@@ -139,6 +139,9 @@ export function registerTerminalProjectRoutes(
 
     try {
       const projectPath = await resolveProjectPathInput(parsed.data.path);
+      const existingContextIds = terminalSessionManager.listProjectContextIds(
+        req.params.id,
+      );
       const project = await terminalSessionManager.updateProject(
         req.params.id,
         {
@@ -151,7 +154,9 @@ export function registerTerminalProjectRoutes(
         return;
       }
 
-      clearPreviewFileSearchCache(project.id);
+      for (const contextId of existingContextIds) {
+        clearPreviewFileSearchCache(contextId);
+      }
       res.json(toProjectPayload(project));
     } catch (error) {
       handleProjectError(res, error);
@@ -186,7 +191,14 @@ export function registerTerminalProjectRoutes(
   router.delete("/project/:id", async (req, res) => {
     const childSessions = terminalSessionManager
       .listSessions()
-      .filter((session) => session.projectId === req.params.id);
+      .filter(
+        (session) =>
+          terminalSessionManager.resolveParentProjectId(session.projectId) ===
+          req.params.id,
+      );
+    const contextIds = terminalSessionManager.listProjectContextIds(
+      req.params.id,
+    );
 
     if (options?.runtimeRegistry) {
       for (const session of childSessions) {
@@ -206,7 +218,9 @@ export function registerTerminalProjectRoutes(
       return;
     }
 
-    clearPreviewFileSearchCache(req.params.id);
+    for (const contextId of contextIds) {
+      clearPreviewFileSearchCache(contextId);
+    }
     options?.terminalEventService?.record({
       kind: "project_deleted",
       terminalSessionId: null,

@@ -217,14 +217,18 @@ export function createAgentTeamRouter(
         ? req.query.terminalSessionId.trim()
         : "";
     if (terminalSessionId) {
-      const run = await agentTeamService.getRunByTerminalSession(
-        projectId,
-        terminalSessionId,
-      );
-      res.json({ runs: run ? [run] : [] });
+      await handleServiceCall(res, async () => {
+        const run = await agentTeamService.getRunByTerminalSession(
+          projectId,
+          terminalSessionId,
+        );
+        return { runs: run ? [run] : [] };
+      });
       return;
     }
-    res.json({ runs: await agentTeamService.listRuns(projectId) });
+    await handleServiceCall(res, async () => ({
+      runs: await agentTeamService.listRuns(projectId),
+    }));
   });
 
   router.get("/runs/:runId", async (req, res) => {

@@ -1,5 +1,6 @@
 import type { TerminalSessionMetadataSnapshot } from "@runweave/shared/terminal/events";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import type { TerminalSessionStore } from "./store";
 import {
   buildPanelRecord,
@@ -11,6 +12,7 @@ import {
   type TerminalPanelRecord,
   type TerminalPanelWorkspaceRecord,
   type TerminalProjectRecord,
+  type TerminalProjectContextRecord,
   type TerminalSessionRecord,
 } from "./manager-records";
 import { sortTerminalProjects, sortTerminalSessions } from "./manager-ordering";
@@ -21,6 +23,7 @@ import {
   isCompletionSourceAllowedForCommand,
   type RecentAgentActivityRecord,
 } from "./completion-source-gate";
+import { WorktreeProjectRegistry } from "./worktree-project-registry";
 
 export interface TerminalSessionManagerObserver {
   onBell?: (input: {
@@ -44,6 +47,7 @@ export type TerminalPanelMutationListener = (
 
 export abstract class TerminalManagerBase {
   protected readonly projects = new Map<string, TerminalProjectRecord>();
+  protected readonly projectContexts = new WorktreeProjectRegistry();
   protected readonly sessions = new Map<string, RuntimeTerminalSessionRecord>();
   protected readonly panels = new Map<string, TerminalPanelRecord>();
   protected readonly panelWorkspaces = new Map<
@@ -188,6 +192,11 @@ export abstract class TerminalManagerBase {
         ),
       ),
     );
+    await Promise.all(
+      this.listProjects().map((project) =>
+        this.projectContexts.refresh(project, this.listSessions()),
+      ),
+    );
   }
 
   listProjects(): TerminalProjectRecord[] {
@@ -195,7 +204,72 @@ export abstract class TerminalManagerBase {
   }
 
   getProject(projectId: string): TerminalProjectRecord | undefined {
-    return this.projects.get(projectId);
+    const parentProject = this.projects.get(projectId);
+    if (parentProject) {
+      return parentProject;
+    }
+    const context = this.projectContexts.get(projectId);
+    return context?.availability === "available" ? context : undefined;
+  }
+
+  getProjectContext(
+    projectId: string,
+  ): TerminalProjectContextRecord | undefined {
+    const parentProject = this.projects.get(projectId);
+    if (parentProject) {
+      return this.projectContexts
+        .list(parentProject.id)
+        .find((context) => context.isPrimary);
+    }
+    return this.projectContexts.get(projectId);
+  }
+
+  async refreshProjectContexts(
+    parentProjectId: string,
+  ): Promise<TerminalProjectContextRecord[] | null> {
+    const parentProject = this.projects.get(parentProjectId);
+    if (!parentProject) {
+      return null;
+    }
+    return this.projectContexts.refresh(parentProject, this.listSessions());
+  }
+
+  listProjectContexts(parentProjectId: string): TerminalProjectContextRecord[] {
+    const parentProject = this.projects.get(parentProjectId);
+    if (!parentProject) {
+      return [];
+    }
+    return this.projectContexts.sort(
+      parentProject,
+      this.projectContexts.list(parentProjectId),
+      this.listSessions(),
+    );
+  }
+
+  listAllProjectContexts(): TerminalProjectRecord[] {
+    return this.listProjects().flatMap((parentProject) =>
+      this.listProjectContexts(parentProject.id).filter(
+        (context) =>
+          context.isPrimary || context.availability === "available",
+      ),
+    );
+  }
+
+  resolveParentProjectId(projectId: string): string {
+    return resolveTerminalParentProjectId(projectId);
+  }
+
+  listProjectContextIds(parentProjectId: string): string[] {
+    const ids = new Set<string>([parentProjectId]);
+    for (const context of this.listProjectContexts(parentProjectId)) {
+      ids.add(context.projectId);
+    }
+    for (const session of this.listSessions()) {
+      if (this.resolveParentProjectId(session.projectId) === parentProjectId) {
+        ids.add(session.projectId);
+      }
+    }
+    return Array.from(ids);
   }
 
   getSession(terminalSessionId: string): TerminalSessionRecord | undefined {

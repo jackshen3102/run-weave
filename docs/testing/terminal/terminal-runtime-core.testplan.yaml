@@ -1,0 +1,116 @@
+version: 1
+name: Terminal 运行时核心验收
+description: >
+  验证 Terminal 从持久化 Session、tmux Panel、Agent 生命周期、事件恢复到 Web/App/CLI
+  消费端的一致性。用系统不变量替代对单个输入控件或一次性视觉状态的重复检查。
+
+cases:
+  - id: TRT-001
+    name: Session 和 Panel 存储迁移保持唯一默认 Pane
+    required: true
+    description: >
+      旧 Session、LowDB 与重启后的记录必须迁移到稳定 default Panel；重复迁移不产生孤儿 pane 或破坏旧接口。
+    preconditions:
+      - 已准备旧 Session fixture、空 tmux Session 和已有多个 Panel 的 Session。
+    steps:
+      - 启动 backend、读取 workspace、重启后重复读取，并调用旧 session snapshot/history 接口。
+      - 确认每个 Session 有且仅有稳定 default Panel，旧接口仍有明确目标，迁移幂等且持久化无孤儿。
+
+  - id: TRT-002
+    name: Panel 操作精确路由且保留最后 Pane
+    required: true
+    description: >
+      split、focus、close、input、interrupt 与 history 必须按 panelId/alias/role 作用于目标 tmux pane；pty、失效 target 与最后 pane 必须 fail closed。
+    preconditions:
+      - 一个 tmux Session 含 default、tests、server Pane，另有 pty Session。
+    steps:
+      - 对各 Pane 执行全部操作，并对 pty、未知 target、重复 alias/role 和最后 Pane 发送非法请求。
+      - 确认目标 capture、tmux selected pane、workspace 和错误码一致；失败不写半状态或误操作其它 Pane。
+
+  - id: TRT-003
+    name: 旧 Session API 遵循 selected 和 default 兼容规则
+    required: true
+    description: >
+      旧 input/interrupt 必须跟随 selected Pane，history/snapshot 保持 default Pane；显式 panelId、alias、role 的优先级固定且可观察。
+    preconditions:
+      - tmux Session 的多个 Pane 各输出不同 marker，已建立 selected Pane。
+    steps:
+      - 分别调用旧 API、同时提交多个 target 字段、切换 selected Pane 后再读取 history/snapshot。
+      - 确认输入与中断只到 selected 或显式目标，历史与快照仍读取 default；未知 target 明确失败。
+
+  - id: TRT-004
+    name: TerminalState 只由权威运行事实推进
+    required: true
+    description: >
+      shell_idle、agent_starting、agent_idle、agent_running 只由 activeCommand、可信 Hook 与退出事实推进，不能由启动命令残留或 scrollback 文案猜测。
+    preconditions:
+      - 真实 Codex Pane 可触发 SessionStart、UserPromptSubmit、Stop、普通命令与退出。
+    steps:
+      - 依次运行 Codex、普通 node 命令、退出、制造 ready/Working 文案并读取 state、metadata 与 store。
+      - 确认状态按权威事件收敛；退出和普通命令清除旧 Agent，文案不单独改变状态。
+
+  - id: TRT-005
+    name: Agent Hook 按 operation 和 Pane 鉴权并抗迟到事件
+    required: true
+    description: >
+      Hook 必须校验 token、terminalSessionId、panelId、agent、operationId 与事件类型；grace 仅接受同 Pane 同 operation 的有限迟到 Stop。
+    preconditions:
+      - 当前 Codex Pane 有 operationId 与可观察 grace 窗口，另有第二 Pane。
+    steps:
+      - 发送匹配、缺失、错误、过期、跨 Pane 与新旧 operation 的 Hook payload。
+      - 确认匹配事件按生命周期推进；其它事件被明确拒绝或忽略，不污染其它 Pane 或重启旧状态。
+
+  - id: TRT-006
+    name: prepare、输入和中断在多 Pane 中不重入不泄密
+    required: true
+    description: >
+      并发 prepare 只提交一次当前 Agent，失败恢复上一代状态；输入、IME 提交与 interrupt 不会重复发送或泄露 prompt/token。
+    preconditions:
+      - tmux Session 有两个 Pane，可同时触发 prepare、中文 IME 输入与 interrupt。
+    steps:
+      - 并发 prepare、输入唯一 marker、模拟 IME composition 和发送 interrupt，再检查 Pane history、metadata 与日志。
+      - 确认每个真实提交只到目标 Pane 一次，失败不遗留 starting，日志/UI 不含用户 prompt 或 token。
+
+  - id: TRT-007
+    name: Terminal 事件流断线后只补缺失事件
+    required: true
+    description: >
+      stream identity、cursor、catchup 与 metadata 双出口必须防止旧 ID 去重、cursor gap 静默丢失和重复 store 写入。
+    preconditions:
+      - Web terminal-events 已连接，可制造 backend 重启、断线、过期 cursor、超前 cursor 和 pending input。
+    steps:
+      - 在每种状态重连并记录 catchup、UI store、pending input 与 API 结果。
+      - 确认正常重连只补缺失事件；异常 cursor 显式报告 gap/恢复，旧上下文 pending input 不会延迟执行。
+
+  - id: TRT-008
+    name: 状态在 API、WebSocket、Web、App 和 CLI 最终一致
+    required: true
+    description: >
+      所有 consumer 必须读取后端权威 TerminalState 和 workspace，不允许客户端以展示文本或本地推断覆盖服务端状态。
+    preconditions:
+      - Web、App、CLI、terminal WS 与 terminal-events 均连接同一真实 Terminal。
+    steps:
+      - 走 shell、启动、运行、停止、退出和 Pane focus 的真实生命周期，交叉读取五类 consumer。
+      - 确认状态、active target、Stop 可见性和 history 一致；迟到事件与 CLI 操作不会抢焦点或回退新状态。
+
+  - id: TRT-009
+    name: 终端恢复不附着到错误 tmux Runtime
+    required: true
+    description: >
+      backend 重启、tmux 进程消失、同名 session 重建和外部 Pane 删除时，恢复只能匹配原始身份，无法确认时必须安全降级。
+    preconditions:
+      - 已创建 tmux Terminal，记录 session/runtime 身份并可模拟外部删除和重建。
+    steps:
+      - 依次重启 backend、删除 Pane、销毁并重建同名 tmux session，读取恢复结果。
+      - 确认能证明身份的 Terminal 恢复原 workspace；不匹配场景不附着新 runtime、不误发输入且给出诊断状态。
+
+  - id: TRT-010
+    name: Terminal Workspace 的核心操作有真实页面证据
+    required: true
+    description: >
+      创建、选择、输入、Panel 切换和状态展示必须在同一 Dev Session 的真实 Web surface 可用，不能以静态检查代替。
+    preconditions:
+      - 已通过 Dev Session 创建可附着 Web surface 和真实 tmux Terminal。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 附着目标，完成创建/选择/输入/Panel 切换并采集 DOM、网络与 Terminal marker。
+      - 确认页面行为与 backend workspace 一致，证据指向该 Dev Session，而非默认浏览器或无关服务。

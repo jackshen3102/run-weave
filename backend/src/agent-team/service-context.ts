@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
+import { isTerminalChildProjectIdLike } from "@runweave/shared/terminal/project-context";
 import type { TerminalSessionManager } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
@@ -8,6 +9,7 @@ import type { TerminalStateService } from "../terminal/terminal-state-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import { logger } from "../logging";
+import { AgentTeamError } from "./errors";
 import { AgentTeamOutboxResolver } from "./outbox-resolver";
 import { AgentTeamPromptSender } from "./prompt-sender";
 import { AgentTeamReviewCheckpointGit } from "./review-checkpoint-git";
@@ -82,7 +84,20 @@ export class AgentTeamServiceContext {
   }
 
   async listRuns(projectId: string): Promise<AgentTeamRun[]> {
+    this.assertReadableProjectRoot(projectId);
     return this.runStore.listRuns(projectId);
+  }
+
+  private assertReadableProjectRoot(projectId: string): void {
+    if (
+      isTerminalChildProjectIdLike(projectId) &&
+      !this.terminalSessionManager.getProject(projectId)?.path
+    ) {
+      throw new AgentTeamError(
+        409,
+        "当前项目目录不可用，无法读取 Agent Team 任务",
+      );
+    }
   }
 
   async getRun(runId: string): Promise<AgentTeamRun | null> {
@@ -93,6 +108,7 @@ export class AgentTeamServiceContext {
     projectId: string,
     terminalSessionId: string,
   ): Promise<AgentTeamRun | null> {
+    this.assertReadableProjectRoot(projectId);
     return this.runStore.getRunByTerminalSession(projectId, terminalSessionId);
   }
 }

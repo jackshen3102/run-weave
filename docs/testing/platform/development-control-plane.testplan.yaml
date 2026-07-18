@@ -1,0 +1,116 @@
+version: 1
+name: 开发控制面核心验收
+description: >
+  验证 Stable 控制面、Dev Session、Beta 槽位、更新与目标 surface 形成可隔离、可恢复、
+  可审计的本地开发闭环。将原先重叠的 Dev Session、Beta、CDP、更新和 CLI 清单合并为系统契约。
+
+cases:
+  - id: DCP-001
+    name: Stable 始终控制 Dev Session 和 Beta 生命周期
+    required: true
+    description: >
+      源码 worktree 只能通过 pnpm dev:session 规划和启动目标，Stable 负责控制链；低层 Beta/update 入口不得绕过 lease、manifest 和停止顺序。
+    preconditions:
+      - Stable 可用，目标 worktree 有可变更源码和 pnpm dev:session 命令。
+    steps:
+      - 对目标 worktree 执行 dry-run 与启动，再尝试使用遗留实例名或低层参数绕过控制链。
+      - 确认合法路径返回明确 devSessionId、source revision 和控制面归属；绕过路径被拒绝或只读，不污染 Stable。
+
+  - id: DCP-002
+    name: Planner 按影响闭包选择隔离并尊重显式目标
+    required: true
+    description: >
+      changed paths、契约、状态写入和用户目标共同决定 profile；显式 profile/surface 优先，能力或状态冲突必须提升隔离而不能错误共享。
+    preconditions:
+      - 已准备纯前端、后端、Electron、App Server、共享协议和跨 worktree 的变更集。
+    steps:
+      - 对每个变更集运行无显式与有显式 profile 的 dry-run JSON，比较 planner 输出。
+      - 确认推荐闭包最小且完整，显式目标优先；不完整或不兼容 profile 在启动前 fail closed。
+
+  - id: DCP-003
+    name: Session Manifest 原子脱敏且身份可恢复
+    required: true
+    description: >
+      manifest 必须原子写入、最小权限、无 secret，并记录 worktree、revision、服务实例、namespace 和 surface，使进程重启后可定位同一 Session。
+    preconditions:
+      - 可启动一个含 Web 与 Electron surface 的 Dev Session。
+    steps:
+      - 启动、读取 manifest、重启调用进程并执行 dev:status，模拟半写入或损坏 manifest。
+      - 确认完整 manifest 可恢复身份且不泄露 token；半写/损坏场景不被当作可用 Session。
+
+  - id: DCP-004
+    name: 共享服务只在身份和能力均兼容时复用
+    required: true
+    description: >
+      Frontend 可复用兼容默认服务；Backend、App Server、认证、event/cursor 或浏览器状态不兼容时必须创建 dedicated 资源。
+    preconditions:
+      - 已存在默认 Backend/App Server，另有两个 worktree 和可区分 capability/namespace。
+    steps:
+      - 分别创建兼容和不兼容的 frontend/fullstack/app-server Session，读取服务 ownership 与 endpoint。
+      - 确认兼容场景显式引用共享实例；不兼容场景独占资源且不会错绑、串状态或复用错误 profile。
+
+  - id: DCP-005
+    name: 并发启动冲突回滚且 stop 只清理自有资源
+    required: true
+    description: >
+      同 worktree 资源冲突、PID 复用、endpoint 漂移和跨 worktree 强退必须可诊断；失败启动与 stop 不得杀死共享或其它 Session 服务。
+    preconditions:
+      - 两个 worktree 可并发创建 Session，且可制造端口、PID 和 endpoint 冲突。
+    steps:
+      - 并发启动、注入冲突、执行 dev:stop 并读取 status 与残留进程。
+      - 确认本次启动回滚，stop 只回收 ownerDevSessionId 对应资源，共享和其它 worktree 服务继续可用。
+
+  - id: DCP-006
+    name: Dev Open 精确解析 Web Desktop 与 Terminal Browser Surface
+    required: true
+    description: >
+      dev:open 必须从目标 Session 解析 Web URL、desktop CDP 与 terminal-browser CDP；全局环境变量、默认端口和其它实例 endpoint 不能劫持。
+    preconditions:
+      - 一个 Electron/Beta Session 同时提供三类 surface，另有干扰 endpoint。
+    steps:
+      - 分别对三类 surface 执行 dev:open --json，并用正确和干扰 endpoint 连接。
+      - 确认每个结果带目标 session/instance 身份；desktop 与 terminal-browser 不可互换，干扰 endpoint 无法访问目标资源。
+
+  - id: DCP-007
+    name: Beta 槽位 lease 限制并发并保持资源有界
+    required: true
+    description: >
+      五槽位池只分配一个合法空槽；第六个并发请求失败，stop/reset 后才能复用，release、磁盘与遗留资源均受安全边界约束。
+    preconditions:
+      - Beta 槽位池为空，可并发启动至少六个独立请求并观察 lease/磁盘状态。
+    steps:
+      - 并发启动、停止、重试、制造 stale/orphan/损坏 lease 与磁盘不足，再读取 status。
+      - 确认最多五个活跃槽位，身份可证的 stale 才可恢复，未知 lease 保持占用，资源不会无限增长或误清 active 槽。
+
+  - id: DCP-008
+    name: Beta 更新隔离 Stable 并按变更类型选择动作
+    required: true
+    description: >
+      runtime、Electron、App Server 和 shared 变更必须选择正确更新闭包；失败回滚且 Stable、其它 Beta 和全局集成不中断。
+    preconditions:
+      - Stable 正常运行，目标 Beta 有可回滚版本，准备四类变更和故意失败构建。
+    steps:
+      - 对每类变更运行更新或 dry-run，随后制造失败并检查 Stable、Beta status 与版本。
+      - 确认目标实例和路径独立，失败回滚到可用版本，Stable 及其它实例不被重启或覆盖。
+
+  - id: DCP-009
+    name: 本地客户端更新对版本与安装态严格负责
+    required: true
+    description: >
+      更新器基于 baseline 和敏感路径选择 runtime 或完整 App 更新；完整更新的版本必须提升，dry-run 只读，desktop verification 使用安装态主窗口 surface。
+    preconditions:
+      - 已安装本地客户端，存在上次更新状态及 frontend/backend/shared/Electron 变更样本。
+    steps:
+      - 分别执行 dry-run、runtime、完整 App、App Server 更新与 verify-desktop，记录计划和安装版本。
+      - 确认模式选择与变更对应，no-restart 不能绕过强制重启，验证 endpoint 属于安装态桌面且版本匹配。
+
+  - id: DCP-010
+    name: CLI 控制面严格使用显式目标并与 Web 收敛
+    required: true
+    description: >
+      health、project、terminal、panel、events 和配置命令必须以显式 ID/baseUrl/profile 路由，JSON 与错误语义稳定，CLI 不抢浏览器焦点。
+    preconditions:
+      - 已连接一个 Backend，存在两个项目、多个 Terminal/Pane 和 Web/App consumer。
+    steps:
+      - 用 CLI 创建、发送、focus、读取 history、订阅 events，并对未知/跨项目 ID 与错误认证重复操作。
+      - 确认命令只影响指定资源，事件使 Web/App 收敛但不抢焦点，错误不猜测其它目标且 JSON 不泄露秘密。

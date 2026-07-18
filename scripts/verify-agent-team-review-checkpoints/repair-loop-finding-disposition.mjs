@@ -23,7 +23,7 @@ export function verifyFindingDispositionChecks(check, { run, reviewOutbox }) {
         ...run.acceptance[0],
         caseId: "case_1",
         sourceCaseId: "AGT-RUNTIME-001",
-        sourceFilePath: "docs/testing/repair-test-cases.md",
+        sourceFilePath: "docs/testing/repair.testplan.yaml",
         status: "pass",
       },
       run.acceptance[1],

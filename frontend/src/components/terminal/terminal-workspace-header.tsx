@@ -16,8 +16,10 @@ import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
+  EMPTY_TERMINAL_PROJECT_CONTEXTS,
   EMPTY_TERMINAL_SESSIONS,
   useTerminalProjectsQuery,
+  useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
 } from "../../features/terminal/queries/terminal-workspace-queries";
 import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
@@ -84,6 +86,12 @@ export function TerminalWorkspaceHeader({
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
+  const activeParentProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeParentProjectId,
+  );
+  const contexts =
+    useTerminalProjectContextsQuery(activeParentProjectId).data ??
+    EMPTY_TERMINAL_PROJECT_CONTEXTS;
   const activeSessionId = useTerminalWorkspaceStore(
     (state) => state.activeSessionId,
   );
@@ -112,8 +120,23 @@ export function TerminalWorkspaceHeader({
     (state) => state.bumpAgentRecoveryRevision,
   );
   const [recoveringAgent, setRecoveringAgent] = useState(false);
+  const activeParentProject =
+    projects.find(
+      (project) => project.projectId === activeParentProjectId,
+    ) ?? null;
+  const activeContext =
+    contexts.find((context) => context.projectId === activeProjectId) ?? null;
   const activeProject =
-    projects.find((project) => project.projectId === activeProjectId) ?? null;
+    activeParentProject && activeContext
+      ? {
+          ...activeParentProject,
+          projectId: activeContext.projectId,
+          name: activeContext.name,
+          path: activeContext.path,
+        }
+      : activeParentProject?.projectId === activeProjectId
+        ? activeParentProject
+        : null;
   const activeSession =
     sessions.find((session) => session.terminalSessionId === activeSessionId) ??
     null;

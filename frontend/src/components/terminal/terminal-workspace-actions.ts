@@ -27,7 +27,6 @@ interface UseTerminalWorkspaceActionsArgs {
   apiBase: string;
   token: string;
   clientMode: ClientMode;
-  selectActiveSession: (terminalSessionId: string | null) => void;
   removeProjectPreview: (projectId: string) => void;
   loadSessions: () => Promise<void>;
   onAuthExpired?: () => void;
@@ -37,7 +36,6 @@ export function useTerminalWorkspaceActions({
   apiBase,
   token,
   clientMode,
-  selectActiveSession,
   removeProjectPreview,
   loadSessions,
   onAuthExpired,
@@ -49,11 +47,16 @@ export function useTerminalWorkspaceActions({
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
+  const activeParentProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeParentProjectId,
+  );
   const activeSessionId = useTerminalWorkspaceStore(
     (state) => state.activeSessionId,
   );
   const activeProject =
-    projects.find((project) => project.projectId === activeProjectId) ?? null;
+    projects.find(
+      (project) => project.projectId === activeParentProjectId,
+    ) ?? null;
   const visibleSessions = activeProjectId
     ? sessions.filter((session) => session.projectId === activeProjectId)
     : sessions;
@@ -91,8 +94,8 @@ export function useTerminalWorkspaceActions({
   const setHistoryTerminalPanelId = useTerminalWorkspaceStore(
     (state) => state.setHistoryTerminalPanelId,
   );
-  const setActiveProjectId = useTerminalWorkspaceStore(
-    (state) => state.setActiveProjectId,
+  const selectProjectContext = useTerminalWorkspaceStore(
+    (state) => state.selectProjectContext,
   );
   const setActiveSessionId = useTerminalWorkspaceStore(
     (state) => state.setActiveSessionId,
@@ -216,8 +219,11 @@ export function useTerminalWorkspaceActions({
             ),
             createdProject,
           ]);
-          setActiveProjectId(createdProject.projectId);
-          selectActiveSession(createdSession.terminalSessionId);
+          selectProjectContext(
+            createdProject.projectId,
+            createdProject.projectId,
+            createdSession.terminalSessionId,
+          );
           const createdAt = new Date().toISOString();
           updateTerminalSessions(queryClient, scope, (currentSessions) => [
             ...currentSessions.filter(
@@ -264,8 +270,7 @@ export function useTerminalWorkspaceActions({
       await deleteTerminalProject(apiBase, token, targetProject.projectId);
       setRequestError(null);
       setProjectDialogError(null);
-      setActiveSessionId(null);
-      setActiveProjectId(null);
+      selectProjectContext(null, null, null);
       removeProjectPreview(targetProject.projectId);
       setProjectPendingDeletion(null);
       await loadSessions();

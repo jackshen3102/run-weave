@@ -45,7 +45,15 @@ export function createPrototypePreviewRouter(
     }
     const project = terminalSessionManager.getProject(projectId);
     if (!project) {
-      res.status(404).type("text").send("Terminal project not found");
+      const context = terminalSessionManager.getProjectContext(projectId);
+      res
+        .status(context ? 409 : 404)
+        .type("text")
+        .send(
+          context
+            ? "Terminal project context is unavailable"
+            : "Terminal project not found",
+        );
       return;
     }
     const verified = authService.verifyTemporaryToken(ticket, {

@@ -73,7 +73,7 @@ export class WorkHistoryService {
     }
     const projects = new Map(
       this.terminalSessionManager
-        .listProjects()
+        .listAllProjectContexts()
         .map((project) => [project.id, project]),
     );
     const search = options.search?.trim().toLowerCase() ?? "";
@@ -84,6 +84,7 @@ export class WorkHistoryService {
         title:
           session.alias?.trim() ||
           projects.get(session.projectId)?.name ||
+          this.terminalSessionManager.getProjectContext(session.projectId)?.name ||
           session.command ||
           session.id,
         cwd: session.cwd,
@@ -111,6 +112,8 @@ export class WorkHistoryService {
               summary.terminalSessionId,
               summary.projectId,
               projects.get(summary.projectId)?.name,
+              this.terminalSessionManager.getProjectContext(summary.projectId)
+                ?.name,
               summary.cwd,
               summary.command,
             ].some((value) => value?.toLowerCase().includes(search)),
@@ -240,7 +243,7 @@ export class WorkHistoryService {
 
   async listRuns(options: ListOptions): Promise<AgentTeamArchivePage> {
     const projectIds = this.terminalSessionManager
-      .listProjects()
+      .listAllProjectContexts()
       .map((project) => project.id);
     const runs = (
       await Promise.all(

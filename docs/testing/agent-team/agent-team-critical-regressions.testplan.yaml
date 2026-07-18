@@ -1,0 +1,78 @@
+version: 1
+name: Agent Team 关键回归验收
+description: >
+  验证 Agent Team 的验收来源生成、completion 事件边界、缺失 outbox 恢复、
+  checkpoint 证据绑定兼容性，以及 TraeX worker 启动原子性五个关键回归不变量。
+
+cases:
+  - id: AGT-CR-001
+    name: 无来源时生成 YAML 测试计划后才能拆分
+    required: true
+    description: >
+      当启动面板未填写计划文件和测试计划文件时，主 Agent 必须从明确任务描述生成项目内
+      `docs/testing/**/*.testplan.yaml`，并将该文件作为可追溯 acceptance 来源后才允许 split。
+    preconditions:
+      - 已启动隔离的 Agent Team terminal，启动面板的计划文件和测试计划文件均为空。
+      - 任务描述明确包含待实现行为和可观察的预期结果。
+    steps:
+      - 填写任务描述并启动 Agent Team，观察主 Agent pane、生成文件和 `propose-split` 请求。
+      - 确认生成文件位于 `docs/testing/` 且符合 `.testplan.yaml` 最小 schema，split 请求引用该文件并只包含 code、code_review、behavior_verify 三类 worker。
+      - 读取 run JSON 和 sidecar；确认 acceptance 来源标记为任务生成，behavior acceptance 保留生成计划的 case ID，而不是泛化默认 case 或独立 Code Review gate。
+
+  - id: AGT-CR-002
+    name: App Server completion 不得直接推进 Agent Team loop
+    required: true
+    description: >
+      合法 pane-scoped outbox 已写入时，App Server `agent.completion` 只能更新其受限投影；
+      只有 terminal completion feed 才能消费 outbox 并恰好推进一次 Agent Team loop。
+    preconditions:
+      - 隔离 run 正在等待 worker，已写入身份匹配的 pane-scoped outbox 且尚未被消费。
+      - 可以分别投递 App Server `agent.completion` 和 backend `/internal/terminal-completion`。
+    steps:
+      - 只投递 App Server `agent.completion`，记录 ThreadRef、TerminalState、run JSON、acceptance、active role 和 loop round。
+      - 确认 App Server 投影可以更新，但 outbox 未被 Agent Team 消费，acceptance、active role 和 loop round 均不推进。
+      - 再投递同一 pane 的 terminal completion feed；确认 backend 按身份匹配消费 outbox 并仅推进一次，日志清晰区分两类事件来源。
+
+  - id: AGT-CR-003
+    name: 缺失 outbox 仅在超时后有限重试并升级人工
+    required: true
+    description: >
+      目标 outbox 确实不存在时，watchdog 必须在超时后重试；达到最大 attempt 后必须进入
+      `need_human`，不能无限等待，也不能将合法 outbox 误判为超时。
+    preconditions:
+      - 隔离 run 正在等待 review，目标 pane-scoped outbox 始终不存在。
+      - 可仅修改隔离 run 的等待时间和 retry attempt，使其分别处于未超时、已超时和达到上限状态。
+    steps:
+      - 在未超时状态触发 watchdog；确认没有 retry 派发或状态推进。
+      - 将等待时间设置为超过超时阈值后触发 watchdog；确认仅因 outbox 缺失发生一次可观察 retry。
+      - 将 attempt 设置到最大值后再次触发 watchdog，并使用 `$toolkit:playwright-cli` 查看 sidecar；确认 run 进入 `need_human`，不会继续无限等待，且合法 outbox 存在时不走该超时路径。
+
+  - id: AGT-CR-004
+    name: checkpoint 结果绑定当前 SHA 且 disabled 与旧 run 保持兼容
+    required: true
+    description: >
+      `local_commit` 模式只接受绑定当前 checkpoint SHA 的 behavior outbox；旧 SHA、缺失 SHA
+      或随机 SHA 必须 fail closed。显式 disabled 与缺少 checkpoint 字段的旧 run 必须继续沿用
+      原有串行流程，且不产生 Git 副作用或要求 checkpoint 字段。
+    preconditions:
+      - 隔离 `local_commit` run 已创建当前 checkpoint C2，behavior worker 正在执行。
+      - 已准备绑定 C2、旧 C1、空值和随机 SHA 的独立 behavior outbox 变体。
+      - 已准备一个显式 disabled run 和一个缺少 reviewCheckpoint 字段的旧 run fixture。
+    steps:
+      - 分别提交四个 SHA 变体并触发 terminal completion；确认只有绑定 C2 的结果被消费，其他变体进入 `need_human` 且不修改 acceptance、round 或 active role。
+      - 对 disabled run 和旧 run 依次完成 code、review、behavior；确认两者无需 reviewTarget 或 verifiedCheckpointCommit，不创建分支或 checkpoint commit，Git HEAD 与工作树保持不变。
+      - 使用 `$toolkit:playwright-cli` 查看侧栏；确认 checkpoint run 的错误 SHA 可诊断，disabled 和旧 run 不展示误导性的 checkpoint SHA。
+
+  - id: AGT-CR-005
+    name: TraeX launch 单次提交且失败保持原子性
+    required: true
+    description: >
+      TraeX worker 的 dispatch 边界必须先持久化，正式任务只作为唯一 initial query 提交一次；
+      launch 未被 backend 接受时不得产生 `command_submitted` 或使 run 假装进入执行状态。
+    preconditions:
+      - 隔离 Dev Session 的 Agent Team worker command 已配置为 TraeX，可捕获 dispatch、launch response、pane input、run JSON 和 lifecycle event。
+      - 已准备一个成功启动条件和一个仅影响测试 worker 的确定性失败启动条件。
+    steps:
+      - 在成功条件下创建 active worker dispatch 并启动 TraeX；确认 dispatch 已持久化，只有一次 launch command 与一次正式 initial query，response 为 `command_submitted` 且 matching lifecycle 前保持 `agent_starting`。
+      - 在失败条件下启动另一个测试 worker；确认 input 未被接受时没有 `command_submitted`，worker 未标记为 executing 或 completed，run 未继续派发任务。
+      - 查看 API、Agent Team UI、pane 与日志；确认失败信息包含 agent、worker 或 pane 和可定位原因，未被降级成 ready 或通用无上下文错误。

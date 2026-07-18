@@ -45,7 +45,7 @@ pnpm runweave:update --verify-desktop
 RUNWEAVE_CODESIGN_IDENTITY="Apple Development: ..." pnpm runweave:update --mode app
 ```
 
-测试用例见 `docs/testing/platform/runweave-local-client-update-test-cases.md`。
+测试计划见 `docs/testing/platform/development-control-plane.testplan.yaml`。
 
 项目侧仍保留三个底层命令：
 

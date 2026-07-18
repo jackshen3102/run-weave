@@ -27,6 +27,7 @@
 ### 验收与改动约束
 
 - 本仓库不写单测/TDD，不新增单元测试文件。验证靠 `pnpm typecheck`、`pnpm lint`、`frontend/tests/*.spec.ts` 的 Playwright E2E，以及实际行为核对。
+- 新增或重写测试计划必须使用 `docs/testing/**/*.testplan.yaml`，严格遵循 `docs/testing/test-plan-format.md`；Agent Team 不接受 Markdown 测试案例文件。落盘后运行 `pnpm testplan:validate <path>`。
 - 若计划或验收里承诺了 Playwright/浏览器验证，完成前必须实际执行 `$toolkit:playwright-cli` 并给出命令或关键证据；未执行则明确写「未执行 + 阻塞原因」，禁止用静态检查/代码阅读/截图冒充。
 - 每一行改动都必须能追溯到本次需求来源；不顺手「优化」相邻代码、格式、注释，只清理自己改动产生的孤儿。
 

@@ -1,0 +1,172 @@
+version: 1
+name: Agent Team 核心闭环验收
+description: >
+  验证 Agent Team 从可追溯 YAML 验收来源、tmux worker 拆分、结果回流、修复门禁、
+  checkpoint 到恢复和隔离的完整闭环。只覆盖改变系统正确性的状态边界。
+
+cases:
+  - id: AGT-001
+    name: YAML 验收来源是启动执行的唯一输入
+    required: true
+    description: >
+      合法的 docs/testing/*.testplan.yaml 只导入 required case；Markdown、路径越界、格式错误
+      或无来源任务必须停在 intake，而不能生成泛化 acceptance 或创建 worker。
+    preconditions:
+      - 已准备合法 YAML、仅 optional YAML、Markdown、非法 YAML 和项目外路径五种输入。
+    steps:
+      - 分别创建 run，读取 API 响应、run JSON、主 pane prompt 和 tmux pane 列表。
+      - 确认合法 YAML 保留源文件和原 case ID；其余输入被拒绝或停在 intake，未创建 worker 或伪造 acceptance。
+
+  - id: AGT-002
+    name: Run 严格绑定当前项目和 Terminal Session
+    required: true
+    description: >
+      同项目的不同 Terminal 以及不同项目的 Terminal 必须拥有独立 run、outbox 与 sidecar 状态。
+    preconditions:
+      - 项目 A 有两个 tmux Terminal，项目 B 有一个 tmux Terminal。
+    steps:
+      - 在三个 Terminal 分别创建或恢复 run，并在每个 run 写入可区分 marker。
+      - 确认 run JSON、sidecar、worker cwd 和 .runweave/agent-team 文件只指向所属项目与 session，切换不会复用其它 run。
+
+  - id: AGT-003
+    name: 创建与恢复 Run 保持单实例且不覆盖用户 Agent
+    required: true
+    description: >
+      并发 Start、刷新或 backend 重启只恢复同一个 active run；用户已启动的非本 run Agent 必须被保护。
+    preconditions:
+      - 分别准备空闲 Terminal、已有 active run 的 Terminal，以及用户手动运行 Agent 的 Terminal。
+    steps:
+      - 从两个浏览器 tab 并发 Start，随后刷新、重启 backend，并尝试在用户 Agent Terminal 启动。
+      - 确认每个 session 最多一个 active run 和一条主 prompt；恢复不重复 split，用户 Agent 场景无任何 run 或 pane 副作用。
+
+  - id: AGT-004
+    name: Split Proposal 只在合法确认后创建精确 Worker
+    required: true
+    description: >
+      proposal 必须拥有合法角色、任务与验收来源；人工驳回回到澄清，自动确认也必须通过同一校验。
+    preconditions:
+      - 已准备合法 proposal、空任务、重复 role、未知 role 和缺验收来源的变体。
+    steps:
+      - 分别人工确认、驳回和启用 autoApproveSplit 提交各变体，读取 run、pane 和 prompt。
+      - 确认只有合法 proposal 创建每角色唯一 worker；驳回只向主 pane 注入一次反馈，非法 proposal 不产生半创建资源。
+
+  - id: AGT-005
+    name: Worker Pane 使用稳定身份和当前生效项目路径
+    required: true
+    description: >
+      worker 必须在可 split 的 tmux Terminal 中获得唯一 panelId、role、alias 与 cwd；pty 和旧用户 pane 不得被误当 worker。
+    preconditions:
+      - 一个 tmux session 已含用户 pane，另一个为不支持 split 的 pty session。
+    steps:
+      - 为 tmux run 确认 code、code_review、behavior_verify worker，并在各 pane 读取 pwd；对 pty 确认同一 proposal。
+      - 确认 worker 只创建在 tmux 且 cwd 为当前有效 Project，原用户 pane 不变；pty 明确拒绝且无虚假 worker。
+
+  - id: AGT-006
+    name: Completion 只消费当前 Pane 的新鲜合法 Outbox
+    required: true
+    description: >
+      completion 和周期扫描只能推进 runId、sessionId、panelId、role 与 freshness 全匹配的 schema 合法 outbox。
+    preconditions:
+      - 当前 run 等待 worker，已准备合法、旧 run、错 panel、错 role、损坏和过期 outbox。
+    steps:
+      - 逐个写入变体并触发 completion 和扫描，保存 run、日志和下游 prompt。
+      - 确认仅合法新 outbox 推进一次；其余均可观察地 ignored 或 invalid，不改变 acceptance、round 或 active role。
+
+  - id: AGT-007
+    name: Completion 双通道和重启恢复保持幂等
+    required: true
+    description: >
+      App Server、直连 completion、扫描和 backend 重启可以任意组合，但同一个 worker 结果只能消耗一次。
+    preconditions:
+      - review 与 behavior_verify worker 分别准备 pass 和 fail outbox，可在写入后停止 backend 或 App Server。
+    steps:
+      - 并发触发两个 completion 通道、重放相同信号，并在不同阶段重启 backend 后恢复。
+      - 确认 pass 完成或进入下一 gate，fail 只回弹一次 code；round、预算和 prompt 数量不会因重放或重启翻倍。
+
+  - id: AGT-008
+    name: Verify First 与 Code First 都遵循同一状态机
+    required: true
+    description: >
+      合法 flow 决定首个 worker；Verify First 的首轮全绿可直接完成，发生代码活动或失败后必须经过适用 review 与复验。
+    preconditions:
+      - 已准备 Code First、Verify First、非法 flow、全绿和失败两类 behavior 结果。
+    steps:
+      - 分别创建 run 并推进首轮结果，读取 worker 派发顺序、acceptance 和最终 phase。
+      - 确认非法 flow 被拒绝；Code First 保持原起步，Verify First 不会因空改动伪造 review，也不会跳过失败后的修复闭环。
+
+  - id: AGT-009
+    name: 失败修复必须交接真实复现与受影响复验
+    required: true
+    description: >
+      runtime finding 需要同场景 Before/After，structural finding 可使用 reviewer 原 harness；缺失、blocked、fail 或空影响矩阵必须 fail closed。
+    preconditions:
+      - 已准备 runtime 与 structural finding，以及有效和无效的 fixVerifications/impactedChecks。
+    steps:
+      - 让 code worker 分别提交各交接变体，读取 run、outbox、review prompt 与 verify 输出。
+      - 确认只有可审计的有效交接派发下游；无效交接不消耗预算、不扩大为全量回归，并进入补交或人工处理。
+
+  - id: AGT-010
+    name: Repair Budget 按稳定问题身份隔离且不可绕过
+    required: true
+    description: >
+      同一 repairKey/invariantKey 即使每轮有不同 diff 也按固定预算计数；不同问题彼此独立，最大次数只在创建 run 时确定。
+    preconditions:
+      - 已准备同 caseId 的两个 invariant、连续失败结果和 0、1、3、5、6 次预算输入。
+    steps:
+      - 推进多轮修复与失败，重放 completion 并重启 backend，再读取 repair cycles。
+      - 确认非法预算无副作用；有效预算按同一稳定身份计数，达到上限进入 need_human，不因 diff、重放或重启重置。
+
+  - id: AGT-011
+    name: Checkpoint 只提交被审查且未漂移的工作树
+    required: true
+    description: >
+      checkpoint 模式要求干净 Git worktree、独占锁和稳定 SHA；review pass 后只提交被审查内容，漂移或失败一律 fail closed。
+    preconditions:
+      - 已准备干净、dirty、detached 和审查中发生源码或 HEAD 漂移的 Git worktree。
+    steps:
+      - 对各 worktree 启动 checkpoint run，完成 review pass/fail、重启 backend 并检查 Git 状态。
+      - 确认只有干净稳定场景产生一次正确 commit；其它场景不创建提交或 worker，锁释放且 run 提供可诊断状态。
+
+  - id: AGT-012
+    name: Terminal 删除、无进展与人工恢复不会失控
+    required: true
+    description: >
+      run 在 Terminal/tmux 消失、连续无进展或预算耗尽时停止自动派发；只有显式 resume 才能携带 note 从可追溯基线继续。
+    preconditions:
+      - 已准备 active run、连续无进展 run 和处于 need_human 的 run。
+    steps:
+      - 删除 Terminal 或触发阈值，再发送迟到 completion；随后对 need_human 提交 resume note。
+      - 确认所有自动推进停止，迟到结果被忽略；resume 仅投递一次 note，保留历史 acceptance 与 repair 记录。
+
+  - id: AGT-013
+    name: Provider 生命周期和 Hook 身份不串 Pane
+    required: true
+    description: >
+      Codex 与 TraeX 的启动、停止和补偿必须携带当前 pane/run 身份；未知生命周期、重复观察和 tmux 恢复均不能猜测或串扰。
+    preconditions:
+      - 同一 tmux session 中存在 Codex、TraeX 与 Agent Team worker，并可取得脱敏 hook/completion payload。
+    steps:
+      - 触发正常、缺 Stop、重复、未知和跨 pane lifecycle 事件，再恢复 tmux。
+      - 确认只匹配的身份更新权威状态或 run；重复无副作用，未知保留 raw 信息，恢复不回退其它 provider/thread。
+
+  - id: AGT-014
+    name: API 鉴权和项目文件边界始终 fail closed
+    required: true
+    description: >
+      未认证、过期认证、跨项目 run/panel 和项目外测试计划路径均不得读取状态、写文件或操作 tmux。
+    preconditions:
+      - 已准备过期 token、其它项目 runId/panelId 与项目外绝对路径请求。
+    steps:
+      - 调用 create、query、focus、resume 与测试计划加载接口，记录响应和资源变化。
+      - 确认请求返回明确 4xx/认证流程，不泄露其它项目数据，run、outbox、pane 和 prompt 均无副作用。
+
+  - id: AGT-015
+    name: 真实 Sidecar 证据与非 Agent Team 工具保持独立
+    required: true
+    description: >
+      Agent Team UI 必须真实呈现当前 run、验收来源、阻断和 worker 状态，同时不破坏同一 Terminal 的 Preview、Browser 和普通 Panel 操作。
+    preconditions:
+      - 已由 Dev Session 准备真实 tmux Terminal、有效 YAML 计划与可附着 Web surface。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 附着该 surface，执行最小 run 并在 Preview、Browser、Agent Team 和普通 Panel 间切换。
+      - 确认页面证据与 run/outbox 一致，其他工具的项目、tab、内容和用户 pane 不被 Agent Team 改写。

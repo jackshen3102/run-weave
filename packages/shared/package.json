@@ -32,6 +32,7 @@
     "./terminal/panel": "./src/terminal/panel.ts",
     "./terminal/preview": "./src/terminal/preview.ts",
     "./terminal/project": "./src/terminal/project.ts",
+    "./terminal/project-context": "./src/terminal/project-context.ts",
     "./terminal/session": "./src/terminal/session.ts",
     "./terminal/state": "./src/terminal/state.ts",
     "./terminal/websocket": "./src/terminal/websocket.ts",

@@ -1,0 +1,170 @@
+version: 1
+name: App Server 与飞书关键回归验收
+description: >
+  验证 App Server 的事件中心、ThreadRef 状态同步和 Hook 降级链路，以及飞书一次性回复
+  到 Terminal 的绑定、精确路由、幂等、失败隔离和通知 transport 迁移等关键回归不变量。
+
+cases:
+  - id: ASFR-001
+    name: App Server 单实例、事件去重与重启恢复
+    required: true
+    description: >
+      验证同一隔离 state dir 只能拥有一个 App Server owner；事件以 dedupeKey 精确去重，
+      重启后 event log、事件游标和递增 ID 均能恢复。
+    preconditions:
+      - 已准备临时 RUNWEAVE_APP_SERVER_STATE_DIR 和 RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR。
+      - 可启动真实 App Server 并使用其 lock 文件中的 bearer token 调用受保护接口。
+    steps:
+      - 启动第一个 App Server，读取 lock、token 和 healthz；再以相同 state dir 启动第二个进程。
+      - 使用相同 dedupeKey 两次写入同一个事件，停止后以相同 state dir 重启并查询全部事件。
+      - 确认只有第一个进程拥有 lock，重复写返回相同 event id 且日志只保留一条；重启后旧事件可查询，新事件从持久化最大 ID 继续递增。
+
+  - id: ASFR-002
+    name: 事件流按游标 catchup 并向多订阅者实时推送
+    required: true
+    description: >
+      验证两个带合法认证的 WebSocket 订阅者都先收到匹配事件的 catchup，随后各自恰好
+      收到一次新的 live event，不因不同 source instance 串流或漏投。
+    preconditions:
+      - App Server 中已有至少一条可筛选事件，且两个 WebSocket 客户端可连接 events stream。
+    steps:
+      - 两个客户端使用相同 after cursor 和 kind 筛选连接 events stream，记录 connected 和 catchup。
+      - 通过另一个 source.instanceId 写入一条匹配的新事件。
+      - 确认两个客户端都取得正确 catchup，live event 各投递一次，所有 event id 保持单调且没有重复或跨 kind 事件。
+
+  - id: ASFR-003
+    name: Hook 双写失败时保持 Backend completion 降级
+    required: true
+    description: >
+      验证 Codex 与 Trae Stop Hook 在 App Server 可用时双写 agent.hook 和 agent.completion；
+      App Server 401、不可用或缺失身份时不会阻断既有 Backend fallback，也不会写入无归属事件。
+    preconditions:
+      - 已准备真实 Hook bridge、可用 Backend fallback endpoint 和可控制的 App Server 成功、401、不可用场景。
+      - 已分别准备带完整 Terminal identity 与缺少 RUNWEAVE_TERMINAL_SESSION_ID 的 Hook 环境。
+    steps:
+      - 分别触发 Codex Stop 和 Trae Stop，核对 App Server 事件与 Backend agent-hook、completion 端点的投递结果。
+      - 使 App Server 返回 401 或不可用后重复触发，再在缺少 terminal identity 的环境触发。
+      - 确认可用时双写且 completion summary 一致；失败时 Hook 仍以 0 退出并完成 Backend fallback；缺失身份时两端均无写入。
+
+  - id: ASFR-004
+    name: 隔离 App Server 发现准确传入新旧终端 pane
+    required: true
+    description: >
+      验证 explicit、HOME 与 disabled 三种发现模式的边界，并确认 Backend 重启后复用的 tmux
+      pane 会刷新到新的隔离 App Server，而不会写入旧实例或全局默认日志。
+    preconditions:
+      - 已准备两个独立 App Server home、对应 Backend 配置及一个真实 tmux-backed Terminal。
+      - 可在不杀死 tmux session 的情况下重启 Backend 并触发 pane 内 Hook bridge。
+    steps:
+      - 以 explicit 模式启动 Backend A 和 App Server A，创建 terminal 并触发 pane Hook，记录 tmux 环境和 A 的 event log。
+      - 停止 Backend A 后，以复用的 tmux socket 启动指向 App Server B 的 Backend B，再次在原 pane 触发 Hook。
+      - 分别验证 HOME、缺失 explicit 配置和 disabled 模式；确认原 pane 写入 B 而非 A 或全局日志，explicit 不回退全局，disabled 不读写 App Server。
+
+  - id: ASFR-005
+    name: CLI 生命周期收敛且不泄露 token
+    required: true
+    description: >
+      验证 rw app-server 的 status、start、stop 和 restart 在空目录、健康 owner、stale lock、
+      并发 start 与缺失 entry 等状态下具有确定结果，输出只暴露脱敏身份。
+    preconditions:
+      - 已构建 Runweave CLI，并准备临时 App Server state dir、stale lock fixture 和缺失 entry fixture。
+    steps:
+      - 在空 state dir 依次执行 status、start、status、stop 和 restart；同时从多个调用方并发执行 start。
+      - 对 stale lock 和缺失 CLI entry 重复 start。
+      - 确认空 status 无副作用，健康 owner 被复用，并发 start 收敛为单 owner，stale lock 被安全替换，缺失 entry 非零退出；所有 stdout、日志和 JSON 均不包含 token 明文。
+
+  - id: ASFR-006
+    name: ThreadRef 投影从事件、事件日志与同步镜像一致恢复
+    required: true
+    description: >
+      验证 SessionStart、UserPromptSubmit、Stop、completion 与 ai_process_exit 将事件投影为
+      正确 ThreadRef；投影文件丢失或服务重启时均从 event log 重建，sync mirror、cursor 和 manifest 与最新状态一致。
+    preconditions:
+      - 已启动使用隔离 state dir 和 cloud sync dir 的真实 App Server。
+      - 已准备不同 agent、thread、terminal session 和 panel 的 Hook/completion 事件。
+    steps:
+      - 写入 SessionStart、UserPromptSubmit、Stop、hook_stop completion 和 ai_process_exit，查询 ThreadRef 状态、events 和 stream。
+      - 重启 App Server 后删除 thread-state projection 文件，再次查询并检查 sync dir 的事件镜像、latest projection、cursor 与 manifest。
+      - 确认 running、idle、completed 等状态符合事件语义，不同 agent、thread、session、panel 相互隔离；重建后投影与 event log 一致，sync 不可用时核心事件和投影仍成功并暴露 degraded。
+
+  - id: ASFR-007
+    name: Codex 状态补偿以同协议事件修正 ThreadRef
+    required: true
+    description: >
+      验证 Codex 轮询发现最近 ThreadRef 与真实状态不一致时，追加可去重的 agent.hook
+      补偿事件，而不是直接篡改投影或引入私有协议。
+    preconditions:
+      - 真实 App Server 使用 fake CODEX_BIN，且存在最近三小时内 agent=codex 的 ThreadRef。
+      - 已分别准备本地 running 但远端 idle、以及本地 idle 但远端 active 的状态。
+    steps:
+      - 运行补偿轮询，读取新增事件、ThreadRef 投影和 event log，再对状态已一致的 thread 重复轮询。
+      - 确认不一致时写入 source=codex、compensation=true 的 agent.hook，idle 映射 Stop、active 映射 UserPromptSubmit；一致状态不追加重复事件。
+
+  - id: ASFR-008
+    name: 飞书通知建立受限且精确的 Terminal 绑定
+    required: true
+    description: >
+      验证 completion 通知只在具有 terminalSessionId 时创建 0600 的 message binding；绑定携带
+      正确 chat、terminal 和可选 panel，过期、并发和通知失败均不会制造错误或虚假绑定。
+    preconditions:
+      - 已配置飞书企业自建测试应用、测试群、独立 RUNWEAVE_FEISHU_STATE_DIR 和运行中的 tmux-backed Terminal。
+      - 可分别触发有效 completion、缺少 Terminal identity、无效飞书凭据、TTL 过期和并发通知。
+    steps:
+      - 对两个不同 Terminal 并发发送有效 completion 通知，读取机器人消息、binding 状态和文件权限。
+      - 分别触发缺少 Terminal identity、无效凭据和过期 binding 的场景。
+      - 确认有效通知各创建一个精确 binding 且权限为 0600；缺身份或通知失败不创建 binding；TTL 清理不误删未过期记录且状态文件始终可解析。
+
+  - id: ASFR-009
+    name: 飞书回复按 allowlist、chat 与 panel 精确路由
+    required: true
+    description: >
+      验证只有 allowlist 用户在正确 chat 中引用有效通知的文本回复才能通过现有 CLI 输入链路
+      投递；带 panel binding 时只能进入目标 pane，拒绝路径绝不产生 Terminal 输入。
+    preconditions:
+      - 存在允许用户、未授权用户、有效 binding、不同 chat fixture，以及包含两个 panel 的目标 Terminal。
+      - binding 显式指向其中一个 panel，且可通过 terminal history 查询唯一标记。
+    steps:
+      - 允许用户在正确 chat 引用通知回复唯一标记，再由未授权用户、未引用消息、非绑定引用、跨 chat、空文本、非文本和超长文本分别尝试。
+      - 检查两个 panel 的 history、Bridge 结果、飞书回执与脱敏日志。
+      - 确认有效文本仅一次进入绑定 panel；所有拒绝均不投递、不猜测 Terminal；特殊字符作为单个 line 原文传递而非被 shell 执行。
+
+  - id: ASFR-010
+    name: 飞书入站消息幂等且 Bridge 重启不重投
+    required: true
+    description: >
+      验证以飞书入站 message_id 为键的状态机在重复推送、Bridge 重启、遗留 processing 和
+      通知与处理并发写入时保持精确一次投递与可恢复状态。
+    preconditions:
+      - 已有一条可投递的有效通知 binding，目标 Terminal 可记录唯一输入标记。
+      - 可重复交付相同入站事件、重启 Bridge、构造 processing 状态和并发写 binding/processed 状态。
+    steps:
+      - 对同一 message_id 连续交付两次，成功后重启 Bridge 并再次交付；随后尝试处理遗留 processing fixture。
+      - 并发执行一条新的 completion notify 与一条 Bridge processed 状态写入。
+      - 确认同一 message_id 只投递一次、重启保留 succeeded、遗留 processing 不自动重投；并发后状态 JSON 可解析且 binding 与 processed 记录均保留。
+
+  - id: ASFR-011
+    name: 飞书投递失败遵守输入边界与认证边界
+    required: true
+    description: >
+      验证 Terminal 不存在、已退出、Backend 不可达或 CLI profile 认证失效时，Bridge 明确失败
+      而不创建 Terminal、不直写 tmux、不无限重试，也不泄露 token 或回复正文。
+    preconditions:
+      - 已准备分别指向 deleted Terminal、exited Terminal、停止 Backend 和失效 profile token 的有效 binding。
+      - Bridge 仍保持飞书事件连接并可读取脱敏处理结果。
+    steps:
+      - 对每种失败条件交付允许用户的有效引用回复，检查 Terminal history、Bridge 状态和飞书回执。
+      - 确认每次均为 failed 且有明确分类，Terminal 无输入副作用，Bridge 不退出或绕过 API 写 tmux，日志和状态不包含凭据或完整回复正文。
+
+  - id: ASFR-012
+    name: 飞书 transport 迁移和通知失败不影响 completion
+    required: true
+    description: >
+      验证 app、webhook 与非法 FEISHU_NOTIFY_TRANSPORT 的通知选择互斥且兼容旧行为；任一
+      通知或回执失败都不会导致 Terminal 重投或阻断原 completion 事件与前端 marker 链路。
+    preconditions:
+      - 已分别配置 app、webhook、非法 transport 和两种通知服务均不可用的环境。
+      - 已准备一次成功 Terminal send 后飞书回执失败的 fixture，以及真实 AI CLI Stop 触发入口。
+    steps:
+      - 在三种 transport 配置下触发 completion，记录两类机器人消息、binding、Hook 主流程和 Backend completion。
+      - 对成功 send 后回执失败与两类通知均不可用的场景，触发有效飞书回复和真实 AI CLI Stop。
+      - 确认 app 只发应用通知、webhook 只保留旧单向通知、非法值不双发且不阻断 Hook；回执失败不重投 Terminal，通知失败不丢失 Backend completion 或前端 marker。

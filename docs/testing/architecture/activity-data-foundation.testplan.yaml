@@ -1,0 +1,94 @@
+version: 1
+name: Activity 数据底座核心验收
+description: >
+  验证 Backend-owned Activity SQLite 作为跨 Stable、Beta、Dev 的唯一行为事实源，在写入、
+  并发、留存、查询、隐私与故障隔离上的核心架构契约。
+
+cases:
+  - id: ADF-001
+    name: Activity 只由当前 Backend 持有并使用固定共享数据集
+    required: true
+    description: >
+      Activity 不创建独立服务或 profile 副本；Stable、Beta、Dev 通过各自 Backend 读写同一用户目录 SQLite，CLI 只能经所选 Backend 访问。
+    preconditions:
+      - 已启动 Stable、Beta、Dev 三个 Backend，并可从 CLI 选择其中任一个。
+    steps:
+      - 分别写入与查询事件，检查进程句柄、数据库路径与 CLI 网络目标。
+      - 确认只有 Backend 持有 SQLite，三方看到同一提交数据；Backend 不可达时 CLI 明确失败且不本地补传。
+
+  - id: ADF-002
+    name: Event Schema 和 Producer 边界封闭
+    required: true
+    description: >
+      仅 allowlist 业务边界可以产生 P0 事件，字段来源、User Query emitter 和外部 TTY 覆盖边界必须可验证且不可伪造。
+    preconditions:
+      - 可触发合法 Hook、terminal command、Agent Team 事件和未注册 producer。
+    steps:
+      - 分别提交合法、未知、重复和字段冲突事件，读取存储与拒绝信息。
+      - 确认合法来源按 schema 入库；未知/伪造来源拒绝，重复不覆盖，User Query 仅有约定权威 emitter。
+
+  - id: ADF-003
+    name: Fact、Content 和 Sequence 在事务内一致提交
+    required: true
+    description: >
+      事件幂等、Fact Content Ref、sequence 和拒绝/已知 drop 的状态必须原子可辨，崩溃后只保留已提交事实。
+    preconditions:
+      - 可制造重复事件、冲突事件、写入中断、已知 drop 和 schema rejection。
+    steps:
+      - 对各场景写入并在事务中断后重启 Backend，查询 facts、content 和 sequence。
+      - 确认重复幂等、冲突不覆盖，提交记录完整；未提交记录不可见，gap 的 drop 与 rejection 可区分。
+
+  - id: ADF-004
+    name: 多 Backend 并发写入不丢失且维护租约防止误删
+    required: true
+    description: >
+      WAL 并发写入必须无损；maintenance lease 使用 fencing token 阻止 stale owner 删除或覆盖新 owner 的工作。
+    preconditions:
+      - 三个 Backend 可并发写入，且可制造旧/新维护 owner 交接。
+    steps:
+      - 并发写入唯一事件并启动两个维护任务，再读取数据库、lease 和清理结果。
+      - 确认全部合法事件可查询且不重复，stale owner 无法执行删除，当前 owner 的维护结果可审计。
+
+  - id: ADF-005
+    name: 迁移、ABI 和运行时闭包 fail closed
+    required: true
+    description: >
+      schema 版本错位、迁移失败、worker/runtime 文件校验失败以及 Node/Electron ABI 不匹配都必须阻止 Activity 启动，而不能降级到损坏数据。
+    preconditions:
+      - 已准备旧/新 schema、损坏 manifest 和三种运行时产物样本。
+    steps:
+      - 分别启动每种样本并记录 health、数据库变更与主业务可用性。
+      - 确认合法迁移一次完成；不匹配场景明确失败、不部分写库，主 Terminal 业务仍能继续。
+
+  - id: ADF-006
+    name: 留存、导出和删除遵守数据策略与恢复语义
+    required: true
+    description: >
+      Fact 与 Content 按独立保留期处理；导出和删除使用普通登录鉴权，删除可恢复且不泄露 locator、正文或 Keychain key。
+    preconditions:
+      - 已准备超过和未超过留存期的数据、合法/过期登录态及可恢复删除任务。
+    steps:
+      - 运行维护、导出、删除、恢复，并检查 API、文件权限、审计和查询结果。
+      - 确认仅目标数据受影响，未认证请求拒绝，敏感正文与密钥不出现在响应、日志或导出元数据中。
+
+  - id: ADF-007
+    name: Facts、Timeline、Sources 与 Policy 查询保持可核对一致性
+    required: true
+    description: >
+      UI/API 必须区分 Recorded 与 Computed；分页、并发阅读窗口、关联、source 分母和高基数索引都返回稳定、可核对结果。
+    preconditions:
+      - 数据集中含并发写入、多个 source、关联事实、content 和分页数据。
+    steps:
+      - 用 `$toolkit:playwright-cli` 与 API 交替查询 Facts、Timeline、Sources、详情和 Policy。
+      - 确认分页不重不漏，当前阅读窗口稳定，关联不按时间猜测，source 分母可复核，UI 与 API 使用同一事实源。
+
+  - id: ADF-008
+    name: Activity 故障不会反向破坏主业务
+    required: true
+    description: >
+      SQLite、worker、查询或 App Server 不可用时，Terminal、Thread、Agent Team 和核心导航保留可用，并将 Activity/source 明确标记为 unavailable。
+    preconditions:
+      - 可分别停止 Activity worker、使 SQLite 不可写、断开 App Server 与造成查询错误。
+    steps:
+      - 在每种故障下执行 Terminal 输入、查看 Thread/Run 并访问 Activity 页面。
+      - 确认主业务不阻塞、不伪造数据；Activity 失败状态可见且恢复后重新读取权威数据。

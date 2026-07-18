@@ -1,0 +1,72 @@
+version: 1
+name: App 连通性核心验收
+description: >
+  验证 Ionic App 对本地 Runweave Backend 的 online/offline、认证、Terminal 实时连接和
+  写操作保护。删除对内部 hook 状态、固定退避秒数和非核心 Bridge 集成的细粒度重复案例。
+
+cases:
+  - id: APP-001
+    name: 在线设备可加载项目并连接 Terminal
+    required: true
+    description: >
+      已认证且 Backend 健康时，App 首页、Terminal 详情、health、overview 和 terminal-events 能形成一致的 online 状态。
+    preconditions:
+      - App 已登录，配置的本机 Backend 健康且至少有一个可打开 Terminal。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 打开 App 首页和 Terminal 详情，记录 health、overview、terminal-events 与 terminal WS。
+      - 确认首页显示 Online，详情显示 Connected/Connecting，Terminal 内容可读，服务端 connected 事件后状态保持在线。
+
+  - id: APP-002
+    name: Backend 不可达只进入 Offline 而不退出登录
+    required: true
+    description: >
+      网络不可达、超时、5xx 或 Terminal 404 必须与 auth-expired 区分；离线保留登录态和已渲染内容，不跳转登录页。
+    preconditions:
+      - App 已登录并有首页 overview 与已打开 Terminal 详情。
+    steps:
+      - 分别停止 Backend、制造 timeout/5xx 和打开已删除 Terminal，观察页面与 auth store。
+      - 确认网络/HTTP/404 进入可解释 Offline 或 not-found，不 resetSession；仅真实 401/认证失效触发重新登录。
+
+  - id: APP-003
+    name: Offline 时停止高频连接与所有后端写操作
+    required: true
+    description: >
+      设备离线后，terminal-events、terminal WS 与详情刷新停止重连；新建、输入、Stop、上传和删除均不得产生请求或离线积压。
+    preconditions:
+      - App 已因 Backend 停止进入 Offline，当前有 Terminal 详情与可见写操作入口。
+    steps:
+      - 在 Offline 状态尝试刷新、新建、发送唯一 marker、Stop、上传图片和删除，并记录网络和 Terminal history。
+      - 确认只允许 health probe/显式 retry，不产生业务写请求或后续 flush marker，页面提示操作已禁用。
+
+  - id: APP-004
+    name: 显式重试和前台恢复后安全重连
+    required: true
+    description: >
+      Backend 恢复后，用户下拉刷新、详情重试或回前台可立即 probe 并恢复 overview、events 和 terminal 连接；原离线输入不得补发。
+    preconditions:
+      - 已完成 APP-003，Backend 可重新启动，离线期间已尝试输入唯一 marker。
+    steps:
+      - 恢复 Backend，分别通过首页刷新、详情 retry 和页面前台恢复触发检测。
+      - 确认 health 成功后变 Online，必要 WS 重连且 UI 收敛；离线 marker 未出现在 Terminal，已渲染内容不会闪退或重复。
+
+  - id: APP-005
+    name: WebSocket open 不可伪造在线状态
+    required: true
+    description: >
+      只有健康业务响应或 terminal-events 服务端 connected 消息可标记 online；raw socket open、错误 close 与未认证 ticket 都不能更新 last-seen。
+    preconditions:
+      - 可拦截或模拟 terminal-events 的 open、connected、error 和 close 顺序。
+    steps:
+      - 分别触发 raw open 无 connected、无效 ticket、正常 connected 和断线恢复。
+      - 确认仅正常业务/connected 转为 Online；其它情况保留 Checking/Offline 或认证错误，且不会引发无限 1200ms 重连。
+
+  - id: APP-006
+    name: App 连接状态不混淆 Terminal 运行状态
+    required: true
+    description: >
+      device online/offline 与 terminal running/exited、agent_running/agent_idle 是独立维度，任一变化不得错误覆盖另一维度。
+    preconditions:
+      - 一个 online 设备上存在 shell、Agent running、Agent idle 与 exited Terminal。
+    steps:
+      - 在状态之间切换，同时模拟一次设备 Offline/Online 恢复，读取首页、详情与 API。
+      - 确认设备状态只表达 Backend 连通性，Terminal 状态仍来自后端权威 TerminalState，两个维度可同时正确展示。

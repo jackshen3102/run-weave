@@ -1,0 +1,55 @@
+version: 1
+name: Web Terminal 状态查询对话框回归
+description: >
+  验证 Web Terminal 的状态查询对话框可以按 Thread ID 和 Terminal ID 查询 ThreadRef，
+  正确处理多候选排序与切换，并只提供面向 Agent 的摘要复制内容。
+
+cases:
+  - id: STATUS-001
+    name: 从 More actions 打开状态查询对话框
+    required: true
+    description: >
+      验证已登录的 Web Terminal 中可以从 More actions 打开居中的状态查询对话框。
+    preconditions:
+      - Web 前端和已登录的 backend 正在运行。
+      - 已打开可用的 Web Terminal 页面。
+    steps:
+      - 点击右上角 `More actions`；确认菜单中显示 `状态查询`。
+      - 点击 `状态查询`；确认居中打开标题为 `状态查询` 的 dialog。
+
+  - id: STATUS-002
+    name: Thread ID 查询显示摘要和未找到状态
+    required: true
+    description: >
+      验证 Thread ID 模式可以显示已有 ThreadRef 的诊断摘要，并对不存在的 thread 给出明确反馈。
+    preconditions:
+      - App Server 中存在至少一条可查询的 ThreadRef。
+      - 已打开状态查询 dialog。
+    steps:
+      - 切换到 `Thread ID`，输入已有 threadId 后点击 `查询`；确认摘要包含 status、threadId、agent、terminalSessionId、terminalPanelId、projectId、runId、lastEventId、lastHookEvent、lastCompletionReason、updatedAt、cwd 和 sourceInstanceId。
+      - 输入不存在的 threadId 后点击 `查询`；确认显示 `未找到该 thread`。
+
+  - id: STATUS-003
+    name: Terminal ID 多候选按状态和时间排序切换
+    required: true
+    description: >
+      验证 Terminal ID 模式对多条 ThreadRef 默认选中正确排序的候选项，并能切换当前摘要。
+    preconditions:
+      - App Server 中存在同一 terminalSessionId 的多条 ThreadRef，且状态或更新时间可区分。
+      - 已打开状态查询 dialog。
+    steps:
+      - 切换到 `Terminal ID`，输入该 terminalSessionId 后点击 `查询`；确认显示候选列表并默认选中排序首项。
+      - 核对候选排序为 running、starting、failed、idle、completed、unknown，同状态按 updatedAt 从新到旧。
+      - 点击另一条候选结果；确认下方状态摘要切换为被点击的 ThreadRef。
+
+  - id: STATUS-004
+    name: 复制给 Agent 不暴露 Raw JSON
+    required: true
+    description: >
+      验证复制功能输出当前选中 ThreadRef 的最小状态与排查指令，多候选时包含候选列表，
+      且对话框不提供原始 JSON 文案或入口。
+    preconditions:
+      - 状态查询已得到至少一条 ThreadRef；多候选场景优先使用 Terminal ID 查询结果。
+    steps:
+      - 点击 `复制给 Agent` 并读取剪贴板；确认包含当前选中 ThreadRef 的最小状态和排查指令，多候选时包含候选列表。
+      - 检查 dialog 可见文案；确认不出现 `复制 JSON` 或 `Raw JSON`。

@@ -6,7 +6,6 @@ import type {
   CreateTerminalSessionResponse,
   UpdateTerminalSessionRequest,
 } from "@runweave/shared/terminal/session";
-import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { AuthService } from "../auth/service";
 import {
   recordTerminalSessionCreated,
@@ -17,15 +16,13 @@ import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
 import { registerTerminalProjectRoutes } from "./terminal-project-routes";
+import { registerTerminalProjectContextRoutes } from "./terminal-project-context-routes";
 import { registerTerminalTmuxOrphanRoutes } from "./terminal-tmux-orphan-routes";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
-import {
-  aggregatePanelTerminalState,
-  type TerminalStateService,
-} from "../terminal/terminal-state-service";
+import type { TerminalStateService } from "../terminal/terminal-state-service";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
@@ -45,6 +42,7 @@ import {
 import {
   createTerminalSessionSchema,
   resolveTerminalCreateDefaults,
+  resolveTerminalStateFromPanels,
   sanitizeTerminalError,
   TerminalCreateDefaultsError,
   updateTerminalSessionSchema,
@@ -60,20 +58,6 @@ import {
 } from "./terminal-panel-routes";
 
 const terminalLogger = logger.child({ component: "terminal" });
-
-function resolveTerminalStateFromPanels(
-  terminalSessionManager: TerminalSessionManager,
-  terminalStateService: TerminalStateService | undefined,
-  session: NonNullable<ReturnType<TerminalSessionManager["getSession"]>>,
-): TerminalState | undefined {
-  const runningPanels = terminalSessionManager
-    .listPanels(session.id)
-    .filter((panel) => panel.status === "running");
-  if (runningPanels.length > 0) {
-    return aggregatePanelTerminalState(runningPanels);
-  }
-  return terminalStateService?.getCurrent(session.id, session);
-}
 
 async function readTerminalHistory(
   session: NonNullable<ReturnType<TerminalSessionManager["getSession"]>>,
@@ -137,6 +121,7 @@ export function createTerminalRouter(
     tmuxOutputWatcher: options?.tmuxOutputWatcher,
     terminalEventService: options?.terminalEventService,
   });
+  registerTerminalProjectContextRoutes(router, terminalSessionManager);
 
   registerTerminalPreviewRoutes(router, terminalSessionManager);
 
@@ -249,7 +234,14 @@ export function createTerminalRouter(
         parsed.data.projectId &&
         !terminalSessionManager.getProject(parsed.data.projectId)
       ) {
-        res.status(404).json({ message: "Terminal project not found" });
+        const context = terminalSessionManager.getProjectContext(
+          parsed.data.projectId,
+        );
+        res.status(context ? 409 : 404).json({
+          message: context
+            ? "Terminal project context is unavailable"
+            : "Terminal project not found",
+        });
         return;
       }
       const session = await terminalSessionManager.createSession(

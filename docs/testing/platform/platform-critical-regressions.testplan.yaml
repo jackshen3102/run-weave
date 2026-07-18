@@ -1,0 +1,66 @@
+version: 1
+name: 平台关键回归验收
+description: >
+  验证终端选择恢复、Beta 槽位交接、Runweave CLI 输入投递和多实例 CDP
+  group 隔离四条跨端关键不变量，防止状态串扰、错误降级和错误目标附着。
+
+cases:
+  - id: PCR-001
+    name: 路由、最近选择与资源删除后的终端恢复保持一致
+    required: true
+    description: >
+      验证有效路由优先于 recent selection；无路由时恢复有效 recent selection；
+      projectSessionIds 记录各项目最近终端；删除终端只在原项目降级、删除项目才按排序
+      全局回退；不同 apiBase 和后端迟到不会覆盖有效选择。
+    preconditions:
+      - 已准备 apiBase 不同的两个连接，连接 C1 含项目 A、B，且 A 排在 B 前，A 含 A1/A2，B 含 B1/B2。
+      - C1 的 recent selection 指向 B/B2，并在 projectSessionIds 中同时保存 A/A2 与 B/B2。
+      - 已通过 `$toolkit:playwright-cli` 附着桌面端目标 CDP，可读取 URL、项目按钮、终端 tab、localStorage 和项目/终端接口响应。
+    steps:
+      - 先打开 `/terminal/<A1>`，确认路由选择 A/A1 并将 recent selection 稳定更新为 A/A1；再写回 B/B2 后打开 `/terminal`，确认 replace 到 B/B2 而非排序第一项。
+      - 在项目间切换，确认分别恢复 A2 和 B2；删除 B2 后重新加载，确认仍选择 B 且降级至 B1；删除项目 B 后重新加载，确认才回退为 A/A1。
+      - 切换到 C2 后确认不会读取 C1 的 recent key；使桌面更新重启期间后端短暂不可用再恢复，确认最终回到 C1 的有效选择，期间 recent selection 未被写为空值或第一项。
+
+  - id: PCR-002
+    name: Beta 槽位重用在 reset 后清空新 owner 行为态
+    required: true
+    description: >
+      验证新 owner 只能在前 owner 完成 stop/reset、manifest 落盘和 lease 释放后复用同一
+      slot；前 owner 的凭据、页面存储和 App Server marker 必须清空，而 warm runtime 与
+      shared 服务必须保持不变。
+    preconditions:
+      - 隔离 validation HOME 中 `pool-01` 已有可复用 warm App、Desktop/App Server runtime，Stable 与 shared Backend/App Server 的 PID、路径和状态已记录。
+      - Session A 已独占 `pool-01`，并在 desktop 与 terminal-browser 写入 Cookie、LocalStorage、IndexedDB、页面 marker、持久标签、backend-auth、browser auth-store 与 App Server marker。
+      - 可在 mutable user-data 重命名后、lease 释放前暂停 A 的 stop/reset 流程，并能使用 `$toolkit:playwright-cli` 附着后续 owner 的 desktop 与 terminal-browser。
+    steps:
+      - 让 A 执行 stop 并停在 reset 屏障；并发请求 B 显式获取 `pool-01`，确认 B 因 slot occupied 失败且看不到半清理目录。
+      - 释放屏障并确认 A 的 reset、stopped 或 identity-safe failed manifest 和 lease 释放完成；启动 B 复用 `pool-01`。
+      - 读取 B 的存储、凭据、标签和 App Server marker，确认均不含 A 的行为态且 B 使用新 ownerSessionId/nonce；确认 warm runtime 仍存在，Stable 与 shared 服务的 PID、路径和状态均未改变。
+
+  - id: PCR-003
+    name: CLI 输入模式、Agent 覆盖与 panel 定向保持隔离
+    required: true
+    description: >
+      验证 `rw terminal send` 的 raw、line、enter、stdin 和 Codex slash command 语义稳定；
+      目标已有其他 agent 时必须显式覆盖；覆盖生命周期和最终输入必须只作用于指定 panel。
+    preconditions:
+      - 已配置可用 `$RW_BIN`、认证和一个运行中的 tmux terminal，终端内至少有 `reviewer` 与其他可观察 panel。
+      - 可读取 terminal history、state 和真实 pane 画面，并可使用 `$toolkit:playwright-cli` 观察各 panel 输入。
+    steps:
+      - 分别投递默认 raw、raw 加 `--enter`、`--mode line`、line 加 `--enter`、stdin raw、stdin line 和 `/compact` 的 `codex_slash_command`；确认 raw 默认不提交、raw 加 enter 兼容提交、line 不双回车、stdin 按指定模式投递、slash command 不被 CLI 改写或吞错。
+      - 在当前为 codex 时向同一终端请求 traex，确认未传 `--agent-overwrite` 时拒绝；传入覆盖后确认先退出 codex、再启动 traex 并以 line 模式投递，agent 名不被归一化。
+      - 使用 `--panel reviewer --agent codex` 定向投递，再同时提供 `--panel` 与 `--role`；确认 agent 启动、clear、exit 和最终文本都只进入 reviewer，`--panel` 优先且其他 panel 没有输入或控制行。
+
+  - id: PCR-004
+    name: CDP group-scoped endpoint 隔离实例和 Agent Control Group
+    required: true
+    description: >
+      验证 group-scoped Terminal Browser CDP endpoint 只枚举和操作指定 Beta instance 与
+      指定 Agent Control Group 的页面，不能被另一实例、另一 group 或全局 endpoint 劫持。
+    preconditions:
+      - Beta 实例 A、B 均健康，各自存在两个 Agent Control Group，四个 group 页面具有不同的可识别 marker 或 URL。
+      - 已记录 A、B 的 instanceId、group 标识、revision 与各 group-scoped endpoint，并将 ambient 全局 CDP 配置指向非目标实例。
+    steps:
+      - 分别解析 A/B 每个 group 的 scoped endpoint，并使用 `$toolkit:playwright-cli` 显式附着后读取 targets、URL 与 marker。
+      - 确认每个连接只返回所属 instance 和所属 group 的页面，且读取到的 marker、revision 与 resolver 输出一致。
+      - 尝试通过某个 endpoint 枚举或操作另一 instance、另一 group 和 ambient 全局 target；确认不可见、不可操作且没有回退到错误 endpoint。

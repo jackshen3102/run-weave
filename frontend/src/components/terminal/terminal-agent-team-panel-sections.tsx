@@ -125,7 +125,7 @@ export function StartFlowSection({
           className="h-8 w-full rounded border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
           value={testCaseFilePath}
           onChange={(event) => onTestCaseFilePathChange(event.target.value)}
-          placeholder="docs/testing/example-test-cases.md"
+          placeholder="docs/testing/example.testplan.yaml"
         />
       </label>
       <label className="block space-y-1 text-[11px] text-slate-400">

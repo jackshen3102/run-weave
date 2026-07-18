@@ -3,6 +3,7 @@ import type { PrepareTerminalAgentRequest, PrepareTerminalAgentResponse, Recover
 import type { CreateTerminalClipboardImageRequest, CreateTerminalClipboardImageResponse, SendTerminalInputRequest, SendTerminalInputResponse } from "@runweave/shared/terminal/input";
 import type { CreateTerminalPanelRequest, ResizeTerminalPanelRequest, TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { CreateTerminalProjectRequest, TerminalProjectListItem, UpdateTerminalProjectRequest } from "@runweave/shared/terminal/project";
+import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
 import type { CreateTerminalSessionRequest, CreateTerminalSessionResponse, CreateTerminalEventsWsTicketResponse, CreateTerminalWsTicketResponse, TerminalSessionHistoryResponse, TerminalSessionListItem, TerminalSessionStatusResponse, UpdateTerminalSessionRequest } from "@runweave/shared/terminal/session";
 import { requestJson, requestVoid } from "./http";
 
@@ -98,6 +99,41 @@ export async function listTerminalProjects(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function listTerminalProjectContexts(
+  apiBase: string,
+  token: string,
+  parentProjectId: string,
+): Promise<TerminalProjectContextListItem[]> {
+  return requestJson<TerminalProjectContextListItem[]>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(parentProjectId)}/contexts`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+}
+
+export async function updateTerminalProjectContext(
+  apiBase: string,
+  token: string,
+  parentProjectId: string,
+  childProjectId: string,
+  pinned: boolean,
+): Promise<TerminalProjectContextListItem> {
+  return requestJson<TerminalProjectContextListItem>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(parentProjectId)}/contexts/${encodeURIComponent(childProjectId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ pinned }),
     },
   );
 }

@@ -1,0 +1,94 @@
+version: 1
+name: Terminal Browser 核心验收
+description: >
+  验证 Terminal Browser 的真实 WebContents、CDP/Playwright MCP 边界、Tab 生命周期和
+  跨实例隔离。只保留影响用户导航、自动化安全和桌面恢复的系统契约。
+
+cases:
+  - id: TBR-001
+    name: 普通链接和自动化页面统一作为面板 Tab 打开
+    required: true
+    description: >
+      正常链接、page-open 和 MCP 创建页面都在当前 Terminal Browser 内生成 Tab，并保持 opener、active Tab 和 UI 状态一致。
+    preconditions:
+      - Electron Terminal Browser 已打开，存在至少一个可导航的页面和可用 CDP/MCP 连接。
+    steps:
+      - 从页面链接、CDP 和 MCP 分别创建页面，再切换、关闭与回到 opener。
+      - 确认新 Tab 插入和激活规则一致，关闭只作用目标 Tab，UI、IPC 与 WebContents 列表实时收敛。
+
+  - id: TBR-002
+    name: CDP 与 Playwright MCP 只附着目标 Terminal Browser
+    required: true
+    description: >
+      endpoint 必须由 dev:open 的 terminal-browser surface 返回；desktop、全局 endpoint 或其它实例不能替代目标 Browser。
+    preconditions:
+      - 已启动带 terminal-browser CDP 的 Dev Session，另有 desktop CDP 或其它实例作为对照。
+    steps:
+      - 分别使用正确和错误 endpoint 执行导航、快照和页面查询。
+      - 确认正确 endpoint 只看到目标 Browser 的 group；错误 endpoint 被拒绝或无法访问目标，未把自动化附着到主窗口。
+
+  - id: TBR-003
+    name: 自动化可执行受控导航快照与交互
+    required: true
+    description: >
+      CDP 和 Playwright MCP 可以对面板页面执行导航、评估、输入、截图和可访问性快照，并将可观察结果映射回正确 Tab。
+    preconditions:
+      - 已通过 TBR-002 附着目标 CDP，页面包含可交互元素和长内容。
+    steps:
+      - 执行导航、输入、截图、可访问性快照和页面评估，再在 UI 选择对应 Tab。
+      - 确认每个结果属于目标 tab/frame，长页面和隐藏元素的快照行为可解释，UI 状态与自动化结果一致。
+
+  - id: TBR-004
+    name: 页面和 Frame 身份在 Session 与 Group 间隔离
+    required: true
+    description: >
+      sessionId、frameId、targetId 和 browser group 只能在所属实例内使用；无明确实例或多候选时不得猜测路由。
+    preconditions:
+      - 已启动两个 Browser group，各自有多个 page 与 frame。
+    steps:
+      - 使用正确、跨 group、过期和缺失的 page/frame/session 标识执行操作。
+      - 确认正确标识可操作；其它请求 fail closed，不泄露页面 URL、Cookie、DOM 或 Tab 列表。
+
+  - id: TBR-005
+    name: 自动化安全边界阻止危险主窗口和文件操作
+    required: true
+    description: >
+      MCP/CDP 不得关闭 Electron 主窗口、访问非所属 file 协议资源、绕过 Cookie/权限策略或通过危险快捷键改变宿主应用。
+    preconditions:
+      - Terminal Browser 中存在普通网页、file URL 尝试和可模拟的 Meta/关闭动作。
+    steps:
+      - 分别发起危险快捷键、关闭浏览器、跨资源 file URL、Cookie 读取与不受信输入。
+      - 确认危险动作被拒绝或限制，普通网页继续可用，日志不泄露敏感值，宿主桌面窗口未关闭。
+
+  - id: TBR-006
+    name: Tab Strip 在拥挤与重排下保持身份和可访问性
+    required: true
+    description: >
+      不同宽度、Tab 数量、侧栏 resize、关闭、键盘导航与拖拽排序不能丢失 active Tab、产生溢出死角或破坏无障碍语义。
+    preconditions:
+      - 已打开足够多的不同标题和 URL 的 Tab，并可调整 Terminal Browser 宽度。
+    steps:
+      - 依次调整宽度、搜索 overview、键盘切换、连续关闭、拖拽重排并重启窗口。
+      - 确认 active Tab 始终可见且身份不变，Overview 操作精确，顺序持久化，Tab 与关闭控件可键盘访问。
+
+  - id: TBR-007
+    name: 连接失败与 MCP 生命周期不会破坏现有浏览会话
+    required: true
+    description: >
+      CDP/MCP 断连、重连、AI Tab 上限和 DevTools 模式变化必须有确定结果，既有用户 Tab 与页面不被无故清理。
+    preconditions:
+      - 已有用户 Tab、MCP 创建 Tab 和可模拟的连接中断、上限与 DevTools 设备模式。
+    steps:
+      - 断开重连 MCP、超过上限、切换设备模式并恢复连接。
+      - 确认拒绝或恢复结果明确，用户 Tab 保留，MCP Tab 按策略收敛且不会产生重复或孤儿 target。
+
+  - id: TBR-008
+    name: Browser 核心路径具备真实 Electron 证据
+    required: true
+    description: >
+      真实 Electron BrowserView、CDP surface 和页面 UI 必须一起验证，不能以独立系统浏览器或静态检查冒充。
+    preconditions:
+      - 已由 Dev Session 提供 desktop 和 terminal-browser 两类 surface。
+    steps:
+      - 使用 desktop surface 准备 Terminal Browser，再通过 terminal-browser endpoint 用 `$toolkit:playwright-cli` 验收 TBR-001 至 TBR-007 的最小路径。
+      - 确认保存的 endpoint、Tab DOM、CDP 结果和桌面窗口归属同一实例，验收后关闭本次创建的测试 Tab 并 detach。

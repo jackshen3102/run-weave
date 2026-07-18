@@ -24,7 +24,7 @@ function behaviorCase(caseId) {
   return {
     caseId,
     sourceCaseId: caseId,
-    sourceFilePath: "docs/testing/full-test-cases.md",
+    sourceFilePath: "docs/testing/full.testplan.yaml",
     text: `${caseId} behavior`,
     status: "pending",
     consecutiveFail: 0,

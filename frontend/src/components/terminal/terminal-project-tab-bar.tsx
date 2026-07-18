@@ -52,7 +52,7 @@ export const TerminalProjectTabBar = memo(function TerminalProjectTabBar({
   const projects = useTerminalProjectsQuery().data ?? EMPTY_TERMINAL_PROJECTS;
   const sessions = useTerminalSessionsQuery().data ?? EMPTY_TERMINAL_SESSIONS;
   const activeProjectId = useTerminalWorkspaceStore(
-    (state) => state.activeProjectId,
+    (state) => state.activeParentProjectId,
   );
   const projectStatusState = useTerminalWorkspaceStore(
     useShallow((state) => ({

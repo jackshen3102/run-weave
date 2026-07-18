@@ -7,9 +7,11 @@ import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
+  EMPTY_TERMINAL_PROJECT_CONTEXTS,
   EMPTY_TERMINAL_SESSIONS,
   updateTerminalSessions,
   useTerminalProjectsQuery,
+  useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
   useTerminalWorkspaceQueryClient,
 } from "../../features/terminal/queries/terminal-workspace-queries";
@@ -26,6 +28,7 @@ import { TerminalSessionTabStrip } from "./terminal-session-tab-strip";
 import { TerminalWorkspaceStage } from "./terminal-workspace-stage";
 import { TerminalWorkspaceOverlays } from "./terminal-workspace-overlays";
 import { useTerminalWorkspaceAgentTeam } from "./use-terminal-workspace-agent-team";
+import { TerminalWorktreeRail } from "./terminal-worktree-rail";
 
 interface WorkspaceConnectionNavigation {
   connections?: ConnectionConfig[];
@@ -38,6 +41,7 @@ interface WorkspaceConnectionNavigation {
 
 interface WorkspaceProjectCommands {
   onSelect: (projectId: string) => void;
+  onSelectContext: (projectId: string) => void;
   onCloseDialog: () => void;
   onSubmitDialog: (name: string, projectPath: string) => Promise<void>;
   onConfirmDelete: () => void;
@@ -81,6 +85,7 @@ export function TerminalWorkspaceShell({
     onConfirmDelete: onConfirmDeleteProject,
     onReorder: onReorderProjects,
     onSelect: onSelectProject,
+    onSelectContext,
     onSubmitDialog: onSubmitProjectDialog,
   } = projectCommands;
   const {
@@ -99,6 +104,12 @@ export function TerminalWorkspaceShell({
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
+  const activeParentProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeParentProjectId,
+  );
+  const contextsQuery = useTerminalProjectContextsQuery(activeParentProjectId);
+  const contexts =
+    contextsQuery.data ?? EMPTY_TERMINAL_PROJECT_CONTEXTS;
   const activeSessionId = useTerminalWorkspaceStore(
     (state) => state.activeSessionId,
   );
@@ -113,9 +124,6 @@ export function TerminalWorkspaceShell({
   );
   const setActivePanelIdBySessionId = useTerminalWorkspaceStore(
     (state) => state.setActivePanelIdBySessionId,
-  );
-  const setActiveProjectId = useTerminalWorkspaceStore(
-    (state) => state.setActiveProjectId,
   );
   const setProjectDialogMode = useTerminalWorkspaceStore(
     (state) => state.setProjectDialogMode,
@@ -138,8 +146,23 @@ export function TerminalWorkspaceShell({
     }
     return sessions.filter((session) => session.projectId === activeProjectId);
   }, [activeProjectId, sessions]);
+  const activeParentProject =
+    projects.find(
+      (project) => project.projectId === activeParentProjectId,
+    ) ?? null;
+  const activeContext =
+    contexts.find((context) => context.projectId === activeProjectId) ?? null;
   const activeProject =
-    projects.find((project) => project.projectId === activeProjectId) ?? null;
+    activeParentProject && activeContext
+      ? {
+          ...activeParentProject,
+          projectId: activeContext.projectId,
+          name: activeContext.name,
+          path: activeContext.path,
+        }
+      : activeParentProject?.projectId === activeProjectId
+        ? activeParentProject
+        : null;
   const activeSession = activeSessionId
     ? (visibleSessions.find(
         (session) => session.terminalSessionId === activeSessionId,
@@ -154,7 +177,7 @@ export function TerminalWorkspaceShell({
   const requestEditProject = useMemoizedFn((projectId?: string) => {
     setPreviewActiveTool("preview");
     if (projectId) {
-      setActiveProjectId(projectId);
+      onSelectProject(projectId);
     }
     setProjectDialogError(null);
     setProjectDialogMode("edit");
@@ -333,28 +356,35 @@ export function TerminalWorkspaceShell({
           requestEditProject,
         }}
       />
-      <TerminalSessionTabStrip
-        visibleSessions={visibleSessions}
-        isMobileMonitor={isMobileMonitor}
-        loading={loading}
-        onReorderSessions={onReorderSessions}
-        onSelectSession={onSelectSession}
-        onRequestCloseSession={onRequestCloseSession}
-        onRequestEditAlias={(session) =>
-          openSessionAlias(session.terminalSessionId)
-        }
-        onPanelSplitEnabledChange={(terminalSessionId, enabled) => {
-          void setPanelSplitEnabled(terminalSessionId, enabled);
-        }}
-        onRequestAgentTeam={requestAgentTeam}
-        onRequestCreateSession={onRequestCreateSession}
-      />
-
-      <TerminalWorkspaceStage
-        clientMode={clientMode}
-        showAgentTeamTool={showAgentTeamTool}
-        onEditProject={() => requestEditProject()}
-        panels={{
+      <div className="flex min-h-0 flex-1">
+        {!isMobileMonitor ? (
+          <TerminalWorktreeRail
+            parentProjectId={activeParentProjectId}
+            onSelectContext={onSelectContext}
+          />
+        ) : null}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TerminalSessionTabStrip
+            visibleSessions={visibleSessions}
+            isMobileMonitor={isMobileMonitor}
+            loading={loading}
+            onReorderSessions={onReorderSessions}
+            onSelectSession={onSelectSession}
+            onRequestCloseSession={onRequestCloseSession}
+            onRequestEditAlias={(session) =>
+              openSessionAlias(session.terminalSessionId)
+            }
+            onPanelSplitEnabledChange={(terminalSessionId, enabled) => {
+              void setPanelSplitEnabled(terminalSessionId, enabled);
+            }}
+            onRequestAgentTeam={requestAgentTeam}
+            onRequestCreateSession={onRequestCreateSession}
+          />
+          <TerminalWorkspaceStage
+            clientMode={clientMode}
+            showAgentTeamTool={showAgentTeamTool}
+            onEditProject={() => requestEditProject()}
+            panels={{
           onActiveAgentTeamRunChange: syncActiveAgentTeamRunForActiveSession,
           onPanelSplitEnabledChange: (enabled) => {
             if (activeSession) {
@@ -379,8 +409,10 @@ export function TerminalWorkspaceShell({
           onResizePanel: (terminalSessionId, panelId, direction, cells) => {
             void resizePanel(terminalSessionId, panelId, direction, cells);
           },
-        }}
-      />
+            }}
+          />
+        </div>
+      </div>
       <TerminalWorkspaceOverlays
         isMobileMonitor={isMobileMonitor}
         onCloseProjectDialog={onCloseProjectDialog}

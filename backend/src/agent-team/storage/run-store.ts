@@ -42,7 +42,7 @@ export class AgentTeamRunStore {
     if (!isSafeAgentTeamRunId(runId)) {
       return null;
     }
-    for (const project of this.terminalSessionManager.listProjects()) {
+    for (const project of this.terminalSessionManager.listAllProjectContexts()) {
       const candidate = this.paths.runFilePath(project.id, runId);
       if (!existsSync(candidate)) {
         continue;

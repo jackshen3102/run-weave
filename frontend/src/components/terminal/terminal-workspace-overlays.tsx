@@ -53,6 +53,9 @@ export function TerminalWorkspaceOverlays({
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
+  const activeParentProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeParentProjectId,
+  );
   const activeSessionId = useTerminalWorkspaceStore(
     (state) => state.activeSessionId,
   );
@@ -114,7 +117,9 @@ export function TerminalWorkspaceOverlays({
   const loading =
     mutationLoading || projectsQuery.isPending || sessionsQuery.isPending;
   const activeProject =
-    projects.find((project) => project.projectId === activeProjectId) ?? null;
+    projects.find(
+      (project) => project.projectId === activeParentProjectId,
+    ) ?? null;
   const activeSession =
     sessions.find((session) => session.terminalSessionId === activeSessionId) ??
     null;

@@ -596,7 +596,7 @@ E2E/手工回归：
 
 建议复用现有终端回归入口：
 
-- `docs/testing/runbooks/terminal-vim.md`
+- `docs/testing/terminal/terminal-runtime-core.testplan.yaml`
 - `frontend/tests/terminal.spec.ts`
 - `frontend/tests/terminal-vim.spec.ts`
 

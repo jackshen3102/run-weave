@@ -5,6 +5,7 @@ export * from "./input";
 export * from "./panel";
 export * from "./preview";
 export * from "./project";
+export * from "./project-context";
 export * from "./session";
 export * from "./state";
 export * from "./websocket";

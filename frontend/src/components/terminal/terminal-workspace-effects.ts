@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,
@@ -48,11 +49,16 @@ export function resolvePreferredProjectId(
         (session) => session.terminalSessionId === preferredSessionId,
       )?.projectId
     : null;
+  const preferredSessionParentProjectId = preferredSessionProjectId
+    ? resolveTerminalParentProjectId(preferredSessionProjectId)
+    : null;
   if (
-    preferredSessionProjectId &&
-    projects.some((project) => project.projectId === preferredSessionProjectId)
+    preferredSessionParentProjectId &&
+    projects.some(
+      (project) => project.projectId === preferredSessionParentProjectId,
+    )
   ) {
-    return preferredSessionProjectId;
+    return preferredSessionParentProjectId;
   }
 
   if (
@@ -71,6 +77,59 @@ export function resolvePreferredProjectId(
   }
 
   return projects[0]?.projectId ?? null;
+}
+
+export function hasValidProjectSessionSelection(
+  projects: Array<{ projectId: string }>,
+  sessions: TerminalSessionListItem[],
+  parentProjectId: string | null,
+  projectId: string | null,
+  terminalSessionId: string | null,
+): boolean {
+  if (!parentProjectId || !projectId || !terminalSessionId) {
+    return false;
+  }
+
+  return (
+    projects.some((project) => project.projectId === parentProjectId) &&
+    resolveTerminalParentProjectId(projectId) === parentProjectId &&
+    sessions.some(
+      (session) =>
+        session.projectId === projectId &&
+        session.terminalSessionId === terminalSessionId,
+    )
+  );
+}
+
+export function selectTerminalProjectContext({
+  activeParentProjectId,
+  projectId,
+  sessions,
+  scope,
+  selectProjectContext,
+}: {
+  activeParentProjectId: string | null;
+  projectId: string;
+  sessions: TerminalSessionListItem[];
+  scope: string;
+  selectProjectContext: (
+    parentProjectId: string | null,
+    projectId: string | null,
+    terminalSessionId: string | null,
+  ) => void;
+}): void {
+  if (!activeParentProjectId) {
+    return;
+  }
+
+  const projectSessions = sessions.filter(
+    (session) => session.projectId === projectId,
+  );
+  selectProjectContext(
+    activeParentProjectId,
+    projectId,
+    resolvePreferredSessionId(scope, projectId, projectSessions),
+  );
 }
 
 function cycleIndex(currentIndex: number, total: number, delta: number): number {
@@ -266,6 +325,7 @@ export function useSessionMarkerCleanup({
 
 interface PersistRecentSelectionOptions {
   apiBase: string;
+  activeParentProjectId: string | null;
   activeProjectId: string | null;
   activeSessionId: string | null;
   canPersist: boolean;
@@ -274,19 +334,33 @@ interface PersistRecentSelectionOptions {
 
 export function usePersistRecentSelection({
   apiBase,
+  activeParentProjectId,
   activeProjectId,
   activeSessionId,
   canPersist,
   requestError,
 }: PersistRecentSelectionOptions): void {
   useEffect(() => {
-    if (!canPersist || requestError || !activeProjectId) {
+    if (
+      !canPersist ||
+      requestError ||
+      !activeParentProjectId ||
+      !activeProjectId
+    ) {
       return;
     }
 
     saveRecentTerminalSelection(apiBase, {
+      parentProjectId: activeParentProjectId,
       projectId: activeProjectId,
       terminalSessionId: activeSessionId,
     });
-  }, [activeProjectId, activeSessionId, apiBase, canPersist, requestError]);
+  }, [
+    activeParentProjectId,
+    activeProjectId,
+    activeSessionId,
+    apiBase,
+    canPersist,
+    requestError,
+  ]);
 }

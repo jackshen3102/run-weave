@@ -1,0 +1,81 @@
+version: 1
+name: Explorer 快捷搜索 UI 回归
+description: >
+  验证 Terminal 右侧 Preview Explorer 的快捷搜索在 Files、Content、Folders 模式中能正确
+  reveal 和选择资源，过滤敏感文件，并遵循页面级快捷键和浮层关闭规则。
+
+cases:
+  - id: EXPLORER-001
+    name: Explorer 入口打开居中快捷浮层
+    required: true
+    description: >
+      验证 Preview Explorer 的搜索入口可用，打开后的浮层相对页面 viewport 居中而不是局部侧栏居中。
+    preconditions:
+      - 已启动 Runweave 并打开包含临时项目的 `/terminal/<session-id>`。
+      - 当前处于 `Preview > Explorer`，项目包含可搜索文件。
+    steps:
+      - 点击 `Search project files` 入口；确认快捷浮层可见。
+      - 读取浮层 bounding box 与 viewport；确认浮层中心接近 viewport 中心，而不是 Explorer sidebar 或 Preview 面板中心。
+
+  - id: EXPLORER-002
+    name: Files 模式选择文件后 reveal 并预览
+    required: true
+    description: >
+      验证 Files 模式的结果显示文件名和目录，选择后关闭浮层、强制回 Explorer 并打开真实文件预览。
+    preconditions:
+      - 项目含 `docs/architecture/terminal-code-preview.md`。
+      - 已在 Preview Explorer 中打开快捷浮层。
+    steps:
+      - 保持默认 Files 模式，输入 `terminal preview` 并点击 `terminal-code-preview.md` 结果。
+      - 确认结果行显示文件名与目录，浮层关闭，Explorer 展开 `docs/architecture`、选中文件并在右侧预览打开该文件。
+
+  - id: EXPLORER-003
+    name: Content 模式定位命中行列
+    required: true
+    description: >
+      验证 Content 模式结果包含命中片段和行列信息，选择后在 Explorer 中打开文件并定位到匹配位置。
+    preconditions:
+      - 项目含 `src/search/quick-target.ts`，其内容包含 `quick-search-target`。
+      - 当前可在 Preview 中使用页面级快捷键。
+    steps:
+      - 在 Preview 空白区域按 `Cmd/Ctrl+Shift+F` 打开 Content 模式，输入 `quick-search-target` 并点击 `quick-target.ts`。
+      - 确认结果行包含文件名、路径、命中片段与 `line:column` badge；浮层关闭，Explorer 展开 `src/search` 并选中文件，Monaco 定位到命中行附近。
+
+  - id: EXPLORER-004
+    name: Folders 模式聚焦目录且不打开伪内容
+    required: true
+    description: >
+      验证 Folders 模式选择目录后只展开并聚焦目录，不将目录错误地作为文件或 mock 内容预览。
+    preconditions:
+      - 项目含 `src/search/nested/child.ts`。
+      - 已在 Preview Explorer 中打开快捷浮层。
+    steps:
+      - 切换到 Folders，输入 `nested` 并点击 `nested` 目录结果。
+      - 确认结果行显示目录名、父路径和 `DIR` badge，浮层关闭且 Explorer 聚焦 `src/search/nested`，右侧未变为目录错误或 mock 内容。
+
+  - id: EXPLORER-005
+    name: 不同 Preview mode 选择结果后统一回 Explorer
+    required: true
+    description: >
+      验证从 Changes、Open/File、Explorer 三种当前 mode 选择文件结果后都回到 Explorer，
+      执行真实展开、选中和文件预览。
+    preconditions:
+      - 项目中存在可通过 Files 模式搜索并打开的文件。
+      - Preview 可分别切换到 Changes、Open/File 和 Explorer mode。
+    steps:
+      - 分别从 Changes、Open/File 和 Explorer mode 打开快捷浮层并选择同一个 Files 结果。
+      - 每次确认最终 mode 均为 Explorer，目录展开、文件选中和预览完成，未停留在 `file` mode。
+
+  - id: EXPLORER-006
+    name: 过滤敏感文件并遵循快捷键焦点和关闭规则
+    required: true
+    description: >
+      验证敏感文件和排除目录不进入搜索结果，快捷键只在 Preview 空白区域生效，Esc 和 Enter
+      正确关闭或选择浮层结果，且不干扰 Monaco 保存。
+    preconditions:
+      - 项目含 `.env.local`、`.env.production.local`、`SECRET.txt`、`node_modules/hidden/index.js`、`dist/hidden.js` 和普通搜索目标。
+      - 页面包含 terminal emulator、Monaco 和普通输入框。
+    steps:
+      - 在 Files 模式查询 `.env`、`secret`、`hidden`，在 Content 模式查询 `quick-search-target`；确认敏感文件和排除目录均不在结果中。
+      - 在 Preview 空白区域分别按 `Cmd/Ctrl+P` 和 `Cmd/Ctrl+Shift+F`；确认打开对应模式。将焦点切到 terminal、Monaco 和普通输入框后重复快捷键；确认不打开浮层，且 Monaco 的 `Cmd/Ctrl+S` 保存逻辑不受影响。
+      - 在浮层内按 `Esc`；确认关闭。重新打开后将结果高亮并按 `Enter`；确认打开当前高亮结果并关闭浮层。

@@ -99,6 +99,9 @@ export class LowDbTerminalSessionStore
       if ("path" in params) {
         project.path = params.path ?? null;
       }
+      if (params.pinnedChildProjectIds !== undefined) {
+        project.pinnedChildProjectIds = [...params.pinnedChildProjectIds];
+      }
       await database.write();
     });
   }

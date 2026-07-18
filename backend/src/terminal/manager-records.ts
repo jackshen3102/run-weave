@@ -1,6 +1,7 @@
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
+import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
 import type {
   PersistedTerminalProjectRecord,
   PersistedTerminalPanelRecord,
@@ -22,7 +23,12 @@ export interface TerminalProjectRecord {
   createdAt: Date;
   isDefault: boolean;
   order?: number;
+  pinnedChildProjectIds: string[];
 }
+
+export interface TerminalProjectContextRecord
+  extends TerminalProjectRecord,
+    TerminalProjectContextListItem {}
 
 export interface TerminalSessionRecord {
   id: string;
@@ -113,6 +119,7 @@ export function buildProjectRecord(
     path: persisted.path ?? null,
     createdAt: new Date(persisted.createdAt),
     isDefault: persisted.isDefault,
+    pinnedChildProjectIds: [...(persisted.pinnedChildProjectIds ?? [])],
     ...(persisted.order !== undefined ? { order: persisted.order } : {}),
   };
 }
@@ -126,6 +133,9 @@ export function toPersistedProject(
     path: project.path,
     createdAt: project.createdAt.toISOString(),
     isDefault: project.isDefault,
+    ...(project.pinnedChildProjectIds.length > 0
+      ? { pinnedChildProjectIds: [...project.pinnedChildProjectIds] }
+      : {}),
   };
 }
 

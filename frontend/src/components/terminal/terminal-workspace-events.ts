@@ -1,6 +1,7 @@
 import { useDebounceFn, useMemoizedFn } from "ahooks";
 import { useEffect, useRef } from "react";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { createTerminalBellPlayer } from "../../features/terminal/bell";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import { useTerminalEventsConnection } from "../../features/terminal/use-terminal-events-connection";
@@ -19,7 +20,6 @@ interface UseTerminalWorkspaceEventsArgs {
   token: string;
   onAuthExpired?: () => void;
   loadSessions: () => Promise<void>;
-  selectActiveSession: (terminalSessionId: string | null) => void;
 }
 
 function isTerminalListInvalidationEvent(
@@ -50,7 +50,6 @@ export function useTerminalWorkspaceEvents({
   token,
   onAuthExpired,
   loadSessions,
-  selectActiveSession,
 }: UseTerminalWorkspaceEventsArgs) {
   const sessions = useTerminalSessionsQuery().data ?? EMPTY_TERMINAL_SESSIONS;
   const { queryClient, scope } = useTerminalWorkspaceQueryClient();
@@ -66,8 +65,8 @@ export function useTerminalWorkspaceEvents({
   const setCompletionMarkers = useTerminalWorkspaceStore(
     (state) => state.setCompletionMarkers,
   );
-  const setActiveProjectId = useTerminalWorkspaceStore(
-    (state) => state.setActiveProjectId,
+  const selectProjectContext = useTerminalWorkspaceStore(
+    (state) => state.selectProjectContext,
   );
   const setBellMarkers = useTerminalWorkspaceStore(
     (state) => state.setBellMarkers,
@@ -99,8 +98,11 @@ export function useTerminalWorkspaceEvents({
         ) {
           return;
         }
-        setActiveProjectId(latestCreatedSession.projectId);
-        selectActiveSession(latestCreatedSession.terminalSessionId);
+        selectProjectContext(
+          resolveTerminalParentProjectId(latestCreatedSession.projectId),
+          latestCreatedSession.projectId,
+          latestCreatedSession.terminalSessionId,
+        );
       });
     },
     { wait: TERMINAL_LIST_REFRESH_DEBOUNCE_MS },

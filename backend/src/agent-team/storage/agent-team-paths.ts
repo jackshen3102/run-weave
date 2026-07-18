@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { TerminalSessionManager } from "../../terminal/manager";
+import { isTerminalChildProjectIdLike } from "@runweave/shared/terminal/project-context";
 import { assertSafeAgentTeamRunId } from "../run-id";
 
 export class AgentTeamPaths {
@@ -125,6 +126,9 @@ export class AgentTeamPaths {
       const project = this.terminalSessionManager.getProject(projectId);
       if (project?.path) {
         return project.path;
+      }
+      if (isTerminalChildProjectIdLike(projectId)) {
+        throw new Error("Terminal project context is unavailable");
       }
     }
     return cwd || this.cwd;
