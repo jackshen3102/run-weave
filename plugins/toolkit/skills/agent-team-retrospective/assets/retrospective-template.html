@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Team 深度复盘</title>
+  <style>
+    :root{color-scheme:dark;--bg:#07101f;--panel:#0d1930;--line:#243657;--text:#e8eefc;--muted:#9fb0ce;--cyan:#53d7ff;--green:#56e39f;--amber:#ffcc66;--red:#ff718a}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#142748 0,transparent 38%),var(--bg);color:var(--text);font:15px/1.62 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+    main{max-width:1180px;margin:auto;padding:56px 28px 96px}h1{font-size:42px;line-height:1.12;margin:10px 0 14px;letter-spacing:-.03em}h2{margin:54px 0 18px;font-size:25px}h3{font-size:17px;margin:0 0 8px}.eyebrow{color:var(--cyan);font-weight:700;letter-spacing:.12em}.lede{max-width:850px;color:var(--muted);font-size:18px}
+    .metrics,.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.metric,.card,.rec{border:1px solid var(--line);background:rgba(13,25,48,.9);border-radius:14px}.metric,.card{padding:18px}.metric b{display:block;font-size:30px}.metric span,.muted{color:var(--muted)}
+    .timeline{border-left:2px solid var(--line);margin-left:10px;padding-left:24px}.event{position:relative;margin:0 0 24px}.event:before{content:"";position:absolute;width:11px;height:11px;border-radius:50%;background:var(--cyan);left:-31px;top:7px}.event p{margin:3px 0;color:var(--muted)}
+    .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;margin-bottom:9px}.fact{background:#173f35;color:#8cf0c0}.framework{background:#4a2633;color:#ff9db0}.environment{background:#4b3d1c;color:#ffdc8a}.contract{background:#203e61;color:#90d5ff}
+    table{width:100%;border-collapse:collapse;background:rgba(13,25,48,.9);border:1px solid var(--line)}th,td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--cyan)}code{color:#b5e7ff}
+    .recs{display:grid;gap:14px}.rec{padding:19px;display:grid;grid-template-columns:72px 1fr minmax(140px,190px);gap:16px}.priority{font-weight:800;font-size:18px}.p0{color:var(--red)}.p1{color:var(--amber)}.p2{color:var(--green)}.impact{color:var(--muted);font-size:13px}.conclusion{border:1px solid #316d85;background:#0c2637;padding:24px;border-radius:16px;margin-top:54px;font-size:18px}
+    .visual{overflow:auto;border:1px solid var(--line);background:rgba(13,25,48,.65);border-radius:14px;padding:18px}.visual svg{display:block;min-width:680px;width:100%;height:auto}
+    @media(max-width:700px){main{padding:36px 18px}.recs{display:block}.rec{grid-template-columns:52px 1fr;margin-bottom:12px}.impact{grid-column:2}h1{font-size:34px}}
+  </style>
+</head>
+<body><main>
+  <!-- 这是视觉骨架，不是固定报表。保留有用部分，删除无关部分，自由增加 SVG、表格或交互。 -->
+  <header>
+    <div class="eyebrow">RUN · 在这里写 runId</div>
+    <h1>Agent Team 深度复盘：一句话点明核心矛盾</h1>
+    <p class="lede">先给结论：实现、框架、合同和环境中，什么才是主要成本。</p>
+  </header>
+
+  <!-- 可选：关键数字。数量按信息密度决定，不限制为四个。 -->
+  <section class="metrics" aria-label="关键指标">
+    <div class="metric"><b>22 / 23</b><span>示例指标</span></div>
+    <div class="metric"><b>15</b><span>示例指标</span></div>
+  </section>
+
+  <!-- 可选：时间线。也可替换为 SVG 流程、泳道、状态机或因果图。 -->
+  <section>
+    <h2>时间线或核心流程</h2>
+    <div class="timeline">
+      <div class="event"><b>关键阶段</b><p>发生了什么、影响是什么、证据在哪里。</p></div>
+    </div>
+  </section>
+
+  <!-- 可选：直接在 .visual 中绘制 SVG。局部区域允许横向滚动。 -->
+  <section>
+    <h2>可视化关系</h2>
+    <div class="visual">
+      <svg viewBox="0 0 680 150" role="img" aria-label="示例流程骨架">
+        <rect x="10" y="45" width="170" height="60" rx="12" fill="#142748" stroke="#53d7ff"/>
+        <rect x="255" y="45" width="170" height="60" rx="12" fill="#142748" stroke="#ffcc66"/>
+        <rect x="500" y="45" width="170" height="60" rx="12" fill="#142748" stroke="#ff718a"/>
+        <path d="M180 75H255M425 75H500" stroke="#53d7ff" stroke-width="2"/>
+        <text x="95" y="80" fill="#e8eefc" text-anchor="middle">事实源</text>
+        <text x="340" y="80" fill="#e8eefc" text-anchor="middle">断点</text>
+        <text x="585" y="80" fill="#e8eefc" text-anchor="middle">结果</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- 可选：根因卡片。标签按事实性质选择。 -->
+  <section>
+    <h2>根因分类</h2>
+    <div class="grid">
+      <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>根因标题</h3><p class="muted">事实、机制和边界。</p></article>
+      <article class="card"><span class="tag fact">已修复</span><h3>修复标题</h3><p class="muted">当前证据和剩余范围。</p></article>
+    </div>
+  </section>
+
+  <!-- 可选：表格适合精确映射和量化对比。 -->
+  <section>
+    <h2>量化结论</h2>
+    <table><thead><tr><th>观察</th><th>数字</th><th>含义</th></tr></thead><tbody><tr><td>示例</td><td>精确数字</td><td>数字说明了什么</td></tr></tbody></table>
+  </section>
+
+  <!-- 可选：建议数量和层级按当前 run 决定。 -->
+  <section>
+    <h2>后续优化建议</h2>
+    <div class="recs"><div class="rec"><div class="priority p0">P0</div><div><h3>机制化建议</h3><p class="muted">推荐机制、防误伤边界和当前状态。</p></div><div class="impact">可验证结果或预期收益。</div></div></div>
+  </section>
+
+  <div class="conclusion"><b>一句话结论：</b>用一句可行动的判断收尾。</div>
+</main></body></html>
