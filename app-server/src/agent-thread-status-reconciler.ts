@@ -190,18 +190,37 @@ export class AgentThreadStatusReconciler {
       thread.threadId,
       thread.agent,
     );
-    const lifecycle = detail?.lifecycle.at(-1);
-    if (!detail || !lifecycle) {
+    if (!detail) {
       return null;
     }
-    const observedStatus =
-      lifecycle.type === "task_started"
-        ? "running"
-        : lifecycle.type === "task_complete" ||
-            lifecycle.type === "turn_aborted"
-          ? "idle"
-          : null;
-    if (!observedStatus) {
+    let lifecycle: (typeof detail.lifecycle)[number] | null = null;
+    let observedStatus: ObservedThreadState["status"] | null = null;
+    for (let index = detail.lifecycle.length - 1; index >= 0; index -= 1) {
+      const candidate = detail.lifecycle[index];
+      if (!candidate) {
+        continue;
+      }
+      if (candidate.type === "task_started") {
+        lifecycle = candidate;
+        observedStatus = "running";
+        break;
+      }
+      if (
+        candidate.type === "task_complete" ||
+        candidate.type === "turn_aborted"
+      ) {
+        lifecycle = candidate;
+        observedStatus = "idle";
+        break;
+      }
+      if (
+        candidate.type !== "token_count" &&
+        candidate.type !== "thread_rolled_back"
+      ) {
+        break;
+      }
+    }
+    if (!lifecycle || !observedStatus) {
       return null;
     }
     return {
