@@ -1,9 +1,7 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef } from "react";
-import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
-import type { ConnectionConfig } from "../../features/connection/types";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import {
@@ -19,12 +17,13 @@ import {
 import { loadRecentTerminalSelection } from "../../features/terminal/recent-selection";
 import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
-import type { ClientMode } from "../../features/client-mode";
 import { HttpError } from "../../services/http";
 import { updateTerminalSession } from "../../services/terminal";
 import {
+  hasValidProjectSessionSelection,
   resolvePreferredProjectId,
   resolvePreferredSessionId,
+  selectTerminalProjectContext,
   usePersistRecentSelection,
   useSessionMarkerCleanup,
   useSessionSelectionShortcuts,
@@ -32,51 +31,12 @@ import {
 import { useTerminalWorkspaceActions } from "./terminal-workspace-actions";
 import { useTerminalWorkspaceEvents } from "./terminal-workspace-events";
 import { TerminalWorkspaceShell } from "./terminal-workspace-shell";
+import type { TerminalWorkspaceProps } from "./terminal-workspace-types";
 
 const SESSION_RETRY_DELAY_MS = 2_000;
 
-function hasValidProjectSessionSelection(
-  projects: Array<{ projectId: string }>,
-  sessions: TerminalSessionListItem[],
-  parentProjectId: string | null,
-  projectId: string | null,
-  terminalSessionId: string | null,
-): boolean {
-  if (!parentProjectId || !projectId || !terminalSessionId) {
-    return false;
-  }
+export type { TerminalWorkspaceProps } from "./terminal-workspace-types";
 
-  return (
-    projects.some((project) => project.projectId === parentProjectId) &&
-    resolveTerminalParentProjectId(projectId) === parentProjectId &&
-    sessions.some(
-      (session) =>
-        session.projectId === projectId &&
-        session.terminalSessionId === terminalSessionId,
-    )
-  );
-}
-
-export interface TerminalWorkspaceConnectionOptions {
-  connections?: ConnectionConfig[];
-  activeConnectionId?: string | null;
-  connectionName?: string;
-  onSelectConnection?: (connectionId: string) => void;
-  onOpenConnectionManager?: () => void;
-}
-
-export interface TerminalWorkspaceProps {
-  apiBase: string;
-  token: string;
-  clientMode?: ClientMode;
-  connection?: TerminalWorkspaceConnectionOptions;
-  initialTerminalSessionId?: string;
-  onActiveSessionChange?: (terminalSessionId: string) => void;
-  onNoSessionAvailable?: () => void;
-  onNavigateHome?: () => void;
-  onAuthExpired?: () => void;
-  className?: string;
-}
 export function TerminalWorkspaceContent({
   apiBase,
   token,
@@ -202,17 +162,13 @@ export function TerminalWorkspaceContent({
     );
   });
   const selectActiveContext = useMemoizedFn((projectId: string) => {
-    if (!activeParentProjectId) {
-      return;
-    }
-    const projectSessions = sessions.filter(
-      (session) => session.projectId === projectId,
-    );
-    selectProjectContext(
+    selectTerminalProjectContext({
       activeParentProjectId,
       projectId,
-      resolvePreferredSessionId(scope, projectId, projectSessions),
-    );
+      sessions,
+      scope,
+      selectProjectContext,
+    });
   });
   const visibleProjects = projects;
   const visibleSessions = useMemo(() => {

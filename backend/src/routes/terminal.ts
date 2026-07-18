@@ -6,7 +6,6 @@ import type {
   CreateTerminalSessionResponse,
   UpdateTerminalSessionRequest,
 } from "@runweave/shared/terminal/session";
-import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { AuthService } from "../auth/service";
 import {
   recordTerminalSessionCreated,
@@ -23,10 +22,7 @@ import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
-import {
-  aggregatePanelTerminalState,
-  type TerminalStateService,
-} from "../terminal/terminal-state-service";
+import type { TerminalStateService } from "../terminal/terminal-state-service";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
@@ -46,6 +42,7 @@ import {
 import {
   createTerminalSessionSchema,
   resolveTerminalCreateDefaults,
+  resolveTerminalStateFromPanels,
   sanitizeTerminalError,
   TerminalCreateDefaultsError,
   updateTerminalSessionSchema,
@@ -61,20 +58,6 @@ import {
 } from "./terminal-panel-routes";
 
 const terminalLogger = logger.child({ component: "terminal" });
-
-function resolveTerminalStateFromPanels(
-  terminalSessionManager: TerminalSessionManager,
-  terminalStateService: TerminalStateService | undefined,
-  session: NonNullable<ReturnType<TerminalSessionManager["getSession"]>>,
-): TerminalState | undefined {
-  const runningPanels = terminalSessionManager
-    .listPanels(session.id)
-    .filter((panel) => panel.status === "running");
-  if (runningPanels.length > 0) {
-    return aggregatePanelTerminalState(runningPanels);
-  }
-  return terminalStateService?.getCurrent(session.id, session);
-}
 
 async function readTerminalHistory(
   session: NonNullable<ReturnType<TerminalSessionManager["getSession"]>>,

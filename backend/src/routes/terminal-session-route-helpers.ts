@@ -2,11 +2,16 @@ import { existsSync, statSync } from "node:fs";
 import os from "node:os";
 import { z } from "zod";
 import type { CreateTerminalSessionRequest } from "@runweave/shared/terminal/session";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
 } from "../terminal/default-shell";
+import {
+  aggregatePanelTerminalState,
+  type TerminalStateService,
+} from "../terminal/terminal-state-service";
 export {
   buildTerminalInputOperationId,
   TERMINAL_INTERRUPT_ESCAPE_INPUT,
@@ -129,6 +134,20 @@ export function resolveTerminalCreateDefaults(
     args: payload.args ?? resolveDefaultTerminalArgs(command),
     cwd,
   };
+}
+
+export function resolveTerminalStateFromPanels(
+  terminalSessionManager: TerminalSessionManager,
+  terminalStateService: TerminalStateService | undefined,
+  session: NonNullable<ReturnType<TerminalSessionManager["getSession"]>>,
+): TerminalState | undefined {
+  const runningPanels = terminalSessionManager
+    .listPanels(session.id)
+    .filter((panel) => panel.status === "running");
+  if (runningPanels.length > 0) {
+    return aggregatePanelTerminalState(runningPanels);
+  }
+  return terminalStateService?.getCurrent(session.id, session);
 }
 
 export function sanitizeTerminalError(error: unknown): string {

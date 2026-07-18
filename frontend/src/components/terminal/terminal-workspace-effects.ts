@@ -79,6 +79,59 @@ export function resolvePreferredProjectId(
   return projects[0]?.projectId ?? null;
 }
 
+export function hasValidProjectSessionSelection(
+  projects: Array<{ projectId: string }>,
+  sessions: TerminalSessionListItem[],
+  parentProjectId: string | null,
+  projectId: string | null,
+  terminalSessionId: string | null,
+): boolean {
+  if (!parentProjectId || !projectId || !terminalSessionId) {
+    return false;
+  }
+
+  return (
+    projects.some((project) => project.projectId === parentProjectId) &&
+    resolveTerminalParentProjectId(projectId) === parentProjectId &&
+    sessions.some(
+      (session) =>
+        session.projectId === projectId &&
+        session.terminalSessionId === terminalSessionId,
+    )
+  );
+}
+
+export function selectTerminalProjectContext({
+  activeParentProjectId,
+  projectId,
+  sessions,
+  scope,
+  selectProjectContext,
+}: {
+  activeParentProjectId: string | null;
+  projectId: string;
+  sessions: TerminalSessionListItem[];
+  scope: string;
+  selectProjectContext: (
+    parentProjectId: string | null,
+    projectId: string | null,
+    terminalSessionId: string | null,
+  ) => void;
+}): void {
+  if (!activeParentProjectId) {
+    return;
+  }
+
+  const projectSessions = sessions.filter(
+    (session) => session.projectId === projectId,
+  );
+  selectProjectContext(
+    activeParentProjectId,
+    projectId,
+    resolvePreferredSessionId(scope, projectId, projectSessions),
+  );
+}
+
 function cycleIndex(currentIndex: number, total: number, delta: number): number {
   if (total <= 0) {
     return -1;
