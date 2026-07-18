@@ -1,0 +1,200 @@
+version: 1
+name: Desktop Slot Companion macOS 首期验收
+description: >
+  验证 Runweave Desktop Slot Companion 在当前激活 Connection 内，以结构化
+  Terminal Session、Completion 和 Agent Team 事实完成跨 Slot 聚合、高优先级提醒、
+  精确跳转、提醒退役、断连降级、固定主屏定位和持久化开关。验收以真实 macOS Electron
+  桌面窗口为主，页面 DOM 与 console 证据通过附着 desktop CDP 的 Playwright 获取；
+  不用静态原型、普通浏览器或 Terminal 输出推断代替真实行为。
+
+cases:
+  - id: DSC-001
+    name: 宠物固定在主屏右下角且自动展示不抢焦点
+    required: true
+    description: >
+      验证独立 Companion 窗口只以主屏 workArea 为锚点，在主窗口移动、鼠标和焦点跨屏、
+      Space 切换与其他应用全屏时保持同一位置和规则；只有用户点击 Slot 才聚焦 Runweave。
+    preconditions:
+      - 使用带两个显示器的 macOS 运行已打包或由受管 Dev Session 启动的 Runweave Electron。
+      - 桌面宠物已启用，当前 Connection 可用，且至少存在一个可见 Slot。
+      - 已通过 dev:open 的 desktop surface 取得本次实例 CDP endpoint，并用 toolkit:playwright-cli attach。
+    steps:
+      - 使用 computer-use 记录主屏 workArea 右下角的 Companion 位置；移动 Runweave 主窗口到副屏并将鼠标和其他应用焦点移到副屏，确认 Companion 仍固定在主屏右下角且没有抢回焦点。
+      - 切换 macOS Space 并让其他应用进入全屏，确认 Companion 仍可见且使用与普通空间相同的托盘或单卡规则，不因外部全屏进入另一种模式。
+      - 改变主屏分辨率、缩放或 Dock 位置，确认 Companion 根据新的主屏 workArea 重新贴右下角，完整可点且没有超出屏幕。
+      - 通过 toolkit:playwright-cli 读取 Companion DOM 和 console，确认窗口内容正常且 0 error、0 warning。
+
+  - id: DSC-002
+    name: 当前 Connection 的结构化事实聚合成稳定 Slot 托盘
+    required: true
+    description: >
+      验证多个 Terminal Session 和 Agent Team run 被投影为每 Session 最多一个 Slot，
+      按固定优先级与更新时间排序，并显示真实可用身份；页面不恢复指标总览行或跨 Connection 数据。
+    preconditions:
+      - 当前 Connection 中准备至少五个 Session，分别具有 working、未确认 completed、Terminal failed、Agent Team running 和 Agent Team failed 的结构化状态。
+      - 另一个 Connection 中存在可区分的 Session，但当前未激活。
+      - Companion 处于新进程首次加载状态且桌面宠物已启用。
+    steps:
+      - 等待首次 snapshot 成功，确认托盘自动展开且只列出当前 Connection 的 Slot，没有另一个 Connection 的 Session。
+      - 通过 toolkit:playwright-cli 检查每个 Session 最多一行；同一 Session 同时具有相关 Agent Team run 和 Terminal 事实时，只显示优先级更高的 Agent Team 事实。
+      - 确认顺序遵循 needs_action、blocked、failed、completed、working；同状态按更新时间倒序且刷新后稳定。
+      - 确认 Slot 可见文案与身份来自 Project、Worktree、Session、Run 或 Completion 结构化字段，页面没有待决定、阻塞、待 Review、执行中等数量总览行。
+      - 缩小可见高度并滚动托盘，确认所有 Slot 可访问，窗口仍贴右下角且不会把内容扩出 workArea。
+
+  - id: DSC-003
+    name: 多个高优先级事实按单卡和批量暂时收起规则提醒
+    required: true
+    description: >
+      验证多个 Human Gate 或明确验收阻塞同时存在时只显示最高优先级单卡；
+      收起会在当前进程批量抑制已有高优先级 attentionId，新事实和应用重启会重新提醒。
+    preconditions:
+      - 当前 Connection 中至少有两个不同 attentionId 的 needs_action 或 blocked Agent Team 事实。
+      - Companion 尚未在本进程收起这些事实。
+    steps:
+      - 等待 snapshot，确认只显示一个最高优先级单卡，卡片身份和内容对应真实 pendingFindingDecision、frameworkRepair 或 skipped acceptance 事实。
+      - 点击收起，确认界面回到 Slot 托盘；继续轮询且两个 attentionId 不变时，单卡不再次自动弹出。
+      - 在 Backend 产生第三个新的高优先级 attentionId，确认 Companion 自动从托盘或收起状态升级为只显示新一轮最高优先级单卡。
+      - 再次批量收起后重启 Runweave，保持结构化高优先级事实未解决，确认进程内抑制集合已清空并重新显示单卡。
+
+  - id: DSC-004
+    name: 用户收起普通托盘后非关键更新不自动展开
+    required: true
+    description: >
+      验证明确的用户收起意图在当前进程内被尊重，working、completed 和 failed 的新增或更新
+      只改变宠物徽标或颜色；新的 Human Gate 或明确验收阻塞仍会打断收起并显示单卡。
+    preconditions:
+      - 当前 Connection 存在至少一个非高优先级 Slot，托盘已展开。
+      - 本进程还没有高优先级事实。
+    steps:
+      - 主动收起托盘，确认只保留宠物。
+      - 依次产生或更新 working、未确认 Completion 和 failed 结构化事实，确认托盘不自动展开，宠物徽标或颜色能表达注意力变化。
+      - 手动点击宠物，确认托盘展开并显示最新 Slot；再次收起。
+      - 产生新的 needs_action 或 blocked attentionId，确认自动升级为单卡且没有先展示普通托盘。
+
+  - id: DSC-005
+    name: Completion 先打开 Session 再确认精确 revision
+    required: true
+    description: >
+      验证未确认 Completion 只有在目标 Session 成功打开后才写 acknowledgedCompletionRevision；
+      可靠 Panel 可精确聚焦，Panel 失效可降级，Connection 或 Session 失败时提醒与 revision 均保留。
+    preconditions:
+      - 当前 Connection 中准备三个未确认 Completion：一个具有有效 panelId，一个 panelId 已失效，一个目标 Session 可在点击前移除或令其不可达。
+      - 已记录各 Session 的 completionRevision 与 acknowledgedCompletionRevision 初值。
+    steps:
+      - 点击具有有效 panelId 的 Completion Slot，确认 Runweave 主窗口被聚焦、正确 Session 被选择、正确 Panel 被聚焦，随后 acknowledgedCompletionRevision 精确更新为 intent 携带的 revision，提醒退役。
+      - 点击 panelId 已失效的 Completion Slot，确认仍打开正确 Session并显示 Panel 降级提示，没有跳到 activePanelId 或其他 Panel；随后精确 revision 被确认，提醒退役。
+      - 对第三个 Slot 在点击期间制造 Connection 不可用或 Session 不存在，确认返回明确失败，主窗口没有打开错误资源，acknowledgedCompletionRevision 不变且提醒仍存在。
+      - 在点击与确认之间产生更晚 completionRevision，确认本次只确认 intent 携带的旧 revision，更晚 Completion 仍作为新 attentionId 显示。
+
+  - id: DSC-006
+    name: 失败提醒成功跳转后只在 Companion 中持久化为已查看
+    required: true
+    description: >
+      验证 Terminal 和 Agent Team failed Slot 成功打开后从 Companion 退役并跨应用重启保持，
+      但真实失败状态不变；跳转失败不退役，新失败事实使用新 attentionId 再次出现。
+    preconditions:
+      - 当前 Connection 中分别存在一个 Terminal 非零退出和一个 Agent Team failed Slot。
+      - 能读取对应 Terminal Session 与 Agent Team run 的真实失败状态。
+    steps:
+      - 点击 Terminal failed Slot，确认正确 Session 成功打开后该提醒从 Companion 退役，而 Session status 和 exitCode 保持失败事实。
+      - 点击 Agent Team failed Slot，确认正确 Session 与 Agent Team 二路窗打开后提醒退役，而 Run status 仍为 failed。
+      - 重启 Runweave，确认两个旧 attentionId 仍不出现在 Companion；检查 failure seen 存储按当前 connectionId 隔离。
+      - 让同一 Session 产生新的失败事实或启动新的 failed run，确认新 attentionId 再次出现。
+      - 为另一个 failed Slot 制造 Connection 或 Session 跳转失败，确认没有写 failure seen，提醒保持可见。
+
+  - id: DSC-007
+    name: Terminal 与 Agent Team Slot 跳到正确目标表面
+    required: true
+    description: >
+      验证普通 Terminal Slot 只打开 Terminal，Agent Team Slot 继续打开二路窗；
+      只有可靠 panelId 才聚焦 Panel，缺失身份时不使用当前 activePanelId 猜测。
+    preconditions:
+      - 当前 Connection 中存在一个普通 Terminal working Slot、一个带有效 worker 或 dispatch panelId 的 Agent Team Slot，以及一个没有可靠 panelId 的 Slot。
+      - 主窗口当前打开另一个 Session 和另一个 activePanelId。
+    steps:
+      - 点击普通 Terminal Slot，确认主窗口切到对应 Session，但不主动打开 Agent Team 二路窗。
+      - 点击带有效 panelId 的 Agent Team Slot，确认切到对应 Session、聚焦该 Panel并打开 Agent Team 二路窗。
+      - 点击没有可靠 panelId 的 Slot，确认只打开对应 Session；当前 activePanelId 没有被当作事件来源，界面不声称已经精确定位 Panel。
+      - 检查所有跳转都停留在当前 Connection，且不存在任意 URL、路径或命令从 Slot payload 进入导航。
+
+  - id: DSC-008
+    name: 断连、未认证、检查中和全部安静具有不同可见语义
+    required: true
+    description: >
+      验证 Companion 不把无法获取可信事实表现为全部安静；断连宠物可打开主窗口连接或登录入口，
+      连接恢复后自动重新采集，而真正空 snapshot 才显示休眠宠物。
+    preconditions:
+      - 能控制当前 Connection 的 token 和 Backend 可达性。
+      - Companion 窗口已启用。
+    steps:
+      - 冷启动 Companion，在首次请求完成前确认显示短暂 checking 语义，不能提前显示“全部安静”。
+      - 移除 token 或让认证返回 401，确认显示灰色断连宠物及标识；点击后打开主窗口登录或连接入口。
+      - 恢复认证但使 Backend 网络不可达，确认仍是断连态，不显示旧 Slot 或休眠态。
+      - 恢复 Backend，确认无需重启即可自动进入当前真实 tray、card 或 quiet 状态。
+      - 清除全部活跃和未确认结构化事实并获得成功空 snapshot，确认此时才显示不可展开的休眠宠物。
+
+  - id: DSC-009
+    name: Electron 托盘开关持久化并控制完整采集生命周期
+    required: true
+    description: >
+      验证“显示桌面宠物”默认启用，关闭时销毁 Companion 并停止请求与订阅，
+      偏好跨重启保留；重新启用后创建一个新窗口并恢复当前真实状态。
+    preconditions:
+      - 使用全新或已清理 Companion enabled 偏好的 macOS Runweave。
+      - 当前 Connection 可用并能观察 /api/attention/slots 请求或等价诊断证据。
+    steps:
+      - 首次启动确认 Electron 托盘中的“显示桌面宠物”已勾选，Companion 窗口存在并开始采集。
+      - 取消勾选，确认 Companion 窗口被销毁且后续不再产生 Attention 轮询或 Terminal event 订阅。
+      - 重启 Runweave，确认开关保持关闭且没有创建 Companion。
+      - 重新勾选，确认只创建一个 Companion 窗口并立即按当前 Connection 显示 checking 后的真实状态。
+      - 损坏或移除偏好文件后再次启动，确认非法偏好安全回退为默认启用且应用不崩溃。
+
+  - id: DSC-010
+    name: Attention 只使用允许的结构化事实和当前 Connection
+    required: true
+    description: >
+      验证 Attention API 与 Companion 不从 Terminal 输出、日志关键字、Browser、CDP、
+      Runtime 或 App Server 状态推断 Slot，不泄露敏感内容，也不跨 Connection 聚合。
+    preconditions:
+      - 当前 Connection 中有一个 shell_idle Session，Terminal 输出包含 error、failed、blocked 等文本，但没有对应结构化失败或阻塞事实。
+      - 当前 Connection 的 Browser 或 CDP 可被人为断开，另一个 Connection 中存在高优先级事实。
+      - 能以已认证和未认证方式请求 /api/attention/slots。
+    steps:
+      - 写入包含 error、failed、blocked 的普通 Terminal 输出，确认没有因此生成 failed 或 blocked Slot。
+      - 断开 Browser、CDP、Runtime 或 App Server，确认在没有结构化 Terminal 或 Agent Team 事实时不会生成对应健康告警。
+      - 切换并保持当前 Connection 不变，确认另一个 Connection 的高优先级事实不进入 snapshot 或 Companion。
+      - 检查 Attention 响应与 UI，不包含 token、完整 scrollback、原始日志或不必要的完整 cwd。
+      - 未认证请求 /api/attention/slots，确认返回现有 401 语义；认证请求只返回当前 Backend 可见的结构化投影。
+
+  - id: DSC-011
+    name: Companion IPC 对非法来源和陈旧身份 fail closed
+    required: true
+    description: >
+      验证尺寸和打开 IPC 只接受正确 BrowserWindow sender 与严格合约，
+      Connection 变化、非法字段、重复 requestId 和超时不会打开错误资源或提前退役提醒。
+    preconditions:
+      - Companion 和主窗口都已启动，当前 Connection 中存在可点击 Slot。
+      - 能从 desktop CDP 或受控诊断入口构造非法 IPC payload 和延迟结果。
+    steps:
+      - 从非 Companion webContents 调用 reportContentSize 或 openSlot，确认请求被拒绝且主窗口和 Companion 尺寸不变。
+      - 分别传入超长 ID、非法 targetSurface、负 completionRevision、任意 URL、token、path 或 command，确认请求被拒绝且没有导航或敏感信息进入日志。
+      - 在 snapshot 后切换当前 Connection 再点击旧 Slot，确认主 renderer 返回 connection_unavailable 或等价陈旧结果，不打开另一个 Connection 的同名 Session，提醒在刷新前不被误退役。
+      - 让主 renderer 超过超时时间才返回，确认 invoke 以 timed_out 结束且迟到结果不能二次完成或退役提醒。
+      - 重复同一 requestId，确认最多执行一次打开和一次 Completion acknowledgement。
+
+  - id: DSC-012
+    name: macOS 打包态完成端到端生命周期验收
+    required: true
+    description: >
+      验证 macOS 安装或打包产物中 Companion 路由、透明窗口、认证共享、Slot 打开、
+      关闭与重启均能工作；Web 原型或开发浏览器通过不能替代此结果。
+    preconditions:
+      - pnpm typecheck、pnpm lint 和 pnpm dist:electron:mac 已成功完成。
+      - 已安装或启动本次 macOS 打包产物，并准备可产生 quiet、working、completed、failed 和 need_human 的真实 Backend。
+      - 已使用 computer-use 打开目标桌面实例，并用 toolkit:playwright-cli attach 到该实例 desktop CDP。
+    steps:
+      - 从全新启动验证 Companion 读取与主窗口相同的当前 Connection 和认证，依次观察 checking 后的 quiet、tray 与 card，不出现登录页被渲染进小窗口或 Beta badge。
+      - 从真实 working、completed、failed 和 need_human Slot 分别执行打开，确认主窗口、Session、Panel 或 Agent Team 目标和退役语义符合前述用例。
+      - 关闭主窗口但保持应用运行，确认 Companion 仍存在；点击 Slot 后主窗口被恢复并定位，自动状态刷新本身不聚焦主窗口。
+      - 退出整个应用并重新启动，确认 enabled 偏好和 failure seen 持久化，高优先级进程内 suppression 不持久化。
+      - 通过 toolkit:playwright-cli 检查 Companion 与主窗口 console 均为 0 error、0 warning，并关闭本次新建 tab、detach；通过 computer-use 确认应用退出后没有遗留 Companion 窗口。

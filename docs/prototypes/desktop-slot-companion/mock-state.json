@@ -1,0 +1,464 @@
+{
+  "appName": "Runweave",
+  "capturedAt": "2026-07-18T14:32:00+08:00",
+  "connection": {
+    "id": "system:local-development",
+    "name": "内置本地后端",
+    "url": "http://127.0.0.1:8787",
+    "createdAt": 0,
+    "available": true,
+    "isSystem": true
+  },
+  "projects": [
+    {
+      "projectId": "project-browser-viewer",
+      "name": "browser-viewer",
+      "path": "/workspace/runweave",
+      "createdAt": "2026-07-18T08:00:00+08:00",
+      "isDefault": false
+    }
+  ],
+  "slots": [
+    {
+      "id": "slot-agent-team",
+      "projectContext": {
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:ZmVhdHVyZS0x",
+        "parentProjectId": "project-browser-viewer",
+        "name": "feature-1",
+        "branch": "feature-1",
+        "head": "2d9e3d1",
+        "path": "/workspace/runweave/.worktree/feature-1",
+        "isPrimary": false,
+        "pinned": true,
+        "pinOrder": 0,
+        "availability": "available"
+      },
+      "terminalSession": {
+        "terminalSessionId": "agt-4ef1c0a8",
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:ZmVhdHVyZS0x",
+        "alias": "Agent Team",
+        "preview": "收口二路窗操作的生命周期",
+        "command": "/bin/zsh",
+        "args": ["-l"],
+        "cwd": "/workspace/runweave/.worktree/feature-1",
+        "activeCommand": "codex",
+        "terminalState": {
+          "state": "agent_idle",
+          "agent": "codex"
+        },
+        "completionRevision": 6,
+        "acknowledgedCompletionRevision": 6,
+        "status": "running",
+        "createdAt": "2026-07-18T13:40:00+08:00",
+        "lastActivityAt": "2026-07-18T14:31:42+08:00",
+        "panelSplitEnabled": true,
+        "activePanelId": "panel-code-review",
+        "panelCount": 4,
+        "panelAliases": ["main", "code", "code_review", "behavior_verify"]
+      },
+      "panelSnapshot": {
+        "panelId": "panel-code-review",
+        "terminalSessionId": "agt-4ef1c0a8",
+        "alias": "code_review",
+        "role": "agent-team:atr_4ef1c0a8:code_review",
+        "cwd": "/workspace/runweave/.worktree/feature-1",
+        "activeCommand": "codex",
+        "terminalState": {
+          "state": "agent_idle",
+          "agent": "codex"
+        },
+        "status": "running",
+        "createdAt": "2026-07-18T13:42:00+08:00",
+        "lastActivityAt": "2026-07-18T14:31:42+08:00",
+        "focused": true,
+        "tmuxPaneId": "%12"
+      },
+      "terminalHistory": {
+        "scrollback": "$ rw agent-team status atr_4ef1c0a8\nstatus: need_human\npending finding: 二路窗操作缺少退役边界\nwaiting for a human disposition"
+      },
+      "completionEvent": null,
+      "agentTeamRun": {
+        "runId": "atr_4ef1c0a8",
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:ZmVhdHVyZS0x",
+        "terminalSessionId": "agt-4ef1c0a8",
+        "mainPanelId": "panel-main",
+        "phase": "executing",
+        "status": "need_human",
+        "task": "收口二路窗操作的生命周期",
+        "activeWorkerRole": null,
+        "activeWorkerDispatch": null,
+        "workers": [
+          {
+            "id": "worker-code",
+            "role": "code",
+            "intent": "修复生命周期",
+            "panelId": "panel-code",
+            "tmuxPaneId": "%11"
+          },
+          {
+            "id": "worker-review",
+            "role": "code_review",
+            "intent": "审查生命周期",
+            "panelId": "panel-code-review",
+            "tmuxPaneId": "%12"
+          },
+          {
+            "id": "worker-verify",
+            "role": "behavior_verify",
+            "intent": "验证生命周期",
+            "panelId": "panel-behavior-verify",
+            "tmuxPaneId": "%13"
+          }
+        ],
+        "acceptance": [],
+        "loop": {
+          "round": 6,
+          "escalated": true,
+          "lastReason": "P1 finding 等待范围裁决",
+          "repairCycles": []
+        },
+        "frameworkRepair": null,
+        "pendingFindingDecision": {
+          "id": "finding-decision-1",
+          "finding": {
+            "severity": "P1",
+            "title": "二路窗操作缺少退役边界",
+            "summary": "操作状态无法在窗口关闭后稳定退役",
+            "invariantKey": "sidecar-operation-retirement"
+          },
+          "outbox": {
+            "sessionId": "agt-4ef1c0a8",
+            "panelId": "panel-code-review",
+            "tmuxPaneId": "%12",
+            "runId": "atr_4ef1c0a8",
+            "role": "code_review",
+            "status": "completed",
+            "summary": "发现需要人工裁决的 P1 finding",
+            "error": null,
+            "finishedAt": "2026-07-18T14:31:42+08:00"
+          },
+          "reviewTarget": null,
+          "reason": "P1 finding 等待范围裁决",
+          "requestedAt": "2026-07-18T14:31:42+08:00"
+        },
+        "logs": ["Finding 等待人工范围裁决"],
+        "createdAt": "2026-07-18T13:40:00+08:00",
+        "updatedAt": "2026-07-18T14:31:42+08:00"
+      }
+    },
+    {
+      "id": "slot-agent-team-blocked",
+      "projectContext": {
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:YWNjZXB0YW5jZS1nYXRl",
+        "parentProjectId": "project-browser-viewer",
+        "name": "acceptance-gate",
+        "branch": "feat/acceptance-gate",
+        "head": "81e7bc4",
+        "path": "/workspace/runweave/.worktree/acceptance-gate",
+        "isPrimary": false,
+        "pinned": true,
+        "pinOrder": 1,
+        "availability": "available"
+      },
+      "terminalSession": {
+        "terminalSessionId": "terminal-agent-team-verify",
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:YWNjZXB0YW5jZS1nYXRl",
+        "alias": "Agent Team verify",
+        "preview": "执行 AGT-WH-015 行为验收",
+        "command": "/bin/zsh",
+        "args": ["-l"],
+        "cwd": "/workspace/runweave/.worktree/acceptance-gate",
+        "activeCommand": "codex",
+        "terminalState": {
+          "state": "agent_idle",
+          "agent": "codex"
+        },
+        "completionRevision": 2,
+        "acknowledgedCompletionRevision": 2,
+        "status": "running",
+        "createdAt": "2026-07-18T13:50:00+08:00",
+        "lastActivityAt": "2026-07-18T14:30:00+08:00",
+        "panelSplitEnabled": true,
+        "activePanelId": "panel-behavior-verify",
+        "panelCount": 4,
+        "panelAliases": ["main", "code", "code_review", "behavior_verify"]
+      },
+      "panelSnapshot": {
+        "panelId": "panel-behavior-verify",
+        "terminalSessionId": "terminal-agent-team-verify",
+        "alias": "behavior_verify",
+        "role": "agent-team:atr_71b4d290:behavior_verify",
+        "cwd": "/workspace/runweave/.worktree/acceptance-gate",
+        "activeCommand": "codex",
+        "terminalState": {
+          "state": "agent_idle",
+          "agent": "codex"
+        },
+        "status": "running",
+        "createdAt": "2026-07-18T13:52:00+08:00",
+        "lastActivityAt": "2026-07-18T14:30:00+08:00",
+        "focused": true,
+        "tmuxPaneId": "%22"
+      },
+      "terminalHistory": {
+        "scrollback": "$ rw agent-team status atr_71b4d290\nbehavior_verify: completed with skipped case\nAGT-WH-015: pending · lastRunStatus=skipped\nstatus: need_human"
+      },
+      "completionEvent": null,
+      "agentTeamRun": {
+        "runId": "atr_71b4d290",
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:YWNjZXB0YW5jZS1nYXRl",
+        "terminalSessionId": "terminal-agent-team-verify",
+        "mainPanelId": "panel-main",
+        "phase": "executing",
+        "status": "need_human",
+        "task": "执行终端 Activity 归因验收",
+        "activeWorkerRole": null,
+        "activeWorkerDispatch": null,
+        "workers": [
+          {
+            "id": "worker-code",
+            "role": "code",
+            "intent": "实现 Activity 归因",
+            "panelId": "panel-code",
+            "tmuxPaneId": "%20"
+          },
+          {
+            "id": "worker-review",
+            "role": "code_review",
+            "intent": "审查 Activity 归因",
+            "panelId": "panel-code-review",
+            "tmuxPaneId": "%21"
+          },
+          {
+            "id": "worker-verify",
+            "role": "behavior_verify",
+            "intent": "执行 AGT-WH-015",
+            "panelId": "panel-behavior-verify",
+            "tmuxPaneId": "%22"
+          }
+        ],
+        "acceptance": [
+          {
+            "caseId": "AGT-WH-015",
+            "text": "终端 Activity 必须归因到正确的 Session",
+            "lastRunStatus": "skipped",
+            "skipReason": "验证环境缺少可用 desktop CDP",
+            "status": "pending",
+            "consecutiveFail": 0,
+            "evidence": []
+          }
+        ],
+        "loop": {
+          "round": 2,
+          "escalated": true,
+          "lastReason": "behavior_verify 环境阻塞，必跑用例未完成：AGT-WH-015",
+          "repairCycles": []
+        },
+        "frameworkRepair": null,
+        "pendingFindingDecision": null,
+        "logs": ["behavior_verify 环境阻塞，必跑用例未完成：AGT-WH-015"],
+        "createdAt": "2026-07-18T13:50:00+08:00",
+        "updatedAt": "2026-07-18T14:30:00+08:00"
+      }
+    },
+    {
+      "id": "slot-completed",
+      "projectContext": {
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:YWN0aXZpdHktZm91bmRhdGlvbg",
+        "parentProjectId": "project-browser-viewer",
+        "name": "activity-foundation",
+        "branch": "feat/activity-foundation",
+        "head": "d43a82c",
+        "path": "/workspace/runweave/.worktree/activity-foundation",
+        "isPrimary": false,
+        "pinned": false,
+        "pinOrder": null,
+        "availability": "available"
+      },
+      "terminalSession": {
+        "terminalSessionId": "terminal-activity",
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:YWN0aXZpdHktZm91bmRhdGlvbg",
+        "alias": "activity",
+        "preview": "Activity 事件来源与终端归因收口",
+        "command": "/bin/zsh",
+        "args": ["-l"],
+        "cwd": "/workspace/runweave/.worktree/activity-foundation",
+        "activeCommand": null,
+        "terminalState": {
+          "state": "agent_idle",
+          "agent": "codex"
+        },
+        "completionRevision": 4,
+        "acknowledgedCompletionRevision": 3,
+        "status": "running",
+        "createdAt": "2026-07-18T13:10:00+08:00",
+        "lastActivityAt": "2026-07-18T14:28:00+08:00",
+        "panelSplitEnabled": true,
+        "activePanelId": "panel-main",
+        "panelCount": 1,
+        "panelAliases": ["main"]
+      },
+      "panelSnapshot": {
+        "panelId": "panel-main",
+        "terminalSessionId": "terminal-activity",
+        "alias": "main",
+        "role": "main",
+        "cwd": "/workspace/runweave/.worktree/activity-foundation",
+        "activeCommand": null,
+        "terminalState": {
+          "state": "agent_idle",
+          "agent": "codex"
+        },
+        "status": "running",
+        "createdAt": "2026-07-18T13:10:00+08:00",
+        "lastActivityAt": "2026-07-18T14:28:00+08:00",
+        "focused": true,
+        "tmuxPaneId": "%31"
+      },
+      "terminalHistory": {
+        "scrollback": "$ codex\nActivity 事件来源与终端归因收口\nTurn completed\n$"
+      },
+      "completionEvent": {
+        "id": "18",
+        "terminalSessionId": "terminal-activity",
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:YWN0aXZpdHktZm91bmRhdGlvbg",
+        "createdAt": "2026-07-18T14:28:00+08:00",
+        "kind": "completion",
+        "payload": {
+          "source": "codex",
+          "completionReason": "hook_stop",
+          "completionRevision": 4,
+          "commandName": "codex",
+          "rawHookEvent": "Stop",
+          "hookEvent": "Stop",
+          "cwd": "/workspace/runweave/.worktree/activity-foundation",
+          "summary": "Activity 事件来源与终端归因收口",
+          "operationId": "operation-activity-4",
+          "panelId": "panel-main",
+          "tmuxPaneId": "%31"
+        }
+      },
+      "agentTeamRun": null
+    },
+    {
+      "id": "slot-working",
+      "projectContext": {
+        "projectId": "project-browser-viewer",
+        "parentProjectId": "project-browser-viewer",
+        "name": "browser-viewer",
+        "branch": "main",
+        "head": "539ab68",
+        "path": "/workspace/runweave",
+        "isPrimary": true,
+        "pinned": true,
+        "pinOrder": 2,
+        "availability": "available"
+      },
+      "terminalSession": {
+        "terminalSessionId": "terminal-codex-runtime",
+        "projectId": "project-browser-viewer",
+        "alias": "runtime",
+        "preview": "检查 Terminal Session 状态同步",
+        "command": "/bin/zsh",
+        "args": ["-l"],
+        "cwd": "/workspace/runweave",
+        "activeCommand": "codex",
+        "terminalState": {
+          "state": "agent_running",
+          "agent": "codex"
+        },
+        "completionRevision": 1,
+        "acknowledgedCompletionRevision": 1,
+        "status": "running",
+        "createdAt": "2026-07-18T12:40:00+08:00",
+        "lastActivityAt": "2026-07-18T14:31:52+08:00",
+        "panelSplitEnabled": true,
+        "activePanelId": "panel-main",
+        "panelCount": 1,
+        "panelAliases": ["main"]
+      },
+      "panelSnapshot": {
+        "panelId": "panel-main",
+        "terminalSessionId": "terminal-codex-runtime",
+        "alias": "main",
+        "role": "main",
+        "cwd": "/workspace/runweave",
+        "activeCommand": "codex",
+        "terminalState": {
+          "state": "agent_running",
+          "agent": "codex"
+        },
+        "status": "running",
+        "createdAt": "2026-07-18T12:40:00+08:00",
+        "lastActivityAt": "2026-07-18T14:31:52+08:00",
+        "focused": true,
+        "tmuxPaneId": "%41"
+      },
+      "terminalHistory": {
+        "scrollback": "$ codex\nInspecting terminal state synchronization...\nReading terminal-state-service.ts\nComparing session and panel state"
+      },
+      "completionEvent": null,
+      "agentTeamRun": null
+    },
+    {
+      "id": "slot-idle",
+      "projectContext": {
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:ZG9jcy1pbmRleA",
+        "parentProjectId": "project-browser-viewer",
+        "name": "docs-index",
+        "branch": "chore/docs-index",
+        "head": "729bc43",
+        "path": "/workspace/runweave/.worktree/docs-index",
+        "isPrimary": false,
+        "pinned": false,
+        "pinOrder": null,
+        "availability": "available"
+      },
+      "terminalSession": {
+        "terminalSessionId": "terminal-docs",
+        "projectId": "wt:cHJvamVjdC1icm93c2VyLXZpZXdlcg:ZG9jcy1pbmRleA",
+        "alias": "docs shell",
+        "preview": null,
+        "command": "/bin/zsh",
+        "args": ["-l"],
+        "cwd": "/workspace/runweave/.worktree/docs-index",
+        "activeCommand": null,
+        "terminalState": {
+          "state": "shell_idle",
+          "agent": null
+        },
+        "completionRevision": 0,
+        "acknowledgedCompletionRevision": 0,
+        "status": "running",
+        "createdAt": "2026-07-18T11:00:00+08:00",
+        "lastActivityAt": "2026-07-18T14:06:00+08:00",
+        "panelSplitEnabled": true,
+        "activePanelId": "panel-main",
+        "panelCount": 1,
+        "panelAliases": ["main"]
+      },
+      "panelSnapshot": {
+        "panelId": "panel-main",
+        "terminalSessionId": "terminal-docs",
+        "alias": "main",
+        "role": "main",
+        "cwd": "/workspace/runweave/.worktree/docs-index",
+        "activeCommand": null,
+        "terminalState": {
+          "state": "shell_idle",
+          "agent": null
+        },
+        "status": "running",
+        "createdAt": "2026-07-18T11:00:00+08:00",
+        "lastActivityAt": "2026-07-18T14:06:00+08:00",
+        "focused": true,
+        "tmuxPaneId": "%51"
+      },
+      "terminalHistory": {
+        "scrollback": "$ git branch --show-current\nchore/docs-index\n$"
+      },
+      "completionEvent": null,
+      "agentTeamRun": null
+    }
+  ]
+}
