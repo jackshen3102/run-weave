@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useMemoizedFn } from "ahooks";
+import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
 import { ChevronLeft, ChevronRight, Pin } from "lucide-react";
 import { terminalQueryKeys } from "../../features/terminal/queries/terminal-query-keys";
 import {
@@ -14,8 +15,10 @@ import {
   useTerminalWorkspaceQueryClient,
 } from "../../features/terminal/queries/terminal-workspace-queries";
 import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
+import { useTerminalAggregateStatus } from "../../features/terminal/use-terminal-aggregate-status";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import { updateTerminalProjectContext } from "../../services/terminal";
+import { TerminalAggregateStatus } from "./terminal-aggregate-status";
 
 interface TerminalWorktreeRailProps {
   parentProjectId: string | null;
@@ -49,6 +52,17 @@ function readRailWidth(scope: string): number {
     : DEFAULT_RAIL_WIDTH_PX;
 }
 
+function getContextDetail(context: TerminalProjectContextListItem): string {
+  const branch = context.branch ?? "detached";
+  if (context.availability === "missing") {
+    return `${branch} · missing`;
+  }
+  if (context.availability === "path_unavailable") {
+    return `${branch} · unavailable`;
+  }
+  return branch;
+}
+
 export function TerminalWorktreeRail({
   parentProjectId,
   onSelectContext,
@@ -61,6 +75,7 @@ export function TerminalWorktreeRail({
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
+  const { byContextProjectId } = useTerminalAggregateStatus();
   const setRequestError = useTerminalWorkspaceStore(
     (state) => state.setRequestError,
   );
@@ -199,6 +214,10 @@ export function TerminalWorktreeRail({
     },
   );
 
+  if (contexts.length <= 1) {
+    return null;
+  }
+
   return (
     <aside
       data-testid="terminal-worktree-rail"
@@ -240,6 +259,7 @@ export function TerminalWorktreeRail({
           {contexts.map((context) => {
             const active = context.projectId === activeProjectId;
             const unavailable = context.availability !== "available";
+            const status = byContextProjectId[context.projectId] ?? 0;
             return (
               <div
                 key={context.projectId}
@@ -259,26 +279,20 @@ export function TerminalWorktreeRail({
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   onClick={() => onSelectContext(context.projectId)}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={[
-                      "h-1.5 w-1.5 shrink-0 rounded-full",
-                      active
-                        ? "bg-emerald-400"
-                        : unavailable
-                          ? "bg-amber-400"
-                          : "bg-slate-600",
-                    ].join(" ")}
-                  />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-semibold">
-                      {context.name}
-                    </span>
-                    <span className="block truncate text-[10px] text-slate-500">
-                      {context.branch ??
-                        (context.availability === "missing"
-                          ? "missing"
-                          : "detached")}
+                    <TerminalAggregateStatus
+                      label={context.name}
+                      status={status}
+                      className="flex w-full"
+                      labelClassName="min-w-0 flex-1 truncate text-xs font-semibold"
+                    />
+                    <span
+                      className={[
+                        "block truncate text-[10px]",
+                        unavailable ? "text-amber-400" : "text-slate-500",
+                      ].join(" ")}
+                    >
+                      {getContextDetail(context)}
                     </span>
                   </span>
                 </button>

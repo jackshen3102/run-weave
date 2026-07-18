@@ -1,21 +1,13 @@
 import { useMemoizedFn } from "ahooks";
-import { memo, useMemo, type CSSProperties } from "react";
+import { memo } from "react";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
 import {
   EMPTY_TERMINAL_PROJECTS,
-  EMPTY_TERMINAL_SESSIONS,
   useTerminalProjectsQuery,
-  useTerminalSessionsQuery,
 } from "../../features/terminal/queries/terminal-workspace-queries";
-import {
-  selectTerminalProjectStatusById,
-  TERMINAL_PROJECT_HAS_BELL,
-  TERMINAL_PROJECT_HAS_COMPLETION,
-  TERMINAL_PROJECT_IS_WORKING,
-  useTerminalWorkspaceStore,
-} from "../../features/terminal/workspace-store";
+import { useTerminalAggregateStatus } from "../../features/terminal/use-terminal-aggregate-status";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import { Button } from "../ui/button";
 import {
   ContextMenu,
@@ -23,8 +15,8 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "../ui/context-menu";
-import { ShimmerText } from "../ui/shimmer-text";
 import { SortableTabs, type SortableTabRenderProps } from "../ui/sortable-tabs";
+import { TerminalAggregateStatus } from "./terminal-aggregate-status";
 
 interface TerminalProjectTabBarProps {
   isMobileMonitor: boolean;
@@ -50,29 +42,15 @@ export const TerminalProjectTabBar = memo(function TerminalProjectTabBar({
   onSelectProject,
 }: TerminalProjectTabBarProps) {
   const projects = useTerminalProjectsQuery().data ?? EMPTY_TERMINAL_PROJECTS;
-  const sessions = useTerminalSessionsQuery().data ?? EMPTY_TERMINAL_SESSIONS;
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeParentProjectId,
   );
-  const projectStatusState = useTerminalWorkspaceStore(
-    useShallow((state) => ({
-      bellMarkers: state.bellMarkers,
-      completionMarkers: state.completionMarkers,
-      terminalStateBySessionId: state.terminalStateBySessionId,
-    })),
-  );
-  const statusByProjectId = useMemo(
-    () => selectTerminalProjectStatusById(projectStatusState, sessions),
-    [projectStatusState, sessions],
-  );
+  const { byParentProjectId } = useTerminalAggregateStatus();
 
   const renderProjectTab = useMemoizedFn(
     (project: TerminalProjectListItem, sortProps: SortableTabRenderProps) => {
       const isActive = project.projectId === activeProjectId;
-      const status = statusByProjectId[project.projectId] ?? 0;
-      const hasBell = Boolean(status & TERMINAL_PROJECT_HAS_BELL);
-      const hasCompletion = Boolean(status & TERMINAL_PROJECT_HAS_COMPLETION);
-      const isWorking = Boolean(status & TERMINAL_PROJECT_IS_WORKING);
+      const status = byParentProjectId[project.projectId] ?? 0;
 
       return (
         <ContextMenu>
@@ -93,31 +71,10 @@ export const TerminalProjectTabBar = memo(function TerminalProjectTabBar({
               }}
               title={project.name}
             >
-              {isWorking ? (
-                <ShimmerText
-                  className="max-w-[160px] truncate shimmer-invert"
-                  style={
-                    {
-                      "--shimmer-duration": "4000",
-                      "--shimmer-repeat-delay": "300",
-                    } as CSSProperties
-                  }
-                >
-                  {project.name}
-                </ShimmerText>
-              ) : (
-                <span className="max-w-[160px] truncate">{project.name}</span>
-              )}
-              <span
-                aria-hidden="true"
-                className={[
-                  "h-1.5 w-1.5 shrink-0 rounded-full",
-                  hasBell
-                    ? "bg-amber-400"
-                    : hasCompletion
-                      ? "bg-emerald-400"
-                      : "bg-transparent",
-                ].join(" ")}
+              <TerminalAggregateStatus
+                label={project.name}
+                status={status}
+                labelClassName="max-w-[160px] truncate"
               />
             </button>
           </ContextMenuTrigger>

@@ -120,10 +120,21 @@ export class AgentThreadStatusReconciler {
         });
         continue;
       }
-      if (!observed || this.isAlreadyProjected(thread, observed)) {
+      if (!observed) {
         continue;
       }
-      await this.recordObservation(thread, observed);
+      const currentThread = this.options.eventCenter
+        .getStateStore()
+        .getThread(thread.threadId);
+      if (
+        !currentThread ||
+        currentThread.lastEventId !== thread.lastEventId ||
+        this.isAlreadyProjected(currentThread, observed) ||
+        this.shouldDeferCodexMismatch(currentThread, observed)
+      ) {
+        continue;
+      }
+      await this.recordObservation(currentThread, observed);
     }
   }
 
@@ -207,10 +218,26 @@ export class AgentThreadStatusReconciler {
     thread: AppServerThreadRef,
     observed: ObservedThreadState,
   ): boolean {
-    return (
+    const lifecycleAlreadyProjected =
       thread.lifecycleStatus === "available" &&
       thread.lastLifecycleCursor === observed.lifecycleCursor &&
-      thread.lastLifecycleType === observed.lifecycleType
+      thread.lastLifecycleType === observed.lifecycleType;
+    return (
+      lifecycleAlreadyProjected &&
+      (thread.agent !== "codex" || thread.status === observed.status)
+    );
+  }
+
+  private shouldDeferCodexMismatch(
+    thread: AppServerThreadRef,
+    observed: ObservedThreadState,
+  ): boolean {
+    if (thread.agent !== "codex" || thread.status === observed.status) {
+      return false;
+    }
+    const updatedAtMs = Date.parse(thread.updatedAt);
+    return (
+      Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs < this.intervalMs
     );
   }
 
