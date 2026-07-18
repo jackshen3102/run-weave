@@ -1,6 +1,6 @@
 ---
 name: git-advanced-workflows
-description: "Master advanced Git workflows including rebasing, cherry-picking, bisect, worktrees, and reflog to maintain clean history and recover from any situation. Use when managing complex Git histories, co..."
+description: "Manage advanced Git workflows including rebasing, cherry-picking, bisect, worktrees, and reflog. Use when managing complex Git history or when an Agent needs to create, inspect, reuse, or remove a Git Worktree; newly created Worktrees must live under the current parent Project's .worktree directory."
 metadata:
   risk: unknown
   source: community
@@ -117,21 +117,51 @@ git bisect run ./test.sh
 
 Work on multiple branches simultaneously without stashing or switching.
 
+For every Worktree created by an Agent, use the task's assigned parent Project root and place the Worktree at the direct-child path `<projectRoot>/.worktree/<managedName>`.
+
+- Treat `projectRoot` as the current Runweave parent Project, not the Git common-dir checkout. A parent Project may itself be a linked Worktree.
+- If the current cwd is already `<projectRoot>/.worktree/<name>`, create any additional Worktree as its sibling under the same parent Project; never create nested `.worktree/<name>/.worktree/<other>` directories.
+- Use a short lowercase ASCII slug for `managedName`. Keep the directory name separate from a branch name containing `/`.
+- Before creation, reject a symlinked `.worktree` root, ensure the root `/.worktree/` path is Git-ignored, and inspect `git worktree list --porcelain` for path or branch collisions.
+- Do not create new Worktrees in `/tmp`, `/private/tmp`, repository siblings, `.trae/worktrees`, or another tool-private directory. Existing Worktrees outside `.worktree` may continue to be used when the task is already bound to them; do not migrate them implicitly.
+- Remove only the exact managed Worktree after checking that it is clean and no task-owned runtime still uses it. Do not use broad `git worktree prune` or forced removal as routine cleanup.
+
 ```bash
-# List existing worktrees
-git worktree list
+# Run from the assigned parent Project root
+project_root="$(git rev-parse --show-toplevel)"
+worktree_root="$project_root/.worktree"
+baseline_revision="<exact-baseline-revision>"
+
+# The repository must ignore /.worktree/ before creation
+test ! -L "$worktree_root"
+mkdir -p "$worktree_root"
+git -C "$project_root" check-ignore -q .worktree/
+
+# Inspect exact registered identities before changing them
+git -C "$project_root" worktree list --porcelain
 
 # Add new worktree for feature branch
-git worktree add ../project-feature feature/new-feature
+git -C "$project_root" worktree add \
+  "$worktree_root/feature-new-feature" \
+  feature/new-feature
 
 # Add worktree and create new branch
-git worktree add -b bugfix/urgent ../project-hotfix main
+git -C "$project_root" worktree add \
+  -b bugfix/urgent \
+  "$worktree_root/bugfix-urgent" \
+  main
 
-# Remove worktree
-git worktree remove ../project-feature
+# Add detached validation worktree from an exact baseline
+git -C "$project_root" worktree add \
+  --detach \
+  "$worktree_root/validate-terminal-state" \
+  "$baseline_revision"
 
-# Prune stale worktrees
-git worktree prune
+# Remove one clean, no-longer-used worktree and verify the registration is gone
+git -C "$worktree_root/feature-new-feature" status --short
+git -C "$project_root" worktree remove \
+  "$worktree_root/feature-new-feature"
+git -C "$project_root" worktree list --porcelain
 ```
 
 ### 5. Reflog
@@ -225,25 +255,31 @@ git bisect run npm test
 ### Workflow 4: Multi-Branch Development
 
 ```bash
-# Main project directory
-cd ~/projects/myapp
+# Run from the assigned parent Project root
+project_root="$(git rev-parse --show-toplevel)"
+hotfix_worktree="$project_root/.worktree/hotfix-critical-bug"
+mkdir -p "$project_root/.worktree"
+git -C "$project_root" check-ignore -q .worktree/
 
-# Create worktree for urgent bugfix
-git worktree add ../myapp-hotfix hotfix/critical-bug
+# Create a direct-child worktree for the existing hotfix branch
+git -C "$project_root" worktree add \
+  "$hotfix_worktree" \
+  hotfix/critical-bug
 
 # Work on hotfix in separate directory
-cd ../myapp-hotfix
+cd "$hotfix_worktree"
 # Make changes, commit
 git commit -m "fix: resolve critical bug"
 git push origin hotfix/critical-bug
 
 # Return to main work without interruption
-cd ~/projects/myapp
+cd "$project_root"
 git fetch origin
 git cherry-pick hotfix/critical-bug
 
-# Clean up when done
-git worktree remove ../myapp-hotfix
+# Clean up the exact path when it is clean and no runtime uses it
+git -C "$hotfix_worktree" status --short
+git -C "$project_root" worktree remove "$hotfix_worktree"
 ```
 
 ### Workflow 5: Recover from Mistakes
@@ -384,7 +420,7 @@ git reset --hard backup-branch
 - **Rebasing Public Branches**: Causes history conflicts for collaborators
 - **Force Pushing Without Lease**: Can overwrite teammate's work
 - **Losing Work in Rebase**: Resolve conflicts carefully, test after rebase
-- **Forgetting Worktree Cleanup**: Orphaned worktrees consume disk space
+- **Unsafe Worktree Placement or Cleanup**: Create only under `<projectRoot>/.worktree/<managedName>` and remove only the verified exact target
 - **Not Backing Up Before Experiment**: Always create safety branch
 - **Bisect on Dirty Working Directory**: Commit or stash before bisecting
 

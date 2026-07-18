@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Team 深度复盘"
+  short_description: "基于真实证据生成 Agent Team 深度复盘与 HTML 架构报告"
+  default_prompt: "使用 $agent-team-retrospective 深度复盘这个 Agent Team run，并生成可运行的中文 HTML 架构报告。"

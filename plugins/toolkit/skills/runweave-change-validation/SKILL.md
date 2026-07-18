@@ -17,6 +17,7 @@ description: 仅当用户在当前请求中显式指定 $toolkit:runweave-change
 ## 必需技能
 
 - 实际执行任何 Dev Session planner、start、status、open、attach、recovery 或 stop 操作时，同时使用 `$toolkit:runweave-dev-session`。本技能负责 patch 边界、完整验收和证据合同；该技能负责准确的 Session 生命周期。
+- 因脏工作区需要创建、检查或移除隔离 Worktree 时，同时使用 `$toolkit:git-advanced-workflows`。本技能决定 patch 与验证时序；该技能负责 Git Worktree 的规范路径、身份检查和精确清理。
 
 ## 不可变边界
 
@@ -24,7 +25,7 @@ description: 仅当用户在当前请求中显式指定 $toolkit:runweave-change
 - 第一次 dry-run 不显式指定 profile。先让真实 diff 给出最低影响闭包。
 - 可以因用户明确的安装态、跨版本或桌面验收目标提升 profile；禁止向下降级或绕过 planner。
 - 未提交代码的验证环境只允许通过 `pnpm dev:session` 启动，并只用 `dev:status`、`dev:open`、`dev:stop` 管理生命周期。Agent 直接调用 Backend、App Server、Electron、Beta、手工 profile/端口或任何跳过 planner 的入口都视为绕过；Dev Session 内部调用的 adapter 不受此限制。
-- 当前工作区有无关改动时，使用只包含本次 patch 的独立 worktree；禁止 stash、reset 或混入他人改动。
+- 当前工作区有无关改动时，使用只包含本次 patch 的独立 Worktree；新建路径固定为任务绑定父 Project 的 `<projectRoot>/.worktree/<validationName>` 直接子目录，禁止 `/tmp`、`/private/tmp`、仓库同级、`.trae/worktrees`、工具私有目录或嵌套 `.worktree`；禁止 stash、reset 或混入他人改动。
 - 浏览器与桌面行为必须真实取证，静态检查不能代替行为验收。
 - Runweave UI/浏览器验收只能显式附着 `dev:open` 返回的 CDP endpoint。禁止使用 `playwright-cli open`、系统浏览器、headless 浏览器、默认 endpoint、环境变量或既有无关 Playwright session 代替目标 surface。
 
@@ -59,9 +60,10 @@ description: 仅当用户在当前请求中显式指定 $toolkit:runweave-change
 
 若工作区不干净且包含无关改动：
 
-1. 从当前基线 commit 创建临时 worktree。
-2. 只把本次任务文件的 patch 应用到该 worktree。
-3. 在该 worktree 安装依赖并执行后续 Dev Session 命令。
+1. 使用 `$toolkit:git-advanced-workflows`，从当前基线 commit 创建 detached 隔离 Worktree，路径为任务绑定父 Project 的 `<projectRoot>/.worktree/<validationName>`；若当前 cwd 已是该父 Project 的子 Worktree，则创建同级子 Worktree，禁止继续嵌套。
+2. 通过 Git Worktree 登记和 realpath 确认 source root 是 `.worktree` 下的直接子目录，且没有路径或分支身份冲突。
+3. 只把本次任务文件的 patch 应用到该 Worktree。
+4. 在该 Worktree 安装依赖并执行后续 Dev Session 命令。
 
 无法可靠区分 patch 边界时停止，不把整个脏工作区当作本次影响范围。
 
@@ -157,7 +159,7 @@ playwright-cli -s="<suggestedPlaywrightSession>" attach --cdp="<endpoint>"
 pnpm dev:stop --session <id> --json
 ```
 
-只停止 manifest 中由该 Session 拥有的 dedicated 服务；不停止 shared 服务。停止后最多等待 10 秒确认状态进入 `stopped` 且目标端口/CDP 不再监听，再移除临时 worktree。
+只停止 manifest 中由该 Session 拥有的 dedicated 服务；不停止 shared 服务。停止后最多等待 10 秒确认状态进入 `stopped` 且目标端口/CDP 不再监听，再使用 `$toolkit:git-advanced-workflows` 移除本次精确的隔离 Worktree；不得强制移除 dirty Worktree，也不得执行全局 `git worktree prune`。
 
 10 秒后仍未清理完成时停止等待：重新保存 `dev:status --json`，用 `lsof -nP -iTCP:<port> -sTCP:LISTEN` 记录占用进程并报告环境阻塞。不要无限轮询、按端口盲杀或移除仍被运行服务使用的 worktree。
 
