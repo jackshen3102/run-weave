@@ -2,7 +2,6 @@ import type {
   AgentTeamActiveWorkerDispatch,
   AgentTeamAcceptanceCase,
   AgentTeamPendingFindingDecision,
-  AgentTeamRepairCycle,
   AgentTeamRun,
   AgentTeamStatus,
   AgentTeamWorker,
@@ -13,6 +12,11 @@ import type { TerminalSessionRecord } from "../terminal/manager";
 import { createTerminalPanelSplit } from "../terminal/application/panel-split";
 import { resolveTmuxTarget } from "../terminal/runtime-launcher";
 import { AgentTeamError } from "./errors";
+import {
+  partialPanelFromError,
+  pendingDecisionFromReviewCycle,
+  type CreatedWorkerPanel,
+} from "./service-execution-support";
 import {
   buildBounceBackPrompt,
   buildWorkerStartupPrompt,
@@ -126,8 +130,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
                   terminalEventService: this.terminalEventService,
                 },
                 {
-                  direction:
-                    boundWorkers.length % 2 === 0 ? "right" : "down",
+                  direction: boundWorkers.length % 2 === 0 ? "right" : "down",
                   role: panelRole,
                   alias: panelAlias,
                   agentTeamRunId: run.runId,
@@ -417,10 +420,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       );
       logs.push(`⏸ ${reason}`);
     } else if (shouldEscalate(repairFolded.loop)) {
-      const reason = buildEscalationReason(
-        repairFolded.loop,
-        foldedAcceptance,
-      );
+      const reason = buildEscalationReason(repairFolded.loop, foldedAcceptance);
       loop = { ...repairFolded.loop, escalated: true, lastReason: reason };
       status = "need_human";
       // Freeze all worker panes: stop injecting further rounds.
@@ -501,8 +501,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     const missingReproductionCaseIds = new Set(
       repairCycles
         .filter(
-          (cycle) =>
-            !(cycle.sourceReproduction ?? cycle.finding?.reproduction),
+          (cycle) => !(cycle.sourceReproduction ?? cycle.finding?.reproduction),
         )
         .flatMap((cycle) => cycle.caseIds),
     );
@@ -589,55 +588,4 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       return run;
     }
   }
-}
-
-interface CreatedWorkerPanel {
-  panelId: string;
-  tmuxPaneId: string;
-  paneRemoved?: boolean;
-}
-
-function partialPanelFromError(error: AgentTeamError): CreatedWorkerPanel | null {
-  if (!error.details || typeof error.details !== "object") {
-    return null;
-  }
-  const details = error.details as Record<string, unknown>;
-  const partialPanel = details.partialPanel;
-  if (!partialPanel || typeof partialPanel !== "object") {
-    return null;
-  }
-  const panel = partialPanel as Record<string, unknown>;
-  if (typeof panel.panelId !== "string" || typeof panel.tmuxPaneId !== "string") {
-    return null;
-  }
-  return {
-    panelId: panel.panelId,
-    tmuxPaneId: panel.tmuxPaneId,
-    paneRemoved: details.paneRemoved === true,
-  };
-}
-
-function pendingDecisionFromReviewCycle(
-  cycles: AgentTeamRepairCycle[],
-  reason: string,
-): AgentTeamPendingFindingDecision | null {
-  const cycle = cycles.find(
-    (item) =>
-      item.sourceRole === "code_review" && item.finding && item.reviewOutbox,
-  );
-  if (!cycle?.finding || !cycle.reviewOutbox) {
-    return null;
-  }
-  return {
-    id: [
-      cycle.finding.invariantKey ?? cycle.repairKey,
-      cycle.finding.reproduction?.scenarioId ?? "no-scenario",
-      cycle.reviewTarget?.targetTree ?? "no-target",
-    ].join(":"),
-    finding: cycle.finding,
-    outbox: cycle.reviewOutbox,
-    reviewTarget: cycle.reviewTarget ?? null,
-    reason,
-    requestedAt: new Date().toISOString(),
-  };
 }
