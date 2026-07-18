@@ -1,4 +1,4 @@
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import type {
   AgentTeamFrameworkRepairRecoveryStatus,
   AgentTeamRun,
@@ -7,6 +7,7 @@ import { Button } from "../ui/button";
 import {
   getAgentTeamCaseElementId,
   ROLE_LABEL,
+  type AgentTeamControlState,
 } from "./terminal-agent-team-panel-model";
 import { AcceptanceEvidenceDetails } from "./terminal-agent-team-panel-details";
 import { formatVerificationSource } from "./terminal-agent-team-panel-sections";
@@ -17,6 +18,7 @@ export function ExecutingSection({
   token,
   projectId,
   run,
+  controlState,
   frameworkRecovery,
   busy,
   onRetry,
@@ -28,6 +30,7 @@ export function ExecutingSection({
   token: string;
   projectId: string;
   run: AgentTeamRun;
+  controlState: AgentTeamControlState;
   frameworkRecovery: AgentTeamFrameworkRepairRecoveryStatus | null;
   busy: boolean;
   onRetry: () => void;
@@ -43,7 +46,10 @@ export function ExecutingSection({
   return (
     <div className="space-y-3">
       <ExecutingHeader run={run} />
-      {run.frameworkRepair?.result === "blocked" ? (
+      {controlState.kind === "automatic_recovery" ? (
+        <AutomaticRecoveryCard run={run} />
+      ) : null}
+      {controlState.allowsFrameworkRecovery ? (
         <FrameworkRepairCard
           recovery={frameworkRecovery}
           busy={busy}
@@ -54,7 +60,12 @@ export function ExecutingSection({
       {run.reviewCheckpoint ? <ReviewCheckpointStatus run={run} /> : null}
       <FindingDecisionsCard run={run} />
       <LoopProgressCard run={run} level={level} />
-      <RunStatusNotice run={run} busy={busy} onRetry={onRetry} />
+      <RunStatusNotice
+        run={run}
+        controlState={controlState}
+        busy={busy}
+        onRetry={onRetry}
+      />
       <AcceptanceEvidenceList
         apiBase={apiBase}
         token={token}
@@ -64,6 +75,26 @@ export function ExecutingSection({
         onAuthExpired={onAuthExpired}
       />
       <RunLogList logs={run.logs} />
+    </div>
+  );
+}
+
+function AutomaticRecoveryCard({ run }: { run: AgentTeamRun }) {
+  const role = run.activeWorkerRole
+    ? ROLE_LABEL[run.activeWorkerRole]
+    : "Worker";
+  return (
+    <div
+      className="space-y-2 rounded border border-cyan-800 bg-cyan-950/30 p-2"
+      aria-label="正在自动恢复"
+      aria-live="polite"
+    >
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-cyan-200">
+        <Loader2 className="h-4 w-4 animate-spin" /> 正在自动恢复
+      </div>
+      <p className="text-[11px] leading-relaxed text-cyan-100/90">
+        正在等待同一 {role} thread 补交结构化结果；恢复期间无需人工操作。
+      </p>
     </div>
   );
 }
@@ -82,7 +113,7 @@ function FrameworkRepairCard({
   return (
     <div className="space-y-2 rounded border border-amber-800 bg-amber-950/35 p-2">
       <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-200">
-        <AlertTriangle className="h-4 w-4" /> 框架修复等待恢复
+        <AlertTriangle className="h-4 w-4" /> 需要恢复现场
       </div>
       <p className="text-[11px] leading-relaxed text-amber-100">
         {recovery?.reason ?? "正在读取框架修复现场…"}
@@ -128,9 +159,11 @@ function ExecutingHeader({ run }: { run: AgentTeamRun }) {
         Loop 状态
       </h3>
       <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
-        {run.activeWorkerRole
-          ? ROLE_LABEL[run.activeWorkerRole]
-          : "Observe Only"}
+        {(run.runKind ?? "primary") === "verification_fixture"
+          ? "Fixture"
+          : run.activeWorkerRole
+            ? ROLE_LABEL[run.activeWorkerRole]
+            : "Observe Only"}
       </span>
     </div>
   );
@@ -213,14 +246,16 @@ function LoopProgressCard({
 
 function RunStatusNotice({
   run,
+  controlState,
   busy,
   onRetry,
 }: {
   run: AgentTeamRun;
+  controlState: AgentTeamControlState;
   busy: boolean;
   onRetry: () => void;
 }) {
-  if (run.pendingFindingDecision) {
+  if (controlState.kind === "scope_decision") {
     return (
       <div className="rounded border border-rose-800 bg-rose-950/40 p-2 text-[11px] text-rose-200">
         Loop 已暂停。请在顶部完成 Finding
@@ -228,10 +263,36 @@ function RunStatusNotice({
       </div>
     );
   }
+  if (
+    controlState.kind === "recovery_required" &&
+    !controlState.allowsFrameworkRecovery
+  ) {
+    return (
+      <div className="rounded border border-amber-800 bg-amber-950/35 p-2 text-[11px] text-amber-100">
+        <div className="font-semibold text-amber-200">需要恢复现场</div>
+        <p className="mt-1 leading-relaxed">
+          {run.loop.lastReason ?? "Run 已暂停，请先恢复运行现场。"}
+        </p>
+      </div>
+    );
+  }
   if (run.status === "done") {
     return (
       <div className="rounded border border-emerald-900 bg-emerald-950/30 p-2 text-xs text-emerald-300">
         Loop 已完成，worker pane 已冻结。
+      </div>
+    );
+  }
+  if (run.status === "cancelled") {
+    const cleanup = run.fixtureResourceCleanup;
+    return (
+      <div className="rounded border border-slate-700 bg-slate-900/50 p-2 text-xs text-slate-300">
+        Fixture 已取消；Run 与 outbox 历史保留。
+        {cleanup?.status === "completed"
+          ? " owned terminal/pane 已按资源账本回收。"
+          : cleanup?.status === "failed"
+            ? ` 资源回收失败：${cleanup.errors.join("；")}`
+            : " 资源回收尚未执行。"}
       </div>
     );
   }

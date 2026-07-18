@@ -44,11 +44,27 @@ const terminalSchema = z
     runtimePreference: z.enum(["auto", "tmux", "pty"]).optional(),
   })
   .strict();
+const runLineageSchema = z
+  .object({
+    ownerRunId: runIdSchema,
+    ownerDispatchId: z.string().trim().min(1).max(200),
+    ownerCaseIds: z.array(z.string().trim().min(1).max(200)).min(1).max(200),
+    ownerDevSessionId: z.string().trim().min(1).max(100).nullable().optional(),
+    fixtureNamespace: z.string().trim().min(1).max(500),
+    ownsTerminalSession: z.boolean(),
+    cleanupPolicy: z.enum([
+      "on_owner_dispatch_complete",
+      "on_owner_run_complete",
+    ]),
+  })
+  .strict();
 
 const createRunSchema = z
   .object({
     projectId: z.string().trim().min(1),
     terminalSessionId: z.string().trim().min(1),
+    runKind: z.enum(["primary", "verification_fixture"]).optional(),
+    lineage: runLineageSchema.nullable().optional(),
     task: z.string().trim().optional(),
     planFilePath: optionalPathSchema,
     testCaseFilePath: optionalPathSchema,
@@ -172,6 +188,25 @@ const agentInterventionSchema = z
 const completeSchema = z
   .object({ note: z.string().trim().min(1).optional() })
   .strict();
+const cancelSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(2_000),
+    cleanupResources: z.boolean().optional(),
+  })
+  .strict();
+const fixtureScopeQuerySchema = z
+  .object({
+    ownerRunId: runIdSchema,
+    ownerDispatchId: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict();
+const fixtureScopeCleanupSchema = z
+  .object({
+    ownerRunId: runIdSchema,
+    ownerDispatchId: z.string().trim().min(1).max(200).nullable().optional(),
+    reason: z.string().trim().min(1).max(2_000),
+  })
+  .strict();
 const findingDispositionSchema = z
   .object({
     invariantKey: z.string().trim().min(1),
@@ -229,6 +264,37 @@ export function createAgentTeamRouter(
     await handleServiceCall(res, async () => ({
       runs: await agentTeamService.listRuns(projectId),
     }));
+  });
+
+  router.get("/fixture-scopes", async (req, res) => {
+    const parsed = fixtureScopeQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.listFixtureScope(
+        parsed.data.ownerRunId,
+        parsed.data.ownerDispatchId,
+      ),
+    );
+  });
+
+  router.post("/fixture-scopes/cleanup", async (req, res) => {
+    const parsed = fixtureScopeCleanupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.cleanupFixtureScope(parsed.data),
+    );
   });
 
   router.get("/runs/:runId", async (req, res) => {
@@ -441,6 +507,25 @@ export function createAgentTeamRouter(
     }
     await handleServiceCall(res, () =>
       agentTeamService.completeRun(params.data.runId, parsed.data),
+    );
+  });
+
+  router.post("/runs/:runId/cancel", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = cancelSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.cancelRun(params.data.runId, parsed.data),
     );
   });
 

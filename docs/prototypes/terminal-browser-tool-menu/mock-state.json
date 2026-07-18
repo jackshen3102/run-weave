@@ -1,0 +1,15 @@
+{
+  "annotationCount": 0,
+  "headerRuleCount": 0,
+  "moreOpen": false,
+  "tools": [
+    { "id": "copy", "label": "Copy address", "icon": "▣", "fixed": true },
+    { "id": "proxy", "label": "Browser proxy", "icon": "⌁", "fixed": true },
+    { "id": "annotate", "label": "Add browser comments", "icon": "▢+" },
+    { "id": "submit", "label": "Submit browser comments", "icon": "➤" },
+    { "id": "headers", "label": "Request headers", "icon": "{}" },
+    { "id": "device", "label": "Device mode", "icon": "▭" },
+    { "id": "devtools", "label": "Open browser DevTools", "icon": "</>" },
+    { "id": "external", "label": "Open in system browser", "icon": "↗" }
+  ]
+}

@@ -256,6 +256,9 @@ export class WorkHistoryService {
         runId: run.runId,
         projectId: run.projectId,
         terminalSessionId: run.terminalSessionId,
+        runKind: run.runKind ?? "primary",
+        ownerRunId: run.lineage?.ownerRunId ?? null,
+        ownerDispatchId: run.lineage?.ownerDispatchId ?? null,
         status: run.status,
         mode: run.options.autoApproveSplit ? "automatic" : "manual",
         createdAt: run.createdAt,
@@ -270,14 +273,27 @@ export class WorkHistoryService {
               summary.runId,
               summary.projectId,
               summary.terminalSessionId,
+              summary.runKind,
+              summary.ownerRunId ?? "",
+              summary.ownerDispatchId ?? "",
               summary.status,
             ].some((value) => value.toLowerCase().includes(search)),
       )
       .sort(compareRunSummaries);
     const cursor = decodeCursor(options.cursor, "runs");
-    const remaining = cursor
+    const cursorWithGroup =
+      cursor && !cursor.group
+        ? {
+            ...cursor,
+            group: summaries.find(
+              (summary) =>
+                summary.runId === cursor.id && summary.updatedAt === cursor.at,
+            )?.runKind,
+          }
+        : cursor;
+    const remaining = cursorWithGroup
       ? summaries.filter(
-          (summary) => compareRunTuple(summary, cursor.at, cursor.id) > 0,
+          (summary) => compareRunCursor(summary, cursorWithGroup) > 0,
         )
       : summaries;
     const pageRuns = remaining.slice(0, options.limit);
@@ -288,6 +304,7 @@ export class WorkHistoryService {
         ? {
             nextCursor: encodeCursor({
               kind: "runs",
+              group: last.runKind,
               at: last.updatedAt,
               id: last.runId,
             }),
@@ -400,7 +417,24 @@ function compareRunSummaries(
   left: AgentTeamArchiveSummary,
   right: AgentTeamArchiveSummary,
 ): number {
-  return compareRunTuple(left, right.updatedAt, right.runId);
+  return (
+    runKindRank(left.runKind) - runKindRank(right.runKind) ||
+    compareRunTuple(left, right.updatedAt, right.runId)
+  );
+}
+
+function compareRunCursor(
+  left: AgentTeamArchiveSummary,
+  cursor: { at: string; id: string; group?: string },
+): number {
+  return cursor.group === "primary" || cursor.group === "verification_fixture"
+    ? runKindRank(left.runKind) - runKindRank(cursor.group) ||
+        compareRunTuple(left, cursor.at, cursor.id)
+    : compareRunTuple(left, cursor.at, cursor.id);
+}
+
+function runKindRank(kind: AgentTeamArchiveSummary["runKind"]): number {
+  return kind === "verification_fixture" ? 1 : 0;
 }
 
 function compareRunTuple(
@@ -423,7 +457,7 @@ function encodeCursor(value: Record<string, string | number>): string {
 function decodeCursor(
   value: string | undefined,
   kind: "terminals" | "runs",
-): { at: string; id: string } | null {
+): { at: string; id: string; group?: string } | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(
@@ -432,7 +466,11 @@ function decodeCursor(
     return parsed.kind === kind &&
       typeof parsed.at === "string" &&
       typeof parsed.id === "string"
-      ? { at: parsed.at, id: parsed.id }
+      ? {
+          at: parsed.at,
+          id: parsed.id,
+          ...(typeof parsed.group === "string" ? { group: parsed.group } : {}),
+        }
       : null;
   } catch {
     return null;

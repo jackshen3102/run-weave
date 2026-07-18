@@ -3,6 +3,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemoizedFn } from "ahooks";
 import { ChevronRight } from "lucide-react";
 import { Button } from "../../components/ui/button";
+import type { AgentTeamArchiveSummary } from "@runweave/shared/work-history";
 import { HttpError } from "../../services/http";
 import {
   fetchAgentTeamArchive,
@@ -51,7 +52,10 @@ export function MultiAgentHistoryView({
     getNextPageParam: (page) => page.nextCursor,
   });
   const runs = listQuery.data?.pages.flatMap((page) => page.runs) ?? [];
-  const effectiveRunId = selectedRunId ?? runs[0]?.runId ?? null;
+  const primaryRuns = runs.filter((run) => run.runKind !== "verification_fixture");
+  const fixtureRuns = runs.filter((run) => run.runKind === "verification_fixture");
+  const effectiveRunId =
+    selectedRunId ?? primaryRuns[0]?.runId ?? fixtureRuns[0]?.runId ?? null;
   const detailQuery = useInfiniteQuery({
     queryKey: ["work-history", "run", apiBase, effectiveRunId],
     initialPageParam: {} as {
@@ -165,35 +169,39 @@ export function MultiAgentHistoryView({
             <Empty text={listQuery.isError ? "Run archives are unavailable." : "No Multi-Agent Runs recorded."} />
           ) : (
             <div>
-              {runs.map((run) => (
-                <article
+              {primaryRuns.map((run) => (
+                <RunArchiveItem
                   key={run.runId}
-                  className={`w-full select-text border-b border-border/70 p-4 ${effectiveRunId === run.runId ? selectedRunId ? "bg-primary/10" : "md:bg-primary/10" : ""}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{run.runId}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {run.mode} · {run.workerCount} workers
-                      </p>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Next round index {run.nextRoundIndex}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-[0.68rem] text-muted-foreground">{run.status}</span>
-                      <button
-                        type="button"
-                        aria-label={`Open Run ${run.runId}`}
-                        className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:h-8 md:w-8"
-                        onClick={() => selectRun(run.runId)}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </article>
+                  run={run}
+                  effectiveRunId={effectiveRunId}
+                  selectedRunId={selectedRunId}
+                  onSelect={selectRun}
+                />
               ))}
+              {fixtureRuns.length > 0 ? (
+                <details
+                  className="border-b border-border/70"
+                  open={
+                    fixtureRuns.some((run) => run.runId === selectedRunId) ||
+                    primaryRuns.length === 0 ||
+                    undefined
+                  }
+                >
+                  <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-muted-foreground">
+                    Verification fixtures ({fixtureRuns.length})
+                  </summary>
+                  {fixtureRuns.map((run) => (
+                    <RunArchiveItem
+                      key={run.runId}
+                      run={run}
+                      effectiveRunId={effectiveRunId}
+                      selectedRunId={selectedRunId}
+                      onSelect={selectRun}
+                      fixture
+                    />
+                  ))}
+                </details>
+              ) : null}
               {listQuery.hasNextPage ? (
                 <div className="p-3 text-center">
                   <Button variant="outline" size="sm" onClick={loadMoreRuns}>Load more runs</Button>
@@ -258,6 +266,56 @@ export function MultiAgentHistoryView({
         />
       }
     />
+  );
+}
+
+function RunArchiveItem({
+  run,
+  effectiveRunId,
+  selectedRunId,
+  onSelect,
+  fixture = false,
+}: {
+  run: AgentTeamArchiveSummary;
+  effectiveRunId: string | null;
+  selectedRunId: string | null;
+  onSelect: (runId: string) => void;
+  fixture?: boolean;
+}) {
+  return (
+    <article
+      className={`w-full select-text border-b border-border/70 p-4 ${fixture ? "bg-muted/20 pl-6" : ""} ${effectiveRunId === run.runId ? (selectedRunId ? "bg-primary/10" : "md:bg-primary/10") : ""}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{run.runId}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {run.mode} · {run.workerCount} workers
+          </p>
+          {fixture ? (
+            <p className="mt-1 truncate text-[0.68rem] text-muted-foreground">
+              owner {run.ownerRunId} · {run.ownerDispatchId}
+            </p>
+          ) : null}
+          <p className="mt-2 text-xs text-muted-foreground">
+            Next round index {run.nextRoundIndex}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-[0.68rem] text-muted-foreground">
+            {run.status}
+          </span>
+          <button
+            type="button"
+            aria-label={`Open Run ${run.runId}`}
+            className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:h-8 md:w-8"
+            onClick={() => onSelect(run.runId)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </article>
   );
 }
 

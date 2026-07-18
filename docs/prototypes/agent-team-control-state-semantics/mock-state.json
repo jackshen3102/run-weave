@@ -1,0 +1,44 @@
+{
+  "defaultState": "automatic-recovery",
+  "states": {
+    "automatic-recovery": {
+      "label": "正在自动恢复",
+      "tone": "recovering",
+      "icon": "spinner",
+      "title": "正在自动恢复",
+      "summary": "code_review 返回的结构化结果不完整，系统正在等待同一 Worker thread 补交。",
+      "meta": [
+        "原 dispatch 已消费",
+        "correction dispatch 已建立",
+        "无需人工操作"
+      ],
+      "actions": []
+    },
+    "recovery-required": {
+      "label": "需要恢复现场",
+      "tone": "recovery",
+      "icon": "warning",
+      "title": "需要恢复现场",
+      "summary": "Backend 重启后需要确认原 Worker pane 仍可继续；无法恢复时创建干净 rerun。",
+      "meta": ["Backend 重启：已检测到", "继续条件：原 Worker pane 可继续"],
+      "actions": [
+        { "id": "continue", "label": "继续原 Run", "primary": true },
+        { "id": "rerun", "label": "重新运行", "primary": false }
+      ]
+    },
+    "scope-decision": {
+      "label": "需要范围裁决",
+      "tone": "decision",
+      "icon": "decision",
+      "title": "Finding 范围裁决",
+      "summary": "P1 · completion transition 在恢复边界上可能影响 ATFR-013。",
+      "meta": ["映射 Case：ATFR-013", "Finding 事实和复现证据始终保留"],
+      "reasonRequired": true,
+      "actions": [
+        { "id": "blocking", "label": "继续修复", "primary": true },
+        { "id": "out-of-scope", "label": "标记范围外", "primary": false },
+        { "id": "waived", "label": "本轮豁免", "primary": false }
+      ]
+    }
+  }
+}

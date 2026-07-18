@@ -139,9 +139,28 @@ async function main(): Promise<void> {
       threadRef("thread-b", "2", project.id, terminal.id, baseTime),
     ];
     const run = fixtureRun(project.id, terminal.id);
+    const fixture = {
+      ...structuredClone(run),
+      runId: "work-history-fixture-run",
+      runKind: "verification_fixture" as const,
+      lineage: {
+        ownerRunId: run.runId,
+        ownerDispatchId: "dispatch-work-history",
+        ownerCaseIds: ["AGT-WH-001"],
+        ownerDevSessionId: "dvs-work-history",
+        fixtureNamespace:
+          "agent-team:work-history-run:dispatch-work-history:dvs-work-history",
+        ownsTerminalSession: true,
+        cleanupPolicy: "on_owner_dispatch_complete" as const,
+      },
+      status: "cancelled" as const,
+      updatedAt: new Date(Date.now() + 60_000).toISOString(),
+    };
     const agentTeamService = {
-      listRuns: async (projectId: string) => (projectId === project.id ? [run] : []),
-      getRun: async (runId: string) => (runId === run.runId ? run : null),
+      listRuns: async (projectId: string) =>
+        projectId === project.id ? [fixture, run] : [],
+      getRun: async (runId: string) =>
+        runId === run.runId ? run : runId === fixture.runId ? fixture : null,
     } as unknown as AgentTeamService;
     const gateway = new FixtureGateway(twoThreads);
     const service = new WorkHistoryService(
@@ -225,8 +244,16 @@ async function main(): Promise<void> {
     assert.equal(remaining?.threadDetails.length, 5);
     assert.equal(remaining?.nextThreadCursor, undefined);
 
-    const runPage = await service.listRuns({ limit: 100 });
+    const runPage = await service.listRuns({ limit: 1 });
     assert.equal(runPage.runs[0]?.nextRoundIndex, 3);
+    assert.equal(runPage.runs[0]?.runKind, "primary");
+    assert(runPage.nextCursor);
+    const fixturePage = await service.listRuns({
+      limit: 1,
+      cursor: runPage.nextCursor,
+    });
+    assert.equal(fixturePage.runs[0]?.runId, fixture.runId);
+    assert.equal(fixturePage.runs[0]?.ownerRunId, run.runId);
     assert.deepEqual(
       resolveAgentTeamRoundAttribution({ activityRound: 2, dispatchRound: 1 }),
       { round: 2, source: "activity_payload" },
@@ -260,6 +287,7 @@ async function main(): Promise<void> {
             "provider_unavailable_degradation",
             "thread_detail_limit_and_concurrency",
             "round_attribution_precedence",
+            "primary_run_before_fixture_pagination",
           ],
         },
         null,

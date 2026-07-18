@@ -3,10 +3,12 @@ import type {
   AgentTeamExportResponse,
   AgentTeamFrameworkRepairRecoveryStatus,
   AgentTeamFrameworkRepairResponse,
+  AgentTeamFixtureScopeResponse,
   AgentTeamRun,
   AgentTeamRunsResponse,
   BeginAgentTeamFrameworkRepairRequest,
   InterveneAgentTeamRunRequest,
+  CancelAgentTeamRunRequest,
 } from "@runweave/shared/agent-team";
 import type { TerminalStateResponse } from "@runweave/shared/terminal/events";
 import type { PrepareTerminalAgentRequest, PrepareTerminalAgentResponse } from "@runweave/shared/terminal/agent-preparation";
@@ -286,6 +288,33 @@ export class TerminalHttpClient {
   ): Promise<AgentTeamFrameworkRepairResponse> {
     return this.auth.requestJson<AgentTeamFrameworkRepairResponse>(
       `/api/agent-team/runs/${encodeURIComponent(runId)}/framework-repair/${action}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  listAgentTeamFixtureScope(
+    ownerRunId: string,
+    ownerDispatchId?: string,
+  ): Promise<AgentTeamFixtureScopeResponse> {
+    const query = new URLSearchParams({ ownerRunId });
+    if (ownerDispatchId) {
+      query.set("ownerDispatchId", ownerDispatchId);
+    }
+    return this.auth.requestJson<AgentTeamFixtureScopeResponse>(
+      `/api/agent-team/fixture-scopes?${query.toString()}`,
+    );
+  }
+
+  cancelAgentTeamRun(
+    runId: string,
+    payload: CancelAgentTeamRunRequest,
+  ): Promise<AgentTeamRun> {
+    return this.auth.requestJson<AgentTeamRun>(
+      `/api/agent-team/runs/${encodeURIComponent(runId)}/cancel`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

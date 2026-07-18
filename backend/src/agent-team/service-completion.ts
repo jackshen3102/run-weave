@@ -8,12 +8,14 @@ import type {
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { TerminalSessionRecord } from "../terminal/manager";
 import {
+  buildAcceptanceSkipCorrectionPrompt,
   buildBehaviorFailureCorrectionPrompt,
   buildCodeFixHandoffCorrectionPrompt,
   buildReviewFindingCorrectionPrompt,
 } from "./prompt-builders";
 import { agentTeamLogger } from "./service-context";
 import {
+  logConsumedCompletion,
   logReconciledCompletion,
   logStaleCompletion,
 } from "./service-completion-logging";
@@ -29,6 +31,7 @@ import {
 import { captureRepairSourceFingerprint } from "./repair-source-fingerprint";
 import {
   acceptanceCasesForRole,
+  behaviorSkipContractErrors,
   ensureWorkerGateAcceptance,
   expandRecheckCasesForFailures,
   isImplementationWorkerOutbox,
@@ -84,9 +87,26 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
         if (
           !latest ||
           latest.phase !== "executing" ||
-          latest.status !== "running" ||
-          !latest.activeWorkerRole
+          latest.status !== "running"
         ) {
+          return false;
+        }
+        const resolvedOutbox =
+          await this.outboxResolver.resolveOutboxWithMetadata(event);
+        if (!resolvedOutbox) {
+          return false;
+        }
+        const { outbox, mtimeMs: outboxMtimeMs } = resolvedOutbox;
+        const consumedReceipt = outbox.dispatchId
+          ? latest.consumedWorkerDispatches?.find(
+              (receipt) => receipt.dispatchId === outbox.dispatchId,
+            )
+          : null;
+        if (consumedReceipt) {
+          logConsumedCompletion(source, latest, consumedReceipt);
+          return true;
+        }
+        if (!latest.activeWorkerRole) {
           return false;
         }
         const activeWorker = findWorkerByRole(
@@ -104,12 +124,6 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           logStaleCompletion(source, latest, activeWorker, signalMismatch);
           return false;
         }
-        const resolvedOutbox =
-          await this.outboxResolver.resolveOutboxWithMetadata(event);
-        if (!resolvedOutbox) {
-          return false;
-        }
-        const { outbox, mtimeMs: outboxMtimeMs } = resolvedOutbox;
         const dispatch = resolveActiveWorkerDispatch(latest, activeWorker);
         if (!dispatch) {
           await this.recoverMissingActiveWorkerDispatch(latest, activeWorker);
@@ -144,19 +158,6 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           logStaleCompletion(source, latest, activeWorker, freshnessMismatch);
           return false;
         }
-        if (
-          latest.consumedWorkerDispatches?.some(
-            (receipt) => receipt.dispatchId === dispatch.dispatchId,
-          )
-        ) {
-          logStaleCompletion(
-            source,
-            latest,
-            activeWorker,
-            "outbox_dispatch_already_consumed",
-          );
-          return true;
-        }
         let archivedOutbox;
         try {
           archivedOutbox = await this.outboxHistoryStore.archive({
@@ -172,16 +173,17 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           );
           return true;
         }
-        const recordConsumed = (nextRun: AgentTeamRun) =>
-          this.recordConsumedWorkerDispatch(nextRun, archivedOutbox.record);
+        const transitionRun = this.withConsumedWorkerDispatch(
+          latest,
+          archivedOutbox.record,
+        );
         if (dispatch.protocolCorrectionAttempt) {
           const expected = dispatch.protocolCorrectionSourceFingerprint;
           if (!expected) {
-            const pausedRun = await this.pauseForRepairProtocolError(
-              latest,
+            await this.pauseForRepairProtocolError(
+              transitionRun,
               "协议补交缺少源码指纹，无法证明补交期间未修改源码",
             );
-            await recordConsumed(pausedRun);
             return true;
           }
           try {
@@ -195,19 +197,17 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
               actual.repoRoot !== expected.repoRoot ||
               actual.sha256 !== expected.sha256
             ) {
-              const pausedRun = await this.pauseForRepairProtocolError(
-                latest,
+              await this.pauseForRepairProtocolError(
+                transitionRun,
                 "协议补交期间源码、Git HEAD 或 index 已变化",
               );
-              await recordConsumed(pausedRun);
               return true;
             }
           } catch (error) {
-            const pausedRun = await this.pauseForRepairProtocolError(
-              latest,
+            await this.pauseForRepairProtocolError(
+              transitionRun,
               `协议补交源码指纹复核失败：${error instanceof Error ? error.message : String(error)}`,
             );
-            await recordConsumed(pausedRun);
             return true;
           }
         }
@@ -216,11 +216,10 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           outbox,
         );
         if (reviewTargetMismatch) {
-          const pausedRun = await this.pauseForCheckpointError(
-            latest,
+          await this.pauseForCheckpointError(
+            transitionRun,
             reviewTargetMismatch,
           );
-          await recordConsumed(pausedRun);
           return true;
         }
         if (outbox.role === "behavior_verify" && latest.reviewCheckpoint) {
@@ -228,11 +227,10 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
             latest.activeWorkerDispatch?.verifiedCheckpointCommit ??
             latest.reviewCheckpoint.lastReviewedCommit;
           if (outbox.verifiedCheckpointCommit !== expectedCheckpointCommit) {
-            const pausedRun = await this.pauseForCheckpointError(
-              latest,
+            await this.pauseForCheckpointError(
+              transitionRun,
               `behavior outbox checkpoint 不匹配：expected ${expectedCheckpointCommit}，actual ${outbox.verifiedCheckpointCommit ?? "null"}`,
             );
-            await recordConsumed(pausedRun);
             return true;
           }
           try {
@@ -244,22 +242,40 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
               latest.activeWorkerDispatch?.checkpointRebasedCommit ?? undefined,
             );
           } catch (error) {
-            const pausedRun = await this.pauseForCheckpointError(
-              latest,
+            await this.pauseForCheckpointError(
+              transitionRun,
               error instanceof Error ? error.message : String(error),
             );
-            await recordConsumed(pausedRun);
             return true;
           }
         }
         const initialRound = this.resolveOutboxRound(latest, outbox);
+        const skipContractErrors =
+          outbox.role === "behavior_verify"
+            ? behaviorSkipContractErrors(latest, initialRound.acceptanceResults)
+            : [];
+        if (skipContractErrors.length > 0) {
+          await this.handleProtocolCorrection(
+            transitionRun,
+            activeWorker,
+            outboxMtimeMs,
+            skipContractErrors,
+            (run) =>
+              buildAcceptanceSkipCorrectionPrompt({
+                run,
+                errors: skipContractErrors,
+              }),
+            "behavior_verify skip",
+          );
+          return true;
+        }
         const behaviorContractErrors = behaviorFailureContractErrors(
           outbox,
           initialRound.acceptanceResults,
         );
         if (behaviorContractErrors.length > 0) {
-          const correctionRun = await this.handleProtocolCorrection(
-            latest,
+          await this.handleProtocolCorrection(
+            transitionRun,
             activeWorker,
             outboxMtimeMs,
             behaviorContractErrors,
@@ -270,7 +286,6 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
               }),
             "behavior_verify reproduction",
           );
-          await recordConsumed(correctionRun);
           return true;
         }
         const reviewContractErrors = reviewFindingContractErrors(
@@ -279,8 +294,8 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           initialRound.acceptanceResults,
         );
         if (reviewContractErrors.length > 0) {
-          const correctionRun = await this.handleProtocolCorrection(
-            latest,
+          await this.handleProtocolCorrection(
+            transitionRun,
             activeWorker,
             outboxMtimeMs,
             reviewContractErrors,
@@ -291,7 +306,6 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
               }),
             "code_review finding",
           );
-          await recordConsumed(correctionRun);
           return true;
         }
         const pendingFindingDecision = resolvePendingFindingDecision(
@@ -299,43 +313,36 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           outbox,
         );
         if (pendingFindingDecision) {
-          const pausedRun = await this.pauseForFindingDecision(
-            latest,
+          await this.pauseForFindingDecision(
+            transitionRun,
             pendingFindingDecision,
           );
-          await recordConsumed(pausedRun);
           return true;
         }
         if (outbox.role === "code") {
           const handoff = validateCodeFixHandoff(latest, outbox);
           if (handoff.status === "reviewer_reproduction_required") {
-            const reviewRun = await this.dispatchSerialWorker(
-              latest,
-              "code_review",
-              {
-                cases: acceptanceCasesForRole(latest, "code_review"),
-                log: "code 无法复现重复 review finding，回派 reviewer 现场举证",
-                triggerSummary: handoff.reason,
-                reviewChallenge: {
-                  repairKeys: handoff.repairKeys,
-                  reason: handoff.reason,
-                },
+            await this.dispatchSerialWorker(transitionRun, "code_review", {
+              cases: acceptanceCasesForRole(latest, "code_review"),
+              log: "code 无法复现重复 review finding，回派 reviewer 现场举证",
+              triggerSummary: handoff.reason,
+              reviewChallenge: {
+                repairKeys: handoff.repairKeys,
+                reason: handoff.reason,
               },
-            );
-            await recordConsumed(reviewRun);
+            });
             return true;
           }
           if (handoff.status === "blocked") {
-            const pausedRun = await this.pauseForRepairProtocolError(
-              latest,
+            await this.pauseForRepairProtocolError(
+              transitionRun,
               handoff.reason,
             );
-            await recordConsumed(pausedRun);
             return true;
           }
           if (handoff.status === "invalid") {
-            const correctionRun = await this.handleProtocolCorrection(
-              latest,
+            await this.handleProtocolCorrection(
+              transitionRun,
               activeWorker,
               outboxMtimeMs,
               handoff.errors,
@@ -346,7 +353,6 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
                 }),
               "code fixVerifications",
             );
-            await recordConsumed(correctionRun);
             return true;
           }
         }
@@ -363,19 +369,17 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           !shouldDispatchRecheck &&
           !shouldDispatchSerial
         ) {
-          const pausedRun = await this.pauseForRepairProtocolError(
-            latest,
+          await this.pauseForRepairProtocolError(
+            transitionRun,
             `${outbox.role} outbox 未包含可消费的验收结果`,
           );
-          await recordConsumed(pausedRun);
           return true;
         }
         const serialRun = await this.dispatchNextSerialWorkerFromCompletion(
-          latest,
+          transitionRun,
           outbox,
         );
         if (serialRun) {
-          await recordConsumed(serialRun);
           logReconciledCompletion(
             source,
             latest,
@@ -385,7 +389,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           );
           return true;
         }
-        let roundRun = latest;
+        let roundRun = transitionRun;
         if (
           outbox.role === "code_review" &&
           latest.reviewCheckpoint &&
@@ -396,30 +400,25 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
         ) {
           if (latest.reviewCheckpoint.pendingReview) {
             const finalized = await this.finalizeReviewCheckpoint(
-              latest,
+              transitionRun,
               outbox,
+              { persist: false },
             );
             if (finalized.status !== "running") {
-              await recordConsumed(finalized);
               return true;
             }
             roundRun = finalized;
           } else if (archivedOutbox.created) {
-            const pausedRun = await this.pauseForCheckpointError(
-              latest,
+            await this.pauseForCheckpointError(
+              transitionRun,
               "review pass 缺少 pending review target",
             );
-            await recordConsumed(pausedRun);
             return true;
           }
         }
         const round = this.resolveOutboxRound(roundRun, outbox);
         if (!round.acceptanceResults.length) {
-          const recheckRun = await this.dispatchBouncedCasesForRecheck(
-            roundRun,
-            outbox,
-          );
-          await recordConsumed(recheckRun);
+          await this.dispatchBouncedCasesForRecheck(roundRun, outbox);
           logReconciledCompletion(
             source,
             latest,
@@ -429,14 +428,13 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           );
           return true;
         }
-        const appliedRun = await this.applyRound(roundRun, {
+        await this.applyRound(roundRun, {
           acceptanceResults: round.acceptanceResults,
           forceBounceCaseIds: round.forceBounceCaseIds,
           repairTargets: round.repairTargets,
           completedWorkerRole: parseWorkerRole(outbox.role),
           completedWorkerSummary: outbox.summary,
         });
-        await recordConsumed(appliedRun);
         logReconciledCompletion(
           source,
           latest,
@@ -451,10 +449,10 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
     });
   }
 
-  protected async recordConsumedWorkerDispatch(
+  protected withConsumedWorkerDispatch(
     run: AgentTeamRun,
     history: AgentTeamOutboxHistoryRecord,
-  ): Promise<AgentTeamRun> {
+  ): AgentTeamRun {
     if (
       run.consumedWorkerDispatches?.some(
         (receipt) => receipt.dispatchId === history.dispatchId,
@@ -462,7 +460,8 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
     ) {
       return run;
     }
-    return this.updateRun(run, {
+    return {
+      ...run,
       workerDispatchProtocolVersion: 1,
       consumedWorkerDispatches: [
         ...(run.consumedWorkerDispatches ?? []),
@@ -474,7 +473,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           consumedAt: new Date().toISOString(),
         },
       ],
-    });
+    };
   }
 
   protected hasBouncedCasesForWorker(

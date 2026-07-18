@@ -21,6 +21,7 @@ export interface AgentTeamServiceOptions {
   tmuxService?: TmuxService;
   tmuxOutputWatcher?: TmuxOutputWatcher;
   cwd?: string;
+  env?: NodeJS.ProcessEnv;
   activity?: TerminalActivityDependencies;
   /** Unique to one Backend boot; used to prove a framework restart occurred. */
   backendInstanceId?: string;

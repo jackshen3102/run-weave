@@ -5,6 +5,7 @@ import type { TerminalSessionListItem } from "@runweave/shared/terminal/session"
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { getAgentTeamRunForTerminal } from "../../services/terminal";
 import { canOpenAgentTeamForSession } from "./terminal-session-tab";
+import { isAgentTeamRunActive } from "./terminal-agent-team-panel-model";
 
 interface UseTerminalWorkspaceAgentTeamParams {
   apiBase: string;
@@ -131,7 +132,7 @@ export function useTerminalWorkspaceAgentTeam({
           return;
         }
         setActiveAgentTeamRunSessionId(
-          run && run.status !== "done" && run.status !== "failed"
+          run && isAgentTeamRunActive(run)
             ? terminalSessionId
             : null,
         );

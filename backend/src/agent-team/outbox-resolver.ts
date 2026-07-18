@@ -1,5 +1,8 @@
 import { open } from "node:fs/promises";
-import type { AgentTeamWorkerOutbox } from "@runweave/shared/agent-team";
+import type {
+  AgentTeamAcceptanceSkip,
+  AgentTeamWorkerOutbox,
+} from "@runweave/shared/agent-team";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { AgentTeamPaths } from "./storage/agent-team-paths";
 import {
@@ -339,6 +342,7 @@ function normalizeAcceptanceResults(
       const reproduction = normalizeReviewFindingReproduction(
         result.reproduction,
       );
+      const skip = normalizeAcceptanceSkip(result.skip);
       return {
         caseId: result.caseId,
         status: result.status,
@@ -352,8 +356,43 @@ function normalizeAcceptanceResults(
         ...(typeof result.skipReason === "string" && result.skipReason.trim()
           ? { skipReason: result.skipReason.trim() }
           : {}),
+        ...(skip ? { skip } : {}),
         evidence: normalizeEvidenceList(result.evidence),
         ...(reproduction ? { reproduction } : {}),
       };
     });
+}
+
+function normalizeAcceptanceSkip(
+  value: AgentTeamAcceptanceSkip | null | undefined,
+): AgentTeamAcceptanceSkip | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  if (
+    !["blocked_by_case", "fail_fast", "environment", "not_applicable"].includes(
+      value.code,
+    ) ||
+    typeof value.retryable !== "boolean" ||
+    typeof value.detail !== "string" ||
+    !value.detail.trim()
+  ) {
+    return null;
+  }
+  const blockerCaseIds = Array.isArray(value.blockerCaseIds)
+    ? Array.from(
+        new Set(
+          value.blockerCaseIds
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        ),
+      )
+    : [];
+  return {
+    code: value.code,
+    ...(blockerCaseIds.length > 0 ? { blockerCaseIds } : {}),
+    retryable: value.retryable,
+    detail: value.detail.trim(),
+  };
 }

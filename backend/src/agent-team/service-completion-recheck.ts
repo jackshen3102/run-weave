@@ -60,6 +60,9 @@ export abstract class AgentTeamCompletionRecheckService extends AgentTeamRepairP
             ? {
                 ...item,
                 status: "pending" as const,
+                lastRunStatus: "pending" as const,
+                skip: null,
+                skipReason: null,
                 consecutiveFail: 0,
                 resultSummary: null,
                 reproduction: null,

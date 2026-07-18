@@ -25,7 +25,9 @@ import {
   AGENT_TEAM_POLL_INTERVAL_MS,
   getAgentTeamAttention,
   getAgentTeamCaseElementId,
+  getAgentTeamControlState,
   getAgentTeamStatusPresentation,
+  isAgentTeamRunActive,
   type WorkerDraft,
 } from "./terminal-agent-team-panel-model";
 import { AgentTeamAttentionSummary } from "./terminal-agent-team-panel-attention";
@@ -116,9 +118,7 @@ export function TerminalAgentTeamPanel({
   );
 
   const syncActiveRunPresence = useMemoizedFn((next: AgentTeamRun | null) => {
-    onActiveRunChange?.(
-      Boolean(next && next.status !== "done" && next.status !== "failed"),
-    );
+    onActiveRunChange?.(Boolean(next && isAgentTeamRunActive(next)));
   });
 
   const loadRun = useMemoizedFn(async (): Promise<void> => {
@@ -222,7 +222,7 @@ export function TerminalAgentTeamPanel({
   );
 
   const continueFrameworkRepair = useMemoizedFn((): void => {
-    if (!run || run.frameworkRepair?.result !== "blocked") {
+    if (!run || !getAgentTeamControlState(run).allowsFrameworkRecovery) {
       return;
     }
     void runFrameworkRepairAction(() =>
@@ -231,7 +231,7 @@ export function TerminalAgentTeamPanel({
   });
 
   const rerunFrameworkRepair = useMemoizedFn((): void => {
-    if (!run || run.frameworkRepair?.result !== "blocked") {
+    if (!run || !getAgentTeamControlState(run).allowsFrameworkRecovery) {
       return;
     }
     void runFrameworkRepairAction(() =>
@@ -325,7 +325,11 @@ export function TerminalAgentTeamPanel({
     ): void => {
       const pending = run?.pendingFindingDecision;
       const invariantKey = pending?.finding.invariantKey;
-      if (!run || !invariantKey) {
+      if (
+        !run ||
+        !getAgentTeamControlState(run).allowsFindingDecision ||
+        !invariantKey
+      ) {
         return;
       }
       void runAction(() =>
@@ -368,6 +372,7 @@ export function TerminalAgentTeamPanel({
 
   const attention =
     run?.phase === "executing" ? getAgentTeamAttention(run) : null;
+  const controlState = run ? getAgentTeamControlState(run) : null;
   const statusPresentation = run
     ? getAgentTeamStatusPresentation(run, attention)
     : null;
@@ -392,9 +397,11 @@ export function TerminalAgentTeamPanel({
                 ? "bg-rose-500/20 text-rose-300"
                 : statusPresentation?.tone === "warning"
                   ? "bg-amber-500/20 text-amber-300"
-                  : statusPresentation?.tone === "running"
-                    ? "bg-emerald-500/20 text-emerald-300"
-                    : "bg-slate-700 text-slate-300",
+                  : statusPresentation?.tone === "recovering"
+                    ? "bg-cyan-500/20 text-cyan-300"
+                    : statusPresentation?.tone === "running"
+                      ? "bg-emerald-500/20 text-emerald-300"
+                      : "bg-slate-700 text-slate-300",
             ].join(" ")}
           >
             {statusPresentation?.label}
@@ -408,14 +415,19 @@ export function TerminalAgentTeamPanel({
         </div>
       ) : null}
 
-      {run?.pendingFindingDecision ? (
+      {run &&
+      run.pendingFindingDecision &&
+      controlState?.allowsFindingDecision ? (
         <AgentTeamFindingDecisionCard
           key={run.pendingFindingDecision.id}
           run={run}
           busy={busy}
           onDecide={decideFinding}
         />
-      ) : run && attention && run.frameworkRepair?.result !== "blocked" ? (
+      ) : run &&
+        attention &&
+        controlState?.kind !== "automatic_recovery" &&
+        !controlState?.allowsFrameworkRecovery ? (
         <AgentTeamAttentionSummary
           attention={attention}
           onFocusPane={focusPane}
@@ -480,6 +492,7 @@ export function TerminalAgentTeamPanel({
             token={token}
             projectId={projectId}
             run={run}
+            controlState={getAgentTeamControlState(run)}
             frameworkRecovery={frameworkRecovery}
             busy={busy}
             onRetry={retryFailedRun}

@@ -1,6 +1,21 @@
-import type { AgentTeamWorkerRole } from "./agent-team-worker";
+import type { AgentTeamWorker, AgentTeamWorkerRole } from "./agent-team-worker";
 import type { AgentTeamAgentIntervention } from "./agent-team-intervention";
 import type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
+import type {
+  AgentTeamAcceptanceDraft,
+  AgentTeamAcceptanceSkip,
+} from "./agent-team-acceptance";
+import type {
+  AgentTeamActiveWorkerDispatch,
+  AgentTeamConsumedWorkerDispatchReceipt,
+} from "./agent-team-dispatch";
+import type {
+  AgentTeamFixtureResourceCleanup,
+  AgentTeamOwnedFixtureCleanup,
+  AgentTeamRunCancellation,
+  AgentTeamRunKind,
+  AgentTeamRunLineage,
+} from "./agent-team-fixture";
 import type {
   AgentTeamAcceptanceStatus,
   AgentTeamPhase,
@@ -17,8 +32,29 @@ export type {
   AgentTeamAgentInterventionAction,
   InterveneAgentTeamRunRequest,
 } from "./agent-team-intervention";
-export type { AgentTeamWorkerRole } from "./agent-team-worker";
+export type { AgentTeamWorker, AgentTeamWorkerRole } from "./agent-team-worker";
 export type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
+export type {
+  AgentTeamAcceptanceSkip,
+  AgentTeamAcceptanceSkipCode,
+  AgentTeamAcceptanceDraft,
+} from "./agent-team-acceptance";
+export type {
+  AgentTeamActiveWorkerDispatch,
+  AgentTeamConsumedWorkerDispatchReceipt,
+  AgentTeamSourceFingerprint,
+} from "./agent-team-dispatch";
+export type {
+  AgentTeamFixtureDevSessionCleanup,
+  AgentTeamFixtureResourceCleanup,
+  AgentTeamFixtureResourceLedger,
+  AgentTeamOwnedFixtureCleanup,
+  AgentTeamRunCancellation,
+  AgentTeamRunKind,
+  AgentTeamRunLineage,
+  CancelAgentTeamRunRequest,
+  CleanupAgentTeamFixtureScopeRequest,
+} from "./agent-team-fixture";
 export type {
   AgentTeamAcceptanceSource,
   AgentTeamAcceptanceStatus,
@@ -51,6 +87,8 @@ export interface AgentTeamAcceptanceCase {
   tags?: string[];
   dependsOn?: string[];
   lastRunStatus?: "pass" | "fail" | "skipped" | "pending";
+  /** Machine-readable latest skip; skipReason remains a legacy display fallback. */
+  skip?: AgentTeamAcceptanceSkip | null;
   skipReason?: string | null;
   /** Latest per-case conclusion supplied by the verification worker. */
   resultSummary?: string | null;
@@ -113,17 +151,6 @@ export interface AgentTeamLoop {
   maxRepairAttempts: number; // default 3
 }
 
-export interface AgentTeamWorker {
-  id: string;
-  role: AgentTeamWorkerRole;
-  intent: string;
-  /** tmux panel id bound after split; null before executing. */
-  panelId?: string | null;
-  tmuxPaneId?: string | null;
-  /** Whether the orchestration layer is currently injecting rounds into it. */
-  frozen?: boolean;
-}
-
 export interface AgentTeamProposal {
   summary: string;
   workers: AgentTeamWorker[];
@@ -146,48 +173,6 @@ export interface HumanInterventionNote {
   clearedFingerprints: string[];
   /** Repair cycles archived before the human resumed the run. */
   clearedRepairCycles?: AgentTeamRepairCycle[];
-}
-
-/** Persisted freshness boundary for the worker currently allowed to complete. */
-export interface AgentTeamActiveWorkerDispatch {
-  /** Unique identity for this backend-owned dispatch. */
-  dispatchId?: string;
-  /** Absent on persisted legacy dispatches whose worker prompt had no dispatch id. */
-  outboxDispatchIdRequired?: boolean;
-  role: AgentTeamWorkerRole;
-  panelId: string | null;
-  tmuxPaneId: string | null;
-  /** Loop round at dispatch time; absent on runs persisted before round attribution. */
-  round?: number;
-  requestedAt: string;
-  /** null means the pane-scoped outbox did not exist when work was dispatched. */
-  outboxMtimeMs: number | null;
-  reviewTarget?: AgentTeamReviewTarget | null;
-  /** Commit the behavior worker must verify for this exact dispatch. */
-  verifiedCheckpointCommit?: string | null;
-  /** Exact dirty paths accepted for this exact behavior dispatch. */
-  checkpointAllowedDirtyPaths?: string[];
-  /** Rewritten checkpoint commit whose trailers match the persisted checkpoint. */
-  checkpointRebasedCommit?: string | null;
-  /** Backend-owned repair identities expected from a bounced code worker. */
-  repairKeys?: string[];
-  /** One protocol-only correction is allowed before escalating to a human. */
-  protocolCorrectionAttempt?: number;
-  /** Source snapshot captured before a protocol-only outbox correction. */
-  protocolCorrectionSourceFingerprint?: AgentTeamSourceFingerprint | null;
-}
-
-export interface AgentTeamSourceFingerprint {
-  repoRoot: string;
-  sha256: string;
-}
-
-export interface AgentTeamConsumedWorkerDispatchReceipt {
-  dispatchId: string;
-  role: AgentTeamWorkerRole;
-  round: number;
-  contentSha256: string;
-  consumedAt: string;
 }
 
 export type AgentTeamFrameworkRepairResult = "blocked" | "continued" | "rerun";
@@ -219,6 +204,10 @@ export interface AgentTeamFrameworkRepair {
 export interface AgentTeamRun {
   runId: string;
   projectId: string;
+  /** Missing on historical data and interpreted as primary. */
+  runKind?: AgentTeamRunKind;
+  /** Present only for verification_fixture runs. */
+  lineage?: AgentTeamRunLineage | null;
   /** One terminal = one run. */
   terminalSessionId: string;
   /** The main-agent pane inside the terminal session. */
@@ -257,6 +246,12 @@ export interface AgentTeamRun {
   findingDecisions?: AgentTeamFindingDecision[];
   /** Reviewer result currently paused for an explicit scope/risk decision. */
   pendingFindingDecision?: AgentTeamPendingFindingDecision | null;
+  /** Immutable reason for an auditable cancelled terminal state. */
+  cancellation?: AgentTeamRunCancellation | null;
+  /** Latest idempotent cleanup result for this fixture's owned resources. */
+  fixtureResourceCleanup?: AgentTeamFixtureResourceCleanup | null;
+  /** Parent-side cleanup receipts, retained across behavior dispatches. */
+  fixtureCleanupHistory?: AgentTeamOwnedFixtureCleanup[];
   /** Observation log for the executing sidecar. */
   logs: string[];
   createdAt: string;
@@ -410,6 +405,8 @@ export interface AgentTeamWorkerOutbox {
     caseId: string;
     status: "pass" | "fail" | "skipped";
     summary?: string | null;
+    /** Required for skipped results produced by current behavior dispatches. */
+    skip?: AgentTeamAcceptanceSkip | null;
     skipReason?: string | null;
     evidence: AgentTeamAcceptanceEvidence[];
     /** Required for behavior_verify failures. */
@@ -417,14 +414,67 @@ export interface AgentTeamWorkerOutbox {
   }>;
 }
 
-export interface AgentTeamAcceptanceDraft {
-  caseId?: string | null;
-  text: string;
-  sourceCaseId?: string | null;
-  sourceFilePath?: string | null;
-  sourceHeading?: string | null;
-  tags?: string[];
-  dependsOn?: string[];
+export type AgentTeamExportHistoryMode = "none" | "tail" | "full";
+
+export interface AgentTeamExportPanel {
+  panelId: string;
+  tmuxPaneId: string | null;
+  alias: string | null;
+  role: string | null;
+  workerRole: AgentTeamWorkerRole | "main" | "unknown";
+  workerId: string | null;
+  source: "main" | "worker" | "session-other";
+  history?: {
+    mode: "tail" | "full" | "unavailable";
+    tailLines: number | null;
+    scrollback: string | null;
+    error?: string;
+  };
+}
+
+export interface AgentTeamExportOutbox {
+  path: string;
+  exists: boolean;
+  scope: "panel" | "tmux-pane" | "legacy-session";
+  panelId: string | null;
+  tmuxPaneId: string | null;
+  outbox: AgentTeamWorkerOutbox | null;
+  error?: string;
+}
+
+/** Immutable observation of one pane outbox before the state machine consumes it. */
+export interface AgentTeamOutboxHistoryRecord {
+  schemaVersion: 1;
+  runId: string;
+  round: number;
+  dispatchId: string;
+  role: AgentTeamWorkerRole;
+  panelId: string | null;
+  tmuxPaneId: string | null;
+  requestedAt: string;
+  recordedAt: string;
+  sourcePath: string;
+  sourceMtimeMs: number;
+  contentSha256: string;
+  /** Exact file content observed by the backend. */
+  rawContent: string;
+  /** Normalized payload used by the state machine. */
+  outbox: AgentTeamWorkerOutbox;
+}
+
+export interface AgentTeamExportOutboxHistory {
+  path: string;
+  record: AgentTeamOutboxHistoryRecord | null;
+  error?: string;
+}
+
+export interface AgentTeamExportAcceptanceSummary {
+  caseId: string;
+  status: AgentTeamAcceptanceStatus;
+  evidenceCount: number;
+  sourceRoles: string[];
+  remainingFindingCount: number;
+  resolvedFindingCount: number;
 }
 
 // --- request / response DTOs ---
@@ -432,6 +482,8 @@ export interface AgentTeamAcceptanceDraft {
 export interface CreateAgentTeamRunRequest {
   projectId: string;
   terminalSessionId: string;
+  runKind?: AgentTeamRunKind;
+  lineage?: AgentTeamRunLineage | null;
   task?: string;
   planFilePath?: string | null;
   testCaseFilePath?: string | null;
@@ -514,71 +566,16 @@ export interface FocusAgentTeamPaneRequest {
   panelId: string;
 }
 
-export interface AgentTeamRunsResponse {
+export interface AgentTeamFixtureScopeResponse {
+  ownerRunId: string;
+  ownerDispatchId: string | null;
   runs: AgentTeamRun[];
+  ownedLiveFixtureRuns: number;
 }
 
-export type AgentTeamExportHistoryMode = "none" | "tail" | "full";
-
-export interface AgentTeamExportPanel {
-  panelId: string;
-  tmuxPaneId: string | null;
-  alias: string | null;
-  role: string | null;
-  workerRole: AgentTeamWorkerRole | "main" | "unknown";
-  workerId: string | null;
-  source: "main" | "worker" | "session-other";
-  history?: {
-    mode: "tail" | "full" | "unavailable";
-    tailLines: number | null;
-    scrollback: string | null;
-    error?: string;
-  };
-}
-
-export interface AgentTeamExportOutbox {
-  path: string;
-  exists: boolean;
-  scope: "panel" | "tmux-pane" | "legacy-session";
-  panelId: string | null;
-  tmuxPaneId: string | null;
-  outbox: AgentTeamWorkerOutbox | null;
-  error?: string;
-}
-
-/** Immutable observation of one pane outbox before the state machine consumes it. */
-export interface AgentTeamOutboxHistoryRecord {
-  schemaVersion: 1;
-  runId: string;
-  round: number;
-  dispatchId: string;
-  role: AgentTeamWorkerRole;
-  panelId: string | null;
-  tmuxPaneId: string | null;
-  requestedAt: string;
-  recordedAt: string;
-  sourcePath: string;
-  sourceMtimeMs: number;
-  contentSha256: string;
-  /** Exact file content observed by the backend. */
-  rawContent: string;
-  /** Normalized payload used by the state machine. */
-  outbox: AgentTeamWorkerOutbox;
-}
-
-export interface AgentTeamExportOutboxHistory {
-  path: string;
-  record: AgentTeamOutboxHistoryRecord | null;
-  error?: string;
-}
-
-export interface AgentTeamExportAcceptanceSummary {
-  caseId: string;
-  status: AgentTeamAcceptanceStatus;
-  evidenceCount: number;
-  sourceRoles: string[];
-  remainingFindingCount: number;
-  resolvedFindingCount: number;
+export interface CleanupAgentTeamFixtureScopeResponse extends AgentTeamFixtureScopeResponse {
+  cancelledRunIds: string[];
+  cleanupErrors: Array<{ runId: string; errors: string[] }>;
 }
 
 export interface AgentTeamExportResponse {
@@ -593,4 +590,8 @@ export interface AgentTeamExportResponse {
   outboxHistory: AgentTeamExportOutboxHistory[];
   acceptanceSummary: AgentTeamExportAcceptanceSummary[];
   warnings: string[];
+}
+
+export interface AgentTeamRunsResponse {
+  runs: AgentTeamRun[];
 }

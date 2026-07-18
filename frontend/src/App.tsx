@@ -6,11 +6,21 @@ import type {
   RuntimeStatsSnapshot,
 } from "@runweave/shared/runtime-monitor";
 import type { SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
-import type { TerminalBrowserAnnotationState, TerminalBrowserAnnotationSubmission } from "@runweave/shared/terminal-browser-annotation";
+import type {
+  TerminalBrowserAnnotationState,
+  TerminalBrowserAnnotationSubmission,
+} from "@runweave/shared/terminal-browser-annotation";
 import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared/terminal-browser-cdp-proxy";
-import type { TerminalBrowserDevicePresetId, TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import type {
+  TerminalBrowserDevicePresetId,
+  TerminalBrowserDeviceState,
+} from "@runweave/shared/terminal-browser-device";
 import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
 import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
+import type {
+  TerminalBrowserToolMenuAction,
+  TerminalBrowserToolMenuRequest,
+} from "@runweave/shared/terminal-browser-tool-menu";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";
@@ -33,7 +43,8 @@ const CONNECTIONS_STORAGE_KEY = "viewer.connections";
 const HOME_PATH = "/home";
 const TERMINAL_LIST_PATH = "/terminal";
 const DEV_SESSION_ID = import.meta.env.VITE_RUNWEAVE_DEV_SESSION_ID?.trim();
-const EXPECTED_BACKEND_ID = import.meta.env.VITE_RUNWEAVE_EXPECTED_BACKEND_ID?.trim();
+const EXPECTED_BACKEND_ID =
+  import.meta.env.VITE_RUNWEAVE_EXPECTED_BACKEND_ID?.trim();
 const EXPECTED_BACKEND_PROTOCOL = Number(
   import.meta.env.VITE_RUNWEAVE_EXPECTED_BACKEND_PROTOCOL ?? "0",
 );
@@ -88,9 +99,13 @@ declare global {
       ) => Promise<TerminalBrowserSnapshot>;
       terminalBrowserListTabs?: () => Promise<TerminalBrowserTabSnapshot[]>;
       terminalBrowserReorderTabs?: (orderedTabIds: string[]) => Promise<void>;
-      terminalBrowserReload?: (tabId: string) => Promise<TerminalBrowserSnapshot>;
+      terminalBrowserReload?: (
+        tabId: string,
+      ) => Promise<TerminalBrowserSnapshot>;
       terminalBrowserStop?: (tabId: string) => Promise<void>;
-      terminalBrowserGoBack?: (tabId: string) => Promise<TerminalBrowserSnapshot>;
+      terminalBrowserGoBack?: (
+        tabId: string,
+      ) => Promise<TerminalBrowserSnapshot>;
       terminalBrowserGoForward?: (
         tabId: string,
       ) => Promise<TerminalBrowserSnapshot>;
@@ -108,6 +123,9 @@ declare global {
         bounds: TerminalBrowserBounds | null,
       ) => Promise<void>;
       terminalBrowserOpenDevTools?: (tabId: string) => Promise<void>;
+      terminalBrowserOpenToolMenu?: (
+        request: TerminalBrowserToolMenuRequest,
+      ) => Promise<TerminalBrowserToolMenuAction | null>;
       terminalBrowserGetCdpProxyInfo?: (
         tabId: string,
       ) => Promise<TerminalBrowserCdpProxyInfo>;
@@ -259,7 +277,12 @@ export default function App() {
 
   const apiBase = isElectron ? (activeConnection?.url ?? "") : WEB_API_BASE;
   const activeConnectionId = isElectron ? (activeConnection?.id ?? null) : null;
-  const { token, status: authStatus, setSession, clearToken } = useScopedAuth({
+  const {
+    token,
+    status: authStatus,
+    setSession,
+    clearToken,
+  } = useScopedAuth({
     apiBase,
     isElectron,
     connectionId: activeConnectionId,
@@ -289,228 +312,235 @@ export default function App() {
 
   return (
     <DevSessionBackendGuard>
-      <ConnectionQueryProvider
-        scope={queryScope}
-        onUnauthorized={clearToken}
-      >
-      <Routes>
-      <Route
-        path="/system-monitor"
-        element={
-          <SystemMonitorPage
-            onNavigateHome={() => {
-              window.location.assign(HOME_PATH);
-            }}
-          />
-        }
-      />
-      {isElectron && (
-        <Route
-          path="/connections"
-          element={
-            <ConnectionsPage
-              connections={connections}
-              activeId={activeConnection?.id ?? null}
-              onAdd={handleAddConnection}
-              onRemove={removeConnection}
-              onSelect={handleSelectConnection}
-              onEdit={updateConnection}
-              onReconnect={reconnectSystemConnection}
-            />
-          }
-        />
-      )}
-      <Route
-        path="/login"
-        element={
-          needsConnection ? (
-            <Navigate to="/connections" replace />
-          ) : isAuthChecking ? (
-            authPendingView
-          ) : token ? (
-            <Navigate to={TERMINAL_LIST_PATH} replace />
-          ) : (
-            <LoginPage
-              apiBase={apiBase}
-              connectionId={activeConnectionId ?? undefined}
-              isElectron={isElectron}
-              connections={connections}
-              connectionName={activeConnection?.name}
-              onSwitchConnection={isElectron ? handleSelectConnection : undefined}
-              onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
-              onSuccess={setSession}
-            />
-          )
-        }
-      />
-      <Route
-        path="/"
-        element={
-          needsConnection ? (
-            <Navigate to="/connections" replace />
-          ) : isAuthChecking ? (
-            authPendingView
-          ) : token ? (
-            <Navigate to={TERMINAL_LIST_PATH} replace />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
-      />
-      <Route
-        path={HOME_PATH}
-        element={
-          needsConnection ? (
-            <Navigate to="/connections" replace />
-          ) : isAuthChecking ? (
-            authPendingView
-          ) : token ? (
-            <HomePage
-              apiBase={apiBase}
-              token={token}
-              clientMode={clientMode}
-              clearToken={clearToken}
-              connections={connections}
-              activeConnectionId={activeConnectionId}
-              connectionName={isElectron ? activeConnection?.name : undefined}
-              onSelectConnection={
-                isElectron ? handleSelectConnection : undefined
-              }
-              onOpenConnectionManager={
-                isElectron ? openConnectionManager : undefined
-              }
-            />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
-      />
-      <Route
-        path="/activity"
-        element={
-          needsConnection ? (
-            <Navigate to="/connections" replace />
-          ) : isAuthChecking ? (
-            authPendingView
-          ) : token ? (
-            <ActivityPage
-              apiBase={apiBase}
-              token={token}
-              onNavigateHome={() => window.location.assign(HOME_PATH)}
-            />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
-      />
-      <Route
-        path="/terminal"
-        element={
-          needsConnection ? (
-            <Navigate to="/connections" replace />
-          ) : isAuthChecking ? (
-            authPendingView
-          ) : token ? (
-            <TerminalRoutePage
-              apiBase={apiBase}
-              token={token}
-              clientMode={clientMode}
-              connections={connections}
-              activeConnectionId={activeConnectionId}
-              connectionName={isElectron ? activeConnection?.name : undefined}
-              onSelectConnection={
-                isElectron ? handleSelectConnection : undefined
-              }
-              onOpenConnectionManager={
-                isElectron ? openConnectionManager : undefined
-              }
-              onAuthExpired={clearToken}
-            />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
-      />
-      <Route
-        path="/terminal/:terminalSessionId"
-        element={
-          needsConnection ? (
-            <Navigate to="/connections" replace />
-          ) : isAuthChecking ? (
-            authPendingView
-          ) : token ? (
-            <TerminalRoutePage
-              apiBase={apiBase}
-              token={token}
-              clientMode={clientMode}
-              connections={connections}
-              activeConnectionId={activeConnectionId}
-              connectionName={isElectron ? activeConnection?.name : undefined}
-              onSelectConnection={
-                isElectron ? handleSelectConnection : undefined
-              }
-              onOpenConnectionManager={
-                isElectron ? openConnectionManager : undefined
-              }
-              onAuthExpired={clearToken}
-            />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
-      />
-      <Route
-        path="/prototypes"
-        element={
-          needsConnection ? (
-            <Navigate to="/connections" replace />
-          ) : isAuthChecking ? (
-            authPendingView
-          ) : token ? (
-            <PrototypesPage
-              apiBase={apiBase}
-              token={token}
-              onAuthExpired={clearToken}
-            />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
-      />
-      <Route
-        path="/prototypes/:projectId/:prototypeSource/:prototypeSlug"
-        element={
-          needsConnection ? (
-            <Navigate to="/connections" replace />
-          ) : isAuthChecking ? (
-            authPendingView
-          ) : token ? (
-            <PrototypesPage
-              apiBase={apiBase}
-              token={token}
-              onAuthExpired={clearToken}
-            />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
-      />
-      <Route
-        path="*"
-        element={
-          <Navigate
-            to={
-              needsConnection
-                ? "/connections"
-                : token
-                  ? TERMINAL_LIST_PATH
-                  : "/login"
+      <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
+        <Routes>
+          <Route
+            path="/system-monitor"
+            element={
+              <SystemMonitorPage
+                onNavigateHome={() => {
+                  window.location.assign(HOME_PATH);
+                }}
+              />
             }
-            replace
           />
-        }
-      />
-      </Routes>
+          {isElectron && (
+            <Route
+              path="/connections"
+              element={
+                <ConnectionsPage
+                  connections={connections}
+                  activeId={activeConnection?.id ?? null}
+                  onAdd={handleAddConnection}
+                  onRemove={removeConnection}
+                  onSelect={handleSelectConnection}
+                  onEdit={updateConnection}
+                  onReconnect={reconnectSystemConnection}
+                />
+              }
+            />
+          )}
+          <Route
+            path="/login"
+            element={
+              needsConnection ? (
+                <Navigate to="/connections" replace />
+              ) : isAuthChecking ? (
+                authPendingView
+              ) : token ? (
+                <Navigate to={TERMINAL_LIST_PATH} replace />
+              ) : (
+                <LoginPage
+                  apiBase={apiBase}
+                  connectionId={activeConnectionId ?? undefined}
+                  isElectron={isElectron}
+                  connections={connections}
+                  connectionName={activeConnection?.name}
+                  onSwitchConnection={
+                    isElectron ? handleSelectConnection : undefined
+                  }
+                  onOpenConnectionManager={
+                    isElectron ? openConnectionManager : undefined
+                  }
+                  onSuccess={setSession}
+                />
+              )
+            }
+          />
+          <Route
+            path="/"
+            element={
+              needsConnection ? (
+                <Navigate to="/connections" replace />
+              ) : isAuthChecking ? (
+                authPendingView
+              ) : token ? (
+                <Navigate to={TERMINAL_LIST_PATH} replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path={HOME_PATH}
+            element={
+              needsConnection ? (
+                <Navigate to="/connections" replace />
+              ) : isAuthChecking ? (
+                authPendingView
+              ) : token ? (
+                <HomePage
+                  apiBase={apiBase}
+                  token={token}
+                  clientMode={clientMode}
+                  clearToken={clearToken}
+                  connections={connections}
+                  activeConnectionId={activeConnectionId}
+                  connectionName={
+                    isElectron ? activeConnection?.name : undefined
+                  }
+                  onSelectConnection={
+                    isElectron ? handleSelectConnection : undefined
+                  }
+                  onOpenConnectionManager={
+                    isElectron ? openConnectionManager : undefined
+                  }
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/activity"
+            element={
+              needsConnection ? (
+                <Navigate to="/connections" replace />
+              ) : isAuthChecking ? (
+                authPendingView
+              ) : token ? (
+                <ActivityPage
+                  apiBase={apiBase}
+                  token={token}
+                  onNavigateHome={() => window.location.assign(HOME_PATH)}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/terminal"
+            element={
+              needsConnection ? (
+                <Navigate to="/connections" replace />
+              ) : isAuthChecking ? (
+                authPendingView
+              ) : token ? (
+                <TerminalRoutePage
+                  apiBase={apiBase}
+                  token={token}
+                  clientMode={clientMode}
+                  connections={connections}
+                  activeConnectionId={activeConnectionId}
+                  connectionName={
+                    isElectron ? activeConnection?.name : undefined
+                  }
+                  onSelectConnection={
+                    isElectron ? handleSelectConnection : undefined
+                  }
+                  onOpenConnectionManager={
+                    isElectron ? openConnectionManager : undefined
+                  }
+                  onAuthExpired={clearToken}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/terminal/:terminalSessionId"
+            element={
+              needsConnection ? (
+                <Navigate to="/connections" replace />
+              ) : isAuthChecking ? (
+                authPendingView
+              ) : token ? (
+                <TerminalRoutePage
+                  apiBase={apiBase}
+                  token={token}
+                  clientMode={clientMode}
+                  connections={connections}
+                  activeConnectionId={activeConnectionId}
+                  connectionName={
+                    isElectron ? activeConnection?.name : undefined
+                  }
+                  onSelectConnection={
+                    isElectron ? handleSelectConnection : undefined
+                  }
+                  onOpenConnectionManager={
+                    isElectron ? openConnectionManager : undefined
+                  }
+                  onAuthExpired={clearToken}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/prototypes"
+            element={
+              needsConnection ? (
+                <Navigate to="/connections" replace />
+              ) : isAuthChecking ? (
+                authPendingView
+              ) : token ? (
+                <PrototypesPage
+                  apiBase={apiBase}
+                  token={token}
+                  onAuthExpired={clearToken}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/prototypes/:projectId/:prototypeSource/:prototypeSlug"
+            element={
+              needsConnection ? (
+                <Navigate to="/connections" replace />
+              ) : isAuthChecking ? (
+                authPendingView
+              ) : token ? (
+                <PrototypesPage
+                  apiBase={apiBase}
+                  token={token}
+                  onAuthExpired={clearToken}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to={
+                  needsConnection
+                    ? "/connections"
+                    : token
+                      ? TERMINAL_LIST_PATH
+                      : "/login"
+                }
+                replace
+              />
+            }
+          />
+        </Routes>
       </ConnectionQueryProvider>
     </DevSessionBackendGuard>
   );

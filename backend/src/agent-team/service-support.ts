@@ -26,15 +26,12 @@ import {
   assertGeneratedTestCaseFilePath,
   formatVerificationSource,
 } from "./service-run-policy";
-import { buildHumanGateMainPrompt } from "./prompt-builders";
-import {
-  isReviewGateAcceptanceCase,
-  resetPersistedAcceptanceForRefresh,
-} from "./service-acceptance-policy";
+import { resetPersistedAcceptanceForRefresh } from "./service-acceptance-policy";
+import { isReviewGateAcceptanceCase } from "./service-acceptance-policy";
 import { buildAgentTeamPanelRole } from "./service-workflow-policy";
-import { AgentTeamWorkerDispatchSupport } from "./service-worker-dispatch-support";
+import { AgentTeamFixtureSupport } from "./service-fixture-support";
 
-export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
+export class AgentTeamServiceSupport extends AgentTeamFixtureSupport {
   protected assertFrameworkRepairNotBlocked(run: AgentTeamRun): void {
     if (run.frameworkRepair?.result === "blocked") {
       throw new AgentTeamError(
@@ -229,10 +226,7 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
     } catch (error) {
       if (
         !allowPersistedAcceptanceFallback ||
-        !isAgentTeamProjectFileMissingError(
-          error,
-          generatedTestCaseFilePath,
-        ) ||
+        !isAgentTeamProjectFileMissingError(error, generatedTestCaseFilePath) ||
         run.verification?.generatedTestCaseFilePath !==
           generatedTestCaseFilePath ||
         !this.hasPersistedAcceptanceForSource(run, generatedTestCaseFilePath)
@@ -286,10 +280,7 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
         run.verification.generatedTestCaseFilePath;
       if (
         !generatedTestCaseFilePath ||
-        !isAgentTeamProjectFileMissingError(
-          error,
-          generatedTestCaseFilePath,
-        ) ||
+        !isAgentTeamProjectFileMissingError(error, generatedTestCaseFilePath) ||
         !this.hasPersistedAcceptanceForSource(run, generatedTestCaseFilePath)
       ) {
         throw error;
@@ -374,7 +365,7 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
   ): Promise<AgentTeamRun> {
     return this.updateRun(run, {
       status: "need_human",
-      activeWorkerRole: role,
+      activeWorkerRole: null,
       activeWorkerDispatch: null,
       workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
       loop: { ...run.loop, escalated: true, lastReason: reason },
@@ -449,55 +440,6 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
       return;
     }
     this.pendingCompletionRounds.delete(runId);
-  }
-
-  protected async updateRun(
-    run: AgentTeamRun,
-    patch: Partial<
-      Pick<
-        AgentTeamRun,
-        | "phase"
-        | "status"
-        | "options"
-        | "terminal"
-        | "task"
-        | "verification"
-        | "reviewCheckpoint"
-        | "activeWorkerRole"
-        | "activeWorkerDispatch"
-        | "workerDispatchProtocolVersion"
-        | "consumedWorkerDispatches"
-        | "frameworkRepair"
-        | "predecessorRunId"
-        | "successorRunId"
-        | "clarify"
-        | "proposal"
-        | "workers"
-        | "acceptance"
-        | "loop"
-        | "humanNotes"
-        | "agentInterventions"
-        | "findingDecisions"
-        | "pendingFindingDecision"
-        | "logs"
-        | "mainPanelId"
-      >
-    >,
-  ): Promise<AgentTeamRun> {
-    const next: AgentTeamRun = {
-      ...run,
-      ...patch,
-      updatedAt: new Date().toISOString(),
-    };
-    await this.runStore.writeRun(next);
-    if (
-      run.status !== "need_human" &&
-      next.status === "need_human" &&
-      next.options.notifyMainOnHumanGate !== false
-    ) {
-      await this.trySendToMain(next, buildHumanGateMainPrompt(next));
-    }
-    return next;
   }
 
   protected async requireRun(runId: string): Promise<AgentTeamRun> {

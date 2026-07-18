@@ -241,6 +241,7 @@ export async function prepareTerminalAgent(
             terminalSessionId: session.id,
             terminalPanelId: panel.id,
             projectId: session.projectId,
+            agentTeamRunId: panel.agentTeamRunId,
             tmuxSessionName:
               session.tmuxSessionName ??
               options.tmuxService.buildSessionName(session.id),

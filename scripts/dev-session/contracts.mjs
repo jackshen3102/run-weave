@@ -139,6 +139,69 @@ export function validateManifest(value) {
   if (value.controlPlane?.appChannel !== "stable") {
     throw new DevSessionError("manifest control plane must be stable", 4);
   }
+  if (value.controlPlane?.agentTeamDispatchId != null) {
+    if (
+      typeof value.controlPlane.agentTeamRunId !== "string" ||
+      !value.controlPlane.agentTeamRunId ||
+      typeof value.controlPlane.agentTeamDispatchId !== "string" ||
+      !value.controlPlane.agentTeamDispatchId ||
+      !Array.isArray(value.controlPlane.agentTeamCaseIds) ||
+      value.controlPlane.agentTeamCaseIds.length === 0 ||
+      value.controlPlane.agentTeamCaseIds.some(
+        (caseId) => typeof caseId !== "string" || !caseId,
+      ) ||
+      typeof value.controlPlane.fixtureNamespace !== "string" ||
+      !value.controlPlane.fixtureNamespace
+    ) {
+      throw new DevSessionError(
+        "manifest Agent Team fixture scope is incomplete",
+        4,
+      );
+    }
+  }
+  if (value.fixtureCleanup != null) {
+    const cleanup = value.fixtureCleanup;
+    if (
+      !cleanup ||
+      typeof cleanup !== "object" ||
+      !["completed", "not_required_shared_backend", "failed"].includes(
+        cleanup.status,
+      ) ||
+      !Number.isInteger(cleanup.ownedLiveFixtureRuns) ||
+      cleanup.ownedLiveFixtureRuns < 0
+    ) {
+      throw new DevSessionError(
+        "manifest fixture cleanup receipt is invalid",
+        4,
+      );
+    }
+    if (cleanup.resourceLedger != null) {
+      const ledger = cleanup.resourceLedger;
+      const stringArrayFields = [
+        "runIds",
+        "terminalSessionIds",
+        "panelIds",
+        "outboxIds",
+      ];
+      if (
+        !ledger ||
+        typeof ledger !== "object" ||
+        ledger.devSessionId !== value.devSessionId ||
+        stringArrayFields.some(
+          (field) =>
+            !Array.isArray(ledger[field]) ||
+            ledger[field].some(
+              (item) => typeof item !== "string" || !item,
+            ),
+        )
+      ) {
+        throw new DevSessionError(
+          "manifest fixture resource ledger is invalid",
+          4,
+        );
+      }
+    }
+  }
   if (
     typeof value.source?.root !== "string" ||
     !path.isAbsolute(value.source.root)
@@ -219,6 +282,7 @@ export function publicManifest(manifest) {
     source: validated.source,
     services: validated.services,
     impacts: validated.impacts,
+    fixtureCleanup: validated.fixtureCleanup ?? null,
     createdAt: validated.createdAt,
     updatedAt: validated.updatedAt,
     failure: validated.failure ?? null,

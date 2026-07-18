@@ -40,7 +40,7 @@ export abstract class AgentTeamCompletionSignalService extends AgentTeamCompleti
     const activeWorker = run.activeWorkerRole
       ? findWorkerByRole(run.workers, run.activeWorkerRole)
       : null;
-    if (!session || !activeWorker) {
+    if (!session) {
       return false;
     }
     return this.reconcileCompletionEvent(

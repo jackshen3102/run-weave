@@ -90,6 +90,44 @@ export type ActivityPayloadValue =
   | { [key: string]: ActivityPayloadValue };
 export type ActivityPayload = Record<string, ActivityPayloadValue>;
 
+export type AgentTeamActivityPurpose =
+  | "run_lifecycle"
+  | "initial_code"
+  | "review"
+  | "full_behavior"
+  | "repair"
+  | "protocol_correction"
+  | "acceptance_result";
+
+export type AgentTeamActivityReasonCode =
+  | "run_created"
+  | "run_succeeded"
+  | "run_failed"
+  | "run_cancelled"
+  | "scope_decision_required"
+  | "framework_repair_blocked"
+  | "recovery_required"
+  | "run_resumed"
+  | "phase_and_status_changed"
+  | "phase_changed"
+  | "status_changed"
+  | "protocol_correction_requested"
+  | "repair_requested"
+  | "review_requested"
+  | "behavior_verification_requested"
+  | "code_execution_requested"
+  | "acceptance_case_dispatched"
+  | "acceptance_passed"
+  | "acceptance_failed"
+  | "worker_result_failed"
+  | "worker_result_completed";
+
+export type AgentTeamActivityPayload = ActivityPayload & {
+  transitionId: string;
+  reasonCode: AgentTeamActivityReasonCode;
+  purpose: AgentTeamActivityPurpose;
+};
+
 export interface ActivityScopeInput {
   cwd?: string;
   projectId?: string;

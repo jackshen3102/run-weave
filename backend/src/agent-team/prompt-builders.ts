@@ -13,7 +13,9 @@ const ROLE_LABEL: Record<string, string> = {
 const EVIDENCE_SCHEMA =
   'acceptanceResults[] 必须包含每条 case 独立的 summary 结论；evidence[] 使用 { type, label, summary, ref, detail? }。type 可用 "text"、"dom"、"screenshot"、"command"、"event"、"json"、"log"、"code"；label 是短标题，evidence summary 是单条证据说明，ref 保留原始证据路径、文本或标识。';
 const BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA =
-  'behavior_verify 的每个 fail 还必须包含 reproduction: { mode: "real_product", status: "reproduced", scenarioId, validationSessionId, steps: string[], expected, actual, evidence[] }；无法从真实产品入口完整复现时必须写 skipped + skipReason，不得把推断写成 fail。';
+  'behavior_verify 的每个 fail 还必须包含 reproduction: { mode: "real_product", status: "reproduced", scenarioId, validationSessionId, steps: string[], expected, actual, evidence[] }；无法从真实产品入口完整复现时必须写 skipped + 结构化 skip，不得把推断写成 fail。';
+const ACCEPTANCE_SKIP_SCHEMA =
+  'behavior_verify 的每个 skipped 必须包含 skip: { code: "blocked_by_case"|"fail_fast"|"environment"|"not_applicable", blockerCaseIds?: string[], retryable: boolean, detail: string }。blocked_by_case/fail_fast 必须填写 blockerCaseIds 且 retryable=true；not_applicable 的 retryable 必须为 false。skipReason 仅兼容旧 outbox，不代替 skip。';
 const FINDING_SCHEMA =
   '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings。每个 open P0/P1 必须提供稳定的小写 invariantKey、verificationMode: "runtime"|"structural"，以及 reproduction: { mode: "real_product"|"review_harness"|"static_contract", status: "reproduced"|"confirmed", scenarioId?, validationSessionId?, steps: string[], expected, actual, evidence[] }。runtime finding 只能使用 real_product + reproduced + scenarioId，并写清实际可观察错误；只观察到内部中间状态、静态推断、未复现或环境阻塞时不得提交 open P0/P1。structural finding 必须由 review_harness/static_contract 确认。Final review 的 blocking finding 还必须提供 caseImpacts: [{ caseId, summary, evidence[] }]，caseId 使用 prompt 列出的 backend 产品 Case id，不能使用 generic Code Review gate；每条映射都要说明该复现场景如何违反产品 Case。若问题真实但不属于支持/需求范围，设置 disposition="out_of_scope" 申请人工裁决；reviewer 不得设置 waived。未设置 disposition 默认 blocking。同一 invariant 复用同一 key。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
 const CODE_FIX_VERIFICATION_SCHEMA =
@@ -56,9 +58,10 @@ export function buildWorkerStartupPrompt(params: {
       ...acceptance.map(formatAcceptancePromptLine),
       "",
       outboxPath
-        ? `把每条用例的结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。`
-        : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。",
-      "首轮按测试案例顺序执行；遇到阻断失败可以停止，但必须在 outbox 写清失败 case、失败步骤和证据。",
+        ? `把每条用例的结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skip?, evidence[] }]。`
+        : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skip?, evidence[] }]。",
+      "首轮按测试案例顺序执行；每个分配 Case 都必须有结果。遇到阻断失败可以停止：失败 Case 写 fail，后续未执行 Case 写 fail_fast 并用 blockerCaseIds 指向失败 Case。",
+      ...formatBehaviorFixtureOwnershipInstructions(run),
     );
     const checkpointCommit = behaviorCheckpointCommit(run);
     if (checkpointCommit) {
@@ -92,7 +95,10 @@ export function buildWorkerStartupPrompt(params: {
           `- outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
           `- ${EVIDENCE_SCHEMA}`,
           ...(worker.role === "behavior_verify"
-            ? [`- ${BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA}`]
+            ? [
+                `- ${BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA}`,
+                `- ${ACCEPTANCE_SKIP_SCHEMA}`,
+              ]
             : []),
           ...(worker.role === "code_review" ? [`- ${FINDING_SCHEMA}`] : []),
         ]
@@ -156,7 +162,7 @@ export function buildFrameworkRepairContinuePrompt(params: {
     `outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
     EVIDENCE_SCHEMA,
     ...(worker.role === "behavior_verify"
-      ? [BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA]
+      ? [BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA, ACCEPTANCE_SKIP_SCHEMA]
       : []),
     ...(worker.role === "code_review" ? [FINDING_SCHEMA] : []),
     "",
@@ -325,7 +331,23 @@ export function buildBehaviorFailureCorrectionPrompt(params: {
     "",
     ...params.errors.map((error) => `- ${error}`),
     "",
-    "只允许补正当前 pane-scoped outbox：如果本轮已经完整执行真实产品场景，补齐原步骤与证据；否则原样重跑失败 case。无法复现时改写为 skipped + skipReason。禁止修改源码或伪造 reproduction。",
+    "只允许补正当前 pane-scoped outbox：如果本轮已经完整执行真实产品场景，补齐原步骤与证据；否则原样重跑失败 case。无法复现时改写为 skipped + 结构化 skip。禁止修改源码或伪造 reproduction。",
+    ACCEPTANCE_SKIP_SCHEMA,
+  ].join("\n");
+}
+
+export function buildAcceptanceSkipCorrectionPrompt(params: {
+  run: AgentTeamRun;
+  errors: string[];
+}): string {
+  return [
+    `[loop round ${params.run.loop.round}] behavior_verify skip 协议不完整，禁止继续调度。`,
+    ...formatWorkerDispatchInstructions(params.run),
+    "",
+    ...params.errors.map((error) => `- ${error}`),
+    "",
+    "只补正当前 pane-scoped outbox 的 skipped 结果，不要修改源码或重跑已经完成的 Case。",
+    ACCEPTANCE_SKIP_SCHEMA,
   ].join("\n");
 }
 
@@ -370,7 +392,10 @@ export function buildWorkerRecheckPrompt(params: {
     heading,
     ...formatWorkerDispatchInstructions(run),
     ...(worker.role === "behavior_verify"
-      ? ["review pass 不代表 behavior pass。"]
+      ? [
+          "review pass 不代表 behavior pass。",
+          ...formatBehaviorFixtureOwnershipInstructions(run),
+        ]
       : []),
     "",
     ...(worker.role === "behavior_verify"
@@ -398,7 +423,7 @@ export function buildWorkerRecheckPrompt(params: {
     ...(skippedCases.length > 0
       ? [
           "",
-          "默认跳过的已通过用例（若本轮 diff 影响它们，请扩大重跑；否则在 outbox 写 skipped + skipReason）：",
+          "本轮范围外的已通过用例（若本轮 diff 影响它们，请明确扩大重跑；否则不要写入 acceptanceResults）：",
           ...skippedCases.map(
             (item) =>
               `- [${item.caseId}] ${item.sourceFilePath ?? "unknown"}：上轮已通过，未被失败点/未执行项/依赖关系命中`,
@@ -407,14 +432,15 @@ export function buildWorkerRecheckPrompt(params: {
       : []),
     "",
     outboxPath
-      ? `把结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。`
-      : "把结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。",
+      ? `把结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skip?, evidence[] }]。`
+      : "把结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skip?, evidence[] }]。",
+    "每个本轮分配 Case 都必须有结果；因其他 Case 未通过而未执行时使用 blocked_by_case/fail_fast，并填写 blockerCaseIds。",
     ...(outboxPath
       ? [
           `outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
           EVIDENCE_SCHEMA,
           ...(worker.role === "behavior_verify"
-            ? [BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA]
+            ? [BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA, ACCEPTANCE_SKIP_SCHEMA]
             : []),
           ...(isReviewWorker ? [FINDING_SCHEMA] : []),
         ]
@@ -448,6 +474,24 @@ function formatWorkerDispatchInstructions(run: AgentTeamRun): string[] {
   return [
     `DispatchId: ${dispatchId}`,
     `- outbox 顶层 dispatchId 必须等于 "${dispatchId}"；不得复用或改写其他 dispatch 的结果。`,
+  ];
+}
+
+function formatBehaviorFixtureOwnershipInstructions(
+  run: AgentTeamRun,
+): string[] {
+  const dispatchId = run.activeWorkerDispatch?.dispatchId?.trim();
+  if (!dispatchId) {
+    return [];
+  }
+  return [
+    "",
+    "真实行为验证 fixture 所有权：",
+    `- 本轮 ownerRunId=${run.runId}，ownerDispatchId=${dispatchId}；worker pane 已注入 RUNWEAVE_AGENT_TEAM_RUN_ID，不得 unset、覆盖或绕过。`,
+    "- 从本 pane 启动的 pnpm dev:session 会把 owner scope 写进 manifest；候选 Backend 创建的 Agent Team Run 必须是 verification_fixture，并保留 owner case 集合与 fixture namespace。",
+    "- 所有 Dev Session、fixture Run、terminal/pane 都属于资源账本；禁止用 done/failed 冒充清理，也禁止物理删除 Run JSON 或 outbox history。",
+    "- 必须在 finally 中先执行 pnpm dev:stop --session <id> --json，确认 fixtureCleanup.status=completed（或共享 Backend 的 not_required_shared_backend）且 ownedLiveFixtureRuns=0，再写本轮最终 outbox。",
+    "- 最终 outbox 是本轮最后一个持久产物；cleanup 未完成时如实写 skipped/blocked 证据，不得让父 Run 伪完成。",
   ];
 }
 
@@ -494,77 +538,10 @@ function formatReviewTargetInstructions(run: AgentTeamRun): string[] {
 }
 
 export { buildHumanNotePrompt } from "./prompt-builders-human-note";
-
-export function buildBlockedBehaviorMainPrompt(params: {
-  run: AgentTeamRun;
-  blockedCases: AgentTeamAcceptanceCase[];
-}): string {
-  const { run, blockedCases } = params;
-  return [
-    `[Agent Team ${run.runId}] behavior_verify 遇到阻塞，run 已暂停，请分析后选择最小恢复动作。`,
-    "",
-    ...blockedCases.flatMap((item) => [
-      `- [${item.caseId}] ${item.sourceFilePath ?? "unknown"}${item.sourceHeading ? `｜${item.sourceHeading}` : ""}`,
-      `  验收合同：${item.text}`,
-      `  阻塞原因：${item.skipReason ?? "worker 未提供 skipReason"}`,
-      ...(item.evidence.length > 0
-        ? [
-            `  证据：${item.evidence.map((evidence) => `${evidence.label}: ${evidence.summary}（ref=${evidence.ref}）`).join("；")}`,
-          ]
-        : ["  证据：无"]),
-    ]),
-    "",
-    "恢复要求：",
-    "- 先判断是环境问题、验收合同问题还是依赖/顺序问题，不要默认修改测试合同。",
-    `- 环境或依赖修复后，执行 rw agent-team intervene ${run.runId} --action dispatch --role behavior_verify --cases <受影响 Case> --note <原因>。`,
-    `- 确需修改验收合同时，编辑项目内完整测试案例文件，再执行 rw agent-team intervene ${run.runId} --action refresh_acceptance --role <code_review|behavior_verify> --cases <受影响 Case> --generated-test-case-file <文件> --note <原因>。`,
-    "- 未声明的 Case 必须保持既有状态和证据，禁止全量重跑。",
-    "- 无法安全判断时保持 need_human，并向用户说明需要的决策。",
-  ].join("\n");
-}
-
-export function buildHumanGateMainPrompt(run: AgentTeamRun): string {
-  if (run.frameworkRepair?.result === "blocked") {
-    return [
-      `[Agent Team ${run.runId}] Run 已进入框架修复阻塞。`,
-      `原因：${run.frameworkRepair.reason}`,
-      `旧 dispatch：${run.frameworkRepair.target.invalidatedDispatch.dispatchId ?? "unknown"}（已失效）`,
-      "完成框架修复并重启 Backend 后，只能选择继续原 Run 或重新运行。",
-      `先执行 rw agent-team framework-repair status ${run.runId} 检查恢复条件。`,
-      `现场可信时执行 rw agent-team framework-repair continue ${run.runId}；否则执行 rw agent-team framework-repair rerun ${run.runId}。`,
-      "不要使用通用 resume、agent intervention 或旧 outbox 绕过该门禁。",
-    ].join("\n");
-  }
-  const blockedCases = run.loop.lastReason?.startsWith(
-    "behavior_verify 环境阻塞",
-  )
-    ? run.acceptance.filter(
-        (item) => item.status === "pending" && item.lastRunStatus === "skipped",
-      )
-    : [];
-  if (blockedCases.length > 0) {
-    return buildBlockedBehaviorMainPrompt({ run, blockedCases });
-  }
-
-  return [
-    `[Agent Team ${run.runId}] run 已进入 Human Gate，请检查当前状态并推进允许的下一步。`,
-    `阶段：${run.phase}`,
-    `原因：${run.loop.lastReason ?? run.logs.at(-1) ?? "未记录"}`,
-    ...(run.phase === "proposal"
-      ? [
-          "当前是拆分提案门禁：请向用户说明提案并等待确认或拒绝，不得代替用户审批。",
-        ]
-      : []),
-    ...(run.pendingFindingDecision
-      ? [
-          `当前是 P0/P1 finding 范围裁决：${run.pendingFindingDecision.reason}`,
-          "必须请求用户 disposition，不得由 Agent 代替人工裁决。",
-        ]
-      : []),
-    "先分析门禁原因；仅在现有权限允许且能安全恢复时执行修复或 Agent intervention。",
-    "本通知不授权绕过 Human Gate。无法安全判断时，向用户说明所需决策。",
-  ].join("\n");
-}
+export {
+  buildBlockedBehaviorMainPrompt,
+  buildHumanGateMainPrompt,
+} from "./prompt-builders-human-gate";
 
 function formatAcceptanceSource(run: AgentTeamRun): string {
   const verification = run.verification;
@@ -592,5 +569,9 @@ function formatAcceptancePromptLine(
   const source = item.sourceFilePath
     ? ` 来源：${item.sourceFilePath}${item.sourceHeading ? ` / ${item.sourceHeading}` : ""}`
     : "";
-  return `${index + 1}. [${item.sourceCaseId ?? item.caseId}] ${item.text}${source}`;
+  const dependencies =
+    item.dependsOn && item.dependsOn.length > 0
+      ? ` 依赖：${item.dependsOn.join(", ")}`
+      : "";
+  return `${index + 1}. [${item.sourceCaseId ?? item.caseId}] ${item.text}${source}${dependencies}`;
 }

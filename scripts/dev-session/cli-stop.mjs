@@ -19,6 +19,7 @@ import {
   releaseBetaSlotLease,
   resetBetaSlotMutableState,
 } from "./beta-slot-pool.mjs";
+import { cleanupOwnedAgentTeamFixtures } from "./agent-team-fixture-cleanup.mjs";
 
 export async function runStop(options, sourceRoot, helpers) {
   const {
@@ -211,6 +212,18 @@ export async function runStop(options, sourceRoot, helpers) {
         });
         await writeManifest(manifest);
         throw enrichedError;
+      }
+    }
+    const fixtureCleanup = await cleanupOwnedAgentTeamFixtures(manifest);
+    if (fixtureCleanup) {
+      manifest = updateManifest(manifest, { fixtureCleanup });
+      await writeManifest(manifest);
+      if (fixtureCleanup.status === "failed") {
+        throw new DevSessionError(
+          "owned Agent Team fixture cleanup did not complete; refusing to stop services",
+          5,
+          { fixtureCleanup },
+        );
       }
     }
     manifest = updateManifest(manifest, { state: "stopping" });
