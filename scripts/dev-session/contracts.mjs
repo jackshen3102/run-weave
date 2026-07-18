@@ -167,6 +167,16 @@ export function validateManifest(value) {
       !["completed", "not_required_shared_backend", "failed"].includes(
         cleanup.status,
       ) ||
+      (cleanup.completionBasis != null &&
+        ![
+          "session_never_started",
+          "session_never_started_backfill",
+          "shared_backend",
+          "cleanup_endpoint",
+          "cleanup_endpoint_failed",
+          "beta_slot_reset",
+          "beta_slot_reset_backfill",
+        ].includes(cleanup.completionBasis)) ||
       !Number.isInteger(cleanup.ownedLiveFixtureRuns) ||
       cleanup.ownedLiveFixtureRuns < 0
     ) {
@@ -221,7 +231,7 @@ export function validateManifest(value) {
   if (value.profile === "beta" && value.targetEnvironment?.betaSlot) {
     const betaSlot = value.targetEnvironment?.betaSlot;
     const assignmentPending =
-      ["planned", "failed"].includes(value.state) &&
+      ["planned", "failed", "stopped"].includes(value.state) &&
       betaSlot?.assignedSlotId === null &&
       betaSlot?.leaseNonce === null;
     if (

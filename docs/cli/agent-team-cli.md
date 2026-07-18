@@ -45,4 +45,6 @@ rw agent-team cancel <fixtureRunId> --reason "operator cleanup" --json
 
 `cancel` 写入可审计的 `cancelled` 终态，不删除 Run JSON 或 outbox history。诊断资源清理问题时可暂用 `--keep-resources`；primary Run 即使 cleanup 审计仍有阻塞也会先停止控制循环，并把阻塞保留在 `fixtureCleanupHistory`。
 
+primary Run 可以通过正式 `/resume` 流程恢复，恢复时只重派未通过或 pending 的 Case；已取消的 verification fixture 不可恢复。
+
 命令只查询当前 CLI profile 对应的 Backend：父 Backend上的本地 fixture可直接查看；跨 Backend fixture应在owned Dev Session停止前查询candidate profile，停止后的Run/terminal/pane/outbox身份以Dev Session manifest的`fixtureCleanup.resourceLedger`和父Run的cleanup receipt为审计事实。
