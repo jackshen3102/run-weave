@@ -79,6 +79,7 @@
 | 飞书一次性终端投递测试                   | testing/app/feishu-one-shot-terminal-delivery-test-cases.md                            |
 | App Server ThreadRef fixture             | testing/app/app-server-threadref-fixture.md                                            |
 | Terminal Panel Split 测试                | testing/terminal/terminal-panel-split-test-cases.md                                    |
+| Terminal Worktree 上下文测试             | testing/terminal/worktree-terminal-context-test-cases.md                               |
 | 桌面端重启项目/终端恢复测试              | testing/platform/desktop-restart-terminal-selection-test-cases.md                      |
 | Terminal Floating Composer 测试          | testing/terminal/terminal-floating-composer-test-cases.md                              |
 | Terminal IME 输入测试                    | testing/terminal/terminal-ime-input-test-cases.md                                      |
