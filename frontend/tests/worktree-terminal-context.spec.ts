@@ -103,6 +103,31 @@ test("keeps one effective Project ID while switching the frozen Worktree rail", 
     const expandedBox = await rail.boundingBox();
     expect(expandedBox?.width).toBeGreaterThanOrEqual(230);
     expect(expandedBox?.width).toBeLessThanOrEqual(242);
+    const resizeHandle = rail.getByRole("separator", {
+      name: "Resize Worktrees panel",
+    });
+    const resizeHandleBox = await resizeHandle.boundingBox();
+    if (!expandedBox || !resizeHandleBox) {
+      throw new Error("Expected Worktree rail resize geometry");
+    }
+    await page.mouse.move(
+      resizeHandleBox.x + resizeHandleBox.width / 2,
+      resizeHandleBox.y + 80,
+    );
+    await page.mouse.down();
+    await page.mouse.move(expandedBox.x + 320, resizeHandleBox.y + 80, {
+      steps: 5,
+    });
+    await page.mouse.up();
+    await expect
+      .poll(async () => (await rail.boundingBox())?.width ?? 0)
+      .toBeGreaterThanOrEqual(316);
+    expect((await rail.boundingBox())?.width).toBeLessThanOrEqual(324);
+    await page.reload();
+    await expect
+      .poll(async () => (await rail.boundingBox())?.width ?? 0)
+      .toBeGreaterThanOrEqual(316);
+    expect((await rail.boundingBox())?.width).toBeLessThanOrEqual(324);
     await rail.getByRole("button", { name: "Collapse Worktrees" }).click();
     await expect(rail).toHaveAttribute("data-collapsed", "true");
     await expect
@@ -113,6 +138,10 @@ test("keeps one effective Project ID while switching the frozen Worktree rail", 
     await expect(rail).toHaveAttribute("data-collapsed", "true");
 
     await rail.getByRole("button", { name: "Expand Worktrees" }).click();
+    await expect
+      .poll(async () => (await rail.boundingBox())?.width ?? 0)
+      .toBeGreaterThanOrEqual(316);
+    expect((await rail.boundingBox())?.width).toBeLessThanOrEqual(324);
     await expect(childRow).toHaveAttribute("data-active", "true");
     git(
       projectRoot,

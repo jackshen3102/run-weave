@@ -33,17 +33,18 @@ Project
 - 切换 Worktree 时，Terminal、cwd、Changes、Preview 和 Agent Team 一起切换。
 - Worktree 可以固定到列表顶部；非固定项按最近活跃时间排序。
 - Worktree 栏可以折叠成窄栏，并通过同一位置重新展开。
+- Worktree 栏右边缘可以拖拽调整宽度，范围为 180–420px；松开后持久化，折叠再展开时恢复上次宽度。
 - 列表来自 Git Worktree 自动发现，不提供新增或删除入口。
 
 ## 原型边界
 
 - 使用静态 mock 数据，不连接真实 Git、PTY、WebSocket 或 Preview API。
-- 固定与折叠状态仅用于交互演示，正式实现需要持久化。
+- 固定与折叠状态仅用于交互演示；宽度使用浏览器 localStorage 模拟正式持久化。
 - 产品核心功能是 Project/Worktree/Terminal 联动、固定和折叠；原型没有可见的辅助控件。
 - 已放弃独立 `worktreeId` 方案，原型内部只保留一个当前生效的 Project ID。
 - `prototype-preview.png` 是 1440 × 900 的当前方案截图。
 
 ## 验证
 
-- 2026-07-18 已使用 `$toolkit:playwright-cli` 验证父/子 Project ID、主节点切换、固定、36px 折叠和 Preview 联动。
+- 2026-07-18 已使用 `$toolkit:playwright-cli` 验证父/子 Project ID、主节点切换、固定、180–420px 拖拽调宽、宽度持久化、36px 折叠和 Preview 联动。
 - 页面无横向溢出，浏览器 console 为 0 error / 0 warning。

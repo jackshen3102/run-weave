@@ -1,4 +1,10 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useMemoizedFn } from "ahooks";
 import { ChevronLeft, ChevronRight, Pin } from "lucide-react";
 import { terminalQueryKeys } from "../../features/terminal/queries/terminal-query-keys";
@@ -16,8 +22,31 @@ interface TerminalWorktreeRailProps {
   onSelectContext: (projectId: string) => void;
 }
 
-function railStorageKey(scope: string): string {
+const DEFAULT_RAIL_WIDTH_PX = 236;
+const MIN_RAIL_WIDTH_PX = 180;
+const MAX_RAIL_WIDTH_PX = 420;
+const RAIL_KEYBOARD_RESIZE_STEP_PX = 16;
+
+function railCollapsedStorageKey(scope: string): string {
   return `viewer.terminal.worktree-rail-collapsed.${scope}`;
+}
+
+function railWidthStorageKey(scope: string): string {
+  return `viewer.terminal.worktree-rail-width.${scope}`;
+}
+
+function clampRailWidth(width: number): number {
+  return Math.min(MAX_RAIL_WIDTH_PX, Math.max(MIN_RAIL_WIDTH_PX, width));
+}
+
+function readRailWidth(scope: string): number {
+  const storedWidth = Number.parseInt(
+    localStorage.getItem(railWidthStorageKey(scope)) ?? "",
+    10,
+  );
+  return Number.isFinite(storedWidth)
+    ? clampRailWidth(storedWidth)
+    : DEFAULT_RAIL_WIDTH_PX;
 }
 
 export function TerminalWorktreeRail({
@@ -36,18 +65,107 @@ export function TerminalWorktreeRail({
     (state) => state.setRequestError,
   );
   const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem(railStorageKey(scope)) === "true",
+    () => localStorage.getItem(railCollapsedStorageKey(scope)) === "true",
   );
+  const [width, setWidth] = useState(() => readRailWidth(scope));
+  const [resizing, setResizing] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
+  const resizeStateRef = useRef<{
+    railLeft: number;
+    width: number;
+    scope: string;
+    previousCursor: string;
+    previousUserSelect: string;
+  } | null>(null);
+
+  const handleResizePointerMove = useMemoizedFn((event: PointerEvent) => {
+    const resizeState = resizeStateRef.current;
+    if (!resizeState) {
+      return;
+    }
+    const nextWidth = clampRailWidth(
+      Math.round(event.clientX - resizeState.railLeft),
+    );
+    resizeState.width = nextWidth;
+    setWidth(nextWidth);
+  });
+
+  const stopResize = useMemoizedFn(() => {
+    const resizeState = resizeStateRef.current;
+    resizeStateRef.current = null;
+    window.removeEventListener("pointermove", handleResizePointerMove);
+    window.removeEventListener("pointerup", stopResize);
+    window.removeEventListener("pointercancel", stopResize);
+    setResizing(false);
+    if (!resizeState) {
+      return;
+    }
+    document.body.style.cursor = resizeState.previousCursor;
+    document.body.style.userSelect = resizeState.previousUserSelect;
+    localStorage.setItem(
+      railWidthStorageKey(resizeState.scope),
+      String(resizeState.width),
+    );
+  });
+
+  const startResize = useMemoizedFn(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const rail = event.currentTarget.closest("aside");
+      if (!rail) {
+        return;
+      }
+      resizeStateRef.current = {
+        railLeft: rail.getBoundingClientRect().left,
+        width,
+        scope,
+        previousCursor: document.body.style.cursor,
+        previousUserSelect: document.body.style.userSelect,
+      };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      setResizing(true);
+      window.addEventListener("pointermove", handleResizePointerMove);
+      window.addEventListener("pointerup", stopResize);
+      window.addEventListener("pointercancel", stopResize);
+    },
+  );
+
+  const resizeWithKeyboard = useMemoizedFn(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const nextWidth =
+        event.key === "Home"
+          ? MIN_RAIL_WIDTH_PX
+          : event.key === "End"
+            ? MAX_RAIL_WIDTH_PX
+            : event.key === "ArrowLeft"
+              ? clampRailWidth(width - RAIL_KEYBOARD_RESIZE_STEP_PX)
+              : event.key === "ArrowRight"
+                ? clampRailWidth(width + RAIL_KEYBOARD_RESIZE_STEP_PX)
+                : null;
+      if (nextWidth === null) {
+        return;
+      }
+      event.preventDefault();
+      setWidth(nextWidth);
+      localStorage.setItem(railWidthStorageKey(scope), String(nextWidth));
+    },
+  );
 
   useEffect(() => {
-    setCollapsed(localStorage.getItem(railStorageKey(scope)) === "true");
-  }, [scope]);
+    stopResize();
+    setCollapsed(
+      localStorage.getItem(railCollapsedStorageKey(scope)) === "true",
+    );
+    setWidth(readRailWidth(scope));
+  }, [scope, stopResize]);
+
+  useEffect(() => stopResize, [stopResize]);
 
   const toggleCollapsed = useMemoizedFn(() => {
     setCollapsed((current) => {
       const next = !current;
-      localStorage.setItem(railStorageKey(scope), String(next));
+      localStorage.setItem(railCollapsedStorageKey(scope), String(next));
       return next;
     });
   });
@@ -85,10 +203,12 @@ export function TerminalWorktreeRail({
     <aside
       data-testid="terminal-worktree-rail"
       data-collapsed={collapsed ? "true" : "false"}
+      data-resizing={resizing ? "true" : "false"}
       className={[
-        "flex min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-950 transition-[width] duration-150",
-        collapsed ? "w-9" : "w-[236px]",
+        "relative flex min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-950",
+        resizing ? "" : "transition-[width] duration-150",
       ].join(" ")}
+      style={{ width: collapsed ? 36 : width }}
     >
       <div
         className={[
@@ -196,6 +316,21 @@ export function TerminalWorktreeRail({
             );
           })}
         </div>
+      ) : null}
+      {!collapsed ? (
+        <div
+          role="separator"
+          tabIndex={0}
+          aria-label="Resize Worktrees panel"
+          aria-orientation="vertical"
+          aria-valuemin={MIN_RAIL_WIDTH_PX}
+          aria-valuemax={MAX_RAIL_WIDTH_PX}
+          aria-valuenow={width}
+          className="absolute right-0 top-0 z-20 h-full w-2 translate-x-1/2 touch-none cursor-col-resize before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-transparent before:transition-colors hover:before:bg-sky-400/60 focus-visible:before:bg-sky-400/60 data-[resizing=true]:before:w-0.5 data-[resizing=true]:before:bg-sky-400"
+          data-resizing={resizing ? "true" : "false"}
+          onPointerDown={startResize}
+          onKeyDown={resizeWithKeyboard}
+        />
       ) : null}
     </aside>
   );
