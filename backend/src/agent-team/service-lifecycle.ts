@@ -17,7 +17,10 @@ import { createInitialLoop } from "./loop";
 import { resolveMaxRepairAttempts } from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
 import { AgentTeamFixtureLifecycleService } from "./service-fixture-lifecycle";
-import { acceptanceCasesForRole } from "./service-acceptance-policy";
+import {
+  acceptanceCasesForRole,
+  behaviorVerificationCasesForDispatch,
+} from "./service-acceptance-policy";
 import {
   normalizeWorkers,
   resolveInitialActiveWorkerRole,
@@ -306,7 +309,7 @@ export class AgentTeamLifecycleService extends AgentTeamFixtureLifecycleService 
   ): Promise<AgentTeamRun> {
     const run = await this.requireRun(runId);
     this.assertFrameworkRepairNotBlocked(run);
-    if (run.status === "cancelled") {
+    if (run.status === "cancelled" && run.runKind === "verification_fixture") {
       throw new AgentTeamError(409, "Cancelled fixture Run cannot be resumed");
     }
     if (run.pendingFindingDecision) {
@@ -373,6 +376,7 @@ export class AgentTeamLifecycleService extends AgentTeamFixtureLifecycleService 
       );
     const nextRun = await this.updateRun(run, {
       status: "running",
+      cancellation: null,
       activeWorkerRole: null,
       activeWorkerDispatch: null,
       workers: setActiveWorker(run.workers, null),
@@ -409,7 +413,12 @@ export class AgentTeamLifecycleService extends AgentTeamFixtureLifecycleService 
         "人工介入后无法恢复：没有可重新派发的 worker pane",
       );
     }
-    const roleCases = acceptanceCasesForRole(nextRun, activeWorkerRole);
+    const roleCases =
+      activeWorkerRole === "behavior_verify"
+        ? behaviorVerificationCasesForDispatch(nextRun)
+        : acceptanceCasesForRole(nextRun, activeWorkerRole).filter(
+            (item) => item.status !== "pass",
+          );
     const failedCases = roleCases.filter((item) => item.status === "fail");
     if (activeWorkerRole === "code" && failedCases.length > 0) {
       return this.bounceFailuresToCode(

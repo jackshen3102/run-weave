@@ -14,18 +14,11 @@ export async function cleanupOwnedAgentTeamFixtures(manifest) {
     manifest.state === "planned" ||
     (manifest.state === "failed" && !backend?.url)
   ) {
-    return {
-      status: "completed",
+    return completedEmptyReceipt(manifest, {
       ownerRunId,
       ownerDispatchId,
-      ownedRunIds: [],
-      cancelledRunIds: [],
-      ownedLiveFixtureRuns: 0,
-      cleanupErrors: [],
-      resourceLedger: emptyResourceLedger(manifest.devSessionId),
-      completedAt: new Date().toISOString(),
-      error: null,
-    };
+      completionBasis: "session_never_started",
+    });
   }
   if (backend?.ownership !== "dedicated") {
     return {
@@ -37,6 +30,7 @@ export async function cleanupOwnedAgentTeamFixtures(manifest) {
       ownedLiveFixtureRuns: 0,
       cleanupErrors: [],
       resourceLedger: emptyResourceLedger(manifest.devSessionId),
+      completionBasis: "shared_backend",
       completedAt: new Date().toISOString(),
       error: null,
     };
@@ -71,6 +65,7 @@ export async function cleanupOwnedAgentTeamFixtures(manifest) {
       ownedLiveFixtureRuns,
       cleanupErrors,
       resourceLedger: buildResourceLedger(manifest.devSessionId, runs),
+      completionBasis: "cleanup_endpoint",
       completedAt: failed ? null : new Date().toISOString(),
       error: failed
         ? `fixture cleanup left ${ownedLiveFixtureRuns} live Runs and ${cleanupErrors.length} resource errors`
@@ -86,10 +81,139 @@ export async function cleanupOwnedAgentTeamFixtures(manifest) {
       ownedLiveFixtureRuns: 1,
       cleanupErrors: [],
       resourceLedger: emptyResourceLedger(manifest.devSessionId),
+      completionBasis: "cleanup_endpoint_failed",
       completedAt: null,
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+export function completeOwnedAgentTeamFixturesAfterBetaSlotReset(manifest) {
+  const ownerRunId = manifest.controlPlane?.agentTeamRunId;
+  const ownerDispatchId = manifest.controlPlane?.agentTeamDispatchId;
+  const betaSlot = manifest.targetEnvironment?.betaSlot;
+  if (
+    !ownerRunId ||
+    !ownerDispatchId ||
+    manifest.profile !== "beta" ||
+    typeof betaSlot?.assignedSlotId !== "string" ||
+    !betaSlot.assignedSlotId ||
+    typeof betaSlot.leaseNonce !== "string" ||
+    !betaSlot.leaseNonce
+  ) {
+    return null;
+  }
+  return completedEmptyReceipt(manifest, {
+    ownerRunId,
+    ownerDispatchId,
+    completionBasis: "beta_slot_reset",
+  });
+}
+
+export function backfillOwnedAgentTeamFixturesForStoppedSession(manifest) {
+  const ownerRunId = manifest.controlPlane?.agentTeamRunId;
+  const ownerDispatchId = manifest.controlPlane?.agentTeamDispatchId;
+  if (!ownerRunId || !ownerDispatchId || manifest.state !== "stopped") {
+    return null;
+  }
+  const betaSlot = manifest.targetEnvironment?.betaSlot;
+  const neverStartedServices = [
+    "frontend",
+    "backend",
+    "appServer",
+    "electron",
+    "beta",
+  ].map((serviceName) => manifest.services?.[serviceName]);
+  if (
+    manifest.profile === "beta" &&
+    manifest.targetEnvironment?.instanceId === null &&
+    betaSlot?.assignedSlotId === null &&
+    betaSlot?.leaseNonce === null &&
+    neverStartedServices.every(
+      (service) =>
+        service?.ownership === "dedicated" &&
+        service.url == null &&
+        service.pid == null &&
+        service.slotId == null &&
+        service.leaseNonce == null,
+    )
+  ) {
+    return withCompletionEvidence(
+      manifest.fixtureCleanup ??
+        completedEmptyReceipt(manifest, {
+          ownerRunId,
+          ownerDispatchId,
+          completionBasis: "session_never_started",
+        }),
+      "session_never_started_backfill",
+      {
+        stoppedAt: manifest.updatedAt ?? null,
+        instanceId: null,
+        assignedSlotId: null,
+        leaseNonce: null,
+      },
+    );
+  }
+  const terminalStatuses = new Set([
+    "already-stopped",
+    "already-stopped-no-slot-processes",
+    "stopped-identity-verified",
+  ]);
+  const serviceNames = ["frontend", "backend", "appServer", "electron"];
+  const dedicatedServices = serviceNames
+    .map((serviceName) => [serviceName, manifest.services?.[serviceName]])
+    .filter(([, service]) => service?.ownership === "dedicated");
+  if (
+    dedicatedServices.length === 0 ||
+    dedicatedServices.some(
+      ([, service]) => !terminalStatuses.has(service.cleanupStatus),
+    )
+  ) {
+    return null;
+  }
+  const receipt = completeOwnedAgentTeamFixturesAfterBetaSlotReset(manifest);
+  if (!receipt) {
+    return null;
+  }
+  return withCompletionEvidence(
+    manifest.fixtureCleanup ?? receipt,
+    "beta_slot_reset_backfill",
+    {
+      stoppedAt: manifest.updatedAt ?? null,
+      serviceCleanupStatuses: Object.fromEntries(
+        dedicatedServices.map(([serviceName, service]) => [
+          serviceName,
+          service.cleanupStatus,
+        ]),
+      ),
+    },
+  );
+}
+
+function withCompletionEvidence(receipt, completionBasis, cleanupEvidence) {
+  if (receipt?.status !== "completed") {
+    return null;
+  }
+  return { ...receipt, completionBasis, cleanupEvidence };
+}
+
+function completedEmptyReceipt(
+  manifest,
+  { ownerRunId, ownerDispatchId, completionBasis },
+) {
+  return {
+    status: "completed",
+    ownerRunId,
+    ownerDispatchId,
+    ownedRunIds: [],
+    cancelledRunIds: [],
+    ownedLiveFixtureRuns: 0,
+    cleanupErrors: [],
+    resourceLedger: emptyResourceLedger(manifest.devSessionId),
+    completionBasis,
+    completedAt: new Date().toISOString(),
+    error: null,
+  };
 }
 
 function buildResourceLedger(devSessionId, runs) {
