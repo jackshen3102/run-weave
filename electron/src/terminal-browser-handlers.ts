@@ -9,7 +9,10 @@ import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browse
 import type { TerminalBrowserDisplayScaleState } from "@runweave/shared/terminal-browser-display-scale";
 import {
   deleteTerminalBrowserAnnotation,
+  focusTerminalBrowserAnnotation,
   listTerminalBrowserAnnotations,
+  setTerminalBrowserAnnotationSelecting,
+  setTerminalBrowserAnnotationSubmitting,
   startTerminalBrowserAnnotation,
   stopTerminalBrowserAnnotation,
   submitTerminalBrowserAnnotations,
@@ -394,7 +397,7 @@ export function registerTerminalBrowserHandlers(): void {
     async (event, tabId: string) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win || typeof tabId !== "string") {
-        return { active: false, annotations: [] };
+        return { active: false, selecting: false, annotations: [] };
       }
       const state = await stopTerminalBrowserAnnotation(
         getTerminalBrowserKey(win, tabId),
@@ -412,11 +415,72 @@ export function registerTerminalBrowserHandlers(): void {
     async (event, tabId: string) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win || typeof tabId !== "string") {
-        return { active: false, annotations: [] };
+        return { active: false, selecting: false, annotations: [] };
       }
       return await listTerminalBrowserAnnotations(
         getTerminalBrowserKey(win, tabId),
       );
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:annotation-set-selecting",
+    async (event, tabId: string, selecting: boolean) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string" || typeof selecting !== "boolean") {
+        throw new Error("Invalid browser annotation selection request");
+      }
+      const state = await setTerminalBrowserAnnotationSelecting(
+        getTerminalBrowserKey(win, tabId),
+        selecting,
+      );
+      win.webContents.send("terminal-browser:annotation-updated", {
+        tabId,
+        state,
+      });
+      return state;
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:annotation-set-submitting",
+    async (event, tabId: string, submitting: boolean) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string" || typeof submitting !== "boolean") {
+        throw new Error("Invalid browser annotation submission state request");
+      }
+      const state = await setTerminalBrowserAnnotationSubmitting(
+        getTerminalBrowserKey(win, tabId),
+        submitting,
+      );
+      win.webContents.send("terminal-browser:annotation-updated", {
+        tabId,
+        state,
+      });
+      return state;
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:annotation-focus",
+    async (event, tabId: string, annotationId: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (
+        !win ||
+        typeof tabId !== "string" ||
+        typeof annotationId !== "string"
+      ) {
+        throw new Error("Invalid browser annotation focus request");
+      }
+      const state = await focusTerminalBrowserAnnotation(
+        getTerminalBrowserKey(win, tabId),
+        annotationId,
+      );
+      win.webContents.send("terminal-browser:annotation-updated", {
+        tabId,
+        state,
+      });
+      return state;
     },
   );
 
@@ -455,7 +519,9 @@ export function registerTerminalBrowserHandlers(): void {
       );
       win.webContents.send("terminal-browser:annotation-updated", {
         tabId,
-        state: { active: false, annotations: [] },
+        state: await listTerminalBrowserAnnotations(
+          getTerminalBrowserKey(win, tabId),
+        ),
       });
       return submission;
     },

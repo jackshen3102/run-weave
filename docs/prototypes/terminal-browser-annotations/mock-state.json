@@ -1,0 +1,47 @@
+{
+  "page": {
+    "title": "Billing settings",
+    "url": "https://acme.local/settings/billing",
+    "workspace": "Acme Studio"
+  },
+  "annotations": [
+    {
+      "id": "comment-1",
+      "index": 1,
+      "targetId": "plan-card",
+      "targetLabel": "Pro plan card",
+      "targetText": "$29 / month",
+      "comment": "价格旁边需要说明这是按成员计费，避免用户误解为整个工作区的总价。"
+    },
+    {
+      "id": "comment-2",
+      "index": 2,
+      "targetId": "save-button",
+      "targetLabel": "Save changes button",
+      "targetText": "Save changes",
+      "comment": "没有修改时建议禁用按钮，并补一个已保存状态，减少重复点击。"
+    }
+  ],
+  "targets": [
+    {
+      "id": "plan-card",
+      "label": "Pro plan card",
+      "text": "$29 / month"
+    },
+    {
+      "id": "seat-control",
+      "label": "Team seats",
+      "text": "8 seats"
+    },
+    {
+      "id": "invoice-email",
+      "label": "Invoice email",
+      "text": "finance@acme.dev"
+    },
+    {
+      "id": "save-button",
+      "label": "Save changes button",
+      "text": "Save changes"
+    }
+  ]
+}

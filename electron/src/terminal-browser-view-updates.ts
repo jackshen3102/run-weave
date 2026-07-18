@@ -216,6 +216,6 @@ export function clearTerminalBrowserAnnotationAndNotify(
   }
   win.webContents.send("terminal-browser:annotation-updated", {
     tabId,
-    state: { active: false, annotations: [] },
+    state: { active: false, selecting: false, annotations: [] },
   });
 }

@@ -1,6 +1,7 @@
 import { useTerminalBrowserController } from "./use-terminal-browser-controller";
 import { TerminalBrowserErrorBanners } from "./terminal-browser-error-banners";
 import { TerminalBrowserNavigationBar } from "./terminal-browser-navigation-bar";
+import { TerminalBrowserAnnotationModeBar } from "./terminal-browser-annotations-panel";
 import { TerminalBrowserSurface } from "./terminal-browser-surface";
 import { TerminalBrowserTabs } from "./terminal-browser-tabs";
 
@@ -30,12 +31,15 @@ export function TerminalBrowserTool({
 
   const {
     activeTab,
+    annotationPanelOpen,
     annotationError,
     annotationState,
     annotationSubmitting,
     browserViewRef,
     closeTab,
+    closeAnnotationPanel,
     createBrowserTab,
+    deleteAnnotation,
     devicePanelOpen,
     deviceSwitching,
     go,
@@ -48,6 +52,7 @@ export function TerminalBrowserTool({
     isElectron,
     mobileDisabledReason,
     openUrlExternally,
+    openAnnotationPanel,
     proxyError,
     proxyState,
     proxySwitching,
@@ -57,9 +62,11 @@ export function TerminalBrowserTool({
     selectDevicePreset,
     setDisplayScale,
     setActiveBrowserTab,
+    setAnnotationSelecting,
     setDevicePanelOpenState,
     setHeaderPanelOpen,
     stop,
+    discardAnnotations,
     submitAddress,
     submitAnnotations,
     surfaceContainerRef,
@@ -67,6 +74,7 @@ export function TerminalBrowserTool({
     toggleAnnotation,
     toggleProxy,
     updateBrowserTab,
+    focusAnnotation,
   } = controller;
 
   return (
@@ -89,10 +97,10 @@ export function TerminalBrowserTool({
           onSubmit: submitAddress,
         }}
         annotation={{
-          active: annotationState.active,
           count: annotationState.annotations.length,
-          submitting: annotationSubmitting,
-          onSubmit: () => void submitAnnotations(),
+          panelOpen: annotationPanelOpen,
+          selecting: annotationState.selecting,
+          onOpenPanel: openAnnotationPanel,
           onToggle: () => void toggleAnnotation(),
         }}
         navigation={{
@@ -124,10 +132,32 @@ export function TerminalBrowserTool({
           onSetDisplayScale: (factor) => void setDisplayScale(factor),
         }}
       />
+      <TerminalBrowserAnnotationModeBar
+        selecting={annotationState.selecting}
+        onDone={() => void setAnnotationSelecting(false)}
+      />
       <TerminalBrowserErrorBanners
-        errors={[proxyError, headerError, annotationError, activeTab.error]}
+        errors={[
+          proxyError,
+          headerError,
+          annotationPanelOpen ? null : annotationError,
+          activeTab.error,
+        ]}
       />
       <TerminalBrowserSurface
+        annotations={{
+          error: annotationError,
+          open: annotationPanelOpen,
+          state: annotationState,
+          submitting: annotationSubmitting,
+          onClose: () => void closeAnnotationPanel(),
+          onDelete: (annotationId) => void deleteAnnotation(annotationId),
+          onDiscard: () => void discardAnnotations(),
+          onFocus: (annotationId) => void focusAnnotation(annotationId),
+          onSelectingChange: (selecting) =>
+            void setAnnotationSelecting(selecting),
+          onSubmit: () => void submitAnnotations(),
+        }}
         refs={{ browserViewRef, containerRef: surfaceContainerRef }}
         environment={{
           isElectron,

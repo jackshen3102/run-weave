@@ -17,14 +17,14 @@ interface AnnotationSession {
 
 const sessions = new Map<string, AnnotationSession>();
 
-function buildRuntimeCallScript(method: string, argument?: string): string {
+function buildRuntimeCallScript(method: string, argument?: unknown): string {
   const globalName = JSON.stringify(TERMINAL_BROWSER_ANNOTATION_RUNTIME_GLOBAL);
   const methodName = JSON.stringify(method);
   const args = argument === undefined ? "" : JSON.stringify(argument);
   return `(() => {
     const runtime = window[${globalName}];
     if (!runtime?.active || typeof runtime[${methodName}] !== "function") {
-      return { active: false, annotations: [] };
+      return { active: false, selecting: false, annotations: [] };
     }
     return runtime[${methodName}](${args});
   })()`;
@@ -103,6 +103,7 @@ function normalizeState(value: unknown): TerminalBrowserAnnotationState {
     : [];
   return {
     active: record.active === true,
+    selecting: record.selecting === true,
     annotations,
     pendingSubmitRequestId:
       typeof record.pendingSubmitRequestId === "string"
@@ -114,12 +115,12 @@ function normalizeState(value: unknown): TerminalBrowserAnnotationState {
 async function callAnnotationRuntime(
   key: string,
   method: string,
-  argument?: string,
+  argument?: unknown,
 ): Promise<TerminalBrowserAnnotationState> {
   const session = sessions.get(key);
   if (!session || session.webContents.isDestroyed()) {
     sessions.delete(key);
-    return { active: false, annotations: [] };
+    return { active: false, selecting: false, annotations: [] };
   }
   try {
     const result = await session.webContents.executeJavaScript(
@@ -133,7 +134,7 @@ async function callAnnotationRuntime(
     return state;
   } catch {
     sessions.delete(key);
-    return { active: false, annotations: [] };
+    return { active: false, selecting: false, annotations: [] };
   }
 }
 
@@ -162,6 +163,27 @@ export async function deleteTerminalBrowserAnnotation(
   return await callAnnotationRuntime(key, "remove", annotationId);
 }
 
+export async function focusTerminalBrowserAnnotation(
+  key: string,
+  annotationId: string,
+): Promise<TerminalBrowserAnnotationState> {
+  return await callAnnotationRuntime(key, "focus", annotationId);
+}
+
+export async function setTerminalBrowserAnnotationSelecting(
+  key: string,
+  selecting: boolean,
+): Promise<TerminalBrowserAnnotationState> {
+  return await callAnnotationRuntime(key, "setSelecting", selecting);
+}
+
+export async function setTerminalBrowserAnnotationSubmitting(
+  key: string,
+  submitting: boolean,
+): Promise<TerminalBrowserAnnotationState> {
+  return await callAnnotationRuntime(key, "setSubmitting", submitting);
+}
+
 export async function stopTerminalBrowserAnnotation(
   key: string,
 ): Promise<TerminalBrowserAnnotationState> {
@@ -178,17 +200,21 @@ export async function submitTerminalBrowserAnnotations(
     session.webContents.isDestroyed() ||
     state.annotations.length === 0
   ) {
-    await stopTerminalBrowserAnnotation(key);
+    await callAnnotationRuntime(key, "setSubmitting", false);
     return { annotations: state.annotations, screenshot: null };
   }
 
-  const image = await session.webContents.capturePage();
-  const screenshot = {
-    mimeType: "image/png" as const,
-    dataBase64: image.toPNG().toString("base64"),
-  };
-  await stopTerminalBrowserAnnotation(key);
-  return { annotations: state.annotations, screenshot };
+  try {
+    const image = await session.webContents.capturePage();
+    const screenshot = {
+      mimeType: "image/png" as const,
+      dataBase64: image.toPNG().toString("base64"),
+    };
+    return { annotations: state.annotations, screenshot };
+  } catch (error) {
+    await callAnnotationRuntime(key, "setSubmitting", false);
+    throw error;
+  }
 }
 
 export function clearTerminalBrowserAnnotation(key: string): void {

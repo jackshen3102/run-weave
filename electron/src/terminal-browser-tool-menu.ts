@@ -27,7 +27,6 @@ function isTerminalBrowserToolMenuRequest(
     Number.isFinite(request.y) &&
     typeof request.showAnnotation === "boolean" &&
     typeof request.annotationActive === "boolean" &&
-    typeof request.annotationSubmitEnabled === "boolean" &&
     typeof request.showHeaders === "boolean" &&
     typeof request.deviceEnabled === "boolean" &&
     typeof request.devtoolsEnabled === "boolean" &&
@@ -59,11 +58,6 @@ export async function popupTerminalBrowserToolMenu(
         click: () => select("toggle-annotation"),
       });
     }
-    template.push({
-      label: "Submit Browser Comments",
-      enabled: value.annotationSubmitEnabled,
-      click: () => select("submit-annotations"),
-    });
     if (value.showHeaders) {
       template.push({
         label: "Request Headers",

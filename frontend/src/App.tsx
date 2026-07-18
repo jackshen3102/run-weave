@@ -153,7 +153,19 @@ declare global {
       terminalBrowserAnnotationList?: (
         tabId: string,
       ) => Promise<TerminalBrowserAnnotationState>;
+      terminalBrowserAnnotationSetSelecting?: (
+        tabId: string,
+        selecting: boolean,
+      ) => Promise<TerminalBrowserAnnotationState>;
+      terminalBrowserAnnotationSetSubmitting?: (
+        tabId: string,
+        submitting: boolean,
+      ) => Promise<TerminalBrowserAnnotationState>;
       terminalBrowserAnnotationDelete?: (
+        tabId: string,
+        annotationId: string,
+      ) => Promise<TerminalBrowserAnnotationState>;
+      terminalBrowserAnnotationFocus?: (
         tabId: string,
         annotationId: string,
       ) => Promise<TerminalBrowserAnnotationState>;

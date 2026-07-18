@@ -15,3 +15,4 @@
 - `agent-team-attention-summary/`：Agent Team run 注意力摘要与待处理项原型。
 - `agent-team-finding-disposition/`：Agent Team finding disposition 交互原型。
 - `terminal-browser-adaptive-tabs/`：Terminal Browser 多 tab 自适应体验原型。
+- `terminal-browser-annotations/`：Terminal Browser 页面评论完整流程、失败恢复与交互问题梳理原型。
