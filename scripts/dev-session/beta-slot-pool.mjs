@@ -17,6 +17,17 @@ export {
   validateBetaSlotLease,
 } from "./beta-slot-pool-core.mjs";
 export {
+  assertBetaPoolStorageReadyForExistingLease,
+  inspectBetaPoolStorage,
+  prepareBetaPoolStorageForAllocation,
+  rollbackBetaPoolStorageMigration,
+} from "./beta-slot-pool-storage-migration.mjs";
+export {
+  resolveBetaPoolStoragePaths,
+  resolveCanonicalBetaPoolPaths,
+  resolveLegacyBetaPoolPaths,
+} from "./beta-slot-pool-storage-paths.mjs";
+export {
   applyBetaSlotRetention,
   assertBetaPoolDiskBudget,
   readBetaSlotMetadata,

@@ -9,6 +9,8 @@ import {
   processIdentityMatches,
   readProcessSignature,
 } from "./service-runtime.mjs";
+import { prepareBetaPoolStorageForAllocation } from "./beta-slot-pool-storage-migration.mjs";
+import { resolveEffectiveBetaPoolPaths } from "./beta-slot-pool-storage-paths.mjs";
 
 export const BETA_SLOT_POLICY = "fixed-pool-v1";
 export const BETA_SLOT_CAPACITY = 5;
@@ -34,21 +36,7 @@ export function assertBetaSlotId(value) {
 }
 
 export function resolveBetaPoolPaths(homeDir = os.homedir()) {
-  const betaRoot = path.join(
-    homeDir,
-    "Library",
-    "Application Support",
-    "Runweave Beta",
-  );
-  const poolRoot = path.join(betaRoot, "pool");
-  return {
-    betaRoot,
-    poolRoot,
-    leasesDir: path.join(poolRoot, "leases"),
-    recoveryClaimsDir: path.join(poolRoot, "recovery-claims"),
-    metadataDir: path.join(poolRoot, "metadata"),
-    quarantineDir: path.join(poolRoot, "quarantine"),
-  };
+  return resolveEffectiveBetaPoolPaths(homeDir);
 }
 
 export function sameFileIdentity(left, right) {
@@ -467,7 +455,7 @@ export async function acquireBetaSlotLease({
   if (requestedSlotId !== null) {
     assertBetaSlotId(requestedSlotId);
   }
-  const paths = resolveBetaPoolPaths(homeDir);
+  const paths = await prepareBetaPoolStorageForAllocation({ homeDir });
   await ensureDirectory(paths.poolRoot, paths.betaRoot);
   await ensureDirectory(paths.leasesDir, paths.poolRoot);
   await ensureDirectory(paths.metadataDir, paths.poolRoot);

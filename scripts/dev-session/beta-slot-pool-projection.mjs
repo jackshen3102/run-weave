@@ -19,6 +19,8 @@ import {
   resolveBetaPoolPaths,
   validateBetaSlotLease,
 } from "./beta-slot-pool-core.mjs";
+import { DevSessionError } from "./contracts.mjs";
+import { inspectBetaPoolStorage } from "./beta-slot-pool-storage-migration.mjs";
 import { inspectBetaSlotProcessSafety } from "./beta-slot-pool-process-inspection.mjs";
 import { readBetaSlotMetadata } from "./beta-slot-pool-storage.mjs";
 
@@ -494,6 +496,14 @@ async function inspectPoolSlot(slotId, paths, homeDir) {
 }
 
 export async function inspectBetaPool({ homeDir = os.homedir() } = {}) {
+  const storage = await inspectBetaPoolStorage({ homeDir });
+  if (storage.mode === "conflict") {
+    throw new DevSessionError("Beta pool storage roots conflict", 5, {
+      code: "beta_pool_storage_conflict",
+      ...storage,
+      suggestedAction: "Inspect both pool roots before retrying.",
+    });
+  }
   const paths = resolveBetaPoolPaths(homeDir);
   const rootFailure = await inspectBetaPoolRootSafety(paths);
   if (rootFailure) {
@@ -507,6 +517,7 @@ export async function inspectBetaPool({ homeDir = os.homedir() } = {}) {
   return {
     schemaVersion: 1,
     policy: BETA_SLOT_POLICY,
+    storage,
     observedAt: new Date().toISOString(),
     reservationGuaranteed: false,
     capacity: BETA_SLOT_CAPACITY,

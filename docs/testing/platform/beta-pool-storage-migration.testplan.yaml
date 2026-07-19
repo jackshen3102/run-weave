@@ -1,0 +1,144 @@
+version: 1
+name: Beta Pool 控制面存储迁移
+description: >
+  验证 Beta Pool 从 Application Support 的旧目录安全迁移到 ~/.runweave/beta-pool，
+  在只读查询、旧 Session 排空、并发迁移、崩溃恢复、冲突和降级场景下始终只有一个权威 Pool，
+  不丢失 metadata/quarantine，也不产生重复 lease owner。
+
+cases:
+  - id: BPSM-001
+    name: 空 HOME 的只读投影不创建任何 Pool 目录
+    required: true
+    description: >
+      验证全新环境中的 dev:pool 只返回五槽 idle 和未初始化存储状态，查询前后 canonical、legacy、
+      migration lock 与 journal 均不存在。
+    preconditions:
+      - 使用独立临时 HOME，canonical Pool、legacy Pool 和 migration 目录均不存在。
+      - 可以记录临时 HOME 在命令执行前后的完整目录清单和文件哈希。
+    steps:
+      - 执行 `pnpm dev:pool --json`；确认返回五个唯一 slotId、全部为 idle、reservationGuaranteed=false 且 storage.mode=uninitialized。
+      - 比较执行前后的目录清单和文件哈希；确认没有创建 ~/.runweave、Application Support/Runweave Beta、migration lock、journal、lease、claim 或 metadata。
+
+  - id: BPSM-002
+    name: Legacy-only 投影保持只读并解释迁移阻塞
+    required: true
+    description: >
+      验证只有旧 Pool 且含有效 lease 时，dev:pool 从 legacy 根生成准确投影并报告 legacy-draining，
+      不创建 canonical、不复制数据也不修改旧 lease。
+    preconditions:
+      - 临时 HOME 的 legacy Pool 中存在一个 schema、owner、nonce 和 manifest 引用均有效的 lease。
+      - canonical Pool 不存在，且可以记录旧 Pool 的 inode、权限、内容哈希和目录清单。
+    steps:
+      - 执行 `pnpm dev:pool --json`；确认 storage.mode=legacy-draining、migrationRequired=true，并准确显示占用槽位和 owner Session。
+      - 比较查询前后的 legacy inode、权限、文件哈希和目录清单；确认完全不变，canonical 和 migration journal 均未创建。
+
+  - id: BPSM-003
+    name: Active legacy Session 先排空再允许迁移
+    required: true
+    description: >
+      验证旧 Pool 仍有 active lease 或 recovery claim 时，新 Beta start 零副作用失败；当前版本仍能沿 legacy 根停止原 owner，
+      最后一个旧 lease 释放后才允许后续 allocation 迁移。
+    preconditions:
+      - 临时 HOME 中存在归属明确的 legacy lease、owner manifest 和可安全停止的 dedicated runtime fixture。
+      - canonical Pool 不存在，可以读取 start 错误、stop 结果、lease identity 和两个根的目录状态。
+    steps:
+      - 发起新的 Beta start；确认返回 beta_pool_legacy_drain_required、owner Session 和 suggestedAction，且没有创建 canonical、没有停止旧 runtime、没有改写旧 lease。
+      - 对原 owner 执行 stop；确认 claim、lease 重验、reset、metadata 和 release 全部发生在 legacy 根，原 Session 收敛为 stopped。
+      - 确认 stop 结束时尚未创建 canonical；再次发起 start，确认此时才进入迁移并通过正常 hard-link acquisition 获得唯一新 lease。
+
+  - id: BPSM-004
+    name: Inactive legacy 数据非破坏且幂等迁移
+    required: true
+    description: >
+      验证无 active lease/claim 的 legacy metadata、lease quarantine 和 legacy instance quarantine 被完整迁到 canonical，
+      旧数据保留为带 migrationId 的备份，重复执行不会覆盖或重复迁移。
+    preconditions:
+      - legacy Pool 无 lease 和 recovery claim，但包含权限为 0700/0600 的 metadata、quarantine 和可识别 fixture 内容。
+      - canonical 不存在，且 fixture 不含 symlink、FIFO、socket 或越界路径。
+    steps:
+      - 触发首次需要分配 lease 的操作；确认生成 migration journal、canonical storage.json、legacy backup 和原路径 regular-file tombstone。
+      - 比较 legacy source fingerprint 与 canonical 文件集合、内容哈希和权限；确认 metadata/quarantine 完整且没有迁移 active lease/claim。
+      - 停止本次 Session并再次触发 start；确认复用同一 canonical，不新建第二个 migrationId、不覆盖 metadata，也不重新读取 legacy backup 作为权威状态。
+
+  - id: BPSM-005
+    name: 两个并发 start 只发布一个 canonical 和一个 lease owner
+    required: true
+    description: >
+      验证 legacy 已排空时两个并发 start 竞争 migration lock，只有一个迁移者发布 canonical，随后现有 hard-link 机制仍保证目标槽位只有一个 owner。
+    preconditions:
+      - legacy Pool 可安全迁移，canonical 与 migration lock 均不存在。
+      - 可以并发启动两个请求并读取 migration journal、storage marker、lease inode、owner nonce 和两个请求结果。
+    steps:
+      - 同时发起两个 Beta start；确认同一时刻只有一个有效 migration lock owner，loser 等待或返回 beta_pool_storage_migration_busy，不执行第二次复制或归档。
+      - 操作收敛后检查 canonical、legacy backup、tombstone 和 completed journal；确认各只有一套且 migrationId 一致。
+      - 检查最终 lease；确认一个 slot 只有一个 inode、ownerSessionId 和 nonce，另一个请求不会覆盖 winner 或复用相同 lease。
+
+  - id: BPSM-006
+    name: 迁移各崩溃阶段恢复为唯一权威根
+    required: true
+    description: >
+      验证迁移在 staging、canonical publish、legacy archive 和 tombstone 写入后分别中断时，
+      同一事务可以安全继续或明确阻塞，不丢失 source、不留下两个可写 Pool。
+    preconditions:
+      - 可以为 preparing、staged、canonical_published 和 legacy_archived 四个阶段分别建立独立临时 HOME fixture。
+      - 每个 fixture 都能注入一次进程中断并保留 journal、inode、fingerprint、staging、canonical、legacy 和 backup 现场。
+    steps:
+      - 分别在四个阶段注入中断，再次执行需要 allocation 的操作；确认系统只清理本次未发布 staging，或依据匹配的 migrationId/fingerprint 继续原事务。
+      - 对每个场景检查最终目录；确认只有 canonical 可写，legacy 原路径为 tombstone，backup 保留，completed journal 与 storage marker 一致。
+      - 将任一 fingerprint 或 inode 改为不匹配后重试；确认返回 beta_pool_storage_migration_blocked 或 conflict，所有 lease、source、backup 和现场均未删除。
+
+  - id: BPSM-007
+    name: Canonical 与 legacy 双权威冲突时 fail closed
+    required: true
+    description: >
+      验证两个根同时含无法由同一 migration journal 解释的状态时，查询能暴露 conflict，
+      start、stop 和 recover 都不自动选择、合并、覆盖或删除任一根。
+    preconditions:
+      - canonical 与 legacy 分别包含不同 migrationId、owner 或 metadata fingerprint 的有效状态。
+      - 可以记录两个根的 inode、文件哈希、lease owner 和命令输出。
+    steps:
+      - 执行 `pnpm dev:pool --json`；确认 storage.mode=conflict，输出 canonicalRoot、legacyRoot 和具体 blockedBy，不把任一根宣称为 authoritative。
+      - 分别尝试 start 和 recover；确认返回 beta_pool_storage_conflict，两个根的 inode、哈希、lease owner 和 runtime 均不变。
+
+  - id: BPSM-008
+    name: Tombstone 阻止降级双分配且回滚受 lease 门禁保护
+    required: true
+    description: >
+      验证迁移完成后的旧代码无法在 legacy 路径重建 Pool；canonical 尚无 lease 时可按同一 migrationId 恢复旧根，
+      canonical 已产生 lease 后任何自动回滚都被拒绝。
+    preconditions:
+      - 已完成一次迁移，canonical marker、legacy backup、tombstone 和 journal 的 migrationId 一致。
+      - 可以分别建立 canonical 无 lease和已有有效 lease 的两个独立 fixture。
+    steps:
+      - 使用只认识旧路径的旧版 fixture 尝试 acquisition；确认因 legacy pool 是 regular-file tombstone 而失败，没有创建 leases 子目录或第二个 owner。
+      - 在 canonical 无 lease/claim 的 fixture 执行受限 rollback；确认 tombstone 被替换为原 backup，canonical 被归档而非删除，journal 状态为 rolled_back。
+      - 在 canonical 有有效 lease 的 fixture 尝试相同 rollback；确认操作被拒绝，canonical lease、legacy tombstone、backup 和 runtime 全部保持不变。
+
+  - id: BPSM-009
+    name: Legacy instance quarantine 全链路改用 canonical
+    required: true
+    description: >
+      验证 legacy-cleanup、restore 和 purge 的 journal 与资源都写入 canonical quarantine/legacy-instances，
+      迁移完成后不会重新创建旧 Pool 目录或绕过 tombstone。
+    preconditions:
+      - canonical migration 已完成，legacy pool 原路径为 tombstone。
+      - 存在一个可安全 quarantine、restore 和 purge 的非 pool Beta legacy fixture。
+    steps:
+      - 执行 legacy-cleanup；确认 operation journal 和资源位于 canonical quarantine/legacy-instances，旧 Pool tombstone 未变化。
+      - 执行 restore；确认只从 canonical operation root 恢复已记录资源，journal 进入 restored，未创建旧 pool/quarantine。
+      - 再次 quarantine 并按 operationId 执行带确认的 purge；确认只删除目标 operation，canonical Pool 的 lease、metadata 和其它 quarantine 均不受影响。
+
+  - id: BPSM-010
+    name: 真实 Beta 生命周期不再访问旧 Pool
+    required: true
+    description: >
+      验证迁移完成后的真实 Beta Dev Session start、status、pool projection 和 stop 全部使用 canonical 控制面，
+      在隔离 macOS 15 以上验收环境中不会因正常 Pool 路径访问弹出“访问其他 App 的数据”。
+    preconditions:
+      - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 管理真实 Beta Session 的启动、查询和清理。
+      - macOS 15 以上隔离验收账号未预先授予 Runweave App Data 或完全磁盘访问权限，且没有其它并发 Runweave 命令。
+      - 使用 `$computer-use` 观察桌面系统弹窗，并能读取本次操作时间窗内的 tccd 日志。
+    steps:
+      - 启动一个真实 Beta Session；确认 start 成功、manifest 指向唯一 slot、canonical 中存在对应 lease，legacy tombstone 和 backup 没有被读取后改写。
+      - 执行 status 与 `pnpm dev:pool --json`；确认 storage.mode=canonical、projection owner/nonce 与 manifest 一致，桌面未出现 App Data 权限弹窗。
+      - 停止该 Session并再次查询 status；确认 Session 为 stopped、canonical lease/claim 已清理，tccd 时间窗内没有由正常 Pool 生命周期触发的 AUTHREQ_PROMPTING。

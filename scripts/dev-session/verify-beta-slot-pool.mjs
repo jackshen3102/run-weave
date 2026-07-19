@@ -31,6 +31,7 @@ import { buildBetaStopArgs } from "./beta-service.mjs";
 import { verifyBetaSlotStorage } from "./verify-beta-slot-storage.mjs";
 import { verifyBetaSlotPoolProjection } from "./verify-beta-slot-pool-projection.mjs";
 import { verifyBetaSlotPoolRecovery } from "./verify-beta-slot-pool-recovery.mjs";
+import { verifyBetaPoolStorageMigration } from "./verify-beta-pool-storage-migration.mjs";
 import { validateManifest } from "./contracts.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -47,6 +48,9 @@ function leaseOptions(homeDir, index, requestedSlotId = null) {
 }
 
 export async function verifyBetaSlotPool(temporaryHome) {
+  await verifyBetaPoolStorageMigration(
+    path.join(temporaryHome, "storage-migration"),
+  );
   const rejectedLegacyInstance = "dvs-new-legacy";
   await assert.rejects(
     execFileAsync(

@@ -322,6 +322,17 @@ async function runStart(options, sourceRoot) {
             break;
           } catch (error) {
             if (
+              error instanceof DevSessionError &&
+              [
+                "beta_pool_legacy_drain_required",
+                "beta_pool_storage_migration_busy",
+                "beta_pool_storage_migration_blocked",
+                "beta_pool_storage_conflict",
+              ].includes(error.details?.code)
+            ) {
+              throw error;
+            }
+            if (
               !(error instanceof DevSessionError) ||
               attempt === BETA_SLOT_CAPACITY
             ) {

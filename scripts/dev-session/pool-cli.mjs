@@ -48,7 +48,8 @@ function printProjection(projection, json) {
   }));
   console.table(rows);
   process.stdout.write(
-    `Observed ${projection.observedAt}; this snapshot does not reserve capacity.\n`,
+    `Storage ${projection.storage.mode}: ${projection.storage.effectiveRoot ?? "conflict"}\n` +
+      `Observed ${projection.observedAt}; this snapshot does not reserve capacity.\n`,
   );
 }
 
