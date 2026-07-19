@@ -9,6 +9,7 @@
     "dev:legacy": "node ./dev.mjs",
     "dev:session": "node ./scripts/dev-session/cli.mjs start",
     "dev:session:verify": "node ./scripts/verify-dev-session.mjs",
+    "dev:pool": "node ./scripts/dev-session/pool-cli.mjs",
     "dev:status": "node ./scripts/dev-session/cli.mjs status",
     "dev:open": "node ./scripts/dev-session/cli.mjs open",
     "dev:stop": "node ./scripts/dev-session/cli.mjs stop",

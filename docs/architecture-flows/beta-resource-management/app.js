@@ -121,23 +121,22 @@ const problems = [
   },
   {
     id: "P4",
-    title: "janitor 结果不可见，无法解释“为什么没回收”",
-    level: "代码事实",
+    title: "janitor 结果在实施前不可见",
+    level: "历史代码事实 · 已修复",
     trigger: "每次 beta start 前运行 runBetaPoolJanitor()。",
     mechanism:
-      "runStart() await 返回值但不保存、不打印；recovered / active / broken 摘要被丢弃。",
-    result:
-      "pool-03/04 在新 Session 启动后仍占用，操作者看不到具体卡在哪个安全检查。",
+      "当前 start 输出 recovered / preserved / blocked / failed receipt，并持久化最近 attempt。",
+    result: "操作者可从 start、owner manifest 与 slot metadata 追踪恢复结果。",
   },
   {
     id: "P5",
-    title: "capacity snapshot 只回答 lease 数量，不回答可用性",
-    level: "代码事实",
+    title: "旧 capacity snapshot 只回答 lease 数量",
+    level: "历史代码事实 · 已由 dev:pool 补齐",
     trigger: "dry-run 或 acquire 前调用 inspectBetaSlotCapacity()。",
     mechanism:
       "snapshot 只读取五个 lease 文件，并显式返回 authoritative:false；不 join manifest 与 runtime。",
     result:
-      "occupied 同时包含 healthy、partial、stale-manual 等不同语义，无法直接指导操作。",
+      "dev:pool 现在联合 manifest/runtime/recovery，并输出有限 derived state 与 blocker。",
   },
 ];
 

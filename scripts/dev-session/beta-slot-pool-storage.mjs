@@ -14,7 +14,6 @@ import {
   DEFAULT_BETA_POOL_MIN_FREE_BYTES,
   assertBetaSlotId,
   atomicWriteJson,
-  resolveBetaPoolPaths,
 } from "./beta-slot-pool-core.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -577,24 +576,8 @@ export async function resetBetaSlotMutableState({
   return { userDataRecreated: true, appServerMutableStateCleared: true };
 }
 
-export async function recordBetaSlotRelease({
-  slotId,
-  revision,
-  cleanupSummary,
-  diskSummary = null,
-  homeDir = os.homedir(),
-}) {
-  const paths = resolveBetaPoolPaths(homeDir);
-  await atomicWriteJson(
-    path.join(paths.metadataDir, `${assertBetaSlotId(slotId)}.json`),
-    {
-      schemaVersion: 1,
-      slotId,
-      lastRevision: revision,
-      lastReleasedAt: new Date().toISOString(),
-      lastCleanupSummary: cleanupSummary,
-      lastDiskSummary: diskSummary,
-    },
-    paths.poolRoot,
-  );
-}
+export {
+  readBetaSlotMetadata,
+  recordBetaSlotRecoveryAttempt,
+  recordBetaSlotRelease,
+} from "./beta-slot-pool-metadata.mjs";

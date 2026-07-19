@@ -24,7 +24,7 @@ Beta pool 不是单一状态机，而是三套事实的组合：
 
 `allocatorPid` 是创建 lease 的启动 CLI PID，不是长期资源 owner。CLI 在启动完成后退出是正常行为，因此 `allocatorLive=false` 不能单独推导槽位失效。
 
-当前主要管理缺口不是“缺少强制删除”，而是没有把上述三套事实合成一个清晰、可操作的资源池视图。系统为了避免误杀，在身份漂移时会拒绝释放 lease；这个安全选择是正确的，但如果恢复结论不可见、没有后续闭环，就会形成容量泄漏。
+当前实现已经用 `pnpm dev:pool --json` 把上述三套事实与 recovery metadata 合成只读资源池投影。系统仍在身份漂移时拒绝释放 lease；可安全证明的空壳由 startup hygiene 回收，持续 partial 只在容量压力下二次检查后回收，恢复结论进入 start 输出、owner manifest 和 slot metadata。
 
 ## 真实现场基线
 
@@ -38,7 +38,7 @@ Beta pool 不是单一状态机，而是三套事实的组合：
 
 现场会继续变化，因此 HTML 明确标记为时间点快照，不是实时控制台。
 
-## 已确认问题
+## 2026-07-18 实施前问题基线
 
 | 编号 | 结论                                                                                                                 | 证据等级                      |
 | ---- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
@@ -48,9 +48,9 @@ Beta pool 不是单一状态机，而是三套事实的组合：
 | P4   | janitor 的扫描与恢复摘要被 `runStart()` 丢弃，操作者看不到为什么某个槽位没有恢复                                     | 代码事实                      |
 | P5   | capacity snapshot 只看 lease 文件，并明确标记 `authoritative: false`，无法表达 partial / reclaimable / manual states | 代码事实                      |
 
-## 建议方向
+## 当前实现
 
-第一步不是自动强杀，而是增加统一的只读资源投影：每个 slot 同时显示 lease、manifest、runtime、recovery 四组事实，并派生 `idle / healthy / partial / stale-reclaimable / stale-manual / broken` 状态。随后再把 janitor 结果和安全恢复入口接到这份投影上。
+`scripts/dev-session/beta-slot-pool-projection.mjs` 为每个 slot 同时显示 lease、manifest、runtime、recovery 四组事实，并派生 `idle / healthy / partial / degraded-shared / stale-reclaimable / stale-manual / broken`。`beta-slot-pool-recovery.mjs` 在 recovery claim 与 owner Session lock 内重读事实后执行 startup hygiene、容量压力恢复或显式 recover；`beta-slot-pool-lifecycle.mjs` 统一 normal stop、start failure 与 recovery 的 release transaction。HTML 保留实施前现场用于解释因果，不是当前实时资源状态。
 
 ## 代码源
 
@@ -59,6 +59,10 @@ Beta pool 不是单一状态机，而是三套事实的组合：
 - `scripts/dev-session/beta-slot-pool-core.mjs`
 - `scripts/dev-session/beta-slot-pool-janitor.mjs`
 - `scripts/dev-session/beta-slot-pool-storage.mjs`
+- `scripts/dev-session/beta-slot-pool-projection.mjs`
+- `scripts/dev-session/beta-slot-pool-recovery.mjs`
+- `scripts/dev-session/beta-slot-pool-lifecycle.mjs`
+- `scripts/dev-session/pool-cli.mjs`
 - `scripts/dev-session/beta-service.mjs`
 - `scripts/dev-session/service-runtime.mjs`
 - `scripts/dev-session/registry.mjs`

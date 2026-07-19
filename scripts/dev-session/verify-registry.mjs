@@ -81,6 +81,7 @@ export function createManifest({ sourceRoot, sessionId }) {
 export async function verifyRegistry(sourceRoot, temporaryHome) {
   const env = {
     ...process.env,
+    HOME: temporaryHome,
     RUNWEAVE_DEV_SESSION_HOME: path.join(temporaryHome, "dev-sessions"),
   };
   const first = createManifest({ sourceRoot, sessionId: "dvs-a1" });

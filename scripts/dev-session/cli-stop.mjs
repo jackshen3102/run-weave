@@ -12,12 +12,13 @@ import {
 } from "./services.mjs";
 import { processIdentityMatches } from "./service-runtime.mjs";
 import {
-  applyBetaSlotRetention,
+  acquireBetaSlotRecoveryClaim,
   assertBetaSlotLease,
   betaSlotProcessesAreAbsent,
-  recordBetaSlotRelease,
-  releaseBetaSlotLease,
-  resetBetaSlotMutableState,
+  createBetaPoolRecoveryReceipt,
+  finalizeBetaSlotRelease,
+  releaseBetaSlotRecoveryClaim,
+  resolveBetaPoolPaths,
 } from "./beta-slot-pool.mjs";
 import {
   backfillOwnedAgentTeamFixturesForStoppedSession,
@@ -36,7 +37,20 @@ export async function runStop(options, sourceRoot, helpers) {
     sessionId: options.sessionId,
     sourceRoot,
   });
-  await withSessionLock(candidate.devSessionId, async () => {
+  const beforeLock = await readManifest(candidate.devSessionId);
+  const recoveryClaimSlot = retainsBetaSlotLease(beforeLock)
+    ? beforeLock.targetEnvironment.betaSlot.assignedSlotId
+    : null;
+  const poolPaths = recoveryClaimSlot ? resolveBetaPoolPaths() : null;
+  const recoveryClaim = recoveryClaimSlot
+    ? await acquireBetaSlotRecoveryClaim(recoveryClaimSlot, poolPaths)
+    : null;
+  if (recoveryClaimSlot && !recoveryClaim) {
+    throw new DevSessionError("Beta slot recovery claim is busy", 5, {
+      slotId: recoveryClaimSlot,
+    });
+  }
+  await withSessionLock(candidate.devSessionId, async (paths) => {
     let manifest = await readManifest(candidate.devSessionId);
     const betaSlot = retainsBetaSlotLease(manifest)
       ? manifest.targetEnvironment.betaSlot
@@ -57,19 +71,32 @@ export async function runStop(options, sourceRoot, helpers) {
           { slotId: betaSlot.assignedSlotId, resetUnsafe: true },
         );
       }
-      const reset = await resetBetaSlotMutableState({
-        slotId: betaSlot.assignedSlotId,
+      const finalized = await finalizeBetaSlotRelease({
+        lease: {
+          slotId: betaSlot.assignedSlotId,
+          ownerSessionId: manifest.devSessionId,
+          leaseNonce: betaSlot.leaseNonce,
+          ownerRevision: manifest.source.revision,
+          ownerManifestPath: paths.manifestPath,
+        },
+        manifest,
+        receipt: createBetaPoolRecoveryReceipt({
+          trigger: "normal_stop",
+          initiatingSessionId: manifest.devSessionId,
+          slotId: betaSlot.assignedSlotId,
+          ownerSessionId: manifest.devSessionId,
+          leaseNonce: betaSlot.leaseNonce,
+          previousManifestState: manifest.state,
+          previousDerivedState: "owned-stop",
+        }),
+        claimAlreadyHeld: Boolean(recoveryClaim),
       });
-      const retention = await applyBetaSlotRetention({
-        slotId: betaSlot.assignedSlotId,
+      manifest = updateManifest(manifest, {
+        state: "stopped",
+        poolRecovery: finalized.receipt,
+        failure: null,
       });
-      const cleanupSummary = { ...reset, retention };
-      await recordBetaSlotRelease({
-        slotId: betaSlot.assignedSlotId,
-        revision: manifest.source.revision,
-        cleanupSummary,
-      });
-      return cleanupSummary;
+      return finalized.cleanupSummary;
     };
     const ensureFixtureCleanup = async () => {
       if (
@@ -190,6 +217,7 @@ export async function runStop(options, sourceRoot, helpers) {
             },
           );
         }
+        manifest = updateManifest(manifest, { services: cleanup.services });
         const betaCleanup = await finalizeBetaSlot();
         const fixtureCleanup =
           manifest.fixtureCleanup ??
@@ -201,13 +229,6 @@ export async function runStop(options, sourceRoot, helpers) {
           failure: null,
         });
         await writeManifest(manifest);
-        if (betaSlot) {
-          await releaseBetaSlotLease({
-            slotId: betaSlot.assignedSlotId,
-            ownerSessionId: manifest.devSessionId,
-            leaseNonce: betaSlot.leaseNonce,
-          });
-        }
         printResult(
           {
             ...publicManifest(manifest),
@@ -216,8 +237,13 @@ export async function runStop(options, sourceRoot, helpers) {
           options.json,
         );
       } catch (error) {
+        const finalizationPending =
+          error instanceof DevSessionError && error.details?.leaseReleased;
         manifest = updateManifest(manifest, {
-          state: "stale",
+          state: finalizationPending ? "stopping" : "stale",
+          ...(finalizationPending && error.details?.receipt
+            ? { poolRecovery: error.details.receipt }
+            : {}),
           failure: {
             message: error instanceof Error ? error.message : String(error),
             exitCode: error instanceof DevSessionError ? error.exitCode : 1,
@@ -267,11 +293,18 @@ export async function runStop(options, sourceRoot, helpers) {
     manifest = updateManifest(manifest, { state: "stopping" });
     await writeManifest(manifest);
     try {
-      await stopSessionServices(manifest.services, { identityVerified: true });
+      await stopSessionServices(manifest.services, {
+        identityVerified: true,
+      });
       await finalizeBetaSlot();
     } catch (error) {
+      const finalizationPending =
+        error instanceof DevSessionError && error.details?.leaseReleased;
       manifest = updateManifest(manifest, {
-        state: "stale",
+        state: finalizationPending ? "stopping" : "stale",
+        ...(finalizationPending && error.details?.receipt
+          ? { poolRecovery: error.details.receipt }
+          : {}),
         failure: {
           message: error instanceof Error ? error.message : String(error),
           exitCode: error instanceof DevSessionError ? error.exitCode : 1,
@@ -282,13 +315,10 @@ export async function runStop(options, sourceRoot, helpers) {
     }
     manifest = updateManifest(manifest, { state: "stopped", failure: null });
     await writeManifest(manifest);
-    if (betaSlot) {
-      await releaseBetaSlotLease({
-        slotId: betaSlot.assignedSlotId,
-        ownerSessionId: manifest.devSessionId,
-        leaseNonce: betaSlot.leaseNonce,
-      });
-    }
     printResult(publicManifest(manifest), options.json);
+  }).finally(async () => {
+    if (recoveryClaim) {
+      await releaseBetaSlotRecoveryClaim(recoveryClaim, poolPaths);
+    }
   });
 }

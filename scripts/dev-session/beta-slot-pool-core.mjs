@@ -51,7 +51,7 @@ export function resolveBetaPoolPaths(homeDir = os.homedir()) {
   };
 }
 
-function sameFileIdentity(left, right) {
+export function sameFileIdentity(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
 }
 
@@ -261,7 +261,7 @@ export async function releaseBetaSlotRecoveryClaim(recoveryClaim, paths) {
   await fs.rm(releasedPath, { recursive: true, force: true });
 }
 
-function validateLease(value, slotId) {
+export function validateBetaSlotLease(value, slotId) {
   const valid =
     value?.schemaVersion === LEASE_SCHEMA_VERSION &&
     value.slotId === slotId &&
@@ -290,7 +290,7 @@ export async function inspectSlot(slotId, paths) {
   const leasePath = path.join(paths.leasesDir, `${slotId}.lock`);
   try {
     const { value } = await readRegularJson(leasePath, paths.poolRoot);
-    const lease = validateLease(value, slotId);
+    const lease = validateBetaSlotLease(value, slotId);
     return {
       slotId,
       state: "occupied",
@@ -336,7 +336,7 @@ async function readMetadata(slotId, paths) {
   }
 }
 
-async function inspectPoolRootSafety(paths) {
+export async function inspectBetaPoolRootSafety(paths) {
   for (const directory of [paths.betaRoot, paths.poolRoot, paths.leasesDir]) {
     const stats = await fs.lstat(directory).catch((error) => {
       if (error?.code === "ENOENT") {
@@ -353,7 +353,7 @@ async function inspectPoolRootSafety(paths) {
 
 export async function inspectBetaSlotCapacity({ homeDir = os.homedir() } = {}) {
   const paths = resolveBetaPoolPaths(homeDir);
-  const rootFailure = await inspectPoolRootSafety(paths);
+  const rootFailure = await inspectBetaPoolRootSafety(paths);
   const slots = rootFailure
     ? BETA_SLOT_IDS.map((slotId) => ({
         slotId,
@@ -547,7 +547,7 @@ export async function assertBetaSlotLease({
       reason: error instanceof Error ? error.message : String(error),
     });
   }
-  const lease = validateLease(read.value, slotId);
+  const lease = validateBetaSlotLease(read.value, slotId);
   if (
     lease.ownerSessionId !== ownerSessionId ||
     lease.leaseNonce !== leaseNonce
