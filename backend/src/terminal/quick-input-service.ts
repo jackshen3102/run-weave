@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { CreateTerminalQuickInputRequest, TerminalQuickInputItem, TerminalQuickInputListKind, TerminalQuickInputMode, TerminalQuickInputSource, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { logger } from "../logging";
 import type {
   PersistedTerminalQuickInputRecord,
@@ -69,7 +70,9 @@ export class TerminalQuickInputService {
     await this.pendingMutation;
     const kind = params.kind ?? "all";
     const limit = clampLimit(params.limit);
-    const projectId = normalizeNullableText(params.projectId);
+    const projectId = normalizeProjectScopeProjectId(
+      normalizeNullableText(params.projectId),
+    );
     const query = params.q?.trim().toLowerCase() ?? "";
     const items = (await this.store.list())
       .filter((item) => item.hiddenAt == null)
@@ -77,9 +80,10 @@ export class TerminalQuickInputService {
         if (projectId === null) {
           return true;
         }
-        return (
-          (item.projectId ?? null) === null || item.projectId === projectId
+        const itemProjectId = normalizeProjectScopeProjectId(
+          item.projectId ?? null,
         );
+        return itemProjectId === null || itemProjectId === projectId;
       })
       .filter((item) => {
         if (kind === "pinned") {
@@ -116,6 +120,7 @@ export class TerminalQuickInputService {
         result = {
           ...existing,
           title: normalized.title,
+          projectId: normalized.projectId,
           terminalSessionId: normalized.terminalSessionId,
           cwd: normalized.cwd,
           pinned: true,
@@ -159,6 +164,7 @@ export class TerminalQuickInputService {
       const next: TerminalQuickInputItem = {
         ...item,
         title: patch.title !== undefined ? patch.title.trim() : item.title,
+        projectId: normalizeProjectScopeProjectId(item.projectId ?? null),
         pinned: patch.pinned !== undefined ? patch.pinned : item.pinned,
         updatedAt: new Date().toISOString(),
       };
@@ -222,6 +228,7 @@ export class TerminalQuickInputService {
       if (existing) {
         result = {
           ...existing,
+          projectId: normalized.projectId,
           terminalSessionId: normalized.terminalSessionId,
           cwd: normalized.cwd,
           source: input.source ?? existing.source,
@@ -265,6 +272,7 @@ export class TerminalQuickInputService {
       const now = new Date().toISOString();
       const next: TerminalQuickInputItem = {
         ...item,
+        projectId: normalizeProjectScopeProjectId(item.projectId ?? null),
         lastUsedAt: now,
         updatedAt: now,
         useCount: item.useCount + 1,
@@ -305,7 +313,9 @@ function normalizePersistableInput(
     title: input.title.trim() || buildTitle(input.data),
     data: input.data,
     mode: input.mode,
-    projectId: normalizeNullableText(input.projectId),
+    projectId: normalizeProjectScopeProjectId(
+      normalizeNullableText(input.projectId),
+    ),
     terminalSessionId: normalizeNullableText(input.terminalSessionId),
     cwd: normalizeNullableText(input.cwd),
   };
@@ -314,6 +324,13 @@ function normalizePersistableInput(
 function normalizeNullableText(value: string | null | undefined): string | null {
   const text = value?.trim();
   return text ? text : null;
+}
+
+function normalizeProjectScopeProjectId(projectId: string | null): string | null {
+  if (!projectId) {
+    return null;
+  }
+  return resolveTerminalParentProjectId(projectId);
 }
 
 function buildTitle(data: string): string {
@@ -334,7 +351,8 @@ function findDuplicate(
       (item) =>
         item.data === input.data &&
         item.mode === input.mode &&
-        (item.projectId ?? null) === input.projectId,
+        normalizeProjectScopeProjectId(item.projectId ?? null) ===
+          input.projectId,
     ) ?? null
   );
 }
