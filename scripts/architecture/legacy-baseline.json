@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": {
+    "commit": "2f61d63",
+    "generatedAt": "2026-07-19T10:58:45.761Z"
+  },
+  "fileSize": {
+    "scripts/dev-session/beta-slot-pool-storage.mjs": 642
+  },
+  "runtimeCycles": [],
+  "typeOnlyCycles": [],
+  "forbiddenImports": [],
+  "sharedRootImports": []
+}

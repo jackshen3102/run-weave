@@ -112,18 +112,22 @@ async function stopRecordedDedicatedServices(manifest, lease, homeDir) {
   }
   const controlScript = path.join(sourceRoot, "scripts", "runweave-beta.mjs");
   if (await fs.lstat(controlScript).catch(() => null)) {
-    await execFileAsync(
-      process.execPath,
-      [
-        controlScript,
-        "stop",
-        "--instance",
-        lease.slotId,
-        "--dev-session",
-        lease.ownerSessionId,
-      ],
-      { cwd: sourceRoot, encoding: "utf8", timeout: 60_000 },
-    );
+    try {
+      await execFileAsync(
+        process.execPath,
+        [
+          controlScript,
+          "stop",
+          "--instance",
+          lease.slotId,
+          "--dev-session",
+          lease.ownerSessionId,
+        ],
+        { cwd: sourceRoot, encoding: "utf8", timeout: 60_000 },
+      );
+    } catch {
+      // control script stop failed; fall through to direct process kill
+    }
   }
   for (const [name, service] of dedicatedServices) {
     if (isPidLive(service.process?.pid)) {

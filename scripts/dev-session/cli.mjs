@@ -276,7 +276,7 @@ async function runStart(options, sourceRoot) {
       poolRecovery.orderingReason = result.orderingReason;
     }
   };
-  if (plan.profile === "beta") {
+  if (plan.profile === "beta" && !plan.targetEnvironment.betaSlot.requestedSlotId) {
     const hygiene = await runBetaPoolJanitor({
       initiatingSessionId: sessionId,
     });
