@@ -312,6 +312,48 @@ export async function applyBetaSlotRetention({
     path.join(homeDir, ".runweave"),
     path.join(targets.appServerHome, "runtime"),
   );
+
+  const pendingPath = path.join(
+    targets.instanceRoot,
+    "diagnostics",
+    "pending.json",
+  );
+  let pending = null;
+  try {
+    const raw = await fs.readFile(pendingPath, "utf8");
+    pending = JSON.parse(raw);
+  } catch {
+    // pending.json is absent or corrupt — nothing to consume
+  }
+  if (pending?.baseline?.app?.backupPath) {
+    const rollbackStats = await fs
+      .lstat(pending.baseline.app.backupPath)
+      .catch(() => null);
+    if (rollbackStats?.isDirectory()) {
+      const existingState = await fs
+        .readFile(targets.statePath, "utf8")
+        .then((raw) => JSON.parse(raw))
+        .catch(() => null);
+      const mode = existingState?.mode ?? "app";
+      const baseline = { ...pending.baseline };
+      if (mode !== "app") {
+        baseline.app.backupPath = baseline.priorAppBackupPath ?? null;
+      }
+      await atomicWriteJson(
+        targets.statePath,
+        {
+          ...existingState,
+          channel: "beta",
+          previous: baseline,
+          logPath: pending.logPath ?? null,
+          lastFailure: null,
+        },
+        targets.instanceRoot,
+      );
+    }
+    await fs.rm(pendingPath, { force: true });
+  }
+
   const stateStats = await fs.lstat(targets.statePath).catch(() => null);
   let state = null;
   if (stateStats) {
