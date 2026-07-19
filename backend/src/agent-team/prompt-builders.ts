@@ -28,8 +28,9 @@ export function buildWorkerStartupPrompt(params: {
   worker: AgentTeamWorker;
   acceptance: AgentTeamAcceptanceCase[];
   outboxPath?: string | null;
+  evolutionContext?: string | null;
 }): string {
-  const { run, worker, acceptance, outboxPath } = params;
+  const { run, worker, acceptance, outboxPath, evolutionContext } = params;
   const lines = [
     `你是本 run 的 worker：${ROLE_LABEL[worker.role] ?? worker.role}。`,
     "",
@@ -84,6 +85,14 @@ export function buildWorkerStartupPrompt(params: {
         : "把审查门禁结果写进 outbox 的 acceptanceResults。优先使用 Code Review/代码审查相关 caseId；如果没有，使用最相关的 caseId。",
     );
     lines.push(...formatReviewTargetInstructions(run));
+  }
+  if (evolutionContext) {
+    lines.push(
+      "",
+      evolutionContext,
+      "",
+      '- 若使用了 Evolution Context，outbox 顶层必须填写 evolutionFeedback: { disposition: "adopted"|"ignored"|"conflicted", assetRevisionIds: string[], summary: string }；只填写实际暴露的 revision，反馈仅作观察，不单独决定效果。',
+    );
   }
   lines.push(
     "",

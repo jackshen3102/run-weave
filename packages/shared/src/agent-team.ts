@@ -440,6 +440,12 @@ export interface AgentTeamOutboxRecommendation {
   summary: string;
 }
 
+export interface AgentTeamEvolutionFeedback {
+  disposition: "adopted" | "ignored" | "conflicted";
+  assetRevisionIds: string[];
+  summary: string;
+}
+
 export interface AgentTeamWorkerOutbox {
   schemaVersion?: 1;
   /** Echoes the backend-owned active dispatch; absent only for legacy prompts. */
@@ -461,6 +467,8 @@ export interface AgentTeamWorkerOutbox {
   resolvedFindings?: AgentTeamOutboxFinding[];
   remainingFindings?: AgentTeamOutboxFinding[];
   recommendations?: AgentTeamOutboxRecommendation[];
+  /** Advisory Evolution Context observation; never decides promotion alone. */
+  evolutionFeedback?: AgentTeamEvolutionFeedback | null;
   /** Code-worker evidence handoff for backend-owned repair keys. */
   fixVerifications?: AgentTeamFixVerification[];
   acceptanceResults?: Array<{

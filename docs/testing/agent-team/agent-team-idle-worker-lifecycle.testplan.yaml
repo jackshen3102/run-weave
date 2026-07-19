@@ -1,0 +1,40 @@
+version: 1
+name: Agent Team idle worker 生命周期恢复
+description: >
+  验证 Agent Team worker 的可信 Stop 在 current thread metadata 已清理时仍按精确 Pane 与 last-thread identity 收敛为 idle，且错误或迟到身份不能污染新 thread，最终允许原 Pane 接收 fresh bounce dispatch。
+
+cases:
+  - id: ATIL-001
+    name: 匹配 last-thread 的 Stop 将 worker 收敛为 idle
+    required: true
+    description: >
+      验证 running worker Pane 已失去 current thread metadata、但保留同 provider 的 last-thread identity 时，匹配的 Stop 被记录并将 Backend、持久状态与 UI 一致收敛为 agent_idle。
+    preconditions:
+      - 已建立包含 code worker Pane 的真实 Agent Team fixture，Pane 已记录唯一的 Codex lastThreadId 和 lastThreadProvider。
+      - fixture 可令 Pane 在 Codex 完成本轮后出现 activeCommand 暂时为空、current thread metadata 为空且 terminalState 尚为 agent_starting 的状态。
+    steps:
+      - 向原 terminalSessionId、panelId、tmuxPaneId 发送携带匹配 threadId 和 provider 的 Stop；确认 Hook 返回 recorded，Pane 状态变为 agent_idle，lastThreadStatus 与更新时间对应本次 Stop，current thread metadata 保持为空。
+      - 使用 `$toolkit:playwright-cli` 附着该 Dev Session 的官方页面 surface；确认原 code worker Pane 显示 idle，页面状态与 Backend panel API、持久 terminal store 一致。
+
+  - id: ATIL-002
+    name: 错误或迟到 Stop 不能覆盖 worker 身份
+    required: true
+    description: >
+      验证 last-thread Stop 的恢复能力仅接受同 Pane、同 provider、同 thread，且存在另一 current thread 时旧 Stop 不得回退新状态。
+    preconditions:
+      - 每个等价分支使用独立 Agent Team fixture，分别可构造错误 thread、错误 provider、跨 Pane 和已进入新 current thread 的旧 Stop。
+    steps:
+      - 分别发送错误 thread、错误 provider、跨 panelId/tmuxPaneId 的 Stop；确认全部 ignored，Pane、Session、operation generation、last-thread metadata 和事件流无变化。
+      - 建立新的 current thread 后发送匹配旧 lastThreadId 的 Stop；确认旧事件不能把新 thread 改为 idle、不能清除新 current identity，也不能归属到其它 Pane。
+
+  - id: ATIL-003
+    name: idle worker 在原 Pane 接收 fresh bounce dispatch
+    required: true
+    description: >
+      验证 code worker 的可信 Stop 收敛为 idle 后，review 失败可通过现有安全门禁在原 Pane 和原 Codex thread 上建立 fresh code dispatch，不新开 thread、不绕过 repair/outbox 合同。
+    preconditions:
+      - 已建立 code、code_review 与 behavior_verify worker 的真实 Agent Team fixture，code 首轮完成并由 code_review 产生一条 blocking finding。
+      - code worker 的匹配 Stop 已按 ATIL-001 收敛为 agent_idle，且 run 尚未人工写入或伪造任何 dispatch/outbox。
+    steps:
+      - 让 Agent Team 将 review finding bounce 回 code；确认创建新的 code dispatchId，repair attempt 与 finding 绑定，并把 prompt 投递到原 code panelId/tmuxPaneId。
+      - 读取原 Pane history、panel metadata 和 run JSON；确认 Codex thread identity 未被替换、没有额外 Pane 或新 thread，activeWorkerDispatch 与后续 pane-scoped outbox 使用同一 fresh dispatchId。

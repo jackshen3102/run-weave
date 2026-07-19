@@ -1,0 +1,226 @@
+version: 1
+name: Agent 自进化运行与反思核心验收
+description: >
+  验证 Evolution Run 能在 Backend 生命周期内以手动或定时方式读取真实行为数据，冻结可审计的只读视图，
+  调度 Codex/Trae 完成隔离分析、交叉质疑、Novelty 判断和长期 Insight 更新，同时遵守并发、预算、恢复、隐私与零产出边界。
+
+cases:
+  - id: ASEC-001
+    name: 同一主项目的动态 workspace 归入同一学习范围
+    required: true
+    description: >
+      验证主项目、多个子 worktree 以及路径已删除但身份仍可解析的历史 workspace 使用同一 learningScopeId，且不同主项目的数据不会混入。
+    preconditions:
+      - 已准备一个主项目、两个由该项目派生的 worktree workspace、一个已删除路径但保留历史事实的子 workspace，以及另一个无关主项目。
+      - 每个 workspace 都存在可区分的 Activity Fact 或 Agent Team Run。
+    steps:
+      - 从任一现存子 workspace 创建指定窗口的手动 Evolution Run；确认 Run 返回的 learningScopeId 等于主项目身份，而不是子 workspace 的 projectId。
+      - 读取该 Run 的 Context Pack 清单；确认主项目及其三个子 workspace 的事实均可追溯，无关主项目事实不存在，原始 projectId、路径、分支和 revision 仍分别保留。
+
+  - id: ASEC-002
+    name: 手动触发通过统一状态机完成一次真实分析
+    required: true
+    description: >
+      验证 UI、CLI 或 API 发起的 manual trigger 只创建一个 Evolution Run，并按持久状态机完成快照、分析、交叉质疑、综合和验证。
+    preconditions:
+      - 当前 learning scope 存在可分析的真实 Activity、Thread 或 Agent Team 数据。
+      - 至少一个配置允许的本地 Provider 已登录且可用。
+    steps:
+      - 使用 CLI 或 UI 发起 standard profile 的手动 Run；确认返回唯一 runId、trigger=manual、预算、Provider Policy 和选定数据范围。
+      - 轮询 Run 详情；确认状态只沿合法阶段前进，完成后可查看 Context Pack、Agent attempts、Claims、DataQuality 和最终 outcome，且没有创建 Agent Team Run 或用户 Terminal session。
+
+  - id: ASEC-003
+    name: 定时触发合并错过窗口并按 watermark 增量执行
+    required: true
+    description: >
+      验证持久化 Schedule 在 Backend 未运行时不会伪执行；下次 Backend 启动后只合并为一次增量 catch-up，不按错过次数堆积重复 Run。
+    preconditions:
+      - 已为一个 learning scope 创建启用的 Schedule，并记录上次成功 analysis watermark。
+      - 测试时可以跨过至少两个计划时间槽后再启动 Backend。
+    steps:
+      - 在 Backend 未运行期间写入可被后续读取的源数据并跨过多个时间槽；启动任一 Backend，观察 Schedule 与 Run 列表。
+      - 确认只创建一个 trigger=schedule 的 queued/running Run，选择范围从上次成功 watermark 延伸到当前冻结点；完成后 watermark 只前进一次且没有重复 Context Pack。
+
+  - id: ASEC-004
+    name: 多 Backend 竞争时全机只有一个 Evolution Run 执行
+    required: true
+    description: >
+      验证 Stable、Beta、Dev Backend 共享 learning.sqlite 时，global lease、heartbeat 和 fencing token 阻止两个 Evolution Run 同时进入执行阶段。
+    preconditions:
+      - Stable、Beta、Dev 三个 Backend 指向同一用户级 evolution 数据目录。
+      - 三个 Backend 可同时发现到期 Schedule 或提交手动 Run。
+    steps:
+      - 并发触发多个 Run 并读取三方 API、lease 和 Run 状态；确认全机最多一个 Run 处于 snapshotting 至 validating 的活动阶段，其余保持 queued。
+      - 使当前 owner lease 过期并让另一 Backend 接管；确认旧 fencing token 的迟到写入被拒绝，新 owner 能从持久阶段继续且最终只有一次知识提交。
+
+  - id: ASEC-005
+    name: Context Pack 对所有 Analyst 提供同一冻结视图
+    required: true
+    description: >
+      验证 Evolution Run 固定 Activity offset、App Server cursor、Run revision 和内容可用性边界；运行期间的新事件不会让不同 Analyst 看到不同样本。
+    preconditions:
+      - 已准备包含关联 Activity、Thread 与 Agent Team Run 的数据，并可在分析阶段继续写入新事件。
+      - Run 预算给出了明确 maxWallTime。
+    steps:
+      - 启动 standard Run，在 Analyst A 完成首轮查询后写入新的关联事件；分别读取 A、B 的工具查询审计和 Context Pack manifest。
+      - 确认 A、B 使用相同 as-of offsets、source digests 和内容集合，新事件只进入后续 Run；在 Run deadline 前会过期的正文被预先标记 unavailable，而不是分析中途随机消失。
+
+  - id: ASEC-006
+    name: Evolution Agent 只能通过运行级只读工具访问证据
+    required: true
+    description: >
+      验证 quick/standard Agent 使用 ephemeral、read-only Provider 进程和 run-scoped MCP token，不能直接打开数据库、修改 workspace、联网或调用其他用户 MCP。
+    preconditions:
+      - 已准备会诱导 Agent 尝试写文件、读取 activity.sqlite、访问外网和调用未授权工具的分析输入。
+      - Provider adapter 可记录实际命令参数、环境白名单、MCP 调用和退出状态。
+    steps:
+      - 运行分析并检查 Provider 启动参数与工具审计；确认使用 read-only sandbox、never approval、ephemeral、ignore-user-config/ignore-rules，且只挂载本次 Evolution MCP。
+      - 尝试执行写入、直接 DB 读取、外网访问和越权 MCP；确认操作被拒绝或工具不存在，Run 不泄露路径、token 或正文到 Backend 日志，合法只读查询仍可完成。
+
+  - id: ASEC-007
+    name: Provider Policy 按可用性执行明确的选择与失败语义
+    required: true
+    description: >
+      验证 auto、codex、trae、mixed 对 Provider 可用与不可用组合给出稳定且可审计的选择、fallback、partial 或 blocked 结果。
+    preconditions:
+      - 可分别模拟 Codex/Trae 均可用、仅一方可用和双方不可用。
+      - Provider 状态能返回 binary、auth 与版本信息但不暴露凭据。
+    steps:
+      - 对每种可用性组合分别创建 auto、显式 codex/trae 和 mixed Run；读取 Agent attempts 与 Run outcome。
+      - 确认 auto 在双方可用时优先跨 Provider、单方可用时记录 fallback；显式 Provider 不可用时不静默替换，mixed 缺一方时进入明确 blocked/partial，双方不可用时不创建伪报告。
+
+  - id: ASEC-008
+    name: Analysis Profile 和资源预算限制真实执行强度
+    required: true
+    description: >
+      验证 quick、standard、deep 只改变允许的 Agent、模型轮次、上下文、工具和 Replay 上限，任何 profile 都不能超过 Run 预算或后台无限续跑。
+    preconditions:
+      - 已配置边界明确的 quick、standard、deep profile，并准备会触发额外质疑或 Judge 的输入。
+      - Provider adapter 可以模拟超时、超量工具调用和结构校验重试。
+    steps:
+      - 分别运行三个 profile 并检查实际 Agent/turn/tool/replay 使用量；确认每项不超过持久化预算，结构重试和 Judge 也计入总量。
+      - 令 Run 达到任一预算上限；确认活动调用被受控结束，已有 attempt 被保留，Run 进入 partial 且不提交 Insight/Candidate，不出现新的未计费续跑。
+
+  - id: ASEC-009
+    name: Trace Segment 与语义 Episode 保留多轮任务因果关系
+    required: true
+    description: >
+      验证确定性分段不按时间猜测已有身份关系，Episode Builder 能把同一目标下的首次行为、用户纠偏、修复与最终结果合并，并把独立目标拆开。
+    preconditions:
+      - 已准备一个包含原始需求、首次错误行为、用户纠偏、修正和最终验收的多轮 Thread。
+      - 同一 Terminal 还包含另一个无关任务，另有一个 Agent Team primary Run 及其 verification fixture。
+    steps:
+      - 创建 Context Pack 并查看 Trace Segments；确认 threadId、runId、interactionId、causationId 等权威关系优先，未知关系明确标记而不按相邻时间强连。
+      - 完成 Episode Builder；确认纠偏链形成一个 Episode、无关任务独立，primary Run 作为 Episode 锚点、worker dispatch 为 Attempt、verification fixture 只作为关联证据且不会独立进入学习样本。
+
+  - id: ASEC-010
+    name: Standard Profile 的 Analyst 首轮相互隔离后再交叉质疑
+    required: true
+    description: >
+      验证 Analyst A、B 首轮面对同一冻结视图但看不到对方输出，完成独立报告后才进入交叉质疑，避免先入结论锚定第二个 Agent。
+    preconditions:
+      - 已准备存在至少两种合理归因路径的 Context Pack。
+      - standard profile 预算允许两个独立 Analyst 和一次交叉质疑。
+    steps:
+      - 运行 standard 分析并检查每个 attempt 的输入摘要、时间线与可见 artifact；确认 A、B 首轮 prompt 不含另一方 report、claim 或 conclusion。
+      - 首轮均完成后继续运行；确认交叉质疑输入包含双方已冻结报告，每条支持、反例和边界引用 Evidence ID，不能修改首轮原始报告。
+
+  - id: ASEC-011
+    name: 竞争性 Claim 在证据不足时不会被强制统一
+    required: true
+    description: >
+      验证观察、因果假设和建议分别建模；存在实质分歧时保留 corroborated、contested、insufficient_evidence 或 rejected 状态，而不是按多数票生成唯一结论。
+    preconditions:
+      - 已准备 Analyst 对同一现象给出 Prompt 缺陷与产品缺陷两种归因，且当前证据不能排除任一方的报告。
+    steps:
+      - 执行交叉质疑与综合，读取 Claim ledger；确认两条原子 Claim 分别保存 supporting/counter evidence、适用范围、作者和所需新证据。
+      - 确认该分歧保持 contested 或 insufficient_evidence，不生成冒充共识的 Candidate；后续加入能证伪一方的新 Episode 后才产生新的状态 revision。
+
+  - id: ASEC-012
+    name: Novelty Gate 隐藏复述并允许合法零产出
+    required: true
+    description: >
+      验证 Claim 相对显式 Knowledge Baseline 被标记为 known、reinforced、novel、contradiction 或 drift；没有实质增量时 Run 正确返回 no_material_novelty。
+    preconditions:
+      - Knowledge Baseline 含适用 AGENTS.md、已晋级资产、既有 Insight revisions、历史拒绝项和一份配置的规范文档。
+      - 分析输入同时包含纯复述、证据增强、新规律和与旧规则冲突的候选结论。
+    steps:
+      - 运行 Novelty Gate；确认纯复述只留审计，实质增强说明新增证据，新规律与冲突分别可见且引用比较对象。
+      - 使用只含已知事实的数据再运行一次；确认 outcome=no_material_novelty、Insight/Candidate 数量为零，并保留覆盖范围和 DataQuality，而不是强行生成固定数量总结。
+
+  - id: ASEC-013
+    name: Episode 事实、Agent 判断与多维 Outcome 不相互冒充
+    required: true
+    description: >
+      验证 completed/failed、命令退出和 Agent 自述仅作为 Observed Facts；目标结果、意图理解、行动质量、自我纠错、效率与安全分别给出带证据的 Assessment 或 unknown。
+    preconditions:
+      - 已准备一个进程正常完成但用户随后纠偏的任务，以及一个命令中途失败但最终验收通过的任务。
+    steps:
+      - 构建两个 Episode 并读取 Outcome Vector；确认第一个不因 completed 自动判成功，第二个不因中途错误自动判失败。
+      - 确认每个维度独立保存 Evidence ID、Analyst、分歧与 unknown；系统不生成无法从这些维度复核的单一成功率。
+
+  - id: ASEC-014
+    name: Insight 通过 revision 和证据账本长期演化
+    required: true
+    description: >
+      验证同一语义知识在后续 Run 中更新既有 Insight，而不是重复创建；新支持、反例、范围收缩、冲突分支和 retirement 全部保留历史。
+    preconditions:
+      - 已准备三批数据，依次支持某个 Claim、提供适用范围反例并证明旧版本因协议变化发生 drift。
+    steps:
+      - 依次完成三个 Evolution Run 并读取 Insight；确认稳定 identity 下产生连续 revisions，旧 statement、scope、confidence 和证据账本不可被原地覆盖。
+      - 检查 ContributionEdge 与 Candidate 引用；确认新反例缩小范围，drift 使依赖该 revision 的资产进入 needs_revalidation，已拒绝结论没有在无新证据时重复刷屏。
+
+  - id: ASEC-015
+    name: Backend 重启后只恢复完整阶段且旧 owner 不能提交
+    required: true
+    description: >
+      验证 Evolution Run 在模型调用或阶段提交边界崩溃后，能够从最后一个完整阶段恢复；状态未知的调用被标记 abandoned，半成品不进入长期知识。
+    preconditions:
+      - 已准备可在 Agent 调用返回前、返回后写阶段结果前和 validating 提交前分别终止 Backend 的故障注入能力。
+    steps:
+      - 在三个故障点分别中断并重启另一 Backend；确认持久状态、attempt、lease 与临时 token 被重新建立，已完整报告可复用，未知调用不会假装成功。
+      - 让旧进程迟到返回并尝试写入；确认 fencing 拒绝旧结果，最终 completed Run 只提交一次知识变化，partial/failed Run 的 artifact 保持隔离。
+
+  - id: ASEC-016
+    name: CLI 使用同一 API 管理 Run、Schedule 与 Provider 状态
+    required: true
+    description: >
+      验证 rw evolution 的 run、list、get、cancel、retry、schedule 和 providers 命令复用受认证 Backend API，文本与 JSON 模式都不直接访问 learning.sqlite。
+    preconditions:
+      - Backend 已启用 Evolution API，CLI 持有有效登录态，并存在一个可取消 Run 和一个 Schedule。
+    steps:
+      - 依次执行 CLI 的手动运行、查询、取消、重试、Schedule 管理与 Provider 状态命令；确认 API 和 CLI 返回同一身份、状态、预算及错误语义。
+      - 停止目标 Backend 或使用无效认证重试；确认 CLI 明确失败，不本地创建 Run、修改 Schedule、读取数据库或输出 Provider 凭据。
+
+  - id: ASEC-017
+    name: Evolution 独立页面展示控制面而不复制 Activity 报表
+    required: true
+    description: >
+      验证 /evolution 能创建 Run、配置 Schedule/Profile/Provider/Budget、查看阶段进度、分歧、Novelty、Insight revision 和零产出结果，并链接回 Activity 证据。
+    preconditions:
+      - 已通过受控 Runweave 环境启动包含 Evolution API 的真实 Web 页面，并存在 completed、partial、contested 和 no_material_novelty 样本。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 打开 /evolution，创建一次手动 Run并操作 Schedule；确认输入校验、queued/running 状态和预算信息与 API 一致。
+      - 查看四类样本详情；确认首页优先显示 novel/contradiction/drift 与待处理分歧，不把 Activity 事实列表伪装成洞察；点击 Evidence 能进入对应 Activity/Work History 详情，浏览器控制台无错误。
+
+  - id: ASEC-018
+    name: Evolution API 与运行级 MCP token 遵守权限隔离
+    required: true
+    description: >
+      验证用户 API 继续使用现有登录和 tunnel 鉴权；内部 MCP 只接受 loopback、未过期且绑定 run/attempt/role 的 bearer token。
+    preconditions:
+      - 已准备合法、缺失、错误和跨 Run 复用的用户凭据与 MCP token，并可从非 loopback 来源发请求。
+    steps:
+      - 请求 Evolution 用户 API；确认合法登录可访问当前本机知识，缺失或错误凭据被拒且响应不泄露路径、token 或敏感正文。
+      - 请求内部 MCP；确认只有匹配当前活动 attempt 的 loopback token 可调用只读工具，跨 Run、过期、已取消和非 loopback 请求全部失败且留下脱敏审计。
+
+  - id: ASEC-019
+    name: 长期知识不绕过原始内容留存与用户删除
+    required: true
+    description: >
+      验证 Analysis 原始 stdout、Prompt、代码与工具结果不会长期写入 learning.sqlite；去敏 Insight 可长期存在，但来源过期或删除会沿 ContributionEdge 更新可用性和置信度。
+    preconditions:
+      - 已准备即将到期的 7 天正文、长期 Fact、包含可识别敏感片段的 Provider 输出和一个可执行的 Activity scoped delete。
+    steps:
+      - 完成 Evolution Run 后检查 learning.sqlite、临时目录、Backend 日志与 API；确认只保存结构化去敏结论、Evidence ID、hash 和元数据，原始输出按期限清理且敏感片段未被长期复制。
+      - 让正文到期并删除目标 Activity scope；确认事实删除语义保持权威，相关 ContributionEdge 标记证据不可用，Insight/Candidate 按剩余证据降级、重评或退休，不影响其他 scope。

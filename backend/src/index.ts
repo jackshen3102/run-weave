@@ -32,6 +32,7 @@ import { createPrototypePreviewRouter } from "./routes/prototype-preview";
 import { createVoiceRouter } from "./routes/voice";
 import { createWorkHistoryRouter } from "./routes/work-history";
 import { createAttentionRouter } from "./routes/attention";
+import { createEvolutionActivationRouter } from "./routes/evolution-activation";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import {
@@ -227,6 +228,11 @@ function createHttpApp(
     createAgentTeamRouter(services.agentTeamService),
   );
   app.use(
+    "/api/evolution",
+    requireAuth,
+    createEvolutionActivationRouter(services.evolutionActivationStore),
+  );
+  app.use(
     "/api/terminal",
     requireAuth,
     createTerminalStateRouter({
@@ -334,6 +340,7 @@ function attachLifecycleHandlers(
         clearInterval(services.activityMaintenanceTimer);
       }
       await services.activityStore?.close();
+      await services.evolutionActivationStore.close();
       codexAppServerClient.shutdown();
       await services.authStore.dispose();
       await profileLock.release();

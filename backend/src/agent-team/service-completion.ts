@@ -20,6 +20,7 @@ import {
   logStaleCompletion,
 } from "./service-completion-logging";
 import { AgentTeamCompletionRecoveryService } from "./service-completion-recovery";
+import { recordEvolutionCodeObservation } from "./service-evolution-outcome";
 import type { AgentTeamCompletionSignalSource } from "./service-types";
 import {
   behaviorFailureContractErrors,
@@ -355,6 +356,12 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
             );
             return true;
           }
+          await recordEvolutionCodeObservation({
+            observer: this.evolutionOutcomeObserver,
+            run: latest,
+            dispatch,
+            outbox,
+          });
         }
         const shouldDispatchRecheck = this.hasBouncedCasesForWorker(
           latest,
@@ -546,8 +553,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           panelId: dispatch.worker.panelId,
           error,
         });
-        latestRun =
-          (await this.runStore.getRun(latestRun.runId)) ?? latestRun;
+        latestRun = (await this.runStore.getRun(latestRun.runId)) ?? latestRun;
         latestRun = await this.markRecheckDispatchFailed(
           latestRun,
           session,

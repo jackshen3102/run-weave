@@ -32,11 +32,20 @@ import { logOrphanedTmuxSessions } from "../terminal/tmux-orphan-scan";
 import { syncExistingTmuxSessionEnvironments } from "../terminal/runtime-launcher";
 import {
   resolveActivityStoragePaths,
+  resolveEvolutionStoragePaths,
   resolveStoragePaths,
 } from "../utils/path";
 import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
 import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
+import {
+  InMemoryEvolutionActivationStore,
+  type EvolutionActivationStore,
+} from "../evolution/activation-store";
+import { DefaultEvolutionMemoryProvider } from "../evolution/injection/memory-provider";
+import { EvolutionOutcomeObserver } from "../evolution/injection/outcome-observer";
+import { StructuredEvolutionMemorySelector } from "../evolution/knowledge/retrieval";
+import { SqliteEvolutionActivationStore } from "../evolution/storage/store";
 
 export interface RuntimeServices {
   activityStore: ActivityStore | null;
@@ -65,6 +74,7 @@ export interface RuntimeServices {
   tmuxService: TmuxService;
   tmuxOutputWatcher: TmuxOutputWatcher;
   appServerEventConsumer: AppServerEventConsumerHandle | null;
+  evolutionActivationStore: EvolutionActivationStore;
 }
 
 function resolveTerminalHookToken(
@@ -93,6 +103,7 @@ function resolveDefaultTmuxSocketPath(browserProfileDir: string): string {
 export async function createRuntimeServices(): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
   const activityPaths = resolveActivityStoragePaths(process.env);
+  const evolutionPaths = resolveEvolutionStoragePaths(process.env);
   let activityStore: ActivityStore | null = null;
   try {
     activityStore = await ActivityStore.create({
@@ -313,6 +324,28 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
       error,
     });
   });
+  let evolutionActivationStore: EvolutionActivationStore;
+  try {
+    evolutionActivationStore = await SqliteEvolutionActivationStore.create({
+      databasePath: evolutionPaths.learningDatabaseFile,
+      env: process.env,
+    });
+  } catch (error) {
+    logger.warn("evolution.initialize.failed", {
+      component: "evolution",
+      message:
+        "Persistent Evolution activation is unavailable; Backend continues with disabled in-memory policy",
+      error,
+    });
+    evolutionActivationStore = new InMemoryEvolutionActivationStore();
+  }
+  const evolutionMemoryProvider = new DefaultEvolutionMemoryProvider(
+    evolutionActivationStore,
+    new StructuredEvolutionMemorySelector(),
+  );
+  const evolutionOutcomeObserver = new EvolutionOutcomeObserver(
+    evolutionActivationStore,
+  );
   const agentTeamService = new AgentTeamService({
     terminalSessionManager,
     terminalEventService,
@@ -323,6 +356,8 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxOutputWatcher,
     activity: terminalActivity,
     backendInstanceId: crypto.randomUUID(),
+    evolutionMemoryProvider,
+    evolutionOutcomeObserver,
   });
   agentTeamService.initialize();
   const appServerHistoryGateway = new AppServerHistoryGateway();
@@ -365,5 +400,6 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxService,
     tmuxOutputWatcher,
     appServerEventConsumer: null,
+    evolutionActivationStore,
   };
 }

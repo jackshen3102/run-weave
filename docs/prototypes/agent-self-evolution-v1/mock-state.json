@@ -1,0 +1,451 @@
+{
+  "product": {
+    "name": "Runweave",
+    "section": "Evolution",
+    "scope": {
+      "name": "browser-viewer",
+      "workspaceCount": 4,
+      "subtitle": "主项目知识范围"
+    }
+  },
+  "providers": [
+    {
+      "id": "codex",
+      "name": "Codex",
+      "status": "available",
+      "version": "0.113.0"
+    },
+    {
+      "id": "trae",
+      "name": "Trae",
+      "status": "available",
+      "version": "2.8.1"
+    }
+  ],
+  "overview": {
+    "lastRunAt": "今天 09:42",
+    "nextRunAt": "周一 10:00",
+    "factsReviewed": 1842,
+    "newInsights": 3,
+    "contestedClaims": 1,
+    "activeMemories": 1
+  },
+  "runs": [
+    {
+      "id": "evo_019f8a",
+      "title": "跨 workspace 失败归因复盘",
+      "trigger": "手动",
+      "profile": "Standard",
+      "providerPolicy": "Auto · Codex + Trae",
+      "status": "completed",
+      "statusLabel": "已完成",
+      "createdAt": "今天 09:31",
+      "completedAt": "今天 09:42",
+      "duration": "11 分 18 秒",
+      "range": "最近 7 天 · 增量",
+      "factsReviewed": 1842,
+      "episodes": 27,
+      "claims": 8,
+      "novelClaims": 3,
+      "dataQuality": "完整",
+      "budget": {
+        "turns": "12 / 18",
+        "tools": "38 / 60",
+        "context": "428 KB / 1 MB"
+      },
+      "stages": [
+        { "id": "snapshot", "label": "冻结证据", "status": "done" },
+        { "id": "segments", "label": "构建 Episode", "status": "done" },
+        { "id": "analysis", "label": "独立分析", "status": "done" },
+        { "id": "cross", "label": "交叉质疑", "status": "done" },
+        { "id": "novelty", "label": "新颖性校验", "status": "done" },
+        { "id": "commit", "label": "提交知识", "status": "done" }
+      ],
+      "analysts": [
+        {
+          "id": "a",
+          "name": "Analyst A",
+          "provider": "Codex",
+          "status": "completed",
+          "summary": "主要问题不是 workspace 数量，而是验证动作没有绑定实际 source revision。",
+          "evidenceCount": 14
+        },
+        {
+          "id": "b",
+          "name": "Analyst B",
+          "provider": "Trae",
+          "status": "completed",
+          "summary": "重复失败集中在跨 workspace 的上下文恢复，但部分样本可能来自运行时断连。",
+          "evidenceCount": 11
+        }
+      ],
+      "crossQuestion": "双方同意 workspace 本身不是知识边界；对失败主要归因于任务上下文还是运行时断连仍有分歧。",
+      "claimIds": ["claim_scope", "claim_revision", "claim_runtime"]
+    },
+    {
+      "id": "evo_019f21",
+      "title": "Agent Team 修复回路增量分析",
+      "trigger": "计划",
+      "profile": "Standard",
+      "providerPolicy": "Mixed · Codex + Trae",
+      "status": "no_novelty",
+      "statusLabel": "无实质新知识",
+      "createdAt": "昨天 10:00",
+      "completedAt": "昨天 10:07",
+      "duration": "7 分 03 秒",
+      "range": "自上次 watermark 后",
+      "factsReviewed": 604,
+      "episodes": 9,
+      "claims": 4,
+      "novelClaims": 0,
+      "dataQuality": "完整",
+      "budget": {
+        "turns": "8 / 18",
+        "tools": "19 / 60",
+        "context": "176 KB / 1 MB"
+      },
+      "stages": [
+        { "id": "snapshot", "label": "冻结证据", "status": "done" },
+        { "id": "segments", "label": "构建 Episode", "status": "done" },
+        { "id": "analysis", "label": "独立分析", "status": "done" },
+        { "id": "cross", "label": "交叉质疑", "status": "done" },
+        { "id": "novelty", "label": "新颖性校验", "status": "done" },
+        { "id": "commit", "label": "提交知识", "status": "skipped" }
+      ],
+      "analysts": [
+        {
+          "id": "a",
+          "name": "Analyst A",
+          "provider": "Codex",
+          "status": "completed",
+          "summary": "样本只增强了既有规则，没有改变适用范围。",
+          "evidenceCount": 6
+        },
+        {
+          "id": "b",
+          "name": "Analyst B",
+          "provider": "Trae",
+          "status": "completed",
+          "summary": "没有发现足以建立新 Insight revision 的反例或漂移。",
+          "evidenceCount": 5
+        }
+      ],
+      "crossQuestion": "两份报告均判断为 reinforced，Novelty Gate 未产生新候选。",
+      "claimIds": []
+    },
+    {
+      "id": "evo_019e77",
+      "title": "验证证据完整性检查",
+      "trigger": "手动",
+      "profile": "Quick",
+      "providerPolicy": "Codex",
+      "status": "partial",
+      "statusLabel": "部分完成",
+      "createdAt": "7 月 17 日 16:28",
+      "completedAt": "7 月 17 日 16:33",
+      "duration": "5 分 10 秒",
+      "range": "指定窗口",
+      "factsReviewed": 221,
+      "episodes": 5,
+      "claims": 0,
+      "novelClaims": 0,
+      "dataQuality": "关键正文已删除",
+      "budget": {
+        "turns": "5 / 6",
+        "tools": "12 / 20",
+        "context": "81 KB / 256 KB"
+      },
+      "stages": [
+        { "id": "snapshot", "label": "冻结证据", "status": "done" },
+        { "id": "segments", "label": "构建 Episode", "status": "done" },
+        { "id": "analysis", "label": "独立分析", "status": "done" },
+        { "id": "cross", "label": "交叉质疑", "status": "skipped" },
+        { "id": "novelty", "label": "新颖性校验", "status": "blocked" },
+        { "id": "commit", "label": "提交知识", "status": "skipped" }
+      ],
+      "analysts": [
+        {
+          "id": "a",
+          "name": "Analyst A",
+          "provider": "Codex",
+          "status": "completed",
+          "summary": "关键纠偏内容不可用，无法验证因果归属。",
+          "evidenceCount": 3
+        }
+      ],
+      "crossQuestion": "Quick profile 未启用交叉质疑。",
+      "claimIds": []
+    }
+  ],
+  "claims": [
+    {
+      "id": "claim_scope",
+      "title": "workspace 生命周期不应成为知识边界",
+      "state": "corroborated",
+      "stateLabel": "已证实",
+      "novelty": "novel",
+      "noveltyLabel": "新增规律",
+      "scope": "browser-viewer 主项目 · 所有 worktree",
+      "statement": "同一主项目中的动态 workspace 共享任务目标和约束；按 workspace 分库存储会丢失跨分支纠偏经验。",
+      "support": 9,
+      "counter": 0,
+      "evidence": [
+        {
+          "id": "act_8f2",
+          "type": "Activity",
+          "label": "3 次跨 workspace 纠偏链"
+        },
+        {
+          "id": "agt_f47",
+          "type": "Agent Team",
+          "label": "同一目标的 4 个 worker attempts"
+        }
+      ]
+    },
+    {
+      "id": "claim_revision",
+      "title": "行为验收必须绑定实际 source revision",
+      "state": "corroborated",
+      "stateLabel": "已证实",
+      "novelty": "reinforced",
+      "noveltyLabel": "证据增强",
+      "scope": "Agent Team code → behavior_verify",
+      "statement": "若 behavior verifier 没有记录被验收 source revision，review pass 不能证明修复后的真实行为已通过。",
+      "support": 12,
+      "counter": 1,
+      "evidence": [
+        {
+          "id": "agt_18a",
+          "type": "Agent Team",
+          "label": "2 次旧 revision 验收"
+        },
+        { "id": "act_17c", "type": "Activity", "label": "用户后续纠偏" }
+      ]
+    },
+    {
+      "id": "claim_runtime",
+      "title": "跨 workspace 失败主要来自上下文恢复",
+      "state": "contested",
+      "stateLabel": "存在分歧",
+      "novelty": "novel",
+      "noveltyLabel": "待确认规律",
+      "scope": "Dev Session 恢复 · worktree 切换",
+      "statement": "上下文恢复缺失可能是失败主因，但当前证据无法排除 Backend 断连产生的同类表象。",
+      "support": 5,
+      "counter": 4,
+      "evidence": [
+        { "id": "term_233", "type": "Terminal", "label": "上下文恢复缺口" },
+        { "id": "act_9bd", "type": "Activity", "label": "同窗口 Backend 断连" }
+      ]
+    }
+  ],
+  "insights": [
+    {
+      "id": "ins_scope_01",
+      "title": "主项目身份是长期经验的最小稳定边界",
+      "category": "工作上下文",
+      "status": "active",
+      "statusLabel": "有效",
+      "novelty": "novel",
+      "noveltyLabel": "新增规律",
+      "revision": 3,
+      "updatedAt": "今天 09:42",
+      "summary": "workspace 可以新增、删除或改名，但由同一主项目派生的任务共享约束、失败模式和纠偏经验。",
+      "scope": "browser-viewer 主项目及其派生 workspace",
+      "exclusions": "主项目 identity 被删除并重新创建时，不自动合并旧知识。",
+      "supportingEvidence": 17,
+      "counterEvidence": 1,
+      "candidateIds": ["mem_scope_01"],
+      "revisions": [
+        {
+          "revision": 3,
+          "date": "今天",
+          "change": "加入已删除 workspace 的历史来源，结论状态保持已证实"
+        },
+        {
+          "revision": 2,
+          "date": "7 月 15 日",
+          "change": "范围从单一 worktree 扩展到父项目"
+        },
+        {
+          "revision": 1,
+          "date": "7 月 11 日",
+          "change": "首次从 6 个 Episode 建立"
+        }
+      ]
+    },
+    {
+      "id": "ins_revision_02",
+      "title": "验收结论必须携带 source revision",
+      "category": "验证可靠性",
+      "status": "active",
+      "statusLabel": "有效",
+      "novelty": "reinforced",
+      "noveltyLabel": "证据增强",
+      "revision": 5,
+      "updatedAt": "今天 09:42",
+      "summary": "没有 source revision 的 behavior pass 无法区分验证对象是修复前还是修复后代码。",
+      "scope": "Agent Team behavior verification",
+      "exclusions": "只读文档审查不要求运行时 revision。",
+      "supportingEvidence": 23,
+      "counterEvidence": 2,
+      "candidateIds": ["mem_revision_02"],
+      "revisions": [
+        {
+          "revision": 5,
+          "date": "今天",
+          "change": "新增跨 workspace 反例，规则保持不变"
+        },
+        {
+          "revision": 4,
+          "date": "7 月 16 日",
+          "change": "加入 fixture 与 primary Run 的关联限制"
+        },
+        {
+          "revision": 3,
+          "date": "7 月 13 日",
+          "change": "加入新的独立来源，结论状态更新为已证实"
+        }
+      ]
+    },
+    {
+      "id": "ins_runtime_03",
+      "title": "上下文恢复与 Backend 断连产生相似失败表象",
+      "category": "运行时可靠性",
+      "status": "contested",
+      "statusLabel": "待补证据",
+      "novelty": "contradiction",
+      "noveltyLabel": "与旧归因冲突",
+      "revision": 2,
+      "updatedAt": "今天 09:42",
+      "summary": "当前样本无法仅凭 terminal failure 区分上下文恢复缺失和 Backend 暂时断连。",
+      "scope": "Dev Session 恢复路径",
+      "exclusions": "有明确连接错误码的样本可直接归入运行时故障。",
+      "supportingEvidence": 5,
+      "counterEvidence": 4,
+      "candidateIds": [],
+      "revisions": [
+        {
+          "revision": 2,
+          "date": "今天",
+          "change": "新增 Backend 断连反例，状态变为 contested"
+        },
+        {
+          "revision": 1,
+          "date": "7 月 17 日",
+          "change": "首次建立上下文恢复假设"
+        }
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "id": "mem_scope_01",
+      "type": "Memory",
+      "title": "跨 workspace 任务先解析主项目上下文",
+      "status": "canary",
+      "statusLabel": "Canary",
+      "risk": "低风险",
+      "evidenceGrade": "E4",
+      "scope": "browser-viewer · code worker",
+      "summary": "执行涉及 worktree 的任务前，先按主项目 identity 检索已有约束和历史纠偏，证据仍保留原 workspace。",
+      "exposure": "20 / 20 eligible tasks",
+      "control": "10 tasks · 重复澄清 4",
+      "canary": "10 tasks · 重复澄清 2",
+      "outcome": "样本不足 · 暂不判定改善",
+      "lastUpdated": "今天 09:42"
+    },
+    {
+      "id": "mem_revision_02",
+      "type": "Memory",
+      "title": "behavior pass 前核对 source revision",
+      "status": "shadow",
+      "statusLabel": "Shadow",
+      "risk": "低风险",
+      "evidenceGrade": "E2",
+      "scope": "browser-viewer · code worker",
+      "summary": "计划行为验收前，确认 verifier 绑定的 revision 与待验收 patch 一致。",
+      "exposure": "尚未注入",
+      "control": "—",
+      "canary": "—",
+      "outcome": "等待 E4",
+      "lastUpdated": "今天 09:42"
+    },
+    {
+      "id": "prompt_04",
+      "type": "Prompt",
+      "title": "在修复任务中显式记录复现 revision",
+      "status": "proposal",
+      "statusLabel": "提案",
+      "risk": "中风险",
+      "evidenceGrade": "E1",
+      "scope": "Agent Team worker prompt",
+      "summary": "建议在 worker contract 中增加复现 revision 字段；V1 不自动修改 Prompt。",
+      "exposure": "不可激活",
+      "control": "—",
+      "canary": "—",
+      "outcome": "等待人工评审",
+      "lastUpdated": "今天 09:42"
+    },
+    {
+      "id": "product_07",
+      "type": "Product",
+      "title": "Dev Session 恢复失败原因分层",
+      "status": "proposal",
+      "statusLabel": "提案",
+      "risk": "高风险",
+      "evidenceGrade": "E1",
+      "scope": "Runweave runtime",
+      "summary": "建议区分上下文缺失、Backend 断连和 source revision 漂移；只生成产品提案。",
+      "exposure": "不可激活",
+      "control": "—",
+      "canary": "—",
+      "outcome": "等待产品决策",
+      "lastUpdated": "今天 09:42"
+    }
+  ],
+  "schedules": [
+    {
+      "id": "sch_weekly",
+      "name": "每周增量反思",
+      "enabled": true,
+      "expression": "每周一 10:00",
+      "timezone": "Asia/Shanghai",
+      "profile": "Standard",
+      "providerPolicy": "Auto",
+      "range": "自上次成功 watermark",
+      "nextRunAt": "周一 10:00",
+      "lastOutcome": "无实质新知识"
+    },
+    {
+      "id": "sch_monthly",
+      "name": "月度深度复核",
+      "enabled": false,
+      "expression": "每月 1 日 09:30",
+      "timezone": "Asia/Shanghai",
+      "profile": "Deep",
+      "providerPolicy": "Mixed",
+      "range": "最近 30 天",
+      "nextRunAt": "已暂停",
+      "lastOutcome": "尚未运行"
+    }
+  ],
+  "scenarioOverrides": {
+    "running": {
+      "banner": "Evolution Run 正在执行",
+      "runStatus": "running"
+    },
+    "no-novelty": {
+      "banner": "本次没有发现实质新知识",
+      "runStatus": "no_novelty"
+    },
+    "degraded": {
+      "banner": "Trae 当前不可用，Auto 已降级为 Codex",
+      "provider": "trae"
+    },
+    "empty": {
+      "banner": "尚未运行项目反思",
+      "empty": true
+    }
+  }
+}

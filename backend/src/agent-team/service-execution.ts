@@ -4,6 +4,7 @@ import type {
   AgentTeamRun,
   AgentTeamWorker,
 } from "@runweave/shared/agent-team";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import type { TerminalSessionRecord } from "../terminal/manager";
 import { createTerminalPanelSplit } from "../terminal/application/panel-split";
 import { resolveTmuxTarget } from "../terminal/runtime-launcher";
@@ -183,6 +184,40 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
       throw error;
     }
     if (activeWorker?.panelId && activeWorkerDispatch) {
+      let evolutionContext: string | null = null;
+      if (
+        activeWorker.role === "code" &&
+        this.evolutionMemoryProvider &&
+        activeWorkerDispatch.dispatchId
+      ) {
+        try {
+          const result = await this.evolutionMemoryProvider.prepare({
+            learningScopeId: resolveTerminalParentProjectId(run.projectId),
+            runId: run.runId,
+            dispatchId: activeWorkerDispatch.dispatchId,
+            workerRole: activeWorker.role,
+            task: run.task,
+            intent: activeWorker.intent,
+            paths: terminal.cwd ? [terminal.cwd] : [],
+            commands: [],
+            failureSignatures: [],
+            dependencies: {
+              sourceRevision:
+                this.runtimeEnv.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || null,
+              provider: terminal.command ?? null,
+            },
+          });
+          evolutionContext = result.context;
+        } catch (error) {
+          agentTeamLogger.warn("agent-team.evolution-memory.fail-open", {
+            message:
+              "Evolution Memory lookup failed; worker dispatch continues",
+            runId: run.runId,
+            dispatchId: activeWorkerDispatch.dispatchId,
+            error,
+          });
+        }
+      }
       const startupPrompt = buildWorkerStartupPrompt({
         run: persistedRun,
         worker: activeWorker,
@@ -191,6 +226,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
           run.terminalSessionId,
           activeWorker,
         ),
+        evolutionContext,
       });
       try {
         await this.agentLaunch.submitAgentLaunch(session, terminal, {

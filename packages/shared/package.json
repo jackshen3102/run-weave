@@ -22,6 +22,7 @@
     "./app-server/types": "./src/app-server/types.ts",
     "./browser-profile-node": "./src/browser-profile-node.ts",
     "./diagnostic-logs": "./src/diagnostic-logs.ts",
+    "./evolution": "./src/evolution.ts",
     "./protocol": "./src/protocol.ts",
     "./runtime-monitor": "./src/runtime-monitor.ts",
     "./system-monitor": "./src/system-monitor.ts",
