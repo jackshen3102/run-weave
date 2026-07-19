@@ -32,6 +32,11 @@ export interface WorkerDraft {
   intent: string;
 }
 
+export function normalizeOptionalPath(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
 export type AgentTeamAttentionTone = "warning" | "danger";
 
 export interface AgentTeamAttention {

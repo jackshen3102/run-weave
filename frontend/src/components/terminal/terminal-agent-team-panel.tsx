@@ -28,20 +28,23 @@ import {
   getAgentTeamAttention,
   getAgentTeamCaseElementId,
   getAgentTeamControlState,
-  getPendingAgentTeamAcceptanceCases,
   getAgentTeamStatusPresentation,
   isAgentTeamRunActive,
+  normalizeOptionalPath,
   type WorkerDraft,
 } from "./terminal-agent-team-panel-model";
-import { AgentTeamAttentionSummary } from "./terminal-agent-team-panel-attention";
-import { AgentTeamAcceptanceDecisionCard } from "./terminal-agent-team-acceptance-decision";
-import { AgentTeamFindingDecisionCard } from "./terminal-agent-team-finding-decision";
+import {
+  AgentTeamPanelGate,
+  AgentTeamPanelHeader,
+  AgentTeamPanelEmptyState,
+} from "./terminal-agent-team-panel-summary";
 import {
   FailedRunSection,
   ProposalSection,
   StartFlowSection,
 } from "./terminal-agent-team-panel-sections";
 import { ExecutingSection } from "./terminal-agent-team-executing-section";
+import { useAgentTeamScopeGuard } from "./terminal-agent-team-scope";
 
 interface TerminalAgentTeamPanelProps {
   apiBase: string;
@@ -125,6 +128,19 @@ export function TerminalAgentTeamPanel({
     onActiveRunChange?.(Boolean(next && isAgentTeamRunActive(next)));
   });
 
+  const handleRunScopeMismatch = useMemoizedFn((): void => {
+    setRun(null);
+    setFrameworkRecovery(null);
+    syncWorkerDraftsFromRun(null);
+    syncActiveRunPresence(null);
+    setError("Agent Team 返回了不属于当前 Terminal 的 Run，已停止展示。");
+  });
+  const { canApplyRunToCurrentScope, isCurrentScope } = useAgentTeamScopeGuard(
+    projectId,
+    terminalSessionId,
+    handleRunScopeMismatch,
+  );
+
   const loadRun = useMemoizedFn(async (): Promise<void> => {
     if (!projectId || !terminalSessionId) {
       setRun(null);
@@ -132,29 +148,53 @@ export function TerminalAgentTeamPanel({
       syncActiveRunPresence(null);
       return;
     }
+    const requestedProjectId = projectId;
+    const requestedTerminalSessionId = terminalSessionId;
     try {
       const next = await getAgentTeamRunForTerminal(
         apiBase,
         token,
-        projectId,
-        terminalSessionId,
+        requestedProjectId,
+        requestedTerminalSessionId,
       );
+      if (
+        !canApplyRunToCurrentScope(
+          next,
+          requestedProjectId,
+          requestedTerminalSessionId,
+        )
+      ) {
+        return;
+      }
       const nextFrameworkRecovery =
         next?.frameworkRepair?.result === "blocked"
           ? await getAgentTeamFrameworkRepair(apiBase, token, next.runId)
           : null;
+      if (
+        !canApplyRunToCurrentScope(
+          next,
+          requestedProjectId,
+          requestedTerminalSessionId,
+        )
+      ) {
+        return;
+      }
       setRun(next);
       setFrameworkRecovery(nextFrameworkRecovery);
       syncWorkerDraftsFromRun(next);
       syncActiveRunPresence(next);
     } catch (caught) {
-      handleError(caught);
+      if (isCurrentScope(requestedProjectId, requestedTerminalSessionId)) {
+        handleError(caught);
+      }
     }
   });
 
   useEffect(() => {
     setRun(null);
     setError(null);
+    setBusy(false);
+    setLoading(false);
     setRetryingRunId(null);
     setFrameworkRecovery(null);
     syncWorkerDraftsFromRun(null);
@@ -162,11 +202,18 @@ export function TerminalAgentTeamPanel({
     if (!projectId || !terminalSessionId) {
       return;
     }
+    const requestedProjectId = projectId;
+    const requestedTerminalSessionId = terminalSessionId;
     setLoading(true);
-    void loadRun().finally(() => setLoading(false));
+    void loadRun().finally(() => {
+      if (isCurrentScope(requestedProjectId, requestedTerminalSessionId)) {
+        setLoading(false);
+      }
+    });
   }, [
     projectId,
     terminalSessionId,
+    isCurrentScope,
     loadRun,
     syncWorkerDraftsFromRun,
     syncActiveRunPresence,
@@ -183,21 +230,43 @@ export function TerminalAgentTeamPanel({
   }, [projectId, terminalSessionId, loadRun]);
 
   const runAction = useMemoizedFn(
-    async (action: () => Promise<AgentTeamRun>): Promise<void> => {
+    async (
+      action: () => Promise<AgentTeamRun>,
+      onApplied?: (next: AgentTeamRun) => void,
+    ): Promise<void> => {
+      if (!projectId || !terminalSessionId) {
+        return;
+      }
+      const requestedProjectId = projectId;
+      const requestedTerminalSessionId = terminalSessionId;
       setBusy(true);
       setError(null);
       try {
         const next = await action();
+        if (
+          !canApplyRunToCurrentScope(
+            next,
+            requestedProjectId,
+            requestedTerminalSessionId,
+          )
+        ) {
+          return;
+        }
         setRun(next);
         if (next.frameworkRepair?.result !== "blocked") {
           setFrameworkRecovery(null);
         }
         syncWorkerDraftsFromRun(next, { force: true });
         syncActiveRunPresence(next);
+        onApplied?.(next);
       } catch (caught) {
-        handleError(caught);
+        if (isCurrentScope(requestedProjectId, requestedTerminalSessionId)) {
+          handleError(caught);
+        }
       } finally {
-        setBusy(false);
+        if (isCurrentScope(requestedProjectId, requestedTerminalSessionId)) {
+          setBusy(false);
+        }
       }
     },
   );
@@ -206,11 +275,25 @@ export function TerminalAgentTeamPanel({
     async (
       action: () => Promise<AgentTeamFrameworkRepairResponse>,
     ): Promise<void> => {
+      if (!projectId || !terminalSessionId) {
+        return;
+      }
+      const requestedProjectId = projectId;
+      const requestedTerminalSessionId = terminalSessionId;
       setBusy(true);
       setError(null);
       try {
         const response = await action();
         const next = response.successorRun ?? response.run;
+        if (
+          !canApplyRunToCurrentScope(
+            next,
+            requestedProjectId,
+            requestedTerminalSessionId,
+          )
+        ) {
+          return;
+        }
         setRun(next);
         setFrameworkRecovery(
           next.frameworkRepair?.result === "blocked" ? response.recovery : null,
@@ -218,9 +301,13 @@ export function TerminalAgentTeamPanel({
         syncWorkerDraftsFromRun(next, { force: true });
         syncActiveRunPresence(next);
       } catch (caught) {
-        handleError(caught);
+        if (isCurrentScope(requestedProjectId, requestedTerminalSessionId)) {
+          handleError(caught);
+        }
       } finally {
-        setBusy(false);
+        if (isCurrentScope(requestedProjectId, requestedTerminalSessionId)) {
+          setBusy(false);
+        }
       }
     },
   );
@@ -252,28 +339,29 @@ export function TerminalAgentTeamPanel({
       setError("请先填写 Agent Team 要执行的任务。");
       return;
     }
-    void runAction(() =>
-      startAgentTeamRun(apiBase, token, {
-        projectId,
-        terminalSessionId,
-        task: trimmedTask,
-        planFilePath: normalizeOptionalPath(planFilePath),
-        testCaseFilePath: normalizeOptionalPath(testCaseFilePath),
-        options: {
-          autoApproveSplit: true,
-          notifyMainOnHumanGate,
-          flow,
-          reviewCheckpointMode: reviewCheckpointEnabled
-            ? "local_commit"
-            : "disabled",
-        },
-      }).then((next) => {
+    void runAction(
+      () =>
+        startAgentTeamRun(apiBase, token, {
+          projectId,
+          terminalSessionId,
+          task: trimmedTask,
+          planFilePath: normalizeOptionalPath(planFilePath),
+          testCaseFilePath: normalizeOptionalPath(testCaseFilePath),
+          options: {
+            autoApproveSplit: true,
+            notifyMainOnHumanGate,
+            flow,
+            reviewCheckpointMode: reviewCheckpointEnabled
+              ? "local_commit"
+              : "disabled",
+          },
+        }),
+      (next) => {
         setRetryingRunId(null);
         if (next.phase === "executing") {
           onPanelSplitEnabledChange?.(true);
         }
-        return next;
-      }),
+      },
     );
   });
 
@@ -297,16 +385,17 @@ export function TerminalAgentTeamPanel({
     if (!run || !workerDrafts) {
       return;
     }
-    void runAction(() =>
-      submitAgentTeamSplitGate(apiBase, token, run.runId, {
-        verdict: "confirmed",
-        workers: workerDrafts,
-      }).then((next) => {
+    void runAction(
+      () =>
+        submitAgentTeamSplitGate(apiBase, token, run.runId, {
+          verdict: "confirmed",
+          workers: workerDrafts,
+        }),
+      (next) => {
         if (next.phase === "executing") {
           onPanelSplitEnabledChange?.(true);
         }
-        return next;
-      }),
+      },
     );
   });
 
@@ -367,11 +456,17 @@ export function TerminalAgentTeamPanel({
   );
 
   const focusPane = useMemoizedFn((panelId: string): void => {
-    if (!run) {
+    if (!run || !projectId || !terminalSessionId) {
       return;
     }
+    const requestedProjectId = projectId;
+    const requestedTerminalSessionId = terminalSessionId;
     void focusAgentTeamPane(apiBase, token, run.runId, panelId).catch(
-      handleError,
+      (caught) => {
+        if (isCurrentScope(requestedProjectId, requestedTerminalSessionId)) {
+          handleError(caught);
+        }
+      },
     );
   });
 
@@ -396,44 +491,23 @@ export function TerminalAgentTeamPanel({
   const attention =
     run?.phase === "executing" ? getAgentTeamAttention(run) : null;
   const controlState = run ? getAgentTeamControlState(run) : null;
-  const pendingAcceptanceCase = run
-    ? getPendingAgentTeamAcceptanceCases(run)[0]
-    : null;
   const statusPresentation = run
     ? getAgentTeamStatusPresentation(run, attention)
     : null;
 
   if (!projectId || !terminalSessionId) {
-    return (
-      <div className="flex h-full items-center justify-center p-4 text-xs text-slate-500">
-        选择一个终端以查看 Agent Team 流程。
-      </div>
-    );
+    return <AgentTeamPanelEmptyState />;
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col text-slate-200">
-      <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
-        <span className="text-xs font-medium text-slate-300">Agent Team</span>
-        {run ? (
-          <span
-            className={[
-              "rounded px-1.5 py-0.5 text-[10px] uppercase",
-              statusPresentation?.tone === "danger"
-                ? "bg-rose-500/20 text-rose-300"
-                : statusPresentation?.tone === "warning"
-                  ? "bg-amber-500/20 text-amber-300"
-                  : statusPresentation?.tone === "recovering"
-                    ? "bg-cyan-500/20 text-cyan-300"
-                    : statusPresentation?.tone === "running"
-                      ? "bg-emerald-500/20 text-emerald-300"
-                      : "bg-slate-700 text-slate-300",
-            ].join(" ")}
-          >
-            {statusPresentation?.label}
-          </span>
-        ) : null}
-      </div>
+      <AgentTeamPanelHeader
+        run={run}
+        projectId={projectId}
+        terminalSessionId={terminalSessionId}
+        loading={loading}
+        statusPresentation={statusPresentation}
+      />
 
       {error ? (
         <div className="mx-3 mt-2 rounded border border-rose-800 bg-rose-950/50 px-2 py-1 text-[11px] text-rose-300">
@@ -441,36 +515,16 @@ export function TerminalAgentTeamPanel({
         </div>
       ) : null}
 
-      {run &&
-      run.pendingFindingDecision &&
-      controlState?.allowsFindingDecision ? (
-        <AgentTeamFindingDecisionCard
-          key={run.pendingFindingDecision.id}
-          run={run}
-          busy={busy}
-          onDecide={decideFinding}
-        />
-      ) : run && controlState?.allowsAcceptanceDecision ? (
-        <AgentTeamAcceptanceDecisionCard
-          key={[
-            run.runId,
-            pendingAcceptanceCase?.caseId,
-            pendingAcceptanceCase?.latestObservation?.recordedAt,
-          ].join(":")}
-          run={run}
-          busy={busy}
-          onDecide={decideAcceptance}
-        />
-      ) : run &&
-        attention &&
-        controlState?.kind !== "automatic_recovery" &&
-        !controlState?.allowsFrameworkRecovery ? (
-        <AgentTeamAttentionSummary
-          attention={attention}
-          onFocusPane={focusPane}
-          onShowDetails={showAttentionDetails}
-        />
-      ) : null}
+      <AgentTeamPanelGate
+        run={run}
+        controlState={controlState}
+        attention={attention}
+        busy={busy}
+        onDecideFinding={decideFinding}
+        onDecideAcceptance={decideAcceptance}
+        onFocusPane={focusPane}
+        onShowAttentionDetails={showAttentionDetails}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {loading ? (
@@ -541,9 +595,4 @@ export function TerminalAgentTeamPanel({
       </div>
     </div>
   );
-}
-
-function normalizeOptionalPath(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
 }
