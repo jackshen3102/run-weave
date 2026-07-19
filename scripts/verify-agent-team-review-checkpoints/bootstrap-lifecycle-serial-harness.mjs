@@ -1,4 +1,5 @@
 import { AgentTeamService } from "../../backend/src/agent-team/service.ts";
+import { getAgentForCommand } from "../../backend/src/terminal/terminal-state-service.ts";
 
 export class AgentTeamSerialDispatchHarness extends AgentTeamService {
   persistedRuns = [];
@@ -14,6 +15,22 @@ export class AgentTeamSerialDispatchHarness extends AgentTeamService {
     };
     this.agentLaunch.submitAgentResume = async (session, terminal, target) => {
       this.resumedThreads.push({ session, terminal, target });
+      const agent = getAgentForCommand(terminal.command ?? null);
+      if (!agent) {
+        throw new Error("resume fixture requires a supported terminal agent");
+      }
+      await this.terminalSessionManager.updatePanelThreadId(
+        target.panelId,
+        target.threadId,
+        agent,
+      );
+      await this.terminalSessionManager.updatePanelTerminalState(
+        target.panelId,
+        {
+          state: "agent_idle",
+          agent,
+        },
+      );
     };
   }
 

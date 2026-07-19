@@ -31,6 +31,7 @@ import { createTestRouter } from "./routes/test";
 import { createPrototypePreviewRouter } from "./routes/prototype-preview";
 import { createVoiceRouter } from "./routes/voice";
 import { createWorkHistoryRouter } from "./routes/work-history";
+import { createAttentionRouter } from "./routes/attention";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import {
@@ -214,6 +215,11 @@ function createHttpApp(
     "/api/work-history",
     requireAuth,
     createWorkHistoryRouter(services.workHistoryService),
+  );
+  app.use(
+    "/api/attention",
+    requireAuth,
+    createAttentionRouter(services.attentionService),
   );
   app.use(
     "/api/agent-team",

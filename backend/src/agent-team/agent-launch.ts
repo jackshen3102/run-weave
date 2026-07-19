@@ -78,7 +78,6 @@ export class AgentTeamAgentLaunchService {
     target: {
       panelId: string;
       threadId: string;
-      prompt: string;
     },
   ): Promise<void> {
     const detectedAgent = resolveLifecycleAgent(terminal);
@@ -103,20 +102,19 @@ export class AgentTeamAgentLaunchService {
       },
       {
         agent: detectedAgent,
-        prompt: target.prompt,
+        prompt: "",
         panelId: panelTarget.panel.id,
         cwd: terminal.cwd ?? session.cwd,
         command: terminal.command,
         args: terminal.args,
         resumeThreadId: target.threadId,
       },
+      { skipInitialPrompt: true },
     );
   }
 }
 
-function resolveLifecycleAgent(
-  terminal: AgentTeamTerminal,
-): "codex" | "traex" {
+function resolveLifecycleAgent(terminal: AgentTeamTerminal): "codex" | "traex" {
   const detectedAgent = getAgentForCommand(terminal.command ?? null);
   if (!detectedAgent) {
     throw new AgentTeamError(

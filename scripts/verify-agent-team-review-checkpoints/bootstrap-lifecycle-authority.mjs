@@ -517,12 +517,11 @@ async function verifyStoppedExistingThreadResumesInFixedPane(check, roots) {
         service.resumedThreads.length === 1 &&
         service.resumedThreads[0].target.panelId === harness.panel.id &&
         service.resumedThreads[0].target.threadId === "old-review-thread" &&
-        service.resumedThreads[0].target.prompt.includes(
-          FORMAL_WORKER_CASE.text,
-        ) &&
         harness.respawnedPanes.length === 0 &&
         harness.paneOperations.every((item) => item.type !== "send") &&
-        service.secondaryPrompts.length === 0,
+        service.secondaryPrompts.length === 1 &&
+        service.secondaryPrompts[0].target.panelId === harness.panel.id &&
+        service.secondaryPrompts[0].text.includes(FORMAL_WORKER_CASE.text),
       {
         result,
         resumedThreads: service.resumedThreads,

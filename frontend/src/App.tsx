@@ -1,7 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { useEffect, useState, type ReactNode } from "react";
 import type {
-  BackendHealthPayload,
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
 } from "@runweave/shared/runtime-monitor";
@@ -22,9 +20,16 @@ import type {
   TerminalBrowserToolMenuAction,
   TerminalBrowserToolMenuRequest,
 } from "@runweave/shared/terminal-browser-tool-menu";
+import type {
+  AttentionOpenDispatch,
+  AttentionOpenIntent,
+  AttentionOpenResult,
+} from "@runweave/shared/attention";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";
+import { useAttentionOpenIntents } from "./features/attention/use-attention-open-intents";
+import { DevSessionBackendGuard } from "./features/dev-session-backend-guard";
 import { useClientMode } from "./features/use-client-mode";
 import {
   buildConnectionQueryScope,
@@ -37,18 +42,13 @@ import { SystemMonitorPage } from "./pages/system-monitor-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
 import { PrototypesPage } from "./pages/prototypes-page";
 import { ActivityPage } from "./pages/activity-page";
+import { DesktopCompanionPage } from "./pages/desktop-companion-page";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
 const CONNECTIONS_STORAGE_KEY = "viewer.connections";
 const HOME_PATH = "/home";
 const TERMINAL_LIST_PATH = "/terminal";
-const DEV_SESSION_ID = import.meta.env.VITE_RUNWEAVE_DEV_SESSION_ID?.trim();
-const EXPECTED_BACKEND_ID =
-  import.meta.env.VITE_RUNWEAVE_EXPECTED_BACKEND_ID?.trim();
-const EXPECTED_BACKEND_PROTOCOL = Number(
-  import.meta.env.VITE_RUNWEAVE_EXPECTED_BACKEND_PROTOCOL ?? "0",
-);
 
 interface TerminalBrowserBounds {
   x: number;
@@ -79,6 +79,14 @@ interface TerminalBrowserTabSnapshot extends TerminalBrowserSnapshot {
 
 declare global {
   interface Window {
+    companionAPI?: {
+      reportContentSize: (size: {
+        width: number;
+        height: number;
+      }) => Promise<void>;
+      openSlot: (intent: AttentionOpenIntent) => Promise<AttentionOpenResult>;
+      openMainWindow: () => Promise<void>;
+    };
     electronAPI?: {
       isElectron: boolean;
       managesPackagedBackend?: boolean;
@@ -219,70 +227,23 @@ declare global {
           state: TerminalBrowserAnnotationState;
         }) => void,
       ) => () => void;
+      onAttentionOpenIntent?: (
+        listener: (intent: AttentionOpenDispatch) => void,
+      ) => (() => void) | void;
+      onAttentionOpenCancelled?: (
+        listener: (requestId: string) => void,
+      ) => (() => void) | void;
+      authorizeAttentionCompletion?: (
+        result: AttentionOpenResult,
+      ) => Promise<boolean>;
+      reportAttentionOpenResult?: (
+        result: AttentionOpenResult,
+      ) => Promise<void>;
     };
   }
 }
 
 const isElectron = window.electronAPI?.isElectron === true;
-
-function DevSessionBackendGuard({ children }: { children: ReactNode }) {
-  const [failure, setFailure] = useState<string | null>(null);
-  const [ready, setReady] = useState(!EXPECTED_BACKEND_ID);
-
-  useEffect(() => {
-    if (!EXPECTED_BACKEND_ID) {
-      return;
-    }
-    const controller = new AbortController();
-    void fetch("/health", { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`health returned HTTP ${response.status}`);
-        }
-        return (await response.json()) as BackendHealthPayload;
-      })
-      .then((health) => {
-        const identityMatches =
-          health.serviceInstanceId === EXPECTED_BACKEND_ID;
-        const protocolMatches =
-          (health.protocolVersion ?? 0) >= EXPECTED_BACKEND_PROTOCOL;
-        if (!identityMatches || !protocolMatches) {
-          throw new Error(
-            `expected backend ${EXPECTED_BACKEND_ID} protocol>=${EXPECTED_BACKEND_PROTOCOL}; actual ${health.serviceInstanceId ?? "legacy"} protocol=${health.protocolVersion ?? 0}`,
-          );
-        }
-        setReady(true);
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted) {
-          setFailure(error instanceof Error ? error.message : String(error));
-        }
-      });
-    return () => controller.abort();
-  }, []);
-
-  if (failure) {
-    return (
-      <main
-        className="min-h-screen bg-background p-6 text-foreground"
-        data-testid="dev-session-backend-mismatch"
-      >
-        <h1 className="text-lg font-semibold">Dev Session backend mismatch</h1>
-        <p className="mt-2 text-sm">Session: {DEV_SESSION_ID ?? "unknown"}</p>
-        <p className="mt-1 text-sm">{failure}</p>
-      </main>
-    );
-  }
-  if (!ready) {
-    return (
-      <main
-        className="min-h-screen bg-background"
-        data-testid="dev-session-backend-checking"
-      />
-    );
-  }
-  return children;
-}
 
 export default function App() {
   const clientMode = useClientMode(isElectron);
@@ -330,6 +291,24 @@ export default function App() {
   };
 
   const authPendingView = <main className="min-h-screen bg-background" />;
+
+  useAttentionOpenIntents({
+    activeConnectionId,
+    apiBase,
+    enabled: isElectron,
+    token,
+  });
+
+  if (window.location.pathname === "/desktop-companion") {
+    if (!isElectron) return <Navigate to="/" replace />;
+    return (
+      <DesktopCompanionPage
+        apiBase={apiBase}
+        token={token}
+        connectionId={activeConnectionId}
+      />
+    );
+  }
 
   return (
     <DevSessionBackendGuard>

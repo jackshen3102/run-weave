@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { HttpError } from "../../services/http";
 import { refreshSession, verifyAuthToken } from "../../services/auth";
 import {
+  CONNECTION_AUTH_STORAGE_KEY,
   cleanupLegacyAuthStorage,
   clearConnectionAuth,
   getConnectionAuth,
@@ -175,6 +176,19 @@ export function useScopedAuth({
   const effectiveStatus = sessionMatchesScope
     ? status
     : resolveStoredSessionStatus(apiBase, isElectron, initialSession);
+
+  useEffect(() => {
+    const syncAuthStorage = (event: StorageEvent): void => {
+      const expectedKey = isElectron
+        ? CONNECTION_AUTH_STORAGE_KEY
+        : webStorageKey;
+      if (event.key === expectedKey) {
+        setValidationNonce((value) => value + 1);
+      }
+    };
+    window.addEventListener("storage", syncAuthStorage);
+    return () => window.removeEventListener("storage", syncAuthStorage);
+  }, [isElectron, webStorageKey]);
 
   useEffect(() => {
     statusRef.current = effectiveStatus;

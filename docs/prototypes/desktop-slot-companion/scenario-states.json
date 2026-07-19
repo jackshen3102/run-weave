@@ -1,0 +1,384 @@
+{
+  "defaultScenario": "mixed-attention",
+  "scenarios": {
+    "mixed-attention": {
+      "description": "Human Gate、Agent Team 验收阻塞、未确认 Completion 与执行中 Terminal 同时存在。",
+      "activeSlotId": "slot-agent-team",
+      "slotPatches": {}
+    },
+    "flowing": {
+      "description": "两个 Agent Team Run 与两个 Codex Terminal 正在执行。",
+      "activeSlotId": "slot-agent-team",
+      "slotPatches": {
+        "slot-agent-team": {
+          "terminalSession": {
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "activePanelId": "panel-code",
+            "lastActivityAt": "2026-07-18T14:31:55+08:00"
+          },
+          "panelSnapshot": {
+            "panelId": "panel-code",
+            "alias": "code",
+            "role": "agent-team:atr_4ef1c0a8:code",
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "lastActivityAt": "2026-07-18T14:31:55+08:00",
+            "tmuxPaneId": "%11"
+          },
+          "terminalHistory": {
+            "scrollback": "$ rw agent-team status atr_4ef1c0a8\nstatus: running · round 6\nactive worker: code\ncode_review / behavior_verify: waiting"
+          },
+          "agentTeamRun": {
+            "status": "running",
+            "activeWorkerRole": "code",
+            "activeWorkerDispatch": {
+              "dispatchId": "dispatch-code-6",
+              "role": "code",
+              "panelId": "panel-code",
+              "tmuxPaneId": "%11",
+              "round": 6,
+              "requestedAt": "2026-07-18T14:31:00+08:00",
+              "outboxMtimeMs": null
+            },
+            "loop": { "round": 6, "escalated": false, "lastReason": null },
+            "pendingFindingDecision": null,
+            "updatedAt": "2026-07-18T14:31:55+08:00"
+          }
+        },
+        "slot-agent-team-blocked": {
+          "terminalSession": {
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "lastActivityAt": "2026-07-18T14:31:20+08:00"
+          },
+          "panelSnapshot": {
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "lastActivityAt": "2026-07-18T14:31:20+08:00"
+          },
+          "terminalHistory": {
+            "scrollback": "$ rw agent-team status atr_71b4d290\nstatus: running · round 2\nactive worker: behavior_verify\nacceptance: 3 pass · 1 pending"
+          },
+          "agentTeamRun": {
+            "status": "running",
+            "activeWorkerRole": "behavior_verify",
+            "activeWorkerDispatch": {
+              "dispatchId": "dispatch-verify-2",
+              "role": "behavior_verify",
+              "panelId": "panel-behavior-verify",
+              "tmuxPaneId": "%22",
+              "round": 2,
+              "requestedAt": "2026-07-18T14:30:30+08:00",
+              "outboxMtimeMs": null
+            },
+            "acceptance": [
+              {
+                "caseId": "AGT-WH-012",
+                "text": "Session 状态同步",
+                "lastRunStatus": "pass",
+                "status": "pass",
+                "consecutiveFail": 0,
+                "evidence": []
+              },
+              {
+                "caseId": "AGT-WH-013",
+                "text": "Panel 归因",
+                "lastRunStatus": "pass",
+                "status": "pass",
+                "consecutiveFail": 0,
+                "evidence": []
+              },
+              {
+                "caseId": "AGT-WH-014",
+                "text": "Completion 确认",
+                "lastRunStatus": "pass",
+                "status": "pass",
+                "consecutiveFail": 0,
+                "evidence": []
+              },
+              {
+                "caseId": "AGT-WH-015",
+                "text": "终端 Activity 必须归因到正确的 Session",
+                "lastRunStatus": "pending",
+                "status": "pending",
+                "consecutiveFail": 0,
+                "evidence": []
+              }
+            ],
+            "loop": { "round": 2, "escalated": false, "lastReason": null },
+            "pendingFindingDecision": null,
+            "updatedAt": "2026-07-18T14:31:20+08:00"
+          }
+        },
+        "slot-completed": {
+          "terminalSession": {
+            "preview": "收口 Activity 事件归因",
+            "activeCommand": "codex",
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "acknowledgedCompletionRevision": 4,
+            "lastActivityAt": "2026-07-18T14:31:00+08:00"
+          },
+          "panelSnapshot": {
+            "activeCommand": "codex",
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "lastActivityAt": "2026-07-18T14:31:00+08:00"
+          },
+          "terminalHistory": {
+            "scrollback": "$ codex\nInspecting Activity event sources...\nReading backend activity contracts\nComparing terminal and Agent Team provenance"
+          },
+          "completionEvent": null
+        }
+      }
+    },
+    "agent-team-running": {
+      "description": "一个 Agent Team behavior_verify 与一个普通 Codex Terminal 正在执行。",
+      "activeSlotId": "slot-agent-team",
+      "slotPatches": {
+        "slot-agent-team": {
+          "terminalSession": {
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "activePanelId": "panel-behavior-verify",
+            "lastActivityAt": "2026-07-18T14:31:55+08:00"
+          },
+          "panelSnapshot": {
+            "panelId": "panel-behavior-verify",
+            "alias": "behavior_verify",
+            "role": "agent-team:atr_4ef1c0a8:behavior_verify",
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "lastActivityAt": "2026-07-18T14:31:55+08:00",
+            "tmuxPaneId": "%13"
+          },
+          "terminalHistory": {
+            "scrollback": "$ rw agent-team status atr_4ef1c0a8\nstatus: running · round 6\nactive worker: behavior_verify\nlatest checkpoint under verification"
+          },
+          "agentTeamRun": {
+            "status": "running",
+            "activeWorkerRole": "behavior_verify",
+            "activeWorkerDispatch": {
+              "dispatchId": "dispatch-verify-6",
+              "role": "behavior_verify",
+              "panelId": "panel-behavior-verify",
+              "tmuxPaneId": "%13",
+              "round": 6,
+              "requestedAt": "2026-07-18T14:31:00+08:00",
+              "outboxMtimeMs": null
+            },
+            "loop": { "round": 6, "escalated": false, "lastReason": null },
+            "pendingFindingDecision": null,
+            "updatedAt": "2026-07-18T14:31:55+08:00"
+          }
+        },
+        "slot-agent-team-blocked": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null },
+            "lastActivityAt": "2026-07-18T14:10:00+08:00"
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "agentTeamRun": null
+        },
+        "slot-completed": {
+          "terminalSession": {
+            "terminalState": { "state": "shell_idle", "agent": null },
+            "acknowledgedCompletionRevision": 4
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "completionEvent": null
+        }
+      }
+    },
+    "completed": {
+      "description": "只有一个未确认 Terminal Completion。",
+      "activeSlotId": "slot-completed",
+      "slotPatches": {
+        "slot-agent-team": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "agentTeamRun": null
+        },
+        "slot-agent-team-blocked": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "agentTeamRun": null
+        },
+        "slot-working": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          }
+        }
+      }
+    },
+    "blocked": {
+      "description": "Agent Team behavior_verify 明确上报环境阻塞，其余活跃项保持普通执行状态。",
+      "activeSlotId": "slot-agent-team-blocked",
+      "slotPatches": {
+        "slot-agent-team": {
+          "terminalSession": {
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "activePanelId": "panel-code"
+          },
+          "panelSnapshot": {
+            "panelId": "panel-code",
+            "alias": "code",
+            "role": "agent-team:atr_4ef1c0a8:code",
+            "terminalState": { "state": "agent_running", "agent": "codex" },
+            "tmuxPaneId": "%11"
+          },
+          "agentTeamRun": {
+            "status": "running",
+            "activeWorkerRole": "code",
+            "activeWorkerDispatch": {
+              "dispatchId": "dispatch-code-6",
+              "role": "code",
+              "panelId": "panel-code",
+              "tmuxPaneId": "%11",
+              "round": 6,
+              "requestedAt": "2026-07-18T14:31:00+08:00",
+              "outboxMtimeMs": null
+            },
+            "loop": { "round": 6, "escalated": false, "lastReason": null },
+            "pendingFindingDecision": null
+          }
+        },
+        "slot-completed": {
+          "terminalSession": {
+            "acknowledgedCompletionRevision": 4,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "completionEvent": null
+        }
+      }
+    },
+    "terminal-exited": {
+      "description": "一个 Terminal Session 以非零 exit code 退出，其余 Slot 安静。",
+      "activeSlotId": "slot-working",
+      "slotPatches": {
+        "slot-agent-team": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "agentTeamRun": null
+        },
+        "slot-agent-team-blocked": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "agentTeamRun": null
+        },
+        "slot-completed": {
+          "terminalSession": {
+            "acknowledgedCompletionRevision": 4,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "completionEvent": null
+        },
+        "slot-working": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null },
+            "status": "exited",
+            "exitCode": 1,
+            "lastActivityAt": "2026-07-18T14:31:10+08:00"
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null },
+            "status": "exited",
+            "exitCode": 1,
+            "lastActivityAt": "2026-07-18T14:31:10+08:00"
+          },
+          "terminalHistory": {
+            "scrollback": "$ codex\nError: provider process exited unexpectedly\nprocess exited with code 1"
+          }
+        }
+      }
+    },
+    "quiet": {
+      "description": "没有 Agent Team 活跃 Run、未确认 Completion、异常退出或活跃 Agent。",
+      "activeSlotId": "slot-idle",
+      "slotPatches": {
+        "slot-agent-team": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "agentTeamRun": null
+        },
+        "slot-agent-team-blocked": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "agentTeamRun": null
+        },
+        "slot-completed": {
+          "terminalSession": {
+            "acknowledgedCompletionRevision": 4,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "completionEvent": null
+        },
+        "slot-working": {
+          "terminalSession": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          },
+          "panelSnapshot": {
+            "activeCommand": null,
+            "terminalState": { "state": "shell_idle", "agent": null }
+          }
+        }
+      }
+    }
+  }
+}

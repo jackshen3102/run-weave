@@ -126,6 +126,18 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isElectron) return;
+    const syncFromStorage = (event: StorageEvent): void => {
+      if (event.key !== storageKey) return;
+      const next = loadStore(storageKey);
+      storeRef.current = next;
+      setStoreState(next);
+    };
+    window.addEventListener("storage", syncFromStorage);
+    return () => window.removeEventListener("storage", syncFromStorage);
+  }, [storageKey]);
+
   const persist = useMemoizedFn((updater: StoreUpdater) => {
     const next = updater(storeRef.current);
     storeRef.current = next;

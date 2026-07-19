@@ -293,8 +293,8 @@ async function resolveCleanupAuth(manifest, baseUrl) {
     }
   }
   const login = await requestAuth(baseUrl, "/api/auth/login", {
-    username: "admin",
-    password: "admin",
+    username: process.env.AUTH_USERNAME?.trim() || "admin",
+    password: process.env.AUTH_PASSWORD?.trim() || "admin",
   });
   if (!login.accessToken) {
     throw new DevSessionError("fixture Backend login returned no token", 5);

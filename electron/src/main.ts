@@ -1,5 +1,10 @@
 import "./desktop-config.js";
-import { app, BrowserWindow, dialog, Menu, net } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, net } from "electron";
+import type {
+  AttentionOpenDispatch,
+  AttentionOpenIntent,
+  AttentionOpenResult,
+} from "@runweave/shared/attention";
 import path from "node:path";
 import { startCdpProxy } from "./terminal-browser-cdp-proxy.js";
 import {
@@ -45,6 +50,142 @@ import {
   writeBetaDesktopStatus,
 } from "./packaged-backend-controller.js";
 import { registerCdpProxyHandlers } from "./terminal-browser-cdp-handlers.js";
+import { createCompanionWindow, resizeCompanionWindow } from "./desktop-companion-window.js";
+import { readCompanionEnabled, writeCompanionEnabled } from "./desktop-companion-preferences.js";
+
+function isId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 512;
+}
+
+function isAttentionIntent(value: unknown): value is AttentionOpenIntent {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  const keys = Object.keys(candidate);
+  const allowed = new Set(["requestId", "connectionId", "attentionId", "projectId", "terminalSessionId", "panelId", "runId", "targetSurface", "completionRevision"]);
+  return keys.every((key) => allowed.has(key)) &&
+    ["requestId", "connectionId", "attentionId", "projectId", "terminalSessionId"].every((key) => isId(candidate[key])) &&
+    (candidate.panelId === null || isId(candidate.panelId)) &&
+    (candidate.runId === null || isId(candidate.runId)) &&
+    (candidate.targetSurface === "terminal" || candidate.targetSurface === "agent-team") &&
+    (candidate.completionRevision === null || (Number.isInteger(candidate.completionRevision) && Number(candidate.completionRevision) >= 0));
+}
+
+function isAttentionResult(value: unknown): value is AttentionOpenResult {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  const status = candidate.status;
+  const allowedStatuses = new Set([
+    "opened",
+    "opened_with_panel_fallback",
+    "connection_unavailable",
+    "session_not_found",
+    "timed_out",
+  ]);
+  if (!isId(candidate.requestId) || !allowedStatuses.has(String(status))) {
+    return false;
+  }
+  const expectsMessage = status !== "opened";
+  return expectsMessage
+    ? typeof candidate.message === "string" && candidate.message.length <= 512
+    : candidate.message === undefined;
+}
+
+function registerCompanionHandlers(): void {
+  const requireCompanion = (senderId: number): BrowserWindow => {
+    const win = desktopRuntime.companionWindow;
+    if (!win || win.isDestroyed() || win.webContents.id !== senderId) throw new Error("Companion sender required");
+    return win;
+  };
+  ipcMain.handle("attention:report-content-size", (event, size: unknown) => {
+    const win = requireCompanion(event.sender.id);
+    if (!size || typeof size !== "object") throw new Error("Invalid size");
+    const { width, height } = size as { width?: unknown; height?: unknown };
+    if (typeof width !== "number" || typeof height !== "number" || !Number.isFinite(width) || !Number.isFinite(height)) throw new Error("Invalid size");
+    resizeCompanionWindow(win, { width, height });
+  });
+  ipcMain.handle("attention:open-main-window", (event) => {
+    requireCompanion(event.sender.id);
+    desktopRuntime.mainWindow?.show();
+    desktopRuntime.mainWindow?.focus();
+  });
+  const pendingRequests = new Map<string, {
+    promise: Promise<AttentionOpenResult>;
+    resolve: (result: AttentionOpenResult) => void;
+    timer: NodeJS.Timeout;
+    completionExpected: boolean;
+  }>();
+  const completedRequests = new Map<string, AttentionOpenResult>();
+  const completePendingRequest = (result: AttentionOpenResult): boolean => {
+    const pending = pendingRequests.get(result.requestId);
+    if (!pending) return false;
+    clearTimeout(pending.timer);
+    pendingRequests.delete(result.requestId);
+    completedRequests.set(result.requestId, result);
+    if (completedRequests.size > 500) {
+      completedRequests.delete(completedRequests.keys().next().value ?? "");
+    }
+    pending.resolve(result);
+    return true;
+  };
+  ipcMain.handle("attention:open-result", (event, result: AttentionOpenResult) => {
+    const mainWindow = desktopRuntime.mainWindow;
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.id !== event.sender.id) throw new Error("Main window sender required");
+    if (!isAttentionResult(result)) throw new Error("Invalid result");
+    const pending = pendingRequests.get(result.requestId);
+    if (!pending) return;
+    if (
+      pending.completionExpected &&
+      (result.status === "opened" || result.status === "opened_with_panel_fallback")
+    ) {
+      throw new Error("Completion open result must use authorization");
+    }
+    completePendingRequest(result);
+  });
+  ipcMain.handle("attention:authorize-completion", (event, result: unknown): boolean => {
+    const mainWindow = desktopRuntime.mainWindow;
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.id !== event.sender.id) throw new Error("Main window sender required");
+    if (!isAttentionResult(result)) throw new Error("Invalid result");
+    if (result.status !== "opened" && result.status !== "opened_with_panel_fallback") throw new Error("Completion authorization requires an opened result");
+    const pending = pendingRequests.get(result.requestId);
+    if (!pending || !pending.completionExpected) return false;
+    return completePendingRequest(result);
+  });
+  ipcMain.handle("attention:open-slot", async (event, value: unknown): Promise<AttentionOpenResult> => {
+    requireCompanion(event.sender.id);
+    if (!isAttentionIntent(value)) throw new Error("Invalid attention intent");
+    const completed = completedRequests.get(value.requestId);
+    if (completed) return completed;
+    const existing = pendingRequests.get(value.requestId);
+    if (existing) return existing.promise;
+    const mainWindow = desktopRuntime.mainWindow;
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { requestId: value.requestId, status: "session_not_found", message: "Main window unavailable" };
+    }
+    let resolveResult!: (result: AttentionOpenResult) => void;
+    const promise = new Promise<AttentionOpenResult>((resolve) => { resolveResult = resolve; });
+    const deadlineAt = Date.now() + 10_000;
+    const timer = setTimeout(() => {
+      pendingRequests.delete(value.requestId);
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("attention:open-cancel", value.requestId);
+      }
+      const result: AttentionOpenResult = { requestId: value.requestId, status: "timed_out", message: "Main window did not finish opening the Slot" };
+      completedRequests.set(value.requestId, result);
+      resolveResult(result);
+    }, 10_000);
+    pendingRequests.set(value.requestId, {
+      promise,
+      resolve: resolveResult,
+      timer,
+      completionExpected: value.completionRevision !== null,
+    });
+    mainWindow.show();
+    mainWindow.focus();
+    const dispatch: AttentionOpenDispatch = { ...value, deadlineAt };
+    mainWindow.webContents.send("attention:open-intent", dispatch);
+    return promise;
+  });
+}
 
 process.on("uncaughtExceptionMonitor", (error) => {
   desktopRuntime.incidentLogger?.error("desktop.process.uncaughtException", {
@@ -104,6 +245,7 @@ if (hasSingleInstanceLock) {
       registerSystemMonitorHandler(() => desktopRuntime.packagedBackend);
       registerTerminalBrowserHandlers();
       registerCdpProxyHandlers();
+      registerCompanionHandlers();
       if (!isBetaChannel) {
         await installHooksIfNeeded({
           resourcesDir: process.env.RUNWEAVE_ELECTRON_RESOURCES_DIR
@@ -219,10 +361,30 @@ if (hasSingleInstanceLock) {
         },
       });
 
+      let companionEnabled = await readCompanionEnabled();
+      const setCompanionEnabled = (enabled: boolean): void => {
+        companionEnabled = enabled;
+        void writeCompanionEnabled(enabled);
+        if (enabled) {
+          if (!desktopRuntime.companionWindow || desktopRuntime.companionWindow.isDestroyed()) {
+            desktopRuntime.companionWindow = createCompanionWindow();
+            desktopRuntime.companionWindow.once("closed", () => {
+              desktopRuntime.companionWindow = null;
+            });
+          }
+        } else {
+          desktopRuntime.companionWindow?.destroy();
+          desktopRuntime.companionWindow = null;
+        }
+      };
+      if (companionEnabled) setCompanionEnabled(true);
+
       createTray(desktopRuntime.mainWindow, {
         enableUpdates: !isBetaChannel,
         onOpenSystemMonitor: openSystemMonitor,
         onReloadLocalRuntime: reloadLocalRuntime,
+        companionEnabled,
+        onSetCompanionEnabled: setCompanionEnabled,
       });
 
       if (
@@ -246,6 +408,8 @@ if (hasSingleInstanceLock) {
             enableUpdates: !isBetaChannel,
             onOpenSystemMonitor: openSystemMonitor,
             onReloadLocalRuntime: reloadLocalRuntime,
+            companionEnabled,
+            onSetCompanionEnabled: setCompanionEnabled,
           });
           return;
         }

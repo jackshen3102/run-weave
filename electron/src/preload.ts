@@ -17,9 +17,36 @@ import type {
   TerminalBrowserToolMenuAction,
   TerminalBrowserToolMenuRequest,
 } from "@runweave/shared/terminal-browser-tool-menu";
+import type {
+  AttentionOpenDispatch,
+  AttentionOpenIntent,
+  AttentionOpenResult,
+} from "@runweave/shared/attention";
+
+contextBridge.exposeInMainWorld("companionAPI", {
+  reportContentSize: (size: { width: number; height: number }) =>
+    ipcRenderer.invoke("attention:report-content-size", size) as Promise<void>,
+  openSlot: (intent: AttentionOpenIntent) =>
+    ipcRenderer.invoke("attention:open-slot", intent) as Promise<AttentionOpenResult>,
+  openMainWindow: () => ipcRenderer.invoke("attention:open-main-window") as Promise<void>,
+});
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
+  onAttentionOpenIntent: (listener: (intent: AttentionOpenDispatch) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, intent: AttentionOpenDispatch) => listener(intent);
+    ipcRenderer.on("attention:open-intent", wrapped);
+    return () => ipcRenderer.off("attention:open-intent", wrapped);
+  },
+  onAttentionOpenCancelled: (listener: (requestId: string) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, requestId: string) => listener(requestId);
+    ipcRenderer.on("attention:open-cancel", wrapped);
+    return () => ipcRenderer.off("attention:open-cancel", wrapped);
+  },
+  authorizeAttentionCompletion: (result: AttentionOpenResult) =>
+    ipcRenderer.invoke("attention:authorize-completion", result) as Promise<boolean>,
+  reportAttentionOpenResult: (result: AttentionOpenResult) =>
+    ipcRenderer.invoke("attention:open-result", result) as Promise<void>,
   isElectron: true,
   managesPackagedBackend:
     (process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND ??

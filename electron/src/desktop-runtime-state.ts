@@ -9,6 +9,7 @@ export const desktopRuntime = {
   packagedBackend: null as PackagedBackendRuntime | null,
   cdpProxy: null as CdpProxyRuntime | null,
   mainWindow: null as BrowserWindow | null,
+  companionWindow: null as BrowserWindow | null,
   activeRelease: null as RuntimeRelease | null,
   packagedBackendState: {
     kind: "packaged-local",
