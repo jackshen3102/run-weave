@@ -26,6 +26,8 @@ import type {
 contextBridge.exposeInMainWorld("companionAPI", {
   reportContentSize: (size: { width: number; height: number }) =>
     ipcRenderer.invoke("attention:report-content-size", size) as Promise<void>,
+  setMousePassthrough: (passthrough: boolean) =>
+    ipcRenderer.invoke("attention:set-mouse-passthrough", passthrough) as Promise<void>,
   openSlot: (intent: AttentionOpenIntent) =>
     ipcRenderer.invoke("attention:open-slot", intent) as Promise<AttentionOpenResult>,
   openMainWindow: () => ipcRenderer.invoke("attention:open-main-window") as Promise<void>,

@@ -84,6 +84,7 @@ declare global {
         width: number;
         height: number;
       }) => Promise<void>;
+      setMousePassthrough: (passthrough: boolean) => Promise<void>;
       openSlot: (intent: AttentionOpenIntent) => Promise<AttentionOpenResult>;
       openMainWindow: () => Promise<void>;
     };

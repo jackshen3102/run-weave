@@ -52,6 +52,10 @@ import {
 import { registerCdpProxyHandlers } from "./terminal-browser-cdp-handlers.js";
 import { createCompanionWindow, resizeCompanionWindow } from "./desktop-companion-window.js";
 import { readCompanionEnabled, writeCompanionEnabled } from "./desktop-companion-preferences.js";
+import {
+  readDesktopMainWindowState,
+  trackDesktopMainWindowState,
+} from "./desktop-main-window-state.js";
 
 function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 512;
@@ -102,6 +106,11 @@ function registerCompanionHandlers(): void {
     const { width, height } = size as { width?: unknown; height?: unknown };
     if (typeof width !== "number" || typeof height !== "number" || !Number.isFinite(width) || !Number.isFinite(height)) throw new Error("Invalid size");
     resizeCompanionWindow(win, { width, height });
+  });
+  ipcMain.handle("attention:set-mouse-passthrough", (event, passthrough: unknown) => {
+    const win = requireCompanion(event.sender.id);
+    if (typeof passthrough !== "boolean") throw new Error("Invalid passthrough state");
+    win.setIgnoreMouseEvents(passthrough, passthrough ? { forward: true } : undefined);
   });
   ipcMain.handle("attention:open-main-window", (event) => {
     requireCompanion(event.sender.id);
@@ -324,13 +333,32 @@ if (hasSingleInstanceLock) {
         return createWindow();
       };
 
+      const createMainWindow = (options?: {
+        initialPath?: string;
+        onReadyToShow?: (win: BrowserWindow) => void;
+      }): BrowserWindow => {
+        const restoredState = isBetaChannel
+          ? null
+          : readDesktopMainWindowState();
+        const win = createWindow({
+          hideOnClose: true,
+          initialBounds: restoredState?.bounds,
+          initialMode: restoredState?.mode,
+          initialPath: options?.initialPath,
+          onReadyToShow: options?.onReadyToShow,
+        });
+        if (!isBetaChannel) {
+          trackDesktopMainWindowState(win, restoredState?.mode ?? "normal");
+        }
+        return win;
+      };
+
       const openSystemMonitor = (): void => {
         if (
           !desktopRuntime.mainWindow ||
           desktopRuntime.mainWindow.isDestroyed()
         ) {
-          desktopRuntime.mainWindow = createWindow({
-            hideOnClose: true,
+          desktopRuntime.mainWindow = createMainWindow({
             initialPath: "/system-monitor",
           });
           return;
@@ -353,8 +381,7 @@ if (hasSingleInstanceLock) {
         ),
       );
 
-      desktopRuntime.mainWindow = createWindow({
-        hideOnClose: true,
+      desktopRuntime.mainWindow = createMainWindow({
         onReadyToShow: (win) => {
           writeBetaDesktopStatus();
           void checkAndNotifyAppServerAvailability(process.env, win);
@@ -403,7 +430,7 @@ if (hasSingleInstanceLock) {
           !desktopRuntime.mainWindow ||
           desktopRuntime.mainWindow.isDestroyed()
         ) {
-          desktopRuntime.mainWindow = createWindow({ hideOnClose: true });
+          desktopRuntime.mainWindow = createMainWindow();
           createTray(desktopRuntime.mainWindow, {
             enableUpdates: !isBetaChannel,
             onOpenSystemMonitor: openSystemMonitor,

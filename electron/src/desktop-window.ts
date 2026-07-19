@@ -8,6 +8,7 @@ import {
   shell,
 } from "electron";
 import pidusage from "pidusage";
+import type { Rectangle } from "electron";
 import type { RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
 import type { SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
 import type { PackagedBackendRuntime } from "./backend-runtime.js";
@@ -20,6 +21,13 @@ import {
 import { buildSystemMonitorSnapshot } from "./system-monitor.js";
 import { shouldAutoOpenWindowDevtools } from "./window-devtools.js";
 import { closeTerminalBrowsersForWindow } from "./terminal-browser-view.js";
+import {
+  DEFAULT_DESKTOP_WINDOW_HEIGHT,
+  DEFAULT_DESKTOP_WINDOW_WIDTH,
+  MIN_DESKTOP_WINDOW_HEIGHT,
+  MIN_DESKTOP_WINDOW_WIDTH,
+  type DesktopWindowMode,
+} from "./desktop-main-window-state.js";
 import {
   CUSTOM_PROTOCOL,
   DEV_DOCK_ICON_PATH,
@@ -146,14 +154,22 @@ export function isSystemMonitorSenderAllowed(senderUrl: string): boolean {
 
 export function createWindow(options?: {
   hideOnClose?: boolean;
+  initialBounds?: Rectangle;
+  initialMode?: DesktopWindowMode;
   initialPath?: string;
   onReadyToShow?: (win: BrowserWindow) => void;
 }): BrowserWindow {
+  const initialBounds = options?.initialBounds;
   const win = new BrowserWindow({
-    width: 1280,
-    height: 860,
-    minWidth: 800,
-    minHeight: 600,
+    ...(initialBounds
+      ? initialBounds
+      : {
+          width: DEFAULT_DESKTOP_WINDOW_WIDTH,
+          height: DEFAULT_DESKTOP_WINDOW_HEIGHT,
+        }),
+    minWidth: MIN_DESKTOP_WINDOW_WIDTH,
+    minHeight: MIN_DESKTOP_WINDOW_HEIGHT,
+    ...(options?.initialMode === "fullscreen" ? { fullscreen: true } : {}),
     webPreferences: {
       preload: PRELOAD_PATH,
       contextIsolation: true,
@@ -165,7 +181,11 @@ export function createWindow(options?: {
   });
 
   win.once("ready-to-show", () => {
-    win.show();
+    if (options?.initialMode === "maximized") {
+      win.maximize();
+    } else {
+      win.show();
+    }
     options?.onReadyToShow?.(win);
   });
   win.once("closed", () => {
