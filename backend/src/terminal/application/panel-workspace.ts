@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal-protocol";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 import type {
   TerminalPanelRecord,
   TerminalSessionManager,
@@ -39,6 +40,34 @@ import {
 import { toPanelListItem, toPanelWorkspacePayload } from "./payloads";
 
 const panelLogger = logger.child({ component: "terminal" });
+
+/**
+ * 收敛僵尸 `agent_starting`:一个 panel 报出 `agent_starting`,但已没有活跃的启动
+ * operation generation(启动租约),说明它的 agent turn 早已结束、只是 codex 仍停在
+ * 前台交互提示符,不会再有 hook 把它推进到 idle。此时按 `agent_idle` 收敛,避免它
+ * 污染 `aggregatePanelTerminalState` 的整体折叠结果。判据只用确定性的 operation
+ * generation,不看运行时长、不放松 hook 门禁。
+ */
+export function convergeStaleStartingWithoutLease(
+  terminalSessionManager: Pick<
+    TerminalSessionManager,
+    "hasPanelAgentOperationGeneration"
+  >,
+  terminalSessionId: string,
+  panelId: string,
+  nextTerminalState: TerminalState,
+): TerminalState {
+  if (
+    nextTerminalState.state !== "agent_starting" ||
+    terminalSessionManager.hasPanelAgentOperationGeneration(
+      terminalSessionId,
+      panelId,
+    )
+  ) {
+    return nextTerminalState;
+  }
+  return { state: "agent_idle", agent: nextTerminalState.agent };
+}
 
 export async function ensureTmuxPanelWorkspace(
   terminalSessionManager: TerminalSessionManager,
@@ -129,10 +158,15 @@ export async function ensureTmuxPanelWorkspace(
         existingPanel.activeCommand,
       );
       const previousActiveCommand = existingPanel.activeCommand;
-      const nextTerminalState = resolveReconciledPanelTerminalState(
-        pane,
-        effectiveActiveCommand,
-        existingPanel.terminalState,
+      const nextTerminalState = convergeStaleStartingWithoutLease(
+        terminalSessionManager,
+        session.id,
+        existingPanel.id,
+        resolveReconciledPanelTerminalState(
+          pane,
+          effectiveActiveCommand,
+          existingPanel.terminalState,
+        ),
       );
       const storedThreadProvider =
         existingPanel.threadProvider ??
