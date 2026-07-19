@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Team Run dd8353fe 深度复盘</title>
+  <style>
+    :root{color-scheme:dark;--bg:#07101f;--panel:#0d1930;--panel2:#101f3b;--line:#243657;--text:#e8eefc;--muted:#9fb0ce;--cyan:#53d7ff;--green:#56e39f;--amber:#ffcc66;--red:#ff718a;--violet:#b39cff}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 14% 0,#142748 0,transparent 36%),radial-gradient(circle at 88% 12%,#102f3d 0,transparent 29%),var(--bg);color:var(--text);font:15px/1.62 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+    main{max-width:1180px;margin:auto;padding:52px 28px 96px}h1{font-size:42px;line-height:1.12;margin:10px 0 14px;letter-spacing:-.03em;max-width:1000px}h2{margin:50px 0 18px;font-size:25px}h3{font-size:17px;margin:0 0 8px}.eyebrow{color:var(--cyan);font-weight:700;letter-spacing:.1em}.lede{max-width:920px;color:var(--muted);font-size:18px}.snapshot{margin-top:10px;color:#7790b7;font-size:12px}
+    .verdict{margin:26px 0 22px;padding:20px 22px;border:1px solid #32667f;border-radius:16px;background:linear-gradient(135deg,rgba(15,48,68,.92),rgba(13,25,48,.92));display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start}.verdict-mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:#153b4d;color:var(--cyan);font-size:22px;font-weight:900}.verdict p{margin:3px 0 0;color:#c6d5ef}.verdict strong{color:#fff}
+    .metrics,.grid{display:grid;gap:14px}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}.metric,.card,.rec{border:1px solid var(--line);background:rgba(13,25,48,.92);border-radius:14px}.metric,.card{padding:17px}.metric b{display:block;font-size:29px;line-height:1.2}.metric span,.muted{color:var(--muted)}.metric small{display:block;margin-top:6px;color:#7589aa}.accent{color:var(--cyan)}.good{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}
+    .visual{overflow:auto;border:1px solid var(--line);background:rgba(13,25,48,.68);border-radius:14px;padding:18px}.visual svg{display:block;min-width:980px;width:100%;height:auto}.legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;color:var(--muted);font-size:12px}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+    .timeline{border-left:2px solid var(--line);margin-left:10px;padding-left:24px}.event{position:relative;margin:0 0 23px}.event:before{content:"";position:absolute;width:11px;height:11px;border-radius:50%;background:var(--cyan);left:-31px;top:7px}.event.block:before{background:var(--red)}.event.repair:before{background:var(--amber)}.event.done:before{background:var(--green)}.event p{margin:3px 0;color:var(--muted)}.event time{color:#7f94b6;font-variant-numeric:tabular-nums;font-size:12px;margin-left:8px}
+    .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;margin-bottom:9px}.fact{background:#173f35;color:#8cf0c0}.framework{background:#4a2633;color:#ff9db0}.environment{background:#4b3d1c;color:#ffdc8a}.contract{background:#203e61;color:#90d5ff}.risk{background:#3c3159;color:#cdbfff}.resolved{background:#173f35;color:#8cf0c0}.card p{margin:5px 0}.evidence{font-size:12px;color:#7f94b6;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+    .table-wrap{overflow:auto;border-radius:14px}table{width:100%;min-width:780px;border-collapse:collapse;background:rgba(13,25,48,.92);border:1px solid var(--line)}th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--cyan);font-size:12px;letter-spacing:.04em;text-transform:uppercase}td:nth-child(2){font-variant-numeric:tabular-nums;white-space:nowrap}code{color:#b5e7ff;background:#101f3b;padding:1px 5px;border-radius:5px}
+    .recs{display:grid;gap:14px}.rec{padding:18px;display:grid;grid-template-columns:70px 1fr minmax(160px,220px);gap:16px}.priority{font-weight:800;font-size:18px}.p0{color:var(--red)}.p1{color:var(--amber)}.p2{color:var(--green)}.impact{color:var(--muted);font-size:13px}.status{display:inline-block;margin-top:8px;padding:2px 7px;border:1px solid var(--line);border-radius:999px;color:#a9bbd7;font-size:11px}
+    details{border:1px solid var(--line);background:rgba(13,25,48,.75);border-radius:12px;padding:12px 14px;margin-top:10px}summary{cursor:pointer;color:#c7d8f4;font-weight:650}details p,details li{color:var(--muted)}
+    .conclusion{border:1px solid #316d85;background:#0c2637;padding:24px;border-radius:16px;margin-top:50px;font-size:18px}.foot{margin-top:14px;color:#6f83a5;font-size:12px}
+    @media(max-width:850px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:700px){main{padding:34px 18px 70px}.metrics{grid-template-columns:1fr}.rec{grid-template-columns:52px 1fr}.impact{grid-column:2}h1{font-size:33px}.verdict{grid-template-columns:1fr}.verdict-mark{display:none}}
+  </style>
+</head>
+<body><main data-snapshot-at="2026-07-19T12:04:01Z">
+  <header>
+    <div class="eyebrow">RUN · atr_dd8353fe_20260719020754</div>
+    <h1>产品 repair loop 最终闭环，但一次 lifecycle 误判吞掉了 78.2% 的总时长</h1>
+    <p class="lede">验收合同成功找出并推动修复 3 个 RuntimeTrace 产品不变量；真正让 run 长时间卡住的不是实现难度，而是 code pane 已完成后，可信 Stop 被按 <code>inactive_agent</code> 忽略，导致 bounce 安全门禁拒绝投递。</p>
+    <p class="snapshot">事实快照：2026-07-19 20:04:01 CST · 最终状态 done · 所有 worker pane 当前 agent_idle</p>
+  </header>
+
+  <div class="verdict">
+    <div class="verdict-mark">✓</div>
+    <div><strong>核心判断</strong><p>这是一个“产品缺陷被有效验收捕获、框架恢复缺口放大人工成本”的成功 run。最终 7 个 required case 全部通过；但 lifecycle/bounce 缺陷本身没有由本 run 修复，只是在 pane 后续自愈为显式 idle 后，通过 1 次精确 code intervention 恢复。</p></div>
+  </div>
+
+  <section class="metrics" aria-label="关键指标">
+    <div class="metric"><b class="good">7 / 7</b><span>required acceptance 最终通过</span><small>optional ASEA-008 按合同未执行</small></div>
+    <div class="metric"><b>9</b><span>已消费 worker dispatch</span><small>code 4 · review 4 · behavior 1</small></div>
+    <div class="metric"><b class="bad">3</b><span>独立 review 失败轮次</span><small>Round 1–3，Round 4 通过</small></div>
+    <div class="metric"><b class="warn">1</b><span>Human Gate + 精确介入</span><small>恢复目标：code / ASEA-004</small></div>
+    <div class="metric"><b>9h 34m</b><span>run 总时长</span><small>02:07:54Z → 11:42:14Z</small></div>
+    <div class="metric"><b class="bad">78.2%</b><span>时间耗在 Human Gate 等待</span><small>7h 28m 51s</small></div>
+  </section>
+
+  <section>
+    <h2>理想闭环与实际断点</h2>
+    <div class="visual">
+      <svg viewBox="0 0 1080 290" role="img" aria-label="Agent Team 从验收来源到完成的实际流程，标出 bounce 断点和恢复路径">
+        <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#53d7ff"/></marker><marker id="arrowRed" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#ff718a"/></marker></defs>
+        <text x="14" y="24" fill="#9fb0ce" font-size="13">控制面主线</text>
+        <g font-family="system-ui" font-size="13" text-anchor="middle">
+          <rect x="10" y="48" width="145" height="62" rx="12" fill="#142748" stroke="#53d7ff"/><text x="82" y="75" fill="#e8eefc">测试计划</text><text x="82" y="95" fill="#9fb0ce">7 required</text>
+          <rect x="190" y="48" width="145" height="62" rx="12" fill="#142748" stroke="#53d7ff"/><text x="262" y="75" fill="#e8eefc">Code Round 1</text><text x="262" y="95" fill="#9fb0ce">自报 7 pass</text>
+          <rect x="370" y="48" width="145" height="62" rx="12" fill="#142748" stroke="#ffcc66"/><text x="442" y="75" fill="#e8eefc">Review Round 1</text><text x="442" y="95" fill="#ffcc66">2 × P1</text>
+          <rect x="550" y="48" width="145" height="62" rx="12" fill="#331c2a" stroke="#ff718a"/><text x="622" y="75" fill="#e8eefc">Bounce 阻断</text><text x="622" y="95" fill="#ff9db0">agent_starting</text>
+          <rect x="730" y="48" width="145" height="62" rx="12" fill="#331c2a" stroke="#ff718a"/><text x="802" y="75" fill="#e8eefc">Human Gate</text><text x="802" y="95" fill="#ff9db0">7h 28m 51s</text>
+          <rect x="910" y="48" width="155" height="62" rx="12" fill="#173f35" stroke="#56e39f"/><text x="987" y="75" fill="#e8eefc">精确介入</text><text x="987" y="95" fill="#8cf0c0">code / ASEA-004</text>
+          <path d="M155 79H190M335 79H370M515 79H550" stroke="#53d7ff" stroke-width="2" marker-end="url(#arrow)"/><path d="M695 79H730M875 79H910" stroke="#ff718a" stroke-width="2" marker-end="url(#arrowRed)"/>
+          <rect x="190" y="174" width="190" height="68" rx="12" fill="#142748" stroke="#ffcc66"/><text x="285" y="201" fill="#e8eefc">Code ↔ Review × 3</text><text x="285" y="222" fill="#9fb0ce">边界逐轮收敛</text>
+          <rect x="450" y="174" width="190" height="68" rx="12" fill="#142748" stroke="#53d7ff"/><text x="545" y="201" fill="#e8eefc">Behavior Verify</text><text x="545" y="222" fill="#9fb0ce">Beta + desktop CDP</text>
+          <rect x="710" y="174" width="190" height="68" rx="12" fill="#173f35" stroke="#56e39f"/><text x="805" y="201" fill="#e8eefc">自动完成</text><text x="805" y="222" fill="#8cf0c0">7 / 7 pass</text>
+          <path d="M987 110V140H285V174" stroke="#53d7ff" stroke-width="2" fill="none" marker-end="url(#arrow)"/><path d="M380 208H450M640 208H710" stroke="#53d7ff" stroke-width="2" marker-end="url(#arrow)"/>
+        </g>
+        <text x="14" y="276" fill="#7589aa" font-size="12">UI 的“已抛回”只表达调度意图；02:50:48Z 的 backend bounce.failed 才证明 prompt 未进入 code pane。</text>
+      </svg>
+    </div>
+    <div class="legend"><span><i class="dot" style="background:#53d7ff"></i>正常控制流</span><span><i class="dot" style="background:#ffcc66"></i>产品 gate 发现</span><span><i class="dot" style="background:#ff718a"></i>框架断点 / 人工等待</span><span><i class="dot" style="background:#56e39f"></i>恢复与完成</span></div>
+  </section>
+
+  <section>
+    <h2>关键时间线</h2>
+    <div class="timeline">
+      <div class="event"><b>Run 创建并自动 split</b><time>02:07:54Z</time><p>验收来源为固定 SHA 的 YAML；code、code_review、behavior_verify 三个 pane 建立。</p></div>
+      <div class="event"><b>Code Round 1 交付</b><time>02:40:41Z</time><p>Code worker 自报 ASEA-001～007 pass；watchdog 在 02:41:58Z 消费 pane-scoped outbox。</p></div>
+      <div class="event block"><b>可信 Stop 被忽略</b><time>02:42:40Z</time><p>Backend 日志同时记录 app-server hook 与 direct hook 为 ignored / inactive_agent；完成 outbox 没丢，但 pane 生命周期没有收敛。</p></div>
+      <div class="event repair"><b>Review Round 1 否决 ASEA-004</b><time>02:48:37Z</time><p>两个 review_harness 复现 assignment 翻桶与 run-wide outcome 广播；code worker 的自判 pass 没有越过独立 gate。</p></div>
+      <div class="event block"><b>Bounce 投递失败，进入 Human Gate</b><time>02:50:48Z</time><p>安全门禁等待同一 thread ready 失败，拒绝向 agent_starting pane 投递；自动 loop 在这里停止。</p></div>
+      <div class="event repair"><b>精确 code intervention</b><time>10:19:40Z</time><p>确认原 code pane 已显式 agent_idle 后，按 ASEA-004 与两条 repair key 建立 fresh dispatch；不是裸输入，也不是泛化 resume。</p></div>
+      <div class="event repair"><b>三轮边界收敛</b><time>10:50Z–11:28Z</time><p>Round 2 修集合级 assignment/dispatch 归因；Round 3 修 asset revision 稳定性/缺失反馈观察；Round 4 补 run/dispatch 可发现 API，review 通过。</p></div>
+      <div class="event done"><b>Behavior Verify 与自动完成</b><time>11:41Z–11:42Z</time><p>owner-scoped Beta Session + desktop CDP 验证真实认证 API；Dev Session 清理完成，7/7 required pass。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>根因分类</h2>
+    <div class="grid">
+      <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>完成事件已消费，pane 生命周期却没有收敛</h3><p class="muted">02:42:40Z 的 Stop 带目标 panel 到达，但因 current agent identity 已空而被判 inactive；后续 bounce 看到 agent_starting，只能 fail closed。该缺陷造成 1 次 Human Gate 和 7h28m51s 等待。</p><div class="evidence">证据：backend log 1358–1398；service-worker-dispatch-support.ts:193–224</div></article>
+      <article class="card"><span class="tag resolved">已修复 / 部分修复</span><h3>3 个 RuntimeTrace 产品不变量已在本 run 内闭环</h3><p class="muted">稳定分桶改为以 assetId 为实验单位；outcome/feedback 改为 dispatch 级因果归因；新增按 runId + dispatchId 的认证发现入口。最终独立 review 无 open P0/P1，behavior gate 通过。</p><div class="evidence">证据：Round 4 review outbox；memory-provider.ts；outcome-observer.ts；evolution-activation.ts</div></article>
+      <article class="card"><span class="tag contract">验收合同问题</span><h3>ASEA-004 同时承载 3 个独立不变量</h3><p class="muted">assignment、反馈归因和 trace 可发现性共享一个 caseId，导致每次修掉一层后才暴露下一层；结果是 3 次 review fail 都显示为同一 ASEA-004。合同有效，但粒度不利于选择性重跑和进度解释。</p><div class="evidence">证据：testplan:41–50；Round 1–3 review histories</div></article>
+      <article class="card"><span class="tag risk">观察风险</span><h3>框架状态自愈不等于恢复机制已修复</h3><p class="muted">介入前 code pane 已重新变为显式 idle，说明状态后来收敛；但 run 仍停在 need_human，且没有代码/验证证明下一次同样时序会自动续跑。最终 done 不能用来关闭这个框架问题。</p><div class="evidence">证据：agentInterventions[0].previousReason；最终 pane snapshot</div></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>量化结论</h2>
+    <div class="table-wrap"><table><thead><tr><th>观察</th><th>数字</th><th>含义</th></tr></thead><tbody>
+      <tr><td>验收结果</td><td>7 pass / 0 fail / 0 pending</td><td>所有 required case 完成；ASEA-008 是 optional，未进入 run 不是漏测。</td></tr>
+      <tr><td>派发构成</td><td>4 code + 4 review + 1 behavior</td><td>9 个 dispatch 全部由 pane-scoped outbox 消费，dispatchId 与 panel/tmux 身份闭合。</td></tr>
+      <tr><td>独立 gate</td><td>3 fail → 1 pass</td><td>Code 自证没有替代 reviewer；每轮失败都产生新的可执行 invariant，而不是重复同一结论。</td></tr>
+      <tr><td>产品问题</td><td>3 个 unique invariant</td><td>最终 review 记录 3 条 resolved P1；历史上出现 5 个 P1 finding 实例，是边界细化，不应误算为 5 个独立根因。</td></tr>
+      <tr><td>框架阻塞</td><td>1 次 bounce failure</td><td>一次状态机断点就让整个串行 pipeline 无法进入 repair，阻塞当时其余 6 个 pending case。</td></tr>
+      <tr><td>人工成本</td><td>1 intervention / 7h28m51s</td><td>只有一次人工动作，但等待占总时长 78.2%；“介入次数少”不代表恢复成本低。</td></tr>
+      <tr><td>恢复后耗时</td><td>1h22m33s</td><td>包含 3 个 code repair、3 个 review gate、1 个 behavior gate；不能直接解释为单个 code worker 的实现效率。</td></tr>
+      <tr><td>环境资源</td><td>1 Beta Session，清理 100%</td><td><code>dvs-756687</code> 最终 stopped，ownedLiveFixtureRuns=0，未形成环境能力阻塞。</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section>
+    <h2>后续优化建议</h2>
+    <div class="recs">
+      <div class="rec"><div class="priority p0">P0</div><div><h3>Bounce 前执行目标化 current-status reconcile</h3><p class="muted">按精确 panel/thread 读取 Codex 当前状态；只允许显式 idle 放行。active 阻断，notLoaded/超时/错误一律视为 unknown；读取前后 lastEventId 不变且 panel/tmux/provider/thread 全匹配才提交 idle。</p><span class="status">当前状态：未做</span></div><div class="impact">验证目标：重放本次 Stop 被忽略时序，fresh code dispatch 自动建立；旧 turn Stop 不覆盖同 thread 新 turn。</div></div>
+      <div class="rec"><div class="priority p1">P1</div><div><h3>把 blocked dispatch target 持久化为恢复合同</h3><p class="muted">进入 need_human 时保存 role、panelId、tmuxPaneId、caseIds、repairKeys 与失败阶段；pane 后续显式 idle 时只重试该目标一次。禁止根据“最后消费的 worker role”猜恢复方向。</p><span class="status">当前状态：部分具备，intervention 可精确指定</span></div><div class="impact">本次可减少 1 次人工路由判断，并避免 resume 误回 reviewer。</div></div>
+      <div class="rec"><div class="priority p1">P1</div><div><h3>拆分 ASEA-004 为 3 个 required case</h3><p class="muted">分别覆盖 assignment stability、dispatch attribution/feedback、run/dispatch discoverability；保留一个端到端组合 gate，但让 repair key 与选择性重跑拥有独立 caseId。</p><span class="status">当前状态：未做</span></div><div class="impact">验证目标：每个 review fail 只影响对应 case；进度从“同一 case 连败 3 次”变成可解释的边界收敛。</div></div>
+      <div class="rec"><div class="priority p2">P2</div><div><h3>UI 区分“计划抛回、已投递、Agent 已启动”</h3><p class="muted">展示 dispatchId、目标 pane、投递确认时间和 thread readiness；bounce failed 时不要只保留“已抛回”的意图文案。</p><span class="status">当前状态：未做</span></div><div class="impact">验证目标：用户不用打开 backend 日志即可判断 prompt 是否真正进入 worker。</div></div>
+      <div class="rec"><div class="priority p2">P2</div><div><h3>在完成态保留历史 repair 指标摘要</h3><p class="muted">最终 run 会清空活动 repairCycles；建议持久化 unique repair keys、review fail count、Human Gate duration 和 recovery action，减少复盘对 outbox-history 的反向重建。</p><span class="status">当前状态：仅 outbox-history 可还原</span></div><div class="impact">验证目标：单次 run GET 即可解释循环成本，指标与历史 outbox 交叉校验一致。</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>证据边界</h2>
+    <details><summary>为什么最终 pass 不能证明框架缺陷已修？</summary><p>最终 pass 证明产品实现和验收链闭环。框架故障发生在第一次 review 后的 bounce 入口；恢复时 pane 已在后台变为显式 idle，随后通过精确 intervention 建立新 dispatch。没有代码 patch 或同一时序的框架回归证据，因此只能标记“历史故障已绕过，根因仍未关闭”。</p></details>
+    <details><summary>为什么 Round 1 的 Code 7 pass 不能作为最终结论？</summary><p>Code worker 的 acceptanceResults 是自证；独立 review 用生产类 review_harness 复现了两个 P1，控制面正确地把 ASEA-004 置为 fail。直到 Round 4 review 和 Round 5 behavior verify 通过，run 才自动完成。</p></details>
+    <details><summary>为什么没有环境能力问题？</summary><p>Behavior worker 在 owner-scoped Beta Session <code>dvs-756687</code> 上运行生产 verifier，并通过 desktop CDP 调用认证 Evolution API；session 最终 stopped、fixture cleanup completed、ownedLiveFixtureRuns=0。</p></details>
+  </section>
+
+  <div class="conclusion"><b>一句话结论：</b>这次 Agent Team 的验收和 repair 机制最终是有效的，但恢复机制把一个可自动判断的 pane readiness 问题变成了占总时长 78.2% 的 Human Gate；下一步优先修目标化状态协调与精确恢复目标，而不是削弱 bounce 安全门禁。</div>
+  <p class="foot">页面依据 2026-07-19T12:04:01Z 的 run JSON、9 份 outbox history、backend 日志、最终 pane 状态与当前代码生成。查看完整来源说明请打开同目录 README.md。</p>
+</main></body></html>

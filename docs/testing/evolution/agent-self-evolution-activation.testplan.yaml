@@ -1,0 +1,95 @@
+version: 1
+name: Agent 自进化资产激活与治理验收
+description: >
+  验证多 Agent 分析产生的候选资产按类型与风险治理，只有 Memory 在 V1 中能够经过 Shadow、显式检索、Live Canary、Promotion、Rollback 与 Drift 重评影响 Agent Team code worker，且默认关闭真实注入。
+
+cases:
+  - id: ASEA-001
+    name: Candidate 类型完整但只有 Memory 具备激活路径
+    required: true
+    description: >
+      验证 Memory、Prompt、Skill、Routing、Product、Code 使用统一证据和生命周期合约，但非 Memory 类型在 V1 中只能形成结构化提案。
+    preconditions:
+      - 已准备能分别产生六类 Candidate 的 corroborated Claims。
+    steps:
+      - 运行 Candidate Factory 并读取六类记录；确认每条都引用固定 Insight revision、证据、反例、适用范围、风险和生成版本。
+      - 尝试推进各类型；确认只有 Memory 可以进入 shadow/canary/promoted，Prompt/Skill/Routing 需要人工批准但仍不自动安装，Product/Code 不能修改产品、仓库、Git 或外部系统。
+
+  - id: ASEA-002
+    name: Memory 检索同时遵守硬边界、语义相关性与注入上限
+    required: true
+    description: >
+      验证检索先按 learning scope、状态、角色、版本、有效期和排除条件硬过滤，再以 FTS/结构化召回和 LLM Selector 判断相关性，任何语义判断都不能越权。
+    preconditions:
+      - 已准备同一主项目不同 workspace 的相关 Memory、无关项目 Memory、已退休/过期 Memory、语义相似但有排除条件的 Memory 和超过上限的候选集。
+    steps:
+      - 为一个 Agent Team code task 执行检索；确认相关 workspace Memory 可召回，无关 scope、错误角色、退休、过期和命中排除条件的记录在 Selector 前已剔除。
+      - 检查 Selector 与最终结果；确认每个选择都有匹配理由，最多注入 3 条且总长度不超过策略上限，没有高置信匹配时返回空集合，未注入候选也进入 RuntimeTrace 审计。
+
+  - id: ASEA-003
+    name: Memory 以带 Asset ID 的补充上下文显式注入
+    required: true
+    description: >
+      验证 Agent Team code worker startup prompt 只追加独立 Evolution Context，不能静默改写用户任务、系统 Prompt、AGENTS.md 或既有验收合同。
+    preconditions:
+      - learning scope 已授权一条 canary Memory，当前 code task 满足其适用条件。
+      - 可以捕获 Backend 发送给 worker 的完整 startup prompt。
+    steps:
+      - 启动匹配任务并对比注入前后的 prompt 结构；确认原始 task、intent、worker 合同和项目规则逐字保持，Evolution Context 单独标注 assetId、status、适用原因、证据等级和建议性权限。
+      - 启动不匹配任务和非 code worker；确认不产生该上下文，且注入服务故障时 Agent Team 主流程继续并记录 fail-open 原因而不是阻断任务。
+
+  - id: ASEA-004
+    name: Canary 与 control 分配产生可归因 RuntimeTrace
+    required: true
+    description: >
+      验证 eligible 真实任务按稳定策略分配 control 或 canary，记录检索、选择、暴露、Agent 反馈及后续 review/behavior/用户纠偏结果，不能只记录“模型认为有用”。
+    preconditions:
+      - 已启用一个低风险 Memory 的 canary policy，并准备多个匹配的真实 Agent Team code task。
+    steps:
+      - 执行匹配任务并读取 RuntimeTrace；确认同一 run/asset 的 assignment 幂等，control 不注入、canary 显式注入，两组都记录 task/run/dispatch、Selector 版本和匹配原因。
+      - 完成后续 code_review 与 behavior_verify；确认 trace 关联客观 gate、repair、用户纠偏和完成结果，Agent 自述 adopted/ignored/conflicted 只作为一项观察而不单独决定效果。
+
+  - id: ASEA-005
+    name: 模型互评不能绕过真实证据晋级 Memory
+    required: true
+    description: >
+      验证 E1 Evidence Review 与 E2 Counterfactual Replay 只能推进到 shadow；自动 promotion 至少需要策略要求的 E3 Sandbox 或 E4 Live Canary 样本且关键维度无回归。
+    preconditions:
+      - 已准备分别只有 E1、只有 E1+E2、包含足量 E4 正向样本和包含关键安全回归的四个 Memory Candidate。
+    steps:
+      - 请求四个 Candidate 自动晋级；确认前两者保持 shadow，足量 E4 且目标改善/关键维度无回归的记录才符合 promotion 条件，安全回归记录立即拒绝或退休。
+      - 将样本数降到策略自动门槛以下再请求晋级；确认百分比改善不能自动 promotion，人工覆盖必须记录身份、理由、证据和可回滚 revision。
+
+  - id: ASEA-006
+    name: 自动化权限按资产风险和 learning scope 策略执行
+    required: true
+    description: >
+      验证 Insight 可自动落库、Memory 可自动 Shadow，但真实 canary/promotion 只有在当前 learning scope 的授权策略明确开启时发生；默认策略关闭所有真实注入。
+    preconditions:
+      - 已准备默认策略、仅允许 Memory canary 的策略和试图授权 Product/Code 自动应用的非法策略。
+    steps:
+      - 在默认策略下完成分析；确认 Insight/Memory draft 可保存，但没有 Agent Team prompt 变化、canary assignment 或自动 promotion。
+      - 启用 Memory canary 后重试并提交非法高风险授权；确认只有该 scope 的低风险 Memory 可以进入 canary，其他 scope 不受影响，Product/Code 自动应用配置被拒绝。
+
+  - id: ASEA-007
+    name: 依赖漂移和反例触发重评、停止注入与回滚
+    required: true
+    description: >
+      验证相关代码/协议、Provider/模型、工具行为、系统 Prompt、来源证据或新反例变化时，Memory 进入 needs_revalidation 并停止新的 promoted 注入，随后可重新晋级或退休。
+    preconditions:
+      - 已准备一条 promoted Memory 及其代码区域、协议版本、Provider、模型、工具与排除条件依赖。
+      - 可以分别制造相关和无关代码变化、新反例以及用户主动 rollback。
+    steps:
+      - 依次制造无关变化和相关依赖变化；确认无关变化不影响资产，相关变化将其标记 needs_revalidation、停止新注入并保留历史 RuntimeTrace。
+      - 完成新的 Shadow/Canary 或执行 rollback；确认有新证据时生成 revision 并可重新 promotion，失败或人工回滚时进入 retired，之后任务不再检索该 revision。
+
+  - id: ASEA-008
+    name: Deep Sandbox Replay 只能在一次性隔离环境执行
+    required: false
+    description: >
+      验证未来启用 E3 时，只有 deep profile 的显式 Sandbox Replay 可以执行工具，且隔离 workspace、资源账本、禁止外发与清理合同完整；该能力不属于首个激活版本的 required 门禁。
+    preconditions:
+      - 已显式开启 deep Sandbox Replay，并准备可恢复的 Git baseline、验收合同和一次性 workspace。
+    steps:
+      - 启动 E3 Replay；确认使用独立临时 workspace、固定 source revision 和受限命令，不能访问用户当前 workspace、commit、push、发消息、提权或使用未授权网络。
+      - 让 Replay 成功、失败和超时；确认所有分支记录命令/文件变化/验收证据并完成资源清理，清理失败时 Evaluation 不能被标记通过或用于 promotion。

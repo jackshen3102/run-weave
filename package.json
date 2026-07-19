@@ -67,6 +67,7 @@
     "architecture:verify": "node ./scripts/verify-architecture.mjs",
     "activity:verify": "pnpm --filter @runweave/backend exec tsx ../scripts/verify-activity-data-foundation.ts",
     "work-history:verify": "pnpm --filter @runweave/backend exec tsx ../scripts/verify-work-history-read-model.ts",
+    "evolution:verify-activation": "pnpm --dir backend exec tsx ../scripts/evolution/verify-activation.mjs",
     "cli:build": "pnpm --filter ./packages/runweave-cli build",
     "cli:shim:local": "pnpm --filter @runweave/cli build && node ./scripts/install-runweave-bin-shim.mjs --home=$HOME/.runweave/app-server-test --cli-entry=./packages/runweave-cli/dist/index.js",
     "cli:version:bump": "node ./scripts/bump-runweave-cli-version.mjs",

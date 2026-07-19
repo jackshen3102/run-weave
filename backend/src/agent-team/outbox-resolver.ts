@@ -278,11 +278,44 @@ export function normalizeAgentTeamWorkerOutbox(
         ? []
         : normalizeFindings(record.remainingFindings, "open"),
     recommendations: normalizeRecommendations(record.recommendations),
+    evolutionFeedback: normalizeEvolutionFeedback(record.evolutionFeedback),
     fixVerifications: normalizeFixVerifications(record.fixVerifications),
     acceptanceResults: normalizeAcceptanceResults(
       record.acceptanceResults,
       typeof record.error === "string" ? record.error : null,
     ),
+  };
+}
+
+function normalizeEvolutionFeedback(
+  value: AgentTeamWorkerOutbox["evolutionFeedback"],
+): AgentTeamWorkerOutbox["evolutionFeedback"] {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  if (
+    !["adopted", "ignored", "conflicted"].includes(value.disposition) ||
+    !Array.isArray(value.assetRevisionIds) ||
+    typeof value.summary !== "string" ||
+    !value.summary.trim()
+  ) {
+    return null;
+  }
+  const assetRevisionIds = Array.from(
+    new Set(
+      value.assetRevisionIds
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+  if (assetRevisionIds.length === 0) {
+    return null;
+  }
+  return {
+    disposition: value.disposition,
+    assetRevisionIds,
+    summary: value.summary.trim().slice(0, 500),
   };
 }
 

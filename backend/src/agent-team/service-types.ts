@@ -11,6 +11,8 @@ import type { TerminalStateService } from "../terminal/terminal-state-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TerminalActivityDependencies } from "../terminal/activity-events";
+import type { EvolutionMemoryProvider } from "../evolution/injection/memory-provider";
+import type { EvolutionOutcomeObserver } from "../evolution/injection/outcome-observer";
 
 export interface AgentTeamServiceOptions {
   terminalSessionManager: TerminalSessionManager;
@@ -25,6 +27,8 @@ export interface AgentTeamServiceOptions {
   activity?: TerminalActivityDependencies;
   /** Unique to one Backend boot; used to prove a framework restart occurred. */
   backendInstanceId?: string;
+  evolutionMemoryProvider?: EvolutionMemoryProvider;
+  evolutionOutcomeObserver?: EvolutionOutcomeObserver;
 }
 
 export type AgentTeamCompletionSignalSource =

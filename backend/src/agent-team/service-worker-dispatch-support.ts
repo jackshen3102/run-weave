@@ -60,6 +60,7 @@ export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
       updatedAt: new Date().toISOString(),
     };
     await this.runStore.writeRun(next);
+    await this.observeEvolutionOutcome(run, next);
     if (
       run.status !== "need_human" &&
       next.status === "need_human" &&
@@ -68,6 +69,100 @@ export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
       await this.trySendToMain(next, buildHumanGateMainPrompt(next));
     }
     return next;
+  }
+
+  private async observeEvolutionOutcome(
+    previous: AgentTeamRun,
+    current: AgentTeamRun,
+  ): Promise<void> {
+    if (!this.evolutionOutcomeObserver) return;
+    const codeDispatchId = this.resolveEvolutionCodeDispatchId(previous);
+    if (!codeDispatchId) return;
+    const source = {
+      sourceDispatchId: previous.activeWorkerDispatch?.dispatchId ?? null,
+      sourceRole: previous.activeWorkerRole,
+    };
+    try {
+      if (previous.status !== current.status) {
+        if (current.status === "done") {
+          await this.evolutionOutcomeObserver.recordForDispatch(
+            current.runId,
+            codeDispatchId,
+            "completed",
+            { ...source, status: current.status, phase: current.phase },
+            current.updatedAt,
+          );
+        } else if (current.status === "cancelled") {
+          await this.evolutionOutcomeObserver.recordForDispatch(
+            current.runId,
+            codeDispatchId,
+            "cancelled",
+            { ...source, status: current.status, phase: current.phase },
+            current.updatedAt,
+          );
+        }
+      }
+      const changedCases = current.acceptance.filter((item) => {
+        const prior = previous.acceptance.find(
+          (candidate) => candidate.caseId === item.caseId,
+        );
+        return prior?.status !== item.status && item.status !== "pending";
+      });
+      if (changedCases.length > 0) {
+        const kind =
+          previous.activeWorkerRole === "code_review"
+            ? "review_gate"
+            : previous.activeWorkerRole === "behavior_verify"
+              ? "behavior_gate"
+              : previous.activeWorkerDispatch?.repairKeys?.length
+                ? "repair"
+                : null;
+        if (kind) {
+          await this.evolutionOutcomeObserver.recordForDispatch(
+            current.runId,
+            codeDispatchId,
+            kind,
+            {
+              ...source,
+              results: changedCases.map((item) => ({
+                caseId: item.caseId,
+                status: item.status,
+                summary: item.resultSummary,
+              })),
+            },
+            current.updatedAt,
+          );
+        }
+      }
+      if (
+        (current.humanNotes?.length ?? 0) > (previous.humanNotes?.length ?? 0)
+      ) {
+        await this.evolutionOutcomeObserver.recordForDispatch(
+          current.runId,
+          codeDispatchId,
+          "user_correction",
+          { ...source, noteCount: current.humanNotes?.length ?? 0 },
+          current.updatedAt,
+        );
+      }
+    } catch (error) {
+      agentTeamLogger.warn("agent-team.evolution-outcome.fail-open", {
+        message: "Evolution outcome recording failed; Agent Team continues",
+        runId: current.runId,
+        error,
+      });
+    }
+  }
+
+  private resolveEvolutionCodeDispatchId(run: AgentTeamRun): string | null {
+    if (run.activeWorkerDispatch?.role === "code") {
+      return run.activeWorkerDispatch.dispatchId ?? null;
+    }
+    return (
+      [...(run.consumedWorkerDispatches ?? [])]
+        .reverse()
+        .find((receipt) => receipt.role === "code")?.dispatchId ?? null
+    );
   }
 
   protected async trySendToMain(

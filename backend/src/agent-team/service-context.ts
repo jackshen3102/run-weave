@@ -18,6 +18,8 @@ import { AgentTeamOutboxHistoryStore } from "./storage/outbox-history-store";
 import { AgentTeamRunStore } from "./storage/run-store";
 import { AgentTeamAgentLaunchService } from "./agent-launch";
 import type { AgentTeamServiceOptions } from "./service-types";
+import type { EvolutionMemoryProvider } from "../evolution/injection/memory-provider";
+import type { EvolutionOutcomeObserver } from "../evolution/injection/outcome-observer";
 import { recordAgentTeamRunTransition } from "./activity-events";
 import {
   resolveAgentTeamEnvironmentFixtureScope,
@@ -47,6 +49,8 @@ export class AgentTeamServiceContext {
   protected readonly backendInstanceId: string;
   protected readonly environmentFixtureScope: AgentTeamEnvironmentFixtureScope | null;
   protected readonly runtimeEnv: NodeJS.ProcessEnv;
+  protected readonly evolutionMemoryProvider?: EvolutionMemoryProvider;
+  protected readonly evolutionOutcomeObserver?: EvolutionOutcomeObserver;
   protected readonly eventQueues = new Map<string, Promise<unknown>>();
   protected readonly pendingCompletionRounds = new Map<string, number>();
   protected recheckWatchdogTimer: ReturnType<typeof setInterval> | null = null;
@@ -61,6 +65,8 @@ export class AgentTeamServiceContext {
     this.tmuxOutputWatcher = options.tmuxOutputWatcher;
     this.backendInstanceId = options.backendInstanceId ?? randomUUID();
     this.runtimeEnv = options.env ?? process.env;
+    this.evolutionMemoryProvider = options.evolutionMemoryProvider;
+    this.evolutionOutcomeObserver = options.evolutionOutcomeObserver;
     this.environmentFixtureScope = resolveAgentTeamEnvironmentFixtureScope(
       this.runtimeEnv,
     );
