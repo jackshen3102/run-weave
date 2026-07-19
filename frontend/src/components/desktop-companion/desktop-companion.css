@@ -39,8 +39,10 @@ body {
 .desktop-companion {
   display: flex;
   width: 410px;
+  max-height: 480px;
   flex-direction: column;
   align-items: flex-end;
+  overflow: hidden;
   padding: 12px 8px;
   color: var(--companion-text);
   font-family:
@@ -79,6 +81,8 @@ body {
 
 .companion-panel {
   width: 394px;
+  min-height: 0;
+  flex: 0 1 auto;
   overflow: hidden;
   border: 1px solid rgba(127, 160, 190, 0.36);
   border-radius: 17px 17px 5px 17px;
@@ -92,6 +96,7 @@ body {
 .companion-panel-head {
   display: flex;
   min-height: 50px;
+  flex: 0 0 auto;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--companion-line-soft);
@@ -139,9 +144,34 @@ body {
 }
 
 .companion-slots {
-  max-height: 430px;
-  overflow: auto;
-  padding: 5px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 4px 6px 6px;
+  scrollbar-color: rgba(96, 115, 134, 0.72) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.companion-slots::-webkit-scrollbar {
+  width: 5px;
+}
+
+.companion-slots::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(96, 115, 134, 0.72);
+}
+
+.companion-slots::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.companion-tray {
+  display: flex;
+  max-height: 380px;
+  flex-direction: column;
 }
 
 .companion-slot {
