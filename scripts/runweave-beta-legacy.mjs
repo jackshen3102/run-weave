@@ -7,6 +7,7 @@ import {
   assertBetaInstanceId,
   resolveBetaUpdateTargets,
 } from "./runweave-update-core.mjs";
+import { resolveEffectiveBetaPoolPaths } from "./dev-session/beta-slot-pool-storage-paths.mjs";
 import {
   inspectProcessReferences,
   inspectRecordedProcessState,
@@ -29,6 +30,7 @@ function assertLegacyInstanceId(value) {
 }
 
 function resolveLegacyRoots(homeDir = os.homedir()) {
+  const poolPaths = resolveEffectiveBetaPoolPaths(homeDir);
   const betaRoot = path.join(
     homeDir,
     "Library",
@@ -38,7 +40,10 @@ function resolveLegacyRoots(homeDir = os.homedir()) {
   return {
     betaRoot,
     instancesRoot: path.join(betaRoot, "instances"),
-    quarantineRoot: path.join(betaRoot, "pool", "quarantine"),
+    quarantineRoot:
+      poolPaths.storageKind === "canonical"
+        ? poolPaths.legacyInstancesQuarantineDir
+        : poolPaths.quarantineDir,
     appServerRoot: path.join(homeDir, ".runweave", "app-server-beta"),
   };
 }

@@ -20,6 +20,7 @@ import {
   resolveBetaPoolPaths,
   sameFileIdentity,
 } from "./beta-slot-pool-core.mjs";
+import { assertBetaPoolStorageReadyForExistingLease } from "./beta-slot-pool-storage-migration.mjs";
 import {
   createBetaPoolRecoveryReceipt,
   finalizeBetaSlotRelease,
@@ -457,6 +458,7 @@ export async function recoverBetaPoolSlot({
   homeDir = os.homedir(),
   applicationsDir = "/Applications",
 } = {}) {
+  await assertBetaPoolStorageReadyForExistingLease({ homeDir });
   assertBetaSlotId(slotId);
   const paths = resolveBetaPoolPaths(homeDir);
   const claim = await acquireBetaSlotRecoveryClaim(slotId, paths);

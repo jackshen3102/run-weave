@@ -13,6 +13,7 @@ import {
 import { processIdentityMatches } from "./service-runtime.mjs";
 import {
   acquireBetaSlotRecoveryClaim,
+  assertBetaPoolStorageReadyForExistingLease,
   assertBetaSlotLease,
   betaSlotProcessesAreAbsent,
   createBetaPoolRecoveryReceipt,
@@ -38,6 +39,9 @@ export async function runStop(options, sourceRoot, helpers) {
     sourceRoot,
   });
   const beforeLock = await readManifest(candidate.devSessionId);
+  if (retainsBetaSlotLease(beforeLock)) {
+    await assertBetaPoolStorageReadyForExistingLease();
+  }
   const recoveryClaimSlot = retainsBetaSlotLease(beforeLock)
     ? beforeLock.targetEnvironment.betaSlot.assignedSlotId
     : null;
