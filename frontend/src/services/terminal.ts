@@ -141,6 +141,7 @@ export async function updateTerminalProjectContext(
 export async function listTerminalSessions(
   apiBase: string,
   token: string,
+  signal?: AbortSignal,
 ): Promise<TerminalSessionListItem[]> {
   return requestJson<TerminalSessionListItem[]>(
     apiBase,
@@ -149,6 +150,7 @@ export async function listTerminalSessions(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal,
     },
   );
 }
@@ -234,6 +236,7 @@ export async function focusTerminalPanel(
   token: string,
   terminalSessionId: string,
   panelId: string,
+  signal?: AbortSignal,
 ): Promise<TerminalPanelWorkspace> {
   return requestJson<TerminalPanelWorkspace>(
     apiBase,
@@ -245,6 +248,7 @@ export async function focusTerminalPanel(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ focus: true }),
+      signal,
     },
   );
 }
@@ -293,6 +297,7 @@ export async function updateTerminalSession(
   token: string,
   terminalSessionId: string,
   payload: UpdateTerminalSessionRequest,
+  signal?: AbortSignal,
 ): Promise<TerminalSessionListItem> {
   return requestJson<TerminalSessionListItem>(
     apiBase,
@@ -304,6 +309,7 @@ export async function updateTerminalSession(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
+      signal,
     },
   );
 }

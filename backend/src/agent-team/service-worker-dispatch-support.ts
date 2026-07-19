@@ -150,11 +150,24 @@ export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
       panel.lastThreadStatus === "idle"
         ? panel.lastThreadId?.trim()
         : null;
-    if (resumableThreadId) {
+    if (resumableThreadId && expectedAgent) {
       await this.agentLaunch.submitAgentResume(session, terminal, {
         panelId: worker.panelId,
         threadId: resumableThreadId,
-        prompt,
+      });
+      const resumedPanel = await this.waitForWorkerThreadReadiness(
+        worker.panelId,
+        expectedAgent,
+        resumableThreadId,
+      );
+      if (!resumedPanel) {
+        throw new AgentTeamError(
+          409,
+          `${worker.role} worker 的恢复线程未进入 ready，禁止投递 dispatch`,
+        );
+      }
+      await this.promptSender.sendPromptToPane(session, prompt, {
+        panelId: worker.panelId,
       });
       return;
     }

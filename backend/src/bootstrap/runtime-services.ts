@@ -36,6 +36,7 @@ import {
 } from "../utils/path";
 import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
 import { WorkHistoryService } from "../work-history/work-history-service";
+import { AttentionService } from "../attention/attention-service";
 
 export interface RuntimeServices {
   activityStore: ActivityStore | null;
@@ -57,6 +58,7 @@ export interface RuntimeServices {
   workHistoryService: WorkHistoryService;
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
+  attentionService: AttentionService;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
   tmuxLifecycleCoordinator: TmuxLifecycleCoordinator;
   ptyService: PtyService;
@@ -330,6 +332,11 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     appServerHistoryGateway,
     agentTeamService,
   );
+  const attentionService = new AttentionService(
+    terminalSessionManager,
+    terminalCompletionEventService,
+    agentTeamService,
+  );
 
   return {
     activityStore,
@@ -351,6 +358,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     workHistoryService,
     terminalEventService,
     terminalCompletionEventService,
+    attentionService,
     terminalRuntimeRegistry,
     tmuxLifecycleCoordinator,
     ptyService,

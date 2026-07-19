@@ -12,6 +12,7 @@
     "./activity/api": "./src/activity/api.ts",
     "./activity/events": "./src/activity/events.ts",
     "./agent-team": "./src/agent-team.ts",
+    "./attention": "./src/attention.ts",
     "./app-server-events": "./src/app-server-events.ts",
     "./app-server-node": "./src/app-server-node.ts",
     "./app-server": "./src/app-server/index.ts",

@@ -239,7 +239,12 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
         cases,
         log: "Agent intervention 重新派发",
         triggerSummary: note,
-        reviewScope: input.role === "code_review" ? "final" : undefined,
+        reviewScope:
+          input.role === "code_review"
+            ? run.reviewCheckpoint?.checkpoints.length === 0
+              ? "full"
+              : "final"
+            : undefined,
         checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
         checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
         checkpointRebasedCommit: input.checkpointRebasedCommit,

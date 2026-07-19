@@ -28,6 +28,8 @@ export function createTray(
     enableUpdates?: boolean;
     onOpenSystemMonitor?: () => void;
     onReloadLocalRuntime?: () => void;
+    companionEnabled?: boolean;
+    onSetCompanionEnabled?: (enabled: boolean) => void;
   } = {},
 ): Tray {
   const icon = resolveIcon();
@@ -41,6 +43,12 @@ export function createTray(
         mainWindow.show();
         mainWindow.focus();
       },
+    },
+    {
+      label: "显示桌面宠物",
+      type: "checkbox",
+      checked: options.companionEnabled ?? true,
+      click: (item) => options.onSetCompanionEnabled?.(item.checked),
     },
     ...(options.onOpenSystemMonitor
       ? [

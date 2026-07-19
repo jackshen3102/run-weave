@@ -75,15 +75,16 @@ cases:
     name: Completion 先打开 Session 再确认精确 revision
     required: true
     description: >
-      验证未确认 Completion 只有在目标 Session 成功打开后才写 acknowledgedCompletionRevision；
-      可靠 Panel 可精确聚焦，Panel 失效可降级，Connection 或 Session 失败时提醒与 revision 均保留。
+      验证未确认 Completion 先在有界时间内完成目标表面打开，再异步写 acknowledgedCompletionRevision；
+      可靠 Panel 可精确聚焦，Panel 失效可降级，Connection 或 Session 打开失败以及确认失败或挂起时提醒均保留。
     preconditions:
       - 当前 Connection 中准备三个未确认 Completion：一个具有有效 panelId，一个 panelId 已失效，一个目标 Session 可在点击前移除或令其不可达。
       - 已记录各 Session 的 completionRevision 与 acknowledgedCompletionRevision 初值。
     steps:
-      - 点击具有有效 panelId 的 Completion Slot，确认 Runweave 主窗口被聚焦、正确 Session 被选择、正确 Panel 被聚焦，随后 acknowledgedCompletionRevision 精确更新为 intent 携带的 revision，提醒退役。
-      - 点击 panelId 已失效的 Completion Slot，确认仍打开正确 Session并显示 Panel 降级提示，没有跳到 activePanelId 或其他 Panel；随后精确 revision 被确认，提醒退役。
-      - 对第三个 Slot 在点击期间制造 Connection 不可用或 Session 不存在，确认返回明确失败，主窗口没有打开错误资源，acknowledgedCompletionRevision 不变且提醒仍存在。
+      - 点击具有有效 panelId 的 Completion Slot，确认 Runweave 主窗口被聚焦、正确 Session 与 Panel 被打开，openSlot 在 deadline 内返回 opened；随后 acknowledgedCompletionRevision 精确更新为 intent 携带的 revision，下一次 snapshot 才让提醒退役。
+      - 点击 panelId 已失效的 Completion Slot，确认仍打开正确 Session并显示 Panel 降级提示，没有跳到 activePanelId 或其他 Panel，openSlot 返回 opened_with_panel_fallback；随后精确 revision 被确认，下一次 snapshot 让提醒退役。
+      - 在目标 Session 已打开后分别让 acknowledgement 失败或挂起，确认 openSlot 保持 opened 或 opened_with_panel_fallback，acknowledgedCompletionRevision 不变且提醒继续存在。
+      - 对第三个 Slot 在点击期间制造 Connection 不可用、Session 不存在或目标表面未在 deadline 前打开，确认返回明确失败或 timed_out，主窗口没有打开错误资源，不发起 acknowledgement，revision 不变且提醒仍存在。
       - 在点击与确认之间产生更晚 completionRevision，确认本次只确认 intent 携带的旧 revision，更晚 Completion 仍作为新 attentionId 显示。
 
   - id: DSC-006
@@ -179,7 +180,8 @@ cases:
       - 从非 Companion webContents 调用 reportContentSize 或 openSlot，确认请求被拒绝且主窗口和 Companion 尺寸不变。
       - 分别传入超长 ID、非法 targetSurface、负 completionRevision、任意 URL、token、path 或 command，确认请求被拒绝且没有导航或敏感信息进入日志。
       - 在 snapshot 后切换当前 Connection 再点击旧 Slot，确认主 renderer 返回 connection_unavailable 或等价陈旧结果，不打开另一个 Connection 的同名 Session，提醒在刷新前不被误退役。
-      - 让主 renderer 超过超时时间才返回，确认 invoke 以 timed_out 结束且迟到结果不能二次完成或退役提醒。
+      - 让主 renderer 在目标表面打开成功结果报告前超过 deadline，确认 invoke 以 timed_out 结束，迟到结果不能二次完成且不能发起 acknowledgement 或退役提醒。
+      - 让目标表面先成功打开并返回 opened 或 opened_with_panel_fallback，再让 acknowledgement 超时或挂起，确认 invoke 已在 deadline 内结束且保持成功终态，提醒因 snapshot 中 revision 未确认而继续存在。
       - 重复同一 requestId，确认最多执行一次打开和一次 Completion acknowledgement。
 
   - id: DSC-012
