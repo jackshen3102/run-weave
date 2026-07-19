@@ -167,10 +167,22 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
     if (exhaustedCases.length === 0) {
       return latestRun;
     }
+    const exhaustedRoles = [
+      ...new Set(
+        exhaustedCases.map((item) => item.recheckWorkerRole ?? "unknown"),
+      ),
+    ];
+    const exhaustedAttempt = Math.max(
+      ...exhaustedCases.map((item) => item.recheckAttempt ?? MAX_RECHECK_ATTEMPTS),
+    );
     return this.updateRun(latestRun, {
       status: "need_human",
       activeWorkerRole: null,
       activeWorkerDispatch: null,
+      loop: {
+        ...latestRun.loop,
+        lastReason: `${exhaustedRoles.join("、")} outbox 缺失，attempt=${exhaustedAttempt}，已达重试上限`,
+      },
       workers: latestRun.workers.map((worker) => ({ ...worker, frozen: true })),
       acceptance: latestRun.acceptance.map((item) =>
         exhaustedCases.some((exhausted) => exhausted.caseId === item.caseId)
