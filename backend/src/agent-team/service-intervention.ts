@@ -15,6 +15,7 @@ import {
   ensureWorkerGateAcceptance,
   mergeAcceptanceRefresh,
 } from "./service-acceptance-policy";
+import { projectAgentTeamRunForRead } from "./service-completion-policy";
 
 function selectAgentInterventionCases(
   eligibleCases: AgentTeamAcceptanceCase[],
@@ -127,6 +128,9 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
           workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
           verification: prepared.verification,
           acceptance,
+          completionOutcome: null,
+          completionHistory:
+            projectAgentTeamRunForRead(run).completionHistory ?? [],
           reviewCheckpoint: run.reviewCheckpoint
             ? {
                 ...run.reviewCheckpoint,

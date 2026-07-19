@@ -140,7 +140,7 @@ rerun 用于现场不可信、Worker pane 不可用或改动过大时。
 - backend/src/routes/agent-team.ts：提供读取恢复状态和执行三个操作的接口。
 - packages/runweave-cli/src/commands/agent-team.ts：提供对应 CLI 操作。
 - frontend/src/components/terminal/：展示框架阻塞状态和两个恢复动作。
-- docs/testing/agent-team/agent-team-framework-repair-recovery-test-cases.md：记录核心验收场景。
+- docs/testing/agent-team/recovery/agent-team-recovery-and-fixtures.testplan.yaml：记录 framework recovery 与资源恢复验收场景。
 
 不为本需求升级通用 JSON 存储、terminal ownership、跨版本迁移或分布式投递协议。
 
@@ -157,7 +157,7 @@ rerun 用于现场不可信、Worker pane 不可用或改动过大时。
 
 详细步骤见：
 
-- docs/testing/agent-team/agent-team-framework-repair-recovery-test-cases.md
+- docs/testing/agent-team/recovery/agent-team-recovery-and-fixtures.testplan.yaml
 
 计划完成必须同时满足：
 

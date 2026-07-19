@@ -85,7 +85,9 @@ async function main() {
         repeated.run.updatedAt === begun.run.updatedAt,
       repeated.run.frameworkRepair,
     );
-    const staleBefore = structuredClone(repeated.run);
+    const staleBefore = structuredClone(
+      await beforeRestart.getRun(fixture.run.runId),
+    );
     const staleConsumed = await beforeRestart.reconcileCompletionSignal({
       projectId: fixture.project.id,
       terminalSessionId: fixture.session.id,

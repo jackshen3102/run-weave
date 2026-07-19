@@ -1,0 +1,127 @@
+version: 1
+name: Agent Team 完成结果与人工干预
+description: >
+  验证自动完成保持严格，而明确人工裁决可以解决环境问题或不合理 Acceptance Case，使 Run 在保留
+  原始 observation 和审计记录的前提下继续或完成。恢复与修复流程的其他细节由对应分类覆盖。
+
+cases:
+  - id: AGT-CP-001
+    name: Fresh Skip 保存 Dispatch Observation 且不计为 Pass
+    required: true
+    description: >
+      protocol v1 worker 的结构化 skip 必须保存 outcome、dispatchId、recordedAt、skip detail 和证据，
+      但 Case 的旧兼容 status 不能被改写成 pass。
+    preconditions:
+      - executing Run 有一个 fresh behavior_verify dispatch 和待执行产品 Case。
+    steps:
+      - 提交 environment skipped outbox；确认 latestObservation=skipped 且 dispatchId/recordedAt 匹配当前结果。
+      - 读取 Run 与面板；确认 Case 未显示为 pass，原 skip 原因和 evidence 可见。
+
+  - id: AGT-CP-002
+    name: 未解决事实和流程 Gate 统一阻断完成
+    required: true
+    description: >
+      未裁决的 pending、fail、skipped、review gate、pending finding、repair、blocked framework repair、
+      active dispatch 和 final review 都必须被同一 completion evaluator 识别，自动和普通 complete API 不能绕过。
+    preconditions:
+      - 已为每种 blocker 准备独立 executing Run fixture。
+    steps:
+      - 分别推进自动完成并调用 complete API；确认 Run 未进入 done，返回的 blocker code/caseIds 与当前事实一致。
+      - 确认没有 blocker 的全通过 Run 才返回 ready，且自动与 API 对同一 fixture 给出一致判断。
+
+  - id: AGT-CP-003
+    name: 被阻断的 Complete 在 Cleanup 和存储前零副作用返回
+    required: true
+    description: >
+      complete 被任何 completion blocker 拒绝时，不能先执行 fixture cleanup、追加 outcome 或写 Run，
+      避免失败请求改变资源和审计事实。
+    preconditions:
+      - need_human Run 有未裁决 Case，并已记录 Run 内容、store 写入数和 fixture ledger。
+    steps:
+      - 调用 complete API；确认返回 409，cleanup 调用数和 Run 写入数均为 0。
+      - 对比请求前后持久化 JSON、fixture ledger、completion history 和日志；确认完全不变。
+
+  - id: AGT-CP-004
+    name: 所有 Gate 与资源归零后只写一次 Completion Outcome
+    required: true
+    description: >
+      所有产品 Case 和 review gate 已解决、final review 完成且 owned fixture cleanup 成功后，
+      Run 才能进入 done 并追加一次 succeeded 或 completed_with_exceptions outcome。
+    preconditions:
+      - 已准备一个只差最后 fresh pass 的 Run，以及一个含有效人工或 finding disposition 的可完成 Run。
+      - 两个 Run 的 fixture cleanup 均可成功。
+    steps:
+      - 分别提交最后结果；确认纯通过 Run 写 succeeded，含裁决 Run 写 completed_with_exceptions 且 exception 引用 decisionId。
+      - 重放 completion 和再次调用 complete；确认 current outcome 与 history 不重复追加，worker 全部冻结且 active dispatch 清空。
+
+  - id: AGT-CP-005
+    name: Legacy 完成事实只在读取边界投影且不污染存储
+    required: true
+    description: >
+      没有 latestObservation 或 completionOutcome 的历史 Run 必须在 list、get 和 by-terminal 三个读取入口获得兼容投影，
+      但 GET 及后续 mutation 都不能把合成 dispatchId 或 recordedAt 固化为真实 observation。
+    preconditions:
+      - 已持久化 pending+skipped 和 done 两类历史 Run，且两者缺少新 completion 字段。
+    steps:
+      - 调用三个读取入口；确认 skipped 与 legacy completion exception 可读，store 写入数为 0。
+      - 对投影后的 Run 触发一次合法 mutation；确认 mutation 使用原始 store 基底，合成 observation 没有落盘。
+
+  - id: AGT-CP-006
+    name: 已完成 Run 刷新 Acceptance 时保留 Completion History
+    required: true
+    description: >
+      refresh_acceptance 必须清空受影响 Case 的当前 observation 和 current outcome，使 Run 重开；
+      旧 completion history 与未受影响 Case 证据必须保留。
+    preconditions:
+      - done Run 有 completion outcome/history，新的可追溯 YAML 只改变其中一个产品 Case。
+    steps:
+      - 执行 refresh_acceptance；确认 Run 重开为 running，current outcome=null，受影响 Case=pending 且无 observation。
+      - 确认旧 history、未受影响 Case、finding/acceptance 决策历史和原证据保持可审计。
+
+  - id: AGT-CP-007
+    name: 人工确认环境问题后 Case 不再阻塞 Run
+    required: true
+    description: >
+      结构化 environment skipped Case 可由人工填写原因并确认不处理；决定只解决当前 observation，
+      原始 skipped 事实不变，Run 可以 completed_with_exceptions 完成。
+    preconditions:
+      - need_human Run 只有一个未解决的 environment skipped 产品 Case，其余完成门禁已满足且没有 active dispatch。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开真实 Agent Team 面板；确认显示原 observation、证据、必填原因和环境跳过入口。
+      - 填写原因并确认；确认 Case 仍显示 skipped，出现人工决定与原因，Run 显示“已完成 · 有裁决”。
+
+  - id: AGT-CP-008
+    name: 人工可将不合理 Case 标记为不适用
+    required: true
+    description: >
+      可追溯但被确认不合理的 fail 或非环境 skipped Case 可由人工标记 invalid_case；模型观察不被改写，
+      completion outcome 必须记录 acceptance disposition exception。
+    preconditions:
+      - need_human Run 有一个人工确认不适用的非 pass 产品 Case，其余完成门禁已满足且没有 active dispatch。
+    steps:
+      - 使用 $toolkit:playwright-cli 填写原因并点击“标记 Case 不适用”；确认 API 记录绑定当前 observation 的决定。
+      - 确认 Case 保留原 fail/skipped 与 evidence，Run 可以完成但不显示为纯成功。
+
+  - id: AGT-CP-009
+    name: 新 Observation 自动使旧人工决定失效
+    required: true
+    description: >
+      人工决定只能解除其绑定的 outcome、dispatchId 和 recordedAt；同一 Case 被刷新或重新执行后，
+      新 observation 必须重新通过或再次人工裁决。
+    preconditions:
+      - Case 已有一条绑定旧 observation 的人工决定。
+    steps:
+      - 写入不同 dispatchId 或 recordedAt 的新 fail/skipped observation；确认旧决定仍在历史中但 completion evaluator 再次报告该 Case 未解决。
+      - 对新 observation 取得 pass 或提交新决定；确认只有最新匹配决定解除阻塞。
+
+  - id: AGT-CP-010
+    name: 人工决定解除已解决 Case 关联的 Repair 阻塞
+    required: true
+    description: >
+      人工裁决后，已经由 pass 或人工决定解决的 Case 不得继续被残留 repair cycle 或只关联这些 Case 的
+      blocked framework repair 阻塞；未解决 Case、finding、active dispatch 和 final review 仍保持严格。
+    preconditions:
+      - need_human Run 有一个 environment skipped Case，并有只关联已通过或待裁决 Case 的 repair cycle 与 blocked framework repair。
+    steps:
+      - 人工确认环境问题；确认原 skipped observation 保留，已解决 Case 从 repair cycle 移除，关联 framework repair 留下人工继续记录。
+      - 确认 Run 在无其他 blocker 时完成；加入一个未解决 Case 或 pending finding 后重复场景，确认仍然被阻断。

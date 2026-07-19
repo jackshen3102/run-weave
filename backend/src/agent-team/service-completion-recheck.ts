@@ -59,6 +59,7 @@ export abstract class AgentTeamCompletionRecheckService extends AgentTeamRepairP
           caseIds.has(item.caseId)
             ? {
                 ...item,
+                latestObservation: null,
                 status: "pending" as const,
                 lastRunStatus: "pending" as const,
                 skip: null,

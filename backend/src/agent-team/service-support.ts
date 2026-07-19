@@ -443,7 +443,7 @@ export class AgentTeamServiceSupport extends AgentTeamFixtureSupport {
   }
 
   protected async requireRun(runId: string): Promise<AgentTeamRun> {
-    const run = await this.getRun(runId);
+    const run = await this.runStore.getRun(runId);
     if (!run) {
       throw new AgentTeamError(404, "Agent-team run not found");
     }

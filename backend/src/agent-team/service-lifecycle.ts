@@ -1,10 +1,9 @@
-import type {
-  AgentTeamRun,
-  CompleteAgentTeamRunRequest,
-  CreateAgentTeamRunRequest,
-  ProposeAgentTeamSplitRequest,
-  ResumeAgentTeamRunRequest,
-  SubmitAgentTeamSplitGateRequest,
+import {
+  type AgentTeamRun,
+  type CreateAgentTeamRunRequest,
+  type ProposeAgentTeamSplitRequest,
+  type ResumeAgentTeamRunRequest,
+  type SubmitAgentTeamSplitGateRequest,
 } from "@runweave/shared/agent-team";
 import { ensureTerminalPanelWorkspace } from "../terminal/application/panel-workspace";
 import { AgentTeamError } from "./errors";
@@ -16,7 +15,7 @@ import {
 import { createInitialLoop } from "./loop";
 import { resolveMaxRepairAttempts } from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
-import { AgentTeamFixtureLifecycleService } from "./service-fixture-lifecycle";
+import { AgentTeamRunCompletionService } from "./service-run-completion";
 import {
   acceptanceCasesForRole,
   behaviorVerificationCasesForDispatch,
@@ -35,7 +34,7 @@ import {
 } from "./service-run-policy";
 import { isTerminalAgentTeamStatus } from "./service-fixture-support";
 
-export class AgentTeamLifecycleService extends AgentTeamFixtureLifecycleService {
+export class AgentTeamLifecycleService extends AgentTeamRunCompletionService {
   async startRun(input: CreateAgentTeamRunRequest): Promise<AgentTeamRun> {
     const session = this.requireSession(input.terminalSessionId);
     const fixtureIdentity = await this.resolveRunFixtureIdentity(input);
@@ -153,6 +152,9 @@ export class AgentTeamLifecycleService extends AgentTeamFixtureLifecycleService 
       proposal: null,
       workers: [],
       acceptance: [],
+      acceptanceDecisions: [],
+      completionOutcome: null,
+      completionHistory: [],
       loop: createInitialLoop(maxRepairAttempts, stableFailThreshold),
       humanNotes: [],
       findingDecisions: [],
@@ -433,99 +435,6 @@ export class AgentTeamLifecycleService extends AgentTeamFixtureLifecycleService 
     });
   }
 
-  async completeRun(
-    runId: string,
-    input: CompleteAgentTeamRunRequest,
-  ): Promise<AgentTeamRun> {
-    const run = await this.requireRun(runId);
-    this.assertFrameworkRepairNotBlocked(run);
-    if (run.phase !== "executing") {
-      throw new AgentTeamError(409, "Run is not executing");
-    }
-    if (run.status === "done") {
-      return run;
-    }
-    if (run.status === "failed") {
-      throw new AgentTeamError(409, "Run has already failed");
-    }
-    if (run.status === "cancelled") {
-      throw new AgentTeamError(
-        409,
-        "Cancelled fixture Run cannot be completed",
-      );
-    }
-    if (run.pendingFindingDecision) {
-      throw new AgentTeamError(
-        409,
-        "存在待裁决 review finding，不能用人工完成隐藏失败",
-      );
-    }
-    if (
-      (run.loop.repairCycles ?? []).some(
-        (cycle) => cycle.sourceRole === "code_review",
-      )
-    ) {
-      throw new AgentTeamError(
-        409,
-        "存在未处理 review finding，请先记录 blocking、out_of_scope 或 waived 裁决",
-      );
-    }
-    const note = input.note?.trim();
-    const now = new Date().toISOString();
-    let fixtureCleanupHistory = run.fixtureCleanupHistory ?? [];
-    if ((run.runKind ?? "primary") === "primary") {
-      const cleanup = await this.reconcileOwnedFixtureResources(
-        run,
-        null,
-        `owner Run ${run.runId} requested completion`,
-      );
-      fixtureCleanupHistory = [...fixtureCleanupHistory, cleanup];
-      if (cleanup.status !== "completed") {
-        const reason = formatFixtureCleanupBlocker(cleanup);
-        return this.updateRun(run, {
-          status: "need_human",
-          workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
-          activeWorkerRole: null,
-          activeWorkerDispatch: null,
-          fixtureCleanupHistory,
-          loop: {
-            ...run.loop,
-            escalated: true,
-            lastReason: reason,
-          },
-          logs: [...run.logs, `⏸ ${reason}`],
-        });
-      }
-    }
-    return this.updateRun(run, {
-      status: "done",
-      workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
-      activeWorkerRole: null,
-      activeWorkerDispatch: null,
-      loop: {
-        ...run.loop,
-        escalated: false,
-        lastReason: null,
-      },
-      humanNotes: note
-        ? [
-            ...run.humanNotes,
-            {
-              id: `note_${Date.now()}`,
-              at: now,
-              text: note,
-              clearedFingerprints: [...run.loop.errorFingerprints],
-            },
-          ]
-        : run.humanNotes,
-      fixtureCleanupHistory,
-      logs: [
-        ...run.logs,
-        note ? `✅ 人工确认完成：${note}` : "✅ 人工确认完成，loop 已结束",
-      ],
-    });
-  }
-
   async focusPane(runId: string, panelId: string): Promise<AgentTeamRun> {
     const run = await this.requireRun(runId);
     const session = this.requireSession(run.terminalSessionId);
@@ -570,16 +479,6 @@ export class AgentTeamLifecycleService extends AgentTeamFixtureLifecycleService 
     }
     return run;
   }
-}
-
-function formatFixtureCleanupBlocker(
-  cleanup: NonNullable<AgentTeamRun["fixtureCleanupHistory"]>[number],
-): string {
-  const liveRuns = cleanup.ownedLiveFixtureRunIds.length;
-  const blockedSessions = cleanup.devSessions.filter(
-    (session) => session.error,
-  ).length;
-  return `fixture cleanup 未归零：ownedLiveFixtureRuns=${liveRuns}，blockedDevSessions=${blockedSessions}${cleanup.errors.length > 0 ? `；${cleanup.errors.join("; ")}` : ""}`;
 }
 
 function buildReviewCheckpointBranch(runId: string): string {

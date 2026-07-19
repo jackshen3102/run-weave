@@ -11,6 +11,34 @@ export type AgentTeamStatus =
   | "cancelled";
 
 export type AgentTeamAcceptanceStatus = "pass" | "fail" | "pending";
+export type AgentTeamAcceptanceObservedOutcome = "pass" | "fail" | "skipped";
+
+export interface AgentTeamAcceptanceObservation {
+  outcome: AgentTeamAcceptanceObservedOutcome;
+  dispatchId: string | null;
+  recordedAt: string;
+}
+
+export type AgentTeamAcceptanceDisposition =
+  | "accepted_environment_skip"
+  | "invalid_case";
+
+export type AgentTeamCompletionResult =
+  | "succeeded"
+  | "completed_with_exceptions";
+
+export type AgentTeamCompletionException =
+  | { kind: "finding_disposition"; decisionId: string }
+  | { kind: "acceptance_disposition"; decisionId: string }
+  | { kind: "legacy_manual_completion"; caseIds: string[] };
+
+export interface AgentTeamCompletionOutcome {
+  id: string;
+  result: AgentTeamCompletionResult;
+  exceptions: AgentTeamCompletionException[];
+  trigger: "automatic" | "operator_finalize";
+  finalizedAt: string;
+}
 export type AgentTeamAcceptanceSource =
   | "test_case_file"
   | "plan_file_generated"

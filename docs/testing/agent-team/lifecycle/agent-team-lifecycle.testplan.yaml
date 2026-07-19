@@ -1,0 +1,108 @@
+version: 1
+name: Agent Team 生命周期与身份边界
+description: >
+  验证 Agent Team 从可追溯验收来源进入 Run、完成 worker split，并在项目、Terminal、pane、provider
+  与用户权限边界内保持身份一致。只覆盖创建和控制面的生命周期，不重复执行、恢复和完成语义。
+
+cases:
+  - id: AGT-LC-001
+    name: 只有可追溯 YAML 验收合同才能进入 Worker Split
+    required: true
+    description: >
+      合法且含 required Case 的项目内 testplan 可以直接作为验收来源；未提供来源时必须停在 intake，
+      由主 Agent 生成可解析 YAML 后再 split。Markdown、项目外路径、非法或仅 optional 的 YAML
+      均不能产生泛化 acceptance 或提前创建 worker。
+    preconditions:
+      - 已准备合法 YAML、仅 optional YAML、Markdown、非法 YAML 和项目外路径五类独立输入。
+      - 已准备一个没有计划和测试计划、但任务描述包含可观察结果的独立 Run。
+    steps:
+      - 分别创建 Run，读取 API、Run JSON、主 pane prompt 和 tmux pane 列表；确认只有合法 YAML 直接形成 required acceptance。
+      - 对无来源 Run 确认其停在 intake，并由主 Agent 生成 docs/testing 下的 testplan 后携带 generatedTestCaseFilePath 提交 split；确认生成前没有 worker 或默认 Case。
+      - 对其余非法输入确认请求被拒绝或继续停在 intake，且没有 pane、outbox 或 acceptance 副作用。
+
+  - id: AGT-LC-002
+    name: Run 严格绑定项目和 Terminal Session
+    required: true
+    description: >
+      同项目不同 Terminal 以及不同项目的 Terminal 必须拥有独立 Run、sidecar、worker cwd 和 outbox，
+      任何页面切换或恢复都不能复用其他身份的数据。
+    preconditions:
+      - 项目 A 有两个 tmux Terminal，项目 B 有一个 tmux Terminal。
+    steps:
+      - 在三个 Terminal 分别创建 Run，并写入可区分的任务与 acceptance marker。
+      - 切换项目、Terminal 和 Agent Team 面板；确认 runId、projectId、terminalSessionId、worker cwd、Run JSON 与 outbox 始终属于当前 Terminal。
+
+  - id: AGT-LC-003
+    name: 并发启动和 Backend 恢复保持单一 Active Run
+    required: true
+    description: >
+      并发 Start、页面刷新和 Backend 重启只能恢复同一个 active Run；已有用户 Agent 的 Terminal
+      必须返回明确冲突，不能被 Agent Team 接管或重复注入启动 prompt。
+    preconditions:
+      - 分别准备空闲 Terminal、已有 active Run 的 Terminal 和用户手动运行 Agent 的 Terminal。
+    steps:
+      - 从两个页面并发 Start，随后刷新页面并重启 Backend；确认同一 session 最多存在一个 active Run、一组 worker 和一次主 prompt。
+      - 在用户 Agent Terminal 尝试启动；确认返回身份明确的冲突，并且没有 Run、pane、prompt 或 Agent 状态副作用。
+
+  - id: AGT-LC-004
+    name: Split 校验与 Worker 创建保持原子性
+    required: true
+    description: >
+      proposal 必须包含合法任务、验收来源和唯一 worker role；只有可 split 的 tmux Terminal 能一次性
+      创建精确 worker。驳回、非法角色、重复角色、空任务和 pty Terminal 都不得留下半创建资源。
+    preconditions:
+      - 已准备合法 proposal、各类非法 proposal、含用户 pane 的 tmux session 和 pty session。
+    steps:
+      - 分别人工确认、驳回并通过 autoApproveSplit 提交 proposal；确认合法人工与自动路径使用同一校验并只创建 code、code_review、behavior_verify 各一个 worker。
+      - 读取每个 worker 的 panelId、tmuxPaneId、role、alias 和 pwd；确认 cwd 为当前项目且原用户 pane 不变。
+      - 对驳回、非法 proposal 和 pty 场景确认没有部分 worker、虚假 active role 或遗留 outbox。
+
+  - id: AGT-LC-005
+    name: Provider 启动携带当前 Pane 身份且失败不伪造执行态
+    required: true
+    description: >
+      Codex 与 TraeX worker 的 launch 必须绑定当前 run、pane、provider 和 dispatch；正式任务只提交一次。
+      launch 未被接受时不得出现 command_submitted、executing 或下游推进。
+    preconditions:
+      - 同一 tmux session 中可分别启动 Codex 与 TraeX 测试 worker，并捕获 launch、pane input、lifecycle event 和 Run JSON。
+      - 已准备一个成功条件和一个只影响测试 worker 的确定性失败条件。
+    steps:
+      - 在成功条件下启动 worker；确认 dispatch 先持久化，正式任务只作为一次 initial input 提交，matching lifecycle 到达前保持 starting。
+      - 在失败条件下启动另一个 worker；确认没有 command_submitted、executing、completed 或下游 dispatch，错误包含 provider、pane 和可定位原因。
+      - 重放重复或跨 pane lifecycle；确认只有身份完全匹配的事件改变状态，其余事件无副作用。
+
+  - id: AGT-LC-006
+    name: API 鉴权和项目资源边界始终 Fail Closed
+    required: true
+    description: >
+      未认证、过期认证、跨项目 run/panel 和项目外文件路径不得读取或修改 Agent Team 状态，
+      也不得操作 tmux、Run JSON 或 outbox。
+    preconditions:
+      - 已准备缺失 token、过期 token、其他项目 runId/panelId 和项目外绝对路径请求。
+    steps:
+      - 调用 create、query、focus、split、resume 与测试计划加载接口；确认返回明确 4xx 或认证流程，不泄露其他项目数据。
+      - 对比操作前后 Run、pane、prompt、outbox 和项目文件；确认所有非法请求零副作用。
+
+  - id: AGT-LC-007
+    name: Agent Team Sidecar 只呈现当前 Run 且不改写其他工具
+    required: true
+    description: >
+      Agent Team UI 必须真实呈现当前 Run、验收来源、worker 和阻断状态，同时不改变同一 Terminal
+      的 Preview、Browser、普通 Panel 和用户 pane。
+    preconditions:
+      - 已由隔离 Dev Session 准备真实 tmux Terminal、合法 YAML 和可附着的页面 surface。
+    steps:
+      - 使用 $toolkit:playwright-cli 附着真实页面，创建最小 Run 并在 Preview、Browser、Agent Team 和普通 Panel 间切换。
+      - 对照 Run JSON、pane 和 outbox；确认 Sidecar 只显示当前 Terminal 的事实，其他工具的项目、tab、内容和用户 pane 保持不变。
+
+  - id: AGT-LC-008
+    name: UI 只暴露当前控制状态允许的人工动作
+    required: true
+    description: >
+      正常执行、自动协议恢复、framework recovery、finding 裁决和 Acceptance Case 裁决必须显示不同状态，
+      且每种状态只提供对应的合法动作，不能用通用完成按钮绕过当前权限边界。
+    preconditions:
+      - 已准备分别处于 normal、automatic_recovery、recovery_required、scope_decision 和 acceptance_decision 的独立 Run。
+    steps:
+      - 使用 $toolkit:playwright-cli 依次打开五个 Run；确认状态标签、原因和按钮集合与 Run JSON 一致。
+      - 尝试触发不属于当前状态的动作；确认 UI 不提供该入口或 API 明确拒绝，Run、dispatch 和裁决记录不变化。

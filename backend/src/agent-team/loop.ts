@@ -65,6 +65,7 @@ export function foldRound(
   run: AgentTeamRun,
   params: {
     acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
+    recordedAt?: string;
   },
 ): FoldRoundResult {
   const loop: AgentTeamLoop = {
@@ -87,12 +88,18 @@ export function foldRound(
     if (result.status === "skipped") {
       return {
         ...acceptanceCase,
+        latestObservation: {
+          outcome: "skipped" as const,
+          dispatchId: run.activeWorkerDispatch?.dispatchId ?? null,
+          recordedAt: params.recordedAt ?? run.updatedAt,
+        },
         lastRunStatus: "skipped" as const,
         skip: result.skip ?? null,
         skipReason:
           result.skip?.detail ??
           result.skipReason ??
           "复验范围未命中，保持上一轮状态",
+        resultSummary: result.summary ?? null,
         evidence:
           result.evidence.length > 0
             ? result.evidence
@@ -108,6 +115,11 @@ export function foldRound(
     if (result.status === "pass") {
       return {
         ...acceptanceCase,
+        latestObservation: {
+          outcome: "pass" as const,
+          dispatchId: run.activeWorkerDispatch?.dispatchId ?? null,
+          recordedAt: params.recordedAt ?? run.updatedAt,
+        },
         status: "pass" as const,
         lastRunStatus: "pass" as const,
         skip: null,
@@ -128,6 +140,11 @@ export function foldRound(
     const consecutiveFail = acceptanceCase.consecutiveFail + 1;
     const nextCase: AgentTeamAcceptanceCase = {
       ...acceptanceCase,
+      latestObservation: {
+        outcome: "fail",
+        dispatchId: run.activeWorkerDispatch?.dispatchId ?? null,
+        recordedAt: params.recordedAt ?? run.updatedAt,
+      },
       status: "fail",
       lastRunStatus: "fail",
       skip: null,

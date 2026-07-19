@@ -1,0 +1,120 @@
+version: 1
+name: Agent Team 执行、验收与修复闭环
+description: >
+  验证 worker outbox 从多 completion 来源进入统一串行状态机，并按 flow、依赖、repair 合同、预算和
+  checkpoint 边界推进。恢复资源和终态人工裁决由其他分类覆盖。
+
+cases:
+  - id: AGT-EX-001
+    name: 只消费当前 Pane 的新鲜合法 Outbox
+    required: true
+    description: >
+      completion 和周期扫描只能消费 runId、projectId、sessionId、panelId、tmuxPaneId、role、dispatchId
+      与 freshness 全匹配且 schema 合法的 pane-scoped outbox。
+    preconditions:
+      - 当前 Run 正在等待一个 worker，并已准备合法、旧 Run、错 pane、错 role、错 dispatch、损坏和过期 outbox 变体。
+    steps:
+      - 逐个提交独立变体并触发 completion；确认仅合法新 outbox 推进 acceptance 和下一角色一次。
+      - 对其余变体确认返回 ignored、invalid 或可诊断恢复状态，round、repair attempt、active role 和下游 prompt 不变化。
+
+  - id: AGT-EX-002
+    name: 多 Completion 来源对同一 Dispatch 只产生一次状态迁移
+    required: true
+    description: >
+      terminal event、App Server、startup reconciliation 和 watchdog 都可以发现合法 outbox，
+      但同一 dispatch 只能折叠一次；consumed receipt、acceptance 与下一 dispatch 必须形成一致快照。
+    preconditions:
+      - 已准备一个合法 review outbox，并能从四种 completion 来源独立或并发投递同一身份。
+    steps:
+      - 并发和顺序组合投递四种信号，再在 Backend 重启后重放；记录每次 Run store 快照和 prompt。
+      - 确认只有首次合法信号推进，后续均命中 consumed receipt；每个持久化快照中 active role 与 active dispatch 同时为空或角色一致。
+      - 确认 acceptance、round、repair attempt 和下一 worker prompt 均没有重复副作用。
+
+  - id: AGT-EX-003
+    name: Code First 与 Verify First 遵循确定的 Gate 顺序
+    required: true
+    description: >
+      flow 只决定首个 worker，不改变共享验收合同。Verify First 首轮全绿且无代码活动时可以直接完成；
+      一旦失败或产生代码活动，适用的 code review 与 behavior verification 都不能被跳过。
+    preconditions:
+      - 已准备 Code First、Verify First、非法 flow，以及全绿、失败和发生代码活动的独立结果。
+    steps:
+      - 分别创建并推进 Run；确认非法 flow 零副作用拒绝，合法 flow 的首个 worker 与配置一致。
+      - 对 Verify First 全绿无改动确认不会伪造 review 工作；对失败或有代码活动场景确认按 code、code_review、behavior_verify 闭环推进。
+
+  - id: AGT-EX-004
+    name: 结构化依赖 Skip 只在 Blocker 解除后局部续跑
+    required: true
+    description: >
+      blocked_by_case 或 fail_fast 必须记录 blockerCaseIds；阻断 Case 通过后只重派传递依赖闭包，
+      已通过和无关 Case 保留证据且不进入全量重跑。
+    preconditions:
+      - A 为失败 Case，B 直接依赖 A，C 传递依赖 A，D 已通过且与 A 无关。
+    steps:
+      - 提交 A fail、B/C 结构化 skipped、D pass 的 behavior outbox；确认 skip 合同和依赖图被持久化。
+      - 修复并复验 A 为 pass；确认下一 dispatch 只含 B/C，D 不重跑且原 pass/evidence 保留。
+      - 对缺 blockerCaseIds、不可重试标记或循环依赖变体确认 fail closed，不猜测自由文本依赖。
+
+  - id: AGT-EX-005
+    name: Repair 交接必须复用原复现场景并提供可审计验证
+    required: true
+    description: >
+      runtime repair 必须复用真实产品 scenarioId 与 validationSessionId；structural repair 必须复用 reviewer
+      harness 或静态合同。缺证据、场景漂移、blocked、fail 和无影响矩阵的交接都不能进入下游 gate。
+    preconditions:
+      - 已准备 runtime 与 structural repair cycle，以及合法、场景漂移、缺证据、not_reproduced 和 verification fail 的独立 code outbox。
+    steps:
+      - 分别提交各交接；确认只有复现场景、skill 调用、verification 和 impactedChecks 完整的结果被接受并增加一次 attempt。
+      - 对重复 structural finding 的 not_reproduced 结果确认其仅在使用 reviewer 原 scenario 且带执行证据时回派 reviewer 举证，不被当作 pass。
+      - 确认其余非法交接进入一次协议补交或人工恢复，不扩大为全量回归且不修改源码边界证据。
+
+  - id: AGT-EX-006
+    name: Repair Budget 按稳定问题身份独立计数
+    required: true
+    description: >
+      repairKey 与 invariantKey 是预算身份；同一问题不能通过修改标题、diff 或重启重置预算，
+      不同问题不能共享计数，达到上限后必须停止自动修复。
+    preconditions:
+      - 已准备同一 Case 的两个 invariant、连续失败结果以及 0、1、3、5、6 次预算输入。
+    steps:
+      - 推进多轮修复、重复 completion 和 Backend 重启；确认合法预算在创建 Run 时固化，非法边界零副作用拒绝。
+      - 确认同一稳定身份 attempts 递增且不同 repairKey 独立；达到上限进入 need_human，不产生第 N+1 次自动 bounce。
+
+  - id: AGT-EX-007
+    name: Review Finding 只有合法人工裁决才能改变修复路由
+    required: true
+    description: >
+      reviewer 提议 out_of_scope、waived 或缺少可追溯 Case 的 blocking finding 时必须先进入 pendingFindingDecision；
+      Agent 不能自行豁免。人工选择 blocking 后才建立修复预算，选择非阻断 disposition 时保留 finding 事实。
+    preconditions:
+      - 已准备可复现且可追溯的 blocking finding、out_of_scope 提议、waived 提议和缺少 Case 映射的 final finding。
+    steps:
+      - 分别提交 review outbox；确认合法 blocking 进入 repair，其他变体在首次 repair attempt 前进入 finding 裁决且 attempts 保持 0。
+      - 由人工分别选择 blocking 与非阻断 disposition；确认 blocking 只派发映射 Case，非阻断决定保留原 finding 并不创建 repair dispatch。
+      - 重放旧 review outbox；确认裁决按 invariant、scenario 和 review target 匹配，不重复消费或串到新 finding。
+
+  - id: AGT-EX-008
+    name: Checkpoint 只接受已审查且未漂移的当前提交
+    required: true
+    description: >
+      local_commit 模式要求独占锁、稳定 worktree 和当前 checkpoint SHA；旧、缺失或随机 SHA 以及审查中
+      的源码或 HEAD 漂移必须 fail closed。disabled 与旧 Run 不得获得 Git 副作用。
+    preconditions:
+      - 已准备干净、dirty、detached、审查中漂移的 worktree，以及绑定当前、旧、空和随机 SHA 的独立 outbox。
+      - 已准备显式 disabled Run 和缺少 checkpoint 字段的历史 Run。
+    steps:
+      - 推进 local_commit review 与 behavior 结果；确认只有当前稳定 checkpoint 被消费并产生一次正确提交，其他场景不改变 acceptance 或 Git。
+      - 完成 disabled 与历史 Run；确认两者无需 reviewTarget 或 verifiedCheckpointCommit，不创建分支、锁或 checkpoint commit。
+      - 使用 $toolkit:playwright-cli 检查错误状态；确认 SHA 漂移可诊断，兼容 Run 不展示伪 checkpoint。
+
+  - id: AGT-EX-009
+    name: 结构化 Activity 能还原一次 Dispatch Transition
+    required: true
+    description: >
+      同一次 Run 写入投影出的 dispatch、acceptance、gate 与恢复事件必须共享 transitionId，并携带适用的
+      reasonCode、role、dispatchId 和 caseIds；消费者无需解析中文 logs 即可还原时序。
+    preconditions:
+      - 已准备能产生正常 dispatch、协议补交、finding gate 和 completion 的独立状态迁移。
+    steps:
+      - 执行每种迁移并只读取 Activity facts/API export；确认同一写入的事件共享 transitionId 且身份字段完整。
+      - 对照 Run JSON；确认事件顺序和最终状态一致，重复投影不产生第二组 transition，事件不包含 prompt、token 或敏感正文。

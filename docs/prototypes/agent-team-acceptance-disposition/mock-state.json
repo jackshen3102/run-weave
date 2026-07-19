@@ -1,0 +1,13 @@
+{
+  "title": "环境阻塞不应否决整个 Run",
+  "case": {
+    "sourceCaseId": "ACO-ENV-001",
+    "text": "在真实桌面环境验证终端右侧 Browser 行为",
+    "observation": {
+      "outcome": "skipped",
+      "label": "环境跳过",
+      "detail": "当前机器没有可用的 desktop CDP surface，无法执行浏览器验收。"
+    }
+  },
+  "decision": null
+}

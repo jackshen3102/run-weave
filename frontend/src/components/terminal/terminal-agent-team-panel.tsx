@@ -2,6 +2,7 @@ import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type {
+  AgentTeamAcceptanceDisposition,
   AgentTeamFindingDisposition,
   AgentTeamFlow,
   AgentTeamFrameworkRepairRecoveryStatus,
@@ -12,6 +13,7 @@ import type { TerminalProjectListItem } from "@runweave/shared/terminal/project"
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
   continueAgentTeamFrameworkRepair,
+  decideAgentTeamAcceptance,
   decideAgentTeamFinding,
   focusAgentTeamPane,
   getAgentTeamFrameworkRepair,
@@ -26,11 +28,13 @@ import {
   getAgentTeamAttention,
   getAgentTeamCaseElementId,
   getAgentTeamControlState,
+  getPendingAgentTeamAcceptanceCases,
   getAgentTeamStatusPresentation,
   isAgentTeamRunActive,
   type WorkerDraft,
 } from "./terminal-agent-team-panel-model";
 import { AgentTeamAttentionSummary } from "./terminal-agent-team-panel-attention";
+import { AgentTeamAcceptanceDecisionCard } from "./terminal-agent-team-acceptance-decision";
 import { AgentTeamFindingDecisionCard } from "./terminal-agent-team-finding-decision";
 import {
   FailedRunSection,
@@ -343,6 +347,25 @@ export function TerminalAgentTeamPanel({
     },
   );
 
+  const decideAcceptance = useMemoizedFn(
+    (
+      caseId: string,
+      disposition: AgentTeamAcceptanceDisposition,
+      reason: string,
+    ): void => {
+      if (!run || !getAgentTeamControlState(run).allowsAcceptanceDecision) {
+        return;
+      }
+      void runAction(() =>
+        decideAgentTeamAcceptance(apiBase, token, run.runId, {
+          caseId,
+          disposition,
+          reason: reason.trim(),
+        }),
+      );
+    },
+  );
+
   const focusPane = useMemoizedFn((panelId: string): void => {
     if (!run) {
       return;
@@ -373,6 +396,9 @@ export function TerminalAgentTeamPanel({
   const attention =
     run?.phase === "executing" ? getAgentTeamAttention(run) : null;
   const controlState = run ? getAgentTeamControlState(run) : null;
+  const pendingAcceptanceCase = run
+    ? getPendingAgentTeamAcceptanceCases(run)[0]
+    : null;
   const statusPresentation = run
     ? getAgentTeamStatusPresentation(run, attention)
     : null;
@@ -423,6 +449,17 @@ export function TerminalAgentTeamPanel({
           run={run}
           busy={busy}
           onDecide={decideFinding}
+        />
+      ) : run && controlState?.allowsAcceptanceDecision ? (
+        <AgentTeamAcceptanceDecisionCard
+          key={[
+            run.runId,
+            pendingAcceptanceCase?.caseId,
+            pendingAcceptanceCase?.latestObservation?.recordedAt,
+          ].join(":")}
+          run={run}
+          busy={busy}
+          onDecide={decideAcceptance}
         />
       ) : run &&
         attention &&

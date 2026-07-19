@@ -5,6 +5,7 @@ import type {
   AgentTeamRunsResponse,
   CompleteAgentTeamRunRequest,
   CreateAgentTeamRunRequest,
+  DecideAgentTeamAcceptanceRequest,
   DecideAgentTeamFindingRequest,
   ProposeAgentTeamSplitRequest,
   ResumeAgentTeamRunRequest,
@@ -165,6 +166,23 @@ export async function decideAgentTeamFinding(
   return requestJson<AgentTeamRun>(
     apiBase,
     `/api/agent-team/runs/${encodeURIComponent(runId)}/finding-disposition`,
+    {
+      method: "POST",
+      headers: AGENT_TEAM_JSON_HEADERS(token),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function decideAgentTeamAcceptance(
+  apiBase: string,
+  token: string,
+  runId: string,
+  payload: DecideAgentTeamAcceptanceRequest,
+): Promise<AgentTeamRun> {
+  return requestJson<AgentTeamRun>(
+    apiBase,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/acceptance-disposition`,
     {
       method: "POST",
       headers: AGENT_TEAM_JSON_HEADERS(token),

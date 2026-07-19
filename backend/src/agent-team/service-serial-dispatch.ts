@@ -89,7 +89,9 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
               )
                 ? {
                     ...item,
+                    latestObservation: null,
                     status: "pending" as const,
+                    lastRunStatus: "pending" as const,
                     resultSummary: null,
                     skip: null,
                     skipReason: null,
@@ -243,6 +245,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
         caseIds.has(item.caseId)
           ? {
               ...item,
+              latestObservation: null,
               status: "pending" as const,
               lastRunStatus: "pending" as const,
               skip: null,
