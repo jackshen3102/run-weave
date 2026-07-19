@@ -84,16 +84,19 @@ cases:
       - 对比操作前后 Run、pane、prompt、outbox 和项目文件；确认所有非法请求零副作用。
 
   - id: AGT-LC-007
-    name: Agent Team Sidecar 只呈现当前 Run 且不改写其他工具
+    name: Agent Team Sidecar 只应用当前 Terminal 的 Run
     required: true
     description: >
-      Agent Team UI 必须真实呈现当前 Run、验收来源、worker 和阻断状态，同时不改变同一 Terminal
-      的 Preview、Browser、普通 Panel 和用户 pane。
+      Agent Team Sidecar 的请求、身份行和 Run 内容必须始终绑定当前项目与 Terminal；快速切换时的迟到响应、
+      无 Run 响应或身份不匹配响应都不能让上一 Terminal 或其他项目的 Run 覆盖当前 scope。
     preconditions:
-      - 已由隔离 Dev Session 准备真实 tmux Terminal、合法 YAML 和可附着的页面 surface。
+      - 已由隔离 Dev Session 在同一项目准备真实 tmux Terminal A、B、C；A 与 B 各有身份和内容可区分的 Run，C 没有 Run。
+      - 已取得可附着的真实页面 surface，并能通过 $toolkit:playwright-cli 独立延迟 Agent Team Run 查询或返回身份不匹配的受控响应。
     steps:
-      - 使用 $toolkit:playwright-cli 附着真实页面，创建最小 Run 并在 Preview、Browser、Agent Team 和普通 Panel 间切换。
-      - 对照 Run JSON、pane 和 outbox；确认 Sidecar 只显示当前 Terminal 的事实，其他工具的项目、tab、内容和用户 pane 保持不变。
+      - 使用 $toolkit:playwright-cli 附着真实页面，依次选择 Terminal A 与 B 并打开 Agent Team；确认每次 Run 查询都携带当前 projectId 和 terminalSessionId，身份行的 data 属性、可见 Terminal、Run、状态与对应 Run JSON 一致，且不出现另一 Terminal 的内容。
+      - 延迟 Terminal A 的 Run 查询后立即切换到 Terminal B，先返回 B 的结果再放行 A 的迟到结果；确认 Sidecar 始终显示 B 的身份与 Run，A 的迟到结果没有覆盖当前内容、loading、busy 或错误状态。
+      - 从已有 Run 的 Terminal 切换到 Terminal C；确认 Sidecar 立即以 C 为当前身份并最终显示“暂无 Run”与创建入口，不残留 A 或 B 的 runId、状态、worker、验收来源或阻断信息。
+      - 对当前 Terminal 的查询分别返回 projectId 不匹配和 terminalSessionId 不匹配的 Run；确认 Sidecar 清空 Run、显示“Agent Team 返回了不属于当前 Terminal 的 Run，已停止展示。”，且 DOM 中不出现不匹配 runId 或其内容。
 
   - id: AGT-LC-008
     name: UI 只暴露当前控制状态允许的人工动作
