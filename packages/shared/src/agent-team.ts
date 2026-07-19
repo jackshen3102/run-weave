@@ -2,7 +2,9 @@ import type { AgentTeamWorker, AgentTeamWorkerRole } from "./agent-team-worker";
 import type { AgentTeamAgentIntervention } from "./agent-team-intervention";
 import type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
 import type {
-  AgentTeamAcceptanceDraft,
+  AgentTeamFrameworkRepair,
+} from "./agent-team-framework-repair";
+import type {
   AgentTeamAcceptanceSkip,
 } from "./agent-team-acceptance";
 import type {
@@ -30,14 +32,32 @@ import type {
   AgentTeamTerminal,
   AgentTeamVerificationConfig,
 } from "./agent-team-run-contract";
+import type { AgentTeamFrameworkRepairRecoveryStatus } from "./agent-team-api";
 
 export type {
   AgentTeamAgentIntervention,
   AgentTeamAgentInterventionAction,
   InterveneAgentTeamRunRequest,
 } from "./agent-team-intervention";
+export type {
+  AgentTeamFrameworkRepairContinueBlockerCode,
+  AgentTeamFrameworkRepairRecoveryStatus,
+  BeginAgentTeamFrameworkRepairRequest,
+  CompleteAgentTeamRunRequest,
+  CreateAgentTeamRunRequest,
+  DecideAgentTeamAcceptanceRequest,
+  FocusAgentTeamPaneRequest,
+  ProposeAgentTeamSplitRequest,
+  ResumeAgentTeamRunRequest,
+  SubmitAgentTeamSplitGateRequest,
+} from "./agent-team-api";
 export type { AgentTeamWorker, AgentTeamWorkerRole } from "./agent-team-worker";
 export type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
+export type {
+  AgentTeamFrameworkRepair,
+  AgentTeamFrameworkRepairResult,
+  AgentTeamFrameworkRepairTarget,
+} from "./agent-team-framework-repair";
 export type {
   AgentTeamAcceptanceSkip,
   AgentTeamAcceptanceSkipCode,
@@ -213,32 +233,6 @@ export interface HumanInterventionNote {
   clearedFingerprints: string[];
   /** Repair cycles archived before the human resumed the run. */
   clearedRepairCycles?: AgentTeamRepairCycle[];
-}
-
-export type AgentTeamFrameworkRepairResult = "blocked" | "continued" | "rerun";
-
-export interface AgentTeamFrameworkRepairTarget {
-  role: AgentTeamWorkerRole;
-  caseIds: string[];
-  panelId: string | null;
-  tmuxPaneId: string | null;
-  invalidatedDispatch: AgentTeamActiveWorkerDispatch;
-}
-
-/** Persisted framework-repair boundary. A blocked record revokes old dispatches. */
-export interface AgentTeamFrameworkRepair {
-  repairId: string;
-  reason: string;
-  begunAt: string;
-  backendInstanceIdBefore: string;
-  target: AgentTeamFrameworkRepairTarget;
-  result: AgentTeamFrameworkRepairResult;
-  /** A durable dispatch reservation which may already have reached the Worker. */
-  pendingContinueDispatchId?: string | null;
-  continuedAt?: string | null;
-  continuedDispatchId?: string | null;
-  rerunAt?: string | null;
-  successorRunId?: string | null;
 }
 
 export interface AgentTeamRun {
@@ -545,82 +539,10 @@ export interface AgentTeamExportAcceptanceSummary {
   resolvedFindingCount: number;
 }
 
-// --- request / response DTOs ---
-
-export interface CreateAgentTeamRunRequest {
-  projectId: string;
-  terminalSessionId: string;
-  runKind?: AgentTeamRunKind;
-  lineage?: AgentTeamRunLineage | null;
-  task?: string;
-  planFilePath?: string | null;
-  testCaseFilePath?: string | null;
-  options?: Partial<AgentTeamRunOptions>;
-  /**
-   * Defaults to Codex for the current loop-engineer test path. Callers may
-   * override this later without changing the orchestration flow.
-   */
-  terminal?: AgentTeamTerminal;
-}
-
-export interface ProposeAgentTeamSplitRequest {
-  /** Who triggered the proposal: human button or agent self-judgment. */
-  source?: "user" | "agent";
-  summary?: string;
-  workers?: Array<Pick<AgentTeamWorker, "role" | "intent">>;
-  acceptance?: AgentTeamAcceptanceDraft[];
-  planFilePath?: string | null;
-  testCaseFilePath?: string | null;
-  generatedTestCaseFilePath?: string | null;
-}
-
-export interface SubmitAgentTeamSplitGateRequest {
-  verdict: "confirmed" | "rejected";
-  workers?: Array<Pick<AgentTeamWorker, "role" | "intent">>;
-  acceptance?: AgentTeamAcceptanceDraft[];
-  planFilePath?: string | null;
-  testCaseFilePath?: string | null;
-  generatedTestCaseFilePath?: string | null;
-}
-
-export interface ResumeAgentTeamRunRequest {
-  note: string;
-}
-
-export interface BeginAgentTeamFrameworkRepairRequest {
-  reason: string;
-}
-
-export type AgentTeamFrameworkRepairContinueBlockerCode =
-  | "backend_not_restarted"
-  | "recovery_target_missing"
-  | "worker_pane_unavailable"
-  | "continue_dispatch_pending"
-  | "repair_not_blocked";
-
-export interface AgentTeamFrameworkRepairRecoveryStatus {
-  runId: string;
-  repairId: string;
-  reason: string;
-  result: AgentTeamFrameworkRepairResult;
-  backendRestarted: boolean;
-  canContinue: boolean;
-  continueBlocker: {
-    code: AgentTeamFrameworkRepairContinueBlockerCode;
-    message: string;
-  } | null;
-  actions: Array<"continue" | "rerun">;
-  target: AgentTeamFrameworkRepairTarget;
-}
-
 export interface AgentTeamFrameworkRepairResponse {
   run: AgentTeamRun;
   recovery: AgentTeamFrameworkRepairRecoveryStatus;
   successorRun: AgentTeamRun | null;
-}
-
-export interface CompleteAgentTeamRunRequest {
-  note?: string;
 }
 
 export interface DecideAgentTeamFindingRequest {
@@ -628,16 +550,6 @@ export interface DecideAgentTeamFindingRequest {
   disposition: AgentTeamFindingDisposition;
   caseIds?: string[];
   reason: string;
-}
-
-export interface DecideAgentTeamAcceptanceRequest {
-  caseId: string;
-  disposition: AgentTeamAcceptanceDisposition;
-  reason: string;
-}
-
-export interface FocusAgentTeamPaneRequest {
-  panelId: string;
 }
 
 export interface AgentTeamFixtureScopeResponse {

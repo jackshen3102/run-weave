@@ -4,6 +4,12 @@ import { AgentTeamError } from "../agent-team/errors";
 import type { AgentTeamService } from "../agent-team/service";
 import { AGENT_TEAM_RUN_ID_PATTERN } from "../agent-team/run-id";
 import { logger } from "../logging";
+import {
+  acceptanceDispositionSchema,
+  exportQuerySchema,
+  findingDispositionSchema,
+  focusSchema,
+} from "./agent-team-route-action-schemas";
 
 const agentTeamRouteLogger = logger.child({ component: "agent-team-route" });
 
@@ -207,41 +213,6 @@ const fixtureScopeCleanupSchema = z
     reason: z.string().trim().min(1).max(2_000),
   })
   .strict();
-const findingDispositionSchema = z
-  .object({
-    invariantKey: z.string().trim().min(1),
-    disposition: z.enum(["blocking", "out_of_scope", "waived"]),
-    caseIds: z.array(z.string().trim().min(1)).optional(),
-    reason: z.string().trim().min(1),
-  })
-  .strict();
-const acceptanceDispositionSchema = z
-  .object({
-    caseId: z.string().trim().min(1),
-    disposition: z.enum(["accepted_environment_skip", "invalid_case"]),
-    reason: z.string().trim().min(1).max(2_000),
-  })
-  .strict();
-const focusSchema = z.object({ panelId: z.string().trim().min(1) }).strict();
-const exportQuerySchema = z
-  .object({
-    history: z.enum(["none", "tail", "full"]).optional(),
-    tail: z.coerce.number().int().positive().max(5000).optional(),
-    includeSessionOther: z
-      .enum(["true", "false"])
-      .optional()
-      .transform((value) =>
-        value === undefined ? undefined : value === "true",
-      ),
-    includeOutboxes: z
-      .enum(["true", "false"])
-      .optional()
-      .transform((value) =>
-        value === undefined ? undefined : value === "true",
-      ),
-  })
-  .strict();
-
 export function createAgentTeamRouter(
   agentTeamService: AgentTeamService,
 ): Router {
