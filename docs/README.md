@@ -61,17 +61,17 @@
 `testing/test-plan-format.md`，测试层级与命令选择见 `testing/layers.md` 和
 `testing/command-matrix.md`。
 
-| 核心系统能力                    | 测试计划                                                    |
-| ------------------------------- | ----------------------------------------------------------- |
-| YAML 格式、20 条上限与编写原则  | testing/test-plan-format.md                                 |
-| 测试层级与命令选择              | testing/layers.md、testing/command-matrix.md                |
-| Agent Team 端到端闭环           | testing/agent-team/agent-team-core.testplan.yaml            |
-| Terminal 运行时和多 Pane        | testing/terminal/terminal-runtime-core.testplan.yaml        |
-| Terminal Browser、CDP 与 MCP    | testing/terminal/terminal-browser-core.testplan.yaml        |
-| Worktree Project Context        | testing/terminal/worktree-project-context.testplan.yaml     |
-| Dev Session、Beta、更新与 CLI   | testing/platform/development-control-plane.testplan.yaml    |
-| Activity SQLite 行为数据底座    | testing/architecture/activity-data-foundation.testplan.yaml |
-| Ionic App 与本机 Backend 连通性 | testing/app/app-connectivity-core.testplan.yaml             |
+| 核心系统能力                          | 测试计划                                                    |
+| ------------------------------------- | ----------------------------------------------------------- |
+| YAML 格式、20 条上限与编写原则        | testing/test-plan-format.md                                 |
+| 测试层级与命令选择                    | testing/layers.md、testing/command-matrix.md                |
+| Agent Team 生命周期、执行、恢复与完成 | testing/agent-team/README.md                                |
+| Terminal 运行时和多 Pane              | testing/terminal/terminal-runtime-core.testplan.yaml        |
+| Terminal Browser、CDP 与 MCP          | testing/terminal/terminal-browser-core.testplan.yaml        |
+| Worktree Project Context              | testing/terminal/worktree-project-context.testplan.yaml     |
+| Dev Session、Beta、更新与 CLI         | testing/platform/development-control-plane.testplan.yaml    |
+| Activity SQLite 行为数据底座          | testing/architecture/activity-data-foundation.testplan.yaml |
+| Ionic App 与本机 Backend 连通性       | testing/app/app-connectivity-core.testplan.yaml             |
 
 ## 历史归档（冻结，不代表当前事实）
 

@@ -37,7 +37,7 @@
 - `pnpm agent-team:verify-completion-outcome`：13/13。
 - `pnpm agent-team:verify-control-plane`：19/19。
 - `pnpm agent-team:verify-fixture-lifecycle`：13/13。
-- `pnpm testplan:validate docs/testing/agent-team/agent-team-completion-outcome.testplan.yaml`：10 条 required Case。
+- `pnpm testplan:validate docs/testing/agent-team/completion/agent-team-completion-and-intervention.testplan.yaml`：10 条 required Case。
 - `git diff --check`：通过。
 
 真实隔离 Dev Session `dvs-176dfc` 中调用新增裁决接口，结果为：

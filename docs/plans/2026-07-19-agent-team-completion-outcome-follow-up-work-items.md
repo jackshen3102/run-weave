@@ -48,7 +48,7 @@ Activity、export、Work History 和 failed/cancelled outcome 不在此 patch；
 
 ### 第一阶段验收
 
-- `pnpm testplan:validate docs/testing/agent-team/agent-team-completion-outcome.testplan.yaml`
+- `pnpm testplan:validate docs/testing/agent-team/completion/agent-team-completion-and-intervention.testplan.yaml`
 - `pnpm agent-team:verify-completion-outcome`
 - `pnpm agent-team:verify-control-plane`
 - `pnpm agent-team:verify-fixture-lifecycle`

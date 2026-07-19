@@ -1,0 +1,142 @@
+version: 1
+name: Agent Team 恢复、重跑与 Fixture 生命周期
+description: >
+  验证 framework repair、缺失 outbox、无进展、Terminal 丢失和 verification fixture 等恢复边界。
+  恢复必须保留可信历史、使旧 dispatch 失效，并且不能通过普通 resume 或清理失败伪造完成。
+
+cases:
+  - id: AGT-RC-001
+    name: Framework Repair Begin 幂等冻结旧 Dispatch
+    required: true
+    description: >
+      begin 必须保存唯一 framework repair 现场并撤销旧 active dispatch 的推进权，但不关闭 worker pane；
+      重复 begin、迟到 completion 和重启后的旧 outbox 扫描都不能改变 Run。
+    preconditions:
+      - executing Run 有 active worker dispatch、已通过 Case、evidence、repair 记录和可辨识 round。
+    steps:
+      - 调用 begin 两次并对比 Run JSON；确认 repairId、首次时间、目标 role/caseIds、旧 dispatch 和可信历史保持一致，且 worker pane 仍存在。
+      - 让旧 worker 写 outbox，并从正常 completion 与重启扫描重放；确认 acceptance、round、repair、active 状态和 framework repair 现场不变化。
+
+  - id: AGT-RC-002
+    name: Backend 重启后可用现场用新 Dispatch 继续原 Run
+    required: true
+    description: >
+      Backend 身份已变化且原 pane 可用时，continue 必须保持原 runId 与历史，只创建一个新 dispatch，
+      向原 worker 投递完整新 prompt 后才记录 continued 并恢复 running。
+    preconditions:
+      - 已 begin 的 framework-blocked Run 记录了重启前 Backend 身份，目标 worker pane 可用。
+      - Backend 已完成重启。
+    steps:
+      - 读取 recovery status；确认 backendRestarted=true 且 canContinue=true，再调用 continue。
+      - 检查 pane prompt、Run JSON、API 和 CLI；确认使用不同于旧值的新 dispatchId，只派发原 role/caseIds，历史结果不被清空。
+      - 确认实际投递成功后 result=continued、Run=running；旧 outbox 仍不能推进。
+
+  - id: AGT-RC-003
+    name: Continue 条件不足或投递失败时保持可恢复现场
+    required: true
+    description: >
+      Backend 未重启、目标 pane 不可用和 prompt 投递失败都必须无副作用拒绝 continue；恢复原条件后可以重试，
+      不能猜测其他 worker、创建替代 pane或伪造 continued。
+    preconditions:
+      - 已准备 Backend 未重启、重启后 pane 缺失和检查后投递失败三个独立 framework-blocked Run。
+    steps:
+      - 分别读取 recovery status 并调用 continue；确认错误原因可区分，repairId、历史、目标和 blocked 结果保持不变。
+      - 恢复各自依赖后再次 continue；确认使用新 dispatch 成功，第一次失败没有遗留半提交 active dispatch 或重复 prompt。
+
+  - id: AGT-RC-004
+    name: Rerun 创建隔离的新 Run 且保留旧现场
+    required: true
+    description: >
+      rerun 必须保留旧 Run 并建立双向 lineage；新 Run 只继承任务输入、验收来源、Terminal 配置和运行选项，
+      不继承旧执行结论、预算、checkpoint、dispatch 或 framework repair 状态。
+    preconditions:
+      - 已 begin 的 Run 仍具备创建新 Run 所需的 Terminal、任务和验收来源。
+    steps:
+      - 调用 rerun 并对比旧 Run、新 Run、worker dispatch 和 UI；确认 runId 不同且 predecessor/successor 可双向追踪。
+      - 确认新 Run 从干净生命周期开始，旧 Run 记录 rerun 结果并可继续回看，两个 Run 的 outbox 和 worker 身份不复用。
+
+  - id: AGT-RC-005
+    name: Rerun 创建失败不破坏旧 Run
+    required: true
+    description: >
+      Terminal 或必要输入不可用导致 rerun 失败时，旧 Run 必须保持 framework repair 现场，不能出现半成品 successor；
+      依赖恢复后可以重新执行同一操作。
+    preconditions:
+      - 已 begin 的 framework-blocked Run 缺失创建 successor 所需的一项可恢复依赖。
+    steps:
+      - 调用 rerun；确认错误指出缺失依赖，旧 Run、repairId、历史和 successorRunId 不变化，Run 存储中没有半成品。
+      - 恢复依赖后重试；确认结果满足新旧 Run 隔离且第一次失败没有重复 pane、分支或 prompt。
+
+  - id: AGT-RC-006
+    name: Framework Recovery 多入口只提供 Continue 或 Rerun
+    required: true
+    description: >
+      framework-blocked Run 的 API、CLI 和真实面板必须一致展示原因、Backend 重启状态和 canContinue；
+      普通 resume、旧 completion 或第三种恢复动作不能绕过恢复决策。
+    preconditions:
+      - 已准备一个可 continue 和一个不可 continue 的 framework-blocked Run，并配置同一 Backend 的 CLI profile。
+    steps:
+      - 对比 recovery API、CLI 和 $toolkit:playwright-cli 面板；确认状态与原因一致，只提供“继续原 Run”和“重新运行”。
+      - 调用普通 resume、重放旧 completion 并扫描旧 outbox；确认均不清除 framework gate 或恢复旧 dispatch 推进权。
+      - 对不可 continue Run 确认 rerun 仍可用；对可 continue Run 确认两个合法决策可执行但不能并发产生两个结果。
+
+  - id: AGT-RC-007
+    name: 缺失 Outbox 只在超时后有限重试并升级人工
+    required: true
+    description: >
+      worker outbox 不存在时，watchdog 在超时前不能重派，超时后每次只产生一个 fresh dispatch，
+      达到 retry 上限后必须进入 need_human，不能无限等待或误判已存在的合法 outbox。
+    preconditions:
+      - 独立 Run 正在等待 worker，目标 pane-scoped outbox 分别处于未超时缺失、已超时缺失、达到上限和合法存在状态。
+    steps:
+      - 触发各状态的 watchdog；确认未超时与合法存在场景不走重试，已超时场景只建立一次 fresh dispatch。
+      - 达到上限后使用 $toolkit:playwright-cli 查看 sidecar；确认 Run 进入 need_human、原因包含缺失 outbox 与 attempt，且不再自动派发。
+
+  - id: AGT-RC-008
+    name: Terminal 丢失或无进展后只有显式 Resume 才能继续
+    required: true
+    description: >
+      Terminal/tmux 消失、连续无进展或 repair budget 耗尽后必须停止自动派发并进入可诊断人工状态；
+      迟到结果不能恢复流程，只有带 note 的显式 resume 能建立一个 fresh dispatch。
+    preconditions:
+      - 已准备 active Run、达到 no-progress 阈值的 Run 和处于 need_human 的 Run。
+    steps:
+      - 删除 Terminal 或推进到阈值并发送迟到 completion；确认自动推进停止，旧结果被忽略，历史 acceptance 和 repair 保留。
+      - 对可恢复 Run 提交一次 resume note；确认 note 可审计、no-progress 控制状态重置且只建立一个匹配当前角色的 fresh dispatch。
+
+  - id: AGT-RC-009
+    name: Verification Fixture 由父 Run 完整持有并在完成前归零
+    required: true
+    description: >
+      behavior verifier 创建的 verification_fixture Run、Dev Session、Terminal、pane 和 outbox 必须记录 owner scope；
+      父 Run 完成前所有 owned live fixture 必须 cancelled 或完成并释放独占资源，历史证据不能物理删除。
+    preconditions:
+      - 父 behavior dispatch 拥有 running、need_human 和 done 三种 fixture Run，并有独占与共享 Terminal、owned Dev Session 和资源 ledger。
+    steps:
+      - 完成父 behavior outbox并停止 owned Dev Session，触发 owner cleanup；读取父子 Run、manifest、Terminal/pane inventory 和 outbox history。
+      - 确认 running/need_human fixture 进入 cancelled、done 保持 done；独占资源回收、共享资源保留、历史 JSON/outbox history 可读。
+      - 确认 receipt 报告 owned live fixture=0 且 owned Dev Session 全部 stopped 后，父 Run 才能进入 done。
+
+  - id: AGT-RC-010
+    name: Fixture Cleanup 部分失败可幂等重试且不伪造完成
+    required: true
+    description: >
+      owned fixture 或 Dev Session 清理部分失败时，父 Run 必须保持非终态并记录精确残留；恢复后只重试残留项，
+      Backend 重启和重复 completion 不能误删共享资源或重复取消。
+    preconditions:
+      - 父 Run 拥有两个 live fixture 和一个 owned Dev Session，其中一项 cleanup 可确定性失败。
+    steps:
+      - 触发完成并记录 cleanup receipt；确认成功项不回滚，父 Run 非 done，残留资源和错误可诊断。
+      - 恢复失败资源、重启 Backend 并重复 completion；确认只清理残留项，操作幂等，最终资源归零后父 Run 完成。
+
+  - id: AGT-RC-011
+    name: 历史 Run 与旧 Dispatch 保持只读兼容且不获得虚假所有权
+    required: true
+    description: >
+      缺少新可选字段的历史 Run/outbox 必须可 list、get、export 和启动恢复；历史数据按 primary、无 fixture owner、
+      无 framework recovery 读取。旧 active dispatch 只在原边界内兼容，新 dispatch 必须使用当前协议。
+    preconditions:
+      - 已准备缺少 runKind、lineage、frameworkRepair、completionOutcome、events 和新 dispatch 字段的历史 fixture。
+    steps:
+      - 执行 list/get/export、startup reconciliation 和 $toolkit:playwright-cli UI 展示；确认无需批量重写且不把历史 Run 当 fixture 清理。
+      - 完成一次历史 active dispatch 再建立新 dispatch；确认旧协议只完成原边界，新 dispatch 使用当前身份与 freshness 合同，不继承虚假 owner 或 recovery。
