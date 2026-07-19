@@ -144,19 +144,32 @@ async function finalizeBetaSlotReleaseClaimed({
       homeDir,
     });
     injectReleaseFailure("after_reset", failureCheckpoint);
-    const retention = await applyBetaSlotRetention({
-      slotId: lease.slotId,
-      homeDir,
-      applicationsDir,
-    });
+    let retention = null;
+    let retentionError = null;
+    try {
+      retention = await applyBetaSlotRetention({
+        slotId: lease.slotId,
+        homeDir,
+        applicationsDir,
+      });
+    } catch (error) {
+      retentionError = error instanceof Error ? error.message : String(error);
+    }
     const pendingReceipt = {
       ...receipt,
       result: "recovered",
       phase: "release_pending",
-      checks: { ...receipt.checks, slotProcessesAbsent: true },
-      failureReason: null,
+      checks: {
+        ...receipt.checks,
+        slotProcessesAbsent: true,
+        ...(retentionError ? { retentionFailed: retentionError } : {}),
+      },
+      failureReason: retentionError || null,
     };
-    const cleanupSummary = { ...reset, retention };
+    const cleanupSummary = {
+      ...reset,
+      retention: retention || { retentionFailed: retentionError },
+    };
     await recordBetaSlotRelease({
       slotId: lease.slotId,
       revision: lease.ownerRevision,

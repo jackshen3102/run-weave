@@ -47,10 +47,15 @@ function leaseOptions(homeDir, index, requestedSlotId = null) {
   };
 }
 
-export async function verifyBetaSlotPool(temporaryHome) {
-  await verifyBetaPoolStorageMigration(
-    path.join(temporaryHome, "storage-migration"),
-  );
+export async function verifyBetaSlotPool(
+  temporaryHome,
+  { includeLegacy = true } = {},
+) {
+  if (includeLegacy) {
+    await verifyBetaPoolStorageMigration(
+      path.join(temporaryHome, "storage-migration"),
+    );
+  }
   const rejectedLegacyInstance = "dvs-new-legacy";
   await assert.rejects(
     execFileAsync(
@@ -554,5 +559,5 @@ export async function verifyBetaSlotPool(temporaryHome) {
   assert(["pool-04", "pool-05"].includes(remainingHealthyLease.lease.slotId));
   await releaseBetaSlotLease(remainingHealthyLease);
 
-  await verifyBetaSlotStorage(temporaryHome);
+  await verifyBetaSlotStorage(temporaryHome, { includeLegacy });
 }

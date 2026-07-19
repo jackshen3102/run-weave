@@ -11,7 +11,6 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { resourcesBackendDir } from "../electron/scripts/activity-sqlite-runtime-paths.mjs";
 
 const repoRoot = process.cwd();
 const artifactsRoot = path.resolve(
@@ -85,6 +84,7 @@ const frontendDist = isolatedBuildRoot
 const electronDist = isolatedBuildRoot
   ? path.join(path.resolve(isolatedBuildRoot), "electron", "dist")
   : path.join(repoRoot, "electron", "dist");
+const resourcesBackendDir = path.join(electronDist, "backend");
 if (isolatedBuildRoot) {
   rmSync(path.resolve(isolatedBuildRoot), { recursive: true, force: true });
   run("pnpm", [
@@ -96,12 +96,22 @@ if (isolatedBuildRoot) {
     "--outDir",
     frontendDist,
   ]);
+  const isolatedElectronEnv = {
+    ...process.env,
+    RUNWEAVE_ACTIVITY_SQLITE_ARTIFACT_ROOT: path.join(
+      path.resolve(isolatedBuildRoot),
+      "native-artifacts",
+      "activity-sqlite",
+    ),
+    RUNWEAVE_ELECTRON_BUNDLE_OUTDIR: electronDist,
+  };
+  run("node", ["scripts/prepare-better-sqlite3-runtime.mjs"], {
+    cwd: path.join(repoRoot, "electron"),
+    env: isolatedElectronEnv,
+  });
   run("node", ["scripts/bundle.mjs"], {
     cwd: path.join(repoRoot, "electron"),
-    env: {
-      ...process.env,
-      RUNWEAVE_ELECTRON_BUNDLE_OUTDIR: electronDist,
-    },
+    env: isolatedElectronEnv,
   });
 } else {
   run("pnpm", ["--filter", "./frontend", "build"]);

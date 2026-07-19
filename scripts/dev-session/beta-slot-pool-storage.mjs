@@ -288,6 +288,22 @@ async function pruneLogs(logDir) {
   return { count: entries.length, bytes: totalBytes, cleanedBytes };
 }
 
+async function pruneArtifacts(artifactsRoot, allowlist) {
+  let cleanedBytes = 0;
+  for (const entry of await fs.readdir(artifactsRoot).catch(() => [])) {
+    const releaseId = entry.startsWith("runweave-runtime-")
+      ? entry.slice("runweave-runtime-".length).replace(/\.zip$/, "")
+      : entry;
+    if (allowlist.has(releaseId)) {
+      continue;
+    }
+    const target = path.join(artifactsRoot, entry);
+    cleanedBytes += await calculatePathBytes(target);
+    await fs.rm(target, { recursive: true, force: true });
+  }
+  return { cleanedBytes };
+}
+
 export async function applyBetaSlotRetention({
   slotId,
   homeDir = os.homedir(),
@@ -422,6 +438,10 @@ export async function applyBetaSlotRetention({
     ),
     pruneLogs(path.join(targets.instanceRoot, "diagnostics", "logs")),
   ]);
+  const artifacts = await pruneArtifacts(
+    path.join(targets.instanceRoot, "runtime-artifacts"),
+    desktopAllowlist,
+  );
   let appBackupCleanedBytes = 0;
   for (const backupPath of allBackupPaths) {
     if (
@@ -443,6 +463,7 @@ export async function applyBetaSlotRetention({
     desktopRuntime,
     appServerRuntime,
     logs,
+    artifacts,
     appBackupMigrated,
     launchServicesUnregistered,
     appBackupCleanedBytes,
@@ -450,6 +471,7 @@ export async function applyBetaSlotRetention({
       desktopRuntime.cleanedBytes +
       appServerRuntime.cleanedBytes +
       logs.cleanedBytes +
+      artifacts.cleanedBytes +
       appBackupCleanedBytes,
   };
 }

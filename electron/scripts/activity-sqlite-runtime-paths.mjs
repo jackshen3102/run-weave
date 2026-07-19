@@ -14,11 +14,15 @@ const backendPackage = JSON.parse(
 export const electronVersion = String(electronPackage.devDependencies.electron).replace(/^\D+/, "");
 export const betterSqliteVersion = String(backendPackage.dependencies["better-sqlite3"]).replace(/^\D+/, "");
 export const runtimeKey = `electron-${electronVersion}-${process.platform}-${process.arch}`;
-export const artifactRoot = path.join(
-  repoRoot,
-  ".native-artifacts",
-  "better-sqlite3",
-  runtimeKey,
-);
+const configuredArtifactRoot =
+  process.env.RUNWEAVE_ACTIVITY_SQLITE_ARTIFACT_ROOT?.trim();
+export const artifactRoot = configuredArtifactRoot
+  ? path.resolve(configuredArtifactRoot)
+  : path.join(
+      repoRoot,
+      ".native-artifacts",
+      "better-sqlite3",
+      runtimeKey,
+    );
 export const stagingAppDir = path.join(artifactRoot, "staging-app");
-export const resourcesBackendDir = path.join(artifactRoot, "resources-backend");
+export const resourcesBackendDir = path.join(electronDir, "dist", "backend");

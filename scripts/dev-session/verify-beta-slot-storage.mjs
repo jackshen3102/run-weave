@@ -16,7 +16,10 @@ import {
 } from "../runweave-beta-legacy.mjs";
 import { isExternalTmuxReference } from "../runweave-beta-process-state.mjs";
 
-export async function verifyBetaSlotStorage(temporaryHome) {
+export async function verifyBetaSlotStorage(
+  temporaryHome,
+  { includeLegacy = true } = {},
+) {
   const betaAppPath = "/Applications/Runweave Beta pool-01.app";
   assert.equal(
     isExternalTmuxReference(
@@ -266,6 +269,10 @@ export async function verifyBetaSlotStorage(temporaryHome) {
   assert.deepEqual((await fs.readdir(targets.appServerHome)).sort(), [
     "runtime",
   ]);
+
+  if (!includeLegacy) {
+    return;
+  }
 
   const legacyHome = path.join(temporaryHome, "legacy-home");
   const legacyApplications = path.join(temporaryHome, "legacy-applications");
