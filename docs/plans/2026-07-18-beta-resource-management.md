@@ -1,9 +1,11 @@
 # Beta 固定资源池可解释投影与最终回收实施计划
 
-> 状态：待实施
+> 状态：历史实施计划；全部 12 条测试合同已合并到当前 Beta Pool 全场景计划
 > 粒度：L3（进程终止、lease 释放、并发竞争与崩溃恢复）
 > 来源：`docs/architecture-flows/beta-resource-management/`
-> 配套测试计划：`docs/testing/platform/beta-resource-management.testplan.yaml`
+> 当前测试计划：`docs/testing/platform/beta-pool-storage-migration.testplan.yaml`
+
+> 测试范围说明：原 `BRM-001`～`BRM-012` 的行为与断言全部保留，并映射为最新 YAML 中的 `BETA-003`～`BETA-014`。当前只保留一个可执行 YAML 入口，本文其余内容作为对应实现背景继续有效。
 
 ## 1. 目标
 
@@ -530,14 +532,14 @@ Beta start 的成功 JSON 增加：
 实施阶段按顺序执行：
 
 ```bash
-pnpm testplan:validate docs/testing/platform/beta-resource-management.testplan.yaml
+pnpm testplan:validate docs/testing/platform/beta-pool-storage-migration.testplan.yaml
 pnpm dev:session:verify
 pnpm typecheck
 pnpm lint
 git diff --check
 ```
 
-行为验收以 `docs/testing/platform/beta-resource-management.testplan.yaml` 为准。执行测试计划时使用 `$toolkit:run-test-cases`；若需要实际启动/停止 Dev Session，必须使用 `$toolkit:runweave-dev-session` 管理准确 Session、profile 和清理。该能力不涉及浏览器页面，不以截图或静态代码阅读冒充 CLI/进程行为结果。
+行为验收以 `docs/testing/platform/beta-pool-storage-migration.testplan.yaml` 为唯一入口。执行测试计划时使用 `$toolkit:run-test-cases`；若需要实际启动/停止 Dev Session，必须使用 `$toolkit:runweave-dev-session` 管理准确 Session、profile 和清理。原 BRM 的投影、恢复、并发、崩溃收敛和诊断场景全部执行；只不构造或迁移 legacy 控制面旧数据。该能力不涉及浏览器页面，不以截图或静态代码阅读冒充 CLI/进程行为结果。
 
 ## 15. 完成标准
 
