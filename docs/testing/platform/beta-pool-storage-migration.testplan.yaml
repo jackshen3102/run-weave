@@ -1,144 +1,257 @@
 version: 1
-name: Beta Pool 控制面存储迁移
+name: Beta Pool 全场景验收
 description: >
-  验证 Beta Pool 从 Application Support 的旧目录安全迁移到 ~/.runweave/beta-pool，
-  在只读查询、旧 Session 排空、并发迁移、崩溃恢复、冲突和降级场景下始终只有一个权威 Pool，
-  不丢失 metadata/quarantine，也不产生重复 lease owner。
+  验证 Beta 固定五槽池在全新 canonical 环境中的初始化、投影、分配、运行、停止与权限边界，
+  并覆盖原 Beta 资源管理合同中的异常识别、安全恢复、并发竞争、崩溃收敛和诊断发布场景。
+  当前计划不构造或迁移 legacy 控制面旧数据，不覆盖迁移 journal、tombstone、备份或降级流程。
 
 cases:
-  - id: BPSM-001
-    name: 空 HOME 的只读投影不创建任何 Pool 目录
+  - id: BETA-001
+    name: 空 HOME 的只读入口不创建 Pool
     required: true
     description: >
-      验证全新环境中的 dev:pool 只返回五槽 idle 和未初始化存储状态，查询前后 canonical、legacy、
-      migration lock 与 journal 均不存在。
+      验证全新环境中的 dev:pool 和 Dev Session dry-run 只返回非权威规划结果，不创建任何控制面文件。
     preconditions:
-      - 使用独立临时 HOME，canonical Pool、legacy Pool 和 migration 目录均不存在。
+      - 使用独立临时 HOME，~/.runweave/beta-pool 不存在。
       - 可以记录临时 HOME 在命令执行前后的完整目录清单和文件哈希。
     steps:
       - 执行 `pnpm dev:pool --json`；确认返回五个唯一 slotId、全部为 idle、reservationGuaranteed=false 且 storage.mode=uninitialized。
-      - 比较执行前后的目录清单和文件哈希；确认没有创建 ~/.runweave、Application Support/Runweave Beta、migration lock、journal、lease、claim 或 metadata。
+      - 执行无显式 profile 的 `pnpm dev:session --dry-run --json`；确认只返回 planner、capacity 和 requestedSlotId 等规划结果，不承诺 assignedSlotId。
+      - 比较执行前后的目录清单和文件哈希；确认没有创建 ~/.runweave、Session、manifest、lease、claim 或 metadata。
 
-  - id: BPSM-002
-    name: Legacy-only 投影保持只读并解释迁移阻塞
+  - id: BETA-002
+    name: 首次启动直接建立 canonical lease
     required: true
     description: >
-      验证只有旧 Pool 且含有效 lease 时，dev:pool 从 legacy 根生成准确投影并报告 legacy-draining，
-      不创建 canonical、不复制数据也不修改旧 lease。
+      验证全新环境的首次真实 Beta start 直接初始化 canonical Pool，并为一个 Session 发布唯一 lease。
     preconditions:
-      - 临时 HOME 的 legacy Pool 中存在一个 schema、owner、nonce 和 manifest 引用均有效的 lease。
-      - canonical Pool 不存在，且可以记录旧 Pool 的 inode、权限、内容哈希和目录清单。
+      - 使用独立临时 HOME，~/.runweave/beta-pool 不存在。
+      - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 管理真实 Beta Session 的启动和清理。
     steps:
-      - 执行 `pnpm dev:pool --json`；确认 storage.mode=legacy-draining、migrationRequired=true，并准确显示占用槽位和 owner Session。
-      - 比较查询前后的 legacy inode、权限、文件哈希和目录清单；确认完全不变，canonical 和 migration journal 均未创建。
+      - 启动一个真实 Beta Session；确认 ~/.runweave/beta-pool/storage.json 已建立，storage.mode=canonical，marker 的 migrationId 与 migratedFrom 均为 null。
+      - 确认 manifest 中 assignedSlotId 和 leaseNonce 与唯一 lease owner 完全一致，且 Session 服务达到 ready。
+      - 停止本 Case 创建的 Session；确认 lease 和 claim 均已清理，目标槽位回到 idle。
 
-  - id: BPSM-003
-    name: Active legacy Session 先排空再允许迁移
+  - id: BETA-003
+    name: 五槽位投影只读且完整解释资源状态
     required: true
     description: >
-      验证旧 Pool 仍有 active lease 或 recovery claim 时，新 Beta start 零副作用失败；当前版本仍能沿 legacy 根停止原 owner，
-      最后一个旧 lease 释放后才允许后续 allocation 迁移。
+      验证 dev:pool 同时返回五个槽位的 lease、manifest、owned runtime、shared dependency、
+      derived state 和 recovery 证据，并且查询不会创建或修改任何资源文件。
     preconditions:
-      - 临时 HOME 中存在归属明确的 legacy lease、owner manifest 和可安全停止的 dedicated runtime fixture。
-      - canonical Pool 不存在，可以读取 start 错误、stop 结果、lease identity 和两个根的目录状态。
+      - 隔离 canonical Pool 中已构造 idle、healthy、partial、stale-reclaimable 与 stale-manual 五类槽位事实。
+      - 已记录 Pool root、Session manifest 和 runtime identity 文件的目录清单、内容哈希与修改时间。
     steps:
-      - 发起新的 Beta start；确认返回 beta_pool_legacy_drain_required、owner Session 和 suggestedAction，且没有创建 canonical、没有停止旧 runtime、没有改写旧 lease。
-      - 对原 owner 执行 stop；确认 claim、lease 重验、reset、metadata 和 release 全部发生在 legacy 根，原 Session 收敛为 stopped。
-      - 确认 stop 结束时尚未创建 canonical；再次发起 start，确认此时才进入迁移并通过正常 hard-link acquisition 获得唯一新 lease。
+      - 执行 `pnpm dev:pool --json`；确认 schemaVersion、observedAt、reservationGuaranteed=false、capacity=5 且五个 slotId 唯一完整。
+      - 逐槽核对 lease、manifest、ownedComponents、sharedDependencies、derivedState、reasons、recovery.checks 与 blockedBy；确认分类与预置事实一致。
+      - 再次读取目录清单、内容哈希和修改时间；确认查询未创建 recovery claim、manifest、lease、metadata 或其它文件，也未修改既有内容。
 
-  - id: BPSM-004
-    name: Inactive legacy 数据非破坏且幂等迁移
+  - id: BETA-004
+    name: allocator 退出不再被解释为 Session 异常
     required: true
     description: >
-      验证无 active lease/claim 的 legacy metadata、lease quarantine 和 legacy instance quarantine 被完整迁到 canonical，
-      旧数据保留为带 migrationId 的备份，重复执行不会覆盖或重复迁移。
+      验证短命 launcher 退出后，健康 Session 仍为 healthy；allocatorPid 只作为 acquisition
+      诊断和缺失 manifest 的 orphan 安全条件，不参与 runtime 健康判断。
     preconditions:
-      - legacy Pool 无 lease 和 recovery claim，但包含权限为 0700/0600 的 metadata、quarantine 和可识别 fixture 内容。
-      - canonical 不存在，且 fixture 不含 symlink、FIFO、socket 或越界路径。
+      - 一个槽位的 lease allocatorPid 已退出，但 owner Session manifest、Electron、Backend、App Server 与 CDP 身份全部一致且健康。
+      - 另一个槽位只有新近创建的 orphan lease，manifest 尚不存在且 allocatorPid 仍存活。
     steps:
-      - 触发首次需要分配 lease 的操作；确认生成 migration journal、canonical storage.json、legacy backup 和原路径 regular-file tombstone。
-      - 比较 legacy source fingerprint 与 canonical 文件集合、内容哈希和权限；确认 metadata/quarantine 完整且没有迁移 active lease/claim。
-      - 停止本次 Session并再次触发 start；确认复用同一 canonical，不新建第二个 migrationId、不覆盖 metadata，也不重新读取 legacy backup 作为权威状态。
+      - 查询 Pool projection；确认健康槽位为 healthy，acquisition.processLive=false 且 affectsRuntimeHealth=false，没有 allocator 相关健康 blocker。
+      - 对新近 orphan 运行 hygiene recovery；确认其因 acquisition process 仍活跃而被 preserved，lease 未释放且 receipt 说明启动事务尚可能进行。
 
-  - id: BPSM-005
-    name: 两个并发 start 只发布一个 canonical 和一个 lease owner
+  - id: BETA-005
+    name: 启动卫生阶段回收全部安全空壳
     required: true
     description: >
-      验证 legacy 已排空时两个并发 start 竞争 migration lock，只有一个迁移者发布 canonical，随后现有 hard-link 机制仍保证目标槽位只有一个 owner。
+      验证每次 Beta start 都回收全部无 slot-owned 运行进程且身份可证明的遗留 lease，
+      不等待池耗尽，并为每个结果保存 receipt。
     preconditions:
-      - legacy Pool 可安全迁移，canonical 与 migration lock 均不存在。
-      - 可以并发启动两个请求并读取 migration journal、storage marker、lease inode、owner nonce 和两个请求结果。
+      - 隔离 canonical Pool 中至少有两个 valid stale lease，其 manifest owner/nonce 一致，记录 PID 均已退出且不存在槽位路径进程引用。
+      - Pool 中另有一个健康 Session 和至少一个 idle 槽位。
     steps:
-      - 同时发起两个 Beta start；确认同一时刻只有一个有效 migration lock owner，loser 等待或返回 beta_pool_storage_migration_busy，不执行第二次复制或归档。
-      - 操作收敛后检查 canonical、legacy backup、tombstone 和 completed journal；确认各只有一套且 migrationId 一致。
-      - 检查最终 lease；确认一个 slot 只有一个 inode、ownerSessionId 和 nonce，另一个请求不会覆盖 winner 或复用相同 lease。
+      - 触发一次 Beta start 的 startup hygiene；确认两个安全空壳均完成 reset、retention、lease release，健康 Session 与其进程保持不变。
+      - 查询原 Session manifest、slot metadata 和 start 输出；确认每个回收都有 trigger=startup_hygiene、result=recovered、releasedLease=true 的一致 receipt。
+      - 再次运行 hygiene；确认结果幂等，不重复停止进程、不破坏 warm runtime，也不生成无界历史记录。
 
-  - id: BPSM-006
-    name: 迁移各崩溃阶段恢复为唯一权威根
+  - id: BETA-006
+    name: 容量压力下自动回收持续 partial 并继续启动
     required: true
     description: >
-      验证迁移在 staging、canonical publish、legacy archive 和 tombstone 写入后分别中断时，
-      同一事务可以安全继续或明确阻塞，不丢失 source、不留下两个可写 Pool。
+      验证五槽已占用时，一个 slot-owned runtime 持续 partial 且剩余进程身份可证明，
+      当前 start 会在二次检查后回收最少候选、重新竞争 lease 并完成启动。
     preconditions:
-      - 可以为 preparing、staged、canonical_published 和 legacy_archived 四个阶段分别建立独立临时 HOME fixture。
-      - 每个 fixture 都能注入一次进程中断并保留 journal、inode、fingerprint、staging、canonical、legacy 和 backup 现场。
+      - 五个 lease 均存在，其中四个 Session healthy，一个 ready Session 的 Electron 与 Backend 已退出但 dedicated App Server 仍存活且身份匹配。
+      - partial Session 在两次检查之间不会恢复，owner Session lock 可获取。
     steps:
-      - 分别在四个阶段注入中断，再次执行需要 allocation 的操作；确认系统只清理本次未发布 staging，或依据匹配的 migrationId/fingerprint 继续原事务。
-      - 对每个场景检查最终目录；确认只有 canonical 可写，legacy 原路径为 tombstone，backup 保留，completed journal 与 storage marker 一致。
-      - 将任一 fingerprint 或 inode 改为不匹配后重试；确认返回 beta_pool_storage_migration_blocked 或 conflict，所有 lease、source、backup 和现场均未删除。
+      - 执行新的 Beta start；确认第一次容量检查没有 idle，系统获取目标 recovery claim 和 owner Session lock，并间隔至少 5 秒完成第二次 owned-runtime 检查。
+      - 确认系统只停止 partial Session 中仍属于原 owner 的 dedicated 组件，验证 slot 无进程后 reset、release，并将原 manifest 写为 stopped 与 completed receipt。
+      - 确认同一 start 随后通过正常原子 lease acquisition 获得一个槽位并进入 ready；输出同时包含新 Session manifest 与旧 Session recovery receipt。
 
-  - id: BPSM-007
-    name: Canonical 与 legacy 双权威冲突时 fail closed
+  - id: BETA-007
+    name: 多候选恢复遵循最小数量和确定性优先级
     required: true
     description: >
-      验证两个根同时含无法由同一 migration journal 解释的状态时，查询能暴露 conflict，
-      start、stop 和 recover 都不自动选择、合并、覆盖或删除任一根。
+      验证无进程空壳全部清理，而涉及终止存活组件时只回收满足当前分配所需的最少数量；
+      候选顺序按恢复成本和 acquiredAt 稳定确定。
     preconditions:
-      - canonical 与 legacy 分别包含不同 migrationId、owner 或 metadata fingerprint 的有效状态。
-      - 可以记录两个根的 inode、文件哈希、lease owner 和命令输出。
+      - Pool 中同时存在两个无进程 stale、两个身份可证明的 partial live Session 和一个 healthy Session，且没有 idle lease。
+      - 两个 partial 的 acquiredAt 可区分，当前请求只需要一个槽位。
     steps:
-      - 执行 `pnpm dev:pool --json`；确认 storage.mode=conflict，输出 canonicalRoot、legacyRoot 和具体 blockedBy，不把任一根宣称为 authoritative。
-      - 分别尝试 start 和 recover；确认返回 beta_pool_storage_conflict，两个根的 inode、哈希、lease owner 和 runtime 均不变。
+      - 触发 Beta start；确认 startup hygiene 回收两个无进程 stale，且不会停止任一 partial live Session。
+      - 在独立等价现场中使 hygiene 后仍无 idle，再触发容量压力恢复；确认只回收一个 partial，并选择恢复成本更低、同级 acquiredAt 更早的候选。
+      - 确认未选中的 partial 仍保有 lease 与进程，receipt 明确列出 recovered、preserved 和候选顺序原因。
 
-  - id: BPSM-008
-    name: Tombstone 阻止降级双分配且回滚受 lease 门禁保护
+  - id: BETA-008
+    name: 身份不匹配和未知引用始终阻止自动与显式释放
     required: true
     description: >
-      验证迁移完成后的旧代码无法在 legacy 路径重建 Pool；canonical 尚无 lease 时可按同一 migrationId 恢复旧根，
-      canonical 已产生 lease 后任何自动回滚都被拒绝。
+      验证 PID 复用、process signature 不匹配、lease/manifest owner 不一致或路径引用未知时，
+      start 与定向 recover 都不会杀进程、reset 或释放 lease，并返回精确 blocker。
     preconditions:
-      - 已完成一次迁移，canonical marker、legacy backup、tombstone 和 journal 的 migrationId 一致。
-      - 可以分别建立 canonical 无 lease和已有有效 lease 的两个独立 fixture。
+      - 已分别构造 live PID identity mismatch、lease nonce mismatch、process reference unknown 三个 canonical 槽位现场。
+      - 已记录这些槽位的 lease inode、进程 PID、mutable state marker 和 manifest 内容。
     steps:
-      - 使用只认识旧路径的旧版 fixture 尝试 acquisition；确认因 legacy pool 是 regular-file tombstone 而失败，没有创建 leases 子目录或第二个 owner。
-      - 在 canonical 无 lease/claim 的 fixture 执行受限 rollback；确认 tombstone 被替换为原 backup，canonical 被归档而非删除，journal 状态为 rolled_back。
-      - 在 canonical 有有效 lease 的 fixture 尝试相同 rollback；确认操作被拒绝，canonical lease、legacy tombstone、backup 和 runtime 全部保持不变。
+      - 在容量压力下启动新 Session；确认三个槽位均不进入 recovered，进程、lease inode、marker 和 manifest owner 未被改写。
+      - 对每个槽位执行定向 recover；确认命令非零返回对应 reason code、expected/actual identity 与 suggestedAction，releasedLease=false。
+      - 尝试传入 `--force`、`--force-kill` 或 `--force-release`；确认参数被拒绝且没有任何资源副作用。
 
-  - id: BPSM-009
-    name: Legacy instance quarantine 全链路改用 canonical
+  - id: BETA-009
+    name: Session busy 与 shared dependency 异常不会触发槽位回收
     required: true
     description: >
-      验证 legacy-cleanup、restore 和 purge 的 journal 与资源都写入 canonical quarantine/legacy-instances，
-      迁移完成后不会重新创建旧 Pool 目录或绕过 tombstone。
+      验证 owner Session 正在执行生命周期操作或只有 shared dependency 异常时，janitor 会保留槽位，
+      尝试其它候选，而不会抢锁或停止 shared 服务。
     preconditions:
-      - canonical migration 已完成，legacy pool 原路径为 tombstone。
-      - 存在一个可安全 quarantine、restore 和 purge 的非 pool Beta legacy fixture。
+      - 一个 partial 候选的 owner Session lock 由存活进程持有。
+      - 另一个 Session 的 slot-owned runtime 全部健康，但 shared Backend 或 shared App Server 不健康。
+      - 已记录 shared 服务 PID、路径和所有引用它的 Session。
     steps:
-      - 执行 legacy-cleanup；确认 operation journal 和资源位于 canonical quarantine/legacy-instances，旧 Pool tombstone 未变化。
-      - 执行 restore；确认只从 canonical operation root 恢复已记录资源，journal 进入 restored，未创建旧 pool/quarantine。
-      - 再次 quarantine 并按 operationId 执行带确认的 purge；确认只删除目标 operation，canonical Pool 的 lease、metadata 和其它 quarantine 均不受影响。
+      - 触发容量压力恢复；确认 busy 候选返回 preserved/owner-session-busy，janitor 不等待抢锁并继续检查其它槽位。
+      - 查询 shared 异常槽位；确认 derivedState=degraded-shared 或等价 shared blocker，recovery 不以 slot cleanup 为候选。
+      - 确认 shared 服务和引用它的所有 Session 未被停止或改写；容量仍不足时错误逐槽列出 busy 与 shared blocker。
 
-  - id: BPSM-010
-    name: 真实 Beta 生命周期不再访问旧 Pool
+  - id: BETA-010
+    name: 损坏 lease 仅在零进程时进入 quarantine
     required: true
     description: >
-      验证迁移完成后的真实 Beta Dev Session start、status、pool projection 和 stop 全部使用 canonical 控制面，
-      在隔离 macOS 15 以上验收环境中不会因正常 Pool 路径访问弹出“访问其他 App 的数据”。
+      验证 corrupt lease 不被直接删除；只有 recovery claim 内证明槽位不存在运行进程和路径引用、
+      且 lease 文件 identity 稳定时才完成 reset 并原子移动到 quarantine。
+    preconditions:
+      - 两个槽位均有损坏 lease；槽位 A 无任何运行进程或路径引用，槽位 B 有引用该 slot 路径的存活进程。
+      - 已记录两个损坏 lease 的 inode 和原始内容。
+    steps:
+      - 运行 startup hygiene；确认槽位 A 先完成安全检查和 reset，再把原 lease 原子移动到带 operation receipt 的 quarantine，随后显示 idle。
+      - 确认槽位 B 保持 broken/stale-manual，原 lease inode 与进程仍存在，blockedBy 指向 active 或 unknown process reference。
+      - 在 reset 或 quarantine rename 前注入失败并重试；确认失败时原 lease 仍占位，成功重试只产生一个有效 quarantine operation。
+
+  - id: BETA-011
+    name: Release 事务在每个崩溃窗口都能幂等收敛
+    required: true
+    description: >
+      验证 normal stop、start failure、automatic recovery 和 explicit recover 共用 release transaction，
+      在 reset、metadata、release 与 stopped manifest 各阶段中断后不会产生 idle slot 与旧进程并存。
+    preconditions:
+      - 可在 release transaction 的 reset 后、metadata 后、release 前和 release 后分别注入一次可恢复中断。
+      - 每个场景均使用独立 Session 与 lease，并能重复执行 status 或 recover。
+    steps:
+      - 在 lease release 前的各检查点中断；确认 manifest 为 stopping/stale 且 lease 保留，再次执行恢复后安全完成或继续明确阻塞。
+      - 在 lease 已释放但 stopped manifest 尚未写入时中断；确认槽位没有旧进程，后续 status/janitor 将 manifest 收敛为 stopped/completed。
+      - 比较四种调用入口；确认 receipt、metadata、reset 顺序和失败语义一致，不存在某一路径绕过 finalizer。
+
+  - id: BETA-012
+    name: 并发恢复与分配只产生唯一 lease owner
+    required: true
+    description: >
+      验证多个 start 在池满时并发观察和恢复同一候选，recovery claim 只允许一个恢复者，
+      hard-link lease publication 只允许一个新 owner，其余请求有界重试并保留准确结果。
+    preconditions:
+      - 五槽已满且只有一个安全可回收候选，可并发启动至少两个新的 Beta Session 请求。
+      - 能读取 recovery claim、lease file identity、两个 start 输出和最终 owner manifest。
+    steps:
+      - 同时发起两个 start；确认同一时刻只有一个有效 recovery claim owner，候选只被停止和 reset 一次。
+      - 确认释放后的槽位只有一个新 lease owner/nonce，另一个请求不会复用相同 lease，也不会覆盖 winner manifest。
+      - 确认 loser 在有界循环后要么获得其它安全槽位，要么返回 capacity-won-by-concurrent-allocator 及已发生的 recovery receipt，不无限重试。
+
+  - id: BETA-013
+    name: 显式槽位请求保持精确目标且不错误回退
+    required: true
+    description: >
+      验证 `--instance pool-0N` 只操作指定槽位：健康占用时直接失败，安全 partial 时只恢复该槽位，
+      identity blocker 时保留现场且不改为分配其它 idle slot。
+    preconditions:
+      - 已准备一个 healthy occupied、一个 safely partial、一个 identity-mismatch 和一个 idle canonical 槽位。
+    steps:
+      - 分别显式请求 healthy occupied 与 identity-mismatch 槽位；确认请求失败并说明目标状态，未分配其它 idle 槽位。
+      - 显式请求 safely partial 槽位；确认只对该槽位执行二次检查和安全恢复，随后通过正常 lease acquisition 获得同一 slotId。
+      - 不传 `--instance` 再启动；确认 allocator 按全池候选规则选择，不继承前一次显式目标。
+
+  - id: BETA-014
+    name: Recovery receipt 三处一致且不泄露秘密
+    required: true
+    description: >
+      验证成功、blocked 和 preserved 恢复都能被操作者解释；成功自动恢复在 start 输出、
+      原 Session manifest 与 slot metadata 中一致，所有输出不包含认证秘密。
+    preconditions:
+      - 已分别触发一次 recovered、blocked 和 preserved recovery attempt。
+      - fixture 的 runtime 文件中含可识别的 token、Cookie 或 Authorization secret，用于验证不会进入 receipt。
+    steps:
+      - 比较 recovered attempt 的 attemptId、trigger、slotId、ownerSessionId、checks、stoppedServices、result 和 releasedLease；确认三处记录一致。
+      - 查询 blocked 与 preserved 槽位；确认 lastRecoveryAttempt 包含 blockedBy 或 preserved reason，原 lease 状态与结果相符。
+      - 序列化 dev:pool、start 输出、manifest 与 metadata 并搜索敏感字段和值；确认不包含 token、Cookie、Authorization、JWT、password 或 fixture secret。
+
+  - id: BETA-015
+    name: 真实运行态投影准确且保持只读
+    required: true
+    description: >
+      验证一个真实 canonical Beta Session 运行时，dev:status 与 dev:pool 对所有权和运行态给出一致结果，
+      并且重复查询不改写控制面。
+    preconditions:
+      - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 启动一个处于 ready 的真实 Beta Session。
+      - 可以记录 canonical Pool 查询前后的目录清单、inode、mtime 和文件哈希。
+    steps:
+      - 执行 `pnpm dev:status --session <devSessionId> --json` 和 `pnpm dev:pool --json`；确认 storage.mode=canonical，五个 slotId 唯一且只有目标槽位为 healthy。
+      - 确认 projection 的 ownerSessionId、leaseNonce、manifest 和实际 runtime identity 一致，其余四槽为 idle。
+      - 重复执行 `pnpm dev:pool --json` 并比较前后现场；确认没有创建 claim、修改 lease/manifest/metadata 或改变进程状态，随后停止本 Case 创建的 Session。
+
+  - id: BETA-016
+    name: 空闲池并发启动遵守唯一所有权与容量上限
+    required: true
+    description: >
+      验证全新 canonical Pool 中的并发 start 为每个成功 Session 发布不同 lease，
+      五槽满载后额外请求不会覆盖已有所有权。
+    preconditions:
+      - 使用独立临时 HOME，canonical Pool 中五个槽位均为空闲。
+      - 可以并发发起 Beta start，并读取每个请求的 Session、slot、nonce、manifest 和 lease identity。
+    steps:
+      - 并发启动五个 Beta Session；确认每个成功请求获得不同 slotId，每个 lease 只有一个 ownerSessionId 和 nonce，manifest 与 lease 完全匹配。
+      - 在五槽均被占用时发起第六个 start；确认请求以容量不足失败，不覆盖既有 lease、不复用 nonce，也不停止任何已运行 Session。
+      - 停止本 Case 创建的全部 Session；确认五个槽位最终全部回到 idle。
+
+  - id: BETA-017
+    name: 正常停止后完全回收并可再次启动
+    required: true
+    description: >
+      验证 canonical Session 正常停止后 lease、claim 和 mutable 状态完全收敛，
+      释放出的容量可以被新的 Session 正常复用。
+    preconditions:
+      - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 启动一个处于 ready 的真实 Beta Session。
+      - 可以读取 stop receipt、owner manifest、lease、claim、slot runtime 和 Pool projection。
+    steps:
+      - 停止目标 Session；确认结果为 stopped，slot-owned 进程已退出，lease 与 recovery claim 均不存在，owner manifest 收敛到终态。
+      - 执行 `pnpm dev:pool --json`；确认目标槽位回到 idle，其它槽位状态未受影响。
+      - 再次启动一个真实 Beta Session；确认可以获得可用槽位且使用新的 devSessionId 和 leaseNonce，随后停止该 Session并确认 Pool 再次为空闲。
+
+  - id: BETA-018
+    name: canonical 生命周期不触发 App Data 权限弹窗
+    required: true
+    description: >
+      验证真实 Beta start、status、Pool projection 和 stop 只访问当前 canonical 控制面，
+      在隔离 macOS 验收环境中不会触发“访问其他 App 的数据”授权提示。
     preconditions:
       - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 管理真实 Beta Session 的启动、查询和清理。
       - macOS 15 以上隔离验收账号未预先授予 Runweave App Data 或完全磁盘访问权限，且没有其它并发 Runweave 命令。
       - 使用 `$computer-use` 观察桌面系统弹窗，并能读取本次操作时间窗内的 tccd 日志。
     steps:
-      - 启动一个真实 Beta Session；确认 start 成功、manifest 指向唯一 slot、canonical 中存在对应 lease，legacy tombstone 和 backup 没有被读取后改写。
+      - 启动一个真实 Beta Session；确认 start 成功、manifest 指向唯一 slot，canonical 中存在对应 lease。
       - 执行 status 与 `pnpm dev:pool --json`；确认 storage.mode=canonical、projection owner/nonce 与 manifest 一致，桌面未出现 App Data 权限弹窗。
-      - 停止该 Session并再次查询 status；确认 Session 为 stopped、canonical lease/claim 已清理，tccd 时间窗内没有由正常 Pool 生命周期触发的 AUTHREQ_PROMPTING。
+      - 停止该 Session并再次查询 status；确认 Session 为 stopped、canonical lease/claim 已清理，tccd 时间窗内没有由本次 canonical 生命周期触发的 AUTHREQ_PROMPTING。

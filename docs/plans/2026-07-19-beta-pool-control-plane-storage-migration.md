@@ -1,9 +1,11 @@
-# Beta Pool 控制面存储迁移实施计划
+# Beta Pool canonical 控制面实施与验收说明
 
-> 状态：实现完成；真实迁移待现有 legacy Session 排空后验收
-> 粒度：L3（并发租约、跨版本兼容、数据迁移与崩溃恢复）
+> 状态：实现完成；当前验收覆盖 Beta Pool 全场景
+> 粒度：L3（固定五槽、并发租约、只读投影、异常恢复与最终回收）
 > 推荐方案：将 Pool 控制面状态迁到 `~/.runweave/beta-pool`
 > 配套测试计划：`docs/testing/platform/beta-pool-storage-migration.testplan.yaml`
+
+> 当前验收边界：配套 YAML 是唯一可执行测试计划，覆盖 canonical 主链和原 Beta 资源管理合同的全部场景。本文记录的旧数据迁移设计作为实现背景保留，但 legacy 控制面数据搬迁、迁移 journal、tombstone、备份和降级不进入当前测试。
 
 ## 1. 目标
 
@@ -344,7 +346,7 @@ storage: {
 
 ## 10. 验证方式
 
-### 10.1 静态与 verifier 门禁
+### 10.1 测试合同门禁
 
 ```bash
 pnpm testplan:validate docs/testing/platform/beta-pool-storage-migration.testplan.yaml
@@ -357,35 +359,36 @@ pnpm dev:session:verify
 
 - YAML schema 校验通过；
 - typecheck、lint 无新增错误；
-- `dev:session:verify` 包含新 migration verifier 且全部通过；
-- verifier 全程使用临时 HOME，不修改用户真实 `~/.runweave` 或 `Application Support`。
+- `dev:session:verify` 的现有仓库级回归全部通过；
+- 当前行为验收使用 canonical fixture 覆盖主链和资源恢复，不构造或导入 legacy 控制面旧数据，也不修改用户真实 `~/.runweave` 或 `Application Support`。
 
 ### 10.2 真实 Dev Session 验收
 
-实际执行时必须使用 `$toolkit:runweave-dev-session` 管理准确 worktree、Session ID、profile 和清理，不直接启动 Beta/Backend/Electron。按配套测试计划完成：
+实际执行时必须使用 `$toolkit:runweave-dev-session` 管理准确 worktree、Session ID、profile 和清理，不直接启动 Beta/Backend/Electron。严格按配套 YAML 依次完成：
 
-1. legacy Session 排空；
-2. 首次 canonical 迁移；
-3. 新 Beta Session start/status/stop；
-4. `dev:pool --json` 确认 `storage.mode=canonical`；
-5. `dev:stop` 后确认 Session stopped 且 lease/claim 均已清理；
-6. 在隔离 macOS 15+ 验收账号上使用 `$computer-use` 观察正常流程没有出现“访问其他 App 的数据”弹窗，并检查对应时间窗没有新的 `AUTHREQ_PROMPTING`。
+1. 空 HOME 只读入口、首次 canonical 初始化、真实运行态投影、并发容量、正常停止与再次启动；
+2. 五类槽位投影、allocator 语义、startup hygiene、容量压力和多候选最小恢复；
+3. identity blocker、Session busy、shared dependency、corrupt lease quarantine 与无 force 后门；
+4. release 崩溃窗口、并发 recovery claim、显式槽位和 recovery receipt 完整性；
+5. 在隔离 macOS 15+ 验收账号上使用 `$computer-use` 确认 canonical 生命周期没有 App Data 弹窗或新的 `AUTHREQ_PROMPTING`。
 
-如果无法获得隔离账号或 TCC 权限已预授权，第 6 步必须报告“未执行 + 环境原因”，不能用静态检查代替。
+执行期间不创建 legacy migration fixture，不导入旧 Pool 数据，也不运行迁移 journal、tombstone、备份或降级 Case。资源异常、旧进程残留和恢复收敛属于 Beta Pool 当前行为，仍按配套计划执行。如果无法获得隔离账号或 TCC 权限已预授权，权限 Case 必须报告“未执行 + 环境原因”，不能用静态检查代替。
 
 ## 11. 验收标准
 
 - [ ] canonical Pool 唯一固定为 `~/.runweave/beta-pool`，普通 Node CLI 可直接管理，不依赖 App Group。
 - [ ] Beta instance 私有数据路径保持原样，没有扩大共享范围。
-- [ ] `dev:pool` 在任何 storage mode 下都不创建、迁移、归档或修复文件。
-- [ ] legacy active 时新 start fail closed，旧 Session 可以被当前版本安全 stop/recover。
-- [ ] inactive legacy 数据只迁移一次，metadata/quarantine 内容与权限完整，旧备份保留。
-- [ ] 并发 start 和迁移崩溃不会产生双 Pool、双 owner 或丢失 lease。
-- [ ] canonical 与 legacy 冲突时没有任何自动删除、覆盖或合并。
-- [ ] 迁移后旧路径 tombstone 阻止旧版本创建第二套 lease。
-- [ ] canonical 已有 lease 时自动 rollback 被拒绝。
-- [ ] legacy instance quarantine 不再写入旧 Pool。
-- [ ] 正常新版本 start/status/stop 不再访问旧 Pool 路径。
+- [ ] 空 HOME 的 `dev:pool` 返回五槽 idle 且不创建任何控制面文件。
+- [ ] 首次真实 start 直接建立 canonical marker，且 `migrationId`、`migratedFrom` 均为 null。
+- [ ] 并发 start、容量耗尽和显式槽位请求都不覆盖已有 lease owner。
+- [ ] status 与 Pool projection 的 slot、owner、nonce、manifest 和 runtime identity 一致。
+- [ ] startup hygiene、容量压力和多候选恢复只处理身份可证明的最少资源。
+- [ ] identity mismatch、unknown reference、Session busy 和 shared dependency 异常均 fail closed。
+- [ ] corrupt lease quarantine、release 崩溃恢复、并发 claim 和 receipt 发布满足原 BRM 安全合同。
+- [ ] stop 后 slot-owned 进程、lease 和 claim 均收敛，释放容量可以再次分配。
+- [ ] 正常 canonical start/status/pool/stop 不触发 App Data 权限弹窗。
+- [ ] 原 `BRM-001`～`BRM-012` 的行为均已合并为 `BETA-003`～`BETA-014`，没有丢失覆盖面。
+- [ ] 当前验收没有创建或导入 legacy migration fixture，也没有执行旧数据搬迁、journal、tombstone、备份或降级 Case。
 - [ ] 配套 YAML 测试计划格式校验、typecheck、lint 和 `dev:session:verify` 全部通过。
 
 ## 12. 风险与副作用
@@ -401,13 +404,13 @@ pnpm dev:session:verify
 | 旧 quarantine 路径变化             | legacy restore/purge 需要找到新 journal        | 同步切换 create/read/restore/purge 全链路，并迁移原 quarantine            |
 | 任意 shell 宽扫描仍可触发 TCC      | 用户仍可能看到同类弹窗                         | 明确产品边界；正常 Pool 代码只使用精确路径，不为通用终端增加全盘访问权限  |
 
-## 13. 执行提交建议
+## 13. 历史实施记录
 
-建议拆成两个可独立审查的提交：
+实现阶段曾建议拆成两个可独立审查的提交：
 
 1. `refactor(dev-session): add beta pool storage root compatibility`
    - 路径合约、只读探测、legacy drain、显式 root 绑定和 verifier；尚不自动迁移。
 2. `feat(dev-session): migrate beta pool control state to runweave home`
    - migration transaction、tombstone、legacy quarantine 切换、真实验收与文档。
 
-第一提交必须保持现有 legacy 行为可用；第二提交只有在配套迁移用例全部通过后才能合并。
+以上内容仅记录实现拆分背景，不是当前测试执行清单。当前验收只使用配套 Beta Pool 全场景 YAML。
