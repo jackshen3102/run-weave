@@ -291,12 +291,9 @@ async function pruneLogs(logDir) {
 async function pruneArtifacts(artifactsRoot, allowlist) {
   let cleanedBytes = 0;
   for (const entry of await fs.readdir(artifactsRoot).catch(() => [])) {
-    const releaseId = entry.startsWith("runweave-runtime-")
-      ? entry.slice("runweave-runtime-".length).replace(/\.zip$/, "")
-      : entry;
-    if (allowlist.has(releaseId)) {
-      continue;
-    }
+    const artifactMatch = /^runweave-runtime-(.+?)(?:\.zip)?$/.exec(entry);
+    const releaseId = artifactMatch?.[1] ?? entry;
+    if (allowlist.has(releaseId)) continue;
     const target = path.join(artifactsRoot, entry);
     cleanedBytes += await calculatePathBytes(target);
     await fs.rm(target, { recursive: true, force: true });
@@ -438,10 +435,8 @@ export async function applyBetaSlotRetention({
     ),
     pruneLogs(path.join(targets.instanceRoot, "diagnostics", "logs")),
   ]);
-  const artifacts = await pruneArtifacts(
-    path.join(targets.instanceRoot, "runtime-artifacts"),
-    desktopAllowlist,
-  );
+  const artifactsRoot = path.join(targets.instanceRoot, "runtime-artifacts");
+  const artifacts = await pruneArtifacts(artifactsRoot, desktopAllowlist);
   let appBackupCleanedBytes = 0;
   for (const backupPath of allBackupPaths) {
     if (
