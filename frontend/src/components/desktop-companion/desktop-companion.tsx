@@ -65,6 +65,7 @@ function CompanionPet(props: {
   return (
     <button
       className={`companion-pet pet-mode-${props.state}`}
+      data-companion-interactive
       type="button"
       disabled={props.disabled}
       aria-label={props.label}
@@ -101,6 +102,7 @@ export function DesktopCompanion(props: {
   const [openedOnce, setOpenedOnce] = useState(false);
   const [openNotice, setOpenNotice] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const mousePassthroughRef = useRef<boolean | null>(null);
   const slots = useMemo(
     () =>
       (snapshot?.slots ?? []).filter(
@@ -152,6 +154,34 @@ export function DesktopCompanion(props: {
     });
     observer.observe(root);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const setMousePassthrough = (passthrough: boolean) => {
+      if (mousePassthroughRef.current === passthrough) return;
+      mousePassthroughRef.current = passthrough;
+      const request = window.companionAPI?.setMousePassthrough(passthrough);
+      if (request) {
+        void request.catch(() => {
+          if (mousePassthroughRef.current === passthrough) {
+            mousePassthroughRef.current = null;
+          }
+        });
+      }
+    };
+    const updateMousePassthrough = (event: MouseEvent) => {
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      setMousePassthrough(!target?.closest("[data-companion-interactive]"));
+    };
+    const enableMousePassthrough = () => setMousePassthrough(true);
+
+    window.addEventListener("mousemove", updateMousePassthrough);
+    window.addEventListener("mouseleave", enableMousePassthrough);
+    return () => {
+      window.removeEventListener("mousemove", updateMousePassthrough);
+      window.removeEventListener("mouseleave", enableMousePassthrough);
+      void window.companionAPI?.setMousePassthrough(false);
+    };
   }, []);
 
   const openSlot = useMemoizedFn(async (slot: AttentionSlot) => {
@@ -211,7 +241,11 @@ export function DesktopCompanion(props: {
     pet = <CompanionPet state="idle" count={0} disabled label="所有 Slot 均安静" />;
   } else if (escalated) {
     panel = (
-      <section className="companion-panel companion-card" data-state={escalated.state}>
+      <section
+        className="companion-panel companion-card"
+        data-companion-interactive
+        data-state={escalated.state}
+      >
         <header className="companion-panel-head">
           <StatusPill slot={escalated} />
           <div className="companion-panel-title">
@@ -249,7 +283,7 @@ export function DesktopCompanion(props: {
     );
   } else {
     panel = (
-      <section className="companion-panel companion-tray">
+      <section className="companion-panel companion-tray" data-companion-interactive>
         <header className="companion-panel-head">
           <div className="companion-panel-title">
             <strong>{headline}</strong>
@@ -295,7 +329,11 @@ export function DesktopCompanion(props: {
 
   return (
     <div ref={rootRef} className="desktop-companion" data-testid="desktop-companion">
-      {openNotice ? <p className="companion-open-notice" role="status">{openNotice}</p> : null}
+      {openNotice ? (
+        <p className="companion-open-notice" data-companion-interactive role="status">
+          {openNotice}
+        </p>
+      ) : null}
       {panel}
       {pet}
     </div>
