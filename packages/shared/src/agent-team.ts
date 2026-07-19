@@ -17,7 +17,11 @@ import type {
   AgentTeamRunLineage,
 } from "./agent-team-fixture";
 import type {
+  AgentTeamAcceptanceDisposition,
+  AgentTeamAcceptanceObservation,
+  AgentTeamAcceptanceObservedOutcome,
   AgentTeamAcceptanceStatus,
+  AgentTeamCompletionOutcome,
   AgentTeamPhase,
   AgentTeamReviewCheckpointState,
   AgentTeamReviewTarget,
@@ -56,8 +60,14 @@ export type {
   CleanupAgentTeamFixtureScopeRequest,
 } from "./agent-team-fixture";
 export type {
+  AgentTeamAcceptanceDisposition,
+  AgentTeamAcceptanceObservation,
+  AgentTeamAcceptanceObservedOutcome,
   AgentTeamAcceptanceSource,
   AgentTeamAcceptanceStatus,
+  AgentTeamCompletionException,
+  AgentTeamCompletionOutcome,
+  AgentTeamCompletionResult,
   AgentTeamFlow,
   AgentTeamPhase,
   AgentTeamReviewCheckpoint,
@@ -87,6 +97,8 @@ export interface AgentTeamAcceptanceCase {
   tags?: string[];
   dependsOn?: string[];
   lastRunStatus?: "pass" | "fail" | "skipped" | "pending";
+  /** Latest completed observation. Pending is represented by absence. */
+  latestObservation?: AgentTeamAcceptanceObservation | null;
   /** Machine-readable latest skip; skipReason remains a legacy display fallback. */
   skip?: AgentTeamAcceptanceSkip | null;
   skipReason?: string | null;
@@ -109,6 +121,34 @@ export interface AgentTeamAcceptanceCase {
   recheckWorkerRole?: AgentTeamWorkerRole | null;
   recheckOutboxMtimeMs?: number | null;
   recheckAttempt?: number;
+}
+
+export interface AgentTeamAcceptanceDecision {
+  id: string;
+  caseId: string;
+  disposition: AgentTeamAcceptanceDisposition;
+  reason: string;
+  /** Immutable observation snapshot that this decision resolves. */
+  observation: AgentTeamAcceptanceObservation;
+  decidedAt: string;
+}
+
+export function resolveAgentTeamAcceptanceObservedOutcome(
+  item: AgentTeamAcceptanceCase,
+): AgentTeamAcceptanceObservedOutcome | "pending" {
+  if (item.latestObservation) {
+    return item.latestObservation.outcome;
+  }
+  if (item.lastRunStatus === "skipped" || item.skip) {
+    return "skipped";
+  }
+  if (item.lastRunStatus === "pass" || item.status === "pass") {
+    return "pass";
+  }
+  if (item.lastRunStatus === "fail" || item.status === "fail") {
+    return "fail";
+  }
+  return "pending";
 }
 
 export type AgentTeamFindingVerificationMode = "runtime" | "structural";
@@ -238,6 +278,12 @@ export interface AgentTeamRun {
   proposal: AgentTeamProposal | null;
   workers: AgentTeamWorker[];
   acceptance: AgentTeamAcceptanceCase[];
+  /** Append-only human decisions bound to an exact acceptance observation. */
+  acceptanceDecisions?: AgentTeamAcceptanceDecision[];
+  /** Current terminal result; null while the Run is non-terminal. */
+  completionOutcome?: AgentTeamCompletionOutcome | null;
+  /** Append-only terminal transition history. */
+  completionHistory?: AgentTeamCompletionOutcome[];
   loop: AgentTeamLoop;
   humanNotes: HumanInterventionNote[];
   /** Recovery actions chosen by the main Agent through the control plane. */
@@ -256,6 +302,28 @@ export interface AgentTeamRun {
   logs: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export function resolveAgentTeamAcceptanceDecision(
+  run: AgentTeamRun,
+  item: AgentTeamAcceptanceCase,
+): AgentTeamAcceptanceDecision | null {
+  const observation = item.latestObservation;
+  if (!observation) {
+    return null;
+  }
+  return (
+    (run.acceptanceDecisions ?? [])
+      .slice()
+      .reverse()
+      .find(
+        (decision) =>
+          decision.caseId === item.caseId &&
+          decision.observation.outcome === observation.outcome &&
+          decision.observation.dispatchId === observation.dispatchId &&
+          decision.observation.recordedAt === observation.recordedAt,
+      ) ?? null
+  );
 }
 
 /** Worker outbox schema, extended with per-case acceptance results. */
@@ -559,6 +627,12 @@ export interface DecideAgentTeamFindingRequest {
   invariantKey: string;
   disposition: AgentTeamFindingDisposition;
   caseIds?: string[];
+  reason: string;
+}
+
+export interface DecideAgentTeamAcceptanceRequest {
+  caseId: string;
+  disposition: AgentTeamAcceptanceDisposition;
   reason: string;
 }
 

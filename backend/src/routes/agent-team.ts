@@ -215,6 +215,13 @@ const findingDispositionSchema = z
     reason: z.string().trim().min(1),
   })
   .strict();
+const acceptanceDispositionSchema = z
+  .object({
+    caseId: z.string().trim().min(1),
+    disposition: z.enum(["accepted_environment_skip", "invalid_case"]),
+    reason: z.string().trim().min(1).max(2_000),
+  })
+  .strict();
 const focusSchema = z.object({ panelId: z.string().trim().min(1) }).strict();
 const exportQuerySchema = z
   .object({
@@ -545,6 +552,25 @@ export function createAgentTeamRouter(
     }
     await handleServiceCall(res, () =>
       agentTeamService.decideFinding(params.data.runId, parsed.data),
+    );
+  });
+
+  router.post("/runs/:runId/acceptance-disposition", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = acceptanceDispositionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.decideAcceptance(params.data.runId, parsed.data),
     );
   });
 

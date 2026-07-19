@@ -91,7 +91,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
           continue;
         }
         await this.enqueue(run.runId, async () => {
-          const latest = await this.getRun(run.runId);
+          const latest = await this.runStore.getRun(run.runId);
           if (
             !latest ||
             latest.phase !== "executing" ||
@@ -246,7 +246,8 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
           attempt,
           error,
         });
-        latestRun = (await this.getRun(latestRun.runId)) ?? latestRun;
+        latestRun =
+          (await this.runStore.getRun(latestRun.runId)) ?? latestRun;
         latestRun = await this.markRecheckDispatchFailed(
           latestRun,
           session,
@@ -288,6 +289,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
         caseIds.has(item.caseId)
           ? {
               ...item,
+              latestObservation: null,
               status: "pending" as const,
               lastRunStatus: "pending" as const,
               skip: null,

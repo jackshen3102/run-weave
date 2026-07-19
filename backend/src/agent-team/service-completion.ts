@@ -83,7 +83,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
     this.incrementPendingCompletionRound(run.runId);
     return this.enqueue(run.runId, async () => {
       try {
-        const latest = await this.getRun(run.runId);
+        const latest = await this.runStore.getRun(run.runId);
         if (
           !latest ||
           latest.phase !== "executing" ||
@@ -546,7 +546,8 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
           panelId: dispatch.worker.panelId,
           error,
         });
-        latestRun = (await this.getRun(latestRun.runId)) ?? latestRun;
+        latestRun =
+          (await this.runStore.getRun(latestRun.runId)) ?? latestRun;
         latestRun = await this.markRecheckDispatchFailed(
           latestRun,
           session,

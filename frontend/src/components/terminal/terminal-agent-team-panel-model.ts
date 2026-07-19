@@ -1,8 +1,10 @@
-import type {
-  AgentTeamAcceptanceCase,
-  AgentTeamRepairCycle,
-  AgentTeamRun,
-  AgentTeamWorkerRole,
+import {
+  resolveAgentTeamAcceptanceDecision,
+  resolveAgentTeamAcceptanceObservedOutcome,
+  type AgentTeamAcceptanceCase,
+  type AgentTeamRepairCycle,
+  type AgentTeamRun,
+  type AgentTeamWorkerRole,
 } from "@runweave/shared/agent-team";
 
 export const AGENT_TEAM_POLL_INTERVAL_MS = 4000;
@@ -54,12 +56,14 @@ export type AgentTeamControlStateKind =
   | "normal"
   | "automatic_recovery"
   | "recovery_required"
-  | "scope_decision";
+  | "scope_decision"
+  | "acceptance_decision";
 
 export interface AgentTeamControlState extends AgentTeamStatusPresentation {
   kind: AgentTeamControlStateKind;
   allowsFrameworkRecovery: boolean;
   allowsFindingDecision: boolean;
+  allowsAcceptanceDecision: boolean;
 }
 
 export function getAgentTeamAttention(
@@ -145,9 +149,10 @@ export function getAgentTeamStatusPresentation(
   }
   if (
     run.status === "done" &&
-    (run.findingDecisions ?? []).some(
+    ((run.findingDecisions ?? []).some(
       (decision) => decision.disposition !== "blocking",
-    )
+    ) ||
+      (run.acceptanceDecisions ?? []).length > 0)
   ) {
     return { label: "已完成 · 有裁决", tone: "warning" };
   }
@@ -170,6 +175,21 @@ export function getAgentTeamControlState(
       tone: "danger",
       allowsFrameworkRecovery: false,
       allowsFindingDecision: true,
+      allowsAcceptanceDecision: false,
+    };
+  }
+  if (
+    run.status === "need_human" &&
+    run.frameworkRepair?.result !== "blocked" &&
+    getPendingAgentTeamAcceptanceCases(run).length > 0
+  ) {
+    return {
+      kind: "acceptance_decision",
+      label: "需要 Case 裁决",
+      tone: "warning",
+      allowsFrameworkRecovery: false,
+      allowsFindingDecision: false,
+      allowsAcceptanceDecision: true,
     };
   }
   if (run.status === "need_human" || run.loop.escalated) {
@@ -179,6 +199,7 @@ export function getAgentTeamControlState(
       tone: "warning",
       allowsFrameworkRecovery: run.frameworkRepair?.result === "blocked",
       allowsFindingDecision: false,
+      allowsAcceptanceDecision: false,
     };
   }
   if (
@@ -191,6 +212,7 @@ export function getAgentTeamControlState(
       tone: "recovering",
       allowsFrameworkRecovery: false,
       allowsFindingDecision: false,
+      allowsAcceptanceDecision: false,
     };
   }
   return {
@@ -199,7 +221,21 @@ export function getAgentTeamControlState(
     tone: run.status === "running" ? "running" : "neutral",
     allowsFrameworkRecovery: false,
     allowsFindingDecision: false,
+    allowsAcceptanceDecision: false,
   };
+}
+
+export function getPendingAgentTeamAcceptanceCases(
+  run: AgentTeamRun,
+): AgentTeamAcceptanceCase[] {
+  return run.acceptance.filter(
+    (item) =>
+      Boolean(item.sourceCaseId && item.sourceFilePath) &&
+      !/code review|代码审查|code_review/i.test(item.text) &&
+      resolveAgentTeamAcceptanceObservedOutcome(item) !== "pending" &&
+      resolveAgentTeamAcceptanceObservedOutcome(item) !== "pass" &&
+      !resolveAgentTeamAcceptanceDecision(run, item),
+  );
 }
 
 export function isAgentTeamRunActive(run: AgentTeamRun): boolean {

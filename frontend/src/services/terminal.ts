@@ -17,6 +17,7 @@ export {
 export {
   completeAgentTeamRun,
   continueAgentTeamFrameworkRepair,
+  decideAgentTeamAcceptance,
   decideAgentTeamFinding,
   focusAgentTeamPane,
   getAgentTeamFrameworkRepair,

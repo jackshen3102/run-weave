@@ -1,7 +1,8 @@
 import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
-import type {
-  AgentTeamFrameworkRepairRecoveryStatus,
-  AgentTeamRun,
+import {
+  resolveAgentTeamAcceptanceDecision,
+  type AgentTeamFrameworkRepairRecoveryStatus,
+  type AgentTeamRun,
 } from "@runweave/shared/agent-team";
 import { Button } from "../ui/button";
 import {
@@ -380,6 +381,7 @@ function AcceptanceEvidenceItem({
   item: AgentTeamRun["acceptance"][number];
   onAuthExpired?: () => void;
 }) {
+  const decision = resolveAgentTeamAcceptanceDecision(run, item);
   return (
     <div
       id={getAgentTeamCaseElementId(run.runId, item.caseId)}
@@ -412,6 +414,15 @@ function AcceptanceEvidenceItem({
           {item.skipReason ? (
             <div className="mt-0.5 text-[10px] text-slate-500">
               跳过：{item.skipReason}
+            </div>
+          ) : null}
+          {decision ? (
+            <div className="mt-1 rounded border border-amber-800/70 bg-amber-950/30 px-1.5 py-1 text-[10px] text-amber-200">
+              人工裁决：
+              {decision.disposition === "accepted_environment_skip"
+                ? "确认环境问题并跳过"
+                : "Case 不适用"}
+              <span className="block text-amber-300/70">{decision.reason}</span>
             </div>
           ) : null}
           <AcceptanceEvidenceDetails

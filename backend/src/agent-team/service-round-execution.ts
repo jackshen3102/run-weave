@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   AgentTeamAcceptanceCase,
   AgentTeamActiveWorkerDispatch,
@@ -25,6 +26,10 @@ import { resolveBounceSelection } from "./service-bounce-policy";
 import { shouldContinueBeforeNoProgressEscalation } from "./service-round-continuation-policy";
 import { pendingDecisionFromReviewCycle } from "./service-execution-support";
 import { AgentTeamServiceSupport } from "./service-support";
+import {
+  appendAgentTeamCompletionOutcome,
+  evaluateAgentTeamCompletion,
+} from "./service-completion-policy";
 
 export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSupport {
   protected abstract dispatchSerialWorker(
@@ -67,7 +72,8 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
       ...run,
       acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance),
     };
-    const folded = foldRound(runWithGates, params);
+    const recordedAt = new Date().toISOString();
+    const folded = foldRound(runWithGates, { ...params, recordedAt });
     const repairFolded = foldRepairGateResult({
       loop: folded.loop,
       completedRole: params.completedWorkerRole,
@@ -115,6 +121,11 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
           isReviewGateAcceptanceCase(item) && item.status !== "pass"
             ? {
                 ...item,
+                latestObservation: {
+                  outcome: "pass" as const,
+                  dispatchId: null,
+                  recordedAt,
+                },
                 status: "pass" as const,
                 lastRunStatus: "pass" as const,
                 resultSummary: "无代码改动，Code Review 门禁无审查对象",
@@ -123,9 +134,6 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
         );
       }
     }
-    const allAcceptancePassed =
-      foldedAcceptance.length > 0 &&
-      foldedAcceptance.every((item) => item.status === "pass");
     const automaticBehaviorCases = behaviorVerificationCasesForDispatch({
       ...run,
       acceptance: foldedAcceptance,
@@ -148,16 +156,20 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
                 item.skip.code === "not_applicable"),
           )
         : [];
-    const needsFinalReview = Boolean(
-      allAcceptancePassed &&
-      run.reviewCheckpoint &&
-      // A zero-diff run (no checkpoint ever produced, e.g. verify_first with
-      // all cases green on the first pass) has nothing to review.
-      run.reviewCheckpoint.checkpoints.length > 0 &&
-      run.reviewCheckpoint.finalReviewedCommit !==
-        run.reviewCheckpoint.lastReviewedCommit,
-    );
-    const reachesCompletionGate = allAcceptancePassed && !needsFinalReview;
+    const completionEvaluation = evaluateAgentTeamCompletion({
+      ...run,
+      status: "running",
+      loop,
+      acceptance: foldedAcceptance,
+      activeWorkerRole: null,
+      activeWorkerDispatch: null,
+      pendingFindingDecision,
+    });
+    const needsFinalReview =
+      !completionEvaluation.ready &&
+      completionEvaluation.blockers.length === 1 &&
+      completionEvaluation.blockers[0]?.code === "final_review";
+    const reachesCompletionGate = completionEvaluation.ready;
     let fixtureCleanupHistory = run.fixtureCleanupHistory ?? [];
     let fixtureCleanupBlocked = false;
     if (
@@ -236,6 +248,19 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
       logs.push(`⏸ ${reason}`);
     }
 
+    const completionPatch =
+      status === "done" && completionEvaluation.ready
+        ? appendAgentTeamCompletionOutcome(run, {
+            id: randomUUID(),
+            result: completionEvaluation.result,
+            exceptions: completionEvaluation.exceptions,
+            trigger: "automatic",
+            finalizedAt: new Date().toISOString(),
+          })
+        : {
+            completionOutcome: null,
+            completionHistory: run.completionHistory ?? [],
+          };
     const transitionPatch = {
       status,
       loop,
@@ -245,6 +270,7 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
       activeWorkerDispatch,
       pendingFindingDecision,
       fixtureCleanupHistory,
+      ...completionPatch,
       workerDispatchProtocolVersion: 1 as const,
       consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
       logs,

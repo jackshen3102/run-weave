@@ -23,6 +23,7 @@ import {
   resolveAgentTeamEnvironmentFixtureScope,
   type AgentTeamEnvironmentFixtureScope,
 } from "./fixture-scope";
+import { projectAgentTeamRunForRead } from "./service-completion-policy";
 
 export const agentTeamLogger = logger.child({
   component: "agent-team-service",
@@ -96,7 +97,8 @@ export class AgentTeamServiceContext {
 
   async listRuns(projectId: string): Promise<AgentTeamRun[]> {
     this.assertReadableProjectRoot(projectId);
-    return this.runStore.listRuns(projectId);
+    const runs = await this.runStore.listRuns(projectId);
+    return runs.map(projectAgentTeamRunForRead);
   }
 
   private assertReadableProjectRoot(projectId: string): void {
@@ -112,7 +114,8 @@ export class AgentTeamServiceContext {
   }
 
   async getRun(runId: string): Promise<AgentTeamRun | null> {
-    return this.runStore.getRun(runId);
+    const run = await this.runStore.getRun(runId);
+    return run ? projectAgentTeamRunForRead(run) : null;
   }
 
   async getRunByTerminalSession(
@@ -120,6 +123,10 @@ export class AgentTeamServiceContext {
     terminalSessionId: string,
   ): Promise<AgentTeamRun | null> {
     this.assertReadableProjectRoot(projectId);
-    return this.runStore.getRunByTerminalSession(projectId, terminalSessionId);
+    const run = await this.runStore.getRunByTerminalSession(
+      projectId,
+      terminalSessionId,
+    );
+    return run ? projectAgentTeamRunForRead(run) : null;
   }
 }

@@ -53,6 +53,7 @@ export function resetPersistedAcceptanceForRefresh(
       tags: [...(item.tags ?? [])],
       dependsOn: [...(item.dependsOn ?? [])],
       status: "pending",
+      latestObservation: null,
       consecutiveFail: 0,
       resultSummary: null,
       reproduction: null,
@@ -65,6 +66,7 @@ export function resetPersistedAcceptanceForRefresh(
       recheckOutboxMtimeMs: null,
       recheckAttempt: 0,
       lastRunStatus: "pending",
+      skip: null,
       skipReason: null,
     }));
 }
