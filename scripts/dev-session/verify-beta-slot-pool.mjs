@@ -29,6 +29,8 @@ import {
 } from "../runweave-beta-operations.mjs";
 import { buildBetaStopArgs } from "./beta-service.mjs";
 import { verifyBetaSlotStorage } from "./verify-beta-slot-storage.mjs";
+import { verifyBetaSlotPoolProjection } from "./verify-beta-slot-pool-projection.mjs";
+import { verifyBetaSlotPoolRecovery } from "./verify-beta-slot-pool-recovery.mjs";
 import { validateManifest } from "./contracts.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -229,6 +231,7 @@ export async function verifyBetaSlotPool(temporaryHome) {
   assert.equal(emptySnapshot.authoritative, false);
   assert.equal(emptySnapshot.capacity, BETA_SLOT_CAPACITY);
   assert.equal(emptySnapshot.idle, BETA_SLOT_CAPACITY);
+  await verifyBetaSlotPoolProjection(temporaryHome);
 
   const absentProcessHome = path.join(temporaryHome, "absent-process-home");
   assert.equal(
@@ -246,7 +249,7 @@ export async function verifyBetaSlotPool(temporaryHome) {
   );
   assert.equal(
     await betaSlotProcessesAreAbsent("pool-01", absentProcessHome),
-    true,
+    false,
   );
   const liveSlotProcess = spawn(
     process.execPath,
@@ -484,6 +487,8 @@ export async function verifyBetaSlotPool(temporaryHome) {
     await fs.readdir(concurrentJanitorPaths.recoveryClaimsDir),
     [],
   );
+
+  await verifyBetaSlotPoolRecovery(temporaryHome, oldLease);
   const first = acquired.find((entry) => entry.lease.slotId === "pool-01");
   await assert.rejects(
     assertBetaSlotLease({

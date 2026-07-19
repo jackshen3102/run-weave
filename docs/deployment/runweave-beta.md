@@ -52,19 +52,37 @@ pnpm dev:session --json
 
 `dev-session --profile beta` 已收敛到固定 5 个全局槽位：`pool-01` 至 `pool-05`。lease 是池化所有权真相；不要用低层命令、端口、最近启动时间或窗口名称推断目标。
 
+使用独立的只读控制面查看五槽联合事实：
+
+```bash
+pnpm dev:pool
+pnpm dev:pool --json
+```
+
+`dev:pool` 联合读取 lease、owner manifest、dedicated runtime、shared dependency 与最近一次 recovery receipt，返回 `idle / healthy / partial / degraded-shared / stale-reclaimable / stale-manual / broken`。它是带 `observedAt` 的观察快照，`reservationGuaranteed=false`，不会创建 claim、manifest、lease 或 metadata；真实分配仍以 hard-link lease publication 为准。
+
+定向恢复 valid lease 时必须显式匹配 owner Session：
+
+```bash
+pnpm dev:pool recover --slot pool-03 --session <ownerSessionId> --json
+```
+
+corrupt lease 无可读 owner 时省略 `--session`，仅允许“零 slot 进程 + 路径引用可信 + lease 文件 identity 稳定”的 guarded quarantine。不存在 `--force`、`--force-kill` 或 `--force-release` 绕过入口。
+
 池化实现必须同时满足：
 
 - dry-run 只输出 `policy`、`capacity`、`requestedSlotId` 和非权威 capacity snapshot，
   不创建 session、manifest、lease 或目录，也不承诺 `assignedSlotId`。
 - 真实 start 获取单槽 lease 后，才把 `assignedSlotId + leaseNonce` 写入 manifest；
   lease 是唯一所有权真相，metadata 只用于 LRU 与诊断。
-- stop/reset 必须在停止 slot-owned 进程、整体替换 mutable `user-data`、清理 dedicated
-  App Server state、写入 manifest 与 metadata 后，最后释放 lease。
+- stop/reset 必须在停止 slot-owned 进程后执行统一 release transaction：替换 mutable
+  `user-data`、清理 dedicated App Server state、写入 `release_pending` receipt、释放 lease，
+  最后把 owner manifest 收敛到 `stopped/completed`。
 - shared Backend/App Server 只记录引用，永远不被 slot janitor 停止或删除；Stable 与 legacy instance 不属于自动池清理范围。
 - 每个槽位的 Desktop Runtime 与 App Server Runtime 最多保留 current + previous；App rollback 最多 1 个且不能以 `.app` 结尾。旧 `.app.previous-*` 会迁移并注销 LaunchServices 路径。磁盘不足时只能清理所有权可证明的 pool 垃圾，仍不足则 fail closed。
 - stale cleanup 只有在记录 PID 已退出或整个槽位不存在运行进程/路径所有者时才释放 lease；PID 复用且仍有槽位进程时继续 fail closed。
 
-验收合同见 [Runweave Beta 槽位池测试计划](../testing/beta-slot-pool.testplan.yaml)。需要验证
+基础隔离合同见 [Runweave Beta 槽位池测试计划](../testing/beta-slot-pool.testplan.yaml)，资源投影与最终回收合同见 [Beta 资源管理测试计划](../testing/platform/beta-resource-management.testplan.yaml)。需要验证
 `dev-session --profile beta` 时，以该合同和 `dev:status` / `dev:open` 返回的 slot、lease、
 manifest、CDP 身份为准。
 

@@ -226,9 +226,7 @@ function buildResourceLedger(devSessionId, runs) {
     const runId = typeof run.runId === "string" ? run.runId : null;
     const projectId = typeof run.projectId === "string" ? run.projectId : null;
     const terminalSessionId =
-      typeof run.terminalSessionId === "string"
-        ? run.terminalSessionId
-        : null;
+      typeof run.terminalSessionId === "string" ? run.terminalSessionId : null;
     if (runId) runIds.push(runId);
     if (terminalSessionId) terminalSessionIds.push(terminalSessionId);
     if (typeof run.mainPanelId === "string") {
@@ -290,6 +288,41 @@ async function resolveCleanupAuth(manifest, baseUrl) {
       }
     } catch {
       // Fall through to the dedicated local Backend credentials.
+    }
+  }
+  const backendProfileDir = manifest.services?.backend?.profileDir;
+  if (
+    typeof backendProfileDir === "string" &&
+    path.isAbsolute(backendProfileDir)
+  ) {
+    const authStorePath = path.join(backendProfileDir, "auth-store.json");
+    try {
+      const authStore = JSON.parse(await readFile(authStorePath, "utf8"));
+      const username = authStore?.auth?.username;
+      const password = authStore?.auth?.password;
+      if (
+        typeof username !== "string" ||
+        !username.trim() ||
+        typeof password !== "string" ||
+        !password
+      ) {
+        throw new DevSessionError(
+          "fixture Backend auth store does not contain credentials",
+          5,
+        );
+      }
+      const login = await requestAuth(baseUrl, "/api/auth/login", {
+        username,
+        password,
+      });
+      if (!login.accessToken) {
+        throw new DevSessionError("fixture Backend login returned no token", 5);
+      }
+      return { accessToken: login.accessToken };
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
     }
   }
   const login = await requestAuth(baseUrl, "/api/auth/login", {

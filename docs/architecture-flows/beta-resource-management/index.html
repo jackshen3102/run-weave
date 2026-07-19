@@ -743,7 +743,7 @@
         </div>
         <aside class="hero-verdict">
           <div class="eyebrow">第一性判断</div>
-          <strong>核心缺口是统一资源投影，不是强制删除按钮。</strong>
+          <strong>统一资源投影已落地，恢复仍坚持 fail closed。</strong>
           <p>
             先让操作者同时看到 lease、manifest、runtime 和 recovery
             eligibility，再决定哪些槽位可以自动回收，哪些必须人工介入。
@@ -773,7 +773,7 @@
           04 问题因果
         </button>
         <button type="button" data-view="direction" aria-selected="false">
-          05 建议方向
+          05 当前实现
         </button>
       </nav>
 
@@ -1028,17 +1028,17 @@
       <section id="direction" class="view">
         <div class="section-head">
           <div>
-            <h2>建议先建立可解释的资源控制面</h2>
+            <h2>已建立可解释、可恢复的资源控制面</h2>
             <p>
               推荐顺序刻意不从“自动清理”开始。没有统一事实投影时，任何更激进的释放策略都会把容量问题变成误杀风险。
             </p>
           </div>
-          <span class="truth-tag">Proposed direction</span>
+          <span class="truth-tag">Implemented control plane</span>
         </div>
         <article class="recommendation">
           <div class="priority">01</div>
           <div>
-            <h3>增加统一的只读 pool projection</h3>
+            <h3>统一只读 pool projection</h3>
             <p>
               每个 slot 同时返回 lease、manifest、runtime、recovery
               四组信号，并明确 derived state 与 reason。不要再让操作者拼接多个
@@ -1065,9 +1065,9 @@
           <div>
             <h3>暴露 janitor 扫描与恢复摘要</h3>
             <p>
-              <code>runStart()</code> 当前 await janitor 后丢弃返回值。应让
-              start/status 输出每个 slot 的 active / recovered / broken
-              原因，并写入可追踪元数据。
+              <code>runStart()</code> 现在返回 recovered / preserved / blocked /
+              failed receipt，并把最近一次结果写入 owner manifest 与 slot
+              metadata。
             </p>
           </div>
           <span class="cost">低风险</span>
@@ -1075,26 +1075,26 @@
         <article class="recommendation">
           <div class="priority">03</div>
           <div>
-            <h3>为 ready Session 增加持续 ownership 信号</h3>
+            <h3>按需重验长期 runtime identity</h3>
             <p>
-              不要复用 allocatorPid。可由长期运行的 Beta component 或轻量
-              control heartbeat 表达 owner 活性，让“launcher 已退出”和“整组
-              runtime 已失效”成为两个明确状态。
+              不复用 allocatorPid，也不增加 heartbeat 或后台 daemon。dev:pool、
+              dev:status 与分配前按需检查长期组件、health、lock、CDP
+              和路径引用。
             </p>
           </div>
-          <span class="cost">需设计协议</span>
+          <span class="cost">已实现</span>
         </article>
         <article class="recommendation">
           <div class="priority">04</div>
           <div>
-            <h3>只自动执行可证明安全的恢复</h3>
+            <h3>只执行可证明安全的恢复</h3>
             <p>
               manifest 非活跃、lease identity 匹配、相关进程确认不存在时允许
               janitor 回收；任一身份不确定仍进入 stale-manual，保留当前
               fail-safe。
             </p>
           </div>
-          <span class="cost">保持安全边界</span>
+          <span class="cost">已实现</span>
         </article>
       </section>
 

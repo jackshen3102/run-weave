@@ -200,9 +200,7 @@ export function validateManifest(value) {
         stringArrayFields.some(
           (field) =>
             !Array.isArray(ledger[field]) ||
-            ledger[field].some(
-              (item) => typeof item !== "string" || !item,
-            ),
+            ledger[field].some((item) => typeof item !== "string" || !item),
         )
       ) {
         throw new DevSessionError(
@@ -220,6 +218,26 @@ export function validateManifest(value) {
   }
   if (!value.services || typeof value.services !== "object") {
     throw new DevSessionError("manifest services are missing", 4);
+  }
+  if (value.poolRecovery != null) {
+    const receipt = value.poolRecovery;
+    if (
+      !receipt ||
+      typeof receipt !== "object" ||
+      receipt.schemaVersion !== 1 ||
+      typeof receipt.attemptId !== "string" ||
+      !receipt.attemptId ||
+      receipt.slotId !== value.targetEnvironment?.betaSlot?.assignedSlotId ||
+      receipt.ownerSessionId !== value.devSessionId ||
+      !["recovered", "preserved", "blocked", "failed"].includes(
+        receipt.result,
+      ) ||
+      !Array.isArray(receipt.blockedBy) ||
+      !Array.isArray(receipt.stoppedServices) ||
+      typeof receipt.releasedLease !== "boolean"
+    ) {
+      throw new DevSessionError("manifest poolRecovery receipt is invalid", 4);
+    }
   }
   if (
     value.profile === "beta" &&
@@ -293,6 +311,7 @@ export function publicManifest(manifest) {
     services: validated.services,
     impacts: validated.impacts,
     fixtureCleanup: validated.fixtureCleanup ?? null,
+    poolRecovery: validated.poolRecovery ?? null,
     createdAt: validated.createdAt,
     updatedAt: validated.updatedAt,
     failure: validated.failure ?? null,

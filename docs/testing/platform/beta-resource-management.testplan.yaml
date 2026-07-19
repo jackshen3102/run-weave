@@ -1,0 +1,174 @@
+version: 1
+name: Beta 固定资源池可解释投影与最终回收验收
+description: >
+  验证 Beta 五槽位能够联合 lease、manifest、runtime 与 recovery 事实形成只读投影，
+  并在遗忘 stop、进程退出、部分组件残留、并发分配和损坏状态下安全恢复容量；
+  无法证明身份时必须保留 lease 并给出可操作 blocker。
+
+cases:
+  - id: BRM-001
+    name: 五槽位投影只读且完整解释资源状态
+    required: true
+    description: >
+      验证 dev:pool 同时返回五个槽位的 lease、manifest、owned runtime、shared dependency、
+      derived state 和 recovery 证据，并且查询不会创建或修改任何资源文件。
+    preconditions:
+      - 隔离测试 HOME 中已构造 idle、healthy、partial、stale-reclaimable 与 stale-manual 五类槽位事实。
+      - 已记录 pool root、Session manifest 和 runtime identity 文件的目录清单、内容哈希与修改时间。
+    steps:
+      - 执行 `pnpm dev:pool --json`；确认 schemaVersion、observedAt、reservationGuaranteed=false、capacity=5 且五个 slotId 唯一完整。
+      - 逐槽核对 lease、manifest、ownedComponents、sharedDependencies、derivedState、reasons、recovery.checks 与 blockedBy；确认分类与预置事实一致。
+      - 再次读取目录清单、内容哈希和修改时间；确认查询未创建 recovery claim、manifest、lease、metadata 或其它文件，也未修改既有内容。
+
+  - id: BRM-002
+    name: allocator 退出不再被解释为 Session 异常
+    required: true
+    description: >
+      验证短命 launcher 退出后，健康 Session 仍为 healthy；allocatorPid 只作为 acquisition
+      诊断和缺失 manifest 的 orphan 安全条件，不参与 runtime 健康判断。
+    preconditions:
+      - 一个槽位的 lease allocatorPid 已退出，但 owner Session manifest、Electron、Backend、App Server 与 CDP 身份全部一致且健康。
+      - 另一个槽位只有新近创建的 orphan lease，manifest 尚不存在且 allocatorPid 仍存活。
+    steps:
+      - 查询 pool projection；确认健康槽位为 healthy，acquisition.processLive=false 且 affectsRuntimeHealth=false，没有 allocator 相关健康 blocker。
+      - 对新近 orphan 运行 hygiene recovery；确认其因 acquisition process 仍活跃而被 preserved，lease 未释放且 receipt 说明启动事务尚可能进行。
+
+  - id: BRM-003
+    name: 启动卫生阶段回收全部安全空壳
+    required: true
+    description: >
+      验证每次 Beta start 都回收全部无 slot-owned 运行进程且身份可证明的遗留 lease，
+      不等待池耗尽，并为每个结果保存 receipt。
+    preconditions:
+      - 隔离池中至少有两个 valid stale lease，其 manifest owner/nonce 一致，记录 PID 均已退出且不存在槽位路径进程引用。
+      - 池中另有一个健康 Session 和至少一个 idle 槽位。
+    steps:
+      - 触发一次 Beta start 的 startup hygiene；确认两个安全空壳均完成 reset、retention、lease release，健康 Session 与其进程保持不变。
+      - 查询原 Session manifest、slot metadata 和 start 输出；确认每个回收都有 trigger=startup_hygiene、result=recovered、releasedLease=true 的一致 receipt。
+      - 再次运行 hygiene；确认结果幂等，不重复停止进程、不破坏 warm runtime，也不生成无界历史记录。
+
+  - id: BRM-004
+    name: 容量压力下自动回收持续 partial 并继续启动
+    required: true
+    description: >
+      验证五槽已占用时，一个 slot-owned runtime 持续 partial 且剩余进程身份可证明，
+      当前 start 会在二次检查后回收最少候选、重新竞争 lease 并完成启动。
+    preconditions:
+      - 五个 lease 均存在，其中四个 Session healthy，一个 ready Session 的 Electron 与 Backend 已退出但 dedicated App Server 仍存活且身份匹配。
+      - partial Session 在两次检查之间不会恢复，owner Session lock 可获取。
+    steps:
+      - 执行新的 Beta start；确认第一次容量检查没有 idle，系统获取目标 recovery claim 和 owner Session lock，并间隔至少 5 秒完成第二次 owned-runtime 检查。
+      - 确认系统只停止 partial Session 中仍属于原 owner 的 dedicated 组件，验证 slot 无进程后 reset、release，并将原 manifest 写为 stopped 与 completed receipt。
+      - 确认同一 start 随后通过正常原子 lease acquisition 获得一个槽位并进入 ready；输出同时包含新 Session manifest 与旧 Session recovery receipt。
+
+  - id: BRM-005
+    name: 多候选恢复遵循最小数量和确定性优先级
+    required: true
+    description: >
+      验证无进程空壳全部清理，而涉及终止存活组件时只回收满足当前分配所需的最少数量；
+      候选顺序按恢复成本和 acquiredAt 稳定确定。
+    preconditions:
+      - 池中同时存在两个无进程 stale、两个身份可证明的 partial live Session 和一个 healthy Session，且没有 idle lease。
+      - 两个 partial 的 acquiredAt 可区分，当前请求只需要一个槽位。
+    steps:
+      - 触发 Beta start；确认 startup hygiene 回收两个无进程 stale，且不会停止任一 partial live Session。
+      - 在独立等价现场中使 hygiene 后仍无 idle，再触发容量压力恢复；确认只回收一个 partial，并选择恢复成本更低、同级 acquiredAt 更早的候选。
+      - 确认未选中的 partial 仍保有 lease 与进程，receipt 明确列出 recovered、preserved 和候选顺序原因。
+
+  - id: BRM-006
+    name: 身份不匹配和未知引用始终阻止自动与显式释放
+    required: true
+    description: >
+      验证 PID 复用、process signature 不匹配、lease/manifest owner 不一致或路径引用未知时，
+      start 与定向 recover 都不会杀进程、reset 或释放 lease，并返回精确 blocker。
+    preconditions:
+      - 已分别构造 live PID identity mismatch、lease nonce mismatch、process reference unknown 三个槽位现场。
+      - 已记录这些槽位的 lease inode、进程 PID、mutable state marker 和 manifest 内容。
+    steps:
+      - 在容量压力下启动新 Session；确认三个槽位均不进入 recovered，进程、lease inode、marker 和 manifest owner 未被改写。
+      - 对每个槽位执行定向 recover；确认命令非零返回对应 reason code、expected/actual identity 与 suggestedAction，releasedLease=false。
+      - 尝试传入 `--force`、`--force-kill` 或 `--force-release`；确认参数被拒绝且没有任何资源副作用。
+
+  - id: BRM-007
+    name: Session busy 与 shared dependency 异常不会触发槽位回收
+    required: true
+    description: >
+      验证 owner Session 正在执行生命周期操作或只有 shared dependency 异常时，janitor 会保留槽位，
+      尝试其它候选，而不会抢锁或停止 shared 服务。
+    preconditions:
+      - 一个 partial 候选的 owner Session lock 由存活进程持有。
+      - 另一个 Session 的 slot-owned runtime 全部健康，但 shared Backend 或 shared App Server 不健康。
+      - 已记录 shared 服务 PID、路径和所有引用它的 Session。
+    steps:
+      - 触发容量压力恢复；确认 busy 候选返回 preserved/owner-session-busy，janitor 不等待抢锁并继续检查其它槽位。
+      - 查询 shared 异常槽位；确认 derivedState=degraded-shared 或等价 shared blocker，recovery 不以 slot cleanup 为候选。
+      - 确认 shared 服务和引用它的所有 Session 未被停止或改写；容量仍不足时错误逐槽列出 busy 与 shared blocker。
+
+  - id: BRM-008
+    name: 损坏 lease 仅在零进程时进入 quarantine
+    required: true
+    description: >
+      验证 corrupt lease 不被直接删除；只有 recovery claim 内证明槽位不存在运行进程和路径引用、
+      且 lease 文件 identity 稳定时才完成 reset 并原子移动到 quarantine。
+    preconditions:
+      - 两个槽位均有损坏 lease；槽位 A 无任何运行进程或路径引用，槽位 B 有引用该 slot 路径的存活进程。
+      - 已记录两个损坏 lease 的 inode 和原始内容。
+    steps:
+      - 运行 startup hygiene；确认槽位 A 先完成安全检查和 reset，再把原 lease 原子移动到带 operation receipt 的 quarantine，随后显示 idle。
+      - 确认槽位 B 保持 broken/stale-manual，原 lease inode 与进程仍存在，blockedBy 指向 active 或 unknown process reference。
+      - 在 reset 或 quarantine rename 前注入失败并重试；确认失败时原 lease 仍占位，成功重试只产生一个有效 quarantine operation。
+
+  - id: BRM-009
+    name: Release 事务在每个崩溃窗口都能幂等收敛
+    required: true
+    description: >
+      验证 normal stop、start failure、automatic recovery 和 explicit recover 共用 release transaction，
+      在 reset、metadata、release 与 stopped manifest 各阶段中断后不会产生 idle slot 与旧进程并存。
+    preconditions:
+      - 可在 release transaction 的 reset 后、metadata 后、release 前和 release 后分别注入一次可恢复中断。
+      - 每个场景均使用独立 Session 与 lease，并能重复执行 status 或 recover。
+    steps:
+      - 在 lease release 前的各检查点中断；确认 manifest 为 stopping/stale 且 lease 保留，再次执行恢复后安全完成或继续明确阻塞。
+      - 在 lease 已释放但 stopped manifest 尚未写入时中断；确认槽位没有旧进程，后续 status/janitor 将 manifest 收敛为 stopped/completed。
+      - 比较四种调用入口；确认 receipt、metadata、reset 顺序和失败语义一致，不存在某一路径绕过 finalizer。
+
+  - id: BRM-010
+    name: 并发 start 只产生唯一 lease owner
+    required: true
+    description: >
+      验证多个 start 在池满时并发观察和恢复同一候选，recovery claim 只允许一个恢复者，
+      hard-link lease publication 只允许一个新 owner，其余请求有界重试并保留准确结果。
+    preconditions:
+      - 五槽已满且只有一个安全可回收候选，可并发启动至少两个新的 Beta Session 请求。
+      - 能读取 recovery claim、lease file identity、两个 start 输出和最终 owner manifest。
+    steps:
+      - 同时发起两个 start；确认同一时刻只有一个有效 recovery claim owner，候选只被停止和 reset 一次。
+      - 确认释放后的槽位只有一个新 lease owner/nonce，另一个请求不会复用相同 lease，也不会覆盖 winner manifest。
+      - 确认 loser 在有界循环后要么获得其它安全槽位，要么返回 capacity-won-by-concurrent-allocator 及已发生的 recovery receipt，不无限重试。
+
+  - id: BRM-011
+    name: 显式槽位请求保持精确目标且不错误回退
+    required: true
+    description: >
+      验证 `--instance pool-0N` 只操作指定槽位：健康占用时直接失败，安全 partial 时只恢复该槽位，
+      identity blocker 时保留现场且不改为分配其它 idle slot。
+    preconditions:
+      - 已准备一个 healthy occupied、一个 safely partial、一个 identity-mismatch 和一个 idle 槽位。
+    steps:
+      - 分别显式请求 healthy occupied 与 identity-mismatch 槽位；确认请求失败并说明目标状态，未分配其它 idle 槽位。
+      - 显式请求 safely partial 槽位；确认只对该槽位执行二次检查和安全恢复，随后通过正常 lease acquisition 获得同一 slotId。
+      - 不传 `--instance` 再启动；确认 allocator 按全池候选规则选择，不继承前一次显式目标。
+
+  - id: BRM-012
+    name: Recovery receipt 三处一致且不泄露秘密
+    required: true
+    description: >
+      验证成功、blocked 和 preserved 恢复都能被操作者解释；成功自动恢复在 start 输出、
+      原 Session manifest 与 slot metadata 中一致，所有输出不包含认证秘密。
+    preconditions:
+      - 已分别触发一次 recovered、blocked 和 preserved recovery attempt。
+      - fixture 的 runtime 文件中含可识别的 token、Cookie 或 Authorization secret，用于验证不会进入 receipt。
+    steps:
+      - 比较 recovered attempt 的 attemptId、trigger、slotId、ownerSessionId、checks、stoppedServices、result 和 releasedLease；确认三处记录一致。
+      - 查询 blocked 与 preserved 槽位；确认 lastRecoveryAttempt 包含 blockedBy 或 preserved reason，原 lease 状态与结果相符。
+      - 序列化 dev:pool、start 输出、manifest 与 metadata 并搜索敏感字段和值；确认不包含 token、Cookie、Authorization、JWT、password 或 fixture secret。
