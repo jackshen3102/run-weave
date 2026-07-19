@@ -31,11 +31,6 @@ extraResources:
       - "prebuilds/darwin-arm64/**/*"
       - "package.json"
       - "LICENSE"
-  - from: ../.native-artifacts/better-sqlite3/electron-33.4.11-darwin-arm64/resources-backend
-    to: backend
-    filter:
-      - "**/*"
-
 mac:
   icon: resources/icons/icon.icns
   category: public.app-category.developer-tools

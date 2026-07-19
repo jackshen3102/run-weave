@@ -5,7 +5,6 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -13,7 +12,6 @@ import path from "node:path";
 import { getAbi } from "node-abi";
 import {
   electronVersion,
-  resourcesBackendDir,
   stagingAppDir,
 } from "./activity-sqlite-runtime-paths.mjs";
 
@@ -37,9 +35,7 @@ export function finalizeActivitySqliteRuntime(workerEntry) {
   if (!existsSync(workerEntry) || !existsSync(nodeModules)) {
     throw new Error("Activity SQLite staging is incomplete");
   }
-  rmSync(resourcesBackendDir, { recursive: true, force: true });
-  mkdirSync(resourcesBackendDir, { recursive: true });
-  cpSync(workerEntry, path.join(resourcesBackendDir, "activity-sqlite-worker.cjs"));
+  const resourcesBackendDir = path.dirname(workerEntry);
   const runtimeNodeModules = path.join(resourcesBackendDir, "node_modules");
   mkdirSync(runtimeNodeModules, { recursive: true });
   for (const packageName of ["better-sqlite3", "bindings", "file-uri-to-path"]) {

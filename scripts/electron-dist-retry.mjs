@@ -248,6 +248,14 @@ async function main() {
   const isolatedBuildRoot = process.env.RUNWEAVE_ELECTRON_BUILD_ROOT?.trim();
   let releaseDir = path.join(ELECTRON_DIR, "release");
 
+  if (isolatedBuildRoot) {
+    electronEnv.RUNWEAVE_ACTIVITY_SQLITE_ARTIFACT_ROOT = path.join(
+      path.resolve(isolatedBuildRoot),
+      "native-artifacts",
+      "activity-sqlite",
+    );
+  }
+
   if (process.env.RUNWEAVE_SKIP_ELECTRON_VERSION_BUMP !== "true") {
     await runCheckedCommand("node", ["./scripts/bump-electron-version.mjs"]);
   }

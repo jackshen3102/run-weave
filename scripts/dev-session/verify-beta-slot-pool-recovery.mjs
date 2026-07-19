@@ -5,7 +5,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
+  acquireBetaSlotLease,
+  createBetaPoolRecoveryReceipt,
+  finalizeBetaSlotRelease,
   inspectBetaSlotProcessSafety,
+  inspectBetaPool,
+  readBetaSlotMetadata,
   resolveBetaPoolPaths,
   runBetaPoolJanitor,
   runBetaPoolRecoveryPass,
@@ -79,6 +84,122 @@ export async function verifyBetaSlotPoolRecovery(temporaryHome, oldLease) {
       await fs.lstat(path.join(candidateOrderPaths.leasesDir, "pool-02.lock"))
     ).isFile(),
   );
+
+  const receiptHome = path.join(temporaryHome, "receipt-home");
+  const receiptApplications = path.join(
+    temporaryHome,
+    "receipt-applications",
+  );
+  const receiptManifestPath = path.join(
+    receiptHome,
+    "sessions",
+    "dvs-receipt",
+    "manifest.json",
+  );
+  await fs.mkdir(receiptApplications, { recursive: true });
+  const receiptLease = await acquireBetaSlotLease({
+    requestedSlotId: "pool-03",
+    ownerSessionId: "dvs-receipt",
+    ownerSourceRoot: process.cwd(),
+    ownerRevision: "receipt-revision",
+    ownerManifestPath: receiptManifestPath,
+    homeDir: receiptHome,
+  });
+  const slotService = {
+    ownership: "disabled",
+    slotId: "pool-03",
+    leaseNonce: receiptLease.lease.leaseNonce,
+  };
+  const receiptManifest = {
+    schemaVersion: 1,
+    devSessionId: "dvs-receipt",
+    state: "stopping",
+    profile: "beta",
+    selectedBy: "explicit-profile",
+    controlPlane: { appChannel: "stable" },
+    targetEnvironment: {
+      kind: "beta",
+      acceptanceSurfaces: ["desktop"],
+      instanceId: "pool-03",
+      betaSlot: {
+        policy: "fixed-pool-v1",
+        capacity: 5,
+        requestedSlotId: "pool-03",
+        assignedSlotId: "pool-03",
+        leaseNonce: receiptLease.lease.leaseNonce,
+      },
+    },
+    source: {
+      root: process.cwd(),
+      revision: "receipt-revision",
+      dirty: false,
+    },
+    services: {
+      frontend: slotService,
+      backend: slotService,
+      appServer: slotService,
+      electron: slotService,
+      beta: slotService,
+      cdp: { desktop: slotService, terminalBrowser: slotService },
+    },
+    impacts: [],
+    createdAt: "2026-07-19T00:00:00.000Z",
+    updatedAt: "2026-07-19T00:00:00.000Z",
+  };
+  await fs.mkdir(path.dirname(receiptManifestPath), { recursive: true });
+  await fs.writeFile(
+    receiptManifestPath,
+    `${JSON.stringify(receiptManifest)}\n`,
+    { mode: 0o600 },
+  );
+  const fixtureSecret = "beta-receipt-fixture-secret";
+  const receiptTargets = resolveBetaUpdateTargets(receiptHome, "pool-03");
+  await fs.mkdir(receiptTargets.userData, { recursive: true });
+  await fs.writeFile(
+    path.join(receiptTargets.userData, "auth-marker.json"),
+    `${JSON.stringify({ Authorization: fixtureSecret, Cookie: fixtureSecret })}\n`,
+  );
+  const finalizedReceipt = await finalizeBetaSlotRelease({
+    lease: receiptLease.lease,
+    manifest: receiptManifest,
+    receipt: createBetaPoolRecoveryReceipt({
+      trigger: "explicit_recovery",
+      initiatingSessionId: "dvs-receipt",
+      slotId: "pool-03",
+      ownerSessionId: "dvs-receipt",
+      leaseNonce: receiptLease.lease.leaseNonce,
+      previousManifestState: "stopping",
+      previousDerivedState: "owned-stop",
+    }),
+    homeDir: receiptHome,
+    applicationsDir: receiptApplications,
+  });
+  const [finalizedManifest, receiptMetadata, receiptProjection] =
+    await Promise.all([
+      fs.readFile(receiptManifestPath, "utf8").then(JSON.parse),
+      readBetaSlotMetadata("pool-03", { homeDir: receiptHome }),
+      inspectBetaPool({ homeDir: receiptHome }),
+    ]);
+  const receiptAttemptId = finalizedReceipt.receipt.attemptId;
+  assert.equal(finalizedManifest.poolRecovery.attemptId, receiptAttemptId);
+  assert.equal(
+    receiptMetadata.lastRecoveryAttempt.attemptId,
+    receiptAttemptId,
+  );
+  assert.equal(
+    receiptProjection.slots.find((slot) => slot.slotId === "pool-03").metadata
+      .lastRecoveryAttempt.attemptId,
+    receiptAttemptId,
+  );
+  const serializedReceiptEvidence = JSON.stringify({
+    output: finalizedReceipt.receipt,
+    manifest: finalizedManifest,
+    metadata: receiptMetadata,
+    projection: receiptProjection,
+  });
+  assert(!serializedReceiptEvidence.includes(fixtureSecret));
+  assert(!serializedReceiptEvidence.includes("Authorization"));
+  assert(!serializedReceiptEvidence.includes("Cookie"));
 
   const recordedProcessHome = path.join(temporaryHome, "recorded-process-home");
   const recordedProcessApplications = path.join(

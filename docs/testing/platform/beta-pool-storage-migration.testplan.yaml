@@ -1,8 +1,13 @@
 version: 1
-name: Beta Pool 全场景验收
+name: Beta Pool 控制面与恢复验收
 description: >
-  验证 Beta 固定五槽池在全新 canonical 环境中的初始化、投影、分配、运行、停止与权限边界，
-  并覆盖原 Beta 资源管理合同中的异常识别、安全恢复、并发竞争、崩溃收敛和诊断发布场景。
+  本文件保留历史入口名称，当前内容不执行 storage migration 或 legacy 数据 Case。
+  验证 Beta 固定五槽池 canonical 控制面的初始化、投影、分配、恢复、停止与权限边界，
+  并覆盖资源管理合同中的异常识别、安全恢复、并发竞争、崩溃收敛和诊断发布场景。
+  所有 Dev Session dry-run 和真实 start 均显式选择 beta profile，不依赖 worktree changed-files 推断。
+  所有会操作槽位资源的 Case 都必须使用稳定、独占且可重入的 ownership HOME 与固定五槽资源，
+  重复执行不得要求机器、HOME 或 /Applications 预先干净；只能自动收敛所有权可证的残留，
+  未知资源必须保留并 fail closed。长期运行与跨 owner 数据边界由 Beta Pool 运行时回归计划覆盖。
   当前计划不构造或迁移 legacy 控制面旧数据，不覆盖迁移 journal、tombstone、备份或降级流程。
 
 cases:
@@ -16,21 +21,25 @@ cases:
       - 可以记录临时 HOME 在命令执行前后的完整目录清单和文件哈希。
     steps:
       - 执行 `pnpm dev:pool --json`；确认返回五个唯一 slotId、全部为 idle、reservationGuaranteed=false 且 storage.mode=uninitialized。
-      - 执行无显式 profile 的 `pnpm dev:session --dry-run --json`；确认只返回 planner、capacity 和 requestedSlotId 等规划结果，不承诺 assignedSlotId。
+      - 执行 `pnpm dev:session --profile beta --dry-run --json`；确认 dryRun=true、profile=beta、selectedBy=explicit-profile、targetEnvironment.kind=beta，且 betaSlot 中 capacity=5、requestedSlotId=null、assignedSlotId=null、leaseNonce=null，并包含 authoritative=false、capacity=5 的只读 capacitySnapshot。
       - 比较执行前后的目录清单和文件哈希；确认没有创建 ~/.runweave、Session、manifest、lease、claim 或 metadata。
 
   - id: BETA-002
-    name: 首次启动直接建立 canonical lease
+    name: 所有权一致的槽位可重复建立 canonical lease
     required: true
     description: >
-      验证全新环境的首次真实 Beta start 直接初始化 canonical Pool，并为一个 Session 发布唯一 lease。
+      验证同一 ownership HOME、固定 slot 与全局 App/rollback pointer 一致时，真实 Beta start 能建立
+      canonical lease 并进入 ready；正常停止后可重复启动，不要求人工清理全局资源。
     preconditions:
-      - 使用独立临时 HOME，~/.runweave/beta-pool 不存在。
+      - 本 Case 使用固定且独占的 ownership HOME 和目标 slot；后续重复执行继续复用同一 HOME，而不是更换 HOME 后复用同一全局 App 名称。
+      - 已只读盘点该 HOME 与 /Applications 中目标 slot 的 App、rollback、previous、warm-state、manifest 和 lease；App/rollback 不存在，或其 pointer 与当前 HOME 中的 identity 完全一致，否则本 Case 前置阻塞。
       - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 管理真实 Beta Session 的启动和清理。
     steps:
-      - 启动一个真实 Beta Session；确认 ~/.runweave/beta-pool/storage.json 已建立，storage.mode=canonical，marker 的 migrationId 与 migratedFrom 均为 null。
-      - 确认 manifest 中 assignedSlotId 和 leaseNonce 与唯一 lease owner 完全一致，且 Session 服务达到 ready。
-      - 停止本 Case 创建的 Session；确认 lease 和 claim 均已清理，目标槽位回到 idle。
+      - 使用 `$toolkit:runweave-dev-session` 和 `--profile beta --instance <slotId>` 启动一个真实 Beta Session；确认空状态会直接建立 canonical，已有当前 HOME 可证残留会安全恢复或收敛，且不会返回 previous pointer missing/invalid。
+      - 确认 storage.mode=canonical，marker 的 migrationId 与 migratedFrom 均为 null；manifest 中 assignedSlotId 和 leaseNonce 与唯一 lease owner 完全一致，Session 服务达到 ready。
+      - 停止本次 Session；确认 slot-owned 进程、lease 和 claim 均已收敛，并记录 App、rollback、warm-state 与 pointer 的一致身份，不手工删除这些资源或重建 HOME。
+      - 在同一 HOME 和 slot 上再次执行相同 Beta start；确认使用新的 devSessionId 和 leaseNonce 再次进入 ready，已有 App/rollback 能由 pointer 解释，没有双 owner或人工清盘。
+      - 再次停止 Session；确认只清理或保留当前 HOME 可证明拥有的资源，Case 开始前记录的未知 App、rollback、lease 和进程均保持不变。
 
   - id: BETA-003
     name: 五槽位投影只读且完整解释资源状态
@@ -39,6 +48,7 @@ cases:
       验证 dev:pool 同时返回五个槽位的 lease、manifest、owned runtime、shared dependency、
       derived state 和 recovery 证据，并且查询不会创建或修改任何资源文件。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；fixture 资源可来自上次执行，但未知来源资源不得被改写或清理。
       - 隔离 canonical Pool 中已构造 idle、healthy、partial、stale-reclaimable 与 stale-manual 五类槽位事实。
       - 已记录 Pool root、Session manifest 和 runtime identity 文件的目录清单、内容哈希与修改时间。
     steps:
@@ -53,6 +63,7 @@ cases:
       验证短命 launcher 退出后，健康 Session 仍为 healthy；allocatorPid 只作为 acquisition
       诊断和缺失 manifest 的 orphan 安全条件，不参与 runtime 健康判断。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；fixture 资源可来自上次执行，但未知来源资源不得被改写或清理。
       - 一个槽位的 lease allocatorPid 已退出，但 owner Session manifest、Electron、Backend、App Server 与 CDP 身份全部一致且健康。
       - 另一个槽位只有新近创建的 orphan lease，manifest 尚不存在且 allocatorPid 仍存活。
     steps:
@@ -66,10 +77,11 @@ cases:
       验证每次 Beta start 都回收全部无 slot-owned 运行进程且身份可证明的遗留 lease，
       不等待池耗尽，并为每个结果保存 receipt。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；重复执行先通过产品恢复链收敛本 fixture 残留，不人工清空 HOME 或 /Applications。
       - 隔离 canonical Pool 中至少有两个 valid stale lease，其 manifest owner/nonce 一致，记录 PID 均已退出且不存在槽位路径进程引用。
       - Pool 中另有一个健康 Session 和至少一个 idle 槽位。
     steps:
-      - 触发一次 Beta start 的 startup hygiene；确认两个安全空壳均完成 reset、retention、lease release，健康 Session 与其进程保持不变。
+      - 使用显式 beta profile 触发一次 Beta start 的 startup hygiene；确认两个安全空壳均完成 reset、retention、lease release，健康 Session 与其进程保持不变。
       - 查询原 Session manifest、slot metadata 和 start 输出；确认每个回收都有 trigger=startup_hygiene、result=recovered、releasedLease=true 的一致 receipt。
       - 再次运行 hygiene；确认结果幂等，不重复停止进程、不破坏 warm runtime，也不生成无界历史记录。
 
@@ -80,10 +92,11 @@ cases:
       验证五槽已占用时，一个 slot-owned runtime 持续 partial 且剩余进程身份可证明，
       当前 start 会在二次检查后回收最少候选、重新竞争 lease 并完成启动。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；重复执行先通过产品恢复链收敛本 fixture 残留，不人工清空 HOME 或 /Applications。
       - 五个 lease 均存在，其中四个 Session healthy，一个 ready Session 的 Electron 与 Backend 已退出但 dedicated App Server 仍存活且身份匹配。
       - partial Session 在两次检查之间不会恢复，owner Session lock 可获取。
     steps:
-      - 执行新的 Beta start；确认第一次容量检查没有 idle，系统获取目标 recovery claim 和 owner Session lock，并间隔至少 5 秒完成第二次 owned-runtime 检查。
+      - 使用显式 beta profile 执行新的 Beta start；确认第一次容量检查没有 idle，系统获取目标 recovery claim 和 owner Session lock，并间隔至少 5 秒完成第二次 owned-runtime 检查。
       - 确认系统只停止 partial Session 中仍属于原 owner 的 dedicated 组件，验证 slot 无进程后 reset、release，并将原 manifest 写为 stopped 与 completed receipt。
       - 确认同一 start 随后通过正常原子 lease acquisition 获得一个槽位并进入 ready；输出同时包含新 Session manifest 与旧 Session recovery receipt。
 
@@ -94,11 +107,12 @@ cases:
       验证无进程空壳全部清理，而涉及终止存活组件时只回收满足当前分配所需的最少数量；
       候选顺序按恢复成本和 acquiredAt 稳定确定。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；重复执行先通过产品恢复链收敛本 fixture 残留，不人工清空 HOME 或 /Applications。
       - Pool 中同时存在两个无进程 stale、两个身份可证明的 partial live Session 和一个 healthy Session，且没有 idle lease。
       - 两个 partial 的 acquiredAt 可区分，当前请求只需要一个槽位。
     steps:
-      - 触发 Beta start；确认 startup hygiene 回收两个无进程 stale，且不会停止任一 partial live Session。
-      - 在独立等价现场中使 hygiene 后仍无 idle，再触发容量压力恢复；确认只回收一个 partial，并选择恢复成本更低、同级 acquiredAt 更早的候选。
+      - 使用显式 beta profile 触发 Beta start；确认 startup hygiene 回收两个无进程 stale，且不会停止任一 partial live Session。
+      - 在独立等价现场中使 hygiene 后仍无 idle，再使用显式 beta profile 触发容量压力恢复；确认只回收一个 partial，并选择恢复成本更低、同级 acquiredAt 更早的候选。
       - 确认未选中的 partial 仍保有 lease 与进程，receipt 明确列出 recovered、preserved 和候选顺序原因。
 
   - id: BETA-008
@@ -108,10 +122,11 @@ cases:
       验证 PID 复用、process signature 不匹配、lease/manifest owner 不一致或路径引用未知时，
       start 与定向 recover 都不会杀进程、reset 或释放 lease，并返回精确 blocker。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；只允许重建本 fixture 的故障现场，机器上的未知资源必须保持不变。
       - 已分别构造 live PID identity mismatch、lease nonce mismatch、process reference unknown 三个 canonical 槽位现场。
       - 已记录这些槽位的 lease inode、进程 PID、mutable state marker 和 manifest 内容。
     steps:
-      - 在容量压力下启动新 Session；确认三个槽位均不进入 recovered，进程、lease inode、marker 和 manifest owner 未被改写。
+      - 在容量压力下使用显式 beta profile 启动新 Session；确认三个槽位均不进入 recovered，进程、lease inode、marker 和 manifest owner 未被改写。
       - 对每个槽位执行定向 recover；确认命令非零返回对应 reason code、expected/actual identity 与 suggestedAction，releasedLease=false。
       - 尝试传入 `--force`、`--force-kill` 或 `--force-release`；确认参数被拒绝且没有任何资源副作用。
 
@@ -122,11 +137,12 @@ cases:
       验证 owner Session 正在执行生命周期操作或只有 shared dependency 异常时，janitor 会保留槽位，
       尝试其它候选，而不会抢锁或停止 shared 服务。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；只允许重建本 fixture 的故障现场，机器上的未知资源必须保持不变。
       - 一个 partial 候选的 owner Session lock 由存活进程持有。
       - 另一个 Session 的 slot-owned runtime 全部健康，但 shared Backend 或 shared App Server 不健康。
       - 已记录 shared 服务 PID、路径和所有引用它的 Session。
     steps:
-      - 触发容量压力恢复；确认 busy 候选返回 preserved/owner-session-busy，janitor 不等待抢锁并继续检查其它槽位。
+      - 使用显式 beta profile 触发容量压力恢复；确认 busy 候选返回 preserved/owner-session-busy，janitor 不等待抢锁并继续检查其它槽位。
       - 查询 shared 异常槽位；确认 derivedState=degraded-shared 或等价 shared blocker，recovery 不以 slot cleanup 为候选。
       - 确认 shared 服务和引用它的所有 Session 未被停止或改写；容量仍不足时错误逐槽列出 busy 与 shared blocker。
 
@@ -137,10 +153,11 @@ cases:
       验证 corrupt lease 不被直接删除；只有 recovery claim 内证明槽位不存在运行进程和路径引用、
       且 lease 文件 identity 稳定时才完成 reset 并原子移动到 quarantine。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；上次执行留下的本 fixture quarantine 可以存在，但不得要求人工清盘。
       - 两个槽位均有损坏 lease；槽位 A 无任何运行进程或路径引用，槽位 B 有引用该 slot 路径的存活进程。
       - 已记录两个损坏 lease 的 inode 和原始内容。
     steps:
-      - 运行 startup hygiene；确认槽位 A 先完成安全检查和 reset，再把原 lease 原子移动到带 operation receipt 的 quarantine，随后显示 idle。
+      - 使用显式 beta profile 启动 Session并运行 startup hygiene；确认槽位 A 先完成安全检查和 reset，再把原 lease 原子移动到带 operation receipt 的 quarantine，随后显示 idle。
       - 确认槽位 B 保持 broken/stale-manual，原 lease inode 与进程仍存在，blockedBy 指向 active 或 unknown process reference。
       - 在 reset 或 quarantine rename 前注入失败并重试；确认失败时原 lease 仍占位，成功重试只产生一个有效 quarantine operation。
 
@@ -151,6 +168,7 @@ cases:
       验证 normal stop、start failure、automatic recovery 和 explicit recover 共用 release transaction，
       在 reset、metadata、release 与 stopped manifest 各阶段中断后不会产生 idle slot 与旧进程并存。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；每个注入现场只操作本 fixture 资源，并能从上次中断现场继续而非先清空。
       - 可在 release transaction 的 reset 后、metadata 后、release 前和 release 后分别注入一次可恢复中断。
       - 每个场景均使用独立 Session 与 lease，并能重复执行 status 或 recover。
     steps:
@@ -165,10 +183,11 @@ cases:
       验证多个 start 在池满时并发观察和恢复同一候选，recovery claim 只允许一个恢复者，
       hard-link lease publication 只允许一个新 owner，其余请求有界重试并保留准确结果。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；重复执行先收敛本 fixture 旧 owner，不人工删除全局 App、rollback 或 lease。
       - 五槽已满且只有一个安全可回收候选，可并发启动至少两个新的 Beta Session 请求。
       - 能读取 recovery claim、lease file identity、两个 start 输出和最终 owner manifest。
     steps:
-      - 同时发起两个 start；确认同一时刻只有一个有效 recovery claim owner，候选只被停止和 reset 一次。
+      - 同时发起两个显式 beta profile 的 start；确认同一时刻只有一个有效 recovery claim owner，候选只被停止和 reset 一次。
       - 确认释放后的槽位只有一个新 lease owner/nonce，另一个请求不会复用相同 lease，也不会覆盖 winner manifest。
       - 确认 loser 在有界循环后要么获得其它安全槽位，要么返回 capacity-won-by-concurrent-allocator 及已发生的 recovery receipt，不无限重试。
 
@@ -179,11 +198,12 @@ cases:
       验证 `--instance pool-0N` 只操作指定槽位：健康占用时直接失败，安全 partial 时只恢复该槽位，
       identity blocker 时保留现场且不改为分配其它 idle slot。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；目标槽位现场由本 fixture 拥有，未知槽位只读且不得作为替代目标。
       - 已准备一个 healthy occupied、一个 safely partial、一个 identity-mismatch 和一个 idle canonical 槽位。
     steps:
-      - 分别显式请求 healthy occupied 与 identity-mismatch 槽位；确认请求失败并说明目标状态，未分配其它 idle 槽位。
-      - 显式请求 safely partial 槽位；确认只对该槽位执行二次检查和安全恢复，随后通过正常 lease acquisition 获得同一 slotId。
-      - 不传 `--instance` 再启动；确认 allocator 按全池候选规则选择，不继承前一次显式目标。
+      - 使用 `--profile beta --instance <slotId>` 分别请求 healthy occupied 与 identity-mismatch 槽位；确认请求失败并说明目标状态，未分配其它 idle 槽位。
+      - 使用 `--profile beta --instance <slotId>` 请求 safely partial 槽位；确认只对该槽位执行二次检查和安全恢复，随后通过正常 lease acquisition 获得同一 slotId。
+      - 保留 `--profile beta` 但不传 `--instance` 再启动；确认 allocator 按全池候选规则选择，不继承前一次显式目标。
 
   - id: BETA-014
     name: Recovery receipt 三处一致且不泄露秘密
@@ -192,6 +212,7 @@ cases:
       验证成功、blocked 和 preserved 恢复都能被操作者解释；成功自动恢复在 start 输出、
       原 Session manifest 与 slot metadata 中一致，所有输出不包含认证秘密。
     preconditions:
+      - 本 Case 使用独占且可重入的 fixture namespace；重复执行只覆盖本 fixture 的 receipt，不清理或采集未知 Session 的敏感数据。
       - 已分别触发一次 recovered、blocked 和 preserved recovery attempt。
       - fixture 的 runtime 文件中含可识别的 token、Cookie 或 Authorization secret，用于验证不会进入 receipt。
     steps:
@@ -206,7 +227,8 @@ cases:
       验证一个真实 canonical Beta Session 运行时，dev:status 与 dev:pool 对所有权和运行态给出一致结果，
       并且重复查询不改写控制面。
     preconditions:
-      - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 启动一个处于 ready 的真实 Beta Session。
+      - 本 Case 使用固定且独占的 fixture namespace；真实 App、rollback、warm-state 和控制面 HOME 的所有权必须一致，重复执行不得要求人工清盘。
+      - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 通过显式 beta profile 启动一个处于 ready 的真实 Beta Session。
       - 可以记录 canonical Pool 查询前后的目录清单、inode、mtime 和文件哈希。
     steps:
       - 执行 `pnpm dev:status --session <devSessionId> --json` 和 `pnpm dev:pool --json`；确认 storage.mode=canonical，五个 slotId 唯一且只有目标槽位为 healthy。
@@ -220,38 +242,28 @@ cases:
       验证全新 canonical Pool 中的并发 start 为每个成功 Session 发布不同 lease，
       五槽满载后额外请求不会覆盖已有所有权。
     preconditions:
-      - 使用独立临时 HOME，canonical Pool 中五个槽位均为空闲。
-      - 可以并发发起 Beta start，并读取每个请求的 Session、slot、nonce、manifest 和 lease identity。
+      - 本 Case 使用固定、独占且可重入的 ownership HOME；五个物理槽位可以存在该 HOME 上次留下的状态，但不得要求机器或 /Applications 预先干净。
+      - 执行前通过产品恢复链把该 HOME 可证明拥有的五槽收敛为可分配状态；任何未知来源槽位保持不变且不计入可用容量。
+      - 可以并发发起显式 beta profile 的 Beta start，并读取每个请求的 Session、slot、nonce、manifest 和 lease identity。
     steps:
-      - 并发启动五个 Beta Session；确认每个成功请求获得不同 slotId，每个 lease 只有一个 ownerSessionId 和 nonce，manifest 与 lease 完全匹配。
-      - 在五槽均被占用时发起第六个 start；确认请求以容量不足失败，不覆盖既有 lease、不复用 nonce，也不停止任何已运行 Session。
+      - 使用显式 beta profile 并发启动五个 Beta Session；确认每个成功请求获得不同 slotId，每个 lease 只有一个 ownerSessionId 和 nonce，manifest 与 lease 完全匹配。
+      - 在五槽均被占用时使用显式 beta profile 发起第六个 start；确认请求以容量不足失败，不覆盖既有 lease、不复用 nonce，也不停止任何已运行 Session。
       - 停止本 Case 创建的全部 Session；确认五个槽位最终全部回到 idle。
+      - 不清空 HOME、/Applications、rollback 或 warm runtime，重复执行上述并发启动、容量边界和停止流程；确认第二轮结果与第一轮一致且没有 previous pointer 错误、双 owner 或未知资源改写。
 
   - id: BETA-017
-    name: 正常停止后完全回收并可再次启动
-    required: true
-    description: >
-      验证 canonical Session 正常停止后 lease、claim 和 mutable 状态完全收敛，
-      释放出的容量可以被新的 Session 正常复用。
-    preconditions:
-      - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 启动一个处于 ready 的真实 Beta Session。
-      - 可以读取 stop receipt、owner manifest、lease、claim、slot runtime 和 Pool projection。
-    steps:
-      - 停止目标 Session；确认结果为 stopped，slot-owned 进程已退出，lease 与 recovery claim 均不存在，owner manifest 收敛到终态。
-      - 执行 `pnpm dev:pool --json`；确认目标槽位回到 idle，其它槽位状态未受影响。
-      - 再次启动一个真实 Beta Session；确认可以获得可用槽位且使用新的 devSessionId 和 leaseNonce，随后停止该 Session并确认 Pool 再次为空闲。
-
-  - id: BETA-018
     name: canonical 生命周期不触发 App Data 权限弹窗
     required: true
     description: >
       验证真实 Beta start、status、Pool projection 和 stop 只访问当前 canonical 控制面，
       在隔离 macOS 验收环境中不会触发“访问其他 App 的数据”授权提示。
     preconditions:
-      - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 管理真实 Beta Session 的启动、查询和清理。
+      - 本 Case 使用固定、独占且可重入的 fixture namespace；隔离账号与全局 /Applications 之间的本 fixture App、rollback 和 pointer 必须可证明一致，不要求人工清盘。
+      - 使用独立 worktree，并由 `$toolkit:runweave-dev-session` 通过显式 beta profile 管理真实 Beta Session 的启动、查询和清理。
       - macOS 15 以上隔离验收账号未预先授予 Runweave App Data 或完全磁盘访问权限，且没有其它并发 Runweave 命令。
       - 使用 `$computer-use` 观察桌面系统弹窗，并能读取本次操作时间窗内的 tccd 日志。
     steps:
-      - 启动一个真实 Beta Session；确认 start 成功、manifest 指向唯一 slot，canonical 中存在对应 lease。
+      - 使用显式 beta profile 启动一个真实 Beta Session；确认 start 成功、manifest 指向唯一 slot，canonical 中存在对应 lease。
       - 执行 status 与 `pnpm dev:pool --json`；确认 storage.mode=canonical、projection owner/nonce 与 manifest 一致，桌面未出现 App Data 权限弹窗。
       - 停止该 Session并再次查询 status；确认 Session 为 stopped、canonical lease/claim 已清理，tccd 时间窗内没有由本次 canonical 生命周期触发的 AUTHREQ_PROMPTING。
+      - 不清空 HOME 或 /Applications，再次执行相同 start、status、Pool projection 和 stop；确认仍无 previous pointer 错误或新的 AUTHREQ_PROMPTING，且只操作本 fixture 资源。

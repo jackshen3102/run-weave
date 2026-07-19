@@ -1,11 +1,11 @@
 # Beta 固定资源池可解释投影与最终回收实施计划
 
-> 状态：历史实施计划；全部 12 条测试合同已合并到当前 Beta Pool 全场景计划
+> 状态：历史实施计划；全部 12 条测试合同已合并到当前 Beta Pool 控制面计划
 > 粒度：L3（进程终止、lease 释放、并发竞争与崩溃恢复）
 > 来源：`docs/architecture-flows/beta-resource-management/`
 > 当前测试计划：`docs/testing/platform/beta-pool-storage-migration.testplan.yaml`
 
-> 测试范围说明：原 `BRM-001`～`BRM-012` 的行为与断言全部保留，并映射为最新 YAML 中的 `BETA-003`～`BETA-014`。当前只保留一个可执行 YAML 入口，本文其余内容作为对应实现背景继续有效。
+> 测试范围说明：原 `BRM-001`～`BRM-012` 的行为与断言全部保留，并映射为控制面 YAML 中的 `BETA-003`～`BETA-014`。长期重复运行、真实 CDP 与跨 owner 资源边界由 `beta-pool-runtime-regressions.testplan.yaml` 独立覆盖，本文其余内容作为对应实现背景继续有效。
 
 ## 1. 目标
 
@@ -474,7 +474,7 @@ Beta start 的成功 JSON 增加：
 - 架构 HTML 从“诊断建议”更新为“现状与目标实现对照”；保留 2026-07-18 快照并明确它不是实时控制台。
 - 不把当时 PID、nonce 或槽位快照改写成当前实时事实。
 
-阶段验收：配套 YAML 中全部 required cases 通过，静态门禁通过，文档命令与实际 CLI 输出一致。
+阶段验收：Beta Pool 控制面与长期运行两份 YAML 中全部 required cases 通过，静态门禁通过，文档命令与实际 CLI 输出一致。
 
 ## 11. 兼容、迁移与回滚
 
@@ -533,13 +533,13 @@ Beta start 的成功 JSON 增加：
 
 ```bash
 pnpm testplan:validate docs/testing/platform/beta-pool-storage-migration.testplan.yaml
-pnpm dev:session:verify
+pnpm dev:session:verify:beta-current
 pnpm typecheck
 pnpm lint
 git diff --check
 ```
 
-行为验收以 `docs/testing/platform/beta-pool-storage-migration.testplan.yaml` 为唯一入口。执行测试计划时使用 `$toolkit:run-test-cases`；若需要实际启动/停止 Dev Session，必须使用 `$toolkit:runweave-dev-session` 管理准确 Session、profile 和清理。原 BRM 的投影、恢复、并发、崩溃收敛和诊断场景全部执行；只不构造或迁移 legacy 控制面旧数据。该能力不涉及浏览器页面，不以截图或静态代码阅读冒充 CLI/进程行为结果。
+资源控制面行为以 `docs/testing/platform/beta-pool-storage-migration.testplan.yaml` 为入口；该历史文件名仅为兼容已有入口，内容不再执行旧数据迁移。跨轮次运行、真实 CDP 与资源所有权回归使用 `docs/testing/platform/beta-pool-runtime-regressions.testplan.yaml`。执行测试计划时使用 `$toolkit:run-test-cases`；若需要实际启动/停止 Dev Session，必须使用 `$toolkit:runweave-dev-session` 管理准确 Session、profile 和清理。原 BRM 的投影、恢复、并发、崩溃收敛和诊断场景全部保留；不构造或迁移 legacy 控制面旧数据。CLI/进程行为不得用截图或静态代码阅读冒充，运行时计划中的页面证据必须使用真实 CDP。
 
 ## 15. 完成标准
 
@@ -553,7 +553,7 @@ git diff --check
 - [ ] 每个 recovery attempt 都可从命令输出、owner manifest 或 slot metadata 至少一个持久入口定位；成功自动恢复三处均可查。
 - [ ] 崩溃注入与并发分配验证不存在“lease 已释放但旧进程仍使用槽位”的状态。
 - [ ] 没有 force kill/release 后门，没有新增单元测试文件，没有修改产品 UI。
-- [ ] 配套测试计划 required cases、`dev:session:verify`、typecheck、lint 和 diff check 全部通过。
+- [ ] 配套测试计划 required cases、`dev:session:verify:beta-current`、typecheck、lint 和 diff check 全部通过。
 
 ## 16. 推荐提交顺序
 
@@ -562,4 +562,4 @@ git diff --check
 3. **容量压力自动恢复**：最后接入 start，启用用户可见行为变化。
 4. **文档与完整验收**：更新架构诊断、部署手册和验证证据。
 
-每个提交都必须保持 `pnpm dev:session:verify` 可运行；不得在 projection 尚不可解释或 receipt 尚未持久化时提前启用自动终止 partial Session。
+每个提交都必须保持 `pnpm dev:session:verify:beta-current` 可运行；不得在 projection 尚不可解释或 receipt 尚未持久化时提前启用自动终止 partial Session。完整兼容门禁 `pnpm dev:session:verify` 仍供仓库级回归使用，但不作为当前 Beta Pool 测试计划证据。

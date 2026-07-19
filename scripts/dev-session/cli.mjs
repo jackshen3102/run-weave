@@ -332,6 +332,17 @@ async function runStart(options, sourceRoot) {
             ) {
               throw error;
             }
+            if (requestedSlotId) {
+              throw new DevSessionError(
+                `requested Beta slot is occupied: ${requestedSlotId}`,
+                5,
+                {
+                  code: "beta_pool_requested_slot_occupied",
+                  requestedSlotId,
+                  slots: error.details?.slots ?? [],
+                },
+              );
+            }
             if (
               !(error instanceof DevSessionError) ||
               attempt === BETA_SLOT_CAPACITY

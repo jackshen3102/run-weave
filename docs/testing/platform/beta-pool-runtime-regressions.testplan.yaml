@@ -1,0 +1,149 @@
+version: 1
+name: Beta Pool 长期运行与生产回归验收
+description: >
+  基于当前固定五槽、canonical lease、warm App/Runtime 和 Dev Session 实现，恢复历史 Beta Pool
+  经生产验证且未被控制面计划等价覆盖的长期运行不变量。覆盖重复 start/stop、连续 update、
+  owner 交接、真实 CDP、磁盘、Stable/shared 边界、跨 HOME 所有权和崩溃恢复；不构造或迁移
+  legacy 控制面旧数据，不测试 migration journal、tombstone、旧备份或降级流程。正常停止后
+  warm slot 使用新 nonce 重试已合并到控制面计划 BETA-002，不在本计划重复维护。
+
+cases:
+  - id: BPR-001
+    name: 十轮启动停止不增加物理安装目标
+    required: true
+    description: >
+      验证固定五槽策略在重复使用中不会退化为 per-session App 或目录；十轮串行 start/stop 后，
+      全机物理 Beta App 和每 HOME slot root 始终受五槽上限约束。
+    preconditions:
+      - 使用固定且独占的 ownership HOME，已只读记录五个 pool App、slot root、lease、Stable App 与未知资源基线。
+      - 至少一个 slot 的 App/rollback 不存在，或其 warm-state pointer 与当前 HOME 的 identity 一致。
+    steps:
+      - 连续十轮使用 `$toolkit:runweave-dev-session` 和显式 beta profile 启动再停止 Session；每轮记录 devSessionId、slotId、leaseNonce、App 路径和 slot root。
+      - 每轮确认只使用 `pool-01` 至 `pool-05`，没有创建以 `dvs-*`、`rcv-*` 或其它 session identity 命名的 App/slot root，停止后本轮 lease 和 claim 已收敛。
+      - 比较十轮前后清单；确认 pool App 与 slot root 均不超过五个，Stable 与未知资源基线不变，资源数量不随轮次线性增长。
+
+  - id: BPR-002
+    name: 十轮更新后 release rollback 与日志保持有界
+    required: true
+    description: >
+      验证同一 slot 连续十次成功 update 后，Desktop/App Server 只保留 current 与 previous，
+      App rollback 最多一个，诊断日志最多五个且合计不超过 64 MiB。
+    preconditions:
+      - 固定 ownership HOME 的目标 slot 已 ready，App、warm-state、Desktop/App Server runtime 和 rollback pointer 身份一致。
+      - 每轮可产生不同 releaseId，并能读取 update state、release 目录、rollback、日志数量和目录字节。
+    steps:
+      - 对同一 slot 连续执行十次 `pnpm runweave:beta:update --instance <slotId>`；每轮确认 update 成功且 state 中 current/previous 与实际目录一致。
+      - 每轮记录 Desktop Runtime、App Server Runtime、App rollback、诊断日志和槽位目录字节；确认两类 Runtime 各不超过两个 release、rollback 不超过一个、日志不超过五个且合计不超过 64 MiB。
+      - 比较第三轮至第十轮的同规模产物；确认目录只随 current/previous 实际大小波动，不随更新次数持续增长，且 Stable 与其它 slot 未被替换或重启。
+
+  - id: BPR-003
+    name: reset 与终态落盘前槽位不可交接
+    required: true
+    description: >
+      验证旧 owner 只有在 slot-owned 进程退出、mutable state reset、终态 manifest 和 metadata 落盘后
+      才能释放 lease；新 owner 在 release 屏障前不能看到半清理现场。
+    preconditions:
+      - Session A 独占固定 slot，可在 user-data swap 后、lease release 前启用当前 release failpoint 或等价可控屏障。
+      - Session B 可以在同一 ownership HOME 中显式请求相同 slot，且已记录 A 的 manifest、lease identity 和 mutable marker。
+    steps:
+      - 停止 A 并暂停在 release 前屏障；同时让 B 显式请求相同 slot，确认 B 立即因 occupied 或 stopping 失败，没有获得 lease、nonce 或半清理 user-data。
+      - 释放屏障；确认 A 的 reset、metadata、stopped 或 identity-safe failed manifest 完成后才删除 lease，receipt 的阶段与文件顺序一致。
+      - 再次启动 B；确认 B 使用新的 ownerSessionId 与 leaseNonce 获得相同 slot，且看不到 A 的 mutable marker。
+
+  - id: BPR-004
+    name: 新 owner 不继承前 owner 的行为态与凭据
+    required: true
+    description: >
+      验证同一 warm slot 交接后，新 owner 的 Cookie、LocalStorage、IndexedDB、持久标签、Backend 和
+      Browser 凭据及 App Server mutable marker 均为空或重新生成，而 warm release 保持不变。
+    preconditions:
+      - Session A 在 desktop 与 terminal-browser 写入唯一 Cookie、LocalStorage、IndexedDB、页面 marker 和持久标签，并产生可识别的 backend-auth、browser auth-store 与 App Server marker。
+      - 已记录 A 的 warm App、Desktop/App Server current/previous release、Stable 和 shared 服务基线。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 附着 A 的 desktop 与 terminal-browser surface，读取并保存本 Case 写入的行为态证据；随后通过 `$toolkit:runweave-dev-session` 停止 A。
+      - 启动 Session B 复用相同 slot，重新通过 `dev:open` 解析 fresh desktop 与 terminal-browser CDP 后附着；确认 B 读不到 A 的 Cookie、LocalStorage、IndexedDB、标签、凭据和 App Server marker，并生成自己的新身份。
+      - 确认 warm App、按 update mode 实际存在的 Desktop release、App Server release、Stable 和 shared 服务基线未被清除或替换；关闭本轮新建 tab、detach 并停止 B。
+
+  - id: BPR-005
+    name: status open 与真实 CDP 始终指向同一槽位身份
+    required: true
+    description: >
+      验证 ready Beta Session 的 status、lease、manifest、App/userData 路径以及 desktop 和
+      terminal-browser CDP 都属于同一 session、slot、nonce 和 revision，不受 ambient endpoint 干扰。
+    preconditions:
+      - 一个 Beta Session 处于 ready，另有 Stable 或其它 Beta CDP endpoint 作为干扰目标。
+      - 可以通过 `$toolkit:runweave-dev-session` 读取 status 和两个 surface，并使用 `$toolkit:playwright-cli` 显式附着返回的 endpoint。
+    steps:
+      - 读取 `dev:status --session <id> --json`；确认 devSessionId、slotId、ownerSessionId、leaseNonce、revision、ownership、App 和 userData 路径与 lease/manifest 一致。
+      - 分别执行 `dev:open --surface desktop` 与 `dev:open --surface terminal-browser`，使用建议 session 名和返回 endpoint 附着；确认两个 surface 类型正确且页面 identity 属于目标 Session。
+      - 将 ambient endpoint 指向干扰实例后重复解析；确认 resolver 结果和附着目标不改变，结束时关闭本轮新建 tab 并 detach，不关闭用户已有窗口或 tab。
+
+  - id: BPR-006
+    name: 磁盘不足只清理可证资源并保持 fail closed
+    required: true
+    description: >
+      验证 `max(configuredFloor, plannedWriteBytes * 3)` 不满足时，系统只清理 pool 内未引用资源，
+      重新计算仍不足则拒绝启动并发布完整字节诊断。
+    preconditions:
+      - 使用当前 `RUNWEAVE_BETA_POOL_MIN_FREE_BYTES` 与 planned write 估算构造确定不足的门禁现场，并准备可清理未引用 release/日志。
+      - 已记录 active slot、current/previous、Stable、shared 服务和未知资源的路径、identity 与内容摘要。
+    steps:
+      - 使用显式 beta profile 启动 Session；确认系统先清理可证明未引用的 pool release/日志，再重新读取 freeBytes。
+      - 确认仍不足时 start 非零退出，错误包含 free、configured、planned、required、cleaned 与 retained bytes，且没有发布可用 lease 或启动 slot-owned 服务。
+      - 核对基线；确认 active、current/previous、Stable、shared 和未知资源均未被删除或改写。
+
+  - id: BPR-007
+    name: 槽位停止恢复与 retention 不得修改 Stable 或 shared 服务
+    required: true
+    description: >
+      验证 stop、startup hygiene、capacity recovery 和 retention 只操作 slot-owned 或 dedicated 资源；
+      planner 判定为 shared 的 Backend/App Server 以及 Stable 始终保持原 identity 和内容。
+    preconditions:
+      - 一个 Beta Session ready，planner 的真实 impact closure 至少包含一个 shared 服务和一个 slot-owned 或 dedicated 服务，不通过降低 profile 伪造 ownership。
+      - 已记录 Stable 与每个 shared 服务的 PID、home、lock、token、event log、内容摘要和引用 Session。
+    steps:
+      - 分别执行目标 Session stop、一次 startup hygiene、一次安全 recovery 和一次 retention；记录每次 receipt 的 ownedComponents、sharedDependencies 与 stoppedServices。
+      - 确认只有 slot-owned/dedicated 组件被停止或清理，任何 shared PID 都不出现在 stoppedServices，shared home/lock/token/event 摘要不变。
+      - 确认 Stable App、进程、userData 和状态摘要不变，其他引用 shared 服务的 Session 继续可用。
+
+  - id: BPR-008
+    name: 启动前置失败不会把新 lease 留成 stale
+    required: true
+    description: >
+      验证 start 在任何 slot-owned 服务启动前因 pointer、retention 或磁盘前置失败时，系统保留未知
+      App/rollback 现场和诊断，但安全释放本次刚发布的 lease，不把单次失败转化为容量泄漏。
+    preconditions:
+      - 固定 ownership HOME 的目标 slot 无运行进程，可构造一个不会修改未知 App/rollback 的确定性 retention blocker。
+      - 已记录目标 slot 的 lease、manifest、App、rollback、pointer、进程引用和 Pool capacity 基线。
+    steps:
+      - 显式请求目标 slot 启动 Beta Session并触发前置 blocker；确认命令非零退出且未启动 Electron、Backend 或 App Server 等 slot-owned 服务。
+      - 读取失败 manifest、receipt 与 Pool projection；确认 failureReason 保留原 blocker，releasedLease=true、leaseRetained=false，目标 slot 可再次分配而不是 stale-reclaimable。
+      - 比较前后基线；确认未知 App、rollback 和 pointer 未被删除、迁移或改写，其他 slot 与 Stable 不变。
+
+  - id: BPR-009
+    name: 不同 HOME 不能同时声明同一全局物理槽位
+    required: true
+    description: >
+      验证一个 HOME 已拥有全局 pool App/rollback/pointer 或活跃 lease 时，另一个 HOME 不会把同一
+      `/Applications` App 解释为空闲资源并发布第二份 lease，而是在任何全局修改前返回所有权冲突。
+    preconditions:
+      - ownership HOME A 已有 identity 完整的目标 slot App、rollback、pointer 和 active 或 warm ownership record。
+      - 隔离 HOME B 没有本地 pool 状态；已记录 A/B 控制面、全局 App/rollback、进程和 Stable 基线。
+    steps:
+      - 在 HOME B 中显式请求 A 的目标 slot；确认启动在发布 B 的 lease 和修改全局 App前失败，错误指出现有 ownership HOME 或不可证明的全局资源冲突。
+      - 查询 A 与 B 的 Pool projection；确认 A 的 owner、pointer、App/rollback 和进程不变，B 未出现可用 owner lease、manifest 不声称获得该 slot。
+      - 回到 HOME A 查询或继续使用目标 Session；确认其 status、lease、CDP 和 warm rollback 链仍一致，Stable 不变。
+
+  - id: BPR-010
+    name: App 交换与 pointer 发布之间崩溃可由 journal 收敛
+    required: true
+    description: >
+      验证完整 App update 在旧 App 已移动到 rollback、warm-state pointer 尚未发布的崩溃窗口中，
+      下次操作会根据 pending journal 和文件 identity 自动恢复或完成提交，不遗留无法解释的 rollback。
+    preconditions:
+      - 固定 ownership HOME 的目标 slot App、warm-state 和 rollback identity 一致，可在 App rename 后、state pointer 原子写入前注入一次进程中断。
+      - 已记录 baseline App identity、pending journal、state pointer、rollback、Stable 和其它 slot 基线。
+    steps:
+      - 执行完整 App update 并在指定崩溃窗口中断；确认现场只包含可追踪的 pending journal、App/rollback 和旧 state，不手工删除或改写任何文件。
+      - 再次执行 status、start 或 update 的恢复入口；确认系统校验 slot、baseline、App 与 rollback identity 后，原子选择完成 pointer 发布或恢复 baseline，并清除已消费 journal。
+      - 确认最终 App 与 pointer/rollback 一致，retention 不返回 previous pointer missing/invalid，重复恢复幂等且 Stable 与其它 slot 未改变。
