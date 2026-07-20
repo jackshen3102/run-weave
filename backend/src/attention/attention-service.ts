@@ -9,6 +9,8 @@ import type { TerminalSessionManager } from "../terminal/manager";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import type { AgentTeamService } from "../agent-team/service";
 import type { TerminalProjectContextRecord } from "../terminal/manager-records";
+import type { TerminalStateService } from "../terminal/terminal-state-service";
+import { resolveEffectiveTerminalState } from "../terminal/application/terminal-state-projection";
 
 const PRIORITY: Record<AttentionState, number> = {
   needs_action: 600,
@@ -123,6 +125,7 @@ export class AttentionService {
     private readonly terminalSessionManager: TerminalSessionManager,
     private readonly completionEventService: TerminalCompletionEventService,
     private readonly agentTeamService: AgentTeamService,
+    private readonly terminalStateService: TerminalStateService,
   ) {}
 
   async snapshot(): Promise<AttentionSnapshot> {
@@ -205,19 +208,34 @@ export class AttentionService {
         });
         continue;
       }
+      const effectiveTerminalState = resolveEffectiveTerminalState(
+        this.terminalSessionManager,
+        this.terminalStateService,
+        session,
+      );
       if (
         session.status === "running" &&
-        (session.terminalState?.state === "agent_starting" ||
-          session.terminalState?.state === "agent_running")
+        (effectiveTerminalState.state === "agent_starting" ||
+          effectiveTerminalState.state === "agent_running")
       ) {
         slots.push({
           ...base,
           attentionId: `terminal:${session.id}:working:${session.lastActivityAt.toISOString()}`,
           state: "working",
-          title: clip(session.preview ?? `${session.terminalState.agent ?? "Agent"} 正在执行`, 100),
-          detail: session.terminalState.state === "agent_starting" ? "Agent 启动中" : "Agent 执行中",
+          title: clip(
+            session.preview ??
+              `${effectiveTerminalState.agent ?? "Agent"} 正在执行`,
+            100,
+          ),
+          detail:
+            effectiveTerminalState.state === "agent_starting"
+              ? "Agent 启动中"
+              : "Agent 执行中",
           updatedAt: session.lastActivityAt.toISOString(),
-          source: { kind: "terminal_session", evidence: `terminalState=${session.terminalState.state}` },
+          source: {
+            kind: "terminal_session",
+            evidence: `terminalState=${effectiveTerminalState.state}`,
+          },
           targetSurface: "terminal",
           completionRevision: null,
         });

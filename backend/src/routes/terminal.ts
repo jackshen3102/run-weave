@@ -39,10 +39,10 @@ import {
   toSessionListItem,
   toStatusPayload,
 } from "../terminal/application/payloads";
+import { resolveEffectiveTerminalState } from "../terminal/application/terminal-state-projection";
 import {
   createTerminalSessionSchema,
   resolveTerminalCreateDefaults,
-  resolveTerminalStateFromPanels,
   sanitizeTerminalError,
   TerminalCreateDefaultsError,
   updateTerminalSessionSchema,
@@ -166,7 +166,7 @@ export function createTerminalRouter(
       .map((session) =>
         toSessionListItem(
           session,
-          resolveTerminalStateFromPanels(
+          resolveEffectiveTerminalState(
             terminalSessionManager,
             options?.terminalStateService,
             session,
@@ -379,7 +379,7 @@ export function createTerminalRouter(
         payload: {
           session: toSessionListItem(
             createdSession,
-            resolveTerminalStateFromPanels(
+            resolveEffectiveTerminalState(
               terminalSessionManager,
               options.terminalStateService,
               createdSession,
@@ -513,7 +513,7 @@ export function createTerminalRouter(
       res.json(
         toSessionListItem(
           updatedSession,
-          resolveTerminalStateFromPanels(
+          resolveEffectiveTerminalState(
             terminalSessionManager,
             options?.terminalStateService,
             updatedSession,
