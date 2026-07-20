@@ -4,6 +4,7 @@ import type {
   AttentionOpenDispatch,
   AttentionOpenIntent,
   AttentionOpenResult,
+  CompanionWindowDragRequest,
 } from "@runweave/shared/attention";
 import path from "node:path";
 import { startCdpProxy } from "./terminal-browser-cdp-proxy.js";
@@ -50,8 +51,13 @@ import {
   writeBetaDesktopStatus,
 } from "./packaged-backend-controller.js";
 import { registerCdpProxyHandlers } from "./terminal-browser-cdp-handlers.js";
-import { createCompanionWindow, resizeCompanionWindow } from "./desktop-companion-window.js";
+import {
+  createCompanionWindow,
+  moveCompanionWindow,
+  resizeCompanionWindow,
+} from "./desktop-companion-window.js";
 import { readCompanionEnabled, writeCompanionEnabled } from "./desktop-companion-preferences.js";
+import { writeDesktopCompanionWindowState } from "./desktop-companion-window-state.js";
 import {
   readDesktopMainWindowState,
   trackDesktopMainWindowState,
@@ -94,6 +100,23 @@ function isAttentionResult(value: unknown): value is AttentionOpenResult {
     : candidate.message === undefined;
 }
 
+function isCompanionWindowDragRequest(
+  value: unknown,
+): value is CompanionWindowDragRequest {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  const keys = Object.keys(candidate);
+  if (candidate.phase === "end") return keys.length === 1;
+  return (
+    (candidate.phase === "start" || candidate.phase === "move") &&
+    keys.length === 3 &&
+    typeof candidate.screenX === "number" &&
+    Number.isFinite(candidate.screenX) &&
+    typeof candidate.screenY === "number" &&
+    Number.isFinite(candidate.screenY)
+  );
+}
+
 function registerCompanionHandlers(): void {
   const requireCompanion = (senderId: number): BrowserWindow => {
     const win = desktopRuntime.companionWindow;
@@ -111,6 +134,45 @@ function registerCompanionHandlers(): void {
     const win = requireCompanion(event.sender.id);
     if (typeof passthrough !== "boolean") throw new Error("Invalid passthrough state");
     win.setIgnoreMouseEvents(passthrough, passthrough ? { forward: true } : undefined);
+  });
+  let dragState: {
+    senderId: number;
+    pointerStart: { x: number; y: number };
+    windowStart: { x: number; y: number };
+  } | null = null;
+  ipcMain.on("attention:drag-window", (event, value: unknown) => {
+    const win = desktopRuntime.companionWindow;
+    if (
+      !win ||
+      win.isDestroyed() ||
+      win.webContents.id !== event.sender.id ||
+      !isCompanionWindowDragRequest(value)
+    ) {
+      return;
+    }
+    if (value.phase === "start") {
+      const [x = 0, y = 0] = win.getPosition();
+      dragState = {
+        senderId: event.sender.id,
+        pointerStart: { x: value.screenX, y: value.screenY },
+        windowStart: { x, y },
+      };
+      return;
+    }
+    if (!dragState || dragState.senderId !== event.sender.id) return;
+    if (value.phase === "end") {
+      dragState = null;
+      writeDesktopCompanionWindowState(win);
+      return;
+    }
+    moveCompanionWindow(
+      win,
+      {
+        x: dragState.windowStart.x + value.screenX - dragState.pointerStart.x,
+        y: dragState.windowStart.y + value.screenY - dragState.pointerStart.y,
+      },
+      { x: value.screenX, y: value.screenY },
+    );
   });
   ipcMain.handle("attention:open-main-window", (event) => {
     requireCompanion(event.sender.id);

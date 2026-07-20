@@ -24,6 +24,7 @@ import type {
   AttentionOpenDispatch,
   AttentionOpenIntent,
   AttentionOpenResult,
+  CompanionWindowDragRequest,
 } from "@runweave/shared/attention";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
@@ -85,6 +86,7 @@ declare global {
         height: number;
       }) => Promise<void>;
       setMousePassthrough: (passthrough: boolean) => Promise<void>;
+      dragWindow: (request: CompanionWindowDragRequest) => void;
       openSlot: (intent: AttentionOpenIntent) => Promise<AttentionOpenResult>;
       openMainWindow: () => Promise<void>;
     };

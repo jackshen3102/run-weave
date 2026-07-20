@@ -52,6 +52,10 @@ export interface AttentionOpenDispatch extends AttentionOpenIntent {
   deadlineAt: number;
 }
 
+export type CompanionWindowDragRequest =
+  | { phase: "start" | "move"; screenX: number; screenY: number }
+  | { phase: "end" };
+
 export type AttentionOpenResult =
   | { requestId: string; status: "opened" }
   | {

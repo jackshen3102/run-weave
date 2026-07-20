@@ -21,6 +21,7 @@ import type {
   AttentionOpenDispatch,
   AttentionOpenIntent,
   AttentionOpenResult,
+  CompanionWindowDragRequest,
 } from "@runweave/shared/attention";
 
 contextBridge.exposeInMainWorld("companionAPI", {
@@ -28,6 +29,8 @@ contextBridge.exposeInMainWorld("companionAPI", {
     ipcRenderer.invoke("attention:report-content-size", size) as Promise<void>,
   setMousePassthrough: (passthrough: boolean) =>
     ipcRenderer.invoke("attention:set-mouse-passthrough", passthrough) as Promise<void>,
+  dragWindow: (request: CompanionWindowDragRequest) =>
+    ipcRenderer.send("attention:drag-window", request),
   openSlot: (intent: AttentionOpenIntent) =>
     ipcRenderer.invoke("attention:open-slot", intent) as Promise<AttentionOpenResult>,
   openMainWindow: () => ipcRenderer.invoke("attention:open-main-window") as Promise<void>,

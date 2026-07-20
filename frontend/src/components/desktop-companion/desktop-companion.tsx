@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useMemoizedFn } from "ahooks";
 import type {
   AttentionOpenIntent,
@@ -10,6 +17,7 @@ import { useAttentionSnapshot } from "../../features/attention/use-attention-sna
 import "./desktop-companion.css";
 
 const HIGH_PRIORITY = new Set<AttentionState>(["needs_action", "blocked"]);
+const DRAG_THRESHOLD_PX = 4;
 const SUMMARY_LABEL: Record<AttentionState, string> = {
   needs_action: "待决定",
   blocked: "验收受阻",
@@ -62,14 +70,102 @@ function CompanionPet(props: {
   label: string;
   onClick?: () => void;
 }) {
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
+  const handlePointerDown = useMemoizedFn(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0 || !window.companionAPI) return;
+      suppressClickRef.current = false;
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.screenX,
+        startY: event.screenY,
+        moved: false,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      window.companionAPI.dragWindow({
+        phase: "start",
+        screenX: event.screenX,
+        screenY: event.screenY,
+      });
+    },
+  );
+  const handlePointerMove = useMemoizedFn(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      if (
+        !drag.moved &&
+        Math.hypot(event.screenX - drag.startX, event.screenY - drag.startY) <
+          DRAG_THRESHOLD_PX
+      ) {
+        return;
+      }
+      drag.moved = true;
+      suppressClickRef.current = true;
+      window.companionAPI?.dragWindow({
+        phase: "move",
+        screenX: event.screenX,
+        screenY: event.screenY,
+      });
+    },
+  );
+  const finishDrag = useMemoizedFn(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      window.companionAPI?.dragWindow({ phase: "end" });
+    },
+  );
+  const cancelDrag = useMemoizedFn(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      suppressClickRef.current = false;
+      finishDrag(event);
+    },
+  );
+  const handleLostPointerCapture = useMemoizedFn(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      window.companionAPI?.dragWindow({ phase: "end" });
+    },
+  );
+  const handleClick = useMemoizedFn(
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
+      if (suppressClickRef.current || props.disabled) {
+        suppressClickRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      props.onClick?.();
+    },
+  );
+
   return (
     <button
       className={`companion-pet pet-mode-${props.state}`}
       data-companion-interactive
       type="button"
-      disabled={props.disabled}
+      aria-disabled={props.disabled || undefined}
       aria-label={props.label}
-      onClick={props.onClick}
+      tabIndex={props.disabled ? -1 : undefined}
+      onClick={handleClick}
+      onLostPointerCapture={handleLostPointerCapture}
+      onPointerCancel={cancelDrag}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishDrag}
     >
       <span className="pet-aura" />
       <span className="pet-shadow" />
