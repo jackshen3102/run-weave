@@ -370,11 +370,14 @@ body {
   place-items: center;
   border-radius: 24px;
   background: transparent;
+  cursor: grab !important;
   filter: drop-shadow(0 15px 18px rgba(0, 0, 0, 0.48));
+  touch-action: none;
+  user-select: none;
 }
 
-.companion-pet:disabled {
-  cursor: default;
+.companion-pet:active {
+  cursor: grabbing !important;
 }
 .pet-aura {
   position: absolute;
