@@ -17,6 +17,7 @@ export interface DesktopMainWindowState {
 
 interface PersistedDesktopMainWindowState extends DesktopMainWindowState {
   version: 1;
+  appVersion?: string;
 }
 
 const STORE_FILE = "desktop-main-window-state.json";
@@ -38,6 +39,9 @@ function parseState(value: unknown): PersistedDesktopMainWindowState | null {
   const bounds = candidate.bounds;
   if (
     candidate.version !== 1 ||
+    (candidate.appVersion !== undefined &&
+      (typeof candidate.appVersion !== "string" ||
+        candidate.appVersion.length === 0)) ||
     !["normal", "maximized", "fullscreen"].includes(candidate.mode ?? "") ||
     !Number.isInteger(candidate.displayId) ||
     !bounds ||
@@ -104,7 +108,11 @@ export function readDesktopMainWindowState(): DesktopMainWindowState | null {
   return {
     bounds: fitBoundsToWorkArea(persisted.bounds, display.workArea),
     displayId: display.id,
-    mode: persisted.mode,
+    mode:
+      persisted.mode === "fullscreen" &&
+      persisted.appVersion !== app.getVersion()
+        ? "maximized"
+        : persisted.mode,
   };
 }
 
@@ -119,6 +127,7 @@ function writeDesktopMainWindowState(
   const display = screen.getDisplayMatching(win.getBounds());
   const state: PersistedDesktopMainWindowState = {
     version: 1,
+    appVersion: app.getVersion(),
     bounds,
     displayId: display.id,
     mode,

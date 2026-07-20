@@ -71,6 +71,7 @@ export async function syncExistingTmuxSessionEnvironments(
       continue;
     }
     const target = resolveTmuxTarget(session, tmuxService);
+    await tmuxService.sanitizeGlobalEnvironment(target);
     if (!(await tmuxService.hasSession(target))) {
       continue;
     }
@@ -116,6 +117,7 @@ export async function ensureTerminalRuntime(
         options.terminalSessionManager.getSession(options.session.id) ??
         options.session;
       const target = resolveTmuxTarget(currentSession, options.tmuxService!);
+      await options.tmuxService!.sanitizeGlobalEnvironment(target);
       const hasSession = await options.tmuxService!.hasSession(target);
       const wasInteractiveShellLaunch = isInteractiveShellLaunch(
         currentSession.command,

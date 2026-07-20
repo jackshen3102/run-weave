@@ -7,13 +7,14 @@ import type {
   TmuxTarget,
 } from "./tmux-types";
 import { TmuxRebuildLimitError } from "./tmux-types";
+import { isNpmProcessEnvName } from "./env";
 import { TmuxProcess } from "./tmux-process";
 import {
   MaxRebuildAttempts,
   RebuildWindowMs,
   RUNWEAVE_TMUX_PREFIX,
   TMUX_RUNTIME_OPTION_ARGS,
-  TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS,
+  TMUX_SANITIZE_ENV_ARGS,
   formatShellCommand,
   isProcessExitCode,
   parsePositiveInteger,
@@ -81,6 +82,38 @@ export class TmuxSessionService extends TmuxProcess {
     }
   }
 
+  async sanitizeGlobalEnvironment(target: TmuxTarget): Promise<void> {
+    let output: string;
+    try {
+      output = (
+        await this.runTmux(["show-environment", "-g"], target)
+      ).stdout;
+    } catch (error) {
+      if (isProcessExitCode(error, 1)) {
+        return;
+      }
+      throw error;
+    }
+
+    const names = output
+      .split(/\r?\n/)
+      .map((line) => {
+        const separatorIndex = line.indexOf("=");
+        return separatorIndex < 0 ? "" : line.slice(0, separatorIndex);
+      })
+      .filter(isNpmProcessEnvName);
+    const args = names.flatMap((name) => [
+      "set-environment",
+      "-g",
+      "-u",
+      name,
+      ";",
+    ]);
+    if (args.length > 0) {
+      await this.runTmux(args.slice(0, -1), target);
+    }
+  }
+
   buildAttachCommand(
     target: TmuxTarget,
     cwd: string,
@@ -90,7 +123,7 @@ export class TmuxSessionService extends TmuxProcess {
       command: this.binary,
       args: [
         ...this.buildServerArgs(target.socketPath),
-        ...TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS,
+        ...TMUX_SANITIZE_ENV_ARGS,
         ...TMUX_RUNTIME_OPTION_ARGS,
         ";",
         "new-session",
@@ -111,7 +144,7 @@ export class TmuxSessionService extends TmuxProcess {
   ): Promise<void> {
     await this.runTmux(
       [
-        ...TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS,
+        ...TMUX_SANITIZE_ENV_ARGS,
         ...TMUX_RUNTIME_OPTION_ARGS,
         ";",
         "new-session",

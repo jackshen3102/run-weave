@@ -92,3 +92,15 @@ cases:
     steps:
       - 使用 desktop surface 准备 Terminal Browser，再通过 terminal-browser endpoint 用 `$toolkit:playwright-cli` 验收 TBR-001 至 TBR-007 的最小路径。
       - 确认保存的 endpoint、Tab DOM、CDP 结果和桌面窗口归属同一实例，验收后关闭本次创建的测试 Tab 并 detach。
+
+  - id: TBR-009
+    name: 当前 Stable 终端直接附着已有右侧 Browser
+    required: true
+    description: >
+      当前 Stable 终端已注入 Terminal Browser endpoint 时，Playwright 必须直接附着默认打开的右侧 Browser，不能通过 open 导航或替换用户已有页面。
+    preconditions:
+      - 当前 Stable 终端的右侧 Browser 已默认打开，至少存在一个用户页面，且 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 非空。
+      - 本用例目标是当前 Stable Terminal Browser，不是 Dev Session 或其它实例。
+    steps:
+      - 记录已有 Tab 数量、活动页 URL 和标题；使用按当前 Terminal Session 命名的 Playwright session 对注入 endpoint 执行 attach，再读取 Tab 列表和页面快照。
+      - 确认附着后仍是原 Tab 数量、URL 和标题，没有出现 `about:blank`、独立系统浏览器或用户页面被替换；随后 detach 并确认右侧 Browser 与已有 Tab 继续可用。

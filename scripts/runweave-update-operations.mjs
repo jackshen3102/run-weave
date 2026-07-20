@@ -17,6 +17,16 @@ import {
 const DESKTOP_VERIFICATION_PORT_START = 9223;
 const DESKTOP_VERIFICATION_PORT_ATTEMPTS = 50;
 
+function createDesktopLaunchEnv() {
+  const env = { ...process.env };
+  for (const name of Object.keys(env)) {
+    if (name.toLowerCase().startsWith("npm_")) {
+      delete env[name];
+    }
+  }
+  return env;
+}
+
 export async function getRunningAppLines() {
   const result = await runCapture("pgrep", ["-fl", appName]);
 
@@ -105,7 +115,7 @@ function createDesktopVerificationLaunchEnv({
   runtimeHome,
   statusPath,
 }) {
-  const env = { ...process.env };
+  const env = createDesktopLaunchEnv();
   for (const name of Object.keys(env)) {
     if (
       name.startsWith("RUNWEAVE_") ||
@@ -255,12 +265,14 @@ export async function openApp(appPath, options = {}) {
     await fs.access(executable);
     const child = spawn(executable, [], {
       detached: true,
-      env: process.env,
+      env: createDesktopLaunchEnv(),
       stdio: "ignore",
     });
     child.unref();
   } else {
-    await runChecked("open", ["-n", appPath]);
+    await runChecked("open", ["-n", appPath], {
+      env: createDesktopLaunchEnv(),
+    });
   }
   await waitForInstalledAppStart(appPath);
   return null;

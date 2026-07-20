@@ -18,43 +18,18 @@ export const InteractivePaneReadyStableMs = 200;
 export const InteractivePaneReadyTimeoutMs = 2_500;
 export const DEFAULT_UTF8_LOCALE = "en_US.UTF-8";
 export const TMUX_RUNTIME_OPTION_ARGS = ["set-option", "-g", "mouse", "on"];
-export const TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS = [
-  "set-environment",
-  "-g",
-  "-u",
+export const TMUX_SANITIZE_ENV_ARGS = [
   "npm_config_prefix",
-  ";",
-  "set-environment",
-  "-g",
-  "-u",
   "NPM_CONFIG_PREFIX",
-  ";",
-  "set-environment",
-  "-g",
-  "-u",
+  "npm_config_registry",
+  "npm_lifecycle_event",
+  "npm_package_name",
   "NO_COLOR",
-  ";",
-  "set-environment",
-  "-g",
-  "-u",
   "FORCE_COLOR",
-  ";",
-  "set-environment",
-  "-g",
-  "-u",
   "CLICOLOR",
-  ";",
-  "set-environment",
-  "-g",
-  "-u",
   "ELECTRON_RUN_AS_NODE",
-  ";",
-  "set-environment",
-  "-g",
-  "-u",
   "FRONTEND_DIST_DIR",
-  ";",
-];
+].flatMap((name) => ["set-environment", "-g", "-u", name, ";"]);
 export const TMUX_METADATA_FIELD_SEPARATOR = "__RUNWEAVE_METADATA_FIELD__";
 // Keep literal send-keys arguments below tmux's command parser limit. The
 // limit is byte-based, so this must be applied to UTF-8 bytes rather than JS
