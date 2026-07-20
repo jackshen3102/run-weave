@@ -1,6 +1,6 @@
 ---
 name: prototype-first-development
-description: 面向最终产品 UI 与交互体验：用可运行 HTML 原型先看后做。用户要求创建或调整页面、组件、交互、状态和产品工作流原型时使用，并可由冻结原型反推实施计划；技术架构、事件流和故障因果可视化改用 architecture-flow-prototyping。
+description: 创建和调整可运行的产品 UI 原型。仅当用户明确提到“HTML”或“原型”，或显式调用本技能时使用。
 ---
 
 # 原型先行开发

@@ -54,6 +54,7 @@
 - `$computer-use` 和 `$toolkit:playwright-cli` 都是本项目高价值技能；遇到真实桌面端、浏览器页面、终端页面联动的场景时，优先把两者结合使用，而不是停留在代码阅读或命令行猜测。
 - 分工：`$computer-use` 管本机桌面端、系统弹窗、应用启动/重启、菜单、安装器，以及进入 Runweave 桌面端具体页面；`$toolkit:playwright-cli` 管打开 Web/App 页面、点击、输入、截图、读 DOM 和浏览器自动化验收。
 - 涉及浏览器页面复现、修复或验收时，必须用 `$toolkit:playwright-cli`，不要用 `$computer-use` 或其它方案替代。两端都涉及时，先用 `$computer-use` 把环境准备到目标状态，再用 `$toolkit:playwright-cli` 做页面级验证与取证。
+- 操作当前 Stable 终端默认打开的右侧 Browser 时，若 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 非空，必须直接用 `$toolkit:playwright-cli` 的 `attach --cdp="$PLAYWRIGHT_MCP_CDP_ENDPOINT"` 附着；不得先执行 `playwright-cli open`，它会导航当前活动页。完成后 `detach`，保留用户已有页面和 Tab。此规则只适用于当前 Stable Terminal Browser；Dev Session 目标仍按下方门禁从 `dev:open` 解析。
 
 ### Runweave 变更验证门禁
 

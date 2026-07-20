@@ -6,7 +6,34 @@ allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*)
 
 # Browser Automation with playwright-cli
 
-## Quick start
+## Choose the browser target first
+
+- For the current Runweave Terminal Browser, when
+  `PLAYWRIGHT_MCP_CDP_ENDPOINT` is non-empty, attach to that endpoint. Do not
+  run `playwright-cli open`; `open` navigates the active page and can replace a
+  user's current URL with `about:blank`.
+- For a Runweave Dev Session, resolve the requested surface through
+  `pnpm dev:open` and attach to the returned endpoint. Do not substitute the
+  ambient `PLAYWRIGHT_MCP_CDP_ENDPOINT`.
+- For a standalone browser that is not an existing Runweave surface, use
+  `playwright-cli open`.
+
+Attach to the current Runweave Terminal Browser with a session scoped to the
+terminal. Reuse that session for later commands, preserve existing tabs, and
+detach instead of closing the browser when finished.
+
+```bash
+RW_PLAYWRIGHT_SESSION="runweave-${RUNWEAVE_TERMINAL_SESSION_ID:-terminal-browser}"
+playwright-cli -s="$RW_PLAYWRIGHT_SESSION" attach --cdp="$PLAYWRIGHT_MCP_CDP_ENDPOINT"
+playwright-cli -s="$RW_PLAYWRIGHT_SESSION" snapshot
+# interact with the existing page
+playwright-cli -s="$RW_PLAYWRIGHT_SESSION" detach
+```
+
+## Standalone browser quick start
+
+The examples below that use `open` apply to standalone browsers, not existing
+Runweave surfaces.
 
 ```bash
 # open new browser

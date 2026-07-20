@@ -1,9 +1,20 @@
+export function isNpmProcessEnvName(name: string): boolean {
+  return name.toLowerCase().startsWith("npm_");
+}
+
+function removeNpmProcessEnv(env: NodeJS.ProcessEnv): void {
+  for (const name of Object.keys(env)) {
+    if (isNpmProcessEnvName(name)) {
+      delete env[name];
+    }
+  }
+}
+
 export function sanitizeTerminalProcessEnv(
   env: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
   const sanitized = { ...env };
-  delete sanitized.npm_config_prefix;
-  delete sanitized.NPM_CONFIG_PREFIX;
+  removeNpmProcessEnv(sanitized);
   delete sanitized.NO_COLOR;
   delete sanitized.ELECTRON_RUN_AS_NODE;
   delete sanitized.FRONTEND_DIST_DIR;
@@ -19,8 +30,7 @@ export function sanitizeTerminalProcessEnv(
 }
 
 export function sanitizeCurrentTerminalProcessEnv(): void {
-  delete process.env.npm_config_prefix;
-  delete process.env.NPM_CONFIG_PREFIX;
+  removeNpmProcessEnv(process.env);
   delete process.env.NO_COLOR;
   delete process.env.ELECTRON_RUN_AS_NODE;
   if (isDisabledColorFlag(process.env.FORCE_COLOR)) {
