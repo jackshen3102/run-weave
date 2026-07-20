@@ -11,7 +11,6 @@ import {
   type CodexThreadStatusType,
 } from "../terminal/codex-thread-snapshot";
 import {
-  aggregatePanelTerminalState,
   getTerminalSessionAgent,
   type TerminalStateService,
 } from "../terminal/terminal-state-service";
@@ -19,6 +18,7 @@ import {
   toProjectPayload,
   toSessionListItem,
 } from "../terminal/application/payloads";
+import { resolveEffectiveTerminalState } from "../terminal/application/terminal-state-projection";
 
 type TerminalSession = ReturnType<
   TerminalSessionManager["listSessions"]
@@ -308,7 +308,7 @@ export async function buildAppHomeOverviewPayload(
         subtitle: buildSessionSubtitle(session, codexThreadSnapshot),
         ...buildDisplayStatus(
           session,
-          resolveOverviewTerminalState(
+          resolveEffectiveTerminalState(
             terminalSessionManager,
             terminalStateService,
             session,
@@ -325,19 +325,6 @@ export async function buildAppHomeOverviewPayload(
       .map((project) => toProjectPayload(project)),
     sessions,
   };
-}
-
-function resolveOverviewTerminalState(
-  terminalSessionManager: TerminalSessionManager,
-  terminalStateService: TerminalStateService,
-  session: TerminalSession,
-): TerminalState {
-  const runningPanels = terminalSessionManager
-    .listPanels(session.id)
-    .filter((panel) => panel.status === "running");
-  return runningPanels.length > 0
-    ? aggregatePanelTerminalState(runningPanels)
-    : terminalStateService.getCurrent(session.id, session);
 }
 
 export function createAppHomeOverviewRouter(options: {

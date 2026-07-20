@@ -7,10 +7,8 @@ import type {
 } from "@runweave/shared/terminal/events";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
-import {
-  aggregatePanelTerminalState,
-  type TerminalStateService,
-} from "../terminal/terminal-state-service";
+import type { TerminalStateService } from "../terminal/terminal-state-service";
+import { resolveEffectiveTerminalState } from "../terminal/application/terminal-state-projection";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TerminalActivityDependencies } from "../terminal/activity-events";
 import type { ActivityEventInput } from "@runweave/shared/activity";
@@ -78,13 +76,11 @@ export function createTerminalStateRouter(options: {
       return;
     }
 
-    const runningPanels = options.terminalSessionManager
-      .listPanels(session.id)
-      .filter((panel) => panel.status === "running");
-    const terminalState =
-      runningPanels.length > 0
-        ? aggregatePanelTerminalState(runningPanels)
-        : options.terminalStateService.getCurrent(session.id, session);
+    const terminalState = resolveEffectiveTerminalState(
+      options.terminalSessionManager,
+      options.terminalStateService,
+      session,
+    );
 
     const payload: TerminalStateResponse = { terminalState };
     res.json(payload);

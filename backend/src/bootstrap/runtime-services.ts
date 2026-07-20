@@ -371,6 +371,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalSessionManager,
     terminalCompletionEventService,
     agentTeamService,
+    terminalStateService,
   );
 
   return {

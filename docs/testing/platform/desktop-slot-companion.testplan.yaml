@@ -200,3 +200,22 @@ cases:
       - 关闭主窗口但保持应用运行，确认 Companion 仍存在；点击 Slot 后主窗口被恢复并定位，自动状态刷新本身不聚焦主窗口。
       - 退出整个应用并重新启动，确认 enabled 偏好和 failure seen 持久化，高优先级进程内 suppression 不持久化。
       - 通过 toolkit:playwright-cli 检查 Companion 与主窗口 console 均为 0 error、0 warning，并关闭本次新建 tab、detach；通过 computer-use 确认应用退出后没有遗留 Companion 窗口。
+
+  - id: DSC-013
+    name: Terminal Slot 与 Terminal 页面共用有效状态投影
+    required: true
+    description: >
+      验证 Attention、Companion 与 Terminal 页面共用同一有效状态投影；存在
+      running Panel 时使用 Panel 聚合，没有 running Panel 时使用进程内
+      TerminalStateService，既不产生 working 假阳性，也不漏报真实 running。
+    preconditions:
+      - 当前 Connection 中准备三个仍为 running 的 Terminal Session，且都没有未确认 Completion、非零退出或更高优先级 Agent Team run。
+      - 第一个 Session 的持久 terminalState 为 agent_starting 或 agent_running，但它的全部 running Panel 均为 agent_idle。
+      - 第二个 Session 的持久 terminalState 为 agent_idle，但它至少有一个 running Panel 为 agent_running，其他 running Panel 可为 agent_idle。
+      - 第三个 Session 没有 running Panel，进程内 TerminalStateService 为 agent_running，而持久 terminalState 为 agent_idle。
+      - 已使用 computer-use 打开目标 macOS 桌面实例，并用 toolkit:playwright-cli 附着该实例 desktop CDP。
+    steps:
+      - 分别读取三个 Session 的 `/api/terminal/session/:id/state` 和 `/api/attention/slots`；确认第一个 Session 为 agent_idle 且没有 working Slot，第二个 Session 为 agent_running 且存在唯一 working Slot，第三个 Session 按 TerminalStateService 显示 agent_running 且存在唯一 working Slot。
+      - 等待至少两次 Companion 轮询；通过 toolkit:playwright-cli 确认第一个 Session 始终不显示“执行中”，第二个和第三个 Session 各显示一个“执行中”条目，刷新不会恢复任一陈旧持久状态。
+      - 将第二个 Session 的最后一个 agent_running Panel 通过可信 Stop 收敛为 agent_idle；确认 Terminal 状态接口变为 agent_idle，下一次 Attention snapshot 移除 working Slot，Companion 随后不再显示该条目。
+      - 检查 Attention Slot 的 source evidence；确认 working 证据与实际用于判断的有效状态一致，无 Panel 分支也没有回退到陈旧持久状态，响应中不新增 token、scrollback、命令文本或其他敏感字段。
