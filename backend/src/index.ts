@@ -334,6 +334,11 @@ function attachLifecycleHandlers(
       await services.tmuxOutputWatcher.dispose();
       services.appServerEventConsumer?.stop();
       await services.terminalRuntimeRegistry.disposeAll();
+      for (const socketPath of new Set(
+        services.tmuxSocketPathsToCleanOnShutdown,
+      )) {
+        await services.tmuxService.killServer(socketPath);
+      }
       await services.terminalSessionManager.dispose();
       await services.terminalQuickInputStore.dispose();
       if (services.activityMaintenanceTimer) {

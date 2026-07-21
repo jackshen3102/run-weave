@@ -446,6 +446,7 @@ async function publishLease(paths, lease) {
 
 export async function acquireBetaSlotLease({
   requestedSlotId = null,
+  excludedSlotIds = [],
   ownerSessionId,
   ownerSourceRoot,
   ownerRevision,
@@ -455,6 +456,7 @@ export async function acquireBetaSlotLease({
   if (requestedSlotId !== null) {
     assertBetaSlotId(requestedSlotId);
   }
+  const excluded = new Set(excludedSlotIds.map(assertBetaSlotId));
   const paths = await prepareBetaPoolStorageForAllocation({ homeDir });
   await ensureDirectory(paths.poolRoot, paths.betaRoot);
   await ensureDirectory(paths.leasesDir, paths.poolRoot);
@@ -473,10 +475,15 @@ export async function acquireBetaSlotLease({
     const requested = snapshot.slots.find(
       (slot) => slot.slotId === requestedSlotId,
     );
-    candidates = requested?.state === "idle" ? [requested] : [];
+    candidates =
+      requested?.state === "idle" && !excluded.has(requestedSlotId)
+        ? [requested]
+        : [];
   } else {
     candidates = sortSlotCandidates(
-      snapshot.slots.filter((slot) => slot.state === "idle"),
+      snapshot.slots.filter(
+        (slot) => slot.state === "idle" && !excluded.has(slot.slotId),
+      ),
       metadata,
       ownerRevision,
     );
@@ -509,6 +516,7 @@ export async function acquireBetaSlotLease({
     5,
     {
       requestedSlotId,
+      excludedSlotIds: [...excluded],
       capacity: BETA_SLOT_CAPACITY,
       slots: current.slots,
       recovery:

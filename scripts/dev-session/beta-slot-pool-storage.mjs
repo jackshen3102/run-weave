@@ -5,16 +5,19 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import {
-  resolveBetaAppBackupPrefix,
-  resolveBetaUpdateTargets,
-} from "../runweave-update-core.mjs";
+import { resolveBetaUpdateTargets } from "../runweave-update-core.mjs";
 import { DevSessionError, assertPathInside } from "./contracts.mjs";
 import {
   DEFAULT_BETA_POOL_MIN_FREE_BYTES,
   assertBetaSlotId,
   atomicWriteJson,
 } from "./beta-slot-pool-core.mjs";
+import {
+  assertNoBetaSlotSymlinkComponents,
+  readBetaSlotWarmState,
+  validateBetaRuntimeReleaseAllowlist,
+  validateBetaSlotRetentionState,
+} from "./beta-slot-pool-retention.mjs";
 
 const execFileAsync = promisify(execFile);
 const MAX_UPDATE_LOGS = 5;
@@ -194,64 +197,11 @@ export async function assertBetaPoolDiskBudget({
   return summary;
 }
 
-async function validateReleaseAllowlist(runtimeHome, previousReleaseId) {
-  const pointerPath = path.join(runtimeHome, "current.json");
-  const releasesDir = path.join(runtimeHome, "releases");
-  const pointerExists = await fs.lstat(pointerPath).catch(() => null);
-  const releasesExist = await fs.lstat(releasesDir).catch(() => null);
-  if (!pointerExists && !releasesExist) {
-    return new Set();
-  }
-  if (
-    !pointerExists ||
-    pointerExists.isSymbolicLink() ||
-    !pointerExists.isFile()
-  ) {
-    throw new DevSessionError(
-      "runtime current pointer is missing or unsafe",
-      5,
-      {
-        runtimeHome,
-      },
-    );
-  }
-  const pointer = JSON.parse(await fs.readFile(pointerPath, "utf8"));
-  if (
-    typeof pointer.releaseId !== "string" ||
-    !pointer.releaseId ||
-    pointer.releaseId.includes("/") ||
-    pointer.releaseId.includes("..")
-  ) {
-    throw new DevSessionError("runtime current pointer is corrupt", 5, {
-      runtimeHome,
-    });
-  }
-  const allowlist = new Set([pointer.releaseId]);
-  if (previousReleaseId) {
-    allowlist.add(previousReleaseId);
-  }
-  for (const releaseId of allowlist) {
-    const releasePath = path.join(releasesDir, releaseId);
-    const stats = await fs.lstat(releasePath).catch(() => null);
-    if (!stats || !stats.isDirectory() || stats.isSymbolicLink()) {
-      throw new DevSessionError(
-        "runtime pointer references a missing release",
-        5,
-        {
-          runtimeHome,
-          releaseId,
-        },
-      );
-    }
-  }
-  return allowlist;
-}
-
 async function pruneRuntime(runtimeHome, previousReleaseId, validated = null) {
   const releasesDir = path.join(runtimeHome, "releases");
   const allowlist =
     validated ??
-    (await validateReleaseAllowlist(runtimeHome, previousReleaseId));
+    (await validateBetaRuntimeReleaseAllowlist(runtimeHome, previousReleaseId));
   let cleanedBytes = 0;
   for (const entry of await fs.readdir(releasesDir).catch(() => [])) {
     if (allowlist.has(entry)) {
@@ -307,8 +257,8 @@ export async function applyBetaSlotRetention({
   applicationsDir = "/Applications",
 }) {
   const targets = resolveBetaUpdateTargets(homeDir, assertBetaSlotId(slotId));
-  await assertNoSymlinkComponents(homeDir, targets.runtimeHome);
-  await assertNoSymlinkComponents(
+  await assertNoBetaSlotSymlinkComponents(homeDir, targets.runtimeHome);
+  await assertNoBetaSlotSymlinkComponents(
     path.join(homeDir, ".runweave"),
     path.join(targets.appServerHome, "runtime"),
   );
@@ -354,67 +304,31 @@ export async function applyBetaSlotRetention({
     await fs.rm(pendingPath, { force: true });
   }
 
-  const stateStats = await fs.lstat(targets.statePath).catch(() => null);
-  let state = null;
-  if (stateStats) {
-    if (!stateStats.isFile() || stateStats.isSymbolicLink()) {
-      throw new DevSessionError("Beta warm-state pointer is unsafe", 5, {
-        slotId,
-        statePath: targets.statePath,
-      });
-    }
-    try {
-      state = JSON.parse(await fs.readFile(targets.statePath, "utf8"));
-    } catch {
-      throw new DevSessionError("Beta warm-state pointer is corrupt", 5, {
-        slotId,
-        statePath: targets.statePath,
-      });
-    }
-  }
-  const desktopPrevious = state?.previous?.runtimeReleaseId ?? null;
-  const appServerPrevious = state?.previous?.appServerReleaseId ?? null;
-  const [desktopAllowlist, appServerAllowlist] = await Promise.all([
-    validateReleaseAllowlist(targets.runtimeHome, desktopPrevious),
-    validateReleaseAllowlist(
-      path.join(targets.appServerHome, "runtime"),
-      appServerPrevious,
-    ),
-  ]);
-  let referencedBackup = state?.previous?.app?.backupPath ?? null;
-  const backupPrefix = path.basename(
-    resolveBetaAppBackupPrefix(slotId, applicationsDir),
-  );
-  const isRollbackEntry = (entry) =>
-    entry === backupPrefix ||
-    (entry.startsWith(`${backupPrefix}-`) &&
-      /^\d+$/.test(entry.slice(backupPrefix.length + 1)));
-  const legacyBackupPrefix = `.${targets.appName}.app.previous`;
-  const applicationEntries = await fs.readdir(applicationsDir).catch(() => []);
-  const backupPaths = applicationEntries
-    .filter(isRollbackEntry)
-    .map((entry) => path.join(applicationsDir, entry));
-  let legacyBackupPaths = applicationEntries
-    .filter((entry) => entry.startsWith(legacyBackupPrefix))
-    .map((entry) => path.join(applicationsDir, entry));
+  const state = await readBetaSlotWarmState(targets, slotId);
+  const validation = await validateBetaSlotRetentionState({
+    slotId,
+    targets,
+    state,
+    applicationsDir,
+  });
+  const {
+    desktopPrevious,
+    appServerPrevious,
+    desktopAllowlist,
+    appServerAllowlist,
+  } = validation;
+  let {
+    referencedBackup,
+    referenceKind,
+    backupPrefix,
+    legacyBackupPrefix,
+    backupPaths,
+    legacyBackupPaths,
+  } = validation.appBackups;
   let appBackupMigrated = false;
   let launchServicesUnregistered = 0;
-  if (
-    referencedBackup &&
-    state?.previous?.app?.exists === true &&
-    path.basename(referencedBackup).startsWith(legacyBackupPrefix)
-  ) {
+  if (referenceKind === "legacy") {
     const resolvedLegacyBackup = path.resolve(referencedBackup);
-    if (!legacyBackupPaths.includes(resolvedLegacyBackup)) {
-      throw new DevSessionError(
-        "Beta legacy app previous pointer is invalid",
-        5,
-        {
-          slotId,
-          referencedBackup,
-        },
-      );
-    }
     const suffix = path
       .basename(resolvedLegacyBackup)
       .slice(legacyBackupPrefix.length);
@@ -451,23 +365,6 @@ export async function applyBetaSlotRetention({
     appBackupMigrated = true;
   }
   const allBackupPaths = [...backupPaths, ...legacyBackupPaths];
-  if (allBackupPaths.length > 0 && !referencedBackup) {
-    throw new DevSessionError("Beta app previous pointer is missing", 5, {
-      slotId,
-      backups: allBackupPaths,
-    });
-  }
-  if (
-    referencedBackup &&
-    state?.previous?.app?.exists === true &&
-    (!allBackupPaths.includes(path.resolve(referencedBackup)) ||
-      !path.basename(referencedBackup).startsWith(backupPrefix))
-  ) {
-    throw new DevSessionError("Beta app previous pointer is invalid", 5, {
-      slotId,
-      referencedBackup,
-    });
-  }
   const [desktopRuntime, appServerRuntime, logs] = await Promise.all([
     pruneRuntime(targets.runtimeHome, desktopPrevious, desktopAllowlist),
     pruneRuntime(
@@ -528,51 +425,14 @@ async function assertSafeMutableRoot(targetPath, allowedRoot) {
   return resolved;
 }
 
-async function assertNoSymlinkComponents(rootPath, targetPath) {
-  const root = path.resolve(rootPath);
-  const target = assertPathInside(root, targetPath, "Beta controlled path");
-  const rootStats = await fs.lstat(root).catch((error) => {
-    if (error?.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  });
-  if (rootStats?.isSymbolicLink()) {
-    throw new DevSessionError("Beta controlled root is a symlink", 5, {
-      path: root,
-    });
-  }
-  let current = root;
-  for (const component of path.relative(root, target).split(path.sep)) {
-    if (!component) {
-      continue;
-    }
-    current = path.join(current, component);
-    const stats = await fs.lstat(current).catch((error) => {
-      if (error?.code === "ENOENT") {
-        return null;
-      }
-      throw error;
-    });
-    if (!stats) {
-      return;
-    }
-    if (stats.isSymbolicLink()) {
-      throw new DevSessionError("Beta controlled path contains a symlink", 5, {
-        path: current,
-      });
-    }
-  }
-}
-
 export async function resetBetaSlotMutableState({
   slotId,
   homeDir = os.homedir(),
   afterUserDataSwap = null,
 }) {
   const targets = resolveBetaUpdateTargets(homeDir, assertBetaSlotId(slotId));
-  await assertNoSymlinkComponents(homeDir, targets.instanceRoot);
-  await assertNoSymlinkComponents(
+  await assertNoBetaSlotSymlinkComponents(homeDir, targets.instanceRoot);
+  await assertNoBetaSlotSymlinkComponents(
     path.join(homeDir, ".runweave"),
     targets.appServerHome,
   );

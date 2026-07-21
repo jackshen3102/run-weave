@@ -1,5 +1,5 @@
 import { ensureTmuxPanelWorkspace } from "../../backend/src/terminal/application/panel-workspace.ts";
-import { syncExistingTmuxSessionEnvironments } from "../../backend/src/terminal/runtime-launcher.ts";
+import { syncExistingTmuxSessionEnvironments } from "../../backend/src/terminal/tmux-session-environment-sync.ts";
 import { aggregatePanelTerminalState } from "../../backend/src/terminal/terminal-state-service.ts";
 import { TERMINAL_APP_SERVER_ENV_KEYS } from "../../backend/src/terminal/runtime-environment.ts";
 import {

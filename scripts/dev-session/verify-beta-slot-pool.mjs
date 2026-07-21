@@ -242,6 +242,14 @@ export async function verifyBetaSlotPool(
   assert.equal(emptySnapshot.idle, BETA_SLOT_CAPACITY);
   await verifyBetaSlotPoolProjection(temporaryHome);
 
+  const excludedHome = path.join(temporaryHome, "excluded-slot-home");
+  const excludedLease = await acquireBetaSlotLease({
+    ...leaseOptions(excludedHome, 12),
+    excludedSlotIds: BETA_SLOT_IDS.slice(0, -1),
+  });
+  assert.equal(excludedLease.lease.slotId, BETA_SLOT_IDS.at(-1));
+  await releaseBetaSlotLease(excludedLease);
+
   const absentProcessHome = path.join(temporaryHome, "absent-process-home");
   assert.equal(
     await betaSlotProcessesAreAbsent("pool-01", absentProcessHome),

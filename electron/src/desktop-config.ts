@@ -46,6 +46,7 @@ if (__RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__) {
 if (__RUNWEAVE_APP_SERVER_HOME__) {
   process.env.RUNWEAVE_APP_SERVER_HOME ??= __RUNWEAVE_APP_SERVER_HOME__;
 }
+process.env.RUNWEAVE_DESKTOP_CHANNEL = desktopChannel;
 
 if (explicitUserDataPath) {
   app.setPath("userData", path.resolve(explicitUserDataPath));
@@ -73,7 +74,6 @@ if (desktopCdpPort) {
 }
 
 if (isBetaChannel) {
-  process.env.RUNWEAVE_DESKTOP_CHANNEL = "beta";
   process.env.BROWSER_PROFILE_DIR ??= path.join(
     app.getPath("userData"),
     "browser-profile",

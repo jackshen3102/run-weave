@@ -29,7 +29,7 @@ import { TerminalStateStore } from "../terminal/terminal-state-store";
 import type { TerminalActivityDependencies } from "../terminal/activity-events";
 import { LowDbTerminalSessionStore } from "../terminal/lowdb-store";
 import { logOrphanedTmuxSessions } from "../terminal/tmux-orphan-scan";
-import { syncExistingTmuxSessionEnvironments } from "../terminal/runtime-launcher";
+import { syncExistingTmuxSessionEnvironments } from "../terminal/tmux-session-environment-sync";
 import {
   resolveActivityStoragePaths,
   resolveEvolutionStoragePaths,
@@ -73,6 +73,7 @@ export interface RuntimeServices {
   ptyService: PtyService;
   tmuxService: TmuxService;
   tmuxOutputWatcher: TmuxOutputWatcher;
+  tmuxSocketPathsToCleanOnShutdown: readonly string[];
   appServerEventConsumer: AppServerEventConsumerHandle | null;
   evolutionActivationStore: EvolutionActivationStore;
 }
@@ -92,12 +93,42 @@ function shouldScanTmuxOrphans(env: NodeJS.ProcessEnv): boolean {
   );
 }
 
-function resolveDefaultTmuxSocketPath(browserProfileDir: string): string {
-  const profileId = createHash("sha256")
+function resolveTmuxProfileId(browserProfileDir: string): string {
+  return createHash("sha256")
     .update(browserProfileDir)
     .digest("hex")
     .slice(0, 12);
-  return path.join(os.tmpdir(), `rw-tmux-${profileId}`, "tmux.sock");
+}
+
+function resolvePersistentTmuxSocketPath(
+  browserProfileDir: string,
+): string {
+  return path.join(
+    os.homedir(),
+    ".runweave",
+    "tmux",
+    resolveTmuxProfileId(browserProfileDir),
+    "tmux.sock",
+  );
+}
+
+function resolveDefaultTmuxSocketPath(
+  browserProfileDir: string,
+  runtimeChannel: "stable" | "beta" | "dev",
+): string {
+  return shouldPreserveTmuxOnShutdown(runtimeChannel)
+    ? resolvePersistentTmuxSocketPath(browserProfileDir)
+    : path.join(
+        os.tmpdir(),
+        `rw-tmux-${resolveTmuxProfileId(browserProfileDir)}`,
+        "tmux.sock",
+      );
+}
+
+function shouldPreserveTmuxOnShutdown(
+  runtimeChannel: "stable" | "beta" | "dev",
+): boolean {
+  return runtimeChannel === "stable";
 }
 
 export async function createRuntimeServices(): Promise<RuntimeServices> {
@@ -272,9 +303,22 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
   const tmuxService = new TmuxService({
     socketPath:
       process.env.TERMINAL_TMUX_SOCKET_PATH ??
-      resolveDefaultTmuxSocketPath(storagePaths.browserProfileDir),
+      resolveDefaultTmuxSocketPath(
+        storagePaths.browserProfileDir,
+        runtimeChannel,
+      ),
     env: process.env,
   });
+  const tmuxSocketPathsToCleanOnShutdown = shouldPreserveTmuxOnShutdown(
+    runtimeChannel,
+  )
+    ? []
+    : [
+        tmuxService.socketPath,
+        ...(runtimeChannel === "beta"
+          ? [resolvePersistentTmuxSocketPath(storagePaths.browserProfileDir)]
+          : []),
+      ];
   const tmuxOutputWatcher = new TmuxOutputWatcher({
     outputDir: path.join(
       path.dirname(storagePaths.terminalSessionStoreFile),
@@ -285,18 +329,26 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxLifecycleCoordinator,
   });
   await terminalSessionManager.initialize();
-  const tmuxEnvironmentFailures =
-    await syncExistingTmuxSessionEnvironments(
-      terminalSessionManager,
-      tmuxService,
-    );
-  for (const failure of tmuxEnvironmentFailures) {
-    logger.warn("terminal.tmux.environment-sync.startup.failed", {
-      message: "Failed to refresh terminal tmux environment during startup",
-      terminalSessionId: failure.terminalSessionId,
-      error: failure.error,
+  void syncExistingTmuxSessionEnvironments(
+    terminalSessionManager,
+    tmuxService,
+  )
+    .then((failures) => {
+      for (const failure of failures) {
+        logger.warn("terminal.tmux.environment-sync.startup.failed", {
+          message: "Failed to refresh terminal tmux environment during startup",
+          terminalSessionId: failure.terminalSessionId,
+          socketPath: failure.socketPath,
+          error: failure.error,
+        });
+      }
+    })
+    .catch((error) => {
+      logger.warn("terminal.tmux.environment-sync.startup.failed", {
+        message: "Failed to refresh terminal tmux environments during startup",
+        error,
+      });
     });
-  }
   terminalStateService = new TerminalStateService(
     new TerminalStateStore(
       terminalSessionManager
@@ -400,6 +452,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     ptyService,
     tmuxService,
     tmuxOutputWatcher,
+    tmuxSocketPathsToCleanOnShutdown,
     appServerEventConsumer: null,
     evolutionActivationStore,
   };

@@ -22,6 +22,7 @@ import {
 import { DevSessionError } from "./contracts.mjs";
 import { inspectBetaPoolStorage } from "./beta-slot-pool-storage-migration.mjs";
 import { inspectBetaSlotProcessSafety } from "./beta-slot-pool-process-inspection.mjs";
+import { inspectBetaSlotRetentionSafety } from "./beta-slot-pool-retention.mjs";
 import { readBetaSlotMetadata } from "./beta-slot-pool-storage.mjs";
 
 async function readLease(slotId, paths) {
@@ -320,7 +321,8 @@ function deriveSlot({ lease, manifest, runtime, processSafety }) {
   const identityBlockers = identityDiagnostics.map(
     (diagnostic) => diagnostic.blocker,
   );
-  const recoveryDiagnostic = identityDiagnostics[0] ??
+  const recoveryDiagnostic =
+    identityDiagnostics[0] ??
     (processSafety.unknown.length > 0
       ? {
           code: "beta_pool_process_reference_unknown",
@@ -424,27 +426,55 @@ function deriveSlot({ lease, manifest, runtime, processSafety }) {
   };
 }
 
-async function inspectPoolSlot(slotId, paths, homeDir) {
+async function inspectPoolSlot(slotId, paths, homeDir, applicationsDir) {
   const leaseObservation = await readLease(slotId, paths);
   const manifestObservation = await readManifestObservation(
     leaseObservation.value,
   );
-  const [runtime, processSafety, metadataResult] = await Promise.all([
-    inspectRuntime(manifestObservation),
-    inspectBetaSlotProcessSafety(slotId, homeDir),
-    readBetaSlotMetadata(slotId, { homeDir })
-      .then((value) => ({ value, failureReason: null }))
-      .catch((error) => ({
-        value: null,
-        failureReason: error instanceof Error ? error.message : String(error),
-      })),
-  ]);
-  const derived = deriveSlot({
+  const [runtime, processSafety, metadataResult, retentionSafety] =
+    await Promise.all([
+      inspectRuntime(manifestObservation),
+      inspectBetaSlotProcessSafety(slotId, homeDir),
+      readBetaSlotMetadata(slotId, { homeDir })
+        .then((value) => ({ value, failureReason: null }))
+        .catch((error) => ({
+          value: null,
+          failureReason: error instanceof Error ? error.message : String(error),
+        })),
+      leaseObservation.state === "absent"
+        ? inspectBetaSlotRetentionSafety({
+            slotId,
+            homeDir,
+            applicationsDir,
+          })
+        : null,
+    ]);
+  let derived = deriveSlot({
     lease: leaseObservation,
     manifest: manifestObservation,
     runtime,
     processSafety,
   });
+  if (derived.derivedState === "idle" && retentionSafety?.healthy === false) {
+    derived = {
+      derivedState: "broken",
+      reasons: ["retention-state-broken"],
+      recovery: {
+        eligible: false,
+        mode: "manual",
+        requiresCapacityPressure: false,
+        checks: {
+          ...derived.recovery.checks,
+          retentionStateHealthy: false,
+        },
+        blockedBy: [retentionSafety.reason],
+        code:
+          retentionSafety.details?.code ?? "beta_slot_retention_state_broken",
+        actual: retentionSafety.details,
+        suggestedAction: "repair-retained-state",
+      },
+    };
+  }
   const lease =
     leaseObservation.state === "valid"
       ? {
@@ -487,6 +517,7 @@ async function inspectPoolSlot(slotId, paths, homeDir) {
     derivedState: derived.derivedState,
     reasons: derived.reasons,
     recovery: derived.recovery,
+    retention: retentionSafety,
     metadata: {
       lastReleasedAt: metadataResult.value?.lastReleasedAt ?? null,
       lastRecoveryAttempt: metadataResult.value?.lastRecoveryAttempt ?? null,
@@ -495,7 +526,10 @@ async function inspectPoolSlot(slotId, paths, homeDir) {
   };
 }
 
-export async function inspectBetaPool({ homeDir = os.homedir() } = {}) {
+export async function inspectBetaPool({
+  homeDir = os.homedir(),
+  applicationsDir = "/Applications",
+} = {}) {
   const storage = await inspectBetaPoolStorage({ homeDir });
   if (storage.mode === "conflict") {
     throw new DevSessionError("Beta pool storage roots conflict", 5, {
@@ -510,7 +544,9 @@ export async function inspectBetaPool({ homeDir = os.homedir() } = {}) {
     throw new Error(rootFailure);
   }
   const slots = await Promise.all(
-    BETA_SLOT_IDS.map((slotId) => inspectPoolSlot(slotId, paths, homeDir)),
+    BETA_SLOT_IDS.map((slotId) =>
+      inspectPoolSlot(slotId, paths, homeDir, applicationsDir),
+    ),
   );
   const count = (state) =>
     slots.filter((slot) => slot.derivedState === state).length;

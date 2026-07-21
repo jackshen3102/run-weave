@@ -25,15 +25,14 @@ import {
   startSessionServices,
 } from "./services.mjs";
 import {
-  BETA_SLOT_CAPACITY,
-  acquireBetaSlotLease,
   applyBetaSlotRetention,
   assertBetaPoolDiskBudget,
   assertBetaSlotLease,
+  inspectAllocatableBetaSlotCapacity,
   inspectBetaSlotCapacity,
-  runBetaPoolRecoveryPass,
   runBetaPoolJanitor,
 } from "./beta-slot-pool.mjs";
+import { acquireStartBetaSlotLease } from "./beta-slot-pool-startup-allocation.mjs";
 import { runStop } from "./cli-stop.mjs";
 import { resolveAgentTeamFixtureScope } from "./agent-team-fixture-scope.mjs";
 import {
@@ -225,7 +224,7 @@ async function runStart(options, sourceRoot) {
               ...plan.targetEnvironment,
               betaSlot: {
                 ...plan.targetEnvironment.betaSlot,
-                capacitySnapshot: await inspectBetaSlotCapacity(),
+                capacitySnapshot: await inspectAllocatableBetaSlotCapacity(),
               },
             },
           }
@@ -276,7 +275,10 @@ async function runStart(options, sourceRoot) {
       poolRecovery.orderingReason = result.orderingReason;
     }
   };
-  if (plan.profile === "beta" && !plan.targetEnvironment.betaSlot.requestedSlotId) {
+  if (
+    plan.profile === "beta" &&
+    !plan.targetEnvironment.betaSlot.requestedSlotId
+  ) {
     const hygiene = await runBetaPoolJanitor({
       initiatingSessionId: sessionId,
     });
@@ -310,72 +312,15 @@ async function runStart(options, sourceRoot) {
       manifestCreated = true;
       if (plan.profile === "beta") {
         const requestedSlotId = plan.targetEnvironment.betaSlot.requestedSlotId;
-        for (let attempt = 0; attempt <= BETA_SLOT_CAPACITY; attempt += 1) {
-          try {
-            slotLease = await acquireBetaSlotLease({
-              requestedSlotId,
-              ownerSessionId: sessionId,
-              ownerSourceRoot: sourceRoot,
-              ownerRevision: revision,
-              ownerManifestPath: paths.manifestPath,
-            });
-            break;
-          } catch (error) {
-            if (
-              error instanceof DevSessionError &&
-              [
-                "beta_pool_legacy_drain_required",
-                "beta_pool_storage_migration_busy",
-                "beta_pool_storage_migration_blocked",
-                "beta_pool_storage_conflict",
-              ].includes(error.details?.code)
-            ) {
-              throw error;
-            }
-            if (requestedSlotId) {
-              throw new DevSessionError(
-                `requested Beta slot is occupied: ${requestedSlotId}`,
-                5,
-                {
-                  code: "beta_pool_requested_slot_occupied",
-                  requestedSlotId,
-                  slots: error.details?.slots ?? [],
-                },
-              );
-            }
-            if (
-              !(error instanceof DevSessionError) ||
-              attempt === BETA_SLOT_CAPACITY
-            ) {
-              throw error;
-            }
-            const pressure = await runBetaPoolRecoveryPass({
-              strategy: "capacity_pressure",
-              requestedSlotId,
-              initiatingSessionId: sessionId,
-            });
-            mergePoolRecovery(pressure);
-            if (pressure.recovered.length === 0) {
-              throw new DevSessionError(error.message, error.exitCode, {
-                ...error.details,
-                code: requestedSlotId
-                  ? "beta_pool_requested_slot_occupied"
-                  : "beta_pool_capacity_exhausted",
-                poolRecovery,
-              });
-            }
-          }
-        }
-        if (!slotLease) {
-          throw new DevSessionError(
-            "Beta pool capacity was won by a concurrent allocator",
-            5,
-            {
-              code: "beta_pool_capacity_won_by_concurrent_allocator",
-              poolRecovery,
-            },
-          );
-        }
+        slotLease = await acquireStartBetaSlotLease({
+          requestedSlotId,
+          sessionId,
+          sourceRoot,
+          revision,
+          ownerManifestPath: paths.manifestPath,
+          poolRecovery,
+          mergePoolRecovery,
+        });
         const assignedSlotId = slotLease.lease.slotId;
         plan.targetEnvironment = {
           ...plan.targetEnvironment,

@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   applyBetaSlotRetention,
   assertBetaPoolDiskBudget,
+  inspectBetaSlotRetentionSafety,
   resetBetaSlotMutableState,
 } from "./beta-slot-pool.mjs";
 import { resolveBetaUpdateTargets } from "../runweave-update-core.mjs";
@@ -248,6 +249,114 @@ export async function verifyBetaSlotStorage(
   });
   assert.equal(absentBackupRetention.appBackupMigrated, false);
   assert.deepEqual(await fs.readdir(absentBackupApplications), []);
+
+  const brokenHome = path.join(temporaryHome, "broken-retention-home");
+  const brokenApplications = path.join(
+    temporaryHome,
+    "broken-retention-applications",
+  );
+  const brokenTargets = resolveBetaUpdateTargets(brokenHome, "pool-03");
+  await Promise.all([
+    fs.mkdir(path.join(brokenTargets.runtimeHome, "releases", "current"), {
+      recursive: true,
+    }),
+    fs.mkdir(path.dirname(brokenTargets.statePath), { recursive: true }),
+    fs.mkdir(brokenApplications, { recursive: true }),
+  ]);
+  await Promise.all([
+    fs.writeFile(
+      path.join(brokenTargets.runtimeHome, "current.json"),
+      `${JSON.stringify({ releaseId: "current" })}\n`,
+    ),
+    fs.writeFile(
+      brokenTargets.statePath,
+      `${JSON.stringify({
+        previous: { runtimeReleaseId: "missing-previous" },
+      })}\n`,
+    ),
+  ]);
+  const brokenStateBefore = await fs.readFile(brokenTargets.statePath, "utf8");
+  const brokenSafety = await inspectBetaSlotRetentionSafety({
+    slotId: "pool-03",
+    homeDir: brokenHome,
+    applicationsDir: brokenApplications,
+  });
+  assert.equal(brokenSafety.healthy, false);
+  assert.equal(
+    brokenSafety.reason,
+    "runtime pointer references a missing release",
+  );
+  assert.equal(brokenSafety.details.code, "beta_slot_retention_state_broken");
+  assert.equal(
+    await fs.readFile(brokenTargets.statePath, "utf8"),
+    brokenStateBefore,
+  );
+
+  const pendingHome = path.join(temporaryHome, "pending-retention-home");
+  const pendingApplications = path.join(
+    temporaryHome,
+    "pending-retention-applications",
+  );
+  const pendingTargets = resolveBetaUpdateTargets(pendingHome, "pool-04");
+  const pendingRollback = path.join(
+    pendingApplications,
+    ".Runweave Beta pool-04.rollback-1",
+  );
+  const pendingPath = path.join(
+    pendingTargets.instanceRoot,
+    "diagnostics",
+    "pending.json",
+  );
+  await Promise.all([
+    fs.mkdir(path.join(pendingTargets.runtimeHome, "releases", "current"), {
+      recursive: true,
+    }),
+    fs.mkdir(path.join(pendingTargets.runtimeHome, "releases", "previous"), {
+      recursive: true,
+    }),
+    fs.mkdir(path.dirname(pendingTargets.statePath), { recursive: true }),
+    fs.mkdir(path.dirname(pendingPath), { recursive: true }),
+    fs.mkdir(pendingRollback, { recursive: true }),
+  ]);
+  await Promise.all([
+    fs.writeFile(
+      path.join(pendingTargets.runtimeHome, "current.json"),
+      `${JSON.stringify({ releaseId: "current" })}\n`,
+    ),
+    fs.writeFile(
+      pendingTargets.statePath,
+      `${JSON.stringify({
+        previous: { runtimeReleaseId: "missing-previous" },
+      })}\n`,
+    ),
+    fs.writeFile(
+      pendingPath,
+      `${JSON.stringify({
+        baseline: {
+          app: { exists: true, backupPath: pendingRollback },
+          runtimeReleaseId: "previous",
+          appServerReleaseId: null,
+        },
+      })}\n`,
+    ),
+  ]);
+  const pendingStateBefore = await fs.readFile(
+    pendingTargets.statePath,
+    "utf8",
+  );
+  const pendingBefore = await fs.readFile(pendingPath, "utf8");
+  const pendingSafety = await inspectBetaSlotRetentionSafety({
+    slotId: "pool-04",
+    homeDir: pendingHome,
+    applicationsDir: pendingApplications,
+  });
+  assert.equal(pendingSafety.healthy, true);
+  assert.equal(pendingSafety.pendingReconciliation, true);
+  assert.equal(
+    await fs.readFile(pendingTargets.statePath, "utf8"),
+    pendingStateBefore,
+  );
+  assert.equal(await fs.readFile(pendingPath, "utf8"), pendingBefore);
 
   await fs.mkdir(targets.userData, { recursive: true });
   await fs.writeFile(path.join(targets.userData, "owner-a-cookie"), "secret");

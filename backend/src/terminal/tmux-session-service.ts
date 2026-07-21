@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import type {
   KillOrphanedTmuxSessionsOptions,
   TmuxCommand,
@@ -78,7 +80,7 @@ export class TmuxSessionService extends TmuxProcess {
         socketPath: target.socketPath,
         error,
       });
-      return false;
+      throw error;
     }
   }
 
@@ -213,15 +215,53 @@ export class TmuxSessionService extends TmuxProcess {
     }
   }
 
-  async listSessions(): Promise<TmuxSessionInfo[]> {
+  async killServer(socketPath = this.socketPath): Promise<void> {
+    if (!existsSync(socketPath)) {
+      return;
+    }
+    let stopped = false;
     try {
-      const result = await this.runTmux([
-        "list-sessions",
-        "-F",
-        ["#{session_name}", "#{session_attached}", "#{session_windows}"].join(
-          "\t",
-        ),
-      ]);
+      await this.runTmux(["kill-server"], {
+        sessionName: "server",
+        socketPath,
+      });
+      stopped = true;
+    } catch (error) {
+      if (isProcessExitCode(error, 1)) {
+        stopped = true;
+      } else {
+        tmuxLogger.error("terminal.tmux.kill-server.failed", {
+          message: "Tmux kill-server failed",
+          socketPath,
+          error,
+        });
+      }
+    }
+    if (stopped) {
+      try {
+        await rm(socketPath, { force: true });
+      } catch (error) {
+        tmuxLogger.error("terminal.tmux.socket.remove.failed", {
+          message: "Tmux socket removal failed",
+          socketPath,
+          error,
+        });
+      }
+    }
+  }
+
+  async listSessions(socketPath = this.socketPath): Promise<TmuxSessionInfo[]> {
+    try {
+      const result = await this.runTmux(
+        [
+          "list-sessions",
+          "-F",
+          ["#{session_name}", "#{session_attached}", "#{session_windows}"].join(
+            "\t",
+          ),
+        ],
+        { sessionName: "server", socketPath },
+      );
       return result.stdout
         .split(/\r?\n/)
         .map((line) => line.trim())

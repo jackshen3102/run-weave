@@ -178,7 +178,10 @@ export async function verifyBetaSlotPoolRecovery(temporaryHome, oldLease) {
     await Promise.all([
       fs.readFile(receiptManifestPath, "utf8").then(JSON.parse),
       readBetaSlotMetadata("pool-03", { homeDir: receiptHome }),
-      inspectBetaPool({ homeDir: receiptHome }),
+      inspectBetaPool({
+        homeDir: receiptHome,
+        applicationsDir: receiptApplications,
+      }),
     ]);
   const receiptAttemptId = finalizedReceipt.receipt.attemptId;
   assert.equal(finalizedManifest.poolRecovery.attemptId, receiptAttemptId);
