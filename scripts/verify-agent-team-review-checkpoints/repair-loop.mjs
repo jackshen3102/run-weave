@@ -305,6 +305,11 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   const behaviorDispatchRun = {
     ...runtimeRun,
+    verification: {
+      testCaseFilePath: "docs/testing/full.testplan.yaml",
+      testCaseSha256: "fixture-test-case-sha",
+      acceptanceSource: "test_case_file",
+    },
     reviewCheckpoint: {
       mode: "local_commit",
       repoRoot: "/tmp/repo",
@@ -341,6 +346,11 @@ export function verifyEvidenceGatedRepairLoop(check) {
     behaviorRecheckPrompt.includes("以下行为 case 尚未验证或需要复验") &&
       behaviorRecheckPrompt.includes("review pass 不代表 behavior pass") &&
       behaviorRecheckPrompt.includes("上游 review 摘要") &&
+      behaviorRecheckPrompt.includes("Agent Team Backend 已校验并固化") &&
+      behaviorRecheckPrompt.includes("testCaseSha256=fixture-test-case-sha") &&
+      behaviorRecheckPrompt.includes(
+        "仓库没有 validator 不属于 environment blocker",
+      ) &&
       behaviorRecheckPrompt.includes(
         `DispatchId: ${behaviorDispatchRun.activeWorkerDispatch.dispatchId}`,
       ) &&

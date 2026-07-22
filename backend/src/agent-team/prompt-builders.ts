@@ -55,6 +55,7 @@ export function buildWorkerStartupPrompt(params: {
     lines.push(
       "",
       `验收来源：${sourceDescription}`,
+      ...formatBehaviorValidationAuthorityInstructions(run),
       "验收用例（逐条跑 Playwright，产出 pass/fail + 截图/DOM 证据）：",
       ...acceptance.map(formatAcceptancePromptLine),
       "",
@@ -151,6 +152,9 @@ export function buildFrameworkRepairContinuePrompt(params: {
     "",
     `原任务：${run.task}`,
     `本次只处理这些 Case：${cases.map((item) => item.caseId).join(", ")}`,
+    ...(worker.role === "behavior_verify"
+      ? formatBehaviorValidationAuthorityInstructions(run)
+      : []),
     ...cases.map(formatAcceptancePromptLine),
     ...(worker.role === "code" && run.reviewCheckpoint
       ? formatCodeWorkerCheckpointInstructions()
@@ -411,6 +415,7 @@ export function buildWorkerRecheckPrompt(params: {
     ...(worker.role === "behavior_verify"
       ? [
           `验收来源：${formatAcceptanceSource(run)}`,
+          ...formatBehaviorValidationAuthorityInstructions(run),
           triggerSummary ? `上游 review 摘要：${triggerSummary}` : null,
           "",
           "默认重跑范围：失败 case、未执行 case、依赖 case，以及你判断被本轮 diff 影响的已通过 case。",
@@ -474,6 +479,23 @@ function behaviorCheckpointCommit(run: AgentTeamRun): string | null {
     run.reviewCheckpoint?.lastReviewedCommit ??
     null
   );
+}
+
+function formatBehaviorValidationAuthorityInstructions(
+  run: AgentTeamRun,
+): string[] {
+  const testCaseSha256 =
+    run.verification?.testCaseSha256 ??
+    run.verification?.generatedTestCaseSha256 ??
+    null;
+  const authority =
+    run.verification?.acceptanceSource === "task_generated"
+      ? "验收合同：Agent Team Backend 已固化本 dispatch 的结构化 Case"
+      : "测试计划校验：Agent Team Backend 已校验并固化本 dispatch 的结构化 Case";
+  return [
+    `${authority}；testCaseSha256=${testCaseSha256 ?? "null"}。`,
+    "直接执行 prompt 分配的 Case；如有原始 YAML，不要重新解析，不要探测或运行目标仓库的测试计划格式校验命令。仓库没有 validator 不属于 environment blocker。",
+  ];
 }
 
 function formatWorkerDispatchInstructions(run: AgentTeamRun): string[] {
