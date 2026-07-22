@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   AgentTeamAcceptanceCase,
   AgentTeamActiveWorkerDispatch,
+  AgentTeamEnvironmentRecoveryProbe,
   AgentTeamPendingFindingDecision,
   AgentTeamRun,
   AgentTeamStatus,
@@ -17,6 +18,7 @@ import {
 } from "./repair-loop";
 import {
   acceptanceCasesForRole,
+  applyEnvironmentRecoveryProbe,
   behaviorVerificationCasesForDispatch,
   ensureWorkerGateAcceptance,
   hasRolePassed,
@@ -42,6 +44,7 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
       reviewScope?: "full" | "incremental" | "final";
       acceptedRepairKeys?: string[];
       reviewChallenge?: { repairKeys: string[]; reason: string };
+      environmentRecoveryProbe?: AgentTeamEnvironmentRecoveryProbe | null;
     },
   ): Promise<AgentTeamRun>;
 
@@ -107,7 +110,18 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
     const codeReviewEverRan = (run.consumedWorkerDispatches ?? []).some(
       (receipt) => receipt.role === "code" || receipt.role === "code_review",
     );
-    let foldedAcceptance = folded.acceptance;
+    const recovery = applyEnvironmentRecoveryProbe({
+      acceptance: folded.acceptance,
+      activeWorkerDispatch: run.activeWorkerDispatch,
+      acceptanceResults: params.acceptanceResults,
+      recordedAt,
+    });
+    let foldedAcceptance = recovery.acceptance;
+    if (recovery.blockerFingerprint) {
+      logs.push(
+        `environment blocker 已由 dispatch ${run.activeWorkerDispatch?.dispatchId ?? "unknown"} 证实解除：${recovery.blockerFingerprint}；失效旧观察并续跑：${recovery.invalidatedCaseIds.join(", ")}`,
+      );
+    }
     if (
       params.completedWorkerRole === "behavior_verify" &&
       !codeReviewEverRan &&

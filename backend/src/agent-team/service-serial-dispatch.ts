@@ -1,5 +1,6 @@
 import type {
   AgentTeamAcceptanceCase,
+  AgentTeamEnvironmentRecoveryProbe,
   AgentTeamRun,
   AgentTeamWorkerOutbox,
   AgentTeamWorkerRole,
@@ -95,6 +96,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
                     resultSummary: null,
                     skip: null,
                     skipReason: null,
+                    environmentRecovery: null,
                   }
                 : item,
             )
@@ -138,6 +140,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       checkpointAllowedDirtyPaths?: string[];
       checkpointExpectedHeadCommit?: string;
       checkpointRebasedCommit?: string;
+      environmentRecoveryProbe?: AgentTeamEnvironmentRecoveryProbe | null;
     },
   ): Promise<AgentTeamRun> {
     const session = this.terminalSessionManager.getSession(
@@ -219,16 +222,19 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       outboxMtimeMs,
       dispatchRun.loop.round,
       reviewTarget,
-      role === "behavior_verify" && run.reviewCheckpoint
-        ? {
-            verifiedCheckpointCommit:
-              options.checkpointExpectedHeadCommit ??
-              run.reviewCheckpoint.lastReviewedCommit,
-            checkpointAllowedDirtyPaths:
-              options.checkpointAllowedDirtyPaths ?? [],
-            checkpointRebasedCommit: options.checkpointRebasedCommit ?? null,
-          }
-        : {},
+      {
+        environmentRecoveryProbe: options.environmentRecoveryProbe ?? null,
+        ...(role === "behavior_verify" && run.reviewCheckpoint
+          ? {
+              verifiedCheckpointCommit:
+                options.checkpointExpectedHeadCommit ??
+                run.reviewCheckpoint.lastReviewedCommit,
+              checkpointAllowedDirtyPaths:
+                options.checkpointAllowedDirtyPaths ?? [],
+              checkpointRebasedCommit: options.checkpointRebasedCommit ?? null,
+            }
+          : {}),
+      },
     );
     const persistedRun = await this.updateRun(run, {
       reviewCheckpoint: dispatchRun.reviewCheckpoint,

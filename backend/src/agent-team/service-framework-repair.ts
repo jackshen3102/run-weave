@@ -559,11 +559,13 @@ function resetAcceptance(
 ): AgentTeamAcceptanceCase[] {
   return acceptance.map((item) => ({
     ...item,
+    latestObservation: null,
     status: "pending",
     consecutiveFail: 0,
     lastRunStatus: "pending",
     skip: null,
     skipReason: null,
+    environmentRecovery: null,
     resultSummary: null,
     reproduction: null,
     evidence: [],

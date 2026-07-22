@@ -290,6 +290,10 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
       worker.role === "code_review"
         ? (run.reviewCheckpoint?.pendingReview ?? null)
         : null,
+      {
+        environmentRecoveryProbe:
+          run.activeWorkerDispatch?.environmentRecoveryProbe,
+      },
     );
     return this.updateRun(run, {
       activeWorkerRole: worker.role,

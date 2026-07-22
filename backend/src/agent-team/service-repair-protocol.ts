@@ -74,6 +74,7 @@ export abstract class AgentTeamRepairProtocolService extends AgentTeamSerialDisp
       dispatch?.reviewTarget ?? null,
       {
         repairKeys: dispatch?.repairKeys,
+        environmentRecoveryProbe: dispatch?.environmentRecoveryProbe,
         protocolCorrectionAttempt: 1,
         protocolCorrectionSourceFingerprint: sourceFingerprint,
       },

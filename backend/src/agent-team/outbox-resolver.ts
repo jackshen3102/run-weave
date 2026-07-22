@@ -422,9 +422,22 @@ function normalizeAcceptanceSkip(
         ),
       )
     : [];
+  const blockerFingerprint =
+    typeof value.blockerFingerprint === "string" &&
+    /^[a-z0-9][a-z0-9._:/-]{0,159}$/.test(
+      value.blockerFingerprint.trim().toLowerCase(),
+    )
+      ? value.blockerFingerprint.trim().toLowerCase()
+      : null;
+  const blockerScope =
+    value.blockerScope === "case" || value.blockerScope === "run"
+      ? value.blockerScope
+      : null;
   return {
     code: value.code,
     ...(blockerCaseIds.length > 0 ? { blockerCaseIds } : {}),
+    ...(blockerFingerprint ? { blockerFingerprint } : {}),
+    ...(blockerScope ? { blockerScope } : {}),
     retryable: value.retryable,
     detail: value.detail.trim(),
   };

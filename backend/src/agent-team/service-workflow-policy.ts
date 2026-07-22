@@ -121,6 +121,7 @@ export function createActiveWorkerDispatch(
     | "verifiedCheckpointCommit"
     | "checkpointAllowedDirtyPaths"
     | "checkpointRebasedCommit"
+    | "environmentRecoveryProbe"
     | "protocolCorrectionAttempt"
     | "protocolCorrectionSourceFingerprint"
   > = {},
@@ -139,6 +140,7 @@ export function createActiveWorkerDispatch(
     checkpointAllowedDirtyPaths: options.checkpointAllowedDirtyPaths ?? [],
     checkpointRebasedCommit: options.checkpointRebasedCommit ?? null,
     repairKeys: options.repairKeys ?? [],
+    environmentRecoveryProbe: options.environmentRecoveryProbe ?? null,
     protocolCorrectionAttempt: options.protocolCorrectionAttempt ?? 0,
     protocolCorrectionSourceFingerprint:
       options.protocolCorrectionSourceFingerprint ?? null,
