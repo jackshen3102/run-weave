@@ -14,6 +14,7 @@ import {
   acceptanceCasesForRole,
   ensureWorkerGateAcceptance,
   mergeAcceptanceRefresh,
+  resolveEnvironmentRecoveryIntervention,
 } from "./service-acceptance-policy";
 import { projectAgentTeamRunForRead } from "./service-completion-policy";
 
@@ -184,6 +185,10 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
         });
       }
 
+      const environmentRecovery =
+        input.role === "behavior_verify"
+          ? resolveEnvironmentRecoveryIntervention(run, input.caseIds)
+          : null;
       let cases: AgentTeamAcceptanceCase[];
       if (input.role === "code") {
         const repairCaseIds = new Set(
@@ -193,12 +198,15 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
           (item) => item.status === "fail" && repairCaseIds.has(item.caseId),
         );
         cases = selectAgentInterventionCases(eligibleCases, input.caseIds);
+      } else if (environmentRecovery) {
+        cases = [environmentRecovery.case];
       } else {
         cases = selectAgentInterventionCases(
           acceptanceCasesForRole(run, input.role),
           input.caseIds,
         );
       }
+      const environmentRecoveryProbe = environmentRecovery?.probe ?? null;
       const intervenedRun = await this.updateRun(run, {
         status: "running",
         activeWorkerRole: null,
@@ -231,6 +239,11 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
             ? [`Agent intervention 覆盖当前 ${input.role} dispatch`]
             : []),
           `Agent intervention 选择 ${input.role}：${cases.map((item) => item.caseId).join(", ")}`,
+          ...(environmentRecoveryProbe
+            ? [
+                `environment recovery 仅派发代表 Case；fingerprint=${environmentRecoveryProbe.blockerFingerprint}，后续由后端串行续跑`,
+              ]
+            : []),
         ],
       });
       if (input.role === "code") {
@@ -252,6 +265,7 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
         checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
         checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
         checkpointRebasedCommit: input.checkpointRebasedCommit,
+        environmentRecoveryProbe,
       });
     });
   }

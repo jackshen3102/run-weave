@@ -41,3 +41,20 @@ export function buildMainTestCaseGenerationPrompt(params: {
     "- 如果无法生成可解析测试案例文件，停止并向用户说明“缺少可追溯测试案例文件”，不要提交 split。",
   ].join("\n");
 }
+
+export function formatBehaviorValidationAuthorityInstructions(
+  run: AgentTeamRun,
+): string[] {
+  const testCaseSha256 =
+    run.verification?.testCaseSha256 ??
+    run.verification?.generatedTestCaseSha256 ??
+    null;
+  const authority =
+    run.verification?.acceptanceSource === "task_generated"
+      ? "验收合同：Agent Team Backend 已固化本 dispatch 的结构化 Case"
+      : "测试计划校验：Agent Team Backend 已校验并固化本 dispatch 的结构化 Case";
+  return [
+    `${authority}；testCaseSha256=${testCaseSha256 ?? "null"}。`,
+    "直接执行 prompt 分配的 Case；如有原始 YAML，不要重新解析，不要探测或运行目标仓库的测试计划格式校验命令。仓库没有 validator 不属于 environment blocker。",
+  ];
+}

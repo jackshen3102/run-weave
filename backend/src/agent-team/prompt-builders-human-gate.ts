@@ -15,6 +15,11 @@ export function buildBlockedBehaviorMainPrompt(params: {
       `- [${item.caseId}] ${item.sourceFilePath ?? "unknown"}${item.sourceHeading ? `｜${item.sourceHeading}` : ""}`,
       `  验收合同：${item.text}`,
       `  skip code：${item.skip?.code ?? "legacy"}`,
+      ...(item.skip?.blockerFingerprint
+        ? [
+            `  blocker fingerprint：${item.skip.blockerFingerprint}（scope=${item.skip.blockerScope ?? "unknown"}）`,
+          ]
+        : []),
       ...(item.skip?.blockerCaseIds?.length
         ? [`  blocker Case：${item.skip.blockerCaseIds.join(", ")}`]
         : []),
@@ -28,7 +33,7 @@ export function buildBlockedBehaviorMainPrompt(params: {
     "",
     "恢复要求：",
     "- 先判断是环境问题、验收合同问题还是依赖/顺序问题，不要默认修改测试合同。",
-    `- 环境或依赖修复后，执行 rw agent-team intervene ${run.runId} --action dispatch --role behavior_verify --cases <受影响 Case> --note <原因>。`,
+    `- 公共环境阻塞修复后，从同 fingerprint 的 Case 中选验收顺序最前的一条作为恢复探针，执行 rw agent-team intervene ${run.runId} --action dispatch --role behavior_verify --cases <代表 Case> --note <原因>；探针证实环境恢复后，后端会失效同 fingerprint 的旧观察并按 Case 顺序串行续跑。`,
     `- 确需修改验收合同时，编辑项目内完整测试案例文件，再执行 rw agent-team intervene ${run.runId} --action refresh_acceptance --role <code_review|behavior_verify> --cases <受影响 Case> --generated-test-case-file <文件> --note <原因>。`,
     "- 未声明的 Case 必须保持既有状态和证据，禁止全量重跑。",
     "- 这是主 Agent 恢复任务，不是人工审批；除非出现拆分审批或 P0/P1 finding 范围裁决，不得仅因 need_human 状态向用户请求确认。",

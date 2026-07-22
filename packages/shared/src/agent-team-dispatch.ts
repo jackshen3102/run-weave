@@ -1,5 +1,6 @@
 import type { AgentTeamReviewTarget } from "./agent-team-run-contract";
 import type { AgentTeamWorkerRole } from "./agent-team-worker";
+import type { AgentTeamEnvironmentRecoveryProbe } from "./agent-team-acceptance";
 
 /** Persisted freshness boundary for the worker currently allowed to complete. */
 export interface AgentTeamActiveWorkerDispatch {
@@ -24,6 +25,8 @@ export interface AgentTeamActiveWorkerDispatch {
   checkpointRebasedCommit?: string | null;
   /** Backend-owned repair identities expected from a bounced code worker. */
   repairKeys?: string[];
+  /** Run-scoped environment blocker being re-probed by this dispatch. */
+  environmentRecoveryProbe?: AgentTeamEnvironmentRecoveryProbe | null;
   /** One protocol-only correction is allowed before escalating to a human. */
   protocolCorrectionAttempt?: number;
   /** Source snapshot captured before a protocol-only outbox correction. */

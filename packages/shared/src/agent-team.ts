@@ -6,6 +6,7 @@ import type {
 } from "./agent-team-framework-repair";
 import type {
   AgentTeamAcceptanceSkip,
+  AgentTeamEnvironmentRecovery,
 } from "./agent-team-acceptance";
 import type {
   AgentTeamActiveWorkerDispatch,
@@ -59,6 +60,10 @@ export type {
   AgentTeamFrameworkRepairTarget,
 } from "./agent-team-framework-repair";
 export type {
+  AgentTeamEnvironmentBlockerScope,
+  AgentTeamEnvironmentRecovery,
+  AgentTeamEnvironmentRecoveryProbe,
+  AgentTeamEnvironmentRecoveryProbeCase,
   AgentTeamAcceptanceSkip,
   AgentTeamAcceptanceSkipCode,
   AgentTeamAcceptanceDraft,
@@ -122,6 +127,8 @@ export interface AgentTeamAcceptanceCase {
   /** Machine-readable latest skip; skipReason remains a legacy display fallback. */
   skip?: AgentTeamAcceptanceSkip | null;
   skipReason?: string | null;
+  /** Why a previous environment skip was invalidated and re-queued. */
+  environmentRecovery?: AgentTeamEnvironmentRecovery | null;
   /** Latest per-case conclusion supplied by the verification worker. */
   resultSummary?: string | null;
   /** Executed failure scenario supplied by behavior_verify. */

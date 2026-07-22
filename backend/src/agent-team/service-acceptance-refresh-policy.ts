@@ -68,6 +68,7 @@ export function resetPersistedAcceptanceForRefresh(
       lastRunStatus: "pending",
       skip: null,
       skipReason: null,
+      environmentRecovery: null,
     }));
 }
 

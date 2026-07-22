@@ -21,6 +21,14 @@ export {
   mergeAcceptanceRefresh,
   resetPersistedAcceptanceForRefresh,
 } from "./service-acceptance-refresh-policy";
+export {
+  applyEnvironmentRecoveryProbe,
+  behaviorSkipContractErrors,
+  behaviorVerificationCasesForDispatch,
+  environmentRecoveryProbeForDispatch,
+  expandRecheckCasesForFailures,
+  resolveEnvironmentRecoveryIntervention,
+} from "./service-behavior-acceptance-policy";
 
 const RECHECK_TIMEOUT_MS = 60 * 60 * 1000;
 export function acceptanceCasesForRole(
@@ -43,121 +51,6 @@ export function hasRolePassed(
 ): boolean {
   const cases = acceptanceCasesForRole(run, role);
   return cases.length > 0 && cases.every((item) => item.status === "pass");
-}
-
-export function behaviorVerificationCasesForDispatch(
-  run: AgentTeamRun,
-): AgentTeamAcceptanceCase[] {
-  const behaviorCases = acceptanceCasesForRole(run, "behavior_verify");
-  const caseById = new Map(behaviorCases.map((item) => [item.caseId, item]));
-  return expandRecheckCasesForFailures(
-    run,
-    behaviorCases.filter(
-      (item) =>
-        (item.status === "fail" || item.status === "pending") &&
-        isCaseReadyForAutomaticDispatch(item, caseById),
-    ),
-  );
-}
-
-export function expandRecheckCasesForFailures(
-  run: AgentTeamRun,
-  seedCases: AgentTeamAcceptanceCase[],
-): AgentTeamAcceptanceCase[] {
-  const behaviorCases = acceptanceCasesForRole(run, "behavior_verify");
-  if (seedCases.every(isReviewGateAcceptanceCase)) {
-    return seedCases;
-  }
-  const selectedIds = new Set(seedCases.map((item) => item.caseId));
-  const caseById = new Map(behaviorCases.map((item) => [item.caseId, item]));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const item of behaviorCases) {
-      if (
-        selectedIds.has(item.caseId) ||
-        !isCaseReadyForAutomaticDispatch(item, caseById) ||
-        !(item.dependsOn ?? []).some((caseId) => selectedIds.has(caseId))
-      ) {
-        continue;
-      }
-      selectedIds.add(item.caseId);
-      changed = true;
-    }
-  }
-  return behaviorCases.filter((item) => selectedIds.has(item.caseId));
-}
-
-export function behaviorSkipContractErrors(
-  run: AgentTeamRun,
-  results: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>,
-): string[] {
-  if (run.workerDispatchProtocolVersion !== 1) {
-    return [];
-  }
-  const knownCaseIds = new Set(run.acceptance.map((item) => item.caseId));
-  const errors: string[] = [];
-  for (const result of results) {
-    if (result.status !== "skipped") {
-      continue;
-    }
-    if (!result.skip) {
-      errors.push(
-        `${result.caseId} skipped 缺少结构化 skip（code/blockerCaseIds/retryable/detail）`,
-      );
-      continue;
-    }
-    const blockerCaseIds = result.skip.blockerCaseIds ?? [];
-    if (
-      (result.skip.code === "blocked_by_case" ||
-        result.skip.code === "fail_fast") &&
-      blockerCaseIds.length === 0
-    ) {
-      errors.push(`${result.caseId} ${result.skip.code} 缺少 blockerCaseIds`);
-    }
-    if (
-      (result.skip.code === "blocked_by_case" ||
-        result.skip.code === "fail_fast") &&
-      !result.skip.retryable
-    ) {
-      errors.push(
-        `${result.caseId} ${result.skip.code} 的 retryable 必须为 true`,
-      );
-    }
-    const invalidBlockerCaseIds = blockerCaseIds.filter(
-      (caseId) => caseId === result.caseId || !knownCaseIds.has(caseId),
-    );
-    if (invalidBlockerCaseIds.length > 0) {
-      errors.push(
-        `${result.caseId} blockerCaseIds 非法：${invalidBlockerCaseIds.join(", ")}`,
-      );
-    }
-    if (result.skip.code === "not_applicable" && result.skip.retryable) {
-      errors.push(`${result.caseId} not_applicable 的 retryable 必须为 false`);
-    }
-  }
-  return errors;
-}
-
-function isCaseReadyForAutomaticDispatch(
-  item: AgentTeamAcceptanceCase,
-  caseById: Map<string, AgentTeamAcceptanceCase>,
-): boolean {
-  if (item.lastRunStatus !== "skipped") {
-    return true;
-  }
-  const skip = item.skip;
-  if (!skip?.retryable) {
-    return false;
-  }
-  if (skip.code === "environment" || skip.code === "not_applicable") {
-    return false;
-  }
-  const blockerCaseIds = skip.blockerCaseIds ?? [];
-  return (
-    blockerCaseIds.length > 0 &&
-    blockerCaseIds.every((caseId) => caseById.get(caseId)?.status === "pass")
-  );
 }
 
 export function findStableFailCaseIdsNeedingBounce(

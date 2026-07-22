@@ -4,6 +4,7 @@ import type {
   AgentTeamRun,
   AgentTeamWorker,
 } from "@runweave/shared/agent-team";
+import { formatBehaviorValidationAuthorityInstructions } from "./prompt-builders-test-cases";
 
 const ROLE_LABEL: Record<string, string> = {
   code: "code_agent（写代码）",
@@ -15,7 +16,7 @@ const EVIDENCE_SCHEMA =
 const BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA =
   'behavior_verify 的每个 fail 还必须包含 reproduction: { mode: "real_product", status: "reproduced", scenarioId, validationSessionId, steps: string[], expected, actual, evidence[] }；无法从真实产品入口完整复现时必须写 skipped + 结构化 skip，不得把推断写成 fail。';
 const ACCEPTANCE_SKIP_SCHEMA =
-  'behavior_verify 的每个 skipped 必须包含 skip: { code: "blocked_by_case"|"fail_fast"|"environment"|"not_applicable", blockerCaseIds?: string[], retryable: boolean, detail: string }。blocked_by_case/fail_fast 必须填写 blockerCaseIds 且 retryable=true；not_applicable 的 retryable 必须为 false。skipReason 仅兼容旧 outbox，不代替 skip。';
+  'behavior_verify 的每个 skipped 必须包含 skip: { code: "blocked_by_case"|"fail_fast"|"environment"|"not_applicable", blockerCaseIds?: string[], blockerFingerprint?: string, blockerScope?: "case"|"run", retryable: boolean, detail: string }。environment 必须填写稳定的小写 blockerFingerprint（同一根因必须复用，仅允许字母数字及 ._:/-，最长 160 字符）和 blockerScope；只有可解除且影响多个 Case 的公共环境阻塞使用 retryable=true + blockerScope="run"，单 Case 阻塞使用 blockerScope="case"。blocked_by_case/fail_fast 必须填写 blockerCaseIds 且 retryable=true；not_applicable 的 retryable 必须为 false。skipReason 仅兼容旧 outbox，不代替 skip。';
 const FINDING_SCHEMA =
   '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings。每个 open P0/P1 必须提供稳定的小写 invariantKey、verificationMode: "runtime"|"structural"，以及 reproduction: { mode: "real_product"|"review_harness"|"static_contract", status: "reproduced"|"confirmed", scenarioId?, validationSessionId?, steps: string[], expected, actual, evidence[] }。runtime finding 只能使用 real_product + reproduced + scenarioId，并写清实际可观察错误；只观察到内部中间状态、静态推断、未复现或环境阻塞时不得提交 open P0/P1。structural finding 必须由 review_harness/static_contract 确认。Final review 的 blocking finding 还必须提供 caseImpacts: [{ caseId, summary, evidence[] }]，caseId 使用 prompt 列出的 backend 产品 Case id，不能使用 generic Code Review gate；每条映射都要说明该复现场景如何违反产品 Case。若问题真实但不属于支持/需求范围，设置 disposition="out_of_scope" 申请人工裁决；reviewer 不得设置 waived。未设置 disposition 默认 blocking。同一 invariant 复用同一 key。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
 const CODE_FIX_VERIFICATION_SCHEMA =
@@ -55,6 +56,7 @@ export function buildWorkerStartupPrompt(params: {
     lines.push(
       "",
       `验收来源：${sourceDescription}`,
+      ...formatBehaviorValidationAuthorityInstructions(run),
       "验收用例（逐条跑 Playwright，产出 pass/fail + 截图/DOM 证据）：",
       ...acceptance.map(formatAcceptancePromptLine),
       "",
@@ -151,6 +153,9 @@ export function buildFrameworkRepairContinuePrompt(params: {
     "",
     `原任务：${run.task}`,
     `本次只处理这些 Case：${cases.map((item) => item.caseId).join(", ")}`,
+    ...(worker.role === "behavior_verify"
+      ? formatBehaviorValidationAuthorityInstructions(run)
+      : []),
     ...cases.map(formatAcceptancePromptLine),
     ...(worker.role === "code" && run.reviewCheckpoint
       ? formatCodeWorkerCheckpointInstructions()
@@ -411,6 +416,7 @@ export function buildWorkerRecheckPrompt(params: {
     ...(worker.role === "behavior_verify"
       ? [
           `验收来源：${formatAcceptanceSource(run)}`,
+          ...formatBehaviorValidationAuthorityInstructions(run),
           triggerSummary ? `上游 review 摘要：${triggerSummary}` : null,
           "",
           "默认重跑范围：失败 case、未执行 case、依赖 case，以及你判断被本轮 diff 影响的已通过 case。",

@@ -118,3 +118,46 @@ cases:
     steps:
       - 执行每种迁移并只读取 Activity facts/API export；确认同一写入的事件共享 transitionId 且身份字段完整。
       - 对照 Run JSON；确认事件顺序和最终状态一致，重复投影不产生第二组 transition，事件不包含 prompt、token 或敏感正文。
+
+  - id: AGT-EX-010
+    name: 公共 Environment Blocker 恢复后按 Case 串行续跑
+    required: true
+    description: >
+      同一 run-scoped retryable environment fingerprint 只能派验收顺序最前的一条代表 Case 探测恢复；
+      探针证实环境可触达后，同 fingerprint 的旧观察被审计性失效，后续一次只派一个 Case，首个真实产品失败立即停止续跑。
+    preconditions:
+      - 已准备按 A、B、C 排序的三个 behavior Case；A/B 为同 fingerprint 的 run-scoped retryable environment skip，C 为不同 fingerprint 的 environment skip。
+      - 已准备代表 Case 的 pass、真实产品 fail 和再次 skipped 三种独立 outbox。
+    steps:
+      - 对 A/B 发起恢复 intervention；确认 active dispatch 只包含 A，probe 快照记录 A/B，C 的 observation 和 skip 不变。
+      - 提交 A pass；确认 A/B 的旧 observation 保存在 environmentRecovery，B 变为 pending 且下一 dispatch 只包含 B，C 仍保持原 fingerprint 的 skipped 状态。
+      - 在独立 fixture 中提交 A 的真实产品 fail；确认先进入现有 code bounce，B/C 均未产生新的 behavior dispatch。
+      - 在独立 fixture 中提交 A skipped；确认 blocker 未被标记恢复，B/C 状态不变并重新进入可诊断 Human Gate。
+
+  - id: AGT-EX-011
+    name: Environment Recovery Intervention 对歧义选择零副作用拒绝
+    required: true
+    description: >
+      后端必须在任何 Run 写入前把 environment recovery 解析成唯一 fingerprint 和代表 Case；唯一 fingerprint
+      可在省略 caseIds 时自动选择，多 fingerprint 或混合普通 Case 必须返回 400 且 Run 快照不变。
+    preconditions:
+      - 已准备一个只有单一 fingerprint 的 blocked Run、一个包含两个 fingerprint 的 blocked Run，以及 environment blocker 与普通 Case 混选的请求。
+    steps:
+      - 对单一 fingerprint Run 省略 caseIds 发起 behavior intervention；确认只派 acceptance 顺序最前的 blocked Case，并记录唯一 recovery probe。
+      - 对多 fingerprint Run 省略 caseIds；确认返回 400，status、active dispatch、acceptance、logs 和 intervention history 均不变化。
+      - 显式混选不同 fingerprint 或普通 Case；确认返回 400 且没有 Run store 写入。
+      - 发起不命中 run-scoped environment blocker 的普通 intervention；确认继续使用既有选择和派发行为，没有新增限制。
+
+  - id: AGT-EX-012
+    name: Framework Repair Successor 不继承旧恢复调度状态
+    required: true
+    description: >
+      framework repair rerun 创建的 successor 是独立 Run；它只继承验收合同，不得继承 predecessor 的
+      latestObservation 或 environmentRecovery 调度标记，同时 predecessor 必须保留完整审计证据。
+    preconditions:
+      - 已准备一个进入 framework repair blocked 状态的 predecessor，其中至少一个 behavior Case 带 environmentRecovery、旧 observation 和 skip 审计快照。
+      - Backend 已按 framework repair 合同重启并允许 rerun。
+    steps:
+      - 执行 framework repair rerun 并读取 predecessor 与 successor Run JSON；确认 predecessor 的 observation、environmentRecovery 和 outbox 历史不变。
+      - 确认 successor 对应 Case 为 pending，latestObservation、environmentRecovery、skip、result、evidence、bounce 和 recheck 状态均为空。
+      - 推进 successor 到 behavior verification；确认初始调度只由新 Run 的验收顺序和依赖决定，不引用 predecessor 的 resolvedByDispatchId。

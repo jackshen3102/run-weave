@@ -42,6 +42,10 @@ export abstract class AgentTeamCompletionRecheckService extends AgentTeamRepairP
       worker.role === "code_review"
         ? (run.reviewCheckpoint?.pendingReview ?? null)
         : null,
+      {
+        environmentRecoveryProbe:
+          run.activeWorkerDispatch?.environmentRecoveryProbe,
+      },
     );
     const caseIds = new Set(cases.map((item) => item.caseId));
     const logPrefix =
