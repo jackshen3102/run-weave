@@ -4,6 +4,7 @@ import type {
   AgentTeamRun,
   AgentTeamWorker,
 } from "@runweave/shared/agent-team";
+import { formatBehaviorValidationAuthorityInstructions } from "./prompt-builders-test-cases";
 
 const ROLE_LABEL: Record<string, string> = {
   code: "code_agent（写代码）",
@@ -479,23 +480,6 @@ function behaviorCheckpointCommit(run: AgentTeamRun): string | null {
     run.reviewCheckpoint?.lastReviewedCommit ??
     null
   );
-}
-
-function formatBehaviorValidationAuthorityInstructions(
-  run: AgentTeamRun,
-): string[] {
-  const testCaseSha256 =
-    run.verification?.testCaseSha256 ??
-    run.verification?.generatedTestCaseSha256 ??
-    null;
-  const authority =
-    run.verification?.acceptanceSource === "task_generated"
-      ? "验收合同：Agent Team Backend 已固化本 dispatch 的结构化 Case"
-      : "测试计划校验：Agent Team Backend 已校验并固化本 dispatch 的结构化 Case";
-  return [
-    `${authority}；testCaseSha256=${testCaseSha256 ?? "null"}。`,
-    "直接执行 prompt 分配的 Case；如有原始 YAML，不要重新解析，不要探测或运行目标仓库的测试计划格式校验命令。仓库没有 validator 不属于 environment blocker。",
-  ];
 }
 
 function formatWorkerDispatchInstructions(run: AgentTeamRun): string[] {
