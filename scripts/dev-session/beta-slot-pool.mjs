@@ -35,11 +35,13 @@ export {
   recordBetaSlotRecoveryAttempt,
   resetBetaSlotMutableState,
 } from "./beta-slot-pool-storage.mjs";
+export { inspectBetaSlotRetentionSafety } from "./beta-slot-pool-retention.mjs";
 export { runBetaPoolJanitor } from "./beta-slot-pool-janitor.mjs";
 export {
   betaSlotProcessesAreAbsent,
   inspectBetaSlotProcessSafety,
 } from "./beta-slot-pool-process-inspection.mjs";
+export { inspectAllocatableBetaSlotCapacity } from "./beta-slot-pool-allocatable-capacity.mjs";
 export { inspectBetaPool } from "./beta-slot-pool-projection.mjs";
 export { recoverBetaPoolSlot } from "./beta-slot-pool-recovery.mjs";
 export { runBetaPoolRecoveryPass } from "./beta-slot-pool-recovery-pass.mjs";

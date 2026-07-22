@@ -44,9 +44,13 @@ async function createLegacyMetadata(homeDir) {
 }
 
 async function verifyReadOnlyAndDrain(root) {
+  const applicationsDir = path.join(root, "applications");
   const emptyHome = path.join(root, "empty");
   const storage = resolveBetaPoolStoragePaths(emptyHome);
-  const projection = await inspectBetaPool({ homeDir: emptyHome });
+  const projection = await inspectBetaPool({
+    homeDir: emptyHome,
+    applicationsDir,
+  });
   assert.equal(projection.storage.mode, "uninitialized");
   assert.equal(await fs.lstat(storage.controlRoot).catch(() => null), null);
   assert.equal(await fs.lstat(storage.legacyBetaRoot).catch(() => null), null);
@@ -70,7 +74,10 @@ async function verifyReadOnlyAndDrain(root) {
     `${JSON.stringify(lease)}\n`,
     { mode: 0o600 },
   );
-  const legacyProjection = await inspectBetaPool({ homeDir: drainHome });
+  const legacyProjection = await inspectBetaPool({
+    homeDir: drainHome,
+    applicationsDir,
+  });
   assert.equal(legacyProjection.storage.mode, "legacy-draining");
   await assert.rejects(
     acquireBetaSlotLease(leaseOptions(drainHome, "dvs-new-allocation")),
@@ -108,7 +115,7 @@ async function verifyMigrationAndRollback(root) {
   await fs.chmod(legacy.storage.legacyBetaRoot, 0o000);
   try {
     assert.equal(
-      (await inspectBetaPool({ homeDir })).storage.mode,
+      (await inspectBetaPoolStorage({ homeDir })).mode,
       "canonical",
     );
   } finally {
@@ -160,6 +167,7 @@ async function verifyCrashRecovery(root) {
 }
 
 async function verifyConflictAndConcurrency(root) {
+  const applicationsDir = path.join(root, "applications");
   const conflictHome = path.join(root, "conflict");
   await Promise.all([
     fs.mkdir(resolveCanonicalBetaPoolPaths(conflictHome).metadataDir, {
@@ -170,7 +178,7 @@ async function verifyConflictAndConcurrency(root) {
     }),
   ]);
   await assert.rejects(
-    inspectBetaPool({ homeDir: conflictHome }),
+    inspectBetaPool({ homeDir: conflictHome, applicationsDir }),
     (error) => error?.details?.code === "beta_pool_storage_conflict",
   );
 
@@ -182,7 +190,7 @@ async function verifyConflictAndConcurrency(root) {
   await fs.mkdir(outside, { recursive: true });
   await fs.symlink(outside, unsafeStorage.migrationRoot);
   await assert.rejects(
-    inspectBetaPool({ homeDir: unsafeHome }),
+    inspectBetaPool({ homeDir: unsafeHome, applicationsDir }),
     (error) =>
       error?.details?.code === "beta_pool_storage_conflict" &&
       error.details.blockedBy.includes("migration-root-unsafe"),

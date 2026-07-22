@@ -6,6 +6,7 @@ import path from "node:path";
 
 import {
   BETA_SLOT_CAPACITY,
+  inspectAllocatableBetaSlotCapacity,
   inspectBetaPool,
   recoverBetaPoolSlot,
   resolveBetaPoolPaths,
@@ -15,14 +16,74 @@ import { resolveBetaUpdateTargets } from "../runweave-update-core.mjs";
 
 export async function verifyBetaSlotPoolProjection(temporaryHome) {
   const paths = resolveBetaPoolPaths(temporaryHome);
-  const emptyProjection = await inspectBetaPool({ homeDir: temporaryHome });
+  const emptyApplications = path.join(temporaryHome, "empty-applications");
+  const emptyProjection = await inspectBetaPool({
+    homeDir: temporaryHome,
+    applicationsDir: emptyApplications,
+  });
   assert.equal(emptyProjection.schemaVersion, 1);
   assert.equal(emptyProjection.reservationGuaranteed, false);
   assert.equal(emptyProjection.capacity, BETA_SLOT_CAPACITY);
   assert.equal(emptyProjection.summary.idle, BETA_SLOT_CAPACITY);
   assert.equal(await fs.lstat(paths.poolRoot).catch(() => null), null);
 
+  const brokenHome = path.join(temporaryHome, "broken-projection-home");
+  const brokenApplications = path.join(
+    temporaryHome,
+    "broken-projection-applications",
+  );
+  const brokenTargets = resolveBetaUpdateTargets(brokenHome, "pool-03");
+  await Promise.all([
+    fs.mkdir(path.join(brokenTargets.runtimeHome, "releases", "current"), {
+      recursive: true,
+    }),
+    fs.mkdir(path.dirname(brokenTargets.statePath), { recursive: true }),
+    fs.mkdir(brokenApplications, { recursive: true }),
+  ]);
+  await Promise.all([
+    fs.writeFile(
+      path.join(brokenTargets.runtimeHome, "current.json"),
+      `${JSON.stringify({ releaseId: "current" })}\n`,
+    ),
+    fs.writeFile(
+      brokenTargets.statePath,
+      `${JSON.stringify({
+        previous: { runtimeReleaseId: "missing-previous" },
+      })}\n`,
+    ),
+  ]);
+  const brokenProjection = await inspectBetaPool({
+    homeDir: brokenHome,
+    applicationsDir: brokenApplications,
+  });
+  const brokenSlot = brokenProjection.slots.find(
+    (slot) => slot.slotId === "pool-03",
+  );
+  assert.equal(brokenProjection.summary.idle, BETA_SLOT_CAPACITY - 1);
+  assert.equal(brokenProjection.summary.broken, 1);
+  assert.equal(brokenSlot.derivedState, "broken");
+  assert.deepEqual(brokenSlot.reasons, ["retention-state-broken"]);
+  assert.equal(brokenSlot.recovery.eligible, false);
+  assert.equal(
+    brokenSlot.recovery.blockedBy[0],
+    "runtime pointer references a missing release",
+  );
+  const allocatable = await inspectAllocatableBetaSlotCapacity({
+    homeDir: brokenHome,
+    applicationsDir: brokenApplications,
+  });
+  assert.equal(allocatable.idle, BETA_SLOT_CAPACITY - 1);
+  assert.equal(allocatable.broken, 1);
+  assert.equal(
+    allocatable.slots.find((slot) => slot.slotId === "pool-03").state,
+    "broken",
+  );
+
   const projectionHome = path.join(temporaryHome, "projection-home");
+  const projectionApplications = path.join(
+    temporaryHome,
+    "projection-applications",
+  );
   const projectionPaths = resolveBetaPoolPaths(projectionHome);
   const projectionTargets = resolveBetaUpdateTargets(projectionHome, "pool-01");
   const projectionManifestPath = path.join(
@@ -113,7 +174,10 @@ export async function verifyBetaSlotPoolProjection(temporaryHome) {
         { mode: 0o600 },
       ),
     ]);
-    const projection = await inspectBetaPool({ homeDir: projectionHome });
+    const projection = await inspectBetaPool({
+      homeDir: projectionHome,
+      applicationsDir: projectionApplications,
+    });
     const projected = projection.slots.find(
       (slot) => slot.slotId === "pool-01",
     );
@@ -134,6 +198,7 @@ export async function verifyBetaSlotPoolProjection(temporaryHome) {
     );
     const mismatchProjection = await inspectBetaPool({
       homeDir: projectionHome,
+      applicationsDir: projectionApplications,
     });
     const mismatchSlot = mismatchProjection.slots.find(
       (slot) => slot.slotId === "pool-01",

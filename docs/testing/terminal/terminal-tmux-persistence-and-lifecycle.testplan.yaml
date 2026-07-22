@@ -1,0 +1,350 @@
+version: 1
+name: Terminal tmux 持久化与生命周期回归验收
+description: >
+  验证 macOS Stable、Beta 与本地开发三种运行通道对 tmux 的所有权边界、应用重启和更新后的
+  Session 持久化、真实丢失与基础设施故障的恢复判定，以及大量历史 Session 启动时的环境刷新、
+  故障隔离和并发上限。Stable 的 tmux 不得因应用退出、Backend 重启或完整应用更新被清理；
+  Beta 和本地开发在正常 SIGINT 或 SIGTERM shutdown 后只清理自身拥有的临时资源。本计划不覆盖
+  Windows，也不把 SIGKILL 或系统崩溃后立即完成进程内清理作为通过条件。
+
+cases:
+  - id: TTP-001
+    name: Stable 应用正常重启后继续使用原 tmux Session
+    required: true
+    description: >
+      验证正式 Stable 应用正常退出并重新启动时，应用进程可以更换，但原 tmux server、Socket、
+      Session、后台命令和 Terminal 记录必须保持同一身份；重新打开终端不得进入 thread 初始化或
+      显示原 Session 丢失警告。
+    preconditions:
+      - macOS 已安装可正常启动的正式 Stable Runweave，且 Stable profile、Backend 和 tmux 资源可独立识别。
+      - 已记录 Stable 应用进程、全部 tmux server、Socket 和 Session 基线，避免把其它 Stable 终端误认为本 Case 资源。
+      - 已在真实 Stable Terminal 中创建一个本 Case 专属终端，记录 terminalSessionId、tmuxSessionName、tmuxSocketPath、tmux server PID 和持久化记录。
+      - 本 Case 终端正在持续输出带单调计数的唯一 marker，确保重启后可以区分恢复原进程与重新创建的新进程。
+    steps:
+      - >
+        使用 `$computer-use` 进入本 Case 终端，并同时从 UI、tmux capture 和进程清单读取重启前 marker、
+        计数、Session 身份与 Socket；确认三类证据指向同一 Stable Terminal，Socket 位于 Stable
+        持久目录而不是系统临时目录。
+      - >
+        使用 `$computer-use` 正常退出 Stable 应用并等待 Electron 与 Backend 进程结束；确认本 Case
+        的 tmux server PID、Socket 和 Session 仍存在，marker 计数在应用关闭期间继续增长。
+      - >
+        重新启动 Stable 应用并重新取得 fresh 桌面窗口引用；打开原 terminalSessionId，确认应用和
+        Backend 使用新进程，但 tmux server PID、tmuxSessionName、tmuxSocketPath 与重启前完全一致。
+      - >
+        确认终端继续显示递增后的 marker，未出现 Original tmux session was lost、thread 初始化或
+        rebuild 计数增加；完成取证后只停止本 Case 创建的终端，不停止 Stable tmux server或其它 Session。
+
+  - id: TTP-002
+    name: Stable 完整应用更新不会把 tmux 误判为应用进程
+    required: true
+    description: >
+      验证完整 Electron App 更新只停止真实 App bundle 可执行进程，即使 tmux 的完整命令行或环境中
+      包含 `/Applications/Runweave.app/Contents/`，更新器也不得终止 tmux；更新后的桌面端必须继续
+      附着原 Session 和原 Agent thread。
+    preconditions:
+      - 当前源码可执行仓库统一 Stable 更新流程，且执行者已获得替换本机 Stable App 的明确授权。
+      - Stable 中存在本 Case 专属的真实 Agent Terminal，已记录 terminalSessionId、threadId、tmuxSessionName、Socket、tmux server PID 和持续输出 marker。
+      - 已确认 `ps -axo pid=,command=` 中本 Case tmux 行包含 Runweave App Contents 路径，同时 `ps -axo pid=,comm=` 显示其真实可执行文件为 tmux 而不是 App bundle 可执行文件。
+      - 已记录其它 Stable tmux Session 基线，更新完成后能够证明没有误伤非目标终端。
+    steps:
+      - >
+        按 `$toolkit:update-runweave-desktop` 流程执行完整 App 更新并开启 desktop verification；保存更新器
+        返回的安装路径、更新模式、桌面 CDP endpoint 和重启后的应用进程身份。
+      - >
+        在更新器停止旧 App、安装新 App 和启动新 App 的各阶段检查本 Case tmux PID、Socket 与
+        Session；确认 tmux PID 始终存活，持续 marker 没有中断，且其它 Stable tmux 基线也未减少。
+      - >
+        使用 `$toolkit:playwright-cli` 显式附着更新器返回的 desktop CDP，进入原 terminalSessionId；
+        确认 terminal 页面属于新安装版本，同时附着的是原 tmuxSessionName、原 Socket 和原 threadId。
+      - >
+        确认页面没有 Session 丢失警告、thread 初始化或 rebuild 增量；detach Playwright 并只清理本 Case
+        创建的 Terminal，不关闭用户已有窗口、Tab、tmux server 或其它 Session。
+
+  - id: TTP-003
+    name: Beta 正常停止只清理自身拥有的 tmux 资源
+    required: true
+    description: >
+      验证 Beta Session 正常停止时会终止自己的临时 tmux server并删除 Socket，但不会根据脏的
+      terminal store 记录扩大清理范围，也不会影响 Stable、其它 Beta Session 或不属于自己的 Socket。
+    preconditions:
+      - Stable 中有一个持续输出唯一 marker 的基线 Terminal，已记录其 tmux PID、Socket 和 Session。
+      - 已通过 `$toolkit:runweave-dev-session` 启动一个使用独占 slot、profile 和 Socket 的 Beta Session A。
+      - A 已通过 desktop surface 创建真实 tmux Terminal，并记录 terminalSessionId、Socket、tmux PID 和 marker。
+      - 已在 `mktemp -d` 创建的本 Case 临时目录中启动一个不属于 A 的独立 tmux server，记录其 Socket、PID、Session 和持续 marker。
+      - A 的隔离 terminal store 中存在一条指向上述独立 Socket 的历史 tmuxSocketPath 记录，用于证明 shutdown 不信任任意 store 路径。
+    steps:
+      - >
+        使用 `$toolkit:playwright-cli` 附着 A 的 desktop CDP，确认 A Terminal 的 marker、profile、Socket
+        与 PID 属于目标 Beta；同时通过 tmux capture 确认独立 server 和 Stable Terminal 的 marker、
+        Socket 与 PID 均与 A 不同，随后关闭本轮新建的浏览器引用并 detach。
+      - >
+        通过 `$toolkit:runweave-dev-session` 正常停止 A；确认 A 的 Backend 完成 shutdown、A 的 tmux PID
+        不再存在、A 的临时 Socket 已删除且使用该 Socket 执行 tmux 查询明确失败。
+      - >
+        检查独立 server 与 Stable 的 PID、Socket、Session 和 marker；确认它们与停止前身份一致并继续
+        输出，A store 中指向独立 Socket 的历史记录没有导致该 server 被清理。
+      - >
+        最后精确停止本 Case 创建的独立 tmux server并删除其临时目录，同时清理 Stable marker Terminal；
+        确认只回收本 Case 声明的资源，不操作 Stable tmux server、其它 Stable Terminal 或其它 Beta 现场。
+
+  - id: TTP-004
+    name: Beta 停止会回收同 profile 的旧版持久 Socket
+    required: false
+    description: >
+      验证从旧版“所有通道都使用持久 Socket”迁移后，Beta 正常停止会同时回收当前临时 Socket和同一
+      Beta profile 的旧持久 Socket，但不会触达不同 profile 的 Stable 持久 Socket。
+    preconditions:
+      - 已准备独占的 Beta profile，并根据 profile 路径计算当前临时 Socket 和旧版持久 Socket 的准确路径。
+      - 旧版持久 Socket 上运行至少一个带唯一 marker 的 tmux Session，且 PID、Socket inode 和 Session 名称均已记录。
+      - Stable 不同 profile 上运行一个基线 tmux Session，已记录 PID、Socket、Session 和 marker。
+      - 可以通过 `$toolkit:runweave-dev-session` 使用上述 Beta profile 启动并正常停止 Beta。
+    steps:
+      - >
+        启动 Beta 并创建当前临时 Socket 上的真实 Terminal；确认当前临时 Socket、旧版持久 Socket和
+        Stable Socket 三者路径、PID 与 marker 均不同。
+      - >
+        正常停止 Beta；确认当前临时 tmux server 与旧版同 profile 持久 tmux server 均已退出，两个
+        Socket 均不存在或无法连接，且相关 Session 不再出现在各自 server 列表中。
+      - >
+        检查 Stable 基线；确认其 PID、Socket inode、Session 和 marker 全部保持不变并继续可用，
+        然后只清理本 Case 创建的 Stable marker Terminal。
+
+  - id: TTP-005
+    name: Stable Terminal 内启动本地开发不会继承 Stable 清理策略
+    required: true
+    description: >
+      验证开发者从 Stable Terminal 执行 `pnpm dev` 时，开发子进程会移除继承的
+      RUNWEAVE_DESKTOP_CHANNEL，并按 dev 通道使用临时 tmux Socket；本地开发正常退出后只清理自己的
+      tmux，不会清理作为父环境来源的 Stable tmux。
+    preconditions:
+      - Stable Terminal 的父 shell 中 RUNWEAVE_DESKTOP_CHANNEL 明确为 stable，且该 Terminal 正在输出唯一 marker。
+      - 已为本地开发准备独占的 BROWSER_PROFILE_DIR、端口和可清理工作目录，不复用 Stable profile。
+      - 可以从 Stable Terminal 执行仓库标准 `pnpm dev`，并能使用 `$toolkit:playwright-cli` 操作其真实 Web 页面。
+      - 已记录 Stable 父 Terminal 的 tmux PID、Socket、Session 和 marker 基线。
+    steps:
+      - >
+        从 Stable Terminal 启动 `pnpm dev`；读取开发 Backend 的 runtime channel、profile 和默认 tmux
+        Socket，确认 channel 为 dev、Socket 位于系统临时目录，且未复用 Stable 持久 Socket。
+      - >
+        使用 `$toolkit:playwright-cli` 打开本地开发 Web 页面并创建真实 Terminal，输入唯一 marker；
+        确认 marker 位于 dev 临时 Socket 的 Session，不出现在 Stable 父 Session。
+      - >
+        向本地开发进程发送正常 SIGTERM 并等待 shutdown 完成；确认 dev tmux PID 已退出、临时 Socket
+        已删除或无法连接，而 Stable 父 tmux PID、Socket、Session 和 marker 保持不变。
+      - >
+        关闭本轮 Playwright 页面并执行 cleanup；只删除独占 dev profile 与本 Case marker，不停止
+        Stable tmux server 或其它 Stable Terminal。
+
+  - id: TTP-006
+    name: tmux 查询超时会保留 Session 且不触发重建
+    required: true
+    description: >
+      以 tmux server 暂时无响应导致的查询超时为代表，验证非 exit code 1 的基础设施失败会从
+      has-session 链路抛出并保留原 Session；不得把查询超时解释为 Session 不存在，不得初始化新
+      thread、重建 tmux 或推进 rebuild 计数。只读取持久状态的 API 继续返回 running 属于正确降级，
+      不作为“查询成功”或“未触发故障”的证据。
+    preconditions:
+      - 已在独占 profile 和 Socket 上创建真实 tmux Terminal，记录 terminalSessionId、threadId、tmuxSessionName、server PID、marker、状态和 rebuild 基线。
+      - 可以只暂停本 Case tmux server 的响应并在 finally 阶段恢复，不影响其它 tmux server。
+      - 已取得 Backend 鉴权信息、日志和 `GET /api/terminal/session/:id/panels` 端点，能够按 terminalSessionId、tmuxSessionName 和 Socket 关联请求与 tmux 日志。
+      - 本 Case 创建的 Terminal 页面和 WebSocket 可以独立关闭并重新附着，不影响用户已有页面或其它 Terminal。
+    steps:
+      - >
+        使用 `$toolkit:playwright-cli` 关闭本 Case 创建的 Terminal 页面并 detach，确保后续判定不复用
+        已有 UI 连接；对本 Case tmux server 发送 SIGSTOP，并使用同一 tmux binary、Socket 和
+        tmuxSessionName 发起受控 has-session 查询；确认 server PID 与 Socket 仍存在，客户端查询在
+        超时边界被终止且没有返回表示 Session 不存在的 exit code 1。
+      - >
+        请求 `GET /api/terminal/session/:id/panels`；确认请求经过约 5 秒超时后返回 HTTP 500 而不是正常
+        panels payload，Backend 日志同时出现同一 tmuxSessionName 和 Socket 的
+        `terminal.tmux.command.timeout` 与 `terminal.tmux.has-session.failed`，从而证明本轮确实执行了
+        目标 has-session 且基础设施错误没有被转换为 false。
+      - >
+        请求只投影 store 的 `GET /api/terminal/session` 并读取本 Case 持久化记录；确认该请求返回 HTTP
+        200，原 Session 仍为 running，threadId、tmuxSessionName、Socket 和 rebuild 计数均未改变；
+        同时确认没有 Original tmux session was lost、agent-resume 或 session-missing 日志，没有创建
+        同名替代 Session，也没有把 watcher 状态推进为 exited。
+      - >
+        在 finally 中向原 server PID 发送 SIGCONT；再次请求 panels 端点并确认返回 HTTP 200，随后用
+        `$toolkit:playwright-cli` 重新打开原 terminalSessionId；确认同一 marker、PID、Socket、Session
+        和 threadId 恢复可见，关闭本轮页面并 detach，然后只清理本 Case 独占资源。
+
+  - id: TTP-007
+    name: tmux Session 确认不存在时只恢复一次已保存 thread
+    required: true
+    description: >
+      验证 has-session 明确返回 exit code 1 时仍走合法恢复路径：原 tmux Session 被确认删除后，
+      Terminal 使用保存的 threadId 重建一次，并展示可解释警告；后续重复打开不得再次重建或产生新 thread。
+    preconditions:
+      - 独占 tmux Socket 上存在一个已完成真实 Agent thread 初始化的 Terminal，已持久化 threadId、provider、tmuxSessionName 和 rebuild 基线。
+      - 已记录原 Session 的 marker、pane 内容和 terminal store，且可以精确删除该 tmuxSessionName 而不停止整个 server。
+      - Agent provider 当前可恢复保存的 threadId，且测试环境身份与原 thread 一致。
+    steps:
+      - >
+        精确删除本 Case tmuxSessionName并执行 has-session；确认命令返回 exit code 1，Socket server仍
+        存活，且其它 Session 不受影响。
+      - >
+        从真实 Terminal UI 打开原 terminalSessionId；确认只创建一个替代 tmux Session，警告明确说明
+        Original tmux session was lost，并使用原 provider 与原 threadId 发起 resume 而不是新建 thread。
+      - >
+        等待 Agent 恢复完成并读取 terminal store、tmux 列表与 UI；确认 rebuild 计数只增加 1、
+        terminalSessionId 保持不变、恢复后的 threadId 等于原值且 Session 位于当前预期 Socket。
+      - >
+        关闭并再次打开同一 Terminal；确认不再出现新的丢失警告、没有第二次 rebuild 或第二个 thread，
+        然后清理本 Case Session。
+
+  - id: TTP-008
+    name: 旧 Socket 缺失但当前 Socket 已有同名 Session 时直接重定向
+    required: false
+    description: >
+      验证持久化记录仍指向不存在的旧 Socket、而当前默认 Socket 已有同名 tmux Session 时，Backend
+      会更新目标并附着现有 Session；不得把它当成真正丢失、不得重建 Session 或恢复 Agent thread。
+    preconditions:
+      - 独占 profile 的当前默认 Socket 上已有本 Case tmuxSessionName，pane 中包含唯一 marker。
+      - terminal store 中对应 terminalSessionId 的 tmuxSocketPath 被设置为一个确定不存在的旧 Socket，threadId 和 rebuild 基线已记录。
+      - 当前 Socket 与旧 Socket 路径不同，且不存在同名干扰 Session。
+    steps:
+      - >
+        打开该 terminalSessionId；确认 Backend 先确认旧 Socket 无目标 Session，再在当前默认 Socket
+        找到完全相同的 tmuxSessionName并附着，而不是创建第二个同名 Session。
+      - >
+        读取 UI、tmux capture 和 terminal store；确认唯一 marker 原样存在，tmuxSocketPath 已更新为
+        当前 Socket，terminalSessionId、threadId 和 rebuild 计数不变。
+      - >
+        确认没有 Session 丢失警告、thread resume 或 thread 初始化；重复打开仍附着同一 Session，
+        然后清理本 Case 资源。
+
+  - id: TTP-009
+    name: 同一故障 Socket 上的 39 个历史 Session 不阻塞 Backend ready
+    required: true
+    description: >
+      验证 Backend 启动不等待历史 tmux 环境同步完成。即使 store 中有 39 个 running Session 指向
+      同一个会触发 5 秒超时的 Socket，健康检查和核心 API 也必须在第一次 tmux 超时返回前 ready，
+      不得形成 39 乘 5 秒的启动等待。
+    preconditions:
+      - 已准备独占 Backend profile，其 terminal store 含 39 条 running tmux Session，全部指向同一个本 Case 故障 Socket且身份互不重复。
+      - PATH 中提供只属于本 Case 的可控 tmux 代理，使该 Socket 的第一个环境查询稳定阻塞超过 5 秒并记录开始与结束时间。
+      - 已关闭 orphan scan 等与本不变量无关的启动工作，并准备可鉴权的 `/health` 请求和至少一个核心只读 API 请求。
+    steps:
+      - >
+        记录单调时钟后启动 Backend；在可控 tmux 代理确认第一个阻塞查询已经进入但尚未返回时，轮询
+        `/health` 和核心只读 API。
+      - >
+        确认 Backend 在第一次 5 秒 tmux 超时结束前返回 ready 且核心 API 可响应；若 readiness 等待
+        环境同步、接近 39 乘 5 秒或无法服务请求，则本 Case 失败。
+      - >
+        释放或等待代理超时并读取 store；确认 39 条 Session 没有因启动期基础设施故障被批量标记 exited、
+        没有触发 thread rebuild，然后正常停止 Backend 并清理独占 profile 与代理。
+
+  - id: TTP-010
+    name: 健康 Socket 上的全部 39 个 Session 都刷新到新环境
+    required: true
+    description: >
+      验证非阻塞启动不以牺牲后台 Session 正确性换取速度。一个健康 Socket 上存在 39 个历史
+      running Session 时，启动后的后台同步必须最终刷新全部 39 个 Session 的 Backend、App Server
+      URL 与 token，不能只处理最近的 8 个或只处理当前打开的 Terminal。
+    preconditions:
+      - 已在独占健康 tmux Socket 上创建 39 个真实 Session，并在隔离 terminal store 中记录为 running且 lastActivityAt 覆盖新旧顺序。
+      - 39 个 Session 的 tmux environment 当前都保存旧 Backend 与 App Server marker，且每个 Session 可通过名称独立读取。
+      - 新 Backend 使用一组唯一且不包含真实敏感凭据的新环境 marker 启动，测试结束后可停止并清理整个独占 Socket。
+    steps:
+      - >
+        启动新 Backend并等待 `/health` ready；确认 ready 可以先于后台刷新完成，不把 readiness 本身当成
+        39 个 Session 已全部刷新的证据。
+      - >
+        在确定的后台验收窗口内逐一读取 39 个 tmux Session environment；确认每一个 Session 都包含
+        新 Backend 与 App Server marker，旧 URL、旧 token 和旧 home marker 均已移除或替换。
+      - >
+        汇总刷新结果必须为 39/39，最旧 Session 与未在 UI 打开的 Session 也必须通过；确认 terminal
+        store 身份、Session 状态和 pane 内容没有被环境刷新改写。
+      - >
+        正常停止 Backend并精确清理本 Case 的 39 个 Session 与独占 Socket，不操作任何用户 Stable、
+        Beta 或其它开发 tmux 资源。
+
+  - id: TTP-011
+    name: 一个故障 Socket 不阻断其它健康 Socket 的环境刷新
+    required: true
+    description: >
+      验证启动环境同步以 Socket 为故障域。20 个 Session 所在 Socket 不可用时，同批次另一个健康
+      Socket 上的 19 个 Session仍必须全部刷新；故障组只产生一个可定位诊断，不能重复 20 次等待、
+      误报 Session 丢失或阻塞健康组。
+    preconditions:
+      - 隔离 terminal store 中有 20 个 running Session 指向故障 Socket A，另有 19 个 running Session 指向真实健康 Socket B。
+      - Socket B 的 19 个真实 tmux Session 均保存旧环境 marker，并可独立读取；Socket A 的查询会返回确定的超时或基础设施错误。
+      - Backend 日志目录、启动时间和新环境 marker均为本 Case 独占，便于按 Socket 聚合诊断。
+    steps:
+      - >
+        启动 Backend并等待后台环境同步收敛；逐一读取 Socket B 的 19 个 Session，确认全部更新为新环境
+        marker，pane 内容、Session 身份和 running 状态保持不变。
+      - >
+        读取 Socket A 对应 store 与日志；确认 20 个 Session 没有被标记 exited、没有 thread rebuild，
+        且本轮启动只记录一个包含 Socket A 路径和代表 terminalSessionId 的环境同步失败。
+      - >
+        确认日志中不存在针对 Socket A 的 20 次重复超时，Socket B 没有失败记录；正常停止 Backend并
+        清理本 Case 的 Socket B、隔离 store 与故障 fixture。
+
+  - id: TTP-012
+    name: 多 Socket 环境刷新最多并行处理两个故障域
+    required: true
+    description: >
+      验证历史 Session 分布在多个 Socket 时，后台环境刷新保持两路 Socket 并发，避免一次启动拉起
+      无界 tmux 子进程；最近活跃的 Socket 组应先进入刷新，同时 Backend 对外服务不等待全部组完成。
+    preconditions:
+      - 已准备六个独立 Socket 组，每组至少一条 running Session 记录，并为各组设置可判定的新旧 lastActivityAt。
+      - 本 Case 可控 tmux 代理会在每个 Socket 查询入口停在独立屏障，记录进入、退出和同时在途数量。
+      - Backend 使用隔离 profile、端口和日志，所有屏障都可在 finally 中释放。
+    steps:
+      - >
+        启动 Backend并等待代理记录第一批 Socket 查询；确认任意时刻同时在途的 Socket 组不超过 2，
+        且第一批是 lastActivityAt 最新的两个 Socket 组。
+      - >
+        保持第一批屏障未释放并请求 `/health`；确认 Backend 已 ready，同时第三个及后续 Socket 组尚未
+        进入，证明启动非阻塞且后台并发受控。
+      - >
+        依次释放每批屏障；确认后续 Socket 以每批最多 2 个继续，最终六组都有明确完成或单组失败结果，
+        不存在饥饿、跳过健康组或并发峰值大于 2。
+      - >
+        释放所有剩余屏障并正常停止 Backend；确认没有遗留代理进程、Socket 或隔离 profile。
+
+  - id: TTP-013
+    name: Beta shutdown 遇到残留 Socket 时仍可幂等完成
+    required: false
+    description: >
+      验证 Beta 拥有的 tmux server 已提前退出但 Socket 路径仍残留时，正常 shutdown 会把
+      kill-server 的“server 不存在”视为可收敛状态并删除残留 Socket，不因重复清理导致 Backend
+      卡住或转为失败终态。
+    preconditions:
+      - 已启动独占 Beta profile，准确记录其临时 tmux Socket、Backend PID 和 Session store。
+      - 可以在不影响其它资源的前提下提前终止本 Case tmux server并留下可识别的残留 Socket 路径。
+      - 已记录 Stable 与其它 Beta tmux 基线，便于证明幂等清理没有越界。
+    steps:
+      - >
+        提前终止本 Case tmux server并保留残留 Socket；确认 server PID 已不存在、Socket 路径仍存在且
+        tmux 查询返回 server 不存在。
+      - >
+        向 Beta Backend 发送正常 SIGTERM；确认 shutdown 在强制退出超时前完成、进程返回预期终态，
+        残留 Socket 被删除且重复执行相同清理不会报致命错误。
+      - >
+        检查 Stable 与其它 Beta 基线；确认其 PID、Socket、Session 和 marker 未变化，然后清理本 Case
+        的隔离 profile。
+
+  - id: TTP-014
+    name: tmux 生命周期改动通过仓库门禁与真实 checkpoint
+    required: true
+    description: >
+      验证相关 TypeScript、Lint、架构边界和现有真实 tmux App Server 环境刷新 checkpoint 全部通过；
+      这些命令只作为代码与集成门禁，不能替代本计划其它 Stable、Beta 和故障行为 Case 的真实证据。
+    preconditions:
+      - 当前工作区依赖已安装，macOS 可执行 tmux，且没有其它进程占用 checkpoint fixture 的临时资源。
+      - 已记录本次 patch 边界，命令输出可以与当前 revision 绑定。
+    steps:
+      - >
+        运行 `pnpm typecheck`、`pnpm lint`、`pnpm architecture:check` 和 `git diff --check`；确认全部退出码为 0，
+        架构报告没有新增 forbidden import、runtime cycle 或超出 ratchet 的债务。
+      - >
+        运行 `pnpm agent-team:verify-review-checkpoints`；确认命令退出码为 0，并且检查清单明确包含
+        `bootstrap-tmux-app-server-environment-refreshes-with-backend`。
+      - >
+        确认 checkpoint 创建的临时 tmux server、Socket、Backend 和目录全部在命令结束后清理；若只
+        有静态命令通过而任一真实行为 Case 未执行，不得据此宣称整份计划通过。

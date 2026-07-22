@@ -331,9 +331,9 @@ async function recoverValidLease({
     });
   }
   const runLocked = async () => {
-    let current = (await inspectBetaPool({ homeDir })).slots.find(
-      (entry) => entry.slotId === slot.slotId,
-    );
+    let current = (
+      await inspectBetaPool({ homeDir, applicationsDir })
+    ).slots.find((entry) => entry.slotId === slot.slotId);
     const base = createBetaPoolRecoveryReceipt({
       trigger,
       initiatingSessionId,
@@ -367,9 +367,9 @@ async function recoverValidLease({
       current.derivedState === "partial"
     ) {
       await sleep(secondCheckDelayMs);
-      current = (await inspectBetaPool({ homeDir })).slots.find(
-        (entry) => entry.slotId === slot.slotId,
-      );
+      current = (
+        await inspectBetaPool({ homeDir, applicationsDir })
+      ).slots.find((entry) => entry.slotId === slot.slotId);
       if (current.derivedState !== "partial" || !current.recovery.eligible) {
         return await persistNonMutatingReceipt(
           {
@@ -479,9 +479,9 @@ export async function recoverBetaPoolSlot({
     };
   }
   try {
-    const slot = (await inspectBetaPool({ homeDir })).slots.find(
-      (entry) => entry.slotId === slotId,
-    );
+    const slot = (
+      await inspectBetaPool({ homeDir, applicationsDir })
+    ).slots.find((entry) => entry.slotId === slotId);
     if (slot.derivedState === "idle") {
       return createBetaPoolRecoveryReceipt({
         trigger,

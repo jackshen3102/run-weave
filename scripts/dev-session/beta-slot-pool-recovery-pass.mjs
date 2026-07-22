@@ -65,7 +65,7 @@ export async function runBetaPoolRecoveryPass({
   if (requestedSlotId) {
     assertBetaSlotId(requestedSlotId);
   }
-  const projection = await inspectBetaPool({ homeDir });
+  const projection = await inspectBetaPool({ homeDir, applicationsDir });
   let candidates = projection.slots.filter((slot) =>
     requestedSlotId ? slot.slotId === requestedSlotId : true,
   );

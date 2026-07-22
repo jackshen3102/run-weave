@@ -58,42 +58,6 @@ export function resolveTmuxTarget(
   };
 }
 
-export async function syncExistingTmuxSessionEnvironments(
-  terminalSessionManager: TerminalSessionManager,
-  tmuxService: TmuxService,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<
-  Array<{ terminalSessionId: string; error: unknown }>
-> {
-  const failures: Array<{ terminalSessionId: string; error: unknown }> = [];
-  for (const session of terminalSessionManager.listSessions()) {
-    if (session.status !== "running" || !isTmuxBackedSession(session)) {
-      continue;
-    }
-    const target = resolveTmuxTarget(session, tmuxService);
-    await tmuxService.sanitizeGlobalEnvironment(target);
-    if (!(await tmuxService.hasSession(target))) {
-      continue;
-    }
-    try {
-      await tmuxService.syncSessionEnvironment(
-        target,
-        buildTmuxSessionRuntimeEnvironment(
-          {
-            terminalSessionId: session.id,
-            projectId: session.projectId,
-            tmuxSessionName: target.sessionName,
-          },
-          env,
-        ),
-      );
-    } catch (error) {
-      failures.push({ terminalSessionId: session.id, error });
-    }
-  }
-  return failures;
-}
-
 export async function ensureTerminalRuntime(
   options: EnsureTerminalRuntimeOptions,
 ): Promise<EnsureTerminalRuntimeResult> {
@@ -116,9 +80,39 @@ export async function ensureTerminalRuntime(
       let currentSession =
         options.terminalSessionManager.getSession(options.session.id) ??
         options.session;
-      const target = resolveTmuxTarget(currentSession, options.tmuxService!);
+      let target = resolveTmuxTarget(currentSession, options.tmuxService!);
       await options.tmuxService!.sanitizeGlobalEnvironment(target);
-      const hasSession = await options.tmuxService!.hasSession(target);
+      let hasSession = await options.tmuxService!.hasSession(target);
+      if (
+        !hasSession &&
+        target.socketPath !== options.tmuxService!.socketPath
+      ) {
+        const previousSocketPath = target.socketPath;
+        target = {
+          sessionName: target.sessionName,
+          socketPath: options.tmuxService!.socketPath,
+        };
+        await options.tmuxService!.sanitizeGlobalEnvironment(target);
+        hasSession = await options.tmuxService!.hasSession(target);
+        currentSession =
+          (await options.terminalSessionManager.updateRuntimeMetadata(
+            currentSession.id,
+            {
+              runtimeKind: "tmux",
+              tmuxSessionName: target.sessionName,
+              tmuxSocketPath: target.socketPath,
+              recoverable: true,
+            },
+          )) ?? currentSession;
+        terminalLogger.info("terminal.tmux.socket.migrated", {
+          message: "Migrated missing tmux session to the current socket",
+          terminalSessionId: currentSession.id,
+          sessionName: target.sessionName,
+          previousSocketPath,
+          socketPath: target.socketPath,
+          sessionAlreadyPresent: hasSession,
+        });
+      }
       const wasInteractiveShellLaunch = isInteractiveShellLaunch(
         currentSession.command,
         currentSession.args,

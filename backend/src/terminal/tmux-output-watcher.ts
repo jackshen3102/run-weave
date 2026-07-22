@@ -133,9 +133,12 @@ export class TmuxOutputWatcher {
     }
 
     const target = resolveTmuxTarget(session, this.tmuxService);
+    const hasSession = await this.tmuxService
+      .hasSession(target)
+      .catch(() => true);
     if (
       !isInteractiveShellLaunch(session.command, session.args) &&
-      !(await this.tmuxService.hasSession(target).catch(() => false))
+      !hasSession
     ) {
       await this.terminalSessionManager.updateSessionMetadata(session.id, {
         cwd: session.cwd,

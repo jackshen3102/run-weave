@@ -28,10 +28,10 @@ function createDesktopLaunchEnv() {
 }
 
 export async function getRunningAppLines() {
-  const result = await runCapture("pgrep", ["-fl", appName]);
+  const result = await runCapture("ps", ["-axo", "pid=,comm="]);
 
-  if (!result.ok && result.code !== 1) {
-    throw new Error(`pgrep failed with exit code ${result.code}`);
+  if (!result.ok) {
+    throw new Error(`ps failed with exit code ${result.code}`);
   }
 
   return result.stdout
@@ -39,6 +39,11 @@ export async function getRunningAppLines() {
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => line.includes(`${appName}.app/Contents/`));
+}
+
+function getProcessId(line) {
+  const pid = Number.parseInt(line.split(/\s+/, 1)[0] ?? "", 10);
+  return Number.isInteger(pid) && pid > 0 ? pid : null;
 }
 
 export async function waitForAppExit() {
@@ -55,7 +60,10 @@ export async function waitForAppExit() {
     console.warn(
       "[runweave-update] force stopping remaining Runweave processes",
     );
-    await run("pkill", ["-f", `${appName}.app/Contents/`]);
+    const remainingProcessIds = remaining.map(getProcessId).filter(Boolean);
+    if (remainingProcessIds.length > 0) {
+      await run("kill", ["-TERM", ...remainingProcessIds.map(String)]);
+    }
   }
 
   for (let attempt = 1; attempt <= 10; attempt += 1) {
