@@ -24,6 +24,7 @@ const {
   parseArgs,
   parsePayload,
   readHookEvent,
+  readNotificationType,
   readTmuxPaneContext,
   readThreadId,
   toAgentHookStateEvent,
@@ -120,7 +121,7 @@ function readTmuxSessionEnv() {
   };
 }
 
-function notifyDesktop(source) {
+function notifyDesktop(source, options = {}) {
   if (process.env.RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY === "1") {
     return;
   }
@@ -129,10 +130,23 @@ function notifyDesktop(source) {
   }
   const labels = { claude: "Claude", codex: "Codex", trae: "Trae" };
   const name = labels[source] || "AI";
+  const notificationType = options.notificationType || null;
+  // traex attention notifications ask the user to come back and choose/confirm,
+  // rather than reporting a finished turn, so use a matching title/body.
+  const title =
+    notificationType === "permission_prompt" ||
+    notificationType === "idle_prompt"
+      ? `${name} 需要你选择/确认`
+      : `${name} 完成了`;
+  const body =
+    notificationType === "permission_prompt" ||
+    notificationType === "idle_prompt"
+      ? "回到终端处理"
+      : "回来接管终端";
   try {
     spawn(
       "/usr/bin/osascript",
-      ["-e", `display notification "回来接管终端" with title "${name} 完成了"`],
+      ["-e", `display notification "${body}" with title "${title}"`],
       { stdio: "ignore", detached: true },
     ).unref();
     spawn("/usr/bin/afplay", ["/System/Library/Sounds/Glass.aiff"], {
@@ -318,8 +332,27 @@ async function main() {
       ? toAgentHookStateEvent(normalizedEvent)
       : null;
   const toolHook = extractToolHook(payload);
+  // traex (normalized to "trae") emits a Notification hook when it needs the
+  // user to come back and act. `permission_prompt` (about to prompt for
+  // approval/selection) and `idle_prompt` (agent idle, waiting for input) are
+  // both "please return to the terminal" signals, so we surface them through
+  // the completion channel to light the green attention dot. Other agents and
+  // other notification types stay untouched. State is intentionally not
+  // updated (stateHookEvent stays null for notification), per the completion-
+  // only design.
+  const notificationType =
+    normalizedEvent === "notification" ? readNotificationType(payload) : null;
+  const isTraexAttentionNotification =
+    (source === "trae" || source === "traex" || source === "traecli") &&
+    (notificationType === "permission_prompt" ||
+      notificationType === "idle_prompt");
+  const effectiveCompletionReason = isTraexAttentionNotification
+    ? "notify"
+    : completionReason;
   const shouldRecordCompletion =
-    completionReason !== "hook_stop" || STOP_EVENTS.has(normalizedEvent);
+    isTraexAttentionNotification ||
+    effectiveCompletionReason !== "hook_stop" ||
+    STOP_EVENTS.has(normalizedEvent);
 
   const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;
   const stateEndpoint = deriveAgentHookEndpoint(endpoint);
@@ -346,6 +379,8 @@ async function main() {
     threadId,
     stateHookEvent,
     commandName,
+    notificationType,
+    isTraexAttentionNotification,
     shouldRecordCompletion,
     tmuxEnvRefresh,
   });
@@ -439,14 +474,14 @@ async function main() {
   }
 
   if (shouldRecordCompletion && completionEndpoint) {
-    notifyDesktop(source);
+    notifyDesktop(source, { notificationType });
     notifyFeishu(payload, source, terminalSessionId, terminalPanelId);
     if (appServerClient) {
       const completionBody = buildCompletionHookBody({
         terminalSessionId,
         payload,
         source,
-        completionReason,
+        completionReason: effectiveCompletionReason,
         rawEvent,
         commandName,
       });
@@ -491,7 +526,7 @@ async function main() {
       terminalSessionId,
       payload,
       source,
-      completionReason,
+      completionReason: effectiveCompletionReason,
       rawEvent,
       commandName,
     });
