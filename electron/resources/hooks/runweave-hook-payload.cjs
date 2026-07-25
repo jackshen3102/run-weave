@@ -237,6 +237,13 @@ function readHookEvent(payload) {
   );
 }
 
+function readNotificationType(payload) {
+  const raw = payload.notification_type ?? payload.notificationType;
+  return typeof raw === "string" && raw.trim()
+    ? raw.trim().toLowerCase()
+    : null;
+}
+
 function readThreadId(payload) {
   const raw =
     payload.threadId ??
@@ -415,6 +422,7 @@ module.exports = {
   parseArgs,
   parsePayload,
   readHookEvent,
+  readNotificationType,
   readTmuxPaneContext,
   readThreadId,
   toAgentHookStateEvent,

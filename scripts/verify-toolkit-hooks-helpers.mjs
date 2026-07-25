@@ -398,3 +398,141 @@ export async function verifyPreToolHook(params) {
     },
   );
 }
+
+// traex emits a Notification hook when it needs the user to choose/confirm
+// (permission_prompt) or is idle waiting for input (idle_prompt). Both surface
+// through the completion channel to light the green attention dot, without
+// touching agent state. Other notification types and other agents must not.
+export async function verifyTraexNotificationCompletion(params) {
+  const baseEnv = {
+    HOME: params.homeDir,
+    RUNWEAVE_TOOLKIT_PLUGIN_ROOT: toolkitDir,
+    RUNWEAVE_APP_SERVER_URL: params.appServerUrl,
+    RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
+    RUNWEAVE_HOOK_ENDPOINT: params.endpoint,
+    RUNWEAVE_COMPLETION_HOOK_ENDPOINT: params.completionEndpoint,
+    RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+  };
+
+  // 1. traex permission_prompt → records completion (reason=notify), no state.
+  let requestsBefore = params.requests.length;
+  let appServerBefore = params.appServerRequests.length;
+  await runToolkitHookCommand(
+    params.command,
+    "traex",
+    {
+      ...baseEnv,
+      RUNWEAVE_HOOK_TOKEN: "token-traex-permission",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-traex-permission",
+      RUNWEAVE_PROJECT_ID: "project-traex-permission",
+    },
+    {
+      hook_event_name: "Notification",
+      notification_type: "permission_prompt",
+      title: "Approve command?",
+      message: "traex wants to run a command",
+      session_id: "thread-traex-permission",
+    },
+    { replacePluginDirPlaceholder: false },
+  );
+  const permissionCompletion = params.requests
+    .slice(requestsBefore)
+    .find((request) => request.url === "/internal/terminal-completion");
+  assert.ok(
+    permissionCompletion,
+    "traex permission_prompt must record a completion",
+  );
+  assert.ok(
+    ["trae", "traex", "traecli"].includes(permissionCompletion.body.source),
+    `traex completion source must be a trae-family agent, got ${permissionCompletion.body.source}`,
+  );
+  assert.equal(permissionCompletion.body.rawHookEvent, "Notification");
+  assert.equal(permissionCompletion.body.completionReason, "notify");
+  const permissionAppServer = params.appServerRequests
+    .slice(appServerBefore)
+    .find((event) => event.kind === "agent.completion");
+  assert.ok(
+    permissionAppServer,
+    "traex permission_prompt must post an app-server completion",
+  );
+  assert.ok(
+    !permissionAppServer.payload.stateHookEvent,
+    "traex Notification completion must not carry an agent state event",
+  );
+
+  // 2. traex idle_prompt → records completion.
+  requestsBefore = params.requests.length;
+  await runToolkitHookCommand(
+    params.command,
+    "traex",
+    {
+      ...baseEnv,
+      RUNWEAVE_HOOK_TOKEN: "token-traex-idle",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-traex-idle",
+      RUNWEAVE_PROJECT_ID: "project-traex-idle",
+    },
+    {
+      hook_event_name: "Notification",
+      notification_type: "idle_prompt",
+      session_id: "thread-traex-idle",
+    },
+    { replacePluginDirPlaceholder: false },
+  );
+  const idleCompletion = params.requests
+    .slice(requestsBefore)
+    .find((request) => request.url === "/internal/terminal-completion");
+  assert.ok(idleCompletion, "traex idle_prompt must record a completion");
+  assert.equal(idleCompletion.body.completionReason, "notify");
+
+  // 3. traex other notification type → must NOT record completion.
+  requestsBefore = params.requests.length;
+  await runToolkitHookCommand(
+    params.command,
+    "traex",
+    {
+      ...baseEnv,
+      RUNWEAVE_HOOK_TOKEN: "token-traex-info",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-traex-info",
+      RUNWEAVE_PROJECT_ID: "project-traex-info",
+    },
+    {
+      hook_event_name: "Notification",
+      notification_type: "info",
+      session_id: "thread-traex-info",
+    },
+    { replacePluginDirPlaceholder: false },
+  );
+  assert.equal(
+    params.requests
+      .slice(requestsBefore)
+      .some((request) => request.url === "/internal/terminal-completion"),
+    false,
+    "traex non-attention notification must not record a completion",
+  );
+
+  // 4. codex permission_prompt → must NOT record (feature is traex-only).
+  requestsBefore = params.requests.length;
+  await runToolkitHookCommand(
+    params.command,
+    "codex",
+    {
+      ...baseEnv,
+      RUNWEAVE_HOOK_TOKEN: "token-codex-permission",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-codex-permission",
+      RUNWEAVE_PROJECT_ID: "project-codex-permission",
+    },
+    {
+      hook_event_name: "Notification",
+      notification_type: "permission_prompt",
+      session_id: "thread-codex-permission",
+    },
+    { replacePluginDirPlaceholder: false },
+  );
+  assert.equal(
+    params.requests
+      .slice(requestsBefore)
+      .some((request) => request.url === "/internal/terminal-completion"),
+    false,
+    "codex permission_prompt must not record a completion",
+  );
+}

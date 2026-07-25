@@ -9,6 +9,7 @@ import {
   verifyPtyProviderInference,
   verifyPreToolHook,
   verifyTmuxPaneContextFailure,
+  verifyTraexNotificationCompletion,
   writeAppServerDiscoveryFiles,
 } from "./verify-toolkit-hooks-helpers.mjs";
 import { createToolkitHookFixture } from "./verify-toolkit-hooks/fixture.mjs";
@@ -566,6 +567,16 @@ try {
       appServerRequestsBeforeIdentitylessLauncher,
       "launcher without Runweave identity must not post app-server events",
     );
+
+    await verifyTraexNotificationCompletion({
+      command: getToolkitHookCommand(toolkitHooksConfig, "Notification"),
+      homeDir,
+      appServerUrl: `http://127.0.0.1:${appServerPort}`,
+      endpoint,
+      completionEndpoint: `http://127.0.0.1:${port}/internal/terminal-completion`,
+      requests,
+      appServerRequests,
+    });
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await new Promise((resolve) => appServer.close(resolve));
