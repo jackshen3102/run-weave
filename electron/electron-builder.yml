@@ -31,6 +31,13 @@ extraResources:
       - "prebuilds/darwin-arm64/**/*"
       - "package.json"
       - "LICENSE"
+  - from: dist/backend
+    to: backend
+    filter:
+      - "activity-sqlite-worker.cjs"
+      - "evolution-sqlite-worker.cjs"
+      - "activity-sqlite-runtime-manifest.json"
+      - "node_modules/**/*"
 mac:
   icon: resources/icons/icon.icns
   category: public.app-category.developer-tools

@@ -17,6 +17,10 @@ export interface EvolutionActivationStore {
   ): Promise<void>;
   getRuntimeTrace(traceId: string): Promise<RuntimeTraceSummary | null>;
   listRuntimeTraces(runId: string): Promise<RuntimeTraceSummary[]>;
+  listRecentRuntimeTraces(
+    learningScopeId?: string,
+    limit?: number,
+  ): Promise<RuntimeTraceSummary[]>;
   close(): Promise<void>;
 }
 
@@ -79,6 +83,20 @@ export class InMemoryEvolutionActivationStore implements EvolutionActivationStor
   async listRuntimeTraces(runId: string): Promise<RuntimeTraceSummary[]> {
     return Array.from(this.traces.values())
       .filter((trace) => trace.runId === runId)
+      .map((trace) => ({ ...trace, events: [...trace.events] }));
+  }
+
+  async listRecentRuntimeTraces(
+    learningScopeId?: string,
+    limit = 100,
+  ): Promise<RuntimeTraceSummary[]> {
+    return Array.from(this.traces.values())
+      .filter(
+        (trace) =>
+          !learningScopeId || trace.learningScopeId === learningScopeId,
+      )
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, limit)
       .map((trace) => ({ ...trace, events: [...trace.events] }));
   }
 

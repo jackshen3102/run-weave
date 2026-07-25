@@ -193,15 +193,16 @@ cases:
       - 停止目标 Backend 或使用无效认证重试；确认 CLI 明确失败，不本地创建 Run、修改 Schedule、读取数据库或输出 Provider 凭据。
 
   - id: ASEC-017
-    name: Evolution 独立页面展示控制面而不复制 Activity 报表
+    name: Evolution 独立页面提供一键范围复盘而不暴露运行参数
     required: true
     description: >
-      验证 /evolution 能创建 Run、配置 Schedule/Profile/Provider/Budget、查看阶段进度、分歧、Novelty、Insight revision 和零产出结果，并链接回 Activity 证据。
+      验证 /evolution 只让用户选择全部工作区或项目范围并一键复盘，后端自动使用上次成功水位、默认分析策略与完整冻结范围，
+      页面直接呈现覆盖情况、关键建议、分歧、Novelty、Insight revision 和零产出结果，并链接回 Activity 证据。
     preconditions:
       - 已通过受控 Runweave 环境启动包含 Evolution API 的真实 Web 页面，并存在 completed、partial、contested 和 no_material_novelty 样本。
     steps:
-      - 使用 `$toolkit:playwright-cli` 打开 /evolution，创建一次手动 Run并操作 Schedule；确认输入校验、queued/running 状态和预算信息与 API 一致。
-      - 查看四类样本详情；确认首页优先显示 novel/contradiction/drift 与待处理分歧，不把 Activity 事实列表伪装成洞察；点击 Evidence 能进入对应 Activity/Work History 详情，浏览器控制台无错误。
+      - 使用 `$toolkit:playwright-cli` 打开 /evolution；确认范围选择只显示全部工作区和当前项目，点击一次复盘按钮即创建唯一 Run，不要求填写 Project ID、Profile、Provider、watermark 或预算。
+      - 查看新 Run 与四类样本详情；确认新 Run 从上次成功水位开始且冻结范围全部覆盖，页面优先显示关键建议、novel/contradiction/drift 与待处理分歧，不把 Activity 事实列表伪装成洞察；点击 Evidence 能进入对应 Activity/Work History 详情，浏览器控制台无错误。
 
   - id: ASEC-018
     name: Evolution API 与运行级 MCP token 遵守权限隔离

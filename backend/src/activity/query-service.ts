@@ -1,4 +1,5 @@
 import type {
+  ActivityEvolutionSnapshotQuery,
   ActivityFactsQuery,
   ActivityOperationScope,
   ActivityTimelineSelector,
@@ -17,6 +18,14 @@ export class ActivityQueryService {
 
   facts(query: ActivityFactsQuery) {
     return this.requireStore().facts(query);
+  }
+
+  evolutionSnapshot(query: ActivityEvolutionSnapshotQuery) {
+    return this.requireStore().evolutionSnapshot(query);
+  }
+
+  evolutionEvidenceAvailability(eventIds: string[]) {
+    return this.requireStore().evolutionEvidenceAvailability(eventIds);
   }
 
   timeline(selector: ActivityTimelineSelector, query: ActivityFactsQuery) {

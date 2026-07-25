@@ -19,7 +19,9 @@ import {
 } from "../electron/scripts/activity-sqlite-runtime-paths.mjs";
 
 const repoRoot = process.cwd();
-const tempRoot = mkdtempSync(path.join(os.tmpdir(), "runweave-activity-runtime-"));
+const tempRoot = mkdtempSync(
+  path.join(os.tmpdir(), "runweave-activity-runtime-"),
+);
 const electronExecutable = path.join(
   repoRoot,
   "node_modules",
@@ -53,7 +55,11 @@ function listFiles(root, directory = root) {
     .sort((left, right) => left.name.localeCompare(right.name))
     .flatMap((entry) => {
       const absolute = path.join(directory, entry.name);
-      assert.equal(entry.isSymbolicLink(), false, `symlink not allowed: ${absolute}`);
+      assert.equal(
+        entry.isSymbolicLink(),
+        false,
+        `symlink not allowed: ${absolute}`,
+      );
       if (entry.isDirectory()) return listFiles(root, absolute);
       return entry.isFile()
         ? [path.relative(root, absolute).split(path.sep).join("/")]
@@ -62,34 +68,55 @@ function listFiles(root, directory = root) {
 }
 
 function verifyManifestTree(root, manifestFileName) {
-  const manifest = JSON.parse(readFileSync(path.join(root, manifestFileName), "utf8"));
+  const manifest = JSON.parse(
+    readFileSync(path.join(root, manifestFileName), "utf8"),
+  );
   const expectedPaths = manifest.files.map((file) => file.path).sort();
-  const activityRoots = manifestFileName === "activity-sqlite-runtime-manifest.json"
-    ? [
-        manifest.workerEntry,
-        "node_modules/better-sqlite3/",
-        "node_modules/bindings/",
-        "node_modules/file-uri-to-path/",
-      ]
-    : null;
-  const actualPaths = listFiles(root).filter((file) =>
-    file !== manifestFileName &&
-    (!activityRoots || activityRoots.some((prefix) =>
-      prefix.endsWith("/") ? file.startsWith(prefix) : file === prefix,
-    )),
-  ).sort();
-  assert.deepEqual(actualPaths, expectedPaths, "runtime manifest file set mismatch");
+  const activityRoots =
+    manifestFileName === "activity-sqlite-runtime-manifest.json"
+      ? [
+          manifest.workerEntry,
+          manifest.evolutionWorkerEntry,
+          "node_modules/better-sqlite3/",
+          "node_modules/bindings/",
+          "node_modules/file-uri-to-path/",
+        ]
+      : null;
+  const actualPaths = listFiles(root)
+    .filter(
+      (file) =>
+        file !== manifestFileName &&
+        (!activityRoots ||
+          activityRoots.some((prefix) =>
+            prefix.endsWith("/") ? file.startsWith(prefix) : file === prefix,
+          )),
+    )
+    .sort();
+  assert.deepEqual(
+    actualPaths,
+    expectedPaths,
+    "runtime manifest file set mismatch",
+  );
   for (const file of manifest.files) {
     const absolute = path.join(root, file.path);
-    assert.equal(statSync(absolute).size, file.size, `${file.path} size mismatch`);
+    assert.equal(
+      statSync(absolute).size,
+      file.size,
+      `${file.path} size mismatch`,
+    );
     assert.equal(
       crypto.createHash("sha256").update(readFileSync(absolute)).digest("hex"),
       file.sha256,
       `${file.path} hash mismatch`,
     );
   }
-  const treeSha256 = crypto.createHash("sha256")
-    .update(manifest.files.map((file) => `${file.path}\0${file.size}\0${file.sha256}`).join("\n"))
+  const treeSha256 = crypto
+    .createHash("sha256")
+    .update(
+      manifest.files
+        .map((file) => `${file.path}\0${file.size}\0${file.sha256}`)
+        .join("\n"),
+    )
     .digest("hex");
   assert.equal(treeSha256, manifest.treeSha256, "runtime tree hash mismatch");
   return manifest;
@@ -111,7 +138,32 @@ let id=0;const pending=new Map();worker.on('message',(m)=>{const p=pending.get(m
 const request=(op)=>new Promise((resolve,reject)=>{const requestId=++id;pending.set(requestId,{resolve,reject});worker.postMessage({...op,id:requestId});});
 (async()=>{const now=new Date().toISOString();const event={eventId:crypto.randomUUID(),eventName:'producer.instance.started',schemaVersion:1,occurredAt:now,producer:{name:'runtime-verify',version:'1',instanceId:${JSON.stringify(label)},bootId:crypto.randomUUID(),bootStartedAt:now,sequence:1},actor:{type:'system'},runtime:{channel:'stable',surface:'backend'},scope:{},payload:{runtime:${JSON.stringify(label)}},contents:[],externalRefs:[]};await request({op:'record',events:[event]});const facts=await request({op:'facts',query:{limit:10}});if(facts.facts.length!==1)throw new Error('worker fact missing');if(!(await request({op:'integrity'})))throw new Error('worker integrity failed');const exited=new Promise((resolve)=>worker.once('exit',resolve));await request({op:'close'});await exited;console.log(JSON.stringify({facts:facts.facts.length,eventName:facts.facts[0].eventName}));})().catch((error)=>{console.error(error);process.exitCode=1;});`,
   );
-  return JSON.parse(run(executable, [harnessPath], { ELECTRON_RUN_AS_NODE: "1" }));
+  return JSON.parse(
+    run(executable, [harnessPath], { ELECTRON_RUN_AS_NODE: "1" }),
+  );
+}
+
+function runEvolutionWorker(
+  workerEntry,
+  databasePath,
+  label,
+  executable = electronExecutable,
+) {
+  const harnessPath = path.join(
+    tempRoot,
+    `${label}-evolution-worker-verify.cjs`,
+  );
+  writeFileSync(
+    harnessPath,
+    `const {Worker}=require('node:worker_threads');
+const worker=new Worker(${JSON.stringify(workerEntry)},{workerData:{databasePath:${JSON.stringify(databasePath)}}});
+let id=0;const pending=new Map();worker.on('message',(m)=>{const p=pending.get(m.id);if(!p)return;pending.delete(m.id);m.ok?p.resolve(m.result):p.reject(new Error(m.error));});worker.on('error',(e)=>{throw e});
+const request=(op)=>new Promise((resolve,reject)=>{const requestId=++id;pending.set(requestId,{resolve,reject});worker.postMessage({...op,id:requestId});});
+(async()=>{if(!(await request({op:'integrity'})))throw new Error('evolution worker integrity failed');const exited=new Promise((resolve)=>worker.once('exit',resolve));await request({op:'close'});await exited;console.log(JSON.stringify({integrity:true}));})().catch((error)=>{console.error(error);process.exitCode=1;});`,
+  );
+  return JSON.parse(
+    run(executable, [harnessPath], { ELECTRON_RUN_AS_NODE: "1" }),
+  );
 }
 
 try {
@@ -135,25 +187,51 @@ try {
     resourcesBackendDir,
     "activity-sqlite-runtime-manifest.json",
   );
-  assert.ok(existsSync(electronManifestPath), "Electron Activity manifest missing");
+  assert.ok(
+    existsSync(electronManifestPath),
+    "Electron Activity manifest missing",
+  );
   const manifest = verifyManifestTree(
     resourcesBackendDir,
     "activity-sqlite-runtime-manifest.json",
   );
-  const electronBinding = path.join(resourcesBackendDir, manifest.nativeBinding);
+  const electronBinding = path.join(
+    resourcesBackendDir,
+    manifest.nativeBinding,
+  );
   assert.notEqual(path.resolve(nodeBinding), path.resolve(electronBinding));
   assert.ok(existsSync(electronBinding), "Electron native binding missing");
 
   const electronDatabase = path.join(tempRoot, "electron.sqlite");
   const workerEntry = path.join(resourcesBackendDir, manifest.workerEntry);
-  const electronOutput = runElectronWorker(workerEntry, electronDatabase, "electron-runtime");
+  const electronOutput = runElectronWorker(
+    workerEntry,
+    electronDatabase,
+    "electron-runtime",
+  );
+  const evolutionWorkerEntry = path.join(
+    resourcesBackendDir,
+    manifest.evolutionWorkerEntry,
+  );
+  const evolutionOutput = runEvolutionWorker(
+    evolutionWorkerEntry,
+    path.join(tempRoot, "electron-evolution.sqlite"),
+    "electron-runtime",
+  );
 
-  const externalRootValue = process.env.RUNWEAVE_ACTIVITY_EXTERNAL_RELEASE?.trim();
-  const externalRoot = externalRootValue ? path.resolve(externalRootValue) : null;
+  const externalRootValue =
+    process.env.RUNWEAVE_ACTIVITY_EXTERNAL_RELEASE?.trim();
+  const externalRoot = externalRootValue
+    ? path.resolve(externalRootValue)
+    : null;
   let externalVerified = false;
   if (externalRoot) {
     verifyManifestTree(externalRoot, "manifest.json");
-    const externalWorker = path.join(externalRoot, "backend", "activity-sqlite-worker.cjs");
+    const externalWorker = path.join(
+      externalRoot,
+      "backend",
+      "activity-sqlite-worker.cjs",
+    );
     const externalBinding = path.join(
       externalRoot,
       "backend",
@@ -170,10 +248,16 @@ try {
       path.join(tempRoot, "external.sqlite"),
       "external-runtime",
     );
+    runEvolutionWorker(
+      path.join(externalRoot, "backend", "evolution-sqlite-worker.cjs"),
+      path.join(tempRoot, "external-evolution.sqlite"),
+      "external-runtime",
+    );
     externalVerified = true;
   }
 
-  const packagedResourcesValue = process.env.RUNWEAVE_ACTIVITY_PACKAGED_RESOURCES?.trim();
+  const packagedResourcesValue =
+    process.env.RUNWEAVE_ACTIVITY_PACKAGED_RESOURCES?.trim();
   const packagedResources = packagedResourcesValue
     ? path.resolve(packagedResourcesValue)
     : null;
@@ -184,7 +268,10 @@ try {
       packagedBackend,
       "activity-sqlite-runtime-manifest.json",
     );
-    const packagedWorker = path.join(packagedBackend, packagedManifest.workerEntry);
+    const packagedWorker = path.join(
+      packagedBackend,
+      packagedManifest.workerEntry,
+    );
     const packagedExecutable = path.join(
       path.dirname(packagedResources),
       "MacOS",
@@ -193,6 +280,12 @@ try {
     runElectronWorker(
       packagedWorker,
       path.join(tempRoot, "packaged.sqlite"),
+      "packaged-runtime",
+      packagedExecutable,
+    );
+    runEvolutionWorker(
+      path.join(packagedBackend, packagedManifest.evolutionWorkerEntry),
+      path.join(tempRoot, "packaged-evolution.sqlite"),
       "packaged-runtime",
       packagedExecutable,
     );
@@ -206,8 +299,12 @@ try {
         node: { packageEntry: nodePackageEntry, binding: nodeBinding },
         electron: {
           workerEntry,
+          evolutionWorkerEntry,
           binding: electronBinding,
-          output: electronOutput,
+          output: {
+            activity: electronOutput,
+            evolution: evolutionOutput,
+          },
           stagingAppDir,
         },
         external: { verified: externalVerified },

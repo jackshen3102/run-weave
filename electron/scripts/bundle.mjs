@@ -98,6 +98,11 @@ const activityWorkerEntry = path.resolve(
   "backend",
   "activity-sqlite-worker.cjs",
 );
+const evolutionWorkerEntry = path.resolve(
+  outputDir,
+  "backend",
+  "evolution-sqlite-worker.cjs",
+);
 await build({
   ...shared,
   entryPoints: ["../backend/src/activity/sqlite-worker.ts"],
@@ -105,7 +110,14 @@ await build({
   format: "cjs",
   external: ["better-sqlite3"],
 });
-finalizeActivitySqliteRuntime(activityWorkerEntry);
+await build({
+  ...shared,
+  entryPoints: ["../backend/src/evolution/storage/sqlite-worker.ts"],
+  outfile: evolutionWorkerEntry,
+  format: "cjs",
+  external: ["better-sqlite3"],
+});
+finalizeActivitySqliteRuntime(activityWorkerEntry, evolutionWorkerEntry);
 
 await build({
   ...shared,

@@ -263,6 +263,41 @@ export async function verifyAssignmentAndOutcomes() {
     { query: { dispatchId: second.trace.dispatchId } },
     discoveryResponse,
   );
+  assert.equal(discoveryStatus, 200);
+  assert.deepEqual(
+    discoveryBody.traces.map((trace) => trace.traceId),
+    [second.trace.traceId],
+  );
+
+  discoveryBody = undefined;
+  discoveryStatus = 200;
+  await discoveryHandler(
+    {
+      query: {
+        learningScopeId: second.trace.learningScopeId,
+        limit: "200",
+      },
+    },
+    discoveryResponse,
+  );
+  assert.equal(discoveryStatus, 200);
+  assert.ok(
+    discoveryBody.traces.some(
+      (trace) => trace.traceId === second.trace.traceId,
+    ),
+  );
+  assert.ok(
+    discoveryBody.traces.every(
+      (trace) => trace.learningScopeId === second.trace.learningScopeId,
+    ),
+  );
+
+  discoveryBody = undefined;
+  discoveryStatus = 200;
+  await discoveryHandler(
+    { query: { limit: "201" } },
+    discoveryResponse,
+  );
   assert.equal(discoveryStatus, 400);
   assert.equal(discoveryBody.error, "invalid_evolution_request");
 }

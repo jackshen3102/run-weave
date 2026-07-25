@@ -1,6 +1,7 @@
 import { HttpError } from "../errors.js";
 
 interface ErrorPayload {
+  error?: unknown;
   message?: unknown;
   details?: unknown;
 }
@@ -62,14 +63,20 @@ async function buildHttpError(
 }
 
 function formatErrorPayloadMessage(payload: ErrorPayload): string | null {
-  if (typeof payload.message !== "string" || !payload.message.trim()) {
+  const message =
+    typeof payload.message === "string" && payload.message.trim()
+      ? payload.message
+      : typeof payload.error === "string" && payload.error.trim()
+        ? payload.error
+        : null;
+  if (!message) {
     return null;
   }
   const panelCandidates = formatPanelCandidates(payload.details);
   if (!panelCandidates) {
-    return payload.message;
+    return message;
   }
-  return `${payload.message}\n${panelCandidates}`;
+  return `${message}\n${panelCandidates}`;
 }
 
 function formatPanelCandidates(details: unknown): string | null {
@@ -82,7 +89,9 @@ function formatPanelCandidates(details: unknown): string | null {
   }
   return [
     "Candidate panels:",
-    ...panels.map((panel) => `- ${formatPanelCandidate(panel as PanelCandidate)}`),
+    ...panels.map(
+      (panel) => `- ${formatPanelCandidate(panel as PanelCandidate)}`,
+    ),
   ].join("\n");
 }
 
@@ -96,7 +105,5 @@ function formatPanelCandidate(panel: PanelCandidate): string {
 }
 
 function formatCandidateField(name: string, value: unknown): string | null {
-  return typeof value === "string" && value.trim()
-    ? `${name}=${value}`
-    : null;
+  return typeof value === "string" && value.trim() ? `${name}=${value}` : null;
 }

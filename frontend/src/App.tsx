@@ -44,6 +44,7 @@ import { TerminalRoutePage } from "./pages/terminal-page";
 import { PrototypesPage } from "./pages/prototypes-page";
 import { ActivityPage } from "./pages/activity-page";
 import { DesktopCompanionPage } from "./pages/desktop-companion-page";
+import { EvolutionPage } from "./pages/evolution-page";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
@@ -423,6 +424,24 @@ export default function App() {
                 authPendingView
               ) : token ? (
                 <ActivityPage
+                  apiBase={apiBase}
+                  token={token}
+                  onNavigateHome={() => window.location.assign(HOME_PATH)}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/evolution"
+            element={
+              needsConnection ? (
+                <Navigate to="/connections" replace />
+              ) : isAuthChecking ? (
+                authPendingView
+              ) : token ? (
+                <EvolutionPage
                   apiBase={apiBase}
                   token={token}
                   onNavigateHome={() => window.location.assign(HOME_PATH)}
