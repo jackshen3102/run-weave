@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Race</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap");
+      html, body { height: 100%; margin: 0; }
+      body { font-family: "Manrope", ui-sans-serif, system-ui, sans-serif; background: #020617; }
+      .font-mono, .term { font-family: "Fira Code", "SFMono-Regular", ui-monospace, monospace; }
+      *::-webkit-scrollbar { width: 8px; height: 8px; }
+      *::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+      /* 终端 xterm 底色 */
+      .xterm-bg { background: #0b1220; }
+      @keyframes rw-pulse { 50% { opacity: .4; } }
+      .rw-pulse { animation: rw-pulse 1.4s ease-in-out infinite; }
+    </style>
+  </head>
+  <body>
+    <main id="app" class="dark h-full text-slate-100"></main>
+    <div id="proto-helper" data-prototype-helper="true" class="hidden"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

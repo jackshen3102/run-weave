@@ -5,7 +5,11 @@ export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
 export type TerminalSvgViewMode = "preview" | "source";
 export type TerminalChangesViewMode = "diff" | "preview";
-export type TerminalSidecarTool = "preview" | "browser" | "agent-team";
+export type TerminalSidecarTool =
+  | "preview"
+  | "browser"
+  | "agent-team"
+  | "race";
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 
@@ -51,6 +55,7 @@ export interface TerminalPreviewProjectState {
 export interface TerminalPreviewStore {
   ui: TerminalPreviewUiState;
   projects: Record<string, TerminalPreviewProjectState>;
+  changesRefreshRevisionByProjectId: Record<string, number>;
   browser: {
     tabs: TerminalBrowserTabState[];
     activeTabId: string;
@@ -58,6 +63,7 @@ export interface TerminalPreviewStore {
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => void;
   openBrowser: () => void;
   openAgentTeam: () => void;
+  openRace: () => void;
   closePreview: () => void;
   setActiveTool: (tool: TerminalSidecarTool) => void;
   setWidth: (widthPx: number) => void;
@@ -89,6 +95,7 @@ export interface TerminalPreviewStore {
     projectId: string,
     mode: TerminalChangesViewMode,
   ) => void;
+  requestChangesRefresh: (projectId: string) => void;
   removeProjectPreview: (projectId: string) => void;
   createBrowserTab: (url?: string) => void;
   addProxyBrowserTab: (

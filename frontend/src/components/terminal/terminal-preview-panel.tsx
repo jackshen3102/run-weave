@@ -25,6 +25,7 @@ import {
   type TerminalPreviewLineTarget,
 } from "./terminal-preview-file-view";
 import { TerminalAgentTeamPanel } from "./terminal-agent-team-panel";
+import { TerminalRacePanel } from "./terminal-race-panel";
 import { useTerminalFileTree } from "./use-terminal-file-tree";
 import { useTerminalPreviewFileMutations } from "./use-terminal-preview-file-mutations";
 
@@ -455,6 +456,7 @@ export function TerminalPreviewPanel({
       onAuthExpired={onAuthExpired}
     />
   );
+  const raceBody = <TerminalRacePanel />;
   return (
     <>
       <TerminalPreviewPanelShell
@@ -539,6 +541,7 @@ export function TerminalPreviewPanel({
         activeTerminalSessionId={activeSession?.terminalSessionId ?? null}
         body={previewBody}
         agentTeamBody={agentTeamBody}
+        raceBody={raceBody}
       />
 
       <TerminalPreviewQuickSearch

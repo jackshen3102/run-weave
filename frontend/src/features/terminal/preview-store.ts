@@ -99,6 +99,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
     activeTool: "preview",
   },
   projects: {},
+  changesRefreshRevisionByProjectId: {},
   browser: createInitialTerminalBrowserState(),
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => {
     set((state: TerminalPreviewStore) => {
@@ -124,6 +125,11 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
   openAgentTeam: () => {
     set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, open: true, activeTool: "agent-team" },
+    }));
+  },
+  openRace: () => {
+    set((state: TerminalPreviewStore) => ({
+      ui: { ...state.ui, open: true, activeTool: "race" },
     }));
   },
   closePreview: () => {
@@ -281,11 +287,28 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
       },
     }));
   },
+  requestChangesRefresh: (projectId: string) => {
+    set((state: TerminalPreviewStore) => ({
+      changesRefreshRevisionByProjectId: {
+        ...state.changesRefreshRevisionByProjectId,
+        [projectId]:
+          (state.changesRefreshRevisionByProjectId[projectId] ?? 0) + 1,
+      },
+    }));
+  },
   removeProjectPreview: (projectId: string) => {
     set((state: TerminalPreviewStore) => {
       const nextProjects = { ...state.projects };
+      const nextChangesRefreshRevisionByProjectId = {
+        ...state.changesRefreshRevisionByProjectId,
+      };
       delete nextProjects[projectId];
-      return { projects: nextProjects };
+      delete nextChangesRefreshRevisionByProjectId[projectId];
+      return {
+        projects: nextProjects,
+        changesRefreshRevisionByProjectId:
+          nextChangesRefreshRevisionByProjectId,
+      };
     });
   },
   ...createTerminalPreviewBrowserActions(set),

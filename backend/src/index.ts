@@ -20,6 +20,7 @@ import { createAppHomeOverviewRouter } from "./routes/app-home-overview";
 import { createAppServerStateRouter } from "./routes/app-server-state";
 import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
 import { createAgentTeamRouter } from "./routes/agent-team";
+import { createRaceRouter } from "./routes/race-routes";
 import { registerActivityRoutes } from "./routes/activity-registration";
 import {
   createInternalTerminalAgentHookRouter,
@@ -238,6 +239,11 @@ function createHttpApp(
     "/api/agent-team",
     requireAuth,
     createAgentTeamRouter(services.agentTeamService),
+  );
+  app.use(
+    "/api/race",
+    requireAuth,
+    createRaceRouter(services.raceService),
   );
   app.use(
     "/api/evolution",

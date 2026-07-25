@@ -1,0 +1,168 @@
+{
+  "project": { "name": "browser-viewer" },
+  "activeWorktreeId": "wt_a",
+  "sidecarTool": "race",
+  "agentCatalog": {
+    "codex": {
+      "label": "codex",
+      "modelSource": "codex 无独立 list 命令；模型经 -m/-c model= 传入。下拉给已知常用模型 + 允许自定义。",
+      "models": ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5", "gpt-5.4", "o3"],
+      "custom": true
+    },
+    "traex": {
+      "label": "traex",
+      "modelSource": "traex models 真实输出（可枚举）。",
+      "models": [
+        "Doubao-Seed-2.1-Pro",
+        "gpt-5.6-sol",
+        "DeepSeek-V4-Pro",
+        "kimi-k2.6",
+        "glm-5.1",
+        "qwen-3.6-plus",
+        "minimax-m2.7",
+        "openrouter-3o"
+      ],
+      "custom": true
+    }
+  },
+  "worktrees": [
+    {
+      "id": "wt_main",
+      "name": "browser-viewer",
+      "branch": "main",
+      "isPrimary": true,
+      "availability": "available",
+      "aggregateStatus": "idle",
+      "role": null,
+      "sessionName": "main",
+      "terminalLines": [
+        { "kind": "cmd", "text": "git status" },
+        {
+          "kind": "out",
+          "text": "On branch main — nothing to commit, working tree clean"
+        }
+      ]
+    },
+    {
+      "id": "wt_a",
+      "name": "race-fix-login-a",
+      "branch": "race/fix-login-token-a",
+      "isPrimary": false,
+      "availability": "available",
+      "aggregateStatus": "idle",
+      "role": "worker A",
+      "agent": "codex",
+      "model": "gpt-5.6-sol",
+      "sessionName": "worker A · codex",
+      "changeSummary": { "filesChanged": 1, "insertions": 8, "deletions": 2 },
+      "terminalLines": [
+        {
+          "kind": "cmd",
+          "text": "codex -m gpt-5.6-sol \"修复登录页 token 过期后白屏\""
+        },
+        {
+          "kind": "out",
+          "text": "· 定位 use-token-refresh.ts 未处理 refresh 失败分支"
+        },
+        {
+          "kind": "out",
+          "text": "· 白屏根因：AuthGuard 过期时既不刷新也不跳转"
+        },
+        {
+          "kind": "out",
+          "text": "过期后跳 /login，还是静默用 refresh token 续期留原页？(等待输入)"
+        }
+      ]
+    },
+    {
+      "id": "wt_b",
+      "name": "race-fix-login-b",
+      "branch": "race/fix-login-token-b",
+      "isPrimary": false,
+      "availability": "available",
+      "aggregateStatus": "running",
+      "role": "worker B",
+      "agent": "traex",
+      "model": "DeepSeek-V4-Pro",
+      "sessionName": "worker B · traex",
+      "changeSummary": { "filesChanged": 1, "insertions": 12, "deletions": 3 },
+      "terminalLines": [
+        {
+          "kind": "cmd",
+          "text": "traex -c model=\"DeepSeek-V4-Pro\" \"修复登录页 token 过期后白屏\""
+        },
+        {
+          "kind": "out",
+          "text": "· 在 useTokenRefresh catch 里 reporter.warning + 跳登录"
+        },
+        { "kind": "out", "text": "· 编辑 use-token-refresh.ts (+12 -3)" },
+        { "kind": "out", "text": "· pnpm typecheck …" }
+      ]
+    },
+    {
+      "id": "wt_c",
+      "name": "race-fix-login-c",
+      "branch": "race/fix-login-token-c",
+      "isPrimary": false,
+      "availability": "available",
+      "aggregateStatus": "idle",
+      "role": "worker C",
+      "agent": "traex",
+      "model": "glm-5.1",
+      "sessionName": "worker C · traex",
+      "changeSummary": { "filesChanged": 3, "insertions": 47, "deletions": 14 },
+      "terminalLines": [
+        {
+          "kind": "cmd",
+          "text": "traex -c model=\"glm-5.1\" \"修复登录页 token 过期后白屏\""
+        },
+        { "kind": "out", "text": "· AuthGuard + 拦截器双层兜底 401" },
+        { "kind": "out", "text": "· 完成 (+47 -14)，typecheck 通过" }
+      ]
+    }
+  ],
+  "race": {
+    "goal": "修复登录页 token 过期后白屏",
+    "plan": "登录页 token 过期后整页白屏，控制台无报错。定位并修复，保证过期后能正确跳转登录态刷新，不要动其它页面的 token 逻辑。",
+    "status": "running",
+    "mainWorktreeId": "wt_main",
+    "workers": [
+      {
+        "workerId": "worker_a",
+        "label": "worker A",
+        "worktreeId": "wt_a",
+        "agent": "codex",
+        "model": "gpt-5.6-sol",
+        "status": "idle",
+        "changeSummary": { "filesChanged": 1, "insertions": 8, "deletions": 2 }
+      },
+      {
+        "workerId": "worker_b",
+        "label": "worker B",
+        "worktreeId": "wt_b",
+        "agent": "traex",
+        "model": "DeepSeek-V4-Pro",
+        "status": "running",
+        "changeSummary": { "filesChanged": 1, "insertions": 12, "deletions": 3 }
+      },
+      {
+        "workerId": "worker_c",
+        "label": "worker C",
+        "worktreeId": "wt_c",
+        "agent": "traex",
+        "model": "glm-5.1",
+        "status": "idle",
+        "changeSummary": {
+          "filesChanged": 3,
+          "insertions": 47,
+          "deletions": 14
+        }
+      }
+    ],
+    "log": [
+      { "text": "主 Agent 下发目标给 3 个 worker（各自 agent + 模型）" },
+      { "text": "worker B (traex/DeepSeek-V4-Pro) 执行中" },
+      { "text": "worker A / C 已空闲（可能完成或在等待输入，需查看其终端）" }
+    ]
+  }
+}

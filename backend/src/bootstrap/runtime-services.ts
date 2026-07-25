@@ -59,6 +59,8 @@ import { SqliteEvolutionActivationStore } from "../evolution/storage/store";
 import { DefaultEvolutionSupplementalSourceReader } from "../evolution/supplemental-sources";
 import { EvolutionToolTokenRegistry } from "../evolution/tools/token-registry";
 import { EvolutionProviderAvailabilityService } from "../evolution/providers/availability";
+import { RaceRecordStore } from "../race/race-record-store";
+import { RaceService } from "../race/race-service";
 
 export interface RuntimeServices {
   activityStore: ActivityStore | null;
@@ -77,6 +79,7 @@ export interface RuntimeServices {
   terminalStateService: TerminalStateService;
   agentTeamService: AgentTeamService;
   agentTeamModelConfigStore: AgentTeamModelConfigStore;
+  raceService: RaceService;
   appServerHistoryGateway: AppServerHistoryGateway;
   workHistoryService: WorkHistoryService;
   terminalEventService: TerminalEventService;
@@ -458,6 +461,19 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     modelSettingsService: agentTeamModelSettingsService,
   });
   agentTeamService.initialize();
+  const raceService = new RaceService({
+    terminalSessionManager,
+    terminalEventService,
+    ptyService,
+    runtimeRegistry: terminalRuntimeRegistry,
+    terminalStateService,
+    tmuxService,
+    tmuxOutputWatcher,
+    store: new RaceRecordStore(
+      path.join(storagePaths.browserProfileDir, "race", "current.json"),
+    ),
+  });
+  await raceService.initialize();
   const appServerHistoryGateway = new AppServerHistoryGateway();
   const workHistoryService = new WorkHistoryService(
     terminalSessionManager,
@@ -534,6 +550,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalStateService,
     agentTeamService,
     agentTeamModelConfigStore,
+    raceService,
     appServerHistoryGateway,
     workHistoryService,
     terminalEventService,

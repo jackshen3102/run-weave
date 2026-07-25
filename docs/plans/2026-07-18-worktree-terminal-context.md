@@ -38,7 +38,7 @@ effectiveProjectId = childProjectId ?? parentProjectId
 1. 顶部仍是父 Project tabs；父 Project 下方左侧是可折叠的 Worktree 平铺列表，右侧是完整 Terminal 区域。
 2. 第一项是当前父 Project 根目录，`projectId === parentProjectId`，始终存在、始终第一、不可取消固定，也没有删除入口。
 3. 其他项只发现 `<parent.path>/.worktree/<name>` 下被 Git 登记的直接子 Worktree；同一仓库位于其他目录的 Worktree 不展示。
-4. Worktree 由磁盘与 Git 自动发现、自动消失；产品不提供新增、删除、重命名或 `...` 菜单。
+4. Worktree 由磁盘与 Git 自动发现、自动消失；通用 Project / Worktree UI 不提供新增、删除、重命名或 `...` 菜单。唯一例外是 Agent Race 可在 `<parent.path>/.worktree/race-*` 受控命名空间内创建或显式删除其当前 Race 记录已登记的 Worktree。
 5. 每项只显示两行：第一行是 Worktree 名称，第二行是实际分支；名称与分支允许不同。
 6. 列表不显示 diff 文件、变更数、clean、ahead/behind 或提交入口。
 7. 第一项之后，用户固定的子 Project 优先；未固定项按所属 Terminal 最近活跃时间倒序排列，再按名称稳定排序。
@@ -48,7 +48,7 @@ effectiveProjectId = childProjectId ?? parentProjectId
 
 ## 非目标
 
-- 不在 Runweave 内执行 `git worktree add/remove/prune/repair`。
+- 除 Agent Race 在 `<parent.path>/.worktree/race-*` 受控命名空间内对当前 Race 记录已登记目标执行 `git worktree add/remove` 外，不在 Runweave 内执行 `git worktree add/remove`；任何场景都不执行 `prune/repair`，也不操作用户已有的非 Race Worktree。
 - 不给业务接口同时传父 Project ID 与子 Project ID。
 - 不增加 `worktreeId`、`worktreePath` 或 Preview 复合上下文字段。
 - 不改变 Activity、Quick Input 的精确 Project scope；父 Project 不隐式汇总子 Project 数据。
