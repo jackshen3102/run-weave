@@ -21,6 +21,11 @@ import {
   normalizeWorkers,
   setActiveWorker,
 } from "./service-workflow-policy";
+import {
+  cloneAgentTeamRoleRuntimeSnapshot,
+  createLegacyAgentTeamRoleRuntimeSnapshot,
+  resolveAgentTeamRoleTerminal,
+} from "./model-runtime";
 
 export class AgentTeamFrameworkRepairService extends AgentTeamLifecycleService {
   async getFrameworkRepairRecovery(
@@ -174,7 +179,7 @@ export class AgentTeamFrameworkRepairService extends AgentTeamLifecycleService {
         await this.submitWorkerDispatchPrompt(
           preparedRun,
           session,
-          run.terminal,
+          resolveAgentTeamRoleTerminal(preparedRun, worker.role),
           worker,
           prompt,
         );
@@ -264,6 +269,11 @@ export class AgentTeamFrameworkRepairService extends AgentTeamLifecycleService {
         run.options.maxRepairAttempts,
       );
       const now = new Date().toISOString();
+      const roleRuntimes = run.roleRuntimes
+        ? cloneAgentTeamRoleRuntimeSnapshot(run.roleRuntimes)
+        : createLegacyAgentTeamRoleRuntimeSnapshot(run.terminal, {
+            capturedAt: now,
+          });
       const cleanRun: AgentTeamRun = {
         runId: newRunId,
         projectId: run.projectId,
@@ -272,10 +282,11 @@ export class AgentTeamFrameworkRepairService extends AgentTeamLifecycleService {
         phase: "intake",
         status: "running",
         options: { ...run.options },
-        terminal: {
-          ...run.terminal,
-          args: [...(run.terminal.args ?? [])],
-        },
+        terminal: resolveAgentTeamRoleTerminal(
+          { terminal: run.terminal, roleRuntimes },
+          "main",
+        ),
+        roleRuntimes,
         task: run.task,
         verification: run.verification ? { ...run.verification } : null,
         reviewCheckpoint,

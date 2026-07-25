@@ -11,6 +11,10 @@ import type {
   ResumeAgentTeamRunRequest,
   SubmitAgentTeamSplitGateRequest,
 } from "@runweave/shared/agent-team";
+import type {
+  AgentTeamModelSettingsResponse,
+  SaveAgentTeamModelConfigRequest,
+} from "@runweave/shared/agent-team-model-config";
 import { requestJson } from "./http";
 
 const AGENT_TEAM_JSON_HEADERS = (token: string) => ({
@@ -30,6 +34,33 @@ export async function getAgentTeamRunForTerminal(
     { headers: { Authorization: `Bearer ${token}` } },
   );
   return response.runs[0] ?? null;
+}
+
+export async function getAgentTeamModelSettings(
+  apiBase: string,
+  token: string,
+): Promise<AgentTeamModelSettingsResponse> {
+  return requestJson<AgentTeamModelSettingsResponse>(
+    apiBase,
+    "/api/agent-team/model-settings",
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+}
+
+export async function saveAgentTeamModelSettings(
+  apiBase: string,
+  token: string,
+  payload: SaveAgentTeamModelConfigRequest,
+): Promise<AgentTeamModelSettingsResponse> {
+  return requestJson<AgentTeamModelSettingsResponse>(
+    apiBase,
+    "/api/agent-team/model-settings",
+    {
+      method: "PUT",
+      headers: AGENT_TEAM_JSON_HEADERS(token),
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function startAgentTeamRun(

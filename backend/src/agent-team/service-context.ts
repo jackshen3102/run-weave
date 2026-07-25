@@ -26,6 +26,7 @@ import {
   type AgentTeamEnvironmentFixtureScope,
 } from "./fixture-scope";
 import { projectAgentTeamRunForRead } from "./service-completion-policy";
+import type { AgentTeamModelSettingsService } from "./model-catalog/service";
 
 export const agentTeamLogger = logger.child({
   component: "agent-team-service",
@@ -51,6 +52,7 @@ export class AgentTeamServiceContext {
   protected readonly runtimeEnv: NodeJS.ProcessEnv;
   protected readonly evolutionMemoryProvider?: EvolutionMemoryProvider;
   protected readonly evolutionOutcomeObserver?: EvolutionOutcomeObserver;
+  protected readonly modelSettingsService?: AgentTeamModelSettingsService;
   protected readonly eventQueues = new Map<string, Promise<unknown>>();
   protected readonly pendingCompletionRounds = new Map<string, number>();
   protected recheckWatchdogTimer: ReturnType<typeof setInterval> | null = null;
@@ -67,6 +69,7 @@ export class AgentTeamServiceContext {
     this.runtimeEnv = options.env ?? process.env;
     this.evolutionMemoryProvider = options.evolutionMemoryProvider;
     this.evolutionOutcomeObserver = options.evolutionOutcomeObserver;
+    this.modelSettingsService = options.modelSettingsService;
     this.environmentFixtureScope = resolveAgentTeamEnvironmentFixtureScope(
       this.runtimeEnv,
     );
@@ -134,5 +137,24 @@ export class AgentTeamServiceContext {
       terminalSessionId,
     );
     return run ? projectAgentTeamRunForRead(run) : null;
+  }
+
+  async getModelSettings() {
+    return this.requireModelSettingsService().getSettings();
+  }
+
+  async saveModelSettings(
+    input: Parameters<AgentTeamModelSettingsService["saveSettings"]>[0],
+  ) {
+    return this.requireModelSettingsService().saveSettings(input);
+  }
+
+  protected requireModelSettingsService(): AgentTeamModelSettingsService {
+    if (!this.modelSettingsService) {
+      throw new AgentTeamError(409, "Agent Team 模型配置服务不可用", {
+        code: "config_required",
+      });
+    }
+    return this.modelSettingsService;
   }
 }

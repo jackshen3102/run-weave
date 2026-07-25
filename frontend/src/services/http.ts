@@ -1,10 +1,12 @@
 export class HttpError extends Error {
   readonly status: number;
+  readonly details: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, details?: unknown) {
     super(message);
     this.name = "HttpError";
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -23,9 +25,12 @@ async function buildHttpError(
 
   if (contentType.includes("application/json")) {
     try {
-      const payload = (await response.json()) as { message?: unknown };
+      const payload = (await response.json()) as {
+        message?: unknown;
+        details?: unknown;
+      };
       if (typeof payload.message === "string" && payload.message.trim()) {
-        return new HttpError(response.status, payload.message);
+        return new HttpError(response.status, payload.message, payload.details);
       }
     } catch {
       // Ignore malformed error bodies and keep the fallback message.

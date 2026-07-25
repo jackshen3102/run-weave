@@ -30,9 +30,14 @@ import {
   formatVerificationSource,
   requireRunnableTask,
   requireVerificationConfig,
-  resolveAgentTeamTerminal,
 } from "./service-run-policy";
 import { isTerminalAgentTeamStatus } from "./service-fixture-support";
+import {
+  cloneAgentTeamRoleRuntimeSnapshot,
+  createLegacyAgentTeamRoleRuntimeSnapshot,
+  resolveAgentTeamRoleTerminal,
+  resolveAgentTeamTerminal,
+} from "./model-runtime";
 
 export class AgentTeamLifecycleService extends AgentTeamRunCompletionService {
   async startRun(input: CreateAgentTeamRunRequest): Promise<AgentTeamRun> {
@@ -48,13 +53,18 @@ export class AgentTeamLifecycleService extends AgentTeamRunCompletionService {
         "This terminal already has an active agent-team run",
       );
     }
-    const terminal = resolveAgentTeamTerminal(input.terminal);
-    this.requireAgentTeamTerminalAvailable(session, terminal);
     const task = requireRunnableTask(input.task);
     const projectRoot = this.resolveRequiredProjectRoot(
       input.projectId,
       session.cwd,
     );
+    const runtimeSource = await this.resolveStartRunRuntime(input);
+    const terminal = runtimeSource.terminal;
+    if (runtimeSource.requireShellIdle) {
+      this.requireAgentTeamTerminalCommandSupported(terminal);
+    } else {
+      this.requireAgentTeamTerminalAvailable(session, terminal);
+    }
     const prepared = await this.prepareInitialAcceptance(input, projectRoot);
     const runId = createAgentTeamRunId(input.terminalSessionId);
     const reviewCheckpointMode =
@@ -64,6 +74,41 @@ export class AgentTeamLifecycleService extends AgentTeamRunCompletionService {
     const maxRepairAttempts = resolveMaxRepairAttempts(
       input.options?.maxRepairAttempts,
     );
+    let mainPanelId: string | null = null;
+    if (this.tmuxService) {
+      try {
+        const workspace = await ensureTerminalPanelWorkspace(
+          this.terminalSessionManager,
+          session,
+          {
+            ptyService: this.ptyService,
+            runtimeRegistry: this.runtimeRegistry,
+            tmuxService: this.tmuxService,
+            tmuxOutputWatcher: this.tmuxOutputWatcher,
+            terminalEventService: this.terminalEventService,
+          },
+        );
+        const preferredMainPanel = runtimeSource.preferredMainPanelId
+          ? this.terminalSessionManager.getPanel(
+              runtimeSource.preferredMainPanelId,
+            )
+          : null;
+        mainPanelId =
+          preferredMainPanel?.terminalSessionId === session.id &&
+          preferredMainPanel.status === "running"
+            ? preferredMainPanel.id
+            : (workspace?.activePanelId ?? null);
+      } catch (error) {
+        agentTeamLogger.warn("agent-team.start.panel_workspace_failed", {
+          message: "Could not initialize panel workspace for run",
+          terminalSessionId: session.id,
+          error,
+        });
+      }
+    }
+    if (runtimeSource.requireShellIdle) {
+      this.requireAgentTeamMainPanelShellIdle(session, mainPanelId);
+    }
     let reviewCheckpoint: AgentTeamRun["reviewCheckpoint"] = null;
     if (reviewCheckpointMode === "local_commit") {
       const preflight = await this.reviewCheckpointGit.preflight(projectRoot);
@@ -99,30 +144,6 @@ export class AgentTeamLifecycleService extends AgentTeamRunCompletionService {
         finalReviewedCommit: null,
       };
     }
-    // Ensure the panel workspace so worker split is possible later.
-    let mainPanelId: string | null = null;
-    if (this.tmuxService) {
-      try {
-        const workspace = await ensureTerminalPanelWorkspace(
-          this.terminalSessionManager,
-          session,
-          {
-            ptyService: this.ptyService,
-            runtimeRegistry: this.runtimeRegistry,
-            tmuxService: this.tmuxService,
-            tmuxOutputWatcher: this.tmuxOutputWatcher,
-            terminalEventService: this.terminalEventService,
-          },
-        );
-        mainPanelId = workspace?.activePanelId ?? null;
-      } catch (error) {
-        agentTeamLogger.warn("agent-team.start.panel_workspace_failed", {
-          message: "Could not initialize panel workspace for run",
-          terminalSessionId: session.id,
-          error,
-        });
-      }
-    }
     const now = new Date().toISOString();
     const run: AgentTeamRun = {
       runId,
@@ -141,6 +162,8 @@ export class AgentTeamLifecycleService extends AgentTeamRunCompletionService {
         flow,
       },
       terminal,
+      roleRuntimes: runtimeSource.roleRuntimes,
+      retryOfRunId: runtimeSource.retryOfRunId,
       task,
       verification: prepared.verification,
       reviewCheckpoint,
@@ -210,6 +233,82 @@ export class AgentTeamLifecycleService extends AgentTeamRunCompletionService {
       status: "need_human",
       proposal,
     });
+  }
+
+  private async resolveStartRunRuntime(
+    input: CreateAgentTeamRunRequest,
+  ): Promise<{
+    terminal: AgentTeamRun["terminal"];
+    roleRuntimes: AgentTeamRun["roleRuntimes"];
+    retryOfRunId: string | null;
+    preferredMainPanelId: string | null;
+    requireShellIdle: boolean;
+  }> {
+    if (input.retryOfRunId && input.terminal) {
+      throw new AgentTeamError(
+        400,
+        "retryOfRunId 与 terminal 不能同时作为运行时来源",
+      );
+    }
+    if (input.retryOfRunId) {
+      const source = await this.runStore.getRun(input.retryOfRunId);
+      if (!source) {
+        throw new AgentTeamError(404, "Retry source run not found");
+      }
+      if (
+        source.projectId !== input.projectId ||
+        source.terminalSessionId !== input.terminalSessionId
+      ) {
+        throw new AgentTeamError(
+          409,
+          "Retry source run must belong to the same Project and Terminal",
+        );
+      }
+      if (source.status !== "failed") {
+        throw new AgentTeamError(409, "Only a failed Run can be retried");
+      }
+      const capturedAt = new Date().toISOString();
+      const roleRuntimes = source.roleRuntimes
+        ? cloneAgentTeamRoleRuntimeSnapshot(source.roleRuntimes, {
+            source: "retry_snapshot",
+            capturedAt,
+          })
+        : createLegacyAgentTeamRoleRuntimeSnapshot(source.terminal, {
+            source: "retry_snapshot",
+            capturedAt,
+          });
+      return {
+        terminal: resolveAgentTeamRoleTerminal(
+          { terminal: source.terminal, roleRuntimes },
+          "main",
+        ),
+        roleRuntimes,
+        retryOfRunId: source.runId,
+        preferredMainPanelId: source.mainPanelId ?? null,
+        requireShellIdle: true,
+      };
+    }
+    if (input.terminal) {
+      return {
+        terminal: resolveAgentTeamTerminal(input.terminal),
+        roleRuntimes: undefined,
+        retryOfRunId: null,
+        preferredMainPanelId: null,
+        requireShellIdle: false,
+      };
+    }
+    const roleRuntimes = await this.requireModelSettingsService()
+      .resolveGlobalRuntimeSnapshot();
+    return {
+      terminal: resolveAgentTeamRoleTerminal(
+        { terminal: roleRuntimes.roles.main.terminal, roleRuntimes },
+        "main",
+      ),
+      roleRuntimes,
+      retryOfRunId: null,
+      preferredMainPanelId: null,
+      requireShellIdle: true,
+    };
   }
   // --- Phase 2: intake -> proposal (+ split gate) ---
   async proposeSplit(

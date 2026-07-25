@@ -13,6 +13,7 @@ import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
 import { TerminalSessionAliasDialog } from "./terminal-session-tab";
 import { TerminalStatusLookupDialog } from "./terminal-status-lookup-dialog";
+import { TerminalAgentTeamModelConfigDialog } from "./terminal-agent-team-model-config-dialog";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
@@ -87,6 +88,9 @@ export function TerminalWorkspaceOverlays({
   const statusLookupOpen = useTerminalWorkspaceStore(
     (state) => state.statusLookupOpen,
   );
+  const agentTeamModelConfigOpen = useTerminalWorkspaceStore(
+    (state) => state.agentTeamModelConfigOpen,
+  );
   const panelWorkspaceBySessionId = useTerminalWorkspaceStore(
     (state) => state.panelWorkspaceBySessionId,
   );
@@ -113,6 +117,9 @@ export function TerminalWorkspaceOverlays({
   );
   const setStatusLookupOpen = useTerminalWorkspaceStore(
     (state) => state.setStatusLookupOpen,
+  );
+  const setAgentTeamModelConfigOpen = useTerminalWorkspaceStore(
+    (state) => state.setAgentTeamModelConfigOpen,
   );
   const loading =
     mutationLoading || projectsQuery.isPending || sessionsQuery.isPending;
@@ -234,6 +241,14 @@ export function TerminalWorkspaceOverlays({
           activeProjectId={activeProjectId}
           activeSessionId={activeSession?.terminalSessionId ?? null}
           activePanelId={activeStatusLookupPanelId}
+        />
+      ) : null}
+      {!isMobileMonitor ? (
+        <TerminalAgentTeamModelConfigDialog
+          apiBase={apiBase}
+          token={token}
+          open={agentTeamModelConfigOpen}
+          onOpenChange={setAgentTeamModelConfigOpen}
         />
       ) : null}
       <AlertDialog

@@ -11,6 +11,7 @@ export default tseslint.config(
       "**/coverage/**",
       "**/node_modules/**",
       "electron/release/**",
+      "docs/prototypes/**",
     ],
   },
   js.configs.recommended,

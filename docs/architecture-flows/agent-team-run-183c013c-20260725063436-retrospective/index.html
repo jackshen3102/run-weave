@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Team Run 183c013c 深度复盘</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07101f;
+      --panel: #0d1930;
+      --panel-strong: #101f3b;
+      --line: #243657;
+      --text: #e8eefc;
+      --muted: #9fb0ce;
+      --cyan: #53d7ff;
+      --green: #56e39f;
+      --amber: #ffcc66;
+      --red: #ff718a;
+      --violet: #b69cff;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 15% 0, #142748 0, transparent 38%),
+        radial-gradient(circle at 90% 12%, rgba(83, 215, 255, .08), transparent 26%),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.62 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    main { max-width: 1220px; margin: auto; padding: 52px 28px 96px; }
+    h1 {
+      max-width: 1040px;
+      font-size: clamp(36px, 5vw, 58px);
+      line-height: 1.08;
+      margin: 12px 0 18px;
+      letter-spacing: -.045em;
+    }
+    h2 { margin: 56px 0 18px; font-size: 27px; letter-spacing: -.02em; }
+    h3 { font-size: 17px; margin: 0 0 8px; }
+    p { margin: 7px 0; }
+    code {
+      color: #b5e7ff;
+      background: rgba(83, 215, 255, .08);
+      border-radius: 5px;
+      padding: 1px 5px;
+      overflow-wrap: anywhere;
+    }
+    .eyebrow { color: var(--cyan); font-weight: 760; letter-spacing: .12em; }
+    .lede { max-width: 940px; color: var(--muted); font-size: 19px; }
+    .lede strong { color: var(--text); }
+    .status-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 18px;
+      margin-top: 24px;
+      color: var(--muted);
+    }
+    .status-line b { color: var(--green); }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: rgba(13, 25, 48, .72);
+      font-size: 13px;
+    }
+    .pill::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 12px rgba(86, 227, 159, .65);
+    }
+    .metrics, .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 14px;
+    }
+    .metrics {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 30px;
+    }
+    .metric, .card, .rec, .panel {
+      border: 1px solid var(--line);
+      background: rgba(13, 25, 48, .9);
+      border-radius: 14px;
+    }
+    .metric, .card { padding: 18px; }
+    .metric b {
+      display: block;
+      font-size: 31px;
+      line-height: 1.1;
+      letter-spacing: -.03em;
+    }
+    .metric span, .muted { color: var(--muted); }
+    .metric em {
+      display: block;
+      color: var(--amber);
+      font-style: normal;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+    .callout {
+      margin-top: 20px;
+      border: 1px solid #4c355d;
+      background: linear-gradient(135deg, rgba(42, 27, 58, .92), rgba(13, 25, 48, .9));
+      border-radius: 16px;
+      padding: 20px 22px;
+    }
+    .callout b { color: #dacbff; }
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .panel { padding: 20px; }
+    .panel.good { border-color: #235e4a; }
+    .panel.bad { border-color: #633244; }
+    .panel ol { margin: 10px 0 0; padding-left: 21px; color: var(--muted); }
+    .visual {
+      overflow: auto;
+      border: 1px solid var(--line);
+      background: rgba(13, 25, 48, .65);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .visual svg { display: block; min-width: 1060px; width: 100%; height: auto; }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 12px; color: var(--muted); font-size: 13px; }
+    .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+    .timeline { border-left: 2px solid var(--line); margin-left: 10px; padding-left: 24px; }
+    .event { position: relative; margin: 0 0 24px; }
+    .event::before {
+      content: "";
+      position: absolute;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--cyan);
+      left: -31px;
+      top: 7px;
+    }
+    .event.warn::before { background: var(--amber); }
+    .event.fail::before { background: var(--red); }
+    .event.pass::before { background: var(--green); }
+    .event p { margin: 3px 0; color: var(--muted); }
+    .event time { color: var(--cyan); font-size: 13px; margin-right: 9px; }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 720;
+      margin-bottom: 9px;
+    }
+    .fact { background: #173f35; color: #8cf0c0; }
+    .framework { background: #4a2633; color: #ff9db0; }
+    .environment { background: #4b3d1c; color: #ffdc8a; }
+    .contract { background: #203e61; color: #90d5ff; }
+    .risk { background: #33294e; color: #c9b7ff; }
+    .card p { color: var(--muted); }
+    .card ul { color: var(--muted); padding-left: 19px; margin-bottom: 0; }
+    .open { color: var(--red); }
+    .closed { color: var(--green); }
+    .partial { color: var(--amber); }
+    .table-wrap { overflow-x: auto; border-radius: 14px; }
+    table {
+      width: 100%;
+      min-width: 850px;
+      border-collapse: collapse;
+      background: rgba(13, 25, 48, .9);
+      border: 1px solid var(--line);
+    }
+    th, td {
+      text-align: left;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--cyan); white-space: nowrap; }
+    td { color: var(--muted); }
+    td strong { color: var(--text); }
+    .recs { display: grid; gap: 14px; }
+    .rec {
+      padding: 19px;
+      display: grid;
+      grid-template-columns: 72px 1fr minmax(180px, 220px);
+      gap: 16px;
+    }
+    .priority { font-weight: 800; font-size: 18px; }
+    .p0 { color: var(--red); }
+    .p1 { color: var(--amber); }
+    .p2 { color: var(--green); }
+    .impact { color: var(--muted); font-size: 13px; }
+    .rec p { color: var(--muted); }
+    .rec small { color: var(--violet); }
+    details {
+      border-top: 1px solid var(--line);
+      margin-top: 15px;
+      padding-top: 13px;
+    }
+    summary { cursor: pointer; color: var(--cyan); }
+    .evidence-list { color: var(--muted); padding-left: 20px; }
+    .conclusion {
+      border: 1px solid #316d85;
+      background: #0c2637;
+      padding: 24px;
+      border-radius: 16px;
+      margin-top: 54px;
+      font-size: 18px;
+    }
+    footer { margin-top: 26px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 780px) {
+      main { padding: 36px 18px 72px; }
+      .two-col { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: 1fr; }
+      .rec { grid-template-columns: 52px 1fr; }
+      .impact { grid-column: 2; }
+      h1 { font-size: 37px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">RUN · ATR_183C013C_20260725063436</div>
+    <h1>一个 <code>code_review</code> 文本匹配，制造了三次人工恢复</h1>
+    <p class="lede">
+      先给结论：<strong>产品缺陷只占一次正常 repair；主要成本来自仍未修复的验收分类与状态机缺陷。</strong>
+      `AGT-MC-002` 只是枚举四个角色，却被识别为 Review Gate，两次从行为验收集合消失；
+      最后的定向 refresh 让 Run 完成，也留下了重复 Case。
+    </p>
+    <div class="status-line">
+      <span class="pill"><b>DONE</b> · automatic succeeded</span>
+      <span>创建 2026-07-25 14:34:36 CST</span>
+      <span>完成 2026-07-25 18:29:21 CST</span>
+      <span>当前四个 pane 均 idle</span>
+    </div>
+  </header>
+
+  <section class="metrics" aria-label="关键指标">
+    <div class="metric"><b>13 / 13</b><span>唯一业务 Case 最终通过</span><em>存储为 14 行，AGT-MC-002 重复</em></div>
+    <div class="metric"><b>7 / 7</b><span>dispatch 产生并被消费</span><em>2 code · 2 review · 3 behavior</em></div>
+    <div class="metric"><b>3</b><span>正式 Agent intervention</span><em>100% 与同一误分类链有关</em></div>
+    <div class="metric"><b>1 + 2</b><span>Human Gate + 静默悬空</span><em>两次 running/role 有值/dispatch 为空</em></div>
+    <div class="metric"><b>1</b><span>真实产品缺陷并已修复</span><em>AGT-MC-003 Browser Profile 持久化</em></div>
+    <div class="metric"><b>3:54:44.833</b><span>Run 总时长</span><em>包含真实打包、CDP 验收、503 与协议补交</em></div>
+  </section>
+
+  <div class="callout">
+    <b>核心因果：</b>
+    测试合同写了四个正式角色 ID
+    → 全文正则命中 <code>code_review</code>
+    → 业务 Case 被当作 Gate
+    → Review worker 没有合法产品 runtime，只能 skipped
+    → completion 清空 dispatch、保留 role
+    → 没有后续 completion 事件触发已有 recovery
+    → 主 Agent 必须手动纠正和定向派发。
+  </div>
+
+  <section>
+    <h2>理想闭环与实际断点</h2>
+    <div class="two-col">
+      <article class="panel good">
+        <h3>理想：显式 Case 类型决定路由</h3>
+        <ol>
+          <li>13 个业务 Case 全部归 `behavior_verify`。</li>
+          <li>独立 `AGT-REVIEW-GATE` 归 `code_review`。</li>
+          <li>行为失败 `AGT-MC-003` 抛回 code，修复后复审、复验。</li>
+          <li>所有 Case 通过，cleanup 归零，自动完成。</li>
+        </ol>
+      </article>
+      <article class="panel bad">
+        <h3>实际：文本内容改变了控制面身份</h3>
+        <ol>
+          <li>`AGT-MC-002` 被当成 Review Gate，synthetic gate 不再创建。</li>
+          <li>behavior 首轮只收到 12 条，Review 两次收到产品行为 Case。</li>
+          <li>两次 review completion 后进入悬空 running 状态。</li>
+          <li>refresh workaround 追加新业务 Case，同时保留旧误分类 Gate。</li>
+        </ol>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>实际控制流：一次产品 repair，三次人工恢复</h2>
+    <div class="visual" aria-label="实际控制流，可横向滚动">
+      <svg viewBox="0 0 1100 390" role="img" aria-label="Agent Team 实际控制流与三个恢复点">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#53d7ff"/>
+          </marker>
+          <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#ff718a"/>
+          </marker>
+        </defs>
+
+        <g font-family="ui-sans-serif,system-ui" font-size="13">
+          <rect x="20" y="30" width="170" height="66" rx="12" fill="#142748" stroke="#53d7ff"/>
+          <text x="105" y="56" fill="#e8eefc" text-anchor="middle" font-weight="700">验收来源</text>
+          <text x="105" y="78" fill="#9fb0ce" text-anchor="middle">13 required YAML Cases</text>
+
+          <rect x="245" y="30" width="180" height="66" rx="12" fill="#142748" stroke="#ff718a"/>
+          <text x="335" y="55" fill="#e8eefc" text-anchor="middle" font-weight="700">全文正则误分类</text>
+          <text x="335" y="77" fill="#ff9db0" text-anchor="middle">MC-002 → Review Gate</text>
+
+          <rect x="480" y="30" width="170" height="66" rx="12" fill="#142748" stroke="#ffcc66"/>
+          <text x="565" y="55" fill="#e8eefc" text-anchor="middle" font-weight="700">Round 1 Review</text>
+          <text x="565" y="77" fill="#ffdc8a" text-anchor="middle">MC-002 skipped</text>
+
+          <rect x="705" y="30" width="170" height="66" rx="12" fill="#351d2c" stroke="#ff718a"/>
+          <text x="790" y="55" fill="#e8eefc" text-anchor="middle" font-weight="700">悬空 running #1</text>
+          <text x="790" y="77" fill="#ff9db0" text-anchor="middle">role=review · dispatch=null</text>
+
+          <rect x="930" y="30" width="150" height="66" rx="12" fill="#30291b" stroke="#ffcc66"/>
+          <text x="1005" y="55" fill="#e8eefc" text-anchor="middle" font-weight="700">Intervention 1</text>
+          <text x="1005" y="77" fill="#ffdc8a" text-anchor="middle">行为 12 Cases</text>
+
+          <path d="M190 63H245M425 63H480M650 63H705M875 63H930" stroke="#53d7ff" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <rect x="930" y="156" width="150" height="66" rx="12" fill="#351d2c" stroke="#ff718a"/>
+          <text x="1005" y="181" fill="#e8eefc" text-anchor="middle" font-weight="700">MC-003 fail</text>
+          <text x="1005" y="203" fill="#ff9db0" text-anchor="middle">真实产品缺陷</text>
+
+          <rect x="705" y="156" width="170" height="66" rx="12" fill="#17372d" stroke="#56e39f"/>
+          <text x="790" y="181" fill="#e8eefc" text-anchor="middle" font-weight="700">Code repair</text>
+          <text x="790" y="203" fill="#8cf0c0" text-anchor="middle">持久化 + 打包链修复</text>
+
+          <rect x="480" y="156" width="170" height="66" rx="12" fill="#142748" stroke="#ffcc66"/>
+          <text x="565" y="181" fill="#e8eefc" text-anchor="middle" font-weight="700">Round 3 Review</text>
+          <text x="565" y="203" fill="#ffdc8a" text-anchor="middle">又审 MC-002 · skipped</text>
+
+          <rect x="245" y="156" width="180" height="66" rx="12" fill="#351d2c" stroke="#ff718a"/>
+          <text x="335" y="181" fill="#e8eefc" text-anchor="middle" font-weight="700">悬空 running #2</text>
+          <text x="335" y="203" fill="#ff9db0" text-anchor="middle">同一状态机断点</text>
+
+          <rect x="20" y="156" width="170" height="66" rx="12" fill="#30291b" stroke="#ffcc66"/>
+          <text x="105" y="181" fill="#e8eefc" text-anchor="middle" font-weight="700">Intervention 2</text>
+          <text x="105" y="203" fill="#ffdc8a" text-anchor="middle">只复验 MC-003</text>
+
+          <path d="M1005 96V156M930 189H875M705 189H650M480 189H425M245 189H190" stroke="#53d7ff" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <rect x="20" y="282" width="170" height="66" rx="12" fill="#17372d" stroke="#56e39f"/>
+          <text x="105" y="307" fill="#e8eefc" text-anchor="middle" font-weight="700">MC-003 pass</text>
+          <text x="105" y="329" fill="#8cf0c0" text-anchor="middle">fresh Beta 独立复验</text>
+
+          <rect x="245" y="282" width="180" height="66" rx="12" fill="#30291b" stroke="#ffcc66"/>
+          <text x="335" y="307" fill="#e8eefc" text-anchor="middle" font-weight="700">Human Gate</text>
+          <text x="335" y="329" fill="#ffdc8a" text-anchor="middle">MC-002 environment skip</text>
+
+          <rect x="480" y="282" width="170" height="66" rx="12" fill="#30291b" stroke="#ffcc66"/>
+          <text x="565" y="307" fill="#e8eefc" text-anchor="middle" font-weight="700">Intervention 3</text>
+          <text x="565" y="329" fill="#ffdc8a" text-anchor="middle">定向 refresh + behavior</text>
+
+          <rect x="705" y="282" width="170" height="66" rx="12" fill="#351d2c" stroke="#ff718a"/>
+          <text x="790" y="307" fill="#e8eefc" text-anchor="middle" font-weight="700">Refresh 重复</text>
+          <text x="790" y="329" fill="#ff9db0" text-anchor="middle">14 rows / 13 unique</text>
+
+          <rect x="930" y="282" width="150" height="66" rx="12" fill="#17372d" stroke="#56e39f"/>
+          <text x="1005" y="307" fill="#e8eefc" text-anchor="middle" font-weight="700">DONE</text>
+          <text x="1005" y="329" fill="#8cf0c0" text-anchor="middle">13/13 unique pass</text>
+
+          <path d="M105 222V282M190 315H245M425 315H480M650 315H705M875 315H930" stroke="#53d7ff" stroke-width="2" marker-end="url(#arrow)"/>
+          <path d="M335 96V156" stroke="#ff718a" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#arrowRed)"/>
+        </g>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="background:#53d7ff"></i>正常控制流</span>
+      <span><i style="background:#ff718a"></i>框架断点 / 产品失败</span>
+      <span><i style="background:#ffcc66"></i>人工恢复 / Gate</span>
+      <span><i style="background:#56e39f"></i>修复与通过</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>时间线：控制面事实与 pane 事实对齐</h2>
+    <div class="timeline">
+      <div class="event">
+        <b><time>14:34:36 CST</time>Run 创建并自动 split</b>
+        <p>来源为 13 条 required YAML Case；`autoApproveSplit=true`，没有拆分审批成本。</p>
+      </div>
+      <div class="event warn">
+        <b><time>15:21:49</time>首个 Review outbox 被消费</b>
+        <p>`AGT-MC-002=skipped`；真实原因是 Review dispatch 没有合法产品 runtime。随后 Run 保持 running，但 dispatch 为空。</p>
+      </div>
+      <div class="event warn">
+        <b><time>15:37:51</time>Intervention 1，静默悬空持续 16m 1.662s</b>
+        <p>定向派给 behavior 的只有 AGT-MC-001、003..013；被误分类的 002 仍未进入行为验收。</p>
+      </div>
+      <div class="event fail">
+        <b><time>16:09:40</time>Round 2 Behavior 被消费：11 pass / 1 fail</b>
+        <p>`AGT-MC-003` 在同一 Browser Profile 重启后返回 `config=null`，真实产品缺陷成立，自动抛回 code。</p>
+      </div>
+      <div class="event">
+        <b><time>17:49:30</time>Code repair outbox 被消费</b>
+        <p>修复 Browser Profile 设置保留与 isolated Electron frontend 最终所有权；pane transcript 同时记录外部 Codex 503 和人工续推，不能把整段墙钟时间当实现效率。</p>
+      </div>
+      <div class="event warn">
+        <b><time>17:53:10</time>Round 3 Review 再次消费 MC-002 skipped</b>
+        <p>同一分类错误复现；45.703 秒后 Intervention 2 只派 `AGT-MC-003` 给 behavior。</p>
+      </div>
+      <div class="event pass">
+        <b><time>18:07:10</time>AGT-MC-003 独立复验通过</b>
+        <p>Project A/B 一致，同 profile fresh Backend/API/UI 恢复原配置；cleanup completed。</p>
+      </div>
+      <div class="event warn">
+        <b><time>18:07:10</time>正式 Human Gate：MC-002 environment skip</b>
+        <p>这不是人工审批；主 Agent在 3m 3.634s 后执行定向 refresh。未声明 Case 保留既有证据。</p>
+      </div>
+      <div class="event">
+        <b><time>18:10:14</time>Intervention 3，refresh 后只派 AGT-MC-002</b>
+        <p>等价中文措辞绕过正则。真实 Beta desktop 完成四角色草稿、切换清空、显式选模、取消和保存。</p>
+      </div>
+      <div class="event pass">
+        <b><time>18:29:21</time>最终 outbox 被消费，自动完成</b>
+        <p>Behavior worker 在 finally/outbox 前曾需人工续推与一次 interrupt；最终 cleanup 归零，13/13 唯一 Case 通过。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>根因分类：历史问题与当前状态分开看</h2>
+    <div class="grid">
+      <article class="card">
+        <span class="tag framework">已确认框架缺陷</span>
+        <h3>Review Gate 使用全文正则</h3>
+        <p><code>/code review|代码审查|code_review/i</code> 扫描整个 Case 文本，而不是读取显式类型或保留 ID。</p>
+        <p class="open"><strong>当前状态：未修。</strong> 当前源码仍保留该逻辑。</p>
+      </article>
+      <article class="card">
+        <span class="tag framework">已确认框架缺陷</span>
+        <h3>completion 可落盘悬空 running</h3>
+        <p>处理 completion 时把 dispatch 清空，却继承旧 active role；Review 未 pass 时没有任何后续分支，最终写出 role 有值、dispatch 为空。</p>
+        <p class="open"><strong>当前状态：未修。</strong> 现有 recovery 需要后续 completion 事件才触发。</p>
+      </article>
+      <article class="card">
+        <span class="tag framework">已确认框架缺陷</span>
+        <h3>Refresh 合并制造重复 Case</h3>
+        <p>旧误分类 Case 被保留为 reviewGate，新措辞 Case 被作为 product case 追加。当前 Run JSON 为 14 行、13 unique。</p>
+        <p class="open"><strong>当前状态：未修。</strong> 完成态数据仍含两个 AGT-MC-002。</p>
+      </article>
+      <article class="card">
+        <span class="tag fact">真实产品缺陷 · 已修复</span>
+        <h3>Backend 重启后配置丢失 / 安装包入口漂移</h3>
+        <p>Round 2 真实复现 `config=null`；修复 normal-stop 设置保留和 isolated Electron frontend 所有权后，Round 4 fresh Beta API/UI 均恢复。</p>
+        <p class="closed"><strong>当前状态：已修复并独立复验。</strong></p>
+      </article>
+      <article class="card">
+        <span class="tag environment">环境能力问题 · 历史</span>
+        <h3>错误角色没有合法产品 surface</h3>
+        <p>Stable Browser 是 Agent Race 原型，Review fixture planner 又拒绝无 product Case 的 dispatch。这是真实限制，但由错误路由触发，不是合同根因。</p>
+        <p class="partial"><strong>当前状态：目标行为已用合法 Beta Session 验证。</strong></p>
+      </article>
+      <article class="card">
+        <span class="tag risk">观察风险</span>
+        <h3>普通 worker 缺少可解释的 liveness 闭环</h3>
+        <p>Code pane 遇到外部 503；Behavior 已完成行为后又停在 finally/outbox。transcript 可见 4 次继续消息和 1 次 interrupt，但“Agent 内部为何停住”未被复现。</p>
+        <p class="partial"><strong>当前状态：Run 已收口；框架韧性仍不足。</strong></p>
+      </article>
+      <article class="card">
+        <span class="tag contract">验收合同问题 · 未成立</span>
+        <h3>合同使用正式角色 ID 本身合理</h3>
+        <p>枚举 `main/code/code_review/behavior_verify` 是业务事实。改成中文只是绕过启发式，不应成为长期测试合同规范。</p>
+        <p class="partial"><strong>当前状态：合同已等价改写，根因未修。</strong></p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>量化结论</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>观察</th><th>数字</th><th>含义</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Acceptance</strong></td><td>13 unique pass；14 stored pass</td><td>功能闭环成立，但完成态存在重复 Case 数据债。</td></tr>
+          <tr><td><strong>Dispatch / outbox</strong></td><td>7 / 7 consumed</td><td>每个正式 dispatch 最终都有正确 pane-scoped 历史 outbox；身份合同没有丢失。</td></tr>
+          <tr><td><strong>正式 intervention</strong></td><td>3</td><td>三次都与同一个误分类链相关；不是三个独立业务问题。</td></tr>
+          <tr><td><strong>静默悬空</strong></td><td>2 次</td><td>状态仍为 running，UI 可能显示“执行中”，但没有 active dispatch，worker 不会收到新任务。</td></tr>
+          <tr><td><strong>Human Gate</strong></td><td>1 次</td><td>是结构化 environment skip 的恢复门，不是 P0/P1 裁决，也没有用户 disposition。</td></tr>
+          <tr><td><strong>产品 repair</strong></td><td>1 个 repairKey</td><td>`behavior_verify:AGT-MC-003` 是唯一真实产品修复；修复后独立行为复验通过。</td></tr>
+          <tr><td><strong>环境事件</strong></td><td>1 structured blocker + 1 transport 503</td><td>前者由误路由触发；后者延长 code pane 墙钟时间，但没有改变最终产品结论。</td></tr>
+          <tr><td><strong>资源清理</strong></td><td>3/3 completed</td><td>最终所有记录 Dev Session 均 stopped、ownedLiveFixtureRuns=0，没有用 done 冒充清理。</td></tr>
+          <tr><td><strong>决策</strong></td><td>0 finding / 0 acceptance disposition</td><td>没有 P0/P1 范围裁决；Run 是 automatic succeeded，不是人工豁免完成。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>后续优化建议</h2>
+    <div class="recs">
+      <div class="rec">
+        <div class="priority p0">P0</div>
+        <div>
+          <h3>用显式 `kind` / 保留 ID 替代全文正则</h3>
+          <p>Review Gate 只接受 `caseId=AGT-REVIEW-GATE` 或结构化 `kind=review_gate`。旧 Run 迁移只匹配已知 legacy 形状，绝不扫描业务文本。</p>
+          <small>状态：未做</small>
+        </div>
+        <div class="impact">验证：含四个角色 ID 的 AGT-MC-002 必须归 behavior；独立 synthetic gate 归 review。</div>
+      </div>
+      <div class="rec">
+        <div class="priority p0">P0</div>
+        <div>
+          <h3>把 active role / dispatch 变成单一状态原子</h3>
+          <p>规定 executing/running 时二者必须同时存在或同时为空；completion 事务必须先算出下一动作再持久化。无下一动作就自动重派或进入带类型原因的 need_human。</p>
+          <small>状态：未做</small>
+        </div>
+        <div class="impact">验证：Review skipped 后不能产生 running + role 有值 + dispatch=null；无需等待新 completion 触发 recovery。</div>
+      </div>
+      <div class="rec">
+        <div class="priority p1">P1</div>
+        <div>
+          <h3>Refresh 按稳定业务身份合并并强制唯一</h3>
+          <p>按 `sourceFilePath + sourceCaseId` 合并，Gate 和 product case 分开存储；写入前 assert `caseId` 唯一。未声明 Case 保留状态与证据。</p>
+          <small>状态：未做</small>
+        </div>
+        <div class="impact">验证：本文件 refresh 后仍是 13 行/13 unique；12 条既有 pass 证据不变。</div>
+      </div>
+      <div class="rec">
+        <div class="priority p1">P1</div>
+        <div>
+          <h3>为普通 worker 增加分阶段 liveness watchdog</h3>
+          <p>区分 agent_running、外部 transport retry、resource cleanup、outbox pending；有工具活动时不误杀，超时后先定向提醒，再升级 typed blocker。</p>
+          <small>状态：未做；已有 recheck watchdog，普通 dispatch 未覆盖</small>
+        </div>
+        <div class="impact">目标：同类 Run 的 4 次人工继续消息和 1 次 interrupt 降为 0，且不重复行为验收。</div>
+      </div>
+      <div class="rec">
+        <div class="priority p1">P1</div>
+        <div>
+          <h3>增加带时间戳的 transition journal</h3>
+          <p>记录 `from/to status`、role、dispatchId、触发源、Case 集合和持久化结果。UI 的“执行中/已抛回”只投影 journal，不作为事实源。</p>
+          <small>状态：未做；当前 logs 为无时间戳字符串</small>
+        </div>
+        <div class="impact">验证：不读取聊天记录即可精确还原每个断点时长和自动恢复原因。</div>
+      </div>
+      <div class="rec">
+        <div class="priority p2">P2</div>
+        <div>
+          <h3>派发前校验 Role × Case × Surface 能力</h3>
+          <p>行为 Case 不允许进入 code_review；需要真实产品 surface 的 Case 在 dispatch 生成前验证 owner role 与 planner capability，而不是等 worker 以 environment skipped 返回。</p>
+          <small>状态：部分具备 planner 门禁，缺少派发前约束</small>
+        </div>
+        <div class="impact">验证：错误角色请求直接返回可定位的 control-plane error，不污染 acceptance 观察。</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>证据索引</h2>
+    <div class="panel">
+      <p>报告以 run JSON、7 份 outbox history、pane transcript、真实 Beta/CDP evidence 和当前代码为事实源，不从 UI 状态文案推导完成度。</p>
+      <details>
+        <summary>展开关键证据路径</summary>
+        <ul class="evidence-list">
+          <li><code>.runweave/agent-team/atr_183c013c_20260725063436.json</code></li>
+          <li><code>.runweave/outbox-history/atr_183c013c_20260725063436/</code></li>
+          <li><code>.runweave/evidence/AGT-MC-003-same-profile-backend-restart/dvs-411c86/</code></li>
+          <li><code>.runweave/evidence/ea49ce59-agt-mc-002-round3-initial.yaml</code></li>
+          <li><code>.playwright-cli/round4-agt-mc-003-after-restart.yaml</code></li>
+          <li><code>.playwright-cli/round5-agt-mc-002-after-save.yaml</code></li>
+          <li><code>backend/src/agent-team/service-acceptance-refresh-policy.ts:7-14,125-145</code></li>
+          <li><code>backend/src/agent-team/service-round-execution.ts:99-102,321-345</code></li>
+        </ul>
+      </details>
+    </div>
+  </section>
+
+  <div class="conclusion">
+    <b>一句话结论：</b>
+    这个 Run 证明产品 repair 闭环有效，但控制面把“Case 写了什么”误当成“Case 是什么”；
+    在显式 Case 类型、原子 dispatch 状态和唯一 refresh 合并落地前，同类角色枚举仍可能重复制造静默悬空与人工恢复。
+  </div>
+
+  <footer>
+    事实快照：2026-07-25 · Runweave worktree feature-1 ·
+    复盘不修改产品实现、不介入已完成 Run。
+  </footer>
+</main>
+</body>
+</html>

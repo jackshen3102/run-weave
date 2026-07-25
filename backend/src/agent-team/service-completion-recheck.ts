@@ -11,6 +11,7 @@ import {
   createActiveWorkerDispatch,
   setActiveWorker,
 } from "./service-workflow-policy";
+import { resolveAgentTeamRoleTerminal } from "./model-runtime";
 
 export abstract class AgentTeamCompletionRecheckService extends AgentTeamRepairProtocolService {
   protected async sendRecheckToWorker(
@@ -96,7 +97,7 @@ export abstract class AgentTeamCompletionRecheckService extends AgentTeamRepairP
     await this.submitWorkerDispatchPrompt(
       persistedRun,
       session,
-      run.terminal,
+      resolveAgentTeamRoleTerminal(persistedRun, worker.role),
       worker,
       workerPrompt,
     );

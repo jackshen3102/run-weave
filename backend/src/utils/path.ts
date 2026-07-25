@@ -13,6 +13,7 @@ export interface StoragePaths {
   authStoreFile: string;
   terminalSessionStoreFile: string;
   terminalQuickInputStoreFile: string;
+  agentTeamModelStoreFile: string;
   backendLogDir: string;
 }
 
@@ -89,6 +90,9 @@ export function resolveStoragePaths(
   const terminalQuickInputStoreFile = path.resolve(
     path.join(path.dirname(terminalSessionStoreFile), "terminal-quick-inputs.json"),
   );
+  const agentTeamModelStoreFile = path.resolve(
+    path.join(browserProfileDir, "agent-team-model-settings.json"),
+  );
   const backendLogDir = path.resolve(
     expandHomePath(env.RUNWEAVE_BACKEND_LOG_DIR, homeDir) ??
       path.join(browserProfileDir, "logs", "backend"),
@@ -99,6 +103,7 @@ export function resolveStoragePaths(
     authStoreFile,
     terminalSessionStoreFile,
     terminalQuickInputStoreFile,
+    agentTeamModelStoreFile,
   } as StoragePaths;
 
   Object.defineProperty(storagePaths, "backendLogDir", {

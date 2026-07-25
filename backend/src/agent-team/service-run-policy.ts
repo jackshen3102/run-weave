@@ -1,6 +1,5 @@
 import type {
   AgentTeamRun,
-  AgentTeamTerminal,
   AgentTeamVerificationConfig,
   AgentTeamWorker,
   AgentTeamWorkerRole,
@@ -10,8 +9,7 @@ import type { TerminalSessionRecord } from "../terminal/manager";
 import { AgentTeamError } from "./errors";
 import { assertAgentTeamTestPlanFilePath } from "./acceptance-case-loader";
 import type { AgentTeamCompletionSignal } from "./service-types";
-
-const DEFAULT_AGENT_TEAM_AGENT_COMMAND = "codex";
+export { resolveAgentTeamTerminal } from "./model-runtime";
 
 export function createSyntheticCompletionEvent(
   run: AgentTeamRun,
@@ -44,17 +42,6 @@ export function createSyntheticCompletionEvent(
 
 export function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-export function resolveAgentTeamTerminal(
-  terminal: AgentTeamTerminal | undefined,
-): AgentTeamTerminal {
-  return {
-    command: terminal?.command?.trim() || DEFAULT_AGENT_TEAM_AGENT_COMMAND,
-    args: terminal?.args ?? [],
-    cwd: terminal?.cwd?.trim() || null,
-    runtimePreference: terminal?.runtimePreference ?? "auto",
-  };
 }
 
 export function requireRunnableTask(task: string | undefined): string {
