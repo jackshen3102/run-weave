@@ -1,0 +1,192 @@
+version: 1
+name: Agent Race 并行工作区与终端闭环
+description: >
+  验证用户能在 Runweave Terminal 工作区创建一场 Race，把同一目标按各自 agent 与模型并行下发到
+  独立 worktree 和 Terminal，并在观测、介入、Diff、恢复与清理过程中保持状态、项目和 Git 资源边界。
+  v1 不包含裁决、等待回答识别、指令广播或自动删除 worktree。
+
+cases:
+  - id: RACE-001
+    name: 无进行中 Race 时可完整配置 Worker
+    required: true
+    description: >
+      Race 作为第四个右侧工具 tab 提供目标、任务计划、baseRef 和逐行 Worker 配置；agent 只能选择
+      codex 或 traex，模型选项随 agent 联动且允许自定义，超过五个 Worker 只提示资源成本而不硬拦截。
+    preconditions:
+      - 当前项目没有进行中的 Race，且主 worktree 处于可识别的当前分支。
+      - 当前 Runweave 真实页面已加载 Terminal 工作区，模型目录接口可用。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 打开右侧工具区；确认 Preview、Browser、Agent Team、Race 四个 tab 并列，切到 Race 后显示目标、任务计划、baseRef、Worker 列表和下发按钮。
+      - 确认 baseRef 默认显示主 worktree 当前分支；新增、删除 Worker，并在同一行切换 codex 与 traex，确认模型列表切换为对应 agent 的目录且自定义模型仍可输入。
+      - 将 Worker 数量从五个增加到六个；确认页面出现包含六份 worktree 和六个并发进程成本的提示，同时第六行仍保留且下发按钮没有仅因数量超过五个而禁用。
+
+  - id: RACE-002
+    name: 下发为每个 Worker 创建唯一受控 Worktree
+    required: true
+    description: >
+      一次合法下发必须从指定 baseRef 为每个 Worker 创建唯一的 `.worktree/race-*` 目录和
+      `race/*` 分支，并把真实路径、分支与子 projectId 准确登记到同一 RaceRecord；不得改动已有
+      非 Race worktree 或分支。
+    preconditions:
+      - 独立 Git fixture 包含主 worktree、一个非 Race 用户 worktree 和可解析的 baseRef。
+      - fixture 中没有进行中的 Race，并已记录提交 HEAD、worktree 列表和分支列表。
+    steps:
+      - 通过真实 Race API 下发三个 Worker，随后读取响应、RaceRecord、`git worktree list --porcelain` 和分支列表；确认恰好新增三个不同的 `race-*` worktree 与三个对应 `race/*` 分支，且都从指定 baseRef 建立。
+      - 对照每个 Worker 的 worktreeId、worktreePath 和 branch；确认 projectId 使用现有子 Project 合约，路径均位于该父仓 `.worktree/` 下且 basename 以 `race-` 开头。
+      - 对照下发前快照；确认主 worktree、非 Race 用户 worktree、已有分支和工作区改动均未被修改、删除或 prune。
+
+  - id: RACE-003
+    name: Worker 按各自协议模型并行接收同一目标
+    required: true
+    description: >
+      每个已供给 Worker 必须在自己的 worktree Terminal 中启动所选 codex 或 traex，并把该 Worker
+      的模型参数和完全相同的目标原文提交一次；多个 Worker 的启动互不等待前一 Worker 完成。
+    preconditions:
+      - 独立 fixture 中 codex 与 traex 测试命令均可启动并可读取各 Worker 的 Terminal transcript。
+      - 已准备包含 codex 指定模型、traex 指定模型和空模型三种配置的合法下发。
+    steps:
+      - 下发三种 Worker 配置并读取各自 Session、cwd、启动 transcript 与状态时间线；确认所有 Session 的 cwd 分别等于其登记 worktreePath，且后续 Worker 无需等待前一 Worker idle 或退出即可进入 starting 或 running。
+      - 检查 codex 指定模型的启动命令包含 `-m` 与所选模型，traex 指定模型的启动命令包含 `-c` 与对应 model 参数，空模型 Worker 不额外携带模型参数。
+      - 对照原始目标逐字检查三个 transcript；确认每个 Worker 只收到一次完全相同的目标原文，没有 Agent Team preamble、outbox 契约、评分或选赢家指令。
+
+  - id: RACE-004
+    name: 单个 Worker 启动失败不阻断其他 Worker
+    required: true
+    description: >
+      某一 Worker 在 worktree 供给、Session 创建或 agent 提交阶段发生确定性失败时，该 Worker
+      必须记录 failed 与可定位原因，其他 Worker 仍能独立完成供给和启动，RaceRecord 不能丢失
+      已创建资源的身份。
+    preconditions:
+      - 独立 fixture 能只对一个指定 Worker 注入可复现的 worktree、Session 或 agent 提交失败。
+      - 同一请求还包含至少一个不受该失败条件影响的合法 Worker。
+    steps:
+      - 下发包含失败 Worker 和合法 Worker 的 Race；确认请求返回一份可读取的 RaceRecord，而不是因单点失败丢弃整场记录。
+      - 读取失败 Worker 的 launchStatus、launchError、worktreePath 与 terminalSessionId；确认状态为 failed、原因可定位，且已创建的 worktree 或 Session 身份仍被登记以供清理，未创建的资源以空值明确表示。
+      - 读取合法 Worker 的 worktree、Session 和 transcript；确认其已独立进入 launched、starting 或 running，并收到目标原文，没有复用失败 Worker 的路径、分支或 Session。
+
+  - id: RACE-005
+    name: 单场约束拒绝覆盖和并发重复下发
+    required: true
+    description: >
+      只要已有一场 Race 被登记，页面重复下发或两个客户端并发创建都只能保留一个 Race；被拒请求
+      必须返回明确冲突且不能追加 Worker、覆盖目标或创建额外 Git 与 Terminal 资源。
+    preconditions:
+      - 独立 fixture 可从两个客户端同时调用 Race API，并已记录下发前的 worktree、分支和 Session 列表。
+    steps:
+      - 先成功创建一场 Race，再使用 `$toolkit:playwright-cli` 从 composer 或等效入口再次尝试下发；确认页面提示先结束当前 Race，API 返回 409 或等价 `race_exists` 冲突。
+      - 在没有 Race 的新 fixture 中并发提交两个可区分目标；确认最终 GET `/race` 只返回其中一个完整 Race，另一个请求被明确拒绝。
+      - 对照资源快照；确认被拒请求没有新增 worktree、分支、Session 或 Worker，也没有修改已存在 Race 的 goal、plan、baseRef 和 workers。
+
+  - id: RACE-006
+    name: TraeX 模型枚举不可用时仅降级模型目录
+    required: true
+    description: >
+      `traex models` 缺失、失败或超时只应让 traex 模型目录降级为可自定义输入，不能阻塞 codex
+      模型目录、Race composer 或使用自定义 traex 模型的下发。
+    preconditions:
+      - 独立 fixture 可让 `traex models` 稳定返回失败或超时，同时保留 codex 与自定义 traex 启动能力。
+      - 当前项目没有进行中的 Race。
+    steps:
+      - 请求 GET `/race/agents`；确认响应仍包含 codex 和 traex，codex 返回维护的模型列表与 `custom:true`，traex 返回空或降级列表与 `custom:true`，并在有超时门禁时于限定时间内结束请求。
+      - 使用 `$toolkit:playwright-cli` 打开 composer 并选择 traex；确认页面给出可理解的降级状态且仍允许输入自定义模型，没有禁用整场下发。
+      - 使用自定义 traex 模型下发一个 Worker；确认 RaceRecord 保留该模型并进入正常供给或启动流程，模型枚举失败没有被误报为 Race 创建失败。
+
+  - id: RACE-007
+    name: 观测态只展示可证明的 Worker 状态
+    required: true
+    description: >
+      Race 面板必须从启动记录与 TerminalStateService 投影 starting、running、idle 和 failed，
+      并明确把 idle 表示为“空闲·待查看”；系统不得虚构 waiting、待回答、完成、评分或赢家状态。
+    preconditions:
+      - 独立 Race 含可分别稳定进入 starting、running、idle 和 failed 的 Worker。
+      - 当前页面能读取 RaceRecord、Terminal 状态和 Race loop 日志。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 依次观察四类 Worker 卡片和状态点；确认 workerId、agent、model 与实际记录一致，状态变化随真实 Terminal 状态更新。
+      - 让一个 Worker 停在 agent_idle 且 transcript 中包含提问文本；确认面板只显示“空闲·待查看”或等价中性文案，不出现 waiting、待回答或已完成的系统判断。
+      - 检查目标、Worker 计数与 loop 日志；确认页面不显示裁决、打分、赢家、指令广播或聚合收件箱控件。
+
+  - id: RACE-008
+    name: Worker 卡与 Rail 始终路由到同一目标 Terminal
+    required: true
+    description: >
+      从 worktree rail 或 Race Worker 卡选择 Worker，都必须原子切换到该 Worker 的 project、
+      Session 和 Terminal；底部输入只能发送给当前 Worker，并在发送后把该 Worker 投影为 running，
+      不能串到兄弟 Worker。
+    preconditions:
+      - 独立 Race 至少有两个已启动 Worker，二者 transcript 含可区分标记。
+      - 两个 Worker 的 Terminal 均可接收输入并读取最新 transcript。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 点击 Worker A 的 rail 行，再点击 Worker B 的 Race 卡；每次确认 active project、Session 标题、cwd 和 transcript 同时切换到所选 Worker。
+      - 在 Worker B 的底部输入框发送唯一标记文本；确认 B 的 transcript 收到该文本且状态转为 running，Worker A 的 transcript 与状态没有出现该标记或无关变化。
+      - 再从 rail 切回 Worker A；确认页面恢复 A 的既有 Terminal，不新建 Session、不复用 B 的 cwd 或 transcript。
+
+  - id: RACE-009
+    name: Diff 入口只由当前 Worktree 的真实 Git 改动驱动
+    required: true
+    description: >
+      Worker 的“终端 / Diff”切换必须只依据该 worktree 的 project-scoped Git 状态；有改动时展示
+      相对 baseRef 的真实 diff，无改动时不展示，不能由 running、idle 或 failed 状态替代判断。
+    preconditions:
+      - 独立 Race 含两个 Worker，其中一个 worktree 有可识别的 Git 改动，另一个保持干净。
+      - 两个 Worker 可分别切换 running 与 idle，而不改变各自 Git 状态。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 打开有改动 Worker；确认出现“终端 / Diff”切换，Diff 的文件、状态和内容与该 worktree 相对 baseRef 的命令行结果一致。
+      - 打开干净 Worker；确认不出现 Diff 切换，也不显示兄弟 Worker 的改动。
+      - 仅切换两个 Worker 的 running 与 idle 状态后重复观察；确认 Diff 可见性不变，随后清除有改动 Worker 的 Git 改动并确认其 Diff 入口消失。
+
+  - id: RACE-010
+    name: 结束 Race 只停止 Session 并保留 Git 产物
+    required: true
+    description: >
+      结束一场 Race 必须清除当前 Race 记录并停止其 Worker Terminal Session，但所有 Race worktree、
+      分支和其中未提交改动必须原样保留，其他项目或用户 Session 不受影响。
+    preconditions:
+      - 独立 Race 至少有两个存活 Worker Session，其中一个 worktree 含未提交改动。
+      - 同一 Backend 还存在一个不属于该 Race 的用户 Session 和非 Race worktree。
+    steps:
+      - 记录 RaceRecord、Worker Session、worktree、分支与未提交改动后，通过 DELETE `/race/:raceId` 结束 Race；确认响应的 ok 字段为 true 且 GET `/race` 返回 null。
+      - 查询原 Worker Session 并检查进程；确认它们均已停止或不可继续接收输入，且没有遗留 Race 运行记录。
+      - 检查 Git 与非 Race 资源；确认所有 Race worktree、分支和未提交改动仍在，用户 Session 与非 Race worktree 保持可用。
+
+  - id: RACE-011
+    name: 显式删除只能作用于已登记的 Race Worktree
+    required: true
+    description: >
+      删除 Worker worktree 只允许命中当前 RaceRecord 登记且路径位于父仓 `.worktree/race-*` 的目标；
+      未登记、非 Race、路径逃逸、脏 worktree 或伪造 workerId 必须 fail closed，且整个操作不得执行 prune。
+    preconditions:
+      - 独立活动 Race 包含一个可安全删除的干净 Worker worktree。
+      - fixture 另有脏 Race worktree、未登记的 `race-*` worktree、非 Race 用户 worktree和父仓外目录。
+    steps:
+      - 调用 DELETE `/race/:raceId/worktree/:workerId` 删除已登记且干净的目标；确认只移除该 worktree，响应的 ok 字段为 true，其他 worktree 与分支保持不变。
+      - 分别使用脏 Worker、未登记 race 路径、非 Race 路径、路径逃逸和伪造 workerId 请求删除；确认每次都返回明确拒绝，目标目录、分支和文件没有变化。
+      - 检查 `git worktree list --porcelain` 与可观测 Git 操作日志；确认没有 prune，也没有删除父仓、兄弟 worktree 或未在当前 RaceRecord 登记的资源。
+
+  - id: RACE-012
+    name: Backend 重启后恢复同一场 Race
+    required: true
+    description: >
+      Backend 重启必须从持久化记录恢复同一个 raceId、配置与 Worker 身份；重启本身不能重复创建
+      worktree、分支或 Session，页面重新取得 fresh endpoint 和 UI 引用后继续显示真实状态。
+    preconditions:
+      - 独立 Race 已完成持久化，至少一个 Worker Session 和 worktree 在 Backend 重启期间保持存在。
+      - 执行者拥有该 fixture Backend 的重启与重新发现 endpoint 权限。
+    steps:
+      - 在重启前保存 GET `/race`、持久化记录、worktree、分支和 Session 快照；停止并重启该 fixture Backend。
+      - 从重启后的控制面重新取得 fresh API endpoint，并用 `$toolkit:playwright-cli` 重新附着 fresh 页面引用；确认 GET `/race` 与面板恢复相同 raceId、goal、plan、baseRef 和 Worker 身份。
+      - 对照重启前后资源；确认没有重复 worktree、分支或 Session，存活 Worker 的最新 Terminal 状态可继续投影，结束本 case 时停止自有 fixture 资源。
+
+  - id: RACE-013
+    name: 恢复时容忍已丢失的 Worker 资源
+    required: true
+    description: >
+      持久化 RaceRecord 引用的某个 worktree 或 Session 已被用户在系统外删除时，恢复流程必须把该
+      Worker 收敛为可解释的缺失或失败状态并保留其他 Worker；不能因一条陈旧引用让整场 Race
+      无法读取、重建已删除资源或误操作现存资源。
+    preconditions:
+      - 独立 Race 至少有两个已登记 Worker，执行者可在 Backend 停止时移除其中一个 Worker 的 Session 或 worktree。
+      - 另一个 Worker 的 Session、worktree 和未提交改动在整个 case 内保持存在。
+    steps:
+      - 停止 fixture Backend，移除 Worker A 的已登记 Session 或 worktree，保留 Worker B 及其改动，然后重启并重新取得 fresh API endpoint。
+      - 读取 GET `/race` 和持久化记录；确认请求成功，Worker A 显示明确的缺失或 failed 状态且不会被静默重建，Worker B 的身份、状态和改动保持不变。
+      - 使用 `$toolkit:playwright-cli` 重新打开 Race 面板；确认页面可继续观测 Worker B，并对 Worker A 给出可定位状态而不是白屏或无限 loading，结束本 case 时停止自有 fixture 资源。

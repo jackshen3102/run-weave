@@ -94,6 +94,13 @@ export function useTerminalPreviewPanelData({
   const projectState = useTerminalPreviewStore((state) =>
     activeProject ? state.projects[activeProject.projectId] : undefined,
   );
+  const changesRefreshRevision = useTerminalPreviewStore((state) =>
+    activeProject
+      ? (state.changesRefreshRevisionByProjectId[
+          activeProject.projectId
+        ] ?? 0)
+      : 0,
+  );
   const mode = projectState?.mode ?? null;
   const query = projectState?.openFileQuery ?? "";
   const selectedFilePath = projectState?.selectedFilePath;
@@ -259,6 +266,13 @@ export function useTerminalPreviewPanelData({
       }
     },
   );
+
+  useEffect(() => {
+    if (changesRefreshRevision === 0 || mode !== "changes") {
+      return;
+    }
+    void loadChanges();
+  }, [changesRefreshRevision, loadChanges, mode]);
 
   const clearFilePreview = useMemoizedFn((filePath?: string) => {
     const path = filePath ?? selectedFilePath;

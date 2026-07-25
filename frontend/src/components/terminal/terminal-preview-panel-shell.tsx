@@ -80,6 +80,7 @@ interface TerminalPreviewPanelShellProps {
   actions: PreviewActions;
   activeTerminalSessionId: string | null;
   agentTeamBody?: ReactNode;
+  raceBody?: ReactNode;
   body: ReactNode;
   layout: SidecarLayout;
   navigation: PreviewNavigation;
@@ -112,6 +113,7 @@ export function TerminalPreviewPanelShell({
   actions,
   activeTerminalSessionId,
   agentTeamBody,
+  raceBody,
   body,
   layout,
   navigation,
@@ -141,8 +143,8 @@ export function TerminalPreviewPanelShell({
   const canSave = save.available;
   const pathCopied = copy.copied;
   const availableTools: TerminalSidecarTool[] = showAgentTeamTool
-    ? ["preview", "browser", "agent-team"]
-    : ["preview", "browser"];
+    ? ["preview", "browser", "agent-team", "race"]
+    : ["preview", "browser", "race"];
   const saveStatusLabel =
     saveStatus === "conflict"
       ? "Conflict"
@@ -200,7 +202,9 @@ export function TerminalPreviewPanelShell({
                       ? "Preview"
                       : tool === "browser"
                         ? "Browser"
-                        : "Agent Team"}
+                        : tool === "agent-team"
+                          ? "Agent Team"
+                          : "Race"}
                   </button>
                 ))}
               </div>
@@ -431,6 +435,16 @@ export function TerminalPreviewPanelShell({
             {showAgentTeamTool && activeTool === "agent-team"
               ? agentTeamBody
               : null}
+          </div>
+          <div
+            className={[
+              "absolute inset-0 min-h-0",
+              activeTool === "race"
+                ? ""
+                : "pointer-events-none hidden",
+            ].join(" ")}
+          >
+            {raceBody}
           </div>
         </div>
       </div>
