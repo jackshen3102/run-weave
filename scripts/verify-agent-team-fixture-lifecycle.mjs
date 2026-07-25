@@ -3,24 +3,17 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
-
 import { AgentTeamService } from "../backend/src/agent-team/service.ts";
 import { createTerminalPanelSplit } from "../backend/src/terminal/application/panel-split.ts";
 import { cleanupOwnedAgentTeamFixtures } from "./dev-session/agent-team-fixture-cleanup.mjs";
 import { resolveAgentTeamFixtureScope } from "./dev-session/agent-team-fixture-scope.mjs";
 import { withHarness } from "./verify-agent-team-review-checkpoints/bootstrap-lifecycle-harness.mjs";
 import { verifyDevSessionBackendIsolation } from "./verify-agent-team-fixture-lifecycle/dev-session-isolation.mjs";
-import {
-  buildRun,
-  buildRuntimeRepairRun,
-  lineage,
-} from "./verify-agent-team-fixture-lifecycle/fixtures.mjs";
-
+import { buildRun, buildRuntimeRepairRun, lineage } from "./verify-agent-team-fixture-lifecycle/fixtures.mjs";
 class FixtureLifecycleHarness extends AgentTeamService {
   write(run) {
     return this.runStore.writeRun(run);
   }
-
   reconcile(owner, dispatchId = null) {
     return this.reconcileOwnedFixtureResources(
       owner,
@@ -28,7 +21,6 @@ class FixtureLifecycleHarness extends AgentTeamService {
       "ATFR fixture verifier cleanup",
     );
   }
-
   round(run, params) {
     return this.applyRound(run, params);
   }
@@ -308,6 +300,21 @@ async function verifyDevSessionScopeResolution() {
       consecutiveFail: 0,
       evidence: [],
     },
+    {
+      caseId: "AGT-MC-002",
+      sourceCaseId: "AGT-MC-002",
+      sourceFilePath:
+        "docs/testing/agent-team/configuration/agent-team-role-model-config.testplan.yaml",
+      text: "依次查看 main、code、code_review、behavior_verify 四个产品角色",
+      status: "pending", consecutiveFail: 0, evidence: [],
+    },
+    {
+      caseId: "AGT-REVIEW-GATE",
+      text: "Code Review 未发现阻断性问题（P0/P1），或阻断问题已修复",
+      status: "pending",
+      consecutiveFail: 0,
+      evidence: [],
+    },
   ];
   await writeFile(
     path.join(runDir, `${owner.runId}.json`),
@@ -365,7 +372,7 @@ async function verifyDevSessionScopeResolution() {
     "ATFR-020-dev-session-inherits-active-behavior-owner",
     scope?.ownerRunId === owner.runId &&
       scope.ownerDispatchId === owner.activeWorkerDispatch.dispatchId &&
-      scope.ownerCaseIds.join(",") === "ATFR-020" &&
+      scope.ownerCaseIds.join(",") === "ATFR-020,AGT-MC-002" &&
       scope.fixtureNamespace.includes("dvs-scope-resolution") &&
       inferredScope?.ownerRunId === owner.runId &&
       inferredScope.ownerDevSessionId === "dvs-scope-inferred" &&

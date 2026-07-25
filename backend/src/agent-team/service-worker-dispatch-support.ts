@@ -11,6 +11,7 @@ import { getAgentForCommand } from "../terminal/terminal-state-service";
 import { AgentTeamError } from "./errors";
 import { buildHumanGateMainPrompt } from "./prompt-builders";
 import { AgentTeamServiceContext, agentTeamLogger } from "./service-context";
+import { hasConsistentActiveWorkerBoundary } from "./service-workflow-policy";
 
 const WORKER_THREAD_READINESS_TIMEOUT_MS = 10_000;
 
@@ -61,6 +62,12 @@ export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
       ...patch,
       updatedAt: new Date().toISOString(),
     };
+    if (!hasConsistentActiveWorkerBoundary(next)) {
+      throw new AgentTeamError(
+        500,
+        "active worker 状态不完整：role、dispatch 与 pane 身份必须原子一致",
+      );
+    }
     await this.runStore.writeRun(next);
     await this.observeEvolutionOutcome(run, next);
     if (

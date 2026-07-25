@@ -1,10 +1,6 @@
 import { readFileSync } from "node:fs";
 import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox-resolver.ts";
-import {
-  buildBounceBackPrompt,
-  buildWorkerStartupPrompt,
-  buildWorkerRecheckPrompt,
-} from "../../backend/src/agent-team/prompt-builders.ts";
+import { buildBounceBackPrompt, buildWorkerStartupPrompt, buildWorkerRecheckPrompt } from "../../backend/src/agent-team/prompt-builders.ts";
 import {
   foldRepairGateResult,
   resolveRepairTargets,
@@ -12,15 +8,10 @@ import {
   validateCodeFixHandoff,
 } from "../../backend/src/agent-team/repair-loop.ts";
 import { createActiveWorkerDispatch } from "../../backend/src/agent-team/service-workflow-policy.ts";
-import {
-  buildFixVerification,
-  buildRepairEvidence,
-  buildRepairRun,
-  normalizeRepairOutbox,
-} from "./repair-fixtures.mjs";
+import { buildFixVerification, buildRepairEvidence, buildRepairRun, normalizeRepairOutbox } from "./repair-fixtures.mjs";
+import { verifyReviewStartupPromptUsesExplicitGate } from "./review-gate-prompt.mjs";
 import { verifyRepairLoopContinuation } from "./repair-loop-continuation.mjs";
 import { verifyFindingDispositionChecks } from "./repair-loop-finding-disposition.mjs";
-
 function buildReviewReproduction(overrides = {}) {
   return {
     mode: "review_harness",
@@ -33,7 +24,6 @@ function buildReviewReproduction(overrides = {}) {
     ...overrides,
   };
 }
-
 export function verifyEvidenceGatedRepairLoop(check) {
   const executionSource = readFileSync(
     new URL(
@@ -291,6 +281,11 @@ export function verifyEvidenceGatedRepairLoop(check) {
       run.loop.round,
     ),
   };
+  verifyReviewStartupPromptUsesExplicitGate(
+    check,
+    reviewDispatchRun,
+    run.workers[1],
+  );
   const reviewRecheckPrompt = buildWorkerRecheckPrompt({
     run: reviewDispatchRun,
     worker: run.workers[1],

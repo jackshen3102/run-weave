@@ -4,6 +4,11 @@ import path from "node:path";
 import { DevSessionError, assertPathInside } from "./contracts.mjs";
 
 const AGENT_TEAM_RUN_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const AGENT_TEAM_REVIEW_GATE_CASE_ID = "AGT-REVIEW-GATE";
+const LEGACY_REVIEW_GATE_TEXTS = new Set([
+  "Code Review 未发现阻断性问题（P0/P1），或阻断问题已修复",
+  "Code Review 未发现阻断性问题（P0/P1）",
+]);
 
 export async function resolveAgentTeamFixtureScope({
   sourceRoot,
@@ -198,7 +203,13 @@ function uniqueCaseIds(cases) {
 function isProductAcceptanceCase(item) {
   return (
     typeof item?.caseId === "string" &&
-    !/code review|代码审查|code_review/i.test(String(item?.text ?? ""))
+    item.caseId !== AGENT_TEAM_REVIEW_GATE_CASE_ID &&
+    !(
+      /^case_\d+$/.test(item.caseId) &&
+      !item.sourceCaseId &&
+      !item.sourceFilePath &&
+      LEGACY_REVIEW_GATE_TEXTS.has(String(item?.text ?? ""))
+    )
   );
 }
 

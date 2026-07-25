@@ -5,6 +5,10 @@ import type {
   AgentTeamWorker,
 } from "@runweave/shared/agent-team";
 import { formatBehaviorValidationAuthorityInstructions } from "./prompt-builders-test-cases";
+import {
+  AGENT_TEAM_REVIEW_GATE_CASE_ID,
+  isReviewGateAcceptanceCase,
+} from "./service-acceptance-refresh-policy";
 
 const ROLE_LABEL: Record<string, string> = {
   code: "code_agent（写代码）",
@@ -83,8 +87,8 @@ export function buildWorkerStartupPrompt(params: {
       ),
       "",
       outboxPath
-        ? `把审查门禁结果写进 ${outboxPath} 的 acceptanceResults。优先使用 Code Review/代码审查相关 caseId；如果没有，使用最相关的 caseId。`
-        : "把审查门禁结果写进 outbox 的 acceptanceResults。优先使用 Code Review/代码审查相关 caseId；如果没有，使用最相关的 caseId。",
+        ? `把审查门禁结果写进 ${outboxPath} 的 acceptanceResults。优先使用 [${AGENT_TEAM_REVIEW_GATE_CASE_ID}]；兼容旧 Run 时仅使用列表中明确的旧 review gate caseId，禁止按文案关键词选择业务 Case。`
+        : `把审查门禁结果写进 outbox 的 acceptanceResults。优先使用 [${AGENT_TEAM_REVIEW_GATE_CASE_ID}]；兼容旧 Run 时仅使用列表中明确的旧 review gate caseId，禁止按文案关键词选择业务 Case。`,
     );
     lines.push(...formatReviewTargetInstructions(run));
   }
@@ -375,10 +379,6 @@ function formatCodeWorkerCheckpointInstructions(): string[] {
     "- 只把实现保留在未提交工作树；code_review 通过后由 backend 独占创建 checkpoint commit。",
     "- code outbox 不要填写 verifiedCheckpointCommit；该字段只属于 behavior_verify 对已创建 checkpoint 的验证结果。",
   ];
-}
-
-function isReviewGateAcceptanceCase(item: AgentTeamAcceptanceCase): boolean {
-  return /code review|代码审查|code_review/i.test(item.text);
 }
 
 /** Ask a review/verify worker to rerun cases after an upstream handoff. */

@@ -6,8 +6,10 @@ import { promisify } from "node:util";
 import { AgentTeamReviewCheckpointGit } from "../backend/src/agent-team/review-checkpoint-git.ts";
 import {
   AGENT_TEAM_REVIEW_GATE_CASE_ID,
+  AGENT_TEAM_REVIEW_GATE_TEXT,
   ensureWorkerGateAcceptance,
   isReviewGateAcceptanceCase,
+  mergeAcceptanceRefresh,
 } from "../backend/src/agent-team/service-acceptance-policy.ts";
 import { verifyRepairIntegration } from "./verify-agent-team-review-checkpoints/repair-integration.mjs";
 import { verifyEvidenceGatedRepairLoop } from "./verify-agent-team-review-checkpoints/repair-loop.mjs";
@@ -83,6 +85,38 @@ async function main() {
         .join(",") === "BSP-017,BSP-018",
     acceptanceAfterProductCaseGrowth,
   );
+  const roleModelProductCase = {
+    ...productCase,
+    caseId: "AGT-MC-002",
+    sourceCaseId: "AGT-MC-002",
+    sourceFilePath:
+      "docs/testing/agent-team/configuration/agent-team-role-model-config.testplan.yaml",
+    text: "依次查看 main、code、code_review、behavior_verify 四个产品角色",
+  };
+  const acceptanceWithRoleModelCase = ensureWorkerGateAcceptance(
+    [reviewWorker],
+    [roleModelProductCase],
+  );
+  check(
+    "traceable-product-case-text-cannot-create-review-gate",
+    !isReviewGateAcceptanceCase(roleModelProductCase) &&
+      acceptanceWithRoleModelCase.length === 2 &&
+      acceptanceWithRoleModelCase[0]?.caseId ===
+        AGENT_TEAM_REVIEW_GATE_CASE_ID &&
+      acceptanceWithRoleModelCase[1] === roleModelProductCase,
+    acceptanceWithRoleModelCase,
+  );
+  const misleadingLegacyShape = {
+    ...roleModelProductCase,
+    caseId: "case_18",
+    sourceCaseId: null,
+    sourceFilePath: null,
+  };
+  check(
+    "legacy-numbered-case-requires-exact-gate-text",
+    !isReviewGateAcceptanceCase(misleadingLegacyShape),
+    misleadingLegacyShape,
+  );
   const legacyReviewGate = {
     ...acceptanceWithReviewGate[0],
     caseId: "case_17",
@@ -98,6 +132,28 @@ async function main() {
       acceptanceWithLegacyReviewGate[0] === legacyReviewGate &&
       acceptanceWithLegacyReviewGate[1] === productCase,
     acceptanceWithLegacyReviewGate,
+  );
+  check(
+    "legacy-review-gate-requires-canonical-text",
+    legacyReviewGate.text === AGENT_TEAM_REVIEW_GATE_TEXT,
+    legacyReviewGate,
+  );
+  const refreshedRoleModelCase = {
+    ...roleModelProductCase,
+    text: `${roleModelProductCase.text}；显式选择模型`,
+  };
+  const refreshedAcceptance = mergeAcceptanceRefresh(
+    acceptanceWithRoleModelCase,
+    [refreshedRoleModelCase],
+    [roleModelProductCase.caseId],
+  );
+  check(
+    "refresh-keeps-one-gate-and-one-role-model-product-case",
+    refreshedAcceptance.length === 2 &&
+      new Set(refreshedAcceptance.map((item) => item.caseId)).size === 2 &&
+      refreshedAcceptance[0]?.caseId === AGENT_TEAM_REVIEW_GATE_CASE_ID &&
+      refreshedAcceptance[1]?.caseId === roleModelProductCase.caseId,
+    refreshedAcceptance,
   );
 
   await verifyBootstrapLifecycle(check, roots);

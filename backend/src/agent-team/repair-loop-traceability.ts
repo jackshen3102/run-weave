@@ -3,12 +3,13 @@ import type {
   AgentTeamOutboxFinding,
   AgentTeamRun,
 } from "@runweave/shared/agent-team";
+import { isReviewGateAcceptanceCase } from "./service-acceptance-refresh-policy";
 
 export function isTraceableProductCase(item: AgentTeamAcceptanceCase): boolean {
   return Boolean(
     item.sourceCaseId &&
     item.sourceFilePath &&
-    !/code review|代码审查|code_review/i.test(item.text),
+    !isReviewGateAcceptanceCase(item),
   );
 }
 

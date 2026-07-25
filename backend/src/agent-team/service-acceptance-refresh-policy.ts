@@ -3,14 +3,24 @@ import type { AgentTeamAcceptanceCase } from "@runweave/shared/agent-team";
 import { AgentTeamError } from "./errors";
 
 export const AGENT_TEAM_REVIEW_GATE_CASE_ID = "AGT-REVIEW-GATE";
+export const AGENT_TEAM_REVIEW_GATE_TEXT =
+  "Code Review 未发现阻断性问题（P0/P1），或阻断问题已修复";
+const LEGACY_REVIEW_GATE_TEXTS = new Set([
+  AGENT_TEAM_REVIEW_GATE_TEXT,
+  "Code Review 未发现阻断性问题（P0/P1）",
+]);
 
 export function isReviewGateAcceptanceCase(
   item: AgentTeamAcceptanceCase,
 ): boolean {
   return (
     item.caseId === AGENT_TEAM_REVIEW_GATE_CASE_ID ||
-    // Persisted runs created before the reserved ID used numbered case_N gates.
-    /code review|代码审查|code_review/i.test(item.text)
+    // Persisted runs created before the reserved ID used this exact,
+    // untraceable numbered gate shape.
+    (/^case_\d+$/.test(item.caseId) &&
+      !item.sourceCaseId &&
+      !item.sourceFilePath &&
+      LEGACY_REVIEW_GATE_TEXTS.has(item.text))
   );
 }
 

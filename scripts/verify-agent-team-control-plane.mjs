@@ -14,9 +14,13 @@ import {
   ensureWorkerGateAcceptance,
   expandRecheckCasesForFailures,
 } from "../backend/src/agent-team/service-acceptance-policy.ts";
-import { createActiveWorkerDispatch } from "../backend/src/agent-team/service-workflow-policy.ts";
+import {
+  createActiveWorkerDispatch,
+  hasConsistentActiveWorkerBoundary,
+} from "../backend/src/agent-team/service-workflow-policy.ts";
 import { getAgentTeamControlState } from "../frontend/src/components/terminal/terminal-agent-team-panel-model.ts";
 import { withHarness } from "./verify-agent-team-review-checkpoints/bootstrap-lifecycle-harness.mjs";
+import { verifyReviewSkipPause } from "./verify-agent-team-control-plane/review-skip-pause.mjs";
 
 const checks = [];
 const roots = [];
@@ -186,14 +190,16 @@ async function verifyDispatchCompletionAtomicity(harness) {
   );
   check(
     "persisted-snapshots-never-split-active-role-from-dispatch",
-    writes.every(
-      (item) =>
-        (item.activeWorkerRole === null &&
-          item.activeWorkerDispatch === null) ||
-        (item.activeWorkerRole != null &&
-          item.activeWorkerDispatch?.role === item.activeWorkerRole),
-    ),
+    writes.every(hasConsistentActiveWorkerBoundary),
     writes,
+  );
+  check(
+    "active-worker-boundary-rejects-role-without-dispatch",
+    !hasConsistentActiveWorkerBoundary({
+      ...run,
+      activeWorkerDispatch: null,
+    }),
+    run,
   );
 
   const withoutActiveDispatch = {
@@ -232,6 +238,17 @@ async function verifyDispatchCompletionAtomicity(harness) {
       afterDuplicates.consumedWorkerDispatches?.length === 1,
     { writes, prompts, afterDuplicates },
   );
+
+  await verifyReviewSkipPause({
+    buildRun,
+    check,
+    harness,
+    outboxPath,
+    prompts,
+    reviewWorker,
+    service,
+    writes,
+  });
 }
 
 function verifyUiControlStateSemantics(run) {

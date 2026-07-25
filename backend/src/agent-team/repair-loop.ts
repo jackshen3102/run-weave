@@ -18,6 +18,7 @@ import {
   findingCaseTraceabilityErrors,
   isTraceableProductCase,
 } from "./repair-loop-traceability";
+import { isReviewGateAcceptanceCase } from "./service-acceptance-refresh-policy";
 export const DEFAULT_MAX_REPAIR_ATTEMPTS = 3;
 export const MIN_REPAIR_ATTEMPTS = 1;
 export const MAX_REPAIR_ATTEMPTS = 5;
@@ -189,7 +190,7 @@ export function resolveRepairTargets(
     failedResults.length > 0
       ? failedResults.map((result) => result.caseId)
       : run.acceptance
-          .filter((item) => /code review|代码审查|code_review/i.test(item.text))
+          .filter(isReviewGateAcceptanceCase)
           .map((item) => item.caseId);
   const reviewTarget = resolveReviewTarget(run, outbox);
   return blockingReviewFindings(run, outbox).flatMap((finding) => {

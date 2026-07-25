@@ -11,11 +11,13 @@ import { normalizeReviewFindingReproduction } from "./outbox-normalizer";
 import { blockingReviewFindings, resolveFindingCaseIds } from "./repair-loop";
 import {
   AGENT_TEAM_REVIEW_GATE_CASE_ID,
+  AGENT_TEAM_REVIEW_GATE_TEXT,
   isReviewGateAcceptanceCase,
 } from "./service-acceptance-refresh-policy";
 
 export {
   AGENT_TEAM_REVIEW_GATE_CASE_ID,
+  AGENT_TEAM_REVIEW_GATE_TEXT,
   assertAcceptanceRefreshPreservesTraceableCases,
   isReviewGateAcceptanceCase,
   mergeAcceptanceRefresh,
@@ -103,7 +105,7 @@ export function ensureWorkerGateAcceptance(
   return [
     {
       caseId: AGENT_TEAM_REVIEW_GATE_CASE_ID,
-      text: "Code Review 未发现阻断性问题（P0/P1），或阻断问题已修复",
+      text: AGENT_TEAM_REVIEW_GATE_TEXT,
       status: "pending",
       consecutiveFail: 0,
       resultSummary: null,
