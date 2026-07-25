@@ -1,0 +1,7 @@
+interface:
+  display_name: "Runtime-Evidence Review"
+  short_description: "三模型只提候选，用真实运行时对照决定阻塞、驳回或未裁决"
+  default_prompt: "使用 $toolkit:review-with-runtime-evidence 对给定变更执行三模型静态候选筛选，并以真实运行时对照完成裁决。"
+
+policy:
+  allow_implicit_invocation: false
