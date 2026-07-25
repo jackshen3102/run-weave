@@ -177,7 +177,7 @@ export function useAttentionOpenIntents({
                 openedResult,
               )) === true;
             if (!completionOpenResolved) return;
-            await updateTerminalSession(
+            const updatedSession = await updateTerminalSession(
               apiBase,
               token,
               intent.terminalSessionId,
@@ -186,6 +186,18 @@ export function useAttentionOpenIntents({
               },
               signal,
             );
+            useTerminalWorkspaceStore.getState().setCompletionMarkers((current) => {
+              const currentRevision = current[intent.terminalSessionId];
+              if (
+                !currentRevision ||
+                currentRevision > updatedSession.acknowledgedCompletionRevision
+              ) {
+                return current;
+              }
+              const next = { ...current };
+              delete next[intent.terminalSessionId];
+              return next;
+            });
             return;
           }
           signal.throwIfAborted();

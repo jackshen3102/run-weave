@@ -81,8 +81,8 @@ cases:
       - 当前 Connection 中准备三个未确认 Completion：一个具有有效 panelId，一个 panelId 已失效，一个目标 Session 可在点击前移除或令其不可达。
       - 已记录各 Session 的 completionRevision 与 acknowledgedCompletionRevision 初值。
     steps:
-      - 点击具有有效 panelId 的 Completion Slot，确认 Runweave 主窗口被聚焦、正确 Session 与 Panel 被打开，openSlot 在 deadline 内返回 opened；随后 acknowledgedCompletionRevision 精确更新为 intent 携带的 revision，下一次 snapshot 才让提醒退役。
-      - 点击 panelId 已失效的 Completion Slot，确认仍打开正确 Session并显示 Panel 降级提示，没有跳到 activePanelId 或其他 Panel，openSlot 返回 opened_with_panel_fallback；随后精确 revision 被确认，下一次 snapshot 让提醒退役。
+      - 点击具有有效 panelId 的 Completion Slot，确认 Runweave 主窗口被聚焦、正确 Session 与 Panel 被打开，openSlot 在 deadline 内返回 opened；随后 acknowledgedCompletionRevision 精确更新为 intent 携带的 revision，对应 Terminal Tab 的 Completion 绿点立即消失，下一次 snapshot 才让提醒退役。
+      - 点击 panelId 已失效的 Completion Slot，确认仍打开正确 Session并显示 Panel 降级提示，没有跳到 activePanelId 或其他 Panel，openSlot 返回 opened_with_panel_fallback；随后精确 revision 被确认，对应 Terminal Tab 的 Completion 绿点立即消失，下一次 snapshot 让提醒退役。
       - 在目标 Session 已打开后分别让 acknowledgement 失败或挂起，确认 openSlot 保持 opened 或 opened_with_panel_fallback，acknowledgedCompletionRevision 不变且提醒继续存在。
       - 对第三个 Slot 在点击期间制造 Connection 不可用、Session 不存在或目标表面未在 deadline 前打开，确认返回明确失败或 timed_out，主窗口没有打开错误资源，不发起 acknowledgement，revision 不变且提醒仍存在。
       - 在点击与确认之间产生更晚 completionRevision，确认本次只确认 intent 携带的旧 revision，更晚 Completion 仍作为新 attentionId 显示。
