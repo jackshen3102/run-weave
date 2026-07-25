@@ -315,7 +315,11 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
       run.workers.find((worker) => worker.role === "code" && worker.panelId) ??
       run.workers.find((worker) => worker.panelId);
     if (!codeWorker?.panelId) {
-      return run;
+      return this.pauseForWorkerDispatchError(
+        run,
+        "code",
+        "稳定失败无法抛回：code worker pane 不存在",
+      );
     }
     const failedCases = run.acceptance.filter((item) =>
       caseIds.includes(item.caseId),
@@ -354,7 +358,11 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
       run.terminalSessionId,
     );
     if (!session) {
-      return run;
+      return this.pauseForWorkerDispatchError(
+        run,
+        "code",
+        `稳定失败无法抛回：terminal session ${run.terminalSessionId} 不存在`,
+      );
     }
     let persistedRun: AgentTeamRun | null = null;
     try {

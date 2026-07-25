@@ -29,7 +29,7 @@ cases:
       - 当前连接至少有一个可用 CLI catalog。
       - 已使用 $toolkit:playwright-cli 打开全局模型配置弹窗。
     steps:
-      - 依次查看主控、实现、审查和行为验证四个固定角色；确认每个角色拥有独立的 CLI、模型和参数草稿。
+      - 依次查看 main、code、code_review、behavior_verify；确认每个角色拥有独立的 CLI、模型和参数草稿。
       - 将一个角色切换到另一个可用 CLI；确认模型变为“请选择模型”、不兼容参数被清理且保存按钮禁用。
       - 搜索并显式选择一个模型；确认只展示该模型支持的 reasoning 档位，Codex 只显示 Fast，TraeX 只显示 Max。
       - 修改草稿后点击取消并重新打开；确认仍显示取消前的已保存值。

@@ -96,6 +96,26 @@ export function setActiveWorker(
   }));
 }
 
+export function hasConsistentActiveWorkerBoundary(
+  run: Pick<
+    AgentTeamRun,
+    "activeWorkerRole" | "activeWorkerDispatch" | "workers"
+  >,
+): boolean {
+  const role = run.activeWorkerRole ?? null;
+  const dispatch = run.activeWorkerDispatch ?? null;
+  if (!role || !dispatch) {
+    return role === null && dispatch === null;
+  }
+  const worker = findWorkerByRole(run.workers, role);
+  return Boolean(
+    worker &&
+      dispatch.role === role &&
+      dispatch.panelId === (worker.panelId ?? null) &&
+      dispatch.tmuxPaneId === (worker.tmuxPaneId ?? null),
+  );
+}
+
 export function shouldDispatchNextSerialWorker(
   run: AgentTeamRun,
   outbox: AgentTeamWorkerOutbox,

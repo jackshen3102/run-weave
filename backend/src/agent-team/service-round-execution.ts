@@ -95,8 +95,8 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
 
     let status: AgentTeamStatus = "running";
     let loop = repairFolded.loop;
-    let workers = run.workers;
-    let activeWorkerRole = run.activeWorkerRole ?? null;
+    let workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
+    let activeWorkerRole: AgentTeamWorkerRole | null = null;
     // This completion consumed the current dispatch. A follow-up bounce or
     // serial worker dispatch will install a new boundary below.
     let activeWorkerDispatch: AgentTeamActiveWorkerDispatch | null = null;
@@ -344,6 +344,25 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
         cases: automaticBehaviorCases,
         log: "behavior_verify 依赖解除，续跑最小 Case 闭包",
         triggerSummary: params.completedWorkerSummary ?? null,
+      });
+    }
+    if (status === "running") {
+      const blockers = completionEvaluation.ready
+        ? []
+        : completionEvaluation.blockers.map((blocker) => blocker.code);
+      const reason = `${params.completedWorkerRole ?? "worker"} completion 后没有合法下一动作${blockers.length > 0 ? `：${blockers.join(", ")}` : ""}`;
+      return this.updateRun(run, {
+        ...transitionPatch,
+        status: "need_human",
+        loop: {
+          ...loop,
+          escalated: true,
+          lastReason: reason,
+        },
+        activeWorkerRole: null,
+        activeWorkerDispatch: null,
+        workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+        logs: [...logs, `⏸ ${reason}`],
       });
     }
     return this.updateRun(run, transitionPatch);
