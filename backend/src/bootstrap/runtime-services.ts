@@ -42,10 +42,21 @@ import {
   InMemoryEvolutionActivationStore,
   type EvolutionActivationStore,
 } from "../evolution/activation-store";
+import type { EvolutionAnalysisStore } from "../evolution/analysis-store";
+import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
+import { EvolutionContextPackBuilder } from "../evolution/context-pack";
 import { DefaultEvolutionMemoryProvider } from "../evolution/injection/memory-provider";
 import { EvolutionOutcomeObserver } from "../evolution/injection/outcome-observer";
+import { EvolutionEvidenceReconciler } from "../evolution/knowledge/evidence-reconciler";
 import { StructuredEvolutionMemorySelector } from "../evolution/knowledge/retrieval";
+import type { EvolutionFoundationStore } from "../evolution/foundation-store";
+import type { EvolutionContextPackStore } from "../evolution/context-pack-store";
+import { EvolutionRuntime } from "../evolution/runtime";
+import { EvolutionService } from "../evolution/service";
 import { SqliteEvolutionActivationStore } from "../evolution/storage/store";
+import { DefaultEvolutionSupplementalSourceReader } from "../evolution/supplemental-sources";
+import { EvolutionToolTokenRegistry } from "../evolution/tools/token-registry";
+import { EvolutionProviderAvailabilityService } from "../evolution/providers/availability";
 
 export interface RuntimeServices {
   activityStore: ActivityStore | null;
@@ -76,6 +87,11 @@ export interface RuntimeServices {
   tmuxSocketPathsToCleanOnShutdown: readonly string[];
   appServerEventConsumer: AppServerEventConsumerHandle | null;
   evolutionActivationStore: EvolutionActivationStore;
+  evolutionAnalysisStore: EvolutionAnalysisStore | null;
+  evolutionContextPackStore: EvolutionContextPackStore | null;
+  evolutionToolTokenRegistry: EvolutionToolTokenRegistry;
+  evolutionRuntime: EvolutionRuntime;
+  evolutionService: EvolutionService;
 }
 
 function resolveTerminalHookToken(
@@ -100,9 +116,7 @@ function resolveTmuxProfileId(browserProfileDir: string): string {
     .slice(0, 12);
 }
 
-function resolvePersistentTmuxSocketPath(
-  browserProfileDir: string,
-): string {
+function resolvePersistentTmuxSocketPath(browserProfileDir: string): string {
   return path.join(
     os.homedir(),
     ".runweave",
@@ -162,7 +176,8 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
       .slice(0, 12)}`;
   const activityEventFactory = new ActivityEventFactory({
     producerName: "runweave-backend",
-    producerVersion: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || "builtin",
+    producerVersion:
+      process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || "builtin",
     producerInstanceId: activityInstanceId,
     runtimeChannel,
     runtimeSurface: "backend",
@@ -194,8 +209,11 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     void (async () => {
       try {
         while (true) {
-          const job = await activityStore?.runDelete(activityMaintenanceOwnerId);
-          if (!job || job.status === "completed" || job.status === "blocked") break;
+          const job = await activityStore?.runDelete(
+            activityMaintenanceOwnerId,
+          );
+          if (!job || job.status === "completed" || job.status === "blocked")
+            break;
           await new Promise<void>((resolve) => {
             const timeout = setTimeout(resolve, 50);
             timeout.unref();
@@ -329,10 +347,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxLifecycleCoordinator,
   });
   await terminalSessionManager.initialize();
-  void syncExistingTmuxSessionEnvironments(
-    terminalSessionManager,
-    tmuxService,
-  )
+  void syncExistingTmuxSessionEnvironments(terminalSessionManager, tmuxService)
     .then((failures) => {
       for (const failure of failures) {
         logger.warn("terminal.tmux.environment-sync.startup.failed", {
@@ -377,11 +392,19 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     });
   });
   let evolutionActivationStore: EvolutionActivationStore;
+  let evolutionAnalysisStore: EvolutionAnalysisStore | null = null;
+  let evolutionFoundationStore: EvolutionFoundationStore | null = null;
+  let evolutionContextPackStore: EvolutionContextPackStore | null = null;
   try {
-    evolutionActivationStore = await SqliteEvolutionActivationStore.create({
-      databasePath: evolutionPaths.learningDatabaseFile,
-      env: process.env,
-    });
+    const persistentEvolutionStore =
+      await SqliteEvolutionActivationStore.create({
+        databasePath: evolutionPaths.learningDatabaseFile,
+        env: process.env,
+      });
+    evolutionActivationStore = persistentEvolutionStore;
+    evolutionAnalysisStore = persistentEvolutionStore;
+    evolutionFoundationStore = persistentEvolutionStore;
+    evolutionContextPackStore = persistentEvolutionStore;
   } catch (error) {
     logger.warn("evolution.initialize.failed", {
       component: "evolution",
@@ -391,6 +414,17 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     });
     evolutionActivationStore = new InMemoryEvolutionActivationStore();
   }
+  const evolutionProviderAvailability =
+    new EvolutionProviderAvailabilityService();
+  const evolutionService = new EvolutionService(
+    evolutionFoundationStore,
+    undefined,
+    evolutionProviderAvailability,
+    evolutionAnalysisStore,
+    evolutionContextPackStore,
+    evolutionActivationStore,
+  );
+  const evolutionToolTokenRegistry = new EvolutionToolTokenRegistry();
   const evolutionMemoryProvider = new DefaultEvolutionMemoryProvider(
     evolutionActivationStore,
     new StructuredEvolutionMemorySelector(),
@@ -418,6 +452,51 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     activityQueryService,
     appServerHistoryGateway,
     agentTeamService,
+  );
+  const evolutionOrchestrator =
+    evolutionFoundationStore &&
+    evolutionAnalysisStore &&
+    evolutionContextPackStore &&
+    activityStore
+      ? new EvolutionAnalysisOrchestrator(
+          evolutionFoundationStore,
+          evolutionAnalysisStore,
+          new EvolutionContextPackBuilder(
+            activityQueryService,
+            evolutionContextPackStore,
+            undefined,
+            new DefaultEvolutionSupplementalSourceReader(
+              appServerHistoryGateway,
+              agentTeamService,
+              (learningScopeId) =>
+                terminalSessionManager.getProjectContext(learningScopeId)
+                  ?.path ??
+                terminalSessionManager.getProject(learningScopeId)?.path ??
+                null,
+            ),
+          ),
+          evolutionToolTokenRegistry,
+          evolutionProviderAvailability,
+          evolutionPaths.temporaryDir,
+        )
+      : null;
+  const evolutionRuntime = new EvolutionRuntime(
+    evolutionFoundationStore,
+    evolutionService,
+    evolutionOrchestrator,
+    (error) => {
+      logger.warn("evolution.maintenance.failed", {
+        component: "evolution",
+        message: "Evolution recovery or scheduler pass failed",
+        error,
+      });
+    },
+    evolutionAnalysisStore && activityStore
+      ? new EvolutionEvidenceReconciler(
+          activityQueryService,
+          evolutionAnalysisStore,
+        )
+      : null,
   );
   const attentionService = new AttentionService(
     terminalSessionManager,
@@ -455,5 +534,10 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxSocketPathsToCleanOnShutdown,
     appServerEventConsumer: null,
     evolutionActivationStore,
+    evolutionAnalysisStore,
+    evolutionContextPackStore,
+    evolutionToolTokenRegistry,
+    evolutionRuntime,
+    evolutionService,
   };
 }

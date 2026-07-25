@@ -46,13 +46,16 @@ export function ActivityPage({
   onNavigateHome: () => void;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [search, setSearch] = useState("");
-  const [runtimeChannel, setRuntimeChannel] =
-    useState<ActivityRuntimeChannel | "">("");
+  const [search, setSearch] = useState(searchParams.get("search") ?? "");
+  const [runtimeChannel, setRuntimeChannel] = useState<
+    ActivityRuntimeChannel | ""
+  >("");
   const [timelineType, setTimelineType] =
     useState<ActivityTimelineSelector["type"]>("thread");
   const [timelineId, setTimelineId] = useState("");
-  const [selectedFact, setSelectedFact] = useState<ActivityFactDto | null>(null);
+  const [selectedFact, setSelectedFact] = useState<ActivityFactDto | null>(
+    null,
+  );
   const deferredSearch = useDeferredValue(search);
   const deferredTimelineId = useDeferredValue(timelineId.trim());
   const requestedView = searchParams.get("view");
@@ -139,7 +142,9 @@ export function ActivityPage({
     });
     setSelectedFact(null);
   });
-  const selectFact = useMemoizedFn((fact: ActivityFactDto) => setSelectedFact(fact));
+  const selectFact = useMemoizedFn((fact: ActivityFactDto) =>
+    setSelectedFact(fact),
+  );
   const closeFact = useMemoizedFn(() => setSelectedFact(null));
   const updateSearch = useMemoizedFn((value: string) => setSearch(value));
   const updateRuntimeChannel = useMemoizedFn(
@@ -148,9 +153,13 @@ export function ActivityPage({
   const updateTimelineType = useMemoizedFn(
     (value: ActivityTimelineSelector["type"]) => setTimelineType(value),
   );
-  const updateTimelineId = useMemoizedFn((value: string) => setTimelineId(value));
+  const updateTimelineId = useMemoizedFn((value: string) =>
+    setTimelineId(value),
+  );
   const loadMoreFacts = useMemoizedFn(() => void factsQuery.fetchNextPage());
-  const loadMoreTimeline = useMemoizedFn(() => void timelineQuery.fetchNextPage());
+  const loadMoreTimeline = useMemoizedFn(
+    () => void timelineQuery.fetchNextPage(),
+  );
   const selectTerminal = useMemoizedFn((terminalSessionId: string | null) =>
     updateParams({ terminal: terminalSessionId, run: null, event: null }),
   );
@@ -231,7 +240,9 @@ export function ActivityPage({
             {view === "facts" ? (
               <FactsPanel
                 facts={facts}
-                frozenOffset={factsQuery.data?.pages[0]?.asOfActivityOffset ?? 0}
+                frozenOffset={
+                  factsQuery.data?.pages[0]?.asOfActivityOffset ?? 0
+                }
                 isError={factsQuery.isError}
                 hasNextPage={factsQuery.hasNextPage}
                 isFetchingNextPage={factsQuery.isFetchingNextPage}

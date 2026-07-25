@@ -282,6 +282,33 @@ export function evaluateDependencyDrift(
   };
 }
 
+export function evaluateEvidenceAvailabilityDrift(
+  candidate: CandidateAsset,
+  params: {
+    insightRevisionId: string;
+    allSupportingEvidenceUnavailable: boolean;
+    reason: string;
+  },
+  now: string = new Date().toISOString(),
+): CandidateLifecycleDecision {
+  if (candidate.lifecycle === "retired" || candidate.lifecycle === "rejected") {
+    return { candidate, changed: false, reason: "candidate_inactive" };
+  }
+  const lifecycle = params.allSupportingEvidenceUnavailable
+    ? "retired"
+    : "needs_revalidation";
+  return {
+    candidate: {
+      ...nextRevision(candidate, lifecycle, params.reason, now, {
+        actor: "evidence-availability-reconciler",
+      }),
+      insightRevisionId: params.insightRevisionId,
+    },
+    changed: true,
+    reason: params.reason,
+  };
+}
+
 export function retireCandidate(
   candidate: CandidateAsset,
   reason: string,

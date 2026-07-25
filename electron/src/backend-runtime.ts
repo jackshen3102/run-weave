@@ -122,8 +122,14 @@ export function buildPackagedBackendEnv(options: {
     RUNWEAVE_TOOLKIT_PLUGIN_ROOT: options.backendPaths.toolkitPluginRoot,
     ...(options.backendPaths.activityAvailable
       ? {
-          RUNWEAVE_ACTIVITY_WORKER_ENTRY: options.backendPaths.activityWorkerEntry,
-          RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR: options.backendPaths.betterSqlitePackageDir,
+          RUNWEAVE_ACTIVITY_WORKER_ENTRY:
+            options.backendPaths.activityWorkerEntry,
+          RUNWEAVE_EVOLUTION_WORKER_ENTRY: path.join(
+            path.dirname(options.backendPaths.activityWorkerEntry),
+            "evolution-sqlite-worker.cjs",
+          ),
+          RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR:
+            options.backendPaths.betterSqlitePackageDir,
           RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING:
             options.backendPaths.betterSqliteNativeBinding,
         }

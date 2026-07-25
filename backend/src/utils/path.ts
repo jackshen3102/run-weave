@@ -34,6 +34,7 @@ export interface ActivityStoragePaths {
 export interface EvolutionStoragePaths {
   evolutionHomeDir: string;
   learningDatabaseFile: string;
+  temporaryDir: string;
 }
 
 export function resolveEvolutionStoragePaths(
@@ -50,6 +51,7 @@ export function resolveEvolutionStoragePaths(
   return {
     evolutionHomeDir,
     learningDatabaseFile: path.join(evolutionHomeDir, "learning.sqlite"),
+    temporaryDir: path.join(evolutionHomeDir, "tmp"),
   };
 }
 

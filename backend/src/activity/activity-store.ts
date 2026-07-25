@@ -7,6 +7,9 @@ import type {
   ActivityContentValueDto,
   ActivityDeleteJobDto,
   ActivityEventInput,
+  ActivityEvolutionEvidenceAvailability,
+  ActivityEvolutionSnapshotPage,
+  ActivityEvolutionSnapshotQuery,
   ActivityFactsPage,
   ActivityFactsQuery,
   ActivityOperationScope,
@@ -34,7 +37,10 @@ function resolveWorkerEntry(env: NodeJS.ProcessEnv): URL {
     return pathToFileURL(path.resolve(configured));
   }
   const currentPath = fileURLToPath(import.meta.url);
-  return new URL(currentPath.endsWith(".ts") ? "./sqlite-worker.ts" : "./sqlite-worker.js", import.meta.url);
+  return new URL(
+    currentPath.endsWith(".ts") ? "./sqlite-worker.ts" : "./sqlite-worker.js",
+    import.meta.url,
+  );
 }
 
 const require = createRequire(import.meta.url);
@@ -143,12 +149,31 @@ export class ActivityStore {
     });
   }
 
-  record(events: ActivityEventInput[], nowMs?: number): Promise<ActivityWriteAck[]> {
-    return this.request({ op: "record", events, ...(nowMs != null ? { nowMs } : {}) });
+  record(
+    events: ActivityEventInput[],
+    nowMs?: number,
+  ): Promise<ActivityWriteAck[]> {
+    return this.request({
+      op: "record",
+      events,
+      ...(nowMs != null ? { nowMs } : {}),
+    });
   }
 
   facts(query: ActivityFactsQuery): Promise<ActivityFactsPage> {
     return this.request({ op: "facts", query });
+  }
+
+  evolutionSnapshot(
+    query: ActivityEvolutionSnapshotQuery,
+  ): Promise<ActivityEvolutionSnapshotPage> {
+    return this.request({ op: "evolution-snapshot", query });
+  }
+
+  evolutionEvidenceAvailability(
+    eventIds: string[],
+  ): Promise<ActivityEvolutionEvidenceAvailability[]> {
+    return this.request({ op: "evolution-evidence-availability", eventIds });
   }
 
   timeline(
@@ -224,12 +249,23 @@ export class ActivityStore {
     return this.request({ op: "delete-status", deleteJobId });
   }
 
-  runDelete(ownerId: string, nowMs?: number): Promise<ActivityDeleteJobDto | null> {
-    return this.request({ op: "run-delete", ownerId, ...(nowMs != null ? { nowMs } : {}) });
+  runDelete(
+    ownerId: string,
+    nowMs?: number,
+  ): Promise<ActivityDeleteJobDto | null> {
+    return this.request({
+      op: "run-delete",
+      ownerId,
+      ...(nowMs != null ? { nowMs } : {}),
+    });
   }
 
   runRetention(ownerId: string, nowMs?: number): Promise<number> {
-    return this.request({ op: "run-retention", ownerId, ...(nowMs != null ? { nowMs } : {}) });
+    return this.request({
+      op: "run-retention",
+      ownerId,
+      ...(nowMs != null ? { nowMs } : {}),
+    });
   }
 
   integrity(): Promise<boolean> {

@@ -292,6 +292,7 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
     const nextRun: AgentTeamRun = { ...run, ...transitionPatch };
 
     if (status === "running" && needsFinalReview) {
+      await this.observeEvolutionOutcome(run, nextRun);
       return this.dispatchSerialWorker(nextRun, "code_review", {
         cases: acceptanceCasesForRole(nextRun, "code_review"),
         log: "behavior_verify 全部通过，启动最终全量 code_review",
@@ -312,6 +313,7 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
           )
         : { caseIds: [], repairKeys: [] };
     if (bounceSelection.caseIds.length > 0) {
+      await this.observeEvolutionOutcome(run, nextRun);
       return this.bounceFailuresToCode(
         nextRun,
         bounceSelection.caseIds,
@@ -324,6 +326,7 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
       params.completedWorkerRole === "code_review" &&
       hasRolePassed(nextRun, "code_review")
     ) {
+      await this.observeEvolutionOutcome(run, nextRun);
       return this.dispatchSerialWorker(nextRun, "behavior_verify", {
         cases: behaviorVerificationCasesForDispatch(nextRun),
         log: "code_review 通过，启动 behavior_verify",
@@ -336,6 +339,7 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
       params.completedWorkerRole === "behavior_verify" &&
       automaticBehaviorCases.length > 0
     ) {
+      await this.observeEvolutionOutcome(run, nextRun);
       return this.dispatchSerialWorker(nextRun, "behavior_verify", {
         cases: automaticBehaviorCases,
         log: "behavior_verify 依赖解除，续跑最小 Case 闭包",

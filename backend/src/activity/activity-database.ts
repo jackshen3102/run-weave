@@ -3,6 +3,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import type {
   ActivityEventInput,
+  ActivityEvolutionSnapshotQuery,
   ActivityFactsQuery,
   ActivityOperationScope,
   ActivityTimelineSelector,
@@ -16,6 +17,10 @@ import {
   queryActivitySources,
   queryActivityTimeline,
 } from "./database-query";
+import {
+  queryActivityEvolutionEvidenceAvailability,
+  queryActivityEvolutionSnapshot,
+} from "./database-evolution-query";
 import {
   createDeleteJob,
   recordActivityAccessAudit,
@@ -71,7 +76,10 @@ export class ActivityDatabase {
   private readonly contentKey: Buffer | null;
 
   constructor(private readonly options: ActivityDatabaseOptions) {
-    fs.mkdirSync(path.dirname(options.databasePath), { recursive: true, mode: 0o700 });
+    fs.mkdirSync(path.dirname(options.databasePath), {
+      recursive: true,
+      mode: 0o700,
+    });
     fs.chmodSync(path.dirname(options.databasePath), 0o700);
     this.database = new Database(options.databasePath);
     this.database.pragma("busy_timeout = 5000");
@@ -81,9 +89,7 @@ export class ActivityDatabase {
     this.database.pragma("foreign_keys = ON");
     this.database.pragma("synchronous = NORMAL");
     this.database.pragma("temp_store = MEMORY");
-    withSqliteInitializationRetry(() =>
-      migrateActivityDatabase(this.database),
-    );
+    withSqliteInitializationRetry(() => migrateActivityDatabase(this.database));
     for (const suffix of ["", "-wal", "-shm"]) {
       const filePath = `${options.databasePath}${suffix}`;
       if (fs.existsSync(filePath)) {
@@ -99,11 +105,15 @@ export class ActivityDatabase {
           const contentKey = loadActivityContentKey(
             {
               ...process.env,
-              RUNWEAVE_ACTIVITY_TEST_MODE: options.activityKeyEnvironment?.testMode
+              RUNWEAVE_ACTIVITY_TEST_MODE: options.activityKeyEnvironment
+                ?.testMode
                 ? "true"
                 : "false",
               ...(options.activityKeyEnvironment?.testKey
-                ? { RUNWEAVE_ACTIVITY_TEST_KEY: options.activityKeyEnvironment.testKey }
+                ? {
+                    RUNWEAVE_ACTIVITY_TEST_KEY:
+                      options.activityKeyEnvironment.testKey,
+                  }
                 : {}),
             },
             path.dirname(options.databasePath),
@@ -132,6 +142,14 @@ export class ActivityDatabase {
 
   facts(query: ActivityFactsQuery) {
     return queryActivityFacts(this.database, query);
+  }
+
+  evolutionSnapshot(query: ActivityEvolutionSnapshotQuery) {
+    return queryActivityEvolutionSnapshot(this.database, query);
+  }
+
+  evolutionEvidenceAvailability(eventIds: string[]) {
+    return queryActivityEvolutionEvidenceAvailability(this.database, eventIds);
   }
 
   timeline(selector: ActivityTimelineSelector, query: ActivityFactsQuery) {
@@ -211,7 +229,10 @@ export class ActivityDatabase {
   }
 
   runRetention(ownerId: string, nowMs?: number) {
-    return runRetentionSweep(this.database, { ownerId, now: nowMs ?? Date.now() });
+    return runRetentionSweep(this.database, {
+      ownerId,
+      now: nowMs ?? Date.now(),
+    });
   }
 
   integrity(): boolean {

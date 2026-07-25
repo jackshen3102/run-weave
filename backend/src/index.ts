@@ -33,6 +33,8 @@ import { createVoiceRouter } from "./routes/voice";
 import { createWorkHistoryRouter } from "./routes/work-history";
 import { createAttentionRouter } from "./routes/attention";
 import { createEvolutionActivationRouter } from "./routes/evolution-activation";
+import { createEvolutionFoundationRouter } from "./routes/evolution-foundation";
+import { createEvolutionMcpRouter } from "./routes/evolution-mcp";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import {
@@ -175,6 +177,16 @@ function createHttpApp(
     backendInstanceId: backendIdentity?.backendId ?? `backend:${process.pid}`,
     hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
   });
+  app.use(
+    "/internal/evolution/mcp",
+    createEvolutionMcpRouter({
+      activityStore: services.activityStore,
+      agentTeamService: services.agentTeamService,
+      appServerHistoryGateway: services.appServerHistoryGateway,
+      contextPackStore: services.evolutionContextPackStore,
+      tokenRegistry: services.evolutionToolTokenRegistry,
+    }),
+  );
 
   if (process.env.RUNWEAVE_E2E_TEST_ROUTES === "true") {
     app.use("/test", createTestRouter());
@@ -230,6 +242,7 @@ function createHttpApp(
   app.use(
     "/api/evolution",
     requireAuth,
+    createEvolutionFoundationRouter(services.evolutionService),
     createEvolutionActivationRouter(services.evolutionActivationStore),
   );
   app.use(
@@ -345,6 +358,8 @@ function attachLifecycleHandlers(
         clearInterval(services.activityMaintenanceTimer);
       }
       await services.activityStore?.close();
+      await services.evolutionRuntime.dispose();
+      services.evolutionToolTokenRegistry.clear();
       await services.evolutionActivationStore.close();
       codexAppServerClient.shutdown();
       await services.authStore.dispose();
@@ -482,6 +497,7 @@ async function startRuntime(): Promise<void> {
     process.env.RUNWEAVE_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal/agent-hook`;
     process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal-completion`;
     await initializeAppServerEventIntegration(services, controlPlaneBaseUrl);
+    services.evolutionRuntime.start(controlPlaneBaseUrl);
 
     stage = "lifecycle-handlers";
     attachLifecycleHandlers(

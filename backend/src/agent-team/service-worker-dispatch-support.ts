@@ -71,7 +71,7 @@ export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
     return next;
   }
 
-  private async observeEvolutionOutcome(
+  protected async observeEvolutionOutcome(
     previous: AgentTeamRun,
     current: AgentTeamRun,
   ): Promise<void> {

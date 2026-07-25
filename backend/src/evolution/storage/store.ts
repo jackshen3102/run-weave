@@ -4,11 +4,38 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import type {
   CandidateAsset,
+  ContributionEdge,
+  ContextPackManifest,
+  Episode,
+  EvolutionAnalysisReport,
+  EvolutionClaim,
+  EvolutionClaimNovelty,
+  EvolutionRun,
+  EvolutionRunAttempt,
   EvolutionScopePolicy,
+  EvolutionSchedule,
+  EvolutionWatermark,
+  Insight,
+  InsightRevision,
   RuntimeTraceEvent,
   RuntimeTraceSummary,
+  TraceSegment,
 } from "@runweave/shared/evolution";
 import type { EvolutionActivationStore } from "../activation-store";
+import type {
+  EvolutionAnalysisStore,
+  EvolutionEvidenceDependency,
+  EvolutionEvidenceReconciliation,
+  EvolutionRunKnowledgeCommit,
+} from "../analysis-store";
+import type { EvolutionContextPackStore } from "../context-pack-store";
+import type {
+  EvolutionDueScheduleMaterialization,
+  EvolutionFoundationStore,
+  EvolutionRunClaim,
+  EvolutionRunListQuery,
+  EvolutionRunTransition,
+} from "../foundation-store";
 import type {
   EvolutionWorkerRequest,
   EvolutionWorkerResponse,
@@ -46,7 +73,13 @@ function createWorker(workerEntry: URL, databasePath: string): Worker {
   });
 }
 
-export class SqliteEvolutionActivationStore implements EvolutionActivationStore {
+export class SqliteEvolutionActivationStore
+  implements
+    EvolutionActivationStore,
+    EvolutionFoundationStore,
+    EvolutionContextPackStore,
+    EvolutionAnalysisStore
+{
   private readonly worker: Worker;
   private readonly pending = new Map<number, PendingRequest>();
   private readonly workerExit: Promise<void>;
@@ -144,6 +177,192 @@ export class SqliteEvolutionActivationStore implements EvolutionActivationStore 
 
   listRuntimeTraces(runId: string): Promise<RuntimeTraceSummary[]> {
     return this.request({ op: "list-traces", runId });
+  }
+
+  listRecentRuntimeTraces(
+    learningScopeId?: string,
+    limit = 100,
+  ): Promise<RuntimeTraceSummary[]> {
+    return this.request({
+      op: "list-recent-traces",
+      learningScopeId,
+      limit,
+    });
+  }
+
+  async putContextPack(manifest: ContextPackManifest): Promise<void> {
+    await this.request({ op: "put-context-pack", manifest });
+  }
+
+  getContextPack(contextPackId: string): Promise<ContextPackManifest | null> {
+    return this.request({ op: "get-context-pack", contextPackId });
+  }
+
+  getContextPackByRun(runId: string): Promise<ContextPackManifest | null> {
+    return this.request({ op: "get-context-pack-by-run", runId });
+  }
+
+  async putTraceSegments(segments: TraceSegment[]): Promise<void> {
+    await this.request({ op: "put-trace-segments", segments });
+  }
+
+  listTraceSegments(runId: string): Promise<TraceSegment[]> {
+    return this.request({ op: "list-trace-segments", runId });
+  }
+
+  async putEpisodes(episodes: Episode[]): Promise<void> {
+    await this.request({ op: "put-episodes", episodes });
+  }
+
+  listEpisodes(runId: string): Promise<Episode[]> {
+    return this.request({ op: "list-episodes", runId });
+  }
+
+  async putAnalysisReport(report: EvolutionAnalysisReport): Promise<void> {
+    await this.request({ op: "put-analysis-report", report });
+  }
+
+  listAnalysisReports(runId: string): Promise<EvolutionAnalysisReport[]> {
+    return this.request({ op: "list-analysis-reports", runId });
+  }
+
+  async putRunAttempt(attempt: EvolutionRunAttempt): Promise<void> {
+    await this.request({ op: "put-run-attempt", attempt });
+  }
+
+  listRunAttempts(runId: string): Promise<EvolutionRunAttempt[]> {
+    return this.request({ op: "list-run-attempts", runId });
+  }
+
+  async putClaims(claims: EvolutionClaim[]): Promise<void> {
+    await this.request({ op: "put-claims", claims });
+  }
+
+  listClaims(runId: string): Promise<EvolutionClaim[]> {
+    return this.request({ op: "list-claims", runId });
+  }
+
+  async putClaimNovelty(items: EvolutionClaimNovelty[]): Promise<void> {
+    await this.request({ op: "put-claim-novelty", items });
+  }
+
+  listClaimNovelty(runId: string): Promise<EvolutionClaimNovelty[]> {
+    return this.request({ op: "list-claim-novelty", runId });
+  }
+
+  async putInsightRevision(params: {
+    insight: Omit<Insight, "revisions">;
+    revision: InsightRevision;
+    contributionEdges: ContributionEdge[];
+  }): Promise<void> {
+    await this.request({ op: "put-insight-revision", ...params });
+  }
+
+  listInsights(learningScopeId?: string): Promise<Insight[]> {
+    return this.request({ op: "list-insights", learningScopeId });
+  }
+
+  getInsight(insightId: string): Promise<Insight | null> {
+    return this.request({ op: "get-insight", insightId });
+  }
+
+  listInsightRevisionsByRun(runId: string): Promise<InsightRevision[]> {
+    return this.request({ op: "list-insight-revisions-by-run", runId });
+  }
+
+  listEvidenceDependencies(): Promise<EvolutionEvidenceDependency[]> {
+    return this.request({ op: "list-evidence-dependencies" });
+  }
+
+  async applyEvidenceReconciliation(
+    reconciliation: EvolutionEvidenceReconciliation,
+  ): Promise<void> {
+    await this.request({ op: "apply-evidence-reconciliation", reconciliation });
+  }
+
+  commitRunKnowledge(
+    params: EvolutionRunKnowledgeCommit,
+  ): Promise<EvolutionRun> {
+    return this.request({ op: "commit-run-knowledge", params });
+  }
+
+  async createRun(run: EvolutionRun): Promise<void> {
+    await this.request({ op: "create-run", run });
+  }
+
+  getRun(runId: string): Promise<EvolutionRun | null> {
+    return this.request({ op: "get-run", runId });
+  }
+
+  listRuns(query?: EvolutionRunListQuery): Promise<EvolutionRun[]> {
+    return this.request({ op: "list-runs", query });
+  }
+
+  claimNextRun(params: {
+    ownerId: string;
+    now: string;
+    leaseTtlMs: number;
+  }): Promise<EvolutionRunClaim | null> {
+    return this.request({ op: "claim-next-run", ...params });
+  }
+
+  heartbeatRunClaim(params: {
+    ownerId: string;
+    fencingToken: number;
+    now: string;
+    leaseTtlMs: number;
+  }): Promise<string> {
+    return this.request({ op: "heartbeat-run-claim", ...params });
+  }
+
+  transitionRun(transition: EvolutionRunTransition): Promise<EvolutionRun> {
+    return this.request({ op: "transition-run", transition });
+  }
+
+  cancelRun(runId: string, now: string): Promise<EvolutionRun> {
+    return this.request({ op: "cancel-run", runId, now });
+  }
+
+  recoverExpiredRuns(now: string): Promise<number> {
+    return this.request({ op: "recover-expired-runs", now });
+  }
+
+  async putSchedule(schedule: EvolutionSchedule): Promise<void> {
+    await this.request({ op: "put-schedule", schedule });
+  }
+
+  getSchedule(scheduleId: string): Promise<EvolutionSchedule | null> {
+    return this.request({ op: "get-schedule", scheduleId });
+  }
+
+  listSchedules(learningScopeId?: string): Promise<EvolutionSchedule[]> {
+    return this.request({ op: "list-schedules", learningScopeId });
+  }
+
+  materializeDueSchedule(
+    params: EvolutionDueScheduleMaterialization,
+  ): Promise<boolean> {
+    return this.request({ op: "materialize-due-schedule", params });
+  }
+
+  deleteSchedule(scheduleId: string): Promise<boolean> {
+    return this.request({ op: "delete-schedule", scheduleId });
+  }
+
+  getWatermark(
+    learningScopeId: string,
+    source: string,
+  ): Promise<EvolutionWatermark | null> {
+    return this.request({ op: "get-watermark", learningScopeId, source });
+  }
+
+  async putWatermark(params: {
+    watermark: EvolutionWatermark;
+    ownerId: string;
+    fencingToken: number;
+    now: string;
+  }): Promise<void> {
+    await this.request({ op: "put-watermark", ...params });
   }
 
   async close(): Promise<void> {

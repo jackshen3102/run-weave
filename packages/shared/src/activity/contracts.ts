@@ -295,6 +295,31 @@ export interface ActivityFactsPage {
   };
 }
 
+export interface ActivityEvolutionSnapshotQuery {
+  learningScopeId: string;
+  afterWatermark: number;
+  atOrBeforeSnapshotBoundary?: number;
+  eventNames: ActivityEventName[];
+  limit: number;
+}
+
+export interface ActivityEvolutionSnapshotPage {
+  learningScopeId: string;
+  afterWatermark: number;
+  snapshotBoundary: number;
+  facts: ActivityFactDto[];
+  hasMore: boolean;
+  nextWatermark?: number;
+}
+
+export interface ActivityEvolutionEvidenceAvailability {
+  eventId: string;
+  availability: "available" | "unavailable";
+  reason: "available" | "deleted" | "expired" | "missing";
+  contentCount: number;
+  availableContentCount: number;
+}
+
 export type ActivityTimelineSelector =
   | { type: "interaction"; id: string }
   | { type: "correlation"; id: string }

@@ -1,6 +1,13 @@
 # agent-self-evolution-v1（个人本地 Agent 自进化架构方案）
 
-基于 Runweave 当前 Activity、Work History、Agent Team 与 App Server 事件数据设计的可运行 HTML 架构原型。它回答的是“整套自进化能力如何运转”，不是产品页面稿，也不代表目标模块已经实现。
+> 历史设计材料：V1 已实现，当前规范见
+> [`docs/architecture/agent-self-evolution.md`](../../architecture/agent-self-evolution.md)，产品入口为
+> `/evolution`，验收合同见
+> [`docs/testing/evolution/`](../../testing/evolution/)。本目录的 HTML 与 `mock-state.json`
+> 只用于解释早期架构决策，不代表当前产品状态。
+
+基于 Runweave Activity、Work History、Agent Team 与 App Server 事件数据设计的可运行 HTML
+架构原型。它回答的是“整套自进化能力如何运转”，不是产品页面稿或真实数据源。
 
 ## 启动
 

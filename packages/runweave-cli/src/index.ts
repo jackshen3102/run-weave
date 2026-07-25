@@ -5,6 +5,7 @@ import { runAppCommand } from "./commands/app.js";
 import { runAgentTeamCommand } from "./commands/agent-team.js";
 import { runActivityCommand } from "./commands/activity.js";
 import { runAuthCommand } from "./commands/auth.js";
+import { runEvolutionCommand } from "./commands/evolution.js";
 import { runHealthCommand } from "./commands/health.js";
 import { runFeishuCommand } from "./commands/feishu.js";
 import { runProjectCommand } from "./commands/project.js";
@@ -67,6 +68,10 @@ export async function runCli(
       await runActivityCommand(subcommand, args, io);
       return 0;
     }
+    if (group === "evolution") {
+      await runEvolutionCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "project") {
       await runProjectCommand(subcommand, args, io);
       return 0;
@@ -76,7 +81,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw <activity|agent-team|app|app-server|auth|feishu|project|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <activity|agent-team|app|app-server|auth|evolution|feishu|project|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

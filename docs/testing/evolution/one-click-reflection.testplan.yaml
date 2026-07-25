@@ -1,0 +1,22 @@
+version: 1
+name: Evolution 一键全量复盘验收
+description: >
+  验证用户只需选择“全部工作区”或一个项目并点击一次按钮，系统就会使用服务端默认策略创建从上次成功水位开始的完整复盘，
+  页面不要求用户理解 Provider、Profile、watermark 或预算，并能展示本次覆盖范围与关键优化建议。
+
+cases:
+  - id: EVR-001
+    name: 选择范围后一次点击完成增量复盘
+    required: true
+    description: >
+      验证范围是用户发起复盘时唯一需要选择的参数；点击一次后只创建一个 Run，后端自动决定分析参数和上次成功水位，
+      最终结果明确展示冻结范围是否全部覆盖以及经过验证的关键建议。
+    preconditions:
+      - 已通过受控 Runweave 环境启动包含 Evolution API 的真实 Web 页面。
+      - Evolution runtime 可用，且至少一个本地分析 Provider 已登录并可用。
+      - 当前 Activity 中存在可归入“全部工作区”或某个项目范围的真实行为数据。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 打开 `/evolution`；确认页面只提供“全部工作区”和项目级复盘范围，主操作是一个“复盘”按钮，页面不存在要求填写 Project ID、Profile、Provider、After watermark、模型轮次、工具调用或最长分钟的手动 Run 表单。
+      - 选择一个有真实行为数据的范围并点击一次“复盘”按钮；确认只产生一个创建 Run 的请求，新记录显示所选范围并进入 queued 或后续合法执行阶段，没有再弹出参数确认表单。
+      - 等待该 Run 进入 completed 或 no_material_novelty；打开运行详情，确认“本次复盘结论”展示覆盖数据量、涉及工作区数量和“冻结范围已全部覆盖”，并展示经过交叉验证的关键决策与优化建议，或明确说明当前没有经过交叉验证的新优化建议。
+      - 检查浏览器控制台；确认没有 error 级别日志。

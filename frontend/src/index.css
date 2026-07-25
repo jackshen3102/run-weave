@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap");
 @import "@runweave/terminal-renderer/terminal-renderer.css";
 
 @tailwind base;
@@ -75,7 +74,7 @@ body {
       transparent 30%
     ),
     hsl(var(--background));
-  font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  font-family: ui-sans-serif, system-ui, sans-serif;
   text-rendering: optimizeLegibility;
 }
 

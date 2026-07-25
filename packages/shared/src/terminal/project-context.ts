@@ -75,10 +75,23 @@ export function buildTerminalChildProjectId(
 ): string {
   const normalizedParentProjectId = parentProjectId.trim();
   const normalizedWorktreeName = normalizeWorktreeName(worktreeName);
-  if (!normalizedParentProjectId || !isValidWorktreeName(normalizedWorktreeName)) {
+  if (
+    !normalizedParentProjectId ||
+    !isValidWorktreeName(normalizedWorktreeName)
+  ) {
     throw new Error("Parent project ID and Worktree name are required");
   }
   return `${CHILD_PROJECT_ID_PREFIX}:${encodeBase64Url(normalizedParentProjectId)}:${encodeBase64Url(normalizedWorktreeName)}`;
+}
+
+export function buildTerminalChildProjectIdPrefix(
+  parentProjectId: string,
+): string {
+  const normalizedParentProjectId = parentProjectId.trim();
+  if (!normalizedParentProjectId) {
+    throw new Error("Parent project ID is required");
+  }
+  return `${CHILD_PROJECT_ID_PREFIX}:${encodeBase64Url(normalizedParentProjectId)}:`;
 }
 
 export function parseTerminalChildProjectId(
@@ -98,7 +111,9 @@ export function parseTerminalChildProjectId(
     return null;
   }
   try {
-    if (buildTerminalChildProjectId(parentProjectId, worktreeName) !== projectId) {
+    if (
+      buildTerminalChildProjectId(parentProjectId, worktreeName) !== projectId
+    ) {
       return null;
     }
   } catch {

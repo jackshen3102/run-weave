@@ -8,6 +8,20 @@
 > - `docs/testing/evolution/agent-self-evolution-core.testplan.yaml`
 > - `docs/testing/evolution/agent-self-evolution-activation.testplan.yaml`
 
+## 0. 实施进度（2026-07-25）
+
+V1 已按本计划完成。系统现在具备真实的冻结证据、双 Provider 分析、Novelty/Insight/Candidate 演化、默认关闭的 Memory 注入、Agent Team canary、客观门禁回写与回滚闭环。完成只表示 V1 链路和治理合同成立；单次 E4 样本不代表长期统计改善，也不启用自动 promotion。
+
+| 计划泳道                                 | 当前状态 | 已落地                                                                                                                                                                      | V1 剩余 |
+| ---------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| PR 1：共享合约、learning store、Run 骨架 | 已完成   | `learning.sqlite` worker、additive migration、全局 lease/fencing、Run/Schedule/Watermark、Backend 生命周期、恢复、API 与 foundation verifier                                | —       |
+| PR 2A：冻结证据与多 Agent 反思           | 已完成   | Activity/Work History/App Server/仓库冻结源、Context Pack、Trace Segment/Episode、首轮隔离、交叉质疑、Claim/Novelty/Insight、真实 Codex/Trae adapter 与 queued Run 自动执行 | —       |
+| PR 2B：Scheduler、CLI、Web               | 已完成   | cron/timezone/catch-up、原子 materialize、`rw evolution` 命令族、真实 `/evolution` Run/Schedule/Insight/Candidate/RuntimeTrace 页面与 Activity backlink                     | —       |
+| PR 3：Candidate 与注入                   | 已完成   | 六类 Candidate、hard filter/selector、scope policy、Agent Team code worker advisory 注入、control/canary 分配、RuntimeTrace、fail-open 与 activation verifier               | —       |
+| PR 4：真实 canary 与回滚                 | 已完成   | Outcome observer、worker feedback、review/behavior gate、dependency drift、needs_revalidation、retire/rollback，以及真实 E4 dogfood 和 rollback 演练                        | —       |
+
+产品入口已从原型落到真实前端路由 `/evolution`。Electron 包含 Activity 与 Evolution SQLite worker；页面可直接查看分析 artifact、候选生命周期、scope policy，以及没有分析 Run 时仍独立存在的 Agent Team RuntimeTrace。原型 `docs/architecture-flows/agent-self-evolution-v1/` 只承担架构讲解，不作为产品状态或假数据源。E3 replay 对应的可选 ASEA-008 不属于 V1 必选门禁。
+
 ## 1. 明确结论
 
 V1 不是“每天生成一份总结”，而是一个由 Backend 托管、可手动或定时触发的长期学习控制面：它从现有 DB 冻结一次可审计的证据视图，让两个独立 Agent 先分别调查、再交叉质疑，把事实、判断、分歧和新颖性分开保存，最终维护可持续修订的 Insight 与候选资产。
@@ -697,13 +711,22 @@ V1 行为稳定后：
 
 ## 18. 最终 Definition of Done
 
-- [ ] 手动与 Schedule 通过同一 Run 服务执行；不是“日报生成器”。
-- [ ] 同一主项目的动态 workspace 共用知识，不同主项目硬隔离。
-- [ ] 全机活动 Run 数量在所有故障注入下都不超过 1。
-- [ ] 双 Analyst 首轮隔离、交叉质疑、分歧与 unknown 可审计。
-- [ ] Novelty Gate 能产生零产出，Insight 以 revision/ContributionEdge 长期演化。
-- [ ] raw content 留存、删除与敏感信息边界未被 learning DB 绕过。
-- [ ] `/evolution`、CLI、API、Provider adapter 和恢复流程通过核心 YAML 合同。
-- [ ] Memory 路径默认关闭；显式 opt-in 后完成至少一次真实 E4 canary 和 rollback。
-- [ ] 非 Memory 资产没有自动改 Prompt/Skill/Routing/Product/Code。
-- [ ] typecheck、lint、build、verifier、Playwright 实际行为验证均有可复核证据。
+- [x] 手动与 Schedule 通过同一 Run 服务执行；不是“日报生成器”。
+- [x] 同一主项目的动态 workspace 共用知识，不同主项目硬隔离。
+- [x] 全机活动 Run 数量在所有故障注入下都不超过 1。
+- [x] 双 Analyst 首轮隔离、交叉质疑、分歧与 unknown 可审计。
+- [x] Novelty Gate 能产生零产出，Insight 以 revision/ContributionEdge 长期演化。
+- [x] raw content 留存、删除与敏感信息边界未被 learning DB 绕过。
+- [x] `/evolution`、CLI、API、Provider adapter 和恢复流程通过核心 YAML 合同。
+- [x] Memory 路径默认关闭；显式 opt-in 后完成至少一次真实 E4 canary 和 rollback。
+- [x] 非 Memory 资产没有自动改 Prompt/Skill/Routing/Product/Code。
+- [x] typecheck、lint、build、verifier、Playwright 实际行为验证均有可复核证据。
+
+## 19. 2026-07-25 实现与验收证据
+
+- 真实分析：standard/mixed Run `9b5edcdb-e921-42a7-be03-50392b668fd8`、`3bf40801-8204-4434-a8f7-f03db866f03d` 完成双 Provider 首轮与交叉质疑；quick/codex Run `107c8922-8047-4d6e-8fb7-edda8afcfd95` 以 `no_material_novelty` 完成，持久化 1 Attempt、1 Report、1 Claim、0 Insight、0 Candidate。
+- 真实 Provider smoke：本机 Codex 7.278 秒、Trae 7.302 秒，均只通过 run-scoped MCP 完成结构化结果并清理临时资源。
+- 真实 E4 canary：Candidate `asset_c670eea87433e8ead086` 的 revision `arev_b90257786bdc06497607` 在 Agent Team Run `atr_7205be8d_20260725022257` 中实际暴露；RuntimeTrace `974957be-c573-4670-8310-3890a84d32b1` 记录检索、选择、暴露、agent feedback、behavior gate 与完成，DOG-E4-001/002 均通过。
+- 真实 rollback：scope policy revision 3 已恢复 `canaryRate=0` 且禁用注入；同一 Candidate 生成 retired revision `arev_dbe33a2fdf0c56bceae8`。回滚后集成 Run `atr_352cde1d_20260725025720` 在 disabled bucket 下完成，DOG-E4-001/002 均通过；RuntimeTrace `109608fb-01d0-4942-a43a-b841e472d171` 包含 `review_gate`、`behavior_gate` 与 `completed`，且没有 Memory 暴露。
+- 产品验收：Beta `0.183.0`、Dev Session `dvs-11a4b0` 通过 Playwright 验证真实 `/evolution`；无分析 Run 的 scope 仍能查看 Agent Team RuntimeTrace，canary/disabled 分桶和事件链可见，rollback revision 与 0% policy 可见，页面 console error 为 0。
+- 自动门禁：核心 YAML 19 个 required Case、activation YAML 7 个 required Case 均通过 schema 校验；foundation、analysis（24 checks）、activation（ASEA-001～007）、provider smoke、workspace typecheck、lint、build 与 `git diff --check` 全部通过。两次缺少完整验收输入的早期探针 `atr_3e588ce5_20260725020308`、`atr_b35d3716_20260725021508` 已取消并明确排除，不计入成功证据。

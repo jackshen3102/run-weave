@@ -3,6 +3,9 @@ import type {
   ActivityContentValueDto,
   ActivityDeleteJobDto,
   ActivityEventInput,
+  ActivityEvolutionEvidenceAvailability,
+  ActivityEvolutionSnapshotPage,
+  ActivityEvolutionSnapshotQuery,
   ActivityFactDto,
   ActivityFactsPage,
   ActivityFactsQuery,
@@ -17,6 +20,16 @@ import type { ActivityIngestRejectionInput } from "./database-rejection";
 export type ActivityWorkerRequest =
   | { id: number; op: "record"; events: ActivityEventInput[]; nowMs?: number }
   | { id: number; op: "facts"; query: ActivityFactsQuery }
+  | {
+      id: number;
+      op: "evolution-snapshot";
+      query: ActivityEvolutionSnapshotQuery;
+    }
+  | {
+      id: number;
+      op: "evolution-evidence-availability";
+      eventIds: string[];
+    }
   | {
       id: number;
       op: "timeline";
@@ -40,7 +53,12 @@ export type ActivityWorkerRequest =
       resultCode?: string;
       nowMs?: number;
     }
-  | { id: number; op: "preview"; scope: ActivityOperationScope; asOfActivityOffset?: number }
+  | {
+      id: number;
+      op: "preview";
+      scope: ActivityOperationScope;
+      asOfActivityOffset?: number;
+    }
   | {
       id: number;
       op: "export-snapshot";
@@ -72,6 +90,8 @@ export type ActivityWorkerCommand = ActivityWorkerRequest extends infer Request
 export type ActivityWorkerResult =
   | ActivityWriteAck[]
   | ActivityFactsPage
+  | ActivityEvolutionSnapshotPage
+  | ActivityEvolutionEvidenceAvailability[]
   | ActivitySourceDto[]
   | ActivityDataPolicyDto
   | ActivityContentValueDto

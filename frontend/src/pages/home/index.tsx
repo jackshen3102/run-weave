@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useNavigate } from "react-router-dom";
-import { Activity } from "lucide-react";
+import { Activity, Sparkles } from "lucide-react";
 import { RuntimeMonitorBadge } from "../../components/runtime-monitor-badge";
 import { Button } from "../../components/ui/button";
 import { ChangePasswordDialog } from "./components/change-password-dialog";
@@ -75,6 +75,7 @@ export function HomePage({
       }
     : undefined;
   const openActivity = () => navigate("/activity");
+  const openEvolution = useMemoizedFn(() => navigate("/evolution"));
 
   if (clientMode === "mobile") {
     return (
@@ -112,6 +113,15 @@ export function HomePage({
               >
                 <Activity className="h-4 w-4" />
                 <span className="sr-only">Activity Facts</span>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="rounded-full px-3"
+                onClick={openEvolution}
+              >
+                <Sparkles className="h-4 w-4" />
+                <span className="sr-only">Evolution</span>
               </Button>
               <Button
                 size="sm"
@@ -175,6 +185,7 @@ export function HomePage({
           onOpenTerminal={openTerminal}
           onOpenSystemMonitor={openSystemMonitor}
           onOpenActivity={openActivity}
+          onOpenEvolution={openEvolution}
           onOpenChangePassword={openPasswordDialog}
           onLogout={handleAuthExpired}
         />
@@ -220,6 +231,14 @@ export function HomePage({
                   System Monitor
                 </Button>
               ) : null}
+              <Button
+                variant="secondary"
+                className="h-11 rounded-full px-6"
+                onClick={openEvolution}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Evolution
+              </Button>
             </div>
           </div>
         </section>

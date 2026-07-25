@@ -1,6 +1,12 @@
 import { isMainThread, parentPort, workerData } from "node:worker_threads";
-import { ActivityDatabase, type ActivityDatabaseOptions } from "./activity-database";
-import type { ActivityWorkerRequest, ActivityWorkerResponse } from "./worker-protocol";
+import {
+  ActivityDatabase,
+  type ActivityDatabaseOptions,
+} from "./activity-database";
+import type {
+  ActivityWorkerRequest,
+  ActivityWorkerResponse,
+} from "./worker-protocol";
 
 if (isMainThread || !parentPort) {
   throw new Error("activity_sqlite_worker_must_run_in_worker_thread");
@@ -16,6 +22,10 @@ function handleRequest(request: ActivityWorkerRequest): unknown {
       return database.record(request.events, request.nowMs);
     case "facts":
       return database.facts(request.query);
+    case "evolution-snapshot":
+      return database.evolutionSnapshot(request.query);
+    case "evolution-evidence-availability":
+      return database.evolutionEvidenceAvailability(request.eventIds);
     case "timeline":
       return database.timeline(request.selector, request.query);
     case "sources":
@@ -53,7 +63,11 @@ function handleRequest(request: ActivityWorkerRequest): unknown {
 workerParentPort.on("message", (request: ActivityWorkerRequest) => {
   let response: ActivityWorkerResponse;
   try {
-    response = { id: request.id, ok: true, result: handleRequest(request) as never };
+    response = {
+      id: request.id,
+      ok: true,
+      result: handleRequest(request) as never,
+    };
   } catch (error) {
     response = {
       id: request.id,

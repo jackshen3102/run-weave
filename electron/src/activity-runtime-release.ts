@@ -9,6 +9,7 @@ interface ActivityRuntimeManifest {
   platform?: unknown;
   arch?: unknown;
   workerEntry?: unknown;
+  evolutionWorkerEntry?: unknown;
   packageEntry?: unknown;
   packageManifest?: unknown;
   nativeBinding?: unknown;
@@ -20,7 +21,9 @@ function isSafeRelativePath(value: unknown): value is string {
   if (typeof value !== "string" || !value.trim() || path.isAbsolute(value)) {
     return false;
   }
-  return value.split(/[\\/]+/).every((segment) => segment && segment !== "." && segment !== "..");
+  return value
+    .split(/[\\/]+/)
+    .every((segment) => segment && segment !== "." && segment !== "..");
 }
 
 function isSha256(value: unknown): value is string {
@@ -29,13 +32,15 @@ function isSha256(value: unknown): value is string {
 
 function listFiles(root: string, directory: string): string[] {
   const files: string[] = [];
-  for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
-    left.name.localeCompare(right.name),
+  for (const entry of readdirSync(directory, { withFileTypes: true }).sort(
+    (left, right) => left.name.localeCompare(right.name),
   )) {
     const absolute = path.join(directory, entry.name);
-    if (entry.isSymbolicLink()) throw new Error("activity_runtime_symlink_not_allowed");
+    if (entry.isSymbolicLink())
+      throw new Error("activity_runtime_symlink_not_allowed");
     if (entry.isDirectory()) files.push(...listFiles(root, absolute));
-    else if (entry.isFile()) files.push(path.relative(root, absolute).split(path.sep).join("/"));
+    else if (entry.isFile())
+      files.push(path.relative(root, absolute).split(path.sep).join("/"));
   }
   return files;
 }
@@ -44,9 +49,15 @@ function sha256(filePath: string): string {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
-function treeSha256(files: Array<{ path: string; size: number; sha256: string }>): string {
+function treeSha256(
+  files: Array<{ path: string; size: number; sha256: string }>,
+): string {
   return createHash("sha256")
-    .update(files.map((file) => `${file.path}\0${file.size}\0${file.sha256}`).join("\n"))
+    .update(
+      files
+        .map((file) => `${file.path}\0${file.size}\0${file.sha256}`)
+        .join("\n"),
+    )
     .digest("hex");
 }
 
@@ -54,15 +65,21 @@ export function validateBundledActivityRuntime(resourcesPath: string): boolean {
   try {
     const root = path.join(resourcesPath, "backend");
     const manifest = JSON.parse(
-      readFileSync(path.join(root, "activity-sqlite-runtime-manifest.json"), "utf8"),
+      readFileSync(
+        path.join(root, "activity-sqlite-runtime-manifest.json"),
+        "utf8",
+      ),
     ) as ActivityRuntimeManifest;
     if (
       manifest.schemaVersion !== 1 ||
       manifest.platform !== process.platform ||
       manifest.arch !== process.arch ||
-      (process.versions.electron && manifest.electronVersion !== process.versions.electron) ||
-      (process.versions.modules && manifest.nodeModuleAbi !== process.versions.modules) ||
+      (process.versions.electron &&
+        manifest.electronVersion !== process.versions.electron) ||
+      (process.versions.modules &&
+        manifest.nodeModuleAbi !== process.versions.modules) ||
       !isSafeRelativePath(manifest.workerEntry) ||
+      !isSafeRelativePath(manifest.evolutionWorkerEntry) ||
       !isSafeRelativePath(manifest.packageEntry) ||
       !isSafeRelativePath(manifest.packageManifest) ||
       !isSafeRelativePath(manifest.nativeBinding) ||
@@ -77,10 +94,13 @@ export function validateBundledActivityRuntime(resourcesPath: string): boolean {
       sha256: file.sha256,
     }));
     if (
-      expected.some((file) =>
-        !isSafeRelativePath(file.path) ||
-        typeof file.size !== "number" || !Number.isSafeInteger(file.size) || file.size < 0 ||
-        !isSha256(file.sha256),
+      expected.some(
+        (file) =>
+          !isSafeRelativePath(file.path) ||
+          typeof file.size !== "number" ||
+          !Number.isSafeInteger(file.size) ||
+          file.size < 0 ||
+          !isSha256(file.sha256),
       ) ||
       new Set(expected.map((file) => file.path)).size !== expected.length
     ) {
@@ -88,15 +108,18 @@ export function validateBundledActivityRuntime(resourcesPath: string): boolean {
     }
     const roots = [
       manifest.workerEntry,
+      manifest.evolutionWorkerEntry,
       "node_modules/better-sqlite3",
       "node_modules/bindings",
       "node_modules/file-uri-to-path",
     ].map((relative) => path.join(root, relative));
-    const actual = roots.flatMap((entry) =>
-      statSync(entry).isDirectory()
-        ? listFiles(root, entry)
-        : [path.relative(root, entry).split(path.sep).join("/")],
-    ).sort();
+    const actual = roots
+      .flatMap((entry) =>
+        statSync(entry).isDirectory()
+          ? listFiles(root, entry)
+          : [path.relative(root, entry).split(path.sep).join("/")],
+      )
+      .sort();
     const expectedPaths = expected.map((file) => file.path as string).sort();
     if (
       actual.length !== expectedPaths.length ||
@@ -106,7 +129,10 @@ export function validateBundledActivityRuntime(resourcesPath: string): boolean {
     }
     const verified = expected.map((file) => {
       const absolute = path.join(root, file.path as string);
-      if (statSync(absolute).size !== file.size || sha256(absolute) !== file.sha256) {
+      if (
+        statSync(absolute).size !== file.size ||
+        sha256(absolute) !== file.sha256
+      ) {
         throw new Error("activity_runtime_file_mismatch");
       }
       return file as { path: string; size: number; sha256: string };

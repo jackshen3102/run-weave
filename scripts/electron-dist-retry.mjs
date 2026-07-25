@@ -162,12 +162,15 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
     { mode: 0o600 },
   );
   const configPath = path.join(buildRoot, "electron-builder.json");
+  const builderIdentity = isolatedBuilderIdentity(baseBuilderConfig);
   await writeFile(
     configPath,
     `${JSON.stringify(
       {
+        ...builderIdentity,
         afterPack: path.join(ELECTRON_DIR, "scripts", "adhoc-sign-mac.js"),
-        extends: path.resolve(ELECTRON_DIR, baseBuilderConfig),
+        copyright: "Copyright © 2024 Runweave contributors",
+        npmRebuild: false,
         directories: {
           app: electronAppDir,
           buildResources: path.join(ELECTRON_DIR, "resources"),
@@ -193,12 +196,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
           },
           { from: frontendDist, to: "frontend/dist", filter: ["**/*"] },
           {
-            from: path.join(
-              ROOT,
-              "backend",
-              "node_modules",
-              "node-pty",
-            ),
+            from: path.join(ROOT, "backend", "node_modules", "node-pty"),
             to: "backend/node_modules/node-pty",
             filter: [
               "lib/**/*",
@@ -207,7 +205,27 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
               "LICENSE",
             ],
           },
+          {
+            from: path.join(electronDist, "backend"),
+            to: "backend",
+            filter: [
+              "activity-sqlite-worker.cjs",
+              "evolution-sqlite-worker.cjs",
+              "activity-sqlite-runtime-manifest.json",
+              "node_modules/**/*",
+            ],
+          },
         ],
+        mac: {
+          icon: path.join(ELECTRON_DIR, "resources", "icons", "icon.icns"),
+          category: "public.app-category.developer-tools",
+          identity: null,
+          hardenedRuntime: false,
+          target: [
+            { target: "dmg", arch: ["arm64"] },
+            { target: "zip", arch: ["arm64"] },
+          ],
+        },
       },
       null,
       2,
@@ -215,6 +233,36 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
     { mode: 0o600 },
   );
   return { configPath, releaseDir };
+}
+
+function isolatedBuilderIdentity(baseBuilderConfig) {
+  const configName = path.basename(baseBuilderConfig);
+  if (configName === "electron-builder.beta.yml") {
+    return {
+      appId: "com.runweave.desktop.beta",
+      productName: "Runweave Beta",
+      artifactName: "Runweave-Beta-${version}-${arch}.${ext}",
+    };
+  }
+  if (configName === "electron-builder.local-updates.yml") {
+    return {
+      appId: "com.runweave.desktop",
+      productName: "Runweave",
+      publish: [
+        {
+          provider: "generic",
+          url: "http://127.0.0.1:5500/updates/mac/",
+        },
+      ],
+    };
+  }
+  if (configName === "electron-builder.yml") {
+    return {
+      appId: "com.runweave.desktop",
+      productName: "Runweave",
+    };
+  }
+  throw new Error(`Unsupported isolated Electron builder config: ${configName}`);
 }
 
 async function main() {

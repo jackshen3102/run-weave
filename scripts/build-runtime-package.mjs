@@ -119,16 +119,8 @@ if (isolatedBuildRoot) {
 }
 
 const releaseDir = path.join(artifactsRoot, releaseId);
-const backendEntry = path.join(
-  electronDist,
-  "backend",
-  "index.cjs",
-);
-const cliEntry = path.join(
-  electronDist,
-  "cli",
-  "index.cjs",
-);
+const backendEntry = path.join(electronDist, "backend", "index.cjs");
+const cliEntry = path.join(electronDist, "cli", "index.cjs");
 if (!existsSync(path.join(frontendDist, "index.html"))) {
   throw new Error("frontend dist is missing index.html");
 }
@@ -140,6 +132,11 @@ if (!existsSync(cliEntry)) {
 }
 if (!existsSync(path.join(resourcesBackendDir, "activity-sqlite-worker.cjs"))) {
   throw new Error("Activity SQLite Electron runtime is missing");
+}
+if (
+  !existsSync(path.join(resourcesBackendDir, "evolution-sqlite-worker.cjs"))
+) {
+  throw new Error("Evolution SQLite Electron runtime is missing");
 }
 rmSync(releaseDir, { recursive: true, force: true });
 mkdirSync(path.join(releaseDir, "frontend"), { recursive: true });
@@ -163,7 +160,11 @@ const files = listFiles(releaseDir)
     sha256: sha256(path.join(releaseDir, filePath)),
   }));
 const treeSha256 = createHash("sha256")
-  .update(files.map((file) => `${file.path}\0${file.size}\0${file.sha256}`).join("\n"))
+  .update(
+    files
+      .map((file) => `${file.path}\0${file.size}\0${file.sha256}`)
+      .join("\n"),
+  )
   .digest("hex");
 
 const manifest = {
