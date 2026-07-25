@@ -214,7 +214,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
     )}\n`,
     { mode: 0o600 },
   );
-  return { configPath, releaseDir };
+  return { configPath, releaseDir, frontendDist };
 }
 
 async function main() {
@@ -245,6 +245,7 @@ async function main() {
       process.env.ELECTRON_BUILDER_CACHE ??
       path.join(defaultCacheRoot, "electron-builder"),
   };
+  delete electronEnv.RUNWEAVE_ISOLATED_FRONTEND_DIST;
   const isolatedBuildRoot = process.env.RUNWEAVE_ELECTRON_BUILD_ROOT?.trim();
   let releaseDir = path.join(ELECTRON_DIR, "release");
 
@@ -266,6 +267,7 @@ async function main() {
       electronEnv,
     );
     releaseDir = isolated.releaseDir;
+    electronEnv.RUNWEAVE_ISOLATED_FRONTEND_DIST = isolated.frontendDist;
     builderArgs.unshift("--config", isolated.configPath);
   } else {
     await runCheckedCommand(commandName("pnpm"), ["build"]);

@@ -34,9 +34,9 @@ import {
 } from "./service-workflow-policy";
 import {
   createAgentTeamPanelError,
-  resolveAgentTeamTerminal,
   requireRunnableTask,
 } from "./service-run-policy";
+import { resolveAgentTeamRoleTerminal } from "./model-runtime";
 
 export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionService {
   protected abstract readWorkerOutboxMtimeMs(
@@ -51,7 +51,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
     context: { source: "user" | "agent"; log: string },
   ): Promise<AgentTeamRun> {
     const session = this.requireSession(run.terminalSessionId);
-    const terminal = resolveAgentTeamTerminal(run.terminal);
+    const mainTerminal = resolveAgentTeamRoleTerminal(run, "main");
     requireRunnableTask(run.task);
     if (this.tmuxService) {
       await this.terminalSessionManager.updateSessionPanelSplitEnabled(
@@ -106,7 +106,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
                   alias: panelAlias,
                   agentTeamRunId: run.runId,
                   agentTeamWorkerId: worker.id,
-                  cwd: terminal.cwd ?? undefined,
+                  cwd: session.cwd,
                   focus: false,
                 },
               );
@@ -159,7 +159,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
       persistedRun = await this.updateRun(run, {
         phase: "executing",
         status: "running",
-        terminal,
+        terminal: mainTerminal,
         proposal: null,
         activeWorkerRole,
         activeWorkerDispatch,
@@ -184,6 +184,10 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
       throw error;
     }
     if (activeWorker?.panelId && activeWorkerDispatch) {
+      const activeWorkerTerminal = resolveAgentTeamRoleTerminal(
+        persistedRun,
+        activeWorker.role,
+      );
       let evolutionContext: string | null = null;
       if (
         activeWorker.role === "code" &&
@@ -198,13 +202,13 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
             workerRole: activeWorker.role,
             task: run.task,
             intent: activeWorker.intent,
-            paths: terminal.cwd ? [terminal.cwd] : [],
+            paths: [activeWorkerTerminal.cwd ?? session.cwd],
             commands: [],
             failureSignatures: [],
             dependencies: {
               sourceRevision:
                 this.runtimeEnv.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || null,
-              provider: terminal.command ?? null,
+              provider: activeWorkerTerminal.command ?? null,
             },
           });
           evolutionContext = result.context;
@@ -229,7 +233,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
         evolutionContext,
       });
       try {
-        await this.agentLaunch.submitAgentLaunch(session, terminal, {
+        await this.agentLaunch.submitAgentLaunch(session, activeWorkerTerminal, {
           panelId: activeWorker.panelId,
           prompt: startupPrompt,
         });
@@ -396,7 +400,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
       await this.submitWorkerDispatchPrompt(
         persistedRun,
         session,
-        resolveAgentTeamTerminal(run.terminal),
+        resolveAgentTeamRoleTerminal(run, "code"),
         codeWorker,
         bouncePrompt,
       );

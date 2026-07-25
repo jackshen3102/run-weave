@@ -23,6 +23,7 @@ const execFileAsync = promisify(execFile);
 const MAX_UPDATE_LOGS = 5;
 const MAX_UPDATE_LOG_BYTES = 64 * 1024 * 1024;
 const MIN_PLANNED_WRITE_BYTES = 512 * 1024 * 1024;
+const BACKEND_CONNECTION_SETTINGS_FILES = ["agent-team-model-settings.json"];
 const LAUNCH_SERVICES_REGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 
@@ -425,10 +426,50 @@ async function assertSafeMutableRoot(targetPath, allowedRoot) {
   return resolved;
 }
 
+async function readBackendConnectionSettings(userData, instanceRoot) {
+  const files = [];
+  for (const fileName of BACKEND_CONNECTION_SETTINGS_FILES) {
+    const filePath = path.join(userData, "browser-profile", fileName);
+    await assertNoBetaSlotSymlinkComponents(instanceRoot, filePath);
+    const stats = await fs.lstat(filePath).catch((error) => {
+      if (error?.code === "ENOENT") {
+        return null;
+      }
+      throw error;
+    });
+    if (!stats) {
+      continue;
+    }
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      throw new DevSessionError(
+        "Beta Backend connection setting must be a regular file",
+        5,
+        { path: filePath },
+      );
+    }
+    files.push({ fileName, contents: await fs.readFile(filePath) });
+  }
+  return files;
+}
+
+async function restoreBackendConnectionSettings(userData, files) {
+  if (files.length === 0) {
+    return;
+  }
+  const profileDir = path.join(userData, "browser-profile");
+  await fs.mkdir(profileDir, { recursive: true, mode: 0o700 });
+  for (const file of files) {
+    await fs.writeFile(path.join(profileDir, file.fileName), file.contents, {
+      mode: 0o600,
+    });
+  }
+}
+
 export async function resetBetaSlotMutableState({
   slotId,
   homeDir = os.homedir(),
   afterUserDataSwap = null,
+  preserveBackendConnectionSettings = false,
 }) {
   const targets = resolveBetaUpdateTargets(homeDir, assertBetaSlotId(slotId));
   await assertNoBetaSlotSymlinkComponents(homeDir, targets.instanceRoot);
@@ -440,6 +481,9 @@ export async function resetBetaSlotMutableState({
     targets.userData,
     targets.instanceRoot,
   );
+  const backendConnectionSettings = preserveBackendConnectionSettings
+    ? await readBackendConnectionSettings(userData, targets.instanceRoot)
+    : [];
   await fs.mkdir(targets.instanceRoot, { recursive: true, mode: 0o700 });
   const resetPath = path.join(
     targets.instanceRoot,
@@ -449,6 +493,7 @@ export async function resetBetaSlotMutableState({
     await fs.rename(userData, resetPath);
   }
   await fs.mkdir(userData, { recursive: true, mode: 0o700 });
+  await restoreBackendConnectionSettings(userData, backendConnectionSettings);
   await afterUserDataSwap?.();
   await fs.rm(resetPath, { recursive: true, force: true });
   for (const entry of await fs.readdir(targets.instanceRoot)) {
@@ -492,7 +537,13 @@ export async function resetBetaSlotMutableState({
   ]) {
     await fs.rm(temporaryPath, { recursive: true, force: true });
   }
-  return { userDataRecreated: true, appServerMutableStateCleared: true };
+  return {
+    userDataRecreated: true,
+    appServerMutableStateCleared: true,
+    preservedBackendConnectionSettings: backendConnectionSettings.map(
+      (file) => file.fileName,
+    ),
+  };
 }
 
 export {

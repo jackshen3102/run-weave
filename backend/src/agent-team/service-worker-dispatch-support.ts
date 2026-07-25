@@ -24,6 +24,8 @@ export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
         | "status"
         | "options"
         | "terminal"
+        | "roleRuntimes"
+        | "retryOfRunId"
         | "task"
         | "verification"
         | "reviewCheckpoint"

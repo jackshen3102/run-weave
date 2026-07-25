@@ -8,6 +8,7 @@ import {
   Home,
   MoreHorizontal,
   RefreshCw,
+  Settings2,
 } from "lucide-react";
 import { useMemoizedFn } from "ahooks";
 import { useState } from "react";
@@ -30,6 +31,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { TerminalProjectTabBar } from "./terminal-project-tab-bar";
@@ -112,6 +114,9 @@ export function TerminalWorkspaceHeader({
   );
   const setStatusLookupOpen = useTerminalWorkspaceStore(
     (state) => state.setStatusLookupOpen,
+  );
+  const setAgentTeamModelConfigOpen = useTerminalWorkspaceStore(
+    (state) => state.setAgentTeamModelConfigOpen,
   );
   const setRequestError = useTerminalWorkspaceStore(
     (state) => state.setRequestError,
@@ -314,6 +319,18 @@ export function TerminalWorkspaceHeader({
             >
               <Activity className="h-4 w-4" />
               状态查询
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                setAgentTeamModelConfigOpen(true);
+              }}
+            >
+              <Settings2 className="h-4 w-4" />
+              <span>Agent Team 模型配置</span>
+              <span className="ml-auto rounded border border-indigo-400/30 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300">
+                全局
+              </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

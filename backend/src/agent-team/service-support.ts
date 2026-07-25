@@ -462,13 +462,8 @@ export class AgentTeamServiceSupport extends AgentTeamFixtureSupport {
     session: TerminalSessionRecord,
     terminal: AgentTeamTerminal,
   ): void {
-    const targetAgent = getAgentForCommand(terminal.command ?? null);
-    if (!targetAgent || (targetAgent !== "codex" && targetAgent !== "traex")) {
-      throw new AgentTeamError(
-        409,
-        `Agent-team terminal command "${terminal.command ?? ""}" does not support lifecycle bootstrap`,
-      );
-    }
+    this.requireAgentTeamTerminalCommandSupported(terminal);
+    const targetAgent = getAgentForCommand(terminal.command ?? null)!;
     const currentState = this.terminalStateService.getCurrent(
       session.id,
       session,
@@ -489,6 +484,44 @@ export class AgentTeamServiceSupport extends AgentTeamFixtureSupport {
         `Agent-team terminal is already using agent "${currentState.agent}"`,
       );
     }
+  }
+
+  protected requireAgentTeamTerminalCommandSupported(
+    terminal: AgentTeamTerminal,
+  ): void {
+    const targetAgent = getAgentForCommand(terminal.command ?? null);
+    if (!targetAgent || (targetAgent !== "codex" && targetAgent !== "traex")) {
+      throw new AgentTeamError(
+        409,
+        `Agent-team terminal command "${terminal.command ?? ""}" does not support lifecycle bootstrap`,
+      );
+    }
+  }
+
+  protected requireAgentTeamMainPanelShellIdle(
+    session: TerminalSessionRecord,
+    mainPanelId: string | null,
+  ): void {
+    const panel = mainPanelId
+      ? this.terminalSessionManager.getPanel(mainPanelId)
+      : null;
+    const state = panel
+      ? (panel.terminalState?.state ??
+        (getAgentForCommand(panel.activeCommand)
+          ? "agent_starting"
+          : "shell_idle"))
+      : this.terminalStateService.getCurrent(session.id, session).state;
+    if (state === "shell_idle") {
+      return;
+    }
+    throw new AgentTeamError(
+      409,
+      `Agent Team 主 pane 当前为 ${state}，只有 shell_idle 才能启动`,
+      {
+        code: "main_panel_not_shell_idle",
+        state,
+      },
+    );
   }
 
   protected findReusableWorkerPanel(

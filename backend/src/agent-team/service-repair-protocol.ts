@@ -6,6 +6,7 @@ import type {
 import { captureRepairSourceFingerprint } from "./repair-source-fingerprint";
 import { AgentTeamSerialDispatchService } from "./service-serial-dispatch";
 import { createActiveWorkerDispatch } from "./service-workflow-policy";
+import { resolveAgentTeamRoleTerminal } from "./model-runtime";
 
 export abstract class AgentTeamRepairProtocolService extends AgentTeamSerialDispatchService {
   protected async pauseForFindingDecision(
@@ -92,7 +93,7 @@ export abstract class AgentTeamRepairProtocolService extends AgentTeamSerialDisp
       await this.submitWorkerDispatchPrompt(
         correctionRun,
         session,
-        run.terminal,
+        resolveAgentTeamRoleTerminal(correctionRun, worker.role),
         worker,
         buildPrompt(correctionRun),
       );

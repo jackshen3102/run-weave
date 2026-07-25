@@ -142,6 +142,7 @@ async function finalizeBetaSlotReleaseClaimed({
     const reset = await resetBetaSlotMutableState({
       slotId: lease.slotId,
       homeDir,
+      preserveBackendConnectionSettings: true,
     });
     injectReleaseFailure("after_reset", failureCheckpoint);
     let retention = null;

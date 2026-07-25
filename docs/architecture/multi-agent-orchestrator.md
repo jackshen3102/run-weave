@@ -33,6 +33,14 @@ Agent Team loop。
 
 worker 角色定义在 `packages/shared/src/agent-team.ts`；prompt 构造在 `backend/src/agent-team/prompt-builders.ts`。Agent Team 不再使用旧 `coder`、`reviewer`、`tester` 默认集合。
 
+## 角色模型配置
+
+当前 Backend 连接在 Browser Profile 下持久化一份四角色全局模型配置，作用于该连接下所有 Project 新建的 Workspace Run。入口仅位于 Terminal Workspace 的 More 菜单；Agent Team 右侧面板不保存 Project 或 Run 级覆盖。
+
+Backend 通过固定的 Codex、TraeX adapter 探测模型目录，只缓存白名单归一化字段。CLI 可执行但 catalog 临时失败时使用最近一次成功缓存；CLI 缺失时即使有缓存也视为不可启动。用户只能提交结构化 provider、model、reasoning、Fast 或 Max，不能提交命令和原始 args。
+
+新 Workspace Run 把 `main`、`code`、`code_review`、`behavior_verify` 的结构化选择和编译后 terminal 固化到 `roleRuntimes`。worker split、resume、recheck、repair 和 framework rerun 都按 role 读取该快照，不回读之后修改的全局配置。UI Retry 通过 `retryOfRunId` 继承失败来源的快照；历史 Run 没有 `roleRuntimes` 时继续把原 `run.terminal` 投影到所有角色，旧 API 显式提交 `terminal` 的行为保持不变。
+
 ## 验收来源
 
 Agent Team 的 `behavior_verify` 不再把后端泛化默认句子当作可执行验收合同。启动 run 时可以传入 `planFilePath` 和 `testCaseFilePath`；测试案例文件优先级最高，计划文件只作为主 Agent 生成测试案例的输入。
@@ -106,8 +114,9 @@ review 范围由后端生成并写入 worker dispatch，reviewer 必须在 pane-
 主要 HTTP 入口位于 `/api/agent-team`：
 
 - `GET /runs?projectId=...&terminalSessionId=...`：读取项目或当前 terminal session 的 run。
+- `GET /model-settings` / `PUT /model-settings`：读取动态 catalog 与保存当前连接的四角色全局配置。
 - `GET /runs/:runId`：读取单个 run。
-- `POST /runs`：在指定 terminal session 上创建 run，可携带 `planFilePath` / `testCaseFilePath`，并可显式设置 `options.reviewCheckpointMode="local_commit"`。
+- `POST /runs`：在指定 terminal session 上创建 run，可携带 `planFilePath` / `testCaseFilePath`；Workspace 路径读取全局配置，`retryOfRunId` 继承失败来源快照，显式 `terminal` 保留旧 API 兼容。
 - `POST /runs/:runId/propose-split`：提交主 Agent 或用户产出的拆分提案，可携带 `testCaseFilePath` / `generatedTestCaseFilePath` 生成可追溯 acceptance。
 - `POST /runs/:runId/split-gate`：确认或驳回拆分提案。
 - `POST /runs/:runId/resume`：人工 note 介入并恢复 loop。

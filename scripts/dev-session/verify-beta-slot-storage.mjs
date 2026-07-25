@@ -379,6 +379,44 @@ export async function verifyBetaSlotStorage(
     "runtime",
   ]);
 
+  const modelSettings = '{"config":{"schemaVersion":1}}\n';
+  await fs.mkdir(path.join(targets.userData, "browser-profile"), {
+    recursive: true,
+  });
+  await fs.writeFile(path.join(targets.userData, "owner-b-cookie"), "secret");
+  await fs.writeFile(
+    path.join(
+      targets.userData,
+      "browser-profile",
+      "agent-team-model-settings.json",
+    ),
+    modelSettings,
+  );
+  const preservedReset = await resetBetaSlotMutableState({
+    slotId: "pool-02",
+    homeDir: retentionHome,
+    preserveBackendConnectionSettings: true,
+  });
+  assert.deepEqual(await fs.readdir(targets.userData), ["browser-profile"]);
+  assert.deepEqual(
+    await fs.readdir(path.join(targets.userData, "browser-profile")),
+    ["agent-team-model-settings.json"],
+  );
+  assert.equal(
+    await fs.readFile(
+      path.join(
+        targets.userData,
+        "browser-profile",
+        "agent-team-model-settings.json",
+      ),
+      "utf8",
+    ),
+    modelSettings,
+  );
+  assert.deepEqual(preservedReset.preservedBackendConnectionSettings, [
+    "agent-team-model-settings.json",
+  ]);
+
   if (!includeLegacy) {
     return;
   }

@@ -30,6 +30,7 @@ export interface CreateAgentTeamRunRequest {
    * override this later without changing the orchestration flow.
    */
   terminal?: AgentTeamTerminal;
+  retryOfRunId?: string;
 }
 
 export interface ProposeAgentTeamSplitRequest {

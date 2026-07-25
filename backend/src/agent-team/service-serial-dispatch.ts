@@ -14,6 +14,7 @@ import {
   findWorkerByRole,
   setActiveWorker,
 } from "./service-workflow-policy";
+import { resolveAgentTeamRoleTerminal } from "./model-runtime";
 
 export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionService {
   protected async finalizeReviewCheckpoint(
@@ -291,7 +292,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       await this.submitWorkerDispatchPrompt(
         persistedRun,
         session,
-        run.terminal,
+        resolveAgentTeamRoleTerminal(persistedRun, role),
         worker,
         workerPrompt,
       );

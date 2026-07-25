@@ -2,6 +2,7 @@ export * from "./diagnostic-logs";
 export * from "./protocol";
 export * from "./runtime-monitor";
 export * from "./agent-team";
+export * from "./agent-team-model-config";
 export * from "./system-monitor";
 export * from "./terminal-protocol";
 export * from "./terminal-preview-core";

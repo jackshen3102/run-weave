@@ -1,0 +1,553 @@
+{
+  "workspace": {
+    "connectionName": "Local",
+    "connectionDetail": "localhost:5000",
+    "projectName": "browser-viewer",
+    "projectPath": "~/workspace/browser-viewer",
+    "branch": "fix/agent-team-recheck-exhaustion",
+    "terminalName": "feature-1",
+    "terminalLines": [
+      {
+        "kind": "prompt",
+        "path": "~/Code/browser-hub/browser-viewer/.worktree/feature-1",
+        "text": "git status --short"
+      },
+      {
+        "kind": "output",
+        "text": ""
+      },
+      {
+        "kind": "prompt",
+        "path": "~/Code/browser-hub/browser-viewer/.worktree/feature-1",
+        "text": ""
+      }
+    ]
+  },
+  "catalogSnapshot": {
+    "capturedAt": "2026-07-25T15:30:00+08:00",
+    "codexVersion": "0.144.6",
+    "traexVersion": "0.200.19",
+    "commands": [
+      "codex debug models",
+      "traex models --json",
+      "traex debug models"
+    ]
+  },
+  "globalConfig": {
+    "scope": "connection",
+    "appliesTo": "new-runs",
+    "updatedAt": "2026-07-25T15:30:00+08:00"
+  },
+  "selectedRoleId": "code",
+  "roles": [
+    {
+      "id": "main",
+      "label": "主 Agent",
+      "shortLabel": "M",
+      "kind": "main",
+      "intent": "拆解任务并驱动 Agent Team",
+      "cli": "codex",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high",
+      "serviceTier": "standard",
+      "maxMode": false,
+      "advancedOpen": false
+    },
+    {
+      "id": "code",
+      "label": "实现",
+      "shortLabel": "C",
+      "kind": "code",
+      "intent": "完成核心代码改动",
+      "cli": "codex",
+      "model": "gpt-5.6-terra",
+      "reasoningEffort": "high",
+      "serviceTier": "fast",
+      "maxMode": false,
+      "advancedOpen": true
+    },
+    {
+      "id": "code_review",
+      "label": "代码评审",
+      "shortLabel": "R",
+      "kind": "review",
+      "intent": "审查改动、风险与回归范围",
+      "cli": "traex",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "xhigh",
+      "serviceTier": "standard",
+      "maxMode": true,
+      "advancedOpen": false
+    },
+    {
+      "id": "behavior_verify",
+      "label": "行为验收",
+      "shortLabel": "V",
+      "kind": "verify",
+      "intent": "按测试案例执行真实行为验收",
+      "cli": "traex",
+      "model": "Doubao-Seed-2.1-Turbo",
+      "reasoningEffort": null,
+      "serviceTier": "standard",
+      "maxMode": false,
+      "advancedOpen": false
+    }
+  ],
+  "catalogs": {
+    "codex": {
+      "label": "Codex",
+      "command": "codex",
+      "models": [
+        {
+          "id": "gpt-5.6-sol",
+          "label": "GPT-5.6 Sol",
+          "family": "gpt",
+          "description": "复杂、开放式、高价值任务",
+          "contextWindow": 272000,
+          "defaultReasoning": "low",
+          "reasoningEfforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "supportsMax": true,
+          "supportsVerbosity": true,
+          "supportsFastTier": true,
+          "beta": false
+        },
+        {
+          "id": "gpt-5.6-terra",
+          "label": "GPT-5.6 Terra",
+          "family": "gpt",
+          "description": "日常开发的均衡主力模型",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "supportsMax": true,
+          "supportsVerbosity": true,
+          "supportsFastTier": true,
+          "beta": false
+        },
+        {
+          "id": "gpt-5.6-luna",
+          "label": "GPT-5.6 Luna",
+          "family": "gpt",
+          "description": "明确、重复、高吞吐任务",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"],
+          "supportsMax": true,
+          "supportsVerbosity": true,
+          "supportsFastTier": true,
+          "beta": false
+        },
+        {
+          "id": "gpt-5.5",
+          "label": "GPT-5.5",
+          "family": "gpt",
+          "description": "复杂编码与研究任务",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": false,
+          "supportsVerbosity": true,
+          "supportsFastTier": true,
+          "beta": false
+        },
+        {
+          "id": "gpt-5.4",
+          "label": "GPT-5.4",
+          "family": "gpt",
+          "description": "通用编码任务",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": false,
+          "supportsVerbosity": true,
+          "supportsFastTier": true,
+          "beta": false
+        },
+        {
+          "id": "gpt-5.4-mini",
+          "label": "GPT-5.4 Mini",
+          "family": "gpt",
+          "description": "简单、快速、成本敏感任务",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": false,
+          "supportsVerbosity": true,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "gpt-5.3-codex-spark",
+          "label": "GPT-5.3 Codex Spark",
+          "family": "gpt",
+          "description": "超低延迟编码任务",
+          "contextWindow": 128000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": false,
+          "supportsVerbosity": true,
+          "supportsFastTier": false,
+          "beta": false
+        }
+      ]
+    },
+    "traex": {
+      "label": "TraeX",
+      "command": "traex",
+      "models": [
+        {
+          "id": "Doubao-Seed-2.1-Pro",
+          "label": "Doubao Seed 2.1 Pro",
+          "family": "doubao",
+          "description": "184K 上下文，支持推理",
+          "contextWindow": 184000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": [],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "Doubao-Seed-2.1-Turbo",
+          "label": "Doubao Seed 2.1 Turbo",
+          "family": "doubao",
+          "description": "184K 上下文，支持推理",
+          "contextWindow": 184000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": [],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "openrouter-3o",
+          "label": "OpenRouter 3o",
+          "family": "claude",
+          "description": "200K 上下文，支持 Max",
+          "contextWindow": 200000,
+          "defaultReasoning": "xhigh",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "openrouter-2o",
+          "label": "OpenRouter 2o",
+          "family": "claude",
+          "description": "200K 上下文，支持 Max",
+          "contextWindow": 200000,
+          "defaultReasoning": "xhigh",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "c_o_new_thinking",
+          "label": "Test O New Thinking",
+          "family": "claude",
+          "description": "实验模型，支持 Max",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high", "max"],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "c_new_thinking",
+          "label": "Test New Thinking",
+          "family": "claude",
+          "description": "实验推理模型",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high", "max"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "c_o_new",
+          "label": "Test O New",
+          "family": "claude",
+          "description": "实验模型，支持 Max",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high", "max"],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "c_new",
+          "label": "Test New",
+          "family": "claude",
+          "description": "实验模型",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high", "max"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "gpt-5.6-sol",
+          "label": "GPT-5.6 Sol",
+          "family": "gpt",
+          "description": "272K 上下文，Beta，支持 Max",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "gpt-5.6-terra",
+          "label": "GPT-5.6 Terra",
+          "family": "gpt",
+          "description": "272K 上下文，Beta，支持 Max",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "gpt-5.6-luna",
+          "label": "GPT-5.6 Luna",
+          "family": "gpt",
+          "description": "272K 上下文，Beta，支持 Max",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "gpt-5.5",
+          "label": "GPT-5.5",
+          "family": "gpt",
+          "description": "272K 上下文，Beta，支持 Max",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "gpt-5.4",
+          "label": "GPT-5.4",
+          "family": "gpt",
+          "description": "272K 上下文，Beta，支持 Max",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "DeepSeek-V4-Pro",
+          "label": "DeepSeek V4 Pro",
+          "family": "deepseek",
+          "description": "200K 上下文，支持推理",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "DeepSeek-V4-Flash",
+          "label": "DeepSeek V4 Flash",
+          "family": "deepseek",
+          "description": "200K 上下文，支持推理",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "kimi-k2.6",
+          "label": "Kimi K2.6",
+          "family": "claude",
+          "description": "200K 上下文",
+          "contextWindow": 200000,
+          "defaultReasoning": null,
+          "reasoningEfforts": [],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "glm-5.1",
+          "label": "GLM 5.1",
+          "family": "claude",
+          "description": "200K 上下文，支持推理",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "qwen-3.6-plus",
+          "label": "Qwen 3.6 Plus",
+          "family": "claude",
+          "description": "200K 上下文，推理由模型决定",
+          "contextWindow": 200000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": [],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "minimax-m2.7",
+          "label": "MiniMax M2.7",
+          "family": "claude",
+          "description": "200K 上下文，支持推理",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "Seed-Dogfooding-2.0",
+          "label": "Seed Dogfooding 2.0",
+          "family": "seed",
+          "description": "200K 上下文，Beta",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "Doubao_1_6",
+          "label": "Doubao Seed Code",
+          "family": "doubao",
+          "description": "116K 上下文，支持 Max",
+          "contextWindow": 116000,
+          "defaultReasoning": null,
+          "reasoningEfforts": [],
+          "supportsMax": true,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "openrouter-1o",
+          "label": "OpenRouter 1o",
+          "family": "claude",
+          "description": "200K 上下文，支持推理",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high", "max"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "openrouter-1",
+          "label": "OpenRouter 1",
+          "family": "claude",
+          "description": "200K 上下文，支持推理",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high", "max"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "gpt-5.2",
+          "label": "GPT-5.2",
+          "family": "gpt",
+          "description": "272K 上下文，支持推理",
+          "contextWindow": 272000,
+          "defaultReasoning": "medium",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": false
+        },
+        {
+          "id": "gemini-3.1-pro",
+          "label": "Gemini 3.1 Pro Preview",
+          "family": "gemini",
+          "description": "200K 上下文，支持推理",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        },
+        {
+          "id": "gemini-3-flash",
+          "label": "Gemini 3 Flash Preview",
+          "family": "gemini",
+          "description": "200K 上下文，支持推理",
+          "contextWindow": 200000,
+          "defaultReasoning": "high",
+          "reasoningEfforts": ["low", "medium", "high"],
+          "supportsMax": false,
+          "supportsVerbosity": false,
+          "supportsFastTier": false,
+          "beta": true
+        }
+      ]
+    }
+  }
+}

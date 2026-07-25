@@ -13,6 +13,7 @@ import type { TmuxService } from "../terminal/tmux-service";
 import type { TerminalActivityDependencies } from "../terminal/activity-events";
 import type { EvolutionMemoryProvider } from "../evolution/injection/memory-provider";
 import type { EvolutionOutcomeObserver } from "../evolution/injection/outcome-observer";
+import type { AgentTeamModelSettingsService } from "./model-catalog/service";
 
 export interface AgentTeamServiceOptions {
   terminalSessionManager: TerminalSessionManager;
@@ -29,6 +30,7 @@ export interface AgentTeamServiceOptions {
   backendInstanceId?: string;
   evolutionMemoryProvider?: EvolutionMemoryProvider;
   evolutionOutcomeObserver?: EvolutionOutcomeObserver;
+  modelSettingsService?: AgentTeamModelSettingsService;
 }
 
 export type AgentTeamCompletionSignalSource =

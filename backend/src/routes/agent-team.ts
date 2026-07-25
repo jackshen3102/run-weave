@@ -1,17 +1,15 @@
 import { Router } from "express";
 import { z } from "zod";
-import { AgentTeamError } from "../agent-team/errors";
 import type { AgentTeamService } from "../agent-team/service";
 import { AGENT_TEAM_RUN_ID_PATTERN } from "../agent-team/run-id";
-import { logger } from "../logging";
+import { registerAgentTeamModelSettingsRoutes } from "./agent-team-model-settings";
 import {
   acceptanceDispositionSchema,
   exportQuerySchema,
   findingDispositionSchema,
   focusSchema,
 } from "./agent-team-route-action-schemas";
-
-const agentTeamRouteLogger = logger.child({ component: "agent-team-route" });
+import { handleAgentTeamServiceCall as handleServiceCall } from "./agent-team-route-support";
 
 const runIdSchema = z
   .string()
@@ -85,6 +83,7 @@ const createRunSchema = z
       .strict()
       .optional(),
     terminal: terminalSchema.optional(),
+    retryOfRunId: runIdSchema.optional(),
   })
   .strict();
 
@@ -217,6 +216,8 @@ export function createAgentTeamRouter(
   agentTeamService: AgentTeamService,
 ): Router {
   const router = Router();
+
+  registerAgentTeamModelSettingsRoutes(router, agentTeamService);
 
   router.get("/runs", async (req, res) => {
     const projectId =
@@ -565,31 +566,4 @@ export function createAgentTeamRouter(
   });
 
   return router;
-}
-
-async function handleServiceCall(
-  res: {
-    status: (code: number) => { json: (body: unknown) => void };
-    json: (body: unknown) => void;
-  },
-  action: () => Promise<unknown>,
-): Promise<void> {
-  try {
-    res.json(await action());
-  } catch (error) {
-    if (error instanceof AgentTeamError) {
-      res.status(error.statusCode).json({
-        message: error.message,
-        ...(error.details !== undefined ? { details: error.details } : {}),
-      });
-      return;
-    }
-    agentTeamRouteLogger.error("agent-team.request.failed", {
-      message: "Agent-team request failed",
-      error: error instanceof Error ? error.message : String(error),
-    });
-    res
-      .status(500)
-      .json({ message: "Agent-team request failed", error: String(error) });
-  }
 }

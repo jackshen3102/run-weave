@@ -1,0 +1,191 @@
+version: 1
+name: Agent Team 全局角色模型配置
+description: >
+  验证当前 Runweave 连接能够为 Agent Team 四个角色持久化 Codex 或 TraeX
+  模型配置，并确保新 Run 严格预检、固化运行时快照，后续恢复不受全局配置漂移影响。
+
+cases:
+  - id: AGT-MC-001
+    name: 全局配置只能从 Workspace 更多菜单进入
+    required: true
+    description: >
+      验证 Web 和 Electron 共用的 Workspace 右上角更多菜单能够打开全局模型配置弹窗，
+      且 Agent Team 右侧面板不出现配置控件或运行时摘要。
+    preconditions:
+      - 已使用 $toolkit:runweave-dev-session 启动包含本次实现的真实 Dev Session。
+      - 已从 dev:open 解析 desktop surface，并使用 $toolkit:playwright-cli 附着该实例。
+    steps:
+      - 在 Terminal Workspace 打开右上角 More actions；确认菜单新增“Agent Team 模型配置”并带“全局”标识。
+      - 点击该菜单项；确认居中弹窗标题为“Agent Team 模型配置”，不显示连接地址、Project 范围或 Run 范围说明。
+      - 查看 Agent Team 右侧面板；确认其中没有模型配置入口、配置控件或角色运行时摘要。
+
+  - id: AGT-MC-002
+    name: 四角色草稿必须完整且显式提交
+    required: true
+    description: >
+      验证四个角色分别维护 CLI、模型和能力参数，切换 CLI 不会隐式选择目录第一项，
+      取消不落盘，只有完整草稿保存后才更新全局配置。
+    preconditions:
+      - 当前连接至少有一个可用 CLI catalog。
+      - 已使用 $toolkit:playwright-cli 打开全局模型配置弹窗。
+    steps:
+      - 依次查看主控、实现、审查和行为验证四个固定角色；确认每个角色拥有独立的 CLI、模型和参数草稿。
+      - 将一个角色切换到另一个可用 CLI；确认模型变为“请选择模型”、不兼容参数被清理且保存按钮禁用。
+      - 搜索并显式选择一个模型；确认只展示该模型支持的 reasoning 档位，Codex 只显示 Fast，TraeX 只显示 Max。
+      - 修改草稿后点击取消并重新打开；确认仍显示取消前的已保存值。
+      - 再次完成四角色配置并保存后重新打开；确认所有角色显示刚保存的值。
+
+  - id: AGT-MC-003
+    name: 配置跨 Project 和 Backend 重启保持一致
+    required: true
+    description: >
+      验证模型配置属于当前 Backend 连接而不是 Project，并在同一 Browser Profile 的
+      Backend 重启后从磁盘恢复。
+    preconditions:
+      - 当前连接下至少存在两个 Project。
+      - 已保存一份完整的四角色配置。
+    steps:
+      - 在 Project A 打开配置并记录四角色值，再切换到 Project B 打开配置；确认两处读取完全相同的全局配置。
+      - 使用 $toolkit:runweave-dev-session 停止并以同一 profile 重新启动 Dev Session，重新从 dev:open 获取 fresh desktop CDP endpoint。
+      - 使用 $toolkit:playwright-cli 附着重启后的实例并打开配置；确认四角色值与重启前一致。
+
+  - id: AGT-MC-004
+    name: Catalog 临时失败直接使用旧缓存
+    required: true
+    description: >
+      验证 CLI 可执行文件仍存在但 catalog 命令临时失败时，配置和新 Run 直接使用最近一次
+      成功持久化的规范化缓存，不要求用户刷新或确认降级。
+    preconditions:
+      - 隔离 Browser Profile 中已经成功缓存 Codex 或 TraeX catalog。
+      - 可控制对应 CLI catalog 命令在保持可执行文件存在的前提下返回失败。
+    steps:
+      - 记录缓存中的模型和能力后让 catalog 命令失败，再请求全局模型设置；确认响应仍返回旧缓存中的模型和能力。
+      - 使用缓存内仍有效的四角色配置保存并启动新 Run；确认保存和启动没有额外刷新、确认或降级操作。
+      - 恢复 catalog 命令并返回不同的有效目录；确认下一次探测更新磁盘缓存及其 capturedAt。
+
+  - id: AGT-MC-005
+    name: 首次无缓存或 CLI 缺失时不可选择
+    required: true
+    description: >
+      验证首次探测失败且没有缓存时该 Provider 不可用，CLI 可执行文件缺失属于硬不可用，
+      不会用旧缓存伪装成可启动状态。
+    preconditions:
+      - 使用没有 Agent Team 模型缓存的隔离 Browser Profile。
+      - 可分别制造 CLI 不存在和 CLI 存在但首次 catalog 命令失败的环境。
+    steps:
+      - 在一个 CLI 不存在时打开配置；确认该 CLI 置灰且四个角色仍可全部选择另一个可用 CLI。
+      - 在 CLI 存在但首次 catalog 探测失败且无缓存时打开配置；确认该 CLI 不提供模型选择。
+      - 在两个 CLI 都不可用且无缓存时尝试保存和启动；确认配置无法保存、新 Run 不创建，并显示可定位到 Provider 的错误。
+
+  - id: AGT-MC-006
+    name: 失效模型在创建 Run 副作用前被阻止
+    required: true
+    description: >
+      验证成功刷新的 catalog 不再包含已保存模型时，Backend 在创建 Run、pane 或 checkpoint
+      分支之前拒绝启动，并返回精确的角色、CLI 和模型身份。
+    preconditions:
+      - 已保存一份完整配置。
+      - 可让下一次成功 catalog 探测移除其中一个已选模型。
+    steps:
+      - 记录目标 Terminal 的 pane、Agent Team Run JSON 和 Git 分支集合，再点击开始 Agent Team。
+      - 确认请求返回 409，错误详情包含失效角色、CLI 和模型，并提供“去配置”入口。
+      - 再次检查 pane、Run JSON 和 Git 分支集合；确认三者均没有因本次失败新增内容。
+
+  - id: AGT-MC-007
+    name: 主 pane 只有 shell_idle 才能启动新 Run
+    required: true
+    description: >
+      验证新的 Workspace 启动链只接受 shell_idle 主 pane，绝不覆盖或复用已有
+      agent_starting、agent_idle 或 agent_running 上下文。
+    preconditions:
+      - 已保存有效的四角色配置。
+      - 可分别建立 shell_idle、agent_starting、agent_idle 和 agent_running 主 pane。
+    steps:
+      - 在 shell_idle 主 pane 启动 Agent Team；确认 Run 使用 main 角色快照启动对应 CLI。
+      - 分别在 agent_starting、agent_idle 和 agent_running 主 pane 发起新的 Workspace Run；确认每次都在创建 Run 或 worker pane 前返回 409。
+      - 对比被拒绝前后的 threadId、lastThreadId、activeCommand 和 pane 历史；确认已有 Agent 上下文未被覆盖、resume 或注入新任务。
+
+  - id: AGT-MC-008
+    name: 混合 Provider 按角色编译并启动
+    required: true
+    description: >
+      验证新 Run 能让四个角色混用 Codex 和 TraeX，并将模型、reasoning、Fast 或 Max
+      编译为显式覆盖本机默认配置的 CLI 参数。
+    preconditions:
+      - 当前连接已安装并登录 Codex 与 TraeX。
+      - 两个实时 catalog 中各至少存在一个可启动模型。
+      - 已准备可追溯的 required YAML 验收来源。
+    steps:
+      - 保存一份同时包含 Codex 和 TraeX 的四角色配置，并为支持能力的模型分别设置 reasoning、Fast 或 Max。
+      - 从 shell_idle 主 pane 启动并进入 worker split；确认每个实际启动的 pane provider 与其角色配置一致。
+      - 检查 Run 的 roleRuntimes 和 pane 启动命令；确认包含明确的 -m、model_reasoning_effort，以及 Codex service_tier=fast 或 standard、TraeX model_backend_variant=max 或 standard。
+      - 确认同一角色的 worker 都解析到该角色的同一份快照，且参数中没有输出详细度、sandbox、approval 或原始自定义 args。
+
+  - id: AGT-MC-009
+    name: 全局修改不改变已有 Run 快照
+    required: true
+    description: >
+      验证新 Run 创建时固化四角色运行时快照，之后修改全局配置只影响再创建的 Run，
+      不改变运行中或历史 Run。
+    preconditions:
+      - 已用配置 A 创建 Run A。
+      - 另有一个 shell_idle Terminal 可创建后续 Run。
+    steps:
+      - 将全局配置从 A 修改为不同的配置 B；确认 Run A 的 roleRuntimes、已启动 pane provider 和线程身份均不变化。
+      - 导出 Run A；确认导出中的运行时快照仍为配置 A。
+      - 在另一个 Terminal 创建 Run B；确认 Run B 固化配置 B，且两个 Run 的快照互不串扰。
+
+  - id: AGT-MC-010
+    name: 原 Run 内恢复始终复用角色快照
+    required: true
+    description: >
+      验证 resume、recheck、repair 回派和普通 worker 再调度都从原 Run 的角色快照解析终端，
+      不读取操作发生时的最新全局配置。
+    preconditions:
+      - 已创建带四角色 roleRuntimes 的 Run。
+      - 已将全局配置改为与该 Run 不同的值。
+    steps:
+      - 依次触发一次 resume、一次 recheck 和一次 repair 回派；确认每次目标 worker 的 Provider、模型和参数都来自原 Run 对应角色快照。
+      - 让 worker pane 回到 shell_idle 并通过保存的同 Provider thread 身份恢复；确认 resume 命令在原快照 args 后追加 threadId，没有读取全局配置。
+      - 检查所有新 dispatch 与 pane 历史；确认没有因为全局配置变化新开错误 Provider thread。
+
+  - id: AGT-MC-011
+    name: Retry 和 framework rerun 的 successor 继承原快照
+    required: true
+    description: >
+      验证失败 Run 的 UI Retry 和 framework repair rerun 创建 successor 时克隆来源 Run
+      的四角色快照，而不是读取最新全局配置。
+    preconditions:
+      - 已有一个包含 roleRuntimes 的 failed Run，且当前全局配置与其不同。
+      - 可分别建立普通 Retry 和 framework repair rerun 场景。
+    steps:
+      - 从 failed Run 点击“重新开始 Agent Team”并提交；确认新 Run 记录受 Backend 校验的 retryOfRunId，四角色快照与来源 Run 相同。
+      - 对 framework repair blocked Run 执行 rerun；确认 successorRun 的四角色快照与 predecessor 相同。
+      - 分别启动 successor worker；确认 Provider、模型和参数与来源 Run 一致，最新全局配置未参与两条继承链。
+
+  - id: AGT-MC-012
+    name: 旧 Run 和显式 terminal API 保持兼容
+    required: true
+    description: >
+      验证没有 roleRuntimes 的历史 Run 继续把原 Run 级 terminal 用于所有角色，
+      现有显式 terminal 创建 API 仍可供旧脚本使用。
+    preconditions:
+      - 准备一份只有 terminal、没有 roleRuntimes 的历史 Run JSON。
+      - 准备一个仍显式提交 terminal 的既有 API 调用场景。
+    steps:
+      - 读取并恢复历史 Run；确认无需迁移文件即可继续使用原 terminal，且不会回读当前全局配置。
+      - 通过旧 API 显式提交 terminal 创建 Run；确认保持当前 Run 级行为，不要求存在全局配置。
+      - 导出两类 Run；确认历史数据可读，新 Workspace 创建的 Run 仍以 roleRuntimes 为权威。
+
+  - id: AGT-MC-013
+    name: 模型配置接口遵守现有 Backend 鉴权
+    required: true
+    description: >
+      验证读取和保存全局模型配置的接口与其他 Agent Team API 使用相同 Bearer 鉴权，
+      未授权请求不能读取模型目录或修改磁盘配置。
+    preconditions:
+      - Backend 已启用现有认证。
+      - 已准备有效 token、无 token 和错误 token 三种请求。
+    steps:
+      - 分别用无 token 和错误 token 请求读取与保存模型配置；确认全部返回 401，磁盘配置和 catalog 缓存未变化。
+      - 使用有效 token 读取和保存配置；确认请求成功且响应不包含 CLI 原始输出、认证信息、用户配置文件内容或环境变量。

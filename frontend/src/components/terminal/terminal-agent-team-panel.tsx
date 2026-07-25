@@ -22,7 +22,6 @@ import {
   startAgentTeamRun,
   submitAgentTeamSplitGate,
 } from "../../services/terminal";
-import { HttpError } from "../../services/http";
 import {
   AGENT_TEAM_POLL_INTERVAL_MS,
   getAgentTeamAttention,
@@ -44,6 +43,10 @@ import {
   StartFlowSection,
 } from "./terminal-agent-team-panel-sections";
 import { ExecutingSection } from "./terminal-agent-team-executing-section";
+import {
+  AgentTeamModelErrorNotice,
+  useAgentTeamModelConfigError,
+} from "./terminal-agent-team-model-error";
 import { useAgentTeamScopeGuard } from "./terminal-agent-team-scope";
 
 interface TerminalAgentTeamPanelProps {
@@ -68,7 +71,13 @@ export function TerminalAgentTeamPanel({
   const [run, setRun] = useState<AgentTeamRun | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    message: error,
+    details: modelConfigError,
+    setMessage: setError,
+    handle: handleError,
+    clear: clearError,
+  } = useAgentTeamModelConfigError(onAuthExpired);
   const [task, setTask] = useState("");
   const [planFilePath, setPlanFilePath] = useState("");
   const [testCaseFilePath, setTestCaseFilePath] = useState("");
@@ -86,14 +95,6 @@ export function TerminalAgentTeamPanel({
   const workerDraftDirtyRef = useRef(false);
   const workerDraftSourceRef = useRef<string | null>(null);
   runIdRef.current = run?.runId ?? null;
-
-  const handleError = useMemoizedFn((caught: unknown): void => {
-    if (caught instanceof HttpError && caught.status === 401) {
-      onAuthExpired?.();
-      return;
-    }
-    setError(caught instanceof Error ? caught.message : String(caught));
-  });
 
   const syncWorkerDraftsFromRun = useMemoizedFn(
     (next: AgentTeamRun | null, options?: { force?: boolean }): void => {
@@ -192,7 +193,7 @@ export function TerminalAgentTeamPanel({
 
   useEffect(() => {
     setRun(null);
-    setError(null);
+    clearError();
     setBusy(false);
     setLoading(false);
     setRetryingRunId(null);
@@ -217,6 +218,7 @@ export function TerminalAgentTeamPanel({
     loadRun,
     syncWorkerDraftsFromRun,
     syncActiveRunPresence,
+    clearError,
   ]);
 
   useEffect(() => {
@@ -240,7 +242,7 @@ export function TerminalAgentTeamPanel({
       const requestedProjectId = projectId;
       const requestedTerminalSessionId = terminalSessionId;
       setBusy(true);
-      setError(null);
+      clearError();
       try {
         const next = await action();
         if (
@@ -344,6 +346,7 @@ export function TerminalAgentTeamPanel({
         startAgentTeamRun(apiBase, token, {
           projectId,
           terminalSessionId,
+          retryOfRunId: retryingRunId ?? undefined,
           task: trimmedTask,
           planFilePath: normalizeOptionalPath(planFilePath),
           testCaseFilePath: normalizeOptionalPath(testCaseFilePath),
@@ -509,11 +512,7 @@ export function TerminalAgentTeamPanel({
         statusPresentation={statusPresentation}
       />
 
-      {error ? (
-        <div className="mx-3 mt-2 rounded border border-rose-800 bg-rose-950/50 px-2 py-1 text-[11px] text-rose-300">
-          {error}
-        </div>
-      ) : null}
+      <AgentTeamModelErrorNotice message={error} details={modelConfigError} />
 
       <AgentTeamPanelGate
         run={run}

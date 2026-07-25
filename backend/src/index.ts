@@ -341,6 +341,7 @@ function attachLifecycleHandlers(
       }
       await services.terminalSessionManager.dispose();
       await services.terminalQuickInputStore.dispose();
+      await services.agentTeamModelConfigStore.dispose();
       if (services.activityMaintenanceTimer) {
         clearInterval(services.activityMaintenanceTimer);
       }

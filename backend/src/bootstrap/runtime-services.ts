@@ -8,6 +8,8 @@ import { loadAuthConfig } from "../auth/config";
 import { AuthService } from "../auth/service";
 import type { AppServerEventConsumerHandle } from "../app-server/event-consumer";
 import { AgentTeamService } from "../agent-team/service";
+import { AgentTeamModelConfigStore } from "../agent-team/model-config-store";
+import { AgentTeamModelSettingsService } from "../agent-team/model-catalog/service";
 import { ActivityEventFactory } from "../activity/event-factory";
 import { ActivityQueryService } from "../activity/query-service";
 import { ActivityRecorder } from "../activity/activity-recorder";
@@ -63,6 +65,7 @@ export interface RuntimeServices {
   terminalQuickInputService: TerminalQuickInputService;
   terminalStateService: TerminalStateService;
   agentTeamService: AgentTeamService;
+  agentTeamModelConfigStore: AgentTeamModelConfigStore;
   appServerHistoryGateway: AppServerHistoryGateway;
   workHistoryService: WorkHistoryService;
   terminalEventService: TerminalEventService;
@@ -244,6 +247,14 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     storagePaths.terminalQuickInputStoreFile,
   );
   await terminalQuickInputStore.initialize();
+  const agentTeamModelConfigStore = new AgentTeamModelConfigStore(
+    storagePaths.agentTeamModelStoreFile,
+  );
+  await agentTeamModelConfigStore.initialize();
+  const agentTeamModelSettingsService = new AgentTeamModelSettingsService(
+    agentTeamModelConfigStore,
+    process.env,
+  );
   const terminalQuickInputService = new TerminalQuickInputService(
     terminalQuickInputStore,
   );
@@ -410,6 +421,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     backendInstanceId: crypto.randomUUID(),
     evolutionMemoryProvider,
     evolutionOutcomeObserver,
+    modelSettingsService: agentTeamModelSettingsService,
   });
   agentTeamService.initialize();
   const appServerHistoryGateway = new AppServerHistoryGateway();
@@ -442,6 +454,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalQuickInputService,
     terminalStateService,
     agentTeamService,
+    agentTeamModelConfigStore,
     appServerHistoryGateway,
     workHistoryService,
     terminalEventService,

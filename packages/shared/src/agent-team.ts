@@ -1,9 +1,7 @@
 import type { AgentTeamWorker, AgentTeamWorkerRole } from "./agent-team-worker";
 import type { AgentTeamAgentIntervention } from "./agent-team-intervention";
 import type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
-import type {
-  AgentTeamFrameworkRepair,
-} from "./agent-team-framework-repair";
+import type { AgentTeamFrameworkRepair } from "./agent-team-framework-repair";
 import type {
   AgentTeamAcceptanceSkip,
   AgentTeamEnvironmentRecovery,
@@ -258,6 +256,8 @@ export interface AgentTeamRun {
   options: AgentTeamRunOptions;
   /** Agent CLI used by the root engineer and worker panes. */
   terminal: AgentTeamTerminal;
+  roleRuntimes?: import("./agent-team-model-config").AgentTeamRoleRuntimeSnapshot;
+  retryOfRunId?: string | null;
   task: string;
   verification?: AgentTeamVerificationConfig | null;
   reviewCheckpoint?: AgentTeamReviewCheckpointState | null;

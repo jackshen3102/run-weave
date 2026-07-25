@@ -8,13 +8,14 @@ Agent Team 测试按稳定产品能力分类，不再按单次需求、历史缺
 | 分类       | 权威测试计划                                                      | Case | 范围                                                                    |
 | ---------- | ----------------------------------------------------------------- | ---: | ----------------------------------------------------------------------- |
 | 生命周期   | `lifecycle/agent-team-lifecycle.testplan.yaml`                    |    8 | 验收来源、Run/Terminal 身份、split、worker/provider、鉴权和 UI 动作权限 |
+| 模型配置   | `configuration/agent-team-role-model-config.testplan.yaml`        |   13 | 全局配置、catalog 缓存、角色运行时、快照继承和旧 API 兼容               |
 | 执行闭环   | `execution/agent-team-execution-and-repair.testplan.yaml`         |    9 | outbox、completion 幂等、flow、依赖、repair、checkpoint 和 Activity     |
 | 恢复与资源 | `recovery/agent-team-recovery-and-fixtures.testplan.yaml`         |   11 | framework repair、rerun、watchdog、人工恢复、fixture cleanup 和历史兼容 |
 | 完成与干预 | `completion/agent-team-completion-and-intervention.testplan.yaml` |   10 | completion outcome、人工 Case 裁决、历史投影和 refresh                  |
 
 ## 执行原则
 
-- 新需求先归入以上四类；只有出现新的独立产品能力域时才新增分类。
+- 新需求先归入以上五类；只有出现新的独立产品能力域时才新增分类。
 - 同一不变量只在一个文件中成为 required Case；其他计划通过引用该 Case 避免复制。
 - 浏览器步骤必须使用 `$toolkit:playwright-cli` 在真实 Dev Session surface 取证。
 - Backend/协议行为使用当前 `agent-team:verify-*` 脚本、真实 API、Run JSON 和 pane-scoped outbox 取证。
