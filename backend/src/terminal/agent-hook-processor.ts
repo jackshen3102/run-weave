@@ -320,6 +320,15 @@ export async function processTerminalAgentHook(
         operationId: input.operationId,
       })) ?? session;
   }
+  // The user submitting a new prompt means they are back at this terminal, so
+  // retire any pending "completion" attention (the green dot) for this session.
+  // acknowledgeSessionCompletion is idempotent when already caught up.
+  if (input.hookEvent === "UserPromptSubmit") {
+    await options.terminalSessionManager.acknowledgeSessionCompletion(
+      session.id,
+      session.completionRevision,
+    );
+  }
   return {
     status: "recorded",
     terminalSessionId: session.id,

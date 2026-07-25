@@ -146,6 +146,31 @@ export function useTerminalWorkspaceEvents({
           }
           return changed ? next : current;
         });
+        // A session going back to agent_running means the user re-engaged that
+        // terminal (e.g. submitted a new prompt), so retire its pending
+        // "completion" green dot immediately. The backend also acknowledges the
+        // completion on UserPromptSubmit; this clears the local marker without
+        // waiting for a session list refresh.
+        const rerunSessionIds = stateEvents
+          .filter(
+            (event) =>
+              event.kind === "terminal_state_changed" &&
+              event.payload.next.state === "agent_running",
+          )
+          .map((event) => event.terminalSessionId);
+        if (rerunSessionIds.length > 0) {
+          setCompletionMarkers((current) => {
+            let changed = false;
+            const next = { ...current };
+            for (const terminalSessionId of rerunSessionIds) {
+              if (next[terminalSessionId] !== undefined) {
+                delete next[terminalSessionId];
+                changed = true;
+              }
+            }
+            return changed ? next : current;
+          });
+        }
       }
 
       const panelEvents = events.filter(
