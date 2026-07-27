@@ -300,21 +300,25 @@ projection 会生成普通 app-server event：
 ## Codex Thread 状态补偿
 
 App Server 内置一个低频 Codex Thread 状态补偿器。它不保存完整 thread 内容，只读取
-当前 projection 中最近活跃且 `agent=codex` 的 ThreadRef，然后按同一策略轮询
-Codex app-server 的 `thread/read`：
+当前 projection 中最近活跃且 `agent=codex` 的 ThreadRef，然后轮询独立 Codex
+app-server 的 `thread/read`：
 
 - 默认启动延迟 10 秒。
 - 默认间隔 30 秒。
 - 只处理最近 3 小时内活跃的 ThreadRef。
 - 单轮最多处理 100 个候选 ThreadRef。
 
-当 Codex 返回的真实 thread status 与 App Server projection 不一致时，补偿器写入
-一条普通 `agent.hook` 事件：
+独立 Codex app-server 的 thread load 状态不是其它 TUI 进程的全局 turn 状态。因此
+补偿器不为状态查询调用 `thread/resume`，并且只把 `active` 作为 Codex 正在运行的正向
+证据；`idle`、`notLoaded`、`systemError` 和读取失败都不能覆盖 hook projection，尤其
+不能把 `running` 改成 `idle`。
 
-- `kind="agent.hook"`
+当 Codex 返回 `active` 且 App Server projection 不一致时，补偿器写入一条普通
+`agent.lifecycle.observed` 事件：
+
+- `kind="agent.lifecycle.observed"`
 - `payload.source="codex"`
-- Codex `idle` -> `payload.stateHookEvent="Stop"`
-- Codex `active` -> `payload.stateHookEvent="UserPromptSubmit"`
+- `payload.observedStatus="running"`
 - `payload.compensation=true`
 - `payload.compensationReason="codex_thread_status_mismatch"`
 

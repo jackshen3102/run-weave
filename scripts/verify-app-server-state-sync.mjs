@@ -379,37 +379,47 @@ async function verifyWebSocketStateEvents(context) {
 }
 
 async function verifyCodexThreadStatusCompensation(context) {
-  const threadId = "thread-compensation";
+  const idleThreadId = "thread-idle-observation";
+  const unloadedThreadId = "thread-cross-process";
   const activeThreadId = "thread-active-compensation";
-  const running = await postEvent(
+  const idleRunning = await postEvent(
     context,
     hookEvent("UserPromptSubmit", {
-      correlationId: threadId,
-      scope: { terminalPanelId: "panel-compensation" },
+      correlationId: idleThreadId,
+      scope: { terminalPanelId: "panel-idle-observation" },
     }),
   );
-  assert.equal(running.status, 201);
-  assert.equal((await getThread(context, threadId)).thread.status, "running");
+  assert.equal(idleRunning.status, 201);
+  const unloadedRunning = await postEvent(
+    context,
+    hookEvent("UserPromptSubmit", {
+      correlationId: unloadedThreadId,
+      scope: { terminalPanelId: "panel-cross-process" },
+    }),
+  );
+  assert.equal(unloadedRunning.status, 201);
 
-  await waitFor(async () => {
-    const thread = await getThread(context, threadId);
-    return thread.thread.status === "idle" ? thread : null;
-  });
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(
+    (await getThread(context, idleThreadId)).thread.status,
+    "running",
+  );
+  assert.equal(
+    (await getThread(context, unloadedThreadId)).thread.status,
+    "running",
+  );
   const events = await getJson(
     context,
-    `/events?after=${running.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
+    `/events?after=${idleRunning.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
   );
-  const compensationEvent = events.events.find(
-    (event) =>
-      event.correlationId === threadId && event.payload?.compensation === true,
-  );
-  assert.ok(compensationEvent);
-  assert.equal(compensationEvent.payload.source, "codex");
-  assert.equal(compensationEvent.payload.observedStatus, "idle");
-  assert.equal(compensationEvent.payload.observedLifecycle, "thread/read:idle");
   assert.equal(
-    compensationEvent.payload.compensationReason,
-    "codex_thread_status_mismatch",
+    events.events.some(
+      (event) =>
+        (event.correlationId === idleThreadId ||
+          event.correlationId === unloadedThreadId) &&
+        event.payload?.observedStatus === "idle",
+    ),
+    false,
   );
 
   await postEvent(
@@ -430,7 +440,7 @@ async function verifyCodexThreadStatusCompensation(context) {
   });
   const activeEvents = await getJson(
     context,
-    `/events?after=${running.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
+    `/events?after=${idleRunning.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
   );
   const activeCompensationEvent = activeEvents.events.find(
     (event) =>

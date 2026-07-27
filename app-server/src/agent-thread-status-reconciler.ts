@@ -162,28 +162,18 @@ export class AgentThreadStatusReconciler {
     if (thread.agent === "codex") {
       const status = await this.options.codexStatusReader.readThreadStatus(
         thread.threadId,
-        { cwd: thread.cwd },
       );
-      if (!status || status === "systemError") {
+      if (status !== "active") {
         return null;
       }
-      const observedStatus =
-        status === "active"
-          ? "running"
-          : status === "idle" ||
-              (status === "notLoaded" && thread.status === "running")
-            ? "idle"
-            : null;
-      return observedStatus
-        ? {
-            status: observedStatus,
-            lifecycleType: `thread/read:${status}`,
-            lifecycleCursor: `thread/read:${status}`,
-            detailStatus: null,
-            preview: null,
-            turnId: null,
-          }
-        : null;
+      return {
+        status: "running",
+        lifecycleType: `thread/read:${status}`,
+        lifecycleCursor: `thread/read:${status}`,
+        detailStatus: null,
+        preview: null,
+        turnId: null,
+      };
     }
 
     const detail = await this.options.traeLifecycleReader.readThread(

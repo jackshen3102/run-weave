@@ -53,7 +53,7 @@ Agent hook 的接收身份以 Panel 为最小作用域。Backend 为每个 Agent
 
 Trae family 的 ready 判定必须来自当前启动轮次的真实输出。Agent Team 在 tmux-backed pane 中启动 TraeX worker 时，会先建立 pane-local startup output boundary，再发送启动命令；ready detector 必须同时看到 active command owner 仍属于 Trae family，并在该 boundary 之后看到新的 ready prompt。旧 ready 画面、其他 pane 输出、启动失败后的残留 prompt 或仅有 owner 切换都不能把状态推进为可派发任务。
 
-另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 自身也可以在 Codex `thread/read` 轮询发现 projected 状态与真实 thread 状态不一致时，写入一条 `payload.compensation=true` 的 `agent.hook` 补偿事件；backend 仍把它当作普通 hook 事件处理。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
+另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 的独立 Codex app-server 进程也可以用 `thread/read=active` 写入 `payload.compensation=true` 的 lifecycle observation，把陈旧 projection 恢复为 `agent_running`；但 `idle`、`notLoaded`、`systemError` 和读取失败都不是其它 TUI 进程已停止的证据，不能合成 `Stop` 或把 `agent_running` 改成 `agent_idle`。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
 
 终端 session 生命周期是最高优先级 guard。只要 session 已退出，读取当前状态时必须返回 `shell_idle`，即使内存里残留了 agent 状态或 active command。
 

@@ -195,8 +195,12 @@ export function createStateSyncHarness({
     if (message.method === "thread/read" || message.method === "thread/resume") {
       const threadId = message.params?.threadId;
       const type =
-        threadId === "thread-compensation"
+        threadId === "thread-idle-observation"
           ? "idle"
+          : threadId === "thread-cross-process"
+            ? message.method === "thread/read"
+              ? "notLoaded"
+              : "idle"
           : threadId === "thread-active-compensation"
             ? "active"
             : null;
