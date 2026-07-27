@@ -16,10 +16,7 @@ export type CodexThreadStatusType =
   | "active";
 
 export interface CodexThreadStatusReader {
-  readThreadStatus(
-    threadId: string,
-    options?: { cwd?: string | null },
-  ): Promise<CodexThreadStatusType | null>;
+  readThreadStatus(threadId: string): Promise<CodexThreadStatusType | null>;
   shutdown(): void;
 }
 
@@ -86,7 +83,6 @@ export class CodexAppServerClient
 
   async readThreadStatus(
     threadId: string,
-    options: { cwd?: string | null } = {},
   ): Promise<CodexThreadStatusType | null> {
     let response: CodexThreadReadResponse | null = null;
     try {
@@ -99,23 +95,7 @@ export class CodexAppServerClient
         throw error;
       }
     }
-    const status = normalizeStatusType(response?.thread?.status?.type);
-    if (status !== "notLoaded") {
-      return status;
-    }
-    let resumed: CodexThreadReadResponse | null = null;
-    try {
-      resumed = (await this.sendRequest("thread/resume", {
-        threadId,
-        ...(options.cwd ? { cwd: options.cwd } : {}),
-      })) as CodexThreadReadResponse | null;
-    } catch (error) {
-      if (isCodexThreadUnavailableError(error)) {
-        return "notLoaded";
-      }
-      throw error;
-    }
-    return normalizeStatusType(resumed?.thread?.status?.type);
+    return normalizeStatusType(response?.thread?.status?.type);
   }
 
   async readThreadDetail(
