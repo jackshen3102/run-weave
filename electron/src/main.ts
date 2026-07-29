@@ -58,10 +58,6 @@ import {
 } from "./desktop-companion-window.js";
 import { readCompanionEnabled, writeCompanionEnabled } from "./desktop-companion-preferences.js";
 import { writeDesktopCompanionWindowState } from "./desktop-companion-window-state.js";
-import {
-  readDesktopMainWindowState,
-  trackDesktopMainWindowState,
-} from "./desktop-main-window-state.js";
 
 function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 512;
@@ -395,32 +391,13 @@ if (hasSingleInstanceLock) {
         return createWindow();
       };
 
-      const createMainWindow = (options?: {
-        initialPath?: string;
-        onReadyToShow?: (win: BrowserWindow) => void;
-      }): BrowserWindow => {
-        const restoredState = isBetaChannel
-          ? null
-          : readDesktopMainWindowState();
-        const win = createWindow({
-          hideOnClose: true,
-          initialBounds: restoredState?.bounds,
-          initialMode: restoredState?.mode,
-          initialPath: options?.initialPath,
-          onReadyToShow: options?.onReadyToShow,
-        });
-        if (!isBetaChannel) {
-          trackDesktopMainWindowState(win, restoredState?.mode ?? "normal");
-        }
-        return win;
-      };
-
       const openSystemMonitor = (): void => {
         if (
           !desktopRuntime.mainWindow ||
           desktopRuntime.mainWindow.isDestroyed()
         ) {
-          desktopRuntime.mainWindow = createMainWindow({
+          desktopRuntime.mainWindow = createWindow({
+            hideOnClose: true,
             initialPath: "/system-monitor",
           });
           return;
@@ -443,7 +420,8 @@ if (hasSingleInstanceLock) {
         ),
       );
 
-      desktopRuntime.mainWindow = createMainWindow({
+      desktopRuntime.mainWindow = createWindow({
+        hideOnClose: true,
         onReadyToShow: (win) => {
           writeBetaDesktopStatus();
           void checkAndNotifyAppServerAvailability(process.env, win);
@@ -492,7 +470,7 @@ if (hasSingleInstanceLock) {
           !desktopRuntime.mainWindow ||
           desktopRuntime.mainWindow.isDestroyed()
         ) {
-          desktopRuntime.mainWindow = createMainWindow();
+          desktopRuntime.mainWindow = createWindow({ hideOnClose: true });
           createTray(desktopRuntime.mainWindow, {
             enableUpdates: !isBetaChannel,
             onOpenSystemMonitor: openSystemMonitor,
