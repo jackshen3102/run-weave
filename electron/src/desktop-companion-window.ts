@@ -89,6 +89,7 @@ export function createCompanionWindow(): BrowserWindow {
     ...bounds,
     transparent: true,
     frame: false,
+    type: process.platform === "darwin" ? "panel" : undefined,
     resizable: false,
     skipTaskbar: true,
     show: false,
