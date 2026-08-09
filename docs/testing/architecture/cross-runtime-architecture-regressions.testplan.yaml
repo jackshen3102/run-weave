@@ -51,15 +51,15 @@ cases:
     name: 质量门禁与声明的执行范围一致
     required: true
     description: >
-      验证架构、类型、lint、构建和 E2E 命令真实执行，质量报告与文档不会把未执行的
-      静态或行为检查宣称为已通过。
+      验证文档、架构、类型、lint、构建和 E2E 命令真实执行，质量报告与文档不会把未执行、
+      无测试资产或已失败的静态与行为检查宣称为已通过。
     preconditions:
-      - 仓库存在 `pnpm architecture:check`、`pnpm test:e2e` 与质量门禁命令。
-      - 可在隔离 fixture 中制造一个架构违规和一个 Playwright 失败。
+      - 仓库存在 `pnpm docs:check`、`pnpm architecture:check`、`pnpm test:e2e` 与质量门禁命令。
+      - 可在隔离 fixture 中制造一个文档死链和一个架构违规；若仓库存在 tracked Playwright spec，还可制造一个 E2E 断言失败。
     steps:
-      - 依次执行 `pnpm architecture:check`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm test:e2e`、`pnpm quality:gate` 与 `git diff --check`。
-      - 分别引入隔离架构违规和 E2E 断言失败后重跑对应命令，并对照质量报告、`docs/testing/layers.md` 与 `docs/testing/command-matrix.md`。
-      - 确认真实失败均导致非零退出，质量报告列出实际执行的 architecture、static、E2E 步骤，文档不夸大执行范围。
+      - 依次执行 `pnpm docs:check`、`pnpm architecture:check`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm test:e2e`、`pnpm quality:gate` 与 `git diff --check`。
+      - 分别引入隔离文档死链和架构违规后重跑对应命令；若仓库存在 tracked Playwright spec，再制造 E2E 断言失败，并对照质量报告、`docs/testing/layers.md` 与 `docs/testing/command-matrix.md`。
+      - 确认真实失败均导致非零退出，质量报告列出实际执行的 docs、architecture、static、E2E 步骤；无 tracked Playwright spec 时 `No tests found` 必须保持阻塞，文档不得夸大执行范围。
 
   - id: CAR-005
     name: Stable 与 Beta 更新失败可回滚

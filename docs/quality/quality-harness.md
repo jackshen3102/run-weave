@@ -17,18 +17,23 @@
 
 ## 分层思路（概念级）
 
+- **文档层**：`pnpm docs:check` 检查 L1/L2 必需入口和受治理 Markdown 的本地相对链接。
 - **架构层**：`pnpm architecture:check` 检查 600 行 ratchet、循环依赖、反向依赖和共享根导入债务。
-- **E2E 层**：Playwright 覆盖登录和 Terminal Workspace 基线；更深的终端、App、Electron 行为按测试案例用 `$playwright-cli` / `$computer-use` 真实取证。
+- **E2E 层**：只允许 `frontend/tests/*.spec.ts` 的 Playwright 自动化；当前没有受 Git 管理的 spec，
+  因此该层会以 `No tests found` 阻塞。终端、App、Electron 行为按测试计划用
+  `$playwright-cli` / `$computer-use` 真实取证。
 - **静态/构建层**：backend、shared、electron、Runweave CLI、App 通过 typecheck、lint、build 或手工冒烟验证。
 
 具体命名与映射见：`docs/testing/layers.md`
 
 ## 入口命令（概览）
 
-- `pnpm run test:e2e`：前端 Playwright 关键路径。
+- `pnpm run test:e2e`：前端 Playwright 入口；当前无 tracked spec，预期以 `No tests found` 非零退出。
 - `pnpm test`：等同于 `pnpm run test:e2e`。
+- `pnpm docs:check`：校验文档入口与仓库内相对链接。
 - `pnpm architecture:report`：生成 `artifacts/architecture-report.json`，报告当前结构债务。
-- `pnpm run quality:gate`：按变更选择 architecture、typecheck/lint 和 Playwright smoke E2E；不运行单测或 coverage。
+- `pnpm run quality:gate`：按变更选择 docs、architecture、typecheck/lint 和 Playwright E2E；当前
+  E2E 资产为空时不会把该层误报为通过。
 
 ## 按需录屏验收
 
@@ -36,12 +41,10 @@
 
 该能力是最终验收证据层，不替代 E2E 断言。详细设计见：`docs/quality/recorded-browser-mcp-verification.md`
 
-## 自动化基线（高层）
+## 行为验收
 
-- 登录成功
-- 进入 Terminal Workspace
-- 默认 Project 与新建 Terminal / Project 入口可见
-
-创建会话、输入回执、重连恢复、Terminal Browser、App 和 Electron 仍必须执行对应 `docs/testing/*` 的真实环境用例，不能由 smoke E2E 代替。
+登录、Terminal Workspace、创建会话、输入回执、重连恢复、Terminal Browser、App 和 Electron
+必须执行对应 `docs/testing/*` 的真实环境用例。只有仓库重新加入明确的 Playwright spec 后，
+这些 spec 才能作为补充自动化证据，不能由命令入口本身代替。
 
 详细选择策略见：`docs/testing/command-matrix.md`
