@@ -4,7 +4,8 @@
 
 ## 先看哪里
 
-- 应用装配、路由和 Electron bridge 类型：`src/App.tsx`
+- 应用装配与路由：`src/App.tsx`
+- Electron bridge 宿主声明：`src/types/desktop-bridge.d.ts`
 - 页面级入口：`src/pages/`
 - 按能力聚合的状态与 UI：`src/features/`
 - 后端 HTTP 调用：`src/services/`

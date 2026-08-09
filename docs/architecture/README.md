@@ -49,7 +49,8 @@
 
 - UI 运行时通过 `@runweave/shared` 使用协议，不导入 Backend 或 Electron 实现。
 - `frontend/` 通过 HTTP/WebSocket 连接 `backend/`；在桌面形态下仅通过 preload bridge 请求
-  Electron 主进程能力。
+  Electron 主进程能力。bridge 类型合同统一由 `@runweave/shared/desktop-bridge` 提供，
+  Electron preload 使用完整合同，Frontend 通过可选宿主合同兼容旧安装态能力。
 - `app/` 通过 Backend API 工作，不依赖 Electron。
 - `backend/` 通过 `backend/src/app-server/` 消费 App Server，不把 App Server 并入自身状态。
 - `packages/shared` 不依赖具体运行时；`packages/common` 不承载协议、存储或 Node/Electron 能力。

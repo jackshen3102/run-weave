@@ -7,58 +7,25 @@ import type {
 } from "@runweave/shared/agent-team";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { TerminalSessionRecord } from "../terminal/manager";
-import {
-  buildAcceptanceSkipCorrectionPrompt,
-  buildBehaviorFailureCorrectionPrompt,
-  buildCodeFixHandoffCorrectionPrompt,
-  buildReviewFindingCorrectionPrompt,
-} from "./prompt-builders";
+import { buildCodeFixHandoffCorrectionPrompt } from "./prompt-builders";
 import { agentTeamLogger } from "./service-context";
-import {
-  logConsumedCompletion,
-  logReconciledCompletion,
-  logStaleCompletion,
-} from "./service-completion-logging";
-import { AgentTeamCompletionRecoveryService } from "./service-completion-recovery";
-import { recordEvolutionCodeObservation } from "./service-evolution-outcome";
+import { logReconciledCompletion } from "./service-completion-logging";
+import { AgentTeamCompletionPreparationService } from "./service-completion-preparation";
 import type { AgentTeamCompletionSignalSource } from "./service-types";
-import {
-  behaviorFailureContractErrors,
-  resolvePendingFindingDecision,
-  reviewFindingContractErrors,
-  validateCodeFixHandoff,
-  type AgentTeamRepairTarget,
-} from "./repair-loop";
-import { captureRepairSourceFingerprint } from "./repair-source-fingerprint";
+import { validateCodeFixHandoff } from "./repair-loop";
 import {
   acceptanceCasesForRole,
-  behaviorSkipContractErrors,
   ensureWorkerGateAcceptance,
   expandRecheckCasesForFailures,
   isImplementationWorkerOutbox,
   resolveRecheckDispatches,
 } from "./service-acceptance-policy";
 import {
-  completionOutboxIdentityMismatch,
-  completionReviewTargetMismatch,
-  completionSignalWorkerMismatch,
-  findWorkerByRole,
   parseWorkerRole,
-  resolveActiveWorkerDispatch,
   shouldDispatchNextSerialWorker,
-  workerOutboxFreshnessMismatch,
 } from "./service-workflow-policy";
 
-export abstract class AgentTeamCompletionService extends AgentTeamCompletionRecoveryService {
-  protected abstract resolveOutboxRound(
-    run: AgentTeamRun,
-    outbox: AgentTeamWorkerOutbox,
-  ): {
-    acceptanceResults: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>;
-    forceBounceCaseIds: string[];
-    repairTargets: AgentTeamRepairTarget[];
-  };
-
+export abstract class AgentTeamCompletionService extends AgentTeamCompletionPreparationService {
   protected abstract markRecheckDispatchFailed(
     run: AgentTeamRun,
     session: TerminalSessionRecord,
@@ -92,145 +59,37 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
         ) {
           return false;
         }
-        const resolvedOutbox =
-          await this.outboxResolver.resolveOutboxWithMetadata(event);
-        if (!resolvedOutbox) {
-          return false;
-        }
-        const { outbox, mtimeMs: outboxMtimeMs } = resolvedOutbox;
-        const consumedReceipt = outbox.dispatchId
-          ? latest.consumedWorkerDispatches?.find(
-              (receipt) => receipt.dispatchId === outbox.dispatchId,
-            )
-          : null;
-        if (consumedReceipt) {
-          logConsumedCompletion(source, latest, consumedReceipt);
-          return true;
-        }
-        if (!latest.activeWorkerRole) {
-          return false;
-        }
-        const activeWorker = findWorkerByRole(
-          latest.workers,
-          latest.activeWorkerRole,
-        );
-        if (!activeWorker) {
-          return false;
-        }
-        const signalMismatch = completionSignalWorkerMismatch(
+        const contextResult = await this.resolveCompletionContext(
+          latest,
           event,
-          activeWorker,
+          source,
         );
-        if (signalMismatch) {
-          logStaleCompletion(source, latest, activeWorker, signalMismatch);
-          return false;
+        if (contextResult.status === "stop") {
+          return contextResult.handled;
         }
-        const dispatch = resolveActiveWorkerDispatch(latest, activeWorker);
-        if (!dispatch) {
-          await this.recoverMissingActiveWorkerDispatch(latest, activeWorker);
-          return true;
-        }
-        const identityMismatch = completionOutboxIdentityMismatch(
+        const context = contextResult.value;
+        const archivedResult = await this.archiveAndVerifyCompletion(
           latest,
-          activeWorker,
-          dispatch,
-          outbox,
-          source !== "terminal_event",
+          event,
+          context,
         );
-        if (identityMismatch) {
-          if (
-            identityMismatch === "active_dispatch_id_missing" ||
-            identityMismatch === "outbox_dispatch_id_missing"
-          ) {
-            await this.pauseForRepairProtocolError(
-              latest,
-              `dispatch-id-v1 协议错误：${identityMismatch}`,
-            );
-            return true;
-          }
-          logStaleCompletion(source, latest, activeWorker, identityMismatch);
-          return false;
+        if (archivedResult.status === "stop") {
+          return archivedResult.handled;
         }
-        const freshnessMismatch = workerOutboxFreshnessMismatch(
-          dispatch,
-          outboxMtimeMs,
-        );
-        if (freshnessMismatch) {
-          logStaleCompletion(source, latest, activeWorker, freshnessMismatch);
-          return false;
-        }
-        let archivedOutbox;
-        try {
-          archivedOutbox = await this.outboxHistoryStore.archive({
-            run: latest,
-            dispatch,
-            resolvedOutbox,
-            cwd: event.payload.cwd,
-          });
-        } catch (error) {
-          await this.pauseForRepairProtocolError(
-            latest,
-            `worker outbox 历史归档失败：${error instanceof Error ? error.message : String(error)}`,
-          );
-          return true;
-        }
-        const transitionRun = this.withConsumedWorkerDispatch(
-          latest,
-          archivedOutbox.record,
-        );
-        if (dispatch.protocolCorrectionAttempt) {
-          const expected = dispatch.protocolCorrectionSourceFingerprint;
-          if (!expected) {
-            await this.pauseForRepairProtocolError(
-              transitionRun,
-              "协议补交缺少源码指纹，无法证明补交期间未修改源码",
-            );
-            return true;
-          }
-          try {
-            const actual = await captureRepairSourceFingerprint(
-              this.resolveRequiredProjectRoot(
-                latest.projectId,
-                event.payload.cwd ?? latest.terminal.cwd ?? "",
-              ),
-            );
-            if (
-              actual.repoRoot !== expected.repoRoot ||
-              actual.sha256 !== expected.sha256
-            ) {
-              await this.pauseForRepairProtocolError(
-                transitionRun,
-                "协议补交期间源码、Git HEAD 或 index 已变化",
-              );
-              return true;
-            }
-          } catch (error) {
-            await this.pauseForRepairProtocolError(
-              transitionRun,
-              `协议补交源码指纹复核失败：${error instanceof Error ? error.message : String(error)}`,
-            );
-            return true;
-          }
-        }
-        const reviewTargetMismatch = completionReviewTargetMismatch(
-          latest,
-          outbox,
-        );
-        if (reviewTargetMismatch) {
-          await this.pauseForCheckpointError(
-            transitionRun,
-            reviewTargetMismatch,
-          );
-          return true;
-        }
-        if (outbox.role === "behavior_verify" && latest.reviewCheckpoint) {
+        const { transitionRun, archivedOutbox } = archivedResult.value;
+        if (
+          context.outbox.role === "behavior_verify" &&
+          latest.reviewCheckpoint
+        ) {
           const expectedCheckpointCommit =
             latest.activeWorkerDispatch?.verifiedCheckpointCommit ??
             latest.reviewCheckpoint.lastReviewedCommit;
-          if (outbox.verifiedCheckpointCommit !== expectedCheckpointCommit) {
+          if (
+            context.outbox.verifiedCheckpointCommit !== expectedCheckpointCommit
+          ) {
             await this.pauseForCheckpointError(
               transitionRun,
-              `behavior outbox checkpoint 不匹配：expected ${expectedCheckpointCommit}，actual ${outbox.verifiedCheckpointCommit ?? "null"}`,
+              `behavior outbox checkpoint 不匹配：expected ${expectedCheckpointCommit}，actual ${context.outbox.verifiedCheckpointCommit ?? "null"}`,
             );
             return true;
           }
@@ -250,119 +109,16 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
             return true;
           }
         }
-        const initialRound = this.resolveOutboxRound(latest, outbox);
-        const skipContractErrors =
-          outbox.role === "behavior_verify"
-            ? behaviorSkipContractErrors(latest, initialRound.acceptanceResults)
-            : [];
-        if (skipContractErrors.length > 0) {
-          await this.handleProtocolCorrection(
-            transitionRun,
-            activeWorker,
-            outboxMtimeMs,
-            skipContractErrors,
-            (run) =>
-              buildAcceptanceSkipCorrectionPrompt({
-                run,
-                errors: skipContractErrors,
-              }),
-            "behavior_verify skip",
-          );
-          return true;
-        }
-        const behaviorContractErrors = behaviorFailureContractErrors(
-          outbox,
-          initialRound.acceptanceResults,
-        );
-        if (behaviorContractErrors.length > 0) {
-          await this.handleProtocolCorrection(
-            transitionRun,
-            activeWorker,
-            outboxMtimeMs,
-            behaviorContractErrors,
-            (run) =>
-              buildBehaviorFailureCorrectionPrompt({
-                run,
-                errors: behaviorContractErrors,
-              }),
-            "behavior_verify reproduction",
-          );
-          return true;
-        }
-        const reviewContractErrors = reviewFindingContractErrors(
+        const contractResult = await this.validateCompletionContracts(
           latest,
-          outbox,
-          initialRound.acceptanceResults,
+          transitionRun,
+          context,
         );
-        if (reviewContractErrors.length > 0) {
-          await this.handleProtocolCorrection(
-            transitionRun,
-            activeWorker,
-            outboxMtimeMs,
-            reviewContractErrors,
-            (run) =>
-              buildReviewFindingCorrectionPrompt({
-                run,
-                errors: reviewContractErrors,
-              }),
-            "code_review finding",
-          );
-          return true;
+        if (contractResult.status === "stop") {
+          return contractResult.handled;
         }
-        const pendingFindingDecision = resolvePendingFindingDecision(
-          latest,
-          outbox,
-        );
-        if (pendingFindingDecision) {
-          await this.pauseForFindingDecision(
-            transitionRun,
-            pendingFindingDecision,
-          );
-          return true;
-        }
-        if (outbox.role === "code") {
-          const handoff = validateCodeFixHandoff(latest, outbox);
-          if (handoff.status === "reviewer_reproduction_required") {
-            await this.dispatchSerialWorker(transitionRun, "code_review", {
-              cases: acceptanceCasesForRole(latest, "code_review"),
-              log: "code 无法复现重复 review finding，回派 reviewer 现场举证",
-              triggerSummary: handoff.reason,
-              reviewChallenge: {
-                repairKeys: handoff.repairKeys,
-                reason: handoff.reason,
-              },
-            });
-            return true;
-          }
-          if (handoff.status === "blocked") {
-            await this.pauseForRepairProtocolError(
-              transitionRun,
-              handoff.reason,
-            );
-            return true;
-          }
-          if (handoff.status === "invalid") {
-            await this.handleProtocolCorrection(
-              transitionRun,
-              activeWorker,
-              outboxMtimeMs,
-              handoff.errors,
-              (run) =>
-                buildCodeFixHandoffCorrectionPrompt({
-                  run,
-                  errors: handoff.errors,
-                }),
-              "code fixVerifications",
-            );
-            return true;
-          }
-          await recordEvolutionCodeObservation({
-            observer: this.evolutionOutcomeObserver,
-            run: latest,
-            dispatch,
-            outbox,
-          });
-        }
+        const initialRound = contractResult.value;
+        const { activeWorker, outbox, outboxMtimeMs } = context;
         const shouldDispatchRecheck = this.hasBouncedCasesForWorker(
           latest,
           outbox,
@@ -481,6 +237,48 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionReco
         },
       ],
     };
+  }
+
+  protected async validateCodeHandoff(
+    latest: AgentTeamRun,
+    transitionRun: AgentTeamRun,
+    activeWorker: AgentTeamWorker,
+    outbox: AgentTeamWorkerOutbox,
+    outboxMtimeMs: number | null,
+  ): Promise<"ready" | "stopped"> {
+    const handoff = validateCodeFixHandoff(latest, outbox);
+    if (handoff.status === "reviewer_reproduction_required") {
+      await this.dispatchSerialWorker(transitionRun, "code_review", {
+        cases: acceptanceCasesForRole(latest, "code_review"),
+        log: "code 无法复现重复 review finding，回派 reviewer 现场举证",
+        triggerSummary: handoff.reason,
+        reviewChallenge: {
+          repairKeys: handoff.repairKeys,
+          reason: handoff.reason,
+        },
+      });
+      return "stopped";
+    }
+    if (handoff.status === "blocked") {
+      await this.pauseForRepairProtocolError(transitionRun, handoff.reason);
+      return "stopped";
+    }
+    if (handoff.status === "invalid") {
+      await this.handleProtocolCorrection(
+        transitionRun,
+        activeWorker,
+        outboxMtimeMs,
+        handoff.errors,
+        (run) =>
+          buildCodeFixHandoffCorrectionPrompt({
+            run,
+            errors: handoff.errors,
+          }),
+        "code fixVerifications",
+      );
+      return "stopped";
+    }
+    return "ready";
   }
 
   protected hasBouncedCasesForWorker(
