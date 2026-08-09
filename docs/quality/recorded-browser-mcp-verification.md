@@ -232,7 +232,7 @@ artifacts/verification-runs/2026-04-30T12-30-00/
       "status": "passed"
     },
     {
-      "command": "pnpm --filter ./frontend exec playwright test tests/smoke.spec.ts",
+      "command": "<当前仓库实际存在的 Playwright spec 命令；若无则省略>",
       "status": "passed"
     }
   ],
@@ -319,7 +319,7 @@ artifacts/verification-runs/2026-04-30T12-30-00/
 
 常规验证：
 - pnpm run typecheck: passed
-- pnpm --filter ./frontend exec playwright test tests/smoke.spec.ts: passed
+- <当前仓库实际存在的 Playwright spec 命令>: passed（若无 tracked spec 则明确写未执行）
 
 浏览器 MCP 页面录屏验证：
 - 录制对象：当前浏览器 MCP 页面 viewport

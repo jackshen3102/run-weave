@@ -1,96 +1,53 @@
 # Runweave 文档总览
 
-面向 Runweave 工程与智能体的**唯一完整文档索引**。按需读取，避免在单一文档里堆叠细节。
+面向 Runweave 工程与智能体的 L1 文档入口。这里只负责把任务路由到下一层索引，
+不维护每一份文件的重复清单。
 
-文档分两类：
+## 从哪里开始
 
-- **活文档**：描述系统当前事实，需要保鲜（architecture / cli / deployment / quality / testing）。
-- **历史归档**：记录特定基线的一次性产物，不代表当前事实（architecture-flows / prototypes）。计划、评审和执行记录不再作为长期文档保留。
+| 你要做什么                                | 下一步                                             |
+| ----------------------------------------- | -------------------------------------------------- |
+| 先理解代码目录、运行时和依赖方向          | [architecture/README.md](./architecture/README.md) |
+| 使用或修改 `rw` CLI                       | [cli/README.md](./cli/README.md)                   |
+| 启动、部署、更新或管理 Beta / Dev Session | [deployment/README.md](./deployment/README.md)     |
+| 选择质量门禁、日志或运行证据              | [quality/README.md](./quality/README.md)           |
+| 编写、查找或执行测试计划                  | [testing/README.md](./testing/README.md)           |
+| 查看历史架构流程或交互原型                | [历史产物](#历史产物冻结)                          |
 
----
+改动某个运行时或包前，还要读目标目录下的 `AGENTS.md`。完整清单以文件系统为准：
 
-## 架构理解（活文档）
+```bash
+git ls-files '**/AGENTS.md' 'AGENTS.md'
+```
 
-| 需求                             | 阅读                                                            |
-| -------------------------------- | --------------------------------------------------------------- |
-| 架构 / 网络拓扑                  | architecture/network-topology.md                                |
-| app-server 架构概览              | architecture/app-server-architecture.md                         |
-| app-server Event Center 细节     | architecture/app-server-event-center.md                         |
-| Activity / Work History          | architecture/app-server-event-center.md#work-history-聚合边界   |
-| App 移动端边界                   | architecture/app-mobile.md                                      |
-| App 后端连接管理                 | architecture/app-mobile.md#配置与安全                           |
-| App 终端语音输入                 | architecture/app-mobile.md#app-终端语音输入                     |
-| App 终端输入与快捷键             | architecture/app-mobile.md#app-终端详情                         |
-| 终端状态模型                     | architecture/terminal-state.md                                  |
-| Terminal Worktree Project 上下文 | architecture/terminal-worktree-context.md                       |
-| 终端代码预览 / Terminal Browser  | architecture/terminal-code-preview.md                           |
-| 多项目原型轮巡库                 | architecture/terminal-code-preview.md#多项目原型轮巡库          |
-| Web Terminal 快捷指令            | architecture/terminal-code-preview.md#快捷指令入口              |
-| Terminal Browser 注释模式        | architecture/terminal-code-preview.md#terminal-browser-注释模式 |
-| 终端 tmux 恢复                   | architecture/terminal-tmux-recovery.md                          |
-| 终端完成事件 Hook                | architecture/terminal-completion-hooks.md                       |
-| 终端任务完成通知（桌面/飞书）    | architecture/terminal-completion-notifications.md               |
-| Agent Team / Loop Engine         | architecture/multi-agent-orchestrator.md                        |
-| Agent Self-Evolution             | architecture/agent-self-evolution.md                            |
-| 本机系统资源监控                 | architecture/system-monitor.md                                  |
+## 文档分层
 
-## 操作指南（活文档）
+### 当前真相
 
-| 需求                         | 阅读                                 |
-| ---------------------------- | ------------------------------------ |
-| Terminal CLI                 | cli/terminal-cli.md                  |
-| Agent Team CLI               | cli/agent-team-cli.md                |
-| Evolution CLI                | cli/evolution-cli.md                 |
-| 部署 / 环境概览              | deployment/overview.md               |
-| 飞书应用通知与 Terminal 回复 | deployment/feishu-app-integration.md |
-| Electron 本地自动更新        | deployment/electron-local-updates.md |
-| Runweave Beta 自举通道       | deployment/runweave-beta.md          |
+`architecture/`、`cli/`、`deployment/`、`quality/`、`testing/` 描述当前实现、
+操作合同和验证入口。它们需要随代码保鲜，是 Agent 判断现状的首要文档来源。
 
-## 质量与可观测（活文档）
+### 过程材料
 
-| 需求                       | 阅读                                         |
-| -------------------------- | -------------------------------------------- |
-| 质量体系概览               | quality/quality-harness.md                   |
-| AI 诊断日志 / Web 日志上报 | quality/ai-diagnostic-logging.md             |
-| 后端滚动日志               | quality/backend-rolling-logs.md              |
-| 按需录屏的浏览器 MCP 验证  | quality/recorded-browser-mcp-verification.md |
-| 终端性能优化               | quality/terminal-performance-optimization.md |
+`plans/` 与 `review/` 只承载正在进行的计划和评审，不是当前事实。任务完成后：
 
-## 测试用例（活文档）
+- 把仍有效的架构边界、操作合同和验收入口迁入当前真相；
+- 删除已完成的过程文件及只服务于它们的资产；
+- 不从旧 plan 或 review 反推现有实现。
 
-供人或 agent 执行的测试用例与回归清单，非可执行测试代码。新增或重写的测试计划统一使用
-`*.testplan.yaml`；Agent Team 只解析该格式，不兼容 Markdown 用例。格式规范见
-`testing/test-plan-format.md`，测试层级与命令选择见 `testing/layers.md` 和
-`testing/command-matrix.md`。
+### 历史产物（冻结）
 
-| 核心系统能力                          | 测试计划                                                                                                                   |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| YAML 格式、20 条上限与编写原则        | testing/test-plan-format.md                                                                                                |
-| 测试层级与命令选择                    | testing/layers.md、testing/command-matrix.md                                                                               |
-| Agent Team 生命周期、执行、恢复与完成 | testing/agent-team/README.md                                                                                               |
-| Terminal 运行时和多 Pane              | testing/terminal/terminal-runtime-core.testplan.yaml                                                                       |
-| Terminal Browser、CDP 与 MCP          | testing/terminal/terminal-browser-core.testplan.yaml                                                                       |
-| Worktree Project Context              | testing/terminal/worktree-project-context.testplan.yaml                                                                    |
-| Dev Session、Beta、更新与 CLI         | testing/platform/development-control-plane.testplan.yaml                                                                   |
-| Beta Pool canonical 控制面与恢复      | testing/platform/beta-pool-storage-migration.testplan.yaml                                                                 |
-| Beta Pool 长期运行与生产回归          | testing/platform/beta-pool-runtime-regressions.testplan.yaml                                                               |
-| Activity SQLite 行为数据底座          | testing/architecture/activity-data-foundation.testplan.yaml                                                                |
-| Agent Self-Evolution 核心与激活       | testing/evolution/agent-self-evolution-core.testplan.yaml、testing/evolution/agent-self-evolution-activation.testplan.yaml |
-| Ionic App 与本机 Backend 连通性       | testing/app/app-connectivity-core.testplan.yaml                                                                            |
+| 目录                                         | 内容                                   |
+| -------------------------------------------- | -------------------------------------- |
+| [architecture-flows/](./architecture-flows/) | 特定基线的可运行架构、事件流与故障复盘 |
+| [prototypes/](./prototypes/)                 | 特定需求阶段的 HTML/JS 交互原型        |
 
-## 历史归档（冻结，不代表当前事实）
+这些目录保留历史证据，但**不代表当前实现**。需要判断现状时回到当前真相和源码。
 
-| 目录                | 内容                                                                          |
-| ------------------- | ----------------------------------------------------------------------------- |
-| architecture-flows/ | 可运行 HTML 技术架构、事件流与故障因果说明（见 architecture-flows/README.md） |
-| prototypes/         | 可运行 HTML/JS 产品交互原型（见 prototypes/README.md）                        |
+## 维护合同
 
-`docs/plans/` 和 `docs/review/` 只允许作为临时过程目录；有效结论应迁入上面的活文档，目录内文件不得长期保留。
-
----
-
-## 维护边界
-
-- **本文件是唯一完整索引。** root `README.md` 只保留面向用户的精选链接，`AGENTS.md` 不再维护路由表。新增/移动活文档时，只在这里同步。
-- 文档整理只维护当前事实、稳定边界和验证入口。一次性计划、评审、执行记录、临时排障过程应沉淀进上表的活文档；核心结论被吸收后，冗余材料应删除。
-- 纯文档保鲜不修改代码、配置或 lockfile。发现代码侧问题时，先在整理报告里列为待处理项，不顺手修代码。
+- 文档价值、归属和生命周期的唯一规则见
+  [`.agents/rules/documentation.md`](../.agents/rules/documentation.md)。
+- 每个长期分类由本目录的 `README.md` 维护索引；本页只维护分类入口。
+- 新增或移动 Markdown 后运行 `pnpm docs:check`，再执行与实际改动范围相称的验证。
+- 纯文档保鲜不顺手修改产品代码；发现代码问题时单独报告和处理。

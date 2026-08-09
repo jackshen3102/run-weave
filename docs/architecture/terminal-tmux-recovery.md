@@ -597,8 +597,8 @@ E2E/手工回归：
 建议复用现有终端回归入口：
 
 - `docs/testing/terminal/terminal-runtime-core.testplan.yaml`
-- `frontend/tests/terminal.spec.ts`
-- `frontend/tests/terminal-vim.spec.ts`
+- 按测试计划使用 `$toolkit:playwright-cli` 验证真实 Terminal 页面；当前仓库没有对应的 tracked
+  Playwright spec，不要引用历史文件名。
 
 ## 风险与决策点
 

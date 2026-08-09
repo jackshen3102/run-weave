@@ -7,14 +7,21 @@ import { fileURLToPath } from "node:url";
 const ROOT = process.cwd();
 const ARTIFACT_DIR = path.join(ROOT, "artifacts");
 const REPORT_PATH = path.join(ARTIFACT_DIR, "quality-report.json");
-const LAYER_ORDER = ["architecture", "static", "e2e"];
+const LAYER_ORDER = ["docs", "architecture", "static", "e2e"];
 const LAYER_STEP_IDS = {
+  docs: ["docs"],
   architecture: ["architecture"],
   static: ["typecheck", "lint"],
   e2e: ["e2e"],
 };
 
 const ALL_STEPS = [
+  {
+    id: "docs",
+    command: ["pnpm", "docs:check"],
+    layers: ["docs"],
+    critical: true,
+  },
   {
     id: "architecture",
     command: ["pnpm", "architecture:check"],
@@ -90,6 +97,25 @@ function isQualityGateFile(filePath) {
   return filePath === "scripts/quality-gate.mjs";
 }
 
+function isDocumentationContentFile(filePath) {
+  return (
+    filePath === "AGENTS.md" ||
+    filePath === "README.md" ||
+    filePath === "README.zh-CN.md" ||
+    filePath.startsWith("docs/") ||
+    filePath.startsWith(".agents/rules/") ||
+    filePath.endsWith("/AGENTS.md")
+  );
+}
+
+function isDocumentationFile(filePath) {
+  return (
+    isDocumentationContentFile(filePath) ||
+    filePath === "package.json" ||
+    filePath === "scripts/check-docs.mjs"
+  );
+}
+
 function isRootQualityInfraFile(filePath) {
   return [
     "eslint.config.mjs",
@@ -100,6 +126,9 @@ function isRootQualityInfraFile(filePath) {
 }
 
 function isArchitectureFile(filePath) {
+  if (isDocumentationContentFile(filePath)) {
+    return false;
+  }
   return (
     isRootQualityInfraFile(filePath) ||
     filePath === ".husky/pre-push" ||
@@ -110,6 +139,9 @@ function isArchitectureFile(filePath) {
 }
 
 function isStaticFile(filePath) {
+  if (isDocumentationContentFile(filePath)) {
+    return false;
+  }
   return (
     isRootQualityInfraFile(filePath) ||
     /^(?:app|app-server|backend|electron|frontend|packages)\//.test(filePath)
@@ -117,6 +149,9 @@ function isStaticFile(filePath) {
 }
 
 function isE2eFile(filePath) {
+  if (isDocumentationContentFile(filePath)) {
+    return false;
+  }
   return (
     isRootQualityInfraFile(filePath) ||
     /^(?:backend|frontend|packages\/(?:common|shared|terminal-renderer))\//.test(
@@ -148,12 +183,16 @@ export function selectLayersForChangedFiles(changedFiles) {
   }
 
   const layers = new Set();
+  const touchesDocs = changedFiles.some(isDocumentationFile);
   const touchesArchitecture = changedFiles.some(isArchitectureFile);
   const touchesStatic = changedFiles.some(isStaticFile);
   const touchesE2e = changedFiles.some(isE2eFile);
   const touchesCriticalJourney = changedFiles.some(isCriticalJourneyFile);
   const touchesQualityGate = changedFiles.some(isQualityGateFile);
 
+  if (touchesDocs || touchesQualityGate) {
+    layers.add("docs");
+  }
   if (touchesArchitecture || touchesQualityGate) {
     layers.add("architecture");
   }
@@ -175,7 +214,7 @@ export function selectStepsForChangedFiles(changedFiles) {
       selectedLayers,
       selectedSteps: expandStepsForLayers(selectedLayers),
       selectionReason:
-        "No changed files detected; ran full architecture, static, and E2E gates.",
+        "No changed files detected; ran full docs, architecture, static, and E2E gates.",
       riskLevel: "full",
     };
   }
@@ -203,6 +242,10 @@ export function selectStepsForChangedFiles(changedFiles) {
 
 function classifyFailure(stepResult) {
   const combinedOutput = `${stepResult.stdout}\n${stepResult.stderr}`;
+
+  if (/No tests found/i.test(combinedOutput)) {
+    return "fail_case_asset";
+  }
 
   if (
     /listen EPERM|EADDRINUSE|Process from config\.webServer was not able to start|Server is not running|failed to allocate remote debugging port/i.test(
@@ -436,7 +479,11 @@ if (isDirectRun) {
   const { failed, report } = await runQualityGate();
   globalThis.console.log(JSON.stringify(report, null, 2));
 
-  if (failed && report.verdict === "fail_product_bug") {
+  if (
+    failed &&
+    (report.verdict === "fail_product_bug" ||
+      report.verdict === "fail_case_asset")
+  ) {
     process.exit(1);
   }
 }

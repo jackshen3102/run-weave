@@ -1,2 +1,3 @@
+pnpm docs:check
 pnpm architecture:check
 pnpm typecheck

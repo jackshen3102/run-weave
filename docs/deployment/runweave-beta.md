@@ -252,7 +252,7 @@ playwright-cli -s=runweave-beta-desktop detach
 
 Terminal Browser 验收先执行 `pnpm dev:open --session <devSessionId> --surface terminal-browser --json`，再附着其返回的 endpoint。Desktop CDP 和 Terminal Browser CDP 是不同 surface；不要用一个 endpoint 代替另一个，也不要使用全局 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 或 Playwright 默认配置猜测目标。
 
-完整回归按 [Runweave Beta 自举开发通道测试计划](../testing/platform/runweave-beta-self-hosting.testplan.yaml) 执行。静态命令、status 或代码阅读不能代替该文档要求的真实桌面与页面行为证据。
+完整回归按 [Beta Pool 长期运行与生产回归验收](../testing/platform/beta-pool-runtime-regressions.testplan.yaml) 执行。静态命令、status 或代码阅读不能代替该文档要求的真实桌面与页面行为证据。
 
 ## 回滚
 

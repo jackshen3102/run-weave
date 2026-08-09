@@ -240,6 +240,6 @@ cases:
     preconditions:
       - 已准备本计划的临时 Git Worktree 数据和可用 Runweave 测试环境。
     steps:
-      - 依次运行 shared、backend、frontend、app 的 typecheck，运行 `pnpm lint`、worktree-terminal-context Playwright E2E 和 `git diff --check`；确认每项为 0 exit code。
+      - 依次运行 shared、backend、frontend、app 的 typecheck、`pnpm lint` 和 `git diff --check`；若仓库存在覆盖本能力的 tracked Playwright spec，再运行对应 E2E，当前不得引用已删除的历史文件。
       - 使用 `$toolkit:playwright-cli` 执行本计划 required P0 场景并保存 DOM、网络或截图证据。
       - 确认 console 无新增错误或警告、contexts 轮询无无限重试和重复节点；出现父子双业务 ID、跨根 Preview/Agent Team、主节点可取消固定、运行 Terminal 丢入口或父删除遗留子 runtime 时判定失败。

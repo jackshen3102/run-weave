@@ -63,6 +63,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm test:e2e",
     "test:e2e": "pnpm --filter @runweave/frontend test:e2e",
+    "docs:check": "node ./scripts/check-docs.mjs",
     "architecture:report": "node ./scripts/architecture/check.mjs --report --output=artifacts/architecture-report.json",
     "architecture:check": "node ./scripts/architecture/check.mjs --output=artifacts/architecture-report.json",
     "architecture:verify": "node ./scripts/verify-architecture.mjs",
