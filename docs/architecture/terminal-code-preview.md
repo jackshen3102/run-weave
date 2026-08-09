@@ -26,6 +26,7 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `frontend/src/components/terminal/terminal-workspace-shell.tsx`：Terminal 工作台展示层，负责顶部栏、活动 session 容器、历史抽屉、Preview sidecar 挂载与缓存 surface 的布局；项目 tab 和 terminal session tab 支持拖拽排序。后台 session 的 bell 与 metadata 由工作区级 terminal-events 连接统一分发。
 - `frontend/src/components/terminal/terminal-workspace-effects.ts`：Terminal 工作台副作用层，负责 recent selection、快捷键切换和 marker 清理等衍生逻辑。
 - `frontend/src/components/terminal/terminal-surface.tsx`：Workspace 内 active session 的终端协调层，负责连接、输出快照、搜索状态、粘贴图片和 Browser link 动作接线；不承载代码预览业务，也不直接堆叠 xterm 初始化细节。
+- `frontend/src/components/terminal/use-terminal-floating-composer-controller.ts`：Floating Composer 与 scroll/tmux copy-mode 控制器；不拥有 xterm、WebSocket、surface cache 或 snapshot 生命周期。
 - `frontend/src/components/terminal/use-terminal-emulator.ts`：xterm 初始化与输入侧能力 hook，封装 renderer addon、fit/search、移动端输入、粘贴图片、tmux 滚轮输入和 wrapped URL link provider 注册。
 - `frontend/src/components/terminal/use-terminal-snapshot-restore.ts`：active surface 恢复 hook，负责在 inactive session 重新激活时用服务端 snapshot 或 deferred output 恢复终端内容。
 - `frontend/src/components/terminal/terminal-surface-layout.tsx`：终端展示壳层，负责错误、粘贴图片 badge、search toolbar、mobile keybar 和 emulator 容器布局。
@@ -45,7 +46,10 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `frontend/src/components/terminal/terminal-line-reference.tsx`：行引用复制的选择范围、按钮和 clipboard 状态封装，避免 Monaco viewer 继续堆叠行引用细节。
 - `frontend/src/components/ui/sortable-tabs.tsx`：项目 tab、terminal session tab 和 Browser tab 共用的拖拽排序基础组件；交互容器不额外声明 `role=button`，避免与内部 tab/button 语义重复。
 - `frontend/src/features/terminal/preview-store.ts`：右侧 Sidecar Zustand store，工具为 `preview | prototypes | browser | agent-team`；Preview 状态继续按 project 保存 query、selected file、selected change。
-- `frontend/src/services/terminal.ts`：Terminal HTTP API client 已提供 project-scoped Preview wrappers、项目与 session 排序，以及原型 gallery / preview ticket wrapper。
+- `frontend/src/services/terminal.ts`：Terminal HTTP API 的兼容 barrel；project、session、panel、
+  completion events 分别由 `terminal-projects.ts`、`terminal-sessions.ts`、
+  `terminal-panels.ts`、`terminal-events.ts` 实现，Preview、Agent Team、Quick Input 与
+  prototype gallery 保持独立模块。
 - `backend/src/routes/terminal.ts`：Terminal HTTP API 主路由，负责项目、session、clipboard image、项目排序和 session 排序，并注册 Preview 与 prototype gallery 子路由。
 - `backend/src/terminal/prototype-gallery.ts`：按已登记项目发现 `docs/prototypes`、解析标题与入口，并通过 realpath 约束静态资源路径。
 - `backend/src/routes/prototype-preview.ts`：使用绑定 `projectId + prototypeSlug` 的短期票据提供只读原型资源。

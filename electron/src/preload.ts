@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer, shell } from "electron";
 import type {
+  RunweaveCompanionBridge,
+  RunweaveElectronBridge,
+  TerminalBrowserAnnotationUpdate,
+  TerminalBrowserCreatedTab,
+  TerminalBrowserTabSnapshot,
+  TerminalBrowserUpdate,
+} from "@runweave/shared/desktop-bridge";
+import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
 } from "@runweave/shared/runtime-monitor";
@@ -24,32 +32,48 @@ import type {
   CompanionWindowDragRequest,
 } from "@runweave/shared/attention";
 
-contextBridge.exposeInMainWorld("companionAPI", {
+const companionApi = {
   reportContentSize: (size: { width: number; height: number }) =>
     ipcRenderer.invoke("attention:report-content-size", size) as Promise<void>,
   setMousePassthrough: (passthrough: boolean) =>
-    ipcRenderer.invoke("attention:set-mouse-passthrough", passthrough) as Promise<void>,
+    ipcRenderer.invoke(
+      "attention:set-mouse-passthrough",
+      passthrough,
+    ) as Promise<void>,
   dragWindow: (request: CompanionWindowDragRequest) =>
     ipcRenderer.send("attention:drag-window", request),
   openSlot: (intent: AttentionOpenIntent) =>
-    ipcRenderer.invoke("attention:open-slot", intent) as Promise<AttentionOpenResult>,
-  openMainWindow: () => ipcRenderer.invoke("attention:open-main-window") as Promise<void>,
-});
+    ipcRenderer.invoke(
+      "attention:open-slot",
+      intent,
+    ) as Promise<AttentionOpenResult>,
+  openMainWindow: () =>
+    ipcRenderer.invoke("attention:open-main-window") as Promise<void>,
+} satisfies RunweaveCompanionBridge;
 
-contextBridge.exposeInMainWorld("electronAPI", {
+const electronApi = {
   platform: process.platform,
-  onAttentionOpenIntent: (listener: (intent: AttentionOpenDispatch) => void) => {
-    const wrapped = (_event: Electron.IpcRendererEvent, intent: AttentionOpenDispatch) => listener(intent);
+  onAttentionOpenIntent: (
+    listener: (intent: AttentionOpenDispatch) => void,
+  ) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      intent: AttentionOpenDispatch,
+    ) => listener(intent);
     ipcRenderer.on("attention:open-intent", wrapped);
     return () => ipcRenderer.off("attention:open-intent", wrapped);
   },
   onAttentionOpenCancelled: (listener: (requestId: string) => void) => {
-    const wrapped = (_event: Electron.IpcRendererEvent, requestId: string) => listener(requestId);
+    const wrapped = (_event: Electron.IpcRendererEvent, requestId: string) =>
+      listener(requestId);
     ipcRenderer.on("attention:open-cancel", wrapped);
     return () => ipcRenderer.off("attention:open-cancel", wrapped);
   },
   authorizeAttentionCompletion: (result: AttentionOpenResult) =>
-    ipcRenderer.invoke("attention:authorize-completion", result) as Promise<boolean>,
+    ipcRenderer.invoke(
+      "attention:authorize-completion",
+      result,
+    ) as Promise<boolean>,
   reportAttentionOpenResult: (result: AttentionOpenResult) =>
     ipcRenderer.invoke("attention:open-result", result) as Promise<void>,
   isElectron: true,
@@ -101,20 +125,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("terminal-browser:navigate", tabId, url),
   terminalBrowserListTabs: () =>
     ipcRenderer.invoke("terminal-browser:list-tabs") as Promise<
-      Array<{
-        tabId: string;
-        url: string;
-        title: string;
-        canGoBack: boolean;
-        canGoForward: boolean;
-        loading: boolean;
-        active: boolean;
-        cdpProxyAttached: boolean;
-        mcpActivityUntil: number | null;
-        devtoolsOpen: boolean;
-        deviceState: TerminalBrowserDeviceState;
-        displayScale: number;
-      }>
+      TerminalBrowserTabSnapshot[]
     >,
   terminalBrowserReorderTabs: (orderedTabIds: string[]) =>
     ipcRenderer.invoke(
@@ -240,25 +251,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
       tabId,
     ) as Promise<TerminalBrowserAnnotationSubmission>,
   onTerminalBrowserTabCreatedFromProxy: (
-    listener: (data: {
-      tabId: string;
-      browserGroupId: string;
-      url: string;
-      title: string;
-      openerTabId?: string;
-      displayScale: number;
-    }) => void,
+    listener: (data: TerminalBrowserCreatedTab) => void,
   ) => {
     const wrapped = (
       _event: Electron.IpcRendererEvent,
-      data: {
-        tabId: string;
-        browserGroupId: string;
-        url: string;
-        title: string;
-        openerTabId?: string;
-        displayScale: number;
-      },
+      data: TerminalBrowserCreatedTab,
     ) => {
       listener(data);
     };
@@ -268,37 +265,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     };
   },
   onTerminalBrowserTabUpdated: (
-    listener: (data: {
-      tabId: string;
-      browserGroupId: string;
-      url: string;
-      title: string;
-      canGoBack: boolean;
-      canGoForward: boolean;
-      loading: boolean;
-      cdpProxyAttached: boolean;
-      mcpActivityUntil: number | null;
-      devtoolsOpen: boolean;
-      deviceState: TerminalBrowserDeviceState;
-      displayScale: number;
-    }) => void,
+    listener: (data: TerminalBrowserUpdate) => void,
   ) => {
     const wrapped = (
       _event: Electron.IpcRendererEvent,
-      data: {
-        tabId: string;
-        browserGroupId: string;
-        url: string;
-        title: string;
-        canGoBack: boolean;
-        canGoForward: boolean;
-        loading: boolean;
-        cdpProxyAttached: boolean;
-        mcpActivityUntil: number | null;
-        devtoolsOpen: boolean;
-        deviceState: TerminalBrowserDeviceState;
-        displayScale: number;
-      },
+      data: TerminalBrowserUpdate,
     ) => {
       listener(data);
     };
@@ -308,37 +279,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     };
   },
   onTerminalBrowserTabActivatedFromProxy: (
-    listener: (data: {
-      tabId: string;
-      browserGroupId: string;
-      url: string;
-      title: string;
-      canGoBack: boolean;
-      canGoForward: boolean;
-      loading: boolean;
-      cdpProxyAttached: boolean;
-      mcpActivityUntil: number | null;
-      devtoolsOpen: boolean;
-      deviceState: TerminalBrowserDeviceState;
-      displayScale: number;
-    }) => void,
+    listener: (data: TerminalBrowserUpdate) => void,
   ) => {
     const wrapped = (
       _event: Electron.IpcRendererEvent,
-      data: {
-        tabId: string;
-        browserGroupId: string;
-        url: string;
-        title: string;
-        canGoBack: boolean;
-        canGoForward: boolean;
-        loading: boolean;
-        cdpProxyAttached: boolean;
-        mcpActivityUntil: number | null;
-        devtoolsOpen: boolean;
-        deviceState: TerminalBrowserDeviceState;
-        displayScale: number;
-      },
+      data: TerminalBrowserUpdate,
     ) => {
       listener(data);
     };
@@ -360,14 +305,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     };
   },
   onTerminalBrowserAnnotationUpdated: (
-    listener: (data: {
-      tabId: string;
-      state: TerminalBrowserAnnotationState;
-    }) => void,
+    listener: (data: TerminalBrowserAnnotationUpdate) => void,
   ) => {
     const wrapped = (
       _event: Electron.IpcRendererEvent,
-      data: { tabId: string; state: TerminalBrowserAnnotationState },
+      data: TerminalBrowserAnnotationUpdate,
     ) => {
       listener(data);
     };
@@ -377,4 +319,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     };
   },
   beep: () => shell.beep(),
-});
+} satisfies RunweaveElectronBridge;
+
+contextBridge.exposeInMainWorld("companionAPI", companionApi);
+contextBridge.exposeInMainWorld("electronAPI", electronApi);

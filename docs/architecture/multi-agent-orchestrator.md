@@ -31,7 +31,12 @@ Agent Team loop。
 | `code_review`     | 复核改动，输出可执行的审查结论。                   |
 | `behavior_verify` | 跑浏览器/行为验收，把通过、失败和证据写回 outbox。 |
 
-worker 角色定义在 `packages/shared/src/agent-team.ts`；prompt 构造在 `backend/src/agent-team/prompt-builders.ts`。Agent Team 不再使用旧 `coder`、`reviewer`、`tester` 默认集合。
+Agent Team 公共入口仍是 `@runweave/shared/agent-team`；内部合同按
+`agent-team-outbox.ts` → `agent-team-run.ts` → `agent-team-export.ts` 单向依赖拆分，
+`agent-team.ts` 只保留兼容 re-export。worker 角色定义在
+`packages/shared/src/agent-team-worker.ts`；prompt 构造在
+`backend/src/agent-team/prompt-builders.ts`。Agent Team 不再使用旧 `coder`、`reviewer`、
+`tester` 默认集合。
 
 ## 角色模型配置
 
@@ -86,6 +91,11 @@ Agent Team 的 Loop Engine 由 `backend/src/agent-team/loop.ts` 维护：
 - `stableFailThreshold`：同一 case 连续失败达到阈值后才反弹给 code pane。
 
 当 stable fail case 尚未反弹时，后端会通过 `buildBounceBackPrompt` 注入 code worker pane；当验收通过数提升或出现明确 diff 进展时，无进展计数会清零。熔断只冻结后续自动注入，不删除 pane 或 outbox，方便人工聚焦现场。
+
+completion/outbox 路由的稳定入口是
+`backend/src/agent-team/service-completion.ts`。主协调器保留 receipt 协议推进、behavior
+checkpoint 绑定和 reviewer reproduction 回派；通用上下文解析、outbox 归档、源码指纹与
+合同校验阶段位于 `service-completion-preparation.ts`。两者共同保持原有事件顺序和恢复预算。
 
 ## 修复交接与预算
 

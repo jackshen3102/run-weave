@@ -5,37 +5,15 @@ import {
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import type { TerminalBrowserUpdate } from "@runweave/shared/desktop-bridge";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 
-export interface TerminalBrowserBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  emulationScale?: number;
-}
-
-export interface TerminalBrowserSnapshot {
-  url: string;
-  title: string;
-  canGoBack: boolean;
-  canGoForward: boolean;
-}
-
-export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
-  tabId: string;
-  browserGroupId: string;
-  loading: boolean;
-  cdpProxyAttached: boolean;
-  mcpActivityUntil: number | null;
-  devtoolsOpen: boolean;
-  deviceState: TerminalBrowserDeviceState;
-  displayScale: number;
-}
-
-export interface TerminalBrowserTabSnapshot extends TerminalBrowserUpdate {
-  active: boolean;
-}
+export type {
+  TerminalBrowserBounds,
+  TerminalBrowserSnapshot,
+  TerminalBrowserTabSnapshot,
+  TerminalBrowserUpdate,
+} from "@runweave/shared/desktop-bridge";
 
 export interface PendingTerminalBrowserUpdate {
   update: TerminalBrowserUpdate;

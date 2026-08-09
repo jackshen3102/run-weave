@@ -22,6 +22,7 @@
     "./app-server/runtime-release": "./src/app-server/runtime-release.ts",
     "./app-server/types": "./src/app-server/types.ts",
     "./browser-profile-node": "./src/browser-profile-node.ts",
+    "./desktop-bridge": "./src/desktop-bridge.ts",
     "./diagnostic-logs": "./src/diagnostic-logs.ts",
     "./evolution": "./src/evolution.ts",
     "./protocol": "./src/protocol.ts",
