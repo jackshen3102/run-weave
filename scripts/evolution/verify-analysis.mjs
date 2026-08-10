@@ -25,6 +25,7 @@ import {
   verifyProviderSelectionPolicies,
   writeAnalysisVerificationResult,
 } from "./verify-analysis-helpers.mjs";
+import { verifyNoveltyQualityGates } from "./verify-novelty-quality.mjs";
 
 async function verifyAnalysisFoundation() {
   const tempRoot = await mkdtemp(
@@ -40,12 +41,19 @@ async function verifyAnalysisFoundation() {
     databasePath: path.join(activityHome, "activity.sqlite"),
     env: {
       ...process.env,
+      RUNWEAVE_ACTIVITY_WORKER_ENTRY: "",
       RUNWEAVE_ACTIVITY_TEST_MODE: "true",
       RUNWEAVE_ACTIVITY_HOME: activityHome,
     },
   });
   let evolutionStore = await SqliteEvolutionActivationStore.create({
     databasePath: evolutionDatabasePath,
+    env: {
+      ...process.env,
+      RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING: "",
+      RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR: "",
+      RUNWEAVE_EVOLUTION_WORKER_ENTRY: "",
+    },
   });
   try {
     const parentProjectId = "project:browser-viewer";
@@ -245,6 +253,12 @@ async function verifyAnalysisFoundation() {
     );
     evolutionStore = await SqliteEvolutionActivationStore.create({
       databasePath: evolutionDatabasePath,
+      env: {
+        ...process.env,
+        RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING: "",
+        RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR: "",
+        RUNWEAVE_EVOLUTION_WORKER_ENTRY: "",
+      },
     });
     assert.deepEqual(
       await evolutionStore.getContextPackByRun(firstPack.runId),
@@ -539,6 +553,7 @@ async function verifyAnalysisFoundation() {
 
     await verifyFencedKnowledgeCommit(service, evolutionStore, childA);
     verifyProviderSelectionPolicies();
+    await verifyNoveltyQualityGates();
 
     writeAnalysisVerificationResult(firstPack, secondPack);
   } finally {

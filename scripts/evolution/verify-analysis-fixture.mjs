@@ -1,4 +1,5 @@
 import { ActivityEventFactory } from "../../backend/src/activity/event-factory.ts";
+import { randomUUID } from "node:crypto";
 import { ActivityQueryService } from "../../backend/src/activity/query-service.ts";
 import { EvolutionAnalysisOrchestrator } from "../../backend/src/evolution/analysis/orchestrator.ts";
 import { EvolutionContextPackBuilder } from "../../backend/src/evolution/context-pack.ts";
@@ -99,7 +100,7 @@ export function createFactory(instanceId) {
 }
 
 export function createFact(factory, projectId, label, cwd) {
-  return factory.create({
+  const event = factory.create({
     eventName: "agent.response.observed",
     occurredAt: capturedAt,
     actorType: "agent",
@@ -112,6 +113,13 @@ export function createFact(factory, projectId, label, cwd) {
     },
     payload: { label },
   });
+  event.contents.push({
+    contentId: randomUUID(),
+    role: "response",
+    mediaType: "text/plain; charset=utf-8",
+    bytesBase64: Buffer.from(`response:${label}`).toString("base64"),
+  });
+  return event;
 }
 
 export function createAnalysisHarness({
