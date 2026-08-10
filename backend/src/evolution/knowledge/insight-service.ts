@@ -56,7 +56,14 @@ export class EvolutionInsightService {
       ) {
         continue;
       }
-      const existing = baselineByTopic.get(claim.topicKey);
+      const existing =
+        baselineByTopic.get(claim.topicKey) ??
+        baseline.find((insight) =>
+          insight.revisions.some(
+            (revision) =>
+              revision.revisionId === novelty.baselineRevisionId,
+          ),
+        );
       const insightId =
         existing?.insightId ??
         stableId("insight", [params.learningScopeId, claim.topicKey]);
@@ -82,7 +89,7 @@ export class EvolutionInsightService {
       const insight: Omit<Insight, "revisions"> = {
         insightId,
         learningScopeId: params.learningScopeId,
-        topicKey: claim.topicKey,
+        topicKey: existing?.topicKey ?? claim.topicKey,
         currentRevisionId: revision.revisionId,
         createdAt: existing?.createdAt ?? params.createdAt,
         updatedAt: params.createdAt,

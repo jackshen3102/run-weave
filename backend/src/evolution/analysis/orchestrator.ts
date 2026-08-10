@@ -198,7 +198,11 @@ export class EvolutionAnalysisOrchestrator {
       await this.transition(claim, stage, "novelty_check");
       stage = "novelty_check";
       await this.analysisStore.putClaims(claims);
-      const novelty = classifyClaimNovelty(claims, baseline);
+      const novelty = classifyClaimNovelty(
+        claims,
+        baseline,
+        manifest.evidence,
+      );
       await this.analysisStore.putClaimNovelty(novelty);
 
       await this.transition(claim, stage, "validating");

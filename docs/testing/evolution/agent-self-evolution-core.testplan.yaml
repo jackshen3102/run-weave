@@ -225,3 +225,18 @@ cases:
     steps:
       - 完成 Evolution Run 后检查 learning.sqlite、临时目录、Backend 日志与 API；确认只保存结构化去敏结论、Evidence ID、hash 和元数据，原始输出按期限清理且敏感片段未被长期复制。
       - 让正文到期并删除目标 Activity scope；确认事实删除语义保持权威，相关 ContributionEdge 标记证据不可用，Insight/Candidate 按剩余证据降级、重评或退休，不影响其他 scope。
+
+  - id: ASEC-020
+    name: 低质量证据与跨 topicKey 重复不能生成长期资产
+    required: true
+    description: >
+      验证 Repository baseline 只用于比较和约束，dogfood、临时目录与验证 fixture 只用于评测；只有至少包含一条可读行为证据或结构化运行结果的结论，才可生成会影响后续执行的 Memory、Prompt、Skill 或 Routing Candidate。
+      同一 Run 内仅因 topicKey 或措辞变化产生的同义 Claim 也不能重复创建资产。
+    preconditions:
+      - 已准备仅引用 AGENTS.md/架构文档的 Claim、仅引用 /tmp 或 .runweave/evidence fixture 的 Claim、正文不可读的运行时建议，以及包含可读 Agent response 或 Agent Team acceptance result 的对照 Claim。
+      - 已准备两个 candidateType 相同、语义高度相似且支持证据重叠的 Claim，其中一条具有更多支持证据；另有一个仅 topicKey 不同但与既有 Insight 语义相同的新 Claim。
+    steps:
+      - 运行 Novelty Gate；确认 repository-only、synthetic-only 和缺少可读行为证据的运行时建议被标为已知或仅留审计，不生成 Candidate。
+      - 检查 Product/Code 类数据质量问题与包含可读行为证据的运行时建议；确认前者仍可作为待治理问题，后者按正常 Novelty 规则产生 Insight/Candidate。
+      - 对同一 Run 执行 Novelty Gate；确认较弱 Claim 只留审计并标记同轮语义重复，较强 Claim 成为唯一可生成资产的代表。
+      - 对跨 Run 的语义匹配 Claim 执行比较；确认它复用既有 Insight identity，并按是否增加新证据标记 known 或 reinforced，不因 topicKey 改名重新判 novel。
