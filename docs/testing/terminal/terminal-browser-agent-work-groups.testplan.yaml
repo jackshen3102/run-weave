@@ -1,0 +1,179 @@
+version: 1
+name: Terminal Browser Agent 工作组验收
+description: >
+  验证 Terminal Browser 以一行平铺 Tab 呈现 Agent 控制工作组，确保页面身份、工作组成员、
+  scoped CDP 边界、运行状态、关闭恢复和共享 Browser Profile 与主进程权威状态一致。
+
+cases:
+  - id: TBWG-001
+    name: 人工新建页面与新建工作组使用不同入口
+    required: true
+    description: >
+      验证 Tab 行加号只在当前工作组新增页面，总览中的新建工作组才创建新的控制边界，
+      两种操作都不弹出强制命名步骤。
+    preconditions:
+      - 已通过隔离 Dev Session 打开真实 Electron Terminal Browser，当前只有一个含页面 A 的工作组。
+      - 已取得该 Dev Session 的 desktop surface，并使用 `$toolkit:playwright-cli` 附着 renderer。
+    steps:
+      - 点击 Tab 行加号；确认空白页面插入页面 A 右侧并沿用页面 A 的 groupId，工作组数量不变且没有命名弹窗。
+      - 打开 Tab 总览并点击新建工作组；确认末尾新增一个含空白页面的 group、该页面被激活且原工作组成员不变。
+      - 从真实 Terminal 中人工打开一个 HTTP 链接；确认页面插入当前 active group，而不是隐式创建第三个工作组。
+
+  - id: TBWG-002
+    name: 页面与自动化派生页面遵守 scoped group 边界
+    required: true
+    description: >
+      验证 page-open 和 scoped CDP 创建的页面继承所属 group，unscoped CDP 创建页面才新增 group，
+      UI 分组与 CDP target 可见范围完全一致。
+    preconditions:
+      - 隔离 Dev Session 的 Terminal Browser 中已有工作组 A、B，页面 marker 和 groupId 均可区分。
+      - 已取得 A、B 的 scoped endpoint 和同实例 unscoped endpoint，并分别建立可清理的 `$toolkit:playwright-cli` 或 raw CDP 连接。
+    steps:
+      - 在 A 的页面中触发 tab-style `window.open`，再通过 A 的 scoped endpoint 调用 `Target.createTarget`；确认两个新页面均与 A 相邻并只出现在 A endpoint 的 target 列表。
+      - 通过 unscoped endpoint 调用 `Target.createTarget`；确认新页面进入末尾的新工作组，A、B 的成员和 endpoint 可见范围不变。
+      - 关闭本 case 创建的页面；确认 target destroyed/detached 只作用对应 target，没有跨组页面消失。
+
+  - id: TBWG-003
+    name: 一行 Tab 以 favicon 和标题表达页面并轻量分组
+    required: true
+    description: >
+      验证所有页面保持单行平铺，真实 favicon 和标题是主要身份，同组连续细线和组间距表达分组，
+      在窄宽度下仍可滚动和通过总览访问全部页面。
+    preconditions:
+      - 两个工作组中已打开至少五个带不同 title、hostname 和安全 favicon 的真实页面，其中一个页面没有 favicon。
+      - 已用 `$toolkit:playwright-cli` 同时附着 desktop renderer 与目标 Terminal Browser 页面，并可调整 sidecar 宽度。
+    steps:
+      - 观察并检查 Tab strip；确认只有一行 Tab、没有常驻组名或展开控件，同组 Tab 相邻且共享连续同色细线，不同组之间有更大间距。
+      - 确认有 favicon 的页面显示对应图标和标题，无 favicon 页面显示 hostname 首字符，空白页显示通用图标；图标失败未出现导航错误或 Toast。
+      - 缩窄 sidecar 直到出现 compact、icon-only 和横向 overflow；确认 active Tab 可见、全部页面可滚动或从总览选中，分组线 tooltip/可访问名称给出完整组名。
+
+  - id: TBWG-004
+    name: 工作组自动命名稳定且用户重命名优先
+    required: true
+    description: >
+      验证工作组零阻塞创建后只自动命名一次，后续页面变化不改名，用户在总览保存的合法名称
+      不再被页面标题覆盖。
+    preconditions:
+      - 已通过总览新建一个只含空白页、名称为新工作组的 group。
+      - 准备两个 title 与 hostname 均不同的可导航页面，并已附着 desktop renderer 的 `$toolkit:playwright-cli`。
+    steps:
+      - 将空白页导航到第一个页面；确认总览中的组名自动变为该页面标题或 hostname，Tab 行仍不常驻显示名称。
+      - 在同组打开第二个页面并切换、关闭首个页面；确认自动组名保持不变。
+      - 在总览把组名改为一个 1～40 字符的自定义名称；确认保存后 tooltip 和总览同步更新，后续导航不会覆盖自定义名称。
+      - 尝试保存 trim 后为空或超过 40 字符的名称；确认请求被拒绝且原名称、成员和 active Tab 不变。
+
+  - id: TBWG-005
+    name: 拖拽只改变所属工作组内的页面顺序
+    required: true
+    description: >
+      验证 Tab 可以在组内排序，但不能通过拖拽或伪造 reorder payload 跨越 group，工作组顺序始终按创建顺序稳定。
+    preconditions:
+      - 工作组 A、B 各至少有两个可区分页面，A 创建时间早于 B。
+      - 可通过 desktop renderer 操作真实 Tab 拖拽，并可向目标 Electron IPC 发送受控的合法与非法排序请求。
+    steps:
+      - 在 A 内拖动页面改变顺序；确认只改变 A 的成员顺序，B 和 A/B 的组序不变，主进程 workspace 与 UI 一致。
+      - 尝试把 A 页面拖到 B，或发送包含 B tabId、缺失成员、重复成员的 A group 排序请求；确认 UI 不接受或回滚，主进程 fail closed 且 CDP groupId 未改变。
+      - 新建 C 并在 A、B 内继续排序；确认工作组仍为 A、B、C，页面派生 Tab 只插入所属组。
+
+  - id: TBWG-006
+    name: 单页直接关闭而多页整组关闭只确认一次
+    required: true
+    description: >
+      验证用户始终可直接关闭单个 Tab，只有总览批量关闭多页面工作组才确认，所有页面关闭后
+      系统只创建一个可用的空白工作组。
+    preconditions:
+      - 工作组 A 只有一个页面，工作组 B 有三个页面，B 至少一个页面已被 CDP client 附着。
+      - 已附着 desktop renderer，并能观察 B 的 target destroyed/detached 消息。
+    steps:
+      - 直接关闭 A 的唯一页面；确认没有确认框，A 被删除，B 和其 Agent 连接状态不受影响。
+      - 从总览关闭 B，先取消批量确认；确认三个页面、active Tab、target 和组序完全不变。
+      - 再次关闭 B 并确认；确认只出现一次确认，三个 target 分别销毁，已连接状态不额外阻止关闭，最终只生成一个新空白组和一个空白页。
+
+  - id: TBWG-007
+    name: 已连接与正在操作使用不同强度的状态提示
+    required: true
+    description: >
+      验证 CDP attach 只在 group 上显示弱连接状态，真实导航或输入只短暂标记命中的具体 Tab，
+      两者都不覆盖 active Tab 选中态或阻止人工操作。
+    preconditions:
+      - 同一工作组中有页面 A、B，用户选中 A，两个页面均没有导航错误。
+      - 已取得该 group 的 scoped endpoint，可分别执行只读初始化命令和真实页面操作。
+    steps:
+      - 附着 endpoint 并只执行 target discovery、Page.enable 或读取 URL；确认 group 显示弱连接点，A、B 不显示正在操作点或整块绿色 MCP 样式。
+      - 只对后台页面 B 执行点击、输入或导航；确认仅 B 在 favicon 附近短暂显示动态操作点，A 仍保持选中且没有被自动切换。
+      - 在活动窗口内由用户直接点击或输入页面 A；确认人工操作可用且没有接管/暂停弹窗。
+      - 等待现有 4.5 秒活动窗口过期；确认 B 的操作点消失，group 连接点在 client 仍附着时保留，断开后消失。
+
+  - id: TBWG-008
+    name: 后台主页面导航失败可发现并在恢复后清除
+    required: true
+    description: >
+      验证后台 Tab 的真实 main-frame 导航失败会标记页面和工作组，切入后显示现有错误横幅；
+      被取消导航、子 frame 或 favicon 失败不误报，成功导航后状态清除。
+    preconditions:
+      - 工作组 A 中有前台页面 A1 和后台页面 A2，另有工作组 B 作为无错误对照。
+      - 已准备一个稳定成功 URL、一个可重复触发 main-frame 失败的 URL 和一个 favicon 失败页面。
+    steps:
+      - 让后台 A2 主 frame 导航失败；确认 A2 显示小红点、A 的分组线显示弱错误端点，A1 当前内容不被 Toast 打断且 B 无错误提示。
+      - 切换到 A2；确认现有错误横幅展示有限长度的失败详情，不包含 Cookie、Header 或页面响应正文。
+      - 分别触发 `ERR_ABORTED/-3`、子 frame 失败和 favicon 获取失败；确认这些场景不新增导航错误点。
+      - 将 A2 导航到稳定成功 URL；确认 Tab 红点、group 错误提示和 active 错误横幅全部清除。
+
+  - id: TBWG-009
+    name: v1 持久化数据迁移为可回滚的 v2 工作组
+    required: true
+    description: >
+      验证旧 flat tabs 文件可在隔离 user-data 中恢复为 v2 工作组，保留 URL、active、group 归属和顺序，
+      同时写出的 flat tabs 仍可被旧 schema 读取。
+    preconditions:
+      - 本 case 独占一个可清理的 Dev Session user-data，已停止其 Electron 进程并记录该 Session 身份。
+      - 该 user-data 中已准备合法 v1 `terminal-browser-tabs.json`，包含两个 group、多个 Tab、明确 activeTabId 和不同 lastActiveAt。
+    steps:
+      - 使用 `$toolkit:runweave-dev-session` 重新启动同一隔离 Session，取得 fresh desktop 与 terminal-browser endpoint；确认最多恢复五个合法 Tab，组序按 v1 首次出现顺序，组内顺序和 active Tab 保留。
+      - 触发一次结构更新并读取 v2 文件；确认 version 为 2、groups 与 flat tabs 成员完全一致、自动组名来自每组首个合法标题/hostname，且没有空组或重复 id。
+      - 用 v1 读取规则解析 v2 的 flat tabs；确认 URL、title、browserGroupId 和 activeTabId 仍可恢复，未把 favicon、错误或连接状态写入文件。
+      - 停止 Session 并清理本 case user-data；确认未读写 Stable 用户的持久化文件。
+
+  - id: TBWG-010
+    name: v2 重启恢复结构但不恢复瞬时状态
+    required: true
+    description: >
+      验证同一隔离 Dev Session 重启后恢复组名、组序、Tab 顺序、URL 和 active 页面，
+      但 Agent 连接、活动、导航错误与 favicon 缓存都重新建立。
+    preconditions:
+      - 本 case 独占一个可重启和清理的 Dev Session，已创建两个有自定义组名的工作组与至少三个页面。
+      - 已记录重启前组序、组内 Tab 顺序、activeTabId，并让一个 group 处于已连接和近期操作状态。
+    steps:
+      - 使用 `$toolkit:runweave-dev-session` 停止并重新启动同一 Session，重新取得 fresh desktop 和 terminal-browser endpoint，不能复用旧 UI ref 或 CDP connection。
+      - 确认自定义组名、组序、组内 Tab 顺序、合法 URL 和 active 页面恢复，工作组仍不随当前 project/terminal session 改变。
+      - 确认所有组初始为未连接、无正在操作点、无旧导航错误，favicon 先显示 fallback 后从真实页面重新获取。
+      - 结束后关闭 owned 页面、断开 fresh endpoint 并停止 Session；确认 cleanup 完成且没有 owned fixture 残留。
+
+  - id: TBWG-011
+    name: 工作组属于桌面窗口且不随项目或终端切换
+    required: true
+    description: >
+      验证同一 Electron 窗口内切换 project、terminal session 或 sidecar tool 不替换 Browser workspace，
+      另一个 Electron 窗口不会直接复用当前窗口的 live group registry。
+    preconditions:
+      - 真实 Electron 主窗口 A 已创建两个有可识别名称和页面的工作组，并准备两个 project 和两个 terminal session。
+      - 可通过 `$computer-use` 打开第二个 Runweave 窗口 B，并用 `$toolkit:playwright-cli` 分别识别 A、B 的 desktop surface。
+    steps:
+      - 在窗口 A 切换 project、terminal session、Preview 和 Agent Team，再回到 Browser；确认原工作组、active Tab 和页面不变。
+      - 打开窗口 B 的 Browser；确认 B 使用独立 live workspace，不能直接看到或重排 A 的工作组，A 的 scoped endpoint 仍只控制 A 的 targets。
+      - 关闭窗口 B；确认窗口 A 的工作组、页面和 Agent 连接不被清理。
+
+  - id: TBWG-012
+    name: 不同工作组继续共享 Browser Profile 和网络环境
+    required: true
+    description: >
+      验证工作组只隔离页面组织和 Agent 控制，不隔离 Cookie、登录态、代理或 Header，
+      UI 也不把工作组表述成独立账号或无痕环境。
+    preconditions:
+      - 隔离 Dev Session 中有工作组 A、B，两个页面访问同一可控 HTTP fixture，并可读取 Cookie、请求 Header 和请求次数。
+      - 本地代理与 Header fixture 可用，所有产生的数据均属于本 case 并可清理。
+    steps:
+      - 在 A 设置登录 Cookie，再从 B 访问同域页面；确认 B 使用相同 Terminal Browser persistent session 并看到同一登录态。
+      - 启用现有代理；确认所有工作组按现有行为重新加载且后续请求共同经过代理，不只作用 active group。
+      - 保存现有全局 Header 规则并刷新 A、B；确认两个工作组的后续请求均携带规则，关闭任一 group 不清除共享 Cookie 或规则。
+      - 检查 Tab strip、tooltip 和总览文案；确认没有独立账号、Profile、无痕或安全隔离的错误承诺。

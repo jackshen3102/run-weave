@@ -107,6 +107,9 @@ export function useTerminalBrowserBounds({
 
     const sendBounds = (): void => {
       frameRef.current = null;
+      if (activeTabIdRef.current !== tabId) {
+        return;
+      }
       if (!activeRef.current) {
         void window.electronAPI?.terminalBrowserHide?.(tabId);
         delete lastBoundsKeyByTabRef.current[tabId];
@@ -147,7 +150,6 @@ export function useTerminalBrowserBounds({
         viewport?.mobile && viewport.width > 0
           ? clippedWidth / viewport.width
           : 1;
-      void window.electronAPI?.terminalBrowserShow?.(tabId);
       const nextBounds = {
         x: rawBounds.x,
         y: rawBounds.y,

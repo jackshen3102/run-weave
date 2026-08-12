@@ -25,6 +25,17 @@ import type {
   TerminalBrowserToolMenuAction,
   TerminalBrowserToolMenuRequest,
 } from "./terminal-browser-tool-menu";
+import type {
+  TerminalBrowserCreateTabRequest,
+  TerminalBrowserStateChangedEvent,
+  TerminalBrowserSnapshot,
+  TerminalBrowserWorkspaceSnapshot,
+} from "./terminal-browser-workspace";
+export type {
+  TerminalBrowserSnapshot,
+  TerminalBrowserTabSnapshot,
+  TerminalBrowserUpdate,
+} from "./terminal-browser-workspace";
 
 export interface TerminalBrowserBounds {
   x: number;
@@ -32,37 +43,6 @@ export interface TerminalBrowserBounds {
   width: number;
   height: number;
   emulationScale?: number;
-}
-
-export interface TerminalBrowserSnapshot {
-  url: string;
-  title: string;
-  canGoBack: boolean;
-  canGoForward: boolean;
-}
-
-export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
-  tabId: string;
-  browserGroupId: string;
-  loading: boolean;
-  cdpProxyAttached: boolean;
-  mcpActivityUntil: number | null;
-  devtoolsOpen: boolean;
-  deviceState: TerminalBrowserDeviceState;
-  displayScale: number;
-}
-
-export interface TerminalBrowserTabSnapshot extends TerminalBrowserUpdate {
-  active: boolean;
-}
-
-export interface TerminalBrowserCreatedTab {
-  tabId: string;
-  browserGroupId: string;
-  url: string;
-  title: string;
-  openerTabId?: string;
-  displayScale: number;
 }
 
 export interface TerminalBrowserAnnotationUpdate {
@@ -107,8 +87,16 @@ export interface RunweaveElectronBridge {
     tabId: string,
     url: string,
   ) => Promise<TerminalBrowserSnapshot>;
-  terminalBrowserListTabs: () => Promise<TerminalBrowserTabSnapshot[]>;
-  terminalBrowserReorderTabs: (orderedTabIds: string[]) => Promise<void>;
+  terminalBrowserGetWorkspace: () => Promise<TerminalBrowserWorkspaceSnapshot>;
+  terminalBrowserCreateTab: (
+    request: TerminalBrowserCreateTabRequest,
+  ) => Promise<void>;
+  terminalBrowserRenameGroup: (groupId: string, name: string) => Promise<void>;
+  terminalBrowserCloseGroup: (groupId: string) => Promise<void>;
+  terminalBrowserReorderGroupTabs: (
+    groupId: string,
+    orderedTabIds: string[],
+  ) => Promise<void>;
   terminalBrowserReload: (tabId: string) => Promise<TerminalBrowserSnapshot>;
   terminalBrowserStop: (tabId: string) => Promise<void>;
   terminalBrowserGoBack: (tabId: string) => Promise<TerminalBrowserSnapshot>;
@@ -174,17 +162,8 @@ export interface RunweaveElectronBridge {
   terminalBrowserAnnotationSubmit: (
     tabId: string,
   ) => Promise<TerminalBrowserAnnotationSubmission>;
-  onTerminalBrowserTabCreatedFromProxy: (
-    listener: (data: TerminalBrowserCreatedTab) => void,
-  ) => () => void;
-  onTerminalBrowserTabUpdated: (
-    listener: (data: TerminalBrowserUpdate) => void,
-  ) => () => void;
-  onTerminalBrowserTabActivatedFromProxy: (
-    listener: (data: TerminalBrowserUpdate) => void,
-  ) => () => void;
-  onTerminalBrowserTabClosed: (
-    listener: (data: { tabId: string }) => void,
+  onTerminalBrowserStateChanged: (
+    listener: (event: TerminalBrowserStateChangedEvent) => void,
   ) => () => void;
   onTerminalBrowserAnnotationUpdated: (
     listener: (data: TerminalBrowserAnnotationUpdate) => void,

@@ -1,5 +1,8 @@
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
+import type {
+  TerminalBrowserGroupSnapshot,
+} from "@runweave/shared/terminal-browser-workspace";
 
 export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
@@ -15,7 +18,7 @@ export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 
 export interface TerminalBrowserTabState {
   id: string;
-  browserGroupId?: string;
+  browserGroupId: string;
   url: string;
   addressInput: string;
   title: string;
@@ -23,6 +26,8 @@ export interface TerminalBrowserTabState {
   canGoBack: boolean;
   canGoForward: boolean;
   error?: string;
+  faviconDataUrl: string | null;
+  navigationError: string | null;
   cdpProxyAttached?: boolean;
   mcpActivityUntil?: number | null;
   devtoolsOpen?: boolean;
@@ -57,6 +62,8 @@ export interface TerminalPreviewStore {
   projects: Record<string, TerminalPreviewProjectState>;
   changesRefreshRevisionByProjectId: Record<string, number>;
   browser: {
+    revision: number;
+    groups: TerminalBrowserGroupSnapshot[];
     tabs: TerminalBrowserTabState[];
     activeTabId: string;
   };
@@ -98,22 +105,25 @@ export interface TerminalPreviewStore {
   requestChangesRefresh: (projectId: string) => void;
   removeProjectPreview: (projectId: string) => void;
   createBrowserTab: (url?: string) => void;
-  addProxyBrowserTab: (
-    tabId: string,
-    browserGroupId: string | undefined,
-    url: string,
-    title: string,
-    openerTabId?: string,
-  ) => void;
-  replaceBrowserTabs: (
+  createBrowserGroup: (url?: string) => void;
+  applyBrowserWorkspace: (
+    revision: number,
+    groups: TerminalBrowserGroupSnapshot[],
     tabs: TerminalBrowserTabState[],
-    activeTabId?: string,
+    activeTabId: string,
+    preserveAddressTabId?: string | null,
+    force?: boolean,
   ) => void;
   closeBrowserTab: (tabId: string) => void;
   setActiveBrowserTab: (tabId: string) => void;
-  reorderBrowserTabs: (fromIndex: number, toIndex: number) => void;
+  reorderBrowserGroupTabs: (
+    groupId: string,
+    fromIndex: number,
+    toIndex: number,
+  ) => void;
   updateBrowserTab: (
     tabId: string,
     updates: Partial<TerminalBrowserTabState>,
+    revision?: number,
   ) => void;
 }

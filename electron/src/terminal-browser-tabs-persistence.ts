@@ -3,6 +3,7 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   normalizeTerminalBrowserPersistedState,
+  createEmptyTerminalBrowserPersistedState,
   type TerminalBrowserPersistedState,
 } from "./terminal-browser-tabs-state.js";
 
@@ -23,14 +24,14 @@ export async function readTerminalBrowserPersistedState(): Promise<TerminalBrows
       typeof error === "object" &&
       (error as { code?: unknown }).code === "ENOENT"
     ) {
-      return { version: 1, activeTabId: null, tabs: [] };
+      return createEmptyTerminalBrowserPersistedState();
     }
     console.warn("[electron] failed to read terminal browser tabs state", {
       path: storePath,
       error: error instanceof Error ? error.message : String(error),
     });
     await backupUnreadableTerminalBrowserTabsStore(storePath);
-    return { version: 1, activeTabId: null, tabs: [] };
+    return createEmptyTerminalBrowserPersistedState();
   }
 }
 

@@ -14,5 +14,6 @@ export * from "./terminal-browser-display-scale";
 export * from "./terminal-browser-headers";
 export * from "./terminal-browser-proxy";
 export * from "./terminal-browser-tool-menu";
+export * from "./terminal-browser-workspace";
 export * from "./voice";
 export * from "./app-server-events";

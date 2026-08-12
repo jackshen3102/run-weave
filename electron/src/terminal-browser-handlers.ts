@@ -40,18 +40,12 @@ import {
   setTerminalBrowserProxyEnabled,
 } from "./terminal-browser-network.js";
 import {
-  getLiveTerminalBrowserTabIds,
-  scheduleTerminalBrowserTabsSave,
-} from "./terminal-browser-tabs.js";
-import {
   attachTerminalBrowser,
   clampTerminalBrowserBounds,
   closeTerminalBrowserEntry,
   detachTerminalBrowser,
   getExistingTerminalBrowserEntry,
-  getOrCreateTerminalBrowserView,
   isTerminalBrowserBounds,
-  restoreTerminalBrowserTabsForWindow,
   validateTerminalBrowserUrl,
 } from "./terminal-browser-view-lifecycle.js";
 import {
@@ -59,12 +53,13 @@ import {
   isNavigationAbortError,
   sendTerminalBrowserTabUpdate,
 } from "./terminal-browser-view-updates.js";
-import { getTerminalBrowserTabsForWindow } from "./terminal-browser-proxy-api.js";
 import { popupTerminalBrowserToolMenu } from "./terminal-browser-tool-menu.js";
+import { registerTerminalBrowserWorkspaceHandlers } from "./terminal-browser-workspace-handlers.js";
 
 export function registerTerminalBrowserHandlers(): void {
   ensureTerminalBrowserHeaderDispatcher();
   ensureTerminalBrowserCookiePersistence(getTerminalBrowserSession());
+  registerTerminalBrowserWorkspaceHandlers();
 
   ipcMain.handle("terminal-browser:open-tool-menu", async (event, request) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -99,56 +94,19 @@ export function registerTerminalBrowserHandlers(): void {
     },
   );
 
-  ipcMain.handle("terminal-browser:list-tabs", async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) {
-      return [];
-    }
-    await restoreTerminalBrowserTabsForWindow(win);
-    return getTerminalBrowserTabsForWindow(win.id);
-  });
-
-  ipcMain.handle(
-    "terminal-browser:reorder-tabs",
-    (event, orderedTabIds: unknown): void => {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (!win || !Array.isArray(orderedTabIds)) {
-        throw new Error("Invalid terminal browser tab order");
-      }
-      const liveTabIds = getLiveTerminalBrowserTabIds(win.id);
-      const candidateTabIds = orderedTabIds.filter(
-        (tabId): tabId is string => typeof tabId === "string",
-      );
-      const candidateTabIdSet = new Set(candidateTabIds);
-      const liveTabIdSet = new Set(liveTabIds);
-      const valid =
-        candidateTabIds.length === orderedTabIds.length &&
-        candidateTabIds.length === liveTabIds.length &&
-        candidateTabIdSet.size === candidateTabIds.length &&
-        candidateTabIds.every((tabId) => liveTabIdSet.has(tabId));
-      if (!valid) {
-        throw new Error("Invalid terminal browser tab order");
-      }
-      terminalBrowserRuntime.tabOrderByWindowId.set(win.id, [
-        ...candidateTabIds,
-      ]);
-      scheduleTerminalBrowserTabsSave();
-    },
-  );
-
   ipcMain.handle("terminal-browser:show", (event, tabId: string) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || typeof tabId !== "string") {
       return;
     }
-    const view = getOrCreateTerminalBrowserView(win, tabId);
-    attachTerminalBrowser(win, tabId, view);
     const entry = terminalBrowserRuntime.entries.get(
       getTerminalBrowserKey(win, tabId),
     );
-    if (entry) {
-      sendTerminalBrowserTabUpdate(win, tabId, entry);
+    if (!entry) {
+      return;
     }
+    attachTerminalBrowser(win, tabId, entry.view);
+    sendTerminalBrowserTabUpdate(win, tabId, entry);
   });
 
   ipcMain.handle("terminal-browser:hide", (event, tabId: string) => {
@@ -238,21 +196,21 @@ export function registerTerminalBrowserHandlers(): void {
         throw new Error("Invalid browser navigation request");
       }
 
-      const view = getOrCreateTerminalBrowserView(win, tabId);
-      const entry = terminalBrowserRuntime.entries.get(
-        getTerminalBrowserKey(win, tabId),
-      );
-      if (entry) {
-        entry.lastKnownUrl = safeUrl;
-      }
+      const entry = getExistingTerminalBrowserEntry(win, tabId, "navigate");
+      const { view } = entry;
+      entry.lastKnownUrl = safeUrl;
       try {
         await view.webContents.loadURL(safeUrl);
       } catch (error) {
         if (!isNavigationAbortError(error)) {
-          throw error;
+          entry.navigationError = (
+            entry.navigationError ||
+            (error instanceof Error ? error.message : "Navigation failed")
+          ).slice(0, 240);
+          sendTerminalBrowserTabUpdate(win, tabId, entry, false);
         }
       }
-      return getTerminalBrowserSnapshot(view, entry?.lastKnownUrl ?? safeUrl);
+      return getTerminalBrowserSnapshot(view, entry.lastKnownUrl);
     },
   );
 

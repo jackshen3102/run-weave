@@ -1,0 +1,65 @@
+import type { TerminalBrowserDeviceState } from "./terminal-browser-device";
+
+export interface TerminalBrowserSnapshot {
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
+  tabId: string;
+  browserGroupId: string;
+  loading: boolean;
+  cdpProxyAttached: boolean;
+  mcpActivityUntil: number | null;
+  devtoolsOpen: boolean;
+  deviceState: TerminalBrowserDeviceState;
+  displayScale: number;
+  faviconDataUrl: string | null;
+  navigationError: string | null;
+}
+
+export interface TerminalBrowserTabSnapshot extends TerminalBrowserUpdate {
+  active: boolean;
+}
+
+export type TerminalBrowserGroupNameOrigin =
+  | "placeholder"
+  | "automatic"
+  | "user";
+
+export interface TerminalBrowserGroupSnapshot {
+  id: string;
+  name: string;
+  nameOrigin: TerminalBrowserGroupNameOrigin;
+  tabIds: string[];
+}
+
+export interface TerminalBrowserWorkspaceSnapshot {
+  revision: number;
+  activeTabId: string;
+  groups: TerminalBrowserGroupSnapshot[];
+  tabs: TerminalBrowserTabSnapshot[];
+}
+
+export type TerminalBrowserCreateTabRequest =
+  | {
+      placement: "current-group";
+      groupId: string;
+      openerTabId: string;
+      url?: string;
+    }
+  | { placement: "new-group"; url?: string };
+
+export type TerminalBrowserStateChangedEvent =
+  | {
+      kind: "workspace";
+      revision: number;
+      workspace: TerminalBrowserWorkspaceSnapshot;
+    }
+  | {
+      kind: "tab";
+      revision: number;
+      tab: TerminalBrowserUpdate;
+    };

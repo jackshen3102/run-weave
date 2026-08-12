@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createTerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import { DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE } from "@runweave/shared/terminal-browser-display-scale";
@@ -41,12 +41,15 @@ let harnessRoot: Root | null = null;
 function normalizeHarnessTab(tab: HarnessTab): TerminalBrowserTabState {
   return {
     ...tab,
+    browserGroupId: tab.browserGroupId ?? "harness-group-default",
     addressInput: tab.url,
     loading: tab.loading ?? false,
     canGoBack: false,
     canGoForward: false,
     deviceState: createTerminalBrowserDeviceState("desktop"),
     displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
+    faviconDataUrl: null,
+    navigationError: null,
   };
 }
 
@@ -65,6 +68,28 @@ function TerminalBrowserTabsHarness({
   const [reorders, setReorders] = useState<
     Array<{ fromIndex: number; toIndex: number }>
   >([]);
+  const groups = useMemo(() => {
+    const result: Array<{
+      id: string;
+      name: string;
+      nameOrigin: "automatic";
+      tabIds: string[];
+    }> = [];
+    for (const tab of tabs) {
+      let group = result.find((candidate) => candidate.id === tab.browserGroupId);
+      if (!group) {
+        group = {
+          id: tab.browserGroupId,
+          name: `Group ${tab.browserGroupId.slice(-6)}`,
+          nameOrigin: "automatic",
+          tabIds: [],
+        };
+        result.push(group);
+      }
+      group.tabIds.push(tab.id);
+    }
+    return result;
+  }, [tabs]);
 
   useEffect(() => {
     window.terminalBrowserTabsHarnessState = {
@@ -80,14 +105,23 @@ function TerminalBrowserTabsHarness({
   return (
     <TerminalBrowserTabs
       tabs={tabs}
+      groups={groups}
       activeTabId={activeTabId}
       onCreateTab={() => {
         const id = `harness-new-${createdTabIds.length + 1}`;
-        const nextTab = normalizeHarnessTab({ id, title: "", url: "" });
+        const browserGroupId =
+          tabs.find((tab) => tab.id === activeTabId)?.browserGroupId;
+        const nextTab = normalizeHarnessTab({
+          id,
+          title: "",
+          url: "",
+          browserGroupId,
+        });
         setTabs((currentTabs) => [...currentTabs, nextTab]);
         setActiveTabId(id);
         setCreatedTabIds((ids) => [...ids, id]);
       }}
+      onCreateGroup={() => undefined}
       onSelectTab={(tabId) => {
         setActiveTabId(tabId);
         setSelectedTabIds((ids) => [...ids, tabId]);
@@ -117,18 +151,28 @@ function TerminalBrowserTabsHarness({
         });
         setClosedTabIds((ids) => [...ids, tabId]);
       }}
-      onReorder={(fromIndex, toIndex) => {
+      onReorder={(groupId, fromIndex, toIndex) => {
         setTabs((currentTabs) => {
+          const memberIndexes = currentTabs.flatMap((tab, index) =>
+            tab.browserGroupId === groupId ? [index] : [],
+          );
           const nextTabs = [...currentTabs];
-          const [movedTab] = nextTabs.splice(fromIndex, 1);
+          const sourceIndex = memberIndexes[fromIndex];
+          const targetIndex = memberIndexes[toIndex];
+          if (sourceIndex === undefined || targetIndex === undefined) {
+            return currentTabs;
+          }
+          const [movedTab] = nextTabs.splice(sourceIndex, 1);
           if (!movedTab) {
             return currentTabs;
           }
-          nextTabs.splice(toIndex, 0, movedTab);
+          nextTabs.splice(targetIndex, 0, movedTab);
           return nextTabs;
         });
         setReorders((items) => [...items, { fromIndex, toIndex }]);
       }}
+      onRenameGroup={async () => undefined}
+      onCloseGroup={async () => undefined}
     />
   );
 }
