@@ -98,12 +98,16 @@ interface PreviewFileEditor {
 }
 
 interface PreviewFileDisplay {
+  canInsertMarkdownReference: boolean;
+  markdownReferenceDisabledReason?: string;
   markdownViewMode: TerminalMarkdownViewMode;
   markdownSplitSourceWidthPct: number;
   svgViewMode: TerminalSvgViewMode;
   markdownScrollRatio: number;
   lineTarget: TerminalPreviewLineTarget | null;
   onMarkdownScrollRatioChange: (ratio: number) => void;
+  onInsertMarkdownReference: (reference: string) => void;
+  onRevealMarkdownSourceLine: (line: number) => void;
   onStartMarkdownResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }
 
@@ -157,12 +161,16 @@ export function TerminalPreviewFileView({
     onReload: onReloadFile,
   } = editor;
   const {
+    canInsertMarkdownReference,
     lineTarget,
+    markdownReferenceDisabledReason,
     markdownScrollRatio,
     markdownSplitSourceWidthPct,
     markdownViewMode,
     svgViewMode,
+    onInsertMarkdownReference,
     onMarkdownScrollRatioChange,
+    onRevealMarkdownSourceLine,
     onStartMarkdownResize,
   } = display;
   const monacoLanguage = getTerminalPreviewMonacoLanguage(
@@ -246,12 +254,17 @@ export function TerminalPreviewFileView({
       filePreview,
       editorContent,
       editable,
+      hasUnsavedChanges: editorContent !== filePreview.content,
+      canInsertMarkdownReference,
+      markdownReferenceDisabledReason,
       onEditorContentChange,
       markdownScrollRatio,
       onMarkdownScrollRatioChange,
       onStartMarkdownResize,
       onAuthExpired,
       onOpenFilePath,
+      onInsertMarkdownReference,
+      onRevealMarkdownSourceLine,
       initialRevealPosition: revealPosition,
     });
   } else if (filePreview && fileKind === "svg") {
@@ -336,12 +349,17 @@ interface RenderMarkdownContentArgs {
   filePreview: TerminalPreviewFileResponse;
   editorContent: string;
   editable: boolean;
+  hasUnsavedChanges: boolean;
+  canInsertMarkdownReference: boolean;
+  markdownReferenceDisabledReason?: string;
   onEditorContentChange: (content: string) => void;
   markdownScrollRatio: number;
   onMarkdownScrollRatioChange: (ratio: number) => void;
   onStartMarkdownResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onAuthExpired?: () => void;
   onOpenFilePath: (filePath: string) => void;
+  onInsertMarkdownReference: (reference: string) => void;
+  onRevealMarkdownSourceLine: (line: number) => void;
   initialRevealPosition?: {
     line: number;
     column: number;
@@ -358,12 +376,17 @@ function renderMarkdownContent({
   filePreview,
   editorContent,
   editable,
+  hasUnsavedChanges,
+  canInsertMarkdownReference,
+  markdownReferenceDisabledReason,
   onEditorContentChange,
   markdownScrollRatio,
   onMarkdownScrollRatioChange,
   onStartMarkdownResize,
   onAuthExpired,
   onOpenFilePath,
+  onInsertMarkdownReference,
+  onRevealMarkdownSourceLine,
   initialRevealPosition,
 }: RenderMarkdownContentArgs): ReactNode {
   if (markdownViewMode === "source") {
@@ -390,8 +413,14 @@ function renderMarkdownContent({
           projectId={activeProject.projectId}
           content={editorContent}
           path={filePreview.path}
+          lineReferencePath={filePreview.absolutePath}
+          canInsertLineReference={canInsertMarkdownReference}
+          lineReferenceDisabledReason={markdownReferenceDisabledReason}
+          hasUnsavedChanges={hasUnsavedChanges}
           onAuthExpired={onAuthExpired}
           onOpenFile={onOpenFilePath}
+          onInsertLineReference={onInsertMarkdownReference}
+          onRevealSourceLine={onRevealMarkdownSourceLine}
         />
       </Suspense>
     );
@@ -429,10 +458,16 @@ function renderMarkdownContent({
           projectId={activeProject.projectId}
           content={editorContent}
           path={filePreview.path}
+          lineReferencePath={filePreview.absolutePath}
+          canInsertLineReference={canInsertMarkdownReference}
+          lineReferenceDisabledReason={markdownReferenceDisabledReason}
+          hasUnsavedChanges={hasUnsavedChanges}
           scrollRatio={markdownScrollRatio}
           onScrollRatioChange={onMarkdownScrollRatioChange}
           onAuthExpired={onAuthExpired}
           onOpenFile={onOpenFilePath}
+          onInsertLineReference={onInsertMarkdownReference}
+          onRevealSourceLine={onRevealMarkdownSourceLine}
         />
       </Suspense>
     </div>

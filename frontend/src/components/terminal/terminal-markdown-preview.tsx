@@ -2,6 +2,7 @@ import { RunweaveImageLightbox } from "@runweave/common/terminal";
 import "@runweave/common/terminal/image-lightbox.css";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, MessageSquarePlus, TextCursorInput } from "lucide-react";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import anchor from "markdown-it-anchor";
@@ -14,6 +15,19 @@ import {
 } from "../../features/terminal/markdown-preview";
 import { HttpError } from "../../services/http";
 import { getTerminalProjectPreviewAsset } from "../../services/terminal";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "../ui/context-menu";
+import {
+  addMarkdownSourceLineMetadata,
+  formatMarkdownLineReference,
+  type MarkdownSourceSelection,
+  resolveMarkdownSourceSelection,
+} from "./terminal-markdown-reference";
 
 interface TerminalMarkdownPreviewProps {
   apiBase: string;
@@ -21,10 +35,16 @@ interface TerminalMarkdownPreviewProps {
   projectId: string;
   content: string;
   path: string;
+  lineReferencePath?: string;
+  canInsertLineReference?: boolean;
+  lineReferenceDisabledReason?: string;
+  hasUnsavedChanges?: boolean;
   scrollRatio?: number;
   onScrollRatioChange?: (ratio: number) => void;
   onAuthExpired?: () => void;
   onOpenFile: (path: string, hash?: string) => void;
+  onInsertLineReference?: (reference: string) => void;
+  onRevealSourceLine?: (line: number) => void;
 }
 
 interface MarkdownRenderResult {
@@ -69,6 +89,7 @@ function getMarkdownRenderer(): MarkdownIt {
     })
     .use(taskLists, { enabled: false })
     .use(footnote);
+  addMarkdownSourceLineMetadata(renderer);
 
   const defaultFence =
     renderer.renderer.rules.fence?.bind(renderer.renderer) ??
@@ -84,7 +105,9 @@ function getMarkdownRenderer(): MarkdownIt {
     const renderEnv = env as { mermaidBlocks?: string[] };
     renderEnv.mermaidBlocks ??= [];
     const blockIndex = renderEnv.mermaidBlocks.push(token.content) - 1;
-    return `<div class="terminal-markdown-mermaid" data-mermaid-index="${blockIndex}"><pre>${renderer.utils.escapeHtml(token.content)}</pre></div>`;
+    token.attrJoin("class", "terminal-markdown-mermaid");
+    token.attrSet("data-mermaid-index", String(blockIndex));
+    return `<div${self.renderAttrs(token)}><pre>${renderer.utils.escapeHtml(token.content)}</pre></div>`;
   };
 
   const defaultImage =
@@ -153,6 +176,8 @@ function renderMarkdown(
         "data-preview-src",
         "data-preview-asset-path",
         "data-preview-alt",
+        "data-source-start",
+        "data-source-end",
       ],
     }),
     mermaidBlocks: env.mermaidBlocks,
@@ -187,13 +212,25 @@ export function TerminalMarkdownPreview({
   projectId,
   content,
   path,
+  lineReferencePath,
+  canInsertLineReference = false,
+  lineReferenceDisabledReason,
+  hasUnsavedChanges = false,
   scrollRatio,
   onScrollRatioChange,
   onAuthExpired,
   onOpenFile,
+  onInsertLineReference,
+  onRevealSourceLine,
 }: TerminalMarkdownPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const feedbackTimeoutRef = useRef<number | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [sourceSelection, setSourceSelection] =
+    useState<MarkdownSourceSelection | null>(null);
+  const [referenceFeedback, setReferenceFeedback] = useState<
+    "copied" | "inserted" | null
+  >(null);
   const [zoomedImage, setZoomedImage] = useState<ZoomedMarkdownImage | null>(
     null,
   );
@@ -208,10 +245,112 @@ export function TerminalMarkdownPreview({
   const closeZoomedImage = useMemoizedFn(() => {
     setZoomedImage(null);
   });
+  const lineReference =
+    sourceSelection && lineReferencePath
+      ? formatMarkdownLineReference(lineReferencePath, sourceSelection)
+      : null;
+  const lineReferenceUnavailable = hasUnsavedChanges || !lineReference;
+  const insertLineReferenceUnavailable =
+    lineReferenceUnavailable || !canInsertLineReference;
+  const lineReferenceTitle = hasUnsavedChanges
+    ? "Save the file before referencing source lines"
+    : undefined;
+
+  const clearReferenceFeedbackTimer = useMemoizedFn(() => {
+    if (feedbackTimeoutRef.current === null) {
+      return;
+    }
+    window.clearTimeout(feedbackTimeoutRef.current);
+    feedbackTimeoutRef.current = null;
+  });
+
+  const showReferenceFeedback = useMemoizedFn(
+    (feedback: "copied" | "inserted") => {
+      clearReferenceFeedbackTimer();
+      setReferenceFeedback(feedback);
+      feedbackTimeoutRef.current = window.setTimeout(() => {
+        setReferenceFeedback(null);
+        feedbackTimeoutRef.current = null;
+      }, 1500);
+    },
+  );
+
+  const refreshSourceSelection = useMemoizedFn(
+    (fallbackTarget?: Node | null): MarkdownSourceSelection | null => {
+      const container = containerRef.current;
+      const nextSelection = container
+        ? resolveMarkdownSourceSelection(container, fallbackTarget)
+        : null;
+      setSourceSelection(nextSelection);
+      setReferenceFeedback(null);
+      return nextSelection;
+    },
+  );
+
+  const copyLineReference = useMemoizedFn(async (): Promise<void> => {
+    if (
+      lineReferenceUnavailable ||
+      !lineReference ||
+      !navigator.clipboard?.writeText
+    ) {
+      return;
+    }
+    await navigator.clipboard.writeText(lineReference);
+    showReferenceFeedback("copied");
+  });
+
+  const copySelectedText = useMemoizedFn(async (): Promise<void> => {
+    const selectedText = sourceSelection?.selectedText;
+    if (!selectedText || !navigator.clipboard?.writeText) {
+      return;
+    }
+    await navigator.clipboard.writeText(selectedText);
+    showReferenceFeedback("copied");
+  });
+
+  const insertLineReference = useMemoizedFn((): void => {
+    if (insertLineReferenceUnavailable || !lineReference) {
+      return;
+    }
+    onInsertLineReference?.(lineReference);
+    showReferenceFeedback("inserted");
+  });
+
+  const revealSourceLine = useMemoizedFn((): void => {
+    if (!sourceSelection) {
+      return;
+    }
+    onRevealSourceLine?.(sourceSelection.startLine);
+  });
 
   useEffect(() => {
     setZoomedImage(null);
+    setSourceSelection(null);
+    setReferenceFeedback(null);
   }, [content, path]);
+
+  useEffect(() => {
+    const handleSelectionChange = (): void => {
+      const container = containerRef.current;
+      const selection = window.getSelection();
+      if (
+        !container ||
+        !selection ||
+        selection.isCollapsed ||
+        !container.contains(selection.anchorNode) ||
+        !container.contains(selection.focusNode)
+      ) {
+        setSourceSelection(null);
+        return;
+      }
+      refreshSourceSelection();
+    };
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      clearReferenceFeedbackTimer();
+    };
+  }, [clearReferenceFeedbackTimer, refreshSourceSelection]);
 
   useEffect(() => {
     if (scrollRatio === undefined) {
@@ -334,10 +473,10 @@ export function TerminalMarkdownPreview({
     };
   }, [apiBase, onAuthExpired, path, projectId, rendered, token]);
 
-  return (
+  const preview = (
     <div
       ref={containerRef}
-      className="terminal-markdown-preview h-full overflow-auto px-5 py-4 text-sm leading-6 text-slate-200"
+      className="terminal-markdown-preview relative h-full overflow-auto px-5 py-4 text-sm leading-6 text-slate-200"
       onScroll={(event) => {
         if (!onScrollRatioChange) {
           return;
@@ -395,6 +534,11 @@ export function TerminalMarkdownPreview({
           });
         }
       }}
+      onContextMenu={(event) => {
+        refreshSourceSelection(
+          event.target instanceof Node ? event.target : null,
+        );
+      }}
     >
       {linkError ? (
         <div className="mb-3 rounded-lg border border-rose-900 bg-rose-950/40 px-3 py-2 text-xs text-rose-200">
@@ -405,10 +549,94 @@ export function TerminalMarkdownPreview({
         className="max-w-none [&_a]:text-cyan-300 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-slate-700 [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-slate-900 [&_code]:px-1 [&_h1]:group [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:group [&_h2]:mb-2 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:group [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:text-lg [&_h3]:font-semibold [&_hr]:border-slate-800 [&_img]:my-4 [&_img]:max-w-full [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:border [&_img]:border-slate-800 [&_li]:my-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:my-3 [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-slate-900 [&_pre]:p-3 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-800 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-slate-800 [&_th]:px-2 [&_th]:py-1 [&_ul]:ml-5 [&_ul]:list-disc"
         dangerouslySetInnerHTML={renderedHtml}
       />
+      {sourceSelection?.selectedText ? (
+        <div
+          data-testid="markdown-reference-toolbar"
+          className="absolute z-30 flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl"
+          style={{ left: sourceSelection.left, top: sourceSelection.top }}
+        >
+          <button
+            type="button"
+            className="inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:text-slate-500"
+            disabled={insertLineReferenceUnavailable}
+            title={
+              lineReferenceTitle ??
+              lineReferenceDisabledReason ??
+              "Add line reference to Agent input"
+            }
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={insertLineReference}
+          >
+            {referenceFeedback === "inserted" ? (
+              <Check className="h-3.5 w-3.5 text-emerald-400" />
+            ) : (
+              <MessageSquarePlus className="h-3.5 w-3.5" />
+            )}
+            {referenceFeedback === "inserted" ? "Added" : "Add to input"}
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-600"
+            disabled={lineReferenceUnavailable}
+            title={lineReferenceTitle ?? "Copy line reference"}
+            aria-label={
+              referenceFeedback === "copied"
+                ? "Line reference copied"
+                : "Copy line reference"
+            }
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => void copyLineReference()}
+          >
+            {referenceFeedback === "copied" ? (
+              <Check className="h-3.5 w-3.5 text-emerald-400" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+      ) : null}
       <TerminalMarkdownImageLightbox
         image={zoomedImage}
         onClose={closeZoomedImage}
       />
     </div>
+  );
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{preview}</ContextMenuTrigger>
+      <ContextMenuContent className="w-52">
+        <ContextMenuItem
+          disabled={insertLineReferenceUnavailable}
+          title={lineReferenceTitle ?? lineReferenceDisabledReason}
+          onSelect={insertLineReference}
+        >
+          <MessageSquarePlus className="mr-2 h-4 w-4" />
+          Add reference to input
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={lineReferenceUnavailable}
+          title={lineReferenceTitle}
+          onSelect={() => void copyLineReference()}
+        >
+          <Copy className="mr-2 h-4 w-4" />
+          Copy line reference
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={!sourceSelection?.selectedText}
+          onSelect={() => void copySelectedText()}
+        >
+          <TextCursorInput className="mr-2 h-4 w-4" />
+          Copy selected text
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          disabled={!sourceSelection || !onRevealSourceLine}
+          onSelect={revealSourceLine}
+        >
+          Reveal in Source
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

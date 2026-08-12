@@ -6,7 +6,10 @@ import {
   getTerminalPreviewFileKind,
   isSupportedTerminalImagePreviewPath,
 } from "../../features/terminal/preview-file-types";
+import { isSupportedFloatingComposerAgent } from "../../features/terminal/floating-composer";
+import { useTerminalPromptInsertionStore } from "../../features/terminal/prompt-insertion-store";
 import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import { Button } from "../ui/button";
 import { TerminalPreviewChangesView } from "./terminal-preview-changes-view";
 import { useTerminalPreviewPanelActions } from "./terminal-preview-panel-actions";
@@ -69,6 +72,14 @@ export function TerminalPreviewPanel({
   onActiveAgentTeamRunChange,
 }: TerminalPreviewPanelProps) {
   const { apiBase, onAuthExpired, token } = useTerminalRuntime();
+  const activeTerminalState = useTerminalWorkspaceStore((state) =>
+    activeSession
+      ? state.terminalStateBySessionId[activeSession.terminalSessionId]
+      : undefined,
+  );
+  const requestPromptInsertion = useTerminalPromptInsertionStore(
+    (state) => state.requestInsertion,
+  );
   const [lineTarget, setLineTarget] =
     useState<TerminalPreviewLineTarget | null>(null);
   const lineTargetSequenceRef = useRef(0);
@@ -191,6 +202,40 @@ export function TerminalPreviewPanel({
     clearFilePreview,
     setMarkdownScrollRatio,
     confirmDiscardDraft,
+  });
+  const terminalState = activeTerminalState ?? activeSession?.terminalState;
+  const canInsertMarkdownReference = Boolean(
+    activeSession?.status === "running" &&
+    isSupportedFloatingComposerAgent({
+      activeCommand: activeSession.activeCommand,
+      terminalState,
+    }),
+  );
+  const markdownReferenceDisabledReason = !activeSession
+    ? "No active terminal"
+    : activeSession.status !== "running"
+      ? "The active terminal is not running"
+      : !canInsertMarkdownReference
+        ? "Start a supported Agent before adding a reference"
+        : undefined;
+  const insertMarkdownReference = useMemoizedFn((reference: string): void => {
+    if (!activeSession || !canInsertMarkdownReference) {
+      return;
+    }
+    requestPromptInsertion(activeSession.terminalSessionId, ` ${reference} `);
+  });
+  const revealMarkdownSourceLine = useMemoizedFn((line: number): void => {
+    if (!projectId || !selectedFilePath) {
+      return;
+    }
+    lineTargetSequenceRef.current += 1;
+    setLineTarget({
+      path: selectedFilePath,
+      line,
+      column: 1,
+      key: `${selectedFilePath}:${line}:1:${lineTargetSequenceRef.current}`,
+    });
+    setMarkdownViewModeInStore(projectId, "source");
   });
 
   const fileTree = useTerminalFileTree({
@@ -383,12 +428,16 @@ export function TerminalPreviewPanel({
           },
         }}
         display={{
+          canInsertMarkdownReference,
           lineTarget,
+          markdownReferenceDisabledReason,
           markdownScrollRatio,
           markdownSplitSourceWidthPct,
           markdownViewMode,
           svgViewMode,
+          onInsertMarkdownReference: insertMarkdownReference,
           onMarkdownScrollRatioChange: setMarkdownScrollRatio,
+          onRevealMarkdownSourceLine: revealMarkdownSourceLine,
           onStartMarkdownResize: startMarkdownResize,
         }}
       />
