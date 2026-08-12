@@ -1,5 +1,5 @@
 import { useMemoizedFn } from "ahooks";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ControlledTreeEnvironment, Tree } from "react-complex-tree";
 import type {
   TreeItem,
@@ -16,6 +16,11 @@ interface TerminalFileTreeProps {
     focusedItem: string | number | undefined;
     selectedItems: Array<string | number>;
   };
+  directoryState: {
+    loading: ReadonlySet<string>;
+    errors: Record<string, string>;
+    truncated: Record<string, number>;
+  };
   treeEvents: {
     onExpandItem: (item: TreeItem<FileTreeData>) => void;
     onCollapseItem: (item: TreeItem<FileTreeData>) => void;
@@ -29,11 +34,13 @@ interface TerminalFileTreeProps {
     onDirectoryClick: (item: TreeItem<FileTreeData>) => void;
     onRequestRenameFile: (relativePath: string) => void;
     onRequestDeleteFile: (relativePath: string) => void;
+    onRetryDirectory: (relativePath: string) => void;
   };
 }
 
 export function TerminalFileTree({
   items,
+  directoryState,
   itemActions,
   treeEvents,
   view,
@@ -52,8 +59,8 @@ export function TerminalFileTree({
     onFileClick,
     onRequestDeleteFile,
     onRequestRenameFile,
+    onRetryDirectory,
   } = itemActions;
-  const [loadingDirs] = useState<Set<string>>(() => new Set());
 
   const viewState = useMemo(
     () => ({
@@ -80,11 +87,14 @@ export function TerminalFileTree({
         children={props.children}
         context={props.context}
         info={props.info}
-        loadingDirs={loadingDirs}
+        loadingDirs={directoryState.loading}
+        directoryError={directoryState.errors[props.item.data.relativePath]}
+        truncatedLimit={directoryState.truncated[props.item.data.relativePath]}
         onFileClick={onFileClick}
         onDirectoryClick={onDirectoryClick}
         onRequestRenameFile={onRequestRenameFile}
         onRequestDeleteFile={onRequestDeleteFile}
+        onRetryDirectory={onRetryDirectory}
       />
     ),
   );

@@ -32,7 +32,10 @@ interface TerminalFileTreeItemProps {
   onDirectoryClick: (item: TreeItem<FileTreeData>) => void;
   onRequestRenameFile: (relativePath: string) => void;
   onRequestDeleteFile: (relativePath: string) => void;
-  loadingDirs: Set<string>;
+  onRetryDirectory: (relativePath: string) => void;
+  loadingDirs: ReadonlySet<string>;
+  directoryError?: string;
+  truncatedLimit?: number;
 }
 
 export function TerminalFileTreeItem({
@@ -41,10 +44,13 @@ export function TerminalFileTreeItem({
   children,
   context,
   loadingDirs,
+  directoryError,
+  truncatedLimit,
   onFileClick,
   onDirectoryClick,
   onRequestRenameFile,
   onRequestDeleteFile,
+  onRetryDirectory,
 }: TerminalFileTreeItemProps): ReactElement {
   const isExpanded = context.isExpanded;
   const isSelected = context.isSelected;
@@ -126,6 +132,34 @@ export function TerminalFileTreeItem({
         row
       )}
       {children}
+      {item.isFolder && isExpanded && directoryError ? (
+        <div
+          className="flex items-start justify-between gap-2 py-1 pr-2 text-xs text-rose-300"
+          style={{ paddingLeft: `${(depth + 1) * 16 + 4}px` }}
+        >
+          <span className="min-w-0 truncate" title={directoryError}>
+            {directoryError}
+          </span>
+          <button
+            type="button"
+            className="shrink-0 underline hover:text-rose-100"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRetryDirectory(item.data.relativePath);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+      {item.isFolder && isExpanded && truncatedLimit ? (
+        <div
+          className="py-1 pr-2 text-xs text-amber-300"
+          style={{ paddingLeft: `${(depth + 1) * 16 + 4}px` }}
+        >
+          Showing the first {truncatedLimit} entries.
+        </div>
+      ) : null}
     </li>
   );
 }

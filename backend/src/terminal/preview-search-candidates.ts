@@ -55,7 +55,7 @@ interface FileSearchCacheEntry {
   files: string[];
 }
 
-interface GitignoreRule {
+export interface PreviewGitignoreRule {
   pattern: string;
   anchored: boolean;
   directoryOnly: boolean;
@@ -66,7 +66,7 @@ interface GitignoreRule {
 const fileSearchCandidateCache = new Map<string, FileSearchCacheEntry>();
 const fileSearchCandidateInflight = new Map<string, Promise<string[]>>();
 
-function parseGitignoreRule(line: string): GitignoreRule | null {
+function parseGitignoreRule(line: string): PreviewGitignoreRule | null {
   let pattern = line.trim();
   if (!pattern || pattern.startsWith("#")) {
     return null;
@@ -102,7 +102,9 @@ function parseGitignoreRule(line: string): GitignoreRule | null {
   };
 }
 
-async function loadRootGitignoreRules(rootPath: string): Promise<GitignoreRule[]> {
+export async function loadPreviewGitignoreRules(
+  rootPath: string,
+): Promise<PreviewGitignoreRule[]> {
   const content = await readFile(path.join(rootPath, ".gitignore"), "utf8").catch(
     () => null,
   );
@@ -113,7 +115,7 @@ async function loadRootGitignoreRules(rootPath: string): Promise<GitignoreRule[]
   return content
     .split(/\r?\n/g)
     .map(parseGitignoreRule)
-    .filter((rule): rule is GitignoreRule => rule !== null);
+    .filter((rule): rule is PreviewGitignoreRule => rule !== null);
 }
 
 function escapeRegExp(value: string): string {
@@ -163,7 +165,7 @@ function pathOrParentMatchesGitignorePattern(
 }
 
 function matchesGitignoreRule(
-  rule: GitignoreRule,
+  rule: PreviewGitignoreRule,
   relativePath: string,
   isDirectory: boolean,
 ): boolean {
@@ -192,10 +194,10 @@ function matchesGitignoreRule(
   );
 }
 
-function isIgnoredByGitignore(
+export function isIgnoredByPreviewGitignore(
   relativePath: string,
   isDirectory: boolean,
-  rules: GitignoreRule[],
+  rules: PreviewGitignoreRule[],
 ): boolean {
   let ignored = false;
   for (const rule of rules) {
@@ -208,7 +210,7 @@ function isIgnoredByGitignore(
 
 async function collectFiles(rootPath: string): Promise<string[]> {
   const results: string[] = [];
-  const gitignoreRules = await loadRootGitignoreRules(rootPath);
+  const gitignoreRules = await loadPreviewGitignoreRules(rootPath);
   const stack = [rootPath];
   while (stack.length > 0 && results.length < SEARCH_MAX_FILES) {
     const current = stack.pop();
@@ -227,14 +229,14 @@ async function collectFiles(rootPath: string): Promise<string[]> {
       if (entry.isDirectory()) {
         if (
           !EXCLUDED_DIRECTORIES.has(entry.name) &&
-          !isIgnoredByGitignore(relativePath, true, gitignoreRules)
+          !isIgnoredByPreviewGitignore(relativePath, true, gitignoreRules)
         ) {
           stack.push(absolutePath);
         }
         continue;
       }
       if (entry.isFile()) {
-        if (!isIgnoredByGitignore(relativePath, false, gitignoreRules)) {
+        if (!isIgnoredByPreviewGitignore(relativePath, false, gitignoreRules)) {
           results.push(relativePath);
         }
       }

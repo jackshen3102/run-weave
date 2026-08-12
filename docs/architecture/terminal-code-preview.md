@@ -185,7 +185,7 @@ Preview 工具内部再区分两个稳定任务：
 
 验收入口见 `docs/testing/terminal/worktree-project-context.testplan.yaml`。
 
-选择 `Explorer` 后，左侧显示受限目录树。目录优先排序，默认过滤 `node_modules`、`.git`、`dist`、`build`、`.next`、`.turbo`、`coverage` 等重目录和敏感环境文件；每层返回数量受 limit 约束，超限时后端标记 `truncated`。选择 `Files` 后，右侧显示 Spotlight / Cmd+P 风格的文件搜索面板。用户可以按文件名或相对路径模糊搜索当前项目路径内文件，选中后进入文件预览。project 内已存在的普通文本/代码文件可以编辑；绝对路径只能手动完整输入并打开，不参与模糊搜索，返回 `base: "filesystem"` 时始终只读。
+选择 `Explorer` 后，左侧显示受限目录树。目录优先排序，复用 Files 搜索的根目录 `.gitignore` 规则，并默认过滤 `node_modules`、`.git`、`dist`、`build`、`.next`、`.turbo`、`coverage` 等重目录和敏感环境文件；每层返回数量受 limit 约束，超限时前端显示 `truncated` 提示。Explorer 不监听文件系统；用户点击 Preview Header 的 Refresh 时，前端重新读取根目录和当前已展开目录。选择 `Files` 后，右侧显示 Spotlight / Cmd+P 风格的文件搜索面板。用户可以按文件名或相对路径模糊搜索当前项目路径内文件，选中后进入文件预览。project 内已存在的普通文本/代码文件可以编辑；绝对路径只能手动完整输入并打开，不参与模糊搜索，返回 `base: "filesystem"` 时始终只读。
 
 ![Open file preview](assets/terminal-code-preview-open-file.svg)
 
