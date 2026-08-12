@@ -10,7 +10,9 @@ import {
   summarizeTerminalChunk,
 } from "../../features/terminal/perf-logging";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
+import { isSupportedFloatingComposerAgent } from "../../features/terminal/floating-composer";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
+import { useTerminalPromptInsertionStore } from "../../features/terminal/prompt-insertion-store";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 import { scheduleTerminalViewportRefresh } from "../../features/terminal/viewport-refresh";
@@ -69,6 +71,16 @@ export function TerminalSurface({
     (state) => state.createBrowserTab,
   );
   const openBrowser = useTerminalPreviewStore((state) => state.openBrowser);
+  const promptInsertionRequest = useTerminalPromptInsertionStore((state) =>
+    active
+      ? (state.requests.find(
+          (request) => request.terminalSessionId === terminalSessionId,
+        ) ?? null)
+      : null,
+  );
+  const consumePromptInsertion = useTerminalPromptInsertionStore(
+    (state) => state.consumeInsertion,
+  );
   const refreshTerminalViewportRef = useRef<(() => void) | null>(null);
   const activeRef = useRef(active);
   const onViewportResizeRef = useRef(onViewportResize);
@@ -107,6 +119,8 @@ export function TerminalSurface({
     terminalSessionId,
     token,
   });
+  const requestTmuxExitCopyMode = scroll.requestTmuxExitCopyMode;
+  const tmuxScrollbackActive = scroll.tmuxScrollbackActive;
 
   const { onOutput, onSnapshot, renderTerminalSnapshot, replayDeferredOutput } =
     useTerminalOutputStream({
@@ -247,6 +261,38 @@ export function TerminalSurface({
     onTmuxScrollbackActiveChange: floatingComposer.setTmuxScrollbackActive,
     onTmuxExitCopyModeRequest: floatingComposer.onTmuxExitCopyModeRequest,
   });
+
+  useEffect(() => {
+    if (!active || !promptInsertionRequest) {
+      return;
+    }
+    if (!isSupportedFloatingComposerAgent({ activeCommand, terminalState })) {
+      consumePromptInsertion(promptInsertionRequest.id);
+      return;
+    }
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+    const pasteReference = (): void => {
+      terminal.paste(promptInsertionRequest.text);
+      consumePromptInsertion(promptInsertionRequest.id);
+    };
+    if (runtimeKindRef.current === "tmux" && tmuxScrollbackActive) {
+      requestTmuxExitCopyMode();
+      const timeout = window.setTimeout(pasteReference, 320);
+      return () => window.clearTimeout(timeout);
+    }
+    pasteReference();
+  }, [
+    active,
+    activeCommand,
+    consumePromptInsertion,
+    promptInsertionRequest,
+    requestTmuxExitCopyMode,
+    terminalState,
+    tmuxScrollbackActive,
+  ]);
 
   useEffect(() => {
     if (!active || !terminalRef.current) {

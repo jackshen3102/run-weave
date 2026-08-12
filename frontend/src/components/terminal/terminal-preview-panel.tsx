@@ -1,5 +1,5 @@
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
@@ -22,11 +22,11 @@ import { useTerminalPreviewQuickSearch } from "./use-terminal-preview-quick-sear
 import {
   renderPreviewEmpty,
   TerminalPreviewFileView,
-  type TerminalPreviewLineTarget,
 } from "./terminal-preview-file-view";
 import { TerminalAgentTeamPanel } from "./terminal-agent-team-panel";
 import { TerminalRacePanel } from "./terminal-race-panel";
 import { useTerminalFileTree } from "./use-terminal-file-tree";
+import { useTerminalMarkdownReferenceActions } from "./use-terminal-markdown-reference-actions";
 import { useTerminalPreviewFileMutations } from "./use-terminal-preview-file-mutations";
 
 interface TerminalPreviewPanelProps {
@@ -69,9 +69,6 @@ export function TerminalPreviewPanel({
   onActiveAgentTeamRunChange,
 }: TerminalPreviewPanelProps) {
   const { apiBase, onAuthExpired, token } = useTerminalRuntime();
-  const [lineTarget, setLineTarget] =
-    useState<TerminalPreviewLineTarget | null>(null);
-  const lineTargetSequenceRef = useRef(0);
   const {
     closePreview,
     setWidth,
@@ -193,6 +190,12 @@ export function TerminalPreviewPanel({
     setMarkdownScrollRatio,
     confirmDiscardDraft,
   });
+  const markdownReference = useTerminalMarkdownReferenceActions({
+    activeSession,
+    projectId,
+    selectedFilePath,
+    setMarkdownViewMode: setMarkdownViewModeInStore,
+  });
 
   const fileTree = useTerminalFileTree({
     apiBase,
@@ -261,17 +264,7 @@ export function TerminalPreviewPanel({
       void fileTree.revealFile(filePath);
       clearFilePreview(filePath);
       setMarkdownScrollRatio(0);
-      if (target) {
-        lineTargetSequenceRef.current += 1;
-        setLineTarget({
-          path: filePath,
-          line: target.line,
-          column: target.column,
-          key: `${filePath}:${target.line}:${target.column}:${lineTargetSequenceRef.current}`,
-        });
-      } else {
-        setLineTarget(null);
-      }
+      markdownReference.setTarget(filePath, target);
     },
   );
 
@@ -385,12 +378,16 @@ export function TerminalPreviewPanel({
           },
         }}
         display={{
-          lineTarget,
+          canInsertMarkdownReference: markdownReference.canInsert,
+          lineTarget: markdownReference.lineTarget,
+          markdownReferenceDisabledReason: markdownReference.disabledReason,
           markdownScrollRatio,
           markdownSplitSourceWidthPct,
           markdownViewMode,
           svgViewMode,
+          onInsertMarkdownReference: markdownReference.insert,
           onMarkdownScrollRatioChange: setMarkdownScrollRatio,
+          onRevealMarkdownSourceLine: markdownReference.revealSourceLine,
           onStartMarkdownResize: startMarkdownResize,
         }}
       />

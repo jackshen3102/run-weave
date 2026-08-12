@@ -14,6 +14,8 @@ import {
 } from "../../features/terminal/markdown-preview";
 import { HttpError } from "../../services/http";
 import { getTerminalProjectPreviewAsset } from "../../services/terminal";
+import { TerminalMarkdownReferenceControls } from "./terminal-markdown-reference-controls";
+import { addMarkdownSourceLineMetadata } from "./terminal-markdown-reference";
 
 interface TerminalMarkdownPreviewProps {
   apiBase: string;
@@ -21,10 +23,16 @@ interface TerminalMarkdownPreviewProps {
   projectId: string;
   content: string;
   path: string;
+  lineReferencePath?: string;
+  canInsertLineReference?: boolean;
+  lineReferenceDisabledReason?: string;
+  hasUnsavedChanges?: boolean;
   scrollRatio?: number;
   onScrollRatioChange?: (ratio: number) => void;
   onAuthExpired?: () => void;
   onOpenFile: (path: string, hash?: string) => void;
+  onInsertLineReference?: (reference: string) => void;
+  onRevealSourceLine?: (line: number) => void;
 }
 
 interface MarkdownRenderResult {
@@ -69,6 +77,7 @@ function getMarkdownRenderer(): MarkdownIt {
     })
     .use(taskLists, { enabled: false })
     .use(footnote);
+  addMarkdownSourceLineMetadata(renderer);
 
   const defaultFence =
     renderer.renderer.rules.fence?.bind(renderer.renderer) ??
@@ -84,7 +93,9 @@ function getMarkdownRenderer(): MarkdownIt {
     const renderEnv = env as { mermaidBlocks?: string[] };
     renderEnv.mermaidBlocks ??= [];
     const blockIndex = renderEnv.mermaidBlocks.push(token.content) - 1;
-    return `<div class="terminal-markdown-mermaid" data-mermaid-index="${blockIndex}"><pre>${renderer.utils.escapeHtml(token.content)}</pre></div>`;
+    token.attrJoin("class", "terminal-markdown-mermaid");
+    token.attrSet("data-mermaid-index", String(blockIndex));
+    return `<div${self.renderAttrs(token)}><pre>${renderer.utils.escapeHtml(token.content)}</pre></div>`;
   };
 
   const defaultImage =
@@ -153,6 +164,8 @@ function renderMarkdown(
         "data-preview-src",
         "data-preview-asset-path",
         "data-preview-alt",
+        "data-source-start",
+        "data-source-end",
       ],
     }),
     mermaidBlocks: env.mermaidBlocks,
@@ -187,10 +200,16 @@ export function TerminalMarkdownPreview({
   projectId,
   content,
   path,
+  lineReferencePath,
+  canInsertLineReference = false,
+  lineReferenceDisabledReason,
+  hasUnsavedChanges = false,
   scrollRatio,
   onScrollRatioChange,
   onAuthExpired,
   onOpenFile,
+  onInsertLineReference,
+  onRevealSourceLine,
 }: TerminalMarkdownPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -335,9 +354,15 @@ export function TerminalMarkdownPreview({
   }, [apiBase, onAuthExpired, path, projectId, rendered, token]);
 
   return (
-    <div
-      ref={containerRef}
-      className="terminal-markdown-preview h-full overflow-auto px-5 py-4 text-sm leading-6 text-slate-200"
+    <TerminalMarkdownReferenceControls
+      containerRef={containerRef}
+      lineReferencePath={lineReferencePath}
+      canInsertLineReference={canInsertLineReference}
+      lineReferenceDisabledReason={lineReferenceDisabledReason}
+      hasUnsavedChanges={hasUnsavedChanges}
+      resetKey={`${path}:${content}`}
+      onInsertLineReference={onInsertLineReference}
+      onRevealSourceLine={onRevealSourceLine}
       onScroll={(event) => {
         if (!onScrollRatioChange) {
           return;
@@ -409,6 +434,6 @@ export function TerminalMarkdownPreview({
         image={zoomedImage}
         onClose={closeZoomedImage}
       />
-    </div>
+    </TerminalMarkdownReferenceControls>
   );
 }
