@@ -181,6 +181,7 @@ export function TerminalPreviewPanel({
       await loadFile(filePath);
     },
     loadChanges,
+    refreshTree: () => fileTree.refreshTree(),
     setWidth,
     setOpenFileQuery,
     openFile: openFileInStore,
@@ -201,6 +202,7 @@ export function TerminalPreviewPanel({
     onOpenFilePath: openFilePath,
   });
   const { loadRootDirectory, resetTree, invalidateDirectory } = fileTree;
+  const projectPath = activeProject?.path ?? null;
 
   const quickSearch = useTerminalPreviewQuickSearch({
     apiBase,
@@ -211,13 +213,13 @@ export function TerminalPreviewPanel({
 
   useEffect(() => {
     resetTree();
-  }, [projectId, hasProjectPath, resetTree]);
+  }, [projectId, projectPath, resetTree]);
 
   useEffect(() => {
     if (mode === "explorer") {
-      loadRootDirectory();
+      void loadRootDirectory();
     }
-  }, [loadRootDirectory, mode]);
+  }, [loadRootDirectory, mode, projectId, projectPath]);
 
   const invalidateFileTreeParents = useMemoizedFn((paths: string[]): void => {
     const directories = new Set(paths.map(getPreviewParentDirectory));
@@ -485,7 +487,7 @@ export function TerminalPreviewPanel({
         }}
         actions={{
           changesLoading,
-          fileLoading,
+          fileLoading: fileLoading || fileTree.loadingDirectories.size > 0,
           mode,
           onRefresh: refresh,
           copy: {

@@ -30,7 +30,11 @@ export function TerminalFileExplorer({
     selectedItems,
     loading,
     error,
+    loadingDirectories,
+    directoryErrors,
+    truncatedDirectories,
     loadRootDirectory,
+    reloadDirectory,
     handleExpandItem,
     handleCollapseItem,
     handleFocusItem,
@@ -73,7 +77,7 @@ export function TerminalFileExplorer({
         <button
           type="button"
           className="text-slate-300 underline hover:text-white"
-          onClick={loadRootDirectory}
+          onClick={() => void loadRootDirectory()}
         >
           Retry
         </button>
@@ -83,9 +87,31 @@ export function TerminalFileExplorer({
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
+      {error ? (
+        <div className="flex items-start justify-between gap-2 border-b border-rose-900/60 bg-rose-950/30 px-3 py-2 text-xs text-rose-300">
+          <span>{error}</span>
+          <button
+            type="button"
+            className="shrink-0 underline hover:text-rose-100"
+            onClick={() => void loadRootDirectory()}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+      {truncatedDirectories["."] ? (
+        <div className="border-b border-amber-900/60 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
+          Showing the first {truncatedDirectories["."]} project entries.
+        </div>
+      ) : null}
       <TerminalFileTree
         items={items}
         view={{ expandedItems, focusedItem, selectedItems }}
+        directoryState={{
+          errors: directoryErrors,
+          loading: loadingDirectories,
+          truncated: truncatedDirectories,
+        }}
         treeEvents={{
           onCollapseItem: handleCollapseItem,
           onExpandItem: handleExpandItem,
@@ -99,6 +125,8 @@ export function TerminalFileExplorer({
           onFileClick: handleFileClick,
           onRequestDeleteFile,
           onRequestRenameFile,
+          onRetryDirectory: (directoryPath) =>
+            void reloadDirectory(directoryPath),
         }}
       />
     </div>

@@ -11,6 +11,8 @@ export interface FileTreeData {
 }
 
 type FileTreeItems = Record<TreeItemIndex, TreeItem<FileTreeData>>;
+type DirectoryErrors = Record<string, string>;
+type TruncatedDirectories = Record<string, number>;
 
 interface UseTerminalFileTreeParams {
   apiBase: string;
@@ -27,7 +29,12 @@ export interface UseTerminalFileTreeReturn {
   selectedItems: TreeItemIndex[];
   loading: boolean;
   error: string | null;
-  loadRootDirectory: () => void;
+  loadingDirectories: ReadonlySet<string>;
+  directoryErrors: DirectoryErrors;
+  truncatedDirectories: TruncatedDirectories;
+  loadRootDirectory: () => Promise<void>;
+  refreshTree: () => Promise<void>;
+  reloadDirectory: (directoryPath: string) => Promise<void>;
   handleExpandItem: (item: TreeItem<FileTreeData>) => void;
   handleCollapseItem: (item: TreeItem<FileTreeData>) => void;
   handleFocusItem: (item: TreeItem<FileTreeData>) => void;
@@ -111,67 +118,124 @@ export function useTerminalFileTree({
   const [expandedItems, setExpandedItems] = useState<TreeItemIndex[]>([]);
   const [focusedItem, setFocusedItem] = useState<TreeItemIndex | undefined>();
   const [selectedItems, setSelectedItems] = useState<TreeItemIndex[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [directoryErrors, setDirectoryErrors] = useState<DirectoryErrors>({});
+  const [truncatedDirectories, setTruncatedDirectories] =
+    useState<TruncatedDirectories>({});
 
   const loadedDirsRef = useRef<Set<string>>(new Set());
   const inflightRef = useRef<
-    Map<string, Promise<TerminalPreviewDirectoryResponse>>
+    Map<string, Promise<TerminalPreviewDirectoryResponse | null>>
   >(new Map());
   const directoryVersionsRef = useRef<Map<string, number>>(new Map());
+  const treeGenerationRef = useRef(0);
 
   const loadDirectory = useMemoizedFn(
-    async (
+    (
       relativePath: string,
     ): Promise<TerminalPreviewDirectoryResponse | null> => {
-      if (!projectId || !hasProjectPath) return null;
+      if (!projectId || !hasProjectPath) return Promise.resolve(null);
 
       const normalizedPath = normalizeDirectoryPath(relativePath);
       const inflight = inflightRef.current.get(normalizedPath);
       if (inflight) return inflight;
 
+      const requestProjectId = projectId;
+      const requestGeneration = treeGenerationRef.current;
       const requestVersion =
         directoryVersionsRef.current.get(normalizedPath) ?? 0;
-      const promise = listTerminalProjectPreviewDirectory(
+      setLoadingDirectories((prev) => {
+        if (prev.has(normalizedPath)) return prev;
+        const next = new Set(prev);
+        next.add(normalizedPath);
+        return next;
+      });
+      setDirectoryErrors((prev) => {
+        if (!(normalizedPath in prev)) return prev;
+        const next = { ...prev };
+        delete next[normalizedPath];
+        return next;
+      });
+
+      const request = listTerminalProjectPreviewDirectory(
         apiBase,
         token,
-        projectId,
+        requestProjectId,
         {
           path: normalizedPath === "." ? "" : normalizedPath,
         },
       );
 
-      inflightRef.current.set(normalizedPath, promise);
-
-      try {
-        const response = await promise;
-        if (
-          (directoryVersionsRef.current.get(normalizedPath) ?? 0) !==
-          requestVersion
-        ) {
+      const promise: Promise<TerminalPreviewDirectoryResponse | null> = request
+        .then((response) => {
+          if (
+            treeGenerationRef.current !== requestGeneration ||
+            response.projectId !== requestProjectId ||
+            (directoryVersionsRef.current.get(normalizedPath) ?? 0) !==
+              requestVersion
+          ) {
+            return response;
+          }
+          loadedDirsRef.current.add(normalizedPath);
+          setItems((prev) =>
+            mergeDirectoryResponse(prev, normalizedPath, response),
+          );
+          setDirectoryErrors((prev) => {
+            if (!(normalizedPath in prev)) return prev;
+            const next = { ...prev };
+            delete next[normalizedPath];
+            return next;
+          });
+          setTruncatedDirectories((prev) => {
+            if (response.truncated) {
+              if (prev[normalizedPath] === response.limit) return prev;
+              return { ...prev, [normalizedPath]: response.limit };
+            }
+            if (!(normalizedPath in prev)) return prev;
+            const next = { ...prev };
+            delete next[normalizedPath];
+            return next;
+          });
           return response;
-        }
-        loadedDirsRef.current.add(normalizedPath);
-        setItems((prev) =>
-          mergeDirectoryResponse(prev, normalizedPath, response),
-        );
-        setError(null);
-        return response;
-      } catch (err) {
-        setError((err as Error).message || "Failed to load directory");
-        return null;
-      } finally {
-        if (inflightRef.current.get(normalizedPath) === promise) {
-          inflightRef.current.delete(normalizedPath);
-        }
-      }
+        })
+        .catch((err: unknown) => {
+          if (
+            treeGenerationRef.current === requestGeneration &&
+            (directoryVersionsRef.current.get(normalizedPath) ?? 0) ===
+              requestVersion
+          ) {
+            setDirectoryErrors((prev) => ({
+              ...prev,
+              [normalizedPath]:
+                (err as Error).message || "Failed to load directory",
+            }));
+          }
+          return null;
+        })
+        .finally(() => {
+          if (
+            treeGenerationRef.current === requestGeneration &&
+            inflightRef.current.get(normalizedPath) === promise
+          ) {
+            inflightRef.current.delete(normalizedPath);
+            setLoadingDirectories((prev) => {
+              if (!prev.has(normalizedPath)) return prev;
+              const next = new Set(prev);
+              next.delete(normalizedPath);
+              return next;
+            });
+          }
+        });
+
+      inflightRef.current.set(normalizedPath, promise);
+      return promise;
     },
   );
 
-  const loadRootDirectory = useMemoizedFn(() => {
-    if (!projectId || !hasProjectPath) return;
-    setLoading(true);
-    loadDirectory(".").finally(() => setLoading(false));
+  const loadRootDirectory = useMemoizedFn(async (): Promise<void> => {
+    await loadDirectory(".");
   });
 
   const handleExpandItem = useMemoizedFn((item: TreeItem<FileTreeData>) => {
@@ -305,12 +369,46 @@ export function useTerminalFileTree({
     }
   });
 
+  const reloadDirectory = useMemoizedFn(
+    async (directoryPath: string): Promise<void> => {
+      const normalized = normalizeDirectoryPath(directoryPath);
+      loadedDirsRef.current.delete(normalized);
+      inflightRef.current.delete(normalized);
+      directoryVersionsRef.current.set(
+        normalized,
+        (directoryVersionsRef.current.get(normalized) ?? 0) + 1,
+      );
+      await loadDirectory(normalized);
+    },
+  );
+
+  const refreshTree = useMemoizedFn(async (): Promise<void> => {
+    if (!projectId || !hasProjectPath) return;
+
+    const directoryPaths = new Set<string>(["."]);
+    for (const itemId of expandedItems) {
+      const item = items[itemId];
+      if (item?.isFolder) {
+        directoryPaths.add(item.data.relativePath || ".");
+      }
+    }
+
+    await Promise.all(
+      Array.from(directoryPaths, (directoryPath) =>
+        reloadDirectory(directoryPath),
+      ),
+    );
+  });
+
   const resetTree = useMemoizedFn(() => {
+    treeGenerationRef.current += 1;
     setItems({ root: createRootItem() });
     setExpandedItems([]);
     setFocusedItem(undefined);
     setSelectedItems([]);
-    setError(null);
+    setLoadingDirectories(new Set());
+    setDirectoryErrors({});
+    setTruncatedDirectories({});
     loadedDirsRef.current.clear();
     inflightRef.current.clear();
     directoryVersionsRef.current.clear();
@@ -321,9 +419,14 @@ export function useTerminalFileTree({
     expandedItems,
     focusedItem,
     selectedItems,
-    loading,
-    error,
+    loading: loadingDirectories.has("."),
+    error: directoryErrors["."] ?? null,
+    loadingDirectories,
+    directoryErrors,
+    truncatedDirectories,
     loadRootDirectory,
+    refreshTree,
+    reloadDirectory,
     handleExpandItem,
     handleCollapseItem,
     handleFocusItem,

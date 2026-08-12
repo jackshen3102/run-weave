@@ -15,6 +15,7 @@ interface TerminalPreviewPanelActionsArgs {
   copyPath: string | null;
   loadFile: (filePath: string) => Promise<void>;
   loadChanges: () => Promise<void>;
+  refreshTree: () => Promise<void>;
   setWidth: (width: number) => void;
   setOpenFileQuery: (projectId: string, query: string) => void;
   openFile: (
@@ -49,6 +50,7 @@ export function useTerminalPreviewPanelActions({
   copyPath,
   loadFile,
   loadChanges,
+  refreshTree,
   setWidth,
   setOpenFileQuery,
   openFile,
@@ -64,7 +66,14 @@ export function useTerminalPreviewPanelActions({
     if (!confirmDiscardDraft()) {
       return;
     }
-    if (mode === "file" || mode === "explorer") {
+    if (mode === "explorer") {
+      void refreshTree();
+      if (selectedFilePath) {
+        void loadFile(selectedFilePath);
+      }
+      return;
+    }
+    if (mode === "file") {
       if (selectedFilePath) {
         void loadFile(selectedFilePath);
       } else if (projectId) {

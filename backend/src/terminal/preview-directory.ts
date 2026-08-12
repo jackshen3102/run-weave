@@ -4,6 +4,8 @@ import type { TerminalPreviewDirectoryResponse, TerminalPreviewTreeEntry, Termin
 import {
   EXCLUDED_DIRECTORIES,
   EXCLUDED_FILE_BASENAMES,
+  isIgnoredByPreviewGitignore,
+  loadPreviewGitignoreRules,
 } from "./preview-search-candidates";
 import { ensureProjectPath, TerminalPreviewError, toRelativePath } from "./preview-paths";
 
@@ -24,9 +26,8 @@ function isSensitiveEntry(basename: string): boolean {
 }
 
 function shouldExcludeEntry(basename: string, isDirectory: boolean): boolean {
-  if (isDirectory) {
-    return EXCLUDED_DIRECTORIES.has(basename);
-  }
+  if (EXCLUDED_DIRECTORIES.has(basename)) return true;
+  if (isDirectory) return false;
   if (EXCLUDED_FILE_BASENAMES.has(basename)) return true;
   if (isSensitiveEntry(basename)) return true;
   return false;
@@ -40,6 +41,7 @@ export async function listPreviewDirectory(params: {
 }): Promise<TerminalPreviewDirectoryResponse> {
   const projectPath = ensureProjectPath(params.projectPath);
   const rootPath = await realpath(projectPath);
+  const gitignoreRules = await loadPreviewGitignoreRules(rootPath);
 
   const requestedPath = params.relativePath.trim();
   const targetAbsolute = requestedPath
@@ -82,6 +84,9 @@ export async function listPreviewDirectory(params: {
 
     const entryAbsolute = path.join(resolvedTarget, dirent.name);
     const entryRelative = toRelativePath(rootPath, entryAbsolute);
+    if (isIgnoredByPreviewGitignore(entryRelative, isDir, gitignoreRules)) {
+      continue;
+    }
     const kind: TerminalPreviewTreeEntryKind = isDir ? "directory" : "file";
 
     const entry: TerminalPreviewTreeEntry = {
