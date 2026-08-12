@@ -3,10 +3,12 @@ import type {
   RunweaveCompanionBridge,
   RunweaveElectronBridge,
   TerminalBrowserAnnotationUpdate,
-  TerminalBrowserCreatedTab,
-  TerminalBrowserTabSnapshot,
-  TerminalBrowserUpdate,
 } from "@runweave/shared/desktop-bridge";
+import type {
+  TerminalBrowserCreateTabRequest,
+  TerminalBrowserStateChangedEvent,
+  TerminalBrowserWorkspaceSnapshot,
+} from "@runweave/shared/terminal-browser-workspace";
 import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
@@ -123,13 +125,27 @@ const electronApi = {
     ipcRenderer.invoke("system-monitor:get") as Promise<SystemMonitorSnapshot>,
   terminalBrowserNavigate: (tabId: string, url: string) =>
     ipcRenderer.invoke("terminal-browser:navigate", tabId, url),
-  terminalBrowserListTabs: () =>
-    ipcRenderer.invoke("terminal-browser:list-tabs") as Promise<
-      TerminalBrowserTabSnapshot[]
-    >,
-  terminalBrowserReorderTabs: (orderedTabIds: string[]) =>
+  terminalBrowserGetWorkspace: () =>
     ipcRenderer.invoke(
-      "terminal-browser:reorder-tabs",
+      "terminal-browser:get-workspace",
+    ) as Promise<TerminalBrowserWorkspaceSnapshot>,
+  terminalBrowserCreateTab: (request: TerminalBrowserCreateTabRequest) =>
+    ipcRenderer.invoke("terminal-browser:create-tab", request) as Promise<void>,
+  terminalBrowserRenameGroup: (groupId: string, name: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:rename-group",
+      groupId,
+      name,
+    ) as Promise<void>,
+  terminalBrowserCloseGroup: (groupId: string) =>
+    ipcRenderer.invoke("terminal-browser:close-group", groupId) as Promise<void>,
+  terminalBrowserReorderGroupTabs: (
+    groupId: string,
+    orderedTabIds: string[],
+  ) =>
+    ipcRenderer.invoke(
+      "terminal-browser:reorder-group-tabs",
+      groupId,
       orderedTabIds,
     ) as Promise<void>,
   terminalBrowserReload: (tabId: string) =>
@@ -250,58 +266,18 @@ const electronApi = {
       "terminal-browser:annotation-submit",
       tabId,
     ) as Promise<TerminalBrowserAnnotationSubmission>,
-  onTerminalBrowserTabCreatedFromProxy: (
-    listener: (data: TerminalBrowserCreatedTab) => void,
+  onTerminalBrowserStateChanged: (
+    listener: (data: TerminalBrowserStateChangedEvent) => void,
   ) => {
     const wrapped = (
       _event: Electron.IpcRendererEvent,
-      data: TerminalBrowserCreatedTab,
+      data: TerminalBrowserStateChangedEvent,
     ) => {
       listener(data);
     };
-    ipcRenderer.on("terminal-browser:tab-created-from-proxy", wrapped);
+    ipcRenderer.on("terminal-browser:state-changed", wrapped);
     return () => {
-      ipcRenderer.off("terminal-browser:tab-created-from-proxy", wrapped);
-    };
-  },
-  onTerminalBrowserTabUpdated: (
-    listener: (data: TerminalBrowserUpdate) => void,
-  ) => {
-    const wrapped = (
-      _event: Electron.IpcRendererEvent,
-      data: TerminalBrowserUpdate,
-    ) => {
-      listener(data);
-    };
-    ipcRenderer.on("terminal-browser:tab-updated", wrapped);
-    return () => {
-      ipcRenderer.off("terminal-browser:tab-updated", wrapped);
-    };
-  },
-  onTerminalBrowserTabActivatedFromProxy: (
-    listener: (data: TerminalBrowserUpdate) => void,
-  ) => {
-    const wrapped = (
-      _event: Electron.IpcRendererEvent,
-      data: TerminalBrowserUpdate,
-    ) => {
-      listener(data);
-    };
-    ipcRenderer.on("terminal-browser:tab-activated-from-proxy", wrapped);
-    return () => {
-      ipcRenderer.off("terminal-browser:tab-activated-from-proxy", wrapped);
-    };
-  },
-  onTerminalBrowserTabClosed: (listener: (data: { tabId: string }) => void) => {
-    const wrapped = (
-      _event: Electron.IpcRendererEvent,
-      data: { tabId: string },
-    ) => {
-      listener(data);
-    };
-    ipcRenderer.on("terminal-browser:tab-closed", wrapped);
-    return () => {
-      ipcRenderer.off("terminal-browser:tab-closed", wrapped);
+      ipcRenderer.off("terminal-browser:state-changed", wrapped);
     };
   },
   onTerminalBrowserAnnotationUpdated: (

@@ -1,11 +1,11 @@
 import { useMemoizedFn } from "ahooks";
-import { Globe2, LoaderCircle, Plus, X } from "lucide-react";
+import { File, LoaderCircle, Plus, X } from "lucide-react";
+import type { TerminalBrowserGroupSnapshot } from "@runweave/shared/terminal-browser-workspace";
 import {
   useEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -22,34 +22,24 @@ import {
   browserTabLabel,
   calculateTerminalBrowserTabWidths,
   getBrowserGroupColor,
-  getBrowserGroupLabel,
+  getTerminalBrowserFaviconFallback,
   getTerminalBrowserTabDensity,
 } from "./terminal-browser-tab-utils";
 
 interface TerminalBrowserTabsProps {
   tabs: TerminalBrowserTabState[];
+  groups: TerminalBrowserGroupSnapshot[];
   activeTabId: string;
   onCreateTab: () => void;
+  onCreateGroup: () => void;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (
     event: { stopPropagation: () => void },
     tabId: string,
   ) => void;
-  onReorder?: (fromIndex: number, toIndex: number) => void;
-}
-
-function BrowserGroupMarker({ browserGroupId }: { browserGroupId?: string }) {
-  const style: CSSProperties = {
-    backgroundColor: getBrowserGroupColor(browserGroupId),
-  };
-  return (
-    <span
-      className="h-4 w-1.5 shrink-0 rounded-full"
-      style={style}
-      title={getBrowserGroupLabel(browserGroupId)}
-      aria-hidden="true"
-    />
-  );
+  onReorder?: (groupId: string, fromIndex: number, toIndex: number) => void;
+  onRenameGroup: (groupId: string, name: string) => Promise<void>;
+  onCloseGroup: (groupId: string) => Promise<void>;
 }
 
 function equalTabIdOrder(left: string[], right: string[]): boolean {
@@ -61,11 +51,15 @@ function equalTabIdOrder(left: string[], right: string[]): boolean {
 
 export function TerminalBrowserTabs({
   tabs,
+  groups,
   activeTabId,
   onCreateTab,
+  onCreateGroup,
   onSelectTab,
   onCloseTab,
   onReorder,
+  onRenameGroup,
+  onCloseGroup,
 }: TerminalBrowserTabsProps) {
   const [now, setNow] = useState(() => Date.now());
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -84,6 +78,10 @@ export function TerminalBrowserTabs({
   const pendingFocusTabIdRef = useRef<string | null>(null);
   const tabIds = useMemo(() => tabs.map((tab) => tab.id), [tabs]);
   const tabIdsKey = tabIds.join("\u0000");
+  const tabsById = useMemo(
+    () => new Map(tabs.map((tab) => [tab.id, tab])),
+    [tabs],
+  );
   const calculatedWidths = useMemo(
     () =>
       calculateTerminalBrowserTabWidths(
@@ -287,6 +285,7 @@ export function TerminalBrowserTabs({
     const density = getTerminalBrowserTabDensity(width);
     const mcpOperating =
       typeof tab.mcpActivityUntil === "number" && tab.mcpActivityUntil > now;
+    const faviconFallback = getTerminalBrowserFaviconFallback(tab.url);
     const showTitle = density !== "icon-only" || selected;
     const showClose = selected || density !== "icon-only";
     return (
@@ -305,9 +304,7 @@ export function TerminalBrowserTabs({
           "group flex h-7 shrink-0 items-center gap-1 overflow-hidden rounded-md border px-2 text-xs transition-colors",
           sortProps.isDragging
             ? "border-sky-500/60 bg-sky-500/20 text-slate-50 opacity-90 shadow-lg"
-            : mcpOperating
-              ? "border-emerald-400/80 bg-emerald-500/15 text-slate-50 shadow-[0_0_0_1px_rgba(52,211,153,0.28)]"
-              : selected
+            : selected
                 ? "border-sky-500/60 bg-sky-500/15 text-slate-50"
                 : "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-900",
         ].join(" ")}
@@ -315,6 +312,7 @@ export function TerminalBrowserTabs({
         data-terminal-browser-tab-slot={tab.id}
         data-density={density}
         data-width={width}
+        data-navigation-error={tab.navigationError ? "true" : "false"}
       >
         <button
           ref={(element) => {
@@ -337,33 +335,45 @@ export function TerminalBrowserTabs({
           onClick={() => selectTab(tab.id)}
           onKeyDown={(event) => handleKeyDown(event, tab.id)}
         >
-          <BrowserGroupMarker browserGroupId={tab.browserGroupId} />
-          {tab.loading ? (
-            <LoaderCircle
-              className="h-3.5 w-3.5 shrink-0 animate-spin"
-              aria-label="Loading"
-            />
-          ) : (
-            <Globe2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          )}
+          <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+            {tab.loading ? (
+              <LoaderCircle
+                className="h-3.5 w-3.5 animate-spin"
+                aria-label="Loading"
+              />
+            ) : tab.faviconDataUrl ? (
+              <img
+                src={tab.faviconDataUrl}
+                className="h-3.5 w-3.5 rounded-sm"
+                alt=""
+                aria-hidden="true"
+              />
+            ) : faviconFallback ? (
+              <span
+                className="text-[10px] font-semibold text-slate-300"
+                aria-hidden="true"
+              >
+                {faviconFallback}
+              </span>
+            ) : (
+              <File className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {mcpOperating ? (
+              <span
+                className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300 ring-1 ring-slate-950"
+                title="Agent is operating this tab"
+                data-mcp-indicator="dot"
+              />
+            ) : null}
+            {tab.navigationError ? (
+              <span
+                className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-400 ring-1 ring-slate-950"
+                title={tab.navigationError}
+                data-navigation-error-indicator
+              />
+            ) : null}
+          </span>
           {showTitle ? <span className="truncate">{tabLabel}</span> : null}
-          {mcpOperating && density === "comfortable" ? (
-            <span
-              className="ml-1 inline-flex h-4 shrink-0 items-center gap-1 rounded bg-emerald-400/20 px-1 text-[9px] font-semibold leading-none text-emerald-100"
-              title="MCP is controlling this tab"
-              data-mcp-indicator="badge"
-            >
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" />
-              MCP
-            </span>
-          ) : null}
-          {mcpOperating && density === "compact" ? (
-            <span
-              className="ml-1 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-300"
-              title="MCP is controlling this tab"
-              data-mcp-indicator="dot"
-            />
-          ) : null}
         </button>
         {showClose ? (
           <button
@@ -409,33 +419,85 @@ export function TerminalBrowserTabs({
         aria-label="Browser tabs"
         data-terminal-browser-tab-viewport
       >
-        {onReorder ? (
-          <SortableTabs
-            items={tabs}
-            getItemId={(tab) => tab.id}
-            onReorder={(fromIndex, toIndex) => {
-              clearCloseFreeze();
-              onReorder(fromIndex, toIndex);
-            }}
-            className="flex w-max items-center gap-1 [&>div]:shrink-0"
-            renderTab={renderTab}
-          />
-        ) : (
-          <div className="flex w-max items-center gap-1">
-            {tabs.map((tab) => (
-              <div key={tab.id}>{renderTab(tab, { isDragging: false })}</div>
-            ))}
-          </div>
-        )}
+        <div className="flex w-max items-center gap-3">
+          {groups.map((group) => {
+            const groupTabs = group.tabIds.flatMap((tabId) => {
+              const tab = tabsById.get(tabId);
+              return tab ? [tab] : [];
+            });
+            if (groupTabs.length === 0) {
+              return null;
+            }
+            const connected = groupTabs.some((tab) => tab.cdpProxyAttached);
+            const hasError = groupTabs.some((tab) => tab.navigationError);
+            return (
+              <div
+                key={group.id}
+                className="relative flex shrink-0 items-center pt-1"
+                data-terminal-browser-group={group.id}
+                data-group-connected={connected ? "true" : "false"}
+                data-group-error={hasError ? "true" : "false"}
+              >
+                <span
+                  role="img"
+                  aria-label={`工作组 ${group.name}`}
+                  title={group.name}
+                  className="absolute inset-x-0 top-0 h-px rounded-full"
+                  style={{ backgroundColor: getBrowserGroupColor(group.id) }}
+                  data-terminal-browser-group-line
+                >
+                  {connected ? (
+                    <span
+                      className="absolute -top-0.5 left-0 h-1.5 w-1.5 rounded-full bg-emerald-300 ring-1 ring-slate-950"
+                      title="Agent/自动化已连接"
+                      data-group-connected-indicator
+                    />
+                  ) : null}
+                  {hasError ? (
+                    <span
+                      className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-400 ring-1 ring-slate-950"
+                      title="工作组中有页面导航失败"
+                      data-group-error-indicator
+                    />
+                  ) : null}
+                </span>
+                {onReorder ? (
+                  <SortableTabs
+                    items={groupTabs}
+                    getItemId={(tab) => tab.id}
+                    onReorder={(fromIndex, toIndex) => {
+                      clearCloseFreeze();
+                      onReorder(group.id, fromIndex, toIndex);
+                    }}
+                    className="flex w-max items-center gap-1 [&>div]:shrink-0"
+                    renderTab={renderTab}
+                  />
+                ) : (
+                  <div className="flex w-max items-center gap-1">
+                    {groupTabs.map((tab) => (
+                      <div key={tab.id}>
+                        {renderTab(tab, { isDragging: false })}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
       <TerminalBrowserTabOverview
         tabs={tabs}
+        groups={groups}
         activeTabId={activeTabId}
         onSelectTab={(tabId) => selectTab(tabId, { clearFreeze: true })}
         onCloseTab={(event, tabId) => {
           clearCloseFreeze();
           onCloseTab(event, tabId);
         }}
+        onCreateGroup={onCreateGroup}
+        onRenameGroup={onRenameGroup}
+        onCloseGroup={onCloseGroup}
       />
       <button
         type="button"

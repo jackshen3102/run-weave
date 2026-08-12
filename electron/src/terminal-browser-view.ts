@@ -13,7 +13,6 @@ export {
   getTerminalBrowserEntryByKey,
   getTerminalBrowserEntryByTargetId,
   getTerminalBrowserDisplayScaleForTarget,
-  getTerminalBrowserTabsForWindow,
   markTerminalBrowserMcpActivity,
   setTerminalBrowserCdpProxyAttached,
   setTerminalBrowserDisplayScaleForTarget,

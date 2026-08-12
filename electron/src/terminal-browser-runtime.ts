@@ -7,6 +7,9 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { TerminalBrowserUpdate } from "@runweave/shared/desktop-bridge";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import type {
+  TerminalBrowserGroupNameOrigin,
+} from "@runweave/shared/terminal-browser-workspace";
 
 export type {
   TerminalBrowserBounds,
@@ -26,6 +29,9 @@ export interface TerminalBrowserEntry {
   attached: boolean;
   targetId: string;
   browserGroupId: string;
+  faviconDataUrl: string | null;
+  faviconGeneration: number;
+  navigationError: string | null;
   cdpProxyAttached: boolean;
   mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
@@ -48,6 +54,18 @@ export interface TerminalBrowserEntry {
   pendingUpdateTimer: NodeJS.Timeout | null;
 }
 
+export interface TerminalBrowserGroupRecord {
+  id: string;
+  name: string;
+  nameOrigin: TerminalBrowserGroupNameOrigin;
+  tabIds: string[];
+}
+
+export interface TerminalBrowserWindowWorkspace {
+  revision: number;
+  groups: TerminalBrowserGroupRecord[];
+}
+
 export interface TerminalBrowserCdpTarget {
   key: string;
   targetId: string;
@@ -66,7 +84,7 @@ export const TERMINAL_BROWSER_SESSION_PARTITION =
 export const terminalBrowserRuntime = {
   entries: new Map<string, TerminalBrowserEntry>(),
   attachedByWindowId: new Map<number, string>(),
-  tabOrderByWindowId: new Map<number, string[]>(),
+  workspaceByWindowId: new Map<number, TerminalBrowserWindowWorkspace>(),
   saveTimer: null as NodeJS.Timeout | null,
   persistedStateRestored: false,
   restoringWindows: new Set<number>(),

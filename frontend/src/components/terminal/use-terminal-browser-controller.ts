@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { TerminalBrowserWorkspaceSnapshot } from "@runweave/shared/terminal-browser-workspace";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalBrowserBounds } from "./use-terminal-browser-bounds";
@@ -8,6 +9,7 @@ import { useTerminalBrowserHeaderRules } from "./use-terminal-browser-header-rul
 import { useTerminalBrowserAnnotations } from "./use-terminal-browser-annotations";
 import { useTerminalBrowserProxy } from "./use-terminal-browser-proxy";
 import { useTerminalBrowserDisplayScale } from "./use-terminal-browser-display-scale";
+import { useTerminalBrowserWorkspaceActions } from "./use-terminal-browser-workspace-actions";
 import {
   buildTabStateFromElectronSnapshot,
   buildTabUpdateFromElectronSnapshot,
@@ -32,30 +34,15 @@ export function useTerminalBrowserController({
   terminalSessionId,
 }: TerminalBrowserToolProps) {
   const tabs = useTerminalPreviewStore((state) => state.browser.tabs);
-  const activeTabId = useTerminalPreviewStore(
-    (state) => state.browser.activeTabId,
-  );
-  const createBrowserTab = useTerminalPreviewStore(
-    (state) => state.createBrowserTab,
-  );
-  const closeBrowserTab = useTerminalPreviewStore(
-    (state) => state.closeBrowserTab,
-  );
-  const addProxyBrowserTab = useTerminalPreviewStore(
-    (state) => state.addProxyBrowserTab,
-  );
-  const replaceBrowserTabs = useTerminalPreviewStore(
-    (state) => state.replaceBrowserTabs,
-  );
-  const setActiveBrowserTab = useTerminalPreviewStore(
-    (state) => state.setActiveBrowserTab,
-  );
-  const reorderBrowserTabs = useTerminalPreviewStore(
-    (state) => state.reorderBrowserTabs,
-  );
-  const updateBrowserTab = useTerminalPreviewStore(
-    (state) => state.updateBrowserTab,
-  );
+  const groups = useTerminalPreviewStore((state) => state.browser.groups);
+  const activeTabId = useTerminalPreviewStore((state) => state.browser.activeTabId);
+  const createBrowserTab = useTerminalPreviewStore((state) => state.createBrowserTab);
+  const createBrowserGroup = useTerminalPreviewStore((state) => state.createBrowserGroup);
+  const closeBrowserTab = useTerminalPreviewStore((state) => state.closeBrowserTab);
+  const applyBrowserWorkspace = useTerminalPreviewStore((state) => state.applyBrowserWorkspace);
+  const setActiveBrowserTab = useTerminalPreviewStore((state) => state.setActiveBrowserTab);
+  const reorderBrowserGroupTabs = useTerminalPreviewStore((state) => state.reorderBrowserGroupTabs);
+  const updateBrowserTab = useTerminalPreviewStore((state) => state.updateBrowserTab);
   const surfaceContainerRef = useRef<HTMLDivElement | null>(null);
   const browserViewRef = useRef<HTMLDivElement | null>(null);
   const loadedUrlByTabRef = useRef<Record<string, string>>({});
@@ -135,42 +122,71 @@ export function useTerminalBrowserController({
     },
   );
   const applyElectronUpdate = useMemoizedFn(
-    (tabId: string, update: ElectronBrowserUpdate) => {
+    (tabId: string, update: ElectronBrowserUpdate, revision?: number) => {
       const tabUpdate = buildTabUpdateFromElectronUpdate(update);
       if (editingAddressTabIdRef.current === tabId) {
         const { addressInput, ...updateWithoutAddressInput } = tabUpdate;
         void addressInput;
-        updateBrowserTab(tabId, updateWithoutAddressInput);
+        updateBrowserTab(tabId, updateWithoutAddressInput, revision);
         return;
       }
-      updateBrowserTab(tabId, tabUpdate);
+      updateBrowserTab(tabId, tabUpdate, revision);
     },
   );
 
-  const syncElectronTabs = useMemoizedFn(async (): Promise<void> => {
-    try {
-      const snapshots = await window.electronAPI?.terminalBrowserListTabs?.();
-      if (!snapshots) {
+  const applyElectronWorkspace = useMemoizedFn(
+    (workspace: TerminalBrowserWorkspaceSnapshot, force = false): void => {
+      const currentBrowserState = useTerminalPreviewStore.getState().browser;
+      if (
+        workspace.revision < currentBrowserState.revision ||
+        (!force && workspace.revision === currentBrowserState.revision)
+      ) {
         return;
       }
-      if (snapshots.length > 0) {
-        for (const snapshot of snapshots) {
-          loadedUrlByTabRef.current[snapshot.tabId] = snapshot.url;
-        }
-        const activeSnapshot = snapshots.find((snapshot) => snapshot.active);
-        replaceBrowserTabs(
-          snapshots.map(buildTabStateFromElectronSnapshot),
-          activeSnapshot?.tabId,
-        );
-        if (activeSnapshot && active) {
-          await window.electronAPI?.terminalBrowserShow?.(activeSnapshot.tabId);
-          syncActiveTabBounds(activeSnapshot.tabId);
-        }
+      const previousTabIds = new Set(
+        currentBrowserState.tabs.map((tab) => tab.id),
+      );
+      for (const snapshot of workspace.tabs) {
+        loadedUrlByTabRef.current[snapshot.tabId] = snapshot.url;
+        previousTabIds.delete(snapshot.tabId);
       }
-    } finally {
-      setElectronTabsSynced(true);
-    }
-  });
+      for (const closedTabId of previousTabIds) {
+        delete loadedUrlByTabRef.current[closedTabId];
+        delete navigationSequenceByTabRef.current[closedTabId];
+        clearTabBounds(closedTabId);
+        handleAnnotationTabClosed(closedTabId);
+      }
+      applyBrowserWorkspace(
+        workspace.revision,
+        workspace.groups,
+        workspace.tabs.map(buildTabStateFromElectronSnapshot),
+        workspace.activeTabId,
+        editingAddressTabIdRef.current,
+        force,
+      );
+    },
+  );
+
+  const syncElectronTabs = useMemoizedFn(
+    async (force = false): Promise<void> => {
+      try {
+        const workspace =
+          await window.electronAPI?.terminalBrowserGetWorkspace?.();
+        if (!workspace) {
+          return;
+        }
+        applyElectronWorkspace(workspace, force);
+        if (workspace.activeTabId && active) {
+          await window.electronAPI?.terminalBrowserShow?.(
+            workspace.activeTabId,
+          );
+          syncActiveTabBounds(workspace.activeTabId);
+        }
+      } finally {
+        setElectronTabsSynced(true);
+      }
+    },
+  );
 
   const navigateTab = useMemoizedFn(
     async (tabId: string, rawInput: string): Promise<void> => {
@@ -338,93 +354,67 @@ export function useTerminalBrowserController({
     if (!isElectron) {
       return;
     }
+    const unsubscribe = window.electronAPI?.onTerminalBrowserStateChanged?.(
+      (event) => {
+        if (event.kind === "workspace") {
+          applyElectronWorkspace(event.workspace);
+          if (event.workspace.activeTabId) {
+            syncActiveTabBounds(event.workspace.activeTabId);
+          }
+          return;
+        }
+        const { tabId, ...update } = event.tab;
+        const knownTab = useTerminalPreviewStore
+          .getState()
+          .browser.tabs.some((tab) => tab.id === tabId);
+        if (!knownTab) {
+          void syncElectronTabs().catch(() => undefined);
+          return;
+        }
+        loadedUrlByTabRef.current[tabId] = update.url;
+        applyElectronUpdate(tabId, event.tab, event.revision);
+        syncActiveTabBounds(tabId);
+      },
+    );
     void syncElectronTabs();
-    return window.electronAPI?.onTerminalBrowserTabCreatedFromProxy?.(
-      ({ tabId, browserGroupId, url, title, openerTabId }) => {
-        loadedUrlByTabRef.current[tabId] = url;
-        addProxyBrowserTab(tabId, browserGroupId, url, title, openerTabId);
-      },
-    );
-  }, [isElectron, addProxyBrowserTab, syncElectronTabs]);
-
-  useEffect(() => {
-    if (!isElectron) {
-      return;
-    }
-    return window.electronAPI?.onTerminalBrowserTabUpdated?.(
-      ({ tabId, ...update }) => {
-        loadedUrlByTabRef.current[tabId] = update.url;
-        applyElectronUpdate(tabId, update);
-        syncActiveTabBounds(tabId);
-      },
-    );
-  }, [isElectron, applyElectronUpdate, syncActiveTabBounds]);
-
-  useEffect(() => {
-    if (!isElectron) {
-      return;
-    }
-    return window.electronAPI?.onTerminalBrowserTabClosed?.(({ tabId }) => {
-      delete loadedUrlByTabRef.current[tabId];
-      delete navigationSequenceByTabRef.current[tabId];
-      clearTabBounds(tabId);
-      closeBrowserTab(tabId);
-      handleAnnotationTabClosed(tabId);
-    });
-  }, [handleAnnotationTabClosed, isElectron, closeBrowserTab, clearTabBounds]);
-
-  useEffect(() => {
-    if (!isElectron) {
-      return;
-    }
-    return window.electronAPI?.onTerminalBrowserTabActivatedFromProxy?.(
-      ({ tabId, ...update }) => {
-        addProxyBrowserTab(
-          tabId,
-          update.browserGroupId,
-          update.url,
-          update.title,
-        );
-        loadedUrlByTabRef.current[tabId] = update.url;
-        applyElectronUpdate(tabId, update);
-        setActiveBrowserTab(tabId);
-        syncActiveTabBounds(tabId);
-      },
-    );
+    return unsubscribe;
   }, [
-    isElectron,
-    addProxyBrowserTab,
     applyElectronUpdate,
-    setActiveBrowserTab,
+    applyElectronWorkspace,
+    isElectron,
     syncActiveTabBounds,
+    syncElectronTabs,
   ]);
 
   const reorderTabs = useMemoizedFn(
-    (fromIndex: number, toIndex: number): void => {
-      const currentTabs = useTerminalPreviewStore.getState().browser.tabs;
+    (groupId: string, fromIndex: number, toIndex: number): void => {
+      const currentGroup = useTerminalPreviewStore
+        .getState()
+        .browser.groups.find((group) => group.id === groupId);
       if (
+        !currentGroup ||
         fromIndex < 0 ||
-        fromIndex >= currentTabs.length ||
+        fromIndex >= currentGroup.tabIds.length ||
         toIndex < 0 ||
-        toIndex >= currentTabs.length ||
+        toIndex >= currentGroup.tabIds.length ||
         fromIndex === toIndex
       ) {
         return;
       }
-      const nextTabs = [...currentTabs];
-      const [movedTab] = nextTabs.splice(fromIndex, 1);
-      if (!movedTab) {
-        return;
-      }
-      nextTabs.splice(toIndex, 0, movedTab);
-      reorderBrowserTabs(fromIndex, toIndex);
-      if (!isElectron || !window.electronAPI?.terminalBrowserReorderTabs) {
+      const orderedTabIds = [...currentGroup.tabIds];
+      const [movedTabId] = orderedTabIds.splice(fromIndex, 1);
+      orderedTabIds.splice(toIndex, 0, movedTabId!);
+      reorderBrowserGroupTabs(groupId, fromIndex, toIndex);
+      if (
+        !isElectron ||
+        !window.electronAPI?.terminalBrowserReorderGroupTabs
+      ) {
         return;
       }
       void window.electronAPI
-        .terminalBrowserReorderTabs(nextTabs.map((tab) => tab.id))
+        .terminalBrowserReorderGroupTabs(groupId, orderedTabIds)
         .catch(() => {
-          void syncElectronTabs().catch(() => undefined);
+          void syncElectronTabs(true).catch(() => undefined);
         });
     },
   );
@@ -439,6 +429,19 @@ export function useTerminalBrowserController({
     setHeaderRulesPanelOpen(false);
     setDevicePanelOpen(false);
     openAnnotationPanelState();
+  });
+
+  const {
+    closeGroup,
+    createGroup,
+    createTab,
+    renameGroup,
+  } = useTerminalBrowserWorkspaceActions({
+    isElectron,
+    createLocalTab: createBrowserTab,
+    createLocalGroup: createBrowserGroup,
+    closeLocalTab: closeBrowserTab,
+    updateTab: updateBrowserTab,
   });
 
   if (!activeTab) {
@@ -523,10 +526,13 @@ export function useTerminalBrowserController({
     tabId: string,
   ): void => {
     event.stopPropagation();
-    void window.electronAPI?.terminalBrowserCloseTab?.(tabId);
-    delete loadedUrlByTabRef.current[tabId];
-    delete navigationSequenceByTabRef.current[tabId];
-    closeBrowserTab(tabId);
+    if (!isElectron || !window.electronAPI?.terminalBrowserCloseTab) {
+      closeBrowserTab(tabId);
+      return;
+    }
+    void window.electronAPI.terminalBrowserCloseTab(tabId).catch(() => {
+      void syncElectronTabs().catch(() => undefined);
+    });
   };
 
   return {
@@ -537,8 +543,10 @@ export function useTerminalBrowserController({
     annotationSubmitting,
     browserViewRef,
     closeTab,
+    closeGroup,
     closeAnnotationPanel,
-    createBrowserTab,
+    createBrowserTab: createTab,
+    createBrowserGroup: createGroup,
     deleteAnnotation,
     devicePanelOpen,
     deviceSwitching,
@@ -550,6 +558,7 @@ export function useTerminalBrowserController({
     handleAddressBlur,
     handleAddressFocus,
     isElectron,
+    groups,
     mobileDisabledReason,
     openUrlExternally,
     openAnnotationPanel,
@@ -557,6 +566,7 @@ export function useTerminalBrowserController({
     proxyState,
     proxySwitching,
     reload,
+    renameGroup,
     reorderTabs,
     saveHeaderRules,
     selectDevicePreset,

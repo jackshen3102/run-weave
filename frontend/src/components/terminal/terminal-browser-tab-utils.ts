@@ -4,6 +4,7 @@ export const TERMINAL_BROWSER_TAB_PREFERRED_WIDTH = 180;
 export const TERMINAL_BROWSER_ACTIVE_TAB_MIN_WIDTH = 80;
 export const TERMINAL_BROWSER_INACTIVE_TAB_MIN_WIDTH = 44;
 export const TERMINAL_BROWSER_TAB_GAP = 4;
+export const TERMINAL_BROWSER_GROUP_GAP = 12;
 
 const BROWSER_GROUP_COLORS = [
   "#38bdf8",
@@ -56,7 +57,7 @@ export function getBrowserGroupLabel(browserGroupId?: string): string {
 }
 
 export function calculateTerminalBrowserTabWidths(
-  tabs: Pick<TerminalBrowserTabState, "id">[],
+  tabs: Pick<TerminalBrowserTabState, "id" | "browserGroupId">[],
   activeTabId: string,
   viewportWidth: number,
 ): Record<string, number> {
@@ -64,7 +65,10 @@ export function calculateTerminalBrowserTabWidths(
     return {};
   }
 
-  const gapTotal = TERMINAL_BROWSER_TAB_GAP * Math.max(0, tabs.length - 1);
+  const groupCount = new Set(tabs.map((tab) => tab.browserGroupId)).size;
+  const gapTotal =
+    TERMINAL_BROWSER_TAB_GAP * Math.max(0, tabs.length - groupCount) +
+    TERMINAL_BROWSER_GROUP_GAP * Math.max(0, groupCount - 1);
   const preferredTotal = TERMINAL_BROWSER_TAB_PREFERRED_WIDTH * tabs.length + gapTotal;
   let activeWidth = TERMINAL_BROWSER_TAB_PREFERRED_WIDTH;
   let inactiveWidth = TERMINAL_BROWSER_TAB_PREFERRED_WIDTH;
@@ -97,6 +101,19 @@ export function calculateTerminalBrowserTabWidths(
       tab.id === activeTabId ? activeWidth : inactiveWidth,
     ]),
   );
+}
+
+export function getTerminalBrowserFaviconFallback(
+  url: string,
+): string | null {
+  if (!url || url === "about:blank") {
+    return null;
+  }
+  try {
+    return Array.from(new URL(url).hostname.trim())[0]?.toLocaleUpperCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export type TerminalBrowserTabDensity =

@@ -72,20 +72,21 @@ Terminal Browser 工具当前边界：
 - 如果显式设置 `RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。
 - CDP Proxy 暴露的是自研 browser-level endpoint，不开启 Electron 全局 `remote-debugging-port`，也不暴露 Runweave 主窗口 renderer 或 DevTools target。
 - Playwright MCP / Playwright CLI 通过 `chromium.connectOverCDP(...)` 连接 Proxy 后，只能发现和操作 Terminal Browser tab。全局 endpoint 会把当前激活 Browser tab 排在 target 列表第一位，避免无显式 page 选择的客户端落到历史第一个 tab。
-- 当前 tab 的 CDP/AI 按钮返回 Agent Control Group scoped WebSocket endpoint（`groupId=...`）；使用该 endpoint 连接时，`Target.getTargets` / discovery / auto-attach 只暴露该 group 内的 Terminal Browser tabs。手动新建 tab 默认新建 group；页面或 Agent 派生的新 tab 继承 opener group，使“Agent 打开的 tab 由同一个 Agent 控制”成为协议语义，而不依赖 UI 当前选择。
+- 当前 tab 的 CDP/AI 按钮返回 Agent Control Group scoped WebSocket endpoint（`groupId=...`）；使用该 endpoint 连接时，`Target.getTargets` / discovery / auto-attach 只暴露该 group 内的 Terminal Browser tabs。Tab 行 `+` 和 Terminal 人工链接在当前 group 新建页面；页面或 scoped Agent 派生的新 tab 继承 opener/group；只有总览“新建工作组”和 unscoped `Target.createTarget` 创建新 group。Group 是自动化可见性边界，不是 Agent 身份或独立 Browser Profile。
 - `Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
 - 多个 CDP 客户端可以同时连接并操作不同 Browser tab。Proxy 对同一 target 复用同一个 Electron `webContents.debugger` attachment，但每个客户端仍使用自己的 proxy session id；任一客户端断开不应清理其他 target 的有效 session。
-- Browser tab 上的 `MCP` 标志只表示近期有 MCP/CDP session 命中该 target 的用户可感知操作，不等同于 CDP 已连接、tab 由 MCP 创建，或该 tab 正被永久接管。
-- `Page.enable`、`Runtime.enable`、`Target.setAutoAttach`、`Target.getTargetInfo`、`Page.getFrameTree`、`Network.enable` 等初始化、发现或静默同步命令不触发 `MCP` 活动标志；导航、点击、输入、evaluate、截图等真实操作才短暂高亮对应 tab。
+- Group 细线上的连接点表示组内至少一个 target 已有 CDP client 附着；Tab favicon 附近的短暂操作点表示近期有 MCP/CDP session 命中该 target 的用户可感知操作。两者都不表示 Agent 身份、所有权或永久接管，也不改变 active Tab 选中背景。
+- `Page.enable`、`Runtime.enable`、`Target.setAutoAttach`、`Target.getTargetInfo`、`Page.getFrameTree`、`Network.enable` 等初始化、发现或静默同步命令不触发操作点；导航、点击、输入、evaluate、截图等真实操作才让对应 Tab 短暂显示 4.5 秒活动状态。
 - Browser 工具的 CDP 能力是桌面端本机自动化边界，不是远端协作协议；不要把 endpoint 持久化到项目数据或对公网暴露。
-- Browser tab 状态会持久化到 Electron `userData` 下的 `terminal-browser-tabs.json`。重启客户端时会恢复合法的 `http:`、`https:`、`about:blank` tab，并丢弃不合法或空 URL。
-- Browser tab strip 只让 tab viewport 横向滚动，`Search all browser tabs` 与 New Tab 固定在 viewport 外。单 tab preferred width 为 180px；空间不足时 active 最小 80px、inactive 最小 44px，间距 4px，达到 minimum 后才产生横向 overflow。
-- Tab 内容按宽度分为 comfortable（`>95px`）、compact（`64～95px`）和 icon-only（`44～63px`）三档。active close 始终保留；inactive close 在非 icon-only 档通过 hover / focus 显示。Overview 可按 title、URL、完整 browser group id 和可见 group label 搜索、选择或关闭全部 tab。
+- Browser workspace 会以 schema v2 持久化到 Electron `userData` 下的 `terminal-browser-tabs.json`，包含 group 名称、顺序、成员顺序、active Tab 和兼容旧客户端的 flat tabs；favicon、导航错误和连接/活动状态不落盘。读取 v1 时按首次出现的 `browserGroupId` 迁移，重启最多恢复 5 个合法的 `http:`、`https:`、`about:blank` Tab。
+- Browser tab strip 只让 tab viewport 横向滚动，总览与 New Tab 固定在 viewport 外。单 tab preferred width 为 180px；空间不足时 active 最小 80px、inactive 最小 44px；组内间距 4px、组间间距 12px，达到 minimum 后才产生横向 overflow。Tab 使用主进程净化后的 favicon 与页面标题作为主要身份，无 favicon 时回退 hostname 首字符或通用页面图标。
+- Tab 内容按宽度分为 comfortable（`>95px`）、compact（`64～95px`）和 icon-only（`44～63px`）三档。active close 始终保留；inactive close 在非 icon-only 档通过 hover / focus 显示。总览按 group 分段，可按 title、URL、group name/id 搜索，并提供新建、重命名和关闭工作组；关闭多页面工作组需要一次批量确认。
 - active tab 会在初始化、选择、新建、关闭、排序和 sidecar resize 后进入 tab viewport。Left / Right 循环切换相邻 tab，Home / End 切换首尾，并使用 active tab `tabIndex=0` 的 roving focus。
 - 鼠标从 tab strip 连续关闭时，剩余 tab 按 tab id 保留关闭前像素宽度，pointer 离开整个 tab bar 后重新分配；touch / pen 在最后一次关闭 1.8 秒后解除。resize、拖拽、Overview 选择或外部 tab replace 会丢弃过期冻结宽度。
-- Browser tab 支持在右侧工具内部拖拽排序；Renderer 先乐观更新，再通过 `terminal-browser:reorder-tabs` 把当前窗口全部 live tab id 的无重复全排列交给 Electron。主进程的 window-scoped order 同时驱动 IPC list 和 `terminal-browser-tabs.json` 数组顺序；非法或竞态 payload 会 reject，Renderer 随后用 Electron live list 收敛。排序不影响网页会话、CDP target 身份或项目 / terminal session 顺序。
-- 普通用户 / AI tab 在 Electron 顺序末尾追加；页面 `window.open` 形成的 tab 会在 opener 右侧插入并继承 browser group。持久化 schema 仍为 version 1，重启最多恢复 5 个 tab，数组顺序就是恢复顺序。
+- Browser tab 只支持所属 group 内拖拽排序；Renderer 可先乐观更新，再通过 `terminal-browser:reorder-group-tabs` 提交 group id 与该组完整成员全排列。主进程拒绝缺失、重复或跨组 tab id，失败时 Renderer 强制读取同 revision workspace 回滚。工作组按创建顺序稳定，不提供跨组拖拽或整体排序。
+- Electron workspace 是 group 名称、顺序、成员、active Tab 和结构 revision 的唯一事实源。Renderer 先订阅统一 `terminal-browser:state-changed` 事件再读取初始 workspace，只应用更新 revision，并从成员 Tab 推导 group 的连接与错误状态；不从颜色、相邻位置或本地临时 Tab 推断 CDP 权限。
+- 主进程 main-frame 导航失败（排除 `ERR_ABORTED/-3`）会写入 Tab live `navigationError`；后台 Tab 和所属 group 显示弱错误点，激活后沿用错误横幅展示详情，下一次成功 main-frame 导航自动清除。favicon 下载或解码失败只回退图标，不进入导航错误。
 - Browser 工具切到后台时只隐藏当前 WebContentsView，不清除该窗口的 selected tab；关闭 selected tab 或关闭窗口时才删除对应 active 映射，因此隐藏、重启和恢复不会把 active 身份回退到数组首项。
 - 工具栏提供本地代理开关与 `Headers` 面板。代理开关使用同一个 `persist:runweave-terminal-browser` session 的 `setProxy`，当前固定走 `127.0.0.1:8899`，绕过 `<local>`。
 - `Headers` 面板只影响右侧 Terminal Browser 的网页请求，不影响 Runweave 主窗口、登录/API 请求或 Electron 更新请求。

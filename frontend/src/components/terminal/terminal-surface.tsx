@@ -219,7 +219,35 @@ export function TerminalSurface({
       if (!nextUrl.ok) {
         return;
       }
-      createBrowserTab(nextUrl.url);
+      const browserState = useTerminalPreviewStore.getState().browser;
+      const activeBrowserTab = browserState.tabs.find(
+        (tab) => tab.id === browserState.activeTabId,
+      );
+      if (
+        activeBrowserTab &&
+        window.electronAPI?.terminalBrowserCreateTab
+      ) {
+        void window.electronAPI
+          .terminalBrowserCreateTab({
+            placement: "current-group",
+            groupId: activeBrowserTab.browserGroupId,
+            openerTabId: activeBrowserTab.id,
+            url: nextUrl.url,
+          })
+          .catch((error) => {
+            useTerminalPreviewStore.getState().updateBrowserTab(
+              activeBrowserTab.id,
+              {
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to open browser link",
+              },
+            );
+          });
+      } else {
+        createBrowserTab(nextUrl.url);
+      }
       openBrowser();
     };
   }, [createBrowserTab, openBrowser]);

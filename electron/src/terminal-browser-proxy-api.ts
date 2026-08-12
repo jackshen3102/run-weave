@@ -1,15 +1,12 @@
 import { BrowserWindow, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
-import { getTerminalBrowserDeviceState } from "./terminal-browser-device-emulation.js";
 import { setTerminalBrowserDisplayScale } from "./terminal-browser-display-scale.js";
 import {
   getTerminalBrowserKey,
   terminalBrowserRuntime,
   type TerminalBrowserCdpTarget,
   type TerminalBrowserEntry,
-  type TerminalBrowserTabSnapshot,
 } from "./terminal-browser-runtime.js";
-import { reconcileTerminalBrowserTabOrder } from "./terminal-browser-tabs.js";
 import {
   attachTerminalBrowser,
   closeTerminalBrowserEntry,
@@ -17,8 +14,6 @@ import {
   validateTerminalBrowserUrl,
 } from "./terminal-browser-view-lifecycle.js";
 import {
-  getTerminalBrowserSnapshot,
-  sendTerminalBrowserTabActivatedFromProxy,
   sendTerminalBrowserTabUpdate,
 } from "./terminal-browser-view-updates.js";
 
@@ -68,35 +63,6 @@ export function getTerminalBrowserEntryByKey(
   return terminalBrowserRuntime.entries.get(key) ?? null;
 }
 
-export function getTerminalBrowserTabsForWindow(
-  windowId: number,
-): TerminalBrowserTabSnapshot[] {
-  const activeTabId =
-    terminalBrowserRuntime.attachedByWindowId.get(windowId) ?? null;
-  const tabs: TerminalBrowserTabSnapshot[] = [];
-  for (const tabId of reconcileTerminalBrowserTabOrder(windowId)) {
-    const entry = terminalBrowserRuntime.entries.get(
-      getTerminalBrowserKey(windowId, tabId),
-    );
-    if (!entry || entry.view.webContents.isDestroyed()) {
-      continue;
-    }
-    tabs.push({
-      tabId,
-      browserGroupId: entry.browserGroupId,
-      ...getTerminalBrowserSnapshot(entry.view, entry.lastKnownUrl),
-      loading: entry.view.webContents.isLoading(),
-      active: activeTabId === tabId,
-      cdpProxyAttached: entry.cdpProxyAttached,
-      mcpActivityUntil: entry.mcpActivityUntil,
-      devtoolsOpen: entry.devtoolsOpen,
-      deviceState: getTerminalBrowserDeviceState(entry),
-      displayScale: entry.displayScale,
-    });
-  }
-  return tabs;
-}
-
 export async function createTerminalBrowserTabFromProxy(
   windowId: number,
   url: string,
@@ -133,15 +99,6 @@ export async function createTerminalBrowserTabFromProxy(
       });
     }
   }
-
-  // Notify the renderer so the frontend tab bar picks up the new tab.
-  win.webContents.send("terminal-browser:tab-created-from-proxy", {
-    tabId,
-    browserGroupId: entry.browserGroupId,
-    url: safeUrl ?? url,
-    title: "",
-    displayScale: entry.displayScale,
-  });
 
   return {
     key,
@@ -180,7 +137,6 @@ export function activateTerminalBrowserTabFromProxy(targetId: string): boolean {
     return false;
   }
   attachTerminalBrowser(win, tabId, found.entry.view);
-  sendTerminalBrowserTabActivatedFromProxy(win, tabId, found.entry);
   return true;
 }
 

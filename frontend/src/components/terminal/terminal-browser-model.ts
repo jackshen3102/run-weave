@@ -1,37 +1,17 @@
-import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import type {
+  TerminalBrowserSnapshot,
+  TerminalBrowserTabSnapshot,
+  TerminalBrowserUpdate,
+} from "@runweave/shared/desktop-bridge";
 import {
   DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
   isTerminalBrowserDisplayScale,
 } from "@runweave/shared/terminal-browser-display-scale";
 import { browserTabLabel } from "./terminal-browser-tab-utils";
 
-export interface ElectronBrowserSnapshot {
-  url: string;
-  title: string;
-  canGoBack: boolean;
-  canGoForward: boolean;
-}
-
-export interface ElectronBrowserUpdate extends ElectronBrowserSnapshot {
-  browserGroupId?: string;
-  loading: boolean;
-  cdpProxyAttached?: boolean;
-  mcpActivityUntil?: number | null;
-  devtoolsOpen?: boolean;
-  deviceState?: TerminalBrowserDeviceState;
-  displayScale?: number;
-}
-
-export interface ElectronBrowserTabSnapshot extends ElectronBrowserUpdate {
-  tabId: string;
-  browserGroupId: string;
-  active: boolean;
-  cdpProxyAttached: boolean;
-  mcpActivityUntil: number | null;
-  devtoolsOpen: boolean;
-  deviceState: TerminalBrowserDeviceState;
-  displayScale?: number;
-}
+export type ElectronBrowserSnapshot = TerminalBrowserSnapshot;
+export type ElectronBrowserUpdate = TerminalBrowserUpdate;
+export type ElectronBrowserTabSnapshot = TerminalBrowserTabSnapshot;
 
 export function openUrlExternally(url: string): void {
   if (window.electronAPI?.openExternal) {
@@ -82,6 +62,8 @@ export function buildTabUpdateFromElectronUpdate(
     devtoolsOpen: update.devtoolsOpen,
     deviceState: update.deviceState,
     displayScale: normalizeDisplayScale(update.displayScale),
+    faviconDataUrl: update.faviconDataUrl,
+    navigationError: update.navigationError,
     error: undefined,
   };
 }
@@ -104,6 +86,8 @@ export function buildTabStateFromElectronSnapshot(
     devtoolsOpen: snapshot.devtoolsOpen,
     deviceState: snapshot.deviceState,
     displayScale: normalizeDisplayScale(snapshot.displayScale),
+    faviconDataUrl: snapshot.faviconDataUrl,
+    navigationError: snapshot.navigationError,
   };
 }
 

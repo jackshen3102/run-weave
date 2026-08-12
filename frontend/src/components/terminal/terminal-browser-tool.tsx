@@ -37,8 +37,10 @@ export function TerminalBrowserTool({
     annotationSubmitting,
     browserViewRef,
     closeTab,
+    closeGroup,
     closeAnnotationPanel,
     createBrowserTab,
+    createBrowserGroup,
     deleteAnnotation,
     devicePanelOpen,
     deviceSwitching,
@@ -47,6 +49,7 @@ export function TerminalBrowserTool({
     headerRules,
     headerRulesPanelOpen,
     headerSaving,
+    groups,
     handleAddressBlur,
     handleAddressFocus,
     isElectron,
@@ -57,6 +60,7 @@ export function TerminalBrowserTool({
     proxyState,
     proxySwitching,
     reload,
+    renameGroup,
     reorderTabs,
     saveHeaderRules,
     selectDevicePreset,
@@ -81,11 +85,15 @@ export function TerminalBrowserTool({
     <div className="flex h-full min-h-0 flex-col bg-slate-950">
       <TerminalBrowserTabs
         tabs={tabs}
+        groups={groups}
         activeTabId={activeTab.id}
         onCreateTab={() => createBrowserTab()}
+        onCreateGroup={createBrowserGroup}
         onSelectTab={setActiveBrowserTab}
         onCloseTab={closeTab}
         onReorder={reorderTabs}
+        onRenameGroup={renameGroup}
+        onCloseGroup={closeGroup}
       />
       <TerminalBrowserNavigationBar
         activeTab={activeTab}
@@ -141,6 +149,7 @@ export function TerminalBrowserTool({
           proxyError,
           headerError,
           annotationPanelOpen ? null : annotationError,
+          activeTab.navigationError,
           activeTab.error,
         ]}
       />

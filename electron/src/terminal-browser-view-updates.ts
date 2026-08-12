@@ -1,5 +1,6 @@
 import { type BrowserWindow, type WebContentsView } from "electron";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import type { TerminalBrowserStateChangedEvent } from "@runweave/shared/terminal-browser-workspace";
 import { clearTerminalBrowserAnnotation } from "./terminal-browser-annotation.js";
 import { getTerminalBrowserDeviceState } from "./terminal-browser-device-emulation.js";
 import {
@@ -9,6 +10,7 @@ import {
   type TerminalBrowserUpdate,
 } from "./terminal-browser-runtime.js";
 import { scheduleTerminalBrowserTabsSave } from "./terminal-browser-tabs.js";
+import { nextTerminalBrowserRevision } from "./terminal-browser-workspace.js";
 
 const TERMINAL_BROWSER_TAB_UPDATE_THROTTLE_MS = 50;
 
@@ -63,6 +65,8 @@ export function getTerminalBrowserUpdateKey(
     update.devtoolsOpen ? "1" : "0",
     getTerminalBrowserDeviceStateUpdateKey(update.deviceState),
     update.displayScale,
+    update.faviconDataUrl ?? "",
+    update.navigationError ?? "",
   ].join("\u001f");
 }
 
@@ -94,7 +98,13 @@ export function commitTerminalBrowserTabUpdate(
   }
   entry.lastSentUpdateKey = updateKey;
   entry.lastSentUpdateAt = Date.now();
-  win.webContents.send("terminal-browser:tab-updated", update);
+  const revision = nextTerminalBrowserRevision(entry.windowId);
+  const event: TerminalBrowserStateChangedEvent = {
+    kind: "tab",
+    revision,
+    tab: update,
+  };
+  win.webContents.send("terminal-browser:state-changed", event);
   scheduleTerminalBrowserTabsSave();
 }
 
@@ -168,6 +178,8 @@ export function sendTerminalBrowserTabUpdate(
     devtoolsOpen: entry.devtoolsOpen,
     deviceState: getTerminalBrowserDeviceState(entry),
     displayScale: entry.displayScale,
+    faviconDataUrl: entry.faviconDataUrl,
+    navigationError: entry.navigationError,
   };
   queueTerminalBrowserTabUpdate(
     win,
@@ -175,35 +187,6 @@ export function sendTerminalBrowserTabUpdate(
     update,
     getTerminalBrowserUpdateKey(update),
   );
-}
-
-export function sendTerminalBrowserTabActivatedFromProxy(
-  win: BrowserWindow,
-  tabId: string,
-  entry: TerminalBrowserEntry,
-): void {
-  if (win.isDestroyed() || win.webContents.isDestroyed()) {
-    return;
-  }
-  if (entry.view.webContents.isDestroyed()) {
-    return;
-  }
-  const snapshot = getTerminalBrowserSnapshot(entry.view, entry.lastKnownUrl);
-  if (snapshot.url) {
-    entry.lastKnownUrl = snapshot.url;
-  }
-  const update: TerminalBrowserUpdate = {
-    tabId,
-    browserGroupId: entry.browserGroupId,
-    ...snapshot,
-    loading: entry.view.webContents.isLoading(),
-    cdpProxyAttached: entry.cdpProxyAttached,
-    mcpActivityUntil: entry.mcpActivityUntil,
-    devtoolsOpen: entry.devtoolsOpen,
-    deviceState: getTerminalBrowserDeviceState(entry),
-    displayScale: entry.displayScale,
-  };
-  win.webContents.send("terminal-browser:tab-activated-from-proxy", update);
 }
 
 export function clearTerminalBrowserAnnotationAndNotify(
