@@ -402,6 +402,13 @@ export function TerminalPreviewPanel({
           loading: changesLoading,
         }}
         diff={{ data: fileDiff, error: diffError, loading: diffLoading }}
+        markdownReference={{
+          canInsert: markdownReference.canInsert,
+          disabledReason: markdownReference.disabledReason,
+          insert: markdownReference.insert,
+          lineTarget: markdownReference.lineTarget,
+          setTarget: markdownReference.setTarget,
+        }}
         selection={{
           kind: selectedChangeKind,
           path: selectedChangePath,
@@ -417,6 +424,7 @@ export function TerminalPreviewPanel({
           select: (filePath, kind) => {
             if (projectId) selectChange(projectId, filePath, kind);
           },
+          setViewMode: setChangesViewMode,
         }}
       />
     );

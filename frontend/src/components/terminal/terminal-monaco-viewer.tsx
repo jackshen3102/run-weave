@@ -95,6 +95,50 @@ export function TerminalMonacoViewer({
     resetLineReferenceCopied,
   } = useLineReferenceCopy(lineReferencePathRef, lineReferenceRangeRef);
 
+  const revealInitialPosition = useMemoizedFn((): void => {
+    if (!initialRevealPosition) {
+      return;
+    }
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) {
+      return;
+    }
+    if (revealedPositionKeyRef.current === initialRevealPosition.key) {
+      return;
+    }
+    revealedPositionKeyRef.current = initialRevealPosition.key;
+    const model = editor.getModel();
+    const line = Math.min(
+      Math.max(1, initialRevealPosition.line),
+      model?.getLineCount() ?? initialRevealPosition.line,
+    );
+    const column = Math.max(1, initialRevealPosition.column);
+    const position = { lineNumber: line, column };
+    editor.setPosition(position);
+    editor.revealPositionInCenter(position);
+    revealDecorationIdsRef.current = editor.deltaDecorations(
+      revealDecorationIdsRef.current,
+      [
+        {
+          range: new monaco.Range(line, 1, line, 1),
+          options: {
+            isWholeLine: true,
+            className: "rw-monaco-search-hit-line",
+          },
+        },
+      ],
+    );
+    window.setTimeout(() => {
+      if (editorRef.current === editor) {
+        revealDecorationIdsRef.current = editor.deltaDecorations(
+          revealDecorationIdsRef.current,
+          [],
+        );
+      }
+    }, 1800);
+  });
+
   const updateLineReferenceRange = useMemoizedFn((): void => {
     const editor = editorRef.current;
     const nextRange = editor
@@ -139,6 +183,7 @@ export function TerminalMonacoViewer({
         },
       });
       updateLineReferenceRange();
+      revealInitialPosition();
     },
   );
 
@@ -168,48 +213,8 @@ export function TerminalMonacoViewer({
   }, [diff, scrollRatio]);
 
   useEffect(() => {
-    if (diff || !initialRevealPosition) {
-      return;
-    }
-    const editor = editorRef.current;
-    const monaco = monacoRef.current;
-    if (!editor || !monaco) {
-      return;
-    }
-    if (revealedPositionKeyRef.current === initialRevealPosition.key) {
-      return;
-    }
-    revealedPositionKeyRef.current = initialRevealPosition.key;
-    const model = editor.getModel();
-    const line = Math.min(
-      Math.max(1, initialRevealPosition.line),
-      model?.getLineCount() ?? initialRevealPosition.line,
-    );
-    const column = Math.max(1, initialRevealPosition.column);
-    const position = { lineNumber: line, column };
-    editor.setPosition(position);
-    editor.revealPositionInCenter(position);
-    revealDecorationIdsRef.current = editor.deltaDecorations(
-      revealDecorationIdsRef.current,
-      [
-        {
-          range: new monaco.Range(line, 1, line, 1),
-          options: {
-            isWholeLine: true,
-            className: "rw-monaco-search-hit-line",
-          },
-        },
-      ],
-    );
-    window.setTimeout(() => {
-      if (editorRef.current === editor) {
-        revealDecorationIdsRef.current = editor.deltaDecorations(
-          revealDecorationIdsRef.current,
-          [],
-        );
-      }
-    }, 1800);
-  }, [diff, initialRevealPosition, content]);
+    revealInitialPosition();
+  }, [diff, initialRevealPosition, content, newContent, revealInitialPosition]);
 
   useEffect(() => {
     return () => {

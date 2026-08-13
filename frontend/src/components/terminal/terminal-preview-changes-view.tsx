@@ -1,3 +1,4 @@
+import { useMemoizedFn } from "ahooks";
 import { Suspense, type ReactNode } from "react";
 import type {
   TerminalPreviewChangeKind,
@@ -18,6 +19,7 @@ import {
   TerminalImagePreview,
   TerminalMarkdownPreview,
   TerminalMonacoViewer,
+  type TerminalPreviewLineTarget,
   TerminalSvgPreview,
 } from "./terminal-preview-file-view";
 
@@ -39,6 +41,17 @@ interface ChangesSelection {
   viewMode: TerminalChangesViewMode;
 }
 
+interface ChangesMarkdownReference {
+  canInsert: boolean;
+  disabledReason?: string;
+  lineTarget: TerminalPreviewLineTarget | null;
+  insert: (reference: string) => void;
+  setTarget: (
+    path: string,
+    target?: { line: number; column: number },
+  ) => void;
+}
+
 interface ChangesCommands {
   openFile: (path: string) => void;
   openFileMode: () => void;
@@ -47,6 +60,7 @@ interface ChangesCommands {
   requestRename: (path: string) => void;
   requestReset: (path: string, kind: TerminalPreviewChangeKind) => void;
   select: (path: string, kind: TerminalPreviewChangeKind) => void;
+  setViewMode: (mode: TerminalChangesViewMode) => void;
 }
 
 interface TerminalPreviewChangesViewProps {
@@ -54,6 +68,7 @@ interface TerminalPreviewChangesViewProps {
   changes: ChangesQueryState;
   commands: ChangesCommands;
   diff: DiffQueryState;
+  markdownReference: ChangesMarkdownReference;
   selection: ChangesSelection;
 }
 
@@ -62,6 +77,7 @@ export function TerminalPreviewChangesView({
   changes,
   commands,
   diff,
+  markdownReference,
   selection,
 }: TerminalPreviewChangesViewProps) {
   const { apiBase, onAuthExpired, token } = useTerminalRuntime();
@@ -72,6 +88,12 @@ export function TerminalPreviewChangesView({
   const selectedChangePending =
     Boolean(selection.path && selection.kind) && !fileDiffMatchesSelection;
   const showDiffLoading = diff.loading || selectedChangePending;
+  const revealMarkdownSourceLine = useMemoizedFn((line: number): void => {
+    if (diff.data) {
+      markdownReference.setTarget(diff.data.path, { line, column: 1 });
+      commands.setViewMode("diff");
+    }
+  });
 
   const renderFileDiffContent = (
     currentFileDiff: TerminalPreviewFileDiffResponse,
@@ -104,8 +126,13 @@ export function TerminalPreviewChangesView({
             projectId={activeProject.projectId}
             content={currentFileDiff.newContent}
             path={currentFileDiff.path}
+            lineReferencePath={currentFileDiff.absolutePath}
+            canInsertLineReference={markdownReference.canInsert}
+            lineReferenceDisabledReason={markdownReference.disabledReason}
             onAuthExpired={onAuthExpired}
             onOpenFile={commands.openFile}
+            onInsertLineReference={markdownReference.insert}
+            onRevealSourceLine={revealMarkdownSourceLine}
           />
         </Suspense>
       );
@@ -127,6 +154,11 @@ export function TerminalPreviewChangesView({
           oldContent={currentFileDiff.oldContent}
           newContent={currentFileDiff.newContent}
           lineReferencePath={currentFileDiff.absolutePath}
+          initialRevealPosition={
+            markdownReference.lineTarget?.path === currentFileDiff.path
+              ? markdownReference.lineTarget
+              : undefined
+          }
         />
       </Suspense>
     );
