@@ -244,7 +244,9 @@ export function TerminalSurface({
                     : "Failed to open browser link",
               },
             );
-          });
+          })
+          .finally(openBrowser);
+        return;
       } else {
         createBrowserTab(nextUrl.url);
       }
