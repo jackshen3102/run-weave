@@ -12,12 +12,12 @@ export async function verifyToolkitHookProviderGuards() {
 }
 
 function verifyAgentThreadResumeFallback() {
-  const completedTraeThread = {
-    activeCommand: null,
+  const activeTraeSession = {
+    activeCommand: "traex",
     lastThreadId: "thread-trae-recent",
     lastThreadProvider: "traex",
   };
-  const resolved = resolveAgentThreadToResume(completedTraeThread);
+  const resolved = resolveAgentThreadToResume(activeTraeSession);
   assert.deepEqual(resolved, {
     provider: "traex",
     threadId: "thread-trae-recent",
@@ -29,21 +29,30 @@ function verifyAgentThreadResumeFallback() {
 
   assert.equal(
     resolveAgentThreadToResume({
-      ...completedTraeThread,
+      ...activeTraeSession,
+      activeCommand: null,
+      threadId: "thread-trae-stale-current",
+      threadProvider: "traex",
+    }),
+    null,
+  );
+  assert.equal(
+    resolveAgentThreadToResume({
+      ...activeTraeSession,
       activeCommand: "codex",
     }),
     null,
   );
   assert.equal(
     resolveAgentThreadToResume({
-      ...completedTraeThread,
+      ...activeTraeSession,
       lastThreadId: "",
     }),
     null,
   );
   assert.equal(
     resolveAgentThreadToResume({
-      ...completedTraeThread,
+      ...activeTraeSession,
       lastThreadProvider: undefined,
     }),
     null,

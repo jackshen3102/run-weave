@@ -368,22 +368,21 @@ export function resolveAgentThreadToResume(
   session: TerminalSessionRecord,
 ): { provider: TerminalAgentKind; threadId: string } | null {
   const activeProvider = getAgentForCommand(session.activeCommand);
-  const currentThreadId = session.threadId?.trim();
-  const currentProvider =
-    session.threadProvider ?? (currentThreadId ? "codex" : undefined);
-  const expectedProvider =
-    activeProvider ?? currentProvider ?? session.lastThreadProvider;
-  if (!expectedProvider) {
+  if (!activeProvider) {
     return null;
   }
 
-  if (currentThreadId && currentProvider === expectedProvider) {
-    return { provider: expectedProvider, threadId: currentThreadId };
+  const currentThreadId = session.threadId?.trim();
+  const currentProvider =
+    session.threadProvider ?? (currentThreadId ? "codex" : undefined);
+
+  if (currentThreadId && currentProvider === activeProvider) {
+    return { provider: activeProvider, threadId: currentThreadId };
   }
 
   const recentThreadId = session.lastThreadId?.trim();
-  return recentThreadId && session.lastThreadProvider === expectedProvider
-    ? { provider: expectedProvider, threadId: recentThreadId }
+  return recentThreadId && session.lastThreadProvider === activeProvider
+    ? { provider: activeProvider, threadId: recentThreadId }
     : null;
 }
 
