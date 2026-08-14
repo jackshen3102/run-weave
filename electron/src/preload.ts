@@ -49,8 +49,8 @@ const companionApi = {
       "attention:open-slot",
       intent,
     ) as Promise<AttentionOpenResult>,
-  openMainWindow: () =>
-    ipcRenderer.invoke("attention:open-main-window") as Promise<void>,
+  openTerminal: () =>
+    ipcRenderer.invoke("attention:open-terminal") as Promise<void>,
 } satisfies RunweaveCompanionBridge;
 
 const electronApi = {

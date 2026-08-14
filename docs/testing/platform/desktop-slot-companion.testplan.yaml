@@ -3,17 +3,17 @@ name: Desktop Slot Companion macOS 首期验收
 description: >
   验证 Runweave Desktop Slot Companion 在当前激活 Connection 内，以结构化
   Terminal Session、Completion 和 Agent Team 事实完成跨 Slot 聚合、高优先级提醒、
-  精确跳转、提醒退役、断连降级、固定主屏定位和持久化开关。验收以真实 macOS Electron
+  精确跳转、提醒退役、断连降级、跨 Space 与全屏可见性、固定主屏定位和持久化开关。验收以真实 macOS Electron
   桌面窗口为主，页面 DOM 与 console 证据通过附着 desktop CDP 的 Playwright 获取；
   不用静态原型、普通浏览器或 Terminal 输出推断代替真实行为。
 
 cases:
   - id: DSC-001
-    name: 宠物固定在主屏右下角且自动展示不抢焦点
+    name: 宠物固定在主屏右下角并在所有 Space 和全屏窗口可见
     required: true
     description: >
       验证独立 Companion 窗口只以主屏 workArea 为锚点，在主窗口移动、鼠标和焦点跨屏、
-      Space 切换与其他应用全屏时保持同一位置和规则；只有用户点击 Slot 才聚焦 Runweave。
+      Space 切换与其他应用全屏时始终可见并保持同一位置和规则；自动展示不聚焦 Runweave。
     preconditions:
       - 使用带两个显示器的 macOS 运行已打包或由受管 Dev Session 启动的 Runweave Electron。
       - 桌面宠物已启用，当前 Connection 可用，且至少存在一个可见 Slot。
@@ -68,7 +68,7 @@ cases:
     steps:
       - 主动收起托盘，确认只保留宠物。
       - 依次产生或更新 working、未确认 Completion 和 failed 结构化事实，确认托盘不自动展开，宠物徽标或颜色能表达注意力变化。
-      - 手动点击宠物，确认托盘展开并显示最新 Slot；再次收起。
+      - 手动点击宠物，确认 Runweave 主窗口恢复并进入 Terminal 页面，同时托盘展开并显示最新 Slot；再次收起。
       - 产生新的 needs_action 或 blocked attentionId，确认自动升级为单卡且没有先展示普通托盘。
 
   - id: DSC-005
@@ -122,14 +122,15 @@ cases:
     name: 断连、未认证、检查中和全部安静具有不同可见语义
     required: true
     description: >
-      验证 Companion 不把无法获取可信事实表现为全部安静；断连宠物可打开主窗口连接或登录入口，
+      验证 Companion 不把无法获取可信事实表现为全部安静；断连宠物点击后请求打开 Terminal，
+      并在缺少连接或认证时遵守主窗口既有的连接或登录守卫，
       连接恢复后自动重新采集，而真正空 snapshot 才显示休眠宠物。
     preconditions:
       - 能控制当前 Connection 的 token 和 Backend 可达性。
       - Companion 窗口已启用。
     steps:
       - 冷启动 Companion，在首次请求完成前确认显示短暂 checking 语义，不能提前显示“全部安静”。
-      - 移除 token 或让认证返回 401，确认显示灰色断连宠物及标识；点击后打开主窗口登录或连接入口。
+      - 移除 token 或让认证返回 401，确认显示灰色断连宠物及标识；点击后主窗口恢复并从 Terminal 路由进入登录或连接守卫。
       - 恢复认证但使 Backend 网络不可达，确认仍是断连态，不显示旧 Slot 或休眠态。
       - 恢复 Backend，确认无需重启即可自动进入当前真实 tray、card 或 quiet 状态。
       - 清除全部活跃和未确认结构化事实并获得成功空 snapshot，确认此时才显示不可展开的休眠宠物。
@@ -219,3 +220,17 @@ cases:
       - 等待至少两次 Companion 轮询；通过 toolkit:playwright-cli 确认第一个 Session 始终不显示“执行中”，第二个和第三个 Session 各显示一个“执行中”条目，刷新不会恢复任一陈旧持久状态。
       - 将第二个 Session 的最后一个 agent_running Panel 通过可信 Stop 收敛为 agent_idle；确认 Terminal 状态接口变为 agent_idle，下一次 Attention snapshot 移除 working Slot，Companion 随后不再显示该条目。
       - 检查 Attention Slot 的 source evidence；确认 working 证据与实际用于判断的有效状态一致，无 Panel 分支也没有回退到陈旧持久状态，响应中不新增 token、scrollback、命令文本或其他敏感字段。
+
+  - id: DSC-014
+    name: 所有宠物状态点击后都打开 Terminal 页面
+    required: true
+    description: >
+      验证 checking、disconnected、idle、告警单卡、收起托盘和展开托盘状态下的宠物使用同一跳转语义；
+      点击恢复 Runweave 主窗口并进入 Terminal 页面，拖拽宠物不会误触跳转。
+    preconditions:
+      - 使用受管 Dev Session 启动 macOS Runweave Electron，并可依次建立各宠物状态。
+      - 已通过 dev:open 的 desktop surface 取得本次实例 CDP endpoint，并用 toolkit:playwright-cli attach。
+    steps:
+      - 依次建立 checking、idle、告警单卡、收起托盘和展开托盘状态；每次先把主窗口切到非 Terminal 页面或隐藏，再用 toolkit:playwright-cli 点击宠物，确认主窗口恢复、获得焦点且路径为 /terminal。
+      - 建立 disconnected 状态并点击宠物，确认主窗口恢复并从 /terminal 按既有路由守卫进入连接或登录页面，没有停留在原页面。
+      - 在任一可交互状态下使用 computer-use 拖拽宠物超过拖拽阈值，确认窗口位置改变但主窗口没有显示或导航；随后单击宠物，确认仍能恢复主窗口并进入 /terminal。

@@ -55,7 +55,7 @@ export interface RunweaveCompanionBridge {
   setMousePassthrough: (passthrough: boolean) => Promise<void>;
   dragWindow: (request: CompanionWindowDragRequest) => void;
   openSlot: (intent: AttentionOpenIntent) => Promise<AttentionOpenResult>;
-  openMainWindow: () => Promise<void>;
+  openTerminal: () => Promise<void>;
 }
 
 export interface RunweaveElectronBridge {
