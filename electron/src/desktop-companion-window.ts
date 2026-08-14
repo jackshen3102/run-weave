@@ -96,13 +96,17 @@ export function createCompanionWindow(): BrowserWindow {
     hasShadow: false,
     webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false },
   });
-  win.setAlwaysOnTop(true, "floating");
+  win.setAlwaysOnTop(
+    true,
+    process.platform === "darwin" ? "screen-saver" : "floating",
+  );
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   trackDesktopCompanionWindowState(win);
   setupSessionIntercept(win);
   win.once("ready-to-show", () => {
     clampCompanionWindow(win);
     win.showInactive();
+    win.moveTop();
   });
   if (isDev) {
     void win.loadURL(`${DEV_SERVER_URL}/desktop-companion`);

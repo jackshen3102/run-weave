@@ -319,22 +319,43 @@ export function DesktopCompanion(props: {
     );
     setCollapsed(false);
   });
+  const openTerminal = useMemoizedFn(() => {
+    void window.companionAPI?.openTerminal();
+  });
+  const openTerminalAndExpand = useMemoizedFn(() => {
+    setCollapsed(false);
+    openTerminal();
+  });
 
   let panel = null;
   let pet;
   if (state === "checking") {
-    pet = <CompanionPet state="checking" count={0} disabled label="正在检查" />;
+    pet = (
+      <CompanionPet
+        state="checking"
+        count={0}
+        label="正在检查，打开终端"
+        onClick={openTerminal}
+      />
+    );
   } else if (state === "disconnected") {
     pet = (
       <CompanionPet
         state="disconnected"
         count={0}
-        label="未连接，打开 Runweave"
-        onClick={() => void window.companionAPI?.openMainWindow()}
+        label="未连接，打开终端"
+        onClick={openTerminal}
       />
     );
   } else if (slots.length === 0) {
-    pet = <CompanionPet state="idle" count={0} disabled label="所有 Slot 均安静" />;
+    pet = (
+      <CompanionPet
+        state="idle"
+        count={0}
+        label="所有 Slot 均安静，打开终端"
+        onClick={openTerminal}
+      />
+    );
   } else if (escalated) {
     panel = (
       <section
@@ -364,8 +385,8 @@ export function DesktopCompanion(props: {
       <CompanionPet
         state={dominantState}
         count={attentionCount}
-        label="收起 Slot companion"
-        onClick={suppressEscalations}
+        label="打开终端"
+        onClick={openTerminal}
       />
     );
   } else if (collapsed) {
@@ -373,8 +394,8 @@ export function DesktopCompanion(props: {
       <CompanionPet
         state={dominantState}
         count={attentionCount}
-        label={`展开 ${slots.length} 个 Slot`}
-        onClick={() => setCollapsed(false)}
+        label={`打开终端并展开 ${slots.length} 个 Slot`}
+        onClick={openTerminalAndExpand}
       />
     );
   } else {
@@ -417,8 +438,8 @@ export function DesktopCompanion(props: {
       <CompanionPet
         state={dominantState}
         count={attentionCount}
-        label="收起 Slot companion"
-        onClick={() => setCollapsed(true)}
+        label="打开终端"
+        onClick={openTerminal}
       />
     );
   }
