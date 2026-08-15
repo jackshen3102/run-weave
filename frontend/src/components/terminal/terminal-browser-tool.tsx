@@ -77,6 +77,7 @@ export function TerminalBrowserTool({
     tabs,
     toggleAnnotation,
     toggleProxy,
+    setProxyPort,
     updateBrowserTab,
     focusAnnotation,
   } = controller;
@@ -128,6 +129,7 @@ export function TerminalBrowserTool({
           state: proxyState,
           switching: proxySwitching,
           onToggle: () => void toggleProxy(),
+          onSetPort: (port) => setProxyPort(port),
         }}
         utilities={{
           isElectron,

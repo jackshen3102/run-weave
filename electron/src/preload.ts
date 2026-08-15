@@ -206,6 +206,11 @@ const electronApi = {
       "terminal-browser:set-proxy-enabled",
       enabled,
     ) as Promise<TerminalBrowserProxyState>,
+  terminalBrowserSetProxyPort: (port: number) =>
+    ipcRenderer.invoke(
+      "terminal-browser:set-proxy-port",
+      port,
+    ) as Promise<TerminalBrowserProxyState>,
   terminalBrowserGetHeaderRules: () =>
     ipcRenderer.invoke(
       "terminal-browser:get-header-rules",

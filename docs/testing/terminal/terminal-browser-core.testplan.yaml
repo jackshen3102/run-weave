@@ -104,3 +104,19 @@ cases:
     steps:
       - 记录已有 Tab 数量、活动页 URL 和标题；使用按当前 Terminal Session 命名的 Playwright session 对注入 endpoint 执行 attach，再读取 Tab 列表和页面快照。
       - 确认附着后仍是原 Tab 数量、URL 和标题，没有出现 `about:blank`、独立系统浏览器或用户页面被替换；随后 detach 并确认右侧 Browser 与已有 Tab 继续可用。
+
+  - id: TBR-010
+    name: 本地代理端口可配置并跨重启持久化
+    required: true
+    description: >
+      验证 Terminal Browser 本地代理 host 固定为 127.0.0.1，端口可配置且校验范围，
+      开关与端口写入持久化偏好并在应用重启后恢复；启用时流量走当前配置端口，非法端口被拒绝。
+    preconditions:
+      - 使用受管 Dev Session 启动 macOS Runweave Electron，Terminal Browser 可用。
+      - 准备两个可区分的本地代理监听端口（例如默认 8899 与另一个空闲端口），能分别观察哪个端口收到请求。
+      - 已通过 dev:open 的 terminal-browser surface 取得 CDP endpoint，并用 toolkit:playwright-cli attach。
+    steps:
+      - 打开代理设置入口，确认展示 host 固定 127.0.0.1、当前端口与开关状态；输入非法端口（如 0、70000、非整数）并保存，确认被拒绝、给出错误提示且未改变生效配置。
+      - 将端口改为第二个空闲端口并保存后启用代理，确认导航请求实际经过该新端口的代理，代理状态的 proxyRules 反映新端口，`<local>` 本地地址仍直连。
+      - 完全退出并重启 Runweave，确认代理开关与端口与关闭前一致；启用状态下无需重新配置即按持久化端口继续代理。
+      - 关闭代理后修改端口并保存，确认端口被持久化但当前不影响直连流量；再次启用时按最新端口生效。
