@@ -1,4 +1,5 @@
 import { BrowserWindow, screen, type Point, type Rectangle } from "electron";
+import { getIsQuitting } from "./app-state.js";
 import { CUSTOM_PROTOCOL, DEV_SERVER_URL, PRELOAD_PATH, isDev } from "./desktop-config.js";
 import { setupSessionIntercept } from "./desktop-window.js";
 import {
@@ -48,6 +49,17 @@ function clampCompanionWindow(win: BrowserWindow): void {
   win.setBounds(fitBoundsToWorkArea(bounds, display.workArea), false);
 }
 
+function showCompanionWindow(win: BrowserWindow): void {
+  if (win.isDestroyed() || getIsQuitting()) return;
+  // showInactive keeps the companion off the key-window path. Visibility across
+  // Spaces and other apps' fullscreen is handled by alwaysOnTop("screen-saver")
+  // plus setVisibleOnAllWorkspaces; do NOT call moveTop here. moveTop on a panel
+  // while the main window is fullscreen makes macOS re-evaluate app activation,
+  // which fires did-become-active/did-resign-active in a feedback loop that
+  // repeatedly pulls the fullscreen main window forward (see incident diag).
+  win.showInactive();
+}
+
 export function moveCompanionWindow(
   win: BrowserWindow,
   requested: Point,
@@ -90,6 +102,11 @@ export function createCompanionWindow(): BrowserWindow {
     transparent: true,
     frame: false,
     type: process.platform === "darwin" ? "panel" : undefined,
+    // macOS: a non-activating panel receives clicks and drags but never makes
+    // Runweave the active app, so clicking the companion cannot pull the main
+    // window forward or switch Spaces when another window is fullscreen. The
+    // companion has no text input, so it never needs keyboard focus.
+    focusable: process.platform === "darwin" ? false : undefined,
     resizable: false,
     skipTaskbar: true,
     show: false,
@@ -105,8 +122,7 @@ export function createCompanionWindow(): BrowserWindow {
   setupSessionIntercept(win);
   win.once("ready-to-show", () => {
     clampCompanionWindow(win);
-    win.showInactive();
-    win.moveTop();
+    showCompanionWindow(win);
   });
   if (isDev) {
     void win.loadURL(`${DEV_SERVER_URL}/desktop-companion`);

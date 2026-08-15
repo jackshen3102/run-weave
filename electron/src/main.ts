@@ -170,17 +170,6 @@ function registerCompanionHandlers(): void {
       { x: value.screenX, y: value.screenY },
     );
   });
-  ipcMain.handle("attention:open-terminal", (event) => {
-    requireCompanion(event.sender.id);
-    const mainWindow = desktopRuntime.mainWindow;
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    navigateWindowToPath(mainWindow, "/terminal");
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
-    }
-    mainWindow.show();
-    mainWindow.focus();
-  });
   const pendingRequests = new Map<string, {
     promise: Promise<AttentionOpenResult>;
     resolve: (result: AttentionOpenResult) => void;
