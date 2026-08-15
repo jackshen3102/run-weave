@@ -56,5 +56,27 @@ export function useTerminalBrowserProxy(isElectron: boolean) {
     }
   });
 
-  return { error, state, switching, toggle };
+  const setPort = useMemoizedFn(async (port: number): Promise<boolean> => {
+    if (!isElectron || switching) {
+      return false;
+    }
+    setSwitching(true);
+    setError(null);
+    try {
+      const next = await window.electronAPI?.terminalBrowserSetProxyPort?.(port);
+      if (next) {
+        setState(next);
+      }
+      return true;
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Failed to update proxy port",
+      );
+      return false;
+    } finally {
+      setSwitching(false);
+    }
+  });
+
+  return { error, state, switching, toggle, setPort };
 }

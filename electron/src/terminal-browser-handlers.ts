@@ -5,7 +5,10 @@ import {
   type TerminalBrowserDeviceState,
 } from "@runweave/shared/terminal-browser-device";
 import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
-import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
+import {
+  isValidTerminalBrowserProxyPort,
+  type TerminalBrowserProxyState,
+} from "@runweave/shared/terminal-browser-proxy";
 import type { TerminalBrowserDisplayScaleState } from "@runweave/shared/terminal-browser-display-scale";
 import {
   deleteTerminalBrowserAnnotation,
@@ -36,8 +39,10 @@ import {
   getTerminalBrowserHeaderState,
   getTerminalBrowserProxyState,
   ensureTerminalBrowserHeaderDispatcher,
+  loadTerminalBrowserProxyPreferences,
   setTerminalBrowserHeaderRules,
   setTerminalBrowserProxyEnabled,
+  setTerminalBrowserProxyPort,
 } from "./terminal-browser-network.js";
 import {
   attachTerminalBrowser,
@@ -57,6 +62,7 @@ import { popupTerminalBrowserToolMenu } from "./terminal-browser-tool-menu.js";
 import { registerTerminalBrowserWorkspaceHandlers } from "./terminal-browser-workspace-handlers.js";
 
 export function registerTerminalBrowserHandlers(): void {
+  loadTerminalBrowserProxyPreferences();
   ensureTerminalBrowserHeaderDispatcher();
   ensureTerminalBrowserCookiePersistence(getTerminalBrowserSession());
   registerTerminalBrowserWorkspaceHandlers();
@@ -80,6 +86,16 @@ export function registerTerminalBrowserHandlers(): void {
         throw new Error("Invalid browser proxy state");
       }
       return await setTerminalBrowserProxyEnabled(enabled);
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:set-proxy-port",
+    async (_event, port: unknown): Promise<TerminalBrowserProxyState> => {
+      if (!isValidTerminalBrowserProxyPort(port)) {
+        throw new Error("Invalid browser proxy port");
+      }
+      return await setTerminalBrowserProxyPort(port);
     },
   );
 

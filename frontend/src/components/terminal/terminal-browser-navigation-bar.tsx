@@ -8,8 +8,6 @@ import {
   MessageSquarePlus,
   RotateCw,
   Square,
-  Wifi,
-  WifiOff,
 } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { type TerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
@@ -22,6 +20,7 @@ import {
 } from "@runweave/shared/terminal-browser-display-scale";
 import type { TerminalBrowserTabState } from "../../features/terminal/preview-store";
 import { TerminalBrowserHeadersButton } from "./terminal-browser-headers-panel";
+import { TerminalBrowserProxyButton } from "./terminal-browser-proxy-button";
 import { Button } from "../ui/button";
 
 interface BrowserAddressControls {
@@ -49,6 +48,7 @@ interface BrowserProxyControls {
   state: TerminalBrowserProxyState | null;
   switching: boolean;
   onToggle: () => void;
+  onSetPort: (port: number) => Promise<boolean>;
 }
 
 interface BrowserPanelControls {
@@ -112,6 +112,7 @@ export function TerminalBrowserNavigationBar({
     state: proxyState,
     switching: proxySwitching,
     onToggle: onToggleProxy,
+    onSetPort: onSetProxyPort,
   } = proxy;
   const {
     isElectron,
@@ -309,35 +310,13 @@ export function TerminalBrowserNavigationBar({
             <Copy className="h-4 w-4" />
           )}
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className={[
-            "h-7 w-7 rounded-md px-0",
-            proxyState?.enabled
-              ? "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200"
-              : "",
-          ].join(" ")}
-          disabled={!isElectron || proxySwitching}
-          onClick={onToggleProxy}
-          aria-label={
-            proxyState?.enabled
-              ? "Disable browser proxy"
-              : "Enable browser proxy"
-          }
-          title={
-            proxyState?.enabled
-              ? `Proxy enabled: ${proxyState.proxyRules}`
-              : "Enable browser proxy"
-          }
-        >
-          {proxyState?.enabled ? (
-            <Wifi className="h-4 w-4" />
-          ) : (
-            <WifiOff className="h-4 w-4" />
-          )}
-        </Button>
+        <TerminalBrowserProxyButton
+          state={proxyState}
+          switching={proxySwitching}
+          disabled={!isElectron}
+          onToggle={onToggleProxy}
+          onSetPort={onSetProxyPort}
+        />
         {hasAnnotations ? annotationButton : null}
         {isElectron && hasHeaderRules ? (
           <TerminalBrowserHeadersButton

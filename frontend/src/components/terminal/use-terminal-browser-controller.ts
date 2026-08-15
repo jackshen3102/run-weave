@@ -63,6 +63,7 @@ export function useTerminalBrowserController({
     state: proxyState,
     switching: proxySwitching,
     toggle: toggleProxy,
+    setPort: setProxyPort,
   } = useTerminalBrowserProxy(isElectron);
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
@@ -582,6 +583,7 @@ export function useTerminalBrowserController({
     surfaceContainerRef,
     tabs,
     toggleProxy,
+    setProxyPort,
     toggleAnnotation,
     focusAnnotation,
     updateBrowserTab,

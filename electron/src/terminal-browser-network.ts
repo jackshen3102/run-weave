@@ -3,25 +3,54 @@ import {
   type TerminalBrowserHeaderRule,
   type TerminalBrowserHeaderState,
 } from "@runweave/shared/terminal-browser-headers";
-import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
+import {
+  buildTerminalBrowserProxyRules,
+  isValidTerminalBrowserProxyPort,
+  TERMINAL_BROWSER_PROXY_DEFAULT_PORT,
+  type TerminalBrowserProxyState,
+} from "@runweave/shared/terminal-browser-proxy";
 import {
   getTerminalBrowserSession,
   terminalBrowserRuntime,
 } from "./terminal-browser-runtime.js";
+import {
+  readTerminalBrowserProxyPreferences,
+  writeTerminalBrowserProxyPreferences,
+} from "./terminal-browser-proxy-preferences.js";
 
-const TERMINAL_BROWSER_PROXY_HOST = "127.0.0.1";
-const TERMINAL_BROWSER_PROXY_PORT = 8899;
-const TERMINAL_BROWSER_PROXY_RULES = `http=${TERMINAL_BROWSER_PROXY_HOST}:${TERMINAL_BROWSER_PROXY_PORT};https=${TERMINAL_BROWSER_PROXY_HOST}:${TERMINAL_BROWSER_PROXY_PORT}`;
 const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>";
 
 let terminalBrowserProxyEnabled = false;
+let terminalBrowserProxyPort = TERMINAL_BROWSER_PROXY_DEFAULT_PORT;
 let terminalBrowserHeaderRules: TerminalBrowserHeaderRule[] = [];
 let terminalBrowserHeaderDispatcherRegistered = false;
+
+// Load persisted proxy preferences into module state. When the proxy was left
+// enabled, re-apply it to the browser session so the restored toggle actually
+// routes traffic; otherwise the port is simply restored for the next enable.
+export function loadTerminalBrowserProxyPreferences(): void {
+  const preferences = readTerminalBrowserProxyPreferences();
+  terminalBrowserProxyEnabled = preferences.enabled;
+  terminalBrowserProxyPort = preferences.port;
+  if (terminalBrowserProxyEnabled) {
+    void applyTerminalBrowserSessionProxy().catch(() => {
+      // Session proxy application is retried on the next explicit toggle.
+    });
+  }
+}
+
+function persistTerminalBrowserProxyPreferences(): void {
+  writeTerminalBrowserProxyPreferences({
+    enabled: terminalBrowserProxyEnabled,
+    port: terminalBrowserProxyPort,
+  });
+}
 
 export function getTerminalBrowserProxyState(): TerminalBrowserProxyState {
   return {
     enabled: terminalBrowserProxyEnabled,
-    proxyRules: TERMINAL_BROWSER_PROXY_RULES,
+    port: terminalBrowserProxyPort,
+    proxyRules: buildTerminalBrowserProxyRules(terminalBrowserProxyPort),
     proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
   };
 }
@@ -119,21 +148,42 @@ export function reloadTerminalBrowserTabsForProxyChange(): void {
   }
 }
 
-export async function setTerminalBrowserProxyEnabled(
-  enabled: boolean,
-): Promise<TerminalBrowserProxyState> {
+async function applyTerminalBrowserSessionProxy(): Promise<void> {
   const browserSession = getTerminalBrowserSession();
-  if (enabled) {
+  if (terminalBrowserProxyEnabled) {
     await browserSession.setProxy({
       mode: "fixed_servers",
-      proxyRules: TERMINAL_BROWSER_PROXY_RULES,
+      proxyRules: buildTerminalBrowserProxyRules(terminalBrowserProxyPort),
       proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
     });
   } else {
     await browserSession.setProxy({ mode: "direct" });
   }
   await browserSession.closeAllConnections();
-  terminalBrowserProxyEnabled = enabled;
   reloadTerminalBrowserTabsForProxyChange();
+}
+
+export async function setTerminalBrowserProxyEnabled(
+  enabled: boolean,
+): Promise<TerminalBrowserProxyState> {
+  terminalBrowserProxyEnabled = enabled;
+  await applyTerminalBrowserSessionProxy();
+  persistTerminalBrowserProxyPreferences();
+  return getTerminalBrowserProxyState();
+}
+
+export async function setTerminalBrowserProxyPort(
+  port: number,
+): Promise<TerminalBrowserProxyState> {
+  if (!isValidTerminalBrowserProxyPort(port)) {
+    throw new Error("Invalid browser proxy port");
+  }
+  terminalBrowserProxyPort = port;
+  // Only re-apply the session proxy when the proxy is active; when disabled the
+  // new port is just persisted and takes effect on the next enable.
+  if (terminalBrowserProxyEnabled) {
+    await applyTerminalBrowserSessionProxy();
+  }
+  persistTerminalBrowserProxyPreferences();
   return getTerminalBrowserProxyState();
 }

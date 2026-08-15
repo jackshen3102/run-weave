@@ -128,6 +128,9 @@ export interface RunweaveElectronBridge {
   terminalBrowserSetProxyEnabled: (
     enabled: boolean,
   ) => Promise<TerminalBrowserProxyState>;
+  terminalBrowserSetProxyPort: (
+    port: number,
+  ) => Promise<TerminalBrowserProxyState>;
   terminalBrowserGetHeaderRules: () => Promise<TerminalBrowserHeaderState>;
   terminalBrowserSetHeaderRules: (
     rules: TerminalBrowserHeaderState["rules"],
