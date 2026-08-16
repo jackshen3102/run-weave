@@ -2,10 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { AgentTeamService } from "../backend/src/agent-team/service.ts";
-import { createActiveWorkerDispatch } from "../backend/src/agent-team/service-workflow-policy.ts";
-import { LowDbTerminalSessionStore } from "../backend/src/terminal/lowdb-store.ts";
-import { TerminalSessionManager } from "../backend/src/terminal/manager.ts";
-import { TerminalRuntimeRegistry } from "../backend/src/terminal/runtime-registry.ts";
+import { createActiveWorkerDispatch } from "../backend/src/agent-team/service/workflow-policy.ts";
+import { LowDbTerminalSessionStore } from "../backend/src/terminal/store/lowdb-store.ts";
+import { TerminalSessionManager } from "../backend/src/terminal/manager/manager.ts";
+import { TerminalRuntimeRegistry } from "../backend/src/terminal/runtime/registry.ts";
 
 export const checks = [];
 let fixtureCounter = 0;

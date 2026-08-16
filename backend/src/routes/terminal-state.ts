@@ -6,10 +6,10 @@ import type {
   TerminalStateResponse,
 } from "@runweave/shared/terminal/events";
 import { logger } from "../logging";
-import type { TerminalSessionManager } from "../terminal/manager";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
+import type { TerminalStateService } from "../terminal/state/terminal-state-service";
 import { resolveEffectiveTerminalState } from "../terminal/application/terminal-state-projection";
-import type { TmuxService } from "../terminal/tmux-service";
+import type { TmuxService } from "../terminal/tmux/service";
 import type { TerminalActivityDependencies } from "../terminal/activity-events";
 import type { ActivityEventInput } from "@runweave/shared/activity";
 import crypto from "node:crypto";

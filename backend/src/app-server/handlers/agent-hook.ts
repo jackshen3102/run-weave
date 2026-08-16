@@ -1,8 +1,8 @@
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import { logger } from "../../logging";
 import { processTerminalAgentHook } from "../../terminal/agent-hook-processor";
-import type { TerminalSessionManager } from "../../terminal/manager";
-import type { TerminalStateService } from "../../terminal/terminal-state-service";
+import type { TerminalSessionManager } from "../../terminal/manager/manager";
+import type { TerminalStateService } from "../../terminal/state/terminal-state-service";
 import {
   readAppServerAgent,
   readAppServerHookSource,

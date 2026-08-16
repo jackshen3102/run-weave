@@ -7,7 +7,7 @@ import type {
   TerminalPrototypeGalleryResponse,
   TerminalPrototypeGallerySource,
 } from "@runweave/shared/terminal/preview";
-import type { TerminalProjectRecord } from "./manager-records";
+import type { TerminalProjectRecord } from "./manager/records";
 
 const PROTOTYPE_ROOTS: ReadonlyArray<{
   source: TerminalPrototypeGallerySource;

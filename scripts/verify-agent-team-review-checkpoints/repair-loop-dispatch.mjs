@@ -1,14 +1,14 @@
 import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox-resolver.ts";
-import { incrementRepairAttempts } from "../../backend/src/agent-team/repair-loop.ts";
-import { resolveBounceSelection } from "../../backend/src/agent-team/service-bounce-policy.ts";
-import { shouldContinueBeforeNoProgressEscalation } from "../../backend/src/agent-team/service-round-continuation-policy.ts";
+import { incrementRepairAttempts } from "../../backend/src/agent-team/repair/loop.ts";
+import { resolveBounceSelection } from "../../backend/src/agent-team/service/bounce-policy.ts";
+import { shouldContinueBeforeNoProgressEscalation } from "../../backend/src/agent-team/service/round-continuation-policy.ts";
 import {
   completionOutboxIdentityMismatch,
   completionSignalWorkerMismatch,
   createActiveWorkerDispatch,
   resolveActiveWorkerDispatch,
   workerOutboxFreshnessMismatch,
-} from "../../backend/src/agent-team/service-workflow-policy.ts";
+} from "../../backend/src/agent-team/service/workflow-policy.ts";
 
 export function verifyDispatchProtocolChecks(
   check,

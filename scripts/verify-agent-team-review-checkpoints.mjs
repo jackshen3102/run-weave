@@ -10,7 +10,7 @@ import {
   ensureWorkerGateAcceptance,
   isReviewGateAcceptanceCase,
   mergeAcceptanceRefresh,
-} from "../backend/src/agent-team/service-acceptance-policy.ts";
+} from "../backend/src/agent-team/service/acceptance-policy.ts";
 import { verifyRepairIntegration } from "./verify-agent-team-review-checkpoints/repair-integration.mjs";
 import { verifyEvidenceGatedRepairLoop } from "./verify-agent-team-review-checkpoints/repair-loop.mjs";
 import { verifyBootstrapLifecycle } from "./verify-agent-team-review-checkpoints/bootstrap-lifecycle.mjs";

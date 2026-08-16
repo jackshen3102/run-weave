@@ -5,11 +5,11 @@ import type {
   AttentionState,
 } from "@runweave/shared/attention";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
-import type { TerminalSessionManager } from "../terminal/manager";
-import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
+import type { TerminalCompletionEventService } from "../terminal/completion/event-service";
 import type { AgentTeamService } from "../agent-team/service";
-import type { TerminalProjectContextRecord } from "../terminal/manager-records";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
+import type { TerminalProjectContextRecord } from "../terminal/manager/records";
+import type { TerminalStateService } from "../terminal/state/terminal-state-service";
 import { resolveEffectiveTerminalState } from "../terminal/application/terminal-state-projection";
 
 const PRIORITY: Record<AttentionState, number> = {

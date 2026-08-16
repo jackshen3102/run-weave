@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createInitialLoop } from "../../backend/src/agent-team/loop.ts";
-import { buildMainTestCaseGenerationPrompt } from "../../backend/src/agent-team/prompt-builders.ts";
+import { buildMainTestCaseGenerationPrompt } from "../../backend/src/agent-team/prompt/builders.ts";
 import {
   withControlledStartupDelay,
   withHarness,

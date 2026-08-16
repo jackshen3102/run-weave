@@ -2,18 +2,18 @@ import type { IncomingMessage } from "node:http";
 import type { TerminalClientMessage, TerminalServerMessage } from "@runweave/shared/terminal/websocket";
 import type { WebSocket } from "ws";
 import { logger } from "../logging";
-import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
+import { getLiveTerminalScrollback } from "../terminal/scrollback/live-scrollback";
 import type {
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../terminal/manager";
-import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import type { TmuxPaneMetadata, TmuxService } from "../terminal/tmux-service";
+} from "../terminal/manager/manager";
+import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
+import type { TmuxPaneMetadata, TmuxService } from "../terminal/tmux/service";
 import {
   isTmuxBackedSession,
   readTerminalScrollback,
   resolveTmuxTarget,
-} from "../terminal/runtime-launcher";
+} from "../terminal/runtime/launcher";
 
 export const TMUX_INITIAL_REPAINT_SETTLE_MS = 50;
 export const TMUX_METADATA_SYNC_DELAY_MS = 100;

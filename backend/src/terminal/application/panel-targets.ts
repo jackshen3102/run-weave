@@ -2,10 +2,10 @@ import type {
   TerminalPanelRecord,
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../manager";
-import { resolveTmuxTarget } from "../runtime-launcher";
-import type { TmuxService } from "../tmux-service";
-import type { TerminalEventService } from "../terminal-event-service";
+} from "../manager/manager";
+import { resolveTmuxTarget } from "../runtime/launcher";
+import type { TmuxService } from "../tmux/service";
+import type { TerminalEventService } from "../state/terminal-event-service";
 import {
   buildPaneTarget,
   requireTmuxSession,

@@ -5,7 +5,7 @@ import { Router } from "express";
 import path from "node:path";
 import { logger } from "../logging";
 import { AppServerClient } from "../app-server/client";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
 import {
   readCodexThreadSnapshot,
   type CodexThreadStatusType,
@@ -13,7 +13,7 @@ import {
 import {
   getTerminalSessionAgent,
   type TerminalStateService,
-} from "../terminal/terminal-state-service";
+} from "../terminal/state/terminal-state-service";
 import {
   toProjectPayload,
   toSessionListItem,

@@ -3,14 +3,14 @@ import { z } from "zod";
 import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import { logger } from "../logging";
-import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
+import type { TerminalCompletionEventService } from "../terminal/completion/event-service";
 import {
   AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
   getCompletionSourceForCommand,
   isCompletionSourceAllowedForCommand,
-} from "../terminal/completion-source-gate";
-import type { TerminalSessionManager } from "../terminal/manager";
-import { getTerminalSessionAgent } from "../terminal/terminal-state-service";
+} from "../terminal/completion/source-gate";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
+import { getTerminalSessionAgent } from "../terminal/state/terminal-state-service";
 
 const completionReasonEnum = z.enum([
   "hook_stop",

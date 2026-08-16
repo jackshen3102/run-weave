@@ -7,7 +7,7 @@ import type {
   TerminalSessionStatusResponse,
   TerminalState,
 } from "@runweave/shared/terminal-protocol";
-import type { TerminalSessionManager } from "../manager";
+import type { TerminalSessionManager } from "../manager/manager";
 
 type TerminalProject = NonNullable<
   ReturnType<TerminalSessionManager["getProject"]>

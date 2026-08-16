@@ -1,12 +1,12 @@
-import { agentTeamLogger } from "./service-context";
-import { AgentTeamExportService } from "./service-export";
+import { agentTeamLogger } from "./service/context";
+import { AgentTeamExportService } from "./service/export";
 
 export type {
   AgentTeamCompletionSignal,
   AgentTeamCompletionSignalSource,
   AgentTeamServiceOptions,
   ExportAgentTeamRunOptions,
-} from "./service-types";
+} from "./service/types";
 
 export class AgentTeamService extends AgentTeamExportService {
   initialize(): void {

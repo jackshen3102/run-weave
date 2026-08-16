@@ -2,7 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import os from "node:os";
 import { z } from "zod";
 import type { CreateTerminalSessionRequest } from "@runweave/shared/terminal/session";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,

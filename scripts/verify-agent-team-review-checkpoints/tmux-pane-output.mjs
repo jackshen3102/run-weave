@@ -3,8 +3,8 @@ import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { TmuxOutputWatcher } from "../../backend/src/terminal/tmux-output-watcher.ts";
-import { TmuxService } from "../../backend/src/terminal/tmux-service.ts";
+import { TmuxOutputWatcher } from "../../backend/src/terminal/tmux/output-watcher.ts";
+import { TmuxService } from "../../backend/src/terminal/tmux/service.ts";
 
 const execFileAsync = promisify(execFile);
 let recordCheck = null;

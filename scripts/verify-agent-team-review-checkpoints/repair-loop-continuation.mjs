@@ -7,8 +7,8 @@ import {
   resolveRepairTargets,
   reviewFindingContractErrors,
   validateCodeFixHandoff,
-} from "../../backend/src/agent-team/repair-loop.ts";
-import { createActiveWorkerDispatch } from "../../backend/src/agent-team/service-workflow-policy.ts";
+} from "../../backend/src/agent-team/repair/loop.ts";
+import { createActiveWorkerDispatch } from "../../backend/src/agent-team/service/workflow-policy.ts";
 import {
   buildFixVerification,
   buildRepairEvidence,

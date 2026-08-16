@@ -3,24 +3,24 @@ import { WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
 import { logger } from "../logging";
 import type { TunnelAuthConfig } from "../server/tunnel-auth";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { TerminalOutputBatcher } from "../terminal/output-batcher";
 import {
   logTerminalPerf,
   summarizeTerminalChunk,
 } from "../terminal/perf-logging";
 import type { PtyService } from "../terminal/pty-service";
-import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
+import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
-} from "../terminal/runtime-launcher";
-import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
+} from "../terminal/runtime/launcher";
+import { createTerminalRuntimeRecorder } from "../terminal/runtime/recorder";
 import { createShellPromptTracker } from "../terminal/shell-integration";
-import type { TmuxLifecycleCoordinator } from "../terminal/tmux-lifecycle-coordinator";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
-import type { TmuxService } from "../terminal/tmux-service";
-import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
+import type { TmuxLifecycleCoordinator } from "../terminal/tmux/lifecycle-coordinator";
+import type { TerminalStateService } from "../terminal/state/terminal-state-service";
+import type { TmuxService } from "../terminal/tmux/service";
+import type { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 import {

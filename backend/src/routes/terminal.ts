@@ -13,26 +13,26 @@ import {
   type TerminalActivityDependencies,
 } from "../terminal/activity-events";
 import { logger } from "../logging";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
 import { registerTerminalProjectRoutes } from "./terminal-project-routes";
 import { registerTerminalProjectContextRoutes } from "./terminal-project-context-routes";
 import { registerTerminalTmuxOrphanRoutes } from "./terminal-tmux-orphan-routes";
 import type { PtyService } from "../terminal/pty-service";
-import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
-import type { TerminalEventService } from "../terminal/terminal-event-service";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
+import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
+import type { TerminalCompletionEventService } from "../terminal/completion/event-service";
+import type { TerminalEventService } from "../terminal/state/terminal-event-service";
+import type { TerminalStateService } from "../terminal/state/terminal-state-service";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
   killTmuxSessionForTerminal,
   readTerminalScrollback,
   readTerminalScrollbackCapture,
-} from "../terminal/runtime-launcher";
-import type { TmuxService } from "../terminal/tmux-service";
-import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
-import type { TerminalQuickInputService } from "../terminal/quick-input-service";
+} from "../terminal/runtime/launcher";
+import type { TmuxService } from "../terminal/tmux/service";
+import type { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
+import type { TerminalQuickInputService } from "../terminal/quick-input/service";
 import {
   toHistoryPayload,
   toPanelWorkspacePayload,

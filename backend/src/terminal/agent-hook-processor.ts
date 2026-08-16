@@ -12,14 +12,14 @@ import {
   AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
   getCompletionSourceForCommand,
   isCompletionSourceAllowedForCommand,
-} from "./completion-source-gate";
-import type { TerminalSessionManager } from "./manager";
+} from "./completion/source-gate";
+import type { TerminalSessionManager } from "./manager/manager";
 import {
   aggregatePanelTerminalState,
   getTerminalSessionAgent,
   resolveAgentHookTerminalState,
   type TerminalStateService,
-} from "./terminal-state-service";
+} from "./state/terminal-state-service";
 import { readCodexThreadSnapshot } from "./codex-thread-snapshot";
 
 const agentHookProcessorLogger = logger.child({

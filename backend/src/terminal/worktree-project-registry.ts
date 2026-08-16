@@ -10,7 +10,7 @@ import type {
   TerminalProjectContextRecord,
   TerminalProjectRecord,
   TerminalSessionRecord,
-} from "./manager-records";
+} from "./manager/records";
 
 interface GitWorktreeRecord {
   worktreePath: string;

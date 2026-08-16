@@ -13,7 +13,7 @@
 
 import {
   aggregatePanelTerminalState,
-} from "../backend/src/terminal/terminal-state-service.ts";
+} from "../backend/src/terminal/state/terminal-state-service.ts";
 import {
   convergeStaleStartingWithoutLease,
 } from "../backend/src/terminal/application/panel-workspace.ts";

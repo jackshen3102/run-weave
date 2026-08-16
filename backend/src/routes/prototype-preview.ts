@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { Router } from "express";
 import path from "node:path";
 import type { AuthService } from "../auth/service";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
 import {
   resolveTerminalPrototypePreviewFile,
   parseTerminalPrototypeGallerySource,

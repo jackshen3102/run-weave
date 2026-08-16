@@ -1,13 +1,13 @@
 import type {
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../terminal/manager";
-import { isTmuxBackedSession } from "../terminal/runtime-launcher";
+} from "../terminal/manager/manager";
+import { isTmuxBackedSession } from "../terminal/runtime/launcher";
 import type {
   TmuxOutputWatcher,
   TmuxPaneOutputCursor,
-} from "../terminal/tmux-output-watcher";
-import type { TmuxPaneTarget } from "../terminal/tmux-service";
+} from "../terminal/tmux/output-watcher";
+import type { TmuxPaneTarget } from "../terminal/tmux/service";
 import { AgentTeamError } from "./errors";
 
 export type TraeStartupOutputBoundary =

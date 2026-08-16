@@ -2,17 +2,17 @@ import type {
   AgentTeamFixtureResourceCleanup,
   AgentTeamRun,
 } from "@runweave/shared/agent-team";
-import type { TerminalSessionManager } from "../terminal/manager";
-import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import type { TerminalEventService } from "../terminal/terminal-event-service";
-import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
-import type { TmuxService } from "../terminal/tmux-service";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
+import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
+import type { TerminalEventService } from "../terminal/state/terminal-event-service";
+import type { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
+import type { TmuxService } from "../terminal/tmux/service";
 import { buildPaneTarget } from "../terminal/application/panel-common";
 import {
   isTmuxBackedSession,
   killTmuxSessionForTerminal,
   resolveTmuxTarget,
-} from "../terminal/runtime-launcher";
+} from "../terminal/runtime/launcher";
 
 interface FixtureResourceCleanupOptions {
   terminalSessionManager: TerminalSessionManager;

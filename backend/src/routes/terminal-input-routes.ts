@@ -8,22 +8,22 @@ import type {
 } from "@runweave/shared/terminal/input";
 import { aiDiagnosticLog } from "../diagnostic-logs/recorder";
 import { logger } from "../logging";
-import type { TerminalSessionManager } from "../terminal/manager";
-import type { TerminalPanelRecord } from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
+import type { TerminalPanelRecord } from "../terminal/manager/manager";
 import type { PtyService } from "../terminal/pty-service";
-import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
-import type { TerminalEventService } from "../terminal/terminal-event-service";
-import type { TmuxService } from "../terminal/tmux-service";
-import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
-import type { TerminalQuickInputService } from "../terminal/quick-input-service";
-import { isTmuxBackedSession } from "../terminal/runtime-launcher";
+import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
+import type { TerminalStateService } from "../terminal/state/terminal-state-service";
+import type { TerminalEventService } from "../terminal/state/terminal-event-service";
+import type { TmuxService } from "../terminal/tmux/service";
+import type { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
+import type { TerminalQuickInputService } from "../terminal/quick-input/service";
+import { isTmuxBackedSession } from "../terminal/runtime/launcher";
 import {
   isMissingTerminalRuntimeError,
   normalizeCodexSlashCommand,
   sendInputToSession,
 } from "../terminal/application/input-dispatcher";
-import { getTerminalSessionAgent } from "../terminal/terminal-state-service";
+import { getTerminalSessionAgent } from "../terminal/state/terminal-state-service";
 import {
   sendTerminalInputSchema,
   sendTerminalInterruptSchema,

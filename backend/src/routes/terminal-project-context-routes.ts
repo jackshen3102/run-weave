@@ -4,7 +4,7 @@ import { z } from "zod";
 import type {
   TerminalProjectContextRecord,
   TerminalSessionManager,
-} from "../terminal/manager";
+} from "../terminal/manager/manager";
 
 const updateProjectContextSchema = z
   .object({ pinned: z.boolean() })

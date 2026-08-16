@@ -4,14 +4,14 @@ import type {
   TerminalPanelRecord,
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../manager";
-import type { TmuxPaneInfo } from "../tmux-service";
-import type { TerminalEventService } from "../terminal-event-service";
-import { getExecutableCommandName } from "../completion-source-gate";
+} from "../manager/manager";
+import type { TmuxPaneInfo } from "../tmux/service";
+import type { TerminalEventService } from "../state/terminal-event-service";
+import { getExecutableCommandName } from "../completion/source-gate";
 import {
   aggregatePanelTerminalState,
   getAgentForCommand,
-} from "../terminal-state-service";
+} from "../state/terminal-state-service";
 import { toPanelWorkspacePayload } from "./payloads";
 
 export function buildDefaultPanel(

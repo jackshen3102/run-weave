@@ -1,8 +1,8 @@
 import { prepareTerminalAgent } from "../../backend/src/terminal/application/agent-preparation.ts";
 import { processTerminalAgentHook } from "../../backend/src/terminal/agent-hook-processor.ts";
 import { handleAgentLifecycleEvent } from "../../backend/src/app-server/handlers/agent-lifecycle.ts";
-import { TerminalStateService } from "../../backend/src/terminal/terminal-state-service.ts";
-import { TerminalStateStore } from "../../backend/src/terminal/terminal-state-store.ts";
+import { TerminalStateService } from "../../backend/src/terminal/state/terminal-state-service.ts";
+import { TerminalStateStore } from "../../backend/src/terminal/state/terminal-state-store.ts";
 import {
   LONG_RUNNING_COMMAND,
   PROMPT,

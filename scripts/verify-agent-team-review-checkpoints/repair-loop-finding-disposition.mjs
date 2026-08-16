@@ -3,7 +3,7 @@ import {
   resolvePendingFindingDecision,
   resolveRepairTargets,
   reviewFindingContractErrors,
-} from "../../backend/src/agent-team/repair-loop.ts";
+} from "../../backend/src/agent-team/repair/loop.ts";
 import { buildRepairEvidence } from "./repair-fixtures.mjs";
 
 export function verifyFindingDispositionChecks(check, { run, reviewOutbox }) {
@@ -11,7 +11,7 @@ export function verifyFindingDispositionChecks(check, { run, reviewOutbox }) {
     scope: "final",
     baseCommit: "base",
     targetTree: "target-tree",
-    changedPaths: ["backend/src/agent-team/repair-loop.ts"],
+    changedPaths: ["backend/src/agent-team/repair/loop.ts"],
     planSha256: "plan-sha",
     testCaseSha256: "case-sha",
     requestedAt: "2026-07-14T00:00:15.000Z",

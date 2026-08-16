@@ -13,12 +13,12 @@ import {
   behaviorVerificationCasesForDispatch,
   ensureWorkerGateAcceptance,
   expandRecheckCasesForFailures,
-} from "../backend/src/agent-team/service-acceptance-policy.ts";
+} from "../backend/src/agent-team/service/acceptance-policy.ts";
 import {
   createActiveWorkerDispatch,
   hasConsistentActiveWorkerBoundary,
-} from "../backend/src/agent-team/service-workflow-policy.ts";
-import { getAgentTeamControlState } from "../frontend/src/components/terminal/terminal-agent-team-panel-model.ts";
+} from "../backend/src/agent-team/service/workflow-policy.ts";
+import { getAgentTeamControlState } from "../frontend/src/components/terminal/agent-team/panel-model.ts";
 import { withHarness } from "./verify-agent-team-review-checkpoints/bootstrap-lifecycle-harness.mjs";
 import { verifyReviewSkipPause } from "./verify-agent-team-control-plane/review-skip-pause.mjs";
 

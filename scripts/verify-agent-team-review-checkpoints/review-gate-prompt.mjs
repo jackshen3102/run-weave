@@ -1,4 +1,4 @@
-import { buildWorkerStartupPrompt } from "../../backend/src/agent-team/prompt-builders.ts";
+import { buildWorkerStartupPrompt } from "../../backend/src/agent-team/prompt/builders.ts";
 
 export function verifyReviewStartupPromptUsesExplicitGate(check, run, worker) {
   const prompt = buildWorkerStartupPrompt({

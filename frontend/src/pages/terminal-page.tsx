@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { TerminalWorkspace } from "../components/terminal/terminal-workspace";
+import { TerminalWorkspace } from "../components/terminal/workspace/workspace";
 import type { ClientMode } from "../features/client-mode";
 import type { ConnectionConfig } from "../features/connection/types";
 

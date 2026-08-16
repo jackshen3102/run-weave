@@ -13,16 +13,16 @@ import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
 } from "../terminal/default-shell";
-import type { TerminalEventService } from "../terminal/terminal-event-service";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalEventService } from "../terminal/state/terminal-event-service";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
 import type { PtyService } from "../terminal/pty-service";
-import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
+import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
 import {
   killTmuxSessionForTerminal,
-} from "../terminal/runtime-launcher";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
-import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
-import type { TmuxService } from "../terminal/tmux-service";
+} from "../terminal/runtime/launcher";
+import type { TerminalStateService } from "../terminal/state/terminal-state-service";
+import type { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
+import type { TmuxService } from "../terminal/tmux/service";
 import { RaceRecordStore } from "./race-record-store";
 import {
   RaceWorktreeSupply,

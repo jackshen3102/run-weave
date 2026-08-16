@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import type { AuthService } from "../auth/service";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
 
 interface HandshakeSuccess {
   ok: true;

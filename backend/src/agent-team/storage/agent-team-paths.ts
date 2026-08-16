@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { TerminalSessionManager } from "../../terminal/manager";
+import type { TerminalSessionManager } from "../../terminal/manager/manager";
 import { isTerminalChildProjectIdLike } from "@runweave/shared/terminal/project-context";
 import { assertSafeAgentTeamRunId } from "../run-id";
 

@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { TerminalEventServerMessage } from "@runweave/shared/terminal/events";
 import { WebSocket } from "ws";
-import { TerminalEventService } from "../backend/src/terminal/terminal-event-service";
+import { TerminalEventService } from "../backend/src/terminal/state/terminal-event-service";
 import { attachTerminalEventsWebSocketServer } from "../backend/src/ws/terminal-events-server";
 
 const authService = {

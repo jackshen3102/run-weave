@@ -5,8 +5,8 @@ import { foldRound } from "../backend/src/agent-team/loop.ts";
 import {
   evaluateAgentTeamCompletion,
   projectAgentTeamRunForRead,
-} from "../backend/src/agent-team/service-completion-policy.ts";
-import { resetPersistedAcceptanceForRefresh } from "../backend/src/agent-team/service-acceptance-refresh-policy.ts";
+} from "../backend/src/agent-team/service/completion-policy.ts";
+import { resetPersistedAcceptanceForRefresh } from "../backend/src/agent-team/service/acceptance-refresh-policy.ts";
 import { AgentTeamService } from "../backend/src/agent-team/service.ts";
 import { withHarness } from "./verify-agent-team-review-checkpoints/bootstrap-lifecycle-harness.mjs";
 
@@ -187,8 +187,8 @@ check(
 
 const mutationReadSources = await Promise.all(
   [
-    "../backend/src/agent-team/service-completion.ts",
-    "../backend/src/agent-team/service-recheck.ts",
+    "../backend/src/agent-team/service/completion.ts",
+    "../backend/src/agent-team/service/recheck.ts",
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
 );
 check(

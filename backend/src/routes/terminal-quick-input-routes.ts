@@ -4,7 +4,7 @@ import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, 
 import {
   TerminalQuickInputValidationError,
   type TerminalQuickInputService,
-} from "../terminal/quick-input-service";
+} from "../terminal/quick-input/service";
 
 const quickInputModeSchema = z.enum([
   "line",

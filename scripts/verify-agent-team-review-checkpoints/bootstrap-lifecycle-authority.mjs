@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { TerminalStateService } from "../../backend/src/terminal/terminal-state-service.ts";
-import { TerminalStateStore } from "../../backend/src/terminal/terminal-state-store.ts";
+import { TerminalStateService } from "../../backend/src/terminal/state/terminal-state-service.ts";
+import { TerminalStateStore } from "../../backend/src/terminal/state/terminal-state-store.ts";
 import { DEFAULT_TERMINAL_AGENT_BOOTSTRAP_PROMPT } from "../../packages/shared/src/terminal/agent-preparation.ts";
 import { buildRepairRun } from "./repair-fixtures.mjs";
 import {
@@ -123,7 +123,7 @@ async function verifyPersistedIdleStartingThreadWaitsForReadiness(
 
 function verifyWorkerPanesStayFixedAcrossRechecks(check) {
   const recheckSource = readFileSync(
-    new URL("../../backend/src/agent-team/service-recheck.ts", import.meta.url),
+    new URL("../../backend/src/agent-team/service/recheck.ts", import.meta.url),
     "utf8",
   );
   const preparationSource = readFileSync(
@@ -197,7 +197,7 @@ function verifyTuiTextDoesNotAdvanceAuthoritativeState(check) {
   );
   const terminalStateSource = readFileSync(
     new URL(
-      "../../backend/src/terminal/terminal-state-service.ts",
+      "../../backend/src/terminal/state/terminal-state-service.ts",
       import.meta.url,
     ),
     "utf8",
