@@ -1,6 +1,6 @@
 import { rm, writeFile } from "node:fs/promises";
 
-import { AGENT_TEAM_REVIEW_GATE_CASE_ID } from "../../backend/src/agent-team/service-acceptance-policy.ts";
+import { AGENT_TEAM_REVIEW_GATE_CASE_ID } from "../../backend/src/agent-team/service/acceptance-policy.ts";
 
 export async function verifyReviewSkipPause({
   buildRun,

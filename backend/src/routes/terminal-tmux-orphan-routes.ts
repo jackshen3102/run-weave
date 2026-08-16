@@ -1,8 +1,8 @@
 import type { Router } from "express";
 import { logger } from "../logging";
-import type { TerminalSessionManager } from "../terminal/manager";
-import { isTmuxBackedSession } from "../terminal/runtime-launcher";
-import type { TmuxService, TmuxSessionInfo } from "../terminal/tmux-service";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
+import { isTmuxBackedSession } from "../terminal/runtime/launcher";
+import type { TmuxService, TmuxSessionInfo } from "../terminal/tmux/service";
 
 const terminalTmuxLogger = logger.child({ component: "terminal" });
 

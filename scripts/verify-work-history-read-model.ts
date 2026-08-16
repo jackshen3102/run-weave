@@ -12,8 +12,8 @@ import { ActivityEventFactory } from "../backend/src/activity/event-factory";
 import { ActivityQueryService } from "../backend/src/activity/query-service";
 import { ActivityStore } from "../backend/src/activity/activity-store";
 import type { AgentTeamService } from "../backend/src/agent-team/service";
-import { LowDbTerminalSessionStore } from "../backend/src/terminal/lowdb-store";
-import { TerminalSessionManager } from "../backend/src/terminal/manager";
+import { LowDbTerminalSessionStore } from "../backend/src/terminal/store/lowdb-store";
+import { TerminalSessionManager } from "../backend/src/terminal/manager/manager";
 import type { AppServerHistoryGateway } from "../backend/src/work-history/app-server-history-gateway";
 import { WorkHistoryService } from "../backend/src/work-history/work-history-service";
 

@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox-resolver.ts";
-import { buildBounceBackPrompt, buildWorkerStartupPrompt, buildWorkerRecheckPrompt } from "../../backend/src/agent-team/prompt-builders.ts";
+import { buildBounceBackPrompt, buildWorkerStartupPrompt, buildWorkerRecheckPrompt } from "../../backend/src/agent-team/prompt/builders.ts";
 import {
   foldRepairGateResult,
   resolveRepairTargets,
   reviewFindingContractErrors,
   validateCodeFixHandoff,
-} from "../../backend/src/agent-team/repair-loop.ts";
-import { createActiveWorkerDispatch } from "../../backend/src/agent-team/service-workflow-policy.ts";
+} from "../../backend/src/agent-team/repair/loop.ts";
+import { createActiveWorkerDispatch } from "../../backend/src/agent-team/service/workflow-policy.ts";
 import { buildFixVerification, buildRepairEvidence, buildRepairRun, normalizeRepairOutbox } from "./repair-fixtures.mjs";
 import { verifyReviewStartupPromptUsesExplicitGate } from "./review-gate-prompt.mjs";
 import { verifyRepairLoopContinuation } from "./repair-loop-continuation.mjs";
@@ -27,7 +27,7 @@ function buildReviewReproduction(overrides = {}) {
 export function verifyEvidenceGatedRepairLoop(check) {
   const executionSource = readFileSync(
     new URL(
-      "../../backend/src/agent-team/service-execution.ts",
+      "../../backend/src/agent-team/service/execution.ts",
       import.meta.url,
     ),
     "utf8",
@@ -37,21 +37,21 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   const completionSource = readFileSync(
     new URL(
-      "../../backend/src/agent-team/service-completion.ts",
+      "../../backend/src/agent-team/service/completion.ts",
       import.meta.url,
     ),
     "utf8",
   );
   const lifecycleSource = readFileSync(
     new URL(
-      "../../backend/src/agent-team/service-lifecycle.ts",
+      "../../backend/src/agent-team/service/lifecycle.ts",
       import.meta.url,
     ),
     "utf8",
   );
   const interventionSource = readFileSync(
     new URL(
-      "../../backend/src/agent-team/service-intervention.ts",
+      "../../backend/src/agent-team/service/intervention.ts",
       import.meta.url,
     ),
     "utf8",
@@ -61,12 +61,12 @@ export function verifyEvidenceGatedRepairLoop(check) {
     lifecycleSource.indexOf("async completeRun"),
   )}\n${interventionSource}`;
   const supportSource = readFileSync(
-    new URL("../../backend/src/agent-team/service-support.ts", import.meta.url),
+    new URL("../../backend/src/agent-team/service/support.ts", import.meta.url),
     "utf8",
   );
   const workerDispatchSupportSource = readFileSync(
     new URL(
-      "../../backend/src/agent-team/service-worker-dispatch-support.ts",
+      "../../backend/src/agent-team/service/worker-dispatch-support.ts",
       import.meta.url,
     ),
     "utf8",
@@ -77,7 +77,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   const repairProtocolSource = readFileSync(
     new URL(
-      "../../backend/src/agent-team/service-repair-protocol.ts",
+      "../../backend/src/agent-team/service/repair-protocol.ts",
       import.meta.url,
     ),
     "utf8",

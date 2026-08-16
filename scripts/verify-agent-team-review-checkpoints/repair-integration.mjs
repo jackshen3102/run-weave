@@ -1,18 +1,18 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { captureRepairSourceFingerprint } from "../../backend/src/agent-team/repair-source-fingerprint.ts";
-import { buildHumanGateMainPrompt } from "../../backend/src/agent-team/prompt-builders.ts";
+import { captureRepairSourceFingerprint } from "../../backend/src/agent-team/repair/source-fingerprint.ts";
+import { buildHumanGateMainPrompt } from "../../backend/src/agent-team/prompt/builders.ts";
 import {
   assertAcceptanceRefreshPreservesTraceableCases,
   mergeAcceptanceRefresh,
   resetPersistedAcceptanceForRefresh,
-} from "../../backend/src/agent-team/service-acceptance-policy.ts";
+} from "../../backend/src/agent-team/service/acceptance-policy.ts";
 import {
   isAgentTeamProjectFileMissingError,
   resolveAgentTeamProjectFile,
 } from "../../backend/src/agent-team/acceptance-case-loader.ts";
-import { AgentTeamServiceSupport } from "../../backend/src/agent-team/service-support.ts";
+import { AgentTeamServiceSupport } from "../../backend/src/agent-team/service/support.ts";
 import { createAgentTeamRouter } from "../../backend/src/routes/agent-team.ts";
 import { buildRepairRun } from "./repair-fixtures.mjs";
 

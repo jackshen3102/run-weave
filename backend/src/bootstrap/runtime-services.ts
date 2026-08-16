@@ -15,23 +15,23 @@ import { ActivityQueryService } from "../activity/query-service";
 import { ActivityRecorder } from "../activity/activity-recorder";
 import { ActivityStore } from "../activity/activity-store";
 import { logger } from "../logging";
-import { LowDbTerminalQuickInputStore } from "../terminal/quick-input-lowdb-store";
-import { TerminalQuickInputService } from "../terminal/quick-input-service";
+import { LowDbTerminalQuickInputStore } from "../terminal/quick-input/lowdb-store";
+import { TerminalQuickInputService } from "../terminal/quick-input/service";
 import { loadOrCreateHookToken } from "../terminal/hook-token";
 import { PtyService } from "../terminal/pty-service";
-import { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import { TmuxLifecycleCoordinator } from "../terminal/tmux-lifecycle-coordinator";
-import { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
-import { TmuxService } from "../terminal/tmux-service";
-import { TerminalSessionManager } from "../terminal/manager";
-import { TerminalCompletionEventService } from "../terminal/completion-event-service";
-import { TerminalEventService } from "../terminal/terminal-event-service";
-import { TerminalStateService } from "../terminal/terminal-state-service";
-import { TerminalStateStore } from "../terminal/terminal-state-store";
+import { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
+import { TmuxLifecycleCoordinator } from "../terminal/tmux/lifecycle-coordinator";
+import { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
+import { TmuxService } from "../terminal/tmux/service";
+import { TerminalSessionManager } from "../terminal/manager/manager";
+import { TerminalCompletionEventService } from "../terminal/completion/event-service";
+import { TerminalEventService } from "../terminal/state/terminal-event-service";
+import { TerminalStateService } from "../terminal/state/terminal-state-service";
+import { TerminalStateStore } from "../terminal/state/terminal-state-store";
 import type { TerminalActivityDependencies } from "../terminal/activity-events";
-import { LowDbTerminalSessionStore } from "../terminal/lowdb-store";
-import { logOrphanedTmuxSessions } from "../terminal/tmux-orphan-scan";
-import { syncExistingTmuxSessionEnvironments } from "../terminal/tmux-session-environment-sync";
+import { LowDbTerminalSessionStore } from "../terminal/store/lowdb-store";
+import { logOrphanedTmuxSessions } from "../terminal/tmux/orphan-scan";
+import { syncExistingTmuxSessionEnvironments } from "../terminal/tmux/session-environment-sync";
 import {
   resolveActivityStoragePaths,
   resolveEvolutionStoragePaths,

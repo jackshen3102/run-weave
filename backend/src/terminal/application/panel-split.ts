@@ -4,9 +4,9 @@ import type {
   TerminalPanelRecord,
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../manager";
-import { ensureTerminalRuntime } from "../runtime-launcher";
-import { buildTerminalRuntimeEnvironment } from "../runtime-environment";
+} from "../manager/manager";
+import { ensureTerminalRuntime } from "../runtime/launcher";
+import { buildTerminalRuntimeEnvironment } from "../runtime/environment";
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,

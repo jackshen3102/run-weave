@@ -1,12 +1,12 @@
 import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
-import { getCompletionSourceForCommand } from "../../terminal/completion-source-gate";
+import { getCompletionSourceForCommand } from "../../terminal/completion/source-gate";
 import type {
   TerminalPanelRecord,
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../../terminal/manager";
-import { getAgentForCommand } from "../../terminal/terminal-state-service";
+} from "../../terminal/manager/manager";
+import { getAgentForCommand } from "../../terminal/state/terminal-state-service";
 
 const TERMINAL_AGENT_KINDS = new Set<TerminalAgentKind>([
   "codex",

@@ -1,5 +1,5 @@
 import { AgentTeamService } from "../../backend/src/agent-team/service.ts";
-import { getAgentForCommand } from "../../backend/src/terminal/terminal-state-service.ts";
+import { getAgentForCommand } from "../../backend/src/terminal/state/terminal-state-service.ts";
 
 export class AgentTeamSerialDispatchHarness extends AgentTeamService {
   persistedRuns = [];

@@ -8,7 +8,7 @@ import {
   rejectUnauthorizedTunnelUpgrade,
   type TunnelAuthConfig,
 } from "../server/tunnel-auth";
-import type { TerminalEventService } from "../terminal/terminal-event-service";
+import type { TerminalEventService } from "../terminal/state/terminal-event-service";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalEventsWebSocketHandshake } from "./terminal-events-handshake";
 

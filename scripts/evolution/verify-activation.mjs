@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { buildWorkerStartupPrompt } from "../../backend/src/agent-team/prompt-builders.ts";
+import { buildWorkerStartupPrompt } from "../../backend/src/agent-team/prompt/builders.ts";
 import { InMemoryEvolutionActivationStore } from "../../backend/src/evolution/activation-store.ts";
 import { createCandidateAssets } from "../../backend/src/evolution/knowledge/candidate-factory.ts";
 import {

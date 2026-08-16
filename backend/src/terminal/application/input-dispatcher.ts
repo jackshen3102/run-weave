@@ -3,21 +3,21 @@ import type {
   TerminalInputMode,
 } from "@runweave/shared/terminal-protocol";
 import { aiDiagnosticLog } from "../../diagnostic-logs/recorder";
-import type { TerminalSessionManager, TerminalSessionRecord } from "../manager";
+import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
 import type { PtyRuntime, PtyService } from "../pty-service";
-import type { TerminalRuntimeRegistry } from "../runtime-registry";
+import type { TerminalRuntimeRegistry } from "../runtime/registry";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
   resolveTmuxTarget,
-} from "../runtime-launcher";
+} from "../runtime/launcher";
 import type {
   TmuxKeySequenceItem,
   TmuxPaneTarget,
   TmuxService,
-} from "../tmux-service";
-import type { TmuxOutputWatcher } from "../tmux-output-watcher";
-import type { TerminalStateService } from "../terminal-state-service";
+} from "../tmux/service";
+import type { TmuxOutputWatcher } from "../tmux/output-watcher";
+import type { TerminalStateService } from "../state/terminal-state-service";
 import {
   buildTerminalInputOperationId,
   TERMINAL_INTERRUPT_ESCAPE_INPUT,

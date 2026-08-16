@@ -8,7 +8,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   DEFAULT_MAX_REPAIR_ATTEMPTS,
   resolveMaxRepairAttempts,
-} from "./repair-loop";
+} from "./repair/loop";
 
 export const DEFAULT_MAX_NO_PROGRESS = 3;
 export const DEFAULT_STABLE_FAIL_THRESHOLD = 2;

@@ -1,6 +1,6 @@
 import type { ActivityEventFactory } from "../activity/event-factory";
 import type { ActivityRecorder } from "../activity/activity-recorder";
-import type { TerminalSessionRecord } from "./manager-records";
+import type { TerminalSessionRecord } from "./manager/records";
 
 export interface TerminalActivityDependencies {
   recorder: ActivityRecorder;

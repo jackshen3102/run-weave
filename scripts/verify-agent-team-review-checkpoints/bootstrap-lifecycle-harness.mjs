@@ -4,9 +4,9 @@ import path from "node:path";
 import { prepareTerminalAgent } from "../../backend/src/terminal/application/agent-preparation.ts";
 import { processTerminalAgentHook } from "../../backend/src/terminal/agent-hook-processor.ts";
 import { ensureTmuxPanelWorkspace } from "../../backend/src/terminal/application/panel-workspace.ts";
-import { LowDbTerminalSessionStore } from "../../backend/src/terminal/lowdb-store.ts";
-import { TerminalSessionManager } from "../../backend/src/terminal/manager.ts";
-import { TmuxService } from "../../backend/src/terminal/tmux-service.ts";
+import { LowDbTerminalSessionStore } from "../../backend/src/terminal/store/lowdb-store.ts";
+import { TerminalSessionManager } from "../../backend/src/terminal/manager/manager.ts";
+import { TmuxService } from "../../backend/src/terminal/tmux/service.ts";
 
 export const LONG_RUNNING_COMMAND = "node -e 'setInterval(() => {}, 1000)' --";
 export const PROMPT = "Inspect this fixture without modifying files, then wait.";

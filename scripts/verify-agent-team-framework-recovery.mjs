@@ -1,10 +1,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createAgentTeamPanelError } from "../backend/src/agent-team/service-run-policy.ts";
+import { createAgentTeamPanelError } from "../backend/src/agent-team/service/run-policy.ts";
 import { TerminalPanelError } from "../backend/src/terminal/application/panel-common.ts";
-import { LowDbTerminalSessionStore } from "../backend/src/terminal/lowdb-store.ts";
-import { TerminalSessionManager } from "../backend/src/terminal/manager.ts";
+import { LowDbTerminalSessionStore } from "../backend/src/terminal/store/lowdb-store.ts";
+import { TerminalSessionManager } from "../backend/src/terminal/manager/manager.ts";
 import {
   CONTINUE_REPAIR_KEY,
   check,

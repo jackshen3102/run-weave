@@ -1,9 +1,9 @@
 import type { TerminalState } from "@runweave/shared/terminal/state";
-import type { TerminalSessionManager } from "../manager";
+import type { TerminalSessionManager } from "../manager/manager";
 import {
   aggregatePanelTerminalState,
   type TerminalStateService,
-} from "../terminal-state-service";
+} from "../state/terminal-state-service";
 
 type TerminalSession = NonNullable<
   ReturnType<TerminalSessionManager["getSession"]>

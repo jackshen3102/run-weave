@@ -51,7 +51,7 @@ export function query(overrides = {}) {
     workerRole: "code",
     task: "Implement agent team startup behavior",
     intent: "Change agent team prompt injection",
-    paths: ["backend/src/agent-team/service-execution.ts"],
+    paths: ["backend/src/agent-team/service/execution.ts"],
     commands: ["pnpm typecheck"],
     failureSignatures: [],
     dependencies: { protocolRevision: "v1" },

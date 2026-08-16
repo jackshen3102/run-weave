@@ -5,19 +5,19 @@ import type {
   TerminalPanelRecord,
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../manager";
+} from "../manager/manager";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
   resolveTmuxTarget,
-} from "../runtime-launcher";
+} from "../runtime/launcher";
 import {
   TMUX_AGENT_PREPARE_COMMAND_OPTION,
   TMUX_AGENT_PREPARE_EXIT_OPTION,
   type TmuxPaneInfo,
   type TmuxService,
-} from "../tmux-service";
-import type { TerminalEventService } from "../terminal-event-service";
+} from "../tmux/service";
+import type { TerminalEventService } from "../state/terminal-event-service";
 import { logger } from "../../logging";
 import {
   requireTmuxSession,

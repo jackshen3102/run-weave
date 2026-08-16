@@ -6,10 +6,10 @@ import type {
   TerminalPanelRecord,
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../manager";
+} from "../manager/manager";
 import { logger } from "../../logging";
-import { getAgentForCommand } from "../terminal-state-service";
-import { isInteractiveShellLaunch } from "../tmux-output-watcher-helpers";
+import { getAgentForCommand } from "../state/terminal-state-service";
+import { isInteractiveShellLaunch } from "../tmux/output-watcher-helpers";
 import { prepareTerminalAgent } from "./agent-preparation";
 import { TerminalPanelError, type TerminalPanelOptions } from "./panel-common";
 import { resolvePanelTarget } from "./panel-targets";

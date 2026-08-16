@@ -3,13 +3,13 @@ import { DEFAULT_TERMINAL_AGENT_BOOTSTRAP_PROMPT } from "@runweave/shared/termin
 import type {
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../terminal/manager";
+} from "../terminal/manager/manager";
 import type { PtyService } from "../terminal/pty-service";
-import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
-import { getAgentForCommand } from "../terminal/terminal-state-service";
-import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
-import type { TmuxService } from "../terminal/tmux-service";
+import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
+import type { TerminalStateService } from "../terminal/state/terminal-state-service";
+import { getAgentForCommand } from "../terminal/state/terminal-state-service";
+import type { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
+import type { TmuxService } from "../terminal/tmux/service";
 import { prepareTerminalAgent } from "../terminal/application/agent-preparation";
 import { resolvePanelTarget } from "../terminal/application/panel-targets";
 import { AgentTeamError } from "./errors";

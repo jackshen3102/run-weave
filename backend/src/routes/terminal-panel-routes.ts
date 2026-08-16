@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { SendTerminalInterruptRequest, SendTerminalInputRequest, TerminalInputMode } from "@runweave/shared/terminal/input";
 import type { PrepareTerminalAgentRequest, RecoverTerminalAgentRequest } from "@runweave/shared/terminal/agent-preparation";
 import type { CreateTerminalPanelRequest, ResizeTerminalPanelRequest, UpdateTerminalPanelRequest } from "@runweave/shared/terminal/panel";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { logger } from "../logging";
 import { sendInputToSession } from "../terminal/application/input-dispatcher";
 import {

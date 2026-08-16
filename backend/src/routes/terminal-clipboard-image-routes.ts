@@ -6,7 +6,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { CreateTerminalClipboardImageRequest, CreateTerminalClipboardImageResponse } from "@runweave/shared/terminal/input";
 import { logger } from "../logging";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
 import {
   TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
   TERMINAL_CLIPBOARD_IMAGE_MAX_MIB,

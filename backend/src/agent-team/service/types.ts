@@ -1,0 +1,64 @@
+import type {
+  AgentTeamAcceptanceCase,
+  AgentTeamExportHistoryMode,
+  AgentTeamVerificationConfig,
+} from "@runweave/shared/agent-team";
+import type { TerminalSessionManager } from "../../terminal/manager/manager";
+import type { PtyService } from "../../terminal/pty-service";
+import type { TerminalRuntimeRegistry } from "../../terminal/runtime/registry";
+import type { TerminalEventService } from "../../terminal/state/terminal-event-service";
+import type { TerminalStateService } from "../../terminal/state/terminal-state-service";
+import type { TmuxOutputWatcher } from "../../terminal/tmux/output-watcher";
+import type { TmuxService } from "../../terminal/tmux/service";
+import type { TerminalActivityDependencies } from "../../terminal/activity-events";
+import type { EvolutionMemoryProvider } from "../../evolution/injection/memory-provider";
+import type { EvolutionOutcomeObserver } from "../../evolution/injection/outcome-observer";
+import type { AgentTeamModelSettingsService } from "../model-catalog/service";
+
+export interface AgentTeamServiceOptions {
+  terminalSessionManager: TerminalSessionManager;
+  terminalEventService: TerminalEventService;
+  ptyService: PtyService;
+  runtimeRegistry: TerminalRuntimeRegistry;
+  terminalStateService: TerminalStateService;
+  tmuxService?: TmuxService;
+  tmuxOutputWatcher?: TmuxOutputWatcher;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  activity?: TerminalActivityDependencies;
+  /** Unique to one Backend boot; used to prove a framework restart occurred. */
+  backendInstanceId?: string;
+  evolutionMemoryProvider?: EvolutionMemoryProvider;
+  evolutionOutcomeObserver?: EvolutionOutcomeObserver;
+  modelSettingsService?: AgentTeamModelSettingsService;
+}
+
+export type AgentTeamCompletionSignalSource =
+  | "terminal_event"
+  | "app_server"
+  | "startup"
+  | "watchdog";
+
+export interface AgentTeamCompletionSignal {
+  projectId: string;
+  terminalSessionId: string;
+  panelId?: string | null;
+  tmuxPaneId?: string | null;
+  cwd?: string | null;
+  outboxPath?: string | null;
+  source: AgentTeamCompletionSignalSource;
+}
+
+export interface ExportAgentTeamRunOptions {
+  history?: AgentTeamExportHistoryMode;
+  tailLines?: number;
+  includeSessionOther?: boolean;
+  includeOutboxes?: boolean;
+}
+
+export interface PreparedAgentTeamAcceptance {
+  verification: AgentTeamVerificationConfig;
+  acceptance: AgentTeamAcceptanceCase[];
+  startLog: string;
+  testCaseValidationError?: string | null;
+}

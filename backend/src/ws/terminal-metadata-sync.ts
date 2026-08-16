@@ -3,10 +3,10 @@ import { logger } from "../logging";
 import type {
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../terminal/manager";
-import { isTmuxBackedSession, resolveTmuxTarget } from "../terminal/runtime-launcher";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
-import type { TmuxService } from "../terminal/tmux-service";
+} from "../terminal/manager/manager";
+import { isTmuxBackedSession, resolveTmuxTarget } from "../terminal/runtime/launcher";
+import type { TerminalStateService } from "../terminal/state/terminal-state-service";
+import type { TmuxService } from "../terminal/tmux/service";
 import {
   getTmuxPaneMetadataReader,
   sendEvent,

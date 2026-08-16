@@ -3,7 +3,7 @@ import { processTerminalAgentHook } from "../../backend/src/terminal/agent-hook-
 import {
   buildAgentResumeCommand,
   resolveAgentThreadToResume,
-} from "../../backend/src/terminal/runtime-launcher.ts";
+} from "../../backend/src/terminal/runtime/launcher.ts";
 
 export async function verifyToolkitHookProviderGuards() {
   await verifyDelayedCrossProviderHookGuard();

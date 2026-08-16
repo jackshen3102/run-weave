@@ -1,8 +1,8 @@
 import type { Response, Router } from "express";
 import { z } from "zod";
 import { logger } from "../logging";
-import type { TerminalSessionManager } from "../terminal/manager";
-import { listPreviewDirectory } from "../terminal/preview-directory";
+import type { TerminalSessionManager } from "../terminal/manager/manager";
+import { listPreviewDirectory } from "../terminal/preview/directory";
 import {
   deletePreviewFile,
   getPreviewFileDiff,
@@ -16,7 +16,7 @@ import {
   searchPreviewFiles,
   searchPreviewFolders,
   TerminalPreviewError,
-} from "../terminal/preview";
+} from "../terminal/preview/preview";
 
 const terminalPreviewLogger = logger.child({ component: "terminal-preview" });
 

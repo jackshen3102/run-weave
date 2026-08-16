@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
-import type { TerminalSessionManager } from "../../terminal/manager";
+import type { TerminalSessionManager } from "../../terminal/manager/manager";
 import { assertSafeAgentTeamRunId, isSafeAgentTeamRunId } from "../run-id";
 import type { AgentTeamPaths } from "./agent-team-paths";
 import { readJsonFile, writeJsonFile } from "./json-file";

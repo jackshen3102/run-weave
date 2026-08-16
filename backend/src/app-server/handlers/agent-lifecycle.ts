@@ -2,8 +2,8 @@ import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events"
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type { TerminalActivityDependencies } from "../../terminal/activity-events";
 import { processTerminalAgentHook } from "../../terminal/agent-hook-processor";
-import type { TerminalSessionManager } from "../../terminal/manager";
-import type { TerminalStateService } from "../../terminal/terminal-state-service";
+import type { TerminalSessionManager } from "../../terminal/manager/manager";
+import type { TerminalStateService } from "../../terminal/state/terminal-state-service";
 import { readAppServerPayloadString } from "./agent-event-payload";
 
 const TERMINAL_AGENTS = new Set<TerminalAgentKind>([

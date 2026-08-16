@@ -9,7 +9,7 @@ import type {
   TerminalPanelRecord,
   TerminalSessionManager,
   TerminalSessionRecord,
-} from "../manager";
+} from "../manager/manager";
 import {
   buildPaneTarget,
   TerminalPanelError,
@@ -18,14 +18,14 @@ import {
 } from "./panel-common";
 import { createTerminalPanelSplit } from "./panel-split";
 import { resolvePanelTarget } from "./panel-targets";
-import { isInteractiveShellLaunch } from "../tmux-output-watcher-helpers";
+import { isInteractiveShellLaunch } from "../tmux/output-watcher-helpers";
 import { sendInputToSession } from "./input-dispatcher";
 import { logger } from "../../logging";
 import {
   TMUX_AGENT_PREPARE_COMMAND_OPTION,
   TMUX_AGENT_PREPARE_EXIT_OPTION,
-} from "../tmux-service";
-import { buildTerminalRuntimeEnvironment } from "../runtime-environment";
+} from "../tmux/service";
+import { buildTerminalRuntimeEnvironment } from "../runtime/environment";
 
 const AGENT_SHELL_STARTUP_DELAY_MS = 10_000;
 const agentPreparationLogger = logger.child({
