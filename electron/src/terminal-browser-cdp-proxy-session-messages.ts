@@ -60,6 +60,7 @@ export async function handleBrowserSessionMessage(
   if (method === "Target.getTargets") {
     const targets = getCurrentTargetInfos(
       conn.sessionManager,
+      conn.scopedProfileId,
       conn.scopedGroupId,
     );
     sendJson(
@@ -72,6 +73,7 @@ export async function handleBrowserSessionMessage(
   if (method === "Target.getTargetInfo") {
     const targetInfo = getTargetInfoForRequest(
       conn.sessionManager,
+      conn.scopedProfileId,
       conn.scopedGroupId,
       params,
     );
@@ -266,6 +268,7 @@ export async function handleSessionMessage(
   if (method === "Target.getTargetInfo") {
     const targetInfo = getTargetInfoForRequest(
       sessionManager,
+      conn.scopedProfileId,
       conn.scopedGroupId,
       params,
       sessionId,

@@ -1,20 +1,20 @@
 import { useMemoizedFn } from "ahooks";
 import type { TerminalBrowserTabState } from "../../../features/terminal/preview-store";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 
 interface TerminalBrowserWorkspaceActionsOptions {
   isElectron: boolean;
+  profileId: TerminalBrowserProfileId;
   createLocalTab: (url?: string) => void;
   createLocalGroup: (url?: string) => void;
   closeLocalTab: (tabId: string) => void;
-  updateTab: (
-    tabId: string,
-    updates: Partial<TerminalBrowserTabState>,
-  ) => void;
+  updateTab: (tabId: string, updates: Partial<TerminalBrowserTabState>) => void;
 }
 
 export function useTerminalBrowserWorkspaceActions({
   isElectron,
+  profileId,
   createLocalTab,
   createLocalGroup,
   closeLocalTab,
@@ -22,7 +22,9 @@ export function useTerminalBrowserWorkspaceActions({
 }: TerminalBrowserWorkspaceActionsOptions) {
   const createTab = useMemoizedFn((url?: string): void => {
     const browser = useTerminalPreviewStore.getState().browser;
-    const activeTab = browser.tabs.find((tab) => tab.id === browser.activeTabId);
+    const activeTab = browser.tabs.find(
+      (tab) => tab.id === browser.activeTabId,
+    );
     if (!activeTab) {
       return;
     }
@@ -32,6 +34,7 @@ export function useTerminalBrowserWorkspaceActions({
     }
     void window.electronAPI
       .terminalBrowserCreateTab({
+        profileId,
         placement: "current-group",
         groupId: activeTab.browserGroupId,
         openerTabId: activeTab.id,
@@ -39,7 +42,8 @@ export function useTerminalBrowserWorkspaceActions({
       })
       .catch((error) => {
         updateTab(activeTab.id, {
-          error: error instanceof Error ? error.message : "Failed to create tab",
+          error:
+            error instanceof Error ? error.message : "Failed to create tab",
         });
       });
   });
@@ -50,7 +54,7 @@ export function useTerminalBrowserWorkspaceActions({
       return;
     }
     void window.electronAPI
-      .terminalBrowserCreateTab({ placement: "new-group" })
+      .terminalBrowserCreateTab({ profileId, placement: "new-group" })
       .catch((error) => {
         updateTab(useTerminalPreviewStore.getState().browser.activeTabId, {
           error:
@@ -64,7 +68,11 @@ export function useTerminalBrowserWorkspaceActions({
       if (!window.electronAPI?.terminalBrowserRenameGroup) {
         throw new Error("Group rename is unavailable");
       }
-      await window.electronAPI.terminalBrowserRenameGroup(groupId, name);
+      await window.electronAPI.terminalBrowserRenameGroup(
+        profileId,
+        groupId,
+        name,
+      );
     },
   );
 
@@ -78,7 +86,7 @@ export function useTerminalBrowserWorkspaceActions({
       }
       return;
     }
-    await window.electronAPI.terminalBrowserCloseGroup(groupId);
+    await window.electronAPI.terminalBrowserCloseGroup(profileId, groupId);
   });
 
   return { closeGroup, createGroup, createTab, renameGroup };

@@ -1,0 +1,288 @@
+version: 1
+name: Terminal Browser 三 Profile 与 Whistle 多代理验收
+description: >
+  验证同一个 Runweave Electron 进程中的三个 Terminal Browser Profile 能以固定 Whistle
+  端口承载独立浏览器数据、用户规则和 CDP Browser Group，并按 Prompt、Worktree、全局默认
+  的优先级把不同 Dev Server 路由到正确 Profile；同时覆盖路由共享与冲突、持久化、HTTPS
+  信任、局部失败和安装包运行时边界。
+
+cases:
+  - id: TBMP-001
+    name: Sidecar 固定展示三个全局 Browser Profile
+    required: true
+    description: >
+      验证桌面 Sidecar 始终提供 Browser 1、Browser 2、Browser 3 三个一级入口，并准确展示
+      Profile 1/2/3 到 8081/8082/8083 的固定映射，切换 Worktree 不会复制或重建 Profile。
+    preconditions:
+      - 使用 $toolkit:runweave-dev-session 启动一个受管 macOS Electron Dev Session，并取得 fresh desktop surface。
+      - 当前 Project 至少发现两个可用 Worktree context。
+    steps:
+      - 使用 $toolkit:playwright-cli 附着 desktop surface，打开 Terminal Sidecar；确认一级工具中同时显示 Browser 1、Browser 2、Browser 3，且每项只有一个实例。
+      - 依次进入三个 Browser 设置面板；确认分别显示固定代理 127.0.0.1:8081、127.0.0.1:8082、127.0.0.1:8083，界面没有修改固定端口或 Profile 数量的入口。
+      - 在两个 Worktree 间来回切换；确认三个 Browser 入口数量和 Profile ID 不变，未因 Worktree 切换自动启动代理、修改路由或刷新页面。
+
+  - id: TBMP-002
+    name: 三个 Profile 的浏览器存储完全隔离
+    required: true
+    description: >
+      验证同一业务 origin 在三个 Profile 中使用独立 Cookie、LocalStorage、IndexedDB 和登录态，
+      任一 Profile 的写入不能被其它 Profile 读取。
+    preconditions:
+      - 受管 Electron Dev Session 已启动，8081、8082、8083 可由 Runweave 使用。
+      - 有一个测试页面可在同一 origin 下读写 Cookie、LocalStorage 和 IndexedDB，并显示当前值。
+    steps:
+      - 分别打开 Browser 1、Browser 2、Browser 3，使用 $toolkit:playwright-cli 在同一测试 origin 写入三个不同的 Cookie、LocalStorage 和 IndexedDB 标识。
+      - 分别刷新并读取三个 Profile；确认每个 Profile 只显示自己写入的三个标识，没有读取其它 Profile 的值。
+      - 在 Profile 1 执行退出登录或删除一个存储值；确认 Profile 2 和 Profile 3 的登录态及存储值保持不变。
+
+  - id: TBMP-003
+    name: Worktree 设置允许多对一绑定且端口字段可为空
+    required: true
+    description: >
+      验证多个 Worktree 可以保存相同首选 Profile，Dev Server 端口可以独立设置或留空，UI
+      不施加一 Profile 一 Worktree 的错误约束。
+    preconditions:
+      - 当前 Project 至少存在四个可用 Worktree context。
+      - 已通过 desktop surface 打开 Worktree Rail 和 Browser Profile 设置面板。
+    steps:
+      - 将两个 Worktree 都绑定 Profile 1，并分别保存 Dev Server 端口 3000 和 3001；确认两项均保存成功，Rail 分别显示 P1 · :3000 和 P1 · :3001。
+      - 将第三个 Worktree 绑定 Profile 2 并把端口留空；确认显示 P2 且不显示本地端口，也没有自动填入或从终端日志猜测端口。
+      - 清除第四个 Worktree 的 Profile 绑定；确认其设置显示跟随全局默认，而不是自动占用一个空闲 Profile。
+
+  - id: TBMP-004
+    name: Agent Profile 解析遵守显式、Worktree、全局默认优先级
+    required: true
+    description: >
+      验证同一解析入口对优先级判定表给出稳定结果：显式 Profile 优先于 Worktree 绑定，
+      Worktree 绑定优先于全局默认，缺少对应关系时使用全局默认。
+    preconditions:
+      - 全局默认设为 Profile 1；Worktree A 绑定 Profile 2；Worktree B 不绑定 Profile。
+      - 两个 Worktree 的 Terminal 环境均具有正确的 RUNWEAVE_PROJECT_ID 和 PLAYWRIGHT_MCP_CDP_ENDPOINT。
+    steps:
+      - 在 Worktree A 执行 `rw browser profile resolve --json`；确认 JSON 的 profileId 为 profile-2、source 为 worktree，且 endpoint 限定 Profile 2。
+      - 在 Worktree A 执行带 `--profile 3` 的解析；确认 profileId 为 profile-3、source 为 explicit，Worktree A 的持久化绑定仍是 Profile 2。
+      - 在 Worktree B 执行无显式参数的解析；确认 profileId 为 profile-1、source 为 global-default。
+
+  - id: TBMP-005
+    name: 临时 Profile 覆盖使用独立 Playwright session 且不会回写
+    required: true
+    description: >
+      验证 `$toolkit:playwright-cli` 临时指定 Profile 时连接该 Profile 的独立 session，detach 后
+      下一次无参数调用恢复 Worktree 默认 Profile，不迁移页面或修改偏好。
+    preconditions:
+      - Worktree A 绑定 Profile 1，Profile 1 和 Profile 3 各自已有可区分的页面。
+      - 当前 Terminal 注入了可用的 Runweave CDP endpoint。
+    steps:
+      - 指示 $toolkit:playwright-cli 临时使用 Profile 3，解析 endpoint 后 attach；确认 session 名含 Profile 3，页面列表只属于 Profile 3，随后 detach。
+      - 再次不指定 Profile 执行同一 skill；确认解析回 Profile 1，使用不同的 Profile 1 session，原 Profile 1 页面仍在且未被 Profile 3 页面替换。
+      - 读取 Worktree A 设置；确认 preferred Profile 仍为 Profile 1，没有保存 prompt override。
+
+  - id: TBMP-006
+    name: CDP 同时按 Profile 和 Browser Group 隔离 Target
+    required: true
+    description: >
+      验证一个物理 CDP Proxy 端口上的逻辑 endpoint 先隔离 Profile、再隔离 Browser Group；
+      不同 Profile 可使用同名 Group，但不能发现或操作对方 Target。
+    preconditions:
+      - Profile 1 和 Profile 2 内都创建名为 group-a 的 Browser Group，并各自打开一个具有不同标题的页面。
+      - 已取得 profile-1/group-a、profile-2/group-a 以及两个 Profile 的 profile-scoped endpoint。
+    steps:
+      - 使用两个独立 $toolkit:playwright-cli session 分别 attach profile-1/group-a 和 profile-2/group-a；确认各自 tab-list、snapshot 和 title 只包含所属 Profile 的 group-a 页面。
+      - 从 Profile 1 endpoint 使用 Profile 2 的 targetId 执行 attach、activate 和 close；确认全部 fail closed，Profile 2 页面未受影响且响应不泄露其 URL 或 DOM。
+      - 在两个 scoped 连接中分别创建新页面；确认新页面继承各自 Profile 和 group-a，同名 Group 没有被合并成跨 Profile 全局 Group。
+
+  - id: TBMP-007
+    name: 三个 Profile 可同时路由到三个不同 Dev Server
+    required: true
+    description: >
+      验证 Runweave 的核心目标：Profile 1/2/3 能通过 8081/8082/8083 同时访问三个不同业务
+      Dev Server，页面、HMR/WebSocket 和流量记录均进入正确实例。
+    preconditions:
+      - 3000、3001、3002 上各有一个受测试生命周期管理的 fixture Dev Server，页面分别显示 DEV-3000、DEV-3001、DEV-3002，并提供可观察的 WebSocket/HMR 标识。
+      - 三份 Whistle 用户规则已分别引用保留 Value `runweave-dev-server`，固定代理端口均空闲。
+      - 三个 Worktree 分别配置 3000、3001、3002，并分别选择 Profile 1、Profile 2、Profile 3。
+    steps:
+      - 并发解析并 attach 三个 Profile endpoint，使用 $toolkit:playwright-cli 导航到同一业务 URL；确认三个页面分别显示 DEV-3000、DEV-3001、DEV-3002。
+      - 触发三个 fixture 的资源请求和 WebSocket/HMR 消息；确认每个 Profile 只收到所属 Dev Server 的标识，没有跨端口响应。
+      - 打开三个 Whistle 控制台检查对应请求；确认 8081、8082、8083 的流量分别命中 3000、3001、3002，三个 CDP 连接仍共用同一个物理 CDP Proxy 监听端口。
+
+  - id: TBMP-008
+    name: 不同 Worktree 在相同路由下可共享同一 Profile
+    required: true
+    description: >
+      验证 Profile 的共享条件由当前 Dev Server 路由决定而不是 Worktree 身份决定；两个 Worktree
+      请求相同端口时可以通过不同 Browser Group 同时自动化。
+    preconditions:
+      - Worktree A 和 Worktree B 都绑定 Profile 1，且 Dev Server 端口都配置为 3000。
+      - Profile 1 中为两个 Agent 准备了不同 Browser Group，3000 fixture 可用。
+    steps:
+      - 从两个 Worktree 并发解析 Profile 1 的不同 Group endpoint；确认两次解析均成功、route 都是 dev-server:3000，没有路由冲突。
+      - 使用两个 $toolkit:playwright-cli session 同时操作各自 Group 页面；确认两个页面均访问 3000，Target 列表和交互不跨 Group。
+      - 断开任一 Agent；确认另一 Agent 的 CDP session、页面和 Profile 1 路由保持可用。
+
+  - id: TBMP-009
+    name: 活跃 Profile 拒绝切换到不同 Dev Server 路由
+    required: true
+    description: >
+      验证 Profile 存在可见页面或 CDP 连接时，不同端口请求返回稳定冲突，不会静默抢占、
+      自动改用其它 Profile 或覆盖当前 Whistle Value。
+    preconditions:
+      - Profile 1 当前路由为 3000，且至少有一个可见 WebContentsView或一个已 attach 的 CDP client。
+      - 另一个 Worktree 请求 Profile 1 和 Dev Server 端口 3001。
+    steps:
+      - 从第二个 Worktree 通过 UI“用于当前 Worktree”和 `rw browser profile resolve` 分别请求 Profile 1；确认两入口都返回 BROWSER_PROFILE_ROUTE_CONFLICT，并显示当前 3000 与请求 3001。
+      - 读取 Whistle 保留 Value 并刷新原页面；确认 Value 仍是 127.0.0.1:3000，原页面继续显示 DEV-3000，没有被切到 3001 或其它 Profile。
+      - 确认冲突过程中没有新开替代 Profile、没有清理原 Browser Group，也没有修改两个 Worktree 的持久化绑定。
+
+  - id: TBMP-010
+    name: Profile 空闲后切换路由只刷新业务页面并保留存储
+    required: true
+    description: >
+      验证 Profile 无可见 view 和 CDP 连接后可从 3000 切到 3001，切换只更新 Whistle Value并
+      reloadIgnoringCache，Cookie、Web Storage、Service Worker 和页面身份不被清理。
+    preconditions:
+      - Profile 1 当前为 3000，已有业务 origin 页面、非业务 origin 页面及可识别的 Cookie、LocalStorage、IndexedDB 和 Service Worker 状态。
+      - Profile 1 已从所有窗口隐藏且所有 CDP client 已 detach；3001 fixture 可用。
+    steps:
+      - 从配置为 3001 的 Worktree 显式使用 Profile 1；确认解析成功，Whistle 保留 Value 变为 127.0.0.1:3001，业务页面重新加载后显示 DEV-3001。
+      - 读取业务页面的 Cookie、LocalStorage、IndexedDB、Service Worker registration、tabId 和 Group；确认均与切换前一致，没有执行清理或创建替代页面。
+      - 检查非业务 origin 页面；确认它没有因本次路由切换被批量刷新，Profile 1 也未调用全局浏览数据重置。
+
+  - id: TBMP-011
+    name: 未配置 Dev Server 时不会沿用上一个本地路由
+    required: true
+    description: >
+      验证 Worktree 没有 Dev Server 端口时解析为 unassigned，Runweave 删除保留 Value且不会继续
+      把业务请求发送到上一个 Worktree 的本地端口；最终回源行为仍由用户规则决定。
+    preconditions:
+      - Profile 2 曾指向 3001，现已空闲；测试 Worktree 未配置 Dev Server 端口。
+      - 测试专用 Whistle 用户规则在保留 Value 不存在时明确回源线上，线上 origin 可返回 ONLINE 标识。
+    steps:
+      - 从无端口 Worktree 显式使用 Profile 2；确认 resolver route 为 unassigned，Whistle Values 中不存在 `runweave-dev-server`。
+      - 使用 $toolkit:playwright-cli 导航业务 URL；确认 3001 fixture 没有收到新请求；在测试专用用户规则作用下页面显示 ONLINE，而不是 DEV-3001。
+      - 再次解析同一 Worktree；确认 unassigned 结果幂等，没有重新写入旧端口或自动猜测终端输出中的端口。
+
+  - id: TBMP-012
+    name: Runweave 只更新保留 Value且三份用户规则独立
+    required: true
+    description: >
+      验证用户在三个 Whistle 控制台维护的 Rules 和普通 Values 不被 Runweave修改，端口切换只
+      影响所属 Profile 的 `runweave-dev-server`。
+    preconditions:
+      - 三个 Whistle 实例各自存在名称和内容不同的用户 Rule、普通 Value 和一条引用保留 Value 的规则。
+      - Profile 1 当前空闲，可从 3000 切换到 3003。
+    steps:
+      - 记录三个控制台的 Rules、普通 Values 和选中状态；切换 Profile 1 到 3003。
+      - 确认只有 8081 实例的 `runweave-dev-server` 变为 127.0.0.1:3003，8082/8083 的保留 Value未变化。
+      - 对照切换前记录；确认三个实例的用户 Rule 正文、普通 Values、规则选择状态和流量历史没有被 Runweave 覆盖、复制或合并。
+
+  - id: TBMP-013
+    name: Whistle 按 Profile 懒启动并在 Runweave 退出时全部停止
+    required: true
+    description: >
+      验证 8081/8082/8083 不在应用启动时无条件占用，Profile 首次实际使用后对应 Whistle 保持
+      运行，完整退出 Runweave 时由同一生命周期释放所有已启动端口。
+    preconditions:
+      - 8081、8082、8083 初始空闲，使用新的受管 Dev Session userData 启动 Electron。
+      - 已准备可检查监听 PID 和 Whistle CGI ready 状态的本机诊断手段。
+    steps:
+      - 启动 Runweave 但不打开 Browser、不解析 Profile；确认 8081、8082、8083 均无本次 Session 的 Whistle listener。
+      - 依次实际使用 Profile 2、Profile 1；确认只启动 8082、8081，CGI ready 后持续存活，Profile 3 的 8083 仍未启动。
+      - 完整退出本次 Runweave Dev Session；确认本次拥有的 Whistle 子进程退出且 8081、8082 释放，不结束其它用户进程。
+
+  - id: TBMP-014
+    name: 固定 Whistle 端口冲突只禁用对应 Profile
+    required: true
+    description: >
+      验证固定端口被外部进程占用时不自动漂移、不杀外部进程且不拖垮应用或其它 Profile。
+    preconditions:
+      - 启动前由测试 fixture 占用 8082，并能证明该 PID 不属于 Runweave。
+      - 8081、8083 空闲，Profile 1/2/3 均可从 UI 显式使用。
+    steps:
+      - 使用 Profile 2；确认显示 WHISTLE_PORT_IN_USE 和固定端口 8082，没有改用其它端口，也没有终止 fixture PID。
+      - 使用 Profile 1 和 Profile 3；确认 8081、8083 正常 ready、页面和 CDP 可用，Runweave 主窗口未退出。
+      - 释放 fixture 后再次显式使用 Profile 2；确认本次在 8082 成功启动，而 Profile 1/3 的进程和页面不被重启。
+
+  - id: TBMP-015
+    name: 重启恢复持久化身份但清空运行时占用
+    required: true
+    description: >
+      验证一次完整 Electron 重启前后，Profile 数据、页面元数据、Worktree 设置和 Whistle 用户
+      规则被恢复，而 PID、CDP 连接、prompt override 和当前 route 不被当作存量运行时恢复。
+    preconditions:
+      - 三个 Profile 已分别保存页面、Group、登录态和不同 Whistle 用户规则；Worktree 与全局设置已保存。
+      - Profile 3 当前通过 prompt override 使用 3002，并存在 CDP 连接。
+    steps:
+      - 使用 desktop 和 terminal-browser surface 记录重启前配置、页面身份、登录态、规则以及 runtime route；完整停止并重新启动同一 Dev Session userData。
+      - 重新取得 fresh desktop 和 terminal-browser endpoint；确认 Worktree/global 设置、三个 Profile 页面元数据、登录态和用户规则恢复，但没有旧 Whistle PID、CDP 连接、prompt override 或 active route。
+      - 在未显式使用 Browser 前确认恢复页面尚未发起导航且 Whistle 未启动；随后显式使用一个 Profile，确认只 materialize 该 Profile 并按当前 Worktree重新解析路由。
+
+  - id: TBMP-016
+    name: 三个 Profile 只信任共享 Whistle CA
+    required: true
+    description: >
+      验证三份独立 Whistle storage 使用同一 Root CA，三个 Terminal Browser Session 可访问被该
+      CA 签发的 HTTPS 流量，而无关自签名或错误证书仍被 Chromium 拒绝。
+    preconditions:
+      - 三个 Whistle 已使用同一 certDir 启动，测试业务 HTTPS origin 可通过 Whistle 解密并返回可观察页面。
+      - 另有一个由不同自签名 CA 提供的 HTTPS fixture，且系统未信任该 CA。
+    steps:
+      - 在三个 Profile 中分别通过 $toolkit:playwright-cli 打开 Whistle 处理的 HTTPS 业务页；确认页面成功加载，证书链最终对应同一个 Runweave Whistle Root CA。
+      - 在三个 Profile 和 Runweave 主窗口可达的普通 Electron Session 中请求无关自签名 fixture；确认均出现证书拒绝，未因全局 ignore-certificate-errors 被放行。
+      - 检查系统代理和钥匙串；确认测试没有修改系统代理，也没有安装三份或一份系统级 Whistle CA。
+
+  - id: TBMP-017
+    name: 多窗口共享三个 Profile 的路由而不复制实例
+    required: true
+    description: >
+      验证同一 Electron 进程的多个 Runweave 窗口共享 Profile Session、Whistle 端口和当前路由，
+      但各窗口可以持有自己的 Browser Group 和页面。
+    preconditions:
+      - 同一个受管 Electron 进程已打开两个 Runweave 主窗口，两个窗口都可访问 Browser 1/2/3。
+      - 窗口 A 的 Profile 1 已激活 3000 并有可见页面。
+    steps:
+      - 在窗口 B 打开 Profile 1 并请求相同 3000；确认复用同一 8081 和 Session 登录态，窗口 B 可创建自己的 Group，进程中没有第二个 Profile 1 或额外 Whistle listener。
+      - 在窗口 B 请求 Profile 1 切到 3001；确认因窗口 A 仍可见而返回路由冲突，窗口 A 页面保持 3000。
+      - 在窗口 B 使用 Profile 2 指向 3001；确认成功使用 8082，两个窗口的 Profile 1/2 页面和 Group 均可继续操作。
+
+  - id: TBMP-018
+    name: Header 规则与网络状态按 Profile 隔离
+    required: true
+    description: >
+      验证既有 Terminal Browser Headers 能力在多 Profile 后按 Session 分桶，保存、刷新和请求改写
+      只影响当前 Profile。
+    preconditions:
+      - 三个 Profile 均打开一个会回显请求 Header 的测试页面。
+      - Profile 1 和 Profile 2 的 Header 面板可编辑，Profile 3 保持默认空规则。
+    steps:
+      - "在 Profile 1 保存 `x-profile: one`，在 Profile 2 保存 `x-profile: two`，随后分别刷新三个页面。"
+      - 确认 Profile 1 回显 one、Profile 2 回显 two、Profile 3 不含 x-profile，任一保存动作未刷新或改写其它 Profile。
+      - 重启 renderer 后重新打开三个 Header 面板；确认规则仍按 Profile 分开，Profile 1 的旧全局 Header 设置只迁移一次且没有复制到 Profile 2/3。
+
+  - id: TBMP-019
+    name: Profile 设置拒绝非法 origin、端口和 Profile ID
+    required: true
+    description: >
+      验证 Profile 偏好和 resolver 对输入边界 fail closed，非法值不会部分写入配置、启动子进程
+      或构造任意 partition/端口。
+    preconditions:
+      - 已记录一份有效的全局设置和 Worktree 设置，三个 Whistle 当前均未启动。
+      - UI 设置面板和 `rw browser profile resolve` 均可操作。
+    steps:
+      - 分别提交端口 0、65536、非整数和固定代理端口 8081；确认每次均返回 INVALID_DEV_SERVER_PORT，原配置不变且没有新 listener。
+      - 分别提交含 path/query 的 business URL、非 http(s) scheme 和空白外的畸形 origin；确认被拒绝，原 business origin 不变。
+      - 通过 CLI 提交 Profile 0、4、任意字符串以及超长 group/project 标识；确认返回非零退出码和稳定错误，未访问其它 partition、文件路径或 CDP Target。
+
+  - id: TBMP-020
+    name: 旧单 Profile 数据迁移到 Profile 1且可安全降级
+    required: true
+    description: >
+      验证现有 `persist:runweave-terminal-browser`、workspace v1/v2 和旧 Header 设置升级后进入
+      Profile 1，Profile 2/3 保持新建状态，旧 8899 proxy preference 不被错误解释或删除。
+    preconditions:
+      - 使用专属 userData 准备旧版本 Profile 登录态、v2 tabs/groups、旧 Header localStorage 和启用的 8899 proxy preference。
+      - 已备份该 fixture，可在升级后检查原文件和新 schema。
+    steps:
+      - 使用新版本启动并首次显式打开 Profile 1；确认旧登录态、tabs/groups 和 Header 规则仍在，Profile 2/3 没有复制这些数据。
+      - 检查持久化文件；确认 workspace 规范化为 v3 并把旧内容放入 Profile 1，旧 proxy preference 文件仍存在但没有控制 8081/8082/8083。
+      - 停止新版本并用只读取旧合同的回滚 fixture 检查 userData；确认新 Whistle storage、Profile 2/3 partition 和新偏好未被删除，旧 Profile 1 partition 仍可读取。

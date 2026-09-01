@@ -22,7 +22,15 @@ import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared/terminal-brow
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import type { TerminalBrowserDisplayScaleState } from "@runweave/shared/terminal-browser-display-scale";
 import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
-import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
+import type {
+  ResolveTerminalBrowserProfileRequest,
+  ResolvedTerminalBrowserProfile,
+  TerminalBrowserProfileChangedEvent,
+  TerminalBrowserProfileId,
+  TerminalBrowserProfilePreferenceUpdate,
+  TerminalBrowserProfilePreferences,
+  TerminalBrowserProfileRuntimeState,
+} from "@runweave/shared/terminal-browser-profile";
 import type {
   TerminalBrowserToolMenuAction,
   TerminalBrowserToolMenuRequest,
@@ -123,26 +131,41 @@ const electronApi = {
     ipcRenderer.invoke("system-monitor:get") as Promise<SystemMonitorSnapshot>,
   terminalBrowserNavigate: (tabId: string, url: string) =>
     ipcRenderer.invoke("terminal-browser:navigate", tabId, url),
-  terminalBrowserGetWorkspace: () =>
+  terminalBrowserGetWorkspace: (profileId: TerminalBrowserProfileId) =>
     ipcRenderer.invoke(
       "terminal-browser:get-workspace",
+      profileId,
     ) as Promise<TerminalBrowserWorkspaceSnapshot>,
   terminalBrowserCreateTab: (request: TerminalBrowserCreateTabRequest) =>
     ipcRenderer.invoke("terminal-browser:create-tab", request) as Promise<void>,
-  terminalBrowserRenameGroup: (groupId: string, name: string) =>
+  terminalBrowserRenameGroup: (
+    profileId: TerminalBrowserProfileId,
+    groupId: string,
+    name: string,
+  ) =>
     ipcRenderer.invoke(
       "terminal-browser:rename-group",
+      profileId,
       groupId,
       name,
     ) as Promise<void>,
-  terminalBrowserCloseGroup: (groupId: string) =>
-    ipcRenderer.invoke("terminal-browser:close-group", groupId) as Promise<void>,
+  terminalBrowserCloseGroup: (
+    profileId: TerminalBrowserProfileId,
+    groupId: string,
+  ) =>
+    ipcRenderer.invoke(
+      "terminal-browser:close-group",
+      profileId,
+      groupId,
+    ) as Promise<void>,
   terminalBrowserReorderGroupTabs: (
+    profileId: TerminalBrowserProfileId,
     groupId: string,
     orderedTabIds: string[],
   ) =>
     ipcRenderer.invoke(
       "terminal-browser:reorder-group-tabs",
+      profileId,
       groupId,
       orderedTabIds,
     ) as Promise<void>,
@@ -197,29 +220,47 @@ const electronApi = {
       "terminal-browser:get-cdp-proxy-info",
       tabId,
     ) as Promise<TerminalBrowserCdpProxyInfo>,
-  terminalBrowserGetProxyState: () =>
-    ipcRenderer.invoke(
-      "terminal-browser:get-proxy-state",
-    ) as Promise<TerminalBrowserProxyState>,
-  terminalBrowserSetProxyEnabled: (enabled: boolean) =>
-    ipcRenderer.invoke(
-      "terminal-browser:set-proxy-enabled",
-      enabled,
-    ) as Promise<TerminalBrowserProxyState>,
-  terminalBrowserSetProxyPort: (port: number) =>
-    ipcRenderer.invoke(
-      "terminal-browser:set-proxy-port",
-      port,
-    ) as Promise<TerminalBrowserProxyState>,
-  terminalBrowserGetHeaderRules: () =>
+  terminalBrowserGetHeaderRules: (profileId: TerminalBrowserProfileId) =>
     ipcRenderer.invoke(
       "terminal-browser:get-header-rules",
+      profileId,
     ) as Promise<TerminalBrowserHeaderState>,
-  terminalBrowserSetHeaderRules: (rules: TerminalBrowserHeaderState["rules"]) =>
+  terminalBrowserSetHeaderRules: (
+    profileId: TerminalBrowserProfileId,
+    rules: TerminalBrowserHeaderState["rules"],
+  ) =>
     ipcRenderer.invoke(
       "terminal-browser:set-header-rules",
+      profileId,
       rules,
     ) as Promise<TerminalBrowserHeaderState>,
+  terminalBrowserGetProfilePreferences: () =>
+    ipcRenderer.invoke(
+      "terminal-browser:get-profile-preferences",
+    ) as Promise<TerminalBrowserProfilePreferences>,
+  terminalBrowserUpdateProfilePreferences: (
+    update: TerminalBrowserProfilePreferenceUpdate,
+  ) =>
+    ipcRenderer.invoke(
+      "terminal-browser:update-profile-preferences",
+      update,
+    ) as Promise<TerminalBrowserProfilePreferences>,
+  terminalBrowserGetProfileRuntimes: () =>
+    ipcRenderer.invoke("terminal-browser:get-profile-runtimes") as Promise<
+      TerminalBrowserProfileRuntimeState[]
+    >,
+  terminalBrowserResolveProfile: (
+    request: ResolveTerminalBrowserProfileRequest,
+  ) =>
+    ipcRenderer.invoke(
+      "terminal-browser:resolve-profile",
+      request,
+    ) as Promise<ResolvedTerminalBrowserProfile>,
+  terminalBrowserOpenWhistleConsole: (profileId: TerminalBrowserProfileId) =>
+    ipcRenderer.invoke(
+      "terminal-browser:open-whistle-console",
+      profileId,
+    ) as Promise<void>,
   terminalBrowserCloseTab: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:close-tab", tabId),
   terminalBrowserAnnotationStart: (tabId: string) =>
@@ -281,6 +322,18 @@ const electronApi = {
     ipcRenderer.on("terminal-browser:state-changed", wrapped);
     return () => {
       ipcRenderer.off("terminal-browser:state-changed", wrapped);
+    };
+  },
+  onTerminalBrowserProfileChanged: (
+    listener: (data: TerminalBrowserProfileChangedEvent) => void,
+  ) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      data: TerminalBrowserProfileChangedEvent,
+    ) => listener(data);
+    ipcRenderer.on("terminal-browser:profile-changed", wrapped);
+    return () => {
+      ipcRenderer.off("terminal-browser:profile-changed", wrapped);
     };
   },
   onTerminalBrowserAnnotationUpdated: (

@@ -71,6 +71,9 @@ export function TerminalSurface({
     (state) => state.createBrowserTab,
   );
   const openBrowser = useTerminalPreviewStore((state) => state.openBrowser);
+  const activeBrowserProfileId = useTerminalPreviewStore(
+    (state) => state.activeBrowserProfileId,
+  );
   const promptInsertionRequest = useTerminalPromptInsertionStore((state) =>
     active
       ? (state.requests.find(
@@ -223,27 +226,24 @@ export function TerminalSurface({
       const activeBrowserTab = browserState.tabs.find(
         (tab) => tab.id === browserState.activeTabId,
       );
-      if (
-        activeBrowserTab &&
-        window.electronAPI?.terminalBrowserCreateTab
-      ) {
+      if (activeBrowserTab && window.electronAPI?.terminalBrowserCreateTab) {
         void window.electronAPI
           .terminalBrowserCreateTab({
+            profileId: activeBrowserProfileId,
             placement: "current-group",
             groupId: activeBrowserTab.browserGroupId,
             openerTabId: activeBrowserTab.id,
             url: nextUrl.url,
           })
           .catch((error) => {
-            useTerminalPreviewStore.getState().updateBrowserTab(
-              activeBrowserTab.id,
-              {
+            useTerminalPreviewStore
+              .getState()
+              .updateBrowserTab(activeBrowserTab.id, {
                 error:
                   error instanceof Error
                     ? error.message
                     : "Failed to open browser link",
-              },
-            );
+              });
           })
           .finally(openBrowser);
         return;
@@ -252,7 +252,7 @@ export function TerminalSurface({
       }
       openBrowser();
     };
-  }, [createBrowserTab, openBrowser]);
+  }, [activeBrowserProfileId, createBrowserTab, openBrowser]);
 
   useEffect(() => {
     tokenRef.current = token;

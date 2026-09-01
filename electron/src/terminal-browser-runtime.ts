@@ -7,9 +7,11 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { TerminalBrowserUpdate } from "@runweave/shared/desktop-bridge";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
-import type {
-  TerminalBrowserGroupNameOrigin,
-} from "@runweave/shared/terminal-browser-workspace";
+import type { TerminalBrowserGroupNameOrigin } from "@runweave/shared/terminal-browser-workspace";
+import {
+  getTerminalBrowserProfileConfig,
+  type TerminalBrowserProfileId,
+} from "@runweave/shared/terminal-browser-profile";
 
 export type {
   TerminalBrowserBounds,
@@ -25,8 +27,10 @@ export interface PendingTerminalBrowserUpdate {
 
 export interface TerminalBrowserEntry {
   windowId: number;
+  profileId: TerminalBrowserProfileId;
   view: WebContentsView;
   attached: boolean;
+  visible: boolean;
   targetId: string;
   browserGroupId: string;
   faviconDataUrl: string | null;
@@ -62,13 +66,25 @@ export interface TerminalBrowserGroupRecord {
 }
 
 export interface TerminalBrowserWindowWorkspace {
+  profileId: TerminalBrowserProfileId;
   revision: number;
   groups: TerminalBrowserGroupRecord[];
+}
+
+export interface TerminalBrowserDormantTab {
+  windowId: number;
+  profileId: TerminalBrowserProfileId;
+  tabId: string;
+  browserGroupId: string;
+  url: string;
+  title: string;
+  lastActiveAt: number;
 }
 
 export interface TerminalBrowserCdpTarget {
   key: string;
   targetId: string;
+  profileId: TerminalBrowserProfileId;
   browserGroupId: string;
   windowId: number;
   active: boolean;
@@ -78,16 +94,14 @@ export interface TerminalBrowserCdpTarget {
   webContents: WebContents;
 }
 
-export const TERMINAL_BROWSER_SESSION_PARTITION =
-  "persist:runweave-terminal-browser";
-
 export const terminalBrowserRuntime = {
   entries: new Map<string, TerminalBrowserEntry>(),
-  attachedByWindowId: new Map<number, string>(),
-  workspaceByWindowId: new Map<number, TerminalBrowserWindowWorkspace>(),
+  dormantTabs: new Map<string, TerminalBrowserDormantTab>(),
+  attachedByWorkspaceKey: new Map<string, string>(),
+  workspaceByKey: new Map<string, TerminalBrowserWindowWorkspace>(),
   saveTimer: null as NodeJS.Timeout | null,
   persistedStateRestored: false,
-  restoringWindows: new Set<number>(),
+  restoringWorkspaceKeys: new Set<string>(),
 };
 
 export const terminalBrowserEvents = new EventEmitter();
@@ -96,17 +110,49 @@ export function createTerminalBrowserGroupId(): string {
   return `browser-group-${randomUUID().slice(0, 8)}`;
 }
 
-export function getTerminalBrowserSession(): Electron.Session {
-  return electronSession.fromPartition(TERMINAL_BROWSER_SESSION_PARTITION);
+export function getTerminalBrowserSession(
+  profileId: TerminalBrowserProfileId,
+): Electron.Session {
+  return electronSession.fromPartition(
+    getTerminalBrowserProfileConfig(profileId).partition,
+  );
 }
 
 export function getTerminalBrowserKey(
   windowIdOrWindow: number | { id: number },
+  profileId: TerminalBrowserProfileId,
   tabId: string,
 ): string {
   const windowId =
     typeof windowIdOrWindow === "number"
       ? windowIdOrWindow
       : windowIdOrWindow.id;
-  return `${windowId}:${tabId}`;
+  return `${windowId}:${profileId}:${tabId}`;
+}
+
+export function getTerminalBrowserWorkspaceKey(
+  windowIdOrWindow: number | { id: number },
+  profileId: TerminalBrowserProfileId,
+): string {
+  const windowId =
+    typeof windowIdOrWindow === "number"
+      ? windowIdOrWindow
+      : windowIdOrWindow.id;
+  return `${windowId}:${profileId}`;
+}
+
+export function findTerminalBrowserEntryForWindow(
+  windowIdOrWindow: number | { id: number },
+  tabId: string,
+): { key: string; entry: TerminalBrowserEntry } | null {
+  const windowId =
+    typeof windowIdOrWindow === "number"
+      ? windowIdOrWindow
+      : windowIdOrWindow.id;
+  for (const [key, entry] of terminalBrowserRuntime.entries) {
+    if (entry.windowId === windowId && key.endsWith(`:${tabId}`)) {
+      return { key, entry };
+    }
+  }
+  return null;
 }

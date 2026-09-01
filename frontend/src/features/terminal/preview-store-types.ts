@@ -1,18 +1,13 @@
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
-import type {
-  TerminalBrowserGroupSnapshot,
-} from "@runweave/shared/terminal-browser-workspace";
+import type { TerminalBrowserGroupSnapshot } from "@runweave/shared/terminal-browser-workspace";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 
 export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
 export type TerminalSvgViewMode = "preview" | "source";
 export type TerminalChangesViewMode = "diff" | "preview";
-export type TerminalSidecarTool =
-  | "preview"
-  | "browser"
-  | "agent-team"
-  | "race";
+export type TerminalSidecarTool = "preview" | "browser" | "agent-team" | "race";
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 
@@ -67,8 +62,18 @@ export interface TerminalPreviewStore {
     tabs: TerminalBrowserTabState[];
     activeTabId: string;
   };
+  browserByProfile: Partial<
+    Record<TerminalBrowserProfileId, TerminalPreviewStore["browser"]>
+  >;
+  activeBrowserProfileId: TerminalBrowserProfileId;
+  browserActivationRevision: number;
+  browserActivationProjectId: string | null;
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => void;
-  openBrowser: () => void;
+  openBrowser: (projectId?: string | null) => void;
+  activateBrowser: (
+    profileId: TerminalBrowserProfileId,
+    projectId: string | null,
+  ) => void;
   openAgentTeam: () => void;
   openRace: () => void;
   closePreview: () => void;

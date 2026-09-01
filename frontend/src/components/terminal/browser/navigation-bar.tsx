@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { type TerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
-import { type TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 import type { TerminalBrowserToolMenuAction } from "@runweave/shared/terminal-browser-tool-menu";
 import {
   DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
@@ -20,7 +20,7 @@ import {
 } from "@runweave/shared/terminal-browser-display-scale";
 import type { TerminalBrowserTabState } from "../../../features/terminal/preview-store";
 import { TerminalBrowserHeadersButton } from "./headers-panel";
-import { TerminalBrowserProxyButton } from "./proxy-button";
+import { TerminalBrowserProfileStatus } from "./profile-status";
 import { Button } from "../../ui/button";
 
 interface BrowserAddressControls {
@@ -44,11 +44,13 @@ interface BrowserAnnotationControls {
   onToggle: () => void;
 }
 
-interface BrowserProxyControls {
-  state: TerminalBrowserProxyState | null;
-  switching: boolean;
-  onToggle: () => void;
-  onSetPort: (port: number) => Promise<boolean>;
+interface BrowserProfileControls {
+  profileId: TerminalBrowserProfileId;
+  projectId: string | null;
+  resolving: boolean;
+  resolutionError: string | null;
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
 }
 
 interface BrowserPanelControls {
@@ -73,7 +75,7 @@ interface TerminalBrowserNavigationBarProps {
   annotation: BrowserAnnotationControls;
   navigation: BrowserNavigationControls;
   panels: BrowserPanelControls;
-  proxy: BrowserProxyControls;
+  profile: BrowserProfileControls;
   utilities: BrowserUtilityControls;
 }
 
@@ -83,7 +85,7 @@ export function TerminalBrowserNavigationBar({
   annotation,
   navigation,
   panels,
-  proxy,
+  profile,
   utilities,
 }: TerminalBrowserNavigationBarProps) {
   const {
@@ -108,18 +110,8 @@ export function TerminalBrowserNavigationBar({
     onDeviceOpenChange: onDevicePanelOpenChange,
     onHeaderRulesOpenChange: onHeaderRulesPanelOpenChange,
   } = panels;
-  const {
-    state: proxyState,
-    switching: proxySwitching,
-    onToggle: onToggleProxy,
-    onSetPort: onSetProxyPort,
-  } = proxy;
-  const {
-    isElectron,
-    onOpenDevTools,
-    onOpenExternal,
-    onSetDisplayScale,
-  } = utilities;
+  const { isElectron, onOpenDevTools, onOpenExternal, onSetDisplayScale } =
+    utilities;
   const moreToolsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [addressCopied, setAddressCopied] = useState(false);
   const [moreToolsOpen, setMoreToolsOpen] = useState(false);
@@ -310,12 +302,13 @@ export function TerminalBrowserNavigationBar({
             <Copy className="h-4 w-4" />
           )}
         </Button>
-        <TerminalBrowserProxyButton
-          state={proxyState}
-          switching={proxySwitching}
-          disabled={!isElectron}
-          onToggle={onToggleProxy}
-          onSetPort={onSetProxyPort}
+        <TerminalBrowserProfileStatus
+          profileId={profile.profileId}
+          projectId={profile.projectId}
+          resolving={profile.resolving}
+          resolutionError={profile.resolutionError}
+          open={profile.settingsOpen}
+          onOpenChange={profile.onSettingsOpenChange}
         />
         {hasAnnotations ? annotationButton : null}
         {isElectron && hasHeaderRules ? (

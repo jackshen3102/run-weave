@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { StateCreator } from "zustand";
 import { persist } from "zustand/middleware";
 import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
+import { TERMINAL_BROWSER_DEFAULT_PROFILE_ID } from "@runweave/shared/terminal-browser-profile";
 import {
   createInitialTerminalBrowserState,
   createTerminalPreviewBrowserActions,
@@ -101,6 +102,10 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
   projects: {},
   changesRefreshRevisionByProjectId: {},
   browser: createInitialTerminalBrowserState(),
+  browserByProfile: {},
+  activeBrowserProfileId: TERMINAL_BROWSER_DEFAULT_PROFILE_ID,
+  browserActivationRevision: 0,
+  browserActivationProjectId: null,
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => {
     set((state: TerminalPreviewStore) => {
       const currentProject = state.projects[projectId] ?? DEFAULT_PROJECT_STATE;
@@ -117,10 +122,30 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
       };
     });
   },
-  openBrowser: () => {
+  openBrowser: (projectId) => {
     set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, open: true, activeTool: "browser" },
+      browserActivationProjectId:
+        projectId === undefined ? state.browserActivationProjectId : projectId,
+      browserActivationRevision: state.browserActivationRevision + 1,
     }));
+  },
+  activateBrowser: (profileId, projectId) => {
+    set((state: TerminalPreviewStore) => {
+      const browserByProfile = {
+        ...state.browserByProfile,
+        [state.activeBrowserProfileId]: state.browser,
+      };
+      return {
+        ui: { ...state.ui, open: true, activeTool: "browser" },
+        browserByProfile,
+        browser:
+          browserByProfile[profileId] ?? createInitialTerminalBrowserState(),
+        activeBrowserProfileId: profileId,
+        browserActivationProjectId: projectId,
+        browserActivationRevision: state.browserActivationRevision + 1,
+      };
+    });
   },
   openAgentTeam: () => {
     set((state: TerminalPreviewStore) => ({

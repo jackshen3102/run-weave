@@ -49,6 +49,10 @@
 - 带浏览器界面开发：`pnpm dev:electron:headed`
 - 默认监听 `0.0.0.0`，可通过 `DEV_HOST` 环境变量覆盖
 - 构建配置：`electron/electron-builder.yml`
+- 完整 Electron 构建会把固定版本 `whistle@2.10.9` 及其生产依赖、Web UI assets 和 LICENSE staged 到 `resources/whistle-runtime`；运行时不依赖系统或全局 `w2`。
+- Terminal Browser 的三个 Profile 分别在首次实际使用时启动 loopback Whistle `8081/8082/8083`，应用退出时只停止自己启动的子进程。三者使用独立 storage、共享 certDir，不修改系统代理或系统钥匙串。
+- `deploy/whistle/proxy.md` 仍是人工部署示例。桌面运行时不会读取或导入该文件，也不会覆盖用户在 Whistle 控制台维护的 Rules；Runweave 只更新保留 Value `runweave-dev-server`。
+- 升级时旧 Browser partition、workspace v1/v2 和旧 Header 规则进入 Profile 1；旧 `terminal-browser-proxy.json` 保留但不再读取。回滚或卸载不得自动删除新 Profile partition、三份 Whistle storage、共享 certDir 或 `terminal-browser-profiles.json`，旧版本会忽略这些新增数据。
 - macOS 打包当前使用 ad-hoc codesign hook 清理隔离属性并对 `.app` bundle 做本地签名；这只保证本地可运行，不等同于 Developer ID 公证发布
 - Electron 客户端支持多后端连接管理，用户可在连接页面添加、切换不同后端地址
 - 打包后的 Electron 客户端会拉起内置后端；内置后端绑定 `0.0.0.0`，同一内网可通过 `http://<本机内网 IP>:<端口>/` 访问同一套 Web 前端

@@ -16,6 +16,7 @@ backend/.env
 .runtime-artifacts/
 artifacts/
 electron/release/
+electron/.whistle-runtime/
 .local-updates/
 .playwright-cli/
 deploy/nginx/certs/

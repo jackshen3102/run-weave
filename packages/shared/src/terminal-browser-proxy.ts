@@ -10,7 +10,11 @@ export interface TerminalBrowserProxyState {
   proxyBypassRules: string;
 }
 
-export function isValidTerminalBrowserProxyPort(value: unknown): value is number {
+export const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>";
+
+export function isValidTerminalBrowserProxyPort(
+  value: unknown,
+): value is number {
   return (
     typeof value === "number" &&
     Number.isInteger(value) &&

@@ -4,6 +4,7 @@ import type { TerminalBrowserStateChangedEvent } from "@runweave/shared/terminal
 import { clearTerminalBrowserAnnotation } from "./terminal-browser-annotation.js";
 import { getTerminalBrowserDeviceState } from "./terminal-browser-device-emulation.js";
 import {
+  findTerminalBrowserEntryForWindow,
   getTerminalBrowserKey,
   type TerminalBrowserEntry,
   type TerminalBrowserSnapshot,
@@ -98,7 +99,7 @@ export function commitTerminalBrowserTabUpdate(
   }
   entry.lastSentUpdateKey = updateKey;
   entry.lastSentUpdateAt = Date.now();
-  const revision = nextTerminalBrowserRevision(entry.windowId);
+  const revision = nextTerminalBrowserRevision(entry.windowId, entry.profileId);
   const event: TerminalBrowserStateChangedEvent = {
     kind: "tab",
     revision,
@@ -169,6 +170,7 @@ export function sendTerminalBrowserTabUpdate(
     entry.lastKnownUrl = snapshot.url;
   }
   const update: TerminalBrowserUpdate = {
+    profileId: entry.profileId,
     tabId,
     browserGroupId: entry.browserGroupId,
     ...snapshot,
@@ -193,7 +195,12 @@ export function clearTerminalBrowserAnnotationAndNotify(
   win: BrowserWindow,
   tabId: string,
 ): void {
-  clearTerminalBrowserAnnotation(getTerminalBrowserKey(win, tabId));
+  const entry = findTerminalBrowserEntryForWindow(win.id, tabId)?.entry;
+  if (entry) {
+    clearTerminalBrowserAnnotation(
+      getTerminalBrowserKey(win, entry.profileId, tabId),
+    );
+  }
   if (win.isDestroyed() || win.webContents.isDestroyed()) {
     return;
   }

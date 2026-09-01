@@ -54,10 +54,16 @@ async function readLimitedResponse(response: Response): Promise<Buffer | null> {
     }
     chunks.push(value);
   }
-  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), length);
+  return Buffer.concat(
+    chunks.map((chunk) => Buffer.from(chunk)),
+    length,
+  );
 }
 
-async function loadFaviconBytes(candidate: string): Promise<Buffer | null> {
+async function loadFaviconBytes(
+  entry: TerminalBrowserEntry,
+  candidate: string,
+): Promise<Buffer | null> {
   const safeCandidate = safeFaviconCandidate(candidate);
   if (!safeCandidate) {
     return null;
@@ -71,14 +77,24 @@ async function loadFaviconBytes(candidate: string): Promise<Buffer | null> {
     return bytes.byteLength <= MAX_FAVICON_BYTES ? bytes : null;
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FAVICON_FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    FAVICON_FETCH_TIMEOUT_MS,
+  );
   try {
-    const response = await getTerminalBrowserSession().fetch(
+    const response = await getTerminalBrowserSession(entry.profileId).fetch(
       safeCandidate.toString(),
       { signal: controller.signal },
     );
-    const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
-    if (!response.ok || !contentType || !SAFE_IMAGE_CONTENT_TYPES.has(contentType)) {
+    const contentType = response.headers
+      .get("content-type")
+      ?.split(";", 1)[0]
+      ?.trim();
+    if (
+      !response.ok ||
+      !contentType ||
+      !SAFE_IMAGE_CONTENT_TYPES.has(contentType)
+    ) {
       return null;
     }
     return await readLimitedResponse(response);
@@ -117,7 +133,7 @@ export async function updateTerminalBrowserFavicon(
 ): Promise<void> {
   for (const candidate of candidates) {
     try {
-      const bytes = await loadFaviconBytes(candidate);
+      const bytes = await loadFaviconBytes(entry, candidate);
       const faviconDataUrl = bytes ? sanitizeFavicon(bytes) : null;
       if (!faviconDataUrl) {
         continue;

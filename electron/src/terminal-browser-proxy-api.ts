@@ -1,8 +1,10 @@
 import { BrowserWindow, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 import { setTerminalBrowserDisplayScale } from "./terminal-browser-display-scale.js";
 import {
   getTerminalBrowserKey,
+  getTerminalBrowserWorkspaceKey,
   terminalBrowserRuntime,
   type TerminalBrowserCdpTarget,
   type TerminalBrowserEntry,
@@ -13,9 +15,7 @@ import {
   getOrCreateTerminalBrowserView,
   validateTerminalBrowserUrl,
 } from "./terminal-browser-view-lifecycle.js";
-import {
-  sendTerminalBrowserTabUpdate,
-} from "./terminal-browser-view-updates.js";
+import { sendTerminalBrowserTabUpdate } from "./terminal-browser-view-updates.js";
 
 export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
   const targets: TerminalBrowserCdpTarget[] = [];
@@ -24,14 +24,17 @@ export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
     if (!wc || wc.isDestroyed()) {
       continue;
     }
-    const tabId = key.split(":").slice(1).join(":");
+    const tabId = key.slice(`${entry.windowId}:${entry.profileId}:`.length);
     targets.push({
       key,
       targetId: entry.targetId,
+      profileId: entry.profileId,
       browserGroupId: entry.browserGroupId,
       windowId: entry.windowId,
       active:
-        terminalBrowserRuntime.attachedByWindowId.get(entry.windowId) === tabId,
+        terminalBrowserRuntime.attachedByWorkspaceKey.get(
+          getTerminalBrowserWorkspaceKey(entry.windowId, entry.profileId),
+        ) === tabId,
       lastActiveAt: entry.lastActiveAt,
       url: wc.getURL() || entry.lastKnownUrl,
       title: wc.getTitle(),
@@ -65,6 +68,7 @@ export function getTerminalBrowserEntryByKey(
 
 export async function createTerminalBrowserTabFromProxy(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
   url: string,
   browserGroupId?: string,
 ): Promise<{
@@ -78,8 +82,10 @@ export async function createTerminalBrowserTabFromProxy(
     return null;
   }
   const tabId = `ai-tab-${randomUUID().slice(0, 8)}`;
-  const view = getOrCreateTerminalBrowserView(win, tabId, { browserGroupId });
-  const key = getTerminalBrowserKey(windowId, tabId);
+  const view = getOrCreateTerminalBrowserView(win, profileId, tabId, {
+    browserGroupId,
+  });
+  const key = getTerminalBrowserKey(windowId, profileId, tabId);
   const entry = terminalBrowserRuntime.entries.get(key);
   if (!entry) {
     return null;
@@ -113,9 +119,8 @@ export function closeTerminalBrowserTabFromProxy(targetId: string): boolean {
   if (!found) {
     return false;
   }
-  const parts = found.key.split(":");
-  const windowId = Number(parts[0]);
-  const tabId = parts.slice(1).join(":");
+  const windowId = found.entry.windowId;
+  const tabId = found.key.slice(`${windowId}:${found.entry.profileId}:`.length);
   const win = BrowserWindow.fromId(windowId);
   if (!win) {
     return false;
@@ -129,9 +134,8 @@ export function activateTerminalBrowserTabFromProxy(targetId: string): boolean {
   if (!found) {
     return false;
   }
-  const parts = found.key.split(":");
-  const windowId = Number(parts[0]);
-  const tabId = parts.slice(1).join(":");
+  const windowId = found.entry.windowId;
+  const tabId = found.key.slice(`${windowId}:${found.entry.profileId}:`.length);
   const win = BrowserWindow.fromId(windowId);
   if (!win) {
     return false;
@@ -147,9 +151,10 @@ export function setTerminalBrowserCdpProxyAttached(
   const found = getTerminalBrowserEntryByTargetId(targetId);
   if (found) {
     found.entry.cdpProxyAttached = attached;
-    const parts = found.key.split(":");
-    const windowId = Number(parts[0]);
-    const tabId = parts.slice(1).join(":");
+    const windowId = found.entry.windowId;
+    const tabId = found.key.slice(
+      `${windowId}:${found.entry.profileId}:`.length,
+    );
     const win = BrowserWindow.fromId(windowId);
     if (win) {
       sendTerminalBrowserTabUpdate(win, tabId, found.entry);
@@ -160,7 +165,9 @@ export function setTerminalBrowserCdpProxyAttached(
 export function getTerminalBrowserDisplayScaleForTarget(
   targetId: string,
 ): number | null {
-  return getTerminalBrowserEntryByTargetId(targetId)?.entry.displayScale ?? null;
+  return (
+    getTerminalBrowserEntryByTargetId(targetId)?.entry.displayScale ?? null
+  );
 }
 
 export async function setTerminalBrowserDisplayScaleForTarget(
@@ -172,9 +179,8 @@ export async function setTerminalBrowserDisplayScaleForTarget(
     return null;
   }
   const result = await setTerminalBrowserDisplayScale(found.entry, factor);
-  const parts = found.key.split(":");
-  const windowId = Number(parts[0]);
-  const tabId = parts.slice(1).join(":");
+  const windowId = found.entry.windowId;
+  const tabId = found.key.slice(`${windowId}:${found.entry.profileId}:`.length);
   const win = BrowserWindow.fromId(windowId);
   if (win) {
     sendTerminalBrowserTabUpdate(win, tabId, found.entry);
@@ -188,9 +194,8 @@ export function markTerminalBrowserMcpActivity(targetId: string): void {
     return;
   }
   found.entry.mcpActivityUntil = Date.now() + 4500;
-  const parts = found.key.split(":");
-  const windowId = Number(parts[0]);
-  const tabId = parts.slice(1).join(":");
+  const windowId = found.entry.windowId;
+  const tabId = found.key.slice(`${windowId}:${found.entry.profileId}:`.length);
   const win = BrowserWindow.fromId(windowId);
   if (win) {
     sendTerminalBrowserTabUpdate(win, tabId, found.entry);

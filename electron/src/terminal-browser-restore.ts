@@ -1,21 +1,22 @@
 import type { BrowserWindow } from "electron";
+import { TERMINAL_BROWSER_PROFILE_IDS } from "@runweave/shared/terminal-browser-profile";
 import { readTerminalBrowserPersistedState } from "./terminal-browser-tabs-persistence.js";
 import { selectTerminalBrowserStateForRestore } from "./terminal-browser-tabs-state.js";
 import {
   getTerminalBrowserKey,
+  getTerminalBrowserWorkspaceKey,
   terminalBrowserRuntime,
 } from "./terminal-browser-runtime.js";
 import {
-  getOrderedTerminalBrowserTabIds,
+  ensureTerminalBrowserDormantFallback,
+  registerTerminalBrowserTab,
   setTerminalBrowserGroupMetadata,
 } from "./terminal-browser-workspace.js";
-import {
-  attachTerminalBrowser,
-  ensureTerminalBrowserFallback,
-  getOrCreateTerminalBrowserView,
-} from "./terminal-browser-view-lifecycle.js";
-import { sendTerminalBrowserTabUpdate } from "./terminal-browser-view-updates.js";
 
+/**
+ * Restore only workspace metadata. Browser views and navigation are created on
+ * the first explicit use of an individual Profile after its route is ready.
+ */
 export async function restoreTerminalBrowserTabsForWindow(
   win: BrowserWindow,
 ): Promise<void> {
@@ -23,67 +24,64 @@ export async function restoreTerminalBrowserTabsForWindow(
     return;
   }
   terminalBrowserRuntime.persistedStateRestored = true;
-  if (getOrderedTerminalBrowserTabIds(win.id).length > 0) {
-    return;
-  }
-
   const state = await readTerminalBrowserPersistedState();
-  terminalBrowserRuntime.restoringWindows.add(win.id);
-  try {
-    const restoredState = selectTerminalBrowserStateForRestore(state);
-    const tabsById = new Map(restoredState.tabs.map((tab) => [tab.id, tab]));
-    for (const group of restoredState.groups) {
-      let openerTabId: string | undefined;
-      for (const tabId of group.tabIds) {
-        const tab = tabsById.get(tabId);
-        if (!tab) {
-          continue;
-        }
-        const view = getOrCreateTerminalBrowserView(win, tab.id, {
-          browserGroupId: group.id,
-          openerTabId,
-          notifyWorkspace: false,
-        });
-        const entry = terminalBrowserRuntime.entries.get(
-          getTerminalBrowserKey(win, tab.id),
-        );
-        if (!entry) {
-          continue;
-        }
-        openerTabId = tab.id;
-        entry.lastActiveAt = tab.lastActiveAt;
-        entry.lastKnownUrl = tab.url;
-        void view.webContents.loadURL(tab.url).catch(() => {
-          sendTerminalBrowserTabUpdate(win, tab.id, entry, false);
-        });
-      }
-      setTerminalBrowserGroupMetadata(
-        win.id,
-        group.id,
-        group.name,
-        group.nameOrigin,
-      );
-    }
 
-    const activeTabId =
-      restoredState.activeTabId &&
-      restoredState.tabs.some((tab) => tab.id === restoredState.activeTabId)
-        ? restoredState.activeTabId
-        : (restoredState.tabs[0]?.id ?? null);
-    if (activeTabId) {
-      const activeEntry = terminalBrowserRuntime.entries.get(
-        getTerminalBrowserKey(win, activeTabId),
+  for (const profileId of TERMINAL_BROWSER_PROFILE_IDS) {
+    const workspaceKey = getTerminalBrowserWorkspaceKey(win.id, profileId);
+    terminalBrowserRuntime.restoringWorkspaceKeys.add(workspaceKey);
+    try {
+      const restored = selectTerminalBrowserStateForRestore(
+        state.profiles[profileId],
       );
-      if (activeEntry) {
-        attachTerminalBrowser(win, activeTabId, activeEntry.view, {
-          emitWorkspace: false,
-          persist: false,
-        });
+      const tabsById = new Map(restored.tabs.map((tab) => [tab.id, tab]));
+      for (const group of restored.groups) {
+        let openerTabId: string | undefined;
+        for (const tabId of group.tabIds) {
+          const tab = tabsById.get(tabId);
+          if (!tab) {
+            continue;
+          }
+          const key = getTerminalBrowserKey(win.id, profileId, tab.id);
+          terminalBrowserRuntime.dormantTabs.set(key, {
+            windowId: win.id,
+            profileId,
+            tabId: tab.id,
+            browserGroupId: group.id,
+            url: tab.url,
+            title: tab.title,
+            lastActiveAt: tab.lastActiveAt,
+          });
+          registerTerminalBrowserTab(
+            win.id,
+            profileId,
+            tab.id,
+            group.id,
+            openerTabId,
+          );
+          openerTabId = tab.id;
+        }
+        setTerminalBrowserGroupMetadata(
+          win.id,
+          profileId,
+          group.id,
+          group.name,
+          group.nameOrigin,
+        );
       }
-    } else {
-      ensureTerminalBrowserFallback(win, { emitWorkspace: false });
+      const activeTabId =
+        restored.activeTabId && tabsById.has(restored.activeTabId)
+          ? restored.activeTabId
+          : (restored.tabs[0]?.id ?? null);
+      if (activeTabId) {
+        terminalBrowserRuntime.attachedByWorkspaceKey.set(
+          workspaceKey,
+          activeTabId,
+        );
+      } else {
+        ensureTerminalBrowserDormantFallback(win.id, profileId);
+      }
+    } finally {
+      terminalBrowserRuntime.restoringWorkspaceKeys.delete(workspaceKey);
     }
-  } finally {
-    terminalBrowserRuntime.restoringWindows.delete(win.id);
   }
 }

@@ -10,6 +10,7 @@ import { runHealthCommand } from "./commands/health.js";
 import { runFeishuCommand } from "./commands/feishu.js";
 import { runProjectCommand } from "./commands/project.js";
 import { runTerminalCommand } from "./commands/terminal.js";
+import { runBrowserCommand } from "./commands/browser.js";
 import { toCliError } from "./errors.js";
 import { readCliVersion } from "./version.js";
 
@@ -80,8 +81,12 @@ export async function runCli(
       await runTerminalCommand(subcommand, args, io);
       return 0;
     }
+    if (group === "browser") {
+      await runBrowserCommand(subcommand, args, io);
+      return 0;
+    }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw <activity|agent-team|app|app-server|auth|evolution|feishu|project|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <activity|agent-team|app|app-server|auth|browser|evolution|feishu|project|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

@@ -7,9 +7,11 @@ import { useTerminalBrowserBounds } from "./use-bounds";
 import { useTerminalBrowserDeviceSelection } from "./use-device-selection";
 import { useTerminalBrowserHeaderRules } from "./use-header-rules";
 import { useTerminalBrowserAnnotations } from "./use-annotations";
-import { useTerminalBrowserProxy } from "./use-proxy";
 import { useTerminalBrowserDisplayScale } from "./use-display-scale";
 import { useTerminalBrowserWorkspaceActions } from "./use-workspace-actions";
+import { useTerminalBrowserProfileResolution } from "./use-profile-resolution";
+import { useTerminalBrowserControllerStore } from "./use-controller-store";
+import type { TerminalBrowserControllerOptions } from "./controller-types";
 import {
   buildTabStateFromElectronSnapshot,
   buildTabUpdateFromElectronSnapshot,
@@ -20,29 +22,29 @@ import {
   openUrlExternally,
 } from "./model";
 
-interface TerminalBrowserToolProps {
-  active: boolean;
-  apiBase: string;
-  token: string;
-  terminalSessionId: string | null;
-}
-
 export function useTerminalBrowserController({
   active,
+  nativeViewSuppressed,
+  profileId,
+  activationProjectId,
+  activationRevision,
   apiBase,
   token,
   terminalSessionId,
-}: TerminalBrowserToolProps) {
-  const tabs = useTerminalPreviewStore((state) => state.browser.tabs);
-  const groups = useTerminalPreviewStore((state) => state.browser.groups);
-  const activeTabId = useTerminalPreviewStore((state) => state.browser.activeTabId);
-  const createBrowserTab = useTerminalPreviewStore((state) => state.createBrowserTab);
-  const createBrowserGroup = useTerminalPreviewStore((state) => state.createBrowserGroup);
-  const closeBrowserTab = useTerminalPreviewStore((state) => state.closeBrowserTab);
-  const applyBrowserWorkspace = useTerminalPreviewStore((state) => state.applyBrowserWorkspace);
-  const setActiveBrowserTab = useTerminalPreviewStore((state) => state.setActiveBrowserTab);
-  const reorderBrowserGroupTabs = useTerminalPreviewStore((state) => state.reorderBrowserGroupTabs);
-  const updateBrowserTab = useTerminalPreviewStore((state) => state.updateBrowserTab);
+}: TerminalBrowserControllerOptions) {
+  const nativeViewActive = active && !nativeViewSuppressed;
+  const {
+    activeTabId,
+    applyBrowserWorkspace,
+    closeBrowserTab,
+    createBrowserGroup,
+    createBrowserTab,
+    groups,
+    reorderBrowserGroupTabs,
+    setActiveBrowserTab,
+    tabs,
+    updateBrowserTab,
+  } = useTerminalBrowserControllerStore();
   const surfaceContainerRef = useRef<HTMLDivElement | null>(null);
   const browserViewRef = useRef<HTMLDivElement | null>(null);
   const loadedUrlByTabRef = useRef<Record<string, string>>({});
@@ -57,14 +59,7 @@ export function useTerminalBrowserController({
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   const editingAddressTabIdRef = useRef<string | null>(null);
   const { headerError, headerRules, headerSaving, saveHeaderRules } =
-    useTerminalBrowserHeaderRules(isElectron);
-  const {
-    error: proxyError,
-    state: proxyState,
-    switching: proxySwitching,
-    toggle: toggleProxy,
-    setPort: setProxyPort,
-  } = useTerminalBrowserProxy(isElectron);
+    useTerminalBrowserHeaderRules(isElectron, profileId);
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
     [activeTabId, tabs],
@@ -106,7 +101,7 @@ export function useTerminalBrowserController({
     syncActiveTabBounds,
     syncBounds,
   } = useTerminalBrowserBounds({
-    active,
+    active: nativeViewActive,
     activeTabId,
     annotationPanelOpen,
     browserViewRef,
@@ -172,12 +167,12 @@ export function useTerminalBrowserController({
     async (force = false): Promise<void> => {
       try {
         const workspace =
-          await window.electronAPI?.terminalBrowserGetWorkspace?.();
+          await window.electronAPI?.terminalBrowserGetWorkspace?.(profileId);
         if (!workspace) {
           return;
         }
         applyElectronWorkspace(workspace, force);
-        if (workspace.activeTabId && active) {
+        if (workspace.activeTabId && nativeViewActive) {
           await window.electronAPI?.terminalBrowserShow?.(
             workspace.activeTabId,
           );
@@ -188,6 +183,17 @@ export function useTerminalBrowserController({
       }
     },
   );
+
+  const { profileError, profileResolving } =
+    useTerminalBrowserProfileResolution({
+      active,
+      activationProjectId,
+      activationRevision,
+      isElectron,
+      profileId,
+      setElectronTabsSynced,
+      syncElectronTabs,
+    });
 
   const navigateTab = useMemoizedFn(
     async (tabId: string, rawInput: string): Promise<void> => {
@@ -256,7 +262,7 @@ export function useTerminalBrowserController({
     if (isElectron && !electronTabsSynced) {
       return;
     }
-    if (!activeTabId || !activeTabUrl || !active || !isElectron) {
+    if (!activeTabId || !activeTabUrl || !nativeViewActive || !isElectron) {
       syncBounds(true);
       return;
     }
@@ -268,12 +274,12 @@ export function useTerminalBrowserController({
 
     syncBounds(true);
   }, [
-    active,
     activeTabId,
     activeTabUrl,
     electronTabsSynced,
     isElectron,
     navigateTab,
+    nativeViewActive,
     syncBounds,
   ]);
 
@@ -320,7 +326,7 @@ export function useTerminalBrowserController({
     if (!isElectron || !electronTabsSynced || !activeTabId) {
       return;
     }
-    if (!active) {
+    if (!nativeViewActive) {
       void window.electronAPI?.terminalBrowserHide?.(activeTabId);
       clearTabBounds(activeTabId);
       return;
@@ -342,12 +348,12 @@ export function useTerminalBrowserController({
       cancelPendingBoundsSync();
     };
   }, [
-    active,
     activeTabId,
     cancelPendingBoundsSync,
     clearTabBounds,
     electronTabsSynced,
     isElectron,
+    nativeViewActive,
     syncBounds,
   ]);
 
@@ -358,10 +364,16 @@ export function useTerminalBrowserController({
     const unsubscribe = window.electronAPI?.onTerminalBrowserStateChanged?.(
       (event) => {
         if (event.kind === "workspace") {
+          if (event.workspace.profileId !== profileId) {
+            return;
+          }
           applyElectronWorkspace(event.workspace);
           if (event.workspace.activeTabId) {
             syncActiveTabBounds(event.workspace.activeTabId);
           }
+          return;
+        }
+        if (event.tab.profileId !== profileId) {
           return;
         }
         const { tabId, ...update } = event.tab;
@@ -377,12 +389,12 @@ export function useTerminalBrowserController({
         syncActiveTabBounds(tabId);
       },
     );
-    void syncElectronTabs();
     return unsubscribe;
   }, [
     applyElectronUpdate,
     applyElectronWorkspace,
     isElectron,
+    profileId,
     syncActiveTabBounds,
     syncElectronTabs,
   ]);
@@ -406,14 +418,11 @@ export function useTerminalBrowserController({
       const [movedTabId] = orderedTabIds.splice(fromIndex, 1);
       orderedTabIds.splice(toIndex, 0, movedTabId!);
       reorderBrowserGroupTabs(groupId, fromIndex, toIndex);
-      if (
-        !isElectron ||
-        !window.electronAPI?.terminalBrowserReorderGroupTabs
-      ) {
+      if (!isElectron || !window.electronAPI?.terminalBrowserReorderGroupTabs) {
         return;
       }
       void window.electronAPI
-        .terminalBrowserReorderGroupTabs(groupId, orderedTabIds)
+        .terminalBrowserReorderGroupTabs(profileId, groupId, orderedTabIds)
         .catch(() => {
           void syncElectronTabs(true).catch(() => undefined);
         });
@@ -432,18 +441,15 @@ export function useTerminalBrowserController({
     openAnnotationPanelState();
   });
 
-  const {
-    closeGroup,
-    createGroup,
-    createTab,
-    renameGroup,
-  } = useTerminalBrowserWorkspaceActions({
-    isElectron,
-    createLocalTab: createBrowserTab,
-    createLocalGroup: createBrowserGroup,
-    closeLocalTab: closeBrowserTab,
-    updateTab: updateBrowserTab,
-  });
+  const { closeGroup, createGroup, createTab, renameGroup } =
+    useTerminalBrowserWorkspaceActions({
+      isElectron,
+      profileId,
+      createLocalTab: createBrowserTab,
+      createLocalGroup: createBrowserGroup,
+      closeLocalTab: closeBrowserTab,
+      updateTab: updateBrowserTab,
+    });
 
   if (!activeTab) {
     return null;
@@ -563,9 +569,9 @@ export function useTerminalBrowserController({
     mobileDisabledReason,
     openUrlExternally,
     openAnnotationPanel,
-    proxyError,
-    proxyState,
-    proxySwitching,
+    profileError,
+    profileId,
+    profileResolving,
     reload,
     renameGroup,
     reorderTabs,
@@ -582,8 +588,6 @@ export function useTerminalBrowserController({
     submitAnnotations,
     surfaceContainerRef,
     tabs,
-    toggleProxy,
-    setProxyPort,
     toggleAnnotation,
     focusAnnotation,
     updateBrowserTab,

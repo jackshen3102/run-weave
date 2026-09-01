@@ -18,17 +18,27 @@ allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*)
 - For a standalone browser that is not an existing Runweave surface, use
   `playwright-cli open`.
 
-Attach to the current Runweave Terminal Browser with a session scoped to the
-terminal. Reuse that session for later commands, preserve existing tabs, and
-detach instead of closing the browser when finished.
+Attach to the current Runweave Terminal Browser only after resolving its
+Profile. Reuse that Profile-scoped session for later commands, preserve
+existing tabs, and detach instead of closing the browser when finished. Pass
+`--profile 1|2|3` only when the user explicitly requests a temporary Profile;
+otherwise the resolver applies Worktree binding and then the global default.
 
 ```bash
-RW_PLAYWRIGHT_SESSION="runweave-${RUNWEAVE_TERMINAL_SESSION_ID:-terminal-browser}"
-playwright-cli -s="$RW_PLAYWRIGHT_SESSION" attach --cdp="$PLAYWRIGHT_MCP_CDP_ENDPOINT"
+RW_BROWSER_RESOLUTION="$(rw browser profile resolve --json)"
+RW_BROWSER_PROFILE="$(printf '%s' "$RW_BROWSER_RESOLUTION" | jq -r .profileId)"
+RW_BROWSER_CDP_ENDPOINT="$(printf '%s' "$RW_BROWSER_RESOLUTION" | jq -r .cdpEndpoint)"
+RW_PLAYWRIGHT_SESSION="runweave-${RUNWEAVE_TERMINAL_SESSION_ID:-terminal-browser}-${RW_BROWSER_PROFILE}"
+playwright-cli -s="$RW_PLAYWRIGHT_SESSION" attach --cdp="$RW_BROWSER_CDP_ENDPOINT"
 playwright-cli -s="$RW_PLAYWRIGHT_SESSION" snapshot
 # interact with the existing page
 playwright-cli -s="$RW_PLAYWRIGHT_SESSION" detach
 ```
+
+If the resolver reports a Profile route conflict or Whistle startup failure,
+stop and report it. Do not attach the ambient endpoint and claim the requested
+Profile was selected. On an old Runweave version, fallback is allowed only
+when no explicit Profile override was requested; preserve the CLI warning.
 
 ## Standalone browser quick start
 

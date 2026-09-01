@@ -1,9 +1,20 @@
 import { useEffect, useState } from "react";
-import { normalizeTerminalBrowserHeaderRules, type TerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
+import {
+  normalizeTerminalBrowserHeaderRules,
+  type TerminalBrowserHeaderRule,
+} from "@runweave/shared/terminal-browser-headers";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 
-const HEADER_RULES_STORAGE_KEY = "terminal.browser.headerRules";
+const LEGACY_HEADER_RULES_STORAGE_KEY = "terminal.browser.headerRules";
 
-export function useTerminalBrowserHeaderRules(isElectron: boolean) {
+function storageKey(profileId: TerminalBrowserProfileId): string {
+  return `terminal.browser.headerRules.${profileId}`;
+}
+
+export function useTerminalBrowserHeaderRules(
+  isElectron: boolean,
+  profileId: TerminalBrowserProfileId,
+) {
   const [headerRules, setHeaderRules] = useState<TerminalBrowserHeaderRule[]>(
     [],
   );
@@ -17,7 +28,13 @@ export function useTerminalBrowserHeaderRules(isElectron: boolean) {
     let cancelled = false;
     const loadHeaderRules = async (): Promise<void> => {
       try {
-        const rawRules = window.localStorage.getItem(HEADER_RULES_STORAGE_KEY);
+        const profileStorageKey = storageKey(profileId);
+        const scopedRules = window.localStorage.getItem(profileStorageKey);
+        const legacyRules =
+          profileId === "profile-1" && scopedRules === null
+            ? window.localStorage.getItem(LEGACY_HEADER_RULES_STORAGE_KEY)
+            : null;
+        const rawRules = scopedRules ?? legacyRules;
         const persistedRules = rawRules
           ? normalizeTerminalBrowserHeaderRules(JSON.parse(rawRules))
           : [];
@@ -28,13 +45,20 @@ export function useTerminalBrowserHeaderRules(isElectron: boolean) {
         if (!window.electronAPI?.terminalBrowserSetHeaderRules) {
           throw new Error("Header rules are unavailable");
         }
-        const state =
-          await window.electronAPI.terminalBrowserSetHeaderRules(
-            persistedRules,
-          );
+        const state = await window.electronAPI.terminalBrowserSetHeaderRules(
+          profileId,
+          persistedRules,
+        );
         if (!cancelled && state) {
           setHeaderRules(state.rules);
           setHeaderError(null);
+          if (legacyRules !== null) {
+            window.localStorage.setItem(
+              profileStorageKey,
+              JSON.stringify(state.rules),
+            );
+            window.localStorage.removeItem(LEGACY_HEADER_RULES_STORAGE_KEY);
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -51,7 +75,7 @@ export function useTerminalBrowserHeaderRules(isElectron: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [isElectron]);
+  }, [isElectron, profileId]);
 
   const saveHeaderRules = async (
     nextRules: TerminalBrowserHeaderRule[],
@@ -66,24 +90,23 @@ export function useTerminalBrowserHeaderRules(isElectron: boolean) {
       if (!window.electronAPI?.terminalBrowserSetHeaderRules) {
         throw new Error("Header rules are unavailable");
       }
-      const previousRules = window.localStorage.getItem(
-        HEADER_RULES_STORAGE_KEY,
-      );
+      const profileStorageKey = storageKey(profileId);
+      const previousRules = window.localStorage.getItem(profileStorageKey);
       window.localStorage.setItem(
-        HEADER_RULES_STORAGE_KEY,
+        profileStorageKey,
         JSON.stringify(normalizedRules),
       );
       let state;
       try {
-        state =
-          await window.electronAPI.terminalBrowserSetHeaderRules(
-            normalizedRules,
-          );
+        state = await window.electronAPI.terminalBrowserSetHeaderRules(
+          profileId,
+          normalizedRules,
+        );
       } catch (error) {
         if (previousRules === null) {
-          window.localStorage.removeItem(HEADER_RULES_STORAGE_KEY);
+          window.localStorage.removeItem(profileStorageKey);
         } else {
-          window.localStorage.setItem(HEADER_RULES_STORAGE_KEY, previousRules);
+          window.localStorage.setItem(profileStorageKey, previousRules);
         }
         throw error;
       }
