@@ -20,7 +20,7 @@ AI CLI Stop Hook
   → 飞书长连接推送 im.message.receive_v1
   → rw feishu bridge
   → 校验发送者、会话、引用关系和 message_id
-  → rw terminal send（line + confirm short）
+  → rw terminal send（prompt_replace + enter + confirm short）
   → 成功：在用户消息上添加 ✅
   → 失败：回复具体错误文本
 ```
@@ -275,7 +275,7 @@ Bridge 会：
 2. 校验引用消息是否为未过期的 Runweave 通知。
 3. 校验回复和通知是否属于同一个 `chat_id`。
 4. 删除飞书生成的 `@_user_1` 等机器人 mention 占位符。
-5. 通过 `rw terminal send` 以 `line + confirm short` 投递到原 Terminal 或原 panel。
+5. 通过 `rw terminal send` 以 `prompt_replace + enter + confirm short` 投递到原 Terminal 或原 panel。
 6. 以入站 `message_id` 去重，飞书重复推送不会造成重复输入。
 
 成功只表示 Runweave 后端接受并入队输入，不表示 AI CLI 已经执行完成。

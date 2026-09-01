@@ -17,6 +17,7 @@ import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
 import { registerTerminalProjectRoutes } from "./terminal-project-routes";
 import { registerTerminalProjectContextRoutes } from "./terminal-project-context-routes";
+import type { TerminalWorktreeDeletionOwnerHooks } from "../terminal/worktree-deletion";
 import { registerTerminalTmuxOrphanRoutes } from "./terminal-tmux-orphan-routes";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
@@ -111,6 +112,7 @@ export function createTerminalRouter(
     terminalStateService?: TerminalStateService;
     quickInputService?: TerminalQuickInputService;
     activity?: TerminalActivityDependencies;
+    worktreeDeletionOwnerHooks?: TerminalWorktreeDeletionOwnerHooks;
   },
 ): Router {
   const router = Router();
@@ -121,7 +123,15 @@ export function createTerminalRouter(
     tmuxOutputWatcher: options?.tmuxOutputWatcher,
     terminalEventService: options?.terminalEventService,
   });
-  registerTerminalProjectContextRoutes(router, terminalSessionManager);
+  registerTerminalProjectContextRoutes(router, terminalSessionManager, {
+    runtimeRegistry: options?.runtimeRegistry,
+    terminalStateService: options?.terminalStateService,
+    terminalEventService: options?.terminalEventService,
+    tmuxService: options?.tmuxService,
+    tmuxOutputWatcher: options?.tmuxOutputWatcher,
+    activity: options?.activity,
+    ownerHooks: options?.worktreeDeletionOwnerHooks,
+  });
 
   registerTerminalPreviewRoutes(router, terminalSessionManager);
 

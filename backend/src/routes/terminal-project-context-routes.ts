@@ -5,6 +5,22 @@ import type {
   TerminalProjectContextRecord,
   TerminalSessionManager,
 } from "../terminal/manager/manager";
+import { logger } from "../logging";
+import type { TerminalActivityDependencies } from "../terminal/activity-events";
+import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
+import type { TerminalEventService } from "../terminal/state/terminal-event-service";
+import type { TerminalStateService } from "../terminal/state/terminal-state-service";
+import type { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
+import type { TmuxService } from "../terminal/tmux/service";
+import {
+  TerminalWorktreeDeletionError,
+  TerminalWorktreeDeletionService,
+  type TerminalWorktreeDeletionOwnerHooks,
+} from "../terminal/worktree-deletion";
+
+const terminalProjectContextLogger = logger.child({
+  component: "terminal-project-context",
+});
 
 const updateProjectContextSchema = z
   .object({ pinned: z.boolean() })
@@ -30,7 +46,27 @@ function toProjectContextPayload(
 export function registerTerminalProjectContextRoutes(
   router: Router,
   terminalSessionManager: TerminalSessionManager,
+  options?: {
+    runtimeRegistry?: TerminalRuntimeRegistry;
+    terminalStateService?: TerminalStateService;
+    terminalEventService?: TerminalEventService;
+    tmuxService?: TmuxService;
+    tmuxOutputWatcher?: TmuxOutputWatcher;
+    activity?: TerminalActivityDependencies;
+    ownerHooks?: TerminalWorktreeDeletionOwnerHooks;
+  },
 ): void {
+  const deletionService = new TerminalWorktreeDeletionService({
+    terminalSessionManager,
+    runtimeRegistry: options?.runtimeRegistry,
+    terminalStateService: options?.terminalStateService,
+    terminalEventService: options?.terminalEventService,
+    tmuxService: options?.tmuxService,
+    tmuxOutputWatcher: options?.tmuxOutputWatcher,
+    activity: options?.activity,
+    ownerHooks: options?.ownerHooks,
+  });
+
   router.get("/project/:parentProjectId/contexts", async (req, res) => {
     const contexts = await terminalSessionManager.refreshProjectContexts(
       req.params.parentProjectId,
@@ -63,6 +99,34 @@ export function registerTerminalProjectContextRoutes(
         return;
       }
       res.json(toProjectContextPayload(context));
+    },
+  );
+
+  router.delete(
+    "/project/:parentProjectId/contexts/:childProjectId",
+    async (req, res) => {
+      try {
+        await deletionService.delete(
+          req.params.parentProjectId,
+          req.params.childProjectId,
+        );
+        res.status(204).send();
+      } catch (error) {
+        if (error instanceof TerminalWorktreeDeletionError) {
+          res.status(error.statusCode).json({
+            message: error.message,
+            ...(error.code ? { code: error.code } : {}),
+          });
+          return;
+        }
+        terminalProjectContextLogger.error("terminal.worktree.delete.failed", {
+          message: "Worktree deletion failed",
+          parentProjectId: req.params.parentProjectId,
+          childProjectId: req.params.childProjectId,
+          error,
+        });
+        res.status(500).json({ message: "Worktree deletion failed" });
+      }
     },
   );
 }

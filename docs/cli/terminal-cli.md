@@ -141,7 +141,7 @@ rw feishu bridge --json
 completion hook 在 `FEISHU_NOTIFY_TRANSPORT=app` 时通过
 `rw feishu notify --stdin --json` 发送应用机器人通知，并保存飞书消息与
 Terminal 的 24 小时绑定。allowlist 用户引用该通知回复纯文本时，Bridge 以
-`line + confirm short` 投递到原 Terminal，并只回复投递成功或失败；它不等待
+`prompt_replace + enter + confirm short` 投递到原 Terminal，并只回复投递成功或失败；它不等待
 AI CLI 后续响应。投递成功时在用户原消息上添加 `DONE` 打钩 reaction，不额外发送
 文本消息；投递失败时仍回复具体失败原因。相同飞书入站 `message_id` 不会重复投递。
 

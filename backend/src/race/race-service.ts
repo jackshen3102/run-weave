@@ -399,6 +399,30 @@ export class RaceService {
     await this.options.store.write(record);
   }
 
+  async waitForWorktreeCreation(): Promise<void> {
+    await this.creationSettled;
+  }
+
+  async markWorktreeRemoved(
+    parentProjectId: string,
+    worktreeId: string,
+  ): Promise<void> {
+    const record = this.options.store.getCurrent();
+    if (!record || record.parentProjectId !== parentProjectId) {
+      return;
+    }
+    const worker = record.workers.find(
+      (candidate) => candidate.worktreeId === worktreeId,
+    );
+    if (!worker) {
+      return;
+    }
+    worker.terminalSessionId = null;
+    worker.launchStatus = "failed";
+    worker.launchError = "Race worktree was removed";
+    await this.options.store.write(record);
+  }
+
   private requireCurrent(raceId: string): RaceRecord {
     const record = this.options.store.getCurrent();
     if (!record || record.raceId !== raceId) {

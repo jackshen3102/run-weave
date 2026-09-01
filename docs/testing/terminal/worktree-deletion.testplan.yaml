@@ -1,0 +1,86 @@
+version: 1
+name: Worktree 删除端到端验收
+description: >
+  验证 Terminal Worktree rail 的右键删除能够安全移除准确的 Git Worktree、关闭关联运行资源并保留分支与历史，同时对可能丢失数据或仍被管理运行时占用的目标明确拒绝。
+
+cases:
+  - id: WTD-001
+    name: 右键删除干净 Worktree 并保留分支
+    required: true
+    description: >
+      用户确认删除一个干净且由本地分支承载的直接子 Worktree 后，准确目标及其普通 Terminal 被删除，当前页面回到父 Project 主工作区，而分支、父 Project 和兄弟 Worktree 保持不变。
+    preconditions:
+      - 测试 Project 下存在一个位于 .worktree 直接子目录的干净 Git Worktree，分支仍存在且没有 Agent 或 Dev Session 占用。
+      - 目标 Worktree 至少有一个普通 Terminal，页面当前选中该 Worktree。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 右键目标 Worktree 行；确认菜单包含“删除”，主工作区行没有该操作。
+      - 点击“删除”；确认弹窗展示目标名称、分支、关联 Terminal 数量，并明确分支会被保留。
+      - 确认删除；确认弹窗关闭、目标行和关联 Terminal 消失，页面切回父 Project 主工作区。
+      - 读取 contexts、sessions 和 Git 状态；确认目标目录与 Worktree 登记消失、原分支仍存在，父 Project 与其它 Worktree 未改变。
+
+  - id: WTD-002
+    name: 未提交改动在最终删除时被拒绝
+    required: true
+    description: >
+      删除入口不提前置灰，但最终确认时必须拒绝含未提交或未跟踪改动的 Worktree，并保留工作目录、Git 登记、Terminal 和当前选择。
+    preconditions:
+      - 测试 Project 下存在一个含未跟踪文件的直接子 Worktree，页面当前选中该 Worktree。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 右键目标行并打开删除确认弹窗；确认删除入口仍可操作。
+      - 确认删除；确认弹窗保持打开并显示存在未提交或未跟踪改动的具体原因。
+      - 读取页面、contexts、sessions 和文件系统；确认目标 Worktree、改动、关联 Terminal 与当前选择均未被删除或切换。
+
+  - id: WTD-003
+    name: 运行中的 Agent 阻止删除
+    required: false
+    description: >
+      目标 Worktree 中存在 starting 或 running Agent 时，最终删除必须被拒绝且不能停止 Agent、Terminal 或移除 Worktree。
+    preconditions:
+      - 测试 Worktree 中有一个可观察为 agent_starting 或 agent_running 的 Terminal。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 发起并确认删除；确认弹窗显示运行中 Agent 的具体占用原因。
+      - 检查 Agent、Terminal 和 Git Worktree；确认它们仍在运行或登记，文件系统未被删除。
+
+  - id: WTD-004
+    name: Dev Session 占用阻止删除
+    required: false
+    description: >
+      任一未停止 Dev Session 的 source.root 指向目标 Worktree 时，最终删除必须报告 Session ID 和状态，且不改变 Session 或 Worktree。
+    preconditions:
+      - 测试 Worktree 是一个未停止 Dev Session 的准确 source.root。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 发起并确认删除；确认弹窗显示占用目标的 Dev Session ID 和状态。
+      - 查询该 Dev Session 与 Git Worktree；确认 Session 未被静默停止，Worktree 未被删除。
+
+  - id: WTD-005
+    name: 无引用 detached HEAD 阻止删除
+    required: false
+    description: >
+      detached Worktree 的 HEAD 没有任何 branch、remote branch 或 tag 引用时，即使工作区干净也必须拒绝删除，避免唯一提交失去可达引用。
+    preconditions:
+      - 测试 Worktree 处于 detached HEAD，当前提交没有 branch、remote branch 或 tag 包含它。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 发起并确认删除；确认弹窗显示 detached commit 无引用的具体原因。
+      - 读取 Git Worktree 和提交；确认目录、登记与 HEAD 提交仍存在。
+
+  - id: WTD-006
+    name: 不可用 Context 只在最终删除时拒绝
+    required: false
+    description: >
+      missing 或 unavailable 子 Context 仍显示删除入口，但最终执行无法重新确认真实路径时必须 fail closed，不能清理残留 Session 或元数据。
+    preconditions:
+      - 页面存在一个带残留 Terminal 的 missing 或 unavailable 子 Context。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 右键目标行；确认菜单仍显示“删除”。
+      - 确认删除；确认弹窗展示路径不可用的具体原因，残留 Terminal、固定状态和历史均保留。
+
+  - id: WTD-007
+    name: Race Worktree 删除后同步 Worker 状态
+    required: false
+    description: >
+      已停止 Agent 的 Race Worktree 从 rail 删除成功后，Race Worker 必须同步为 Worktree 已删除，不能保留 launched 状态或可恢复的失效 Session。
+    preconditions:
+      - 当前 Race 有一个 Agent 已停止、工作区干净且仍登记的 Worker Worktree。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 从 Worktree rail 删除该 Worker Worktree；确认目标行消失且分支仍存在。
+      - 打开 Race 面板并读取 Race API；确认对应 Worker 的 Terminal 为空、状态明确标记 Worktree 已删除。

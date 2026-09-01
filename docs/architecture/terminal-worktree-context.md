@@ -51,7 +51,9 @@ activeProjectId: string | null; // 唯一 effectiveProjectId
 activeSessionId: string | null;
 ```
 
-desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久第一且不可取消固定，其他节点只显示名称和实际分支。rail 不提供新增、删除、重命名、diff 或 Git 写操作。contexts 每 3 秒刷新并在窗口重新聚焦时刷新。
+desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久第一且不可取消固定，其他节点只显示名称和实际分支。子 Worktree 行的右键菜单提供删除入口；主节点不提供 Git 写操作。contexts 每 3 秒刷新并在窗口重新聚焦时刷新。
+
+删除只移除当前父 Project 的 `.worktree/<name>` 直接子 Worktree，保留分支、Activity 和 Work History。最终确认时 Backend 重新校验 Git 登记、路径边界、工作区干净状态、detached HEAD 引用、运行中 Agent 和 Dev Session 占用；失败不使用 `--force`。普通 Terminal 会在删除前停止，当前 Context 删除成功后 Web 切回父 Project 主节点。
 
 `contextProjectIdByParentProjectId` 恢复每个父 Project 上次选中的 context，`projectSessionIds` 继续按生效 Project ID 恢复 Terminal。Preview store 原本已按 `projectId` 分桶，不增加复合 key。
 
@@ -62,11 +64,14 @@ Ionic App 不渲染 rail。App Home 用 `resolveTerminalParentProjectId` 把子 
 ```http
 GET /api/terminal/project/:parentProjectId/contexts
 PATCH /api/terminal/project/:parentProjectId/contexts/:childProjectId
+DELETE /api/terminal/project/:parentProjectId/contexts/:childProjectId
 Content-Type: application/json
 
 { "pinned": true }
 ```
 
+`DELETE` 无请求体，成功返回 204；安全校验失败返回包含具体原因的 4xx。删除成功后清理该子 Context 的 Session、Preview cache 与固定元数据，但不删除 Git branch 或历史记录。
+
 Preview 仍使用 `/api/terminal/project/:effectiveProjectId/preview/*`，Session create 仍使用现有 `projectId` 字段。Activity 与 Project-scoped Quick Input 继续精确匹配该 ID，父 Project 不隐式汇总子 Project 数据。
 
-验收入口：`docs/testing/terminal/worktree-project-context.testplan.yaml`。
+验收入口：`docs/testing/terminal/worktree-project-context.testplan.yaml` 与 `docs/testing/terminal/worktree-deletion.testplan.yaml`。

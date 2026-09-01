@@ -106,6 +106,27 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
     return contexts.find((candidate) => candidate.projectId === childProjectId);
   }
 
+  async removeProjectContextMetadata(
+    parentProjectId: string,
+    childProjectId: string,
+  ): Promise<void> {
+    const parent = this.projects.get(parentProjectId);
+    if (!parent) {
+      return;
+    }
+    const nextPinnedIds = parent.pinnedChildProjectIds.filter(
+      (projectId) => projectId !== childProjectId,
+    );
+    if (nextPinnedIds.length !== parent.pinnedChildProjectIds.length) {
+      parent.pinnedChildProjectIds = nextPinnedIds;
+      await this.sessionStore.updateProject({
+        projectId: parentProjectId,
+        pinnedChildProjectIds: nextPinnedIds,
+      });
+    }
+    await this.projectContexts.refresh(parent, this.listSessions());
+  }
+
   async deleteProject(projectId: string): Promise<boolean> {
     const project = this.projects.get(projectId);
     if (!project) {
