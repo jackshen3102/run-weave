@@ -7,7 +7,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "dev": "tsx src/main.ts",
-    "build": "node scripts/prepare-better-sqlite3-runtime.mjs && tsc -p tsconfig.json && node scripts/bundle.mjs",
+    "build": "node scripts/prepare-better-sqlite3-runtime.mjs && node scripts/prepare-whistle-runtime.mjs && tsc -p tsconfig.json && node scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\"",
     "pack": "electron-builder --dir",

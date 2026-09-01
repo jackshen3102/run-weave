@@ -38,6 +38,11 @@ extraResources:
       - "evolution-sqlite-worker.cjs"
       - "activity-sqlite-runtime-manifest.json"
       - "node_modules/**/*"
+  - from: .whistle-runtime
+    to: whistle-runtime
+    filter:
+      - "node_modules/**/*"
+      - "package.json"
 mac:
   icon: resources/icons/icon.icns
   category: public.app-category.developer-tools

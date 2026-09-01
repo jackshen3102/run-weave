@@ -19,6 +19,7 @@ import { useTerminalAggregateStatus } from "../../../features/terminal/use-termi
 import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
 import { updateTerminalProjectContext } from "../../../services/terminal";
 import { TerminalAggregateStatus } from "./aggregate-status";
+import type { TerminalBrowserProfilePreferences } from "@runweave/shared/terminal-browser-profile";
 
 interface TerminalWorktreeRailProps {
   parentProjectId: string | null;
@@ -70,8 +71,7 @@ export function TerminalWorktreeRail({
   const { apiBase, scope, token } = useTerminalRuntime();
   const { queryClient } = useTerminalWorkspaceQueryClient();
   const contextsQuery = useTerminalProjectContextsQuery(parentProjectId);
-  const contexts =
-    contextsQuery.data ?? EMPTY_TERMINAL_PROJECT_CONTEXTS;
+  const contexts = contextsQuery.data ?? EMPTY_TERMINAL_PROJECT_CONTEXTS;
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
@@ -85,6 +85,8 @@ export function TerminalWorktreeRail({
   const [width, setWidth] = useState(() => readRailWidth(scope));
   const [resizing, setResizing] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
+  const [profilePreferences, setProfilePreferences] =
+    useState<TerminalBrowserProfilePreferences | null>(null);
   const resizeStateRef = useRef<{
     railLeft: number;
     width: number;
@@ -177,6 +179,26 @@ export function TerminalWorktreeRail({
 
   useEffect(() => stopResize, [stopResize]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void window.electronAPI
+      ?.terminalBrowserGetProfilePreferences?.()
+      .then((preferences) => {
+        if (!cancelled && preferences) setProfilePreferences(preferences);
+      });
+    const unsubscribe = window.electronAPI?.onTerminalBrowserProfileChanged?.(
+      (event) => {
+        if (event.kind === "preferences") {
+          setProfilePreferences(event.preferences);
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+
   const toggleCollapsed = useMemoizedFn(() => {
     setCollapsed((current) => {
       const next = !current;
@@ -200,10 +222,7 @@ export function TerminalWorktreeRail({
           pinned,
         );
         await queryClient.invalidateQueries({
-          queryKey: terminalQueryKeys.projectContexts(
-            scope,
-            parentProjectId,
-          ),
+          queryKey: terminalQueryKeys.projectContexts(scope, parentProjectId),
         });
         setRequestError(null);
       } catch (error) {
@@ -260,6 +279,20 @@ export function TerminalWorktreeRail({
             const active = context.projectId === activeProjectId;
             const unavailable = context.availability !== "available";
             const status = byContextProjectId[context.projectId] ?? 0;
+            const browserPreference =
+              profilePreferences?.worktrees[context.projectId];
+            const browserProfileId =
+              browserPreference?.preferredProfileId ??
+              profilePreferences?.defaultProfileId;
+            const browserSummary = browserProfileId
+              ? `${browserProfileId.replace("profile-", "P")} · ${
+                  browserPreference?.devServerPort
+                    ? `:${browserPreference.devServerPort}`
+                    : "no port"
+                } · ${
+                  browserPreference?.preferredProfileId ? "bound" : "global"
+                }`
+              : null;
             return (
               <div
                 key={context.projectId}
@@ -294,6 +327,14 @@ export function TerminalWorktreeRail({
                     >
                       {getContextDetail(context)}
                     </span>
+                    {browserSummary ? (
+                      <span
+                        data-testid="terminal-worktree-browser-profile"
+                        className="block truncate text-[9px] text-slate-600"
+                      >
+                        {browserSummary}
+                      </span>
+                    ) : null}
                   </span>
                 </button>
                 {context.isPrimary ? (
@@ -307,7 +348,9 @@ export function TerminalWorktreeRail({
                 ) : (
                   <button
                     type="button"
-                    aria-label={context.pinned ? "Unpin Worktree" : "Pin Worktree"}
+                    aria-label={
+                      context.pinned ? "Unpin Worktree" : "Pin Worktree"
+                    }
                     title={context.pinned ? "Unpin Worktree" : "Pin Worktree"}
                     disabled={pendingProjectId === context.projectId}
                     className={[

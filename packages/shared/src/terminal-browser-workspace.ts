@@ -1,4 +1,5 @@
 import type { TerminalBrowserDeviceState } from "./terminal-browser-device";
+import type { TerminalBrowserProfileId } from "./terminal-browser-profile";
 
 export interface TerminalBrowserSnapshot {
   url: string;
@@ -8,6 +9,7 @@ export interface TerminalBrowserSnapshot {
 }
 
 export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
+  profileId: TerminalBrowserProfileId;
   tabId: string;
   browserGroupId: string;
   loading: boolean;
@@ -37,6 +39,7 @@ export interface TerminalBrowserGroupSnapshot {
 }
 
 export interface TerminalBrowserWorkspaceSnapshot {
+  profileId: TerminalBrowserProfileId;
   revision: number;
   activeTabId: string;
   groups: TerminalBrowserGroupSnapshot[];
@@ -45,12 +48,17 @@ export interface TerminalBrowserWorkspaceSnapshot {
 
 export type TerminalBrowserCreateTabRequest =
   | {
+      profileId: TerminalBrowserProfileId;
       placement: "current-group";
       groupId: string;
       openerTabId: string;
       url?: string;
     }
-  | { placement: "new-group"; url?: string };
+  | {
+      profileId: TerminalBrowserProfileId;
+      placement: "new-group";
+      url?: string;
+    };
 
 export type TerminalBrowserStateChangedEvent =
   | {

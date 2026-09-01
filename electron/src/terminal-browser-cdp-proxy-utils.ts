@@ -9,6 +9,7 @@ import {
 import { getTerminalBrowserCdpTargets } from "./terminal-browser-view.js";
 import type { CdpProxyConnectionState } from "./terminal-browser-cdp-proxy-types.js";
 import { CDP_PROXY_TRACE_ENABLED } from "./terminal-browser-cdp-proxy-logging.js";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 
 export function getFirstWindowId(): number | null {
   const windows = BrowserWindow.getAllWindows();
@@ -19,19 +20,22 @@ export function canUseTarget(
   conn: CdpProxyConnectionState,
   targetId: string,
 ): boolean {
-  if (!conn.scopedGroupId) {
-    return true;
-  }
   return getTerminalBrowserCdpTargets().some(
     (target) =>
       target.targetId === targetId &&
-      target.browserGroupId === conn.scopedGroupId,
+      target.profileId === conn.scopedProfileId &&
+      (!conn.scopedGroupId || target.browserGroupId === conn.scopedGroupId),
   );
 }
 
-export function getScopedTargets(scopedGroupId: string | null) {
+export function getScopedTargets(
+  scopedProfileId: TerminalBrowserProfileId,
+  scopedGroupId: string | null,
+) {
   return getTerminalBrowserCdpTargets().filter(
-    (target) => !scopedGroupId || target.browserGroupId === scopedGroupId,
+    (target) =>
+      target.profileId === scopedProfileId &&
+      (!scopedGroupId || target.browserGroupId === scopedGroupId),
   );
 }
 
@@ -51,9 +55,10 @@ export function sendJson(ws: WebSocket, data: object): void {
 
 export function getCurrentTargetInfos(
   sessionManager: CdpSessionManager,
+  scopedProfileId: TerminalBrowserProfileId,
   scopedGroupId: string | null,
 ): CdpTargetInfo[] {
-  return getScopedTargets(scopedGroupId).map((t) =>
+  return getScopedTargets(scopedProfileId, scopedGroupId).map((t) =>
     buildTargetInfo({
       targetId: t.targetId,
       url: t.url,
@@ -66,6 +71,7 @@ export function getCurrentTargetInfos(
 
 export function getTargetInfoForRequest(
   sessionManager: CdpSessionManager,
+  scopedProfileId: TerminalBrowserProfileId,
   scopedGroupId: string | null,
   params: Record<string, unknown>,
   sessionId?: string,
@@ -76,7 +82,11 @@ export function getTargetInfoForRequest(
     ? sessionManager.getTargetIdForSession(sessionId)
     : null;
   const targetId = requestedTargetId ?? sessionTargetId;
-  const targets = getCurrentTargetInfos(sessionManager, scopedGroupId);
+  const targets = getCurrentTargetInfos(
+    sessionManager,
+    scopedProfileId,
+    scopedGroupId,
+  );
 
   if (targetId) {
     return targets.find((target) => target.targetId === targetId) ?? null;
@@ -89,12 +99,16 @@ export function broadcastTargetCreated(
   initiator: CdpProxyConnectionState,
   target: {
     targetId: string;
+    profileId: TerminalBrowserProfileId;
     browserGroupId: string;
     url: string;
     title: string;
   },
 ): void {
   for (const conn of connections) {
+    if (conn.scopedProfileId !== target.profileId) {
+      continue;
+    }
     if (conn.scopedGroupId && conn.scopedGroupId !== target.browserGroupId) {
       continue;
     }

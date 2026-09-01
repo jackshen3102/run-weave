@@ -56,8 +56,12 @@ import {
   moveCompanionWindow,
   resizeCompanionWindow,
 } from "./desktop-companion-window.js";
-import { readCompanionEnabled, writeCompanionEnabled } from "./desktop-companion-preferences.js";
+import {
+  readCompanionEnabled,
+  writeCompanionEnabled,
+} from "./desktop-companion-preferences.js";
 import { writeDesktopCompanionWindowState } from "./desktop-companion-window-state.js";
+import { stopAllTerminalBrowserWhistles } from "./terminal-browser-whistle-runtime.js";
 
 function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 512;
@@ -67,13 +71,34 @@ function isAttentionIntent(value: unknown): value is AttentionOpenIntent {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
   const keys = Object.keys(candidate);
-  const allowed = new Set(["requestId", "connectionId", "attentionId", "projectId", "terminalSessionId", "panelId", "runId", "targetSurface", "completionRevision"]);
-  return keys.every((key) => allowed.has(key)) &&
-    ["requestId", "connectionId", "attentionId", "projectId", "terminalSessionId"].every((key) => isId(candidate[key])) &&
+  const allowed = new Set([
+    "requestId",
+    "connectionId",
+    "attentionId",
+    "projectId",
+    "terminalSessionId",
+    "panelId",
+    "runId",
+    "targetSurface",
+    "completionRevision",
+  ]);
+  return (
+    keys.every((key) => allowed.has(key)) &&
+    [
+      "requestId",
+      "connectionId",
+      "attentionId",
+      "projectId",
+      "terminalSessionId",
+    ].every((key) => isId(candidate[key])) &&
     (candidate.panelId === null || isId(candidate.panelId)) &&
     (candidate.runId === null || isId(candidate.runId)) &&
-    (candidate.targetSurface === "terminal" || candidate.targetSurface === "agent-team") &&
-    (candidate.completionRevision === null || (Number.isInteger(candidate.completionRevision) && Number(candidate.completionRevision) >= 0));
+    (candidate.targetSurface === "terminal" ||
+      candidate.targetSurface === "agent-team") &&
+    (candidate.completionRevision === null ||
+      (Number.isInteger(candidate.completionRevision) &&
+        Number(candidate.completionRevision) >= 0))
+  );
 }
 
 function isAttentionResult(value: unknown): value is AttentionOpenResult {
@@ -116,21 +141,35 @@ function isCompanionWindowDragRequest(
 function registerCompanionHandlers(): void {
   const requireCompanion = (senderId: number): BrowserWindow => {
     const win = desktopRuntime.companionWindow;
-    if (!win || win.isDestroyed() || win.webContents.id !== senderId) throw new Error("Companion sender required");
+    if (!win || win.isDestroyed() || win.webContents.id !== senderId)
+      throw new Error("Companion sender required");
     return win;
   };
   ipcMain.handle("attention:report-content-size", (event, size: unknown) => {
     const win = requireCompanion(event.sender.id);
     if (!size || typeof size !== "object") throw new Error("Invalid size");
     const { width, height } = size as { width?: unknown; height?: unknown };
-    if (typeof width !== "number" || typeof height !== "number" || !Number.isFinite(width) || !Number.isFinite(height)) throw new Error("Invalid size");
+    if (
+      typeof width !== "number" ||
+      typeof height !== "number" ||
+      !Number.isFinite(width) ||
+      !Number.isFinite(height)
+    )
+      throw new Error("Invalid size");
     resizeCompanionWindow(win, { width, height });
   });
-  ipcMain.handle("attention:set-mouse-passthrough", (event, passthrough: unknown) => {
-    const win = requireCompanion(event.sender.id);
-    if (typeof passthrough !== "boolean") throw new Error("Invalid passthrough state");
-    win.setIgnoreMouseEvents(passthrough, passthrough ? { forward: true } : undefined);
-  });
+  ipcMain.handle(
+    "attention:set-mouse-passthrough",
+    (event, passthrough: unknown) => {
+      const win = requireCompanion(event.sender.id);
+      if (typeof passthrough !== "boolean")
+        throw new Error("Invalid passthrough state");
+      win.setIgnoreMouseEvents(
+        passthrough,
+        passthrough ? { forward: true } : undefined,
+      );
+    },
+  );
   let dragState: {
     senderId: number;
     pointerStart: { x: number; y: number };
@@ -170,12 +209,15 @@ function registerCompanionHandlers(): void {
       { x: value.screenX, y: value.screenY },
     );
   });
-  const pendingRequests = new Map<string, {
-    promise: Promise<AttentionOpenResult>;
-    resolve: (result: AttentionOpenResult) => void;
-    timer: NodeJS.Timeout;
-    completionExpected: boolean;
-  }>();
+  const pendingRequests = new Map<
+    string,
+    {
+      promise: Promise<AttentionOpenResult>;
+      resolve: (result: AttentionOpenResult) => void;
+      timer: NodeJS.Timeout;
+      completionExpected: boolean;
+    }
+  >();
   const completedRequests = new Map<string, AttentionOpenResult>();
   const completePendingRequest = (result: AttentionOpenResult): boolean => {
     const pending = pendingRequests.get(result.requestId);
@@ -189,64 +231,99 @@ function registerCompanionHandlers(): void {
     pending.resolve(result);
     return true;
   };
-  ipcMain.handle("attention:open-result", (event, result: AttentionOpenResult) => {
-    const mainWindow = desktopRuntime.mainWindow;
-    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.id !== event.sender.id) throw new Error("Main window sender required");
-    if (!isAttentionResult(result)) throw new Error("Invalid result");
-    const pending = pendingRequests.get(result.requestId);
-    if (!pending) return;
-    if (
-      pending.completionExpected &&
-      (result.status === "opened" || result.status === "opened_with_panel_fallback")
-    ) {
-      throw new Error("Completion open result must use authorization");
-    }
-    completePendingRequest(result);
-  });
-  ipcMain.handle("attention:authorize-completion", (event, result: unknown): boolean => {
-    const mainWindow = desktopRuntime.mainWindow;
-    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.id !== event.sender.id) throw new Error("Main window sender required");
-    if (!isAttentionResult(result)) throw new Error("Invalid result");
-    if (result.status !== "opened" && result.status !== "opened_with_panel_fallback") throw new Error("Completion authorization requires an opened result");
-    const pending = pendingRequests.get(result.requestId);
-    if (!pending || !pending.completionExpected) return false;
-    return completePendingRequest(result);
-  });
-  ipcMain.handle("attention:open-slot", async (event, value: unknown): Promise<AttentionOpenResult> => {
-    requireCompanion(event.sender.id);
-    if (!isAttentionIntent(value)) throw new Error("Invalid attention intent");
-    const completed = completedRequests.get(value.requestId);
-    if (completed) return completed;
-    const existing = pendingRequests.get(value.requestId);
-    if (existing) return existing.promise;
-    const mainWindow = desktopRuntime.mainWindow;
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      return { requestId: value.requestId, status: "session_not_found", message: "Main window unavailable" };
-    }
-    let resolveResult!: (result: AttentionOpenResult) => void;
-    const promise = new Promise<AttentionOpenResult>((resolve) => { resolveResult = resolve; });
-    const deadlineAt = Date.now() + 10_000;
-    const timer = setTimeout(() => {
-      pendingRequests.delete(value.requestId);
-      if (!mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("attention:open-cancel", value.requestId);
+  ipcMain.handle(
+    "attention:open-result",
+    (event, result: AttentionOpenResult) => {
+      const mainWindow = desktopRuntime.mainWindow;
+      if (
+        !mainWindow ||
+        mainWindow.isDestroyed() ||
+        mainWindow.webContents.id !== event.sender.id
+      )
+        throw new Error("Main window sender required");
+      if (!isAttentionResult(result)) throw new Error("Invalid result");
+      const pending = pendingRequests.get(result.requestId);
+      if (!pending) return;
+      if (
+        pending.completionExpected &&
+        (result.status === "opened" ||
+          result.status === "opened_with_panel_fallback")
+      ) {
+        throw new Error("Completion open result must use authorization");
       }
-      const result: AttentionOpenResult = { requestId: value.requestId, status: "timed_out", message: "Main window did not finish opening the Slot" };
-      completedRequests.set(value.requestId, result);
-      resolveResult(result);
-    }, 10_000);
-    pendingRequests.set(value.requestId, {
-      promise,
-      resolve: resolveResult,
-      timer,
-      completionExpected: value.completionRevision !== null,
-    });
-    mainWindow.show();
-    mainWindow.focus();
-    const dispatch: AttentionOpenDispatch = { ...value, deadlineAt };
-    mainWindow.webContents.send("attention:open-intent", dispatch);
-    return promise;
-  });
+      completePendingRequest(result);
+    },
+  );
+  ipcMain.handle(
+    "attention:authorize-completion",
+    (event, result: unknown): boolean => {
+      const mainWindow = desktopRuntime.mainWindow;
+      if (
+        !mainWindow ||
+        mainWindow.isDestroyed() ||
+        mainWindow.webContents.id !== event.sender.id
+      )
+        throw new Error("Main window sender required");
+      if (!isAttentionResult(result)) throw new Error("Invalid result");
+      if (
+        result.status !== "opened" &&
+        result.status !== "opened_with_panel_fallback"
+      )
+        throw new Error("Completion authorization requires an opened result");
+      const pending = pendingRequests.get(result.requestId);
+      if (!pending || !pending.completionExpected) return false;
+      return completePendingRequest(result);
+    },
+  );
+  ipcMain.handle(
+    "attention:open-slot",
+    async (event, value: unknown): Promise<AttentionOpenResult> => {
+      requireCompanion(event.sender.id);
+      if (!isAttentionIntent(value))
+        throw new Error("Invalid attention intent");
+      const completed = completedRequests.get(value.requestId);
+      if (completed) return completed;
+      const existing = pendingRequests.get(value.requestId);
+      if (existing) return existing.promise;
+      const mainWindow = desktopRuntime.mainWindow;
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        return {
+          requestId: value.requestId,
+          status: "session_not_found",
+          message: "Main window unavailable",
+        };
+      }
+      let resolveResult!: (result: AttentionOpenResult) => void;
+      const promise = new Promise<AttentionOpenResult>((resolve) => {
+        resolveResult = resolve;
+      });
+      const deadlineAt = Date.now() + 10_000;
+      const timer = setTimeout(() => {
+        pendingRequests.delete(value.requestId);
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("attention:open-cancel", value.requestId);
+        }
+        const result: AttentionOpenResult = {
+          requestId: value.requestId,
+          status: "timed_out",
+          message: "Main window did not finish opening the Slot",
+        };
+        completedRequests.set(value.requestId, result);
+        resolveResult(result);
+      }, 10_000);
+      pendingRequests.set(value.requestId, {
+        promise,
+        resolve: resolveResult,
+        timer,
+        completionExpected: value.completionRevision !== null,
+      });
+      mainWindow.show();
+      mainWindow.focus();
+      const dispatch: AttentionOpenDispatch = { ...value, deadlineAt };
+      mainWindow.webContents.send("attention:open-intent", dispatch);
+      return promise;
+    },
+  );
 }
 
 process.on("uncaughtExceptionMonitor", (error) => {
@@ -324,8 +401,7 @@ if (hasSingleInstanceLock) {
         host: CDP_PROXY_HOST,
         port: cdpProxyPort,
         identity: {
-          instanceId:
-            process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim() || null,
+          instanceId: process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim() || null,
           devSessionId: process.env.RUNWEAVE_DEV_SESSION_ID?.trim() || null,
           sourceRevision: desktopSourceRevision,
           pid: process.pid,
@@ -428,7 +504,10 @@ if (hasSingleInstanceLock) {
         companionEnabled = enabled;
         void writeCompanionEnabled(enabled);
         if (enabled) {
-          if (!desktopRuntime.companionWindow || desktopRuntime.companionWindow.isDestroyed()) {
+          if (
+            !desktopRuntime.companionWindow ||
+            desktopRuntime.companionWindow.isDestroyed()
+          ) {
             desktopRuntime.companionWindow = createCompanionWindow();
             desktopRuntime.companionWindow.once("closed", () => {
               desktopRuntime.companionWindow = null;
@@ -503,6 +582,7 @@ app.on("before-quit", (event) => {
   void (async () => {
     await Promise.allSettled([
       desktopRuntime.cdpProxy?.stop() ?? Promise.resolve(),
+      stopAllTerminalBrowserWhistles(),
       desktopRuntime.packagedBackend?.stop() ?? Promise.resolve(),
     ]);
     desktopRuntime.packagedBackendsStoppedForQuit = true;

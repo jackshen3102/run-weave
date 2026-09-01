@@ -1,3 +1,5 @@
+import type { TerminalBrowserProfileId } from "./terminal-browser-profile";
+
 export interface TerminalBrowserCdpProxyInfo {
   available: boolean;
   endpoint: string | null;
@@ -5,6 +7,7 @@ export interface TerminalBrowserCdpProxyInfo {
   port: number | null;
   host: "127.0.0.1";
   tabId: string;
+  profileId: TerminalBrowserProfileId;
   targetId: string | null;
   browserGroupId: string | null;
   url: string;

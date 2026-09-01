@@ -110,7 +110,17 @@ async function calculateTrackedSourceBytes(sourceRoot) {
       sourceRoot,
       path.join(sourceRoot, relativePath),
     );
-    const stats = await fs.lstat(filePath);
+    let stats;
+    try {
+      stats = await fs.lstat(filePath);
+    } catch (error) {
+      // `git ls-files` intentionally includes tracked paths deleted in the
+      // working tree. They contribute zero bytes to the pending source build.
+      if (error?.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
     bytes += stats.size;
   }
   return bytes;

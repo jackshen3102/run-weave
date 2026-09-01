@@ -1,6 +1,9 @@
 import { BrowserWindow, shell } from "electron";
 import { normalizeTerminalBrowserUrlForStorage } from "./terminal-browser-tabs-state.js";
-import { TERMINAL_BROWSER_SESSION_PARTITION } from "./terminal-browser-runtime.js";
+import {
+  getTerminalBrowserProfileConfig,
+  type TerminalBrowserProfileId,
+} from "@runweave/shared/terminal-browser-profile";
 
 export function openTerminalBrowserExternalUrl(url: string): void {
   try {
@@ -15,6 +18,7 @@ export function openTerminalBrowserExternalUrl(url: string): void {
 
 function createTerminalBrowserPopupWindowOptions(
   parentWindow: BrowserWindow,
+  profileId: TerminalBrowserProfileId,
 ): Electron.BrowserWindowConstructorOptions {
   return {
     parent: parentWindow,
@@ -23,7 +27,7 @@ function createTerminalBrowserPopupWindowOptions(
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      partition: TERMINAL_BROWSER_SESSION_PARTITION,
+      partition: getTerminalBrowserProfileConfig(profileId).partition,
       sandbox: true,
     },
   };
@@ -32,6 +36,7 @@ function createTerminalBrowserPopupWindowOptions(
 export function configureTerminalBrowserPopupWindow(
   parentWindow: BrowserWindow,
   popupWindow: BrowserWindow,
+  profileId: TerminalBrowserProfileId,
 ): void {
   popupWindow.once("ready-to-show", () => {
     if (!popupWindow.isDestroyed()) {
@@ -46,12 +51,14 @@ export function configureTerminalBrowserPopupWindow(
     }
     return {
       action: "allow",
-      overrideBrowserWindowOptions:
-        createTerminalBrowserPopupWindowOptions(parentWindow),
+      overrideBrowserWindowOptions: createTerminalBrowserPopupWindowOptions(
+        parentWindow,
+        profileId,
+      ),
     };
   });
   popupWindow.webContents.on("did-create-window", (childWindow) => {
-    configureTerminalBrowserPopupWindow(parentWindow, childWindow);
+    configureTerminalBrowserPopupWindow(parentWindow, childWindow, profileId);
   });
 }
 

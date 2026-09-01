@@ -20,7 +20,15 @@ import type {
 } from "./terminal-browser-device";
 import type { TerminalBrowserDisplayScaleState } from "./terminal-browser-display-scale";
 import type { TerminalBrowserHeaderState } from "./terminal-browser-headers";
-import type { TerminalBrowserProxyState } from "./terminal-browser-proxy";
+import type {
+  ResolveTerminalBrowserProfileRequest,
+  ResolvedTerminalBrowserProfile,
+  TerminalBrowserProfileChangedEvent,
+  TerminalBrowserProfileId,
+  TerminalBrowserProfilePreferenceUpdate,
+  TerminalBrowserProfilePreferences,
+  TerminalBrowserProfileRuntimeState,
+} from "./terminal-browser-profile";
 import type {
   TerminalBrowserToolMenuAction,
   TerminalBrowserToolMenuRequest,
@@ -86,13 +94,23 @@ export interface RunweaveElectronBridge {
     tabId: string,
     url: string,
   ) => Promise<TerminalBrowserSnapshot>;
-  terminalBrowserGetWorkspace: () => Promise<TerminalBrowserWorkspaceSnapshot>;
+  terminalBrowserGetWorkspace: (
+    profileId: TerminalBrowserProfileId,
+  ) => Promise<TerminalBrowserWorkspaceSnapshot>;
   terminalBrowserCreateTab: (
     request: TerminalBrowserCreateTabRequest,
   ) => Promise<void>;
-  terminalBrowserRenameGroup: (groupId: string, name: string) => Promise<void>;
-  terminalBrowserCloseGroup: (groupId: string) => Promise<void>;
+  terminalBrowserRenameGroup: (
+    profileId: TerminalBrowserProfileId,
+    groupId: string,
+    name: string,
+  ) => Promise<void>;
+  terminalBrowserCloseGroup: (
+    profileId: TerminalBrowserProfileId,
+    groupId: string,
+  ) => Promise<void>;
   terminalBrowserReorderGroupTabs: (
+    profileId: TerminalBrowserProfileId,
     groupId: string,
     orderedTabIds: string[],
   ) => Promise<void>;
@@ -124,17 +142,26 @@ export interface RunweaveElectronBridge {
   terminalBrowserGetCdpProxyInfo: (
     tabId: string,
   ) => Promise<TerminalBrowserCdpProxyInfo>;
-  terminalBrowserGetProxyState: () => Promise<TerminalBrowserProxyState>;
-  terminalBrowserSetProxyEnabled: (
-    enabled: boolean,
-  ) => Promise<TerminalBrowserProxyState>;
-  terminalBrowserSetProxyPort: (
-    port: number,
-  ) => Promise<TerminalBrowserProxyState>;
-  terminalBrowserGetHeaderRules: () => Promise<TerminalBrowserHeaderState>;
+  terminalBrowserGetHeaderRules: (
+    profileId: TerminalBrowserProfileId,
+  ) => Promise<TerminalBrowserHeaderState>;
   terminalBrowserSetHeaderRules: (
+    profileId: TerminalBrowserProfileId,
     rules: TerminalBrowserHeaderState["rules"],
   ) => Promise<TerminalBrowserHeaderState>;
+  terminalBrowserGetProfilePreferences: () => Promise<TerminalBrowserProfilePreferences>;
+  terminalBrowserUpdateProfilePreferences: (
+    update: TerminalBrowserProfilePreferenceUpdate,
+  ) => Promise<TerminalBrowserProfilePreferences>;
+  terminalBrowserGetProfileRuntimes: () => Promise<
+    TerminalBrowserProfileRuntimeState[]
+  >;
+  terminalBrowserResolveProfile: (
+    request: ResolveTerminalBrowserProfileRequest,
+  ) => Promise<ResolvedTerminalBrowserProfile>;
+  terminalBrowserOpenWhistleConsole: (
+    profileId: TerminalBrowserProfileId,
+  ) => Promise<void>;
   terminalBrowserCloseTab: (tabId: string) => Promise<void>;
   terminalBrowserAnnotationStart: (
     tabId: string,
@@ -166,6 +193,9 @@ export interface RunweaveElectronBridge {
   ) => Promise<TerminalBrowserAnnotationSubmission>;
   onTerminalBrowserStateChanged: (
     listener: (event: TerminalBrowserStateChangedEvent) => void,
+  ) => () => void;
+  onTerminalBrowserProfileChanged: (
+    listener: (event: TerminalBrowserProfileChangedEvent) => void,
   ) => () => void;
   onTerminalBrowserAnnotationUpdated: (
     listener: (data: TerminalBrowserAnnotationUpdate) => void,

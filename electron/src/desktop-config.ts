@@ -36,8 +36,7 @@ if (__RUNWEAVE_DEV_SESSION_ID__) {
 }
 process.env.RUNWEAVE_SOURCE_REVISION ??= desktopSourceRevision;
 if (__RUNWEAVE_DESKTOP_STATUS_PATH__) {
-  process.env.RUNWEAVE_DESKTOP_STATUS_PATH ??=
-    __RUNWEAVE_DESKTOP_STATUS_PATH__;
+  process.env.RUNWEAVE_DESKTOP_STATUS_PATH ??= __RUNWEAVE_DESKTOP_STATUS_PATH__;
 }
 if (__RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__) {
   process.env.RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT ??=
@@ -114,9 +113,7 @@ export const isDev = !app.isPackaged;
 export const managesPackagedBackend = isDev
   ? false
   : process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND?.trim() !== "false";
-process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND = String(
-  managesPackagedBackend,
-);
+process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND = String(managesPackagedBackend);
 
 export const DEV_SERVER_URL =
   process.env.RUNWEAVE_DEV_URL ??
@@ -148,5 +145,3 @@ protocol.registerSchemesAsPrivileged([
     },
   })),
 ]);
-
-app.commandLine.appendSwitch("ignore-certificate-errors");

@@ -2,6 +2,10 @@ import type {
   TerminalBrowserGroupNameOrigin,
   TerminalBrowserGroupSnapshot,
 } from "@runweave/shared/terminal-browser-workspace";
+import {
+  TERMINAL_BROWSER_PROFILE_IDS,
+  type TerminalBrowserProfileId,
+} from "@runweave/shared/terminal-browser-profile";
 
 export const TERMINAL_BROWSER_MAX_RESTORED_TABS = 5;
 const PLACEHOLDER_GROUP_NAME = "新工作组";
@@ -15,15 +19,33 @@ export interface TerminalBrowserPersistedTabRecord {
   browserGroupId: string;
 }
 
-export interface TerminalBrowserPersistedState {
-  version: 2;
+export interface TerminalBrowserPersistedProfileState {
   activeTabId: string | null;
   groups: TerminalBrowserGroupSnapshot[];
   tabs: TerminalBrowserPersistedTabRecord[];
 }
 
+export interface TerminalBrowserPersistedState {
+  version: 3;
+  profiles: Record<
+    TerminalBrowserProfileId,
+    TerminalBrowserPersistedProfileState
+  >;
+}
+
 export function createEmptyTerminalBrowserPersistedState(): TerminalBrowserPersistedState {
-  return { version: 2, activeTabId: null, groups: [], tabs: [] };
+  return {
+    version: 3,
+    profiles: {
+      "profile-1": createEmptyTerminalBrowserPersistedProfileState(),
+      "profile-2": createEmptyTerminalBrowserPersistedProfileState(),
+      "profile-3": createEmptyTerminalBrowserPersistedProfileState(),
+    },
+  };
+}
+
+export function createEmptyTerminalBrowserPersistedProfileState(): TerminalBrowserPersistedProfileState {
+  return { activeTabId: null, groups: [], tabs: [] };
 }
 
 export function normalizeTerminalBrowserUrlForStorage(
@@ -50,9 +72,10 @@ function truncateGroupName(name: string): string {
   return Array.from(name).slice(0, MAX_GROUP_NAME_LENGTH).join("");
 }
 
-function automaticGroupName(
-  tab: TerminalBrowserPersistedTabRecord,
-): { name: string; nameOrigin: TerminalBrowserGroupNameOrigin } {
+function automaticGroupName(tab: TerminalBrowserPersistedTabRecord): {
+  name: string;
+  nameOrigin: TerminalBrowserGroupNameOrigin;
+} {
   const title = tab.title.trim();
   const titleLooksLikeUrl = (() => {
     try {
@@ -95,7 +118,9 @@ function buildGroupsFromFlatTabs(
   return groups;
 }
 
-function normalizeFlatTabs(value: unknown): TerminalBrowserPersistedTabRecord[] {
+function normalizeFlatTabs(
+  value: unknown,
+): TerminalBrowserPersistedTabRecord[] {
   const rawTabs = Array.isArray(value) ? value : [];
   const seenTabIds = new Set<string>();
   const tabs: TerminalBrowserPersistedTabRecord[] = [];
@@ -115,7 +140,8 @@ function normalizeFlatTabs(value: unknown): TerminalBrowserPersistedTabRecord[] 
       url,
       title: typeof tab.title === "string" ? tab.title : "",
       lastActiveAt:
-        typeof tab.lastActiveAt === "number" && Number.isFinite(tab.lastActiveAt)
+        typeof tab.lastActiveAt === "number" &&
+        Number.isFinite(tab.lastActiveAt)
           ? tab.lastActiveAt
           : 0,
       browserGroupId:
@@ -148,7 +174,9 @@ function normalizeV2Groups(
     const nameLength = Array.from(name).length;
     const nameOrigin = group.nameOrigin;
     const tabIds = Array.isArray(group.tabIds)
-      ? group.tabIds.filter((tabId): tabId is string => typeof tabId === "string")
+      ? group.tabIds.filter(
+          (tabId): tabId is string => typeof tabId === "string",
+        )
       : [];
     if (
       !id ||
@@ -180,9 +208,9 @@ function normalizeV2Groups(
 }
 
 export function selectTerminalBrowserStateForRestore(
-  state: TerminalBrowserPersistedState,
+  state: TerminalBrowserPersistedProfileState,
   limit = TERMINAL_BROWSER_MAX_RESTORED_TABS,
-): TerminalBrowserPersistedState {
+): TerminalBrowserPersistedProfileState {
   const orderedTabs = state.groups.flatMap((group) =>
     group.tabIds.flatMap((tabId) => {
       const tab = state.tabs.find((candidate) => candidate.id === tabId);
@@ -221,25 +249,60 @@ export function selectTerminalBrowserStateForRestore(
     state.activeTabId && selectedIds.has(state.activeTabId)
       ? state.activeTabId
       : (tabs[0]?.id ?? null);
-  return { version: 2, activeTabId, groups, tabs };
+  return { activeTabId, groups, tabs };
 }
 
-export function normalizeTerminalBrowserPersistedState(
+function normalizeTerminalBrowserPersistedProfileState(
   value: unknown,
-): TerminalBrowserPersistedState {
+  version: unknown,
+): TerminalBrowserPersistedProfileState {
   if (!value || typeof value !== "object") {
-    return createEmptyTerminalBrowserPersistedState();
+    return createEmptyTerminalBrowserPersistedProfileState();
   }
   const candidate = value as Record<string, unknown>;
   const tabs = normalizeFlatTabs(candidate.tabs);
   const groups =
-    candidate.version === 2
-      ? (normalizeV2Groups(candidate.groups, tabs) ?? buildGroupsFromFlatTabs(tabs))
+    version === 2 || version === 3
+      ? (normalizeV2Groups(candidate.groups, tabs) ??
+        buildGroupsFromFlatTabs(tabs))
       : buildGroupsFromFlatTabs(tabs);
   const activeTabId =
     typeof candidate.activeTabId === "string" &&
     tabs.some((tab) => tab.id === candidate.activeTabId)
       ? candidate.activeTabId
       : (tabs[0]?.id ?? null);
-  return { version: 2, activeTabId, groups, tabs };
+  return { activeTabId, groups, tabs };
+}
+
+export function normalizeTerminalBrowserPersistedState(
+  value: unknown,
+): TerminalBrowserPersistedState {
+  const empty = createEmptyTerminalBrowserPersistedState();
+  if (!value || typeof value !== "object") {
+    return empty;
+  }
+  const candidate = value as Record<string, unknown>;
+  if (
+    candidate.version === 3 &&
+    candidate.profiles &&
+    typeof candidate.profiles === "object" &&
+    !Array.isArray(candidate.profiles)
+  ) {
+    const rawProfiles = candidate.profiles as Record<string, unknown>;
+    for (const profileId of TERMINAL_BROWSER_PROFILE_IDS) {
+      empty.profiles[profileId] = normalizeTerminalBrowserPersistedProfileState(
+        rawProfiles[profileId],
+        3,
+      );
+    }
+    return empty;
+  }
+
+  // v1/v2 used a single Browser Session. Preserve that state in Profile 1;
+  // the other two profiles intentionally start empty.
+  empty.profiles["profile-1"] = normalizeTerminalBrowserPersistedProfileState(
+    candidate,
+    candidate.version,
+  );
+  return empty;
 }

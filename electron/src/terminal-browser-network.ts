@@ -4,61 +4,25 @@ import {
   type TerminalBrowserHeaderState,
 } from "@runweave/shared/terminal-browser-headers";
 import {
-  buildTerminalBrowserProxyRules,
-  isValidTerminalBrowserProxyPort,
-  TERMINAL_BROWSER_PROXY_DEFAULT_PORT,
-  type TerminalBrowserProxyState,
-} from "@runweave/shared/terminal-browser-proxy";
+  getTerminalBrowserProfileConfig,
+  type TerminalBrowserProfileId,
+} from "@runweave/shared/terminal-browser-profile";
+import { TERMINAL_BROWSER_PROXY_BYPASS_RULES } from "@runweave/shared/terminal-browser-proxy";
 import {
   getTerminalBrowserSession,
   terminalBrowserRuntime,
 } from "./terminal-browser-runtime.js";
-import {
-  readTerminalBrowserProxyPreferences,
-  writeTerminalBrowserProxyPreferences,
-} from "./terminal-browser-proxy-preferences.js";
 
-const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>";
+const headerRulesByProfile = new Map<
+  TerminalBrowserProfileId,
+  TerminalBrowserHeaderRule[]
+>();
+const registeredHeaderSessions = new WeakSet<Electron.Session>();
 
-let terminalBrowserProxyEnabled = false;
-let terminalBrowserProxyPort = TERMINAL_BROWSER_PROXY_DEFAULT_PORT;
-let terminalBrowserHeaderRules: TerminalBrowserHeaderRule[] = [];
-let terminalBrowserHeaderDispatcherRegistered = false;
-
-// Load persisted proxy preferences into module state. When the proxy was left
-// enabled, re-apply it to the browser session so the restored toggle actually
-// routes traffic; otherwise the port is simply restored for the next enable.
-export function loadTerminalBrowserProxyPreferences(): void {
-  const preferences = readTerminalBrowserProxyPreferences();
-  terminalBrowserProxyEnabled = preferences.enabled;
-  terminalBrowserProxyPort = preferences.port;
-  if (terminalBrowserProxyEnabled) {
-    void applyTerminalBrowserSessionProxy().catch(() => {
-      // Session proxy application is retried on the next explicit toggle.
-    });
-  }
-}
-
-function persistTerminalBrowserProxyPreferences(): void {
-  writeTerminalBrowserProxyPreferences({
-    enabled: terminalBrowserProxyEnabled,
-    port: terminalBrowserProxyPort,
-  });
-}
-
-export function getTerminalBrowserProxyState(): TerminalBrowserProxyState {
-  return {
-    enabled: terminalBrowserProxyEnabled,
-    port: terminalBrowserProxyPort,
-    proxyRules: buildTerminalBrowserProxyRules(terminalBrowserProxyPort),
-    proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
-  };
-}
-
-export function getTerminalBrowserHeaderState(): TerminalBrowserHeaderState {
-  return {
-    rules: terminalBrowserHeaderRules,
-  };
+export function getTerminalBrowserHeaderState(
+  profileId: TerminalBrowserProfileId,
+): TerminalBrowserHeaderState {
+  return { rules: headerRulesByProfile.get(profileId) ?? [] };
 }
 
 export function wildcardUrlPatternMatches(
@@ -87,12 +51,14 @@ export function setRequestHeader(
   requestHeaders[name] = value;
 }
 
-export function ensureTerminalBrowserHeaderDispatcher(): void {
-  if (terminalBrowserHeaderDispatcherRegistered) {
+export function ensureTerminalBrowserHeaderDispatcher(
+  profileId: TerminalBrowserProfileId,
+): void {
+  const browserSession = getTerminalBrowserSession(profileId);
+  if (registeredHeaderSessions.has(browserSession)) {
     return;
   }
-
-  getTerminalBrowserSession().webRequest.onBeforeSendHeaders(
+  browserSession.webRequest.onBeforeSendHeaders(
     { urls: ["<all_urls>"] },
     (details, callback) => {
       let parsedUrl: URL;
@@ -102,14 +68,12 @@ export function ensureTerminalBrowserHeaderDispatcher(): void {
         callback({});
         return;
       }
-
       if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
         callback({});
         return;
       }
-
       let requestHeaders: Record<string, string> | null = null;
-      for (const rule of terminalBrowserHeaderRules) {
+      for (const rule of headerRulesByProfile.get(profileId) ?? []) {
         if (
           !rule.enabled ||
           !wildcardUrlPatternMatches(rule.urlPattern, parsedUrl.toString())
@@ -119,71 +83,51 @@ export function ensureTerminalBrowserHeaderDispatcher(): void {
         requestHeaders ??= { ...details.requestHeaders };
         setRequestHeader(requestHeaders, rule.name, rule.value);
       }
-
       callback(requestHeaders ? { requestHeaders } : {});
     },
   );
-  terminalBrowserHeaderDispatcherRegistered = true;
+  registeredHeaderSessions.add(browserSession);
 }
 
 export function setTerminalBrowserHeaderRules(
+  profileId: TerminalBrowserProfileId,
   rules: unknown,
 ): TerminalBrowserHeaderState {
-  terminalBrowserHeaderRules = normalizeTerminalBrowserHeaderRules(rules);
-  ensureTerminalBrowserHeaderDispatcher();
-  return getTerminalBrowserHeaderState();
+  const normalized = normalizeTerminalBrowserHeaderRules(rules);
+  headerRulesByProfile.set(profileId, normalized);
+  ensureTerminalBrowserHeaderDispatcher(profileId);
+  return getTerminalBrowserHeaderState(profileId);
 }
 
-export function reloadTerminalBrowserTabsForProxyChange(): void {
+export async function applyTerminalBrowserProfileProxy(
+  profileId: TerminalBrowserProfileId,
+): Promise<void> {
+  const config = getTerminalBrowserProfileConfig(profileId);
+  await getTerminalBrowserSession(profileId).setProxy({
+    mode: "fixed_servers",
+    proxyRules: `127.0.0.1:${config.whistlePort}`,
+    proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
+  });
+}
+
+export function reloadTerminalBrowserBusinessOrigin(
+  profileId: TerminalBrowserProfileId,
+  businessOrigin: string | null,
+): void {
+  if (!businessOrigin) {
+    return;
+  }
   for (const entry of terminalBrowserRuntime.entries.values()) {
-    const webContents = entry.view.webContents;
-    if (webContents.isDestroyed()) {
+    if (entry.profileId !== profileId || entry.view.webContents.isDestroyed()) {
       continue;
     }
-    const url = webContents.getURL();
-    if (!url || url === "about:blank") {
+    try {
+      const url = entry.view.webContents.getURL() || entry.lastKnownUrl;
+      if (new URL(url).origin === businessOrigin) {
+        entry.view.webContents.reloadIgnoringCache();
+      }
+    } catch {
       continue;
     }
-    webContents.reload();
   }
-}
-
-async function applyTerminalBrowserSessionProxy(): Promise<void> {
-  const browserSession = getTerminalBrowserSession();
-  if (terminalBrowserProxyEnabled) {
-    await browserSession.setProxy({
-      mode: "fixed_servers",
-      proxyRules: buildTerminalBrowserProxyRules(terminalBrowserProxyPort),
-      proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
-    });
-  } else {
-    await browserSession.setProxy({ mode: "direct" });
-  }
-  await browserSession.closeAllConnections();
-  reloadTerminalBrowserTabsForProxyChange();
-}
-
-export async function setTerminalBrowserProxyEnabled(
-  enabled: boolean,
-): Promise<TerminalBrowserProxyState> {
-  terminalBrowserProxyEnabled = enabled;
-  await applyTerminalBrowserSessionProxy();
-  persistTerminalBrowserProxyPreferences();
-  return getTerminalBrowserProxyState();
-}
-
-export async function setTerminalBrowserProxyPort(
-  port: number,
-): Promise<TerminalBrowserProxyState> {
-  if (!isValidTerminalBrowserProxyPort(port)) {
-    throw new Error("Invalid browser proxy port");
-  }
-  terminalBrowserProxyPort = port;
-  // Only re-apply the session proxy when the proxy is active; when disabled the
-  // new port is just persisted and takes effect on the next enable.
-  if (terminalBrowserProxyEnabled) {
-    await applyTerminalBrowserSessionProxy();
-  }
-  persistTerminalBrowserProxyPreferences();
-  return getTerminalBrowserProxyState();
 }

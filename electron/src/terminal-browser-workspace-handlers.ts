@@ -1,8 +1,10 @@
 import { BrowserWindow, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
 import type { TerminalBrowserCreateTabRequest } from "@runweave/shared/terminal-browser-workspace";
+import { isTerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 import {
   getTerminalBrowserKey,
+  getTerminalBrowserWorkspaceKey,
   terminalBrowserRuntime,
 } from "./terminal-browser-runtime.js";
 import { restoreTerminalBrowserTabsForWindow } from "./terminal-browser-restore.js";
@@ -19,34 +21,44 @@ import { sendTerminalBrowserTabUpdate } from "./terminal-browser-view-updates.js
 import {
   getTerminalBrowserGroup,
   getTerminalBrowserWorkspaceSnapshot,
+  ensureTerminalBrowserDormantFallback,
   renameTerminalBrowserGroup,
   reorderTerminalBrowserGroupTabs,
   sendTerminalBrowserWorkspaceChanged,
 } from "./terminal-browser-workspace.js";
 
 export function registerTerminalBrowserWorkspaceHandlers(): void {
-  ipcMain.handle("terminal-browser:get-workspace", async (event) => {
+  ipcMain.handle("terminal-browser:get-workspace", async (event, profileId) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) {
+    if (!win || !isTerminalBrowserProfileId(profileId)) {
       throw new Error("Terminal browser window is unavailable");
     }
     await restoreTerminalBrowserTabsForWindow(win);
-    ensureTerminalBrowserFallback(win, { emitWorkspace: false });
-    return getTerminalBrowserWorkspaceSnapshot(win.id);
+    ensureTerminalBrowserDormantFallback(win.id, profileId);
+    return getTerminalBrowserWorkspaceSnapshot(win.id, profileId);
   });
 
   ipcMain.handle(
     "terminal-browser:create-tab",
     (event, request: TerminalBrowserCreateTabRequest): void => {
       const win = BrowserWindow.fromWebContents(event.sender);
-      if (!win || !request || typeof request !== "object") {
+      if (
+        !win ||
+        !request ||
+        typeof request !== "object" ||
+        !isTerminalBrowserProfileId(request.profileId)
+      ) {
         throw new Error("Invalid terminal browser tab request");
       }
       const tabId = `browser-tab-${randomUUID().slice(0, 8)}`;
       let browserGroupId: string | undefined;
       let openerTabId: string | undefined;
       if (request.placement === "current-group") {
-        const group = getTerminalBrowserGroup(win.id, request.groupId);
+        const group = getTerminalBrowserGroup(
+          win.id,
+          request.profileId,
+          request.groupId,
+        );
         if (
           !group ||
           typeof request.openerTabId !== "string" ||
@@ -67,10 +79,15 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
       if (!safeUrl) {
         throw new Error("Invalid terminal browser URL");
       }
-      const view = getOrCreateTerminalBrowserView(win, tabId, {
-        browserGroupId,
-        openerTabId,
-      });
+      const view = getOrCreateTerminalBrowserView(
+        win,
+        request.profileId,
+        tabId,
+        {
+          browserGroupId,
+          openerTabId,
+        },
+      );
       const entry = getExistingTerminalBrowserEntry(win, tabId, "create");
       attachTerminalBrowser(win, tabId, view);
       entry.lastKnownUrl = safeUrl;
@@ -84,25 +101,33 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
 
   ipcMain.handle(
     "terminal-browser:rename-group",
-    (event, groupId: unknown, name: unknown): void => {
+    (event, profileId: unknown, groupId: unknown, name: unknown): void => {
       const win = BrowserWindow.fromWebContents(event.sender);
-      if (!win || typeof groupId !== "string") {
+      if (
+        !win ||
+        !isTerminalBrowserProfileId(profileId) ||
+        typeof groupId !== "string"
+      ) {
         throw new Error("Invalid terminal browser group rename request");
       }
-      renameTerminalBrowserGroup(win.id, groupId, name);
-      sendTerminalBrowserWorkspaceChanged(win);
+      renameTerminalBrowserGroup(win.id, profileId, groupId, name);
+      sendTerminalBrowserWorkspaceChanged(win, profileId);
       scheduleTerminalBrowserTabsSave();
     },
   );
 
   ipcMain.handle(
     "terminal-browser:close-group",
-    (event, groupId: unknown): void => {
+    (event, profileId: unknown, groupId: unknown): void => {
       const win = BrowserWindow.fromWebContents(event.sender);
-      if (!win || typeof groupId !== "string") {
+      if (
+        !win ||
+        !isTerminalBrowserProfileId(profileId) ||
+        typeof groupId !== "string"
+      ) {
         throw new Error("Invalid terminal browser group close request");
       }
-      const group = getTerminalBrowserGroup(win.id, groupId);
+      const group = getTerminalBrowserGroup(win.id, profileId, groupId);
       if (!group) {
         return;
       }
@@ -114,39 +139,54 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
           selectFallback: false,
         });
       }
-      const fallbackTabId = ensureTerminalBrowserFallback(win, {
+      const fallbackTabId = ensureTerminalBrowserFallback(win, profileId, {
         emitWorkspace: false,
       });
-      const fallbackEntry = terminalBrowserRuntime.entries.get(
-        getTerminalBrowserKey(win, fallbackTabId),
-      );
+      const fallbackEntry = fallbackTabId
+        ? terminalBrowserRuntime.entries.get(
+            getTerminalBrowserKey(win, profileId, fallbackTabId),
+          )
+        : null;
       if (
         fallbackEntry &&
-        !terminalBrowserRuntime.attachedByWindowId.get(win.id)
+        !terminalBrowserRuntime.attachedByWorkspaceKey.get(
+          getTerminalBrowserWorkspaceKey(win.id, profileId),
+        )
       ) {
-        attachTerminalBrowser(win, fallbackTabId, fallbackEntry.view, {
+        attachTerminalBrowser(win, fallbackTabId!, fallbackEntry.view, {
           emitWorkspace: false,
           persist: false,
         });
       }
-      sendTerminalBrowserWorkspaceChanged(win);
+      sendTerminalBrowserWorkspaceChanged(win, profileId);
       scheduleTerminalBrowserTabsSave();
     },
   );
 
   ipcMain.handle(
     "terminal-browser:reorder-group-tabs",
-    (event, groupId: unknown, orderedTabIds: unknown): void => {
+    (
+      event,
+      profileId: unknown,
+      groupId: unknown,
+      orderedTabIds: unknown,
+    ): void => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (
         !win ||
+        !isTerminalBrowserProfileId(profileId) ||
         typeof groupId !== "string" ||
         !Array.isArray(orderedTabIds)
       ) {
         throw new Error("Invalid terminal browser group tab order");
       }
-      reorderTerminalBrowserGroupTabs(win.id, groupId, orderedTabIds);
-      sendTerminalBrowserWorkspaceChanged(win);
+      reorderTerminalBrowserGroupTabs(
+        win.id,
+        profileId,
+        groupId,
+        orderedTabIds,
+      );
+      sendTerminalBrowserWorkspaceChanged(win, profileId);
       scheduleTerminalBrowserTabsSave();
     },
   );

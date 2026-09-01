@@ -1,12 +1,18 @@
 import { BrowserWindow } from "electron";
+import { randomUUID } from "node:crypto";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 import type {
   TerminalBrowserGroupNameOrigin,
   TerminalBrowserStateChangedEvent,
   TerminalBrowserWorkspaceSnapshot,
 } from "@runweave/shared/terminal-browser-workspace";
 import { getTerminalBrowserDeviceState } from "./terminal-browser-device-emulation.js";
+import { createTerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import { DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE } from "@runweave/shared/terminal-browser-display-scale";
 import {
+  createTerminalBrowserGroupId,
   getTerminalBrowserKey,
+  getTerminalBrowserWorkspaceKey,
   terminalBrowserRuntime,
   type TerminalBrowserGroupRecord,
   type TerminalBrowserWindowWorkspace,
@@ -17,20 +23,25 @@ export const TERMINAL_BROWSER_MAX_GROUP_NAME_LENGTH = 40;
 
 function getOrCreateWindowWorkspace(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
 ): TerminalBrowserWindowWorkspace {
-  const existing = terminalBrowserRuntime.workspaceByWindowId.get(windowId);
+  const key = getTerminalBrowserWorkspaceKey(windowId, profileId);
+  const existing = terminalBrowserRuntime.workspaceByKey.get(key);
   if (existing) {
     return existing;
   }
   const workspace: TerminalBrowserWindowWorkspace = {
+    profileId,
     revision: 0,
     groups: [],
   };
-  terminalBrowserRuntime.workspaceByWindowId.set(windowId, workspace);
+  terminalBrowserRuntime.workspaceByKey.set(key, workspace);
   return workspace;
 }
 
-export function normalizeTerminalBrowserGroupName(name: unknown): string | null {
+export function normalizeTerminalBrowserGroupName(
+  name: unknown,
+): string | null {
   if (typeof name !== "string") {
     return null;
   }
@@ -58,16 +69,15 @@ export function deriveTerminalBrowserAutomaticGroupName(
       return false;
     }
     try {
-      return new URL(normalizedTitle).toString() === new URL(normalizedUrl).toString();
+      return (
+        new URL(normalizedTitle).toString() ===
+        new URL(normalizedUrl).toString()
+      );
     } catch {
       return normalizedTitle === normalizedUrl;
     }
   })();
-  if (
-    normalizedTitle &&
-    normalizedTitle !== "about:blank" &&
-    !titleIsUrl
-  ) {
+  if (normalizedTitle && normalizedTitle !== "about:blank" && !titleIsUrl) {
     return truncateGroupName(normalizedTitle);
   }
   if (!normalizedUrl) {
@@ -83,16 +93,18 @@ export function deriveTerminalBrowserAutomaticGroupName(
 
 export function getTerminalBrowserGroups(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
 ): TerminalBrowserGroupRecord[] {
-  return getOrCreateWindowWorkspace(windowId).groups;
+  return getOrCreateWindowWorkspace(windowId, profileId).groups;
 }
 
 export function getTerminalBrowserGroup(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
   groupId: string,
 ): TerminalBrowserGroupRecord | null {
   return (
-    getOrCreateWindowWorkspace(windowId).groups.find(
+    getOrCreateWindowWorkspace(windowId, profileId).groups.find(
       (group) => group.id === groupId,
     ) ?? null
   );
@@ -100,11 +112,12 @@ export function getTerminalBrowserGroup(
 
 export function setTerminalBrowserGroupMetadata(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
   groupId: string,
   name: string,
   nameOrigin: TerminalBrowserGroupNameOrigin,
 ): void {
-  const group = getTerminalBrowserGroup(windowId, groupId);
+  const group = getTerminalBrowserGroup(windowId, profileId, groupId);
   const normalizedName = normalizeTerminalBrowserGroupName(name);
   if (!group || !normalizedName) {
     throw new Error("Invalid terminal browser group metadata");
@@ -115,15 +128,18 @@ export function setTerminalBrowserGroupMetadata(
 
 export function registerTerminalBrowserTab(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
   tabId: string,
   browserGroupId: string,
   openerTabId?: string,
 ): void {
-  const workspace = getOrCreateWindowWorkspace(windowId);
+  const workspace = getOrCreateWindowWorkspace(windowId, profileId);
   for (const group of workspace.groups) {
     group.tabIds = group.tabIds.filter((memberId) => memberId !== tabId);
   }
-  let group = workspace.groups.find((candidate) => candidate.id === browserGroupId);
+  let group = workspace.groups.find(
+    (candidate) => candidate.id === browserGroupId,
+  );
   if (!group) {
     group = {
       id: browserGroupId,
@@ -139,15 +155,58 @@ export function registerTerminalBrowserTab(
   } else {
     group.tabIds.push(tabId);
   }
-  workspace.groups = workspace.groups.filter((candidate) => candidate.tabIds.length > 0);
-  assertTerminalBrowserWorkspaceIntegrity(windowId);
+  workspace.groups = workspace.groups.filter(
+    (candidate) => candidate.tabIds.length > 0,
+  );
+  assertTerminalBrowserWorkspaceIntegrity(windowId, profileId);
+}
+
+/**
+ * Ensure an empty workspace has a selectable tab without allocating a
+ * WebContents. Cold restore must stay metadata-only until the Profile route is
+ * resolved, otherwise a persisted business URL can navigate outside Whistle.
+ */
+export function ensureTerminalBrowserDormantFallback(
+  windowId: number,
+  profileId: TerminalBrowserProfileId,
+): string {
+  const existingTabId = getOrderedTerminalBrowserTabIds(windowId, profileId)[0];
+  if (existingTabId) {
+    return existingTabId;
+  }
+  const tabId = `browser-tab-${randomUUID().slice(0, 8)}`;
+  const browserGroupId = createTerminalBrowserGroupId();
+  terminalBrowserRuntime.dormantTabs.set(
+    getTerminalBrowserKey(windowId, profileId, tabId),
+    {
+      windowId,
+      profileId,
+      tabId,
+      browserGroupId,
+      url: "about:blank",
+      title: "",
+      lastActiveAt: Date.now(),
+    },
+  );
+  registerTerminalBrowserTab(
+    windowId,
+    profileId,
+    tabId,
+    browserGroupId,
+  );
+  terminalBrowserRuntime.attachedByWorkspaceKey.set(
+    getTerminalBrowserWorkspaceKey(windowId, profileId),
+    tabId,
+  );
+  return tabId;
 }
 
 export function removeTerminalBrowserTabFromWorkspace(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
   tabId: string,
 ): void {
-  const workspace = getOrCreateWindowWorkspace(windowId);
+  const workspace = getOrCreateWindowWorkspace(windowId, profileId);
   workspace.groups = workspace.groups
     .map((group) => ({
       ...group,
@@ -158,10 +217,11 @@ export function removeTerminalBrowserTabFromWorkspace(
 
 export function reorderTerminalBrowserGroupTabs(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
   groupId: string,
   orderedTabIds: string[],
 ): void {
-  const group = getTerminalBrowserGroup(windowId, groupId);
+  const group = getTerminalBrowserGroup(windowId, profileId, groupId);
   if (!group) {
     throw new Error("Unknown terminal browser group");
   }
@@ -179,15 +239,16 @@ export function reorderTerminalBrowserGroupTabs(
     throw new Error("Invalid terminal browser group tab order");
   }
   group.tabIds = [...candidateIds];
-  assertTerminalBrowserWorkspaceIntegrity(windowId);
+  assertTerminalBrowserWorkspaceIntegrity(windowId, profileId);
 }
 
 export function renameTerminalBrowserGroup(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
   groupId: string,
   name: unknown,
 ): void {
-  const group = getTerminalBrowserGroup(windowId, groupId);
+  const group = getTerminalBrowserGroup(windowId, profileId, groupId);
   const normalizedName = normalizeTerminalBrowserGroupName(name);
   if (!group || !normalizedName) {
     throw new Error("Invalid terminal browser group name");
@@ -198,11 +259,12 @@ export function renameTerminalBrowserGroup(
 
 export function maybeAutomaticallyNameTerminalBrowserGroup(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
   groupId: string,
   title: string,
   url: string,
 ): boolean {
-  const group = getTerminalBrowserGroup(windowId, groupId);
+  const group = getTerminalBrowserGroup(windowId, profileId, groupId);
   if (!group || group.nameOrigin !== "placeholder") {
     return false;
   }
@@ -215,48 +277,83 @@ export function maybeAutomaticallyNameTerminalBrowserGroup(
   return true;
 }
 
-export function getOrderedTerminalBrowserTabIds(windowId: number): string[] {
-  return getOrCreateWindowWorkspace(windowId).groups.flatMap(
+export function getOrderedTerminalBrowserTabIds(
+  windowId: number,
+  profileId: TerminalBrowserProfileId,
+): string[] {
+  return getOrCreateWindowWorkspace(windowId, profileId).groups.flatMap(
     (group) => group.tabIds,
   );
 }
 
 export function getTerminalBrowserWorkspaceSnapshot(
   windowId: number,
+  profileId: TerminalBrowserProfileId,
 ): TerminalBrowserWorkspaceSnapshot {
-  const workspace = getOrCreateWindowWorkspace(windowId);
-  const activeTabId = terminalBrowserRuntime.attachedByWindowId.get(windowId) ?? "";
-  const tabs = getOrderedTerminalBrowserTabIds(windowId).flatMap((tabId) => {
-    const entry = terminalBrowserRuntime.entries.get(
-      getTerminalBrowserKey(windowId, tabId),
-    );
-    const webContents = entry?.view.webContents;
-    if (!entry || !webContents || webContents.isDestroyed()) {
-      return [];
-    }
-    const history = webContents.navigationHistory;
-    const url = webContents.getURL() || entry.lastKnownUrl;
-    return [
-      {
-        tabId,
-        browserGroupId: entry.browserGroupId,
-        url,
-        title: webContents.getTitle(),
-        canGoBack: history.canGoBack(),
-        canGoForward: history.canGoForward(),
-        loading: webContents.isLoading(),
-        active: activeTabId === tabId,
-        cdpProxyAttached: entry.cdpProxyAttached,
-        mcpActivityUntil: entry.mcpActivityUntil,
-        devtoolsOpen: entry.devtoolsOpen,
-        deviceState: getTerminalBrowserDeviceState(entry),
-        displayScale: entry.displayScale,
-        faviconDataUrl: entry.faviconDataUrl,
-        navigationError: entry.navigationError,
-      },
-    ];
-  });
+  const workspace = getOrCreateWindowWorkspace(windowId, profileId);
+  const workspaceKey = getTerminalBrowserWorkspaceKey(windowId, profileId);
+  const activeTabId =
+    terminalBrowserRuntime.attachedByWorkspaceKey.get(workspaceKey) ?? "";
+  const tabs = getOrderedTerminalBrowserTabIds(windowId, profileId).flatMap(
+    (tabId) => {
+      const entry = terminalBrowserRuntime.entries.get(
+        getTerminalBrowserKey(windowId, profileId, tabId),
+      );
+      const webContents = entry?.view.webContents;
+      if (!entry || !webContents || webContents.isDestroyed()) {
+        const dormant = terminalBrowserRuntime.dormantTabs.get(
+          getTerminalBrowserKey(windowId, profileId, tabId),
+        );
+        if (!dormant) {
+          return [];
+        }
+        return [
+          {
+            profileId,
+            tabId,
+            browserGroupId: dormant.browserGroupId,
+            url: dormant.url,
+            title: dormant.title,
+            canGoBack: false,
+            canGoForward: false,
+            loading: false,
+            active: activeTabId === tabId,
+            cdpProxyAttached: false,
+            mcpActivityUntil: null,
+            devtoolsOpen: false,
+            deviceState: createTerminalBrowserDeviceState("desktop"),
+            displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
+            faviconDataUrl: null,
+            navigationError: null,
+          },
+        ];
+      }
+      const history = webContents.navigationHistory;
+      const url = webContents.getURL() || entry.lastKnownUrl;
+      return [
+        {
+          profileId,
+          tabId,
+          browserGroupId: entry.browserGroupId,
+          url,
+          title: webContents.getTitle(),
+          canGoBack: history.canGoBack(),
+          canGoForward: history.canGoForward(),
+          loading: webContents.isLoading(),
+          active: activeTabId === tabId,
+          cdpProxyAttached: entry.cdpProxyAttached,
+          mcpActivityUntil: entry.mcpActivityUntil,
+          devtoolsOpen: entry.devtoolsOpen,
+          deviceState: getTerminalBrowserDeviceState(entry),
+          displayScale: entry.displayScale,
+          faviconDataUrl: entry.faviconDataUrl,
+          navigationError: entry.navigationError,
+        },
+      ];
+    },
+  );
   return {
+    profileId,
     revision: workspace.revision,
     activeTabId:
       activeTabId && tabs.some((tab) => tab.tabId === activeTabId)
@@ -272,18 +369,24 @@ export function getTerminalBrowserWorkspaceSnapshot(
   };
 }
 
-export function nextTerminalBrowserRevision(windowId: number): number {
-  const workspace = getOrCreateWindowWorkspace(windowId);
+export function nextTerminalBrowserRevision(
+  windowId: number,
+  profileId: TerminalBrowserProfileId,
+): number {
+  const workspace = getOrCreateWindowWorkspace(windowId, profileId);
   workspace.revision += 1;
   return workspace.revision;
 }
 
-export function sendTerminalBrowserWorkspaceChanged(win: BrowserWindow): void {
+export function sendTerminalBrowserWorkspaceChanged(
+  win: BrowserWindow,
+  profileId: TerminalBrowserProfileId,
+): void {
   if (win.isDestroyed() || win.webContents.isDestroyed()) {
     return;
   }
-  const revision = nextTerminalBrowserRevision(win.id);
-  const workspace = getTerminalBrowserWorkspaceSnapshot(win.id);
+  const revision = nextTerminalBrowserRevision(win.id, profileId);
+  const workspace = getTerminalBrowserWorkspaceSnapshot(win.id, profileId);
   const event: TerminalBrowserStateChangedEvent = {
     kind: "workspace",
     revision,
@@ -292,12 +395,20 @@ export function sendTerminalBrowserWorkspaceChanged(win: BrowserWindow): void {
   win.webContents.send("terminal-browser:state-changed", event);
 }
 
-export function clearTerminalBrowserWorkspace(windowId: number): void {
-  terminalBrowserRuntime.workspaceByWindowId.delete(windowId);
+export function clearTerminalBrowserWorkspaces(windowId: number): void {
+  for (const key of terminalBrowserRuntime.workspaceByKey.keys()) {
+    if (key.startsWith(`${windowId}:`)) {
+      terminalBrowserRuntime.workspaceByKey.delete(key);
+      terminalBrowserRuntime.attachedByWorkspaceKey.delete(key);
+    }
+  }
 }
 
-export function assertTerminalBrowserWorkspaceIntegrity(windowId: number): void {
-  const workspace = getOrCreateWindowWorkspace(windowId);
+export function assertTerminalBrowserWorkspaceIntegrity(
+  windowId: number,
+  profileId: TerminalBrowserProfileId,
+): void {
+  const workspace = getOrCreateWindowWorkspace(windowId, profileId);
   const groupIds = new Set<string>();
   const tabIds = new Set<string>();
   for (const group of workspace.groups) {
@@ -310,21 +421,40 @@ export function assertTerminalBrowserWorkspaceIntegrity(windowId: number): void 
         throw new Error("Duplicate terminal browser workspace tab");
       }
       const entry = terminalBrowserRuntime.entries.get(
-        getTerminalBrowserKey(windowId, tabId),
+        getTerminalBrowserKey(windowId, profileId, tabId),
       );
-      if (!entry || entry.browserGroupId !== group.id) {
+      const dormant = terminalBrowserRuntime.dormantTabs.get(
+        getTerminalBrowserKey(windowId, profileId, tabId),
+      );
+      if (
+        (!entry || entry.browserGroupId !== group.id) &&
+        (!dormant || dormant.browserGroupId !== group.id)
+      ) {
         throw new Error("Terminal browser workspace membership mismatch");
       }
       tabIds.add(tabId);
     }
   }
   for (const [key, entry] of terminalBrowserRuntime.entries) {
-    if (entry.windowId !== windowId || entry.view.webContents.isDestroyed()) {
+    if (
+      entry.windowId !== windowId ||
+      entry.profileId !== profileId ||
+      entry.view.webContents.isDestroyed()
+    ) {
       continue;
     }
-    const tabId = key.slice(`${windowId}:`.length);
+    const tabId = key.slice(`${windowId}:${profileId}:`.length);
     if (!tabIds.has(tabId)) {
       throw new Error("Live terminal browser tab missing from workspace");
+    }
+  }
+  for (const [key, dormant] of terminalBrowserRuntime.dormantTabs) {
+    if (dormant.windowId !== windowId || dormant.profileId !== profileId) {
+      continue;
+    }
+    const tabId = key.slice(`${windowId}:${profileId}:`.length);
+    if (!tabIds.has(tabId)) {
+      throw new Error("Dormant terminal browser tab missing from workspace");
     }
   }
 }

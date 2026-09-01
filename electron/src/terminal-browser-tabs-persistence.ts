@@ -1,5 +1,5 @@
 import { app } from "electron";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   normalizeTerminalBrowserPersistedState,
@@ -41,9 +41,12 @@ async function backupUnreadableTerminalBrowserTabsStore(
   const backupPath = `${storePath}.bad-${Date.now()}`;
   try {
     await copyFile(storePath, backupPath);
-    console.warn("[electron] backed up unreadable terminal browser tabs state", {
-      backupPath,
-    });
+    console.warn(
+      "[electron] backed up unreadable terminal browser tabs state",
+      {
+        backupPath,
+      },
+    );
   } catch (error) {
     console.warn("[electron] failed to back up terminal browser tabs state", {
       path: storePath,
@@ -56,6 +59,8 @@ export async function writeTerminalBrowserPersistedState(
   state: TerminalBrowserPersistedState,
 ): Promise<void> {
   const storePath = getTerminalBrowserTabsStorePath();
+  const temporaryPath = `${storePath}.tmp-${process.pid}`;
   await mkdir(path.dirname(storePath), { recursive: true });
-  await writeFile(storePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  await writeFile(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, storePath);
 }

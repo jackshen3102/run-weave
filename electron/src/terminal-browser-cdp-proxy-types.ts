@@ -1,5 +1,6 @@
 import type { WebSocket } from "ws";
 import type { CdpSessionManager } from "./terminal-browser-cdp-proxy-session.js";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 
 export interface CdpProxyOptions {
   host: string;
@@ -22,6 +23,7 @@ export interface CdpProxyRuntime {
 export interface CdpProxyConnectionState {
   ws: WebSocket;
   sessionManager: CdpSessionManager;
+  scopedProfileId: TerminalBrowserProfileId;
   scopedGroupId: string | null;
   browserSessionIds: Set<string>;
   discoveryEnabled: boolean;

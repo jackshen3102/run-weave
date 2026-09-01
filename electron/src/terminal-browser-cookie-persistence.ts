@@ -1,9 +1,11 @@
 const TERMINAL_BROWSER_COOKIE_RETENTION_SECONDS = 10 * 365 * 24 * 60 * 60;
 
-let terminalBrowserCookiePersistenceRegistered = false;
+const registeredSessions = new WeakSet<Electron.Session>();
 
 function getTerminalBrowserCookieExpirationDate(): number {
-  return Math.floor(Date.now() / 1000) + TERMINAL_BROWSER_COOKIE_RETENTION_SECONDS;
+  return (
+    Math.floor(Date.now() / 1000) + TERMINAL_BROWSER_COOKIE_RETENTION_SECONDS
+  );
 }
 
 function buildTerminalBrowserCookieUrl(cookie: Electron.Cookie): string | null {
@@ -23,7 +25,7 @@ function buildTerminalBrowserCookieUrl(cookie: Electron.Cookie): string | null {
 export function ensureTerminalBrowserCookiePersistence(
   browserSession: Electron.Session,
 ): void {
-  if (terminalBrowserCookiePersistenceRegistered) {
+  if (registeredSessions.has(browserSession)) {
     return;
   }
 
@@ -51,12 +53,15 @@ export function ensureTerminalBrowserCookiePersistence(
       })
       .then(() => browserSession.cookies.flushStore())
       .catch((error) => {
-        console.warn("[electron] failed to persist terminal browser session cookie", {
-          domain: cookie.domain,
-          name: cookie.name,
-          error: error instanceof Error ? error.message : String(error),
-        });
+        console.warn(
+          "[electron] failed to persist terminal browser session cookie",
+          {
+            domain: cookie.domain,
+            name: cookie.name,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
       });
   });
-  terminalBrowserCookiePersistenceRegistered = true;
+  registeredSessions.add(browserSession);
 }

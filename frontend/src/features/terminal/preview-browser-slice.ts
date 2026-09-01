@@ -106,7 +106,9 @@ function hasBrowserTabChanges(
   tab: TerminalBrowserTabState,
   updates: Partial<TerminalBrowserTabState>,
 ): boolean {
-  for (const key of Object.keys(updates) as Array<keyof TerminalBrowserTabState>) {
+  for (const key of Object.keys(updates) as Array<
+    keyof TerminalBrowserTabState
+  >) {
     if (key === "deviceState") {
       const nextDeviceState = updates.deviceState;
       if (
@@ -124,11 +126,10 @@ function hasBrowserTabChanges(
   return false;
 }
 
-const initialGroup = createLocalBrowserGroup();
-const initialTab = createBrowserTabState(initialGroup.id);
-initialGroup.tabIds.push(initialTab.id);
-
 export function createInitialTerminalBrowserState(): TerminalPreviewStore["browser"] {
+  const initialGroup = createLocalBrowserGroup();
+  const initialTab = createBrowserTabState(initialGroup.id);
+  initialGroup.tabIds.push(initialTab.id);
   return {
     revision: -1,
     groups: [initialGroup],
@@ -159,7 +160,11 @@ export function createTerminalPreviewBrowserActions(
           candidate.id === group.id
             ? {
                 ...candidate,
-                tabIds: insertAfter(candidate.tabIds, activeMemberIndex, nextTab.id),
+                tabIds: insertAfter(
+                  candidate.tabIds,
+                  activeMemberIndex,
+                  nextTab.id,
+                ),
               }
             : candidate,
         );
@@ -230,7 +235,9 @@ export function createTerminalPreviewBrowserActions(
     },
     reorderBrowserGroupTabs: (groupId, fromIndex, toIndex) => {
       set((state) => {
-        const group = state.browser.groups.find((candidate) => candidate.id === groupId);
+        const group = state.browser.groups.find(
+          (candidate) => candidate.id === groupId,
+        );
         if (
           !group ||
           fromIndex < 0 ||
@@ -247,7 +254,9 @@ export function createTerminalPreviewBrowserActions(
         const groups = state.browser.groups.map((candidate) =>
           candidate.id === groupId ? { ...candidate, tabIds } : candidate,
         );
-        const tabsById = new Map(state.browser.tabs.map((tab) => [tab.id, tab]));
+        const tabsById = new Map(
+          state.browser.tabs.map((tab) => [tab.id, tab]),
+        );
         const tabs = groups.flatMap((candidate) =>
           candidate.tabIds.flatMap((tabId) => {
             const tab = tabsById.get(tabId);
@@ -259,7 +268,9 @@ export function createTerminalPreviewBrowserActions(
     },
     closeBrowserTab: (tabId) => {
       set((state) => {
-        const closingIndex = state.browser.tabs.findIndex((tab) => tab.id === tabId);
+        const closingIndex = state.browser.tabs.findIndex(
+          (tab) => tab.id === tabId,
+        );
         if (closingIndex < 0) {
           return state;
         }

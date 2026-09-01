@@ -106,17 +106,17 @@ cases:
       - 确认附着后仍是原 Tab 数量、URL 和标题，没有出现 `about:blank`、独立系统浏览器或用户页面被替换；随后 detach 并确认右侧 Browser 与已有 Tab 继续可用。
 
   - id: TBR-010
-    name: 本地代理端口可配置并跨重启持久化
+    name: 三个 Browser Profile 使用固定 Whistle 端口
     required: true
     description: >
-      验证 Terminal Browser 本地代理 host 固定为 127.0.0.1，端口可配置且校验范围，
-      开关与端口写入持久化偏好并在应用重启后恢复；启用时流量走当前配置端口，非法端口被拒绝。
+      验证三个 Terminal Browser Profile 固定映射到 127.0.0.1:8081/8082/8083，
+      不再暴露旧 8899 开关或可编辑代理端口；Profile 首次实际使用时才懒启动对应内置 Whistle。
     preconditions:
       - 使用受管 Dev Session 启动 macOS Runweave Electron，Terminal Browser 可用。
-      - 准备两个可区分的本地代理监听端口（例如默认 8899 与另一个空闲端口），能分别观察哪个端口收到请求。
-      - 已通过 dev:open 的 terminal-browser surface 取得 CDP endpoint，并用 toolkit:playwright-cli attach。
+      - 8081、8082、8083 初始空闲，且可检查本机 listener 与 Whistle CGI 状态。
+      - 已通过 dev:open 的 desktop surface 打开 Terminal Sidecar，并可使用 toolkit:playwright-cli attach。
     steps:
-      - 打开代理设置入口，确认展示 host 固定 127.0.0.1、当前端口与开关状态；输入非法端口（如 0、70000、非整数）并保存，确认被拒绝、给出错误提示且未改变生效配置。
-      - 将端口改为第二个空闲端口并保存后启用代理，确认导航请求实际经过该新端口的代理，代理状态的 proxyRules 反映新端口，`<local>` 本地地址仍直连。
-      - 完全退出并重启 Runweave，确认代理开关与端口与关闭前一致；启用状态下无需重新配置即按持久化端口继续代理。
-      - 关闭代理后修改端口并保存，确认端口被持久化但当前不影响直连流量；再次启用时按最新端口生效。
+      - 启动应用但不打开 Browser；确认三个固定端口均未被本次应用占用，界面不存在旧代理开关、8899 端口或修改固定端口的入口。
+      - 依次实际使用 Browser 1、Browser 2、Browser 3；确认分别只在 8081、8082、8083 启动 CGI ready 的 Whistle，状态面板显示固定映射且 `<local>` 继续绕过代理。
+      - 打开三个 Whistle 控制台并确认它们位于各自 Profile 页面、storage 相互独立；完整退出应用后确认本次拥有的三个 listener 全部释放。
+      - 保留旧 `terminal-browser-proxy.json` fixture 并重启；确认旧 8899 开关/端口不控制三个新 Profile，也没有被升级过程删除或改写。

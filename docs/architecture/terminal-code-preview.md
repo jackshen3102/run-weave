@@ -64,22 +64,23 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 
 Terminal Browser 工具当前边界：
 
-- Browser 工具挂在 Preview 面板外壳内，是 Terminal Workspace 的本地 sidecar。
-- Electron 桌面端用 `WebContentsView` 承载 Browser tab，tab 生命周期和可见区域由主进程管理，前端只同步 tab 状态、地址栏、工具栏和面板布局。
+- Sidecar 一级工具固定包含 `Browser 1`、`Browser 2`、`Browser 3`。三个入口对应应用进程全局的三个 Profile；Worktree 只提供默认选择和 Dev Server 端口，不拥有或复制 Profile。
+- Electron 桌面端用 `WebContentsView` 承载 Browser tab，tab 生命周期和可见区域由主进程管理，前端只同步 tab 状态、地址栏、工具栏和面板布局。Profile 1 沿用 `persist:runweave-terminal-browser`，Profile 2/3 使用独立 partition，因此 Cookie、LocalStorage、IndexedDB、Cache Storage 和登录态天然隔离。
 - Web/PWA 模式不提供本地 Electron Browser，也不展示 CDP endpoint。
 - Browser tab 只允许 `http:`、`https:` 和 `about:blank` 导航；页面发起的新窗口会被收口成 Browser 工具内的新 tab 或被拒绝。
 - CDP Proxy 只监听 `127.0.0.1`，默认从 `9224` 开始找可用端口，并通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 传给 Runweave terminal 里的子进程。
 - 如果显式设置 `RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。
 - CDP Proxy 暴露的是自研 browser-level endpoint，不开启 Electron 全局 `remote-debugging-port`，也不暴露 Runweave 主窗口 renderer 或 DevTools target。
-- Playwright MCP / Playwright CLI 通过 `chromium.connectOverCDP(...)` 连接 Proxy 后，只能发现和操作 Terminal Browser tab。全局 endpoint 会把当前激活 Browser tab 排在 target 列表第一位，避免无显式 page 选择的客户端落到历史第一个 tab。
-- 当前 tab 的 CDP/AI 按钮返回 Agent Control Group scoped WebSocket endpoint（`groupId=...`）；使用该 endpoint 连接时，`Target.getTargets` / discovery / auto-attach 只暴露该 group 内的 Terminal Browser tabs。Tab 行 `+` 和 Terminal 人工链接在当前 group 新建页面；页面或 scoped Agent 派生的新 tab 继承 opener/group；只有总览“新建工作组”和 unscoped `Target.createTarget` 创建新 group。Group 是自动化可见性边界，不是 Agent 身份或独立 Browser Profile。
+- Playwright MCP / Playwright CLI 通过 `rw browser profile resolve` 先按“本次显式指定 > 当前 Worktree 首选 > 全局默认”解析 Profile 和路由，再以 `chromium.connectOverCDP(...)` 连接返回的 scoped endpoint。显式覆盖不写回 Worktree 偏好。
+- CDP 仍只有一个 loopback 物理端口，逻辑 scope 为 `profileId + 可选 groupId`。无 `profileId` 的旧 endpoint 只映射全局默认 Profile，不汇总暴露三个 Profile。当前 tab 的 CDP/AI 按钮返回 Profile + Agent Control Group scoped WebSocket endpoint；`Target.getTargets`、discovery、auto-attach 和 target 操作都先过滤 Profile，再过滤可选 Group。
+- Tab 行 `+` 和 Terminal 人工链接在当前 Profile 的当前 group 新建页面；页面或 scoped Agent 派生的新 tab 继承 opener 的 Profile/group；只有总览“新建工作组”和 profile-scoped、group-unscoped `Target.createTarget` 创建新 group。Group 是 Profile 内自动化可见性边界，不是 Agent 身份、Worktree 或 Profile。
 - `Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
 - 多个 CDP 客户端可以同时连接并操作不同 Browser tab。Proxy 对同一 target 复用同一个 Electron `webContents.debugger` attachment，但每个客户端仍使用自己的 proxy session id；任一客户端断开不应清理其他 target 的有效 session。
 - Group 细线上的连接点表示组内至少一个 target 已有 CDP client 附着；Tab favicon 附近的短暂操作点表示近期有 MCP/CDP session 命中该 target 的用户可感知操作。两者都不表示 Agent 身份、所有权或永久接管，也不改变 active Tab 选中背景。
 - `Page.enable`、`Runtime.enable`、`Target.setAutoAttach`、`Target.getTargetInfo`、`Page.getFrameTree`、`Network.enable` 等初始化、发现或静默同步命令不触发操作点；导航、点击、输入、evaluate、截图等真实操作才让对应 Tab 短暂显示 4.5 秒活动状态。
 - Browser 工具的 CDP 能力是桌面端本机自动化边界，不是远端协作协议；不要把 endpoint 持久化到项目数据或对公网暴露。
-- Browser workspace 会以 schema v2 持久化到 Electron `userData` 下的 `terminal-browser-tabs.json`，包含 group 名称、顺序、成员顺序、active Tab 和兼容旧客户端的 flat tabs；favicon、导航错误和连接/活动状态不落盘。读取 v1 时按首次出现的 `browserGroupId` 迁移，重启最多恢复 5 个合法的 `http:`、`https:`、`about:blank` Tab。
+- Browser workspace 会以 schema v3 按 Profile 持久化到 Electron `userData` 下的 `terminal-browser-tabs.json`，包含 group 名称、顺序、成员顺序和 active Tab；favicon、导航错误、Whistle PID、runtime route、prompt override 和连接/活动状态不落盘。v1/v2 内容全部迁入 Profile 1，Profile 2/3 初始为空；每个 Profile 最多恢复 5 个合法 URL 的元数据，首次显式 resolve 且路由 ready 后才创建 `WebContentsView` 并导航。
 - Browser tab strip 只让 tab viewport 横向滚动，总览与 New Tab 固定在 viewport 外。单 tab preferred width 为 180px；空间不足时 active 最小 80px、inactive 最小 44px；组内间距 4px、组间间距 12px，达到 minimum 后才产生横向 overflow。Tab 使用主进程净化后的 favicon 与页面标题作为主要身份，无 favicon 时回退 hostname 首字符或通用页面图标。
 - Tab 内容按宽度分为 comfortable（`>95px`）、compact（`64～95px`）和 icon-only（`44～63px`）三档。active close 始终保留；inactive close 在非 icon-only 档通过 hover / focus 显示。总览按 group 分段，可按 title、URL、group name/id 搜索，并提供新建、重命名和关闭工作组；关闭多页面工作组需要一次批量确认。
 - active tab 会在初始化、选择、新建、关闭、排序和 sidecar resize 后进入 tab viewport。Left / Right 循环切换相邻 tab，Home / End 切换首尾，并使用 active tab `tabIndex=0` 的 roving focus。
@@ -88,12 +89,14 @@ Terminal Browser 工具当前边界：
 - Electron workspace 是 group 名称、顺序、成员、active Tab 和结构 revision 的唯一事实源。Renderer 先订阅统一 `terminal-browser:state-changed` 事件再读取初始 workspace，只应用更新 revision，并从成员 Tab 推导 group 的连接与错误状态；不从颜色、相邻位置或本地临时 Tab 推断 CDP 权限。
 - 主进程 main-frame 导航失败（排除 `ERR_ABORTED/-3`）会写入 Tab live `navigationError`；后台 Tab 和所属 group 显示弱错误点，激活后沿用错误横幅展示详情，下一次成功 main-frame 导航自动清除。favicon 下载或解码失败只回退图标，不进入导航错误。
 - Browser 工具切到后台时只隐藏当前 WebContentsView，不清除该窗口的 selected tab；关闭 selected tab 或关闭窗口时才删除对应 active 映射，因此隐藏、重启和恢复不会把 active 身份回退到数组首项。
-- 工具栏提供本地代理开关与 `Headers` 面板。代理开关使用同一个 `persist:runweave-terminal-browser` session 的 `setProxy`，当前固定走 `127.0.0.1:8899`，绕过 `<local>`。
-- `Headers` 面板只影响右侧 Terminal Browser 的网页请求，不影响 Runweave 主窗口、登录/API 请求或 Electron 更新请求。
-- Header 规则保存在前端 `localStorage` 的 `terminal.browser.headerRules`，Terminal Browser Tool 挂载时会同步到 Electron 主进程；保存失败会回滚本地存储并展示错误。
+- 三个 Profile 首次实际使用时分别懒启动内置 `whistle@2.10.9`，固定监听 `127.0.0.1:8081/8082/8083`，使用 `profile-1/2/3` 独立 storage 和同一 certDir。Runweave 只维护保留 Value `runweave-dev-server`，不会创建、选择或改写用户 Rules 和其它 Values；`deploy/whistle/proxy.md` 是独立人工部署示例，不属于 Terminal Browser 默认规则。
+- Profile runtime route 只有 `unassigned` 或 `dev-server:<port>`。同路由可以跨 Worktree/Agent 共享；不同路由在仍有可见 view 或 CDP 连接时返回冲突。Profile 空闲后切换只更新/删除保留 Value，并仅刷新配置的 business origin 页面，不清浏览数据或页面身份。
+- 每个 Profile Session 固定使用所属 Whistle 代理并绕过 `<local>`；应用不修改系统代理。三个 Profile 只在自己的 `setCertificateVerifyProc` 中接受共享 Whistle Root CA 链，其它证书继续采用 Chromium 校验结果；主窗口和其它 Session 不继承该信任。
+- `Headers` 面板只影响当前 Profile 的网页请求，不影响其它 Profile、Runweave 主窗口、登录/API 请求或 Electron 更新请求。
+- Header 规则保存在 Profile-scoped `localStorage` key；旧 `terminal.browser.headerRules` 只在 Profile 1 首次成功同步时迁移一次。每个 Profile 分别同步到其 Electron Session dispatcher，保存失败会回滚本地存储并展示错误。
 - Header 规则通过 `terminal-browser:get-header-rules` / `terminal-browser:set-header-rules` IPC 进入主进程。主进程做最终校验，最多 20 条，字段为 `enabled`、固定操作 `set`、`name`、`value`，URL 模式固定为 `*://*/*`，当前前端不暴露单条规则的 URL pattern 编辑。
 - Header 名必须符合 HTTP token 形态，禁止控制字符、冒号以及 `host`、`content-length`、`connection`、`upgrade`、`proxy-authorization`、`set-cookie`。Header 值不能为空且不能包含控制字符。
-- Electron 主进程只注册一个 `webRequest.onBeforeSendHeaders({ urls: ["<all_urls>"] })` dispatcher。dispatcher 只处理 `http:` / `https:` 请求，按规则列表顺序匹配固定全局 URL 模式；同名 Header 后命中的规则覆盖前面的规则。
+- Electron 主进程为三个 Profile Session 各注册一个 `webRequest.onBeforeSendHeaders({ urls: ["<all_urls>"] })` dispatcher。dispatcher 只处理 `http:` / `https:` 请求，按所属 Profile 的规则列表顺序匹配固定全局 URL 模式；同名 Header 后命中的规则覆盖前面的规则。
 - Header 规则变更只影响后续新请求。面板保存成功后会关闭面板；如需让当前页面主文档请求携带新规则，用户需要通过工具栏刷新当前 Browser tab。
 - Browser 工具栏的地址输入框旁提供复制当前地址按钮，只复制当前 tab 的地址文本，不触发导航、分享或外部打开；复制成功后短暂显示完成状态。
 - Browser 工具提供当前 tab 级别的设备模式。`Desktop` 是默认状态；切到移动设备时，当前支持 `iPhone SE`、`iPhone 14` 和 `Pixel 7` 三个预设，分别应用移动端 viewport、device scale factor、移动端 user agent 和 touch emulation。

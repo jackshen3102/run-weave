@@ -86,6 +86,7 @@ export async function handleMessage(
       case "Target.getTargets": {
         const targets = getCurrentTargetInfos(
           sessionManager,
+          conn.scopedProfileId,
           conn.scopedGroupId,
         );
         sendJson(ws, buildCdpResult(id, { targetInfos: targets }));
@@ -95,6 +96,7 @@ export async function handleMessage(
       case "Target.getTargetInfo": {
         const targetInfo = getTargetInfoForRequest(
           sessionManager,
+          conn.scopedProfileId,
           conn.scopedGroupId,
           params,
         );
@@ -117,6 +119,7 @@ export async function handleMessage(
         if (discover) {
           const targets = getCurrentTargetInfos(
             sessionManager,
+            conn.scopedProfileId,
             conn.scopedGroupId,
           );
           for (const info of targets) {
@@ -137,7 +140,10 @@ export async function handleMessage(
         sendJson(ws, buildCdpResult(id, {}));
 
         if (autoAttach) {
-          const targets = getScopedTargets(conn.scopedGroupId);
+          const targets = getScopedTargets(
+            conn.scopedProfileId,
+            conn.scopedGroupId,
+          );
           for (const t of targets) {
             try {
               const { proxySessionId } = sessionManager.attachDebugger(
@@ -195,6 +201,7 @@ export async function handleMessage(
           const target = getTerminalBrowserCdpTargets().find(
             (t) =>
               t.targetId === targetId &&
+              t.profileId === conn.scopedProfileId &&
               (!conn.scopedGroupId || t.browserGroupId === conn.scopedGroupId),
           );
           if (!target) {
@@ -268,7 +275,10 @@ export async function handleMessage(
         }
 
         const allTargets = getTerminalBrowserCdpTargets();
-        const currentTargets = getScopedTargets(conn.scopedGroupId);
+        const currentTargets = getScopedTargets(
+          conn.scopedProfileId,
+          conn.scopedGroupId,
+        );
         if (conn.scopedGroupId && currentTargets.length === 0) {
           sendJson(
             ws,
@@ -303,6 +313,7 @@ export async function handleMessage(
 
         const created = await createTerminalBrowserTabFromProxy(
           windowId,
+          conn.scopedProfileId,
           url,
           conn.scopedGroupId ?? undefined,
         );
@@ -313,6 +324,7 @@ export async function handleMessage(
 
         broadcastTargetCreated(connections, conn, {
           targetId: created.targetId,
+          profileId: conn.scopedProfileId,
           browserGroupId: created.browserGroupId,
           url,
           title: "",

@@ -147,6 +147,11 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
     ["scripts/prepare-better-sqlite3-runtime.mjs"],
     { cwd: ELECTRON_DIR, env },
   );
+  const whistleRuntime = path.join(buildRoot, "whistle-runtime");
+  await runCheckedCommand("node", ["scripts/prepare-whistle-runtime.mjs"], {
+    cwd: ELECTRON_DIR,
+    env: { ...env, RUNWEAVE_WHISTLE_RUNTIME_DIR: whistleRuntime },
+  });
   await runCheckedCommand("node", ["scripts/bundle.mjs"], {
     cwd: ELECTRON_DIR,
     env: { ...env, RUNWEAVE_ELECTRON_BUNDLE_OUTDIR: electronDist },
@@ -215,6 +220,11 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
               "node_modules/**/*",
             ],
           },
+          {
+            from: whistleRuntime,
+            to: "whistle-runtime",
+            filter: ["node_modules/**/*", "package.json"],
+          },
         ],
         mac: {
           icon: path.join(ELECTRON_DIR, "resources", "icons", "icon.icns"),
@@ -262,7 +272,9 @@ function isolatedBuilderIdentity(baseBuilderConfig) {
       productName: "Runweave",
     };
   }
-  throw new Error(`Unsupported isolated Electron builder config: ${configName}`);
+  throw new Error(
+    `Unsupported isolated Electron builder config: ${configName}`,
+  );
 }
 
 async function main() {

@@ -1,12 +1,19 @@
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useState } from "react";
 import { useTerminalBrowserController } from "./use-controller";
 import { TerminalBrowserErrorBanners } from "./error-banners";
 import { TerminalBrowserNavigationBar } from "./navigation-bar";
 import { TerminalBrowserAnnotationModeBar } from "./annotations-panel";
 import { TerminalBrowserSurface } from "./surface";
 import { TerminalBrowserTabs } from "./tabs";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 
 interface TerminalBrowserToolProps {
   active: boolean;
+  profileId: TerminalBrowserProfileId;
+  activationProjectId: string | null;
+  activationRevision: number;
+  currentProjectId: string | null;
   apiBase: string;
   token: string;
   terminalSessionId: string | null;
@@ -14,16 +21,42 @@ interface TerminalBrowserToolProps {
 
 export function TerminalBrowserTool({
   active,
+  profileId,
+  activationProjectId,
+  activationRevision,
+  currentProjectId,
   apiBase,
   token,
   terminalSessionId,
 }: TerminalBrowserToolProps) {
+  const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
   const controller = useTerminalBrowserController({
     active,
+    nativeViewSuppressed: profileSettingsOpen,
+    profileId,
+    activationProjectId,
+    activationRevision,
     apiBase,
     token,
     terminalSessionId,
   });
+
+  const activeTabId = controller?.activeTab.id ?? null;
+  const controllerIsElectron = controller?.isElectron === true;
+  const handleProfileSettingsOpenChange = useMemoizedFn(
+    async (open: boolean): Promise<void> => {
+      if (open && controllerIsElectron && activeTabId) {
+        await window.electronAPI?.terminalBrowserHide?.(activeTabId);
+      }
+      setProfileSettingsOpen(open);
+    },
+  );
+
+  useEffect(() => {
+    if (!active) {
+      setProfileSettingsOpen(false);
+    }
+  }, [active]);
 
   if (!controller) {
     return null;
@@ -56,9 +89,8 @@ export function TerminalBrowserTool({
     mobileDisabledReason,
     openUrlExternally,
     openAnnotationPanel,
-    proxyError,
-    proxyState,
-    proxySwitching,
+    profileError,
+    profileResolving,
     reload,
     renameGroup,
     reorderTabs,
@@ -76,8 +108,6 @@ export function TerminalBrowserTool({
     surfaceContainerRef,
     tabs,
     toggleAnnotation,
-    toggleProxy,
-    setProxyPort,
     updateBrowserTab,
     focusAnnotation,
   } = controller;
@@ -125,11 +155,15 @@ export function TerminalBrowserTool({
           onDeviceOpenChange: setDevicePanelOpenState,
           onHeaderRulesOpenChange: setHeaderPanelOpen,
         }}
-        proxy={{
-          state: proxyState,
-          switching: proxySwitching,
-          onToggle: () => void toggleProxy(),
-          onSetPort: (port) => setProxyPort(port),
+        profile={{
+          profileId,
+          projectId: currentProjectId,
+          resolving: profileResolving,
+          resolutionError: profileError,
+          settingsOpen: profileSettingsOpen,
+          onSettingsOpenChange: (open) => {
+            void handleProfileSettingsOpenChange(open);
+          },
         }}
         utilities={{
           isElectron,
@@ -148,7 +182,7 @@ export function TerminalBrowserTool({
       />
       <TerminalBrowserErrorBanners
         errors={[
-          proxyError,
+          profileError,
           headerError,
           annotationPanelOpen ? null : annotationError,
           activeTab.navigationError,

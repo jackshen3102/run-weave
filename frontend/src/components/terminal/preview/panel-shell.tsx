@@ -12,8 +12,14 @@ import { Button } from "../../ui/button";
 import { TerminalBrowserTool } from "../browser/tool";
 import type { TerminalSidecarTool } from "../../../features/terminal/preview-store";
 import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
+import {
+  TERMINAL_BROWSER_PROFILE_IDS,
+  type TerminalBrowserProfileId,
+} from "@runweave/shared/terminal-browser-profile";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
 
 interface ActiveProjectLike {
+  projectId?: string;
   name?: string;
   path?: string | null;
 }
@@ -121,6 +127,18 @@ export function TerminalPreviewPanelShell({
   view,
 }: TerminalPreviewPanelShellProps) {
   const { apiBase, token } = useTerminalRuntime();
+  const activeBrowserProfileId = useTerminalPreviewStore(
+    (state) => state.activeBrowserProfileId,
+  );
+  const browserActivationRevision = useTerminalPreviewStore(
+    (state) => state.browserActivationRevision,
+  );
+  const browserActivationProjectId = useTerminalPreviewStore(
+    (state) => state.browserActivationProjectId,
+  );
+  const activateBrowser = useTerminalPreviewStore(
+    (state) => state.activateBrowser,
+  );
   const { activeTool, onSetActiveTool, showAgentTeamTool } = tools;
   const { expanded, onClose, onStartResize, onToggleExpanded, panelWidth } =
     layout;
@@ -142,9 +160,25 @@ export function TerminalPreviewPanelShell({
   const saveStatus: SaveStatus = save.status;
   const canSave = save.available;
   const pathCopied = copy.copied;
-  const availableTools: TerminalSidecarTool[] = showAgentTeamTool
-    ? ["preview", "browser", "agent-team", "race"]
-    : ["preview", "browser", "race"];
+  const availableTools: Array<
+    | { kind: TerminalSidecarTool; label: string }
+    | {
+        kind: "browser-profile";
+        profileId: TerminalBrowserProfileId;
+        label: string;
+      }
+  > = [
+    { kind: "preview", label: "Preview" },
+    ...TERMINAL_BROWSER_PROFILE_IDS.map((profileId, index) => ({
+      kind: "browser-profile" as const,
+      profileId,
+      label: `Browser ${index + 1}`,
+    })),
+    ...(showAgentTeamTool
+      ? [{ kind: "agent-team" as const, label: "Agent Team" }]
+      : []),
+    { kind: "race", label: "Race" },
+  ];
   const saveStatusLabel =
     saveStatus === "conflict"
       ? "Conflict"
@@ -180,33 +214,52 @@ export function TerminalPreviewPanelShell({
           <div className="flex min-h-[34px] items-center gap-2">
             <div className="min-w-0 flex-1">
               <div
-                className="inline-flex rounded-md border border-slate-800 bg-slate-900/70 p-0.5"
+                className="flex max-w-full overflow-x-auto rounded-md border border-slate-800 bg-slate-900/70 p-0.5"
                 role="tablist"
                 aria-label="Sidecar tools"
               >
-                {availableTools.map((tool) => (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTool === tool}
-                    key={tool}
-                    className={[
-                      "h-6 rounded-sm px-2 text-xs",
-                      activeTool === tool
-                        ? "bg-slate-700 text-slate-50"
-                        : "text-slate-400 hover:text-slate-100",
-                    ].join(" ")}
-                    onClick={() => onSetActiveTool(tool)}
-                  >
-                    {tool === "preview"
-                      ? "Preview"
-                      : tool === "browser"
-                        ? "Browser"
-                        : tool === "agent-team"
-                          ? "Agent Team"
-                          : "Race"}
-                  </button>
-                ))}
+                {availableTools.map((tool) => {
+                  const selected =
+                    tool.kind === "browser-profile"
+                      ? activeTool === "browser" &&
+                        activeBrowserProfileId === tool.profileId
+                      : activeTool === tool.kind;
+                  return (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      data-testid={
+                        tool.kind === "browser-profile"
+                          ? `terminal-browser-profile-${tool.profileId}`
+                          : undefined
+                      }
+                      key={
+                        tool.kind === "browser-profile"
+                          ? tool.profileId
+                          : tool.kind
+                      }
+                      className={[
+                        "h-6 shrink-0 rounded-sm px-2 text-xs",
+                        selected
+                          ? "bg-slate-700 text-slate-50"
+                          : "text-slate-400 hover:text-slate-100",
+                      ].join(" ")}
+                      onClick={() => {
+                        if (tool.kind === "browser-profile") {
+                          activateBrowser(
+                            tool.profileId,
+                            activeProject?.projectId ?? null,
+                          );
+                        } else {
+                          onSetActiveTool(tool.kind);
+                        }
+                      }}
+                    >
+                      {tool.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -420,6 +473,10 @@ export function TerminalPreviewPanelShell({
             <TerminalBrowserTool
               active={activeTool === "browser"}
               apiBase={apiBase}
+              profileId={activeBrowserProfileId}
+              activationProjectId={browserActivationProjectId}
+              activationRevision={browserActivationRevision}
+              currentProjectId={activeProject?.projectId ?? null}
               token={token}
               terminalSessionId={activeTerminalSessionId}
             />
@@ -439,9 +496,7 @@ export function TerminalPreviewPanelShell({
           <div
             className={[
               "absolute inset-0 min-h-0",
-              activeTool === "race"
-                ? ""
-                : "pointer-events-none hidden",
+              activeTool === "race" ? "" : "pointer-events-none hidden",
             ].join(" ")}
           >
             {raceBody}
