@@ -14,6 +14,27 @@ const OSC_COMMAND_PATTERN = new RegExp(
 );
 const ZSH_HOOK_PREFIX = "runweave-zsh-";
 
+function isManagedZshHookDirectory(value: string | undefined): boolean {
+  const normalized = value?.trim();
+  return Boolean(
+    normalized && path.basename(normalized).startsWith(ZSH_HOOK_PREFIX),
+  );
+}
+
+function resolveOriginalZdotdir(env: NodeJS.ProcessEnv): string {
+  const candidates = [
+    env.RUNWEAVE_ORIGINAL_ZDOTDIR,
+    env.BROWSER_VIEWER_ORIGINAL_ZDOTDIR,
+    env.ZDOTDIR,
+  ];
+
+  return (
+    candidates.find(
+      candidate => candidate?.trim() && !isManagedZshHookDirectory(candidate),
+    )?.trim() ?? ""
+  );
+}
+
 export function buildDirectoryLabel(cwd: string): string {
   const normalized = cwd.replace(/\/+$/, "") || cwd;
   const baseName = path.basename(normalized);
@@ -110,7 +131,7 @@ function ensureZshHookDirectory(): string {
   const sourceOriginalScript = (startupFile: string) =>
     [
       '_runweave_original_zdotdir="${RUNWEAVE_ORIGINAL_ZDOTDIR:-${BROWSER_VIEWER_ORIGINAL_ZDOTDIR:-$HOME}}"',
-      `if [[ -r "$_runweave_original_zdotdir/${startupFile}" ]]; then`,
+      `if [[ "$_runweave_original_zdotdir" != */${ZSH_HOOK_PREFIX}* && -r "$_runweave_original_zdotdir/${startupFile}" ]]; then`,
       `  source "$_runweave_original_zdotdir/${startupFile}"`,
       "fi",
       `export ZDOTDIR="${hookDir}"`,
@@ -118,7 +139,7 @@ function ensureZshHookDirectory(): string {
     ].join("\n");
   const zshrcScript = [
     '_runweave_original_zdotdir="${RUNWEAVE_ORIGINAL_ZDOTDIR:-${BROWSER_VIEWER_ORIGINAL_ZDOTDIR:-$HOME}}"',
-    'if [[ -r "$_runweave_original_zdotdir/.zshrc" ]]; then',
+    `if [[ "$_runweave_original_zdotdir" != */${ZSH_HOOK_PREFIX}* && -r "$_runweave_original_zdotdir/.zshrc" ]]; then`,
     '  source "$_runweave_original_zdotdir/.zshrc"',
     "fi",
     'typeset -ga precmd_functions',
@@ -192,9 +213,11 @@ export function applyShellIntegration(
   const shellName = path.basename(command);
 
   if (shellName === "zsh") {
+    const originalZdotdir = resolveOriginalZdotdir(env);
     return {
       ...env,
-      RUNWEAVE_ORIGINAL_ZDOTDIR: env.ZDOTDIR ?? "",
+      RUNWEAVE_ORIGINAL_ZDOTDIR: originalZdotdir,
+      BROWSER_VIEWER_ORIGINAL_ZDOTDIR: originalZdotdir,
       ZDOTDIR: ensureZshHookDirectory(),
     };
   }

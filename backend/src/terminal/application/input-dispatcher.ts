@@ -136,7 +136,7 @@ function buildPromptReplaceSequence(
       value: text,
       delayAfterMs: submit ? CODEX_COMPOSER_SUBMIT_DELAY_MS : undefined,
     },
-    ...(submit ? [{ type: "key" as const, key: "C-m" }] : []),
+    ...(submit ? [{ type: "key" as const, key: "Enter" }] : []),
   ];
 }
 
@@ -167,7 +167,7 @@ function buildTerminalLineSequence(data: string): TmuxKeySequenceItem[] {
       value: data,
       delayAfterMs: CODEX_COMPOSER_SUBMIT_DELAY_MS,
     },
-    { type: "key", key: "C-m" },
+    { type: "key", key: "Enter" },
   ];
 }
 

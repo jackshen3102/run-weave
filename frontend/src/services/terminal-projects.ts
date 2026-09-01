@@ -75,6 +75,22 @@ export async function updateTerminalProjectContext(
   );
 }
 
+export async function deleteTerminalWorktree(
+  apiBase: string,
+  token: string,
+  parentProjectId: string,
+  childProjectId: string,
+): Promise<void> {
+  return requestVoid(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(parentProjectId)}/contexts/${encodeURIComponent(childProjectId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+}
+
 export async function deleteTerminalProject(
   apiBase: string,
   token: string,

@@ -103,3 +103,35 @@ export function saveRecentTerminalSelection(
     } satisfies RecentTerminalSelection),
   );
 }
+
+export function removeRecentTerminalProjectContext(
+  apiBase: string,
+  parentProjectId: string,
+  childProjectId: string,
+): void {
+  const currentSelection = loadRecentTerminalSelection(apiBase);
+  if (!currentSelection) {
+    return;
+  }
+  const nextProjectSessionIds = { ...currentSelection.projectSessionIds };
+  const removedSessionId = nextProjectSessionIds[childProjectId];
+  delete nextProjectSessionIds[childProjectId];
+  const nextContextProjectIds = {
+    ...currentSelection.contextProjectIdByParentProjectId,
+  };
+  if (nextContextProjectIds[parentProjectId] === childProjectId) {
+    nextContextProjectIds[parentProjectId] = parentProjectId;
+  }
+  localStorage.setItem(
+    buildStorageKey(apiBase),
+    JSON.stringify({
+      projectId: currentSelection.projectId,
+      terminalSessionId:
+        currentSelection.terminalSessionId === removedSessionId
+          ? null
+          : currentSelection.terminalSessionId,
+      projectSessionIds: nextProjectSessionIds,
+      contextProjectIdByParentProjectId: nextContextProjectIds,
+    } satisfies RecentTerminalSelection),
+  );
+}

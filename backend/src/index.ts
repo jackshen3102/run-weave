@@ -274,6 +274,14 @@ function createHttpApp(
       terminalStateService: services.terminalStateService,
       quickInputService: services.terminalQuickInputService,
       activity: services.terminalActivity,
+      worktreeDeletionOwnerHooks: {
+        beforeDelete: () => services.raceService.waitForWorktreeCreation(),
+        afterDelete: ({ parentProjectId, childProjectId }) =>
+          services.raceService.markWorktreeRemoved(
+            parentProjectId,
+            childProjectId,
+          ),
+      },
     }),
   );
   app.use("/api/voice", requireAuth, createVoiceRouter());
