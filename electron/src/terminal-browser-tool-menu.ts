@@ -12,6 +12,10 @@ import {
   getPreviousTerminalBrowserDisplayScale,
   isTerminalBrowserDisplayScale,
 } from "@runweave/shared/terminal-browser-display-scale";
+import {
+  isTerminalBrowserMinimumViewportWidth,
+  TERMINAL_BROWSER_MINIMUM_VIEWPORT_WIDTHS,
+} from "@runweave/shared/terminal-browser-minimum-width";
 
 function isTerminalBrowserToolMenuRequest(
   value: unknown,
@@ -30,7 +34,8 @@ function isTerminalBrowserToolMenuRequest(
     typeof request.showHeaders === "boolean" &&
     typeof request.deviceEnabled === "boolean" &&
     typeof request.devtoolsEnabled === "boolean" &&
-    isTerminalBrowserDisplayScale(request.displayScale)
+    isTerminalBrowserDisplayScale(request.displayScale) &&
+    isTerminalBrowserMinimumViewportWidth(request.minimumViewportWidth)
   );
 }
 
@@ -89,6 +94,29 @@ export async function popupTerminalBrowserToolMenu(
           enabled: value.displayScale !== 1,
           click: () => select("reset-zoom"),
         },
+      ],
+    });
+    const minimumWidthLabel =
+      value.minimumViewportWidth === null
+        ? "Auto"
+        : `${value.minimumViewportWidth} px`;
+    template.push({
+      label: `Minimum Width · ${minimumWidthLabel}`,
+      submenu: [
+        {
+          label: "Auto",
+          type: "radio",
+          checked: value.minimumViewportWidth === null,
+          click: () => select("minimum-width-auto"),
+        },
+        ...TERMINAL_BROWSER_MINIMUM_VIEWPORT_WIDTHS.map(
+          (width): MenuItemConstructorOptions => ({
+            label: `${width} px`,
+            type: "radio",
+            checked: value.minimumViewportWidth === width,
+            click: () => select(`minimum-width-${width}`),
+          }),
+        ),
       ],
     });
     template.push(

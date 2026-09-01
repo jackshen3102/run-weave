@@ -1,0 +1,202 @@
+version: 1
+name: Terminal Browser 存活 Tab 最小视口宽度验收
+description: >
+  验证右侧 Terminal Browser 可按存活 Tab 选择 Auto、768px、1024px 或 1440px 的 CSS
+  逻辑最小视口宽度；面板不足时通过宿主画布横向滚动查看超出区域，同时保持 Zoom、Device、
+  工具面板、Agent/CDP 布局、截图、输入坐标与非持久化生命周期一致。
+
+cases:
+  - id: TBMW-001
+    name: 原生菜单按存活 Tab 隔离固定宽度档位
+    required: true
+    description: >
+      验证 More 菜单只提供 Auto、768px、1024px、1440px 四个单选项，选择只修改当前
+      存活 Tab；其它 Tab、Profile 与新建 Tab 不继承该值。
+    preconditions:
+      - 已使用 $toolkit:runweave-dev-session 启动受管 macOS Electron Dev Session，并取得 fresh desktop surface。
+      - Browser 1 中已有内容可区分的 A、B 两个 Tab，Browser 2 中已有对照 Tab C，三者初始均为 Auto。
+    steps:
+      - 使用 $computer-use 在 A 打开 More；确认显示 Minimum Width · Auto，子菜单只有 Auto、768 px、1024 px、1440 px，且只有 Auto checked、没有 1280 px 或任意输入框。
+      - 在 A 选择 1024 px 后重新打开菜单；确认父项显示 1024 px且只有对应项 checked。
+      - 切换到 B 和 Browser 2 的 C；确认两者仍显示 Auto；切回 A，确认仍为 1024 px。
+      - 从 Tab 加号、页面 target=_blank 和新工作组入口分别创建新 Tab；确认每个新 Tab 都从 Auto 开始，A、B、C 的选择没有变化。
+
+  - id: TBMW-002
+    name: Desktop 逻辑宽度遵守 Auto 与三个最小值边界
+    required: true
+    description: >
+      验证 Desktop 页面在 Auto 时跟随可见画布，在固定档位时 window.innerWidth 与媒体查询
+      不低于所选值；只有可见画布小于有效内容宽度时才出现宿主横向滚动轨道。
+    preconditions:
+      - 目标 Tab 加载无动画的受控 HTTP 页面，页面可显示 window.innerWidth、window.innerHeight、matchMedia 结果和关键元素 CSS 几何。
+      - 已使用 $toolkit:playwright-cli 分别附着目标 Dev Session 的 desktop surface 与 terminal-browser surface，并能调整 Sidecar 宽度。
+    steps:
+      - 在 Auto 下把 Sidecar 调整到至少两个不同宽度；每次确认页面 window.innerWidth 跟随 Browser 画布可见宽度，宿主横向滚动轨道不存在。
+      - 把画布缩到小于 768px，依次选择 768px、1024px、1440px；确认每档 window.innerWidth 均不低于所选值、对应媒体查询与该逻辑宽度一致，并显示横向滚动轨道。
+      - 保持 768px 档并把画布扩大到至少 768px；确认页面使用更大的实际逻辑宽度，滚动轨道消失且画布 offset 回到零。
+      - 切回 Auto；确认页面立即恢复随画布宽度布局，没有残留固定宽度、空白区或滚动轨道。
+
+  - id: TBMW-003
+    name: 超宽 WebContentsView 严格裁剪在 Browser 画布内
+    required: true
+    description: >
+      验证固定最小宽度产生的超宽原生页面只在 Browser 页面区域内可见和接收点击，不能覆盖
+      左侧 Terminal、Tab、地址栏、工具栏或相邻 Sidecar 区域。
+    preconditions:
+      - 真实 Electron 窗口左侧 Terminal 中有可点击且会产生可观察结果的控件，右侧 Browser 页面有左右两端可区分区域。
+      - Sidecar 已缩窄到明显小于 1440px，目标 Tab 选择 1440px 并出现横向滚动轨道。
+    steps:
+      - 在最左、居中和最右三个宿主 offset 分别截取桌面证据；确认网页像素始终被裁剪在 Browser 页面矩形内，工具栏与左侧 Terminal 没有被覆盖。
+      - 在每个 offset 点击 Browser 当前可见元素；确认命中对应页面元素，不出现与 offset 等量的错误偏移。
+      - 点击和输入左侧 Terminal、地址栏及 Tab；确认这些控件持续可用，页面没有截获区域外事件。
+      - 切换 Preview 再返回 Browser，关闭并重新打开 Sidecar；确认没有遗留透明父 View 或不可见区域阻断点击。
+
+  - id: TBMW-004
+    name: 宿主横向位置遵守切档导航刷新与 Tab 切换规则
+    required: true
+    description: >
+      验证横向位置属于存活 Tab 的 renderer 状态：Tab 切换和同页刷新保留，切换档位或主页面
+      导航归零，布局变宽后对旧位置做 clamp。
+    preconditions:
+      - A、B 两个 Tab 均加载左右两端具有稳定标记的受控页面，A 选择 1440px、B 选择 1024px，当前画布对两者均产生 overflow。
+      - desktop surface 可读取 Browser 横向滚动容器的 scrollLeft、scrollWidth 和 clientWidth。
+    steps:
+      - 将 A 滚到中部，切换到 B 并把 B 滚到最右，再切回 A；确认 A、B 分别恢复自己的位置，没有串值。
+      - 在 A 使用现有 Reload；确认页面完成刷新后 A 保留原宿主横向位置。
+      - 在 A 从 1440px 切到 1024px；确认 offset 回到最左；再次滚动后通过地址栏导航到不同 URL，确认新页面从最左开始。
+      - 将 Sidecar 扩大到旧 offset 超过新上限；确认 scrollLeft 被 clamp 到合法范围，没有右侧空白；扩大到无 overflow 后确认轨道消失且 offset 为零。
+
+  - id: TBMW-005
+    name: 最小宽度以 CSS 像素独立组合 Zoom
+    required: true
+    description: >
+      验证 1024px 的含义不随 Zoom 改变；Zoom 只改变物理内容宽度和横向范围，页面逻辑宽度
+      始终不低于 1024px，另一 Tab 不受影响。
+    preconditions:
+      - A Tab 选择 1024px，B Tab 保持 Auto，两者加载同一可报告逻辑 viewport 和固定元素矩形的静态页面。
+      - 已取得 A、B 的 terminal-browser page 与 desktop UI 证据入口。
+    steps:
+      - 在 A 的 Zoom 100% 记录 window.innerWidth、固定元素 CSS 矩形、滚动容器 clientWidth 与 scrollWidth；确认逻辑宽度至少 1024px。
+      - 把 A 依次设为 80% 和 150%；每次确认 window.innerWidth 与媒体查询仍不低于 1024px，元素 CSS 几何语义不被宿主 offset 改写，物理 scrollWidth 按显示比例重新计算。
+      - 在 80% 下扩大画布直到不需要 overflow，再在 150% 下确认相同画布可能重新产生 overflow；两种状态都没有把 minimum 改成别的档位。
+      - 切换 B；确认 B 仍为 Auto 与原 Zoom，未继承 A 的 minimum、显示比例或横向位置。
+
+  - id: TBMW-006
+    name: 工具面板与 Sidecar 布局只改变网页可见宽度
+    required: true
+    description: >
+      验证 Comments、Request Headers、Device 的 320px 工具面板不计入网页可视宽度；Sidecar
+      resize、展开和还原只重算 overflow，不移动工具栏或工具面板。
+    preconditions:
+      - 目标 Tab 为 Desktop、选择 1024px，并加载可报告 viewport 的静态页面。
+      - 当前 Sidecar 宽度足以在工具面板关闭时不 overflow，但打开 320px 工具面板后会 overflow。
+    steps:
+      - 依次打开 Comments、Request Headers 和 Device 面板；每次确认工具面板固定在右侧、网页可见宽度扣除 320px 后出现滚动轨道，页面逻辑宽度仍不低于 1024px。
+      - 在工具面板打开时滚到最右后关闭面板；确认网页可见宽度增大、offset 被合法 clamp，工具面板没有随网页移动。
+      - 拖拽缩窄和扩大 Sidecar；确认 Tab、地址栏、工具栏位置稳定，scrollWidth 与上限实时更新。
+      - 展开 Sidecar 再还原；确认足够宽时轨道消失，还原后按当前 1024px 状态重新出现，页面高度始终取当前可用高度而没有高度档位。
+
+  - id: TBMW-007
+    name: 移动 Device Mode 暂停并恢复 Desktop 最小宽度
+    required: true
+    description: >
+      验证移动设备预设拥有完整宽高语义并暂时覆盖 Desktop minimum；minimum 选择不丢失，
+      切回 Desktop 后恢复且从最左侧开始。
+    preconditions:
+      - A Tab 为 Desktop、选择 1440px并已滚到非零位置；B Tab 保持 Desktop Auto。
+      - 环境支持现有 iPhone SE、iPhone 14 和 Pixel 7 预设，且目标 page 可报告 viewport、UA、touch 与媒体查询。
+    steps:
+      - 使用 $computer-use 打开 Device Mode，并用 desktop surface 依次选择三个移动预设；确认每次使用该预设的完整宽高、UA、touch 和既有 fit scale，不应用 1440px floor且不显示宿主横向滚动轨道。
+      - 在移动模式打开 More；确认 Minimum Width 仍显示 1440px 选择但处于暂不影响当前移动 viewport 的状态，没有把值改成 Auto。
+      - 切回 Desktop；确认 A 恢复至少 1440px 的逻辑宽度、必要时重新出现滚动轨道，并从最左侧开始。
+      - 切换 B；确认 B 仍为 Desktop Auto，没有继承 A 的 Device 或 minimum 状态。
+
+  - id: TBMW-008
+    name: Agent automation metrics 遵守 minimum floor 与 clear 恢复
+    required: true
+    description: >
+      验证 scoped CDP 对目标 Tab 设置 automation viewport 时，小于 minimum 的 width 被 clamp，
+      大于 minimum 的 width 保留；clear 后恢复 minimum 与 Zoom 的当前组合。
+    preconditions:
+      - A Tab 选择 1024px、Zoom 100%，B Tab 为 Auto；两者加载可报告 viewport、媒体查询和固定元素矩形的静态页面。
+      - 已用 $toolkit:playwright-cli 附着 A 所在 scoped endpoint，并取得该 target 的受控 primary session。
+    steps:
+      - 通过受控 session 对 A 发送 width=390 的 Emulation.setDeviceMetricsOverride；确认 A 的 window.innerWidth、媒体查询和 Page.getLayoutMetrics 均不低于 1024px，B 不变。
+      - 对 A 改为 width=1920；确认有效逻辑 width 为 1920 而不是被降到 1024，height、deviceScaleFactor、screen 与 orientation 等原参数保持。
+      - 将 A 的 Zoom 改为 150%；确认 minimum 仍使用 CSS 像素，automation viewport 与 displayScale 组合后 Agent DOM 坐标不需要手工缩放。
+      - 发送 Emulation.clearDeviceMetricsOverride；确认 A 恢复当前 1024px minimum + 150% Zoom 的 Desktop metrics，而不是回到窄 Auto 或残留 1920px automation base。
+
+  - id: TBMW-009
+    name: Agent 截图与输入不依赖人类横向位置
+    required: true
+    description: >
+      验证人类横向滚动只改变桌面可见切片；Agent viewport screenshot 覆盖完整逻辑视口，
+      locator、mouse 和 Input 均继续使用页面 CSS 坐标。
+    preconditions:
+      - A Tab 选择 1440px，页面在最左、中部和最右各有唯一标记与可点击控件，当前 Browser 画布明显窄于 1440px。
+      - desktop surface、terminal-browser Playwright page 与受控 primary session 均指向同一 A target。
+    steps:
+      - 人工把宿主画布滚到最左，保存 Agent viewport screenshot 并记录图片宽度、三个标记与 window.scrollX；确认截图覆盖完整逻辑 viewport且页面 window.scrollX 未被宿主滚动改变。
+      - 把宿主画布滚到最右，再保存同类截图；确认图片逻辑宽度和三个标记与最左基准一致，不只截取人类当前可见切片。
+      - 在最右宿主位置使用 Playwright locator 和 CSS 坐标分别点击左端与右端控件；确认两者都命中正确目标，不加减 horizontalOffsetX。
+      - 切回最左并由人类点击当前可见控件；确认原生点击命中视觉对应元素，Agent 后续操作仍使用同一 CSS 坐标系。
+
+  - id: TBMW-010
+    name: Browser comments 在横向裁剪后保持目标与截图坐标一致
+    required: true
+    description: >
+      验证最小宽度与宿主横移不会破坏既有 Browser comments：当前可见元素可被选择，marker、
+      prompt viewport 坐标和提交截图指向同一逻辑页面目标。
+    preconditions:
+      - A Tab 选择 1440px，受控页面左右两端各有唯一可注释元素，Browser 画布产生 overflow。
+      - 当前 terminal session 可接收 Browser comments prompt，测试产生的草稿、截图和 prompt 可在本 case 清理。
+    steps:
+      - 在宿主最左位置对左端元素创建评论；确认 marker 与输入框贴合该元素，记录的 viewport 宽度不低于 1440px。
+      - 滚到最右并对右端元素创建第二条评论；确认第一条逻辑 marker 仍存在，第二条坐标与当前可见元素一致，没有减错宿主 offset。
+      - 提交评论；确认截图同时包含正确编号目标，prompt 中两个目标的 viewport/rect 坐标与页面 CSS 坐标一致，Terminal 收到一次完整 prompt。
+      - 清理评论和截图；确认停止 annotation 后普通横向滚动、页面点击与 Agent 操作恢复且没有残留 overlay。
+
+  - id: TBMW-011
+    name: 非法档位与 metrics 失败保持旧状态
+    required: true
+    description: >
+      验证 main-process IPC 是最终校验边界；非法 minimum 或 Chromium metrics 应用失败时明确
+      拒绝，菜单、页面、offset 和其它 Tab 保持最后一次成功状态。
+    preconditions:
+      - A Tab 已成功选择 1024px并滚到中部，B Tab 为 Auto。
+      - 可从隔离 desktop renderer 发起受控 bridge 调用，并可在 owned fixture 中触发一次可恢复的 metrics command 失败。
+    steps:
+      - 分别提交 1280、0、负数、字符串、NaN 和对象作为 minimum；确认每次都明确失败，A 菜单仍为 1024px、页面 floor 与原 offset 不变，B 仍为 Auto。
+      - 对已关闭 tabId 和另一个窗口的 tabId 发起设置；确认 fail closed且不泄露对应页面 URL、标题或 Profile 数据。
+      - 触发一次 Chromium metrics 应用失败后选择 1440px；确认 UI 展示现有错误且不假显示 1440px，A 仍保持最后成功的 1024px，B 不变。
+      - 恢复 fixture 后合法选择 1440px；确认错误清除、状态成功切换并从最左开始，没有重复 View 或 debugger attachment。
+
+  - id: TBMW-012
+    name: 关闭 Tab 后新 WebContents 回到 Auto且不写入磁盘
+    required: true
+    description: >
+      验证 minimum 只属于当前存活 WebContents；关闭 Tab 删除该状态，新建页面从 Auto 开始，
+      Terminal Browser 持久化文件不出现 minimum 或横向 offset 字段。
+    preconditions:
+      - A、B 两个 Tab 分别选择 1440px 与 768px，A、B 均有非零宿主横向位置。
+      - 已记录当前隔离 Dev Session 的 terminal-browser-tabs.json 路径并能读取本 case 前后的真实内容。
+    steps:
+      - 读取持久化文件；确认 Tab/Group 页面元数据仍可保存，但不存在 minimumViewportWidth、horizontalOffsetX 或同义字段。
+      - 关闭 A 后新建 Tab C；确认 C 获得新的 WebContents且菜单为 Auto、无宿主横向位置，B 仍为 768px并保留自己的位置。
+      - 关闭 B 后通过 page-open 与 scoped CDP 各创建新 Tab；确认两者均为 Auto，没有复用已关闭 A/B 的状态。
+      - 再次读取持久化文件；确认仍没有 minimum 或 offset 字段，并清理本 case 创建的 Tab。
+
+  - id: TBMW-013
+    name: 保留 userData 的完整应用重启把恢复 Tab 重置为 Auto
+    required: true
+    description: >
+      验证完整 Electron 进程重启会结束所有 live WebContents；同一隔离 userData 恢复页面元数据时，
+      minimum 与宿主 offset 不恢复，首次 materialize 使用 Auto。
+    preconditions:
+      - 本 case 独占一个可保留 userData 重启的受管 Dev Session，A Tab 选择 1440px并滚到非零位置，持久化 URL、Group 与 active Tab 已稳定写入。
+      - 已记录重启前 desktop/terminal-browser endpoint、A 的页面身份和持久化文件内容。
+    steps:
+      - 完整停止 Electron 进程但保留本 case 的隔离 userData，再重新启动同一实例；使用 $toolkit:runweave-dev-session 取得 fresh desktop 与 terminal-browser endpoint，不能复用旧 UI ref 或 CDP connection。
+      - 显式打开恢复的 Profile 并 materialize A；确认 URL、Group 与 active Tab 页面元数据按既有规则恢复，但 Minimum Width 显示 Auto、没有旧横向 offset。
+      - 读取恢复前后的 terminal-browser-tabs.json；确认两者均没有 minimum 或 offset 字段，重启不是依赖字段清理实现的。
+      - 关闭 owned 页面、detach fresh 连接并停止 Session；确认 fixture、原生 View、CDP attachment 和测试 userData 按本 case 约定清理完成。

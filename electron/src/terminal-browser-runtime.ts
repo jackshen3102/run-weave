@@ -2,11 +2,16 @@ import {
   session as electronSession,
   type WebContents,
   type WebContentsView,
+  type View,
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import type { TerminalBrowserUpdate } from "@runweave/shared/desktop-bridge";
+import type {
+  TerminalBrowserBounds,
+  TerminalBrowserUpdate,
+} from "@runweave/shared/desktop-bridge";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import type { TerminalBrowserMinimumViewportWidth } from "@runweave/shared/terminal-browser-minimum-width";
 import type { TerminalBrowserGroupNameOrigin } from "@runweave/shared/terminal-browser-workspace";
 import {
   getTerminalBrowserProfileConfig,
@@ -29,6 +34,9 @@ export interface TerminalBrowserEntry {
   windowId: number;
   profileId: TerminalBrowserProfileId;
   view: WebContentsView;
+  viewportView: View;
+  viewportBounds: TerminalBrowserBounds | null;
+  horizontalOffsetX: number;
   attached: boolean;
   visible: boolean;
   targetId: string;
@@ -41,6 +49,7 @@ export interface TerminalBrowserEntry {
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
   displayScale: number;
+  minimumViewportWidth: TerminalBrowserMinimumViewportWidth;
   emulationScale: number;
   automationDeviceMetrics: Record<string, unknown> | null;
   metricsMutationQueue: Promise<void>;

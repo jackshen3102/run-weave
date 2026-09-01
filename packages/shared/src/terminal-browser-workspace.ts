@@ -1,5 +1,6 @@
 import type { TerminalBrowserDeviceState } from "./terminal-browser-device";
 import type { TerminalBrowserProfileId } from "./terminal-browser-profile";
+import type { TerminalBrowserMinimumViewportWidth } from "./terminal-browser-minimum-width";
 
 export interface TerminalBrowserSnapshot {
   url: string;
@@ -18,6 +19,7 @@ export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
   displayScale: number;
+  minimumViewportWidth: TerminalBrowserMinimumViewportWidth;
   faviconDataUrl: string | null;
   navigationError: string | null;
 }

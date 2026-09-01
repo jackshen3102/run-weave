@@ -66,6 +66,7 @@ export function getTerminalBrowserUpdateKey(
     update.devtoolsOpen ? "1" : "0",
     getTerminalBrowserDeviceStateUpdateKey(update.deviceState),
     update.displayScale,
+    update.minimumViewportWidth ?? "auto",
     update.faviconDataUrl ?? "",
     update.navigationError ?? "",
   ].join("\u001f");
@@ -180,6 +181,7 @@ export function sendTerminalBrowserTabUpdate(
     devtoolsOpen: entry.devtoolsOpen,
     deviceState: getTerminalBrowserDeviceState(entry),
     displayScale: entry.displayScale,
+    minimumViewportWidth: entry.minimumViewportWidth,
     faviconDataUrl: entry.faviconDataUrl,
     navigationError: entry.navigationError,
   };

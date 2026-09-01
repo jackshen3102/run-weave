@@ -21,12 +21,17 @@ import type {
 import type { TerminalBrowserDisplayScaleState } from "./terminal-browser-display-scale";
 import type { TerminalBrowserHeaderState } from "./terminal-browser-headers";
 import type {
+  TerminalBrowserMinimumViewportWidth,
+  TerminalBrowserMinimumViewportWidthState,
+} from "./terminal-browser-minimum-width";
+import type {
   ResolveTerminalBrowserProfileRequest,
   ResolvedTerminalBrowserProfile,
   TerminalBrowserProfileChangedEvent,
   TerminalBrowserProfileId,
   TerminalBrowserProfilePreferenceUpdate,
   TerminalBrowserProfilePreferences,
+  TerminalBrowserProfileProxyMode,
   TerminalBrowserProfileRuntimeState,
 } from "./terminal-browser-profile";
 import type {
@@ -51,6 +56,7 @@ export interface TerminalBrowserBounds {
   width: number;
   height: number;
   emulationScale?: number;
+  horizontalOffsetX?: number;
 }
 
 export interface TerminalBrowserAnnotationUpdate {
@@ -131,6 +137,10 @@ export interface RunweaveElectronBridge {
     tabId: string,
     factor: number,
   ) => Promise<TerminalBrowserDisplayScaleState>;
+  terminalBrowserSetMinimumViewportWidth: (
+    tabId: string,
+    width: TerminalBrowserMinimumViewportWidth,
+  ) => Promise<TerminalBrowserMinimumViewportWidthState>;
   terminalBrowserSetBounds: (
     tabId: string,
     bounds: TerminalBrowserBounds | null,
@@ -156,6 +166,10 @@ export interface RunweaveElectronBridge {
   terminalBrowserGetProfileRuntimes: () => Promise<
     TerminalBrowserProfileRuntimeState[]
   >;
+  terminalBrowserSetProfileProxyMode: (
+    profileId: TerminalBrowserProfileId,
+    proxyMode: TerminalBrowserProfileProxyMode,
+  ) => Promise<TerminalBrowserProfileRuntimeState>;
   terminalBrowserResolveProfile: (
     request: ResolveTerminalBrowserProfileRequest,
   ) => Promise<ResolvedTerminalBrowserProfile>;

@@ -16,6 +16,7 @@ import {
   validateTerminalBrowserUrl,
 } from "./terminal-browser-view-lifecycle.js";
 import { sendTerminalBrowserTabUpdate } from "./terminal-browser-view-updates.js";
+import { relayoutTerminalBrowserViewport } from "./terminal-browser-viewport-layout.js";
 
 export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
   const targets: TerminalBrowserCdpTarget[] = [];
@@ -179,6 +180,7 @@ export async function setTerminalBrowserDisplayScaleForTarget(
     return null;
   }
   const result = await setTerminalBrowserDisplayScale(found.entry, factor);
+  relayoutTerminalBrowserViewport(found.entry);
   const windowId = found.entry.windowId;
   const tabId = found.key.slice(`${windowId}:${found.entry.profileId}:`.length);
   const win = BrowserWindow.fromId(windowId);

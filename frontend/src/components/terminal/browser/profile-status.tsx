@@ -1,3 +1,4 @@
+import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import {
   TERMINAL_BROWSER_PROFILE_CONFIGS,
@@ -31,6 +32,8 @@ export function TerminalBrowserProfileStatus({
     useState<TerminalBrowserProfilePreferences | null>(null);
   const [runtime, setRuntime] =
     useState<TerminalBrowserProfileRuntimeState | null>(null);
+  const [proxySwitching, setProxySwitching] = useState(false);
+  const [proxyError, setProxyError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const activateBrowser = useTerminalPreviewStore(
     (state) => state.activateBrowser,
@@ -75,16 +78,45 @@ export function TerminalBrowserProfileStatus({
     return () => window.removeEventListener("pointerdown", close);
   }, [onOpenChange, open]);
 
+  const proxyEnabled = runtime?.proxyMode !== "direct";
+  const toggleProxy = useMemoizedFn(async () => {
+    if (!runtime || proxySwitching) {
+      return;
+    }
+    setProxySwitching(true);
+    setProxyError(null);
+    try {
+      const next =
+        await window.electronAPI?.terminalBrowserSetProfileProxyMode?.(
+          profileId,
+          proxyEnabled ? "direct" : "whistle",
+        );
+      if (!next) {
+        throw new Error("Profile proxy control is unavailable");
+      }
+      setRuntime(next);
+      activateBrowser(profileId, projectId);
+    } catch (error) {
+      setProxyError(
+        error instanceof Error ? error.message : "Failed to switch proxy",
+      );
+    } finally {
+      setProxySwitching(false);
+    }
+  });
+
   const status = resolving
     ? "starting"
     : (runtime?.whistle.status ?? "stopped");
   const statusClass = resolutionError
     ? "bg-rose-500"
-    : status === "ready"
-      ? "bg-emerald-400"
-      : status === "failed"
-        ? "bg-rose-500"
-        : "bg-amber-400";
+    : !proxyEnabled
+      ? "bg-slate-500"
+      : status === "ready"
+        ? "bg-emerald-400"
+        : status === "failed"
+          ? "bg-rose-500"
+          : "bg-amber-400";
   const routeLabel =
     runtime?.route.kind === "dev-server"
       ? `127.0.0.1:${runtime.route.port}`
@@ -99,6 +131,8 @@ export function TerminalBrowserProfileStatus({
         variant="ghost"
         className="h-7 gap-1 px-1.5 text-[10px]"
         aria-expanded={open}
+        aria-label={`${config.label}: ${proxyEnabled ? "proxy enabled" : "direct connection"}`}
+        title={proxyEnabled ? "Whistle proxy enabled" : "Direct connection"}
         onClick={() => onOpenChange(!open)}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${statusClass}`} />
@@ -110,19 +144,53 @@ export function TerminalBrowserProfileStatus({
           <div className="space-y-1 text-[11px]">
             <div className="flex justify-between gap-3 text-slate-200">
               <strong>{config.label}</strong>
-              <span>{status}</span>
+              <span>{proxyEnabled ? "Proxy" : "Direct"}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-slate-400">
+              <span>Connection</span>
+              <Button
+                data-testid="terminal-browser-profile-proxy-toggle"
+                type="button"
+                size="sm"
+                variant="ghost"
+                className={[
+                  "h-6 min-w-16 px-2 text-[10px]",
+                  proxyEnabled
+                    ? "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20"
+                    : "bg-slate-700 text-slate-200 hover:bg-slate-600",
+                ].join(" ")}
+                disabled={!runtime || resolving || proxySwitching}
+                aria-label={`${config.label} proxy`}
+                aria-pressed={proxyEnabled}
+                title={
+                  proxyEnabled
+                    ? "Switch this Profile to a direct connection"
+                    : "Enable the Whistle proxy for this Profile"
+                }
+                onClick={() => void toggleProxy()}
+              >
+                {proxySwitching
+                  ? "Switching…"
+                  : proxyEnabled
+                    ? "Enabled"
+                    : "Direct"}
+              </Button>
             </div>
             <div className="flex justify-between text-slate-400">
               <span>Whistle</span>
-              <span>127.0.0.1:{config.whistlePort}</span>
+              <span>
+                {status} · 127.0.0.1:{config.whistlePort}
+              </span>
             </div>
             <div className="flex justify-between text-slate-400">
               <span>Route</span>
               <span data-testid="terminal-browser-route">{routeLabel}</span>
             </div>
-            {resolutionError ? (
+            {proxyError ? (
+              <p className="break-words text-rose-300">{proxyError}</p>
+            ) : resolutionError ? (
               <p className="break-words text-rose-300">{resolutionError}</p>
-            ) : runtime?.whistle.error ? (
+            ) : proxyEnabled && runtime?.whistle.error ? (
               <p className="break-words text-rose-300">
                 {runtime.whistle.error.code}: {runtime.whistle.error.message}
               </p>

@@ -188,12 +188,7 @@ export function ensureTerminalBrowserDormantFallback(
       lastActiveAt: Date.now(),
     },
   );
-  registerTerminalBrowserTab(
-    windowId,
-    profileId,
-    tabId,
-    browserGroupId,
-  );
+  registerTerminalBrowserTab(windowId, profileId, tabId, browserGroupId);
   terminalBrowserRuntime.attachedByWorkspaceKey.set(
     getTerminalBrowserWorkspaceKey(windowId, profileId),
     tabId,
@@ -323,6 +318,7 @@ export function getTerminalBrowserWorkspaceSnapshot(
             devtoolsOpen: false,
             deviceState: createTerminalBrowserDeviceState("desktop"),
             displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
+            minimumViewportWidth: null,
             faviconDataUrl: null,
             navigationError: null,
           },
@@ -346,6 +342,7 @@ export function getTerminalBrowserWorkspaceSnapshot(
           devtoolsOpen: entry.devtoolsOpen,
           deviceState: getTerminalBrowserDeviceState(entry),
           displayScale: entry.displayScale,
+          minimumViewportWidth: entry.minimumViewportWidth,
           faviconDataUrl: entry.faviconDataUrl,
           navigationError: entry.navigationError,
         },

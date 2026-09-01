@@ -95,6 +95,8 @@ export type TerminalBrowserWhistleStatus =
   | "ready"
   | "failed";
 
+export type TerminalBrowserProfileProxyMode = "whistle" | "direct";
+
 export interface TerminalBrowserErrorPayload {
   code: TerminalBrowserErrorCode;
   message: string;
@@ -113,6 +115,7 @@ export interface TerminalBrowserWhistleState {
 
 export interface TerminalBrowserProfileRuntimeState {
   profileId: TerminalBrowserProfileId;
+  proxyMode: TerminalBrowserProfileProxyMode;
   route: TerminalBrowserRoute;
   whistle: TerminalBrowserWhistleState;
   visibleViewCount: number;

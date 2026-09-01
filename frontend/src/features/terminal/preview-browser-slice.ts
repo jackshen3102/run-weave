@@ -46,6 +46,7 @@ function createBrowserTabState(
     navigationError: null,
     deviceState: createTerminalBrowserDeviceState("desktop"),
     displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
+    minimumViewportWidth: null,
   };
 }
 

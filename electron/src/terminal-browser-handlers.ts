@@ -9,6 +9,7 @@ import {
   isTerminalBrowserProfileId,
   TERMINAL_BROWSER_PROFILE_IDS,
   type ResolveTerminalBrowserProfileRequest,
+  type TerminalBrowserProfileProxyMode,
 } from "@runweave/shared/terminal-browser-profile";
 import type { TerminalBrowserDisplayScaleState } from "@runweave/shared/terminal-browser-display-scale";
 import {
@@ -30,6 +31,7 @@ import {
 } from "./terminal-browser-device-emulation.js";
 import { ensureTerminalBrowserCookiePersistence } from "./terminal-browser-cookie-persistence.js";
 import { setTerminalBrowserDisplayScale } from "./terminal-browser-display-scale.js";
+import { registerTerminalBrowserMinimumWidthHandler } from "./terminal-browser-minimum-width-handler.js";
 import {
   getTerminalBrowserKey,
   getTerminalBrowserSession,
@@ -43,7 +45,6 @@ import {
 } from "./terminal-browser-network.js";
 import {
   attachTerminalBrowser,
-  clampTerminalBrowserBounds,
   closeTerminalBrowserEntry,
   detachTerminalBrowser,
   getExistingTerminalBrowserEntry,
@@ -51,6 +52,10 @@ import {
   materializeTerminalBrowserProfile,
   validateTerminalBrowserUrl,
 } from "./terminal-browser-view-lifecycle.js";
+import {
+  layoutTerminalBrowserViewport,
+  relayoutTerminalBrowserViewport,
+} from "./terminal-browser-viewport-layout.js";
 import {
   getTerminalBrowserSnapshot,
   isNavigationAbortError,
@@ -66,6 +71,7 @@ import {
 import {
   getTerminalBrowserProfileRuntimeStates,
   resolveTerminalBrowserProfile,
+  setTerminalBrowserProfileProxyMode,
 } from "./terminal-browser-profile-runtime.js";
 import { ensureTerminalBrowserWhistle } from "./terminal-browser-whistle-runtime.js";
 import { createTerminalBrowserTabFromProxy } from "./terminal-browser-proxy-api.js";
@@ -87,6 +93,7 @@ export function registerTerminalBrowserHandlers(): void {
     );
   }
   registerTerminalBrowserWorkspaceHandlers();
+  registerTerminalBrowserMinimumWidthHandler();
 
   ipcMain.handle("terminal-browser:open-tool-menu", async (event, request) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -126,6 +133,21 @@ export function registerTerminalBrowserHandlers(): void {
   );
   ipcMain.handle("terminal-browser:get-profile-runtimes", () =>
     getTerminalBrowserProfileRuntimeStates(),
+  );
+  ipcMain.handle(
+    "terminal-browser:set-profile-proxy-mode",
+    async (_event, profileId: unknown, proxyMode: unknown) => {
+      if (
+        !isTerminalBrowserProfileId(profileId) ||
+        (proxyMode !== "whistle" && proxyMode !== "direct")
+      ) {
+        throw new Error("Invalid Terminal Browser Profile proxy mode");
+      }
+      return await setTerminalBrowserProfileProxyMode(
+        profileId,
+        proxyMode as TerminalBrowserProfileProxyMode,
+      );
+    },
   );
   ipcMain.handle(
     "terminal-browser:resolve-profile",
@@ -219,6 +241,7 @@ export function registerTerminalBrowserHandlers(): void {
         entry,
         normalizedPresetId,
       );
+      relayoutTerminalBrowserViewport(entry, 0);
       sendTerminalBrowserTabUpdate(win, tabId, entry);
       return nextState;
     },
@@ -241,6 +264,7 @@ export function registerTerminalBrowserHandlers(): void {
         "update display scale for",
       );
       const state = await setTerminalBrowserDisplayScale(entry, factor);
+      relayoutTerminalBrowserViewport(entry);
       sendTerminalBrowserTabUpdate(win, tabId, entry);
       return state;
     },
@@ -350,8 +374,7 @@ export function registerTerminalBrowserHandlers(): void {
       if (!entry) {
         return;
       }
-      const nextBounds = clampTerminalBrowserBounds(win, bounds);
-      entry.view.setBounds(nextBounds);
+      layoutTerminalBrowserViewport(win, entry, bounds);
       await updateTerminalBrowserEmulationScale(
         entry,
         clampTerminalBrowserEmulationScale(bounds.emulationScale),

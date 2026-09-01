@@ -12,6 +12,7 @@ export * from "./terminal-browser-cdp-proxy";
 export * from "./terminal-browser-device";
 export * from "./terminal-browser-display-scale";
 export * from "./terminal-browser-headers";
+export * from "./terminal-browser-minimum-width";
 export * from "./terminal-browser-proxy";
 export * from "./terminal-browser-tool-menu";
 export * from "./terminal-browser-workspace";
