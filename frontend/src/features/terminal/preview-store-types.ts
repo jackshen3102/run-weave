@@ -2,6 +2,7 @@ import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-brows
 import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
 import type { TerminalBrowserGroupSnapshot } from "@runweave/shared/terminal-browser-workspace";
 import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
+import type { TerminalBrowserMinimumViewportWidth } from "@runweave/shared/terminal-browser-minimum-width";
 
 export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
@@ -28,6 +29,7 @@ export interface TerminalBrowserTabState {
   devtoolsOpen?: boolean;
   deviceState: TerminalBrowserDeviceState;
   displayScale: number;
+  minimumViewportWidth: TerminalBrowserMinimumViewportWidth;
 }
 
 export const DEFAULT_MARKDOWN_VIEW_MODE: TerminalMarkdownViewMode = "preview";

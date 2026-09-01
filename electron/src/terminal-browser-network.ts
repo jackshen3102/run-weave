@@ -6,6 +6,7 @@ import {
 import {
   getTerminalBrowserProfileConfig,
   type TerminalBrowserProfileId,
+  type TerminalBrowserProfileProxyMode,
 } from "@runweave/shared/terminal-browser-profile";
 import { TERMINAL_BROWSER_PROXY_BYPASS_RULES } from "@runweave/shared/terminal-browser-proxy";
 import {
@@ -99,15 +100,36 @@ export function setTerminalBrowserHeaderRules(
   return getTerminalBrowserHeaderState(profileId);
 }
 
-export async function applyTerminalBrowserProfileProxy(
+export async function configureTerminalBrowserProfileProxy(
   profileId: TerminalBrowserProfileId,
+  proxyMode: TerminalBrowserProfileProxyMode,
 ): Promise<void> {
   const config = getTerminalBrowserProfileConfig(profileId);
-  await getTerminalBrowserSession(profileId).setProxy({
-    mode: "fixed_servers",
-    proxyRules: `127.0.0.1:${config.whistlePort}`,
-    proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
-  });
+  const browserSession = getTerminalBrowserSession(profileId);
+  await browserSession.setProxy(
+    proxyMode === "whistle"
+      ? {
+          mode: "fixed_servers",
+          proxyRules: `127.0.0.1:${config.whistlePort}`,
+          proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
+        }
+      : { mode: "direct" },
+  );
+}
+
+export async function reloadTerminalBrowserProfileAfterProxyChange(
+  profileId: TerminalBrowserProfileId,
+): Promise<void> {
+  await getTerminalBrowserSession(profileId).closeAllConnections();
+  for (const entry of terminalBrowserRuntime.entries.values()) {
+    if (entry.profileId !== profileId || entry.view.webContents.isDestroyed()) {
+      continue;
+    }
+    const url = entry.view.webContents.getURL();
+    if (url && url !== "about:blank") {
+      entry.view.webContents.reload();
+    }
+  }
 }
 
 export function reloadTerminalBrowserBusinessOrigin(

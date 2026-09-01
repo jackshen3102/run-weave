@@ -15,7 +15,7 @@ export function detachTerminalBrowser(
   if (!tabId) {
     for (const entry of terminalBrowserRuntime.entries.values()) {
       if (entry.windowId === win.id) {
-        entry.view.setVisible(false);
+        entry.viewportView.setVisible(false);
         entry.visible = false;
       }
     }
@@ -23,7 +23,7 @@ export function detachTerminalBrowser(
   }
   const found = findTerminalBrowserEntryForWindow(win, tabId);
   if (found) {
-    found.entry.view.setVisible(false);
+    found.entry.viewportView.setVisible(false);
     found.entry.visible = false;
   }
 }
@@ -31,7 +31,7 @@ export function detachTerminalBrowser(
 export function attachTerminalBrowser(
   win: BrowserWindow,
   tabId: string,
-  view: WebContentsView,
+  _view: WebContentsView,
   options: { emitWorkspace?: boolean; persist?: boolean } = {},
 ): void {
   const entry = findTerminalBrowserEntryForWindow(win, tabId)?.entry;
@@ -42,21 +42,21 @@ export function attachTerminalBrowser(
   const attachedTabId =
     terminalBrowserRuntime.attachedByWorkspaceKey.get(workspaceKey);
   if (attachedTabId === tabId && entry.attached) {
-    view.setVisible(true);
+    entry.viewportView.setVisible(true);
     entry.visible = true;
     return;
   }
   for (const candidate of terminalBrowserRuntime.entries.values()) {
     if (candidate.windowId === win.id) {
-      candidate.view.setVisible(false);
+      candidate.viewportView.setVisible(false);
       candidate.visible = false;
     }
   }
   if (!entry.attached) {
-    win.contentView.addChildView(view);
+    win.contentView.addChildView(entry.viewportView);
     entry.attached = true;
   }
-  view.setVisible(true);
+  entry.viewportView.setVisible(true);
   entry.visible = true;
   terminalBrowserRuntime.attachedByWorkspaceKey.set(workspaceKey, tabId);
   entry.lastActiveAt = Date.now();

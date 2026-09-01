@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView } from "electron";
+import { BrowserWindow, View, WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
 import { createTerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import { DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE } from "@runweave/shared/terminal-browser-display-scale";
@@ -89,6 +89,9 @@ export function getOrCreateTerminalBrowserView(
       sandbox: true,
     },
   });
+  const viewportView = new View();
+  viewportView.addChildView(view);
+  viewportView.setVisible(false);
   view.webContents.setWindowOpenHandler(({ url, disposition }) => {
     const safeUrl = validateTerminalBrowserUrl(url);
     if (!safeUrl) {
@@ -128,12 +131,15 @@ export function getOrCreateTerminalBrowserView(
   view.webContents.on("did-create-window", (popupWindow) => {
     configureTerminalBrowserPopupWindow(win, popupWindow, profileId);
   });
-  view.setVisible(false);
+  view.setVisible(true);
 
   const entry: TerminalBrowserEntry = {
     windowId: win.id,
     profileId,
     view,
+    viewportView,
+    viewportBounds: null,
+    horizontalOffsetX: 0,
     attached: false,
     visible: false,
     targetId: randomUUID(),
@@ -149,6 +155,7 @@ export function getOrCreateTerminalBrowserView(
     devtoolsOpen: false,
     deviceState: createTerminalBrowserDeviceState("desktop"),
     displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
+    minimumViewportWidth: null,
     emulationScale: 1,
     automationDeviceMetrics: null,
     metricsMutationQueue: Promise.resolve(),
@@ -301,6 +308,10 @@ export function getOrCreateTerminalBrowserView(
       terminalBrowserRuntime.attachedByWorkspaceKey.get(
         getTerminalBrowserWorkspaceKey(win.id, profileId),
       ) === tabId;
+    if (entry.attached && !win.isDestroyed()) {
+      win.contentView.removeChildView(entry.viewportView);
+      entry.attached = false;
+    }
     terminalBrowserRuntime.entries.delete(key);
     if (wasActive) {
       terminalBrowserRuntime.attachedByWorkspaceKey.delete(
@@ -407,10 +418,7 @@ export function materializeTerminalBrowserProfile(
   profileId: TerminalBrowserProfileId,
   options: { attach?: boolean } = {},
 ): string {
-  const fallbackTabId = ensureTerminalBrowserDormantFallback(
-    win.id,
-    profileId,
-  );
+  const fallbackTabId = ensureTerminalBrowserDormantFallback(win.id, profileId);
   const selectedTabId =
     terminalBrowserRuntime.attachedByWorkspaceKey.get(
       getTerminalBrowserWorkspaceKey(win.id, profileId),
@@ -509,7 +517,8 @@ export function closeTerminalBrowserEntry(
     reason: "user",
   });
   if (entry.attached) {
-    win.contentView.removeChildView(entry.view);
+    win.contentView.removeChildView(entry.viewportView);
+    entry.attached = false;
   }
   clearPendingTerminalBrowserTabUpdate(entry);
   closeTerminalBrowserDisplayScale(entry);
@@ -521,6 +530,7 @@ export function closeTerminalBrowserEntry(
     profileId,
     browserGroupId: entry.browserGroupId,
   });
+  entry.viewportView.removeChildView(entry.view);
   entry.view.webContents.close();
   if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
     const remainingTabIds = getOrderedTerminalBrowserTabIds(win.id, profileId);

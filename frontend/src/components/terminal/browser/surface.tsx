@@ -11,11 +11,13 @@ import { TerminalBrowserAnnotationsPanel } from "./annotations-panel";
 import { TerminalBrowserDevicePanel } from "./device-panel";
 import { TerminalBrowserHeadersPanel } from "./headers-panel";
 import { Button } from "../../ui/button";
+import type { TerminalBrowserHorizontalViewportState } from "./use-bounds";
 
 const BROWSER_VIEW_GUTTER_PX = 6;
 const TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX = 320;
 const MOBILE_STAGE_PADDING_PX = 12;
 const MIN_MOBILE_SCALE = 0.1;
+const HORIZONTAL_VIEWPORT_TRACK_HEIGHT_PX = 14;
 
 interface MobileDisplaySize {
   width: number;
@@ -69,6 +71,9 @@ interface TerminalBrowserSurfaceProps {
   environment: BrowserSurfaceEnvironment;
   headers: BrowserHeaderPanel;
   refs: BrowserSurfaceRefs;
+  horizontalViewport: TerminalBrowserHorizontalViewportState & {
+    onScroll: (scrollLeft: number) => void;
+  };
 }
 
 export function TerminalBrowserSurface({
@@ -76,6 +81,7 @@ export function TerminalBrowserSurface({
   device,
   environment,
   headers,
+  horizontalViewport,
   refs,
 }: TerminalBrowserSurfaceProps) {
   const { browserViewRef, containerRef } = refs;
@@ -101,6 +107,14 @@ export function TerminalBrowserSurface({
   const sidePanelOpen =
     annotations.open || headerRulesPanelOpen || devicePanelOpen;
   const lastMobileMeasureKeyRef = useRef<string | null>(null);
+  const horizontalTrackRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const track = horizontalTrackRef.current;
+    if (track && track.scrollLeft !== horizontalViewport.scrollLeft) {
+      track.scrollLeft = horizontalViewport.scrollLeft;
+    }
+  }, [horizontalViewport.scrollLeft]);
 
   useLayoutEffect(() => {
     if (!deviceState.mobile || !deviceState.viewport) {
@@ -200,9 +214,35 @@ export function TerminalBrowserSurface({
           style={{
             left: BROWSER_VIEW_GUTTER_PX,
             right: sidePanelOpen ? TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX : 0,
+            bottom: horizontalViewport.overflowing
+              ? HORIZONTAL_VIEWPORT_TRACK_HEIGHT_PX
+              : 0,
           }}
         />
       )}
+      {!deviceState.mobile && horizontalViewport.overflowing ? (
+        <div
+          ref={horizontalTrackRef}
+          aria-label="Browser horizontal viewport"
+          className="absolute bottom-0 overflow-x-auto overflow-y-hidden"
+          style={{
+            left: BROWSER_VIEW_GUTTER_PX,
+            right: sidePanelOpen ? TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX : 0,
+            height: HORIZONTAL_VIEWPORT_TRACK_HEIGHT_PX,
+          }}
+          onScroll={(event) =>
+            horizontalViewport.onScroll(event.currentTarget.scrollLeft)
+          }
+        >
+          <div
+            aria-hidden="true"
+            style={{
+              width: horizontalViewport.contentWidth,
+              height: 1,
+            }}
+          />
+        </div>
+      ) : null}
       {isElectron ? <TerminalBrowserAnnotationsPanel {...annotations} /> : null}
       {isElectron ? (
         <TerminalBrowserHeadersPanel

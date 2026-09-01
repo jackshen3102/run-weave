@@ -48,6 +48,7 @@ function normalizeHarnessTab(tab: HarnessTab): TerminalBrowserTabState {
     canGoForward: false,
     deviceState: createTerminalBrowserDeviceState("desktop"),
     displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
+    minimumViewportWidth: null,
     faviconDataUrl: null,
     navigationError: null,
   };
@@ -76,7 +77,9 @@ function TerminalBrowserTabsHarness({
       tabIds: string[];
     }> = [];
     for (const tab of tabs) {
-      let group = result.find((candidate) => candidate.id === tab.browserGroupId);
+      let group = result.find(
+        (candidate) => candidate.id === tab.browserGroupId,
+      );
       if (!group) {
         group = {
           id: tab.browserGroupId,
@@ -100,7 +103,14 @@ function TerminalBrowserTabsHarness({
       createdTabIds,
       reorders,
     };
-  }, [activeTabId, closedTabIds, createdTabIds, reorders, selectedTabIds, tabs]);
+  }, [
+    activeTabId,
+    closedTabIds,
+    createdTabIds,
+    reorders,
+    selectedTabIds,
+    tabs,
+  ]);
 
   return (
     <TerminalBrowserTabs
@@ -109,8 +119,9 @@ function TerminalBrowserTabsHarness({
       activeTabId={activeTabId}
       onCreateTab={() => {
         const id = `harness-new-${createdTabIds.length + 1}`;
-        const browserGroupId =
-          tabs.find((tab) => tab.id === activeTabId)?.browserGroupId;
+        const browserGroupId = tabs.find(
+          (tab) => tab.id === activeTabId,
+        )?.browserGroupId;
         const nextTab = normalizeHarnessTab({
           id,
           title: "",
@@ -144,7 +155,8 @@ function TerminalBrowserTabsHarness({
           }
           if (activeTabId === tabId) {
             setActiveTabId(
-              remainingTabs[Math.min(closingIndex, remainingTabs.length - 1)]!.id,
+              remainingTabs[Math.min(closingIndex, remainingTabs.length - 1)]!
+                .id,
             );
           }
           return remainingTabs;

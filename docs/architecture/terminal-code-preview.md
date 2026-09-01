@@ -91,7 +91,7 @@ Terminal Browser 工具当前边界：
 - Browser 工具切到后台时只隐藏当前 WebContentsView，不清除该窗口的 selected tab；关闭 selected tab 或关闭窗口时才删除对应 active 映射，因此隐藏、重启和恢复不会把 active 身份回退到数组首项。
 - 三个 Profile 首次实际使用时分别懒启动内置 `whistle@2.10.9`，固定监听 `127.0.0.1:8081/8082/8083`，使用 `profile-1/2/3` 独立 storage 和同一 certDir。Runweave 只维护保留 Value `runweave-dev-server`，不会创建、选择或改写用户 Rules 和其它 Values；`deploy/whistle/proxy.md` 是独立人工部署示例，不属于 Terminal Browser 默认规则。
 - Profile runtime route 只有 `unassigned` 或 `dev-server:<port>`。同路由可以跨 Worktree/Agent 共享；不同路由在仍有可见 view 或 CDP 连接时返回冲突。Profile 空闲后切换只更新/删除保留 Value，并仅刷新配置的 business origin 页面，不清浏览数据或页面身份。
-- 每个 Profile Session 固定使用所属 Whistle 代理并绕过 `<local>`；应用不修改系统代理。三个 Profile 只在自己的 `setCertificateVerifyProc` 中接受共享 Whistle Root CA 链，其它证书继续采用 Chromium 校验结果；主窗口和其它 Session 不继承该信任。
+- 每个 Profile Session 默认使用所属 Whistle 代理并绕过 `<local>`，也可在运行时独立切为直连；临时开关不持久化，应用重启后恢复默认代理模式。切换会关闭该 Profile 的既有网络连接并刷新其页面，但不停止 Whistle 或清理其 Rules、Values 与 storage。应用不修改系统代理。三个 Profile 只在自己的 `setCertificateVerifyProc` 中接受共享 Whistle Root CA 链，其它证书继续采用 Chromium 校验结果；主窗口和其它 Session 不继承该信任。
 - `Headers` 面板只影响当前 Profile 的网页请求，不影响其它 Profile、Runweave 主窗口、登录/API 请求或 Electron 更新请求。
 - Header 规则保存在 Profile-scoped `localStorage` key；旧 `terminal.browser.headerRules` 只在 Profile 1 首次成功同步时迁移一次。每个 Profile 分别同步到其 Electron Session dispatcher，保存失败会回滚本地存储并展示错误。
 - Header 规则通过 `terminal-browser:get-header-rules` / `terminal-browser:set-header-rules` IPC 进入主进程。主进程做最终校验，最多 20 条，字段为 `enabled`、固定操作 `set`、`name`、`value`，URL 模式固定为 `*://*/*`，当前前端不暴露单条规则的 URL pattern 编辑。
@@ -105,6 +105,11 @@ Terminal Browser 工具当前边界：
 - 移动设备画布使用显式缩放模型：前端计算设备逻辑 viewport、面板内展示 bounds 和 `emulationScale`，Electron `setBounds()` 使用展示 bounds，CDP emulation 使用逻辑 viewport 与 scale。不能用 CSS transform 代替 native view 缩放。
 - 设备模式可与 CDP Proxy 共存：如果当前 tab 已附着 CDP Proxy，设备切换复用同一个 `webContents.debugger` 发送 emulation 命令；如果先进入移动设备再被 CDP attach，CDP Proxy 复用设备模式已有的 debugger attach。detached DevTools 仍与设备模式和 CDP Proxy 互斥。
 - 设备状态切换失败必须从 IPC 返回错误，前端不能显示假成功。设备按钮禁用只作为用户体验提示，主进程校验才是安全边界。
+- More 菜单在 Zoom 相邻位置提供当前 tab 的 `Minimum Width`，固定为 `Auto`、`768 px`、`1024 px`、`1440 px` 四档。它与 Zoom 一样只属于存活的 Electron tab：导航、刷新和 tab 切换保留，关闭 tab 或完整重启后恢复 `Auto`，且不写入 `terminal-browser-tabs.json`。
+- Desktop 下最小宽度以 CSS 逻辑像素计；Electron 用普通 `View` 裁剪容器承载更宽的 `WebContentsView`，子 View 宽度为 `max(可见宽度, minimum × displayScale)`。Renderer 底部滚动轨道只提交受 clamp 的宿主横向偏移，地址栏、tab strip、Comments、Headers 和 Device 面板保持固定，页面自身的 `window.scrollX` 不变。
+- 宿主横向偏移按 renderer 中的存活 tab 保存：切换 tab 和同 URL Reload 保留，切换 minimum、主 frame URL 变化或 Device 状态切换归零；resize 与工具面板开关会重新 clamp，页面不再 overflow 时轨道消失并归零。该偏移不进入 workspace snapshot 或磁盘。
+- iPhone SE、iPhone 14 和 Pixel 7 模式暂不应用最小宽度，也不显示宿主横向轨道；切回 Desktop 后恢复此前选择并从最左侧开始。外部 CDP metrics 在 Desktop 下同样遵守 minimum floor，截图、layout metrics 和 Agent 输入仍使用完整逻辑视口坐标，不叠加人类横向偏移。
+- 最小宽度、Zoom、Device 和 automation metrics 共用同一条主进程 mutation queue。主进程只接受封闭档位并根据 live entry 计算原生子 View 尺寸；Renderer 不能通过 bounds IPC 请求任意内容宽度。
 
 ### Terminal Browser 注释模式
 

@@ -3,6 +3,7 @@ import type {
   RunweaveCompanionBridge,
   RunweaveElectronBridge,
   TerminalBrowserAnnotationUpdate,
+  TerminalBrowserBounds,
 } from "@runweave/shared/desktop-bridge";
 import type {
   TerminalBrowserCreateTabRequest,
@@ -21,6 +22,10 @@ import type {
 import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared/terminal-browser-cdp-proxy";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import type { TerminalBrowserDisplayScaleState } from "@runweave/shared/terminal-browser-display-scale";
+import type {
+  TerminalBrowserMinimumViewportWidth,
+  TerminalBrowserMinimumViewportWidthState,
+} from "@runweave/shared/terminal-browser-minimum-width";
 import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
 import type {
   ResolveTerminalBrowserProfileRequest,
@@ -29,6 +34,7 @@ import type {
   TerminalBrowserProfileId,
   TerminalBrowserProfilePreferenceUpdate,
   TerminalBrowserProfilePreferences,
+  TerminalBrowserProfileProxyMode,
   TerminalBrowserProfileRuntimeState,
 } from "@runweave/shared/terminal-browser-profile";
 import type {
@@ -198,15 +204,18 @@ const electronApi = {
       tabId,
       factor,
     ) as Promise<TerminalBrowserDisplayScaleState>,
+  terminalBrowserSetMinimumViewportWidth: (
+    tabId: string,
+    width: TerminalBrowserMinimumViewportWidth,
+  ) =>
+    ipcRenderer.invoke(
+      "terminal-browser:set-minimum-viewport-width",
+      tabId,
+      width,
+    ) as Promise<TerminalBrowserMinimumViewportWidthState>,
   terminalBrowserSetBounds: (
     tabId: string,
-    bounds: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      emulationScale?: number;
-    } | null,
+    bounds: TerminalBrowserBounds | null,
   ) => ipcRenderer.invoke("terminal-browser:set-bounds", tabId, bounds),
   terminalBrowserOpenDevTools: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:open-devtools", tabId),
@@ -249,6 +258,15 @@ const electronApi = {
     ipcRenderer.invoke("terminal-browser:get-profile-runtimes") as Promise<
       TerminalBrowserProfileRuntimeState[]
     >,
+  terminalBrowserSetProfileProxyMode: (
+    profileId: TerminalBrowserProfileId,
+    proxyMode: TerminalBrowserProfileProxyMode,
+  ) =>
+    ipcRenderer.invoke(
+      "terminal-browser:set-profile-proxy-mode",
+      profileId,
+      proxyMode,
+    ) as Promise<TerminalBrowserProfileRuntimeState>,
   terminalBrowserResolveProfile: (
     request: ResolveTerminalBrowserProfileRequest,
   ) =>

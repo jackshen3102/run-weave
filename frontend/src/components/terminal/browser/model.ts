@@ -8,6 +8,10 @@ import {
   isTerminalBrowserDisplayScale,
 } from "@runweave/shared/terminal-browser-display-scale";
 import { browserTabLabel } from "./tab-utils";
+import {
+  isTerminalBrowserMinimumViewportWidth,
+  type TerminalBrowserMinimumViewportWidth,
+} from "@runweave/shared/terminal-browser-minimum-width";
 
 export type ElectronBrowserSnapshot = TerminalBrowserSnapshot;
 export type ElectronBrowserUpdate = TerminalBrowserUpdate;
@@ -62,6 +66,9 @@ export function buildTabUpdateFromElectronUpdate(
     devtoolsOpen: update.devtoolsOpen,
     deviceState: update.deviceState,
     displayScale: normalizeDisplayScale(update.displayScale),
+    minimumViewportWidth: normalizeMinimumViewportWidth(
+      update.minimumViewportWidth,
+    ),
     faviconDataUrl: update.faviconDataUrl,
     navigationError: update.navigationError,
     error: undefined,
@@ -86,6 +93,9 @@ export function buildTabStateFromElectronSnapshot(
     devtoolsOpen: snapshot.devtoolsOpen,
     deviceState: snapshot.deviceState,
     displayScale: normalizeDisplayScale(snapshot.displayScale),
+    minimumViewportWidth: normalizeMinimumViewportWidth(
+      snapshot.minimumViewportWidth,
+    ),
     faviconDataUrl: snapshot.faviconDataUrl,
     navigationError: snapshot.navigationError,
   };
@@ -95,6 +105,12 @@ function normalizeDisplayScale(value: unknown): number {
   return isTerminalBrowserDisplayScale(value)
     ? value
     : DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE;
+}
+
+function normalizeMinimumViewportWidth(
+  value: unknown,
+): TerminalBrowserMinimumViewportWidth {
+  return isTerminalBrowserMinimumViewportWidth(value) ? value : null;
 }
 
 function normalizeElectronBrowserUrl(url: string): string {

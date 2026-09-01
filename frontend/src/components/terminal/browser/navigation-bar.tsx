@@ -12,6 +12,7 @@ import {
 import { useRef, useState, type FormEvent } from "react";
 import { type TerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
 import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
+import type { TerminalBrowserMinimumViewportWidth } from "@runweave/shared/terminal-browser-minimum-width";
 import type { TerminalBrowserToolMenuAction } from "@runweave/shared/terminal-browser-tool-menu";
 import {
   DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
@@ -67,6 +68,9 @@ interface BrowserUtilityControls {
   onOpenDevTools: () => void;
   onOpenExternal: () => void;
   onSetDisplayScale: (factor: number) => void;
+  onSetMinimumViewportWidth: (
+    width: TerminalBrowserMinimumViewportWidth,
+  ) => void;
 }
 
 interface TerminalBrowserNavigationBarProps {
@@ -110,8 +114,13 @@ export function TerminalBrowserNavigationBar({
     onDeviceOpenChange: onDevicePanelOpenChange,
     onHeaderRulesOpenChange: onHeaderRulesPanelOpenChange,
   } = panels;
-  const { isElectron, onOpenDevTools, onOpenExternal, onSetDisplayScale } =
-    utilities;
+  const {
+    isElectron,
+    onOpenDevTools,
+    onOpenExternal,
+    onSetDisplayScale,
+    onSetMinimumViewportWidth,
+  } = utilities;
   const moreToolsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [addressCopied, setAddressCopied] = useState(false);
   const [moreToolsOpen, setMoreToolsOpen] = useState(false);
@@ -166,6 +175,18 @@ export function TerminalBrowserNavigationBar({
         case "reset-zoom":
           onSetDisplayScale(DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE);
           break;
+        case "minimum-width-auto":
+          onSetMinimumViewportWidth(null);
+          break;
+        case "minimum-width-768":
+          onSetMinimumViewportWidth(768);
+          break;
+        case "minimum-width-1024":
+          onSetMinimumViewportWidth(1024);
+          break;
+        case "minimum-width-1440":
+          onSetMinimumViewportWidth(1440);
+          break;
       }
     },
   );
@@ -189,6 +210,7 @@ export function TerminalBrowserNavigationBar({
         devtoolsEnabled:
           activeTab.cdpProxyAttached !== true && !activeTab.deviceState.mobile,
         displayScale: activeTab.displayScale,
+        minimumViewportWidth: activeTab.minimumViewportWidth,
       });
       handleMoreTool(action);
     } finally {

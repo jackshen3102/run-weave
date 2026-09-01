@@ -21,10 +21,14 @@ export function isTerminalBrowserBounds(
     return false;
   }
   return (
-    candidate.emulationScale === undefined ||
-    (typeof candidate.emulationScale === "number" &&
-      Number.isFinite(candidate.emulationScale) &&
-      candidate.emulationScale > 0)
+    (candidate.emulationScale === undefined ||
+      (typeof candidate.emulationScale === "number" &&
+        Number.isFinite(candidate.emulationScale) &&
+        candidate.emulationScale > 0)) &&
+    (candidate.horizontalOffsetX === undefined ||
+      (typeof candidate.horizontalOffsetX === "number" &&
+        Number.isFinite(candidate.horizontalOffsetX) &&
+        candidate.horizontalOffsetX >= 0))
   );
 }
 

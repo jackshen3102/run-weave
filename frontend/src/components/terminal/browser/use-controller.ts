@@ -3,11 +3,11 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { TerminalBrowserWorkspaceSnapshot } from "@runweave/shared/terminal-browser-workspace";
 import { normalizeTerminalBrowserUrl } from "../../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
-import { useTerminalBrowserBounds } from "./use-bounds";
 import { useTerminalBrowserDeviceSelection } from "./use-device-selection";
 import { useTerminalBrowserHeaderRules } from "./use-header-rules";
 import { useTerminalBrowserAnnotations } from "./use-annotations";
 import { useTerminalBrowserDisplayScale } from "./use-display-scale";
+import { useTerminalBrowserViewport } from "./use-viewport";
 import { useTerminalBrowserWorkspaceActions } from "./use-workspace-actions";
 import { useTerminalBrowserProfileResolution } from "./use-profile-resolution";
 import { useTerminalBrowserControllerStore } from "./use-controller-store";
@@ -96,16 +96,20 @@ export function useTerminalBrowserController({
     ? "Mobile mode unavailable while DevTools is open"
     : null;
   const {
-    cancelPendingBoundsSync,
     clearTabBounds,
+    horizontalViewport,
+    resetHorizontalOffset,
+    setHorizontalOffset,
     syncActiveTabBounds,
     syncBounds,
-  } = useTerminalBrowserBounds({
+    setMinimumViewportWidth,
+  } = useTerminalBrowserViewport({
     active: nativeViewActive,
-    activeTabId,
+    activeTab,
     annotationPanelOpen,
     browserViewRef,
     devicePanelOpen,
+    electronTabsSynced,
     headerRulesPanelOpen,
     isElectron,
     surfaceContainerRef,
@@ -209,6 +213,8 @@ export function useTerminalBrowserController({
         return;
       }
 
+      resetHorizontalOffset(tabId);
+
       updateBrowserTab(tabId, {
         url: nextUrl.url,
         addressInput: nextUrl.url,
@@ -288,10 +294,6 @@ export function useTerminalBrowserController({
   }, [annotationPanelOpen, devicePanelOpen, headerRulesPanelOpen, syncBounds]);
 
   useEffect(() => {
-    syncBounds(true);
-  }, [activeTab?.deviceState, syncBounds]);
-
-  useEffect(() => {
     if (!isElectron || !active || !activeTabId) {
       return;
     }
@@ -323,41 +325,6 @@ export function useTerminalBrowserController({
   }, [active, activeTabId, isElectron, updateBrowserTab]);
 
   useEffect(() => {
-    if (!isElectron || !electronTabsSynced || !activeTabId) {
-      return;
-    }
-    if (!nativeViewActive) {
-      void window.electronAPI?.terminalBrowserHide?.(activeTabId);
-      clearTabBounds(activeTabId);
-      return;
-    }
-    void window.electronAPI?.terminalBrowserShow?.(activeTabId);
-    const element = surfaceContainerRef.current;
-    if (!element) {
-      return;
-    }
-    const handleWindowResize = (): void => syncBounds();
-    const observer = new ResizeObserver(() => syncBounds());
-    observer.observe(element);
-    window.addEventListener("resize", handleWindowResize);
-    syncBounds(true);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", handleWindowResize);
-      void window.electronAPI?.terminalBrowserHide?.(activeTabId);
-      cancelPendingBoundsSync();
-    };
-  }, [
-    activeTabId,
-    cancelPendingBoundsSync,
-    clearTabBounds,
-    electronTabsSynced,
-    isElectron,
-    nativeViewActive,
-    syncBounds,
-  ]);
-
-  useEffect(() => {
     if (!isElectron) {
       return;
     }
@@ -384,6 +351,10 @@ export function useTerminalBrowserController({
           void syncElectronTabs().catch(() => undefined);
           return;
         }
+        const previousUrl = loadedUrlByTabRef.current[tabId];
+        if (previousUrl !== undefined && previousUrl !== update.url) {
+          resetHorizontalOffset(tabId);
+        }
         loadedUrlByTabRef.current[tabId] = update.url;
         applyElectronUpdate(tabId, event.tab, event.revision);
         syncActiveTabBounds(tabId);
@@ -395,6 +366,7 @@ export function useTerminalBrowserController({
     applyElectronWorkspace,
     isElectron,
     profileId,
+    resetHorizontalOffset,
     syncActiveTabBounds,
     syncElectronTabs,
   ]);
@@ -492,6 +464,7 @@ export function useTerminalBrowserController({
   };
 
   const go = async (direction: "back" | "forward"): Promise<void> => {
+    resetHorizontalOffset(activeTab.id);
     try {
       const snapshot =
         direction === "back"
@@ -562,6 +535,7 @@ export function useTerminalBrowserController({
     headerRules,
     headerRulesPanelOpen,
     headerSaving,
+    horizontalViewport,
     handleAddressBlur,
     handleAddressFocus,
     isElectron,
@@ -578,6 +552,8 @@ export function useTerminalBrowserController({
     saveHeaderRules,
     selectDevicePreset,
     setDisplayScale,
+    setHorizontalOffset,
+    setMinimumViewportWidth,
     setActiveBrowserTab,
     setAnnotationSelecting,
     setDevicePanelOpenState,

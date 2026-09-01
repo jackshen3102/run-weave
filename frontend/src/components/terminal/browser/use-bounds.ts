@@ -1,11 +1,17 @@
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  getTerminalBrowserContentWidth,
+  type TerminalBrowserMinimumViewportWidth,
+} from "@runweave/shared/terminal-browser-minimum-width";
 import { aiDiagnosticLog } from "../../../features/diagnostic-logs/recorder";
 
 const TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX = 320;
 
 interface BrowserBoundsTab {
   id: string;
+  displayScale: number;
+  minimumViewportWidth: TerminalBrowserMinimumViewportWidth;
   deviceState: {
     mobile: boolean;
     presetId: string;
@@ -15,6 +21,18 @@ interface BrowserBoundsTab {
     } | null;
   };
 }
+
+export interface TerminalBrowserHorizontalViewportState {
+  contentWidth: number;
+  overflowing: boolean;
+  scrollLeft: number;
+}
+
+const EMPTY_HORIZONTAL_VIEWPORT: TerminalBrowserHorizontalViewportState = {
+  contentWidth: 1,
+  overflowing: false,
+  scrollLeft: 0,
+};
 
 interface UseTerminalBrowserBoundsParams {
   active: boolean;
@@ -47,6 +65,18 @@ export function useTerminalBrowserBounds({
   const frameRef = useRef<number | null>(null);
   const activeTabIdRef = useRef(activeTabId);
   const activeRef = useRef(active);
+  const tabLayoutByIdRef = useRef<
+    Record<
+      string,
+      | {
+          displayScale: number;
+          minimumViewportWidth: TerminalBrowserMinimumViewportWidth;
+          mobile: boolean;
+        }
+      | undefined
+    >
+  >({});
+  const scrollLeftByTabIdRef = useRef<Record<string, number | undefined>>({});
   const deviceViewportByTabRef = useRef<
     Record<string, { mobile: boolean; width: number } | undefined>
   >({});
@@ -62,6 +92,8 @@ export function useTerminalBrowserBounds({
     | undefined
   >({});
   const lastBoundsKeyByTabRef = useRef<Record<string, string>>({});
+  const [horizontalViewport, setHorizontalViewport] =
+    useState<TerminalBrowserHorizontalViewportState>(EMPTY_HORIZONTAL_VIEWPORT);
 
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
@@ -76,13 +108,20 @@ export function useTerminalBrowserBounds({
       string,
       { mobile: boolean; width: number } | undefined
     > = {};
+    const nextLayouts: typeof tabLayoutByIdRef.current = {};
     for (const tab of tabs) {
       nextViewports[tab.id] =
         tab.deviceState.mobile && tab.deviceState.viewport
           ? { mobile: true, width: tab.deviceState.viewport.width }
           : { mobile: false, width: 1 };
+      nextLayouts[tab.id] = {
+        displayScale: tab.displayScale,
+        minimumViewportWidth: tab.minimumViewportWidth,
+        mobile: tab.deviceState.mobile,
+      };
     }
     deviceViewportByTabRef.current = nextViewports;
+    tabLayoutByIdRef.current = nextLayouts;
     deviceInfoByTabRef.current = Object.fromEntries(
       tabs.map((tab) => [
         tab.id,
@@ -95,10 +134,30 @@ export function useTerminalBrowserBounds({
     );
   }, [tabs]);
 
-  const clearTabBounds = useMemoizedFn((tabId: string): void => {
-    delete deviceViewportByTabRef.current[tabId];
-    delete lastBoundsKeyByTabRef.current[tabId];
-  });
+  const clearTabBounds = useMemoizedFn(
+    (tabId: string, preserveHorizontalOffset = false): void => {
+      if (preserveHorizontalOffset) {
+        delete lastBoundsKeyByTabRef.current[tabId];
+        return;
+      }
+      delete deviceViewportByTabRef.current[tabId];
+      delete tabLayoutByIdRef.current[tabId];
+      delete scrollLeftByTabIdRef.current[tabId];
+      delete lastBoundsKeyByTabRef.current[tabId];
+    },
+  );
+
+  const updateHorizontalViewport = useMemoizedFn(
+    (next: TerminalBrowserHorizontalViewportState): void => {
+      setHorizontalViewport((current) =>
+        current.contentWidth === next.contentWidth &&
+        current.overflowing === next.overflowing &&
+        current.scrollLeft === next.scrollLeft
+          ? current
+          : next,
+      );
+    },
+  );
 
   const syncBoundsForTab = useMemoizedFn((tabId: string, immediate = false) => {
     if (!isElectron) {
@@ -113,6 +172,7 @@ export function useTerminalBrowserBounds({
       if (!activeRef.current) {
         void window.electronAPI?.terminalBrowserHide?.(tabId);
         delete lastBoundsKeyByTabRef.current[tabId];
+        updateHorizontalViewport(EMPTY_HORIZONTAL_VIEWPORT);
         return;
       }
       const rect = browserViewRef.current?.getBoundingClientRect();
@@ -146,16 +206,39 @@ export function useTerminalBrowserBounds({
         return;
       }
       const viewport = deviceViewportByTabRef.current[tabId];
+      const layout = tabLayoutByIdRef.current[tabId];
       const emulationScale =
         viewport?.mobile && viewport.width > 0
           ? clippedWidth / viewport.width
           : 1;
+      const contentWidth = getTerminalBrowserContentWidth(
+        clippedWidth,
+        layout?.minimumViewportWidth ?? null,
+        layout?.displayScale ?? 1,
+        layout?.mobile ?? false,
+      );
+      const maximumScrollLeft = Math.max(0, contentWidth - clippedWidth);
+      const requestedScrollLeft = scrollLeftByTabIdRef.current[tabId] ?? 0;
+      const scrollLeft =
+        layout?.mobile === true
+          ? 0
+          : Math.max(
+              0,
+              Math.min(Math.round(requestedScrollLeft), maximumScrollLeft),
+            );
+      scrollLeftByTabIdRef.current[tabId] = scrollLeft;
+      updateHorizontalViewport({
+        contentWidth,
+        overflowing: maximumScrollLeft > 0,
+        scrollLeft,
+      });
       const nextBounds = {
         x: rawBounds.x,
         y: rawBounds.y,
         width: clippedWidth,
         height: rawBounds.height,
         emulationScale,
+        horizontalOffsetX: scrollLeft,
       };
       const boundsKey = [
         nextBounds.x,
@@ -163,6 +246,11 @@ export function useTerminalBrowserBounds({
         nextBounds.width,
         nextBounds.height,
         nextBounds.emulationScale.toFixed(4),
+        nextBounds.horizontalOffsetX,
+        contentWidth,
+        layout?.minimumViewportWidth ?? "auto",
+        layout?.displayScale ?? 1,
+        layout?.mobile ? "mobile" : "desktop",
       ].join(":");
       if (lastBoundsKeyByTabRef.current[tabId] === boundsKey) {
         const deviceInfo = deviceInfoByTabRef.current?.[tabId];
@@ -187,6 +275,8 @@ export function useTerminalBrowserBounds({
         emulationScale,
         rawWidth: rawBounds.width,
         clippedBySidePanel: clippedWidth !== rawBounds.width,
+        contentWidth,
+        horizontalOffsetX: scrollLeft,
       });
       const boundsPromise = window.electronAPI?.terminalBrowserSetBounds?.(
         tabId,
@@ -229,6 +319,24 @@ export function useTerminalBrowserBounds({
     }
   });
 
+  const resetHorizontalOffset = useMemoizedFn((tabId: string): void => {
+    scrollLeftByTabIdRef.current[tabId] = 0;
+    delete lastBoundsKeyByTabRef.current[tabId];
+    if (activeTabIdRef.current === tabId) {
+      setHorizontalViewport((current) => ({ ...current, scrollLeft: 0 }));
+      syncBoundsForTab(tabId, true);
+    }
+  });
+
+  const setHorizontalOffset = useMemoizedFn((scrollLeft: number): void => {
+    const tabId = activeTabIdRef.current;
+    if (!tabId || !Number.isFinite(scrollLeft)) {
+      return;
+    }
+    scrollLeftByTabIdRef.current[tabId] = Math.max(0, scrollLeft);
+    syncBoundsForTab(tabId);
+  });
+
   const cancelPendingBoundsSync = useMemoizedFn((): void => {
     if (frameRef.current !== null) {
       window.cancelAnimationFrame(frameRef.current);
@@ -239,6 +347,9 @@ export function useTerminalBrowserBounds({
   return {
     cancelPendingBoundsSync,
     clearTabBounds,
+    horizontalViewport,
+    resetHorizontalOffset,
+    setHorizontalOffset,
     syncActiveTabBounds,
     syncBounds,
   };

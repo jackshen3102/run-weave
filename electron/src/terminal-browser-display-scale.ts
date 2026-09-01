@@ -8,6 +8,13 @@ import {
   getTerminalBrowserDevicePreset,
   type TerminalBrowserDeviceState,
 } from "@runweave/shared/terminal-browser-device";
+import {
+  getTerminalBrowserContentWidth,
+  isTerminalBrowserMinimumViewportWidth,
+  type TerminalBrowserMinimumViewportWidth,
+  type TerminalBrowserMinimumViewportWidthState,
+} from "@runweave/shared/terminal-browser-minimum-width";
+import type { TerminalBrowserBounds } from "@runweave/shared/desktop-bridge";
 
 type DeviceMetricsParams = Record<string, unknown>;
 type MetricsCommandSender = (
@@ -21,6 +28,8 @@ export interface TerminalBrowserDisplayScaleEntry {
   cdpProxyAttached: boolean;
   deviceState: TerminalBrowserDeviceState;
   displayScale: number;
+  minimumViewportWidth: TerminalBrowserMinimumViewportWidth;
+  viewportBounds: TerminalBrowserBounds | null;
   emulationScale: number;
   automationDeviceMetrics: DeviceMetricsParams | null;
   metricsMutationQueue: Promise<void>;
@@ -50,19 +59,27 @@ function enqueueMetricsMutation<T>(
 
 function getRawMetricsScale(params: DeviceMetricsParams): number {
   const scale = params.scale;
-  return typeof scale === "number" && Number.isFinite(scale)
-    ? scale
-    : 1;
+  return typeof scale === "number" && Number.isFinite(scale) ? scale : 1;
 }
 
 function buildEffectiveDeviceMetrics(
   entry: TerminalBrowserDisplayScaleEntry,
   displayScale: number,
   automationMetrics = entry.automationDeviceMetrics,
+  minimumViewportWidth = entry.minimumViewportWidth,
 ): DeviceMetricsParams | null {
   if (automationMetrics) {
+    const rawWidth = automationMetrics.width;
+    const width =
+      !entry.deviceState.mobile &&
+      minimumViewportWidth !== null &&
+      typeof rawWidth === "number" &&
+      Number.isFinite(rawWidth)
+        ? Math.max(rawWidth, minimumViewportWidth)
+        : rawWidth;
     return {
       ...automationMetrics,
+      width,
       scale: getRawMetricsScale(automationMetrics) * displayScale,
     };
   }
@@ -82,13 +99,22 @@ function buildEffectiveDeviceMetrics(
     };
   }
 
-  if (displayScale === DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE) {
+  if (
+    displayScale === DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE &&
+    minimumViewportWidth === null
+  ) {
     return null;
   }
 
-  const bounds = entry.view.getBounds();
+  const bounds = entry.viewportBounds ?? entry.view.getBounds();
+  const contentWidth = getTerminalBrowserContentWidth(
+    bounds.width,
+    minimumViewportWidth,
+    displayScale,
+    false,
+  );
   return {
-    width: Math.max(1, Math.round(bounds.width / displayScale)),
+    width: Math.max(1, Math.round(contentWidth / displayScale)),
     height: Math.max(1, Math.round(bounds.height / displayScale)),
     deviceScaleFactor: 0,
     mobile: false,
@@ -197,6 +223,7 @@ function canReleaseMetricsDebugger(
 ): boolean {
   return (
     entry.displayScale === DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE &&
+    entry.minimumViewportWidth === null &&
     !entry.deviceState.mobile &&
     entry.automationDeviceMetrics === null
   );
@@ -236,6 +263,47 @@ export async function setTerminalBrowserDisplayScale(
   });
 }
 
+export async function setTerminalBrowserMinimumViewportWidth(
+  entry: TerminalBrowserDisplayScaleEntry,
+  width: unknown,
+): Promise<TerminalBrowserMinimumViewportWidthState> {
+  if (!isTerminalBrowserMinimumViewportWidth(width)) {
+    throw new Error("Invalid terminal browser minimum viewport width");
+  }
+  return await enqueueMetricsMutation(entry, async () => {
+    if (entry.minimumViewportWidth === width) {
+      return { width };
+    }
+    const wasDebuggerAttached = entry.deviceDebuggerAttached;
+    ensureTerminalBrowserMetricsDebugger(entry);
+    try {
+      const metrics = buildEffectiveDeviceMetrics(
+        entry,
+        entry.displayScale,
+        entry.automationDeviceMetrics,
+        width,
+      );
+      const sender = getDefaultMetricsCommandSender(entry);
+      if (metrics) {
+        await sender("Emulation.setDeviceMetricsOverride", metrics);
+      } else {
+        await sender("Emulation.clearDeviceMetricsOverride", {});
+      }
+    } catch (error) {
+      if (!wasDebuggerAttached) {
+        releaseTerminalBrowserMetricsDebugger(entry);
+      }
+      throw error;
+    }
+
+    entry.minimumViewportWidth = width;
+    if (canReleaseMetricsDebugger(entry)) {
+      releaseTerminalBrowserMetricsDebugger(entry);
+    }
+    return { width };
+  });
+}
+
 export async function reapplyTerminalBrowserDisplayMetrics(
   entry: TerminalBrowserDisplayScaleEntry,
 ): Promise<void> {
@@ -258,7 +326,9 @@ export async function reapplyTerminalBrowserDisplayMetrics(
 
 export async function sendTerminalBrowserAutomationMetricsCommand(
   entry: TerminalBrowserDisplayScaleEntry,
-  method: "Emulation.setDeviceMetricsOverride" | "Emulation.clearDeviceMetricsOverride",
+  method:
+    | "Emulation.setDeviceMetricsOverride"
+    | "Emulation.clearDeviceMetricsOverride",
   params: DeviceMetricsParams,
   sender: MetricsCommandSender,
 ): Promise<object> {

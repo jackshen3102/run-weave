@@ -82,6 +82,7 @@ export function TerminalBrowserTool({
     headerRules,
     headerRulesPanelOpen,
     headerSaving,
+    horizontalViewport,
     groups,
     handleAddressBlur,
     handleAddressFocus,
@@ -97,6 +98,8 @@ export function TerminalBrowserTool({
     saveHeaderRules,
     selectDevicePreset,
     setDisplayScale,
+    setHorizontalOffset,
+    setMinimumViewportWidth,
     setActiveBrowserTab,
     setAnnotationSelecting,
     setDevicePanelOpenState,
@@ -174,6 +177,8 @@ export function TerminalBrowserTool({
           },
           onOpenExternal: () => openUrlExternally(activeTab.url),
           onSetDisplayScale: (factor) => void setDisplayScale(factor),
+          onSetMinimumViewportWidth: (width) =>
+            void setMinimumViewportWidth(width),
         }}
       />
       <TerminalBrowserAnnotationModeBar
@@ -204,6 +209,10 @@ export function TerminalBrowserTool({
           onSubmit: () => void submitAnnotations(),
         }}
         refs={{ browserViewRef, containerRef: surfaceContainerRef }}
+        horizontalViewport={{
+          ...horizontalViewport,
+          onScroll: setHorizontalOffset,
+        }}
         environment={{
           isElectron,
           onOpenExternal: () => openUrlExternally(activeTab.url),
