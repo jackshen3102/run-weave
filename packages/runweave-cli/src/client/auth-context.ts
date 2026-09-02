@@ -110,7 +110,10 @@ async function requestWithAuth<T>(params: {
 
   if (params.state.current.accessToken === requestedProfile.accessToken) {
     params.state.refreshPromise ??= (async () => {
-      const refreshed = await createAuthClient().refresh(params.state.current);
+      const refreshed = await createAuthClient().refresh(
+        params.state.current,
+        params.init?.signal ?? undefined,
+      );
       await params.store.saveProfile(params.resolved.name, refreshed);
       params.state.current = refreshed;
       return refreshed;

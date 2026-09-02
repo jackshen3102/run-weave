@@ -17,7 +17,10 @@ export interface AuthClient {
     username: string;
     password: string;
   }): Promise<RunweaveProfile>;
-  refresh(profile: RunweaveProfile): Promise<RunweaveProfile>;
+  refresh(
+    profile: RunweaveProfile,
+    signal?: AbortSignal,
+  ): Promise<RunweaveProfile>;
   verify(profile: RunweaveProfile): Promise<boolean>;
 }
 
@@ -47,7 +50,7 @@ export function createAuthClient(): AuthClient {
       };
     },
 
-    async refresh(profile) {
+    async refresh(profile, signal) {
       if (!profile.refreshToken) {
         return profile;
       }
@@ -61,6 +64,7 @@ export function createAuthClient(): AuthClient {
             "x-auth-client": "electron",
           },
           body: JSON.stringify({ refreshToken: profile.refreshToken }),
+          signal,
         },
       );
       return {

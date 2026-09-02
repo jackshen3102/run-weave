@@ -21,6 +21,16 @@ import type { AuthContext } from "./auth-context.js";
 export class TerminalHttpClient {
   constructor(private readonly auth: AuthContext) {}
 
+  withSignal(signal: AbortSignal): TerminalHttpClient {
+    return new TerminalHttpClient({
+      ...this.auth,
+      requestJson: <T>(apiPath: string, init?: RequestInit) =>
+        this.auth.requestJson<T>(apiPath, { ...init, signal }),
+      requestVoid: (apiPath: string, init?: RequestInit) =>
+        this.auth.requestVoid(apiPath, { ...init, signal }),
+    });
+  }
+
   listProjects(): Promise<TerminalProjectListItem[]> {
     return this.auth.requestJson<TerminalProjectListItem[]>(
       "/api/terminal/project",

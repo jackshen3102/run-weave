@@ -195,7 +195,7 @@ send_webhook_message() {
 send_app_message() {
   local text="$1"
   export FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_TARGET_CHAT_ID
-  export FEISHU_ALLOWED_OPEN_IDS FEISHU_BINDING_TTL_HOURS
+  export FEISHU_ALLOWED_OPEN_IDS
   export RUNWEAVE_FEISHU_STATE_DIR
   local rw_bin
   local -a rw_command

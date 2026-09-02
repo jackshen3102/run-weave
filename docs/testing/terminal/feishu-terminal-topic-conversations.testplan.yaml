@@ -1,0 +1,295 @@
+version: 1
+name: 飞书 Terminal 话题会话验收
+description: >
+  验证新 completion 通知按目标群和 Terminal ID 收敛到唯一飞书话题，白名单用户无需
+  @bot 即可按 root 安全投递到当前活动 Panel，且并发、重启、幂等、根删除、故障和旧状态边界均不
+  造成重复输入或跨 Terminal 串线。
+
+cases:
+  - id: FTTC-001
+    name: 同一 Terminal 的第一条通知成为根且后续通知进入同一话题
+    required: true
+    description: >
+      验证一个没有 v2 topic 的 Terminal 以第一条真实 completion 通知作为唯一顶层根，后续
+      completion 使用同一 root 的话题回复，不产生占位消息或第二个顶层通知。
+    preconditions:
+      - 飞书测试应用已具备发送消息权限并位于目标测试群，使用隔离且为空的 RUNWEAVE_FEISHU_STATE_DIR。
+      - 已准备一个运行中的真实 Terminal，且可从其中触发两次内容不同的 completion。
+    steps:
+      - 触发第一次 completion；确认目标群只新增一条包含真实完成内容的顶层机器人消息，state 中该 chat 与 Terminal 形成一个 active topic，rootMessageId 等于该消息 ID。
+      - 触发第二次 completion；确认飞书只在第一条消息的话题中新增回复，返回消息的 root_id 等于已保存 rootMessageId，群聊顶层没有第二条该 Terminal 通知。
+      - 检查 state；确认 topic 仍只有一个 root，不保存非根通知 message ID、来源 Panel 或两条通知的正文。
+
+  - id: FTTC-002
+    name: 不同 Terminal 始终使用不同话题
+    required: true
+    description: >
+      验证 chat 相同但 Terminal ID 不同的通知分别建立独立 root，后续通知只复用各自话题，
+      即使 project、cwd、agent 和消息文本相同也不会串线。
+    preconditions:
+      - 飞书测试应用与目标群可用，隔离 state 中不存在本 case 两个 Terminal 的 topic。
+      - 已准备两个运行中的真实 Terminal，可为二者触发相同文本的 completion。
+    steps:
+      - 分别为两个 Terminal 触发第一次 completion，再各触发一次后续 completion。
+      - 核对飞书层级和 v2 state；确认存在两个不同 root，每个 root 下只包含所属 Terminal 的后续通知。
+      - 核对两个 Terminal ID 与 topic 映射；确认不存在共享 root、跨 chat binding 或按文本、路径推断身份的记录。
+
+  - id: FTTC-003
+    name: 同一 Terminal 的并发首次通知收敛为一个根
+    required: true
+    description: >
+      验证多个独立 notify 进程同时发现 topic 不存在时，通过持久化 claim、飞书 UUID 幂等和
+      CAS 最终只激活一个 root；首次 create 结果未知时也沿用同一 UUID 有界恢复，其余真实
+      completion 作为该 root 的话题回复保留。
+    preconditions:
+      - 飞书测试应用、目标群和隔离 state 可用，目标 Terminal 尚无 topic。
+      - 可并发触发至少三条带不同唯一标记的真实 notify 请求，并能读取全部飞书响应和最终 state。
+      - 可分别注入服务端已落消息但客户端收到 ECONNRESET，以及 Axios 风格 HTTP 502 的 create 调用，并记录重试 UUID。
+    steps:
+      - 同时启动三次同一 Terminal 的 notify，等待所有进程成功或返回明确失败后读取目标群与 state。
+      - 确认目标群只有一个新顶层 root，成功的其余通知均位于该 root 话题内，三个唯一标记没有被合并或覆盖。
+      - 在独立 fixture 中分别让首次 create 落消息后抛 ECONNRESET，以及携带 response.status=502 的 Axios 风格错误；确认两种有界重试都使用各自首次调用的同一 UUID 并返回同一 root，state 最终只有一个 active topic、没有遗留 creating owner，JSON 可解析且文件权限为 0600；任一 fixture 出现两个顶层 root即失败。
+
+  - id: FTTC-004
+    name: Topic 跨 Bridge 和 CLI 重启继续复用
+    required: true
+    description: >
+      验证 topic 已持久化而非绑定在单个进程内；Bridge 和 CLI 进程重启后，新 completion 仍
+      回复原 root，不创建第二个顶层通知。
+    preconditions:
+      - 隔离 state 中已有一个 active topic，其 Terminal 在 Backend session 列表中仍存在。
+      - 可停止并重新启动 Bridge/CLI 进程，并取得重启后的新进程与 WebSocket 连接证据。
+    steps:
+      - 记录 rootMessageId，停止 Bridge，重新启动并取得新的健康进程和 WebSocket ready 证据。
+      - 使用重启后的 CLI 为同一 Terminal 触发一次新 completion。
+      - 确认新通知回复原 root，state 中仍只有一个 active topic且没有使用重启前的内存引用。
+
+  - id: FTTC-005
+    name: Topic 超过二十四小时空闲仍继续复用
+    required: true
+    description: >
+      验证 topic 生命周期不再使用旧 binding TTL；仍存在的 Terminal 即使超过二十四小时没有
+      飞书交互，新 completion 也继续回复原 root，而 processed 仍按自身规则清理。
+    preconditions:
+      - 隔离 state 中已有一个 active topic，其 Terminal 在 Backend session 列表中仍存在。
+      - 可为 topic 建立超过二十四小时的时间边界 fixture，并同时准备一条超过 processed 清理期限的幂等记录。
+    steps:
+      - 记录 rootMessageId，在 topic 时间超过二十四小时后触发同一 Terminal 的新 completion。
+      - 确认新通知回复原 root，topic 未被 TTL prune且没有第二个顶层通知。
+      - 读取 state；确认超过自身期限的 processed 记录被清理，active topic 保留且未累计非根通知记录。
+
+  - id: FTTC-006
+    name: 升级时不把旧 binding 迁移为 Topic
+    required: true
+    description: >
+      验证无 version 的 v1 state 即使包含同一 Terminal 的多条历史 binding，也不会选取任一旧
+      飞书消息作为新 root；升级后的第一条新 completion 才建立 v2 topic。
+    preconditions:
+      - 已在隔离目录准备可解析的 v1 bridge-state.json，其中同一 Terminal 至少有两条未过期历史 binding。
+      - 历史消息仍存在于目标测试群，且可触发该 Terminal 的一条新 completion。
+    steps:
+      - 使用新 CLI/Bridge 读取 v1 state 并触发第一条新 completion，随后读取飞书消息层级与首次写回的 state。
+      - 确认历史 message ID 均未成为 root、未被编辑或删除，新 completion 作为新的顶层 root。
+      - 确认 state 为 version 2，topics 不含历史 bindings，旧 bindings 没有被导入 topic。
+
+  - id: FTTC-007
+    name: 白名单用户无需 at bot 即可完成飞书对话闭环
+    required: true
+    description: >
+      验证已发布“获取群组中所有消息”权限后，白名单用户在 Runweave topic 中发送不含 mention
+      的纯文本会恰好一次进入目标 Terminal，成功 reaction 和后续 AI completion 都留在同一话题。
+    preconditions:
+      - 飞书应用已获得“获取群组中所有消息”、发送消息和 reaction 权限，已订阅 im.message.receive_v1 并发布生效版本。
+      - 同一 App ID 只有一个健康 Bridge，目标群中已有一个绑定运行中 Terminal 的新 v2 topic。
+      - 可使用 $computer-use 操作真实飞书客户端，并可查询目标 Terminal history。
+    steps:
+      - 在该话题输入框发送不含 @bot 的唯一纯文本；确认 Bridge 收到事件且用户消息出现 DONE reaction。
+      - 查询目标 Terminal history；确认唯一文本完整出现一次，不含飞书 mention 占位符，也没有出现在其它 Terminal。
+      - 等待该轮 AI completion；确认机器人完成通知出现在相同 root 的话题中，群聊顶层没有新增该 Terminal 通知。
+
+  - id: FTTC-008
+    name: 群聊读取扩大后拒绝路径仍无 Terminal 副作用
+    required: true
+    description: >
+      验证非白名单用户、其它 chat、无 topic root、未知 root、非文本消息及普通群顶层文本均被
+      静默忽略，不写 processed、不查询或猜测 Terminal，也不回复权限信息。
+    preconditions:
+      - 飞书测试应用已能接收目标群普通消息，并准备允许用户、未授权用户、另一个测试群和一个有效 Runweave topic。
+      - 所有候选 Terminal history 和隔离 state 已记录基线。
+    steps:
+      - 由未授权用户在有效 topic 发文本；再由允许用户分别在群顶层、另一个群、未知 topic 发文本，并在有效 topic 发送图片或文件。
+      - 读取所有候选 Terminal history、processed state、Bridge 脱敏日志和飞书消息。
+      - 确认所有尝试均无 Terminal 输入、无 processed 记录、无“无权限”机器人回复且日志不含消息正文；任一路径发生最近 Terminal fallback 即失败。
+
+  - id: FTTC-009
+    name: 回复非根完成通知时仍投递当前活动 Panel
+    required: true
+    description: >
+      验证飞书把 Topic 内回复统一表达为 root/thread 关系时，回复同一 Terminal 的非根
+      completion 仍由 Backend 选择当前活动 Panel，不依赖飞书未提供的被回复消息标识。
+    preconditions:
+      - 已准备一个具有两个运行中 Panel 的 tmux-backed Terminal，两个 Panel history 可独立查询。
+      - 话题内已有一条来自非活动 Panel 的非根 completion 通知，v2 state 不保存 notification binding。
+      - 可使用 $computer-use 在真实飞书话题中回复指定非根通知。
+    steps:
+      - 将另一个 Panel 设为当前活动 Panel，再直接回复非根 completion 通知并发送唯一文本。
+      - 查询两个 Panel history 和 processed state；确认文本恰好一次进入当前活动 Panel，非活动 Panel 没有该文本。
+      - 确认成功 reaction 位于用户消息，topic root 与 Terminal ID 均未改变，state 没有写入通知到 Panel 的映射。
+
+  - id: FTTC-010
+    name: 普通话题发言投递当前活动 Panel
+    required: true
+    description: >
+      验证未回复非根 completion 的普通 topic 发言不使用 root 的首条通知 Panel，而由 Backend
+      在该 Terminal 内选择当前活动 Panel。
+    preconditions:
+      - 已准备一个具有两个运行中 Panel 的 Terminal，其 topic root 来自 Panel A，当前活动 Panel 为 Panel B。
+      - 可使用 $computer-use 在真实话题输入框直接发送消息，并查询两个 Panel history。
+    steps:
+      - 在话题输入框直接发送不含 @bot 的唯一文本，不引用任何非根 completion。
+      - 查询 Panel A 与 Panel B history；确认文本恰好一次进入当前活动 Panel B，Panel A 没有该文本。
+      - 检查 state；确认 root 只用于 Terminal 定位，没有作为 Panel binding 被读取或写回。
+
+  - id: FTTC-011
+    name: 历史通知的来源 Panel 关闭后仍投递当前活动 Panel
+    required: true
+    description: >
+      验证 Topic 只绑定 Terminal：历史非根 completion 的来源 Panel 关闭后，回复该消息仍由
+      Backend 投递当前活动 Panel，不因不存在的历史 Panel binding 失败。
+    preconditions:
+      - 双 Panel Terminal 的话题中已有一条来自 Panel A 的非根 completion，随后 Panel A 已关闭且 Panel B 仍运行并为当前活动 Panel。
+      - 可回复该历史 completion，并查询 Terminal、Panel B history、processed state 与飞书 reaction。
+    steps:
+      - 回复来自已关闭 Panel A 的 completion 并发送唯一文本，等待 Bridge 完成最终 processed 状态。
+      - 确认文本恰好一次进入当前活动 Panel B，Terminal 其它 pane 没有该文本，topic mapping 保持 active。
+      - 确认用户消息获得 DONE reaction，话题中没有“原 Panel 已关闭”的失败回复，state 没有创建 Panel binding。
+
+  - id: FTTC-012
+    name: 快速连续消息按话题到达顺序串行投递
+    required: true
+    description: >
+      验证同一 topic 中快速发送的多条不同消息不会因并发 prompt_replace 而覆盖、合并、交错或
+      乱序，每条只在前一条完成接受或拒绝后进入下一次投递。
+    preconditions:
+      - 已有一个绑定运行中 Terminal 当前活动 Panel 的健康 topic，Bridge 的 per-topic queue 为空。
+      - 可快速连续发送三条带有显式序号和唯一边界标记的纯文本消息，并读取精确 Terminal history。
+    steps:
+      - 在同一话题快速依次发送消息 1、消息 2、消息 3，不等待前一条 reaction。
+      - 等待三条消息各自获得最终 processed 状态后读取 Terminal history 与飞书 reaction。
+      - 确认三段内容各完整出现一次且顺序为 1、2、3，没有字符交错或合并；每条用户消息各自只有一个 DONE reaction。
+
+  - id: FTTC-013
+    name: 成功事件重复推送和 Bridge 重启后不会重复投递
+    required: true
+    description: >
+      验证同一飞书 message_id 在成功后重复推送，并跨 Bridge 重启再次推送时，都不会第二次写
+      Terminal，持久化 succeeded 保持 at-most-once。
+    preconditions:
+      - 已有合法 topic、运行中目标 Terminal 和一条可重复交付的白名单文本事件 fixture。
+      - 可控制同一事件重复交付并停止、重新启动 Bridge。
+    steps:
+      - 连续交付相同 message_id 两次，确认第一次成功后停止 Bridge，再启动新进程并第三次交付相同事件。
+      - 读取 Terminal history、processed state 和用户消息 reaction。
+      - 确认文本只出现一次，重启前后 processed 均为 succeeded，重复事件没有新增 Terminal 输入或重复 reaction。
+
+  - id: FTTC-014
+    name: 遗留 processing 重启后转为 unknown 且不自动重投
+    required: true
+    description: >
+      验证 Bridge 在无法判断崩溃前 Terminal 是否已经接受输入时，将遗留 processing 标记为
+      unknown 并拒绝自动重投，避免同一远程指令执行两次。
+    preconditions:
+      - 已有合法 topic和一条 message_id 对应的 processing 状态，目标 Terminal history 已记录基线。
+      - 可停止并重新启动 Bridge，再次交付完全相同的入站事件。
+    steps:
+      - 启动 Bridge 读取遗留 processing state，再次交付相同 message_id。
+      - 读取 processed state、Terminal history 和 Bridge 脱敏日志。
+      - 确认 processing 转为 unknown且未向 Terminal 写入文本；自动重投或把 unknown 改写为 succeeded 均判失败。
+
+  - id: FTTC-015
+    name: Topic 根被删除后由下一条真实通知重建
+    required: true
+    description: >
+      验证飞书明确证明 active root 已删除或不存在时，旧 mapping 通过 expected-root CAS 清除，
+      当前或下一条真实 completion 成为唯一新根，且不会发送占位消息。
+    preconditions:
+      - 已有一个 active topic，记录其 rootMessageId，目标 Terminal 仍运行且可触发新 completion。
+      - 可在真实飞书测试群删除该 root，并观察消息详情 API、notify 输出和 v2 state。
+    steps:
+      - 删除 root 后触发一条带唯一标记的新 completion，等待 notifier 完成 root 验证与恢复。
+      - 确认旧 topic 已从 state 移除，新 completion 是唯一新顶层 root且内容未被替换成占位文本。
+      - 再触发一次 completion；确认其进入新 root 话题，未恢复或回复已删除 root。
+
+  - id: FTTC-016
+    name: 瞬时飞书失败不会错误更换 Topic 根
+    required: true
+    description: >
+      验证网络中断、限流或权限错误等无法证明 root 已删除的失败只导致本次通知失败，active
+      root 保持不变，恢复后下一条 completion 继续回复原 root。
+    preconditions:
+      - 已有一个未删除的 active root 和运行中的目标 Terminal。
+      - 可对 reply/get 调用制造一次可恢复的网络、限流或权限失败，并在之后恢复飞书 API。
+    steps:
+      - 记录 rootMessageId，注入瞬时失败并触发 completion；确认 notify 返回明确失败且群中没有新顶层 root。
+      - 读取 state；确认 active rootMessageId 未变化，没有第二个 creating 或 active topic。
+      - 恢复 API 后触发另一条 completion；确认其回复原 root，出现新顶层消息或 mapping 被清空即失败。
+
+  - id: FTTC-017
+    name: Terminal 删除与退出状态遵守 Topic 生命周期
+    required: true
+    description: >
+      验证 Terminal 已删除时投递明确失败并在回执后清除 topic，Terminal 仅为 exited 时同样不
+      写输入但保留 topic，不创建或猜测替代 Terminal。
+    preconditions:
+      - 已分别准备指向 deleted Terminal 和 exited Terminal 的两个独立 v2 topic fixture。
+      - 可交付合法白名单话题文本并读取 processed、飞书回执、topic state 和候选 Terminal history。
+    steps:
+      - 分别向 deleted Terminal topic 和 exited Terminal topic 交付唯一文本，等待两条消息形成最终 failed 状态。
+      - 确认两条文本均未进入任何 Terminal，也没有创建、恢复或选择其它 Terminal。
+      - 确认 deleted Terminal 收到明确失败回执后 topic 被清除，exited Terminal 的 topic 保留；两类日志均不含完整正文。
+
+  - id: FTTC-018
+    name: Backend 不可达与认证失效不会绕过 Terminal API
+    required: true
+    description: >
+      验证 Backend 连接失败或 CLI profile 认证失效时，Bridge 明确失败且不直接操作 tmux、
+      不无限重试、不移除仍可能有效的 topic；请求已发出但 Backend 不返回时会在截止时间内
+      记为 unknown，401 后 token refresh 不返回时也受同一截止时间约束并释放同 topic 队列。
+    preconditions:
+      - 已分别准备停止 Backend 和失效认证 profile 的两个独立 Bridge 运行环境，topic 指向仍存在的 Terminal ID。
+      - 可交付合法白名单话题文本并观察进程、state、回执和 tmux pane history。
+      - 可在第三个隔离环境中让 getSession 成功、sendInput 遵守 AbortSignal 但不主动返回；在第四个隔离环境中让 Terminal API 首次返回 401 且 refresh 接口不主动返回。
+    steps:
+      - 在 Backend 不可达与认证失效环境分别交付唯一文本，等待 Bridge 返回最终失败分类。
+      - 检查 tmux pane、processed、topic state、Bridge 进程和飞书失败回复。
+      - 在挂起环境交付第三条消息，确认 15 秒内落为 unknown 且结果未知回执出现；重放同一 message_id 不增加 get/send，恢复客户端后下一条消息可及时处理。
+      - 在 401 后 refresh 挂起环境交付第四条消息，确认 refresh 请求继承该消息的 AbortSignal，15 秒内落为 failed；重放同一 message_id 不增加 Terminal 或 refresh 请求，下一条消息可及时处理。
+      - 确认四条文本均未绕过 Terminal API 写入 tmux，Bridge 未退出或无限重试，topic 未被当作 Terminal 删除而清除，日志不含正文、token 或 Authorization。
+
+  - id: FTTC-019
+    name: Reaction 或失败回执异常不会重复投递 Terminal
+    required: true
+    description: >
+      验证 Terminal 投递结果先持久化，随后飞书 DONE reaction 或失败文字回执异常只影响用户
+      可见确认，不会改变结果、再次发送输入或创建另一话题。
+    preconditions:
+      - 已准备一条 Terminal 可成功接受但 DONE reaction 会失败的合法话题消息。
+      - 已准备一条 Terminal 会拒绝且飞书失败回复也会失败的独立合法话题消息。
+    steps:
+      - 分别交付成功 fixture 与失败 fixture，注入对应回执故障后再次交付各自相同 message_id。
+      - 读取两个 processed 状态、Terminal history、topic state 与 Bridge 脱敏日志。
+      - 确认成功文本只进入 Terminal 一次且状态保持 succeeded，失败文本零输入且状态保持 failed；两者都没有第二个 root、重复投递或凭据正文泄露。
+
+  - id: FTTC-020
+    name: CLI、Hook、文档与测试计划静态门禁一致
+    required: true
+    description: >
+      验证 CLI 源码和 bundle、Toolkit 与 Electron hook 副本、当前合同文档及 YAML schema 使用
+      同一套 topic 语义，且不再读取或宣传 FEISHU_BINDING_TTL_HOURS。
+    preconditions:
+      - 功能代码、Hook、文档和测试计划改动已完成，依赖已安装。
+      - 工作区中的其它用户改动已识别并保持不变。
+    steps:
+      - 运行 CLI typecheck、lint 和 build；确认全部零退出，构建产物包含 reply_in_thread、v2 topic 和无 @ 路由逻辑。
+      - 运行 Toolkit hook 同步验证；确认 plugins/toolkit 与 electron/resources 的飞书脚本内容一致且均不再透传 FEISHU_BINDING_TTL_HOURS。
+      - 校验本测试计划和 App Server 测试计划，再运行 docs:check、architecture:check 与 git diff --check；确认全部通过且当前文档无“24 小时一次性引用回复”的有效合同残留。

@@ -5,7 +5,6 @@ export interface FeishuConfig {
   appSecret: string;
   targetChatId: string | null;
   allowedOpenIds: Set<string>;
-  bindingTtlMs: number;
 }
 
 export function resolveFeishuConfig(
@@ -29,15 +28,10 @@ export function resolveFeishuConfig(
       .map((value) => value.trim())
       .filter(Boolean),
   );
-  const ttlHours = Number(env.FEISHU_BINDING_TTL_HOURS ?? "24");
-  if (!Number.isFinite(ttlHours) || ttlHours <= 0) {
-    throw new CliError("FEISHU_BINDING_TTL_HOURS must be a positive number", 2);
-  }
   return {
     appId,
     appSecret,
     targetChatId: targetChatId ?? null,
     allowedOpenIds,
-    bindingTtlMs: ttlHours * 60 * 60 * 1000,
   };
 }

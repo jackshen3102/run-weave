@@ -41,15 +41,30 @@ hook 安装进用户全局 Claude/Codex/Trae 配置，会覆盖所有 AI CLI（�
 - **安装拷贝**：Electron 启动时 `installNotifyAssets()` 把它 `copyFile` 到 `~/.runweave/hooks/feishu_stop_notify.sh` 并 `chmod 0755`。
 - **launcher 调用**：`notifyFeishu` 调 `~/.runweave/hooks/feishu_stop_notify.sh`，存在才执行，stdin 传入原始 payload（注入正确 `source`、`terminalSessionId` 和 panel 上下文）。
 
-### 应用机器人一次性回复投递
+### 应用机器人 Terminal 话题会话
 
 默认 `FEISHU_NOTIFY_TRANSPORT=app` 时，脚本把完成通知 payload 和已生成文案交给
-`rw feishu notify --stdin --json`。企业自建应用发送通知成功后，本地保存飞书
-`message_id -> terminalSessionId/panelId` 的短期绑定。单机运行的
-`rw feishu bridge` 通过飞书官方 SDK 长连接接收消息；allowlist 用户引用通知回复
-纯文本时，Bridge 复用正常登录态 Terminal Input API 投递一次，并立即发送投递结果
-回执，不等待新的 completion。成功回执使用用户原消息上的 `DONE` 打钩 reaction，
-不新增机器人文本消息；失败回执保留文字原因。
+`rw feishu notify --stdin --json`。目标群中的 `(chatId, terminalSessionId)` 长期映射到
+一个飞书话题：第一条真实 completion 通知就是顶层 root，后续通知通过
+`reply_in_thread` 回复同一 root。v2 state 只保存 topic 和 24 小时 processed 幂等记录；
+topic 本身没有 TTL，旧版 message binding 不迁移，也不累计非根通知记录。
+首次建 root 遇到 timeout、reset 或 HTTP 5xx 等传输结果未知错误时，会在 30 秒 claim lease
+内用同一个飞书 UUID 最多重试一次；仍无法确认时保留 creating，后续通知继续用原 UUID
+恢复，避免双 root。
+
+单机运行的 `rw feishu bridge` 通过飞书官方 SDK 长连接接收目标群全部消息。allowlist
+用户在已绑定话题中发送纯文本时无需 `@bot`：root 只决定 Terminal，Topic 内所有文本均由
+Backend 选择投递时的当前活动 Panel。Bridge 复用正常登录态 Terminal Input API 投递一次，
+不等待新的 completion。成功只在用户消息上添加 `DONE`
+reaction；失败回复留在原话题，回执失败也不会重投 Terminal。
+
+同 topic 的入站消息在进程内串行，避免 `prompt_replace` 交错；不同 topic 可以并行。
+每条 Terminal 投递有 15 秒端到端截止时间，包括 401 后的 token refresh 和请求重试：send 前
+超时记为 failed；send 已开始后超时记为 unknown，二者都释放当前话题队列且不自动重投
+相同 `message_id`。
+Terminal 被确认删除时清除本地 topic，exited 状态保留。复用 topic 前以及通知回复失败后，
+只有消息详情 API 明确证明 root 已删除才清除并由当前真实 completion 重建；网络、限流和
+权限错误保留原 root。
 
 迁移期间可显式设置 `FEISHU_NOTIFY_TRANSPORT=webhook` 保留旧自定义机器人单向通知。
 两种 transport 互斥，不支持双发。应用模式稳定后可删除群内旧自定义机器人。
@@ -77,6 +92,7 @@ FEISHU_APP_ID=<企业自建应用 App ID>
 FEISHU_APP_SECRET=<企业自建应用 App Secret>
 FEISHU_TARGET_CHAT_ID=<通知群 chat_id>
 FEISHU_ALLOWED_OPEN_IDS=<允许投递的用户 open_id，逗号分隔>
+RUNWEAVE_FEISHU_STATE_DIR=<topic 与幂等状态目录>
 RUNWEAVE_CLI_BIN=<rw 可执行文件绝对路径>
 
 # 仅 FEISHU_NOTIFY_TRANSPORT=webhook 时使用：
@@ -124,7 +140,7 @@ launcher 源码放在 `plugins/toolkit/hooks/runweave-hook-bridge.cjs`，运行�
 
 静态检查：`pnpm --filter ./electron typecheck && pnpm --filter ./electron lint`
 
-端到端（macOS，需 `~/.runweave/feishu_notify.env` 配好 webhook）：
+端到端（macOS，需 `~/.runweave/feishu_notify.env` 配好飞书应用）：
 
 1. `pnpm dev:electron` 启动，使 launcher 与脚本被重写/拷贝为最新。
 2. 确认拷贝：`ls -l ~/.runweave/hooks/feishu_stop_notify.sh`（存在且可执行）。
@@ -148,7 +164,8 @@ launcher 源码放在 `plugins/toolkit/hooks/runweave-hook-bridge.cjs`，运行�
      | ~/.runweave/bin/runweave-hook-bridge --source codex
    ```
 
-   预期：每次一条 “<Name> 完成了” 系统通知 + 一次 Glass 声音 + 一条飞书消息（env 配了的话）。
+   预期：每次一条 “<Name> 完成了” 系统通知 + 一次 Glass 声音；同一 Terminal 的飞书
+   completion 全部进入同一话题。
 
 4. 确认 codex 不再双发：检查 `~/.codex/hooks.json` 已无 `notify.sh` / `feishu_stop_notify.sh` 条目。
 5. 未配置飞书 env 时：通知与声音正常，飞书静默跳过、无报错。

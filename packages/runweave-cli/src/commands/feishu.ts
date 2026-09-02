@@ -3,21 +3,19 @@ import { getStringOption, parseArgs, resolveOutputMode } from "../args.js";
 import { resolveAuthContext } from "../client/auth-context.js";
 import { TerminalHttpClient } from "../client/terminal-http-client.js";
 import { CliError } from "../errors.js";
+import {
+  FeishuBridgeMessageHandler,
+  type FeishuInboundMessageEvent,
+} from "../feishu/bridge-message-handler.js";
 import { resolveFeishuConfig } from "../feishu/config.js";
 import { FeishuStateStore } from "../feishu/state-store.js";
+import { notifyFeishuTopic } from "../feishu/topic-notifier.js";
 import { writeOutput } from "../output/format.js";
-import {
-  DEFAULT_AGENT_START_TIMEOUT_MS,
-  DEFAULT_CONFIRM_TIMEOUT_MS,
-  sendWithConfirmation,
-} from "./terminal-agent.js";
 
-const MAX_INPUT_BYTES = 256 * 1024;
+const FEISHU_REQUEST_TIMEOUT_MS = 10_000;
 
 interface NotifyPayload {
   terminalSessionId?: unknown;
-  panelId?: unknown;
-  terminalPanelId?: unknown;
   notificationText?: unknown;
 }
 
@@ -34,17 +32,17 @@ export async function runFeishuCommand(
   const parsed = parseArgs(args, new Set(["json", "plain", "stdin"]));
   const mode = resolveOutputMode(parsed.options);
   const config = resolveFeishuConfig(io.env, {
-    requireTargetChatId: subcommand === "notify",
+    requireTargetChatId: subcommand === "notify" || subcommand === "bridge",
   });
   const store = new FeishuStateStore(io.env);
-  const client = new Lark.Client({
-    appId: config.appId,
-    appSecret: config.appSecret,
-  });
+  const client = createFeishuClient(config.appId, config.appSecret);
 
   if (subcommand === "notify") {
     if (parsed.options.stdin !== true) {
       throw new CliError("rw feishu notify requires --stdin", 2);
+    }
+    if (!config.targetChatId) {
+      throw new CliError("FEISHU_TARGET_CHAT_ID is required", 2);
     }
     const payload = JSON.parse(await readStdin(io.stdin)) as NotifyPayload;
     const terminalSessionId = readRequiredString(
@@ -55,36 +53,31 @@ export async function runFeishuCommand(
       payload.notificationText,
       "notificationText",
     );
-    if (!config.targetChatId) {
-      throw new CliError("FEISHU_TARGET_CHAT_ID is required", 2);
-    }
-    const response = await client.im.v1.message.create({
-      params: { receive_id_type: "chat_id" },
-      data: {
-        receive_id: config.targetChatId,
-        msg_type: "text",
-        content: JSON.stringify({ text: notificationText }),
-      },
-    });
-    const messageId = response.data?.message_id;
-    const chatId = response.data?.chat_id ?? config.targetChatId;
-    if (response.code || !messageId) {
-      throw new Error(
-        `Feishu notification failed: ${response.code ?? "missing_message_id"}`,
-      );
-    }
-    const now = new Date();
-    await store.saveBinding({
-      messageId,
-      chatId,
+    const result = await notifyFeishuTopic({
+      client,
+      store,
+      chatId: config.targetChatId,
       terminalSessionId,
-      panelId:
-        readOptionalString(payload.panelId) ??
-        readOptionalString(payload.terminalPanelId),
-      createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + config.bindingTtlMs).toISOString(),
+      notificationText,
     });
-    writeOutput(io.stdout, mode, { sent: true, messageId, terminalSessionId });
+    const output = {
+      sent: true,
+      terminalSessionId,
+      ...result,
+    };
+    writeOutput(
+      io.stdout,
+      mode,
+      mode === "json"
+        ? output
+        : [
+            `sent=${output.sent}`,
+            `terminalSessionId=${output.terminalSessionId}`,
+            `rootMessageId=${output.rootMessageId}`,
+            `messageId=${output.messageId}`,
+            `createdTopic=${output.createdTopic}`,
+          ].join("\n"),
+    );
     return;
   }
 
@@ -117,6 +110,9 @@ export async function runFeishuCommand(
   }
 
   if (subcommand === "bridge") {
+    if (!config.targetChatId) {
+      throw new CliError("FEISHU_TARGET_CHAT_ID is required", 2);
+    }
     if (config.allowedOpenIds.size === 0) {
       throw new CliError(
         "FEISHU_ALLOWED_OPEN_IDS must contain at least one open_id",
@@ -130,42 +126,47 @@ export async function runFeishuCommand(
     });
     const terminalClient = new TerminalHttpClient(auth);
     const bridgeLease = await store.acquireBridgeLease();
-    const dispatcher = new Lark.EventDispatcher({}).register({
-      "im.message.receive_v1": (event) => {
-        void handleMessage({
-          event,
-          config,
-          store,
-          client,
-          terminalClient,
-          stderr: io.stderr,
-        }).catch((error) => {
-          io.stderr.write(
-            `Feishu bridge message handling failed: ${classifyDeliveryError(error)}\n`,
-          );
-        });
-      },
-    });
-    const wsClient = new Lark.WSClient({
-      appId: config.appId,
-      appSecret: config.appSecret,
-      loggerLevel: Lark.LoggerLevel.info,
-    });
-    const stop = (): void => {
-      wsClient.close();
-      void bridgeLease.release();
-    };
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
-    writeOutput(io.stdout, mode, {
-      started: true,
-      transport: "feishu_websocket",
-    });
     try {
-      await wsClient.start({ eventDispatcher: dispatcher });
+      await store.recoverInterruptedDeliveries();
+      await reconcileTerminalTopics(store, terminalClient, io.stderr);
+      const handler = new FeishuBridgeMessageHandler({
+        config,
+        store,
+        client,
+        terminalClient,
+        stderr: io.stderr,
+      });
+      const dispatcher = new Lark.EventDispatcher({}).register({
+        "im.message.receive_v1": (event) => {
+          void handler.enqueue(event as FeishuInboundMessageEvent).catch(() => {
+            io.stderr.write(
+              `Feishu topic delivery: category=handler_failed messageId=${event.message.message_id}\n`,
+            );
+          });
+        },
+      });
+      const wsClient = new Lark.WSClient({
+        appId: config.appId,
+        appSecret: config.appSecret,
+        loggerLevel: Lark.LoggerLevel.info,
+      });
+      const stop = (): void => {
+        wsClient.close();
+        void bridgeLease.release();
+      };
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+      writeOutput(io.stdout, mode, {
+        started: true,
+        transport: "feishu_websocket",
+      });
+      try {
+        await wsClient.start({ eventDispatcher: dispatcher });
+      } finally {
+        process.off("SIGINT", stop);
+        process.off("SIGTERM", stop);
+      }
     } finally {
-      process.off("SIGINT", stop);
-      process.off("SIGTERM", stop);
       await bridgeLease.release();
     }
     return;
@@ -174,157 +175,106 @@ export async function runFeishuCommand(
   throw new CliError("Usage: rw feishu <notify|discover|bridge> [options]", 2);
 }
 
-async function handleMessage(params: {
-  event: {
-    sender: { sender_id?: { open_id?: string }; sender_type: string };
-    message: {
-      message_id: string;
-      parent_id?: string;
-      root_id?: string;
-      chat_id: string;
-      message_type: string;
-      content: string;
-      mentions?: Array<{ key: string }>;
-    };
-  };
-  config: ReturnType<typeof resolveFeishuConfig>;
-  store: FeishuStateStore;
-  client: Lark.Client;
-  terminalClient: TerminalHttpClient;
-  stderr: Pick<NodeJS.WriteStream, "write">;
-}): Promise<void> {
-  const { event } = params;
-  const senderOpenId = event.sender.sender_id?.open_id;
-  if (
-    event.sender.sender_type !== "user" ||
-    !senderOpenId ||
-    !params.config.allowedOpenIds.has(senderOpenId) ||
-    event.message.message_type !== "text"
-  ) {
-    return;
-  }
-  const parentId = event.message.parent_id ?? event.message.root_id;
-  if (!parentId) {
-    return;
-  }
-  const binding = await params.store.getBinding(parentId);
-  if (!binding || binding.chatId !== event.message.chat_id) {
-    return;
-  }
-  const deliveryState = await params.store.beginDelivery(
-    event.message.message_id,
-    binding.terminalSessionId,
-  );
-  if (deliveryState !== "started") {
-    return;
-  }
-  let text = "";
-  try {
-    const parsed = JSON.parse(event.message.content) as { text?: unknown };
-    text =
-      typeof parsed.text === "string"
-        ? stripFeishuMentions(parsed.text, event.message.mentions)
-        : "";
-  } catch {
-    text = "";
-  }
-  if (!text || Buffer.byteLength(text, "utf8") > MAX_INPUT_BYTES) {
-    await params.store.finishDelivery(event.message.message_id, "failed");
-    await safeReply(
-      params.client,
-      event.message.message_id,
-      "投递失败：回复内容为空或过长",
-    );
-    return;
-  }
-  try {
-    const result = await sendWithConfirmation({
-      client: params.terminalClient,
-      terminalSessionId: binding.terminalSessionId,
-      text,
-      enter: true,
-      inputMode: "prompt_replace",
-      inputModeProvided: true,
-      panel: binding.panelId ?? undefined,
-      role: undefined,
-      confirmMode: "short",
-      confirmTimeoutMs: DEFAULT_CONFIRM_TIMEOUT_MS,
-      agent: undefined,
-      agentOverwrite: false,
-      agentStartCommand: undefined,
-      agentClearCommand: "/clear",
-      agentExitCommand: undefined,
-      agentStartTimeoutMs: DEFAULT_AGENT_START_TIMEOUT_MS,
-    });
-    if (result.inputAccepted !== true || result.inputEnqueued !== true) {
-      throw new Error("Runweave did not accept terminal input");
-    }
-    await params.store.finishDelivery(event.message.message_id, "succeeded");
-    await safeReaction(params.client, event.message.message_id);
-  } catch (error) {
-    await params.store.finishDelivery(event.message.message_id, "failed");
-    params.stderr.write(
-      `Feishu reply delivery failed: ${classifyDeliveryError(error)}\n`,
-    );
-    await safeReply(
-      params.client,
-      event.message.message_id,
-      `投递失败：${classifyDeliveryError(error)}`,
-    );
-  }
-}
-
-export function stripFeishuMentions(
-  text: string,
-  mentions: Array<{ key: string }> | undefined,
-): string {
-  let normalized = text;
-  for (const mention of mentions ?? []) {
-    if (mention.key) normalized = normalized.replaceAll(mention.key, "");
-  }
-  return normalized.trim();
-}
-
-async function safeReply(
-  client: Lark.Client,
-  messageId: string,
-  text: string,
+async function reconcileTerminalTopics(
+  store: FeishuStateStore,
+  terminalClient: TerminalHttpClient,
+  stderr: Pick<NodeJS.WriteStream, "write">,
 ): Promise<void> {
   try {
-    await client.im.v1.message.reply({
-      path: { message_id: messageId },
-      data: { msg_type: "text", content: JSON.stringify({ text }) },
-    });
+    const sessions = await terminalClient.listSessions();
+    await store.cleanupMissingSessions(
+      new Set(sessions.map((session) => session.terminalSessionId)),
+    );
   } catch {
-    // A failed Feishu receipt must never retry an already accepted terminal input.
+    stderr.write(
+      "Feishu topic reconciliation skipped: Runweave session list unavailable\n",
+    );
   }
 }
 
-async function safeReaction(
-  client: Lark.Client,
-  messageId: string,
-): Promise<void> {
-  try {
-    await client.im.v1.messageReaction.create({
-      path: { message_id: messageId },
-      data: { reaction_type: { emoji_type: "DONE" } },
-    });
-  } catch {
-    // A failed Feishu reaction must never retry an already accepted terminal input.
-  }
+function createFeishuClient(appId: string, appSecret: string): Lark.Client {
+  return new Lark.Client({
+    appId,
+    appSecret,
+    httpInstance: new TimeoutHttpInstance(
+      Lark.defaultHttpInstance,
+      FEISHU_REQUEST_TIMEOUT_MS,
+    ),
+  });
 }
 
-function classifyDeliveryError(error: unknown): string {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  if (message.includes("401") || message.includes("token"))
-    return "Runweave 认证失败";
-  if (message.includes("not found") || message.includes("404"))
-    return "Terminal 不存在";
-  if (message.includes("not running") || message.includes("exited"))
-    return "Terminal 不可运行";
-  if (message.includes("fetch") || message.includes("connect"))
-    return "Runweave 后端不可达";
-  return "Runweave 未接受输入";
+class TimeoutHttpInstance implements Lark.HttpInstance {
+  constructor(
+    private readonly delegate: Lark.HttpInstance,
+    private readonly timeoutMs: number,
+  ) {}
+
+  request<T = unknown, R = T, D = unknown>(
+    options: Lark.HttpRequestOptions<D>,
+  ): Promise<R> {
+    return this.delegate.request<T, R, D>({
+      ...options,
+      timeout: this.timeoutMs,
+    });
+  }
+
+  get<T = unknown, R = T, D = unknown>(
+    url: string,
+    options?: Lark.HttpRequestOptions<D>,
+  ): Promise<R> {
+    return this.delegate.get<T, R, D>(url, this.withTimeout(options));
+  }
+
+  delete<T = unknown, R = T, D = unknown>(
+    url: string,
+    options?: Lark.HttpRequestOptions<D>,
+  ): Promise<R> {
+    return this.delegate.delete<T, R, D>(url, this.withTimeout(options));
+  }
+
+  head<T = unknown, R = T, D = unknown>(
+    url: string,
+    options?: Lark.HttpRequestOptions<D>,
+  ): Promise<R> {
+    return this.delegate.head<T, R, D>(url, this.withTimeout(options));
+  }
+
+  options<T = unknown, R = T, D = unknown>(
+    url: string,
+    options?: Lark.HttpRequestOptions<D>,
+  ): Promise<R> {
+    return this.delegate.options<T, R, D>(url, this.withTimeout(options));
+  }
+
+  post<T = unknown, R = T, D = unknown>(
+    url: string,
+    data?: D,
+    options?: Lark.HttpRequestOptions<D>,
+  ): Promise<R> {
+    return this.delegate.post<T, R, D>(url, data, this.withTimeout(options));
+  }
+
+  put<T = unknown, R = T, D = unknown>(
+    url: string,
+    data?: D,
+    options?: Lark.HttpRequestOptions<D>,
+  ): Promise<R> {
+    return this.delegate.put<T, R, D>(url, data, this.withTimeout(options));
+  }
+
+  patch<T = unknown, R = T, D = unknown>(
+    url: string,
+    data?: D,
+    options?: Lark.HttpRequestOptions<D>,
+  ): Promise<R> {
+    return this.delegate.patch<T, R, D>(url, data, this.withTimeout(options));
+  }
+
+  private withTimeout<D>(
+    options?: Lark.HttpRequestOptions<D>,
+  ): Lark.HttpRequestOptions<D> {
+    return { ...options, timeout: this.timeoutMs };
+  }
 }
 
 async function readStdin(stdin: NodeJS.ReadStream): Promise<string> {
