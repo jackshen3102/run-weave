@@ -73,10 +73,10 @@ Terminal 被确认删除时清除本地 topic，exited 状态保留。复用 top
 
 1. 从 stdin 读 payload JSON，只处理 `Stop` / `SubagentStop` 事件，其它直接 `return 0`。
 2. `source ~/.runweave/feishu_notify.env` 加载敏感配置（见下）；env 缺失则静默 `return 0`。
-3. 从 payload 取 `cwd`、`session_id`、`source`，按 `source` 映射 agent 名（codex→Codex，coco/trae→Coco，claude→Claude）。
+3. 从 payload 取 `cwd` 和 `session_id`。
 4. 取最后一条 assistant 回复：优先 payload 的 `transcript_path`，否则按 `~/Library/Caches/coco/sessions/<session_id>/events.jsonl` 兜底，截断 2500 字。
 5. 解析终端 ID：payload 的 `terminalId`/`terminalSessionId` 优先，否则 fallback 到 `RUNWEAVE_TERMINAL_SESSION_ID`/`RUNWEAVE_TMUX_SESSION_NAME`，再 fallback 到 `tmux display-message`。
-6. 拼成文本；默认交给 `rw feishu notify` 通过应用机器人发送，显式 webhook transport 时调用旧群机器人 Webhook。
+6. 拼成 `路径: <cwd>(<terminalId>)` 加最后一条 assistant 回复的紧凑文本；默认交给 `rw feishu notify` 通过应用机器人发送，显式 webhook transport 时调用旧群机器人 Webhook。
 7. 全程错误只写 `~/.runweave/feishu_notify.log`，不影响 CLI。
 
 ### 敏感配置（env 控制、默认静默）

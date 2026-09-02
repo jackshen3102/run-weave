@@ -74,61 +74,53 @@ load_config() {
 }
 
 build_message_text() {
-  local agent_name="$1"
-  local cwd="$2"
+  local cwd="$1"
+  local terminal_id="$2"
   local content="$3"
-  local session_id="$4"
-  local terminal_context="$5"
-  local timestamp="$6"
 
   cat <<EOF
-${agent_name} 任务完成
+路径: ${cwd}(${terminal_id})
 
-路径: ${cwd}
-内容:
 ${content}
-
-会话: ${session_id}
-  ${terminal_context}
 EOF
 }
 
-format_terminal_context() {
+format_terminal_id() {
   local raw_id="$1"
 
   raw_id="${raw_id#session=}"
   raw_id="${raw_id#runweave-}"
   if [[ -n "$raw_id" ]]; then
-    printf 'terminalId: %s' "$raw_id"
+    printf '%s' "$raw_id"
   else
-    printf 'terminalId: unknown'
+    printf 'unknown'
   fi
 }
 
-resolve_terminal_context() {
+resolve_terminal_id() {
   local terminal_id payload_session env_session tmux_info
 
   terminal_id="$(json_get '.terminalId // .terminal_id // .terminalSessionId // .terminal_session_id')"
   if [[ -n "$terminal_id" ]]; then
-    format_terminal_context "$terminal_id"
+    format_terminal_id "$terminal_id"
     return
   fi
 
   payload_session="$(json_get '.tmux_session_name // .tmuxSessionName')"
   if [[ -n "$payload_session" ]]; then
-    format_terminal_context "$payload_session"
+    format_terminal_id "$payload_session"
     return
   fi
 
   env_session="${RUNWEAVE_TERMINAL_SESSION_ID:-}"
   if [[ -n "$env_session" ]]; then
-    format_terminal_context "$env_session"
+    format_terminal_id "$env_session"
     return
   fi
 
   env_session="${RUNWEAVE_TMUX_SESSION_NAME:-}"
   if [[ -n "$env_session" ]]; then
-    format_terminal_context "$env_session"
+    format_terminal_id "$env_session"
     return
   fi
 
@@ -139,12 +131,12 @@ resolve_terminal_context() {
         2>/dev/null || true
     )"
     if [[ -n "$tmux_info" ]]; then
-      format_terminal_context "$tmux_info"
+      format_terminal_id "$tmux_info"
       return
     fi
   fi
 
-  printf 'terminalId: unknown (这个终端 ID 适用于给 rw cli 发送命令)'
+  printf 'unknown'
 }
 
 send_webhook_message() {
@@ -236,13 +228,7 @@ main() {
     return 0
   fi
 
-  local agent_name cwd content session_id terminal_context timestamp text
-  agent_name="${FEISHU_AGENT_NAME:-$(json_get '.source' 'Codex')}"
-  case "$agent_name" in
-    codex) agent_name="Codex" ;;
-    coco | trae) agent_name="Coco" ;;
-    claude) agent_name="Claude" ;;
-  esac
+  local cwd content session_id terminal_id text
   cwd="$(json_get '.cwd' "${PWD:-unknown}")"
   session_id="$(json_get '.session_id' 'unknown')"
 
@@ -258,9 +244,8 @@ main() {
     content="$(json_get '.last_assistant_message // .message // .body' '(任务已完成)')"
   fi
   content="$(truncate_text "$content" 2500)"
-  terminal_context="$(resolve_terminal_context)"
-  timestamp="$(date '+%Y-%m-%d %H:%M:%S %Z')"
-  text="$(build_message_text "$agent_name" "$cwd" "$content" "$session_id" "$terminal_context" "$timestamp")"
+  terminal_id="$(resolve_terminal_id)"
+  text="$(build_message_text "$cwd" "$terminal_id" "$content")"
 
   if [[ "${FEISHU_NOTIFY_DEBUG_PAYLOAD:-0}" == "1" ]]; then
     printf '%s\n' "$PAYLOAD" >>"${HOME}/.runweave/feishu_notify_payload.log" 2>/dev/null || true
