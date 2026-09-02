@@ -122,7 +122,7 @@ Hermes/Feishu 默认应使用 `send --confirm short`，任务完成通知由已�
 
 completion event 依赖 Runweave tmux-backed terminal 内启动的 AI CLI 继承 `RUNWEAVE_TERMINAL_SESSION_ID`、`RUNWEAVE_PROJECT_ID`、`RUNWEAVE_HOOK_ENDPOINT` 和 `RUNWEAVE_HOOK_TOKEN`。旧 pane、外部系统终端、hook 未安装或非 tmux fallback terminal 不能依赖 completion 模式完成闭环。
 
-## 飞书一次性投递
+## 飞书 Terminal 话题会话
 
 飞书企业自建应用可以在一台机器上运行一个长连接 Bridge：
 
@@ -139,14 +139,29 @@ rw feishu bridge --json
 的 `openId` 和 `chatId` 后退出，不进行 Terminal 投递。
 
 completion hook 在 `FEISHU_NOTIFY_TRANSPORT=app` 时通过
-`rw feishu notify --stdin --json` 发送应用机器人通知，并保存飞书消息与
-Terminal 的 24 小时绑定。allowlist 用户引用该通知回复纯文本时，Bridge 以
-`prompt_replace + enter + confirm short` 投递到原 Terminal，并只回复投递成功或失败；它不等待
-AI CLI 后续响应。投递成功时在用户原消息上添加 `DONE` 打钩 reaction，不额外发送
-文本消息；投递失败时仍回复具体失败原因。相同飞书入站 `message_id` 不会重复投递。
+`rw feishu notify --stdin --json` 发送应用机器人通知。同一目标群中的同一 Terminal ID
+只使用一个长期话题：第一条真实 completion 是 root，后续通知回复该 root 并设置
+`reply_in_thread`。topic 不使用 24 小时 TTL；旧版 message binding 不迁移，升级后的
+第一条新通知建立新 topic。`FEISHU_BINDING_TTL_HOURS` 已废弃且不再读取。
+首次建 root 的 timeout、reset、HTTP 5xx 等不确定传输失败会在 claim lease 内复用同一飞书
+UUID 有界重试；后续恢复也沿用该 UUID，不以新的顶层消息猜测结果。
+
+飞书应用必须获得“获取群组中所有消息”权限，订阅 `im.message.receive_v1` 并重新发布版本。
+allowlist 用户可在已绑定话题中直接发送纯文本，无需 `@bot`。Bridge 以
+`prompt_replace + enter + confirm short` 投递：root 只选择 Terminal，回复非根 completion
+与普通话题发言一样由 Backend 选择当前活动 Panel；state 不保存通知到 Panel 的映射。
+成功在用户消息上添加 `DONE` reaction，失败回复留在原话题。相同入站
+`message_id` 持久化去重，同一话题按事件到达顺序串行处理。
+Terminal API 投递以 15 秒为截止时间，包括 401 后的 token refresh 和请求重试；send 前超时
+记录 failed，send 已开始后超时记录 unknown。两种情况都会释放串行队列，但相同消息都不会
+自动重投。
+
+Terminal 被确认删除时 topic 才清除；Terminal 只是 exited、Backend 不可达或认证失败时
+保留。复用飞书 root 前以及回复失败后，只有消息详情 API 明确证明 root 已删除才创建新
+root；瞬时网络、限流或权限错误不会换话题。
 
 同一个飞书应用只能运行一个本方案的 Bridge。飞书长连接为集群消费，多台独立
-机器同时连接时事件可能被另一台机器消费，无法读取本机 binding。
+机器同时连接时事件可能被另一台机器消费，无法读取本机 topic state。
 
 Linux systemd 与 macOS LaunchAgent 的常驻配置见
 [`feishu-app-integration.md`](../deployment/feishu-app-integration.md)。同一个飞书应用

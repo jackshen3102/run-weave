@@ -1,8 +1,8 @@
 version: 1
-name: App Server 与飞书关键回归验收
+name: App Server 关键回归验收
 description: >
-  验证 App Server 的事件中心、ThreadRef 状态同步和 Hook 降级链路，以及飞书一次性回复
-  到 Terminal 的绑定、精确路由、幂等、失败隔离和通知 transport 迁移等关键回归不变量。
+  验证 App Server 的事件中心、ThreadRef 状态同步、CLI 生命周期和 Hook 降级链路等
+  关键回归不变量。飞书 Terminal 话题会话由 terminal 目录下的专属测试计划覆盖。
 
 cases:
   - id: ASFR-001
@@ -99,72 +99,3 @@ cases:
     steps:
       - 运行补偿轮询，读取新增事件、ThreadRef 投影和 event log，再对状态已一致的 thread 重复轮询。
       - 确认不一致时写入 source=codex、compensation=true 的 agent.hook，idle 映射 Stop、active 映射 UserPromptSubmit；一致状态不追加重复事件。
-
-  - id: ASFR-008
-    name: 飞书通知建立受限且精确的 Terminal 绑定
-    required: true
-    description: >
-      验证 completion 通知只在具有 terminalSessionId 时创建 0600 的 message binding；绑定携带
-      正确 chat、terminal 和可选 panel，过期、并发和通知失败均不会制造错误或虚假绑定。
-    preconditions:
-      - 已配置飞书企业自建测试应用、测试群、独立 RUNWEAVE_FEISHU_STATE_DIR 和运行中的 tmux-backed Terminal。
-      - 可分别触发有效 completion、缺少 Terminal identity、无效飞书凭据、TTL 过期和并发通知。
-    steps:
-      - 对两个不同 Terminal 并发发送有效 completion 通知，读取机器人消息、binding 状态和文件权限。
-      - 分别触发缺少 Terminal identity、无效凭据和过期 binding 的场景。
-      - 确认有效通知各创建一个精确 binding 且权限为 0600；缺身份或通知失败不创建 binding；TTL 清理不误删未过期记录且状态文件始终可解析。
-
-  - id: ASFR-009
-    name: 飞书回复按 allowlist、chat 与 panel 精确路由
-    required: true
-    description: >
-      验证只有 allowlist 用户在正确 chat 中引用有效通知的文本回复才能通过现有 CLI 输入链路
-      投递；带 panel binding 时只能进入目标 pane，拒绝路径绝不产生 Terminal 输入。
-    preconditions:
-      - 存在允许用户、未授权用户、有效 binding、不同 chat fixture，以及包含两个 panel 的目标 Terminal。
-      - binding 显式指向其中一个 panel，且可通过 terminal history 查询唯一标记。
-    steps:
-      - 允许用户在正确 chat 引用通知回复唯一标记，再由未授权用户、未引用消息、非绑定引用、跨 chat、空文本、非文本和超长文本分别尝试。
-      - 检查两个 panel 的 history、Bridge 结果、飞书回执与脱敏日志。
-      - 确认有效文本仅一次进入绑定 panel；所有拒绝均不投递、不猜测 Terminal；特殊字符作为单个 line 原文传递而非被 shell 执行。
-
-  - id: ASFR-010
-    name: 飞书入站消息幂等且 Bridge 重启不重投
-    required: true
-    description: >
-      验证以飞书入站 message_id 为键的状态机在重复推送、Bridge 重启、遗留 processing 和
-      通知与处理并发写入时保持精确一次投递与可恢复状态。
-    preconditions:
-      - 已有一条可投递的有效通知 binding，目标 Terminal 可记录唯一输入标记。
-      - 可重复交付相同入站事件、重启 Bridge、构造 processing 状态和并发写 binding/processed 状态。
-    steps:
-      - 对同一 message_id 连续交付两次，成功后重启 Bridge 并再次交付；随后尝试处理遗留 processing fixture。
-      - 并发执行一条新的 completion notify 与一条 Bridge processed 状态写入。
-      - 确认同一 message_id 只投递一次、重启保留 succeeded、遗留 processing 不自动重投；并发后状态 JSON 可解析且 binding 与 processed 记录均保留。
-
-  - id: ASFR-011
-    name: 飞书投递失败遵守输入边界与认证边界
-    required: true
-    description: >
-      验证 Terminal 不存在、已退出、Backend 不可达或 CLI profile 认证失效时，Bridge 明确失败
-      而不创建 Terminal、不直写 tmux、不无限重试，也不泄露 token 或回复正文。
-    preconditions:
-      - 已准备分别指向 deleted Terminal、exited Terminal、停止 Backend 和失效 profile token 的有效 binding。
-      - Bridge 仍保持飞书事件连接并可读取脱敏处理结果。
-    steps:
-      - 对每种失败条件交付允许用户的有效引用回复，检查 Terminal history、Bridge 状态和飞书回执。
-      - 确认每次均为 failed 且有明确分类，Terminal 无输入副作用，Bridge 不退出或绕过 API 写 tmux，日志和状态不包含凭据或完整回复正文。
-
-  - id: ASFR-012
-    name: 飞书 transport 迁移和通知失败不影响 completion
-    required: true
-    description: >
-      验证 app、webhook 与非法 FEISHU_NOTIFY_TRANSPORT 的通知选择互斥且兼容旧行为；任一
-      通知或回执失败都不会导致 Terminal 重投或阻断原 completion 事件与前端 marker 链路。
-    preconditions:
-      - 已分别配置 app、webhook、非法 transport 和两种通知服务均不可用的环境。
-      - 已准备一次成功 Terminal send 后飞书回执失败的 fixture，以及真实 AI CLI Stop 触发入口。
-    steps:
-      - 在三种 transport 配置下触发 completion，记录两类机器人消息、binding、Hook 主流程和 Backend completion。
-      - 对成功 send 后回执失败与两类通知均不可用的场景，触发有效飞书回复和真实 AI CLI Stop。
-      - 确认 app 只发应用通知、webhook 只保留旧单向通知、非法值不双发且不阻断 Hook；回执失败不重投 Terminal，通知失败不丢失 Backend completion 或前端 marker。
