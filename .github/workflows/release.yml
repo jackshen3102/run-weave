@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Create an inspectable draft release without publishing it
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos:
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Verify version and compute release identity
+        id: release
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          workspace_version=$(node -p "require('./electron/package.json').version")
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            version=${GITHUB_REF_NAME#v}
+            test "$GITHUB_REF_NAME" != "$version" || { echo "error: release tag must start with v: $GITHUB_REF_NAME" >&2; exit 1; }
+            test "$workspace_version" = "$version" || { echo "error: tag $GITHUB_REF_NAME does not match Electron version $workspace_version" >&2; exit 1; }
+            release_tag=$GITHUB_REF_NAME
+            release_title="Runweave $version"
+          else
+            test "$DRY_RUN" = "true" || { echo "error: workflow_dispatch is only supported with dry_run enabled" >&2; exit 1; }
+            version=$workspace_version
+            release_tag="dry-run-$(date -u +%Y%m%d-%H%M%S)"
+            release_title="$release_tag"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release_title=$release_title" >> "$GITHUB_OUTPUT"
+
+      - name: Require Apple Silicon runner
+        run: test "$(uname -m)" = "arm64"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build macOS arm64 installer
+        env:
+          RUNWEAVE_SKIP_ELECTRON_VERSION_BUMP: "true"
+        run: pnpm dist:electron:mac
+
+      - name: Verify application and installer
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          app="electron/release/mac-arm64/Runweave.app"
+          dmg="electron/release/Runweave-$VERSION-arm64.dmg"
+          test -d "$app"
+          test -f "$dmg"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          file "$app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework" | grep -q 'arm64'
+          mount_point=$(mktemp -d "$RUNNER_TEMP/runweave-dmg.XXXXXX")
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount_point" "$dmg"
+          trap 'hdiutil detach "$mount_point"' EXIT
+          test -d "$mount_point/Runweave.app"
+          codesign --verify --deep --strict --verbose=2 "$mount_point/Runweave.app"
+          shasum -a 256 "$dmg" | tee "$dmg.sha256"
+
+      - name: Create draft release and upload installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+          RELEASE_TITLE: ${{ steps.release.outputs.release_title }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          notes="Apple Silicon macOS installer for Runweave $VERSION. The app is ad-hoc signed and is not Apple-notarized."
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            gh release create "$RELEASE_TAG" --draft --verify-tag --title "$RELEASE_TITLE" --notes "$notes"
+          else
+            gh release create "$RELEASE_TAG" --draft --prerelease --target "$GITHUB_SHA" --title "$RELEASE_TITLE" --notes "Dry-run artifacts for commit $GITHUB_SHA. $notes"
+          fi
+          dmg="electron/release/Runweave-$VERSION-arm64.dmg"
+          gh release upload "$RELEASE_TAG" "$dmg" "$dmg.sha256" --clobber
