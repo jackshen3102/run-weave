@@ -224,7 +224,11 @@ async function startOwnedWhistle(
     process.execPath,
     [
       "-e",
-      "require(process.argv[1])(JSON.parse(process.argv[2]))",
+      // Keep the detached proxy bound to Electron's lifetime after a crash.
+      [
+        'process.once("disconnect", () => process.exit(0));',
+        "require(process.argv[1])(JSON.parse(process.argv[2]));",
+      ].join(""),
       resolveWhistleEntrypoint(),
       JSON.stringify({
         host: "127.0.0.1",
@@ -240,7 +244,7 @@ async function startOwnedWhistle(
     {
       detached: process.platform !== "win32",
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
     },
   );
   record.child = child;
