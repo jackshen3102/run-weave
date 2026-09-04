@@ -92,6 +92,7 @@ export interface TerminalBrowserDormantTab {
 
 export interface TerminalBrowserCdpTarget {
   key: string;
+  tabId: string;
   targetId: string;
   profileId: TerminalBrowserProfileId;
   browserGroupId: string;
@@ -100,6 +101,8 @@ export interface TerminalBrowserCdpTarget {
   lastActiveAt: number;
   url: string;
   title: string;
+  faviconDataUrl: string | null;
+  loading: boolean;
   webContents: WebContents;
 }
 

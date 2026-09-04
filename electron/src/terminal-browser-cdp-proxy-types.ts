@@ -21,6 +21,7 @@ export interface CdpProxyRuntime {
 }
 
 export interface CdpProxyConnectionState {
+  connectionId: string;
   ws: WebSocket;
   sessionManager: CdpSessionManager;
   scopedProfileId: TerminalBrowserProfileId;

@@ -145,6 +145,7 @@ async function resolveProfile(
         projectId,
         explicitProfileId: options.profileId,
         browserGroupId: groupId,
+        terminalSessionId: io.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim() || null,
       }),
       signal: controller.signal,
     });

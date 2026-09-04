@@ -1,4 +1,9 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import {
   Check,
   Copy,
@@ -85,6 +90,7 @@ interface PreviewViewOptions {
 interface TerminalPreviewPanelShellProps {
   actions: PreviewActions;
   activeTerminalSessionId: string | null;
+  automationBody?: ReactNode;
   agentTeamBody?: ReactNode;
   raceBody?: ReactNode;
   body: ReactNode;
@@ -118,6 +124,7 @@ function describeMode(mode: string | null | undefined): string {
 export function TerminalPreviewPanelShell({
   actions,
   activeTerminalSessionId,
+  automationBody,
   agentTeamBody,
   raceBody,
   body,
@@ -160,6 +167,20 @@ export function TerminalPreviewPanelShell({
   const saveStatus: SaveStatus = save.status;
   const canSave = save.available;
   const pathCopied = copy.copied;
+  const [automationConnectionCount, setAutomationConnectionCount] = useState(0);
+  useEffect(() => {
+    if (window.electronAPI?.isElectron !== true) {
+      return;
+    }
+    void window.electronAPI
+      .terminalBrowserAutomationGetSnapshot?.()
+      .then((snapshot) =>
+        setAutomationConnectionCount(snapshot.connections.length),
+      );
+    return window.electronAPI.onTerminalBrowserAutomationStateChanged?.(
+      (snapshot) => setAutomationConnectionCount(snapshot.connections.length),
+    );
+  }, []);
   const availableTools: Array<
     | { kind: TerminalSidecarTool; label: string }
     | {
@@ -169,6 +190,17 @@ export function TerminalPreviewPanelShell({
       }
   > = [
     { kind: "preview", label: "Preview" },
+    ...(window.electronAPI?.isElectron === true
+      ? [
+          {
+            kind: "automation" as const,
+            label:
+              automationConnectionCount > 0
+                ? `Automation · ${automationConnectionCount}`
+                : "Automation",
+          },
+        ]
+      : []),
     ...TERMINAL_BROWSER_PROFILE_IDS.map((profileId, index) => ({
       kind: "browser-profile" as const,
       profileId,
@@ -232,7 +264,7 @@ export function TerminalPreviewPanelShell({
                       data-testid={
                         tool.kind === "browser-profile"
                           ? `terminal-browser-profile-${tool.profileId}`
-                          : undefined
+                          : `terminal-sidecar-${tool.kind}`
                       }
                       key={
                         tool.kind === "browser-profile"
@@ -456,6 +488,14 @@ export function TerminalPreviewPanelShell({
           </div>
         ) : null}
         <div className="relative min-h-0 flex-1">
+          <div
+            className={[
+              "absolute inset-0 min-h-0",
+              activeTool === "automation" ? "" : "pointer-events-none hidden",
+            ].join(" ")}
+          >
+            {automationBody}
+          </div>
           <div
             className={[
               "absolute inset-0 min-h-0",

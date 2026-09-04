@@ -42,6 +42,7 @@
     "./terminal/state": "./src/terminal/state.ts",
     "./terminal/websocket": "./src/terminal/websocket.ts",
     "./terminal-browser-annotation": "./src/terminal-browser-annotation.ts",
+    "./terminal-browser-automation": "./src/terminal-browser-automation.ts",
     "./terminal-browser-cdp-proxy": "./src/terminal-browser-cdp-proxy.ts",
     "./terminal-browser-device": "./src/terminal-browser-device.ts",
     "./terminal-browser-display-scale": "./src/terminal-browser-display-scale.ts",

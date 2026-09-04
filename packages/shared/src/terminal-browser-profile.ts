@@ -82,6 +82,7 @@ export interface ResolveTerminalBrowserProfileRequest {
   projectId: string | null;
   explicitProfileId: TerminalBrowserProfileId | null;
   browserGroupId: string | null;
+  terminalSessionId?: string | null;
 }
 
 export type TerminalBrowserProfileResolutionSource =
@@ -128,6 +129,8 @@ export interface ResolvedTerminalBrowserProfile {
   projectId: string | null;
   route: TerminalBrowserRoute;
   cdpEndpoint: string;
+  browserGroupId?: string | null;
+  automationAttribution?: "terminal" | "unattributed";
   whistle: TerminalBrowserWhistleState;
 }
 
@@ -146,8 +149,10 @@ export type TerminalBrowserErrorCode =
   | "INVALID_DEV_SERVER_PORT"
   | "INVALID_BUSINESS_ORIGIN"
   | "INVALID_PROJECT_ID"
+  | "INVALID_TERMINAL_SESSION_ID"
   | "INVALID_BROWSER_GROUP_ID"
   | "BROWSER_PROFILE_ROUTE_CONFLICT"
+  | "AUTOMATION_PROFILE_CONFLICT"
   | "WHISTLE_PORT_IN_USE"
   | "WHISTLE_START_FAILED"
   | "WHISTLE_VALUE_UPDATE_FAILED"

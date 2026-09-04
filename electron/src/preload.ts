@@ -20,6 +20,12 @@ import type {
   TerminalBrowserAnnotationSubmission,
 } from "@runweave/shared/terminal-browser-annotation";
 import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared/terminal-browser-cdp-proxy";
+import type {
+  TerminalBrowserAutomationFrame,
+  TerminalBrowserAutomationFrameAcknowledgeRequest,
+  TerminalBrowserAutomationSnapshot,
+  TerminalBrowserAutomationViewStateRequest,
+} from "@runweave/shared/terminal-browser-automation";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import type { TerminalBrowserDisplayScaleState } from "@runweave/shared/terminal-browser-display-scale";
 import type {
@@ -274,6 +280,45 @@ const electronApi = {
       "terminal-browser:resolve-profile",
       request,
     ) as Promise<ResolvedTerminalBrowserProfile>,
+  terminalBrowserAutomationGetSnapshot: () =>
+    ipcRenderer.invoke(
+      "terminal-browser:automation-get-snapshot",
+    ) as Promise<TerminalBrowserAutomationSnapshot>,
+  terminalBrowserAutomationSetViewState: (
+    request: TerminalBrowserAutomationViewStateRequest,
+  ) =>
+    ipcRenderer.invoke(
+      "terminal-browser:automation-set-view-state",
+      request,
+    ) as Promise<void>,
+  terminalBrowserAutomationAcknowledgeFrame: (
+    request: TerminalBrowserAutomationFrameAcknowledgeRequest,
+  ) =>
+    ipcRenderer.invoke(
+      "terminal-browser:automation-ack-frame",
+      request,
+    ) as Promise<void>,
+  onTerminalBrowserAutomationStateChanged: (
+    listener: (snapshot: TerminalBrowserAutomationSnapshot) => void,
+  ) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      snapshot: TerminalBrowserAutomationSnapshot,
+    ) => listener(snapshot);
+    ipcRenderer.on("terminal-browser:automation-state-changed", wrapped);
+    return () =>
+      ipcRenderer.off("terminal-browser:automation-state-changed", wrapped);
+  },
+  onTerminalBrowserAutomationFrame: (
+    listener: (frame: TerminalBrowserAutomationFrame) => void,
+  ) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      frame: TerminalBrowserAutomationFrame,
+    ) => listener(frame);
+    ipcRenderer.on("terminal-browser:automation-frame", wrapped);
+    return () => ipcRenderer.off("terminal-browser:automation-frame", wrapped);
+  },
   terminalBrowserOpenWhistleConsole: (profileId: TerminalBrowserProfileId) =>
     ipcRenderer.invoke(
       "terminal-browser:open-whistle-console",

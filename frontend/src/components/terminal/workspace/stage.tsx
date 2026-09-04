@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { ClientMode } from "../../../features/client-mode";
 import {
@@ -90,6 +90,28 @@ export function TerminalWorkspaceStage({
         previewExpanded: state.ui.expanded,
       })),
     );
+  const automationConnectionCountRef = useRef(0);
+  useEffect(() => {
+    if (window.electronAPI?.isElectron !== true) {
+      return;
+    }
+    const applyConnectionCount = (connectionCount: number) => {
+      const previousCount = automationConnectionCountRef.current;
+      automationConnectionCountRef.current = connectionCount;
+      if (previousCount === 0 && connectionCount > 0) {
+        const previewState = useTerminalPreviewStore.getState();
+        if (!previewState.ui.open) {
+          previewState.openAutomation();
+        }
+      }
+    };
+    void window.electronAPI
+      .terminalBrowserAutomationGetSnapshot?.()
+      .then((snapshot) => applyConnectionCount(snapshot.connections.length));
+    return window.electronAPI.onTerminalBrowserAutomationStateChanged?.(
+      (snapshot) => applyConnectionCount(snapshot.connections.length),
+    );
+  }, []);
   const isMobileMonitor = clientMode === "mobile";
   const visibleSessions = useMemo(
     () =>
@@ -108,9 +130,8 @@ export function TerminalWorkspaceStage({
     return sessions.filter((session) => ids.has(session.terminalSessionId));
   }, [activeSession, cachedSurfaceSessionIds, sessions]);
   const activeParentProject =
-    projects.find(
-      (project) => project.projectId === activeParentProjectId,
-    ) ?? null;
+    projects.find((project) => project.projectId === activeParentProjectId) ??
+    null;
   const activeContext =
     contexts.find((context) => context.projectId === activeProjectId) ?? null;
   const activeProject =
@@ -248,6 +269,7 @@ export function TerminalWorkspaceStage({
             <TerminalPreviewPanel
               activeProject={activeProject}
               activeSession={activeSession}
+              sessions={sessions}
               showAgentTeamTool={showAgentTeamTool}
               widthPx={previewWidthPx}
               onPanelSplitEnabledChange={onPanelSplitEnabledChange}
@@ -274,6 +296,7 @@ export function TerminalWorkspaceStage({
                 <TerminalPreviewPanel
                   activeProject={activeProject}
                   activeSession={activeSession}
+                  sessions={sessions}
                   showAgentTeamTool={showAgentTeamTool}
                   widthPx={previewWidthPx}
                   onPanelSplitEnabledChange={onPanelSplitEnabledChange}

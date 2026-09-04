@@ -8,7 +8,12 @@ export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
 export type TerminalSvgViewMode = "preview" | "source";
 export type TerminalChangesViewMode = "diff" | "preview";
-export type TerminalSidecarTool = "preview" | "browser" | "agent-team" | "race";
+export type TerminalSidecarTool =
+  | "preview"
+  | "automation"
+  | "browser"
+  | "agent-team"
+  | "race";
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 
@@ -72,6 +77,7 @@ export interface TerminalPreviewStore {
   browserActivationProjectId: string | null;
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => void;
   openBrowser: (projectId?: string | null) => void;
+  openAutomation: () => void;
   activateBrowser: (
     profileId: TerminalBrowserProfileId,
     projectId: string | null,

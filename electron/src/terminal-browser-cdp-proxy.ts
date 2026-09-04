@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electron";
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import {
   isTerminalBrowserProfileId,
@@ -20,7 +21,7 @@ import type {
   CdpProxyRuntime,
 } from "./terminal-browser-cdp-proxy-types.js";
 import {
-  getFirstWindowId,
+  getTerminalBrowserOwnerWindowId,
   getScopedTargets,
   sendJson,
 } from "./terminal-browser-cdp-proxy-utils.js";
@@ -36,6 +37,13 @@ import {
 } from "./terminal-browser-errors.js";
 import { restoreTerminalBrowserTabsForWindow } from "./terminal-browser-restore.js";
 import { materializeTerminalBrowserProfile } from "./terminal-browser-view-lifecycle.js";
+import { createTerminalBrowserTabFromProxy } from "./terminal-browser-view.js";
+import { acceptAutomationAttribution } from "./terminal-browser-automation-attribution.js";
+import {
+  recordTerminalBrowserAutomationCommand,
+  registerTerminalBrowserAutomationConnection,
+  unregisterTerminalBrowserAutomationConnection,
+} from "./terminal-browser-automation-runtime.js";
 
 export type {
   CdpProxyOptions,
@@ -50,6 +58,7 @@ const MAX_RESOLVER_BODY_BYTES = 64 * 1024;
 interface Scope {
   profileId: TerminalBrowserProfileId;
   groupId: string | null;
+  automationToken: string | null;
 }
 
 function resolveScope(rawUrl: string, endpoint: string): Scope {
@@ -69,6 +78,7 @@ function resolveScope(rawUrl: string, endpoint: string): Scope {
   return {
     profileId,
     groupId: parsed.searchParams.get("groupId")?.trim() || null,
+    automationToken: parsed.searchParams.get("automationToken")?.trim() || null,
   };
 }
 
@@ -78,6 +88,7 @@ function statusForError(error: unknown): number {
   }
   if (
     error.code === "BROWSER_PROFILE_ROUTE_CONFLICT" ||
+    error.code === "AUTOMATION_PROFILE_CONFLICT" ||
     error.code === "WHISTLE_PORT_IN_USE"
   ) {
     return 409;
@@ -123,6 +134,9 @@ export async function startCdpProxy(
     if (scope.groupId) {
       params.set("groupId", scope.groupId);
     }
+    if (scope.automationToken) {
+      params.set("automationToken", scope.automationToken);
+    }
     return `${wsUrl}?${params}`;
   };
 
@@ -138,13 +152,28 @@ export async function startCdpProxy(
             req,
           )) as ResolveTerminalBrowserProfileRequest;
           const resolved = await resolveTerminalBrowserProfile(request);
-          const windowId = getFirstWindowId();
+          const windowId = getTerminalBrowserOwnerWindowId();
           const win = windowId === null ? null : BrowserWindow.fromId(windowId);
           if (win) {
             await restoreTerminalBrowserTabsForWindow(win);
             materializeTerminalBrowserProfile(win, resolved.profileId, {
               attach: false,
             });
+            if (
+              resolved.browserGroupId &&
+              !getScopedTargets(
+                resolved.profileId,
+                resolved.browserGroupId,
+              ).some((target) => target.windowId === win.id)
+            ) {
+              await createTerminalBrowserTabFromProxy(
+                win.id,
+                resolved.profileId,
+                "about:blank",
+                resolved.browserGroupId,
+                { attach: false },
+              );
+            }
           }
           sendJsonResponse(res, 200, resolved);
         } catch (error) {
@@ -239,8 +268,40 @@ export async function startCdpProxy(
 
   wss.on("connection", (ws: WebSocket, req) => {
     const scope = resolveScope(req.url ?? "", endpoint);
-    const sessionManager = new CdpSessionManager();
+    const connectionId = randomUUID();
+    const windowId =
+      getScopedTargets(scope.profileId, scope.groupId)[0]?.windowId ??
+      getTerminalBrowserOwnerWindowId();
+    if (windowId === null) {
+      ws.close(1011, "No Electron window available");
+      return;
+    }
+    let actor;
+    try {
+      actor = acceptAutomationAttribution({
+        token: scope.automationToken,
+        connectionId,
+        profileId: scope.profileId,
+        browserGroupId: scope.groupId,
+      });
+    } catch (error) {
+      ws.close(
+        1008,
+        toTerminalBrowserErrorPayload(error, "AUTOMATION_PROFILE_CONFLICT")
+          .message,
+      );
+      return;
+    }
+    const sessionManager = new CdpSessionManager((targetId, method, params) => {
+      recordTerminalBrowserAutomationCommand(
+        connectionId,
+        targetId,
+        method,
+        params,
+      );
+    });
     const conn: CdpProxyConnectionState = {
+      connectionId,
       ws,
       sessionManager,
       scopedProfileId: scope.profileId,
@@ -257,9 +318,18 @@ export async function startCdpProxy(
       cleanedUp = true;
       sessionManager.cleanup();
       connections.delete(conn);
+      unregisterTerminalBrowserAutomationConnection(connectionId);
       changeTerminalBrowserCdpConnectionCount(scope.profileId, -1);
     };
     connections.add(conn);
+    registerTerminalBrowserAutomationConnection({
+      connectionId,
+      actor,
+      profileId: scope.profileId,
+      browserGroupId: scope.groupId,
+      windowId,
+      state: conn,
+    });
     changeTerminalBrowserCdpConnectionCount(scope.profileId, 1);
     sessionManager.setMessageRelay((data) => sendJson(ws, data));
     ws.on("pong", () => {
@@ -286,14 +356,8 @@ export async function startCdpProxy(
           sessionId: sessionId ?? null,
         });
       }
-      void handleMessage(
-        connections,
-        conn,
-        id,
-        method,
-        params ?? {},
-        sessionId,
-      );
+      const safeParams = params ?? {};
+      void handleMessage(connections, conn, id, method, safeParams, sessionId);
     });
     ws.on("close", cleanup);
     ws.on("error", cleanup);

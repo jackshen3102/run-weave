@@ -130,6 +130,11 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
       browserActivationRevision: state.browserActivationRevision + 1,
     }));
   },
+  openAutomation: () => {
+    set((state: TerminalPreviewStore) => ({
+      ui: { ...state.ui, open: true, activeTool: "automation" },
+    }));
+  },
   activateBrowser: (profileId, projectId) => {
     set((state: TerminalPreviewStore) => {
       const browserByProfile = {

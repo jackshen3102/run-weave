@@ -38,6 +38,11 @@ interface AttachedTarget {
 }
 
 type MessageRelay = (data: object) => void;
+type CommandCompletedListener = (
+  targetId: string,
+  method: string,
+  params: Record<string, unknown>,
+) => void;
 
 let nextSyntheticContextId = 1_000_000_000;
 
@@ -145,6 +150,8 @@ export class CdpSessionManager {
   private readonly proxySessionToTarget = new Map<string, string>();
   private readonly electronSessionToProxy = new Map<string, string>();
   private messageRelay: MessageRelay | null = null;
+
+  constructor(private readonly onCommandCompleted?: CommandCompletedListener) {}
 
   setMessageRelay(relay: MessageRelay): void {
     this.messageRelay = relay;
@@ -308,6 +315,11 @@ export class CdpSessionManager {
     if (method === "Runtime.enable") {
       this.emitDefaultExecutionContext(target);
     }
+    this.onCommandCompleted?.(
+      targetId,
+      method,
+      params as Record<string, unknown>,
+    );
     return this.rewriteFrameIdsForClient(target, safeResult);
   }
 
