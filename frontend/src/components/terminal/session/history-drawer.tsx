@@ -10,16 +10,19 @@ import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
-import { Copy } from "lucide-react";
+import { useMemoizedFn } from "ahooks";
+import { Copy, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 import { formatTerminalSessionName } from "../../../features/terminal/session-name";
 import { DEFAULT_TERMINAL_PREFERENCES } from "../../../features/terminal/preferences";
 import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
+import { cn } from "../../../lib/utils";
 import { HttpError } from "../../../services/http";
 import {
   getTerminalHistory,
   getTerminalPanelHistory,
 } from "../../../services/terminal";
+import { Button } from "../../ui/button";
 import {
   Sheet,
   SheetContent,
@@ -53,6 +56,14 @@ interface TerminalHistoryDrawerProps {
   onOpenChange: (open: boolean) => void;
 }
 
+function formatSnapshotTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export function TerminalHistoryDrawer({
   open,
   target,
@@ -76,59 +87,78 @@ export function TerminalHistoryDrawer({
     threadProvider: terminalThreadProvider,
   } = target;
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const requestSequenceRef = useRef(0);
   const [history, setHistory] = useState<TerminalSessionHistoryResponse | null>(
     null,
   );
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [snapshotLoadedAt, setSnapshotLoadedAt] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
+  const loadHistory = useMemoizedFn(async (clearCurrent: boolean) => {
     if (!open || !terminalSessionId) {
       return;
     }
 
-    let cancelled = false;
-    setHistory(null);
+    const requestSequence = requestSequenceRef.current + 1;
+    requestSequenceRef.current = requestSequence;
+    if (clearCurrent) {
+      setHistory(null);
+      setSnapshotLoadedAt(null);
+    }
     setLoading(true);
     setRequestError(null);
 
-    const request = terminalPanelId
-      ? getTerminalPanelHistory(
-          apiBase,
-          token,
-          terminalSessionId,
-          terminalPanelId,
-        )
-      : getTerminalHistory(apiBase, token, terminalSessionId);
+    try {
+      const payload = terminalPanelId
+        ? await getTerminalPanelHistory(
+            apiBase,
+            token,
+            terminalSessionId,
+            terminalPanelId,
+          )
+        : await getTerminalHistory(apiBase, token, terminalSessionId);
+      if (requestSequenceRef.current !== requestSequence) {
+        return;
+      }
+      setHistory(payload);
+      setSnapshotLoadedAt(Date.now());
+    } catch (error: unknown) {
+      if (requestSequenceRef.current !== requestSequence) {
+        return;
+      }
+      if (error instanceof HttpError && error.status === 401) {
+        onAuthExpired?.();
+        return;
+      }
+      setRequestError(String(error));
+    } finally {
+      if (requestSequenceRef.current === requestSequence) {
+        setLoading(false);
+      }
+    }
+  });
 
-    void request
-      .then((payload) => {
-        if (cancelled) {
-          return;
-        }
-        setHistory(payload);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        setHistory(null);
-        if (error instanceof HttpError && error.status === 401) {
-          onAuthExpired?.();
-          return;
-        }
-        setRequestError(String(error));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
+  useEffect(() => {
+    if (!open || !terminalSessionId) {
+      requestSequenceRef.current += 1;
+      return;
+    }
+
+    void loadHistory(true);
 
     return () => {
-      cancelled = true;
+      requestSequenceRef.current += 1;
     };
-  }, [apiBase, onAuthExpired, open, terminalPanelId, terminalSessionId, token]);
+  }, [apiBase, loadHistory, open, terminalPanelId, terminalSessionId, token]);
+
+  const handleOpenChange = useMemoizedFn((nextOpen: boolean) => {
+    if (!nextOpen) {
+      setExpanded(false);
+    }
+    onOpenChange(nextOpen);
+  });
 
   const renderedTitle =
     title ??
@@ -138,7 +168,7 @@ export function TerminalHistoryDrawer({
           cwd: history.cwd,
           activeCommand: history.activeCommand,
         })
-      : "Terminal History");
+      : "Current terminal");
   const renderedStatus = useMemo(() => {
     if (!history) {
       return terminalSessionId ? terminalSessionId : "No terminal selected";
@@ -335,11 +365,14 @@ export function TerminalHistoryDrawer({
   ]);
 
   return (
-    <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
+    <Sheet modal={false} open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         side="right"
         showOverlay={false}
-        className="flex h-dvh w-[min(48rem,100vw)] max-w-none flex-col gap-0 rounded-none border-l border-slate-800 bg-slate-950 p-0 text-slate-100"
+        className={cn(
+          "flex h-dvh max-w-none flex-col gap-0 rounded-none border-l border-slate-800 bg-slate-950 p-0 text-slate-100",
+          expanded ? "w-screen border-l-0" : "w-[min(64rem,100vw)]",
+        )}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
         }}
@@ -353,22 +386,61 @@ export function TerminalHistoryDrawer({
           event.preventDefault();
         }}
       >
-        <SheetHeader className="border-b border-slate-800 px-3 py-2 pr-12">
-          <SheetTitle className="truncate text-sm text-slate-100">
-            {renderedTitle}
-          </SheetTitle>
-          <SheetDescription className="truncate text-[11px] text-slate-400">
-            {renderedStatus}
-          </SheetDescription>
-          <div className="grid grid-cols-1 gap-1 pt-1 text-[11px] sm:grid-cols-2">
-            {idRows.map((row) => (
-              <CopyableHistoryIdRow
-                key={row.label}
-                label={row.label}
-                value={row.value}
-              />
-            ))}
+        <SheetHeader className="border-b border-slate-800 px-3 py-2">
+          <div className="flex min-w-0 items-start gap-2 pr-10">
+            <div className="min-w-0 flex-1">
+              <SheetTitle className="truncate text-sm text-slate-100">
+                Copy terminal output
+              </SheetTitle>
+              <SheetDescription className="truncate text-[11px] text-slate-400">
+                {renderedTitle} · {renderedStatus}
+              </SheetDescription>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="size-7 rounded-md p-0 text-slate-400 hover:text-slate-100"
+                disabled={loading || !terminalSessionId}
+                onClick={() => {
+                  void loadHistory(false);
+                }}
+                aria-label="Refresh terminal output snapshot"
+                title="Refresh snapshot (clears the current selection)"
+              >
+                <RefreshCw className={cn(loading && "animate-spin")} />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="size-7 rounded-md p-0 text-slate-400 hover:text-slate-100"
+                onClick={() => {
+                  setExpanded((current) => !current);
+                }}
+                aria-label={expanded ? "Restore drawer width" : "Expand drawer"}
+                aria-pressed={expanded}
+                title={expanded ? "Restore drawer width" : "Expand drawer"}
+              >
+                {expanded ? <Minimize2 /> : <Maximize2 />}
+              </Button>
+            </div>
           </div>
+          <details className="text-[11px] text-slate-400">
+            <summary className="cursor-pointer select-none hover:text-slate-200">
+              Terminal details
+            </summary>
+            <div className="grid grid-cols-1 gap-1 pt-1 sm:grid-cols-2">
+              {idRows.map((row) => (
+                <CopyableHistoryIdRow
+                  key={row.label}
+                  label={row.label}
+                  value={row.value}
+                />
+              ))}
+            </div>
+          </details>
         </SheetHeader>
         {requestError ? (
           <p className="border-b border-slate-800 px-3 py-1.5 text-xs text-rose-400">
@@ -376,13 +448,27 @@ export function TerminalHistoryDrawer({
           </p>
         ) : null}
         {loading ? (
-          <p className="border-b border-slate-800 px-3 py-1.5 text-xs text-slate-400">
-            Loading output...
+          <p
+            className="border-b border-slate-800 px-3 py-1.5 text-xs text-slate-400"
+            aria-live="polite"
+          >
+            {history ? "Refreshing snapshot..." : "Loading snapshot..."}
           </p>
         ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-slate-800 px-3 py-1.5 text-[11px] text-slate-400">
+          <span>
+            Drag to select. Keep dragging past the top or bottom edge to scroll.
+          </span>
+          <span aria-live="polite">
+            {snapshotLoadedAt
+              ? `Snapshot ${formatSnapshotTime(snapshotLoadedAt)}`
+              : "Snapshot not loaded"}
+          </span>
+        </div>
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           <div
             ref={terminalContainerRef}
+            aria-label="Terminal output snapshot"
             className="h-full min-h-full w-full overflow-x-auto overflow-y-hidden border border-slate-800 bg-[#0b1220] px-1 py-1"
           />
         </div>

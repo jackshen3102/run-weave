@@ -2,9 +2,9 @@ import type { TerminalProjectListItem } from "@runweave/shared/terminal/project"
 import {
   Activity,
   ClipboardList,
+  Copy,
   ExternalLink,
   Eye,
-  History,
   Home,
   MoreHorizontal,
   RefreshCw,
@@ -282,8 +282,8 @@ export function TerminalWorkspaceHeader({
                 }
               }}
             >
-              <History className="h-4 w-4" />
-              Terminal History
+              <Copy className="h-4 w-4" />
+              Copy terminal output…
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={
