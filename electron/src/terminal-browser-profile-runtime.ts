@@ -1,5 +1,11 @@
 import { BrowserWindow } from "electron";
 import {
+  assertAutomationProfileAvailable,
+  deriveAutomationBrowserGroupId,
+  mintAutomationAttributionToken,
+  normalizeAutomationTerminalSessionId,
+} from "./terminal-browser-automation-attribution.js";
+import {
   getTerminalBrowserProfileConfig,
   isTerminalBrowserProfileId,
   TERMINAL_BROWSER_PROFILE_IDS,
@@ -125,6 +131,7 @@ export function changeTerminalBrowserCdpConnectionCount(
 function buildCdpEndpoint(
   profileId: TerminalBrowserProfileId,
   browserGroupId: string | null,
+  automationToken: string | null,
 ): string {
   const proxy = desktopRuntime.cdpProxy;
   if (!proxy) {
@@ -133,6 +140,9 @@ function buildCdpEndpoint(
   const params = new URLSearchParams({ profileId });
   if (browserGroupId) {
     params.set("groupId", browserGroupId);
+  }
+  if (automationToken) {
+    params.set("automationToken", automationToken);
   }
   return `ws://${proxy.host}:${proxy.port}/devtools/browser/runweave-terminal-browser?${params}`;
 }
@@ -151,9 +161,17 @@ export async function resolveTerminalBrowserProfile(
     request.projectId === null
       ? null
       : normalizeTerminalBrowserProjectId(request.projectId);
-  const browserGroupId = normalizeTerminalBrowserGroupId(
+  const terminalSessionId = normalizeAutomationTerminalSessionId(
+    request.terminalSessionId,
+  );
+  const requestedBrowserGroupId = normalizeTerminalBrowserGroupId(
     request.browserGroupId,
   );
+  const browserGroupId =
+    requestedBrowserGroupId ??
+    (terminalSessionId
+      ? deriveAutomationBrowserGroupId(terminalSessionId)
+      : null);
   if (
     request.explicitProfileId !== null &&
     !isTerminalBrowserProfileId(request.explicitProfileId)
@@ -175,6 +193,9 @@ export async function resolveTerminalBrowserProfile(
     : worktree?.preferredProfileId
       ? "worktree"
       : "global-default";
+  if (terminalSessionId) {
+    assertAutomationProfileAvailable(terminalSessionId, profileId);
+  }
   const requestedRoute: TerminalBrowserRoute = worktree?.devServerPort
     ? { kind: "dev-server", port: worktree.devServerPort }
     : { kind: "unassigned" };
@@ -226,12 +247,22 @@ export async function resolveTerminalBrowserProfile(
       );
     }
     notifyRuntimeChanged(profileId);
+    const automationToken =
+      terminalSessionId && browserGroupId
+        ? mintAutomationAttributionToken({
+            terminalSessionId,
+            profileId,
+            browserGroupId,
+          })
+        : null;
     return {
       profileId,
       source,
       projectId,
       route: structuredClone(record.route),
-      cdpEndpoint: buildCdpEndpoint(profileId, browserGroupId),
+      cdpEndpoint: buildCdpEndpoint(profileId, browserGroupId, automationToken),
+      browserGroupId,
+      automationAttribution: terminalSessionId ? "terminal" : "unattributed",
       whistle: getTerminalBrowserWhistleState(profileId),
     } satisfies ResolvedTerminalBrowserProfile;
   });

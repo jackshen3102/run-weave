@@ -62,7 +62,7 @@ import {
 } from "./desktop-companion-preferences.js";
 import { writeDesktopCompanionWindowState } from "./desktop-companion-window-state.js";
 import { stopAllTerminalBrowserWhistles } from "./terminal-browser-whistle-runtime.js";
-
+import { registerTerminalBrowserAutomationHandlers } from "./terminal-browser-automation-runtime.js";
 function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 512;
 }
@@ -383,6 +383,7 @@ if (hasSingleInstanceLock) {
       registerRuntimeStatsHandler(() => desktopRuntime.packagedBackend);
       registerSystemMonitorHandler(() => desktopRuntime.packagedBackend);
       registerTerminalBrowserHandlers();
+      registerTerminalBrowserAutomationHandlers();
       registerCdpProxyHandlers();
       registerCompanionHandlers();
       if (!isBetaChannel) {

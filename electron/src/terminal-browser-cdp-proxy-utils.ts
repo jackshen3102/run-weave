@@ -1,4 +1,3 @@
-import { BrowserWindow } from "electron";
 import { WebSocket } from "ws";
 import type { CdpSessionManager } from "./terminal-browser-cdp-proxy-session.js";
 import {
@@ -10,10 +9,11 @@ import { getTerminalBrowserCdpTargets } from "./terminal-browser-view.js";
 import type { CdpProxyConnectionState } from "./terminal-browser-cdp-proxy-types.js";
 import { CDP_PROXY_TRACE_ENABLED } from "./terminal-browser-cdp-proxy-logging.js";
 import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
+import { desktopRuntime } from "./desktop-runtime-state.js";
 
-export function getFirstWindowId(): number | null {
-  const windows = BrowserWindow.getAllWindows();
-  return windows.length > 0 ? windows[0]!.id : null;
+export function getTerminalBrowserOwnerWindowId(): number | null {
+  const mainWindow = desktopRuntime.mainWindow;
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow.id : null;
 }
 
 export function canUseTarget(

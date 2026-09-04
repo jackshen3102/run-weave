@@ -21,7 +21,7 @@ import {
   broadcastTargetCreated,
   canUseTarget,
   getCurrentTargetInfos,
-  getFirstWindowId,
+  getTerminalBrowserOwnerWindowId,
   getScopedTargets,
   getTargetInfoForRequest,
   isSafeNoopCommand,
@@ -301,7 +301,7 @@ export async function handleMessage(
         const windowId = resolveCreateTargetWindowId(
           currentTargets,
           sessionManager.getAttachedTargetIds(),
-          getFirstWindowId(),
+          getTerminalBrowserOwnerWindowId(),
         );
         if (windowId === null) {
           sendJson(

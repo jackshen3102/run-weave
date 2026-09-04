@@ -28,6 +28,7 @@ export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
     const tabId = key.slice(`${entry.windowId}:${entry.profileId}:`.length);
     targets.push({
       key,
+      tabId,
       targetId: entry.targetId,
       profileId: entry.profileId,
       browserGroupId: entry.browserGroupId,
@@ -39,6 +40,8 @@ export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
       lastActiveAt: entry.lastActiveAt,
       url: wc.getURL() || entry.lastKnownUrl,
       title: wc.getTitle(),
+      faviconDataUrl: entry.faviconDataUrl,
+      loading: wc.isLoading(),
       webContents: wc,
     });
   }
@@ -72,6 +75,7 @@ export async function createTerminalBrowserTabFromProxy(
   profileId: TerminalBrowserProfileId,
   url: string,
   browserGroupId?: string,
+  options: { attach?: boolean } = {},
 ): Promise<{
   key: string;
   targetId: string;
@@ -92,7 +96,9 @@ export async function createTerminalBrowserTabFromProxy(
     return null;
   }
 
-  attachTerminalBrowser(win, tabId, view);
+  if (options.attach !== false) {
+    attachTerminalBrowser(win, tabId, view);
+  }
 
   const safeUrl = validateTerminalBrowserUrl(url);
   if (safeUrl) {

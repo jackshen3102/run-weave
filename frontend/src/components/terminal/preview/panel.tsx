@@ -19,26 +19,23 @@ import {
 import { TerminalPreviewPanelShell } from "./panel-shell";
 import { TerminalPreviewQuickSearch } from "./quick-search";
 import { useTerminalPreviewQuickSearch } from "./use-quick-search";
-import {
-  renderPreviewEmpty,
-  TerminalPreviewFileView,
-} from "./file-view";
+import { renderPreviewEmpty, TerminalPreviewFileView } from "./file-view";
 import { TerminalAgentTeamPanel } from "../agent-team/panel";
 import { TerminalRacePanel } from "../race/race-panel";
 import { useTerminalFileTree } from "./use-file-tree";
 import { useTerminalMarkdownReferenceActions } from "../markdown/use-actions";
 import { useTerminalPreviewFileMutations } from "./use-file-mutations";
-
+import { TerminalBrowserAutomationTool } from "../automation/tool";
 interface TerminalPreviewPanelProps {
   activeProject: TerminalProjectListItem | null;
   activeSession: TerminalSessionListItem | null;
+  sessions: TerminalSessionListItem[];
   showAgentTeamTool: boolean;
   widthPx?: number;
   onEditProject: () => void;
   onPanelSplitEnabledChange?: (enabled: boolean) => void;
   onActiveAgentTeamRunChange?: (active: boolean) => void;
 }
-
 function getPreviewParentDirectory(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/g, "");
   const lastSlashIndex = normalized.lastIndexOf("/");
@@ -62,6 +59,7 @@ function shouldIgnoreQuickSearchShortcut(target: EventTarget | null): boolean {
 export function TerminalPreviewPanel({
   activeProject,
   activeSession,
+  sessions,
   showAgentTeamTool,
   widthPx,
   onEditProject,
@@ -464,6 +462,12 @@ export function TerminalPreviewPanel({
     />
   );
   const raceBody = <TerminalRacePanel />;
+  const automationBody = (
+    <TerminalBrowserAutomationTool
+      active={activeTool === "automation"}
+      sessions={sessions}
+    />
+  );
   return (
     <>
       <TerminalPreviewPanelShell
@@ -546,6 +550,7 @@ export function TerminalPreviewPanel({
           onSetSvg: setSvgViewMode,
         }}
         activeTerminalSessionId={activeSession?.terminalSessionId ?? null}
+        automationBody={automationBody}
         body={previewBody}
         agentTeamBody={agentTeamBody}
         raceBody={raceBody}

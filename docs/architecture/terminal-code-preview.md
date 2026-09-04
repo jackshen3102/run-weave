@@ -62,21 +62,26 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `backend/src/terminal/preview-directory.ts`：目录树枚举服务，按 project path 约束、只返回一层 children，处理过滤、排序、limit/truncated 和目录错误语义。
 - 当前后端还没有把独立 `.svg` 文件识别成可渲染预览类型；SVG 文件预览需要在后端语言识别和前端 file mode 渲染层补齐。
 
-Terminal Browser 工具当前边界：
+Terminal Browser 与 Automation 工具当前边界：
 
-- Sidecar 一级工具固定包含 `Browser 1`、`Browser 2`、`Browser 3`。三个入口对应应用进程全局的三个 Profile；Worktree 只提供默认选择和 Dev Server 端口，不拥有或复制 Profile。
+- Desktop Sidecar 一级工具包含 `Automation`、`Browser 1`、`Browser 2`、`Browser 3`。三个 Browser 入口对应应用进程全局的三个 Profile；Worktree 只提供默认选择和 Dev Server 端口，不拥有或复制 Profile。
 - Electron 桌面端用 `WebContentsView` 承载 Browser tab，tab 生命周期和可见区域由主进程管理，前端只同步 tab 状态、地址栏、工具栏和面板布局。Profile 1 沿用 `persist:runweave-terminal-browser`，Profile 2/3 使用独立 partition，因此 Cookie、LocalStorage、IndexedDB、Cache Storage 和登录态天然隔离。
-- Web/PWA 模式不提供本地 Electron Browser，也不展示 CDP endpoint。
+- Web/PWA 模式不提供本地 Electron Browser、Automation 或 CDP endpoint。
 - Browser tab 只允许 `http:`、`https:` 和 `about:blank` 导航；页面发起的新窗口会被收口成 Browser 工具内的新 tab 或被拒绝。
 - CDP Proxy 只监听 `127.0.0.1`，默认从 `9224` 开始找可用端口，并通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 传给 Runweave terminal 里的子进程。
 - 如果显式设置 `RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。
 - CDP Proxy 暴露的是自研 browser-level endpoint，不开启 Electron 全局 `remote-debugging-port`，也不暴露 Runweave 主窗口 renderer 或 DevTools target。
 - Playwright MCP / Playwright CLI 通过 `rw browser profile resolve` 先按“本次显式指定 > 当前 Worktree 首选 > 全局默认”解析 Profile 和路由，再以 `chromium.connectOverCDP(...)` 连接返回的 scoped endpoint。显式覆盖不写回 Worktree 偏好。
+- Terminal 中的 resolver 默认携带 `RUNWEAVE_TERMINAL_SESSION_ID`。未显式指定 Group 时，Electron 为该 Terminal 派生不含原始 ID 的稳定 Group，并用一次性内存 token 把 WebSocket connection 投影到 Automation；token 只用于 UI attribution，不扩大 `profileId + groupId` 的 CDP 权限。同一 Terminal 有活跃连接时只能绑定一个 Profile。
 - CDP 仍只有一个 loopback 物理端口，逻辑 scope 为 `profileId + 可选 groupId`。无 `profileId` 的旧 endpoint 只映射全局默认 Profile，不汇总暴露三个 Profile。当前 tab 的 CDP/AI 按钮返回 Profile + Agent Control Group scoped WebSocket endpoint；`Target.getTargets`、discovery、auto-attach 和 target 操作都先过滤 Profile，再过滤可选 Group。
 - Tab 行 `+` 和 Terminal 人工链接在当前 Profile 的当前 group 新建页面；页面或 scoped Agent 派生的新 tab 继承 opener 的 Profile/group；只有总览“新建工作组”和 profile-scoped、group-unscoped `Target.createTarget` 创建新 group。Group 是 Profile 内自动化可见性边界，不是 Agent 身份、Worktree 或 Profile。
 - `Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
 - 多个 CDP 客户端可以同时连接并操作不同 Browser tab。Proxy 对同一 target 复用同一个 Electron `webContents.debugger` attachment，但每个客户端仍使用自己的 proxy session id；任一客户端断开不应清理其他 target 的有效 session。
+- CDP resolver、无 target 连接和 `Target.createTarget` 的窗口 fallback 只使用 `desktopRuntime.mainWindow`；Desktop Companion、临时捕获宿主和其它辅助窗口不能拥有 Browser workspace、Automation registry 或 target。
+- Automation 按 Terminal/unattributed connection 聚合当前窗口内的受控 Group，所有 Tab 只展示元数据，始终最多一个 selected target 生产实时画面。默认跟随最近的点击、输入、滚动、导航或刷新；手动选择后固定，显式恢复后才继续跟随。观察面只读，“在 Browser 中打开”只 reveal 同一 tab。
+- Automation 画面使用目标 `webContents.capturePage()`，最长边 640px、目标 5 FPS、单 in-flight，并由 renderer `<img>` load/error ACK 控制下一帧。fresh 未挂载或 0×0 的嵌套 View 只在 Automation 可见时进入临时 `BaseWindow` 合成宿主；必须先挂载后设置 bounds。产品 producer 不向外部 CDP 连接发送 screenshot/screencast 命令。
+- 切出 Automation、收起 Sidecar、窗口隐藏/销毁、target 销毁或 connection 断开都会停止 producer、释放临时宿主和 frame bytes。连接、actor、动作、选择、指针和画面都不持久化。
 - Group 细线上的连接点表示组内至少一个 target 已有 CDP client 附着；Tab favicon 附近的短暂操作点表示近期有 MCP/CDP session 命中该 target 的用户可感知操作。两者都不表示 Agent 身份、所有权或永久接管，也不改变 active Tab 选中背景。
 - `Page.enable`、`Runtime.enable`、`Target.setAutoAttach`、`Target.getTargetInfo`、`Page.getFrameTree`、`Network.enable` 等初始化、发现或静默同步命令不触发操作点；导航、点击、输入、evaluate、截图等真实操作才让对应 Tab 短暂显示 4.5 秒活动状态。
 - Browser 工具的 CDP 能力是桌面端本机自动化边界，不是远端协作协议；不要把 endpoint 持久化到项目数据或对公网暴露。

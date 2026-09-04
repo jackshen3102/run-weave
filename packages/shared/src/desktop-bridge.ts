@@ -15,6 +15,12 @@ import type {
 } from "./terminal-browser-annotation";
 import type { TerminalBrowserCdpProxyInfo } from "./terminal-browser-cdp-proxy";
 import type {
+  TerminalBrowserAutomationFrame,
+  TerminalBrowserAutomationFrameAcknowledgeRequest,
+  TerminalBrowserAutomationSnapshot,
+  TerminalBrowserAutomationViewStateRequest,
+} from "./terminal-browser-automation";
+import type {
   TerminalBrowserDevicePresetId,
   TerminalBrowserDeviceState,
 } from "./terminal-browser-device";
@@ -173,6 +179,19 @@ export interface RunweaveElectronBridge {
   terminalBrowserResolveProfile: (
     request: ResolveTerminalBrowserProfileRequest,
   ) => Promise<ResolvedTerminalBrowserProfile>;
+  terminalBrowserAutomationGetSnapshot: () => Promise<TerminalBrowserAutomationSnapshot>;
+  terminalBrowserAutomationSetViewState: (
+    request: TerminalBrowserAutomationViewStateRequest,
+  ) => Promise<void>;
+  terminalBrowserAutomationAcknowledgeFrame: (
+    request: TerminalBrowserAutomationFrameAcknowledgeRequest,
+  ) => Promise<void>;
+  onTerminalBrowserAutomationStateChanged: (
+    listener: (snapshot: TerminalBrowserAutomationSnapshot) => void,
+  ) => () => void;
+  onTerminalBrowserAutomationFrame: (
+    listener: (frame: TerminalBrowserAutomationFrame) => void,
+  ) => () => void;
   terminalBrowserOpenWhistleConsole: (
     profileId: TerminalBrowserProfileId,
   ) => Promise<void>;

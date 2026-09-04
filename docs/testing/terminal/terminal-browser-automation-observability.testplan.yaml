@@ -1,0 +1,295 @@
+version: 1
+name: Terminal Browser Automation 可视化验收
+description: >
+  验证 Runweave Desktop 能在 Automation Sidecar 中按 Terminal 汇总当前窗口内的活跃浏览器自动化，
+  以 Tab 元数据列表和单路实时主画面展示受控 Group；连接身份、Profile 绑定、
+  只读边界、瞬时动作提示、隐私清理和性能降级都符合约定，且不依赖或嵌入 Playwright Dashboard。
+
+cases:
+  - id: TBAO-001
+    name: Desktop 始终提供 Automation 入口和明确空状态
+    required: true
+    description: >
+      验证 macOS Desktop 的 Sidecar 工具列表始终包含 Automation；没有活跃自动化连接时只显示稳定空状态，
+      不显示旧 Terminal、旧画面或历史动作。
+    preconditions:
+      - 已通过隔离 Dev Session 启动真实 Runweave Desktop，当前没有任何 Terminal Browser CDP 连接。
+      - 已取得该 Desktop 的 fresh UI surface，Browser 1/2/3 中可以保留普通人工页面。
+    steps:
+      - 使用 $computer-use 打开 Sidecar；确认 Automation 与 Preview、Browser 1/2/3 并列且始终可见。
+      - 打开 Automation；确认页面只显示“当前没有浏览器自动化”的空状态，普通人工页面没有被列入 Tab 元数据列表。
+      - 在 Preview、Browser 和 Automation 之间切换并收起、重新打开 Sidecar；确认入口位置稳定，宽度与展开状态沿用现有 Sidecar 行为。
+
+  - id: TBAO-002
+    name: Web 和 PWA 不暴露 Desktop Automation 工具
+    required: true
+    description: >
+      验证没有 Electron WebContentsView 能力的 Web/PWA surface 不展示 Automation 入口，
+      也不会建立帧订阅或伪装成可用的浏览器观察能力。
+    preconditions:
+      - 已启动同版本的真实 Web/PWA 页面，并取得可由 $toolkit:playwright-cli 操作的 fresh 页面。
+      - 当前页面不是 Electron renderer，window.electronAPI 不可用。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开 Terminal Sidecar 工具列表；确认不存在 Automation 入口，Preview 等既有工具仍可使用。
+      - 检查页面网络、控制台和可见 UI；确认没有 Automation 帧订阅、Desktop-only 能力报错或误导性的空画面。
+
+  - id: TBAO-003
+    name: 第一个归属连接在 Sidecar 关闭时自动打开 Automation
+    required: true
+    description: >
+      验证 Sidecar 关闭时，第一个携带当前 terminalSessionId 的自动化连接会自动打开 Automation，
+      只创建一张 Terminal 卡片，并展示其专属 Group 的 Tab 元数据和唯一主画面。
+    preconditions:
+      - 隔离 Dev Session 中存在一个运行中的 Terminal，Sidecar 当前关闭，且该 Terminal 没有活跃 CDP 连接。
+      - 该 Terminal 可执行 rw browser profile resolve 和 $toolkit:playwright-cli，并已记录 terminalSessionId。
+      - Desktop Companion 已启用，Desktop CDP 中同时存在主窗口与 runweave://app/desktop-companion。
+    steps:
+      - 从该 Terminal 解析默认 Profile 并附着 Playwright；确认 Sidecar 自动打开且选中 Automation，没有打开官方 Playwright Dashboard。
+      - 分别读取主窗口与 Desktop Companion 的 Automation snapshot；确认 connection、Group 和 target 只归属主窗口，Companion 保持空状态。
+      - 确认 Automation 只显示一张与该 terminalSessionId 对应的 Terminal 卡片，并标明唯一 Profile、专属 Group 和活跃连接状态。
+      - 使用 $toolkit:playwright-cli 创建并导航一个可识别页面；确认出现该 Group 的 Tab 元数据项，主画面能看见当前 viewport。
+      - detach Playwright；确认 Terminal 卡片和画面立即消失，Automation 回到空状态。
+
+  - id: TBAO-004
+    name: 已有 Sidecar 工作不会被连接事件抢走
+    required: true
+    description: >
+      验证用户正在查看其他 Sidecar 工具或已主动关闭 Automation 时，新连接只更新入口徽标，
+      不切换工具、不改变宽度，也不会在同一连接周期内反复自动打开。
+    preconditions:
+      - 隔离 Dev Session 中准备一个无活跃 CDP 的 Terminal，Sidecar 已打开并选中 Preview。
+      - Automation 入口可见，当前徽标计数为零。
+    steps:
+      - 从 Terminal 建立第一个归属自动化连接；确认 Sidecar 仍停留在 Preview，Automation 入口显示活跃 Terminal 数量或动态提示。
+      - 手动打开 Automation 后关闭 Sidecar；在同一 Terminal/Profile 下增加或重建另一个连接，确认 Sidecar 不再自动打开。
+      - 断开该 Terminal 的全部自动化连接，再建立一个新的连接周期；确认 Sidecar 关闭时可以再次自动打开 Automation。
+
+  - id: TBAO-005
+    name: 同一 Terminal 的多个连接合并为一张卡片
+    required: true
+    description: >
+      验证同一 terminalSessionId、同一 Profile 和 Group 下的多个并发 CDP 连接只形成一个 Terminal 视图；
+      关闭部分连接不会过早移除卡片，最后一个连接断开时立即移除。
+    preconditions:
+      - 隔离 Dev Session 中存在一个 Terminal，并可从该 Terminal 建立两个独立的 scoped CDP 连接。
+      - Automation 已打开，两个连接都使用 resolver 返回的同一 Profile 和专属 Group。
+    steps:
+      - 依次建立两个连接；确认 Automation 始终只有一张 Terminal 卡片，同一个 Tab 只渲染一个元数据项，连接详情能表达存在多个 transport connection。
+      - 让两个连接分别对同一 Group 的不同 Tab 执行可感知操作；确认操作都归入同一 Terminal 卡片且不会重复帧流。
+      - 断开第一个连接；确认卡片、Group 和第二个连接控制的画面继续存在。
+      - 断开最后一个连接；确认卡片和画面立即消失。
+
+  - id: TBAO-006
+    name: 两个 Terminal 默认获得相互隔离的 Browser Group
+    required: true
+    description: >
+      验证两个 Terminal 即使解析到同一 Browser Profile，也会默认获得不同 Group，
+      各自的 target discovery、创建和 Automation 展示不会串页。
+    preconditions:
+      - 隔离 Dev Session 中创建两个 terminalSessionId 不同的 Terminal A、B，并让它们都解析到 Browser 1。
+      - A、B 均未显式传入 --group-id，且各自可建立 Playwright 连接。
+    steps:
+      - 分别从 A、B 执行 rw browser profile resolve --json；确认 profileId 都是 profile-1，但 endpoint 中的 groupId 非空且彼此不同。
+      - 使用 $toolkit:playwright-cli 分别附着两个 endpoint，并各创建一个内容可识别的页面；确认 A 的 Target.getTargets 不包含 B 页面，B 也不包含 A 页面。
+      - 打开 Automation；确认出现两张 Terminal 卡片，每张只展示自己的 Group 和页面，Tab 元数据与主画面不串用。
+      - 断开并清理两边连接；确认两张卡片分别按连接生命周期消失。
+
+  - id: TBAO-007
+    name: 一个 Terminal 活跃期间只能绑定一个 Profile
+    required: true
+    description: >
+      验证 Terminal 已有活跃连接时解析第二个 Profile 会明确失败；全部连接断开后，
+      同一 Terminal 可以重新绑定另一个 Profile，且两个 Profile 的浏览数据仍保持既有隔离。
+    preconditions:
+      - 隔离 Dev Session 中存在一个 Terminal，Browser 1 和 Browser 2 都可用且路由不冲突。
+      - 该 Terminal 已解析并连接 Browser 1，Automation 显示一张活跃卡片。
+    steps:
+      - 在 Browser 1 连接仍活跃时，从同一 Terminal 请求 rw browser profile resolve --profile 2 --json；确认命令以明确的 Profile 绑定冲突失败，Browser 1 连接和页面不受影响。
+      - 断开该 Terminal 的全部 Browser 1 连接；确认 Automation 卡片立即消失。
+      - 再次请求 Browser 2 并附着；确认成功，Automation 重新出现同一 Terminal 卡片但只标明 Browser 2，不同时展示 Browser 1。
+
+  - id: TBAO-008
+    name: 连接断开后观察卡片消失但 Browser 页面保留
+    required: true
+    description: >
+      验证自动化连接与 Browser 内容使用不同生命周期；最后一个连接断开后 Automation 立即清空，
+      但专属 Group、Tab、URL 和页面状态仍可从现有 Browser 工具访问。
+    preconditions:
+      - 一个 Terminal 已在专属 Group 中打开包含可识别本地状态的页面，Automation 正在显示该页面。
+      - 已记录 Profile、Group、Tab 标题、URL 和页面内状态。
+    steps:
+      - detach 最后一个自动化连接；确认对应 Terminal 卡片、Tab 元数据、主画面和动作提示立即从 Automation 消失，没有“最近断开”区域。
+      - 使用 $computer-use 打开对应 Browser Profile；确认原 Group、Tab、URL 和页面内状态仍然存在。
+      - 新建另一个 Terminal 并解析同一 Profile；确认它默认获得新 Group，不继承已断开 Terminal 的控制范围。
+
+  - id: TBAO-009
+    name: 无 Terminal 身份的连接显示为未归属自动化
+    required: true
+    description: >
+      验证直接连接 ambient CDP endpoint、没有 terminalSessionId 的客户端不会被伪装成某个 Terminal；
+      它在 Automation 中以明确警告身份出现，并在断开后立即消失。
+    preconditions:
+      - 隔离 Dev Session 的 loopback CDP Proxy 可用，并准备一个不携带 Terminal 身份的独立客户端。
+      - Automation 已打开且当前没有其它活跃连接。
+    steps:
+      - 让客户端直接连接 ambient endpoint；确认 Automation 出现“未归属自动化”警告卡片，并显示实际 Profile、可见 Group 和 Tab。
+      - 尝试在连接参数中提供任意显示名称；确认 UI 不把客户端自报名称当成可信 Terminal 身份。
+      - 断开客户端；确认警告卡片和所有相关画面立即消失。
+
+  - id: TBAO-010
+    name: Automation 只展示活跃连接作用域内的 Group 和全部 Tab
+    required: true
+    description: >
+      验证一个归属连接只让其 scoped Group 进入 Automation，但该 Group 内所有 Tab 都可见，
+      包括尚未发生点击或导航的页面；同 Profile 的其它人工 Group 不会泄露到观察页。
+    preconditions:
+      - Browser 1 中准备 Group A 的三个页面和 Group B 的一个人工页面，内容均可区分。
+      - 一个 Terminal 只连接 Group A，Group B 没有任何 CDP 连接。
+    steps:
+      - 打开 Automation；确认只显示 Group A，三个页面各有唯一元数据项，尚未发生操作的页面标记为空闲或未观察到操作；只有选中页面存在画面流。
+      - 确认 Group B 的标题、URL 和画面均不出现在 Automation。
+      - 在 Group A 新开和关闭一个 Tab；确认元数据列表随真实 workspace 更新且不产生重复或残留卡片、后台画面流。
+
+  - id: TBAO-011
+    name: Tab 元数据列表和唯一主画面保持 viewport 与清晰度边界
+    required: true
+    description: >
+      验证最多十个受控 Tab 只展示元数据，选中 Tab 使用单路实时主画面；
+      主画面只呈现当前 viewport、保持宽高比，不执行后台 Tab 截图、全页拼接或 Retina 2 倍传输。
+    preconditions:
+      - Automation 中存在多个宽高比不同、包含视口边缘标记和长页面内容的受控 Tab。
+      - 可读取帧元数据中的目标尺寸、时间戳和序号，但不能取得页面输入内容。
+    steps:
+      - 检查十个 Tab 的 DOM 与采集统计；确认未选中项只有 title、URL、favicon 和状态，没有 img/canvas 画面或后台 frame producer。
+      - 展开和收窄 Sidecar；确认主画面最长边不超过 640px、目标刷新率为 5 FPS，并按实际 CSS 尺寸重新请求 fresh frame 而非拉伸旧帧。
+      - 对选中页面滚动到中部；确认主画面展示当前 viewport，未偷偷滚动页面或拼接全页内容。
+      - 切换宽高比不同的 Tab；确认画面完整 letterbox 展示且不裁剪、不变形，空余区域不泄露上一 Tab 的旧帧。
+
+  - id: TBAO-012
+    name: 主画面默认跟随操作且手动选择后固定
+    required: true
+    description: >
+      验证主画面默认跟随最近发生点击、输入、滚动或导航的 Tab；用户手动选择后进入固定查看，
+      后台动作不再抢走画面，直到用户显式恢复跟随。
+    preconditions:
+      - 一个或多个 Terminal 卡片中至少有三个可区分 Tab，Automation 当前处于默认跟随模式。
+      - 可分别对三个 Tab 发送读取命令、鼠标移动和用户可感知的输入或导航命令。
+    steps:
+      - 依次在 Tab A、B 执行点击或导航；确认主画面依次跟随 A、B，读取 DOM、网络初始化和单纯鼠标移动不会触发切换。
+      - 手动选择 Tab C；确认 UI 标明固定查看，随后 A、B 的可感知操作不会改变主画面。
+      - 点击“恢复跟随”并在 A 操作；确认主画面切回 A，Tab 元数据列表和 Terminal 卡片顺序不因跟随而抖动。
+
+  - id: TBAO-013
+    name: Automation 画面只读且可跳转到真实 Browser Tab
+    required: true
+    description: >
+      验证 Tab 元数据列表和主画面不会把鼠标、键盘、滚轮或导航指令发送给网页；
+      用户只能通过明确的“在 Browser 中打开”跳到现有 Browser Profile 和目标 Tab 后操作。
+    preconditions:
+      - Automation 主画面展示一个带输入框、按钮和滚动区域的受控 Tab，并已记录页面初始状态。
+      - 对应 Browser Profile 和 Tab 在现有 Browser 工具中可正常人工操作。
+    steps:
+      - 在 Automation 主画面上点击、双击、输入、滚动和使用浏览器导航快捷键；确认只改变选中或固定状态，网页 DOM、URL、焦点和滚动位置均不变化。
+      - 点击“在 Browser 中打开”；确认 Sidecar 切换到正确 Browser Profile 并选中同一 Tab，没有创建新页面或复制 WebContentsView。
+      - 在真实 Browser 中人工点击和输入；确认页面正常变化，返回 Automation 后能看到新画面但不会把人工操作归属为 Agent 动作。
+
+  - id: TBAO-014
+    name: Agent 光标和点击反馈准确且不泄露输入内容
+    required: true
+    description: >
+      验证 Automation 在画面覆盖层显示 Agent 指针与短暂点击圆环，坐标与网页命中目标一致；
+      键盘操作只显示“正在输入”，不显示按键、文本、剪贴板或表单值。
+    preconditions:
+      - 受控静态页面包含坐标可验证的按钮和输入框，并在页面内显示最后命中的元素标识。
+      - Automation 主画面已选中该页面，连接可发送 Playwright 鼠标与键盘操作。
+    steps:
+      - 使用 $toolkit:playwright-cli 移动鼠标并点击多个已知元素；确认 Agent 光标和点击圆环落在对应视觉目标上，页面报告的命中元素一致。
+      - 输入一段唯一敏感测试文本；确认 UI 只短暂显示“正在输入”，Automation DOM、可访问名称、帧元数据和诊断日志均不包含该文本或具体按键。
+      - 停止输入并等待动作窗口结束；确认输入提示和点击圆环消失，光标不会被误标为人工鼠标。
+
+  - id: TBAO-015
+    name: 动作状态短暂显示且不形成历史时间线
+    required: true
+    description: >
+      验证点击、输入、滚动、导航和重新加载会产生有限枚举的瞬时状态，
+      初始化、发现和只读命令不触发状态；提示过期后没有动作历史或可回看记录。
+    preconditions:
+      - Automation 中有一个活跃 Terminal 和两个受控 Tab，动作提示当前为空闲。
+      - 可发送 CDP 初始化、DOM 读取、点击、输入、滚动、导航和重新加载命令。
+    steps:
+      - 发送 Target discovery、Page.enable、Runtime.enable 和 DOM 读取；确认 Terminal 与 Tab 保持空闲，不出现伪动作。
+      - 分别发送点击、输入、滚动、导航和重新加载；确认命中的 Tab 显示对应有限状态，未命中的 Tab 不变化，状态中没有 locator、文本或请求参数。
+      - 等待既定瞬时窗口过期；确认状态恢复为空闲，UI 没有时间线、最近动作列表或断开后的历史数据。
+
+  - id: TBAO-016
+    name: 只有 Automation 可见时才采集和传输画面
+    required: true
+    description: >
+      验证画面生产者严格跟随当前 BrowserWindow 中 Automation 的可见性；切换工具、收起 Sidecar、
+      窗口隐藏或销毁后停止采帧并释放订阅，再次打开时从 fresh frame 恢复。
+    preconditions:
+      - 一个活跃连接控制多个持续变化的页面，Automation 已打开并能观察帧序号和采集指标。
+      - 可切换 Sidecar 工具、收起 Sidecar、隐藏和重新显示当前 Desktop 窗口。
+    steps:
+      - 在 Automation 可见时记录帧序号持续更新；切到 Preview，确认 1 秒内 selected producer 停止采帧和 IPC 传输，且没有其它目标的后台 producer，但连接徽标与动作状态仍更新。
+      - 返回 Automation；确认收到 fresh frame 后恢复，不先展示切走前的缓存画面。
+      - 分别收起 Sidecar、隐藏窗口和销毁测试窗口；确认每种不可见状态都停止对应订阅，没有跨窗口继续采集。
+
+  - id: TBAO-017
+    name: 画面数据不持久化、不记录日志并在释放后不可访问
+    required: true
+    description: >
+      验证 Automation 帧只以受限二进制 IPC 在内存中存在，不写入 Browser workspace、项目、临时截图、
+      Activity、诊断日志或遥测；切走和断开后旧帧引用被撤销。
+    preconditions:
+      - 隔离 Dev Session 使用可清理的 user-data、日志目录和项目目录，并已记录测试开始前文件清单。
+      - 页面包含一段唯一隐私标记，Automation 已显示该页面但没有执行用户截图或录屏。
+    steps:
+      - 观察画面后检查 Terminal Browser 持久化文件、Activity、诊断日志、项目目录和本轮新增临时文件；确认没有帧文件、base64/data URL、ws token 或唯一隐私标记。
+      - 切到 Preview 并通过 renderer 可用合同重新请求状态；确认状态只含连接和 Tab 元数据，不能取得上一次画面字节或对象 URL。
+      - 断开连接并触发垃圾回收可观察边界；确认旧对象 URL 已撤销、帧缓冲计数归零，Browser 页面本身仍保留。
+
+  - id: TBAO-018
+    name: 画面中断两秒后清空并在恢复后继续
+    required: true
+    description: >
+      验证单个 Tab 采集失败时最多保留最后一帧两秒并明确标记陈旧；持续失败会清空画面并显示具体状态，
+      恢复后自动换成 fresh frame，且不影响其它 Tab 的元数据和自动化执行。
+    preconditions:
+      - Automation 中至少有两个持续可采集的受控 Tab，可对其中一个注入可恢复的采集失败而不销毁 CDP 连接。
+      - 已记录两个 Tab 的帧序号和当前时间。
+    steps:
+      - 让 Tab A 的采集失败；确认最后一帧立即覆盖“画面中断”和最后更新时间，Tab B 的元数据继续正常刷新且没有后台画面流。
+      - 保持失败超过两秒；确认 A 的旧图像被清空并显示可判定的失败原因，没有无限冻结或替换成 B 的画面。
+      - 在失败期间选择 Tab B；确认先停止 A，再为 B 建立唯一画面流并显示 fresh frame；恢复并重新选择 A 后收到更大的帧序号，CDP 连接与页面状态均未重建。
+
+  - id: TBAO-019
+    name: viewport 变换后画面与 Agent 坐标仍一致
+    required: true
+    description: >
+      验证 Desktop Zoom、Minimum Width、宿主横向偏移和现有移动设备预设下，Automation 仍捕获真实当前 viewport，
+      Agent 指针与点击标记按正确坐标映射，不改变 Playwright 的 CSS 坐标语义。
+    preconditions:
+      - 静态坐标页面包含 viewport 尺寸、滚动位置和多个边缘交互目标，Automation 与 $toolkit:playwright-cli 均连接目标 Tab。
+      - 可通过 $computer-use 调整现有 Zoom、Minimum Width、横向轨道和至少一个移动设备预设。
+    steps:
+      - 在 Desktop 100%、80% Zoom 和不同 Minimum Width/横向偏移下点击同一 CSS 坐标目标；确认网页命中目标不变，Automation 指针覆盖在当前画面的对应位置。
+      - 切到一个移动设备预设并重复点击、输入和滚动；确认主画面宽高比、viewport 内容和覆盖层坐标与设备画布一致。
+      - 恢复 Desktop 默认设置；确认画面和坐标自动收敛，没有残留移动设备比例或人工横向偏移补偿。
+
+  - id: TBAO-020
+    name: 十个 Tab 下达到性能门槛且不拖慢自动化
+    required: true
+    description: >
+      验证全局十个受控 Tab 的最坏规模下，十路元数据与唯一主画面达到已确认的帧率、延迟、CPU、RSS、切换和停止门槛；
+      相同 Playwright 操作相对关闭 Automation 的基线不出现超过 10% 的延迟劣化或新增失败。
+    preconditions:
+      - 目标 macOS 机器的负载稳定，隔离 Dev Session 中准备十个 owned 页面，其中主页面持续变化，其余九个以可测频率变化。
+      - 已准备可重复的 Playwright 点击、输入和导航序列，并能分别采集关闭与打开 Automation 时的时延、失败、CPU 和 RSS。
+    steps:
+      - 在同一 fresh Desktop 中按 AB/BA/AB 顺序运行关闭与打开 Automation 的性能序列各三轮；记录操作延迟分布、失败数和 CPU，并确认 fixture 自身稳定。
+      - 打开 Automation，选中持续变化页面并运行同一序列；确认恰好十个元数据项、只有一个 frame producer，主画面达到请求 5 FPS 的 90%、变化到展示 P95 不超过 500ms、最大帧间隔不超过 1 秒。
+      - 依次选择十个 Tab；确认 10/10 都能显示 fresh frame，切换到首帧 P95 不超过 2 秒，上一 Tab 的 producer 和 buffer 均已清理。
+      - 对比同进程性能段；确认增量 CPU 不超过单核 15%、Playwright 操作延迟劣化不超过 10%，且没有新增超时或失败。
+      - 另外启动三组相互独立的 fresh A/B Desktop 进程；A 始终不开画面，B 始终打开同一画面，使用相同 warmup、十 Tab fixture 和 30 秒采样，按进程角色比较 steady-state RSS；确认三组配对增量分别不超过 100MB。禁止用同进程前后 RSS growth 相减替代。
+      - 切到 Preview；确认 1 秒内停止采帧，稳定态增量 CPU 低于 1%，随后断开连接并确认帧缓冲和 owned fixture 全部清理。

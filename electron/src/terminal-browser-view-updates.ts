@@ -6,6 +6,7 @@ import { getTerminalBrowserDeviceState } from "./terminal-browser-device-emulati
 import {
   findTerminalBrowserEntryForWindow,
   getTerminalBrowserKey,
+  terminalBrowserEvents,
   type TerminalBrowserEntry,
   type TerminalBrowserSnapshot,
   type TerminalBrowserUpdate,
@@ -107,6 +108,11 @@ export function commitTerminalBrowserTabUpdate(
     tab: update,
   };
   win.webContents.send("terminal-browser:state-changed", event);
+  terminalBrowserEvents.emit("tab-updated", {
+    windowId: win.id,
+    profileId: entry.profileId,
+    tabId: update.tabId,
+  });
   scheduleTerminalBrowserTabsSave();
 }
 

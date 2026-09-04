@@ -13,6 +13,7 @@ import {
   createTerminalBrowserGroupId,
   getTerminalBrowserKey,
   getTerminalBrowserWorkspaceKey,
+  terminalBrowserEvents,
   terminalBrowserRuntime,
   type TerminalBrowserGroupRecord,
   type TerminalBrowserWindowWorkspace,
@@ -390,6 +391,10 @@ export function sendTerminalBrowserWorkspaceChanged(
     workspace,
   };
   win.webContents.send("terminal-browser:state-changed", event);
+  terminalBrowserEvents.emit("workspace-changed", {
+    windowId: win.id,
+    profileId,
+  });
 }
 
 export function clearTerminalBrowserWorkspaces(windowId: number): void {
