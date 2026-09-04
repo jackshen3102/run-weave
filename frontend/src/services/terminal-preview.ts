@@ -1,11 +1,11 @@
 import type { TerminalPreviewChangeKind, TerminalPreviewDeleteFileRequest, TerminalPreviewDeleteFileResponse, TerminalPreviewDirectoryResponse, TerminalPreviewContentSearchResponse, TerminalPreviewFileDiffResponse, TerminalPreviewFileResponse, TerminalPreviewFileSearchResponse, TerminalPreviewFolderSearchResponse, TerminalPreviewGitChangesResponse, TerminalPreviewRenameFileRequest, TerminalPreviewResetChangeRequest, TerminalPreviewResetChangeResponse, TerminalPreviewSaveFileRequest, TerminalPreviewSaveFileResponse } from "@runweave/shared/terminal/preview";
-import { requestBlob, requestJson } from "./http";
+import { requestBlob, requestJson, requestVoid } from "./http";
 
 export async function searchTerminalProjectPreviewFiles(
   apiBase: string,
   token: string,
   projectId: string,
-  params: { query: string; limit?: number },
+  params: { query: string; limit?: number; signal?: AbortSignal },
 ): Promise<TerminalPreviewFileSearchResponse> {
   const query = new URLSearchParams();
   query.set("q", params.query);
@@ -20,6 +20,7 @@ export async function searchTerminalProjectPreviewFiles(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal: params.signal,
     },
   );
 }
@@ -28,7 +29,7 @@ export async function searchTerminalProjectPreviewFolders(
   apiBase: string,
   token: string,
   projectId: string,
-  params: { query: string; limit?: number },
+  params: { query: string; limit?: number; signal?: AbortSignal },
 ): Promise<TerminalPreviewFolderSearchResponse> {
   const query = new URLSearchParams();
   query.set("q", params.query);
@@ -43,6 +44,7 @@ export async function searchTerminalProjectPreviewFolders(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal: params.signal,
     },
   );
 }
@@ -51,7 +53,7 @@ export async function searchTerminalProjectPreviewContent(
   apiBase: string,
   token: string,
   projectId: string,
-  params: { query: string; limit?: number },
+  params: { query: string; limit?: number; signal?: AbortSignal },
 ): Promise<TerminalPreviewContentSearchResponse> {
   const query = new URLSearchParams();
   query.set("q", params.query);
@@ -63,6 +65,24 @@ export async function searchTerminalProjectPreviewContent(
     apiBase,
     `/api/terminal/project/${encodeURIComponent(projectId)}/preview/content/search?${query.toString()}`,
     {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      signal: params.signal,
+    },
+  );
+}
+
+export async function refreshTerminalProjectPreviewSearchIndex(
+  apiBase: string,
+  token: string,
+  projectId: string,
+): Promise<void> {
+  await requestVoid(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/search-index/refresh`,
+    {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
       },

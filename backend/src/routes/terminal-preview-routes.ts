@@ -1,10 +1,11 @@
-import type { Response, Router } from "express";
+import type { Request, Response, Router } from "express";
 import { z } from "zod";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { listPreviewDirectory } from "../terminal/preview/directory";
 import {
   deletePreviewFile,
+  clearPreviewFileSearchCache,
   getPreviewFileDiff,
   getPreviewGitChanges,
   readPreviewAsset,
@@ -100,6 +101,26 @@ function handlePreviewError(res: Response, error: unknown) {
   });
 }
 
+function createRequestAbortScope(req: Request, res: Response): {
+  signal: AbortSignal;
+  dispose: () => void;
+} {
+  const controller = new AbortController();
+  const abort = (): void => controller.abort();
+  const abortIfIncomplete = (): void => {
+    if (!res.writableEnded) abort();
+  };
+  req.once("aborted", abort);
+  res.once("close", abortIfIncomplete);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      req.off("aborted", abort);
+      res.off("close", abortIfIncomplete);
+    },
+  };
+}
+
 export function registerTerminalPreviewRoutes(
   router: Router,
   terminalSessionManager: TerminalSessionManager,
@@ -170,6 +191,7 @@ export function registerTerminalPreviewRoutes(
       return;
     }
 
+    const abortScope = createRequestAbortScope(req, res);
     try {
       const { project } = resolveProjectPreviewContext(
         terminalSessionManager,
@@ -181,8 +203,25 @@ export function registerTerminalPreviewRoutes(
           projectPath: project.path,
           query: parsed.data.q,
           limit: parsed.data.limit,
+          signal: abortScope.signal,
         }),
       );
+    } catch (error) {
+      if (abortScope.signal.aborted) return;
+      handlePreviewError(res, error);
+    } finally {
+      abortScope.dispose();
+    }
+  });
+
+  router.post("/project/:id/preview/search-index/refresh", (req, res) => {
+    try {
+      const { project } = resolveProjectPreviewContext(
+        terminalSessionManager,
+        req.params.id,
+      );
+      clearPreviewFileSearchCache(project.id);
+      res.status(204).send();
     } catch (error) {
       handlePreviewError(res, error);
     }

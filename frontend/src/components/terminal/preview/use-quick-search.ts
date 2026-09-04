@@ -5,6 +5,7 @@ import {
   searchTerminalProjectPreviewContent,
   searchTerminalProjectPreviewFiles,
   searchTerminalProjectPreviewFolders,
+  refreshTerminalProjectPreviewSearchIndex,
 } from "../../../services/terminal";
 
 const QUICK_SEARCH_DEBOUNCE_MS = 180;
@@ -56,7 +57,21 @@ export function useTerminalPreviewQuickSearch({
     setOpen(false);
   });
 
+  const refreshIndex = useMemoizedFn(async (): Promise<void> => {
+    if (!projectId) return;
+    setError(null);
+    try {
+      await refreshTerminalProjectPreviewSearchIndex(apiBase, token, projectId);
+    } catch (caught: unknown) {
+      setError(onRequestError(caught));
+    }
+  });
+
   useEffect(() => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    let abortController: AbortController | null = null;
+
     if (!open || !projectId) {
       setLoading(false);
       setError(null);
@@ -67,7 +82,6 @@ export function useTerminalPreviewQuickSearch({
 
     const trimmedQuery = query.trim();
     if ((mode === "content" || mode === "folders") && !trimmedQuery) {
-      requestIdRef.current += 1;
       setLoading(false);
       setError(null);
       setTruncated(false);
@@ -75,24 +89,27 @@ export function useTerminalPreviewQuickSearch({
       return;
     }
 
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
+    setLoading(true);
+    setError(null);
+    setTruncated(false);
+    setResults((current) => ({ ...current, [mode]: [] }));
     const timeoutId = window.setTimeout(() => {
-      setLoading(true);
-      setError(null);
+      abortController = new AbortController();
       const request =
         mode === "files"
           ? searchTerminalProjectPreviewFiles(apiBase, token, projectId, {
               query,
               limit: QUICK_SEARCH_LIMIT,
+              signal: abortController.signal,
             }).then((payload) => ({
               items: payload.items,
-              truncated: false,
+              truncated: payload.truncated,
             }))
           : mode === "content"
             ? searchTerminalProjectPreviewContent(apiBase, token, projectId, {
                 query,
                 limit: QUICK_SEARCH_LIMIT,
+                signal: abortController.signal,
               }).then((payload) => ({
                 items: payload.items,
                 truncated: payload.truncated,
@@ -100,6 +117,7 @@ export function useTerminalPreviewQuickSearch({
             : searchTerminalProjectPreviewFolders(apiBase, token, projectId, {
                 query,
                 limit: QUICK_SEARCH_LIMIT,
+                signal: abortController.signal,
               }).then((payload) => ({
                 items: payload.items,
                 truncated: payload.truncated,
@@ -114,7 +132,10 @@ export function useTerminalPreviewQuickSearch({
           setTruncated(payload.truncated);
         })
         .catch((caught: unknown) => {
-          if (requestIdRef.current !== requestId) {
+          if (
+            requestIdRef.current !== requestId ||
+            (caught instanceof Error && caught.name === "AbortError")
+          ) {
             return;
           }
           setResults((current) => ({ ...current, [mode]: [] }));
@@ -130,6 +151,7 @@ export function useTerminalPreviewQuickSearch({
 
     return () => {
       window.clearTimeout(timeoutId);
+      abortController?.abort();
     };
   }, [apiBase, mode, onRequestError, open, projectId, query, token]);
 
@@ -143,6 +165,7 @@ export function useTerminalPreviewQuickSearch({
     truncated,
     openSearch,
     closeSearch,
+    refreshIndex,
     setOpen,
     setMode,
     setQuery,

@@ -79,3 +79,77 @@ cases:
       - 在 Files 模式查询 `.env`、`secret`、`hidden`，在 Content 模式查询 `quick-search-target`；确认敏感文件和排除目录均不在结果中。
       - 在 Preview 空白区域分别按 `Cmd/Ctrl+P` 和 `Cmd/Ctrl+Shift+F`；确认打开对应模式。将焦点切到 terminal、Monaco 和普通输入框后重复快捷键；确认不打开浮层，且 Monaco 的 `Cmd/Ctrl+S` 保存逻辑不受影响。
       - 在浮层内按 `Esc`；确认关闭。重新打开后将结果高亮并按 `Enter`；确认打开当前高亮结果并关闭浮层。
+
+  - id: EXPLORER-007
+    name: 大仓库 Files 搜索完整且跨重建稳定
+    required: true
+    description: >
+      验证超过两万个文件的项目不会被候选上限随机截断，冷索引重建前后都能找到同一个唯一文件，
+      且每次搜索都在三秒内出现结果。
+    preconditions:
+      - 已准备由本次执行拥有、可清理且至少包含四万个普通文件的临时项目，其中 `zz-large-search/large-search-target.ts` 的文件名唯一。
+      - 已启动 Runweave 并用 `$toolkit:playwright-cli` 打开该项目的 Preview Explorer。
+    steps:
+      - 打开 Files 搜索并输入 `large-search-target`；记录输入到结果出现的耗时，确认三秒内只出现真实目标文件。
+      - 关闭浮层，点击 Preview Header 的 Refresh 后重新搜索同一文件；重复两次，确认每次仍在三秒内返回同一路径，没有随机变成 `No results`。
+
+  - id: EXPLORER-008
+    name: 大仓库 Content 搜索覆盖尾部唯一内容
+    required: true
+    description: >
+      验证 Content 搜索直接覆盖完整项目，在大仓库尾部文件中只有一次的文本也能返回真实行列，
+      不会以 `truncated: false` 的空结果结束。
+    preconditions:
+      - 已准备由本次执行拥有、可清理且至少包含四万个普通文件的临时项目，只有 `zz-content-sentinel/content-tail-sentinel.ts` 包含 `large_content_unique_marker_20260904`。
+      - 已启动 Runweave 并用 `$toolkit:playwright-cli` 打开该项目的 Preview Explorer。
+    steps:
+      - 切换到 Content 并输入 `large_content_unique_marker_20260904`；确认十秒内显示 `content-tail-sentinel.ts`、唯一命中片段和真实行列，没有显示 `No results` 或超时错误。
+      - 点击结果；确认浮层关闭、Explorer reveal 真实文件，Monaco 定位到包含唯一文本的行。
+
+  - id: EXPLORER-009
+    name: 结果超过五十条时明确提示继续收窄
+    required: true
+    description: >
+      验证 Files 与 Content 的结果达到展示上限时都明确标记仍有更多结果，不把前五十条暗示成完整集合。
+    preconditions:
+      - 临时项目中至少六十个文件名包含 `many-file-match`，且至少六十个普通文本文件包含 `many_content_match`。
+      - 已用 `$toolkit:playwright-cli` 打开该项目的 Explorer 快捷搜索。
+    steps:
+      - 在 Files 输入 `many-file-match`；确认显示五十条结果，底部出现 `More results exist. Refine your search.`。
+      - 切换到 Content 并输入 `many_content_match`；确认显示五十条结果并出现同一收窄提示，没有输出过量错误。
+
+  - id: EXPLORER-010
+    name: 快速改写查询只保留最后一次结果
+    required: true
+    description: >
+      验证输入变化会取消旧 Content 请求，迟到响应不能覆盖最后一次查询或继续显示旧结果。
+    preconditions:
+      - 大仓库临时项目含 `final-query-target.ts`，内容只有一次 `final_query_marker_20260904`。
+      - 已用 `$toolkit:playwright-cli` 打开 Content 搜索，并能读取浏览器网络请求记录。
+    steps:
+      - 输入一个项目中不存在的长文本，等待请求已经发出后立即替换为 `final_query_marker_20260904`；确认最终只显示 `final-query-target.ts`，没有旧查询结果或旧错误。
+      - 检查本轮网络请求；确认旧请求被取消或连接提前结束，最终请求成功，浮层保持可操作。
+
+  - id: EXPLORER-011
+    name: 显式 Refresh 使外部新增文件进入索引
+    required: true
+    description: >
+      验证项目级搜索索引可长期复用，同时 Preview Header 的 Refresh 能使终端或外部工具新增的文件立即可搜索。
+    preconditions:
+      - 已用 `$toolkit:playwright-cli` 在 owned 临时项目中完成一次 Files 搜索，使当前项目索引进入缓存。
+      - 临时项目当前不存在 `external-refresh-target.ts`，执行者可在该项目内创建并最终清理此文件。
+    steps:
+      - 在页面外向临时项目新增 `external-refresh-target.ts`，重新打开 Files 搜索并输入完整文件名；确认刷新前缓存结果中没有该文件。
+      - 关闭浮层并点击 Preview Header 的 Refresh，再次搜索；确认出现 `external-refresh-target.ts` 且可打开真实内容。
+
+  - id: EXPLORER-012
+    name: Unicode 文件名和跨目录片段可搜索
+    required: true
+    description: >
+      验证 Files 搜索按 Unicode 字母数字和完整相对路径匹配，不再只支持 ASCII basename。
+    preconditions:
+      - owned 临时项目包含唯一文件 `模块/搜索目标.ts`。
+      - 已用 `$toolkit:playwright-cli` 打开该项目的 Files 搜索。
+    steps:
+      - 输入 `搜索目标`；确认结果显示 `搜索目标.ts` 和父目录 `模块`。
+      - 清空后输入 `模块 搜索目标`；确认同一文件仍是可选择结果，点击后 Explorer reveal 并打开真实文件。

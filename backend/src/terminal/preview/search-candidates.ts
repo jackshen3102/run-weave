@@ -3,14 +3,13 @@ import { readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { logger } from "../../logging";
-import { toRelativePath } from "./paths";
+import { TerminalPreviewError, toRelativePath } from "./paths";
 
 const execFileAsync = promisify(execFile);
 const terminalPreviewLogger = logger.child({ component: "terminal-preview" });
 
-const SEARCH_MAX_FILES = 20_000;
-const RG_SEARCH_TIMEOUT_MS = 5_000;
-const FILE_SEARCH_CACHE_TTL_MS = 15_000;
+const RG_SEARCH_TIMEOUT_MS = 15_000;
+const RG_SEARCH_MAX_BUFFER_BYTES = 32 * 1024 * 1024;
 const SENSITIVE_FILE_GLOBS = [
   ".env",
   "**/.env",
@@ -51,8 +50,12 @@ export const EXCLUDED_FILE_BASENAMES = new Set([".DS_Store", "Thumbs.db"]);
 const EXCLUDED_FILE_SUFFIXES = [".code-search"];
 
 interface FileSearchCacheEntry {
-  loadedAt: number;
   files: string[];
+}
+
+interface FileSearchInflightEntry {
+  generation: string;
+  promise: Promise<string[]>;
 }
 
 export interface PreviewGitignoreRule {
@@ -64,7 +67,12 @@ export interface PreviewGitignoreRule {
 }
 
 const fileSearchCandidateCache = new Map<string, FileSearchCacheEntry>();
-const fileSearchCandidateInflight = new Map<string, Promise<string[]>>();
+const fileSearchCandidateInflight = new Map<
+  string,
+  FileSearchInflightEntry
+>();
+const fileSearchCandidateGenerations = new Map<string, number>();
+let fileSearchCandidateGlobalGeneration = 0;
 
 function parseGitignoreRule(line: string): PreviewGitignoreRule | null {
   let pattern = line.trim();
@@ -212,12 +220,12 @@ async function collectFiles(rootPath: string): Promise<string[]> {
   const results: string[] = [];
   const gitignoreRules = await loadPreviewGitignoreRules(rootPath);
   const stack = [rootPath];
-  while (stack.length > 0 && results.length < SEARCH_MAX_FILES) {
+  while (stack.length > 0) {
     const current = stack.pop();
     if (!current) {
       continue;
     }
-    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    const entries = await readdir(current, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.name.startsWith(".") && entry.name !== ".env") {
         if (EXCLUDED_DIRECTORIES.has(entry.name)) {
@@ -318,13 +326,13 @@ function normalizeRgFileList(stdout: string): string[] {
     .map((filePath) => filePath.split(path.sep).join("/"))
     .filter((filePath) => !path.isAbsolute(filePath))
     .filter(shouldIncludeSearchCandidate)
-    .slice(0, SEARCH_MAX_FILES);
+    .sort((left, right) => left.localeCompare(right));
 }
 
 async function collectFilesWithRipgrep(rootPath: string): Promise<string[]> {
   const { stdout } = await execFileAsync("rg", buildRgFileArgs(), {
     cwd: rootPath,
-    maxBuffer: 8 * 1024 * 1024,
+    maxBuffer: RG_SEARCH_MAX_BUFFER_BYTES,
     timeout: RG_SEARCH_TIMEOUT_MS,
   });
 
@@ -371,10 +379,51 @@ function shouldWarnRipgrepFailure(error: unknown): boolean {
   );
 }
 
+function isMissingRipgrepError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error as Error & { code?: unknown }).code === "ENOENT"
+  );
+}
+
+function isEmptyRipgrepResult(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error as Error & { code?: unknown }).code === 1
+  );
+}
+
+function toSearchIndexError(error: unknown): TerminalPreviewError {
+  if (error instanceof Error) {
+    const details = error as Error & {
+      code?: string;
+      signal?: string;
+      killed?: boolean;
+    };
+    if (
+      details.killed ||
+      details.signal ||
+      details.code === "ETIMEDOUT"
+    ) {
+      return new TerminalPreviewError("Project file indexing timed out", 504);
+    }
+    if (details.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+      return new TerminalPreviewError("Project file index is too large", 413);
+    }
+  }
+  return new TerminalPreviewError("Project file indexing failed", 500);
+}
+
 async function collectSearchCandidateFiles(rootPath: string): Promise<string[]> {
   try {
     return await collectFilesWithRipgrep(rootPath);
   } catch (error) {
+    if (isEmptyRipgrepResult(error)) return [];
+    if (isMissingRipgrepError(error)) {
+      return (await collectFiles(rootPath))
+        .filter(shouldIncludeSearchCandidate)
+        .sort((left, right) => left.localeCompare(right));
+    }
     if (shouldWarnRipgrepFailure(error)) {
       const describedError = describeRipgrepFailure(error);
       terminalPreviewLogger.warn(
@@ -388,7 +437,7 @@ async function collectSearchCandidateFiles(rootPath: string): Promise<string[]> 
         },
       );
     }
-    return (await collectFiles(rootPath)).filter(shouldIncludeSearchCandidate);
+    throw toSearchIndexError(error);
   }
 }
 
@@ -396,44 +445,48 @@ function getFileSearchCacheKey(projectId: string, rootPath: string): string {
   return `${projectId}:${rootPath}`;
 }
 
-function readFileSearchCache(cacheKey: string, now = Date.now()): string[] | null {
+function readFileSearchCache(cacheKey: string): string[] | null {
   const cached = fileSearchCandidateCache.get(cacheKey);
   if (!cached) {
-    return null;
-  }
-  if (now - cached.loadedAt > FILE_SEARCH_CACHE_TTL_MS) {
-    fileSearchCandidateCache.delete(cacheKey);
     return null;
   }
   return cached.files;
 }
 
-function writeFileSearchCache(
-  cacheKey: string,
-  files: string[],
-  now = Date.now(),
-): void {
-  fileSearchCandidateCache.set(cacheKey, {
-    loadedAt: now,
-    files,
-  });
+function writeFileSearchCache(cacheKey: string, files: string[]): void {
+  fileSearchCandidateCache.set(cacheKey, { files });
+}
+
+function getFileSearchGeneration(cacheKey: string): string {
+  return `${fileSearchCandidateGlobalGeneration}:${fileSearchCandidateGenerations.get(cacheKey) ?? 0}`;
+}
+
+function invalidateFileSearchCacheKey(cacheKey: string): void {
+  fileSearchCandidateGenerations.set(
+    cacheKey,
+    (fileSearchCandidateGenerations.get(cacheKey) ?? 0) + 1,
+  );
+  fileSearchCandidateCache.delete(cacheKey);
+  fileSearchCandidateInflight.delete(cacheKey);
 }
 
 export function clearPreviewFileSearchCache(projectId?: string): void {
   if (!projectId) {
+    fileSearchCandidateGlobalGeneration += 1;
     fileSearchCandidateCache.clear();
     fileSearchCandidateInflight.clear();
+    fileSearchCandidateGenerations.clear();
     return;
   }
 
-  for (const cacheKey of fileSearchCandidateCache.keys()) {
+  const cacheKeys = new Set([
+    ...fileSearchCandidateCache.keys(),
+    ...fileSearchCandidateInflight.keys(),
+    ...fileSearchCandidateGenerations.keys(),
+  ]);
+  for (const cacheKey of cacheKeys) {
     if (cacheKey.startsWith(`${projectId}:`)) {
-      fileSearchCandidateCache.delete(cacheKey);
-    }
-  }
-  for (const cacheKey of fileSearchCandidateInflight.keys()) {
-    if (cacheKey.startsWith(`${projectId}:`)) {
-      fileSearchCandidateInflight.delete(cacheKey);
+      invalidateFileSearchCacheKey(cacheKey);
     }
   }
 }
@@ -448,20 +501,32 @@ async function collectCachedSearchCandidateRootFiles(
     return cached;
   }
 
+  const generation = getFileSearchGeneration(cacheKey);
   const inflight = fileSearchCandidateInflight.get(cacheKey);
-  if (inflight) {
-    return inflight;
+  if (inflight?.generation === generation) {
+    return inflight.promise;
   }
 
+  const startedAt = performance.now();
   const pending = collectSearchCandidateFiles(rootPath)
     .then((files) => {
-      writeFileSearchCache(cacheKey, files);
+      if (getFileSearchGeneration(cacheKey) === generation) {
+        writeFileSearchCache(cacheKey, files);
+      }
+      terminalPreviewLogger.debug("terminal-preview.search-index.built", {
+        message: "Terminal preview search index built",
+        rootPath,
+        fileCount: files.length,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       return files;
     })
     .finally(() => {
-      fileSearchCandidateInflight.delete(cacheKey);
+      if (fileSearchCandidateInflight.get(cacheKey)?.promise === pending) {
+        fileSearchCandidateInflight.delete(cacheKey);
+      }
     });
-  fileSearchCandidateInflight.set(cacheKey, pending);
+  fileSearchCandidateInflight.set(cacheKey, { generation, promise: pending });
   return pending;
 }
 

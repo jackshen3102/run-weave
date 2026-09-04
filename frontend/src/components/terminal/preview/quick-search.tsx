@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import { Command } from "cmdk";
-import { File, FileText, Folder, Search } from "lucide-react";
+import { File, FileText, Folder, LoaderCircle, Search } from "lucide-react";
 import type { TerminalPreviewContentSearchItem, TerminalPreviewFileSearchItem, TerminalPreviewFolderSearchItem, TerminalPreviewQuickSearchMode } from "@runweave/shared/terminal/preview";
 import {
   Dialog,
@@ -350,6 +350,15 @@ export function TerminalPreviewQuickSearch({
                   ))
                 : null}
             </Command.Group>
+            {loading && items.length === 0 ? (
+              <div
+                className="flex items-center gap-2 px-3 py-8 text-sm text-slate-400"
+                role="status"
+              >
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                Searching the whole project...
+              </div>
+            ) : null}
             {!loading && !error && items.length === 0 ? (
               <Command.Empty className="px-3 py-8 text-sm text-slate-400">
                 {query.trim()
@@ -365,7 +374,9 @@ export function TerminalPreviewQuickSearch({
             <span>Cmd+Shift+F Content</span>
             <span>Esc Close</span>
             <span>Enter Open</span>
-            <span className="ml-auto">{truncated ? "Showing first 50 results" : ""}</span>
+            <span className="ml-auto">
+              {truncated ? "More results exist. Refine your search." : ""}
+            </span>
           </div>
         </Command>
       </DialogContent>
