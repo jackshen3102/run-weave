@@ -4,7 +4,7 @@ import type {
   AttentionOpenDispatch,
   AttentionOpenIntent,
   AttentionOpenResult,
-  CompanionWindowDragRequest,
+  CompanionPresentationState,
 } from "@runweave/shared/attention";
 import path from "node:path";
 import { startCdpProxy } from "./terminal-browser-cdp-proxy.js";
@@ -23,6 +23,7 @@ import { installHooksIfNeeded } from "./hooks/hook-installer.js";
 import { desktopRuntime } from "./desktop-runtime-state.js";
 import {
   desktopSourceRevision,
+  DEV_SERVER_URL,
   isBetaChannel,
   isDev,
   managesPackagedBackend,
@@ -52,15 +53,10 @@ import {
 } from "./packaged-backend-controller.js";
 import { registerCdpProxyHandlers } from "./terminal-browser-cdp-handlers.js";
 import {
-  createCompanionWindow,
-  moveCompanionWindow,
-  resizeCompanionWindow,
-} from "./desktop-companion-window.js";
-import {
   readCompanionEnabled,
   writeCompanionEnabled,
 } from "./desktop-companion-preferences.js";
-import { writeDesktopCompanionWindowState } from "./desktop-companion-window-state.js";
+import { DesktopCompanionAgent } from "./desktop-companion-agent.js";
 import { stopAllTerminalBrowserWhistles } from "./terminal-browser-whistle-runtime.js";
 import { registerTerminalBrowserAutomationHandlers } from "./terminal-browser-automation-runtime.js";
 function isId(value: unknown): value is string {
@@ -121,94 +117,50 @@ function isAttentionResult(value: unknown): value is AttentionOpenResult {
     : candidate.message === undefined;
 }
 
-function isCompanionWindowDragRequest(
+function isCompanionPresentation(
   value: unknown,
-): value is CompanionWindowDragRequest {
+): value is CompanionPresentationState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
-  const keys = Object.keys(candidate);
-  if (candidate.phase === "end") return keys.length === 1;
-  return (
-    (candidate.phase === "start" || candidate.phase === "move") &&
-    keys.length === 3 &&
-    typeof candidate.screenX === "number" &&
-    Number.isFinite(candidate.screenX) &&
-    typeof candidate.screenY === "number" &&
-    Number.isFinite(candidate.screenY)
-  );
+  if (
+    (candidate.connectionId !== null && !isId(candidate.connectionId)) ||
+    !["checking", "ready", "disconnected"].includes(String(candidate.state))
+  ) {
+    return false;
+  }
+  if (candidate.snapshot === null) return true;
+  if (!candidate.snapshot || typeof candidate.snapshot !== "object")
+    return false;
+  const snapshot = candidate.snapshot as Record<string, unknown>;
+  if (
+    typeof snapshot.generatedAt !== "string" ||
+    !Array.isArray(snapshot.slots)
+  ) {
+    return false;
+  }
+  try {
+    return JSON.stringify(value).length <= 1_000_000;
+  } catch {
+    return false;
+  }
 }
 
-function registerCompanionHandlers(): void {
-  const requireCompanion = (senderId: number): BrowserWindow => {
-    const win = desktopRuntime.companionWindow;
-    if (!win || win.isDestroyed() || win.webContents.id !== senderId)
-      throw new Error("Companion sender required");
-    return win;
-  };
-  ipcMain.handle("attention:report-content-size", (event, size: unknown) => {
-    const win = requireCompanion(event.sender.id);
-    if (!size || typeof size !== "object") throw new Error("Invalid size");
-    const { width, height } = size as { width?: unknown; height?: unknown };
+let companionAgent: DesktopCompanionAgent | null = null;
+let companionEnabled = false;
+
+function registerCompanionHandlers(): (
+  value: unknown,
+) => Promise<AttentionOpenResult> {
+  const requireMainRenderer = (senderId: number): void => {
+    const mainWindow = desktopRuntime.mainWindow;
     if (
-      typeof width !== "number" ||
-      typeof height !== "number" ||
-      !Number.isFinite(width) ||
-      !Number.isFinite(height)
-    )
-      throw new Error("Invalid size");
-    resizeCompanionWindow(win, { width, height });
-  });
-  ipcMain.handle(
-    "attention:set-mouse-passthrough",
-    (event, passthrough: unknown) => {
-      const win = requireCompanion(event.sender.id);
-      if (typeof passthrough !== "boolean")
-        throw new Error("Invalid passthrough state");
-      win.setIgnoreMouseEvents(
-        passthrough,
-        passthrough ? { forward: true } : undefined,
-      );
-    },
-  );
-  let dragState: {
-    senderId: number;
-    pointerStart: { x: number; y: number };
-    windowStart: { x: number; y: number };
-  } | null = null;
-  ipcMain.on("attention:drag-window", (event, value: unknown) => {
-    const win = desktopRuntime.companionWindow;
-    if (
-      !win ||
-      win.isDestroyed() ||
-      win.webContents.id !== event.sender.id ||
-      !isCompanionWindowDragRequest(value)
+      !mainWindow ||
+      mainWindow.isDestroyed() ||
+      mainWindow.webContents.id !== senderId
     ) {
-      return;
+      throw new Error("Main window sender required");
     }
-    if (value.phase === "start") {
-      const [x = 0, y = 0] = win.getPosition();
-      dragState = {
-        senderId: event.sender.id,
-        pointerStart: { x: value.screenX, y: value.screenY },
-        windowStart: { x, y },
-      };
-      return;
-    }
-    if (!dragState || dragState.senderId !== event.sender.id) return;
-    if (value.phase === "end") {
-      dragState = null;
-      writeDesktopCompanionWindowState(win);
-      return;
-    }
-    moveCompanionWindow(
-      win,
-      {
-        x: dragState.windowStart.x + value.screenX - dragState.pointerStart.x,
-        y: dragState.windowStart.y + value.screenY - dragState.pointerStart.y,
-      },
-      { x: value.screenX, y: value.screenY },
-    );
-  });
+  };
   const pendingRequests = new Map<
     string,
     {
@@ -234,13 +186,7 @@ function registerCompanionHandlers(): void {
   ipcMain.handle(
     "attention:open-result",
     (event, result: AttentionOpenResult) => {
-      const mainWindow = desktopRuntime.mainWindow;
-      if (
-        !mainWindow ||
-        mainWindow.isDestroyed() ||
-        mainWindow.webContents.id !== event.sender.id
-      )
-        throw new Error("Main window sender required");
+      requireMainRenderer(event.sender.id);
       if (!isAttentionResult(result)) throw new Error("Invalid result");
       const pending = pendingRequests.get(result.requestId);
       if (!pending) return;
@@ -257,13 +203,7 @@ function registerCompanionHandlers(): void {
   ipcMain.handle(
     "attention:authorize-completion",
     (event, result: unknown): boolean => {
-      const mainWindow = desktopRuntime.mainWindow;
-      if (
-        !mainWindow ||
-        mainWindow.isDestroyed() ||
-        mainWindow.webContents.id !== event.sender.id
-      )
-        throw new Error("Main window sender required");
+      requireMainRenderer(event.sender.id);
       if (!isAttentionResult(result)) throw new Error("Invalid result");
       if (
         result.status !== "opened" &&
@@ -275,55 +215,65 @@ function registerCompanionHandlers(): void {
       return completePendingRequest(result);
     },
   );
+  ipcMain.handle("attention:get-companion-enabled", (event): boolean => {
+    requireMainRenderer(event.sender.id);
+    return companionEnabled;
+  });
   ipcMain.handle(
-    "attention:open-slot",
-    async (event, value: unknown): Promise<AttentionOpenResult> => {
-      requireCompanion(event.sender.id);
-      if (!isAttentionIntent(value))
-        throw new Error("Invalid attention intent");
-      const completed = completedRequests.get(value.requestId);
-      if (completed) return completed;
-      const existing = pendingRequests.get(value.requestId);
-      if (existing) return existing.promise;
-      const mainWindow = desktopRuntime.mainWindow;
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        return {
-          requestId: value.requestId,
-          status: "session_not_found",
-          message: "Main window unavailable",
-        };
+    "attention:publish-companion-presentation",
+    (event, value: unknown): void => {
+      requireMainRenderer(event.sender.id);
+      if (!isCompanionPresentation(value)) {
+        throw new Error("Invalid companion presentation");
       }
-      let resolveResult!: (result: AttentionOpenResult) => void;
-      const promise = new Promise<AttentionOpenResult>((resolve) => {
-        resolveResult = resolve;
-      });
-      const deadlineAt = Date.now() + 10_000;
-      const timer = setTimeout(() => {
-        pendingRequests.delete(value.requestId);
-        if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("attention:open-cancel", value.requestId);
-        }
-        const result: AttentionOpenResult = {
-          requestId: value.requestId,
-          status: "timed_out",
-          message: "Main window did not finish opening the Slot",
-        };
-        completedRequests.set(value.requestId, result);
-        resolveResult(result);
-      }, 10_000);
-      pendingRequests.set(value.requestId, {
-        promise,
-        resolve: resolveResult,
-        timer,
-        completionExpected: value.completionRevision !== null,
-      });
-      mainWindow.show();
-      mainWindow.focus();
-      const dispatch: AttentionOpenDispatch = { ...value, deadlineAt };
-      mainWindow.webContents.send("attention:open-intent", dispatch);
-      return promise;
+      companionAgent?.publish(value);
     },
   );
+
+  return async (value: unknown): Promise<AttentionOpenResult> => {
+    if (!isAttentionIntent(value)) throw new Error("Invalid attention intent");
+    const completed = completedRequests.get(value.requestId);
+    if (completed) return completed;
+    const existing = pendingRequests.get(value.requestId);
+    if (existing) return existing.promise;
+    const mainWindow = desktopRuntime.mainWindow;
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return {
+        requestId: value.requestId,
+        status: "session_not_found",
+        message: "Main window unavailable",
+      };
+    }
+    let resolveResult!: (result: AttentionOpenResult) => void;
+    const promise = new Promise<AttentionOpenResult>((resolve) => {
+      resolveResult = resolve;
+    });
+    const deadlineAt = Date.now() + 10_000;
+    const timer = setTimeout(() => {
+      pendingRequests.delete(value.requestId);
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("attention:open-cancel", value.requestId);
+      }
+      const result: AttentionOpenResult = {
+        requestId: value.requestId,
+        status: "timed_out",
+        message: "Main window did not finish opening the Slot",
+      };
+      completedRequests.set(value.requestId, result);
+      resolveResult(result);
+    }, 10_000);
+    pendingRequests.set(value.requestId, {
+      promise,
+      resolve: resolveResult,
+      timer,
+      completionExpected: value.completionRevision !== null,
+    });
+    mainWindow.show();
+    mainWindow.focus();
+    const dispatch: AttentionOpenDispatch = { ...value, deadlineAt };
+    mainWindow.webContents.send("attention:open-intent", dispatch);
+    return promise;
+  };
 }
 
 process.on("uncaughtExceptionMonitor", (error) => {
@@ -385,7 +335,7 @@ if (hasSingleInstanceLock) {
       registerTerminalBrowserHandlers();
       registerTerminalBrowserAutomationHandlers();
       registerCdpProxyHandlers();
-      registerCompanionHandlers();
+      const openAttentionSlot = registerCompanionHandlers();
       if (!isBetaChannel) {
         await installHooksIfNeeded({
           resourcesDir: process.env.RUNWEAVE_ELECTRON_RESOURCES_DIR
@@ -500,26 +450,44 @@ if (hasSingleInstanceLock) {
         },
       });
 
-      let companionEnabled = await readCompanionEnabled();
+      const companionSupported = process.platform === "darwin";
+      companionAgent = companionSupported
+        ? new DesktopCompanionAgent({
+            frontend: isDev
+              ? { kind: "dev", url: `${DEV_SERVER_URL}/companion.html` }
+              : { kind: "bundle", root: getActiveFrontendDistDir() },
+            onOpenSlot: openAttentionSlot,
+            statePath: path.join(
+              app.getPath("userData"),
+              "desktop-companion-window-state.json",
+            ),
+          })
+        : null;
+      companionEnabled = companionSupported && (await readCompanionEnabled());
       const setCompanionEnabled = (enabled: boolean): void => {
-        companionEnabled = enabled;
-        void writeCompanionEnabled(enabled);
-        if (enabled) {
-          if (
-            !desktopRuntime.companionWindow ||
-            desktopRuntime.companionWindow.isDestroyed()
-          ) {
-            desktopRuntime.companionWindow = createCompanionWindow();
-            desktopRuntime.companionWindow.once("closed", () => {
-              desktopRuntime.companionWindow = null;
-            });
-          }
+        companionEnabled = companionSupported && enabled;
+        void writeCompanionEnabled(companionEnabled);
+        desktopRuntime.mainWindow?.webContents.send(
+          "attention:companion-enabled-changed",
+          companionEnabled,
+        );
+        if (companionEnabled) {
+          void companionAgent?.start().catch((error) => {
+            console.error("[companion-agent] failed to start", error);
+          });
         } else {
-          desktopRuntime.companionWindow?.destroy();
-          desktopRuntime.companionWindow = null;
+          void companionAgent?.stop();
         }
       };
-      if (companionEnabled) setCompanionEnabled(true);
+      if (companionEnabled) {
+        void companionAgent?.start().catch((error) => {
+          console.error("[companion-agent] failed to start", error);
+        });
+      }
+      desktopRuntime.mainWindow.webContents.send(
+        "attention:companion-enabled-changed",
+        companionEnabled,
+      );
 
       createTray(desktopRuntime.mainWindow, {
         enableUpdates: !isBetaChannel,
@@ -585,6 +553,7 @@ app.on("before-quit", (event) => {
       desktopRuntime.cdpProxy?.stop() ?? Promise.resolve(),
       stopAllTerminalBrowserWhistles(),
       desktopRuntime.packagedBackend?.stop() ?? Promise.resolve(),
+      companionAgent?.stop() ?? Promise.resolve(),
     ]);
     desktopRuntime.packagedBackendsStoppedForQuit = true;
     app.quit();

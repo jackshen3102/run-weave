@@ -37,6 +37,14 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      input: {
+        companion: fileURLToPath(new URL("./companion.html", import.meta.url)),
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+      },
+    },
+  },
   server: {
     host: frontendHost,
     port: frontendPort,

@@ -2,6 +2,7 @@ import { rmSync } from "node:fs";
 import { build } from "esbuild";
 import path from "node:path";
 import { finalizeActivitySqliteRuntime } from "./finalize-better-sqlite3-runtime.mjs";
+import { buildCompanionAgent } from "./build-companion-agent.mjs";
 
 const outputDir = process.env.RUNWEAVE_ELECTRON_BUNDLE_OUTDIR ?? "dist";
 
@@ -128,6 +129,8 @@ await build({
   outExtension: { ".js": ".cjs" },
 });
 
+await buildCompanionAgent(outputDir);
+
 console.log(
-  "[bundle] electron main + preload + backend/cli runtime built successfully",
+  "[bundle] electron main + preload + backend/cli + companion runtime built successfully",
 );

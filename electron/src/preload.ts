@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer, shell } from "electron";
 import type {
-  RunweaveCompanionBridge,
   RunweaveElectronBridge,
   TerminalBrowserAnnotationUpdate,
   TerminalBrowserBounds,
@@ -49,27 +48,8 @@ import type {
 } from "@runweave/shared/terminal-browser-tool-menu";
 import type {
   AttentionOpenDispatch,
-  AttentionOpenIntent,
   AttentionOpenResult,
-  CompanionWindowDragRequest,
 } from "@runweave/shared/attention";
-
-const companionApi = {
-  reportContentSize: (size: { width: number; height: number }) =>
-    ipcRenderer.invoke("attention:report-content-size", size) as Promise<void>,
-  setMousePassthrough: (passthrough: boolean) =>
-    ipcRenderer.invoke(
-      "attention:set-mouse-passthrough",
-      passthrough,
-    ) as Promise<void>,
-  dragWindow: (request: CompanionWindowDragRequest) =>
-    ipcRenderer.send("attention:drag-window", request),
-  openSlot: (intent: AttentionOpenIntent) =>
-    ipcRenderer.invoke(
-      "attention:open-slot",
-      intent,
-    ) as Promise<AttentionOpenResult>,
-} satisfies RunweaveCompanionBridge;
 
 const electronApi = {
   platform: process.platform,
@@ -96,6 +76,20 @@ const electronApi = {
     ) as Promise<boolean>,
   reportAttentionOpenResult: (result: AttentionOpenResult) =>
     ipcRenderer.invoke("attention:open-result", result) as Promise<void>,
+  getCompanionEnabled: () =>
+    ipcRenderer.invoke("attention:get-companion-enabled") as Promise<boolean>,
+  onCompanionEnabledChanged: (listener: (enabled: boolean) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, enabled: boolean) =>
+      listener(enabled);
+    ipcRenderer.on("attention:companion-enabled-changed", wrapped);
+    return () =>
+      ipcRenderer.off("attention:companion-enabled-changed", wrapped);
+  },
+  publishCompanionPresentation: (presentation) =>
+    ipcRenderer.invoke(
+      "attention:publish-companion-presentation",
+      presentation,
+    ) as Promise<void>,
   isElectron: true,
   managesPackagedBackend:
     (process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND ??
@@ -416,5 +410,4 @@ const electronApi = {
   beep: () => shell.beep(),
 } satisfies RunweaveElectronBridge;
 
-contextBridge.exposeInMainWorld("companionAPI", companionApi);
 contextBridge.exposeInMainWorld("electronAPI", electronApi);

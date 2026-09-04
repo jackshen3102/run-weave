@@ -11,9 +11,12 @@ import type {
   AttentionOpenIntent,
   AttentionSlot,
   AttentionState,
+  CompanionPresentationState,
 } from "@runweave/shared/attention";
-import { hasSeenFailure, markFailureSeen } from "../../features/attention/attention-retirement";
-import { useAttentionSnapshot } from "../../features/attention/use-attention-snapshot";
+import {
+  hasSeenFailure,
+  markFailureSeen,
+} from "../../features/attention/attention-retirement";
 import "./desktop-companion.css";
 
 const HIGH_PRIORITY = new Set<AttentionState>(["needs_action", "blocked"]);
@@ -27,7 +30,10 @@ const SUMMARY_LABEL: Record<AttentionState, string> = {
 };
 
 function formatRelativeTime(value: string): string {
-  const elapsed = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 1000));
+  const elapsed = Math.max(
+    0,
+    Math.floor((Date.now() - Date.parse(value)) / 1000),
+  );
   if (!Number.isFinite(elapsed)) return "-";
   if (elapsed < 60) return elapsed < 10 ? "刚刚" : `${elapsed} 秒前`;
   const minutes = Math.floor(elapsed / 60);
@@ -51,7 +57,9 @@ function targetLabel(slot: AttentionSlot): string {
 }
 
 function slotPath(slot: AttentionSlot): string {
-  return [slot.contextName, slot.sessionLabel, slot.panelLabel].filter(Boolean).join(" / ");
+  return [slot.contextName, slot.sessionLabel, slot.panelLabel]
+    .filter(Boolean)
+    .join(" / ");
 }
 
 function StatusPill({ slot }: { slot: AttentionSlot }) {
@@ -181,18 +189,20 @@ function CompanionPet(props: {
       {props.count > 0 ? (
         <span className={`pet-state-badge ${props.state}`}>{props.count}</span>
       ) : null}
-      {props.state === "disconnected" ? <span className="pet-disconnected-mark">×</span> : null}
-      {props.state === "checking" ? <span className="pet-checking-mark">…</span> : null}
+      {props.state === "disconnected" ? (
+        <span className="pet-disconnected-mark">×</span>
+      ) : null}
+      {props.state === "checking" ? (
+        <span className="pet-checking-mark">…</span>
+      ) : null}
     </button>
   );
 }
 
 export function DesktopCompanion(props: {
-  apiBase: string;
-  token: string | null;
-  connectionId: string | null;
+  presentation: CompanionPresentationState;
 }) {
-  const { state, snapshot } = useAttentionSnapshot(props);
+  const { connectionId, snapshot, state } = props.presentation;
   const [collapsed, setCollapsed] = useState(false);
   const [suppressed, setSuppressed] = useState<Set<string>>(() => new Set());
   const [openedOnce, setOpenedOnce] = useState(false);
@@ -204,13 +214,14 @@ export function DesktopCompanion(props: {
       (snapshot?.slots ?? []).filter(
         (slot) =>
           slot.state !== "failed" ||
-          !props.connectionId ||
-          !hasSeenFailure(props.connectionId, slot.attentionId),
+          !connectionId ||
+          !hasSeenFailure(connectionId, slot.attentionId),
       ),
-    [props.connectionId, snapshot],
+    [connectionId, snapshot],
   );
   const escalated = slots.find(
-    (slot) => HIGH_PRIORITY.has(slot.state) && !suppressed.has(slot.attentionId),
+    (slot) =>
+      HIGH_PRIORITY.has(slot.state) && !suppressed.has(slot.attentionId),
   );
   const counts = useMemo(
     () =>
@@ -281,11 +292,11 @@ export function DesktopCompanion(props: {
   }, []);
 
   const openSlot = useMemoizedFn(async (slot: AttentionSlot) => {
-    if (!props.connectionId) return;
+    if (!connectionId) return;
     setOpenNotice(null);
     const intent: AttentionOpenIntent = {
       requestId: crypto.randomUUID(),
-      connectionId: props.connectionId,
+      connectionId,
       attentionId: slot.attentionId,
       projectId: slot.projectId,
       terminalSessionId: slot.terminalSessionId,
@@ -301,9 +312,10 @@ export function DesktopCompanion(props: {
     if (
       slot.state === "failed" &&
       result &&
-      (result.status === "opened" || result.status === "opened_with_panel_fallback")
+      (result.status === "opened" ||
+        result.status === "opened_with_panel_fallback")
     ) {
-      markFailureSeen(props.connectionId, slot.attentionId);
+      markFailureSeen(connectionId, slot.attentionId);
     }
   });
 
@@ -331,7 +343,9 @@ export function DesktopCompanion(props: {
       <CompanionPet state="disconnected" count={0} disabled label="未连接" />
     );
   } else if (slots.length === 0) {
-    pet = <CompanionPet state="idle" count={0} disabled label="所有 Slot 均安静" />;
+    pet = (
+      <CompanionPet state="idle" count={0} disabled label="所有 Slot 均安静" />
+    );
   } else if (escalated) {
     panel = (
       <section
@@ -342,17 +356,38 @@ export function DesktopCompanion(props: {
         <header className="companion-panel-head">
           <StatusPill slot={escalated} />
           <div className="companion-panel-title">
-            <strong>{escalated.projectName} / {escalated.contextName}</strong>
+            <strong>
+              {escalated.projectName} / {escalated.contextName}
+            </strong>
             <span>{formatRelativeTime(escalated.updatedAt)}</span>
           </div>
-          <button className="companion-close" type="button" onClick={suppressEscalations} aria-label="收起">×</button>
+          <button
+            className="companion-close"
+            type="button"
+            onClick={suppressEscalations}
+            aria-label="收起"
+          >
+            ×
+          </button>
         </header>
         <div className="companion-card-body">
           <h2>{escalated.title}</h2>
           <p>{escalated.detail}</p>
           <div className="companion-card-actions">
-            <button className="companion-ghost" type="button" onClick={suppressEscalations}>暂时收起</button>
-            <button className="companion-primary" type="button" onClick={() => void openSlot(escalated)}>打开 {targetLabel(escalated)} →</button>
+            <button
+              className="companion-ghost"
+              type="button"
+              onClick={suppressEscalations}
+            >
+              暂时收起
+            </button>
+            <button
+              className="companion-primary"
+              type="button"
+              onClick={() => void openSlot(escalated)}
+            >
+              打开 {targetLabel(escalated)} →
+            </button>
           </div>
         </div>
       </section>
@@ -376,13 +411,23 @@ export function DesktopCompanion(props: {
     );
   } else {
     panel = (
-      <section className="companion-panel companion-tray" data-companion-interactive>
+      <section
+        className="companion-panel companion-tray"
+        data-companion-interactive
+      >
         <header className="companion-panel-head">
           <div className="companion-panel-title">
             <strong>{headline}</strong>
             <span>{summary}</span>
           </div>
-          <button className="companion-close" type="button" onClick={() => setCollapsed(true)} aria-label="收起">×</button>
+          <button
+            className="companion-close"
+            type="button"
+            onClick={() => setCollapsed(true)}
+            aria-label="收起"
+          >
+            ×
+          </button>
         </header>
         <div className="companion-slots">
           {slots.map((slot) => (
@@ -404,7 +449,9 @@ export function DesktopCompanion(props: {
                   {slotPath(slot)} · {formatRelativeTime(slot.updatedAt)}
                 </span>
               </span>
-              <span className="companion-slot-target">↗ {targetLabel(slot)}</span>
+              <span className="companion-slot-target">
+                ↗ {targetLabel(slot)}
+              </span>
             </button>
           ))}
         </div>
@@ -420,10 +467,20 @@ export function DesktopCompanion(props: {
     );
   }
 
+  const compact = panel === null && openNotice === null;
+
   return (
-    <div ref={rootRef} className="desktop-companion" data-testid="desktop-companion">
+    <div
+      ref={rootRef}
+      className={`desktop-companion${compact ? " is-compact" : ""}`}
+      data-testid="desktop-companion"
+    >
       {openNotice ? (
-        <p className="companion-open-notice" data-companion-interactive role="status">
+        <p
+          className="companion-open-notice"
+          data-companion-interactive
+          role="status"
+        >
           {openNotice}
         </p>
       ) : null}

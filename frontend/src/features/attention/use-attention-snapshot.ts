@@ -8,12 +8,18 @@ export function useAttentionSnapshot(params: {
   apiBase: string;
   token: string | null;
   connectionId: string | null;
+  enabled?: boolean;
 }): { state: AttentionLoadState; snapshot: AttentionSnapshot | null } {
-  const { apiBase, token, connectionId } = params;
+  const { apiBase, token, connectionId, enabled = true } = params;
   const [state, setState] = useState<AttentionLoadState>("checking");
   const [snapshot, setSnapshot] = useState<AttentionSnapshot | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setSnapshot(null);
+      setState("checking");
+      return;
+    }
     if (!apiBase || !token || !connectionId) {
       setSnapshot(null);
       setState("disconnected");
@@ -46,7 +52,7 @@ export function useAttentionSnapshot(params: {
       window.clearInterval(timer);
       controller?.abort();
     };
-  }, [apiBase, connectionId, token]);
+  }, [apiBase, connectionId, enabled, token]);
 
   return { state, snapshot };
 }

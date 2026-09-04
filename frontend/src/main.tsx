@@ -10,7 +10,7 @@ const buildRevision =
   import.meta.env.VITE_RUNWEAVE_SOURCE_REVISION ?? "unknown";
 const buildVersion = import.meta.env.VITE_RUNWEAVE_VERSION ?? "unknown";
 
-if (buildChannel === "beta" && window.location.pathname !== "/desktop-companion") {
+if (buildChannel === "beta") {
   const shortRevision = buildRevision.slice(0, 12);
   document.title = `Runweave Beta · ${shortRevision}`;
   document.documentElement.dataset.runweaveChannel = "beta";

@@ -11,11 +11,16 @@ directories:
 
 files:
   - dist/**/*
+  - "!dist/companion/**/*"
   - resources/**/*
   - "!resources/icons/raw/**"
   - "!node_modules/**/*"
 
 extraResources:
+  - from: dist/companion
+    to: companion
+    filter:
+      - "**/*"
   - from: resources/hooks
     to: runweave-hook-runtime/hooks
     filter:
