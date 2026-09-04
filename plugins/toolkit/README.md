@@ -20,6 +20,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `diagnostic-log-debugging`
 - `doc-coauthoring`
 - `git-advanced-workflows`
+- `grill-with-docs`
 - `grilling`
 - `github-pr`
 - `handoff`
