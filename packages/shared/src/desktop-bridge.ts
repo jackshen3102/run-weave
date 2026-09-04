@@ -2,6 +2,7 @@ import type {
   AttentionOpenDispatch,
   AttentionOpenIntent,
   AttentionOpenResult,
+  CompanionPresentationState,
   CompanionWindowDragRequest,
 } from "./attention";
 import type {
@@ -92,6 +93,13 @@ export interface RunweaveElectronBridge {
     result: AttentionOpenResult,
   ) => Promise<boolean>;
   reportAttentionOpenResult: (result: AttentionOpenResult) => Promise<void>;
+  getCompanionEnabled: () => Promise<boolean>;
+  onCompanionEnabledChanged: (
+    listener: (enabled: boolean) => void,
+  ) => () => void;
+  publishCompanionPresentation: (
+    presentation: CompanionPresentationState,
+  ) => Promise<void>;
   getPackagedBackendState: () => Promise<PackagedBackendConnectionState>;
   onPackagedBackendStateChange: (
     listener: (state: PackagedBackendConnectionState) => void,

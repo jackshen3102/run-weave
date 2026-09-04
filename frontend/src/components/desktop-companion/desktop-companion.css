@@ -56,6 +56,10 @@ body {
   line-height: normal;
 }
 
+.desktop-companion.is-compact {
+  width: 92px;
+}
+
 .desktop-companion button {
   border: 0;
   color: inherit;

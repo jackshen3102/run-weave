@@ -185,7 +185,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
           {
             from: electronAppDir,
             to: ".",
-            filter: ["package.json", "dist/**/*"],
+            filter: ["package.json", "dist/**/*", "!dist/companion/**/*"],
           },
           {
             from: path.join(ELECTRON_DIR, "resources"),
@@ -194,6 +194,11 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
           },
         ],
         extraResources: [
+          {
+            from: path.join(electronDist, "companion"),
+            to: "companion",
+            filter: ["**/*"],
+          },
           {
             from: path.join(ELECTRON_DIR, "resources", "hooks"),
             to: "runweave-hook-runtime/hooks",

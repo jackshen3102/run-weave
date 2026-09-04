@@ -3,6 +3,7 @@ import { resolveNeedsConnection } from "./features/connection/system-connection"
 import { useConnections } from "./features/connection/use-connections";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";
 import { useAttentionOpenIntents } from "./features/attention/use-attention-open-intents";
+import { useDesktopCompanionHost } from "./features/attention/use-desktop-companion-host";
 import { DevSessionBackendGuard } from "./features/dev-session-backend-guard";
 import { useClientMode } from "./features/use-client-mode";
 import {
@@ -16,7 +17,6 @@ import { SystemMonitorPage } from "./pages/system-monitor-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
 import { PrototypesPage } from "./pages/prototypes-page";
 import { ActivityPage } from "./pages/activity-page";
-import { DesktopCompanionPage } from "./pages/desktop-companion-page";
 import { EvolutionPage } from "./pages/evolution-page";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -80,17 +80,12 @@ export default function App() {
     enabled: isElectron,
     token,
   });
-
-  if (window.location.pathname === "/desktop-companion") {
-    if (!isElectron) return <Navigate to="/" replace />;
-    return (
-      <DesktopCompanionPage
-        apiBase={apiBase}
-        token={token}
-        connectionId={activeConnectionId}
-      />
-    );
-  }
+  useDesktopCompanionHost({
+    apiBase,
+    token,
+    connectionId: activeConnectionId,
+    enabled: isElectron,
+  });
 
   return (
     <DevSessionBackendGuard>

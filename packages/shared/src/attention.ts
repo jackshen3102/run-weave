@@ -36,6 +36,22 @@ export interface AttentionSnapshot {
   slots: AttentionSlot[];
 }
 
+export type CompanionPresentationLoadState =
+  | "checking"
+  | "ready"
+  | "disconnected";
+
+/**
+ * The deliberately small state projection sent from the trusted Electron
+ * renderer to the native macOS companion process. Authentication material and
+ * backend URLs never cross the companion process boundary.
+ */
+export interface CompanionPresentationState {
+  connectionId: string | null;
+  state: CompanionPresentationLoadState;
+  snapshot: AttentionSnapshot | null;
+}
+
 export interface AttentionOpenIntent {
   requestId: string;
   connectionId: string;
