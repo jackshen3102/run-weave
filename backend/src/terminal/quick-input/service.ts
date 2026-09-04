@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CreateTerminalQuickInputRequest, TerminalQuickInputItem, TerminalQuickInputListKind, TerminalQuickInputMode, TerminalQuickInputSource, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import type {
   PersistedTerminalQuickInputRecord,
   TerminalQuickInputStore,

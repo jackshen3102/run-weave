@@ -69,7 +69,7 @@ http://127.0.0.1:6188/
 
 ### 验收来源
 
-- `docs/plans/2026-07-25-agent-team-global-role-model-config.md`
+- `docs/plans/agent-team/2026-07-25-global-role-model-config.md`
   - SHA-256：`c2b5e744969253b674633d0131c984b7d6f7a28ac146632f33a719f44d62a379`
 - `docs/testing/agent-team/configuration/agent-team-role-model-config.testplan.yaml`
   - SHA-256：`2c3bf2773433def798716b98d11cca2c901441a5e59ead9b09af58f8802a6fed`
@@ -86,7 +86,7 @@ http://127.0.0.1:6188/
 - `.playwright-cli/round5-agt-mc-002-traex-selected.yaml`
 - `.playwright-cli/round5-agt-mc-002-after-cancel.yaml`
 - `.playwright-cli/round5-agt-mc-002-after-save.yaml`
-- `docs/review/2026-07-25-agt-mc-002-code-review-round-3.review.md`
+- `docs/review/agent-team/model/2026-07-25-round-3.md`
 
 ### 当前代码链路
 

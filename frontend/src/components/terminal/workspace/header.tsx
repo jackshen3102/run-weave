@@ -13,9 +13,9 @@ import {
 import { useMemoizedFn } from "ahooks";
 import { useState } from "react";
 import type { ConnectionConfig } from "../../../features/connection/types";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useShallow } from "zustand/react/shallow";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
@@ -23,9 +23,9 @@ import {
   useTerminalProjectsQuery,
   useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
-import { recoverTerminalAgent } from "../../../services/terminal";
+} from "../../../features/terminal/queries/workspace";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { recoverTerminalAgent } from "../../../services/terminal/index";
 import { Button } from "../../ui/button";
 import { ConnectionSwitcher } from "../../connection-switcher";
 import {

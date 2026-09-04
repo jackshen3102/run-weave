@@ -14,11 +14,11 @@ import {
   useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
   useTerminalWorkspaceQueryClient,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
-import { terminalQueryKeys } from "../../../features/terminal/queries/terminal-query-keys";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+} from "../../../features/terminal/queries/workspace";
+import { terminalQueryKeys } from "../../../features/terminal/queries/keys";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { HttpError } from "../../../services/http";
 import {
   createRace,
@@ -26,7 +26,7 @@ import {
   getRace,
   getRaceAgents,
 } from "../../../services/race";
-import { getTerminalProjectPreviewGitChanges } from "../../../services/terminal";
+import { getTerminalProjectPreviewGitChanges } from "../../../services/terminal/index";
 import { TerminalRaceObserver } from "./race-observer";
 
 const EMPTY_AGENT_CATALOG: RaceAgentCatalog = {

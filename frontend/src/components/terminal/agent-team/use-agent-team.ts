@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
-import { getAgentTeamRunForTerminal } from "../../../services/terminal";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
+import { getAgentTeamRunForTerminal } from "../../../services/terminal/index";
 import { canOpenAgentTeamForSession } from "../session/session-tab";
 import { isAgentTeamRunActive } from "./panel-model";
 

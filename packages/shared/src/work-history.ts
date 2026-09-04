@@ -3,12 +3,12 @@ import type {
   AgentTeamRun,
   AgentTeamRunKind,
   AgentTeamStatus,
-} from "./agent-team";
+} from "./agent-team/index";
 import type {
   AppServerThreadDetailResponse,
   AppServerThreadRef,
-} from "./app-server-events";
-import type { TerminalSessionListItem } from "./terminal/session";
+} from "./app-server/events";
+import type { TerminalSessionListItem } from "./terminal/runtime/session";
 
 export type WorkHistorySourceStatus =
   | { status: "available" }

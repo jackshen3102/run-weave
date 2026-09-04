@@ -1,7 +1,7 @@
 import type { TerminalEventServerMessage } from "@runweave/shared/terminal/events";
 import { WebSocket, WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
-import { logger } from "../logging";
+import { logger } from "../logging/index";
 import {
   isTunnelRequestAuthorized,
   rejectUnauthorizedTunnelUpgrade,

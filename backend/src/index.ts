@@ -14,28 +14,28 @@ import {
   flushAndCloseLogger,
   initializeLogger,
   logger,
-} from "./logging";
+} from "./logging/index";
 import { createAuthRouter } from "./routes/auth";
-import { createAppHomeOverviewRouter } from "./routes/app-home-overview";
-import { createAppServerStateRouter } from "./routes/app-server-state";
-import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
-import { createAgentTeamRouter } from "./routes/agent-team";
-import { createRaceRouter } from "./routes/race-routes";
-import { registerActivityRoutes } from "./routes/activity-registration";
+import { createAppHomeOverviewRouter } from "./routes/app/home-overview";
+import { createAppServerStateRouter } from "./routes/app-server/state";
+import { createDiagnosticLogsRouter } from "./routes/diagnostics/logs";
+import { createAgentTeamRouter } from "./routes/agent-team/index";
+import { createRaceRouter } from "./routes/race";
+import { registerActivityRoutes } from "./routes/activity/registration";
 import {
   createInternalTerminalAgentHookRouter,
   createTerminalStateRouter,
-} from "./routes/terminal-state";
-import { createInternalTerminalCompletionRouter } from "./routes/terminal-completion";
-import { createTerminalRouter } from "./routes/terminal";
+} from "./routes/terminal/state";
+import { createInternalTerminalCompletionRouter } from "./routes/terminal/completion";
+import { createTerminalRouter } from "./routes/terminal/index";
 import { createTestRouter } from "./routes/test";
-import { createPrototypePreviewRouter } from "./routes/prototype-preview";
+import { createPrototypePreviewRouter } from "./routes/prototype/preview";
 import { createVoiceRouter } from "./routes/voice";
 import { createWorkHistoryRouter } from "./routes/work-history";
 import { createAttentionRouter } from "./routes/attention";
-import { createEvolutionActivationRouter } from "./routes/evolution-activation";
-import { createEvolutionFoundationRouter } from "./routes/evolution-foundation";
-import { createEvolutionMcpRouter } from "./routes/evolution-mcp";
+import { createEvolutionActivationRouter } from "./routes/evolution/activation";
+import { createEvolutionFoundationRouter } from "./routes/evolution/foundation";
+import { createEvolutionMcpRouter } from "./routes/evolution/mcp";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import {
@@ -49,8 +49,8 @@ import {
   loadTunnelAuthConfig,
   type TunnelAuthConfig,
 } from "./server/tunnel-auth";
-import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image";
-import { sanitizeCurrentTerminalProcessEnv } from "./terminal/env";
+import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/preview/clipboard-image";
+import { sanitizeCurrentTerminalProcessEnv } from "./terminal/runtime/env";
 import { listenWithFallback } from "./server/listen";
 import { createHttpUpgradeRouter } from "./server/http-upgrade-router";
 import {
@@ -70,7 +70,7 @@ import {
   attachWorkspaceServiceUpgradeProxy,
   createWorkspaceServiceHttpProxy,
 } from "./terminal/workspace-service/proxy";
-import { TerminalWorktreeDeletionError } from "./terminal/worktree-deletion";
+import { TerminalWorktreeDeletionError } from "./terminal/workspace-service/worktree-deletion";
 
 const HASHED_ASSET_CACHE_CONTROL =
   "public, max-age=31536000, s-maxage=31536000, immutable";

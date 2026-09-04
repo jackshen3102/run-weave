@@ -1,6 +1,6 @@
 import { open } from "node:fs/promises";
 import { aiDiagnosticLog } from "../../diagnostic-logs/recorder";
-import { logTerminalPerf } from "../perf-logging";
+import { logTerminalPerf } from "../runtime/perf-logging";
 import type {
   TmuxKeySequenceItem,
   TmuxPaneInfo,

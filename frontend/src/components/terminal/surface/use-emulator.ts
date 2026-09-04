@@ -15,12 +15,12 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import type { ClientMode } from "../../../features/client-mode";
-import { DEFAULT_TERMINAL_PREFERENCES } from "../../../features/terminal/preferences";
-import { createResizeScheduler } from "../../../features/terminal/resize-scheduler";
-import { createTerminalWrappedWebLinkProvider } from "../../../features/terminal/web-link-provider";
-import { shouldSuppressWheelInput } from "../../../features/terminal/wheel-input";
+import { DEFAULT_TERMINAL_PREFERENCES } from "../../../features/terminal/state/preferences";
+import { createResizeScheduler } from "../../../features/terminal/viewport/resize-scheduler";
+import { createTerminalWrappedWebLinkProvider } from "../../../features/terminal/navigation/web-link-provider";
+import { shouldSuppressWheelInput } from "../../../features/terminal/viewport/wheel-input";
 import { HttpError } from "../../../services/http";
-import { createTerminalSessionClipboardImage } from "../../../services/terminal";
+import { createTerminalSessionClipboardImage } from "../../../services/terminal/index";
 import {
   IME_COMMIT_WINDOW_MS,
   TERMINAL_RESIZE_DEBOUNCE_MS,

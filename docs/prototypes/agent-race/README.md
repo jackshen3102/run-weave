@@ -10,7 +10,7 @@
 原型的每个交互都对照真实代码核过一遍，不可忠实实现的已从界面移除或降级：
 
 - **每 worker 各自选 agent + 真实模型**（本轮）：composer 从「全局 agent + worker 数量」改为**逐行 worker 配置**——每行选 agent（`codex`/`traex`）并联动该 agent 的真实模型下拉。证据：`traex models` 可枚举真实模型列表；codex 用 `-m <MODEL>`；模型经 `buildAgentLaunchCommand`（`agent-preparation.ts:442`）拼进启动命令。**纠正了上一版“模型只能自由填空”的错误结论**——两个 agent 的模型都拿得到。
-- **移除「worker 待回答」独立状态**：现有终端状态机只有 `starting/idle/running`（`terminal-state-service.ts:278-292`），codex 停下提问和干完活都只报 `agent_idle`，`AgentHookStateEvent` 也只有 5 个事件、无 waiting（`packages/shared/src/terminal/events.ts:222-227`）。系统物理上无法区分「在等你」和「完成」。所以原型不再有琥珀「待回答」高亮/顶部提示/WAITING 徽标；idle worker 统一显示「空闲·待查看」，提问文字只作为**终端里的普通输出**存在（需人进终端看，这是真实的）。
+- **移除「worker 待回答」独立状态**：现有终端状态机只有 `starting/idle/running`（`terminal-state-service.ts:278-292`），codex 停下提问和干完活都只报 `agent_idle`，`AgentHookStateEvent` 也只有 5 个事件、无 waiting（`packages/shared/src/terminal/runtime/events.ts:222-227`）。系统物理上无法区分「在等你」和「完成」。所以原型不再有琥珀「待回答」高亮/顶部提示/WAITING 徽标；idle worker 统一显示「空闲·待查看」，提问文字只作为**终端里的普通输出**存在（需人进终端看，这是真实的）。
 - **diff 切换改为基于真实 git 信号**：「终端/Diff」toggle 的出现条件是「有改动」（`changeSummary.filesChanged > 0`，对应 `preview-git.ts` 的 `git status`），与 agent 状态无关。
 - **终端输入框对所有 worker 常显**：往终端发文本（`sendInputToSession`）任何时候都能做，不假装只有「等回答」时才可输入。
 

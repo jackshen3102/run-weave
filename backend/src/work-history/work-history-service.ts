@@ -12,7 +12,7 @@ import type {
   TerminalArchiveSummary,
   WorkHistorySourceStatus,
 } from "@runweave/shared/work-history";
-import type { ActivityQueryService } from "../activity/query-service";
+import type { ActivityQueryService } from "../activity/database/service";
 import type { AgentTeamService } from "../agent-team/service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { toSessionListItem } from "../terminal/application/payloads";

@@ -151,7 +151,7 @@ RuntimeTrace，记录召回、过滤、选择、分桶、实际暴露 revision �
 
 主要实现位于：
 
-- `packages/shared/src/evolution.ts`
+- `packages/shared/src/evolution/index.ts`
 - `backend/src/evolution/`
 - `backend/src/routes/evolution-*.ts`
 - `frontend/src/pages/evolution-page.tsx`

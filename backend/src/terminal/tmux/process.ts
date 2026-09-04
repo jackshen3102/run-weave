@@ -5,8 +5,8 @@ import { createHash, randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { sanitizeTerminalProcessEnv } from "../env";
-import { applyShellIntegration } from "../shell-integration";
+import { sanitizeTerminalProcessEnv } from "../runtime/env";
+import { applyShellIntegration } from "../runtime/shell-integration";
 import type {
   TmuxAvailability,
   TmuxExecFile,

@@ -1,7 +1,7 @@
 import { useMemoizedFn } from "ahooks";
 import { useState } from "react";
 import type { AgentTeamModelErrorDetails } from "@runweave/shared/agent-team-model-config";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { HttpError } from "../../../services/http";
 
 export function useAgentTeamModelConfigError(onAuthExpired?: () => void) {

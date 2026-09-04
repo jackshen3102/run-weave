@@ -23,7 +23,7 @@ import {
   isCompletionSourceAllowedForCommand,
   type RecentAgentActivityRecord,
 } from "../completion/source-gate";
-import { WorktreeProjectRegistry } from "../worktree-project-registry";
+import { WorktreeProjectRegistry } from "../workspace-service/worktree-project-registry";
 
 export interface TerminalSessionManagerObserver {
   onBell?: (input: {

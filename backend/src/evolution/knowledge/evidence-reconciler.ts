@@ -4,7 +4,7 @@ import type {
   ContributionEdge,
   InsightRevision,
 } from "@runweave/shared/evolution";
-import type { ActivityQueryService } from "../../activity/query-service";
+import type { ActivityQueryService } from "../../activity/database/service";
 import type {
   EvolutionAnalysisStore,
   EvolutionPreparedInsightRevision,

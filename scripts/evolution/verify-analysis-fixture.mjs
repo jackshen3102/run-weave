@@ -1,6 +1,6 @@
-import { ActivityEventFactory } from "../../backend/src/activity/event-factory.ts";
+import { ActivityEventFactory } from "../../backend/src/activity/recording/event-factory.ts";
 import { randomUUID } from "node:crypto";
-import { ActivityQueryService } from "../../backend/src/activity/query-service.ts";
+import { ActivityQueryService } from "../../backend/src/activity/database/service.ts";
 import { EvolutionAnalysisOrchestrator } from "../../backend/src/evolution/analysis/orchestrator.ts";
 import { EvolutionContextPackBuilder } from "../../backend/src/evolution/context-pack.ts";
 import { EvolutionService } from "../../backend/src/evolution/service.ts";

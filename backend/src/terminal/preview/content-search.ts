@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { TerminalPreviewContentSearchItem, TerminalPreviewContentSearchRange, TerminalPreviewContentSearchResponse } from "@runweave/shared/terminal/preview";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import { ensureProjectPath, TerminalPreviewError } from "./paths";
 import {
   buildRgSearchExclusionArgs,

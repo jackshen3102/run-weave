@@ -18,7 +18,7 @@ import {
   findingCaseTraceabilityErrors,
   isTraceableProductCase,
 } from "./loop-traceability";
-import { isReviewGateAcceptanceCase } from "../service/acceptance-refresh-policy";
+import { isReviewGateAcceptanceCase } from "../service/acceptance/refresh";
 export const DEFAULT_MAX_REPAIR_ATTEMPTS = 3;
 export const MIN_REPAIR_ATTEMPTS = 1;
 export const MAX_REPAIR_ATTEMPTS = 5;

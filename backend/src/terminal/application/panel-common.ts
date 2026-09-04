@@ -3,7 +3,7 @@ import type {
   TerminalSessionManager,
   TerminalSessionRecord,
 } from "../manager/manager";
-import type { PtyService } from "../pty-service";
+import type { PtyService } from "../runtime/pty-service";
 import type { TerminalRuntimeRegistry } from "../runtime/registry";
 import { isTmuxBackedSession, resolveTmuxTarget } from "../runtime/launcher";
 import type { TmuxPaneTarget, TmuxService } from "../tmux/service";

@@ -1,13 +1,13 @@
 import { useMemoizedFn } from "ahooks";
 import { useState } from "react";
 import type { ClientMode } from "../../../features/client-mode";
-import { resolveNewTerminalRuntimePreference } from "../../../features/terminal/runtime-preference";
+import { resolveNewTerminalRuntimePreference } from "../../../features/terminal/state/runtime-preference";
 import { HttpError } from "../../../services/http";
 import { changePassword as submitPasswordChange } from "../../../services/auth";
 import {
   createTerminalSession,
   listTerminalSessions,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import { resolveReusableTerminalSession } from "../terminal-session-reuse";
 
 interface UseHomeTerminalPasswordParams {

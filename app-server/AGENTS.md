@@ -6,10 +6,10 @@ HTTP/WebSocket 消费入口，并以 singleton 运行。
 ## 先看哪里
 
 - 进程装配与生命周期：`src/index.ts`
-- 事件写入与订阅：`src/event-center.ts`
-- append-only 存储：`src/event-store.ts`
-- 状态投影：`src/state-projector.ts`、`src/state-store.ts`
-- HTTP/WebSocket 边界：`src/http-server.ts`、`src/websocket-server.ts`
+- 事件写入与订阅：`src/events/center.ts`
+- append-only 存储：`src/events/store.ts`
+- 状态投影：`src/state/projector.ts`、`src/state/store.ts`
+- HTTP/WebSocket 边界：`src/server/http.ts`、`src/server/websocket.ts`
 - 发现、配置与 singleton：`src/config.ts`、`src/singleton.ts`
 - 当前架构合同：`../docs/architecture/app-server-architecture.md`
 

@@ -229,7 +229,7 @@ mutation 写入 `version: 2`；升级后的第一条新 completion 才建立 roo
 ## 七、真实验收
 
 唯一当前测试合同是
-[`feishu-terminal-topic-conversations.testplan.yaml`](../testing/terminal/feishu-terminal-topic-conversations.testplan.yaml)。
+[`feishu-terminal-topic-conversations.testplan.yaml`](../testing/terminal/integrations/feishu-topic-conversations.testplan.yaml)。
 真实验收至少准备两个 Terminal 和一个双 Panel Terminal，并逐 case 隔离 fixture：
 
 1. 核对同 Terminal 只有一个顶层 root，后续 completion 的 `root_id` 相同。

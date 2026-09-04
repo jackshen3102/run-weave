@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox-resolver.ts";
+import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox/resolver.ts";
 import { InMemoryEvolutionActivationStore } from "../../backend/src/evolution/activation-store.ts";
 import { EvolutionOutcomeObserver } from "../../backend/src/evolution/injection/outcome-observer.ts";
 import { DefaultEvolutionMemoryProvider } from "../../backend/src/evolution/injection/memory-provider.ts";
 import { createCandidateAssets } from "../../backend/src/evolution/knowledge/candidate-factory.ts";
 import { authorizeMemoryCanary } from "../../backend/src/evolution/knowledge/lifecycle.ts";
 import { StructuredEvolutionMemorySelector } from "../../backend/src/evolution/knowledge/retrieval.ts";
-import { createEvolutionActivationRouter } from "../../backend/src/routes/evolution-activation.ts";
+import { createEvolutionActivationRouter } from "../../backend/src/routes/evolution/activation.ts";
 import { draft, enabledPolicy, now, query } from "./activation-fixture.mjs";
 
 export async function verifyAssignmentAndOutcomes() {

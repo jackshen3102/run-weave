@@ -460,8 +460,8 @@ const issues = [
       "真实复现：prepare 响应后 39ms /state=starting 但 Pane=shell_idle；169ms Pane=starting 但 /state、Session、Home=shell_idle；297ms 全部收敛 starting。hook 边界另出现约 130ms Pane idle / Home running。",
     sources: [
       "backend/src/terminal/application/panel-metadata.ts",
-      "backend/src/routes/app-home-overview.ts",
-      "backend/src/routes/terminal-state.ts",
+      "backend/src/routes/app/home-overview.ts",
+      "backend/src/routes/terminal/state.ts",
       "backend/src/terminal/manager-session-runtime.ts",
     ],
   },
@@ -510,8 +510,8 @@ const issues = [
     sources: [
       "backend/src/terminal/manager-session-runtime.ts",
       "backend/src/terminal/application/panel-metadata.ts",
-      "backend/src/routes/terminal-state.ts",
-      "docs/testing/terminal/terminal-runtime-core.testplan.yaml",
+      "backend/src/routes/terminal/state.ts",
+      "docs/testing/terminal/runtime/core.testplan.yaml",
     ],
   },
   {
@@ -556,7 +556,7 @@ const issues = [
     evidence:
       "真实复现：实际执行 printf OSC; sleep 2，300ms API activeCommand=codex，页面按钮为 feature(codex)，尽管真实前台流程只是 printf + sleep。已保存截图。",
     sources: [
-      "backend/src/terminal/shell-integration.ts",
+      "backend/src/terminal/runtime/shell-integration.ts",
       "backend/src/ws/terminal-metadata-sync.ts",
     ],
   },
@@ -566,15 +566,15 @@ const sources = [
   {
     title: "Session / Agent contracts",
     files: [
-      "packages/shared/src/terminal/session.ts",
-      "packages/shared/src/terminal/state.ts",
+      "packages/shared/src/terminal/runtime/session.ts",
+      "packages/shared/src/terminal/runtime/state.ts",
     ],
   },
   {
     title: "Hook authenticity gate",
     files: [
-      "backend/src/terminal/agent-hook-processor.ts",
-      "backend/src/routes/terminal-state.ts",
+      "backend/src/terminal/application/agent-hook-processor.ts",
+      "backend/src/routes/terminal/state.ts",
     ],
   },
   {
@@ -587,15 +587,15 @@ const sources = [
   {
     title: "Provider truth",
     files: [
-      "app-server/src/state-projector.ts",
-      "app-server/src/agent-thread-status-reconciler.ts",
+      "app-server/src/state/projector.ts",
+      "app-server/src/state/reconciler.ts",
     ],
   },
   {
     title: "Event recovery",
     files: [
       "backend/src/terminal/terminal-event-service.ts",
-      "frontend/src/features/terminal/use-terminal-events-connection.ts",
+      "frontend/src/features/terminal/connection/use-events.ts",
     ],
   },
   {

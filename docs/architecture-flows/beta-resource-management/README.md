@@ -50,23 +50,23 @@ Beta pool 不是单一状态机，而是三套事实的组合：
 
 ## 当前实现
 
-`scripts/dev-session/beta-slot-pool-projection.mjs` 为每个 slot 同时显示 lease、manifest、runtime、recovery 四组事实，并派生 `idle / healthy / partial / degraded-shared / stale-reclaimable / stale-manual / broken`。`beta-slot-pool-recovery.mjs` 在 recovery claim 与 owner Session lock 内重读事实后执行 startup hygiene、容量压力恢复或显式 recover；`beta-slot-pool-lifecycle.mjs` 统一 normal stop、start failure 与 recovery 的 release transaction。HTML 保留实施前现场用于解释因果，不是当前实时资源状态。
+`scripts/dev-session/beta-pool/projection.mjs` 为每个 slot 同时显示 lease、manifest、runtime、recovery 四组事实，并派生 `idle / healthy / partial / degraded-shared / stale-reclaimable / stale-manual / broken`。`beta-slot-pool-recovery.mjs` 在 recovery claim 与 owner Session lock 内重读事实后执行 startup hygiene、容量压力恢复或显式 recover；`beta-slot-pool-lifecycle.mjs` 统一 normal stop、start failure 与 recovery 的 release transaction。HTML 保留实施前现场用于解释因果，不是当前实时资源状态。
 
 ## 代码源
 
 - `scripts/dev-session/cli.mjs`
-- `scripts/dev-session/cli-stop.mjs`
-- `scripts/dev-session/beta-slot-pool-core.mjs`
-- `scripts/dev-session/beta-slot-pool-janitor.mjs`
-- `scripts/dev-session/beta-slot-pool-storage.mjs`
-- `scripts/dev-session/beta-slot-pool-projection.mjs`
-- `scripts/dev-session/beta-slot-pool-recovery.mjs`
-- `scripts/dev-session/beta-slot-pool-lifecycle.mjs`
-- `scripts/dev-session/pool-cli.mjs`
-- `scripts/dev-session/beta-service.mjs`
-- `scripts/dev-session/service-runtime.mjs`
+- `scripts/dev-session/commands/stop.mjs`
+- `scripts/dev-session/beta-pool/core.mjs`
+- `scripts/dev-session/beta-pool/recovery/janitor.mjs`
+- `scripts/dev-session/beta-pool/storage/index.mjs`
+- `scripts/dev-session/beta-pool/projection.mjs`
+- `scripts/dev-session/beta-pool/recovery/index.mjs`
+- `scripts/dev-session/beta-pool/lifecycle.mjs`
+- `scripts/dev-session/commands/pool.mjs`
+- `scripts/dev-session/services/beta.mjs`
+- `scripts/dev-session/services/runtime.mjs`
 - `scripts/dev-session/registry.mjs`
-- `scripts/runweave-beta.mjs`
+- `scripts/beta/index.mjs`
 
 ## 边界
 

@@ -15,29 +15,29 @@ import {
 import { createInitialLoop } from "../loop";
 import { resolveMaxRepairAttempts } from "../repair/loop";
 import { agentTeamLogger } from "./context";
-import { AgentTeamRunCompletionService } from "./run-completion";
+import { AgentTeamRunCompletionService } from "./completion/run";
 import {
   acceptanceCasesForRole,
   behaviorVerificationCasesForDispatch,
-} from "./acceptance-policy";
+} from "./acceptance/policy";
 import {
   normalizeWorkers,
   resolveInitialActiveWorkerRole,
   setActiveWorker,
-} from "./workflow-policy";
+} from "./policies/workflow";
 import {
   formatErrorMessage,
   formatVerificationSource,
   requireRunnableTask,
   requireVerificationConfig,
-} from "./run-policy";
-import { isTerminalAgentTeamStatus } from "./fixture-support";
+} from "./policies/run";
+import { isTerminalAgentTeamStatus } from "./fixture/support";
 import {
   cloneAgentTeamRoleRuntimeSnapshot,
   createLegacyAgentTeamRoleRuntimeSnapshot,
   resolveAgentTeamRoleTerminal,
   resolveAgentTeamTerminal,
-} from "../model-runtime";
+} from "../runtime/model-runtime";
 
 export class AgentTeamLifecycleService extends AgentTeamRunCompletionService {
   async startRun(input: CreateAgentTeamRunRequest): Promise<AgentTeamRun> {

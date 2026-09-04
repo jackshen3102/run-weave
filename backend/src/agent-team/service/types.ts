@@ -4,13 +4,13 @@ import type {
   AgentTeamVerificationConfig,
 } from "@runweave/shared/agent-team";
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
-import type { PtyService } from "../../terminal/pty-service";
+import type { PtyService } from "../../terminal/runtime/pty-service";
 import type { TerminalRuntimeRegistry } from "../../terminal/runtime/registry";
 import type { TerminalEventService } from "../../terminal/state/terminal-event-service";
 import type { TerminalStateService } from "../../terminal/state/terminal-state-service";
 import type { TmuxOutputWatcher } from "../../terminal/tmux/output-watcher";
 import type { TmuxService } from "../../terminal/tmux/service";
-import type { TerminalActivityDependencies } from "../../terminal/activity-events";
+import type { TerminalActivityDependencies } from "../../terminal/runtime/activity-events";
 import type { EvolutionMemoryProvider } from "../../evolution/injection/memory-provider";
 import type { EvolutionOutcomeObserver } from "../../evolution/injection/outcome-observer";
 import type { AgentTeamModelSettingsService } from "../model-catalog/service";

@@ -8,8 +8,8 @@ import {
 } from "@ionic/react";
 import { FormEvent, useState } from "react";
 
-import { AppConnectionChip } from "../components/AppConnectionChip";
-import { AppConnectionManager } from "../components/AppConnectionManager";
+import { AppConnectionChip } from "../components/shell/connection-chip";
+import { AppConnectionManager } from "../components/shell/connection-manager";
 import type { AppConnectionConfig } from "../features/connections/types";
 import type { AppDeviceConnectionStatus } from "../hooks/use-app-device-connection";
 import { ApiError } from "../services/http";

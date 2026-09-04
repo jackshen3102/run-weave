@@ -17,12 +17,12 @@ frontend / Electron
 
 关键代码路径：
 
-- Electron packaged 模式下，`electron/src/updater.ts` 更新下载完成后会调用 `autoUpdater.quitAndInstall()`。
+- Electron packaged 模式下，`electron/src/updater/index.ts` 更新下载完成后会调用 `autoUpdater.quitAndInstall()`。
 - Electron packaged 模式下，`electron/src/main.ts` 的 `before-quit` 会执行 `packagedBackendRuntime?.stop()`。
-- Electron packaged 模式下，`electron/src/backend-runtime.ts` 的 `stop()` 会给 packaged backend 子进程发送 `SIGTERM`，超时后 `SIGKILL`。
+- Electron packaged 模式下，`electron/src/backend/runtime.ts` 的 `stop()` 会给 packaged backend 子进程发送 `SIGTERM`，超时后 `SIGKILL`。
 - `backend/src/index.ts`：后端收到 `SIGTERM` 后调用 `terminalRuntimeRegistry.disposeAll()`。
 - `backend/src/terminal/runtime-registry.ts`：`disposeAll()` 对每个 runtime 调用 `disposeRuntime()`。
-- `backend/src/terminal/pty-service.ts`：node-pty runtime 的 `dispose()` 最终调用 `ptyProcess.kill()`。
+- `backend/src/terminal/runtime/pty-service.ts`：node-pty runtime 的 `dispose()` 最终调用 `ptyProcess.kill()`。
 
 前端已有 WebSocket 自动重连能力，后端也会在 runtime 缺失时尝试重新 spawn 终端，但当前重新 spawn 的是原始 shell 命令，不能恢复已在运行中的 `codex` TUI。
 
@@ -132,7 +132,7 @@ tmux -L runweave ...
 
 ## 数据模型
 
-当前 terminal session 主要字段在 `backend/src/terminal/manager.ts` 和 `packages/shared/src/terminal-protocol.ts` 中定义，状态只有：
+当前 terminal session 主要字段在 `backend/src/terminal/manager.ts` 和 `packages/shared/src/terminal/protocol.ts` 中定义，状态只有：
 
 ```ts
 status: "running" | "exited";
@@ -257,7 +257,7 @@ fallback 到 `runtimeKind: "pty"` 时，行为必须和现状保持一致：继�
 
 ### 2. 修改创建终端流程
 
-当前创建终端在 `backend/src/routes/terminal.ts`：
+当前创建终端在 `backend/src/routes/terminal/index.ts`：
 
 1. `terminalSessionManager.createSession(...)` 创建持久记录。
 2. `ptyService.spawnSession(...)` 启动原始 shell。
@@ -405,7 +405,7 @@ tmux-backed 终端允许客户端更新、backend 重启和服务端部署后恢
 
 ### Electron 更新保护
 
-在 `electron/src/updater.ts` 的“更新已就绪”阶段，前端或主进程需要知道当前是否存在因 tmux 不可用而降级的 pty fallback 终端：
+在 `electron/src/updater/index.ts` 的“更新已就绪”阶段，前端或主进程需要知道当前是否存在因 tmux 不可用而降级的 pty fallback 终端：
 
 ```text
 no active terminal:
@@ -457,7 +457,7 @@ new backend attaches tmux session on demand
 
 前端自动重连逻辑可以继续复用：
 
-- `frontend/src/features/terminal/use-terminal-connection.ts`
+- `frontend/src/features/terminal/connection/use-connection.ts`
 - `frontend/src/components/terminal/terminal-surface.tsx`
 
 ## 性能与前端交互边界
@@ -596,7 +596,7 @@ E2E/手工回归：
 
 建议复用现有终端回归入口：
 
-- `docs/testing/terminal/terminal-runtime-core.testplan.yaml`
+- `docs/testing/terminal/runtime/core.testplan.yaml`
 - 按测试计划使用 `$toolkit:playwright-cli` 验证真实 Terminal 页面；当前仓库没有对应的 tracked
   Playwright spec，不要引用历史文件名。
 

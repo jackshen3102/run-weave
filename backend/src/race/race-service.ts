@@ -12,10 +12,10 @@ import { ensureTerminalPanelWorkspace } from "../terminal/application/panel-work
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
-} from "../terminal/default-shell";
+} from "../terminal/runtime/default-shell";
 import type { TerminalEventService } from "../terminal/state/terminal-event-service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
-import type { PtyService } from "../terminal/pty-service";
+import type { PtyService } from "../terminal/runtime/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
 import {
   killTmuxSessionForTerminal,

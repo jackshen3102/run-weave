@@ -5,9 +5,9 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
   EMPTY_TERMINAL_PROJECTS,
   useTerminalProjectsQuery,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
-import { useTerminalAggregateStatus } from "../../../features/terminal/use-terminal-aggregate-status";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+} from "../../../features/terminal/queries/workspace";
+import { useTerminalAggregateStatus } from "../../../features/terminal/status/use-aggregate-status";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { Button } from "../../ui/button";
 import {
   ContextMenu,

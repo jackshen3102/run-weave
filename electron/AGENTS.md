@@ -7,10 +7,10 @@
 
 - 主进程装配：`src/main.ts`
 - Renderer bridge：`src/preload.ts`
-- Bridge 类型合同：`../packages/shared/src/desktop-bridge.ts`
-- 主窗口与自定义协议：`src/desktop-window.ts`
-- 内置 Backend 生命周期：`src/packaged-backend-controller.ts`
-- Terminal Browser：`src/terminal-browser-*.ts`
+- Bridge 类型合同：`../packages/shared/src/desktop/bridge.ts`
+- 主窗口与自定义协议：`src/desktop/window.ts`
+- 内置 Backend 生命周期：`src/backend/packaged/controller.ts`
+- Terminal Browser：`src/browser/`
 - 打包配置：`electron-builder.yml`、`electron-builder.beta.yml`
 
 ## 边界

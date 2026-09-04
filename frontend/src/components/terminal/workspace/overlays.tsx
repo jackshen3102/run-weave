@@ -15,15 +15,15 @@ import { TerminalSessionAliasDialog } from "../session/session-tab";
 import { TerminalStatusLookupDialog } from "./status-lookup-dialog";
 import { TerminalAgentTeamModelConfigDialog } from "../agent-team/model-config-dialog";
 import { useShallow } from "zustand/react/shallow";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_SESSIONS,
   useTerminalProjectsQuery,
   useTerminalSessionsQuery,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
-import { formatTerminalSessionName } from "../../../features/terminal/session-name";
+} from "../../../features/terminal/queries/workspace";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import {
   formatHistoryPanelLabel,
   resolveHistoryPanelId,

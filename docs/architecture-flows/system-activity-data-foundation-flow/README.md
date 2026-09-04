@@ -70,7 +70,7 @@ maintenance
 ## 与当前代码的关系
 
 - `backend/src/activity/` 已实现 worker-owned SQLite、WAL、迁移、幂等、gap、加密 Content、7/30 天留存、审计和 durable delete job。
-- `backend/src/routes/activity.ts` 已实现复用现有登录鉴权的 Facts/Timeline/Sources/Policy/Content/export/delete API。
+- `backend/src/routes/activity/index.ts` 已实现复用现有登录鉴权的 Facts/Timeline/Sources/Policy/Content/export/delete API。
 - Stable/Beta/Dev 的 Backend 直接共享 profile 外固定数据库；三进程同库集成脚本已验证 300 条并发 Fact、完整性和权限。
 - Terminal、Hook、Electron Browser 与 Agent Team durable transition 已接线；Verification family 在身份化 runner 完成前不注册。
 - `/activity` 已实现 Facts、详情/Content、Timeline、Sources、Data Policy 与直接 export/delete；CLI 始终调用所选 Backend。

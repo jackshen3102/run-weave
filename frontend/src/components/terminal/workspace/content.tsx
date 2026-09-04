@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
@@ -14,12 +14,12 @@ import {
   useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
   useTerminalWorkspaceQueryClient,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
-import { loadRecentTerminalSelection } from "../../../features/terminal/recent-selection";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
-import { resolveCachedTerminalSurfaceIds } from "../../../features/terminal/surface-cache";
+} from "../../../features/terminal/queries/workspace";
+import { loadRecentTerminalSelection } from "../../../features/terminal/input/recent-selection";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { resolveCachedTerminalSurfaceIds } from "../../../features/terminal/state/surface-cache";
 import { HttpError } from "../../../services/http";
-import { updateTerminalSession } from "../../../services/terminal";
+import { updateTerminalSession } from "../../../services/terminal/index";
 import {
   hasValidProjectSessionSelection,
   resolvePreferredProjectId,

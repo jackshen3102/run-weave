@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { logger } from "../logging";
+import { logger } from "../logging/index";
 import type {
   TerminalSessionManager,
   TerminalSessionRecord,

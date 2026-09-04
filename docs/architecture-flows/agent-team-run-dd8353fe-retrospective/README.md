@@ -66,7 +66,7 @@ python3 -m http.server 6188 --directory docs/architecture-flows/agent-team-run-d
 
 - `backend/src/evolution/injection/memory-provider.ts` 以 `assetId` 进入 assignment hash。
 - `backend/src/evolution/injection/outcome-observer.ts` 使用 `recordForDispatch()` 和 `recordAgentFeedbackForDispatch()`。
-- `backend/src/routes/evolution-activation.ts` 提供 `GET /runtime-traces?runId=&dispatchId=`。
+- `backend/src/routes/evolution/activation.ts` 提供 `GET /runtime-traces?runId=&dispatchId=`。
 - Round 4 review outbox 没有 open P0/P1；Round 5 behavior outbox 完成真实 Beta/API 验证。
 
 这里的“部分修复”只针对产品链；lifecycle/bounce 框架缺陷仍未关闭。
@@ -90,7 +90,7 @@ python3 -m http.server 6188 --directory docs/architecture-flows/agent-team-run-d
 ### Run 与验收来源
 
 - `.runweave/agent-team/atr_dd8353fe_20260719020754.json`
-- `docs/plans/2026-07-19-agent-self-evolution-v1.md`
+- `docs/plans/evolution/2026-07-19-v1.md`
   - SHA-256：`78336793ed2b962879472416018bdb80e957b38f079bba7b0440e7317583309f`
 - `docs/testing/evolution/agent-self-evolution-activation.testplan.yaml`
   - SHA-256：`c3053ae1e750b9ea346b11d8b4ada483e9085a13591abb5491f21ac0424ef1cb`

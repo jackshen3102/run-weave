@@ -18,7 +18,7 @@ import { HttpError } from "../../services/http";
 import {
   createTerminalPrototypePreviewTicket,
   listTerminalPrototypeGallery,
-} from "../../services/terminal";
+} from "../../services/terminal/index";
 
 interface PrototypeSelection {
   projectId: string;

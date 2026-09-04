@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getAgentTeamModelSettings,
   saveAgentTeamModelSettings,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import { Button } from "../../ui/button";
 import {
   Dialog,

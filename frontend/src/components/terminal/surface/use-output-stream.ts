@@ -6,8 +6,8 @@ import type { TerminalModeState } from "@runweave/shared/terminal/websocket";
 import {
   logTerminalPerf,
   summarizeTerminalChunk,
-} from "../../../features/terminal/perf-logging";
-import { filterBrowserHandledTerminalOutput } from "../../../features/terminal/output-filter";
+} from "../../../features/terminal/output/performance";
+import { filterBrowserHandledTerminalOutput } from "../../../features/terminal/output/filter";
 import {
   DEFERRED_OUTPUT_BACKGROUND_FLUSH_CHARS,
   recordTerminalPerfProbeEvent,

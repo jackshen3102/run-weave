@@ -70,7 +70,7 @@ python3 -m http.server 6189 --directory docs/architecture-flows/terminal-state-e
 ### 合约与状态
 
 - `packages/shared/src/terminal/{session,state,events,websocket,completion}.ts`
-- `packages/shared/src/app-server-events.ts`
+- `packages/shared/src/app-server/events.ts`
 - `backend/src/terminal/{terminal-state-service,terminal-state-store,agent-hook-processor}.ts`
 - `backend/src/terminal/{manager-session-runtime,runtime-recorder,shell-integration}.ts`
 

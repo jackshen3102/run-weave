@@ -6,16 +6,16 @@ import type {
   AgentTeamRoleRuntimeSnapshot,
   SaveAgentTeamModelConfigRequest,
 } from "@runweave/shared/agent-team-model-config";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import { AgentTeamError } from "../errors";
 import {
   AgentTeamModelConfigStore,
   type PersistedAgentTeamProviderCatalog,
-} from "../model-config-store";
+} from "../runtime/model-config-store";
 import {
   createAgentTeamRoleRuntimeSnapshot,
   isAgentTeamRoleModelConfigMap,
-} from "../model-runtime";
+} from "../runtime/model-runtime";
 import { probeCodexCatalog } from "./codex";
 import { probeTraexCatalog } from "./traex";
 import type { AgentTeamCatalogProbe } from "./types";

@@ -7,8 +7,8 @@
 - 用户命令入口：`cli.mjs`
 - profile 与影响闭包规划：`planner.mjs`
 - Session 持久化与查找：`registry.mjs`
-- dedicated/shared 服务生命周期：`dedicated-services.mjs`、`shared-services.mjs`
-- 固定 Beta Pool：`beta-slot-pool.mjs` 及 `beta-slot-pool-*.mjs`
+- dedicated/shared 服务生命周期：`services/dedicated.mjs`、`services/shared.mjs`
+- 固定 Beta Pool：`beta-pool/`
 - 外部使用合同：`../../docs/deployment/runweave-beta.md`
 - 验收矩阵：`../../docs/testing/platform/development-control-plane.testplan.yaml`
 
@@ -23,7 +23,7 @@
 ## 操作与验证
 
 实际执行 `dev:session`、`dev:status`、`dev:open` 或 `dev:stop` 前，必须使用
-`$toolkit:runweave-dev-session`。代码级验证入口：
+`$toolkit:runweave-dev-session`。代码级验证入口在 `verify/`：
 
 ```bash
 pnpm dev:session:verify

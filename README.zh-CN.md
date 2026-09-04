@@ -32,7 +32,7 @@ Observer / Verifier / State / Exit Condition。
 
 - **Verifier** = `behavior_verify` worker，按验收用例跑 Playwright，把
   pass/fail + 证据写回 outbox（五类角色定义见
-  `packages/shared/src/agent-team.ts`，prompt 见
+  `packages/shared/src/agent-team/index.ts`，prompt 见
   `backend/src/agent-team/prompt-builders.ts`）。
 - **State + Exit Condition** 在 `backend/src/agent-team/loop.ts`：
   `errorFingerprints`（错误指纹去重）、`bestPassCount`（客观进展信号），

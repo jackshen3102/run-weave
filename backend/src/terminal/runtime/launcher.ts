@@ -1,10 +1,10 @@
 import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import {
   resolveDefaultTerminalLaunchConfig,
   resolveTerminalFallbackLaunchConfig,
-} from "../default-shell";
-import type { PtyRuntime, PtyService } from "../pty-service";
+} from "./default-shell";
+import type { PtyRuntime, PtyService } from "./pty-service";
 import type { TerminalRuntimeRegistry } from "./registry";
 import { createTerminalRuntimeRecorder } from "./recorder";
 import type { TmuxService, TmuxTarget } from "../tmux/service";

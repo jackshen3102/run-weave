@@ -18,7 +18,7 @@ import {
   type TmuxService,
 } from "../tmux/service";
 import type { TerminalEventService } from "../state/terminal-event-service";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import {
   requireTmuxSession,
   TerminalPanelError,

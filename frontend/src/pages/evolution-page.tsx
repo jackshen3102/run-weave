@@ -30,7 +30,7 @@ import {
   updateEvolutionSchedule,
   updateEvolutionScopePolicy,
 } from "../services/evolution";
-import { listTerminalProjects } from "../services/terminal";
+import { listTerminalProjects } from "../services/terminal/index";
 import {
   EvolutionScheduleDialog,
   RetireEvolutionCandidateDialog,

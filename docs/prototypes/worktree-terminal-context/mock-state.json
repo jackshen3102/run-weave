@@ -61,7 +61,7 @@
               "kind": "tsx"
             },
             {
-              "path": "frontend/src/features/terminal/workspace-store.ts",
+              "path": "frontend/src/features/terminal/state/workspace-store.ts",
               "kind": "ts"
             },
             {
@@ -106,7 +106,7 @@
               "lines": [
                 "$ codex",
                 "Inspecting the Activity event pipeline...",
-                "Edited backend/src/activity/activity-store.ts",
+                "Edited backend/src/activity/recording/store.ts",
                 "Edited frontend/src/pages/activity-page.tsx",
                 "Running pnpm typecheck"
               ]
@@ -127,7 +127,7 @@
           ],
           "changes": [
             {
-              "path": "backend/src/activity/activity-store.ts",
+              "path": "backend/src/activity/recording/store.ts",
               "kind": "M",
               "additions": 42,
               "deletions": 8
@@ -159,7 +159,7 @@
           ],
           "files": [
             {
-              "path": "backend/src/activity/activity-store.ts",
+              "path": "backend/src/activity/recording/store.ts",
               "kind": "ts"
             },
             {
@@ -175,7 +175,7 @@
               "kind": "md"
             }
           ],
-          "selectedFilePath": "backend/src/activity/activity-store.ts",
+          "selectedFilePath": "backend/src/activity/recording/store.ts",
           "filePreview": [
             "export class ActivityStore {",
             "  constructor(private readonly database: Database) {}",
@@ -211,14 +211,14 @@
               "lines": [
                 "$ trae",
                 "Reproduced stale Preview root after context change",
-                "Changed frontend/src/features/terminal/preview-store.ts",
+                "Changed frontend/src/features/terminal/preview/store.ts",
                 "Needs decision: preserve open file per worktree?"
               ]
             }
           ],
           "changes": [
             {
-              "path": "frontend/src/features/terminal/preview-store.ts",
+              "path": "frontend/src/features/terminal/preview/store.ts",
               "kind": "M",
               "additions": 19,
               "deletions": 7
@@ -232,7 +232,7 @@
           ],
           "files": [
             {
-              "path": "frontend/src/features/terminal/preview-store.ts",
+              "path": "frontend/src/features/terminal/preview/store.ts",
               "kind": "ts"
             },
             {
@@ -244,7 +244,7 @@
               "kind": "ts"
             }
           ],
-          "selectedFilePath": "frontend/src/features/terminal/preview-store.ts",
+          "selectedFilePath": "frontend/src/features/terminal/preview/store.ts",
           "filePreview": [
             "export interface TerminalPreviewStore {",
             "  ui: TerminalPreviewUiState;",

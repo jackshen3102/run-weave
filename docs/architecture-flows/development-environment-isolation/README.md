@@ -97,7 +97,7 @@ dedicated 服务记录 `ownerDevSessionId`；shared 服务保留自己的稳定 
 
 ## 当前代码事实
 
-- `dev.mjs` 为 `pnpm dev` 动态分配 Backend/Frontend 端口，并按 cwd hash 选择 dev browser profile；同一 worktree 内的并行 agent 仍会落到同一 profile。
+- `scripts/dev/web.mjs` 为 `pnpm dev` 动态分配 Backend/Frontend 端口，并按 cwd hash 选择 dev browser profile；同一 worktree 内的并行 agent 仍会落到同一 profile。
 - Frontend 通过 `VITE_PROXY_TARGET` 固定代理到本次 dev Backend，这是当前较清晰的一条绑定边。
 - Backend 未收到显式 `RUNWEAVE_APP_SERVER_URL/TOKEN` 时，会从默认 App Server lock/token 自动发现全局 App Server。
 - Electron 为每个运行实例启动 Terminal Browser CDP Proxy，并把 endpoint 注入 Backend/新 terminal；全局 Playwright 配置和 ambient env 仍可能指向别的实例。
@@ -220,21 +220,21 @@ dedicated 服务记录 `ownerDevSessionId`；shared 服务保留自己的稳定 
 
 ## 代码源
 
-- `dev.mjs`
+- `scripts/dev/web.mjs`
 - `frontend/vite.config.ts`
 - `frontend/src/App.tsx`
 - `backend/src/index.ts`
 - `backend/src/server/profile-lock.ts`
 - `backend/src/utils/path.ts`
-- `packages/shared/src/app-server-node.ts`
+- `packages/shared/src/app-server/node.ts`
 - `app-server/src/config.ts`
 - `app-server/src/singleton.ts`
 - `electron/src/main.ts`
-- `electron/src/backend-runtime.ts`
-- `electron/src/terminal-browser-cdp-proxy-port.ts`
-- `electron/src/terminal-browser-cdp-proxy.ts`
-- `scripts/runweave-beta.mjs`
-- `scripts/runweave-update-core.mjs`
+- `electron/src/backend/runtime.ts`
+- `electron/src/browser/cdp/proxy/port.ts`
+- `electron/src/browser/cdp/proxy/index.ts`
+- `scripts/beta/index.mjs`
+- `scripts/update/core.mjs`
 
 ## 验收点
 

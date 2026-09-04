@@ -1,4 +1,4 @@
-import { TerminalRuntimeProvider } from "../../../features/terminal/queries/terminal-runtime-provider";
+import { TerminalRuntimeProvider } from "../../../features/terminal/queries/provider";
 import { TerminalWorkspaceContent } from "./content";
 import type { TerminalWorkspaceProps } from "./types";
 

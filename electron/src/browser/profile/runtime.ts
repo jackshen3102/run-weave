@@ -1,0 +1,305 @@
+import { BrowserWindow } from "electron";
+import {
+  assertAutomationProfileAvailable,
+  deriveAutomationBrowserGroupId,
+  mintAutomationAttributionToken,
+  normalizeAutomationTerminalSessionId,
+} from "../automation/attribution.js";
+import {
+  getTerminalBrowserProfileConfig,
+  isTerminalBrowserProfileId,
+  TERMINAL_BROWSER_PROFILE_IDS,
+  type ResolveTerminalBrowserProfileRequest,
+  type ResolvedTerminalBrowserProfile,
+  type TerminalBrowserProfileId,
+  type TerminalBrowserProfileProxyMode,
+  type TerminalBrowserProfileRuntimeState,
+  type TerminalBrowserRoute,
+} from "@runweave/shared/terminal-browser-profile";
+import { desktopRuntime } from "../../desktop/runtime-state.js";
+import { ensureTerminalBrowserCertificateTrust } from "../security/certificate.js";
+import { TerminalBrowserError } from "../errors.js";
+import {
+  getTerminalBrowserProfilePreferences,
+  normalizeTerminalBrowserGroupId,
+  normalizeTerminalBrowserProjectId,
+} from "./preferences.js";
+import { terminalBrowserRuntime } from "../runtime.js";
+import {
+  configureTerminalBrowserProfileProxy,
+  reloadTerminalBrowserBusinessOrigin,
+  reloadTerminalBrowserProfileAfterProxyChange,
+} from "../security/network.js";
+import { setWhistleReservedValue } from "../whistle/client.js";
+import {
+  ensureTerminalBrowserWhistle,
+  getTerminalBrowserWhistleState,
+  terminalBrowserWhistleEvents,
+} from "../whistle/runtime.js";
+
+interface ProfileRuntimeRecord {
+  proxyMode: TerminalBrowserProfileProxyMode;
+  route: TerminalBrowserRoute;
+  mutationQueue: Promise<unknown>;
+  cdpConnectionCount: number;
+}
+
+const records = new Map<TerminalBrowserProfileId, ProfileRuntimeRecord>(
+  TERMINAL_BROWSER_PROFILE_IDS.map((profileId) => [
+    profileId,
+    {
+      proxyMode: "whistle",
+      route: { kind: "unassigned" },
+      mutationQueue: Promise.resolve(),
+      cdpConnectionCount: 0,
+    },
+  ]),
+);
+
+function routesEqual(left: TerminalBrowserRoute, right: TerminalBrowserRoute) {
+  return (
+    left.kind === right.kind &&
+    (left.kind === "unassigned" ||
+      (right.kind === "dev-server" && left.port === right.port))
+  );
+}
+
+function getVisibleViewCount(
+  profileId: TerminalBrowserProfileId,
+  excludedWindowId?: number,
+): number {
+  let count = 0;
+  for (const entry of terminalBrowserRuntime.entries.values()) {
+    if (
+      entry.profileId === profileId &&
+      entry.windowId !== excludedWindowId &&
+      entry.visible
+    ) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+export function getTerminalBrowserProfileRuntimeState(
+  profileId: TerminalBrowserProfileId,
+): TerminalBrowserProfileRuntimeState {
+  const record = records.get(profileId)!;
+  return {
+    profileId,
+    proxyMode: record.proxyMode,
+    route: structuredClone(record.route),
+    whistle: getTerminalBrowserWhistleState(profileId),
+    visibleViewCount: getVisibleViewCount(profileId),
+    cdpConnectionCount: record.cdpConnectionCount,
+  };
+}
+
+export function getTerminalBrowserProfileRuntimeStates(): TerminalBrowserProfileRuntimeState[] {
+  return TERMINAL_BROWSER_PROFILE_IDS.map(
+    getTerminalBrowserProfileRuntimeState,
+  );
+}
+
+function notifyRuntimeChanged(profileId: TerminalBrowserProfileId): void {
+  const runtime = getTerminalBrowserProfileRuntimeState(profileId);
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send("terminal-browser:profile-changed", {
+        kind: "runtime",
+        runtime,
+      });
+    }
+  }
+}
+
+terminalBrowserWhistleEvents.on("changed", ({ profileId }) => {
+  if (isTerminalBrowserProfileId(profileId)) {
+    notifyRuntimeChanged(profileId);
+  }
+});
+
+export function changeTerminalBrowserCdpConnectionCount(
+  profileId: TerminalBrowserProfileId,
+  delta: 1 | -1,
+): void {
+  const record = records.get(profileId)!;
+  record.cdpConnectionCount = Math.max(0, record.cdpConnectionCount + delta);
+  notifyRuntimeChanged(profileId);
+}
+
+function buildCdpEndpoint(
+  profileId: TerminalBrowserProfileId,
+  browserGroupId: string | null,
+  automationToken: string | null,
+): string {
+  const proxy = desktopRuntime.cdpProxy;
+  if (!proxy) {
+    throw new Error("Terminal Browser CDP proxy is not running");
+  }
+  const params = new URLSearchParams({ profileId });
+  if (browserGroupId) {
+    params.set("groupId", browserGroupId);
+  }
+  if (automationToken) {
+    params.set("automationToken", automationToken);
+  }
+  return `ws://${proxy.host}:${proxy.port}/devtools/browser/runweave-terminal-browser?${params}`;
+}
+
+export async function resolveTerminalBrowserProfile(
+  request: ResolveTerminalBrowserProfileRequest,
+  options: { excludedWindowId?: number } = {},
+): Promise<ResolvedTerminalBrowserProfile> {
+  if (!request || typeof request !== "object") {
+    throw new TerminalBrowserError(
+      "INVALID_BROWSER_PROFILE",
+      "Invalid Terminal Browser Profile resolution request",
+    );
+  }
+  const projectId =
+    request.projectId === null
+      ? null
+      : normalizeTerminalBrowserProjectId(request.projectId);
+  const terminalSessionId = normalizeAutomationTerminalSessionId(
+    request.terminalSessionId,
+  );
+  const requestedBrowserGroupId = normalizeTerminalBrowserGroupId(
+    request.browserGroupId,
+  );
+  const browserGroupId =
+    requestedBrowserGroupId ??
+    (terminalSessionId
+      ? deriveAutomationBrowserGroupId(terminalSessionId)
+      : null);
+  if (
+    request.explicitProfileId !== null &&
+    !isTerminalBrowserProfileId(request.explicitProfileId)
+  ) {
+    throw new TerminalBrowserError(
+      "INVALID_BROWSER_PROFILE",
+      "Unknown Terminal Browser Profile",
+      { profileId: request.explicitProfileId },
+    );
+  }
+  const preferences = getTerminalBrowserProfilePreferences();
+  const worktree = projectId ? preferences.worktrees[projectId] : undefined;
+  const profileId =
+    request.explicitProfileId ??
+    worktree?.preferredProfileId ??
+    preferences.defaultProfileId;
+  const source = request.explicitProfileId
+    ? "explicit"
+    : worktree?.preferredProfileId
+      ? "worktree"
+      : "global-default";
+  if (terminalSessionId) {
+    assertAutomationProfileAvailable(terminalSessionId, profileId);
+  }
+  const requestedRoute: TerminalBrowserRoute = worktree?.devServerPort
+    ? { kind: "dev-server", port: worktree.devServerPort }
+    : { kind: "unassigned" };
+  const record = records.get(profileId)!;
+
+  const mutation = record.mutationQueue.then(async () => {
+    const routeChanges = !routesEqual(record.route, requestedRoute);
+    const visibleViewCount = getVisibleViewCount(
+      profileId,
+      options.excludedWindowId,
+    );
+    if (
+      routeChanges &&
+      (visibleViewCount > 0 || record.cdpConnectionCount > 0)
+    ) {
+      throw new TerminalBrowserError(
+        "BROWSER_PROFILE_ROUTE_CONFLICT",
+        `${getTerminalBrowserProfileConfig(profileId).label} is currently in use`,
+        {
+          profileId,
+          currentRoute: record.route,
+          requestedRoute,
+          visibleViewCount,
+          cdpConnectionCount: record.cdpConnectionCount,
+        },
+      );
+    }
+
+    let whistle = getTerminalBrowserWhistleState(profileId);
+    if (record.proxyMode === "whistle") {
+      whistle = await ensureTerminalBrowserWhistle(profileId);
+      await configureTerminalBrowserProfileProxy(profileId, "whistle");
+      await ensureTerminalBrowserCertificateTrust(profileId);
+      await setWhistleReservedValue(
+        profileId,
+        whistle.port,
+        requestedRoute.kind === "dev-server"
+          ? `127.0.0.1:${requestedRoute.port}`
+          : null,
+      );
+    } else {
+      await configureTerminalBrowserProfileProxy(profileId, "direct");
+    }
+    record.route = requestedRoute;
+    if (routeChanges) {
+      reloadTerminalBrowserBusinessOrigin(
+        profileId,
+        preferences.businessOrigin,
+      );
+    }
+    notifyRuntimeChanged(profileId);
+    const automationToken =
+      terminalSessionId && browserGroupId
+        ? mintAutomationAttributionToken({
+            terminalSessionId,
+            profileId,
+            browserGroupId,
+          })
+        : null;
+    return {
+      profileId,
+      source,
+      projectId,
+      route: structuredClone(record.route),
+      cdpEndpoint: buildCdpEndpoint(profileId, browserGroupId, automationToken),
+      browserGroupId,
+      automationAttribution: terminalSessionId ? "terminal" : "unattributed",
+      whistle: getTerminalBrowserWhistleState(profileId),
+    } satisfies ResolvedTerminalBrowserProfile;
+  });
+  record.mutationQueue = mutation.catch(() => undefined);
+  return await mutation;
+}
+
+export async function setTerminalBrowserProfileProxyMode(
+  profileId: TerminalBrowserProfileId,
+  proxyMode: TerminalBrowserProfileProxyMode,
+): Promise<TerminalBrowserProfileRuntimeState> {
+  const record = records.get(profileId)!;
+  const mutation = record.mutationQueue.then(async () => {
+    if (record.proxyMode === proxyMode) {
+      return getTerminalBrowserProfileRuntimeState(profileId);
+    }
+
+    if (proxyMode === "whistle") {
+      const whistle = await ensureTerminalBrowserWhistle(profileId);
+      await configureTerminalBrowserProfileProxy(profileId, "whistle");
+      await ensureTerminalBrowserCertificateTrust(profileId);
+      await setWhistleReservedValue(
+        profileId,
+        whistle.port,
+        record.route.kind === "dev-server"
+          ? `127.0.0.1:${record.route.port}`
+          : null,
+      );
+    } else {
+      await configureTerminalBrowserProfileProxy(profileId, "direct");
+    }
+
+    record.proxyMode = proxyMode;
+    await reloadTerminalBrowserProfileAfterProxyChange(profileId);
+    notifyRuntimeChanged(profileId);
+    return getTerminalBrowserProfileRuntimeState(profileId);
+  });
+  record.mutationQueue = mutation.catch(() => undefined);
+  return await mutation;
+}

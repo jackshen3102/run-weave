@@ -6,7 +6,7 @@ import type {
   LearningScopeRef,
   SourceBoundary,
 } from "@runweave/shared/evolution";
-import { canonicalJson, sha256 } from "../activity/canonical";
+import { canonicalJson, sha256 } from "../activity/security/canonical";
 
 const MAX_BASELINE_FILE_BYTES = 256_000;
 

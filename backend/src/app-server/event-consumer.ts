@@ -1,6 +1,6 @@
 import type { WebSocket } from "ws";
 import type { AppServerEventEnvelope, AppServerEventStreamMessage } from "@runweave/shared/app-server-events";
-import { logger } from "../logging";
+import { logger } from "../logging/index";
 import type { AppServerClient } from "./client";
 import type { AppServerEventCursorStore } from "./event-cursor-store";
 

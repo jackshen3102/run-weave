@@ -5,7 +5,7 @@ import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/projec
 import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,
-} from "../../../features/terminal/recent-selection";
+} from "../../../features/terminal/input/recent-selection";
 
 export function resolvePreferredSessionId(
   apiBase: string,

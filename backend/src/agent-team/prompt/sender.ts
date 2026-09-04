@@ -2,7 +2,7 @@ import type {
   TerminalSessionManager,
   TerminalSessionRecord,
 } from "../../terminal/manager/manager";
-import type { PtyService } from "../../terminal/pty-service";
+import type { PtyService } from "../../terminal/runtime/pty-service";
 import type { TerminalRuntimeRegistry } from "../../terminal/runtime/registry";
 import type { TerminalStateService } from "../../terminal/state/terminal-state-service";
 import type { TmuxOutputWatcher } from "../../terminal/tmux/output-watcher";

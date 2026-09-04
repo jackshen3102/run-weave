@@ -8,7 +8,7 @@ import type {
 import {
   getAgentTeamFrameworkRepair,
   getAgentTeamRunForTerminal,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import {
   AGENT_TEAM_POLL_INTERVAL_MS,
   isAgentTeamRunActive,

@@ -9,8 +9,8 @@ import {
   type TerminalProjectContextRecord,
   type TerminalSessionRecord,
 } from "./records";
-import { getInitialTerminalActiveCommand } from "../session-launch";
-import { createUniqueTerminalSessionId } from "../session-id";
+import { getInitialTerminalActiveCommand } from "../runtime/session-launch";
+import { createUniqueTerminalSessionId } from "../runtime/session-id";
 import { TerminalManagerPanelOperations } from "./panel-operations";
 
 export type {

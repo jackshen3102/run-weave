@@ -1,5 +1,5 @@
 import type { TerminalSessionManager } from "../manager/manager";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import { isTmuxBackedSession } from "../runtime/launcher";
 import type { TmuxSessionInfo, TmuxService } from "./service";
 

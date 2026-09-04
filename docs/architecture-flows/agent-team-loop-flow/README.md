@@ -17,7 +17,7 @@ Agent Team / Loop Engine 端到端流程的可视化梳理，聚焦**流程本�
 ## 代码源
 
 - `backend/src/agent-team/service.ts`（`startRun` / `prepareInitialAcceptance` / `applySplit` / `handleTerminalEvent` / `applyRound` / `resumeRun` / recheck watchdog）
-- `backend/src/agent-team/acceptance-case-loader.ts`（从 `docs/testing/**/*.testplan.yaml` 解析可追溯验收用例）
+- `backend/src/agent-team/acceptance/case-loader.ts`（从 `docs/testing/**/*.testplan.yaml` 解析可追溯验收用例）
 - `backend/src/agent-team/loop.ts`（`foldRound` / `shouldEscalate` / `fingerprintFailure`）
 - `backend/src/agent-team/prompt-builders.ts`（main test-case generation / worker startup / bounce-back / recheck / human-note prompt）
-- `packages/shared/src/agent-team.ts`（数据模型，含 `AgentTeamVerificationConfig`）
+- `packages/shared/src/agent-team/index.ts`（数据模型，含 `AgentTeamVerificationConfig`）

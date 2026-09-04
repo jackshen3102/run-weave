@@ -4,9 +4,9 @@ import type { ClientMode } from "../../../features/client-mode";
 import {
   DEFAULT_TERMINAL_SIDECAR_WIDTH,
   useTerminalPreviewStore,
-} from "../../../features/terminal/preview-store";
+} from "../../../features/terminal/preview/store";
 import { useShallow } from "zustand/react/shallow";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
@@ -14,13 +14,13 @@ import {
   useTerminalProjectsQuery,
   useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
+} from "../../../features/terminal/queries/workspace";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { TerminalPanelTargetBar } from "../input/panel-target-bar";
 import { TerminalSurface } from "../surface/surface";
 
 const TerminalPreviewPanel = lazy(() =>
-  import("../preview/panel").then((module) => ({
+  import("../preview/panel/index").then((module) => ({
     default: module.TerminalPreviewPanel,
   })),
 );

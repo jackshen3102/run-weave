@@ -5,9 +5,9 @@ import {
   focusTerminalPanel,
   listTerminalSessions,
   updateTerminalSession,
-} from "../../services/terminal";
-import { useTerminalPreviewStore } from "../terminal/preview-store";
-import { useTerminalWorkspaceStore } from "../terminal/workspace-store";
+} from "../../services/terminal/index";
+import { useTerminalPreviewStore } from "../terminal/preview/store";
+import { useTerminalWorkspaceStore } from "../terminal/state/workspace-store";
 
 interface UseAttentionOpenIntentsOptions {
   activeConnectionId: string | null;

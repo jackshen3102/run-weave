@@ -1,4 +1,4 @@
-import { createShellPromptTracker } from "../shell-integration";
+import { createShellPromptTracker } from "./shell-integration";
 import type { TerminalSessionManager } from "../manager/manager";
 
 export function createTerminalRuntimeRecorder(

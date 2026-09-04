@@ -1,6 +1,6 @@
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { Plus } from "lucide-react";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { SortableTabs, type SortableTabRenderProps } from "../../ui/sortable-tabs";
 import { TerminalSessionTab } from "./session-tab";
 

@@ -13,8 +13,8 @@ import {
   type DataQualityIssue,
   type SourceBoundary,
 } from "@runweave/shared/evolution";
-import { canonicalJson, sha256 } from "../activity/canonical";
-import type { ActivityQueryService } from "../activity/query-service";
+import { canonicalJson, sha256 } from "../activity/security/canonical";
+import type { ActivityQueryService } from "../activity/database/service";
 import type { EvolutionContextPackStore } from "./context-pack-store";
 import type { EvolutionSupplementalSourceReader } from "./supplemental-sources";
 

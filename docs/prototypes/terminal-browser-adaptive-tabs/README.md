@@ -115,7 +115,7 @@ http://127.0.0.1:6188/?tabs=10&width=420&active=4&prototypeControls=1
 - 原型表达的产品行为：active 保真、inactive 分级降噪、minimum 后 overflow、overview 全量找回、关闭布局稳定。
 - 已进入产品实现的核心功能：README“产品核心功能”表中的全部条目。
 - 不进入产品实现的原型辅助功能：URL 参数、helper、mock terminal、mock page。
-- 需要检查的现有代码：`terminal-browser-tabs.tsx`、`sortable-tabs.tsx`、`use-terminal-browser-controller.ts`、`preview-store.ts`、`electron/src/terminal-browser-view.ts`。
+- 需要检查的现有代码：`terminal-browser-tabs.tsx`、`sortable-tabs.tsx`、`use-terminal-browser-controller.ts`、`preview-store.ts`、`electron/src/browser/view/index.ts`。
 - 可能涉及的数据结构：前端无需新增 tab 主模型字段；实现 close freeze/overflow 可使用局部 UI 状态；reorder 持久化可能需要 Electron IPC。
 - 可能涉及的前端落点：tab item container query、overview popover、active scrollIntoView、pointer/touch closing mode、keyboard navigation。
 - 可能涉及的后端或运行时落点：无；Electron 仅涉及顺序持久化与既有 tab event 对齐。

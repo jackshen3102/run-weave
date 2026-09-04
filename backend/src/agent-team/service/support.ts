@@ -20,16 +20,16 @@ import {
   isAgentTeamProjectFileMissingError,
   loadAcceptanceCasesFromTestPlan,
   resolveAgentTeamProjectFile,
-} from "../acceptance-case-loader";
+} from "../acceptance/case-loader";
 import type { PreparedAgentTeamAcceptance } from "./types";
 import {
   assertGeneratedTestCaseFilePath,
   formatVerificationSource,
-} from "./run-policy";
-import { resetPersistedAcceptanceForRefresh } from "./acceptance-policy";
-import { isReviewGateAcceptanceCase } from "./acceptance-policy";
-import { buildAgentTeamPanelRole } from "./workflow-policy";
-import { AgentTeamFixtureSupport } from "./fixture-support";
+} from "./policies/run";
+import { resetPersistedAcceptanceForRefresh } from "./acceptance/policy";
+import { isReviewGateAcceptanceCase } from "./acceptance/policy";
+import { buildAgentTeamPanelRole } from "./policies/workflow";
+import { AgentTeamFixtureSupport } from "./fixture/support";
 
 export class AgentTeamServiceSupport extends AgentTeamFixtureSupport {
   protected assertFrameworkRepairNotBlocked(run: AgentTeamRun): void {

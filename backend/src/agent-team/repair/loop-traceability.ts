@@ -3,7 +3,7 @@ import type {
   AgentTeamOutboxFinding,
   AgentTeamRun,
 } from "@runweave/shared/agent-team";
-import { isReviewGateAcceptanceCase } from "../service/acceptance-refresh-policy";
+import { isReviewGateAcceptanceCase } from "../service/acceptance/refresh";
 
 export function isTraceableProductCase(item: AgentTeamAcceptanceCase): boolean {
   return Boolean(

@@ -2,16 +2,16 @@ import { useDebounceFn, useMemoizedFn } from "ahooks";
 import { useEffect, useRef } from "react";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
-import { createTerminalBellPlayer } from "../../../features/terminal/bell";
+import { createTerminalBellPlayer } from "../../../features/terminal/feedback/bell";
 import { useShallow } from "zustand/react/shallow";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
-import { useTerminalEventsConnection } from "../../../features/terminal/use-terminal-events-connection";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
+import { useTerminalEventsConnection } from "../../../features/terminal/connection/use-events";
 import {
   EMPTY_TERMINAL_SESSIONS,
   updateTerminalSessions,
   useTerminalSessionsQuery,
   useTerminalWorkspaceQueryClient,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
+} from "../../../features/terminal/queries/workspace";
 
 const BELL_MARKER_DURATION_MS = 2_000;
 const TERMINAL_LIST_REFRESH_DEBOUNCE_MS = 50;

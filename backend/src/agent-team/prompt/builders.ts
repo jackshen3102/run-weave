@@ -8,7 +8,7 @@ import { formatBehaviorValidationAuthorityInstructions } from "./builders-test-c
 import {
   AGENT_TEAM_REVIEW_GATE_CASE_ID,
   isReviewGateAcceptanceCase,
-} from "../service/acceptance-refresh-policy";
+} from "../service/acceptance/refresh";
 
 const ROLE_LABEL: Record<string, string> = {
   code: "code_agent（写代码）",
