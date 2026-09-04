@@ -16,6 +16,7 @@ export interface TerminalFloatingComposerDiagnostics {
   bufferType: "normal" | "alternate" | undefined;
   draftMirrorSupported: boolean;
   eligible: boolean;
+  inputLagFallbackActive: boolean;
   sessionStatus: string | null;
   terminalAgent: string | null;
   terminalAtBottom: boolean;
@@ -70,7 +71,10 @@ export function TerminalFloatingComposer({
 
   useEffect(() => {
     if (visible) {
-      textareaRef.current?.focus();
+      const textarea = textareaRef.current;
+      textarea?.focus();
+      const draftEnd = textarea?.value.length ?? 0;
+      textarea?.setSelectionRange(draftEnd, draftEnd);
     }
   }, [visible]);
 
@@ -95,6 +99,9 @@ export function TerminalFloatingComposer({
       diagnostics.draftMirrorSupported,
     ),
     "data-floating-composer-eligible": String(diagnostics.eligible),
+    "data-floating-composer-input-lag-fallback-active": String(
+      diagnostics.inputLagFallbackActive,
+    ),
     "data-floating-composer-scroll-button-mode": scrollButtonMode,
     "data-floating-composer-session-status": diagnostics.sessionStatus ?? "",
     "data-floating-composer-terminal-agent": diagnostics.terminalAgent ?? "",
@@ -114,6 +121,14 @@ export function TerminalFloatingComposer({
     >
       {visible ? (
         <div className="absolute right-2 bottom-3.5 left-2 flex flex-col items-center gap-1">
+          {diagnostics.inputLagFallbackActive ? (
+            <div
+              role="status"
+              className="pointer-events-none rounded-full border border-amber-400/25 bg-slate-950/90 px-2.5 py-1 text-[11px] text-amber-100 shadow-lg shadow-slate-950/30"
+            >
+              Terminal busy · input buffered locally
+            </div>
+          ) : null}
           {scrollButtonMode === "floating" ? (
             <ScrollButton onClick={onScrollToBottom} />
           ) : null}

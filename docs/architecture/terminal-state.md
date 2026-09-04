@@ -125,7 +125,7 @@ Stop、ESC、SIGINT 或 HTTP interrupt 也不直接写 `TerminalState`。控制�
 
 Web desktop terminal 的 floating composer 是 `TerminalState` 的消费方之一，但不是新的状态来源。它只在受支持 agent 命中、session 仍 running、搜索栏未打开、且终端处于 TUI/agent 场景时启用；Codex 与 Trae family 可以来自 `terminalState.agent`，Claude 首期只通过 `activeCommand` basename 命中。
 
-当前交互是离底或 tmux scrollback active 时先显示一个紧凑的打开按钮。用户点开后，底部出现浮动 composer；composer 上方的回到底部按钮与 composer 同步显示。回到底部或关闭 composer 后，焦点回到原始 xterm/TUI 输入。普通 shell、mobile client mode、已退出 session、搜索栏打开或 unsupported TUI 都继续使用原有右下角 `Scroll terminal to bottom` 行为。
+当前交互是离底或 tmux scrollback active 时先显示一个紧凑的打开按钮。用户点开后，底部出现浮动 composer；composer 上方的回到底部按钮与 composer 同步显示。受支持 TUI 在输入后 150ms 内没有任何终端输出时，也会自动进入 composer，把后续编辑保留在 Web 本地，并在提交时通过既有 `prompt_replace` 路径一次性同步，避免系统高负载拖慢 PTY 回显后继续阻塞输入反馈。回到底部或关闭 composer 后，焦点回到原始 xterm/TUI 输入。普通 shell、mobile client mode、已退出 session、搜索栏打开或 unsupported TUI 都继续使用原有右下角 `Scroll terminal to bottom` 行为。
 
 浮动 composer 维护 Web 侧 draft mirror：普通字符、换行、Backspace、Ctrl+U、bracketed paste 等可识别输入会同步为 draft；焦点报告和鼠标控制序列会忽略；未知 escape sequence 会让本 session 暂停 floating composer，直到用户回到底部或 agent/session metadata 变化后重新评估。composer 发送或回到底部同步草稿时，会保守使用 Ctrl+U + draft 替换真实 TUI 输入行；这个 replay 只允许在 supported agent/TUI gate 内发生。
 
