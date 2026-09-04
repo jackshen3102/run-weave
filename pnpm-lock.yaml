@@ -49,6 +49,9 @@ importers:
       "@capacitor/keyboard":
         specifier: ^8.0.3
         version: 8.0.3(@capacitor/core@8.4.0)
+      "@capacitor/local-notifications":
+        specifier: ^8.3.1
+        version: 8.3.1(@capacitor/core@8.4.0)
       "@capacitor/share":
         specifier: ^8.0.1
         version: 8.0.1(@capacitor/core@8.4.0)
@@ -1368,6 +1371,14 @@ packages:
     resolution:
       {
         integrity: sha512-27Bv5/2w1Ss2njguBgTS98O0Bb8DRJhAARyzXYib0JlT/n6BrJw/EZ0CokM4C8GFUjFDjJnEKF1Ie01buTMEXQ==,
+      }
+    peerDependencies:
+      "@capacitor/core": ">=8.0.0"
+
+  "@capacitor/local-notifications@8.3.1":
+    resolution:
+      {
+        integrity: sha512-F7zu/+p/mIR958YP4axOkeI5hBKRaXDyYjbNPrAil2wWfd7OxScPSTvP9t85NpQ0eULVRu0/sntoxOg6ck477A==,
       }
     peerDependencies:
       "@capacitor/core": ">=8.0.0"
@@ -7064,13 +7075,6 @@ packages:
         integrity: sha512-2QQVyG2P4wszne79jemMjWYLp0DBbDhr4/yFroPCxvPP1wtMxgdIV3l5n+XZ5E9mgoXU79w7yTWpm2XzJsISxQ==,
       }
 
-  ip-address@10.1.0:
-    resolution:
-      {
-        integrity: sha512-XXADHxXmvT9+CRxhXg56LJovE+bmWnEWB78LB83VZTprKTmaC5QfruXocxzTZ2Kl0DNwKuBdlIhjL8LeY8Sf8Q==,
-      }
-    engines: { node: ">= 12" }
-
   ip-address@10.2.0:
     resolution:
       {
@@ -11872,6 +11876,10 @@ snapshots:
     dependencies:
       "@capacitor/core": 8.4.0
 
+  "@capacitor/local-notifications@8.3.1(@capacitor/core@8.4.0)":
+    dependencies:
+      "@capacitor/core": 8.4.0
+
   "@capacitor/share@8.0.1(@capacitor/core@8.4.0)":
     dependencies:
       "@capacitor/core": 8.4.0
@@ -15678,8 +15686,6 @@ snapshots:
     dependencies:
       "@stencil/core": 4.43.5
 
-  ip-address@10.1.0: {}
-
   ip-address@10.2.0: {}
 
   ipaddr.js@1.9.1: {}
@@ -17322,7 +17328,7 @@ snapshots:
 
   socks@2.8.7:
     dependencies:
-      ip-address: 10.1.0
+      ip-address: 10.2.0
       smart-buffer: 4.2.0
 
   sockx@0.2.3:
