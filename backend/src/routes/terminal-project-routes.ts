@@ -14,6 +14,9 @@ import type { TmuxService } from "../terminal/tmux/service";
 import type { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
 import type { TerminalEventService } from "../terminal/state/terminal-event-service";
 import { toProjectPayload } from "../terminal/application/payloads";
+import type { WorkspaceServiceManager } from "../terminal/workspace-service/manager";
+import { WorkspaceServiceRequestError } from "../terminal/workspace-service/errors";
+import { registerTerminalWorkspaceServiceRoutes } from "./terminal-workspace-service-routes";
 
 const terminalProjectLogger = logger.child({ component: "terminal" });
 
@@ -64,6 +67,13 @@ function handleProjectError(res: Response, error: unknown) {
     res.status(error.statusCode).json({ message: error.message });
     return;
   }
+  if (error instanceof WorkspaceServiceRequestError) {
+    res.status(error.statusCode).json({
+      code: "workspace_service_active",
+      message: error.message,
+    });
+    return;
+  }
   terminalProjectLogger.error("terminal.project.request.failed", {
     message: "Terminal project request failed",
     error,
@@ -82,8 +92,15 @@ export function registerTerminalProjectRoutes(
     tmuxService?: TmuxService;
     tmuxOutputWatcher?: TmuxOutputWatcher;
     terminalEventService?: TerminalEventService;
+    workspaceServiceManager?: WorkspaceServiceManager;
   },
 ): void {
+  if (options?.workspaceServiceManager) {
+    registerTerminalWorkspaceServiceRoutes(
+      router,
+      options.workspaceServiceManager,
+    );
+  }
   router.get("/project", (_req, res) => {
     const payload = terminalSessionManager
       .listProjects()
@@ -189,47 +206,57 @@ export function registerTerminalProjectRoutes(
   });
 
   router.delete("/project/:id", async (req, res) => {
-    const childSessions = terminalSessionManager
-      .listSessions()
-      .filter(
-        (session) =>
-          terminalSessionManager.resolveParentProjectId(session.projectId) ===
-          req.params.id,
-      );
     const contextIds = terminalSessionManager.listProjectContextIds(
       req.params.id,
     );
+    let releaseWorkspaceServiceGuard: (() => void) | undefined;
+    try {
+      releaseWorkspaceServiceGuard =
+        await options?.workspaceServiceManager?.acquireDeletionGuard(contextIds);
+      const childSessions = terminalSessionManager
+        .listSessions()
+        .filter(
+          (session) =>
+            terminalSessionManager.resolveParentProjectId(session.projectId) ===
+            req.params.id,
+        );
 
-    if (options?.runtimeRegistry) {
-      for (const session of childSessions) {
-        await options.runtimeRegistry.disposeRuntime(session.id);
+      if (options?.runtimeRegistry) {
+        for (const session of childSessions) {
+          await options.runtimeRegistry.disposeRuntime(session.id);
+        }
       }
-    }
-    for (const session of childSessions) {
-      await options?.tmuxOutputWatcher?.unwatchSession(session.id);
-    }
-    for (const session of childSessions) {
-      await killTmuxSessionForTerminal(session, options?.tmuxService);
-    }
+      for (const session of childSessions) {
+        await options?.tmuxOutputWatcher?.unwatchSession(session.id);
+      }
+      for (const session of childSessions) {
+        await killTmuxSessionForTerminal(session, options?.tmuxService);
+      }
 
-    const deleted = await terminalSessionManager.deleteProject(req.params.id);
-    if (!deleted) {
-      res.status(404).json({ message: "Terminal project not found" });
-      return;
-    }
+      const deleted = await terminalSessionManager.deleteProject(req.params.id);
+      if (!deleted) {
+        res.status(404).json({ message: "Terminal project not found" });
+        return;
+      }
+      options?.workspaceServiceManager?.forgetContexts(contextIds);
 
-    for (const contextId of contextIds) {
-      clearPreviewFileSearchCache(contextId);
-    }
-    options?.terminalEventService?.record({
-      kind: "project_deleted",
-      terminalSessionId: null,
-      projectId: req.params.id,
-      payload: {
+      for (const contextId of contextIds) {
+        clearPreviewFileSearchCache(contextId);
+      }
+      options?.terminalEventService?.record({
+        kind: "project_deleted",
+        terminalSessionId: null,
         projectId: req.params.id,
-        terminalSessionIds: childSessions.map((session) => session.id),
-      },
-    });
-    res.status(204).send();
+        payload: {
+          projectId: req.params.id,
+          terminalSessionIds: childSessions.map((session) => session.id),
+        },
+      });
+      res.status(204).send();
+    } catch (error) {
+      handleProjectError(res, error);
+    } finally {
+      releaseWorkspaceServiceGuard?.();
+    }
   });
 }

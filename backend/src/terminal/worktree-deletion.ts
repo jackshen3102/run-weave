@@ -47,7 +47,9 @@ interface WorktreeDeletionHookInput {
 }
 
 export interface TerminalWorktreeDeletionOwnerHooks {
-  beforeDelete?: (input: WorktreeDeletionHookInput) => Promise<void>;
+  beforeDelete?: (
+    input: WorktreeDeletionHookInput,
+  ) => Promise<void | (() => void | Promise<void>)>;
   afterDelete?: (
     input: WorktreeDeletionHookInput & { terminalSessionIds: string[] },
   ) => Promise<void>;
@@ -248,12 +250,15 @@ export class TerminalWorktreeDeletionService {
       );
     }
     this.deletingProjectIds.add(childProjectId);
+    let releaseOwnerGuard: void | (() => void | Promise<void>) = undefined;
     try {
       const initialTarget = await this.resolveSafeTarget(
         parentProjectId,
         childProjectId,
       );
-      await this.options.ownerHooks?.beforeDelete?.(initialTarget);
+      releaseOwnerGuard = await this.options.ownerHooks?.beforeDelete?.(
+        initialTarget,
+      );
 
       const target = await this.resolveSafeTarget(
         parentProjectId,
@@ -321,6 +326,7 @@ export class TerminalWorktreeDeletionService {
         });
       }
     } finally {
+      await releaseOwnerGuard?.();
       this.deletingProjectIds.delete(childProjectId);
     }
   }

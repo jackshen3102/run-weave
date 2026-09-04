@@ -156,7 +156,8 @@ export type TerminalBrowserErrorCode =
   | "WHISTLE_PORT_IN_USE"
   | "WHISTLE_START_FAILED"
   | "WHISTLE_VALUE_UPDATE_FAILED"
-  | "WHISTLE_CA_UNAVAILABLE";
+  | "WHISTLE_CA_UNAVAILABLE"
+  | "BROWSER_PROFILE_PROXY_CONFIGURATION_FAILED";
 
 export function isTerminalBrowserProfileId(
   value: unknown,

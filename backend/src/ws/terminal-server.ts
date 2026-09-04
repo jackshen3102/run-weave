@@ -1,4 +1,3 @@
-import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
 import { logger } from "../logging";
@@ -33,6 +32,7 @@ import {
   TMUX_INITIAL_REPAINT_SETTLE_MS,
 } from "./terminal-server-connection-helpers";
 import { attachTerminalUpgradeHandler } from "./terminal-upgrade";
+import type { HttpUpgradeRouter } from "../server/http-upgrade-router";
 import {
   createTerminalInputHandler,
   type TerminalClientInputState,
@@ -43,7 +43,7 @@ import { createTerminalMetadataSyncController } from "./terminal-metadata-sync";
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
 
 export function attachTerminalWebSocketServer(
-  server: HttpServer,
+  upgradeRouter: HttpUpgradeRouter,
   terminalSessionManager: TerminalSessionManager,
   runtimeRegistry: TerminalRuntimeRegistry,
   authService: AuthService,
@@ -58,7 +58,7 @@ export function attachTerminalWebSocketServer(
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
-  attachTerminalUpgradeHandler(server, wss, options?.tunnelAuthConfig);
+  attachTerminalUpgradeHandler(upgradeRouter, wss, options?.tunnelAuthConfig);
 
   wss.on("connection", async (socket, request) => {
     const handshake = validateTerminalWebSocketHandshake({

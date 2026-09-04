@@ -57,6 +57,7 @@ import {
   registerTerminalPanelRoutes,
   resolvePanelTarget,
 } from "./terminal-panel-routes";
+import type { WorkspaceServiceManager } from "../terminal/workspace-service/manager";
 
 const terminalLogger = logger.child({ component: "terminal" });
 
@@ -113,6 +114,7 @@ export function createTerminalRouter(
     quickInputService?: TerminalQuickInputService;
     activity?: TerminalActivityDependencies;
     worktreeDeletionOwnerHooks?: TerminalWorktreeDeletionOwnerHooks;
+    workspaceServiceManager?: WorkspaceServiceManager;
   },
 ): Router {
   const router = Router();
@@ -122,6 +124,7 @@ export function createTerminalRouter(
     tmuxService: options?.tmuxService,
     tmuxOutputWatcher: options?.tmuxOutputWatcher,
     terminalEventService: options?.terminalEventService,
+    workspaceServiceManager: options?.workspaceServiceManager,
   });
   registerTerminalProjectContextRoutes(router, terminalSessionManager, {
     runtimeRegistry: options?.runtimeRegistry,
@@ -132,7 +135,6 @@ export function createTerminalRouter(
     activity: options?.activity,
     ownerHooks: options?.worktreeDeletionOwnerHooks,
   });
-
   registerTerminalPreviewRoutes(router, terminalSessionManager);
 
   const reorderSessionsSchema = z

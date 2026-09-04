@@ -40,6 +40,7 @@
     "./terminal/project-context": "./src/terminal/project-context.ts",
     "./terminal/session": "./src/terminal/session.ts",
     "./terminal/state": "./src/terminal/state.ts",
+    "./terminal/workspace-service": "./src/terminal/workspace-service.ts",
     "./terminal/websocket": "./src/terminal/websocket.ts",
     "./terminal-browser-annotation": "./src/terminal-browser-annotation.ts",
     "./terminal-browser-automation": "./src/terminal-browser-automation.ts",

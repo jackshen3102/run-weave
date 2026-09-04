@@ -1,4 +1,3 @@
-import type { Server as HttpServer } from "node:http";
 import type { TerminalEventServerMessage } from "@runweave/shared/terminal/events";
 import { WebSocket, WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
@@ -11,6 +10,7 @@ import {
 import type { TerminalEventService } from "../terminal/state/terminal-event-service";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalEventsWebSocketHandshake } from "./terminal-events-handshake";
+import type { HttpUpgradeRouter } from "../server/http-upgrade-router";
 
 const terminalEventsWsLogger = logger.child({
   component: "terminal-events-ws",
@@ -28,7 +28,7 @@ function sendTerminalEvent(
 }
 
 export function attachTerminalEventsWebSocketServer(
-  server: HttpServer,
+  upgradeRouter: HttpUpgradeRouter,
   authService: AuthService,
   terminalEventService: TerminalEventService,
   options?: {
@@ -37,19 +37,20 @@ export function attachTerminalEventsWebSocketServer(
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
-  server.on("upgrade", (request, socket, head) => {
+  upgradeRouter.register((request, socket, head) => {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
     if (pathname !== "/ws/terminal-events") {
-      return;
+      return false;
     }
     if (!isTunnelRequestAuthorized(request, options?.tunnelAuthConfig)) {
       rejectUnauthorizedTunnelUpgrade(socket);
-      return;
+      return true;
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit("connection", ws, request);
     });
+    return true;
   });
 
   wss.on("connection", (socket, request) => {
