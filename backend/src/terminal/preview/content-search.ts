@@ -1,8 +1,8 @@
-import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import type { TerminalPreviewContentSearchItem, TerminalPreviewContentSearchRange, TerminalPreviewContentSearchResponse } from "@runweave/shared/terminal/preview";
+import { logger } from "../../logging";
 import { ensureProjectPath, TerminalPreviewError } from "./paths";
 import {
   buildRgSearchExclusionArgs,
@@ -10,39 +10,24 @@ import {
   shouldIncludeSearchCandidate,
 } from "./search-candidates";
 
-const execFileAsync = promisify(execFile);
-
 const DEFAULT_CONTENT_SEARCH_LIMIT = 50;
-const CONTENT_SEARCH_TIMEOUT_MS = 5_000;
-const CONTENT_SEARCH_MAX_BUFFER = 4 * 1024 * 1024;
+const CONTENT_SEARCH_TIMEOUT_MS = 15_000;
 const CONTENT_SEARCH_SNIPPET_RADIUS = 80;
-const CONTENT_SEARCH_FILE_CHUNK_SIZE = 500;
 const CONTENT_SEARCH_MAX_FILE_SIZE_BYTES = 1024 * 1024;
 const CONTENT_SEARCH_MAX_MATCHES_PER_FILE = 5;
+const CONTENT_SEARCH_MAX_STDERR_LENGTH = 16_384;
+const terminalPreviewLogger = logger.child({ component: "terminal-preview" });
 
-interface RgJsonMatchEvent {
-  type: "match";
-  data: {
-    path?: { text?: string };
-    lines?: { text?: string };
-    line_number?: number;
-    submatches?: Array<{
-      start?: number;
-      end?: number;
-    }>;
-  };
-}
-
-function isRgJsonMatchEvent(value: unknown): value is RgJsonMatchEvent {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { type?: unknown }).type === "match"
-  );
+interface ContentSearchExecution {
+  items: TerminalPreviewContentSearchItem[];
+  truncated: boolean;
 }
 
 function normalizeRgPath(filePath: string): string {
-  return filePath.split(path.sep).join("/");
+  return filePath
+    .split(path.sep)
+    .join("/")
+    .replace(/^\.\//, "");
 }
 
 function createSnippet(params: {
@@ -76,40 +61,12 @@ function createSnippet(params: {
   };
 }
 
-function utf8ByteOffsetToUtf16Index(value: string, byteOffset: number): number {
-  const targetOffset = Math.max(0, Math.trunc(byteOffset));
-  let currentOffset = 0;
-  for (let index = 0; index < value.length;) {
-    if (currentOffset >= targetOffset) {
-      return index;
-    }
-    const codePoint = value.codePointAt(index);
-    if (codePoint === undefined) {
-      return index;
-    }
-    const character = String.fromCodePoint(codePoint);
-    const nextOffset = currentOffset + Buffer.byteLength(character, "utf8");
-    if (nextOffset > targetOffset) {
-      return index;
-    }
-    currentOffset = nextOffset;
-    index += character.length;
-  }
-  return value.length;
-}
-
-function parseRgMatchLine(line: string): TerminalPreviewContentSearchItem | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(line);
-  } catch {
-    return null;
-  }
-  if (!isRgJsonMatchEvent(parsed)) {
-    return null;
-  }
-
-  const relativePath = normalizeRgPath(parsed.data.path?.text ?? "");
+function parseRgMatch(params: {
+  filePath: string;
+  matchRecord: string;
+  query: string;
+}): TerminalPreviewContentSearchItem | null {
+  const relativePath = normalizeRgPath(params.filePath);
   if (!relativePath || path.isAbsolute(relativePath)) {
     return null;
   }
@@ -117,26 +74,23 @@ function parseRgMatchLine(line: string): TerminalPreviewContentSearchItem | null
     return null;
   }
 
-  const lineNumber = parsed.data.line_number;
-  if (
-    typeof lineNumber !== "number" ||
-    !Number.isInteger(lineNumber) ||
-    lineNumber < 1
-  ) {
+  const lineSeparator = params.matchRecord.indexOf(":");
+  const columnSeparator = params.matchRecord.indexOf(":", lineSeparator + 1);
+  if (lineSeparator <= 0 || columnSeparator <= lineSeparator + 1) {
     return null;
   }
-
-  const rawLineText = parsed.data.lines?.text ?? "";
-  const ranges =
-    parsed.data.submatches
-      ?.map((submatch) => ({
-        start: utf8ByteOffsetToUtf16Index(
-          rawLineText,
-          submatch.start ?? 0,
-        ),
-        end: utf8ByteOffsetToUtf16Index(rawLineText, submatch.end ?? 0),
-      }))
-      .filter((range) => range.end > range.start) ?? [];
+  const lineNumber = Number(params.matchRecord.slice(0, lineSeparator));
+  if (!Number.isInteger(lineNumber) || lineNumber < 1) {
+    return null;
+  }
+  const rawLineText = params.matchRecord
+    .slice(columnSeparator + 1)
+    .replace(/\r$/, "");
+  const ranges = findLiteralRanges({
+    lineText: rawLineText,
+    query: params.query,
+    caseSensitive: shouldSearchCaseSensitively(params.query),
+  });
   const firstRange = ranges[0];
   const dirname = path.posix.dirname(relativePath);
   const snippet = createSnippet({
@@ -155,15 +109,20 @@ function parseRgMatchLine(line: string): TerminalPreviewContentSearchItem | null
   };
 }
 
-function buildRgContentArgs(query: string, relativePaths: string[]): string[] {
+function buildRgContentArgs(query: string): string[] {
   return [
-    "--json",
     "--line-number",
     "--column",
+    "--with-filename",
+    "--null",
+    "--no-heading",
+    "--color",
+    "never",
     "--smart-case",
     "--fixed-strings",
     "--no-config",
     "--no-require-git",
+    "--no-messages",
     "--hidden",
     "--max-count",
     "5",
@@ -172,15 +131,8 @@ function buildRgContentArgs(query: string, relativePaths: string[]): string[] {
     ...buildRgSearchExclusionArgs(),
     "--",
     query,
-    ...relativePaths,
+    ".",
   ];
-}
-
-function isNoMatchError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error as Error & { code?: unknown }).code === 1
-  );
 }
 
 function isMissingRipgrepError(error: unknown): boolean {
@@ -190,7 +142,22 @@ function isMissingRipgrepError(error: unknown): boolean {
   );
 }
 
+function createAbortError(): Error {
+  const error = new Error("Content search aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function throwIfSearchStopped(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
 function toContentSearchError(error: unknown): TerminalPreviewError {
+  if (error instanceof TerminalPreviewError) {
+    return error;
+  }
   if (error instanceof Error) {
     const details = error as Error & {
       code?: string | number;
@@ -243,16 +210,143 @@ function findLiteralRanges(params: {
   return ranges;
 }
 
+function searchContentWithRipgrep(params: {
+  projectPath: string;
+  query: string;
+  limit: number;
+  signal?: AbortSignal;
+}): Promise<ContentSearchExecution> {
+  throwIfSearchStopped(params.signal);
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("rg", buildRgContentArgs(params.query), {
+      cwd: params.projectPath,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const items: TerminalPreviewContentSearchItem[] = [];
+    let outputBuffer = "";
+    let pendingPath: string | null = null;
+    let stderr = "";
+    let settled = false;
+    let stoppedForLimit = false;
+    let timedOut = false;
+    let aborted = false;
+
+    const cleanup = (): void => {
+      clearTimeout(timeoutId);
+      params.signal?.removeEventListener("abort", handleAbort);
+    };
+    const finish = (result: ContentSearchExecution): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+    const fail = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const stopChild = (): void => {
+      if (!child.killed) {
+        child.kill("SIGTERM");
+      }
+    };
+    const parseAvailableRecords = (): void => {
+      while (!stoppedForLimit) {
+        if (pendingPath === null) {
+          const pathEnd = outputBuffer.indexOf("\0");
+          if (pathEnd < 0) return;
+          pendingPath = outputBuffer.slice(0, pathEnd);
+          outputBuffer = outputBuffer.slice(pathEnd + 1);
+        }
+
+        const recordEnd = outputBuffer.indexOf("\n");
+        if (recordEnd < 0) return;
+        const matchRecord = outputBuffer.slice(0, recordEnd);
+        outputBuffer = outputBuffer.slice(recordEnd + 1);
+        const item = parseRgMatch({
+          filePath: pendingPath,
+          matchRecord,
+          query: params.query,
+        });
+        pendingPath = null;
+        if (!item) continue;
+        items.push(item);
+        if (items.length > params.limit) {
+          stoppedForLimit = true;
+          stopChild();
+        }
+      }
+    };
+    const handleAbort = (): void => {
+      aborted = true;
+      stopChild();
+    };
+
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      stopChild();
+    }, CONTENT_SEARCH_TIMEOUT_MS);
+
+    params.signal?.addEventListener("abort", handleAbort, { once: true });
+    if (params.signal?.aborted) {
+      handleAbort();
+    }
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      outputBuffer += chunk;
+      parseAvailableRecords();
+    });
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+      if (stderr.length < CONTENT_SEARCH_MAX_STDERR_LENGTH) {
+        stderr += chunk.slice(0, CONTENT_SEARCH_MAX_STDERR_LENGTH - stderr.length);
+      }
+    });
+    child.once("error", fail);
+    child.once("close", (code) => {
+      if (aborted) {
+        fail(createAbortError());
+        return;
+      }
+      if (timedOut) {
+        fail(new TerminalPreviewError("Content search timed out", 504));
+        return;
+      }
+      if (stoppedForLimit || code === 0 || code === 1) {
+        finish({
+          items: items.slice(0, params.limit),
+          truncated: stoppedForLimit,
+        });
+        return;
+      }
+      fail(new Error(stderr.trim() || `ripgrep exited with code ${code}`));
+    });
+  });
+}
+
 async function readSearchableTextFile(
   projectPath: string,
   relativePath: string,
+  signal?: AbortSignal,
 ): Promise<string | null> {
-  const buffer = await readFile(path.join(projectPath, relativePath)).catch(
-    () => null,
-  );
-  if (!buffer || buffer.length > CONTENT_SEARCH_MAX_FILE_SIZE_BYTES) {
+  throwIfSearchStopped(signal);
+  const absolutePath = path.join(projectPath, relativePath);
+  const fileStats = await stat(absolutePath).catch(() => null);
+  throwIfSearchStopped(signal);
+  if (
+    !fileStats?.isFile() ||
+    fileStats.size > CONTENT_SEARCH_MAX_FILE_SIZE_BYTES
+  ) {
     return null;
   }
+  const buffer = await readFile(absolutePath, { signal }).catch(() => {
+    throwIfSearchStopped(signal);
+    return null;
+  });
+  if (!buffer) return null;
   if (buffer.includes(0)) {
     return null;
   }
@@ -264,16 +358,23 @@ async function searchContentWithNodeFallback(params: {
   query: string;
   limit: number;
   relativePaths: string[];
-}): Promise<TerminalPreviewContentSearchItem[]> {
+  signal?: AbortSignal;
+}): Promise<ContentSearchExecution> {
   const items: TerminalPreviewContentSearchItem[] = [];
   const caseSensitive = shouldSearchCaseSensitively(params.query);
+  const deadline = performance.now() + CONTENT_SEARCH_TIMEOUT_MS;
   for (const relativePath of params.relativePaths) {
+    throwIfSearchStopped(params.signal);
+    if (performance.now() > deadline) {
+      throw new TerminalPreviewError("Content search timed out", 504);
+    }
     if (items.length > params.limit) {
       break;
     }
     const content = await readSearchableTextFile(
       params.projectPath,
       relativePath,
+      params.signal,
     );
     if (content === null) {
       continue;
@@ -314,7 +415,10 @@ async function searchContentWithNodeFallback(params: {
       }
     }
   }
-  return items;
+  return {
+    items: items.slice(0, params.limit),
+    truncated: items.length > params.limit,
+  };
 }
 
 export async function searchPreviewContent(params: {
@@ -322,6 +426,7 @@ export async function searchPreviewContent(params: {
   projectPath: string | null | undefined;
   query: string;
   limit?: number;
+  signal?: AbortSignal;
 }): Promise<TerminalPreviewContentSearchResponse> {
   const projectPath = ensureProjectPath(params.projectPath);
   const query = params.query.trim();
@@ -340,73 +445,49 @@ export async function searchPreviewContent(params: {
     };
   }
 
-  const items: TerminalPreviewContentSearchItem[] = [];
-  const candidateFiles = await collectCachedSearchCandidateFiles(
-    params.projectId,
-    projectPath,
-  );
-  for (
-    let index = 0;
-    index < candidateFiles.length && items.length <= limit;
-    index += CONTENT_SEARCH_FILE_CHUNK_SIZE
-  ) {
-    const chunk = candidateFiles.slice(index, index + CONTENT_SEARCH_FILE_CHUNK_SIZE);
-    if (chunk.length === 0) {
-      continue;
+  const startedAt = performance.now();
+  let execution: ContentSearchExecution;
+  try {
+    execution = await searchContentWithRipgrep({
+      projectPath,
+      query,
+      limit,
+      signal: params.signal,
+    });
+  } catch (error) {
+    if (params.signal?.aborted) {
+      throw error;
     }
-
-    let stdout = "";
-    try {
-      const result = await execFileAsync("rg", buildRgContentArgs(query, chunk), {
-        cwd: projectPath,
-        maxBuffer: CONTENT_SEARCH_MAX_BUFFER,
-        timeout: CONTENT_SEARCH_TIMEOUT_MS,
-      });
-      stdout = result.stdout;
-    } catch (error) {
-      if (isNoMatchError(error)) {
-        stdout = "";
-      } else if (isMissingRipgrepError(error)) {
-        const fallbackItems = await searchContentWithNodeFallback({
-          projectPath,
-          query,
-          limit,
-          relativePaths: candidateFiles,
-        });
-        return {
-          kind: "content-search",
-          projectId: params.projectId,
-          projectPath,
-          query,
-          items: fallbackItems.slice(0, limit),
-          truncated: fallbackItems.length > limit,
-        };
-      } else {
-        throw toContentSearchError(error);
-      }
+    if (!isMissingRipgrepError(error)) {
+      throw toContentSearchError(error);
     }
-
-    for (const line of stdout.split(/\r?\n/g)) {
-      if (!line.trim()) {
-        continue;
-      }
-      const item = parseRgMatchLine(line);
-      if (!item) {
-        continue;
-      }
-      items.push(item);
-      if (items.length > limit) {
-        break;
-      }
-    }
+    const candidateFiles = await collectCachedSearchCandidateFiles(
+      params.projectId,
+      projectPath,
+    );
+    execution = await searchContentWithNodeFallback({
+      projectPath,
+      query,
+      limit,
+      relativePaths: candidateFiles,
+      signal: params.signal,
+    });
   }
+  terminalPreviewLogger.debug("terminal-preview.content-search.completed", {
+    message: "Terminal preview content search completed",
+    projectPath,
+    queryLength: query.length,
+    resultCount: execution.items.length,
+    truncated: execution.truncated,
+    durationMs: Math.round(performance.now() - startedAt),
+  });
 
   return {
     kind: "content-search",
     projectId: params.projectId,
     projectPath,
     query,
-    items: items.slice(0, limit),
-    truncated: items.length > limit,
+    items: execution.items,
+    truncated: execution.truncated,
   };
 }

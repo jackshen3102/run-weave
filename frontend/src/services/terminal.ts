@@ -29,6 +29,7 @@ export {
   getTerminalProjectPreviewGitChanges,
   listTerminalProjectPreviewDirectory,
   renameTerminalProjectPreviewFile,
+  refreshTerminalProjectPreviewSearchIndex,
   resetTerminalProjectPreviewChange,
   saveTerminalProjectPreviewFile,
   searchTerminalProjectPreviewContent,

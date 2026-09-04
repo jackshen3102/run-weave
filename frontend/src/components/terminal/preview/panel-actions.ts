@@ -16,6 +16,7 @@ interface TerminalPreviewPanelActionsArgs {
   loadFile: (filePath: string) => Promise<void>;
   loadChanges: () => Promise<void>;
   refreshTree: () => Promise<void>;
+  refreshSearchIndex: () => Promise<void>;
   setWidth: (width: number) => void;
   setOpenFileQuery: (projectId: string, query: string) => void;
   openFile: (
@@ -51,6 +52,7 @@ export function useTerminalPreviewPanelActions({
   loadFile,
   loadChanges,
   refreshTree,
+  refreshSearchIndex,
   setWidth,
   setOpenFileQuery,
   openFile,
@@ -67,7 +69,7 @@ export function useTerminalPreviewPanelActions({
       return;
     }
     if (mode === "explorer") {
-      void refreshTree();
+      void Promise.all([refreshTree(), refreshSearchIndex()]);
       if (selectedFilePath) {
         void loadFile(selectedFilePath);
       }

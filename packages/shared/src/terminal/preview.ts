@@ -109,6 +109,7 @@ export interface TerminalPreviewFileSearchResponse {
   query: string;
   absoluteInput: boolean;
   items: TerminalPreviewFileSearchItem[];
+  truncated: boolean;
 }
 
 export interface TerminalPreviewFolderSearchResponse {

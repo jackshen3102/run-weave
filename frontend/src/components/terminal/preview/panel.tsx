@@ -146,6 +146,11 @@ export function TerminalPreviewPanel({
     onAuthExpired,
   });
 
+  const quickSearch = useTerminalPreviewQuickSearch({
+    apiBase, token, projectId,
+    onRequestError: handleRequestError,
+  });
+
   useEffect(() => {
     if (activeTool === "agent-team" && !showAgentTeamTool) {
       setActiveTool("preview");
@@ -177,6 +182,7 @@ export function TerminalPreviewPanel({
     },
     loadChanges,
     refreshTree: () => fileTree.refreshTree(),
+    refreshSearchIndex: quickSearch.refreshIndex,
     setWidth,
     setOpenFileQuery,
     openFile: openFileInStore,
@@ -204,13 +210,6 @@ export function TerminalPreviewPanel({
   });
   const { loadRootDirectory, resetTree, invalidateDirectory } = fileTree;
   const projectPath = activeProject?.path ?? null;
-
-  const quickSearch = useTerminalPreviewQuickSearch({
-    apiBase,
-    token,
-    projectId,
-    onRequestError: handleRequestError,
-  });
 
   useEffect(() => {
     resetTree();
