@@ -7,7 +7,7 @@ import {
   closeTerminalPanel,
   createTerminalPanel,
   focusTerminalPanel,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 
 function getWorkspacePanels(
   workspace: TerminalPanelWorkspace | null,

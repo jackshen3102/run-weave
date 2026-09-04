@@ -3,7 +3,7 @@ import type {
   TerminalEventCursorGap,
   TerminalEventEnvelope,
 } from "@runweave/shared/terminal/events";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 
 const MAX_TERMINAL_EVENTS = 500;
 

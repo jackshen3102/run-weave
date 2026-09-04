@@ -2,30 +2,30 @@ import { randomUUID } from "node:crypto";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import { isTerminalChildProjectIdLike } from "@runweave/shared/terminal/project-context";
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
-import type { PtyService } from "../../terminal/pty-service";
+import type { PtyService } from "../../terminal/runtime/pty-service";
 import type { TerminalRuntimeRegistry } from "../../terminal/runtime/registry";
 import type { TerminalEventService } from "../../terminal/state/terminal-event-service";
 import type { TerminalStateService } from "../../terminal/state/terminal-state-service";
 import type { TmuxOutputWatcher } from "../../terminal/tmux/output-watcher";
 import type { TmuxService } from "../../terminal/tmux/service";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import { AgentTeamError } from "../errors";
-import { AgentTeamOutboxResolver } from "../outbox-resolver";
+import { AgentTeamOutboxResolver } from "../outbox/resolver";
 import { AgentTeamPromptSender } from "../prompt/sender";
-import { AgentTeamReviewCheckpointGit } from "../review-checkpoint-git";
+import { AgentTeamReviewCheckpointGit } from "../review/git";
 import { AgentTeamPaths } from "../storage/agent-team-paths";
 import { AgentTeamOutboxHistoryStore } from "../storage/outbox-history-store";
 import { AgentTeamRunStore } from "../storage/run-store";
-import { AgentTeamAgentLaunchService } from "../agent-launch";
+import { AgentTeamAgentLaunchService } from "../runtime/agent-launch";
 import type { AgentTeamServiceOptions } from "./types";
 import type { EvolutionMemoryProvider } from "../../evolution/injection/memory-provider";
 import type { EvolutionOutcomeObserver } from "../../evolution/injection/outcome-observer";
-import { recordAgentTeamRunTransition } from "../activity-events";
+import { recordAgentTeamRunTransition } from "../events/activity";
 import {
   resolveAgentTeamEnvironmentFixtureScope,
   type AgentTeamEnvironmentFixtureScope,
-} from "../fixture-scope";
-import { projectAgentTeamRunForRead } from "./completion-policy";
+} from "../fixtures/scope";
+import { projectAgentTeamRunForRead } from "./completion/policy";
 import type { AgentTeamModelSettingsService } from "../model-catalog/service";
 
 export const agentTeamLogger = logger.child({

@@ -4,7 +4,7 @@ import type { TerminalState } from "@runweave/shared/terminal/state";
 import { fileToBase64, shellQuote } from "@runweave/common/terminal";
 import { useState, type RefObject } from "react";
 
-import { recordSupportLog } from "../features/support-logs";
+import { recordSupportLog } from "../features/support-logs/index";
 import { classifyApiFailure } from "../services/api-failure";
 import {
   createTerminalSessionClipboardImage,

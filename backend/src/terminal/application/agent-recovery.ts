@@ -7,7 +7,7 @@ import type {
   TerminalSessionManager,
   TerminalSessionRecord,
 } from "../manager/manager";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import { getAgentForCommand } from "../state/terminal-state-service";
 import { isInteractiveShellLaunch } from "../tmux/output-watcher-helpers";
 import { prepareTerminalAgent } from "./agent-preparation";

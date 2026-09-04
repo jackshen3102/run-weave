@@ -1,6 +1,6 @@
 import path from "node:path";
 import { discoverAppServer } from "@runweave/shared/app-server/discovery";
-import { logger } from "../logging";
+import { logger } from "../logging/index";
 import { resolveStoragePaths } from "../utils/path";
 import type { RuntimeServices } from "../bootstrap/runtime-services";
 import { AppServerClient } from "./client";

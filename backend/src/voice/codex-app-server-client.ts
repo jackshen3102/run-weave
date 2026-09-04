@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { logger } from "../logging";
+import { logger } from "../logging/index";
 
 interface CodexRpcSuccess {
   id: string;

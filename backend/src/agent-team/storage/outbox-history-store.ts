@@ -14,7 +14,7 @@ import type {
   AgentTeamOutboxHistoryRecord,
   AgentTeamRun,
 } from "@runweave/shared/agent-team";
-import type { AgentTeamResolvedOutbox } from "../outbox-resolver";
+import type { AgentTeamResolvedOutbox } from "../outbox/resolver";
 import type { AgentTeamPaths } from "./agent-team-paths";
 
 export class AgentTeamOutboxHistoryStore {

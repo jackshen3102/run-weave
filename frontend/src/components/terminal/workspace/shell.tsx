@@ -3,9 +3,9 @@ import { useMemoizedFn } from "ahooks";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { ConnectionConfig } from "../../../features/connection/types";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useShallow } from "zustand/react/shallow";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
@@ -15,14 +15,14 @@ import {
   useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
   useTerminalWorkspaceQueryClient,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
+} from "../../../features/terminal/queries/workspace";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import type { ClientMode } from "../../../features/client-mode";
 import {
   listTerminalPanels,
   resizeTerminalPanel,
   updateTerminalSession,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import { HttpError } from "../../../services/http";
 import { TerminalWorkspaceHeader } from "./header";
 import { TerminalSessionTabStrip } from "../session/session-tab-strip";

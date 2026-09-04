@@ -15,8 +15,8 @@ import {
   ensureWorkerGateAcceptance,
   mergeAcceptanceRefresh,
   resolveEnvironmentRecoveryIntervention,
-} from "./acceptance-policy";
-import { projectAgentTeamRunForRead } from "./completion-policy";
+} from "./acceptance/policy";
+import { projectAgentTeamRunForRead } from "./completion/policy";
 
 function selectAgentInterventionCases(
   eligibleCases: AgentTeamAcceptanceCase[],

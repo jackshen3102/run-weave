@@ -25,12 +25,12 @@ Codex / Coco / Trae task finishes
 - Hook 配置合并与旧配置清理：`electron/src/hooks/hook-installer-config.ts`
 - 自包含 launcher 生成：`electron/src/hooks/hook-launcher-script.ts`
 - tmux 环境注入：`backend/src/terminal/runtime-launcher.ts`、`backend/src/terminal/tmux-service.ts`
-- 内部写入接口：`backend/src/routes/terminal-completion.ts`
+- 内部写入接口：`backend/src/routes/terminal/completion.ts`
 - source / active command 门禁：`backend/src/terminal/completion-source-gate.ts`、`backend/src/terminal/manager.ts`
 - 全局事件服务与 completion 兼容层：`backend/src/terminal/terminal-event-service.ts`、`backend/src/terminal/completion-event-service.ts`、`backend/src/terminal/completion-events.ts`
 - workspace 事件 WebSocket：`backend/src/ws/terminal-events-server.ts`、`backend/src/ws/terminal-events-handshake.ts`
-- 前端连接与点亮：`frontend/src/features/terminal/use-terminal-events-connection.ts`、`frontend/src/components/terminal/terminal-workspace.tsx`
-- 协议类型：`packages/shared/src/terminal-protocol.ts`
+- 前端连接与点亮：`frontend/src/features/terminal/connection/use-events.ts`、`frontend/src/components/terminal/terminal-workspace.tsx`
+- 协议类型：`packages/shared/src/terminal/protocol.ts`
 
 ## Launcher 与身份注入
 

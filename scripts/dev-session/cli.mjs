@@ -23,7 +23,7 @@ import {
   resolveOpenTarget,
   resolveSourceRevision,
   startSessionServices,
-} from "./services.mjs";
+} from "./services/index.mjs";
 import {
   applyBetaSlotRetention,
   assertBetaPoolDiskBudget,
@@ -31,16 +31,16 @@ import {
   inspectAllocatableBetaSlotCapacity,
   inspectBetaSlotCapacity,
   runBetaPoolJanitor,
-} from "./beta-slot-pool.mjs";
-import { acquireStartBetaSlotLease } from "./beta-slot-pool-startup-allocation.mjs";
-import { runStop } from "./cli-stop.mjs";
-import { resolveAgentTeamFixtureScope } from "./agent-team-fixture-scope.mjs";
+} from "./beta-pool/index.mjs";
+import { acquireStartBetaSlotLease } from "./beta-pool/allocation/startup.mjs";
+import { runStop } from "./commands/stop.mjs";
+import { resolveAgentTeamFixtureScope } from "./fixtures/scope.mjs";
 import {
   readOptionalManifest,
   retainsBetaSlotLease,
   updateManifest,
-} from "./cli-manifest.mjs";
-import { cleanupFailedStart } from "./cli-start-cleanup.mjs";
+} from "./commands/manifest.mjs";
+import { cleanupFailedStart } from "./commands/start-cleanup.mjs";
 
 function parseArgs(argv) {
   const command = argv[0] ?? "start";

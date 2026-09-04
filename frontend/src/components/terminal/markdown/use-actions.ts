@@ -1,11 +1,11 @@
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { useMemoizedFn } from "ahooks";
 import { useRef, useState } from "react";
-import { isSupportedFloatingComposerAgent } from "../../../features/terminal/floating-composer";
-import { useTerminalPromptInsertionStore } from "../../../features/terminal/prompt-insertion-store";
-import type { TerminalMarkdownViewMode } from "../../../features/terminal/preview-store";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
-import type { TerminalPreviewLineTarget } from "../preview/file-view";
+import { isSupportedFloatingComposerAgent } from "../../../features/terminal/input/floating-composer";
+import { useTerminalPromptInsertionStore } from "../../../features/terminal/input/prompt-store";
+import type { TerminalMarkdownViewMode } from "../../../features/terminal/preview/store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
+import type { TerminalPreviewLineTarget } from "../preview/files/view";
 
 interface UseTerminalMarkdownReferenceActionsArgs {
   activeSession: TerminalSessionListItem | null;

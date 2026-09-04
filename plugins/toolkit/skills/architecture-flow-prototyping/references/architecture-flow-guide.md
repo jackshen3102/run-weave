@@ -95,7 +95,7 @@
       "lane": "app-server",
       "title": "EventStore.append",
       "responsibility": "分配 id 并追加 JSONL",
-      "source": "app-server/src/event-store.ts"
+      "source": "app-server/src/events/store.ts"
     }
   ],
   "scenarios": [

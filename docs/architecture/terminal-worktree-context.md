@@ -74,4 +74,4 @@ Content-Type: application/json
 
 Preview 仍使用 `/api/terminal/project/:effectiveProjectId/preview/*`，Session create 仍使用现有 `projectId` 字段。Activity 与 Project-scoped Quick Input 继续精确匹配该 ID，父 Project 不隐式汇总子 Project 数据。
 
-验收入口：`docs/testing/terminal/worktree-project-context.testplan.yaml` 与 `docs/testing/terminal/worktree-deletion.testplan.yaml`。
+验收入口：`docs/testing/terminal/workspace/project-context.testplan.yaml` 与 `docs/testing/terminal/workspace/deletion.testplan.yaml`。

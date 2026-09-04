@@ -1,6 +1,6 @@
 import { accessSync, constants } from "node:fs";
 import path from "node:path";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import type {
   TmuxLaunchCommand,
   TmuxPaneMetadata,

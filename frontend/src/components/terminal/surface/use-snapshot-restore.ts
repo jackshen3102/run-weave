@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { TerminalModeState } from "@runweave/shared/terminal/websocket";
 import { HttpError } from "../../../services/http";
-import { getTerminalSession } from "../../../services/terminal";
+import { getTerminalSession } from "../../../services/terminal/index";
 
 type MutableRef<T> = { current: T };
 

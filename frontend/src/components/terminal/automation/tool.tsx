@@ -14,7 +14,7 @@ import type {
   TerminalBrowserAutomationTargetSnapshot,
 } from "@runweave/shared/terminal-browser-automation";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 
 interface TerminalBrowserAutomationToolProps {
   active: boolean;

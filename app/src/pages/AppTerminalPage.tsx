@@ -8,15 +8,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type AppTerminalDetailTab,
   TerminalDetailTabBar,
-} from "../components/TerminalDetailTabBar";
-import { AppTerminalDeleteAlerts } from "../components/AppTerminalDeleteAlerts";
-import { AppTerminalHeader } from "../components/AppTerminalHeader";
-import { AppTerminalPanels } from "../components/AppTerminalPanels";
-import { TerminalHistoryModal } from "../components/TerminalHistoryModal";
-import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
+} from "../components/terminal/tab-bar";
+import { AppTerminalDeleteAlerts } from "../components/terminal/delete-alerts";
+import { AppTerminalHeader } from "../components/terminal/header";
+import { AppTerminalPanels } from "../components/terminal/panels";
+import { TerminalHistoryModal } from "../components/terminal/history-modal";
+import { TerminalCommandComposer } from "../components/terminal/composer";
 import type { AppConnectionConfig } from "../features/connections/types";
 import { AppTerminalRuntimeProvider } from "../features/terminal/app-terminal-runtime";
-import { recordSupportLog, useSupportLogs } from "../features/support-logs";
+import { recordSupportLog, useSupportLogs } from "../features/support-logs/index";
 import { basename, shortPath } from "../lib/app-terminal-path-labels";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalActions } from "../hooks/use-app-terminal-actions";

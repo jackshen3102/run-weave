@@ -115,9 +115,9 @@ Browser Group，并保持 runtime route unassigned；普通本机 Web 使用新�
 - Backend 状态机：`backend/src/terminal/workspace-service/manager.ts`
 - HTTP/WS Host 代理：`backend/src/terminal/workspace-service/proxy.ts`
 - Desktop UI：`frontend/src/components/terminal/workspace/workspace-services-popover.tsx`
-- Electron 网络策略：`electron/src/terminal-browser-network.ts`
+- Electron 网络策略：`electron/src/browser/security/network.ts`
 - 协议 verifier：`pnpm workspace-services:verify`
-- 真实验收合同：`docs/testing/terminal/workspace-services.testplan.yaml`
+- 真实验收合同：`docs/testing/terminal/workspace/services.testplan.yaml`
 
 实现验证还应执行 Backend、Frontend、Electron 与 Shared 的 typecheck/lint、
 `pnpm architecture:check`、`pnpm docs:check`。涉及 UI 或 Browser 行为时必须使用受管 Dev Session 和

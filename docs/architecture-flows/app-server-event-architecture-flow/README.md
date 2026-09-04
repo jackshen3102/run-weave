@@ -158,12 +158,12 @@ P3 的原始判断被运行实验否定：catchup 与 subscribe 位于同一个�
 ### App Server
 
 - `app-server/src/index.ts`
-- `app-server/src/http-server.ts`
-- `app-server/src/websocket-server.ts`
-- `app-server/src/event-center.ts`
-- `app-server/src/event-store.ts`
-- `app-server/src/state-projector.ts`
-- `app-server/src/state-store.ts`
+- `app-server/src/server/http.ts`
+- `app-server/src/server/websocket.ts`
+- `app-server/src/events/center.ts`
+- `app-server/src/events/store.ts`
+- `app-server/src/state/projector.ts`
+- `app-server/src/state/store.ts`
 - `app-server/src/cloud-sync-sim.ts`
 - `app-server/src/codex-thread-status-compensator.ts`
 
@@ -175,14 +175,14 @@ P3 的原始判断被运行实验否定：catchup 与 subscribe 位于同一个�
 - `backend/src/app-server/event-cursor-store.ts`
 - `backend/src/app-server/handlers/agent-hook.ts`
 - `backend/src/app-server/handlers/agent-completion.ts`
-- `backend/src/terminal/agent-hook-processor.ts`
+- `backend/src/terminal/application/agent-hook-processor.ts`
 - `backend/src/terminal/terminal-state-service.ts`
 
 ### Producer / Shared contract
 
 - `plugins/toolkit/hooks/runweave-hook-bridge.cjs`
 - `plugins/toolkit/hooks/runweave-hook-payload.cjs`
-- `packages/shared/src/app-server-events.ts`
+- `packages/shared/src/app-server/events.ts`
 
 ## 验收点
 

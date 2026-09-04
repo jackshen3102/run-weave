@@ -16,7 +16,7 @@ import {
   rerunAgentTeamFrameworkRepair,
   startAgentTeamRun,
   submitAgentTeamSplitGate,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import {
   getAgentTeamAttention,
   getAgentTeamCaseElementId,

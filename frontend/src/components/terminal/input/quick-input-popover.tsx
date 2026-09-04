@@ -15,7 +15,7 @@ import {
   markTerminalQuickInputUsed,
   sendTerminalInput,
   updateTerminalQuickInput,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";

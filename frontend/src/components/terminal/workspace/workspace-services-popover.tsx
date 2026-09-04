@@ -9,20 +9,20 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { WorkspaceServiceSnapshot } from "@runweave/shared/terminal/workspace-service";
-import { openTerminalBrowserUrl } from "../../../features/terminal/open-terminal-browser-url";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
+import { openTerminalBrowserUrl } from "../../../features/terminal/navigation/open-browser";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import {
   useTerminalWorkspaceQueryClient,
   useTerminalWorkspaceServicesQuery,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
-import { terminalQueryKeys } from "../../../features/terminal/queries/terminal-query-keys";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
+} from "../../../features/terminal/queries/workspace";
+import { terminalQueryKeys } from "../../../features/terminal/queries/keys";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { cn } from "../../../lib/utils";
 import { HttpError } from "../../../services/http";
 import {
   startTerminalWorkspaceService,
   stopTerminalWorkspaceService,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import { Button } from "../../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
 

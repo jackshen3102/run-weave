@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { ActivityQueryService } from "../../backend/src/activity/query-service.ts";
-import { ActivityStore } from "../../backend/src/activity/activity-store.ts";
+import { ActivityQueryService } from "../../backend/src/activity/database/service.ts";
+import { ActivityStore } from "../../backend/src/activity/recording/store.ts";
 import { EvolutionContextPackBuilder } from "../../backend/src/evolution/context-pack.ts";
 import { EvolutionEvidenceReconciler } from "../../backend/src/evolution/knowledge/evidence-reconciler.ts";
 import { SqliteEvolutionActivationStore } from "../../backend/src/evolution/storage/store.ts";
-import { EVOLUTION_GLOBAL_SCOPE_ID } from "../../packages/shared/src/evolution.ts";
+import { EVOLUTION_GLOBAL_SCOPE_ID } from "../../packages/shared/src/evolution/index.ts";
 import { buildTerminalChildProjectId } from "../../packages/shared/src/terminal/project-context.ts";
 import {
   analysisFixtureState,

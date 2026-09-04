@@ -55,11 +55,11 @@ http://127.0.0.1:6188/
 | Connection 名称与 ID        | 当前 Electron `ConnectionConfig`                                                            | `frontend/src/features/connection/types.ts`、`use-connections.ts`                       |
 | Project 名称                | `TerminalProjectListItem`                                                                   | `packages/shared/src/terminal/project.ts`、`GET /api/terminal/project`                  |
 | Worktree、branch、projectId | `TerminalProjectContextListItem`                                                            | `packages/shared/src/terminal/project-context.ts`、`terminal-project-context-routes.ts` |
-| Session 名称与状态          | alias、cwd、activeCommand、terminalState                                                    | `packages/shared/src/terminal/session.ts`、`state.ts`                                   |
+| Session 名称与状态          | alias、cwd、activeCommand、terminalState                                                    | `packages/shared/src/terminal/runtime/session.ts`、`state.ts`                           |
 | Completion 是否未确认       | completion revision 两个字段                                                                | `TerminalSessionListItem`、`acknowledgeSessionCompletion()`                             |
-| Completion 标题             | 匹配 revision 的 `completion.payload.summary`，否则使用 `session.preview`                   | `packages/shared/src/terminal/completion.ts`、`completion-event-service.ts`             |
+| Completion 标题             | 匹配 revision 的 `completion.payload.summary`，否则使用 `session.preview`                   | `packages/shared/src/terminal/runtime/completion.ts`、`completion-event-service.ts`     |
 | Terminal 异常退出           | `status / exitCode`                                                                         | `TerminalSessionListItem`、`terminal-server.ts`                                         |
-| Agent Team 任务与状态       | `task / status / loop / activeWorkerRole`                                                   | `packages/shared/src/agent-team.ts`                                                     |
+| Agent Team 任务与状态       | `task / status / loop / activeWorkerRole`                                                   | `packages/shared/src/agent-team/index.ts`                                               |
 | Human Gate 标题             | `pendingFindingDecision.finding.title / reason`                                             | `AgentTeamPendingFindingDecision`                                                       |
 | 验收阻塞详情                | acceptance `caseId / text / skipReason / lastRunStatus`                                     | `AgentTeamAcceptanceCase`、`service-execution.ts`                                       |
 | 相对时间                    | `updatedAt / createdAt / lastActivityAt`                                                    | Agent Team 与 Terminal DTO                                                              |

@@ -1,6 +1,6 @@
 import type http from "node:http";
 import net from "node:net";
-import { logger } from "../logging";
+import { logger } from "../logging/index";
 
 const serverLogger = logger.child({ component: "server" });
 

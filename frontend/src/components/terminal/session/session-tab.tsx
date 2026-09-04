@@ -9,8 +9,8 @@ import { createPortal } from "react-dom";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import { PanelsTopLeft, Pencil, Workflow, X } from "lucide-react";
-import { formatTerminalSessionName } from "../../../features/terminal/session-name";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { Button } from "../../ui/button";
 import { ShimmerText } from "../../ui/shimmer-text";
 import {

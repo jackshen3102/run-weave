@@ -10,23 +10,23 @@ import { useMemoizedFn } from "ahooks";
 import { useShallow } from "zustand/react/shallow";
 import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
 import { ChevronLeft, ChevronRight, Pin, Trash2 } from "lucide-react";
-import { removeRecentTerminalProjectContext } from "../../../features/terminal/recent-selection";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
-import { terminalQueryKeys } from "../../../features/terminal/queries/terminal-query-keys";
+import { removeRecentTerminalProjectContext } from "../../../features/terminal/input/recent-selection";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
+import { terminalQueryKeys } from "../../../features/terminal/queries/keys";
 import {
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
   EMPTY_TERMINAL_SESSIONS,
   useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
   useTerminalWorkspaceQueryClient,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
-import { useTerminalAggregateStatus } from "../../../features/terminal/use-terminal-aggregate-status";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+} from "../../../features/terminal/queries/workspace";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { useTerminalAggregateStatus } from "../../../features/terminal/status/use-aggregate-status";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   deleteTerminalWorktree,
   updateTerminalProjectContext,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import { HttpError } from "../../../services/http";
 import {
   AlertDialog,

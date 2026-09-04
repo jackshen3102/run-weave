@@ -1,5 +1,5 @@
 import { agentTeamLogger } from "./service/context";
-import { AgentTeamExportService } from "./service/export";
+import { AgentTeamExportService } from "./service/export/index";
 
 export type {
   AgentTeamCompletionSignal,

@@ -1,4 +1,4 @@
-import type { PtyRuntime } from "../pty-service";
+import type { PtyRuntime } from "./pty-service";
 
 const ESCAPE = "\u001b";
 const BRACKETED_PASTE_MODE_PATTERN = new RegExp(

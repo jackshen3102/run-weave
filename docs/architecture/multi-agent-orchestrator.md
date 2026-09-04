@@ -34,7 +34,7 @@ Agent Team loop。
 Agent Team 公共入口仍是 `@runweave/shared/agent-team`；内部合同按
 `agent-team-outbox.ts` → `agent-team-run.ts` → `agent-team-export.ts` 单向依赖拆分，
 `agent-team.ts` 只保留兼容 re-export。worker 角色定义在
-`packages/shared/src/agent-team-worker.ts`；prompt 构造在
+`packages/shared/src/agent-team/worker.ts`；prompt 构造在
 `backend/src/agent-team/prompt-builders.ts`。Agent Team 不再使用旧 `coder`、`reviewer`、
 `tester` 默认集合。
 

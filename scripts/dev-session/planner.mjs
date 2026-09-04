@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 
-import { isInstalledAppControlPath } from "../runweave-update-core.mjs";
+import { isInstalledAppControlPath } from "../update/core.mjs";
 
 import {
   DevSessionError,
@@ -15,7 +15,7 @@ import {
   BETA_SLOT_CAPACITY,
   BETA_SLOT_POLICY,
   assertBetaSlotId,
-} from "./beta-slot-pool.mjs";
+} from "./beta-pool/index.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -97,11 +97,11 @@ function classifyChangedFile(file) {
   }
   if (
     isInstalledAppControlPath(file) ||
-    file.startsWith("scripts/runweave-beta-") ||
-    file.startsWith("scripts/runweave-update-") ||
-    file === "scripts/build-runtime-package.mjs" ||
-    file === "scripts/install-runtime-package.mjs" ||
-    file === "scripts/install-app-server-runtime.mjs" ||
+    file.startsWith("scripts/beta/") ||
+    file.startsWith("scripts/update/") ||
+    file === "scripts/release/build-runtime.mjs" ||
+    file === "scripts/install/runtime.mjs" ||
+    file === "scripts/install/app-server.mjs" ||
     file.includes("updater") ||
     file.includes("runtime-package")
   ) {
@@ -112,7 +112,7 @@ function classifyChangedFile(file) {
   }
   if (file.startsWith("packages/shared/")) {
     const isAppServerContract = file.includes("/app-server/");
-    const isBackendHealthContract = file.endsWith("/runtime-monitor.ts");
+    const isBackendHealthContract = file.endsWith("/monitoring/runtime.ts");
     const profile = isAppServerContract
       ? "app-server"
       : isBackendHealthContract
@@ -128,10 +128,10 @@ function classifyChangedFile(file) {
     };
   }
   if (
-    file === "dev.mjs" ||
-    file === "electron-dev.mjs" ||
+    file === "scripts/dev/web.mjs" ||
+    file === "scripts/dev/electron.mjs" ||
     file.startsWith("scripts/dev-session/") ||
-    file === "scripts/verify-dev-session.mjs" ||
+    file === "scripts/dev-session/verify/index.mjs" ||
     file === "package.json"
   ) {
     return {

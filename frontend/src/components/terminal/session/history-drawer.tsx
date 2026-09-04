@@ -13,15 +13,15 @@ import { Terminal } from "@xterm/xterm";
 import { useMemoizedFn } from "ahooks";
 import { Copy, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
-import { formatTerminalSessionName } from "../../../features/terminal/session-name";
-import { DEFAULT_TERMINAL_PREFERENCES } from "../../../features/terminal/preferences";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
+import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
+import { DEFAULT_TERMINAL_PREFERENCES } from "../../../features/terminal/state/preferences";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { cn } from "../../../lib/utils";
 import { HttpError } from "../../../services/http";
 import {
   getTerminalHistory,
   getTerminalPanelHistory,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import { Button } from "../../ui/button";
 import {
   Sheet,

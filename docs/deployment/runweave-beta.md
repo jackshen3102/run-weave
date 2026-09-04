@@ -149,7 +149,7 @@ pnpm dev:session --json
 | 首次部署或缺少历史状态          | 完整 Beta App，并初始化 Beta App Server |
 | 已部署且内容未变化的 dirty 文件 | 不重复触发对应组件更新                  |
 
-完整 App 的敏感路径列表以 `scripts/runweave-update-core.mjs` 中的 `APP_SENSITIVE_PATH_PREFIXES` 为准，App Server 路径以 `APP_SERVER_SENSITIVE_PATH_PREFIXES` 为准；跨目录改动以 `--dry-run` 的实际选择和原因作为权威判断。
+完整 App 的敏感路径列表以 `scripts/update/core.mjs` 中的 `APP_SENSITIVE_PATH_PREFIXES` 为准，App Server 路径以 `APP_SERVER_SENSITIVE_PATH_PREFIXES` 为准；跨目录改动以 `--dry-run` 的实际选择和原因作为权威判断。
 
 ### 强制更新模式
 

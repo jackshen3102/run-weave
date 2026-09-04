@@ -3,7 +3,7 @@ import {
   TERMINAL_AGGREGATE_HAS_BELL,
   TERMINAL_AGGREGATE_HAS_COMPLETION,
   TERMINAL_AGGREGATE_IS_WORKING,
-} from "../../../features/terminal/workspace-store";
+} from "../../../features/terminal/state/workspace-store";
 import { ShimmerText } from "../../ui/shimmer-text";
 
 interface TerminalAggregateStatusProps {

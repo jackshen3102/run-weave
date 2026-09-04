@@ -1,5 +1,5 @@
-import { logger } from "../logging";
-import { logTerminalPerf } from "../terminal/perf-logging";
+import { logger } from "../logging/index";
+import { logTerminalPerf } from "../terminal/runtime/perf-logging";
 
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
 

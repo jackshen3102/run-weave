@@ -1,12 +1,12 @@
 import type { WebSocket } from "ws";
-import type { PtyRuntime } from "../terminal/pty-service";
+import type { PtyRuntime } from "../terminal/runtime/pty-service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
-import type { TerminalOutputBatcher } from "../terminal/output-batcher";
+import type { TerminalOutputBatcher } from "../terminal/runtime/output-batcher";
 import {
   logTerminalPerf,
   summarizeTerminalChunk,
-} from "../terminal/perf-logging";
-import { logger } from "../logging";
+} from "../terminal/runtime/perf-logging";
+import { logger } from "../logging/index";
 import {
   handleRuntimeActionError,
   parseTerminalClientMessage,

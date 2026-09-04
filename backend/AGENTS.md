@@ -23,7 +23,7 @@ Activity、Evolution、认证与工作历史等运行时能力。
   `src/routes` 或 `src/ws`。
 - 前后端或跨进程共享的 DTO、事件和协议修改必须落在 `packages/shared`，并同步检查所有真实消费者。
 - 不把 Backend-only 存储模型或服务实现迁入 `packages/common`。
-- 不新增单元测试；优先使用现有 `scripts/verify-*.mjs`、测试计划和真实行为验证。
+- 不新增单元测试；优先使用现有 `scripts/verify/`、测试计划和真实行为验证。
 
 ## 验证
 

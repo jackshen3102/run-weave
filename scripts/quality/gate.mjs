@@ -1,0 +1,489 @@
+import { spawnSync } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+
+const ROOT = process.cwd();
+const ARTIFACT_DIR = path.join(ROOT, "artifacts");
+const REPORT_PATH = path.join(ARTIFACT_DIR, "quality-report.json");
+const LAYER_ORDER = ["docs", "architecture", "static", "e2e"];
+const LAYER_STEP_IDS = {
+  docs: ["docs"],
+  architecture: ["architecture"],
+  static: ["typecheck", "lint"],
+  e2e: ["e2e"],
+};
+
+const ALL_STEPS = [
+  {
+    id: "docs",
+    command: ["pnpm", "docs:check"],
+    layers: ["docs"],
+    critical: true,
+  },
+  {
+    id: "architecture",
+    command: ["pnpm", "architecture:check"],
+    layers: ["architecture"],
+    critical: true,
+  },
+  {
+    id: "typecheck",
+    command: ["pnpm", "typecheck"],
+    layers: ["static"],
+    critical: true,
+  },
+  {
+    id: "lint",
+    command: ["pnpm", "lint"],
+    layers: ["static"],
+    critical: true,
+  },
+  {
+    id: "e2e",
+    command: ["pnpm", "test:e2e"],
+    layers: ["e2e"],
+    critical: true,
+  },
+];
+
+function readChangedFiles() {
+  const changedArg = process.argv.find((arg) => arg.startsWith("--changed="));
+  if (changedArg) {
+    return changedArg
+      .slice("--changed=".length)
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+  }
+
+  const changed = readGitPathList(["diff", "--name-only", "HEAD"]);
+  const untracked = readGitPathList([
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+  ]);
+  if (!changed || !untracked) {
+    return [];
+  }
+  return [...new Set([...changed, ...untracked])].sort();
+}
+
+function readGitPathList(args) {
+  const result = spawnSync("git", args, {
+    cwd: ROOT,
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+  return result.stdout
+    .split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function isCriticalJourneyFile(filePath) {
+  return [
+    "backend/src/routes/test.ts",
+    "frontend/src/pages/home/",
+    "frontend/src/App.tsx",
+  ].some((prefix) => filePath.startsWith(prefix));
+}
+
+function isQualityGateFile(filePath) {
+  return filePath === "scripts/quality/gate.mjs";
+}
+
+function isDocumentationContentFile(filePath) {
+  return (
+    filePath === "AGENTS.md" ||
+    filePath === "README.md" ||
+    filePath === "README.zh-CN.md" ||
+    filePath.startsWith("docs/") ||
+    filePath.startsWith(".agents/rules/") ||
+    filePath.endsWith("/AGENTS.md")
+  );
+}
+
+function isDocumentationFile(filePath) {
+  return (
+    isDocumentationContentFile(filePath) ||
+    filePath === "package.json" ||
+    filePath === "scripts/quality/docs.mjs"
+  );
+}
+
+function isRootQualityInfraFile(filePath) {
+  return [
+    "eslint.config.mjs",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+  ].includes(filePath);
+}
+
+function isArchitectureFile(filePath) {
+  if (isDocumentationContentFile(filePath)) {
+    return false;
+  }
+  return (
+    isRootQualityInfraFile(filePath) ||
+    filePath === ".husky/pre-push" ||
+    /^(?:app|app-server|backend|electron|frontend|packages|plugins|scripts)\//.test(
+      filePath,
+    )
+  );
+}
+
+function isStaticFile(filePath) {
+  if (isDocumentationContentFile(filePath)) {
+    return false;
+  }
+  return (
+    isRootQualityInfraFile(filePath) ||
+    /^(?:app|app-server|backend|electron|frontend|packages)\//.test(filePath)
+  );
+}
+
+function isE2eFile(filePath) {
+  if (isDocumentationContentFile(filePath)) {
+    return false;
+  }
+  return (
+    isRootQualityInfraFile(filePath) ||
+    /^(?:backend|frontend|packages\/(?:common|shared|terminal-renderer))\//.test(
+      filePath,
+    )
+  );
+}
+
+function expandStepsForLayers(layers) {
+  const stepIds = layers.flatMap((layer) => LAYER_STEP_IDS[layer] ?? []);
+  const selected = [];
+
+  for (const stepId of stepIds) {
+    const found = ALL_STEPS.find((step) => step.id === stepId);
+    if (!found) {
+      continue;
+    }
+    if (!selected.some((step) => step.id === found.id)) {
+      selected.push(found);
+    }
+  }
+
+  return selected;
+}
+
+export function selectLayersForChangedFiles(changedFiles) {
+  if (changedFiles.length === 0) {
+    return [...LAYER_ORDER];
+  }
+
+  const layers = new Set();
+  const touchesDocs = changedFiles.some(isDocumentationFile);
+  const touchesArchitecture = changedFiles.some(isArchitectureFile);
+  const touchesStatic = changedFiles.some(isStaticFile);
+  const touchesE2e = changedFiles.some(isE2eFile);
+  const touchesCriticalJourney = changedFiles.some(isCriticalJourneyFile);
+  const touchesQualityGate = changedFiles.some(isQualityGateFile);
+
+  if (touchesDocs || touchesQualityGate) {
+    layers.add("docs");
+  }
+  if (touchesArchitecture || touchesQualityGate) {
+    layers.add("architecture");
+  }
+  if (touchesStatic || touchesCriticalJourney || touchesQualityGate) {
+    layers.add("static");
+  }
+  if (touchesE2e || touchesCriticalJourney || touchesQualityGate) {
+    layers.add("e2e");
+  }
+
+  return LAYER_ORDER.filter((layer) => layers.has(layer));
+}
+
+export function selectStepsForChangedFiles(changedFiles) {
+  const selectedLayers = selectLayersForChangedFiles(changedFiles);
+
+  if (changedFiles.length === 0) {
+    return {
+      selectedLayers,
+      selectedSteps: expandStepsForLayers(selectedLayers),
+      selectionReason:
+        "No changed files detected; ran full docs, architecture, static, and E2E gates.",
+      riskLevel: "full",
+    };
+  }
+
+  if (selectedLayers.length === 0) {
+    return {
+      selectedLayers,
+      selectedSteps: [],
+      selectionReason:
+        "No code paths mapped to the layered quality harness were changed.",
+      riskLevel: "minimal",
+    };
+  }
+
+  const selectedSteps = expandStepsForLayers(selectedLayers);
+
+  return {
+    selectedLayers,
+    selectedSteps,
+    selectionReason: `Selected layers: ${selectedLayers.join(", ")}.`,
+    riskLevel:
+      selectedLayers.length === LAYER_ORDER.length ? "full" : "reduced",
+  };
+}
+
+function classifyFailure(stepResult) {
+  const combinedOutput = `${stepResult.stdout}\n${stepResult.stderr}`;
+
+  if (/No tests found/i.test(combinedOutput)) {
+    return "fail_case_asset";
+  }
+
+  if (
+    /listen EPERM|EADDRINUSE|Process from config\.webServer was not able to start|Server is not running|failed to allocate remote debugging port/i.test(
+      combinedOutput,
+    )
+  ) {
+    return "fail_env_noise";
+  }
+
+  return "fail_product_bug";
+}
+
+function buildEvidence(results) {
+  return results
+    .filter(
+      (result) =>
+        result.status === "passed" || result.status === "passed_after_retry",
+    )
+    .map((result) =>
+      result.status === "passed_after_retry"
+        ? `${result.id} passed after retry (${result.attempts.length} attempts)`
+        : `${result.id} passed`,
+    );
+}
+
+function buildRiskSummary(results, skippedCriticalSteps, selection) {
+  const risks = [];
+
+  for (const result of results) {
+    if (result.status === "passed_after_retry") {
+      risks.push(
+        `${result.id} passed after retry (${result.attempts.length} attempts)`,
+      );
+    }
+  }
+
+  if (selection.riskLevel !== "full") {
+    risks.push(`Reduced gate selection: ${selection.selectionReason}`);
+  }
+
+  if (skippedCriticalSteps.length > 0) {
+    risks.push(`Skipped critical steps: ${skippedCriticalSteps.join(", ")}`);
+  }
+
+  return risks;
+}
+
+function buildStepEnv(baseEnv) {
+  const nextEnv = { ...baseEnv };
+  for (const key of [
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_COMMON_DIR",
+  ]) {
+    delete nextEnv[key];
+  }
+  return nextEnv;
+}
+
+function runStep(step) {
+  const [cmd, ...args] = step.command;
+  const startedAt = new Date().toISOString();
+  const result = spawnSync(cmd, args, {
+    cwd: ROOT,
+    encoding: "utf8",
+    stdio: "pipe",
+    env: buildStepEnv(process.env),
+  });
+  const endedAt = new Date().toISOString();
+
+  return {
+    id: step.id,
+    command: step.command.join(" "),
+    startedAt,
+    endedAt,
+    exitCode: result.status ?? 1,
+    status: result.status === 0 ? "passed" : "failed",
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
+function runStepWithRetries(step) {
+  const attempts = [];
+  const maxAttempts = step.maxAttempts ?? 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = runStep(step);
+    attempts.push({
+      ...result,
+      attempt,
+    });
+
+    if (result.status === "passed") {
+      if (attempt > 1) {
+        return {
+          ...result,
+          attempt,
+          status: "passed_after_retry",
+          attempts,
+        };
+      }
+      return {
+        ...result,
+        attempt,
+        attempts,
+      };
+    }
+  }
+
+  const lastAttempt = attempts.at(-1);
+  return {
+    ...lastAttempt,
+    attempts,
+  };
+}
+
+function stripAttemptOutput(attempt) {
+  return {
+    id: attempt.id,
+    command: attempt.command,
+    startedAt: attempt.startedAt,
+    endedAt: attempt.endedAt,
+    exitCode: attempt.exitCode,
+    status: attempt.status,
+    attempt: attempt.attempt,
+  };
+}
+
+function toReportStep(result) {
+  return {
+    id: result.id,
+    command: result.command,
+    startedAt: result.startedAt,
+    endedAt: result.endedAt,
+    exitCode: result.exitCode,
+    status: result.status,
+    attempt: result.attempt,
+    retrySummary:
+      result.attempts.length > 1
+        ? {
+            attempts: result.attempts.length,
+            finalStatus: result.status,
+          }
+        : null,
+    attempts: result.attempts.map(stripAttemptOutput),
+  };
+}
+
+export async function runQualityGate() {
+  const changedFiles = readChangedFiles();
+  const selection = selectStepsForChangedFiles(changedFiles);
+  const results = [];
+
+  for (const step of selection.selectedSteps) {
+    const result = runStepWithRetries(step);
+    results.push(result);
+    if (result.status === "failed") {
+      break;
+    }
+  }
+
+  const failed = results.find((result) => result.status === "failed");
+  const skippedCriticalSteps = ALL_STEPS.filter(
+    (step) =>
+      step.critical &&
+      !selection.selectedSteps.some(
+        (selectedStep) => selectedStep.id === step.id,
+      ),
+  ).map((step) => step.id);
+
+  let verdict = "pass";
+  if (failed) {
+    verdict = classifyFailure(failed);
+  } else if (results.some((result) => result.status === "passed_after_retry")) {
+    verdict = "pass_with_risk";
+  } else if (
+    selection.riskLevel !== "full" ||
+    skippedCriticalSteps.length > 0
+  ) {
+    verdict = "pass_with_risk";
+  }
+
+  const evidence = buildEvidence(results);
+  const riskSummary = buildRiskSummary(
+    results,
+    skippedCriticalSteps,
+    selection,
+  );
+
+  const report = {
+    verdict,
+    generatedAt: new Date().toISOString(),
+    changedFiles,
+    selectedLayers: selection.selectedLayers,
+    selectionReason: selection.selectionReason,
+    riskSummary,
+    evidence,
+    skippedCriticalSteps,
+    steps: results.map(toReportStep),
+    failedStepId: failed?.id ?? null,
+  };
+
+  await mkdir(ARTIFACT_DIR, { recursive: true });
+  await writeFile(REPORT_PATH, JSON.stringify(report, null, 2));
+
+  return {
+    failed,
+    report,
+  };
+}
+
+const isDirectRun =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) ===
+    path.resolve(fileURLToPath(import.meta.url));
+
+if (isDirectRun) {
+  const { failed, report } = await runQualityGate();
+  globalThis.console.log(JSON.stringify(report, null, 2));
+
+  if (
+    failed &&
+    (report.verdict === "fail_product_bug" ||
+      report.verdict === "fail_case_asset")
+  ) {
+    process.exit(1);
+  }
+}

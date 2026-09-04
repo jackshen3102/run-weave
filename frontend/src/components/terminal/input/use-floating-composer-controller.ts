@@ -11,9 +11,9 @@ import type { ClientMode } from "../../../features/client-mode";
 import {
   applyTerminalDraftInput,
   shouldEnableFloatingComposer,
-} from "../../../features/terminal/floating-composer";
-import { logTerminalPerf } from "../../../features/terminal/perf-logging";
-import { sendTerminalInput as sendTerminalInputRequest } from "../../../services/terminal";
+} from "../../../features/terminal/input/floating-composer";
+import { logTerminalPerf } from "../../../features/terminal/output/performance";
+import { sendTerminalInput as sendTerminalInputRequest } from "../../../services/terminal/index";
 import type { TerminalFloatingComposerDiagnostics } from "./floating-composer";
 
 const TMUX_EXIT_COPY_MODE_REQUEST_COOLDOWN_MS = 1_000;

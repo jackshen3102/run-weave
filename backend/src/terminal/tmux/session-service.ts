@@ -9,7 +9,7 @@ import type {
   TmuxTarget,
 } from "./types";
 import { TmuxRebuildLimitError } from "./types";
-import { isNpmProcessEnvName } from "../env";
+import { isNpmProcessEnvName } from "../runtime/env";
 import { TmuxProcess } from "./process";
 import {
   MaxRebuildAttempts,

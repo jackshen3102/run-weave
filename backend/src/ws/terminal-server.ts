@@ -1,21 +1,21 @@
 import { WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
-import { logger } from "../logging";
+import { logger } from "../logging/index";
 import type { TunnelAuthConfig } from "../server/tunnel-auth";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
-import { TerminalOutputBatcher } from "../terminal/output-batcher";
+import { TerminalOutputBatcher } from "../terminal/runtime/output-batcher";
 import {
   logTerminalPerf,
   summarizeTerminalChunk,
-} from "../terminal/perf-logging";
-import type { PtyService } from "../terminal/pty-service";
+} from "../terminal/runtime/perf-logging";
+import type { PtyService } from "../terminal/runtime/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
 } from "../terminal/runtime/launcher";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime/recorder";
-import { createShellPromptTracker } from "../terminal/shell-integration";
+import { createShellPromptTracker } from "../terminal/runtime/shell-integration";
 import type { TmuxLifecycleCoordinator } from "../terminal/tmux/lifecycle-coordinator";
 import type { TerminalStateService } from "../terminal/state/terminal-state-service";
 import type { TmuxService } from "../terminal/tmux/service";

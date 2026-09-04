@@ -1,7 +1,7 @@
 import { createReadStream } from "node:fs";
 import { stat, truncate } from "node:fs/promises";
 import { StringDecoder } from "node:string_decoder";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
 import { appendToScrollbackBuffer } from "../scrollback/scrollback-buffer";
 import type { TmuxLifecycleCoordinator } from "./lifecycle-coordinator";

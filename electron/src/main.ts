@@ -1,4 +1,4 @@
-import "./desktop-config.js";
+import "./desktop/config.js";
 import { app, BrowserWindow, dialog, ipcMain, Menu, net } from "electron";
 import type {
   AttentionOpenDispatch,
@@ -7,27 +7,27 @@ import type {
   CompanionPresentationState,
 } from "@runweave/shared/attention";
 import path from "node:path";
-import { startCdpProxy } from "./terminal-browser-cdp-proxy.js";
+import { startCdpProxy } from "./browser/cdp/proxy/index.js";
 import {
   CDP_PROXY_HOST,
   findAvailableCdpProxyPort,
   resolveCdpProxyPort,
-} from "./terminal-browser-cdp-proxy-port.js";
-import { createTray } from "./tray.js";
-import { checkForUpdates, initAutoUpdater } from "./updater.js";
-import { setIsQuitting } from "./app-state.js";
-import { shouldEnableAutoUpdates } from "./updater-config.js";
-import { buildApplicationMenuTemplate } from "./application-menu.js";
-import { registerTerminalBrowserHandlers } from "./terminal-browser-view.js";
+} from "./browser/cdp/proxy/port.js";
+import { createTray } from "./desktop/tray.js";
+import { checkForUpdates, initAutoUpdater } from "./updater/index.js";
+import { setIsQuitting } from "./app/state.js";
+import { shouldEnableAutoUpdates } from "./updater/config.js";
+import { buildApplicationMenuTemplate } from "./desktop/menu.js";
+import { registerTerminalBrowserHandlers } from "./browser/view/index.js";
 import { installHooksIfNeeded } from "./hooks/hook-installer.js";
-import { desktopRuntime } from "./desktop-runtime-state.js";
+import { desktopRuntime } from "./desktop/runtime-state.js";
 import {
   desktopSourceRevision,
   DEV_SERVER_URL,
   isBetaChannel,
   isDev,
   managesPackagedBackend,
-} from "./desktop-config.js";
+} from "./desktop/config.js";
 import {
   createWindow,
   navigateWindowToPath,
@@ -36,13 +36,13 @@ import {
   registerRuntimeStatsHandler,
   registerSystemMonitorHandler,
   setApplicationIcon,
-} from "./desktop-window.js";
+} from "./desktop/window.js";
 import {
   exportDesktopDiagnostics,
   getActiveFrontendDistDir,
   initializeDesktopIncidentLogger,
   refreshActiveRuntimeRelease,
-} from "./desktop-diagnostics.js";
+} from "./desktop/diagnostics.js";
 import {
   checkAndNotifyAppServerAvailability,
   connectExternalBackendRuntime,
@@ -50,15 +50,15 @@ import {
   reloadLocalRuntime,
   startPackagedBackendRuntime,
   writeBetaDesktopStatus,
-} from "./packaged-backend-controller.js";
-import { registerCdpProxyHandlers } from "./terminal-browser-cdp-handlers.js";
+} from "./backend/packaged/controller.js";
+import { registerCdpProxyHandlers } from "./browser/cdp/handlers.js";
 import {
   readCompanionEnabled,
   writeCompanionEnabled,
-} from "./desktop-companion-preferences.js";
-import { DesktopCompanionAgent } from "./desktop-companion-agent.js";
-import { stopAllTerminalBrowserWhistles } from "./terminal-browser-whistle-runtime.js";
-import { registerTerminalBrowserAutomationHandlers } from "./terminal-browser-automation-runtime.js";
+} from "./companion/preferences.js";
+import { DesktopCompanionAgent } from "./companion/agent.js";
+import { stopAllTerminalBrowserWhistles } from "./browser/whistle/runtime.js";
+import { registerTerminalBrowserAutomationHandlers } from "./browser/automation/runtime.js";
 function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 512;
 }

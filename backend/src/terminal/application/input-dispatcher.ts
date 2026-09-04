@@ -4,7 +4,7 @@ import type {
 } from "@runweave/shared/terminal-protocol";
 import { aiDiagnosticLog } from "../../diagnostic-logs/recorder";
 import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
-import type { PtyRuntime, PtyService } from "../pty-service";
+import type { PtyRuntime, PtyService } from "../runtime/pty-service";
 import type { TerminalRuntimeRegistry } from "../runtime/registry";
 import {
   ensureTerminalRuntime,

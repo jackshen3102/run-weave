@@ -134,7 +134,7 @@ launcher 源码放在 `plugins/toolkit/hooks/runweave-hook-bridge.cjs`，运行�
 - 资源缺失时的 launcher 生成兜底：`electron/src/hooks/hook-launcher-script.ts`
 - Electron 运行副本：`electron/resources/hooks/`
 - 安装入口注入 resourcesDir：`electron/src/main.ts`（`installHooksIfNeeded({ resourcesDir })`）
-- 前端绿点收到完成事件时的提示音：`frontend/src/components/terminal/terminal-workspace.tsx`、`frontend/src/features/terminal/bell.ts`
+- 前端绿点收到完成事件时的提示音：`frontend/src/components/terminal/terminal-workspace.tsx`、`frontend/src/features/terminal/feedback/bell.ts`
 
 ## 验证
 

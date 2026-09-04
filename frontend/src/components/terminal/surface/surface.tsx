@@ -8,15 +8,15 @@ import type { ClientMode } from "../../../features/client-mode";
 import {
   logTerminalPerf,
   summarizeTerminalChunk,
-} from "../../../features/terminal/perf-logging";
-import { normalizeTerminalBrowserUrl } from "../../../features/terminal/browser-url";
-import { openTerminalBrowserUrl } from "../../../features/terminal/open-terminal-browser-url";
-import { isSupportedFloatingComposerAgent } from "../../../features/terminal/floating-composer";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
-import { useTerminalPromptInsertionStore } from "../../../features/terminal/prompt-insertion-store";
-import { useTerminalConnection } from "../../../features/terminal/use-terminal-connection";
-import { useTerminalRuntime } from "../../../features/terminal/queries/terminal-runtime-provider";
-import { scheduleTerminalViewportRefresh } from "../../../features/terminal/viewport-refresh";
+} from "../../../features/terminal/output/performance";
+import { normalizeTerminalBrowserUrl } from "../../../features/terminal/navigation/browser-url";
+import { openTerminalBrowserUrl } from "../../../features/terminal/navigation/open-browser";
+import { isSupportedFloatingComposerAgent } from "../../../features/terminal/input/floating-composer";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
+import { useTerminalPromptInsertionStore } from "../../../features/terminal/input/prompt-store";
+import { useTerminalConnection } from "../../../features/terminal/connection/use-connection";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { scheduleTerminalViewportRefresh } from "../../../features/terminal/viewport/refresh";
 import { useTerminalSearch } from "./use-search";
 import { TerminalFloatingComposer } from "../input/floating-composer";
 import { TerminalMobileControls } from "../input/mobile-controls";

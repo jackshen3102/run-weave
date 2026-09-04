@@ -4,7 +4,7 @@ import type { AppHomeOverviewResponse } from "@runweave/shared/terminal/session"
 import { useEffect, useRef, useState } from "react";
 
 import type { AppConnectionConfig } from "../features/connections/types";
-import { recordSupportLog } from "../features/support-logs";
+import { recordSupportLog } from "../features/support-logs/index";
 import {
   login,
   logout,

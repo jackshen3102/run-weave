@@ -5,24 +5,24 @@ import type { WebSocketServer } from "ws";
 import { resolveAppServerConfig } from "./config.js";
 import { loadOrCreateToken } from "./auth.js";
 import { AppServerCloudSyncSim } from "./cloud-sync-sim.js";
-import { CodexAppServerClient } from "./codex-app-server-client.js";
+import { CodexAppServerClient } from "./codex/client.js";
 import {
   AgentThreadStatusReconciler,
   parseOptionalPositiveInteger,
-} from "./agent-thread-status-reconciler.js";
-import { AppServerEventCenter } from "./event-center.js";
-import { AppServerEventStore } from "./event-store.js";
-import { createHttpApp } from "./http-server.js";
-import { AppServerStateProjector } from "./state-projector.js";
-import { AppServerStateStore } from "./state-store.js";
-import { TraeThreadLifecycleReader } from "./trae-thread-lifecycle-reader.js";
+} from "./state/reconciler.js";
+import { AppServerEventCenter } from "./events/center.js";
+import { AppServerEventStore } from "./events/store.js";
+import { createHttpApp } from "./server/http.js";
+import { AppServerStateProjector } from "./state/projector.js";
+import { AppServerStateStore } from "./state/store.js";
+import { TraeThreadLifecycleReader } from "./trae/lifecycle-reader.js";
 import {
   acquireSingletonLock,
   preflightSingleton,
   releaseLock,
   type AppServerLock,
 } from "./singleton.js";
-import { attachEventStreamWebSocketServer } from "./websocket-server.js";
+import { attachEventStreamWebSocketServer } from "./server/websocket.js";
 
 async function main(): Promise<void> {
   const config = resolveAppServerConfig();

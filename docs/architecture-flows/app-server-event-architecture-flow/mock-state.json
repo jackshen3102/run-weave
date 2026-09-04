@@ -310,9 +310,9 @@
       "consequence": "主 JSONL、latestEventId、cursor、投影顺序与 Cloud Sync mirror 重新共享同一单调事件序列。",
       "evidence": "修复前 40 次并发 append 只有 1 个唯一 id，mirror 40 个唯一事件写出 53 行；修复后主日志和 mirror 都是 40 行、40 个唯一 id、末尾 id=40。",
       "source": [
-        "app-server/src/event-store.ts:71",
-        "app-server/src/event-store.ts:85",
-        "app-server/src/event-store.ts:96"
+        "app-server/src/events/store.ts:71",
+        "app-server/src/events/store.ts:85",
+        "app-server/src/events/store.ts:96"
       ]
     },
     {
@@ -325,9 +325,9 @@
       "consequence": "积压不再被首批窗口截断，consumer 可以按既有 events message 顺序处理全部历史事件。",
       "evidence": "修复前真实 WS 120 条只交付 100 条；修复后使用默认 batch size 收到 100/20 两批，共 120 条且 id 全部唯一。",
       "source": [
-        "app-server/src/http-server.ts:202",
-        "app-server/src/websocket-server.ts:46",
-        "packages/shared/src/app-server-events.ts:54"
+        "app-server/src/server/http.ts:202",
+        "app-server/src/server/websocket.ts:46",
+        "packages/shared/src/app-server/events.ts:54"
       ]
     },
     {
@@ -353,7 +353,7 @@
       "mechanism": "连接处理中的 connected、全部 catchup 与 subscribe 是同一个同步回调，中间没有 await，Node 事件循环不会插入另一个 record 回调。",
       "consequence": "此前推测的漏事件条件没有成立，不增加 epoch、水位或二次检查代码。",
       "evidence": "100 轮连接握手与并发 POST 压力实验共 400 条事件，missing=0；代码同步执行模型与实验一致。",
-      "source": ["app-server/src/websocket-server.ts:46"]
+      "source": ["app-server/src/server/websocket.ts:46"]
     },
     {
       "id": "P4",
@@ -365,9 +365,9 @@
       "consequence": "consumer 无法区分“从 cursor 后完整恢复”与“日志开头已经丢失”；重启后旧 ThreadRef 也可能不在重建结果中。",
       "evidence": "8 天旧 ThreadRef 实验得到 snapshotBeforeClear=1、retainedEvents=0、threadsAfterReplay=0；它落在明确保留边界，未复现当前业务状态错误。",
       "source": [
-        "packages/shared/src/app-server-events.ts:54",
+        "packages/shared/src/app-server/events.ts:54",
         "app-server/src/index.ts:41",
-        "app-server/src/event-store.ts:64"
+        "app-server/src/events/store.ts:64"
       ]
     },
     {
@@ -380,7 +380,7 @@
       "consequence": "文件操作仍在关键路径，但当前规模下没有达到修改门槛。",
       "evidence": "1200 条普通事件 total=821ms、p95=1.03ms；300 条持续改变 ThreadRef 的事件 total=330ms、p95=1.87ms、max=4.71ms。",
       "source": [
-        "app-server/src/event-center.ts:28",
+        "app-server/src/events/center.ts:28",
         "app-server/src/cloud-sync-sim.ts:49"
       ]
     },
@@ -395,7 +395,7 @@
       "evidence": "同一 UserPromptSubmit 连续送达 2 次，TerminalStateService 只发布 1 条状态事件，最终状态保持 agent_running/codex。",
       "source": [
         "plugins/toolkit/hooks/runweave-hook-bridge.cjs:358",
-        "backend/src/terminal/agent-hook-processor.ts:67"
+        "backend/src/terminal/application/agent-hook-processor.ts:67"
       ]
     }
   ],

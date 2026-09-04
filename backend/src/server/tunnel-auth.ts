@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type { Request, RequestHandler, Response } from "express";
-import { logger } from "../logging";
+import { logger } from "../logging/index";
 
 export interface TunnelAuthConfig {
   token: string;

@@ -10,7 +10,7 @@ import { buildTerminalRuntimeEnvironment } from "../runtime/environment";
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
-} from "../default-shell";
+} from "../runtime/default-shell";
 import {
   buildPaneTarget,
   requireTmuxSession,

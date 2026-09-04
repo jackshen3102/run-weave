@@ -71,13 +71,13 @@ Playwright public page API 继续作为产品行为验收面，但不承担 Runw
 
 ## 代码源
 
-- `electron/src/terminal-browser-cdp-proxy.ts`
-- `electron/src/terminal-browser-cdp-proxy-messages.ts`
-- `electron/src/terminal-browser-cdp-proxy-session.ts`
-- `electron/src/terminal-browser-cdp-proxy-session-messages.ts`
-- `electron/src/terminal-browser-display-scale.ts`
-- `docs/plans/2026-07-18-terminal-browser-per-tab-display-scale.md`
-- `docs/testing/terminal/terminal-browser-display-scale.testplan.yaml`
+- `electron/src/browser/cdp/proxy/index.ts`
+- `electron/src/browser/cdp/proxy/messages.ts`
+- `electron/src/browser/cdp/proxy/session.ts`
+- `electron/src/browser/cdp/proxy/session-messages.ts`
+- `electron/src/browser/device/display-scale.ts`
+- `docs/plans/terminal/2026-07-18-browser-display-scale.md`
+- `docs/testing/terminal/browser/display-scale.testplan.yaml`
 
 ## 边界
 

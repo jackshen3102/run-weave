@@ -85,18 +85,18 @@ flowchart LR
 | 组件                      | 代码入口                                                  | 职责                                                                           | 非职责                          |
 | ------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------- |
 | app-server process        | `app-server/src/index.ts`                                 | 启动 HTTP/WS server、加载 token、初始化事件与状态存储、写 singleton lock       | 不启动 backend，不管理 terminal |
-| singleton/runtime helpers | `packages/shared/src/app-server-node.ts`                  | 解析 home/runtime、发现 owner、校验 health、安装 runtime release、兼容旧 lock  | 不包含 HTTP 业务逻辑            |
-| event schema              | `packages/shared/src/app-server-events.ts`                | 定义事件 envelope、状态 ref、source、scope、stream message 类型                | 不决定 handler 语义             |
-| HTTP API                  | `app-server/src/http-server.ts`                           | 鉴权、Origin 校验、事件写入、事件查询、状态查询、sync status                   | 不保存 consumer cursor          |
-| WebSocket API             | `app-server/src/websocket-server.ts`                      | 分批完整 catchup + live 事件投递                                               | 不做 ack，不保证 exactly-once   |
-| event store               | `app-server/src/event-store.ts`                           | 串行 append-only JSONL 持久化、7 天保留窗口、dedupe、按 id 查询                | 不做跨机器同步                  |
-| state store/projector     | `app-server/src/state-store.ts`、`state-projector.ts`     | 从 `agent.hook` / `agent.completion` 投影 ThreadRef，使用 `agent` 字段区分类型 | 不保存完整 thread 内容          |
+| singleton/runtime helpers | `packages/shared/src/app-server/node.ts`                  | 解析 home/runtime、发现 owner、校验 health、安装 runtime release、兼容旧 lock  | 不包含 HTTP 业务逻辑            |
+| event schema              | `packages/shared/src/app-server/events.ts`                | 定义事件 envelope、状态 ref、source、scope、stream message 类型                | 不决定 handler 语义             |
+| HTTP API                  | `app-server/src/server/http.ts`                           | 鉴权、Origin 校验、事件写入、事件查询、状态查询、sync status                   | 不保存 consumer cursor          |
+| WebSocket API             | `app-server/src/server/websocket.ts`                      | 分批完整 catchup + live 事件投递                                               | 不做 ack，不保证 exactly-once   |
+| event store               | `app-server/src/events/store.ts`                          | 串行 append-only JSONL 持久化、7 天保留窗口、dedupe、按 id 查询                | 不做跨机器同步                  |
+| state store/projector     | `app-server/src/state/store.ts`、`state-projector.ts`     | 从 `agent.hook` / `agent.completion` 投影 ThreadRef，使用 `agent` 字段区分类型 | 不保存完整 thread 内容          |
 | local sync sim            | `app-server/src/cloud-sync-sim.ts`                        | 镜像事件、latest projection、cursor、manifest                                  | 不上传真实云端                  |
 | CLI lifecycle             | `packages/runweave-cli/src/commands/app-server.ts`        | 安装、启动、停止、重启、状态查询                                               | 不编译源码，不决定更新策略      |
-| Electron bridge           | `electron/src/app-server-cli.ts`                          | 检查 app-server 是否可用；不可用时提示用户                                     | 不安装、启动或重启 app-server   |
+| Electron bridge           | `electron/src/app-server/cli.ts`                          | 检查 app-server 是否可用；不可用时提示用户                                     | 不安装、启动或重启 app-server   |
 | backend consumer          | `backend/src/app-server/*`                                | 发现 app-server、订阅事件、按 ownership 过滤并处理                             | 不启动 app-server               |
 | hook bridge               | `plugins/toolkit/hooks/*` 和 `electron/resources/hooks/*` | 将 AI hook 事件双写到 app-server 和 backend fallback                           | 不启动 app-server               |
-| local updater             | `scripts/runweave-update*.mjs`                            | 判断 Desktop App、Desktop Runtime、App Server 三类更新动作                     | 不绕过 CLI 直接杀进程           |
+| local updater             | `scripts/update/`                                         | 判断 Desktop App、Desktop Runtime、App Server 三类更新动作                     | 不绕过 CLI 直接杀进程           |
 
 ## Home、Runtime 与 Singleton
 
@@ -441,13 +441,13 @@ flowchart TD
 
 改动前先判断你在改哪一层：
 
-- **事件合约**：先改 `packages/shared/src/app-server-events.ts`，再同步 HTTP validation、
+- **事件合约**：先改 `packages/shared/src/app-server/events.ts`，再同步 HTTP validation、
   producer payload、consumer handler。
-- **状态 projection**：优先改 `app-server/src/state-projector.ts` 和 `state-store.ts`；event log
+- **状态 projection**：优先改 `app-server/src/state/projector.ts` 和 `state-store.ts`；event log
   仍是事实源，projection 必须可重建。
 - **本地同步模拟**：改 `app-server/src/cloud-sync-sim.ts`；失败不能 throw 到 HTTP 主流程，不能把
   token、Authorization、cookie、secret 写入 manifest 或 latest projection。
-- **发现/生命周期**：优先改 `packages/shared/src/app-server-node.ts` 和 CLI，不要让
+- **发现/生命周期**：优先改 `packages/shared/src/app-server/node.ts` 和 CLI，不要让
   Electron、backend、hook 各自复制 lock/token 逻辑。
 - **运行时安装**：改 updater 或 runtime manifest 时，要同时考虑 Desktop Runtime 和
   App Server runtime 的 release 指针。
@@ -474,11 +474,11 @@ flowchart TD
 
 1. 本文：理解架构边界和流程。
 2. `docs/architecture/app-server-event-center.md`：查看接口、状态文件和验证入口。
-3. `packages/shared/src/app-server-node.ts`：理解 home/runtime/discovery/lock 的真实实现。
+3. `packages/shared/src/app-server/node.ts`：理解 home/runtime/discovery/lock 的真实实现。
 4. `app-server/src/index.ts`、`event-store.ts`、`http-server.ts`、`websocket-server.ts`：
    理解服务端事件中心。
-5. `app-server/src/state-store.ts`、`state-projector.ts`、`cloud-sync-sim.ts`：
+5. `app-server/src/state/store.ts`、`state-projector.ts`、`cloud-sync-sim.ts`：
    理解状态投影和本地同步模拟。
-6. `packages/runweave-cli/src/commands/app-server.ts`、`electron/src/app-server-cli.ts`：
+6. `packages/runweave-cli/src/commands/app-server.ts`、`electron/src/app-server/cli.ts`：
    理解启动、重启和 packaged runtime 接入。
 7. `backend/src/app-server/*` 与 hook bridge：理解 producer/consumer 和 fallback。

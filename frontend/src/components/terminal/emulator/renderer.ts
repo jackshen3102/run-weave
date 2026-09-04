@@ -1,7 +1,7 @@
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { Terminal } from "@xterm/xterm";
-import type { TerminalRendererPreference } from "../../../features/terminal/preferences";
+import type { TerminalRendererPreference } from "../../../features/terminal/state/preferences";
 
 export function installTerminalRenderer(
   terminal: Terminal,

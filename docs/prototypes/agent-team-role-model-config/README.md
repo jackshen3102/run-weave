@@ -39,11 +39,11 @@ python3 -m http.server 6188 --directory docs/prototypes/agent-team-role-model-co
 
 Agent Team 当前不是“完全没有 Codex / TraeX 支持”，而是配置粒度停留在整个 Run：
 
-- `packages/shared/src/agent-team-run-contract.ts` 的 `AgentTeamTerminal` 只有 `command / args / cwd / runtimePreference`。
-- `packages/shared/src/agent-team-worker.ts` 的 worker 只有 `role / intent / panelId / tmuxPaneId / frozen`。
+- `packages/shared/src/agent-team/run-contract.ts` 的 `AgentTeamTerminal` 只有 `command / args / cwd / runtimePreference`。
+- `packages/shared/src/agent-team/worker.ts` 的 worker 只有 `role / intent / panelId / tmuxPaneId / frozen`。
 - `frontend/src/components/terminal/terminal-agent-team-panel.tsx` 创建 Run 时没有提交 `terminal`，后端因而使用缺省 Codex。
 - `backend/src/agent-team/service-run-policy.ts` 将缺省命令解析为 `codex`。
-- `backend/src/agent-team/agent-launch.ts` 启动主 Agent 和 worker 时接收同一个 `AgentTeamTerminal`。
+- `backend/src/agent-team/runtime/agent-launch.ts` 启动主 Agent 和 worker 时接收同一个 `AgentTeamTerminal`。
 - `backend/src/agent-team/service-worker-dispatch-support.ts` 恢复 worker thread 时仍以 Run 级 `terminal.command` 判断 provider。
 
 因此需要新增的是：

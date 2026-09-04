@@ -1,5 +1,5 @@
-import type { TerminalLastThreadStatus } from "./session";
-import type { TerminalAgentKind, TerminalState } from "./state";
+import type { TerminalLastThreadStatus } from "./runtime/session";
+import type { TerminalAgentKind, TerminalState } from "./runtime/state";
 
 export type TerminalPanelRole = string;
 

@@ -1,4 +1,4 @@
-import { recordSupportLog } from "../features/support-logs";
+import { recordSupportLog } from "../features/support-logs/index";
 
 function toEventName(message: string): string {
   return `legacy.${message

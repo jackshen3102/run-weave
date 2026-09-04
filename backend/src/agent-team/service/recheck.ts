@@ -6,7 +6,7 @@ import type {
   AgentTeamWorkerOutbox,
 } from "@runweave/shared/agent-team";
 import type { TerminalSessionRecord } from "../../terminal/manager/manager";
-import { AgentTeamCompletionService } from "./completion";
+import { AgentTeamCompletionService } from "./completion/index";
 import { agentTeamLogger } from "./context";
 import {
   ensureWorkerGateAcceptance,
@@ -17,12 +17,12 @@ import {
   isReviewGateAcceptanceCase,
   resolveRecheckDispatches,
   synthesizeBlockingReviewResults,
-} from "./acceptance-policy";
+} from "./acceptance/policy";
 import {
   createActiveWorkerDispatch,
   findWorkerByRole,
   setActiveWorker,
-} from "./workflow-policy";
+} from "./policies/workflow";
 import {
   rawBlockingReviewFindings,
   resolveRepairTargets,

@@ -198,11 +198,11 @@
         "symptom": "修复前可稳定复现低 ID 事件被去重、保留窗口外事件静默缺失；修复后新 stream 的 ID=1 事件正常显示，gap 会触发 resync。",
         "boundary": "已覆盖 restart、502 条溢出、窗口边界、cursor ahead 与正常重连；事件本身仍是 500 条内存 backlog，不改为持久事件存储。",
         "sources": [
-          "packages/shared/src/terminal-protocol.ts",
+          "packages/shared/src/terminal/protocol.ts",
           "backend/src/terminal/terminal-event-service.ts",
-          "backend/src/routes/terminal-ticket-routes.ts",
+          "backend/src/routes/terminal/input/ticket.ts",
           "backend/src/ws/terminal-events-server.ts",
-          "frontend/src/features/terminal/use-terminal-events-connection.ts",
+          "frontend/src/features/terminal/connection/use-events.ts",
           "app/src/hooks/use-app-terminal-events-connection.ts"
         ]
       },
@@ -234,7 +234,7 @@
         "symptom": "真实浏览器从 1 个 surface 增至 3 个时保留 3 个 xterm、捕获 2 条新增 session WS，JS heap 约增加 4.2 MB；未出现卡顿或错误。",
         "boundary": "只复现资源乘数，没有复现用户可见性能问题；按本轮门槛不修改 cache 上限或 surface 生命周期。",
         "sources": [
-          "frontend/src/features/terminal/surface-cache.ts",
+          "frontend/src/features/terminal/state/surface-cache.ts",
           "frontend/src/components/terminal/terminal-workspace-stage.tsx",
           "frontend/src/components/terminal/use-terminal-output-stream.ts",
           "frontend/src/components/terminal/terminal-surface-utils.ts",
@@ -252,7 +252,7 @@
         "symptom": "修复前离线输入在网络恢复后自动执行；修复后相同唯一标记未进入终端历史，恢复后仍显示未发送提示。",
         "boundary": "resize 仍可保留最新值并在重连后同步；只有用户输入禁止跨连接重放。",
         "sources": [
-          "frontend/src/features/terminal/use-terminal-connection.ts",
+          "frontend/src/features/terminal/connection/use-connection.ts",
           "frontend/src/components/terminal/terminal-surface.tsx"
         ]
       },
@@ -270,7 +270,7 @@
           "backend/src/ws/terminal-server.ts",
           "backend/src/terminal/manager.ts",
           "backend/src/index.ts",
-          "frontend/src/features/terminal/use-terminal-connection.ts",
+          "frontend/src/features/terminal/connection/use-connection.ts",
           "frontend/src/components/terminal/terminal-workspace-events.ts"
         ]
       }
@@ -372,9 +372,9 @@
               "GET /api/app/home/overview"
             ],
             "sources": [
-              "backend/src/routes/terminal.ts",
+              "backend/src/routes/terminal/index.ts",
               "backend/src/routes/terminal-input-dispatcher.ts",
-              "backend/src/routes/app-home-overview.ts"
+              "backend/src/routes/app/home-overview.ts"
             ]
           },
           {
@@ -393,7 +393,7 @@
             ],
             "sources": [
               "backend/src/ws/terminal-server.ts",
-              "packages/shared/src/terminal-protocol.ts"
+              "packages/shared/src/terminal/protocol.ts"
             ]
           },
           {
@@ -501,7 +501,7 @@
             ],
             "interfaces": ["write / resize / signal", "onData / onExit"],
             "sources": [
-              "backend/src/terminal/pty-service.ts",
+              "backend/src/terminal/runtime/pty-service.ts",
               "backend/src/terminal/runtime-launcher.ts"
             ]
           },
@@ -522,7 +522,7 @@
             "sources": [
               "backend/src/terminal/tmux-service.ts",
               "backend/src/terminal/runtime-launcher.ts",
-              "backend/src/routes/terminal-panel-routes.ts"
+              "backend/src/routes/terminal/panels/index.ts"
             ]
           }
         ]
@@ -544,9 +544,9 @@
             ],
             "interfaces": ["POST /events", "WS /events/stream", "GET /threads"],
             "sources": [
-              "app-server/src/event-center.ts",
-              "app-server/src/state-projector.ts",
-              "packages/shared/src/app-server-events.ts"
+              "app-server/src/events/center.ts",
+              "app-server/src/state/projector.ts",
+              "packages/shared/src/app-server/events.ts"
             ]
           }
         ]
@@ -631,7 +631,7 @@
             "title": "useTerminalConnection.sendInput",
             "detail": "仅在浏览器在线且 WebSocket open 时发送 TerminalClientMessage；离线输入不排队，并明确提示未发送。",
             "payload": "{ type: input, data: 继续 }",
-            "source": "frontend/src/features/terminal/use-terminal-connection.ts"
+            "source": "frontend/src/features/terminal/connection/use-connection.ts"
           },
           {
             "id": "web-xterm-3",
@@ -679,7 +679,7 @@
             "title": "POST session input",
             "detail": "HTTP 请求携带 terminalSessionId；若 panel split 开启，还会携带 activePanelId。",
             "payload": "POST /api/terminal/session/:id/input",
-            "source": "frontend/src/services/terminal.ts"
+            "source": "frontend/src/services/terminal/index.ts"
           },
           {
             "id": "web-composer-3",
@@ -711,7 +711,7 @@
             "title": "在 IonTextarea 输入并点击发送",
             "detail": "handleSubmit 读取 trimEnd 后的文本，调用 onSendInput；成功后清空输入框。",
             "payload": "text = 继续",
-            "source": "app/src/components/TerminalCommandComposer.tsx"
+            "source": "app/src/components/terminal/composer.tsx"
           },
           {
             "id": "app-composer-2",
@@ -799,7 +799,7 @@
         ],
         "sources": [
           "backend/src/ws/terminal-server.ts",
-          "frontend/src/features/terminal/use-terminal-connection.ts",
+          "frontend/src/features/terminal/connection/use-connection.ts",
           "app/src/hooks/use-app-terminal-connection.ts"
         ]
       },
@@ -843,8 +843,8 @@
           "derived thread.state.changed → AppServerThreadRef"
         ],
         "sources": [
-          "app-server/src/event-center.ts",
-          "app-server/src/state-projector.ts",
+          "app-server/src/events/center.ts",
+          "app-server/src/state/projector.ts",
           "backend/src/app-server/event-consumer.ts"
         ]
       }
@@ -1014,7 +1014,7 @@
         "owner": "AppServerStateStore",
         "persisted": "App Server state store",
         "endsWhen": "由后续 Agent event 持续更新；与 terminal delete 没有直接级联代码",
-        "source": "packages/shared/src/app-server-events.ts · app-server/src/state-store.ts"
+        "source": "packages/shared/src/app-server/events.ts · app-server/src/state/store.ts"
       }
     ],
     "counts": [
@@ -1023,14 +1023,14 @@
         "value": "≤ 10",
         "unit": "跨当前 backend 的最近 session",
         "contains": "每个含 xterm + terminal WS；inactive surface 屏幕外挂载",
-        "source": "frontend/src/features/terminal/surface-cache.ts"
+        "source": "frontend/src/features/terminal/state/surface-cache.ts"
       },
       {
         "metric": "Web global terminal-events connection",
         "value": "1",
         "unit": "每个 Terminal Workspace / backend 连接",
         "contains": "统一接收 Project、Session、Panel、state、completion、bell 与 metadata",
-        "source": "frontend/src/features/terminal/use-terminal-events-connection.ts"
+        "source": "frontend/src/features/terminal/connection/use-events.ts"
       },
       {
         "metric": "App live TerminalRenderer",
@@ -1063,7 +1063,7 @@
       "purpose": "列出 backend Project 主数据",
       "payload": "TerminalProjectListItem[]",
       "consumers": "Web TerminalWorkspace",
-      "source": "backend/src/routes/terminal-project-routes.ts"
+      "source": "backend/src/routes/terminal/projects/index.ts"
     },
     {
       "type": "REST",
@@ -1072,7 +1072,7 @@
       "purpose": "列出全部 Terminal Session 与折叠状态",
       "payload": "TerminalSessionListItem[]",
       "consumers": "Web TerminalWorkspace",
-      "source": "backend/src/routes/terminal.ts"
+      "source": "backend/src/routes/terminal/index.ts"
     },
     {
       "type": "REST",
@@ -1081,7 +1081,7 @@
       "purpose": "App-only Project + Session 聚合列表",
       "payload": "AppHomeOverviewResponse",
       "consumers": "App useAppSession",
-      "source": "backend/src/routes/app-home-overview.ts"
+      "source": "backend/src/routes/app/home-overview.ts"
     },
     {
       "type": "REST",
@@ -1090,7 +1090,7 @@
       "purpose": "创建 Project",
       "payload": "name, path? → TerminalProjectListItem",
       "consumers": "Web / App",
-      "source": "backend/src/routes/terminal-project-routes.ts"
+      "source": "backend/src/routes/terminal/projects/index.ts"
     },
     {
       "type": "REST",
@@ -1099,7 +1099,7 @@
       "purpose": "创建 Session 并初始化 runtime / default panel",
       "payload": "projectId?, cwd?, inherit?, runtimePreference? → terminalSessionId",
       "consumers": "Web / App / CLI",
-      "source": "backend/src/routes/terminal.ts"
+      "source": "backend/src/routes/terminal/index.ts"
     },
     {
       "type": "REST",
@@ -1108,7 +1108,7 @@
       "purpose": "读取 session metadata + live scrollback",
       "payload": "TerminalSessionStatusResponse",
       "consumers": "Web snapshot restore / App detail",
-      "source": "backend/src/routes/terminal.ts"
+      "source": "backend/src/routes/terminal/index.ts"
     },
     {
       "type": "REST",
@@ -1126,7 +1126,7 @@
       "purpose": "发送 escape interrupt 并更新 Agent state",
       "payload": "panel selector? → SendTerminalInterruptResponse",
       "consumers": "App Stop / Web controls / CLI",
-      "source": "backend/src/routes/terminal.ts"
+      "source": "backend/src/routes/terminal/index.ts"
     },
     {
       "type": "REST",
@@ -1135,7 +1135,7 @@
       "purpose": "读取 TerminalState 权威视图",
       "payload": "{ terminalState }",
       "consumers": "App detail / control plane",
-      "source": "backend/src/routes/terminal-state.ts"
+      "source": "backend/src/routes/terminal/state.ts"
     },
     {
       "type": "REST",
@@ -1144,7 +1144,7 @@
       "purpose": "列出、拆分、更新、删除、resize、input、interrupt Panel",
       "payload": "TerminalPanelWorkspace / panel operation",
       "consumers": "Web panel split / Agent Team / CLI",
-      "source": "backend/src/routes/terminal-panel-routes.ts"
+      "source": "backend/src/routes/terminal/panels/index.ts"
     },
     {
       "type": "REST",
@@ -1153,7 +1153,7 @@
       "purpose": "签发绑定 terminalSessionId 的短期 terminal WS ticket",
       "payload": "{ ticket }",
       "consumers": "Web / App terminal connection",
-      "source": "backend/src/routes/terminal-ticket-routes.ts"
+      "source": "backend/src/routes/terminal/input/ticket.ts"
     },
     {
       "type": "REST",
@@ -1162,7 +1162,7 @@
       "purpose": "签发 terminal-events WS ticket + baselineEventId + streamId",
       "payload": "{ ticket, baselineEventId, streamId }",
       "consumers": "Web workspace / App session",
-      "source": "backend/src/routes/terminal-ticket-routes.ts"
+      "source": "backend/src/routes/terminal/input/ticket.ts"
     },
     {
       "type": "WebSocket",
@@ -1189,7 +1189,7 @@
       "purpose": "记录 agent.hook / agent.completion 等跨进程事件",
       "payload": "CreateAppServerEventRequest",
       "consumers": "AppServerEventCenter",
-      "source": "app-server/src/http-server.ts"
+      "source": "app-server/src/server/http.ts"
     },
     {
       "type": "Internal",

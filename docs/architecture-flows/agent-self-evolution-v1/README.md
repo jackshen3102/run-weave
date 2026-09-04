@@ -154,12 +154,12 @@ L4 仍然禁止自动外发、自动合并、提权和破坏性操作。Product 
 
 ### Agent Team
 
-- `backend/src/agent-team/activity-events.ts`
+- `backend/src/agent-team/events/activity.ts`
 - `.runweave/agent-team/<runId>.json` 及 Run / Round / Worker 关联结构
 
 ### App Server
 
-- `app-server/src/event-store.ts`
+- `app-server/src/events/store.ts`
 - App Server event / thread 内容与 Activity fact 的关联 ID
 
 ## 外部研究依据

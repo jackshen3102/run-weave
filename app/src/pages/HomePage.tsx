@@ -15,17 +15,17 @@ import {
 } from "@ionic/react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
-import { AppConnectionChip } from "../components/AppConnectionChip";
-import { AppConnectionManager } from "../components/AppConnectionManager";
-import { AppMoreMenu } from "../components/AppMoreMenu";
+import { AppConnectionChip } from "../components/shell/connection-chip";
+import { AppConnectionManager } from "../components/shell/connection-manager";
+import { AppMoreMenu } from "../components/shell/more-menu";
 import type { AppConnectionConfig } from "../features/connections/types";
-import { useSupportLogs } from "../features/support-logs";
+import { useSupportLogs } from "../features/support-logs/index";
 import type { AppDeviceConnectionSnapshot } from "../hooks/use-app-device-connection";
 import {
   buildTerminalHomeGroups,
   type TerminalHomeProjectGroup,
 } from "../lib/terminal-home-view-model";
-import { ProjectGroup } from "../components/ProjectGroup";
+import { ProjectGroup } from "../components/project/group";
 
 interface HomePageProps {
   activeConnection: AppConnectionConfig | null;

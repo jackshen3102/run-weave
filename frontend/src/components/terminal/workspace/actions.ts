@@ -1,5 +1,5 @@
 import { useMemoizedFn } from "ahooks";
-import { resolveNewTerminalRuntimePreference } from "../../../features/terminal/runtime-preference";
+import { resolveNewTerminalRuntimePreference } from "../../../features/terminal/state/runtime-preference";
 import type { ClientMode } from "../../../features/client-mode";
 import { HttpError } from "../../../services/http";
 import {
@@ -11,9 +11,9 @@ import {
   reorderTerminalSessions,
   updateTerminalSession,
   updateTerminalProject,
-} from "../../../services/terminal";
+} from "../../../services/terminal/index";
 import { useShallow } from "zustand/react/shallow";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/workspace-store";
+import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_SESSIONS,
@@ -22,7 +22,7 @@ import {
   useTerminalProjectsQuery,
   useTerminalSessionsQuery,
   useTerminalWorkspaceQueryClient,
-} from "../../../features/terminal/queries/terminal-workspace-queries";
+} from "../../../features/terminal/queries/workspace";
 
 interface UseTerminalWorkspaceActionsArgs {
   apiBase: string;

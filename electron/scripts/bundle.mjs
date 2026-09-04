@@ -106,7 +106,7 @@ const evolutionWorkerEntry = path.resolve(
 );
 await build({
   ...shared,
-  entryPoints: ["../backend/src/activity/sqlite-worker.ts"],
+  entryPoints: ["../backend/src/activity/database/sqlite-worker.ts"],
   outfile: activityWorkerEntry,
   format: "cjs",
   external: ["better-sqlite3"],

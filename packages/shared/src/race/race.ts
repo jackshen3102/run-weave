@@ -1,4 +1,4 @@
-import type { TerminalAgentPreparationAgent } from "../terminal/agent-preparation";
+import type { TerminalAgentPreparationAgent } from "../terminal/runtime/agent-preparation";
 
 export type RaceAgent = TerminalAgentPreparationAgent;
 

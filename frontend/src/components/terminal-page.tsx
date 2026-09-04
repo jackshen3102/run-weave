@@ -17,13 +17,13 @@ import type { TerminalSessionStatusResponse } from "@runweave/shared/terminal/se
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { RuntimeMonitorBadge } from "./runtime-monitor-badge";
-import { filterBrowserHandledTerminalOutput } from "../features/terminal/output-filter";
-import { formatTerminalSessionName } from "../features/terminal/session-name";
-import { useTerminalConnection } from "../features/terminal/use-terminal-connection";
-import { createTerminalWrappedWebLinkProvider } from "../features/terminal/web-link-provider";
-import { shouldSuppressWheelInput } from "../features/terminal/wheel-input";
+import { filterBrowserHandledTerminalOutput } from "../features/terminal/output/filter";
+import { formatTerminalSessionName } from "../features/terminal/state/session-name";
+import { useTerminalConnection } from "../features/terminal/connection/use-connection";
+import { createTerminalWrappedWebLinkProvider } from "../features/terminal/navigation/web-link-provider";
+import { shouldSuppressWheelInput } from "../features/terminal/viewport/wheel-input";
 import { HttpError } from "../services/http";
-import { getTerminalSession } from "../services/terminal";
+import { getTerminalSession } from "../services/terminal/index";
 
 interface TerminalPageProps {
   apiBase: string;

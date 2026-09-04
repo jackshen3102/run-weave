@@ -32,7 +32,7 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `frontend/src/components/terminal/terminal-surface-layout.tsx`：终端展示壳层，负责错误、粘贴图片 badge、search toolbar、mobile keybar 和 emulator 容器布局。
 - `frontend/src/components/terminal/terminal-search-toolbar.tsx`：终端搜索 toolbar 展示层，封装 query、方向、匹配大小写、整词和 regex 开关。
 - `frontend/src/components/terminal/terminal-surface-utils.ts`：TerminalSurface 的稳定工具与类型边界，包含终端自动响应过滤、单次 composition 提交状态、搜索结果类型、移动端 beforeinput 解析和性能探针记录。
-- `frontend/src/features/terminal/web-link-provider.ts`：窄范围 wrapped URL 兼容 provider，只处理 xterm 标记为跨行 wrapped 的 `http:` / `https:` 链接，不接管普通 URL 或文件路径预览。
+- `frontend/src/features/terminal/navigation/web-link-provider.ts`：窄范围 wrapped URL 兼容 provider，只处理 xterm 标记为跨行 wrapped 的 `http:` / `https:` 链接，不接管普通 URL 或文件路径预览。
 - `frontend/src/components/terminal/terminal-preview-panel.tsx`：右侧 Preview 面板的数据编排层，负责按 active project 读取 Preview 状态、发起文件和 diff 请求，并把动作与渲染层连接起来。
 - `frontend/src/components/terminal/terminal-preview-panel-paths.ts`：Preview 路径选择与复制路径的纯函数边界，负责从 Files / Changes 状态、后端 `absolutePath` 和 active project path 中得出当前选中路径与可复制路径。
 - `frontend/src/components/terminal/terminal-preview-panel-actions.ts`：Preview 面板动作层，负责刷新、复制路径、面板宽度拖拽、Markdown split 拖拽和视图模式切换。
@@ -45,17 +45,17 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `frontend/src/components/terminal/terminal-monaco-viewer.tsx`：Monaco Editor / Diff Editor 封装，已通过 lazy boundary 加载；在文件或 diff 选区非空时可复制 `path:line` / `path:start-end` 行引用。
 - `frontend/src/components/terminal/terminal-line-reference.tsx`：行引用复制的选择范围、按钮和 clipboard 状态封装，避免 Monaco viewer 继续堆叠行引用细节。
 - `frontend/src/components/ui/sortable-tabs.tsx`：项目 tab、terminal session tab 和 Browser tab 共用的拖拽排序基础组件；交互容器不额外声明 `role=button`，避免与内部 tab/button 语义重复。
-- `frontend/src/features/terminal/preview-store.ts`：右侧 Sidecar Zustand store，工具为 `preview | prototypes | browser | agent-team`；Preview 状态继续按 project 保存 query、selected file、selected change。
-- `frontend/src/services/terminal.ts`：Terminal HTTP API 的兼容 barrel；project、session、panel、
+- `frontend/src/features/terminal/preview/store.ts`：右侧 Sidecar Zustand store，工具为 `preview | prototypes | browser | agent-team`；Preview 状态继续按 project 保存 query、selected file、selected change。
+- `frontend/src/services/terminal/index.ts`：Terminal HTTP API 的兼容 barrel；project、session、panel、
   completion events 分别由 `terminal-projects.ts`、`terminal-sessions.ts`、
   `terminal-panels.ts`、`terminal-events.ts` 实现，Preview、Agent Team、Quick Input 与
   prototype gallery 保持独立模块。
-- `backend/src/routes/terminal.ts`：Terminal HTTP API 主路由，负责项目、session、clipboard image、项目排序和 session 排序，并注册 Preview 与 prototype gallery 子路由。
-- `backend/src/terminal/prototype-gallery.ts`：按已登记项目发现 `docs/prototypes`、解析标题与入口，并通过 realpath 约束静态资源路径。
-- `backend/src/routes/prototype-preview.ts`：使用绑定 `projectId + prototypeSlug` 的短期票据提供只读原型资源。
-- `backend/src/routes/terminal-preview-routes.ts`：Terminal Preview HTTP 子路由，提供 `/api/terminal/project/:id/preview/...` project-scoped Preview API。
+- `backend/src/routes/terminal/index.ts`：Terminal HTTP API 主路由，负责项目、session、clipboard image、项目排序和 session 排序，并注册 Preview 与 prototype gallery 子路由。
+- `backend/src/terminal/preview/prototype-gallery.ts`：按已登记项目发现 `docs/prototypes`、解析标题与入口，并通过 realpath 约束静态资源路径。
+- `backend/src/routes/prototype/preview.ts`：使用绑定 `projectId + prototypeSlug` 的短期票据提供只读原型资源。
+- `backend/src/routes/terminal/preview/index.ts`：Terminal Preview HTTP 子路由，提供 `/api/terminal/project/:id/preview/...` project-scoped Preview API。
 - `backend/src/terminal/preview.ts`：后端 Preview service 已基于 project path 做路径约束、文件读取、语言识别、搜索、git changes 和 diff。
-- `packages/shared/src/terminal-protocol.ts`：Terminal 共享协议包含 Preview search/file/git changes/file diff、directory tree，以及 prototype gallery / preview ticket 类型。
+- `packages/shared/src/terminal/protocol.ts`：Terminal 共享协议包含 Preview search/file/git changes/file diff、directory tree，以及 prototype gallery / preview ticket 类型。
 - 当前 `frontend/package.json` 已有 `monaco-editor`、`@monaco-editor/react` 和 `zustand`，但还没有 `markdown-it`、Markdown 插件及 Mermaid 依赖。
 - 当前 Terminal Project 已有 `path: string | null` 字段。Preview 的文件根目录是 project path，不使用 terminal session 的实时 `cwd`。
 - 后端已经把 `.md` / `.mdx` 识别为 `language: "markdown"`。因此 Markdown 预览不需要新增文件读取 API，属于前端渲染层能力。
@@ -105,7 +105,7 @@ Terminal Browser 与 Automation 工具当前边界：
 - Header 规则变更只影响后续新请求。面板保存成功后会关闭面板；如需让当前页面主文档请求携带新规则，用户需要通过工具栏刷新当前 Browser tab。
 - Browser 工具栏的地址输入框旁提供复制当前地址按钮，只复制当前 tab 的地址文本，不触发导航、分享或外部打开；复制成功后短暂显示完成状态。
 - Browser 工具提供当前 tab 级别的设备模式。`Desktop` 是默认状态；切到移动设备时，当前支持 `iPhone SE`、`iPhone 14` 和 `Pixel 7` 三个预设，分别应用移动端 viewport、device scale factor、移动端 user agent 和 touch emulation。
-- 设备预设定义在 `packages/shared/src/terminal-browser-device.ts`，由前端设备面板和 Electron 主进程共享。新建、恢复和 proxy-created tab 仍从 `Desktop` 开始，不继承其他 tab 的移动设备状态。
+- 设备预设定义在 `packages/shared/src/browser/device.ts`，由前端设备面板和 Electron 主进程共享。新建、恢复和 proxy-created tab 仍从 `Desktop` 开始，不继承其他 tab 的移动设备状态。
 - 移动设备模式只作用于 Terminal Browser 的 Electron `WebContentsView`。前端负责设备入口、预设选择、手机画布布局和 bounds 同步；真实 emulation 在 Electron 主进程里通过目标 tab 的 `webContents.debugger` 落地。
 - 移动设备画布使用显式缩放模型：前端计算设备逻辑 viewport、面板内展示 bounds 和 `emulationScale`，Electron `setBounds()` 使用展示 bounds，CDP emulation 使用逻辑 viewport 与 scale。不能用 CSS transform 代替 native view 缩放。
 - 设备模式可与 CDP Proxy 共存：如果当前 tab 已附着 CDP Proxy，设备切换复用同一个 `webContents.debugger` 发送 emulation 命令；如果先进入移动设备再被 CDP attach，CDP Proxy 复用设备模式已有的 debugger attach。detached DevTools 仍与设备模式和 CDP Proxy 互斥。
@@ -197,7 +197,7 @@ Preview 工具内部再区分两个稳定任务：
 
 静态路由只接受 GET/HEAD，并对 project root、prototype root、prototype dir 和最终文件执行 realpath containment。响应禁用缓存，允许 opaque-origin iframe 读取本地资源，但不授予 iframe `allow-same-origin`。选择状态按 `{projectId, slug}` 保存到当前 `apiBase` 对应的 localStorage key；切换工具或重开 Sidecar 后恢复，列表刷新时再对磁盘事实做校验。
 
-验收入口见 `docs/testing/terminal/worktree-project-context.testplan.yaml`。
+验收入口见 `docs/testing/terminal/workspace/project-context.testplan.yaml`。
 
 选择 `Explorer` 后，左侧显示受限目录树。目录优先排序，复用 Files 搜索的根目录 `.gitignore` 规则，并默认过滤 `node_modules`、`.git`、`dist`、`build`、`.next`、`.turbo`、`coverage` 等重目录和敏感环境文件；每层返回数量受 limit 约束，超限时前端显示 `truncated` 提示。Explorer 不监听文件系统；用户点击 Preview Header 的 Refresh 时，前端重新读取根目录和当前已展开目录。选择 `Files` 后，右侧显示 Spotlight / Cmd+P 风格的文件搜索面板。用户可以按文件名或相对路径模糊搜索当前项目路径内文件，选中后进入文件预览。project 内已存在的普通文本/代码文件可以编辑；绝对路径只能手动完整输入并打开，不参与模糊搜索，返回 `base: "filesystem"` 时始终只读。
 
@@ -1014,11 +1014,11 @@ Type to search files or paste an absolute path
 - `frontend/src/components/terminal/terminal-markdown-preview.tsx`
 - `frontend/src/components/terminal/terminal-svg-preview.tsx`
 - `frontend/src/components/terminal/terminal-image-preview.tsx`
-- `frontend/src/features/terminal/markdown-preview.ts`
+- `frontend/src/features/terminal/preview/markdown.ts`
 - `frontend/src/features/terminal/svg-preview.ts`
 - `frontend/src/features/terminal/image-preview.ts`
-- `frontend/src/features/terminal/preview-store.ts`
-- `frontend/src/services/terminal.ts`
+- `frontend/src/features/terminal/preview/store.ts`
+- `frontend/src/services/terminal/index.ts`
 
 当前项目已经有前四个 Preview 组件、`preview-store.ts` 和 project-scoped service wrappers。Markdown / SVG / Image 增量建议只新增 renderer 组件和纯渲染工具，不拆出新的 service 文件。
 

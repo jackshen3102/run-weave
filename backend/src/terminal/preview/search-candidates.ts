@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { logger } from "../../logging";
+import { logger } from "../../logging/index";
 import { TerminalPreviewError, toRelativePath } from "./paths";
 
 const execFileAsync = promisify(execFile);

@@ -6,7 +6,7 @@ import {
   SupportLogProvider,
   SupportLogSheet,
   useSupportLogs,
-} from "./features/support-logs";
+} from "./features/support-logs/index";
 import { useAppSession } from "./hooks/use-app-session";
 import { AppRoutes } from "./routes/AppRoutes";
 import { AppQueryProvider } from "./features/query/app-query-provider";

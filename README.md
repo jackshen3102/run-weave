@@ -37,7 +37,7 @@ Goal / Planner / Actor / Observer / Verifier / State / Exit Condition.
 
 - **Verifier** is a `behavior_verify` worker that runs Playwright against the
   drafted acceptance cases and writes pass/fail + evidence back to its outbox
-  (roles are defined in `packages/shared/src/agent-team.ts`; prompts in
+  (roles are defined in `packages/shared/src/agent-team/index.ts`; prompts in
   `backend/src/agent-team/prompt-builders.ts`).
 - **State + Exit Condition** live in `backend/src/agent-team/loop.ts`:
   `errorFingerprints` (dedup repeated failures), `bestPassCount` (objective

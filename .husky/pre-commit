@@ -1,4 +1,4 @@
-node ./scripts/check-staged-sensitive-paths.mjs
+node ./scripts/quality/staged-sensitive-paths.mjs
 pnpm toolkit:sync:staged
 pnpm lint-staged
-node ./scripts/check-staged-sensitive-paths.mjs
+node ./scripts/quality/staged-sensitive-paths.mjs
