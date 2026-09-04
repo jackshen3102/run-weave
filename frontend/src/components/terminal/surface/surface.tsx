@@ -30,6 +30,7 @@ import { useTerminalOutputStream } from "./use-output-stream";
 import { useTerminalSnapshotRestore } from "./use-snapshot-restore";
 import {
   IME_COMMIT_WINDOW_MS,
+  recordTerminalPerfProbeEvent,
   TERMINAL_RESIZE_DEBOUNCE_MS,
   type TerminalImeCommit,
   type PastedImageReference,
@@ -110,6 +111,7 @@ export function TerminalSurface({
   const restoreSnapshotRequestRef = useRef(0);
   const websocketContentVersionRef = useRef(0);
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const floatingComposerOutputReceivedRef = useRef<() => void>(() => undefined);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
   const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
@@ -134,6 +136,7 @@ export function TerminalSurface({
       hasRenderedSnapshotRef,
       lastInputSentAtRef,
       outputSequenceRef,
+      onOutputReceived: () => floatingComposerOutputReceivedRef.current(),
       refreshTerminalViewportRef,
       requiresSnapshotRestoreRef,
       setHasNewOutputBelow: scroll.setHasNewOutputBelow,
@@ -175,6 +178,11 @@ export function TerminalSurface({
       seq: inputSequenceRef.current,
       ...summarizeTerminalChunk(data),
     });
+    recordTerminalPerfProbeEvent("terminal.input.captured", data, {
+      terminalSessionId,
+      seq: inputSequenceRef.current,
+      ...summarizeTerminalChunk(data),
+    });
     sendInput(data);
   });
   const floatingComposer = useTerminalFloatingComposerController({
@@ -192,6 +200,11 @@ export function TerminalSurface({
     terminalState,
     token,
   });
+
+  useEffect(() => {
+    floatingComposerOutputReceivedRef.current =
+      floatingComposer.handleOutputReceived;
+  }, [floatingComposer.handleOutputReceived]);
 
   useLayoutEffect(() => {
     activeRef.current = active;

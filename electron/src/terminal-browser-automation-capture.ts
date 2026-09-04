@@ -59,6 +59,9 @@ interface ActiveCapture extends TerminalBrowserAutomationCaptureSource {
 
 const DEFAULT_FPS = 5;
 const JPEG_QUALITY = 60;
+// Never let an over-budget capture immediately start another synchronous
+// resize/JPEG cycle on Electron's main thread.
+const MIN_CAPTURE_COOLDOWN_MS = 50;
 
 function clampFps(value: number | undefined): number {
   return Math.min(15, Math.max(1, value ?? DEFAULT_FPS));
@@ -200,7 +203,7 @@ export class TerminalBrowserAutomationCapture {
         this.scheduleCapturePage(
           active,
           generation,
-          Math.max(0, active.intervalMs - elapsed),
+          Math.max(MIN_CAPTURE_COOLDOWN_MS, active.intervalMs - elapsed),
         );
       }
     }

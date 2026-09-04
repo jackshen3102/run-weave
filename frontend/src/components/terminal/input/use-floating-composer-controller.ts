@@ -17,6 +17,7 @@ import { sendTerminalInput as sendTerminalInputRequest } from "../../../services
 import type { TerminalFloatingComposerDiagnostics } from "./floating-composer";
 
 const TMUX_EXIT_COPY_MODE_REQUEST_COOLDOWN_MS = 1_000;
+const INPUT_LAG_FALLBACK_DELAY_MS = 150;
 
 type TerminalRuntimeKindRef = RefObject<"tmux" | "pty" | null>;
 
@@ -153,9 +154,11 @@ function useTerminalFloatingDraftController({
   const floatingDraftDirtyRef = useRef(false);
   const floatingDraftSyncPendingRef = useRef(false);
   const floatingComposerVisibleRef = useRef(false);
+  const inputLagFallbackTimerRef = useRef<number | null>(null);
   const [floatingComposerOpen, setFloatingComposerOpen] = useState(false);
   const [floatingDraft, setFloatingDraft] = useState("");
   const [draftMirrorSupported, setDraftMirrorSupported] = useState(true);
+  const [inputLagFallbackActive, setInputLagFallbackActive] = useState(false);
 
   const eligible = shouldEnableFloatingComposer({
     activeCommand,
@@ -166,20 +169,56 @@ function useTerminalFloatingDraftController({
     terminalState,
   });
 
+  const clearInputLagFallbackTimer = useMemoizedFn(() => {
+    if (inputLagFallbackTimerRef.current === null) {
+      return;
+    }
+    window.clearTimeout(inputLagFallbackTimerRef.current);
+    inputLagFallbackTimerRef.current = null;
+  });
+
+  const handleOutputReceived = useMemoizedFn(() => {
+    clearInputLagFallbackTimer();
+  });
+
   const handleUserInputData = useMemoizedFn((data: string) => {
     if (!eligible || !draftMirrorSupported) {
       return;
     }
-    const next = applyTerminalDraftInput(lastSyncedTuiDraftRef.current, data);
+    const previousDraft = lastSyncedTuiDraftRef.current;
+    const next = applyTerminalDraftInput(previousDraft, data);
     if (!next.supported) {
+      clearInputLagFallbackTimer();
       if (lastSyncedTuiDraftRef.current) {
         setDraftMirrorSupported(false);
       }
       return;
     }
     lastSyncedTuiDraftRef.current = next.draft;
+    floatingDraftRef.current = next.draft;
     floatingDraftDirtyRef.current = false;
     setFloatingDraft(next.draft);
+
+    if (!next.draft) {
+      clearInputLagFallbackTimer();
+      setInputLagFallbackActive(false);
+      return;
+    }
+    if (
+      next.draft === previousDraft ||
+      floatingComposerVisibleRef.current ||
+      inputLagFallbackTimerRef.current !== null
+    ) {
+      return;
+    }
+    inputLagFallbackTimerRef.current = window.setTimeout(() => {
+      inputLagFallbackTimerRef.current = null;
+      if (!floatingDraftRef.current || !eligible || !draftMirrorSupported) {
+        return;
+      }
+      setInputLagFallbackActive(true);
+      setFloatingComposerOpen(true);
+    }, INPUT_LAG_FALLBACK_DELAY_MS);
   });
 
   const handleDraftChange = useMemoizedFn((value: string) => {
@@ -239,7 +278,9 @@ function useTerminalFloatingDraftController({
   );
 
   const available =
-    eligible && draftMirrorSupported && showScrollToBottomControl;
+    eligible &&
+    draftMirrorSupported &&
+    (showScrollToBottomControl || inputLagFallbackActive);
   const visible = available && floatingComposerOpen;
   const showTrigger = available && !floatingComposerOpen;
 
@@ -255,6 +296,9 @@ function useTerminalFloatingDraftController({
     ) {
       return;
     }
+    clearInputLagFallbackTimer();
+    setInputLagFallbackActive(false);
+    setFloatingComposerOpen(false);
     scrollToBottom();
   });
 
@@ -294,21 +338,48 @@ function useTerminalFloatingDraftController({
 
   useEffect(() => {
     setDraftMirrorSupported(true);
+    clearInputLagFallbackTimer();
+    setInputLagFallbackActive(false);
   }, [
     activeCommand,
+    clearInputLagFallbackTimer,
     terminalSessionId,
     terminalState?.agent,
     terminalState?.state,
   ]);
 
+  useEffect(() => {
+    if (eligible) {
+      return;
+    }
+    clearInputLagFallbackTimer();
+    setInputLagFallbackActive(false);
+    setFloatingComposerOpen(false);
+  }, [clearInputLagFallbackTimer, eligible]);
+
+  useEffect(
+    () => () => {
+      clearInputLagFallbackTimer();
+    },
+    [clearInputLagFallbackTimer],
+  );
+
+  const handleClose = useMemoizedFn(() => {
+    clearInputLagFallbackTimer();
+    setInputLagFallbackActive(false);
+    setFloatingComposerOpen(false);
+  });
+
   return {
     draft: floatingDraft,
     draftMirrorSupported,
     eligible,
+    handleOutputReceived,
     handleDraftChange,
     handleSend,
     handleUserInputData,
-    onClose: () => setFloatingComposerOpen(false),
+    inputLagFallbackActive,
+    onClose: handleClose,
     onOpen: () => setFloatingComposerOpen(true),
     showTrigger,
     visible,
@@ -384,6 +455,7 @@ export function useTerminalFloatingComposerController({
     bufferType,
     draftMirrorSupported: draft.draftMirrorSupported,
     eligible,
+    inputLagFallbackActive: draft.inputLagFallbackActive,
     sessionStatus,
     terminalAgent: terminalState?.agent ?? null,
     terminalAtBottom: scroll.terminalAtBottom,
@@ -400,6 +472,7 @@ export function useTerminalFloatingComposerController({
     diagnostics,
     draft: draft.draft,
     handleBottomStateChange: scroll.handleBottomStateChange,
+    handleOutputReceived: draft.handleOutputReceived,
     handleUserInputData: draft.handleUserInputData,
     hasNewOutputBelow: scroll.hasNewOutputBelow,
     onClose: handleClose,

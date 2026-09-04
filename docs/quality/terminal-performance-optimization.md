@@ -27,8 +27,9 @@ Playwright / E2E / benchmark 使用固定端口和固定临时存储路径，不
 
 最开始的 benchmark 用 accessibility / text polling 等待 marker 出现在终端文本里，看到的 p95 约为 1.9s。后续诊断证明这主要是 screen reader / accessibility 文本观测方式带来的测量噪声，不代表真实 paint 延迟。
 
-最终改成在终端输出链路里记录三类 probe：
+最终改成在终端输入与输出链路里记录四类 probe：
 
+- `terminal.input.captured`：xterm 捕获用户输入的时间。
 - `terminal.output.received`：前端收到 WS output 的时间。
 - `terminal.output.rendered`：`terminal.write(...)` callback 返回的时间。
 - `terminal.output.painted`：write callback 后经过两次 `requestAnimationFrame`，用于近似用户可见 paint 的时间。
