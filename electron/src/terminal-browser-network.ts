@@ -9,6 +9,7 @@ import {
   type TerminalBrowserProfileProxyMode,
 } from "@runweave/shared/terminal-browser-profile";
 import { TERMINAL_BROWSER_PROXY_BYPASS_RULES } from "@runweave/shared/terminal-browser-proxy";
+import { TerminalBrowserError } from "./terminal-browser-errors.js";
 import {
   getTerminalBrowserSession,
   terminalBrowserRuntime,
@@ -19,6 +20,46 @@ const headerRulesByProfile = new Map<
   TerminalBrowserHeaderRule[]
 >();
 const registeredHeaderSessions = new WeakSet<Electron.Session>();
+const WORKSPACE_SERVICE_PROXY_PROBE_URL =
+  "http://runweave-proxy-probe.localhost";
+const EXTERNAL_PROXY_PROBE_URL = "https://example.com";
+
+async function verifyTerminalBrowserProfileProxy(
+  profileId: TerminalBrowserProfileId,
+  proxyMode: TerminalBrowserProfileProxyMode,
+): Promise<void> {
+  const browserSession = getTerminalBrowserSession(profileId);
+  const localRoute = await browserSession.resolveProxy(
+    WORKSPACE_SERVICE_PROXY_PROBE_URL,
+  );
+  if (localRoute.trim() !== "DIRECT") {
+    throw new TerminalBrowserError(
+      "BROWSER_PROFILE_PROXY_CONFIGURATION_FAILED",
+      "Workspace Service localhost traffic is not configured for direct access",
+      { profileId, proxyMode, localRoute },
+    );
+  }
+  let externalRoute: string | null = null;
+  if (proxyMode === "whistle") {
+    const whistlePort = getTerminalBrowserProfileConfig(profileId).whistlePort;
+    externalRoute = await browserSession.resolveProxy(
+      EXTERNAL_PROXY_PROBE_URL,
+    );
+    if (!externalRoute.includes(`127.0.0.1:${whistlePort}`)) {
+      throw new TerminalBrowserError(
+        "BROWSER_PROFILE_PROXY_CONFIGURATION_FAILED",
+        "External traffic is not configured for the Profile Whistle proxy",
+        { profileId, proxyMode, externalRoute, whistlePort },
+      );
+    }
+  }
+  console.info("[electron] terminal browser proxy verified", {
+    profileId,
+    proxyMode,
+    localRoute,
+    externalRoute,
+  });
+}
 
 export function getTerminalBrowserHeaderState(
   profileId: TerminalBrowserProfileId,
@@ -115,6 +156,7 @@ export async function configureTerminalBrowserProfileProxy(
         }
       : { mode: "direct" },
   );
+  await verifyTerminalBrowserProfileProxy(profileId, proxyMode);
 }
 
 export async function reloadTerminalBrowserProfileAfterProxyChange(

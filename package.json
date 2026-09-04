@@ -69,6 +69,7 @@
     "architecture:verify": "node ./scripts/verify-architecture.mjs",
     "activity:verify": "pnpm --filter @runweave/backend exec tsx ../scripts/verify-activity-data-foundation.ts",
     "work-history:verify": "pnpm --filter @runweave/backend exec tsx ../scripts/verify-work-history-read-model.ts",
+    "workspace-services:verify": "pnpm --dir backend exec tsx ../scripts/verify-workspace-services.mjs",
     "evolution:verify-foundation": "pnpm --dir backend exec tsx ../scripts/evolution/verify-foundation.mjs",
     "evolution:verify-analysis": "pnpm --dir backend exec tsx ../scripts/evolution/verify-analysis.mjs",
     "evolution:verify-activation": "pnpm --dir backend exec tsx ../scripts/evolution/verify-activation.mjs",

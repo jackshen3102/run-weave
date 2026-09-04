@@ -74,6 +74,7 @@
 | ------------------------------------ | ------------------------------------------------------------------------------ |
 | Terminal 状态来源与消费              | [terminal-state.md](./terminal-state.md)                                       |
 | Worktree Project Context             | [terminal-worktree-context.md](./terminal-worktree-context.md)                 |
+| 本地开发服务稳定 URL 与生命周期      | [terminal-workspace-services.md](./terminal-workspace-services.md)             |
 | 文件、Diff、Markdown 与 Browser 预览 | [terminal-code-preview.md](./terminal-code-preview.md)                         |
 | tmux 持久化与恢复                    | [terminal-tmux-recovery.md](./terminal-tmux-recovery.md)                       |
 | 完成事件 Hook                        | [terminal-completion-hooks.md](./terminal-completion-hooks.md)                 |

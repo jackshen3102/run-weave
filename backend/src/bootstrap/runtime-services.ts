@@ -24,6 +24,7 @@ import { TmuxLifecycleCoordinator } from "../terminal/tmux/lifecycle-coordinator
 import { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
 import { TmuxService } from "../terminal/tmux/service";
 import { TerminalSessionManager } from "../terminal/manager/manager";
+import { WorkspaceServiceManager } from "../terminal/workspace-service/manager";
 import { TerminalCompletionEventService } from "../terminal/completion/event-service";
 import { TerminalEventService } from "../terminal/state/terminal-event-service";
 import { TerminalStateService } from "../terminal/state/terminal-state-service";
@@ -74,6 +75,7 @@ export interface RuntimeServices {
   authCookieName: string;
   authSecureCookies: boolean;
   terminalSessionManager: TerminalSessionManager;
+  workspaceServiceManager: WorkspaceServiceManager;
   terminalQuickInputStore: LowDbTerminalQuickInputStore;
   terminalQuickInputService: TerminalQuickInputService;
   terminalStateService: TerminalStateService;
@@ -361,6 +363,9 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxLifecycleCoordinator,
   });
   await terminalSessionManager.initialize();
+  const workspaceServiceManager = new WorkspaceServiceManager(
+    terminalSessionManager,
+  );
   void syncExistingTmuxSessionEnvironments(terminalSessionManager, tmuxService)
     .then((failures) => {
       for (const failure of failures) {
@@ -545,6 +550,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     authCookieName: authConfig.refreshCookieName,
     authSecureCookies: authConfig.secureCookies,
     terminalSessionManager,
+    workspaceServiceManager,
     terminalQuickInputStore,
     terminalQuickInputService,
     terminalStateService,

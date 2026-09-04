@@ -10,6 +10,7 @@ import {
   summarizeTerminalChunk,
 } from "../../../features/terminal/perf-logging";
 import { normalizeTerminalBrowserUrl } from "../../../features/terminal/browser-url";
+import { openTerminalBrowserUrl } from "../../../features/terminal/open-terminal-browser-url";
 import { isSupportedFloatingComposerAgent } from "../../../features/terminal/floating-composer";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview-store";
 import { useTerminalPromptInsertionStore } from "../../../features/terminal/prompt-insertion-store";
@@ -227,12 +228,10 @@ export function TerminalSurface({
   useEffect(() => {
     openTerminalLinkRef.current = (uri: string): void => {
       if (window.electronAPI?.isElectron !== true) {
-        window.open(uri, "_blank", "noopener,noreferrer");
-        return;
-      }
-
-      const nextUrl = normalizeTerminalBrowserUrl(uri);
-      if (!nextUrl.ok) {
+        void openTerminalBrowserUrl({
+          url: uri,
+          placement: { kind: "new-group" },
+        }).catch(() => undefined);
         return;
       }
       const browserState = useTerminalPreviewStore.getState().browser;
@@ -240,14 +239,15 @@ export function TerminalSurface({
         (tab) => tab.id === browserState.activeTabId,
       );
       if (activeBrowserTab && window.electronAPI?.terminalBrowserCreateTab) {
-        void window.electronAPI
-          .terminalBrowserCreateTab({
-            profileId: activeBrowserProfileId,
-            placement: "current-group",
+        void openTerminalBrowserUrl({
+          url: uri,
+          profileId: activeBrowserProfileId,
+          placement: {
+            kind: "current-group",
             groupId: activeBrowserTab.browserGroupId,
             openerTabId: activeBrowserTab.id,
-            url: nextUrl.url,
-          })
+          },
+        })
           .catch((error) => {
             useTerminalPreviewStore
               .getState()
@@ -261,6 +261,8 @@ export function TerminalSurface({
           .finally(openBrowser);
         return;
       } else {
+        const nextUrl = normalizeTerminalBrowserUrl(uri);
+        if (!nextUrl.ok) return;
         createBrowserTab(nextUrl.url);
       }
       openBrowser();

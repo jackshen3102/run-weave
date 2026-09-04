@@ -10,7 +10,7 @@ export interface TerminalBrowserProxyState {
   proxyBypassRules: string;
 }
 
-export const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>";
+export const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>,*.localhost";
 
 export function isValidTerminalBrowserProxyPort(
   value: unknown,

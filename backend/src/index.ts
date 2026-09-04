@@ -52,6 +52,7 @@ import {
 import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image";
 import { sanitizeCurrentTerminalProcessEnv } from "./terminal/env";
 import { listenWithFallback } from "./server/listen";
+import { createHttpUpgradeRouter } from "./server/http-upgrade-router";
 import {
   acquireBackendProfileLock,
   type BackendProfileLock,
@@ -65,6 +66,11 @@ import {
   createRuntimeServices,
   type RuntimeServices,
 } from "./bootstrap/runtime-services";
+import {
+  attachWorkspaceServiceUpgradeProxy,
+  createWorkspaceServiceHttpProxy,
+} from "./terminal/workspace-service/proxy";
+import { TerminalWorktreeDeletionError } from "./terminal/worktree-deletion";
 
 const HASHED_ASSET_CACHE_CONTROL =
   "public, max-age=31536000, s-maxage=31536000, immutable";
@@ -110,6 +116,7 @@ function createHttpApp(
   const requireTunnelAuth = createTunnelAuthMiddleware(tunnelAuthConfig);
 
   app.use(createRequestContextMiddleware());
+  app.use(createWorkspaceServiceHttpProxy(services.workspaceServiceManager));
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
     createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
@@ -274,13 +281,34 @@ function createHttpApp(
       terminalStateService: services.terminalStateService,
       quickInputService: services.terminalQuickInputService,
       activity: services.terminalActivity,
+      workspaceServiceManager: services.workspaceServiceManager,
       worktreeDeletionOwnerHooks: {
-        beforeDelete: () => services.raceService.waitForWorktreeCreation(),
-        afterDelete: ({ parentProjectId, childProjectId }) =>
-          services.raceService.markWorktreeRemoved(
-            parentProjectId,
-            childProjectId,
-          ),
+        beforeDelete: async ({ childProjectId }) => {
+          await services.raceService.waitForWorktreeCreation();
+          try {
+            return await services.workspaceServiceManager.acquireDeletionGuard([
+              childProjectId,
+            ]);
+          } catch (error) {
+            throw new TerminalWorktreeDeletionError(
+              error instanceof Error
+                ? error.message
+                : "Worktree has an active Workspace Service",
+              409,
+              "workspace_service_active",
+            );
+          }
+        },
+        afterDelete: async ({ parentProjectId, childProjectId }) => {
+          try {
+            await services.raceService.markWorktreeRemoved(
+              parentProjectId,
+              childProjectId,
+            );
+          } finally {
+            services.workspaceServiceManager.forgetContexts([childProjectId]);
+          }
+        },
       },
     }),
   );
@@ -358,6 +386,7 @@ function attachLifecycleHandlers(
       }
       await webSocketServersClosed;
       await serverClosed;
+      await services.workspaceServiceManager.dispose();
       await services.tmuxOutputWatcher.dispose();
       services.appServerEventConsumer?.stop();
       await services.terminalRuntimeRegistry.disposeAll();
@@ -467,6 +496,7 @@ async function startRuntime(): Promise<void> {
       profileLock.getOwner(),
     );
     const server = http.createServer(app);
+    const upgradeRouter = createHttpUpgradeRouter(server);
     const serverConnections = new Set<Socket>();
     server.on("connection", (connection) => {
       serverConnections.add(connection);
@@ -474,8 +504,12 @@ async function startRuntime(): Promise<void> {
     });
 
     stage = "websocket-servers";
+    attachWorkspaceServiceUpgradeProxy(
+      upgradeRouter,
+      services.workspaceServiceManager,
+    );
     const terminalWebSocketServer = attachTerminalWebSocketServer(
-      server,
+      upgradeRouter,
       services.terminalSessionManager,
       services.terminalRuntimeRegistry,
       services.authService,
@@ -489,7 +523,7 @@ async function startRuntime(): Promise<void> {
       },
     );
     const terminalEventsWebSocketServer = attachTerminalEventsWebSocketServer(
-      server,
+      upgradeRouter,
       services.authService,
       services.terminalEventService,
       { tunnelAuthConfig },
@@ -499,6 +533,7 @@ async function startRuntime(): Promise<void> {
       host: runtimeConfig.host,
       maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
     });
+    services.workspaceServiceManager.setProxyPort(port);
     await profileLock.update({ port, host: runtimeConfig.host ?? null });
     const controlPlaneBaseUrl = `http://127.0.0.1:${port}`;
     // Pin rw CLI control-plane env to THIS backend. Parent shells may carry a

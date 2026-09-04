@@ -22,6 +22,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `git-advanced-workflows`
 - `grilling`
 - `github-pr`
+- `handoff`
 - `karpathy-guidelines`
 - `playwright-cli`
 - `react-best-practices`

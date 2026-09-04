@@ -1,0 +1,184 @@
+version: 1
+name: Direct-first Workspace Services V1 验收
+description: >
+  验证 runweave.json 显式声明的本地 HTTP 服务在 Project Context 隔离、动态端口、
+  稳定 localhost URL、HTTP/WebSocket 转发、进程回收、删除竞争、Electron Whistle bypass
+  与本机安全边界下形成闭环，同时不替代生产 Origin 验收。
+
+cases:
+  - id: WSS-001
+    name: 配置发现不会自动执行仓库命令
+    required: true
+    description: >
+      读取有效 runweave.json 只能返回声明与 stopped 状态；页面加载、Context 切换和配置刷新都不能创建进程或占用端口。
+    preconditions:
+      - 临时 Git Project 的主工作区和一个 Worktree 分别包含可记录执行次数的有效 runweave.json。
+      - 已记录系统中与 fixture 相关的初始进程和监听端口。
+    steps:
+      - 调用 services list API，并使用 $toolkit:playwright-cli 打开 Services popover、切换两个 Context 和刷新页面。
+      - 确认两份配置均被发现且状态为 stopped，执行计数仍为 0，进程与监听端口没有新增。
+
+  - id: WSS-002
+    name: 配置 schema 与 cwd 路径边界 fail closed
+    required: true
+    description: >
+      超大文件、未知版本/字段、非法 service key、绝对 cwd、symlink 越界和健康检查绝对 URL 均不能进入可启动状态。
+    preconditions:
+      - 已为每类非法输入准备独立 Context，并在 Context 外放置可识别的目标目录。
+    steps:
+      - 逐一调用 list 和 start API，记录状态码、结构化错误、进程、端口及 Context 外目录访问。
+      - 确认 list 返回 invalid 或 start 返回 422，错误不泄露环境值，且没有执行命令、占用端口或访问越界目录。
+
+  - id: WSS-003
+    name: 过期 config revision 不能执行旧命令
+    required: true
+    description: >
+      Start 必须在 mutation lock 内重读 runweave.json 并匹配 expected revision，消除查看配置到执行之间的 TOCTOU。
+    preconditions:
+      - 已读取命令 A 的 config revision，但尚未调用 start。
+    steps:
+      - 把配置原子替换为命令 B，再携带命令 A 的 revision 调用 start。
+      - 确认返回 409 config_changed，命令 A/B 都未执行；重新 list 后用新 revision 只能启动命令 B。
+
+  - id: WSS-004
+    name: 单服务动态端口与稳定 URL 成立
+    required: true
+    description: >
+      同一 Project Context 的服务每次启动可以获得不同 targetPort，但 canonical Workspace URL 必须保持不变。
+    preconditions:
+      - 有一个绑定 127.0.0.1、回显自身端口与 Host 的 fixture HTTP 服务。
+    steps:
+      - 启动至 ready，记录 URL/targetPort，停止后占用旧端口并再次启动至 ready。
+      - 确认第二次 targetPort 不同、URL 完全相同，使用旧 URL 访问得到第二个进程的端口标识。
+
+  - id: WSS-005
+    name: 三个 Worktree 的同名服务不会串路
+    required: true
+    description: >
+      serviceName 相同也必须按 parentProjectId、projectId 和 serviceName 生成独立身份与目标映射。
+    preconditions:
+      - 同一父 Project 有三个直接子 Worktree，均声明 web 服务并返回各自唯一 Context 标识。
+    steps:
+      - 并发启动三个 web 服务，各交叉请求稳定 URL 100 次并记录 hostname、targetPort 和响应标识。
+      - 确认三个 hostname 与 targetPort 均不同，每个 URL 的 100 次响应都只包含所属 Context 标识。
+
+  - id: WSS-006
+    name: HTTP Host 代理保留服务语义并拒绝未知 Host
+    required: true
+    description: >
+      已注册 Host 应保留原始 Host、method、path、query、body 和流式响应，未知同形 Host 不得落入 Runweave SPA。
+    preconditions:
+      - fixture 服务可回显请求元数据并提供 chunked response；另准备一个未知 identity12 Host。
+    steps:
+      - 通过稳定 URL 发送 GET、POST 和流式请求，再向同一 Backend 端口发送未知同形 Host 请求。
+      - 确认合法请求语义完整、转发头为可信本地值，未知 Host 返回 404 且响应不是 Runweave index.html。
+
+  - id: WSS-007
+    name: WebSocket 与 Vite HMR upgrade 由 Workspace 代理独占处理
+    required: true
+    description: >
+      服务自己的任意 WebSocket path 包括 /ws/terminal 都必须双向通信，不能被 Runweave Terminal upgrade handler 二次消费。
+    preconditions:
+      - fixture 同时提供 echo WebSocket、路径 /ws/terminal 的 WebSocket 和 Vite HMR 页面。
+    steps:
+      - 分别建立两条 WebSocket 并双向发送 100 条消息，再使用 $toolkit:playwright-cli 打开 Vite 页面并触发源码热更新。
+      - 确认消息顺序和值完整，连接只建立一次，页面收到 HMR 更新且 Terminal WebSocket 日志没有该 service 请求。
+
+  - id: WSS-008
+    name: 并发 Start 和 Stop 对单一服务线性化
+    required: true
+    description: >
+      同一 canonical service key 的并发 mutation 只能产生一个 owned process group，重复操作必须幂等。
+    preconditions:
+      - fixture 会记录进程 pid、启动次数、SIGTERM 次数和退出时间。
+    steps:
+      - 并发发送 20 个 Start，ready 后再并发发送 20 个 Stop，并读取所有响应与 fixture 计数。
+      - 确认只启动并停止一个 process group，没有第二 targetPort、悬挂 promise 或 failed 假状态。
+
+  - id: WSS-009
+    name: 启动失败和健康超时不会留下半状态
+    required: true
+    description: >
+      立即退出、永不监听和健康检查持续失败都必须进入结构化 failed，并回收候选端口与 owned process group。
+    preconditions:
+      - 三个独立服务分别模拟 exit 1、30 秒不监听、监听但 health 返回 500。
+    steps:
+      - 逐一启动并等待超过对应失败判定，再检查 snapshot、端口和进程组。
+      - 确认 error code/exitCode 准确，target 不再接受连接，5 秒内无 fixture 进程存活，Stop 可幂等收敛为 stopped。
+
+  - id: WSS-010
+    name: Backend 正常退出与崩溃都回收 owned service
+    required: true
+    description: >
+      Workspace Service 生命周期只能归属于启动它的 Backend；IPC disconnect 必须覆盖无法运行正常 shutdown hook 的场景。
+    preconditions:
+      - 隔离 Backend 已启动两个会派生孙进程的服务，并记录 supervisor 与完整 process group。
+    steps:
+      - 对新实例分别执行 SIGTERM 和 SIGKILL，各重复 3 次，并在 5 秒后检查全部记录 pid/process group。
+      - 确认 6 次均无存活服务或孙进程，也没有根据 PID 文件或端口误杀预先存在的外部 fixture。
+
+  - id: WSS-011
+    name: 控制 API 与 Host 代理只接受本机直连
+    required: true
+    description: >
+      auth token、伪造 Host 或 tunnel 身份都不能越过 TCP peer 与 Forwarded header 的 local-only 判定。
+    preconditions:
+      - Backend 绑定可访问的 LAN 地址并启用 tunnel fixture；准备有效 auth token、稳定 Host 和 WebSocket client。
+    steps:
+      - 从 loopback、LAN peer、tunnel 以及 loopback 加伪造 Forwarded headers 分别调用 list/start，并请求 HTTP 与 WebSocket 稳定 URL。
+      - 确认只有无 Forwarded header 的 loopback 请求成功，其余 API/HTTP/upgrade 全部 403 且没有启动或命中服务。
+
+  - id: WSS-012
+    name: Whistle 与 Direct 模式都对 localhost Workspace 直连
+    required: true
+    description: >
+      扩大 bypass 只能影响 *.localhost；Whistle 模式的普通外部 URL 仍必须进入当前 Profile 固定代理。
+    preconditions:
+      - 使用 $toolkit:runweave-dev-session 启动受管 macOS Electron Dev Session，Profile 1 Whistle 可用且 Workspace service ready。
+    steps:
+      - 使用 $toolkit:playwright-cli 附着 fresh desktop surface，在 Profile 1 的 Whistle 与 Direct 模式分别打开稳定 URL，并读取 setProxy 后的 resolveProxy 自检证据。
+      - 确认两种模式的 Workspace probe 都是 DIRECT；Whistle 模式的 https://example.com 指向 Profile 1 固定端口，Direct 模式为 DIRECT，页面均可访问。
+
+  - id: WSS-013
+    name: Services UI 只操作当前 Context 且显式打开 Browser
+    required: true
+    description: >
+      Header popover 必须在快速切换 Context 时丢弃迟到状态；Start 不自动打开 Browser，Open 不改变 Proxy Mode 或声明 dev-server route。
+    preconditions:
+      - 两个 Context 有不同 service 状态，Worktree B 绑定 Profile 2，当前 Browser Profile 1 处于 Whistle。
+    steps:
+      - 使用 $toolkit:playwright-cli 快速切换 Context 并启动 Worktree B 服务，确认 Browser 未打开；ready 后点击 Open。
+      - 确认 UI 仅显示 Worktree B 状态，新页面位于 Profile 2 的新 Group，URL 正确，Profile 2 Proxy Mode 未改变且 runtime route 仍未分配。
+
+  - id: WSS-014
+    name: 配置变更只标记运行实例待重启
+    required: true
+    description: >
+      运行中的服务必须保留其启动 revision，不因文件刷新暗中重启、换端口或改命令。
+    preconditions:
+      - 命令 A 已 ready，并已记录 revision、URL、targetPort 和 pid。
+    steps:
+      - 把配置改为命令 B，等待 list/UI 刷新，再请求运行 URL并检查进程。
+      - 确认 snapshot 显示 staleConfig，命令 A 的 URL/port/pid 仍有效且命令 B 未执行；显式 Stop/Start 后才切换到 B。
+
+  - id: WSS-015
+    name: Worktree 和父 Project 删除与服务启动竞争 fail closed
+    required: true
+    description: >
+      删除 guard 与 service mutation 必须共享 Context 锁，使两种竞争顺序都不会留下运行在已删除路径中的服务。
+    preconditions:
+      - 干净 Worktree 可删除，父 Project 还有另一个 Context；fixture 可暂停在 start 或 delete guard 内。
+    steps:
+      - 分别构造 Start 先取得锁和 Delete 先取得锁两种顺序，再覆盖父 Project 删除包含活跃子服务的情况。
+      - 确认前者删除返回 workspace_service_active，后者 Start 返回 context_deleting；父 Project 整体拒绝且其它 Project 服务不受影响。
+
+  - id: WSS-016
+    name: Workspace Service 不冒充生产 Origin 验收
+    required: true
+    description: >
+      localhost 页面成功不能被记录为生产 Cookie、OAuth、CORS 或精确域名通过，Exact Origin 流程仍使用 Whistle。
+    preconditions:
+      - fixture 页面显示当前 origin、Cookie domain 结果和 CORS 结果；另有一条中性测试生产域名 Whistle 规则。
+    steps:
+      - 使用 $toolkit:playwright-cli 分别执行 Workspace URL 与 Exact Origin URL 验收并保存结果标签。
+      - 确认 Workspace 结果明确标为 Local Origin，生产域名能力只采用 Exact Origin 结果，二者没有互相覆盖或合并为同一通过项。

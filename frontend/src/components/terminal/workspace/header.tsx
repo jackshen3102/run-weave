@@ -37,6 +37,7 @@ import {
 } from "../../ui/dropdown-menu";
 import { TerminalProjectTabBar } from "../session/project-tab-bar";
 import { TerminalQuickInputPopover } from "../input/quick-input-popover";
+import { TerminalWorkspaceServicesPopover } from "./workspace-services-popover";
 
 interface HeaderConnectionNavigation {
   connections?: ConnectionConfig[];
@@ -219,6 +220,14 @@ export function TerminalWorkspaceHeader({
           token={token}
           activeProject={activeProject}
           activeSession={activeSession}
+          disabled={loading}
+        />
+      ) : null}
+      {!isMobileMonitor ? (
+        <TerminalWorkspaceServicesPopover
+          contextAvailable={Boolean(activeProject?.path)}
+          parentProjectId={activeParentProjectId}
+          projectId={activeProjectId}
           disabled={loading}
         />
       ) : null}
