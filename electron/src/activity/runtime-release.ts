@@ -110,8 +110,6 @@ export function validateBundledActivityRuntime(resourcesPath: string): boolean {
       manifest.workerEntry,
       manifest.evolutionWorkerEntry,
       "node_modules/better-sqlite3",
-      "node_modules/bindings",
-      "node_modules/file-uri-to-path",
     ].map((relative) => path.join(root, relative));
     const actual = roots
       .flatMap((entry) =>

@@ -22,13 +22,14 @@ const repoRoot = process.cwd();
 const tempRoot = mkdtempSync(
   path.join(os.tmpdir(), "runweave-activity-runtime-"),
 );
+const electronRequire = createRequire(
+  path.join(repoRoot, "electron", "package.json"),
+);
+const electronPackageDir = path.dirname(
+  electronRequire.resolve("electron/package.json"),
+);
 const electronExecutable = path.join(
-  repoRoot,
-  "node_modules",
-  ".pnpm",
-  "electron@33.4.11",
-  "node_modules",
-  "electron",
+  electronPackageDir,
   "dist",
   "Electron.app",
   "Contents",
@@ -78,8 +79,6 @@ function verifyManifestTree(root, manifestFileName) {
           manifest.workerEntry,
           manifest.evolutionWorkerEntry,
           "node_modules/better-sqlite3/",
-          "node_modules/bindings/",
-          "node_modules/file-uri-to-path/",
         ]
       : null;
   const actualPaths = listFiles(root)
@@ -171,11 +170,11 @@ try {
     path.join(repoRoot, "backend", "package.json"),
   );
   const nodePackageEntry = backendRequire.resolve("better-sqlite3");
+  const nodePackageDir = path.dirname(path.dirname(nodePackageEntry));
   const nodeBinding = path.join(
-    path.dirname(path.dirname(nodePackageEntry)),
-    "build",
-    "Release",
-    "better_sqlite3.node",
+    nodePackageDir,
+    "prebuilds",
+    `${process.platform}-${process.arch}.node`,
   );
   const nodeDatabase = path.join(tempRoot, "node.sqlite");
   run(process.execPath, [
@@ -226,7 +225,7 @@ try {
     : null;
   let externalVerified = false;
   if (externalRoot) {
-    verifyManifestTree(externalRoot, "manifest.json");
+    const externalManifest = verifyManifestTree(externalRoot, "manifest.json");
     const externalWorker = path.join(
       externalRoot,
       "backend",
@@ -234,12 +233,7 @@ try {
     );
     const externalBinding = path.join(
       externalRoot,
-      "backend",
-      "node_modules",
-      "better-sqlite3",
-      "build",
-      "Release",
-      "better_sqlite3.node",
+      externalManifest.backend.betterSqliteNativeBinding,
     );
     assert.ok(existsSync(externalWorker));
     assert.ok(existsSync(externalBinding));

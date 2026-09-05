@@ -229,7 +229,7 @@ export function navigateWindowToPath(
 }
 
 export function setApplicationIcon(): void {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" || !app.dock) {
     return;
   }
 
