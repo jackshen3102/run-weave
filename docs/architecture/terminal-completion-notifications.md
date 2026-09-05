@@ -59,9 +59,22 @@ Backend 选择投递时的当前活动 Panel。Bridge 复用正常登录态 Term
 reaction；失败回复留在原话题，回执失败也不会重投 Terminal。
 
 同 topic 的入站消息在进程内串行，避免 `prompt_replace` 交错；不同 topic 可以并行。
-每条 Terminal 投递有 15 秒端到端截止时间，包括 401 后的 token refresh 和请求重试：send 前
-超时记为 failed；send 已开始后超时记为 unknown，二者都释放当前话题队列且不自动重投
-相同 `message_id`。
+入站事件先写入 owner-only 状态文件再确认接收，消息从创建时间起最多等待 120 秒。
+每次后端请求最多 15 秒；发送前后端不可达、认证失败、限流或 5xx 时每 2 秒重试。
+确认终端输入请求开始前先持久化标记；请求开始后的网络错误或超时记为 unknown，不自动重投。
+401 是明确拒绝，可以刷新认证后继续尝试。成功以 Input API 的 inputAccepted/inputEnqueued
+为准，不因随后查询历史失败而误报投递失败。相同 message_id 的重复事件不会重复输入。
+Bridge 重启后只恢复未开始发送且未过期的事件；发送已开始的中断记录转为 unknown。
+超过等待窗口的消息明确失败，避免唤醒后执行长时间积压的旧指令。
+
+Bridge 在整个运行周期持有单实例锁，收到退出信号后关闭 WebSocket、取消等待并释放锁。
+锁记录进程所有者，进程崩溃后的残留锁可以恢复。飞书 SDK 负责正常心跳与重连；Bridge 每
+15 秒检查连接，检测到超过 60 秒的时间跳变、终止失败或超过 120 秒未连通时重建连接。
+后端探测独立执行，恢复状态记录带时间戳的 backend_ready/backend_unavailable。
+常驻客户端认证失败后重新读取同一后端、同一 profile 的凭证；跨进程刷新串行执行，配置原子
+替换，避免轮换 refresh token 后旧 Bridge 永久失效。显式环境 access token 不自动刷新。
+网络恢复不能替代已经注销的登录，也不能恢复电脑重启前已丢失的进程内任务。
+
 Terminal 被确认删除时清除本地 topic，exited 状态保留。复用 topic 前以及通知回复失败后，
 只有消息详情 API 明确证明 root 已删除才清除并由当前真实 completion 重建；网络、限流和
 权限错误保留原 root。

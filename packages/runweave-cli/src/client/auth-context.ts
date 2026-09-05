@@ -25,22 +25,23 @@ export async function resolveAuthContext(params: {
   backendPort?: string;
   store?: ProfileStore;
   env?: NodeJS.ProcessEnv;
+  deferRefresh?: boolean;
 }): Promise<AuthContext> {
   const store = params.store ?? new ProfileStore();
   const resolved = await store.resolve(params.profileName, params.env, {
     backendPort: params.backendPort,
   });
-  const authClient = createAuthClient();
   let current = resolved.profile;
 
-  if (!current.accessToken || (!resolved.usesEnvAccessToken && isExpired(current))) {
-    current = await authClient.refresh(current);
-    if (!resolved.usesEnvAccessToken) {
-      await store.saveProfile(resolved.name, current);
-    }
+  if (
+    !params.deferRefresh &&
+    !resolved.usesEnvAccessToken &&
+    (!current.accessToken || isExpired(current))
+  ) {
+    current = await refreshStoredProfile(store, resolved, current);
   }
 
-  if (!current.accessToken) {
+  if (!current.accessToken && !params.deferRefresh) {
     throw new HttpError(401, "Runweave access token is missing");
   }
 
@@ -49,7 +50,7 @@ export async function resolveAuthContext(params: {
   return {
     profileName: resolved.name,
     baseUrl: current.baseUrl,
-    accessToken: current.accessToken,
+    accessToken: current.accessToken ?? "",
     async requestJson<T>(apiPath: string, init?: RequestInit) {
       return requestWithAuth<T>({
         resolved,
@@ -101,8 +102,7 @@ async function requestWithAuth<T>(params: {
     if (
       !(error instanceof HttpError) ||
       error.status !== 401 ||
-      params.resolved.usesEnvAccessToken ||
-      !requestedProfile.refreshToken
+      params.resolved.usesEnvAccessToken
     ) {
       throw error;
     }
@@ -110,11 +110,12 @@ async function requestWithAuth<T>(params: {
 
   if (params.state.current.accessToken === requestedProfile.accessToken) {
     params.state.refreshPromise ??= (async () => {
-      const refreshed = await createAuthClient().refresh(
+      const refreshed = await refreshStoredProfile(
+        params.store,
+        params.resolved,
         params.state.current,
         params.init?.signal ?? undefined,
       );
-      await params.store.saveProfile(params.resolved.name, refreshed);
       params.state.current = refreshed;
       return refreshed;
     })().finally(() => {
@@ -143,4 +144,46 @@ async function requestWithParser<T>(
     return undefined as T;
   }
   return requestJson<T>(baseUrl, apiPath, init);
+}
+
+async function refreshStoredProfile(
+  store: ProfileStore,
+  resolved: ResolvedProfile,
+  previous: RunweaveProfile,
+  signal?: AbortSignal,
+): Promise<RunweaveProfile> {
+  return store.updateProfile(
+    resolved.name,
+    async (saved) => {
+      // Never copy credentials from a different backend into a long-lived client.
+      if (saved && saved.baseUrl !== previous.baseUrl) {
+        throw new HttpError(
+          401,
+          "Runweave profile backend changed; restart the client",
+        );
+      }
+      if (!saved)
+        throw new HttpError(
+          401,
+          "Runweave profile was removed; login required",
+        );
+      const latest = saved;
+      if (
+        latest.accessToken &&
+        latest.accessToken !== previous.accessToken &&
+        !isExpired(latest)
+      ) {
+        return latest;
+      }
+      if (!latest.refreshToken)
+        throw new HttpError(401, "Runweave login required");
+      return createAuthClient().refresh(
+        latest,
+        signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
+          : AbortSignal.timeout(10_000),
+      );
+    },
+    signal,
+  );
 }

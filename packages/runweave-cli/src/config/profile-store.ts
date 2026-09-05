@@ -1,5 +1,15 @@
+import { randomUUID } from "node:crypto";
+import { acquireProcessLock } from "../runtime/process-lock.js";
 import { constants } from "node:fs";
-import { access, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { CliError } from "../errors.js";
@@ -25,7 +35,9 @@ export interface ResolvedProfile {
 const DEFAULT_PROFILE = "local";
 const DEFAULT_BACKEND_PORT = "5001";
 
-export function resolveConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveConfigPath(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
   return (
     env.RUNWEAVE_CONFIG_FILE?.trim() ||
     path.join(os.homedir(), ".runweave", "config.json")
@@ -57,20 +69,45 @@ export class ProfileStore {
 
   async save(config: RunweaveConfig): Promise<void> {
     await mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
-    await writeFile(this.filePath, `${JSON.stringify(config, null, 2)}\n`, {
-      mode: 0o600,
-    });
-    await chmod(this.filePath, 0o600);
+    const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporaryPath, `${JSON.stringify(config, null, 2)}\n`, {
+        mode: 0o600,
+      });
+      await rename(temporaryPath, this.filePath);
+    } finally {
+      await rm(temporaryPath, { force: true });
+    }
   }
 
   async saveProfile(name: string, profile: RunweaveProfile): Promise<void> {
-    const current = (await this.load()) ?? {
-      activeProfile: name,
-      profiles: {},
-    };
-    current.activeProfile = name;
-    current.profiles[name] = profile;
-    await this.save(current);
+    await this.updateProfile(name, async () => profile, undefined, true);
+  }
+
+  async updateProfile(
+    name: string,
+    update: (profile: RunweaveProfile | undefined) => Promise<RunweaveProfile>,
+    signal?: AbortSignal,
+    activate = false,
+  ): Promise<RunweaveProfile> {
+    const lock = await acquireProcessLock(
+      `${this.filePath}.lock`,
+      15_000,
+      signal,
+    );
+    try {
+      const config = (await this.load()) ?? {
+        activeProfile: name,
+        profiles: {},
+      };
+      const profile = await update(config.profiles[name]);
+      config.profiles[name] = profile;
+      if (activate) config.activeProfile = name;
+      await this.save(config);
+      return profile;
+    } finally {
+      await lock.release();
+    }
   }
 
   async resolve(

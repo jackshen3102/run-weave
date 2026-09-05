@@ -1,0 +1,76 @@
+version: 1
+name: 飞书 Bridge 恢复验收
+description: 验证真实飞书消息到独立终端的投递与恢复，未知结果不自动重复执行。模拟故障不等同于真实合盖或系统重启。
+cases:
+  - id: FREC-001
+    name: 真实消息投递
+    required: true
+    description: 真实用户话题消息经 WebSocket 进入独立终端且仅执行一次。
+    preconditions:
+      - 已获准向配置群发送测试消息，独立终端和绑定话题已建立。
+    steps:
+      - 用飞书用户身份发送唯一 printf 标记；确认 Bridge succeeded、DONE 表情和终端标记输出。
+      - 使用 toolkit:playwright-cli 查看测试终端页面，确认输出可见。
+  - id: FREC-002
+    name: 共享凭证轮换
+    required: true
+    description: 常驻认证上下文能使用其他进程更新后的凭证恢复认证。
+    preconditions:
+      - 独立配置使用真实后端的测试登录会话，不修改日常 profile。
+    steps:
+      - 保留旧认证上下文，另一进程刷新并持久化令牌；让旧 access token 请求得到 401。
+      - 确认旧上下文无需重启即可调用真实后端，旧 refresh token 没有被重复使用。
+  - id: FREC-003
+    name: 后端暂时不可用
+    required: true
+    description: 尚未发送的真实消息在后端恢复后仅执行一次。
+    preconditions:
+      - 独立测试 Bridge 使用真实后端前的可控代理，不影响日常后端。
+    steps:
+      - 让代理拒绝只读预检，发送真实飞书测试消息；确认 waiting_for_backend。
+      - 120 秒内恢复代理，确认消息 succeeded 且独立终端仅执行一次。
+  - id: FREC-004
+    name: Bridge 崩溃恢复
+    required: true
+    description: 崩溃前未发送的消息持久化并在重启后恢复。
+    preconditions:
+      - 独立 Bridge、真实绑定话题与可控后端代理可用。
+    steps:
+      - 拒绝预检并发送真实消息，确认入站消息持久化；强制结束该测试 Bridge。
+      - 120 秒内启动新的测试 Bridge 并恢复代理，确认死进程锁被回收且消息仅执行一次。
+  - id: FREC-005
+    name: 发送结果未知
+    required: true
+    description: 后端执行成功但响应丢失时不得自动再次发送。
+    preconditions:
+      - 独立 Bridge 使用可丢弃 input 响应的代理连接真实后端。
+    steps:
+      - 发送真实测试消息，代理转发 input 后丢弃响应；确认终端输出一次、状态 unknown。
+      - 恢复代理并重启测试 Bridge，确认该消息未重复执行。
+  - id: FREC-006
+    name: 单实例与正常退出
+    required: true
+    description: 整个连接生命周期持有锁，正常退出释放锁。
+    preconditions:
+      - 独立测试 Bridge 已连接。
+    steps:
+      - 使用同一状态目录启动第二实例，确认被拒绝且首个进程锁仍存在。
+      - 向首个实例发送 SIGTERM，确认连接关闭、进程退出和锁删除。
+  - id: FREC-007
+    name: 休眠时间跳变恢复
+    required: true
+    description: 暂停测试进程模拟超过 60 秒的事件循环停顿，恢复后重新建立连接。
+    preconditions:
+      - 独立测试 Bridge 已连接，可以只暂停该进程。
+    steps:
+      - SIGSTOP 暂停测试 Bridge 超过 60 秒后 SIGCONT 恢复，确认 resume_reconnect 和 websocket_ready。
+      - 发送真实测试消息，确认独立终端成功收到且只执行一次；注明这不等同于物理合盖验收。
+  - id: FREC-008
+    name: 超时消息不自动执行
+    required: true
+    description: 后端超过等待窗口仍未恢复时，消息失败而非无限积压。
+    preconditions:
+      - 独立测试 Bridge 的只读预检可被阻断。
+    steps:
+      - 阻断预检并发送真实消息，等待创建时间起超过 120 秒，确认 failed 回执。
+      - 恢复代理，确认独立终端没有执行该消息。

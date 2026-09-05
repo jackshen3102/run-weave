@@ -1,11 +1,7 @@
+import { setTimeout as delay } from "node:timers/promises";
 import type * as Lark from "@larksuiteoapi/node-sdk";
 import type { TerminalHttpClient } from "../client/terminal-http-client.js";
 import { HttpError } from "../errors.js";
-import {
-  DEFAULT_AGENT_START_TIMEOUT_MS,
-  DEFAULT_CONFIRM_TIMEOUT_MS,
-  sendWithConfirmation,
-} from "../commands/terminal-agent.js";
 import type { FeishuConfig } from "./config.js";
 import type { FeishuStateStore, FeishuTopicActive } from "./state-store.js";
 
@@ -19,6 +15,7 @@ export interface FeishuInboundMessageEvent {
   };
   message: {
     message_id: string;
+    create_time?: string;
     parent_id?: string;
     root_id?: string;
     thread_id?: string;
@@ -40,8 +37,65 @@ export class FeishuBridgeMessageHandler {
       client: Lark.Client;
       terminalClient: TerminalHttpClient;
       stderr: Pick<NodeJS.WriteStream, "write">;
+      signal: AbortSignal;
     },
   ) {}
+
+  async accept(event: FeishuInboundMessageEvent): Promise<void> {
+    if (!this.isEligibleEnvelope(event) || this.params.signal.aborted) return;
+    const topic = await this.params.store.findActiveTopicByRoot(
+      event.message.chat_id,
+      event.message.root_id!,
+    );
+    if (
+      !topic ||
+      (topic.threadId && topic.threadId !== event.message.thread_id)
+    )
+      return;
+    const text = parseMessageText(
+      event.message.content,
+      event.message.mentions,
+    );
+    if (!text || Buffer.byteLength(text, "utf8") > MAX_INPUT_BYTES) {
+      if (
+        (await this.params.store.beginDelivery(
+          event.message.message_id,
+          topic.terminalSessionId,
+        )) === "started"
+      ) {
+        await this.params.store.finishDelivery(
+          event.message.message_id,
+          "failed",
+        );
+        await this.replyWithReceipt(
+          event,
+          topic,
+          "投递失败：回复内容为空或过长",
+        );
+      }
+      return;
+    }
+    if (!(await this.params.store.queueEvent(event, topic.terminalSessionId)))
+      return;
+    this.schedule(event);
+  }
+
+  async recover(): Promise<void> {
+    for (const event of await this.params.store.waitingEvents())
+      this.schedule(event);
+  }
+
+  async drain(): Promise<void> {
+    await Promise.allSettled(this.topicTails.values());
+  }
+
+  private schedule(event: FeishuInboundMessageEvent): void {
+    void this.enqueue(event).catch(() => {
+      this.params.stderr.write(
+        `${new Date().toISOString()} Feishu delivery: handler_failed messageId=${event.message.message_id}\n`,
+      );
+    });
+  }
 
   enqueue(event: FeishuInboundMessageEvent): Promise<void> {
     if (!this.isEligibleEnvelope(event)) return Promise.resolve();
@@ -102,66 +156,111 @@ export class FeishuBridgeMessageHandler {
       return;
     }
 
+    const entry = await this.params.store.delivery(event.message.message_id);
+    const deadline = Date.parse(entry?.expiresAt ?? new Date().toISOString());
     let inputAttempted = false;
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      TERMINAL_DELIVERY_TIMEOUT_MS,
-    );
-    try {
-      const terminalClient = trackInputAttempt(
-        this.params.terminalClient.withSignal(controller.signal),
-        () => {
-          inputAttempted = true;
-        },
-      );
-      const result = await sendWithConfirmation({
-        client: terminalClient,
-        terminalSessionId: topic.terminalSessionId,
-        text,
-        enter: true,
-        inputMode: "prompt_replace",
-        inputModeProvided: true,
-        panel: undefined,
-        role: undefined,
-        confirmMode: "short",
-        confirmTimeoutMs: DEFAULT_CONFIRM_TIMEOUT_MS,
-        agent: undefined,
-        agentOverwrite: false,
-        agentStartCommand: undefined,
-        agentClearCommand: "/clear",
-        agentExitCommand: undefined,
-        agentStartTimeoutMs: DEFAULT_AGENT_START_TIMEOUT_MS,
-      });
-      if (result.inputAccepted !== true || result.inputEnqueued !== true) {
-        throw new Error("Runweave did not accept terminal input");
-      }
-      await this.params.store.finishDelivery(
-        event.message.message_id,
-        "succeeded",
-      );
-      await this.addDoneReaction(event, topic);
-    } catch (error) {
-      const failure = classifyTerminalFailure(error, inputAttempted);
-      await this.params.store.finishDelivery(
-        event.message.message_id,
-        failure.deliveryStatus,
-      );
-      this.log(failure.category, event, topic);
-      await this.replyWithReceipt(
-        event,
-        topic,
-        `投递失败：${failure.userText}`,
-      );
-      if (failure.removeTopic) {
-        await this.params.store.clearTopic({
-          chatId: topic.chatId,
-          terminalSessionId: topic.terminalSessionId,
-          expectedRootMessageId: topic.rootMessageId,
+    let lastError: unknown = new Error("Delivery expired before sending");
+    let waitingLogged = false;
+    while (!this.params.signal.aborted && Date.now() < deadline) {
+      const signal = AbortSignal.any([
+        this.params.signal,
+        AbortSignal.timeout(
+          Math.max(
+            1,
+            Math.min(TERMINAL_DELIVERY_TIMEOUT_MS, deadline - Date.now()),
+          ),
+        ),
+      ]);
+      try {
+        const client = this.params.terminalClient.withSignal(signal);
+        // Read-only preflight can be retried across backend downtime.
+        await client.getSession(topic.terminalSessionId);
+        signal.throwIfAborted();
+        await this.params.store.markInputAttempt(
+          event.message.message_id,
+          true,
+        );
+        if (this.params.signal.aborted || Date.now() >= deadline) {
+          await this.params.store.markInputAttempt(
+            event.message.message_id,
+            false,
+          );
+          if (this.params.signal.aborted) break;
+          throw new Error("delivery_expired");
+        }
+        inputAttempted = true;
+        const result = await client.sendInput(topic.terminalSessionId, {
+          operationId: `feishu:${event.message.message_id}`,
+          data: text,
+          mode: "prompt_replace",
+          submit: true,
         });
+        if (result.inputAccepted !== true || result.inputEnqueued !== true) {
+          throw new Error("Runweave did not accept terminal input");
+        }
+        await this.params.store.finishDelivery(
+          event.message.message_id,
+          "succeeded",
+        );
+        this.log("succeeded", event, topic);
+        await this.addDoneReaction(event, topic);
+        return;
+      } catch (error) {
+        lastError = error;
+        // A 401 is an explicit rejection before input execution, safe to retry.
+        if (error instanceof HttpError && error.status === 401) {
+          await this.params.store.markInputAttempt(
+            event.message.message_id,
+            false,
+          );
+          inputAttempted = false;
+        }
+        const retryable =
+          !inputAttempted &&
+          (!(error instanceof HttpError) ||
+            error.status === 401 ||
+            error.status === 429 ||
+            error.status >= 500);
+        if (!retryable || this.params.signal.aborted) break;
+        if (!waitingLogged) {
+          this.log("waiting_for_backend", event, topic);
+          waitingLogged = true;
+        }
+        await delay(
+          Math.min(2_000, Math.max(1, deadline - Date.now())),
+          undefined,
+          { signal: this.params.signal },
+        ).catch(() => undefined);
       }
-    } finally {
-      clearTimeout(timeout);
+    }
+    if (this.params.signal.aborted && !inputAttempted) {
+      await this.params.store.finishDelivery(
+        event.message.message_id,
+        "waiting",
+      );
+      return;
+    }
+    if (!inputAttempted && Date.now() >= deadline)
+      lastError = new Error("delivery_expired");
+    const failure = classifyTerminalFailure(lastError, inputAttempted);
+    await this.params.store.finishDelivery(
+      event.message.message_id,
+      failure.deliveryStatus,
+    );
+    this.log(failure.category, event, topic);
+    await this.replyWithReceipt(
+      event,
+      topic,
+      inputAttempted && failure.deliveryStatus === "unknown"
+        ? "投递结果未知：请先检查终端，未自动重发"
+        : `投递失败：${failure.userText}，请在恢复后重新发送`,
+    );
+    if (failure.removeTopic) {
+      await this.params.store.clearTopic({
+        chatId: topic.chatId,
+        terminalSessionId: topic.terminalSessionId,
+        expectedRootMessageId: topic.rootMessageId,
+      });
     }
   }
 
@@ -208,7 +307,7 @@ export class FeishuBridgeMessageHandler {
     topic: FeishuTopicActive,
   ): void {
     this.params.stderr.write(
-      `Feishu topic delivery: category=${category} messageId=${event.message.message_id} terminalId=${topic.terminalSessionId} panelId=active\n`,
+      `${new Date().toISOString()} Feishu topic delivery: category=${category} messageId=${event.message.message_id} terminalId=${topic.terminalSessionId} panelId=active\n`,
     );
   }
 }
@@ -248,6 +347,14 @@ function classifyTerminalFailure(
   deliveryStatus: "failed" | "unknown";
 } {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("delivery_expired")) {
+    return {
+      category: "waiting_expired",
+      userText: "等待恢复超过 120 秒，尚未发送",
+      removeTopic: false,
+      deliveryStatus: "failed",
+    };
+  }
   if (isAbortError(error)) {
     return inputAttempted
       ? {
@@ -279,6 +386,14 @@ function classifyTerminalFailure(
       deliveryStatus: "failed",
     };
   }
+  if (inputAttempted) {
+    return {
+      category: "input_result_unknown",
+      userText: "终端投递结果未知",
+      removeTopic: false,
+      deliveryStatus: "unknown",
+    };
+  }
   if (message.includes("not running") || message.includes("exited")) {
     return {
       category: "terminal_not_running",
@@ -305,24 +420,6 @@ function classifyTerminalFailure(
     removeTopic: false,
     deliveryStatus: "failed",
   };
-}
-
-function trackInputAttempt(
-  client: TerminalHttpClient,
-  onInputAttempt: () => void,
-): TerminalHttpClient {
-  return new Proxy(client, {
-    get(target, property, receiver) {
-      if (property === "sendInput") {
-        return (...args: Parameters<TerminalHttpClient["sendInput"]>) => {
-          onInputAttempt();
-          return target.sendInput(...args);
-        };
-      }
-      const value = Reflect.get(target, property, receiver) as unknown;
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
 }
 
 function isAbortError(error: unknown): boolean {

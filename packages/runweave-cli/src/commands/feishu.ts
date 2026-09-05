@@ -1,3 +1,4 @@
+import { runBridgeConnection } from "../feishu/bridge-runtime.js";
 import * as Lark from "@larksuiteoapi/node-sdk";
 import { getStringOption, parseArgs, resolveOutputMode } from "../args.js";
 import { resolveAuthContext } from "../client/auth-context.js";
@@ -88,6 +89,13 @@ export async function runFeishuCommand(
       appSecret: config.appSecret,
       loggerLevel: Lark.LoggerLevel.info,
     });
+    let finish!: () => void;
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const stop = (): void => finish();
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
     const dispatcher = new Lark.EventDispatcher({}).register({
       "im.message.receive_v1": (event) => {
         const openId = event.sender.sender_id?.open_id;
@@ -97,13 +105,17 @@ export async function runFeishuCommand(
           openId,
           chatId: event.message.chat_id,
         });
-        wsClient.close();
+        finish();
       },
     });
     io.stderr.write("Waiting for one Feishu user message...\n");
     try {
       await wsClient.start({ eventDispatcher: dispatcher });
+      await finished;
     } finally {
+      wsClient.close({ force: true });
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
       await bridgeLease.release();
     }
     return;
@@ -123,37 +135,29 @@ export async function runFeishuCommand(
       profileName: getStringOption(parsed.options, "profile"),
       backendPort: getStringOption(parsed.options, "backend-port"),
       env: io.env,
+      deferRefresh: true,
     });
     const terminalClient = new TerminalHttpClient(auth);
     const bridgeLease = await store.acquireBridgeLease();
+    const controller = new AbortController();
     try {
       await store.recoverInterruptedDeliveries();
-      await reconcileTerminalTopics(store, terminalClient, io.stderr);
       const handler = new FeishuBridgeMessageHandler({
         config,
         store,
         client,
         terminalClient,
         stderr: io.stderr,
+        signal: controller.signal,
       });
+      await handler.recover();
       const dispatcher = new Lark.EventDispatcher({}).register({
-        "im.message.receive_v1": (event) => {
-          void handler.enqueue(event as FeishuInboundMessageEvent).catch(() => {
-            io.stderr.write(
-              `Feishu topic delivery: category=handler_failed messageId=${event.message.message_id}\n`,
-            );
-          });
+        "im.message.receive_v1": async (event) => {
+          // Acknowledge only after durable enqueue, not after terminal execution.
+          await handler.accept(event as FeishuInboundMessageEvent);
         },
       });
-      const wsClient = new Lark.WSClient({
-        appId: config.appId,
-        appSecret: config.appSecret,
-        loggerLevel: Lark.LoggerLevel.info,
-      });
-      const stop = (): void => {
-        wsClient.close();
-        void bridgeLease.release();
-      };
+      const stop = (): void => controller.abort();
       process.once("SIGINT", stop);
       process.once("SIGTERM", stop);
       writeOutput(io.stdout, mode, {
@@ -161,8 +165,16 @@ export async function runFeishuCommand(
         transport: "feishu_websocket",
       });
       try {
-        await wsClient.start({ eventDispatcher: dispatcher });
+        await runBridgeConnection({
+          config,
+          auth,
+          dispatcher,
+          stderr: io.stderr,
+          signal: controller.signal,
+        });
       } finally {
+        controller.abort();
+        await handler.drain();
         process.off("SIGINT", stop);
         process.off("SIGTERM", stop);
       }
@@ -173,23 +185,6 @@ export async function runFeishuCommand(
   }
 
   throw new CliError("Usage: rw feishu <notify|discover|bridge> [options]", 2);
-}
-
-async function reconcileTerminalTopics(
-  store: FeishuStateStore,
-  terminalClient: TerminalHttpClient,
-  stderr: Pick<NodeJS.WriteStream, "write">,
-): Promise<void> {
-  try {
-    const sessions = await terminalClient.listSessions();
-    await store.cleanupMissingSessions(
-      new Set(sessions.map((session) => session.terminalSessionId)),
-    );
-  } catch {
-    stderr.write(
-      "Feishu topic reconciliation skipped: Runweave session list unavailable\n",
-    );
-  }
 }
 
 function createFeishuClient(appId: string, appSecret: string): Lark.Client {
