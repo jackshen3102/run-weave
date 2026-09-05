@@ -1,10 +1,30 @@
 ---
 name: playwright-cli
 description: Automate browser interactions, test web pages and work with Playwright tests.
-allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*)
+allowed-tools: Bash(playwright-cli:*) Bash(pnpm:*) Bash(npx:*) Bash(npm:*)
 ---
 
 # Browser Automation with playwright-cli
+
+## Use the repository-pinned CLI without replacing this skill
+
+In the Runweave repository, use the Playwright CLI bundled with the pinned
+stable `playwright` package for every command:
+
+```bash
+pnpm exec playwright cli --version
+pnpm exec playwright cli <command> [args] [options]
+```
+
+The examples below use `playwright-cli` for readability. In this repository,
+substitute `pnpm exec playwright cli`; do not fall back to a globally installed
+`@playwright/cli`, whose Playwright runtime may differ from the repository pin.
+
+Do not run `playwright-cli install --skills` or replace this directory with an
+upstream skill bundle. This tracked skill adds Runweave-specific Profile,
+Worktree, Dev Session, tab-preservation, and detach rules that upstream does not
+provide. Merge upstream skill changes into this file while retaining those
+rules.
 
 ## Choose the browser target first
 
@@ -29,16 +49,23 @@ RW_BROWSER_RESOLUTION="$(rw browser profile resolve --json)"
 RW_BROWSER_PROFILE="$(printf '%s' "$RW_BROWSER_RESOLUTION" | jq -r .profileId)"
 RW_BROWSER_CDP_ENDPOINT="$(printf '%s' "$RW_BROWSER_RESOLUTION" | jq -r .cdpEndpoint)"
 RW_PLAYWRIGHT_SESSION="runweave-${RUNWEAVE_TERMINAL_SESSION_ID:-terminal-browser}-${RW_BROWSER_PROFILE}"
-playwright-cli -s="$RW_PLAYWRIGHT_SESSION" attach --cdp="$RW_BROWSER_CDP_ENDPOINT"
-playwright-cli -s="$RW_PLAYWRIGHT_SESSION" snapshot
+pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" attach --cdp="$RW_BROWSER_CDP_ENDPOINT"
+pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" snapshot
 # interact with the existing page
-playwright-cli -s="$RW_PLAYWRIGHT_SESSION" detach
+pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" detach
 ```
 
 If the resolver reports a Profile route conflict or Whistle startup failure,
 stop and report it. Do not attach the ambient endpoint and claim the requested
 Profile was selected. On an old Runweave version, fallback is allowed only
 when no explicit Profile override was requested; preserve the CLI warning.
+
+The repository-pinned CLI connects to an existing CDP browser with
+`noDefaults: true`, so it does not apply Playwright's download, focus, or media
+defaults to the user's default context. This does not remove the lower-fidelity
+CDP boundary or browser-version skew. Prove Trace, HAR, screencast, downloads,
+and other advanced capabilities on the exact Runweave surface before claiming
+support; a successful attach or snapshot proves only that exercised path.
 
 ## Standalone browser quick start
 
@@ -84,6 +111,11 @@ playwright-cli upload ./document.pdf
 playwright-cli check e12
 playwright-cli uncheck e12
 playwright-cli snapshot
+# search the snapshot for text or a regexp, returns matching nodes with surrounding context
+playwright-cli find "Sign in"
+playwright-cli find --regex "Sign (in|up)"
+# wrap the regexp in slashes to add flags, e.g. /i for case-insensitive
+playwright-cli find --regex "/sign (in|up)/i"
 playwright-cli eval "document.title"
 playwright-cli eval "el => el.textContent" e5
 # get element id, class, or any attribute not visible in the snapshot
@@ -249,6 +281,12 @@ playwright-cli open --browser=firefox
 playwright-cli open --browser=webkit
 playwright-cli open --browser=msedge
 
+# Emulate a generic mobile device (Pixel 10 for Chromium, iPhone 17 for WebKit).
+# Prefer this when a mobile layout is acceptable: mobile pages are usually
+# lighter, so snapshots are smaller and cheaper.
+playwright-cli open --mobile
+playwright-cli open --device="iPhone 15"
+
 # Use persistent profile (by default profile is in-memory)
 playwright-cli open --persistent
 # Use persistent profile with custom directory
@@ -318,6 +356,11 @@ playwright-cli snapshot e34
 
 # include each element's bounding box as [box=x,y,width,height]
 playwright-cli snapshot --boxes
+
+# search a large snapshot instead of capturing it all — returns matching nodes
+# with 3 lines of context around each match (like grep -C)
+playwright-cli find "Add to cart"
+playwright-cli find --regex "\\$[0-9]+\\.[0-9]{2}"
 ```
 
 ## Targeting elements
@@ -365,16 +408,20 @@ playwright-cli kill-all
 
 ## Installation
 
-If global `playwright-cli` command is not available, try a local version via `npx playwright-cli`:
+Outside Runweave, prefer the CLI bundled with Playwright 1.62 or newer:
 
 ```bash
-npx --no-install playwright-cli --version
+npx --no-install playwright --version
 ```
 
-When local version is available, use `npx playwright-cli` in all commands. Otherwise, install `playwright-cli` as a global command:
+When local version is available, use `npx playwright cli` in all commands.
+Otherwise, install the standalone CLI globally. Its package version is
+independent of Playwright's stable version, so verify both before use:
 
 ```bash
 npm install -g @playwright/cli@latest
+playwright-cli --version
+npm list -g --depth=1 @playwright/cli playwright playwright-core
 ```
 
 ## Example: Form submission

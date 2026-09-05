@@ -34,6 +34,26 @@ function hashFile(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
+function resolveNativeBinding(packageDir) {
+  const prebuildPlatform =
+    process.platform === "linux" &&
+    !process.report.getReport().header.glibcVersionRuntime
+      ? "linuxmusl"
+      : process.platform;
+  const candidates = [
+    path.join(
+      packageDir,
+      "prebuilds",
+      `${prebuildPlatform}-${process.arch}.node`,
+    ),
+    path.join(packageDir, "build", "Release", "better_sqlite3.node"),
+  ];
+  const nativeBinding = candidates.find((candidate) => existsSync(candidate));
+  if (!nativeBinding)
+    throw new Error("Electron better-sqlite3 binding is missing");
+  return nativeBinding;
+}
+
 export function finalizeActivitySqliteRuntime(
   workerEntry,
   evolutionWorkerEntry,
@@ -49,11 +69,8 @@ export function finalizeActivitySqliteRuntime(
   const resourcesBackendDir = path.dirname(workerEntry);
   const runtimeNodeModules = path.join(resourcesBackendDir, "node_modules");
   mkdirSync(runtimeNodeModules, { recursive: true });
-  for (const packageName of [
-    "better-sqlite3",
-    "bindings",
-    "file-uri-to-path",
-  ]) {
+  const runtimePackageNames = ["better-sqlite3"];
+  for (const packageName of runtimePackageNames) {
     cpSync(
       path.join(nodeModules, packageName),
       path.join(runtimeNodeModules, packageName),
@@ -61,22 +78,19 @@ export function finalizeActivitySqliteRuntime(
     );
   }
 
-  const nativeBinding = path.join(
-    resourcesBackendDir,
-    "node_modules",
-    "better-sqlite3",
-    "build",
-    "Release",
-    "better_sqlite3.node",
+  const nativeBinding = resolveNativeBinding(
+    path.join(runtimeNodeModules, "better-sqlite3"),
   );
-  if (!existsSync(nativeBinding))
-    throw new Error("Electron better-sqlite3 binding is missing");
+  const nativeBindingRelative = path
+    .relative(resourcesBackendDir, nativeBinding)
+    .split(path.sep)
+    .join("/");
   const runtimeRoots = [
     workerEntry,
     evolutionWorkerEntry,
-    path.join(runtimeNodeModules, "better-sqlite3"),
-    path.join(runtimeNodeModules, "bindings"),
-    path.join(runtimeNodeModules, "file-uri-to-path"),
+    ...runtimePackageNames.map((packageName) =>
+      path.join(runtimeNodeModules, packageName),
+    ),
   ];
   const files = runtimeRoots
     .flatMap((entry) =>
@@ -110,8 +124,7 @@ export function finalizeActivitySqliteRuntime(
         evolutionWorkerEntry: "evolution-sqlite-worker.cjs",
         packageEntry: "node_modules/better-sqlite3/lib/index.js",
         packageManifest: "node_modules/better-sqlite3/package.json",
-        nativeBinding:
-          "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+        nativeBinding: nativeBindingRelative,
         files,
         treeSha256,
       },

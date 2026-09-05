@@ -32,6 +32,10 @@ interface RuntimePointer {
   releaseId?: unknown;
 }
 
+interface BundledActivityManifest {
+  nativeBinding?: unknown;
+}
+
 interface RuntimeManifest {
   schemaVersion?: unknown;
   releaseId?: unknown;
@@ -101,6 +105,15 @@ const CURRENT_SHARED_PROTOCOL_VERSION = "0.1.0";
 export function resolveBundledRuntimeRelease(
   resourcesPath: string = process.resourcesPath,
 ): RuntimeRelease {
+  const bundledBackendDir = path.join(resourcesPath, "backend");
+  const bundledActivityManifest = readJsonFile<BundledActivityManifest>(
+    path.join(bundledBackendDir, "activity-sqlite-runtime-manifest.json"),
+  );
+  const bundledNativeBinding = isSafeRelativePath(
+    bundledActivityManifest?.nativeBinding,
+  )
+    ? resolveInside(bundledBackendDir, bundledActivityManifest.nativeBinding)
+    : null;
   return {
     source: "bundled",
     releaseId: BUNDLED_RUNTIME_RELEASE_ID,
@@ -122,15 +135,16 @@ export function resolveBundledRuntimeRelease(
     nodePtyDir: path.join(resourcesPath, "backend", "node_modules", "node-pty"),
     activityWorkerEntry: path.join(resourcesPath, "backend", "activity-sqlite-worker.cjs"),
     betterSqlitePackageDir: path.join(resourcesPath, "backend", "node_modules", "better-sqlite3"),
-    betterSqliteNativeBinding: path.join(
-      resourcesPath,
-      "backend",
-      "node_modules",
-      "better-sqlite3",
-      "build",
-      "Release",
-      "better_sqlite3.node",
-    ),
+    betterSqliteNativeBinding:
+      bundledNativeBinding ??
+      path.join(
+        bundledBackendDir,
+        "node_modules",
+        "better-sqlite3",
+        "build",
+        "Release",
+        "better_sqlite3.node",
+      ),
     activityAvailable: validateBundledActivityRuntime(resourcesPath),
     runtimeRoot: null,
     releaseDir: null,

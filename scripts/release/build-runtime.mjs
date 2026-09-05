@@ -138,6 +138,21 @@ if (
 ) {
   throw new Error("Evolution SQLite Electron runtime is missing");
 }
+const activityRuntimeManifest = JSON.parse(
+  readFileSync(
+    path.join(resourcesBackendDir, "activity-sqlite-runtime-manifest.json"),
+    "utf8",
+  ),
+);
+const activityNativeBinding = activityRuntimeManifest.nativeBinding;
+if (
+  typeof activityNativeBinding !== "string" ||
+  !activityNativeBinding ||
+  path.isAbsolute(activityNativeBinding) ||
+  activityNativeBinding.split(/[\\/]+/).some((part) => part === "..")
+) {
+  throw new Error("Activity SQLite native binding path is invalid");
+}
 rmSync(releaseDir, { recursive: true, force: true });
 mkdirSync(path.join(releaseDir, "frontend"), { recursive: true });
 mkdirSync(path.join(releaseDir, "backend"), { recursive: true });
@@ -184,8 +199,10 @@ const manifest = {
     entry: "backend/index.cjs",
     activityWorkerEntry: "backend/activity-sqlite-worker.cjs",
     betterSqlitePackageDir: "backend/node_modules/better-sqlite3",
-    betterSqliteNativeBinding:
-      "backend/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+    betterSqliteNativeBinding: path.posix.join(
+      "backend",
+      activityNativeBinding.split(path.sep).join("/"),
+    ),
   },
   cli: {
     entry: "cli/index.cjs",
