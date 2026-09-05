@@ -1,15 +1,25 @@
+import type { FeishuInboundMessageEvent } from "./bridge-message-handler.js";
+import { acquireProcessLock } from "../runtime/process-lock.js";
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-export type DeliveryStatus = "processing" | "succeeded" | "failed" | "unknown";
+export type DeliveryStatus =
+  | "waiting"
+  | "processing"
+  | "succeeded"
+  | "failed"
+  | "unknown";
 
 export interface ProcessedMessage {
   messageId: string;
   status: DeliveryStatus;
   terminalSessionId: string;
   updatedAt: string;
+  event?: FeishuInboundMessageEvent;
+  expiresAt?: string;
+  inputAttempted?: boolean;
 }
 
 export interface FeishuTopicCreating {
@@ -66,36 +76,7 @@ export class FeishuStateStore {
   }
 
   async acquireBridgeLease(): Promise<{ release(): Promise<void> }> {
-    await mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const handle = await open(this.bridgeLeasePath, "wx", 0o600);
-        await handle.writeFile(`${process.pid}\n`, "utf8");
-        let released = false;
-        return {
-          release: async () => {
-            if (released) return;
-            released = true;
-            await handle.close();
-            await rm(this.bridgeLeasePath, { force: true });
-          },
-        };
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-          throw error;
-        }
-        const ownerPid = Number(
-          (await readFile(this.bridgeLeasePath, "utf8")).trim(),
-        );
-        if (Number.isInteger(ownerPid) && isProcessAlive(ownerPid)) {
-          throw new Error(
-            `Feishu Bridge is already running with pid ${ownerPid}`,
-          );
-        }
-        await rm(this.bridgeLeasePath, { force: true });
-      }
-    }
-    throw new Error("Failed to acquire Feishu Bridge process lease");
+    return acquireProcessLock(this.bridgeLeasePath);
   }
 
   async claimTopicCreation(params: {
@@ -283,11 +264,55 @@ export class FeishuStateStore {
       let recovered = 0;
       for (const processed of Object.values(state.processed)) {
         if (processed.status !== "processing") continue;
-        processed.status = "unknown";
+        processed.status =
+          processed.event && !processed.inputAttempted ? "waiting" : "unknown";
         processed.updatedAt = new Date().toISOString();
         recovered += 1;
       }
       return recovered;
+    });
+  }
+
+  async queueEvent(
+    event: FeishuInboundMessageEvent,
+    terminalSessionId: string,
+  ): Promise<boolean> {
+    return this.mutate((state) => {
+      if (state.processed[event.message.message_id]) return false;
+      state.processed[event.message.message_id] = {
+        messageId: event.message.message_id,
+        terminalSessionId,
+        status: "waiting",
+        event,
+        expiresAt: new Date(
+          Math.min(
+            Date.now(),
+            Number(event.message.create_time) || Date.now(),
+          ) + 120_000,
+        ).toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      return true;
+    });
+  }
+
+  async waitingEvents(): Promise<FeishuInboundMessageEvent[]> {
+    const state = await this.readState();
+    return Object.values(state.processed)
+      .filter((entry) => entry.status === "waiting" && entry.event)
+      .map((entry) => entry.event!);
+  }
+
+  async delivery(messageId: string): Promise<ProcessedMessage | undefined> {
+    return (await this.readState()).processed[messageId];
+  }
+
+  async markInputAttempt(messageId: string, attempted: boolean): Promise<void> {
+    await this.mutate((state) => {
+      const entry = state.processed[messageId];
+      if (!entry || entry.status !== "processing")
+        throw new Error("Delivery is not processing");
+      entry.inputAttempted = attempted;
     });
   }
 
@@ -298,6 +323,11 @@ export class FeishuStateStore {
     try {
       return await this.mutate((state) => {
         const existing = state.processed[messageId];
+        if (existing?.status === "waiting") {
+          existing.status = "processing";
+          this.activeDeliveries.add(messageId);
+          return "started";
+        }
         if (existing) {
           if (
             existing.status === "processing" &&
@@ -334,6 +364,7 @@ export class FeishuStateStore {
         if (existing?.status === "processing") {
           existing.status = status;
           existing.updatedAt = new Date().toISOString();
+          if (status !== "waiting") delete existing.event;
         }
       });
     } finally {
@@ -343,7 +374,7 @@ export class FeishuStateStore {
 
   private async mutate<T>(operation: (state: FeishuStateV2) => T): Promise<T> {
     await mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
-    const lock = await this.acquireLock();
+    const lock = await acquireProcessLock(this.lockPath, 2_000);
     try {
       const state = await this.readState();
       pruneProcessed(state);
@@ -355,23 +386,8 @@ export class FeishuStateStore {
       await rename(tempPath, this.filePath);
       return result;
     } finally {
-      await lock.close();
-      await rm(this.lockPath, { force: true });
+      await lock.release();
     }
-  }
-
-  private async acquireLock() {
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      try {
-        return await open(this.lockPath, "wx", 0o600);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-          throw error;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-    }
-    throw new Error("Timed out waiting for Feishu state lock");
   }
 
   private async readState(): Promise<FeishuStateV2> {
@@ -510,13 +526,4 @@ function readString(value: unknown): string | null {
 
 function readNullableString(value: unknown): string | null | undefined {
   return value === null ? null : (readString(value) ?? undefined);
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
 }
