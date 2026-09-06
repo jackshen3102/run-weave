@@ -110,13 +110,13 @@ cases:
     required: true
     description: >
       验证三个 Terminal Browser Profile 固定映射到 127.0.0.1:8081/8082/8083，
-      不再暴露旧 8899 开关或可编辑代理端口；Profile 首次实际使用时才懒启动对应内置 Whistle。
+      不再暴露旧 8899 开关或可编辑代理端口；Profile 显式开启 Proxy 时才懒启动对应内置 Whistle。
     preconditions:
       - 使用受管 Dev Session 启动 macOS Runweave Electron，Terminal Browser 可用。
       - 8081、8082、8083 初始空闲，且可检查本机 listener 与 Whistle CGI 状态。
       - 已通过 dev:open 的 desktop surface 打开 Terminal Sidecar，并可使用 toolkit:playwright-cli attach。
     steps:
       - 启动应用但不打开 Browser；确认三个固定端口均未被本次应用占用，界面不存在旧代理开关、8899 端口或修改固定端口的入口。
-      - 依次实际使用 Browser 1、Browser 2、Browser 3；确认分别只在 8081、8082、8083 启动 CGI ready 的 Whistle，状态面板显示固定映射且 `<local>` 继续绕过代理。
+      - 依次在 Browser 1、Browser 2、Browser 3 的设置中显式开启 Proxy；确认分别只在 8081、8082、8083 启动 CGI ready 的 Whistle，状态面板显示固定映射且 `<local>` 继续绕过代理。
       - 打开三个 Whistle 控制台并确认它们位于各自 Profile 页面、storage 相互独立；完整退出应用后确认本次拥有的三个 listener 全部释放。
       - 保留旧 `terminal-browser-proxy.json` fixture 并重启；确认旧 8899 开关/端口不控制三个新 Profile，也没有被升级过程删除或改写。

@@ -103,7 +103,8 @@ Project/Worktree 删除与 Start 共享 Context guard。活跃服务会让删除
 Terminal Browser Profile 仍只有 `whistle | direct` 两种 Proxy Mode。Electron Session 的 bypass 为
 `<local>,*.localhost`：Workspace URL 在两种模式下都必须解析为 `DIRECT`；Whistle 模式的普通外部
 URL 仍解析到该 Profile 的固定 Whistle 端口。每次 `setProxy()` 后主进程都通过 `resolveProxy()`
-自检，失败时不宣告切换成功。
+自检，失败时不宣告切换成功。普通安装态默认使用 Whistle；带独立 userData 的受管 Dev Session
+默认 Direct，开发验收需要生产域名语义时再从 Profile 设置显式开启 Whistle。
 
 Services popover 只查询当前 active Context：静止状态每 3 秒刷新，starting/stopping 每 1 秒刷新。
 Open 仅在 ready 时可用；Electron 使用 Worktree preferred Profile（否则全局默认 Profile）创建新

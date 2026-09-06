@@ -1,0 +1,49 @@
+version: 1
+name: Dev Session Terminal Browser 代理模式验收
+description: >
+  验证使用独立 userData 的受管 Dev Session 默认绕过业务 Whistle 代理，避免普通开发与端到端
+  验收依赖固定端口；需要生产域名代理语义时仍可显式开启，普通安装态行为保持不变。
+
+cases:
+  - id: DSPM-001
+    name: Dev Session 默认直连且不占用代理路由
+    required: true
+    description: >
+      受管 Dev Session 的三个 Profile 默认 Direct；即使固定 Whistle 端口已被无关进程占用，
+      Browser 与 CDP 仍可使用，不启动代理、不杀外部进程，也不因 Worktree 端口不同发生冲突。
+    preconditions:
+      - 使用独立 userData 的受管 Electron Dev Session 尚未启动。
+      - 由测试 fixture 分别占用 8081、8082、8083，并记录三个不属于 Runweave 的 PID。
+      - 两个 Worktree 绑定同一 Profile，Dev Server 端口分别配置为 3000 和另一个可用端口。
+    steps:
+      - 启动 Dev Session，通过 desktop surface 打开 Terminal Browser；确认三个 Profile 的状态均为 Direct，fixture PID 全部存活。
+      - 使用 `$toolkit:playwright-cli` 依次附着并操作三个 Profile 的真实页面；确认 CDP 与页面可用，8081、8082、8083 没有新增 Runweave listener。
+      - 从两个 Worktree 依次解析同一 Profile；确认两次均成功且 runtime route 均为 unassigned，没有 BROWSER_PROFILE_ROUTE_CONFLICT，也没有连接 3000 或另一个配置端口。
+
+  - id: DSPM-002
+    name: Dev Session 可以显式开启和关闭 Whistle
+    required: true
+    description: >
+      Dev Session 需要生产域名、Cookie 或 CORS 代理语义时，用户仍可按 Profile 显式开启固定
+      Whistle；切回 Direct 后立即退出 dev-server route，不影响其它 Profile。
+    preconditions:
+      - 使用独立 userData 的受管 Electron Dev Session 已启动，8081、8082、8083 均空闲。
+      - 当前 Worktree 为 Profile 2 配置了一个由测试 fixture 管理的 Dev Server 端口。
+    steps:
+      - 在 Profile 2 设置中开启 Proxy 并重新激活当前 Worktree；确认 8082 出现属于本次 Session 的 Whistle listener，runtime route 为配置的 dev-server 端口，Profile 1 和 Profile 3 保持 Direct。
+      - 使用 `$toolkit:playwright-cli` 访问测试业务 origin；确认请求经过 Profile 2 的 Whistle 并到达配置的 Dev Server，另外两个固定端口没有启动。
+      - 将 Profile 2 切回 Direct；确认 runtime route 立即变为 unassigned，后续页面请求不再经过 Whistle，已启动的 Whistle 仅由 Session 退出生命周期回收。
+
+  - id: DSPM-003
+    name: 非 Dev Session 保持默认 Whistle
+    required: true
+    description: >
+      没有受管 Dev Session 身份的普通安装态继续默认使用 Whistle，避免开发体验优化改变业务
+      场景的生产域名代理、登录态和用户规则行为。
+    preconditions:
+      - 启动一个不含 RUNWEAVE_DEV_SESSION_ID 的普通安装态 Runweave，使用其正常 userData。
+      - Profile 1 的固定端口 8081 空闲，并准备可观察的 Whistle 测试规则。
+    steps:
+      - 首次打开并解析 Profile 1；确认状态为 Proxy、8081 懒启动属于该应用的 Whistle，Worktree 配置端口时 runtime route 为对应 dev-server 端口。
+      - 使用 `$toolkit:playwright-cli` 访问测试业务 origin；确认请求命中 Profile 1 的 Whistle 规则，登录态和规则 storage 仍属于原 Profile。
+      - 退出应用；确认应用拥有的 8081 listener 被释放，没有修改系统代理或其它 Profile 数据。
