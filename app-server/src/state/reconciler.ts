@@ -4,6 +4,7 @@ import type {
   AppServerThreadRef,
 } from "@runweave/shared/app-server-events";
 import type { CodexThreadStatusReader } from "../codex/client.js";
+import type { CodexRolloutLifecycleReaderLike } from "../codex/lifecycle-reader.js";
 import type { AppServerEventCenter } from "../events/center.js";
 import type { TraeThreadLifecycleReader } from "../trae/lifecycle-reader.js";
 
@@ -30,6 +31,7 @@ interface ObservedThreadState {
 export interface AgentThreadStatusReconcilerOptions {
   eventCenter: AppServerEventCenter;
   codexStatusReader: CodexThreadStatusReader;
+  codexRolloutLifecycleReader: CodexRolloutLifecycleReaderLike;
   traeLifecycleReader: TraeThreadLifecycleReader;
   sourceInstanceId: string;
   startDelayMs?: number;
@@ -90,6 +92,7 @@ export class AgentThreadStatusReconciler {
       this.intervalTimer = null;
     }
     this.options.codexStatusReader.shutdown();
+    this.options.codexRolloutLifecycleReader.shutdown();
     this.options.traeLifecycleReader.shutdown();
   }
 
@@ -183,20 +186,50 @@ export class AgentThreadStatusReconciler {
     thread: AppServerThreadRef,
   ): Promise<ObservedThreadState | null> {
     if (thread.agent === "codex") {
-      const status = await this.options.codexStatusReader.readThreadStatus(
-        thread.threadId,
-      );
-      if (status !== "active") {
-        return null;
+      let status: Awaited<
+        ReturnType<CodexThreadStatusReader["readThreadStatus"]>
+      > = null;
+      let statusReadError: unknown = null;
+      try {
+        status = await this.options.codexStatusReader.readThreadStatus(
+          thread.threadId,
+        );
+      } catch (error) {
+        statusReadError = error;
       }
-      return {
-        status: "running",
-        lifecycleType: `thread/read:${status}`,
-        lifecycleCursor: `thread/read:${status}`,
-        detailStatus: null,
-        preview: null,
-        turnId: null,
-      };
+      if (status === "active") {
+        return {
+          status: "running",
+          lifecycleType: `thread/read:${status}`,
+          lifecycleCursor: `thread/read:${status}`,
+          detailStatus: null,
+          preview: null,
+          turnId: null,
+        };
+      }
+      if (thread.status === "running") {
+        const lifecycle =
+          await this.options.codexRolloutLifecycleReader.readLatestLifecycle(
+            thread.threadId,
+          );
+        if (
+          lifecycle?.status === "idle" &&
+          !isOlderThanThreadProjection(lifecycle.timestamp, thread)
+        ) {
+          return {
+            status: lifecycle.status,
+            lifecycleType: `rollout:${lifecycle.type}`,
+            lifecycleCursor: lifecycle.cursor,
+            detailStatus: null,
+            preview: null,
+            turnId: lifecycle.turnId,
+          };
+        }
+      }
+      if (statusReadError) {
+        throw statusReadError;
+      }
+      return null;
     }
 
     const detail = await this.options.traeLifecycleReader.readThread(
@@ -317,6 +350,19 @@ export class AgentThreadStatusReconciler {
       eventId: result.event.id,
     });
   }
+}
+
+function isOlderThanThreadProjection(
+  observedAt: string,
+  thread: AppServerThreadRef,
+): boolean {
+  const observedAtMs = Date.parse(observedAt);
+  const projectedAtMs = Date.parse(thread.updatedAt);
+  return (
+    Number.isFinite(observedAtMs) &&
+    Number.isFinite(projectedAtMs) &&
+    observedAtMs < projectedAtMs
+  );
 }
 
 export function parseOptionalPositiveInteger(
