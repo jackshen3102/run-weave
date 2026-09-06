@@ -17,6 +17,7 @@ import {
   type TerminalBrowserRoute,
 } from "@runweave/shared/terminal-browser-profile";
 import { desktopRuntime } from "../../desktop/runtime-state.js";
+import { isManagedDevSession } from "../../desktop/config.js";
 import { ensureTerminalBrowserCertificateTrust } from "../security/certificate.js";
 import { TerminalBrowserError } from "../errors.js";
 import {
@@ -48,7 +49,7 @@ const records = new Map<TerminalBrowserProfileId, ProfileRuntimeRecord>(
   TERMINAL_BROWSER_PROFILE_IDS.map((profileId) => [
     profileId,
     {
-      proxyMode: "whistle",
+      proxyMode: isManagedDevSession ? "direct" : "whistle",
       route: { kind: "unassigned" },
       mutationQueue: Promise.resolve(),
       cdpConnectionCount: 0,
@@ -196,12 +197,13 @@ export async function resolveTerminalBrowserProfile(
   if (terminalSessionId) {
     assertAutomationProfileAvailable(terminalSessionId, profileId);
   }
-  const requestedRoute: TerminalBrowserRoute = worktree?.devServerPort
-    ? { kind: "dev-server", port: worktree.devServerPort }
-    : { kind: "unassigned" };
   const record = records.get(profileId)!;
 
   const mutation = record.mutationQueue.then(async () => {
+    const requestedRoute: TerminalBrowserRoute =
+      record.proxyMode === "whistle" && worktree?.devServerPort
+        ? { kind: "dev-server", port: worktree.devServerPort }
+        : { kind: "unassigned" };
     const routeChanges = !routesEqual(record.route, requestedRoute);
     const visibleViewCount = getVisibleViewCount(
       profileId,
@@ -293,6 +295,7 @@ export async function setTerminalBrowserProfileProxyMode(
       );
     } else {
       await configureTerminalBrowserProfileProxy(profileId, "direct");
+      record.route = { kind: "unassigned" };
     }
 
     record.proxyMode = proxyMode;

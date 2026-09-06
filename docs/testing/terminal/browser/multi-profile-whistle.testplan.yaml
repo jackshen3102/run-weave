@@ -1,10 +1,10 @@
 version: 1
 name: Terminal Browser 三 Profile 与 Whistle 多代理验收
 description: >
-  验证同一个 Runweave Electron 进程中的三个 Terminal Browser Profile 能以固定 Whistle
-  端口承载独立浏览器数据、用户规则和 CDP Browser Group，并按 Prompt、Worktree、全局默认
-  的优先级把不同 Dev Server 路由到正确 Profile；同时覆盖路由共享与冲突、持久化、HTTPS
-  信任、局部失败和安装包运行时边界。
+  验证同一个 Runweave Electron 进程中的三个 Terminal Browser Profile 能在显式开启 Proxy 后
+  以固定 Whistle 端口承载独立浏览器数据、用户规则和 CDP Browser Group，并按 Prompt、
+  Worktree、全局默认的优先级把不同 Dev Server 路由到正确 Profile；同时覆盖路由共享与冲突、
+  持久化、HTTPS 信任、局部失败和安装包运行时边界。
 
 cases:
   - id: TBMP-001
@@ -28,7 +28,7 @@ cases:
       验证同一业务 origin 在三个 Profile 中使用独立 Cookie、LocalStorage、IndexedDB 和登录态，
       任一 Profile 的写入不能被其它 Profile 读取。
     preconditions:
-      - 受管 Electron Dev Session 已启动，8081、8082、8083 可由 Runweave 使用。
+      - 受管 Electron Dev Session 已启动，三个 Browser Profile 均可使用。
       - 有一个测试页面可在同一 origin 下读写 Cookie、LocalStorage 和 IndexedDB，并显示当前值。
     steps:
       - 分别打开 Browser 1、Browser 2、Browser 3，使用 $toolkit:playwright-cli 在同一测试 origin 写入三个不同的 Cookie、LocalStorage 和 IndexedDB 标识。
@@ -101,6 +101,7 @@ cases:
       - 3000、3001、3002 上各有一个受测试生命周期管理的 fixture Dev Server，页面分别显示 DEV-3000、DEV-3001、DEV-3002，并提供可观察的 WebSocket/HMR 标识。
       - 三份 Whistle 用户规则已分别引用保留 Value `runweave-dev-server`，固定代理端口均空闲。
       - 三个 Worktree 分别配置 3000、3001、3002，并分别选择 Profile 1、Profile 2、Profile 3。
+      - 三个 Profile 已分别从设置中显式开启 Proxy。
     steps:
       - 并发解析并 attach 三个 Profile endpoint，使用 $toolkit:playwright-cli 导航到同一业务 URL；确认三个页面分别显示 DEV-3000、DEV-3001、DEV-3002。
       - 触发三个 fixture 的资源请求和 WebSocket/HMR 消息；确认每个 Profile 只收到所属 Dev Server 的标识，没有跨端口响应。
@@ -115,6 +116,7 @@ cases:
     preconditions:
       - Worktree A 和 Worktree B 都绑定 Profile 1，且 Dev Server 端口都配置为 3000。
       - Profile 1 中为两个 Agent 准备了不同 Browser Group，3000 fixture 可用。
+      - Profile 1 已从设置中显式开启 Proxy。
     steps:
       - 从两个 Worktree 并发解析 Profile 1 的不同 Group endpoint；确认两次解析均成功、route 都是 dev-server:3000，没有路由冲突。
       - 使用两个 $toolkit:playwright-cli session 同时操作各自 Group 页面；确认两个页面均访问 3000，Target 列表和交互不跨 Group。
@@ -129,6 +131,7 @@ cases:
     preconditions:
       - Profile 1 当前路由为 3000，且至少有一个可见 WebContentsView或一个已 attach 的 CDP client。
       - 另一个 Worktree 请求 Profile 1 和 Dev Server 端口 3001。
+      - Profile 1 已从设置中显式开启 Proxy。
     steps:
       - 从第二个 Worktree 通过 UI“用于当前 Worktree”和 `rw browser profile resolve` 分别请求 Profile 1；确认两入口都返回 BROWSER_PROFILE_ROUTE_CONFLICT，并显示当前 3000 与请求 3001。
       - 读取 Whistle 保留 Value 并刷新原页面；确认 Value 仍是 127.0.0.1:3000，原页面继续显示 DEV-3000，没有被切到 3001 或其它 Profile。
@@ -143,6 +146,7 @@ cases:
     preconditions:
       - Profile 1 当前为 3000，已有业务 origin 页面、非业务 origin 页面及可识别的 Cookie、LocalStorage、IndexedDB 和 Service Worker 状态。
       - Profile 1 已从所有窗口隐藏且所有 CDP client 已 detach；3001 fixture 可用。
+      - Profile 1 已从设置中显式开启 Proxy。
     steps:
       - 从配置为 3001 的 Worktree 显式使用 Profile 1；确认解析成功，Whistle 保留 Value 变为 127.0.0.1:3001，业务页面重新加载后显示 DEV-3001。
       - 读取业务页面的 Cookie、LocalStorage、IndexedDB、Service Worker registration、tabId 和 Group；确认均与切换前一致，没有执行清理或创建替代页面。
@@ -157,6 +161,7 @@ cases:
     preconditions:
       - Profile 2 曾指向 3001，现已空闲；测试 Worktree 未配置 Dev Server 端口。
       - 测试专用 Whistle 用户规则在保留 Value 不存在时明确回源线上，线上 origin 可返回 ONLINE 标识。
+      - Profile 2 已从设置中显式开启 Proxy。
     steps:
       - 从无端口 Worktree 显式使用 Profile 2；确认 resolver route 为 unassigned，Whistle Values 中不存在 `runweave-dev-server`。
       - 使用 $toolkit:playwright-cli 导航业务 URL；确认 3001 fixture 没有收到新请求；在测试专用用户规则作用下页面显示 ONLINE，而不是 DEV-3001。
@@ -171,6 +176,7 @@ cases:
     preconditions:
       - 三个 Whistle 实例各自存在名称和内容不同的用户 Rule、普通 Value 和一条引用保留 Value 的规则。
       - Profile 1 当前空闲，可从 3000 切换到 3003。
+      - 三个 Profile 已分别从设置中显式开启 Proxy。
     steps:
       - 记录三个控制台的 Rules、普通 Values 和选中状态；切换 Profile 1 到 3003。
       - 确认只有 8081 实例的 `runweave-dev-server` 变为 127.0.0.1:3003，8082/8083 的保留 Value未变化。
@@ -187,7 +193,7 @@ cases:
       - 已准备可检查监听 PID 和 Whistle CGI ready 状态的本机诊断手段。
     steps:
       - 启动 Runweave 但不打开 Browser、不解析 Profile；确认 8081、8082、8083 均无本次 Session 的 Whistle listener。
-      - 依次实际使用 Profile 2、Profile 1；确认只启动 8082、8081，CGI ready 后持续存活，Profile 3 的 8083 仍未启动。
+      - 依次从设置中显式开启 Profile 2、Profile 1 的 Proxy；确认只启动 8082、8081，CGI ready 后持续存活，Profile 3 的 8083 仍未启动。
       - 完整退出本次 Runweave Dev Session；确认本次拥有的 Whistle 子进程退出且 8081、8082 释放，不结束其它用户进程。
 
   - id: TBMP-014
@@ -199,8 +205,8 @@ cases:
       - 启动前由测试 fixture 占用 8082，并能证明该 PID 不属于 Runweave。
       - 8081、8083 空闲，Profile 1/2/3 均可从 UI 显式使用。
     steps:
-      - 使用 Profile 2；确认显示 WHISTLE_PORT_IN_USE 和固定端口 8082，没有改用其它端口，也没有终止 fixture PID。
-      - 使用 Profile 1 和 Profile 3；确认 8081、8083 正常 ready、页面和 CDP 可用，Runweave 主窗口未退出。
+      - 在 Profile 2 设置中开启 Proxy；确认显示 WHISTLE_PORT_IN_USE 和固定端口 8082，没有改用其它端口，也没有终止 fixture PID。
+      - 在 Profile 1 和 Profile 3 设置中开启 Proxy；确认 8081、8083 正常 ready、页面和 CDP 可用，Runweave 主窗口未退出。
       - 释放 fixture 后再次显式使用 Profile 2；确认本次在 8082 成功启动，而 Profile 1/3 的进程和页面不被重启。
 
   - id: TBMP-015
@@ -211,11 +217,11 @@ cases:
       规则被恢复，而 PID、CDP 连接、prompt override 和当前 route 不被当作存量运行时恢复。
     preconditions:
       - 三个 Profile 已分别保存页面、Group、登录态和不同 Whistle 用户规则；Worktree 与全局设置已保存。
-      - Profile 3 当前通过 prompt override 使用 3002，并存在 CDP 连接。
+      - Profile 3 已显式开启 Proxy，当前通过 prompt override 使用 3002，并存在 CDP 连接。
     steps:
       - 使用 desktop 和 terminal-browser surface 记录重启前配置、页面身份、登录态、规则以及 runtime route；完整停止并重新启动同一 Dev Session userData。
       - 重新取得 fresh desktop 和 terminal-browser endpoint；确认 Worktree/global 设置、三个 Profile 页面元数据、登录态和用户规则恢复，但没有旧 Whistle PID、CDP 连接、prompt override 或 active route。
-      - 在未显式使用 Browser 前确认恢复页面尚未发起导航且 Whistle 未启动；随后显式使用一个 Profile，确认只 materialize 该 Profile 并按当前 Worktree重新解析路由。
+      - 在未显式使用 Browser 前确认恢复页面尚未发起导航且 Whistle 未启动；随后显式使用一个 Profile，确认只 materialize 该 Profile；受管 Dev Session 恢复默认 Direct 和 unassigned route。
 
   - id: TBMP-016
     name: 三个 Profile 只信任共享 Whistle CA
@@ -240,10 +246,11 @@ cases:
     preconditions:
       - 同一个受管 Electron 进程已打开两个 Runweave 主窗口，两个窗口都可访问 Browser 1/2/3。
       - 窗口 A 的 Profile 1 已激活 3000 并有可见页面。
+      - Profile 1 已从设置中显式开启 Proxy。
     steps:
       - 在窗口 B 打开 Profile 1 并请求相同 3000；确认复用同一 8081 和 Session 登录态，窗口 B 可创建自己的 Group，进程中没有第二个 Profile 1 或额外 Whistle listener。
       - 在窗口 B 请求 Profile 1 切到 3001；确认因窗口 A 仍可见而返回路由冲突，窗口 A 页面保持 3000。
-      - 在窗口 B 使用 Profile 2 指向 3001；确认成功使用 8082，两个窗口的 Profile 1/2 页面和 Group 均可继续操作。
+      - 在窗口 B 为 Profile 2 显式开启 Proxy 并指向 3001；确认成功使用 8082，两个窗口的 Profile 1/2 页面和 Group 均可继续操作。
 
   - id: TBMP-018
     name: Header 规则与网络状态按 Profile 隔离

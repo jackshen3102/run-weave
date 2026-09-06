@@ -22,6 +22,11 @@ const desktopInstanceId =
 const explicitUserDataPath =
   process.env.RUNWEAVE_DESKTOP_USER_DATA_DIR?.trim() ||
   __RUNWEAVE_DESKTOP_USER_DATA_DIR__;
+export const isManagedDevSession = Boolean(
+  (process.env.RUNWEAVE_DEV_SESSION_ID?.trim() ||
+    __RUNWEAVE_DEV_SESSION_ID__) &&
+    explicitUserDataPath,
+);
 const configuredDesktopCdpPort = parseOptionalPort(
   process.env.RUNWEAVE_DESKTOP_CDP_PORT ??
     __RUNWEAVE_DESKTOP_CDP_PORT__ ??
