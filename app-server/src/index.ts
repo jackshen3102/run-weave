@@ -23,6 +23,7 @@ import {
   type AppServerLock,
 } from "./singleton.js";
 import { attachEventStreamWebSocketServer } from "./server/websocket.js";
+import { createAppServerRuntimeStatusReport } from "./runtime-status.js";
 
 async function main(): Promise<void> {
   const config = resolveAppServerConfig();
@@ -94,6 +95,13 @@ async function main(): Promise<void> {
     sourceRevision: config.sourceRevision,
     traeLifecycleReader,
     codexThreadDetailReader: codexAppServerClient,
+    getRuntimeStatusReport: () =>
+      createAppServerRuntimeStatusReport({
+        eventCenter,
+        reconciler: agentThreadStatusReconciler,
+        serviceInstanceId,
+        version: config.version,
+      }),
   });
   const server = http.createServer(app);
   const eventStreamServer = attachEventStreamWebSocketServer({

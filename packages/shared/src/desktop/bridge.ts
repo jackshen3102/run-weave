@@ -12,6 +12,10 @@ import type {
 } from "../monitoring/runtime";
 import type { SystemMonitorSnapshot } from "../monitoring/system";
 import type {
+  RuntimeStatusCapabilityId,
+  RuntimeStatusReport,
+} from "../monitoring/runtime-status";
+import type {
   TerminalBrowserAnnotationState,
   TerminalBrowserAnnotationSubmission,
 } from "../browser/annotation";
@@ -111,6 +115,12 @@ export interface RunweaveElectronBridge {
   openExternal: (url: string) => Promise<void>;
   getRuntimeStats: () => Promise<RuntimeStatsSnapshot>;
   getSystemMonitorSnapshot: () => Promise<SystemMonitorSnapshot>;
+  getRuntimeStatusReport: () => Promise<RuntimeStatusReport>;
+  showRuntimeStatusNotification: (input: {
+    capabilityId: RuntimeStatusCapabilityId;
+    title: string;
+    body: string;
+  }) => Promise<boolean>;
   terminalBrowserNavigate: (
     tabId: string,
     url: string,

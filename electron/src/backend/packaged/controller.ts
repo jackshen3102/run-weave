@@ -252,46 +252,11 @@ export async function checkAppServerForPackagedBackend(
 
 export async function checkAndNotifyAppServerAvailability(
   env: NodeJS.ProcessEnv,
-  parentWindow?: BrowserWindow | null,
 ): Promise<Awaited<ReturnType<typeof checkAppServerAvailability>>> {
-  const connection = await checkAppServerAvailability({
+  return await checkAppServerAvailability({
     env,
     logger: desktopRuntime.incidentLogger ?? undefined,
   });
-  if (connection) {
-    desktopRuntime.appServerUnavailableDialogShown = false;
-    return connection;
-  }
-
-  if (!desktopRuntime.appServerUnavailableDialogShown) {
-    showAppServerUnavailableDialog(parentWindow);
-  }
-
-  return null;
-}
-
-export function showAppServerUnavailableDialog(
-  parentWindow?: BrowserWindow | null,
-): void {
-  desktopRuntime.appServerUnavailableDialogShown = true;
-  const options: Electron.MessageBoxOptions = {
-    type: "warning",
-    buttons: ["OK"],
-    title: "App Server",
-    message: "App Server 没有启动",
-    detail: "Runweave 不会自动安装、启动或重启 App Server。",
-  };
-  if (parentWindow && !parentWindow.isDestroyed()) {
-    parentWindow.show();
-    parentWindow.focus();
-    setTimeout(() => {
-      if (!parentWindow.isDestroyed()) {
-        void dialog.showMessageBox(parentWindow, options);
-      }
-    }, 100);
-    return;
-  }
-  void dialog.showMessageBox(options);
 }
 
 export async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionState> {
@@ -467,11 +432,7 @@ export function registerPackagedBackendHandlers(): void {
     },
   );
 
-  ipcMain.handle("viewer:check-app-server", async (event): Promise<boolean> => {
-    const parentWindow = BrowserWindow.fromWebContents(event.sender);
-    return (
-      (await checkAndNotifyAppServerAvailability(process.env, parentWindow)) !==
-      null
-    );
+  ipcMain.handle("viewer:check-app-server", async (): Promise<boolean> => {
+    return (await checkAndNotifyAppServerAvailability(process.env)) !== null;
   });
 }

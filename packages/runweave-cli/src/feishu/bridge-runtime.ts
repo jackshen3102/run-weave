@@ -1,6 +1,7 @@
 import * as Lark from "@larksuiteoapi/node-sdk";
 import type { AuthContext } from "../client/auth-context.js";
 import type { FeishuConfig } from "./config.js";
+import type { FeishuRuntimeStatusReporter } from "./runtime-status.js";
 
 export async function runBridgeConnection(params: {
   config: FeishuConfig;
@@ -8,6 +9,7 @@ export async function runBridgeConnection(params: {
   dispatcher: Lark.EventDispatcher;
   stderr: Pick<NodeJS.WriteStream, "write">;
   signal: AbortSignal;
+  statusReporter: FeishuRuntimeStatusReporter;
 }): Promise<void> {
   const log = (event: string) =>
     params.stderr.write(
@@ -17,10 +19,22 @@ export async function runBridgeConnection(params: {
     appId: params.config.appId,
     appSecret: params.config.appSecret,
     loggerLevel: Lark.LoggerLevel.warn,
-    onReady: () => log("websocket_ready"),
-    onReconnected: () => log("websocket_reconnected"),
-    onReconnecting: () => log("websocket_reconnecting"),
-    onError: () => log("websocket_failed"),
+    onReady: () => {
+      params.statusReporter.markLarkConnected();
+      log("websocket_ready");
+    },
+    onReconnected: () => {
+      params.statusReporter.markLarkConnected();
+      log("websocket_reconnected");
+    },
+    onReconnecting: () => {
+      params.statusReporter.markLarkDisconnected();
+      log("websocket_reconnecting");
+    },
+    onError: () => {
+      params.statusReporter.markLarkDisconnected();
+      log("websocket_failed");
+    },
   });
   let lastTick = Date.now();
   let lastBackendState = "";
@@ -34,7 +48,12 @@ export async function runBridgeConnection(params: {
       const resumed = now - lastTick > 60_000;
       lastTick = now;
       const status = client.getConnectionStatus();
-      if (status.state === "connected") disconnectedSince = now;
+      if (status.state === "connected") {
+        disconnectedSince = now;
+        params.statusReporter.markLarkConnected();
+      } else {
+        params.statusReporter.markLarkDisconnected();
+      }
       if (
         resumed ||
         status.state === "failed" ||
@@ -42,7 +61,6 @@ export async function runBridgeConnection(params: {
       ) {
         log(resumed ? "resume_reconnect" : "websocket_restart");
         client.close({ force: true });
-        disconnectedSince = now;
         await client.start({ eventDispatcher: params.dispatcher });
       }
       try {
@@ -50,11 +68,14 @@ export async function runBridgeConnection(params: {
           signal: AbortSignal.any([params.signal, AbortSignal.timeout(10_000)]),
         });
         if (lastBackendState !== "ready") log("backend_ready");
+        params.statusReporter.markBackendConnected();
         lastBackendState = "ready";
       } catch {
         if (lastBackendState !== "unavailable") log("backend_unavailable");
+        params.statusReporter.markBackendDisconnected();
         lastBackendState = "unavailable";
       }
+      void params.statusReporter.publish().catch(() => undefined);
     } finally {
       checking = false;
     }

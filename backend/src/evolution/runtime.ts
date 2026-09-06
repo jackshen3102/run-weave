@@ -9,11 +9,17 @@ const LEASE_TTL_MS = 45_000;
 const HEARTBEAT_INTERVAL_MS = 10_000;
 
 export class EvolutionRuntime {
+  private readonly startedAt = Date.now();
   private recoveryTimer: NodeJS.Timeout | null = null;
   private maintenanceRunning = false;
   private activeExecution: Promise<void> | null = null;
   private activeAbortController: AbortController | null = null;
   private controlPlaneBaseUrl: string | null = null;
+  private lastMaintenanceStartedAt: number | null = null;
+  private lastMaintenanceCompletedAt: number | null = null;
+  private lastMaintenanceFailedAt: number | null = null;
+  private lastLeaseHeartbeatAt: number | null = null;
+  private consecutiveMaintenanceFailures = 0;
   private readonly ownerId = `evolution-runtime:${process.pid}:${crypto.randomUUID()}`;
 
   constructor(
@@ -44,9 +50,24 @@ export class EvolutionRuntime {
     await this.activeExecution?.catch(() => undefined);
   }
 
+  getStatusSnapshot() {
+    return {
+      enabled: this.store !== null,
+      startedAt: this.startedAt,
+      maintenanceRunning: this.maintenanceRunning,
+      activeExecution: this.activeExecution !== null,
+      lastMaintenanceStartedAt: this.lastMaintenanceStartedAt,
+      lastMaintenanceCompletedAt: this.lastMaintenanceCompletedAt,
+      lastMaintenanceFailedAt: this.lastMaintenanceFailedAt,
+      lastLeaseHeartbeatAt: this.lastLeaseHeartbeatAt,
+      consecutiveMaintenanceFailures: this.consecutiveMaintenanceFailures,
+    };
+  }
+
   private runMaintenance(): void {
     if (!this.store || this.maintenanceRunning) return;
     this.maintenanceRunning = true;
+    this.lastMaintenanceStartedAt = Date.now();
     const now = new Date();
     void this.store
       .recoverExpiredRuns(now.toISOString())
@@ -56,7 +77,15 @@ export class EvolutionRuntime {
       .then(() => this.service.materializeDueSchedules(now))
       .then(() => this.evidenceReconciler?.reconcile())
       .then(() => this.claimAndExecute())
-      .catch(this.onError)
+      .then(() => {
+        this.lastMaintenanceCompletedAt = Date.now();
+        this.consecutiveMaintenanceFailures = 0;
+      })
+      .catch((error) => {
+        this.lastMaintenanceFailedAt = Date.now();
+        this.consecutiveMaintenanceFailures += 1;
+        this.onError(error);
+      })
       .finally(() => {
         this.maintenanceRunning = false;
       });
@@ -77,6 +106,7 @@ export class EvolutionRuntime {
       leaseTtlMs: LEASE_TTL_MS,
     });
     if (!claim) return;
+    this.lastLeaseHeartbeatAt = Date.now();
     const abortController = new AbortController();
     this.activeAbortController = abortController;
     let heartbeatRunning = false;
@@ -126,5 +156,6 @@ export class EvolutionRuntime {
       now: new Date().toISOString(),
       leaseTtlMs: LEASE_TTL_MS,
     });
+    this.lastLeaseHeartbeatAt = Date.now();
   }
 }

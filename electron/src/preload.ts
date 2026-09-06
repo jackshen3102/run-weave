@@ -15,6 +15,10 @@ import type {
 } from "@runweave/shared/runtime-monitor";
 import type { SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
 import type {
+  RuntimeStatusCapabilityId,
+  RuntimeStatusReport,
+} from "@runweave/shared/runtime-status";
+import type {
   TerminalBrowserAnnotationState,
   TerminalBrowserAnnotationSubmission,
 } from "@runweave/shared/terminal-browser-annotation";
@@ -135,6 +139,15 @@ const electronApi = {
     ) as Promise<RuntimeStatsSnapshot>,
   getSystemMonitorSnapshot: () =>
     ipcRenderer.invoke("system-monitor:get") as Promise<SystemMonitorSnapshot>,
+  getRuntimeStatusReport: () =>
+    ipcRenderer.invoke(
+      "runtime-status:get-report",
+    ) as Promise<RuntimeStatusReport>,
+  showRuntimeStatusNotification: (input: {
+    capabilityId: RuntimeStatusCapabilityId;
+    title: string;
+    body: string;
+  }) => ipcRenderer.invoke("runtime-status:notify", input) as Promise<boolean>,
   terminalBrowserNavigate: (tabId: string, url: string) =>
     ipcRenderer.invoke("terminal-browser:navigate", tabId, url),
   terminalBrowserGetWorkspace: (profileId: TerminalBrowserProfileId) =>

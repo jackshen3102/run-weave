@@ -39,11 +39,37 @@ type RecheckWatchdogClock = {
   activeElapsedMs: number;
 };
 
+export interface AgentTeamRecheckWatchdogStatus {
+  startedAt: number;
+  running: boolean;
+  lastStartedAt: number | null;
+  lastCompletedAt: number | null;
+  lastFailedAt: number | null;
+  consecutiveFailures: number;
+}
+
 export class AgentTeamRecheckService extends AgentTeamCompletionService {
   private readonly recheckWatchdogClocks = new Map<
     string,
     RecheckWatchdogClock
   >();
+  private readonly recheckWatchdogStartedAt = Date.now();
+  private recheckWatchdogRunning = false;
+  private recheckWatchdogLastStartedAt: number | null = null;
+  private recheckWatchdogLastCompletedAt: number | null = null;
+  private recheckWatchdogLastFailedAt: number | null = null;
+  private recheckWatchdogConsecutiveFailures = 0;
+
+  getRecheckWatchdogStatus(): AgentTeamRecheckWatchdogStatus {
+    return {
+      startedAt: this.recheckWatchdogStartedAt,
+      running: this.recheckWatchdogRunning,
+      lastStartedAt: this.recheckWatchdogLastStartedAt,
+      lastCompletedAt: this.recheckWatchdogLastCompletedAt,
+      lastFailedAt: this.recheckWatchdogLastFailedAt,
+      consecutiveFailures: this.recheckWatchdogConsecutiveFailures,
+    };
+  }
 
   protected startRecheckWatchdog(): void {
     if (this.recheckWatchdogTimer) {
@@ -63,47 +89,59 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
   protected async runRecheckWatchdog(
     source: "startup" | "watchdog",
   ): Promise<void> {
-    const projects = this.terminalSessionManager.listAllProjectContexts();
-    for (const project of projects) {
-      const runs = await this.runStore.listRuns(project.id);
-      for (const run of runs) {
-        if (run.phase !== "executing" || run.status !== "running") {
-          continue;
-        }
-        const session = this.terminalSessionManager.getSession(
-          run.terminalSessionId,
-        );
-        const activeWorker = run.activeWorkerRole
-          ? findWorkerByRole(run.workers, run.activeWorkerRole)
-          : null;
-        if (!session || !activeWorker) {
-          continue;
-        }
-        const reconciled = await this.reconcileCompletionSignal({
-          projectId: run.projectId,
-          terminalSessionId: run.terminalSessionId,
-          panelId: activeWorker.panelId ?? null,
-          tmuxPaneId: activeWorker.tmuxPaneId ?? null,
-          cwd: session.cwd,
-          source,
-        });
-        if (reconciled) {
-          continue;
-        }
-        await this.enqueue(run.runId, async () => {
-          const latest = await this.runStore.getRun(run.runId);
-          if (
-            !latest ||
-            latest.phase !== "executing" ||
-            latest.status !== "running"
-          ) {
-            return;
+    this.recheckWatchdogRunning = true;
+    this.recheckWatchdogLastStartedAt = Date.now();
+    try {
+      const projects = this.terminalSessionManager.listAllProjectContexts();
+      for (const project of projects) {
+        const runs = await this.runStore.listRuns(project.id);
+        for (const run of runs) {
+          if (run.phase !== "executing" || run.status !== "running") {
+            continue;
           }
-          if (this.hasObservedRecheckTimeout(latest)) {
-            await this.handleTimedOutRechecks(latest);
+          const session = this.terminalSessionManager.getSession(
+            run.terminalSessionId,
+          );
+          const activeWorker = run.activeWorkerRole
+            ? findWorkerByRole(run.workers, run.activeWorkerRole)
+            : null;
+          if (!session || !activeWorker) {
+            continue;
           }
-        });
+          const reconciled = await this.reconcileCompletionSignal({
+            projectId: run.projectId,
+            terminalSessionId: run.terminalSessionId,
+            panelId: activeWorker.panelId ?? null,
+            tmuxPaneId: activeWorker.tmuxPaneId ?? null,
+            cwd: session.cwd,
+            source,
+          });
+          if (reconciled) {
+            continue;
+          }
+          await this.enqueue(run.runId, async () => {
+            const latest = await this.runStore.getRun(run.runId);
+            if (
+              !latest ||
+              latest.phase !== "executing" ||
+              latest.status !== "running"
+            ) {
+              return;
+            }
+            if (this.hasObservedRecheckTimeout(latest)) {
+              await this.handleTimedOutRechecks(latest);
+            }
+          });
+        }
       }
+      this.recheckWatchdogLastCompletedAt = Date.now();
+      this.recheckWatchdogConsecutiveFailures = 0;
+    } catch (error) {
+      this.recheckWatchdogLastFailedAt = Date.now();
+      this.recheckWatchdogConsecutiveFailures += 1;
+      throw error;
+    } finally {
+      this.recheckWatchdogRunning = false;
     }
   }
 

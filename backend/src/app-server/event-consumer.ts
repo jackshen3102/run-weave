@@ -16,6 +16,17 @@ export interface AppServerEventConsumerOptions {
 export interface AppServerEventConsumerHandle {
   start(): Promise<void>;
   stop(): void;
+  getStatusSnapshot(): AppServerEventConsumerStatusSnapshot;
+}
+
+export interface AppServerEventConsumerStatusSnapshot {
+  state: "connecting" | "connected" | "stopped";
+  observedAt: number;
+  failureSince: number | null;
+  reconnectAttempt: number;
+  nextAttemptAt: number | null;
+  lastConnectedAt: number | null;
+  lastErrorSummary: string | null;
 }
 
 const eventConsumerLogger = logger.child({
@@ -28,11 +39,21 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectDelayMs = 1000;
   private queue: Promise<void> = Promise.resolve();
+  private state: AppServerEventConsumerStatusSnapshot = {
+    state: "stopped",
+    observedAt: Date.now(),
+    failureSince: null,
+    reconnectAttempt: 0,
+    nextAttemptAt: null,
+    lastConnectedAt: null,
+    lastErrorSummary: null,
+  };
 
   constructor(private readonly options: AppServerEventConsumerOptions) {}
 
   async start(): Promise<void> {
     this.stopped = false;
+    this.updateStatus({ state: "connecting", failureSince: Date.now() });
     const cursor = await this.options.cursorStore.read(this.options.consumerId);
     this.connect(cursor);
   }
@@ -45,6 +66,16 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
     }
     this.socket?.close();
     this.socket = null;
+    this.state = {
+      ...this.state,
+      state: "stopped",
+      observedAt: Date.now(),
+      nextAttemptAt: null,
+    };
+  }
+
+  getStatusSnapshot(): AppServerEventConsumerStatusSnapshot {
+    return { ...this.state };
   }
 
   private connect(after: string | null): void {
@@ -72,6 +103,12 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
     }
     const delay = this.reconnectDelayMs;
     this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 30_000);
+    this.updateStatus({
+      state: "connecting",
+      failureSince: this.state.failureSince ?? Date.now(),
+      reconnectAttempt: this.state.reconnectAttempt + 1,
+      nextAttemptAt: Date.now() + delay,
+    });
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       const cursor = await this.options.cursorStore.read(
@@ -82,6 +119,11 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
   }
 
   private handleSocketError(error: Error): void {
+    this.updateStatus({
+      state: "connecting",
+      failureSince: this.state.failureSince ?? Date.now(),
+      lastErrorSummary: summarizeConnectionError(error),
+    });
     eventConsumerLogger.warn("app-server.consumer.socket.error", {
       message: "App-server event stream socket error",
       consumerId: this.options.consumerId,
@@ -109,6 +151,16 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
   ): Promise<void> {
     if (message.type === "connected") {
       this.reconnectDelayMs = 1000;
+      const now = Date.now();
+      this.state = {
+        state: "connected",
+        observedAt: now,
+        failureSince: null,
+        reconnectAttempt: 0,
+        nextAttemptAt: null,
+        lastConnectedAt: now,
+        lastErrorSummary: null,
+      };
       return;
     }
     if (message.type === "events") {
@@ -128,4 +180,17 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
     }
     await this.options.cursorStore.write(this.options.consumerId, event.id);
   }
+
+  private updateStatus(
+    patch: Partial<AppServerEventConsumerStatusSnapshot>,
+  ): void {
+    this.state = { ...this.state, ...patch, observedAt: Date.now() };
+  }
+}
+
+function summarizeConnectionError(error: Error): string {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code
+    ? `App Server connection failed (${code})`
+    : "App Server connection failed";
 }

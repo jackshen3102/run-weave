@@ -59,6 +59,7 @@ import {
 import { DesktopCompanionAgent } from "./companion/agent.js";
 import { stopAllTerminalBrowserWhistles } from "./browser/whistle/runtime.js";
 import { registerTerminalBrowserAutomationHandlers } from "./browser/automation/runtime.js";
+import { registerRuntimeStatusHandlers } from "./monitoring/runtime-status.js";
 function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 512;
 }
@@ -336,6 +337,10 @@ if (hasSingleInstanceLock) {
       registerTerminalBrowserAutomationHandlers();
       registerCdpProxyHandlers();
       const openAttentionSlot = registerCompanionHandlers();
+      registerRuntimeStatusHandlers({
+        getCompanion: () => companionAgent,
+        isCompanionEnabled: () => companionEnabled,
+      });
       if (!isBetaChannel) {
         await installHooksIfNeeded({
           resourcesDir: process.env.RUNWEAVE_ELECTRON_RESOURCES_DIR
@@ -444,9 +449,9 @@ if (hasSingleInstanceLock) {
 
       desktopRuntime.mainWindow = createWindow({
         hideOnClose: true,
-        onReadyToShow: (win) => {
+        onReadyToShow: () => {
           writeBetaDesktopStatus();
-          void checkAndNotifyAppServerAvailability(process.env, win);
+          void checkAndNotifyAppServerAvailability(process.env);
         },
       });
 

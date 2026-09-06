@@ -28,6 +28,7 @@
     "./evolution": "./src/evolution/index.ts",
     "./protocol": "./src/protocol.ts",
     "./runtime-monitor": "./src/monitoring/runtime.ts",
+    "./runtime-status": "./src/monitoring/runtime-status.ts",
     "./race": "./src/race/index.ts",
     "./system-monitor": "./src/monitoring/system.ts",
     "./terminal": "./src/terminal/index.ts",

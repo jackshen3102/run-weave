@@ -278,11 +278,17 @@ export async function setTerminalBrowserProfileProxyMode(
 ): Promise<TerminalBrowserProfileRuntimeState> {
   const record = records.get(profileId)!;
   const mutation = record.mutationQueue.then(async () => {
-    if (record.proxyMode === proxyMode) {
+    if (
+      record.proxyMode === proxyMode &&
+      (proxyMode !== "whistle" ||
+        getTerminalBrowserWhistleState(profileId).status === "ready")
+    ) {
       return getTerminalBrowserProfileRuntimeState(profileId);
     }
 
     if (proxyMode === "whistle") {
+      record.proxyMode = "whistle";
+      notifyRuntimeChanged(profileId);
       const whistle = await ensureTerminalBrowserWhistle(profileId);
       await configureTerminalBrowserProfileProxy(profileId, "whistle");
       await ensureTerminalBrowserCertificateTrust(profileId);

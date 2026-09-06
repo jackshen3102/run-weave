@@ -1,6 +1,7 @@
 import { WebSocket } from "ws";
 import type { AppServerEventEnvelope, AppServerEventListResponse, AppServerEventStreamMessage, AppServerSyncStatusResponse, AppServerThreadDetailResponse, AppServerThreadListResponse, AppServerThreadResponse, CreateAppServerEventRequest } from "@runweave/shared/app-server-events";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
+import type { RuntimeStatusReport } from "@runweave/shared/runtime-status";
 
 export class AppServerClient {
   constructor(private readonly connection: AppServerConnectionInfo) {}
@@ -97,6 +98,19 @@ export class AppServerClient {
       return null;
     }
     return (await response.json()) as AppServerSyncStatusResponse;
+  }
+
+  async getRuntimeStatus(
+    signal?: AbortSignal,
+  ): Promise<RuntimeStatusReport | null> {
+    const response = await fetch(`${this.connection.baseUrl}/runtime-status`, {
+      headers: this.headers(),
+      signal,
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as RuntimeStatusReport;
   }
 
   connectStream(options: {

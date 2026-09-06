@@ -14,7 +14,7 @@ Runweave 当前由三条并行链路组成：
 
 ## 对外入口（高层）
 
-- HTTP：登录、终端 session、文件预览、诊断日志、健康检查
+- HTTP：登录、终端 session、文件预览、诊断日志、健康检查和运行状态快照
 - WebSocket：`/ws/terminal`、`/ws/terminal-events`
 - Electron：通过连接管理器选择后端地址，所有 HTTP/WebSocket 请求直达远程后端
 
@@ -27,6 +27,10 @@ Runweave 当前由三条并行链路组成：
 ## 关键边界
 
 - `/api/*` 走 Bearer Token 鉴权。
+- `GET /api/runtime-status` 返回当前 Backend 节点快照；Feishu Bridge 通过受认证的
+  `PUT /api/runtime-status/reports/feishu-bridge` 上报短期有效的 owner report。
+- App Server 通过自身 Bearer Token 保护的 `GET /runtime-status` 提供 owner report，Backend 定时拉取。
+- 状态链路使用轮询和带 TTL 的报告，没有新增状态专用 WebSocket。
 - `/ws/terminal` 与 `/ws/terminal-events` 在握手阶段校验短时 ticket。
 - 后端不再提供服务端浏览器 viewer 相关 HTTP、WebSocket 或 DevTools 入口。
 

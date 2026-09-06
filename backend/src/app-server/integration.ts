@@ -10,6 +10,7 @@ import { handleAgentCompletionEvent } from "./handlers/agent-completion";
 import { handleAgentHookEvent } from "./handlers/agent-hook";
 import { handleAgentLifecycleEvent } from "./handlers/agent-lifecycle";
 import { isEventOwnedByThisBackend } from "./ownership";
+import { startAppServerRuntimeStatusSource } from "./runtime-status-source";
 
 const APP_SERVER_AGENT_EVENT_CONSUMER_ID = "backend:agent-events";
 
@@ -97,7 +98,11 @@ export async function initializeAppServerEventIntegration(
       },
     });
     await consumer.start();
-    services.appServerEventConsumer = consumer;
+    services.runtimeStatus.eventConsumer = consumer;
+    services.runtimeStatus.appServerSource = startAppServerRuntimeStatusSource(
+      client,
+      services.runtimeStatus.registry,
+    );
 
     logger.info("backend.app-server.connected", {
       component: "app-server",

@@ -6,7 +6,6 @@ import type { AuthStore } from "../auth/store";
 import { LowDbAuthStore } from "../auth/lowdb-store";
 import { loadAuthConfig } from "../auth/config";
 import { AuthService } from "../auth/service";
-import type { AppServerEventConsumerHandle } from "../app-server/event-consumer";
 import { AgentTeamService } from "../agent-team/service";
 import { AgentTeamModelConfigStore } from "../agent-team/runtime/model-config-store";
 import { AgentTeamModelSettingsService } from "../agent-team/model-catalog/service";
@@ -24,7 +23,7 @@ import { TmuxLifecycleCoordinator } from "../terminal/tmux/lifecycle-coordinator
 import { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
 import { TmuxService } from "../terminal/tmux/service";
 import { TerminalSessionManager } from "../terminal/manager/manager";
-import { WorkspaceServiceManager } from "../terminal/workspace-service/manager";
+import { RuntimeStatusWorkspaceServiceManager } from "../runtime-status/workspace-service-manager";
 import { TerminalCompletionEventService } from "../terminal/completion/event-service";
 import { TerminalEventService } from "../terminal/state/terminal-event-service";
 import { TerminalStateService } from "../terminal/state/terminal-state-service";
@@ -62,8 +61,10 @@ import { EvolutionToolTokenRegistry } from "../evolution/tools/token-registry";
 import { EvolutionProviderAvailabilityService } from "../evolution/providers/availability";
 import { RaceRecordStore } from "../race/race-record-store";
 import { RaceService } from "../race/race-service";
+import { BackendRuntimeStatusService } from "../runtime-status/service";
 
 export interface RuntimeServices {
+  runtimeStatus: BackendRuntimeStatusService;
   activityStore: ActivityStore | null;
   activityRecorder: ActivityRecorder;
   activityQueryService: ActivityQueryService;
@@ -75,7 +76,7 @@ export interface RuntimeServices {
   authCookieName: string;
   authSecureCookies: boolean;
   terminalSessionManager: TerminalSessionManager;
-  workspaceServiceManager: WorkspaceServiceManager;
+  workspaceServiceManager: RuntimeStatusWorkspaceServiceManager;
   terminalQuickInputStore: LowDbTerminalQuickInputStore;
   terminalQuickInputService: TerminalQuickInputService;
   terminalStateService: TerminalStateService;
@@ -93,7 +94,6 @@ export interface RuntimeServices {
   tmuxService: TmuxService;
   tmuxOutputWatcher: TmuxOutputWatcher;
   tmuxSocketPathsToCleanOnShutdown: readonly string[];
-  appServerEventConsumer: AppServerEventConsumerHandle | null;
   evolutionActivationStore: EvolutionActivationStore;
   evolutionAnalysisStore: EvolutionAnalysisStore | null;
   evolutionContextPackStore: EvolutionContextPackStore | null;
@@ -153,7 +153,9 @@ function shouldPreserveTmuxOnShutdown(
   return runtimeChannel === "stable";
 }
 
-export async function createRuntimeServices(): Promise<RuntimeServices> {
+export async function createRuntimeServices(
+  serviceInstanceId?: string,
+): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
   const activityPaths = resolveActivityStoragePaths(process.env);
   const evolutionPaths = resolveEvolutionStoragePaths(process.env);
@@ -363,7 +365,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxLifecycleCoordinator,
   });
   await terminalSessionManager.initialize();
-  const workspaceServiceManager = new WorkspaceServiceManager(
+  const workspaceServiceManager = new RuntimeStatusWorkspaceServiceManager(
     terminalSessionManager,
   );
   void syncExistingTmuxSessionEnvironments(terminalSessionManager, tmuxService)
@@ -538,7 +540,17 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalStateService,
   );
 
-  return {
+  const runtimeStatus = new BackendRuntimeStatusService(
+    serviceInstanceId ?? activityInstanceId,
+    {
+      activityStoreAvailable: activityStore !== null,
+      agentTeamService,
+      evolutionRuntime,
+      workspaceServiceManager,
+    },
+  );
+  const services: RuntimeServices = {
+    runtimeStatus,
     activityStore,
     activityRecorder,
     activityQueryService,
@@ -568,7 +580,6 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxService,
     tmuxOutputWatcher,
     tmuxSocketPathsToCleanOnShutdown,
-    appServerEventConsumer: null,
     evolutionActivationStore,
     evolutionAnalysisStore,
     evolutionContextPackStore,
@@ -576,4 +587,5 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     evolutionRuntime,
     evolutionService,
   };
+  return services;
 }
