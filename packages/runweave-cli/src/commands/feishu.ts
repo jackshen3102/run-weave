@@ -11,6 +11,7 @@ import {
 import { resolveFeishuConfig } from "../feishu/config.js";
 import { FeishuStateStore } from "../feishu/state-store.js";
 import { notifyFeishuTopic } from "../feishu/topic-notifier.js";
+import { FeishuRuntimeStatusReporter } from "../feishu/runtime-status.js";
 import { writeOutput } from "../output/format.js";
 
 const FEISHU_REQUEST_TIMEOUT_MS = 10_000;
@@ -139,6 +140,8 @@ export async function runFeishuCommand(
     });
     const terminalClient = new TerminalHttpClient(auth);
     const bridgeLease = await store.acquireBridgeLease();
+    const statusReporter = new FeishuRuntimeStatusReporter(auth);
+    statusReporter.start();
     const controller = new AbortController();
     try {
       await store.recoverInterruptedDeliveries();
@@ -171,6 +174,7 @@ export async function runFeishuCommand(
           dispatcher,
           stderr: io.stderr,
           signal: controller.signal,
+          statusReporter,
         });
       } finally {
         controller.abort();
@@ -179,6 +183,7 @@ export async function runFeishuCommand(
         process.off("SIGTERM", stop);
       }
     } finally {
+      await statusReporter.stop();
       await bridgeLease.release();
     }
     return;

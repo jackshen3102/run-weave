@@ -63,6 +63,7 @@
 | 任务                                    | 文档                                                       |
 | --------------------------------------- | ---------------------------------------------------------- |
 | 网络拓扑、Backend 与 Electron 连接      | [network-topology.md](./network-topology.md)               |
+| 跨运行时状态来源、聚合与安全边界        | [runtime-status.md](./runtime-status.md)                   |
 | App 移动端连接、页面和安全边界          | [app-mobile.md](./app-mobile.md)                           |
 | App Server 总体架构                     | [app-server-architecture.md](./app-server-architecture.md) |
 | App Server Event Center 与 Work History | [app-server-event-center.md](./app-server-event-center.md) |

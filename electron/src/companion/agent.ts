@@ -60,6 +60,10 @@ export class DesktopCompanionAgent {
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private restartAttempt = 0;
   private starting: Promise<void> | null = null;
+  private ready = false;
+  private failureSince: number | null = null;
+  private nextAttemptAt: number | null = null;
+  private observedAt = Date.now();
 
   constructor(private readonly options: DesktopCompanionAgentOptions) {}
 
@@ -67,18 +71,43 @@ export class DesktopCompanionAgent {
     return this.child?.pid ?? null;
   }
 
+  getStatusSnapshot() {
+    return {
+      desiredRunning: this.desiredRunning,
+      running: this.child !== null,
+      ready: this.ready,
+      restartAttempt: this.restartAttempt,
+      failureSince: this.failureSince,
+      nextAttemptAt: this.nextAttemptAt,
+      observedAt: this.observedAt,
+    };
+  }
+
   start(): Promise<void> {
     this.desiredRunning = true;
+    this.observedAt = Date.now();
     if (this.starting) return this.starting;
     if (this.child) return Promise.resolve();
-    this.starting = this.launch().finally(() => {
-      this.starting = null;
-    });
+    this.starting = this.launch()
+      .catch((error) => {
+        this.ready = false;
+        this.failureSince ??= Date.now();
+        this.observedAt = Date.now();
+        this.scheduleRestart();
+        throw error;
+      })
+      .finally(() => {
+        this.starting = null;
+      });
     return this.starting;
   }
 
   async stop(): Promise<void> {
     this.desiredRunning = false;
+    this.ready = false;
+    this.failureSince = null;
+    this.nextAttemptAt = null;
+    this.observedAt = Date.now();
     if (this.restartTimer) clearTimeout(this.restartTimer);
     this.restartTimer = null;
     const child = this.child;
@@ -128,6 +157,9 @@ export class DesktopCompanionAgent {
     });
     child.once("exit", (code, signal) => {
       if (this.child === child) this.child = null;
+      this.ready = false;
+      this.failureSince ??= Date.now();
+      this.observedAt = Date.now();
       if (!this.desiredRunning) return;
       console.warn("[companion-agent] exited unexpectedly", { code, signal });
       this.scheduleRestart();
@@ -141,6 +173,10 @@ export class DesktopCompanionAgent {
       const handleReady = (message: CompanionAgentMessage): void => {
         if (message.type !== "ready") return;
         clearTimeout(timer);
+        this.ready = true;
+        this.failureSince = null;
+        this.nextAttemptAt = null;
+        this.observedAt = Date.now();
         this.onMessage = this.handleMessage.bind(this);
         resolve();
       };
@@ -227,6 +263,9 @@ export class DesktopCompanionAgent {
   private scheduleRestart(): void {
     if (this.restartTimer || !this.desiredRunning) return;
     const delay = Math.min(500 * 2 ** this.restartAttempt, 10_000);
+    this.failureSince ??= Date.now();
+    this.nextAttemptAt = Date.now() + delay;
+    this.observedAt = Date.now();
     this.restartAttempt += 1;
     this.restartTimer = setTimeout(() => {
       this.restartTimer = null;

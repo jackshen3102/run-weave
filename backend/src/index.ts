@@ -33,6 +33,7 @@ import { createPrototypePreviewRouter } from "./routes/prototype/preview";
 import { createVoiceRouter } from "./routes/voice";
 import { createWorkHistoryRouter } from "./routes/work-history";
 import { createAttentionRouter } from "./routes/attention";
+import { registerRuntimeStatusRoutes } from "./routes/registration/runtime-status";
 import { createEvolutionActivationRouter } from "./routes/evolution/activation";
 import { createEvolutionFoundationRouter } from "./routes/evolution/foundation";
 import { createEvolutionMcpRouter } from "./routes/evolution/mcp";
@@ -71,6 +72,7 @@ import {
   createWorkspaceServiceHttpProxy,
 } from "./terminal/workspace-service/proxy";
 import { TerminalWorktreeDeletionError } from "./terminal/workspace-service/worktree-deletion";
+import { setBackendRuntimeStatusListener } from "./bootstrap/runtime-status";
 
 const HASHED_ASSET_CACHE_CONTROL =
   "public, max-age=31536000, s-maxage=31536000, immutable";
@@ -219,6 +221,7 @@ function createHttpApp(
     requireAuth,
     createDiagnosticLogsRouter(diagnosticLogRecorder),
   );
+  registerRuntimeStatusRoutes(app, requireAuth, services.runtimeStatus);
   app.use(
     "/api/app",
     requireAuth,
@@ -387,8 +390,8 @@ function attachLifecycleHandlers(
       await webSocketServersClosed;
       await serverClosed;
       await services.workspaceServiceManager.dispose();
+      services.runtimeStatus.dispose();
       await services.tmuxOutputWatcher.dispose();
-      services.appServerEventConsumer?.stop();
       await services.terminalRuntimeRegistry.disposeAll();
       for (const socketPath of new Set(
         services.tmuxSocketPathsToCleanOnShutdown,
@@ -488,7 +491,9 @@ async function startRuntime(): Promise<void> {
     stage = "tunnel-auth-config";
     const tunnelAuthConfig = loadTunnelAuthConfig(process.env);
     stage = "runtime-services";
-    const services = await createRuntimeServices();
+    const services = await createRuntimeServices(
+      `backend:${profileLock.getOwner().backendId}`,
+    );
     stage = "http-app";
     const app = createHttpApp(
       services,
@@ -535,17 +540,16 @@ async function startRuntime(): Promise<void> {
     });
     services.workspaceServiceManager.setProxyPort(port);
     await profileLock.update({ port, host: runtimeConfig.host ?? null });
-    const controlPlaneBaseUrl = `http://127.0.0.1:${port}`;
+    const controlPlaneBaseUrl = setBackendRuntimeStatusListener(services, {
+      host: runtimeConfig.host,
+      port,
+    });
     // Pin rw CLI control-plane env to THIS backend. Parent shells may carry a
     // stale default such as 5001 while this process is running on a fallback
     // test port.
-    process.env.RUNWEAVE_BASE_URL = controlPlaneBaseUrl;
-    process.env.RUNWEAVE_BACKEND_PORT = String(port);
     // Always pin the hook endpoint to THIS backend's listening port. Inheriting
     // it from a parent shell spawned by another Runweave backend would deliver
     // codex hook events to the wrong process.
-    process.env.RUNWEAVE_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal/agent-hook`;
-    process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal-completion`;
     await initializeAppServerEventIntegration(services, controlPlaneBaseUrl);
     services.evolutionRuntime.start(controlPlaneBaseUrl);
 

@@ -43,12 +43,12 @@ export type { WorkspaceServiceProxyRoute } from "./manager-types";
 export class WorkspaceServiceManager {
   private readonly configLoader = new WorkspaceServiceConfigLoader();
   private readonly contextMutex = new KeyedMutex();
-  private readonly records = new Map<string, WorkspaceServiceRecord>();
+  protected readonly records = new Map<string, WorkspaceServiceRecord>();
   private readonly hostnameToKey = new Map<string, string>();
   private readonly deletingProjectIds = new Set<string>();
-  private proxyPort: number | null = null;
+  protected proxyPort: number | null = null;
 
-  constructor(private readonly terminalSessionManager: TerminalSessionManager) {}
+  constructor(protected readonly terminalSessionManager: TerminalSessionManager) {}
 
   setProxyPort(port: number): void {
     this.proxyPort = port;

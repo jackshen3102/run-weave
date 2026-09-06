@@ -1,0 +1,149 @@
+version: 1
+name: 运行状态来源与注册机制验收
+description: >
+  验证 Backend、App Server、Feishu Bridge 与 Electron 按统一协议提供脱敏的当前运行状态，
+  各自保留恢复策略，来源过期后能够形成明确根因而不影响原业务主链。
+
+cases:
+  - id: RSP-001
+    name: 已认证客户端取得统一节点快照
+    required: true
+    description: >
+      验证 Backend 状态接口返回版本化节点身份、来源报告和稳定状态项，且同一状态项连续查询保持身份不变。
+    preconditions:
+      - 已启动真实 Backend，并具有一个可用的登录会话。
+      - Backend 已完成监听和 Runtime Services 初始化。
+    steps:
+      - 使用有效 Bearer Token 连续两次请求 GET /api/runtime-status；确认均返回 protocolVersion 1、同一 node serviceInstanceId、generatedAt 和 reports。
+      - 核对每个报告都包含 source、observedAt、validForMs 和 items，每个状态项都包含稳定 id、capabilityId、state、summary 与 observedAt。
+      - 确认两次快照中未发生生命周期变化的状态项 id 保持一致，Backend process 状态为 healthy。
+
+  - id: RSP-002
+    name: 状态接口拒绝越权和非法来源报告
+    required: true
+    description: >
+      验证状态读取和 Feishu 报告写入遵守现有认证与严格输入边界，非法请求不能污染后续快照。
+    preconditions:
+      - 已启动真实 Backend，并准备有效 Bearer Token、无效 Token 和符合大小限制的测试报告。
+    steps:
+      - 不带 Token 和使用无效 Token 请求 GET /api/runtime-status；确认返回 401，响应不包含任何状态报告。
+      - 向 Feishu report PUT 分别提交未知 protocolVersion、非 feishu-bridge source、超限条目、非法状态、外部导航和超长字符串；确认请求被拒绝。
+      - 使用有效 Token 重新读取快照；确认非法报告没有出现，Backend 正常报告未被覆盖。
+
+  - id: RSP-003
+    name: 状态报告和展示事实保持脱敏
+    required: true
+    description: >
+      验证所有 owner 报告只包含允许展示的地址、端口、摘要和时间，不泄露认证、业务内容或本机内部细节。
+    preconditions:
+      - Backend、App Server、Feishu Bridge 和 Electron 均已启动并能提供状态。
+      - 测试环境使用可识别的唯一测试 secret、chat ID、open ID、Terminal marker、cwd 和环境变量值。
+    steps:
+      - 读取 Backend 状态快照、App Server owner report 和 Electron IPC report，并保存完整 JSON。
+      - 搜索唯一测试值以及 token、secret、Authorization、消息正文、Terminal 输入输出、完整 command、cwd、环境变量和错误 stack；确认全部不存在。
+      - 核对 facts 只包含声明为 address、port、text 或 time 的 display-safe 字符串，navigation 只包含应用内绝对路径。
+
+  - id: RSP-004
+    name: 外部来源过期只产生一个来源根因
+    required: true
+    description: >
+      验证 Backend 按接收时间和 TTL 判断外部 owner 丢失，保留最后报告并把其下游项标为无法判断。
+    preconditions:
+      - 已启动真实 Backend，并具有有效 Bearer Token。
+      - 可提交一个 validForMs 较短、包含一个根项和两个依赖项的合法 Feishu Bridge 测试报告。
+    steps:
+      - PUT 合法报告后立即读取快照；确认来源和三个状态项均为当前状态。
+      - 停止继续上报并等待超过 validForMs；再次读取快照，确认来源根因进入 unhealthy，最后已知子项保留但聚合结果为 blocked。
+      - 确认只有飞书能力域计为一个异常，不因两个下游项重复形成异常来源。
+
+  - id: RSP-005
+    name: Feishu Bridge 连接恢复策略独立于消息投递
+    required: true
+    description: >
+      验证 Bridge 仅根据配置、单实例 lease、Lark WebSocket 和 Backend 连接报告状态，持续失败超过宽限才异常，全程不发送真实消息。
+    preconditions:
+      - 已启动使用独立状态目录和测试凭证的 Feishu Bridge，并已取得单实例 lease。
+      - 可阻断和恢复 Lark WebSocket 网络，但不向群聊发送任何消息。
+    steps:
+      - 读取状态快照；确认 configuration、bridge lease、Lark WebSocket 和 Backend auth 均存在，且报告中没有 delivery 状态。
+      - 阻断 Lark WebSocket；确认 120 秒宽限内为 recovering，并能看到持续时间或重试信息，期间不计入异常。
+      - 保持阻断超过 120 秒；确认 Lark 状态进入 unhealthy，重建连接没有重置 continuous failure 起点。
+      - 恢复网络并等待真实 connected；确认状态回到 healthy，期间没有发送、回复或表情副作用。
+
+  - id: RSP-006
+    name: Feishu Bridge 与 Backend 断连后恢复报告
+    required: true
+    description: >
+      验证 Bridge 的 Backend 认证检查先进入恢复中，持续失败后异常，并在 Backend 恢复后重新上报而不阻塞 Lark 连接。
+    preconditions:
+      - Feishu Bridge 与 Backend 已连接，Lark WebSocket 保持正常。
+      - 可暂时阻断 Bridge 到 Backend 的 HTTP 请求而不影响 Lark 网络。
+    steps:
+      - 阻断 Bridge 到 Backend 的请求并观察 Bridge 诊断输出；确认先记录 backend unavailable 并继续持有 lease 与 Lark 连接。
+      - 保持阻断超过 Backend 连接宽限；恢复 Backend 请求后读取状态快照，确认 backend auth 曾进入异常并在 verify 成功后恢复 healthy。
+      - 确认 Bridge 未退出、未丢失单实例 lease，也没有因状态上报失败执行或重复执行任何 Terminal 输入。
+
+  - id: RSP-007
+    name: App Server owner 与 Backend consumer 分别报告
+    required: true
+    description: >
+      验证 App Server 自己报告 process、event center、sync 和 reconciler，Backend 只额外报告自己的 event consumer 连接。
+    preconditions:
+      - 已启动真实 App Server 和连接该实例的 Backend，并具有两端合法认证。
+      - App Server Thread reconciler 已至少完成一轮。
+    steps:
+      - 分别读取 App Server /runtime-status 和 Backend /api/runtime-status；确认 App Server 四项来自 app-server source，event consumer 来自 backend source。
+      - 停止 App Server；确认 Backend 保留最后 owner report，App Server 来源过期，event consumer 按自身退避先 recovering、持续 60 秒后 unhealthy。
+      - 恢复同一 App Server；确认 owner report、reconciler freshness 和 event consumer connected 分别恢复，既有 event cursor 没有被清空或倒退。
+
+  - id: RSP-008
+    name: Workspace Service 复用已有生命周期状态
+    required: true
+    description: >
+      验证已声明服务直接投影 stopped、starting、ready 和 failed，使用既有端口与健康检查，不建立第二套进程判断。
+    preconditions:
+      - 已准备包含一个可正常启动服务和一个会退出服务的独立 runweave.json Project Context。
+      - Backend 与 Workspace Service proxy 已启动。
+    steps:
+      - 在服务均未启动时读取状态；确认已声明服务显示 disabled 或未配置，不计入异常。
+      - 启动正常服务；确认 starting 映射 recovering，ready 后映射 healthy，facts 中的稳定 URL 与 target port 和现有 Workspace Service API 一致。
+      - 启动会退出的服务并等待既有启动窗口结束；确认其映射 unhealthy，并只暴露既有错误码和脱敏摘要，不返回 command 或 cwd。
+
+  - id: RSP-009
+    name: 关键周期任务按自身新鲜度判断
+    required: true
+    description: >
+      验证 Agent Team watchdog、Evolution maintenance 或 lease heartbeat、App Server reconciler 使用各自周期判断，不把正常长任务误判为停止。
+    preconditions:
+      - Backend 和 App Server 已启动，Agent Team watchdog 与 reconciler 可以完成至少三轮。
+      - 已准备一个持续时间超过普通 maintenance 周期、但 lease heartbeat 正常的独立 Evolution run。
+    steps:
+      - 跨三个周期读取状态；确认 watchdog 和 reconciler 的 observedAt 持续更新，状态保持 healthy。
+      - 启动长 Evolution run；确认 maintenance 尚未完成时由新鲜 lease heartbeat 保持 healthy，而不是因上次完成时间变旧进入异常。
+      - 结束该 run；确认状态重新依据 maintenance 新鲜度判断，状态报告不包含 run 输入或输出内容。
+
+  - id: RSP-010
+    name: Electron 报告真实本地设施和连接地址
+    required: true
+    description: >
+      验证 Electron 只通过窄 IPC 报告 packaged Backend、CDP Proxy、LAN 地址及可复制端口，并准确处理无 LAN 的降级。
+    preconditions:
+      - 已启动真实 macOS Runweave Desktop，packaged Backend 和 CDP Proxy 均已 ready。
+      - 可分别提供正常局域网与断开所有非 loopback 网络的测试条件。
+    steps:
+      - 调用主窗口 renderer 的 getRuntimeStatusReport；确认 Electron、packaged Backend 和 CDP Proxy 为 healthy，端口与实际 listener 一致。
+      - 在正常局域网下核对 primary 地址；确认它使用非 loopback IPv4 与实际 Backend 端口，127.0.0.1 只作为诊断候选。
+      - 断开非 loopback 网络后重新取报告；确认 local network 明确显示“仅本机可用”并进入异常，不伪造手机可访问地址。
+
+  - id: RSP-011
+    name: Electron 可选设施只在被期望运行时异常
+    required: true
+    description: >
+      验证 Companion 和每个 Profile 的 Whistle 在停用或未使用时为中性，启用后才按自己的 readiness 和恢复策略判断。
+    preconditions:
+      - 已启动真实 macOS Runweave Desktop，并可切换 Companion 与 Browser Profile proxy mode。
+      - 可用独立端口占用方式制造一个 Whistle 启动失败，不影响其他 Profile。
+    steps:
+      - 在 Companion 未启用、Profile 未使用或 direct mode 时读取报告；确认对应状态为 disabled 且异常数不增加。
+      - 启用 Companion；确认启动中为 recovering、ready 后为 healthy；制造连续启动失败超过 30 秒后确认只让 Companion 异常。
+      - 占用一个 Profile 的 Whistle 端口并使用该 Profile；确认 15 秒窗口后只有该 Profile 项 unhealthy，其他 Profile 状态不受影响。

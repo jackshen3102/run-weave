@@ -18,6 +18,7 @@ import { rejectNonLoopbackOrigin, requireBearerToken } from "../auth.js";
 import type { AppServerEventCenter } from "../events/center.js";
 import type { TraeThreadLifecycleReader } from "../trae/lifecycle-reader.js";
 import type { CodexThreadDetailReader } from "../codex/client.js";
+import type { RuntimeStatusReport } from "@runweave/shared/runtime-status";
 
 const MAX_EVENTS_LIMIT = 500;
 const MAX_STATE_LIMIT = 500;
@@ -123,6 +124,7 @@ export function createHttpApp(options: {
   sourceRevision: string | null;
   traeLifecycleReader: TraeThreadLifecycleReader;
   codexThreadDetailReader: CodexThreadDetailReader;
+  getRuntimeStatusReport: () => RuntimeStatusReport;
 }): express.Express {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
@@ -154,6 +156,10 @@ export function createHttpApp(options: {
   });
 
   app.use(requireBearerToken(options.token));
+
+  app.get("/runtime-status", (_req, res) => {
+    res.json(options.getRuntimeStatusReport());
+  });
 
   app.post("/events", async (req, res) => {
     const parsed = eventRequestSchema.safeParse(req.body);

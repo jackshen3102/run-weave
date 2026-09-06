@@ -28,5 +28,4 @@ export const desktopRuntime = {
   packagedBackendsStoppedForQuit: false,
   stoppingPackagedBackendsForQuit: false,
   incidentLogger: null as DesktopIncidentLogger | null,
-  appServerUnavailableDialogShown: false,
 };

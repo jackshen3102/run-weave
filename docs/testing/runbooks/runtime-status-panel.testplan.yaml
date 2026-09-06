@@ -1,0 +1,168 @@
+version: 1
+name: 运行状态入口与面板验收
+description: >
+  验证 Web 和 macOS Desktop 的统一运行状态入口、可复制地址、节点合并、能力域聚合、
+  因果抑制、非阻塞提醒与 System Monitor 边界符合用户可见合同。
+
+cases:
+  - id: RUI-001
+    name: 右上角常显地址并正确分流点击
+    required: true
+    description: >
+      验证主要页面右上角持续显示当前连接完整地址，地址点击只复制，入口其余区域只打开右侧抽屉。
+    preconditions:
+      - 已启动真实 Desktop 与健康的本机 Backend，并已登录。
+      - 系统剪贴板可读取，当前页面为 Home。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 附着正确 Desktop renderer；确认右上角显示手机可访问的本机完整 URL 和正常状态。
+      - 依次导航 Terminal、Activity、Evolution、Prototypes 和 System Monitor；确认各主要页面 header 都有同一入口且地址不因页面切换变化。
+      - 点击地址子按钮并读取剪贴板；确认复制值与显示的完整 URL 一致，抽屉没有打开。
+      - 点击入口的非地址区域；确认从右侧打开运行状态抽屉，当前页面和输入状态均未被替换。
+
+  - id: RUI-002
+    name: 本机与当前连接按节点身份展示和合并
+    required: true
+    description: >
+      验证 Desktop 只观察本机与当前连接，远程时使用两张同结构节点卡，连接回本机时按 Backend 身份合并。
+    preconditions:
+      - 已准备一个本机 Backend 和另一个可登录的远程 Backend，两者 serviceInstanceId 不同。
+      - 连接管理器还保存第三个未选中的远程连接。
+    steps:
+      - 选择远程 Backend，并使用 `$toolkit:playwright-cli` 打开状态抽屉；确认同时显示“本机”和“当前连接”两张结构相同的节点卡。
+      - 确认右上角复制的是当前远程 URL，本机卡仍能复制本机 LAN URL，第三个未选中连接没有被轮询或展示。
+      - 切换回本机 Backend；确认两张卡合并为一张，同时带“本机”和“当前连接”标签，没有重复状态或异常计数。
+
+  - id: RUI-003
+    name: 恢复中耗尽后才形成前台异常提醒
+    required: true
+    description: >
+      验证单次失败和重试阶段只显示黄色恢复中，策略耗尽后才变红、计数并显示一次前台非阻塞提醒。
+    preconditions:
+      - Desktop 窗口保持前台聚焦，状态入口已取得至少一个正常基线快照。
+      - 可阻断一个拥有有限重试策略的独立状态项，并能在测试后恢复。
+    steps:
+      - 阻断该依赖一次后迅速恢复；使用 `$toolkit:playwright-cli` 确认状态最多短暂显示 recovering，没有红色异常、异常计数或提示。
+      - 再次阻断并保持到重试策略耗尽；确认状态从 recovering 转为 unhealthy，右上角按能力域增加 1，并出现一次可定位到该能力域的非阻塞提示。
+      - 保持故障跨越多个 polling 周期；确认状态持续高亮但不重复提示。
+      - 恢复依赖后再次制造稳定故障；确认恢复后计数清零，新的转移允许再次提示一次。
+
+  - id: RUI-004
+    name: 后台稳定异常只触发一次系统通知
+    required: true
+    description: >
+      验证 Electron 窗口隐藏或失焦时由主进程显示系统通知，前台 notice 与系统通知不会同时出现。
+    preconditions:
+      - 已启动允许显示系统通知的真实 macOS Desktop，并取得正常基线快照。
+      - 可制造和恢复一个会稳定进入 unhealthy 的独立状态项。
+    steps:
+      - 使用 `$computer-use` 将 Runweave 窗口隐藏或切换失焦，再制造稳定异常；确认出现一次 Runweave 系统通知。
+      - 保持故障跨越多个后台 polling 周期；确认不重复出现系统通知。
+      - 使用 `$computer-use` 恢复窗口并用 `$toolkit:playwright-cli` 检查页面；确认抽屉内异常持续高亮，但没有补发前台 notice。
+      - 恢复后保持窗口前台再次制造异常；确认只出现前台非阻塞提示，不出现系统通知。
+
+  - id: RUI-005
+    name: Backend 断开时抑制下游告警风暴
+    required: true
+    description: >
+      验证节点连接是 Backend 断开的唯一根因，最后已知服务端状态显示无法判断，Electron 本地状态继续独立更新。
+    preconditions:
+      - Desktop 已连接健康的本机 Backend，App Server、飞书和后台任务状态均已加载。
+      - Electron 本地报告与 Backend 报告具有可区分的 source。
+    steps:
+      - 停止 Backend 并等待节点连接宽限耗尽；使用 `$toolkit:playwright-cli` 打开抽屉，确认只有节点连接能力进入 unhealthy 并提醒一次。
+      - 确认最后已知的 App Server、飞书和 Backend 后台任务项显示 blocked 与对应上游根因，不分别变红或增加异常数。
+      - 确认 Electron process、CDP Proxy 和本地网络等仍能取得证据的状态继续正常刷新。
+      - 恢复 Backend；确认节点连接先恢复，下游重新检查，只有自身仍失败并耗尽宽限的项目才独立异常。
+
+  - id: RUI-006
+    name: 中性状态和旧版本不会制造假异常
+    required: true
+    description: >
+      验证未配置、主动停用、无法适用和不支持运行状态协议的能力具有明确中性展示，不计数也不提醒。
+    preconditions:
+      - 已准备未配置飞书、停用 Companion、未使用 Whistle Profile 和一个不提供 /api/runtime-status 的旧 Backend。
+      - 所有连接的 /health 仍可正常响应。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 检查本机节点；确认飞书显示 unconfigured，Companion 和未使用 Whistle 显示 disabled，均不增加异常计数。
+      - 切换到旧 Backend；确认节点连接仍由 /health 显示可用，详细运行状态显示 unsupported，不把旧版本误报为节点故障。
+      - 保持页面跨越多个 polling 周期；确认以上中性状态不触发前台或系统通知。
+
+  - id: RUI-007
+    name: Terminal WebSocket 使用已有有限重试边界
+    required: true
+    description: >
+      验证运行中的 Terminal 连接按现有最多五次重连展示恢复状态，正常退出或卸载不产生异常。
+    preconditions:
+      - 已打开一个运行中的真实 Terminal，Terminal WS 已连接并形成正常基线。
+      - 可只阻断该 Terminal WS，不停止 Backend HTTP 与 terminal-events WS。
+    steps:
+      - 阻断 Terminal WS；使用 `$toolkit:playwright-cli` 确认对应 session 状态显示 recovering 和重试进度，其他 Terminal 能力保持正常。
+      - 保持阻断直到现有五次重试耗尽；确认该状态进入 unhealthy，且只增加 Terminal 能力域一个异常。
+      - 恢复并手动重新连接；确认真实 WS open 后状态恢复 healthy。
+      - 正常结束 Terminal 或离开销毁其 surface；确认该动态状态项变为 disabled 或注销，不产生异常提醒。
+
+  - id: RUI-008
+    name: Terminal 事件流必须收到 connected 才健康
+    required: true
+    description: >
+      验证 terminal-events 的 raw socket open 不能伪造健康，持续重连超过宽限后独立异常并能恢复。
+    preconditions:
+      - 已打开 Terminal Workspace，terminal-events 已收到服务端 connected 并形成正常基线。
+      - 可让 WebSocket 握手成功但阻断服务端 connected 消息，且不影响普通 Terminal WS。
+    steps:
+      - 制造 raw socket open 但无 connected；使用 `$toolkit:playwright-cli` 确认状态保持 checking 或 recovering，不进入 healthy。
+      - 保持该状态超过 30 秒；确认 terminal-events 状态进入 unhealthy，普通 Terminal WS 仍按自己的状态展示。
+      - 恢复服务端 connected；确认 failure window 清零、状态恢复 healthy，并按现有 cursor 继续 catchup 而不重放重复事件。
+
+  - id: RUI-009
+    name: 能力域折叠连锁状态并保留根因详情
+    required: true
+    description: >
+      验证同一能力内多个失败状态项只计一个异常，展开后仍能区分每个真实故障边界和依赖关系。
+    preconditions:
+      - 已准备一个能力域内可同时出现两个 unhealthy 子项和一个被它们阻塞子项的真实或受控环境。
+      - 状态入口已取得正常基线。
+    steps:
+      - 同时使两个独立子项耗尽恢复策略；使用 `$toolkit:playwright-cli` 确认右上角异常数只增加一个能力域。
+      - 展开该能力域；确认两个 unhealthy 状态项分别显示各自摘要、观察时间和恢复信息，被阻塞项显示依赖根因。
+      - 只恢复其中一个异常；确认能力域仍为 unhealthy 且异常数不变化，详情中已恢复项变回 healthy。
+      - 恢复最后一个异常；确认能力域和右上角整体状态恢复正常。
+
+  - id: RUI-010
+    name: 重新检查不产生业务副作用
+    required: true
+    description: >
+      验证抽屉中的重新检查只刷新当前报告，不发送飞书消息、不写 Terminal、不启停或重启服务。
+    preconditions:
+      - 状态抽屉已打开，存在可观察的飞书、Terminal、App Server 和 Workspace Service 状态。
+      - 已记录飞书群消息数、Terminal 唯一 marker、相关进程 PID 和 Workspace Service 状态。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 点击“重新检查”；确认入口显示短暂 checking 并在请求完成后更新时间。
+      - 核对飞书群、Terminal 输出、App Server、Backend、Companion、Whistle 和 Workspace Service；确认没有新消息、输入、PID 变化、启动、停止或重启。
+      - 确认网络中只有 health、status GET 和 Electron status IPC，没有 Terminal input、飞书发送或控制类请求。
+
+  - id: RUI-011
+    name: System Monitor 资源变化不参与异常计数
+    required: true
+    description: >
+      验证 CPU 与内存继续作为次级资源信息展示，高占用不会被运行状态面板解释为服务异常。
+    preconditions:
+      - 已启动真实 macOS Desktop，所有运行依赖状态健康。
+      - 可用独立无数据风险的进程制造短时 CPU 或内存高占用。
+    steps:
+      - 制造资源高占用并使用 `$toolkit:playwright-cli` 打开状态抽屉；确认资源摘要变化，但整体健康和异常能力域数量不变。
+      - 点击 System Monitor 导航；确认进入现有 /system-monitor 并看到对应资源变化。
+      - 停止负载并返回原页面；确认运行状态入口仍存在，资源恢复过程没有产生异常提醒。
+
+  - id: RUI-012
+    name: Web 和移动视图只展示当前节点
+    required: true
+    description: >
+      验证非 Electron surface 使用相同状态语义但不伪造本机 Electron 节点或本机资源信息。
+    preconditions:
+      - 可通过浏览器和移动 viewport 打开同一个已认证 Backend 页面。
+      - Backend 支持 runtime-status protocolVersion 1。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 在普通浏览器打开页面和状态抽屉；确认右上角显示当前页面 Backend 地址，抽屉只有当前节点。
+      - 切换到移动 viewport；确认地址仍可复制，能力域和状态项可滚动读取，右侧抽屉不会超出可操作区域。
+      - 确认页面不显示 Electron process、CDP Proxy、Companion、Whistle 或 CPU/内存 IPC 数据，也不因缺少 electronAPI 产生异常。

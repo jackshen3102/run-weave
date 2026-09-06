@@ -37,12 +37,17 @@ export interface AgentThreadStatusReconcilerOptions {
 }
 
 export class AgentThreadStatusReconciler {
+  private readonly startedAt = Date.now();
   private readonly startDelayMs: number;
   private readonly intervalMs: number;
   private startTimer: NodeJS.Timeout | null = null;
   private intervalTimer: NodeJS.Timeout | null = null;
   private stopped = true;
   private running = false;
+  private lastStartedAt: number | null = null;
+  private lastCompletedAt: number | null = null;
+  private lastFailedAt: number | null = null;
+  private consecutiveFailures = 0;
 
   constructor(private readonly options: AgentThreadStatusReconcilerOptions) {
     this.startDelayMs = options.startDelayMs ?? DEFAULT_START_DELAY_MS;
@@ -88,14 +93,32 @@ export class AgentThreadStatusReconciler {
     this.options.traeLifecycleReader.shutdown();
   }
 
+  getStatusSnapshot() {
+    return {
+      startedAt: this.startedAt,
+      startDelayMs: this.startDelayMs,
+      intervalMs: this.intervalMs,
+      running: this.running,
+      lastStartedAt: this.lastStartedAt,
+      lastCompletedAt: this.lastCompletedAt,
+      lastFailedAt: this.lastFailedAt,
+      consecutiveFailures: this.consecutiveFailures,
+    };
+  }
+
   private async tick(): Promise<void> {
     if (this.running) {
       return;
     }
     this.running = true;
+    this.lastStartedAt = Date.now();
     try {
       await this.reconcileOnce();
+      this.lastCompletedAt = Date.now();
+      this.consecutiveFailures = 0;
     } catch (error) {
+      this.lastFailedAt = Date.now();
+      this.consecutiveFailures += 1;
       logWarn("agent-thread-status-reconciler.failed", {
         message: "Agent thread status reconciliation round failed",
         error: serializeError(error),

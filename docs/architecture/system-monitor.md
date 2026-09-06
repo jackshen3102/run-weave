@@ -2,6 +2,9 @@
 
 System Monitor 是 Runweave macOS Electron 客户端里的本机诊断面板，用来快速判断当前机器 CPU、内存、电池和高占用应用。它是只读看板，不是进程管理器。
 
+CPU 和内存也可作为 Runtime Status 抽屉的次级诊断信息，但资源高低不改变运行状态、异常能力域数量
+或提醒。Runtime Status 判断的是进程、端点、连接和周期任务等离散运行依赖。
+
 ## 当前能力
 
 - 入口：Electron 菜单提供 `System Monitor`，快捷键为 `CmdOrCtrl+Shift+M`；前端路由为 `/system-monitor`。
