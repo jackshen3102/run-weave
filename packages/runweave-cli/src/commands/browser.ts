@@ -5,9 +5,10 @@ import {
   type TerminalBrowserProfileId,
 } from "@runweave/shared/terminal-browser-profile";
 import { CliError } from "../errors.js";
+import { runBrowserAssistCommand } from "./browser-assist.js";
 
 const USAGE =
-  "Usage: rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json]";
+  "Usage: rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json] | rw browser assist <request|status|acknowledge|cancel> [options]";
 
 interface BrowserCommandIo {
   stdout: Pick<NodeJS.WriteStream, "write">;
@@ -203,6 +204,10 @@ export async function runBrowserCommand(
   args: string[],
   io: BrowserCommandIo,
 ): Promise<void> {
+  if (subcommand === "assist") {
+    await runBrowserAssistCommand(args, io);
+    return;
+  }
   if (subcommand !== "profile" || args[0] !== "resolve") {
     throw new CliError(USAGE, 2);
   }

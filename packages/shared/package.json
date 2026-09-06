@@ -7,6 +7,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
+    "./terminal-browser-assistance": "./src/browser/assistance.ts",
     ".": "./src/index.ts",
     "./activity": "./src/activity/index.ts",
     "./activity/api": "./src/activity/api.ts",

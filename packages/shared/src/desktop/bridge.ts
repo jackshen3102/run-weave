@@ -1,3 +1,4 @@
+import type { BrowserAssistanceTarget } from "../browser/assistance";
 import type {
   AttentionOpenDispatch,
   AttentionOpenIntent,
@@ -139,6 +140,9 @@ export interface RunweaveElectronBridge {
   terminalBrowserGoBack: (tabId: string) => Promise<TerminalBrowserSnapshot>;
   terminalBrowserGoForward: (tabId: string) => Promise<TerminalBrowserSnapshot>;
   terminalBrowserShow: (tabId: string) => Promise<void>;
+  terminalBrowserResolveAssistanceTarget: (
+    target: BrowserAssistanceTarget,
+  ) => Promise<string>;
   terminalBrowserHide: (tabId: string) => Promise<void>;
   terminalBrowserGetDeviceState: (
     tabId: string,

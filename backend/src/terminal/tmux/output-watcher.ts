@@ -8,7 +8,10 @@ import {
   captureScrollbackBufferCursor,
   createScrollbackBuffer,
 } from "../scrollback/scrollback-buffer";
-import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
+import type {
+  TerminalSessionManager,
+  TerminalSessionRecord,
+} from "../manager/manager";
 import type { TmuxPaneTarget, TmuxService } from "./service";
 import type { TmuxLifecycleCoordinator } from "./lifecycle-coordinator";
 import {
@@ -25,6 +28,7 @@ import {
   waitForPaneOutputBoundary,
 } from "./output-watcher-helpers";
 import { TmuxOutputPoller } from "./output-poller";
+import { beginTerminalInput } from "../runtime/input-admission";
 
 interface TmuxOutputWatcherOptions {
   outputDir: string;
@@ -232,6 +236,7 @@ export class TmuxOutputWatcher {
     );
     const markerId = randomUUID();
     const marker = `\u001b]777;runweave-pane-boundary=${markerId}\u0007`;
+    const release = beginTerminalInput(session);
     try {
       await this.tmuxService.writePaneOutput(target, marker);
       await this.tmuxService.sendInput(target, `${input}\r`);
@@ -245,6 +250,8 @@ export class TmuxOutputWatcher {
         error,
       });
       return null;
+    } finally {
+      release();
     }
     const deadline = Date.now() + PANE_OUTPUT_BOUNDARY_TIMEOUT_MS;
     while (Date.now() <= deadline) {

@@ -1,6 +1,7 @@
 import type { WebSocket } from "ws";
 import type { PtyRuntime } from "../terminal/runtime/pty-service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
+import { beginTerminalInput } from "../terminal/runtime/input-admission";
 import type { TerminalOutputBatcher } from "../terminal/runtime/output-batcher";
 import {
   logTerminalPerf,
@@ -68,7 +69,14 @@ export function createTerminalInputHandler({
         });
         outputBatcher.markNextChunkInteractive();
         const writeStartedAt = performance.now();
-        runtime.write(parsed.data);
+        const session = terminalSessionManager.getSession(terminalSessionId);
+        if (!session) throw new Error("Terminal session is unavailable");
+        const release = beginTerminalInput(session);
+        try {
+          runtime.write(parsed.data);
+        } finally {
+          release();
+        }
         if (/[\r\n]/.test(parsed.data)) {
           scheduleMetadataSync();
         }
@@ -96,7 +104,14 @@ export function createTerminalInputHandler({
     }
     if (parsed.type === "signal") {
       try {
-        runtime.signal(parsed.signal);
+        const session = terminalSessionManager.getSession(terminalSessionId);
+        if (!session) throw new Error("Terminal session is unavailable");
+        const release = beginTerminalInput(session);
+        try {
+          runtime.signal(parsed.signal);
+        } finally {
+          release();
+        }
       } catch (error) {
         handleRuntimeActionError(socket, terminalSessionId, "signal", error);
       }

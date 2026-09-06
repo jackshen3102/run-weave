@@ -185,6 +185,8 @@ const electronApi = {
     ipcRenderer.invoke("terminal-browser:go-forward", tabId),
   terminalBrowserShow: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:show", tabId),
+  terminalBrowserResolveAssistanceTarget: (target) =>
+    ipcRenderer.invoke("terminal-browser:resolve-assistance-target", target),
   terminalBrowserHide: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:hide", tabId),
   terminalBrowserGetDeviceState: (tabId: string) =>

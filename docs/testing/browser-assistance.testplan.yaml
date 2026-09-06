@@ -1,0 +1,52 @@
+version: 1
+name: Browser assistance V1
+description: Codex 主动请求用户协助后，用户在原浏览器处理并交还同一对话；不涉及 Cookie 处理或强制暂停。
+cases:
+  - id: BHA-001
+    name: 请求到交还的真实闭环
+    required: true
+    description: 验证 CLI、Backend、Electron UI 和同一 Codex 对话。
+    preconditions:
+      - 在本次源码 Dev Session 创建独立 Codex Terminal，使用本地无外部副作用的登录与提交 fixture。
+    steps:
+      - Agent 观察阻塞、detach、执行 assist request 并结束轮次，UI 由等待 Agent 变为等待用户。
+      - 点击打开协助页面，确认展示绑定 Profile 和 Group 的原 target；模拟用户完成登录。
+      - 点击交还 Agent，同一对话收到恢复提示并执行 acknowledge；UI 显示已确认。
+      - Agent 重新观察页面后完成任务，fixture 提交计数为 1。
+  - id: BHA-002
+    name: 已完成任务不重复提交
+    required: true
+    description: 用户已完成业务操作，Agent 必须重新观察并跳过。
+    preconditions:
+      - 独立请求进入 waiting，fixture 的提交按钮在完成后仍可点击。
+    steps:
+      - 用户完成登录并提交一次，再点击交还。
+      - Agent acknowledge 并重新观察，明确识别已完成，提交计数保持 1。
+  - id: BHA-003
+    name: 重复交还与取消
+    required: true
+    description: 交还只投递一次，取消的请求不得恢复。
+    preconditions:
+      - 独立请求进入 waiting，记录原 Codex 对话和 fixture 计数。
+    steps:
+      - 对同一请求连续交还两次，仅第一次投递；之后状态读取不产生投递。
+      - 创建新请求并取消，旧请求和取消请求均不得触发再次投递。
+  - id: BHA-004
+    name: 目标失效和忙碌保护
+    required: true
+    description: 不向错误对话交还，也不在 Agent 忙碌时投递。
+    preconditions:
+      - 独立请求进入 waiting。
+    steps:
+      - 让绑定 Agent 进入 running，交还被拒绝且没有新增输入。
+      - 原浏览器 target 关闭后，UI 的打开与交还操作明确报错，不切换到其他页面。
+      - 原 Panel 或对话关闭或改变后，请求失效，不自动启动或替换 Agent。
+  - id: BHA-005
+    name: 未完成协助与恢复确认
+    required: true
+    description: 投递接受不等于恢复成功，仍阻塞时重新请求。
+    preconditions:
+      - 独立请求进入 waiting，用户尚未处理 fixture 登录。
+    steps:
+      - 点击交还后，未 acknowledge 前仅显示等待 Agent 确认，不显示任务成功。
+      - Agent acknowledge 并重新观察，仍阻塞则新建请求并结束轮次；提交计数为 0。
