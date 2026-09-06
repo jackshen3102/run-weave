@@ -1,4 +1,6 @@
 import { BrowserWindow, ipcMain } from "electron";
+import type { BrowserAssistanceTarget } from "@runweave/shared/terminal-browser-assistance";
+import { getTerminalBrowserCdpTargets } from "./proxy/api.js";
 import {
   createTerminalBrowserDeviceState,
   normalizeTerminalBrowserDevicePresetId,
@@ -86,6 +88,14 @@ function resolveTerminalBrowserEntryKey(
 }
 
 export function registerTerminalBrowserHandlers(): void {
+  ipcMain.handle("terminal-browser:resolve-assistance-target", (event, binding: BrowserAssistanceTarget) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const target = win && binding && getTerminalBrowserCdpTargets().find((candidate) =>
+      candidate.windowId === win.id && candidate.targetId === binding.targetId &&
+      candidate.profileId === binding.profileId && candidate.browserGroupId === binding.browserGroupId);
+    if (!target) throw new Error("协助页面已关闭、移动或不属于当前窗口；请取消请求并让 Agent 重新观察");
+    return target.tabId;
+  });
   for (const profileId of TERMINAL_BROWSER_PROFILE_IDS) {
     ensureTerminalBrowserHeaderDispatcher(profileId);
     ensureTerminalBrowserCookiePersistence(

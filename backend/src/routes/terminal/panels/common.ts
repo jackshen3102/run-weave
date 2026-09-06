@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import { TerminalPanelError } from "../../../terminal/application/panel-common";
+import { TerminalInputBusyError } from "../../../terminal/runtime/input-admission";
 
 export {
   buildPaneTarget,
@@ -16,6 +17,10 @@ export function sendTerminalPanelRouteError(
   res: Response,
   error: unknown,
 ): boolean {
+  if (error instanceof TerminalInputBusyError) {
+    res.status(409).json({ message: error.message });
+    return true;
+  }
   if (error instanceof TerminalPanelError) {
     res.status(error.statusCode).json({
       message: error.message,

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { registerBrowserAssistanceRoutes } from "./browser-assistance";
 import { z } from "zod";
 import type { TerminalCompletionEventListResponse } from "@runweave/shared/terminal/events";
 import type {
@@ -546,7 +547,7 @@ export function createTerminalRouter(
     }
   });
   registerTerminalInputRoutes(router, terminalSessionManager, options);
-
+  registerBrowserAssistanceRoutes(router, terminalSessionManager, options);
   router.delete("/session/:id", async (req, res) => {
     const session = terminalSessionManager.getSession(req.params.id);
     terminalLogger.info("terminal.session.delete.started", {

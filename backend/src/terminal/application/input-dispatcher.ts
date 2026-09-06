@@ -3,7 +3,10 @@ import type {
   TerminalInputMode,
 } from "@runweave/shared/terminal-protocol";
 import { aiDiagnosticLog } from "../../diagnostic-logs/recorder";
-import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
+import type {
+  TerminalSessionManager,
+  TerminalSessionRecord,
+} from "../manager/manager";
 import type { PtyRuntime, PtyService } from "../runtime/pty-service";
 import type { TerminalRuntimeRegistry } from "../runtime/registry";
 import {
@@ -18,6 +21,7 @@ import type {
 } from "../tmux/service";
 import type { TmuxOutputWatcher } from "../tmux/output-watcher";
 import type { TerminalStateService } from "../state/terminal-state-service";
+import { beginTerminalInput } from "../runtime/input-admission";
 import {
   buildTerminalInputOperationId,
   TERMINAL_INTERRUPT_ESCAPE_INPUT,
@@ -197,44 +201,32 @@ export async function sendInputToSession(
     throw new Error("Terminal tmux service unavailable");
   }
 
-  const ensured = await ensureTerminalRuntime({
-    session,
-    terminalSessionManager,
-    runtimeRegistry: options.runtimeRegistry,
-    ptyService: options.ptyService,
-    tmuxService: options.tmuxService,
-    tmuxOutputWatcher: options.tmuxOutputWatcher,
-  });
-  const currentTerminalState = options.terminalStateService?.getCurrent(
-    session.id,
-    session,
-  );
-  const codexSlashCommand =
-    mode === "codex_slash_command" ? normalizeCodexSlashCommand(data) : null;
-  const composerSubmitKey =
-    currentTerminalState?.state === "agent_running" ? "Tab" : "C-m";
-  const dispatchData =
-    codexSlashCommand === null ? resolveTerminalInputData(data, mode) : null;
-  const exitTmuxCopyMode = mode === "tmux_exit_copy_mode";
-  aiDiagnosticLog("terminal input dispatch requested", {
-    terminalSessionId: session.id,
-    runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
-    operationId: operationId ?? null,
-    inputMode: mode ?? "raw",
-    input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
-    codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
-    promptPasteSubmitKey: mode === "prompt_paste" ? composerSubmitKey : null,
-    promptReplaceSubmit: mode === "prompt_replace" ? submit === true : null,
-    exitTmuxCopyMode,
-  });
-  if (isTmuxBackedSession(session) && options.tmuxService) {
-    const target =
-      paneTarget ?? resolveTmuxTarget(session, options.tmuxService);
-    aiDiagnosticLog("terminal tmux input dispatch selected", {
+  const release =
+    mode === "tmux_exit_copy_mode" ? () => {} : beginTerminalInput(session);
+  try {
+    const ensured = await ensureTerminalRuntime({
+      session,
+      terminalSessionManager,
+      runtimeRegistry: options.runtimeRegistry,
+      ptyService: options.ptyService,
+      tmuxService: options.tmuxService,
+      tmuxOutputWatcher: options.tmuxOutputWatcher,
+    });
+    const currentTerminalState = options.terminalStateService?.getCurrent(
+      session.id,
+      session,
+    );
+    const codexSlashCommand =
+      mode === "codex_slash_command" ? normalizeCodexSlashCommand(data) : null;
+    const composerSubmitKey =
+      currentTerminalState?.state === "agent_running" ? "Tab" : "C-m";
+    const dispatchData =
+      codexSlashCommand === null ? resolveTerminalInputData(data, mode) : null;
+    const exitTmuxCopyMode = mode === "tmux_exit_copy_mode";
+    aiDiagnosticLog("terminal input dispatch requested", {
       terminalSessionId: session.id,
+      runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
       operationId: operationId ?? null,
-      tmuxSessionName: target.sessionName,
-      socketPath: target.socketPath,
       inputMode: mode ?? "raw",
       input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
       codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
@@ -242,60 +234,79 @@ export async function sendInputToSession(
       promptReplaceSubmit: mode === "prompt_replace" ? submit === true : null,
       exitTmuxCopyMode,
     });
-    if (exitTmuxCopyMode) {
-      await options.tmuxService.cancelCopyMode(target);
-    } else if (codexSlashCommand) {
-      await options.tmuxService.sendKeySequence(
-        target,
-        buildCodexSlashCommandSequence(codexSlashCommand, composerSubmitKey),
-      );
-    } else if (mode === "prompt_paste") {
-      await options.tmuxService.sendKeySequence(
-        target,
-        buildPromptPasteSequence(data, composerSubmitKey),
-      );
-    } else if (mode === "prompt_replace") {
-      await options.tmuxService.sendKeySequence(
-        target,
-        buildPromptReplaceSequence(data, submit === true),
-      );
-    } else if (mode === "line") {
-      await options.tmuxService.sendKeySequence(
-        target,
-        buildTerminalLineSequence(data),
-      );
-    } else {
-      await options.tmuxService.sendInput(target, dispatchData ?? "");
-    }
-  } else {
-    if (!exitTmuxCopyMode) {
-      if (mode === "prompt_replace") {
-        await writePromptReplacePtyInput(
-          ensured.runtime,
-          data,
-          submit === true,
+    if (isTmuxBackedSession(session) && options.tmuxService) {
+      const target =
+        paneTarget ?? resolveTmuxTarget(session, options.tmuxService);
+      aiDiagnosticLog("terminal tmux input dispatch selected", {
+        terminalSessionId: session.id,
+        operationId: operationId ?? null,
+        tmuxSessionName: target.sessionName,
+        socketPath: target.socketPath,
+        inputMode: mode ?? "raw",
+        input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
+        codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
+        promptPasteSubmitKey:
+          mode === "prompt_paste" ? composerSubmitKey : null,
+        promptReplaceSubmit: mode === "prompt_replace" ? submit === true : null,
+        exitTmuxCopyMode,
+      });
+      if (exitTmuxCopyMode) {
+        await options.tmuxService.cancelCopyMode(target);
+      } else if (codexSlashCommand) {
+        await options.tmuxService.sendKeySequence(
+          target,
+          buildCodexSlashCommandSequence(codexSlashCommand, composerSubmitKey),
+        );
+      } else if (mode === "prompt_paste") {
+        await options.tmuxService.sendKeySequence(
+          target,
+          buildPromptPasteSequence(data, composerSubmitKey),
+        );
+      } else if (mode === "prompt_replace") {
+        await options.tmuxService.sendKeySequence(
+          target,
+          buildPromptReplaceSequence(data, submit === true),
+        );
+      } else if (mode === "line") {
+        await options.tmuxService.sendKeySequence(
+          target,
+          buildTerminalLineSequence(data),
         );
       } else {
-        ensured.runtime.write(
-          codexSlashCommand
-            ? buildCodexSlashCommandPtyInput(
-                codexSlashCommand,
-                composerSubmitKey,
-              )
-            : mode === "prompt_paste"
-              ? buildPromptPastePtyInput(data, composerSubmitKey)
-              : (dispatchData ?? ""),
-        );
+        await options.tmuxService.sendInput(target, dispatchData ?? "");
+      }
+    } else {
+      if (!exitTmuxCopyMode) {
+        if (mode === "prompt_replace") {
+          await writePromptReplacePtyInput(
+            ensured.runtime,
+            data,
+            submit === true,
+          );
+        } else {
+          ensured.runtime.write(
+            codexSlashCommand
+              ? buildCodexSlashCommandPtyInput(
+                  codexSlashCommand,
+                  composerSubmitKey,
+                )
+              : mode === "prompt_paste"
+                ? buildPromptPastePtyInput(data, composerSubmitKey)
+                : (dispatchData ?? ""),
+          );
+        }
       }
     }
-  }
 
-  return {
-    operationId: operationId ?? buildTerminalInputOperationId(),
-    terminalSessionId: session.id,
-    inputAccepted: true,
-    inputEnqueued: true,
-    runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
-    acceptedAt: new Date().toISOString(),
-  };
+    return {
+      operationId: operationId ?? buildTerminalInputOperationId(),
+      terminalSessionId: session.id,
+      inputAccepted: true,
+      inputEnqueued: true,
+      runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
+      acceptedAt: new Date().toISOString(),
+    };
+  } finally {
+    release();
+  }
 }
