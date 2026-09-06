@@ -55,7 +55,7 @@ const {
   run,
   startAppServer,
   stopAppServer,
-  waitFor,
+  verifyCodexThreadStatusCompensation,
   writeFakeCodexBin,
 } = createStateSyncHarness({
   WebSocket,
@@ -381,83 +381,6 @@ async function verifyWebSocketStateEvents(context) {
   stream.close();
 }
 
-async function verifyCodexThreadStatusCompensation(context) {
-  const idleThreadId = "thread-idle-observation";
-  const unloadedThreadId = "thread-cross-process";
-  const activeThreadId = "thread-active-compensation";
-  const idleRunning = await postEvent(
-    context,
-    hookEvent("UserPromptSubmit", {
-      correlationId: idleThreadId,
-      scope: { terminalPanelId: "panel-idle-observation" },
-    }),
-  );
-  assert.equal(idleRunning.status, 201);
-  const unloadedRunning = await postEvent(
-    context,
-    hookEvent("UserPromptSubmit", {
-      correlationId: unloadedThreadId,
-      scope: { terminalPanelId: "panel-cross-process" },
-    }),
-  );
-  assert.equal(unloadedRunning.status, 201);
-
-  await new Promise((resolve) => setTimeout(resolve, 350));
-  assert.equal(
-    (await getThread(context, idleThreadId)).thread.status,
-    "running",
-  );
-  assert.equal(
-    (await getThread(context, unloadedThreadId)).thread.status,
-    "running",
-  );
-  const events = await getJson(
-    context,
-    `/events?after=${idleRunning.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
-  );
-  assert.equal(
-    events.events.some(
-      (event) =>
-        (event.correlationId === idleThreadId ||
-          event.correlationId === unloadedThreadId) &&
-        event.payload?.observedStatus === "idle",
-    ),
-    false,
-  );
-
-  await postEvent(
-    context,
-    hookEvent("Stop", {
-      correlationId: activeThreadId,
-      scope: { terminalPanelId: "panel-active-compensation" },
-    }),
-  );
-  assert.equal(
-    (await getThread(context, activeThreadId)).thread.status,
-    "idle",
-  );
-
-  await waitFor(async () => {
-    const thread = await getThread(context, activeThreadId);
-    return thread.thread.status === "running" ? thread : null;
-  });
-  const activeEvents = await getJson(
-    context,
-    `/events?after=${idleRunning.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
-  );
-  const activeCompensationEvent = activeEvents.events.find(
-    (event) =>
-      event.correlationId === activeThreadId &&
-      event.payload?.compensation === true,
-  );
-  assert.ok(activeCompensationEvent);
-  assert.equal(activeCompensationEvent.payload.observedStatus, "running");
-  assert.equal(
-    activeCompensationEvent.payload.observedLifecycle,
-    "thread/read:active",
-  );
-}
-
 async function verifyUnknownTraeLifecycleNoop() {
   const [{ AgentThreadStatusReconciler }, { AppServerStateStore }] =
     await Promise.all([
@@ -494,6 +417,10 @@ async function verifyUnknownTraeLifecycleNoop() {
     },
     codexStatusReader: {
       readThreadStatus: async () => null,
+      shutdown() {},
+    },
+    codexRolloutLifecycleReader: {
+      readLatestLifecycle: async () => null,
       shutdown() {},
     },
     traeLifecycleReader: {

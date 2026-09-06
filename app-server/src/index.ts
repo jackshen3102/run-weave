@@ -6,6 +6,7 @@ import { resolveAppServerConfig } from "./config.js";
 import { loadOrCreateToken } from "./auth.js";
 import { AppServerCloudSyncSim } from "./cloud-sync-sim.js";
 import { CodexAppServerClient } from "./codex/client.js";
+import { CodexRolloutLifecycleReader } from "./codex/lifecycle-reader.js";
 import {
   AgentThreadStatusReconciler,
   parseOptionalPositiveInteger,
@@ -72,10 +73,12 @@ async function main(): Promise<void> {
   });
   const traeLifecycleReader = new TraeThreadLifecycleReader();
   const codexAppServerClient = new CodexAppServerClient();
+  const codexRolloutLifecycleReader = new CodexRolloutLifecycleReader();
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,
     codexStatusReader: codexAppServerClient,
+    codexRolloutLifecycleReader,
     traeLifecycleReader,
     startDelayMs: parseOptionalPositiveInteger(
       process.env.RUNWEAVE_APP_SERVER_THREAD_STATUS_START_DELAY_MS ??

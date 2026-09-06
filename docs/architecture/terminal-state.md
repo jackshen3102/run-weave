@@ -53,7 +53,7 @@ Agent hook 的接收身份以 Panel 为最小作用域。Backend 为每个 Agent
 
 Trae family 的 ready 判定必须来自当前启动轮次的真实输出。Agent Team 在 tmux-backed pane 中启动 TraeX worker 时，会先建立 pane-local startup output boundary，再发送启动命令；ready detector 必须同时看到 active command owner 仍属于 Trae family，并在该 boundary 之后看到新的 ready prompt。旧 ready 画面、其他 pane 输出、启动失败后的残留 prompt 或仅有 owner 切换都不能把状态推进为可派发任务。
 
-另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 的独立 Codex app-server 进程也可以用 `thread/read=active` 写入 `payload.compensation=true` 的 lifecycle observation，把陈旧 projection 恢复为 `agent_running`；但 `idle`、`notLoaded`、`systemError` 和读取失败都不是其它 TUI 进程已停止的证据，不能合成 `Stop` 或把 `agent_running` 改成 `agent_idle`。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
+另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 的独立 Codex app-server 进程也可以用 `thread/read=active` 写入 `payload.compensation=true` 的 lifecycle observation，把陈旧 projection 恢复为 `agent_running`。独立进程返回的 `idle`、`notLoaded`、`systemError` 和读取失败都不是其它 TUI 进程已停止的证据；`agent_running -> agent_idle` 只接受同一 thread rollout 中不早于当前 projection 的 `task_complete` 或 `turn_aborted`。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
 
 终端 session 生命周期是最高优先级 guard。只要 session 已退出，读取当前状态时必须返回 `shell_idle`，即使内存里残留了 agent 状态或 active command。
 
@@ -133,4 +133,4 @@ Web desktop terminal 的 floating composer 是 `TerminalState` 的消费方之�
 
 当前状态模型支持 Codex 与 Trae 系列 CLI。Claude、Coco 或普通 shell 命令需要后续扩展 `TerminalAgentKind` 或新增 `shell_running`，不要通过 tail 文本猜测提前混入当前模型。
 
-如果 hook 丢失，状态可能短期停留在旧值或回到 `shell_idle`。Backend 重启会恢复同一 Profile 中仍有效的 Panel Agent 活动租约和 operation generation；过期或无法与当前 Panel 对齐的记录采用 fail-closed，不复活旧 Agent 状态。下一次 active command 或可信 agent hook 会继续校正状态；系统不根据运行时长猜测 running。
+如果 hook 丢失，状态可能短期停留在旧值；App Server 可在后续低频 reconciliation 中使用明确的 Codex rollout 终态或 Trae lifecycle 终态校正。Backend 重启会恢复同一 Profile 中仍有效的 Panel Agent 活动租约和 operation generation；过期或无法与当前 Panel 对齐的记录采用 fail-closed，不复活旧 Agent 状态。未知、缺失或过旧的 provider 事实保持原状态；系统不根据运行时长猜测 running。

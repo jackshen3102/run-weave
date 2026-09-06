@@ -300,8 +300,8 @@ projection 会生成普通 app-server event：
 ## Codex Thread 状态补偿
 
 App Server 内置一个低频 Codex Thread 状态补偿器。它不保存完整 thread 内容，只读取
-当前 projection 中最近活跃且 `agent=codex` 的 ThreadRef，然后轮询独立 Codex
-app-server 的 `thread/read`：
+当前 projection 中最近活跃且 `agent=codex` 的 ThreadRef，然后联合独立 Codex
+app-server 的 `thread/read` 与本机 Codex rollout 生命周期：
 
 - 默认启动延迟 10 秒。
 - 默认间隔 30 秒。
@@ -310,15 +310,16 @@ app-server 的 `thread/read`：
 
 独立 Codex app-server 的 thread load 状态不是其它 TUI 进程的全局 turn 状态。因此
 补偿器不为状态查询调用 `thread/resume`，并且只把 `active` 作为 Codex 正在运行的正向
-证据；`idle`、`notLoaded`、`systemError` 和读取失败都不能覆盖 hook projection，尤其
-不能把 `running` 改成 `idle`。
+证据；`idle`、`notLoaded`、`systemError` 和读取失败都不能覆盖 hook projection。对于
+`running -> idle`，补偿器只接受同一 thread rollout 中、且不早于当前 projection 的
+`task_complete` 或 `turn_aborted`。未知、缺失、过旧或无法解析的 rollout 记录保持原状态。
 
-当 Codex 返回 `active` 且 App Server projection 不一致时，补偿器写入一条普通
+当 Codex 返回 `active`，或 rollout 生命周期与 App Server projection 不一致时，补偿器写入一条普通
 `agent.lifecycle.observed` 事件：
 
 - `kind="agent.lifecycle.observed"`
 - `payload.source="codex"`
-- `payload.observedStatus="running"`
+- `payload.observedStatus="running" | "idle"`
 - `payload.compensation=true`
 - `payload.compensationReason="codex_thread_status_mismatch"`
 

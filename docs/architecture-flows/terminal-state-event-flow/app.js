@@ -31,7 +31,7 @@ const axes = [
     owner: "App Server state projection",
     states: ["starting", "running", "idle", "completed", "failed", "unknown"],
     detail:
-      "Codex thread/read 与 Trae 生命周期记录提供更接近 provider 的事实，用于 Home 状态和缺 hook 补偿。",
+      "Codex thread/read、Codex rollout 与 Trae 生命周期记录提供更接近 provider 的事实，用于 Home 状态和缺 hook 补偿。",
   },
   {
     tone: "var(--blue)",

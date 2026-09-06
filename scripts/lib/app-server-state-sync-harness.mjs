@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   buildCompletionEvent,
@@ -32,6 +32,7 @@ export function createStateSyncHarness({
         RUNWEAVE_APP_SERVER_PORT: "0",
         RUNWEAVE_APP_SERVER_CODEX_STATUS_START_DELAY_MS: "100",
         RUNWEAVE_APP_SERVER_CODEX_STATUS_INTERVAL_MS: "100",
+        RUNWEAVE_CODEX_SESSIONS_DIR: path.join(stateDir, "codex-sessions"),
         CODEX_BIN: fakeCodexBinPath,
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -218,6 +219,161 @@ export function createStateSyncHarness({
     await chmod(filePath, 0o755);
   }
 
+  async function writeCodexLifecycle(
+    stateDir,
+    threadId,
+    type,
+    timestamp,
+    lastAgentMessage,
+  ) {
+    const sessionsDir = path.join(
+      stateDir,
+      "codex-sessions",
+      "2026",
+      "09",
+      "06",
+    );
+    await mkdir(sessionsDir, { recursive: true });
+    await writeFile(
+      path.join(sessionsDir, `rollout-${threadId}.jsonl`),
+      `${JSON.stringify({
+        timestamp: timestamp.toISOString(),
+        ordinal: 1,
+        type: "event_msg",
+        payload: {
+          type,
+          turn_id: `turn-${threadId}`,
+          last_agent_message: lastAgentMessage,
+        },
+      })}\n`,
+      "utf8",
+    );
+  }
+
+  async function verifyCodexThreadStatusCompensation(context) {
+    const idleThreadId = "thread-idle-observation";
+    const unloadedThreadId = "thread-cross-process";
+    const abortedThreadId = "thread-aborted-rollout";
+    const activeThreadId = "thread-active-compensation";
+    const idleRunning = await postEvent(
+      context,
+      hookEvent("UserPromptSubmit", {
+        correlationId: idleThreadId,
+        scope: { terminalPanelId: "panel-idle-observation" },
+      }),
+    );
+    assert.equal(idleRunning.status, 201);
+    assert.equal(
+      (
+        await postEvent(
+          context,
+          hookEvent("UserPromptSubmit", {
+            correlationId: unloadedThreadId,
+            scope: { terminalPanelId: "panel-cross-process" },
+          }),
+        )
+      ).status,
+      201,
+    );
+    assert.equal(
+      (
+        await postEvent(
+          context,
+          hookEvent("UserPromptSubmit", {
+            correlationId: abortedThreadId,
+            scope: { terminalPanelId: "panel-aborted-rollout" },
+          }),
+        )
+      ).status,
+      201,
+    );
+    await writeCodexLifecycle(
+      context.stateDir,
+      idleThreadId,
+      "task_complete",
+      new Date(0),
+    );
+    await writeCodexLifecycle(
+      context.stateDir,
+      unloadedThreadId,
+      "task_complete",
+      new Date(),
+      "sensitive final answer must not leave the rollout",
+    );
+    await writeCodexLifecycle(
+      context.stateDir,
+      abortedThreadId,
+      "turn_aborted",
+      new Date(),
+    );
+
+    await waitFor(async () => {
+      const threads = await Promise.all([
+        getThread(context, unloadedThreadId),
+        getThread(context, abortedThreadId),
+      ]);
+      return threads.every(({ thread }) => thread.status === "idle")
+        ? threads
+        : null;
+    });
+    assert.equal(
+      (await getThread(context, idleThreadId)).thread.status,
+      "running",
+    );
+    const events = await getJson(
+      context,
+      `/events?after=${idleRunning.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
+    );
+    assert.equal(
+      events.events.some(
+        (event) =>
+          event.correlationId === unloadedThreadId &&
+          event.payload?.observedStatus === "idle",
+      ),
+      true,
+    );
+    const idleCompensationEvent = events.events.find(
+      (event) => event.correlationId === unloadedThreadId,
+    );
+    assert.equal(idleCompensationEvent.payload?.preview, null);
+    assert.equal(
+      events.events.some(
+        (event) =>
+          event.correlationId === abortedThreadId &&
+          event.payload?.observedLifecycle === "rollout:turn_aborted" &&
+          event.payload?.observedStatus === "idle",
+      ),
+      true,
+    );
+
+    await postEvent(
+      context,
+      hookEvent("Stop", {
+        correlationId: activeThreadId,
+        scope: { terminalPanelId: "panel-active-compensation" },
+      }),
+    );
+    await waitFor(async () => {
+      const thread = await getThread(context, activeThreadId);
+      return thread.thread.status === "running" ? thread : null;
+    });
+    const activeEvents = await getJson(
+      context,
+      `/events?after=${idleRunning.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
+    );
+    const activeCompensationEvent = activeEvents.events.find(
+      (event) =>
+        event.correlationId === activeThreadId &&
+        event.payload?.compensation === true,
+    );
+    assert.ok(activeCompensationEvent);
+    assert.equal(activeCompensationEvent.payload.observedStatus, "running");
+    assert.equal(
+      activeCompensationEvent.payload.observedLifecycle,
+      "thread/read:active",
+    );
+  }
+
   function run(command, args) {
     const child = spawn(command, args, {
       cwd: repoRoot,
@@ -255,6 +411,7 @@ export function createStateSyncHarness({
     run,
     startAppServer,
     stopAppServer,
+    verifyCodexThreadStatusCompensation,
     waitFor,
     writeFakeCodexBin,
   };
