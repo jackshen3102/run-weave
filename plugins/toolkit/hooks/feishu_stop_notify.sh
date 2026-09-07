@@ -44,24 +44,6 @@ truncate_text() {
   fi
 }
 
-extract_last_assistant_content() {
-  local transcript_path="$1"
-
-  if [[ -z "$transcript_path" || ! -f "$transcript_path" ]]; then
-    return 1
-  fi
-
-  local content
-  content="$(tail -200 "$transcript_path" \
-    | jq -s '[.[] | select(.message.message.role == "assistant" and .message.message.content != "" and .message.message.content != null)] | last | .message.message.content // empty' -r 2>/dev/null)"
-
-  if [[ -n "$content" ]]; then
-    printf '%s' "$content"
-    return 0
-  fi
-  return 1
-}
-
 load_config() {
   if [[ ! -f "$CONFIG_FILE" ]]; then
     log "skip: config file missing"
@@ -228,18 +210,14 @@ main() {
     return 0
   fi
 
-  local cwd content session_id terminal_id text
+  local cwd content terminal_id text extractor script_dir
   cwd="$(json_get '.cwd' "${PWD:-unknown}")"
-  session_id="$(json_get '.session_id' 'unknown')"
-
-  # Try extracting last assistant message from transcript file
-  local transcript_path
-  transcript_path="$(json_get '.transcript_path')"
-  # Fallback: derive transcript path from session_id
-  if [[ -z "$transcript_path" || ! -f "$transcript_path" ]]; then
-    transcript_path="${HOME}/Library/Caches/coco/sessions/${session_id}/events.jsonl"
+  script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  extractor="${script_dir}/runweave-hook-payload.cjs"
+  if [[ ! -f "$extractor" ]]; then
+    extractor="${HOME}/.runweave/bin/runweave-hook-payload.cjs"
   fi
-  content="$(extract_last_assistant_content "$transcript_path" || true)"
+  content="$(printf '%s' "$PAYLOAD" | "${RUNWEAVE_HOOK_NODE:-node}" "$extractor" 2>/dev/null || true)"
   if [[ -z "$content" ]]; then
     content="$(json_get '.last_assistant_message // .message // .body' '(任务已完成)')"
   fi

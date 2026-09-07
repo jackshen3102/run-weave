@@ -3,6 +3,15 @@ import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
 
+/** Backend projection; text is null when history has no completed reply yet. */
+export interface TerminalReplySnapshot {
+  threadId: string;
+  provider: TerminalAgentKind;
+  text: string | null;
+  completionRevision: number;
+  needsRefresh?: boolean;
+}
+
 export interface PersistedTerminalProjectRecord {
   id: string;
   name: string;
@@ -21,6 +30,7 @@ export interface PersistedTerminalSessionRecord {
   threadId?: string;
   threadProvider?: TerminalAgentKind;
   preview?: string;
+  latestReply?: TerminalReplySnapshot;
   lastThreadId?: string;
   lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
@@ -54,6 +64,7 @@ export interface PersistedTerminalPanelRecord {
   threadId?: string;
   threadProvider?: TerminalAgentKind;
   preview?: string;
+  latestReply?: TerminalReplySnapshot;
   lastThreadId?: string;
   lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
@@ -237,6 +248,11 @@ export interface UpdateTerminalProjectParams {
 }
 
 export interface TerminalSessionStore {
+  updateLatestReply(
+    terminalSessionId: string,
+    panelId: string | null,
+    reply: TerminalReplySnapshot,
+  ): Promise<void>;
   initialize(): Promise<void>;
   dispose(): Promise<void>;
   listProjects(): Promise<PersistedTerminalProjectRecord[]>;

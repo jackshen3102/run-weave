@@ -1,4 +1,9 @@
-/* global module, process */
+/* global module, process, require, Buffer */
+/* eslint-disable @typescript-eslint/no-require-imports */
+
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 const STOP_EVENTS = new Set(["stop", "subagent_stop", "subagentstop"]);
 const COMPLETION_REASONS = new Set([
@@ -126,17 +131,11 @@ function normalizeSummaryText(value) {
 
 function extractCompletionSummary(payload) {
   const directKeys = [
-    "summary",
-    "message",
-    "last_message",
-    "lastMessage",
+    "last_assistant_message",
     "lastAssistantMessage",
+    "last_agent_message",
     "assistant_message",
     "assistantMessage",
-    "response",
-    "output",
-    "text",
-    "content",
   ];
   for (const key of directKeys) {
     const normalized = normalizeSummaryText(payload?.[key]);
@@ -144,24 +143,101 @@ function extractCompletionSummary(payload) {
       return normalized;
     }
   }
-  const transcript = Array.isArray(payload?.transcript)
-    ? payload.transcript
-    : null;
-  if (transcript) {
-    for (let index = transcript.length - 1; index >= 0; index -= 1) {
-      const item = transcript[index];
-      const role = String(item?.role || item?.type || "").toLowerCase();
-      if (role && !role.includes("assistant") && !role.includes("agent")) {
-        continue;
-      }
-      const normalized =
-        normalizeSummaryText(item?.content) ||
-        normalizeSummaryText(item?.text) ||
-        normalizeSummaryText(item?.message);
-      if (normalized) {
-        return normalized;
-      }
+  const fromTranscript = readTranscriptReply(payload);
+  if (fromTranscript) return fromTranscript;
+  for (const key of [
+    "summary",
+    "message",
+    "last_message",
+    "lastMessage",
+    "response",
+    "output",
+    "text",
+    "content",
+    "body",
+  ]) {
+    const normalized = normalizeSummaryText(payload?.[key]);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+function readTranscriptReply(payload) {
+  if (Array.isArray(payload?.transcript))
+    return lastAssistantReply(payload.transcript);
+  const sessionId = readThreadId(payload);
+  const candidates = [payload?.transcript_path];
+  if (sessionId && /^[A-Za-z0-9_-]+$/.test(sessionId)) {
+    candidates.push(
+      path.join(
+        os.homedir(),
+        "Library/Caches/coco/sessions",
+        sessionId,
+        "events.jsonl",
+      ),
+    );
+  }
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string" || !candidate) continue;
+    let descriptor;
+    try {
+      descriptor = fs.openSync(candidate, "r");
+      const stat = fs.fstatSync(descriptor);
+      if (!stat.isFile()) continue;
+      // Bound hook work even for very long conversations and tool output.
+      const start = Math.max(0, stat.size - 1024 * 1024);
+      const buffer = Buffer.alloc(stat.size - start);
+      const bytes = fs.readSync(descriptor, buffer, 0, buffer.length, start);
+      const tail = buffer.subarray(0, bytes).toString("utf8");
+      const lines = (start ? tail.slice(tail.indexOf("\n") + 1) : tail).split(
+        /\r?\n/,
+      );
+      const records = lines.flatMap((line) => {
+        try {
+          return [JSON.parse(line)];
+        } catch {
+          return [];
+        }
+      });
+      return lastAssistantReply(records);
+    } catch {
+      // A missing transcript must not prevent completion reporting.
+    } finally {
+      if (descriptor !== undefined) fs.closeSync(descriptor);
     }
+  }
+  return null;
+}
+
+function lastAssistantReply(records) {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index];
+    if (record?.type === "event_msg") {
+      if (record.payload?.type === "task_complete") {
+        const completed = normalizeSummaryText(
+          record.payload.last_agent_message,
+        );
+        if (completed) return completed;
+      }
+      if (record.payload?.type === "task_started") return null;
+    }
+    const item =
+      record?.type === "response_item"
+        ? record.payload
+        : (record?.message?.message ??
+          (typeof record?.message === "object" ? record.message : record));
+    const role = item?.role ?? item?.type;
+    if (role === "user") return null;
+    if (role !== "assistant" && role !== "agent") continue;
+    if (item.phase && item.phase !== "final_answer") continue;
+    const content = Array.isArray(item.content)
+      ? item.content
+          .filter((part) => part.type === "text" || part.type === "output_text")
+          .map((part) => part.text ?? "")
+          .join("\n")
+      : (item.content ?? item.text ?? item.message);
+    const normalized = normalizeSummaryText(content);
+    if (normalized) return normalized;
   }
   return null;
 }
@@ -347,6 +423,7 @@ function buildCompletionHookBody({
     rawHookEvent: String(rawEvent || "Stop"),
     hookEvent: String(rawEvent || "Stop"),
     summary: extractCompletionSummary(payload),
+    threadId: readThreadId(payload),
     operationId: process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
     panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID || null,
     tmuxPaneId: process.env.TMUX_PANE || null,
@@ -427,3 +504,14 @@ module.exports = {
   readThreadId,
   toAgentHookStateEvent,
 };
+
+// The standalone Feishu script uses the same extractor as the completion hook.
+if (require.main === module) {
+  try {
+    process.stdout.write(
+      extractCompletionSummary(JSON.parse(fs.readFileSync(0, "utf8"))) ?? "",
+    );
+  } catch {
+    process.exitCode = 0;
+  }
+}

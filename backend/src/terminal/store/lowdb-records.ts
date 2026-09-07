@@ -12,6 +12,7 @@ export function toMetadataRecord(
     projectId: session.projectId,
     alias: session.alias ?? null,
     pinnedAt: session.pinnedAt ?? null,
+    ...(session.latestReply ? { latestReply: session.latestReply } : {}),
     command: session.command,
     args: [...session.args],
     cwd: session.cwd,

@@ -167,11 +167,13 @@ function notifyFeishu(payload, source, terminalSessionId, terminalPanelId) {
     const child = spawn(script, [], {
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
+      env: { ...process.env, RUNWEAVE_HOOK_NODE: process.execPath },
     });
     child.on("error", () => {});
     child.stdin.end(
       JSON.stringify({
         ...payload,
+        last_assistant_message: extractCompletionSummary(payload),
         source,
         terminalSessionId,
         terminalPanelId: terminalPanelId || undefined,
@@ -399,6 +401,10 @@ async function main() {
     return;
   }
 
+  if (normalizedEvent === "stop") {
+    const summary = extractCompletionSummary(payload);
+    if (summary) payload.last_assistant_message = summary;
+  }
   const appServerClient = await discoverAppServer();
   if (!appServerClient) {
     appendDebugLog("hook bridge app-server unavailable", {

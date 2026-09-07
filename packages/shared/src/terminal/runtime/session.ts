@@ -92,6 +92,7 @@ export interface TerminalSessionListItem {
 
 export interface AppHomeOverviewSession extends TerminalSessionListItem {
   title: string;
+  /** Latest completed reply as a plain-text preview; falls back to cwd. */
   subtitle: string;
   displayStatus:
     | "running"

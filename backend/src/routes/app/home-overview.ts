@@ -19,6 +19,7 @@ import {
   toSessionListItem,
 } from "../../terminal/application/payloads";
 import { resolveEffectiveTerminalState } from "../../terminal/application/terminal-state-projection";
+import { buildTerminalReplySubtitle } from "../../terminal/completion/reply-preview";
 
 type TerminalSession = ReturnType<
   TerminalSessionManager["listSessions"]
@@ -71,13 +72,6 @@ function buildSessionTitle(session: TerminalSession): string {
     agent ?? session.activeCommand?.trim() ?? basename(session.command);
   const directoryLabel = basename(session.cwd);
   return directoryLabel ? `${commandLabel} · ${directoryLabel}` : commandLabel;
-}
-
-function buildSessionSubtitle(
-  session: TerminalSession,
-  codexThreadSnapshot?: CodexThreadOverviewSnapshot | null,
-): string {
-  return resolveEffectivePreview(session, codexThreadSnapshot) ?? session.cwd;
 }
 
 function resolveEffectivePreview(
@@ -305,7 +299,7 @@ export async function buildAppHomeOverviewPayload(
         threadId: resolveEffectiveThreadId(session),
         preview: resolveEffectivePreview(session, codexThreadSnapshot),
         title: buildSessionTitle(session),
-        subtitle: buildSessionSubtitle(session, codexThreadSnapshot),
+        subtitle: await buildTerminalReplySubtitle(terminalSessionManager, session),
         ...buildDisplayStatus(
           session,
           resolveEffectiveTerminalState(

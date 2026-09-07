@@ -7,8 +7,39 @@ import {
   type TerminalPanelWorkspaceRecord,
 } from "./records";
 import { TerminalManagerSessionRuntime } from "./session-runtime";
+import type { TerminalReplySnapshot } from "../store/store";
 
 export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntime {
+  async updateLatestReply(
+    terminalSessionId: string,
+    panelId: string | null,
+    reply: TerminalReplySnapshot,
+  ): Promise<void> {
+    const owner = panelId
+      ? this.panels.get(panelId)
+      : this.sessions.get(terminalSessionId);
+    if (
+      !owner ||
+      ("terminalSessionId" in owner &&
+        owner.terminalSessionId !== terminalSessionId)
+    )
+      return;
+    // A delayed history read must never overwrite a newer completion.
+    if (
+      owner.latestReply &&
+      owner.latestReply.completionRevision > reply.completionRevision
+    )
+      return;
+    const previous = owner.latestReply;
+    owner.latestReply = reply;
+    try {
+      await this.sessionStore.updateLatestReply(terminalSessionId, panelId, reply);
+    } catch (error) {
+      if (owner.latestReply === reply) owner.latestReply = previous;
+      throw error;
+    }
+  }
+
   async upsertPanelWorkspace(
     workspace: TerminalPanelWorkspaceRecord,
   ): Promise<TerminalPanelWorkspaceRecord> {
