@@ -107,12 +107,12 @@ export const TerminalProjectTabBar = memo(function TerminalProjectTabBar({
   );
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex min-w-0 flex-1 items-center gap-1">
       <SortableTabs
         items={projects}
         getItemId={getProjectId}
         onReorder={onReorderProjects}
-        className="flex min-w-0 items-center gap-1"
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0"
         renderTab={renderProjectTab}
       />
       {!isMobileMonitor ? (

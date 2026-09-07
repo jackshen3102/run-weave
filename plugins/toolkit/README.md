@@ -26,6 +26,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `handoff`
 - `karpathy-guidelines`
 - `playwright-cli`
+- [`product-exploration`](./skills/product-exploration/SKILL.md)：显式调用的产品探索，默认 30 分钟；只取证报告，不生成测试代码或自动修复。
 - `react-best-practices`
 - `recorded-browser-mcp-verification`
 - `review-only`
