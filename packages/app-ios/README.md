@@ -28,6 +28,23 @@ node scripts/ios.mjs run --simulator <UDID> --configuration Debug
 `.build/ios/DerivedData/Build/Products/`。脚本不启动 Backend，也不改变其他应用的配置。
 仓库根的 `pnpm ios:doctor`、`pnpm ios:build -- ...`、`pnpm ios:run -- ...` 只是同一脚本的快捷入口。
 
+### 真机操作与取证
+
+需要操作或验收连接的 iPhone 时，统一使用 Mac 上的 Xcode 工具链和既有 XCUITest 执行器：
+
+1. 先确认当前设备连接、配对、解锁和签名条件，读取当前脚本；设备标识、Team 和产物路径按本机实际状态解析。
+2. 用 `xcodebuild` 构建并签名对应配置，再用 `xcrun devicectl device install app` 安装到目标手机；保留既有 Bundle ID 和应用数据。
+3. 通过既有 XCUITest 执行器激活应用、读取控件树，并执行点击、输入、滑动等真实 UI 操作；产品流程从正式首页进入。
+4. 保存 `.xcresult`，用 `xcrun xcresulttool export attachments` 导出截图、控件树等证据，并分别报告构建、安装和真机行为结果。
+
+当前执行机器的历史脚本在仓库根 `.runweave/native-device-runner/`：`build-app.py` 负责构建安装，
+`run.py` 负责执行当前 `UIProbe.swift` 并导出证据。`run.py` 的名称参数是本次证据名称，
+不会按名称加载历史 Swift 脚本。复用前检查脚本中的固定设备标识、Team、旧产物目录和当前操作内容，
+使用新的证据名称；这些本地文件不随源码分发，缺失时明确报告，不能假定新机器已具备该执行器。
+
+Playwright 只用于配套 Web 页面，不能验证 SwiftUI。终端实验室是被测页面，
+其入口是否显示不影响真机操控能力；仅专项验证显式启用实验室参数。历史成功、编译通过或单张截图不代表本次交互验收通过。
+
 ## 连接 Backend
 
 在应用的连接管理中添加可达的 HTTP/HTTPS Backend 地址，再使用该 Backend 的账号登录。
