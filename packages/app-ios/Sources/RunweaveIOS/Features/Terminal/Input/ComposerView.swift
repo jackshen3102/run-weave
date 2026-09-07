@@ -3,6 +3,7 @@ import SwiftUI
 struct ComposerView: View {
   @ObservedObject var session: AppSession
   @ObservedObject var controller: SessionController
+  @ObservedObject private var imageDrafts: TerminalImageDrafts
   let terminalID: String
   var active = true
   @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -12,11 +13,26 @@ struct ComposerView: View {
   @State private var editing = false
   @ScaledMetric(relativeTo: .body) private var inputHeight = 60.0
 
+  init(session: AppSession, controller: SessionController, terminalID: String, active: Bool = true)
+  {
+    self.session = session
+    self.controller = controller
+    self.terminalID = terminalID
+    self.active = active
+    self.imageDrafts = session.imageDrafts
+  }
+
+  private var images: [TerminalDraftImage] { imageDrafts.images[terminalID] ?? [] }
+  private var hasContent: Bool { hasText || !images.isEmpty }
+  private var sendDisabled: Bool {
+    !session.canWrite || !controller.canSend || stopping
+      || (!showStop && (!hasContent || images.contains { $0.path == nil }))
+  }
   private var hasText: Bool {
     !(session.terminalDrafts[terminalID] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       .isEmpty
   }
-  private var showStop: Bool { session.isCommandActive(terminalID) && !hasText }
+  private var showStop: Bool { session.isCommandActive(terminalID) && !hasContent }
   private var actionLabel: String {
     showStop ? (stopping ? "停止中…" : "停止") : (controller.inputBusy ? "发送中…" : "发送")
   }
@@ -42,15 +58,18 @@ struct ComposerView: View {
         ShortcutBar(controller: controller, enabled: session.canWrite)
       }
       if let failure { Text(failure).font(.caption).foregroundColor(.red) }
-      inputCard
-        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 4)
-        .background(TerminalAppearance.panel)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-          RoundedRectangle(cornerRadius: 16).strokeBorder(
-            editing ? TerminalAppearance.accent.opacity(0.6) : TerminalAppearance.border,
-            lineWidth: 1
-          ))
+      VStack(alignment: .leading, spacing: 4) {
+        ComposerImageAttachments(drafts: imageDrafts, session: session, terminalID: terminalID)
+        inputCard
+      }
+      .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 4)
+      .background(TerminalAppearance.panel)
+      .clipShape(RoundedRectangle(cornerRadius: 16))
+      .overlay(
+        RoundedRectangle(cornerRadius: 16).strokeBorder(
+          editing ? TerminalAppearance.accent.opacity(0.6) : TerminalAppearance.border,
+          lineWidth: 1
+        ))
     }
     .padding(.horizontal, 12).padding(.vertical, 8)
     .background(TerminalAppearance.background)
@@ -145,9 +164,8 @@ struct ComposerView: View {
     }
     .accessibilityLabel(actionLabel)
     .accessibilityIdentifier("terminal-composer-submit")
-    .disabled(!session.canWrite || !controller.canSend || stopping || (!showStop && !hasText))
-    .opacity(
-      !session.canWrite || !controller.canSend || stopping || (!showStop && !hasText) ? 0.4 : 1)
+    .disabled(sendDisabled)
+    .opacity(sendDisabled ? 0.4 : 1)
   }
 
   private func submit() {

@@ -124,6 +124,13 @@ public actor APIClient {
       "/api/terminal/session", method: "POST", body: ["projectId": projectID],
       retryUnauthorized: false)
   }
+  func updateTerminal(id: String, change: TerminalMetadataChange) async throws -> UpdatedTerminal {
+    let value: UpdatedTerminal = try await authorized(
+      "/api/terminal/session/\(Self.pathComponent(id))", method: "PATCH",
+      body: change.body, retryUnauthorized: false)
+    guard value.terminalSessionId == id else { throw APIError.invalidResponse }
+    return value
+  }
   func deleteTerminal(id: String) async throws {
     let _: EmptyResponse = try await authorized(
       "/api/terminal/session/\(Self.pathComponent(id))", method: "DELETE", retryUnauthorized: false)

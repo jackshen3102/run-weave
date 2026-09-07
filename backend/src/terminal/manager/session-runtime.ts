@@ -219,15 +219,21 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
     }
 
     const nextAlias = alias?.trim() || null;
-    if (session.alias === nextAlias) {
-      return session;
-    }
-
-    session.alias = nextAlias;
     await this.sessionStore.updateSessionAlias({
       terminalSessionId,
       alias: nextAlias,
     });
+    session.alias = nextAlias;
+    return session;
+  }
+
+  async setSessionPinned(
+    terminalSessionId: string,
+    pinned: boolean,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) return undefined;
+    session.pinnedAt = await this.sessionStore.setSessionPinned(terminalSessionId, pinned);
     return session;
   }
 

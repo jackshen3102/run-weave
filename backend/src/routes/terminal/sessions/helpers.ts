@@ -26,6 +26,7 @@ export const createTerminalSessionSchema = z
 export const updateTerminalSessionSchema = z
   .object({
     alias: z.string().trim().max(80).nullable().optional(),
+    pinned: z.boolean().optional(),
     panelSplitEnabled: z.boolean().optional(),
     acknowledgedCompletionRevision: z.number().int().nonnegative().optional(),
   })

@@ -23,6 +23,8 @@ struct TerminalState: Codable {
 struct HomeTerminal: Codable, Identifiable {
   let terminalSessionId: String
   let projectId: String
+  var alias: String?
+  var pinnedAt: String?
   var title: String
   var subtitle: String
   let command: String
@@ -55,7 +57,7 @@ struct HomeTerminal: Codable, Identifiable {
 struct TerminalDetails: Decodable, Identifiable {
   let terminalSessionId: String
   let projectId: String
-  let alias: String?
+  var alias: String?
   let command: String
   let cwd: String
   let activeCommand: String?
@@ -64,6 +66,25 @@ struct TerminalDetails: Decodable, Identifiable {
   let scrollback: String
   let scrollbackSourceCols: Int?
   var id: String { terminalSessionId }
+}
+
+// PATCH returns a session list item, without overview title/subtitle fields.
+struct UpdatedTerminal: Decodable {
+  let terminalSessionId: String
+  let alias: String?
+  let pinnedAt: String?
+}
+
+enum TerminalMetadataChange {
+  case pinned(Bool)
+  case alias(String?)
+
+  var body: [String: Any] {
+    switch self {
+    case .pinned(let value): return ["pinned": value]
+    case .alias(let value): return ["alias": value as Any? ?? NSNull()]
+    }
+  }
 }
 
 struct CreatedTerminal: Decodable {
