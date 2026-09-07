@@ -231,7 +231,9 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func withConnection<T>(_ operation: (APIClient) async throws -> T) async throws -> T {
+  func withConnection<T>(
+    reportFailure: Bool = true, _ operation: (APIClient) async throws -> T
+  ) async throws -> T {
     guard authenticated, let api else { throw APIError.credentialsUnavailable }
     guard foreground, health.status == .online else { throw APIError.offline }
     let epoch = generation
@@ -240,7 +242,9 @@ final class AppSession: ObservableObject {
       guard epoch == generation, !Task.isCancelled else { throw CancellationError() }
       return value
     } catch {
-      if epoch == generation, !Task.isCancelled { await handle(error, epoch: epoch) }
+      if epoch == generation, !Task.isCancelled {
+        await handle(error, epoch: epoch, reportFailure: reportFailure)
+      }
       throw error
     }
   }
@@ -265,7 +269,17 @@ final class AppSession: ObservableObject {
       terminalID: terminalID)
   }
 
-  func setForeground(_ value: Bool) {
+  func recordUserAction(_ action: String, terminalID: String) {
+    guard terminal?.id == terminalID else { return }
+    terminalController?.recordUserAction(action)
+  }
+
+  func setScenePhase(_ phase: ScenePhase) {
+    terminalController?.recordScenePhase(phase)
+    setForeground(phase == .active)
+  }
+
+  private func setForeground(_ value: Bool) {
     guard foreground != value else { return }
     foreground = value
     if !value {
@@ -420,9 +434,9 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func handle(_ failure: Error, epoch: Int) async {
+  private func handle(_ failure: Error, epoch: Int, reportFailure: Bool = true) async {
     guard generation == epoch else { return }
-    error = displayError(failure)
+    if reportFailure { error = displayError(failure) }
     if case APIError.credentialsUnavailable = failure {
       authenticated = false
       overview = nil

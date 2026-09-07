@@ -19,6 +19,37 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   private var lastSize: (Int, Int)?
   private var pendingSize: (Int, Int)?
   private var sizeScheduled = false
+  private var displayUpdateLink: AnyObject?
+  private var displayBytes = 0
+  private var displayCommit: ((Int, TimeInterval) -> Void)?
+  public private(set) var eventDispatchStartedAt: TimeInterval?
+
+  /// Opt-in measurement for the internal Profile probe. Does not force frames or flush transactions.
+  @discardableResult
+  public func observeDisplayCommits(_ callback: ((Int, TimeInterval) -> Void)?) -> Bool {
+    guard #available(iOS 18.0, *) else { return false }
+    (displayUpdateLink as? UIUpdateLink)?.isEnabled = false
+    displayUpdateLink = nil
+    displayCommit = nil
+    eventDispatchStartedAt = nil
+    terminalView.notifyUpdateChanges = false
+    guard let callback else { return true }
+    guard renderer == "CoreGraphics" else { return false }
+    displayBytes = consumedBytes
+    displayCommit = callback
+    terminalView.notifyUpdateChanges = true
+    let link = UIUpdateLink(view: terminalView)
+    link.addAction(to: .beforeEventDispatch) { [weak self] _, _ in
+      self?.eventDispatchStartedAt = ProcessInfo.processInfo.systemUptime
+    }
+    link.addAction(to: .afterCATransactionCommit) { [weak self] _, _ in
+      guard let self, self.active, self.view.window != nil else { return }
+      self.displayCommit?(self.displayBytes, ProcessInfo.processInfo.systemUptime)
+    }
+    link.isEnabled = true
+    displayUpdateLink = link
+    return true
+  }
 
   public init(scrollback: Int = 5000) {
     var options = TerminalOptions.default
@@ -32,6 +63,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
     super.init()
     terminalView.terminalDelegate = self
     if let view = terminalView as? NativeTerminalView {
+      view.acceptsTerminalResponses = { [weak self] in self?.isTmux?() != true }
       let gestures = TerminalGestures(view: view)
       gestures.isTmux = { [weak self] in self?.isTmux?() ?? false }
       gestures.sendScroll = { [weak self] input, rows in self?.tmuxScroll?(input, rows) ?? false }
@@ -45,6 +77,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
     terminalView.getTerminal().resetToInitialState()
     terminalView.setNeedsDisplay()
     consumedBytes = 0
+    displayBytes = 0
   }
 
   func applyTheme(dark: Bool) {
@@ -70,6 +103,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   }
 
   public func dispose() {
+    observeDisplayCommits(nil)
     setActive(false)
     gestures?.dispose()
     gestures = nil
@@ -108,5 +142,8 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   public func clipboardCopy(source: TerminalView, content: Data) {}
   public func clipboardRead(source: TerminalView) -> Data? { nil }
   public func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
-  public func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+  public func rangeChanged(source: TerminalView, startY: Int, endY: Int) {
+    // SwiftTerm invalidates the visible rows after this callback; UIKit commits that display later.
+    displayBytes = consumedBytes
+  }
 }

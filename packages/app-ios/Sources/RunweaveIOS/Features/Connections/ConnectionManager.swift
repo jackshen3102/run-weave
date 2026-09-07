@@ -88,6 +88,7 @@ struct ConnectionManager: View {
         Text("将移除此连接和它的本地登录凭据，远端项目和终端会保留。")
       }
     }.navigationViewStyle(.stack).interactiveDismissDisabled(busy)
+      .preferredColorScheme(theme == "light" ? .light : .dark)
   }
 
   private func connectionStatus(_ connection: BackendConnection) -> String {

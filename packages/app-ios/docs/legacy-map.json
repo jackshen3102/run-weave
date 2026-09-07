@@ -358,12 +358,12 @@
       "caseIds": ["IOSFEATURE-007", "IOSFEATURE-008"],
       "status": "implemented",
       "evidencePath": null,
-      "baselineCommit": "26a3d821d1206d389518859bf82650b55648cd7a",
+      "baselineCommit": "b1eccb2447e8fdf5e3e7dc35b3cde96fc763f533",
       "sourceHashes": {
         "app/src/components/preview/file-drawer.tsx": "1df8e9320860ec3ebd45f2335757c224e72e0325aa8b767d19078c2d2ec2c4bb",
         "app/src/components/terminal/files-tab.tsx": "c5eb3da240456c3ccb4b9ffd1c44a0ef10a131163326ac502b49590ef6cddb72",
         "packages/shared/src/terminal/preview-core.ts": "c247ce9e54e84b942250b4904b66742b11c2287dd2f9a118cc3b720f4cde7564",
-        "packages/shared/src/terminal/preview.ts": "47f963a879c6c8cba85a2a0322b6bec08bb52a7d7992d40660a1fedb5270231b"
+        "packages/shared/src/terminal/preview.ts": "ee904949f9f83e4d1c452fff48cab9d85e3afff2da89fa838d163f34afa96a6a"
       }
     },
     {
@@ -387,13 +387,13 @@
       "caseIds": ["IOSFEATURE-009"],
       "status": "implemented",
       "evidencePath": null,
-      "baselineCommit": "26a3d821d1206d389518859bf82650b55648cd7a",
+      "baselineCommit": "b1eccb2447e8fdf5e3e7dc35b3cde96fc763f533",
       "sourceHashes": {
         "app/src/components/preview/diff.tsx": "4b731f35900c2663a9acaaf36cd50599de8b8520f82f4c557b8c36549d8a885f",
         "app/src/components/terminal/changes-tab.tsx": "3ff90de834854a51907bd4448e98c39b073a87ac21119900a2d75a48b15f16b1",
         "app/src/lib/mobile-diff.ts": "e30dee3043bde93490f9d85471c8d6b6891a58df66a48deb21cc114f473b6888",
         "packages/shared/src/terminal/preview-core.ts": "c247ce9e54e84b942250b4904b66742b11c2287dd2f9a118cc3b720f4cde7564",
-        "packages/shared/src/terminal/preview.ts": "47f963a879c6c8cba85a2a0322b6bec08bb52a7d7992d40660a1fedb5270231b"
+        "packages/shared/src/terminal/preview.ts": "ee904949f9f83e4d1c452fff48cab9d85e3afff2da89fa838d163f34afa96a6a"
       }
     },
     {
@@ -412,12 +412,12 @@
       "caseIds": ["IOSFEATURE-010"],
       "status": "implemented",
       "evidencePath": null,
-      "baselineCommit": "26a3d821d1206d389518859bf82650b55648cd7a",
+      "baselineCommit": "b1eccb2447e8fdf5e3e7dc35b3cde96fc763f533",
       "sourceHashes": {
         "app/src/components/preview/zoomable-image.tsx": "5b1169df7ac4d685ce7a75849e3efa2f53bea1dcf3770d4ccb8233554200ff0f",
         "packages/common/src/terminal/image-lightbox.css": "d1e2e983d1f09fea9c8cd9c98bd89668c765bb91d3d7ad908b1f108a71abbcbd",
         "packages/common/src/terminal/image-lightbox.tsx": "bb3d586ca8621921246d8bec12fa3310827efccf32e9f331aca8fb444dd747d9",
-        "packages/shared/src/terminal/preview.ts": "47f963a879c6c8cba85a2a0322b6bec08bb52a7d7992d40660a1fedb5270231b"
+        "packages/shared/src/terminal/preview.ts": "ee904949f9f83e4d1c452fff48cab9d85e3afff2da89fa838d163f34afa96a6a"
       }
     },
     {
