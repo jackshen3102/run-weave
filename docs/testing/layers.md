@@ -35,16 +35,16 @@ Terminal、Agent Team、Browser、Activity、App、Electron、CLI 和平台路�
   `pnpm testplan:validate <path>`。
 - 浏览器 E2E：当前无可执行 spec；恢复前使用对应 YAML 计划与 `$toolkit:playwright-cli`
   获取真实页面证据，不把 `No tests found` 报告为通过。
-- 浏览器与 App 行为：按对应 YAML 计划使用 `$toolkit:playwright-cli`；桌面端联动先用
+- 浏览器行为：按对应 YAML 计划使用 `$toolkit:playwright-cli`；桌面端联动先用
   `$computer-use` 准备目标实例。
 - 前端类型：`pnpm --filter ./frontend typecheck`
-- App 类型/构建：`pnpm --filter @runweave/app typecheck`、`pnpm --filter @runweave/app build`
+- 原生 iOS 构建：`pnpm ios:doctor`、`pnpm ios:build -- --simulator <UDID>`
 - 后端/Electron/CLI/shared：使用对应 package 的 `typecheck`、`lint`、`build` 或手工冒烟验证。
 
-## 独立原生 iOS 候选
+## 原生 iOS
 
-`packages/app-ios` 的构建、源码映射和运行命令见 [包入口](../../packages/app-ios/README.md)。
-原生 UI 使用 Simulator / 真机实际操作；Playwright 只用于旧 Web App 对照，不能验证 SwiftUI。
+`packages/app-ios` 的构建和运行命令见 [包入口](../../packages/app-ios/README.md)。
+原生 UI 使用 Simulator / 真机实际操作；Playwright 只用于配套 Web 客户端，不能验证 SwiftUI。
 验收合同为 `app/ios-native-terminal.testplan.yaml`、`app/ios-native-session.testplan.yaml` 和
 `app/ios-native-features.testplan.yaml`。三种配置编译通过和 YAML 格式校验都不代表运行用例通过。
 不新增 XCTest、单元测试或独立 live-test 框架绕过原生 UI 取证要求。

@@ -99,38 +99,22 @@ default; set `RUNWEAVE_BACKEND_PORT` or pass `--backend-port` for a one-off
 local port override. See [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)
 for CLI environment and precedence details.
 
-### Mobile App
+### iOS App
 
-Runweave mobile workflows are handled by the dedicated App client:
+The native SwiftUI/UIKit client lives in [packages/app-ios](packages/app-ios/README.md).
+It connects directly to a Runweave Backend for projects, terminals, media input and read-only previews.
+Open `packages/app-ios/ios/RunweaveNative.xcodeproj` to build with Xcode; no Web build or pnpm dependency installation is needed.
 
-- Review projects, terminal sessions, status, and recent activity.
-- Open a terminal directly from the App when phone-side input is needed.
-- Keep mobile UI and API contracts separate from the Web desktop frontend.
-
-The old Web mobile page has been removed. App home data is served by the
-App-only `/api/app/home/overview` endpoint.
-
-### iOS App Commands
-
-Use different commands for local simulator debugging and device builds:
+Optional repository shortcuts:
 
 ```bash
-# Local simulator debugging with live reload.
-# Starts the local backend and App Vite dev server.
-pnpm app:dev:ios
-
-# Local backend with static iOS build/sync/open.
-# Does not support live reload.
-pnpm app:ios:local
-
-# Device build with a fixed backend from app/.env.local.
-# Does not start a backend and does not support live reload.
-pnpm app:ios:device
+pnpm ios:doctor
+pnpm ios:build -- --simulator <UDID> --configuration Debug
+pnpm ios:run -- --simulator <UDID> --configuration Debug
 ```
 
-For device builds, copy `app/.env.example` to `app/.env.local` and set
-`VITE_RUNWEAVE_API_BASE` to the backend URL. `app/.env.local` is ignored by git
-so machine-specific domains or LAN addresses are not committed.
+Configure the Backend address and login inside the app. These commands do not start a Backend.
+Device signing, package-local Node commands and diagnostics are documented in the [iOS entrypoint](packages/app-ios/README.md).
 
 ## Quick Start
 

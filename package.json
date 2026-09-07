@@ -29,9 +29,6 @@
     "runweave:beta:rollback": "node ./scripts/beta/index.mjs rollback",
     "runweave:beta:migrate": "node ./scripts/beta/index.mjs migrate",
     "runweave:beta:verify": "node ./scripts/beta/index.mjs verify",
-    "app:dev": "node ./scripts/dev/app.mjs",
-    "app:dev:ios": "APP_DEV_IOS=true node ./scripts/dev/app.mjs",
-    "app:build": "pnpm --filter @runweave/app build",
     "app-server:dev": "pnpm --filter @runweave/app-server dev",
     "app-server:install": "node ./scripts/install/app-server.mjs",
     "app-server:install:test": "node ./scripts/install/app-server.mjs --home=$HOME/.runweave/app-server-test",
@@ -50,9 +47,6 @@
     "testplan:verify": "pnpm --dir backend exec tsx ../scripts/testing/verify-format.ts",
     "agent-team:verify-fixture-lifecycle": "pnpm --dir backend exec tsx ../scripts/verify/agent-team/fixture-lifecycle/index.mjs",
     "app-server:seed-threadref-fixture": "node ./scripts/app-server/seed-threadref-fixture.mjs",
-    "app:ios:device": "pnpm --filter @runweave/app ios:open",
-    "app:ios:local": "node ./scripts/mobile/ios-local.mjs",
-    "app:version:bump": "node ./scripts/release/version/app.mjs",
     "runtime:build": "node ./scripts/release/build-runtime.mjs",
     "runtime:install": "node ./scripts/install/runtime.mjs",
     "runtime:pack-and-install": "pnpm runtime:build && node ./scripts/install/runtime.mjs --latest",
@@ -83,7 +77,10 @@
     "toolkit:verify-hooks": "pnpm --filter ./electron exec tsx ../scripts/toolkit/verify/index.mjs",
     "perf:terminal": "node ./scripts/performance/terminal.mjs",
     "quality:gate": "node ./scripts/quality/gate.mjs",
-    "prepare": "husky"
+    "prepare": "husky",
+    "ios:doctor": "node packages/app-ios/scripts/ios.mjs doctor",
+    "ios:build": "node packages/app-ios/scripts/ios.mjs build",
+    "ios:run": "node packages/app-ios/scripts/ios.mjs run"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --fix",

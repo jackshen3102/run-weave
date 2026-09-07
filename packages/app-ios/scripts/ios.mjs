@@ -4,8 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const pkg = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const repo = resolve(pkg, "../..");
-const buildRoot = resolve(repo, ".runweave/ios-native-build");
+const buildRoot = resolve(pkg, ".build/ios");
 const project = resolve(pkg, "ios/RunweaveNative.xcodeproj");
 const lock = resolve(
   project,
@@ -15,7 +14,7 @@ const [command, ...raw] = process.argv.slice(2);
 const args = raw.filter((arg) => arg !== "--");
 function run(program, argv, capture = false) {
   const result = spawnSync(program, argv, {
-    cwd: repo,
+    cwd: pkg,
     encoding: "utf8",
     stdio: capture ? "pipe" : "inherit",
   });

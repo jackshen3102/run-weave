@@ -1,23 +1,23 @@
 version: 1
 name: iOS 原生终端技术门禁
 description: >
-  验证新增 packages/app-ios 的 SwiftTerm 终端与真实 Backend、tmux 和现有协议兼容。
-  本文件是验收合同，实际执行状态单独记录于 docs/review。原生 UI 使用 Simulator 或真机操作取证；
-  旧 Web 对照使用 $toolkit:playwright-cli。每例自行创建专用 fixture 并只清理自己拥有的资源。
+  验证 packages/app-ios 的 SwiftTerm 终端与真实 Backend、tmux 和现有协议兼容。
+  本文件是验收合同，实际执行状态单独记录于 packages/app-ios/docs/validation-status.md。原生 UI 使用 Simulator 或真机操作取证；
+  每例自行创建专用 fixture 并只清理自己拥有的资源。
 
 cases:
   - id: IOSTERM-001
-    name: 独立原生 App 可以在模拟器与旧 App 并存
+    name: 原生应用可独立构建安装启动
     required: true
     description: >
-      新包独立构建和安装，不覆盖旧 Bundle ID，不修改旧 App 的配置和数据。
+      仅依赖原生包、Xcode 与 Swift 依赖即可构建和安装，不需要 React、Capacitor、pnpm 依赖或前端服务器。
     preconditions:
-      - P0 已创建新 package、shared scheme 和 ios 命令，当前有可用 Xcode 与已安装 simulator destination。
-      - 专用模拟器已安装并能启动旧 App，已记录旧 App 的连接列表与 Bundle ID。
+      - 当前有可用 Xcode、Metal Toolchain 与已安装 simulator destination，使用独占的测试模拟器。
+      - 本例干净原生包没有已生成的 Web 产物，Backend 由本例另行提供或连接管理暂不添加服务器。
     steps:
-      - 运行 ios:doctor 并记录 SDK、runtime、destination；使用该 UDID 运行 ios:build，确认 BUILD SUCCEEDED 和真实 app 路径。
-      - 运行 ios:run；确认启动 com.runweave.app.native 并显示原生入口，保存 PID 和屏幕证据。
-      - 切回旧 App；确认仍可启动且连接列表与原记录一致，新包构建未更改旧工程签名设置。
+      - 在原生包运行 node scripts/ios.mjs doctor，再用该 UDID 执行 build；确认 BUILD SUCCEEDED 与包内 .build/ios 产物。
+      - 运行 node scripts/ios.mjs run --simulator 对应 UDID；确认启动 com.runweave.app.native 的正式入口，保存 PID 与 UI 证据。
+      - 确认构建和启动均未启动 Web 服务器，也未依赖其他客户端源码；安装身份与工程声明一致。
 
   - id: IOSTERM-002
     name: tmux attach 实时流可驱动原生终端
@@ -56,7 +56,7 @@ cases:
     steps:
       - 在真实原生 TerminalProbe 播放该 fixture，记录接收与消费顺序以及最终画面。
       - 确认没有替换字符、丢字或半截 ANSI 字面量，已知字符及光标落点正确。
-      - 用同 fixture 和尺寸在旧 xterm 通过 $toolkit:playwright-cli 做独立重放对照；将字体外观差异与语义差异分开记录。
+      - 对照固定 fixture 的预期字符与光标位置；明确记录 emoji、组合字符的列宽，区分字体外观与语义错误。
 
   - id: IOSTERM-005
     name: tmux 历史滚动能正确回到实时输出
@@ -90,7 +90,7 @@ cases:
     description: >
       iOS 挂起与恢复不会创建新远端会话、重放输入或保持无法继续交互的旧画面。
     preconditions:
-      - 真机已安装候选 App，已登录并连接专用 tmux 会话；后端保持运行。
+      - 真机已安装原生 App，已登录并连接专用 tmux 会话；后端保持运行。
       - 已记录会话 ID、输入计数、renderer 类型，且可在后端产生带行号更新。
     steps:
       - 锁屏至少两分钟，在后端继续产生更新；解锁并回到 App，重新取得当前 UI 状态。
@@ -101,13 +101,13 @@ cases:
     name: App 进程重新启动不会破坏远端会话
     required: true
     description: >
-      终止并重启候选 App 后可重新打开原会话，原生内存销毁不等于远端 tmux 被终止。
+      终止并重启原生 App 后可重新打开原会话，原生内存销毁不等于远端 tmux 被终止。
     preconditions:
-      - 候选 App 已独立登录并打开专用 tmux 会话，远端运行持续更新的无副作用程序。
-      - 已记录该会话 ID，执行者只拥有候选 App 进程而非用户其他进程的控制权。
+      - 原生 App 已独立登录并打开专用 tmux 会话，远端运行持续更新的无副作用程序。
+      - 已记录该会话 ID，执行者只拥有原生 App 进程而非用户其他进程的控制权。
     steps:
-      - 终止候选 App 进程，确认远端会话继续存在并更新。
-      - 重新启动候选 App，重新取得 PID 和 UI，打开原会话；确认凭据和连接仍可用。
+      - 终止原生 App 进程，确认远端会话继续存在并更新。
+      - 重新启动原生 App，重新取得 PID 和 UI，打开原会话；确认凭据和连接仍可用。
       - 确认当前画面恢复且可继续输入，不自动创建替代 session、不重放旧命令。
 
   - id: IOSTERM-009
@@ -121,7 +121,7 @@ cases:
     steps:
       - 开启 Metal 播放 fixture，记录实际 renderer 状态及画面，确认真实启用且字符、光标可见。
       - 在新的本用例视图实例中注入初始化失败，确认显示明确失败并切到已验证普通 renderer 或停止显示错误，不伪报 Metal。
-      - 保存两种结果与决策；若选定普通 renderer 作为候选默认值，仍需独立通过持续输出性能门禁。
+      - 保存两种结果与决策；若选定普通 renderer 作为默认值，仍需独立通过持续输出性能门禁。
 
   - id: IOSTERM-010
     name: 持续输出满足原生渲染性能预算
@@ -130,24 +130,24 @@ cases:
       在真实设备、固定负载下按计划的预设阈值验证消费延迟、队列和内存，模拟器帧率不作为结论。
     preconditions:
       - 已有真机 Profile 构建，使用 Release 优化并开启内部计量，选定 renderer 且有 Instruments 或等价记录。
-      - 已固定同设备的旧 xterm 基线、字体、行列、5000 行 scrollback 和无敏感输出 fixture。
+      - 已固定设备、字体、行列、5000 行 scrollback 和无敏感输出 fixture，记录本轮构建与测量边界。
     steps:
       - 向实际终端视图送入每秒 256 KiB 的 ASCII 加 ANSI 流持续 60 秒；记录接收到显示提交的 p95、队列峰值和结束排空时间。
       - 确认 p95 不超过 100 ms、结束后两秒内排空且 1 MiB 队列不溢出；任何缺字、停滞或崩溃均失败。
-      - 延续同一负载生命周期到十分钟，确认第十分钟相对预热后第二分钟内存增幅不超过百分之二十；记录绝对 RSS、峰值和旧端对照。
+      - 延续同一负载生命周期到十分钟，确认第十分钟相对预热后第二分钟内存增幅不超过百分之二十；记录绝对 RSS、峰值及完整负载结束标记。
       - 在同一运行中记录本地输入 UI 反馈 p95 不超过 100 ms，端到端 PTY 回显单独计量，不把网络延迟算作渲染性能。
 
   - id: IOSTERM-011
     name: 原生客户端退出只释放自己的连接
     required: true
     description: >
-      新旧客户端观察同一远端 session 时，关闭原生视图不得结束会话或断开另一个客户端。
+      两个独立客户端观察同一远端 session 时，关闭原生视图不得结束会话或断开另一个客户端。
     preconditions:
-      - 专用 Backend 有一个测试 tmux session，旧客户端已经连接并独占输入和 resize。
+      - 专用 Backend 有一个测试 tmux session，另一个测试客户端已经连接并独占输入和 resize。
       - 原生验证入口支持本用例只读观察、不发送 resize，双方均为测试资源。
     steps:
-      - 原生只读附着并接收输出；通过旧客户端产生 marker，确认双方收到同一会话更新。
-      - 关闭原生终端视图；确认其 socket 和订阅已释放，旧客户端仍在线且可继续产生输出。
+      - 原生只读附着并接收输出；通过另一个测试客户端产生 marker，确认双方收到同一会话更新。
+      - 关闭原生终端视图；确认其 socket 和订阅已释放，另一个测试客户端仍在线且可继续产生输出。
       - 确认后端 session 未被删除、tmux 未退出，原生释放后无继续写入或 resize 回调。
 
   - id: IOSTERM-012
@@ -167,12 +167,12 @@ cases:
     name: 声明的最低 iOS 版本能实际运行
     required: true
     description: >
-      iOS 15 的支持声明必须有该版本实际运行证据，最新模拟器编译成功不能替代。
+      App host 声明的最低系统支持必须有该版本实际运行证据，最新模拟器编译成功不能替代。
     preconditions:
-      - 有可运行 iOS 15 的专用设备或兼容工具链的 simulator，且候选包仍声明最低 iOS 15。
+      - 已读取 App host 的 IPHONEOS_DEPLOYMENT_TARGET，并有可运行该版本的专用设备或兼容 simulator。
       - 已有对应签名或模拟器构建条件、专用 Backend 与 tmux 会话。
     steps:
-      - 在最低版本环境安装并启动候选 App，记录 OS、构建与依赖锁定版本。
+      - 在最低版本环境安装并启动原生 App，记录 OS、构建与依赖锁定版本。
       - 登录并打开专用终端，确认导航与实际终端交互无不可用 API 崩溃。
       - 无法获得该版本运行环境时记录 blocked；不得用提高 deployment target 或仅执行 build 将本例改为 pass。
 
@@ -182,10 +182,10 @@ cases:
     description: >
       新客户端能消费现有 runtimeKind 为 pty 的会话，不将所有会话硬编码为 tmux。
     preconditions:
-      - 专用 Backend 已创建 runtimeKind 为 pty 的独立测试会话，候选 App 已认证。
+      - 专用 Backend 已创建 runtimeKind 为 pty 的独立测试会话，原生 App 已认证。
     steps:
       - 打开该会话并确认 connected 中的 runtimeKind 为 pty，输出与 raw 输入形成真实闭环。
-      - 退出该测试 shell，确认候选 App 收敛到 exited，不调用 tmux 专属 copy mode 操作。
+      - 退出该测试 shell，确认原生 App 收敛到 exited，不调用 tmux 专属 copy mode 操作。
       - 确认释放客户端资源不触碰其他测试会话。
 
   - id: IOSTERM-015

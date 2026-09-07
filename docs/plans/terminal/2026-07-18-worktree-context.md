@@ -1,5 +1,6 @@
 # Worktree Terminal Context 实施计划
 
+> 历史计划：下文保留当时实施范围；当前代码和命令以 [Worktree 架构](../../architecture/terminal-worktree-context.md) 与 [iOS 入口](../../../packages/app-ios/README.md) 为准。旧移动端已退役。
 > 状态：待实施
 > 粒度：L2（跨 shared、backend、frontend、App、Agent Team 与持久化）
 > 交互基准：`docs/prototypes/worktree-terminal-context/`
@@ -334,7 +335,7 @@ activeSessionId: string | null;
 
 新增/修改：
 
-- `app/src/lib/terminal-home-view-model.ts`
+- 原移动端 view model（已退役；当前原生归属为 `packages/app-ios/Sources/RunweaveIOS/Contracts/Home.swift`）
 - `frontend/tests/worktree-terminal-context.spec.ts`（新增 Playwright E2E，不新增 unit test）
 - `docs/architecture/terminal-worktree-context.md`（新增）
 - `docs/architecture/terminal-code-preview.md`
@@ -360,7 +361,7 @@ activeSessionId: string | null;
 pnpm --filter @runweave/shared typecheck
 pnpm --filter @runweave/backend typecheck
 pnpm --filter @runweave/frontend typecheck
-pnpm --filter @runweave/app typecheck
+# 原移动端类型检查已退役；原生构建见 iOS 入口。
 pnpm lint
 pnpm --dir frontend test:e2e -- worktree-terminal-context.spec.ts
 git diff --check

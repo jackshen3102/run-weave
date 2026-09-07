@@ -3,12 +3,28 @@ import SwiftUI
 
 @main
 struct RunweaveNativeApp: App {
+  #if NATIVE_DIAGNOSTICS
+    @State private var showingTerminalLab =
+      ProcessInfo.processInfo.arguments.contains("--native-terminal-lab")
+  #endif
+
   var body: some Scene {
     WindowGroup {
       #if NATIVE_DIAGNOSTICS
-        TabView {
-          RootView().tabItem { Label("首页", systemImage: "house") }
-          TerminalProbe().tabItem { Label("终端验证", systemImage: "waveform.path.ecg") }
+        if showingTerminalLab {
+          NavigationView {
+            TerminalProbe()
+              .navigationTitle("终端实验室")
+              .navigationBarTitleDisplayMode(.inline)
+              .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                  Button("返回首页") { showingTerminalLab = false }
+                }
+              }
+          }
+          .navigationViewStyle(.stack)
+        } else {
+          RootView()
         }
       #else
         RootView()

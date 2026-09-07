@@ -130,15 +130,3 @@ cases:
     steps:
       - 使用 `$toolkit:playwright-cli` 打开 terminal search 后向上滚动；确认搜索工具栏和输入焦点保持，Composer 不出现或覆盖工具栏。
       - 关闭搜索后进入 tmux scrollback/copy-mode 并离底；确认 Composer 可显示，点击回底后通过现有退出 copy-mode 路径回到底部，Composer 同步隐藏。
-
-  - id: TAC-011
-    name: App 与 mobile 不出现 Web Composer 回归
-    required: true
-    description: >
-      验证 Floating Composer 仅作用于 Web desktop Terminal；mobile mode 与 Ionic App 的原有 composer、
-      Stop 和 keybar 行为不被覆盖。
-    preconditions:
-      - 可访问 mobile mode 或 Ionic App Terminal 页面。
-    steps:
-      - 打开 mobile 或 App Terminal 并滚动内容。
-      - 确认不出现 Web desktop Floating Composer，原有 App composer、Stop 和 keybar 仍可操作且布局未被覆盖。

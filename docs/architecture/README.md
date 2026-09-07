@@ -6,42 +6,31 @@
 ## 运行时地图
 
 ```text
-                    ┌──────────────────────────┐
-                    │ packages/shared          │
-                    │ 跨运行时 DTO / 事件 / 协议 │
-                    └────────────┬─────────────┘
-                                 │
-       ┌──────────────┬──────────┼───────────┬──────────────┐
-       ▼              ▼          ▼           ▼              ▼
- frontend/         app/       backend/    electron/      app-server/
- Web/Electron UI   Ionic App  HTTP/WS +    桌面主进程      全局事件与
-                              Terminal     + Browser      Thread 状态
-                              控制面        + IPC
-       │              │          ▲           │              ▲
-       └────── HTTP / WebSocket ─┘           └─ 进程/IPC ────┘
+frontend (Web/Electron UI) ── HTTP/WS ── backend ── app-server
+           │                             ▲
+           └─ preload IPC ── electron    │
+packages/app-ios (SwiftUI/SwiftTerm) ── HTTP/WS
 
- packages/common/             Web 与 App 当前共同使用的前端实现
- packages/terminal-renderer/  终端 React/xterm 渲染层
- packages/runweave-cli/       `rw` 参数化控制面客户端
- scripts/dev-session/         隔离开发会话、Beta Pool 与 surface 生命周期
+packages/shared        跨运行时 TypeScript 合同；Swift DTO 对照接口
+packages/common        Web 前端使用的终端与图片基础能力
+packages/runweave-cli  rw 控制面客户端
+scripts/dev-session    开发会话与 Beta 生命周期
 ```
 
 ## 目录职责
 
-| 目录                          | 当前职责                                                         | 首要入口                                       |
-| ----------------------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
-| `frontend/`                   | Web UI 与 Electron renderer                                      | `frontend/src/App.tsx`                         |
-| `backend/`                    | 本机 HTTP/WebSocket、Terminal、Agent Team、Activity、Evolution   | `backend/src/index.ts`                         |
-| `electron/`                   | macOS 窗口、IPC、内嵌 Browser、Backend 进程与更新                | `electron/src/main.ts`                         |
-| `app/`                        | Ionic React + Capacitor 移动客户端                               | `app/src/App.tsx`                              |
-| `packages/app-ios/`           | 独立 Swift iOS 候选客户端，通过 Backend HTTP/WS 工作，验收进行中 | [原生包入口](../../packages/app-ios/README.md) |
-| `app-server/`                 | 独立事件中心、Thread 状态投影和实时消费                          | `app-server/src/index.ts`                      |
-| `packages/shared/`            | 跨运行时纯 TypeScript 合同                                       | `packages/shared/package.json#exports`         |
-| `packages/common/`            | Web 与 App 真实复用的前端实现                                    | `packages/common/AGENTS.md`                    |
-| `packages/terminal-renderer/` | 终端 React/xterm 渲染                                            | `packages/terminal-renderer/src/index.ts`      |
-| `packages/runweave-cli/`      | `rw` CLI                                                         | `packages/runweave-cli/src/index.ts`           |
-| `scripts/dev-session/`        | Dev Session / Beta Pool 控制面                                   | `scripts/dev-session/cli.mjs`                  |
-| `plugins/toolkit/`            | Runweave 项目技能与 hooks                                        | `plugins/toolkit/.codex-plugin/plugin.json`    |
+| 目录                     | 当前职责                                                       | 首要入口                                       |
+| ------------------------ | -------------------------------------------------------------- | ---------------------------------------------- |
+| `frontend/`              | Web UI 与 Electron renderer                                    | `frontend/src/App.tsx`                         |
+| `backend/`               | 本机 HTTP/WebSocket、Terminal、Agent Team、Activity、Evolution | `backend/src/index.ts`                         |
+| `electron/`              | macOS 窗口、IPC、内嵌 Browser、Backend 进程与更新              | `electron/src/main.ts`                         |
+| `packages/app-ios/`      | 独立 Swift iOS 应用，通过 Backend HTTP/WS 工作                 | [原生包入口](../../packages/app-ios/README.md) |
+| `app-server/`            | 独立事件中心、Thread 状态投影和实时消费                        | `app-server/src/index.ts`                      |
+| `packages/shared/`       | 跨运行时纯 TypeScript 合同                                     | `packages/shared/package.json#exports`         |
+| `packages/common/`       | Web 终端与图片基础能力                                         | `packages/common/AGENTS.md`                    |
+| `packages/runweave-cli/` | `rw` CLI                                                       | `packages/runweave-cli/src/index.ts`           |
+| `scripts/dev-session/`   | Dev Session / Beta Pool 控制面                                 | `scripts/dev-session/cli.mjs`                  |
+| `plugins/toolkit/`       | Runweave 项目技能与 hooks                                      | `plugins/toolkit/.codex-plugin/plugin.json`    |
 
 改动某个目录前继续读其就近 `AGENTS.md`；完整清单以
 `git ls-files '**/AGENTS.md' 'AGENTS.md'` 为准。
@@ -52,7 +41,7 @@
 - `frontend/` 通过 HTTP/WebSocket 连接 `backend/`；在桌面形态下仅通过 preload bridge 请求
   Electron 主进程能力。bridge 类型合同统一由 `@runweave/shared/desktop-bridge` 提供，
   Electron preload 使用完整合同，Frontend 通过可选宿主合同兼容旧安装态能力。
-- `app/` 通过 Backend API 工作，不依赖 Electron。
+- `packages/app-ios/` 通过 Backend API 工作，独立构建，不依赖 Electron 或 Web 源码。
 - `backend/` 通过 `backend/src/app-server/` 消费 App Server，不把 App Server 并入自身状态。
 - `packages/shared` 不依赖具体运行时；`packages/common` 不承载协议、存储或 Node/Electron 能力。
 - 机械边界由 `pnpm architecture:check` 校验；本文只维护人和 Agent 需要的语义地图。

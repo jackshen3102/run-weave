@@ -20,7 +20,6 @@ const RESOLUTION_SUFFIXES = [
 const PACKAGE_ROOTS = new Map([
   ["@runweave/shared", "packages/shared/src/index.ts"],
   ["@runweave/common", "packages/common/src"],
-  ["@runweave/terminal-renderer", "packages/terminal-renderer/src/index.ts"],
   ["@runweave/cli", "packages/runweave-cli/src/index.ts"],
 ]);
 
@@ -264,18 +263,6 @@ function findCycles(files, edges, includeTypes) {
 function isForbiddenEdge(edge) {
   if (!edge.target) {
     return false;
-  }
-  if (
-    edge.source.startsWith("app/src/services/") &&
-    /^(?:app\/src\/(?:components|pages))\//.test(edge.target)
-  ) {
-    return true;
-  }
-  if (
-    edge.source.startsWith("app/src/store/") &&
-    /^(?:app\/src\/(?:components|pages))\//.test(edge.target)
-  ) {
-    return true;
   }
   if (
     edge.source.startsWith("frontend/src/services/") &&

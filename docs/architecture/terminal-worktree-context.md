@@ -57,7 +57,7 @@ desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久
 
 `contextProjectIdByParentProjectId` 恢复每个父 Project 上次选中的 context，`projectSessionIds` 继续按生效 Project ID 恢复 Terminal。Preview store 原本已按 `projectId` 分桶，不增加复合 key。
 
-Ionic App 不渲染 rail。App Home 用 `resolveTerminalParentProjectId` 把子 Session 归入父 Project 组，但打开 Session 时保留原始子 `projectId`。
+原生 iOS 不渲染 Web rail。`Contracts/Home.swift` 的 `parentProjectID` 把子 Session 归入父 Project 组，打开 Session 时仍使用原始终端身份。
 
 ## API
 

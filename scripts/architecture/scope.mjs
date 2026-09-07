@@ -12,9 +12,8 @@ export const REPO_ROOT = path.resolve(
 const SOURCE_EXTENSION =
   /\.(?:cjs|css|h|java|js|jsx|kt|kts|m|mjs|mm|py|scss|sh|swift|ts|tsx)$/;
 const ROOT_SOURCE_FILE =
-  /^(?:app-dev|dev|electron-dev|start)\.mjs$|^eslint\.config\.mjs$/;
+  /^(?:dev|electron-dev|start)\.mjs$|^eslint\.config\.mjs$/;
 const INCLUDED_PREFIXES = [
-  "app/",
   "app-server/",
   "backend/",
   "electron/",

@@ -9,7 +9,7 @@
 
     var body: some View {
       VStack(spacing: 8) {
-        Text("TerminalProbe · SwiftTerm 1.19.0").font(.headline)
+        Text("SwiftTerm 1.19.0").font(.headline)
         Button("连接真实会话") { live = true }
         Text(model.status).font(.caption).accessibilityIdentifier("probe-status")
         HStack {
@@ -153,7 +153,7 @@
             }.disabled(busy)
           }
         }
-        .navigationTitle("真实终端验证")
+        .navigationTitle("终端实验室 · 真实会话")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           Button("关闭") {

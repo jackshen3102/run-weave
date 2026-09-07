@@ -1,12 +1,10 @@
-# 原生 iOS 候选客户端
+# Runweave iOS
 
-- 本目录是独立 Swift package 与 Xcode App host；旧 `app/` 保留对照。
-- 只通过 Backend HTTP/WS 协议工作，不导入旧 App、Backend、Electron 实现。
-- Swift DTO 对照 `packages/shared`，来源和差异记录在 `docs/legacy-map.json`。
-- Bundle ID 固定 `com.runweave.app.native`，凭据不与旧 App 共享。
-- `ios/Diagnostics` 仅编入 Debug/Profile；Release 不包含 Probe 或注入入口。
-- 不新增单元测试；使用根目录原生 YAML 门禁，未获得真实证据不得标为 verified。
-- 显式验证：`pnpm --filter @runweave/app-ios ios:doctor`、`mapping:check`、
-  `ios:build -- --simulator <UDID>`；构建和证据输出均在根 `.runweave/`。
-- 运行方式与当前完成范围见 [README.md](./README.md)，技术门禁见
-  [decisions.md](./docs/decisions.md)。
+- 本目录是可独立构建的 Swift package 与 Xcode App host；构建只需要 Xcode、Swift 依赖和可选的 Node 命令包装，不依赖 React、Capacitor 或 pnpm workspace。
+- 仅通过 Backend HTTP/WS 协议工作，不导入 Backend、Electron 或 Web 实现。
+- Swift DTO 位于 `Sources/RunweaveIOS/Contracts`；修改协议时核对仓库 `packages/shared` 中的 HTTP/WS 合同及实际 Backend 响应，见 [架构边界](docs/architecture.md)。
+- 保持 Bundle ID `com.runweave.app.native` 及现有 Keychain、UserDefaults 标识，避免升级变成新安装或丢失登录态。
+- `ios/Diagnostics` 仅在 Debug/Profile 启用；Release 不启用实验室或注入入口。
+- 不新增单元测试。构建成功不代表原生 UI 或真机验收通过；测试合同和当前限制见 [验收状态](docs/validation-status.md)。
+- 在本目录执行 `node scripts/ios.mjs doctor`、`node scripts/ios.mjs build --simulator <UDID>`；产物在本目录 `.build/ios/`，不提交个人签名设置或构建输出。
+- 开发、安装、连接与诊断操作统一从 [README](README.md) 进入。
