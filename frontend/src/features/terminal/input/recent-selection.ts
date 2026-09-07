@@ -53,12 +53,15 @@ export function loadRecentTerminalSelection(
         : { [parsed.projectId]: parsed.projectId };
 
     if (typeof parsed.terminalSessionId === "string") {
+      const effectiveProjectId =
+        contextProjectIdByParentProjectId[parsed.projectId] ?? parsed.projectId;
       return {
         projectId: parsed.projectId,
         terminalSessionId: parsed.terminalSessionId,
         projectSessionIds: {
+          // Backfill legacy records without overwriting a context's saved tab.
+          [effectiveProjectId]: parsed.terminalSessionId,
           ...projectSessionIds,
-          [parsed.projectId]: parsed.terminalSessionId,
         },
         contextProjectIdByParentProjectId,
       };
