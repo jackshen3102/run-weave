@@ -188,6 +188,12 @@ export function TerminalPreviewChangesView({
     content = renderFileDiffContent(diff.data, diff.data.path);
   }
 
+  if (!changes.error && changes.data?.repoRoot === null) {
+    return renderPreviewEmpty(
+      "This project is not a Git repository. Use Explorer to browse files.",
+    );
+  }
+
   return (
     <div
       className="grid h-full min-h-0"

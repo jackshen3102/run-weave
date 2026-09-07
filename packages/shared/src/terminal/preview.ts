@@ -194,7 +194,8 @@ export interface TerminalPreviewGitChangesResponse {
   kind: "git-changes";
   projectId: string;
   projectPath: string;
-  repoRoot: string;
+  /** Null only when the project is not in a Git working tree. Other Git errors fail the request. */
+  repoRoot: string | null;
   staged: TerminalPreviewChangeFile[];
   working: TerminalPreviewChangeFile[];
 }

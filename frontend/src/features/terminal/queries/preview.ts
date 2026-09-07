@@ -52,9 +52,11 @@ export function useTerminalPreviewQueries(input: {
     (input.mode === "file" || input.mode === "explorer") &&
     !isSupportedTerminalImagePreviewPath(selectedFilePath);
   const changesEnabled =
-    Boolean(projectId && input.hasProjectPath) && input.mode === "changes";
+    Boolean(projectId && input.hasProjectPath) &&
+    (input.mode === null || input.mode === "changes");
   const diffEnabled =
     changesEnabled &&
+    input.mode === "changes" &&
     Boolean(input.selectedChangePath && input.selectedChangeKind);
 
   const search = useQuery({

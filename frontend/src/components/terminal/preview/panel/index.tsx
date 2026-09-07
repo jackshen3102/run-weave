@@ -280,6 +280,8 @@ export function TerminalPreviewPanel({
   const handleQuickSearchShortcut = useMemoizedFn(
     (event: KeyboardEvent): void => {
       if (
+        event.defaultPrevented ||
+        event.altKey ||
         quickSearch.open ||
         activeTool !== "preview" ||
         !projectId ||
@@ -312,12 +314,6 @@ export function TerminalPreviewPanel({
   const openFileMode = (): void => {
     if (projectId) setProjectPreviewMode(projectId, "file");
   };
-  const openChangesMode = (): void => {
-    if (projectId && confirmDiscardDraft()) {
-      setProjectPreviewMode(projectId, "changes");
-    }
-  };
-
   let previewBody: ReactNode;
   if (!activeProject) {
     previewBody = renderPreviewEmpty("No project selected");
@@ -426,28 +422,7 @@ export function TerminalPreviewPanel({
       />
     );
   } else {
-    previewBody = renderPreviewEmpty(
-      "No preview for this project",
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          className="rounded-lg"
-          onClick={openFileMode}
-        >
-          Open file...
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="rounded-lg"
-          onClick={openChangesMode}
-        >
-          Changes
-        </Button>
-      </div>,
-    );
+    previewBody = renderPreviewEmpty("Loading preview...");
   }
   const agentTeamBody = (
     <TerminalAgentTeamPanel

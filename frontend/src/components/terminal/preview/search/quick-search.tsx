@@ -288,7 +288,7 @@ export function TerminalPreviewQuickSearch({
                 ? "Searching"
                 : query.trim()
                   ? `${activeMode.label} results`
-                  : mode === "files"
+                  : mode === "files" && items.length > 0
                     ? "Changed files"
                     : `${activeMode.label} search`}
             </div>
@@ -364,7 +364,7 @@ export function TerminalPreviewQuickSearch({
                 {query.trim()
                   ? "No results"
                   : mode === "files"
-                    ? "No changed files. Type to search files."
+                    ? "Type a file name or path to search."
                     : "Type to search."}
               </Command.Empty>
             ) : null}
