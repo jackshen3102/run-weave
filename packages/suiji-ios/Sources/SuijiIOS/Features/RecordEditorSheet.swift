@@ -18,7 +18,7 @@ struct RecordEditorSheet: View {
               .pickerStyle(.segmented).disabled(!model.editable)
           }
           TextEditor(text: $model.draft.body).frame(minHeight: 240).focused($focused).disabled(!model.editable)
-            .accessibilityLabel("正文").scrollContentBackground(.hidden).padding(8).background(.white, in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityLabel("正文").scrollContentBackground(.hidden).padding(8).foregroundStyle(SuijiTheme.ink).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 12))
           Text("\(model.draft.body.unicodeScalars.count) / \(model.limits.bodyScalars)").font(.caption).foregroundStyle(.secondary)
           ForEach(model.draft.existing) { attachment in
             HStack { Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text"); Spacer()
