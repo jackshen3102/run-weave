@@ -19,6 +19,8 @@ export interface TerminalCompletionEvent {
   cwd: string | null;
   outboxPath?: string | null;
   summary?: string | null;
+  /** Provider thread that produced the reply, when supplied by the hook. */
+  threadId?: string | null;
   operationId?: string | null;
   /**
    * The panel (workspace pane) that produced the completion, when the terminal
@@ -41,6 +43,7 @@ export interface TerminalCompletionEventPayload {
   cwd: string | null;
   outboxPath?: string | null;
   summary?: string | null;
+  threadId?: string | null;
   operationId?: string | null;
   panelId?: string | null;
   tmuxPaneId?: string | null;

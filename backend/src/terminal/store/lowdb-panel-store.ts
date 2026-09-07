@@ -1,4 +1,5 @@
 import type {
+  TerminalReplySnapshot,
   PersistedTerminalPanelRecord,
   PersistedTerminalPanelWorkspaceRecord,
   PersistedRecentAgentActivityRecord,
@@ -14,6 +15,28 @@ import { buildRecentAgentActivityKey } from "../completion/source-gate";
 import { LowDbScrollbackStore } from "./lowdb-scrollback-store";
 
 export class LowDbPanelStore extends LowDbScrollbackStore {
+  async updateLatestReply(
+    terminalSessionId: string,
+    panelId: string | null,
+    reply: TerminalReplySnapshot,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const owner = panelId
+        ? database.data.panels.find(
+            (panel) =>
+              panel.id === panelId &&
+              panel.terminalSessionId === terminalSessionId,
+          )
+        : database.data.sessions.find(
+            (session) => session.id === terminalSessionId,
+          );
+      if (!owner) return;
+      owner.latestReply = structuredClone(reply);
+      await database.write();
+    });
+  }
+
   async listPanels(): Promise<PersistedTerminalPanelRecord[]> {
     return this.getPanels();
   }

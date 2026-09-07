@@ -1,4 +1,5 @@
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
+import type { TerminalReplySnapshot } from "../store/store";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
@@ -38,6 +39,7 @@ export interface TerminalSessionRecord {
   threadId?: string;
   threadProvider?: TerminalAgentKind;
   preview?: string;
+  latestReply?: TerminalReplySnapshot;
   lastThreadId?: string;
   lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
@@ -71,6 +73,7 @@ export interface TerminalPanelRecord {
   threadId?: string;
   threadProvider?: TerminalAgentKind;
   preview?: string;
+  latestReply?: TerminalReplySnapshot;
   lastThreadId?: string;
   lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
@@ -152,6 +155,7 @@ export function buildSessionRecord(
     threadProvider:
       persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
     preview: persisted.preview,
+    latestReply: persisted.latestReply,
     lastThreadId: persisted.lastThreadId,
     lastThreadProvider:
       persisted.lastThreadProvider ??
@@ -231,6 +235,7 @@ export function toPersistedSession(
     threadId: session.threadId,
     threadProvider: session.threadProvider,
     preview: session.preview,
+    latestReply: session.latestReply,
     lastThreadId: session.lastThreadId,
     lastThreadProvider: session.lastThreadProvider,
     lastThreadStatus: session.lastThreadStatus,
@@ -272,6 +277,7 @@ export function buildPanelRecord(
     threadProvider:
       persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
     preview: persisted.preview,
+    latestReply: persisted.latestReply,
     lastThreadId: persisted.lastThreadId,
     lastThreadProvider:
       persisted.lastThreadProvider ??
@@ -307,6 +313,7 @@ export function toPersistedPanel(
     threadId: panel.threadId,
     threadProvider: panel.threadProvider,
     preview: panel.preview,
+    latestReply: panel.latestReply,
     lastThreadId: panel.lastThreadId,
     lastThreadProvider: panel.lastThreadProvider,
     lastThreadStatus: panel.lastThreadStatus,
