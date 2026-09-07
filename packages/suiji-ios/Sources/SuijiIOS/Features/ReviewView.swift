@@ -13,7 +13,7 @@ struct ReviewView: View {
             Text("从记录里，接着想").font(.title2.bold())
             Text("主动发问后才检索。回答引用原文，保存结论由你决定。").foregroundStyle(.secondary)
             ForEach(model.turns) { turn in
-              Text(verbatim: turn.question).padding().frame(maxWidth: .infinity, alignment: .trailing).background(SuijiTheme.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+              Text(verbatim: turn.question).padding().frame(maxWidth: .infinity, alignment: .trailing).background(SuijiTheme.pale, in: RoundedRectangle(cornerRadius: 16))
               if let answer = turn.review.answer { answerView(answer) }
             }
             VStack(alignment: .leading, spacing: 14) {
@@ -30,11 +30,11 @@ struct ReviewView: View {
                   Button("查询进度") { Task { await model.refresh() } }
                   Spacer(); Button("取消回顾") { Task { await model.cancel() } }
                 } else {
-                  Spacer(); Button(model.pending ? "手动确认请求" : "发送") { Task { await model.submit() } }.buttonStyle(.borderedProminent).disabled(model.starting || model.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                  Spacer(); Button(model.pending ? "手动确认请求" : "发送") { Task { await model.submit() } }.buttonStyle(.borderedProminent).foregroundStyle(SuijiTheme.onGreen).disabled(model.starting || model.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
               }
               if !model.message.isEmpty, !model.starting { Button("结束此次等待，重新提问") { model.endWaiting() }.font(.footnote) }
-            }.padding().background(.background, in: RoundedRectangle(cornerRadius: 16))
+            }.padding().background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 16))
             Text("对话仅保留在当前会话，重新登录后不会自动重新执行。服务上的回顾结果保留 30 分钟。").font(.caption).foregroundStyle(.secondary)
           }.padding(20)
         }.background(SuijiTheme.background)
@@ -49,7 +49,7 @@ struct ReviewView: View {
           VStack(alignment: .leading, spacing: 6) {
             Text("[\(index + 1)] \(displayDate(citation.createdAt)) · \(citation.taskStatus?.label ?? "想法") · 版本 \(citation.version)").font(.caption).foregroundStyle(.secondary)
             Text(verbatim: citation.quote.isEmpty ? citation.attachment?.fileName ?? "已读取图片附件" : citation.quote).font(.callout).lineLimit(5)
-          }.frame(maxWidth: .infinity, alignment: .leading).padding().background(SuijiTheme.green.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+          }.frame(maxWidth: .infinity, alignment: .leading).padding().background(SuijiTheme.pale, in: RoundedRectangle(cornerRadius: 12))
         }.buttonStyle(.plain)
       }
       Text("本次查看 \(answer.coverage.listedRecords) 条摘要、\(answer.coverage.readRecords) 条原文、\(answer.coverage.attachmentReads) 段附件。关键词检索，未启用向量索引，未读取外链。").font(.caption).foregroundStyle(.secondary)
@@ -57,7 +57,7 @@ struct ReviewView: View {
         Button("另存笔记") { Task { await session.openEditor(kind: .note, body: answer.text) } }
         Spacer(); Button("新建待办") { Task { await session.openEditor(kind: .task, body: answer.text) } }
       }
-    }.padding().background(.background, in: RoundedRectangle(cornerRadius: 16))
+    }.padding().background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 16))
   }
 }
 struct ReviewCitationDetail: View {

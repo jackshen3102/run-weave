@@ -7,6 +7,7 @@ import { Input } from "../../components/ui/input";
 import { SuijiClient } from "../../services/suiji";
 import { SuijiDraftStore } from "./drafts";
 import { SuijiWorkspace } from "./workspace";
+import { SuijiThemeSelect } from "./theme-select";
 import type { SuijiConnection } from "./connection-model";
 
 export default function SuijiPage() {
@@ -78,7 +79,10 @@ export default function SuijiPage() {
     <main className="suiji-theme flex min-h-dvh items-center justify-center bg-background px-6 py-12 text-foreground">
       <section className="flex w-full max-w-md flex-col gap-7 rounded-3xl border bg-card p-8 shadow-sm">
         <div className="flex flex-col gap-3">
-          <Feather className="size-9 text-primary" />
+          <div className="flex items-center justify-between gap-3">
+            <Feather className="size-9 text-primary" />
+            <SuijiThemeSelect />
+          </div>
           <h1 className="text-3xl font-semibold">随记</h1>
           <p className="text-sm leading-6 text-muted-foreground">
             留住当下的想法，慢慢再看。

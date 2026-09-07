@@ -1,9 +1,22 @@
 import SwiftUI
+import UIKit
 enum SuijiTheme {
-  static let green = Color(red: 8/255, green: 123/255, blue: 96/255)
-  static let pale = Color(red: 230/255, green: 243/255, blue: 238/255)
-  static let background = Color(red: 243/255, green: 246/255, blue: 245/255)
-  static let ink = Color(red: 32/255, green: 43/255, blue: 41/255)
+  static let green = adaptive(light: 0x087B60, dark: 0x86C1A4)
+  static let onGreen = adaptive(light: 0xFFFFFF, dark: 0x142019)
+  static let pale = adaptive(light: 0xE6F3EE, dark: 0x2C4438)
+  static let background = adaptive(light: 0xF3F6F5, dark: 0x141A17)
+  static let surface = adaptive(light: 0xFFFFFF, dark: 0x1E2421)
+  static let ink = adaptive(light: 0x202B29, dark: 0xE8EEEA)
+  static let border = adaptive(light: 0xDFE5E2, dark: 0x424D47)
+
+  private static func adaptive(light: UInt32, dark: UInt32) -> Color {
+    Color(uiColor: UIColor { traits in
+      let value = traits.userInterfaceStyle == .dark ? dark : light
+      return UIColor(red: CGFloat((value >> 16) & 0xFF) / 255,
+                     green: CGFloat((value >> 8) & 0xFF) / 255,
+                     blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+    })
+  }
 }
 extension TaskStatus {
   var label: String { switch self { case .open: return "未完成"; case .done: return "已完成"; case .archived: return "不再做" } }
@@ -28,8 +41,8 @@ struct RecordCard: View {
       }
       if pending { Label("状态结果待确认", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange) }
       Text(displayDate(record.createdAt)).font(.caption).foregroundStyle(.secondary)
-    }.padding(16).background(.white, in: RoundedRectangle(cornerRadius: 16))
-      .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.gray.opacity(0.12)))
+    }.padding(16).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 16))
+      .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(SuijiTheme.border))
   }
 }
 func displayDate(_ value: String) -> String {
@@ -54,7 +67,7 @@ struct FilterBar: View {
 struct CaptureButton: View {
   let action: () -> Void
   var body: some View {
-    Button(action: action) { Image(systemName: "plus").font(.title2.bold()).frame(width: 54, height: 54).background(SuijiTheme.green, in: Circle()).foregroundStyle(.white) }
+    Button(action: action) { Image(systemName: "plus").font(.title2.bold()).frame(width: 54, height: 54).background(SuijiTheme.green, in: Circle()).foregroundStyle(SuijiTheme.onGreen) }
       .accessibilityLabel("新增记录").shadow(color: SuijiTheme.green.opacity(0.2), radius: 8, y: 4)
   }
 }

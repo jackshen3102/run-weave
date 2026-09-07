@@ -11,6 +11,7 @@ import type {
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { SuijiHttpError } from "../../services/suiji";
+import { SuijiThemeSelect } from "./theme-select";
 import type { SuijiConnection } from "./connection-model";
 import type { PendingRequest, SuijiDraft } from "./drafts";
 import { SuijiEditorModel } from "./editor-model";
@@ -273,7 +274,8 @@ export function SuijiWorkspace({
               慢慢记录，慢慢想。
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <SuijiThemeSelect />
             <Button variant="ghost" size="sm" asChild>
               <Link to="/home">Runweave</Link>
             </Button>
