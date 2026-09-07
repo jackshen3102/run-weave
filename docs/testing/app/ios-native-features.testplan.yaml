@@ -1,0 +1,153 @@
+version: 1
+name: iOS 原生移动功能对照验收
+description: >
+  验证原生输入、媒体、只读预览和诊断与当前移动 App 的行为合同一致。
+  每例独立登录专用 Backend 并创建自身 fixture，原生端实际操作取证，旧 Web 对照使用
+  $toolkit:playwright-cli。不新增单元测试，不把静态检查或截图本身当作行为通过。
+
+cases:
+  - id: IOSFEATURE-001
+    name: Composer 保留文本提交与未确认结果语义
+    required: true
+    description: >
+      普通文本与 Codex 斜杠命令使用正确 HTTP mode，写入结果不明时保留草稿且不自动重复执行。
+    preconditions:
+      - 候选 App 已登录专用 Backend 并打开可切换 shell 和 Codex 状态的测试终端。
+      - 能记录 input 请求并仅对本例输入模拟服务端接收后客户端响应丢失。
+    steps:
+      - 分别提交普通文本、多行文本和 Codex 状态下带前导空白的斜杠命令；确认 line 与 codex_slash_command 的选择与旧逻辑一致，后端收到原文。
+      - 在专用会话对唯一无副作用 marker 注入响应丢失；确认显示发送结果未确认并保留草稿，不自动重发。
+      - 对照后端操作记录确认已接收操作未因客户端超时变成重复输入，inputAccepted 不被表述为 Agent 已完成。
+
+  - id: IOSFEATURE-002
+    name: 快捷键使用原始控制序列
+    required: true
+    description: >
+      Ctrl-C、Tab、Esc、方向键与 Enter 走原始终端输入，不被包装为普通命令行。
+    preconditions:
+      - 候选 App 打开本例专用终端，存在可验证补全、历史和中断的无副作用程序。
+    steps:
+      - 使用快捷键依次完成补全、历史移动、退出交互及中断；记录实际 WS input 数据。
+      - 确认控制序列与后端结果一致，没有额外命令提交或重复换行，Composer 草稿不被无关按键清空。
+
+  - id: IOSFEATURE-003
+    name: Stop 展示以后端 Agent 状态为准
+    required: true
+    description: >
+      Stop 发送既有 interrupt 请求，响应成功不代表 Agent 已进入 idle。
+    preconditions:
+      - 候选 App 已打开本例 agent_running 会话，专用环境可延迟后端状态变化事件。
+    steps:
+      - 点击 Stop，确认只发起该 session 的 interrupt 请求，并保留 operationId 等关联信息。
+      - 在 interrupt 已响应但状态事件仍为 agent_running 时观察；确认没有乐观改 idle 或隐藏应显示的 Stop。
+      - 释放后端 idle 状态事件；确认按钮与状态按权威事件收敛。
+
+  - id: IOSFEATURE-004
+    name: 历史查看与复制不影响实时会话
+    required: true
+    description: >
+      用户可查看并复制多屏历史文本，历史快照不能覆盖正在更新的终端视图。
+    preconditions:
+      - 候选 App 的本例终端具有至少 500 行带唯一行号的历史，实时输出仍在更新。
+    steps:
+      - 打开历史入口并跨屏选择复制已知范围，粘贴到本例临时文本处；确认文本完整且行序一致。
+      - 关闭历史查看回到终端；确认显示最新输出，没有把历史 capture 文本重新灌入实时 renderer。
+
+  - id: IOSFEATURE-005
+    name: 图片上传只进入待发送草稿
+    required: true
+    description: >
+      图片经现有 API 上传后插入正确引用的后端路径，用户确认发送前终端不执行。
+    preconditions:
+      - 模拟器或真机候选 App 已打开专用终端，系统照片选择器有本例无敏感图片，已有一段 Composer 草稿。
+      - 测试 Backend 返回的图片文件路径包含空格或单引号，可观察上传与输入请求。
+    steps:
+      - 选择图片并等待上传；确认调用 clipboard-image，返回路径经过 shell quoting 后插入草稿，原有草稿保留。
+      - 确认尚无 terminal input 请求；用户显式发送后才提交，后端解释为一个正确文件路径。
+      - 取消一次新的图片选择；确认不上传、不发送，也不清空已有草稿。
+
+  - id: IOSFEATURE-006
+    name: 录音转写保持用户确认边界
+    required: true
+    description: >
+      原生录音满足 24 kHz WAV 合同，拒绝、取消或转写失败不破坏草稿，成功也不自动发送。
+    preconditions:
+      - 真机候选 App 已打开专用终端且草稿非空；麦克风权限可在本例设备设置中控制。
+      - 测试 Backend 提供转写服务并可对本例注入转写失败，能够检查脱敏音频格式元数据。
+    steps:
+      - 录制并结束一段测试语音；确认提交 audio/wav、24000 Hz 和正确 duration，转写成功只追加文字到草稿。
+      - 分别在本例重新开始录音时取消、拒绝权限或注入转写失败；确认录音资源释放，已有草稿保留且无 terminal input。
+      - 显式点击发送才出现终端输入请求；记录权限和录音状态，不把转写服务不可用标记为通过。
+
+  - id: IOSFEATURE-007
+    name: 文件浏览搜索保持项目作用域
+    required: true
+    description: >
+      原生文件树和搜索使用当前项目的只读 API，不混用其他项目结果或越过项目边界。
+    preconditions:
+      - 候选 App 已登录专用 Backend，两个项目有同名但内容不同的文件和嵌套目录。
+    steps:
+      - 在项目 A 的 Files 展开目录、搜索并打开同名文件；确认请求 projectId 与返回内容属于 A。
+      - 切到项目 B 执行相同搜索；确认显示 B 内容，旧请求和缓存不污染结果。
+      - 确认无写文件 API，超出项目作用域的请求被后端拒绝且 UI 不显示泄漏内容。
+
+  - id: IOSFEATURE-008
+    name: 文件内容与预览错误有明确边界
+    required: true
+    description: >
+      文本和轻量 Markdown 可读，缺失、大文件和不支持的二进制预览各有准确结果。
+    preconditions:
+      - 本例项目包含文本、带标题列表代码块链接的 Markdown，以及可产生 404、413、415 的预览资源。
+      - 候选 App 已登录且可打开本例 Files，外链处理与认证服务隔离。
+    steps:
+      - 依次打开文本和 Markdown；确认内容、代码块与链接语义可读，HTML 或脚本文本不能获得终端输入权限。
+      - 在同一预览入口打开缺失、过大和二进制资源；分别确认资源不存在、过大、不支持提示，不误注销。
+      - 打开允许的外部链接；确认未携带 Backend token，也未在具备终端权限的内容容器运行。
+
+  - id: IOSFEATURE-009
+    name: Changes 与 Diff 保留只读审阅语义
+    required: true
+    description: >
+      原生 Changes 显示正确的文件变更和行号，大 Diff 使用已定义降级且不产生写操作。
+    preconditions:
+      - 本例 Git 项目有已知新增、删除、修改、重命名，以及超过旧算法行数或计算成本阈值的文本变更。
+      - 已保存该 fixture 的 Git diff 与旧 App 显示作为对照，不改用户真实工作区。
+    steps:
+      - 打开 Changes 并逐项查看；确认文件身份、变更类型、增删行及行号与 fixture 一致。
+      - 打开大 Diff；确认总行数超过 800 或乘积超过 180000 时使用明确降级，页面可返回且主线程未长时间卡死。
+      - 确认整个审阅没有 stage、commit 或文件写请求，保存原生与旧端差异记录。
+
+  - id: IOSFEATURE-010
+    name: 图片预览可缩放关闭并释放资源
+    required: true
+    description: >
+      文件或图片变更的图片预览可以全屏缩放和平移，关闭后仍处于原审阅上下文。
+    preconditions:
+      - 模拟器或真机候选 App 已打开本例项目图片，图片大小和像素尺寸已记录；模拟器可操作其模拟触控手势。
+    steps:
+      - 打开全屏图片，双指缩放和平移后关闭；确认交互可用并返回原文件或 Changes 位置。
+      - 重复打开关闭十次；确认没有残留遮罩或无限增加的图片请求与解码资源，记录内存和任务释放情况。
+
+  - id: IOSFEATURE-011
+    name: 诊断记录可关联排障且不泄漏凭据
+    required: true
+    description: >
+      用户发起的诊断会话可开始、停止、导出并对接既有服务，日志有新旧映射所需身份且敏感数据被剔除。
+    preconditions:
+      - 候选 App 已连接支持现有 diagnostic logs API 的专用 Backend，允许本例显式上传诊断。
+      - 已准备可识别但无实际权限的 token 与命令内容标记用于检查日志脱敏。
+    steps:
+      - 从原生诊断入口开始记录，执行一次连接与无副作用读取后停止并导出；确认得到可读诊断产物及服务端结果。
+      - 核对 client、版本、renderer、connection、session、generation、请求与事件时间字段，能够沿 MAP ID 定位模块。
+      - 搜索导出文件与上传内容；确认没有 token、ticket、默认终端正文或命令全文，未开启诊断时不自动上传。
+
+  - id: IOSFEATURE-012
+    name: 主题选择在原生界面与终端一致持久化
+    required: true
+    description: >
+      明暗主题在原生页面和终端保持可读，重开候选 App 后保留选择且不改变旧 App 主题。
+    preconditions:
+      - 新旧 App 并存，已记录旧主题；候选 App 已有独立主题配置并打开本例终端。
+    steps:
+      - 在候选 App 切换明暗主题，查看 Home、Composer、终端和预览；确认前景背景可读且主题一致。
+      - 关闭并重新启动候选 App，确认选择持久化；打开旧 App，确认旧主题未被改变。

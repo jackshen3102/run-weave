@@ -40,3 +40,11 @@ Terminal、Agent Team、Browser、Activity、App、Electron、CLI 和平台路�
 - 前端类型：`pnpm --filter ./frontend typecheck`
 - App 类型/构建：`pnpm --filter @runweave/app typecheck`、`pnpm --filter @runweave/app build`
 - 后端/Electron/CLI/shared：使用对应 package 的 `typecheck`、`lint`、`build` 或手工冒烟验证。
+
+## 独立原生 iOS 候选
+
+`packages/app-ios` 的构建、源码映射和运行命令见 [包入口](../../packages/app-ios/README.md)。
+原生 UI 使用 Simulator / 真机实际操作；Playwright 只用于旧 Web App 对照，不能验证 SwiftUI。
+验收合同为 `app/ios-native-terminal.testplan.yaml`、`app/ios-native-session.testplan.yaml` 和
+`app/ios-native-features.testplan.yaml`。三种配置编译通过和 YAML 格式校验都不代表运行用例通过。
+不新增 XCTest、单元测试或独立 live-test 框架绕过原生 UI 取证要求。
