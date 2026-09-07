@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
+import { RuntimeStatusEntry } from "../../components/runtime-status-entry";
 
 export type EvolutionView =
   | "overview"
@@ -300,6 +301,7 @@ export function EvolutionHeader({
         <p className="mt-1 text-xs text-muted-foreground">{copy[view][1]}</p>
       </div>
       <div className="flex shrink-0 gap-2">
+        <RuntimeStatusEntry className="max-sm:max-w-36" />
         <Button variant="secondary" size="sm" onClick={onOpenSchedule}>
           <CalendarClock className="h-4 w-4" />
           <span className="max-sm:hidden">运行计划</span>

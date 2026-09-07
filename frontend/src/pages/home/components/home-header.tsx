@@ -1,6 +1,6 @@
 import type { ConnectionConfig } from "../../../features/connection/types";
 import { ConnectionSwitcher } from "../../../components/connection-switcher";
-import { RuntimeMonitorBadge } from "../../../components/runtime-monitor-badge";
+import { RuntimeStatusEntry } from "../../../components/runtime-status-entry";
 import { ThemeToggle } from "../../../components/theme-toggle";
 import { Button } from "../../../components/ui/button";
 import { Activity, Database, Sparkles } from "lucide-react";
@@ -110,7 +110,7 @@ export function HomeHeader({
         >
           Logout
         </Button>
-        <RuntimeMonitorBadge />
+        <RuntimeStatusEntry />
         <ThemeToggle />
       </div>
     </header>

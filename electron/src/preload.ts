@@ -143,6 +143,8 @@ const electronApi = {
     ipcRenderer.invoke(
       "runtime-status:get-report",
     ) as Promise<RuntimeStatusReport>,
+  copyRuntimeStatusText: (value: string) =>
+    ipcRenderer.invoke("runtime-status:copy-text", value) as Promise<boolean>,
   showRuntimeStatusNotification: (input: {
     capabilityId: RuntimeStatusCapabilityId;
     title: string;

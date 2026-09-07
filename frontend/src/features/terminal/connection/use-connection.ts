@@ -5,6 +5,7 @@ import { HttpError } from "../../../services/http";
 import { createTerminalWsTicket } from "../../../services/terminal/index";
 import {
   getTerminalReconnectDelay,
+  MAX_TERMINAL_RECONNECT_ATTEMPTS,
   MIN_TERMINAL_RECONNECT_LIFETIME_MS,
   shouldAutoReconnectTerminalClose,
 } from "./reconnect-policy";
@@ -93,6 +94,9 @@ export function useTerminalConnection(params: {
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
   const [manualReconnectNonce, setManualReconnectNonce] = useState(0);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [failureSince, setFailureSince] = useState<number | null>(null);
+  const [lastCloseReason, setLastCloseReason] = useState<string | null>(null);
 
   const setNextConnectionStatus = useMemoizedFn(
     (status: ConnectionStatus): void => {
@@ -173,10 +177,13 @@ export function useTerminalConnection(params: {
 
           connectedAtRef.current = Date.now();
           closeReasonRef.current = null;
+          setFailureSince(null);
+          setLastCloseReason(null);
           clearStableConnectionTimer();
           stableConnectionTimerRef.current = window.setTimeout(() => {
             if (socketRef.current === socket) {
               reconnectCountRef.current = 0;
+              setReconnectAttempt(0);
             }
             stableConnectionTimerRef.current = null;
           }, MIN_TERMINAL_RECONNECT_LIFETIME_MS);
@@ -222,6 +229,9 @@ export function useTerminalConnection(params: {
           });
 
           const closeReason = closeReasonRef.current || event.reason || null;
+          const failedAt = Date.now();
+          setFailureSince((current) => current ?? failedAt);
+          setLastCloseReason(closeReason);
           const reconnectAttempt = reconnectCountRef.current;
           if (
             !cancelled &&
@@ -235,6 +245,7 @@ export function useTerminalConnection(params: {
           ) {
             const delay = getTerminalReconnectDelay(reconnectAttempt);
             reconnectCountRef.current = reconnectAttempt + 1;
+            setReconnectAttempt(reconnectAttempt + 1);
             setNextConnectionStatus("connecting");
             clearReconnectTimer();
             reconnectTimerRef.current = window.setTimeout(() => {
@@ -244,6 +255,7 @@ export function useTerminalConnection(params: {
           }
 
           setNextConnectionStatus("closed");
+          setReconnectAttempt(MAX_TERMINAL_RECONNECT_ATTEMPTS);
           if (closeReasonRef.current || event.reason) {
             setError(
               closeReasonRef.current ||
@@ -346,7 +358,21 @@ export function useTerminalConnection(params: {
           error: String(error),
         });
         closeReasonRef.current = String(error);
+        setFailureSince((current) => current ?? Date.now());
+        setLastCloseReason(String(error));
         setError(String(error));
+        const reconnectAttempt = reconnectCountRef.current;
+        if (reconnectAttempt < MAX_TERMINAL_RECONNECT_ATTEMPTS) {
+          reconnectCountRef.current = reconnectAttempt + 1;
+          setReconnectAttempt(reconnectAttempt + 1);
+          setNextConnectionStatus("connecting");
+          clearReconnectTimer();
+          reconnectTimerRef.current = window.setTimeout(() => {
+            void connect();
+          }, getTerminalReconnectDelay(reconnectAttempt));
+          return;
+        }
+        setReconnectAttempt(MAX_TERMINAL_RECONNECT_ATTEMPTS);
         setNextConnectionStatus("closed");
       }
     };
@@ -393,6 +419,9 @@ export function useTerminalConnection(params: {
     terminalStatus,
     exitCode,
     runtimeKind,
+    reconnectAttempt,
+    failureSince,
+    lastCloseReason,
     error: inputError ?? error,
     sendInput: useMemoizedFn((data: string) => {
       outboundSequenceRef.current += 1;

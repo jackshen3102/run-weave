@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { RuntimeStatusItem } from "@runweave/shared/runtime-status";
 import type { Terminal } from "@xterm/xterm";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { TerminalState } from "@runweave/shared/terminal/state";
@@ -15,6 +16,8 @@ import { isSupportedFloatingComposerAgent } from "../../../features/terminal/inp
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useTerminalPromptInsertionStore } from "../../../features/terminal/input/prompt-store";
 import { useTerminalConnection } from "../../../features/terminal/connection/use-connection";
+import { MAX_TERMINAL_RECONNECT_ATTEMPTS } from "../../../features/terminal/connection/reconnect-policy";
+import { useRuntimeStatusItem } from "../../../features/runtime-status/use-runtime-status";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { scheduleTerminalViewportRefresh } from "../../../features/terminal/viewport/refresh";
 import { useTerminalSearch } from "./use-search";
@@ -149,7 +152,17 @@ export function TerminalSurface({
       websocketContentVersionRef,
     });
 
-  const { error, sendInput, sendResize, runtimeKind } = useTerminalConnection({
+  const {
+    connectionStatus,
+    error,
+    failureSince,
+    lastCloseReason,
+    reconnectAttempt,
+    sendInput,
+    sendResize,
+    runtimeKind,
+    terminalStatus: connectionTerminalStatus,
+  } = useTerminalConnection({
     apiBase,
     terminalSessionId,
     token,
@@ -157,6 +170,55 @@ export function TerminalSurface({
     onSnapshot,
     onOutput,
   });
+  const runtimeStatusItem = useMemo<RuntimeStatusItem>(() => {
+    const observedAt = Date.now();
+    const stopped =
+      sessionStatus === "exited" || connectionTerminalStatus === "exited";
+    const state = stopped
+      ? "disabled"
+      : connectionStatus === "connected"
+        ? "healthy"
+        : connectionStatus === "closed" &&
+            reconnectAttempt >= MAX_TERMINAL_RECONNECT_ATTEMPTS
+          ? "unhealthy"
+          : "recovering";
+    return {
+      id: `frontend.terminal.websocket:${terminalSessionId}`,
+      capabilityId: "terminal",
+      label: `Terminal ${terminalSessionId.slice(0, 8)}`,
+      state,
+      summary: stopped
+        ? "Terminal 已正常退出"
+        : state === "healthy"
+          ? "Terminal WebSocket 已连接"
+          : state === "unhealthy"
+            ? lastCloseReason || "Terminal WebSocket 重试已耗尽"
+            : "Terminal WebSocket 正在重连",
+      observedAt,
+      dependsOn: ["frontend.node.http", "frontend.node.auth"],
+      recovery:
+        state === "recovering" || state === "unhealthy"
+          ? {
+              startedAt: failureSince ?? observedAt,
+              attempt: reconnectAttempt,
+              maxAttempts: MAX_TERMINAL_RECONNECT_ATTEMPTS,
+              nextAttemptAt: null,
+              deadlineAt: null,
+            }
+          : null,
+      facts: [],
+      navigation: null,
+    };
+  }, [
+    connectionStatus,
+    failureSince,
+    lastCloseReason,
+    reconnectAttempt,
+    connectionTerminalStatus,
+    sessionStatus,
+    terminalSessionId,
+  ]);
+  useRuntimeStatusItem(runtimeStatusItem, runtimeStatusItem.id);
 
   const sendTerminalInput = useMemoizedFn((data: string): void => {
     const now = performance.now();

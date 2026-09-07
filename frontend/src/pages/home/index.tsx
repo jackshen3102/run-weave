@@ -1,7 +1,7 @@
 import { useMemoizedFn } from "ahooks";
 import { useNavigate } from "react-router-dom";
 import { Activity, Sparkles } from "lucide-react";
-import { RuntimeMonitorBadge } from "../../components/runtime-monitor-badge";
+import { RuntimeStatusEntry } from "../../components/runtime-status-entry";
 import { Button } from "../../components/ui/button";
 import { ChangePasswordDialog } from "./components/change-password-dialog";
 import { HomeHeader } from "./components/home-header";
@@ -141,7 +141,7 @@ export function HomePage({
               </Button>
             </div>
           </header>
-          <RuntimeMonitorBadge />
+          <RuntimeStatusEntry className="self-end" />
 
           {terminalError ? (
             <p className="text-sm text-red-500" role="alert">

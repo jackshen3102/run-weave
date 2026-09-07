@@ -1,6 +1,6 @@
 # Runweave 运行状态面板实施计划
 
-> 状态：需求与架构边界已确认，待实现
+> 状态：已实现并完成 required 验收
 > 粒度：L3（跨 shared、Backend、App Server、Electron、CLI、Frontend 与真实桌面验收）
 > 代码基线：`main@75938f19`
 > 配套测试计划：
@@ -295,39 +295,39 @@ Activity retention 等不直接造成当前用户功能失效的低风险循环�
 
 ### Phase 1：共享合同与纯聚合规则
 
-- [ ] 新建 `packages/shared/src/monitoring/runtime-status.ts`，实现上述 DTO、状态枚举、能力域顺序、
+- [x] 新建 `packages/shared/src/monitoring/runtime-status.ts`，实现上述 DTO、状态枚举、能力域顺序、
       状态严重度、报告过期判断、能力域聚合和因果抑制纯函数。
-- [ ] 修改 `packages/shared/package.json`，增加 `./runtime-status` 明确导出；不修改根 `src/index.ts`。
-- [ ] 在纯函数中保证输入不可变；对未知协议或未知状态返回 `unsupported`，不得抛错导致整个面板消失。
-- [ ] 给动态状态 ID 提供只做字符规范化的 helper，禁止把 cwd、URL token、chat ID 或消息文本编码进 ID。
+- [x] 修改 `packages/shared/package.json`，增加 `./runtime-status` 明确导出；不修改根 `src/index.ts`。
+- [x] 在纯函数中保证输入不可变；对未知协议或未知状态返回 `unsupported`，不得抛错导致整个面板消失。
+- [x] 给动态状态 ID 提供只做字符规范化的 helper，禁止把 cwd、URL token、chat ID 或消息文本编码进 ID。
 
 完成标准：所有运行时只从一个共享子路径取得状态合同；相同输入在 Backend 和 Frontend 得到相同的
 严重度、异常计数和受阻结果。
 
 ### Phase 2：Backend 注册表、HTTP API 与 Backend 拥有状态
 
-- [ ] 新建 `backend/src/runtime-status/registry.ts`：注册同步/异步 provider、合并当前报告、缓存最后成功
+- [x] 新建 `backend/src/runtime-status/registry.ts`：注册同步/异步 provider、合并当前报告、缓存最后成功
       报告、按接收时间判断外部来源过期，并在 `dispose()` 清理 provider timer。
-- [ ] 新建 `backend/src/runtime-status/provider.ts`：把 Backend 监听身份、Activity store、App Server
+- [x] 新建 `backend/src/runtime-status/provider.ts`：把 Backend 监听身份、Activity store、App Server
       consumer、Agent Team watchdog、Evolution runtime 和 Workspace Services 转为共享状态项。
-- [ ] 新建 `backend/src/routes/runtime-status.ts`：实现受认证的 GET 和 Feishu PUT；用严格 schema、来源
+- [x] 新建 `backend/src/routes/runtime-status.ts`：实现受认证的 GET 和 Feishu PUT；用严格 schema、来源
       allowlist、条目数/大小/长度限制校验输入，响应中不返回 token、环境变量、命令、cwd 或原始错误对象。
-- [ ] 修改 `backend/src/bootstrap/runtime-services.ts`：创建 `RuntimeStatusRegistry`，把它加入
+- [x] 修改 `backend/src/bootstrap/runtime-services.ts`：创建 `RuntimeStatusRegistry`，把它加入
       `RuntimeServices`，在各 service 构造完成后注册 provider；Activity 初始化失败保留现有降级并报告异常。
-- [ ] 修改 `backend/src/index.ts`：挂载 `/api/runtime-status`，监听成功后写入 Backend host/port/instance
+- [x] 修改 `backend/src/index.ts`：挂载 `/api/runtime-status`，监听成功后写入 Backend host/port/instance
       状态，shutdown 时 dispose registry。
-- [ ] 修改 `backend/src/app-server/event-consumer.ts`：公开只读连接快照，记录 connection、failureSince、
+- [x] 修改 `backend/src/app-server/event-consumer.ts`：公开只读连接快照，记录 connection、failureSince、
       reconnectAttempt、lastConnectedAt 和 lastErrorSummary；不改变游标与指数退避行为。
-- [ ] 修改 `backend/src/app-server/integration.ts`：无 App Server、初始化失败和连接成功都写入明确状态；
+- [x] 修改 `backend/src/app-server/integration.ts`：无 App Server、初始化失败和连接成功都写入明确状态；
       不新增自动安装或重启。
-- [ ] 新建 `backend/src/app-server/runtime-status-source.ts` 并修改
+- [x] 新建 `backend/src/app-server/runtime-status-source.ts` 并修改
       `backend/src/app-server/client.ts`：以 5 秒最小间隔拉取 App Server owner report，复用 in-flight 请求，
       失败时保留最后报告并让来源按 TTL 过期，不阻塞 Backend `/api/runtime-status` 超过 1 秒。
-- [ ] 修改 `backend/src/agent-team/service/recheck.ts`：只记录 watchdog 最近开始、完成和失败时间并提供
+- [x] 修改 `backend/src/agent-team/service/recheck.ts`：只记录 watchdog 最近开始、完成和失败时间并提供
       只读快照；业务 recheck timeout、重试次数与结果保持不变。
-- [ ] 修改 `backend/src/evolution/runtime.ts`：区分 maintenance freshness 与 active run lease heartbeat；
+- [x] 修改 `backend/src/evolution/runtime.ts`：区分 maintenance freshness 与 active run lease heartbeat；
       长时间正常执行不能因 maintenance 尚未结束被误判为 stale。
-- [ ] 修改 `backend/src/terminal/workspace-service/manager.ts`：增加脱敏状态投影；只返回 project/context
+- [x] 修改 `backend/src/terminal/workspace-service/manager.ts`：增加脱敏状态投影；只返回 project/context
       identity、服务名、稳定 URL、目标端口、状态与既有错误码，不返回 command/cwd。
 
 完成标准：一个已认证客户端能从 Backend 得到 Backend 与 App Server 报告；来源失联后保留最后值并
@@ -337,41 +337,41 @@ Activity retention 等不直接造成当前用户功能失效的低风险循环�
 
 #### App Server
 
-- [ ] 新建 `app-server/src/runtime-status.ts`：从 Event Center、Cloud Sync 和 reconciler 只读状态构造
+- [x] 新建 `app-server/src/runtime-status.ts`：从 Event Center、Cloud Sync 和 reconciler 只读状态构造
       App Server owner report，报告有效期 15 秒。
-- [ ] 修改 `app-server/src/state/reconciler.ts`：记录最近一轮开始、完成、错误摘要和是否运行；首轮前
+- [x] 修改 `app-server/src/state/reconciler.ts`：记录最近一轮开始、完成、错误摘要和是否运行；首轮前
       `recovering`，90 秒无完成后才 `unhealthy`。
-- [ ] 修改 `app-server/src/server/http.ts`：在现有 bearer token 之后增加 `GET /runtime-status`；保持
+- [x] 修改 `app-server/src/server/http.ts`：在现有 bearer token 之后增加 `GET /runtime-status`；保持
       `/healthz`、`/readyz` 与事件 API 不变。
-- [ ] 修改 `app-server/src/index.ts`：把 reconciler 和 Event Center 注入状态 provider；shutdown 后不再
+- [x] 修改 `app-server/src/index.ts`：把 reconciler 和 Event Center 注入状态 provider；shutdown 后不再
       产生新报告。
 
 #### Feishu Bridge
 
-- [ ] 新建 `packages/runweave-cli/src/feishu/runtime-status.ts`：维护一个脱敏 report builder，并通过现有
+- [x] 新建 `packages/runweave-cli/src/feishu/runtime-status.ts`：维护一个脱敏 report builder，并通过现有
       `AuthContext.requestJson` PUT 到当前 Backend；同一时刻最多一个上报请求，失败不阻塞 Bridge 主循环。
-- [ ] 修改 `packages/runweave-cli/src/commands/feishu.ts`：配置校验和 lease 成功后初始化 reporter；正常
+- [x] 修改 `packages/runweave-cli/src/commands/feishu.ts`：配置校验和 lease 成功后初始化 reporter；正常
       SIGINT/SIGTERM 最后尝试上报 `disabled`，异常退出依靠 Backend TTL 判定 owner 丢失。
-- [ ] 修改 `packages/runweave-cli/src/feishu/bridge-runtime.ts`：Lark 回调、15 秒检查和 Backend verify
+- [x] 修改 `packages/runweave-cli/src/feishu/bridge-runtime.ts`：Lark 回调、15 秒检查和 Backend verify
       更新 owner 状态；保留 120 秒重建策略，但 continuous failure 起点只在真正 connected 后清零。
-- [ ] 报告不得包含 `FEISHU_APP_SECRET`、App ID、目标 chat ID、open ID、消息内容或 delivery 结果。
+- [x] 报告不得包含 `FEISHU_APP_SECRET`、App ID、目标 chat ID、open ID、消息内容或 delivery 结果。
 
 #### Electron
 
-- [ ] 新建 `electron/src/desktop/connection-address.ts`：从当前 packaged Backend URL 取得端口，枚举非
+- [x] 新建 `electron/src/desktop/connection-address.ts`：从当前 packaged Backend URL 取得端口，枚举非
       internal IPv4；优先默认路由对应的私网接口，排除 loopback、link-local 和 `utun`/虚拟接口，保留
       其余候选供抽屉展示。无法可靠选择时不伪造 primary，只表达“仅本机可用”。
-- [ ] 新建 `electron/src/monitoring/runtime-status.ts`：从 packaged Backend state、CDP Proxy、Companion
+- [x] 新建 `electron/src/monitoring/runtime-status.ts`：从 packaged Backend state、CDP Proxy、Companion
       和 Profile runtime 生成 Electron report，并注册 `getRuntimeStatusReport` 与系统通知 IPC。
-- [ ] 修改 `electron/src/companion/agent.ts`：暴露 desired/running/ready/restart/failureSince 的只读快照；
+- [x] 修改 `electron/src/companion/agent.ts`：暴露 desired/running/ready/restart/failureSince 的只读快照；
       保留现有启动、停止和重启逻辑。
-- [ ] 修改 `electron/src/main.ts`：注册 status handlers，并通过 getter 注入当前主窗口、Companion 与
+- [x] 修改 `electron/src/main.ts`：注册 status handlers，并通过 getter 注入当前主窗口、Companion 与
       `desktopRuntime`；不让 handler持有第二份生命周期状态。
-- [ ] 修改 `electron/src/preload.ts` 与 `packages/shared/src/desktop/bridge.ts`：增加窄 IPC 合同；Frontend
+- [x] 修改 `electron/src/preload.ts` 与 `packages/shared/src/desktop/bridge.ts`：增加窄 IPC 合同；Frontend
       继续只能通过 `window.electronAPI` 访问。
-- [ ] 修改 `electron/src/backend/packaged/controller.ts`：移除启动时“App Server 没有启动”的阻塞 dialog，
+- [x] 修改 `electron/src/backend/packaged/controller.ts`：移除启动时“App Server 没有启动”的阻塞 dialog，
       让同一异常由状态入口、抽屉和一次非阻塞提醒表达。
-- [ ] 修改 `electron/src/desktop/runtime-state.ts`：删除仅服务旧 dialog 去重的
+- [x] 修改 `electron/src/desktop/runtime-state.ts`：删除仅服务旧 dialog 去重的
       `appServerUnavailableDialogShown`；其它 Backend reload/error dialog 行为保持不变。
 
 完成标准：每个外部/本地 owner 都能提供共享报告；报告失败不阻塞原业务；Electron 不暴露 Node API
@@ -379,41 +379,41 @@ Activity retention 等不直接造成当前用户功能失效的低风险循环�
 
 ### Phase 4：Frontend 合并、入口、抽屉与提醒
 
-- [ ] 新建 `frontend/src/services/runtime-status.ts`：实现 Backend health、受认证 status GET 和手动
+- [x] 新建 `frontend/src/services/runtime-status.ts`：实现 Backend health、受认证 status GET 和手动
       refresh；区分 401、404/旧版本、timeout 与一般网络失败。
-- [ ] 新建 `frontend/src/features/runtime-status/registry.ts`：保存 Frontend owner 状态、Electron 报告、
+- [x] 新建 `frontend/src/features/runtime-status/registry.ts`：保存 Frontend owner 状态、Electron 报告、
       本机/当前 Backend 最后快照；按共享纯函数处理 TTL、节点去重、能力聚合和因果抑制。Electron 的
       `local-host` 报告绑定到已识别的本机 Backend；Backend 尚不可达时先展示独立本机卡，身份恢复后合并，
       不产生重复告警。
-- [ ] 新建 `frontend/src/features/runtime-status/provider.tsx` 和
+- [x] 新建 `frontend/src/features/runtime-status/provider.tsx` 和
       `frontend/src/features/runtime-status/use-runtime-status.ts`：在 `App.tsx` 只启动一套 5 秒 polling；隐藏
       页面仍保持低频 15 秒 polling 以支持后台提醒，手动检查立即执行且复用 in-flight 请求。
-- [ ] 修改 `frontend/src/App.tsx`：把 connections、active connection、token、client mode 和 Electron
+- [x] 修改 `frontend/src/App.tsx`：把 connections、active connection、token、client mode 和 Electron
       bridge 注入全局 provider；Desktop 只轮询本机与当前节点，Web/PWA 只轮询当前节点。
-- [ ] 本机不是当前连接时，从本地 system connection 的独立 auth store 读取本机 token；没有本机会话
+- [x] 本机不是当前连接时，从本地 system connection 的独立 auth store 读取本机 token；没有本机会话
       时仍使用 `/health` 判断地址与身份，详细 Backend 项显示 `blocked`，不得借用远程 token。
-- [ ] 修改 `frontend/src/features/terminal/connection/use-connection.ts`：暴露 reconnect attempt、
+- [x] 修改 `frontend/src/features/terminal/connection/use-connection.ts`：暴露 reconnect attempt、
       failureSince 和退出原因；修改 `frontend/src/components/terminal/surface/surface.tsx`，为每个仍运行的
       Terminal 注册 WS 状态，复用现有 5 次重试策略。
-- [ ] 修改 `frontend/src/features/terminal/connection/use-events.ts` 与
+- [x] 修改 `frontend/src/features/terminal/connection/use-events.ts` 与
       `frontend/src/components/terminal/workspace/events.ts`：注册 terminal-events 状态；socket open 不等于
       healthy，只有服务端 `connected` 才清除 failure window。
-- [ ] 新建 `frontend/src/components/runtime-status-entry.tsx`：渲染地址、整体色彩和异常能力域数字；地址
+- [x] 新建 `frontend/src/components/runtime-status-entry.tsx`：渲染地址、整体色彩和异常能力域数字；地址
       子按钮只复制，外层按钮只开抽屉，键盘焦点与 aria-label 分开。
-- [ ] 新建 `frontend/src/components/runtime-status-panel.tsx`：使用 `components/ui/sheet.tsx` 渲染节点卡、
+- [x] 新建 `frontend/src/components/runtime-status-panel.tsx`：使用 `components/ui/sheet.tsx` 渲染节点卡、
       能力域和状态项；支持重新检查、复制事实和允许的应用内导航。
-- [ ] 新建 `frontend/src/components/runtime-status-notice.tsx`：记录 capability 从非异常到异常的转移；
+- [x] 新建 `frontend/src/components/runtime-status-notice.tsx`：记录 capability 从非异常到异常的转移；
       首次快照不提示，前台显示自动消失的非阻塞 notice，后台调用 Electron notification IPC。
-- [ ] 删除 `frontend/src/components/runtime-monitor-badge.tsx` 的 Dropdown 实现；将资源摘要作为抽屉次级
+- [x] 删除 `frontend/src/components/runtime-monitor-badge.tsx` 的 Dropdown 实现；将资源摘要作为抽屉次级
       区域继续复用 `useElectronRuntimeStats`，确认无 import 后再删除旧组件文件。
-- [ ] 修改 `frontend/src/pages/home/components/home-header.tsx`、`frontend/src/pages/home/index.tsx`、
+- [x] 修改 `frontend/src/pages/home/components/home-header.tsx`、`frontend/src/pages/home/index.tsx`、
       `frontend/src/components/terminal/workspace/header.tsx`、
       `frontend/src/pages/activity/activity-page-panels.tsx`、
       `frontend/src/pages/evolution/evolution-page-panels.tsx`、`frontend/src/pages/prototypes-page.tsx` 和
       `frontend/src/pages/system-monitor-page.tsx`，在各自主 header 右侧使用同一 `RuntimeStatusEntry`；避免
       fixed overlay 遮挡现有操作。修改 `frontend/src/components/connection-page.tsx` 和
       `frontend/src/components/login-page.tsx`，只显示能够无认证取得的精简节点状态。
-- [ ] 所有跨页面稳定函数使用 `ahooks/useMemoizedFn`；不为 polling、copy 或 notice handler 引入新的
+- [x] 所有跨页面稳定函数使用 `ahooks/useMemoizedFn`；不为 polling、copy 或 notice handler 引入新的
       `useCallback`。
 
 完成标准：主要页面只有一个一致的运行状态入口；本机/当前节点视图、状态颜色、异常计数、复制、
@@ -421,14 +421,14 @@ Activity retention 等不直接造成当前用户功能失效的低风险循环�
 
 ### Phase 5：活文档与验收
 
-- [ ] 实现完成时新建 `docs/architecture/runtime-status.md`，只描述已经落地的状态拥有权、数据流、API、
+- [x] 实现完成时新建 `docs/architecture/runtime-status.md`，只描述已经落地的状态拥有权、数据流、API、
       状态机、安全边界和扩展方式；更新 `docs/architecture/README.md` 索引。
-- [ ] 更新 `docs/architecture/network-topology.md`，加入受认证 status GET 和 Feishu report PUT；明确
+- [x] 更新 `docs/architecture/network-topology.md`，加入受认证 status GET 和 Feishu report PUT；明确
       没有新增状态 WebSocket。
-- [ ] 更新 `docs/architecture/system-monitor.md`，说明资源监控与运行状态异常计数的边界。
-- [ ] 保留 `CONTEXT.md` 与 ADR-0001/0002 作为术语与架构取舍；实现与 ADR 不一致时先修实现，不改写
+- [x] 更新 `docs/architecture/system-monitor.md`，说明资源监控与运行状态异常计数的边界。
+- [x] 保留 `CONTEXT.md` 与 ADR-0001/0002 作为术语与架构取舍；实现与 ADR 不一致时先修实现，不改写
       已接受决定来迁就代码。
-- [ ] 使用两份 YAML 计划执行真实 provider 与 UI 验收；执行由 `$toolkit:run-test-cases` 负责，本计划
+- [x] 使用两份 YAML 计划执行真实 provider 与 UI 验收；执行由 `$toolkit:run-test-cases` 负责，本计划
       只编写合同，不在计划阶段运行用例。
 
 ## 文件范围

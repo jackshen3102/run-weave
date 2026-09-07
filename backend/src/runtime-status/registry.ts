@@ -60,6 +60,34 @@ export class RuntimeStatusRegistry {
     const externalReports = [...this.externalReports.values()].map((stored) =>
       expireRuntimeStatusReport(stored.report, stored.receivedAt, now),
     );
+    if (!this.externalReports.has("feishu-bridge")) {
+      externalReports.push({
+        protocolVersion: 1,
+        target: { kind: "node", nodeId: this.serviceInstanceId },
+        source: {
+          id: "feishu-bridge",
+          runtime: "feishu-bridge",
+          instanceId: "feishu-bridge:unconfigured",
+          capabilityId: "feishu",
+        },
+        observedAt: now,
+        validForMs: 15_000,
+        items: [
+          {
+            id: "feishu.configuration",
+            capabilityId: "feishu",
+            label: "飞书配置",
+            state: "unconfigured",
+            summary: "尚未收到飞书 Bridge 状态",
+            observedAt: now,
+            dependsOn: ["backend.process"],
+            recovery: null,
+            facts: [],
+            navigation: null,
+          },
+        ],
+      });
+    }
     return {
       protocolVersion: 1,
       generatedAt: now,

@@ -3,6 +3,7 @@ import type { TerminalPrototypeGallerySource } from "@runweave/shared/terminal/p
 import { ArrowLeft, PanelsTopLeft } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { PrototypeGallery } from "../components/prototypes/prototype-gallery";
+import { RuntimeStatusEntry } from "../components/runtime-status-entry";
 
 interface PrototypesPageProps {
   apiBase: string;
@@ -67,6 +68,7 @@ export function PrototypesPage({
             Project prototype library
           </p>
         </div>
+        <RuntimeStatusEntry className="ml-auto h-7 max-w-[18rem] border-slate-700 bg-slate-900 text-slate-300" />
       </header>
       <div className="min-h-0 flex-1">
         <PrototypeGallery

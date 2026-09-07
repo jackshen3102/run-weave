@@ -1,11 +1,13 @@
 import { useDebounceFn, useMemoizedFn } from "ahooks";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import type { RuntimeStatusItem } from "@runweave/shared/runtime-status";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { createTerminalBellPlayer } from "../../../features/terminal/feedback/bell";
 import { useShallow } from "zustand/react/shallow";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { useTerminalEventsConnection } from "../../../features/terminal/connection/use-events";
+import { useRuntimeStatusItem } from "../../../features/runtime-status/use-runtime-status";
 import {
   EMPTY_TERMINAL_SESSIONS,
   updateTerminalSessions,
@@ -336,7 +338,7 @@ export function useTerminalWorkspaceEvents({
     void loadSessions();
   });
 
-  useTerminalEventsConnection({
+  const terminalEventsConnection = useTerminalEventsConnection({
     apiBase,
     token,
     getCursor: getCompletionEventCursor,
@@ -345,6 +347,51 @@ export function useTerminalWorkspaceEvents({
     onResyncRequired: resyncTerminalWorkspace,
     onTerminalEvents: applyTerminalEvents,
   });
+  const runtimeStatusItem = useMemo<RuntimeStatusItem>(() => {
+    const observedAt = Date.now();
+    const state =
+      terminalEventsConnection.connectionStatus === "connected"
+        ? "healthy"
+        : terminalEventsConnection.failureExpired
+          ? "unhealthy"
+          : terminalEventsConnection.failureSince === null
+            ? "checking"
+            : "recovering";
+    return {
+      id: "frontend.terminal-events.websocket",
+      capabilityId: "terminal",
+      label: "Terminal events",
+      state,
+      summary:
+        state === "healthy"
+          ? "Terminal 事件流已收到服务端 connected"
+          : state === "unhealthy"
+            ? terminalEventsConnection.error || "Terminal 事件流持续未连接"
+            : "等待 Terminal 事件流服务端确认",
+      observedAt,
+      dependsOn: ["frontend.node.http", "frontend.node.auth"],
+      recovery:
+        state === "recovering" || state === "unhealthy"
+          ? {
+              startedAt: terminalEventsConnection.failureSince ?? observedAt,
+              attempt: terminalEventsConnection.reconnectAttempt,
+              maxAttempts: null,
+              nextAttemptAt: null,
+              deadlineAt:
+                (terminalEventsConnection.failureSince ?? observedAt) + 30_000,
+            }
+          : null,
+      facts: [],
+      navigation: null,
+    };
+  }, [
+    terminalEventsConnection.connectionStatus,
+    terminalEventsConnection.error,
+    terminalEventsConnection.failureExpired,
+    terminalEventsConnection.failureSince,
+    terminalEventsConnection.reconnectAttempt,
+  ]);
+  useRuntimeStatusItem(runtimeStatusItem, runtimeStatusItem.id);
 
   return { resetTerminalEventCursor };
 }

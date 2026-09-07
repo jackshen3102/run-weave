@@ -6,6 +6,7 @@ import { useAttentionOpenIntents } from "./features/attention/use-attention-open
 import { useDesktopCompanionHost } from "./features/attention/use-desktop-companion-host";
 import { DevSessionBackendGuard } from "./features/dev-session-backend-guard";
 import { useClientMode } from "./features/use-client-mode";
+import { RuntimeStatusProvider } from "./features/runtime-status/provider";
 import {
   buildConnectionQueryScope,
   ConnectionQueryProvider,
@@ -89,7 +90,13 @@ export default function App() {
 
   return (
     <DevSessionBackendGuard>
-      <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
+      <RuntimeStatusProvider
+        apiBase={apiBase}
+        token={token}
+        connections={connections}
+        isElectron={isElectron}
+      >
+        <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
         <Routes>
           <Route
             path="/system-monitor"
@@ -336,7 +343,8 @@ export default function App() {
             }
           />
         </Routes>
-      </ConnectionQueryProvider>
+        </ConnectionQueryProvider>
+      </RuntimeStatusProvider>
     </DevSessionBackendGuard>
   );
 }

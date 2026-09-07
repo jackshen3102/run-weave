@@ -1,4 +1,4 @@
-import { BrowserWindow, Notification, ipcMain } from "electron";
+import { BrowserWindow, Notification, clipboard, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
 import {
   isRuntimeStatusCapabilityId,
@@ -19,10 +19,13 @@ const electronInstanceId =
 export function buildElectronRuntimeStatusReport(options: {
   companion: DesktopCompanionAgent | null;
   companionEnabled: boolean;
+  managesPackagedBackend?: boolean;
   now?: number;
 }): RuntimeStatusReport {
   const now = options.now ?? Date.now();
   const backend = desktopRuntime.packagedBackendState;
+  const backendAvailable =
+    options.managesPackagedBackend === false || backend.available;
   const addresses = resolveLocalConnectionAddresses(backend.backendUrl);
   const addressFacts: RuntimeStatusFact[] = [];
   if (addresses.primary) {
@@ -69,12 +72,16 @@ export function buildElectronRuntimeStatusReport(options: {
       ...item(
         "electron.packaged-backend",
         "Packaged Backend",
-        backend.available
+        options.managesPackagedBackend === false
+          ? "disabled"
+          : backend.available
           ? "healthy"
           : desktopRuntime.packagedBackendRestartPromise
             ? "recovering"
             : "unhealthy",
-        backend.available
+        options.managesPackagedBackend === false
+          ? "Backend 由外部 Dev Session 管理"
+          : backend.available
           ? "本机 Backend 已就绪"
           : desktopRuntime.packagedBackendRestartPromise
             ? "本机 Backend 正在启动"
@@ -97,17 +104,20 @@ export function buildElectronRuntimeStatusReport(options: {
       ...item(
         "electron.local-network",
         "Local network",
-        !backend.available
+        !backendAvailable
           ? "blocked"
           : addresses.primary
             ? "healthy"
             : "unhealthy",
-        backend.available && addresses.primary
+        backendAvailable && addresses.primary
           ? "局域网地址可用"
           : "仅本机可用",
         now,
       ),
-      dependsOn: ["electron.packaged-backend"],
+      dependsOn:
+        options.managesPackagedBackend === false
+          ? []
+          : ["electron.packaged-backend"],
       facts: addressFacts,
     },
     {
@@ -206,7 +216,17 @@ export function registerRuntimeStatusHandlers(options: {
     return buildElectronRuntimeStatusReport({
       companion: options.getCompanion(),
       companionEnabled: options.isCompanionEnabled(),
+      managesPackagedBackend:
+        process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND?.trim() !== "false",
     });
+  });
+  ipcMain.handle("runtime-status:copy-text", (event, value: unknown): boolean => {
+    requireMainRenderer(event.sender.id);
+    if (typeof value !== "string" || value.length === 0 || value.length > 2_048) {
+      throw new Error("Invalid runtime status copy value");
+    }
+    clipboard.writeText(value);
+    return true;
   });
   ipcMain.handle("runtime-status:notify", (event, input: unknown): boolean => {
     const mainWindow = requireMainRenderer(event.sender.id);
