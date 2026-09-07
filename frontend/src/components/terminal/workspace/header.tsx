@@ -38,6 +38,7 @@ import {
 import { TerminalProjectTabBar } from "../session/project-tab-bar";
 import { TerminalQuickInputPopover } from "../input/quick-input-popover";
 import { TerminalWorkspaceServicesPopover } from "./workspace-services-popover";
+import { RuntimeStatusEntry } from "../../runtime-status-entry";
 
 interface HeaderConnectionNavigation {
   connections?: ConnectionConfig[];
@@ -231,6 +232,7 @@ export function TerminalWorkspaceHeader({
           disabled={loading}
         />
       ) : null}
+      <RuntimeStatusEntry className="ml-auto h-6 max-w-[18rem] border-slate-700 bg-slate-900 text-slate-300" />
       {!isMobileMonitor ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

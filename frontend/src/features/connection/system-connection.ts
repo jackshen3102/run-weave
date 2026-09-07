@@ -7,7 +7,8 @@ export function shouldExposeLocalDevelopmentConnection(
   isElectron: boolean,
   managesPackagedBackend: boolean,
 ): boolean {
-  return isElectron && managesPackagedBackend;
+  return isElectron &&
+    (managesPackagedBackend || Boolean(window.electronAPI?.backendUrl));
 }
 
 export function buildLocalDevelopmentConnection(

@@ -28,9 +28,23 @@ function getInitialPackagedBackendState(): PackagedBackendConnectionState | null
     available: Boolean(electronBackendUrl),
     backendUrl: electronBackendUrl,
     statusMessage: electronBackendUrl ? null : "内置本地后端不可用",
-    canReconnect: true,
+    canReconnect: managesPackagedBackend,
     runtimeSource: null,
     runtimeReleaseId: null,
+  };
+}
+
+function normalizeDesktopBackendState(
+  state: PackagedBackendConnectionState,
+): PackagedBackendConnectionState {
+  if (managesPackagedBackend) return state;
+  const backendUrl = state.backendUrl || electronBackendUrl;
+  return {
+    ...state,
+    available: Boolean(backendUrl),
+    backendUrl,
+    statusMessage: backendUrl ? null : state.statusMessage,
+    canReconnect: false,
   };
 }
 
@@ -111,12 +125,12 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     let disposed = false;
     const electronApi = window.electronAPI;
     const unsubscribe = electronApi?.onPackagedBackendStateChange?.((state) => {
-      setPackagedBackendState(state);
+      setPackagedBackendState(normalizeDesktopBackendState(state));
     });
 
     void electronApi?.getPackagedBackendState?.().then((state) => {
       if (!disposed) {
-        setPackagedBackendState(state);
+        setPackagedBackendState(normalizeDesktopBackendState(state));
       }
     });
 
@@ -242,8 +256,9 @@ export function useConnections(storageKey: string): UseConnectionsResult {
       return false;
     }
 
-    setPackagedBackendState(nextState);
-    return nextState.available;
+    const normalized = normalizeDesktopBackendState(nextState);
+    setPackagedBackendState(normalized);
+    return normalized.available;
   });
 
   return isElectron

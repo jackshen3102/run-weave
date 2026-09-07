@@ -16,7 +16,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import type { TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { RuntimeMonitorBadge } from "./runtime-monitor-badge";
+import { RuntimeStatusEntry } from "./runtime-status-entry";
 import { filterBrowserHandledTerminalOutput } from "../features/terminal/output/filter";
 import { formatTerminalSessionName } from "../features/terminal/state/session-name";
 import { useTerminalConnection } from "../features/terminal/connection/use-connection";
@@ -331,7 +331,7 @@ export function TerminalPage({
               <span>{renderedConnectionStatus}</span>
             </div>
           </div>
-          <RuntimeMonitorBadge />
+          <RuntimeStatusEntry />
         </div>
       </header>
       <main className="flex min-h-0 flex-1 flex-col gap-4 p-6">

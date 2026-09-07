@@ -116,6 +116,7 @@ export interface RunweaveElectronBridge {
   getRuntimeStats: () => Promise<RuntimeStatsSnapshot>;
   getSystemMonitorSnapshot: () => Promise<SystemMonitorSnapshot>;
   getRuntimeStatusReport: () => Promise<RuntimeStatusReport>;
+  copyRuntimeStatusText: (value: string) => Promise<boolean>;
   showRuntimeStatusNotification: (input: {
     capabilityId: RuntimeStatusCapabilityId;
     title: string;

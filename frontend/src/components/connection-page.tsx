@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import type { ConnectionConfig } from "../features/connection/types";
 import { shouldShowReconnectAction } from "../features/connection/system-connection";
+import { RuntimeStatusEntry } from "./runtime-status-entry";
 
 interface ConnectionPageProps {
   connections: ConnectionConfig[];
@@ -120,6 +121,7 @@ export function ConnectionPage({
             </Button>
           )}
         </div>
+        <RuntimeStatusEntry className="mt-4 max-w-full" />
 
         {showForm && (
           <div className="mt-6 space-y-4">

@@ -6,6 +6,7 @@ import { HttpError } from "../services/http";
 import { login as loginWithPassword } from "../services/auth";
 import { cleanupLegacyAuthStorage } from "../features/auth/storage";
 import type { LoginResponse } from "@runweave/shared/protocol";
+import { RuntimeStatusEntry } from "./runtime-status-entry";
 
 interface LoginPageProps {
   apiBase: string;
@@ -67,6 +68,7 @@ export function LoginPage({
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.38em] text-muted-foreground/70">
             Runweave
           </p>
+          <RuntimeStatusEntry className="max-w-56" />
           {isElectron && connectionName && onSwitchConnection && onOpenConnectionManager ? (
             <ConnectionSwitcher
               connections={connections}

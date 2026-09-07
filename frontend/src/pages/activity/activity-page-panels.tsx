@@ -9,6 +9,7 @@ import type {
 } from "@runweave/shared/activity";
 import { terminalPreviewFormatBytes } from "@runweave/shared/terminal-preview-core";
 import { Button } from "../../components/ui/button";
+import { RuntimeStatusEntry } from "../../components/runtime-status-entry";
 import {
   Select,
   SelectContent,
@@ -196,6 +197,7 @@ export function ActivityHeader({
         </div>
       </div>
       <div className="flex gap-2">
+        <RuntimeStatusEntry className="max-md:max-w-40" />
         <label className="flex h-9 min-w-72 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm max-lg:min-w-0 max-lg:flex-1">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { SystemMonitorAppGroup, SystemMonitorProcess, SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
 import { Button } from "../components/ui/button";
+import { RuntimeStatusEntry } from "../components/runtime-status-entry";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -314,6 +315,7 @@ export function SystemMonitorPage({ onNavigateHome }: SystemMonitorPageProps) {
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <RuntimeStatusEntry />
             {onNavigateHome ? (
               <Button variant="ghost" size="sm" onClick={onNavigateHome}>
                 <Home className="mr-2 h-4 w-4" />

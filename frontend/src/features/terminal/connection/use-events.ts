@@ -56,6 +56,8 @@ export function useTerminalEventsConnection(params: {
   const tokenRef = useRef(token);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectCountRef = useRef(0);
+  const failureSinceRef = useRef<number | null>(null);
+  const failureTimerRef = useRef<number | null>(null);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const closeReasonRef = useRef<string | null>(null);
   const lastConnectionCursorRef = useRef<string | null>(null);
@@ -67,6 +69,9 @@ export function useTerminalEventsConnection(params: {
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [failureSince, setFailureSince] = useState<number | null>(null);
+  const [failureExpired, setFailureExpired] = useState(false);
 
   useEffect(() => {
     tokenRef.current = token;
@@ -122,9 +127,37 @@ export function useTerminalEventsConnection(params: {
   useEffect(() => {
     setConnectionStatus("connecting");
     setError(null);
+    setFailureExpired(false);
     seenEventIdsRef.current = new Set();
     lastConnectionCursorRef.current = null;
     let cancelled = false;
+    const clearFailureTimer = (): void => {
+      if (failureTimerRef.current !== null) {
+        window.clearTimeout(failureTimerRef.current);
+        failureTimerRef.current = null;
+      }
+    };
+    const beginFailureWindow = (): void => {
+      if (failureSinceRef.current !== null) return;
+      const startedAt = Date.now();
+      failureSinceRef.current = startedAt;
+      setFailureSince(startedAt);
+      clearFailureTimer();
+      failureTimerRef.current = window.setTimeout(() => {
+        failureTimerRef.current = null;
+        setFailureExpired(true);
+      }, 30_000);
+    };
+    const markServerConnected = (): void => {
+      failureSinceRef.current = null;
+      setFailureSince(null);
+      setFailureExpired(false);
+      reconnectCountRef.current = 0;
+      setReconnectAttempt(0);
+      clearFailureTimer();
+      setConnectionStatus("connected");
+    };
+    beginFailureWindow();
 
     const clearReconnectTimer = (): void => {
       if (reconnectTimerRef.current === null) {
@@ -175,8 +208,7 @@ export function useTerminalEventsConnection(params: {
             return;
           }
           closeReasonRef.current = null;
-          setConnectionStatus("connected");
-          reconnectCountRef.current = 0;
+          setConnectionStatus("connecting");
         });
 
         socket.addEventListener("close", (event) => {
@@ -192,8 +224,10 @@ export function useTerminalEventsConnection(params: {
           }
 
           if (!cancelled) {
+            beginFailureWindow();
             const reconnectAttempt = reconnectCountRef.current;
             reconnectCountRef.current = reconnectAttempt + 1;
+            setReconnectAttempt(reconnectAttempt + 1);
             setConnectionStatus("connecting");
             clearReconnectTimer();
             reconnectTimerRef.current = window.setTimeout(() => {
@@ -231,6 +265,7 @@ export function useTerminalEventsConnection(params: {
               if (parsed.gap) {
                 resetEventStream();
               }
+              markServerConnected();
               return;
             }
             if (parsed.type === "terminal-events") {
@@ -264,8 +299,10 @@ export function useTerminalEventsConnection(params: {
         }
 
         setError(String(error));
+        beginFailureWindow();
         const reconnectAttempt = reconnectCountRef.current;
         reconnectCountRef.current = reconnectAttempt + 1;
+        setReconnectAttempt(reconnectAttempt + 1);
         clearReconnectTimer();
         reconnectTimerRef.current = window.setTimeout(() => {
           void connect();
@@ -282,6 +319,8 @@ export function useTerminalEventsConnection(params: {
       window.clearTimeout(connectTimer);
       clearReconnectTimer();
       reconnectCountRef.current = 0;
+      failureSinceRef.current = null;
+      clearFailureTimer();
       closeReasonRef.current = null;
       socketRef.current?.close();
       socketRef.current = null;
@@ -291,5 +330,8 @@ export function useTerminalEventsConnection(params: {
   return {
     connectionStatus,
     error,
+    reconnectAttempt,
+    failureSince,
+    failureExpired,
   };
 }
