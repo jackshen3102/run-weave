@@ -9,10 +9,19 @@ struct ShortcutBar: View {
   ]
 
   var body: some View {
-    HStack {
+    HStack(spacing: 6) {
       ForEach(keys, id: \.0) { key in
-        Button(key.0) { controller.sendRaw(key.1) }.frame(maxWidth: .infinity)
+        Button(key.0 == "Ctrl-C" ? "^C" : key.0 == "Enter" ? "↵" : key.0) {
+          controller.sendRaw(key.1)
+        }
+        .font(.system(.caption, design: .monospaced))
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .background(TerminalAppearance.panel)
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(TerminalAppearance.border))
+        .accessibilityLabel(key.0)
       }
-    }.disabled(!enabled || !controller.canSend).padding(.horizontal)
+    }.buttonStyle(.plain).foregroundColor(.secondary)
+      .disabled(!enabled || !controller.canSend)
   }
 }

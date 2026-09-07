@@ -11,7 +11,6 @@ struct TerminalScreen: View {
   @State private var requestedChange: SelectedFile?
   @State private var changesCount = 0
   @AppStorage("native.theme") private var theme = "dark"
-  @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   private var currentTerminal: HomeTerminal? {
     session.overview?.sessions.first { $0.id == details.id }
@@ -32,25 +31,18 @@ struct TerminalScreen: View {
     return controller.connectionStatus
   }
 
+  private var projectName: String {
+    session.overview?.projects.first {
+      $0.id == HomeOverview.parentProjectID(details.projectId)
+    }?.name ?? (cwd as NSString).lastPathComponent
+  }
+
   var body: some View {
-    VStack(spacing: 6) {
-      HStack(alignment: .top) {
-        Text(cwd).lineLimit(1).truncationMode(.middle)
-        Spacer()
-        Text(status)
-        if let terminal = currentTerminal { Text(terminal.relativeTime) }
-      }.font(.caption).foregroundColor(.secondary).padding(.horizontal)
+    VStack(spacing: 0) {
       if let error = session.error {
         Text(error).font(.caption).foregroundColor(.red).padding(.horizontal)
       }
-      HStack {
-        ForEach(["Chat", "Changes", "Files"], id: \.self) { value in
-          Button(value == "Changes" ? "Changes (\(changesCount))" : value) {
-            controller.surface.view.window?.endEditing(true)
-            tab = value
-          }.font(.body.weight(tab == value ? .bold : .regular)).frame(maxWidth: .infinity)
-        }
-      }.padding(.horizontal)
+      tabs
       ZStack {
         chat.opacity(tab == "Chat" ? 1 : 0).allowsHitTesting(tab == "Chat").accessibilityHidden(
           tab != "Chat")
@@ -68,6 +60,9 @@ struct TerminalScreen: View {
           tab != "Files")
       }
     }
+    .background(TerminalAppearance.background.ignoresSafeArea())
+    .tint(TerminalAppearance.accent)
+    .modifier(TerminalNavigationBackground())
     .onAppear { controller.surface.applyTheme(dark: theme != "light") }
     .onChange(of: theme) { controller.surface.applyTheme(dark: $0 != "light") }
     .navigationTitle(title)
@@ -83,11 +78,46 @@ struct TerminalScreen: View {
     }
   }
 
+  private var tabs: some View {
+    HStack(spacing: 24) {
+      ForEach(["Chat", "Changes", "Files"], id: \.self) { value in tabButton(value) }
+      Spacer(minLength: 0)
+    }
+    .buttonStyle(.plain).padding(.horizontal, 16)
+    .overlay(alignment: .bottom) {
+      Rectangle().fill(TerminalAppearance.border).frame(height: 0.5)
+    }
+  }
+
+  private func tabButton(_ value: String) -> some View {
+    Button {
+      controller.surface.view.window?.endEditing(true)
+      tab = value
+    } label: {
+      HStack(spacing: 5) {
+        Text(value == "Chat" ? "终端" : value == "Changes" ? "变更" : "文件")
+        if value == "Changes" {
+          Text("\(changesCount)").font(.caption2)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(TerminalAppearance.panel).cornerRadius(5)
+        }
+      }
+      .font(.subheadline.weight(tab == value ? .semibold : .regular))
+      .foregroundColor(tab == value ? Color.primary : Color.secondary)
+      .frame(minHeight: 44)
+      .overlay(alignment: .bottom) {
+        if tab == value { Rectangle().fill(TerminalAppearance.accent).frame(height: 2) }
+      }
+    }
+    .accessibilityAddTraits(tab == value ? .isSelected : [])
+  }
+
   private var chat: some View {
-    VStack(spacing: verticalSizeClass == .compact ? 2 : 6) {
+    VStack(spacing: 0) {
       if session.health.status == .offline { Text("本地电脑暂时不可用").foregroundColor(.orange) }
       if let failure = controller.failure { Text(failure).font(.caption).foregroundColor(.red) }
       TerminalHostView(surface: controller.surface).frame(minHeight: 24)
+        .padding(.horizontal, 12).padding(.top, 10)
         .overlay(alignment: .bottomTrailing) {
           if controller.scrolledBack {
             Button("回到底部") { controller.returnToBottom() }
@@ -95,22 +125,29 @@ struct TerminalScreen: View {
               .disabled(!session.canWrite || !controller.canSend)
           }
         }
-      if verticalSizeClass != .compact {
-        ShortcutBar(controller: controller, enabled: session.canWrite)
-      }
       ComposerView(
         session: session, controller: controller, terminalID: details.id, active: tab == "Chat")
     }
   }
 
   @ToolbarContentBuilder private var terminalToolbar: some ToolbarContent {
+    ToolbarItem(placement: .principal) {
+      VStack(alignment: .leading, spacing: 3) {
+        (Text(title).fontWeight(.semibold) + Text(" / \(projectName)").foregroundColor(.secondary))
+          .font(.subheadline).lineLimit(1)
+        HStack(spacing: 4) {
+          Circle().fill(status == "已连接" ? TerminalAppearance.accent : .orange)
+            .frame(width: 5, height: 5)
+          Text("\(session.connection?.name ?? "电脑") · \(status)")
+            .font(.caption2).foregroundColor(.secondary).lineLimit(1)
+        }
+      }
+      .accessibilityElement(children: .combine)
+    }
     ToolbarItemGroup(placement: .navigationBarTrailing) {
-      Button {
-        controller.surface.view.window?.endEditing(true)
-      } label: {
-        Image(systemName: "keyboard.chevron.compact.down")
-      }.accessibilityLabel("收起键盘")
       Menu {
+        Text(cwd)
+        Button("收起键盘") { controller.surface.view.window?.endEditing(true) }
         Button("终端历史") { showingHistory = true }
         Button("诊断") { showingDiagnostics = true }
         Button("回到底部") { controller.returnToBottom() }.disabled(
@@ -119,8 +156,8 @@ struct TerminalScreen: View {
           !session.canWrite)
         Button("删除终端", role: .destructive) { deleting = true }.disabled(!session.canWrite)
       } label: {
-        Image(systemName: "ellipsis.circle")
-      }
+        Image(systemName: "ellipsis")
+      }.accessibilityLabel("终端操作")
     }
   }
 }

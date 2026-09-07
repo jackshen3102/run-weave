@@ -1,9 +1,10 @@
 import SwiftUI
 
-struct MediaControls: View {
+struct MediaControls<Content: View>: View {
   @ObservedObject var session: AppSession
   let terminalID: String
   let visible: Bool
+  @ViewBuilder let content: (AnyView, AnyView) -> Content
   @Environment(\.scenePhase) private var scenePhase
   @StateObject private var recorder = VoiceRecorder()
   @State private var picking = false
@@ -18,29 +19,7 @@ struct MediaControls: View {
       if let failure = failure ?? recorder.failure {
         Text(failure).font(.caption).foregroundColor(.red)
       }
-      HStack {
-        Button("图片") { picking = true }.disabled(busy || recorder.recording || !session.canWrite)
-        if recorder.recording {
-          Button("结束并转写") {
-            session.recordUserAction("voice.transcribe", terminalID: terminalID)
-            do {
-              let clip = try recorder.finish()
-              submit { try await $0.transcribe(clip) }
-            } catch { failure = displayError(error) }
-          }.disabled(busy || !session.canWrite)
-          Button("取消录音", role: .cancel) {
-            session.recordUserAction("voice.cancel", terminalID: terminalID)
-            recorder.cancel()
-          }
-        } else {
-          Button(recorder.requestingPermission ? "请求麦克风…" : "录音") {
-            session.recordUserAction("voice.start", terminalID: terminalID)
-            Task { await recorder.start() }
-          }.disabled(busy || recorder.requestingPermission || !session.canWrite)
-        }
-        if busy { ProgressView() }
-        Spacer()
-      }
+      content(AnyView(attachmentButton), AnyView(voiceButtons))
     }
     .sheet(isPresented: $picking) {
       ImagePicker { result in
@@ -73,6 +52,46 @@ struct MediaControls: View {
       }
     }
     .onChange(of: scenePhase) { if $0 == .background { recorder.cancel() } }
+  }
+
+  private var attachmentButton: some View {
+    Button {
+      picking = true
+    } label: {
+      Image(systemName: "plus")
+    }.accessibilityLabel("添加图片")
+      .disabled(busy || recorder.recording || !session.canWrite)
+  }
+
+  private var voiceButtons: some View {
+    HStack(spacing: 2) {
+      if recorder.recording {
+        Button {
+          session.recordUserAction("voice.transcribe", terminalID: terminalID)
+          do {
+            let clip = try recorder.finish()
+            submit { try await $0.transcribe(clip) }
+          } catch { failure = displayError(error) }
+        } label: {
+          Image(systemName: "checkmark.circle.fill").foregroundColor(.red)
+        }.accessibilityLabel("结束并转写").disabled(busy || !session.canWrite)
+        Button(role: .cancel) {
+          session.recordUserAction("voice.cancel", terminalID: terminalID)
+          recorder.cancel()
+        } label: {
+          Image(systemName: "xmark")
+        }.accessibilityLabel("取消录音")
+      } else {
+        Button {
+          session.recordUserAction("voice.start", terminalID: terminalID)
+          Task { await recorder.start() }
+        } label: {
+          if recorder.requestingPermission { ProgressView() } else { Image(systemName: "mic") }
+        }.accessibilityLabel(recorder.requestingPermission ? "请求麦克风…" : "录音")
+          .disabled(busy || recorder.requestingPermission || !session.canWrite)
+      }
+      if busy { ProgressView() }
+    }
   }
 
   private func submit(_ action: @escaping (APIClient) async throws -> String) {

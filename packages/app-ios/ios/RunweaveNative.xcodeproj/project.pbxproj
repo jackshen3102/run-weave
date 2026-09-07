@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A77C920851F940EF8A1C0011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A77C920851F940EF8A1C0012 /* Assets.xcassets */; };
 		BC1D04EF29A64F6783410091 /* Diagnostics/TerminalPerformanceCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1D04EF29A64F6783410092 /* Diagnostics/TerminalPerformanceCapture.swift */; };
 		28465006C5C473977D4EC761 /* Diagnostics/TerminalProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA9C736F19E7F60B7F6764AD /* Diagnostics/TerminalProbe.swift */; };
 		6B997245719355C9279AB0F9 /* RunweaveIOS in Frameworks */ = {isa = PBXBuildFile; productRef = 8CE3E71EF8635D2BF27913BB /* RunweaveIOS */; };
@@ -14,6 +15,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A77C920851F940EF8A1C0012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = RunweaveNative/Assets.xcassets; sourceTree = "<group>"; };
 		BC1D04EF29A64F6783410092 /* Diagnostics/TerminalPerformanceCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics/TerminalPerformanceCapture.swift; sourceTree = "<group>"; };
 		61DE1B08FE2FC56EE9044434 /* RunweaveNative/RunweaveNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunweaveNative/RunweaveNativeApp.swift; sourceTree = "<group>"; };
 		A8792157CB4F27FB949C035F /* RunweaveNative.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RunweaveNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -35,6 +37,7 @@
 		AD936FCBED631FA67E05C3EA = {
 			isa = PBXGroup;
 			children = (
+				A77C920851F940EF8A1C0012 /* Assets.xcassets */,
 				BC1D04EF29A64F6783410092 /* Diagnostics/TerminalPerformanceCapture.swift */,
 				61DE1B08FE2FC56EE9044434 /* RunweaveNative/RunweaveNativeApp.swift */,
 				BA9C736F19E7F60B7F6764AD /* Diagnostics/TerminalProbe.swift */,
@@ -99,6 +102,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A77C920851F940EF8A1C0011 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -135,6 +139,7 @@
 		1BE405632761C5C341A152B0 /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RunweaveNative/Simulator.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -156,6 +161,7 @@
 		6C7EFF6369083C8E1F2B1994 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RunweaveNative/Simulator.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -205,6 +211,7 @@
 		DD75E2CB1C510A828AC72D96 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RunweaveNative/Simulator.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
