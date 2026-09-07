@@ -14,6 +14,12 @@ import {
 const execFileAsync = promisify(execFile);
 const GIT_FILE_CONTENT_MAX_BYTES = 1024 * 1024;
 
+class GitRepositoryMissingError extends TerminalPreviewError {
+  constructor() {
+    super("This project is not a Git repository.", 400);
+  }
+}
+
 async function runGit(
   cwd: string,
   args: string[],
@@ -24,9 +30,23 @@ async function runGit(
       cwd,
       maxBuffer: options?.maxBuffer ?? 4 * 1024 * 1024,
       timeout: 5_000,
+      env: { ...process.env, LC_ALL: "C" },
     });
     return result.stdout;
   } catch (error) {
+    if (
+      args[0] === "rev-parse" &&
+      error instanceof Error &&
+      "code" in error &&
+      error.code === 128 &&
+      "stderr" in error &&
+      typeof error.stderr === "string" &&
+      error.stderr.startsWith(
+        "fatal: not a git repository (or any of the parent directories)",
+      )
+    ) {
+      throw new GitRepositoryMissingError();
+    }
     throw new TerminalPreviewError(
       error instanceof Error ? error.message : "Git command failed",
       400,
@@ -196,8 +216,21 @@ export async function getPreviewGitChanges(params: {
   projectPath: string | null | undefined;
 }): Promise<TerminalPreviewGitChangesResponse> {
   const projectPath = ensureProjectPath(params.projectPath);
-  const { repoRoot, projectRelativeToRepo } =
-    await resolveGitContext(projectPath);
+  let context;
+  try {
+    context = await resolveGitContext(projectPath);
+  } catch (error) {
+    if (!(error instanceof GitRepositoryMissingError)) throw error;
+    return {
+      kind: "git-changes",
+      projectId: params.projectId,
+      projectPath,
+      repoRoot: null,
+      staged: [],
+      working: [],
+    };
+  }
+  const { repoRoot, projectRelativeToRepo } = context;
   const pathspec = projectRelativeToRepo || ".";
   const output = await runGit(
     repoRoot,

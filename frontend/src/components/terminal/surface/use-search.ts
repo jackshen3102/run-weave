@@ -84,25 +84,42 @@ export function useTerminalSearch({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (clientMode === "mobile") {
+      const target = event.target;
+      if (
+        clientMode === "mobile" ||
+        event.defaultPrevented ||
+        !(target instanceof Node) ||
+        !(
+          terminalRef.current?.element?.contains(target) ||
+          searchInputRef.current?.parentElement?.contains(target)
+        )
+      ) {
         return;
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "f"
+      ) {
         event.preventDefault();
+        event.stopPropagation();
         setOpen(true);
         return;
       }
 
       if (event.key === "Escape" && open) {
         event.preventDefault();
+        event.stopPropagation();
         setOpen(false);
         terminalRef.current?.focus();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    // Handle terminal-local shortcuts before xterm consumes Ctrl+F as PTY input.
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [active, clientMode, open, terminalRef]);
 
   useEffect(() => {

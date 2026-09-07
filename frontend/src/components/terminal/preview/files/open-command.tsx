@@ -65,7 +65,7 @@ export function TerminalOpenFileCommand({
           <Command.Empty className="px-3 py-8 text-sm text-slate-400">
             {loading
               ? "Loading changed files..."
-              : "No changed files. Type to search files or paste an absolute path."}
+              : "Type to search files or paste an absolute path."}
           </Command.Empty>
         ) : null}
         {absoluteInput ? (
@@ -86,7 +86,9 @@ export function TerminalOpenFileCommand({
                 : "Loading changes"
               : query.trim()
                 ? "Search results"
-                : "Changed files"}
+                : items.length > 0
+                  ? "Changed files"
+                  : "Search files"}
           </div>
         ) : null}
         <Command.Group>

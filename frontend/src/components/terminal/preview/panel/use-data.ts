@@ -314,11 +314,19 @@ export function useTerminalPreviewPanelData({
   );
 
   useEffect(() => {
-    if (!projectId || !hasProjectPath || mode) {
+    if (
+      !projectId ||
+      !hasProjectPath ||
+      mode ||
+      (!changes && !previewQueries.changes.isError)
+    ) {
       return;
     }
-    setProjectPreviewMode(projectId, "changes");
-  }, [hasProjectPath, mode, projectId, setProjectPreviewMode]);
+    setProjectPreviewMode(
+      projectId,
+      changes?.repoRoot === null ? "explorer" : "changes",
+    );
+  }, [changes, hasProjectPath, mode, previewQueries.changes.isError, projectId, setProjectPreviewMode]);
 
   useTerminalPreviewPanelKeyboardEffects({
     expanded,
