@@ -8,6 +8,7 @@ struct MediaControls<Content: View>: View {
   @Environment(\.scenePhase) private var scenePhase
   @StateObject private var recorder = VoiceRecorder()
   @State private var picking = false
+  @State private var pickerGeneration = 0
   @State private var busy = false
   @State private var failure: String?
   @State private var scope: String?
@@ -24,11 +25,15 @@ struct MediaControls<Content: View>: View {
     .sheet(isPresented: $picking) {
       ImagePicker { result in
         picking = false
-        guard active, scope == session.connection?.scope else { return }
+        guard active, pickerGeneration == session.generation, scope == session.connection?.scope
+        else { return }
         switch result {
         case .success(let value):
           if let (data, type) = value {
-            submit { try await $0.uploadImage(terminalID: terminalID, data: data, mimeType: type) }
+            do {
+              try session.imageDrafts.add(
+                data: data, mimeType: type, terminalID: terminalID, session: session)
+            } catch { failure = displayError(error) }
           }
         case .failure(let error): failure = displayError(error)
         }
@@ -56,6 +61,8 @@ struct MediaControls<Content: View>: View {
 
   private var attachmentButton: some View {
     Button {
+      failure = nil
+      pickerGeneration = session.generation
       picking = true
     } label: {
       Image(systemName: "plus")

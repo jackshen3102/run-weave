@@ -215,9 +215,39 @@ export class LowDbTerminalSessionStore
         return;
       }
 
+      // Publish metadata only after the queued durable write succeeds.
+      await database.adapter.write({
+        ...database.data,
+        sessions: database.data.sessions.map((record) =>
+          record === session ? { ...record, alias: params.alias } : record,
+        ),
+      });
       session.alias = params.alias;
-      await database.write();
     });
+  }
+
+  async setSessionPinned(
+    terminalSessionId: string,
+    pinned: boolean,
+  ): Promise<string | null> {
+    let pinnedAt: string | null = null;
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === terminalSessionId,
+      );
+      if (!session) throw new Error("Terminal session not found");
+      pinnedAt = pinned ? (session.pinnedAt ?? new Date().toISOString()) : null;
+      if ((session.pinnedAt ?? null) === pinnedAt) return;
+      await database.adapter.write({
+        ...database.data,
+        sessions: database.data.sessions.map((record) =>
+          record === session ? { ...record, pinnedAt } : record,
+        ),
+      });
+      session.pinnedAt = pinnedAt;
+    });
+    return pinnedAt;
   }
 
   async updateSessionThreadId(

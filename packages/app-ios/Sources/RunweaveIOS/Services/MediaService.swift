@@ -13,7 +13,10 @@ extension APIClient {
       "/api/terminal/session/\(Self.pathComponent(terminalID))/clipboard-image", method: "POST",
       body: ["mimeType": mimeType, "dataBase64": data.base64EncodedString()],
       retryUnauthorized: false)
-    return "'" + value.filePath.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+    guard !value.filePath.isEmpty, !value.filePath.contains("\0") else {
+      throw APIError.invalidResponse
+    }
+    return value.filePath
   }
 
   func transcribe(_ clip: VoiceClip) async throws -> String {

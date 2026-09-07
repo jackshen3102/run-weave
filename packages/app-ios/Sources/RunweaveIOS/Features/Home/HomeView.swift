@@ -7,49 +7,63 @@ struct HomeView: View {
   @State private var newProject = false
   @State private var deleting: HomeTerminal?
   @State private var showingDiagnostics = false
+  @State private var renaming: HomeTerminal?
+  @State private var initializedGeneration: Int?
 
   var groups: [HomeGroup] { session.overview?.groups(matching: query) ?? [] }
+
+  private var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+  private var pinned: [HomeTerminal] {
+    groups.flatMap(\.sessions).filter { $0.pinnedAt != nil }.sorted {
+      if $0.pinnedAt != $1.pinnedAt { return ($0.pinnedAt ?? "") > ($1.pinnedAt ?? "") }
+      return $0.id < $1.id
+    }
+  }
+
+  private func initializeExpansion() {
+    guard session.overview != nil, initializedGeneration != session.generation else { return }
+    expanded = Set((session.overview?.groups(matching: "") ?? []).prefix(4).map(\.id))
+    initializedGeneration = session.generation
+  }
+
+  private func row(_ terminal: HomeTerminal, projectName: String? = nil) -> some View {
+    HomeTerminalRow(session: session, terminal: terminal, projectName: projectName,
+      rename: { renaming = terminal }, delete: { deleting = terminal })
+  }
 
   var body: some View {
     List {
       if session.health.status == .offline {
         Section { Text("本地电脑暂时不可用，列表会保留最近一次加载的数据。").foregroundColor(.orange) }
-      } else if let error = session.error {
+      }
+      if let error = session.error {
         Section { Text(error).foregroundColor(.red) }
       }
       if session.loading && session.overview == nil { ProgressView() }
-      if !session.loading, session.overview?.projects.isEmpty == true { Text("暂无项目") }
+      if !session.loading, session.overview != nil, searching, groups.isEmpty {
+        Text("没有找到匹配的项目或终端")
+      } else if !session.loading, session.overview?.projects.isEmpty == true { Text("暂无项目") }
+      if !pinned.isEmpty {
+        Section("置顶") {
+          ForEach(pinned) { terminal in
+            row(terminal, projectName: session.overview?.projects.first {
+              $0.id == HomeOverview.parentProjectID(terminal.projectId)
+            }?.name)
+          }
+        }
+      }
       ForEach(groups) { group in
         Section {
-          if expanded.contains(group.id) {
+          if searching || expanded.contains(group.id) {
             if group.sessions.isEmpty { Text("暂无终端").foregroundColor(.secondary) }
             ForEach(group.sessions) { terminal in
-              Button {
-                Task { await session.openTerminal(terminal.id) }
-              } label: {
-                VStack(alignment: .leading, spacing: 5) {
-                  HStack {
-                    Text(terminal.title).font(.headline).foregroundColor(.primary)
-                    Spacer()
-                    Text(terminal.displayStatusLabel).font(.caption).foregroundColor(
-                      terminal.displayStatus == "running" ? .green : .secondary)
-                  }
-                  HStack {
-                    Text(terminal.subtitle).lineLimit(2)
-                    Spacer()
-                    Text(terminal.relativeTime)
-                  }.font(.caption).foregroundColor(.secondary)
-                }.padding(.vertical, 4)
-              }
-              .contextMenu {
-                Button("删除终端", role: .destructive) { deleting = terminal }.disabled(
-                  !session.canWrite)
-              }
+              row(terminal)
             }
           }
         } header: {
           HStack {
             Button {
+              guard !searching else { return }
               if expanded.contains(group.id) {
                 expanded.remove(group.id)
               } else {
@@ -57,7 +71,7 @@ struct HomeView: View {
               }
             } label: {
               HStack {
-                Image(systemName: expanded.contains(group.id) ? "chevron.down" : "chevron.right")
+                Image(systemName: (searching || expanded.contains(group.id)) ? "chevron.down" : "chevron.right")
                 VStack(alignment: .leading) {
                   Text(group.project.name)
                   Text(group.project.path ?? "No path").font(.caption2).lineLimit(1)
@@ -65,7 +79,7 @@ struct HomeView: View {
                 Spacer()
                 Text("\(group.terminalCount)")
               }
-            }.accessibilityLabel("展开或收起 \(group.project.name)")
+            }.accessibilityLabel(searching ? group.project.name : "展开或收起 \(group.project.name)")
             Button {
               Task { await session.createTerminal(projectID: group.id) }
             } label: {
@@ -78,10 +92,16 @@ struct HomeView: View {
     }
     .searchable(text: $query, prompt: "Search projects and terminals")
     .refreshable { await session.refresh() }
-    .onChange(of: session.overview?.projects.map(\.id)) { _ in
-      if expanded.isEmpty { expanded = Set(groups.prefix(4).map(\.id)) }
+    .onChange(of: session.overview?.projects.map(\.id)) { _ in initializeExpansion() }
+    .onChange(of: session.generation) { _ in
+      expanded.removeAll()
+      initializedGeneration = nil
+      query = ""
+      renaming = nil
+      deleting = nil
+      initializeExpansion()
     }
-    .onAppear { if expanded.isEmpty { expanded = Set(groups.prefix(4).map(\.id)) } }
+    .onAppear { initializeExpansion() }
     .toolbar {
       ToolbarItem(placement: .navigationBarTrailing) {
         Menu {
@@ -99,6 +119,9 @@ struct HomeView: View {
         expanded.insert(id)
         query = ""
       }
+    }
+    .sheet(item: $renaming) { terminal in
+      RenameTerminalView(session: session, terminal: terminal)
     }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session) }
     .confirmationDialog(

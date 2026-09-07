@@ -59,6 +59,8 @@ export interface TerminalSessionStatusResponse {
 export type TerminalSessionHistoryResponse = TerminalSessionStatusResponse;
 
 export interface TerminalSessionListItem {
+  /** Backend-generated UTC timestamp; missing/null means unpinned. */
+  pinnedAt?: string | null;
   terminalSessionId: string;
   projectId: string;
   alias?: string | null;
@@ -113,6 +115,7 @@ export interface AppHomeOverviewResponse {
 }
 
 export interface UpdateTerminalSessionRequest {
+  pinned?: boolean;
   alias?: string | null;
   panelSplitEnabled?: boolean;
   acknowledgedCompletionRevision?: number;

@@ -11,6 +11,7 @@ export function toMetadataRecord(
     id: session.id,
     projectId: session.projectId,
     alias: session.alias ?? null,
+    pinnedAt: session.pinnedAt ?? null,
     command: session.command,
     args: [...session.args],
     cwd: session.cwd,

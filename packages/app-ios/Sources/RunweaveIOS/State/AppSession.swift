@@ -16,8 +16,10 @@ final class AppSession: ObservableObject {
   @Published private(set) var terminalController: SessionController?
   // Retained when expired authentication dismisses the terminal, scoped to the active connection.
   @Published private(set) var terminalDrafts: [String: String] = [:]
+  let imageDrafts = TerminalImageDrafts()
   private(set) var api: APIClient?
-  private var generation = 0
+  @Published private(set) var generation = 0
+  @Published private(set) var metadataWrites = Set<String>()
   private var overviewRevision = 0
   private var pendingOverviewEvents: [TerminalEvent] = []
   private var overviewTask: Task<Void, Never>?
@@ -36,6 +38,8 @@ final class AppSession: ObservableObject {
     api = nil
     stopResources()
     terminalDrafts.removeAll()
+    imageDrafts.clear()
+    metadataWrites.removeAll()
     self.connection = connection
     authenticated = false
     overview = nil
@@ -83,7 +87,9 @@ final class AppSession: ObservableObject {
     generation += 1
     stopResources()
     terminalDrafts.removeAll()
+    imageDrafts.clear()
     authenticated = false
+    metadataWrites.removeAll()
     overview = nil
     loading = false
     writing = false
@@ -97,8 +103,9 @@ final class AppSession: ObservableObject {
     if authenticated, health.status == .online { await reload() }
   }
 
-  func reload() async {
-    guard let api, authenticated, foreground else { return }
+  @discardableResult
+  func reload() async -> Bool {
+    guard let api, authenticated, foreground else { return false }
     let epoch = generation
     loadingRequest += 1
     let request = loadingRequest
@@ -107,13 +114,13 @@ final class AppSession: ObservableObject {
     loading = true
     do {
       var value = try await api.overview()
-      guard generation == epoch, request == loadingRequest, !Task.isCancelled else { return }
+      guard generation == epoch, request == loadingRequest, !Task.isCancelled else { return false }
       // Structural changes require a fresh snapshot. State/metadata updates are replayed below,
       // so a busy real Backend cannot indefinitely invalidate otherwise usable snapshots.
       if revision != overviewRevision {
         loading = false
         scheduleReload()
-        return
+        return false
       }
       Self.patch(pendingOverviewEvents, into: &value)
       pendingOverviewEvents.removeAll(keepingCapacity: true)
@@ -121,11 +128,49 @@ final class AppSession: ObservableObject {
       health.status = .online
       error = nil
       startEvents()
+      loading = false
+      return true
     } catch {
-      guard generation == epoch, request == loadingRequest, !Task.isCancelled else { return }
+      guard generation == epoch, request == loadingRequest, !Task.isCancelled else { return false }
       await handle(error, epoch: epoch)
     }
     if generation == epoch, request == loadingRequest { loading = false }
+    return false
+  }
+
+  func canEditTerminal(_ id: String) -> Bool {
+    canWrite && !metadataWrites.contains(id)
+  }
+
+  func updateTerminal(_ id: String, change: TerminalMetadataChange) async throws {
+    guard canEditTerminal(id), let api else { throw APIError.offline }
+    let epoch = generation
+    metadataWrites.insert(id)
+    defer { if epoch == generation { metadataWrites.remove(id) } }
+    let value: UpdatedTerminal
+    do {
+      value = try await api.updateTerminal(id: id, change: change)
+      guard epoch == generation, !Task.isCancelled else { throw CancellationError() }
+    } catch {
+      if epoch == generation { await handle(error, epoch: epoch) }
+      throw error
+    }
+    // Invalidate every snapshot begun before this successful write.
+    overviewRevision += 1
+    loadingRequest += 1
+    loading = false
+    if let index = overview?.sessions.firstIndex(where: { $0.id == id }) {
+      switch change {
+      case .pinned: overview?.sessions[index].pinnedAt = value.pinnedAt
+      case .alias:
+        overview?.sessions[index].alias = value.alias
+        if let alias = value.alias { overview?.sessions[index].title = alias }
+      }
+    }
+    if case .alias = change, terminal?.id == id { terminal?.alias = value.alias }
+    let refreshed = await reload()
+    guard epoch == generation, !Task.isCancelled else { throw CancellationError() }
+    if !refreshed { error = "已保存，列表刷新失败，请刷新列表。" }
   }
 
   func createProject(name: String, path: String?) async throws -> TerminalProject {
@@ -179,7 +224,7 @@ final class AppSession: ObservableObject {
   }
 
   func deleteTerminal(_ id: String) async {
-    guard canWrite, let api else {
+    guard canEditTerminal(id), let api else {
       error = APIError.offline.localizedDescription
       return
     }
@@ -190,6 +235,11 @@ final class AppSession: ObservableObject {
       try await api.deleteTerminal(id: id)
       guard epoch == generation, !Task.isCancelled else { return }
       terminalDrafts.removeValue(forKey: id)
+      imageDrafts.clear(terminalID: id)
+      overviewRevision += 1
+      loadingRequest += 1
+      loading = false
+      overview?.sessions.removeAll { $0.id == id }
       if terminal?.id == id { closeTerminal() }
       await reload()
     } catch { if epoch == generation { await handle(error, epoch: epoch) } }
@@ -216,15 +266,24 @@ final class AppSession: ObservableObject {
     }
     let draft = terminalDrafts[terminalID] ?? ""
     let text = draft.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
-    guard !text.isEmpty else { return }
+    let images = imageDrafts.images[terminalID] ?? []
+    guard images.allSatisfy({ $0.path != nil }) else {
+      throw AttachmentError("请等待图片上传完成，或重试、移除上传失败的图片")
+    }
+    let paths = images.compactMap(\.path).map {
+      "'" + $0.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+    }
+    let payload = ([text].filter { !$0.isEmpty } + paths).joined(separator: " ")
+    guard !payload.isEmpty else { return }
     let epoch = generation
     let agent = overview?.sessions.first { $0.id == terminalID }?.terminalState.agent
     let isSlash = text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/")
     let mode = agent == "codex" && isSlash ? "codex_slash_command" : "line"
     do {
-      try await controller.sendCommand(text, mode: mode)
+      try await controller.sendCommand(payload, mode: mode)
       guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
       if terminalDrafts[terminalID] == draft { terminalDrafts.removeValue(forKey: terminalID) }
+      imageDrafts.remove(Set(images.map(\.id)), terminalID: terminalID)
     } catch {
       if generation == epoch, !(error is CancellationError) { await handle(error, epoch: epoch) }
       throw error
@@ -376,6 +435,7 @@ final class AppSession: ObservableObject {
   private func apply(_ batch: [TerminalEvent]) {
     let structural = Set([
       "project_created", "project_deleted", "terminal_session_created", "terminal_session_deleted",
+      "completion", "terminal_state_changed",
     ])
     if batch.contains(where: { structural.contains($0.kind) }) {
       overviewRevision += 1

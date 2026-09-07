@@ -1,3 +1,4 @@
+import { registerTerminalSessionUpdateRoute } from "./sessions/update";
 import { Router } from "express";
 import { registerBrowserAssistanceRoutes } from "./browser-assistance";
 import { z } from "zod";
@@ -5,7 +6,6 @@ import type { TerminalCompletionEventListResponse } from "@runweave/shared/termi
 import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
-  UpdateTerminalSessionRequest,
 } from "@runweave/shared/terminal/session";
 import type { AuthService } from "../../auth/service";
 import {
@@ -47,7 +47,6 @@ import {
   resolveTerminalCreateDefaults,
   sanitizeTerminalError,
   TerminalCreateDefaultsError,
-  updateTerminalSessionSchema,
 } from "./sessions/helpers";
 import { registerTerminalTicketRoutes } from "./input/ticket";
 import { registerTerminalPrototypeGalleryRoutes } from "./preview/gallery";
@@ -469,83 +468,7 @@ export function createTerminalRouter(
     );
   });
 
-  router.patch("/session/:id", async (req, res) => {
-    const parsed = updateTerminalSessionSchema.safeParse(
-      req.body as UpdateTerminalSessionRequest,
-    );
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    const session = terminalSessionManager.getSession(req.params.id);
-    if (!session) {
-      res.status(404).json({ message: "Terminal session not found" });
-      return;
-    }
-
-    try {
-      let updatedSession = session;
-      if (parsed.data.alias !== undefined) {
-        updatedSession =
-          (await terminalSessionManager.updateSessionAlias(
-            session.id,
-            parsed.data.alias,
-          )) ?? updatedSession;
-      }
-      if (parsed.data.panelSplitEnabled !== undefined) {
-        const runningPanelCount = terminalSessionManager
-          .listPanels(session.id)
-          .filter((panel) => panel.status === "running").length;
-        if (
-          parsed.data.panelSplitEnabled === false &&
-          session.panelSplitEnabled &&
-          runningPanelCount > 1
-        ) {
-          res.status(409).json({
-            message: "Close extra panels before disabling panel split.",
-          });
-          return;
-        }
-        updatedSession =
-          (await terminalSessionManager.updateSessionPanelSplitEnabled(
-            session.id,
-            parsed.data.panelSplitEnabled,
-          )) ?? updatedSession;
-      }
-      if (parsed.data.acknowledgedCompletionRevision !== undefined) {
-        updatedSession =
-          (await terminalSessionManager.acknowledgeSessionCompletion(
-            session.id,
-            parsed.data.acknowledgedCompletionRevision,
-          )) ?? updatedSession;
-      }
-      res.json(
-        toSessionListItem(
-          updatedSession,
-          resolveEffectiveTerminalState(
-            terminalSessionManager,
-            options?.terminalStateService,
-            updatedSession,
-          ),
-          toPanelWorkspacePayload(terminalSessionManager, session.id),
-        ),
-      );
-    } catch (error) {
-      terminalLogger.error("terminal.session.update.failed", {
-        message: "Terminal session update failed",
-        terminalSessionId: session.id,
-        error,
-      });
-      res.status(500).json({
-        message: "Terminal session update failed",
-        error: String(error),
-      });
-    }
-  });
+  registerTerminalSessionUpdateRoute(router, terminalSessionManager, options?.terminalStateService);
   registerTerminalInputRoutes(router, terminalSessionManager, options);
   registerBrowserAssistanceRoutes(router, terminalSessionManager, options);
   router.delete("/session/:id", async (req, res) => {

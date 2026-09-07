@@ -16,6 +16,8 @@ struct TerminalScreen: View {
     session.overview?.sessions.first { $0.id == details.id }
   }
   private var title: String {
+    if let currentTerminal { return currentTerminal.title }
+    if let alias = details.alias, !alias.isEmpty { return alias }
     let command: String?
     if let metadata = controller.metadata {
       command = metadata.activeCommand

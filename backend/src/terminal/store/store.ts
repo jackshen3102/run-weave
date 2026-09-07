@@ -14,6 +14,7 @@ export interface PersistedTerminalProjectRecord {
 }
 
 export interface PersistedTerminalSessionRecord {
+  pinnedAt?: string | null;
   id: string;
   projectId: string;
   alias?: string | null;
@@ -289,6 +290,7 @@ export interface TerminalSessionStore {
   ): Promise<void>;
   updateSessionLaunch(params: UpdateTerminalSessionLaunchParams): Promise<void>;
   updateSessionAlias(params: UpdateTerminalSessionAliasParams): Promise<void>;
+  setSessionPinned(terminalSessionId: string, pinned: boolean): Promise<string | null>;
   updateSessionThreadId(
     params: UpdateTerminalSessionThreadIdParams,
   ): Promise<void>;

@@ -7,8 +7,10 @@
 
 仓库 `docs/testing/app/` 中的原生计划是当前合同：
 
+- [首页置顶、搜索与重命名](../../../docs/testing/app/ios-native-home-discovery.testplan.yaml)
 - [终端与渲染](../../../docs/testing/app/ios-native-terminal.testplan.yaml)
 - [认证、连接与资源生命周期](../../../docs/testing/app/ios-native-session.testplan.yaml)
+- [终端图片附件](../../../docs/testing/app/ios-native-image-attachments.testplan.yaml)
 - [输入、媒体、预览与主题](../../../docs/testing/app/ios-native-features.testplan.yaml)
 
 布局改动若有独立执行计划，以该任务当前计划为准，不继承历史运行结果。
@@ -27,6 +29,31 @@ p95 41.56 ms，输入提交 p95 4.51 ms，第二/第十分钟 RSS 163.44/163.89 
 这些本地文件不随源码分发。发布结论必须带对应 commit、设备、配置、计划版本和可访问证据。
 历史阶段报告及迁移对照可以从 Git 历史查阅，不作为运行或构建依赖。
 本轮把旧客户端对照改为独立验收合同，因此不沿用旧版“40 通过”等汇总数字。
+
+## 首页查找验收
+
+2026-09-07，`ios-native-home-discovery.testplan.yaml` 的 IOSHOME-001 至 IOSHOME-011
+已在本轮隔离 Backend、真实 shell 和 iOS 26.5 Simulator 上取证。覆盖置顶与取消、幂等与重启恢复、
+连接切换迟到响应、搜索展开恢复、Unicode 别名、写入/刷新失败、离线禁用、鉴权、删除和真实输入。
+输入用例同时核对原生请求日志与专用文件，确认命令只执行一次。Swift Debug 构建通过；这不替代真机验收。
+
+本轮证据位于执行机器 `.runweave/ios-home-discovery/`，入口为 `REPORT.md`，含构建、
+`.xcresult`、控件树、截图与脱敏 API 结果。旧格式记录由修改前的存储实现生成，再用候选 Backend
+修改和重启验证。中途磁盘空间耗尽、原 Simulator 消失，恢复后使用本轮新建 Simulator 完成剩余用例。
+
+全目录存储故障还暴露了既有活动时间后台写入的未捕获异常；本轮只验证并修复置顶/别名的失败一致性，
+不声称整个 Backend 已能从任意磁盘故障恢复。该异常保留在本轮证据中供后续专项处理。
+
+## 图片附件验收
+
+2026-09-07，`ios-native-image-attachments.testplan.yaml` 的 IOSIMAGE-001 至 IOSIMAGE-005
+已在 iOS 26.5 Simulator、原生照片选择器、隔离 Backend 和真实 zsh 上通过。覆盖多图预览、取消选择、
+文字与图片一次发送、上传失败重试、移除后迟到响应、仅图片发送、输入失败保留、终端/连接隔离，
+以及发送确认期间新增草稿的保留。真实 shell 实参文件验证了空格、单引号转义与图片顺序，图片像素哈希一致。
+
+本轮证据入口为执行机器 `.runweave/ios-image-attachments/REPORT.md`，含 `.xcresult`、截图、控件树、
+脱敏请求记录和实参核对。Swift Debug 构建、增量 Swift 格式检查与测试计划 schema 检查通过。
+这些结果不替代真机、语音转写、后台系统终止或全部图片格式的专项验收。
 
 ## 待关闭事项
 

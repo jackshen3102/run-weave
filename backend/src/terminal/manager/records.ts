@@ -31,6 +31,7 @@ export interface TerminalProjectContextRecord
     TerminalProjectContextListItem {}
 
 export interface TerminalSessionRecord {
+  pinnedAt?: string | null;
   id: string;
   projectId: string;
   alias: string | null;
@@ -146,6 +147,7 @@ export function buildSessionRecord(
     id: persisted.id,
     projectId: persisted.projectId,
     alias: persisted.alias ?? null,
+    pinnedAt: persisted.pinnedAt ?? null,
     threadId: persisted.threadId,
     threadProvider:
       persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
@@ -225,6 +227,7 @@ export function toPersistedSession(
     id: session.id,
     projectId: session.projectId,
     alias: session.alias,
+    pinnedAt: session.pinnedAt ?? null,
     threadId: session.threadId,
     threadProvider: session.threadProvider,
     preview: session.preview,

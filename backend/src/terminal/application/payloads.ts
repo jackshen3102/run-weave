@@ -71,6 +71,7 @@ export function toSessionListItem(
     terminalSessionId: session.id,
     projectId: session.projectId,
     alias: session.alias,
+    pinnedAt: session.pinnedAt ?? null,
     threadId: session.threadId,
     threadProvider: session.threadProvider,
     preview: session.preview,
