@@ -1,3 +1,4 @@
+import { SuijiEntryLink } from "../../../features/suiji/entry-link";
 import type { ConnectionConfig } from "../../../features/connection/types";
 import { ConnectionSwitcher } from "../../../components/connection-switcher";
 import { RuntimeStatusEntry } from "../../../components/runtime-status-entry";
@@ -57,6 +58,7 @@ export function HomeHeader({
           )}
       </div>
       <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" asChild><SuijiEntryLink>随记</SuijiEntryLink></Button>
         <Button
           size="sm"
           className="rounded-full px-4"

@@ -1,0 +1,112 @@
+version: 1
+name: 随记 Web 录入
+description: 本地真实运行验收；静态门禁不代替行为证据。
+cases:
+  - id: WEB-001
+    name: "入口与节点身份独立"
+    required: true
+    description: "入口与节点身份独立，按下列实际可观察结果判定。"
+    preconditions:
+      - "归属明确的 Runweave Dev Session 已启动，随记服务配置此 Web Origin，节点可断开。"
+    steps:
+      - "使用 $toolkit:playwright-cli 点击登录/连接页的随记入口；桌面创建独立随记窗口，普通浏览器新开页面，原页面 URL 保持不变。输入随记地址及凭据登录，节点未连接时仍显示记录。"
+      - "刷新页面确认当前随记会话可恢复，离开后从桌面首页入口再次打开同一记录。"
+  - id: WEB-002
+    name: "原样创建和编辑"
+    required: true
+    description: "原样创建和编辑，按下列实际可观察结果判定。"
+    preconditions:
+      - "实际 Web 页面已登录隔离随记服务。"
+    steps:
+      - "使用 $toolkit:playwright-cli 点加号，输入含前后空白、换行、中文、emoji 和 URL 的正文并保存。"
+      - "打开详情编辑一部分后保存，HTTP 读回同一 ID、版本递增、原文和创建时间正确，无自动标题或标签。"
+  - id: WEB-003
+    name: "附件保存和阅读"
+    required: true
+    description: "附件保存和阅读，按下列实际可观察结果判定。"
+    preconditions:
+      - "实际 Web 页面已登录，准备 JPEG/PNG、UTF-8 Markdown 和不支持的文件。"
+    steps:
+      - "使用 $toolkit:playwright-cli 上传图片和 Markdown、保存纯附件记录并打开阅读；内容正确，鉴权 HTTP 可读取同一附件 ID。"
+      - "尝试超限、非法 UTF-8 或不支持类型，确认明确拒绝，已有文字和附件不丢失。"
+  - id: WEB-004
+    name: "草稿刷新恢复而不补传"
+    required: true
+    description: "草稿刷新恢复而不补传，按下列实际可观察结果判定。"
+    preconditions:
+      - "实际页面已登录，独占当前身份编辑器，存在未保存文字和附件。"
+    steps:
+      - "使用 $toolkit:playwright-cli 输入草稿与附件，等待本机保存完成后刷新。"
+      - "再次打开编辑器确认内容和附件恢复，期间没有 POST/PATCH/上传；用户点击保存后才创建一次。"
+  - id: WEB-005
+    name: "不确定响应手动幂等确认"
+    required: true
+    description: "不确定响应手动幂等确认，按下列实际可观察结果判定。"
+    preconditions:
+      - "实际页面可代理一次写响应，数据库仍可写入。"
+    steps:
+      - "使用 $toolkit:playwright-cli 保存时丢弃已提交响应，确认输入冻结并显示结果待确认。"
+      - "刷新并重新打开草稿，确认仍冻结且没有自动重发；点击手动确认后沿用键及参数，数据库只有一条记录。"
+  - id: WEB-006
+    name: "冲突保留本机原文"
+    required: true
+    description: "冲突保留本机原文，按下列实际可观察结果判定。"
+    preconditions:
+      - "Web 已打开编辑器，另一客户端已更新同一记录版本。"
+    steps:
+      - "使用 $toolkit:playwright-cli 保存旧版本，确认冲突且本机正文不丢失，服务端新正文不被覆盖。"
+      - "显式查看最新版本并确认继续编辑后保存，确认只按用户选择形成新版本。"
+  - id: WEB-007
+    name: "待办终态和再次创建"
+    required: true
+    description: "待办终态和再次创建，按下列实际可观察结果判定。"
+    preconditions:
+      - "隔离库有 open 待办，实际页面已登录。"
+    steps:
+      - "使用 $toolkit:playwright-cli 标记完成，确认服务保存成功后详情弹窗关闭并刷新列表；保存失败时弹窗保留。完成或不再做的记录出现在对应筛选且不能撤销终态。"
+      - "从对应状态筛选重新打开详情，点击再次想做，确认只预填正文，保存产生不同 ID、open 状态，无附件复制或关联。"
+  - id: WEB-008
+    name: "搜索分页保留创建顺序"
+    required: true
+    description: "搜索分页保留创建顺序，按下列实际可观察结果判定。"
+    preconditions:
+      - "隔离库有超过一页的多状态记录及字面百分号、下划线和中文短词。"
+    steps:
+      - "使用 $toolkit:playwright-cli 查询上述字面词、筛选类型和状态并加载更多，确认无重复、漏越筛选或旧响应回流。"
+      - "编辑旧记录后返回列表，确认仍按创建时间排序。"
+  - id: WEB-009
+    name: "切换身份隔离草稿与旧响应"
+    required: true
+    description: "切换身份隔离草稿与旧响应，按下列实际可观察结果判定。"
+    preconditions:
+      - "实际浏览器有两套归属明确的隔离服务或不同 serverId。"
+    steps:
+      - "使用 $toolkit:playwright-cli 建立草稿并延迟一个读请求，然后退出切换服务。"
+      - "确认旧响应不显示、旧 token 不发往新服务、草稿和附件不被新身份使用；切回原身份可恢复。"
+  - id: WEB-010
+    name: "多标签编辑互斥"
+    required: true
+    description: "多标签编辑互斥，按下列实际可观察结果判定。"
+    preconditions:
+      - "实际浏览器同一 Origin 有两个已登录同一随记身份的标签页。"
+    steps:
+      - "使用 $toolkit:playwright-cli 打开两个标签，确认只有一个页面持有编辑锁，另一个明确只读/占用提示。"
+      - "关闭持锁标签并由另一页接管，确认已落盘草稿恢复，无双重写入。"
+  - id: WEB-011
+    name: "CORS 精确边界"
+    required: true
+    description: "CORS 精确边界，按下列实际可观察结果判定。"
+    preconditions:
+      - "独立随记服务仅允许当前 Dev Session Web Origin。"
+    steps:
+      - "从允许的 Origin 使用真实浏览器登录、读取和保存成功；OPTIONS 返回限定方法和 headers。"
+      - "通过 HTTP 分别使用恶意 Origin、null 和 MCP Origin 请求，确认均拒绝且不执行写入；无 Origin 原生请求仍正常。"
+  - id: WEB-012
+    name: "独立窗口复用与关闭重开"
+    required: true
+    description: "桌面重复打开复用同一随记窗口，关闭只结束该窗口，已落盘草稿可在重新登录后恢复。"
+    preconditions:
+      - "归属明确的 Beta Dev Session 与随记服务已启动；主窗口和随记窗口分别可通过真实 CDP 操作。"
+    steps:
+      - "使用 $toolkit:playwright-cli 在随记独立窗口登录并打开已落盘草稿；从主窗口再次点击随记，确认窗口数量不增加、原草稿和登录状态保留、主窗口 URL 不变。随记窗口返回 Runweave 后再次点击主窗口入口，确认同一窗口回到随记。"
+      - "关闭随记窗口，确认主窗口仍可使用；再次点击入口创建新的随记窗口，登录后恢复同一身份草稿，不自动保存到服务。"

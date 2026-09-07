@@ -330,3 +330,24 @@ canvas {
     -webkit-text-fill-color: currentColor;
   }
 }
+
+/* Suiji owns its small visual theme; shared renderer tokens stay unchanged. */
+.suiji-theme {
+  --background: 42 32% 96%;
+  --foreground: 145 12% 20%;
+  --card: 45 30% 99%;
+  --card-foreground: 145 12% 20%;
+  --primary: 151 22% 34%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 143 17% 90%;
+  --secondary-foreground: 145 12% 20%;
+  --muted: 40 18% 92%;
+  --muted-foreground: 140 6% 43%;
+  --accent: 143 20% 93%;
+  --accent-foreground: 145 12% 20%;
+  --border: 45 14% 84%;
+  --input: 45 14% 84%;
+  --ring: 151 22% 34%;
+  color: hsl(var(--foreground));
+  color-scheme: light;
+}

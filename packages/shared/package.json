@@ -59,7 +59,8 @@
     "./terminal-preview-core": "./src/terminal/preview-core.ts",
     "./terminal-protocol": "./src/terminal/protocol.ts",
     "./work-history": "./src/work-history.ts",
-    "./voice": "./src/voice.ts"
+    "./voice": "./src/voice.ts",
+    "./suiji": "./src/suiji/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -1,3 +1,4 @@
+import { SuijiEntryLink } from "../../../features/suiji/entry-link";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import {
   Activity,
@@ -232,7 +233,8 @@ export function TerminalWorkspaceHeader({
           disabled={loading}
         />
       ) : null}
-      <RuntimeStatusEntry className="ml-auto h-6 max-w-[18rem] border-slate-700 bg-slate-900 text-slate-300" />
+      <SuijiEntryLink className="ml-auto rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">随记</SuijiEntryLink>
+      <RuntimeStatusEntry className="h-6 max-w-[18rem] border-slate-700 bg-slate-900 text-slate-300" />
       {!isMobileMonitor ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
