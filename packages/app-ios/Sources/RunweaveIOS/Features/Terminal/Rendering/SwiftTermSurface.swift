@@ -81,7 +81,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   }
 
   func applyTheme(dark: Bool) {
-    terminalView.nativeBackgroundColor = dark ? .black : .white
+    terminalView.nativeBackgroundColor = TerminalAppearance.backgroundColor(dark: dark)
     terminalView.nativeForegroundColor = dark ? .white : .black
   }
 
