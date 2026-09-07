@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "date": "2026-09-06",
+  "baselineCommit": "26a3d821d1206d389518859bf82650b55648cd7a",
+  "phase": "P0 complete; P1 partial; P2-P5 not started",
+  "counts": {
+    "pass": 4,
+    "blocked": 1,
+    "not_run": 36
+  },
+  "toolchain": {
+    "xcode": "26.6 17F113",
+    "sdk": "iPhoneSimulator 26.5",
+    "runtime": "iOS 26.2",
+    "swiftTerm": "1.19.0",
+    "swiftTermRevision": "464df5207fc2432e16c9a23abe538187196daf5f"
+  },
+  "cases": {
+    "IOSFEATURE-001": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-002": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-003": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-004": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-005": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-006": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-007": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-008": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-009": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-010": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-011": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSFEATURE-012": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-001": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-002": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-003": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-004": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-005": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-006": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-007": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-008": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-009": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-010": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-011": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-012": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-013": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-014": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSSESSION-015": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSTERM-001": {
+      "verdict": "pass",
+      "reason": "Distinct bundle IDs installed and launched; old connection list unchanged.",
+      "evidence": [
+        ".runweave/ios-native-evidence/legacy-before.png",
+        ".runweave/ios-native-evidence/final-debug-build.log",
+        ".runweave/ios-native-evidence/final-debug-run.log"
+      ]
+    },
+    "IOSTERM-002": {
+      "verdict": "pass",
+      "reason": "Real tmux WS stream, ANSI marker, Vim and exactly-once input observed.",
+      "evidence": [
+        ".runweave/ios-native-evidence/IOSTERM-002-events.json",
+        ".runweave/ios-native-evidence/tmux-shell-after-vim.png",
+        ".runweave/ios-native-evidence/terminal-fixture.json"
+      ]
+    },
+    "IOSTERM-003": {
+      "verdict": "pass",
+      "reason": "Keyboard and orientation layout repaired; positive deduplicated resize matches outer PTY and returns to 46x33.",
+      "evidence": [
+        ".runweave/ios-native-evidence/IOSTERM-003/viewport.jsonl",
+        ".runweave/ios-native-evidence/IOSTERM-003/events.json",
+        ".runweave/ios-native-evidence/IOSTERM-003/portrait-restored.png",
+        ".runweave/ios-native-evidence/IOSTERM-003/cleanup.json"
+      ]
+    },
+    "IOSTERM-004": {
+      "verdict": "pass",
+      "reason": "59 single-byte chunks; native and tmux 3.6a agree on ZWJ width; legacy xterm semantic difference recorded.",
+      "evidence": [
+        ".runweave/ios-native-evidence/IOSTERM-004/native.json",
+        ".runweave/ios-native-evidence/IOSTERM-004/xterm.json",
+        ".runweave/ios-native-evidence/IOSTERM-004/native.png",
+        ".runweave/ios-native-evidence/IOSTERM-004/xterm.png",
+        ".runweave/ios-native-evidence/IOSTERM-004/tmux-width.json"
+      ]
+    },
+    "IOSTERM-005": {
+      "verdict": "blocked",
+      "reason": "Paired device requires passcode unlock; dedicated test Backend is localhost-only. Simulator supplement cannot establish physical touch acceptance.",
+      "evidence": [
+        ".runweave/ios-native-evidence/physical-device-lock.log",
+        ".runweave/ios-native-evidence/http-input-before.json",
+        ".runweave/ios-native-evidence/http-input-after.json",
+        ".runweave/ios-native-evidence/http-input-events.json",
+        ".runweave/ios-native-evidence/http-input-after.png"
+      ]
+    },
+    "IOSTERM-006": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSTERM-007": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSTERM-008": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSTERM-009": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSTERM-010": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSTERM-011": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSTERM-012": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSTERM-013": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    },
+    "IOSTERM-014": {
+      "verdict": "not_run",
+      "reason": "P1 G1 is not complete; dependent migration and acceptance have not started.",
+      "evidence": []
+    }
+  },
+  "sourceHashes": {
+    "packages/app-ios/Package.swift": "6b28ae92318315eae4fd979443a30266e1b95179d24b6c18c8d344ca81d588ca",
+    "packages/app-ios/Sources/RunweaveIOS/App/RootView.swift": "c5f280eae85daef6c6e7a6fa3845f7b43c85d3d9754435b37581f08554856dd9",
+    "packages/app-ios/Sources/RunweaveIOS/Contracts/APIError.swift": "5e929852b99cd6ded200791ed8a6b84d2aacd16b335c3b838e4600f0fd185369",
+    "packages/app-ios/Sources/RunweaveIOS/Contracts/TerminalMessage.swift": "6951dec4529ebf63891ed8fb33c302814c8d78d6c383be6453ffc1adb1e48b23",
+    "packages/app-ios/Sources/RunweaveIOS/Features/Terminal/Rendering/SwiftTermSurface.swift": "a3abcac3069765cc8412317d408e6f769d279cbcc1c8f16018b9262dc7896c3c",
+    "packages/app-ios/Sources/RunweaveIOS/Features/Terminal/Rendering/TerminalHostView.swift": "de8fd840a64aebec3666a41b3d8135f101df0ba861973d3c84a74c215f83e68d",
+    "packages/app-ios/Sources/RunweaveIOS/Features/Terminal/Rendering/TerminalSurface.swift": "67eda108eb879cf425a68972acfc2f88b25bbc6d5485f14f9f64ebc464ae55d0",
+    "packages/app-ios/Sources/RunweaveIOS/Features/Terminal/SessionController.swift": "e93540cf5c9b7625c8c597eb804ac98065c87443e1822dde24462d4c8b2754fd",
+    "packages/app-ios/Sources/RunweaveIOS/Services/APIClient.swift": "b18995b806ecf2881dd5bada419c4da9345e0ce5f79a2cb297ed853797e8a940",
+    "packages/app-ios/Sources/RunweaveIOS/State/CredentialStore.swift": "688284d8d227ce07a2c231e83460b7c352b37867f3ebb43b5eda892c21f725e9",
+    "packages/app-ios/ios/Diagnostics/TerminalProbe.swift": "7e51b93212320ec39636ee4b0643885c883a750c8a906403ac609663e8b6e572",
+    "packages/app-ios/ios/RunweaveNative/Info.plist": "2c726a8c1595ab6532d9c6e7afe83d06448b078a596b8965002ce331f6b6d928",
+    "packages/app-ios/ios/RunweaveNative/RunweaveNativeApp.swift": "8e6b23902a07bab0626b324078b5acfb220642f51cb6a01ba9dd5c38d63b9aa4",
+    "packages/app-ios/ios/RunweaveNative/Simulator.entitlements": "5beae96f2879697a655aaaacd851bb1ea5dc7fe453395a341fd668eff4f1e54c",
+    "packages/app-ios/ios/RunweaveNative.xcodeproj/project.pbxproj": "1c180157deae7f49bb6a5a0a0beb82685feed29ec7a2465dea4275707737a099",
+    "packages/app-ios/ios/RunweaveNative.xcodeproj/xcshareddata/xcschemes/RunweaveNative.xcscheme": "f39f343545ac8c50b7745d4e4e1879ad63977108015810ad1f65074b1f79dd50",
+    "packages/app-ios/scripts/check-mapping.mjs": "14c41d6332fd10d5916dc5c3a026a3181d27b492c967513420145b01daf223d0",
+    "packages/app-ios/scripts/ios.mjs": "6d6c757335786161e05227d1addb1fb5785277af3e8ee4dfb289fd0a298c5d90"
+  },
+  "cleanup": {
+    "status": "owned live session stopped; known earlier stale manifest remains",
+    "devSessionId": "dvs-4b4424",
+    "devSessionState": "stopped",
+    "fixtureSessionsDeleted": ["23b1cc8c", "e24836f9", "8d00c190", "53e3f85d"],
+    "playwright": "dvs-4b4424-desktop detached; owned fixture overlay removed",
+    "privateFixtureAuthFile": "removed",
+    "staleSession": "dvs-430edc",
+    "staleReason": "Tool refused stop and cleanup-stale due to service identity drift; no manual deletion or PID cleanup.",
+    "evidence": [
+      ".runweave/ios-native-evidence/dev-stop-final.json",
+      ".runweave/ios-native-evidence/final-fixture-cleanup.json"
+    ]
+  },
+  "builds": {
+    "simulatorDebug": "pass",
+    "simulatorProfile": "pass",
+    "simulatorRelease": "pass",
+    "deviceProfileSignedBuild": "pass",
+    "releaseProbeSymbols": 0,
+    "deviceRuntime": "not_run"
+  },
+  "staticChecks": {
+    "mapping": "21 valid; hashes current",
+    "yaml": "41 required cases schema-valid only",
+    "docs": "pass",
+    "swiftFormat": "pass",
+    "nodeSyntax": "pass",
+    "plists": "pass",
+    "gitDiffCheck": "pass",
+    "architecture": "pass; existing TS/JS ratchet, not Swift runtime coverage"
+  }
+}

@@ -1,5 +1,9 @@
 # Runweave App 移动端边界
 
+本文描述旧 `app/` 的业务合同。独立 Swift 候选客户端位于
+[`packages/app-ios`](../../packages/app-ios/README.md)，沿用 Backend HTTP/WS，保留旧 App 对照。
+新旧源码映射和当前验收范围以原生包文档为准；候选客户端尚未通过完整替换验收。
+
 Runweave 的移动端能力由专门的 App 客户端承载，不再维护旧的 Web H5 移动终端页面。App 和桌面 Web 共用登录、项目、终端 session 与输入能力，但移动端首页和终端详情有独立的轻量契约。
 
 ## App 首页
