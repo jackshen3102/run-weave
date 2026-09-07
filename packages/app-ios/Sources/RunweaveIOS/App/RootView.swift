@@ -56,7 +56,7 @@ public struct RootView: View {
     .id(connections.active?.scope)
     .task(id: connections.active?.scope) { await session.activate(connections.active) }
     .onAppear { if connections.active == nil { managingConnections = true } }
-    .onChange(of: scenePhase) { phase in session.setForeground(phase == .active) }
+    .onChange(of: scenePhase) { phase in session.setScenePhase(phase) }
     .sheet(isPresented: $managingConnections) {
       ConnectionManager(store: connections, session: session)
     }

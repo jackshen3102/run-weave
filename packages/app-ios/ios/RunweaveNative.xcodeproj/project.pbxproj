@@ -7,12 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BC1D04EF29A64F6783410091 /* Diagnostics/TerminalPerformanceCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1D04EF29A64F6783410092 /* Diagnostics/TerminalPerformanceCapture.swift */; };
 		28465006C5C473977D4EC761 /* Diagnostics/TerminalProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA9C736F19E7F60B7F6764AD /* Diagnostics/TerminalProbe.swift */; };
 		6B997245719355C9279AB0F9 /* RunweaveIOS in Frameworks */ = {isa = PBXBuildFile; productRef = 8CE3E71EF8635D2BF27913BB /* RunweaveIOS */; };
 		F2EED3E9AD51B8CDAEBE2A39 /* RunweaveNative/RunweaveNativeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61DE1B08FE2FC56EE9044434 /* RunweaveNative/RunweaveNativeApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		BC1D04EF29A64F6783410092 /* Diagnostics/TerminalPerformanceCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics/TerminalPerformanceCapture.swift; sourceTree = "<group>"; };
 		61DE1B08FE2FC56EE9044434 /* RunweaveNative/RunweaveNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunweaveNative/RunweaveNativeApp.swift; sourceTree = "<group>"; };
 		A8792157CB4F27FB949C035F /* RunweaveNative.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RunweaveNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BA9C736F19E7F60B7F6764AD /* Diagnostics/TerminalProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics/TerminalProbe.swift; sourceTree = "<group>"; };
@@ -33,6 +35,7 @@
 		AD936FCBED631FA67E05C3EA = {
 			isa = PBXGroup;
 			children = (
+				BC1D04EF29A64F6783410092 /* Diagnostics/TerminalPerformanceCapture.swift */,
 				61DE1B08FE2FC56EE9044434 /* RunweaveNative/RunweaveNativeApp.swift */,
 				BA9C736F19E7F60B7F6764AD /* Diagnostics/TerminalProbe.swift */,
 				A8792157CB4F27FB949C035F /* RunweaveNative.app */,
@@ -108,6 +111,7 @@
 			files = (
 				F2EED3E9AD51B8CDAEBE2A39 /* RunweaveNative/RunweaveNativeApp.swift in Sources */,
 				28465006C5C473977D4EC761 /* Diagnostics/TerminalProbe.swift in Sources */,
+				BC1D04EF29A64F6783410091 /* Diagnostics/TerminalPerformanceCapture.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -187,3 +187,17 @@ cases:
       - 打开该会话并确认 connected 中的 runtimeKind 为 pty，输出与 raw 输入形成真实闭环。
       - 退出该测试 shell，确认候选 App 收敛到 exited，不调用 tmux 专属 copy mode 操作。
       - 确认释放客户端资源不触碰其他测试会话。
+
+  - id: IOSTERM-015
+    name: tmux 自动设备响应不会污染用户命令
+    required: true
+    description: >
+      tmux attach 输出引发的 renderer 自动响应不能通过 pane 输入接口进入 shell，
+      用户键盘和快捷键仍可输入，普通 PTY 保留终端查询响应能力。
+    preconditions:
+      - 原生 App 打开本例独占的真实 tmux shell，已记录初始进程与空输入行。
+      - 可向本例 shell 输出设备属性、版本和窗口尺寸查询，并记录终端输入和 pane 文本。
+    steps:
+      - 由本例程序输出查询，等待 renderer 消费；确认 shell 输入行没有自动设备响应，后台未收到对应 pane input。
+      - 显式输入唯一无副作用命令并发送，再操作快捷键；确认命令原文执行一次，没有被版本号或尺寸响应拼接。
+      - 在独立普通 PTY 查询环境重放设备查询；确认收到合法终端响应，未将 tmux 专用抑制错误应用于普通 PTY。

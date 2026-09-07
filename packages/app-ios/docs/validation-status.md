@@ -1,7 +1,9 @@
 # 原生 iOS 验收状态
 
 2026-09-07 范围更新：用户已接入 iPhone 17，真机用例开始执行；用户明确排除
-`IOSTERM-013`（iOS 15 兼容性），该项不再作为验收阻塞。下文保留 2026-09-06 的结果快照。
+`IOSTERM-013`（iOS 15 兼容性）以及 `IOSSESSION-015` 中的 HTTPS/WSS 与 TLS 证书测试，
+这些子项不再作为验收阻塞，也不再等待 HTTPS 地址。局域网权限拒绝与恢复已在真机通过。
+下文保留 2026-09-06 的结果快照。
 真机预检、当前 Debug 构建/安装/启动、登录保留与 XCUITest 就绪已通过。
 `IOSTERM-005` 已修复并通过真机回归：动态手势优先级覆盖 SwiftTerm 后装载的 pan，
 6000 行历史可拖动，tmux 历史模式 0→1→0，回到底部后的命令执行正常。
@@ -9,14 +11,91 @@
 重开同一终端保留草稿且不自动发送；客户端数 0→1→0→1，远端 pane PID 保持。
 终端详情改为系统导航推入，临时触摸诊断代码已移除。当前 Debug 与 Release 真机构建通过。
 `IOSTERM-007` 恢复功能与新输入通过：约 360 秒接收空档后恢复同一会话和实时画面，
-后台程序仅启动一次，新命令仅执行一次；仍缺 scene 时间戳与解锁到画面的完整耗时。
+后台程序仅启动一次，新命令仅执行一次；仍需在同次持续输出锁屏运行中补齐恢复耗时与 scene/socket 记录。
 `IOSTERM-009` 已通过真机 Metal 渲染与新实例失败降级；两条路径导出字符/光标一致。
-默认仍为 CoreGraphics，持续输出性能、TLS/网络权限的真机用例尚未完成。
-`IOSFEATURE-006` 部分完成：真机转写追加草稿、取消保留、WAV 24 kHz/单声道/16 位、
-临时文件清理及受控显式发送一次已验证；尚缺权限拒绝恢复、服务失败与上传元数据取证。
-取消测试结束后另记录一次来源未明的发送，早于显式发送脚本；25 秒无触摸回归未复现，
-保留异常，不将该完整用例标为通过。
+默认仍为 CoreGraphics，持续输出性能仍在验证；局域网 HTTP 真机连接与权限拒绝/恢复已取证。
+`IOSFEATURE-006` 已完成真实语音转写、取消、麦克风拒绝与恢复、服务失败与上传参数取证。
+上传实测 audio/wav、24 kHz、单声道、16 位；声明时长与 WAV 时长最大差约 21 ms。
+仍保留部分完成：早前取消测试结束后记录一次来源未明的发送，无触摸回归未复现。
+新增 `IOSFEATURE-013` 已通过：修复成功转写后页面顶部残留旧 HTTP 503 错误；
+同一真机与独立 fixture 内验证失败→成功后旧错误消失，等待二十秒无自动发送，
+显式发送仅出现一次输入。媒体局部错误不再写入全局错误，认证和网络状态处理保留。
+此次修复 Debug/Release 真机构建、Swift 格式与 21 项映射检查通过，功能计划共 13 项校验通过。
+`IOSTERM-015` 已修复并通过真机回归：SwiftTerm 解析输出时产生的自动设备响应，
+在 tmux 模式下不再经 pane 输入接口写入 shell；键盘和快捷键路径保持，普通 PTY 仍返回合法设备信息。
+真实 tmux 验证零自动 WS input、显式命令一次、Ctrl-C 一次；普通 PTY 收到合法设备属性响应。
+Debug/Release 真机构建、Swift 格式、21 项源码映射和新增终端计划 15 项校验通过。
+见[tmux 输入证据](../../../.runweave/ios-real-backend-20260907/tmux-response-verification.json)、
+[真机回归](../../../.runweave/native-device-runner/query-routing-tmux-clean.xcresult)与
+[PTY 回归](../../../.runweave/native-device-runner/query-routing-pty.xcresult)。
+
+本轮补充通过：独立真实 Backend 重启后的新事件流与 Home 同步；前台独立断网后大 TUI 恢复；
+只读原生客户端退出后旧客户端继续输入；旧 App 同 fixture Diff 与 Unicode 对照；
+Safari 外链请求无认证头/Cookie、无原生 bridge；新旧安装、连接配置与主题隔离。
+Unicode 差异已记录：SwiftTerm 保留 👩‍💻 为 2 格，旧 xterm Unicode 11 拆成两个 emoji 共 4 格，
+没有将旧端退化复制到原生。
+原生已恢复 mac 后端、深色主题和已有登录，测试连接 Dedicated Real Backend 已移除，远端测试资源仍在。
+旧 App 的 5 个连接、默认家里mac和深色外观前后不变；
+[隔离与恢复证据](../../../.runweave/native-device-runner/dedicated-cleanup-isolation.xcresult)。
+原 native-theme-old-isolation runner 的原生主题步骤通过，但旧端面板定位失败；
+旧端已独立补跑通过，没有把失败 runner 整体计作通过。
+
+`IOSSESSION-015` 局域网权限子项已通过：拒绝时保留 Home/登录、禁用写操作并显示可解释的连接错误；
+用户恢复权限后手动检测显示在线且已登录，无需重新认证，原终端重新连接，pane PID 75312 保持。
+[权限拒绝](../../../.runweave/native-device-runner/local-network-denied-verified.xcresult)与
+[恢复证据](../../../.runweave/native-device-runner/local-network-restored-verified.xcresult)。TLS 仍按用户要求排除。
+
+`IOSFEATURE-007` 按本轮有效范围通过：项目搜索隔离、相对越界与越界软链接拒绝已取证。
+用户明确排除“项目外绝对路径预览”子项，保持后端现有只读预览行为，不再等待该决策。
+
+前后台及操作来源诊断已补充：记录 scene 与 Composer/录音按钮动作，不记录命令或语音正文。
+Profile 真机连续 3 次取消录音、等待 20 秒无输入；显式发送对应 1 次动作、1 次 accepted 和 1 次后端执行。
+[诊断回归证据](../../../.runweave/ios-native-evidence/device-20260907/action-scene-verification.json)。
+Profile/Release 真机构建、Swift 格式与 21 项映射检查通过；历史来源未明输入仍单独保留。
+新增一次锁屏实测：后台 408.708 秒，scene.active 到 snapshot 接收 1.328 秒，
+ticket 到 snapshot 0.168 秒，原 shell PID 保持，恢复后新输入执行一次。
+但该次输出程序在锁屏前已被 Ctrl-C 停止，不能作为持续输出锁屏用例的完整证据；
+snapshot 接收也不等于画面已经提交。
+[锁屏计量及限制](../../../.runweave/ios-native-evidence/device-20260907/lock-metrics-return-verification.json)。
+
+`IOSTERM-010` 的原生性能子项已通过完整 Profile 真机重跑：256 KiB/s、600 秒、150 MiB，
+字号 14、46×12、5000 行 scrollback、CoreGraphics。接收与提交均为 157286452 B，
+前 60 秒输出提交 p95 为 41.56 ms，本地输入提交 p95 为 4.51 ms（130 次）；
+队列峰值 23 KiB、最终为 0，最后接收到提交为 36.69 ms，最终截图包含末行与 PERF END。
+第二/第十分钟附近 RSS 为 163.44/163.89 MiB，增长 0.28%，五秒采样峰值 165.64 MiB。
+RSS 包含内部计量开销；正常结束的 Instruments 短录制另取得该进程 RSS，用于交叉核对。
+输出延迟从解码后的通知开始，不包含 WebSocket JSON 解码；输入从应用事件分发开始，
+不包含 OS 键盘投递。UIKit afterCATransactionCommit 不代表屏幕发光时刻。
+内部验证入口新增 RSS 采样与保存失败提示，Profile/Release 构建、格式和 21 项映射检查通过。
+[完整原生负载结果](../../../.runweave/ios-native-evidence/device-20260907/performance-native-rss-analysis.json)与
+[真机 UI 回归](../../../.runweave/native-device-runner/performance-long-native-rss.xcresult)。
+
+旧 xterm 对照仍未完成十分钟：同一手机的 Safari 加载原有 TerminalRenderer，
+固定 46×12 与系统等宽字号 14；这是组件测试页，不是旧 App 安装包的完整性能测量。
+已取得前 60 秒数据，但两轮先后出现 WebSocket 关闭与 CoreDevice 控制连接失效，
+第二次未同时录制 Instruments，仍发生中断；设备工具随后已无法找到手机，停止真机操作。
+用户指出手机仍连接后重新核对：USB 注册表可见 iPhone，xcdevice 也显示 USB 可用；
+不可用的是 CoreDevice tunnel。刷新已有配对后恢复 connected，进程查询与 DDI 服务均成功。
+没有解除配对或重置手机，不能把先前工具不可用描述为手机被拔掉。
+[控制通道恢复记录](../../../.runweave/ios-native-evidence/device-20260907/device-channel-recovery.json)。
+其 onRender 加两次 requestAnimationFrame 的计量边界不同，不能将两端数字直接换算为速度比例。
+首轮另因布局变成 44 列及输入焦点问题作废，已修正测试页，未计为通过。
+[旧端结果及中断记录](../../../.runweave/ios-native-evidence/device-20260907/performance-legacy-analysis.json)。
+首次原生录制曾提前结束显示采样，且断连文件没有可导出的 RSS 行；
+该轮限制保留在[首次负载分析](../../../.runweave/ios-native-evidence/device-20260907/performance-native-initial-analysis.json)，
+没有使用那份文件推断内存增幅。
+
+当前累计 **44 个用例：40 通过（含明确排除的子项）、3 部分完成、1 整项排除**。
+尚未完成：
+
+- `IOSFEATURE-006`：早前取消测试后的一次来源未明 HTTP 输入；与本次 raw 设备响应缺陷不是同一证据，未合并结论。
+- `IOSTERM-007`：在同次持续输出锁屏运行中补齐恢复耗时与 scene/socket 记录。
+- `IOSTERM-010`：原生性能子项通过，同设备旧 xterm 十分钟基线因真机连接丢失未完成。
+
+`IOSTERM-013` 按用户要求排除。部分完成和未执行均不计为通过。
+[累计结果](../../../.runweave/ios-native-evidence/goal-results.json)与
 [真机执行记录](../../../.runweave/ios-native-evidence/device-20260907/results.json)。
+下文 9 月 6 日表格为历史快照，不代表本轮当前状态。
 
 2026-09-06，候选版本 0.1.0。41 个正式用例已逐项核对：**23 项通过，10 项部分完成，8 项未执行**（6 项真机、2 项环境受限）。部分完成不计为通过。按本轮约定，真机和下表列明的困难子项跳过；这不代表可替换旧 App 或全部迁移门禁已通过。
 

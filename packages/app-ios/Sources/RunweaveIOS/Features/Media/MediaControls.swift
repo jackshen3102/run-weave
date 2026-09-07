@@ -22,14 +22,19 @@ struct MediaControls: View {
         Button("图片") { picking = true }.disabled(busy || recorder.recording || !session.canWrite)
         if recorder.recording {
           Button("结束并转写") {
+            session.recordUserAction("voice.transcribe", terminalID: terminalID)
             do {
               let clip = try recorder.finish()
               submit { try await $0.transcribe(clip) }
             } catch { failure = displayError(error) }
           }.disabled(busy || !session.canWrite)
-          Button("取消录音", role: .cancel) { recorder.cancel() }
+          Button("取消录音", role: .cancel) {
+            session.recordUserAction("voice.cancel", terminalID: terminalID)
+            recorder.cancel()
+          }
         } else {
           Button(recorder.requestingPermission ? "请求麦克风…" : "录音") {
+            session.recordUserAction("voice.start", terminalID: terminalID)
             Task { await recorder.start() }
           }.disabled(busy || recorder.requestingPermission || !session.canWrite)
         }
@@ -76,7 +81,8 @@ struct MediaControls: View {
     failure = nil
     operation = Task {
       do {
-        let text = try await session.withConnection(action)
+        // Media owns its recoverable error; connection/auth transitions still belong to the session.
+        let text = try await session.withConnection(reportFailure: false, action)
         guard active, !Task.isCancelled, scope == session.connection?.scope else { return }
         session.appendDraft(text, terminalID: terminalID)
       } catch { if !Task.isCancelled { failure = displayError(error) } }

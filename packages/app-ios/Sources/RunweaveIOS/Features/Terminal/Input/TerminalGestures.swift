@@ -5,6 +5,15 @@ import UIKit
 @MainActor
 final class NativeTerminalView: TerminalView {
   weak var scrollHandler: TerminalGestures?
+  var acceptsTerminalResponses: () -> Bool = { true }
+
+  override func send(source: Terminal, data: ArraySlice<UInt8>) {
+    // Parser replies are distinct from TerminalView.send(data:) keyboard input.
+    // The tmux transport routes input to the pane, not to its attach client's PTY.
+    guard acceptsTerminalResponses() else { return }
+    super.send(source: source, data: data)
+  }
+
   override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
     switch direction {
     case .up, .previous:

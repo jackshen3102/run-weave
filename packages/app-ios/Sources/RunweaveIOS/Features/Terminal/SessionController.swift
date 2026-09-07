@@ -22,6 +22,16 @@ public final class SessionController: ObservableObject {
   private var localAtBottom = true
   public private(set) var events: [[String: Any]] = []
   func clearDiagnosticEvents() { events.removeAll() }
+  func recordUserAction(_ action: String) { record("action.\(action)") }
+
+  func recordScenePhase(_ phase: ScenePhase) {
+    switch phase {
+    case .active: record("scene.active")
+    case .inactive: record("scene.inactive")
+    case .background: record("scene.background")
+    @unknown default: record("scene.unknown")
+    }
+  }
   private let api: APIClient
   private let terminalID: String
   private let readOnly: Bool

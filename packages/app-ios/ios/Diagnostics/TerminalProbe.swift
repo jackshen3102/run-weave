@@ -194,6 +194,7 @@
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ObservedObject var controller: SessionController
+    @StateObject private var performance = TerminalPerformanceCapture()
     @State private var input = ""
     @State private var exportFile: ExportFile?
     @State private var exportFailure: String?
@@ -214,6 +215,12 @@
             Button("导出") { export() }
             Button("回到底部") { controller.returnToBottom() }.disabled(!controller.canSend)
           }.buttonStyle(.bordered)
+        }
+        HStack {
+          Button(performance.running ? "结束性能采样" : "开始性能采样") {
+            if performance.running { performance.stop() } else { performance.start(controller) }
+          }
+          Text(performance.status).font(.caption2)
         }
         TerminalHostView(surface: controller.surface)
         if verticalSizeClass != .compact {
@@ -241,6 +248,7 @@
           }.accessibilityLabel("收起键盘")
         }
       }
+      .onDisappear { performance.stop() }
       .onChange(of: scenePhase) { phase in
         if phase == .active {
           controller.connect()

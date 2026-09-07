@@ -49,6 +49,7 @@ struct ComposerView: View {
         Button(showStop ? (stopping ? "停止中…" : "Stop") : (controller.inputBusy ? "发送中…" : "发送")) {
           failure = nil
           let stop = showStop
+          session.recordUserAction(stop ? "composer.stop" : "composer.send", terminalID: terminalID)
           if stop { stopping = true }
           Task {
             defer { stopping = false }
