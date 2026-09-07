@@ -27,3 +27,6 @@ deploy/nginx/openssl-san.local.cnf
 .runweave
 .trae
 .worktree
+
+# Retired mobile client: keep local build caches and configuration untracked.
+/app/

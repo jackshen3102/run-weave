@@ -20,12 +20,12 @@ const REQUIRED_ENTRYPOINTS = [
   "frontend/AGENTS.md",
   "backend/AGENTS.md",
   "electron/AGENTS.md",
-  "app/AGENTS.md",
+  "packages/app-ios/AGENTS.md",
+  "packages/app-ios/README.md",
   "app-server/AGENTS.md",
   "packages/common/AGENTS.md",
   "packages/shared/AGENTS.md",
   "packages/runweave-cli/AGENTS.md",
-  "packages/terminal-renderer/AGENTS.md",
   "scripts/dev-session/AGENTS.md",
 ];
 
@@ -38,6 +38,7 @@ function listDocumentationFiles() {
     .split("\n")
     .filter(Boolean)
     .filter(isDocumentationFile)
+    .filter((filePath) => existsSync(path.join(REPO_ROOT, filePath)))
     .sort();
 }
 
@@ -47,6 +48,8 @@ function isDocumentationFile(filePath) {
     filePath === "README.md" ||
     filePath === "README.zh-CN.md" ||
     filePath.startsWith("docs/") ||
+    filePath.startsWith("packages/app-ios/docs/") ||
+    filePath === "packages/app-ios/README.md" ||
     filePath.startsWith(".agents/rules/") ||
     filePath.endsWith("/AGENTS.md")
   );

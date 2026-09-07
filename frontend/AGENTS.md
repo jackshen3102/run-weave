@@ -10,13 +10,13 @@
 - 按能力聚合的状态与 UI：`src/features/`
 - 后端 HTTP 调用：`src/services/`
 - 端到端测试允许位置：`tests/`（当前无 tracked spec，实际清单以 Git 为准）
-- 终端与跨端共享 UI：`@runweave/terminal-renderer`、`@runweave/common/terminal`
+- 终端显示：`src/components/terminal/surface/`；终端与图片基础能力：`@runweave/common/terminal`
 
 ## 边界
 
 - 页面和组件不反向被 `src/services/` 导入；服务层只处理协议调用与数据转换。
-- 跨 backend/frontend/electron/app 的 DTO 或协议进入 `packages/shared`，不要在前端复制。
-- 只有 Web 与 App 当前共同使用的前端代码才进入 `packages/common`；完整规则见
+- 跨 backend/frontend/electron 的 DTO 或协议进入 `packages/shared`，不要在前端复制。
+- 现有终端与图片基础能力保留在 `packages/common`；新增代码的归属规则见
   `../packages/common/AGENTS.md`。
 - Electron 能力通过 `window.electronAPI` / `window.companionAPI` bridge 使用，不从前端直接导入
   Electron 主进程模块。

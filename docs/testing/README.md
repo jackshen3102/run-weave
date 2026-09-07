@@ -16,7 +16,7 @@
 | 目录                               | 范围                                                 |
 | ---------------------------------- | ---------------------------------------------------- |
 | [`agent-team/`](./agent-team/)     | Agent Team 生命周期、执行、恢复、配置与干预          |
-| [`app/`](./app/)                   | Ionic App、App Server 与设备连接                     |
+| [`app/`](./app/)                   | 原生 iOS、App Server 与设备连接                      |
 | [`architecture/`](./architecture/) | 跨运行时架构与 Activity 数据底座                     |
 | [`browser/`](./browser/)           | 浏览器和原型画廊                                     |
 | [`evolution/`](./evolution/)       | Agent Self-Evolution                                 |

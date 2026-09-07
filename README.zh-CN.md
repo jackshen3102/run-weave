@@ -84,38 +84,22 @@ rw terminal handoff "$TERMINAL_ID" --tail 120 --json
 
 `send --confirm short` 确认的是输入已经投递或被短暂观察到，不代表 AI 任务已经完成。
 
-### 移动 App
+### iOS App
 
-Runweave 的移动端工作流由专门的 App 客户端承载：
+原生 SwiftUI/UIKit 应用位于 [packages/app-ios](packages/app-ios/README.md)，
+直接连接 Backend，提供项目、终端、媒体输入和只读预览。
+用 Xcode 打开 `packages/app-ios/ios/RunweaveNative.xcodeproj` 即可构建，无需 Web 构建或 pnpm 依赖安装。
 
-- 查看项目、终端会话、状态和最近活动。
-- 必要时直接从 App 打开某个终端，进行手机端输入。
-- 移动端 UI 与 API 契约和 Web 桌面前端保持分离。
-
-旧的 Web 移动端页面已删除。App 首页数据由仅服务 App 的 `/api/app/home/overview`
-接口提供。
-
-### iOS App 命令
-
-本地模拟器调试和真机构建使用不同命令：
+仓库根也提供可选快捷命令：
 
 ```bash
-# 本地模拟器调试，支持 live reload。
-# 会启动本地 backend 和 App Vite dev server。
-pnpm app:dev:ios
-
-# 本地后端 + 静态 iOS build/sync/open。
-# 不支持 live reload。
-pnpm app:ios:local
-
-# 真机/固定后端构建，后端地址来自 app/.env.local。
-# 不启动 backend，也不支持 live reload。
-pnpm app:ios:device
+pnpm ios:doctor
+pnpm ios:build -- --simulator <UDID> --configuration Debug
+pnpm ios:run -- --simulator <UDID> --configuration Debug
 ```
 
-真机构建前，复制 `app/.env.example` 为 `app/.env.local`，并把
-`VITE_RUNWEAVE_API_BASE` 设置为后端地址。`app/.env.local` 已被 git 忽略，本机域名
-或局域网地址不会提交到仓库。
+Backend 地址与登录在应用内配置；这些命令不启动 Backend。
+真机签名、包内 Node 命令及诊断入口统一见 [iOS 使用说明](packages/app-ios/README.md)。
 
 ## 快速开始
 

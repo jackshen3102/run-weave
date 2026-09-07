@@ -98,7 +98,6 @@ async function calculateTrackedSourceBytes(sourceRoot) {
       "backend",
       "packages/common",
       "packages/shared",
-      "packages/terminal-renderer",
       "packages/runweave-cli",
       "scripts",
     ],

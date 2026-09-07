@@ -1,21 +1,14 @@
-# AGENTS
+# Web 基础能力
 
-`packages/common` is only for common Web/App frontend code.
+`packages/common` 保留 Web 前端使用的终端缓冲、滚动、输入和图片预览基础能力。
+原生 iOS 不导入本包。调用方通过显式子路径 `@runweave/common/terminal` 使用。
 
-If a task or plan says `packages/commom`, treat it as a typo. The real directory is `packages/common`.
+## 边界
 
-## Boundary
+- 不新增根导出；样式继续使用明确的 CSS 子路径。
+- 新增页面状态、Web-only 业务、Electron bridge 或服务调用保留在 `frontend` 的实际拥有者。
+- 不为了未来复用增加抽象；新增基础能力需列出当前调用方与保留包边界的理由。
+- 后端、CLI、跨运行时协议、DTO 和纯 TypeScript 合同进入 `packages/shared`。
+- 修改终端或图片公共行为时检查所有 Web 调用方；原生 Swift 实现独立维护。
 
-- Put code here only when Web and App both reuse it now, or when the same change adds both Web and App callers.
-- Shared browser styles may live here only when both Web and App import the style asset.
-- Keep backend, Electron, CLI, protocol, DTO, persistence models, and cross-runtime contracts in `packages/shared`.
-- Treat `packages/shared` as the frontend/backend shared contract package, mainly for types, protocols, DTOs, and pure TypeScript contracts used across runtimes.
-- Do not move App-only UI helpers, Web-only terminal behavior, backend helpers, Electron bridge code, CLI helpers, or service contracts into this package.
-
-## Exports
-
-- Add explicit subpath exports only, such as `@runweave/common/terminal`.
-- Do not add a root `@runweave/common` export.
-- Do not import from the package root.
-
-Before adding or moving an export, write down the Web caller and the App caller in the change description. If either caller does not exist, keep the code in its current owner.
+验证使用 `pnpm --filter @runweave/common typecheck` 与 Web 前端对应检查。

@@ -1,6 +1,6 @@
 # 跨运行时合同
 
-`packages/shared`（`@runweave/shared`）保存 backend、frontend、app、electron、app-server、CLI
+`packages/shared`（`@runweave/shared`）保存 backend、frontend、electron、app-server、CLI
 之间复用的纯 TypeScript 合同。
 
 ## 适合放这里
@@ -16,17 +16,18 @@
 
 - Backend service、数据库模型和文件系统实现；
 - Electron handler、preload 实现或 BrowserView 生命周期；
-- Web/App 组件、hooks 和样式；
+- Web 组件、hooks 和样式；
 - 只被一个运行时使用、仅因“未来可能复用”而抽出的类型。
 
-Web 与 App 共享的前端实现属于 `packages/common`；其边界见 `../common/AGENTS.md`。
+Web 终端与图片基础能力见 `../common/AGENTS.md`。原生 iOS 的 Swift DTO 对照本包的序列化合同，
+但不直接导入 TypeScript。
 
 ## 变更检查
 
 修改合同前，用实际 import 搜索确认消费者，并同步审查序列化、兼容和可选字段语义：
 
 ```bash
-rg '@runweave/shared' app app-server backend electron frontend packages scripts
+rg '@runweave/shared' app-server backend electron frontend packages scripts
 pnpm --filter @runweave/shared typecheck
 pnpm architecture:check
 ```

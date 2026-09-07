@@ -132,7 +132,7 @@ function isArchitectureFile(filePath) {
   return (
     isRootQualityInfraFile(filePath) ||
     filePath === ".husky/pre-push" ||
-    /^(?:app|app-server|backend|electron|frontend|packages|plugins|scripts)\//.test(
+    /^(?:app-server|backend|electron|frontend|packages|plugins|scripts)\//.test(
       filePath,
     )
   );
@@ -144,7 +144,7 @@ function isStaticFile(filePath) {
   }
   return (
     isRootQualityInfraFile(filePath) ||
-    /^(?:app|app-server|backend|electron|frontend|packages)\//.test(filePath)
+    /^(?:app-server|backend|electron|frontend|packages)\//.test(filePath)
   );
 }
 
@@ -154,9 +154,7 @@ function isE2eFile(filePath) {
   }
   return (
     isRootQualityInfraFile(filePath) ||
-    /^(?:backend|frontend|packages\/(?:common|shared|terminal-renderer))\//.test(
-      filePath,
-    )
+    /^(?:backend|frontend|packages\/(?:common|shared))\//.test(filePath)
   );
 }
 

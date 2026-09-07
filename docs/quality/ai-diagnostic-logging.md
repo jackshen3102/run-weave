@@ -287,7 +287,7 @@ POST /api/diagnostic-logs/download
 
 - Web 端不再依赖 `window.runweaveDiagnosticLogs.enable()` 或可拖拽右下角浮窗。
 - Web 端从 Terminal toolbar 的更多菜单打开受控 dialog，结束后展示日志条数和服务端日志文件路径。
-- App 端继续使用 Ionic sheet 入口，结束上报后展示服务端 `logs.jsonl` 路径。
+- 原生 iOS 从 Home 的“诊断”菜单打开 SwiftUI 面板，支持开始、停止收集、本地导出和复制后端路径；持久化边界见 [iOS 技术决策](../../packages/app-ios/docs/decisions.md)。
 - 前端页面刷新后，Web recorder 的前端缓冲区会丢失；后端 recorder 仍是进程级当前记录窗口。这是当前诊断日志设计限制，不在前端做本地持久化。
 
 ## 结果弹窗

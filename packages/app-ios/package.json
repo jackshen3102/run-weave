@@ -7,7 +7,6 @@
   "scripts": {
     "ios:doctor": "node scripts/ios.mjs doctor",
     "ios:build": "node scripts/ios.mjs build",
-    "ios:run": "node scripts/ios.mjs run",
-    "mapping:check": "node scripts/check-mapping.mjs"
+    "ios:run": "node scripts/ios.mjs run"
   }
 }

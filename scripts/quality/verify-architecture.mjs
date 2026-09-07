@@ -68,11 +68,11 @@ async function verifyFileSizeBoundaries() {
 
 async function verifyImportBoundaries() {
   const root = path.join(tempRoot, "imports");
-  await writeFixture(root, "app/src/services/http.ts", [
+  await writeFixture(root, "frontend/src/services/http.ts", [
     'import { record } from "../components/LogPanel";',
     "export const request = record;",
   ]);
-  await writeFixture(root, "app/src/components/LogPanel.tsx", [
+  await writeFixture(root, "frontend/src/components/LogPanel.tsx", [
     'import { request } from "../services/http";',
     "export const record = request;",
   ]);

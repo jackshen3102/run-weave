@@ -39,7 +39,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["frontend/src/**/*.{ts,tsx}", "app/src/**/*.{ts,tsx}"],
+    files: ["frontend/src/**/*.{ts,tsx}"],
     languageOptions: {
       globals: {
         ...globals.browser,
