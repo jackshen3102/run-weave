@@ -18,6 +18,7 @@ const RESOLUTION_SUFFIXES = [
 ];
 
 const PACKAGE_ROOTS = new Map([
+  ["@runweave/suiji-server", "packages/suiji-server/src/index.ts"],
   ["@runweave/shared", "packages/shared/src/index.ts"],
   ["@runweave/common", "packages/common/src"],
   ["@runweave/cli", "packages/runweave-cli/src/index.ts"],
@@ -261,6 +262,39 @@ function findCycles(files, edges, includeTypes) {
 }
 
 function isForbiddenEdge(edge) {
+  if (edge.source.startsWith("packages/suiji-server/")) {
+    if (
+      edge.specifier.startsWith("@runweave/") &&
+      edge.specifier !== "@runweave/shared/suiji" &&
+      !edge.specifier.startsWith("@runweave/suiji-server")
+    )
+      return true;
+    if (
+      edge.target?.startsWith("packages/shared/src/") &&
+      !edge.target.startsWith("packages/shared/src/suiji/")
+    )
+      return true;
+    if (
+      /^(?:@runweave\/(?:common|cli|terminal-renderer|backend|app-server|frontend|app|electron))(?:\/|$)/.test(
+        edge.specifier,
+      )
+    )
+      return true;
+    if (
+      edge.target &&
+      /^(?:app|app-server|backend|electron|frontend)\/|^packages\/(?:app-ios|common|runweave-cli|terminal-renderer)\//.test(
+        edge.target,
+      )
+    )
+      return true;
+    if (
+      /^packages\/suiji-server\/src\/(?:auth|records|storage)\//.test(
+        edge.source,
+      ) &&
+      edge.target?.startsWith("packages/suiji-server/src/http/")
+    )
+      return true;
+  }
   if (!edge.target) {
     return false;
   }

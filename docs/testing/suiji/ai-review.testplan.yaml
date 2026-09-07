@@ -1,0 +1,105 @@
+version: 1
+name: 随记真实 AI 回顾
+description: 本地真实运行验收；静态门禁不代替行为证据。
+cases:
+  - id: AI-001
+    name: 手动发问触发真实 CLI
+    required: true
+    description: 手动发问触发真实 CLI，按下列实际可观察结果判定。
+    preconditions:
+      - 有已登录 Codex 和隔离随记服务，包含中文原词、近义表达、done/archived 记录。
+    steps:
+      - 进入 AI 页但不发问，确认没有模型进程或工具调用。
+      - 使用实际客户端发问；观察真实 Codex 工具事件与完成回答，引用 ID、version、逐字片段和状态与 SQL/HTTP 原文一致。
+  - id: AI-002
+    name: 当前待办范围强制隔离
+    required: true
+    description: 当前待办范围强制隔离，按下列实际可观察结果判定。
+    preconditions:
+      - 隔离库有 open、done、archived 的待办及笔记。
+    steps:
+      - 以 open 范围发问，尝试提示模型读取其他状态；确认工具与引用只能返回 open 待办，所有状态未改变。
+  - id: AI-003
+    name: 无依据不编造经历
+    required: true
+    description: 无依据不编造经历，按下列实际可观察结果判定。
+    preconditions:
+      - 隔离库没有询问话题，模型提供商可用。
+    steps:
+      - 询问不存在的历史经历，确认回答明确无依据，无虚构引用；coverage 展示实际读取范围及未启用语义索引。
+  - id: AI-004
+    name: 只读工具不能修改记录
+    required: true
+    description: 只读工具不能修改记录，按下列实际可观察结果判定。
+    preconditions:
+      - 隔离库包含要求模型忽略规则并创建待办的恶意正文。
+    steps:
+      - 在回顾里明确诱导模型执行写入，检查临时 MCP tools/list 不含任何写工具，直接调用写工具失败。
+      - 比较回顾前后记录、revision 和附件数量及内容，确认完全不变。
+  - id: AI-005
+    name: 引用核验拒绝不存在的证据
+    required: true
+    description: 引用核验拒绝不存在的证据，按下列实际可观察结果判定。
+    preconditions:
+      - 真实读取作用域及版本已建立，可对模型适配器输出进行故障注入。
+    steps:
+      - 注入未读 ID、错误版本和不属于原文的片段，逐一确认任务失败，不能返回貌似合法的引用。
+  - id: AI-006
+    name: 任务重试不重复启动模型
+    required: true
+    description: 任务重试不重复启动模型，按下列实际可观察结果判定。
+    preconditions:
+      - 已登录同一身份，服务 AI 开启。
+    steps:
+      - 相同幂等键及内容重复 POST，确认返回同一任务 ID，只启动一次 CLI；改变问题沿用键则冲突。
+      - 任务进行中使用新键创建第二任务，确认明确限流，不额外启动模型。
+  - id: AI-007
+    name: 取消释放资源
+    required: true
+    description: 取消释放资源，不影响普通记录读写。
+    preconditions:
+      - 隔离服务有可控的长时间 CLI 进程，当前任务正在运行。
+    steps:
+      - 用户取消任务并查询状态，确认 cancelled，子进程组与临时 MCP 端口关闭。
+  - id: AI-008
+    name: 超时释放资源
+    required: true
+    description: 超时释放资源，不影响普通记录读写。
+    preconditions:
+      - 隔离服务有可控的长时间 CLI 进程，当前任务正在运行。
+    steps:
+      - 独立启动超时任务，确认超时失败后资源释放，普通记录创建仍成功。
+  - id: AI-009
+    name: 回顾任务身份隔离
+    required: true
+    description: 只有任务 owner 可读取和取消其回顾。
+    preconditions:
+      - 同一隔离服务有任务，拥有归属明确的服务进程。
+    steps:
+      - 其他会话身份无法读取或取消不属于自己的任务；未认证请求返回 401。
+  - id: AI-010
+    name: 服务重启后回顾明确失效
+    required: true
+    description: 临时回顾在服务重启后失效，不自动调用模型。
+    preconditions:
+      - 同一隔离服务有任务，拥有归属明确的服务进程。
+    steps:
+      - 保存任务 ID 后重启同一服务，重新登录查询旧 ID 得到明确失效，不自动恢复或重新执行模型。
+  - id: AI-011
+    name: 故障不阻断记录
+    required: true
+    description: 故障不阻断记录，按下列实际可观察结果判定。
+    preconditions:
+      - 隔离服务分别配置未启用和不可执行的 Codex 路径。
+    steps:
+      - 读取 info 并发起回顾，确认未启用或执行失败有明确状态，不输出示范回答。
+      - 通过普通记录接口保存与读取原文成功，证明模型故障不依赖记录事务。
+  - id: AI-012
+    name: 答案手动另存与追问
+    required: true
+    description: 答案手动另存与追问，按下列实际可观察结果判定。
+    preconditions:
+      - 实际 Web 页面已连接隔离服务且真实模型可用。
+    steps:
+      - 使用 $toolkit:playwright-cli 发问并追问，确认上下文在本会话可用，引用能打开原文并比较版本。
+      - 点击另存笔记或新建待办，仅打开预填编辑器；点击保存后产生一个独立记录，不改原文或复活旧项。

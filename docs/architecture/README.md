@@ -78,6 +78,10 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | Agent Team / Loop Engine | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md) |
 | Agent Self-Evolution     | [agent-self-evolution.md](./agent-self-evolution.md)         |
 
+## 随记
+
+独立云服务、Swift App 和交付证据见 [随记 M1](./suiji.md)。
+
 ## 维护规则
 
 - 新增跨运行时当前合同时更新本页；单一目录的入口与限制优先写入该目录 `AGENTS.md`。

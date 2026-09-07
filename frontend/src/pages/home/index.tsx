@@ -1,3 +1,4 @@
+import { SuijiEntryLink } from "../../features/suiji/entry-link";
 import { useMemoizedFn } from "ahooks";
 import { useNavigate } from "react-router-dom";
 import { Activity, Sparkles } from "lucide-react";
@@ -94,6 +95,7 @@ export function HomePage({
               ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <Button variant="outline" size="sm" asChild><SuijiEntryLink>随记</SuijiEntryLink></Button>
               {openSystemMonitor ? (
                 <Button
                   variant="secondary"

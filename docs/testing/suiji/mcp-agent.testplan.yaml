@@ -1,0 +1,160 @@
+version: 1
+name: 随记 M2 MCP 与 Agent
+description: >
+  使用隔离随记服务、真实 PostgreSQL 与官方 MCP Client 按序取证，最后单独验证目标 Agent。
+  每条自行创建专用记录和操作键，不依赖前例；只操作本例拥有的进程和数据。
+  原始凭据留在受保护文件，结果脱敏。协议调用通过不等于目标 Agent 已验证。
+cases:
+  - id: SUIJIMCP-001
+    name: 未配置 MCP 时保留原 HTTP 服务
+    required: true
+    description: >
+      MCP 默认关闭，新增依赖不能让未配置的 M1 服务失去可用性。
+    preconditions:
+      - 本例独立服务没有 MCP 配置，专用数据库已迁移并初始化所有者。
+    steps:
+      - 请求 MCP；确认 404；使用原账号登录并通过 HTTP 创建和读取记录，确认来源 app。
+
+  - id: SUIJIMCP-002
+    name: MCP 每次请求校验独立凭据与来源
+    required: true
+    description: >
+      初始化不产生绕过认证的会话，App token 和 MCP token 不能互用，未约定的浏览器来源被拒绝。
+    preconditions:
+      - 本例服务启用独立 MCP 凭据，已有有效 App 会话，执行者持有受保护的 MCP token。
+    steps:
+      - 无凭据、错误凭据与 App token 分别请求 MCP；确认 401，无记录内容。
+      - 正确凭据完成初始化后去掉凭据调用工具；确认仍为 401；用 MCP token 调 HTTP info 也为 401。
+      - 带任意 Origin 调 MCP；确认拒绝；无 Origin 的正确请求可列出工具。
+      - 正确凭据请求 GET 或 DELETE MCP；确认 405，不创建长连接或删除数据。
+
+  - id: SUIJIMCP-003
+    name: 发现的工具只暴露严格业务能力
+    required: true
+    description: >
+      七个工具有明确输入和注解，未知字段不能更改身份、来源或记录结构。
+    preconditions:
+      - 本例官方 MCP Client 已连接启用 MCP 的隔离服务。
+    steps:
+      - 调用 tools/list；确认只有计划中的七个业务工具，读取与写入注解正确，没有 SQL、shell、删除和上传工具。
+      - 对创建与替换传 ownerId、actor、createdVia、attachmentIds 等未知字段；确认拒绝且没有写入。
+      - 对写操作省略幂等键，对修改省略版本；确认拒绝；调用未知工具确认协议错误，不伪造业务成功。
+
+  - id: SUIJIMCP-004
+    name: 列表与关键词搜索提供有界摘要和真实覆盖范围
+    required: true
+    description: >
+      列表和搜索不把片段冒充全文，不把关键词匹配宣称为语义或附件检索。
+    preconditions:
+      - 本例创建超过一页的专用记录，包含超过 300 标量的正文、中文、URL、百分号以及三种任务状态。
+      - 本例时间范围或唯一关键词可隔离其他数据，官方 MCP Client 已连接。
+    steps:
+      - 分页调用 list_records 并应用类型/状态过滤；确认集合及倒序正确，摘要最多 300 标量，无 body 字段，nextCursor 可续读。
+      - 搜索本例中文与百分号；确认字面匹配正确，覆盖仅为当前正文，标明 keyword；不存在的词返回空集合。
+      - 对截断项调用 get_record；确认完整正文、附件与版本可读，excerptIsFullBody 没有虚报。
+
+  - id: SUIJIMCP-005
+    name: Agent 写入复用记录服务并正确标记操作者
+    required: true
+    description: >
+      MCP 新建来源为 agent；替换 App 记录时原来源保留，修订 actor 反映实际入口。
+    preconditions:
+      - 本例有经 HTTP 创建的带附件记录，官方 MCP Client 和只读数据库取证连接可用。
+    steps:
+      - MCP 创建含空格、换行和 emoji 的笔记；确认全文原样、version 1、createdVia 为 agent，HTTP 可读取相同 ID。
+      - 先 get_record 读取 App 记录，再仅替换正文；确认 ID、附件、状态、createdAt 与原 createdVia 不变，版本加一。
+      - 查询本例修订；确认两次 MCP 写入的 actor 为 agent，HTTP 原始修订为 app，响应文本和 structuredContent 表达一致。
+
+  - id: SUIJIMCP-006
+    name: HTTP 和 MCP 同版本竞争不会静默覆盖
+    required: true
+    description: >
+      两种入口共用版本事务，冲突结果为可识别的工具错误并保留最新数据。
+    preconditions:
+      - 本例独立记录已由 App HTTP 和 MCP 读取同一版本，准备两个不同操作键。
+    steps:
+      - HTTP 先提交不同正文，再用原版本执行 MCP 替换；确认 isError 为 true，结构化 VERSION_CONFLICT 含 currentVersion。
+      - 读取记录和修订；确认只有 HTTP 提交的正文与一次版本增加，MCP 没有强制覆盖。
+
+  - id: SUIJIMCP-007
+    name: MCP 重放与并发重试只产生一次副作用
+    required: true
+    description: >
+      JSON-RPC 请求 ID 变化不改变逻辑幂等键，相同意图不会重复创建或递增版本。
+    preconditions:
+      - 本例两个独立 MCP Client 可连接同一服务，准备一个新创建键及相同 payload。
+    steps:
+      - 并发调用相同键的创建，再原样重试；确认都取得同一记录，只有一条记录和一个初始修订。
+      - 读取完整记录后替换正文，再原键原版本重放；确认返回相同成功结果，版本不再递增。
+
+  - id: SUIJIMCP-008
+    name: 幂等键区分不同意图并保留旧 App 重放兼容
+    required: true
+    description: >
+      同正文不同键允许创建，跨入口或改 payload 复用键被拒绝，已有 App 摘要仍可重放。
+    preconditions:
+      - 本例数据库有按 M1 摘要算法保存的 HTTP 成功结果，已记录原创建键、payload 与 ID。
+    steps:
+      - 升级后的 HTTP 原样重放该键；确认仍返回原 ID；MCP 使用同键创建相同正文，确认键复用错误。
+      - MCP 创建成功后用同键改正文再创建；确认 IDEMPOTENCY_KEY_REUSED，原结果仍可重放。
+      - 用两个新键分别创建相同正文；确认独立 ID，不按内容去重。
+
+  - id: SUIJIMCP-009
+    name: 待办状态工具保留终态规则
+    required: true
+    description: >
+      状态工具只允许 open 到 done 或 archived，业务失败有结构化结果。
+    preconditions:
+      - 本例有两个 open 待办和一条笔记，MCP Client 已连接，知道各自当前版本。
+    steps:
+      - 分别完成和归档两个待办；确认状态、版本与 HTTP 一致。
+      - 对终态用新键再次改状态，对笔记改任务状态；确认 INVALID_TRANSITION 且原记录不变。
+      - 请求 open 目标；确认输入拒绝，不提供复活能力。
+
+  - id: SUIJIMCP-010
+    name: 附件只读工具遵守预算并保留内容
+    required: true
+    description: >
+      Markdown 可按标量分页完整还原，图片返回实际 image 内容，不执行资料中的指令或外链。
+    preconditions:
+      - 本例通过 HTTP 上传包含 emoji 与 HTML/外链文本的 Markdown 和合法图片，记录附件 ID 与文件校验和。
+    steps:
+      - 用小 limit 分页读取 Markdown；确认拼接内容与原文一致，游标推进且绑定附件，未知 ID 与跨附件游标拒绝。
+      - 读取图片；确认 MCP image 的 MIME 和解码字节校验和正确，没有服务器路径或公开下载 URL。
+      - 查看网络和数据变化；确认不请求外链、不执行 HTML 或附件中的写入指令，没有修改任何记录。
+
+  - id: SUIJIMCP-011
+    name: 写入响应丢失后可用原键确认结果
+    required: true
+    description: >
+      真实提交后的连接中断不会让后续 MCP 重试形成第二次创建。
+    preconditions:
+      - 本例 Client 经独占故障代理访问服务；代理能读到上游成功响应后丢弃下行响应。
+      - 专用数据库可核对本例提交结果，结束后能撤销代理规则。
+    steps:
+      - 发起创建并丢弃成功响应；确认客户端失败同时数据库已有提交。
+      - 恢复连接并原键原参数重试；确认返回原 ID，只有一次修订；撤销本例故障规则。
+
+  - id: SUIJIMCP-012
+    name: 个人 MCP 凭据过期后停止授权
+    required: true
+    description: >
+      到期在每次请求检查，不因曾初始化而继续读取；App 会话不受 MCP 期限影响。
+    preconditions:
+      - 本例独立服务配置短期 MCP 凭据，已取得 App 会话；不调整系统时间。
+    steps:
+      - 到期前完成 MCP 初始化和读取；等待配置期限过去后再次读取，确认 401 且没有私有内容。
+      - 使用原 App 会话读取 info；确认有效，MCP 到期不使整个服务停止。
+
+  - id: SUIJIMCP-013
+    name: 目标 Agent 实际完成发现到读改写闭环
+    required: true
+    description: >
+      目标 Agent 使用 MCP 工具完成用户明确授权的样例操作，不能用 SDK 脚本替代此项。
+    preconditions:
+      - 已明确目标 Agent 并配置仅指向本例测试服务的 MCP，凭据通过环境注入，没有修改全局个人配置。
+      - 专用服务包含长正文样例，末尾有必须保留的标记；执行者可查看 Agent 工具事件与服务结果。
+    steps:
+      - 要求 Agent 列出并搜索样例，再按用户指令给指定记录正文追加一句；确认先 get_record 读取完整正文，再带版本和幂等键调用替换。
+      - 要求 Agent 新建一个指定正文的待办并完成；确认实际调用 create_record 与 set_task_status。
+      - 独立 HTTP 核对原记录末尾标记、新增文字及新待办状态；保存实际 Agent 工具调用证据，未调用工具不得判为通过。

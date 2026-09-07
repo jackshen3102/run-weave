@@ -1,0 +1,16 @@
+{
+  "environment": "development",
+  "targetHost": "REPLACE_WITH_TARGET_HOSTNAME",
+  "targetPath": "/srv/suiji",
+  "envFile": "/srv/suiji/deployment.env",
+  "project": "suiji-dev",
+  "domain": "notes.example.com",
+  "tls": "external-reverse-proxy",
+  "apiURL": "https://notes.example.com",
+  "backupLocation": "backup-user@backup-host:/srv/backups/suiji",
+  "rpoSeconds": 86400,
+  "rtoSeconds": 3600,
+  "pauseSeconds": 120,
+  "restoreIsolated": false,
+  "ownerCredentialsFile": "/srv/suiji/secrets/owner.json"
+}

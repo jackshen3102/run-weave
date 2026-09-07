@@ -113,6 +113,7 @@ export interface RunweaveElectronBridge {
   reloadRuntime: () => Promise<PackagedBackendConnectionState>;
   checkAppServer: () => Promise<boolean>;
   openExternal: (url: string) => Promise<void>;
+  openSuijiWindow: () => Promise<void>;
   getRuntimeStats: () => Promise<RuntimeStatsSnapshot>;
   getSystemMonitorSnapshot: () => Promise<SystemMonitorSnapshot>;
   getRuntimeStatusReport: () => Promise<RuntimeStatusReport>;

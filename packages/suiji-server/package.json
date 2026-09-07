@@ -1,0 +1,39 @@
+{
+  "name": "@runweave/suiji-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src scripts migrations",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "auth:init": "tsx scripts/admin.ts init",
+    "auth:reset": "tsx scripts/admin.ts reset",
+    "mcp:credential": "tsx scripts/mcp-credential.ts"
+  },
+  "dependencies": {
+    "@runweave/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "express": "4.22.2",
+    "zod": "3.25.76",
+    "pg": "8.23.0",
+    "node-pg-migrate": "9.0.0",
+    "busboy": "1.6.0",
+    "sharp": "0.35.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.13.10",
+    "@types/pg": "^8.15.0",
+    "@types/busboy": "^1.5.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "esbuild": "0.25.12"
+  },
+  "files": [
+    "dist"
+  ]
+}

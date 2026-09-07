@@ -1,0 +1,12 @@
+{
+  "name": "@runweave/suiji-ios",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ios:doctor": "node scripts/ios.mjs doctor",
+    "ios:build": "node scripts/ios.mjs build",
+    "ios:run": "node scripts/ios.mjs run",
+    "mapping:check": "node scripts/check-mapping.mjs"
+  }
+}

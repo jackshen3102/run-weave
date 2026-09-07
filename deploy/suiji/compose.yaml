@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:18.6@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: suiji
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password, api_password]
+    volumes:
+      - ${SUIJI_DATA_DIR:?required}/postgres:/var/lib/postgresql
+      - ./init-db.sh:/docker-entrypoint-initdb.d/10-suiji.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d suiji]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    # No host database port. Only this Compose network can reach PostgreSQL.
+  api:
+    image: ${SUIJI_IMAGE:?immutable image required}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SUIJI_APP_VERSION: ${SUIJI_REVISION:?required}
+      SUIJI_MCP_TOKEN_SHA256: ${SUIJI_MCP_TOKEN_SHA256:-}
+      SUIJI_MCP_TOKEN_EXPIRES_AT: ${SUIJI_MCP_TOKEN_EXPIRES_AT:-}
+    secrets: [api_password]
+    ports: ["127.0.0.1:${SUIJI_PORT:-4783}:4783"]
+    volumes: ["${SUIJI_DATA_DIR:?required}/attachments:/data/attachments"]
+    stop_grace_period: 120s
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:4783/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  admin:
+    image: ${SUIJI_IMAGE:?immutable image required}
+    profiles: [admin]
+    secrets: [db_password]
+    command: [migrate]
+    depends_on:
+      db:
+        condition: service_healthy
+secrets:
+  db_password:
+    file: ${SUIJI_DB_PASSWORD_FILE:?required}
+  api_password:
+    file: ${SUIJI_API_PASSWORD_FILE:?required}
