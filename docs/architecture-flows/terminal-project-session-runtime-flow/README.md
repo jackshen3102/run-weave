@@ -1,9 +1,13 @@
-# terminal-project-session-runtime-flow（项目 / 终端 / xterm 架构诊断图）
+# terminal-project-session-runtime-flow（历史架构诊断图）
 
-Runweave 当前项目、终端 session、xterm.js、PTY/tmux、App 与事件系统关系的可运行说明原型。
+> 历史原型：记录 2026-07-11 的诊断快照，不代表当前实现。旧 `app/` 与 React 终端 renderer 已退役；
+> 图中的旧路径仅供历史追溯。当前客户端与协议边界见 [iOS 架构](../../../packages/app-ios/docs/architecture.md)
+> 和[全仓代码地图](../../architecture/README.md)。
+
+Runweave 当时的项目、终端 session、xterm.js、PTY/tmux、App 与事件系统关系的可运行说明原型。
 
 - **性质**：基于真实复现更新后的代码诊断图；P1/P2/P4 展示已验证修复，P3/P5 展示未达到修改门槛的证据。
-- **代码基线**：包含 terminal event recovery、结构刷新合并与离线输入修复的当前工作区，梳理日期 `2026-07-11`。
+- **代码基线**：2026-07-11 包含 terminal event recovery、结构刷新合并与离线输入修复的工作区快照，梳理日期 `2026-07-11`。
 - **范围假设**：用户原话中的“上面也有项目”按“App 上也有项目”理解，因此同时覆盖 Web/Electron Terminal Workspace 与 `app/`。如果原意不是 App，图中的 Web/Electron 主链仍然独立成立。
 - **参考风格**：`docs/architecture-flows/agent-team-loop-flow/` 的深色流程图与代码源说明风格。
 

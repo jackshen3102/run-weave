@@ -1,10 +1,10 @@
 {
   "meta": {
-    "title": "Project · Terminal · xterm 架构诊断图",
-    "subtitle": "数据面 · 事件面 · 权威快照 · 问题边界",
-    "baseline": "working tree · verified",
+    "title": "历史原型 · Project · Terminal · xterm",
+    "subtitle": "2026-07-11 诊断快照；旧 App 已退役，当前架构见 README 链接",
+    "baseline": "historical snapshot",
     "date": "2026-07-11",
-    "scope": "先复现再处理：P1/P2/P4 已修复，P3/P5 保持现状"
+    "scope": "历史复现结果，不代表当前实现"
   },
   "views": [
     {
