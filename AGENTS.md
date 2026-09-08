@@ -22,8 +22,6 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
   `docs/testing/layers.md`。
 - 新增或重写测试计划只能使用 `docs/testing/**/*.testplan.yaml`；遵循
   `docs/testing/test-plan-format.md`，落盘后运行 `pnpm testplan:validate <path>`。
-- 承诺浏览器或 UI 验收时必须实际执行 `$toolkit:playwright-cli`；未执行则明确记录阻塞，
-  不得用静态检查、代码阅读或普通截图冒充。
 - Web 稳定函数引用优先使用 `ahooks` 的 `useMemoizedFn`；引入 `useCallback` 前说明原因。
 - 跨运行时协议、DTO 和纯 TS 合同进入 `packages/shared`；Web 的终端与图片基础能力保留在 `packages/common`，
   原生 iOS 的 Swift DTO 对照协议，不依赖 TS 前端实现。细则见对应包的 `AGENTS.md`。
@@ -32,23 +30,13 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
 ## 操作路由
 
 - 浏览器页面复现、修改或验收：使用 `$toolkit:playwright-cli`，按其规则附着正确页面。
+  承诺的 UI 验收必须实际执行；未执行则记录阻塞，不得用静态检查、代码阅读或普通截图冒充。
 - 实际执行 `pnpm dev:session`、`dev:status`、`dev:open` 或 `dev:stop`：必须使用
   `$toolkit:runweave-dev-session`；生命周期细则见 `scripts/dev-session/AGENTS.md`。
 - `$toolkit:runweave-change-validation` 只在用户当前请求显式点名时触发；否则执行与改动范围
   相称的验证，不默认启动完整 Dev Session。
 - 原生 iOS、Electron、Backend、Frontend、App Server、CLI 和共享包的专属边界与验证命令，
   以各自就近 `AGENTS.md` 为准。
-
-## 常用命令
-
-```bash
-pnpm dev
-pnpm dev:electron
-pnpm typecheck
-pnpm lint
-pnpm docs:check
-pnpm dist:electron:mac
-```
 
 ## 文档入口
 

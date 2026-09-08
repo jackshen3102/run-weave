@@ -1,5 +1,8 @@
 # App Server Architecture
 
+本文维护职责、设计取舍和故障边界；文件布局、API 与消费协议见
+[Event Center](./app-server-event-center.md)，更新操作见[本地更新](../deployment/electron-local-updates.md)。
+
 本文是给 agent 阅读的 app-server 架构入口。目标是先理解系统边界、生命周期和数据流，
 再决定应该读哪些源码文件。接口细节、命令和测试入口不在本文展开，见
 `docs/architecture/app-server-event-center.md`。
@@ -100,74 +103,12 @@ flowchart LR
 
 ## Home、Runtime 与 Singleton
 
-app-server home 是状态和可运行代码的唯一聚合点：
+同一个 home 只能有一个 owner；正式与测试使用不同 home，不共享 lock、token、事件或 runtime。
+事件日志是事实源，状态 JSON 是可重建投影；保留窗口清理不重置 event id。写入队列保证
+`append -> projection -> sync -> notify` 顺序，consumer 不应依赖并发写入的偶然时序。
 
-```text
-app-server home
-  app-server.lock.json
-  app-server-token
-  app-server-events.jsonl
-  app-server-thread-state.json
-  app-server.log
-  runtime/
-    current.json
-    releases/<releaseId>/
-      manifest.json
-      app-server/index.cjs
-```
-
-同一个 home 中只能有一个 owner。不同 home 可以并存，用于正式环境和测试环境隔离。
-
-事件数据使用 append-only JSONL 保存到 `app-server-events.jsonl`。它不是无限增长的诊断
-日志，而是 app-server 当前保留窗口内的事件存储；默认只保留最近 7 天事件。启动时会清理
-超过保留窗口的旧事件并重写 JSONL 文件，运行中也会周期性清理。event id 仍按历史最大 id
-继续递增，避免 consumer 已保存的 cursor 因旧事件被清理后错过新事件。
-
-EventCenter 使用 record queue 串行执行 `append -> projection -> sync -> notify`，EventStore
-使用独立 append queue 保护 id 分配、dedupe 与 JSONL 追加。并发 HTTP producer 不会在主日志
-或本地同步镜像中生成重复 id/重复行。
-
-状态文件保存的是从事件投影出来的 latest view，而不是新的事实源。启动时 app-server 会从
-event log 重建 ThreadRef，然后写回 latest state JSON。ThreadRef 的 `threadId` 是唯一键，
-`agent` 字段用于区分 Codex、Trae 等 agent 类型。
-
-默认本地同步模拟目录：
-
-```text
-~/.runweave/app-server-cloud-sync-sim/
-  events/app-server-events.jsonl
-  projections/threads.jsonl
-  projections/latest-threads.json
-  cursors/upload-cursor.json
-  manifests/sync-manifest.json
-```
-
-验证和自动化必须通过 `RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR` 覆盖该目录，避免污染用户默认
-目录。
-
-```mermaid
-flowchart TB
-  subgraph Global[Default Global Home]
-    GState[lock/token/events]
-    GRuntime[current runtime release]
-    GOwner[global owner process]
-  end
-
-  subgraph Test[Test Home]
-    TState[isolated lock/token/events]
-    TRuntime[isolated runtime release]
-    TOwner[test owner process]
-  end
-
-  GRuntime --> GOwner
-  GOwner --> GState
-  TRuntime --> TOwner
-  TOwner --> TState
-```
-
-正式运行默认使用全局 home。测试运行必须显式切换 home，否则会污染正式 singleton。
-agent 排查“现在跑的是哪份代码”时，应先看 lock 中的 `pid`、`releaseId`、`entry` 和
-`runtimeRoot`，再看 runtime `current.json`。
+文件布局、保留策略、同步模拟目录与隔离变量统一维护在 [Event Center](./app-server-event-center.md)。
+排查实际运行代码时先看 lock 的 `pid`、`releaseId`、`entry` 和 `runtimeRoot`，再核对 runtime `current.json`。
 
 ## 生命周期模型
 
@@ -198,34 +139,9 @@ stateDiagram-v2
 
 ## 发现与鉴权
 
-client 发现 app-server 有两条路径：
-
-```mermaid
-flowchart TD
-  Client[Client]
-  Env{Has explicit URL + token?}
-  EnvHealth[Check explicit health]
-  LockToken[Read lock + token from home]
-  HomeHealth[Check owner health]
-  Connected[Use app-server]
-  Unavailable[Degrade / continue without app-server]
-
-  Client --> Env
-  Env -->|yes| EnvHealth
-  Env -->|no| LockToken
-  EnvHealth -->|ok| Connected
-  EnvHealth -->|fail| LockToken
-  LockToken --> HomeHealth
-  HomeHealth -->|ok| Connected
-  HomeHealth -->|fail| Unavailable
-```
-
-鉴权模型很小：
-
-- `/healthz` 和 `/readyz` 不要求 bearer token。
-- 事件写入、查询和 WebSocket stream 都要求 bearer token。
-- 非 loopback Origin 会被拒绝。
-- token 只用于本机 app-server client 鉴权，不应写入日志或 PR body。
+Client 通过显式环境配置或 home 的发现记录定位已有 owner，失败时按消费者职责降级，不隐式安装或启动。
+HTTP/WebSocket 的鉴权、Origin 限制与发现参数见 [Event Center](./app-server-event-center.md#发现与鉴权)；
+真实发现分支以 [shared discovery](../../packages/shared/src/app-server/discovery.ts) 为准。
 
 ## 事件模型
 
@@ -330,38 +246,10 @@ WebSocket 推送和 backend consumer 链路。Backend 不再启动自己的 Code
 
 ## Consumer Cursor 与 At-Least-Once
 
-```mermaid
-sequenceDiagram
-  participant Consumer
-  participant CursorStore
-  participant AppServer
-  participant Handler
+选择 at-least-once 是为了让 handler 或进程失败后仍能重放：相关事件在 handler 成功后推进 cursor；
+不属于当前 Backend 的事件跳过 handler 后推进 cursor。业务副作用前先做 ownership 过滤，handler 必须幂等。
 
-  Consumer->>CursorStore: read lastEventId
-  Consumer->>AppServer: connect stream after lastEventId
-  AppServer-->>Consumer: connected
-  AppServer-->>Consumer: catchup events (one or more batches)
-  loop each event
-    alt owned by this backend
-      Consumer->>Handler: handle event
-      alt handler succeeds
-        Consumer->>CursorStore: write event.id
-      else handler fails
-        Consumer-->>Consumer: keep old cursor
-      end
-    else not owned by this backend
-      Consumer->>CursorStore: write event.id
-    end
-  end
-  AppServer-->>Consumer: live event
-```
-
-这个模型故意选择 at-least-once：
-
-- 相关事件在 handler 成功后推进 cursor；无 ownership 事件跳过 handler 后直接推进 cursor。
-- handler 失败、进程退出或 cursor 写入失败时，事件会在下次连接后重放。
-- handler 必须幂等。
-- consumer 应先做 ownership 过滤，再执行业务副作用。
+catchup/live 消息与 cursor 操作统一见 [实时消费](./app-server-event-center.md#实时消费)。
 
 ## Backend 与 Hook 的关系
 
@@ -393,36 +281,10 @@ flowchart LR
 
 ## 更新与发布模型
 
-Desktop 更新现在拆成三个独立组件动作：
+Desktop App、Desktop Runtime 和 App Server 是独立组件。App Server 更新需要切换其 runtime 并重启 owner，
+不能把“不重启桌面端”等同于“不重启 App Server”。Electron 仅检查服务可用性，安装和重启归 CLI/更新器。
 
-```mermaid
-flowchart TD
-  Diff[Local source diff / release contents]
-  Planner[Update Planner]
-  AppDecision{Desktop App needed?}
-  RuntimeDecision{Desktop Runtime needed?}
-  AppServerDecision{App Server needed?}
-  AppInstall[Replace Desktop App]
-  RuntimeInstall[Install Desktop Runtime]
-  AppServerInstall[Install App Server Runtime]
-  AppServerRestart[Restart App Server owner]
-
-  Diff --> Planner
-  Planner --> AppDecision
-  Planner --> RuntimeDecision
-  Planner --> AppServerDecision
-  AppDecision -->|yes| AppInstall
-  RuntimeDecision -->|yes| RuntimeInstall
-  AppServerDecision -->|yes| AppServerInstall
-  AppServerInstall --> AppServerRestart
-```
-
-设计意图：
-
-- Desktop App、Desktop Runtime、App Server 是三个组件，不应互相伪装。
-- App Server 更新意味着安装新 app-server runtime，并重启 app-server owner。
-- “不重启桌面端”不能和 App Server 更新混用，因为 App Server 更新必须重启服务进程。
-- Electron 启动时只检查 app-server；如果服务未启动，会提示用户，不执行安装、启动或重启。
+planner、参数、安装顺序及隔离 home 统一见 [App Server 组件更新](../deployment/electron-local-updates.md#app-server-组件更新)。
 
 ## 失败与降级原则
 

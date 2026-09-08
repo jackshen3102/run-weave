@@ -49,3 +49,22 @@ Thread reconciler。Feishu Bridge 报告配置、单实例 lease、Lark WebSocke
 - 状态检查不发送飞书消息、不写 Terminal，也不启动、停止或重启业务服务。
 
 扩展状态项时，先在真实 owner 中复用已有生命周期证据，再返回共享 DTO；不要在消费者中复制状态机。
+
+## 客户端消费与入口
+
+[RuntimeStatusEntry](../../frontend/src/components/runtime-status-entry.tsx) 展示整体状态与异常能力域数量，点击打开状态面板。
+当前入口不直接显示连接 URL；地址从面板的节点信息查看和复制。组件布局不放入领域词汇表。
+
+- 本机与当前连接用相同的节点/能力域模型；同节点身份优先按 `serviceInstanceId` 合并，URL 仅作缺失身份时的回退。
+- Frontend 自己的 HTTP、Terminal WS 与事件连接状态也是报告来源；当前报告及面板状态见
+  [Frontend registry](../../frontend/src/features/runtime-status/registry.ts) 和 [Provider](../../frontend/src/features/runtime-status/provider.tsx)。
+- HTTP 404、缺少旧版本 IPC 或不支持的协议能力应表达为 `unsupported`，不因诊断能力缺失中断业务。
+- 后台页面的轮询不承诺硬实时；重新可见时刷新。失败持续时间与连接重建次数不同，
+  重建连接不能代替真实成功证据清除故障窗口。
+- CPU/内存由 System Monitor 展示，不参与运行状态异常计数。地址可复制不等于对另一台设备可达；
+  无可用 LAN 地址时不能把 loopback 宣称为手机连接入口。
+
+设计取舍保留在 [ADR-0001](../adr/0001-owner-reported-runtime-status.md) 和
+[ADR-0002](../adr/0002-runtime-status-registry.md)。验收合同为
+[Providers](../testing/platform/runtime-status-providers.testplan.yaml) 与
+[状态面板](../testing/runbooks/runtime-status-panel.testplan.yaml)；本轮文档整理未重跑历史验收。

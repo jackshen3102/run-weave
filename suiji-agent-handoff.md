@@ -5,18 +5,29 @@ document_version: 1.0
 prepared_at: 2026-09-05
 language: zh-CN
 audience: implementation_agent
-status: ready_for_repository_inspection_and_incremental_implementation
+status: frozen_historical_handoff
 requirements_authority: latest_explicit_user_decisions
 prototype_preferred_variant: A
 prototype_source_commit: 3ee37c668cb292d9dd4c89691862835ebef170f4
 prototype_latest_saved_version: 4
 prototype_current_published_version: 3
-backend_implemented: false
-database_implemented: false
-real_ai_implemented: false
+implementation_snapshot_at: 2026-09-05
+backend_implemented_at_snapshot: false
+database_implemented_at_snapshot: false
+real_ai_implemented_at_snapshot: false
 ---
 
-# 随记：面向实现 Agent 的完整交接文档
+# 随记：2026-09-05 历史交接（冻结）
+
+本文保留原始产品决策与早期建议，不再作为接手 Agent 的执行入口。元数据中的实现状态仅描述
+2026-09-05 基线；后端、数据库和本地 CLI AI 回顾已有后续实现，不能按下文重新开始建设。
+
+- 当前架构和验证边界：[随记架构与交付状态](docs/architecture/suiji.md)。
+- 当前进度与未完成事项：[分阶段计划](docs/plans/2026-09-07-suiji.md)。
+- 已接受的部署决定：[独立云服务 ADR](docs/adr/0003-suiji-independent-cloud-service.md)。
+
+下文的“启动指令”“下一位 Agent 提示”“待实现”均为历史引用。若发现仍独有的需求，先与当前计划
+和用户最新决定核对，再迁入活文档；原型、建议 SQL/API 与历史验收清单不代表当前实现或新任务。
 
 > 本文是需求与实施交接，不是已经完成的后端技术说明。它整合本轮产品讨论、原型迭代和数据库/Agent/部署方向，并明确标出新增的工程建议。收到本文的 Agent 不需要依赖原会话即可开始工作。
 >
