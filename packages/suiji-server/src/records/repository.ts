@@ -6,10 +6,11 @@ export async function getRecord(
   ownerId: string,
   id: string,
   lock = false,
+  includeTrash = false,
 ): Promise<SuijiRecord> {
   const row = (
     await client.query(
-      `SELECT * FROM records WHERE owner_id=$1 AND id=$2 ${lock ? "FOR UPDATE" : ""}`,
+      `SELECT * FROM records WHERE owner_id=$1 AND id=$2 ${includeTrash ? "" : "AND deleted_at IS NULL"} ${lock ? "FOR UPDATE" : ""}`,
       [ownerId, id],
     )
   ).rows[0];
@@ -29,6 +30,7 @@ export async function getRecord(
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     createdVia: row.created_via,
+    deletedAt: row.deleted_at?.toISOString() ?? null,
     attachments,
   };
 }

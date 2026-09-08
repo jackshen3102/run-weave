@@ -13,7 +13,7 @@ if (Math.floor(Number(dbVersion) / 10000) !== 18)
 const schema = await pool.query(
   "SELECT count(*)::int AS version FROM suiji_migrations",
 );
-if (schema.rows[0].version !== 2)
+if (schema.rows[0].version !== 3)
   throw new Error(
     "Unsupported schema version; migrate with a compatible artifact",
   );

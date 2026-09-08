@@ -2,7 +2,7 @@
 
 单人自用的独立记录 API。实现用户名密码登录、稳定 owner/server 身份、原文记录、三态待办、
 版本冲突、事务修订、请求幂等，以及鉴权 JPEG/PNG/UTF-8 Markdown 上传下载。
-支持独立个人凭据的 MCP，以及手动触发、只读检索的本地 Codex CLI 回顾；自动同步与真正删除未接入。
+支持独立个人凭据的 MCP，以及手动触发、只读检索的本地 Codex CLI 回顾；支持记录回收站；自动同步与永久删除未接入。
 
 ## 本地运行
 
@@ -29,17 +29,18 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 公开合同：[shared/suiji](../shared/src/suiji/index.ts)。所有 `/api/suiji/v1` 请求需要 Bearer，
 所有业务写请求需要 `Idempotency-Key`。ID 为 UUID，UTC 时间精度为毫秒，正文按 Unicode 标量计数。
 
-| 接口                                          | 行为                                                               |
-| --------------------------------------------- | ------------------------------------------------------------------ |
-| `POST /api/auth/login` / `refresh` / `logout` | 单独会话、轮换刷新、注销当前会话                                   |
-| `GET /api/auth/verify` / `/api/suiji/v1/info` | 核验身份、协议、版本与输入限额                                     |
-| `GET /api/suiji/v1/records`                   | kind/taskStatus/q/from/to/cursor/limit；创建时间倒序，q 为字面子串 |
-| `GET /api/suiji/v1/records/:id`               | 当前正文、状态、版本和有序附件                                     |
-| `POST /api/suiji/v1/records`                  | kind/body/attachmentIds；note 状态 null，task 初始 open            |
-| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，body/attachmentIds 至少一个；一次原子保存         |
-| `POST /api/suiji/v1/records/:id/task-status`  | expectedVersion/targetStatus；仅 open → done 或 archived           |
-| `POST /api/suiji/v1/uploads`                  | 单个 multipart file；幂等摘要与 boundary 无关                      |
-| `GET /api/suiji/v1/attachments/:id/content`   | 当前 owner 的实际文件流，不返回存储路径                            |
+| 接口                                          | 行为                                                                  |
+| --------------------------------------------- | --------------------------------------------------------------------- |
+| `POST /api/auth/login` / `refresh` / `logout` | 单独会话、轮换刷新、注销当前会话                                      |
+| `GET /api/auth/verify` / `/api/suiji/v1/info` | 核验身份、协议、版本与输入限额                                        |
+| `GET /api/suiji/v1/records`                   | kind/taskStatus/q/from/to/cursor/limit；创建时间倒序，q 为字面子串    |
+| `GET /api/suiji/v1/records/:id`               | 当前正文、状态、版本和有序附件                                        |
+| `POST /api/suiji/v1/records`                  | kind/body/attachmentIds；note 状态 null，task 初始 open               |
+| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，body/attachmentIds 至少一个；一次原子保存            |
+| `POST /api/suiji/v1/records/:id/trash`        | expectedVersion/trashed；移入回收站或恢复，保留正文、附件和待办原状态 |
+| `POST /api/suiji/v1/records/:id/task-status`  | expectedVersion/targetStatus；仅 open → done 或 archived              |
+| `POST /api/suiji/v1/uploads`                  | 单个 multipart file；幂等摘要与 boundary 无关                         |
+| `GET /api/suiji/v1/attachments/:id/content`   | 当前 owner 的实际文件流，不返回存储路径                               |
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -175,3 +176,11 @@ pnpm architecture:check
 业务验证见 [服务 YAML](../../docs/testing/suiji/service-records.testplan.yaml)，
 部署见 [独立部署入口](../../deploy/suiji/README.md)，当前证据范围见
 [随记架构与交付状态](../../docs/architecture/suiji.md)。静态通过不等于原生或生产验收通过。
+
+## 回收站
+
+迁移到 schema 3 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
+分页游标绑定筛选。App 可按 ID 查看回收站原文和附件，不能编辑或变更待办状态。恢复不改变待办原状态。
+每次删除或恢复沿用版本校验、单事务修订及幂等请求；客户端先持久化意图，结果未知时仅由用户手动确认原请求。
+Web 和原生 iOS 均提供回收站入口、删除确认及恢复。已有本机正文草稿保留，恢复后保存仍须通过版本校验。
+Agent MCP 与 AI 新检索排除回收站正文和附件；已生成的历史回答不追溯擦除。本版本不提供自动清理或永久删除。

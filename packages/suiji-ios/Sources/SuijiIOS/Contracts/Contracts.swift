@@ -17,6 +17,7 @@ public struct SuijiRecord: Codable, Identifiable, Equatable, Sendable {
   public let version: Int
   public let createdAt: String
   public let updatedAt: String
+  public let deletedAt: String?
   public let createdVia: String
   public let attachments: [Attachment]
 }

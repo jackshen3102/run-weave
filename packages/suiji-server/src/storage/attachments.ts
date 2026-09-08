@@ -95,10 +95,10 @@ export class AttachmentService {
       },
     );
   }
-  async content(owner: string, id: string) {
+  async content(owner: string, id: string, includeTrash = false) {
     const row = (
       await this.pool.query(
-        "SELECT object_key,mime_type,byte_size,file_name FROM attachments WHERE owner_id=$1 AND id=$2",
+        `SELECT object_key,mime_type,byte_size,file_name FROM attachments a WHERE owner_id=$1 AND id=$2 ${includeTrash ? "" : "AND NOT EXISTS (SELECT 1 FROM records r WHERE r.owner_id=a.owner_id AND r.id=a.bound_record_id AND r.deleted_at IS NOT NULL)"}`,
         [owner, id],
       )
     ).rows[0];

@@ -125,6 +125,7 @@ export function SuijiRecordDetail({
   onClose,
   onEdit,
   onStatus,
+  onTrash,
   onReview,
   onRecreate,
   writable,
@@ -137,6 +138,7 @@ export function SuijiRecordDetail({
   onClose: () => void;
   onEdit: () => void;
   onStatus: (status: "done" | "archived") => void;
+  onTrash: (trashed: boolean) => void;
   onReview: () => void;
   onRecreate: () => void;
   writable: boolean;
@@ -144,6 +146,7 @@ export function SuijiRecordDetail({
   busy: boolean;
   citedVersion?: number;
 }) {
+  const [confirmTrash, setConfirmTrash] = useState(false);
   return (
     <Dialog
       open
@@ -167,19 +170,31 @@ export function SuijiRecordDetail({
             <SuijiAttachmentView key={a.id} attachment={a} client={client} />
           ))}
         </div>
-        {pending ? <p role="alert">有状态操作待确认，请手动重试确认</p> : null}
+        {record.deletedAt ? (
+          <p role="status">已在回收站，恢复后可继续编辑。</p>
+        ) : null}
+        {pending ? (
+          <Button disabled={!writable || busy} onClick={() => onStatus("done")}>
+            操作结果待确认 · 手动确认
+          </Button>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            disabled={!writable || pending || busy}
+            disabled={!writable || pending || busy || Boolean(record.deletedAt)}
             onClick={onEdit}
           >
             编辑
           </Button>
-          <Button variant="outline" onClick={onReview}>
+          <Button
+            variant="outline"
+            disabled={Boolean(record.deletedAt)}
+            onClick={onReview}
+          >
             聊聊这条
           </Button>
-          {record.kind === "task" &&
+          {!record.deletedAt &&
+          record.kind === "task" &&
           (record.taskStatus === "open" || pending) ? (
             <>
               <Button
@@ -198,11 +213,44 @@ export function SuijiRecordDetail({
                 </Button>
               ) : null}
             </>
-          ) : record.kind === "task" ? (
+          ) : !record.deletedAt && record.kind === "task" ? (
             <Button disabled={!writable} onClick={onRecreate}>
               再次想做
             </Button>
           ) : null}
+          {record.deletedAt ? (
+            <Button
+              disabled={!writable || pending || busy}
+              onClick={() => onTrash(false)}
+            >
+              恢复记录
+            </Button>
+          ) : confirmTrash ? (
+            <div className="flex flex-wrap items-center gap-2" role="alert">
+              <span>移入回收站后可恢复，正文和附件会保留。</span>
+              <Button
+                variant="destructive"
+                disabled={!writable || pending || busy}
+                onClick={() => {
+                  setConfirmTrash(false);
+                  onTrash(true);
+                }}
+              >
+                确认移入回收站
+              </Button>
+              <Button variant="ghost" onClick={() => setConfirmTrash(false)}>
+                取消
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="destructive"
+              disabled={!writable || pending || busy}
+              onClick={() => setConfirmTrash(true)}
+            >
+              移入回收站
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

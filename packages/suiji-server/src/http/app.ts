@@ -18,6 +18,7 @@ import {
   createSchema,
   editSchema,
   statusSchema,
+  trashSchema,
   listSchema,
   loginSchema,
   refreshSchema,
@@ -146,6 +147,9 @@ export function createApp(
   app.delete(`${root}/reviews/:id`, route(async (req, res) => {
     res.json(reviews.cancel(res.locals.auth.ownerId, uuid.parse(req.params.id)));
   }));
+  app.post(`${root}/records/:id/trash`, route(async (req, res) => {
+    res.json(await records.trash(context(req, res), uuid.parse(req.params.id), trashSchema.parse(req.body)));
+  }));
   app.get(
     `${root}/records`,
     route(async (req, res) =>
@@ -164,6 +168,7 @@ export function createApp(
         record: await records.get(
           res.locals.auth.ownerId,
           uuid.parse(req.params.id),
+          true,
         ),
       }),
     ),
@@ -229,6 +234,7 @@ export function createApp(
       const content = await attachments.content(
         res.locals.auth.ownerId,
         uuid.parse(req.params.id),
+        true,
       );
       res.set({
         "Content-Type":
