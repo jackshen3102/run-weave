@@ -151,24 +151,35 @@ sudo systemctl status runweave-feishu-bridge.service
 
 ### macOS LaunchAgent
 
-将配置保存为 `~/.runweave/feishu_notify.env` 并执行 `chmod 600`。wrapper 只加载配置并
-`exec` Bridge：
+将配置保存为 `~/.runweave/feishu_notify.env` 并执行 `chmod 600`。wrapper 加载配置，
+在 Bridge 运行期间阻止系统因空闲自动休眠，再 `exec` Bridge：
 
 ```bash
 #!/usr/bin/env bash
 set -a
 source "$HOME/.runweave/feishu_notify.env"
 set +a
+/usr/bin/caffeinate -i -w "$$" &
 exec /absolute/path/to/rw feishu bridge --json
 ```
 
+`exec` 保留 wrapper 的 PID；`caffeinate -w` 跟随该 PID，Bridge 退出后自动释放
+防休眠断言。`-i` 允许锁屏和显示器熄屏，但会在接电和电池供电时阻止空闲系统休眠；
+它不保证合盖或主动选择睡眠后仍可远程使用。需要恢复自动休眠时停止 Bridge。
+手机可以使用移动网络，无需与 Mac 在同一局域网；Mac 必须联网并持续运行。
+
 LaunchAgent 使用 `~/Library/LaunchAgents/com.runweave.feishu-bridge.plist`，设置
-`RunAtLoad=true` 和 `KeepAlive=true`。重启命令：
+`RunAtLoad=true` 和 `KeepAlive=true`。`KeepAlive` 只负责重启退出的进程，不阻止系统
+休眠。重启命令：
 
 ```bash
 launchctl kickstart -k gui/$(id -u)/com.runweave.feishu-bridge
 launchctl print gui/$(id -u)/com.runweave.feishu-bridge
 ```
+
+用 `pmset -g assertions` 确认 `caffeinate` 持有 `PreventUserIdleSystemSleep`，再检查
+Bridge 日志中的 `websocket_ready` 和 `backend_ready`。这些检查证明防休眠断言和连接
+已生效；锁屏后的真实投递仍需按下方真实验收步骤核对 DONE 和 Terminal history。
 
 ## 五、话题与路由合同
 
