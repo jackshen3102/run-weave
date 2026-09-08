@@ -42,10 +42,17 @@ export const statusSchema = z
     targetStatus: z.enum(["done", "archived"]),
   })
   .strict();
+export const trashSchema = z
+  .object({
+    expectedVersion: z.number().int().positive(),
+    trashed: z.boolean(),
+  })
+  .strict();
 export const listSchema = z
   .object({
     kind: z.enum(["note", "task"]).optional(),
     taskStatus: z.enum(["open", "done", "archived"]).optional(),
+    trash: z.literal("true").optional(),
     q: body.optional(),
     from: z.string().datetime().optional(),
     to: z.string().datetime().optional(),

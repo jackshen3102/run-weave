@@ -1,7 +1,9 @@
 import SwiftUI
+enum RecordAction { case status(TaskStatus), trash(Bool) }
 @MainActor final class SuijiSession: ObservableObject {
   @Published var endpoint: String
   @Published var info: ServiceInfo?
+  @Published var lastChangedRecord: SuijiRecord?
   @Published var records: [SuijiRecord] = []
   @Published var message = ""
   @Published var loading = false
@@ -17,7 +19,7 @@ import SwiftUI
   init(endpoint: URL?) { self.endpoint = endpoint?.absoluteString ?? UserDefaults.standard.string(forKey: "suiji.endpoint") ?? "" }
   func connect(username: String? = nil, password: String? = nil) async {
     let previous = client; generation = UUID(); let current = generation
-    editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; records = []; info = nil; store = nil; client = nil; pendingStatuses = []; statusBusy = []
+    editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil; records = []; info = nil; store = nil; client = nil; pendingStatuses = []; statusBusy = []
     await previous?.cancel()
     do {
       let url = try APIClient.normalize(endpoint); let api = try APIClient(endpoint: url); client = api
@@ -31,11 +33,11 @@ import SwiftUI
   }
   func isCurrent(_ api: APIClient) -> Bool { client === api && info != nil }
   func logout() async {
-    generation = UUID(); editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; info = nil; records = []; store = nil; pendingStatuses = []; statusBusy = []
+    generation = UUID(); editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil; info = nil; records = []; store = nil; pendingStatuses = []; statusBusy = []
     let old = client; client = nil
     do { try await old?.logout() } catch { message = error.localizedDescription }
   }
-  func load(kind: String?, status: String?, q: String, more: Bool = false) async {
+  func load(kind: String?, status: String?, q: String, more: Bool = false, trash: Bool = false) async {
     guard let client, info != nil else { return }
     if more && (loading || nextCursor == nil) { return }
     let current = generation, request = UUID(); listGeneration = request
@@ -43,6 +45,7 @@ import SwiftUI
     if !more { records = []; nextCursor = nil }
     defer { if listGeneration == request { loading = false } }
     var query = URLComponents(); var items: [URLQueryItem] = []
+    if trash { items.append(URLQueryItem(name: "trash", value: "true")) }
     if let kind { items.append(URLQueryItem(name: "kind", value: kind)) }
     if let status { items.append(URLQueryItem(name: "taskStatus", value: status)) }
     if !q.isEmpty { items.append(URLQueryItem(name: "q", value: q)) }
@@ -61,7 +64,7 @@ import SwiftUI
       if generation == current, listGeneration == request {
         message = error.localizedDescription
         if let apiError = error as? APIError, apiError.error.code == "UNAUTHENTICATED" {
-          generation = UUID(); editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil
+          generation = UUID(); editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil
           records = []; info = nil; store = nil; await client.cancel(); self.client = nil
         }
       }
@@ -69,6 +72,7 @@ import SwiftUI
   }
   func openEditor(record: SuijiRecord? = nil, kind: RecordKind = .note, body: String = "") async {
     guard let client, let store, let info else { return }; let current = generation
+    guard record?.deletedAt == nil else { return }
     do {
       if let record, try await store.status(record.id) != nil { message = "此记录有状态操作待确认，请先手动重试确认"; return }
       if let cached = editingModels[record?.id ?? "new"], cached.canReopen {
@@ -84,19 +88,26 @@ import SwiftUI
       if restored != nil { await model.prepareForCapture(kind: kind, body: body) }
     } catch { if generation == current { message = error.localizedDescription } }
   }
-  func setStatus(_ record: SuijiRecord, target: TaskStatus) async {
+  func changeRecord(_ record: SuijiRecord, action: RecordAction) async {
     guard let client, let store, !statusBusy.contains(record.id) else { return }
     let current = generation; statusBusy.insert(record.id)
     defer { if current == generation { statusBusy.remove(record.id) } }
     do {
       let previous = try await store.status(record.id)
       if previous == nil, let draft = try await store.load(record.id), draft.frozen { throw MessageError(message: "正文保存结果待确认，请先在编辑器确认") }
-      let operation = try previous ?? PendingOperation(path: "api/suiji/v1/records/\(record.id)/task-status", method: "POST", payload: JSONSerialization.data(withJSONObject: ["expectedVersion": record.version, "targetStatus": target.rawValue], options: [.sortedKeys]))
+      let payload: [String: Any], suffix: String
+      switch action {
+      case .status(let target): payload = ["expectedVersion": record.version, "targetStatus": target.rawValue]; suffix = "task-status"
+      case .trash(let trashed): payload = ["expectedVersion": record.version, "trashed": trashed]; suffix = "trash"
+      }
+      let path = "api/suiji/v1/records/\(record.id)/" + suffix
+      let operation = try previous ?? PendingOperation(path: path, method: "POST", payload: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
       try await store.saveStatus(operation, id: record.id)
       guard current == generation else { return }; pendingStatuses.insert(record.id)
       let result = try await client.request(RecordResponse.self, path: operation.path, method: operation.method, data: operation.payload, key: operation.key)
       guard current == generation else { return }
       try await store.removeStatus(record.id); pendingStatuses.remove(record.id)
+      lastChangedRecord = result.record
       if let index = records.firstIndex(where: { $0.id == record.id }) { records[index] = result.record }; message = ""
     } catch let error as APIError {
       guard current == generation else { return }

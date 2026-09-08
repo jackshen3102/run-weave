@@ -17,6 +17,7 @@ export type SuijiRecord = {
   createdAt: string;
   updatedAt: string;
   createdVia: "app" | "agent";
+  deletedAt?: string | null;
   attachments: SuijiAttachment[];
 };
 export type CreateRecord = {
@@ -33,5 +34,6 @@ export type ChangeTaskStatus = {
   expectedVersion: number;
   targetStatus: "done" | "archived";
 };
+export type ChangeRecordTrash = { expectedVersion: number; trashed: boolean };
 export type RecordResponse = { record: SuijiRecord };
 export type RecordPage = { items: SuijiRecord[]; nextCursor: string | null };

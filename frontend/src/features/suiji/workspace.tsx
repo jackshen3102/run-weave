@@ -98,6 +98,7 @@ export function SuijiWorkspace({
       query.set("kind", "task");
       query.set("taskStatus", status);
     } else if (kind) query.set("kind", kind);
+    if (tab === "trash") query.set("trash", "true");
     if (search) query.set("q", search);
     if (more && cursor) query.set("cursor", cursor);
     try {
@@ -162,7 +163,7 @@ export function SuijiWorkspace({
       defaultKind: "note" | "task" = "note",
       body = "",
     ) => {
-      if (!writable) return;
+      if (!writable || record?.deletedAt) return;
       try {
         if (record && (await store.get("status:" + record.id)))
           throw new Error("状态操作待确认，请先手动确认");
@@ -201,8 +202,8 @@ export function SuijiWorkspace({
       }
     },
   );
-  const changeStatus = useMemoizedFn(
-    async (record: SuijiRecord, targetStatus: "done" | "archived") => {
+  const changeRecord = useMemoizedFn(
+    async (record: SuijiRecord, action: { targetStatus: "done" | "archived" } | { trashed: boolean }) => {
       if (!writable || statusBusy) return;
       setStatusBusy(true);
       setMessage("");
@@ -214,10 +215,10 @@ export function SuijiWorkspace({
         )
           throw new Error("正文保存结果待确认，请先在编辑器确认");
         const operation = previous ?? {
-          path: `/api/suiji/v1/records/${record.id}/task-status`,
+          path: `/api/suiji/v1/records/${record.id}/${"trashed" in action ? "trash" : "task-status"}`,
           method: "POST",
           key: crypto.randomUUID(),
-          data: { expectedVersion: record.version, targetStatus },
+          data: { expectedVersion: record.version, ...action },
         };
         await store.set("status:" + record.id, operation);
         if (!alive.current) return;
@@ -237,7 +238,7 @@ export function SuijiWorkspace({
         });
         setDetail((current) => {
           if (current?.record.id !== record.id) return current;
-          return result.record.taskStatus === "done"
+          return operation.path.endsWith("/trash") || result.record.taskStatus === "done"
             ? undefined
             : { record: result.record };
         });
@@ -284,12 +285,13 @@ export function SuijiWorkspace({
             </Button>
           </div>
         </header>
-        <nav aria-label="随记导航" className="flex gap-2 border-b pb-4">
+        <nav aria-label="随记导航" className="flex flex-wrap gap-2 border-b pb-4">
           {(
             [
               ["records", "记录"],
               ["tasks", "待办"],
               ["ai", "AI 回顾"],
+              ["trash", "回收站"],
             ] as const
           ).map(([value, label]) => (
             <Button
@@ -416,12 +418,12 @@ export function SuijiWorkspace({
               ) : items.length === 0 ? (
                 <div className="flex flex-col gap-3 py-16 text-center">
                   <h2 className="text-xl">
-                    {query ? "没有找到匹配的原文" : "留一点想法在这里"}
+                    {query ? "没有找到匹配的原文" : tab === "trash" ? "回收站为空" : "留一点想法在这里"}
                   </h2>
                   <p className="text-sm text-muted-foreground">
                     {query
                       ? "试试更短的关键词。"
-                      : "点右下角加号，记下一句想到的事。"}
+                      : tab === "trash" ? "删除的记录会保留在这里，可随时恢复。" : "点右下角加号，记下一句想到的事。"}
                   </p>
                 </div>
               ) : null}
@@ -444,7 +446,7 @@ export function SuijiWorkspace({
                 ) : null}
               </div>
             </section>
-            <Button
+            {tab !== "trash" ? <Button
               aria-label="新增记录"
               className="fixed bottom-8 right-8 size-14 rounded-full shadow-lg md:right-12"
               disabled={!writable}
@@ -453,7 +455,7 @@ export function SuijiWorkspace({
               }
             >
               <Plus />
-            </Button>
+            </Button> : null}
           </>
         ) : null}
         <footer className="mt-auto break-all pb-4 text-xs text-muted-foreground">
@@ -466,7 +468,8 @@ export function SuijiWorkspace({
           client={client}
           onClose={() => setDetail(undefined)}
           onEdit={() => void edit(detail.record)}
-          onStatus={(target) => void changeStatus(detail.record, target)}
+          onStatus={(target) => void changeRecord(detail.record, { targetStatus: target })}
+          onTrash={(trashed) => void changeRecord(detail.record, { trashed })}
           onReview={() => {
             setScope({ kind: "record", recordId: detail.record.id });
             setDetail(undefined);

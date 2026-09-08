@@ -4,6 +4,7 @@ import type {
   CreateRecord,
   EditRecord,
   ChangeTaskStatus,
+  ChangeRecordTrash,
   SuijiRecord,
   RecordPage,
 } from "@runweave/shared/suiji";
@@ -13,6 +14,7 @@ import { transaction } from "../db/pool";
 import { digest, mutate, type Mutation } from "./mutations";
 import { getRecord } from "./repository";
 export type RecordQuery = {
+  trash?: "true";
   kind?: string;
   taskStatus?: string;
   q?: string;
@@ -24,19 +26,22 @@ export type RecordQuery = {
 export class RecordService {
   constructor(private pool: pg.Pool) {}
   // A repeatable-read snapshot prevents a body/version from being paired with newer attachments.
-  async get(owner: string, id: string) {
+  async get(owner: string, id: string, includeTrash = false) {
     return transaction(this.pool, async (client) => {
       await client.query(
         "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
       );
-      return getRecord(client, owner, id);
+      return getRecord(client, owner, id, false, includeTrash);
     });
   }
   async list(owner: string, query: RecordQuery): Promise<RecordPage> {
     const { cursor, limit, ...filters } = query;
     const fingerprint = digest(filters);
     const values: unknown[] = [owner];
-    const where = ["owner_id=$1"];
+    const where = [
+      "owner_id=$1",
+      query.trash === "true" ? "deleted_at IS NOT NULL" : "deleted_at IS NULL",
+    ];
     const add = (sql: string, value: unknown) => {
       values.push(value);
       where.push(sql.replace("?", `$${values.length}`));
@@ -75,7 +80,9 @@ export class RecordService {
       ).rows;
       const items: SuijiRecord[] = [];
       for (const row of rows.slice(0, limit))
-        items.push(await getRecord(client, owner, row.id));
+        items.push(
+          await getRecord(client, owner, row.id, false, query.trash === "true"),
+        );
       const last = items.at(-1);
       return {
         items,
@@ -159,6 +166,18 @@ export class RecordService {
       return this.snapshot(client, context, id);
     });
   }
+  trash(context: Mutation, id: string, input: ChangeRecordTrash) {
+    return mutate(this.pool, context, `trash:${id}`, input, async (client) => {
+      const old = await getRecord(client, context.ownerId, id, true, true);
+      this.version(old, input.expectedVersion);
+      if (Boolean(old.deletedAt) === input.trashed) return { record: old };
+      await client.query(
+        "UPDATE records SET deleted_at=CASE WHEN $3 THEN clock_timestamp() ELSE NULL END,version=version+1,updated_at=clock_timestamp() WHERE owner_id=$1 AND id=$2",
+        [context.ownerId, id, input.trashed],
+      );
+      return this.snapshot(client, context, id, true);
+    });
+  }
   private version(record: SuijiRecord, expected: number) {
     if (record.version !== expected)
       throw new ServiceError(
@@ -209,8 +228,19 @@ export class RecordService {
         [owner, id, attachment, position],
       );
   }
-  private async snapshot(client: pg.PoolClient, context: Mutation, id: string) {
-    const record = await getRecord(client, context.ownerId, id);
+  private async snapshot(
+    client: pg.PoolClient,
+    context: Mutation,
+    id: string,
+    includeTrash = false,
+  ) {
+    const record = await getRecord(
+      client,
+      context.ownerId,
+      id,
+      false,
+      includeTrash,
+    );
     await client.query(
       "INSERT INTO record_revisions(owner_id,record_id,version,snapshot,request_id,actor) VALUES($1,$2,$3,$4,$5,$6)",
       [
