@@ -2,6 +2,9 @@ import SwiftUI
 enum RecordAction { case status(TaskStatus), trash(Bool) }
 @MainActor final class SuijiSession: ObservableObject {
   @Published var endpoint: String
+  @Published var username: String
+  @Published private(set) var environment: ConnectionEnvironment
+  @Published private(set) var connecting = false
   @Published var info: ServiceInfo?
   @Published var lastChangedRecord: SuijiRecord?
   @Published var records: [SuijiRecord] = []
@@ -16,26 +19,56 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
   private var editingModels: [String: EditorModel] = [:]
   private var generation = UUID()
   private var listGeneration = UUID()
-  init(endpoint: URL?) { self.endpoint = endpoint?.absoluteString ?? UserDefaults.standard.string(forKey: "suiji.endpoint") ?? "" }
+  private var profiles: ConnectionProfiles
+  init(endpoint: URL?) {
+    let saved = ConnectionProfiles.restore(endpoint: endpoint)
+    profiles = saved; environment = saved.active
+    self.endpoint = saved[saved.active].endpoint; username = saved[saved.active].username
+  }
+  private func rememberConnection() {
+    profiles[environment] = ConnectionProfile(endpoint: endpoint, username: username)
+    profiles.active = environment; profiles.save()
+  }
+  private func resetConnection() -> APIClient? {
+    let previous = client; generation = UUID(); listGeneration = UUID()
+    editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil
+    records = []; info = nil; store = nil; client = nil; pendingStatuses = []; statusBusy = []
+    loading = false; nextCursor = nil; message = ""; connecting = false
+    return previous
+  }
+  func switchEnvironment(_ target: ConnectionEnvironment) async {
+    guard target != environment else { return }
+    rememberConnection(); environment = target
+    endpoint = profiles[target].endpoint; username = profiles[target].username
+    await connect()
+  }
+  func editConnection() async {
+    rememberConnection()
+    let previous = resetConnection(); await previous?.cancel()
+  }
   func connect(username: String? = nil, password: String? = nil) async {
-    let previous = client; generation = UUID(); let current = generation
-    editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil; records = []; info = nil; store = nil; client = nil; pendingStatuses = []; statusBusy = []
+    if let username { self.username = username }
+    rememberConnection()
+    let address = endpoint, target = environment
+    let previous = resetConnection(); let current = generation; connecting = true
+    defer { if generation == current { connecting = false } }
     await previous?.cancel()
+    guard generation == current, !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     do {
-      let url = try APIClient.normalize(endpoint); let api = try APIClient(endpoint: url); client = api
-      endpoint = url.absoluteString; UserDefaults.standard.set(endpoint, forKey: "suiji.endpoint")
+      let url = try APIClient.normalize(address); let api = try APIClient(endpoint: url, environment: target); client = api
+      endpoint = url.absoluteString; rememberConnection()
       let identity: ServiceInfo
       if let username, let password { identity = try await api.login(username: username, password: password) } else { identity = try await api.info() }
       guard generation == current else { await api.cancel(); return }
-      let drafts = try DraftStore(endpoint: url, info: identity)
+      let drafts = try DraftStore(endpoint: url, info: identity, environment: target)
       store = drafts; info = identity; message = ""
     } catch { if generation == current { message = error.localizedDescription } }
   }
   func isCurrent(_ api: APIClient) -> Bool { client === api && info != nil }
   func logout() async {
-    generation = UUID(); editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil; info = nil; records = []; store = nil; pendingStatuses = []; statusBusy = []
-    let old = client; client = nil
-    do { try await old?.logout() } catch { message = error.localizedDescription }
+    rememberConnection()
+    let old = resetConnection(), current = generation
+    do { try await old?.logout() } catch { if generation == current { message = error.localizedDescription } }
   }
   func load(kind: String?, status: String?, q: String, more: Bool = false, trash: Bool = false) async {
     guard let client, info != nil else { return }
@@ -64,8 +97,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       if generation == current, listGeneration == request {
         message = error.localizedDescription
         if let apiError = error as? APIError, apiError.error.code == "UNAUTHENTICATED" {
-          generation = UUID(); editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil
-          records = []; info = nil; store = nil; await client.cancel(); self.client = nil
+          _ = resetConnection(); message = error.localizedDescription; await client.cancel()
         }
       }
     }

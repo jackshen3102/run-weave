@@ -31,8 +31,8 @@ struct Draft: Codable, Identifiable, Sendable {
 actor DraftStore {
   let root: URL
   private var revisions: [String: Int] = [:]
-  init(endpoint: URL, info: ServiceInfo) throws {
-    let identity = endpoint.absoluteString + "\n" + info.serverId + "\n" + info.ownerId
+  init(endpoint: URL, info: ServiceInfo, environment: ConnectionEnvironment) throws {
+    let identity = environment.scoped(endpoint.absoluteString + "\n" + info.serverId + "\n" + info.ownerId)
     let scope = SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
     let base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     root = base.appendingPathComponent("SuijiDrafts/" + scope, isDirectory: true)

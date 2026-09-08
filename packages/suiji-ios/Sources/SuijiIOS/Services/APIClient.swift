@@ -1,17 +1,18 @@
 import Foundation
 actor APIClient {
   nonisolated let endpoint: URL
+  private let environment: ConnectionEnvironment
   private let session: URLSession
   private var credentials: SavedCredentials?
   private var refreshTask: Task<SavedCredentials, Error>?
   private var active = true
-  init(endpoint: URL) throws {
-    self.endpoint = endpoint
+  init(endpoint: URL, environment: ConnectionEnvironment) throws {
+    self.endpoint = endpoint; self.environment = environment
     let config = URLSessionConfiguration.ephemeral
     config.httpShouldSetCookies = false; config.httpCookieStorage = nil; config.urlCache = nil
     config.timeoutIntervalForRequest = 30; config.timeoutIntervalForResource = 60
     session = URLSession(configuration: config)
-    credentials = try Credentials.read(endpoint: endpoint.absoluteString)
+    credentials = try Credentials.read(endpoint: endpoint.absoluteString, environment: environment)
   }
   static func normalize(_ value: String) throws -> URL {
     guard var c = URLComponents(string: value.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -50,7 +51,7 @@ actor APIClient {
   }
   private func store(_ tokens: Tokens) throws {
     let value = SavedCredentials(tokens: tokens, expiresAt: Date().addingTimeInterval(TimeInterval(tokens.expiresIn)))
-    try Credentials.write(value, endpoint: endpoint.absoluteString); credentials = value
+    try Credentials.write(value, endpoint: endpoint.absoluteString, environment: environment); credentials = value
   }
   private func refresh() async throws -> SavedCredentials {
     if let task = refreshTask { return try await task.value }
@@ -64,7 +65,7 @@ actor APIClient {
     refreshTask = task
     defer { refreshTask = nil }
     let result = try await task.value; try assertActive()
-    try Credentials.write(result, endpoint: endpoint.absoluteString); credentials = result; return result
+    try Credentials.write(result, endpoint: endpoint.absoluteString, environment: environment); credentials = result; return result
   }
   func request<T: Decodable>(_ type: T.Type, path: String, method: String = "GET", data: Data? = nil, key: String? = nil, contentType: String = "application/json") async throws -> T {
     let body = try await bytes(path: path, method: method, data: data, key: key, contentType: contentType)
@@ -89,7 +90,7 @@ actor APIClient {
   func logout() async throws {
     let saved = credentials
     active = false; refreshTask?.cancel(); session.invalidateAndCancel()
-    try Credentials.remove(endpoint: endpoint.absoluteString); credentials = nil
+    try Credentials.remove(endpoint: endpoint.absoluteString, environment: environment); credentials = nil
     guard let saved, let url = URL(string: endpoint.absoluteString + "/api/auth/logout") else { return }
     let config = URLSessionConfiguration.ephemeral
     config.httpShouldSetCookies = false; config.httpCookieStorage = nil; config.urlCache = nil
