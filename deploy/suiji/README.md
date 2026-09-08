@@ -55,6 +55,29 @@ docker compose --env-file /absolute/deployment.env -f deploy/suiji/compose.yaml 
 更新配置后通过现有发布流程重建 API 容器使其生效；轮换凭据需同步更新 Agent 环境变量。
 移除两项并重建 API 可关闭 MCP，未配置时 HTTP 和原生客户端继续工作。本阶段没有 schema 迁移。
 
+## Codex 回顾
+
+镜像包含固定版本 Codex CLI，默认关闭回顾。登录保存在 `${SUIJI_DATA_DIR}/codex`，
+与容器生命周期分离；入口创建目录并交给运行 API 的 UID/GID 1000，权限为 `0700`。
+目录只用于此服务的 Codex 登录和运行状态，不挂载个人工作区或整套 Runweave。
+
+先发布包含 Codex 的镜像，再使用同一 deployment env 和 Compose project 完成登录：
+
+```bash
+docker compose --env-file /absolute/deployment.env --project-name <project> -f deploy/suiji/compose.yaml run --rm --no-deps api codex-login
+docker compose --env-file /absolute/deployment.env --project-name <project> -f deploy/suiji/compose.yaml run --rm --no-deps api codex-status
+```
+
+第一条使用设备码登录，按终端链接在浏览器确认；登录命令不连接数据库。
+参考 [Codex 无界面设备登录](https://learn.chatgpt.com/docs/auth#login-on-headless-devices)。
+认证内容不放进镜像、仓库或日志；Codex 需要能写回该目录以刷新登录。目录不属于记录/附件业务备份。
+
+确认已登录后，在 deployment env 设置 `SUIJI_AI_PROVIDER=codex-cli`，
+可选设置 `SUIJI_AI_TIMEOUT_SECONDS`（默认 180），通过原发布流程重建 API 容器。
+Compose 将持久目录作为 `SUIJI_CODEX_HOME=/data/codex` 传给服务。
+手机重新连接后进入「AI」提问；是否启用仍以实际鉴权 `info.ai.enabled` 为准。
+验收必须创建一次真实回顾并检查回答及原文引用，镜像构建和 CLI 登录成功不代表模型调用已通过。
+
 ## 备份和恢复
 
 ```bash

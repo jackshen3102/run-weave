@@ -8,6 +8,10 @@ RUN pnpm install --frozen-lockfile --filter @runweave/suiji-server... --ignore-s
 RUN pnpm --filter @runweave/suiji-server build && pnpm --filter @runweave/suiji-server deploy --prod --legacy /output
 
 FROM node:22.22.2-bookworm-slim
+ARG CODEX_VERSION=0.153.4
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global @openai/codex@${CODEX_VERSION} && npm cache clean --force
 WORKDIR /app
 COPY --from=build --chown=node:node /output /app
 COPY --chown=node:node deploy/suiji/entrypoint.mjs /app/entrypoint.mjs

@@ -18,17 +18,23 @@ services:
     # No host database port. Only this Compose network can reach PostgreSQL.
   api:
     image: ${SUIJI_IMAGE:?immutable image required}
+    init: true
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
       SUIJI_APP_VERSION: ${SUIJI_REVISION:?required}
+      SUIJI_AI_PROVIDER: ${SUIJI_AI_PROVIDER:-disabled}
+      SUIJI_AI_TIMEOUT_SECONDS: ${SUIJI_AI_TIMEOUT_SECONDS:-180}
+      SUIJI_CODEX_HOME: /data/codex
       SUIJI_MCP_TOKEN_SHA256: ${SUIJI_MCP_TOKEN_SHA256:-}
       SUIJI_MCP_TOKEN_EXPIRES_AT: ${SUIJI_MCP_TOKEN_EXPIRES_AT:-}
     secrets: [api_password]
     ports: ["127.0.0.1:${SUIJI_PORT:-4783}:4783"]
-    volumes: ["${SUIJI_DATA_DIR:?required}/attachments:/data/attachments"]
+    volumes:
+      - ${SUIJI_DATA_DIR:?required}/attachments:/data/attachments
+      - ${SUIJI_DATA_DIR:?required}/codex:/data/codex
     stop_grace_period: 120s
     healthcheck:
       test:
