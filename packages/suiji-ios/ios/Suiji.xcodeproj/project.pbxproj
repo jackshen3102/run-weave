@@ -7,11 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AF93120D892A47DCA2910001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AF93120D892A47DCA2910002 /* Assets.xcassets */; };
 		6B997245719355C9279AB0F9 /* SuijiIOS in Frameworks */ = {isa = PBXBuildFile; productRef = 8CE3E71EF8635D2BF27913BB /* SuijiIOS */; };
 		F2EED3E9AD51B8CDAEBE2A39 /* Suiji/SuijiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61DE1B08FE2FC56EE9044434 /* Suiji/SuijiApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AF93120D892A47DCA2910002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Suiji/Assets.xcassets; sourceTree = "<group>"; };
 		61DE1B08FE2FC56EE9044434 /* Suiji/SuijiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Suiji/SuijiApp.swift; sourceTree = "<group>"; };
 		A8792157CB4F27FB949C035F /* Suiji.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Suiji.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -31,6 +33,7 @@
 		AD936FCBED631FA67E05C3EA = {
 			isa = PBXGroup;
 			children = (
+				AF93120D892A47DCA2910002 /* Assets.xcassets */,
 				61DE1B08FE2FC56EE9044434 /* Suiji/SuijiApp.swift */,
 				A8792157CB4F27FB949C035F /* Suiji.app */,
 			);
@@ -93,6 +96,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AF93120D892A47DCA2910001 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -127,6 +131,7 @@
 		1BE405632761C5C341A152B0 /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = Suiji/Info.plist;
@@ -146,6 +151,7 @@
 		6C7EFF6369083C8E1F2B1994 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = Suiji/Info.plist;
@@ -193,6 +199,7 @@
 		DD75E2CB1C510A828AC72D96 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = Suiji/Info.plist;

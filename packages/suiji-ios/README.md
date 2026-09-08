@@ -17,7 +17,8 @@ pnpm --filter @runweave/suiji-ios ios:run --simulator <UDID> --configuration Deb
 Debug 可配置本地服务，网络声明仅允许本地网络，没有全局 ATS 明文例外。
 
 打开 App 输入独立云地址、用户名和密码。测试服务默认 `http://127.0.0.1:4783`，
-该地址仅适用于同一 Mac 的 Simulator；真机使用其实际可达的服务地址。
+该地址仅适用于同一 Mac 的 Simulator；真机可通过同一局域网内 Mac 的 IP 和服务端口连接。
+本地服务需监听局域网接口（例如 `SUIJI_HOST=0.0.0.0`），不能只监听 `127.0.0.1`。
 配置只保存端点；token 保存在独立 Keychain service `com.runweave.suiji.credentials`。
 
 ## 行为与代码入口
@@ -53,13 +54,19 @@ pnpm --filter @runweave/suiji-ios mapping:check
 原生合同：[ios-capture.testplan.yaml](../../docs/testing/suiji/ios-capture.testplan.yaml)。
 当前已验证构建与 HTTP DTO；2026-09-07 已用本机开发证书完成 Debug 真机签名，
 并在 USB 连接的 iPhone 17 上安装、启动。签名团队仅通过构建参数传入，没有写入工程默认值。
-本地服务已提供局域网入口；Mac 上的登录与读取成功不代表手机网络验证通过。
+已在真机通过局域网 IP 完成登录、真实列表读取和类型筛选，并导出控件树与截图。
 用户指定的既有真机执行器已复制到根 `.runweave/suiji/physical/runner/`，
 通过 `python3 .runweave/suiji/physical/runner/run.py <本次唯一名称>` 构建并执行当前 `UIProbe.swift`，
-输出 `.xcresult`、日志及导出的附件。执行器使用手机已安装的 runner 标识，避免占用新的免费签名名额；
+输出 `.xcresult`、日志及导出的附件。当前执行器标识为 `com.runweave.suiji-device-runner.xctrunner`；
 同一手机不能同时运行多个原生执行任务。该本地执行器不随 Git 分发；运行前核对设备 UDID，
 当前探针的目标 Bundle ID 为 `com.runweave.suiji`。
-当前 runner 已安装，但两次执行均在启用自动化模式时超时，尚未进入随记控件树读取或点击步骤；
-17 条原生用例仍未执行，需先排查手机锁屏或授权状态。
-构建、安装和启动证据在根 `.runweave/suiji/physical/`，不能据此声称草稿重启、键盘或真机闭环通过。
-云服务部署仍按当前计划延期。
+设备操作前按 Bundle ID 核对目标：随记为 `com.runweave.suiji`，`packages/app-ios` 的
+Runweave Native 为 `com.runweave.app.native`，已退役的旧 `app` 为 `com.runweave.app`。
+2026-09-07 已通过 SUIJIIOS-001～014、016、017 共 16 条本地真机用例，包含附件、草稿重启、
+离线手动重试、记录与状态丢响应的幂等确认、版本冲突、身份隔离、屏幕键盘及最大辅助功能字号。
+空白草稿的入口默认类型和长正文输入时的光标可见性问题已修复并重测。
+另外已在手机实际发问到已登录的 Codex CLI，核对单条记录范围、引用回看和显式另存笔记。
+015 云端独立网络用例按用户要求延期；
+当前逐例状态与阻塞见根 `.runweave/suiji/physical/readiness-results.json`。
+执行器通过后仍须检查截图中的实际布局、末行与光标，并用独立 HTTP 读取核对保存结果；
+仅构建、安装或 XCTest 断言通过不能代替这一步。大字号用例结束后恢复设备原字号。

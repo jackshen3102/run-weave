@@ -17,7 +17,8 @@ struct RecordEditorSheet: View {
             Picker("记录类型", selection: $model.draft.kind) { Text("笔记").tag(RecordKind.note); Text("待办").tag(RecordKind.task) }
               .pickerStyle(.segmented).disabled(!model.editable)
           }
-          TextEditor(text: $model.draft.body).frame(minHeight: 240).focused($focused).disabled(!model.editable)
+          TextEditor(text: $model.draft.body).contentMargins(.bottom, 20, for: .scrollContent)
+            .frame(height: 240).focused($focused).disabled(!model.editable)
             .accessibilityLabel("正文").scrollContentBackground(.hidden).padding(8).foregroundStyle(SuijiTheme.ink).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 12))
           Text("\(model.draft.body.unicodeScalars.count) / \(model.limits.bodyScalars)").font(.caption).foregroundStyle(.secondary)
           ForEach(model.draft.existing) { attachment in

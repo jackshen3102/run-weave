@@ -17,6 +17,15 @@ import SwiftUI
   var canReopen: Bool { active && !confirmed }
   var editable: Bool { !busy && !draft.frozen && !confirmed && active }
   func cancel() { active = false }
+  func prepareForCapture(kind: RecordKind, body: String) async {
+    guard draft.recordID == nil else { return }
+    if editable, !draft.conflict, draft.pending == nil, draft.body.isEmpty, draft.existing.isEmpty, draft.local.isEmpty {
+      guard draft.kind != kind || !body.isEmpty else { return }
+      draft.kind = kind; draft.body = body; await persist()
+    } else if !body.isEmpty {
+      message = "已恢复原有草稿，新内容未覆盖它。请先处理当前草稿，再另存。"
+    }
+  }
   func persist() async {
     draft.revision += 1; let snapshot = draft
     do { try await store.save(snapshot); if active && draft.revision == snapshot.revision { message = "草稿已保存在本机" } }

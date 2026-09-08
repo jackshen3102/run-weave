@@ -43,18 +43,18 @@ flowchart LR
 
 ## 当前验证范围
 
-以下为 2026-09-07 的本地开发证据，不代表生产或原生体验验收。
+以下为 2026-09-07 的本地分层验收证据，云端生产范围尚未完成。
 
-| 范围             | 结果与合同                                                                                                                                             |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 服务数据         | [20 条](../testing/suiji/service-records.testplan.yaml)通过，真实 PostgreSQL 18.6、HTTP、文件与受控故障                                                |
-| 外部 MCP         | [13 条](../testing/suiji/mcp-agent.testplan.yaml)通过，含真实 Codex CLI 读改写与独立 HTTP 读回                                                         |
-| Web / 桌面录入   | [12 条](../testing/suiji/web-capture.testplan.yaml)通过，实际 Beta 独立窗口和同一构建的 HTTP 页面，含附件、断线、草稿、冲突、身份、多标签页及窗口重开  |
-| 本地 AI          | [12 条](../testing/suiji/ai-review.testplan.yaml)通过，真实 Codex 发问、追问、范围与只读验证；非法引用、慢进程等使用明确的故障注入                     |
-| Swift 构建 / DTO | Debug、Release Simulator 构建通过；Debug 已签名安装并启动于 iPhone 17；真实 HTTP 的 63 条记录及已完成 AI 回答通过生产 Codable 字段回编码核对           |
-| 原生体验         | [17 条](../testing/suiji/ios-capture.testplan.yaml)未执行；已切换用户指定的真机 runner，安装成功，但两次均在启用自动化模式时超时，尚无随记界面操作证据 |
-| 独立部署         | [前 3 条](../testing/suiji/deployment-recovery.testplan.yaml)通过；异机备份及后续恢复未执行，云部署与恢复按用户要求延期                                |
-| 静态门禁         | 服务与前端 typecheck/lint、服务 build、shared typecheck、架构边界通过；不能替代上述 UI 验收                                                            |
+| 范围             | 结果与合同                                                                                                                                            |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 服务数据         | [20 条](../testing/suiji/service-records.testplan.yaml)通过，真实 PostgreSQL 18.6、HTTP、文件与受控故障                                               |
+| 外部 MCP         | [13 条](../testing/suiji/mcp-agent.testplan.yaml)通过，含真实 Codex CLI 读改写与独立 HTTP 读回                                                        |
+| Web / 桌面录入   | [12 条](../testing/suiji/web-capture.testplan.yaml)通过，实际 Beta 独立窗口和同一构建的 HTTP 页面，含附件、断线、草稿、冲突、身份、多标签页及窗口重开 |
+| 本地 AI          | [12 条](../testing/suiji/ai-review.testplan.yaml)通过，真实 Codex 发问、追问、范围与只读验证；非法引用、慢进程等使用明确的故障注入                    |
+| Swift 构建 / DTO | Debug、Release Simulator 构建通过；Debug 已签名安装并启动于 iPhone 17；真实 HTTP 的 63 条记录及已完成 AI 回答通过生产 Codable 字段回编码核对          |
+| 原生体验         | [16 条本地用例](../testing/suiji/ios-capture.testplan.yaml)通过，含草稿、附件、记录与状态幂等、冲突、身份、键盘与大字号；015 云端独立网络延期         |
+| 独立部署         | [前 3 条](../testing/suiji/deployment-recovery.testplan.yaml)通过；异机备份及后续恢复未执行，云部署与恢复按用户要求延期                               |
+| 静态门禁         | 服务与前端 typecheck/lint、服务 build、shared typecheck、架构边界通过；不能替代上述 UI 验收                                                           |
 
 类型切换按钮和完成后自动关窗目前仅通过静态检查，尚未进行新一轮 Web UI 验收。
 
