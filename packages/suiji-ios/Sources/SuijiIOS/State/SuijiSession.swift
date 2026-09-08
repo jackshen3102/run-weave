@@ -72,7 +72,8 @@ import SwiftUI
     do {
       if let record, try await store.status(record.id) != nil { message = "此记录有状态操作待确认，请先手动重试确认"; return }
       if let cached = editingModels[record?.id ?? "new"], cached.canReopen {
-        if !body.isEmpty { cached.message = "已恢复原有草稿，新内容未覆盖它。请先处理当前草稿，再另存。" }
+        await cached.prepareForCapture(kind: kind, body: body)
+        guard generation == current else { return }
         editor = cached; return
       }
       let restored = try await store.load(record?.id ?? "new")
@@ -80,7 +81,7 @@ import SwiftUI
       let draft = restored ?? Draft(kind: record?.kind ?? kind, body: record?.body ?? body, recordID: record?.id, expectedVersion: record?.version, existing: record?.attachments ?? [])
       let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits); editingModels[draft.id] = model; editor = model
       await model.persist()
-      if restored != nil, !body.isEmpty { model.message = "已恢复原有草稿，新内容未覆盖它。请先处理当前草稿，再另存。" }
+      if restored != nil { await model.prepareForCapture(kind: kind, body: body) }
     } catch { if generation == current { message = error.localizedDescription } }
   }
   func setStatus(_ record: SuijiRecord, target: TaskStatus) async {
