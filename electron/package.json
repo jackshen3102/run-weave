@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "@runweave/shared": "workspace:*",
+    "ajv": "8.18.0",
+    "ajv-formats": "3.0.1",
     "electron-updater": "^6.6.2",
     "pidusage": "^4.0.1",
     "ws": "^8.18.1"

@@ -87,6 +87,9 @@ export function getOrCreateTerminalBrowserView(
       nodeIntegration: false,
       partition: getTerminalBrowserProfileConfig(profileId).partition,
       sandbox: true,
+      // Opt in only this browser surface; keep the desktop renderer unchanged.
+      enableBlinkFeatures:
+        process.env.RUNWEAVE_BROWSER_WEBMCP === "1" ? "WebMCP" : undefined,
     },
   });
   const viewportView = new View();

@@ -73,6 +73,11 @@ function actionLabel(target: TerminalBrowserAutomationTargetSnapshot): string {
       return "导航";
     case "reload":
       return "刷新";
+    case "tool":
+      return `${target.tool?.name ?? "网页工具"} · ${
+        target.tool?.status === "succeeded" ? "已完成" :
+          target.tool?.status === "unknown" ? "结果待确认" : "调用中"
+      }`;
     default:
       return target.loading ? "加载中" : "空闲";
   }

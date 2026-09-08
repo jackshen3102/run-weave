@@ -10,6 +10,7 @@ export type TerminalBrowserAutomationActionKind =
   | "input"
   | "scroll"
   | "navigate"
+  | "tool"
   | "reload";
 
 export interface TerminalBrowserAutomationConnectionSnapshot {
@@ -35,6 +36,7 @@ export interface TerminalBrowserAutomationTargetSnapshot {
   actorKeys: string[];
   action: TerminalBrowserAutomationActionKind;
   actionUntil: number | null;
+  tool?: { name: string; status: "running" | "succeeded" | "unknown" };
   pointer: { x: number; y: number } | null;
   previewState: "idle" | "connecting" | "live" | "error";
   previewError: string | null;

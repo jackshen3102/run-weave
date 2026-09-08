@@ -18,6 +18,7 @@ import {
 } from "../../view/index.js";
 import type { CdpProxyConnectionState } from "./types.js";
 import { CDP_PROXY_TRACE_ENABLED } from "./logging.js";
+import { handleBrowserToolCommand } from "../../webmcp/handler.js";
 import {
   getCurrentTargetInfos,
   getTargetInfoForRequest,
@@ -164,6 +165,11 @@ export async function handleSessionMessage(
   sessionId: string,
 ): Promise<void> {
   const { ws, sessionManager } = conn;
+
+  if (method === "Runweave.listBrowserTools" || method === "Runweave.callBrowserTool") {
+    await handleBrowserToolCommand(conn, id, method, params, sessionId);
+    return;
+  }
 
   if (isBlockedCommand(method)) {
     sendJson(

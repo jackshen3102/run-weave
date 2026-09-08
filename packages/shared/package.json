@@ -55,6 +55,7 @@
     "./terminal-browser-proxy": "./src/browser/proxy.ts",
     "./terminal-browser-tool-menu": "./src/browser/tool-menu.ts",
     "./terminal-browser-workspace": "./src/browser/workspace.ts",
+    "./terminal-browser-webmcp": "./src/browser/webmcp.ts",
     "./terminal-limits": "./src/terminal/limits.ts",
     "./terminal-preview-core": "./src/terminal/preview-core.ts",
     "./terminal-protocol": "./src/terminal/protocol.ts",
