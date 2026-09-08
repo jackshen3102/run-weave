@@ -105,6 +105,7 @@ FEISHU_APP_ID=<企业自建应用 App ID>
 FEISHU_APP_SECRET=<企业自建应用 App Secret>
 FEISHU_TARGET_CHAT_ID=<通知群 chat_id>
 FEISHU_ALLOWED_OPEN_IDS=<允许投递的用户 open_id，逗号分隔>
+FEISHU_NOTIFY_OPEN_IDS=<完成通知需要 @ 的用户 open_id，逗号分隔，可选>
 RUNWEAVE_FEISHU_STATE_DIR=<topic 与幂等状态目录>
 RUNWEAVE_CLI_BIN=<rw 可执行文件绝对路径>
 

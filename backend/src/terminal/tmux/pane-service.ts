@@ -396,7 +396,10 @@ export class TmuxPaneService extends TmuxSessionService {
     }
   }
 
-  async cancelCopyMode(target: TmuxTarget | TmuxPaneTarget): Promise<void> {
+  async cancelCopyMode(
+    target: TmuxTarget | TmuxPaneTarget,
+    options: { strict?: boolean } = {},
+  ): Promise<void> {
     const tmuxTarget = resolveTmuxTargetName(target);
     aiDiagnosticLog("terminal tmux cancel-copy-mode requested", {
       tmuxSessionName: target.sessionName,
@@ -423,6 +426,7 @@ export class TmuxPaneService extends TmuxSessionService {
         tmuxTarget,
         error,
       });
+      if (options.strict) throw error;
     }
   }
 

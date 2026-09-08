@@ -1,0 +1,134 @@
+version: 1
+name: 手机扫码登录协议与凭据边界
+description: "目标验收合同，功能待实现；覆盖 owner 授权、单次签发、存储恢复、资源上限和凭据传输。涉及客户端传输或日志的用例仍需真实候选三端。"
+cases:
+  - id: MQP-001
+    name: "原有账号密码登录保持兼容"
+    required: true
+    description: "证明新增扫码机制不改变原有登录、刷新和退出协议。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码登录接口；执行者可用临时 HTTP 驱动与脱敏存储观察取证，不使用生产账号或原始 Token 截图。"
+      - "隔离 Backend 有已知测试账号，临时客户端没有登录态。"
+    steps:
+      - "分别使用现有 web、electron、app clientType 调用账号密码登录；确认错误密码返回 401，正确密码成功且 app/electron 返回 refreshToken，web 保持原 HttpOnly cookie 方式。"
+      - "对各自会话执行现有刷新和注销；确认刷新仍沿用同一 sessionId，注销只使对应会话失效，其他独立会话可继续验证。"
+  - id: MQP-002
+    name: "发起和批准只属于有效桌面登录会话"
+    required: true
+    description: "证明未登录、已失效和其他桌面 sessionId 无法查询或批准别人的扫码请求。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码登录接口；执行者可用临时 HTTP 驱动与脱敏存储观察取证，不使用生产账号或原始 Token 截图。"
+      - "同一账号建立两个独立桌面登录会话 A、B；由 A 创建一个可领取请求并建立手机 claim。"
+    steps:
+      - "无 Bearer 和无效 Bearer 分别尝试创建、查询、批准，确认返回 401 且没有新增手机登录会话。"
+      - "使用 B 查询或批准 A 的 requestId；确认返回 404，不泄露设备名称、状态或结果。"
+      - "注销 A 后用已有手机 claimantToken 尝试 exchange；确认请求失效，无法基于创建时的旧授权签发手机会话。"
+  - id: MQP-003
+    name: "一个二维码只绑定一个手机请求"
+    required: true
+    description: "证明不同手机不能覆盖已扫描请求或拿走另一手机的领取结果。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码登录接口；执行者可用临时 HTTP 驱动与脱敏存储观察取证，不使用生产账号或原始 Token 截图。"
+      - "桌面 owner 已创建新请求，两个临时手机客户端分别持有独立 claimantToken。"
+    steps:
+      - "手机 A 使用合法 qrSecret 提交 claim，再用同一参数重试；确认两次返回相同 claimId，桌面只显示 A。"
+      - "手机 B 使用同一二维码和不同 claimantToken 提交 claim；确认冲突且不能替换 A 的设备信息；错误 secret 或直接枚举 requestId 不获得状态。"
+      - "桌面批准 A 的 claimId；确认只有 A 可 exchange，B 无法取得登录结果，也不能发送完成回执。"
+  - id: MQP-004
+    name: "未批准时不能领取登录凭据"
+    required: true
+    description: "证明扫描与轮询不等于授权；批准动作必须绑定当前 claimId。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码登录接口；执行者可用临时 HTTP 驱动与脱敏存储观察取证，不使用生产账号或原始 Token 截图。"
+      - "创建一个 pending_approval 请求，手机持有合法 claimantToken。"
+    steps:
+      - "在桌面未批准前重复 exchange；确认只返回 202 等待状态，没有 accessToken、refreshToken 或新增 app 会话。"
+      - "以 owner Bearer 提交错误 claimId 的 approve；确认返回冲突且请求保持待批准。"
+      - "提交正确 claimId 后领取结果；确认才创建且仅创建一个 app 会话。"
+  - id: MQP-005
+    name: "拒绝或取消终止未签发请求"
+    required: true
+    description: "证明人工拒绝与签发前取消均无法在迟到请求中恢复为批准。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码登录接口；执行者可用临时 HTTP 驱动与脱敏存储观察取证，不使用生产账号或原始 Token 截图。"
+      - "每个分支各创建独立 pending_approval 请求，均尚未开始签发。"
+    steps:
+      - "对拒绝分支由 owner 选择 reject；对取消分支由 owner 或对应 claimant 发出 cancel。"
+      - "对这些终态重复 approve、exchange 和迟到 complete；确认不签发手机会话，状态不回到 approved。"
+      - "验证期间不复用已完成登录的请求；分支结束清理该隔离 fixture。"
+  - id: MQP-006
+    name: "过期或换码使旧二维码失效"
+    required: true
+    description: "证明服务端期限及主动换码不可被旧请求重放绕过。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码登录接口；执行者可用临时 HTTP 驱动与脱敏存储观察取证，不使用生产账号或原始 Token 截图。"
+      - "使用隔离环境的正常服务端时钟；有一个等待扫码请求及其尚未对外共享的二维码。"
+    steps:
+      - "等待该请求 180 秒期限到达后再 claim；确认服务端拒绝且不创建会话，不能只依赖手机时钟。"
+      - "另建请求，由同一 owner 主动换码；分别对旧码和新码提交 claim，确认旧码失效、新码可进入待批准。"
+      - "清理本轮未完成请求，不调整生产系统时钟。"
+  - id: MQP-007
+    name: "并发领取和回包丢失不重复签发"
+    required: true
+    description: "证明同一请求最多产生一个手机登录会话，授权回包丢失可以由同一手机在期限内取回原结果。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码登录接口；执行者可用临时 HTTP 驱动与脱敏存储观察取证，不使用生产账号或原始 Token 截图。"
+      - "已有 approved 请求；临时网络代理能只丢弃该 requestId 首次 exchange 的响应，并观察隔离 auth 存储。"
+    steps:
+      - "让两个同 claimantToken 的 exchange 并发到达真实 Backend，丢弃首个成功回包；随后在 120 秒领取窗口内重试。"
+      - "确认所有成功领取结果对应同一 sessionId，持久化只增加一条 app 会话；其他 claimantToken 不能领取缓存结果。"
+      - "完成有效 complete 后再次 exchange；确认不返回 Token，不会再次创建会话。"
+  - id: MQP-008
+    name: "Backend 重启只中止未完成扫码"
+    required: true
+    description: "证明重启是一次明确的临时请求失效边界，已完成的普通登录会话保留。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码登录接口；执行者可用临时 HTTP 驱动与脱敏存储观察取证，不使用生产账号或原始 Token 截图。"
+      - "本 case 独立启动隔离 Backend，建立一个已保存的手机登录会话，并另建一个 approved 但尚未领取的请求。"
+    steps:
+      - "记录已登录手机 sessionId 与未完成 requestId 的脱敏证据，然后由本 case 重启同一个隔离 Backend，保持 auth 存储目录。"
+      - "重新取得 fresh endpoint；旧 requestId 的 exchange 返回失效且不产生新的会话。"
+      - "用重启前已保存的手机凭据执行正常 verify/refresh，确认仍可使用并保留同一 sessionId；完成本 case 的资源清理。"
+  - id: MQP-009
+    name: "签发持久化失败不暴露成功凭据"
+    required: true
+    description: "证明会话创建的磁盘失败不会留下可被新接口或旧密码登录误用的成功记录。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码登录接口；执行者可用临时 HTTP 驱动与脱敏存储观察取证，不使用生产账号或原始 Token 截图。"
+      - "本 case 的隔离 auth 存储可注入创建记录写入失败，记录写入前会话集合。"
+    steps:
+      - "在正常密码登录与 approved 扫码 exchange 两个等价签发入口分别注入创建记录写入失败；确认请求返回失败，不返回任何成功 Token。"
+      - "检查内存及后续成功存盘结果不包含失败会话；同一扫码 requestId 的并发领取不绕过失败状态重复提交半成品。"
+      - "移除故障，再以新的登录尝试验证可正常签发；仅清理本 case 的隔离存储。"
+  - id: MQP-010
+    name: "短期请求与限流表有固定资源上限"
+    required: true
+    description: "正常轮询可用，过量创建和探测被拒绝且到期资源得到清理。"
+    preconditions:
+      - "本轮隔离 Backend 已实现扫码接口；可使用临时 HTTP 驱动和脱敏存储观察，不使用生产账号。"
+      - "所有容量请求仅针对本用例的隔离 Backend，能够观察请求表和计数器的脱敏大小。"
+    steps:
+      - "在独立 owner 会话中达到创建每分钟 10 次及全局 64 个活跃请求上限，确认第 11 次或超容量创建返回 429 和 Retry-After。"
+      - "超过每 IP 每分钟 240 次或每 requestId 每分钟 180 次的短期接口限额，确认返回 429；单个正常手机每秒一次轮询不被误伤。"
+      - "等待对应有效窗口结束和清理周期，确认请求、结果缓存和计数器释放；清理本用例隔离存储。"
+  - id: MQP-011
+    name: "重定向不把扫码秘密交给新地址"
+    required: true
+    description: "扫码客户端禁止跨 origin 或 HTTPS 降级转发。"
+    preconditions:
+      - "本轮候选 iOS App 已安装到可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "隔离服务器 A 提供 307/308 到另一 origin B 或 HTTP 降级的测试响应；使用明确的非生产短期秘密，可观察 B 的请求。"
+    steps:
+      - "真实 iPhone 扫描 A 的测试码，依次触发跨 origin 与 HTTPS 降级重定向；确认客户端拒绝继续且说明连接地址异常。"
+      - "确认 B 未收到 qrSecret、claimantToken 或手机 Authorization；结束后清理临时服务器记录。"
+  - id: MQP-012
+    name: "日志与诊断不记录扫码凭据"
+    required: true
+    description: "新流程的成功和错误记录都不暴露可用于登录的秘密。"
+    preconditions:
+      - "本轮候选 iOS App 已安装到可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "本轮隔离 Backend 与候选 Electron 可用，桌面已登录测试账号；所有证据脱敏。"
+      - "本用例可读取隔离 Backend 日志、候选 Electron 控制台和原生诊断导出；请求结束失效后才保存截图。"
+    steps:
+      - "使用 $toolkit:playwright-cli 与原生执行器完成一轮扫码，在本轮流程内制造可恢复网络错误后继续领取和完成。"
+      - "检查三端日志与诊断，不含密码、qrSecret、claimantToken、完整二维码、accessToken 或 refreshToken；仅保留脱敏状态证据并清理本轮会话。"

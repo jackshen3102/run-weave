@@ -1,0 +1,151 @@
+version: 1
+name: iOS 扫码登录跨端交互
+description: "目标验收合同，功能待实现；覆盖真实 iPhone 扫码、桌面确认、连接保存和原生生命周期，不表示已通过运行验收。"
+cases:
+  - id: MQUI-001
+    name: "真实 iPhone 扫码完成本机登录"
+    required: true
+    description: "证明扫码、桌面批准、手机保存登录态和首页构成同一次真实跨端流程；桌面成功提示必须晚于手机完成回执。"
+    preconditions:
+      - "候选实现已部署到本轮隔离 Backend 与 Electron；桌面账号已正常登录。"
+      - "本轮候选 iOS App 已安装在可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "手机与本机 Backend 网络可达，手机尚无该连接；现场可让手机相机扫描桌面显示的二维码。"
+    steps:
+      - "使用 $toolkit:playwright-cli 附着本轮候选 Electron renderer，从当前连接菜单打开连接手机；确认目标名与地址对应当前本机连接，二维码不是 loopback 地址。"
+      - "通过现有原生执行器在正式 App 的连接管理点击扫码；让真实相机扫描上述二维码，确认进入等待电脑确认且不要求输入 URL、用户名或密码。"
+      - "在同一桌面弹窗点击允许登录；确认签发手机 app 登录会话，其 sessionId 与桌面不同；在手机保存完成前桌面仍显示正在完成手机登录。"
+      - "确认手机保存连接和凭据、进入对应项目首页，桌面随后显示手机已登录；通过正常界面退出本轮测试手机登录并清理隔离连接，保留脱敏证据。"
+  - id: MQUI-002
+    name: "远程连接的完整地址与目标保持一致"
+    required: true
+    description: "证明二维码连接的是当前远程 Backend，且保留反向代理路径前缀。"
+    preconditions:
+      - "候选实现已部署到本轮隔离 Backend 与 Electron；桌面账号已正常登录。"
+      - "本轮候选 iOS App 已安装在可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "隔离环境有可区分的 Backend A 和 B；Electron 当前选中 A，手机可访问带路径前缀的 A，二者均有明确不同的项目标记。"
+    steps:
+      - "使用 $toolkit:playwright-cli 打开 A 的连接手机弹窗；确认展示 A 的连接名称，解析本轮临时二维码确认 baseUrl 保留 A 的协议、主机、端口和路径前缀，证据隐藏 qrSecret。"
+      - "使用真实 iPhone 扫码并在桌面允许；确认请求到达 A 的 /api/auth/mobile-login 路径，手机首页只显示 A 的标记，不显示 B 的项目。"
+      - "退出本轮手机登录并清理隔离连接；保留完整请求路径但不保留秘密。"
+  - id: MQUI-003
+    name: "手机保存之前不切换原连接"
+    required: true
+    description: "证明 Keychain 或连接记录保存失败不会把未完成登录当作当前成功连接。"
+    preconditions:
+      - "候选实现已部署到本轮隔离 Backend 与 Electron；桌面账号已正常登录。"
+      - "本轮候选 iOS App 已安装在可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "手机当前使用隔离连接 B；目标 A 的扫码可达；使用仅限隔离环境的可控存储失败入口，或运行时注入底层保存失败。"
+    steps:
+      - "从 B 发起对 A 的扫码并批准，在 Keychain 写入或连接记录提交处使保存失败；确认 UI 明确显示保存异常，没有成功回执，也不自动进入 A 首页。"
+      - "检查 B 的 activeID、原连接记录和凭据仍可用；已有相同 URL 连接被复用时，确认失败补偿保留其旧凭据与用户命名。"
+      - "若补偿本身失败，确认显示独立的保存异常而非成功；恢复注入后清理仅属于本用例的新会话及记录。"
+  - id: MQUI-004
+    name: "保存成功后回执丢失不清除登录"
+    required: true
+    description: "证明手机落盘后的完成回执失败不会让有效登录态被删除或重复签发。"
+    preconditions:
+      - "候选实现已部署到本轮隔离 Backend 与 Electron；桌面账号已正常登录。"
+      - "本轮候选 iOS App 已安装在可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "隔离代理可只丢弃本轮 complete 的请求或响应；目标手机可完成 Keychain 和连接记录写入。"
+    steps:
+      - "使用 $toolkit:playwright-cli 与原生执行器完成扫码批准；在手机保存成功后阻断 complete 回执，确认手机仍可凭新登录态访问目标 Backend。"
+      - "在回执有效窗口内恢复通道并重试同一 complete；确认幂等成功、桌面收到 completed 后才显示手机已登录，未产生第二个 app session。"
+      - "另以同一行为边界验证回执窗口超时：桌面显示未收到完成确认，手机仍保留已保存凭据；清理本轮隔离登录。"
+  - id: MQUI-005
+    name: "桌面切换电脑关闭旧授权流程"
+    required: true
+    description: "桌面连接作用域变化后，旧请求不能跟随新电脑或继续等待批准。"
+    preconditions:
+      - "本轮隔离 Backend 与候选 Electron 可用，桌面已登录测试账号；所有证据脱敏。"
+      - "隔离 Backend A、B 均可用；桌面当前选择 A，可延迟 A 的状态响应。"
+    steps:
+      - "使用 $toolkit:playwright-cli 在 A 打开连接手机并建立 pending_approval 请求；暂缓 A 的状态响应，然后通过当前连接菜单切换到 B。"
+      - "确认 A 弹窗关闭且未签发请求被取消；释放旧响应，确认 B 不显示 A 的手机请求，新建弹窗使用 B 的 requestId。"
+      - "尝试领取 A 的旧请求，确认不签发手机会话；清理本轮临时请求。"
+  - id: MQUI-006
+    name: "手机取消后迟到结果不改变当前连接"
+    required: true
+    description: "手机扫码任务结束后，旧网络响应不能覆盖当前选择。"
+    preconditions:
+      - "本轮候选 iOS App 已安装到可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "本轮隔离 Backend 与候选 Electron 可用，桌面已登录测试账号；所有证据脱敏。"
+      - "手机已连接隔离 B；A 可扫码，可延迟 A 的 exchange 成功响应。"
+    steps:
+      - "在手机从 B 扫描 A 并等待桌面批准；使用 $toolkit:playwright-cli 批准并延迟 A 的领取响应。"
+      - "在手机取消扫码回到 B，再释放迟到响应；确认 B 的 activeID、连接记录和凭据保持原值，A 不被迟到任务自动导入。"
+      - "若 A 已签发，确认取消不伪称撤销该登录；通过本用例隔离存储清理未领取会话。"
+  - id: MQUI-007
+    name: "相机权限只在主动扫码时申请"
+    required: true
+    description: "拒绝相机权限后仍可使用手动连接并从设置恢复扫码。"
+    preconditions:
+      - "本轮候选 iOS App 已安装到可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "本轮相机权限尚未决定，手机可通过设置修改权限。"
+    steps:
+      - "使用原生执行器打开连接管理，确认没有权限请求；点击扫码后才申请相机权限。"
+      - "拒绝权限，确认说明不可扫码且可返回手动连接；通过系统设置授予权限后重新打开扫码，确认采集画面可用。"
+      - "结束用例时关闭扫码页，清理本轮权限操作的临时证据。"
+  - id: MQUI-008
+    name: "退出扫码或后台暂停释放相机"
+    required: true
+    description: "相机捕获会话与扫码页面的前台生命周期一致。"
+    preconditions:
+      - "本轮候选 iOS App 已安装到可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "相机权限已授予，正式 App 可打开扫码页面。"
+    steps:
+      - "打开扫码后取消，确认捕获会话停止；重新打开后切到后台，确认再次停止采集。"
+      - "回到前台核对期限并重新进入扫码，确认可启动新扫描，旧帧不自动建立 claim；最后关闭扫码页。"
+  - id: MQUI-009
+    name: "重复相机帧只建立一次扫码尝试"
+    required: true
+    description: "证明同一个可见二维码的连续识别不会产生多条手机请求或重复 UI 切换。"
+    preconditions:
+      - "候选实现已部署到本轮隔离 Backend 与 Electron；桌面账号已正常登录。"
+      - "本轮候选 iOS App 已安装在可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "手机相机已获授权；桌面有本轮新的有效二维码。"
+    steps:
+      - "真实相机持续对准二维码，使用原生与后端脱敏记录观察；确认第一个合法帧后扫描停止，只有一个 claimant 身份和一个 claimId。"
+      - "保持码在镜头前并等待桌面批准；确认手机一直处于同一等待页，不连续弹页或重复添加连接。"
+      - "取消本轮未签发请求并确认扫描资源已释放。"
+  - id: MQUI-010
+    name: "非法二维码在联网前拒绝"
+    required: true
+    description: "解析失败的扫码数据不会成为网络请求。"
+    preconditions:
+      - "本轮候选 iOS App 已安装到可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "准备普通文本、未知版本、超过 4096 字节载荷、非法日期、loopback、非 HTTP(S)、userinfo/query/fragment URL 的非凭据测试码；可观察该 App 的隔离请求。"
+    steps:
+      - "使用真实相机扫描各测试码；确认格式或地址非法者明确拒绝，未发出 claim 或任何携带扫码字段的网络请求。"
+      - "未知版本显示升级提示；返回手动入口后原连接仍可使用。"
+  - id: MQUI-011
+    name: "地址不可达时保留恢复入口"
+    required: true
+    description: "可解析二维码的网络失败不会删除原连接或冒充电脑进程退出。"
+    preconditions:
+      - "本轮候选 iOS App 已安装到可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "手机已有可用隔离 B；准备格式正确但目标不可达的非凭据测试码。"
+    steps:
+      - "扫码后观察连接超时，确认显示网络连接失败并提供重试、重新扫码或手动登录。"
+      - "返回 B，确认原登录仍可使用；重试只延续当前尝试，不生成重复本地连接。"
+  - id: MQUI-012
+    name: "重复添加同一地址复用本地连接"
+    required: true
+    description: "证明扫码成功按规范化完整 URL 去重，保留已有连接 ID 和用户命名。"
+    preconditions:
+      - "候选实现已部署到本轮隔离 Backend 与 Electron；桌面账号已正常登录。"
+      - "本轮候选 iOS App 已安装在可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "手机已有目标地址的手动命名连接，记录其 ID 与 Keychain scope；桌面连接到同一 Backend。"
+    steps:
+      - "扫码并批准同一规范化地址的新请求；确认新手机登录态写入该连接作用域，连接列表没有重复条目，用户命名保持不变。"
+      - "检查不同路径前缀的隔离地址没有被仅按主机名合并；新地址仍可作为独立连接保存。"
+      - "退出并清理本轮新增登录态；不得删除与用例无关的原连接数据。"
+  - id: MQUI-013
+    name: "旧后端与手动入口兼容"
+    required: true
+    description: "证明不支持新接口时用户仍能按原流程登录。"
+    preconditions:
+      - "本轮候选 iOS App 已安装在可用、已解锁的真实 iPhone；按 packages/app-ios/README.md 核对签名和既有原生执行器。"
+      - "一个未提供 mobile-login 路由但支持现有账号密码协议的隔离旧 Backend 可达；有对应的非真实授权测试二维码。"
+    steps:
+      - "扫码连接旧 Backend，确认 404 被呈现为电脑端暂不支持扫码登录，不无限重试。"
+      - "返回连接管理，手动添加地址并输入该 Backend 测试账号密码；确认进入首页，原登录流程没有被扫码入口取代。"

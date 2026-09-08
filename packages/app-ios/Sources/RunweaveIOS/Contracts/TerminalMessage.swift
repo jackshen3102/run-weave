@@ -9,6 +9,7 @@ enum TerminalMessage: Decodable {
   case status(String, Int?)
   case exit(Int?)
   case error(String)
+  case notice(String)
   case unknown
 
   private enum Keys: String, CodingKey {
@@ -38,6 +39,7 @@ enum TerminalMessage: Decodable {
       self = .status(value, try c.decodeIfPresent(Int.self, forKey: .exitCode))
     case "exit": self = .exit(try c.decode(Int?.self, forKey: .exitCode))
     case "error": self = .error(try c.decode(String.self, forKey: .message))
+    case "notice": self = .notice(try c.decode(String.self, forKey: .message))
     default: self = .unknown
     }
   }

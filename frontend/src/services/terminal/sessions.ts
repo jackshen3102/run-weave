@@ -111,6 +111,7 @@ export async function sendTerminalInput(
   token: string,
   terminalSessionId: string,
   payload: SendTerminalInputRequest,
+  signal?: AbortSignal,
 ): Promise<SendTerminalInputResponse> {
   return requestJson<SendTerminalInputResponse>(
     apiBase,
@@ -122,6 +123,7 @@ export async function sendTerminalInput(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
+      signal,
     },
   );
 }

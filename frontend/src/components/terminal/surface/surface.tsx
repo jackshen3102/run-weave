@@ -155,6 +155,7 @@ export function TerminalSurface({
   const {
     connectionStatus,
     error,
+    notice,
     failureSince,
     lastCloseReason,
     reconnectAttempt,
@@ -178,8 +179,7 @@ export function TerminalSurface({
       ? "disabled"
       : connectionStatus === "connected"
         ? "healthy"
-        : connectionStatus === "closed" &&
-            reconnectAttempt >= MAX_TERMINAL_RECONNECT_ATTEMPTS
+        : connectionStatus === "closed"
           ? "unhealthy"
           : "recovering";
     return {
@@ -192,7 +192,10 @@ export function TerminalSurface({
         : state === "healthy"
           ? "Terminal WebSocket 已连接"
           : state === "unhealthy"
-            ? lastCloseReason || "Terminal WebSocket 重试已耗尽"
+            ? lastCloseReason ||
+              (reconnectAttempt >= MAX_TERMINAL_RECONNECT_ATTEMPTS
+                ? "Terminal WebSocket 重试已耗尽"
+                : "Terminal WebSocket 已关闭")
             : "Terminal WebSocket 正在重连",
       observedAt,
       dependsOn: ["frontend.node.http", "frontend.node.auth"],
@@ -254,7 +257,6 @@ export function TerminalSurface({
     clientMode,
     error,
     paneWorkspace,
-    runtimeKindRef,
     searchOpen: search.open,
     scroll,
     sessionStatus,
@@ -452,6 +454,7 @@ export function TerminalSurface({
     <TerminalSurfaceLayout
       active={active}
       error={error ?? pasteError}
+      notice={notice}
       pastedImages={pastedImages}
       paneWorkspace={showPaneResizeHandle ? paneWorkspace : null}
       toolbar={
@@ -485,6 +488,8 @@ export function TerminalSurface({
         <TerminalFloatingComposer
           diagnostics={floatingComposer.diagnostics}
           draft={floatingComposer.draft}
+          sending={floatingComposer.sending}
+          sendError={floatingComposer.sendError}
           hasNewOutputBelow={floatingComposer.hasNewOutputBelow}
           scrollButtonMode={floatingComposer.scrollButtonMode}
           showTrigger={floatingComposer.showTrigger}

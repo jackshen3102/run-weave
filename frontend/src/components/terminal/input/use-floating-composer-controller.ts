@@ -117,8 +117,6 @@ interface UseTerminalFloatingDraftControllerOptions {
   clientMode: ClientMode;
   error: string | null;
   paneWorkspace: TerminalPanelWorkspace | null;
-  requestTmuxExitCopyMode: () => void;
-  runtimeKindRef: TerminalRuntimeKindRef;
   searchOpen: boolean;
   scrollToBottom: () => void;
   sessionStatus: "running" | "exited";
@@ -126,7 +124,6 @@ interface UseTerminalFloatingDraftControllerOptions {
   terminalAtBottom: boolean;
   terminalSessionId: string;
   terminalState?: TerminalState;
-  tmuxScrollbackActive: boolean;
   token: string;
 }
 
@@ -137,8 +134,6 @@ function useTerminalFloatingDraftController({
   clientMode,
   error,
   paneWorkspace,
-  requestTmuxExitCopyMode,
-  runtimeKindRef,
   searchOpen,
   scrollToBottom,
   sessionStatus,
@@ -146,7 +141,6 @@ function useTerminalFloatingDraftController({
   terminalAtBottom,
   terminalSessionId,
   terminalState,
-  tmuxScrollbackActive,
   token,
 }: UseTerminalFloatingDraftControllerOptions) {
   const lastSyncedTuiDraftRef = useRef("");
@@ -159,6 +153,58 @@ function useTerminalFloatingDraftController({
   const [floatingDraft, setFloatingDraft] = useState("");
   const [draftMirrorSupported, setDraftMirrorSupported] = useState(true);
   const [inputLagFallbackActive, setInputLagFallbackActive] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const requestScopeRef = useRef<object | null>(null);
+  const sendErrorRef = useRef(sendError);
+  sendErrorRef.current = sendError;
+  const draftsByTargetRef = useRef(
+    new Map<
+      string,
+      {
+        draft: string;
+        synced: string;
+        dirty: boolean;
+        error: string | null;
+      }
+    >(),
+  );
+
+  useEffect(() => {
+    if (inputLagFallbackTimerRef.current !== null) {
+      window.clearTimeout(inputLagFallbackTimerRef.current);
+      inputLagFallbackTimerRef.current = null;
+    }
+    const target = JSON.stringify([
+      apiBase,
+      terminalSessionId,
+      paneWorkspace?.activePanelId,
+    ]);
+    const draftsByTarget = draftsByTargetRef.current;
+    const saved = draftsByTarget.get(target);
+    requestScopeRef.current = {};
+    floatingDraftRef.current = saved?.draft ?? "";
+    lastSyncedTuiDraftRef.current = saved?.synced ?? "";
+    floatingDraftDirtyRef.current = saved?.dirty ?? false;
+    floatingDraftSyncPendingRef.current = false;
+    floatingComposerVisibleRef.current = false;
+    setFloatingDraft(floatingDraftRef.current);
+    setSendError(saved?.error ?? null);
+    setFloatingComposerOpen(Boolean(saved?.dirty || saved?.error));
+    setSending(false);
+    setInputLagFallbackActive(false);
+    return () => {
+      draftsByTarget.set(target, {
+        draft: floatingDraftRef.current,
+        synced: lastSyncedTuiDraftRef.current,
+        dirty: floatingDraftDirtyRef.current,
+        error: floatingDraftSyncPendingRef.current
+          ? "发送结果未确认，草稿已保留。请先检查终端，再决定是否重新发送。"
+          : sendErrorRef.current,
+      });
+      requestScopeRef.current = null;
+    };
+  }, [apiBase, terminalSessionId, paneWorkspace?.activePanelId]);
 
   const eligible = shouldEnableFloatingComposer({
     activeCommand,
@@ -195,8 +241,11 @@ function useTerminalFloatingDraftController({
       return;
     }
     lastSyncedTuiDraftRef.current = next.draft;
+    // Raw terminal input must not overwrite an unsent local edit or an in-flight send.
+    if (floatingDraftDirtyRef.current || floatingDraftSyncPendingRef.current) {
+      return;
+    }
     floatingDraftRef.current = next.draft;
-    floatingDraftDirtyRef.current = false;
     setFloatingDraft(next.draft);
 
     if (!next.draft) {
@@ -222,77 +271,104 @@ function useTerminalFloatingDraftController({
   });
 
   const handleDraftChange = useMemoizedFn((value: string) => {
+    floatingDraftRef.current = value;
     setFloatingDraft(value);
     floatingDraftDirtyRef.current = value !== lastSyncedTuiDraftRef.current;
   });
 
   const sendDraftToTui = useMemoizedFn(
-    (options: { delayMs?: number; submit?: boolean } = {}): boolean => {
+    async (options: { submit?: boolean } = {}): Promise<boolean> => {
+      if (floatingDraftSyncPendingRef.current) {
+        return false;
+      }
       const shouldReplay = floatingDraftDirtyRef.current;
       const shouldSubmit = options.submit === true;
       if (!shouldReplay && !shouldSubmit) {
         return true;
       }
       if (error) {
+        setSendError("终端连接不可用，草稿已保留；重连后再发送。");
+        setFloatingComposerOpen(true);
         return false;
       }
 
-      const draftToReplay = floatingDraft;
-      const sendSequence = () => {
-        floatingDraftSyncPendingRef.current = true;
-        void sendTerminalInputRequest(apiBase, token, terminalSessionId, {
-          data: draftToReplay,
-          mode: "prompt_replace",
-          submit: shouldSubmit,
-          ...(paneWorkspace?.activePanelId
-            ? { panelId: paneWorkspace.activePanelId }
-            : {}),
-        })
-          .then(() => {
-            floatingDraftSyncPendingRef.current = false;
-            if (floatingDraftRef.current !== draftToReplay) {
-              return;
-            }
-            lastSyncedTuiDraftRef.current = shouldSubmit ? "" : draftToReplay;
-            floatingDraftDirtyRef.current = false;
-            if (shouldSubmit) {
-              setFloatingDraft("");
-            }
-          })
-          .catch((requestError: unknown) => {
-            logTerminalPerf("terminal.floating_composer.sync.failed", {
-              terminalSessionId,
-              error: String(requestError),
-            });
-            floatingDraftSyncPendingRef.current = false;
-          });
-      };
-
-      if (options.delayMs && options.delayMs > 0) {
-        window.setTimeout(sendSequence, options.delayMs);
-      } else {
-        sendSequence();
+      const draftToReplay = floatingDraftRef.current;
+      const scope = requestScopeRef.current;
+      const panelId = paneWorkspace?.activePanelId;
+      floatingDraftSyncPendingRef.current = true;
+      setSending(true);
+      setSendError(null);
+      try {
+        if (!scope || requestScopeRef.current !== scope) {
+          return false;
+        }
+        await sendTerminalInputRequest(
+          apiBase,
+          token,
+          terminalSessionId,
+          {
+            data: draftToReplay,
+            mode: "prompt_replace",
+            submit: shouldSubmit,
+            ...(panelId ? { panelId } : {}),
+          },
+          AbortSignal.timeout(20_000),
+        );
+        if (requestScopeRef.current !== scope) {
+          return false;
+        }
+        lastSyncedTuiDraftRef.current = shouldSubmit ? "" : draftToReplay;
+        if (floatingDraftRef.current !== draftToReplay) {
+          return false;
+        }
+        floatingDraftDirtyRef.current = false;
+        if (shouldSubmit) {
+          floatingDraftRef.current = "";
+          setFloatingDraft("");
+        }
+        return true;
+      } catch (requestError) {
+        if (requestScopeRef.current !== scope) {
+          return false;
+        }
+        logTerminalPerf("terminal.floating_composer.sync.failed", {
+          terminalSessionId,
+          error: String(requestError),
+        });
+        floatingDraftDirtyRef.current = true;
+        setSendError(
+          "发送结果未确认，草稿已保留。请先检查终端，再决定是否重新发送。",
+        );
+        setFloatingComposerOpen(true);
+        return false;
+      } finally {
+        if (requestScopeRef.current === scope) {
+          floatingDraftSyncPendingRef.current = false;
+          setSending(false);
+        }
       }
-      return true;
     },
   );
 
   const available =
     eligible &&
     draftMirrorSupported &&
-    (showScrollToBottomControl || inputLagFallbackActive);
+    (showScrollToBottomControl ||
+      inputLagFallbackActive ||
+      floatingComposerOpen ||
+      sending ||
+      Boolean(sendError));
   const visible = available && floatingComposerOpen;
   const showTrigger = available && !floatingComposerOpen;
 
-  const handleSend = useMemoizedFn(() => {
+  const handleSend = useMemoizedFn(async () => {
     if (!floatingDraft) {
       return;
     }
     if (
-      !sendDraftToTui({
-        delayMs: tmuxScrollbackActive ? 320 : 0,
+      !(await sendDraftToTui({
         submit: true,
-      })
+      }))
     ) {
       return;
     }
@@ -303,13 +379,14 @@ function useTerminalFloatingDraftController({
   });
 
   useEffect(() => {
-    floatingDraftRef.current = floatingDraft;
-  }, [floatingDraft]);
-
-  useEffect(() => {
     const wasVisible = floatingComposerVisibleRef.current;
     floatingComposerVisibleRef.current = visible;
-    if (!wasVisible && visible) {
+    if (
+      !wasVisible &&
+      visible &&
+      !floatingDraftDirtyRef.current &&
+      !floatingDraftSyncPendingRef.current
+    ) {
       const syncedDraft = lastSyncedTuiDraftRef.current;
       floatingDraftRef.current = syncedDraft;
       floatingDraftDirtyRef.current = false;
@@ -320,15 +397,12 @@ function useTerminalFloatingDraftController({
       wasVisible &&
       !visible &&
       floatingDraftDirtyRef.current &&
-      !floatingDraftSyncPendingRef.current
+      !floatingDraftSyncPendingRef.current &&
+      !sendError
     ) {
-      const syncDelayMs = runtimeKindRef.current === "tmux" ? 320 : 0;
-      if (runtimeKindRef.current === "tmux") {
-        requestTmuxExitCopyMode();
-      }
-      sendDraftToTui({ delayMs: syncDelayMs });
+      void sendDraftToTui();
     }
-  }, [requestTmuxExitCopyMode, runtimeKindRef, sendDraftToTui, visible]);
+  }, [sendDraftToTui, sendError, visible]);
 
   useEffect(() => {
     if (terminalAtBottom) {
@@ -372,6 +446,8 @@ function useTerminalFloatingDraftController({
 
   return {
     draft: floatingDraft,
+    sending,
+    sendError,
     draftMirrorSupported,
     eligible,
     handleOutputReceived,
@@ -392,7 +468,6 @@ interface UseTerminalFloatingComposerControllerOptions {
   clientMode: ClientMode;
   error: string | null;
   paneWorkspace: TerminalPanelWorkspace | null;
-  runtimeKindRef: TerminalRuntimeKindRef;
   searchOpen: boolean;
   sessionStatus: "running" | "exited";
   scroll: ReturnType<typeof useTerminalScrollController>;
@@ -408,7 +483,6 @@ export function useTerminalFloatingComposerController({
   clientMode,
   error,
   paneWorkspace,
-  runtimeKindRef,
   searchOpen,
   sessionStatus,
   scroll,
@@ -427,8 +501,6 @@ export function useTerminalFloatingComposerController({
     clientMode,
     error,
     paneWorkspace,
-    requestTmuxExitCopyMode: scroll.requestTmuxExitCopyMode,
-    runtimeKindRef,
     searchOpen,
     scrollToBottom: scroll.scrollToBottom,
     sessionStatus,
@@ -436,7 +508,6 @@ export function useTerminalFloatingComposerController({
     terminalAtBottom: scroll.terminalAtBottom,
     terminalSessionId,
     terminalState,
-    tmuxScrollbackActive: scroll.tmuxScrollbackActive,
     token,
   });
   const eligible = draft.eligible;
@@ -471,6 +542,8 @@ export function useTerminalFloatingComposerController({
   return {
     diagnostics,
     draft: draft.draft,
+    sending: draft.sending,
+    sendError: draft.sendError,
     handleBottomStateChange: scroll.handleBottomStateChange,
     handleOutputReceived: draft.handleOutputReceived,
     handleUserInputData: draft.handleUserInputData,

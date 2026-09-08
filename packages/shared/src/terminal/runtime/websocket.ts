@@ -52,6 +52,10 @@ export type TerminalServerMessage =
       exitCode: number | null;
     }
   | {
+      type: "notice";
+      message: string;
+    }
+  | {
       type: "error";
       message: string;
     };

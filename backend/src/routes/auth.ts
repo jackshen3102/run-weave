@@ -162,17 +162,23 @@ export function createAuthRouter(
       return;
     }
 
-    const result = await authService.login(
-      parsed.data.username,
-      parsed.data.password,
-      {
-        clientType,
-        connectionId:
-          typeof req.headers["x-connection-id"] === "string"
-            ? req.headers["x-connection-id"]
-            : undefined,
-      },
-    );
+    let result;
+    try {
+      result = await authService.login(
+        parsed.data.username,
+        parsed.data.password,
+        {
+          clientType,
+          connectionId:
+            typeof req.headers["x-connection-id"] === "string"
+              ? req.headers["x-connection-id"]
+              : undefined,
+        },
+      );
+    } catch {
+      res.status(503).json({ message: "Login could not be saved" });
+      return;
+    }
     if (!result) {
       loginAttemptGuard.recordFailure(loginIdentity);
       res.status(401).json({ message: "Invalid credentials" });

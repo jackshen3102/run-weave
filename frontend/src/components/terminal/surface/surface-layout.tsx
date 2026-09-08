@@ -8,6 +8,7 @@ interface TerminalSurfaceLayoutProps {
   active: boolean;
   controls: ReactNode;
   error: string | null;
+  notice: string | null;
   mobileControls: ReactNode;
   paneWorkspace: TerminalPanelWorkspace | null;
   pastedImages: PastedImageReference[];
@@ -25,6 +26,7 @@ export function TerminalSurfaceLayout({
   active,
   controls,
   error,
+  notice,
   mobileControls,
   paneWorkspace,
   pastedImages,
@@ -37,6 +39,11 @@ export function TerminalSurfaceLayout({
     <div className="flex h-full min-h-0 flex-col">
       {error ? (
         <p className="px-3 py-2 text-xs text-rose-400">{error}</p>
+      ) : null}
+      {notice ? (
+        <p role="status" className="px-3 py-2 text-xs text-amber-300">
+          {notice}
+        </p>
       ) : null}
       {pastedImages.length > 0 ? (
         <div className="flex flex-wrap gap-2 px-3 pb-2">

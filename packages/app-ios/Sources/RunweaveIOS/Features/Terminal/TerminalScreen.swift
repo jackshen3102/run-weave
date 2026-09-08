@@ -118,6 +118,7 @@ struct TerminalScreen: View {
     VStack(spacing: 0) {
       if session.health.status == .offline { Text("本地电脑暂时不可用").foregroundColor(.orange) }
       if let failure = controller.failure { Text(failure).font(.caption).foregroundColor(.red) }
+      if let notice = controller.notice { Text(notice).font(.caption).foregroundColor(.orange) }
       TerminalHostView(surface: controller.surface).frame(minHeight: 24)
         .padding(.horizontal, 12).padding(.top, 10)
         .overlay(alignment: .bottomTrailing) {
@@ -164,8 +165,8 @@ struct TerminalScreen: View {
         Button("诊断") { showingDiagnostics = true }
         Button("回到底部") { controller.returnToBottom() }.disabled(
           !session.canWrite || !controller.canSend)
-        Button("重连") { if session.canWrite { controller.connect() } }.disabled(
-          !session.canWrite)
+        Button("重连") { Task { await session.reconnectTerminal() } }.disabled(
+          !session.canReconnect)
         Button("删除终端", role: .destructive) { deleting = true }.disabled(!session.canWrite)
       } label: {
         Image(systemName: "ellipsis")

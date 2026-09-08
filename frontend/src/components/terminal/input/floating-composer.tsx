@@ -27,6 +27,8 @@ export interface TerminalFloatingComposerDiagnostics {
 interface TerminalFloatingComposerProps {
   diagnostics: TerminalFloatingComposerDiagnostics;
   draft: string;
+  sending: boolean;
+  sendError: string | null;
   hasNewOutputBelow: boolean;
   scrollButtonMode: "floating" | "legacy" | "none";
   showTrigger: boolean;
@@ -52,6 +54,8 @@ function resizeTextarea(textarea: HTMLTextAreaElement | null): void {
 export function TerminalFloatingComposer({
   diagnostics,
   draft,
+  sending,
+  sendError,
   hasNewOutputBelow,
   scrollButtonMode,
   showTrigger,
@@ -79,9 +83,14 @@ export function TerminalFloatingComposer({
   }, [visible]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      onSend();
+      if (!sending) {
+        onSend();
+      }
       return;
     }
     if (event.key === "Escape") {
@@ -121,6 +130,22 @@ export function TerminalFloatingComposer({
     >
       {visible ? (
         <div className="absolute right-2 bottom-3.5 left-2 flex flex-col items-center gap-1">
+          {sendError ? (
+            <p
+              role="alert"
+              className="rounded bg-slate-950 px-3 py-2 text-xs text-amber-300"
+            >
+              {sendError}
+            </p>
+          ) : null}
+          {sending ? (
+            <p
+              role="status"
+              className="rounded bg-slate-950 px-3 py-1 text-xs text-slate-200"
+            >
+              正在发送…
+            </p>
+          ) : null}
           {diagnostics.inputLagFallbackActive ? (
             <div
               role="status"
@@ -143,6 +168,7 @@ export function TerminalFloatingComposer({
               className="grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900/70 text-slate-400 transition hover:border-slate-600 hover:bg-slate-800 hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-300 active:bg-slate-800"
               onPointerDown={(event) => event.preventDefault()}
               onClick={onClose}
+              disabled={sending}
             >
               <X aria-hidden="true" className="h-4 w-4" />
             </button>
@@ -153,6 +179,7 @@ export function TerminalFloatingComposer({
               rows={1}
               spellCheck={false}
               value={draft}
+              readOnly={sending}
               onChange={(event) => {
                 resizeTextarea(event.currentTarget);
                 onDraftChange(event.currentTarget.value);
@@ -164,7 +191,7 @@ export function TerminalFloatingComposer({
               aria-label="Send"
               title="Send"
               className="grid h-7 w-7 place-items-center rounded-full border border-cyan-400/40 bg-cyan-400/18 text-cyan-50 transition hover:border-cyan-300/60 hover:bg-cyan-400/28 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:bg-cyan-400/35 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800/70 disabled:text-slate-500"
-              disabled={draft.length === 0}
+              disabled={sending || draft.length === 0}
               onPointerDown={(event) => event.preventDefault()}
               onClick={onSend}
             >

@@ -1,3 +1,4 @@
+import { createMobileLoginRouter } from "./routes/mobile-login";
 import "dotenv/config";
 import http from "node:http";
 import type { Socket } from "node:net";
@@ -73,7 +74,6 @@ import {
 } from "./terminal/workspace-service/proxy";
 import { TerminalWorktreeDeletionError } from "./terminal/workspace-service/worktree-deletion";
 import { setBackendRuntimeStatusListener } from "./bootstrap/runtime-status";
-
 const HASHED_ASSET_CACHE_CONTROL =
   "public, max-age=31536000, s-maxage=31536000, immutable";
 const REVALIDATED_STATIC_CACHE_CONTROL = "no-cache";
@@ -213,6 +213,7 @@ function createHttpApp(
       trustProxyHeaders: tunnelAuthConfig !== null,
     }),
   );
+  app.use("/api/auth/mobile-login", createMobileLoginRouter(services.mobileLoginService, services.authService));
   diagnosticLogRecorder.configurePersistence({
     persistRoot: resolveStoragePaths(process.env).backendLogDir,
   });
@@ -409,6 +410,7 @@ function attachLifecycleHandlers(
       services.evolutionToolTokenRegistry.clear();
       await services.evolutionActivationStore.close();
       codexAppServerClient.shutdown();
+      services.mobileLoginService.dispose();
       await services.authStore.dispose();
       await profileLock.release();
       logger.info("backend.shutdown.completed", {

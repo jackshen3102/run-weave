@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useOpenMobileLogin } from "../features/mobile-login/context";
 import { Check, ChevronsUpDown, PlusCircle } from "lucide-react";
 import type { ConnectionConfig } from "../features/connection/types";
 import { Button } from "./ui/button";
@@ -29,6 +30,7 @@ export function ConnectionSwitcher({
   className,
 }: ConnectionSwitcherProps) {
   const [open, setOpen] = useState(false);
+  const openMobileLogin = useOpenMobileLogin();
   const resolvedActiveName =
     activeConnectionName ??
     connections.find((connection) => connection.id === activeConnectionId)?.name ??
@@ -76,6 +78,9 @@ export function ConnectionSwitcher({
           );
         })}
         <DropdownMenuSeparator />
+        {openMobileLogin ? <DropdownMenuItem onSelect={() => { setOpen(false); openMobileLogin(); }}>
+          连接手机
+        </DropdownMenuItem> : null}
         <DropdownMenuItem
           onSelect={() => {
             onOpenConnectionManager();

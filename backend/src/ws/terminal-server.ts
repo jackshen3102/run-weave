@@ -130,7 +130,7 @@ export function attachTerminalWebSocketServer(
         runtime = ensured.runtime;
         if (ensured.warning) {
           sendEvent(socket, {
-            type: "error",
+            type: "notice",
             message: ensured.warning,
           });
         }
@@ -308,7 +308,7 @@ export function attachTerminalWebSocketServer(
               });
               if (ensured.warning) {
                 sendEvent(socket, {
-                  type: "error",
+                  type: "notice",
                   message: ensured.warning,
                 });
               }

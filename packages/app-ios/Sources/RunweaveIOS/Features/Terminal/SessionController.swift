@@ -11,6 +11,7 @@ public final class SessionController: ObservableObject {
   @Published public private(set) var receivedBytes = 0
   @Published public private(set) var queuedBytes = 0
   @Published public private(set) var failure: String?
+  @Published public private(set) var notice: String?
   @Published public private(set) var inputBusy = false
   @Published private(set) var metadata: Metadata?
   struct Metadata {
@@ -88,6 +89,7 @@ public final class SessionController: ObservableObject {
     stopped = false
     surface.setActive(true)
     failure = nil
+    notice = nil
     let epoch = generation
     task = Task { [weak self] in
       guard let self else { return }
@@ -257,6 +259,9 @@ public final class SessionController: ObservableObject {
     case .metadata(let cwd, let activeCommand):
       metadata = Metadata(cwd: cwd, activeCommand: activeCommand)
       record("metadata")
+    case .notice(let message):
+      notice = message
+      record("runtime.notice")
     case .error: halt("终端服务返回错误，请查看后端诊断")
     case .unknown: record("protocol.unknown")
     }
@@ -329,8 +334,14 @@ public final class SessionController: ObservableObject {
     socket.send(.string(text)) { [weak self] error in
       guard error != nil else { return }
       Task { @MainActor in
-        guard let self, self.generation == epoch else { return }
-        self.halt("发送结果未确认；不会自动重发")
+        guard let self, self.generation == epoch, self.socket === socket else { return }
+        let isInput = payload["type"] as? String == "input"
+        if isInput { self.failure = "发送结果未确认；不会自动重发" }
+        self.record(isInput ? "input.unconfirmed" : "resize.unconfirmed")
+        self.connected = false
+        self.sentSize = nil
+        // Let the receive loop reconnect. Only viewport state is resent; input is never replayed.
+        socket.cancel(with: .goingAway, reason: nil)
       }
     }
   }

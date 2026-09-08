@@ -4,6 +4,8 @@ struct ConnectionManager: View {
   @Environment(\.dismiss) private var dismiss
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
+  var onMobileLogin: () -> Void = {}
+  @State private var scanning = false
   @State private var editingID: String?
   @State private var name = ""
   @State private var url = ""
@@ -17,6 +19,11 @@ struct ConnectionManager: View {
   var body: some View {
     NavigationView {
       Form {
+        Section {
+          Button { scanning = true } label: {
+            Label("扫码连接电脑", systemImage: "qrcode.viewfinder").font(.headline)
+          }.disabled(store.storageError != nil)
+        }
         Section(header: Text("外观")) {
           Picker("主题", selection: $theme) {
             Text("深色").tag("dark")
@@ -89,6 +96,13 @@ struct ConnectionManager: View {
       }
     }.navigationViewStyle(.stack).interactiveDismissDisabled(busy)
       .preferredColorScheme(theme == "light" ? .light : .dark)
+      .sheet(isPresented: $scanning) {
+        MobileLoginView(store: store, session: session) {
+          scanning = false
+          onMobileLogin()
+          dismiss()
+        }
+      }
   }
 
   private func connectionStatus(_ connection: BackendConnection) -> String {

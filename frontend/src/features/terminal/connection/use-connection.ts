@@ -1,6 +1,10 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
-import type { TerminalClientMessage, TerminalModeState, TerminalServerMessage } from "@runweave/shared/terminal/websocket";
+import type {
+  TerminalClientMessage,
+  TerminalModeState,
+  TerminalServerMessage,
+} from "@runweave/shared/terminal/websocket";
 import { HttpError } from "../../../services/http";
 import { createTerminalWsTicket } from "../../../services/terminal/index";
 import {
@@ -93,6 +97,7 @@ export function useTerminalConnection(params: {
   const [runtimeKind, setRuntimeKind] = useState<TerminalRuntimeKind>(null);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [manualReconnectNonce, setManualReconnectNonce] = useState(0);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [failureSince, setFailureSince] = useState<number | null>(null);
@@ -117,6 +122,7 @@ export function useTerminalConnection(params: {
     setExitCode(null);
     setError(null);
     setInputError(null);
+    setNotice(null);
     let cancelled = false;
 
     const clearReconnectTimer = () => {
@@ -255,7 +261,7 @@ export function useTerminalConnection(params: {
           }
 
           setNextConnectionStatus("closed");
-          setReconnectAttempt(MAX_TERMINAL_RECONNECT_ATTEMPTS);
+          setReconnectAttempt(reconnectCountRef.current);
           if (closeReasonRef.current || event.reason) {
             setError(
               closeReasonRef.current ||
@@ -324,6 +330,10 @@ export function useTerminalConnection(params: {
               });
               setNextTerminalStatus("exited");
               setExitCode(parsed.exitCode ?? null);
+              return;
+            }
+            if (parsed.type === "notice") {
+              setNotice(parsed.message);
               return;
             }
             if (parsed.type === "error") {
@@ -423,6 +433,7 @@ export function useTerminalConnection(params: {
     failureSince,
     lastCloseReason,
     error: inputError ?? error,
+    notice,
     sendInput: useMemoizedFn((data: string) => {
       outboundSequenceRef.current += 1;
       const socket = socketRef.current;

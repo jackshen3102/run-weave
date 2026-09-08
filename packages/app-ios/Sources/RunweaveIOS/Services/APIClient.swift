@@ -11,6 +11,8 @@ public actor APIClient {
   private var tokens: AuthTokens?
   private var refreshTask: Task<AuthTokens, Error>?
   private var authEpoch = 0
+  private var importingMobileLogin = false
+  private var mobileLoginImportTask: Task<Void, Error>?
   var previewCache = ScopedCache()
   func diagnosticSnapshot() async -> DiagnosticStore.Snapshot {
     await DiagnosticStore.shared.snapshot(scope: connectionID)
@@ -53,6 +55,7 @@ public actor APIClient {
   deinit { session.invalidateAndCancel() }
   func hasCredentials() -> Bool { tokens != nil }
   func close() async {
+    _ = await mobileLoginImportTask?.result
     previewCache.clear()
     authEpoch += 1
     refreshTask?.cancel()
@@ -76,7 +79,50 @@ public actor APIClient {
     } catch APIError.http(401) { throw APIError.loginRejected }
   }
 
-  func clearCredentials() throws {
+  /// Called only for this endpoint's approved mobile result. Connection persistence is one
+  /// synchronous MainActor step with Keychain compensation, not a cross-store transaction.
+  func importMobileLogin(_ result: MobileLoginResult,
+    commitConnection: @escaping @MainActor () throws -> Void) async throws {
+    try result.validate()
+    guard !importingMobileLogin else { throw CancellationError() }
+    importingMobileLogin = true
+    defer { importingMobileLogin = false }
+    authEpoch += 1
+    refreshTask?.cancel()
+    refreshTask = nil
+    let next = AuthTokens(accessToken: result.accessToken, refreshToken: result.refreshToken,
+      expiresIn: result.expiresIn, sessionId: result.sessionId,
+      expiresAt: Date().addingTimeInterval(result.expiresIn))
+    let encoded = try JSONEncoder().encode(next)
+    let vault = self.vault
+    let account = self.account
+    let task = Task {
+      try await MainActor.run {
+        try Task.checkCancellation()
+        let previous = try vault.read(account)
+        try vault.write(encoded, account: account)
+        do { try commitConnection() }
+        catch {
+          do {
+            if let previous { try vault.write(previous, account: account) }
+            else { try vault.delete(account) }
+          } catch {
+            throw MobileLoginFailure(message: "保存连接失败，恢复原凭据也失败。请检查本地存储后重新登录。")
+          }
+          throw error
+        }
+      }
+      // Once both stores succeeded, cancellation must not discard the persisted login.
+      tokens = next
+      previewCache.clear()
+    }
+    mobileLoginImportTask = task
+    defer { mobileLoginImportTask = nil }
+    try await task.value
+  }
+
+  func clearCredentials() async throws {
+    _ = await mobileLoginImportTask?.result
     previewCache.clear()
     authEpoch += 1
     refreshTask?.cancel()
@@ -86,8 +132,9 @@ public actor APIClient {
   }
 
   func logout() async throws {
+    _ = await mobileLoginImportTask?.result
     let token = tokens?.accessToken
-    try clearCredentials()
+    try await clearCredentials()
     if let token {
       let _: EmptyResponse? = try? await request("/api/auth/logout", method: "POST", bearer: token)
     }
@@ -211,6 +258,7 @@ public actor APIClient {
     _ path: String, method: String = "GET", body: [String: Any]? = nil,
     retryUnauthorized: Bool = true, decode: ((Data) throws -> T)? = nil
   ) async throws -> T {
+    guard !importingMobileLogin else { throw CancellationError() }
     guard var current = tokens else { throw APIError.credentialsUnavailable }
     let epoch = authEpoch
     if let expiry = current.expiresAt, expiry.timeIntervalSinceNow < 15 {
@@ -240,7 +288,7 @@ public actor APIClient {
         guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
         return value
       } catch APIError.http(401) {
-        if epoch == authEpoch { try clearCredentials() }
+        if epoch == authEpoch { try await clearCredentials() }
         throw APIError.credentialsUnavailable
       }
     }
@@ -260,7 +308,7 @@ public actor APIClient {
         return renewed
       } catch APIError.http(401) {
         guard epoch == self.authEpoch else { throw CancellationError() }
-        try self.clearCredentials()
+        try await self.clearCredentials()
         throw APIError.credentialsUnavailable
       }
     }

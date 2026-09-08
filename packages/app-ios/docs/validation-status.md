@@ -12,6 +12,8 @@
 - [认证、连接与资源生命周期](../../../docs/testing/app/ios-native-session.testplan.yaml)
 - [终端图片附件](../../../docs/testing/app/ios-native-image-attachments.testplan.yaml)
 - [输入、媒体、预览与主题](../../../docs/testing/app/ios-native-features.testplan.yaml)
+- [扫码跨端交互](../../../docs/testing/app/mobile-qr-login.testplan.yaml)
+- [扫码协议与凭据](../../../docs/testing/app/mobile-qr-login-protocol.testplan.yaml)
 
 布局改动若有独立执行计划，以该任务当前计划为准，不继承历史运行结果。
 原生 UI 需要 Simulator / 真机实际操作。Playwright 可用于 Backend 配套的 Web 客户端，不能验证 SwiftUI。
@@ -67,6 +69,18 @@ p95 41.56 ms，输入提交 p95 4.51 ms，第二/第十分钟 RSS 163.44/163.89 
 确认版本记录及落盘结果。这不替代真机或桌面与手机同时在线的端到端验收。
 
 ## 待关闭事项
+
+扫码实现已有 iOS 26.5 Simulator Debug 构建、iPhone 17 真机 Debug 构建与安装证据。
+2026-09-08 的真机 XCUITest 从正式连接管理进入扫码，确认点击后才出现相机权限请求，随后进入
+扫码页并取消返回原连接。桌面候选通过 Playwright 完成入口、换码、请求确认与完成回执状态验证，
+其中手机请求由临时 HTTP 驱动发送，不能视为真实相机扫码成功。
+
+独立 Backend 协议检查已覆盖旧登录、owner/claimant 绑定、批准边界、取消、180 秒真实期限、
+并发丢包恢复、同一认证目录下的 Backend 重启，以及会话创建写盘失败恢复（MQP-001～009）。
+MQP-010 已验证连续 65 次每秒轮询、每 IP/requestId 限流、第 65 个活跃请求拒绝以及等待后的容量恢复；
+内部表大小未通过公开 API 观测，因此不标为整条通过。后端结构化字段与 JSON 字符串的脱敏链已独立验证。
+本机原始证据在 `.runweave/mobile-qr-login-evidence/`；真实相机对准桌面、Keychain/连接保存故障、
+回执丢失恢复及三端日志/重定向用例仍需专项取证，25 条 required 用例尚未全量通过。
 
 | 项目                | 当前边界与下一步                                                                                                 |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------- |

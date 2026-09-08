@@ -34,6 +34,19 @@ final class AppSession: ObservableObject {
   private var foreground = true
   private var loadingRequest = 0
   var canWrite: Bool { authenticated && health.status == .online && foreground && !writing }
+  @Published private(set) var reconnectingTerminal = false
+  var canReconnect: Bool { authenticated && foreground && !loading && !writing && !reconnectingTerminal }
+
+  func reconnectTerminal() async {
+    guard canReconnect, let controller = terminalController else { return }
+    let epoch = generation
+    reconnectingTerminal = true
+    defer { if generation == epoch { reconnectingTerminal = false } }
+    await refresh()
+    guard generation == epoch, terminalController === controller,
+      authenticated, foreground, health.status == .online else { return }
+    controller.connect()
+  }
 
   func activate(_ connection: BackendConnection?) async {
     generation += 1
@@ -45,6 +58,7 @@ final class AppSession: ObservableObject {
     imageDrafts.clear()
     metadataWrites.removeAll()
     self.connection = connection
+    reconnectingTerminal = false
     authenticated = false
     overview = nil
     error = nil

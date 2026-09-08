@@ -62,7 +62,13 @@ export class LowDbAuthStore implements AuthStore {
     await this.enqueueWrite(async () => {
       const auth = this.getAuthRecord();
       auth.refreshSessions.push(structuredClone(session));
-      await this.getDatabase().write();
+      try {
+        await this.getDatabase().write();
+      } catch (error) {
+        // Writes are serialized; remove only this uncommitted creation.
+        auth.refreshSessions = auth.refreshSessions.filter((entry) => entry.id !== session.id);
+        throw error;
+      }
     });
   }
 
