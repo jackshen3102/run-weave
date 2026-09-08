@@ -15,11 +15,7 @@
 | 编写、查找或执行测试计划                  | [testing/README.md](./testing/README.md)           |
 | 查看历史架构流程或交互原型                | [历史产物](#历史产物冻结)                          |
 
-改动某个运行时或包前，还要读目标目录下的 `AGENTS.md`。完整清单以文件系统为准：
-
-```bash
-git ls-files '**/AGENTS.md' 'AGENTS.md'
-```
+改动某个运行时或包前，读取目标目录下的 `AGENTS.md`。
 
 ## 文档分层
 
@@ -30,11 +26,8 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
 
 ### 过程材料
 
-`plans/` 与 `review/` 只承载正在进行的计划和评审，不是当前事实。任务完成后：
-
-- 把仍有效的架构边界、操作合同和验收入口迁入当前真相；
-- 删除已完成的过程文件及只服务于它们的资产；
-- 不从旧 plan 或 review 反推现有实现。
+`plans/` 与 `review/` 只承载正在进行的计划和评审，不代表当前实现。完成后的结论迁移与清理遵循
+[文档治理](../.agents/rules/documentation.md#生命周期)。
 
 ### 历史产物（冻结）
 

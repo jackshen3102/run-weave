@@ -16,17 +16,6 @@
 Terminal、Agent Team、Browser、Activity、App、Electron、CLI 和平台路径，按
 `docs/testing/**/*.testplan.yaml` 中对应计划在真实服务上验收；不要引用或补造不存在的 spec。
 
-## 删除
-
-- `backend/src/**/*.test.ts`
-- `backend/src/**/*.live.test.ts`
-- `electron/src/**/*.test.ts`
-- `packages/shared/src/**/*.test.ts`
-- `packages/runweave-cli/src/**/*.test.ts`
-- `*.test.mjs`
-- `vitest.config.ts`
-- `vitest.live.config.ts`
-
 ## 验证替代
 
 - 文档门禁：`pnpm docs:check`

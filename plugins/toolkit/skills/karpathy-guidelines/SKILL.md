@@ -8,18 +8,17 @@ license: MIT
 
 Behavioral guidelines to reduce common LLM coding mistakes, derived from [Andrej Karpathy's observations](https://x.com/karpathy/status/2015883857489522876) on LLM coding pitfalls.
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+Apply these guidelines within the user's requested scope and the repository's instructions, including its verification policy.
 
 ## 1. Think Before Coding
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+**Ground decisions in context. Surface consequential uncertainty.**
 
 Before implementing:
 
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
+- Resolve questions from the code and existing context first. Choose routine, reversible implementation details using established patterns; state assumptions that materially affect the result.
+- Ask when missing information could change the goal, scope, authorization, or acceptance criteria and cannot be resolved from context. Pause only the dependent work; continue useful work within the agreed scope.
 - If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
 
 ## 2. Simplicity First
 
@@ -53,13 +52,15 @@ The test: Every changed line should trace directly to the user's request.
 
 ## 4. Goal-Driven Execution
 
-**Define success criteria. Loop until verified.**
+**Define success criteria. Verify in proportion to the change.**
+
+Follow the repository's verification policy. Prefer existing checks and direct behavior verification; do not require new test files or TDD by default. Complete required checks, then expand verification only when a change, failure, or unresolved concern warrants it. Report any verification gaps explicitly.
 
 Transform tasks into verifiable goals:
 
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
+- "Add validation" → "Verify representative valid and invalid inputs behave as required"
+- "Fix the bug" → "Check the reported failure path and verify the corrected behavior"
+- "Refactor X" → "Verify affected behavior remains unchanged using relevant existing checks"
 
 For multi-step tasks, state a brief plan:
 
