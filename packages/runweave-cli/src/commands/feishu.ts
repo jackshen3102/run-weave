@@ -55,12 +55,17 @@ export async function runFeishuCommand(
       payload.notificationText,
       "notificationText",
     );
+    const mentions = [...config.notifyOpenIds]
+      .map((openId) => `<at user_id="${openId}"></at>`)
+      .join(" ");
     const result = await notifyFeishuTopic({
       client,
       store,
       chatId: config.targetChatId,
       terminalSessionId,
-      notificationText,
+      notificationText: mentions
+        ? `${mentions}\n${notificationText}`
+        : notificationText,
     });
     const output = {
       sent: true,

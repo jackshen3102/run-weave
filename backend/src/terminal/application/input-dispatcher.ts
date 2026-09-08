@@ -263,6 +263,8 @@ export async function sendInputToSession(
           buildPromptPasteSequence(data, composerSubmitKey),
         );
       } else if (mode === "prompt_replace") {
+        // Replace the prompt only after leaving scrollback on the same target pane.
+        await options.tmuxService.cancelCopyMode(target, { strict: true });
         await options.tmuxService.sendKeySequence(
           target,
           buildPromptReplaceSequence(data, submit === true),

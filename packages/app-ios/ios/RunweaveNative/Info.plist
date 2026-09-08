@@ -31,6 +31,8 @@
 	<string>连接你配置的电脑上的 Runweave 服务。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>录制你主动发起的语音，转写为命令草稿。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>扫描电脑显示的 Runweave 二维码，由电脑确认后登录。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

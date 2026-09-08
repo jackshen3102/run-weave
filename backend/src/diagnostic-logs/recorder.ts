@@ -85,6 +85,10 @@ function redactUrlString(value: string, state: RedactionState): string {
 
 function redactString(value: string, state: RedactionState): string {
   const withHeaders = value
+    .replace(/("(?:qrSecret|claimantToken|accessToken|refreshToken)"\s*:\s*)"(?:\\.|[^"\\])*"/gi, (_match, prefix: string) => {
+      state.report.tokens += 1;
+      return `${prefix}"[REDACTED]"`;
+    })
     .replace(/\bAuthorization\s*:\s*(Bearer|Basic)\s+[^\s,;]+/gi, (match) => {
       state.report.authorizationHeaders += 1;
       return match.replace(/(Bearer|Basic)\s+[^\s,;]+/i, "$1 [REDACTED]");

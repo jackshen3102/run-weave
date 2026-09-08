@@ -1,3 +1,4 @@
+import { MobileLoginProvider } from "./features/mobile-login/provider";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
@@ -50,6 +51,7 @@ function RunweaveApp() {
   const activeConnectionId = isElectron ? (activeConnection?.id ?? null) : null;
   const {
     token,
+    sessionId,
     status: authStatus,
     setSession,
     clearToken,
@@ -94,7 +96,7 @@ function RunweaveApp() {
     enabled: isElectron,
   });
 
-  return (
+  const content = (
     <DevSessionBackendGuard>
       <RuntimeStatusProvider
         apiBase={apiBase}
@@ -353,4 +355,7 @@ function RunweaveApp() {
       </RuntimeStatusProvider>
     </DevSessionBackendGuard>
   );
+  return isElectron && activeConnection && token && sessionId && authStatus !== "unauthenticated"
+    ? <MobileLoginProvider key={`${activeConnection.id}:${apiBase}:${sessionId}`} connection={activeConnection} token={token}>{content}</MobileLoginProvider>
+    : content;
 }

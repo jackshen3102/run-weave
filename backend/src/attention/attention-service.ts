@@ -194,13 +194,19 @@ export class AttentionService {
               candidate.terminalSessionId === session.id &&
               candidate.payload.completionRevision === session.completionRevision,
           );
+        const needsAction =
+          event?.payload.completionReason === "notify" &&
+          event.payload.rawHookEvent?.toLowerCase() === "notification" &&
+          ["trae", "traex", "traecli"].includes(event.payload.source);
         slots.push({
           ...base,
           attentionId: `terminal:${session.id}:completion:${session.completionRevision}`,
           panelId: event?.payload.panelId ?? null,
-          state: "completed",
-          title: clip(event?.payload.summary ?? session.preview ?? "Agent 已完成本轮工作", 100),
-          detail: `${session.terminalState?.agent ?? "Agent"} completion 尚未确认`,
+          state: needsAction ? "needs_action" : "completed",
+          title: clip(event?.payload.summary ?? (needsAction ? "Agent 需要你处理" : session.preview ?? "Agent 已完成本轮工作"), 100),
+          detail: needsAction
+            ? "Agent 发出了等待通知，请打开终端查看确认或输入请求"
+            : `${session.terminalState?.agent ?? "Agent"} completion 尚未确认`,
           updatedAt: event?.createdAt ?? session.lastActivityAt.toISOString(),
           source: { kind: "terminal_session", evidence: `completionRevision=${session.completionRevision}` },
           targetSurface: "terminal",

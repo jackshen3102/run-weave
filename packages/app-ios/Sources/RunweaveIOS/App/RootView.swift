@@ -5,6 +5,7 @@ public struct RootView: View {
   @StateObject private var connections = ConnectionStore()
   @StateObject private var session = AppSession()
   @State private var managingConnections = false
+  @State private var mobileLoginRevision = 0
   @AppStorage("native.theme") private var theme = "dark"
 
   public init() {}
@@ -54,11 +55,14 @@ public struct RootView: View {
     .navigationViewStyle(.stack)
     .preferredColorScheme(theme == "light" ? .light : .dark)
     .id(connections.active?.scope)
-    .task(id: connections.active?.scope) { await session.activate(connections.active) }
+    .task(id: "\(connections.active?.scope ?? ""):\(mobileLoginRevision)") { await session.activate(connections.active) }
     .onAppear { if connections.active == nil { managingConnections = true } }
     .onChange(of: scenePhase) { phase in session.setScenePhase(phase) }
     .sheet(isPresented: $managingConnections) {
-      ConnectionManager(store: connections, session: session)
+      ConnectionManager(store: connections, session: session) {
+        managingConnections = false
+        mobileLoginRevision += 1
+      }
     }
   }
 }

@@ -87,6 +87,29 @@ export class AuthService {
       return null;
     }
 
+    return this.issueSession(username, params);
+  }
+
+  getActiveSession(sessionId: string): AccessTokenSession | null {
+    const record = this.refreshSessions.get(sessionId);
+    return record && isRefreshSessionActive(record)
+      ? { sessionId: record.id, username: record.username }
+      : null;
+  }
+
+  async loginFromOwnerSession(ownerSessionId: string, connectionId: string): Promise<LoginResult | null> {
+    const owner = this.getActiveSession(ownerSessionId);
+    if (!owner) return null;
+    const result = await this.issueSession(owner.username, { clientType: "app", connectionId });
+    // A desktop logout can win while the store write is awaiting disk.
+    if (!this.getActiveSession(ownerSessionId)) {
+      await this.logoutSession(result.accessToken);
+      return null;
+    }
+    return result;
+  }
+
+  private async issueSession(username: string, params: LoginParams): Promise<LoginResult> {
     const sessionId = randomUUID();
     const accessToken = issueToken({
       username,
@@ -115,8 +138,8 @@ export class AuthService {
       clientType: params.clientType,
       connectionId: params.connectionId ?? null,
     };
-    this.refreshSessions.set(record.id, record);
     await this.authStore?.createRefreshSession(record);
+    this.refreshSessions.set(record.id, record);
 
     return {
       accessToken: accessToken.token,

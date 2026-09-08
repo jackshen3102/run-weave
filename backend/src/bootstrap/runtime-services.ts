@@ -1,3 +1,4 @@
+import { MobileLoginService } from "../auth/mobile-login";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
@@ -73,6 +74,7 @@ export interface RuntimeServices {
   terminalActivity: TerminalActivityDependencies;
   authStore: AuthStore;
   authService: AuthService;
+  mobileLoginService: MobileLoginService;
   authCookieName: string;
   authSecureCookies: boolean;
   terminalSessionManager: TerminalSessionManager;
@@ -559,6 +561,7 @@ export async function createRuntimeServices(
     terminalActivity,
     authStore,
     authService,
+    mobileLoginService: new MobileLoginService(authService),
     authCookieName: authConfig.refreshCookieName,
     authSecureCookies: authConfig.secureCookies,
     terminalSessionManager,

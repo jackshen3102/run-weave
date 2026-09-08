@@ -139,6 +139,7 @@ export function useScopedAuth({
   webStorageKey,
 }: UseScopedAuthParams): {
   token: string | null;
+  sessionId: string | null;
   status: AuthStatus;
   setSession: (session: {
     accessToken: string;
@@ -490,6 +491,7 @@ export function useScopedAuth({
 
   return {
     token: effectiveSession?.accessToken ?? null,
+    sessionId: effectiveSession?.sessionId ?? null,
     status: effectiveStatus,
     setSession,
     clearSession,

@@ -114,6 +114,11 @@ GET /api/app-server/threads/:threadId
 
 Stop、ESC、SIGINT 或 HTTP interrupt 也不直接写 `TerminalState`。控制输入发出后，状态只能由后续 `Stop` hook 或 active command 变化自然校正。这样可以避免前端/App 在用户点击 Stop 后提前隐藏 Stop 按钮，造成状态假成功。
 
+Attention 聚合独立区分“已完成”和“需要处理”：Trae 系列 `Notification + notify` 的未读事件
+显示为 `needs_action`，提示用户打开终端查看确认或输入请求；普通 Stop 完成仍为 `completed`。
+两者沿用 completion revision 的已读确认，均不改写 `TerminalState`。目前没有明确等待事件的
+Agent 不推断为“卡住”或“需要确认”，也不按多久没有输出来猜测。
+
 ## 消费方
 
 - App 通过 App overview 取得列表和详情初始 `TerminalState`，再通过全局 `/ws/terminal-events` 接收 `terminal_state_changed` 事件刷新列表和终端详情状态；`/api/terminal/session/:id/state` 仍作为 CLI、调试和断线诊断入口。仅当 `terminalState.state === "agent_running"` 时展示 Stop。

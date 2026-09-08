@@ -25,6 +25,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 export function redactString(value: string): string {
   return value
+    .replace(/("(?:qrSecret|claimantToken|accessToken|refreshToken)"\s*:\s*)"(?:\\.|[^"\\])*"/gi, '$1"[redacted]"')
     .replace(URL_SECRET_PARAM_PATTERN, "$1[redacted]")
     .replace(HEADER_SECRET_PATTERN, "$1: [redacted]")
     .replace(ENV_SECRET_PATTERN, "$1=[redacted]");

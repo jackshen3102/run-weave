@@ -26,6 +26,12 @@ ios/RunweaveNative → RootView → AppSession
 
 源码路径相对于 `Sources/RunweaveIOS`，host 及内部验证目录除外。
 终端关闭释放本客户端资源，不结束远端 tmux；连接切换使旧请求、socket 和缓存失效。
+
+终端 WS 的 `notice` 是可继续使用的恢复提示，不进入失败或停止重连状态；`error` 仍表示失败。
+手动重连独立于写入权限：已登录的前台客户端可在离线时立即检查 Backend 并重新连接，
+但离线时不能发送输入。切换连接或终端后，旧的手动重连结果不会连接到新目标。
+旧 socket 的发送失败回调不能停止新连接；当前 socket 发送失败时继续走接收循环的重连，
+仅重同步窗口尺寸。输入结果未确认仍显示提示，不自动重发输入。
 设备 online/offline 与后端 TerminalState 分开管理；socket open 不等于业务已连接。
 
 ## 协议来源

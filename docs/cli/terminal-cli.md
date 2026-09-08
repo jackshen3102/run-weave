@@ -143,6 +143,10 @@ completion hook 在 `FEISHU_NOTIFY_TRANSPORT=app` 时通过
 只使用一个长期话题：第一条真实 completion 是 root，后续通知回复该 root 并设置
 `reply_in_thread`。topic 不使用 24 小时 TTL；旧版 message binding 不迁移，升级后的
 第一条新通知建立新 topic。`FEISHU_BINDING_TTL_HOURS` 已废弃且不再读取。
+在通知环境中设置 `FEISHU_NOTIFY_OPEN_IDS=<open-id>[,<open-id>...]`，可让每条完成通知
+（包括首次 root 和后续话题回复）显式 `@` 指定用户。使用发送机器人的应用作用域下的
+`open_id`；重复 ID 自动去重，未配置时不添加 `@`。该配置独立于允许终端投递的
+`FEISHU_ALLOWED_OPEN_IDS`，不改变入站权限，也不使用 `@所有人`。
 首次建 root 的 timeout、reset、HTTP 5xx 等不确定传输失败会在 claim lease 内复用同一飞书
 UUID 有界重试；后续恢复也沿用该 UUID，不以新的顶层消息猜测结果。
 

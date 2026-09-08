@@ -5,6 +5,7 @@ export interface FeishuConfig {
   appSecret: string;
   targetChatId: string | null;
   allowedOpenIds: Set<string>;
+  notifyOpenIds: Set<string>;
 }
 
 export function resolveFeishuConfig(
@@ -28,10 +29,25 @@ export function resolveFeishuConfig(
       .map((value) => value.trim())
       .filter(Boolean),
   );
+  const notifyOpenIds = new Set(
+    (env.FEISHU_NOTIFY_OPEN_IDS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  for (const openId of notifyOpenIds) {
+    if (!/^ou_[a-zA-Z0-9]+$/.test(openId)) {
+      throw new CliError(
+        "FEISHU_NOTIFY_OPEN_IDS must contain user open IDs",
+        2,
+      );
+    }
+  }
   return {
     appId,
     appSecret,
     targetChatId: targetChatId ?? null,
     allowedOpenIds,
+    notifyOpenIds,
   };
 }

@@ -37,7 +37,9 @@ export function shouldAutoReconnectTerminalClose(params: {
     return false;
   }
 
-  return params.livedMs >= MIN_TERMINAL_RECONNECT_LIFETIME_MS;
+  // A failed handshake or an early network drop still consumes the retry budget.
+  // Connection lifetime only decides when that budget resets, not whether to retry.
+  return true;
 }
 
 export function getTerminalReconnectDelay(attempt: number): number {
