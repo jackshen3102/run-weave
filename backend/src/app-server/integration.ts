@@ -1,8 +1,9 @@
 import path from "node:path";
-import { discoverAppServer } from "@runweave/shared/app-server/discovery";
+import { discoverAppServer, getAppServerStatus } from "@runweave/shared/app-server/discovery";
 import { logger } from "../logging/index";
 import { resolveStoragePaths } from "../utils/path";
 import type { RuntimeServices } from "../bootstrap/runtime-services";
+import type { AppServerIntegrationStatus } from "../runtime-status/provider";
 import { AppServerClient } from "./client";
 import { AppServerEventConsumer } from "./event-consumer";
 import { AppServerEventCursorStore } from "./event-cursor-store";
@@ -19,8 +20,17 @@ export async function initializeAppServerEventIntegration(
   backendBaseUrl: string,
 ): Promise<void> {
   try {
+    if (process.env.RUNWEAVE_APP_SERVER_DISCOVERY?.trim() === "disabled") {
+      services.runtimeStatus.appServerIntegration = {
+        state: "disabled",
+        summary: "App Server 集成已主动禁用",
+        observedAt: Date.now(),
+      };
+      return;
+    }
     const connection = await discoverAppServer({ env: process.env });
     if (!connection) {
+      services.runtimeStatus.appServerIntegration = await describeUnavailableAppServer();
       logger.info("backend.app-server.unavailable", {
         component: "app-server",
         message:
@@ -110,6 +120,11 @@ export async function initializeAppServerEventIntegration(
       consumerId: APP_SERVER_AGENT_EVENT_CONSUMER_ID,
     });
   } catch (error) {
+    services.runtimeStatus.appServerIntegration = {
+      state: "unhealthy",
+      summary: "App Server 事件集成初始化失败，终端状态同步和完成事件补偿不可用",
+      observedAt: Date.now(),
+    };
     logger.warn("backend.app-server.integration.failed", {
       component: "app-server",
       message:
@@ -117,4 +132,22 @@ export async function initializeAppServerEventIntegration(
       error,
     });
   }
+}
+
+async function describeUnavailableAppServer(): Promise<AppServerIntegrationStatus> {
+  const env = process.env;
+  let configured = Boolean(
+    env.RUNWEAVE_APP_SERVER_URL?.trim() || env.RUNWEAVE_APP_SERVER_TOKEN?.trim(),
+  );
+  if (env.RUNWEAVE_APP_SERVER_DISCOVERY?.trim() !== "explicit") {
+    const status = await getAppServerStatus({ env });
+    configured ||= Boolean(status.lock || status.hasToken || status.currentRuntime);
+  }
+  return {
+    state: configured ? "unhealthy" : "unconfigured",
+    summary: configured
+      ? "App Server 已配置但无法连接，终端状态同步和完成事件补偿不可用；请检查 App Server 服务"
+      : "App Server 未配置",
+    observedAt: Date.now(),
+  };
 }

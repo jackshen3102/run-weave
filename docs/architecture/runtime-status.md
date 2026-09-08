@@ -25,11 +25,17 @@ Thread reconciler。Feishu Bridge 报告配置、单实例 lease、Lark WebSocke
 ## 过期与恢复
 
 - owner 依据既有重试、宽限和新鲜度窗口产出 `healthy`、`recovering` 或 `unhealthy`。
+- Backend 启动时未能连接 App Server，若存在连接配置、安装记录或发现记录，事件消费者必须报告
+  `unhealthy`；只有没有配置时才报告 `unconfigured`，显式禁用报告 `disabled`。不能用消费者实例
+  缺失推断“未配置”。
 - Backend 使用服务端接收时间和 `validForMs` 判断外部报告过期，不信任客户端时钟。
 - 来源过期时保留最后已知子项，增加一个来源级 `unhealthy` 根因，并把子项标记为 `blocked`。
 - `dependsOn` 的异常或受阻状态会传递为 `blocked`，避免连锁故障重复计数。
 - Workspace Service 直接投影既有 `stopped/starting/ready/stopping/failed`，不创建第二套进程探测。
 - 周期任务按自己最近完成时间判断；Evolution 有活动 run 时改用 lease heartbeat 判断。
+
+右上角入口在存在异常能力域时显示红色“异常”和数量；首次加载已有异常也会提示，同一异常持续期间
+不重复弹出。原因和影响在状态面板中查看。
 
 ## 安全边界
 

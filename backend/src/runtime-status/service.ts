@@ -4,6 +4,7 @@ import type { AgentTeamService } from "../agent-team/service";
 import type { EvolutionRuntime } from "../evolution/runtime";
 import {
   createBackendRuntimeStatusReport,
+  type AppServerIntegrationStatus,
   type BackendRuntimeStatusInput,
 } from "./provider";
 import { RuntimeStatusRegistry } from "./registry";
@@ -13,6 +14,11 @@ export class BackendRuntimeStatusService {
   listener: { baseUrl: string; host: string; port: number } | null = null;
   appServerSource: AppServerRuntimeStatusSourceHandle | null = null;
   eventConsumer: AppServerEventConsumerHandle | null = null;
+  appServerIntegration: AppServerIntegrationStatus = {
+    state: "checking",
+    summary: "正在连接 App Server",
+    observedAt: Date.now(),
+  };
 
   constructor(
     serviceInstanceId: string,
@@ -30,6 +36,7 @@ export class BackendRuntimeStatusService {
         listener: this.listener,
         activityStoreAvailable: this.dependencies.activityStoreAvailable,
         eventConsumer: this.eventConsumer?.getStatusSnapshot() ?? null,
+        appServerIntegration: this.appServerIntegration,
         watchdog: this.dependencies.agentTeamService.getRecheckWatchdogStatus(),
         evolution: this.dependencies.evolutionRuntime.getStatusSnapshot(),
         workspaceServiceManager: this.dependencies.workspaceServiceManager,
