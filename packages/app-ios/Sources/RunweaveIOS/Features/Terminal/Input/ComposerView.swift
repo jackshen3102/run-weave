@@ -171,6 +171,10 @@ struct ComposerView: View {
   private func submit() {
     failure = nil
     let stop = showStop
+    if !stop {
+      editing = false
+      showingShortcuts = false
+    }
     session.recordUserAction(stop ? "composer.stop" : "composer.send", terminalID: terminalID)
     if stop { stopping = true }
     Task {

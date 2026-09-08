@@ -19,15 +19,17 @@ struct HomeTerminalRow: View {
     } label: {
       VStack(alignment: .leading, spacing: 5) {
         HStack {
-          Text(terminal.title).font(.headline).foregroundColor(.primary)
+          Text(terminal.title).font(.headline).foregroundColor(.primary).lineLimit(1)
+          TerminalAttentionBadge(
+            unread: terminal.hasUnreadCompletion, bell: session.bellMarkers.contains(terminal.id),
+            showLabel: false)
           if pinned {
             Image(systemName: "pin.fill").font(.caption).foregroundColor(.secondary)
               .accessibilityLabel("已置顶")
           }
           Spacer()
           if session.metadataWrites.contains(terminal.id) { ProgressView() }
-          Text(terminal.displayStatusLabel).font(.caption).foregroundColor(
-            terminal.displayStatus == "running" ? .green : .secondary)
+          TerminalStatusBadge(terminal: terminal)
         }
         if let projectName { Text(projectName).font(.caption).foregroundColor(.secondary) }
         HStack {
@@ -42,6 +44,10 @@ struct HomeTerminalRow: View {
         .tint(.orange).disabled(!session.canEditTerminal(terminal.id))
     }
     .contextMenu {
+      if terminal.hasUnreadCompletion {
+        Button("标记已读") { Task { await session.acknowledgeTerminal(terminal.id) } }
+          .disabled(!session.canWrite || session.acknowledgementWrites.contains(terminal.id))
+      }
       Button(action: setPinned) { Label(pinLabel, systemImage: pinned ? "pin.slash" : "pin") }
         .disabled(!session.canEditTerminal(terminal.id))
       Button("重命名", action: rename).disabled(!session.canEditTerminal(terminal.id))

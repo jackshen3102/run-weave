@@ -135,6 +135,17 @@ public actor APIClient {
     let _: EmptyResponse = try await authorized(
       "/api/terminal/session/\(Self.pathComponent(id))", method: "DELETE", retryUnauthorized: false)
   }
+  func acknowledgeTerminal(id: String, revision: Int) async throws
+    -> TerminalCompletionAcknowledgement
+  {
+    let value: TerminalCompletionAcknowledgement = try await authorized(
+      "/api/terminal/session/\(Self.pathComponent(id))", method: "PATCH",
+      body: ["acknowledgedCompletionRevision": revision], retryUnauthorized: false)
+    guard value.terminalSessionId == id, value.acknowledgedCompletionRevision >= revision,
+      value.completionRevision >= value.acknowledgedCompletionRevision
+    else { throw APIError.invalidResponse }
+    return value
+  }
   public func terminalTicket(id: String) async throws -> String {
     let value: Ticket = try await authorized(
       "/api/terminal/session/\(Self.pathComponent(id))/ws-ticket", method: "POST")

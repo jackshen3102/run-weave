@@ -20,6 +20,10 @@ final class AppSession: ObservableObject {
   private(set) var api: APIClient?
   @Published private(set) var generation = 0
   @Published private(set) var metadataWrites = Set<String>()
+  // Mutated by the attention extension; scoped to this connection generation.
+  @Published var acknowledgementWrites = Set<String>()
+  @Published var bellMarkers = Set<String>()
+  var bellTasks: [String: Task<Void, Never>] = [:]
   private var overviewRevision = 0
   private var pendingOverviewEvents: [TerminalEvent] = []
   private var overviewTask: Task<Void, Never>?
@@ -142,6 +146,18 @@ final class AppSession: ObservableObject {
     canWrite && !metadataWrites.contains(id)
   }
 
+  func mergeCompletionAcknowledgement(_ value: TerminalCompletionAcknowledgement) {
+    overviewRevision += 1
+    if let index = overview?.sessions.firstIndex(where: { $0.id == value.terminalSessionId }) {
+      overview?.sessions[index].completionRevision = max(
+        overview?.sessions[index].completionRevision ?? 0, value.completionRevision)
+      overview?.sessions[index].acknowledgedCompletionRevision = max(
+        overview?.sessions[index].acknowledgedCompletionRevision ?? 0,
+        value.acknowledgedCompletionRevision)
+    }
+    scheduleReload()
+  }
+
   func updateTerminal(_ id: String, change: TerminalMetadataChange) async throws {
     guard canEditTerminal(id), let api else { throw APIError.offline }
     let epoch = generation
@@ -208,6 +224,7 @@ final class AppSession: ObservableObject {
 
   func openTerminal(_ id: String) async {
     guard let api else { return }
+    let revision = overview?.sessions.first { $0.id == id }?.completionRevision ?? 0
     let epoch = generation
     routeRequest += 1
     let route = routeRequest
@@ -220,6 +237,8 @@ final class AppSession: ObservableObject {
       terminalController = controller
       terminal = details
       if health.status == .online, foreground { controller.connect() }
+      clearBellMarker(id)
+      await acknowledgeTerminal(id, revision: revision)
     } catch { if epoch == generation { await handle(error, epoch: epoch) } }
   }
 
@@ -240,6 +259,7 @@ final class AppSession: ObservableObject {
       loadingRequest += 1
       loading = false
       overview?.sessions.removeAll { $0.id == id }
+      clearBellMarker(id)
       if terminal?.id == id { closeTerminal() }
       await reload()
     } catch { if epoch == generation { await handle(error, epoch: epoch) } }
@@ -342,6 +362,7 @@ final class AppSession: ObservableObject {
     guard foreground != value else { return }
     foreground = value
     if !value {
+      clearBellMarkers()
       Task { await DiagnosticStore.shared.flush() }
       resumeTask?.cancel()
       resumeTask = nil
@@ -415,8 +436,9 @@ final class AppSession: ObservableObject {
         guard let self, self.generation == epoch else { return }
         self.scheduleReload()
       }
-      stream.onEvents = { [weak self] batch in
+      stream.onEvents = { [weak self] batch, live in
         guard let self, self.generation == epoch else { return }
+        if live { self.applyBellEvents(batch) }
         self.apply(batch)
       }
       stream.onFailure = { [weak self] error in
@@ -443,6 +465,7 @@ final class AppSession: ObservableObject {
     }
     let updates = batch.filter {
       $0.kind == "terminal_state_changed" || $0.kind == "terminal_session_metadata_changed"
+        || $0.kind == "completion"
     }
     if loading {
       if pendingOverviewEvents.count + updates.count > 10000 {
@@ -462,9 +485,14 @@ final class AppSession: ObservableObject {
   private static func patch(_ batch: [TerminalEvent], into overview: inout HomeOverview) {
     for event in batch {
       guard let id = event.terminalSessionId,
-        let index = overview.sessions.firstIndex(where: { $0.id == id }),
-        let next = event.payload.next
+        let index = overview.sessions.firstIndex(where: { $0.id == id })
       else { continue }
+      if event.kind == "completion", let revision = event.payload.completionRevision {
+        overview.sessions[index].completionRevision = max(
+          overview.sessions[index].completionRevision ?? 0, revision)
+        continue
+      }
+      guard let next = event.payload.next else { continue }
       if event.kind == "terminal_state_changed", let state = next.state {
         overview.sessions[index].terminalState = TerminalState(state: state, agent: next.agent)
         let exited = overview.sessions[index].status == "exited"
@@ -494,7 +522,7 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func handle(_ failure: Error, epoch: Int, reportFailure: Bool = true) async {
+  func handle(_ failure: Error, epoch: Int, reportFailure: Bool = true) async {
     guard generation == epoch else { return }
     if reportFailure { error = displayError(failure) }
     if case APIError.credentialsUnavailable = failure {
@@ -508,6 +536,8 @@ final class AppSession: ObservableObject {
   }
 
   private func stopResources() {
+    clearBellMarkers()
+    acknowledgementWrites.removeAll()
     pendingOverviewEvents.removeAll()
     resumeTask?.cancel()
     resumeTask = nil

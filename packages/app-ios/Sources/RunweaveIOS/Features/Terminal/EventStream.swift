@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 final class EventStream {
-  var onEvents: (([TerminalEvent]) -> Void)?
+  var onEvents: (([TerminalEvent], Bool) -> Void)?
   var onResync: (() -> Void)?
   var onConnected: (() -> Void)?
   var onFailure: ((Error) async -> Bool)?
@@ -63,10 +63,10 @@ final class EventStream {
               self.onResync?()
             case "terminal-events":
               guard let events = message.events else { throw APIError.invalidResponse }
-              self.deliver(events)
+              self.deliver(events, live: false)
             case "terminal-event":
               guard let event = message.event else { throw APIError.invalidResponse }
-              self.deliver([event])
+              self.deliver([event], live: true)
             case "error":
               throw message.message == "Unauthorized"
                 ? APIError.credentialsUnavailable : APIError.invalidResponse
@@ -89,7 +89,7 @@ final class EventStream {
     }
   }
 
-  private func deliver(_ values: [TerminalEvent]) {
+  private func deliver(_ values: [TerminalEvent], live: Bool) {
     var fresh: [TerminalEvent] = []
     for value in values where !seen.contains(value.id) {
       seen.insert(value.id)
@@ -104,7 +104,7 @@ final class EventStream {
       for id in seenOrder.prefix(count) { seen.remove(id) }
       seenOrder.removeFirst(count)
     }
-    if !fresh.isEmpty { onEvents?(fresh) }
+    if !fresh.isEmpty { onEvents?(fresh, live) }
   }
 
   private func resetCursor() {
