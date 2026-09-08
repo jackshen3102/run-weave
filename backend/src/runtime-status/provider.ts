@@ -10,11 +10,18 @@ import type { RuntimeStatusWorkspaceServiceManager } from "./workspace-service-m
 
 const BACKEND_REPORT_VALID_FOR_MS = 15_000;
 
+export interface AppServerIntegrationStatus {
+  state: "checking" | "disabled" | "unconfigured" | "unhealthy";
+  summary: string;
+  observedAt: number;
+}
+
 export interface BackendRuntimeStatusInput {
   serviceInstanceId: string;
   listener: { baseUrl: string; host: string; port: number } | null;
   activityStoreAvailable: boolean;
   eventConsumer: AppServerEventConsumerStatusSnapshot | null;
+  appServerIntegration: AppServerIntegrationStatus;
   watchdog: AgentTeamRecheckWatchdogStatus;
   evolution: ReturnType<EvolutionRuntime["getStatusSnapshot"]>;
   workspaceServiceManager: RuntimeStatusWorkspaceServiceManager;
@@ -69,7 +76,7 @@ export async function createBackendRuntimeStatusReport(
       facts: [],
       navigation: { label: "Activity", route: "/activity" },
     },
-    buildEventConsumerItem(services.eventConsumer ?? undefined, now),
+    buildEventConsumerItem(services.eventConsumer, services.appServerIntegration, now),
     buildWatchdogItem(services.watchdog, now),
     buildEvolutionItem(services.evolution, now),
     ...(await services.workspaceServiceManager.getRuntimeStatusItems(now)),
@@ -91,7 +98,8 @@ export async function createBackendRuntimeStatusReport(
 }
 
 function buildEventConsumerItem(
-  snapshot: AppServerEventConsumerStatusSnapshot | undefined,
+  snapshot: AppServerEventConsumerStatusSnapshot | null,
+  integration: AppServerIntegrationStatus,
   now: number,
 ): RuntimeStatusItem {
   if (!snapshot) {
@@ -99,9 +107,9 @@ function buildEventConsumerItem(
       "backend.app-server-event-consumer",
       "app-server",
       "App Server event consumer",
-      "unconfigured",
-      "App Server 未配置",
-      now,
+      integration.state,
+      integration.summary,
+      integration.observedAt,
     );
   }
   const elapsed = snapshot.failureSince

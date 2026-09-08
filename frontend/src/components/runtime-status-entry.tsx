@@ -1,4 +1,4 @@
-import { Activity } from "lucide-react";
+import { Activity, AlertTriangle } from "lucide-react";
 import { useRuntimeStatus } from "../features/runtime-status/use-runtime-status";
 import { cn } from "../lib/utils";
 
@@ -29,11 +29,15 @@ export function RuntimeStatusEntry(props: { className?: string }) {
       aria-label="打开运行状态"
       aria-haspopup="dialog"
       aria-expanded={panelOpen}
-      title="运行状态"
+      title={overallState === "unhealthy" ? "运行异常，点击查看详情" : "运行状态"}
       onClick={() => setPanelOpen(true)}
     >
-      <Activity className="h-3.5 w-3.5 shrink-0" />
-      <span>状态</span>
+      {overallState === "unhealthy" ? (
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      ) : (
+        <Activity className="h-3.5 w-3.5 shrink-0" />
+      )}
+      <span>{overallState === "unhealthy" ? "异常" : "状态"}</span>
       {unhealthyCapabilityIds.length > 0 ? (
         <span
           className="shrink-0 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"
