@@ -36,6 +36,7 @@ interface TargetActivity {
   actionUntil: number;
   pointer: { x: number; y: number } | null;
   timer: NodeJS.Timeout;
+  tool?: { name: string; status: "running" | "succeeded" | "unknown" };
 }
 
 interface ViewerSession {
@@ -128,6 +129,7 @@ export function getTerminalBrowserAutomationSnapshot(
         actorKeys,
         action: activeActivity?.action ?? "idle",
         actionUntil: activeActivity?.actionUntil ?? null,
+        tool: activeActivity?.tool,
         pointer: activeActivity?.pointer ?? null,
         previewState: isPreviewTarget
           ? (viewer?.previewState ?? "idle")
@@ -406,7 +408,11 @@ function classifyAction(
 ): {
   action: TerminalBrowserAutomationActionKind | null;
   pointer?: { x: number; y: number };
+  tool?: TargetActivity["tool"];
 } {
+  if (method === "Runweave.callBrowserTool") {
+    return { action: "tool", tool: params.tool as TargetActivity["tool"] };
+  }
   if (method === "Page.navigate" || method === "Page.setDocumentContent") {
     return { action: "navigate" };
   }
@@ -461,12 +467,14 @@ export function recordTerminalBrowserAutomationCommand(
   if (existing) {
     clearTimeout(existing.timer);
   }
-  const actionUntil = Date.now() + ACTION_DURATION_MS;
+  const duration = classified.tool?.status === "running" ? 17_000 : ACTION_DURATION_MS;
+  const actionUntil = Date.now() + duration;
   const timer = setTimeout(() => {
     activities.delete(targetId);
     notifyWindow(connection.windowId);
-  }, ACTION_DURATION_MS);
+  }, duration);
   activities.set(targetId, {
+    tool: classified.tool,
     action: classified.action,
     actionUntil,
     pointer: classified.pointer ?? existing?.pointer ?? null,
