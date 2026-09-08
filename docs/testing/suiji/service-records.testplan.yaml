@@ -73,16 +73,17 @@ cases:
       - 以空正文关联本例附件创建记录；确认成功；随后尝试把其正文和附件同时清空，确认拒绝且原版本保留。
 
   - id: SUIJISVC-006
-    name: 待办终态不能被恢复或互转
+    name: 待办完成可撤销且不再做保持终态
     required: true
     description: >
-      状态机只允许 open 到 done 或 archived，不允许笔记变成待办或终态复活。
+      状态机允许 open 到 done 或 archived，以及 done 回到 open；不允许笔记变成待办、archived 恢复或 done 与 archived 互转。
     preconditions:
       - 专用服务中本例已创建两个 open 待办和一条笔记，记录当前版本。
       - 各次状态请求使用新键和请求前读取的版本，避免把版本冲突误判为状态机拒绝。
     steps:
       - 分别把两个 open 待办改为 done 与 archived；确认成功，各递增一次版本并留下完整快照。
-      - 对终态请求 open、另一个终态或再次提交同状态的新操作；确认拒绝非法转换且版本不变。
+      - 将 done 用新键和当前版本恢复为 open；确认 ID、正文、附件、createdAt 保留，版本仅增加一次；同键原样重放仍返回相同结果，独立 GET 版本不再增加。
+      - 再次完成该待办；分别对 done 请求 archived 或 done，对 archived 请求 open、done 或 archived；确认非法转换被拒绝且版本不变。
       - 对笔记调用状态接口或尝试通过普通 PATCH 改 kind/status；确认拒绝，笔记仍为 note 且状态 null。
 
   - id: SUIJISVC-007

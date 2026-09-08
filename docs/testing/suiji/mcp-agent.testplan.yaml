@@ -100,16 +100,17 @@ cases:
       - 用两个新键分别创建相同正文；确认独立 ID，不按内容去重。
 
   - id: SUIJIMCP-009
-    name: 待办状态工具保留终态规则
+    name: 待办状态工具支持撤销完成并保留转换边界
     required: true
     description: >
-      状态工具只允许 open 到 done 或 archived，业务失败有结构化结果。
+      状态工具允许 open 到 done 或 archived，以及 done 到 open，业务失败有结构化结果。
     preconditions:
       - 本例有两个 open 待办和一条笔记，MCP Client 已连接，知道各自当前版本。
     steps:
       - 分别完成和归档两个待办；确认状态、版本与 HTTP 一致。
-      - 对终态用新键再次改状态，对笔记改任务状态；确认 INVALID_TRANSITION 且原记录不变。
-      - 请求 open 目标；确认输入拒绝，不提供复活能力。
+      - 将 done 用新键与当前版本恢复为 open；确认原 ID、正文和附件保留，版本增加一次；原样重放返回同一结果且版本不再增加。
+      - 对 archived 请求 open、done 或 archived，对笔记改任务状态；确认 INVALID_TRANSITION 且原记录不变。
+      - 对 open 请求 open 或使用旧版本恢复记录；确认分别返回 INVALID_TRANSITION 或 VERSION_CONFLICT。
 
   - id: SUIJIMCP-010
     name: 附件只读工具遵守预算并保留内容

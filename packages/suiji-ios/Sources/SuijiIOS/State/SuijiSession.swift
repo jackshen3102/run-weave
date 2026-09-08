@@ -70,7 +70,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     let old = resetConnection(), current = generation
     do { try await old?.logout() } catch { if generation == current { message = error.localizedDescription } }
   }
-  func load(kind: String?, status: String?, q: String, more: Bool = false, trash: Bool = false) async {
+  func load(kind: String?, status: String?, q: String, more: Bool = false, trash: Bool = false, hideCompleted: Bool = false) async {
     guard let client, info != nil else { return }
     if more && (loading || nextCursor == nil) { return }
     let current = generation, request = UUID(); listGeneration = request
@@ -82,17 +82,23 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     if let kind { items.append(URLQueryItem(name: "kind", value: kind)) }
     if let status { items.append(URLQueryItem(name: "taskStatus", value: status)) }
     if !q.isEmpty { items.append(URLQueryItem(name: "q", value: q)) }
-    if more, let cursor = nextCursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
-    query.queryItems = items
     do {
-      let page = try await client.request(RecordPage.self, path: "api/suiji/v1/records?" + (query.percentEncodedQuery ?? ""))
-      guard generation == current, listGeneration == request else { return }
-      records = more ? records + page.items.filter { new in !records.contains { $0.id == new.id } } : page.items; nextCursor = page.nextCursor; message = ""
-      if let store {
-        var pending: Set<String> = []
-        for record in records { if try await store.status(record.id) != nil { pending.insert(record.id) } }
-        if generation == current, listGeneration == request { pendingStatuses = pending }
-      }
+      var cursor = more ? nextCursor : nil
+      var incoming: [SuijiRecord] = [], pending: Set<String> = []
+      repeat {
+        query.queryItems = items + (cursor.map { [URLQueryItem(name: "cursor", value: $0)] } ?? [])
+        let page = try await client.request(RecordPage.self, path: "api/suiji/v1/records?" + (query.percentEncodedQuery ?? ""))
+        guard generation == current, listGeneration == request else { return }
+        if let store {
+          for record in page.items { if try await store.status(record.id) != nil { pending.insert(record.id) } }
+        }
+        guard generation == current, listGeneration == request else { return }
+        // Filter server reads only: a completion stays visible until the next reload.
+        incoming = page.items.filter { !hideCompleted || $0.taskStatus != .done || pending.contains($0.id) }
+        cursor = page.nextCursor
+      } while incoming.isEmpty && cursor != nil
+      records = more ? records + incoming.filter { new in !records.contains { $0.id == new.id } } : incoming
+      nextCursor = cursor; pendingStatuses = more ? pendingStatuses.union(pending) : pending; message = ""
     } catch {
       if generation == current, listGeneration == request {
         message = error.localizedDescription

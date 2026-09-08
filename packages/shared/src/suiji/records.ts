@@ -32,7 +32,7 @@ export type EditRecord = {
 };
 export type ChangeTaskStatus = {
   expectedVersion: number;
-  targetStatus: "done" | "archived";
+  targetStatus: TaskStatus;
 };
 export type ChangeRecordTrash = { expectedVersion: number; trashed: boolean };
 export type RecordResponse = { record: SuijiRecord };

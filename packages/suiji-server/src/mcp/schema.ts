@@ -40,7 +40,7 @@ export const replaceInput = z
 export const statusInput = z
   .object({
     recordId: uuid,
-    targetStatus: z.enum(["done", "archived"]),
+    targetStatus: z.enum(["open", "done", "archived"]),
     expectedVersion: z.number().int().positive(),
     idempotencyKey: keySchema,
   })
