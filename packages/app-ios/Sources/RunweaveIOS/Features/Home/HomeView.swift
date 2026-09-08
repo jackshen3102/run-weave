@@ -77,6 +77,7 @@ struct HomeView: View {
                   Text(group.project.path ?? "No path").font(.caption2).lineLimit(1)
                 }
                 Spacer()
+                TerminalGroupStatus(terminals: group.sessions, bells: session.bellMarkers)
                 Text("\(group.terminalCount)")
               }
             }.accessibilityLabel(searching ? group.project.name : "展开或收起 \(group.project.name)")

@@ -34,8 +34,13 @@ struct HomeTerminal: Codable, Identifiable {
   var displayStatus: String
   var displayStatusLabel: String
   var terminalState: TerminalState
+  var completionRevision: Int?
+  var acknowledgedCompletionRevision: Int?
   let lastActivityAt: String
   var id: String { terminalSessionId }
+  var hasUnreadCompletion: Bool {
+    (completionRevision ?? 0) > (acknowledgedCompletionRevision ?? 0)
+  }
 
   var relativeTime: String {
     let formatter = ISO8601DateFormatter()
@@ -73,6 +78,12 @@ struct UpdatedTerminal: Decodable {
   let terminalSessionId: String
   let alias: String?
   let pinnedAt: String?
+}
+
+struct TerminalCompletionAcknowledgement: Decodable {
+  let terminalSessionId: String
+  let completionRevision: Int
+  let acknowledgedCompletionRevision: Int
 }
 
 enum TerminalMetadataChange {

@@ -147,6 +147,16 @@ struct TerminalScreen: View {
       .accessibilityElement(children: .combine)
     }
     ToolbarItemGroup(placement: .navigationBarTrailing) {
+      if currentTerminal?.hasUnreadCompletion == true {
+        Button {
+          Task { await session.acknowledgeTerminal(details.id) }
+        } label: {
+          TerminalAttentionBadge(unread: true, bell: false, showLabel: false)
+            .padding(8)
+        }
+        .accessibilityLabel("有新的接管提醒，标记已读")
+        .disabled(!session.canWrite || session.acknowledgementWrites.contains(details.id))
+      }
       Menu {
         Text(cwd)
         Button("收起键盘") { controller.surface.view.window?.endEditing(true) }
