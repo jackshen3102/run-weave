@@ -4,30 +4,9 @@ public struct SuijiRootView: View {
   public init(endpoint: URL? = nil) { _session = StateObject(wrappedValue: SuijiSession(endpoint: endpoint)) }
   public var body: some View {
     Group {
-      if let info = session.info { CaptureHome(session: session).id(info.serverId + info.ownerId + session.endpoint) }
-      else { ConnectionView(session: session) }
+      if let info = session.info { CaptureHome(session: session).id(session.environment.rawValue + info.serverId + info.ownerId + session.endpoint) }
+      else { ConnectionView(session: session).id(session.environment) }
     }.tint(SuijiTheme.green).task { if !session.endpoint.isEmpty { await session.connect() } }
-  }
-}
-struct ConnectionView: View {
-  @ObservedObject var session: SuijiSession
-  @State private var username = ""
-  @State private var password = ""
-  @State private var busy = false
-  var body: some View {
-    NavigationStack {
-      Form {
-        Section { Text("随记").font(.largeTitle.bold()); Text("随手记录，慢慢回看。独立连接你的随记云服务。").foregroundStyle(.secondary) }
-        Section("云服务") {
-          TextField("https://你的云服务地址", text: $session.endpoint).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).accessibilityLabel("云服务地址")
-          TextField("账号", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled().textContentType(.username)
-          SecureField("密码", text: $password).textContentType(.password)
-          Button(busy ? "连接中…" : "登录") { busy = true; Task { await session.connect(username: username, password: password); password = ""; busy = false } }
-          Button("恢复已有登录") { busy = true; Task { await session.connect(); busy = false } }
-        }.disabled(busy)
-        if !session.message.isEmpty { Section { Text(session.message).foregroundStyle(.orange) } }
-      }.navigationTitle("欢迎使用随记")
-    }
   }
 }
 struct CaptureHome: View {
@@ -46,7 +25,9 @@ struct CaptureHome: View {
   var body: some View {
     TabView(selection: $tab) {
       NavigationStack {
-        feed.navigationTitle("随记").toolbar { Button { settings = true } label: { Image(systemName: "gearshape").accessibilityLabel("连接设置") } }
+        feed.navigationTitle("随记").toolbar {
+          ToolbarItem(placement: .topBarTrailing) { Button { settings = true } label: { Image(systemName: "gearshape").accessibilityLabel("连接设置") } }
+        }
       }.tabItem { Label("记录", systemImage: "square.and.pencil") }.tag("records")
       NavigationStack { feed.navigationTitle("待办") }.tabItem { Label("待办", systemImage: "checklist") }.tag("tasks")
       NavigationStack { feed.navigationTitle("回收站") }.tabItem { Label("回收站", systemImage: "trash") }.tag("trash")
@@ -54,12 +35,7 @@ struct CaptureHome: View {
     }.task(id: loadKey) { if tab != "ai" { await session.load(kind: kind, status: status, q: query, trash: tab == "trash") } }
       .sheet(item: $session.editor, onDismiss: { Task { await session.load(kind: kind, status: status, q: query, trash: tab == "trash") } }) { RecordEditorSheet(model: $0) }
       .onDisappear { review.stopWatching() }
-      .sheet(isPresented: $settings) {
-        NavigationStack { Form {
-          Section("当前云服务") { Text(session.endpoint); Text("已登录独立随记账号") }
-          Section { Button("退出登录 / 更换服务地址", role: .destructive) { settings = false; Task { await session.logout() } } }
-        }.navigationTitle("连接设置").toolbar { Button("关闭") { settings = false } } }
-      }
+      .sheet(isPresented: $settings) { ConnectionSettingsView(session: session) }
   }
   private var feed: some View {
     ScrollView {
