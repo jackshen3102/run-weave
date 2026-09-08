@@ -39,7 +39,7 @@ export const editSchema = z
 export const statusSchema = z
   .object({
     expectedVersion: z.number().int().positive(),
-    targetStatus: z.enum(["done", "archived"]),
+    targetStatus: z.enum(["open", "done", "archived"]),
   })
   .strict();
 export const trashSchema = z

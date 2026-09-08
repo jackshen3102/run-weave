@@ -2,7 +2,7 @@
 
 单人自用的独立记录 API。实现用户名密码登录、稳定 owner/server 身份、原文记录、三态待办、
 版本冲突、事务修订、请求幂等，以及鉴权 JPEG/PNG/UTF-8 Markdown 上传下载。
-支持独立个人凭据的 MCP，以及手动触发、只读检索的本地 Codex CLI 回顾；支持记录回收站；自动同步与永久删除未接入。
+支持独立个人凭据的 MCP，以及手动触发、只读检索的 Codex CLI 回顾；支持记录回收站；自动同步与永久删除未接入。
 
 ## 本地运行
 
@@ -29,18 +29,18 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 公开合同：[shared/suiji](../shared/src/suiji/index.ts)。所有 `/api/suiji/v1` 请求需要 Bearer，
 所有业务写请求需要 `Idempotency-Key`。ID 为 UUID，UTC 时间精度为毫秒，正文按 Unicode 标量计数。
 
-| 接口                                          | 行为                                                                  |
-| --------------------------------------------- | --------------------------------------------------------------------- |
-| `POST /api/auth/login` / `refresh` / `logout` | 单独会话、轮换刷新、注销当前会话                                      |
-| `GET /api/auth/verify` / `/api/suiji/v1/info` | 核验身份、协议、版本与输入限额                                        |
-| `GET /api/suiji/v1/records`                   | kind/taskStatus/q/from/to/cursor/limit；创建时间倒序，q 为字面子串    |
-| `GET /api/suiji/v1/records/:id`               | 当前正文、状态、版本和有序附件                                        |
-| `POST /api/suiji/v1/records`                  | kind/body/attachmentIds；note 状态 null，task 初始 open               |
-| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，body/attachmentIds 至少一个；一次原子保存            |
-| `POST /api/suiji/v1/records/:id/trash`        | expectedVersion/trashed；移入回收站或恢复，保留正文、附件和待办原状态 |
-| `POST /api/suiji/v1/records/:id/task-status`  | expectedVersion/targetStatus；仅 open → done 或 archived              |
-| `POST /api/suiji/v1/uploads`                  | 单个 multipart file；幂等摘要与 boundary 无关                         |
-| `GET /api/suiji/v1/attachments/:id/content`   | 当前 owner 的实际文件流，不返回存储路径                               |
+| 接口                                          | 行为                                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| `POST /api/auth/login` / `refresh` / `logout` | 单独会话、轮换刷新、注销当前会话                                         |
+| `GET /api/auth/verify` / `/api/suiji/v1/info` | 核验身份、协议、版本与输入限额                                           |
+| `GET /api/suiji/v1/records`                   | kind/taskStatus/q/from/to/cursor/limit；创建时间倒序，q 为字面子串       |
+| `GET /api/suiji/v1/records/:id`               | 当前正文、状态、版本和有序附件                                           |
+| `POST /api/suiji/v1/records`                  | kind/body/attachmentIds；note 状态 null，task 初始 open                  |
+| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，body/attachmentIds 至少一个；一次原子保存               |
+| `POST /api/suiji/v1/records/:id/trash`        | expectedVersion/trashed；移入回收站或恢复，保留正文、附件和待办原状态    |
+| `POST /api/suiji/v1/records/:id/task-status`  | expectedVersion/targetStatus；open → done/archived；done → open 撤销完成 |
+| `POST /api/suiji/v1/uploads`                  | 单个 multipart file；幂等摘要与 boundary 无关                            |
+| `GET /api/suiji/v1/attachments/:id/content`   | 当前 owner 的实际文件流，不返回存储路径                                  |
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -84,15 +84,15 @@ url = "https://your-suiji-host/mcp"
 bearer_token_env_var = "SUIJI_MCP_TOKEN"
 ```
 
-| 工具                  | 行为                                                                       |
-| --------------------- | -------------------------------------------------------------------------- |
-| `list_records`        | 创建时间倒序的摘要，kind/taskStatus/from/to/cursor/limit，默认 20、最多 50 |
-| `search_records`      | query 与同样筛选，默认 10、最多 50；当前正文的字面关键词匹配               |
-| `get_record`          | recordId，完整正文、version 和附件元数据                                   |
-| `create_record`       | kind/body/idempotencyKey，新记录来源 agent，不接附件上传                   |
-| `replace_record_body` | recordId/body/expectedVersion/idempotencyKey，仅替换正文                   |
-| `set_task_status`     | recordId/targetStatus/expectedVersion/idempotencyKey，open → done/archived |
-| `read_attachment`     | attachmentId/cursor/limit，Markdown 标量分页或实际 image 块                |
+| 工具                  | 行为                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `list_records`        | 创建时间倒序的摘要，kind/taskStatus/from/to/cursor/limit，默认 20、最多 50              |
+| `search_records`      | query 与同样筛选，默认 10、最多 50；当前正文的字面关键词匹配                            |
+| `get_record`          | recordId，完整正文、version 和附件元数据                                                |
+| `create_record`       | kind/body/idempotencyKey，新记录来源 agent，不接附件上传                                |
+| `replace_record_body` | recordId/body/expectedVersion/idempotencyKey，仅替换正文                                |
+| `set_task_status`     | recordId/targetStatus/expectedVersion/idempotencyKey，open → done/archived；done → open |
+| `read_attachment`     | attachmentId/cursor/limit，Markdown 标量分页或实际 image 块                             |
 
 参数使用 camelCase，拒绝未知字段。摘要最多 300 标量，`excerptIsFullBody` 标明是否完整；
 替换前应先 `get_record`，不能用摘要覆盖全文。搜索明确不覆盖附件、历史正文、外链或语义索引。
@@ -106,7 +106,7 @@ App 旧请求摘要保持兼容；Agent 使用可信操作前缀隔离，同键�
 
 验收合同：[MCP 与 Agent](../../docs/testing/suiji/mcp-agent.testplan.yaml)。
 
-## 本地 AI 回顾
+## AI 回顾
 
 在运行服务的同一账号下先确认 `codex login status` 已登录，再在受保护的 API 环境文件加入：
 
@@ -116,9 +116,12 @@ SUIJI_CODEX_BIN=/absolute/path/to/codex
 SUIJI_AI_TIMEOUT_SECONDS=180
 ```
 
-`SUIJI_CODEX_BIN` 可省略，默认从 PATH 查找 `codex`。默认 provider 为 `disabled`；
-`NODE_ENV=production` 拒绝 `codex-cli`，当前适配器供本地使用，云端提供商另行实现。
-复用宿主 CLI 登录，不读取认证文件、不修改全局 Codex 配置。记录保存与模型可用性无关。
+`SUIJI_CODEX_BIN` 可省略，默认从 PATH 查找 `codex`。默认 provider 为 `disabled`。
+开发环境默认复用运行服务账号的 CLI 登录；也可用绝对路径 `SUIJI_CODEX_HOME` 指定独立登录目录。
+正式环境启用 `codex-cli` 时必须显式设置该目录，并为服务账号保留读写权限和持久存储，供 Codex 刷新登录。
+登录及模型调用发生在运行随记服务的机器上，手机不需要安装 Codex，也不依赖用户 Mac 在线。
+Docker 镜像固定安装 Codex CLI 0.153.4；容器登录与配置见[部署入口](../../deploy/suiji/README.md#codex-回顾)。
+服务只传递登录目录给 CLI，不读取认证内容，不修改全局 Codex 配置。记录保存与模型可用性无关。
 
 | 接口                               | 合同                                                                      |
 | ---------------------------------- | ------------------------------------------------------------------------- |

@@ -14,6 +14,7 @@ const env = z.object({
   SUIJI_WEB_ORIGINS: z.string().default(""),
   SUIJI_AI_PROVIDER: z.enum(["disabled", "codex-cli"]).default("disabled"),
   SUIJI_CODEX_BIN: z.string().min(1).default("codex"),
+  SUIJI_CODEX_HOME: z.string().min(1).optional(),
   SUIJI_AI_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(600).default(180),
   SUIJI_MCP_TOKEN_SHA256: z.string().regex(/^[a-f0-9]{64}$/).or(z.literal("")).optional(),
   SUIJI_MCP_TOKEN_EXPIRES_AT: z.string().datetime().or(z.literal("")).optional(),
@@ -31,8 +32,10 @@ export function readConfig() {
     if (!["http:", "https:"].includes(url.protocol) || url.origin !== origin)
       throw new Error("SUIJI_WEB_ORIGINS requires exact HTTP(S) origins or runweave://app separated by commas");
   }
-  if (c.NODE_ENV === "production" && c.SUIJI_AI_PROVIDER === "codex-cli")
-    throw new Error("codex-cli is a local development provider; cloud AI requires a separate provider");
+  if (c.SUIJI_CODEX_HOME && !path.isAbsolute(c.SUIJI_CODEX_HOME))
+    throw new Error("SUIJI_CODEX_HOME must be absolute");
+  if (c.NODE_ENV === "production" && c.SUIJI_AI_PROVIDER === "codex-cli" && !c.SUIJI_CODEX_HOME)
+    throw new Error("Production Codex requires a persistent SUIJI_CODEX_HOME for its login");
   if (Boolean(c.SUIJI_MCP_TOKEN_SHA256) !== Boolean(c.SUIJI_MCP_TOKEN_EXPIRES_AT))
     throw new Error("MCP requires both token digest and expiration configuration");
   if (!path.isAbsolute(c.SUIJI_STORAGE_DIR))

@@ -153,11 +153,16 @@ export class RecordService {
     return mutate(this.pool, context, `status:${id}`, input, async (client) => {
       const old = await getRecord(client, context.ownerId, id, true);
       this.version(old, input.expectedVersion);
-      if (old.kind !== "task" || old.taskStatus !== "open")
+      const allowed =
+        (old.taskStatus === "open" &&
+          (input.targetStatus === "done" ||
+            input.targetStatus === "archived")) ||
+        (old.taskStatus === "done" && input.targetStatus === "open");
+      if (old.kind !== "task" || !allowed)
         throw new ServiceError(
           409,
           "INVALID_TRANSITION",
-          "仅未完成待办可以改变状态",
+          "仅支持完成或放弃未完成待办，以及将已完成待办恢复为未完成",
         );
       await client.query(
         "UPDATE records SET task_status=$3,version=version+1,updated_at=clock_timestamp() WHERE owner_id=$1 AND id=$2",

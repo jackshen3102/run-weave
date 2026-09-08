@@ -118,7 +118,11 @@ export async function runCodex(
     await new Promise<void>((resolve, reject) => {
       const child = spawn(config.SUIJI_CODEX_BIN, args, {
         cwd: directory,
-        env: { ...childEnv, SUIJI_REVIEW_TOKEN: bridge!.token },
+        env: {
+          ...childEnv,
+          ...(config.SUIJI_CODEX_HOME ? { CODEX_HOME: config.SUIJI_CODEX_HOME } : {}),
+          SUIJI_REVIEW_TOKEN: bridge!.token,
+        },
         detached: process.platform !== "win32",
         stdio: ["pipe", "pipe", "pipe"],
       });

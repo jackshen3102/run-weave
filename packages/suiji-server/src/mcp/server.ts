@@ -123,7 +123,7 @@ export function createMcpServer(
     "set_task_status",
     {
       description:
-        "仅按用户明确要求将 open 待办标为 done 或 archived（不再做）。先读取完整记录和版本；终态不能撤销或复活，再想做应新建独立待办。重试沿用原幂等键、目标与版本。",
+        "仅按用户明确要求将 open 待办标为 done 或 archived（不再做），或将 done 恢复为 open 以撤销完成。先读取完整记录和版本；archived 不能恢复或转为 done，再想做应新建独立待办。重试沿用原幂等键、目标与版本。",
       inputSchema: schema.statusInput,
       annotations: write,
     },

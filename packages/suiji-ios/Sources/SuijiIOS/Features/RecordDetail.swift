@@ -45,6 +45,8 @@ struct RecordDetail: View {
         if pending { Button("操作结果待确认 · 重试确认") { Task { await session.changeRecord(record, action: .status(.done)) } } }
         else if record.deletedAt == nil, record.taskStatus == .open {
           HStack { Button("完成") { Task { await session.changeRecord(record, action: .status(.done)) } }; Spacer(); Button("不再做") { Task { await session.changeRecord(record, action: .status(.archived)) } } }
+        } else if record.deletedAt == nil, record.taskStatus == .done {
+          Button("恢复为未完成") { Task { await session.changeRecord(record, action: .status(.open)) } }
         }
         if record.deletedAt == nil, record.kind == .task, record.taskStatus != .open {
           Button("再建一个待办") { Task { await session.openEditor(kind: .task, body: record.body) } }
