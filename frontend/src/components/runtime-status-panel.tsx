@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { ChevronRight, Copy, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type {
   RuntimeStatusCapabilityId,
   RuntimeStatusCapabilitySnapshot,
@@ -44,6 +44,13 @@ function formatObservedAt(value: number): string {
   return new Intl.DateTimeFormat(undefined, {
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   }).format(value);
+}
+
+function isAwaitingLogin(items: RuntimeStatusItem[]): boolean {
+  return (
+    items.some((item) => item.id === "frontend.node.http" && item.state === "healthy")
+    && items.some((item) => item.id === "frontend.node.auth" && item.state === "blocked")
+  );
 }
 
 function RuntimeStatusItemRow({ item }: { item: RuntimeStatusItem }) {
@@ -109,13 +116,14 @@ function RuntimeStatusItemRow({ item }: { item: RuntimeStatusItem }) {
 
 function CapabilitySection({ capability }: { capability: RuntimeStatusCapabilitySnapshot }) {
   const [open, setOpen] = useState(capability.state === "unhealthy");
+  const awaitingLogin = isAwaitingLogin(capability.items);
   return (
     <section className="overflow-hidden rounded-xl border border-border/70" data-runtime-status-capability={capability.capabilityId} data-runtime-status-state={capability.state}>
       <button type="button" className="flex w-full items-center justify-between gap-3 bg-muted/30 px-4 py-3 text-left" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
         <span className="text-sm font-medium">{CAPABILITY_LABELS[capability.capabilityId]}</span>
         <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
           <span className={`h-2 w-2 rounded-full ${STATE_DOT[capability.state]}`} />
-          {STATE_LABELS[capability.state]}
+          {capability.state === "blocked" && awaitingLogin ? "待登录" : STATE_LABELS[capability.state]}
           <ChevronRight className={`h-3.5 w-3.5 transition ${open ? "rotate-90" : ""}`} />
         </span>
       </button>
@@ -146,12 +154,28 @@ function RuntimeResources() {
 
 export function RuntimeStatusPanel() {
   const { nodes, panelOpen, setPanelOpen, refresh, refreshing } = useRuntimeStatus();
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const copyAddress = useMemoizedFn(async (value: string) => {
     await copyRuntimeStatusText(value);
   });
   return (
     <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
-      <SheetContent className="w-[min(92vw,42rem)] overflow-hidden p-0 sm:max-w-[42rem]">
+      <SheetContent
+        className="w-[min(92vw,42rem)] overflow-hidden p-0 sm:max-w-[42rem]"
+        onOpenAutoFocus={() => {
+          returnFocusRef.current = document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          const returnFocus = returnFocusRef.current;
+          returnFocusRef.current = null;
+          if (returnFocus?.isConnected) {
+            event.preventDefault();
+            returnFocus.focus({ preventScroll: true });
+          }
+        }}
+      >
         <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
           <div className="flex items-center justify-between gap-4">
             <div><SheetTitle>运行状态</SheetTitle><SheetDescription>当前依赖、恢复状态与最近证据</SheetDescription></div>
@@ -161,16 +185,20 @@ export function RuntimeStatusPanel() {
           </div>
         </SheetHeader>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
-          {nodes.map((node) => (
-            <article key={node.id} className="space-y-3 rounded-2xl border border-border/70 bg-card/60 p-4" data-runtime-status-node={node.id}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{node.roles.includes("local") ? "本机节点" : "连接节点"}</h2>{node.roles.map((role) => <span key={role} className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">{role === "local" ? "本机" : "当前连接"}</span>)}</div><button type="button" className="mt-1 inline-flex max-w-full items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground" aria-label={`${node.roles.includes("local") ? "复制本机" : "复制当前连接"}地址`} onClick={() => void copyAddress(node.address)}><span className="truncate">{node.address}</span><Copy className="h-3 w-3 shrink-0" /></button></div>
-                <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"><span className={`h-2 w-2 rounded-full ${STATE_DOT[node.state]}`} />{STATE_LABELS[node.state]}</span>
-              </div>
-              <div className="space-y-2">{node.capabilities.map((capability) => <CapabilitySection key={capability.capabilityId} capability={capability} />)}</div>
-              {node.roles.includes("local") ? <RuntimeResources /> : null}
-            </article>
-          ))}
+          {nodes.map((node) => {
+            const awaitingLogin = node.capabilities.some((capability) => isAwaitingLogin(capability.items));
+            return (
+              <article key={node.id} className="space-y-3 rounded-2xl border border-border/70 bg-card/60 p-4" data-runtime-status-node={node.id}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{node.roles.includes("local") ? "本机节点" : "连接节点"}</h2>{node.roles.map((role) => <span key={role} className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">{role === "local" ? "本机" : "当前连接"}</span>)}</div><button type="button" className="mt-1 inline-flex max-w-full items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground" aria-label={`${node.roles.includes("local") ? "复制本机" : "复制当前连接"}地址`} onClick={() => void copyAddress(node.address)}><span className="truncate">{node.address}</span><Copy className="h-3 w-3 shrink-0" /></button></div>
+                  <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"><span className={`h-2 w-2 rounded-full ${STATE_DOT[node.state]}`} />{node.state === "blocked" && awaitingLogin ? "待登录" : STATE_LABELS[node.state]}</span>
+                </div>
+                {awaitingLogin ? <p className="text-sm text-muted-foreground">服务可连接，登录后查看详细状态。</p> : null}
+                <div className="space-y-2">{node.capabilities.map((capability) => <CapabilitySection key={capability.capabilityId} capability={capability} />)}</div>
+                {node.roles.includes("local") ? <RuntimeResources /> : null}
+              </article>
+            );
+          })}
           {nodes.length === 0 ? <p className="py-12 text-center text-sm text-muted-foreground">正在检查运行状态…</p> : null}
         </div>
       </SheetContent>
