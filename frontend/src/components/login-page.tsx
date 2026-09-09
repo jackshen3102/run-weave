@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
 import type { ConnectionConfig } from "../features/connection/types";
 import { ConnectionSwitcher } from "./connection-switcher";
 import { Button } from "./ui/button";
@@ -34,10 +35,23 @@ export function LoginPage({
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const usernameError =
+    showFieldErrors && !username ? "Please enter your username." : null;
+  const passwordError =
+    showFieldErrors && !password ? "Please enter your password." : null;
 
-  const login = async (): Promise<void> => {
-    setLoading(true);
+  const login = useMemoizedFn(async (): Promise<void> => {
+    if (loading) return;
+    setShowFieldErrors(true);
     setError(null);
+    if (!username || !password) {
+      (!username ? usernameRef : passwordRef).current?.focus();
+      return;
+    }
+    setLoading(true);
 
     try {
       const data = await loginWithPassword(
@@ -49,6 +63,10 @@ export function LoginPage({
       );
       onSuccess(data);
     } catch (loginError) {
+      if (loginError instanceof HttpError && loginError.status === 400) {
+        setError("Please check your username and password and try again.");
+        return;
+      }
       if (loginError instanceof HttpError && loginError.status === 401) {
         setError("Incorrect username or password.");
         return;
@@ -58,7 +76,7 @@ export function LoginPage({
     } finally {
       setLoading(false);
     }
-  };
+  });
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 sm:px-6">
@@ -81,7 +99,14 @@ export function LoginPage({
           ) : null}
         </div>
 
-        <div className="mt-8 space-y-4">
+        <form
+          className="mt-8 space-y-4"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void login();
+          }}
+        >
           <div className="space-y-2">
             <label
               className="text-xs uppercase tracking-[0.24em] text-muted-foreground/70"
@@ -90,12 +115,24 @@ export function LoginPage({
               Username
             </label>
             <input
+              ref={usernameRef}
               id="username"
               autoComplete="username"
+              required
+              aria-invalid={Boolean(usernameError)}
+              aria-describedby={usernameError ? "username-error" : undefined}
               value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              onChange={(event) => {
+                setUsername(event.target.value);
+                setError(null);
+              }}
               className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"
             />
+            {usernameError ? (
+              <p id="username-error" className="text-sm text-red-500" role="alert">
+                {usernameError}
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -106,19 +143,25 @@ export function LoginPage({
               Password
             </label>
             <input
+              ref={passwordRef}
               id="password"
               type="password"
               autoComplete="current-password"
+              required
+              aria-invalid={Boolean(passwordError)}
+              aria-describedby={passwordError ? "password-error" : undefined}
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void login();
-                }
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setError(null);
               }}
               className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"
             />
+            {passwordError ? (
+              <p id="password-error" className="text-sm text-red-500" role="alert">
+                {passwordError}
+              </p>
+            ) : null}
           </div>
 
           {error && (
@@ -128,13 +171,13 @@ export function LoginPage({
           )}
 
           <Button
+            type="submit"
             className="mt-2 h-12 w-full rounded-full text-sm"
-            onClick={() => void login()}
             disabled={loading}
           >
             {loading ? "Entering..." : "Continue"}
           </Button>
-        </div>
+        </form>
       </section>
     </main>
   );

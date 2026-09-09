@@ -251,6 +251,7 @@ playwright-cli -s=runweave-beta-desktop detach
 预期 `channel` 为 `beta`，标题和页面 revision 与 `dev:status` 中的 `source.revision` 对应。dirty 或 untracked 内容不会进入页面 revision；是否部署了脏工作区必须同时检查 `source.dirty` 和更新状态中的 worktree snapshot。桌面并存、退出、恢复和窗口身份使用 `$computer-use` 验证。
 
 Terminal Browser 验收先执行 `pnpm dev:open --session <devSessionId> --surface terminal-browser --json`，再附着其返回的 endpoint。Desktop CDP 和 Terminal Browser CDP 是不同 surface；不要用一个 endpoint 代替另一个，也不要使用全局 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 或 Playwright 默认配置猜测目标。
+`terminal-browser` 的 `dev:open` 会初始化目标实例的默认 Browser Profile，复用已有标签，并确认该 Profile 下存在页面 target 后才返回 `health: ready`。首次使用无需手动切到 Browser；返回的 WebSocket endpoint 带有 Profile 范围，附着时保留完整地址。Profile 初始化失败或页面不可用时命令报错，不返回 ready。
 受管 Dev Session 的 Terminal Browser Profile 默认 Direct，不会为普通验收启动固定 `8081/8082/8083` Whistle；需要生产域名、Cookie、CORS 或 HSTS 代理语义时，再从对应 Profile 设置显式开启 Proxy。
 
 完整回归按 [Beta Pool 长期运行与生产回归验收](../testing/platform/beta-pool-runtime-regressions.testplan.yaml) 执行。静态命令、status 或代码阅读不能代替该文档要求的真实桌面与页面行为证据。

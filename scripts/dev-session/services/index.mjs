@@ -26,6 +26,7 @@ import {
   startDedicatedFrontend,
 } from "./dedicated.mjs";
 import { startDedicatedBeta } from "./beta.mjs";
+import { prepareTerminalBrowserEndpoint } from "./terminal-browser.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -519,11 +520,15 @@ export async function resolveOpenTarget(manifest, surface) {
   if (!cdp?.endpoint) {
     throw new DevSessionError(`${surface} surface is disabled`, 4);
   }
+  const endpoint =
+    surface === "terminal-browser"
+      ? await prepareTerminalBrowserEndpoint(cdp.endpoint)
+      : assertLoopbackUrl(cdp.endpoint, `${surface} CDP endpoint`);
   return {
     devSessionId: manifest.devSessionId,
     surface,
     serviceInstanceId: cdp.serviceInstanceId,
-    endpoint: assertLoopbackUrl(cdp.endpoint, `${surface} CDP endpoint`),
+    endpoint,
     pid: cdp.pid,
     revision: cdp.sourceRevision,
     health: "ready",
