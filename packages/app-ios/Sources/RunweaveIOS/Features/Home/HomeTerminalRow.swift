@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HomeTerminalRow: View {
   @ObservedObject var session: AppSession
@@ -6,6 +7,7 @@ struct HomeTerminalRow: View {
   let projectName: String?
   let rename: () -> Void
   let delete: () -> Void
+  @State private var showingCopied = false
   private var pinned: Bool { terminal.pinnedAt != nil }
   private var pinLabel: String { pinned ? "取消置顶" : "置顶" }
 
@@ -44,6 +46,12 @@ struct HomeTerminalRow: View {
         .tint(.orange).disabled(!session.canEditTerminal(terminal.id))
     }
     .contextMenu {
+      Button {
+        UIPasteboard.general.string = terminal.id
+        showingCopied = true
+      } label: {
+        Label("复制终端 ID", systemImage: "doc.on.doc")
+      }
       if terminal.hasUnreadCompletion {
         Button("标记已读") { Task { await session.acknowledgeTerminal(terminal.id) } }
           .disabled(!session.canWrite || session.acknowledgementWrites.contains(terminal.id))
@@ -53,6 +61,11 @@ struct HomeTerminalRow: View {
       Button("重命名", action: rename).disabled(!session.canEditTerminal(terminal.id))
       Button("删除终端", role: .destructive, action: delete)
         .disabled(!session.canEditTerminal(terminal.id))
+    }
+    .alert("已复制终端 ID", isPresented: $showingCopied) {
+      Button("好", role: .cancel) {}
+    } message: {
+      Text(terminal.id)
     }
   }
 }

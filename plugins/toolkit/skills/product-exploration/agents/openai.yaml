@@ -1,6 +1,4 @@
 interface:
-  display_name: "产品探索"
-  short_description: "按需探索指定功能，提供真实问题证据与优化建议，不生成测试代码"
   default_prompt: "使用 $toolkit:product-exploration，围绕我指定的功能或用户目标做一轮最多 30 分钟的真实探索，只取证报告，不自动修复。"
 
 policy:

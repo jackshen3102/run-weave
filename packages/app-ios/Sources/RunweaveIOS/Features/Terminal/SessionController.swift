@@ -14,7 +14,7 @@ public final class SessionController: ObservableObject {
   @Published public private(set) var notice: String?
   @Published public private(set) var inputBusy = false
   @Published private(set) var metadata: Metadata?
-  struct Metadata {
+  struct Metadata: Equatable {
     let cwd: String
     let activeCommand: String?
   }
@@ -69,19 +69,24 @@ public final class SessionController: ObservableObject {
       guard let self, self.canSend else { return false }
       self.sendRaw(input)
       self.tmuxScrollRows = max(0, self.tmuxScrollRows + rows)
-      self.scrolledBack = !self.localAtBottom || self.tmuxScrollRows >= 4
+      self.updateScrollState()
       self.record("scroll.tmux", extra: ["deltaRows": rows])
       return true
     }
     surface.scrollState = { [weak self] position in
       guard let self else { return }
       self.localAtBottom = !self.surface.terminalView.canScroll || position >= 1
-      self.scrolledBack = !self.localAtBottom || self.tmuxScrollRows >= 4
+      self.updateScrollState()
     }
     surface.viewportChanged = { [weak self] cols, rows in
       self?.size = (cols, rows)
       self?.sendSize()
     }
+  }
+
+  private func updateScrollState() {
+    let next = !localAtBottom || tmuxScrollRows >= 4
+    if scrolledBack != next { scrolledBack = next }
   }
 
   public func connect() {
@@ -251,13 +256,14 @@ public final class SessionController: ObservableObject {
       guard hasSnapshot else { throw APIError.invalidResponse }
       enqueue(text, event: "output")
     case .status(let status, _):
-      runtimeStatus = status
+      if runtimeStatus != status { runtimeStatus = status }
       record("runtime.status")
     case .exit:
       runtimeStatus = "exited"
       record("runtime.exit")
     case .metadata(let cwd, let activeCommand):
-      metadata = Metadata(cwd: cwd, activeCommand: activeCommand)
+      let next = Metadata(cwd: cwd, activeCommand: activeCommand)
+      if metadata != next { metadata = next }
       record("metadata")
     case .notice(let message):
       notice = message
