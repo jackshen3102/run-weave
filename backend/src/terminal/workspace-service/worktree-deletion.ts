@@ -208,11 +208,15 @@ async function findBlockingDevSession(
         devSessionId?: unknown;
         state?: unknown;
         source?: { root?: unknown };
+        failure?: { leaseRetained?: unknown };
       };
       if (
         typeof manifest.source?.root !== "string" ||
         typeof manifest.state !== "string" ||
-        manifest.state === "stopped"
+        manifest.state === "stopped" ||
+        // Failed starts keep their outcome after identity-safe resource cleanup.
+        (manifest.state === "failed" &&
+          manifest.failure?.leaseRetained === false)
       ) {
         continue;
       }
@@ -522,7 +526,7 @@ export class TerminalWorktreeDeletionService {
     );
     if (blockingDevSession) {
       throw new TerminalWorktreeDeletionError(
-        `Worktree is used by Dev Session ${blockingDevSession.devSessionId} (${blockingDevSession.state})`,
+        `Dev Session ${blockingDevSession.devSessionId}（${blockingDevSession.state}）尚未确认释放该 Worktree。请先检查该 Session 的状态并完成停止或清理，再重试删除。`,
         409,
         "dev_session_active",
       );
