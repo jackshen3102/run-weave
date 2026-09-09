@@ -6,6 +6,7 @@ struct TerminalScreen: View {
   let details: TerminalDetails
   @State private var deleting = false
   @State private var showingHistory = false
+  @State private var showingInfo = false
   @State private var showingDiagnostics = false
   @State private var showingComposer = false
   @State private var composerPreventsDismissal = false
@@ -96,6 +97,7 @@ struct TerminalScreen: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbar { terminalToolbar }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id) }
+    .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id) }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session) }
     .sheet(isPresented: $showingComposer) {
       TerminalComposerSheet(
@@ -254,18 +256,13 @@ struct TerminalScreen: View {
         .accessibilityLabel("有新的接管提醒，标记已读")
         .disabled(!session.canWrite || session.acknowledgementWrites.contains(details.id))
       }
-      Menu {
-        Text(cwd)
-        Button("终端历史") { showingHistory = true }
-        Button("诊断") { showingDiagnostics = true }
-        Button("回到底部") { controller.returnToBottom() }.disabled(
-          !session.canWrite || !controller.canSend)
-        Button("重连") { Task { await session.reconnectTerminal() } }.disabled(
-          !session.canReconnect)
-        Button("删除终端", role: .destructive) { deleting = true }.disabled(!session.canWrite)
-      } label: {
-        Image(systemName: "ellipsis")
-      }.accessibilityLabel("终端操作")
+      TerminalActionsMenu(
+        session: session, controller: controller, terminalID: details.id,
+        cwd: cwd, canReturnToBottom: session.canWrite && controller.canSend,
+        canReconnect: session.canReconnect, canDelete: session.canWrite,
+        deleting: $deleting, showingHistory: $showingHistory,
+        showingInfo: $showingInfo, showingDiagnostics: $showingDiagnostics
+      ).equatable()
     }
   }
 }
