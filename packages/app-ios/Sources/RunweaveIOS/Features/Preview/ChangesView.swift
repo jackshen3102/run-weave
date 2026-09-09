@@ -5,14 +5,10 @@ struct ChangesView: View {
   let projectID: String
   let active: Bool
   @Binding var requested: SelectedFile?
-  @Binding var count: Int
-  @State private var changes: PreviewChanges?
+  @ObservedObject var model: ProjectChangesModel
   @State private var filter = "all"
   @State private var selected: SelectedFile?
   @State private var viewed = Set<String>()
-  @State private var failure: String?
-  @State private var loading = false
-  @State private var loadID = UUID()
 
   var body: some View {
     VStack {
@@ -21,13 +17,16 @@ struct ChangesView: View {
         Text("Staged").tag("staged")
         Text("Working").tag("working")
       }.pickerStyle(.segmented).padding(.horizontal)
-      if loading { ProgressView() }
-      if let failure { Text(failure).foregroundColor(.red) }
+      if model.loading && model.changes == nil { ProgressView() }
+      if let failure = model.failure {
+        Text(model.changes == nil ? failure : "更新失败，显示上次结果：\(failure)")
+          .foregroundColor(.red)
+      }
       List {
         ForEach(["staged", "working"], id: \.self) { kind in
           if filter == "all" || filter == kind {
             Section(header: Text(kind == "staged" ? "Staged" : "Working")) {
-              ForEach(kind == "staged" ? changes?.staged ?? [] : changes?.working ?? []) { item in
+              ForEach(kind == "staged" ? model.changes?.staged ?? [] : model.changes?.working ?? []) { item in
                 let file = SelectedFile(path: item.path, changeKind: kind)
                 Button {
                   selected = file
@@ -43,12 +42,13 @@ struct ChangesView: View {
             }
           }
         }
-        if count == 0, !loading, failure == nil { Text("暂无变更") }
-      }.refreshable { await load(force: true) }
+        if model.count == 0, model.failure == nil { Text("暂无变更") }
+      }.refreshable { await model.refresh(force: true) }
     }
     .task(id: active) {
       if active {
-        await load()
+        await model.refresh()
+        guard !Task.isCancelled else { return }
         openRequested()
       }
     }
@@ -64,29 +64,5 @@ struct ChangesView: View {
       selected = requested
       self.requested = nil
     }
-  }
-  private func load(force: Bool = false) async {
-    let request = UUID()
-    loadID = request
-    loading = true
-    failure = nil
-    defer { if !Task.isCancelled, loadID == request { loading = false } }
-    do {
-      if let api = session.api {
-        let saved: PreviewChanges? = await api.previewSnapshot(
-          projectID: projectID, resource: "git-changes")
-        guard !Task.isCancelled, loadID == request else { return }
-        if let saved {
-          changes = saved
-          count = saved.staged.count + saved.working.count
-        }
-      }
-      let value = try await session.withConnection {
-        try await $0.changes(projectID: projectID, force: force)
-      }
-      guard !Task.isCancelled, loadID == request else { return }
-      changes = value
-      count = value.staged.count + value.working.count
-    } catch { if !Task.isCancelled, loadID == request { failure = previewError(error) } }
   }
 }

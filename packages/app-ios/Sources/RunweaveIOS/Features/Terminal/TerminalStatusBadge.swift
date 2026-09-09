@@ -6,7 +6,7 @@ struct TerminalStatusBadge: View {
   private var state: String {
     terminal.status == "exited" ? "exited" : terminal.terminalState.state
   }
-  private var busy: Bool { state == "agent_running" || state == "agent_starting" }
+  private var busy: Bool { terminal.isAgentActive }
   private var label: String {
     switch state {
     case "agent_running": return "正在执行"

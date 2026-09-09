@@ -7,7 +7,8 @@
 
 仓库 `docs/testing/app/` 中的原生计划是当前合同：
 
-- [首页置顶、搜索与重命名](../../../docs/testing/app/ios-native-home-discovery.testplan.yaml)
+- [首页关注、搜索与重命名](../../../docs/testing/app/ios-native-home-discovery.testplan.yaml)
+- [终端悬浮输入布局](../../../docs/testing/app/ios-native-terminal-layout.testplan.yaml)
 - [终端与渲染](../../../docs/testing/app/ios-native-terminal.testplan.yaml)
 - [认证、连接与资源生命周期](../../../docs/testing/app/ios-native-session.testplan.yaml)
 - [终端图片附件](../../../docs/testing/app/ios-native-image-attachments.testplan.yaml)
@@ -18,6 +19,11 @@
 布局改动若有独立执行计划，以该任务当前计划为准，不继承历史运行结果。
 原生 UI 需要 Simulator / 真机实际操作。Playwright 可用于 Backend 配套的 Web 客户端，不能验证 SwiftUI。
 不新增 XCTest 或单元测试框架来替代真实 UI 取证。
+
+2026-09-09 将终端常驻 Composer 改为右下角入口和系统 Sheet，大输入区覆盖终端，键盘不再改变
+底层终端视口；同时保留草稿提示和执行中一键停止。10 条布局测试计划通过格式校验，iOS 26.5
+Simulator Debug 构建、安装和启动通过；启动时 Backend 离线，尚未完成终端内交互验收，不能据此
+宣称闪动和 resize 行为已经运行通过。
 
 ## 已有证据及适用边界
 
@@ -38,6 +44,10 @@ p95 41.56 ms，输入提交 p95 4.51 ms，第二/第十分钟 RSS 163.44/163.89 
 已在本轮隔离 Backend、真实 shell 和 iOS 26.5 Simulator 上取证。覆盖置顶与取消、幂等与重启恢复、
 连接切换迟到响应、搜索展开恢复、Unicode 别名、写入/刷新失败、离线禁用、鉴权、删除和真实输入。
 输入用例同时核对原生请求日志与专用文件，确认命令只执行一次。Swift Debug 构建通过；这不替代真机验收。
+
+2026-09-09 新增 IOSHOME-012 至 IOSHOME-015，覆盖未读与执行态临时上浮、关注原因优先级去重和
+离线缓存降级。测试计划格式校验与 iOS 26.5 Simulator Debug 构建通过；这四条新增行为尚未执行
+Simulator 或真机交互验收。
 
 本轮证据位于执行机器 `.runweave/ios-home-discovery/`，入口为 `REPORT.md`，含构建、
 `.xcresult`、控件树、截图与脱敏 API 结果。旧格式记录由修改前的存储实现生成，再用候选 Backend

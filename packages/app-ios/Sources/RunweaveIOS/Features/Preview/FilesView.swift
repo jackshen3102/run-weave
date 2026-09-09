@@ -4,12 +4,12 @@ struct FilesView: View {
   @ObservedObject var session: AppSession
   let projectID: String
   let active: Bool
+  @ObservedObject var model: ProjectChangesModel
   let showChange: (SelectedFile) -> Void
   @State private var path = ""
   @State private var query = ""
   @State private var directory: PreviewDirectory?
   @State private var search: PreviewSearch?
-  @State private var changes: PreviewChanges?
   @State private var selected: SelectedFile?
   @State private var failure: String?
   @State private var loading = false
@@ -98,10 +98,10 @@ struct FilesView: View {
     }
   }
   private func change(_ path: String) -> (String, String)? {
-    if let item = changes?.working.first(where: { $0.path == path }) {
+    if let item = model.changes?.working.first(where: { $0.path == path }) {
       return ("working", item.status)
     }
-    if let item = changes?.staged.first(where: { $0.path == path }) {
+    if let item = model.changes?.staged.first(where: { $0.path == path }) {
       return ("staged", item.status)
     }
     return nil
@@ -142,10 +142,8 @@ struct FilesView: View {
         guard !Task.isCancelled, loadID == request else { return }
         search = value
       }
-      let value = try? await session.withConnection {
-        try await $0.changes(projectID: projectID, force: force)
-      }
-      if !Task.isCancelled, loadID == request { changes = value }
+      guard !Task.isCancelled, loadID == request else { return }
+      await model.refresh(force: force)
     } catch { if !Task.isCancelled, loadID == request { failure = previewError(error) } }
   }
 }
