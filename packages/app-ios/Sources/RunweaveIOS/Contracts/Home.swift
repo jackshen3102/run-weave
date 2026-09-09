@@ -41,6 +41,10 @@ struct HomeTerminal: Codable, Identifiable {
   var hasUnreadCompletion: Bool {
     (completionRevision ?? 0) > (acknowledgedCompletionRevision ?? 0)
   }
+  var isAgentActive: Bool {
+    status != "exited"
+      && (terminalState.state == "agent_running" || terminalState.state == "agent_starting")
+  }
 
   var relativeTime: String {
     let formatter = ISO8601DateFormatter()

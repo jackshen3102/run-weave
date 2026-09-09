@@ -1,6 +1,12 @@
 import SwiftUI
 
 struct HomeView: View {
+  private enum AttentionPriority: Int {
+    case unread
+    case active
+    case pinned
+  }
+
   @ObservedObject var session: AppSession
   @State private var query = ""
   @State private var expanded = Set<String>()
@@ -13,11 +19,30 @@ struct HomeView: View {
   var groups: [HomeGroup] { session.overview?.groups(matching: query) ?? [] }
 
   private var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-  private var pinned: [HomeTerminal] {
-    groups.flatMap(\.sessions).filter { $0.pinnedAt != nil }.sorted {
-      if $0.pinnedAt != $1.pinnedAt { return ($0.pinnedAt ?? "") > ($1.pinnedAt ?? "") }
-      return $0.id < $1.id
+  private var attention: [HomeTerminal] {
+    let online = session.health.status == .online
+    return groups.flatMap(\.sessions).filter {
+      $0.hasUnreadCompletion || (online && $0.isAgentActive) || $0.pinnedAt != nil
+    }.sorted { left, right in
+      let leftPriority = attentionPriority(left, online: online)
+      let rightPriority = attentionPriority(right, online: online)
+      if leftPriority != rightPriority { return leftPriority.rawValue < rightPriority.rawValue }
+      if leftPriority == .pinned, left.pinnedAt != right.pinnedAt {
+        return (left.pinnedAt ?? "") > (right.pinnedAt ?? "")
+      }
+      if left.lastActivityAt != right.lastActivityAt {
+        return left.lastActivityAt > right.lastActivityAt
+      }
+      return left.id < right.id
     }
+  }
+
+  private func attentionPriority(
+    _ terminal: HomeTerminal, online: Bool
+  ) -> AttentionPriority {
+    if terminal.hasUnreadCompletion { return .unread }
+    if online && terminal.isAgentActive { return .active }
+    return .pinned
   }
 
   private func initializeExpansion() {
@@ -43,9 +68,9 @@ struct HomeView: View {
       if !session.loading, session.overview != nil, searching, groups.isEmpty {
         Text("没有找到匹配的项目或终端")
       } else if !session.loading, session.overview?.projects.isEmpty == true { Text("暂无项目") }
-      if !pinned.isEmpty {
-        Section("置顶") {
-          ForEach(pinned) { terminal in
+      if !attention.isEmpty {
+        Section("关注") {
+          ForEach(attention) { terminal in
             row(terminal, projectName: session.overview?.projects.first {
               $0.id == HomeOverview.parentProjectID(terminal.projectId)
             }?.name)

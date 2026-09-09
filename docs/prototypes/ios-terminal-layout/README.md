@@ -64,6 +64,6 @@ index.html 是布局与样式；app.js 是局部演示状态；mock-state.json �
 
 ## 原生实现衔接
 
-用户确认方案 A（快捷键默认收起）后，已在原生终端页实现。对应的[布局验收计划](../../testing/app/ios-native-terminal-layout.testplan.yaml)覆盖原生初始布局、草稿/键盘保留、真实输入、原始按键、页签与选图取消、横竖屏。HTML 原型仍是历史设计参考，不作为真实后端验收证据。
+用户曾确认方案 A（快捷键默认收起）并在原生终端页实现；2026-09-09 后该常驻输入布局已被右下角入口与系统 Sheet 取代。当前[布局验收计划](../../testing/app/ios-native-terminal-layout.testplan.yaml)覆盖终端视口稳定、覆盖式输入、草稿恢复、一键停止、媒体关闭边界与横竖屏。HTML 原型仅保留为历史设计参考，不作为当前产品或真实后端验收证据。
 
-最新输入区验证：原型通过 playwright-cli 核对未聚焦 36px、聚焦 60px 文本区，以及快捷键开关的条件显示；刷新三个预览图。原生模拟器已验证两行草稿收起/恢复、选图取消、软件键盘下快捷键切换和真实 shell 单次发送，详见本地 `.runweave/terminal-design/focus-acceptance.md`。
+历史常驻输入区曾通过原生模拟器验证两行草稿收起/恢复、选图取消、软件键盘下快捷键切换和真实 shell 单次发送，详见本地 `.runweave/terminal-design/focus-acceptance.md`；这些证据不覆盖新的系统 Sheet 布局。

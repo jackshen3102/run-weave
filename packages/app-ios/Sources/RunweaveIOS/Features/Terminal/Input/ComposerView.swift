@@ -1,25 +1,71 @@
 import SwiftUI
 
+struct TerminalComposerSheet: View {
+  @ObservedObject var session: AppSession
+  @ObservedObject var controller: SessionController
+  let terminalID: String
+  @Binding var preventsDismissal: Bool
+  @Environment(\.dismiss) private var dismiss
+
+  private var busy: Bool { preventsDismissal || controller.inputBusy }
+
+  var body: some View {
+    NavigationView {
+      ComposerView(
+        session: session, controller: controller, terminalID: terminalID, active: true,
+        preventsDismissal: $preventsDismissal, onActionSucceeded: { dismiss() })
+        .navigationTitle("输入终端")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+          ToolbarItem(placement: .cancellationAction) {
+            Button("关闭") { dismiss() }.disabled(busy)
+          }
+        }
+    }
+    .navigationViewStyle(.stack)
+    .interactiveDismissDisabled(busy)
+    .modifier(TerminalComposerPresentation())
+  }
+}
+
+private struct TerminalComposerPresentation: ViewModifier {
+  @ViewBuilder func body(content: Content) -> some View {
+    if #available(iOS 16.0, *) {
+      content
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    } else {
+      content
+    }
+  }
+}
+
 struct ComposerView: View {
   @ObservedObject var session: AppSession
   @ObservedObject var controller: SessionController
   @ObservedObject private var imageDrafts: TerminalImageDrafts
   let terminalID: String
   var active = true
+  @Binding var preventsDismissal: Bool
+  let onActionSucceeded: () -> Void
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   @State private var failure: String?
   @State private var stopping = false
   @State private var showingShortcuts = false
-  @State private var editing = false
-  @ScaledMetric(relativeTo: .body) private var inputHeight = 60.0
+  @State private var editing = true
+  @ScaledMetric(relativeTo: .body) private var inputHeight = 144.0
 
-  init(session: AppSession, controller: SessionController, terminalID: String, active: Bool = true)
-  {
+  init(
+    session: AppSession, controller: SessionController, terminalID: String, active: Bool = true,
+    preventsDismissal: Binding<Bool>, onActionSucceeded: @escaping () -> Void
+  ) {
     self.session = session
     self.controller = controller
     self.terminalID = terminalID
     self.active = active
     self.imageDrafts = session.imageDrafts
+    _preventsDismissal = preventsDismissal
+    self.onActionSucceeded = onActionSucceeded
   }
 
   private var images: [TerminalDraftImage] { imageDrafts.images[terminalID] ?? [] }
@@ -54,7 +100,7 @@ struct ComposerView: View {
           }.font(.caption).disabled(!session.canWrite)
         }
       #endif
-      if editing && showingShortcuts {
+      if showingShortcuts {
         ShortcutBar(controller: controller, enabled: session.canWrite)
       }
       if let failure { Text(failure).font(.caption).foregroundColor(.red) }
@@ -71,26 +117,21 @@ struct ComposerView: View {
           lineWidth: 1
         ))
     }
-    .padding(.horizontal, 12).padding(.vertical, 8)
-    .background(TerminalAppearance.background)
-    .overlay(alignment: .top) { Rectangle().fill(TerminalAppearance.border).frame(height: 0.5) }
+    .padding(16)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .background(TerminalAppearance.background.ignoresSafeArea())
   }
 
   private var inputCard: some View {
-    MediaControls(session: session, terminalID: terminalID, visible: active) { attachment, voice in
-      if #available(iOS 16.0, *) {
-        ComposerLayout(expanded: editing) {
-          editor
+    MediaControls(
+      session: session, terminalID: terminalID, visible: active,
+      preventsDismissal: $preventsDismissal
+    ) { attachment, voice in
+      VStack(spacing: 8) {
+        editor
+        HStack(spacing: 2) {
           attachment
           controls(voice: voice)
-        }
-      } else {
-        VStack(spacing: 2) {
-          editor
-          HStack(spacing: 2) {
-            attachment
-            controls(voice: voice)
-          }
         }
       }
     }
@@ -105,11 +146,10 @@ struct ComposerView: View {
         set: { session.setDraft($0, terminalID: terminalID) }),
       isFocused: $editing
     )
-    .frame(height: editing && verticalSizeClass != .compact ? inputHeight : 36)
+    .frame(height: verticalSizeClass == .compact ? 88 : inputHeight)
     .overlay(alignment: .topLeading) {
       if (session.terminalDrafts[terminalID] ?? "").isEmpty {
-        Text(editing ? "输入命令或告诉 Agent 要做什么…" : "输入命令…")
-          .lineLimit(editing ? nil : 1)
+        Text("输入命令或告诉 Agent 要做什么…")
           .font(.body).foregroundColor(.secondary)
           .padding(.horizontal, 5).padding(.top, 8)
           .allowsHitTesting(false).accessibilityHidden(true)
@@ -119,21 +159,19 @@ struct ComposerView: View {
 
   private func controls(voice: AnyView) -> some View {
     HStack(spacing: 2) {
-      if editing {
-        Button {
-          showingShortcuts.toggle()
-        } label: {
-          Image(systemName: "keyboard")
-            .foregroundColor(showingShortcuts ? TerminalAppearance.accent : .secondary)
-            .frame(width: 44, height: 44)
-            .background(showingShortcuts ? TerminalAppearance.accent.opacity(0.14) : .clear)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        .accessibilityLabel(showingShortcuts ? "收起快捷键" : "展开快捷键")
-        .accessibilityValue(showingShortcuts ? "已展开" : "已收起")
-        .accessibilityIdentifier("terminal-shortcuts-toggle")
+      Button {
+        showingShortcuts.toggle()
+      } label: {
+        Image(systemName: "keyboard")
+          .foregroundColor(showingShortcuts ? TerminalAppearance.accent : .secondary)
+          .frame(width: 44, height: 44)
+          .background(showingShortcuts ? TerminalAppearance.accent.opacity(0.14) : .clear)
+          .clipShape(RoundedRectangle(cornerRadius: 12))
       }
-      if editing { Spacer(minLength: 0) }
+      .accessibilityLabel(showingShortcuts ? "收起快捷键" : "展开快捷键")
+      .accessibilityValue(showingShortcuts ? "已展开" : "已收起")
+      .accessibilityIdentifier("terminal-shortcuts-toggle")
+      Spacer(minLength: 0)
       if editing {
         Button {
           editing = false
@@ -185,49 +223,12 @@ struct ComposerView: View {
         } else {
           try await session.sendCommand(terminalID: terminalID)
         }
+        onActionSucceeded()
       } catch {
         if !(error is CancellationError) {
           failure = stop ? displayError(error) : displayInputError(error)
         }
       }
     }
-  }
-}
-
-/// Keeps the text view mounted while the editor moves between one and two rows.
-@available(iOS 16.0, *)
-private struct ComposerLayout: Layout {
-  let expanded: Bool
-  private let gap = 4.0
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let width = proposal.width ?? 320
-    let controls = subviews[2].sizeThatFits(.unspecified)
-    let editorWidth = expanded ? width : max(0, width - 44 - controls.width - gap * 2)
-    let editor = subviews[0].sizeThatFits(ProposedViewSize(width: editorWidth, height: nil))
-    return CGSize(
-      width: width, height: expanded ? editor.height + gap + 44 : max(editor.height, 44))
-  }
-
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    let controlsWidth =
-      expanded
-      ? bounds.width - 44 - gap
-      : subviews[2].sizeThatFits(.unspecified).width
-    let editorWidth = expanded ? bounds.width : max(0, bounds.width - 44 - controlsWidth - gap * 2)
-    let editorSize = subviews[0].sizeThatFits(ProposedViewSize(width: editorWidth, height: nil))
-    subviews[0].place(
-      at: CGPoint(
-        x: expanded ? bounds.minX : bounds.minX + 44 + gap,
-        y: expanded ? bounds.minY : bounds.midY - editorSize.height / 2),
-      proposal: ProposedViewSize(width: editorWidth, height: editorSize.height))
-    let controlsY = expanded ? bounds.maxY - 44 : bounds.midY - 22
-    subviews[1].place(
-      at: CGPoint(x: bounds.minX, y: controlsY), proposal: ProposedViewSize(width: 44, height: 44))
-    subviews[2].place(
-      at: CGPoint(x: bounds.maxX - controlsWidth, y: controlsY),
-      proposal: ProposedViewSize(width: controlsWidth, height: 44))
   }
 }

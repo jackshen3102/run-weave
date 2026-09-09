@@ -29,6 +29,7 @@ public struct RootView: View {
         ) {
           if let details = session.terminal, let controller = session.terminalController {
             TerminalScreen(session: session, controller: controller, details: details)
+              .id("\(session.generation):\(details.id):\(details.projectId)")
           }
         } label: {
           EmptyView()

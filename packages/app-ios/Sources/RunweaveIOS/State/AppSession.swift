@@ -31,7 +31,7 @@ final class AppSession: ObservableObject {
   private var resumeTask: Task<Void, Never>?
   private var routeRequest = 0
   private var events: EventStream?
-  private var foreground = true
+  @Published private(set) var foreground = true
   private var loadingRequest = 0
   var canWrite: Bool { authenticated && health.status == .online && foreground && !writing }
   @Published private(set) var reconnectingTerminal = false

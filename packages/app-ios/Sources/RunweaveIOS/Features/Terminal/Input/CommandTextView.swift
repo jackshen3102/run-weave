@@ -30,6 +30,12 @@ struct CommandTextView: UIViewRepresentable {
     if view.text != text { view.text = text }
     if !isFocused { view.setContentOffset(.zero, animated: false) }
     if !isFocused, view.isFirstResponder { view.resignFirstResponder() }
+    if isFocused, !view.isFirstResponder {
+      DispatchQueue.main.async {
+        guard context.coordinator.parent.isFocused, view.window != nil else { return }
+        view.becomeFirstResponder()
+      }
+    }
   }
   func makeCoordinator() -> Coordinator { Coordinator(self) }
   final class Coordinator: NSObject, UITextViewDelegate {

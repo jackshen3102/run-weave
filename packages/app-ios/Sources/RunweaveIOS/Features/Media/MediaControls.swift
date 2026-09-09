@@ -4,6 +4,7 @@ struct MediaControls<Content: View>: View {
   @ObservedObject var session: AppSession
   let terminalID: String
   let visible: Bool
+  @Binding var preventsDismissal: Bool
   @ViewBuilder let content: (AnyView, AnyView) -> Content
   @Environment(\.scenePhase) private var scenePhase
   @StateObject private var recorder = VoiceRecorder()
@@ -42,11 +43,13 @@ struct MediaControls<Content: View>: View {
     .onAppear {
       active = visible
       scope = session.connection?.scope
+      syncDismissalState()
     }
     .onDisappear {
       active = false
       operation?.cancel()
       recorder.cancel()
+      preventsDismissal = false
     }
     .onChange(of: visible) { value in
       active = value
@@ -55,8 +58,17 @@ struct MediaControls<Content: View>: View {
         recorder.cancel()
         busy = false
       }
+      syncDismissalState()
     }
-    .onChange(of: scenePhase) { if $0 == .background { recorder.cancel() } }
+    .onChange(of: busy) { _ in syncDismissalState() }
+    .onChange(of: recorder.recording) { _ in syncDismissalState() }
+    .onChange(of: recorder.requestingPermission) { _ in syncDismissalState() }
+    .onChange(of: scenePhase) {
+      if $0 == .background {
+        recorder.cancel()
+        syncDismissalState()
+      }
+    }
   }
 
   private var attachmentButton: some View {
@@ -114,5 +126,9 @@ struct MediaControls<Content: View>: View {
       } catch { if !Task.isCancelled { failure = displayError(error) } }
       busy = false
     }
+  }
+
+  private func syncDismissalState() {
+    preventsDismissal = visible && (busy || recorder.recording || recorder.requestingPermission)
   }
 }
