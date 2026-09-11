@@ -8,7 +8,6 @@ import {
   fetchHealthJson,
   inspectAppServerHandshake,
   inspectBackendHandshake,
-  isProcessLive,
   readJson,
   readProcessSignature,
 } from "./runtime.mjs";
@@ -185,57 +184,4 @@ export async function resolveSharedAppServer(revision, { required = false } = {}
   return service;
 }
 
-export async function stopOwnedProcess(processInfo) {
-  if (!processInfo?.pid || !isProcessLive(processInfo.pid)) {
-    return;
-  }
-  const currentSignature = readProcessSignature(processInfo.pid);
-  if (
-    !processInfo.processSignature ||
-    currentSignature !== processInfo.processSignature
-  ) {
-    throw new DevSessionError(
-      "owned process identity no longer matches; refusing to stop",
-      5,
-      {
-        pid: processInfo.pid,
-        expectedSignature: processInfo.processSignature,
-        actualSignature: currentSignature,
-      },
-    );
-  }
-  try {
-    process.kill(-processInfo.pid, "SIGTERM");
-  } catch (error) {
-    if (error?.code !== "ESRCH") {
-      throw error;
-    }
-  }
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline && isProcessLive(processInfo.pid)) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  if (isProcessLive(processInfo.pid)) {
-    process.kill(-processInfo.pid, "SIGKILL");
-  }
-}
-
-export async function stopSpawnedProcess(processInfo) {
-  if (!processInfo?.pid || !isProcessLive(processInfo.pid)) {
-    return;
-  }
-  try {
-    process.kill(-processInfo.pid, "SIGTERM");
-  } catch (error) {
-    if (error?.code !== "ESRCH") {
-      throw error;
-    }
-  }
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline && isProcessLive(processInfo.pid)) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  if (isProcessLive(processInfo.pid)) {
-    process.kill(-processInfo.pid, "SIGKILL");
-  }
-}
+export { stopOwnedProcess, stopSpawnedProcess } from "./process-stop.mjs";

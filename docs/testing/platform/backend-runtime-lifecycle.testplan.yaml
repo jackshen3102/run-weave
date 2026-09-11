@@ -1,0 +1,97 @@
+version: 1
+name: Backend 运行时装配与资源生命周期验收
+description: >
+  验证 Activity owner、Backend 部分启动回收和正常关闭的端到端合同。
+  所有进程、Profile、Activity/Evolution 数据库和 tmux fixture 必须隔离；
+  产品页面通过 Dev Session resolver 与 playwright-cli 验收。
+  故障注入只作用于本次测试进程或临时文件，不修改真实用户数据。
+  源码验证清除继承的 RUNWEAVE_ACTIVITY_WORKER_ENTRY 与 RUNWEAVE_EVOLUTION_WORKER_ENTRY，
+  避免使用安装态旧 worker；缺失 worker 用例除外。
+  逐条记录实际命令、进程退出、日志和页面证据，静态检查不能替代行为通过。
+cases:
+  - id: BRL-001
+    name: 浏览器登录到终端和 Activity 的完整链路可用
+    required: true
+    description: >
+      重构后实际 Backend 的认证、HTTP、终端 WS、全局事件与 Activity 查询保持兼容。
+    preconditions:
+      - 已按 planner 启动当前 worktree 的隔离 Dev Session，并解析准确的 CDP surface。
+      - 使用测试账号、临时项目和隔离的 Activity/Evolution 数据目录。
+    steps:
+      - 使用 playwright-cli 附着 resolver 返回的 CDP，记录 Session 与页面身份，登录当前 Backend。
+      - 在临时项目创建终端并输入带唯一标记的 shell 命令，确认页面收到真实输出且刷新后 Session 仍存在。
+      - 打开 Activity 页面并查询本次终端相关事实，确认 UI 与认证 API 返回相同事件身份，未认证查询被拒绝。
+  - id: BRL-002
+    name: Activity 维护停止后才关闭真实 SQLite worker
+    required: true
+    description: >
+      Activity 不重叠调度，停止后不再启动维护，进行中的维护结束后才关闭存储；重复关闭不产生新任务。
+    preconditions:
+      - 已准备隔离的真实 Activity SQLite、可恢复删除任务及运行时集成验证环境。
+    steps:
+      - 通过真实 Activity runtime 写入事实并启动维护，在维护已提交 worker 请求时调用关闭，再次调用关闭。
+      - 记录维护请求完成和存储关闭的顺序，确认没有关闭后访问数据库、未处理 rejection 或遗留 worker。
+      - 重新打开同一数据库，确认 integrity 和已提交事实可读，删除任务按既有持久化语义完成或可恢复。
+  - id: BRL-003
+    name: 服务装配中途失败回收先前取得的资源
+    required: true
+    description: >
+      Activity 已创建而后续认证或配置存储初始化失败时，原始错误保留，数据库 worker 退出，Profile 锁释放。
+    preconditions:
+      - 已准备隔离 Profile，并可用临时无效认证存储路径触发初始化失败。
+    steps:
+      - 用 Dev Session 启动失败样本，保存 runtime-services 阶段错误和进程退出证据，确认没有存活的 Backend worker 或维护任务。
+      - 撤销故障后通过控制面恢复或新建同一源码的隔离 Session，确认数据库可重新打开且不存在遗留 owner 阻塞。
+  - id: BRL-004
+    name: HTTP 监听失败使用同一回收路径
+    required: true
+    description: >
+      完成领域装配但无法监听时，HTTP、WS、领域资源和 Profile 锁均得到清理，失败阶段仍可定位。
+    preconditions:
+      - 具备隔离的真实 Backend 进程故障注入环境，监听失败仅注入到本次启动。
+    steps:
+      - 在真实 server.listen 边界注入 EADDRINUSE 或等价确定性错误，记录 listen 阶段失败而非健康启动。
+      - 确认进程自行退出、未遗留监听器或数据库 worker，清除故障后正常启动通过。
+  - id: BRL-005
+    name: 正常关闭和单项清理失败都尝试回收后续资源
+    required: true
+    description: >
+      Backend 停止接收新工作后停止后台生产者，再关闭其存储；单项失败不跳过其余清理，退出结果保留失败信息。
+    preconditions:
+      - 已启动隔离 Backend，能够触发仅本次进程的单项 dispose 失败。
+    steps:
+      - 正常样本先用 Dev Session status、Profile lock 与 health 核对 Backend child 的精确身份，再向该 PID 发送 SIGTERM；确认 shutdown.completed、正常退出、专属端口关闭与 Profile owner 释放。不要用 watcher 或控制面退出替代 Backend 优雅退出证据。
+      - 故障样本使一个清理步骤在执行实际清理后抛错，再关闭 Backend，确认后续数据库与锁仍释放，错误包含失败步骤且退出非零。
+      - 在独立真实资源集成验证中并发调用同一 runtime 的 dispose，确认资源清理只执行一次且调用方等待同一轮结束。
+      - 最后用 Dev Session stop 清理其余 dedicated 服务；故障导致身份过期时先保存 status 和 recovery 指引，仅按指引使用 cleanup-stale，不手动删除锁或停止共享服务。
+  - id: BRL-006
+    name: Activity 初始化失败仍保留主业务可用
+    required: true
+    description: >
+      Activity worker 或数据库无法初始化时保持 unavailable，不创建替代数据集，也不阻断登录与真实终端交互。
+    preconditions:
+      - 已准备隔离 Session 和只针对测试 Activity 路径的初始化故障。
+    steps:
+      - 启动故障样本并用 playwright-cli 登录、创建终端、输入唯一标记并确认输出。
+      - 打开 Activity 与运行状态界面，确认明确的不可用反馈而非伪造空成功；关闭进程后没有遗留 worker。
+  - id: BRL-007
+    name: 关闭保持 tmux 渠道及 App Server 所有权边界
+    required: true
+    description: >
+      Stable 保留持久 tmux，Dev/Beta 清理自己负责的 tmux；任何 Backend 关闭都不停止独立 App Server。
+    preconditions:
+      - 使用隔离的 Stable 语义和 Dev/Beta 语义运行时 fixture，tmux socket 不属于真实安装态。
+      - 已记录测试 App Server 的独立 owner 身份。
+    steps:
+      - 为不同渠道 fixture 创建真实 tmux session 后关闭运行时，确认 Stable session 存活而 Dev/Beta 自有 session 被清理。
+      - 确认 App Server 原 owner 与健康状态未被 Backend 清理改变；最后显式清理 fixture 自己保留的 tmux。
+  - id: BRL-008
+    name: 静态与既有集成门禁无回归
+    required: true
+    description: >
+      类型、导入边界和已有 Activity 数据底座合同保持通过；只作为行为验收的补充证据。
+    preconditions:
+      - 本次代码与测试计划已完成且依赖可用。
+    steps:
+      - 运行 Backend typecheck、lint、architecture:check 与本计划 testplan:validate，确认全部通过。
+      - 运行 backend:verify-lifecycle 的真实 SQLite、tmux 和运行时回收验证；执行 activity:verify 与 work-history:verify，确认真实存储与聚合结果保持兼容。

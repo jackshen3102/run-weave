@@ -118,12 +118,18 @@ export class ActivityStore {
       databasePath: params.databasePath,
       env,
     });
-    const healthy = await store.integrity();
-    if (!healthy) {
-      await store.close();
-      throw new Error("activity_integrity_check_failed");
+    try {
+      if (!(await store.integrity())) {
+        throw new Error("activity_integrity_check_failed");
+      }
+      return store;
+    } catch (error) {
+      // The factory owns the worker until it successfully returns a store.
+      store.closed = true;
+      await store.worker.terminate();
+      store.rejectAll(new Error("activity_store_closed"));
+      throw error;
     }
-    return store;
   }
 
   private rejectAll(error: Error): void {
@@ -276,14 +282,13 @@ export class ActivityStore {
     if (this.closed) {
       return;
     }
-    await this.request({ op: "close" }).catch(() => undefined);
+    void this.request({ op: "close" }).catch(() => undefined);
     this.closed = true;
     let timeout: NodeJS.Timeout | undefined;
     const exited = await Promise.race([
       this.workerExit.then(() => true),
       new Promise<boolean>((resolve) => {
         timeout = setTimeout(() => resolve(false), 2_000);
-        timeout.unref();
       }),
     ]);
     if (timeout) clearTimeout(timeout);

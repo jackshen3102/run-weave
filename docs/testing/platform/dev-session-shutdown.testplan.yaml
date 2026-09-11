@@ -1,0 +1,73 @@
+version: 1
+name: Dev Session 进程关闭与 watcher 信号边界验收
+description: >
+  验证 Dev Session stop、失败启动回滚与 stale cleanup 使用同一有界、身份安全的进程关闭机制。
+  真实产品必须从当前 worktree 的 planner 启动，源码 SQLite worker 路径与数据目录隔离；
+  测试只能操作 manifest 或本次 fixture 直接记录的进程，不按名称或端口杀进程。
+  stopped 或 launcher 退出不是 Backend 优雅退出证据，须检查应用日志、worker、锁和残留进程。
+cases:
+  - id: DSS-001
+    name: 真实 pnpm 和 tsx watcher 只转发一次停止信号
+    required: true
+    description: >
+      有延迟清理的真实子进程收到一次 SIGTERM，完成清理后 launcher 和整个自有进程组才退出。
+    preconditions:
+      - 已准备使用仓库固定 tsx 的独立 pnpm fixture，子进程记录收到的信号和清理完成事件。
+    steps:
+      - 通过实际 stopOwnedProcess 向 fixture launcher 停止，比较子进程的信号次数、清理事件与 launcher 退出时间。
+      - 确认子进程只收到一次 SIGTERM，没有 Previous process hasn't exited 或 Force killing 提示，stop 在进程组清空后返回。
+  - id: DSS-002
+    name: 活跃终端通过 dev stop 完成端到端资源回收
+    required: true
+    description: >
+      真实浏览器登录、终端交互后调用 dev:stop，Backend 与 App Server 正常关闭，锁和专属资源得到回收。
+    preconditions:
+      - 已按 planner 创建当前 worktree 的 Electron Dev Session，数据目录与账号独立。
+    steps:
+      - 通过 dev:status 和 dev:open 校验身份，再用 playwright-cli 登录、创建临时项目与终端，确认唯一标记命令的真实输出。
+      - 保持终端 Session 存活，detach Playwright 后执行指定 Session 的 dev:stop，不手动提前向 Backend child 发信号。
+      - 确认 Backend 日志包含 shutdown.completed，SQLite workers 正常退出，Backend 与 App Server owner lock 消失，没有 watcher 强杀日志，专属进程组和端口退出。
+      - 重复 dev:stop 与 dev:status 确认幂等 stopped，dev:open 明确拒绝已停止的 surface；其它既有 Session 不受影响。
+  - id: DSS-003
+    name: 失败启动回滚与 stale owner 恢复复用安全关闭
+    required: true
+    description: >
+      后续服务启动失败或健康身份漂移时，已取得的 launcher 仍按相同关闭规则回收；未知身份不被清理。
+    preconditions:
+      - 存在隔离的启动失败 fixture 和持有完整 launcher 身份的 stale manifest。
+    steps:
+      - 在真实 pnpm watcher fixture 上执行 stopSpawnedProcess，确认子进程清理完成且没有重复信号；执行既有 stale-cleanup-retry 集成验证。
+      - 对真实 Dev Session 注入后续 Frontend 启动失败，使已启动 Backend 进入启动回滚，确认 Backend 完成关闭且 owner lock 释放。
+      - 按 status 返回的 recovery 指引清理本次失败或 stale Session，确认既有 shared 服务与其它 Session 仍可用。
+  - id: DSS-004
+    name: 进程身份漂移和共享资源禁止发送停止信号
+    required: true
+    description: >
+      launcher 签名不匹配时 fail closed，不发送 SIGTERM 或 SIGKILL；shared-declared 服务不进入自有进程停止路径。
+    preconditions:
+      - 已准备两个相互独立的真实 fixture 进程及记录完整身份的服务合同。
+    steps:
+      - 给其中一个 fixture 提供错误签名调用停止，确认明确拒绝且两个 fixture 都仍存活。
+      - 将一个 fixture 标为 shared-declared，停止包含另一个 dedicated fixture 的服务集合，确认只有 dedicated 进程退出。
+  - id: DSS-005
+    name: 超时升级与 launcher 提前退出不会产生假成功
+    required: true
+    description: >
+      忽略 SIGTERM 的 owner 在有界等待后仅在身份再次确认时被强制清理；launcher 提前退出时仍等待组内进程，无法确认的残留不得标记成功。
+    preconditions:
+      - 已准备忽略 SIGTERM、提前退出而子进程延迟退出、以及留下持续存活子进程的隔离 fixture。
+    steps:
+      - 停止忽略信号的 fixture，确认先出现 SIGTERM，再在等待窗口结束后强制终止，结果明确记录 forced 且进程组为空。
+      - 停止提前退出但子进程会完成的 fixture，确认 stop 等待子进程退出才返回。
+      - 对 launcher 已消失而组内仍有无法核验 owner 的 fixture 调用停止和 stale cleanup，确认返回错误且不发送盲目进程组信号，不把 manifest 标记 stopped。
+      - 最后按 fixture 原始记录逐一清理本次自有进程，不操作外部进程。
+  - id: DSS-006
+    name: 生命周期和架构门禁保持兼容
+    required: true
+    description: >
+      现有 Dev Session 的 planner、registry、ownership、stale recovery 和上一轮 Backend 资源生命周期合同无回归。
+    preconditions:
+      - 实现与测试计划已落盘，仓库依赖可用。
+    steps:
+      - 运行 pnpm dev:session:verify 与 pnpm backend:verify-lifecycle，确认进程、registry 和真实 SQLite/tmux 集成验证通过。
+      - 运行改动脚本的 eslint、架构检查、docs:check 和本测试计划的 testplan:validate，确认全部通过。

@@ -61,6 +61,7 @@
     "architecture:report": "node ./scripts/architecture/check.mjs --report --output=artifacts/architecture-report.json",
     "architecture:check": "node ./scripts/architecture/check.mjs --output=artifacts/architecture-report.json",
     "architecture:verify": "node ./scripts/quality/verify-architecture.mjs",
+    "backend:verify-lifecycle": "pnpm --dir backend exec tsx ../scripts/verify/backend/runtime-lifecycle.ts",
     "activity:verify": "pnpm --filter @runweave/backend exec tsx ../scripts/verify/activity/foundation.ts",
     "work-history:verify": "pnpm --filter @runweave/backend exec tsx ../scripts/verify/activity/work-history.ts",
     "workspace-services:verify": "pnpm --dir backend exec tsx ../scripts/verify/terminal/workspace-services.mjs",

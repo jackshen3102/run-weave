@@ -72,16 +72,16 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
   }
 
   protected startRecheckWatchdog(): void {
-    if (this.recheckWatchdogTimer) {
+    if (this.recheckWatchdogTimer || this.stopping) {
       return;
     }
     this.recheckWatchdogTimer = setInterval(() => {
-      void this.runRecheckWatchdog("watchdog").catch((error) => {
+      this.trackBackgroundTask(this.runRecheckWatchdog("watchdog").catch((error) => {
         agentTeamLogger.warn("agent-team.recheck_watchdog.failed", {
           message: "Could not scan pending rechecks",
           error,
         });
-      });
+      }));
     }, RECHECK_WATCHDOG_INTERVAL_MS);
     this.recheckWatchdogTimer.unref?.();
   }
@@ -89,6 +89,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
   protected async runRecheckWatchdog(
     source: "startup" | "watchdog",
   ): Promise<void> {
+    if (this.stopping || this.recheckWatchdogRunning) return;
     this.recheckWatchdogRunning = true;
     this.recheckWatchdogLastStartedAt = Date.now();
     try {

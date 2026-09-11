@@ -107,8 +107,8 @@ export async function initializeAppServerEventIntegration(
         }
       },
     });
-    await consumer.start();
     services.runtimeStatus.eventConsumer = consumer;
+    await consumer.start();
     services.runtimeStatus.appServerSource = startAppServerRuntimeStatusSource(
       client,
       services.runtimeStatus.registry,

@@ -1,0 +1,53 @@
+version: 1
+name: 进行中 Provider 任务的关闭
+description: >
+  通过真实 Dev Session、Evolution API、SQLite 和本地可控 Provider 子进程验证关闭顺序。
+  本地 Provider fixture 不调用收费模型，只验证进程与取消边界，不代表远端模型或 Agent Team 全链路验收。
+  先保存失败证据，只修复已复现的缺陷。
+cases:
+  - id: IPS-001
+    name: 正在执行的分析在存储关闭前完成取消
+    required: true
+    description: >
+      必须先观察真实 Provider 进程收到 prompt、API 中存在 running attempt，再停止服务；
+      不能用未执行任务或直接构造已完成 Promise 冒充在途验证。
+    preconditions:
+      - 已固定源码 worktree 并读取 Dev Session 技能，使用 planner 选择的 profile 和专属数据目录。
+      - 本地 Provider fixture 经正常二进制配置入口接入，只操作任务创建的数据和进程。
+    steps:
+      - 经认证 API 创建专属项目与可供分析的 Activity，再创建 quick Evolution run；等待实际 Provider started 与 running attempt 证据。
+      - 使用精确 Session 的 dev:stop，不提前杀 Backend child；确认 Provider 收到取消、退出并更新 attempt，之后 SQLite worker 才关闭。
+      - 检查 Backend shutdown.completed、owner lock 释放和完整自有进程组消失，不把等待 lease 过期的可恢复 run 当作未知悬挂任务。
+      - 等待旧 lease 过期后，用禁用 Provider 的新任务 Session 重新打开同一专属数据库；经 API 确认旧 run 被接管、attempt 递增并明确进入 blocked，而不是永久停留在旧 owner。
+  - id: IPS-002
+    name: 不响应温和终止的 Provider 被有界回收
+    required: true
+    description: >
+      Provider 故意忽略 SIGTERM 时，Provider 自己的超时升级应先于 Backend 控制面强杀，
+      不遗留 detached 子进程，也不在存储关闭后继续写入。
+    preconditions:
+      - 独立任务 Session 使用忽略 SIGTERM 的真实本地 Provider fixture。
+    steps:
+      - 确认 Provider 真正执行后调用 dev:stop，记录信号和 PID；验证 Provider 在自身 grace 窗口后消失。
+      - 确认 Backend 非 forced、正常记录 shutdown.completed，attempt 取消持久化、worker 和锁正常释放。
+  - id: IPS-003
+    name: 已取消的请求不会启动新的 Provider
+    required: true
+    description: >
+      使用真实 Provider runner 和独立可执行 fixture 验证已 aborted 的 signal，
+      取消必须在 spawn 前被识别，不能等待模型执行预算耗尽。
+    preconditions:
+      - 请求使用本地临时工作目录和可审计 started 标记的真实 fixture，不启动产品 HTTP 服务。
+    steps:
+      - 先给 AbortController 发送取消，再调用产品 Provider runner；记录耗时、错误类型和 fixture 是否启动，先保存修复前结果。
+      - 只有确认发生取消后仍启动的缺陷才修改代码；复验应立即返回 provider_cancelled 且没有 spawned fixture，原本正常执行后的取消仍应有效。
+  - id: IPS-004
+    name: 门禁与任务资源清理
+    required: true
+    description: >
+      所有新建任务 Session 和可控 fixture 都必须完成清理；未覆盖的远端模型及 Agent Team 场景明确列出。
+    preconditions:
+      - 已保存本轮复现和复验日志，保留此前工作区改动。
+    steps:
+      - 执行相关 Backend typecheck、lint、生命周期进程集成、架构检查和计划格式校验，记录真实结果。
+      - 按固定 Session ID 检查 stopped，自有进程组为空；仅在捕获的 PID 和进程签名匹配时清理本轮 fixture，不触碰安装态或共享进程。

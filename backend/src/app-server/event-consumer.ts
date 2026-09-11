@@ -15,7 +15,7 @@ export interface AppServerEventConsumerOptions {
 
 export interface AppServerEventConsumerHandle {
   start(): Promise<void>;
-  stop(): void;
+  stop(): Promise<void>;
   getStatusSnapshot(): AppServerEventConsumerStatusSnapshot;
 }
 
@@ -58,13 +58,13 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
     this.connect(cursor);
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.stopped = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    this.socket?.close();
+    this.socket?.terminate();
     this.socket = null;
     this.state = {
       ...this.state,
@@ -72,6 +72,7 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
       observedAt: Date.now(),
       nextAttemptAt: null,
     };
+    await this.queue;
   }
 
   getStatusSnapshot(): AppServerEventConsumerStatusSnapshot {
@@ -119,6 +120,7 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
   }
 
   private handleSocketError(error: Error): void {
+    if (this.stopped) return;
     this.updateStatus({
       state: "connecting",
       failureSince: this.state.failureSince ?? Date.now(),
@@ -135,6 +137,7 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
   }
 
   private enqueueMessage(message: AppServerEventStreamMessage): void {
+    if (this.stopped) return;
     this.queue = this.queue
       .then(() => this.handleMessage(message))
       .catch((error: unknown) => {
@@ -150,6 +153,7 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
     message: AppServerEventStreamMessage,
   ): Promise<void> {
     if (message.type === "connected") {
+      if (this.stopped) return;
       this.reconnectDelayMs = 1000;
       const now = Date.now();
       this.state = {

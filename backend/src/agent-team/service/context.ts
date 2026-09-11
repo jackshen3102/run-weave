@@ -56,6 +56,13 @@ export class AgentTeamServiceContext {
   protected readonly eventQueues = new Map<string, Promise<unknown>>();
   protected readonly pendingCompletionRounds = new Map<string, number>();
   protected recheckWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+  protected readonly backgroundTasks = new Set<Promise<void>>();
+  protected stopping = false;
+
+  protected trackBackgroundTask(task: Promise<void>): void {
+    this.backgroundTasks.add(task);
+    void task.finally(() => this.backgroundTasks.delete(task)).catch(() => undefined);
+  }
 
   constructor(options: AgentTeamServiceOptions) {
     this.terminalSessionManager = options.terminalSessionManager;

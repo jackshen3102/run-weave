@@ -3,11 +3,11 @@ import { createDeviceStatusRouter } from "./routes/device-status";
 import { createMobileLoginRouter } from "./routes/mobile-login";
 import "dotenv/config";
 import http from "node:http";
-import type { Socket } from "node:net";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import express from "express";
-import type { WebSocketServer } from "ws";
+import { ResourceScope } from "./bootstrap/resource-scope";
+import { TransportRuntime } from "./server/transport-runtime";
 import { migrateLegacyBrowserProfileRootIfNeeded } from "@runweave/shared/browser-profile-node";
 import { createRequireAuth } from "./auth/middleware";
 import { initializeAppServerEventIntegration } from "./app-server/integration";
@@ -359,13 +359,7 @@ function setFrontendStaticHeaders(
   }
 }
 
-function attachLifecycleHandlers(
-  server: http.Server,
-  services: RuntimeServices,
-  profileLock: BackendProfileLock,
-  webSocketServers: WebSocketServer[],
-  serverConnections: Set<Socket>,
-): void {
+function attachLifecycleHandlers(resources: ResourceScope): void {
   let shuttingDown = false;
 
   const shutdown = async (): Promise<void> => {
@@ -379,40 +373,7 @@ function attachLifecycleHandlers(
       message: "Backend shutdown started",
     });
     try {
-      const serverClosed = closeServer(server);
-      const webSocketServersClosed = Promise.all(
-        webSocketServers.map(closeWebSocketServer),
-      );
-      for (const connection of serverConnections) {
-        connection.destroy();
-      }
-      await webSocketServersClosed;
-      await serverClosed;
-      await services.workspaceServiceManager.dispose();
-      services.runtimeStatus.dispose();
-      await services.batteryAlerts?.dispose();
-      await services.deviceMonitor?.dispose();
-      await services.tmuxOutputWatcher.dispose();
-      await services.terminalRuntimeRegistry.disposeAll();
-      for (const socketPath of new Set(
-        services.tmuxSocketPathsToCleanOnShutdown,
-      )) {
-        await services.tmuxService.killServer(socketPath);
-      }
-      await services.terminalSessionManager.dispose();
-      await services.terminalQuickInputStore.dispose();
-      await services.agentTeamModelConfigStore.dispose();
-      if (services.activityMaintenanceTimer) {
-        clearInterval(services.activityMaintenanceTimer);
-      }
-      await services.activityStore?.close();
-      await services.evolutionRuntime.dispose();
-      services.evolutionToolTokenRegistry.clear();
-      await services.evolutionActivationStore.close();
-      codexAppServerClient.shutdown();
-      services.mobileLoginService.dispose();
-      await services.authStore.dispose();
-      await profileLock.release();
+      await resources.dispose();
       logger.info("backend.shutdown.completed", {
         component: "backend",
         message: "Backend shutdown completed",
@@ -439,36 +400,9 @@ function attachLifecycleHandlers(
   });
 }
 
-async function closeWebSocketServer(server: WebSocketServer): Promise<void> {
-  for (const client of server.clients) {
-    client.terminate();
-  }
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
-async function closeServer(server: http.Server): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
 async function startRuntime(): Promise<void> {
   let stage: BackendStartStage = "runtime-config";
-  let profileLock: BackendProfileLock | null = null;
+  const resources = new ResourceScope();
   try {
     const runtimeConfig = resolveRuntimeConfig();
     stage = "storage-migration";
@@ -483,19 +417,22 @@ async function startRuntime(): Promise<void> {
     }
     const storagePaths = resolveStoragePaths(process.env);
     stage = "profile-lock";
-    profileLock = await acquireBackendProfileLock({
+    const profileLock: BackendProfileLock = await acquireBackendProfileLock({
       devSessionId: process.env.RUNWEAVE_DEV_SESSION_ID,
       profileDir: storagePaths.browserProfileDir,
       port: runtimeConfig.preferredPort,
       host: runtimeConfig.host,
       runtimeReleaseId: process.env.RUNWEAVE_RUNTIME_RELEASE_ID,
     });
+    resources.defer("profile-lock", () => profileLock.release());
+    resources.defer("codex-client", () => codexAppServerClient.shutdown());
     stage = "tunnel-auth-config";
     const tunnelAuthConfig = loadTunnelAuthConfig(process.env);
     stage = "runtime-services";
     const services = await createRuntimeServices(
       `backend:${profileLock.getOwner().backendId}`,
     );
+    resources.defer("runtime-services", () => services.dispose());
     stage = "http-app";
     const app = createHttpApp(
       services,
@@ -503,12 +440,9 @@ async function startRuntime(): Promise<void> {
       profileLock.getOwner(),
     );
     const server = http.createServer(app);
+    const transport = new TransportRuntime(server);
+    resources.defer("transport", () => transport.dispose());
     const upgradeRouter = createHttpUpgradeRouter(server);
-    const serverConnections = new Set<Socket>();
-    server.on("connection", (connection) => {
-      serverConnections.add(connection);
-      connection.once("close", () => serverConnections.delete(connection));
-    });
 
     stage = "websocket-servers";
     attachWorkspaceServiceUpgradeProxy(
@@ -529,12 +463,14 @@ async function startRuntime(): Promise<void> {
         terminalStateService: services.terminalStateService,
       },
     );
+    transport.addWebSocket(terminalWebSocketServer);
     const terminalEventsWebSocketServer = attachTerminalEventsWebSocketServer(
       upgradeRouter,
       services.authService,
       services.terminalEventService,
       { tunnelAuthConfig, deviceMonitor: services.deviceMonitor },
     );
+    transport.addWebSocket(terminalEventsWebSocketServer);
     stage = "listen";
     const port = await listenWithFallback(server, runtimeConfig.preferredPort, {
       host: runtimeConfig.host,
@@ -553,16 +489,10 @@ async function startRuntime(): Promise<void> {
     // it from a parent shell spawned by another Runweave backend would deliver
     // codex hook events to the wrong process.
     await initializeAppServerEventIntegration(services, controlPlaneBaseUrl);
-    services.evolutionRuntime.start(controlPlaneBaseUrl);
+    services.start(controlPlaneBaseUrl);
 
     stage = "lifecycle-handlers";
-    attachLifecycleHandlers(
-      server,
-      services,
-      profileLock,
-      [terminalWebSocketServer, terminalEventsWebSocketServer],
-      serverConnections,
-    );
+    attachLifecycleHandlers(resources);
     logger.info("backend.started", {
       component: "backend",
       message: "Backend started",
@@ -572,7 +502,11 @@ async function startRuntime(): Promise<void> {
       runtimeReleaseId: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || null,
     });
   } catch (error) {
-    await profileLock?.release();
+    try {
+      await resources.dispose();
+    } catch (cleanupError) {
+      logger.error("backend.start.cleanup.failed", { stage, error: cleanupError });
+    }
     throw new BackendStartError(stage, error);
   }
 }

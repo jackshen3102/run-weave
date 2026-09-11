@@ -116,11 +116,17 @@ export class SqliteEvolutionActivationStore
       params.databasePath,
       params.env ?? process.env,
     );
-    if (!(await store.request<boolean>({ op: "integrity" }))) {
-      await store.close();
-      throw new Error("evolution_integrity_check_failed");
+    try {
+      if (!(await store.request<boolean>({ op: "integrity" }))) {
+        throw new Error("evolution_integrity_check_failed");
+      }
+      return store;
+    } catch (error) {
+      store.closed = true;
+      await store.worker.terminate();
+      store.rejectAll(new Error("evolution_store_closed"));
+      throw error;
     }
-    return store;
   }
 
   private rejectAll(error: Error): void {
@@ -367,14 +373,13 @@ export class SqliteEvolutionActivationStore
 
   async close(): Promise<void> {
     if (this.closed) return;
-    await this.request({ op: "close" }).catch(() => undefined);
+    void this.request({ op: "close" }).catch(() => undefined);
     this.closed = true;
     let timeout: NodeJS.Timeout | undefined;
     const exited = await Promise.race([
       this.workerExit.then(() => true),
       new Promise<boolean>((resolve) => {
         timeout = setTimeout(() => resolve(false), 2_000);
-        timeout.unref();
       }),
     ]);
     if (timeout) clearTimeout(timeout);

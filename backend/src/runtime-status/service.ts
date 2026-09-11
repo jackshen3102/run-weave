@@ -44,9 +44,9 @@ export class BackendRuntimeStatusService {
     });
   }
 
-  dispose(): void {
-    this.eventConsumer?.stop();
+  async dispose(): Promise<void> {
     this.appServerSource?.stop();
     this.registry.dispose();
+    await this.eventConsumer?.stop();
   }
 }
