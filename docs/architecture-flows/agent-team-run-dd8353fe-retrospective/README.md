@@ -90,12 +90,12 @@ python3 -m http.server 6188 --directory docs/architecture-flows/agent-team-run-d
 ### Run 与验收来源
 
 - `.runweave/agent-team/atr_dd8353fe_20260719020754.json`
-- `docs/plans/evolution/2026-07-19-v1.md`
+- [过程材料（Git 历史）](https://github.com/jackshen3102/run-weave/blob/9f406b9ee8f8197fe07959a1a8d0620dbee614d7/docs/plans/evolution/2026-07-19-v1.md)
   - SHA-256：`78336793ed2b962879472416018bdb80e957b38f079bba7b0440e7317583309f`
 - `docs/testing/evolution/agent-self-evolution-activation.testplan.yaml`
   - SHA-256：`c3053ae1e750b9ea346b11d8b4ada483e9085a13591abb5491f21ac0424ef1cb`
 
-上述两个当前文件 SHA 与 run JSON 内固定值一致。
+上述 SHA 是当时 Run 固定的输入身份；过程材料已从主线删除，历史链接不代表当前实现或本轮重新核验的内容哈希。
 
 ### Worker 产物
 

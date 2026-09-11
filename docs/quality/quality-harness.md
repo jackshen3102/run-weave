@@ -43,6 +43,11 @@
 
 ## 行为验收
 
+需要围绕用户目标发现未知问题时，可显式使用
+[`product-exploration`](../../plugins/toolkit/skills/product-exploration/SKILL.md)。
+它只负责探索、取证与报告，不随提交自动执行，也不生成回归测试资产；具体权限与预算由该 Skill 维护。
+Skill 文件存在或通过格式检查不等于已完成新线程加载及真实产品探索验证。
+
 登录、Terminal Workspace、创建会话、输入回执、重连恢复、Terminal Browser、App 和 Electron
 必须执行对应 `docs/testing/*` 的真实环境用例。只有仓库重新加入明确的 Playwright spec 后，
 这些 spec 才能作为补充自动化证据，不能由命令入口本身代替。

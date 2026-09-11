@@ -59,6 +59,17 @@ desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久
 
 原生 iOS 不渲染 Web rail。`Contracts/Home.swift` 的 `parentProjectID` 把子 Session 归入父 Project 组，打开 Session 时仍使用原始终端身份。
 
+## Race 的 Worktree 生命周期
+
+Race 为同一目标的每个 worker 创建独立 Worktree、分支与 Terminal，用户分别查看输出和 Diff，
+不自动选赢家、合并或推送。当前连接一次只保留一个 Race；结束 Race 停止 worker Terminal 并清除
+Race 记录，但保留 Worktree 与分支供人工比较。实现见 [RaceService](../../backend/src/race/race-service.ts)。
+
+普通 Worktree 删除会先等待 Race 创建结束。专用的
+`DELETE /api/race/:raceId/worktree/:workerId` 仍未等待同一创建屏障，创建期间并发调用可能留下
+指向已删除路径的 worker Session。这是代码侧待处理的生命周期风险；结束 Race 可清理已登记的 Session。
+验收入口是 [Race](../testing/terminal/agent-team/race.testplan.yaml)。
+
 ## API
 
 ```http

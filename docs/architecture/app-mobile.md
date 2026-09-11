@@ -14,6 +14,10 @@ Runweave 的移动应用位于 `packages/app-ios/`，由 SwiftUI/UIKit 与 Swift
 - 移动端提供命令输入、媒体草稿与 Files/Changes 只读审阅；不直接复用桌面布局、Monaco 或 Browser 控制面。
 - Swift DTO 手动对照 `packages/shared` 的接口合同；协议变更需验证真实 Backend 与客户端兼容。
 
+原生新建终端只提交 `projectId`，由 Backend 的 `auto` 策略选择运行时：tmux 可用时优先 tmux，
+否则回退 PTY。它不沿用已退役客户端固定请求 PTY 的行为；打开已有终端则始终遵循服务端实际
+runtime。迁移对照中的模块覆盖不能代替对应运行时的输入、滚动和恢复验收。
+
 ## 手机扫码登录
 
 Electron 已登录连接的“当前连接 → 连接手机”入口与 iOS 连接管理的“扫码连接电脑”配合使用。

@@ -35,7 +35,7 @@ Agent Team 公共入口仍是 `@runweave/shared/agent-team`；内部合同按
 `agent-team-outbox.ts` → `agent-team-run.ts` → `agent-team-export.ts` 单向依赖拆分，
 `agent-team.ts` 只保留兼容 re-export。worker 角色定义在
 `packages/shared/src/agent-team/worker.ts`；prompt 构造在
-`backend/src/agent-team/prompt-builders.ts`。Agent Team 不再使用旧 `coder`、`reviewer`、
+`backend/src/agent-team/prompt/builders.ts`。Agent Team 不再使用旧 `coder`、`reviewer`、
 `tester` 默认集合。
 
 ## 角色模型配置
@@ -45,6 +45,10 @@ Agent Team 公共入口仍是 `@runweave/shared/agent-team`；内部合同按
 Backend 通过固定的 Codex、TraeX adapter 探测模型目录，只缓存白名单归一化字段。CLI 可执行但 catalog 临时失败时使用最近一次成功缓存；CLI 缺失时即使有缓存也视为不可启动。用户只能提交结构化 provider、model、reasoning、Fast 或 Max，不能提交命令和原始 args。
 
 新 Workspace Run 把 `main`、`code`、`code_review`、`behavior_verify` 的结构化选择和编译后 terminal 固化到 `roleRuntimes`。worker split、resume、recheck、repair 和 framework rerun 都按 role 读取该快照，不回读之后修改的全局配置。UI Retry 通过 `retryOfRunId` 继承失败来源的快照；历史 Run 没有 `roleRuntimes` 时继续把原 `run.terminal` 投影到所有角色，旧 API 显式提交 `terminal` 的行为保持不变。
+
+角色配置的验收入口是[全局角色模型配置](../testing/agent-team/configuration/agent-team-role-model-config.testplan.yaml)，
+包含关闭 Fast/Max 时覆盖 CLI ambient 配置，以及 `retryOfRunId` 与显式 `terminal` 互斥的边界。
+真实弹窗取消、保存与重开行为需独立取证，静态配置检查不代表 UI 已通过。
 
 ## 验收来源
 
@@ -93,9 +97,35 @@ Agent Team 的 Loop Engine 由 `backend/src/agent-team/loop.ts` 维护：
 当 stable fail case 尚未反弹时，后端会通过 `buildBounceBackPrompt` 注入 code worker pane；当验收通过数提升或出现明确 diff 进展时，无进展计数会清零。熔断只冻结后续自动注入，不删除 pane 或 outbox，方便人工聚焦现场。
 
 completion/outbox 路由的稳定入口是
-`backend/src/agent-team/service-completion.ts`。主协调器保留 receipt 协议推进、behavior
-checkpoint 绑定和 reviewer reproduction 回派；通用上下文解析、outbox 归档、源码指纹与
-合同校验阶段位于 `service-completion-preparation.ts`。两者共同保持原有事件顺序和恢复预算。
+[completion 服务](../../backend/src/agent-team/service/completion/index.ts)，负责 receipt、checkpoint
+绑定与结果回派；上下文、归档和合同校验位于同目录的 `preparation.ts`。
+
+## 完成裁决与恢复
+
+自动完成与显式 `/complete` 使用同一个[完成条件](../../backend/src/agent-team/service/completion/policy.ts)：
+产品 Case 已通过或具有绑定当前 observation 的有效人工裁决，review gate 通过，没有未解决的 finding、
+repair cycle、framework blocker 或 active dispatch，并完成最新 checkpoint 的 final review。
+条件不满足时 `/complete` 返回 409，不执行完成清理；清理成功后才写入 done 与 completion outcome。
+
+模型事实保存在 `latestObservation`，人工决定独立追加到 `acceptanceDecisions`。只允许
+`accepted_environment_skip` 与 `invalid_case`；前者要求结构化 `skipped + environment`，两者都须说明原因。
+新 observation 会使旧裁决失效。裁决可解除仅关联已解决 Case 的修复阻塞，不能绕过 review；
+带例外完成为 `completed_with_exceptions`，不把原始 fail/skipped 改写成 pass。
+当前没有计划中提出的 follow-up work item 子系统。
+
+环境恢复只跨同一 `blockerFingerprint` 的 `environment + retryable + scope=run` Case 生效。
+Backend 选择一个代表 Case 探针；混选普通 Case 或多个 fingerprint 的 intervention 返回 400。
+探针证明环境已恢复后，同组旧观察保留为审计记录，待验收项按顺序逐个重跑；真实产品失败仍进入原修复流程。
+历史 skip 缺少 fingerprint 时不猜测批量恢复。
+
+框架阻塞撤销旧 dispatch 的推进权，迟到 outbox 不得推进 Run；它不等同于物理终止 worker。
+恢复可以继续原 Run，或创建 successor 重新运行。successor 清空旧 `latestObservation` 与
+`environmentRecovery`，恢复审计留在 predecessor，不继承旧通过结论。
+实现入口是 [framework recovery](../../backend/src/agent-team/service/repair/framework.ts)。
+
+验收使用[完成与介入](../testing/agent-team/completion/agent-team-completion-and-intervention.testplan.yaml)、
+[恢复与 fixture](../testing/agent-team/recovery/agent-team-recovery-and-fixtures.testplan.yaml)。
+Backend 或 review harness 通过不代表桌面裁决 UI 已验收。
 
 ## 修复交接与预算
 
