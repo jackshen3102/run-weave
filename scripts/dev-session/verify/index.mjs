@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { verifyPlanner } from "./planner.mjs";
+import { verifyProcessStop } from "./process-stop.mjs";
 import { verifyBetaSlotPool } from "./beta-slot-pool.mjs";
 import {
   verifyBackendProfileLockPublication,
@@ -17,6 +18,11 @@ async function main() {
     path.join(os.tmpdir(), "runweave-dev-session-"),
   );
   const sourceRoot = path.resolve(process.cwd());
+  const processStopChecks = await verifyProcessStop(sourceRoot, path.join(temporaryHome, "process-stop"));
+  if (process.argv.includes("--process-stop-only")) {
+    process.stdout.write(`${JSON.stringify({ ok: true, checks: processStopChecks })}\n`);
+    return;
+  }
   verifyPlanner(sourceRoot);
   await verifyBetaSlotPool(path.join(temporaryHome, "beta-slot-pool"), {
     includeLegacy: !betaCurrentOnly,
@@ -35,8 +41,8 @@ async function main() {
     `${JSON.stringify({
       ok: true,
       checks: betaCurrentOnly
-        ? checks.filter((check) => !excludedBetaLegacyChecks.has(check))
-        : checks,
+        ? [...processStopChecks, ...checks.filter((check) => !excludedBetaLegacyChecks.has(check))]
+        : [...processStopChecks, ...checks],
     })}\n`,
   );
 }

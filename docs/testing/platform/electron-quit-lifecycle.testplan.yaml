@@ -1,0 +1,42 @@
+version: 1
+name: Electron 异步退出生命周期
+description: >
+  先用真实 Dev Session 复现 Electron 清理结束后仍无法退出的问题，再验证异步 before-quit
+  清理完成后重新发起退出不会重入原生取消流程。只验收 mac 源码桌面，不替代安装态全产品回归。
+cases:
+  - id: EQL-001
+    name: 空闲桌面的退出完成而不是超时强杀
+    required: true
+    description: >
+      保留修复前 forced、清理完成及缺失 quit 的证据。修复后同场景应出现完整退出事件，
+      进程组及时消失，不通过增加控制面超时或跳过清理来满足条件。
+    preconditions:
+      - 已读取 Dev Session 技能并固定本次源码 worktree，已有改动保持不变。
+      - 使用独立 Session 数据目录，安装态 SQLite worker 覆盖不污染源码验证。
+    steps:
+      - 先 dry-run，再提升到 electron profile；记录 Session、PID、进程签名和 dedicated ownership，在登录页空闲时调用精确 Session 的 dev:stop。
+      - 修复前记录 Electron 的 forced 结果；用仅观察的诊断记录 before-quit、HTTP close、app.quit、will-quit 和 quit，确认清理结束但未完成退出，不把诊断脚本自身启动失败算作问题复现。
+      - 仅在问题复现后修改退出时序，重新经 planner 启动同场景；确认 Electron exited、quit 和 exit 0，并且没有未退出的自有进程组。
+  - id: EQL-002
+    name: 活跃终端桌面关闭保留业务资源清理
+    required: true
+    description: >
+      真正操作桌面后通过控制面停止，不提前杀 Backend child；正常释放自有资源而不触碰共享运行时。
+    preconditions:
+      - 任务创建的 electron Session 已 ready，desktop CDP 由 dev:open 解析并核对身份。
+      - 使用仓库 Playwright CLI 和任务专属账号、项目目录，不修改用户项目。
+    steps:
+      - 附着正确 desktop surface，登录、新建项目并在终端输出唯一标记；通过页面快照确认输出可见。
+      - detach 后调用本 Session 的 dev:stop；确认 Electron 非 forced、Backend shutdown.completed、自有 Backend 与 App Server lock 释放，watcher 没有 Force killing 警告。
+      - 对同一 Session 重复 stop 和 status，确认 stopped；dev:open 应拒绝打开，任务创建的所有 Session 完成清理，已有安装实例与共享资源不被停止。
+  - id: EQL-003
+    name: 相关门禁通过且环境阻塞如实报告
+    required: true
+    description: >
+      验证代码、真实 launcher 集成和计划格式；完整控制面套件若被已有安装实例阻塞，
+      必须记录为阻塞，不通过削弱跨 HOME 进程所有权保护获取假通过。
+    preconditions:
+      - 已保存修复前完整 dev:session:verify 输出和本机 Beta 只读进程引用证据。
+    steps:
+      - 执行 Electron typecheck、lint、dev:session:verify --process-stop-only、架构检查、docs 检查和本计划校验，确认通过。
+      - 记录完整 dev:session:verify 的实际结果；若失败，核对失败 fixture 与全局 appPath 引用，区分正确的安全阻断和运行时缺陷，不停止非任务实例或跳过安全检查。

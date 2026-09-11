@@ -32,6 +32,9 @@ export async function runProviderProcess(params: {
   request: EvolutionProviderRequest;
   env?: NodeJS.ProcessEnv;
 }): Promise<EvolutionProviderResult> {
+  // An abort may precede this call (for example while a run claim is pending).
+  // Adding a listener cannot replay that event; do not spawn new work for it.
+  if (params.request.signal?.aborted) throw new Error("provider_cancelled");
   const startedAt = Date.now();
   const outputFile = path.join(
     params.request.workingDirectory,

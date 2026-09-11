@@ -11,10 +11,12 @@ import { AuthService } from "../auth/service";
 import { AgentTeamService } from "../agent-team/service";
 import { AgentTeamModelConfigStore } from "../agent-team/runtime/model-config-store";
 import { AgentTeamModelSettingsService } from "../agent-team/model-catalog/service";
-import { ActivityEventFactory } from "../activity/recording/event-factory";
-import { ActivityQueryService } from "../activity/database/service";
-import { ActivityRecorder } from "../activity/recording/recorder";
-import { ActivityStore } from "../activity/recording/store";
+import type { ActivityEventFactory } from "../activity/recording/event-factory";
+import type { ActivityQueryService } from "../activity/database/service";
+import type { ActivityRecorder } from "../activity/recording/recorder";
+import type { ActivityStore } from "../activity/recording/store";
+import { ActivityRuntime } from "../activity/runtime";
+import { ResourceScope } from "./resource-scope";
 import { logger } from "../logging/index";
 import { LowDbTerminalQuickInputStore } from "../terminal/quick-input/lowdb-store";
 import { TerminalQuickInputService } from "../terminal/quick-input/service";
@@ -35,7 +37,6 @@ import { LowDbTerminalSessionStore } from "../terminal/store/lowdb-store";
 import { logOrphanedTmuxSessions } from "../terminal/tmux/orphan-scan";
 import { syncExistingTmuxSessionEnvironments } from "../terminal/tmux/session-environment-sync";
 import {
-  resolveActivityStoragePaths,
   resolveEvolutionStoragePaths,
   resolveStoragePaths,
 } from "../utils/path";
@@ -66,12 +67,13 @@ import { RaceService } from "../race/race-service";
 import { BackendRuntimeStatusService } from "../runtime-status/service";
 
 export interface RuntimeServices extends DeviceMonitoringRuntime {
+  start(controlPlaneBaseUrl: string): void;
+  dispose(): Promise<void>;
   runtimeStatus: BackendRuntimeStatusService;
   activityStore: ActivityStore | null;
   activityRecorder: ActivityRecorder;
   activityQueryService: ActivityQueryService;
   activityEventFactory: ActivityEventFactory;
-  activityMaintenanceTimer: NodeJS.Timeout | null;
   terminalActivity: TerminalActivityDependencies;
   authStore: AuthStore;
   authService: AuthService;
@@ -159,98 +161,47 @@ function shouldPreserveTmuxOnShutdown(
 export async function createRuntimeServices(
   serviceInstanceId?: string,
 ): Promise<RuntimeServices> {
-  const storagePaths = resolveStoragePaths(process.env);
-  const activityPaths = resolveActivityStoragePaths(process.env);
-  const evolutionPaths = resolveEvolutionStoragePaths(process.env);
-  let activityStore: ActivityStore | null = null;
+  const resources = new ResourceScope();
   try {
-    activityStore = await ActivityStore.create({
-      databasePath: activityPaths.activityDatabaseFile,
-      env: process.env,
-    });
+    return await assembleRuntimeServices(resources, serviceInstanceId);
   } catch (error) {
-    logger.warn("activity.initialize.failed", {
-      component: "activity",
-      message: "Activity is unavailable; Backend will continue without it",
-      error,
-    });
+    try {
+      await resources.dispose();
+    } catch (cleanupError) {
+      logger.error("backend.start.cleanup.failed", { error: cleanupError });
+    }
+    throw error;
   }
+}
+
+async function assembleRuntimeServices(
+  resources: ResourceScope,
+  serviceInstanceId?: string,
+): Promise<RuntimeServices> {
+  const storagePaths = resolveStoragePaths(process.env);
+  const evolutionPaths = resolveEvolutionStoragePaths(process.env);
   const runtimeChannel =
     process.env.RUNWEAVE_DESKTOP_CHANNEL === "stable" ||
     process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta"
       ? process.env.RUNWEAVE_DESKTOP_CHANNEL
       : "dev";
-  const activityInstanceId =
-    process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim() ||
-    `backend:${process.pid}:${crypto
-      .createHash("sha256")
-      .update(storagePaths.browserProfileDir)
-      .digest("hex")
-      .slice(0, 12)}`;
-  const activityEventFactory = new ActivityEventFactory({
-    producerName: "runweave-backend",
-    producerVersion:
-      process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || "builtin",
-    producerInstanceId: activityInstanceId,
+  const activity = await ActivityRuntime.create({
+    env: process.env,
+    browserProfileDir: storagePaths.browserProfileDir,
     runtimeChannel,
-    runtimeSurface: "backend",
-    sourceRevision: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim(),
-    backendProfileId: path.basename(storagePaths.browserProfileDir),
   });
-  const activityRecorder = new ActivityRecorder(activityStore);
-  const activityQueryService = new ActivityQueryService(activityStore);
-  const terminalActivity = {
+  resources.defer("activity", () => activity.dispose());
+  const {
+    store: activityStore,
     recorder: activityRecorder,
+    queryService: activityQueryService,
     eventFactory: activityEventFactory,
-  };
-  if (activityStore) {
-    await activityRecorder.recordBatch([
-      activityEventFactory.create({
-        eventName: "producer.instance.started",
-        payload: {
-          pid: process.pid,
-          releaseId: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || null,
-        },
-      }),
-    ]);
-  }
-  const activityMaintenanceOwnerId = `${activityInstanceId}:${crypto.randomUUID()}`;
-  let activityMaintenanceRunning = false;
-  const runActivityMaintenance = (): void => {
-    if (!activityStore || activityMaintenanceRunning) return;
-    activityMaintenanceRunning = true;
-    void (async () => {
-      try {
-        while (true) {
-          const job = await activityStore?.runDelete(
-            activityMaintenanceOwnerId,
-          );
-          if (!job || job.status === "completed" || job.status === "blocked")
-            break;
-          await new Promise<void>((resolve) => {
-            const timeout = setTimeout(resolve, 50);
-            timeout.unref();
-          });
-        }
-        await activityStore?.runRetention(activityMaintenanceOwnerId);
-      } catch (error) {
-        logger.warn("activity.maintenance.failed", {
-          component: "activity",
-          message: "Activity maintenance pass failed",
-          error,
-        });
-      } finally {
-        activityMaintenanceRunning = false;
-      }
-    })();
-  };
-  const activityMaintenanceTimer = activityStore
-    ? setInterval(runActivityMaintenance, 15 * 60 * 1000)
-    : null;
-  activityMaintenanceTimer?.unref();
-  runActivityMaintenance();
+    instanceId: activityInstanceId,
+  } = activity;
+  const terminalActivity = { recorder: activityRecorder, eventFactory: activityEventFactory };
   const authConfig = loadAuthConfig();
   const authStore = new LowDbAuthStore(storagePaths.authStoreFile);
+  resources.defer("auth-store", () => authStore.dispose());
   const persistedAuth = await authStore.initialize({
     username: authConfig.username,
     password: authConfig.password,
@@ -274,10 +225,12 @@ export async function createRuntimeServices(
   const terminalQuickInputStore = new LowDbTerminalQuickInputStore(
     storagePaths.terminalQuickInputStoreFile,
   );
+  resources.defer("terminal-quick-input-store", () => terminalQuickInputStore.dispose());
   await terminalQuickInputStore.initialize();
   const agentTeamModelConfigStore = new AgentTeamModelConfigStore(
     storagePaths.agentTeamModelStoreFile,
   );
+  resources.defer("agent-team-model-config", () => agentTeamModelConfigStore.dispose());
   await agentTeamModelConfigStore.initialize();
   const agentTeamModelSettingsService = new AgentTeamModelSettingsService(
     agentTeamModelConfigStore,
@@ -323,6 +276,7 @@ export async function createRuntimeServices(
       },
     },
   );
+  resources.defer("terminal-session-manager", () => terminalSessionManager.dispose());
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalEventService,
     terminalSessionManager,
@@ -358,6 +312,10 @@ export async function createRuntimeServices(
           ? [resolvePersistentTmuxSocketPath(storagePaths.browserProfileDir)]
           : []),
       ];
+  for (const socketPath of new Set(tmuxSocketPathsToCleanOnShutdown)) {
+    resources.defer("tmux-server", () => tmuxService.killServer(socketPath).then(() => undefined));
+  }
+  resources.defer("terminal-runtimes", () => terminalRuntimeRegistry.disposeAll());
   const tmuxOutputWatcher = new TmuxOutputWatcher({
     outputDir: path.join(
       path.dirname(storagePaths.terminalSessionStoreFile),
@@ -367,11 +325,13 @@ export async function createRuntimeServices(
     tmuxService,
     tmuxLifecycleCoordinator,
   });
+  resources.defer("tmux-output-watcher", () => tmuxOutputWatcher.dispose());
   await terminalSessionManager.initialize();
   const workspaceServiceManager = new RuntimeStatusWorkspaceServiceManager(
     terminalSessionManager,
   );
-  void syncExistingTmuxSessionEnvironments(terminalSessionManager, tmuxService)
+  resources.defer("workspace-services", () => workspaceServiceManager.dispose());
+  const environmentSync = syncExistingTmuxSessionEnvironments(terminalSessionManager, tmuxService)
     .then((failures) => {
       for (const failure of failures) {
         logger.warn("terminal.tmux.environment-sync.startup.failed", {
@@ -388,6 +348,7 @@ export async function createRuntimeServices(
         error,
       });
     });
+  resources.defer("tmux-environment-recovery", () => environmentSync);
   terminalStateService = new TerminalStateService(
     new TerminalStateStore(
       terminalSessionManager
@@ -409,12 +370,13 @@ export async function createRuntimeServices(
   if (shouldScanTmuxOrphans(process.env)) {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
-  void tmuxOutputWatcher.watchExistingSessions().catch((error) => {
+  const outputRecovery = tmuxOutputWatcher.watchExistingSessions().catch((error) => {
     logger.warn("terminal.tmux.output-watch.startup.failed", {
       message: "Failed to recover tmux output watchers during startup",
       error,
     });
   });
+  resources.defer("tmux-output-recovery", () => outputRecovery);
   let evolutionActivationStore: EvolutionActivationStore;
   let evolutionAnalysisStore: EvolutionAnalysisStore | null = null;
   let evolutionFoundationStore: EvolutionFoundationStore | null = null;
@@ -438,6 +400,7 @@ export async function createRuntimeServices(
     });
     evolutionActivationStore = new InMemoryEvolutionActivationStore();
   }
+  resources.defer("evolution-store", () => evolutionActivationStore.close());
   const evolutionProviderAvailability =
     new EvolutionProviderAvailabilityService();
   const evolutionService = new EvolutionService(
@@ -449,6 +412,7 @@ export async function createRuntimeServices(
     evolutionActivationStore,
   );
   const evolutionToolTokenRegistry = new EvolutionToolTokenRegistry();
+  resources.defer("evolution-tool-tokens", () => evolutionToolTokenRegistry.clear());
   const evolutionMemoryProvider = new DefaultEvolutionMemoryProvider(
     evolutionActivationStore,
     new StructuredEvolutionMemorySelector(),
@@ -470,7 +434,7 @@ export async function createRuntimeServices(
     evolutionOutcomeObserver,
     modelSettingsService: agentTeamModelSettingsService,
   });
-  agentTeamService.initialize();
+  resources.defer("agent-team", () => agentTeamService.dispose());
   const raceService = new RaceService({
     terminalSessionManager,
     terminalEventService,
@@ -536,6 +500,7 @@ export async function createRuntimeServices(
         )
       : null,
   );
+  resources.defer("evolution-runtime", () => evolutionRuntime.dispose());
   const attentionService = new AttentionService(
     terminalSessionManager,
     terminalCompletionEventService,
@@ -552,19 +517,34 @@ export async function createRuntimeServices(
       workspaceServiceManager,
     },
   );
+  resources.defer("runtime-status", () => runtimeStatus.dispose());
   const deviceMonitoring = await createDeviceMonitor(storagePaths.browserProfileDir, authService);
+  resources.defer("device-monitor", () => deviceMonitoring.deviceMonitor?.dispose());
+  resources.defer("battery-alerts", () => deviceMonitoring.batteryAlerts?.dispose());
+  const mobileLoginService = new MobileLoginService(authService);
+  resources.defer("mobile-login", () => mobileLoginService.dispose());
+  let disposed = false;
   const services: RuntimeServices = {
     ...deviceMonitoring,
+    start: (controlPlaneBaseUrl) => {
+      if (disposed) return;
+      activity.start();
+      agentTeamService.initialize();
+      evolutionRuntime.start(controlPlaneBaseUrl);
+    },
+    dispose: () => {
+      disposed = true;
+      return resources.dispose();
+    },
     runtimeStatus,
     activityStore,
     activityRecorder,
     activityQueryService,
     activityEventFactory,
-    activityMaintenanceTimer,
     terminalActivity,
     authStore,
     authService,
-    mobileLoginService: new MobileLoginService(authService),
+    mobileLoginService,
     authCookieName: authConfig.refreshCookieName,
     authSecureCookies: authConfig.secureCookies,
     terminalSessionManager,

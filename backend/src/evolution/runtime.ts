@@ -12,6 +12,10 @@ export class EvolutionRuntime {
   private readonly startedAt = Date.now();
   private recoveryTimer: NodeJS.Timeout | null = null;
   private maintenanceRunning = false;
+  private maintenance: Promise<void> | null = null;
+  private stopping = false;
+  private disposal: Promise<void> | null = null;
+  private readonly heartbeats = new Set<Promise<void>>();
   private activeExecution: Promise<void> | null = null;
   private activeAbortController: AbortController | null = null;
   private controlPlaneBaseUrl: string | null = null;
@@ -31,7 +35,7 @@ export class EvolutionRuntime {
   ) {}
 
   start(controlPlaneBaseUrl: string): void {
-    if (!this.store || this.recoveryTimer) return;
+    if (!this.store || this.recoveryTimer || this.stopping) return;
     this.controlPlaneBaseUrl = controlPlaneBaseUrl;
     this.recoveryTimer = setInterval(
       () => this.runMaintenance(),
@@ -41,13 +45,22 @@ export class EvolutionRuntime {
     this.runMaintenance();
   }
 
-  async dispose(): Promise<void> {
-    if (this.recoveryTimer) {
-      clearInterval(this.recoveryTimer);
+  dispose(): Promise<void> {
+    if (!this.disposal) {
+      this.stopping = true;
+      if (this.recoveryTimer) clearInterval(this.recoveryTimer);
       this.recoveryTimer = null;
+      this.activeAbortController?.abort("evolution_runtime_shutdown");
+      this.disposal = this.drain();
     }
+    return this.disposal;
+  }
+
+  private async drain(): Promise<void> {
+    await this.maintenance;
     this.activeAbortController?.abort("evolution_runtime_shutdown");
     await this.activeExecution?.catch(() => undefined);
+    await Promise.allSettled([...this.heartbeats]);
   }
 
   getStatusSnapshot() {
@@ -65,11 +78,11 @@ export class EvolutionRuntime {
   }
 
   private runMaintenance(): void {
-    if (!this.store || this.maintenanceRunning) return;
+    if (!this.store || this.maintenanceRunning || this.stopping) return;
     this.maintenanceRunning = true;
     this.lastMaintenanceStartedAt = Date.now();
     const now = new Date();
-    void this.store
+    this.maintenance = this.store
       .recoverExpiredRuns(now.toISOString())
       .then(() =>
         this.orchestrator?.cleanupOrphanedTemporaryDirectories(),
@@ -88,11 +101,13 @@ export class EvolutionRuntime {
       })
       .finally(() => {
         this.maintenanceRunning = false;
+        this.maintenance = null;
       });
   }
 
   private async claimAndExecute(): Promise<void> {
     if (
+      this.stopping ||
       !this.store ||
       !this.orchestrator ||
       !this.controlPlaneBaseUrl ||
@@ -109,18 +124,21 @@ export class EvolutionRuntime {
     this.lastLeaseHeartbeatAt = Date.now();
     const abortController = new AbortController();
     this.activeAbortController = abortController;
+    if (this.stopping) abortController.abort("evolution_runtime_shutdown");
     let heartbeatRunning = false;
     const heartbeat = setInterval(() => {
       if (heartbeatRunning) return;
       heartbeatRunning = true;
-      void this.refreshClaim(claim, abortController)
+      const task = this.refreshClaim(claim, abortController)
         .catch((error) => {
           abortController.abort("evolution_lease_lost");
           this.onError(error);
         })
         .finally(() => {
           heartbeatRunning = false;
+          this.heartbeats.delete(task);
         });
+      this.heartbeats.add(task);
     }, HEARTBEAT_INTERVAL_MS);
     heartbeat.unref();
     this.activeExecution = this.orchestrator

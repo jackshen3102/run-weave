@@ -354,7 +354,7 @@ export async function stopSessionServices(
           encoding: "utf8",
         });
       } else {
-        await stopOwnedProcess(service.process);
+        service.stopResult = await stopOwnedProcess(service.process);
       }
     }
   }
@@ -395,6 +395,8 @@ export async function cleanupStaleSessionServices(
         recordedPid > 0 &&
         !isProcessLive(recordedPid)
       ) {
+        // A dead launcher alone does not prove its children have gone.
+        inspectedService.stopResult = await stopOwnedProcess(originalService.process);
         inspectedService.cleanupStatus = "already-stopped";
         stoppedServices.push(serviceName);
         continue;
@@ -403,7 +405,7 @@ export async function cleanupStaleSessionServices(
         !originalService.betaControl &&
         processIdentityMatches(originalService.process)
       ) {
-        await stopOwnedProcess(originalService.process);
+        inspectedService.stopResult = await stopOwnedProcess(originalService.process);
         inspectedService.cleanupStatus =
           "stopped-owner-process-identity-verified";
         stoppedServices.push(serviceName);
@@ -427,7 +429,7 @@ export async function cleanupStaleSessionServices(
         },
       );
     } else {
-      await stopOwnedProcess(originalService.process);
+      inspectedService.stopResult = await stopOwnedProcess(originalService.process);
     }
     inspectedService.cleanupStatus = "stopped-identity-verified";
     stoppedServices.push(serviceName);

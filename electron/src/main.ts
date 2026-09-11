@@ -563,7 +563,9 @@ app.on("before-quit", (event) => {
       companionAgent?.stop() ?? Promise.resolve(),
     ]);
     desktopRuntime.packagedBackendsStoppedForQuit = true;
-    app.quit();
+    // Let the native before-quit cancellation unwind before retrying. A quit
+    // from this Promise continuation can re-enter it and leave a windowless app.
+    setImmediate(() => app.quit());
   })();
 });
 
