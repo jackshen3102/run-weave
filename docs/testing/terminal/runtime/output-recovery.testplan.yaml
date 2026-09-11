@@ -1,0 +1,129 @@
+version: 1
+name: Terminal 弱网有界输出恢复验收
+description: >
+  验证 tmux Terminal 在短断线时只补连续缺口，在长断线、缓存淘汰、无效游标和慢客户端场景中
+  安全降级到当前状态或停止发送，并且 Backend、Web、原生 iOS 和其它客户端都不产生无界资源压力。
+  每例使用自己创建的 Backend、tmux session、客户端和输出 fixture，并只清理自己拥有的资源。
+
+cases:
+  - id: TOR-001
+    name: 短断线只续传连续缺口
+    required: true
+    description: >
+      同一 tmux 展示流在 60 秒和 512 KiB 窗口内恢复时，Backend 必须从客户端已提交位置之后继续，
+      不发送 snapshot，不缺失或重复输出。
+    preconditions:
+      - 隔离 Backend 已创建专用 tmux 会话，原始 WebSocket fixture 能记录 connected、snapshot、output 的 streamId、offset、字节和时间。
+      - 输出 fixture 可产生严格递增且不会出现在 ANSI 参数中的唯一 marker，总缺口小于 512 KiB。
+    steps:
+      - 首次连接并消费完整 snapshot，记录 resumeClientId 与 snapshot cursor；断开该客户端 5 秒并产生一组 marker，携带同一组恢复字段重连。
+      - 确认 connected 选择 resume，首个 fromOffset 等于客户端 cursor，所有 range 首尾连续且 toOffset 严格递增，没有 snapshot。
+      - 将断开时间改为 30 秒并用新 fixture 重复；按 cursor 区间与始终在线的观察客户端逐字节对照，并比较恢复后的屏幕与光标。VT 重绘允许原始数据重复包含旧 marker，不以原始文本出现次数代替去重判断。
+      - 模拟旧 socket 在 Backend 仍处于半开状态时由同一 resumeClientId 建立新 socket；确认新连接原子接管，旧 cleanup 不关闭新 runtime 或造成重复输出。
+
+  - id: TOR-002
+    name: 过期或超量缺口不自动回放历史
+    required: true
+    description: >
+      缺口超过 60 秒或 512 KiB 时必须拒绝续传旧输出，只取得当前屏幕快照并继续实时流，不能发送任意尾部。
+    preconditions:
+      - 隔离 Backend、专用 tmux TUI、一个保持在线的观察客户端和可记录恢复原因及发送字节的 WebSocket fixture 已就绪。
+      - fixture 可独立建立超过 60 秒的缺口，以及在 60 秒内超过 512 KiB 的缺口。
+    steps:
+      - 建立 cursor 后只断开被测客户端超过 60 秒，由观察客户端保持 runtime 在线并持续改变 TUI，再携带原 resumeClientId 和 cursor 重连；确认 recovery 为 snapshot，reason 为 cursor_expired、client_lease_expired 或已清理 lease 的 client_lease_missing，旧区间未作为 replay 推送。
+      - 重建 fixture，在 60 秒内输出超过 512 KiB 后重连；确认 recovery 为 snapshot，reason 为淘汰，未发送“可用多少发多少”的尾部。
+      - 对两种分支分别确认 snapshot 从完整边界开始、当前画面可继续接收实时 marker，单次 snapshot 不超过 512 KiB。
+
+  - id: TOR-003
+    name: 错误流身份和非法位置安全降级
+    required: true
+    description: >
+      客户端伪造、超前、负数、非整数、块中间或旧 runtime cursor 时不能读取缓存、跳过输出或影响 session 身份。
+    preconditions:
+      - 隔离 Backend 有两个专用 tmux session，fixture 已取得各自合法 cursor，并能触发其中一个 runtime 重建。
+      - 原始 WebSocket 客户端可构造 resumeStreamId 和 resumeOffset，但 ticket 仍绑定固定 terminalSessionId。
+    steps:
+      - 依次提交随机或无 lease 的 resumeClientId、另一 session 的 streamId、随机 streamId、超前 offset、负数、非整数和合法 frame 中间 offset；确认均不进入 resume、不返回其它会话数据。
+      - 重建目标 runtime 后提交旧 cursor；确认 stream_changed 并取得新 snapshot，新 streamId 与旧值不同。
+      - 确认所有失败只影响本连接，日志不含 ticket 或终端正文，目标 tmux 和另一 session 均可继续交互。
+
+  - id: TOR-004
+    name: 慢客户端背压不拖累其它客户端
+    required: true
+    description: >
+      单个客户端消费停滞时，Backend 必须在待发送数据达到上限后停止为它排队，同时保持同 session 的快客户端和 tmux 任务正常。
+    preconditions:
+      - 一个专用 tmux session 同时连接可暂停读取的慢客户端和持续消费的快客户端，只有测试 fixture 产生输出。
+      - Backend 可观测每连接 bufferedAmount、关闭码、subscriber 数和进程 RSS，输出不含敏感内容。
+    steps:
+      - 暂停慢客户端读取并持续输出，确认其 bufferedAmount 不超过 512 KiB 后无限增长，而是在阈值处停止发送并请求 1013 关闭；关闭握手 1 秒未完成时强制终止，此时慢端允许观察到 1006。
+      - 确认快客户端仍连续收到结束 marker、可执行一次无副作用输入，tmux session 未退出且没有被重新创建。
+      - 恢复慢客户端并重新连接；确认它只按有效 cursor 续传或取得当前 snapshot，不会触发 Backend 把此前积压再次整体入队。
+
+  - id: TOR-005
+    name: idle runtime 时间和数量上限都能回收
+    required: true
+    description: >
+      tmux attach runtime 只能为短恢复临时保活，全局数量和生命周期必须可观察且到期后没有 timer、subscriber 或子进程泄漏。
+    preconditions:
+      - 隔离 Backend 可创建至少九个专用 tmux session 和超过 64 个短连接，并能读取 registry 诊断计数、Backend 和子进程 RSS。
+      - 已记录连接前的 runtime、client lease、subscriber、timer、tmux client 子进程和 RSS 基线。
+    steps:
+      - 依次连接并断开九个 session；确认 idle runtime 始终不超过八个，最早进入 idle 的实例被释放，tmux session 本身仍存在。
+      - 在 60 秒窗口内重连一个未淘汰 session；确认复用相同 streamId、旧释放 timer 没有在连接存活时销毁 runtime。
+      - 制造超过单 runtime 八个及全局 64 个断线 client lease；确认最早 lease 被淘汰且对应连接只能 snapshot，表大小不继续增长。
+      - 全部断开并等待窗口到期后 120 秒；确认 client lease、idle runtime、恢复 timer、WS subscriber 和额外 attach 子进程归零，RSS 回到记录的稳定区间且无持续增长。
+
+  - id: TOR-006
+    name: 原生 iOS 在渲染提交后才推进游标
+    required: true
+    description: >
+      iOS 收到短恢复输出时不清屏，并且只有 SwiftTerm 实际消费对应数据后才保存 cursor，清理未消费队列不会造成永久缺口。
+    preconditions:
+      - 真机 Profile 构建已连接隔离 Backend 和专用 tmux TUI，Diagnostics 可观察 recovery mode、range、queuedBytes、committed cursor 和 reset 次数。
+      - fixture 可让 SwiftTerm 消费短暂落后，并且只中断该手机客户端网络。
+    steps:
+      - 产生多帧带 ANSI 和唯一 marker 的输出，在 queuedBytes 大于零时切断网络；确认 committed cursor 没有越过尚未 feed 的最后一帧。
+      - 60 秒内恢复网络；确认 iOS 选择 resume、不调用 surface reset，未提交范围被补齐且每个 marker 只显示一次。
+      - 等待队列排空并继续交互；确认 cursor 与 Backend head 收敛、画面光标和颜色正确，1 MiB 本地队列没有溢出。
+
+  - id: TOR-007
+    name: 原生 iOS 长断线恢复当前 TUI 而不回放历史
+    required: true
+    description: >
+      iOS 在 cursor 过期或被淘汰时必须清理旧队列并只应用一次完整当前快照，不能显示半截 ANSI、长时间追赶旧输出或重放输入。
+    preconditions:
+      - 真机原生 App 已打开专用 tmux TUI，后端和 tmux 在客户端断线期间保持运行。
+      - 已准备超过 60 秒和超过 512 KiB 两种独立缺口，并记录断线前输入次数、画面与 cursor。
+    steps:
+      - 分别制造过期和超量缺口后恢复网络；确认两次均选择 snapshot 而非 resume，历史 marker 未被逐条推送，surface 每次只 reset 一次。
+      - 对照 Backend 当前 pane 确认 TUI 文本、颜色、光标和 bracketed paste mode 一致，没有字面 ESC 片段或大片永久空白。
+      - 发送一个新的唯一命令；确认只执行一次，旧输入没有自动重放，连接和后续实时输出保持可用。
+
+  - id: TOR-008
+    name: Web 恢复与新旧协议保持兼容
+    required: true
+    description: >
+      Web xterm 在新协议短恢复时不 reset，在 snapshot 降级时只 reset 一次，并能与不提供 cursor/range 的旧 Backend 正常工作。
+    preconditions:
+      - 已通过 `$toolkit:runweave-dev-session` 建立隔离页面和专用 tmux session，并使用 `$toolkit:playwright-cli` 附着准确的 Terminal 页面。
+      - fixture 可切换新协议、无恢复字段的旧协议响应，并可观察 xterm write callback、deferred queue、scroll position 和 reset 次数。
+    steps:
+      - 在终端尺寸不变的新协议下制造 30 秒以内的小缺口；确认 Web 续传完整 cursor 区间、不 reset、不抢回用户历史滚动位置，range 连续。
+      - 在断线时改变终端尺寸或由外围提示条改变布局；确认旧网格的 cursor 被作废并降级为当前快照，不错误续传。不能将这一分支记为无清屏续传通过。
+      - 制造超量缺口；确认 Web 应用一次 snapshot、恢复当前画面和后续输入，没有先回放旧尾部再清屏。
+      - 切换为无 cursor/range 的旧协议 fixture；确认 Web 清除恢复 cursor 并沿用 snapshot/output 行为，没有协议错误或无限重连。
+
+  - id: TOR-009
+    name: 极端持续输出时恢复成本保持有界
+    required: true
+    description: >
+      当前屏幕无法在 2 秒和 512 KiB 内安全取得时，Backend 必须停止本次恢复而不是扩大缓存、创建临时 attach 或发送截断快照。
+    preconditions:
+      - 隔离 Backend、专用 tmux session 和每秒至少 256 KiB 的可控 ASCII 加 ANSI 输出 fixture 已就绪。
+      - 可观测 snapshot singleflight、镜像待解析字节、发送字节、关闭码、tmux 存活和 Backend RSS。
+    steps:
+      - 让 cursor 失效并保持持续输出，同时并发发起至少五个恢复连接；确认同流重叠请求合并为一个 snapshot 工作，全局最多两个工作，不创建临时 attach。
+      - 确认每个 snapshot 工作在 2 秒或 512 KiB 上限内结束，失败连接收到明确恢复失败或 1013，不收到任意输出尾部。
+      - 使用跨输出帧的半截 CSI 和 OSC 制造未完成解析状态；确认不截断控制序列制作快照，2 秒后明确停止恢复；镜像积压超过 512 KiB 或 8,192 个操作时也明确停止，未闭合控制串不能无限占用内存。
+      - 停止高频输出后重新连接；确认可取得完整当前 snapshot 并继续交互，Backend RSS 和 attach 子进程数没有持续增长。

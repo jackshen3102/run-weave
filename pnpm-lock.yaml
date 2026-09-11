@@ -80,6 +80,15 @@ importers:
       "@runweave/shared":
         specifier: workspace:*
         version: link:../packages/shared
+      "@xterm/addon-serialize":
+        specifier: 0.14.0
+        version: 0.14.0
+      "@xterm/addon-unicode11":
+        specifier: 0.9.0
+        version: 0.9.0
+      "@xterm/headless":
+        specifier: 6.0.0
+        version: 6.0.0
       better-sqlite3:
         specifier: 13.0.3
         version: 13.0.3
@@ -3966,6 +3975,12 @@ packages:
         integrity: sha512-9OeuBFu0/uZJPu+9AHKY6g/w0Czyb/Ut0A5t79I4ULoU4IfU5BEpPFVGQxP4zTTMdfZEYkVIRYbHBX1xWwjeSA==,
       }
 
+  "@xterm/addon-serialize@0.14.0":
+    resolution:
+      {
+        integrity: sha512-uteyTU1EkrQa2Ux6P/uFl2fzmXI46jy5uoQMKEOM0fKTyiW7cSn0WrFenHm5vO5uEXX/GpwW/FgILvv3r0WbkA==,
+      }
+
   "@xterm/addon-unicode11@0.9.0":
     resolution:
       {
@@ -3985,6 +4000,12 @@ packages:
       }
     peerDependencies:
       "@xterm/xterm": ^6.1.0-beta.195
+
+  "@xterm/headless@6.0.0":
+    resolution:
+      {
+        integrity: sha512-5Yj1QINYCyzrZtf8OFIHi47iQtI+0qYFPHmouEfG8dHNxbZ9Tb9YGSuLcsEwj9Z+OL75GJqPyJbyoFer80a2Hw==,
+      }
 
   "@xterm/xterm@6.0.0":
     resolution:
@@ -13299,6 +13320,8 @@ snapshots:
 
   "@xterm/addon-search@0.16.0": {}
 
+  "@xterm/addon-serialize@0.14.0": {}
+
   "@xterm/addon-unicode11@0.9.0": {}
 
   "@xterm/addon-web-links@0.12.0": {}
@@ -13306,6 +13329,8 @@ snapshots:
   "@xterm/addon-webgl@0.20.0-beta.194(@xterm/xterm@6.0.0)":
     dependencies:
       "@xterm/xterm": 6.0.0
+
+  "@xterm/headless@6.0.0": {}
 
   "@xterm/xterm@6.0.0": {}
 

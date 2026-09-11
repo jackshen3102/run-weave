@@ -39,6 +39,8 @@ import {
 } from "./terminal-input-handler";
 import { logTerminalConnectionOpened } from "./terminal-connection-logging";
 import { createTerminalMetadataSyncController } from "./terminal-metadata-sync";
+import { createTerminalOutputRecovery } from "./terminal-output-recovery";
+import { closeSlowTerminalSocket } from "./terminal-server-connection-helpers";
 
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
 
@@ -90,9 +92,21 @@ export function attachTerminalWebSocketServer(
     let handleClientMessage:
       | ((data: string, isBinary: boolean) => void)
       | null = null;
+    let pendingClientBytes = 0;
     socket.on("message", (data, isBinary) => {
       const rawData = String(data);
       if (!handleClientMessage) {
+        pendingClientBytes += Buffer.byteLength(rawData, "utf8");
+        if (
+          pendingClientBytes > 64 * 1024 ||
+          pendingClientMessages.length >= 64
+        ) {
+          closeSlowTerminalSocket(
+            socket,
+            "Terminal initialization input limit",
+          );
+          return;
+        }
         pendingClientMessages.push({ data: rawData, isBinary });
         return;
       }
@@ -107,7 +121,8 @@ export function attachTerminalWebSocketServer(
       isTmuxBackedSession(session) &&
       ptyService &&
       tmuxService &&
-      runtimeRegistry.getAttachedClientCount(terminalSessionId) === 0
+      runtimeRegistry.getAttachedClientCount(terminalSessionId) === 0 &&
+      !runtimeRegistry.getOutputRecovery(terminalSessionId)
     ) {
       terminalWsLogger.info("terminal.tmux.attach-runtime.disposed", {
         message:
@@ -162,6 +177,32 @@ export function attachTerminalWebSocketServer(
       return;
     }
     const activeRuntime = runtime;
+    if (socket.readyState !== 1) {
+      if (session && isTmuxBackedSession(session))
+        runtimeRegistry.retainIdleRuntime(terminalSessionId);
+      return;
+    }
+    const initialSize = new URL(request.url ?? "/", "http://localhost")
+      .searchParams;
+    const cols = Number(initialSize.get("cols"));
+    const rows = Number(initialSize.get("rows"));
+    if (
+      runtimeRegistry.getOutputRecovery(terminalSessionId) &&
+      Number.isInteger(cols) &&
+      Number.isInteger(rows) &&
+      cols >= 2 &&
+      cols <= 500 &&
+      rows >= 1 &&
+      rows <= 200
+    ) {
+      try {
+        activeRuntime.resize(cols, rows);
+      } catch {
+        closeSlowTerminalSocket(socket);
+        runtimeRegistry.retainIdleRuntime(terminalSessionId);
+        return;
+      }
+    }
 
     if (!session || !isTmuxBackedSession(session)) {
       runtimeRegistry.ensureRecorder(
@@ -185,7 +226,7 @@ export function attachTerminalWebSocketServer(
     };
     let runtimeOutputSequence = 0;
     let flushedOutputSequence = 0;
-    const outputBatcher = new TerminalOutputBatcher((output) => {
+    const outputBatcher = new TerminalOutputBatcher((output, range) => {
       flushedOutputSequence += 1;
       logTerminalPerf("terminal.ws.output.flush", {
         terminalSessionId,
@@ -197,8 +238,16 @@ export function attachTerminalWebSocketServer(
             : Date.now() - inputState.lastInputAt,
         ...summarizeTerminalChunk(output),
       });
-      sendEvent(socket, { type: "output", data: output });
+      sendEvent(socket, { type: "output", data: output, range });
     }, `${terminalSessionId}/${clientId}`);
+    const outputRecovery = createTerminalOutputRecovery({
+      request,
+      socket,
+      registry: runtimeRegistry,
+      terminalSessionId,
+      batcher: outputBatcher,
+      includeSnapshot: sendInitialSnapshot,
+    });
     let snapshotDelivered = false;
     let pendingInitialOutput = "";
     const shellPromptTracker = createShellPromptTracker({
@@ -228,7 +277,44 @@ export function attachTerminalWebSocketServer(
           )
         : undefined;
     runtimeRegistry.attachClient(terminalSessionId, clientId);
-    const unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
+    let unsubscribe = () => undefined as void;
+    let cleanedUp = false;
+    const cleanupConnection = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      handleClientMessage = () => undefined;
+      pendingClientMessages.length = 0;
+      heartbeat.stop();
+      unsubscribe();
+      outputRecovery?.dispose();
+      outputBatcher.dispose();
+      releaseTmuxLifecycleClient?.();
+      metadataSync.clearTmuxPaneMetadataSync();
+      // An old attach's delayed close must not affect its replacement runtime.
+      if (runtimeRegistry.getRuntime(terminalSessionId) !== activeRuntime)
+        return;
+      runtimeRegistry.detachClient(terminalSessionId, clientId);
+      if (session && isTmuxBackedSession(session))
+        runtimeRegistry.retainIdleRuntime(terminalSessionId);
+    };
+    socket.on("terminal-output-stopped", cleanupConnection);
+    socket.on("error", cleanupConnection);
+    socket.on("close", (code, reason) => {
+      terminalWsLogger.info("terminal-ws.closed", {
+        message: "Terminal websocket closed",
+        terminalSessionId,
+        clientId,
+        code,
+        reason: String(reason),
+        durationMs: Date.now() - connectedAt,
+      });
+      cleanupConnection();
+    });
+    socket.on("pong", () => heartbeat.markAlive());
+    unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
+      onOutputFrame: (frame) => outputRecovery?.onFrame(frame),
+      onRecoveryError: () =>
+        closeSlowTerminalSocket(socket, "Terminal mirror output limit"),
       onData(data) {
         runtimeOutputSequence += 1;
         logTerminalPerf("terminal.runtime.output", {
@@ -248,23 +334,25 @@ export function attachTerminalWebSocketServer(
         );
 
         if (metadata.metadataChanged && metadata.cwd) {
-          void metadataSync.publishMetadata(
-            {
-              cwd: metadata.cwd,
-              activeCommand: metadata.activeCommand,
-            },
-            { forceSend: true },
-          ).catch((error: unknown) => {
-            terminalWsLogger.error("terminal.tmux.metadata-sync.failed", {
-              message: "Terminal metadata update failed",
-              terminalSessionId,
-              error,
+          void metadataSync
+            .publishMetadata(
+              {
+                cwd: metadata.cwd,
+                activeCommand: metadata.activeCommand,
+              },
+              { forceSend: true },
+            )
+            .catch((error: unknown) => {
+              terminalWsLogger.error("terminal.tmux.metadata-sync.failed", {
+                message: "Terminal metadata update failed",
+                terminalSessionId,
+                error,
+              });
             });
-          });
         }
         metadataSync.scheduleTmuxPaneMetadataSync();
 
-        if (!metadata.output) {
+        if (outputRecovery || !metadata.output) {
           return;
         }
 
@@ -276,6 +364,10 @@ export function attachTerminalWebSocketServer(
             ...summarizeTerminalChunk(metadata.output),
           });
           pendingInitialOutput += metadata.output;
+          if (Buffer.byteLength(pendingInitialOutput, "utf8") > 512 * 1024) {
+            pendingInitialOutput = "";
+            closeSlowTerminalSocket(socket);
+          }
           return;
         }
 
@@ -360,51 +452,58 @@ export function attachTerminalWebSocketServer(
       },
     });
 
-    sendEvent(socket, {
-      type: "connected",
-      terminalSessionId,
-      runtimeKind: session && isTmuxBackedSession(session) ? "tmux" : "pty",
-    });
-    await metadataSync.syncTmuxPaneMetadata();
-    if (session) {
-      if (sendInitialSnapshot) {
-        if (settleInitialTmuxRepaint) {
-          await delay(TMUX_INITIAL_REPAINT_SETTLE_MS);
-        }
-        sendEvent(socket, {
-          type: "snapshot",
-          data: await resolveInitialSnapshot(
-            terminalSessionManager,
-            runtimeRegistry,
-            terminalSessionId,
-            session.scrollback,
-            tmuxService,
-          ),
-          modes: {
-            bracketedPasteMode:
-              runtimeRegistry.getBracketedPasteMode(terminalSessionId),
-          },
-        });
-      }
+    if (outputRecovery) {
+      await outputRecovery.start();
+      if (cleanedUp || socket.readyState !== 1) return;
       snapshotDelivered = true;
-      sendStatusEvent(socket, session.status, session.exitCode);
+      if (session) sendStatusEvent(socket, session.status, session.exitCode);
     } else {
       sendEvent(socket, {
-        type: "snapshot",
-        data: "",
-        modes: {
-          bracketedPasteMode: null,
-        },
+        type: "connected",
+        terminalSessionId,
+        runtimeKind: session && isTmuxBackedSession(session) ? "tmux" : "pty",
       });
-      snapshotDelivered = true;
+      if (session) {
+        if (sendInitialSnapshot) {
+          if (settleInitialTmuxRepaint) {
+            await delay(TMUX_INITIAL_REPAINT_SETTLE_MS);
+          }
+          sendEvent(socket, {
+            type: "snapshot",
+            data: await resolveInitialSnapshot(
+              terminalSessionManager,
+              runtimeRegistry,
+              terminalSessionId,
+              session.scrollback,
+              tmuxService,
+            ),
+            modes: {
+              bracketedPasteMode:
+                runtimeRegistry.getBracketedPasteMode(terminalSessionId),
+            },
+          });
+        }
+        snapshotDelivered = true;
+        sendStatusEvent(socket, session.status, session.exitCode);
+      } else {
+        sendEvent(socket, {
+          type: "snapshot",
+          data: "",
+          modes: {
+            bracketedPasteMode: null,
+          },
+        });
+        snapshotDelivered = true;
+      }
+      if (settleInitialTmuxRepaint) {
+        pendingInitialOutput = "";
+      }
+      if (pendingInitialOutput) {
+        outputBatcher.push(pendingInitialOutput);
+        pendingInitialOutput = "";
+      }
     }
-    if (settleInitialTmuxRepaint) {
-      pendingInitialOutput = "";
-    }
-    if (pendingInitialOutput) {
-      outputBatcher.push(pendingInitialOutput);
-      pendingInitialOutput = "";
-    }
+    if (cleanedUp || socket.readyState !== 1) return;
     heartbeat.start();
 
     handleClientMessage = createTerminalInputHandler({
@@ -420,55 +519,7 @@ export function attachTerminalWebSocketServer(
     for (const pendingMessage of pendingClientMessages.splice(0)) {
       handleClientMessage(pendingMessage.data, pendingMessage.isBinary);
     }
-
-    let cleanedUp = false;
-    const cleanupConnection = () => {
-      if (cleanedUp) {
-        return;
-      }
-      cleanedUp = true;
-      heartbeat.stop();
-      unsubscribe();
-      outputBatcher.dispose();
-      releaseTmuxLifecycleClient?.();
-      metadataSync.clearTmuxPaneMetadataSync();
-      runtimeRegistry.detachClient(terminalSessionId, clientId);
-      if (
-        session &&
-        isTmuxBackedSession(session) &&
-        runtimeRegistry.getAttachedClientCount(terminalSessionId) === 0
-      ) {
-        void runtimeRegistry
-          .disposeRuntime(terminalSessionId)
-          .catch((error: unknown) => {
-            terminalWsLogger.error("terminal.tmux.attach-runtime.disposed", {
-              message: "Failed to dispose idle tmux runtime",
-              terminalSessionId,
-              error,
-            });
-          });
-      }
-    };
-
-    socket.on("close", (code, reason) => {
-      terminalWsLogger.info("terminal-ws.closed", {
-        message: "Terminal websocket closed",
-        terminalSessionId,
-        clientId,
-        code,
-        reason: String(reason),
-        durationMs: Date.now() - connectedAt,
-      });
-      cleanupConnection();
-    });
-
-    socket.on("error", () => {
-      cleanupConnection();
-    });
-
-    socket.on("pong", () => {
-      heartbeat.markAlive();
-    });
+    void metadataSync.syncTmuxPaneMetadata().catch(() => undefined);
   });
 
   return wss;

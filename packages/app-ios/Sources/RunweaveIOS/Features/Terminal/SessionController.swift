@@ -45,7 +45,16 @@ public final class SessionController: ObservableObject {
   private var connected = false
   private var hasSnapshot = false
   private var stopped = true
-  private var queue: [[UInt8]] = []
+  private struct OutputFrame {
+    let bytes: [UInt8]
+    let cursor: TerminalOutputCursor?
+    var size: (Int, Int)? = nil
+  }
+  private var queue: [OutputFrame] = []
+  private let resumeClientID = UUID().uuidString
+  private var committedCursor: TerminalOutputCursor?
+  private var receivedCursor: TerminalOutputCursor?
+  private var cursorValid = false
   private var drainTask: Task<Void, Never>?
   private var drainGeneration = 0
   private var size: (Int, Int)?
@@ -79,6 +88,11 @@ public final class SessionController: ObservableObject {
       self.updateScrollState()
     }
     surface.viewportChanged = { [weak self] cols, rows in
+      if let self, let size = self.size, size != (cols, rows) {
+        // A locally resized renderer no longer represents the old cursor's grid.
+        self.committedCursor = nil
+        self.cursorValid = false
+      }
       self?.size = (cols, rows)
       self?.sendSize()
     }
@@ -106,7 +120,11 @@ public final class SessionController: ObservableObject {
           guard self.generation == epoch, !Task.isCancelled else { return }
           self.record("ticket.acquired")
           let ws = self.networking.webSocketTask(
-            with: try self.api.webSocketURL(terminalID: self.terminalID, ticket: ticket))
+            with: try self.api.webSocketURL(
+              terminalID: self.terminalID, ticket: ticket, resumeClientID: self.resumeClientID,
+              resumeStreamID: self.committedCursor?.streamId,
+              resumeOffset: self.committedCursor?.offset,
+              cols: self.size?.0, rows: self.size?.1))
           ws.maximumMessageSize = 2 * Self.highWater
           self.socket = ws
           self.connected = false
@@ -131,8 +149,14 @@ public final class SessionController: ObservableObject {
         } catch {
           guard self.generation == epoch, !Task.isCancelled, !self.stopped else { return }
           self.connected = false
+          let closeCode = self.socket?.closeCode.rawValue
           self.socket?.cancel(with: .goingAway, reason: nil)
           self.socket = nil
+          self.clearQueue()
+          if closeCode == 1013 || closeCode == 1008 || closeCode == 1011 {
+            self.halt("终端恢复已停止，请在网络稳定后手动重连")
+            return
+          }
           if let error = error as? APIError {
             self.halt(error.localizedDescription)
             return
@@ -235,26 +259,64 @@ public final class SessionController: ObservableObject {
 
   private func consume(_ message: TerminalMessage) throws {
     switch message {
-    case .connected(let id, let kind):
+    case .connected(let id, let kind, let recovery):
       guard id == terminalID else { throw APIError.invalidResponse }
       connected = true
       runtimeKind = kind
+      if recovery?.mode == .resume {
+        guard committedCursor != nil else { throw APIError.invalidResponse }
+        receivedCursor = committedCursor
+        hasSnapshot = true
+        record("recovery.resume")
+      } else {
+        if committedCursor != nil {
+          notice = "断线较久或输出已超出恢复窗口，已同步当前屏幕；未回放旧输出"
+        }
+        committedCursor = nil
+        receivedCursor = nil
+        cursorValid = false
+        record("recovery.snapshot")
+      }
       connectionStatus = "已连接"
       record("connected")
       sendSize()
-    case .snapshot(let text, let bracketed):
+    case .snapshot(let text, let bracketed, let cursor, let cols, let rows):
       guard connected else { throw APIError.invalidResponse }
       clearQueue()
+      guard cursor == nil || (cursor!.offset >= 0 && !cursor!.streamId.isEmpty) else {
+        throw APIError.invalidResponse
+      }
+      if let cols, let rows, !(2...500).contains(cols) || !(1...200).contains(rows) {
+        throw APIError.invalidResponse
+      }
+      committedCursor = nil
+      receivedCursor = cursor
+      cursorValid = cursor != nil
       surface.reset()
       tmuxScrollRows = 0
       localAtBottom = true
       scrolledBack = false
       hasSnapshot = true
-      enqueue(text, event: "snapshot")
-      if let bracketed { enqueue(bracketed ? "\u{1b}[?2004h" : "\u{1b}[?2004l", event: "modes") }
-    case .output(let text):
+      let modes = bracketed.map { $0 ? "\u{1b}[?2004h" : "\u{1b}[?2004l" } ?? ""
+      enqueue(
+        text + modes, event: "snapshot", cursor: cursor,
+        snapshotSize: cols.flatMap { col in rows.map { (col, $0) } })
+    case .output(let text, let range):
       guard hasSnapshot else { throw APIError.invalidResponse }
-      enqueue(text, event: "output")
+      var cursor: TerminalOutputCursor?
+      if let range {
+        guard let receivedCursor, range.streamId == receivedCursor.streamId,
+          range.fromOffset == receivedCursor.offset, range.fromOffset >= 0,
+          range.toOffset >= range.fromOffset,
+          range.toOffset - range.fromOffset == text.utf8.count, text.utf8.count <= 65536
+        else { throw APIError.invalidResponse }
+        cursor = TerminalOutputCursor(streamId: range.streamId, offset: range.toOffset)
+      } else {
+        committedCursor = nil
+        cursorValid = false
+      }
+      receivedCursor = cursor
+      enqueue(text, event: "output", cursor: cursor)
     case .status(let status, _):
       if runtimeStatus != status { runtimeStatus = status }
       record("runtime.status")
@@ -273,17 +335,20 @@ public final class SessionController: ObservableObject {
     }
   }
 
-  private func enqueue(_ text: String, event: String) {
+  private func enqueue(
+    _ text: String, event: String, cursor: TerminalOutputCursor? = nil,
+    snapshotSize: (Int, Int)? = nil
+  ) {
     let bytes = Array(text.utf8)
-    guard queuedBytes + bytes.count <= Self.highWater else {
+    guard queuedBytes + bytes.count <= Self.highWater, queue.count < 8192 else {
       halt("输出积压超过 1 MiB，需要重同步；连接已停止")
       return
     }
     receivedBytes += bytes.count
     queuedBytes += bytes.count
-    for offset in stride(from: 0, to: bytes.count, by: 16384) {
-      queue.append(Array(bytes[offset..<min(offset + 16384, bytes.count)]))
-    }
+    // A range is fed atomically. Dropping an unconsumed frame on disconnect
+    // cannot leave an already-rendered prefix that would be replayed twice.
+    queue.append(OutputFrame(bytes: bytes, cursor: cursor, size: snapshotSize))
     record(event, bytes: bytes.count)
     guard drainTask == nil else { return }
     let epoch = generation
@@ -294,9 +359,14 @@ public final class SessionController: ObservableObject {
         !self.queue.isEmpty
       {
         let next = self.queue.removeFirst()
-        self.surface.feed(next)
-        self.queuedBytes -= next.count
-        self.record("consume", bytes: next.count)
+        let terminal = self.surface.terminalView.getTerminal()
+        let localSize = (terminal.cols, terminal.rows)
+        if let size = next.size { terminal.resize(cols: size.0, rows: size.1) }
+        self.surface.feed(next.bytes)
+        if next.size != nil { terminal.resize(cols: localSize.0, rows: localSize.1) }
+        self.committedCursor = self.cursorValid ? next.cursor : nil
+        self.queuedBytes -= next.bytes.count
+        self.record("consume", bytes: next.bytes.count)
         await Task.yield()
       }
       if self.generation == epoch, self.drainGeneration == drainEpoch { self.drainTask = nil }
@@ -309,6 +379,7 @@ public final class SessionController: ObservableObject {
     drainTask = nil
     queue.removeAll(keepingCapacity: false)
     queuedBytes = 0
+    receivedCursor = committedCursor
   }
 
   private func halt(_ message: String) {
@@ -364,6 +435,8 @@ public final class SessionController: ObservableObject {
       "terminalSessionId": terminalID, "generation": generation,
       "uptime": ProcessInfo.processInfo.systemUptime, "queuedBytes": queuedBytes,
       "renderer": surface.renderer, "rendererVersion": "1.19.0",
+      "committedOffset": committedCursor?.offset ?? -1,
+      "streamId": committedCursor?.streamId ?? "",
     ]
     value.merge(extra) { _, next in next }
     if let entry = DiagnosticRecord.terminal(value) {

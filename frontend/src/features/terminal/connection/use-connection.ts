@@ -15,6 +15,10 @@ import {
 } from "./reconnect-policy";
 import { logTerminalPerf, summarizeTerminalChunk } from "../output/performance";
 import { toWebSocketBase } from "../navigation/url";
+import {
+  TerminalClientOutputRecovery,
+  type TerminalOutputDelivery,
+} from "./output-recovery";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;
@@ -52,8 +56,12 @@ export function useTerminalConnection(params: {
   terminalSessionId: string;
   token: string;
   onAuthExpired?: () => void;
-  onSnapshot?: (data: string, modes?: TerminalModeState) => void;
-  onOutput?: (data: string) => void;
+  onSnapshot?: (
+    data: string,
+    modes?: TerminalModeState,
+    delivery?: TerminalOutputDelivery,
+  ) => void;
+  onOutput?: (data: string, delivery?: TerminalOutputDelivery) => void;
   includeSnapshot?: boolean;
 }) {
   const {
@@ -66,6 +74,8 @@ export function useTerminalConnection(params: {
     includeSnapshot = true,
   } = params;
   const socketRef = useRef<WebSocket | null>(null);
+  const outputRecoveryRef = useRef<TerminalClientOutputRecovery | null>(null);
+  const outputRecoveryScopeRef = useRef<string | null>(null);
   const tokenRef = useRef(token);
   const pendingResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -124,6 +134,17 @@ export function useTerminalConnection(params: {
     setInputError(null);
     setNotice(null);
     let cancelled = false;
+    const scope = JSON.stringify([apiBase, terminalSessionId]);
+    const previousRecovery =
+      outputRecoveryScopeRef.current === scope
+        ? null
+        : outputRecoveryRef.current;
+    const outputRecovery =
+      outputRecoveryScopeRef.current === scope && outputRecoveryRef.current
+        ? outputRecoveryRef.current
+        : new TerminalClientOutputRecovery();
+    outputRecoveryRef.current = outputRecovery;
+    outputRecoveryScopeRef.current = scope;
 
     const clearReconnectTimer = () => {
       if (reconnectTimerRef.current === null) {
@@ -157,6 +178,9 @@ export function useTerminalConnection(params: {
       });
 
       try {
+        await previousRecovery?.reconnectCursor();
+        const cursor = await outputRecovery.reconnectCursor();
+        if (cancelled) return;
         const ticketPayload = await createTerminalWsTicket(
           apiBase,
           tokenRef.current,
@@ -166,12 +190,31 @@ export function useTerminalConnection(params: {
           return;
         }
 
-        const wsUrl = buildTerminalWsUrl(
-          apiBase,
-          terminalSessionId,
-          ticketPayload.ticket,
-          includeSnapshot,
+        const wsUrl = new URL(
+          buildTerminalWsUrl(
+            apiBase,
+            terminalSessionId,
+            ticketPayload.ticket,
+            includeSnapshot,
+          ),
         );
+        if (includeSnapshot && onSnapshotRef.current && onOutputRef.current) {
+          wsUrl.searchParams.set("resumeClientId", outputRecovery.clientId);
+          if (cursor) {
+            wsUrl.searchParams.set("resumeStreamId", cursor.streamId);
+            wsUrl.searchParams.set("resumeOffset", String(cursor.offset));
+          }
+          if (pendingResizeRef.current) {
+            wsUrl.searchParams.set(
+              "cols",
+              String(pendingResizeRef.current.cols),
+            );
+            wsUrl.searchParams.set(
+              "rows",
+              String(pendingResizeRef.current.rows),
+            );
+          }
+        }
 
         const socket = new WebSocket(wsUrl);
         socketRef.current = socket;
@@ -281,16 +324,45 @@ export function useTerminalConnection(params: {
             ) as TerminalServerMessage;
             inboundSequenceRef.current += 1;
             if (parsed.type === "connected") {
+              if (parsed.recovery?.mode !== "resume")
+                outputRecovery.invalidate();
+              if (parsed.recovery?.mode === "snapshot" && cursor)
+                setNotice(
+                  "断线较久或输出已超出恢复窗口，已同步当前屏幕；未回放旧输出。",
+                );
               setRuntimeKind(parsed.runtimeKind ?? null);
               return;
             }
             if (parsed.type === "snapshot") {
+              if (
+                (parsed.cols !== undefined || parsed.rows !== undefined) &&
+                (!Number.isInteger(parsed.cols) ||
+                  !Number.isInteger(parsed.rows) ||
+                  parsed.cols! < 2 ||
+                  parsed.cols! > 500 ||
+                  parsed.rows! < 1 ||
+                  parsed.rows! > 200)
+              )
+                throw new Error("Invalid terminal snapshot dimensions");
               logTerminalPerf("ws.message.snapshot", {
                 terminalSessionId,
                 seq: inboundSequenceRef.current,
                 ...summarizeTerminalChunk(parsed.data),
               });
-              onSnapshotRef.current?.(parsed.data, parsed.modes);
+              const delivery = outputRecovery.snapshot(
+                parsed.data,
+                parsed.cursor,
+              );
+              delivery.cols = parsed.cols;
+              delivery.rows = parsed.rows;
+              if (onSnapshotRef.current) {
+                if (!parsed.cursor) delivery.commit(false);
+                onSnapshotRef.current(
+                  parsed.data,
+                  parsed.modes,
+                  parsed.cursor ? delivery : undefined,
+                );
+              } else delivery.commit(false);
               return;
             }
             if (parsed.type === "output") {
@@ -299,7 +371,17 @@ export function useTerminalConnection(params: {
                 seq: inboundSequenceRef.current,
                 ...summarizeTerminalChunk(parsed.data),
               });
-              onOutputRef.current?.(parsed.data);
+              const delivery = outputRecovery.output(
+                parsed.data,
+                includeSnapshot ? parsed.range : undefined,
+              );
+              if (onOutputRef.current) {
+                if (!parsed.range || !includeSnapshot) delivery.commit(false);
+                onOutputRef.current(
+                  parsed.data,
+                  parsed.range && includeSnapshot ? delivery : undefined,
+                );
+              } else delivery.commit(false);
               return;
             }
             if (parsed.type === "metadata") {
@@ -349,6 +431,8 @@ export function useTerminalConnection(params: {
               }
             }
           } catch {
+            outputRecovery.invalidate();
+            socket.close(4000, "Terminal output requires resynchronization");
             closeReasonRef.current = "Invalid terminal message";
             setError("Invalid terminal message");
           }
@@ -425,6 +509,9 @@ export function useTerminalConnection(params: {
   );
 
   return {
+    invalidateOutputRecovery: useMemoizedFn(() =>
+      outputRecoveryRef.current?.invalidate(),
+    ),
     connectionStatus,
     terminalStatus,
     exitCode,
@@ -458,6 +545,9 @@ export function useTerminalConnection(params: {
       });
     }),
     sendResize: useMemoizedFn((cols: number, rows: number) => {
+      const previous = pendingResizeRef.current;
+      if (previous && (previous.cols !== cols || previous.rows !== rows))
+        outputRecoveryRef.current?.invalidate();
       pendingResizeRef.current = { cols, rows };
       outboundSequenceRef.current += 1;
       logTerminalPerf("ws.send.resize", {

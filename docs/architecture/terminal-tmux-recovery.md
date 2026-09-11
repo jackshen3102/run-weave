@@ -33,9 +33,44 @@ session 的 `running/exited`、runtime 是否 attached、tmux 是否存在以及
 
 1. WebSocket 根据 session/panel 身份取得 runtime；已有有效 runtime 时复用。
 2. tmux session 仍存在而 attach runtime 缺失时，重新 attach，并取得当前 pane 的 fresh snapshot。
-3. 最后一个终端 WebSocket 客户端断开时只释放 idle attach runtime；tmux session 与用户任务继续存活。
+3. 最后一个终端 WebSocket 客户端断开后，attach runtime 最多保活 60 秒；到期或超过全局 8 个 idle
+   runtime 的上限时释放最早 idle 的实例。tmux session 与用户任务继续存活。
    后台输出和 metadata 仍由 watcher 与全局 terminal events 链路维护。
-4. snapshot 与 live output 可能并发；前端恢复、防止旧 snapshot 覆盖新输出及 output batching 继续走现有链路。
+4. tmux 的 snapshot 与 live output 使用同一 attach 输出流的字节游标衔接，不能拼接独立 attach 的快照。
+
+## 弱网输出恢复
+
+[共享协议](../../packages/shared/src/terminal/runtime/websocket.ts) 的可选 `recovery`、`cursor`、
+`range` 字段只描述展示输出，不代表命令执行确认。客户端以实例内存中的 `resumeClientId`、
+`resumeStreamId`、`resumeOffset` 请求恢复；ticket/session 鉴权保持独立。
+
+- 同一 runtime、有效客户端 lease 和完整缓存边界同时成立时，仅续传已提交 cursor 之后的输出。
+  Web 在 xterm write callback 后提交，iOS 在完整帧同步 feed 后提交；接收队列中的数据不算已显示。
+  本地终端尺寸变化会作废旧网格的恢复游标；包括断线期间外围提示条导致的布局变化，此时安全降级
+  为快照，不承诺短断线无清屏。恢复身份在同一 API/session 的客户端实例内稳定，不写入持久化存储。
+- 客户端 lease、输出数据各自最多保留 60 秒。超过时间、字节上限、stream 改变或游标无效时，只取
+  当前屏幕快照，不推送裁剪后的尾部，不从 persisted scrollback 补历史。
+- [输出镜像](../../backend/src/terminal/runtime/output-screen.ts) 使用固定版本的 headless xterm，
+  只保存正常/备用屏幕，scrollback 为零。等待同流解析完成和完整 ANSI 边界后序列化，再补发快照
+  cursor 后的连续输出；没有临时 tmux attach，也没有静默 50 ms 即视为一致的假设。
+- [状态适配层](../../backend/src/terminal/runtime/output-screen-state.ts) 补充序列化器遗漏的滚动区域、
+  保存光标、字符集、鼠标编码、隐藏光标及行尾 wrap 状态。它依赖固定版本的内部字段；升级依赖必须
+  重新验证状态及后续 VT 操作一致性。无法安全序列化的状态拒绝恢复，不发送不完整快照。
+
+| 资源                  | 上限与行为                                                         |
+| --------------------- | ------------------------------------------------------------------ |
+| 每条流的续传缓存      | 60 秒、512 KiB UTF-8、8,192 帧；保留完整帧边界                     |
+| 展示输出帧            | 64 KiB UTF-8，batch 合并仍保持连续 from/to offset                  |
+| 镜像待解析数据 / 操作 | 512 KiB / 8,192；未闭合控制串也有 512 KiB 上限                     |
+| 镜像尺寸              | 2～500 列、1～200 行，与对应 PTY resize 一起校验                   |
+| 快照                  | 同流 singleflight、全局最多两个工作、2 秒、512 KiB；失败关闭本连接 |
+| WS 待发送队列         | 现有 bufferedAmount 加本次 JSON 的 UTF-8 字节不能超过 512 KiB      |
+| 断线客户端 lease      | 每 runtime 最多 8 个、全局 64 个，定时过期                         |
+| idle attach           | 最多 60 秒、全局 8 个，淘汰不删除 tmux pane                        |
+
+慢客户端使用 1013 关闭，立即退订并在 1 秒内强制结束未完成的 close handshake；Web/iOS 对此停止
+自动重试，网络稳定后由用户手动重连。镜像自身超限时释放该 attach，连接明确停止，tmux 任务仍保留。
+普通 PTY 不启用游标恢复，旧服务端的无恢复字段消息仍按原路径消费。
 
 如果原 tmux session 已消失，恢复不再等价于接回原进程。Launcher 会区分原 shell、可恢复的 Agent thread
 和不可恢复的执行状态；有可恢复 thread 时可按保存的身份启动 resume，并记录丢失提示。
@@ -53,7 +88,7 @@ session 的 `running/exited`、runtime 是否 attached、tmux 是否存在以及
 - 已恢复运行时但原 tmux 会话丢失等非致命提示，通过 terminal WS 的 `notice` 消息展示；
   `error` 留给失败。Web 与原生 iOS 收到 `notice` 后继续处理连接、快照和输出。
 - Web 对建连早期的异常断线也执行有上限的退避重连；连接存活时间只决定重置重试预算。
-  正常关闭、鉴权拒绝、已退出会话仍不自动重连。
+  正常关闭、鉴权拒绝、已退出会话及 1013 背压/恢复失败仍不自动重连。
 - 悬浮输入框等待 HTTP 输入确认后才清空，20 秒未收到确认则回到可操作状态；结果未确认时保留按终端和分屏隔离的草稿，
   显示提示并由用户检查终端后决定是否再次发送，不自动重放。HTTP 成功仅表示输入已交付，
   不表示 Agent 已执行或完成任务。tmux 的 `prompt_replace` 在目标分屏退出回看模式后才写入。
@@ -103,6 +138,7 @@ Backend 启动时仅在配置启用扫描时调用；不可用或扫描失败只
 
 使用 [Terminal Runtime 用例](../testing/terminal/runtime/core.testplan.yaml) 与
 [tmux 生命周期用例](../testing/terminal/runtime/tmux-persistence.testplan.yaml)、
+[弱网输出恢复用例](../testing/terminal/runtime/output-recovery.testplan.yaml)、
 [命令矩阵](../testing/command-matrix.md) 选择本轮检查，保留以下行为边界：
 
 - 原任务存活与缺失重建分别取证；Backend 重启后接回正确 session/panel。

@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks";
-import type { Dispatch, SetStateAction } from "react";
+import { useRef, type Dispatch, type SetStateAction } from "react";
+import type { TerminalOutputDelivery } from "../../../features/terminal/connection/output-recovery";
 import type { Terminal } from "@xterm/xterm";
 import { isTerminalAtBottom } from "@runweave/common/terminal";
 import type { TerminalModeState } from "@runweave/shared/terminal/websocket";
@@ -84,6 +85,7 @@ function releaseTerminalFrameAfterPaint(release: () => void): void {
 }
 
 interface UseTerminalOutputStreamOptions {
+  onLocalReset: () => void;
   activeRef: MutableRef<boolean>;
   deferredOutputRef: MutableRef<string>;
   deferredSnapshotRef: MutableRef<DeferredTerminalSnapshot | null>;
@@ -104,6 +106,7 @@ interface UseTerminalOutputStreamOptions {
 }
 
 export function useTerminalOutputStream({
+  onLocalReset,
   activeRef,
   deferredOutputRef,
   deferredSnapshotRef,
@@ -122,11 +125,21 @@ export function useTerminalOutputStream({
   terminalSessionId,
   websocketContentVersionRef,
 }: UseTerminalOutputStreamOptions) {
+  const networkWrites = useRef(Promise.resolve());
+  const enqueueNetworkWrite = useMemoizedFn((work: () => Promise<void>) => {
+    networkWrites.current = networkWrites.current.then(work, work);
+  });
   const renderTerminalSnapshot = useMemoizedFn(
-    (data: string, modes?: TerminalModeState) => {
+    (
+      data: string,
+      modes?: TerminalModeState,
+      delivery?: TerminalOutputDelivery,
+    ) => {
+      if (!delivery) onLocalReset();
       const nextChunk = filterBrowserHandledTerminalOutput(data);
       const terminal = terminalRef.current;
       if (!terminal) {
+        delivery?.commit(false);
         return;
       }
       setTerminalAtBottom(true);
@@ -152,6 +165,9 @@ export function useTerminalOutputStream({
       const bracketedPasteMode =
         modes?.bracketedPasteMode ?? terminal.modes.bracketedPasteMode;
       terminal.reset();
+      const localSize = { cols: terminal.cols, rows: terminal.rows };
+      if (delivery?.cols && delivery.rows)
+        terminal.resize(delivery.cols, delivery.rows);
       const renderStartedAt = performance.now();
       terminal.write(
         `${wrapSynchronizedOutput(nextChunk)}${
@@ -160,6 +176,9 @@ export function useTerminalOutputStream({
             : BRACKETED_PASTE_MODE_DISABLE
         }`,
         () => {
+          if (delivery?.cols && delivery.rows)
+            terminal.resize(localSize.cols, localSize.rows);
+          delivery?.commit();
           logTerminalPerf("terminal.snapshot.rendered", {
             terminalSessionId,
             renderDurationMs: Number(
@@ -270,8 +289,37 @@ export function useTerminalOutputStream({
   });
 
   const onSnapshot = useMemoizedFn(
-    (data: string, modes?: TerminalModeState) => {
+    (
+      data: string,
+      modes?: TerminalModeState,
+      delivery?: TerminalOutputDelivery,
+    ) => {
       websocketContentVersionRef.current += 1;
+      if (delivery) {
+        // Serialize reset + write with preceding output, even in a hidden panel.
+        // New-protocol data is committed only by the actual xterm callback.
+        enqueueNetworkWrite(
+          () =>
+            new Promise<void>((resolve) => {
+              const terminal = terminalRef.current;
+              if (!terminal) {
+                delivery.commit(false);
+                resolve();
+                return;
+              }
+              terminal.write("", () =>
+                renderTerminalSnapshot(data, modes, {
+                  ...delivery,
+                  commit: (accepted) => {
+                    delivery.commit(accepted);
+                    resolve();
+                  },
+                }),
+              );
+            }),
+        );
+        return;
+      }
       if (!activeRef.current) {
         deferredSnapshotRef.current = { data, modes };
         deferredOutputRef.current = "";
@@ -284,91 +332,114 @@ export function useTerminalOutputStream({
     },
   );
 
-  const onOutput = useMemoizedFn((data: string) => {
-    const nextChunk = filterBrowserHandledTerminalOutput(data);
-    if (!nextChunk) {
-      return;
-    }
-    onOutputReceived?.();
-    websocketContentVersionRef.current += 1;
+  const onOutput = useMemoizedFn(
+    (data: string, delivery?: TerminalOutputDelivery) => {
+      const nextChunk = filterBrowserHandledTerminalOutput(data);
+      if (delivery) {
+        websocketContentVersionRef.current += 1;
+        if (nextChunk) onOutputReceived?.();
+        enqueueNetworkWrite(
+          () =>
+            new Promise<void>((resolve) => {
+              const terminal = terminalRef.current;
+              if (!terminal || requiresSnapshotRestoreRef.current) {
+                delivery.commit(false);
+                resolve();
+                return;
+              }
+              if (!isTerminalAtBottom(terminal)) setHasNewOutputBelow(true);
+              terminal.write(nextChunk, () => {
+                delivery.commit();
+                resolve();
+              });
+            }),
+        );
+        return;
+      }
+      if (!nextChunk) {
+        return;
+      }
+      onOutputReceived?.();
+      websocketContentVersionRef.current += 1;
 
-    const now = Date.now();
-    outputSequenceRef.current += 1;
-    const outputSequence = outputSequenceRef.current;
-    logTerminalPerf("terminal.output.received", {
-      terminalSessionId,
-      seq: outputSequence,
-      sinceLastInputMs:
-        lastInputSentAtRef.current === null
-          ? null
-          : now - lastInputSentAtRef.current,
-      ...summarizeTerminalChunk(nextChunk),
-    });
-    recordTerminalPerfProbeEvent("terminal.output.received", nextChunk, {
-      terminalSessionId,
-      seq: outputSequence,
-      sinceLastInputMs:
-        lastInputSentAtRef.current === null
-          ? null
-          : now - lastInputSentAtRef.current,
-      ...summarizeTerminalChunk(nextChunk),
-    });
-
-    if (!activeRef.current) {
-      markDeferredOutput(nextChunk);
-      return;
-    }
-
-    const terminal = terminalRef.current;
-    if (!terminal) {
-      return;
-    }
-
-    const wasAtBottom = isTerminalAtBottom(terminal);
-    if (!wasAtBottom) {
-      setHasNewOutputBelow(true);
-    }
-    const renderStartedAt = performance.now();
-    terminal.write(nextChunk, () => {
-      const renderedAt = performance.now();
-      const sinceLastInputMs =
-        lastInputSentAtRef.current === null
-          ? null
-          : Date.now() - lastInputSentAtRef.current;
-      logTerminalPerf("terminal.output.rendered", {
+      const now = Date.now();
+      outputSequenceRef.current += 1;
+      const outputSequence = outputSequenceRef.current;
+      logTerminalPerf("terminal.output.received", {
         terminalSessionId,
         seq: outputSequence,
-        sinceLastInputMs,
-        renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
+        sinceLastInputMs:
+          lastInputSentAtRef.current === null
+            ? null
+            : now - lastInputSentAtRef.current,
         ...summarizeTerminalChunk(nextChunk),
       });
-      recordTerminalPerfProbeEvent("terminal.output.rendered", nextChunk, {
+      recordTerminalPerfProbeEvent("terminal.output.received", nextChunk, {
         terminalSessionId,
         seq: outputSequence,
-        sinceLastInputMs,
-        renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
+        sinceLastInputMs:
+          lastInputSentAtRef.current === null
+            ? null
+            : now - lastInputSentAtRef.current,
         ...summarizeTerminalChunk(nextChunk),
       });
-      requestAnimationFrame(() => {
+
+      if (!activeRef.current) {
+        markDeferredOutput(nextChunk);
+        return;
+      }
+
+      const terminal = terminalRef.current;
+      if (!terminal) {
+        return;
+      }
+
+      const wasAtBottom = isTerminalAtBottom(terminal);
+      if (!wasAtBottom) {
+        setHasNewOutputBelow(true);
+      }
+      const renderStartedAt = performance.now();
+      terminal.write(nextChunk, () => {
+        const renderedAt = performance.now();
+        const sinceLastInputMs =
+          lastInputSentAtRef.current === null
+            ? null
+            : Date.now() - lastInputSentAtRef.current;
+        logTerminalPerf("terminal.output.rendered", {
+          terminalSessionId,
+          seq: outputSequence,
+          sinceLastInputMs,
+          renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
+          ...summarizeTerminalChunk(nextChunk),
+        });
+        recordTerminalPerfProbeEvent("terminal.output.rendered", nextChunk, {
+          terminalSessionId,
+          seq: outputSequence,
+          sinceLastInputMs,
+          renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
+          ...summarizeTerminalChunk(nextChunk),
+        });
         requestAnimationFrame(() => {
-          const paintDelayMs = Number(
-            (performance.now() - renderedAt).toFixed(2),
-          );
-          const paintedSinceLastInputMs =
-            lastInputSentAtRef.current === null
-              ? null
-              : Date.now() - lastInputSentAtRef.current;
-          recordTerminalPerfProbeEvent("terminal.output.painted", nextChunk, {
-            terminalSessionId,
-            seq: outputSequence,
-            sinceLastInputMs: paintedSinceLastInputMs,
-            paintDelayMs,
-            ...summarizeTerminalChunk(nextChunk),
+          requestAnimationFrame(() => {
+            const paintDelayMs = Number(
+              (performance.now() - renderedAt).toFixed(2),
+            );
+            const paintedSinceLastInputMs =
+              lastInputSentAtRef.current === null
+                ? null
+                : Date.now() - lastInputSentAtRef.current;
+            recordTerminalPerfProbeEvent("terminal.output.painted", nextChunk, {
+              terminalSessionId,
+              seq: outputSequence,
+              sinceLastInputMs: paintedSinceLastInputMs,
+              paintDelayMs,
+              ...summarizeTerminalChunk(nextChunk),
+            });
           });
         });
       });
-    });
-  });
+    },
+  );
 
   return {
     onOutput,
