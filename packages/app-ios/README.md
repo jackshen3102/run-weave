@@ -24,6 +24,8 @@ node scripts/ios.mjs run --simulator <UDID> --configuration Debug
 ```
 
 使用 doctor 列出的已安装 destination。支持 Debug、Profile、Release 三种配置；先构建，再安装对应配置。
+Debug/Profile 真机构建不启用 APNs 推送，可使用 Personal Team 签名；Release 保留推送权限，
+需要支持 Push Notifications 的开发者团队和描述文件。
 模拟器使用 ad hoc 签名和专属 Keychain entitlement；产物在本目录
 `.build/ios/DerivedData/Build/Products/`。脚本不启动 Backend，也不改变其他应用的配置。
 仓库根的 `pnpm ios:doctor`、`pnpm ios:build -- ...`、`pnpm ios:run -- ...` 只是同一脚本的快捷入口。
