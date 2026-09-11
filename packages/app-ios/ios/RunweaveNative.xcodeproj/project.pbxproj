@@ -141,6 +141,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RunweaveNative/Simulator.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = RunweaveNative/Device.entitlements;
+				APS_ENVIRONMENT = development;
+				RUNWEAVE_APNS_ENVIRONMENT = sandbox;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P9654G8Z76;
@@ -163,6 +166,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RunweaveNative/Simulator.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = RunweaveNative/Device.entitlements;
+				APS_ENVIRONMENT = development;
+				RUNWEAVE_APNS_ENVIRONMENT = sandbox;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P9654G8Z76;
@@ -213,6 +219,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RunweaveNative/Simulator.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = RunweaveNative/Device.entitlements;
+				APS_ENVIRONMENT = production;
+				RUNWEAVE_APNS_ENVIRONMENT = production;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P9654G8Z76;

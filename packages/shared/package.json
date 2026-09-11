@@ -62,7 +62,10 @@
     "./terminal-protocol": "./src/terminal/protocol.ts",
     "./work-history": "./src/work-history.ts",
     "./voice": "./src/voice.ts",
-    "./suiji": "./src/suiji/index.ts"
+    "./suiji": "./src/suiji/index.ts",
+    "./device-status": "./src/monitoring/device-status.ts",
+    "./battery": "./src/monitoring/battery.ts",
+    "./device-notifications": "./src/monitoring/device-notifications.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

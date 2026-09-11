@@ -117,3 +117,10 @@ export function createCorsMiddleware(
     next();
   };
 }
+
+export function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
+  return (rawOrigins ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}

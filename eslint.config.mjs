@@ -21,6 +21,7 @@ export default tseslint.config(
       "app-server/src/**/*.ts",
       "backend/src/**/*.ts",
       "packages/shared/src/**/*.ts",
+      "packages/push-gateway/src/**/*.ts",
       "packages/suiji-server/**/*.ts",
       "packages/suiji-server/**/*.cjs",
       "packages/runweave-cli/src/**/*.ts",

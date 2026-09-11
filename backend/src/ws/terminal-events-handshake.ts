@@ -4,6 +4,8 @@ import type { AuthService } from "../auth/service";
 interface TerminalEventsHandshakeSuccess {
   ok: true;
   after: string | null;
+  sessionId: string;
+  deviceStatus: boolean;
 }
 
 interface TerminalEventsHandshakeFailure {
@@ -50,5 +52,7 @@ export function validateTerminalEventsWebSocketHandshake(params: {
   return {
     ok: true,
     after,
+    sessionId: verifiedTicket.sessionId,
+    deviceStatus: requestUrl.searchParams.get("deviceStatus") === "1",
   };
 }

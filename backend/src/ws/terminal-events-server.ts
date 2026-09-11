@@ -1,3 +1,4 @@
+import type { DeviceMonitorService } from "../device-monitor/service";
 import type { TerminalEventServerMessage } from "@runweave/shared/terminal/events";
 import { WebSocket, WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
@@ -33,6 +34,7 @@ export function attachTerminalEventsWebSocketServer(
   terminalEventService: TerminalEventService,
   options?: {
     tunnelAuthConfig?: TunnelAuthConfig | null;
+    deviceMonitor?: DeviceMonitorService | null;
   },
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
@@ -105,7 +107,12 @@ export function attachTerminalEventsWebSocketServer(
       events: terminalEventService.listAfter(handshake.after),
     });
 
+    const unsubscribeDevice = handshake.deviceStatus ? options?.deviceMonitor?.subscribe((snapshot) => {
+      if (!authService.getActiveSession(handshake.sessionId)) { socket.close(1008, "Unauthorized"); return; }
+      sendTerminalEvent(socket, { type: "device-status", snapshot });
+    }) : undefined;
     socket.on("close", () => {
+      unsubscribeDevice?.();
       heartbeat.stop();
       unsubscribe();
       terminalEventsWsLogger.info("terminal-events-ws.disconnected", {

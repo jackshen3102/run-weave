@@ -1,3 +1,4 @@
+import { createDeviceMonitor, type DeviceMonitoringRuntime } from "../device-monitor/bootstrap";
 import { MobileLoginService } from "../auth/mobile-login";
 import { createHash } from "node:crypto";
 import os from "node:os";
@@ -64,7 +65,7 @@ import { RaceRecordStore } from "../race/race-record-store";
 import { RaceService } from "../race/race-service";
 import { BackendRuntimeStatusService } from "../runtime-status/service";
 
-export interface RuntimeServices {
+export interface RuntimeServices extends DeviceMonitoringRuntime {
   runtimeStatus: BackendRuntimeStatusService;
   activityStore: ActivityStore | null;
   activityRecorder: ActivityRecorder;
@@ -551,7 +552,9 @@ export async function createRuntimeServices(
       workspaceServiceManager,
     },
   );
+  const deviceMonitoring = await createDeviceMonitor(storagePaths.browserProfileDir, authService);
   const services: RuntimeServices = {
+    ...deviceMonitoring,
     runtimeStatus,
     activityStore,
     activityRecorder,

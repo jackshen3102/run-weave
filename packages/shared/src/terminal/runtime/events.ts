@@ -1,3 +1,4 @@
+import type { DeviceStatusSnapshot } from "../../monitoring/device-status";
 import type { TerminalCompletionEventPayload } from "./completion";
 import type { TerminalPanelListItem, TerminalPanelWorkspace } from "../panel";
 import type { TerminalProjectListItem } from "../project";
@@ -255,6 +256,7 @@ export interface TerminalEventCursorGap {
 }
 
 export type TerminalEventServerMessage =
+  | { type: "device-status"; snapshot: DeviceStatusSnapshot }
   | {
       type: "connected";
       acceptedAfter: string | null;

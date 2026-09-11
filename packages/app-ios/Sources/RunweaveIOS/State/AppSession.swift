@@ -15,8 +15,15 @@ final class AppSession: ObservableObject {
   @Published var terminal: TerminalDetails?
   @Published private(set) var terminalController: SessionController?
   // Retained when expired authentication dismisses the terminal, scoped to the active connection.
-  @Published private(set) var terminalDrafts: [String: String] = [:]
+  @Published private(set) var terminalDrafts: [String: String] = [:] { didSet { scheduleDraftSave() } }
+  let deviceStatus = DeviceStatusStore()
   let imageDrafts = TerminalImageDrafts()
+  let draftArchive = ConnectionDraftArchive()
+  var draftSaveTask: Task<Void, Never>?
+  var changingDraftScope = false
+  var unreadableDraftScopes = Set<String>()
+
+  init() { imageDrafts.onChange = { [weak self] in self?.scheduleDraftSave() } }
   private(set) var api: APIClient?
   @Published private(set) var generation = 0
   @Published private(set) var metadataWrites = Set<String>()
@@ -37,6 +44,11 @@ final class AppSession: ObservableObject {
   @Published private(set) var reconnectingTerminal = false
   var canReconnect: Bool { authenticated && foreground && !loading && !writing && !reconnectingTerminal }
 
+  func discardDraftContents(_ value: BackendConnection) {
+    guard connection?.scope == value.scope else { return }
+    changingDraftScope = true; terminalDrafts.removeAll(); imageDrafts.clear(); changingDraftScope = false
+  }
+
   func reconnectTerminal() async {
     guard canReconnect, let controller = terminalController else { return }
     let epoch = generation
@@ -54,9 +66,14 @@ final class AppSession: ObservableObject {
     let previous = api
     api = nil
     stopResources()
-    terminalDrafts.removeAll()
-    imageDrafts.clear()
+    saveDraftsNow()
+    changingDraftScope = true
+    let drafts = archivedDrafts(connection)
+    terminalDrafts = drafts.text
+    imageDrafts.restore(drafts.images)
+    changingDraftScope = false
     metadataWrites.removeAll()
+    deviceStatus.reset()
     self.connection = connection
     reconnectingTerminal = false
     authenticated = false
@@ -104,13 +121,17 @@ final class AppSession: ObservableObject {
     guard let api else { return }
     generation += 1
     stopResources()
+    forgetDrafts(connection)
+    changingDraftScope = true
     terminalDrafts.removeAll()
     imageDrafts.clear()
+    changingDraftScope = false
     authenticated = false
     metadataWrites.removeAll()
     overview = nil
     loading = false
     writing = false
+    if let connection { await NotificationCoordinator.shared.disable(connection, client: api) }
     do { try await api.logout() } catch { self.error = displayError(error) }
   }
 
@@ -376,6 +397,8 @@ final class AppSession: ObservableObject {
     guard foreground != value else { return }
     foreground = value
     if !value {
+      saveDraftsNow()
+      deviceStatus.suspend()
       clearBellMarkers()
       Task { await DiagnosticStore.shared.flush() }
       resumeTask?.cancel()
@@ -404,6 +427,7 @@ final class AppSession: ObservableObject {
     guard generation == epoch, foreground, !Task.isCancelled else { return }
     health = result
     if result.status == .offline {
+      deviceStatus.disconnected()
       events?.stop()
       terminalController?.disconnect()
       scheduleProbe(epoch: epoch)
@@ -442,9 +466,15 @@ final class AppSession: ObservableObject {
     if events == nil {
       let epoch = generation
       let stream = EventStream(api: api)
+      stream.onDeviceStatus = { [weak self] value in
+        guard let self, self.generation == epoch, self.foreground else { return }
+        self.deviceStatus.receive(value)
+        if let connection = self.connection { NotificationCoordinator.shared.note(value, connection: connection) }
+      }
       stream.onConnected = { [weak self] in
         guard let self, self.generation == epoch else { return }
         self.health.status = .online
+        self.deviceStatus.refresh(api)
       }
       stream.onResync = { [weak self] in
         guard let self, self.generation == epoch else { return }
@@ -457,6 +487,7 @@ final class AppSession: ObservableObject {
       }
       stream.onFailure = { [weak self] error in
         guard let self, self.generation == epoch else { return false }
+        self.deviceStatus.disconnected()
         await self.handle(error, epoch: epoch)
         guard self.generation == epoch, self.authenticated, self.foreground else { return false }
         if case APIError.invalidResponse = error { return false }
@@ -550,6 +581,7 @@ final class AppSession: ObservableObject {
   }
 
   private func stopResources() {
+    deviceStatus.suspend()
     clearBellMarkers()
     acknowledgementWrites.removeAll()
     pendingOverviewEvents.removeAll()

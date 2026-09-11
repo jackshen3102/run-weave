@@ -4,6 +4,7 @@ public struct RootView: View {
   @Environment(\.scenePhase) private var scenePhase
   @StateObject private var connections = ConnectionStore()
   @StateObject private var session = AppSession()
+  @ObservedObject private var notifications = NotificationCoordinator.shared
   @State private var managingConnections = false
   @State private var mobileLoginRevision = 0
   @AppStorage("native.theme") private var theme = "dark"
@@ -48,6 +49,7 @@ public struct RootView: View {
                   ? Color.green : session.health.status == .offline ? Color.red : Color.orange
               ).frame(width: 7, height: 7)
               Text(connections.active?.name ?? "选择电脑").lineLimit(1)
+              if session.authenticated { DeviceBatteryView(device: session.deviceStatus, compact: true) }
             }
           }.accessibilityLabel("连接管理")
         }
@@ -57,8 +59,19 @@ public struct RootView: View {
     .preferredColorScheme(theme == "light" ? .light : .dark)
     .id(connections.active?.scope)
     .task(id: "\(connections.active?.scope ?? ""):\(mobileLoginRevision)") { await session.activate(connections.active) }
-    .onAppear { if connections.active == nil { managingConnections = true } }
-    .onChange(of: scenePhase) { phase in session.setScenePhase(phase) }
+    .onAppear {
+      if connections.active == nil { managingConnections = true }
+      notifications.consume(in: connections)
+      notifications.foreground()
+    }
+    .onChange(of: notifications.pendingHostID) { _ in notifications.consume(in: connections) }
+    .alert("电脑提醒", isPresented: Binding(get: { notifications.message != nil }, set: { if !$0 { notifications.message = nil } })) {
+      Button("好") { notifications.message = nil }
+    } message: { Text(notifications.message ?? "") }
+    .onChange(of: scenePhase) { phase in
+      session.setScenePhase(phase)
+      if phase == .active { notifications.foreground() } else { notifications.suspend() }
+    }
     .sheet(isPresented: $managingConnections) {
       ConnectionManager(store: connections, session: session) {
         managingConnections = false
