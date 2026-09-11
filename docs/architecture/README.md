@@ -57,6 +57,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | App 移动端连接、页面和安全边界          | [app-mobile.md](./app-mobile.md)                           |
 | App Server 总体架构                     | [app-server-architecture.md](./app-server-architecture.md) |
 | App Server Event Center 与 Work History | [app-server-event-center.md](./app-server-event-center.md) |
+| Mac 电量与手机提醒                      | [device-monitor.md](./device-monitor.md)                   |
 | 本机系统资源监控                        | [system-monitor.md](./system-monitor.md)                   |
 
 ### Terminal

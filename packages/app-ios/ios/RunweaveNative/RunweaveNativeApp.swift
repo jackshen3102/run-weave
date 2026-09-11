@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct RunweaveNativeApp: App {
+  @UIApplicationDelegateAdaptor(NotificationAppDelegate.self) private var notifications
   #if NATIVE_DIAGNOSTICS
     @State private var showingTerminalLab =
       ProcessInfo.processInfo.arguments.contains("--native-terminal-lab")

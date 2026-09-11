@@ -13,7 +13,8 @@ struct TerminalDraftImage: Identifiable {
 /// Attachments belong to a connection's terminal drafts, not to the lifetime of a picker or screen.
 @MainActor
 final class TerminalImageDrafts: ObservableObject {
-  @Published private(set) var images: [String: [TerminalDraftImage]] = [:]
+  var onChange: (() -> Void)?
+  @Published private(set) var images: [String: [TerminalDraftImage]] = [:] { didSet { onChange?() } }
   private var uploads: [UUID: Task<Void, Never>] = [:]
 
   func add(data: Data, mimeType: String, terminalID: String, session: AppSession) throws {
@@ -67,6 +68,17 @@ final class TerminalImageDrafts: ObservableObject {
 
   func clear(terminalID: String) {
     remove(Set((images[terminalID] ?? []).map(\.id)), terminalID: terminalID)
+  }
+
+  func restore(_ value: [String: [TerminalDraftImage]]) {
+    clear()
+    images = value.mapValues { images in
+      images.map { image in
+        var restored = image
+        if restored.path == nil { restored.failure = restored.failure ?? "上传已暂停，请重试" }
+        return restored
+      }
+    }
   }
 
   func clear() {

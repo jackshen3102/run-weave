@@ -241,6 +241,7 @@ public actor APIClient {
       path: "/ws/terminal-events",
       query: [
         URLQueryItem(name: "token", value: ticket), URLQueryItem(name: "after", value: after ?? ""),
+        URLQueryItem(name: "deviceStatus", value: "1"),
       ])
   }
   private nonisolated func socketURL(path: String, query: [URLQueryItem]) throws -> URL {
@@ -350,6 +351,7 @@ public actor APIClient {
     var request = URLRequest(url: url)
     request.httpMethod = method
     request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
+    request.setValue(connectionID, forHTTPHeaderField: "X-Connection-ID")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
     if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body) }

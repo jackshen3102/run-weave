@@ -102,3 +102,27 @@ MQP-010 已验证连续 65 次每秒轮询、每 IP/requestId 限流、第 65 �
 
 旧 xterm 十分钟对照未完成，保留为历史研究限制；旧客户端退役后不再作为当前原生性能合同的前置条件。
 原生性能预算仍保留，不能因为删除对照就降低阈值。后续布局、渲染或输入变更需按影响范围重验。
+
+## Mac 电量与提醒验证
+
+2026-09-11，Debug/Release Simulator 构建与 iOS 26.5 的既有 XCUITest 执行器交互通过：本机实际 100%/AC/full，
+注入样本的实时 18%、接电但未充电、0%、失败保留旧记录、无电池、前台恢复新值，以及冷启动保留登录。
+另用隔离 Backend 和真实 zsh 验证终端草稿在 App 后台后终止、重新启动时恢复，未向终端提交该草稿。
+本轮原始证据位于执行机器 `.runweave/battery-ui/runner/` 的 `battery-native-final.xcresult` 与 `battery-drafts-01.xcresult`，
+包含截图和控件树。采样注入只用于受控电量场景，不代表物理电池真的降到了 0%。
+
+协议集成驱动验证真实认证 HTTP/WS、安装身份、单实例存储、阈值去重、别名撤销、网关重启、迟到 token 失败和接电取消重试。
+provider 使用本地 HTTP/2 TLS 服务验证 ES256 JWT、固定 APNs headers/正文和响应映射；未向 Apple 发送通知。
+另在真实 130 秒内保持 3 个鉴权 HTTP/WS 客户端，确认仅有启动、60 秒和 120 秒共 3 次采样；
+初始 WS ticket 过期后，有效登录会话继续接收快照。注册确认前不发送、旧版本确认被拒也已通过真实 API 验证。
+两份电量/推送 YAML 合同共 36 条 required 用例，本轮是上述专项验证，尚未完成全部用例的独立逐条验收。
+
+同日已用当前本地代码的 Profile 构建升级 iPhone 17（iOS 26.6.1），既有真机执行器验证启动、
+连接管理和返回首页通过，原登录和连接保留。当前 Personal Team 不支持 Push Notifications，
+该安装通过本地空 entitlement 文件和 `RUNWEAVE_APNS_ENVIRONMENT=disabled` 构建，未启用 APNs。
+本机桌面端随后更新到 0.208.0，安装态 Backend 的鉴权电量接口返回 52%/battery/discharging，与系统读数一致；
+未再次验证手机刷新后的电量。证据分别位于执行机器 `.runweave/battery-phone/` 和 `.runweave/battery-desktop/`。
+
+真实 sandbox/production 锁屏、前台 APNs 和点击通知路由未执行：可用推送签名、APNs 私钥与集中部署未配置。
+远程 Mac、真实手机离线撤销、完整后台时序、命令超时恢复、
+异常文件系统与完整多连接交互仍需按 YAML 合同补齐。构建或本地注入结果不能替代这些门槛。

@@ -97,6 +97,12 @@ export class AuthService {
       : null;
   }
 
+  getActiveAppSession(sessionId: string): (AccessTokenSession & { connectionId: string }) | null {
+    const record = this.refreshSessions.get(sessionId);
+    return record && isRefreshSessionActive(record) && record.clientType === "app" && record.connectionId
+      ? { sessionId: record.id, username: record.username, connectionId: record.connectionId } : null;
+  }
+
   async loginFromOwnerSession(ownerSessionId: string, connectionId: string): Promise<LoginResult | null> {
     const owner = this.getActiveSession(ownerSessionId);
     if (!owner) return null;

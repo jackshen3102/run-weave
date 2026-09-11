@@ -1,0 +1,177 @@
+version: 1
+name: Mac 电量采集与原生手机展示验收
+description: >
+  这是 2026-09-10 候选方案的验收合同，未实施或未执行不代表通过。每例独立拥有 Backend、
+  存储目录、认证会话及需要的原生客户端；不使用其他 case 遗留状态。只有采样依赖可注入，
+  HTTP、WS、鉴权、状态存储和 UI 必须走真实实现。系统实读与注入数据分别标记；结束后只清理本例资源。
+cases:
+  - id: BATMON-001
+    name: macOS 真实采样与系统电源信息一致
+    required: true
+    description: >
+      实际 Backend 读取所在 Mac 的电源信息，无需管理员权限，百分比与供电状态可由系统命令对照。
+    preconditions:
+      - 本例拥有一台有内置电池的 Mac 上的隔离候选 Backend，并已获得只供本例使用的登录凭据。
+      - 采样未注入替代实现，可记录采样时刻和本轮子进程调用。
+    steps:
+      - 读取 pmset -g batt 和 ioreg 电源信息，同时通过已鉴权的设备状态 API 取得首次成功快照。
+      - 核对百分比、AC 或电池供电以及充电状态一致；确认未把已充满且接电误写成正在放电。
+      - 确认调用不包含 sudo、进程列表或 CPU/内存采集，结果不含硬件序列号或完整命令行。
+  - id: BATMON-002
+    name: 无电池和不支持平台具有不同语义
+    required: true
+    description: >
+      已确认无电池是有效观测，平台不支持是能力缺失，两者均不能伪造 0% 或误报低电量。
+    preconditions:
+      - 本例拥有隔离候选 Backend，可在采样依赖边界提供无电池和不支持平台的明确结果。
+    steps:
+      - 提供 macOS 成功读取但无内置电池的结果；确认 API 返回 ok、absent 和空百分比。
+      - 提供不支持平台的结果；确认 API 返回 unsupported 和未知电池字段，终端 API 仍可用。
+  - id: BATMON-003
+    name: 采样失败保留最后成功观测
+    required: true
+    description: >
+      失败只能降低数据可信度，不能刷新旧观测时间或把旧电量替换成 0%。
+    preconditions:
+      - 本例 Backend 的隔离采样依赖先返回 38% 的有效结果，之后可返回错误或不可解析内容。
+    steps:
+      - 记录成功快照的 observedAt，再分别提供命令失败和无合法百分比的输出。
+      - 确认 sampleStatus 为 error，百分比仍为 38%，observedAt 不变，sampleAgeMs 随时间增加。
+      - 恢复有效采样；确认错误状态解除，并使用新的真实观测时间。
+  - id: BATMON-004
+    name: 客户端数量不放大采样频率
+    required: true
+    description: >
+      Backend 只有一个每 60 秒运行的采样器，多次读取和多个订阅客户端不重复启动系统命令。
+    preconditions:
+      - 本例 Backend 有独立采样调用记录，时钟正常，启动时没有其他设备监控实例使用该存储目录。
+    steps:
+      - 启动 Backend 并连接三个鉴权客户端，在 130 秒内重复 GET 和建立或关闭设备订阅。
+      - 核对启动时一次、约 60 秒和 120 秒各一次采样，读取请求不额外增加调用次数。
+      - 确认每轮只包含电源信息命令，订阅数增减不改变下一轮采样时机。
+  - id: BATMON-005
+    name: 采样超时可恢复且不积压子进程
+    required: true
+    description: >
+      单次命令卡住时在 3 秒预算后终止，下一轮仍能采集，关闭服务后没有本轮采样进程遗留。
+    preconditions:
+      - 本例隔离 Backend 的采样执行边界可挂起一个本轮拥有的命令并记录进程退出。
+    steps:
+      - 挂起采样，确认约 3 秒后返回错误并结束对应子进程，没有并行积压的命令。
+      - 恢复采样依赖并等待下一轮，确认获得成功快照。
+      - 关闭本例 Backend，确认采样定时器、子进程及本例订阅均释放。
+  - id: BATMON-006
+    name: 未变化电量仍有可信的新鲜度
+    required: true
+    description: >
+      连续成功读取相同百分比仍更新时间；停止成功采样后才按原始观测年龄降级。
+    preconditions:
+      - 本例 Backend 与原生客户端在线，采样依赖持续返回同一百分比，双方可读取单调时钟记录。
+    steps:
+      - 保持相同电量超过 180 秒，确认每轮 device-status 更新观测时间，手机仍显示当前值。
+      - 暂停成功采样但保持 WS 心跳，等待最后成功样本超过 180 秒；确认手机显示上次电量。
+      - 核对普通 WS 心跳或重复 GET 没有伪造新的成功采样时间。
+  - id: BATMON-007
+    name: 原生电量展示区分未知和真实零值
+    required: true
+    description: >
+      SwiftUI 首页与连接详情按数据语义展示数字、供电文字和新鲜度，不增加整行常驻监控面板。
+    preconditions:
+      - 本例候选 App 已安装到 Simulator 或真机，登录本例可控制采样依赖的隔离 Backend。
+    steps:
+      - 通过原生控件操作进入首页和连接详情，依次提供 pending、38% 电池供电、接电未充电、已充满和真实 0% 样本。
+      - 确认首次未知不显示 0%，接电与正在充电文案不同，真实 0% 正常显示。
+      - 提供无电池、采样失败和过期结果；确认相应文案可通过控件树读取，颜色不是唯一状态提示。
+  - id: BATMON-008
+    name: 多连接读取使用各自身份且不切换当前电脑
+    required: true
+    description: >
+      连接列表读取彼此隔离的快照，不借用当前连接的凭据或把列表读取变成全局连接切换。
+    preconditions:
+      - 本例拥有两个不同凭据的 Backend、一条同机地址别名和一条未登录连接，均在专用 App 中保存。
+    steps:
+      - 选择第一个 Backend，打开连接列表并刷新；确认各行使用所属凭据，未登录行提示登录后查看。
+      - 核对同机别名返回相同 hostId，不同 Backend 保留各自电量，activeID 始终不变。
+      - 确认最大并发不超过 3；关闭列表后，非当前连接请求被取消且不维持额外后台订阅。
+  - id: BATMON-009
+    name: 迟到 HTTP 结果不覆盖更新事件或新连接
+    required: true
+    description: >
+      连接 generation 和同流 revision 共同保证旧结果不能让电量倒退或串到另一台电脑。
+    preconditions:
+      - 本例有两个隔离 Backend，透明代理只对本例 GET 响应延迟，WS 保持真实连接。
+    steps:
+      - 延迟 A 的 GET，先让 A 通过 WS 返回更高 revision，再释放 GET；确认手机保留较新快照。
+      - 再延迟 A 的读取并切换 B，随后释放 A 响应；确认 B 的 hostId、数字和更新时间不被替换。
+  - id: BATMON-010
+    name: Backend 重启保留安装身份并更新流代次
+    required: true
+    description: >
+      同一存储目录重启保持 hostId，新 streamId 不接受旧流快照，初始数据等待新采样后才标新。
+    preconditions:
+      - 本例独占一个隔离 Backend 和存储目录，客户端已经读取并记录 hostId、streamId 和 revision。
+    steps:
+      - 完成重启前取证后停止本例 Backend，再使用同一目录重启并重新取得端口、认证及原生控件引用。
+      - 确认 hostId 不变、streamId 改变，重连后 revision 允许从新流起点开始。
+      - 延迟一次旧流结果并释放，确认不能覆盖新流；未获得新样本前不把持久化旧值显示为实时。
+  - id: BATMON-011
+    name: 设备数据仅向已鉴权调用者开放
+    required: true
+    description: >
+      电量 API 和设备消息沿用访问控制，公开健康接口不泄露设备快照。
+    preconditions:
+      - 本例 Backend 开启正常鉴权，拥有有效与无效的访问凭据和 WS ticket。
+    steps:
+      - 分别不带凭据、带无效凭据访问设备 API 和订阅设备消息；确认请求被拒且没有电量数据。
+      - 使用有效凭据确认可读取，再查看公开健康响应；确认不包含电量、电脑名称或通知订阅。
+  - id: BATMON-012
+    name: 登录会话撤销停止既有设备消息
+    required: true
+    description: >
+      已建立的设备订阅不能在其登录会话失效后继续读取新的电量。
+    preconditions:
+      - 本例客户端已通过有效会话订阅设备消息，可由本例管理员撤销该会话。
+    steps:
+      - 记录一帧有效设备快照后撤销会话，再产生新的采样结果。
+      - 确认旧连接停止设备投递并关闭，原凭据不能重新读取或订阅；不以临时 ticket 自然过期替代此检查。
+  - id: BATMON-013
+    name: 旧客户端不接收新增设备帧
+    required: true
+    description: >
+      新 Backend 对未显式订阅的现有事件客户端保持消息集合与终端补发语义兼容。
+    preconditions:
+      - 本例新 Backend 与不发送 deviceStatus 订阅参数的旧协议客户端连接，并拥有本例专用空闲终端。
+    steps:
+      - 保持连接跨过两轮电量采样，确认没有 device-status 帧。
+      - 在本例终端产生一个正常状态事件并重连补发，确认原有 cursor 和事件顺序没有因设备采样改变。
+  - id: BATMON-014
+    name: 新 App 连接旧 Backend 时降级为不支持
+    required: true
+    description: >
+      设备 API 缺失只能关闭电量能力，不影响原有首页、连接和终端。
+    preconditions:
+      - 本例候选原生 App 已保存一个由本例拥有且没有设备状态 API 的旧 Backend。
+    steps:
+      - 登录并进入连接详情，确认设备 API 的 404 显示暂不支持电量监控。
+      - 打开本例终端并返回首页，确认原有功能可用，未因能力缺失反复刷新 token 或重新登录。
+  - id: BATMON-015
+    name: 手机前后台切换释放订阅并恢复新快照
+    required: true
+    description: >
+      手机退到后台时停止主动网络活动，恢复时重新读取当前值；Mac 采样不依赖手机前台状态。
+    preconditions:
+      - 本例原生 App 与隔离 Backend 在线，可记录本例 HTTP/WS 和采样时序。
+    steps:
+      - 让 App 退到后台超过 70 秒，并改变本例采样结果；确认手机没有定时 GET，Mac 仍按计划采样。
+      - 恢复前台，确认重新读取并订阅得到新电量，原订阅没有重复残留。
+  - id: BATMON-016
+    name: 远程地址显示目标 Mac 而非手机旁的电脑
+    required: true
+    description: >
+      通过已有远程连接访问时仍采集目标 Backend 所在 Mac，地址前缀和身份边界保持正确。
+    preconditions:
+      - 本例拥有可通过远程 HTTPS 地址访问的 Mac Backend，手机保存对应连接且可独立对照目标 Mac 的系统电量。
+      - 该连接的代理前缀与凭据属于本例，未把请求转发到执行者旁边的其他 Mac。
+    steps:
+      - 通过原生 App 选择远程连接，读取设备详情并与目标 Mac 的系统电量及 hostId 对照。
+      - 确认 GET 和设备订阅保留已有地址前缀，未回退 localhost 或其他电脑，连接中断时仅保留目标的旧值。

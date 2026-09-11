@@ -1,3 +1,5 @@
+import { createDeviceNotificationsRouter } from "./routes/device-notifications";
+import { createDeviceStatusRouter } from "./routes/device-status";
 import { createMobileLoginRouter } from "./routes/mobile-login";
 import "dotenv/config";
 import http from "node:http";
@@ -38,7 +40,7 @@ import { registerRuntimeStatusRoutes } from "./routes/registration/runtime-statu
 import { createEvolutionActivationRouter } from "./routes/evolution/activation";
 import { createEvolutionFoundationRouter } from "./routes/evolution/foundation";
 import { createEvolutionMcpRouter } from "./routes/evolution/mcp";
-import { createCorsMiddleware } from "./server/cors";
+import { createCorsMiddleware, parseConfiguredOrigins } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import {
   isLocalDirectRequest,
@@ -99,13 +101,6 @@ class BackendStartError extends Error {
   }
 }
 
-function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
-  return (rawOrigins ?? "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-}
-
 sanitizeCurrentTerminalProcessEnv();
 
 function createHttpApp(
@@ -119,6 +114,7 @@ function createHttpApp(
 
   app.use(createRequestContextMiddleware());
   app.use(createWorkspaceServiceHttpProxy(services.workspaceServiceManager));
+  app.use("/api/device/notifications", express.json({ limit: "8kb" }));
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
     createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
@@ -223,6 +219,8 @@ function createHttpApp(
     createDiagnosticLogsRouter(diagnosticLogRecorder),
   );
   registerRuntimeStatusRoutes(app, requireAuth, services.runtimeStatus);
+  app.use("/api/device", requireAuth, createDeviceStatusRouter(services.deviceMonitor));
+  app.use("/api/device/notifications", requireAuth, createDeviceNotificationsRouter(services.batteryAlerts?.subscriptions ?? null, services.authService));
   app.use(
     "/api/app",
     requireAuth,
@@ -392,6 +390,8 @@ function attachLifecycleHandlers(
       await serverClosed;
       await services.workspaceServiceManager.dispose();
       services.runtimeStatus.dispose();
+      await services.batteryAlerts?.dispose();
+      await services.deviceMonitor?.dispose();
       await services.tmuxOutputWatcher.dispose();
       await services.terminalRuntimeRegistry.disposeAll();
       for (const socketPath of new Set(
@@ -533,7 +533,7 @@ async function startRuntime(): Promise<void> {
       upgradeRouter,
       services.authService,
       services.terminalEventService,
-      { tunnelAuthConfig },
+      { tunnelAuthConfig, deviceMonitor: services.deviceMonitor },
     );
     stage = "listen";
     const port = await listenWithFallback(server, runtimeConfig.preferredPort, {

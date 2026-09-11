@@ -2,6 +2,7 @@ import Foundation
 
 @MainActor
 final class EventStream {
+  var onDeviceStatus: ((DeviceStatusSnapshot) -> Void)?
   var onEvents: (([TerminalEvent], Bool) -> Void)?
   var onResync: (() -> Void)?
   var onConnected: (() -> Void)?
@@ -61,6 +62,8 @@ final class EventStream {
               self.onConnected?()
               // Close the overview-read/ticket-baseline race with a fresh authoritative read.
               self.onResync?()
+            case "device-status":
+              if let value = message.snapshot { self.onDeviceStatus?(value) }
             case "terminal-events":
               guard let events = message.events else { throw APIError.invalidResponse }
               self.deliver(events, live: false)
@@ -124,6 +127,7 @@ final class EventStream {
 
   func dispose() {
     stop()
+    onDeviceStatus = nil
     onEvents = nil
     onResync = nil
     onConnected = nil

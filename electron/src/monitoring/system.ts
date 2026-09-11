@@ -1,3 +1,4 @@
+import { parseMacBattery } from "@runweave/shared/battery";
 import { execFile } from "node:child_process";
 import crypto from "node:crypto";
 import os from "node:os";
@@ -341,36 +342,17 @@ export function parseBattery(
   pmsetOutput: string | null,
   ioregOutput: string | null,
 ): SystemMonitorSnapshot["battery"] {
-  if (!pmsetOutput || !/InternalBattery/i.test(pmsetOutput)) {
-    return { available: false };
-  }
-
-  const percentMatch = pmsetOutput.match(/(\d+)%/);
-  const percent = percentMatch?.[1] ? Number(percentMatch[1]) : null;
-  if (percent === null || !Number.isFinite(percent)) {
-    return { available: false };
-  }
-
-  const charging =
-    /AC Power/i.test(pmsetOutput) || /;\s*charging;/i.test(pmsetOutput);
-  const timeMatch = pmsetOutput.match(/(\d+):(\d+)\s+remaining/i);
-  const timeRemainingMin =
-    timeMatch?.[1] && timeMatch[2]
-      ? Number(timeMatch[1]) * 60 + Number(timeMatch[2])
-      : null;
-  const amperageMatch = ioregOutput?.match(/"InstantAmperage"\s*=\s*(-?\d+)/);
-  const dischargeRateMa = amperageMatch?.[1] ? Number(amperageMatch[1]) : null;
-
-  return {
-    available: true,
-    percent,
-    charging,
-    timeRemainingMin,
-    dischargeRateMa:
-      dischargeRateMa !== null && Number.isFinite(dischargeRateMa)
-        ? dischargeRateMa
-        : null,
-  };
+  if (!pmsetOutput) return { available: false };
+  try {
+    const battery = parseMacBattery(pmsetOutput);
+    if (battery.presence !== "present" || battery.percent === null) return { available: false };
+    const time = pmsetOutput.match(/(\d+):(\d+)\s+remaining/i);
+    const amperage = ioregOutput?.match(/"InstantAmperage"\s*=\s*(-?\d+)/)?.[1];
+    return { available: true, percent: battery.percent,
+      charging: battery.powerSource === "ac" || battery.chargeState === "charging",
+      timeRemainingMin: time ? Number(time[1]) * 60 + Number(time[2]) : null,
+      dischargeRateMa: amperage && Number.isFinite(Number(amperage)) ? Number(amperage) : null };
+  } catch { return { available: false }; }
 }
 
 async function sampleProcesses(

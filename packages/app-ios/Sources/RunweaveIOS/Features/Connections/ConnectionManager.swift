@@ -5,6 +5,7 @@ struct ConnectionManager: View {
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
   var onMobileLogin: () -> Void = {}
+  @StateObject private var batteries = ConnectionBatteryStore()
   @State private var scanning = false
   @State private var editingID: String?
   @State private var name = ""
@@ -48,11 +49,17 @@ struct ConnectionManager: View {
                 }
               }
               Text(connectionStatus(connection)).font(.caption)
+              if session.connection?.scope == connection.scope, session.authenticated {
+                DeviceBatteryView(device: session.deviceStatus)
+              } else if let device = batteries.devices[connection.scope] {
+                DeviceBatteryView(device: device)
+              }
               if session.connection?.scope == connection.scope, !session.checking,
                 !session.authenticated
               {
                 Button("前往登录，加载项目和终端") { dismiss() }.buttonStyle(.borderless)
               }
+              DeviceNotificationSettings(connection: connection, availability: batteries.notificationAvailability[connection.scope])
               HStack {
                 Button(checkingIDs.contains(connection.id) ? "检测中" : "检测") { check(connection) }
                   .disabled(checkingIDs.contains(connection.id))
@@ -95,6 +102,9 @@ struct ConnectionManager: View {
         Text("将移除此连接和它的本地登录凭据，远端项目和终端会保留。")
       }
     }.navigationViewStyle(.stack).interactiveDismissDisabled(busy)
+      .task(id: store.connections.map(\.scope).joined(separator: "|")) {
+        await batteries.refresh(store.connections)
+      }
       .preferredColorScheme(theme == "light" ? .light : .dark)
       .sheet(isPresented: $scanning) {
         MobileLoginView(store: store, session: session) {
@@ -145,6 +155,8 @@ struct ConnectionManager: View {
     } else {
       client = try APIClient(base: connection.url, connectionID: connection.id)
     }
+    session.forgetDrafts(connection)
+    await NotificationCoordinator.shared.disable(connection, client: client)
     try await client.clearCredentials()
   }
 

@@ -1,0 +1,219 @@
+version: 1
+name: Mac 低电量告警与原生 APNs 推送验收
+description: >
+  这是 2026-09-10 候选方案的验收合同，不代表当前已具备推送能力。每例自行建立隔离 Backend、
+  网关目录、host 发送凭据和订阅，不依赖上一例状态；只允许采样源及 APNs 传输边界注入。
+  系统规则、鉴权、存储和原生 UI 使用真实实现。真实 APNs 接受与手机可见通知分别取证，
+  不使用 simctl push 冒充送达。只对本例拥有的手机和服务发送通知或做故障注入，并清理本例资源。
+cases:
+  - id: BATALERT-001
+    name: 阈值只触发当前最高有效档位
+    required: true
+    description: >
+      新鲜且使用电池的 20% 与 10% 档位各有一次决策，首次已低于 10% 不叠发两档。
+    preconditions:
+      - 本例 Backend 有启用的专用订阅和 APNs 记录器，可在独立轮次提供受控电池样本。
+    steps:
+      - 在一轮中依次提供 21%、20%、11%、10% 和 0%；确认只创建 20% 与 10% 两档记录，0% 不被误判缺失。
+      - 在本例新的独立轮次首次提供 8%；确认只产生 10% 档，重复同值不再次发送。
+      - 提供 AC、未知和过期样本，确认不创建低电量推送。
+  - id: BATALERT-002
+    name: 25% 恢复阈值阻止临界抖动重复提醒
+    required: true
+    description: >
+      同一轮次的已发档位在阈值附近及短暂接电后仍保持，只有回升至 25% 才重新允许提醒。
+    preconditions:
+      - 本例专用订阅已在当前轮次接收一次 20% 档决策，采样依赖可控制百分比及电源状态。
+    steps:
+      - 提供 21%、20%、AC 下 22% 以及拔电后 19%，确认没有重复 20% 档。
+      - 提供新鲜 25%，再降至 20%，确认新 cycleId 下只增加一次提醒。
+  - id: BATALERT-003
+    name: Backend 重启不丢失告警去重
+    required: true
+    description: >
+      已完成的每档投递记录在同一安装重启后仍生效，不因进程内状态消失而重复通知。
+    preconditions:
+      - 本例独占 Backend 存储目录，已完成一条 20% 档记录，并能停止和重启本例进程。
+    steps:
+      - 记录 notificationId 和接受次数，停止本例 Backend 后使用原目录重启，重新获取实际端口和认证。
+      - 首次新鲜采样仍为 18%，确认没有重复发送；降到 10% 时仅新增对应档位。
+  - id: BATALERT-004
+    name: 只有用户启用并授权后才建立推送订阅
+    required: true
+    description: >
+      原生 App 不在启动时索取通知权限，拒绝权限不影响电量功能，也不悄悄建立有效推送目标。
+    preconditions:
+      - 本例 App 已安装到可控制通知授权状态的专用 Simulator 或设备，连接本例具备通知配置的 Backend。
+    steps:
+      - 首次打开 App 和电量详情，确认没有系统通知授权弹窗，提醒开关默认关闭。
+      - 主动开启提醒并拒绝权限，确认设置显示未允许、电量仍可读且服务端未新增启用订阅。
+      - 再次进入设置，确认不重复弹权限请求，可引导用户自行到系统设置开启。
+  - id: BATALERT-005
+    name: 订阅归属由 Backend 鉴权身份决定
+    required: true
+    description: >
+      请求体中的伪造身份不能覆盖真实会话归属，未授权用户无法读取或删除别人的订阅。
+    preconditions:
+      - 本例 Backend 有专用合法会话和已注册绑定，可构造缺失凭据及伪造身份字段的 HTTP 请求。
+    steps:
+      - 不带或带无效 Bearer 调用通知状态、注册和删除接口，确认被拒且没有存储变更。
+      - 使用有效会话在请求体伪造 ownerSessionId、username、hostId 或不匹配的 connectionId，确认被拒而非跨身份落盘。
+      - 核对合法状态响应不回显 deviceToken 或其他绑定的撤销凭据。
+  - id: BATALERT-006
+    name: 网关限制发送者所在电脑的目标和模板
+    required: true
+    description: >
+      一台 Mac 的发送凭据不能给另一台 Mac 的订阅发消息，也不能把网关变成任意通知或请求代理。
+    preconditions:
+      - 本例网关拥有 A、B 两个独立 host 凭据及各自订阅，APNs 边界仅记录本例请求。
+    steps:
+      - 用 A 凭据操作 B 的订阅或发送记录，确认被拒且没有 APNs 请求。
+      - 尝试提供任意 token、URL、topic 或正文，确认严格校验拒绝；合法 A 记录只使用预设电量模板和所属目标。
+      - 撤销 A 的发送凭据，确认 A 后续请求失效而 B 仍可正常处理。
+  - id: BATALERT-007
+    name: token 轮换不会被旧失败响应覆盖
+    required: true
+    description: >
+      新 token 更新替代旧版本，针对旧 token 的迟到 Unregistered 响应不能删除新注册。
+    preconditions:
+      - 本例有一个已启用安装目标，可在 APNs 传输边界延迟旧 token 的失败响应。
+    steps:
+      - 发起旧 token 的请求并延迟响应，注册该安装的新 token 后释放旧 Unregistered 响应。
+      - 确认新版本仍有效，后续新档位只发往新 token；不把 token 长度硬编码为固定字节数。
+  - id: BATALERT-008
+    name: 正常登录 token 刷新保留有效订阅
+    required: true
+    description: >
+      同一登录 sessionId 的 token 轮换不会使提醒失效或创建重复订阅。
+    preconditions:
+      - 本例 Backend 有已启用订阅和有效 refresh token，可核对真实 AuthService 会话记录。
+    steps:
+      - 执行正常认证刷新，确认 sessionId 保持不变。
+      - 再次同步注册并触发本轮首个有效档位，确认只有一个投递目标和一次发送决策。
+  - id: BATALERT-009
+    name: 会话撤销阻止尚未提交的提醒
+    required: true
+    description: >
+      退出或撤销登录后，发送与重试前的授权检查能阻止仍在 Backend 待发的通知。
+    preconditions:
+      - 本例订阅的告警已进入可控的待发状态，尚未向 APNs 提交，所属会话可由本例撤销。
+    steps:
+      - 撤销所属会话后释放发送步骤，确认待发记录取消且没有新的 APNs 请求。
+      - 在同一失效会话下尝试再注册或重试，确认失败；已在 APNs 接受的旧记录不被误报为成功撤回。
+  - id: BATALERT-010
+    name: Mac 离线时手机能撤销自己的绑定
+    required: true
+    description: >
+      撤销能力不要求 Mac 在线，专用 revokeToken 只能删除所属连接绑定，不能关闭其他连接的提醒。
+    preconditions:
+      - 本例手机有一条已启用连接及其 Keychain 撤销凭据，Mac 连接可暂停而本例网关仍可访问。
+    steps:
+      - 使 Mac 不可达，在手机关闭该连接提醒，确认请求直接到固定网关并撤销对应绑定。
+      - 用同一 revokeToken 尝试撤销别的本例绑定，确认被拒；重复撤销原绑定仍幂等。
+      - 恢复 Mac 并释放撤销前的迟到 token 同步，确认网关墓碑拒绝旧写入，提醒没有被重新开启。
+  - id: BATALERT-011
+    name: 手机离线删除连接不伪报远端停发
+    required: true
+    description: >
+      手机无法联系任何服务时保留待撤销凭据，恢复网络后先完成撤销，不把本地删除等同于远端确认。
+    preconditions:
+      - 本例手机已有启用连接，网关和撤销凭据有效，本例可独立断开手机网络。
+    steps:
+      - 手机离线后删除该连接，确认本地可完成删除并明确提示远端提醒关闭尚未确认。
+      - 恢复网络并重新取得原生控件引用，确认待撤销绑定先被删除，不自动恢复为新订阅。
+  - id: BATALERT-012
+    name: 同机地址别名只产生一次目标投递
+    required: true
+    description: >
+      同一安装通过两个 URL 别名启用提醒时共享投递目标，删除一个授权绑定不会误删另一个。
+    preconditions:
+      - 本例同一 Backend 有两个地址别名和独立有效会话，专用手机在两条连接都启用了提醒。
+    steps:
+      - 触发一个低电量档位，确认两个绑定最终只产生一次目标投递。
+      - 删除其中一个绑定，确认另一个仍有效；再触发新的更低档位，确认仍只投递一次。
+  - id: BATALERT-013
+    name: 并发及丢失确认不导致盲目重复发送
+    required: true
+    description: >
+      同一 notificationId 有唯一发送意图；APNs 可能已处理但结果未知时，不以重试制造重复通知。
+    preconditions:
+      - 本例网关有持久状态，可并发提交同一 notificationId，并在 APNs 边界制造提交后确认丢失。
+    steps:
+      - 并发提交同一记录，确认只有一次外发；对已有接受结果的重复请求返回相同已知状态。
+      - 对本例另一条新记录制造提交后响应丢失，确认记录为 unknown，重复请求不自动再次发送。
+  - id: BATALERT-014
+    name: 网关重启保留发送结果与不确定状态
+    required: true
+    description: >
+      网关恢复后不能把旧的 accepted 或未确认 sending 记录当成全新请求。
+    preconditions:
+      - 本例独占网关目录，已有一条 accepted 记录和一条停在 sending 的记录，可安全重启本例网关。
+    steps:
+      - 保存重启前状态后重启网关，重新取得实际地址和凭据，再提交同一组 notificationId。
+      - 确认 accepted 不重发，遗留 sending 转为 unknown 而非自动重投，其他新记录仍可处理。
+  - id: BATALERT-015
+    name: 重试始终服从最新状态与时间期限
+    required: true
+    description: >
+      明确可重试错误可有限退避，但过期、接电、失效授权或严重度升级必须取消原待发记录。
+    preconditions:
+      - 本例 Backend 和网关可在采样及 APNs 边界返回受控 429/5xx，能记录请求时刻和决策状态。
+    steps:
+      - 保持有效低电量并返回明确 429/5xx，确认尊重 Retry-After，最多按 5、30、120 秒重试且总期限不超过 5 分钟。
+      - 在同一重试流程中改为接电或样本过期，确认下一次尝试取消，不因为队列存在就继续发送。
+      - 对本例独立新记录在 20% 重试前升级到 10% 档，确认旧档停止，新的最高档位单独处理。
+  - id: BATALERT-016
+    name: 推送不可用不影响电量和终端
+    required: true
+    description: >
+      网关不可达、配置缺失或持久化失败只降低提醒能力，不中断已可用的核心功能。
+    preconditions:
+      - 本例 App 已连接有真实终端与设备采样的隔离 Backend，可在本例提醒配置和网关边界注入故障。
+    steps:
+      - 使网关不可达或提醒配置缺失，确认设置显示推送暂不可用，电量 GET 和本例终端仍可用。
+      - 对新告警模拟持久化失败，确认没有越过失败去发送网络通知，且错误可通过脱敏状态定位。
+      - 核对本例日志不含私钥、完整 deviceToken、发送凭据或终端内容。
+  - id: BATALERT-017
+    name: sandbox 实际锁屏通知到达正确手机
+    required: true
+    description: >
+      使用真实 sandbox APNs token 的候选 App 在锁屏且 Runweave 不在前台时收到一次正确告警。
+    preconditions:
+      - 本例专用物理 iPhone 已安装含正确推送 entitlement 的开发签名 App，允许通知且关闭干扰验收的专注模式。
+      - 本例网关配置真实 sandbox APNs 凭据，Mac 和手机可联网；只对本例订阅发送。
+    steps:
+      - 实际注册 token 并启用连接提醒，把 App 切到后台并锁屏，通过本例采样依赖触发一个新低电量轮次。
+      - 分别保存网关 APNs 接受记录和手机可见通知证据，核对电脑名称、档位、百分比及次数一致。
+      - 确认使用 alert、正确 topic 和 environment、expiration 为 0；不能把单独的 HTTP 200 判为本例通过。
+  - id: BATALERT-018
+    name: production 签名产物使用匹配推送环境
+    required: true
+    description: >
+      正式分发路径上的签名产物使用 production token 和网关配置，不把开发环境通过当成正式环境通过。
+    preconditions:
+      - 本例专用物理设备已安装合法正式分发的候选产物，实际 entitlement 与 APNs 配置均为 production。
+      - 用户已允许通知，本例拥有独立订阅及可发送的正式环境凭据。
+    steps:
+      - 核对实际签名 entitlement 与注册 token 的投递环境，锁屏后触发本例新的低电量轮次。
+      - 同时取得 APNs 接受与手机真实通知，确认没有拿 sandbox token 反复重试，也没有更换 Bundle ID。
+  - id: BATALERT-019
+    name: 前台只由统一通知处理器展示一次
+    required: true
+    description: >
+      App 前台同时收到设备状态与 APNs 时只产生一次系统提醒，电量展示仍正常更新。
+    preconditions:
+      - 本例原生 App 已获真实推送授权并保持前台，连接本例候选 Backend 和真实 APNs 网关。
+    steps:
+      - 触发一个新档位，让设备消息和对应 APNs 通知先后抵达；确认电量更新且只有一次系统提醒。
+      - 重复投递本例相同 notificationId 给统一处理器，确认不再追加横幅或声音。
+  - id: BATALERT-020
+    name: 点击通知冷启动后只定位已授权电脑
+    required: true
+    description: >
+      通知点击按已保存 hostId 定位电脑并重新读取，不能把 payload 变成任意连接或终端输入。
+    preconditions:
+      - 本例手机保存两台专用 Mac 的连接及其中一台的别名，已有本例真实低电量通知，App 进程当前未运行。
+    steps:
+      - 点击该通知冷启动，确认初始化后定位匹配 hostId 的已保存连接并读取新状态，保留其他终端草稿。
+      - 对本例已移除连接的旧通知再次冷启动点击，确认提示连接已移除，不自动添加 URL 或发送终端输入。
+      - 核对通知中的旧百分比不覆盖已接电后的新状态，需重新认证时进入目标连接登录页。
