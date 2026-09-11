@@ -35,11 +35,17 @@ func displayError(_ error: Error) -> String {
   if let api = error as? APIError { return api.localizedDescription }
   if let url = error as? URLError {
     switch url.code {
-    case .timedOut: return "连接超时，请检查电脑和网络"
+    case .appTransportSecurityRequiresSecureConnection:
+      return "此 HTTP 地址被系统安全策略拦截，请使用 HTTPS 地址或更新客户端"
+    case .timedOut: return "连接超时，请检查服务器和网络"
+    case .cannotFindHost, .dnsLookupFailed: return "无法解析服务器地址，请检查域名和 DNS"
+    case .cannotConnectToHost: return "无法连接服务器，请检查地址、端口和服务是否已启动"
+    case .notConnectedToInternet: return "网络不可用，请检查手机的 Wi-Fi 或蜂窝网络"
+    case .networkConnectionLost: return "网络连接已中断，请重试"
     case .serverCertificateUntrusted, .serverCertificateHasBadDate,
       .serverCertificateHasUnknownRoot, .secureConnectionFailed:
       return "TLS 连接失败，请检查服务器证书"
-    default: return "无法连接电脑，请检查网络、局域网权限和服务地址"
+    default: return "无法连接服务器，请检查网络、局域网权限和服务地址（错误码 \(url.code.rawValue)）"
     }
   }
   return error.localizedDescription

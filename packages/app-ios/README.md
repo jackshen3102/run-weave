@@ -53,6 +53,9 @@ Playwright 只用于配套 Web 页面，不能验证 SwiftUI。终端实验室�
 手机需能直接访问二维码显示的电脑地址，远程代理路径会保留；本功能不提供公网穿透。
 旧 Backend 不支持扫码接口时继续使用原来的手动登录。
 地址和登录状态在运行时配置，不使用 Vite 环境变量或编译时固定服务器。
+为支持用户配置的公网和局域网 HTTP 后端，App 使用 `NSAllowsArbitraryLoads`；不要同时添加
+`NSAllowsLocalNetworking`，否则 iOS 会忽略此放行设置。HTTPS 仍由系统校验服务器证书；
+公网部署优先使用 HTTPS。策略语义见 [Apple ATS 配置说明](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsallowsarbitraryloads)。
 模拟器可以访问电脑的 localhost；真机应填写手机可达的电脑地址。
 Backend 的部署和开发生命周期由仓库部署工具管理，原生应用不负责启动或停止服务器。
 

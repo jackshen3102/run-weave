@@ -103,7 +103,9 @@ private struct LoginView: View {
       if let message = failure ?? session.error { Section { Text(message).foregroundColor(.red) } }
       if session.health.status == .offline {
         Section {
-          Text(session.health.message)
+          if session.health.message != (failure ?? session.error) {
+            Text(session.health.message)
+          }
           Button("重新检测") { Task { await session.refresh() } }
         }
       }
