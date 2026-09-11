@@ -20,6 +20,7 @@ import { RuntimeStatusEntry } from "./runtime-status-entry";
 import { filterBrowserHandledTerminalOutput } from "../features/terminal/output/filter";
 import { formatTerminalSessionName } from "../features/terminal/state/session-name";
 import { useTerminalConnection } from "../features/terminal/connection/use-connection";
+import type { TerminalOutputDelivery } from "../features/terminal/connection/output-recovery";
 import { createTerminalWrappedWebLinkProvider } from "../features/terminal/navigation/web-link-provider";
 import { shouldSuppressWheelInput } from "../features/terminal/viewport/wheel-input";
 import { HttpError } from "../services/http";
@@ -51,33 +52,49 @@ export function TerminalPage({
   const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
 
   const onSnapshot = useMemoizedFn(
-    (data: string, modes?: TerminalModeState) => {
+    (
+      data: string,
+      modes?: TerminalModeState,
+      delivery?: TerminalOutputDelivery,
+    ) => {
       const nextChunk = filterBrowserHandledTerminalOutput(data);
       const terminal = terminalRef.current;
       if (!terminal) {
+        delivery?.commit(false);
         return;
       }
 
       const bracketedPasteMode =
         modes?.bracketedPasteMode ?? terminal.modes.bracketedPasteMode;
       terminal.reset();
+      const size = { cols: terminal.cols, rows: terminal.rows };
+      if (delivery?.cols && delivery.rows)
+        terminal.resize(delivery.cols, delivery.rows);
       terminal.write(
         `${nextChunk}${bracketedPasteMode ? "\u001b[?2004h" : "\u001b[?2004l"}`,
         () => {
+          if (delivery?.cols && delivery.rows)
+            terminal.resize(size.cols, size.rows);
+          delivery?.commit();
           terminal.scrollToBottom();
         },
       );
     },
   );
 
-  const onOutput = useMemoizedFn((data: string) => {
-    const nextChunk = filterBrowserHandledTerminalOutput(data);
-    if (!nextChunk) {
-      return;
-    }
+  const onOutput = useMemoizedFn(
+    (data: string, delivery?: TerminalOutputDelivery) => {
+      const nextChunk = filterBrowserHandledTerminalOutput(data);
+      if (!nextChunk) {
+        delivery?.commit();
+        return;
+      }
 
-    terminalRef.current?.write(nextChunk);
-  });
+      if (terminalRef.current)
+        terminalRef.current.write(nextChunk, () => delivery?.commit());
+      else delivery?.commit(false);
+    },
+  );
 
   const {
     connectionStatus,

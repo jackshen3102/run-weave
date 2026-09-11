@@ -1,4 +1,9 @@
 import { logTerminalPerf } from "./perf-logging";
+import type { TerminalOutputRange } from "@runweave/shared/terminal/websocket";
+import {
+  OUTPUT_FRAME_MAX_BYTES,
+  type TerminalOutputFrame,
+} from "./output-recovery";
 
 const OUTPUT_BATCH_DURATION_MS = 16;
 const OUTPUT_BATCH_MAX_SIZE = 200 * 1024;
@@ -7,11 +12,40 @@ export class TerminalOutputBatcher {
   private bufferedOutput = "";
   private flushTimer: NodeJS.Timeout | null = null;
   private flushNextChunkImmediately = false;
+  private range?: TerminalOutputRange;
 
   constructor(
-    private readonly onFlush: (output: string) => void,
+    private readonly onFlush: (
+      output: string,
+      range?: TerminalOutputRange,
+    ) => void,
     private readonly label = "default",
   ) {}
+
+  pushFrame(frame: TerminalOutputFrame): void {
+    if (
+      this.bufferedOutput &&
+      (!this.range ||
+        this.range.streamId !== frame.range.streamId ||
+        this.range.toOffset !== frame.range.fromOffset ||
+        frame.range.toOffset - this.range.fromOffset > OUTPUT_FRAME_MAX_BYTES)
+    )
+      this.flush();
+    this.range = {
+      ...frame.range,
+      fromOffset: this.range?.fromOffset ?? frame.range.fromOffset,
+    };
+    this.bufferedOutput += frame.data;
+    if (this.flushNextChunkImmediately) {
+      this.flushNextChunkImmediately = false;
+      this.flush();
+    } else if (!this.flushTimer) {
+      this.flushTimer = setTimeout(
+        () => this.flush(),
+        OUTPUT_BATCH_DURATION_MS,
+      );
+    }
+  }
 
   markNextChunkInteractive(): void {
     this.flushNextChunkImmediately = true;
@@ -75,12 +109,14 @@ export class TerminalOutputBatcher {
     }
 
     const output = this.bufferedOutput;
+    const range = this.range;
+    this.range = undefined;
     this.bufferedOutput = "";
     logTerminalPerf("terminal.batcher.flush", {
       label: this.label,
       outputLen: output.length,
     });
-    this.onFlush(output);
+    this.onFlush(output, range);
   }
 
   dispose(): void {
@@ -91,5 +127,6 @@ export class TerminalOutputBatcher {
 
     this.flushNextChunkImmediately = false;
     this.bufferedOutput = "";
+    this.range = undefined;
   }
 }

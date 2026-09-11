@@ -116,6 +116,7 @@ export function TerminalSurface({
   const websocketContentVersionRef = useRef(0);
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const floatingComposerOutputReceivedRef = useRef<() => void>(() => undefined);
+  const invalidateOutputRecoveryRef = useRef<() => void>(() => undefined);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
   const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
@@ -133,6 +134,7 @@ export function TerminalSurface({
 
   const { onOutput, onSnapshot, renderTerminalSnapshot, replayDeferredOutput } =
     useTerminalOutputStream({
+      onLocalReset: () => invalidateOutputRecoveryRef.current(),
       activeRef,
       deferredOutputRef,
       deferredSnapshotRef,
@@ -153,6 +155,7 @@ export function TerminalSurface({
     });
 
   const {
+    invalidateOutputRecovery,
     connectionStatus,
     error,
     notice,
@@ -171,6 +174,7 @@ export function TerminalSurface({
     onSnapshot,
     onOutput,
   });
+  invalidateOutputRecoveryRef.current = invalidateOutputRecovery;
   const runtimeStatusItem = useMemo<RuntimeStatusItem>(() => {
     const observedAt = Date.now();
     const stopped =

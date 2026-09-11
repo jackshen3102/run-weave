@@ -1,5 +1,8 @@
 import type { IncomingMessage } from "node:http";
-import type { TerminalClientMessage, TerminalServerMessage } from "@runweave/shared/terminal/websocket";
+import type {
+  TerminalClientMessage,
+  TerminalServerMessage,
+} from "@runweave/shared/terminal/websocket";
 import type { WebSocket } from "ws";
 import { logger } from "../logging/index";
 import { getLiveTerminalScrollback } from "../terminal/scrollback/live-scrollback";
@@ -71,12 +74,31 @@ export function parseTerminalClientMessage(
 export function sendEvent(
   socket: WebSocket,
   event: TerminalServerMessage,
-): void {
+): boolean {
   if (socket.readyState !== 1) {
-    return;
+    return false;
   }
 
-  socket.send(JSON.stringify(event));
+  const payload = JSON.stringify(event);
+  if (socket.bufferedAmount + Buffer.byteLength(payload, "utf8") > 512 * 1024) {
+    closeSlowTerminalSocket(socket);
+    return false;
+  }
+  socket.send(payload);
+  return true;
+}
+
+export function closeSlowTerminalSocket(
+  socket: WebSocket,
+  reason = "Terminal output recovery required",
+): void {
+  if (socket.readyState !== 1) return;
+  socket.close(1013, reason);
+  // Stop producers immediately, even if the close handshake cannot cross the network.
+  socket.emit("terminal-output-stopped");
+  const timer = setTimeout(() => socket.terminate(), 1000);
+  timer.unref();
+  socket.once("close", () => clearTimeout(timer));
 }
 
 export function sendStatusEvent(

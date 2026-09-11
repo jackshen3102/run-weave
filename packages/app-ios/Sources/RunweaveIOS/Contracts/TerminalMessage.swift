@@ -1,10 +1,27 @@
 import Foundation
 
+struct TerminalOutputCursor: Decodable {
+  let streamId: String
+  let offset: Int
+}
+
+struct TerminalOutputRange: Decodable {
+  let streamId: String
+  let fromOffset: Int
+  let toOffset: Int
+}
+
+struct TerminalOutputRecovery: Decodable {
+  enum Mode: String, Decodable { case snapshot, resume }
+  let mode: Mode
+  let reason: String
+}
+
 /// Mirrors packages/shared/src/terminal/runtime/websocket.ts. Unknown types are forward compatible.
 enum TerminalMessage: Decodable {
-  case connected(String, String?)
-  case snapshot(String, Bool?)
-  case output(String)
+  case connected(String, String?, TerminalOutputRecovery?)
+  case snapshot(String, Bool?, TerminalOutputCursor?, Int?, Int?)
+  case output(String, TerminalOutputRange?)
   case metadata(String, String?)
   case status(String, Int?)
   case exit(Int?)
@@ -14,7 +31,7 @@ enum TerminalMessage: Decodable {
 
   private enum Keys: String, CodingKey {
     case type, terminalSessionId, runtimeKind, data, modes, cwd, activeCommand, status, exitCode,
-      message
+      message, recovery, cursor, range, cols, rows
   }
   private struct Modes: Decodable { let bracketedPasteMode: Bool? }
 
@@ -24,12 +41,20 @@ enum TerminalMessage: Decodable {
     case "connected":
       let kind = try c.decodeIfPresent(String.self, forKey: .runtimeKind)
       guard kind == nil || kind == "tmux" || kind == "pty" else { throw APIError.invalidResponse }
-      self = .connected(try c.decode(String.self, forKey: .terminalSessionId), kind)
+      self = .connected(
+        try c.decode(String.self, forKey: .terminalSessionId), kind,
+        try c.decodeIfPresent(TerminalOutputRecovery.self, forKey: .recovery))
     case "snapshot":
       self = .snapshot(
         try c.decode(String.self, forKey: .data),
-        try c.decodeIfPresent(Modes.self, forKey: .modes)?.bracketedPasteMode)
-    case "output": self = .output(try c.decode(String.self, forKey: .data))
+        try c.decodeIfPresent(Modes.self, forKey: .modes)?.bracketedPasteMode,
+        try c.decodeIfPresent(TerminalOutputCursor.self, forKey: .cursor),
+        try c.decodeIfPresent(Int.self, forKey: .cols),
+        try c.decodeIfPresent(Int.self, forKey: .rows))
+    case "output":
+      self = .output(
+        try c.decode(String.self, forKey: .data),
+        try c.decodeIfPresent(TerminalOutputRange.self, forKey: .range))
     case "metadata":
       self = .metadata(
         try c.decode(String.self, forKey: .cwd), try c.decode(String?.self, forKey: .activeCommand))

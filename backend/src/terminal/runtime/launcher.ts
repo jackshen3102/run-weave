@@ -303,8 +303,13 @@ export async function ensureTerminalRuntime(
           ],
         }),
       );
-      options.runtimeRegistry.createRuntime(currentSession.id, runtime);
-      return { runtime, warning };
+      options.runtimeRegistry.createRuntime(currentSession.id, runtime, {
+        recoverableOutput: true,
+      });
+      return {
+        runtime: options.runtimeRegistry.getRuntime(currentSession.id)!,
+        warning,
+      };
     });
   }
 
