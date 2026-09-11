@@ -76,7 +76,7 @@ Playwright public page API 继续作为产品行为验收面，但不承担 Runw
 - `electron/src/browser/cdp/proxy/session.ts`
 - `electron/src/browser/cdp/proxy/session-messages.ts`
 - `electron/src/browser/device/display-scale.ts`
-- `docs/plans/terminal/2026-07-18-browser-display-scale.md`
+- [过程材料（Git 历史）](https://github.com/jackshen3102/run-weave/blob/9f406b9ee8f8197fe07959a1a8d0620dbee614d7/docs/plans/terminal/2026-07-18-browser-display-scale.md)
 - `docs/testing/terminal/browser/display-scale.testplan.yaml`
 
 ## 边界

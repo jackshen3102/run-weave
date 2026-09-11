@@ -93,6 +93,11 @@ Beta Pool 行为验收按能力边界拆成两个可独立执行的合同，避�
 
 当前范围的自动 verifier 使用 `pnpm dev:session:verify:beta-current`；它复用现有 Beta Pool verifier，但明确跳过 storage migration 和 legacy cleanup/purge fixture。`pnpm dev:session:verify` 保留为仓库级全兼容门禁，不作为这两份当前测试计划的 case 证据。
 
+仍需关注两个所有权与恢复风险：物理 App/rollback 位于全局 `/Applications`，而 lease、pointer
+属于用户目录，不能用临时 HOME 声称拥有已有物理槽位；App swap 与 pointer 发布之间的崩溃窗口
+也不能仅凭 `pending.json` 存在就认定已恢复，当前更新入口尚未消费该日志进行重放。
+分别由长期运行计划中的 BPR-009、BPR-010 保留验收合同；未知资源继续保留并报告阻塞，不能人工清盘规避。
+
 历史 `BSP-001`～`BSP-017` 不再作为 Markdown 执行入口，但其仍有效的不变量必须按下表保留；映射不是删减许可：
 
 | 历史合同                       | 当前归属                     | 处理                                                              |

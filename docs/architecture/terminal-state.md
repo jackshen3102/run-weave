@@ -36,6 +36,11 @@ Terminal session 与 panel metadata 中的 current/last thread 必须同时携�
 
 ## 状态来源
 
+Terminal 列表、状态 API、App Home 与 Attention 的 working 判断共用
+[有效状态投影](../../backend/src/terminal/application/terminal-state-projection.ts)：有 running Panel 时
+聚合 Panel 状态，否则读取 `TerminalStateService` 当前值，再回退持久 Session。投影只读，不回写存储。
+Companion 不单独维护运行状态；Completion 的来源是历史事件，不能用当前 Panel 的 Agent 身份替代。
+
 后端 `TerminalStateService` 的主状态来源只有两类：
 
 1. Shell active command，用来判断终端是否在受支持 AI CLI 内。

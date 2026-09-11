@@ -123,6 +123,10 @@ control/canary 由 scope、run、asset 和 policy revision 确定性分配。每
 RuntimeTrace，记录召回、过滤、选择、分桶、实际暴露 revision 和后续客观结果。关闭 policy
 会立即停止新注入；“退休 / 回滚”生成新的 Candidate revision，历史 trace 继续保留。
 
+分桶使用稳定 `assetId`，更新 revision 或新增候选不能改变同一 run/asset 的实验身份。
+客观结果与 Agent feedback 按 dispatch 精确归因；feedback 缺失或引用未暴露 revision 时记录
+`missing`，不静默丢失观察。feedback 始终是 `advisoryOnly`，不能直接作为 promotion 依据。
+
 ## 运行时与故障边界
 
 - 全机 lease key 固定为 `global-evolution-runner-v1`，所有 Backend 合计最多一个活动 Run。

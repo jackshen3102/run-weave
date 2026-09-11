@@ -105,7 +105,7 @@ http://127.0.0.1:6188/
 - 原型表达的产品行为：独立 Evolution 控制面，围绕增量认知、分歧、证据和激活治理组织。
 - 需要进入产品实现的核心功能：上表全部产品核心功能。
 - 不进入产品实现的原型辅助功能：URL mock 状态、计时器、本地临时写入。
-- 对应计划：`docs/plans/evolution/2026-07-19-v1.md`。
+- 对应计划：[过程材料（Git 历史）](https://github.com/jackshen3102/run-weave/blob/9f406b9ee8f8197fe07959a1a8d0620dbee614d7/docs/plans/evolution/2026-07-19-v1.md)。
 - 需要检查的现有代码：`frontend/src/App.tsx`、Home/Activity 页面、Agent Team startup prompt、Evolution API 实现进度。
 - 可能涉及的协议或数据结构：EvolutionRun、Claim、InsightRevision、CandidateAsset、RuntimeTrace、EvolutionSchedule、ProviderAvailability。
 - 可能涉及的前端落点：`frontend/src/pages/evolution-page.tsx`、`frontend/src/pages/evolution/`、`frontend/src/services/evolution.ts`。

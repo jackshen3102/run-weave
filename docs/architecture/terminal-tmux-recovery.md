@@ -44,6 +44,10 @@ session 的 `running/exited`、runtime 是否 attached、tmux 是否存在以及
 自动重建受时间窗口与次数限制；当前常量为 60 秒内最多 3 次。超过限制会标记不可恢复/退出并返回错误，
 不能无限重建。tmux 不可用、探测失败和 session 明确不存在也要分别保留诊断信息。
 
+存在性探测只有明确的 session 不存在结果才能触发缺失恢复；timeout、权限或基础设施错误应保留
+原状态并返回失败。只读列表可能继续显示 running，历史接口也可能回退存储内容，这些响应不能证明
+一次新的 runtime attach 成功；验收需核对实际探测与 tmux 身份。
+
 ## 客户端恢复与输入边界
 
 - 已恢复运行时但原 tmux 会话丢失等非致命提示，通过 terminal WS 的 `notice` 消息展示；
@@ -79,6 +83,11 @@ Backend 启动时仅在配置启用扫描时调用；不可用或扫描失败只
 
 ## 更新与部署前提
 
+- 标准 Stable 通道默认使用用户目录下按 Profile 隔离的持久 socket，Backend 正常退出时保留 tmux。
+  Beta 与本地开发默认使用临时 socket，正常退出时停止自身 tmux server；其中的 shell、Agent 和后台
+  命令不会跨退出保留。Beta 还回收同 Profile 的旧版持久 socket。崩溃或 `SIGKILL` 无法执行进程内清理。
+- 上述隔离依赖标准启动入口的 channel 与独立 Profile。不要手动让 Beta 使用 Stable Profile，
+  本地开发从仓库规定入口启动，避免继承错误的 Stable channel。
 - 本机客户端或 Backend 重启，只在 tmux server、store 与 socket 保留时才能重新连接。
   pty 终端不具备同样保障；任何更新流程都应依据实际 runtime 判断影响。
 - 服务端滚动部署需要新旧 Backend 能访问相同的运行环境与稳定存储。tmux 若位于随部署销毁的容器/Pod 中，
@@ -87,9 +96,13 @@ Backend 启动时仅在配置启用扫描时调用；不可用或扫描失败只
 - 本地更新操作从 [部署入口](../deployment/README.md) 查找；Dev Session 的启动与清理遵循
   [控制面规则](../../scripts/dev-session/AGENTS.md)。
 
+已知元数据限制：旧 socket 中的 session 缺失时，Launcher 可能在重建成功前就改写 socket 并标记
+`recoverable: true`。该标记和迁移日志不能独立证明恢复成功，仍需验证目标 tmux session 与实际附着。
+
 ## 验证入口
 
 使用 [Terminal Runtime 用例](../testing/terminal/runtime/core.testplan.yaml) 与
+[tmux 生命周期用例](../testing/terminal/runtime/tmux-persistence.testplan.yaml)、
 [命令矩阵](../testing/command-matrix.md) 选择本轮检查，保留以下行为边界：
 
 - 原任务存活与缺失重建分别取证；Backend 重启后接回正确 session/panel。
