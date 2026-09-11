@@ -8,9 +8,11 @@ export class AppServerClient {
 
   async postEvent(
     event: CreateAppServerEventRequest,
+    signal?: AbortSignal,
   ): Promise<AppServerEventEnvelope | null> {
     const response = await fetch(`${this.connection.baseUrl}/events`, {
       method: "POST",
+      signal,
       headers: this.headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(event),
     });

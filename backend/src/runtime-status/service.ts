@@ -12,6 +12,7 @@ import { RuntimeStatusRegistry } from "./registry";
 export class BackendRuntimeStatusService {
   readonly registry: RuntimeStatusRegistry;
   listener: { baseUrl: string; host: string; port: number } | null = null;
+  appServerIntegrationHandle: { stop(): Promise<void> } | null = null;
   appServerSource: AppServerRuntimeStatusSourceHandle | null = null;
   eventConsumer: AppServerEventConsumerHandle | null = null;
   appServerIntegration: AppServerIntegrationStatus = {
@@ -45,7 +46,8 @@ export class BackendRuntimeStatusService {
   }
 
   async dispose(): Promise<void> {
-    this.appServerSource?.stop();
+    await this.appServerIntegrationHandle?.stop();
+    await this.appServerSource?.stop();
     this.registry.dispose();
     await this.eventConsumer?.stop();
   }

@@ -284,6 +284,12 @@ app-server 不维护每个 consumer 的 ack 或 cursor。consumer 必须自己�
 ## Backend 接入
 
 backend 启动时通过环境变量或 `~/.runweave/app-server` 下的 lock/token 发现 app-server。
+首次发现或事件集成失败后，每 5 秒重新发现，不要求 App Server 先于 Backend 启动。
+已建立的事件流断开后，除原有游标重连外，Backend 也重新发现服务；发现地址或 token
+变化时，先停止旧状态轮询并排空事件处理，再用原游标建立新的消费者。显式发现模式
+仍只连接声明的地址，不回退到全局服务；主动禁用集成时不调度重试。
+Backend 关闭时先停止发现调度、取消并等待初始化，再停止状态轮询和排空事件消费。
+实现入口是 [事件集成](../../backend/src/app-server/integration.ts)。
 发现失败不会阻塞 backend 启动，只记录日志并继续使用原有能力。backend 不 import
 `@runweave/app-server`，也不启动 app-server。
 

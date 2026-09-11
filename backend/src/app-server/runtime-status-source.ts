@@ -4,7 +4,7 @@ import type { AppServerClient } from "./client";
 const POLL_INTERVAL_MS = 5_000;
 
 export interface AppServerRuntimeStatusSourceHandle {
-  stop(): void;
+  stop(): Promise<void>;
 }
 
 export function startAppServerRuntimeStatusSource(
@@ -17,7 +17,7 @@ export function startAppServerRuntimeStatusSource(
     if (stopped) return Promise.resolve();
     inFlight ??= (async () => {
       const report = await client.getRuntimeStatus(AbortSignal.timeout(1_000));
-      if (report?.source.runtime === "app-server") {
+      if (!stopped && report?.source.runtime === "app-server") {
         registry.setExternalReport(report);
       }
     })()
@@ -31,9 +31,10 @@ export function startAppServerRuntimeStatusSource(
   const timer = setInterval(() => void poll(), POLL_INTERVAL_MS);
   timer.unref();
   return {
-    stop() {
+    async stop() {
       stopped = true;
       clearInterval(timer);
+      await inFlight;
     },
   };
 }
