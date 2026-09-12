@@ -6,7 +6,7 @@ struct FilePreview: View {
   @ObservedObject var session: AppSession
   let projectID: String
   let file: SelectedFile
-  var showChange: (() -> Void)?
+  var relatedChange: SelectedFile?
   var didLoad: (() -> Void)?
   @State private var payload: PreviewFile?
   @State private var diff: PreviewDiff?
@@ -17,15 +17,17 @@ struct FilePreview: View {
   @State private var mode = "preview"
   @State private var copied = false
   @State private var fullImage = false
+  @State private var showingChange = false
+  @State private var loadedMode: String?
 
   init(
-    session: AppSession, projectID: String, file: SelectedFile, showChange: (() -> Void)? = nil,
+    session: AppSession, projectID: String, file: SelectedFile, relatedChange: SelectedFile? = nil,
     didLoad: (() -> Void)? = nil
   ) {
     self.session = session
     self.projectID = projectID
     self.file = file
-    self.showChange = showChange
+    self.relatedChange = relatedChange
     self.didLoad = didLoad
     _mode = State(initialValue: file.changeKind == nil ? "preview" : "source")
   }
@@ -33,63 +35,87 @@ struct FilePreview: View {
   private var content: String { diff?.newContent ?? payload?.content ?? "" }
   private var suffix: String { (file.path as NSString).pathExtension.lowercased() }
   var body: some View {
-    NavigationView {
-      VStack(spacing: 4) {
-        Text(file.path).font(.caption).lineLimit(2).padding(.horizontal)
-        if file.changeKind != nil || ["md", "markdown", "svg"].contains(suffix) {
-          Picker("查看方式", selection: $mode) {
-            Text(file.changeKind == nil ? "Source" : "Diff").tag("source")
-            Text("Preview").tag("preview")
-          }.pickerStyle(.segmented).padding(.horizontal)
-        }
-        if loading { ProgressView() }
-        if let failure { Text(failure).foregroundColor(.red) }
-        if !loading, failure == nil {
-          if mode == "source", file.changeKind != nil {
-            DiffView(lines: lines)
-          } else if let image {
-            ImagePreview(image: image).onTapGesture { fullImage = true }
-            Button("全屏查看") { fullImage = true }
-          } else if mode == "preview", suffix == "svg" {
-            SVGPreview(content: content)
-          } else if mode == "preview", ["md", "markdown"].contains(suffix) {
-            MarkdownPreview(content: content)
-          } else {
-            GeometryReader { geometry in
-              ScrollView([.horizontal, .vertical]) {
-                Text(verbatim: content).font(.system(size: 13, design: .monospaced))
-                  .textSelection(.enabled).padding()
-                  .frame(
-                    minWidth: geometry.size.width, minHeight: geometry.size.height,
-                    alignment: .topLeading)
-              }
+    VStack(spacing: 4) {
+      Text(file.path).font(.caption).foregroundColor(.secondary).lineLimit(2)
+        .padding(.horizontal).padding(.top, 8)
+      if file.changeKind != nil || ["md", "markdown", "svg"].contains(suffix) {
+        Picker("查看方式", selection: $mode) {
+          Text(file.changeKind == nil ? "Source" : "Diff").tag("source")
+          Text("Preview").tag("preview")
+        }.pickerStyle(.segmented).padding(.horizontal)
+      }
+      if loading { ProgressView() }
+      if let failure { Text(failure).foregroundColor(.red) }
+      if !loading, failure == nil {
+        if mode == "source", file.changeKind != nil {
+          DiffView(lines: lines)
+        } else if let image {
+          ImagePreview(image: image).onTapGesture { fullImage = true }
+          Button("全屏查看") { fullImage = true }
+        } else if mode == "preview", suffix == "svg" {
+          SVGPreview(content: content)
+        } else if mode == "preview", ["md", "markdown"].contains(suffix) {
+          MarkdownPreview(content: content)
+        } else {
+          GeometryReader { geometry in
+            ScrollView([.horizontal, .vertical]) {
+              Text(verbatim: content).font(.system(size: 13, design: .monospaced))
+                .textSelection(.enabled).padding()
+                .frame(
+                  minWidth: geometry.size.width, minHeight: geometry.size.height,
+                  alignment: .topLeading)
             }
           }
         }
       }
-      .navigationTitle((file.path as NSString).lastPathComponent).navigationBarTitleDisplayMode(
-        .inline
-      )
-      .toolbar {
-        ToolbarItem(placement: .navigationBarLeading) { Button("关闭") { dismiss() } }
-        ToolbarItemGroup(placement: .navigationBarTrailing) {
+    }
+    .background(Color(uiColor: .systemBackground).ignoresSafeArea())
+    .navigationTitle((file.path as NSString).lastPathComponent)
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .navigationBarTrailing) {
+        Menu {
           Button(copied ? "已复制" : "复制路径") {
             UIPasteboard.general.string = file.path
             copied = true
           }
-          if let showChange { Button("查看变更", action: showChange) }
+          if relatedChange != nil {
+            Button("查看变更") { showingChange = true }
+          }
+          Button("关闭预览") { dismiss() }
+        } label: {
+          Image(systemName: "ellipsis")
         }
+        .accessibilityLabel("预览操作")
       }
-      .task(id: mode) { await load() }
-      .fullScreenCover(isPresented: $fullImage) {
-        VStack {
-          Button("关闭图片") { fullImage = false }.padding()
-          if let image { ImagePreview(image: image) }
+    }
+    .background {
+      NavigationLink(isActive: $fullImage) {
+        if let image {
+          ImagePreview(image: image)
+            .background(Color(uiColor: .systemBackground).ignoresSafeArea())
+            .navigationTitle("图片预览").navigationBarTitleDisplayMode(.inline)
         }
+      } label: {
+        EmptyView()
       }
-    }.navigationViewStyle(.stack)
+      .hidden()
+      NavigationLink(isActive: $showingChange) {
+        if let relatedChange {
+          FilePreview(session: session, projectID: projectID, file: relatedChange)
+        }
+      } label: {
+        EmptyView()
+      }
+      .hidden()
+    }
+    .task(id: mode) {
+      // A child navigation pop must not replace the retained content with a spinner.
+      guard loadedMode != mode else { return }
+      await load(mode: mode)
+    }
   }
-  private func load() async {
+  private func load(mode: String) async {
     loading = true
     failure = nil
     if let api = session.api {
@@ -120,22 +146,28 @@ struct FilePreview: View {
         let value = try await session.withConnection {
           try await $0.diff(projectID: projectID, path: file.path, kind: kind)
         }
-        diff = value
+        guard !Task.isCancelled else { return }
         let built = await Task.detached(priority: .userInitiated) {
           DiffBuilder.build(old: value.oldContent, new: value.newContent)
         }.value
         guard !Task.isCancelled else { return }
+        diff = value
         lines = built
         didLoad?()
       } else if isPreviewImage(file.path) {
         await loadImage()
       } else {
-        payload = try await session.withConnection {
+        let value = try await session.withConnection {
           try await $0.file(projectID: projectID, path: file.path)
         }
+        guard !Task.isCancelled else { return }
+        payload = value
       }
     } catch { if !Task.isCancelled { failure = previewError(error) } }
-    if !Task.isCancelled { loading = false }
+    if !Task.isCancelled {
+      loading = false
+      if failure == nil { loadedMode = mode }
+    }
   }
   private func loadImage() async {
     do {

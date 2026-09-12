@@ -13,7 +13,6 @@ struct TerminalScreen: View {
   @State private var stoppingCommand = false
   @State private var actionFailure: String?
   @State private var tab = "Chat"
-  @State private var requestedChange: SelectedFile?
   @StateObject private var changes: ProjectChangesModel
   @ObservedObject private var imageDrafts: TerminalImageDrafts
   @AppStorage("native.theme") private var theme = "dark"
@@ -68,15 +67,13 @@ struct TerminalScreen: View {
           tab != "Chat")
         ChangesView(
           session: session, projectID: details.projectId, active: tab == "Changes",
-          requested: $requestedChange, model: changes
+          model: changes
         )
         .opacity(tab == "Changes" ? 1 : 0).allowsHitTesting(tab == "Changes").accessibilityHidden(
           tab != "Changes")
-        FilesView(session: session, projectID: details.projectId, active: tab == "Files", model: changes) {
-          change in
-          requestedChange = change
-          tab = "Changes"
-        }.opacity(tab == "Files" ? 1 : 0).allowsHitTesting(tab == "Files").accessibilityHidden(
+        FilesView(
+          session: session, projectID: details.projectId, active: tab == "Files", model: changes
+        ).opacity(tab == "Files" ? 1 : 0).allowsHitTesting(tab == "Files").accessibilityHidden(
           tab != "Files")
       }
     }
