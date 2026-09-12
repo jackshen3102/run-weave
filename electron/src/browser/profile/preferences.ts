@@ -15,6 +15,7 @@ import {
   type TerminalBrowserProfileId,
   type TerminalBrowserProfilePreferenceUpdate,
   type TerminalBrowserProfilePreferences,
+  type TerminalBrowserProfileProxyMode,
   type TerminalBrowserWorktreePreference,
 } from "@runweave/shared/terminal-browser-profile";
 import { TerminalBrowserError } from "../errors.js";
@@ -170,6 +171,27 @@ function normalizePersistedPreferences(
   ) {
     throw new Error("Invalid profile preferences");
   }
+  const proxyModes: Partial<
+    Record<TerminalBrowserProfileId, TerminalBrowserProfileProxyMode>
+  > = {};
+  if (candidate.proxyModes !== undefined) {
+    if (
+      !candidate.proxyModes ||
+      typeof candidate.proxyModes !== "object" ||
+      Array.isArray(candidate.proxyModes)
+    ) {
+      throw new Error("Invalid profile proxy modes");
+    }
+    for (const [profileId, mode] of Object.entries(candidate.proxyModes)) {
+      if (
+        !isTerminalBrowserProfileId(profileId) ||
+        (mode !== "direct" && mode !== "whistle")
+      ) {
+        throw new Error("Invalid profile proxy mode");
+      }
+      proxyModes[profileId] = mode;
+    }
+  }
   const worktrees: Record<string, TerminalBrowserWorktreePreference> = {};
   for (const [projectId, preference] of Object.entries(candidate.worktrees)) {
     normalizeTerminalBrowserProjectId(projectId);
@@ -181,6 +203,7 @@ function normalizePersistedPreferences(
     businessOrigin: normalizeTerminalBrowserBusinessOrigin(
       candidate.businessOrigin,
     ),
+    proxyModes,
     worktrees,
   };
 }
@@ -249,6 +272,18 @@ function notifyPreferencesChanged(
 export function getTerminalBrowserProfilePreferences(): TerminalBrowserProfilePreferences {
   currentPreferences ??= loadPreferences();
   return clonePreferences(currentPreferences);
+}
+
+export function saveTerminalBrowserProfileProxyMode(
+  profileId: TerminalBrowserProfileId,
+  proxyMode: TerminalBrowserProfileProxyMode,
+): void {
+  const next = getTerminalBrowserProfilePreferences();
+  if (next.proxyModes?.[profileId] === proxyMode) return;
+  next.proxyModes = { ...next.proxyModes, [profileId]: proxyMode };
+  persistPreferences(next);
+  currentPreferences = next;
+  notifyPreferencesChanged(clonePreferences(next));
 }
 
 export function updateTerminalBrowserProfilePreferences(
