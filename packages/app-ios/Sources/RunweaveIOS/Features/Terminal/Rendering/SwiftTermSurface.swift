@@ -62,6 +62,10 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
       options: options)
     super.init()
     terminalView.terminalDelegate = self
+    // Selection menus still need first-responder status, but reading the terminal
+    // must not open a keyboard (and resize the remote screen). Input lives in Composer.
+    terminalView.inputView = UIView(frame: .zero)
+    terminalView.inputAccessoryView = nil
     if let view = terminalView as? NativeTerminalView {
       view.acceptsTerminalResponses = { [weak self] in self?.isTmux?() != true }
       let gestures = TerminalGestures(view: view)
