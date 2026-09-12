@@ -80,7 +80,7 @@ struct CaptureHome: View {
         }
       }
       .scrollDismissesKeyboard(.interactively)
-      .overlay(alignment: .bottomTrailing) { if tab != "trash" { CaptureButton { Task { await session.openEditor(kind: tab == "tasks" ? .task : .note) } }.padding(20) } }
+      .overlay(alignment: .bottomTrailing) { if tab != "trash" { CaptureButton { Task { await session.openEditor() } }.padding(20) } }
   }
   private var searchField: some View {
     HStack(spacing: 12) {

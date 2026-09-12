@@ -160,7 +160,7 @@ export function SuijiWorkspace({
   const edit = useMemoizedFn(
     async (
       record?: SuijiRecord,
-      defaultKind: "note" | "task" = "note",
+      defaultKind: "note" | "task" = "task",
       body = "",
     ) => {
       if (!writable || record?.deletedAt) return;
@@ -451,7 +451,7 @@ export function SuijiWorkspace({
               className="fixed bottom-8 right-8 size-14 rounded-full shadow-lg md:right-12"
               disabled={!writable}
               onClick={() =>
-                void edit(undefined, tab === "tasks" ? "task" : "note")
+                void edit()
               }
             >
               <Plus />

@@ -133,18 +133,22 @@ export class RecordService {
     return mutate(this.pool, context, `edit:${id}`, input, async (client) => {
       const old = await getRecord(client, context.ownerId, id, true);
       this.version(old, input.expectedVersion);
+      const kind = input.kind ?? old.kind;
+      const taskStatus =
+        kind === old.kind ? old.taskStatus : kind === "task" ? "open" : null;
       const body = input.body ?? old.body,
         ids = input.attachmentIds ?? old.attachments.map((a) => a.id);
       this.checkContent(body, ids);
       if (
+        kind === old.kind &&
         body === old.body &&
         JSON.stringify(ids) === JSON.stringify(old.attachments.map((a) => a.id))
       )
         return { record: old };
       await this.attach(client, context.ownerId, id, ids);
       await client.query(
-        "UPDATE records SET body=$3,version=version+1,updated_at=clock_timestamp() WHERE owner_id=$1 AND id=$2",
-        [context.ownerId, id, body],
+        "UPDATE records SET body=$3,kind=$4,task_status=$5,version=version+1,updated_at=clock_timestamp() WHERE owner_id=$1 AND id=$2",
+        [context.ownerId, id, body, kind, taskStatus],
       );
       return this.snapshot(client, context, id);
     });

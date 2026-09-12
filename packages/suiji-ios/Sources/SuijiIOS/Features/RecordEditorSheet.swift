@@ -13,9 +13,10 @@ struct RecordEditorSheet: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 18) {
-          if model.draft.recordID == nil {
-            Picker("记录类型", selection: $model.draft.kind) { Text("笔记").tag(RecordKind.note); Text("待办").tag(RecordKind.task) }
-              .pickerStyle(.segmented).disabled(!model.editable)
+          Picker("记录类型", selection: $model.draft.kind) { Text("想法").tag(RecordKind.note); Text("待办").tag(RecordKind.task) }
+            .pickerStyle(.segmented).disabled(!model.editable)
+          if model.draft.recordID != nil {
+            Text("切换为待办时设为未完成；切换为想法时清除待办状态。").font(.footnote).foregroundStyle(.secondary)
           }
           TextEditor(text: $model.draft.body).contentMargins(.bottom, 20, for: .scrollContent)
             .frame(height: 240).focused($focused).disabled(!model.editable)
@@ -41,9 +42,10 @@ struct RecordEditorSheet: View {
             Button("查看最新内容与本地草稿") { Task { await model.compare() } }
             if let latest = model.latest {
               Text("云端最新（版本 \(latest.version)）").font(.headline)
+              Text("云端类型：\(latest.kind == .note ? "想法" : "待办")").font(.subheadline)
               Text(verbatim: latest.body).textSelection(.enabled)
               Text("本地草稿").font(.headline); Text(verbatim: model.draft.body).textSelection(.enabled)
-              Text("继续编辑将保留本地正文，采用云端最新附件；可再次调整后保存。").font(.footnote)
+              Text("继续编辑将保留本地正文和类型，采用云端最新附件；可再次调整后保存。").font(.footnote)
               Button("已比较，基于最新版本继续编辑") { Task { await model.rebase() } }
             }
           }

@@ -108,7 +108,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       }
     }
   }
-  func openEditor(record: SuijiRecord? = nil, kind: RecordKind = .note, body: String = "") async {
+  func openEditor(record: SuijiRecord? = nil, kind: RecordKind = .task, body: String = "") async {
     guard let client, let store, let info else { return }; let current = generation
     guard record?.deletedAt == nil else { return }
     do {
