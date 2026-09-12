@@ -233,7 +233,7 @@ async function readAgentThreadOverviewSnapshot(
     const response = await new AppServerClient(connection).getThread(
       identity.id,
     );
-    if (!response?.detail) {
+    if (!response?.detail || response.detail.status === "unknown") {
       return null;
     }
     return {

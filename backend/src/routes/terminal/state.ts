@@ -1,3 +1,4 @@
+import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import { Router } from "express";
 import { z } from "zod";
 import type {
@@ -16,10 +17,11 @@ import crypto from "node:crypto";
 import { processTerminalAgentHook } from "../../terminal/application/agent-hook-processor";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
-const AGENT_HOOKS = ["codex", "trae", "traecli", "traex"] as const;
+const AGENT_HOOKS = ["codex", "trae", "traecli", "traex", "pi"] as const;
 
 const agentHookStateSchema = z
   .object({
+    pi: z.custom<import("@runweave/shared/terminal/pi-agent").PiAgentContext>(isPiAgentContext).optional(),
     activityEventId: z.string().uuid().optional(),
     operationId: z.string().trim().min(1).max(256).optional(),
     terminalSessionId: z.string().trim().min(1),
@@ -39,6 +41,7 @@ const agentHookStateSchema = z
       "Stop",
       "ToolRequested",
       "ToolCompleted",
+      "AgentMetadata",
     ]),
     toolUseId: z.string().trim().min(1).max(256).optional(),
     toolName: z.string().trim().min(1).max(256).optional(),
@@ -135,6 +138,13 @@ export function createInternalTerminalAgentHookRouter(options: {
         res.status(404).json({ message: "Terminal session not found" });
         return;
       }
+      if (parsed.data.agent === "pi") {
+        const result = await processTerminalAgentHook(options, { ...parsed.data, hookEvent: "AgentMetadata" });
+        if (result.status !== "recorded") {
+          res.status(202).json({ disposition: "ignored" });
+          return;
+        }
+      }
       recordAgentHookActivity(
         options.activity,
         parsed.data,
@@ -204,7 +214,7 @@ function recordAgentHookActivity(
   hook: AgentHookStateRequest,
   hookActivityEvents: Map<string, ActivityEventInput>,
 ): void {
-  if (!activity) return;
+  if (!activity || hook.hookEvent === "AgentMetadata") return;
   const rawHookEvent = hook.rawHookEvent?.toLowerCase() ?? "";
   if (rawHookEvent.includes("subagent")) return;
   const eventName =
@@ -240,7 +250,7 @@ function recordAgentHookActivity(
     eventName,
     actorType: hook.hookEvent === "UserPromptSubmit" ? "user" : "agent",
     actorAgent:
-      hook.agent === "codex"
+      hook.agent === "pi" ? "pi" : hook.agent === "codex"
         ? "codex"
         : hook.agent.startsWith("trae")
           ? "trae"

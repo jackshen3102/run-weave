@@ -1,3 +1,5 @@
+import { getAgentAdapter } from "../runtime/agent-adapters";
+import { getAgentForCommand } from "../state/terminal-state-service";
 import type {
   SendTerminalInputResponse,
   TerminalInputMode,
@@ -34,6 +36,8 @@ const BRACKETED_PASTE_END = "\u001b[201~";
 const PROMPT_PASTE_CHUNK_SIZE = 3000;
 
 type TerminalInputDispatchOptions = {
+  /** Internal shell launch after a pane respawn, before command observation catches up. */
+  agentLaunch?: boolean;
   ptyService?: PtyService;
   runtimeRegistry?: TerminalRuntimeRegistry;
   tmuxService?: TmuxService;
@@ -235,8 +239,29 @@ export async function sendInputToSession(
       exitTmuxCopyMode,
     });
     if (isTmuxBackedSession(session) && options.tmuxService) {
-      const target =
+      let target: ReturnType<typeof resolveTmuxTarget> | TmuxPaneTarget =
         paneTarget ?? resolveTmuxTarget(session, options.tmuxService);
+      const structuredInput =
+        mode === "line" || mode === "prompt_paste" || mode === "prompt_replace";
+      if (structuredInput && !("paneId" in target)) {
+        const active = (await options.tmuxService.listPanes(target)).find(
+          (pane) => pane.active,
+        );
+        if (active) target = { ...target, paneId: active.paneId };
+      }
+      const panel =
+        "paneId" in target
+          ? terminalSessionManager
+              .listPanels(session.id)
+              .find((candidate) => candidate.tmuxPaneId === target.paneId)
+          : undefined;
+      const adapter = getAgentAdapter(
+        getAgentForCommand(panel?.activeCommand ?? session.activeCommand),
+      );
+      const replacePrompt =
+        !options.agentLaunch && structuredInput
+          ? adapter.replacePrompt
+          : undefined;
       aiDiagnosticLog("terminal tmux input dispatch selected", {
         terminalSessionId: session.id,
         operationId: operationId ?? null,
@@ -250,7 +275,21 @@ export async function sendInputToSession(
         promptReplaceSubmit: mode === "prompt_replace" ? submit === true : null,
         exitTmuxCopyMode,
       });
-      if (exitTmuxCopyMode) {
+      if (replacePrompt) {
+        if (!("paneId" in target) || typeof target.paneId !== "string")
+          throw new Error(
+            "Agent pane identity unavailable; draft was retained",
+          );
+        await replacePrompt({
+          target: { ...target, paneId: target.paneId },
+          tmux: options.tmuxService,
+          terminalSessionId: session.id,
+          pi: panel?.pi,
+          requestId: operationId ?? buildTerminalInputOperationId(),
+          text: data,
+          submit: mode !== "prompt_replace" || submit === true,
+        });
+      } else if (exitTmuxCopyMode) {
         await options.tmuxService.cancelCopyMode(target);
       } else if (codexSlashCommand) {
         await options.tmuxService.sendKeySequence(

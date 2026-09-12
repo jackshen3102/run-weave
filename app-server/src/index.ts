@@ -1,3 +1,4 @@
+import { PiSessionReader } from "./pi/session-reader.js";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
@@ -72,6 +73,7 @@ async function main(): Promise<void> {
     cloudSync,
   });
   const traeLifecycleReader = new TraeThreadLifecycleReader();
+  const piSessionReader = new PiSessionReader();
   const codexAppServerClient = new CodexAppServerClient();
   const codexRolloutLifecycleReader = new CodexRolloutLifecycleReader();
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
@@ -80,6 +82,7 @@ async function main(): Promise<void> {
     codexStatusReader: codexAppServerClient,
     codexRolloutLifecycleReader,
     traeLifecycleReader,
+    piSessionReader,
     startDelayMs: parseOptionalPositiveInteger(
       process.env.RUNWEAVE_APP_SERVER_THREAD_STATUS_START_DELAY_MS ??
         process.env.RUNWEAVE_APP_SERVER_CODEX_STATUS_START_DELAY_MS,
@@ -97,6 +100,7 @@ async function main(): Promise<void> {
     devSessionId: config.devSessionId,
     sourceRevision: config.sourceRevision,
     traeLifecycleReader,
+    piSessionReader,
     codexThreadDetailReader: codexAppServerClient,
     getRuntimeStatusReport: () =>
       createAppServerRuntimeStatusReport({

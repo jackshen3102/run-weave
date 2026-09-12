@@ -11,6 +11,8 @@ export default tseslint.config(
       "**/coverage/**",
       "**/node_modules/**",
       "electron/release/**",
+      // Bundled Pi extension; lint its source under plugins/pi instead.
+      "electron/resources/hooks/pi/runweave.js",
       "docs/prototypes/**",
     ],
   },

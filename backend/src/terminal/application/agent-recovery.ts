@@ -32,13 +32,14 @@ export async function recoverTerminalAgent(
     "explicit-or-active",
   );
 
+  const agent = panel.terminalState?.agent;
   if (
     panel.terminalState?.state !== "agent_idle" ||
-    panel.terminalState.agent !== "codex"
+    (agent !== "codex" && agent !== "pi")
   ) {
     throw new TerminalPanelError(
       409,
-      "Only an idle Codex panel can be recovered",
+      "Only an idle Codex or Pi panel can be recovered",
     );
   }
   if (!isInteractiveShellLaunch(session.command, session.args)) {
@@ -47,24 +48,25 @@ export async function recoverTerminalAgent(
       "Terminal session command is not a persistent interactive shell",
     );
   }
-  if (getAgentForCommand(panel.activeCommand) !== "codex") {
-    throw new TerminalPanelError(409, "Terminal panel is not running Codex");
+  if (getAgentForCommand(panel.activeCommand) !== agent) {
+    throw new TerminalPanelError(409, "Terminal panel is not running the requested agent");
   }
 
-  const resumedThreadId = resolveCodexThreadToRecover(
+  const resumedThreadId = resolveAgentThreadToRecover(
     terminalSessionManager,
     session,
     panel,
+    agent,
   );
   if (!resumedThreadId) {
     throw new TerminalPanelError(
       409,
-      "Terminal panel has no saved Codex thread",
+      "Terminal panel has no saved agent thread",
     );
   }
 
   agentRecoveryLogger.warn("terminal.agent-recovery.requested", {
-    message: "Idle Codex panel recovery requested",
+    message: "Idle agent panel recovery requested",
     terminalSessionId: session.id,
     panelId: panel.id,
     tmuxPaneId: panel.tmuxPaneId,
@@ -76,7 +78,7 @@ export async function recoverTerminalAgent(
     session,
     options,
     {
-      agent: "codex",
+      agent,
       prompt: "",
       panelId: panel.id,
       cwd: panel.cwd,
@@ -89,7 +91,7 @@ export async function recoverTerminalAgent(
   );
 
   agentRecoveryLogger.info("terminal.agent-recovery.started", {
-    message: "Codex panel respawned and saved thread resume started",
+    message: "Agent panel respawned and saved thread resume started",
     terminalSessionId: session.id,
     panelId: panel.id,
     tmuxPaneId: panel.tmuxPaneId,
@@ -104,31 +106,33 @@ export async function recoverTerminalAgent(
   };
 }
 
-function resolveCodexThreadToRecover(
+function resolveAgentThreadToRecover(
   terminalSessionManager: TerminalSessionManager,
   session: TerminalSessionRecord,
   panel: TerminalPanelRecord,
+  agent: "codex" | "pi",
 ): string | null {
-  const panelThreadId = readCodexThreadId(panel);
+  const panelThreadId = readAgentThreadId(panel, agent);
   if (panelThreadId) {
     return panelThreadId;
   }
   const runningPanels = terminalSessionManager
     .listPanels(session.id)
     .filter((candidate) => candidate.status === "running");
-  return runningPanels.length === 1 ? readCodexThreadId(session) : null;
+  return runningPanels.length === 1 ? readAgentThreadId(session, agent) : null;
 }
 
-function readCodexThreadId(
+function readAgentThreadId(
   source: Pick<
     TerminalPanelRecord | TerminalSessionRecord,
     "threadId" | "threadProvider" | "lastThreadId" | "lastThreadProvider"
   >,
+  agent: "codex" | "pi",
 ): string | null {
-  if (source.threadProvider === "codex" && source.threadId?.trim()) {
+  if (source.threadProvider === agent && source.threadId?.trim()) {
     return source.threadId.trim();
   }
-  if (source.lastThreadProvider === "codex" && source.lastThreadId?.trim()) {
+  if (source.lastThreadProvider === agent && source.lastThreadId?.trim()) {
     return source.lastThreadId.trim();
   }
   return null;

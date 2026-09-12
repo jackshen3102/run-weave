@@ -6,6 +6,7 @@ export const AGENT_ACTIVITY_STARTING_MAX_AGE_MS = 5 * 60_000;
 const allowedActiveCommandsBySource: Partial<
   Record<TerminalCompletionEvent["source"], ReadonlySet<string>>
 > = {
+  pi: new Set(["pi"]),
   codex: new Set(["codex"]),
   trae: new Set(["trae"]),
   traecli: new Set(["traecli"]),

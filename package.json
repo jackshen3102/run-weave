@@ -81,7 +81,9 @@
     "prepare": "husky",
     "ios:doctor": "node packages/app-ios/scripts/ios.mjs doctor",
     "ios:build": "node packages/app-ios/scripts/ios.mjs build",
-    "ios:run": "node packages/app-ios/scripts/ios.mjs run"
+    "ios:run": "node packages/app-ios/scripts/ios.mjs run",
+    "agents:build": "node scripts/agents/build.mjs",
+    "pi:install": "node scripts/agents/install-pi.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --fix",

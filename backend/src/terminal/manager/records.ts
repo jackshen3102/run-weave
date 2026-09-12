@@ -1,3 +1,4 @@
+import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalReplySnapshot } from "../store/store";
 import type { TerminalState } from "@runweave/shared/terminal/state";
@@ -38,6 +39,7 @@ export interface TerminalSessionRecord {
   alias: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  pi?: PiAgentContext;
   preview?: string;
   latestReply?: TerminalReplySnapshot;
   lastThreadId?: string;
@@ -72,6 +74,8 @@ export interface TerminalPanelRecord {
   role: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  pi?: PiAgentContext;
+  piLastCompletionKey?: string;
   preview?: string;
   latestReply?: TerminalReplySnapshot;
   lastThreadId?: string;
@@ -152,6 +156,7 @@ export function buildSessionRecord(
     alias: persisted.alias ?? null,
     pinnedAt: persisted.pinnedAt ?? null,
     threadId: persisted.threadId,
+    pi: persisted.pi,
     threadProvider:
       persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
     preview: persisted.preview,
@@ -234,6 +239,7 @@ export function toPersistedSession(
     pinnedAt: session.pinnedAt ?? null,
     threadId: session.threadId,
     threadProvider: session.threadProvider,
+    pi: session.pi,
     preview: session.preview,
     latestReply: session.latestReply,
     lastThreadId: session.lastThreadId,
@@ -274,6 +280,8 @@ export function buildPanelRecord(
     alias: persisted.alias ?? null,
     role: persisted.role ?? null,
     threadId: persisted.threadId,
+    pi: persisted.pi,
+    piLastCompletionKey: persisted.piLastCompletionKey,
     threadProvider:
       persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
     preview: persisted.preview,
@@ -312,6 +320,8 @@ export function toPersistedPanel(
     role: panel.role,
     threadId: panel.threadId,
     threadProvider: panel.threadProvider,
+    pi: panel.pi,
+    piLastCompletionKey: panel.piLastCompletionKey,
     preview: panel.preview,
     latestReply: panel.latestReply,
     lastThreadId: panel.lastThreadId,

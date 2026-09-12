@@ -262,6 +262,7 @@ export class LowDbTerminalSessionStore
         return;
       }
 
+      if (params.pi) session.pi = params.pi;
       if (params.threadId) {
         session.threadId = params.threadId;
         session.threadProvider = params.provider ?? undefined;

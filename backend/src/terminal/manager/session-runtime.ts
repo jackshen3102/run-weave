@@ -1,3 +1,4 @@
+import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type {
   TerminalAgentKind,
@@ -260,6 +261,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
     terminalSessionId: string,
     threadId: string | null,
     provider: TerminalAgentKind | null = null,
+    pi?: PiAgentContext,
   ): Promise<TerminalSessionRecord | undefined> {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {
@@ -273,12 +275,13 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
         (session.threadId === nextThreadId ? "codex" : undefined))
       : undefined;
     if (
-      session.threadId === nextThreadId &&
+      !pi && session.threadId === nextThreadId &&
       session.threadProvider === nextProvider
     ) {
       return session;
     }
 
+    if (pi) session.pi = pi;
     if (nextThreadId) {
       session.threadId = nextThreadId;
       session.threadProvider = nextProvider;
@@ -290,6 +293,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
       terminalSessionId,
       threadId: nextThreadId ?? null,
       provider: nextProvider ?? null,
+      ...(pi ? { pi } : {}),
     });
     return session;
   }

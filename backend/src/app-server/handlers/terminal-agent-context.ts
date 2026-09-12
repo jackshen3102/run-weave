@@ -12,7 +12,7 @@ const TERMINAL_AGENT_KINDS = new Set<TerminalAgentKind>([
   "codex",
   "trae",
   "traecli",
-  "traex",
+  "traex", "pi",
 ]);
 
 export function resolveAppServerTerminalAgent(options: {

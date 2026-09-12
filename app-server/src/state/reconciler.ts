@@ -1,3 +1,5 @@
+import { PiSessionReader } from "../pi/session-reader.js";
+import { isNewerPiContext, type PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type {
   AppServerAgentKind,
   AppServerThreadDetail,
@@ -17,9 +19,12 @@ const RECONCILED_AGENTS = new Set<AppServerAgentKind>([
   "trae",
   "traecli",
   "traex",
+  "pi",
 ]);
 
 interface ObservedThreadState {
+  pi?: PiAgentContext;
+  operationId?: string | null;
   status: "idle" | "running";
   lifecycleType: string;
   lifecycleCursor: string;
@@ -33,6 +38,7 @@ export interface AgentThreadStatusReconcilerOptions {
   codexStatusReader: CodexThreadStatusReader;
   codexRolloutLifecycleReader: CodexRolloutLifecycleReaderLike;
   traeLifecycleReader: TraeThreadLifecycleReader;
+  piSessionReader?: PiSessionReader;
   sourceInstanceId: string;
   startDelayMs?: number;
   intervalMs?: number;
@@ -185,6 +191,17 @@ export class AgentThreadStatusReconciler {
   private async readObservedState(
     thread: AppServerThreadRef,
   ): Promise<ObservedThreadState | null> {
+    if (thread.agent === "pi") {
+      const result = await (this.options.piSessionReader ?? new PiSessionReader()).read(thread);
+      const fact = result?.latest;
+      if (!fact || !thread.pi || fact.instanceId !== thread.pi.instanceId ||
+          !isNewerPiContext(fact, thread.pi) || fact.terminalSessionId !== thread.terminalSessionId ||
+          fact.tmuxPaneId !== this.options.eventCenter.getStateStore().getThreadTmuxPaneId(thread.threadId) ||
+          (fact.hook !== "UserPromptSubmit" && fact.event !== "agent_settled")) return null;
+      return { pi: fact, operationId: fact.operationId, status: fact.event === "agent_settled" ? "idle" : "running",
+        lifecycleType: fact.event, lifecycleCursor: `${fact.instanceId}:${fact.sequence}`,
+        detailStatus: result!.summary.status, preview: result!.summary.preview, turnId: fact.runId };
+    }
     if (thread.agent === "codex") {
       let status: Awaited<
         ReturnType<CodexThreadStatusReader["readThreadStatus"]>
@@ -320,6 +337,7 @@ export class AgentThreadStatusReconciler {
       ].join(":"),
       payload: {
         source: thread.agent,
+        ...(observed.pi ? { pi: observed.pi, operationId: observed.operationId } : {}),
         threadId: thread.threadId,
         observedStatus: observed.status,
         lifecycleStatus: "available",

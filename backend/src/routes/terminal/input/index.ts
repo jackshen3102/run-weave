@@ -63,6 +63,8 @@ async function reconcileInterruptAgentState(params: {
   agent: TerminalAgentKind;
   panel: TerminalPanelRecord | null;
 }): Promise<void> {
+  // Pi settled (or its persisted lifecycle) owns the result of an interrupt.
+  if (params.agent === "pi") return;
   const startedAt = Date.now();
   while (Date.now() - startedAt < INTERRUPT_AGENT_IDLE_POLL_TIMEOUT_MS) {
     const session = params.terminalSessionManager.getSession(

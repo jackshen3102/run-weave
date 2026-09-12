@@ -1,3 +1,4 @@
+import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
@@ -23,6 +24,7 @@ export interface StateRefIdentity {
 }
 
 export interface StateRefUpdate {
+  pi?: PiAgentContext;
   agent: AppServerAgentKind;
   status: AppServerAgentRunStatus;
   threadId: string;
@@ -118,6 +120,7 @@ export class AppServerStateStore {
     const previousTmuxPaneId =
       this.threadTmuxPaneIds.get(update.threadId) ?? null;
     const current: AppServerThreadRef = {
+      ...(update.pi ?? previous?.pi ? { pi: update.pi ?? previous?.pi } : {}),
       threadId: update.threadId,
       agent: update.agent,
       status: update.status,
@@ -135,7 +138,7 @@ export class AppServerStateStore {
       lifecycleStatus:
         update.lifecycleStatus ??
         previous?.lifecycleStatus ??
-        (update.agent === "codex" ? "available" : "degraded"),
+        (update.agent === "codex" || update.agent === "pi" ? "available" : "degraded"),
       lastLifecycleType:
         update.lastLifecycleType ?? previous?.lastLifecycleType ?? null,
       lastLifecycleCursor:
@@ -278,7 +281,7 @@ function isAgentKind(value: unknown): value is AppServerAgentKind {
     value === "codex" ||
     value === "trae" ||
     value === "traecli" ||
-    value === "traex" ||
+    value === "pi" || value === "traex" ||
     value === "unknown"
   );
 }

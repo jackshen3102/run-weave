@@ -1,3 +1,4 @@
+import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
@@ -29,6 +30,7 @@ export interface PersistedTerminalSessionRecord {
   alias?: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  pi?: PiAgentContext;
   preview?: string;
   latestReply?: TerminalReplySnapshot;
   lastThreadId?: string;
@@ -63,6 +65,8 @@ export interface PersistedTerminalPanelRecord {
   role?: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  pi?: PiAgentContext;
+  piLastCompletionKey?: string;
   preview?: string;
   latestReply?: TerminalReplySnapshot;
   lastThreadId?: string;
@@ -163,6 +167,7 @@ export interface UpdateTerminalSessionAliasParams {
 }
 
 export interface UpdateTerminalSessionThreadIdParams {
+  pi?: PiAgentContext;
   terminalSessionId: string;
   threadId: string | null;
   provider: TerminalAgentKind | null;

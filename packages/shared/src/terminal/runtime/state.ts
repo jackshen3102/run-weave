@@ -1,4 +1,4 @@
-export type TerminalAgentKind = "codex" | "trae" | "traex" | "traecli";
+export type TerminalAgentKind = "codex" | "trae" | "traex" | "pi" | "traecli";
 
 export type TerminalStateValue =
   | "shell_idle"

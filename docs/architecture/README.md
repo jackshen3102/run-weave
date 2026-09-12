@@ -72,6 +72,8 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | 完成事件 Hook                             | [terminal-completion-hooks.md](./terminal-completion-hooks.md)                 |
 | 桌面与飞书完成通知                        | [terminal-completion-notifications.md](./terminal-completion-notifications.md) |
 
+Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.md)。
+
 ### Agent 系统
 
 | 任务                     | 文档                                                         |

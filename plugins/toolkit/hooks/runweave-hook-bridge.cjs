@@ -129,7 +129,7 @@ function notifyDesktop(source, options = {}) {
     return;
   }
   const labels = { claude: "Claude", codex: "Codex", trae: "Trae" };
-  const name = labels[source] || "AI";
+  const name = source === "pi" ? "Pi" : labels[source] || "AI";
   const notificationType = options.notificationType || null;
   // traex attention notifications ask the user to come back and choose/confirm,
   // rather than reporting a finished turn, so use a matching title/body.
@@ -159,6 +159,7 @@ function notifyDesktop(source, options = {}) {
 }
 
 function notifyFeishu(payload, source, terminalSessionId, terminalPanelId) {
+  if (process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY === "1") return;
   const script = `${os.homedir()}/.runweave/hooks/feishu_stop_notify.sh`;
   try {
     if (!fs.existsSync(script)) {
@@ -217,9 +218,11 @@ async function postAgentHook({
   toolHook,
   activityEventId,
   operationId,
+  pi,
 }) {
   const body = JSON.stringify({
     activityEventId,
+    ...(pi ? { pi } : {}),
     ...(operationId ? { operationId } : {}),
     terminalSessionId,
     projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
@@ -296,7 +299,8 @@ async function postCompletionHook({
       },
       body: JSON.stringify(body),
     });
-    return { ok: response.ok, status: response.status };
+    const result = await response.json().catch(() => null);
+    return { ok: response.ok, status: response.status, accepted: Boolean(result?.event) && !result?.ignored };
   } catch (error) {
     return {
       ok: false,
@@ -330,7 +334,7 @@ async function main() {
   const completionReason = normalizeReason(args.reason);
   const threadId = readThreadId(payload);
   const stateHookEvent =
-    source === "codex" || source === "trae"
+    source === "pi" || source === "codex" || source === "trae"
       ? toAgentHookStateEvent(normalizedEvent)
       : null;
   const toolHook = extractToolHook(payload);
@@ -351,10 +355,10 @@ async function main() {
   const effectiveCompletionReason = isTraexAttentionNotification
     ? "notify"
     : completionReason;
-  const shouldRecordCompletion =
+  const shouldRecordCompletion = (source !== "pi" || payload.pi?.outcome === "completed") && (
     isTraexAttentionNotification ||
     effectiveCompletionReason !== "hook_stop" ||
-    STOP_EVENTS.has(normalizedEvent);
+    STOP_EVENTS.has(normalizedEvent));
 
   const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;
   const stateEndpoint = deriveAgentHookEndpoint(endpoint);
@@ -469,6 +473,7 @@ async function main() {
           ? toolHook
           : undefined,
       activityEventId,
+      ...(source === "pi" ? { pi: payload.pi } : {}),
       operationId: process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
     });
     appendDebugLog("hook bridge posted agent hook", {
@@ -480,8 +485,10 @@ async function main() {
   }
 
   if (shouldRecordCompletion && completionEndpoint) {
-    notifyDesktop(source, { notificationType });
-    notifyFeishu(payload, source, terminalSessionId, terminalPanelId);
+    if (source !== "pi") {
+      notifyDesktop(source, { notificationType });
+      notifyFeishu(payload, source, terminalSessionId, terminalPanelId);
+    }
     if (appServerClient) {
       const completionBody = buildCompletionHookBody({
         terminalSessionId,
@@ -504,6 +511,7 @@ async function main() {
         dedupePrefix: "completion",
       });
       completionEvent.payload = {
+        ...(completionBody.pi ? { pi: completionBody.pi } : {}),
         source: completionBody.source,
         completionReason: completionBody.completionReason,
         commandName: completionBody.commandName,
@@ -536,6 +544,10 @@ async function main() {
       rawEvent,
       commandName,
     });
+    if (source === "pi" && result.accepted) {
+      notifyDesktop(source, { notificationType });
+      notifyFeishu(payload, source, terminalSessionId, terminalPanelId);
+    }
     appendDebugLog("hook bridge posted completion hook", {
       terminalSessionId,
       rawEvent: String(rawEvent || "Stop"),

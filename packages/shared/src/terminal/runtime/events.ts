@@ -1,3 +1,4 @@
+import type { PiAgentContext } from "../pi-agent";
 import type { DeviceStatusSnapshot } from "../../monitoring/device-status";
 import type { TerminalCompletionEventPayload } from "./completion";
 import type { TerminalPanelListItem, TerminalPanelWorkspace } from "../panel";
@@ -33,7 +34,7 @@ export interface TerminalNotificationEventPayload {
   level: "info" | "success" | "warning" | "error";
   title: string;
   message?: string;
-  source: "codex" | "terminal" | "system";
+  source: "codex" | "pi" | "terminal" | "system";
   dedupeKey?: string;
   action?: {
     type: "open_terminal";
@@ -225,9 +226,11 @@ export type AgentHookStateEvent =
   | "UserPromptSubmit"
   | "Stop"
   | "ToolRequested"
-  | "ToolCompleted";
+  | "ToolCompleted"
+  | "AgentMetadata";
 
 export interface AgentHookStateRequest {
+  pi?: PiAgentContext;
   activityEventId?: string;
   operationId?: string;
   terminalSessionId: string;

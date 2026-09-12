@@ -59,6 +59,7 @@ export function convergeStaleStartingWithoutLease(
 ): TerminalState {
   if (
     nextTerminalState.state !== "agent_starting" ||
+    nextTerminalState.agent === "pi" ||
     terminalSessionManager.hasPanelAgentOperationGeneration(
       terminalSessionId,
       panelId,

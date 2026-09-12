@@ -1,3 +1,4 @@
+import type { PiAgentContext } from "../terminal/pi-agent";
 export type AppServerEventSourceApp =
   | "app-server"
   | "backend"
@@ -66,7 +67,7 @@ export type AppServerHookSource =
   | "codex"
   | "trae"
   | "traecli"
-  | "traex"
+  | "traex" | "pi"
   | "unknown";
 
 export type AppServerCompletionReason =
@@ -80,7 +81,7 @@ export type AppServerAgentKind =
   | "codex"
   | "trae"
   | "traecli"
-  | "traex"
+  | "traex" | "pi"
   | "unknown";
 
 export type AppServerAgentRunStatus =
@@ -106,7 +107,7 @@ export interface AppServerThreadLifecycleEvent {
 
 export interface AppServerThreadTurn {
   turnId: string;
-  status: "running" | "completed" | "interrupted";
+  status: "running" | "completed" | "interrupted" | "failed";
   startedAt: string | null;
   completedAt: string | null;
   preview: string | null;
@@ -124,6 +125,7 @@ export interface AppServerThreadDetail {
 }
 
 export interface AppServerThreadRef {
+  pi?: PiAgentContext;
   threadId: string;
   agent: AppServerAgentKind;
   status: AppServerAgentRunStatus;
@@ -202,10 +204,12 @@ export interface AppServerCodexThreadDetail {
   turns: AppServerThreadDetailTurn[];
 }
 
+export type AppServerPiThreadDetail = Omit<AppServerCodexThreadDetail, "provider"> & { provider: "pi" };
+
 export interface AppServerThreadDetailResponse {
   thread: AppServerThreadRef;
   availability: AppServerThreadDetailAvailability;
-  detail?: AppServerCodexThreadDetail | AppServerThreadDetail;
+  detail?: AppServerCodexThreadDetail | AppServerPiThreadDetail | AppServerThreadDetail;
 }
 
 export interface AppServerSyncStatusResponse {

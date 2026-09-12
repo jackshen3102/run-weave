@@ -90,6 +90,11 @@ export async function prepareAgentSession(params: {
       };
     }
     await sendAgentControlLine(params, targetPanel, params.agentClearCommand);
+    if (params.agent === "pi" && params.agentClearCommand === "/new") {
+      const oldThread = targetPanel.threadId ?? targetPanel.lastThreadId;
+      await waitForPanelState(params, targetPanel.panelId, (panel) =>
+        isRequestedAgentReady(panel, "pi") && Boolean(panel.threadId) && panel.threadId !== oldThread);
+    }
     actions.push("clear");
     return {
       status: "cleared_existing",
@@ -155,16 +160,26 @@ export async function prepareAgentSession(params: {
       : {}),
     timeoutMs: params.agentStartTimeoutMs,
   });
+  let readyPanel: TerminalPanelListItem | undefined;
+  if (params.agent === "pi") {
+    readyPanel = await waitForPanelState(params, prepared.panelId, (panel) => {
+      const fact = panel.pi;
+      if (!fact || Date.parse(fact.startedAt) < Date.parse(prepared.startedAt)) return false;
+      if (fact.event === "agent_settled" && fact.outcome !== "completed")
+        throw new CliError("Pi bootstrap did not complete successfully; business prompt was not sent", 4);
+      return isRequestedAgentReady(panel, "pi") && fact.event === "agent_settled" && fact.outcome === "completed";
+    });
+  }
   actions.push("start");
   return {
     status: previousAgent ? "restarted" : "started",
     requestedAgent: params.agent,
     previousAgent,
     panelId: prepared.panelId,
-    terminalState: { state: "agent_starting", agent: prepared.provider },
+    terminalState: readyPanel?.terminalState ?? { state: "agent_starting", agent: prepared.provider },
     actions,
     operationId: prepared.operationId,
-    threadId: prepared.threadId,
+    threadId: readyPanel?.pi?.sessionId ?? prepared.threadId,
   };
 }
 
@@ -276,6 +291,7 @@ function isRequestedAgentReady(
   agent: string,
 ): boolean {
   return (
+    (agent !== "pi" || Boolean(panel.pi) && panel.pi?.event !== "ui_prompt_start") &&
     panel.terminalState?.state === "agent_idle" &&
     isMatchingAgent(agent, panel.terminalState.agent)
   );
@@ -288,7 +304,7 @@ function isMatchingAgent(agent: string, current: string | null): boolean {
 function isPreparationAgent(
   value: string,
 ): value is TerminalAgentPreparationAgent {
-  return value === "codex" || value === "traex";
+  return value === "codex" || value === "traex" || value === "pi";
 }
 
 function isValidAgentName(value: string): boolean {
@@ -311,7 +327,7 @@ function withCodexSkipUpdateOnStartup(command: string): string {
 }
 
 function getDefaultAgentExitCommand(agent: string): string {
-  return agent === "codex" || agent === "traex" || agent === "traecli"
+  return agent === "pi" || agent === "codex" || agent === "traex" || agent === "traecli"
     ? "/quit"
     : "/exit";
 }

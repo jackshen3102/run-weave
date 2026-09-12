@@ -1,7 +1,7 @@
 import type { TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
 
 const AGENT_COMMAND_PATTERN =
-  /(?:^|\/)(codex|claude|opencode|coco|trae|traecli|traex)(?:$|\s|-)/i;
+  /(?:^|\/)(codex|claude|opencode|coco|trae|traecli|traex|pi)(?:$|\s|-)/i;
 const SHELL_COMMAND_PATTERN = /(?:^|\/)(zsh|bash|fish|sh)$/i;
 export const AGENT_PROMPT_PATTERN = /(^|\n)\s*[›>]\s+|\bgpt-[\w.-]+.*[~/]/i;
 const SHELL_PROMPT_PATTERN = /(?:^|\n).*(?:[%$#]\s*)$/;
@@ -131,7 +131,7 @@ export function agentNameOrNull(command: string | null): string | null {
 }
 
 export function isKnownAgentName(value: string): boolean {
-  return /^(codex|claude|opencode|coco|trae|traecli|traex)$/i.test(value);
+  return /^(codex|claude|opencode|coco|trae|traecli|traex|pi)$/i.test(value);
 }
 
 export function containsInputEcho(tail: string, text: string): boolean {
@@ -151,6 +151,7 @@ export function inferAgent(activeCommand: string | null, tail: string): string {
   if (source.includes("claude")) {
     return "claude";
   }
+  if (/(?:^|[\s/])pi(?:$|\s)/.test(source)) return "pi";
   if (source.includes("traecli")) {
     return "traecli";
   }

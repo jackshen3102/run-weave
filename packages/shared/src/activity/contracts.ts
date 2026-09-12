@@ -15,6 +15,7 @@ export type ActivityRuntimeSurface =
   | "shell";
 export type ActivityActorType = "user" | "agent" | "system" | "unknown";
 export type ActivityActorAgent =
+  | "pi"
   | "codex"
   | "claude"
   | "trae"

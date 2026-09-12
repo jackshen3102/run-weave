@@ -8,6 +8,7 @@ const SUPPORTED_AGENT_COMMANDS = new Set([
   "codex",
   "trae",
   "traex",
+  "pi",
   "traecli",
   "claude",
 ]);

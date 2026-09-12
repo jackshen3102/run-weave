@@ -127,6 +127,7 @@ export function toPanelListItem(
     role: panel.role,
     threadId: panel.threadId,
     threadProvider: panel.threadProvider,
+    pi: panel.pi,
     preview: panel.preview,
     lastThreadId: panel.lastThreadId,
     lastThreadProvider: panel.lastThreadProvider,

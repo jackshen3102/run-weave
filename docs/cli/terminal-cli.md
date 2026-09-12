@@ -96,11 +96,11 @@ CLI 会发送 agent 名本身作为启动命令，也可以通过 `--agent-start
 输入都会定向到同一个 panel；`--panel` 优先于 `--role`。
 
 若目标 terminal 已经是同一个 agent，默认直接复用；传 `--agent-overwrite`
-时会先发送 `--agent-clear-command`（默认 `/clear`）新开一个 CLI 上下文，再
+时会先发送 `--agent-clear-command`（Pi 默认 `/new`，其它默认 `/clear`）新开一个 CLI 上下文，再
 投递输入。若目标 terminal 是另一个 agent，默认失败；传
 `--agent-overwrite` 时会先发送 `--agent-exit-command` 退出旧 agent，再启动
 指定 agent 并投递输入。未显式设置 `--agent-exit-command` 时，`codex`、
-`traex`、`traecli` 默认使用 `/quit`，其它 agent 默认使用 `/exit`。
+`traex`、`traecli`、`pi` 默认使用 `/quit`，其它 agent 默认使用 `/exit`。
 
 ## 读取上下文
 
@@ -181,3 +181,24 @@ rw project delete "$PROJECT_ID" --json
 ```
 
 CLI 不提供批量删除，也不会按 name、path、project 或 cwd 推断删除目标。删除 project 会级联删除该 project 下的 terminal session。
+
+### Pi Agent
+
+`rw terminal send <id> --agent pi --text "继续" --json` 支持 Pi 原生 TUI。
+Pi CLI 身份始终为 `pi`，即使模型 provider 为 `openai-codex`。准备响应的
+`starting/command_submitted` 仅表示启动命令已投递；以对应 Pane 的权威状态确认就绪。
+项目 trust 或认证界面不会自动被接受。
+
+需要 Pi 0.85.1 起的兼容 0.x 版本，并安装 Runweave Pi 扩展。Desktop 启动时自动
+安装扩展及原生 `runweave` skill；已运行的 Pi 用 `/reload` 加载。安装器保留非
+Runweave 管理的同名文件。`PI_CODING_AGENT_DIR` 可覆盖默认 `~/.pi/agent`。
+
+Pi 的 `line`、`prompt_paste`、`prompt_replace` 输入先通过当前 Pane 的私有编辑器
+连接完整替换文本，再由原生 Enter 提交；运行中提交遵循 Pi 的 steering 语义。
+`prompt_replace` 默认只替换草稿，显式 `submit` 才发送。扩展不可用或输入正被占用
+时返回失败，调用方保留草稿；不使用 Ctrl+U 猜测多行编辑器的清空行为。
+默认 Escape 停止当前请求，`/quit` 退出。Pi 尚不支持 Agent Team/Race worker 配置。
+
+历史只读取扩展登记的 Pi v3 JSONL 会话文件，并按当前分支展示消息、工具和压缩摘要。
+恢复使用已校验的 `--session <精确文件>`，文件缺失或 header ID 不匹配时失败，
+不会回退到最近会话。

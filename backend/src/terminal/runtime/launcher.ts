@@ -1,4 +1,9 @@
-import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
+import { buildAgentResumeCommand, getAgentAdapter } from "./agent-adapters";
+export { buildAgentResumeCommand } from "./agent-adapters";
+import type {
+  TerminalSessionManager,
+  TerminalSessionRecord,
+} from "../manager/manager";
 import { logger } from "../../logging/index";
 import {
   resolveDefaultTerminalLaunchConfig,
@@ -35,10 +40,6 @@ interface EnsureTerminalRuntimeOptions {
 const TmuxPostEnterInputDelayMs = 300;
 const BRACKETED_PASTE_START = "\u001b[200~";
 const BRACKETED_PASTE_END = "\u001b[201~";
-const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
-  "-c",
-  "check_for_update_on_startup=false",
-] as const;
 const terminalLogger = logger.child({ component: "terminal" });
 
 export function isTmuxBackedSession(
@@ -132,19 +133,16 @@ export async function ensureTerminalRuntime(
               currentSession.id,
             );
             warning = `Original tmux session was lost; resumed ${agentThreadToResume.provider} thread from saved threadId (${attempt.count}/${attempt.maxAttempts}).`;
-            terminalLogger.warn(
-              "terminal.tmux.session-missing.agent-resume",
-              {
-                message: "Tmux terminal session missing; resuming agent thread",
-                terminalSessionId: currentSession.id,
-                provider: agentThreadToResume.provider,
-                threadId: agentThreadToResume.threadId,
-                sessionName: target.sessionName,
-                socketPath: target.socketPath,
-                rebuildCount: attempt.count,
-                rebuildWindowMs: attempt.windowMs,
-              },
-            );
+            terminalLogger.warn("terminal.tmux.session-missing.agent-resume", {
+              message: "Tmux terminal session missing; resuming agent thread",
+              terminalSessionId: currentSession.id,
+              provider: agentThreadToResume.provider,
+              threadId: agentThreadToResume.threadId,
+              sessionName: target.sessionName,
+              socketPath: target.socketPath,
+              rebuildCount: attempt.count,
+              rebuildWindowMs: attempt.windowMs,
+            });
           } catch (error) {
             if (error instanceof TmuxRebuildLimitError) {
               terminalLogger.error("terminal.tmux.rebuild-limit.exceeded", {
@@ -258,7 +256,15 @@ export async function ensureTerminalRuntime(
         if (agentThreadToResume) {
           await options.tmuxService!.sendInput(
             target,
-            buildAgentResumeCommand(agentThreadToResume),
+            buildAgentResumeCommand({
+              ...agentThreadToResume,
+              sessionFile: await getAgentAdapter(
+                agentThreadToResume.provider,
+              ).resolveResumeTarget(
+                agentThreadToResume.threadId,
+                currentSession.pi,
+              ),
+            }),
           );
           currentSession =
             (await options.terminalSessionManager.updateSessionThreadId(
@@ -357,18 +363,6 @@ function isInteractiveShellLaunch(command: string, args: string[]): boolean {
   return !args.some((arg) => arg === "-c" || arg === "-lc");
 }
 
-export function buildAgentResumeCommand(thread: {
-  provider: TerminalAgentKind;
-  threadId: string;
-}): string {
-  const args = [
-    ...(thread.provider === "codex" ? CODEX_SKIP_UPDATE_ON_STARTUP_ARGS : []),
-    "resume",
-    thread.threadId,
-  ];
-  return `${thread.provider} ${args.map(shellQuote).join(" ")}\n`;
-}
-
 export function resolveAgentThreadToResume(
   session: TerminalSessionRecord,
 ): { provider: TerminalAgentKind; threadId: string } | null {
@@ -389,13 +383,6 @@ export function resolveAgentThreadToResume(
   return recentThreadId && session.lastThreadProvider === activeProvider
     ? { provider: activeProvider, threadId: recentThreadId }
     : null;
-}
-
-function shellQuote(value: string): string {
-  if (/^[A-Za-z0-9_/:=.,@%+-]+$/.test(value)) {
-    return value;
-  }
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function createTmuxInputPacedRuntime(runtime: PtyRuntime): PtyRuntime {

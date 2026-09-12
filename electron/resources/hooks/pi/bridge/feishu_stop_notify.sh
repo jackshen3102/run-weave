@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+
+set -uo pipefail
+
+CONFIG_FILE="${FEISHU_NOTIFY_ENV:-${HOME}/.runweave/feishu_notify.env}"
+LOG_FILE="${FEISHU_NOTIFY_LOG:-${HOME}/.runweave/feishu_notify.log}"
+OPENSSL_BIN="${OPENSSL_BIN:-/opt/homebrew/bin/openssl}"
+
+if [[ ! -f "$CONFIG_FILE" && -f /etc/runweave/feishu.env ]]; then
+  CONFIG_FILE=/etc/runweave/feishu.env
+fi
+
+log() {
+  local message="$1"
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$message" >>"$LOG_FILE" 2>/dev/null || true
+}
+
+json_get() {
+  local filter="$1"
+  local fallback="${2:-}"
+
+  if [[ -z "${PAYLOAD:-}" ]] || ! command -v jq >/dev/null 2>&1; then
+    printf '%s' "$fallback"
+    return
+  fi
+
+  local value
+  value="$(printf '%s' "$PAYLOAD" | jq -r "$filter // empty" 2>/dev/null || true)"
+  if [[ -n "$value" && "$value" != "null" ]]; then
+    printf '%s' "$value"
+  else
+    printf '%s' "$fallback"
+  fi
+}
+
+truncate_text() {
+  local text="$1"
+  local limit="${2:-3000}"
+
+  if ((${#text} > limit)); then
+    printf '%s\n...(truncated)' "${text:0:limit}"
+  else
+    printf '%s' "$text"
+  fi
+}
+
+load_config() {
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    log "skip: config file missing"
+    return 1
+  fi
+
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+  return 0
+}
+
+build_message_text() {
+  local cwd="$1"
+  local terminal_id="$2"
+  local content="$3"
+
+  cat <<EOF
+路径: ${cwd}(${terminal_id})
+
+${content}
+EOF
+}
+
+format_terminal_id() {
+  local raw_id="$1"
+
+  raw_id="${raw_id#session=}"
+  raw_id="${raw_id#runweave-}"
+  if [[ -n "$raw_id" ]]; then
+    printf '%s' "$raw_id"
+  else
+    printf 'unknown'
+  fi
+}
+
+resolve_terminal_id() {
+  local terminal_id payload_session env_session tmux_info
+
+  terminal_id="$(json_get '.terminalId // .terminal_id // .terminalSessionId // .terminal_session_id')"
+  if [[ -n "$terminal_id" ]]; then
+    format_terminal_id "$terminal_id"
+    return
+  fi
+
+  payload_session="$(json_get '.tmux_session_name // .tmuxSessionName')"
+  if [[ -n "$payload_session" ]]; then
+    format_terminal_id "$payload_session"
+    return
+  fi
+
+  env_session="${RUNWEAVE_TERMINAL_SESSION_ID:-}"
+  if [[ -n "$env_session" ]]; then
+    format_terminal_id "$env_session"
+    return
+  fi
+
+  env_session="${RUNWEAVE_TMUX_SESSION_NAME:-}"
+  if [[ -n "$env_session" ]]; then
+    format_terminal_id "$env_session"
+    return
+  fi
+
+  if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then
+    tmux_info="$(
+      tmux display-message -p \
+        'session=#{session_name}' \
+        2>/dev/null || true
+    )"
+    if [[ -n "$tmux_info" ]]; then
+      format_terminal_id "$tmux_info"
+      return
+    fi
+  fi
+
+  printf 'unknown'
+}
+
+send_webhook_message() {
+  local text="$1"
+
+  if [[ -z "${FEISHU_WEBHOOK_URL:-}" ]]; then
+    return 1
+  fi
+
+  local body
+  if [[ -n "${FEISHU_WEBHOOK_SECRET:-}" ]]; then
+    local timestamp sign openssl_cmd
+    timestamp="$(date +%s)"
+    openssl_cmd="$OPENSSL_BIN"
+    if [[ ! -x "$openssl_cmd" ]]; then
+      openssl_cmd="$(command -v openssl || true)"
+    fi
+    if [[ -z "$openssl_cmd" ]]; then
+      log "webhook failed: openssl not found for signed webhook"
+      return 0
+    fi
+    sign="$(printf '' | "$openssl_cmd" dgst -sha256 -hmac "${timestamp}"$'\n'"${FEISHU_WEBHOOK_SECRET}" -binary | base64 | tr -d '\n')"
+    body="$(jq -nc --arg text "$text" --arg timestamp "$timestamp" --arg sign "$sign" \
+      '{timestamp:$timestamp, sign:$sign, msg_type:"text", content:{text:$text}}')"
+  else
+    body="$(jq -nc --arg text "$text" '{msg_type:"text", content:{text:$text}}')"
+  fi
+
+  local response
+  response="$(curl --connect-timeout 3 --max-time 5 -sS \
+    -H 'Content-Type: application/json' \
+    -d "$body" \
+    "$FEISHU_WEBHOOK_URL" 2>&1)"
+  local status=$?
+  if ((status != 0)); then
+    log "webhook failed: curl exit ${status}"
+    return 0
+  fi
+
+  local code
+  code="$(printf '%s' "$response" | jq -r '.code // .StatusCode // 0' 2>/dev/null || printf '0')"
+  if [[ "$code" != "0" ]]; then
+    log "webhook failed: response code ${code}"
+  fi
+  return 0
+}
+
+send_app_message() {
+  local text="$1"
+  export FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_TARGET_CHAT_ID
+  export FEISHU_ALLOWED_OPEN_IDS
+  export FEISHU_NOTIFY_OPEN_IDS
+  export RUNWEAVE_FEISHU_STATE_DIR
+  local rw_bin
+  local -a rw_command
+  rw_bin="${RUNWEAVE_CLI_BIN:-$(command -v rw || true)}"
+  if [[ -n "$rw_bin" && -x "$rw_bin" ]]; then
+    rw_command=("$rw_bin")
+  elif [[ -n "$rw_bin" && -f "$rw_bin" ]] && command -v node >/dev/null 2>&1; then
+    rw_command=(node "$rw_bin")
+  else
+    log "app notify failed: rw CLI not found"
+    return 0
+  fi
+
+  local notify_payload
+  notify_payload="$(printf '%s' "$PAYLOAD" | jq -c --arg text "$text" '. + {notificationText:$text}' 2>/dev/null || true)"
+  if [[ -z "$notify_payload" ]]; then
+    log "app notify failed: invalid payload"
+    return 0
+  fi
+  if ! printf '%s' "$notify_payload" | "${rw_command[@]}" feishu notify --stdin --json >/dev/null 2>>"$LOG_FILE"; then
+    log "app notify failed: rw feishu notify returned non-zero"
+  fi
+}
+
+main() {
+  PAYLOAD="$(cat || true)"
+
+  local event
+  event="$(json_get '.hook_event_name // .hookEventName // .event')"
+  case "$event" in
+    "" | "Stop" | "stop" | "SubagentStop" | "subagent_stop") ;;
+    *) return 0 ;;
+  esac
+
+  load_config || return 0
+  if ! command -v jq >/dev/null 2>&1; then
+    log "skip: jq missing"
+    return 0
+  fi
+
+  local cwd content terminal_id text extractor script_dir
+  cwd="$(json_get '.cwd' "${PWD:-unknown}")"
+  script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  extractor="${script_dir}/runweave-hook-payload.cjs"
+  if [[ ! -f "$extractor" ]]; then
+    extractor="${HOME}/.runweave/bin/runweave-hook-payload.cjs"
+  fi
+  content="$(printf '%s' "$PAYLOAD" | "${RUNWEAVE_HOOK_NODE:-node}" "$extractor" 2>/dev/null || true)"
+  if [[ -z "$content" ]]; then
+    content="$(json_get '.last_assistant_message // .message // .body' '(任务已完成)')"
+  fi
+  content="$(truncate_text "$content" 2500)"
+  terminal_id="$(resolve_terminal_id)"
+  text="$(build_message_text "$cwd" "$terminal_id" "$content")"
+
+  if [[ "${FEISHU_NOTIFY_DEBUG_PAYLOAD:-0}" == "1" ]]; then
+    printf '%s\n' "$PAYLOAD" >>"${HOME}/.runweave/feishu_notify_payload.log" 2>/dev/null || true
+  fi
+
+  case "${FEISHU_NOTIFY_TRANSPORT:-app}" in
+    app) send_app_message "$text" ;;
+    webhook) send_webhook_message "$text" ;;
+    *) log "invalid FEISHU_NOTIFY_TRANSPORT" ;;
+  esac
+  return 0
+}
+
+main "$@" || log "unexpected failure"
+exit 0
