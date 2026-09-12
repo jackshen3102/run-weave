@@ -78,6 +78,20 @@ Simulator 或真机交互验收。
 证据位于执行机器 `.runweave/ios-attention-20260908/`，包含原生 `.xcresult`、截图、控件树、
 确认版本记录及落盘结果。这不替代真机或桌面与手机同时在线的端到端验收。
 
+## 文件预览原生导航
+
+2026-09-12，本轮工作区候选在 iPhone 17 / iOS 26.6.1 上完成 Debug 构建和覆盖安装。
+既有 XCUITest 执行器从正式首页进入终端，验证系统左边缘右滑、短距离取消、连续进出、
+源码与 Diff 横滚、Markdown 返回、图片双击缩放和平移及逐层返回；搜索词、列表落点和
+文件内滚动位置保留。从文件进入 Diff 后返回没有重新显示加载指示器，截图已逐项核对。
+没有向终端发送命令，也没有修改连接、凭据或服务端数据。
+
+本机证据为 `.runweave/native-device-runner/preview-native-gestures.xcresult`、
+`preview-native-media.xcresult`、`preview-native-nested-performance.xcresult` 及各自导出的附件。
+三次系统导航指标采样报告约 87.7 fps、hitch 为 0，但 frame count 字段为 0，
+不能据此宣称所有转场零掉帧；该小样本也不覆盖所有设备、大文件、弱网与系统中断。
+此前 `preview-left-*` / `preview-right-*` 为已移除的自定义手势方案，不作为当前版本证据。
+
 ## 待关闭事项
 
 扫码实现已有 iOS 26.5 Simulator Debug 构建、iPhone 17 真机 Debug 构建与安装证据。

@@ -5,12 +5,14 @@ struct FilesView: View {
   let projectID: String
   let active: Bool
   @ObservedObject var model: ProjectChangesModel
-  let showChange: (SelectedFile) -> Void
   @State private var path = ""
   @State private var query = ""
   @State private var directory: PreviewDirectory?
   @State private var search: PreviewSearch?
   @State private var selected: SelectedFile?
+  @State private var showingPreview = false
+  @State private var previewID = UUID()
+  @FocusState private var searchFocused: Bool
   @State private var failure: String?
   @State private var loading = false
   @State private var loadID = UUID()
@@ -19,9 +21,10 @@ struct FilesView: View {
   var body: some View {
     VStack(spacing: 4) {
       TextField("搜索文件", text: $query).textFieldStyle(.roundedBorder).padding(.horizontal)
-        .autocapitalization(.none).disableAutocorrection(true)
+        .autocapitalization(.none).disableAutocorrection(true).focused($searchFocused)
       ScrollView(.horizontal) {
         HStack {
+          if loading { ProgressView().controlSize(.small) }
           Button("root") {
             path = ""
             query = ""
@@ -35,7 +38,6 @@ struct FilesView: View {
           }
         }.padding(.horizontal)
       }
-      if loading { ProgressView() }
       if let failure { Text(failure).foregroundColor(.red) }
       List {
         if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -50,7 +52,7 @@ struct FilesView: View {
               if entry.kind == "directory" {
                 path = entry.path
               } else {
-                selected = SelectedFile(path: entry.path)
+                open(SelectedFile(path: entry.path))
               }
             } label: {
               HStack {
@@ -68,7 +70,7 @@ struct FilesView: View {
         } else {
           ForEach(search?.items ?? []) { item in
             Button {
-              selected = SelectedFile(path: item.path)
+              open(SelectedFile(path: item.path))
             } label: {
               VStack(alignment: .leading) {
                 Text(item.basename)
@@ -86,16 +88,28 @@ struct FilesView: View {
       do { try await Task.sleep(nanoseconds: 200_000_000) } catch { return }
       await load()
     }
-    .sheet(item: $selected) { file in
-      FilePreview(
-        session: session, projectID: projectID, file: file,
-        showChange: change(file.path).map { change in
-          {
-            selected = nil
-            showChange(SelectedFile(path: file.path, changeKind: change.0))
-          }
-        })
+    .background {
+      NavigationLink(isActive: $showingPreview) {
+        if let selected {
+          FilePreview(
+            session: session, projectID: projectID, file: selected,
+            relatedChange: change(selected.path).map {
+              SelectedFile(path: selected.path, changeKind: $0.0)
+            }
+          ).id(previewID)
+        }
+      } label: {
+        EmptyView()
+      }
+      .hidden()
     }
+  }
+  private func open(_ file: SelectedFile) {
+    searchFocused = false
+    // Retain the destination through the native pop animation; refresh on the next open.
+    selected = file
+    previewID = UUID()
+    showingPreview = true
   }
   private func change(_ path: String) -> (String, String)? {
     if let item = model.changes?.working.first(where: { $0.path == path }) {

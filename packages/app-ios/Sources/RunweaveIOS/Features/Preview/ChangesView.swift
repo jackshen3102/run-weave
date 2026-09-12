@@ -4,10 +4,11 @@ struct ChangesView: View {
   @ObservedObject var session: AppSession
   let projectID: String
   let active: Bool
-  @Binding var requested: SelectedFile?
   @ObservedObject var model: ProjectChangesModel
   @State private var filter = "all"
   @State private var selected: SelectedFile?
+  @State private var showingPreview = false
+  @State private var previewID = UUID()
   @State private var viewed = Set<String>()
 
   var body: some View {
@@ -29,7 +30,7 @@ struct ChangesView: View {
               ForEach(kind == "staged" ? model.changes?.staged ?? [] : model.changes?.working ?? []) { item in
                 let file = SelectedFile(path: item.path, changeKind: kind)
                 Button {
-                  selected = file
+                  open(file)
                 } label: {
                   HStack {
                     Text(item.path).foregroundColor(.primary)
@@ -48,21 +49,25 @@ struct ChangesView: View {
     .task(id: active) {
       if active {
         await model.refresh()
-        guard !Task.isCancelled else { return }
-        openRequested()
       }
     }
-    .onChange(of: requested) { _ in if active { openRequested() } }
-    .sheet(item: $selected) { file in
-      FilePreview(
-        session: session, projectID: projectID, file: file,
-        didLoad: { viewed.insert(file.id) })
+    .background {
+      NavigationLink(isActive: $showingPreview) {
+        if let selected {
+          FilePreview(
+            session: session, projectID: projectID, file: selected,
+            didLoad: { viewed.insert(selected.id) }
+          ).id(previewID)
+        }
+      } label: {
+        EmptyView()
+      }
+      .hidden()
     }
   }
-  private func openRequested() {
-    if let requested {
-      selected = requested
-      self.requested = nil
-    }
+  private func open(_ file: SelectedFile) {
+    selected = file
+    previewID = UUID()
+    showingPreview = true
   }
 }
