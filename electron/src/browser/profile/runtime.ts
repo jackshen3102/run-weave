@@ -24,6 +24,7 @@ import {
   getTerminalBrowserProfilePreferences,
   normalizeTerminalBrowserGroupId,
   normalizeTerminalBrowserProjectId,
+  saveTerminalBrowserProfileProxyMode,
 } from "./preferences.js";
 import { terminalBrowserRuntime } from "../runtime.js";
 import {
@@ -45,17 +46,26 @@ interface ProfileRuntimeRecord {
   cdpConnectionCount: number;
 }
 
-const records = new Map<TerminalBrowserProfileId, ProfileRuntimeRecord>(
-  TERMINAL_BROWSER_PROFILE_IDS.map((profileId) => [
-    profileId,
-    {
-      proxyMode: isManagedDevSession ? "direct" : "whistle",
+const records = new Map<TerminalBrowserProfileId, ProfileRuntimeRecord>();
+
+function getProfileRecord(
+  profileId: TerminalBrowserProfileId,
+): ProfileRuntimeRecord {
+  let record = records.get(profileId);
+  if (!record) {
+    // Read lazily, after the host has selected its userData directory.
+    record = {
+      proxyMode:
+        getTerminalBrowserProfilePreferences().proxyModes?.[profileId] ??
+        (isManagedDevSession ? "direct" : "whistle"),
       route: { kind: "unassigned" },
       mutationQueue: Promise.resolve(),
       cdpConnectionCount: 0,
-    },
-  ]),
-);
+    };
+    records.set(profileId, record);
+  }
+  return record;
+}
 
 function routesEqual(left: TerminalBrowserRoute, right: TerminalBrowserRoute) {
   return (
@@ -85,7 +95,7 @@ function getVisibleViewCount(
 export function getTerminalBrowserProfileRuntimeState(
   profileId: TerminalBrowserProfileId,
 ): TerminalBrowserProfileRuntimeState {
-  const record = records.get(profileId)!;
+  const record = getProfileRecord(profileId);
   return {
     profileId,
     proxyMode: record.proxyMode,
@@ -124,7 +134,7 @@ export function changeTerminalBrowserCdpConnectionCount(
   profileId: TerminalBrowserProfileId,
   delta: 1 | -1,
 ): void {
-  const record = records.get(profileId)!;
+  const record = getProfileRecord(profileId);
   record.cdpConnectionCount = Math.max(0, record.cdpConnectionCount + delta);
   notifyRuntimeChanged(profileId);
 }
@@ -197,7 +207,7 @@ export async function resolveTerminalBrowserProfile(
   if (terminalSessionId) {
     assertAutomationProfileAvailable(terminalSessionId, profileId);
   }
-  const record = records.get(profileId)!;
+  const record = getProfileRecord(profileId);
 
   const mutation = record.mutationQueue.then(async () => {
     const requestedRoute: TerminalBrowserRoute =
@@ -276,13 +286,14 @@ export async function setTerminalBrowserProfileProxyMode(
   profileId: TerminalBrowserProfileId,
   proxyMode: TerminalBrowserProfileProxyMode,
 ): Promise<TerminalBrowserProfileRuntimeState> {
-  const record = records.get(profileId)!;
+  const record = getProfileRecord(profileId);
   const mutation = record.mutationQueue.then(async () => {
     if (
       record.proxyMode === proxyMode &&
       (proxyMode !== "whistle" ||
         getTerminalBrowserWhistleState(profileId).status === "ready")
     ) {
+      saveTerminalBrowserProfileProxyMode(profileId, proxyMode);
       return getTerminalBrowserProfileRuntimeState(profileId);
     }
 
@@ -305,6 +316,7 @@ export async function setTerminalBrowserProfileProxyMode(
     }
 
     record.proxyMode = proxyMode;
+    saveTerminalBrowserProfileProxyMode(profileId, proxyMode);
     await reloadTerminalBrowserProfileAfterProxyChange(profileId);
     notifyRuntimeChanged(profileId);
     return getTerminalBrowserProfileRuntimeState(profileId);

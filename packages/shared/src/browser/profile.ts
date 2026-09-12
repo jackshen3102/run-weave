@@ -62,6 +62,10 @@ export interface TerminalBrowserProfilePreferences {
   version: 1;
   defaultProfileId: TerminalBrowserProfileId;
   businessOrigin: string | null;
+  /** Missing entries retain the host's default until explicitly selected. */
+  proxyModes?: Partial<
+    Record<TerminalBrowserProfileId, TerminalBrowserProfileProxyMode>
+  >;
   worktrees: Record<string, TerminalBrowserWorktreePreference>;
 }
 
