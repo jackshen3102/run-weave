@@ -1,3 +1,4 @@
+import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type { TerminalActivityDependencies } from "../../terminal/runtime/activity-events";
@@ -11,6 +12,7 @@ const TERMINAL_AGENTS = new Set<TerminalAgentKind>([
   "trae",
   "traecli",
   "traex",
+  "pi",
 ]);
 
 export async function handleAgentLifecycleEvent(
@@ -58,6 +60,8 @@ export async function handleAgentLifecycleEvent(
           agent: provider,
           hookEvent: observedStatus === "running" ? "UserPromptSubmit" : "Stop",
           threadId,
+          operationId: readAppServerPayloadString(event.payload, "operationId"),
+          ...(isPiAgentContext((event.payload as Record<string, unknown>)?.pi) ? { pi: (event.payload as { pi: import("@runweave/shared/terminal/pi-agent").PiAgentContext }).pi } : {}),
           panelId: event.scope?.terminalPanelId,
           tmuxPaneId: event.scope?.terminalTmuxPaneId,
         },
@@ -89,7 +93,7 @@ export async function handleAgentLifecycleEvent(
       eventName: "agent.lifecycle.observed",
       occurredAt: event.createdAt,
       actorType: "agent",
-      actorAgent: provider === "codex" ? "codex" : "trae",
+      actorAgent: provider === "pi" ? "pi" : provider === "codex" ? "codex" : "trae",
       scope: {
         projectId: session.projectId,
         terminalSessionId: session.id,

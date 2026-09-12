@@ -16,6 +16,7 @@ type TerminalStatePanelSnapshot = Pick<
 
 const SHELL_IDLE: TerminalState = { state: "shell_idle", agent: null };
 const AGENT_COMMANDS: Record<TerminalAgentKind, ReadonlySet<string>> = {
+  pi: new Set(["pi"]),
   codex: new Set(["codex"]),
   trae: new Set(["trae"]),
   traecli: new Set(["traecli"]),
@@ -36,6 +37,11 @@ export class TerminalStateService {
       state: TerminalState,
     ) => void,
   ) {}
+
+  notifyPi(terminalSessionId: string, projectId: string, title: string): void {
+    this.eventService?.record({ kind: "terminal_notification", terminalSessionId, projectId,
+      payload: { source: "pi", level: "warning", title } });
+  }
 
   setShellActiveCommand(
     terminalSessionId: string,

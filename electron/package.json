@@ -19,7 +19,8 @@
     "ajv-formats": "3.0.1",
     "electron-updater": "^6.6.2",
     "pidusage": "^4.0.1",
-    "ws": "^8.18.1"
+    "ws": "^8.18.1",
+    "@runweave/agent-bridge": "workspace:*"
   },
   "devDependencies": {
     "@electron/rebuild": "4.2.0",

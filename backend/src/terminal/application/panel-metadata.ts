@@ -225,7 +225,7 @@ const NODE_WRAPPED_ACTIVE_COMMANDS = new Set([
   "pnpm",
   "trae",
   "traecli",
-  "traex",
+  "traex", "pi",
   "yarn",
 ]);
 

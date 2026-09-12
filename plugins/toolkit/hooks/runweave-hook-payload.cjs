@@ -345,7 +345,7 @@ function normalizeSource(raw) {
     source === "codex" ||
     source === "trae" ||
     source === "traecli" ||
-    source === "traex"
+    source === "pi" || source === "traex"
   ) {
     return source;
   }
@@ -380,6 +380,7 @@ function deriveAgentHookEndpoint(endpoint) {
 }
 
 function toAgentHookStateEvent(normalizedEvent) {
+  if (normalizedEvent === "agentmetadata") return "AgentMetadata";
   if (
     normalizedEvent === "sessionstart" ||
     normalizedEvent === "session_start"
@@ -418,6 +419,7 @@ function buildCompletionHookBody({
   return {
     terminalSessionId,
     source,
+    ...(source === "pi" && payload.pi ? { pi: payload.pi } : {}),
     completionReason,
     commandName: commandName || null,
     rawHookEvent: String(rawEvent || "Stop"),
@@ -465,12 +467,13 @@ function buildAppServerBaseEvent({
           ? payload.cwd
           : process.env.PWD || null,
     },
-    dedupeKey: `${dedupePrefix}:${source}:${terminalSessionId}:${String(
+    dedupeKey: payload.pi ? `${dedupePrefix}:pi:${payload.pi.instanceId}:${payload.pi.sequence}` : `${dedupePrefix}:${source}:${terminalSessionId}:${String(
       rawEvent || "Unknown",
     )}:${threadId || "no-thread"}:${Date.now()}`,
     correlationId: threadId,
     payload: {
       source,
+      ...(source === "pi" && payload.pi ? { pi: payload.pi } : {}),
       threadId,
       rawHookEvent: String(rawEvent || "Unknown"),
       normalizedEvent,

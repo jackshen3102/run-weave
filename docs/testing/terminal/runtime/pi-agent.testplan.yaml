@@ -1,0 +1,199 @@
+version: 1
+name: Pi Agent 日常终端接入验收
+description: >
+  Pi 日常终端接入的行为合同；实现与执行证据分别记录，不将静态检查当作真机验收。验证既有 Terminal 中的
+  生命周期、输入、身份隔离和历史恢复；不以 Codex 模型身份替代 Pi CLI 身份。
+
+cases:
+  - id: PI-001
+    name: Pi 原生运行在同一 Pane 内产生准确状态
+    required: true
+    description: >
+      一次真实模型请求只能将对应 Pi Pane 推进到 running 和 idle；普通输出不能决定 Agent 状态。
+    preconditions:
+      - 隔离的 Runweave 测试环境已安装 Pi 0.85.1 与候选 Runweave 扩展，模型可用。
+      - 测试者拥有独立 tmux Terminal，可读取 Panel 状态与 terminal-events。
+    steps:
+      - 在测试 Pane 启动 Pi 并提交一个只读请求；确认 Agent 身份为 pi，真实运行期间为 agent_running。
+      - 等待 agent_settled；确认该 Pane 变为 agent_idle，期间 turn_end 不单独结束运行。
+      - 退出 Pi 并运行输出 Working 和 ready 的普通 shell 命令；确认状态为 shell_idle，不被输出文案改变。
+
+  - id: PI-002
+    name: 排队的后续消息完成前不提前结束整次活动
+    required: true
+    description: >
+      Pi 自动执行 follow-up 的期间保持运行，最后一次 settled 才结束活动。
+    preconditions:
+      - 独立测试 Pane 中 Pi 与 Runweave 扩展正常运行，可观察 agent_end 和 agent_settled。
+      - 已关闭测试环境外发通知，可通过测试事件 sink 观察 completion。
+    steps:
+      - 发起真实任务并在执行期间排入 follow-up；记录低层 agent_end 和后续继续执行事件。
+      - 确认中间 agent_end 不产生成功 completion，后续消息完成且 Pi settled 后才结束对应活动。
+
+  - id: PI-003
+    name: 自动重试不产生提前完成
+    required: true
+    description: >
+      同一请求的可恢复服务错误与自动重试属于未结束活动。
+    preconditions:
+      - 独立测试 Pi 使用可控 provider fixture，首次返回可重试错误，下一次返回成功。
+      - Pi 自动重试已启用，可观察真实扩展事件和 Runweave 状态。
+    steps:
+      - 提交请求并观察第一次失败到重试开始的窗口；确认未出现成功 completion。
+      - 等待重试成功并 settled；确认当前活动结束且成功提醒只产生一次。
+
+  - id: PI-004
+    name: 自动压缩和继续执行期间保持活动
+    required: true
+    description: >
+      上下文压缩后会继续执行的请求，在压缩窗口不得被判定完成。
+    preconditions:
+      - 独立 Pi fixture 的上下文与压缩配置可稳定触发一次自动压缩后继续执行。
+      - 已安装候选扩展，可观察 session_compact、agent_end、agent_settled 和 terminal-events。
+    steps:
+      - 提交触发自动压缩的请求；确认压缩及后续继续执行期间不产生成功完成信号。
+      - 等待最终 settled；确认活动结束，历史仍能读取压缩前后对应分支。
+
+  - id: PI-005
+    name: 中断和最终错误不被标成成功完成
+    required: true
+    description: >
+      当前请求因用户中断或不可恢复错误结束时回到 idle，并保留中断或失败结果。
+    preconditions:
+      - 独立 Pi fixture 可以分别运行可中断请求和稳定失败请求，不会影响用户任务。
+      - 状态、完成事件和结果提示可观察，外发通知已关闭。
+    steps:
+      - 启动请求后发送默认 Escape；确认仅当前请求停止，状态回到 idle，结果为中断且不发成功 completion。
+      - 在同一 fixture 提交稳定失败请求；确认最终失败后回到 idle，有失败反馈且不发成功 completion。
+
+  - id: PI-006
+    name: 扩展交互等待不触发任务完成
+    required: true
+    description: >
+      Pi 扩展的阻塞 UI prompt 是待用户处理，不能被消费为任务成功。
+    preconditions:
+      - 独立 Pi fixture 已加载可调用 ctx.ui.confirm 的确定性扩展，能够生成真实 ui_prompt_start/end。
+      - Runweave attention 与 completion 事件可读取，测试外发通知已关闭。
+    steps:
+      - 触发确认弹窗；确认 Runweave 显示待处理反馈，未产生驱动任务完成的成功事件。
+      - 完成确认并让任务继续；确认等待 span 结束，仅最终 settled 决定活动结束。
+
+  - id: PI-007
+    name: 旧事件不能污染其它 Pane 或新一代运行
+    required: true
+    description: >
+      Pi 上报必须同时满足 source、终端、Pane、会话与当前 operation 归属。
+    preconditions:
+      - 独立 Terminal 有两个 Pane，一个为 Pi，另一个运行其它 Agent，已记录当前事件归属。
+      - 测试工具可在不输出 token 的前提下延迟和重放候选 Pi 事件。
+    steps:
+      - 对 Pi Pane 开始下一代运行后，重放上一代 settled，并发送错 Pane、错 source 和无效 token 事件。
+      - 确认上述事件被拒绝或忽略，新运行与另一个 Pane 状态均未被覆盖；当前匹配事件仍可正常推进状态。
+
+  - id: PI-008
+    name: Reload 后扩展不重复监听或重复通知
+    required: true
+    description: >
+      同一 Pi 进程 reload 前后的 Runweave 扩展资源按 session 生命周期重新建立。
+    preconditions:
+      - 独立 Pi fixture 已安装自发现的候选扩展，并已完成一次真实请求。
+      - 测试环境外发通知已关闭，可统计桥接事件与扩展监听资源。
+    steps:
+      - 在 Pi 中执行两次 reload，重新取得当前 session 上下文后提交唯一标记请求。
+      - 确认旧资源已关闭，新请求只有一份有效事件链，成功 completion 不因 reload 次数增长。
+
+  - id: PI-009
+    name: 新建恢复与分叉始终绑定当前 Pi 会话
+    required: true
+    description: >
+      同一 TUI 内替换 session 时，历史身份随新会话切换，旧会话回调不再作用当前 Pane。
+    preconditions:
+      - 独立 Pi fixture 已建立两个内容不同的测试会话，并可执行 new、resume 和 fork。
+      - 可读取 Pi session header、当前 leaf 与 Runweave ThreadRef。
+    steps:
+      - 在同一 TUI 依次新建、精确恢复测试会话并分叉；每次完成切换后核对 session id、cwd、分叉来源和 ThreadRef。
+      - 在最终会话提交唯一标记；确认事件与历史只归属当前会话，旧 shutdown 不把当前 Pi 标成已退出。
+
+  - id: PI-010
+    name: Web 浮动输入框完整替换多行草稿
+    required: true
+    description: >
+      Pi Composer 必须完整同步草稿，不能因 Ctrl+U 的行首语义留下旧内容或发生多次提交。
+    preconditions:
+      - 独立 Dev Session 已实现候选 Pi Composer，具有可附着的真实 Web 页面与 Pi Terminal。
+      - Pi 使用已声明支持的键位配置，能够读取真正接受的用户消息。
+    steps:
+      - 使用 $toolkit:playwright-cli 附着正确页面，在 Pi 中先留下多行旧草稿并将光标移到中间。
+      - 打开浮动输入框，输入包含中文和换行的新草稿并提交；确认 Pi 接受的内容与新草稿逐字一致，没有旧行残留且只提交一次。
+
+  - id: PI-011
+    name: iOS 图文草稿只在 Pi 接受后清除
+    required: true
+    description: >
+      原生 App 的图文草稿接受确认必须遵循 Backend 投递结果，不按 Codex 专用协议误发。
+    preconditions:
+      - 按原生包真机流程安装候选 App，连接拥有独立 Pi Terminal 的测试 Backend。
+      - 设备已有当前终端的多行文本和一张可供模型识别的测试图片草稿。
+    steps:
+      - 按原生真机自动化流程发送草稿；确认消息只到当前 Pi Pane，图片可读取，接受确认前草稿没有被提前清除。
+
+  - id: PI-012
+    name: rw 准备流程不把提交启动命令当作就绪
+    required: true
+    description: >
+      rw 对 Pi 的准备、投递与退出使用 Pi 协议，认证或 trust 阻塞不能被判定为 ready。
+    preconditions:
+      - 独立 Terminal 可供 rw 准备 Pi，测试项目的 trust 状态由 fixture 明确控制。
+      - rw JSON 输出和 Pi 真正接受的用户消息均可观察。
+    steps:
+      - 在未解决 trust 的 fixture 启动 Pi；确认准备流程明确报告等待或阻塞，业务 prompt 未泄入 shell 或选择菜单。
+      - 由测试者明确完成项目 trust 后重试；确认真实就绪后只投递一次请求，退出使用 Pi 支持的命令。
+
+  - id: PI-013
+    name: 历史读取保留分支并容忍追加中的半行
+    required: true
+    description: >
+      Pi reader 展示选定分支的历史，未知记录和不完整尾行不会导致串分支或整份历史不可用。
+    preconditions:
+      - 独立只读历史 fixture 包含真实 Pi v3 会话的分支、工具、压缩及未知 custom entry，尾部可追加半行。
+      - fixture 已按受信任路径登记，App Server Pi reader 与 Work History 可读取。
+    steps:
+      - 读取当前分支历史；确认用户和助手消息顺序正确，其它分支不混入，压缩记录有明确表示。
+      - 在同一文件尾部追加半行后读取，再补全该行并读取；确认前次完整历史不丢失，补全后新记录可见且不重复。
+
+  - id: PI-014
+    name: Backend 重启后只用当前生命周期事实校正 Pi 状态
+    required: true
+    description: >
+      断线与 Backend 重启后，明确的 settled 事实能校正状态，旧完成不能覆盖当前运行或重播通知。
+    preconditions:
+      - 独立 Runweave fixture 中 Pi 保持运行，扩展已写入可核对的 Runweave custom lifecycle entry。
+      - 测试者能停启该 fixture 的 Backend 并重新取得其 endpoint，外发通知已关闭。
+    steps:
+      - 记录 Pi session、Pane、operation 与事件 cursor，在一次任务结束事件直连丢失的窗口重启测试 Backend。
+      - 按 Dev Session 流程重新取得 fresh endpoint 并读取状态；确认仅匹配的持久化生命周期事实校正当前任务，通知不重复。
+      - 提交下一次请求；确认旧 settled 不覆盖新 running，后续事件使用新 Backend 身份继续被接受。
+
+  - id: PI-015
+    name: 精确恢复不会回退到最近或错误会话
+    required: true
+    description: >
+      Pi 恢复使用精确 session 身份和已校验目录；缺失或身份不符时必须明确失败。
+    preconditions:
+      - 独立 session-dir 内有两个真实 Pi 测试会话，候选实现可从已退出的测试 Pane 发起恢复。
+      - 其中一个会话为目标，另一个为最近会话，测试者可在 fixture 内改名或替换目标文件。
+    steps:
+      - 恢复较早的目标会话；确认命令使用 Pi 的精确 session 选择，恢复后的 header id 与目标一致。
+      - 退出测试 Pi，将目标文件移走或换成 header 不匹配的测试文件后再次恢复；确认明确失败，没有打开最近会话或覆盖其它文件。
+
+  - id: PI-016
+    name: iOS Stop 按权威状态停止当前 Pi 请求
+    required: true
+    description: >
+      原生 App 的 Stop 可见性与作用目标遵循 Backend 当前 Pane 状态，不误停其它终端。
+    preconditions:
+      - 按原生包真机流程安装候选 App，连接独立测试 Backend。
+      - 两个测试 Terminal 各自运行 Pi，其中当前终端有可中断请求，另一个保持独立活动。
+    steps:
+      - 按原生真机自动化流程打开当前 Pi 终端；确认运行时显示 Stop，点击后仅当前 Pi 请求停止。
+      - 确认当前 App 与 Backend 最终显示 idle 且 Stop 消失，另一个终端的活动未被中断。

@@ -1,6 +1,6 @@
 import type { TerminalAgentKind } from "./state";
 
-export type TerminalAgentPreparationAgent = "codex" | "traex";
+export type TerminalAgentPreparationAgent = "codex" | "traex" | "pi";
 
 export const DEFAULT_TERMINAL_AGENT_BOOTSTRAP_PROMPT =
   "只读回答当前工作目录的绝对路径，不运行后台任务、不修改任何文件；完成后等待下一条输入。";

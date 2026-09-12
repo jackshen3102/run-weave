@@ -1,3 +1,4 @@
+import type { PiAgentContext } from "./pi-agent";
 import type { TerminalLastThreadStatus } from "./runtime/session";
 import type { TerminalAgentKind, TerminalState } from "./runtime/state";
 
@@ -24,6 +25,7 @@ export interface TerminalPanelGeometry {
 }
 
 export interface TerminalPanelListItem {
+  pi?: PiAgentContext;
   panelId: string;
   terminalSessionId: string;
   alias: string | null;

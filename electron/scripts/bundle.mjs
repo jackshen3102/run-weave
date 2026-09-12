@@ -1,8 +1,11 @@
+import { buildAgentAssets } from "../../scripts/agents/build.mjs";
 import { rmSync } from "node:fs";
 import { build } from "esbuild";
 import path from "node:path";
 import { finalizeActivitySqliteRuntime } from "./finalize-better-sqlite3-runtime.mjs";
 import { buildCompanionAgent } from "./build-companion-agent.mjs";
+
+await buildAgentAssets();
 
 const outputDir = process.env.RUNWEAVE_ELECTRON_BUNDLE_OUTDIR ?? "dist";
 

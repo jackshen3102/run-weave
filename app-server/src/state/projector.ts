@@ -1,3 +1,4 @@
+import { isPiAgentContext, isNewerPiContext } from "@runweave/shared/terminal/pi-agent";
 import type {
   AppServerAgentKind,
   AppServerAgentRunStatus,
@@ -22,6 +23,7 @@ const AGENT_KINDS = new Set<AppServerAgentKind>([
   "trae",
   "traecli",
   "traex",
+  "pi",
   "unknown",
 ]);
 const STOP_EVENTS = new Set(["stop", "subagent_stop", "subagentstop"]);
@@ -46,6 +48,7 @@ export class AppServerStateProjector {
       return { threadChange: null };
     }
 
+    if (projection.agent === "pi" && (!projection.pi || projection.pi.sessionId !== projection.threadId || !isNewerPiContext(projection.pi, this.stateStore.getThread(projection.threadId)?.pi))) return { threadChange: null };
     const threadChange = this.stateStore.upsertThread(projection);
     return { threadChange };
   }
@@ -82,6 +85,7 @@ function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
 
   return {
     agent,
+    ...(isPiAgentContext(payload.pi) ? { pi: payload.pi } : {}),
     status,
     threadId,
     projectId: event.scope?.projectId ?? null,
@@ -126,6 +130,7 @@ function readLifecycleAvailability(
 function readHookStatus(
   payload: Record<string, unknown>,
 ): AppServerAgentRunStatus | null {
+  if (isPiAgentContext(payload.pi)) return payload.pi.runId && payload.pi.event !== "agent_settled" ? "running" : "idle";
   const hookEvent = readHookEvent(payload);
   if (hookEvent === "SessionStart") {
     return "starting";
@@ -223,7 +228,7 @@ function readAgentFromCommand(
     basename === "codex" ||
     basename === "trae" ||
     basename === "traecli" ||
-    basename === "traex"
+    basename === "pi" || basename === "traex"
   ) {
     return basename;
   }

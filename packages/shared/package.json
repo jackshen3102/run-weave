@@ -33,6 +33,7 @@
     "./race": "./src/race/index.ts",
     "./system-monitor": "./src/monitoring/system.ts",
     "./terminal": "./src/terminal/index.ts",
+    "./terminal/pi-agent": "./src/terminal/pi-agent.ts",
     "./terminal/agent-preparation": "./src/terminal/runtime/agent-preparation.ts",
     "./terminal/completion": "./src/terminal/runtime/completion.ts",
     "./terminal/events": "./src/terminal/runtime/events.ts",
@@ -65,7 +66,8 @@
     "./suiji": "./src/suiji/index.ts",
     "./device-status": "./src/monitoring/device-status.ts",
     "./battery": "./src/monitoring/battery.ts",
-    "./device-notifications": "./src/monitoring/device-notifications.ts"
+    "./device-notifications": "./src/monitoring/device-notifications.ts",
+    "./terminal/agent-resume": "./src/terminal/agent-resume.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

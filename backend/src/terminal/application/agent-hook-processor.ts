@@ -1,3 +1,4 @@
+import { isPiAgentContext, isNewerPiContext, type PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type {
   AgentHookIgnoreReason,
   AgentHookStateEvent,
@@ -33,6 +34,7 @@ function getLastThreadStatusForHookEvent(
 }
 
 export interface ProcessTerminalAgentHookInput {
+  pi?: PiAgentContext;
   terminalSessionId: string;
   operationId?: string | null;
   agent: TerminalAgentKind;
@@ -276,6 +278,33 @@ export async function processTerminalAgentHook(
       panelId: panel?.id ?? null,
       ignoreReason: "inactive_agent",
     };
+  }
+
+  if (input.agent === "pi") {
+    if (!isPiAgentContext(input.pi) || input.pi.sessionId !== hookThreadId ||
+        !isNewerPiContext(input.pi, currentThreadOwner.pi)) {
+      return { status: "ignored", terminalSessionId: session.id, agent: input.agent,
+        hookEvent: input.hookEvent, activeCommand: targetActiveCommand,
+        terminalState: currentTargetState, panelId: panel?.id ?? null,
+        ignoreReason: "operation_identity_mismatch" };
+    }
+    if (panel) {
+      panel.pi = input.pi;
+      await options.terminalSessionManager.upsertPanel(panel);
+    }
+    if (!panel || options.terminalSessionManager.listPanels(session.id).length <= 1) {
+      await options.terminalSessionManager.updateSessionThreadId(session.id,
+        session.threadId ?? null, session.threadProvider ?? null, input.pi);
+    }
+    const event = input.pi.event;
+    if (event === "ui_prompt_start" || (event === "agent_settled" && input.pi.outcome === "failed")) {
+      options.terminalStateService.notifyPi(session.id, session.projectId,
+        event === "ui_prompt_start" ? "Pi 需要你处理" : "Pi 本轮执行失败");
+    }
+  }
+  if (input.hookEvent === "AgentMetadata") {
+    return { status: "recorded", terminalSessionId: session.id, agent: effectiveAgent,
+      hookEvent: input.hookEvent, terminalState: currentTargetState, panelId: panel?.id ?? null };
   }
 
   let terminalState: TerminalState;

@@ -1,3 +1,4 @@
+import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import { logger } from "../../logging/index";
 import { processTerminalAgentHook } from "../../terminal/application/agent-hook-processor";
@@ -103,6 +104,7 @@ export async function handleAgentCompletionEvent(
     tmuxPaneId,
     commandName,
     operationId,
+    ...(isPiAgentContext((event.payload as Record<string, unknown>)?.pi) ? { pi: (event.payload as { pi: import("@runweave/shared/terminal/pi-agent").PiAgentContext }).pi } : {}),
   });
   if (result.status === "not_found" || result.status === "exited") {
     return completionContext;

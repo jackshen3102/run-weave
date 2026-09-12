@@ -1,0 +1,20 @@
+{
+  "name": "@runweave/pi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "keywords": [
+    "pi-package"
+  ],
+  "files": [
+    "dist"
+  ],
+  "pi": {
+    "extensions": [
+      "./dist/runweave.js"
+    ],
+    "skills": [
+      "./dist/SKILL.md"
+    ]
+  }
+}

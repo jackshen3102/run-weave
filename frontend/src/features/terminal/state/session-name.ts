@@ -10,7 +10,7 @@ const DISPLAY_AGENT_COMMANDS = new Set([
   "codex",
   "trae",
   "traecli",
-  "traex",
+  "traex", "pi",
 ]);
 
 function basename(value: string | undefined): string | null {

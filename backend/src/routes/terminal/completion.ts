@@ -1,3 +1,4 @@
+import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import { Router } from "express";
 import { z } from "zod";
 import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
@@ -24,9 +25,10 @@ const terminalCompletionLogger = logger.child({
 
 const completionEventSchema = z
   .object({
+    pi: z.custom<import("@runweave/shared/terminal/pi-agent").PiAgentContext>(isPiAgentContext).optional(),
     terminalSessionId: z.string().trim().min(1),
     source: z
-      .enum(["claude", "codex", "trae", "traecli", "traex", "unknown"])
+      .enum(["claude", "codex", "trae", "traecli", "traex", "pi", "unknown"])
       .default("unknown"),
     completionReason: completionReasonEnum.optional(),
     commandName: z.string().trim().min(1).nullable().optional(),
@@ -49,6 +51,7 @@ export function createInternalTerminalCompletionRouter(options: {
   hookToken: string | undefined;
 }): Router {
   const router = Router();
+  const piCompletions = new Set<string>();
 
   router.post("/", async (req, res) => {
     const expectedToken = options.hookToken;
@@ -207,8 +210,25 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
 
+    const pi = parsed.data.pi;
+    const piKey = pi ? `${pi.instanceId}:${pi.sequence}` : null;
+    if (effectiveSource === "pi") {
+      const owner = targetPanel ?? session;
+      if (!pi || pi.outcome !== "completed" || pi.event !== "agent_settled" ||
+          owner.pi?.instanceId !== pi.instanceId || owner.pi.sequence !== pi.sequence ||
+          owner.pi.sessionId !== parsed.data.threadId || !piKey || piCompletions.has(piKey) || targetPanel?.piLastCompletionKey === piKey) {
+        res.status(202).json({ event: null, ignored: true }); return;
+      }
+      piCompletions.add(piKey);
+      if (piCompletions.size > 500) piCompletions.delete(piCompletions.values().next().value!);
+    }
     let event: TerminalEventEnvelope;
     try {
+      // Persist the accepted identity before emitting; replay after restart stays silent.
+      if (effectiveSource === "pi" && targetPanel && piKey) {
+        targetPanel.piLastCompletionKey = piKey;
+        await options.terminalSessionManager.upsertPanel(targetPanel);
+      }
       event = await options.completionEventService.record(
         {
           terminalSessionId: parsed.data.terminalSessionId,
@@ -227,6 +247,7 @@ export function createInternalTerminalCompletionRouter(options: {
         session,
       );
     } catch (error) {
+      if (piKey) piCompletions.delete(piKey);
       terminalCompletionLogger.error("terminal-completion.record.failed", {
         message: "Terminal completion event failed to persist",
         terminalSessionId: parsed.data.terminalSessionId,

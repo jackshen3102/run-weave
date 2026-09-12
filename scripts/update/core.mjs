@@ -65,6 +65,9 @@ export function resolveBetaAppBackupPrefix(
 }
 
 export const INSTALLED_APP_CONTROL_PATH_PREFIXES = [
+  "packages/agent-bridge/",
+  "plugins/pi/",
+  "scripts/agents/",
   "electron/resources/",
   "electron/scripts/",
   "electron/electron-builder.yml",

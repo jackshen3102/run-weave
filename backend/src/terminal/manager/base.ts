@@ -436,6 +436,7 @@ export abstract class TerminalManagerBase {
     if (!active || active.operationId !== operationId) {
       return false;
     }
+    if (active.provider === "pi") return provider === "pi";
     if (active.provider === "codex") {
       return provider === "codex";
     }
@@ -526,6 +527,6 @@ function isTerminalAgentKind(value: string): value is TerminalAgentKind {
     value === "codex" ||
     value === "trae" ||
     value === "traecli" ||
-    value === "traex"
+    value === "pi" || value === "traex"
   );
 }

@@ -172,6 +172,19 @@ export class AttentionService {
         slots.push(runSlot);
         continue;
       }
+      const piPanel = this.terminalSessionManager.listPanels(session.id).find((panel) =>
+        panel.status === "running" && panel.terminalState?.agent === "pi" &&
+        (panel.pi?.event === "ui_prompt_start" || panel.pi?.outcome === "failed"));
+      if (piPanel?.pi) {
+        const waiting = piPanel.pi.event === "ui_prompt_start";
+        slots.push({ ...base, panelId: piPanel.id,
+          attentionId: `terminal:${session.id}:pi:${piPanel.pi.instanceId}:${piPanel.pi.sequence}`,
+          state: waiting ? "needs_action" : "failed", title: waiting ? "Pi 需要你处理" : "Pi 本轮执行失败",
+          detail: waiting ? "打开终端完成确认或输入" : "打开终端查看错误并重试",
+          updatedAt: piPanel.lastActivityAt.toISOString(), source: { kind: "terminal_session", evidence: piPanel.pi.event },
+          targetSurface: "terminal", completionRevision: null });
+        continue;
+      }
       if (session.status === "exited" && (session.exitCode ?? 0) !== 0) {
         slots.push({
           ...base,

@@ -1,3 +1,4 @@
+import { installPi } from "@runweave/agent-bridge/install-pi";
 import {
   access,
   chmod,
@@ -79,11 +80,26 @@ export async function installAllHooks(
   const context = resolveHookInstallerContext(options);
   await installNotifyAssets(context);
   await writeLauncherScript(context);
-  // Phase 1: only codex + trae completion are supported end-to-end. Claude
+  // Codex, Trae and Pi have complete lifecycle adapters. Claude
   // installer stays in-source for a future re-enable but is not invoked yet,
   // so the green-dot path remains strictly limited to known AI CLIs.
   await installCodexHooks(context);
   await installTraeHooks(context);
+  await installPiExtension(context);
+}
+
+export async function installPiExtension(
+  options: HookInstallerOptions = {},
+): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  const entry = await resolveHookAssetPath(context, "pi/runweave.js");
+  if (!(await fileExists(entry))) return;
+  await installPi({
+    agentDir:
+      process.env.PI_CODING_AGENT_DIR ||
+      path.join(context.homeDir, ".pi", "agent"),
+    assetsDir: path.dirname(entry),
+  });
 }
 
 export async function installNotifyAssets(
@@ -407,7 +423,13 @@ async function resolveHookAssetPath(
     return packagedAsset;
   }
 
-  const toolkitAsset = path.join(getDefaultToolkitHooksDir(), basename);
+  const toolkitAsset = basename.startsWith("pi/")
+    ? path.resolve(
+        getDefaultToolkitHooksDir(),
+        "../../pi/dist",
+        basename.slice(3),
+      )
+    : path.join(getDefaultToolkitHooksDir(), basename);
   if (await fileExists(toolkitAsset)) {
     return toolkitAsset;
   }
@@ -457,15 +479,17 @@ function getTraeDir(homeDir: string): string {
 async function hasAnyConfigDir(
   context: HookInstallerContext,
 ): Promise<boolean> {
-  // Phase 1 supports codex + trae only, so the trigger is whichever of those
-  // config dirs exist on the host.
+  // Install only for providers already configured on the host.
   if (await directoryExists(getCodexDir(context.homeDir))) {
     return true;
   }
   if (await directoryExists(getTraeDir(context.homeDir))) {
     return true;
   }
-  return false;
+  return directoryExists(
+    process.env.PI_CODING_AGENT_DIR ||
+      path.join(context.homeDir, ".pi", "agent"),
+  );
 }
 
 function launcherCommand(context: HookInstallerContext): string {

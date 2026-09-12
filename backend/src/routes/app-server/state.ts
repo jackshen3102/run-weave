@@ -13,6 +13,7 @@ const AGENT_VALUES = new Set([
   "trae",
   "traecli",
   "traex",
+  "pi",
   "unknown",
 ]);
 const STATUS_VALUES = new Set([

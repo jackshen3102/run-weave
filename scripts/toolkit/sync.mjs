@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import {
-  copyFileSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -9,6 +8,11 @@ import {
   rmSync,
   symlinkSync,
 } from "node:fs";
+import { buildAgentAssets } from "../agents/build.mjs";
+import {
+  bridgeAssets,
+  installPi,
+} from "../../packages/agent-bridge/src/install-pi.mjs";
 import { homedir } from "node:os";
 import path from "node:path";
 import {
@@ -35,15 +39,6 @@ const marketplaceRelativePath = ".agents/plugins/marketplace.json";
 const pluginDir = path.join(repoRoot, pluginRelativePath);
 const manifestPath = path.join(pluginDir, ".codex-plugin", "plugin.json");
 const hooksConfigPath = path.join(pluginDir, "hooks.json");
-const toolkitHooksDir = path.join(pluginDir, "hooks");
-const electronHooksDir = path.join(repoRoot, "electron", "resources", "hooks");
-const toolkitHookAssets = [
-  "app-server-client.cjs",
-  "feishu_stop_notify.sh",
-  "runweave-hook-bridge.cjs",
-  "runweave-hook-dispatch.cjs",
-  "runweave-hook-payload.cjs",
-];
 const marketplacePath = path.join(repoRoot, marketplaceRelativePath);
 const codexHome = process.env.CODEX_HOME || path.join(homedir(), ".codex");
 const traeHome = path.join(homedir(), ".trae");
@@ -84,7 +79,12 @@ const codexCacheSnapshot = snapshotCodexCompatibilityCache(
   codexCompatibilityVersions,
 );
 
-syncToolkitHookAssets();
+await buildAgentAssets();
+await installPi({
+  agentDir:
+    process.env.PI_CODING_AGENT_DIR || path.join(homedir(), ".pi", "agent"),
+  assetsDir: path.join(repoRoot, "plugins", "pi", "dist"),
+});
 updateCodexCachebuster();
 formatCodexPluginManifest();
 installForCodex(pluginName, marketplaceName);
@@ -108,9 +108,12 @@ if (shouldStageCachebuster) {
     "add",
     path.relative(repoRoot, manifestPath),
     path.relative(repoRoot, hooksConfigPath),
-    ...toolkitHookAssets.map((asset) =>
-      path.relative(repoRoot, path.join(electronHooksDir, asset)),
-    ),
+    ...bridgeAssets.flatMap((asset) => [
+      `plugins/toolkit/hooks/${asset}`,
+      `electron/resources/hooks/${asset}`,
+    ]),
+    "electron/resources/hooks/runweave-hook-dispatch.cjs",
+    "electron/resources/hooks/pi",
   ]);
 }
 
@@ -127,6 +130,8 @@ function hasStagedToolkitChanges() {
       "--name-only",
       "--",
       pluginRelativePath,
+      "packages/agent-bridge",
+      "scripts/agents",
       marketplaceRelativePath,
     ],
     { quiet: true },
@@ -136,18 +141,6 @@ function hasStagedToolkitChanges() {
     .filter(Boolean);
 
   return output.length > 0;
-}
-
-function syncToolkitHookAssets() {
-  mkdirSync(electronHooksDir, { recursive: true });
-  for (const asset of toolkitHookAssets) {
-    const source = path.join(toolkitHooksDir, asset);
-    if (!existsSync(source)) {
-      continue;
-    }
-
-    copyFileSync(source, path.join(electronHooksDir, asset));
-  }
 }
 
 function updateCodexCachebuster() {

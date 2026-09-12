@@ -1,3 +1,5 @@
+import { buildAgentResumeArgs } from "@runweave/shared/terminal/agent-resume";
+import { getAgentAdapter } from "../runtime/agent-adapters";
 import { randomUUID } from "node:crypto";
 import {
   type PrepareTerminalAgentRequest,
@@ -197,6 +199,13 @@ export async function prepareTerminalAgent(
     const startedAt = new Date(startedAtMs).toISOString();
     const reusingPanel = request.panelId !== undefined;
     const resumingThread = Boolean(resumeThreadId);
+    if (resumeThreadId) {
+      const file = await getAgentAdapter(request.agent).resolveResumeTarget(
+        resumeThreadId,
+        panel.pi ?? session.pi,
+      );
+      request = { ...request, resumeThreadId: file };
+    }
 
     if (
       panel.status !== "running" ||
@@ -278,7 +287,7 @@ export async function prepareTerminalAgent(
       );
       await sendInputToSession(
         terminalSessionManager,
-        options,
+        { ...options, agentLaunch: true },
         session,
         buildAgentLaunchCommand(
           request,
@@ -292,10 +301,7 @@ export async function prepareTerminalAgent(
       commandSubmittedAt = new Date().toISOString();
       commandSubmitted = true;
     } catch (error) {
-      await clearPendingAgentPrepareOptions(
-        options.tmuxService,
-        paneTarget,
-      );
+      await clearPendingAgentPrepareOptions(options.tmuxService, paneTarget);
       throwPreparationError({
         phase: "cli_launch",
         operationId,
@@ -311,7 +317,9 @@ export async function prepareTerminalAgent(
     try {
       let currentPanel = terminalSessionManager.getPanel(panel.id);
       if (!currentPanel) {
-        throw new Error("Terminal agent panel missing after command submission");
+        throw new Error(
+          "Terminal agent panel missing after command submission",
+        );
       }
       if (resumingThread) {
         const nextActiveCommand = request.command?.trim() || request.agent;
@@ -446,7 +454,10 @@ function buildAgentLaunchCommand(
 ): string {
   const command = request.command?.trim() || request.agent;
   const requestedArgs = request.resumeThreadId?.trim()
-    ? [...(request.args ?? []), "resume", request.resumeThreadId.trim()]
+    ? [
+        ...(request.args ?? []),
+        ...buildAgentResumeArgs(request.agent, request.resumeThreadId.trim()),
+      ]
     : (request.args ?? []);
   const args =
     request.agent === "codex"

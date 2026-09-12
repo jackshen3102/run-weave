@@ -98,6 +98,11 @@ async function readCompletedReply(
   const response = await new AppServerHistoryGateway().getThreadDetail(
     identity.id,
   );
+  if (response.availability === "available" && response.detail?.provider === "pi" &&
+      "threadId" in response.detail && response.detail.threadId === identity.id) {
+    return [...response.detail.turns].reverse().flatMap((turn) =>
+      turn.status === "completed" ? [...turn.messages].reverse().filter((message) => message.role === "assistant" && message.text.trim()).map((message) => message.text) : [])[0] ?? null;
+  }
   if (
     response.availability !== "available" ||
     !response.detail ||

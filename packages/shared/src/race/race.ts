@@ -1,6 +1,6 @@
 import type { TerminalAgentPreparationAgent } from "../terminal/runtime/agent-preparation";
 
-export type RaceAgent = TerminalAgentPreparationAgent;
+export type RaceAgent = Exclude<TerminalAgentPreparationAgent, "pi">;
 
 export interface RaceWorkerConfig {
   agent: RaceAgent;

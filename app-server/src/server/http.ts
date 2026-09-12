@@ -1,3 +1,5 @@
+import { createThreadReaders } from "../agents/thread-readers.js";
+import { PiSessionReader } from "../pi/session-reader.js";
 import express from "express";
 import { z } from "zod";
 import type {
@@ -6,7 +8,6 @@ import type {
   AppServerEventListResponse,
   AppServerSyncStatusResponse,
   AppServerThreadListResponse,
-  AppServerThreadDetailResponse,
   AppServerThreadResponse,
   CreateAppServerEventRequest,
 } from "@runweave/shared/app-server-events";
@@ -91,9 +92,15 @@ const eventRequestSchema = z
     if (value.kind === "agent.completion") {
       const payload = value.payload as Record<string, unknown>;
       if (
-        !["claude", "codex", "trae", "traecli", "traex", "unknown"].includes(
-          String(payload.source),
-        )
+        ![
+          "claude",
+          "codex",
+          "trae",
+          "traecli",
+          "traex",
+          "pi",
+          "unknown",
+        ].includes(String(payload.source))
       ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -123,9 +130,14 @@ export function createHttpApp(options: {
   devSessionId: string | null;
   sourceRevision: string | null;
   traeLifecycleReader: TraeThreadLifecycleReader;
+  piSessionReader?: PiSessionReader;
   codexThreadDetailReader: CodexThreadDetailReader;
   getRuntimeStatusReport: () => RuntimeStatusReport;
 }): express.Express {
+  const threadReader = createThreadReaders({
+    ...options,
+    piSessionReader: options.piSessionReader ?? new PiSessionReader(),
+  });
   const app = express();
   app.use(express.json({ limit: "1mb" }));
   app.use(rejectNonLoopbackOrigin);
@@ -216,12 +228,7 @@ export function createHttpApp(options: {
       return;
     }
     try {
-      const detail = options.traeLifecycleReader.supports(thread.agent)
-        ? await options.traeLifecycleReader.readThread(
-            thread.threadId,
-            thread.agent,
-          )
-        : null;
+      const detail = await threadReader(thread).summary(thread);
       const response: AppServerThreadResponse = { thread, detail };
       res.json(response);
     } catch (error) {
@@ -238,20 +245,7 @@ export function createHttpApp(options: {
       return;
     }
     try {
-      if (options.traeLifecycleReader.supports(thread.agent)) {
-        const detail = await options.traeLifecycleReader.readThread(
-          thread.threadId,
-          thread.agent,
-        );
-        res.json({
-          thread,
-          availability: detail ? "available" : "thread_not_found",
-          ...(detail ? { detail } : {}),
-        } satisfies AppServerThreadDetailResponse);
-        return;
-      }
-      const response: AppServerThreadDetailResponse =
-        await options.codexThreadDetailReader.readThreadDetail(thread);
+      const response = await threadReader(thread).detail(thread);
       res.json(response);
     } catch (error) {
       next(error);
@@ -373,6 +367,7 @@ function isAgentKind(value: string): value is AppServerAgentKind {
     value === "codex" ||
     value === "trae" ||
     value === "traecli" ||
+    value === "pi" ||
     value === "traex" ||
     value === "unknown"
   );

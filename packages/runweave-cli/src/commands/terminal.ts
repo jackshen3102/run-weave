@@ -265,7 +265,7 @@ export async function runTerminalCommand(
       agentOverwrite: getBooleanOption(parsed.options, "agent-overwrite"),
       agentStartCommand: getStringOption(parsed.options, "agent-start-command"),
       agentClearCommand:
-        getStringOption(parsed.options, "agent-clear-command") ?? "/clear",
+        getStringOption(parsed.options, "agent-clear-command") ?? (requestedAgent === "pi" ? "/new" : "/clear"),
       agentExitCommand: getStringOption(parsed.options, "agent-exit-command"),
       agentStartTimeoutMs: Number(
         getStringOption(parsed.options, "agent-start-timeout-ms") ??

@@ -158,7 +158,7 @@ export function TerminalWorkspaceHeader({
     }
     if (
       !window.confirm(
-        "Restart the current Codex pane and resume its saved thread? Unsaved prompt text in this pane will be discarded.",
+        "Restart the current agent pane and resume its saved thread? Unsaved prompt text in this pane will be discarded.",
       )
     ) {
       return;
@@ -302,14 +302,14 @@ export function TerminalWorkspaceHeader({
               disabled={
                 recoveringAgent ||
                 activeSession?.terminalState?.state !== "agent_idle" ||
-                activeSession.terminalState.agent !== "codex"
+                !["codex", "pi"].includes(activeSession.terminalState.agent ?? "")
               }
               onSelect={() => {
                 void recoverActiveAgent();
               }}
             >
               <RefreshCw className="h-4 w-4" />
-              {recoveringAgent ? "Recovering Codex…" : "Recover Codex"}
+              {recoveringAgent ? "Recovering agent…" : "Recover agent"}
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {
