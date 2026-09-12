@@ -228,12 +228,21 @@ public actor APIClient {
     }
   }
 
-  public nonisolated func webSocketURL(terminalID: String, ticket: String) throws -> URL {
+  public nonisolated func webSocketURL(
+    terminalID: String, ticket: String, resumeClientID: String? = nil,
+    resumeStreamID: String? = nil, resumeOffset: Int? = nil,
+    cols: Int? = nil, rows: Int? = nil
+  ) throws -> URL {
     try socketURL(
       path: "/ws/terminal",
       query: [
         URLQueryItem(name: "terminalSessionId", value: terminalID),
         URLQueryItem(name: "token", value: ticket),
+        URLQueryItem(name: "resumeClientId", value: resumeClientID),
+        URLQueryItem(name: "resumeStreamId", value: resumeStreamID),
+        URLQueryItem(name: "resumeOffset", value: resumeOffset.map(String.init)),
+        URLQueryItem(name: "cols", value: cols.map(String.init)),
+        URLQueryItem(name: "rows", value: rows.map(String.init)),
       ])
   }
   nonisolated func eventSocketURL(ticket: String, after: String?) throws -> URL {

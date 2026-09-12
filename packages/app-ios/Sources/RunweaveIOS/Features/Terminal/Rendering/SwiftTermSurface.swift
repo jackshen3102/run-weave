@@ -74,7 +74,9 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   }
 
   public func reset() {
-    terminalView.getTerminal().resetToInitialState()
+    // SwiftTerm 1.19's RIS preserves the alternate buffer. Enter then leave it
+    // to clear it before resetting; CAN first cancels any partial control string.
+    terminalView.getTerminal().feed(text: "\u{18}\u{1b}[?1049h\u{1b}[?1049l\u{1b}c")
     terminalView.setNeedsDisplay()
     consumedBytes = 0
     displayBytes = 0

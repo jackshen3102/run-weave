@@ -4,6 +4,34 @@ export interface TerminalModeState {
   bracketedPasteMode: boolean | null;
 }
 
+/** A committed position in one tmux attach display stream (UTF-8 bytes). */
+export interface TerminalOutputCursor {
+  streamId: string;
+  offset: number;
+}
+
+export interface TerminalOutputRange {
+  streamId: string;
+  fromOffset: number;
+  toOffset: number;
+}
+
+export type TerminalRecoveryReason =
+  | "initial"
+  | "cursor_valid"
+  | "cursor_missing"
+  | "client_lease_missing"
+  | "client_lease_expired"
+  | "stream_changed"
+  | "cursor_invalid"
+  | "cursor_expired"
+  | "cursor_evicted";
+
+export interface TerminalOutputRecovery {
+  mode: "snapshot" | "resume";
+  reason: TerminalRecoveryReason;
+}
+
 export type TerminalClientMessage =
   | {
       type: "input";
@@ -27,11 +55,15 @@ export type TerminalServerMessage =
       type: "connected";
       terminalSessionId: string;
       runtimeKind?: "tmux" | "pty";
+      recovery?: TerminalOutputRecovery;
     }
   | {
       type: "snapshot";
       data: string;
       modes?: TerminalModeState;
+      cursor?: TerminalOutputCursor;
+      cols?: number;
+      rows?: number;
     }
   | {
       type: "metadata";
@@ -41,6 +73,7 @@ export type TerminalServerMessage =
   | {
       type: "output";
       data: string;
+      range?: TerminalOutputRange;
     }
   | {
       type: "status";
