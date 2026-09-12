@@ -36,11 +36,13 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 | `GET /api/suiji/v1/records`                   | kind/taskStatus/q/from/to/cursor/limit；创建时间倒序，q 为字面子串       |
 | `GET /api/suiji/v1/records/:id`               | 当前正文、状态、版本和有序附件                                           |
 | `POST /api/suiji/v1/records`                  | kind/body/attachmentIds；note 状态 null，task 初始 open                  |
-| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，body/attachmentIds 至少一个；一次原子保存               |
+| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，kind/body/attachmentIds 至少一个；一次原子保存          |
 | `POST /api/suiji/v1/records/:id/trash`        | expectedVersion/trashed；移入回收站或恢复，保留正文、附件和待办原状态    |
 | `POST /api/suiji/v1/records/:id/task-status`  | expectedVersion/targetStatus；open → done/archived；done → open 撤销完成 |
 | `POST /api/suiji/v1/uploads`                  | 单个 multipart file；幂等摘要与 boundary 无关                            |
 | `GET /api/suiji/v1/attachments/:id/content`   | 当前 owner 的实际文件流，不返回存储路径                                  |
+
+编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。

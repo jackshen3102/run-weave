@@ -17,7 +17,7 @@ struct PendingOperation: Codable, Sendable {
 }
 struct Draft: Codable, Identifiable, Sendable {
   var id: String { recordID ?? "new" }
-  var kind: RecordKind = .note
+  var kind: RecordKind = .task
   var body = ""
   var recordID: String?
   var expectedVersion: Int?

@@ -38,7 +38,7 @@ export function SuijiEditor({
     >
       <DialogContent className="suiji-theme max-h-[90dvh] max-w-2xl overflow-y-auto">
         <DialogTitle>
-          {draft.id === "new" ? "记下一点什么" : "编辑原文"}
+          {draft.id === "new" ? "记下一点什么" : "编辑记录"}
         </DialogTitle>
         <DialogDescription>
           {draft.frozen
@@ -49,33 +49,36 @@ export function SuijiEditor({
           disabled={busy || draft.frozen}
           className="flex flex-col gap-4"
         >
-          {draft.id === "new" ? (
-            <div className="flex items-center gap-3">
-              <span>类型</span>
-              <div
-                role="group"
-                aria-label="记录类型"
-                className="inline-flex gap-1 rounded-xl bg-secondary p-1"
-              >
-                {(
-                  [
-                    ["note", "笔记"],
-                    ["task", "待办"],
-                  ] as const
-                ).map(([kind, label]) => (
-                  <Button
-                    key={kind}
-                    type="button"
-                    size="sm"
-                    variant={draft.kind === kind ? "default" : "ghost"}
-                    aria-pressed={draft.kind === kind}
-                    onClick={() => model.edit({ kind })}
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
+          <div className="flex items-center gap-3">
+            <span>类型</span>
+            <div
+              role="group"
+              aria-label="记录类型"
+              className="inline-flex gap-1 rounded-xl bg-secondary p-1"
+            >
+              {(
+                [
+                  ["note", "想法"],
+                  ["task", "待办"],
+                ] as const
+              ).map(([kind, label]) => (
+                <Button
+                  key={kind}
+                  type="button"
+                  size="sm"
+                  variant={draft.kind === kind ? "default" : "ghost"}
+                  aria-pressed={draft.kind === kind}
+                  onClick={() => model.edit({ kind })}
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
+          </div>
+          {draft.id !== "new" ? (
+            <p className="text-sm text-muted-foreground">
+              切换为待办时设为未完成；切换为想法时清除待办状态。
+            </p>
           ) : null}
           <label className="flex flex-col gap-2">
             原文
@@ -157,7 +160,9 @@ export function SuijiEditor({
         {state.latest ? (
           <section className="flex flex-col gap-3 rounded-xl border p-4">
             <p className="text-sm text-muted-foreground">
-              服务端版本 {state.latest.version}，请与上方本机正文比较
+              服务端版本 {state.latest.version}，类型：
+              {state.latest.kind === "note" ? "想法" : "待办"}
+              。请与上方本机草稿比较
             </p>
             <p className="whitespace-pre-wrap break-words">
               {state.latest.body}
@@ -166,7 +171,7 @@ export function SuijiEditor({
               variant="outline"
               onClick={() => model.acceptLatestVersion()}
             >
-              保留本机正文，采用最新版本继续编辑
+              保留本机正文和类型，采用最新版本继续编辑
             </Button>
           </section>
         ) : null}

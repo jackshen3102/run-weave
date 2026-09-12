@@ -65,8 +65,8 @@ import SwiftUI
       }
       if draft.pending == nil {
         let ids = draft.existing.map(\.id) + draft.local.compactMap { $0.uploaded?.id }
-        var payload: [String: Any] = ["body": draft.body, "attachmentIds": ids]
-        if let version = draft.expectedVersion { payload["expectedVersion"] = version } else { payload["kind"] = draft.kind.rawValue }
+        var payload: [String: Any] = ["kind": draft.kind.rawValue, "body": draft.body, "attachmentIds": ids]
+        if let version = draft.expectedVersion { payload["expectedVersion"] = version }
         draft.pending = PendingOperation(path: "api/suiji/v1/records" + (draft.recordID.map { "/" + $0 } ?? ""), method: draft.recordID == nil ? "POST" : "PATCH", payload: try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
         draft.revision += 1; try await store.save(draft)
       }

@@ -28,12 +28,16 @@ export const createSchema = z
 export const editSchema = z
   .object({
     expectedVersion: z.number().int().positive(),
+    kind: z.enum(["note", "task"]).optional(),
     body: body.optional(),
     attachmentIds: attachmentIds.optional(),
   })
   .strict()
   .refine(
-    (v) => v.body !== undefined || v.attachmentIds !== undefined,
+    (v) =>
+      v.kind !== undefined ||
+      v.body !== undefined ||
+      v.attachmentIds !== undefined,
     "至少提供一个可修改字段",
   );
 export const statusSchema = z

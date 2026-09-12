@@ -27,6 +27,7 @@ export type CreateRecord = {
 };
 export type EditRecord = {
   expectedVersion: number;
+  kind?: RecordKind;
   body?: string;
   attachmentIds?: string[];
 };

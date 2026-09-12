@@ -178,9 +178,8 @@ export class SuijiEditorModel {
             method: draft.id === "new" ? "POST" : "PATCH",
             key: crypto.randomUUID(),
             data: {
-              ...(draft.id === "new"
-                ? { kind: draft.kind }
-                : { expectedVersion: draft.version }),
+              kind: draft.kind,
+              ...(draft.id === "new" ? {} : { expectedVersion: draft.version }),
               body: draft.body,
               attachmentIds: [
                 ...draft.existing.map((a) => a.id),
@@ -242,7 +241,7 @@ export class SuijiEditorModel {
   acceptLatestVersion() {
     const latest = this.state.latest;
     if (!latest || this.state.busy || this.state.draft.frozen) return;
-    // Explicit body-only merge: use the current remote attachments so concurrent file edits are not silently undone.
+    // Keep local body and kind: use the current remote attachments so concurrent file edits are not silently undone.
     const draft = {
       ...this.state.draft,
       version: latest.version,
@@ -259,7 +258,7 @@ export class SuijiEditorModel {
       draft,
       latest: undefined,
       conflict: false,
-      message: "已采用最新版本号与附件，本机正文保留；请比较后手动保存",
+      message: "已采用最新版本号与附件，本机正文和类型保留；请比较后手动保存",
     });
     void this.persist(draft).catch(() => undefined);
   }
