@@ -29,6 +29,8 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
 
 ## 操作路由
 
+- 新服务器初始化 Pi、补装扩展或迁移 Pi 环境：读
+  [Pi 环境初始化](docs/deployment/pi-agent-setup.md)，按需补齐并执行对应的真实搜索或子 Agent 验证。
 - 浏览器页面复现、修改或验收：使用 `$toolkit:playwright-cli`，按其规则附着正确页面。
   承诺的 UI 验收必须实际执行；未执行则记录阻塞，不得用静态检查、代码阅读或普通截图冒充。
 - 实际执行 `pnpm dev:session`、`dev:status`、`dev:open` 或 `dev:stop`：必须使用
