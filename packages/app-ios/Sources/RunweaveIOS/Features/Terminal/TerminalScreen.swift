@@ -77,6 +77,8 @@ struct TerminalScreen: View {
           tab != "Files")
       }
     }
+    // A search keyboard inside the composer sheet must not resize the terminal behind it.
+    .ignoresSafeArea(.keyboard, edges: .bottom)
     .background(TerminalAppearance.background.ignoresSafeArea())
     .tint(TerminalAppearance.accent)
     .modifier(TerminalNavigationBackground())

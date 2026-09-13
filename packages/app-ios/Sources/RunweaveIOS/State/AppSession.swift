@@ -16,6 +16,8 @@ final class AppSession: ObservableObject {
   @Published private(set) var terminalController: SessionController?
   // Retained when expired authentication dismisses the terminal, scoped to the active connection.
   @Published private(set) var terminalDrafts: [String: String] = [:] { didSet { scheduleDraftSave() } }
+  @Published private(set) var suppressedQuickInputDrafts = Set<String>()
+  private(set) var draftRevisions: [String: UUID] = [:]
   let deviceStatus = DeviceStatusStore()
   let imageDrafts = TerminalImageDrafts()
   let draftArchive = ConnectionDraftArchive()
@@ -46,7 +48,12 @@ final class AppSession: ObservableObject {
 
   func discardDraftContents(_ value: BackendConnection) {
     guard connection?.scope == value.scope else { return }
-    changingDraftScope = true; terminalDrafts.removeAll(); imageDrafts.clear(); changingDraftScope = false
+    changingDraftScope = true
+    suppressedQuickInputDrafts.removeAll()
+    draftRevisions.removeAll()
+    terminalDrafts.removeAll()
+    imageDrafts.clear()
+    changingDraftScope = false
   }
 
   func reconnectTerminal() async {
@@ -68,8 +75,11 @@ final class AppSession: ObservableObject {
     stopResources()
     saveDraftsNow()
     changingDraftScope = true
+    error = nil
     let drafts = archivedDrafts(connection)
     terminalDrafts = drafts.text
+    suppressedQuickInputDrafts = drafts.suppressedQuickInputs
+    draftRevisions.removeAll()
     imageDrafts.restore(drafts.images)
     changingDraftScope = false
     metadataWrites.removeAll()
@@ -78,7 +88,6 @@ final class AppSession: ObservableObject {
     reconnectingTerminal = false
     authenticated = false
     overview = nil
-    error = nil
     checking = true
     loading = false
     writing = false
@@ -123,6 +132,8 @@ final class AppSession: ObservableObject {
     stopResources()
     forgetDrafts(connection)
     changingDraftScope = true
+    suppressedQuickInputDrafts.removeAll()
+    draftRevisions.removeAll()
     terminalDrafts.removeAll()
     imageDrafts.clear()
     changingDraftScope = false
@@ -288,7 +299,7 @@ final class AppSession: ObservableObject {
     do {
       try await api.deleteTerminal(id: id)
       guard epoch == generation, !Task.isCancelled else { return }
-      terminalDrafts.removeValue(forKey: id)
+      setDraft("", terminalID: id)
       imageDrafts.clear(terminalID: id)
       overviewRevision += 1
       loadingRequest += 1
@@ -307,41 +318,14 @@ final class AppSession: ObservableObject {
     terminal = nil
   }
 
-  func setDraft(_ text: String, terminalID: String) {
+  func setDraft(_ text: String, terminalID: String, suppressQuickInputHistory: Bool = false) {
+    draftRevisions[terminalID] = UUID()
     if text.isEmpty {
+      suppressedQuickInputDrafts.remove(terminalID)
       terminalDrafts.removeValue(forKey: terminalID)
     } else {
+      if suppressQuickInputHistory { suppressedQuickInputDrafts.insert(terminalID) }
       terminalDrafts[terminalID] = text
-    }
-  }
-
-  func sendCommand(terminalID: String) async throws {
-    guard canWrite, terminal?.id == terminalID, let controller = terminalController else {
-      throw APIError.offline
-    }
-    let draft = terminalDrafts[terminalID] ?? ""
-    let text = draft.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
-    let images = imageDrafts.images[terminalID] ?? []
-    guard images.allSatisfy({ $0.path != nil }) else {
-      throw AttachmentError("请等待图片上传完成，或重试、移除上传失败的图片")
-    }
-    let paths = images.compactMap(\.path).map {
-      "'" + $0.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
-    }
-    let payload = ([text].filter { !$0.isEmpty } + paths).joined(separator: " ")
-    guard !payload.isEmpty else { return }
-    let epoch = generation
-    let agent = overview?.sessions.first { $0.id == terminalID }?.terminalState.agent
-    let isSlash = text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/")
-    let mode = agent == "codex" && isSlash ? "codex_slash_command" : "line"
-    do {
-      try await controller.sendCommand(payload, mode: mode)
-      guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
-      if terminalDrafts[terminalID] == draft { terminalDrafts.removeValue(forKey: terminalID) }
-      imageDrafts.remove(Set(images.map(\.id)), terminalID: terminalID)
-    } catch {
-      if generation == epoch, !(error is CancellationError) { await handle(error, epoch: epoch) }
-      throw error
     }
   }
 

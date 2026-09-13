@@ -12,6 +12,8 @@
 - [终端与渲染](../../../docs/testing/app/ios-native-terminal.testplan.yaml)
 - [认证、连接与资源生命周期](../../../docs/testing/app/ios-native-session.testplan.yaml)
 - [终端图片附件](../../../docs/testing/app/ios-native-image-attachments.testplan.yaml)
+- [本地快捷回复](../../../docs/testing/app/ios-native-local-quick-replies.testplan.yaml)
+- [草稿隐私元数据兼容](../../../docs/testing/app/ios-native-draft-privacy.testplan.yaml)
 - [输入、媒体、预览与主题](../../../docs/testing/app/ios-native-features.testplan.yaml)
 - [扫码跨端交互](../../../docs/testing/app/mobile-qr-login.testplan.yaml)
 - [扫码协议与凭据](../../../docs/testing/app/mobile-qr-login-protocol.testplan.yaml)
@@ -91,6 +93,43 @@ Simulator 或真机交互验收。
 三次系统导航指标采样报告约 87.7 fps、hitch 为 0，但 frame count 字段为 0，
 不能据此宣称所有转场零掉帧；该小样本也不覆盖所有设备、大文件、弱网与系统中断。
 此前 `preview-left-*` / `preview-right-*` 为已移除的自定义手势方案，不作为当前版本证据。
+
+## 本地快捷回复验证
+
+2026-09-12，本轮候选通过 iOS 26.5 独占 Simulator Debug 构建与既有 XCUITest 执行器的专项交互：
+无连接时新增含技能名称的多行回复、标题/正文搜索、编辑、手动排序、取消删除、确认删除和进程重启恢复；
+真实终端输入面板选择填入、追加、替换、草稿冷启动恢复后显式发送。独占 Backend 与真实 PTY 文本消费者
+核对请求只接受一次、携带 `recordQuickInput: false`、正文收到一次且没有自动收录到快捷库。
+另以目录真实不可写条件验证保存失败保留编辑内容，恢复权限后由用户显式重试成功；含引号、双连字符的
+正文由共用文本编辑器原样保存。没有向用户已有终端发送测试内容，也未安装到个人真机。
+
+真实 HTTP 输入检查覆盖省略/true 继续收录、false 跳过、非法类型投递前 400 拒绝；不能将其视为
+旧 Backend 或手机全流程已全部验收。最初几次执行器的语言化按钮、遮挡命中与异步 UI 等待问题已在
+执行器调整后重跑，不作为最终通过证据。本轮原始证据位于 `.runweave/local-quick-replies/`：
+`runner/library-04.xcresult`、`runner/composer-03.xcresult`、`runner/write-failure-01.xcresult`、
+`protocol-results.json` 和 `ui-send-result.json`，每次原生运行均导出截图和控件树。
+
+2026-09-13，按上述两份 YAML 逐项完成 22 条 required 用例。独占 Simulator、真实 Backend 与
+PTY/tmux 覆盖容量和损坏归档边界、跨项目/电脑、离线、注销/删除连接、写失败、接受响应丢失、
+迟到目标隔离、覆盖安装和真实旧 App 字典迁移；旧 Backend 从 Git 基线运行，未用 mock 替代拒绝路径。
+同文新编辑场景在真实接受确认处读取到不同的旧/新 revision UUID，确认草稿及隐私策略保留且只投递一次。
+原附件路径、类型及上传原图保持；旧归档迁移中的 JPEG 缩略图可能按既有序列化方式重新编码，不保证缩略图字节不变。
+
+验收中修复了两项 UI 问题：发送等待确认时可明确关闭并切换目标，旧请求不能清理新目标；
+回复库搜索键盘不再改变底层终端尺寸。修复后完整重复尺寸/媒体用例，真实 tmux/stty 均为 38 行、43 列，
+打开/搜索/编辑/填入/录音取消/关闭过程中新增 WS resize 为 0，媒体忙时仍禁止关闭或进入回复库。
+最终候选另回归正常发送清理、未确认错误保留和迟到目标隔离；横竖屏实际行列为
+38×43 → 13×83 → 38×43，仅旋转产生两次 resize，横屏打开输入和回复库搜索键盘新增 resize 为 0。
+这些是受影响路径的专项回归，不表示终端布局、图片或连接测试计划的全部用例已重跑。
+
+iPhone 17 / iOS 26.6.1 另补验了冷启动正文/排序及实际文件保护：归档和目录均为
+`NSFileProtectionCompleteUntilFirstUserAuthentication`，目录排除备份属性为 true，解除了 Simulator
+不提供该保护属性的环境限制。真机部分不等于所有 22 条均在真机执行，也不包含锁屏/首次解锁或备份恢复实验。
+
+逐条结果和原始证据保存在本机 `.runweave/local-quick-replies-remaining-20260913/REPORT.md`，关联
+`.runweave/local-quick-replies-acceptance-20260912/runner/` 的 xcresult、截图/控件树、前后归档、
+输入接受/接收记录、旧版本构建及只读调试器观察。真机补证入口为
+`.runweave/local-quick-replies-device-20260913/REPORT.md`。测试计划未改写以规避失败。
 
 ## 待关闭事项
 

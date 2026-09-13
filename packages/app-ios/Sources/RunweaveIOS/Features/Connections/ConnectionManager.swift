@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConnectionManager: View {
   @Environment(\.dismiss) private var dismiss
+  @EnvironmentObject private var quickReplies: LocalQuickReplyStore
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
   var onMobileLogin: () -> Void = {}
@@ -24,6 +25,13 @@ struct ConnectionManager: View {
           Button { scanning = true } label: {
             Label("扫码连接电脑", systemImage: "qrcode.viewfinder").font(.headline)
           }.disabled(store.storageError != nil)
+        }
+        Section {
+          NavigationLink {
+            QuickReplyLibraryView()
+          } label: {
+            Label("快捷回复", systemImage: "text.badge.plus")
+          }.accessibilityIdentifier("connection-quick-replies")
         }
         Section(header: Text("外观")) {
           Picker("主题", selection: $theme) {
@@ -88,7 +96,7 @@ struct ConnectionManager: View {
       .disabled(busy)
       .navigationTitle("连接管理")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar { Button("关闭") { dismiss() }.disabled(busy) }
+      .toolbar { Button("关闭") { dismiss() }.disabled(busy || quickReplies.saving) }
       .confirmationDialog(
         "删除本地连接？",
         isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -101,7 +109,7 @@ struct ConnectionManager: View {
       } message: {
         Text("将移除此连接和它的本地登录凭据，远端项目和终端会保留。")
       }
-    }.navigationViewStyle(.stack).interactiveDismissDisabled(busy)
+    }.navigationViewStyle(.stack).interactiveDismissDisabled(busy || quickReplies.saving)
       .task(id: store.connections.map(\.scope).joined(separator: "|")) {
         await batteries.refresh(store.connections)
       }

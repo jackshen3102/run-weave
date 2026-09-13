@@ -4,6 +4,8 @@ import UIKit
 struct CommandTextView: UIViewRepresentable {
   @Binding var text: String
   @Binding var isFocused: Bool
+  var collapsesWhenUnfocused = true
+  var accessibilityLabel = "命令草稿"
 
   func makeUIView(context: Context) -> UITextView {
     let view = UITextView()
@@ -15,7 +17,7 @@ struct CommandTextView: UIViewRepresentable {
     view.smartQuotesType = .no
     view.smartDashesType = .no
     view.smartInsertDeleteType = .no
-    view.accessibilityLabel = "命令草稿"
+    view.accessibilityLabel = accessibilityLabel
     view.backgroundColor = .clear
     view.textContainer.maximumNumberOfLines = 1
     view.textContainer.lineBreakMode = .byTruncatingTail
@@ -25,10 +27,11 @@ struct CommandTextView: UIViewRepresentable {
   }
   func updateUIView(_ view: UITextView, context: Context) {
     context.coordinator.parent = self
-    view.textContainer.maximumNumberOfLines = isFocused ? 0 : 1
-    view.textContainer.lineBreakMode = isFocused ? .byWordWrapping : .byTruncatingTail
+    let expanded = isFocused || !collapsesWhenUnfocused
+    view.textContainer.maximumNumberOfLines = expanded ? 0 : 1
+    view.textContainer.lineBreakMode = expanded ? .byWordWrapping : .byTruncatingTail
     if view.text != text { view.text = text }
-    if !isFocused { view.setContentOffset(.zero, animated: false) }
+    if !expanded { view.setContentOffset(.zero, animated: false) }
     if !isFocused, view.isFirstResponder { view.resignFirstResponder() }
     if isFocused, !view.isFirstResponder {
       DispatchQueue.main.async {
