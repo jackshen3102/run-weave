@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const index=process.argv.indexOf('--profile');
+const profile=path.resolve(index<0?path.join(os.homedir(),'.pi/agent-codex-recovery'):process.argv[index+1]);
+if(path.basename(profile)!=='agent-codex-recovery')throw new Error('Profile must be named agent-codex-recovery.');
+fs.mkdirSync(profile,{recursive:true,mode:0o700});
+if(fs.realpathSync(profile)!==profile&&path.basename(fs.realpathSync(profile))!=='agent-codex-recovery')throw new Error('Invalid profile symlink.');
+const settings=path.join(profile,'settings.json');
+if(fs.existsSync(settings))throw new Error('Profile settings already exist; no files were overwritten.');
+fs.writeFileSync(settings,JSON.stringify({retry:{enabled:false},defaultProvider:'openai-codex',defaultModel:'gpt-6-astra',enabledModels:['openai-codex/*'],extensions:[path.join(root,'src/index.ts')]},null,2)+'\n',{flag:'wx',mode:0o600});
+const quote=s=>"'"+s.replaceAll("'","'\\''")+"'";
+console.log(`PI_CODING_AGENT_DIR=${quote(profile)} ${quote(process.execPath)} ${quote(path.join(root,'node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js'))}`);
+console.log('Use /login in this independent Pi profile. Original credentials and sessions were not copied.');
