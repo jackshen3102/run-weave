@@ -1,3 +1,5 @@
+import type { CodexQuotaService } from "../codex/quota.js";
+import { emptyCodexQuota } from "@runweave/shared/app-server/codex-quota";
 import { createThreadReaders } from "../agents/thread-readers.js";
 import { PiSessionReader } from "../pi/session-reader.js";
 import express from "express";
@@ -132,6 +134,7 @@ export function createHttpApp(options: {
   traeLifecycleReader: TraeThreadLifecycleReader;
   piSessionReader?: PiSessionReader;
   codexThreadDetailReader: CodexThreadDetailReader;
+  codexQuota?: CodexQuotaService;
   getRuntimeStatusReport: () => RuntimeStatusReport;
 }): express.Express {
   const threadReader = createThreadReaders({
@@ -168,6 +171,17 @@ export function createHttpApp(options: {
   });
 
   app.use(requireBearerToken(options.token));
+
+  app.get("/codex/quota", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (req.query.refresh !== undefined && req.query.refresh !== "1") {
+      res.status(400).json({ message: "Invalid refresh query" });
+      return;
+    }
+    res.json(options.codexQuota
+      ? await options.codexQuota.read(req.query.refresh === "1")
+      : emptyCodexQuota("unsupported"));
+  });
 
   app.get("/runtime-status", (_req, res) => {
     res.json(options.getRuntimeStatusReport());

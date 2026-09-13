@@ -6,6 +6,7 @@ import type { WebSocketServer } from "ws";
 import { resolveAppServerConfig } from "./config.js";
 import { loadOrCreateToken } from "./auth.js";
 import { AppServerCloudSyncSim } from "./cloud-sync-sim.js";
+import { CodexQuotaService } from "./codex/quota.js";
 import { CodexAppServerClient } from "./codex/client.js";
 import { CodexRolloutLifecycleReader } from "./codex/lifecycle-reader.js";
 import {
@@ -102,6 +103,7 @@ async function main(): Promise<void> {
     traeLifecycleReader,
     piSessionReader,
     codexThreadDetailReader: codexAppServerClient,
+    codexQuota: new CodexQuotaService(codexAppServerClient),
     getRuntimeStatusReport: () =>
       createAppServerRuntimeStatusReport({
         eventCenter,

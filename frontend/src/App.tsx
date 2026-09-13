@@ -1,3 +1,4 @@
+import { CodexQuotaProvider } from "./features/codex-quota/provider";
 import { MobileLoginProvider } from "./features/mobile-login/provider";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { lazy, Suspense } from "react";
@@ -104,6 +105,7 @@ function RunweaveApp() {
         connections={connections}
         isElectron={isElectron}
       >
+        <CodexQuotaProvider key={`${queryScope}:${sessionId ?? ""}:${token ? "authenticated" : "anonymous"}`} apiBase={apiBase} token={token} connectionName={activeConnection?.name ?? "当前连接"} onUnauthorized={clearToken}>
         <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
         <Routes>
           <Route
@@ -352,6 +354,7 @@ function RunweaveApp() {
           />
         </Routes>
         </ConnectionQueryProvider>
+        </CodexQuotaProvider>
       </RuntimeStatusProvider>
     </DevSessionBackendGuard>
   );
