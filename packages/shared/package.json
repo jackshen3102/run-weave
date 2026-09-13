@@ -16,6 +16,7 @@
     "./agent-team": "./src/agent-team/index.ts",
     "./agent-team-model-config": "./src/agent-team/model-config.ts",
     "./attention": "./src/attention.ts",
+    "./app-server/codex-quota": "./src/app-server/codex-quota.ts",
     "./app-server-events": "./src/app-server/events.ts",
     "./app-server-node": "./src/app-server/node.ts",
     "./app-server": "./src/app-server/index.ts",

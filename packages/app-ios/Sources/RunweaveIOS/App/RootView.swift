@@ -5,6 +5,7 @@ public struct RootView: View {
   @StateObject private var connections = ConnectionStore()
   @StateObject private var session = AppSession()
   @StateObject private var quickReplies = LocalQuickReplyStore()
+  @StateObject private var codexQuota = CodexQuotaStore()
   @ObservedObject private var notifications = NotificationCoordinator.shared
   @State private var managingConnections = false
   @State private var mobileLoginRevision = 0
@@ -65,6 +66,8 @@ public struct RootView: View {
       notifications.consume(in: connections)
       notifications.foreground()
     }
+    .onChange(of: session.generation) { _ in codexQuota.reset() }
+    .onChange(of: session.authenticated) { if !$0 { codexQuota.reset() } }
     .onChange(of: notifications.pendingHostID) { _ in notifications.consume(in: connections) }
     .alert("电脑提醒", isPresented: Binding(get: { notifications.message != nil }, set: { if !$0 { notifications.message = nil } })) {
       Button("好") { notifications.message = nil }
@@ -74,7 +77,7 @@ public struct RootView: View {
       if phase == .active { notifications.foreground() } else { notifications.suspend() }
     }
     .sheet(isPresented: $managingConnections) {
-      ConnectionManager(store: connections, session: session) {
+      ConnectionManager(store: connections, session: session, codexQuota: codexQuota) {
         managingConnections = false
         mobileLoginRevision += 1
       }

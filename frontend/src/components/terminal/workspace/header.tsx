@@ -1,3 +1,4 @@
+import { useOpenCodexQuota } from "../../../features/codex-quota/context";
 import { SuijiEntryLink } from "../../../features/suiji/entry-link";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import {
@@ -72,6 +73,7 @@ export function TerminalWorkspaceHeader({
   projects: projectCommands,
 }: TerminalWorkspaceHeaderProps) {
   const { apiBase, token } = useTerminalRuntime();
+  const openCodexQuota = useOpenCodexQuota();
   const {
     activeConnectionId,
     connectionName,
@@ -250,6 +252,7 @@ export function TerminalWorkspaceHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-40">
+            {openCodexQuota ? <DropdownMenuItem onSelect={openCodexQuota}>Codex 额度</DropdownMenuItem> : null}
             <DropdownMenuItem
               disabled={loading || !activeProjectId}
               onSelect={() => {

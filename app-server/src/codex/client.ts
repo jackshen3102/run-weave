@@ -81,6 +81,14 @@ export class CodexAppServerClient
   private initialized = false;
   private initializePromise: Promise<void> | null = null;
 
+  readQuotaAccount(): Promise<unknown> {
+    return this.sendRequest("account/read", { refreshToken: false });
+  }
+
+  readRateLimits(): Promise<unknown> {
+    return this.sendRequest("account/rateLimits/read");
+  }
+
   async readThreadStatus(
     threadId: string,
   ): Promise<CodexThreadStatusType | null> {

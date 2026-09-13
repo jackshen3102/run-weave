@@ -5,9 +5,11 @@ struct ConnectionManager: View {
   @EnvironmentObject private var quickReplies: LocalQuickReplyStore
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
+  let codexQuota: CodexQuotaStore
   var onMobileLogin: () -> Void = {}
   @StateObject private var batteries = ConnectionBatteryStore()
   @State private var scanning = false
+  @State private var showingCodexQuota = false
   @State private var editingID: String?
   @State private var name = ""
   @State private var url = ""
@@ -32,6 +34,11 @@ struct ConnectionManager: View {
           } label: {
             Label("快捷回复", systemImage: "text.badge.plus")
           }.accessibilityIdentifier("connection-quick-replies")
+        }
+        if session.authenticated {
+          Section(header: Text(session.connection?.name ?? "当前电脑")) {
+            Button("Codex 额度") { showingCodexQuota = true }
+          }
         }
         Section(header: Text("外观")) {
           Picker("主题", selection: $theme) {
@@ -114,6 +121,9 @@ struct ConnectionManager: View {
         await batteries.refresh(store.connections)
       }
       .preferredColorScheme(theme == "light" ? .light : .dark)
+      .sheet(isPresented: $showingCodexQuota) {
+        CodexQuotaView(session: session, quota: codexQuota)
+      }
       .sheet(isPresented: $scanning) {
         MobileLoginView(store: store, session: session) {
           scanning = false

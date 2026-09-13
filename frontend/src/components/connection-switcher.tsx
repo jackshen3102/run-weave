@@ -1,3 +1,4 @@
+import { useOpenCodexQuota } from "../features/codex-quota/context";
 import { useState } from "react";
 import { useOpenMobileLogin } from "../features/mobile-login/context";
 import { Check, ChevronsUpDown, PlusCircle } from "lucide-react";
@@ -31,6 +32,7 @@ export function ConnectionSwitcher({
 }: ConnectionSwitcherProps) {
   const [open, setOpen] = useState(false);
   const openMobileLogin = useOpenMobileLogin();
+  const openCodexQuota = useOpenCodexQuota();
   const resolvedActiveName =
     activeConnectionName ??
     connections.find((connection) => connection.id === activeConnectionId)?.name ??
@@ -78,6 +80,7 @@ export function ConnectionSwitcher({
           );
         })}
         <DropdownMenuSeparator />
+        {openCodexQuota ? <DropdownMenuItem onSelect={() => { setOpen(false); openCodexQuota(); }}>Codex 额度</DropdownMenuItem> : null}
         {openMobileLogin ? <DropdownMenuItem onSelect={() => { setOpen(false); openMobileLogin(); }}>
           连接手机
         </DropdownMenuItem> : null}

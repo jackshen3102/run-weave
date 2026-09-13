@@ -1,3 +1,4 @@
+import { createCodexQuotaRouter } from "./routes/codex-quota";
 import { createDeviceNotificationsRouter } from "./routes/device-notifications";
 import { createDeviceStatusRouter } from "./routes/device-status";
 import { createMobileLoginRouter } from "./routes/mobile-login";
@@ -219,6 +220,7 @@ function createHttpApp(
     createDiagnosticLogsRouter(diagnosticLogRecorder),
   );
   registerRuntimeStatusRoutes(app, requireAuth, services.runtimeStatus);
+  app.use("/api/codex/quota", requireAuth, createCodexQuotaRouter());
   app.use("/api/device", requireAuth, createDeviceStatusRouter(services.deviceMonitor));
   app.use("/api/device/notifications", requireAuth, createDeviceNotificationsRouter(services.batteryAlerts?.subscriptions ?? null, services.authService));
   app.use(
