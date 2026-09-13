@@ -19,6 +19,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `debugging-strategies`
 - `diagnostic-log-debugging`
 - `doc-coauthoring`
+- [`eli5`](./skills/eli5/SKILL.md)：用大图和少量文字生成零基础 HTML 图解；源自 [Thariq Shihipar 的上游技能](https://github.com/anthropics/claude-plugins-community/blob/863e70dc7cff21a2facc749e40a7ecd1a5d19833/eli5/skills/eli5/SKILL.md)，保留核心指令并适配 Codex 主题参数。
 - `git-advanced-workflows`
 - `grill-with-docs`
 - `grilling`
