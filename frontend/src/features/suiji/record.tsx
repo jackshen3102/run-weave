@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import LinkifyIt from "linkify-it";
 import type { SuijiAttachment, SuijiRecord } from "@runweave/shared/suiji";
 import { Button } from "../../components/ui/button";
 import {
@@ -23,25 +24,58 @@ export const recordDate = (value: string) =>
     minute: "2-digit",
   });
 
-export function RecordBody({ body }: { body: string }) {
-  // Plain text remains the source of truth. Only explicit HTTP(S) spans become links.
+const linkify = new LinkifyIt({ fuzzyLink: true, fuzzyEmail: false });
+linkify.onCompile = function () {
+  // linkify-it exposes these regex source strings through onCompile; its typings
+  // incorrectly declare all re entries as RegExp. Treat CJK prose punctuation as boundaries.
+  const keys = ["src_path", "tpl_link_fuzzy", "tpl_link_no_ip_fuzzy"] as const;
+  const patterns = this.re as unknown as Record<typeof keys[number] | "src_ZCc", string>;
+  for (const key of keys) {
+    patterns[key] = patterns[key].replaceAll(
+      patterns.src_ZCc,
+      `${patterns.src_ZCc}|[。，、；！？（）【】「」『』《》“”‘’]`,
+    );
+  }
+};
+linkify.add("ftp:", null)
+  .add("mailto:", null)
+  .add("//", null);
+
+export function RecordBody({ body, className = "" }: { body: string; className?: string }) {
+  const content = useMemo(() => {
+    const parts: ReactNode[] = [];
+    let offset = 0;
+    for (const match of linkify.match(body) ?? []) {
+      if (!/^https?:\/\//i.test(match.url)) continue;
+      parts.push(body.slice(offset, match.index));
+      parts.push(
+        <a
+          key={match.index}
+          href={match.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="pointer-events-auto relative text-primary underline underline-offset-4"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (window.electronAPI?.openExternal) {
+              event.preventDefault();
+              void window.electronAPI.openExternal(match.url);
+            }
+          }}
+        >
+          {body.slice(match.index, match.lastIndex)}
+        </a>,
+      );
+      offset = match.lastIndex;
+    }
+    parts.push(body.slice(offset));
+    return parts;
+  }, [body]);
+
+  // Keep the original text, including whitespace and punctuation, unchanged.
   return (
-    <p className="whitespace-pre-wrap break-words leading-7">
-      {body.split(/(https?:\/\/[^\s<>]+)/g).map((part, i) =>
-        /^https?:\/\//.test(part) ? (
-          <a
-            key={i}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline underline-offset-4"
-          >
-            {part}
-          </a>
-        ) : (
-          part
-        ),
-      )}
+    <p className={`whitespace-pre-wrap break-words leading-7 ${className}`}>
+      {content}
     </p>
   );
 }

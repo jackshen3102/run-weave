@@ -37,7 +37,11 @@ struct RecordCard<Destination: View>: View {
   private var actionTitle: String { reopening ? "撤销完成" : "完成" }
   var body: some View {
     ZStack(alignment: .topTrailing) {
-      NavigationLink(destination: destination) { content }.buttonStyle(.plain)
+      content.background {
+        NavigationLink(destination: destination) {
+          RoundedRectangle(cornerRadius: 16).fill(SuijiTheme.surface)
+        }.buttonStyle(.plain).accessibilityLabel("查看记录详情").accessibilityValue(record.body)
+      }
       if canChangeStatus || busy {
         Button { onStatusChange(reopening ? .open : .done) } label: {
           HStack(spacing: 6) {
@@ -60,15 +64,15 @@ struct RecordCard<Destination: View>: View {
         if canChangeStatus || busy {
           Label(reopening ? actionTitle : "提交中", systemImage: "circle").font(.caption).padding(.horizontal, 10).frame(minHeight: 44).hidden()
         } else if let status = record.taskStatus { TaskStatusBadge(status: status) }
-      }
-      if !record.body.isEmpty { Text(verbatim: record.body).font(.body).foregroundStyle(SuijiTheme.ink).lineLimit(8).frame(maxWidth: .infinity, alignment: .leading) }
+      }.allowsHitTesting(false)
+      if !record.body.isEmpty { RecordBody(text: record.body, lineLimit: 8, linksOnly: true).frame(maxWidth: .infinity, alignment: .leading) }
       ForEach(record.attachments) { attachment in
-        Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text").font(.subheadline).foregroundStyle(SuijiTheme.green)
+        Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text").font(.subheadline).foregroundStyle(SuijiTheme.green).allowsHitTesting(false)
       }
-      if pending && !busy { Label("状态结果待确认", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange) }
-      Text(displayDate(record.createdAt)).font(.caption).foregroundStyle(.secondary)
-    }.padding(16).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 16))
-      .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(SuijiTheme.border))
+      if pending && !busy { Label("状态结果待确认", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange).allowsHitTesting(false) }
+      Text(displayDate(record.createdAt)).font(.caption).foregroundStyle(.secondary).allowsHitTesting(false)
+    }.padding(16)
+      .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(SuijiTheme.border).allowsHitTesting(false))
   }
 }
 func displayDate(_ value: String) -> String {
