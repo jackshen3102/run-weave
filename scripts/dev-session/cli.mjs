@@ -34,6 +34,7 @@ import {
 } from "./beta-pool/index.mjs";
 import { acquireStartBetaSlotLease } from "./beta-pool/allocation/startup.mjs";
 import { runStop } from "./commands/stop.mjs";
+import { inspectMissingBetaLease } from "./commands/missing-beta-lease.mjs";
 import { resolveAgentTeamFixtureScope } from "./fixtures/scope.mjs";
 import {
   readOptionalManifest,
@@ -425,6 +426,23 @@ async function runStatus(options, sourceRoot) {
       }
     }
     if (retainsBetaSlotLease(manifest)) {
+      const missingLease = await inspectMissingBetaLease(manifest);
+      if (missingLease) {
+        manifest = updateManifest(manifest, {
+          failure: {
+            message:
+              "Beta lease and dedicated processes are absent; explicit Session cleanup is required",
+            exitCode: 5,
+            recovery: {
+              ...buildStaleRecovery(manifest.devSessionId, manifest.services, []),
+              checks: missingLease,
+            },
+          },
+        });
+        await writeManifest(manifest);
+        printResult(publicManifest(manifest), options.json);
+        return;
+      }
       await assertBetaSlotLease({
         slotId: manifest.targetEnvironment.betaSlot.assignedSlotId,
         ownerSessionId: manifest.devSessionId,
