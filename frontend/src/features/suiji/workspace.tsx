@@ -16,7 +16,7 @@ import type { SuijiConnection } from "./connection-model";
 import type { PendingRequest, SuijiDraft } from "./drafts";
 import { SuijiEditorModel } from "./editor-model";
 import { SuijiEditor } from "./editor";
-import { recordDate, statusText, SuijiRecordDetail } from "./record";
+import { RecordBody, recordDate, statusText, SuijiRecordDetail } from "./record";
 import { SuijiReviewPanel } from "./review";
 
 export function SuijiWorkspace({
@@ -386,27 +386,33 @@ export function SuijiWorkspace({
             </section>
             <section className="flex flex-col gap-4 pb-20">
               {items.map((record) => (
-                <button
+                <article
                   key={record.id}
-                  onClick={() => void open(record.id)}
-                  className="flex flex-col gap-3 rounded-2xl border bg-card p-6 text-left shadow-sm transition-colors hover:bg-accent"
+                  className="relative flex flex-col gap-3 rounded-2xl border bg-card p-6 text-left shadow-sm transition-colors hover:bg-accent"
                 >
-                  <span className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <button
+                    type="button"
+                    aria-label={`查看记录：${record.body || "附件记录"}`}
+                    onClick={() => void open(record.id)}
+                    className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <span className="pointer-events-none relative flex items-center justify-between gap-3 text-xs text-muted-foreground">
                     <span>
                       {statusText(record)}
                       {pending.has(record.id) ? " · 状态待确认" : ""}
                     </span>
                     <time>{recordDate(record.createdAt)}</time>
                   </span>
-                  <span className="line-clamp-5 whitespace-pre-wrap break-words leading-7">
-                    {record.body || "附件记录"}
-                  </span>
+                  <RecordBody
+                    body={record.body || "附件记录"}
+                    className="pointer-events-none relative line-clamp-5"
+                  />
                   {record.attachments.length ? (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="pointer-events-none relative text-xs text-muted-foreground">
                       {record.attachments.map((a) => a.fileName).join(" · ")}
                     </span>
                   ) : null}
-                </button>
+                </article>
               ))}
               {loading ? (
                 <p
