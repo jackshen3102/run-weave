@@ -11,6 +11,7 @@ import {
   stopSessionServices,
 } from "../services/index.mjs";
 import { processIdentityMatches } from "../services/runtime.mjs";
+import { inspectMissingBetaLease } from "./missing-beta-lease.mjs";
 import {
   acquireBetaSlotRecoveryClaim,
   assertBetaPoolStorageReadyForExistingLease,
@@ -177,6 +178,31 @@ export async function runStop(options, sourceRoot, helpers) {
           `--cleanup-stale requires a stale Session: ${manifest.devSessionId} (${manifest.state})`,
           5,
         );
+      }
+      const missingLease = await inspectMissingBetaLease(manifest);
+      if (missingLease) {
+        // Nothing remains to stop or reset. Only reconcile this historical
+        // manifest while holding both the slot claim and the Session lock.
+        manifest = updateManifest(manifest, {
+          state: "stopped",
+          failure: null,
+          poolRecovery: createBetaPoolRecoveryReceipt({
+            trigger: "missing_lease_cleanup",
+            initiatingSessionId: manifest.devSessionId,
+            slotId: betaSlot.assignedSlotId,
+            ownerSessionId: manifest.devSessionId,
+            leaseNonce: betaSlot.leaseNonce,
+            previousManifestState: manifest.state,
+            previousDerivedState: "idle",
+            result: "recovered",
+            phase: "completed",
+            completedAt: new Date().toISOString(),
+            checks: missingLease,
+          }),
+        });
+        await writeManifest(manifest);
+        printResult(publicManifest(manifest), options.json);
+        return;
       }
       manifest = updateManifest(manifest, { state: "stopping" });
       await writeManifest(manifest);
