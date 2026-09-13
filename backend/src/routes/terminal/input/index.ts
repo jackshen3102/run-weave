@@ -201,7 +201,11 @@ export function registerTerminalInputRoutes(
         panelTarget?.paneTarget,
         parsed.data.submit,
       );
-      if (options?.quickInputService && payload.inputAccepted) {
+      if (
+        options?.quickInputService &&
+        payload.inputAccepted &&
+        parsed.data.recordQuickInput !== false
+      ) {
         try {
           await options.quickInputService.recordRecentInput({
             data: parsed.data.data,

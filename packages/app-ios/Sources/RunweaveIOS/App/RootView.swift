@@ -4,6 +4,7 @@ public struct RootView: View {
   @Environment(\.scenePhase) private var scenePhase
   @StateObject private var connections = ConnectionStore()
   @StateObject private var session = AppSession()
+  @StateObject private var quickReplies = LocalQuickReplyStore()
   @ObservedObject private var notifications = NotificationCoordinator.shared
   @State private var managingConnections = false
   @State private var mobileLoginRevision = 0
@@ -78,6 +79,7 @@ public struct RootView: View {
         mobileLoginRevision += 1
       }
     }
+    .environmentObject(quickReplies)
   }
 }
 

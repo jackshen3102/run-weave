@@ -62,6 +62,8 @@ export interface SendTerminalInputRequest {
   submit?: boolean;
   operationId?: string;
   quickInputSource?: TerminalQuickInputSource;
+  /** false skips quick-input history; omitted or true preserves existing recording. */
+  recordQuickInput?: boolean;
   panelId?: string;
   panelAlias?: string;
   role?: TerminalPanelRole;

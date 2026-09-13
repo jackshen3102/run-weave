@@ -18,6 +18,16 @@ Runweave 的移动应用位于 `packages/app-ios/`，由 SwiftUI/UIKit 与 Swift
 否则回退 PTY。它不沿用已退役客户端固定请求 PTY 的行为；打开已有终端则始终遵循服务端实际
 runtime。迁移对照中的模块覆盖不能代替对应运行时的输入、滚动和恢复验收。
 
+## 本地快捷回复输入策略
+
+手机个人回复库由 iOS 本机持有，管理与持久化合同见
+[iOS 架构](../../packages/app-ios/docs/architecture.md#本地快捷回复)，不复用 Backend 的快捷库接口。
+终端 input 请求的可选 `recordQuickInput: false` 仅禁止本次接受输入自动收录到 Backend 快捷历史，
+不改变投递、权限、operationId 或确认语义；省略/true 保持原行为。字段类型错误在投递前拒绝。
+手机的禁止收录标记随草稿持久化，编辑后仍生效；旧 Backend 不支持字段时不得静默去掉字段重发。
+发布需先升级 Backend；未知实现若忽略未知字段，不在已验证兼容承诺内。实际终端/Agent 历史不属于
+快捷回复库的纯本地承诺。
+
 ## 手机扫码登录
 
 Electron 已登录连接的“当前连接 → 连接手机”入口与 iOS 连接管理的“扫码连接电脑”配合使用。

@@ -46,6 +46,7 @@ export const sendTerminalInputSchema = z
       ])
       .optional(),
     submit: z.boolean().optional(),
+    recordQuickInput: z.boolean().optional(),
     operationId: z.string().trim().min(1).optional(),
     quickInputSource: z
       .enum([

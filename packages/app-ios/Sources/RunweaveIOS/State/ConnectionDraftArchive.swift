@@ -5,18 +5,21 @@ import UIKit
 /// Local, protected drafts survive a notification cold start; they never enter the push payload.
 @MainActor
 final class ConnectionDraftArchive {
-  struct Snapshot: Codable {
-    var text: [String: String]
-    var images: [String: [Image]]
+  private struct TextArchive: Codable {
+    let schemaVersion: Int
+    let text: [String: String]
+    let suppressedQuickInputs: Set<String>
   }
+  typealias Snapshot = (
+    text: [String: String], images: [String: [TerminalDraftImage]], suppressedQuickInputs: Set<String>
+  )
   struct Image: Codable {
     let preview: Data
     let mimeType: String
     let data: Data?
     let path: String?
   }
-  private var memory: [String: (text: [String: String], images: [String: [TerminalDraftImage]])] =
-    [:]
+  private var memory: [String: Snapshot] = [:]
   private var imageSignatures: [String: String] = [:]
   private func file(_ scope: String) throws -> URL {
     let root = try FileManager.default.url(
@@ -33,14 +36,20 @@ final class ConnectionDraftArchive {
     let key = SHA256.hash(data: Data(scope.utf8)).map { String(format: "%02x", $0) }.joined()
     return root.appendingPathComponent(key + ".json")
   }
-  func save(scope: String, text: [String: String], images: [String: [TerminalDraftImage]]) throws {
-    memory[scope] = (text, images)
+  func save(
+    scope: String, text: [String: String], images: [String: [TerminalDraftImage]],
+    suppressedQuickInputs: Set<String>
+  ) throws {
+    memory[scope] = (text, images, suppressedQuickInputs)
     let destination = try file(scope)
     if text.isEmpty && images.isEmpty {
       try remove(scope)
       return
     }
-    try JSONEncoder().encode(text).write(
+    try JSONEncoder().encode(TextArchive(
+      schemaVersion: 1, text: text,
+      suppressedQuickInputs: suppressedQuickInputs.intersection(text.keys)
+    )).write(
       to: destination.appendingPathExtension("text"),
       options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     var parts: [String] = []
@@ -68,16 +77,25 @@ final class ConnectionDraftArchive {
       options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     imageSignatures[scope] = signature
   }
-  func read(_ scope: String) throws -> (
-    text: [String: String], images: [String: [TerminalDraftImage]]
-  ) {
+  func read(_ scope: String) throws -> Snapshot {
     if let value = memory[scope] { return value }
     let source = try file(scope)
     let textURL = source.appendingPathExtension("text")
     let imagesURL = source.appendingPathExtension("images")
-    let text =
-      FileManager.default.fileExists(atPath: textURL.path)
-      ? try JSONDecoder().decode([String: String].self, from: Data(contentsOf: textURL)) : [:]
+    var text: [String: String] = [:]
+    var suppressedQuickInputs = Set<String>()
+    if FileManager.default.fileExists(atPath: textURL.path) {
+      let data = try Data(contentsOf: textURL)
+      let decoder = JSONDecoder()
+      if let legacy = try? decoder.decode([String: String].self, from: data) {
+        text = legacy
+      } else {
+        let archive = try decoder.decode(TextArchive.self, from: data)
+        guard archive.schemaVersion == 1 else { throw APIError.invalidResponse }
+        text = archive.text
+        suppressedQuickInputs = archive.suppressedQuickInputs.intersection(text.keys)
+      }
+    }
     let storedImages =
       FileManager.default.fileExists(atPath: imagesURL.path)
       ? try JSONDecoder().decode([String: [Image]].self, from: Data(contentsOf: imagesURL)) : [:]
@@ -89,7 +107,7 @@ final class ConnectionDraftArchive {
           failure: value.path == nil ? "上传已暂停，请重试" : nil)
       }
     }
-    return (text, images)
+    return (text, images, suppressedQuickInputs)
   }
   func remove(_ scope: String) throws {
     memory.removeValue(forKey: scope)

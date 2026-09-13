@@ -203,11 +203,13 @@ public actor APIClient {
   }
 
   /// Acceptance is not process completion. Never automatically retry a business write.
-  func terminalInput(id: String, data: String, mode: String) async throws {
+  func terminalInput(id: String, data: String, mode: String, recordQuickInput: Bool? = nil) async throws {
     let operationID = UUID().uuidString
+    var body: [String: Any] = ["data": data, "mode": mode, "operationId": operationID]
+    if let recordQuickInput { body["recordQuickInput"] = recordQuickInput }
     let value: InputAcceptance = try await authorized(
       "/api/terminal/session/\(Self.pathComponent(id))/input", method: "POST",
-      body: ["data": data, "mode": mode, "operationId": operationID], retryUnauthorized: false
+      body: body, retryUnauthorized: false
     )
     guard value.operationId == operationID, value.terminalSessionId == id,
       value.inputAccepted, value.inputEnqueued

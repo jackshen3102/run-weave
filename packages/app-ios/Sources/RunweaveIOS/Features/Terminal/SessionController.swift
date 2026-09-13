@@ -226,12 +226,14 @@ public final class SessionController: ObservableObject {
     }
   }
 
-  func sendCommand(_ text: String, mode: String) async throws {
+  func sendCommand(_ text: String, mode: String, recordQuickInput: Bool? = nil) async throws {
     guard canSend else { throw APIError.offline }
     let epoch = generation
     inputBusy = true
     failure = nil
-    let operation = Task { try await api.terminalInput(id: terminalID, data: text, mode: mode) }
+    let operation = Task {
+      try await api.terminalInput(id: terminalID, data: text, mode: mode, recordQuickInput: recordQuickInput)
+    }
     commandTask = operation
     defer {
       if generation == epoch {

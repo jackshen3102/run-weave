@@ -1,13 +1,14 @@
 import SwiftUI
 
 struct TerminalComposerSheet: View {
+  @EnvironmentObject private var quickReplies: LocalQuickReplyStore
   @ObservedObject var session: AppSession
   @ObservedObject var controller: SessionController
   let terminalID: String
   @Binding var preventsDismissal: Bool
   @Environment(\.dismiss) private var dismiss
 
-  private var busy: Bool { preventsDismissal || controller.inputBusy }
+  private var busy: Bool { preventsDismissal || quickReplies.saving }
 
   var body: some View {
     NavigationView {
@@ -53,6 +54,11 @@ struct ComposerView: View {
   @State private var stopping = false
   @State private var showingShortcuts = false
   @State private var editing = true
+  @State private var showingReplies = false
+  @State private var savingReply = false
+  @State private var replySnapshot = ""
+  @State private var pendingReply: LocalQuickReply?
+  @State private var confirmingInsertion = false
   @ScaledMetric(relativeTo: .body) private var inputHeight = 144.0
 
   init(
@@ -100,6 +106,11 @@ struct ComposerView: View {
           }.font(.caption).disabled(!session.canWrite)
         }
       #endif
+      Text(targetLabel).font(.caption).foregroundColor(.secondary).lineLimit(2)
+      if controller.inputBusy {
+        Text("正在等待电脑确认；关闭面板不会撤回已发送内容，也不会自动重发。")
+          .font(.caption).foregroundColor(.secondary)
+      }
       if showingShortcuts {
         ShortcutBar(controller: controller, enabled: session.canWrite)
       }
@@ -120,11 +131,42 @@ struct ComposerView: View {
     .padding(16)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .background(TerminalAppearance.background.ignoresSafeArea())
+    .background {
+      NavigationLink(isActive: $showingReplies) {
+        QuickReplyLibraryView(onSelect: selectReply)
+      } label: { EmptyView() }.hidden()
+      NavigationLink(isActive: $savingReply) {
+        QuickReplyEditorView(initialBody: replySnapshot)
+      } label: { EmptyView() }.hidden()
+    }
+    .onChange(of: showingReplies) { showing in
+      if !showing {
+        confirmingInsertion = pendingReply != nil
+        if pendingReply == nil { editing = true }
+      }
+    }
+    .onChange(of: savingReply) { showing in if !showing { editing = true } }
+    .confirmationDialog("输入框已有文字", isPresented: $confirmingInsertion, titleVisibility: .visible) {
+      Button("追加到末尾") { insertReply(append: true) }
+      Button("替换文字", role: .destructive) { insertReply(append: false) }
+      Button("取消", role: .cancel) { pendingReply = nil; editing = true }
+    } message: {
+      Text("只修改当前输入框，图片附件保留；不会直接发送。")
+    }
+  }
+
+  private var targetLabel: String {
+    let terminal = session.overview?.sessions.first { $0.id == terminalID }
+    let project = session.overview?.projects.first {
+      $0.id == HomeOverview.parentProjectID(session.terminal?.projectId ?? "")
+    }
+    return [session.connection?.name, project?.name, terminal?.title ?? terminalID]
+      .compactMap { $0 }.joined(separator: " · ")
   }
 
   private var inputCard: some View {
     MediaControls(
-      session: session, terminalID: terminalID, visible: active,
+      session: session, terminalID: terminalID, visible: active && !showingReplies && !savingReply,
       preventsDismissal: $preventsDismissal
     ) { attachment, voice in
       VStack(spacing: 8) {
@@ -171,6 +213,23 @@ struct ComposerView: View {
       .accessibilityLabel(showingShortcuts ? "收起快捷键" : "展开快捷键")
       .accessibilityValue(showingShortcuts ? "已展开" : "已收起")
       .accessibilityIdentifier("terminal-shortcuts-toggle")
+      Menu {
+        Button("选择快捷回复") {
+          editing = false
+          pendingReply = nil
+          showingReplies = true
+        }.accessibilityIdentifier("quick-reply-open")
+        Button("保存为快捷回复") {
+          replySnapshot = session.terminalDrafts[terminalID] ?? ""
+          editing = false
+          savingReply = true
+        }.disabled(!hasText)
+      } label: {
+        Image(systemName: "text.badge.plus").frame(width: 44, height: 44)
+      }
+      .accessibilityLabel("快捷回复")
+      .accessibilityIdentifier("terminal-quick-replies")
+      .disabled(preventsDismissal || controller.inputBusy)
       Spacer(minLength: 0)
       if editing {
         Button {
@@ -206,6 +265,23 @@ struct ComposerView: View {
     .opacity(sendDisabled ? 0.4 : 1)
   }
 
+  private func selectReply(_ item: LocalQuickReply) {
+    guard session.terminal?.id == terminalID, session.terminalController === controller else { return }
+    pendingReply = item
+    if (session.terminalDrafts[terminalID] ?? "").isEmpty { insertReply(append: false) }
+    showingReplies = false
+  }
+
+  private func insertReply(append: Bool) {
+    defer { pendingReply = nil; editing = true }
+    guard let item = pendingReply, session.terminal?.id == terminalID,
+      session.terminalController === controller else { return }
+    let previous = session.terminalDrafts[terminalID] ?? ""
+    session.setDraft(
+      append && !previous.isEmpty ? previous + "\n" + item.body : item.body,
+      terminalID: terminalID, suppressQuickInputHistory: true)
+  }
+
   private func submit() {
     failure = nil
     let stop = showStop
@@ -227,6 +303,10 @@ struct ComposerView: View {
       } catch {
         if !(error is CancellationError) {
           failure = stop ? displayError(error) : displayInputError(error)
+          if !stop && session.suppressedQuickInputDrafts.contains(terminalID) {
+            failure = "快捷回复发送未确认，请确认电脑端支持本地快捷回复。不会自动重发或改为记录历史。\n"
+              + displayInputError(error)
+          }
         }
       }
     }
