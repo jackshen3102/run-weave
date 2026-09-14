@@ -1,0 +1,143 @@
+version: 1
+name: iOS 真机预检、按需准备与批内复用验收
+description: >
+  这是仓库内 device 工具入口的验收合同；执行结果以对应运行记录和真机证据为准。
+  验证指定设备、分层预检、可信构建复用、同批 XCTest 执行、失败停止和独立证据。
+  每例独立建立本例拥有的运行目录、套件及必要设备窗口；只使用授权的测试设备、App 和业务物料。
+  真机行为使用 Xcode、devicectl 和仓库内候选 XCUITest 执行器取证，禁止运行未知内容的历史 UIProbe。
+  格式校验不代表真机通过；无法建立本例环境时记录 blocked，不改变主用手机密码或清理用户数据。
+cases:
+  - id: IOSDEVICE-001
+    name: 只读预检严格绑定指定设备
+    required: true
+    description: >
+      doctor 使用显式 UDID，只报告本轮可确认的状态，不安装 App、不启动 XCTest、不选择其他设备兜底。
+    preconditions:
+      - 候选 device doctor 已实现，本例已记录一台授权设备的 UDID 和当前安装及运行进程状态。
+    steps:
+      - 从 packages/app-ios 运行 node scripts/ios.mjs device doctor --device 后接目标 UDID 并加 --json；核对输出 UDID、observedAt、分项证据及退出码，不将 automation unknown 误报为可操控。
+      - 省略设备参数及传入本例不存在的 UDID，确认分别返回参数错误和设备不可用，没有回退到其他设备。
+      - 对比执行前后及命令事件，确认没有 App 安装、XCTest 启动或业务输入。
+  - id: IOSDEVICE-002
+    name: 普通锁屏只阻塞准备而不触发重装
+    required: true
+    description: >
+      对真实已锁屏设备，工具准确报告 device_locked；用户正常解锁后重新查询状态，不复用旧锁屏判断。
+    preconditions:
+      - 本例有可人工锁屏解锁的授权设备、已安装目标 App 和独立证据目录，且没有其他测试占用。
+    steps:
+      - 在设备上正常锁屏，执行 doctor，确认本轮 lockState 证据对应锁屏且返回明确解锁提示。
+      - 保持锁屏再次调用候选 run，确认进入环境阻塞，日志没有循环安装、构建 runner 或启动测试。
+      - 用户正常解锁后再次 doctor，确认读取新状态；自动化授权仍须主动检查，不因解锁自动标记 automation_ready。
+  - id: IOSDEVICE-003
+    name: 自动化授权等待保持同一启动且不执行业务
+    required: true
+    description: >
+      真实出现 UI Automation 密码提示时，工具标记待用户处理，在仍存活的本轮 XCTest 中等待，不重装或反复启动。
+    preconditions:
+      - 本例授权设备自然处于需要 UI Automation 再授权的状态，用户可在设备上输入密码；不能建立该状态时记录 blocked。
+      - 候选套件只有一个无业务写入的前置检查和一个只读场景，拥有独立运行目录。
+    steps:
+      - 执行 run，观察设备提示原文与同一轮 Xcode 进程，确认状态为 waiting_for_user，提示只出现一次且业务 case 尚未开始。
+      - 在等待预算内人工完成系统授权；若原 XCTest 仍存活，确认沿用本轮启动继续；若已退出，确认报告已退出而非伪造健康会话。
+      - 检查等待阶段没有第二次安装、重签或自动化启动请求，日志不含密码。
+  - id: IOSDEVICE-004
+    name: runner 缓存只在当前构建输入可验证时命中
+    required: true
+    description: >
+      相同 runner 与套件重复执行可以使用编译产物；套件未提交修改或产物损坏必须导致该层失效，不能执行旧逻辑。
+    preconditions:
+      - 本例拥有可用设备、有效签名、独立套件副本与构建缓存，套件通过唯一只读附件标记其内容版本。
+    steps:
+      - 建立本例基线构建并执行，再以完全相同输入执行，确认本工具不再次请求 build-for-testing，实际证据仍对应指定套件。
+      - 仅修改套件副本的附件标记并保持 Git HEAD 不变，再执行，确认 runner 输入摘要变化且新标记出现在真机证据中；App 不因该修改被重新构建。
+      - 在本例独占缓存中删除一个 runner 产物，再执行，确认检测失效并重建，或明确阻塞，不报告缓存命中。
+  - id: IOSDEVICE-005
+    name: App 源码变化不能命中旧构建
+    required: true
+    description: >
+      App 的未提交源文件变化使 App 产物失效并安装新目标包；保持业务 Bundle ID 和既有登录数据。
+    preconditions:
+      - 本例有独立源码副本、明确可修改且可在 App 中观察的 Debug 文本及授权设备；已记录既有非敏感登录状态和 Bundle ID。
+      - 本例已独立建立该源码副本的基线安装与套件，不依赖其他 case 的产物。
+    steps:
+      - 只修改本例 Debug 可见文本而不提交 Git，再执行同一套件，确认 App 构建摘要改变并生成新产物。
+      - 在真机读取新文本并保存证据，确认没有使用旧包；核对 Bundle ID 与既有数据保持，工具未卸载 App 或清 Keychain。
+  - id: IOSDEVICE-006
+    name: 一批三个场景只启动一轮 XCTest
+    required: true
+    description: >
+      主动就绪检查与三个无外部提交场景在同一轮 XCTest 中完成，各 case 有新前置条件观察及独立结果。
+    preconditions:
+      - 本例设备已解锁且可自动化，准备了同一 App 下三个独立只读场景，每个场景能从声明的前置状态自行建立条件。
+      - 本例独占运行与证据目录，已记录工具请求事件的基线。
+    steps:
+      - 一次 run 执行整批，确认先主动读取目标 App 树，再按显式 case 列表执行；正常路径只请求一次 test-without-building。
+      - 确认批内没有再次 build-for-testing 或 App 安装，未先执行一个独立 smoke 再启动业务测试。
+      - 核对三个 case 的 ID、开始结束状态、独立附件及每例新控件查询；不存在共用旧截图作为新验收结果。
+  - id: IOSDEVICE-007
+    name: 跨批安装身份未知时不得假定已安装正确包
+    required: true
+    description: >
+      只有旧安装回执或相同 Bundle ID/营销版本时，不足以跳过当前产物核对；不明确的状态必须按约定准备或阻塞。
+    preconditions:
+      - 本例设备授权安装两个同 Bundle ID 且相同展示版本的专用构建 A 和 B，两者有可观察内容差异，应用数据可保留。
+      - 本例先由候选工具建立 A 的本地回执，再由本例拥有的安装流程将设备更新为 B。
+    steps:
+      - 请求候选工具执行针对 A 的新批次，确认不会仅依据旧回执直接声称设备仍是 A。
+      - 核对工具重新安装本批 A 一次或返回 artifact_unverified；若继续执行，真实 UI 必须显示 A 对应内容。
+      - 确认没有使用 B 的 UI 证据为 A 签发通过，也没有卸载 App 或删除数据。
+  - id: IOSDEVICE-008
+    name: 多工作树请求不能并发占用同一设备
+    required: true
+    description: >
+      同一设备的用户级排他锁跨候选工具工作树生效，后来的请求不影响已有执行。
+    preconditions:
+      - 本例有两个候选工具工作树、同一授权设备和一份可控时长的只读场景；两个请求均属于本例。
+    steps:
+      - 在第一个工作树启动本例场景并确认获得设备锁，在第二个工作树对同一 UDID 发起 run。
+      - 确认第二个请求返回 device_busy 并提供可识别的运行身份，没有安装、输入或终止第一个进程。
+      - 第一个请求正常结束释放锁后，第二个工作树重新运行，确认可获得锁且使用自己的构建与证据目录。
+  - id: IOSDEVICE-009
+    name: 所有者退出不自动重放中途业务
+    required: true
+    description: >
+      运行进程异常退出后保留可审计状态；尚有子进程或结果未知时不能抢锁并重放已开始的 case。
+    preconditions:
+      - 本例拥有独占设备窗口和可安全终止的候选父进程，场景只写本例测试草稿，不发送或提交外部动作。
+      - 本例可记录其子进程身份与开始事件，不会触及用户其他 Xcode 进程。
+    steps:
+      - 待本例 case 开始后终止本例父进程，保存退出前后及剩余子进程状态。
+      - 新调用 status 和 run，确认结果不足时为 unknown；旧子进程仍活跃或身份不确定时拒绝占用，没有再次执行该 case。
+      - 仅在本例已确认所有归属子进程退出后释放本例遗留资源，确认不会通过全局进程清理影响其他测试。
+  - id: IOSDEVICE-010
+    name: 第一个业务失败立即停止后续场景
+    required: true
+    description: >
+      批内断言失败保留前面通过结果，失败例单独 fail，后续例 blocked；不靠重跑整批消除失败。
+    preconditions:
+      - 本例拥有三个只读场景：第一例可通过，第二例含明确可控的失败断言，第三例执行后会生成唯一附件。
+      - 设备与候选工具环境就绪，证据目录独立。
+    steps:
+      - 执行该批，确认第一例 pass、第二例 fail、第三例 blocked，第三例唯一附件不存在。
+      - 检查实际工具调用和 xcresult，确认没有第二轮 XCTest 来自动重跑业务，失败截图和树仍可读取。
+  - id: IOSDEVICE-011
+    name: 用例要求冷启动时不强行复用前台进程
+    required: true
+    description: >
+      会话优化服从当前 case 的生命周期要求，冷启动例会明确重启目标 App 并重新建立前置条件。
+    preconditions:
+      - 本例拥有一个已在前台的测试 App 和声明冷启动前置条件的只读套件，能够记录前后 App 进程身份。
+    steps:
+      - 执行该套件，确认事件包含由 case 要求触发的 App restart，而不是仅 activate 旧前台状态。
+      - 读取重启后新的进程/页面证据并验证冷启动条件，确认未复用重启前元素引用或截图。
+  - id: IOSDEVICE-012
+    name: 附件导出失败不会伪装成完整验收通过
+    required: true
+    description: >
+      业务结果和证据导出状态分开记录；导出失败报告独立错误且保留 xcresult，不重新执行业务。
+    preconditions:
+      - 本例拥有可通过的只读场景、可写的 xcresult 目录，以及仅对本例附件导出目的目录生效的可恢复写入故障。
+    steps:
+      - 执行场景并在附件导出阶段触发本例写入故障，确认 case 业务结果仍可辨识，整体返回 evidence_export_failed，原始 xcresult 保留。
+      - 恢复本例目的目录，使用 xcresulttool 对同一结果重新导出，确认能取得原始附件；操作记录中没有重新启动或执行业务场景。

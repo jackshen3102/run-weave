@@ -32,17 +32,70 @@ Debug/Profile 真机构建不启用 APNs 推送，可使用 Personal Team 签名
 
 ### 真机操作与取证
 
-需要操作或验收连接的 iPhone 时，统一使用 Mac 上的 Xcode 工具链和既有 XCUITest 执行器：
+正式入口使用 Xcode、devicectl 和仓库内固定 `BatchRunner.testBatch`。在本目录执行：
 
-1. 先确认当前设备连接、配对、解锁和签名条件，读取当前脚本；设备标识、Team 和产物路径按本机实际状态解析。
-2. 用 `xcodebuild` 构建并签名对应配置，再用 `xcrun devicectl device install app` 安装到目标手机；保留既有 Bundle ID 和应用数据。
-3. 通过既有 XCUITest 执行器激活应用、读取控件树，并执行点击、输入、滑动等真实 UI 操作；产品流程从正式首页进入。
-4. 保存 `.xcresult`，用 `xcrun xcresulttool export attachments` 导出截图、控件树等证据，并分别报告构建、安装和真机行为结果。
+```bash
+node scripts/ios.mjs device doctor --device <硬件UDID> --json
+node scripts/ios.mjs device run --device <硬件UDID> --suite scripts/device/suites/read-only --configuration Debug --json
+node scripts/ios.mjs device status --run <runId> --json
+```
 
-当前执行机器的历史脚本在仓库根 `.runweave/native-device-runner/`：`build-app.py` 负责构建安装，
-`run.py` 负责执行当前 `UIProbe.swift` 并导出证据。`run.py` 的名称参数是本次证据名称，
-不会按名称加载历史 Swift 脚本。复用前检查脚本中的固定设备标识、Team、旧产物目录和当前操作内容，
-使用新的证据名称；这些本地文件不随源码分发，缺失时明确报告，不能假定新机器已具备该执行器。
+设备必须显式指定硬件 UDID，不接受设备名称或 CoreDevice 别名，不自动选择第一台设备。
+`xcrun devicectl list devices --json-output <本机文件>` 可用于选择设备。真机执行支持 Debug/Profile；
+Team 从现有工程签名配置解析，有歧义时传 `--team <本机Team>`。不提交个人设备、证书或本机配置。
+免费签名设备若已满安装槽位，可在确认旧测试 runner 空闲后，通过
+`--runner-bundle-id <旧runner的基础BundleID>` 复用其槽位（不含 `.xctrunner` 后缀）。
+该参数只覆盖测试 runner 的构建身份，会安装本轮新 runner，不能借此复用旧测试逻辑。
+
+`doctor` 只查询工具、当前连接、配对、开发服务、锁屏、App 元数据和占用；每项查询超时 10 秒，
+独立查询并行，总预算不超过 30 秒。它不安装、不启动 App 或 XCTest。
+`preflight_ok` 不证明 UI Automation 已授权：该项保持 `unknown`，只有同一轮 XCTest 激活固定目标
+并读取新的控件树后才进入 `automation_ready`。明确识别到系统授权错误时，保留原进程等待最多
+120 秒；普通启动失败不会被猜成密码问题。授权或锁屏由用户在手机上处理，不改变密码和权限。
+
+套件目录必须提供 `suite.json` 和 `Suite.swift`，可从
+[`scripts/device/suites/read-only`](scripts/device/suites/read-only/suite.json) 复制。
+manifest 固定 `schemaVersion: 1` 和 Bundle ID，`cases` 是 1–20 个唯一 ID 的显式顺序；
+`timeoutSeconds` 可设 30–1800 秒，默认 180。Swift 的 `DeviceSuite.cases()` 返回对应 `DeviceCase`，
+每例分别声明 `precondition`、`execute`、`postcondition`，使用 `context.require` 立即抛出失败。
+每例自行建立导航和物料条件，不依赖上一例结果、不缓存控件引用。需要冷启动时声明
+`restartReason`；非空 `launchArguments` 要求每例均声明重启。套件是用户明确选择的可执行
+Swift 源码，运行前应审查业务动作；工具不解析任意点击指令，也不按日志名称选择旧代码。
+内置三例仅检查正式首页、连接管理和返回首页，不登录、不提交外部动作。
+
+App 与 runner 分开计算输入摘要并检查签名及产物内容；套件变化只使 runner 身份改变。
+无法完整描述的生成插件、构建脚本、外部依赖或符号链接回退到 Xcode 增量构建，并记录理由。
+当前 SwiftTerm 插件会生成构建触发文件，所以 App 层仍请求增量构建，不能声称零构建。
+不跳过插件信任验证。跨批不能仅凭 Bundle ID 或展示版本证明安装身份，因此每批保守安装一次，
+不卸载 App 或清除数据。安装完成后和执行结束时核对当前安装位置；身份改变时结果为 unknown。
+结束阶段的只读观察在 30 秒预算内最多尝试 3 次，仅对超时重查，仍无法确认时保留 unknown。
+
+每批只请求一次 `test-without-building`，主动检查也在其中；首个失败停止后续例子，
+保留 pass/fail/blocked，执行中断的例子标 unknown，不自动重放。正常例子 activate App，
+只有声明冷启动才主动 restart。状态文件不能恢复已经退出的 XCTest 进程。
+
+证据位于 `.build/ios/device/runs/<runId>/`：`run.json` 保存身份、结果、计数和各命令计时，
+`events.jsonl` 保存阶段和用例事件，`commands.jsonl` 保存命令时序，`result.xcresult` 与
+`attachments/` 保存断言、控件树和截图。Xcode 内部 runner 部署次数不可观测时为 unknown。
+业务结果与附件导出状态分开；导出失败保留 xcresult，可只重新导出：
+
+```bash
+xcrun xcresulttool export attachments --path <run目录>/result.xcresult --output-path <新附件目录>
+```
+
+退出码：0 为 doctor 无硬阻塞或整批通过；2 为参数错误；3 为环境阻塞/占用；4 为用例失败；
+5 为执行器、未知结果或证据故障。doctor 返回 0 仍不代表能操作 UI。
+
+同一用户的多工作树共享 `~/.runweave/native-device/locks/<UDID>/owner.json` 原子排他锁，
+记录父进程与每个子进程的 PID、启动身份和进程组。正常结束且全部子进程组退出才释放；
+父进程异常退出或子进程身份不明时保留锁并返回 device_busy，不自动抢占。
+人工处理遗留锁前必须逐一确认 owner 中父子进程和进程组都已退出，再仅移走该 UDID 的锁目录；
+禁止全局清理 Xcode 进程。此锁不覆盖手动 Xcode 和旧脚本，遇到外部 runner 应协调设备窗口。
+
+历史 `.runweave/native-device-runner/` 脚本保留但新入口不调用它们。
+旧 `run.py` 只执行当时的 `UIProbe.swift`，名称参数不会选择历史用例；迁移时整理成显式套件，
+不能原样运行未知的历史探针。配套验收合同见
+[真机预检与复用](../../docs/testing/app/ios-device-preflight-reuse.testplan.yaml)。
 
 Playwright 只用于配套 Web 页面，不能验证 SwiftUI。终端实验室是被测页面，
 其入口是否显示不影响真机操控能力；仅专项验证显式启用实验室参数。历史成功、编译通过或单张截图不代表本次交互验收通过。

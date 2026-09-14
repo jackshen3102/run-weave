@@ -39,70 +39,85 @@ function options() {
   return result;
 }
 try {
-  if (process.platform !== "darwin")
-    throw new Error("iOS builds require macOS and Xcode");
-  const flags = [
-    "-project",
-    project,
-    "-scheme",
-    "RunweaveNative",
-    "-derivedDataPath",
-    resolve(buildRoot, "DerivedData"),
-    "-clonedSourcePackagesDirPath",
-    resolve(buildRoot, "SourcePackages"),
-    "-packageCachePath",
-    resolve(buildRoot, "PackageCache"),
-  ];
-  if (command === "doctor") {
-    run("xcodebuild", ["-version"]);
-    run("xcodebuild", ["-showsdks"]);
-    run("xcrun", ["simctl", "list", "runtimes"]);
-    run("xcodebuild", [...flags, "-showdestinations"]);
-    console.log(
-      existsSync(lock)
-        ? readFileSync(lock, "utf8")
-        : "Package.resolved: not resolved yet",
-    );
+  if (command === "device") {
+    const { deviceCLI } = await import("./device/cli.mjs");
+    process.exitCode = await deviceCLI(args);
   } else {
-    if (!["build", "run"].includes(command))
-      throw new Error("Expected doctor, build, or run");
-    const { simulator, configuration } = options();
-    if (!simulator) throw new Error("An explicit --simulator UDID is required");
-    const devices = JSON.parse(
-      run("xcrun", ["simctl", "list", "devices", "available", "--json"], true),
-    );
-    const device = Object.values(devices.devices)
-      .flat()
-      .find((item) => item.udid === simulator);
-    if (!device)
-      throw new Error("Simulator is not available in the installed runtimes");
-    const app = resolve(
-      buildRoot,
-      `DerivedData/Build/Products/${configuration}-iphonesimulator/RunweaveNative.app`,
-    );
-    if (command === "build") {
-      mkdirSync(buildRoot, { recursive: true });
-      run("xcodebuild", [
-        ...flags,
-        "-configuration",
-        configuration,
-        "-destination",
-        `platform=iOS Simulator,id=${simulator}`,
-        "CODE_SIGNING_ALLOWED=YES",
-        "CODE_SIGN_IDENTITY=-",
-        "build",
-      ]);
-      if (!existsSync(app))
-        throw new Error("Build completed without expected app product");
-      console.log(`APP_PATH=${app}`);
+    if (process.platform !== "darwin")
+      throw new Error("iOS builds require macOS and Xcode");
+    const flags = [
+      "-project",
+      project,
+      "-scheme",
+      "RunweaveNative",
+      "-derivedDataPath",
+      resolve(buildRoot, "DerivedData"),
+      "-clonedSourcePackagesDirPath",
+      resolve(buildRoot, "SourcePackages"),
+      "-packageCachePath",
+      resolve(buildRoot, "PackageCache"),
+    ];
+    if (command === "doctor") {
+      run("xcodebuild", ["-version"]);
+      run("xcodebuild", ["-showsdks"]);
+      run("xcrun", ["simctl", "list", "runtimes"]);
+      run("xcodebuild", [...flags, "-showdestinations"]);
+      console.log(
+        existsSync(lock)
+          ? readFileSync(lock, "utf8")
+          : "Package.resolved: not resolved yet",
+      );
     } else {
-      if (!existsSync(app))
-        throw new Error("Build this configuration before installing");
-      if (device.state !== "Booted")
-        run("xcrun", ["simctl", "boot", simulator]);
-      run("xcrun", ["simctl", "bootstatus", simulator, "-b"]);
-      run("xcrun", ["simctl", "install", simulator, app]);
-      run("xcrun", ["simctl", "launch", simulator, "com.runweave.app.native"]);
+      if (!["build", "run"].includes(command))
+        throw new Error("Expected doctor, build, or run");
+      const { simulator, configuration } = options();
+      if (!simulator)
+        throw new Error("An explicit --simulator UDID is required");
+      const devices = JSON.parse(
+        run(
+          "xcrun",
+          ["simctl", "list", "devices", "available", "--json"],
+          true,
+        ),
+      );
+      const device = Object.values(devices.devices)
+        .flat()
+        .find((item) => item.udid === simulator);
+      if (!device)
+        throw new Error("Simulator is not available in the installed runtimes");
+      const app = resolve(
+        buildRoot,
+        `DerivedData/Build/Products/${configuration}-iphonesimulator/RunweaveNative.app`,
+      );
+      if (command === "build") {
+        mkdirSync(buildRoot, { recursive: true });
+        run("xcodebuild", [
+          ...flags,
+          "-configuration",
+          configuration,
+          "-destination",
+          `platform=iOS Simulator,id=${simulator}`,
+          "CODE_SIGNING_ALLOWED=YES",
+          "CODE_SIGN_IDENTITY=-",
+          "build",
+        ]);
+        if (!existsSync(app))
+          throw new Error("Build completed without expected app product");
+        console.log(`APP_PATH=${app}`);
+      } else {
+        if (!existsSync(app))
+          throw new Error("Build this configuration before installing");
+        if (device.state !== "Booted")
+          run("xcrun", ["simctl", "boot", simulator]);
+        run("xcrun", ["simctl", "bootstatus", simulator, "-b"]);
+        run("xcrun", ["simctl", "install", simulator, app]);
+        run("xcrun", [
+          "simctl",
+          "launch",
+          simulator,
+          "com.runweave.app.native",
+        ]);
+      }
     }
   }
 } catch (error) {
