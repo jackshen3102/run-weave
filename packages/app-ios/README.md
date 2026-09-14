@@ -58,6 +58,11 @@ Team 从现有工程签名配置解析，有歧义时传 `--team <本机Team>`�
 manifest 固定 `schemaVersion: 1` 和 Bundle ID，`cases` 是 1–20 个唯一 ID 的显式顺序；
 `timeoutSeconds` 可设 30–1800 秒，默认 180。Swift 的 `DeviceSuite.cases()` 返回对应 `DeviceCase`，
 每例分别声明 `precondition`、`execute`、`postcondition`，使用 `context.require` 立即抛出失败。
+元素存在性等待可用 `element.waitUntilExists(timeout:)`：先检查当前状态，未出现再调用
+XCTest 等待；它不保证元素可点击，交互前仍需相应检查，业务断言也不能省略。
+已知目标使用元素类型与 ID 或文字直接查询，例如 `app.buttons["关闭"].exists`；
+不要为单个元素的存在性判断读取并搜索 `app.debugDescription`。完整控件树继续用于
+未知页面探索、诊断和既定的前后取证。
 每例自行建立导航和物料条件，不依赖上一例结果、不缓存控件引用。需要冷启动时声明
 `restartReason`；非空 `launchArguments` 要求每例均声明重启。套件是用户明确选择的可执行
 Swift 源码，运行前应审查业务动作；工具不解析任意点击指令，也不按日志名称选择旧代码。

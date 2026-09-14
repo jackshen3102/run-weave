@@ -1,5 +1,14 @@
 import XCTest
 
+extension XCUIElement {
+  // Avoid the initial polling delay for an element that is already present.
+  // Presence does not imply hittability; callers retain their interaction checks.
+  @MainActor
+  func waitUntilExists(timeout: TimeInterval) -> Bool {
+    exists || waitForExistence(timeout: timeout)
+  }
+}
+
 struct DeviceCase {
   let id: String
   var restartReason: String? = nil
@@ -81,7 +90,7 @@ final class BatchRunner: XCTestCase {
     }) { throw DeviceAssertion(description: "Launch arguments require declared restart for every case") }
     emit("automation_probe_started")
     app.activate()
-    guard app.wait(for: .runningForeground, timeout: 15), app.windows.firstMatch.waitForExistence(timeout: 15) else {
+    guard app.wait(for: .runningForeground, timeout: 15), app.windows.firstMatch.waitUntilExists(timeout: 15) else {
       throw DeviceAssertion(description: "Target foreground/window unavailable")
     }
     evidence(app, "automation-ready")
