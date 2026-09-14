@@ -65,6 +65,7 @@
     "./work-history": "./src/work-history.ts",
     "./voice": "./src/voice.ts",
     "./suiji": "./src/suiji/index.ts",
+    "./suiji/desktop": "./src/suiji/desktop.ts",
     "./device-status": "./src/monitoring/device-status.ts",
     "./battery": "./src/monitoring/battery.ts",
     "./device-notifications": "./src/monitoring/device-notifications.ts",

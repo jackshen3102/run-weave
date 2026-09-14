@@ -133,7 +133,9 @@ const electronApi = {
     ipcRenderer.invoke("viewer:check-app-server") as Promise<boolean>,
   openExternal: (url: string) =>
     ipcRenderer.invoke("viewer:open-external", url),
-  openSuijiWindow: () => ipcRenderer.invoke("viewer:open-suiji"),
+  loadSuijiState: () => ipcRenderer.invoke("suiji:load"),
+  saveSuijiProfile: (environment, profile) => ipcRenderer.invoke("suiji:save-profile", environment, profile),
+  selectSuijiEnvironment: (environment) => ipcRenderer.invoke("suiji:select-environment", environment),
   getRuntimeStats: () =>
     ipcRenderer.invoke(
       "viewer:get-runtime-stats",

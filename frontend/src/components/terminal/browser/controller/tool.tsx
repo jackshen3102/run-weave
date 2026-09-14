@@ -1,3 +1,4 @@
+import { useSuijiDrawer } from "../../../../features/suiji/drawer-state";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useState } from "react";
 import { useTerminalBrowserController } from "./use-controller";
@@ -30,9 +31,10 @@ export function TerminalBrowserTool({
   terminalSessionId,
 }: TerminalBrowserToolProps) {
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
+  const suijiOpen = useSuijiDrawer((state) => state.open);
   const controller = useTerminalBrowserController({
     active,
-    nativeViewSuppressed: profileSettingsOpen,
+    nativeViewSuppressed: profileSettingsOpen || suijiOpen,
     profileId,
     activationProjectId,
     activationRevision,

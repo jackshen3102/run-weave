@@ -1,4 +1,3 @@
-import { SuijiEntryLink } from "../features/suiji/entry-link";
 import { useNavigate } from "react-router-dom";
 import type { ConnectionConfig } from "../features/connection/types";
 import { LoginPage as LoginScreen } from "../components/login-page";
@@ -29,7 +28,6 @@ export function LoginPage({
 
   return (
     <>
-    <SuijiEntryLink className="fixed bottom-6 left-6 z-10 rounded-full border bg-card px-4 py-2 text-sm text-foreground shadow-sm">打开随记</SuijiEntryLink>
     <LoginScreen
       apiBase={apiBase}
       connectionId={connectionId}
