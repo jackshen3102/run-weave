@@ -382,3 +382,18 @@ canvas {
 :where(.suiji-theme, .suiji-theme *) {
   border-color: hsl(var(--border));
 }
+
+@keyframes suiji-drawer-enter {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .suiji-drawer[open] {
+    animation: suiji-drawer-enter 180ms ease-out;
+  }
+}

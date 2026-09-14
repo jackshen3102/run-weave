@@ -1,3 +1,4 @@
+import type { SuijiDesktopState, SuijiEnvironment, SuijiProfile } from "../suiji/desktop";
 import type { BrowserAssistanceTarget } from "../browser/assistance";
 import type {
   AttentionOpenDispatch,
@@ -113,7 +114,9 @@ export interface RunweaveElectronBridge {
   reloadRuntime: () => Promise<PackagedBackendConnectionState>;
   checkAppServer: () => Promise<boolean>;
   openExternal: (url: string) => Promise<void>;
-  openSuijiWindow: () => Promise<void>;
+  loadSuijiState: () => Promise<SuijiDesktopState>;
+  saveSuijiProfile: (environment: SuijiEnvironment, profile: SuijiProfile) => Promise<void>;
+  selectSuijiEnvironment: (environment: SuijiEnvironment) => Promise<void>;
   getRuntimeStats: () => Promise<RuntimeStatsSnapshot>;
   getSystemMonitorSnapshot: () => Promise<SystemMonitorSnapshot>;
   getRuntimeStatusReport: () => Promise<RuntimeStatusReport>;

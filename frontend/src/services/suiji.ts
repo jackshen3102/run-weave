@@ -4,7 +4,15 @@ import type {
   SuijiTokens,
 } from "@runweave/shared/suiji";
 
-type SavedSession = { tokens: SuijiTokens; expiresAt: number };
+import type { SuijiSavedSession as SavedSession } from "@runweave/shared/suiji/desktop";
+type SessionStorage = {
+  session?: SavedSession;
+  credentials?: { username: string; password: string };
+  persist: (
+    session: SavedSession | undefined,
+    forget?: boolean,
+  ) => Promise<void>;
+};
 export class SuijiHttpError extends Error {
   constructor(
     readonly status: number,
@@ -42,21 +50,15 @@ export class SuijiClient {
   private saved?: SavedSession;
   private lifetime = new AbortController();
   private renewing?: Promise<SavedSession>;
-  constructor(endpoint: string) {
+  constructor(
+    endpoint: string,
+    private storage: SessionStorage,
+  ) {
     this.endpoint = suijiEndpoint(endpoint);
-    try {
-      this.saved =
-        JSON.parse(sessionStorage.getItem(this.storageKey) ?? "null") ??
-        undefined;
-    } catch {
-      /* Missing or invalid session. */
-    }
+    this.saved = storage.session;
   }
   get active() {
     return !this.lifetime.signal.aborted;
-  }
-  private get storageKey() {
-    return `suiji.session.v1:${this.endpoint}`;
   }
   private assertActive() {
     if (!this.active) throw new DOMException("服务连接已切换", "AbortError");
@@ -64,10 +66,11 @@ export class SuijiClient {
   cancel() {
     this.lifetime.abort();
   }
-  private store(tokens: SuijiTokens) {
+  private async store(tokens: SuijiTokens) {
     this.assertActive();
     const saved = { tokens, expiresAt: Date.now() + tokens.expiresIn * 1000 };
-    sessionStorage.setItem(this.storageKey, JSON.stringify(saved));
+    await this.storage.persist(saved);
+    this.assertActive();
     this.saved = saved;
     return saved;
   }
@@ -114,7 +117,7 @@ export class SuijiClient {
       "POST",
       JSON.stringify({ username, password }),
     );
-    this.store((await response.json()) as SuijiTokens);
+    await this.store((await response.json()) as SuijiTokens);
     return this.info();
   }
   private refresh() {
@@ -122,11 +125,26 @@ export class SuijiClient {
     const old = this.saved;
     if (!old) return Promise.reject(new Error("请登录随记"));
     this.renewing = (async () => {
-      const response = await this.raw(
-        "/api/auth/refresh",
-        "POST",
-        JSON.stringify({ refreshToken: old.tokens.refreshToken }),
-      );
+      let response: Response;
+      try {
+        response = await this.raw(
+          "/api/auth/refresh",
+          "POST",
+          JSON.stringify({ refreshToken: old.tokens.refreshToken }),
+        );
+      } catch (error) {
+        if (
+          !(error instanceof SuijiHttpError) ||
+          error.status !== 401 ||
+          !this.storage.credentials
+        )
+          throw error;
+        response = await this.raw(
+          "/api/auth/login",
+          "POST",
+          JSON.stringify(this.storage.credentials),
+        );
+      }
       const tokens = (await response.json()) as SuijiTokens;
       if (
         tokens.ownerId !== old.tokens.ownerId ||
@@ -209,6 +227,13 @@ export class SuijiClient {
     this.assertActive();
     return blob;
   }
+  async restore() {
+    if (!this.saved && this.storage.credentials) {
+      const { username, password } = this.storage.credentials;
+      return this.login(username, password);
+    }
+    return this.info();
+  }
   async info() {
     const value = await this.request<SuijiInfo>("/api/suiji/v1/info");
     if (
@@ -221,9 +246,11 @@ export class SuijiClient {
   }
   async logout() {
     const saved = this.saved;
+    // Stop in-flight refreshes before clearing credentials, so logout cannot be undone.
     this.cancel();
+    await this.storage.persist(undefined, true);
+    this.storage.credentials = undefined;
     this.saved = undefined;
-    sessionStorage.removeItem(this.storageKey);
     if (saved) {
       try {
         await fetch(this.endpoint + "/api/auth/logout", {

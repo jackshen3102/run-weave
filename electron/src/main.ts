@@ -21,7 +21,7 @@ import { buildApplicationMenuTemplate } from "./desktop/menu.js";
 import { registerTerminalBrowserHandlers } from "./browser/view/index.js";
 import { installHooksIfNeeded } from "./hooks/hook-installer.js";
 import { desktopRuntime } from "./desktop/runtime-state.js";
-import { registerSuijiWindowHandler } from "./desktop/suiji-window.js";
+import { registerSuijiStorage } from "./desktop/suiji-storage.js";
 import {
   desktopSourceRevision,
   DEV_SERVER_URL,
@@ -331,7 +331,7 @@ if (hasSingleInstanceLock) {
       writeBetaDesktopStatus();
       setApplicationIcon();
       registerOpenExternalHandler();
-      registerSuijiWindowHandler();
+      registerSuijiStorage();
       registerPackagedBackendHandlers();
       registerRuntimeStatsHandler(() => desktopRuntime.packagedBackend);
       registerSystemMonitorHandler(() => desktopRuntime.packagedBackend);

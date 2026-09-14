@@ -30,8 +30,17 @@ export type SuijiDraft = {
 export class SuijiDraftStore {
   readonly scope: string;
   private database: Promise<IDBDatabase>;
-  constructor(endpoint: string, info: SuijiInfo) {
-    this.scope = JSON.stringify([endpoint, info.serverId, info.ownerId]);
+  constructor(
+    endpoint: string,
+    info: SuijiInfo,
+    environment: "production" | "development" = "production",
+  ) {
+    this.scope = JSON.stringify([
+      ...(environment === "development" ? [environment] : []),
+      endpoint,
+      info.serverId,
+      info.ownerId,
+    ]);
     this.database = new Promise((resolve, reject) => {
       const request = indexedDB.open("suiji-local-v1", 1);
       request.onupgradeneeded = () =>

@@ -1,7 +1,7 @@
 import { CodexQuotaProvider } from "./features/codex-quota/provider";
 import { MobileLoginProvider } from "./features/mobile-login/provider";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { lazy, Suspense } from "react";
+import { SuijiDrawer } from "./features/suiji/drawer";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";
@@ -31,9 +31,8 @@ const TERMINAL_LIST_PATH = "/terminal";
 
 const isElectron = window.electronAPI?.isElectron === true;
 
-const SuijiPage = lazy(() => import("./features/suiji/connection"));
 export default function App() {
-  return <Routes><Route path="/suiji/*" element={<Suspense fallback={<p role="status">正在打开随记…</p>}><SuijiPage /></Suspense>} /><Route path="*" element={<RunweaveApp />} /></Routes>;
+  return <><RunweaveApp /><SuijiDrawer /></>;
 }
 
 function RunweaveApp() {

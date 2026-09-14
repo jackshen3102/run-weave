@@ -8,7 +8,7 @@ AI 回顾使用已登录 Codex CLI；正式服务可配置独立的持久登录�
 ```mermaid
 flowchart LR
   I[Suiji SwiftUI App] --> H[独立 HTTP API]
-  W[Web / Runweave 桌面随记路由] --> H
+  W[Web / Runweave 终端随记抽屉] --> H
   H --> S[记录 / 身份 / 附件业务服务]
   A[外部 Agent] --> M[独立凭据的七工具 MCP]
   M --> S
@@ -23,13 +23,29 @@ flowchart LR
   K -.-> H
 ```
 
-| 归属                   | 入口与约束                                                                                                                                                 |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP / 数据 / AI / MCP | [suiji-server](../../packages/suiji-server/README.md)，事务、版本、独立认证、模型进程生命周期                                                              |
-| 原生 UI / 草稿         | [suiji-ios](../../packages/suiji-ios/README.md)，Swift Package + 薄宿主，Keychain 与原子草稿                                                               |
-| Web UI / 草稿          | [页面](../../frontend/src/features/suiji/connection.tsx)、[客户端](../../frontend/src/services/suiji.ts)，独立路由、sessionStorage、IndexedDB 与 Web Locks |
-| 共享协议               | [shared/suiji](../../packages/shared/src/suiji/index.ts)，纯 TS 合同与限额，无运行时驱动                                                                   |
-| 部署与恢复             | [deploy/suiji](../../deploy/suiji/README.md)，独立产物、追加迁移、停写备份、空目标恢复                                                                     |
+| 归属                   | 入口与约束                                                                                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP / 数据 / AI / MCP | [suiji-server](../../packages/suiji-server/README.md)，事务、版本、独立认证、模型进程生命周期                                                        |
+| 原生 UI / 草稿         | [suiji-ios](../../packages/suiji-ios/README.md)，Swift Package + 薄宿主，Keychain 与原子草稿                                                         |
+| Web UI / 草稿          | [页面](../../frontend/src/features/suiji/connection.tsx)、[客户端](../../frontend/src/services/suiji.ts)，终端抽屉、环境隔离、IndexedDB 与 Web Locks |
+| 共享协议               | [shared/suiji](../../packages/shared/src/suiji/index.ts)，纯 TS 合同与限额，无运行时驱动                                                             |
+| 部署与恢复             | [deploy/suiji](../../deploy/suiji/README.md)，独立产物、追加迁移、停写备份、空目标恢复                                                               |
+
+## 桌面交互与账户
+
+桌面只从终端右上角打开[随记抽屉](../../frontend/src/features/suiji/drawer.tsx)，不创建独立窗口。
+记录、待办、回收站、AI 与手机保持相同结构；详情、编辑和附件在抽屉内导航。
+关闭抽屉保留当前页面和草稿，终端切换不重建随记会话。原生内嵌浏览器在抽屉打开时隐藏，关闭后恢复。
+
+账户固定为正式和开发两套，切换不注销另一环境。桌面通过窄 IPC 访问
+[主进程安全存储](../../electron/src/desktop/suiji-storage.ts)：账号、密码和会话一起由 Electron
+异步 safeStorage 加密，密文以原子替换方式写入稳定 userData 目录，不依赖 renderer origin 或构建目录。
+桌面更新须保持应用身份、签名和 userData 稳定。Web 只保存非敏感账户配置，令牌仍限当前标签页，不持久保存密码。
+
+打开时恢复会话，访问令牌过期后续期；刷新令牌失效时以保存的密码重新认证，并核验原 server/owner 身份。
+网络故障保留凭据；主动退出先取消旧请求，再清除当前环境密码和会话，草稿保留。
+开发草稿额外按环境隔离；正式草稿沿用旧的 endpoint/serverId/ownerId 键。
+认证恢复不自动重发业务写操作，保存结果未知时仍由用户手动确认。
 
 ## 一致性边界
 
