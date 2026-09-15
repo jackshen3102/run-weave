@@ -125,6 +125,10 @@ export class TmuxSessionService extends TmuxProcess {
       command: this.binary,
       args: [
         ...this.buildServerArgs(target.socketPath),
+        // Both xterm.js and SwiftTerm consume OSC 8. Declare this on our VT
+        // client so tmux preserves link targets through redraws and copy mode.
+        "-T",
+        "hyperlinks",
         ...TMUX_SANITIZE_ENV_ARGS,
         ...TMUX_RUNTIME_OPTION_ARGS,
         ";",

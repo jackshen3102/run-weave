@@ -306,16 +306,31 @@ export function TerminalSurface({
       const activeBrowserTab = browserState.tabs.find(
         (tab) => tab.id === browserState.activeTabId,
       );
-      if (activeBrowserTab && window.electronAPI?.terminalBrowserCreateTab) {
-        void openTerminalBrowserUrl({
-          url: uri,
-          profileId: activeBrowserProfileId,
-          placement: {
-            kind: "current-group",
-            groupId: activeBrowserTab.browserGroupId,
-            openerTabId: activeBrowserTab.id,
-          },
-        })
+      if (
+        activeBrowserTab &&
+        window.electronAPI?.terminalBrowserCreateTab &&
+        window.electronAPI.terminalBrowserGetWorkspace
+      ) {
+        // The renderer may still contain a placeholder group after startup.
+        // Resolve the actual opener before requesting a tab in its group.
+        void window.electronAPI
+          .terminalBrowserGetWorkspace(activeBrowserProfileId)
+          .then((workspace) => {
+            const opener = workspace.tabs.find(
+              (tab) => tab.tabId === workspace.activeTabId,
+            );
+            return openTerminalBrowserUrl({
+              url: uri,
+              profileId: activeBrowserProfileId,
+              placement: opener
+                ? {
+                    kind: "current-group",
+                    groupId: opener.browserGroupId,
+                    openerTabId: opener.tabId,
+                  }
+                : { kind: "new-group" },
+            });
+          })
           .catch((error) => {
             useTerminalPreviewStore
               .getState()

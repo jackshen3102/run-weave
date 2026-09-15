@@ -18,6 +18,7 @@ final class AppSession: ObservableObject {
   @Published private(set) var terminalDrafts: [String: String] = [:] { didSet { scheduleDraftSave() } }
   @Published private(set) var suppressedQuickInputDrafts = Set<String>()
   private(set) var draftRevisions: [String: UUID] = [:]
+  let browser = BrowserSession()
   let deviceStatus = DeviceStatusStore()
   let imageDrafts = TerminalImageDrafts()
   let draftArchive = ConnectionDraftArchive()
@@ -25,7 +26,15 @@ final class AppSession: ObservableObject {
   var changingDraftScope = false
   var unreadableDraftScopes = Set<String>()
 
-  init() { imageDrafts.onChange = { [weak self] in self?.scheduleDraftSave() } }
+  init() {
+    imageDrafts.onChange = { [weak self] in self?.scheduleDraftSave() }
+    browser.currentSource = { [weak self] in self?.browserSource }
+  }
+
+  var browserSource: BrowserSourceScope? {
+    guard authenticated, let connection, let terminal, terminalController != nil else { return nil }
+    return BrowserSourceScope(connectionScope: connection.scope, generation: generation, terminalID: terminal.id)
+  }
   private(set) var api: APIClient?
   @Published private(set) var generation = 0
   @Published private(set) var metadataWrites = Set<String>()
@@ -312,6 +321,7 @@ final class AppSession: ObservableObject {
   }
 
   func closeTerminal() {
+    browser.invalidate()
     routeRequest += 1
     terminalController?.dispose()
     terminalController = nil
@@ -484,6 +494,11 @@ final class AppSession: ObservableObject {
   }
 
   private func apply(_ batch: [TerminalEvent]) {
+    // Only the authoritative deletion event ends this route; offline/exit are not deletion.
+    if let id = terminal?.id,
+      batch.contains(where: { $0.kind == "terminal_session_deleted" && $0.terminalSessionId == id }) {
+      closeTerminal()
+    }
     let structural = Set([
       "project_created", "project_deleted", "terminal_session_created", "terminal_session_deleted",
       "completion", "terminal_state_changed",

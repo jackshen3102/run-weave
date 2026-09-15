@@ -6,6 +6,129 @@ import UIKit
 final class NativeTerminalView: TerminalView {
   weak var scrollHandler: TerminalGestures?
   var acceptsTerminalResponses: () -> Bool = { true }
+  var linkIntent: ((BrowserOpenIntent) -> Void)?
+  private var menuObserver: NSObjectProtocol?
+  private var linkMenu: AnyObject?
+  private var menuPoint = CGPoint.zero
+
+  func installLinkMenu() {
+    // Observe SwiftTerm's own recognizer after its hit testing. Do not install a competing pan
+    // or maintain a second ANSI/cell map. Long press selects via SwiftTerm's public API.
+    for recognizer in gestureRecognizers ?? [] where recognizer is UILongPressGestureRecognizer {
+      recognizer.addTarget(self, action: #selector(selectLinkAtLongPress(_:)))
+    }
+    if #available(iOS 16.0, *) {
+      let menu = UIEditMenuInteraction(delegate: self)
+      addInteraction(menu)
+      linkMenu = menu
+    }
+    menuObserver = NotificationCenter.default.addObserver(
+      forName: UIMenuController.willShowMenuNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        DispatchQueue.main.async { [weak self] in
+          self?.observeSelectionPans()
+          self?.presentSelectedLinkMenu()
+        }
+      }
+    }
+  }
+
+  func disposeLinkMenu() {
+    if let menuObserver { NotificationCenter.default.removeObserver(menuObserver) }
+    menuObserver = nil
+    if #available(iOS 16.0, *), let menu = linkMenu as? UIEditMenuInteraction {
+      menu.dismissMenu()
+      removeInteraction(menu)
+    }
+    linkMenu = nil
+    for recognizer in gestureRecognizers ?? [] {
+      recognizer.removeTarget(self, action: #selector(selectLinkAtLongPress(_:)))
+      recognizer.removeTarget(self, action: #selector(selectionPanEnded(_:)))
+    }
+    if isFirstResponder { UIMenuController.shared.hideMenu() }
+    linkIntent = nil
+  }
+
+  @objc private func selectLinkAtLongPress(_ gesture: UILongPressGestureRecognizer) {
+    guard gesture.state == .began, !hasActiveSelection, linkIntent != nil else { return }
+    menuPoint = gesture.location(in: self)
+    // Target invocation order is not an API guarantee. Wait for SwiftTerm to capture its
+    // bidi-aware buffer position before asking it to select; never derive our own hit map.
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.linkIntent != nil, !self.hasActiveSelection else { return }
+      self.select(nil)
+      self.observeSelectionPans()
+      // SwiftTerm may show its legacy menu before this asynchronous selection exists.
+      // Re-evaluate after selection rather than relying on an already-delivered notification.
+      self.presentSelectedLinkMenu()
+    }
+  }
+
+  private func observeSelectionPans() {
+    guard linkIntent != nil else { return }
+    // SwiftTerm installs its selection pan dynamically. Observe it without adding a competing
+    // recognizer or retaining removed pans; remove/add keeps our target registration unique.
+    for recognizer in gestureRecognizers ?? [] where recognizer is UIPanGestureRecognizer {
+      recognizer.removeTarget(self, action: #selector(selectionPanEnded(_:)))
+      recognizer.addTarget(self, action: #selector(selectionPanEnded(_:)))
+    }
+  }
+
+  @objc private func selectionPanEnded(_ gesture: UIPanGestureRecognizer) {
+    guard gesture.state == .ended, linkIntent != nil else { return }
+    // Updating an already visible legacy menu need not emit another willShow notification.
+    // Wait until SwiftTerm has finished extending the selection and updating its own menu.
+    DispatchQueue.main.async { [weak self] in
+      self?.presentSelectedLinkMenu()
+    }
+  }
+
+  private func presentSelectedLinkMenu() {
+    guard isFirstResponder, selectedLink != nil else { return }
+    if #available(iOS 16.0, *), let menu = linkMenu as? UIEditMenuInteraction {
+      UIMenuController.shared.hideMenu()
+      menu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: menuPoint))
+    }
+  }
+
+  private var selectedLink: String? {
+    guard linkIntent != nil, let text = getSelection(), !text.isEmpty,
+      !text.contains(where: { $0.isNewline }) else { return nil }
+    let terminal = getTerminal()
+    let start = selection.start
+    let end = selection.end
+    if let explicit = terminal.link(at: .buffer(start), mode: .explicitOnly) {
+      guard end.row >= start.row, end.row - start.row <= 100 else { return nil }
+      // Only treat a selection entirely covered by one OSC 8 target as a hyperlink label.
+      for row in start.row...end.row {
+        let first = row == start.row ? start.col : 0
+        let last = row == end.row ? end.col : terminal.cols
+        guard first <= last else { return nil }
+        for col in first..<last {
+          guard terminal.link(at: .buffer(Position(col: col, row: row)), mode: .explicitOnly) == explicit else { return nil }
+        }
+      }
+      return explicit
+    }
+    return BrowserURLPolicy.selectedURL(text)
+  }
+
+  fileprivate func linkActions() -> [UIMenuElement] {
+    guard let target = selectedLink else { return [] }
+    let host: String
+    if let url = URL(string: target), let actualHost = url.host { host = actualHost }
+    else { host = "不支持的链接" }
+    let actions: [(String, BrowserOpenIntent.Action)] = [
+      ("内置打开 · \(host)", .internalOpen), ("链接 · \(host)", .link)
+    ]
+    return actions.map { title, action in
+      UIAction(title: title) { [weak self] _ in
+        guard let self, self.selectedLink == target else { return }
+        self.linkIntent?(BrowserOpenIntent(target: target, origin: .selection, action: action))
+      }
+    }
+  }
 
   override func send(source: Terminal, data: ArraySlice<UInt8>) {
     // Parser replies are distinct from TerminalView.send(data:) keyboard input.
@@ -23,6 +146,14 @@ final class NativeTerminalView: TerminalView {
         ?? super.accessibilityScroll(direction)
     default: return super.accessibilityScroll(direction)
     }
+  }
+}
+
+@available(iOS 16.0, *)
+extension NativeTerminalView: UIEditMenuInteractionDelegate {
+  func editMenuInteraction(_ interaction: UIEditMenuInteraction,
+    menuFor configuration: UIEditMenuConfiguration, suggestedActions: [UIMenuElement]) -> UIMenu? {
+    UIMenu(children: suggestedActions + linkActions())
   }
 }
 

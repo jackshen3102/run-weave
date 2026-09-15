@@ -3,6 +3,7 @@ import UIKit
 @MainActor
 public protocol TerminalSurface: AnyObject {
   var view: UIView { get }
+  var openLinkRequested: ((BrowserOpenIntent) -> Void)? { get set }
   var rawInput: (([UInt8]) -> Void)? { get set }
   var viewportChanged: ((Int, Int) -> Void)? { get set }
   var bell: (() -> Void)? { get set }

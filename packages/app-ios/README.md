@@ -1,15 +1,15 @@
 # Runweave iOS
 
 Runweave 的原生 iOS 应用，使用 SwiftUI/UIKit 和 SwiftTerm，通过 HTTP/WebSocket 连接 Runweave Backend。
-应用包含连接管理、登录、项目与终端、命令输入、图片上传、语音转写、Files/Changes 只读预览及诊断。
+应用包含连接管理、登录、项目与终端、命令输入、图片上传、语音转写、Files/Changes 只读预览及诊断；终端链接可在单页内置浏览器阅读、收起与恢复。
 Bundle ID 为 `com.runweave.app.native`，保留已有安装的连接、主题和安全凭据。
 
 ## 构建与安装
 
 需要 macOS、Xcode、iOS SDK 和 Metal Toolchain。应用部署版本以 Xcode host 的
 `IPHONEOS_DEPLOYMENT_TARGET` 为准；Swift package 的最低平台声明不等于应用已验证的最低系统。
-SwiftTerm 固定为 1.19.0，依赖锁在
-`ios/RunweaveNative.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`。
+SwiftTerm 基于 1.19.0，以仓库内 [Vendor/SwiftTerm](Vendor/SwiftTerm/README.md) 本地 package
+交付最小直接单击补丁；来源 commit、许可、原始输入哈希与完整差异随源码保存，不依赖下载缓存补丁。
 首次构建需通过 Xcode 的正常流程审查并启用 SwiftTermBuildInfoPlugin，不跳过插件信任校验。
 
 直接打开 `ios/RunweaveNative.xcodeproj`，选择 `RunweaveNative` scheme 和设备即可构建。
@@ -125,6 +125,22 @@ Backend 的部署和开发生命周期由仓库部署工具管理，原生应用
 电脑确认回执”，可重试完成确认或进入首页；不要因此删除已保存的登录。授权与回执边界见
 [跨端扫码合同](../../docs/architecture/app-mobile.md#手机扫码登录)。
 图片和语音转写只追加到草稿，用户显式发送后才进入终端。Files/Changes 是只读审阅入口。
+
+## 终端网页
+
+OSC 8 真实链接与普通完整 HTTP(S) URL（含终端自然软折行）均可直接单击内置打开，不要求先长按或聚焦。
+长按并调整原生选区是兜底；菜单提供内置打开和“链接”，后者显示完整真实目标并可复制。
+内置页采用紧凑的单行标题栏和底部图标栏；右上角“…”展示域名与链接操作，底部提供后退、前进、刷新。
+TUI 排版成多行的链接使用 OSC 8 提供的完整目标；普通文本不推测拼接硬换行。已激活选区时保留选择操作。浏览器全屏覆盖终端，“回终端”保留网页并由 toolbar 的网页按钮恢复；
+“关闭网页”或替换不同 URL 需确认未提交内容风险。离开来源终端释放网页，不跨终端或进程恢复表单。
+
+网站登录独立于电脑连接和 Safari；“清除网页数据”影响本机全部内置网站，不清电脑凭据或终端草稿。
+电脑 localhost 服务不支持，不做转发。TLS 错误不可忽略，下载和不兼容的网站登录可由用户选择默认浏览器继续。
+HTTP(S) 链接默认内置打开，新窗口链接复用当前页，自动弹窗由 WebKit 限制；mailto/tel 等外部协议不自动唤起其他 App。
+内嵌页面允许 `about:blank`、`about:srcdoc`；被拦截的子页面不显示整页提示，主页面提示可手动关闭。
+需要外部浏览器时，从网页右上角“更多”主动打开当前网页。关闭/替换会等待旧文档安全卸载；卸载失败时不清网站数据，并提示重启后重试。
+当前实现的边界见 [架构](docs/architecture.md#终端内置网页)，构建与尚未关闭的原生运行门槛见
+[验收状态](docs/validation-status.md)。
 
 ## 诊断与终端实验室
 

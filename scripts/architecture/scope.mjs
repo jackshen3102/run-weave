@@ -46,6 +46,11 @@ export function isArchitectureSourceFile(filePath, options = {}) {
   if (normalized.split("/").some((segment) => EXCLUDED_SEGMENTS.has(segment))) {
     return false;
   }
+  // Vendored upstream dependency, tracked with provenance and a reviewable patch.
+  // Keep Runweave's Swift integration in scope, not SwiftTerm's upstream file sizes.
+  if (normalized.startsWith("packages/app-ios/Vendor/SwiftTerm/")) {
+    return false;
+  }
   if (options.allSupportedFiles) {
     return true;
   }
