@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+"""Isolated iOS agent-device sessions; command status is not business acceptance."""
+
+import argparse
+import concurrent.futures
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+
+
+VERSION = "0.21.3"
+
+
+def capture(args, timeout=15):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or args[0])
+    return result.stdout.strip()
+
+
+def verify_version():
+    actual = capture(["agent-device", "--version"])
+    if not re.search(rf"(?<![\d.]){re.escape(VERSION)}(?![\d.])", actual):
+        raise RuntimeError(f"Expected agent-device {VERSION}; found {actual}")
+    return actual
+
+
+def check_node():
+    actual = capture(["node", "--version"])
+    parts = tuple(int(part) for part in actual.lstrip("v").split(".")[:2])
+    if parts < (22, 12):
+        raise RuntimeError(f"Node 22.12+ required; found {actual}")
+    return actual
+
+
+def write_json(path, data):
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    path.chmod(0o600)
+
+
+def device_json(config, topic):
+    with tempfile.TemporaryDirectory(prefix="agent-device-check-") as temporary:
+        output = Path(temporary) / "result.json"
+        capture([
+            "xcrun", "devicectl", "device", "info", topic,
+            "--device", config["udid"], "--timeout", "10",
+            "--json-output", str(output),
+        ])
+        return json.loads(output.read_text())["result"]
+
+
+def check_target(config):
+    if config["kind"] == "simulator":
+        data = json.loads(capture(["xcrun", "simctl", "list", "devices", "--json"]))
+        device = next((d for group in data["devices"].values() for d in group
+                       if d["udid"] == config["udid"]), None)
+        if not device or not device.get("isAvailable") or device["state"] != "Booted":
+            raise RuntimeError("Selected simulator is missing, unavailable or not booted")
+        return {"name": device["name"], "udid": device["udid"], "state": device["state"]}
+    data = device_json(config, "details")
+    hardware = data["hardwareProperties"]
+    connection = data["connectionProperties"]
+    properties = data["deviceProperties"]
+    if hardware.get("udid") != config["udid"]:
+        raise RuntimeError("Use the exact hardware UDID, not a device name or CoreDevice alias")
+    if connection.get("pairingState") != "paired":
+        raise RuntimeError("Selected device is not paired")
+    if properties.get("developerModeStatus") != "enabled":
+        raise RuntimeError("Selected device Developer Mode is not enabled")
+    return {"name": properties.get("name"), "udid": hardware["udid"],
+            "transport": connection.get("transportType"),
+            "developerMode": properties["developerModeStatus"]}
+
+
+def check_lock(config):
+    data = device_json(config, "lockState")
+    if data.get("passcodeRequired") or not data.get("unlockedSinceBoot"):
+        raise RuntimeError("Unlock the selected iPhone on the device")
+    return data
+
+
+def check_developer_tools():
+    output = capture(["/usr/sbin/DevToolsSecurity", "-status"])
+    if "enabled" not in output.lower():
+        raise RuntimeError(output)
+    return output
+
+
+def preflight(root, config):
+    checks = {
+        "cli": verify_version,
+        "node": check_node,
+        "xcode": lambda: capture(["xcodebuild", "-version"]),
+        "target": lambda: check_target(config),
+    }
+    if config["kind"] == "device":
+        checks.update(lock=lambda: check_lock(config), developerTools=check_developer_tools)
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(checks)) as pool:
+        pending = {name: pool.submit(check) for name, check in checks.items()}
+        for name, future in pending.items():
+            try:
+                results[name] = {"ok": True, "detail": future.result()}
+            except (OSError, RuntimeError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+                results[name] = {"ok": False, "error": str(error)}
+    report = {"preflightOk": all(r["ok"] for r in results.values()),
+              "automationReady": False, "checks": results,
+              "unchecked": ["runner provisioning/install quota", "UI Automation authorization",
+                            "other XCTest users", "app build provenance"]}
+    write_json(root / "preflight.json", report)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if report["preflightOk"] else 2
+
+
+def invoke(root, config, command, private=False, daemon=False):
+    verify_version()
+    env = os.environ.copy()
+    env["AGENT_DEVICE_STATE_DIR"] = str(root / "state")
+    env["AGENT_DEVICE_NO_UPDATE_NOTIFIER"] = "1"
+    # Do not inherit another project's signing overrides.
+    for key in ("AGENT_DEVICE_IOS_TEAM_ID", "AGENT_DEVICE_IOS_BUNDLE_ID",
+                "AGENT_DEVICE_IOS_PROVISIONING_PROFILE", "AGENT_DEVICE_IOS_SIGNING_IDENTITY"):
+        env.pop(key, None)
+    if config["kind"] == "device":
+        env["AGENT_DEVICE_IOS_TEAM_ID"] = config["teamId"]
+        env["AGENT_DEVICE_IOS_BUNDLE_ID"] = config["runnerId"]
+    args = ["agent-device", *command]
+    if not daemon:
+        args.extend(["--session", config["session"], "--platform", "ios", "--udid", config["udid"]])
+    started = time.monotonic()
+    result = subprocess.run(args, env=env, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True)
+    output = result.stdout
+    code = result.returncode
+    # Pinned upstream CLI can return zero without a usable initial snapshot or settle result.
+    if code == 0 and "initial interactive snapshot failed" in output:
+        code = 2
+    if code == 0 and "not settled after" in output:
+        code = 3
+    try:
+        if code == 0 and json.loads(output).get("success") is False:
+            code = 2
+    except (ValueError, AttributeError):
+        pass
+    stamp = f"{time.time_ns()}-{uuid.uuid4().hex[:6]}"
+    if not private:
+        logfile = root / f"{stamp}.log"
+        logfile.write_text(output)
+        logfile.chmod(0o600)
+    metric = {"id": stamp, "command": command[0], "seconds": round(time.monotonic() - started, 3),
+              "upstreamExit": result.returncode, "exit": code, "outputSaved": not private}
+    with (root / "metrics.jsonl").open("a") as stream:
+        stream.write(json.dumps(metric) + "\n")
+    (root / "metrics.jsonl").chmod(0o600)
+    sys.stdout.write(output)
+    print("COMMAND_RESULT " + json.dumps(metric), file=sys.stderr)
+    if code != result.returncode:
+        print("Observation incomplete. Inspect current state before any retry.", file=sys.stderr)
+    return code
+
+
+def main():
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="action", required=True)
+    init = sub.add_parser("init", help="Create a new local task; no device mutation")
+    init.add_argument("root", type=Path)
+    init.add_argument("--kind", choices=("device", "simulator"), required=True)
+    init.add_argument("--udid", required=True)
+    init.add_argument("--app", required=True)
+    init.add_argument("--team-id")
+    init.add_argument("--runner-id")
+    for action in ("check", "stop"):
+        sub.add_parser(action).add_argument("root", type=Path)
+    run = sub.add_parser("run", help="Pass a CLI command after --; open uses the bound App")
+    run.add_argument("root", type=Path)
+    # REMAINDER keeps upstream flags untouched. A leading --private belongs to this wrapper.
+    run.add_argument("command", nargs=argparse.REMAINDER)
+    options = parser.parse_args()
+    root = options.root.resolve()
+    if options.action == "init":
+        if options.kind == "device" and not (options.team_id and options.runner_id):
+            parser.error("physical device requires --team-id and --runner-id")
+        if not re.fullmatch(r"[A-Za-z0-9-]+", options.udid):
+            parser.error("invalid UDID")
+        for value in (options.app, options.runner_id):
+            if value and not re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", value):
+                parser.error("invalid Bundle ID")
+        root.mkdir(parents=True, exist_ok=False)
+        config = {"kind": options.kind, "udid": options.udid, "app": options.app,
+                  "teamId": options.team_id, "runnerId": options.runner_id,
+                  "session": "qa-" + uuid.uuid4().hex[:12], "version": VERSION}
+        write_json(root / "session.json", config)
+        print(root)
+        return 0
+    config = json.loads((root / "session.json").read_text())
+    if config.get("version") != VERSION:
+        raise RuntimeError("Task was created for a different CLI version; create a new task")
+    if options.action == "check":
+        return preflight(root, config)
+    if options.action == "stop":
+        # Cleanup is allowed even after preflight failed; never stop another state directory.
+        close_code = invoke(root, config, ["close"])
+        stop_code = invoke(root, config, ["daemon", "stop", "--state-dir", str(root / "state"), "--clean"], daemon=True)
+        return stop_code or close_code
+    command = options.command
+    private = bool(command and command[0] == "--private")
+    if private:
+        command = command[1:]
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        parser.error("run requires an agent-device command after --")
+    forbidden = ("--session", "--platform", "--udid", "--device", "--state-dir", "--serial")
+    if any(arg == flag or arg.startswith(flag + "=") for arg in command for flag in forbidden):
+        parser.error("device/session overrides are fixed by init; create a separate task")
+    if command[0] in ("daemon", "devices", "install", "reinstall", "uninstall"):
+        parser.error("use stop for cleanup; installation/discovery uses explicit native tooling")
+    if command[0] == "open":
+        if len(command) > 1 and not command[1].startswith("-"):
+            parser.error("open uses the App bound by init; do not pass another App")
+        command.insert(1, config["app"])
+    if command[0] == "open" and preflight(root, config):
+        return 2
+    return invoke(root, config, command, private)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, RuntimeError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        sys.exit(2)

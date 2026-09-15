@@ -12,6 +12,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 
 ## 已包含的 Skills
 
+- [`agent-device`](./skills/agent-device/SKILL.md)：iOS 模拟器和真机上的 Agent 交互验收，包含设备预检、独立会话及证据记录。
 - `brainstorming`
 - `code-grounded-requirements`
 - `daily-doc-maintenance`

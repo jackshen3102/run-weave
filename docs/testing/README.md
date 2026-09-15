@@ -5,11 +5,12 @@
 
 ## 先读规则
 
-| 任务                            | 文档                                         |
-| ------------------------------- | -------------------------------------------- |
-| YAML schema、Case ID 与拆分规则 | [test-plan-format.md](./test-plan-format.md) |
-| 自动化、脚本和人工证据分层      | [layers.md](./layers.md)                     |
-| 按改动类型选择命令              | [command-matrix.md](./command-matrix.md)     |
+| 任务                            | 文档                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| YAML schema、Case ID 与拆分规则 | [test-plan-format.md](./test-plan-format.md)                            |
+| 自动化、脚本和人工证据分层      | [layers.md](./layers.md)                                                |
+| 按改动类型选择命令              | [command-matrix.md](./command-matrix.md)                                |
+| iOS 日常交互排查与修复验收      | [agent-device 技能](../../plugins/toolkit/skills/agent-device/SKILL.md) |
 
 ## 按能力找计划
 

@@ -32,7 +32,10 @@ Debug/Profile 真机构建不启用 APNs 推送，可使用 Personal Team 签名
 
 ### 真机操作与取证
 
-正式入口使用 Xcode、devicectl 和仓库内固定 `BatchRunner.testBatch`。在本目录执行：
+日常交互排查、修复后的探索验收使用 [`toolkit:agent-device`](../../plugins/toolkit/skills/agent-device/SKILL.md)，
+显式绑定设备并核对业务后置状态。它不替代构建安装，也不作为唯一的无人值守门禁。
+
+固定套件入口使用 Xcode、devicectl 和仓库内固定 `BatchRunner.testBatch`。在本目录执行：
 
 ```bash
 node scripts/ios.mjs device doctor --device <硬件UDID> --json

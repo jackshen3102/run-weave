@@ -33,6 +33,7 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
   [Pi 环境初始化](docs/deployment/pi-agent-setup.md)，按需补齐并执行对应的真实搜索或子 Agent 验证。
 - 浏览器页面复现、修改或验收：使用 `$toolkit:playwright-cli`，按其规则附着正确页面。
   承诺的 UI 验收必须实际执行；未执行则记录阻塞，不得用静态检查、代码阅读或普通截图冒充。
+- iOS 日常交互排查与修复验收：使用 `$toolkit:agent-device`；固定 XCTest 套件仍按包入口执行。
 - 实际执行 `pnpm dev:session`、`dev:status`、`dev:open` 或 `dev:stop`：必须使用
   `$toolkit:runweave-dev-session`；生命周期细则见 `scripts/dev-session/AGENTS.md`。
 - `$toolkit:runweave-change-validation` 只在用户当前请求显式点名时触发；否则执行与改动范围
