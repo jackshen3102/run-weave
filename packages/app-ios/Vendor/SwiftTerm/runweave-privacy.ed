@@ -1,0 +1,4 @@
+1568c
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("swiftterm-dump-\(Buffer.n)").path
+.
+w

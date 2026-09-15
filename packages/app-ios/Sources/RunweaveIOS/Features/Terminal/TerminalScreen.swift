@@ -3,12 +3,14 @@ import SwiftUI
 struct TerminalScreen: View {
   @ObservedObject var session: AppSession
   @ObservedObject var controller: SessionController
+  @ObservedObject private var browser: BrowserSession
   let details: TerminalDetails
   @State private var deleting = false
   @State private var showingHistory = false
   @State private var showingInfo = false
   @State private var showingDiagnostics = false
   @State private var showingComposer = false
+  @State private var browserPresentationID = UUID()
   @State private var composerPreventsDismissal = false
   @State private var stoppingCommand = false
   @State private var actionFailure: String?
@@ -20,6 +22,7 @@ struct TerminalScreen: View {
   init(session: AppSession, controller: SessionController, details: TerminalDetails) {
     self.session = session
     self.controller = controller
+    self.browser = session.browser
     self.details = details
     _changes = StateObject(wrappedValue: ProjectChangesModel(session: session, terminal: details))
     self.imageDrafts = session.imageDrafts
@@ -82,7 +85,10 @@ struct TerminalScreen: View {
     .background(TerminalAppearance.background.ignoresSafeArea())
     .tint(TerminalAppearance.accent)
     .modifier(TerminalNavigationBackground())
-    .onAppear { controller.surface.applyTheme(dark: theme != "light") }
+    .onAppear {
+      controller.surface.applyTheme(dark: theme != "light")
+      connectBrowserIntents()
+    }
     .onChange(of: theme) { controller.surface.applyTheme(dark: $0 != "light") }
     .task(id: canReadChanges) {
       if canReadChanges { await changes.refresh() }
@@ -91,10 +97,24 @@ struct TerminalScreen: View {
     .onChange(of: controller.connectionStatus) { status in
       if status == "已连接" { Task { await changes.refresh() } }
     }
-    .onDisappear { changes.cancel() }
+    .onDisappear {
+      changes.cancel()
+      browser.unregisterTerminalPresentation(id: browserPresentationID, controllerID: ObjectIdentifier(controller))
+    }
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar { terminalToolbar }
+    .overlay(alignment: .top) {
+      if let status = browser.dataStatus {
+        Text(status).font(.caption).padding(8).background(.regularMaterial)
+          .allowsHitTesting(false).accessibilityIdentifier("browser-data-status")
+      }
+    }
+    .fullScreenCover(isPresented: Binding(
+      get: { browser.state == .presented },
+      set: { if !$0 { browser.collapse() } }
+    )) { BrowserScreen(browser: browser) }
+    .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented))
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id) }
     .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id) }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session) }
@@ -108,6 +128,31 @@ struct TerminalScreen: View {
       Button("取消", role: .cancel) {}
     } message: {
       Text("删除后将结束该远端终端会话。")
+    }
+  }
+
+  private func connectBrowserIntents() {
+    guard let source = session.browserSource, source.terminalID == details.id,
+      session.terminalController === controller else { return }
+    let composer = $showingComposer
+    let history = $showingHistory
+    let info = $showingInfo
+    let diagnostics = $showingDiagnostics
+    let deletion = $deleting
+    let browser = browser
+    let registrationID = browserPresentationID
+    // Bindings read current SwiftUI storage; capturing this View's Bool values would go stale.
+    browser.registerTerminalPresentation(id: registrationID, source: source, controllerID: ObjectIdentifier(controller)) { [weak session, weak controller, weak browser] in
+      guard let session, let controller, let browser, session.browserSource == source,
+        session.terminalController === controller, let window = controller.surface.view.window else { return false }
+      let systemBusy = window.rootViewController?.presentedViewController != nil
+      return !composer.wrappedValue && !history.wrappedValue && !info.wrappedValue
+        && !diagnostics.wrappedValue && !deletion.wrappedValue && !systemBusy
+        && browser.state != .presented && browser.prompt == nil
+    }
+    controller.openLinkRequested = { intent in
+      browser.open(intent, source: source, presentationAvailable:
+        browser.terminalPresentationAvailable(source: source, registrationID: registrationID))
     }
   }
 
@@ -245,6 +290,16 @@ struct TerminalScreen: View {
       .accessibilityElement(children: .combine)
     }
     ToolbarItemGroup(placement: .navigationBarTrailing) {
+      if let page = browser.page {
+        Button {
+          guard let source = session.browserSource,
+            browser.terminalPresentationAvailable(source: source, registrationID: browserPresentationID) else { return }
+          browser.resume()
+        } label: { Image(systemName: "globe") }
+        .accessibilityLabel("恢复网页：\(page.title)")
+        .accessibilityIdentifier("terminal-browser-resume")
+        .disabled(browser.clearing)
+      }
       if currentTerminal?.hasUnreadCompletion == true {
         Button {
           Task { await session.acknowledgeTerminal(details.id) }

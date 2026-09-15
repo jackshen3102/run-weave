@@ -65,10 +65,13 @@ public final class SessionController: ObservableObject {
     !readOnly && connected && hasSnapshot && !stopped && !inputBusy && runtimeStatus != "exited"
   }
 
+  public var openLinkRequested: ((BrowserOpenIntent) -> Void)?
+
   public init(api: APIClient, terminalID: String, readOnly: Bool = false) {
     self.api = api
     self.terminalID = terminalID
     self.readOnly = readOnly
+    surface.openLinkRequested = { [weak self] intent in self?.openLinkRequested?(intent) }
     surface.rawInput = { [weak self] bytes in
       guard let text = String(bytes: bytes, encoding: .utf8) else { return }
       self?.sendRaw(text)
@@ -231,7 +234,14 @@ public final class SessionController: ObservableObject {
     let epoch = generation
     inputBusy = true
     failure = nil
+    let exitsCopyMode = runtimeKind == "tmux" && mode != "tmux_exit_copy_mode"
     let operation = Task {
+      if exitsCopyMode {
+        // Scrollback consumes ordinary input as navigation keys. Leave it before sending
+        // any command, even after reconnect when our local scroll position was reset.
+        try await api.terminalInput(id: terminalID, data: "", mode: "tmux_exit_copy_mode")
+        guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
+      }
       try await api.terminalInput(id: terminalID, data: text, mode: mode, recordQuickInput: recordQuickInput)
     }
     commandTask = operation
@@ -244,6 +254,12 @@ public final class SessionController: ObservableObject {
     do {
       try await operation.value
       guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
+      if exitsCopyMode {
+        tmuxScrollRows = 0
+        localAtBottom = true
+        scrolledBack = false
+        surface.terminalView.scroll(toPosition: 1)
+      }
       record("input.accepted", extra: ["mode": mode])
     } catch {
       guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
@@ -254,6 +270,7 @@ public final class SessionController: ObservableObject {
   }
 
   public func dispose() {
+    openLinkRequested = nil
     disconnect()
     surface.dispose()
     networking.invalidateAndCancel()

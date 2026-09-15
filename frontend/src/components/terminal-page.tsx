@@ -21,7 +21,6 @@ import { filterBrowserHandledTerminalOutput } from "../features/terminal/output/
 import { formatTerminalSessionName } from "../features/terminal/state/session-name";
 import { useTerminalConnection } from "../features/terminal/connection/use-connection";
 import type { TerminalOutputDelivery } from "../features/terminal/connection/output-recovery";
-import { createTerminalWrappedWebLinkProvider } from "../features/terminal/navigation/web-link-provider";
 import { shouldSuppressWheelInput } from "../features/terminal/viewport/wheel-input";
 import { HttpError } from "../services/http";
 import { getTerminalSession } from "../services/terminal/index";
@@ -150,8 +149,17 @@ export function TerminalPage({
 
     const fitAddon = new FitAddon();
     const unicode11Addon = new Unicode11Addon();
+    const activateLink = (event: MouseEvent, uri: string) => {
+      event.preventDefault();
+      if (window.electronAPI?.openExternal) {
+        void window.electronAPI.openExternal(uri);
+        return;
+      }
+      window.open(uri, "_blank", "noopener,noreferrer");
+    };
     const terminal = new Terminal({
       allowProposedApi: true,
+      linkHandler: { activate: activateLink },
       cursorBlink: true,
       fontFamily: '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
       fontSize: 14,
@@ -170,28 +178,7 @@ export function TerminalPage({
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(unicode11Addon);
-    const linkProviderDisposable = terminal.registerLinkProvider(
-      createTerminalWrappedWebLinkProvider(terminal, {
-        activate: (event, uri) => {
-          event.preventDefault();
-          if (window.electronAPI?.openExternal) {
-            void window.electronAPI.openExternal(uri);
-            return;
-          }
-          window.open(uri, "_blank", "noopener,noreferrer");
-        },
-      }),
-    );
-    terminal.loadAddon(
-      new WebLinksAddon((event, uri) => {
-        event.preventDefault();
-        if (window.electronAPI?.openExternal) {
-          void window.electronAPI.openExternal(uri);
-          return;
-        }
-        window.open(uri, "_blank", "noopener,noreferrer");
-      }),
-    );
+    terminal.loadAddon(new WebLinksAddon(activateLink));
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
     terminal.attachCustomWheelEventHandler((event) => {
@@ -304,7 +291,6 @@ export function TerminalPage({
       document.removeEventListener("visibilitychange", refreshTerminalViewport);
       window.removeEventListener("focus", refreshTerminalViewport);
       dataDisposable.dispose();
-      linkProviderDisposable.dispose();
       terminal.dispose();
       terminalRef.current = null;
     };

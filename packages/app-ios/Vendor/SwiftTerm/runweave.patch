@@ -1,0 +1,314 @@
+diff --git a/Package.swift b/Package.swift
+--- a/Package.swift
++++ b/Package.swift
+@@ -1,160 +1,28 @@
+ // swift-tools-version:6.0
++import PackageDescription
+ 
+-import PackageDescription
+-import Foundation
+-
+-// A package manifest is compiled and run on the HOST, so `os(Linux)` is false
+-// when cross-compiling from macOS to Linux — and the Apple/Mac/iOS sources are
+-// then handed to the Linux target, which fails on `import CoreText`. There is
+-// no way for a manifest to see the destination, so allow the exclude to be
+-// forced explicitly.
+-let excludeAppleSources =
+-    ProcessInfo.processInfo.environment["SWIFTTERM_EXCLUDE_APPLE"] == "1"
+-#if os(Linux) || os(Windows)
+-let platformExcludes = ["Apple", "Mac", "iOS"]
+-#else
+-let platformExcludes: [String] = excludeAppleSources ? ["Apple", "Mac", "iOS"] : []
+-#endif
+-
+-let isGitHubActions = ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
+-let disableBenchmark = true
+-let benchmarkDependencies: [Package.Dependency] = (isGitHubActions || disableBenchmark) ? [] : [
+-    .package(url: "https://github.com/ordo-one/package-benchmark", .upToNextMajor(from: "1.29.11"))
+-]
+-
+-let buildInfoTargets: [Target] = [
+-    .executableTarget(
+-        name: "SwiftTermBuildInfoGenerator",
+-        path: "Sources/SwiftTermBuildInfoGenerator"
+-    ),
+-    .plugin(
+-        name: "SwiftTermBuildInfoPlugin",
+-        capability: .buildTool(),
+-        dependencies: ["SwiftTermBuildInfoGenerator"]
+-    )
+-]
+-
+-#if os(Windows)
+-let products: [Product] = [
+-    .executable(name: "SwiftTermFuzz", targets: ["SwiftTermFuzz"]),
+-    .library(
+-        name: "SwiftTerm",
+-        targets: ["SwiftTerm"]
+-    ),
+-]
+-
+-let targets: [Target] = [
+-    .target(
+-        name: "SwiftTerm",
+-        dependencies: [],
+-        path: "Sources/SwiftTerm",
+-        exclude: platformExcludes + ["Mac/README.md"],
+-        plugins: [
+-            .plugin(name: "SwiftTermBuildInfoPlugin")
+-        ]
+-//        swiftSettings: [
+-//            .unsafeFlags(["-enforce-exclusivity=none"])
+-//        ]
+-    ),
+-    .executableTarget (
+-        name: "SwiftTermFuzz",
+-        dependencies: ["SwiftTerm"],
+-        path: "Sources/SwiftTermFuzz"
+-    ),
+-    .testTarget(
+-        name: "SwiftTermTests",
+-        dependencies: ["SwiftTerm"],
+-        path: "Tests/SwiftTermTests",
+-        resources: [
+-            .copy("Fixtures/xterm-ghostty.infocmp"),
+-            .copy("Fixtures/swifterm-terminfo.infocmp")
+-        ]
+-    )
+-] + buildInfoTargets
+-#else
+-let products: [Product] = [
+-    .executable(name: "SwiftTermFuzz", targets: ["SwiftTermFuzz"]),
+-    .executable(name: "termcast", targets: ["Termcast"]),
+-    .library(
+-        name: "SwiftTerm",
+-        targets: ["SwiftTerm"]
+-    ),
+-]
+-
+-let benchmarkTargets: [Target] = (isGitHubActions || disableBenchmark) ? [] : [
+-    .executableTarget(
+-        name: "SwiftTermBenchmarks",
+-        dependencies: [
+-            "SwiftTerm",
+-            .product(name: "Benchmark", package: "package-benchmark")
+-        ],
+-        path: "Benchmarks/SwiftTermBenchmarks",
+-        plugins: [
+-            .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
+-        ]
+-    )
+-]
+-
+-let targets: [Target] = [
+-    .target(
+-        name: "SwiftTerm",
+-        //
+-        // We can not use Swift Subprocess, because there is no way of configuring the child process to
+-        // be a controlling terminal, as it is posix-spawn based.
+-//        dependencies: [
+-//            .product(name: "Subprocess", package: "swift-subprocess", condition: .when(platforms: [.macOS, .linux]))
+-//        ],
+-        path: "Sources/SwiftTerm",
+-        exclude: platformExcludes + ["Mac/README.md"],
+-        resources: [
+-            .process("Apple/Metal/Shaders.metal")
+-        ],
+-        plugins: [
+-            .plugin(name: "SwiftTermBuildInfoPlugin")
+-        ]
+-//        swiftSettings: [
+-//            .unsafeFlags(["-enforce-exclusivity=none"])
+-//        ]
+-    ),
+-    .executableTarget (
+-        name: "SwiftTermFuzz",
+-        dependencies: ["SwiftTerm"],
+-        path: "Sources/SwiftTermFuzz"
+-    ),
+-    .executableTarget (
+-        name: "Termcast",
+-        dependencies: [
+-            "SwiftTerm",
+-            .product(name: "ArgumentParser", package: "swift-argument-parser")
+-        ],
+-        path: "Sources/Termcast"
+-    ),
+-    .testTarget(
+-        name: "SwiftTermTests",
+-        dependencies: ["SwiftTerm"],
+-        path: "Tests/SwiftTermTests",
+-        resources: [
+-            .copy("Fixtures/xterm-ghostty.infocmp"),
+-            .copy("Fixtures/swifterm-terminfo.infocmp")
+-        ]
+-    )
+-] + benchmarkTargets + buildInfoTargets
+-#endif
+-
++// Library-only distribution of SwiftTerm 1.19.0; provenance and patches: README.md.
+ let package = Package(
+     name: "SwiftTerm",
+-    platforms: [
+-        .iOS(.v14),
+-        (disableBenchmark ? .macOS(.v11) : .macOS(.v13)),
+-        .tvOS(.v13),
+-        .visionOS(.v1)
++    platforms: [.iOS(.v14), .macOS(.v11), .tvOS(.v13), .visionOS(.v1)],
++    products: [.library(name: "SwiftTerm", targets: ["SwiftTerm"])],
++    targets: [
++        .target(
++            name: "SwiftTerm",
++            path: "Sources/SwiftTerm",
++            exclude: ["Mac/README.md"],
++            resources: [.process("Apple/Metal/Shaders.metal")],
++            plugins: [.plugin(name: "SwiftTermBuildInfoPlugin")]
++        ),
++        .executableTarget(
++            name: "SwiftTermBuildInfoGenerator",
++            path: "Sources/SwiftTermBuildInfoGenerator"
++        ),
++        .plugin(
++            name: "SwiftTermBuildInfoPlugin",
++            capability: .buildTool(),
++            dependencies: ["SwiftTermBuildInfoGenerator"]
++        )
+     ],
+-    products: products,
+-    dependencies: [
+-        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0"),
+-        .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.4.3"),
+-    ] + benchmarkDependencies,
+-//        .package(url: "https://github.com/swiftlang/swift-subprocess", revision: "426790f3f24afa60b418450da0afaa20a8b3bdd4")
+-    targets: targets,
+     swiftLanguageModes: [.v5]
+ )
+diff --git a/Sources/SwiftTerm/Terminal.swift b/Sources/SwiftTerm/Terminal.swift
+--- a/Sources/SwiftTerm/Terminal.swift
++++ b/Sources/SwiftTerm/Terminal.swift
+@@ -7144,6 +7144,9 @@
+         case explicitOnly
+         /// Look for explicit hyperlinks first, then fall back to implicit detection.
+         case explicitAndImplicit
++        /// Explicit links, then implicit links across terminal soft wraps only.
++        /// Unrelated hard-broken lines are never joined by the editor-wrap heuristic.
++        case explicitAndImplicitSoftWrapped
+     }
+ 
+     struct LinkMatch {
+@@ -7225,6 +7228,8 @@
+             return nil
+         case .explicitAndImplicit:
+             return implicitLinkMatch(at: position, in: buffer)
++        case .explicitAndImplicitSoftWrapped:
++            return implicitLinkMatch(at: position, in: buffer, allowHeuristicWrapping: false)
+         }
+     }
+ 
+@@ -7299,9 +7304,9 @@
+         )
+     }
+ 
+-    private func implicitLinkMatch(at position: Position, in buffer: Buffer) -> LinkMatch?
+-    {
+-        guard let lineMap = buildGhosttyImplicitLineMap(at: position, in: buffer) else {
++    private func implicitLinkMatch(at position: Position, in buffer: Buffer, allowHeuristicWrapping: Bool = true) -> LinkMatch?
++    {
++        guard let lineMap = buildGhosttyImplicitLineMap(at: position, in: buffer, allowHeuristicWrapping: allowHeuristicWrapping) else {
+             return nil
+         }
+         guard let regex = Self.ghosttyImplicitLinkRegex else {
+@@ -7508,7 +7513,7 @@
+         charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/?#[]@!$&*+,;=%()"
+     )
+ 
+-    private func buildGhosttyImplicitLineMap(at position: Position, in buffer: Buffer) -> GhosttyImplicitLineMap?
++    private func buildGhosttyImplicitLineMap(at position: Position, in buffer: Buffer, allowHeuristicWrapping: Bool) -> GhosttyImplicitLineMap?
+     {
+         guard position.row >= 0 && position.row < buffer.lines.count else {
+             return nil
+@@ -7534,7 +7539,7 @@
+         while endRow + 1 < buffer.lines.count && buffer.lines[endRow + 1].isWrapped {
+             endRow += 1
+         }
+-        if startRow == targetRow && endRow == targetRow,
++        if allowHeuristicWrapping && startRow == targetRow && endRow == targetRow,
+            let (heuristicStart, heuristicEnd) = heuristicImplicitGroup(around: targetRow, in: buffer)
+         {
+             startRow = heuristicStart
+diff --git a/Sources/SwiftTerm/iOS/iOSTerminalView.swift b/Sources/SwiftTerm/iOS/iOSTerminalView.swift
+--- a/Sources/SwiftTerm/iOS/iOSTerminalView.swift
++++ b/Sources/SwiftTerm/iOS/iOSTerminalView.swift
+@@ -151,6 +151,11 @@
+     /// Controls how link tracking resolves hovered links:
+     /// `.explicit` = OSC 8 only, `.implicit` = explicit + implicit fallback, `.none` = off.
+     public var linkReporting: LinkReporting = .implicit
++
++    /// Opt-in touch activation without hover or a prior focus tap. Uses the existing
++    /// single-tap recognizer and buffer hit testing; active selections keep their gestures.
++    /// Implicit targets are HTTP(S) only and join actual soft wraps, never hard line breaks.
++    public var opensLinksOnSingleTap: Bool = false
+ 
+     /// Controls link highlighting and link activation behavior.
+     public var linkHighlightMode: LinkHighlightMode = .hover {
+@@ -805,6 +810,22 @@
+ 
+     @objc func singleTap (_ gestureRecognizer: UITapGestureRecognizer)
+     {
++        if opensLinksOnSingleTap, gestureRecognizer.view != nil,
++           gestureRecognizer.state == .ended, !selection.active {
++            let hit = calculateTapHit(gesture: gestureRecognizer).grid
++            let explicit = terminal.link(at: .buffer(hit), mode: .explicitOnly)
++            let detected = explicit ?? terminal.link(at: .buffer(hit), mode: .explicitAndImplicitSoftWrapped)
++            if let link = detected,
++               explicit != nil || link.lowercased().hasPrefix("http://") || link.lowercased().hasPrefix("https://") {
++                var params: [String: String] = [:]
++                if explicit != nil, let payload = payloadString(at: hit),
++                   let (_, values) = urlAndParamsFrom(payload: payload) {
++                    params = values
++                }
++                terminalDelegate?.requestOpenLink(source: self, link: link, params: params)
++                return
++            }
++        }
+         if isFirstResponder {
+             guard gestureRecognizer.view != nil else { return }
+ 
+@@ -813,7 +834,8 @@
+             }
+ 
+             let tapHit = calculateTapHit(gesture: gestureRecognizer).grid
+-            if let result = linkForClick(at: tapHit, hasCommandModifier: commandActive) {
++            if !opensLinksOnSingleTap,
++               let result = linkForClick(at: tapHit, hasCommandModifier: commandActive) {
+                 terminalDelegate?.requestOpenLink(source: self, link: result.link, params: result.params)
+                 return
+             }
+diff --git a/Plugins/SwiftTermBuildInfoPlugin/plugin.swift b/Plugins/SwiftTermBuildInfoPlugin/plugin.swift
+--- a/Plugins/SwiftTermBuildInfoPlugin/plugin.swift
++++ b/Plugins/SwiftTermBuildInfoPlugin/plugin.swift
+@@ -8,18 +8,13 @@
+         let outputDirectory = context.pluginWorkDirectoryURL.appendingPathComponent("Generated")
+         let outputFile = outputDirectory.appendingPathComponent("SwiftTermBuildInfo.swift")
+         let triggerFile = context.pluginWorkDirectoryURL.appendingPathComponent("build-info-trigger")
+-        let fallbackVariableNames = [
+-            "SWIFTTERM_BUILD_BRANCH",
+-            "SWIFTTERM_BUILD_TAG",
+-            "SWIFTTERM_BUILD_COMMIT",
+-            "SWIFTTERM_BUILD_DIRTY"
++        // Never mistake the containing application's Git repository for upstream.
++        let fallbackEnvironment = [
++            "SWIFTTERM_BUILD_BRANCH": "runweave-vendored",
++            "SWIFTTERM_BUILD_TAG": "1.19.0-runweave.1",
++            "SWIFTTERM_BUILD_COMMIT": "464df5207fc2432e16c9a23abe538187196daf5f",
++            "SWIFTTERM_BUILD_DIRTY": "true"
+         ]
+-        let processEnvironment = ProcessInfo.processInfo.environment
+-        let fallbackEnvironment = fallbackVariableNames.reduce(into: [String: String]()) { result, name in
+-            if let value = processEnvironment[name] {
+-                result[name] = value
+-            }
+-        }
+ 
+         try FileManager.default.createDirectory(
+             at: context.pluginWorkDirectoryURL,

@@ -9,6 +9,8 @@
 
 - [首页关注、搜索与重命名](../../../docs/testing/app/ios-native-home-discovery.testplan.yaml)
 - [终端悬浮输入布局](../../../docs/testing/app/ios-native-terminal-layout.testplan.yaml)
+- [内置浏览器与终端连续性](../../../docs/testing/app/ios-native-browser.testplan.yaml)
+- [网页身份与导航安全](../../../docs/testing/app/ios-native-browser-safety.testplan.yaml)
 - [终端与渲染](../../../docs/testing/app/ios-native-terminal.testplan.yaml)
 - [认证、连接与资源生命周期](../../../docs/testing/app/ios-native-session.testplan.yaml)
 - [终端图片附件](../../../docs/testing/app/ios-native-image-attachments.testplan.yaml)

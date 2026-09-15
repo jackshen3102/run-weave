@@ -104,6 +104,75 @@ Sheet 内部布局，底层终端保持挂载和原始 bounds，
 失败则保留面板、错误和草稿。Agent 执行期间终端右下角独立显示停止按钮，
 不要求先打开输入面板。录音、麦克风权限请求或转写进行中时禁止交互关闭，避免视图销毁取消媒体操作。
 
+## 终端内置网页
+
+`AppSession` 持有唯一 `BrowserSession`，来源是 connection scope、AppSession generation 与 terminal ID；
+网页回调额外检查 session identity；确认检查来源、session 与生命周期 token，URL 相关确认及异步外部打开
+另检查导航 revision。关闭/清除不检查 revision，网站不能靠持续改变地址使用户确认失效。过期 URL 操作
+显示明确状态，不重放操作；旧来源已离开则直接丢弃，避免在新来源弹旧错误。
+返回首页、切换终端/连接、注销和删除来源走 `closeTerminal` 同步使页面失效；事件流收到匹配当前 ID
+的权威 `terminal_session_deleted` 同样立即关闭，不等待 overview 刷新。网络断开和普通后台
+往返不主动销毁网页，不改变既有终端 socket 策略。网页运行时不落盘，冷启动不恢复地址、历史或表单。
+
+终端链接沿 `SwiftTermSurface → SessionController → TerminalScreen` 只传递意图，不传入认证或输入。
+[本地 SwiftTerm 1.19.0 补丁](../Vendor/SwiftTerm/README.md) 以默认关闭的 opt-in 复用原生
+single-tap recognizer、bidi-aware hit test 与 implicit detector；本 App 开启后，普通完整 HTTP(S)
+URL 和 OSC 8 均首次单击打开，不需预先聚焦或选择。普通 URL 仅合并真实软折行；TUI 多行显示使用 OSC 8 的完整目标。
+不启用上游通用跨硬换行 heuristic；不新增 ANSI/单元格映射，不把 URL 发送到终端。OSC 8 仍常驻高亮。Backend 的 tmux attach 声明 hyperlinks 能力，实时输出与重连屏幕快照均保留字符绑定的真实链接。
+已激活选区保留原选择处理；长按沿用公开 `select` 作为兜底，选区软折行由依赖合并，
+硬换行与多个 URL 混合选区不推测拼接。菜单在现有长按/选择路径上使用系统 edit menu，不新增竞争滚动手势
+或原始 ANSI 坐标映射；OSC 8 菜单按所选字符真实目标显示域名，原生复制仍复制选区原文。
+该菜单使用 iOS 16 API，产品 host 部署版本仍是 iOS 18.6，package 平台声明不代表已验收更低系统。
+
+`BrowserScreen` 覆盖全屏显示；顶部 48pt 单行标题栏放返回和更多菜单，底部 48pt 图标栏放后退、前进、刷新。
+标题优先使用网页标题，加载前回退真实域名；更多菜单展示实际目标域名并提供完整地址，HTTP 在标题旁显示非加密图标。
+加载进度以顶部 2pt 细线覆盖显示，状态提示浮于正文上方，不改变网页可用高度；外框随 App 深浅主题切换。
+收起保留同一 `WKWebView`，终端不出栈；toolbar 恢复不 reload。
+同完整 URL 仅恢复，不同 URL 替换及关闭均确认未提交内容风险；替换清除旧网页历史。
+终端保持原挂载与键盘安全区策略，网页工具栏不加入终端布局，也不新增 WS resize 或输入调用。
+这一零 resize 合同仍需按 [浏览与任务连续性](../../../docs/testing/app/ios-native-browser.testplan.yaml)
+在实际设备上取证，构建不能证明网页键盘行为。
+
+`TerminalScreen` 按自己的稳定实例 UUID 和来源 scope 注册实时呈现查询，读取 SwiftUI Binding 的当前
+Composer/媒体宿主 Sheet、历史/信息/诊断/删除状态及该终端窗口的系统呈现状态；另核对当前 controller 身份。
+注销仅匹配自己的注册 UUID 与 controller 身份，旧页面的 onDisappear 不会清掉新来源注册。首次链接打开、恢复沿用此互斥；
+替换等待旧页卸载完成后，创建 WKWebView/加载之前再次查询同一注册。查询失败立即丢弃意图并提示主动重试，
+不等 Sheet 结束自动重放。查询成功到创建/加载之间没有进一步 await，均在 MainActor 同步完成。
+
+网页主导航、frame、新窗口及响应复用 `BrowserURLPolicy`；内嵌 frame 额外允许 `about:blank`
+和 `about:srcdoc` 文档，不放宽终端入口、主页面或卸载隔离规则。接受有效 HTTP(S)，拒绝 URL 用户密码、
+显式 localhost/loopback/未指定本地地址及其它协议；不替换电脑域名、不代理、不做 DNS 防火墙承诺。
+HTTP 明示未加密；TLS 保留 WebKit 系统校验，不提供忽略入口。HTTP(S) 链接默认内置打开，
+新窗口请求通过 URL 策略后保留原始 request 并加载到当前 WebView，不创建额外页面。WebKit 自动开窗许可关闭；
+mailto/tel 等外部协议仍被阻止，网页点击和脚本都不获得唤起外部 App 的能力。
+网页更多菜单提供用户主动“在默认浏览器打开当前网页”的入口；外部调用前后复核来源
+及 session/lifetime，且只允许 HTTP(S)。不引入私有 API、JS bridge 或触摸时间窗口授权。
+附件和不可显示响应取消；子页面拦截不产生整页提示，主页面失败提示可手动关闭。
+主页面附件提示从更多菜单复制链接或外部打开，
+HTTP 4xx/5xx 仍显示站点页面。宿主处理主文档网络失败和 WebContent 回收，回收后只允许用户重载。
+
+普通网页启用 JS；`alert`、`confirm`、`prompt` 由原生弹窗呈现并显示调用 frame 的网站来源。
+确认与取消分别回传网页结果；收起、后台、导航、进程回收及会话失效会取消尚未完成的对话框，
+回调只完成一次，旧页面不能向新页面回传结果。其他系统呈现占用时取消并提示主动重试，不排队弹出。
+使用本机默认持久 `WKWebsiteDataStore`，不注入脚本、message handler、Backend header、
+URLSession Cookie 或终端/文件/认证桥。网站账号由本机所有终端共用，但不继承 Safari 或电脑登录。
+关闭、切换、Runweave 注销不清网站 Cookie。每次页面失效都先进入待卸载集合，包括已关闭但可能被
+SwiftUI 退场暂时持有的实例；停止加载/移出视图不被当作旧文档已卸载。页面保留严格导航 delegate，
+只允许一次宿主发起、禁 JS 的受控 `about:blank` 导航；须匹配同一 `WKNavigation` 的 commit 与 finish
+才解除卸载屏障。退役页面即使仍被持有，也拒绝后续导航和交互；新网页等待所有旧页卸载完成。
+卸载失败、WebContent 终止或 30 秒未完成均为失败，保留阻止新页的状态并明确要求重启后重试；
+超时不是销毁证据，不会触发网站数据删除。
+
+清除需确认全部本机内置网站影响，锁住新导航并等待上述全部旧页屏障成功，之后才调用 WebKit
+删除数据；待删除回调及 data records 校验结束才解除清除忙态。删除 API 没有错误参数，残余记录显示
+未完全清除，回调未返回时保持忙态，不提前宣称成功。SVG 预览保持独立非持久、禁 JS/网络配置。
+
+终端选区菜单保留内置打开和“链接”；网页更多菜单也使用“链接”展示完整地址并提供复制。
+失败页使用失败导航地址；外部打开统一位于网页更多菜单。默认浏览器通过
+系统 URL opening，不硬编码 Safari，成功后收起原页，拒绝则原界面报错。不记录网页正文、URL query、
+fragment 或认证错误详情。安全验收入口为
+[网页身份与导航安全](../../../docs/testing/app/ios-native-browser-safety.testplan.yaml)。
+
 ## 本地快捷回复
 
 `RootView` 持有唯一 `LocalQuickReplyStore`，连接管理页和终端输入面板共用同一设备回复库；

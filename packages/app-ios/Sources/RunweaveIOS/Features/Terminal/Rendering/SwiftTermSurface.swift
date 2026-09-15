@@ -6,6 +6,7 @@ import UIKit
 public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDelegate {
   public let terminalView: TerminalView
   public var view: UIView { terminalView }
+  public var openLinkRequested: ((BrowserOpenIntent) -> Void)?
   public var rawInput: (([UInt8]) -> Void)?
   public var viewportChanged: ((Int, Int) -> Void)?
   public var bell: (() -> Void)?
@@ -67,6 +68,13 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
     terminalView.inputView = UIView(frame: .zero)
     terminalView.inputAccessoryView = nil
     if let view = terminalView as? NativeTerminalView {
+      view.linkIntent = { [weak self] intent in
+        guard let self, self.active else { return }
+        self.openLinkRequested?(intent)
+      }
+      view.installLinkMenu()
+      view.linkHighlightMode = .always
+      view.opensLinksOnSingleTap = true
       view.acceptsTerminalResponses = { [weak self] in self?.isTmux?() != true }
       let gestures = TerminalGestures(view: view)
       gestures.isTmux = { [weak self] in self?.isTmux?() ?? false }
@@ -116,6 +124,8 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
     isTmux = nil
     tmuxScroll = nil
     terminalView.terminalDelegate = nil
+    (terminalView as? NativeTerminalView)?.disposeLinkMenu()
+    openLinkRequested = nil
     rawInput = nil
     viewportChanged = nil
     bell = nil
@@ -144,7 +154,10 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   public func bell(source: TerminalView) { bell?() }
   public func setTerminalTitle(source: TerminalView, title: String) {}
   public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-  public func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
+  public func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+    guard active else { return }
+    openLinkRequested?(BrowserOpenIntent(target: link, origin: .terminalLink, action: .internalOpen))
+  }
   public func clipboardCopy(source: TerminalView, content: Data) {}
   public func clipboardRead(source: TerminalView) -> Data? { nil }
   public func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}

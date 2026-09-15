@@ -17,7 +17,6 @@ import { Terminal } from "@xterm/xterm";
 import type { ClientMode } from "../../../features/client-mode";
 import { DEFAULT_TERMINAL_PREFERENCES } from "../../../features/terminal/state/preferences";
 import { createResizeScheduler } from "../../../features/terminal/viewport/resize-scheduler";
-import { createTerminalWrappedWebLinkProvider } from "../../../features/terminal/navigation/web-link-provider";
 import { shouldSuppressWheelInput } from "../../../features/terminal/viewport/wheel-input";
 import { HttpError } from "../../../services/http";
 import { createTerminalSessionClipboardImage } from "../../../services/terminal/index";
@@ -105,8 +104,13 @@ export function useTerminalEmulator({
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
     const unicode11Addon = new Unicode11Addon();
+    const activateLink = (event: MouseEvent, uri: string) => {
+      event.preventDefault();
+      openTerminalLinkRef.current(uri);
+    };
     const terminal = new Terminal({
       allowProposedApi: true,
+      linkHandler: { activate: activateLink },
       cursorBlink: initialPreferences.cursorBlink,
       fontFamily: initialPreferences.fontFamily,
       fontSize: initialPreferences.fontSize,
@@ -132,20 +136,7 @@ export function useTerminalEmulator({
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
     terminal.loadAddon(unicode11Addon);
-    const linkProviderDisposable = terminal.registerLinkProvider(
-      createTerminalWrappedWebLinkProvider(terminal, {
-        activate: (event, uri) => {
-          event.preventDefault();
-          openTerminalLinkRef.current(uri);
-        },
-      }),
-    );
-    terminal.loadAddon(
-      new WebLinksAddon((event, uri) => {
-        event.preventDefault();
-        openTerminalLinkRef.current(uri);
-      }),
-    );
+    terminal.loadAddon(new WebLinksAddon(activateLink));
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
     terminal.attachCustomWheelEventHandler((event) => {
@@ -519,7 +510,6 @@ export function useTerminalEmulator({
       scrollDisposable.dispose();
       renderDisposable.dispose();
       selectionDisposable.dispose();
-      linkProviderDisposable.dispose();
       resizeScheduler.dispose();
       rendererAddon?.dispose();
       terminal.dispose();

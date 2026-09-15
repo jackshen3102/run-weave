@@ -6,7 +6,7 @@ let package = Package(
   platforms: [.iOS(.v15)],
   products: [.library(name: "RunweaveIOS", targets: ["RunweaveIOS"])],
   dependencies: [
-    .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.19.0")
+    .package(path: "Vendor/SwiftTerm")
   ],
   targets: [
     .target(name: "RunweaveIOS", dependencies: ["SwiftTerm"])

@@ -1,0 +1,154 @@
+version: 1
+name: iOS 内置浏览器网页身份与导航安全
+description: >
+  验证待实现的内置浏览器不会把 Runweave 凭据或终端能力授予普通网页，导航及外部动作遵守同一策略，
+  网站数据与电脑连接数据独立。通过正式原生终端和生产 WKWebView 访问受控真实 HTTP(S) 页面，
+  每例用独立测试账号和自己拥有的 fixture，采用既有 XCUITest 执行器并保存脱敏网络证据与 xcresult。
+  fixture 的外部浏览器预检须使用 $toolkit:playwright-cli，但不能替代原生运行结果。
+  清除数据、证书故障与进程重启只在独占安装或明确授权真机执行；缺少前提即 blocked，不用调用 delegate 或注入假状态代替。
+cases:
+  - id: IOSBSAFE-001
+    name: 关闭网页保留本机网站身份
+    required: true
+    description: >
+      关闭和重开只改变页面会话，服务器设置的持久登录 Cookie 仍有效，不把网页账号解释成当前电脑账号。
+    preconditions:
+      - 候选 App 使用本例独占网页数据，已登录真实测试 Backend 并有专用终端。
+      - 受控 HTTPS 站点有独立测试账号、服务端登录校验和明确未过期的持久 Cookie，不依赖 Safari 登录。
+    steps:
+      - 从终端内置打开站点并真实登录，确认服务端返回该测试网站身份。
+      - 关闭网页并确认，再从同一终端重新打开；确认新页面加载但仍通过服务端校验保持网站登录。
+      - 打开浏览器菜单；确认明确说明网站账号独立于电脑连接，没有声称与 Safari 或桌面登录共享。
+  - id: IOSBSAFE-002
+    name: 持久网站登录跨 App 重启而页面不自动恢复
+    required: true
+    description: >
+      同一次真实重启实验中，持久 Cookie 保留，但网页运行时、历史和未提交表单不会自动恢复。
+    preconditions:
+      - 独占候选 App 已从本例终端登录受控 HTTPS 站点，服务端设置有效期足够长的持久 Cookie。
+      - 已记录登录成功及表单状态，本例有权限终止候选 App 进程。
+    steps:
+      - 真实终止并重新启动 App，重新取得原生进程和控件树，从正式首页进入本例终端。
+      - 确认没有网页恢复入口；主动内置打开站点后确认服务器仍识别同一测试账号，而旧表单和网页历史未恢复。
+  - id: IOSBSAFE-003
+    name: 清除网页数据有确认且不影响 Runweave 账号
+    required: true
+    description: >
+      清除只作用于本机内置网站数据；取消无变化，确认清除期间阻止旧网页回写和新导航，完成后网页账号退出而电脑凭据及草稿保留。
+    preconditions:
+      - 独占候选 App 已登录测试 Backend，专用终端有已保存的唯一草稿。
+      - 本例站点已真实登录并持有 Cookie、LocalStorage、IndexedDB 和 Cache Storage 标记，页面周期写入本例标记。
+      - 已通过页面和服务端记录确认各标记存在，全部网页数据均归本例所有，可安全清除。
+    steps:
+      - 点击清除网页数据并取消；确认原页面、服务端登录和标记仍有效。
+      - 再次清除并确认；确认旧页停止并移除，清除忙时不能恢复或创建网页，不提前显示成功。
+      - 清除完成后重新打开站点；确认需要重新登录，各类测试标记已消失，旧页没有继续写回数据。
+      - 返回终端并通过真实 Backend 读取确认 App 仍已登录，连接和草稿未被清理；若清除报告失败则不得显示已清除或本例通过。
+  - id: IOSBSAFE-004
+    name: 不安全 URL 不能绕过入口策略
+    required: true
+    description: >
+      无效目标、带用户密码的 URL 及不支持的协议在终端入口和网页顶层跳转中均被拒绝，不执行脚本、读取文件或自动交给系统。
+    preconditions:
+      - 候选 App 已打开本例专用终端，受控 HTTPS fixture 可通过真实链接和重定向尝试无害的协议样本。
+      - 样本覆盖 javascript、data、file、about、未知 scheme、无效 URL 和带测试 user:password 的 HTTP(S) URL，均不包含真实秘密。
+      - 受控页面包含 about:blank 和 srcdoc 子页面、未知协议子页面、附件子页面及显式 loopback 子页面；loopback fixture 可记录是否收到请求。
+    steps:
+      - 在终端通过 OSC 8 或链接菜单尝试各样本；确认拒绝并有可读说明，不打开系统 App、不执行脚本、不访问本地文件。
+      - 从合法受控页面点击或重定向到同组样本；确认仍被拒绝，当前宿主与终端保持可用。
+      - 确认 about:blank 与 srcdoc 子页面内容正常显示；未知协议、附件及 loopback 子页面被取消，不显示整页提示，loopback fixture 没有收到请求。
+      - 主页面主动点击不支持的链接仍出现说明；点击提示关闭按钮后，说明消失且原网页仍可操作。主页面 about:blank 不能绕过入口策略。
+      - 核对站点和系统动作记录，确认带 user:password 的目标未被请求；错误与日志不暴露该测试密码原文。
+  - id: IOSBSAFE-005
+    name: 无效 TLS 证书不能继续访问
+    required: true
+    description: >
+      WebKit 使用正常证书校验，真实证书错误不能被宿主或网页引导绕过。
+    preconditions:
+      - 本例受控站点使用真实无效证书，错误原因已从独立网络检查确定，未安装信任该证书的根 CA。
+      - 候选 App 已从本例终端准备打开该地址，另有一个证书正常的受控页面。
+    steps:
+      - 内置打开无效证书地址；确认错误可见，没有忽略错误或继续访问按钮，页面正文未执行。
+      - 从证书正常页面重定向到该地址；确认同样失败，返回终端和关闭页面仍可操作。
+  - id: IOSBSAFE-006
+    name: 新窗口链接复用内置页且不会唤起外部浏览器
+    required: true
+    description: >
+      合法 HTTP(S) 新窗口请求复用当前 WebView，自动弹窗由 WebKit 限制；新窗口通道不能绕过 URL 策略或唤起外部浏览器。
+    preconditions:
+      - 受控 HTTPS 页面分别有用户可点击的 target=_blank 链接、target=_blank 的 POST 表单、自动定时 window.open 和带不支持协议的新窗口链接。
+      - 候选 App 从本例终端打开该页面，执行者能检查原生 UI、目标站点请求和 live WebView 归属。
+    steps:
+      - 点击合法 target=_blank 链接；确认目标在当前内置页打开，只有一个网页会话，未唤起外部浏览器，网页后退可回到原页面。
+      - 网页后退回到 fixture，等待无用户手势的定时 window.open；确认被 WebKit 阻止，当前地址不变，没有额外网页或外部浏览器被打开。
+      - 提交 target=_blank 的无敏感 POST 表单；确认目标在当前内置页打开，站点收到原始 POST 方法和表单内容，网页后退可回到原页面。
+      - 点击不支持协议的新窗口链接；确认复用协议策略拒绝，没有通过新窗口通道绕过限制。
+  - id: IOSBSAFE-007
+    name: 下载响应不会静默保存或伪报完成
+    required: true
+    description: >
+      首版不提供下载管理；附件及不可显示响应有明确降级，用户可主动复制或外部打开。
+    preconditions:
+      - 受控 HTTPS 站点提供无敏感附件响应和不可显示的二进制 MIME，Content-Disposition 和请求记录可检查。
+      - 候选 App 已从本例终端进入下载入口页面，独占安装可检查是否新增产品下载记录或文件。
+    steps:
+      - 点击附件下载，再尝试直接内置打开附件 URL；确认均提示暂不支持内置下载，没有下载完成提示或静默保存文件。
+      - 尝试不可显示的响应；确认取消加载并提示从更多菜单复制或外部打开，回终端和关闭仍可用。
+  - id: IOSBSAFE-008
+    name: 网页外部协议不会启动其他 App
+    required: true
+    description: >
+      网页 mailto/tel、自动协议跳转及未知 scheme 均被阻止，不启动外部 App。
+    preconditions:
+      - 授权真机或独占 Simulator 已打开本例受控页面，页面含测试 mailto/tel 链接和自动 scheme 跳转。
+      - 使用不发送真实邮件、不拨出真实电话的安全测试目标，不要求外部处理程序存在。
+    steps:
+      - 点击 mailto 和 tel 链接；确认宿主提示跳转被阻止，未离开 Runweave、没有拨号或发信动作。
+      - 触发页面无用户手势的自动跳转和未知 App scheme；确认直接阻止，没有自动切换 App。
+  - id: IOSBSAFE-009
+    name: 网页请求与脚本不获得 Runweave 凭据或终端能力
+    required: true
+    description: >
+      第三方主请求、子请求、跨域重定向和网页脚本均不获得宿主认证或原生终端控制权限。
+    preconditions:
+      - 候选 App 已登录本例专用测试 Backend，测试凭据只供本例本地比对，不输出到截图或报告。
+      - 两个受控 HTTPS origin 能记录请求 header/cookie 并提供无破坏性的 bridge 探测页面，Backend 可记录实际终端输入。
+    steps:
+      - 从终端打开第一个 origin，加载子资源并导航到第二个 origin；在本例环境内比对请求，确认没有 Runweave Bearer、Keychain 凭据或宿主 URLSession 认证 Cookie。
+      - 通过页面尝试调用预期不存在的终端、文件和认证原生桥，仅发送无害唯一标记；确认没有可调用接口，Backend 没有收到该标记的终端输入或宿主授权文件请求。
+      - 检查诊断导出只保留必要脱敏信息，没有 URL query/fragment 中的测试秘密或网页正文；证据保存布尔比对与脱敏摘要，不保存真实凭据。
+  - id: IOSBSAFE-010
+    name: 电脑本地地址只解释不改写或转发
+    required: true
+    description: >
+      localhost 类显式本地目标不会被误当电脑地址访问，也不能经重定向或新窗口进入手机 loopback。
+    preconditions:
+      - 本例终端可输出 localhost、127.0.0.2、IPv6 loopback、0.0.0.0 和 service.localhost 的 HTTP(S) URL。
+      - 受控 HTTPS 页面可通过主导航和 target=_blank 指向这些样本，独占 Simulator 可在对应 loopback 端口记录是否收到请求。
+    steps:
+      - 从终端逐一尝试样本；确认提示电脑本地服务暂不支持，没有替换为 Backend 域名或发起端口代理。
+      - 从合法网页经重定向或明确点击新窗口进入相同样本；确认同样拒绝，loopback 记录无命中。
+      - 核对 Backend 没有收到新代理请求，App 没有自动请求局域网发现或新增网络权限；不据此宣称完整私网防火墙已实现。
+  - id: IOSBSAFE-011
+    name: HTTP 页面明确标注非加密连接
+    required: true
+    description: >
+      可达 HTTP 文档可内置阅读，但真实域名与非加密提示不能被网页标题隐藏或伪装成 HTTPS。
+    preconditions:
+      - 本例受控公网 HTTP 页面可达，标题故意包含锁图标和另一 HTTPS 域名，页面没有登录表单或真实敏感数据。
+      - 候选 App 已在本例专用终端显示该 HTTP 地址。
+    steps:
+      - 内置打开页面；确认正文可显示，标题旁显示非加密图标且辅助功能读作“未加密连接”；打开更多菜单，确认展示实际 HTTP host。
+      - 从更多菜单打开“链接”查看完整地址；确认 scheme 仍为 HTTP，宿主没有因为标题包含锁图标而显示安全锁状态。
+  - id: IOSBSAFE-012
+    name: 业务网站登录兼容性有真实兜底证据
+    required: true
+    description: >
+      至少一个用户指定公网业务站点使用测试账号完成可用路径；不接受嵌入式登录时外部兜底可达，而非声称所有 SSO 都被支持。
+    preconditions:
+      - 用户已指定一个公网业务网站并授权非生产测试账号，真机可访问该网站及其身份提供方。
+      - 已记录该站点实际登录要求，系统默认浏览器可用，用户同意本例真实登录但不执行业务写操作。
+    steps:
+      - 从本例终端内置打开实际业务链接并尝试正常登录；记录最终 URL、身份提供方提示与原生画面，敏感输入不入证据。
+      - 若站点接受内置登录，确认可进入只读目标页并收起恢复；若明确拒绝嵌入式登录，从更多菜单主动选择默认浏览器打开并在那里完成登录到只读目标页。
+      - 返回 Runweave 确认来源终端可用；报告该站点为内置通过或外部兜底通过，不将外部登录写成内置成功，不复制 Safari Cookie 回内置页。
