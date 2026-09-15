@@ -34,8 +34,10 @@ Terminal、Agent Team、Browser、Activity、App、Electron、CLI 和平台路�
 
 `packages/app-ios` 的构建和运行命令见 [包入口](../../packages/app-ios/README.md)。
 原生 UI 使用 Simulator / 真机实际操作；Playwright 只用于配套 Web 客户端，不能验证 SwiftUI。
+日常排查和修复后的交互验收使用 [`toolkit:agent-device`](../../plugins/toolkit/skills/agent-device/SKILL.md)，
+固定版本、独立设备会话并记录真实后置状态；录制回放只作辅助，不作为唯一的无人值守门禁。
 验收合同为 `app/ios-native-terminal.testplan.yaml`、`app/ios-native-session.testplan.yaml` 和
 `app/ios-native-features.testplan.yaml`。三种配置编译通过和 YAML 格式校验都不代表运行用例通过。
-真机预检与批执行使用 `packages/app-ios/scripts/device/runner/BatchRunner.swift` 固定 XCTest UI 执行器，
+固定真机套件的预检与批执行使用 `packages/app-ios/scripts/device/runner/BatchRunner.swift` XCTest UI 执行器，
 对应 `app/ios-device-preflight-reuse.testplan.yaml`。这是实际控件树、操作和附件的取证基础设施；
 不新增单元测试或独立 live-test 框架绕过原生 UI 取证要求。

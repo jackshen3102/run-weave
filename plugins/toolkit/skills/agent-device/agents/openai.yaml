@@ -1,0 +1,4 @@
+interface:
+  display_name: "iOS Agent Device"
+  short_description: "用独立设备会话完成 iOS 交互验收，保存证据并确认动作结果"
+  default_prompt: "使用 $agent-device 验证指定 iOS App 的功能，记录真实后置状态、失败和清理结果。"
