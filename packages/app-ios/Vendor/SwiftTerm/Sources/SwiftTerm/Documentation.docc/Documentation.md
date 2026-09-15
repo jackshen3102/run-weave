@@ -1,4 +1,4 @@
-# `SwiftTerm`
+# ``SwiftTerm``
 
 SwiftTerm is a VT100/Xterm terminal emulator library for Swift applications that
 can be embedded into macOS, iOS applications, text-based, headless applications
@@ -21,20 +21,20 @@ project by using the URL for this repository.
 
 ### macOS
 
-The macOS AppKit `TerminalView` is a reusable `NSView` that can be connected to
-any data source by implementing `TerminalViewDelegate`. For the common case of
-running a local Unix process, `LocalProcessTerminalView` connects the terminal
+The macOS AppKit ``TerminalView`` is a reusable `NSView` that can be connected to
+any data source by implementing ``TerminalViewDelegate``. For the common case of
+running a local Unix process, ``LocalProcessTerminalView`` connects the terminal
 to a pseudo-terminal.
 
 ### iOS and visionOS
 
-The UIKit `TerminalView` is an embeddable `UIScrollView` subclass that uses the
-same `TerminalViewDelegate` protocol. Since iOS does not support local processes,
+The UIKit ``TerminalView`` is an embeddable `UIScrollView` subclass that uses the
+same ``TerminalViewDelegate`` protocol. Since iOS does not support local processes,
 the typical use case is connecting the terminal to a remote host via SSH.
 
 ### Headless
 
-`HeadlessTerminal` runs a local process without any UI, useful for scripting,
+``HeadlessTerminal`` runs a local process without any UI, useful for scripting,
 testing, and screen-scraping terminal output.
 
 ### Features
@@ -46,11 +46,11 @@ testing, and screen-scraping terminal output.
 - Mouse event reporting (X10, SGR, UTF-8, URxvt protocols)
 - Terminal resizing (local and remote-initiated)
 - Hyperlink support (OSC 8)
-- Configurable Apple view link tracking via `LinkReporting` (explicit OSC 8 and implicit URL detection)
+- Configurable Apple view link tracking via ``LinkReporting`` (explicit OSC 8 and implicit URL detection)
 - Optional GPU-accelerated rendering via Metal (macOS, iOS, visionOS)
 - Graphics: Sixel, iTerm2-style inline images, and Kitty graphics protocol
 - Selection and search with a built-in macOS find bar and programmable search APIs
-- Thread-safe `Terminal` instances
+- Thread-safe ``Terminal`` instances
 - Terminal session recording and playback with `termcast`
 
 ## Topics
@@ -58,26 +58,26 @@ testing, and screen-scraping terminal output.
 ### Essentials
 
 - <doc:GettingStarted>
-- `Terminal`
-- `TerminalOptions`
-- `CursorStyle`
+- ``Terminal``
+- ``TerminalOptions``
+- ``CursorStyle``
 
 ### Views
 
-- `TerminalView`
-- `TerminalViewDelegate`
+- ``TerminalView``
+- ``TerminalViewDelegate``
 
 ### Running Local Processes
 
-- `LocalProcess`
-- `LocalProcessDelegate`
-- `LocalProcessTerminalView`
-- `LocalProcessTerminalViewDelegate`
+- ``LocalProcess``
+- ``LocalProcessDelegate``
+- ``LocalProcessTerminalView``
+- ``LocalProcessTerminalViewDelegate``
 
 ### Headless Usage
 
 - <doc:HeadlessUsage>
-- `HeadlessTerminal`
+- ``HeadlessTerminal``
 
 ### Guides
 
@@ -89,53 +89,53 @@ testing, and screen-scraping terminal output.
 
 ### Terminal Delegate
 
-- `TerminalDelegate`
+- ``TerminalDelegate``
 
 ### Terminal Configuration
 
-- `TerminalOptions`
-- `CursorStyle`
+- ``TerminalOptions``
+- ``CursorStyle``
 
 ### Buffer and Content Access
 
-- `Buffer`
-- `BufferLine`
-- `Terminal/BufferKind`
+- ``Buffer``
+- ``BufferLine``
+- ``Terminal/BufferKind``
 
 ### Data Types
 
-- `Position`
-- `Attribute`
-- `CharData`
-- `CharacterStyle`
-- `Color`
+- ``Position``
+- ``Attribute``
+- ``CharData``
+- ``CharacterStyle``
+- ``Color``
 
 ### Selection and Search
 
 - <doc:Search>
-- `SelectionService`
-- `SearchService`
-- `SearchOptions`
+- ``SelectionService``
+- ``SearchService``
+- ``SearchOptions``
 
 ### Bidirectional Text
 
 - <doc:BiDi>
-- `BidiPresentationState`
-- `BidiPresentationMode`
-- `BidiSupportMode`
-- `BidiDirection`
-- `BidiHostPolicy`
+- ``BidiPresentationState``
+- ``BidiPresentationMode``
+- ``BidiSupportMode``
+- ``BidiDirection``
+- ``BidiHostPolicy``
 
 ### GPU Rendering
 
-- `MetalBufferingMode`
-- `MetalError`
+- ``MetalBufferingMode``
+- ``MetalError``
 
 ### Graphics
 
-- `ImageSizeRequest`
-- `TerminalImage`
+- ``ImageSizeRequest``
+- ``TerminalImage``
 
 ### Mouse Input
 
-- `Terminal/MouseMode`
+- ``Terminal/MouseMode``

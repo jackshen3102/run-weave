@@ -23,8 +23,8 @@ recommendation, the same model that mlterm uses:
   order and SwiftTerm performs no reordering or shaping; with an RTL
   character path, column zero is placed at the right edge of the view.
 
-A _paragraph_ is a row together with the soft-wrapped rows that continue it.
-Each paragraph stores its own BiDi state (`BidiPresentationState`), so
+A *paragraph* is a row together with the soft-wrapped rows that continue it.
+Each paragraph stores its own BiDi state (``BidiPresentationState``), so
 scrollback keeps the presentation it had when it was produced. Escape
 sequences change the state of the paragraph that the cursor is on and of the
 paragraphs that follow; earlier paragraphs do not change.
@@ -32,18 +32,18 @@ paragraphs that follow; earlier paragraphs do not change.
 ### The six presentation modes
 
 The recommendation defines six effective modes, exposed as
-`BidiPresentationMode` and derived from three independent settings: the
+``BidiPresentationMode`` and derived from three independent settings: the
 support mode (implicit or explicit), autodetection, and the fallback
 direction.
 
-| Mode                      | Support                    | Autodetect | Base direction                       |
-| ------------------------- | -------------------------- | ---------- | ------------------------------------ |
-| `implicitLeftToRight`     | terminal reorders          | off        | always LTR                           |
-| `implicitRightToLeft`     | terminal reorders          | off        | always RTL                           |
-| `implicitAutoLeftToRight` | terminal reorders          | on         | first strong character, LTR fallback |
-| `implicitAutoRightToLeft` | terminal reorders          | on         | first strong character, RTL fallback |
-| `explicitLeftToRight`     | app supplies display order | —          | column 0 at the left                 |
-| `explicitRightToLeft`     | app supplies display order | —          | column 0 at the right                |
+| Mode | Support | Autodetect | Base direction |
+|---|---|---|---|
+| `implicitLeftToRight` | terminal reorders | off | always LTR |
+| `implicitRightToLeft` | terminal reorders | off | always RTL |
+| `implicitAutoLeftToRight` | terminal reorders | on | first strong character, LTR fallback |
+| `implicitAutoRightToLeft` | terminal reorders | on | first strong character, RTL fallback |
+| `explicitLeftToRight` | app supplies display order | — | column 0 at the left |
+| `explicitRightToLeft` | app supplies display order | — | column 0 at the right |
 
 SwiftTerm starts in `implicitAutoLeftToRight`: the terminal reorders,
 autodetection is on, and paragraphs with no strong RTL character render
@@ -59,39 +59,39 @@ them are live on this branch and can be probed with DECRQM.
 
 ### BDSM — BiDi support mode (ANSI mode 8)
 
-| Sequence  | Effect                                                           |
-| --------- | ---------------------------------------------------------------- |
+| Sequence | Effect |
+|---|---|
 | `CSI 8 h` | Implicit mode: the terminal performs BiDi reordering and shaping |
-| `CSI 8 l` | Explicit mode: the application supplies text in display order    |
+| `CSI 8 l` | Explicit mode: the application supplies text in display order |
 
 ### SCP — Select Character Path (`CSI Ps SP k`)
 
 Sets the paragraph base direction (the fallback direction when autodetection
 is on, the fixed direction when it is off):
 
-| Sequence                     | Effect                                                      |
-| ---------------------------- | ----------------------------------------------------------- |
-| `CSI 0 SP k` (or `CSI SP k`) | Default direction (from `TerminalOptions/initialBidiState`) |
-| `CSI 1 SP k`                 | Left-to-right                                               |
-| `CSI 2 SP k`                 | Right-to-left                                               |
+| Sequence | Effect |
+|---|---|
+| `CSI 0 SP k` (or `CSI SP k`) | Default direction (from ``TerminalOptions/initialBidiState``) |
+| `CSI 1 SP k` | Left-to-right |
+| `CSI 2 SP k` | Right-to-left |
 
 ### SPD — Select Presentation Directions (`CSI Ps SP S`)
 
 The recommendation discourages SPD in favor of SCP, but SwiftTerm accepts it
 as a compatibility alias because the original BiDi patches used it:
 
-| Sequence     | Effect        |
-| ------------ | ------------- |
+| Sequence | Effect |
+|---|---|
 | `CSI 0 SP S` | Left-to-right |
 | `CSI 3 SP S` | Right-to-left |
 
 ### DEC private modes (DECSET/DECRST)
 
-| Set            | Reset          | Effect                                                                                                       |
-| -------------- | -------------- | ------------------------------------------------------------------------------------------------------------ |
+| Set | Reset | Effect |
+|---|---|---|
 | `CSI ? 2501 h` | `CSI ? 2501 l` | Autodetect paragraph direction from the first strong character; when off, the SCP-selected direction applies |
-| `CSI ? 2500 h` | `CSI ? 2500 l` | Mirror horizontally asymmetric box-drawing characters on RTL runs                                            |
-| `CSI ? 1243 h` | `CSI ? 1243 l` | Swap the Left and Right arrow keys while the cursor is on an RTL paragraph                                   |
+| `CSI ? 2500 h` | `CSI ? 2500 l` | Mirror horizontally asymmetric box-drawing characters on RTL runs |
+| `CSI ? 1243 h` | `CSI ? 1243 l` | Swap the Left and Right arrow keys while the cursor is on an RTL paragraph |
 
 ### Querying, saving, and restoring
 
@@ -100,10 +100,10 @@ as a compatibility alias because the original BiDi patches used it:
   modes. The reply is `CSI Ps ; Pm $ y` with `Pm` = 1 (set) or 2 (reset).
 - **XTSAVE/XTRESTORE** (`CSI ? Pm s` and `CSI ? Pm r`) save and restore
   modes 2500, 2501, and 1243. The recommendation asks BiDi-aware
-  applications to _save and disable_ arrow swapping on startup and restore
+  applications to *save and disable* arrow swapping on startup and restore
   it on exit; SwiftTerm supports that dance.
-- **RIS** and `Terminal/resetToInitialState()` restore the state
-  configured in `TerminalOptions`.
+- **RIS** and ``Terminal/resetToInitialState()`` restore the state
+  configured in ``TerminalOptions``.
 
 ### Trying it from a shell
 
@@ -123,16 +123,16 @@ printf '\e[8l'
 
 ### Configuring initial state
 
-`TerminalOptions` gained three properties:
+``TerminalOptions`` gained three properties:
 
-- `TerminalOptions/initialBidiState` — the `BidiPresentationState` that
+- ``TerminalOptions/initialBidiState`` — the ``BidiPresentationState`` that
   new paragraphs receive at startup and after a reset. The default enables
   implicit mode with autodetection and an LTR fallback.
-- `TerminalOptions/maximumBidiParagraphRows` — the largest number of
+- ``TerminalOptions/maximumBidiParagraphRows`` — the largest number of
   soft-wrapped rows the renderer treats as one paragraph (default 500).
   Paragraphs beyond the cap fall back to row-local processing, which bounds
   the cost of pathological output such as an endless wrapped line.
-- `TerminalOptions/initialBidiArrowKeySwap` — the initial value for
+- ``TerminalOptions/initialBidiArrowKeySwap`` — the initial value for
   arrow-key swapping (default `false`; the host or the application must opt
   in).
 
@@ -148,20 +148,20 @@ let terminal = Terminal(delegate: delegate, options: options)
 
 ### Inspecting and changing live state
 
-`Terminal` exposes the live protocol state:
+``Terminal`` exposes the live protocol state:
 
-- `Terminal/currentBidiState` — the state applied to the paragraph in
+- ``Terminal/currentBidiState`` — the state applied to the paragraph in
   progress and to new paragraphs (read-only; escape sequences change it).
-- `Terminal/bidiArrowKeySwap` — read-write; the host can toggle arrow
+- ``Terminal/bidiArrowKeySwap`` — read-write; the host can toggle arrow
   swapping directly, for example from a menu item.
-- `Terminal/bidiSupportEnabled`, `Terminal/bidiAutodetectDirection`,
-  `Terminal/bidiRTLPreference`, `Terminal/bidiBoxMirroring` —
+- ``Terminal/bidiSupportEnabled``, ``Terminal/bidiAutodetectDirection``,
+  ``Terminal/bidiRTLPreference``, ``Terminal/bidiBoxMirroring`` —
   convenience read-only views of the current state.
 
 ### Controlling the view
 
 The AppKit and UIKit `TerminalView`s expose `bidiHostPolicy`
-(`BidiHostPolicy`):
+(``BidiHostPolicy``):
 
 - `.respectTerminal` (default) — the view applies the per-paragraph BiDi
   state that the protocol stores in the buffer.
@@ -178,12 +178,12 @@ operations keep working on logical content.
 
 ### Arrow-key swapping
 
-When `Terminal/bidiArrowKeySwap` is on and the cursor is on a paragraph
+When ``Terminal/bidiArrowKeySwap`` is on and the cursor is on a paragraph
 whose resolved base direction is RTL, the view swaps the sequences that the
 Left and Right arrows send, so the cursor moves in the visual direction of
 the key. Home and End are not swapped. The feature is off by default;
-enable it with `TerminalOptions/initialBidiArrowKeySwap`, by setting
-`Terminal/bidiArrowKeySwap`, or from the application side with
+enable it with ``TerminalOptions/initialBidiArrowKeySwap``, by setting
+``Terminal/bidiArrowKeySwap``, or from the application side with
 `CSI ? 1243 h`.
 
 ## Rendering details
@@ -212,23 +212,23 @@ marks, selection, cursor movement, and scrollback. See its README for usage.
 
 ### Configuration
 
-- `TerminalOptions/initialBidiState`
-- `TerminalOptions/maximumBidiParagraphRows`
-- `TerminalOptions/initialBidiArrowKeySwap`
+- ``TerminalOptions/initialBidiState``
+- ``TerminalOptions/maximumBidiParagraphRows``
+- ``TerminalOptions/initialBidiArrowKeySwap``
 
 ### Live State
 
-- `Terminal/currentBidiState`
-- `Terminal/bidiArrowKeySwap`
-- `Terminal/bidiSupportEnabled`
-- `Terminal/bidiAutodetectDirection`
-- `Terminal/bidiRTLPreference`
-- `Terminal/bidiBoxMirroring`
+- ``Terminal/currentBidiState``
+- ``Terminal/bidiArrowKeySwap``
+- ``Terminal/bidiSupportEnabled``
+- ``Terminal/bidiAutodetectDirection``
+- ``Terminal/bidiRTLPreference``
+- ``Terminal/bidiBoxMirroring``
 
 ### Types
 
-- `BidiPresentationState`
-- `BidiPresentationMode`
-- `BidiSupportMode`
-- `BidiDirection`
-- `BidiHostPolicy`
+- ``BidiPresentationState``
+- ``BidiPresentationMode``
+- ``BidiSupportMode``
+- ``BidiDirection``
+- ``BidiHostPolicy``

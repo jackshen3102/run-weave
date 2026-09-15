@@ -4,13 +4,13 @@ Run a terminal emulator without a UI for scripting, testing, and automation.
 
 ## Overview
 
-`HeadlessTerminal` pairs a `Terminal` engine with a `LocalProcess`, letting
+``HeadlessTerminal`` pairs a ``Terminal`` engine with a ``LocalProcess``, letting
 you run commands and inspect the terminal output programmatically. There is no view
 involved — the terminal state lives entirely in memory.
 
 ## Basic Usage
 
-Create a `HeadlessTerminal` with an `onEnd` callback, start a process, and wait
+Create a ``HeadlessTerminal`` with an `onEnd` callback, start a process, and wait
 for it to finish:
 
 ```swift
@@ -68,7 +68,7 @@ headless.send(data: [0x03][...])  // Ctrl-C
 
 ## Custom Terminal Size
 
-Pass a `TerminalOptions` with the desired dimensions. Applications running in
+Pass a ``TerminalOptions`` with the desired dimensions. Applications running in
 the terminal will see this size and format their output accordingly:
 
 ```swift

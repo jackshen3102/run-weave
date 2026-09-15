@@ -4,13 +4,13 @@ Configure fonts, colors, cursor style, and input behavior.
 
 ## Overview
 
-SwiftTerm's `TerminalView` exposes a number of properties for customizing the
+SwiftTerm's ``TerminalView`` exposes a number of properties for customizing the
 terminal's appearance and input handling. This guide covers the most common
 customization points available on both macOS and iOS.
 
 ## Fonts
 
-Both the macOS and iOS `TerminalView` expose a `font` property. Setting it
+Both the macOS and iOS ``TerminalView`` expose a `font` property. Setting it
 replaces the font used for rendering terminal text:
 
 ```swift
@@ -40,8 +40,8 @@ terminalView.nativeBackgroundColor = NSColor.black    // or UIColor.black
 
 ### ANSI Palette
 
-To install a custom 256-color palette, use `Terminal/installPalette(colors:)`.
-The array must contain exactly 256 `Color` values — the first 16 are the
+To install a custom 256-color palette, use ``Terminal/installPalette(colors:)``.
+The array must contain exactly 256 ``Color`` values — the first 16 are the
 standard ANSI colors, 16-231 are the 6x6x6 color cube, and 232-255 are the
 greyscale ramp:
 
@@ -61,14 +61,13 @@ terminalView.caretTextColor = NSColor.black  // optional: text color under curso
 ## Cursor Style
 
 The cursor style is typically controlled by the remote application via escape
-sequences, but you can set an initial style through `TerminalOptions`:
+sequences, but you can set an initial style through ``TerminalOptions``:
 
 ```swift
 let options = TerminalOptions(cursorStyle: .steadyBar)
 ```
 
-Available styles in `CursorStyle`:
-
+Available styles in ``CursorStyle``:
 - `blinkBlock`, `steadyBlock`
 - `blinkUnderline`, `steadyUnderline`
 - `blinkBar`, `steadyBar`
@@ -114,7 +113,7 @@ SwiftTerm's Apple terminal views can resolve links from two sources:
 - **Explicit links**: OSC 8 hyperlink payloads emitted by the terminal app.
 - **Implicit links**: URL-like text detected directly from rendered terminal content.
 
-Use `LinkReporting` via `linkReporting` to control which source is used during
+Use ``LinkReporting`` via `linkReporting` to control which source is used during
 view-level link tracking:
 
 ```swift
@@ -131,8 +130,8 @@ click/tap is allowed to open the link.
 
 ### What happens when the user activates a link
 
-When a click/tap lands on an active link, `TerminalView` calls
-`TerminalViewDelegate/requestOpenLink(source:link:params:)`.
+When a click/tap lands on an active link, ``TerminalView`` calls
+``TerminalViewDelegate/requestOpenLink(source:link:params:)``.
 
 - For explicit OSC 8 hyperlinks, `link` is the hyperlink target and `params`
   contains parsed key/value pairs from the OSC 8 payload (when present).
@@ -163,8 +162,8 @@ When a click/tap lands on an active link, `TerminalView` calls
 
 ## Terminal Options
 
-`TerminalOptions` controls engine-level settings. Create a custom options struct
-and pass it when constructing a `Terminal` or `HeadlessTerminal`:
+``TerminalOptions`` controls engine-level settings. Create a custom options struct
+and pass it when constructing a ``Terminal`` or ``HeadlessTerminal``:
 
 ```swift
 let options = TerminalOptions(
@@ -196,20 +195,20 @@ sequences, and the rendering pipeline — see <doc:BiDi>.
 
 Key options:
 
-| Property                    | Default                   | Description                                          |
-| --------------------------- | ------------------------- | ---------------------------------------------------- |
-| `cols` / `rows`             | 80 / 25                   | Initial terminal dimensions                          |
-| `scrollback`                | 500                       | Number of lines in the scrollback buffer             |
-| `tabStopWidth`              | 8                         | Tab stop interval                                    |
-| `termName`                  | `"xterm-256color"`        | Value reported for `TERM`                            |
-| `cursorStyle`               | `.blinkBlock`             | Initial cursor appearance                            |
-| `screenReaderMode`          | `false`                   | Accessibility mode                                   |
-| `enableSixelReported`       | `true`                    | Advertise Sixel support to applications              |
-| `initialBidiState`          | implicit, autodetect, LTR | BiDi state for new paragraphs after startup or reset |
-| `maximumBidiParagraphRows`  | `500`                     | Maximum rows processed as one BiDi paragraph         |
-| `initialBidiArrowKeySwap`   | `false`                   | Initial state for BiDi left/right arrow swapping     |
-| `kittyImageCacheLimitBytes` | 320 MB                    | Memory limit for Kitty image cache                   |
-| `ansi256PaletteStrategy`    | `.base16Lab`              | 256-color palette generation strategy                |
+| Property | Default | Description |
+|----------|---------|-------------|
+| `cols` / `rows` | 80 / 25 | Initial terminal dimensions |
+| `scrollback` | 500 | Number of lines in the scrollback buffer |
+| `tabStopWidth` | 8 | Tab stop interval |
+| `termName` | `"xterm-256color"` | Value reported for `TERM` |
+| `cursorStyle` | `.blinkBlock` | Initial cursor appearance |
+| `screenReaderMode` | `false` | Accessibility mode |
+| `enableSixelReported` | `true` | Advertise Sixel support to applications |
+| `initialBidiState` | implicit, autodetect, LTR | BiDi state for new paragraphs after startup or reset |
+| `maximumBidiParagraphRows` | `500` | Maximum rows processed as one BiDi paragraph |
+| `initialBidiArrowKeySwap` | `false` | Initial state for BiDi left/right arrow swapping |
+| `kittyImageCacheLimitBytes` | 320 MB | Memory limit for Kitty image cache |
+| `ansi256PaletteStrategy` | `.base16Lab` | 256-color palette generation strategy |
 
 The `.base16Lab` and `.base16LabHarmonious` strategies are based on the
 palette-generation write-up by
@@ -254,11 +253,11 @@ if terminalView.isUsingMetalRenderer {
 
 ## Search
 
-On macOS, `TerminalView` includes a built-in find bar that integrates with the
+On macOS, ``TerminalView`` includes a built-in find bar that integrates with the
 standard **Edit > Find** menu (Cmd-F, Next, Previous, and "Use Selection for Find").
 
 If you want to drive search programmatically or supply your own search UI, use the
-public helpers on `TerminalView`:
+public helpers on ``TerminalView``:
 
 ```swift
 terminalView.findNext("term")
@@ -266,14 +265,14 @@ terminalView.findPrevious("term", options: SearchOptions(caseSensitive: true))
 terminalView.clearSearch()
 ```
 
-`SearchOptions` lets you toggle case sensitivity, regex matching, and whole-word
+``SearchOptions`` lets you toggle case sensitivity, regex matching, and whole-word
 matching.
 
 ## Change Notifications
 
 If you need to be notified when specific rows change (for example, to drive a
 custom overlay), set `notifyUpdateChanges` to `true` and implement
-`TerminalViewDelegate/rangeChanged(source:startY:endY:)`:
+``TerminalViewDelegate/rangeChanged(source:startY:endY:)``:
 
 ```swift
 terminalView.notifyUpdateChanges = true

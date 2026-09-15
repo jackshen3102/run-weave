@@ -31,7 +31,7 @@ Or in Xcode, use **File > Add Package Dependencies** and enter the repository UR
 
 ## macOS: Embedding a Local Terminal
 
-The fastest way to get a working terminal on macOS is `LocalProcessTerminalView`,
+The fastest way to get a working terminal on macOS is ``LocalProcessTerminalView``,
 which connects the terminal to a local Unix process:
 
 ```swift
@@ -63,15 +63,15 @@ class ViewController: NSViewController, LocalProcessTerminalViewDelegate {
 }
 ```
 
-`LocalProcessTerminalView` launches `/bin/bash` by default. Pass a different
+``LocalProcessTerminalView`` launches `/bin/bash` by default. Pass a different
 executable and arguments to `startProcess(executable:args:environment:)` to run
 other commands.
 
 ## macOS: Custom Data Source
 
 If you need to connect the terminal to a custom data source (SSH, a network
-socket, or a custom protocol), use `TerminalView` directly and implement
-`TerminalViewDelegate`:
+socket, or a custom protocol), use ``TerminalView`` directly and implement
+``TerminalViewDelegate``:
 
 ```swift
 class MyTerminalController: NSViewController, TerminalViewDelegate {
@@ -104,17 +104,16 @@ class MyTerminalController: NSViewController, TerminalViewDelegate {
 ```
 
 The key pattern is:
-
-- Implement `TerminalViewDelegate/send(source:data:)` to forward user input
+- Implement ``TerminalViewDelegate/send(source:data:)`` to forward user input
   to your backend.
-- Call `TerminalView/feed(byteArray:)` when data arrives from the backend.
-- Implement `TerminalViewDelegate/requestOpenLink(source:link:params:)` to
+- Call ``TerminalView/feed(byteArray:)`` when data arrives from the backend.
+- Implement ``TerminalViewDelegate/requestOpenLink(source:link:params:)`` to
   control how link taps/clicks are handled.
 
 ## iOS: Embedding a Terminal
 
-On iOS, `TerminalView` is a `UIScrollView` subclass. The setup is the same as the
-custom data source pattern for macOS — implement `TerminalViewDelegate` and wire
+On iOS, ``TerminalView`` is a `UIScrollView` subclass. The setup is the same as the
+custom data source pattern for macOS — implement ``TerminalViewDelegate`` and wire
 the `send` and `feed` methods:
 
 ```swift
@@ -151,7 +150,7 @@ to a remote host via SSH. See <doc:SSHIntegration> for details.
 
 ## Headless: Scripting and Testing
 
-`HeadlessTerminal` runs a terminal emulator without any UI, useful for scripting
+``HeadlessTerminal`` runs a terminal emulator without any UI, useful for scripting
 applications and inspecting terminal output programmatically:
 
 ```swift
@@ -175,14 +174,14 @@ See <doc:HeadlessUsage> for more detail.
 
 ## Platform Availability
 
-| Feature                  | macOS 13+ | iOS 13+ | visionOS 1+ | Linux | Windows |
-| ------------------------ | --------- | ------- | ----------- | ----- | ------- |
-| Core engine (`Terminal`) | Yes       | Yes     | Yes         | Yes   | Yes     |
-| AppKit `TerminalView`    | Yes       | —       | —           | —     | —       |
-| UIKit `TerminalView`     | —         | Yes     | Yes         | —     | —       |
-| Metal GPU rendering      | Yes       | Yes     | Yes         | —     | —       |
-| `LocalProcess`           | Yes       | —       | —           | Yes   | —       |
-| `HeadlessTerminal`       | Yes       | —       | —           | Yes   | —       |
+| Feature | macOS 13+ | iOS 13+ | visionOS 1+ | Linux | Windows |
+|---------|-----------|---------|-------------|-------|---------|
+| Core engine (``Terminal``) | Yes | Yes | Yes | Yes | Yes |
+| AppKit ``TerminalView`` | Yes | — | — | — | — |
+| UIKit ``TerminalView`` | — | Yes | Yes | — | — |
+| Metal GPU rendering | Yes | Yes | Yes | — | — |
+| ``LocalProcess`` | Yes | — | — | Yes | — |
+| ``HeadlessTerminal`` | Yes | — | — | Yes | — |
 
 ## Next Steps
 

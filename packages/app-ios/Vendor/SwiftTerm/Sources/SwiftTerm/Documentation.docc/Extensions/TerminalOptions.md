@@ -1,14 +1,14 @@
-# `TerminalOptions`
+# ``TerminalOptions``
 
 Configuration options for the terminal engine.
 
 ## Overview
 
 `TerminalOptions` controls the initial dimensions, scrollback size, cursor style,
-and feature flags for a `Terminal` instance. Pass an options struct when
-constructing a terminal or a `HeadlessTerminal`.
+and feature flags for a ``Terminal`` instance. Pass an options struct when
+constructing a terminal or a ``HeadlessTerminal``.
 
-Use `TerminalOptions/default` for sensible defaults (80x25, 500-line scrollback,
+Use ``TerminalOptions/default`` for sensible defaults (80x25, 500-line scrollback,
 blinking block cursor).
 
 For a guide on customization, see <doc:Customization>.
@@ -17,39 +17,39 @@ For a guide on customization, see <doc:Customization>.
 
 ### Getting Default Options
 
-- `default`
+- ``default``
 
 ### Terminal Dimensions
 
-- `cols`
-- `rows`
+- ``cols``
+- ``rows``
 
 ### Scrollback
 
-- `scrollback`
+- ``scrollback``
 
 ### Appearance
 
-- `cursorStyle`
-- `tabStopWidth`
+- ``cursorStyle``
+- ``tabStopWidth``
 
 ### Terminal Identity
 
-- `termName`
+- ``termName``
 
 ### Behavior
 
-- `convertEol`
-- `screenReaderMode`
-- `initialBidiState`
-- `maximumBidiParagraphRows`
-- `initialBidiArrowKeySwap`
+- ``convertEol``
+- ``screenReaderMode``
+- ``initialBidiState``
+- ``maximumBidiParagraphRows``
+- ``initialBidiArrowKeySwap``
 
 ### Graphics
 
-- `enableSixelReported`
-- `kittyImageCacheLimitBytes`
+- ``enableSixelReported``
+- ``kittyImageCacheLimitBytes``
 
 ### Colors
 
-- `ansi256PaletteStrategy`
+- ``ansi256PaletteStrategy``

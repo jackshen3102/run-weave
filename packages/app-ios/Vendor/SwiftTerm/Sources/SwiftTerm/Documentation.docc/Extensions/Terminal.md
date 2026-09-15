@@ -1,4 +1,4 @@
-# `Terminal`
+# ``Terminal``
 
 The core terminal emulation engine.
 
@@ -6,160 +6,160 @@ The core terminal emulation engine.
 
 `Terminal` is the main class that implements VT100/Xterm terminal emulation. It
 manages the terminal buffer, processes escape sequences, tracks cursor state, and
-notifies its `TerminalDelegate` of events.
+notifies its ``TerminalDelegate`` of events.
 
 `Terminal` is UI-agnostic — it can be used with the bundled AppKit and UIKit views,
 with a headless backend, or with a custom renderer. All input flows through the
-`feed(buffer:)` family of methods, and output is delivered through the delegate's
-`TerminalDelegate/send(source:data:)` callback.
+``feed(buffer:)`` family of methods, and output is delivered through the delegate's
+``TerminalDelegate/send(source:data:)`` callback.
 
-Instances are thread-safe: you can call `feed(byteArray:)` from a background
+Instances are thread-safe: you can call ``feed(byteArray:)`` from a background
 queue and the terminal will synchronize internally.
 
 ## Topics
 
 ### Creating a Terminal
 
-- `init(delegate:options:)`
+- ``init(delegate:options:)``
 
 ### Configuration
 
-- `options`
-- `cols`
-- `rows`
-- `applicationCursor`
-- `bracketedPasteMode`
-- `silentLog`
-- `foregroundColor`
-- `backgroundColor`
-- `cursorColor`
-- `currentAttribute`
-- `mouseMode`
+- ``options``
+- ``cols``
+- ``rows``
+- ``applicationCursor``
+- ``bracketedPasteMode``
+- ``silentLog``
+- ``foregroundColor``
+- ``backgroundColor``
+- ``cursorColor``
+- ``currentAttribute``
+- ``mouseMode``
 
 ### Feeding Input
 
-- `feed(byteArray:)`
-- `feed(text:)`
-- `feed(buffer:)`
-- `parse(buffer:)`
+- ``feed(byteArray:)``
+- ``feed(text:)``
+- ``feed(buffer:)``
+- ``parse(buffer:)``
 
 ### Sending Responses
 
-- `sendResponse(text:)`
-- `sendResponse(_:)`
+- ``sendResponse(text:)``
+- ``sendResponse(_:)``
 
 ### Buffer Access
 
-- `buffer`
-- `BufferKind`
-- `isCurrentBufferAlternate`
-- `getBufferAsData(kind:encoding:)`
-- `getText(start:end:)`
-- `getCharData(col:row:)`
-- `getLine(row:)`
-- `getScrollInvariantLine(row:)`
-- `getCharacter(col:row:)`
-- `getCharacter(for:)`
+- ``buffer``
+- ``BufferKind``
+- ``isCurrentBufferAlternate``
+- ``getBufferAsData(kind:encoding:)``
+- ``getText(start:end:)``
+- ``getCharData(col:row:)``
+- ``getLine(row:)``
+- ``getScrollInvariantLine(row:)``
+- ``getCharacter(col:row:)``
+- ``getCharacter(for:)``
 
 ### Resize and Layout
 
-- `resize(cols:rows:)`
-- `getDims()`
-- `changeScrollback(_:)`
-- `changeHistorySize(_:)`
+- ``resize(cols:rows:)``
+- ``getDims()``
+- ``changeScrollback(_:)``
+- ``changeHistorySize(_:)``
 
 ### Terminal State
 
-- `setup(isReset:)`
-- `softReset()`
-- `resetToInitialState()`
-- `resetNormalBuffer()`
-- `hostCurrentDirectory`
-- `hostCurrentDocument`
+- ``setup(isReset:)``
+- ``softReset()``
+- ``resetToInitialState()``
+- ``resetNormalBuffer()``
+- ``hostCurrentDirectory``
+- ``hostCurrentDocument``
 
 ### Bidirectional Text
 
-- `currentBidiState`
-- `bidiArrowKeySwap`
-- `bidiSupportEnabled`
-- `bidiAutodetectDirection`
-- `bidiRTLPreference`
-- `bidiBoxMirroring`
+- ``currentBidiState``
+- ``bidiArrowKeySwap``
+- ``bidiSupportEnabled``
+- ``bidiAutodetectDirection``
+- ``bidiRTLPreference``
+- ``bidiBoxMirroring``
 
 ### Cursor
 
-- `getCursorLocation()`
-- `setCursorStyle(_:)`
-- `showCursor()`
-- `hideCursor()`
+- ``getCursorLocation()``
+- ``setCursorStyle(_:)``
+- ``showCursor()``
+- ``hideCursor()``
 
 ### Scrolling
 
-- `scroll(isWrapped:)`
-- `emitLineFeed()`
-- `getTopVisibleRow()`
+- ``scroll(isWrapped:)``
+- ``emitLineFeed()``
+- ``getTopVisibleRow()``
 
 ### Display Updates
 
-- `refresh(startRow:endRow:)`
-- `updateFullScreen()`
-- `getUpdateRange()`
-- `getScrollInvariantUpdateRange()`
-- `clearUpdateRange()`
+- ``refresh(startRow:endRow:)``
+- ``updateFullScreen()``
+- ``getUpdateRange()``
+- ``getScrollInvariantUpdateRange()``
+- ``clearUpdateRange()``
 
 ### Mouse Events
 
-- `MouseMode`
-- `encodeButton(button:release:shift:meta:control:)`
-- `sendEvent(buttonFlags:x:y:)`
-- `sendEvent(buttonFlags:x:y:pixelX:pixelY:)`
-- `sendMotion(buttonFlags:x:y:pixelX:pixelY:)`
+- ``MouseMode``
+- ``encodeButton(button:release:shift:meta:control:)``
+- ``sendEvent(buttonFlags:x:y:)``
+- ``sendEvent(buttonFlags:x:y:pixelX:pixelY:)``
+- ``sendMotion(buttonFlags:x:y:pixelX:pixelY:)``
 
 ### Titles
 
-- `setTitle(text:)`
-- `setIconTitle(text:)`
+- ``setTitle(text:)``
+- ``setIconTitle(text:)``
 
 ### Focus
 
-- `setTerminalFocus(_:)`
+- ``setTerminalFocus(_:)``
 
 ### Colors
 
-- `ansi256PaletteStrategy`
-- `installPalette(colors:)`
+- ``ansi256PaletteStrategy``
+- ``installPalette(colors:)``
 
 ### CharData Factories
 
-- `makeCharData(attribute:code:size:)`
-- `makeCharData(attribute:char:size:)`
-- `makeCharData(attribute:scalar:size:)`
-- `updateCharData(_:char:size:)`
-- `updateCharData(_:code:size:)`
-- `makePayload(value:)`
+- ``makeCharData(attribute:code:size:)``
+- ``makeCharData(attribute:char:size:)``
+- ``makeCharData(attribute:scalar:size:)``
+- ``updateCharData(_:char:size:)``
+- ``updateCharData(_:code:size:)``
+- ``makePayload(value:)``
 
 ### Housekeeping
 
-- `garbageCollectPayload()`
+- ``garbageCollectPayload()``
 
 ### Parser Extension
 
-- `parser`
-- `registerOscHandler(code:handler:)`
+- ``parser``
+- ``registerOscHandler(code:handler:)``
 
 ### Environment
 
-- `getEnvironmentVariables(termName:trueColor:)`
+- ``getEnvironmentVariables(termName:trueColor:)``
 
 ### Progress Reporting
 
-- `ProgressReport`
-- `ProgressReportState`
+- ``ProgressReport``
+- ``ProgressReportState``
 
 ### Window Manipulation
 
-- `WindowManipulationCommand`
+- ``WindowManipulationCommand``
 
 ### Image Sizing
 
-- `ImageSizeRequest`
+- ``ImageSizeRequest``

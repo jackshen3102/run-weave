@@ -12,11 +12,11 @@ yourself. This guide describes the pattern and points to working examples.
 
 The integration between SwiftTerm and SSH has two directions:
 
-1. **User input to SSH**: Implement `TerminalViewDelegate/send(source:data:)`
+1. **User input to SSH**: Implement ``TerminalViewDelegate/send(source:data:)``
    and write the received bytes to the SSH channel.
 
 2. **SSH output to terminal**: When data arrives from the SSH channel, call
-   `TerminalView/feed(byteArray:)` to deliver it to the terminal.
+   ``TerminalView/feed(byteArray:)`` to deliver it to the terminal.
 
 ```
 ┌──────────────┐   send(data:)    ┌──────────────┐
@@ -62,11 +62,11 @@ func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
 
 When opening an SSH session, the server needs the initial terminal size for the
 PTY allocation. After the connection is established, notify the server of size
-changes through `TerminalViewDelegate/sizeChanged(source:newCols:newRows:)`.
+changes through ``TerminalViewDelegate/sizeChanged(source:newCols:newRows:)``.
 
 ## Environment Variables
 
-Use `Terminal/getEnvironmentVariables(termName:trueColor:)` to build an
+Use ``Terminal/getEnvironmentVariables(termName:trueColor:)`` to build an
 environment suitable for the remote shell:
 
 ```swift

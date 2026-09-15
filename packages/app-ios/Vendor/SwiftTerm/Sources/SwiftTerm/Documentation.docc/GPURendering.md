@@ -12,12 +12,12 @@ especially for large terminals or applications that update the screen rapidly.
 
 Metal rendering is available on macOS, iOS, and visionOS — any platform where
 MetalKit can be imported. It is **disabled by default**; you opt in
-by calling `TerminalView/setUseMetal(_:)`.
+by calling ``TerminalView/setUseMetal(_:)``.
 
 ## Enabling Metal Rendering
 
-Call `TerminalView/setUseMetal(_:)` after the view has been added to a
-window. The method throws a `MetalError` if the GPU pipeline cannot be
+Call ``TerminalView/setUseMetal(_:)`` after the view has been added to a
+window. The method throws a ``MetalError`` if the GPU pipeline cannot be
 created (for example, on hardware without Metal support):
 
 ```swift
@@ -36,7 +36,7 @@ try terminalView.setUseMetal(false)
 ```
 
 Check the current rendering path with
-`TerminalView/isUsingMetalRenderer`:
+``TerminalView/isUsingMetalRenderer``:
 
 ```swift
 if terminalView.isUsingMetalRenderer {
@@ -46,13 +46,13 @@ if terminalView.isUsingMetalRenderer {
 
 ## Buffering Mode
 
-The `TerminalView/metalBufferingMode` property controls how the renderer
+The ``TerminalView/metalBufferingMode`` property controls how the renderer
 builds and caches GPU buffers each frame:
 
-| Mode                                            | Behavior                                                            | Best for                                                         |
-| ----------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `MetalBufferingMode/perRowPersistent` (default) | Caches vertex data per row; only dirty rows are rebuilt each frame. | Interactive shells, editors, and typical terminal use.           |
-| `MetalBufferingMode/perFrameAggregated`         | Rebuilds all visible rows into a single buffer every frame.         | Full-screen TUI apps that repaint most of the screen each frame. |
+| Mode | Behavior | Best for |
+|------|----------|----------|
+| ``MetalBufferingMode/perRowPersistent`` (default) | Caches vertex data per row; only dirty rows are rebuilt each frame. | Interactive shells, editors, and typical terminal use. |
+| ``MetalBufferingMode/perFrameAggregated`` | Rebuilds all visible rows into a single buffer every frame. | Full-screen TUI apps that repaint most of the screen each frame. |
 
 Change the mode at any time — the renderer picks it up on the next frame:
 
@@ -64,21 +64,21 @@ terminalView.metalBufferingMode = .perFrameAggregated
 
 The following environment variable can be used to tune Metal behavior:
 
-| Variable                               | Values                    | Description                                                                                                                                                                        |
-| -------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Variable | Values | Description |
+|----------|--------|-------------|
 | `SWIFTTERM_METAL_LIVE_RESIZE_THROTTLE` | `0` or `false` to disable | On macOS, Metal redraws are throttled during live window resizing for smoother interaction. Set this variable to disable throttling if you prefer immediate redraws during resize. |
 
 ## Error Handling
 
-`MetalError` describes the specific reason Metal initialization failed.
+``MetalError`` describes the specific reason Metal initialization failed.
 Common cases include:
 
-- `MetalError/deviceUnavailable` — No Metal-capable GPU was found (for
+- ``MetalError/deviceUnavailable`` — No Metal-capable GPU was found (for
   example, running in a VM or on very old hardware).
-- `MetalError/shaderCompilationFailed(_:)` — The Metal shader source could
+- ``MetalError/shaderCompilationFailed(_:)`` — The Metal shader source could
   not be compiled. This typically indicates a build-configuration issue.
 
-A full list of cases is available in the `MetalError` documentation.
+A full list of cases is available in the ``MetalError`` documentation.
 
 ## Supported Features
 
@@ -108,14 +108,14 @@ maintained — one grayscale for regular text and one BGRA for color glyphs
 
 ### Enabling GPU Rendering
 
-- `TerminalView/setUseMetal(_:)`
-- `TerminalView/isUsingMetalRenderer`
+- ``TerminalView/setUseMetal(_:)``
+- ``TerminalView/isUsingMetalRenderer``
 
 ### Configuration
 
-- `TerminalView/metalBufferingMode`
-- `MetalBufferingMode`
+- ``TerminalView/metalBufferingMode``
+- ``MetalBufferingMode``
 
 ### Error Handling
 
-- `MetalError`
+- ``MetalError``
