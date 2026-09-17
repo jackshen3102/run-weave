@@ -1,0 +1,105 @@
+version: 1
+name: 随记桌面链接复用当前 Browser 宿主
+description: >
+  这是行为验收合同，不代表所有用例已经通过。验证随记抽屉链接进入现有 Electron Browser，正确协调抽屉、Profile、异步结果和失败恢复，纯 Web 保持原生链接行为。
+  每例独立准备候选窗口、Profile、随记测试身份与受控站点。使用 $computer-use 对应原生 UI 能力确认目标桌面实例，
+  再用 $toolkit:playwright-cli 操作真实 renderer 和对应网页 surface；不把 store、截图或注入的成功 bridge 当作完整交互证明。
+  动态端点由当前实例发现，缺少旧壳、调试器或 fixture 时记 blocked；各例结束只清理本例资源。
+cases:
+  - id: SUIDESKBROWSER-001
+    name: 列表链接进入可见且可操作的 Browser
+    required: true
+    description: 一次列表链接点击只创建一个新分组标签，抽屉收起且原生网页真实可见，原卡片不会同时进入详情。
+    preconditions:
+      - 候选 Electron 已通过 $computer-use 对应原生 UI 能力确认窗口和源码，随记抽屉显示本例列表记录。
+      - 记录含受控 HTTPS 链接及 query、fragment，已有 Browser 标签和分组清单已记录，网页有可点击计数器。
+    steps:
+      - 使用 $toolkit:playwright-cli 点击记录正文链接；确认随记抽屉关闭，Browser 面板成为活动工具。
+      - 附着实际新网页 surface，确认完整目标正确，点击页面计数器可得到反馈，原生视图没有被不可见抽屉阻挡。
+      - 核对只新增一个标签和新分组，已有分组不变；从终端右上角重开随记，确认仍在原列表，没有误入详情。
+  - id: SUIDESKBROWSER-002
+    name: 详情打开后可恢复随记完整阅读现场
+    required: true
+    description: 收起抽屉不卸载随记工作区，返回后保留环境、筛选、搜索、详情和滚动，也不丢失既有业务草稿。
+    preconditions:
+      - 候选 Electron 的本例随记账户已有已落盘未提交草稿，列表设定筛选和搜索后打开一条长正文详情并滚动。
+      - 详情含可达受控 HTTPS 链接，执行者已记录环境、筛选、搜索、详情身份与位置。
+    steps:
+      - 使用 $toolkit:playwright-cli 点击详情链接并确认进入真实 Browser 网页，再从终端右上角重开随记。
+      - 确认回到同一详情和阅读位置，退出详情后筛选与搜索保持，账户环境未变化。
+      - 恢复本例草稿并只读核对业务版本；确认内容未丢失、没有因为打开网页执行保存或任务状态写入。
+  - id: SUIDESKBROWSER-003
+    name: 使用当前 Profile 而非项目默认 Profile
+    required: true
+    description: 随记打开使用点击时选中的 Browser Profile，复用其网站身份且不改变另一 Profile。
+    preconditions:
+      - 候选 Electron 当前 Browser 为 P2，项目或全局默认为 P1；两个专用 Profile 在受控网站分别登录不同测试身份。
+      - 随记本例记录含同一受控网站身份页链接，已记录 P1、P2 的标签和网站身份。
+    steps:
+      - 使用 $toolkit:playwright-cli 从随记点击链接；确认新标签属于 P2，面板仍为 P2，站点显示 P2 的原网站身份。
+      - 切换到 P1 读取其身份页与标签清单；确认没有本次新增标签且身份未被随记账户覆盖。
+  - id: SUIDESKBROWSER-004
+    name: 标签创建失败恢复仍有效的随记来源
+    required: true
+    description: 明确的创建失败显示可操作错误并恢复来源，不自动外部打开或自动重试。
+    preconditions:
+      - 独占候选 Electron 的本例随记详情可用；执行者能通过主进程调试器在真实 create-tab handler 创建资源前制造一次受控异常，并记录故障位置。
+      - 不替换 renderer 的 electronAPI，不模拟成功返回；已记录现有标签数量及随记详情位置，正常窗口和业务服务保持存活。
+    steps:
+      - 启用本例一次性 handler 异常，使用 $toolkit:playwright-cli 点击链接；确认出现明确错误且原抽屉详情恢复，没有启动外部浏览器或新增标签。
+      - 等待超过正常调用完成时间；确认没有自动重试，不出现后台新标签。
+      - 撤销故障后点击明确的重试动作；确认一次用户动作创建一个可操作标签。保存故障注入事实，不将其描述为自然线上错误。
+  - id: SUIDESKBROWSER-005
+    name: 已离开来源时迟到完成不抢占新界面
+    required: true
+    description: 旧打开请求完成时不能重新激活用户已经离开的 Profile 或随记账户；不对主进程已接受的标签虚构取消保证。
+    preconditions:
+      - 独占候选 Electron 有两个测试随记环境与可切换的 Browser Profile，主进程调试器可在真实 create-tab 接受请求后、回复前暂停该操作。
+      - renderer 在暂停期间仍可操作；已记录请求来源环境、P2 和当前窗口，执行者不销毁窗口或更换 fixture。
+    steps:
+      - 使用 $toolkit:playwright-cli 从 P2 对应随记来源点击链接，待真实 handler 在回复前暂停后，在 renderer 重开随记并切换到另一测试环境或主动选择 P1。
+      - 恢复 handler 并等待完成；确认当前用户选择的界面保持，旧请求没有强行收起新抽屉、弹出旧错误或激活 P2。
+      - 检查主进程已接受的标签可仍留在原 P2；确认没有为清理旧请求关闭任何用户既有标签，报告区分资源已创建与迟到 UI 动作被抑制。
+  - id: SUIDESKBROWSER-006
+    name: 同一次未完成打开不被快速点击重复提交
+    required: true
+    description: 进行中的同源打开操作只提交一次创建，完成后新的明确点击才允许再次创建。
+    preconditions:
+      - 独占候选 Electron 的本例记录链接可达，调试器能在真实 create-tab 返回前暂停，renderer 可继续处理点击。
+      - 已记录真实 handler 调用计数及现有标签，未开启其它浏览器创建任务。
+    steps:
+      - 使用 $toolkit:playwright-cli 快速双击同一链接；必要时在 pending 期间重开抽屉再次点击同一来源，确认没有第二个在途创建请求。
+      - 释放暂停并取得网页真实状态；确认本次只有一个新标签。
+      - 待操作完成后再次明确从随记点击；确认此时允许一个新的标签，不把历史完成请求永久锁住。
+  - id: SUIDESKBROWSER-007
+    name: 纯 Web 链接保持原生新标签与复制语义
+    required: true
+    description: 无 Electron bridge 时不引入终端 store 依赖，正常点击、修饰键和复制链接保持浏览器默认能力。
+    preconditions:
+      - 当前候选前端运行于普通浏览器的随记页面，不存在 Electron bridge，专用记录有可达受控 HTTPS 链接。
+      - 浏览器允许由真实用户点击产生的新标签，记录页身份和业务版本已记录。
+    steps:
+      - 使用 $toolkit:playwright-cli 正常点击链接；确认新标签打开正确地址，源页随记现场保持，新页 opener 不可访问源页。
+      - 回到源页，以平台标准修饰键点击及原生链接菜单复制地址；确认浏览器默认操作生效，不被异步桌面 handler 吞掉，复制值等于真实 href。
+      - 只读核对业务记录未发生写入，不出现终端 Browser 或 Electron 不可用异常。
+  - id: SUIDESKBROWSER-008
+    name: 缺少内置能力的旧壳可明确外部打开
+    required: true
+    description: 真实不提供 create-tab 的兼容壳仍能处理随记链接，不先隐藏抽屉或制造空 Browser 面板。
+    preconditions:
+      - 独占兼容测试壳真实缺少 terminalBrowserCreateTab 但提供 openExternal，加载当前候选 renderer；已记录壳版本与能力，不通过删改 window bridge 模拟。
+      - 本例随记详情有受控安全 URL，系统默认浏览器可通过 $computer-use 对应原生 UI 能力操作。
+    steps:
+      - 使用 $toolkit:playwright-cli 点击链接；通过原生 UI 确认系统默认浏览器收到正确 URL，随记抽屉仍保持原详情，没有新建空 Browser 面板。
+      - 切回候选桌面并取得新页面状态；确认原详情可继续操作，没有重复外部打开或自动重试。
+  - id: SUIDESKBROWSER-009
+    name: 正文选择和普通卡片点击不误开 Browser
+    required: true
+    description: 链接接入不改变列表卡片和正文选区的互斥行为，复制不被转换成打开请求。
+    preconditions:
+      - 候选 Electron 随记列表有本例长正文、无敏感可复制文字及链接，现有 Browser 标签数量已记录。
+      - 当前没有未完成打开请求，原生剪贴板可在测试文本区核对。
+    steps:
+      - 使用 $toolkit:playwright-cli 选择正文普通文本并复制；确认内容准确，抽屉未收起、Browser 标签未增加。
+      - 点击卡片普通区域进入详情；确认只有详情导航，没有网页创建。
+      - 在详情复制完整链接地址而不执行打开；确认仍留在详情且 Browser 标签数不变。

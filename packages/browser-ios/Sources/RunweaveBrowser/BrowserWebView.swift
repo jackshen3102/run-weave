@@ -5,7 +5,7 @@ import WebKit
 @MainActor
 final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDelegate {
   let id = UUID()
-  let source: BrowserSourceScope
+  let source: BrowserContext
   let webView: WKWebView
   private weak var owner: BrowserSession?
   private var observations: [NSKeyValueObservation] = []
@@ -120,7 +120,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
     // Scripted links and subframes may request a handoff, but only native confirmation opens it.
     // Do not disclose the URL query: login links can carry an authorization token.
     owner?.request(.application(link),
-      message: "网站 \(origin.host) 请求打开\(link.name)。如需登录，请在客户端完成授权后返回 Runweave，当前网页会保留。")
+      message: "网站 \(origin.host) 请求打开\(link.name)。如需登录，请在客户端完成授权后返回\(owner?.configuration.applicationName ?? "应用")，当前网页会保留。")
   }
 
   func openApplication(_ link: BrowserURLPolicy.ApplicationLink) {
@@ -146,7 +146,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       guard self.valid, self.navigationRevision == revision else { return }
       // Preserve the original document and its authorization polling, including on return.
       self.notice = success
-        ? "已打开\(link.name)。完成授权后，请返回 Runweave 继续浏览。"
+        ? "已打开\(link.name)。完成授权后，请返回\(self.owner?.configuration.applicationName ?? "应用") 继续浏览。"
         : "无法打开\(link.name)。请确认已安装客户端，或从右上角“…”在默认浏览器继续。"
       self.changed()
     }
@@ -169,7 +169,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       completion: completionHandler)
   }
 
-  init(url: URL, source: BrowserSourceScope, store: WKWebsiteDataStore, owner: BrowserSession) {
+  init(url: URL, source: BrowserContext, store: WKWebsiteDataStore, owner: BrowserSession) {
     self.source = source
     self.owner = owner
     currentURL = url

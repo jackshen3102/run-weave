@@ -2,6 +2,8 @@
 
 Runweave 的原生 iOS 应用，使用 SwiftUI/UIKit 和 SwiftTerm，通过 HTTP/WebSocket 连接 Runweave Backend。
 应用包含连接管理、登录、项目与终端、命令输入、图片上传、语音转写、Files/Changes 只读预览及诊断；终端链接可在单页内置浏览器阅读、收起与恢复。
+
+内置浏览器使用相邻的 [RunweaveBrowser Swift Package](../browser-ios/README.md)，与随记共享实现；终端来源和呈现条件仍由本 App 管理。
 Bundle ID 为 `com.runweave.app.native`，保留已有安装的连接、主题和安全凭据。
 
 ## 构建与安装

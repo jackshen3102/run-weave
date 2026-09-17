@@ -2,8 +2,8 @@ import SwiftUI
 import WebKit
 
 @MainActor
-final class BrowserSession: ObservableObject {
-  enum State { case empty, presented, collapsed }
+public final class BrowserSession: ObservableObject {
+  public enum State { case empty, presented, collapsed }
   struct Prompt: Identifiable {
     enum Kind {
       case replace(URL)
@@ -15,46 +15,56 @@ final class BrowserSession: ObservableObject {
     let id = UUID()
     let kind: Kind
     let message: String
-    let source: BrowserSourceScope
+    let source: BrowserContext
     let identity: UUID?
     let navigationRevision: Int?
     let lifetime: UUID
   }
 
-  @Published private(set) var state: State = .empty
+  @Published public private(set) var state: State = .empty
   @Published private(set) var page: BrowserPage?
-  @Published private(set) var clearing = false
+  @Published public private(set) var clearing = false
   @Published var prompt: Prompt?
-  @Published private(set) var dataStatus: String?
-  var currentSource: (() -> BrowserSourceScope?)?
+  @Published public private(set) var dataStatus: String?
+  public var currentSource: (() -> BrowserContext?)?
+  public var pageTitle: String? { page?.title }
+  public var hasPrompt: Bool { prompt != nil }
+  let configuration: BrowserPresentationConfiguration
+
+  public init(configuration: BrowserPresentationConfiguration) {
+    self.configuration = configuration
+  }
+
   private let store = WKWebsiteDataStore.default()
   private var lifetime = UUID()
-  private struct TerminalPresentation {
+  private struct HostPresentation {
     let id: UUID
-    let source: BrowserSourceScope
-    let controllerID: ObjectIdentifier
+    let source: BrowserContext
+    let hostID: ObjectIdentifier
     let isAvailable: () -> Bool
   }
-  private var terminalPresentation: TerminalPresentation?
+  private var hostPresentation: HostPresentation?
 
-  func registerTerminalPresentation(
-    id: UUID, source: BrowserSourceScope, controllerID: ObjectIdentifier,
+  public func registerHostPresentation(
+    id: UUID, source: BrowserContext, hostID: ObjectIdentifier,
     isAvailable: @escaping () -> Bool
   ) {
     guard valid(source) else { return }
-    terminalPresentation = TerminalPresentation(
-      id: id, source: source, controllerID: controllerID, isAvailable: isAvailable)
+    hostPresentation = HostPresentation(
+      id: id, source: source, hostID: hostID, isAvailable: isAvailable)
   }
 
-  func unregisterTerminalPresentation(id: UUID, controllerID: ObjectIdentifier) {
-    guard terminalPresentation?.id == id, terminalPresentation?.controllerID == controllerID else {
-      return
+  @discardableResult
+  public func unregisterHostPresentation(id: UUID, hostID: ObjectIdentifier) -> Bool {
+    guard hostPresentation?.id == id, hostPresentation?.hostID == hostID else {
+      return false
     }
-    terminalPresentation = nil
+    hostPresentation = nil
+    return true
   }
 
-  func terminalPresentationAvailable(source: BrowserSourceScope, registrationID: UUID) -> Bool {
-    guard valid(source), let registration = terminalPresentation,
+  public func hostPresentationAvailable(source: BrowserContext, registrationID: UUID) -> Bool {
+    guard valid(source), let registration = hostPresentation,
       registration.id == registrationID, registration.source == source
     else { return false }
     return registration.isAvailable()
@@ -63,7 +73,7 @@ final class BrowserSession: ObservableObject {
   // still retain its UIView; removal from the visible session is not an unload barrier.
   @Published private var retiringPages: [UUID: BrowserPage] = [:]
 
-  func valid(_ source: BrowserSourceScope, identity: UUID? = nil) -> Bool {
+  func valid(_ source: BrowserContext, identity: UUID? = nil) -> Bool {
     guard currentSource?() == source else { return false }
     return identity == nil || page?.id == identity
   }
@@ -72,7 +82,7 @@ final class BrowserSession: ObservableObject {
     !clearing && page === candidate && valid(candidate.source, identity: candidate.id)
   }
 
-  func open(_ intent: BrowserOpenIntent, source: BrowserSourceScope, presentationAvailable: Bool) {
+  public func open(_ intent: BrowserOpenIntent, source: BrowserContext, presentationAvailable: Bool) {
     guard valid(source, identity: intent.sessionIdentity), !clearing else { return }
     guard retiringPages.isEmpty else {
       dataStatus = "旧网页尚未安全卸载，不能打开新网页。若卸载失败，请重启应用后重试。"
@@ -120,12 +130,12 @@ final class BrowserSession: ObservableObject {
     }
   }
 
-  private func create(_ url: URL, source: BrowserSourceScope) {
+  private func create(_ url: URL, source: BrowserContext) {
     guard !clearing, valid(source), case .web = BrowserURLPolicy.classify(url.absoluteString) else {
       return
     }
-    guard let presentation = terminalPresentation, presentation.source == source else {
-      dataStatus = "终端当前不可呈现网页，请返回终端后主动重试。"
+    guard let presentation = hostPresentation, presentation.source == source else {
+      dataStatus = "当前界面不可呈现网页，请返回来源页面后主动重试。"
       return
     }
     let presentationID = presentation.id
@@ -135,9 +145,9 @@ final class BrowserSession: ObservableObject {
       guard let self, await self.waitForRetiredPages(), self.lifetime == expectedLifetime,
         self.valid(source), !self.clearing, self.page == nil
       else { return }
-      // This is a live TerminalScreen query, not the Bool captured at the first open.
+      // This is a live host query, not the Bool captured at the first open.
       // No suspension occurs from this check through construction and load.
-      guard self.terminalPresentationAvailable(source: source, registrationID: presentationID)
+      guard self.hostPresentationAvailable(source: source, registrationID: presentationID)
       else {
         self.dataStatus = "请先完成当前输入、媒体或系统操作，再主动重新打开网页。"
         return  // Drop the intent; becoming available later must not replay it.
@@ -150,12 +160,12 @@ final class BrowserSession: ObservableObject {
     }
   }
 
-  func resume() {
+  public func resume() {
     guard let page, isCurrent(page) else { return }
     state = .presented
   }
 
-  func collapse() {
+  public func collapse() {
     guard let page, isCurrent(page) else { return }
     state = .collapsed
     cancelApplicationRequest()
@@ -164,7 +174,7 @@ final class BrowserSession: ObservableObject {
   }
 
   /// Invalidates callbacks synchronously, then retires the document without clearing identity.
-  func invalidate() {
+  public func invalidate() {
     lifetime = UUID()
     let previous = page
     page = nil
@@ -203,7 +213,7 @@ final class BrowserSession: ObservableObject {
     objectWillChange.send()
   }
 
-  func message(_ text: String, source: BrowserSourceScope) {
+  func message(_ text: String, source: BrowserContext) {
     setPrompt(.message, message: text, source: source)
   }
 
@@ -217,7 +227,7 @@ final class BrowserSession: ObservableObject {
     if case .application = prompt?.kind { prompt = nil }
   }
 
-  private func setPrompt(_ kind: Prompt.Kind, message: String, source: BrowserSourceScope) {
+  private func setPrompt(_ kind: Prompt.Kind, message: String, source: BrowserContext) {
     guard valid(source), !clearing else { return }
     prompt = Prompt(
       kind: kind, message: message, source: source, identity: page?.id,
@@ -225,7 +235,7 @@ final class BrowserSession: ObservableObject {
   }
 
   func confirm(_ value: Prompt) {
-    // Do not deliver an old source's UI into a different connection/terminal.
+    // Do not deliver an old source's UI into a different host context.
     guard valid(value.source), !clearing else { return }
     guard value.lifetime == lifetime, page?.id == value.identity else {
       dataStatus = "网页会话已变化，请重新操作。"
@@ -251,7 +261,7 @@ final class BrowserSession: ObservableObject {
   }
 
   func openExternal(
-    _ url: URL, source: BrowserSourceScope, identity: UUID?
+    _ url: URL, source: BrowserContext, identity: UUID?
   ) {
     guard valid(source, identity: identity), !clearing else { return }
     switch BrowserURLPolicy.classify(url.absoluteString) {

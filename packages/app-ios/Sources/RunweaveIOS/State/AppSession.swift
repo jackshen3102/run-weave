@@ -1,3 +1,4 @@
+import RunweaveBrowser
 import Foundation
 import SwiftUI
 
@@ -18,7 +19,9 @@ final class AppSession: ObservableObject {
   @Published private(set) var terminalDrafts: [String: String] = [:] { didSet { scheduleDraftSave() } }
   @Published private(set) var suppressedQuickInputDrafts = Set<String>()
   private(set) var draftRevisions: [String: UUID] = [:]
-  let browser = BrowserSession()
+  let browser = BrowserSession(configuration: BrowserPresentationConfiguration(
+    applicationName: "Runweave", returnLabel: "回终端",
+    clearDataMessage: "清除此 App 全部内置网站的登录与存储数据？网页将关闭，不影响电脑连接或终端草稿。网站登录独立于电脑连接。"))
   let deviceStatus = DeviceStatusStore()
   let imageDrafts = TerminalImageDrafts()
   let draftArchive = ConnectionDraftArchive()
@@ -31,9 +34,9 @@ final class AppSession: ObservableObject {
     browser.currentSource = { [weak self] in self?.browserSource }
   }
 
-  var browserSource: BrowserSourceScope? {
+  var browserSource: BrowserContext? {
     guard authenticated, let connection, let terminal, terminalController != nil else { return nil }
-    return BrowserSourceScope(connectionScope: connection.scope, generation: generation, terminalID: terminal.id)
+    return BrowserContext(scope: [connection.scope, terminal.id], generation: String(generation))
   }
   private(set) var api: APIClient?
   @Published private(set) var generation = 0

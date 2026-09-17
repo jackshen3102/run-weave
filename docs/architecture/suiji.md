@@ -37,6 +37,11 @@ flowchart LR
 记录、待办、回收站、AI 与手机保持相同结构；详情、编辑和附件在抽屉内导航。
 关闭抽屉保留当前页面和草稿，终端切换不重建随记会话。原生内嵌浏览器在抽屉打开时隐藏，关闭后恢复。
 
+列表与详情正文的普通链接点击通过[浏览器装配层](../../frontend/src/features/suiji/browser-navigation.ts)
+收起抽屉，在当前 Browser Profile 新建分组标签并激活面板；重新打开随记仍保留原页面。
+页面不注入随记凭据，网站身份沿用所选 Browser Profile。失败显示主动重试/外部打开入口，
+迟到结果不抢占已切换的账户或界面。纯 Web 保留原生新标签行为；缺少创建标签能力的旧桌面壳走外部打开。
+
 账户固定为正式和开发两套，切换不注销另一环境。桌面通过窄 IPC 访问
 [主进程安全存储](../../electron/src/desktop/suiji-storage.ts)：账号、密码和会话一起由 Electron
 异步 safeStorage 加密，密文以原子替换方式写入稳定 userData 目录，不依赖 renderer origin 或构建目录。

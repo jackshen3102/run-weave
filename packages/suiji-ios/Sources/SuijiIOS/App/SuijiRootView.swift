@@ -40,6 +40,7 @@ struct CaptureHome: View {
       .sheet(item: $session.editor, onDismiss: { Task { await session.load(kind: kind, status: status, q: query, trash: tab == "trash", hideCompleted: tab == "records") } }) { RecordEditorSheet(model: $0) }
       .onDisappear { review.stopWatching() }
       .sheet(isPresented: $settings) { ConnectionSettingsView(session: session) }
+      .modifier(SuijiBrowserHost(session: session, settingsPresented: $settings))
   }
   private var feed: some View {
     ScrollView {

@@ -31,8 +31,10 @@ import { SuijiReviewPanel } from "./review";
 
 export function SuijiWorkspace({
   connection,
+  onOpenLink,
 }: {
   connection: SuijiConnection;
+  onOpenLink?: (url: string) => void;
 }) {
   const { client, info, store } = connection;
   const [tab, setTab] = useState("records"),
@@ -415,6 +417,7 @@ export function SuijiWorkspace({
                         <time>{recordDate(record.createdAt)}</time>
                       </span>
                       <RecordBody
+                        onOpenLink={onOpenLink}
                         body={record.body || "附件记录"}
                         className="pointer-events-none relative line-clamp-5"
                       />
@@ -519,6 +522,7 @@ export function SuijiWorkspace({
       </div>
       {detail && !editor ? (
         <SuijiRecordDetail
+          onOpenLink={onOpenLink}
           {...detail}
           client={client}
           onClose={() => setDetail(undefined)}

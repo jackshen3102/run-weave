@@ -2,4 +2,6 @@
 import PackageDescription
 let package = Package(name: "SuijiIOS", platforms: [.iOS("18.6")],
   products: [.library(name: "SuijiIOS", targets: ["SuijiIOS"])],
-  targets: [.target(name: "SuijiIOS", resources: [.process("Resources")])], swiftLanguageModes: [.v5])
+  dependencies: [.package(path: "../browser-ios")],
+  targets: [.target(name: "SuijiIOS", dependencies: [.product(name: "RunweaveBrowser", package: "browser-ios")],
+    resources: [.process("Resources")])], swiftLanguageModes: [.v5])

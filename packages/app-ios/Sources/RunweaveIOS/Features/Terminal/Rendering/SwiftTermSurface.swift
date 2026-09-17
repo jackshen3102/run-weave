@@ -1,3 +1,4 @@
+import RunweaveBrowser
 import SwiftTerm
 import UIKit
 
@@ -156,7 +157,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
   public func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
     guard active else { return }
-    openLinkRequested?(BrowserOpenIntent(target: link, origin: .terminalLink, action: .internalOpen))
+    openLinkRequested?(BrowserOpenIntent(target: link, origin: .host, action: .internalOpen))
   }
   public func clipboardCopy(source: TerminalView, content: Data) {}
   public func clipboardRead(source: TerminalView) -> Data? { nil }
