@@ -107,6 +107,51 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
 
   func cancelJavaScriptDialog() { finishJavaScriptDialog(nil) }
 
+  private func requestApplication(_ link: BrowserURLPolicy.ApplicationLink, frame: WKFrameInfo) {
+    guard valid, owner?.state == .presented, owner?.prompt == nil, javaScriptReply == nil,
+      UIApplication.shared.applicationState == .active, presentationController != nil
+    else { return }
+    let origin = frame.securityOrigin
+    guard origin.protocol == "https", !origin.host.isEmpty else {
+      notice = "请从 HTTPS 网页打开客户端。"
+      changed()
+      return
+    }
+    // Scripted links and subframes may request a handoff, but only native confirmation opens it.
+    // Do not disclose the URL query: login links can carry an authorization token.
+    owner?.request(.application(link),
+      message: "网站 \(origin.host) 请求打开\(link.name)。如需登录，请在客户端完成授权后返回 Runweave，当前网页会保留。")
+  }
+
+  func openApplication(_ link: BrowserURLPolicy.ApplicationLink) {
+    guard valid, owner?.state == .presented,
+      UIApplication.shared.applicationState == .active,
+      BrowserURLPolicy.applicationLink(link.url) != nil else { return }
+    let revision = navigationRevision
+    let options: [UIApplication.OpenExternalURLOptionsKey: Any] =
+      link.universalLink ? [.universalLinksOnly: true] : [:]
+    Task { @MainActor [weak self] in
+      guard let self, self.valid, self.navigationRevision == revision,
+        self.owner?.state == .presented,
+        UIApplication.shared.applicationState == .active else { return }
+      var success = await UIApplication.shared.open(link.url, options: options)
+      guard self.valid, self.navigationRevision == revision else { return }
+      if !success, let fallback = link.schemeFallback {
+        // An installed client may not handle this host's Universal Link. Use the
+        // equivalent client scheme only for the already-confirmed, allowlisted route.
+        guard self.owner?.state == .presented,
+          UIApplication.shared.applicationState == .active else { return }
+        success = await UIApplication.shared.open(fallback, options: [:])
+      }
+      guard self.valid, self.navigationRevision == revision else { return }
+      // Preserve the original document and its authorization polling, including on return.
+      self.notice = success
+        ? "已打开\(link.name)。完成授权后，请返回 Runweave 继续浏览。"
+        : "无法打开\(link.name)。请确认已安装客户端，或从右上角“…”在默认浏览器继续。"
+      self.changed()
+    }
+  }
+
   func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
     presentJavaScriptDialog(.alert, message: message, frame: frame) { _ in completionHandler() }
@@ -271,6 +316,11 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       decide(.cancel)
       return
     }
+    if !action.shouldPerformDownload, let link = BrowserURLPolicy.applicationLink(url) {
+      decide(.cancel)
+      requestApplication(link, frame: action.sourceFrame)
+      return
+    }
     let isSubframe = action.targetFrame?.isMainFrame == false
     if isSubframe, !action.shouldPerformDownload, BrowserURLPolicy.isEmbeddedDocument(url) {
       decide(.allow)
@@ -292,6 +342,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       if action.targetFrame?.isMainFrame == true {
         navigationRevision += 1
         cancelJavaScriptDialog()
+        owner?.cancelApplicationRequest()
         requestedURL = url
         failure = nil
         failureURL = nil
@@ -419,6 +470,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
   }
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
     cancelJavaScriptDialog()
+    owner?.cancelApplicationRequest()
     if retirement != .active {
       finishUnload(false)
       return
@@ -436,9 +488,13 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
     for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
   ) -> WKWebView? {
     guard retirement == .active, valid, navigationAction.targetFrame == nil,
-      !navigationAction.shouldPerformDownload, let url = navigationAction.request.url,
-      case .web = BrowserURLPolicy.classify(url.absoluteString)
+      !navigationAction.shouldPerformDownload, let url = navigationAction.request.url
     else { return nil }
+    if let link = BrowserURLPolicy.applicationLink(url) {
+      requestApplication(link, frame: navigationAction.sourceFrame)
+      return nil
+    }
+    guard case .web = BrowserURLPolicy.classify(url.absoluteString) else { return nil }
     // Keep new-window links in this browser, preserving the original request (including POST).
     // The load passes through the same main-frame navigation policy and lifecycle guards.
     navigation = webView.load(navigationAction.request)
