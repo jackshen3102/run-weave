@@ -2,7 +2,7 @@ import RunweaveBrowser
 import SwiftTerm
 import UIKit
 
-/// Uses the same scrolling path for touch and VoiceOver. No command parsing or input replay.
+/// Local history uses UIScrollView; alternate screens route through TerminalGestures.
 @MainActor
 final class NativeTerminalView: TerminalView {
   weak var scrollHandler: TerminalGestures?
@@ -11,6 +11,21 @@ final class NativeTerminalView: TerminalView {
   private var menuObserver: NSObjectProtocol?
   private var linkMenu: AnyObject?
   private var menuPoint = CGPoint.zero
+
+  override func mouseModeChanged(source: Terminal) {
+    // Runweave owns remote scrolling. SwiftTerm's mouse pan would compete with
+    // UIScrollView even though allowMouseReporting is disabled.
+  }
+
+  override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    if gestureRecognizer === panGestureRecognizer {
+      guard scrollHandler?.active != false, !hasActiveSelection else { return false }
+      let start = gestureRecognizer.location(in: self).x
+        - panGestureRecognizer.translation(in: self).x - bounds.minX
+      guard start > 24 else { return false }
+    }
+    return super.gestureRecognizerShouldBegin(gestureRecognizer)
+  }
 
   func installLinkMenu() {
     // Observe SwiftTerm's own recognizer after its hit testing. Do not install a competing pan
@@ -163,7 +178,15 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
   private weak var view: NativeTerminalView?
   private let pan = UIPanGestureRecognizer()
   private var accumulated: CGFloat = 0
-  var active = true
+  // Runweave's private tmux server uses the default copy-mode wheel bindings (-N 5).
+  private let tmuxRowsPerWheel = 5
+  var active = true {
+    didSet {
+      view?.isScrollEnabled = active
+      pan.isEnabled = active
+      accumulated = 0
+    }
+  }
   var isTmux: () -> Bool = { false }
   var sendScroll: ((String, Int) -> Bool)?
 
@@ -188,6 +211,8 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
   }
   func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
     guard active, let view, !view.hasActiveSelection else { return false }
+    // Normal-buffer history already has pixel scrolling and native inertia.
+    guard view.getTerminal().isCurrentBufferAlternate else { return false }
     let position = pan.location(in: view)
     let start = position.x - pan.translation(in: view).x - view.bounds.minX
     let velocity = pan.velocity(in: view)
@@ -198,14 +223,16 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
     guard let view else { return }
     if gesture.state == .began { accumulated = 0 }
     if gesture.state == .began || gesture.state == .changed {
-      accumulated += gesture.translation(in: view).y * 3
+      guard active, !view.hasActiveSelection, view.getTerminal().isCurrentBufferAlternate,
+        isTmux() else { accumulated = 0; return }
+      accumulated += gesture.translation(in: view).y * 2
       gesture.setTranslation(.zero, in: view)
-      let lineHeight = view.bounds.height / CGFloat(max(1, view.getTerminal().rows))
+      let lineHeight = view.getOptimalFrameSize().height / CGFloat(max(1, view.getTerminal().rows))
       guard lineHeight > 0 else { return }
-      let rows = Int(accumulated / lineHeight)
-      if rows != 0 {
-        accumulated -= CGFloat(rows) * lineHeight
-        _ = scroll(rows: rows)
+      let wheels = Int(accumulated / (lineHeight * CGFloat(tmuxRowsPerWheel)))
+      if wheels != 0 {
+        accumulated -= CGFloat(wheels * tmuxRowsPerWheel) * lineHeight
+        _ = sendTmuxScroll(wheels: wheels)
       }
     } else {
       accumulated = 0
@@ -215,15 +242,22 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
     guard active, let view, !view.hasActiveSelection, rows != 0 else { return false }
     let terminal = view.getTerminal()
     if terminal.isCurrentBufferAlternate, isTmux() {
-      let button = rows > 0 ? 64 : 65
-      let col = max(1, terminal.cols / 2)
-      let row = max(1, terminal.rows / 2)
-      let input = String(repeating: "\u{1b}[<\(button);\(col);\(row)M", count: abs(rows))
-      return sendScroll?(input, rows) ?? false
+      // VoiceOver requests a page, measured in rows rather than wheel events.
+      let wheels = max(1, Int((Double(abs(rows)) / Double(tmuxRowsPerWheel)).rounded()))
+      return sendTmuxScroll(wheels: rows > 0 ? wheels : -wheels)
     }
     // Unlike pageUp/pageDown, scrollUp/Down never emit cursor keys in a PTY alternate screen.
     if rows > 0 { view.scrollUp(lines: rows) } else { view.scrollDown(lines: -rows) }
     return true
+  }
+  private func sendTmuxScroll(wheels: Int) -> Bool {
+    guard let view else { return false }
+    let terminal = view.getTerminal()
+    let button = wheels > 0 ? 64 : 65
+    let col = max(1, terminal.cols / 2)
+    let row = max(1, terminal.rows / 2)
+    let input = String(repeating: "\u{1b}[<\(button);\(col);\(row)M", count: abs(wheels))
+    return sendScroll?(input, wheels * tmuxRowsPerWheel) ?? false
   }
   func dispose() {
     if let view {

@@ -1,52 +1,60 @@
-const SCROLL_LINES_PER_EVENT = 1;
-const WHEEL_DELTA_PER_LINE = 80;
+// Runweave's private tmux server uses the default copy-mode wheel bindings (-N 5).
+const TMUX_ROWS_PER_WHEEL = 5;
+const GESTURE_IDLE_MS = 250;
 
-/**
- * Minimum interval (ms) between tmux scroll inputs.
- * Trackpads and touch drags fire high-frequency events; throttling prevents
- * multiple screens from flying past on a single swipe.
- */
-const TMUX_SCROLL_THROTTLE_MS = 60;
+type ScrollEvent = Pick<WheelEvent, "deltaY" | "deltaMode" | "timeStamp">;
 
-let lastTmuxScrollAt = 0;
+/** One accumulator per terminal. Preserve distance instead of rounding every event up. */
+export function createTmuxScrollInput() {
+  let pendingPixels = 0;
+  let lastEventAt = -Infinity;
 
-/**
- * Returns true when enough time has elapsed since the last accepted scroll.
- * Call this **before** `buildTmuxScrollInput` to drop excessive events.
- */
-export function shouldThrottleTmuxScroll(): boolean {
-  const now = performance.now();
-  if (now - lastTmuxScrollAt < TMUX_SCROLL_THROTTLE_MS) {
-    return true;
-  }
-  lastTmuxScrollAt = now;
-  return false;
-}
+  const reset = () => {
+    pendingPixels = 0;
+    lastEventAt = -Infinity;
+  };
 
-/**
- * Converts a wheel deltaY into SGR-encoded mouse scroll escape sequences
- * that tmux interprets when `mouse on` is active.
- *
- * SGR encoding: `\e[<button;col;rowM`
- *   - button 64 = scroll up
- *   - button 65 = scroll down
- */
-export function buildTmuxScrollInput(
-  deltaY: number,
-  cols: number,
-  rows: number,
-): string | null {
-  if (deltaY === 0) {
-    return null;
-  }
+  return {
+    reset,
+    consume(
+      event: ScrollEvent,
+      cols: number,
+      rows: number,
+      lineHeight: number,
+      sensitivity: number,
+    ): { input: string; rows: number } | null {
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+        reset();
+        return null;
+      }
+      const unit =
+        event.deltaMode === 1
+          ? lineHeight
+          : event.deltaMode === 2
+            ? lineHeight * rows
+            : 1;
+      const pixels = event.deltaY * unit * sensitivity;
+      if (!Number.isFinite(pixels) || pixels === 0) return null;
+      if (
+        event.timeStamp - lastEventAt > GESTURE_IDLE_MS ||
+        Math.sign(pixels) !== Math.sign(pendingPixels)
+      ) {
+        pendingPixels = 0;
+      }
+      lastEventAt = event.timeStamp;
+      pendingPixels += pixels;
+      const pixelsPerWheel = lineHeight * TMUX_ROWS_PER_WHEEL;
+      const wheels = Math.trunc(pendingPixels / pixelsPerWheel);
+      if (wheels === 0) return null;
+      pendingPixels -= wheels * pixelsPerWheel;
 
-  const button = deltaY < 0 ? 64 : 65;
-  const col = Math.max(1, Math.floor(cols / 2));
-  const row = Math.max(1, Math.floor(rows / 2));
-  const lines = Math.min(
-    Math.max(1, Math.ceil(Math.abs(deltaY) / WHEEL_DELTA_PER_LINE)),
-    SCROLL_LINES_PER_EVENT,
-  );
-
-  return `\x1b[<${button};${col};${row}M`.repeat(lines);
+      const button = wheels < 0 ? 64 : 65;
+      const col = Math.max(1, Math.floor(cols / 2));
+      const row = Math.max(1, Math.floor(rows / 2));
+      return {
+        input: `\x1b[<${button};${col};${row}M`.repeat(Math.abs(wheels)),
+        rows: wheels * TMUX_ROWS_PER_WHEEL,
+      };
+    },
+  };
 }

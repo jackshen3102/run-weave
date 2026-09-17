@@ -21,6 +21,9 @@ RunweaveIOS 的 [Package.swift](../../Package.swift) 直接引用本目录，不
 
 ## 补丁边界
 
+- 本地历史沿用 UIScrollView 的像素滚动与系统惯性；已冻结历史在惯性期间同步阅读位置，
+  防止后续输出拉回松手位置。触达底部后继续跟随输出，并将滚动位置通知宿主。
+
 - `iOSTerminalView.opensLinksOnSingleTap` 默认关闭，仅 Runweave 开启。沿用现有 single-tap
   recognizer、bidi-aware buffer hit test 和 delegate；首次触摸无需先点一次聚焦。
   OSC 8 使用真实目标与原参数；普通 HTTP(S) 复用上游 implicit detector。

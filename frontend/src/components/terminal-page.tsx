@@ -1,10 +1,9 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  buildTmuxScrollInput,
+  createTmuxScrollInput,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
-  shouldThrottleTmuxScroll,
 } from "@runweave/common/terminal";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared/terminal-limits";
 import { type TerminalModeState } from "@runweave/shared/terminal/websocket";
@@ -181,27 +180,37 @@ export function TerminalPage({
     terminal.loadAddon(new WebLinksAddon(activateLink));
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
+    const tmuxScroll = createTmuxScrollInput();
+    const screen = terminal.element?.querySelector(".xterm-screen");
     terminal.attachCustomWheelEventHandler((event) => {
-      const canScroll = terminal.buffer.active.baseY > 0;
+      const { baseY, viewportY } = terminal.buffer.active;
+      const canScroll =
+        event.deltaY < 0
+          ? viewportY > 0
+          : event.deltaY > 0 && viewportY < baseY;
       if (!shouldSuppressWheelInput(event, canScroll)) {
+        tmuxScroll.reset();
         return true;
       }
 
       if (
         runtimeKindRef.current === "tmux" &&
+        terminal.buffer.active.type === "alternate" &&
         event.deltaY !== 0 &&
         !event.shiftKey
       ) {
-        if (!shouldThrottleTmuxScroll()) {
-          const input = buildTmuxScrollInput(
-            event.deltaY,
-            terminal.cols,
-            terminal.rows,
-          );
-          if (input) {
-            sendInput(input);
-          }
+        const scroll = tmuxScroll.consume(
+          event,
+          terminal.cols,
+          terminal.rows,
+          (screen?.getBoundingClientRect().height ?? 0) / terminal.rows,
+          terminal.options.scrollSensitivity ?? 1,
+        );
+        if (scroll) {
+          sendInput(scroll.input);
         }
+      } else {
+        tmuxScroll.reset();
       }
 
       event.preventDefault();
