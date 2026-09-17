@@ -1,18 +1,28 @@
 import Foundation
 import SwiftUI
 
+/// Only diagnostic consumers observe transport accounting; it never invalidates session UI.
+@MainActor
+public final class TerminalOutputMetrics: ObservableObject {
+  @Published public fileprivate(set) var receivedBytes = 0
+  @Published public fileprivate(set) var queuedBytes = 0
+}
+
 /// Owns one client's socket. Closing it never deletes or interrupts the remote runtime.
 @MainActor
 public final class SessionController: ObservableObject {
   public let surface = SwiftTermSurface()
   @Published public private(set) var connectionStatus = "未连接"
   @Published public private(set) var runtimeKind: String?
-  @Published public private(set) var runtimeStatus: String?
-  @Published public private(set) var receivedBytes = 0
-  @Published public private(set) var queuedBytes = 0
+  @Published public private(set) var runtimeStatus: String? { didSet { updateCanSend() } }
+  // Transport accounting is not presentation state. Output must not invalidate menus or editors.
+  public let outputMetrics = TerminalOutputMetrics()
+  public var receivedBytes: Int { outputMetrics.receivedBytes }
+  public var queuedBytes: Int { outputMetrics.queuedBytes }
   @Published public private(set) var failure: String?
   @Published public private(set) var notice: String?
-  @Published public private(set) var inputBusy = false
+  @Published public private(set) var inputBusy = false { didSet { updateCanSend() } }
+  @Published public private(set) var canSend = false
   @Published private(set) var metadata: Metadata?
   struct Metadata: Equatable {
     let cwd: String
@@ -42,9 +52,9 @@ public final class SessionController: ObservableObject {
   private var commandTask: Task<Void, Error>?
   private var socket: URLSessionWebSocketTask?
   private let networking = URLSession(configuration: .ephemeral)
-  private var connected = false
-  private var hasSnapshot = false
-  private var stopped = true
+  private var connected = false { didSet { updateCanSend() } }
+  private var hasSnapshot = false { didSet { updateCanSend() } }
+  private var stopped = true { didSet { updateCanSend() } }
   private struct OutputFrame {
     let bytes: [UInt8]
     let cursor: TerminalOutputCursor?
@@ -61,8 +71,9 @@ public final class SessionController: ObservableObject {
   private var sentSize: (Int, Int)?
   private static let highWater = 1024 * 1024
 
-  public var canSend: Bool {
-    !readOnly && connected && hasSnapshot && !stopped && !inputBusy && runtimeStatus != "exited"
+  private func updateCanSend() {
+    let next = !readOnly && connected && hasSnapshot && !stopped && !inputBusy && runtimeStatus != "exited"
+    if canSend != next { canSend = next }
   }
 
   public var openLinkRequested: ((BrowserOpenIntent) -> Void)?
@@ -363,8 +374,8 @@ public final class SessionController: ObservableObject {
       halt("输出积压超过 1 MiB，需要重同步；连接已停止")
       return
     }
-    receivedBytes += bytes.count
-    queuedBytes += bytes.count
+    outputMetrics.receivedBytes += bytes.count
+    outputMetrics.queuedBytes += bytes.count
     // A range is fed atomically. Dropping an unconsumed frame on disconnect
     // cannot leave an already-rendered prefix that would be replayed twice.
     queue.append(OutputFrame(bytes: bytes, cursor: cursor, size: snapshotSize))
@@ -384,7 +395,7 @@ public final class SessionController: ObservableObject {
         self.surface.feed(next.bytes)
         if next.size != nil { terminal.resize(cols: localSize.0, rows: localSize.1) }
         self.committedCursor = self.cursorValid ? next.cursor : nil
-        self.queuedBytes -= next.bytes.count
+        self.outputMetrics.queuedBytes -= next.bytes.count
         self.record("consume", bytes: next.bytes.count)
         await Task.yield()
       }
@@ -397,7 +408,7 @@ public final class SessionController: ObservableObject {
     drainTask?.cancel()
     drainTask = nil
     queue.removeAll(keepingCapacity: false)
-    queuedBytes = 0
+    outputMetrics.queuedBytes = 0
     receivedCursor = committedCursor
   }
 

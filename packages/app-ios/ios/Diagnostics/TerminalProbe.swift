@@ -190,6 +190,14 @@
     }
   }
 
+  private struct TerminalOutputMetricsView: View {
+    @ObservedObject var metrics: TerminalOutputMetrics
+
+    var body: some View {
+      Text("接收 \(metrics.receivedBytes) B · 队列 \(metrics.queuedBytes) B").font(.caption2)
+    }
+  }
+
   private struct LiveSessionView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -205,7 +213,7 @@
           "\(controller.connectionStatus) · \(controller.runtimeKind ?? "unknown") · \(controller.runtimeStatus ?? "unknown")"
         ).font(.caption)
         if verticalSizeClass != .compact {
-          Text("接收 \(controller.receivedBytes) B · 队列 \(controller.queuedBytes) B").font(.caption2)
+          TerminalOutputMetricsView(metrics: controller.outputMetrics)
         }
         if let failure = controller.failure { Text(failure).foregroundColor(.red).font(.caption) }
         if verticalSizeClass != .compact {

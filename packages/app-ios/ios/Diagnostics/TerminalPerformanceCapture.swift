@@ -58,14 +58,14 @@
       previousIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
       UIApplication.shared.isIdleTimerDisabled = true
       status = "正在采样 · 最长 11 分钟"
-      controller.$receivedBytes.sink { [weak self] total in
+      controller.outputMetrics.$receivedBytes.sink { [weak self] total in
         guard let self, self.running, total > self.baseReceived + self.received else { return }
         self.received = total - self.baseReceived
         let now = ProcessInfo.processInfo.systemUptime
         self.lastReceipt = now - self.started
         self.pending.append((self.received, now))
       }.store(in: &subscriptions)
-      controller.$queuedBytes.sink { [weak self] value in
+      controller.outputMetrics.$queuedBytes.sink { [weak self] value in
         guard let self else { return }
         self.queuePeak = max(self.queuePeak, value)
       }.store(in: &subscriptions)

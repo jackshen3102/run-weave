@@ -10,6 +10,7 @@ struct TerminalScreen: View {
   @State private var showingInfo = false
   @State private var showingDiagnostics = false
   @State private var showingComposer = false
+  @AccessibilityFocusState private var composerTriggerFocused: Bool
   @State private var browserPresentationID = UUID()
   @State private var composerPreventsDismissal = false
   @State private var stoppingCommand = false
@@ -118,10 +119,11 @@ struct TerminalScreen: View {
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id) }
     .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id) }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session) }
-    .sheet(isPresented: $showingComposer) {
-      TerminalComposerSheet(
+    .background {
+      TerminalComposerPresentation(
         session: session, controller: controller, terminalID: details.id,
-        preventsDismissal: $composerPreventsDismissal)
+        isPresented: $showingComposer, preventsDismissal: $composerPreventsDismissal,
+        onDismiss: { composerTriggerFocused = true })
     }
     .confirmationDialog("删除终端？", isPresented: $deleting, titleVisibility: .visible) {
       Button("删除", role: .destructive) { Task { await session.deleteTerminal(details.id) } }
@@ -258,6 +260,7 @@ struct TerminalScreen: View {
       .accessibilityLabel("打开终端输入")
       .accessibilityValue(hasComposerDraft ? "有未发送草稿" : "无草稿")
       .accessibilityIdentifier("terminal-composer-open")
+      .accessibilityFocused($composerTriggerFocused)
     }
   }
 
