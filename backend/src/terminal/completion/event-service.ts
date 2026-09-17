@@ -1,3 +1,4 @@
+import { logger } from "../../logging/index";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { RecordTerminalCompletionEventInput } from "./events";
 import type { TerminalEventService } from "../state/terminal-event-service";
@@ -11,6 +12,7 @@ export class TerminalCompletionEventService {
   constructor(
     private readonly terminalEventService: TerminalEventService,
     private readonly terminalSessionManager: TerminalSessionManager,
+    private readonly onCompleted?: (event: TerminalEventEnvelope) => Promise<void>,
   ) {}
 
   async record(
@@ -53,7 +55,7 @@ export class TerminalCompletionEventService {
       );
     }
 
-    return this.terminalEventService.record({
+    const event = this.terminalEventService.record({
       kind: "completion",
       terminalSessionId: input.terminalSessionId,
       projectId: session.projectId,
@@ -73,6 +75,13 @@ export class TerminalCompletionEventService {
         tmuxPaneId: input.tmuxPaneId ?? null,
       },
     });
+    // Persist background work before acknowledging the completion hook. Learning failure
+    // never blocks or rewrites the user's original task result.
+    if (!input.panelId || !this.terminalSessionManager.getPanel(input.panelId)?.agentTeamRunId) {
+      try { await this.onCompleted?.(event); }
+      catch (error) { logger.warn("experience.completion.enqueue.failed", { error }); }
+    }
+    return event;
   }
 
   listAfter(afterId: string | null): TerminalEventEnvelope[] {

@@ -1,3 +1,4 @@
+import { createExperienceRouter } from "./routes/experience";
 import { createCodexQuotaRouter } from "./routes/codex-quota";
 import { createDeviceNotificationsRouter } from "./routes/device-notifications";
 import { createDeviceStatusRouter } from "./routes/device-status";
@@ -255,6 +256,11 @@ function createHttpApp(
     "/api/race",
     requireAuth,
     createRaceRouter(services.raceService),
+  );
+  app.use(
+    "/api/experience",
+    requireAuth,
+    createExperienceRouter(services.experienceService, services.experienceLearning),
   );
   app.use(
     "/api/evolution",

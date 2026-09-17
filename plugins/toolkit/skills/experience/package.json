@@ -1,0 +1,13 @@
+{
+  "name": "@runweave/experience-skill",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "SKILL.md"
+  ],
+  "pi": {
+    "skills": [
+      "./SKILL.md"
+    ]
+  }
+}

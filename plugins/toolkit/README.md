@@ -21,6 +21,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `diagnostic-log-debugging`
 - `doc-coauthoring`
 - [`eli5`](./skills/eli5/SKILL.md)：用大图和少量文字生成零基础 HTML 图解；源自 [Thariq Shihipar 的上游技能](https://github.com/anthropics/claude-plugins-community/blob/863e70dc7cff21a2facc749e40a7ecd1a5d19833/eli5/skills/eli5/SKILL.md)，保留核心指令并适配 Codex 主题参数。
+- [`experience`](./skills/experience/SKILL.md)：任意 Git 项目的按需经验检索与结果反馈；按仓库隔离，不依赖项目 `AGENTS.md`。
 - `git-advanced-workflows`
 - `grill-with-docs`
 - `grilling`
@@ -79,6 +80,16 @@ MARKETPLACE_NAME="$(python3 "$CODEX_HOME/skills/.system/plugin-creator/scripts/r
   --marketplace-path .agents/plugins/marketplace.json)"
 codex plugin add "toolkit@$MARKETPLACE_NAME"
 ```
+
+`experience` 是可选 skill：Codex 用户主动安装 Toolkit 后发现它；Pi 用户可单独安装同一源码目录：
+
+```bash
+pi install /absolute/path/to/browser-viewer/plugins/toolkit/skills/experience
+```
+
+该目录自带 Pi package manifest，不依赖构建或 Electron 分发副本。桌面启动和 Pi hooks 安装器
+不会安装、升级或覆盖这个 skill；未安装就不提供该检索入口，不做自动补装。
+项目无需写入提示文件。已有 CLI 和认证连接可用后，Agent 按问题选择 skill，不在启动时强制检索。
 
 重新安装后，在新的 Codex 线程中验证 skill 加载。不要依赖当前线程热加载插件 skills。
 

@@ -77,6 +77,9 @@ skill；Beta 按既有策略不自动写全局 Hook。安装器保留用户自�
 扩展。正在运行的 Pi 需要 `/reload`。安装不迁移 Codex 凭据，不修改默认模型；动态
 扩展 provider 或通过临时 `-e` 参数加载的模型不保证能随自动恢复重建。
 
+可选的 `experience` skill 由用户主动安装其源码目录中的 Pi package；桌面和 hooks 安装器
+不分发或管理它。安装入口见 [Toolkit 插件](../../plugins/toolkit/README.md#本地安装)。
+
 ## 验证边界
 
 [日常终端测试合同](../testing/terminal/runtime/pi-agent.testplan.yaml) 包含原生 TUI、
