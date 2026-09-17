@@ -9,6 +9,7 @@ final class BrowserSession: ObservableObject {
       case replace(URL)
       case close, clear
       case address(String)
+      case application(BrowserURLPolicy.ApplicationLink)
       case message
     }
     let id = UUID()
@@ -157,6 +158,7 @@ final class BrowserSession: ObservableObject {
   func collapse() {
     guard let page, isCurrent(page) else { return }
     state = .collapsed
+    cancelApplicationRequest()
     page.cancelJavaScriptDialog()
     page.webView.endEditing(true)
   }
@@ -207,7 +209,12 @@ final class BrowserSession: ObservableObject {
 
   func request(_ kind: Prompt.Kind, message: String) {
     guard let page, isCurrent(page), state == .presented else { return }
+    if case .application = kind { dataStatus = nil }
     setPrompt(kind, message: message, source: page.source)
+  }
+
+  func cancelApplicationRequest() {
+    if case .application = prompt?.kind { prompt = nil }
   }
 
   private func setPrompt(_ kind: Prompt.Kind, message: String, source: BrowserSourceScope) {
@@ -227,7 +234,7 @@ final class BrowserSession: ObservableObject {
     prompt = nil
     switch value.kind {
     case .close, .clear: break  // A page cannot defeat these actions by continuously changing URL.
-    case .replace, .address, .message:
+    case .replace, .address, .message, .application:
       guard page?.navigationRevision == value.navigationRevision else {
         dataStatus = "网页地址已变化，请重新选择操作。"
         return
@@ -238,6 +245,7 @@ final class BrowserSession: ObservableObject {
     case .close: invalidate()
     case .clear: clearData()
     case .address(let target): UIPasteboard.general.string = target
+    case .application(let link): page?.openApplication(link)
     case .message: break
     }
   }

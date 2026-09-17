@@ -18,7 +18,10 @@ struct BrowserScreen: View {
     .background(chrome.ignoresSafeArea())
     .modifier(BrowserPromptPresenter(browser: browser, active: true))
     .onChange(of: scenePhase) { phase in
-      if phase != .active { browser.page?.cancelJavaScriptDialog() }
+      if phase != .active {
+        browser.page?.cancelJavaScriptDialog()
+        browser.cancelApplicationRequest()
+      }
     }
   }
 
@@ -201,27 +204,33 @@ struct BrowserPromptPresenter: ViewModifier {
   @ObservedObject var browser: BrowserSession
   let active: Bool
   func body(content: Content) -> some View {
-    content.alert(
-      item: Binding(
-        get: { active ? browser.prompt : nil },
+    content.alert("网页",
+      isPresented: Binding(
+        get: { active && browser.prompt != nil },
         set: { value in
-          if active { browser.prompt = value }
-        })
+          if active && !value { browser.prompt = nil }
+        }),
+      presenting: browser.prompt
     ) { prompt in
-      let action: String
-      switch prompt.kind {
-      case .replace: action = "替换网页"
-      case .close: action = "关闭网页"
-      case .clear: action = "清除全部网站数据"
-      case .address: action = "复制链接"
-      case .message:
-        return Alert(
-          title: Text("网页"), message: Text(prompt.message), dismissButton: .default(Text("好")))
+      if case .message = prompt.kind {
+        Button("好", role: .cancel) {}
+      } else {
+        Button(confirmationTitle(prompt.kind)) { browser.confirm(prompt) }
+        Button("取消", role: .cancel) {}
       }
-      return Alert(
-        title: Text("网页"), message: Text(prompt.message),
-        primaryButton: .default(Text(action)) { browser.confirm(prompt) },
-        secondaryButton: .cancel(Text("取消")))
+    } message: { prompt in
+      Text(prompt.message)
+    }
+  }
+
+  private func confirmationTitle(_ kind: BrowserSession.Prompt.Kind) -> String {
+    switch kind {
+    case .replace: return "替换网页"
+    case .close: return "关闭网页"
+    case .clear: return "清除全部网站数据"
+    case .address: return "复制链接"
+    case .application(let link): return "打开\(link.name)"
+    case .message: return "好"
     }
   }
 }

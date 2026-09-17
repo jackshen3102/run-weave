@@ -144,7 +144,12 @@ Composer/媒体宿主 Sheet、历史/信息/诊断/删除状态及该终端窗�
 显式 localhost/loopback/未指定本地地址及其它协议；不替换电脑域名、不代理、不做 DNS 防火墙承诺。
 HTTP 明示未加密；TLS 保留 WebKit 系统校验，不提供忽略入口。HTTP(S) 链接默认内置打开，
 新窗口请求通过 URL 策略后保留原始 request 并加载到当前 WebView，不创建额外页面。WebKit 自动开窗许可关闭；
-mailto/tel 等外部协议仍被阻止，网页点击和脚本都不获得唤起外部 App 的能力。
+网页中的飞书/Lark 链接单独走客户端交接策略：识别 `lark`、`x-feishu`、`x-lark` 的客户端地址及官方 HTTPS AppLink。
+AppLink 精确匹配 `applink.feishu.cn`、`applink.larkoffice.com`、`applink.larksuite.com`；其中 larkoffice 用于设备授权页发起的隐藏 iframe 跳转，不使用域名后缀泛匹配。
+仅 HTTPS 来源且网页当前可见、应用在前台、无其它弹窗时可提出请求；原生确认显示请求 frame 的域名和客户端名称，不展示授权参数。
+主页面、子 frame 和新窗口均需原生确认，网页脚本或 `.linkActivated` 本身不算用户授权。确认与异步打开回调复核页面身份及导航 revision。
+HTTPS AppLink 先尝试 Universal Link，系统无法打开时回退到同地址的 `lark` scheme，保留路径和授权参数；失败不自动转入外部浏览器。客户端打开不收起、替换或刷新原网页，使站点自己的授权轮询在返回后继续。
+这不提供向 Runweave 自动回跳的协议或跨浏览器 Cookie 同步；其它协议（包括 mailto/tel）仍被阻止，终端入口仍只接受 HTTP(S)。
 网页更多菜单提供用户主动“在默认浏览器打开当前网页”的入口；外部调用前后复核来源
 及 session/lifetime，且只允许 HTTP(S)。不引入私有 API、JS bridge 或触摸时间窗口授权。
 附件和不可显示响应取消；子页面拦截不产生整页提示，主页面失败提示可手动关闭。
@@ -168,7 +173,7 @@ SwiftUI 退场暂时持有的实例；停止加载/移出视图不被当作旧�
 未完全清除，回调未返回时保持忙态，不提前宣称成功。SVG 预览保持独立非持久、禁 JS/网络配置。
 
 终端选区菜单保留内置打开和“链接”；网页更多菜单也使用“链接”展示完整地址并提供复制。
-失败页使用失败导航地址；外部打开统一位于网页更多菜单。默认浏览器通过
+失败页使用失败导航地址；默认浏览器入口位于网页更多菜单。默认浏览器通过
 系统 URL opening，不硬编码 Safari，成功后收起原页，拒绝则原界面报错。不记录网页正文、URL query、
 fragment 或认证错误详情。安全验收入口为
 [网页身份与导航安全](../../../docs/testing/app/ios-native-browser-safety.testplan.yaml)。

@@ -25,6 +25,41 @@ struct BrowserSourceScope: Equatable {
 
 /// A navigation policy, not a DNS resolver or a private-network firewall.
 enum BrowserURLPolicy {
+  struct ApplicationLink {
+    let url: URL
+    let name: String
+    var universalLink: Bool { url.scheme?.lowercased() == "https" }
+
+    var schemeFallback: URL? {
+      guard universalLink,
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+      else { return nil }
+      // Feishu's Conditional Access page uses this same route with either scheme.
+      components.scheme = "lark"
+      return components.url
+    }
+  }
+
+  /// Page-only handoff. These URLs never become browser entry URLs or website history.
+  static func applicationLink(_ url: URL) -> ApplicationLink? {
+    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+      components.user == nil, components.password == nil, components.port == nil,
+      let scheme = components.scheme?.lowercased(), let host = components.host?.lowercased()
+    else { return nil }
+    // Conditional Access uses larkoffice AppLinks, including inside a hidden iframe.
+    let appLinkHost = ["applink.feishu.cn", "applink.larkoffice.com", "applink.larksuite.com"]
+      .contains(host)
+    switch scheme {
+    case "lark", "x-feishu", "x-lark":
+      guard appLinkHost || host == "client" else { return nil }
+    case "https":
+      guard appLinkHost, components.path.hasPrefix("/client/") else { return nil }
+    default: return nil
+    }
+    let name = scheme == "x-lark" || host == "applink.larksuite.com" ? "Lark" : "飞书"
+    return ApplicationLink(url: url, name: name)
+  }
+
   enum Decision {
     case web(URL)
     case denied(String)
