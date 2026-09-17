@@ -1725,24 +1725,22 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         // short of the exact maximum, so the freeze never disengaged.
         let atBottomThreshold = max(contentOffsetTolerance, cellDimension.height / 2)
         if offsetY >= maxContentOffset - atBottomThreshold {
+            let wasScrolling = userScrolling
             if displayBuffer.yDisp != maxRow {
                 terminal.setViewYDisp(maxRow)
             }
             setManualScrolling(false)
+            if wasScrolling {
+                terminalDelegate?.scrolled(source: self, position: scrollPosition)
+            }
             return
         }
 
-        // Freeze auto-follow only while the finger is physically down
-        // (isTracking). Excluding the momentum coast is essential: after the
-        // finger lifts, deceleration keeps firing sync while streaming output
-        // extends the content and the bottom recedes ahead of the coasting
-        // offset — treating that "not at the bottom yet" reading as a manual
-        // scroll would re-freeze a view the user just flung to the bottom. This
-        // must key off isTracking, not isDragging: on device isDragging stays
-        // true through the entire coast, so it fails to exclude momentum. It also
-        // covers layout/system-driven offset changes (startup sizing, rotation,
-        // keyboard insets, buffer shrink), which are never a manual scroll.
-        guard isTracking else {
+        // Only a finger-down drag may start freezing the live tail. Once history
+        // is frozen, keep its anchor in sync throughout native deceleration so
+        // the next output does not snap back to the lift-off row. A coast that
+        // reached the live tail, or a layout-driven offset, must not freeze it again.
+        guard isTracking || (userScrolling && isDecelerating) else {
             return
         }
 
@@ -1752,6 +1750,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             terminal.setViewYDisp(row)
         }
         setManualScrolling(true)
+        terminalDelegate?.scrolled(source: self, position: scrollPosition)
     }
 
     func getCurrentGraphicsContext () -> CGContext?

@@ -1,12 +1,11 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import {
-  buildTmuxScrollInput,
+  createTmuxScrollInput,
   fileToBase64,
   type TerminalBottomState,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
   shellQuote,
-  shouldThrottleTmuxScroll,
 } from "@runweave/common/terminal";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared/terminal-limits";
 import { FitAddon } from "@xterm/addon-fit";
@@ -139,20 +138,27 @@ export function useTerminalEmulator({
     terminal.loadAddon(new WebLinksAddon(activateLink));
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
+    const tmuxScroll = createTmuxScrollInput();
+    const screen = terminal.element?.querySelector(".xterm-screen");
     terminal.attachCustomWheelEventHandler((event) => {
       const { baseY, viewportY } = terminal.buffer.active;
       const canScroll =
-        event.deltaY < 0 ? viewportY > 0 : event.deltaY > 0 && viewportY < baseY;
+        event.deltaY < 0
+          ? viewportY > 0
+          : event.deltaY > 0 && viewportY < baseY;
       if (!shouldSuppressWheelInput(event, canScroll)) {
+        tmuxScroll.reset();
         return true;
       }
 
       if (
         runtimeKindRef.current === "tmux" &&
+        terminal.buffer.active.type === "alternate" &&
         event.deltaY !== 0 &&
         !event.shiftKey
       ) {
         if (event.deltaY > 0 && viewportState.isAtBottom()) {
+          tmuxScroll.reset();
           onTmuxExitCopyModeRequest();
           onTmuxScrollbackActiveChange(false);
           event.preventDefault();
@@ -160,25 +166,27 @@ export function useTerminalEmulator({
           return false;
         }
 
-        if (!shouldThrottleTmuxScroll()) {
-          const input = buildTmuxScrollInput(
-            event.deltaY,
-            terminal.cols,
-            terminal.rows,
-          );
-          if (input) {
-            sendTerminalInput(input);
-            if (event.deltaY < 0) {
-              viewportState.markAwayFromBottom();
-              onTmuxScrollbackActiveChange(true);
-            } else {
-              const nextBottomState = viewportState.markTowardBottom();
-              if (nextBottomState.isAtBottom) {
-                onTmuxScrollbackActiveChange(false);
-              }
+        const scroll = tmuxScroll.consume(
+          event,
+          terminal.cols,
+          terminal.rows,
+          (screen?.getBoundingClientRect().height ?? 0) / terminal.rows,
+          terminal.options.scrollSensitivity ?? 1,
+        );
+        if (scroll) {
+          sendTerminalInput(scroll.input);
+          if (scroll.rows < 0) {
+            viewportState.markAwayFromBottom(-scroll.rows);
+            onTmuxScrollbackActiveChange(true);
+          } else {
+            const nextBottomState = viewportState.markTowardBottom(scroll.rows);
+            if (nextBottomState.isAtBottom) {
+              onTmuxScrollbackActiveChange(false);
             }
           }
         }
+      } else {
+        tmuxScroll.reset();
       }
 
       event.preventDefault();
