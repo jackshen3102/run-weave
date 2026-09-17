@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct MediaControls<Content: View>: View {
-  @ObservedObject var session: AppSession
+  let session: AppSession
   let terminalID: String
+  let canWrite: Bool
   let visible: Bool
   @Binding var preventsDismissal: Bool
   @ViewBuilder let content: (AnyView, AnyView) -> Content
@@ -12,6 +13,7 @@ struct MediaControls<Content: View>: View {
   @State private var pickerGeneration = 0
   @State private var busy = false
   @State private var failure: String?
+  @State private var showingFailure = false
   @State private var scope: String?
   @State private var active = false
   @State private var operation: Task<Void, Never>?
@@ -19,10 +21,15 @@ struct MediaControls<Content: View>: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
       if let failure = failure ?? recorder.failure {
-        Text(failure).font(.caption).foregroundColor(.red)
+        Button { showingFailure = true } label: {
+          Text(failure).font(.caption).foregroundColor(.red).lineLimit(1)
+        }.buttonStyle(.plain).accessibilityHint("查看完整错误")
       }
       content(AnyView(attachmentButton), AnyView(voiceButtons))
     }
+    .alert("媒体操作失败", isPresented: $showingFailure) {
+      Button("关闭", role: .cancel) {}
+    } message: { Text(failure ?? recorder.failure ?? "") }
     .sheet(isPresented: $picking) {
       ImagePicker { result in
         picking = false
@@ -79,7 +86,7 @@ struct MediaControls<Content: View>: View {
     } label: {
       Image(systemName: "plus")
     }.accessibilityLabel("添加图片")
-      .disabled(busy || recorder.recording || !session.canWrite)
+      .disabled(busy || recorder.recording || !canWrite)
   }
 
   private var voiceButtons: some View {
@@ -93,7 +100,7 @@ struct MediaControls<Content: View>: View {
           } catch { failure = displayError(error) }
         } label: {
           Image(systemName: "checkmark.circle.fill").foregroundColor(.red)
-        }.accessibilityLabel("结束并转写").disabled(busy || !session.canWrite)
+        }.accessibilityLabel("结束并转写").disabled(busy || !canWrite)
         Button(role: .cancel) {
           session.recordUserAction("voice.cancel", terminalID: terminalID)
           recorder.cancel()
@@ -107,7 +114,7 @@ struct MediaControls<Content: View>: View {
         } label: {
           if recorder.requestingPermission { ProgressView() } else { Image(systemName: "mic") }
         }.accessibilityLabel(recorder.requestingPermission ? "请求麦克风…" : "录音")
-          .disabled(busy || recorder.requestingPermission || !session.canWrite)
+          .disabled(busy || recorder.requestingPermission || !canWrite)
       }
       if busy { ProgressView() }
     }

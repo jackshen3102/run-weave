@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ShortcutBar: View {
-  @ObservedObject var controller: SessionController
+  let controller: SessionController
   let enabled: Bool
   private let keys = [
     ("Ctrl-C", "\u{03}"), ("Tab", "\t"), ("Esc", "\u{1b}"),
@@ -22,6 +22,6 @@ struct ShortcutBar: View {
         .accessibilityLabel(key.0)
       }
     }.buttonStyle(.plain).foregroundColor(.secondary)
-      .disabled(!enabled || !controller.canSend)
+      .disabled(!enabled)
   }
 }
