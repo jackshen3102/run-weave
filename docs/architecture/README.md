@@ -79,6 +79,7 @@ Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.m
 | 任务                     | 文档                                                         |
 | ------------------------ | ------------------------------------------------------------ |
 | Agent Team / Loop Engine | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md) |
+| 普通会话项目经验         | [检索与证据回执](../cli/experience-cli.md)                   |
 | Agent Self-Evolution     | [agent-self-evolution.md](./agent-self-evolution.md)         |
 
 ## 随记

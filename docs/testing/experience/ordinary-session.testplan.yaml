@@ -1,0 +1,199 @@
+version: 1
+name: 普通会话经验检索与证据消费
+description: 验证真实 Backend/CLI 的项目隔离、证据失效、版本回执与普通 Agent 的证据使用，召回不等于收益。
+cases:
+  - id: EXPERIENCE-001
+    name: 按具体症状检索真实经验
+    required: true
+    description: 有具体触发与现存来源的经验可召回，无关查询和 ASCII 子串误命中不返回经验。
+    preconditions:
+      - 隔离 Backend 已认证且 CLI 来自本次源码，当前 cwd 属于 Git 仓库。
+      - 准备包含原始证据行、未来有效期和多组触发词的合法记录，不提供 codePaths。
+    steps:
+      - 用 CLI 保存记录并按匹配症状查询；确认返回完整记录、匹配词、repositoryId、namespace 和 lookupId，最多三条。
+      - 分别用无关症状及仅包含 ASCII 触发词子串的查询检索；确认 matches 为空。
+  - id: EXPERIENCE-002
+    name: 仓库身份隔离
+    required: true
+    description: worktree 与所属仓库共用项目身份，同名独立 Git 仓库不能读取其记录。
+    preconditions:
+      - 有一个已有经验的主仓库及属于它的现存 worktree；Backend 是否注册该项目不影响此能力。
+      - 准备同名但 Git common directory 不同的另一个临时仓库。
+    steps:
+      - 从主目录和 worktree 查询；确认 repositoryId 相同，源码不同也能命中同一有效经验。
+      - 从另一个同名仓库查询同一症状；确认无跨项目经验。
+  - id: EXPERIENCE-003
+    name: 证据与生命周期失效后停止推荐
+    required: true
+    description: 在独占临时仓库内改变证据或生命周期，相关记录被明确排除，不能静默继续推荐。
+    preconditions:
+      - 自建临时 Git 仓库与原始证据文件，已保存可正常召回的记录；不修改用户项目代码。
+    steps:
+      - 删除新记录的原始证据后查询；确认保存的脱敏摘录仍可校验；恢复后改变原文件，确认 excluded 标明 evidence_changed；恢复证据。
+      - 使用当前版本更新为过期或 retired 状态后分别查询；确认不再作为可用经验返回，show 仍标明失效原因。
+  - id: EXPERIENCE-004
+    name: 更新与结果回执绑定实际版本
+    required: true
+    description: 无旧版本不能覆盖；未检索、不同项目、伪造版本或无证据的采用回执被拒绝；真实历史版本仍可反馈。
+    preconditions:
+      - 临时项目中有当前有效经验及一次检索返回的 lookupId、id、revision。
+      - 有归属另一个项目的目录及本次操作结果证据文件。
+    steps:
+      - 不带 expected-revision 覆盖已有记录；确认 HTTP 409；带正确旧版本更新成功且版本改变。
+      - 用旧 lookupId 和实际命中的旧 revision 提交带结果证据的反馈；确认记录旧版本且不修改新版。用另一项目或伪造 revision 提交回执；确认拒绝。
+      - 重新检索后提交无 evidence 的 used 回执；确认 HTTP 400。
+      - 提交带本次真实证据的 used 回执；确认持久化，history 中 attribution 明确为 agent_report。
+  - id: EXPERIENCE-005
+    name: 本机已认证访问边界
+    required: true
+    description: 未认证及通过转发头访问均不能读取本机经验。
+    preconditions:
+      - 隔离 Backend 已启动，持有本次测试的有效认证和一个 Git 仓库路径。
+    steps:
+      - 不带认证查询经验；确认 HTTP 401。
+      - 带有效认证和 X-Forwarded-For 查询经验；确认 HTTP 403。
+  - id: EXPERIENCE-006
+    name: 普通 Agent 核实经验来源及当前实现
+    required: true
+    description: 在保持既有技能与记忆的基线上比较，经验组实际读取来源，不将历史收益、遗漏或检索次数包装成新增效果。
+    preconditions:
+      - 同一已安装 Agent 和模型、两个新会话、相同只读任务及可访问的原始本地证据。
+      - 基线保留已有技能和记忆，仅禁用新经验入口；经验组使用本次 CLI/Backend 和经验 skill。
+    steps:
+      - 给两组相同的当前优化或故障判断任务；保存完整工具轨迹和最终结论，不给出预期答案。
+      - 核对经验组确实调用检索并读取原始来源和当前代码；检查反例、后续验证及已落地实现没有被遗漏或倒置。
+      - 对照两组实际行动、正确性与耗时，明确有无新增价值；单次样本不能宣称普遍提升，失败样本必须保留。
+  - id: EXPERIENCE-007
+    name: 跨 Backend 共用仓库经验
+    required: true
+    description: 两个独立进程、不同端口及 profile 的 Backend 使用同一命名空间，可共享记录、查询回执与采用结果。
+    preconditions:
+      - 两个归属本次验收的 Backend 进程使用相同经验根目录及独立测试命名空间，各自已认证。
+      - 主仓库有现存 worktree；分别注册主目录及 worktree，或不注册任何项目。
+      - 准备合法经验和现存来源文件，不要求两个目录源码内容一致。
+    steps:
+      - 从第一个 Backend 保存，第二个 Backend 使用 worktree 查询；确认 repositoryId、namespace 和 revision 一致且命中。
+      - 使用第二个 Backend 的 lookupId 向第一个 Backend 提交带结果证据的回执；第二个 Backend 的 history 可见同一回执。
+      - 同一仓库重复注册后再查询；确认仍然命中且不再报项目身份歧义。
+  - id: EXPERIENCE-008
+    name: 正式与测试命名空间隔离
+    required: true
+    description: 同仓库身份不能跨命名空间读取记录或使用回执。
+    preconditions:
+      - 两个归属本次验收的 Backend 使用同一测试根目录、不同显式命名空间；均指向同一真实 Git 仓库。
+      - 第一个命名空间中已保存合法经验并有 lookupId。
+    steps:
+      - 第二个 Backend 查询；确认 repositoryId 相同、namespace 不同、matches 为空。
+      - 向第二个 Backend 提交第一处的回执；确认 HTTP 404 且没有结果记录。
+  - id: EXPERIENCE-009
+    name: 不同进程的并发更新不会互相覆盖
+    required: true
+    description: 两个 Backend 同时提交同一旧版本只有一个成功，另一请求明确冲突，历史版本完整。
+    preconditions:
+      - 两个归属本次验收的独立 Backend 进程共享测试命名空间和仓库，已经有同一条有效记录。
+    steps:
+      - 同时向两个进程发送携带相同 expectedRevision 但内容不同的更新；确认一个 HTTP 201、一个 HTTP 409。
+      - 两端读取记录；确认 revision 和内容一致且属于唯一成功的更新，数据库保留旧版本及唯一新版本。
+  - id: EXPERIENCE-010
+    name: 源码变化不妨碍检索与实际反馈
+    required: true
+    description: 经验独立于源码，修改或移动相关文件后仍可检索并记录成功或失败结果，同仓库 worktree 共用经验。
+    preconditions:
+      - 独占临时 Git 仓库及其 worktree 中有可执行任务；准备实际执行结果作为证据。
+      - 保存带可选 codePaths 的经验并检索；保留 lookupId 和命中版本，不修改用户代码。
+    steps:
+      - 修改相关源码的诊断文案并执行原命令；确认观察结果保持一致，两个 worktree 均能召回相同经验。
+      - 用修改前 lookupId 提交实际成功回执；确认保存成功且版本仍对应当时命中记录。
+      - 移动相关源码文件后查询；确认经验仍可用，不出现 code_changed 或 code_unavailable。
+      - 对修改后的实现执行真实失败输入，提交该次失败证据；确认回执保存、当前版本进入 needs_revalidation，历史成功与失败结果均保留。
+  - id: EXPERIENCE-011
+    name: 完成事件驱动持久化学习
+    required: true
+    description: 普通会话的完成事件自动排队，从实际工具请求和结果生成候选，独立复核通过后才可查询。
+    preconditions:
+      - 本次隔离 Backend 开启学习，已登录的真实 Codex CLI 可用，Activity 正常保存内容。
+      - 普通终端任务实际读取当前代码并执行验证，保留用户输入及配对工具结果。
+    steps:
+      - 完成该任务；不调用 experience save，检查 status 出现 queued 或 running 任务。
+      - 等待分析完成；检查候选引用本轮配对工具记录、复核状态为 supported、候选状态为 promoted。
+      - 新会话按具体症状查询；确认返回生成的经验和来源，不将模型复核当作认证收益。
+  - id: EXPERIENCE-012
+    name: 重启恢复尚未分析的任务
+    required: true
+    description: 已入队任务在后台重启后继续处理，不重复晋级同一候选。
+    preconditions:
+      - 本次隔离环境有已持久化的 queued 学习任务及完整 Activity 来源。
+    steps:
+      - 停止并重建学习运行时，使用原命名空间和存储；确认任务仍可查询。
+      - 启动处理并等待终态；确认同一 jobId 只保留一个候选，查询与历史版本一致。
+  - id: EXPERIENCE-013
+    name: 无工具证据不能凭完成总结生成经验
+    required: true
+    description: Agent 总结声称成功但没有配对工具结果时，完成事件只能跳过学习，不能自动晋级。
+    preconditions:
+      - 隔离环境已启用学习，准备一轮只有用户输入和完成总结的普通会话。
+    steps:
+      - 发送该轮完成事件并等待处理；确认状态为 skipped，原因为 no_observed_tool_result。
+      - 查询对应症状和候选列表；确认没有新增可用经验。
+  - id: EXPERIENCE-014
+    name: 新证据失败后停止后续推荐
+    required: true
+    description: 带实际结果证据的失败采用回执使当前版本进入待复核，另一 worktree 的后续任务不能继续采用该版本。
+    preconditions:
+      - 隔离仓库中有一条可用经验、当前查询回执和本次失败的证据文件。
+    steps:
+      - 提交 used 且 result 为 failed 的回执；确认保存反馈并生成 needs_revalidation 新版本。
+      - 在新会话查询相同症状；确认不返回匹配，excluded 明确说明待复核，旧版本仍留存。
+  - id: EXPERIENCE-015
+    name: 临时证据清理后保留脱敏摘录
+    required: true
+    description: 经验只持久化引用范围的脱敏材料，原始临时文件删除后仍能审计，结构化凭据不得保留。
+    preconditions:
+      - 隔离目录中有包含测试用 password 字段与真实结果的证据文件，已通过 save 保存经验。
+    steps:
+      - 查看保存的 archived.text；确认 password 值被脱敏，原始位置、原始哈希与摘录哈希仍可查询。
+      - 删除原始临时文件并重建服务；确认经验仍可用且摘录内容一致。
+  - id: EXPERIENCE-016
+    name: 分析失败可见并可重试
+    required: true
+    description: Provider 不可用或输出不合格不会伪装成无新发现；任务有明确错误，可在原因修复后重试。
+    preconditions:
+      - 隔离环境有含真实工具证据的学习任务，Provider 启动条件受本次验收控制。
+    steps:
+      - 令 Provider 启动失败；确认 status 为 failed，记录原因且没有 active 经验。
+      - 恢复 Provider 后用 retry 提交任务；确认同一 jobId 重新排队，尝试次数增加，按真实复核结果结束。
+  - id: EXPERIENCE-017
+    name: 后续事件不挤掉延迟处理任务的来源
+    required: true
+    description: 任务持有完成时快照，旧版无快照任务通过分页仍能恢复原轮次，不混入后续会话。
+    preconditions:
+      - 独占 Activity 测试库和经验队列，已记录用户输入及实际命令的一对请求与返回结果。
+      - 已通过普通完成事件入队，保存当时 readLearningFacts 的完整输出。
+    steps:
+      - 在同一会话继续记录下一轮用户输入和至少二百条真实执行的后续事件。
+      - 读取已入队任务；确认结果与入队时完全一致，未混入后续事件。
+      - 去除同一任务的快照字段以模拟旧版任务，再读取；确认分页后仍得到相同事实。
+      - 读取包含二百零一条小体积事件的后续单轮；确认跨页后用户输入和一百对工具请求与结果均完整保留。
+  - id: EXPERIENCE-018
+    name: 复核必须看到候选未引用的后续失败
+    required: true
+    description: 真实探针先成功后失败，只引用早期成功的候选不能被晋级。
+    preconditions:
+      - 隔离 HTTP 就绪探针依赖一个本次管理的本地服务，已保留实际请求与响应。
+      - 依赖正常时 ready 为 true，停止依赖后同一探针返回 ready 为 false。
+    steps:
+      - 暂存只引用首次成功但声称本轮允许继续部署的候选，将两次实际探测都作为本轮事实交给真实 Codex 复核。
+      - 确认复核输入包含后续失败，结论说明该反证，候选不进入 promoted。
+      - 关闭本次创建的探针服务，保留请求、响应及复核结果。
+  - id: EXPERIENCE-019
+    name: 历史失败回执必须参与重新晋级判断
+    required: true
+    description: 已被实际失败结果停用的经验，不能仅重复旧成功证据就恢复推荐。
+    preconditions:
+      - 隔离经验库中保存一条就绪探针成功记录，已完成检索。
+      - 本次管理的探针依赖停机后实际返回 ready 为 false，已用该结果提交失败回执。
+    steps:
+      - 暂存沿用同一经验 ID、仅重复旧成功证据且未解释失败条件的候选，调用真实 Codex 复核。
+      - 确认复核输入包含该经验的历史失败与归档结果，候选不进入 promoted，当前经验继续为 needs_revalidation。
+      - 实际恢复依赖并重新探测，将恢复操作和恢复后的成功结果一并归档到新候选；确认复核说明失败条件已变化，允许有限范围的经验重新晋级。
+      - 关闭本次创建的服务，保留实际结果、回执与复核结论。

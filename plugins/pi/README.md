@@ -17,3 +17,7 @@ pnpm pi:install
 
 修改 `extensions/runweave.ts` 和 `skills/runweave/SKILL.md`；公共桥接修改
 `packages/agent-bridge`。不要手工修改 `dist` 或 Electron 生成副本。
+
+可选的经验检索 skill 不属于本 hooks 安装包。需要时由用户主动执行
+`pi install /absolute/path/to/browser-viewer/plugins/toolkit/skills/experience`，直接使用该目录的
+Pi package manifest；桌面启动和 `pi:install` 不会安装它。

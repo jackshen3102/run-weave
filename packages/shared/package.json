@@ -69,7 +69,8 @@
     "./device-status": "./src/monitoring/device-status.ts",
     "./battery": "./src/monitoring/battery.ts",
     "./device-notifications": "./src/monitoring/device-notifications.ts",
-    "./terminal/agent-resume": "./src/terminal/agent-resume.ts"
+    "./terminal/agent-resume": "./src/terminal/agent-resume.ts",
+    "./experience": "./src/experience.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -3,6 +3,9 @@ import { MobileLoginService } from "../auth/mobile-login";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import type { ExperienceService } from "../experience/service";
+import { createExperienceLearning } from "../experience/bootstrap";
+import type { ExperienceLearningRuntime } from "../experience/learning-runtime";
 import crypto from "node:crypto";
 import type { AuthStore } from "../auth/store";
 import { LowDbAuthStore } from "../auth/lowdb-store";
@@ -105,6 +108,8 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   evolutionToolTokenRegistry: EvolutionToolTokenRegistry;
   evolutionRuntime: EvolutionRuntime;
   evolutionService: EvolutionService;
+  experienceService: ExperienceService;
+  experienceLearning: ExperienceLearningRuntime;
 }
 
 function resolveTerminalHookToken(
@@ -198,6 +203,8 @@ async function assembleRuntimeServices(
     eventFactory: activityEventFactory,
     instanceId: activityInstanceId,
   } = activity;
+  const { experienceService, experienceLearning } = createExperienceLearning(activityStore, runtimeChannel);
+  resources.defer("experience-learning", () => experienceLearning.dispose());
   const terminalActivity = { recorder: activityRecorder, eventFactory: activityEventFactory };
   const authConfig = loadAuthConfig();
   const authStore = new LowDbAuthStore(storagePaths.authStoreFile);
@@ -280,6 +287,7 @@ async function assembleRuntimeServices(
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalEventService,
     terminalSessionManager,
+    (event) => experienceLearning.enqueue(event),
   );
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
   const tmuxLifecycleCoordinator = new TmuxLifecycleCoordinator();
@@ -531,6 +539,7 @@ async function assembleRuntimeServices(
       activity.start();
       agentTeamService.initialize();
       evolutionRuntime.start(controlPlaneBaseUrl);
+      experienceLearning.start();
     },
     dispose: () => {
       disposed = true;
@@ -572,6 +581,8 @@ async function assembleRuntimeServices(
     evolutionToolTokenRegistry,
     evolutionRuntime,
     evolutionService,
+    experienceService,
+    experienceLearning,
   };
   return services;
 }
