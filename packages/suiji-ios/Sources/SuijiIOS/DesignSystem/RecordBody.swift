@@ -7,10 +7,25 @@ struct RecordBody: UIViewRepresentable {
   var lineLimit: Int = 0
   var linksOnly: Bool = false
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.suijiOpenLink) private var openLink
   private static let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+
+  func makeCoordinator() -> Coordinator { Coordinator(openLink: openLink) }
+
+  final class Coordinator: NSObject, UITextViewDelegate {
+    var openLink: ((URL) -> Void)?
+    init(openLink: ((URL) -> Void)?) { self.openLink = openLink }
+
+    func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
+      defaultAction: UIAction) -> UIAction? {
+      guard case .link(let url) = textItem.content, openLink != nil else { return defaultAction }
+      return UIAction { [weak self] _ in self?.openLink?(url) }
+    }
+  }
 
   func makeUIView(context: Context) -> RecordBodyTextView {
     let view = RecordBodyTextView()
+    view.delegate = context.coordinator
     view.isEditable = false
     view.isSelectable = true
     view.isScrollEnabled = false
@@ -23,6 +38,7 @@ struct RecordBody: UIViewRepresentable {
   }
 
   func updateUIView(_ view: RecordBodyTextView, context: Context) {
+    context.coordinator.openLink = openLink
     if view.text != text {
       let attributed = NSMutableAttributedString(string: text)
       let range = NSRange(text.startIndex..<text.endIndex, in: text)

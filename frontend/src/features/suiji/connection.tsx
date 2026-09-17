@@ -16,6 +16,7 @@ import {
 import { SuijiDraftStore } from "./drafts";
 import { SuijiWorkspace } from "./workspace";
 import type { SuijiConnection } from "./connection-model";
+import type { SuijiOpenLink } from "./browser-navigation";
 import {
   environmentLabel,
   loadAccounts,
@@ -23,7 +24,13 @@ import {
   selectEnvironment,
 } from "./accounts";
 
-export default function SuijiPage({ onClose }: { onClose?: () => void }) {
+export default function SuijiPage({
+  onClose,
+  onOpenLink,
+}: {
+  onClose?: () => void;
+  onOpenLink?: SuijiOpenLink;
+}) {
   const [accounts, setAccounts] = useState<SuijiDesktopState>();
   const [endpoint, setEndpoint] = useState("");
   const [username, setUsername] = useState("");
@@ -36,6 +43,18 @@ export default function SuijiPage({ onClose }: { onClose?: () => void }) {
   const current = useRef<SuijiClient | undefined>(undefined);
   const alive = useRef(true);
   const generation = useRef(0);
+  const openLink = useMemoizedFn((url: string) => {
+    const sequence = generation.current;
+    const client = current.current;
+    onOpenLink?.(
+      url,
+      () =>
+        alive.current &&
+        generation.current === sequence &&
+        current.current === client &&
+        client !== undefined,
+    );
+  });
   const fill = (profile: SuijiProfile) => {
     setEndpoint(profile.endpoint);
     setUsername(profile.username);
@@ -228,6 +247,7 @@ export default function SuijiPage({ onClose }: { onClose?: () => void }) {
           <SuijiWorkspace
             key={connection.store.scope}
             connection={connection}
+            onOpenLink={onOpenLink ? openLink : undefined}
           />
         </div>
       ) : null}

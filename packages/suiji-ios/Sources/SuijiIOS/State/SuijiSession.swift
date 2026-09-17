@@ -1,4 +1,5 @@
 import SwiftUI
+import RunweaveBrowser
 enum RecordAction { case status(TaskStatus), trash(Bool) }
 @MainActor final class SuijiSession: ObservableObject {
   @Published var endpoint: String
@@ -18,18 +19,29 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
   private var store: DraftStore?
   private var editingModels: [String: EditorModel] = [:]
   private var generation = UUID()
+  let browser = BrowserSession(configuration: BrowserPresentationConfiguration(
+    applicationName: "随记", returnLabel: "回随记",
+    clearDataMessage: "清除此 App 全部内置网站的登录与存储数据？网页将关闭，不影响随记账户或草稿。网站登录独立于随记账户。"))
+  var browserSource: BrowserContext? {
+    guard let info, let client else { return nil }
+    return BrowserContext(
+      scope: [environment.rawValue, client.endpoint.absoluteString, info.serverId, info.ownerId],
+      generation: generation.uuidString)
+  }
   private var listGeneration = UUID()
   private var profiles: ConnectionProfiles
   init(endpoint: URL?) {
     let saved = ConnectionProfiles.restore(endpoint: endpoint)
     profiles = saved; environment = saved.active
     self.endpoint = saved[saved.active].endpoint; username = saved[saved.active].username
+    browser.currentSource = { [weak self] in self?.browserSource }
   }
   private func rememberConnection() {
     profiles[environment] = ConnectionProfile(endpoint: endpoint, username: username)
     profiles.active = environment; profiles.save()
   }
   private func resetConnection() -> APIClient? {
+    browser.invalidate()
     let previous = client; generation = UUID(); listGeneration = UUID()
     editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil
     records = []; info = nil; store = nil; client = nil; pendingStatuses = []; statusBusy = []

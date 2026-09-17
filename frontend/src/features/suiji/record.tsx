@@ -40,9 +40,11 @@ linkify.add("ftp:", null).add("mailto:", null).add("//", null);
 export function RecordBody({
   body,
   className = "",
+  onOpenLink,
 }: {
   body: string;
   className?: string;
+  onOpenLink?: (url: string) => void;
 }) {
   const content = useMemo(() => {
     const parts: ReactNode[] = [];
@@ -59,7 +61,18 @@ export function RecordBody({
           className="pointer-events-auto relative text-primary underline underline-offset-4"
           onClick={(event) => {
             event.stopPropagation();
-            if (window.electronAPI?.openExternal) {
+            if (
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            )
+              return;
+            if (onOpenLink) {
+              event.preventDefault();
+              onOpenLink(match.url);
+            } else if (window.electronAPI?.openExternal) {
               event.preventDefault();
               void window.electronAPI.openExternal(match.url);
             }
@@ -72,7 +85,7 @@ export function RecordBody({
     }
     parts.push(body.slice(offset));
     return parts;
-  }, [body]);
+  }, [body, onOpenLink]);
 
   // Keep the original text, including whitespace and punctuation, unchanged.
   return (
@@ -153,6 +166,7 @@ export function SuijiAttachmentView({
 
 export function SuijiRecordDetail({
   record,
+  onOpenLink,
   client,
   onClose,
   onEdit,
@@ -166,6 +180,7 @@ export function SuijiRecordDetail({
   citedVersion,
 }: {
   record: SuijiRecord;
+  onOpenLink?: (url: string) => void;
   client: SuijiClient;
   onClose: () => void;
   onEdit: () => void;
@@ -190,7 +205,7 @@ export function SuijiRecordDetail({
           此记录已更新；回答引用的是版本 {citedVersion}，下方是当前原文。
         </p>
       ) : null}
-      <RecordBody body={record.body} />
+      <RecordBody body={record.body} onOpenLink={onOpenLink} />
       <div className="flex flex-wrap gap-2">
         {record.attachments.map((a) => (
           <SuijiAttachmentView key={a.id} attachment={a} client={client} />

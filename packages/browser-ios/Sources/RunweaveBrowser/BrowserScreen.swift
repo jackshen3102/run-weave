@@ -1,12 +1,14 @@
 import SwiftUI
 import UIKit
 
-struct BrowserScreen: View {
+public struct BrowserScreen: View {
   @ObservedObject var browser: BrowserSession
   @Environment(\.scenePhase) private var scenePhase
+  public init(browser: BrowserSession) { self.browser = browser }
+
   private let chrome = Color(uiColor: .secondarySystemBackground)
 
-  var body: some View {
+  public var body: some View {
     VStack(spacing: 0) {
       if let page = browser.page {
         navigationBar(page)
@@ -33,7 +35,7 @@ struct BrowserScreen: View {
           .frame(width: 44, height: 48)
           .contentShape(Rectangle())
       }
-      .accessibilityLabel("回终端")
+      .accessibilityLabel(browser.configuration.returnLabel)
       .accessibilityIdentifier("browser-collapse")
 
       Text(page.title)
@@ -90,7 +92,7 @@ struct BrowserScreen: View {
           Label("关闭网页", systemImage: "xmark")
         }
         Button(role: .destructive) {
-          browser.request(.clear, message: "清除本机全部内置网站的登录与存储数据？网页将关闭，不影响电脑连接或终端草稿。")
+          browser.request(.clear, message: browser.configuration.clearDataMessage)
         } label: {
           Label("清除网页数据", systemImage: "trash")
         }
@@ -200,10 +202,14 @@ struct BrowserScreen: View {
   }
 }
 
-struct BrowserPromptPresenter: ViewModifier {
+public struct BrowserPromptPresenter: ViewModifier {
   @ObservedObject var browser: BrowserSession
   let active: Bool
-  func body(content: Content) -> some View {
+  public init(browser: BrowserSession, active: Bool) {
+    self.browser = browser
+    self.active = active
+  }
+  public func body(content: Content) -> some View {
     content.alert("网页",
       isPresented: Binding(
         get: { active && browser.prompt != nil },

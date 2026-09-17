@@ -1,3 +1,4 @@
+import RunweaveBrowser
 import SwiftTerm
 import UIKit
 
@@ -111,7 +112,7 @@ final class NativeTerminalView: TerminalView {
       }
       return explicit
     }
-    return BrowserURLPolicy.selectedURL(text)
+    return TerminalLinkSelection.selectedURL(text)
   }
 
   fileprivate func linkActions() -> [UIMenuElement] {

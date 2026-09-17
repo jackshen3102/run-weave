@@ -6,10 +6,13 @@ let package = Package(
   platforms: [.iOS(.v15)],
   products: [.library(name: "RunweaveIOS", targets: ["RunweaveIOS"])],
   dependencies: [
-    .package(path: "Vendor/SwiftTerm")
+    .package(path: "Vendor/SwiftTerm"),
+    .package(path: "../browser-ios")
   ],
   targets: [
-    .target(name: "RunweaveIOS", dependencies: ["SwiftTerm"])
+    .target(name: "RunweaveIOS", dependencies: [
+      "SwiftTerm", .product(name: "RunweaveBrowser", package: "browser-ios")
+    ])
   ],
   swiftLanguageModes: [.v5]
 )

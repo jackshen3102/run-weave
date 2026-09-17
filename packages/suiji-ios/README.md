@@ -3,6 +3,12 @@
 独立 SwiftUI App，最低 iOS 18.6，Bundle ID `com.runweave.suiji`。
 宿主装配 `SuijiRootView(endpoint:)`；没有终端、SwiftTerm、SwiftUIX 或 Runweave 节点身份依赖。
 
+正文 HTTP(S) 链接通过 UITextView 原生动作进入 [共享浏览器](../browser-ios/README.md)。
+列表、详情与 Tab 共用当前账户根会话；回随记保留网页，可从「继续浏览」恢复；另一 URL 先确认替换。
+切环境、更换连接、登出和身份失效同步关闭旧会话，不重放旧意图。网站登录独立于随记账户，
+清除网站数据只清此 App 内的全部网站数据，不清随记登录或草稿，也不影响 Runweave App。
+接入入口为 `Features/Browser/SuijiBrowserHost.swift`；验收见 [浏览器接入合同](../../docs/testing/suiji/ios-browser-reuse.testplan.yaml)。
+
 ## 构建和启动
 
 ```bash

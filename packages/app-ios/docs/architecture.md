@@ -108,6 +108,10 @@ iOS 收到完成和状态变化事件后刷新 overview，并丢弃刷新期间�
 
 ## 终端内置网页
 
+浏览器实现位于独立 [RunweaveBrowser](../../browser-ios/README.md) 包，终端的选区识别留在
+`TerminalLinkSelection`。宿主将下面的业务来源映射到不透明 `BrowserContext`，以实时呈现注册接入；
+共享包不导入 RunweaveIOS，WebView 与页面对象不对宿主暴露。
+
 `AppSession` 持有唯一 `BrowserSession`，来源是 connection scope、AppSession generation 与 terminal ID；
 网页回调额外检查 session identity；确认检查来源、session 与生命周期 token，URL 相关确认及异步外部打开
 另检查导航 revision。关闭/清除不检查 revision，网站不能靠持续改变地址使用户确认失效。过期 URL 操作

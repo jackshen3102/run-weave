@@ -1,3 +1,4 @@
+import RunweaveBrowser
 import SwiftUI
 
 struct TerminalScreen: View {
@@ -100,7 +101,7 @@ struct TerminalScreen: View {
     }
     .onDisappear {
       changes.cancel()
-      browser.unregisterTerminalPresentation(id: browserPresentationID, controllerID: ObjectIdentifier(controller))
+      browser.unregisterHostPresentation(id: browserPresentationID, hostID: ObjectIdentifier(controller))
     }
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
@@ -134,7 +135,7 @@ struct TerminalScreen: View {
   }
 
   private func connectBrowserIntents() {
-    guard let source = session.browserSource, source.terminalID == details.id,
+    guard let source = session.browserSource, session.terminal?.id == details.id,
       session.terminalController === controller else { return }
     let composer = $showingComposer
     let history = $showingHistory
@@ -144,17 +145,17 @@ struct TerminalScreen: View {
     let browser = browser
     let registrationID = browserPresentationID
     // Bindings read current SwiftUI storage; capturing this View's Bool values would go stale.
-    browser.registerTerminalPresentation(id: registrationID, source: source, controllerID: ObjectIdentifier(controller)) { [weak session, weak controller, weak browser] in
+    browser.registerHostPresentation(id: registrationID, source: source, hostID: ObjectIdentifier(controller)) { [weak session, weak controller, weak browser] in
       guard let session, let controller, let browser, session.browserSource == source,
         session.terminalController === controller, let window = controller.surface.view.window else { return false }
       let systemBusy = window.rootViewController?.presentedViewController != nil
       return !composer.wrappedValue && !history.wrappedValue && !info.wrappedValue
         && !diagnostics.wrappedValue && !deletion.wrappedValue && !systemBusy
-        && browser.state != .presented && browser.prompt == nil
+        && browser.state != .presented && !browser.hasPrompt
     }
     controller.openLinkRequested = { intent in
       browser.open(intent, source: source, presentationAvailable:
-        browser.terminalPresentationAvailable(source: source, registrationID: registrationID))
+        browser.hostPresentationAvailable(source: source, registrationID: registrationID))
     }
   }
 
@@ -293,13 +294,13 @@ struct TerminalScreen: View {
       .accessibilityElement(children: .combine)
     }
     ToolbarItemGroup(placement: .navigationBarTrailing) {
-      if let page = browser.page {
+      if let title = browser.pageTitle {
         Button {
           guard let source = session.browserSource,
-            browser.terminalPresentationAvailable(source: source, registrationID: browserPresentationID) else { return }
+            browser.hostPresentationAvailable(source: source, registrationID: browserPresentationID) else { return }
           browser.resume()
         } label: { Image(systemName: "globe") }
-        .accessibilityLabel("恢复网页：\(page.title)")
+        .accessibilityLabel("恢复网页：\(title)")
         .accessibilityIdentifier("terminal-browser-resume")
         .disabled(browser.clearing)
       }

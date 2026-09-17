@@ -12,6 +12,7 @@ frontend (Web/Electron UI) ── HTTP/WS ── backend ── app-server
 packages/app-ios (SwiftUI/SwiftTerm) ── HTTP/WS
 
 packages/shared        跨运行时 TypeScript 合同；Swift DTO 对照接口
+packages/browser-ios   Runweave / 随记 iOS 共用 Swift 浏览器；宿主提供业务生命周期
 packages/common        Web 前端使用的终端与图片基础能力
 packages/runweave-cli  rw 控制面客户端
 scripts/dev-session    开发会话与 Beta 生命周期
@@ -42,6 +43,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
   Electron 主进程能力。bridge 类型合同统一由 `@runweave/shared/desktop-bridge` 提供，
   Electron preload 使用完整合同，Frontend 通过可选宿主合同兼容旧安装态能力。
 - `packages/app-ios/` 通过 Backend API 工作，独立构建，不依赖 Electron 或 Web 源码。
+- `packages/app-ios/` 与 `packages/suiji-ios/` 共同依赖独立 [Swift 浏览器包](../../packages/browser-ios/README.md)，两个业务 App 不互相依赖；网页数据仍按 App 沙箱隔离。
 - `backend/` 通过 `backend/src/app-server/` 消费 App Server，不把 App Server 并入自身状态。
 - `packages/shared` 不依赖具体运行时；`packages/common` 不承载协议、存储或 Node/Electron 能力。
 - 机械边界由 `pnpm architecture:check` 校验；本文只维护人和 Agent 需要的语义地图。
