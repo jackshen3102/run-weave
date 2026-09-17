@@ -1,6 +1,6 @@
 ---
 name: update-runweave-desktop
-description: 仅当用户显式指定此 skill 时使用；在当前项目内更新本地 Runweave macOS 桌面客户端。用于区分 runtime 热更新、完整 Electron App 更新和 App Server 更新，并通过更新器返回的 desktop CDP 与 Playwright 验证真实桌面 UI，最终必须进入终端页面完成确认。
+description: 仅当用户显式指定此 skill 时使用；更新本地 Runweave macOS 桌面客户端及全局 rw CLI，区分 runtime、完整 App 和 App Server 更新，验证实际 rw 命令及桌面终端页面。
 ---
 
 # 更新 Runweave 桌面端
@@ -8,6 +8,8 @@ description: 仅当用户显式指定此 skill 时使用；在当前项目内更
 ## 概览
 
 此 skill 只在用户手动指定时执行。默认调用方已经位于当前项目根目录；不要定位 checkout、切换目录、更新源码或要求用户提供项目路径。使用仓库统一的本地更新器判断本地 Runweave 桌面客户端需要 runtime 热更新、完整替换 Electron App，还是安装并重启 App Server；实际更新路径只走 `pnpm runweave:update`，桌面 App UI 通过更新器显式提供的 desktop CDP 使用 Playwright 验证。
+
+Stable 更新同时同步用户登录 shell 实际执行的全局 `rw`。桌面内置 CLI 更新不等于全局命令更新；两者都必须核对。Beta 更新不覆盖全局 Stable CLI。此流程不安装或更新任何 skill。
 
 ## 必需技能
 
@@ -20,10 +22,12 @@ description: 仅当用户显式指定此 skill 时使用；在当前项目内更
    - 如果存在 `~/Library/Application Support/RunweaveLocalUpdate/state.json`，读取上次本地更新状态。
    - 从 `/Applications/Runweave.app/Contents/Info.plist` 检查已安装 App 的路径和版本。
    - 检查正在运行的 Runweave 进程，确保当前活跃 App 来自 `/Applications/Runweave.app`，而不是挂载的 `/Volumes/...` App。
+   - 在用户登录 shell 中检查 `command -v rw`，记录命令路径；不能用仓库或 runtime 内的绝对 CLI 路径代替全局入口。
 
 2. 先用统一命令规划：
    - 运行 `pnpm runweave:update --dry-run`。
    - 从输出中读取 `selected mode`、`reason`、`selected app-server action`、`app-server reason`、`app-server home` 和 `native-sensitive changes`。
+   - 同时读取 `selected cli action`、`cli reason`、`cli command` 和 `cli npm prefix`。Stable 为 `sync`，Beta 为 `skip`；`sync` 在构建后按内容决定是否安装，不依赖版本号或上次桌面更新记录。
    - backend、frontend 和 shared runtime 变更通常应选择 `runtime`。
    - Electron shell/native 文件、App resources、builder 配置、本地更新脚本、缺少历史状态，或源码 shell 版本更新时，应选择 `app`。
    - `app-server/`、CLI app-server 命令、shared app-server 协议、app-server 安装或验证脚本变更时，应选择 `selected app-server action: update`。
@@ -37,6 +41,8 @@ description: 仅当用户显式指定此 skill 时使用；在当前项目内更
    - `--no-restart` 只用于不更新 App Server 且不做桌面验收的 runtime 更新；不能与 `--verify-desktop` 组合。App 更新必须退出并重新打开桌面端，App Server 更新必须执行 `rw app-server restart`。
    - `--no-restart` 和 `selected app-server action: update` 不能组合；如果只想更新桌面 runtime，用 `--app-server=skip` 明确跳过 App Server。
    - 当 `selected app-server action` 为 `update` 时，统一更新器会安装当前源码构建出的 App Server runtime，并通过 `rw app-server restart` 切换全局 owner；不要绕过更新器手动运行底层安装脚本。
+   - Stable 的统一更新器还会构建 CLI、按需安装全局 npm 包，并校验登录 shell 的 `rw` 路径、SHA-256 与 `--version`。内容一致则 `unchanged`；未安装则安装。npm prefix 与实际 `rw` 不一致时先报告具体路径冲突，不用 sudo 或改写其他 shim 强行覆盖。
+   - 读取 `cli verification` 结果及更新状态中的 `cli`。CLI 更新或校验失败时，本轮不能报告全部更新完成；明确桌面与 CLI 各自的结果，不额外执行版本号递增命令。
 
 4. 显式附着更新器返回的 desktop CDP：
    - 从 `[runweave-update] desktop verification ready: {...}` 读取 `endpoint`、`statusPath`、`pid`、`appPath`、`appVersion`、`sourceRevision`、`pageUrl` 和 `window`。
@@ -45,7 +51,13 @@ description: 仅当用户显式指定此 skill 时使用；在当前项目内更
      `playwright-cli -s="runweave-update-<pid>-desktop" attach --cdp="<endpoint>"`
    - 不得使用 `playwright-cli open`、默认端口、`9224` Terminal Browser proxy、环境变量、最近实例或既有 Playwright session 代替更新器返回的主窗口 endpoint。
 
-5. 最后必须进入终端页面完成确认：
+5. Stable 验证实际全局 `rw`（Beta 记录全局 CLI 被跳过）：
+   - 在用户登录 shell 中再次运行 `command -v rw`、`rw --version`，路径须与 `cli verification.commandPath` 一致。
+   - 使用实际 `rw` 向本轮目标 Backend 执行只读业务命令；例如从 desktop verification 的 `backend.baseUrl` 取端口，运行 `rw experience status --cwd "$PWD" --backend-port <该端口> --json`，确认 JSON 正常返回。没有指定业务命令时使用 `rw health --backend-port <该端口> --json`。
+   - 保留正常认证流程，不输出凭据；调用失败须明确记录，不能改用 runtime 内置 CLI 成功来替代全局入口验收。
+   - 版本号可能相同，必须结合更新器提供的构建哈希判断。不要向正在运行任务的终端 pane 输入验收命令，使用独立 shell 执行。
+
+6. 最后必须进入终端页面完成确认：
    - 附着后读取 page/tab 列表，选择与 `pageUrl` 一致的 Electron 主 renderer；不得新建或关闭桌面 page。
    - 使用页面 DOM 进入或恢复一个终端页面；如果已经在 `/terminal/`，不要额外改变用户状态。
    - 至少断言主 renderer URL 属于 Runweave 安装态页面、`document.visibilityState === "visible"`、viewport 宽高均大于 0、终端工作区与输入区域可见且可交互。
@@ -74,4 +86,4 @@ description: 仅当用户显式指定此 skill 时使用；在当前项目内更
 ## 验证
 
 - 如果改动了 skill 或更新器代码，运行 `pnpm runweave:update:test-cases`。
-- 如果是实际桌面端更新请求，报告 dry-run 计划、实际执行模式、App Server action/home/release、最终安装的 App 路径和版本、desktop verification status/CDP/PID/page、Playwright attach/detach、是否遇到污染环境或无窗口问题，以及是否已进入终端页面。若因原生系统表面使用了 Computer Use，单独说明原因；常规路径不要求使用。
+- 如果是实际桌面端更新请求，报告 dry-run 计划、实际执行模式、App Server action/home/release、全局 CLI action/path/version/sha256 和真实接口调用结果、最终安装的 App 路径和版本、desktop verification status/CDP/PID/page、Playwright attach/detach、是否遇到污染环境或无窗口问题，以及是否已进入终端页面。若因原生系统表面使用了 Computer Use，单独说明原因；常规路径不要求使用。

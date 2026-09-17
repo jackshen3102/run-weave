@@ -71,7 +71,7 @@ http://127.0.0.1:5500/updates/mac/latest-mac.yml
 
 ## App Server 组件更新
 
-`pnpm runweave:update` 是本地安装/更新入口。它的 planner 同时判断三个组件：
+`pnpm runweave:update` 是本地安装/更新入口。它同时处理以下组件：
 
 - Desktop App：Electron shell/native 文件变化、缺少历史 state、shell version
   升级时选择完整 App 更新。
@@ -79,6 +79,8 @@ http://127.0.0.1:5500/updates/mac/latest-mac.yml
   热更新。
 - App Server：`app-server/`、`packages/shared` 中的 app-server 协议、CLI app-server
   命令、app-server 安装/验证脚本变化时，单独执行 app-server runtime 安装和重启。
+- 全局 CLI：Stable 更新构建当前 `rw`，登录 shell 中的全局 npm 安装与构建内容不一致时
+  自动更新；未安装时补装，内容一致则跳过安装。Beta 不覆盖全局 Stable CLI。
 
 dry-run 会同时输出桌面更新模式和 app-server 动作：
 
@@ -92,9 +94,12 @@ pnpm runweave:update --dry-run
 [runweave-update] selected mode: runtime|app
 [runweave-update] selected app-server action: update|skip
 [runweave-update] app-server home: ~/.runweave/app-server
+[runweave-update] selected cli action: sync|skip
+[runweave-update] cli command: /实际命令路径/rw
+[runweave-update] cli npm prefix: /实际全局安装前缀
 ```
 
-实际执行时，桌面更新和 app-server 更新是两个独立组件动作：
+实际执行时，各组件分别更新：
 
 1. `mode=runtime` 时先构建并安装 Desktop Runtime；除非传入 `--no-restart`，否则重启
    桌面端。
@@ -102,6 +107,14 @@ pnpm runweave:update --dry-run
 3. `app-server action=update` 时构建当前源码中的 app-server bundle，安装到
    `app-server home/runtime/releases/<releaseId>`，再通过 `rw app-server restart`
    切换运行中的全局 owner。
+4. Stable 同步全局 `rw`，核验实际命令指向的文件与本次 CLI 构建 SHA-256 一致，并执行
+   `--version`。`cli verification` 和更新 state 的 `cli` 保存动作、路径、版本和哈希。
+   不递增源码版本号，因此同版本号也会按内容更新。CLI 失败则整个命令失败，不报告全部完成。
+
+桌面 runtime 的 `cli/index.cjs` 与全局 npm 包是两个入口。更新前检查登录 shell 的 `rw`
+是否属于当前 npm prefix；冲突时停止，避免更新了一个包却继续使用另一份命令。该检查也适用于
+dry-run，但 dry-run 不构建或安装。更新后的接口验收使用全局 `rw` 和本轮目标 Backend，
+不能用 runtime 内置 CLI 替代。`--app-server=skip` 不会跳过全局 CLI 同步；此流程不安装 skill。
 
 可以显式控制 app-server 组件：
 

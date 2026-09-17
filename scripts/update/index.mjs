@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { planCliUpdate, runCliUpdate } from "./cli.mjs";
 import {
   parseRunweaveUpdateArgs,
   resolveAppBuildVersion,
@@ -98,6 +99,7 @@ async function main() {
     plan,
     verifyDesktop: args.verifyDesktop,
   });
+  const cliPlan = await planCliUpdate({ sourceRoot, channel });
   const gitHead = await getGitHead(sourceRoot);
   const gitDirty = await getGitStatusDirty(sourceRoot);
   const worktreeSnapshot = await createWorktreeSnapshot(sourceRoot);
@@ -139,6 +141,13 @@ async function main() {
     `[runweave-update] selected app-server action: ${plan.appServer.action}`,
   );
   console.log(`[runweave-update] app-server reason: ${plan.appServer.reason}`);
+  console.log(`[runweave-update] selected cli action: ${cliPlan.action}`);
+  console.log(`[runweave-update] cli reason: ${cliPlan.reason}`);
+  console.log(
+    `[runweave-update] cli command: ${cliPlan.commandPath ?? "not installed"}`,
+  );
+  if (cliPlan.prefix)
+    console.log(`[runweave-update] cli npm prefix: ${cliPlan.prefix}`);
   console.log(
     `[runweave-update] desktop verification: ${desktopVerification ? desktopVerification.statusPath : "disabled"}`,
   );
@@ -241,9 +250,12 @@ async function main() {
       });
     }
   }
+  const cli = await runCliUpdate({ sourceRoot, plan: cliPlan });
+  console.log(`[runweave-update] cli verification: ${JSON.stringify(cli)}`);
   const nextInstalledVersion = await readInstalledMacAppVersion(appPath);
   await writeUpdateState(statePath, {
     channel,
+    cli,
     appServer: {
       action: plan.appServer.action,
       changedFiles: plan.appServer.changedFiles,
