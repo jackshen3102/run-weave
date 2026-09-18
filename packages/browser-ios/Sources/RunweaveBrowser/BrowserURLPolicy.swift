@@ -43,7 +43,7 @@ enum BrowserURLPolicy {
     case denied(String)
   }
 
-  static func classify(_ raw: String) -> Decision {
+  static func classify(_ raw: String, allowLocal: Bool = false) -> Decision {
     guard !raw.isEmpty, !raw.contains(where: { $0.isWhitespace || $0.isNewline }),
       !raw.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
       let components = URLComponents(string: raw), let url = components.url,
@@ -59,7 +59,7 @@ enum BrowserURLPolicy {
     guard let host = url.host?.lowercased(), !host.isEmpty,
       components.port.map({ (1...65535).contains($0) }) ?? true
     else { return .denied("链接缺少有效的网站地址。") }
-    if isLocalHost(host) {
+    if isLocalHost(host) && !allowLocal {
       return .denied("电脑本地服务暂不支持，请使用手机可访问的地址。")
     }
     return .web(url)
@@ -74,7 +74,7 @@ enum BrowserURLPolicy {
     return components.path == "blank" || components.path == "srcdoc"
   }
 
-  private static func isLocalHost(_ raw: String) -> Bool {
+  static func isLocalHost(_ raw: String) -> Bool {
     let host = raw.trimmingCharacters(in: CharacterSet(charactersIn: "[]")).lowercased()
       .trimmingCharacters(in: CharacterSet(charactersIn: "."))
     if host == "localhost" || host.hasSuffix(".localhost") { return true }

@@ -1,3 +1,4 @@
+import { LocalBrowserService } from "../browser-local/service";
 import { createDeviceMonitor, type DeviceMonitoringRuntime } from "../device-monitor/bootstrap";
 import { MobileLoginService } from "../auth/mobile-login";
 import { createHash } from "node:crypto";
@@ -81,6 +82,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   authStore: AuthStore;
   authService: AuthService;
   mobileLoginService: MobileLoginService;
+  localBrowserService: LocalBrowserService;
   authCookieName: string;
   authSecureCookies: boolean;
   terminalSessionManager: TerminalSessionManager;
@@ -531,6 +533,9 @@ async function assembleRuntimeServices(
   resources.defer("battery-alerts", () => deviceMonitoring.batteryAlerts?.dispose());
   const mobileLoginService = new MobileLoginService(authService);
   resources.defer("mobile-login", () => mobileLoginService.dispose());
+  const localBrowserService = new LocalBrowserService((authId, terminalId) =>
+    Boolean(authService.getActiveAppSession(authId) && terminalSessionManager.getSession(terminalId)));
+  resources.defer("local-browser", () => localBrowserService.dispose());
   let disposed = false;
   const services: RuntimeServices = {
     ...deviceMonitoring,
@@ -554,6 +559,7 @@ async function assembleRuntimeServices(
     authStore,
     authService,
     mobileLoginService,
+    localBrowserService,
     authCookieName: authConfig.refreshCookieName,
     authSecureCookies: authConfig.secureCookies,
     terminalSessionManager,

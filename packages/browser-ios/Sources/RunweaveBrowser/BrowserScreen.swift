@@ -87,7 +87,7 @@ public struct BrowserScreen: View {
       }
       Section {
         Button(role: .destructive) {
-          browser.request(.close, message: "关闭网页？未提交内容可能丢失。网站登录数据仍保留。")
+          browser.request(.close, message: page.localPreview == nil ? "关闭网页？未提交内容可能丢失。网站登录数据仍保留。" : "关闭本地预览？未提交内容与临时网站数据将丢失。")
         } label: {
           Label("关闭网页", systemImage: "xmark")
         }

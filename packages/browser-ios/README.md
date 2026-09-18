@@ -1,7 +1,7 @@
 # RunweaveBrowser
 
 Runweave 与随记 iOS 共用的单页浏览器实现。Swift Package 最低声明 iOS 15，使用 Swift 5 语言模式；
-实际 App 部署版本仍由两个宿主决定。只依赖 Foundation、SwiftUI、UIKit、WebKit，无业务包或第三方依赖。
+实际 App 部署版本仍由两个宿主决定。只依赖 Foundation、SwiftUI、UIKit、WebKit、Network，无业务包或第三方依赖。
 
 ## 接入边界
 
@@ -25,6 +25,13 @@ WebView/Page 内部实现不对业务 App 暴露。真实调用方：
 各 App 使用各自沙箱的默认 WKWebsiteDataStore，不迁移 Runweave 原存储。网站身份与宿主业务身份独立：
 切业务账户关闭页面但不自动清 Cookie；清理操作影响当前 App 的全部内置网站，不影响另一 App 或业务草稿。
 不注入认证头、Keychain、终端或随记原生桥。飞书/Lark 白名单跳转保留可信 HTTPS 来源、原生确认与过期检查。
+
+## 可选电脑本地预览
+
+宿主可注入 `prepareLocalPreview`，返回当前来源持有的 `BrowserLocalPreview`。
+共享包仅配置临时存储和回环代理，不读取业务凭据。此能力需要 iOS 17；不注入时继续拒绝回环入口。
+Runweave 使用认证 Backend 通道，转换预览域名并限制到单一目标，关闭页面同步关闭 lease。
+详细地址、HTTPS 和资源兼容边界见 [本地预览](../app-ios/docs/local-browser.md)。
 
 ## 验证
 

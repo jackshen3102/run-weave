@@ -5,6 +5,7 @@ import WebKit
 @MainActor
 final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDelegate {
   let id = UUID()
+  let localPreview: BrowserLocalPreview?
   let source: BrowserContext
   let webView: WKWebView
   private weak var owner: BrowserSession?
@@ -24,7 +25,14 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
   private(set) var failure: String?
   private(set) var failureURL: URL?
   private(set) var notice: String?
-  var exportURL: URL { failureURL ?? currentURL }
+  var exportURL: URL {
+    let value = failureURL ?? currentURL
+    guard let localPreview, localPreview.allows(value),
+      var components = URLComponents(url: value, resolvingAgainstBaseURL: false),
+      let original = URLComponents(url: localPreview.originalURL, resolvingAgainstBaseURL: false) else { return value }
+    components.scheme = original.scheme; components.host = original.host; components.port = original.port
+    return components.url ?? value
+  }
   var title: String { webView.title.flatMap { $0.isEmpty ? nil : $0 } ?? currentURL.host ?? "网页" }
   private var javaScriptDialog: UIAlertController?
   private var javaScriptReply: ((String?) -> Void)?
@@ -107,6 +115,11 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
 
   func cancelJavaScriptDialog() { finishJavaScriptDialog(nil) }
 
+  private func classify(_ raw: String) -> BrowserURLPolicy.Decision {
+    let allowed = URL(string: raw).map { localPreview?.allows($0) == true } ?? false
+    return BrowserURLPolicy.classify(raw, allowLocal: allowed)
+  }
+
   private func requestApplication(_ link: BrowserURLPolicy.ApplicationLink, frame: WKFrameInfo) {
     guard valid, owner?.state == .presented, owner?.prompt == nil, javaScriptReply == nil,
       UIApplication.shared.applicationState == .active, presentationController != nil
@@ -169,19 +182,29 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       completion: completionHandler)
   }
 
-  init(url: URL, source: BrowserContext, store: WKWebsiteDataStore, owner: BrowserSession) {
+  init(url: URL, source: BrowserContext, store: WKWebsiteDataStore, owner: BrowserSession, localPreview: BrowserLocalPreview? = nil) {
+    self.localPreview = localPreview
     self.source = source
     self.owner = owner
     currentURL = url
     requestedURL = url
     let configuration = WKWebViewConfiguration()
     configuration.websiteDataStore = store
+    if let rules = localPreview?.rules { configuration.userContentController.add(rules) }
     // Ordinary web JavaScript, with no user scripts, message handlers, cookies or auth bridge.
     configuration.defaultWebpagePreferences.allowsContentJavaScript = true
     // navigationType is not a trusted user-gesture signal (scripted anchor clicks qualify).
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
     webView = WKWebView(frame: .zero, configuration: configuration)
     super.init()
+    if let localPreview {
+      notice = localPreview.explanation
+      localPreview.onFailure = { [weak self] message in
+        guard let self, self.valid else { return }
+        self.notice = message
+        self.changed()
+      }
+    }
     webView.navigationDelegate = self
     webView.uiDelegate = self
     webView.allowsBackForwardNavigationGestures = true
@@ -213,7 +236,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
   private func changed() { if valid { owner?.changed(self) } }
   private func updateURL() {
     guard valid else { return }
-    if let url = webView.url, case .web = BrowserURLPolicy.classify(url.absoluteString) {
+    if let url = webView.url, case .web = classify(url.absoluteString) {
       if currentURL != url { navigationRevision += 1 }
       currentURL = url
     }
@@ -221,11 +244,11 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
   }
 
   func load(_ url: URL) {
-    guard valid, case .web = BrowserURLPolicy.classify(url.absoluteString) else { return }
+    guard valid, case .web = classify(url.absoluteString) else { return }
     cancelJavaScriptDialog()
     failure = nil
     failureURL = nil
-    notice = nil
+    notice = localPreview?.explanation
     requestedURL = url
     navigation = webView.load(URLRequest(url: url))
     changed()
@@ -237,7 +260,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
     changed()
   }
 
-  func retry() { load(exportURL) }
+  func retry() { load(failureURL ?? currentURL) }
   func back() { if valid && webView.canGoBack { navigation = webView.goBack() } }
   func forward() { if valid && webView.canGoForward { navigation = webView.goForward() } }
   func reload() {
@@ -326,7 +349,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       decide(.allow)
       return
     }
-    switch BrowserURLPolicy.classify(url.absoluteString) {
+    switch classify(url.absoluteString) {
     case .denied(let reason):
       if !isSubframe {
         notice = reason
@@ -346,7 +369,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
         requestedURL = url
         failure = nil
         failureURL = nil
-        notice = nil
+        notice = localPreview.flatMap { $0.allows(url) ? $0.explanation : nil }
         changed()
       }
       decide(.allow)
@@ -372,7 +395,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       decisionHandler(response.canShowMIMEType ? .allow : .cancel)
       return
     }
-    guard case .web = BrowserURLPolicy.classify(url.absoluteString) else {
+    guard case .web = classify(url.absoluteString) else {
       decisionHandler(.cancel)
       if response.isForMainFrame {
         notice = "此页面地址无法在内置浏览器打开。"
@@ -413,7 +436,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
     }
     guard valid, self.navigation === navigation else { return }
     if let url = webView.url {
-      guard case .web = BrowserURLPolicy.classify(url.absoluteString) else {
+      guard case .web = classify(url.absoluteString) else {
         webView.stopLoading()
         notice = "已阻止不支持的重定向地址。"
         changed()
@@ -494,7 +517,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       requestApplication(link, frame: navigationAction.sourceFrame)
       return nil
     }
-    guard case .web = BrowserURLPolicy.classify(url.absoluteString) else { return nil }
+    guard case .web = classify(url.absoluteString) else { return nil }
     // Keep new-window links in this browser, preserving the original request (including POST).
     // The load passes through the same main-frame navigation policy and lifecycle guards.
     navigation = webView.load(navigationAction.request)

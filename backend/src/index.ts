@@ -1,3 +1,5 @@
+import { attachLocalBrowserWebSocketServer, localBrowserAuth } from "./ws/browser-local-server";
+import { LOCAL_BROWSER_MAX_CONNECTIONS, LOCAL_BROWSER_MAX_FRAME } from "@runweave/shared/browser-local-tunnel";
 import { createExperienceRouter } from "./routes/experience";
 import { createCodexQuotaRouter } from "./routes/codex-quota";
 import { createDeviceNotificationsRouter } from "./routes/device-notifications";
@@ -221,6 +223,11 @@ function createHttpApp(
     createDiagnosticLogsRouter(diagnosticLogRecorder),
   );
   registerRuntimeStatusRoutes(app, requireAuth, services.runtimeStatus);
+  app.get("/api/browser/local/capabilities", requireAuth, (req, res) => {
+    if (!localBrowserAuth(req, services.authService)) { res.sendStatus(401); return; }
+    if (!services.localBrowserService.enabled) { res.status(503).json({ code: "disabled" }); return; }
+    res.json({ protocolVersion: 1, maxConnections: LOCAL_BROWSER_MAX_CONNECTIONS, maxFrameBytes: LOCAL_BROWSER_MAX_FRAME });
+  });
   app.use("/api/codex/quota", requireAuth, createCodexQuotaRouter());
   app.use("/api/device", requireAuth, createDeviceStatusRouter(services.deviceMonitor));
   app.use("/api/device/notifications", requireAuth, createDeviceNotificationsRouter(services.batteryAlerts?.subscriptions ?? null, services.authService));
@@ -451,6 +458,8 @@ async function startRuntime(): Promise<void> {
     const transport = new TransportRuntime(server);
     resources.defer("transport", () => transport.dispose());
     const upgradeRouter = createHttpUpgradeRouter(server);
+    transport.addWebSocket(attachLocalBrowserWebSocketServer(upgradeRouter,
+      services.localBrowserService, services.authService, tunnelAuthConfig));
 
     stage = "websocket-servers";
     attachWorkspaceServiceUpgradeProxy(
