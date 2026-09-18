@@ -121,7 +121,7 @@ P2 验收：电脑只监听 loopback 时，真机仍能加载页面、API 和 WS
 
 ## 验证入口与通过条件
 
-新增验收合同（待功能实现后执行）：
+新增验收合同（待功能实现后执行，共 33 条 required 用例）：
 
 - [访问与网页行为](../testing/app/ios-local-browser.testplan.yaml)：HTTP、地址族、资源、接口、表单、HMR、TLS、跨网络及兼容。
 - [授权与生命周期](../testing/app/ios-local-browser-lifecycle.testplan.yaml)：鉴权、目标边界、凭据、连接隔离、竞态、断网、撤销、回收与宿主回归。
