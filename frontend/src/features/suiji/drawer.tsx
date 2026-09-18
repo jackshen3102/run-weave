@@ -67,6 +67,7 @@ export function SuijiDrawer() {
               }
             >
               <SuijiPage
+                active={open}
                 onClose={() => setOpen(false)}
                 onOpenLink={browser.openLink}
               />

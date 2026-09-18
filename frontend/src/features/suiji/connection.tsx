@@ -25,9 +25,11 @@ import {
 } from "./accounts";
 
 export default function SuijiPage({
+  active = true,
   onClose,
   onOpenLink,
 }: {
+  active?: boolean;
   onClose?: () => void;
   onOpenLink?: SuijiOpenLink;
 }) {
@@ -40,6 +42,9 @@ export default function SuijiPage({
   const [settings, setSettings] = useState(false);
   const [needsLogin, setNeedsLogin] = useState(true);
   const [connection, setConnection] = useState<SuijiConnection>();
+  const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(
+    null,
+  );
   const current = useRef<SuijiClient | undefined>(undefined);
   const alive = useRef(true);
   const generation = useRef(0);
@@ -220,6 +225,7 @@ export default function SuijiPage({
           <span className="rounded bg-secondary px-2 py-0.5 text-xs">开发</span>
         ) : null}
         <div className="ml-auto flex items-center gap-1">
+          {!settings ? <div ref={setHeaderActions} className="flex" /> : null}
           {connection && !settings ? (
             <Button
               variant="ghost"
@@ -247,6 +253,8 @@ export default function SuijiPage({
           <SuijiWorkspace
             key={connection.store.scope}
             connection={connection}
+            active={active}
+            headerActions={headerActions}
             onOpenLink={onOpenLink ? openLink : undefined}
           />
         </div>
