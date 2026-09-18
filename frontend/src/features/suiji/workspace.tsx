@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useDebounce, useMemoizedFn } from "ahooks";
 import {
   Plus,
@@ -7,6 +8,7 @@ import {
   ListChecks,
   Trash2,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import type {
   RecordPage,
@@ -31,9 +33,13 @@ import { SuijiReviewPanel } from "./review";
 
 export function SuijiWorkspace({
   connection,
+  active = true,
+  headerActions,
   onOpenLink,
 }: {
   connection: SuijiConnection;
+  active?: boolean;
+  headerActions: HTMLElement | null;
   onOpenLink?: (url: string) => void;
 }) {
   const { client, info, store } = connection;
@@ -148,8 +154,8 @@ export function SuijiWorkspace({
     }
   });
   useEffect(() => {
-    void load();
-  }, [load, tab, kind, status, search]);
+    if (active) void load();
+  }, [load, tab, kind, status, search, active]);
   const open = useMemoizedFn(async (id: string, citedVersion?: number) => {
     const sequence = generation.current;
     const request = ++detailRequest.current;
@@ -170,6 +176,13 @@ export function SuijiWorkspace({
         else next.delete(id);
         return next;
       });
+      setItems((old) =>
+        old.map((item) =>
+          item.id === record.id && item.version <= record.version
+            ? record
+            : item,
+        ),
+      );
       setDetail({ record, citedVersion });
     } catch (error) {
       if (alive.current)
@@ -288,8 +301,35 @@ export function SuijiWorkspace({
       }
     },
   );
+  const visibleItems = items.filter(
+    (record) =>
+      Boolean(record.deletedAt) === (tab === "trash") &&
+      (tab === "tasks"
+        ? record.kind === "task" && record.taskStatus === status
+        : !kind || record.kind === kind) &&
+      (tab !== "records" ||
+        record.taskStatus !== "done" ||
+        pending.has(record.id)),
+  );
   return (
     <main className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
+      {headerActions && tab !== "ai" && !detail && !editor
+        ? createPortal(
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={loading ? "刷新中" : "刷新"}
+              title="刷新"
+              disabled={loading}
+              onClick={() => void load()}
+            >
+              <RefreshCw
+                className={`size-4 ${loading ? "animate-spin" : ""}`}
+              />
+            </Button>,
+            headerActions,
+          )
+        : null}
       <div
         className={detail || editor ? "hidden" : "flex min-h-0 flex-1 flex-col"}
       >
@@ -391,45 +431,36 @@ export function SuijiWorkspace({
                 ) : null}
               </section>
               <section className="flex flex-col gap-4 pb-20">
-                {items
-                  .filter(
-                    (record) =>
-                      tab !== "records" ||
-                      record.taskStatus !== "done" ||
-                      pending.has(record.id),
-                  )
-                  .map((record) => (
-                    <article
-                      key={record.id}
-                      className="relative flex flex-col gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition-colors hover:bg-accent"
-                    >
-                      <button
-                        type="button"
-                        aria-label={`查看记录：${record.body || "附件记录"}`}
-                        onClick={() => void open(record.id)}
-                        className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                      <span className="pointer-events-none relative flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                        <span>
-                          {statusText(record)}
-                          {pending.has(record.id) ? " · 状态待确认" : ""}
-                        </span>
-                        <time>{recordDate(record.createdAt)}</time>
+                {visibleItems.map((record) => (
+                  <article
+                    key={record.id}
+                    className="relative flex flex-col gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition-colors hover:bg-accent"
+                  >
+                    <button
+                      type="button"
+                      aria-label={`查看记录：${record.body || "附件记录"}`}
+                      onClick={() => void open(record.id)}
+                      className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    />
+                    <span className="pointer-events-none relative flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                      <span>
+                        {statusText(record)}
+                        {pending.has(record.id) ? " · 状态待确认" : ""}
                       </span>
-                      <RecordBody
-                        onOpenLink={onOpenLink}
-                        body={record.body || "附件记录"}
-                        className="pointer-events-none relative line-clamp-5"
-                      />
-                      {record.attachments.length ? (
-                        <span className="pointer-events-none relative text-xs text-muted-foreground">
-                          {record.attachments
-                            .map((a) => a.fileName)
-                            .join(" · ")}
-                        </span>
-                      ) : null}
-                    </article>
-                  ))}
+                      <time>{recordDate(record.createdAt)}</time>
+                    </span>
+                    <RecordBody
+                      onOpenLink={onOpenLink}
+                      body={record.body || "附件记录"}
+                      className="pointer-events-none relative line-clamp-5"
+                    />
+                    {record.attachments.length ? (
+                      <span className="pointer-events-none relative text-xs text-muted-foreground">
+                        {record.attachments.map((a) => a.fileName).join(" · ")}
+                      </span>
+                    ) : null}
+                  </article>
+                ))}
                 {loading ? (
                   <p
                     role="status"
@@ -437,12 +468,7 @@ export function SuijiWorkspace({
                   >
                     正在读取记录…
                   </p>
-                ) : items.filter(
-                    (record) =>
-                      tab !== "records" ||
-                      record.taskStatus !== "done" ||
-                      pending.has(record.id),
-                  ).length === 0 ? (
+                ) : visibleItems.length === 0 ? (
                   <div className="flex flex-col gap-3 py-16 text-center">
                     <h2 className="text-xl">
                       {query
@@ -461,13 +487,6 @@ export function SuijiWorkspace({
                   </div>
                 ) : null}
                 <div className="flex justify-center gap-3">
-                  <Button
-                    variant="ghost"
-                    disabled={loading}
-                    onClick={() => void load()}
-                  >
-                    刷新
-                  </Button>
                   {cursor ? (
                     <Button
                       variant="outline"
