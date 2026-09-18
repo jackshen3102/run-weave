@@ -100,7 +100,8 @@ async function readFactText(
     if (descriptor.availability !== "available")
       throw new Error("experience_source_expired");
     const value = await store.content(descriptor.contentId);
-    if (!value?.bytesBase64) throw new Error("experience_source_unavailable");
+    if (typeof value?.bytesBase64 !== "string")
+      throw new Error("experience_source_unavailable");
     const text = Buffer.from(value.bytesBase64, "base64").toString("utf8");
     if (Buffer.byteLength(text) > 40_000)
       throw new Error("experience_source_too_large");

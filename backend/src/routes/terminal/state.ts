@@ -140,7 +140,8 @@ export function createInternalTerminalAgentHookRouter(options: {
       }
       if (parsed.data.agent === "pi") {
         const result = await processTerminalAgentHook(options, { ...parsed.data, hookEvent: "AgentMetadata" });
-        if (result.status !== "recorded") {
+        if (result.status !== "recorded" &&
+            !(result.status === "ignored" && result.activityReplayAllowed)) {
           res.status(202).json({ disposition: "ignored" });
           return;
         }
@@ -173,6 +174,11 @@ export function createInternalTerminalAgentHookRouter(options: {
       return;
     }
     if (result.status === "ignored") {
+      // App Server and the direct hook share Pi sequencing, but only the direct
+      // hook carries Activity content. Do not lose it when state arrived first.
+      if (result.activityReplayAllowed) {
+        recordAgentHookActivity(options.activity, parsed.data, hookActivityEvents);
+      }
       terminalStateLogger.info("terminal-state.hook.ignored", {
         message: "Terminal agent hook ignored because agent is not current",
         terminalSessionId: result.terminalSessionId,

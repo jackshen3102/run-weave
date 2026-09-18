@@ -1,0 +1,27 @@
+version: 1
+name: 经验学习来源采集
+description: 验证 Pi 双通道状态与 Activity 内容独立去重，空输出仍能进入完整学习事实，检验不会放开身份与证据大小边界。
+cases:
+  - id: EXPLEARN-001
+    name: Pi 状态去重不丢失本轮提问
+    required: true
+    description: 先到达 App Server 的状态与后到达直连入口的内容属于同一 Pi 事件时，内容保存一次，终端状态不重复改变；反向顺序也成立。
+    preconditions:
+      - 使用独占临时目录中的真实持久会话管理器、Activity SQLite worker 和已认证 HTTP hook 路由。
+      - 创建运行中的 Pi 会话及合法 sessionId、instanceId、sequence，使用真实 App Server handler 消费受控 hook 输入。
+    steps:
+      - 先由 App Server handler 接收 UserPromptSubmit，再经 HTTP 发送相同 Pi 上下文及 query；确认 Activity 有一条用户提问且状态保持不变。
+      - 重复同一 activityEventId；确认提问未重复；以新 sequence 先发送 HTTP 再调用 App Server handler，确认正常保存新事件。
+      - 分别发送错误 token、错误 panel、同 sequence 不同 runId 和过期 sequence；确认不新增 Activity，也不回退状态。
+      - 关闭 HTTP 与 SQLite worker，释放本次会话存储并删除独占目录。
+  - id: EXPLEARN-002
+    name: 空工具输出与证据大小边界
+    required: true
+    description: 已保存的空字符串工具输出属于有效证据，不能误报来源丢失；仍拒绝超过单条上限的内容，不静默截断。
+    preconditions:
+      - 独占 Activity 数据库中存在本轮用户提问、匹配工具请求与空字符串结果；Stop 经 App Server 与 HTTP 双通道送达。
+      - 所有事实的终端、线程、面板及通道一致，读取使用完成时快照。
+    steps:
+      - 调用真实学习来源读取器；确认按顺序返回用户提问、工具请求、空字符串结果及回复，不出现 experience_source_unavailable 或边界丢失。
+      - 写入超过 40000 字节的单条工具结果，以新快照读取；确认明确返回 experience_source_too_large，不输出伪完整事实。
+      - 关闭并删除本次独占存储；验收数据不进入 production。

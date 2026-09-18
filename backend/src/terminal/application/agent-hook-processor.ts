@@ -1,4 +1,5 @@
 import { isPiAgentContext, isNewerPiContext, type PiAgentContext } from "@runweave/shared/terminal/pi-agent";
+import { isDeepStrictEqual } from "node:util";
 import type {
   AgentHookIgnoreReason,
   AgentHookStateEvent,
@@ -68,6 +69,8 @@ export type ProcessTerminalAgentHookResult =
       terminalState: TerminalState;
       panelId: string | null;
       ignoreReason: AgentHookIgnoreReason;
+      /** Another transport accepted this exact Pi event; only Activity may replay it. */
+      activityReplayAllowed?: boolean;
     }
   | {
       status: "recorded";
@@ -286,7 +289,11 @@ export async function processTerminalAgentHook(
       return { status: "ignored", terminalSessionId: session.id, agent: input.agent,
         hookEvent: input.hookEvent, activeCommand: targetActiveCommand,
         terminalState: currentTargetState, panelId: panel?.id ?? null,
-        ignoreReason: "operation_identity_mismatch" };
+        ignoreReason: "operation_identity_mismatch",
+        activityReplayAllowed: isPiAgentContext(input.pi) &&
+          input.pi.sessionId === hookThreadId &&
+          isDeepStrictEqual(input.pi, currentThreadOwner.pi),
+      };
     }
     if (panel) {
       panel.pi = input.pi;
