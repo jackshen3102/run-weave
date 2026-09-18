@@ -23,13 +23,9 @@ import type { SuijiConnection } from "./connection-model";
 import type { PendingRequest, SuijiDraft } from "./drafts";
 import { SuijiEditorModel } from "./editor-model";
 import { SuijiEditor } from "./editor";
-import {
-  RecordBody,
-  recordDate,
-  statusText,
-  SuijiRecordDetail,
-} from "./record";
+import { SuijiRecordCard, SuijiRecordDetail } from "./record";
 import { SuijiReviewPanel } from "./review";
+import { TagFilter } from "./tags";
 
 export function SuijiWorkspace({
   connection,
@@ -47,6 +43,8 @@ export function SuijiWorkspace({
     [kind, setKind] = useState(""),
     [status, setStatus] = useState("open");
   const [query, setQuery] = useState("");
+  const [tag, setTag] = useState("");
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [searchVisible, setSearchVisible] = useState(false);
   const search = useDebounce(query, { wait: 250 });
   const detailRequest = useRef(0);
@@ -118,12 +116,17 @@ export function SuijiWorkspace({
     } else if (kind) query.set("kind", kind);
     if (tab === "trash") query.set("trash", "true");
     if (search) query.set("q", search);
+    if (tag) query.set("tag", tag);
     if (more && cursor) query.set("cursor", cursor);
     try {
-      const page = await client.request<RecordPage>(
-        "/api/suiji/v1/records?" + query,
-      );
+      const [page, tags] = await Promise.all([
+        client.request<RecordPage>("/api/suiji/v1/records?" + query),
+        more
+          ? undefined
+          : client.request<{ items: string[] }>("/api/suiji/v1/tags"),
+      ]);
       if (!alive.current || sequence !== generation.current) return;
+      if (tags) setAvailableTags(tags.items);
       const pendingIds = await Promise.all(
         page.items.map(async (r) =>
           (await store.get("status:" + r.id)) ? r.id : undefined,
@@ -155,7 +158,17 @@ export function SuijiWorkspace({
   });
   useEffect(() => {
     if (active) void load();
-  }, [load, tab, kind, status, search, active]);
+  }, [load, tab, kind, status, search, tag, active]);
+  const selectTag = useMemoizedFn((value: string) => {
+    ++generation.current;
+    ++detailRequest.current;
+    setItems([]);
+    setCursor(null);
+    setDetail(undefined);
+    if (tab === "ai") setTab("records");
+    if (value === tag) void load();
+    else setTag(value);
+  });
   const open = useMemoizedFn(async (id: string, citedVersion?: number) => {
     const sequence = generation.current;
     const request = ++detailRequest.current;
@@ -212,6 +225,7 @@ export function SuijiWorkspace({
             id,
             kind: record?.kind ?? defaultKind,
             body: record?.body ?? body,
+            tags: record?.tags ?? [],
             version: record?.version,
             existing: record?.attachments ?? [],
             files: [],
@@ -304,6 +318,7 @@ export function SuijiWorkspace({
   const visibleItems = items.filter(
     (record) =>
       Boolean(record.deletedAt) === (tab === "trash") &&
+      (!tag || (record.tags ?? []).includes(tag)) &&
       (tab === "tasks"
         ? record.kind === "task" && record.taskStatus === status
         : !kind || record.kind === kind) &&
@@ -430,36 +445,21 @@ export function SuijiWorkspace({
                   />
                 ) : null}
               </section>
+              <TagFilter
+                available={availableTags}
+                selected={tag}
+                onSelect={selectTag}
+              />
               <section className="flex flex-col gap-4 pb-20">
                 {visibleItems.map((record) => (
-                  <article
+                  <SuijiRecordCard
                     key={record.id}
-                    className="relative flex flex-col gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition-colors hover:bg-accent"
-                  >
-                    <button
-                      type="button"
-                      aria-label={`查看记录：${record.body || "附件记录"}`}
-                      onClick={() => void open(record.id)}
-                      className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                    <span className="pointer-events-none relative flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                      <span>
-                        {statusText(record)}
-                        {pending.has(record.id) ? " · 状态待确认" : ""}
-                      </span>
-                      <time>{recordDate(record.createdAt)}</time>
-                    </span>
-                    <RecordBody
-                      onOpenLink={onOpenLink}
-                      body={record.body || "附件记录"}
-                      className="pointer-events-none relative line-clamp-5"
-                    />
-                    {record.attachments.length ? (
-                      <span className="pointer-events-none relative text-xs text-muted-foreground">
-                        {record.attachments.map((a) => a.fileName).join(" · ")}
-                      </span>
-                    ) : null}
-                  </article>
+                    record={record}
+                    pending={pending.has(record.id)}
+                    onOpen={() => void open(record.id)}
+                    onOpenLink={onOpenLink}
+                    onTag={selectTag}
+                  />
                 ))}
                 {loading ? (
                   <p
@@ -471,15 +471,15 @@ export function SuijiWorkspace({
                 ) : visibleItems.length === 0 ? (
                   <div className="flex flex-col gap-3 py-16 text-center">
                     <h2 className="text-xl">
-                      {query
+                      {query || tag
                         ? "没有找到匹配的原文"
                         : tab === "trash"
                           ? "回收站为空"
                           : "留一点想法在这里"}
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                      {query
-                        ? "试试更短的关键词。"
+                      {query || tag
+                        ? "试试其他标签或更短的关键词。"
                         : tab === "trash"
                           ? "删除的记录会保留在这里，可随时恢复。"
                           : "点右下角加号，记下一句想到的事。"}
@@ -544,6 +544,7 @@ export function SuijiWorkspace({
           onOpenLink={onOpenLink}
           {...detail}
           client={client}
+          onTag={selectTag}
           onClose={() => setDetail(undefined)}
           onEdit={() => void edit(detail.record)}
           onStatus={(target) =>
@@ -564,6 +565,7 @@ export function SuijiWorkspace({
       {editor ? (
         <SuijiEditor
           model={editor}
+          availableTags={availableTags}
           onClose={() => setEditor(undefined)}
           onDiscard={() => {
             models.current.delete(editor.state.draft.id);

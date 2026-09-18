@@ -13,6 +13,7 @@ public struct SuijiRecord: Codable, Identifiable, Equatable, Sendable {
   public let id: String
   public let kind: RecordKind
   public let body: String
+  public let tags: [String]?
   public let taskStatus: TaskStatus?
   public let version: Int
   public let createdAt: String
@@ -22,6 +23,18 @@ public struct SuijiRecord: Codable, Identifiable, Equatable, Sendable {
   public let attachments: [Attachment]
 }
 public struct RecordResponse: Codable, Sendable { public let record: SuijiRecord }
+struct TagDirectory: Decodable, Sendable { let items: [String] }
+enum SuijiTags {
+  static func normalize(_ values: [String]) throws -> [String] {
+    guard values.count <= 2 else { throw MessageError(message: "最多 2 个标签") }
+    let tags = values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    guard tags.allSatisfy({ !$0.isEmpty && $0.unicodeScalars.count <= 20 && !$0.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) }) else {
+      throw MessageError(message: "标签须为 1–20 个字符，不能包含控制字符")
+    }
+    guard Set(tags).count == tags.count else { throw MessageError(message: "标签不能重复") }
+    return tags
+  }
+}
 public struct UploadResponse: Codable, Sendable { public let attachment: Attachment }
 public struct RecordPage: Codable, Sendable { public let items: [SuijiRecord]; public let nextCursor: String? }
 public struct Tokens: Codable, Sendable {

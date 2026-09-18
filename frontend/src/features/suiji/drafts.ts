@@ -21,6 +21,7 @@ export type SuijiDraft = {
   id: string;
   kind: RecordKind;
   body: string;
+  tags?: string[];
   version?: number;
   existing: SuijiAttachment[];
   files: DraftFile[];

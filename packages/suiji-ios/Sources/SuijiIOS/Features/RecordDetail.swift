@@ -38,6 +38,9 @@ struct RecordDetail: View {
         if let citedVersion, citedVersion != record.version { Text("此记录已更新；回答引用的是版本 \(citedVersion)，下方是当前原文。").font(.footnote).foregroundStyle(.secondary) }
         if let status = record.taskStatus { TaskStatusBadge(status: status) }
         RecordBody(text: record.body).frame(maxWidth: .infinity, alignment: .leading)
+        if let tags = record.tags, !tags.isEmpty {
+          RecordTags(tags: tags) { session.selectedTag = $0; dismiss() }
+        }
         ForEach(record.attachments) { item in Button { attachment = item } label: { Label(item.fileName, systemImage: item.kind == "image" ? "photo" : "doc.text") } }
         Text(displayDate(record.createdAt)).font(.caption).foregroundStyle(.secondary)
         if record.deletedAt != nil { Text("已在回收站，恢复后可继续编辑。").foregroundStyle(.secondary) }

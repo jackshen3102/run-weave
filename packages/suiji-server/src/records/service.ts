@@ -18,6 +18,7 @@ export type RecordQuery = {
   kind?: string;
   taskStatus?: string;
   q?: string;
+  tag?: string;
   from?: string;
   to?: string;
   cursor?: string;
@@ -25,6 +26,15 @@ export type RecordQuery = {
 };
 export class RecordService {
   constructor(private pool: pg.Pool) {}
+  async tags(owner: string): Promise<{ items: string[] }> {
+    const result = await this.pool.query<{ tag: string }>(
+      `SELECT tag FROM records CROSS JOIN LATERAL unnest(tags) AS tag
+       WHERE owner_id=$1 AND deleted_at IS NULL
+       GROUP BY tag ORDER BY max(updated_at) DESC, tag COLLATE "C"`,
+      [owner],
+    );
+    return { items: result.rows.map((row) => row.tag) };
+  }
   // A repeatable-read snapshot prevents a body/version from being paired with newer attachments.
   async get(owner: string, id: string, includeTrash = false) {
     return transaction(this.pool, async (client) => {
@@ -48,6 +58,7 @@ export class RecordService {
     };
     if (query.kind) add("kind=?", query.kind);
     if (query.taskStatus) add("task_status=?", query.taskStatus);
+    if (query.tag) add("?=ANY(tags)", query.tag);
     if (query.q)
       add("body LIKE ? ESCAPE '\\'", `%${query.q.replace(/[\\%_]/g, "\\$&")}%`);
     if (query.from) add("created_at>=?", query.from);
@@ -109,7 +120,7 @@ export class RecordService {
         const id = randomUUID();
         this.checkContent(input.body, input.attachmentIds ?? []);
         await client.query(
-          "INSERT INTO records(id,owner_id,kind,body,task_status,created_via) VALUES($1,$2,$3,$4,$5,$6)",
+          "INSERT INTO records(id,owner_id,kind,body,task_status,created_via,tags) VALUES($1,$2,$3,$4,$5,$6,$7)",
           [
             id,
             context.ownerId,
@@ -117,6 +128,7 @@ export class RecordService {
             input.body,
             input.kind === "task" ? "open" : null,
             context.actor,
+            input.tags ?? [],
           ],
         );
         await this.attach(
@@ -137,18 +149,20 @@ export class RecordService {
       const taskStatus =
         kind === old.kind ? old.taskStatus : kind === "task" ? "open" : null;
       const body = input.body ?? old.body,
+        tags = input.tags ?? old.tags ?? [],
         ids = input.attachmentIds ?? old.attachments.map((a) => a.id);
       this.checkContent(body, ids);
       if (
         kind === old.kind &&
         body === old.body &&
+        JSON.stringify(tags) === JSON.stringify(old.tags ?? []) &&
         JSON.stringify(ids) === JSON.stringify(old.attachments.map((a) => a.id))
       )
         return { record: old };
       await this.attach(client, context.ownerId, id, ids);
       await client.query(
-        "UPDATE records SET body=$3,kind=$4,task_status=$5,version=version+1,updated_at=clock_timestamp() WHERE owner_id=$1 AND id=$2",
-        [context.ownerId, id, body, kind, taskStatus],
+        "UPDATE records SET body=$3,kind=$4,task_status=$5,tags=$6,version=version+1,updated_at=clock_timestamp() WHERE owner_id=$1 AND id=$2",
+        [context.ownerId, id, body, kind, taskStatus, tags],
       );
       return this.snapshot(client, context, id);
     });

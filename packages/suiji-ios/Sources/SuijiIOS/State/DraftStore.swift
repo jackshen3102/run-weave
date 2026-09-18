@@ -19,6 +19,8 @@ struct Draft: Codable, Identifiable, Sendable {
   var id: String { recordID ?? "new" }
   var kind: RecordKind = .task
   var body = ""
+  // nil in older drafts means preserve the server tags on edit.
+  var tags: [String]?
   var recordID: String?
   var expectedVersion: Int?
   var existing: [Attachment] = []

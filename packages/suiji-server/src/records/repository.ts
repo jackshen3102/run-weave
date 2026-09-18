@@ -25,6 +25,7 @@ export async function getRecord(
     id: row.id,
     kind: row.kind,
     body: row.body,
+    tags: row.tags,
     taskStatus: row.task_status,
     version: row.version,
     createdAt: row.created_at.toISOString(),

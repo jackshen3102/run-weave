@@ -3,10 +3,12 @@ import PhotosUI
 import UniformTypeIdentifiers
 struct RecordEditorSheet: View {
   @ObservedObject var model: EditorModel
+  var availableTags: [String] = []
   @Environment(\.dismiss) private var dismiss
   @State private var photo: PhotosPickerItem?
   @State private var choosingFile = false
   @State private var discarding = false
+  @State private var choosingTag = false
   @State private var preview: LocalAttachment?
   @FocusState private var focused: Bool
   var body: some View {
@@ -22,6 +24,7 @@ struct RecordEditorSheet: View {
             .frame(height: 240).focused($focused).disabled(!model.editable)
             .accessibilityLabel("正文").scrollContentBackground(.hidden).padding(8).foregroundStyle(SuijiTheme.ink).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 12))
           Text("\(model.draft.body.unicodeScalars.count) / \(model.limits.bodyScalars)").font(.caption).foregroundStyle(.secondary)
+          tagEditor
           ForEach(model.draft.existing) { attachment in
             HStack { Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text"); Spacer()
               Button("移除") { model.draft.existing.removeAll { $0.id == attachment.id }; Task { await model.persist() } }.disabled(!model.editable)
@@ -44,8 +47,11 @@ struct RecordEditorSheet: View {
               Text("云端最新（版本 \(latest.version)）").font(.headline)
               Text("云端类型：\(latest.kind == .note ? "想法" : "待办")").font(.subheadline)
               Text(verbatim: latest.body).textSelection(.enabled)
+              Text("云端标签").font(.subheadline); RecordTags(tags: latest.tags ?? [])
               Text("本地草稿").font(.headline); Text(verbatim: model.draft.body).textSelection(.enabled)
-              Text("继续编辑将保留本地正文和类型，采用云端最新附件；可再次调整后保存。").font(.footnote)
+              Text(model.draft.tags == nil ? "本机未修改标签，保存时保留云端标签" : "本机标签").font(.subheadline)
+              RecordTags(tags: model.draft.tags ?? [])
+              Text("继续编辑将保留本地正文、类型和标签选择，采用云端最新附件；可再次调整后保存。").font(.footnote)
               Button("已比较，基于最新版本继续编辑") { Task { await model.rebase() } }
             }
           }
@@ -63,13 +69,31 @@ struct RecordEditorSheet: View {
       }
       .onChange(of: model.draft.body) { _, _ in Task { await model.persist() } }
       .onChange(of: model.draft.kind) { _, _ in Task { await model.persist() } }
+      .onChange(of: model.draft.tags) { _, _ in Task { await model.persist() } }
       .onChange(of: photo) { _, item in Task { await importPhoto(item) } }
       .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.item]) { result in Task { await importMarkdown(result) } }
       .confirmationDialog("放弃本机草稿？服务器记录不会被删除。", isPresented: $discarding, titleVisibility: .visible) {
         Button("放弃草稿", role: .destructive) { Task { if await model.discard() { dismiss() } } }
       }
       .sheet(item: $preview) { item in AttachmentReader(title: item.fileName, kind: item.kind) { try await model.store.data(item) } }
+      .sheet(isPresented: $choosingTag) {
+        TagPickerSheet(available: availableTags, selected: model.draft.tags ?? [], allowsCreate: true) { tag in
+          guard model.editable else { return }
+          model.draft.tags = (model.draft.tags ?? []) + [tag]
+        }
+      }
     }
+  }
+  private var tagEditor: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      ForEach(model.draft.tags ?? [], id: \.self) { tag in
+        Button { model.draft.tags?.removeAll { $0 == tag } } label: {
+          HStack { TagLabel(name: tag); Image(systemName: "xmark.circle") }
+        }.accessibilityLabel("移除标签：" + tag)
+      }
+      Button("＋标签") { focused = false; choosingTag = true }.disabled((model.draft.tags ?? []).count >= 2)
+      if (model.draft.tags ?? []).count >= 2 { Text("最多 2 个标签").font(.caption).foregroundStyle(.secondary) }
+    }.disabled(!model.editable)
   }
   private func importPhoto(_ item: PhotosPickerItem?) async {
     guard let item else { return }

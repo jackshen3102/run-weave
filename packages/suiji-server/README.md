@@ -29,20 +29,23 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 公开合同：[shared/suiji](../shared/src/suiji/index.ts)。所有 `/api/suiji/v1` 请求需要 Bearer，
 所有业务写请求需要 `Idempotency-Key`。ID 为 UUID，UTC 时间精度为毫秒，正文按 Unicode 标量计数。
 
-| 接口                                          | 行为                                                                     |
-| --------------------------------------------- | ------------------------------------------------------------------------ |
-| `POST /api/auth/login` / `refresh` / `logout` | 单独会话、轮换刷新、注销当前会话                                         |
-| `GET /api/auth/verify` / `/api/suiji/v1/info` | 核验身份、协议、版本与输入限额                                           |
-| `GET /api/suiji/v1/records`                   | kind/taskStatus/q/from/to/cursor/limit；创建时间倒序，q 为字面子串       |
-| `GET /api/suiji/v1/records/:id`               | 当前正文、状态、版本和有序附件                                           |
-| `POST /api/suiji/v1/records`                  | kind/body/attachmentIds；note 状态 null，task 初始 open                  |
-| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，kind/body/attachmentIds 至少一个；一次原子保存          |
-| `POST /api/suiji/v1/records/:id/trash`        | expectedVersion/trashed；移入回收站或恢复，保留正文、附件和待办原状态    |
-| `POST /api/suiji/v1/records/:id/task-status`  | expectedVersion/targetStatus；open → done/archived；done → open 撤销完成 |
-| `POST /api/suiji/v1/uploads`                  | 单个 multipart file；幂等摘要与 boundary 无关                            |
-| `GET /api/suiji/v1/attachments/:id/content`   | 当前 owner 的实际文件流，不返回存储路径                                  |
+| 接口                                          | 行为                                                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `POST /api/auth/login` / `refresh` / `logout` | 单独会话、轮换刷新、注销当前会话                                                     |
+| `GET /api/auth/verify` / `/api/suiji/v1/info` | 核验身份、协议、版本与输入限额                                                       |
+| `GET /api/suiji/v1/records`                   | kind/taskStatus/q/tag/from/to/cursor/limit；创建时间倒序，q 为字面子串，tag 精确匹配 |
+| `GET /api/suiji/v1/tags`                      | 当前 owner 有效记录的去重标签，按最近使用记录更新时间倒序，返回 items                |
+| `GET /api/suiji/v1/records/:id`               | 当前正文、状态、版本和有序附件                                                       |
+| `POST /api/suiji/v1/records`                  | kind/body/attachmentIds/tags；note 状态 null，task 初始 open                         |
+| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，kind/body/attachmentIds/tags 至少一个；一次原子保存                 |
+| `POST /api/suiji/v1/records/:id/trash`        | expectedVersion/trashed；移入回收站或恢复，保留正文、附件和待办原状态                |
+| `POST /api/suiji/v1/records/:id/task-status`  | expectedVersion/targetStatus；open → done/archived；done → open 撤销完成             |
+| `POST /api/suiji/v1/uploads`                  | 单个 multipart file；幂等摘要与 boundary 无关                                        |
+| `GET /api/suiji/v1/attachments/:id/content`   | 当前 owner 的实际文件流，不返回存储路径                                              |
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
+
+标签版本要求 schema 4，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -184,7 +187,7 @@ pnpm architecture:check
 
 ## 回收站
 
-迁移到 schema 3 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
+迁移到 schema 4 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
 分页游标绑定筛选。App 可按 ID 查看回收站原文和附件，不能编辑或变更待办状态。恢复不改变待办原状态。
 每次删除或恢复沿用版本校验、单事务修订及幂等请求；客户端先持久化意图，结果未知时仅由用户手动确认原请求。
 Web 和原生 iOS 均提供回收站入口、删除确认及恢复。已有本机正文草稿保留，恢复后保存仍须通过版本校验。

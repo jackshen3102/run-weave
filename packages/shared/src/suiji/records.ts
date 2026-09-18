@@ -12,6 +12,8 @@ export type SuijiRecord = {
   id: string;
   kind: RecordKind;
   body: string;
+  /** Older responses may omit tags. Treat omission as an empty list. */
+  tags?: string[];
   taskStatus: TaskStatus | null;
   version: number;
   createdAt: string;
@@ -23,12 +25,15 @@ export type SuijiRecord = {
 export type CreateRecord = {
   kind: RecordKind;
   body: string;
+  tags?: string[];
   attachmentIds?: string[];
 };
 export type EditRecord = {
   expectedVersion: number;
   kind?: RecordKind;
   body?: string;
+  /** Omission preserves existing tags; [] clears them. */
+  tags?: string[];
   attachmentIds?: string[];
 };
 export type ChangeTaskStatus = {

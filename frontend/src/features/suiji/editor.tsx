@@ -4,17 +4,20 @@ import type { SuijiRecord } from "@runweave/shared/suiji";
 import { Button } from "../../components/ui/button";
 import { SuijiPanel } from "./panel";
 import type { SuijiEditorModel } from "./editor-model";
+import { RecordTags, TagEditor } from "./tags";
 
 export function SuijiEditor({
   model,
   onClose,
   onSaved,
   onDiscard,
+  availableTags,
 }: {
   model: SuijiEditorModel;
   onClose: () => void;
   onSaved: (record: SuijiRecord) => void;
   onDiscard: () => void;
+  availableTags: string[];
 }) {
   const state = useSyncExternalStore(model.subscribe, model.snapshot),
     { draft, busy } = state;
@@ -79,6 +82,7 @@ export function SuijiEditor({
             className="min-h-56 resize-y rounded-xl border bg-background p-4 leading-relaxed outline-none focus:ring-2 focus:ring-ring"
           />
         </label>
+        <TagEditor selected={draft.tags} available={availableTags} onChange={(tags) => model.edit({ tags })} />
         <span className="text-right text-xs text-muted-foreground">
           {[...draft.body].length.toLocaleString()} / 20,000
         </span>
@@ -148,6 +152,10 @@ export function SuijiEditor({
       ) : null}
       {state.latest ? (
         <section className="flex flex-col gap-3 rounded-xl border p-4">
+          <p>云端标签</p>
+          <RecordTags tags={state.latest.tags} />
+          <p>本机标签{draft.tags === undefined ? "：未修改，保存时保留云端标签" : ""}</p>
+          <RecordTags tags={draft.tags} />
           <p className="text-sm text-muted-foreground">
             服务端版本 {state.latest.version}，类型：
             {state.latest.kind === "note" ? "想法" : "待办"}
@@ -155,7 +163,7 @@ export function SuijiEditor({
           </p>
           <p className="whitespace-pre-wrap break-words">{state.latest.body}</p>
           <Button variant="outline" onClick={() => model.acceptLatestVersion()}>
-            保留本机正文和类型，采用最新版本继续编辑
+            保留本机正文、类型和标签选择，采用最新版本继续编辑
           </Button>
         </section>
       ) : null}
