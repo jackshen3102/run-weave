@@ -283,5 +283,10 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except (OSError, RuntimeError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+        code = getattr(error, "code", None)
+        if code is not None:
+            print(json.dumps({"ok": False, "code": code, "detail": str(error)},
+                             ensure_ascii=False), file=sys.stderr)
+            sys.exit(getattr(error, "exit_code", 2))
         print(f"ERROR: {error}", file=sys.stderr)
         sys.exit(2)
