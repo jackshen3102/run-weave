@@ -13,6 +13,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
   @Published var loading = false
   @Published var editor: EditorModel?
   @Published var nextCursor: String?
+  @Published private(set) var loadMoreError: String?
   @Published var pendingStatuses: Set<String> = []
   @Published var statusBusy: Set<String> = []
   private(set) var client: APIClient?
@@ -29,6 +30,14 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       generation: generation.uuidString)
   }
   private var listGeneration = UUID()
+  private struct ListScope: Equatable {
+    let kind: String?
+    let status: String?
+    let query: String
+    let trash: Bool
+    let hideCompleted: Bool
+  }
+  private var listScope: ListScope?
   private var profiles: ConnectionProfiles
   init(endpoint: URL?) {
     let saved = ConnectionProfiles.restore(endpoint: endpoint)
@@ -45,7 +54,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     let previous = client; generation = UUID(); listGeneration = UUID()
     editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil
     records = []; info = nil; store = nil; client = nil; pendingStatuses = []; statusBusy = []
-    loading = false; nextCursor = nil; message = ""; connecting = false
+    loading = false; nextCursor = nil; loadMoreError = nil; listScope = nil; message = ""; connecting = false
     return previous
   }
   func switchEnvironment(_ target: ConnectionEnvironment) async {
@@ -84,10 +93,11 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
   }
   func load(kind: String?, status: String?, q: String, more: Bool = false, trash: Bool = false, hideCompleted: Bool = false) async {
     guard let client, info != nil else { return }
-    if more && (loading || nextCursor == nil) { return }
+    let scope = ListScope(kind: kind, status: status, query: q, trash: trash, hideCompleted: hideCompleted)
+    if more && (loading || nextCursor == nil || listScope != scope) { return }
     let current = generation, request = UUID(); listGeneration = request
-    loading = true
-    if !more { records = []; nextCursor = nil }
+    loading = true; loadMoreError = nil
+    if !more { records = []; nextCursor = nil; listScope = scope }
     defer { if listGeneration == request { loading = false } }
     var query = URLComponents(); var items: [URLQueryItem] = []
     if trash { items.append(URLQueryItem(name: "trash", value: "true")) }
@@ -113,7 +123,8 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       nextCursor = cursor; pendingStatuses = more ? pendingStatuses.union(pending) : pending; message = ""
     } catch {
       if generation == current, listGeneration == request {
-        message = error.localizedDescription
+        if more { loadMoreError = error.localizedDescription }
+        else { message = error.localizedDescription }
         if let apiError = error as? APIError, apiError.error.code == "UNAUTHENTICATED" {
           _ = resetConnection(); message = error.localizedDescription; await client.cancel()
         }
