@@ -1,7 +1,7 @@
 # Runweave iOS
 
 Runweave 的原生 iOS 应用，使用 SwiftUI/UIKit 和 SwiftTerm，通过 HTTP/WebSocket 连接 Runweave Backend。
-应用包含连接管理、登录、项目与终端、命令输入、图片上传、语音转写、Files/Changes 只读预览及诊断；终端链接可在单页内置浏览器阅读、收起与恢复。
+应用包含连接管理、登录、项目与终端、命令输入、图片上传、语音转写、Files/Changes 预览与单文件删除、Reset及诊断；终端链接可在单页内置浏览器阅读、收起与恢复。
 
 内置浏览器使用相邻的 [RunweaveBrowser Swift Package](../browser-ios/README.md)，与随记共享实现；终端来源和呈现条件仍由本 App 管理。
 Bundle ID 为 `com.runweave.app.native`，保留已有安装的连接、主题和安全凭据。
@@ -129,7 +129,7 @@ Backend 的部署和开发生命周期由仓库部署工具管理，原生应用
 扫码会复用相同规范化地址的连接和用户命名，保存完成前保留当前连接。若提示“登录已保存，但未收到
 电脑确认回执”，可重试完成确认或进入首页；不要因此删除已保存的登录。授权与回执边界见
 [跨端扫码合同](../../docs/architecture/app-mobile.md#手机扫码登录)。
-图片和语音转写只追加到草稿，用户显式发送后才进入终端。Files/Changes 是只读审阅入口。
+图片和语音转写只追加到草稿，用户显式发送后才进入终端。Files/Changes 支持预览及确认后的单文件删除、Reset；文件正文仍只读。
 
 ## 终端网页
 

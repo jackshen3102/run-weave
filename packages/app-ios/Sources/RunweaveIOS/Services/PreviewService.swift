@@ -46,4 +46,29 @@ extension APIClient {
   func asset(projectID: String, path: String) async throws -> Data {
     try await cachedPreview(previewPath(projectID, "asset", ["path": path]), decode: { $0 })
   }
+
+  func mutatePreview(projectID: String, mutation: PreviewMutation) async throws {
+    // Invalidate even on transport failure: the server may have applied the write.
+    defer { invalidatePreview(projectID: projectID) }
+    switch mutation {
+    case .delete(let path, let mtimeMs):
+      var body: [String: Any] = ["path": path]
+      if let mtimeMs { body["expectedMtimeMs"] = mtimeMs }
+      let _: Data = try await authorized(
+        previewPath(projectID, "file"), method: "DELETE", body: body,
+        retryUnauthorized: false, decode: { $0 })
+    case .reset(let path, let kind, _):
+      let _: Data = try await authorized(
+        previewPath(projectID, "git-change/reset"), method: "POST",
+        body: ["path": path, "kind": kind], retryUnauthorized: false, decode: { $0 })
+    }
+  }
+
+  private func invalidatePreview(projectID: String) {
+    let prefix = previewPath(projectID, "")
+    for key in Array(previewCache.flights.keys) where key.hasPrefix(prefix) {
+      previewCache.flights.removeValue(forKey: key)?.cancel()
+    }
+    previewCache.entries = previewCache.entries.filter { !$0.key.hasPrefix(prefix) }
+  }
 }

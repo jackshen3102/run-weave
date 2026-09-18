@@ -11,7 +11,7 @@ Runweave 的移动应用位于 `packages/app-ios/`，由 SwiftUI/UIKit 与 Swift
 - `/api/app/home/overview` 与认证头 `X-Auth-Client: app` 是当前原生客户端继续使用的协议，不能随旧 UI 一并删除。
 - Backend 拥有远端 TerminalState、tmux/PTY 和项目权限；客户端关闭页面只释放自己的连接。
 - 手机连接状态与终端运行状态分别管理，重连不能排队补发离线输入。
-- 移动端提供命令输入、媒体草稿与 Files/Changes 只读审阅；不直接复用桌面布局、Monaco 或 Browser 控制面。
+- 移动端提供命令输入、媒体草稿与 Files/Changes 审阅及单文件删除、Reset；不直接复用桌面布局、Monaco 或 Browser 控制面。
 - Swift DTO 手动对照 `packages/shared` 的接口合同；协议变更需验证真实 Backend 与客户端兼容。
 
 原生新建终端只提交 `projectId`，由 Backend 的 `auto` 策略选择运行时：tmux 可用时优先 tmux，

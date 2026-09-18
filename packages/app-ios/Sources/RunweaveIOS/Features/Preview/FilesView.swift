@@ -16,8 +16,9 @@ struct FilesView: View {
   @State private var failure: String?
   @State private var loading = false
   @State private var loadID = UUID()
+  @State private var mutation: PreviewMutation?
 
-  private var requestID: String { "\(active):\(path):\(query)" }
+  private var requestID: String { "\(active):\(path):\(query):\(model.mutationRevision)" }
   var body: some View {
     VStack(spacing: 4) {
       TextField("搜索文件", text: $query).textFieldStyle(.roundedBorder).padding(.horizontal)
@@ -64,6 +65,12 @@ struct FilesView: View {
                 }
               }
             }
+            .contextMenu {
+              if entry.kind == "file" {
+                Button("删除文件", role: .destructive) { mutation = .delete(path: entry.path) }
+                  .disabled(model.mutating)
+              }
+            }
           }
           if directory?.entries.isEmpty == true { Text("此目录为空") }
           if directory?.truncated == true { Text("目录结果已截断（最多 400 项），可搜索文件缩小范围").font(.caption) }
@@ -77,12 +84,17 @@ struct FilesView: View {
                 Text(item.dirname).font(.caption).foregroundColor(.secondary)
               }
             }
+            .contextMenu {
+              Button("删除文件", role: .destructive) { mutation = .delete(path: item.path) }
+                .disabled(model.mutating)
+            }
           }
           if search?.items.isEmpty == true { Text("没有匹配文件") }
           if search?.truncated == true { Text("搜索结果已截断（最多 50 项）").font(.caption) }
         }
       }.refreshable { await load(force: true) }
     }
+    .modifier(PreviewMutationConfirmation(model: model, target: $mutation))
     .task(id: requestID) {
       guard active else { return }
       do { try await Task.sleep(nanoseconds: 200_000_000) } catch { return }
@@ -92,9 +104,9 @@ struct FilesView: View {
       NavigationLink(isActive: $showingPreview) {
         if let selected {
           FilePreview(
-            session: session, projectID: projectID, file: selected,
+            session: session, projectID: projectID, file: selected, model: model,
             relatedChange: change(selected.path).map {
-              SelectedFile(path: selected.path, changeKind: $0.0)
+              SelectedFile(path: selected.path, changeKind: $0.0, changeStatus: $0.1)
             }
           ).id(previewID)
         }

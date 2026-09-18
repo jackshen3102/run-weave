@@ -7,6 +7,8 @@ final class ProjectChangesModel: ObservableObject {
   @Published private(set) var changes: PreviewChanges?
   @Published private(set) var loading = false
   @Published private(set) var failure: String?
+  @Published private(set) var mutating = false
+  @Published private(set) var mutationRevision = 0
   private weak var session: AppSession?
   private let projectID: String
   private let terminalID: String
@@ -26,6 +28,28 @@ final class ProjectChangesModel: ObservableObject {
   private func isCurrent(_ session: AppSession) -> Bool {
     session.generation == generation && session.terminal?.id == terminalID
       && session.terminal?.projectId == projectID && session.authenticated
+  }
+
+  func mutate(_ mutation: PreviewMutation) async throws {
+    guard !mutating, let session, isCurrent(session) else { throw CancellationError() }
+    mutating = true
+    defer { mutating = false }
+    do {
+      try await session.withConnection(reportFailure: false) {
+        try await $0.mutatePreview(projectID: self.projectID, mutation: mutation)
+      }
+    } catch {
+      // A failed response does not prove the disk was unchanged; do not retry writes.
+      if isCurrent(session) {
+        cancel()
+        await refresh(force: true)
+      }
+      throw error
+    }
+    guard isCurrent(session) else { throw CancellationError() }
+    cancel()
+    mutationRevision += 1
+    await refresh(force: true)
   }
 
   func refresh(force: Bool = false) async {

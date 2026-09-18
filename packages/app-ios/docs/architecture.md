@@ -13,16 +13,16 @@ ios/RunweaveNative → RootView → AppSession
 
 ## 归属与生命周期
 
-| 入口                                                        | 职责                                                  |
-| ----------------------------------------------------------- | ----------------------------------------------------- |
-| `App/RootView.swift`、`Features/Connections`                | 导航、连接管理和主题                                  |
-| `State/ConnectionStore.swift`                               | 本地连接列表与当前连接，不保存明文凭据                |
-| `State/AppSession.swift`                                    | 当前连接、认证、Home、草稿和 generation；丢弃过期响应 |
-| `Services/APIClient.swift`                                  | 规范化 endpoint、认证、HTTP 错误分类与请求            |
-| `Features/Terminal/SessionController.swift`                 | 终端连接、输入确认、事件与资源释放                    |
-| `Features/Terminal/EventStream.swift`、`Rendering`、`Input` | 传输、解析显示和用户输入分别归属                      |
-| `Features/Preview`、`Features/Media`                        | 只读审阅、上传与转写，业务错误由所属区域展示          |
-| `State/DiagnosticStore.swift`、`ios/Diagnostics`            | 日常脱敏日志与内部验证入口，二者分开                  |
+| 入口                                                        | 职责                                                     |
+| ----------------------------------------------------------- | -------------------------------------------------------- |
+| `App/RootView.swift`、`Features/Connections`                | 导航、连接管理和主题                                     |
+| `State/ConnectionStore.swift`                               | 本地连接列表与当前连接，不保存明文凭据                   |
+| `State/AppSession.swift`                                    | 当前连接、认证、Home、草稿和 generation；丢弃过期响应    |
+| `Services/APIClient.swift`                                  | 规范化 endpoint、认证、HTTP 错误分类与请求               |
+| `Features/Terminal/SessionController.swift`                 | 终端连接、输入确认、事件与资源释放                       |
+| `Features/Terminal/EventStream.swift`、`Rendering`、`Input` | 传输、解析显示和用户输入分别归属                         |
+| `Features/Preview`、`Features/Media`                        | 文件审阅与单文件操作、上传与转写，业务错误由所属区域展示 |
+| `State/DiagnosticStore.swift`、`ios/Diagnostics`            | 日常脱敏日志与内部验证入口，二者分开                     |
 
 源码路径相对于 `Sources/RunweaveIOS`，host 及内部验证目录除外。
 终端关闭释放本客户端资源，不结束远端 tmux；连接切换使旧请求、socket 和缓存失效。

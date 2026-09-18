@@ -10,6 +10,7 @@ struct ChangesView: View {
   @State private var showingPreview = false
   @State private var previewID = UUID()
   @State private var viewed = Set<String>()
+  @State private var mutation: PreviewMutation?
 
   var body: some View {
     VStack {
@@ -28,7 +29,7 @@ struct ChangesView: View {
           if filter == "all" || filter == kind {
             Section(header: Text(kind == "staged" ? "Staged" : "Working")) {
               ForEach(kind == "staged" ? model.changes?.staged ?? [] : model.changes?.working ?? []) { item in
-                let file = SelectedFile(path: item.path, changeKind: kind)
+                let file = SelectedFile(path: item.path, changeKind: kind, changeStatus: item.status)
                 Button {
                   open(file)
                 } label: {
@@ -39,6 +40,15 @@ struct ChangesView: View {
                     if viewed.contains(file.id) { Image(systemName: "checkmark") }
                   }
                 }
+                .contextMenu {
+                  Button(kind == "staged" ? "Reset · 取消暂存" : "Reset · 丢弃修改", role: .destructive) {
+                    mutation = .reset(path: item.path, kind: kind, status: item.status)
+                  }.disabled(model.mutating)
+                  if item.status != "deleted" {
+                    Button("删除文件", role: .destructive) { mutation = .delete(path: item.path) }
+                      .disabled(model.mutating)
+                  }
+                }
               }
             }
           }
@@ -46,6 +56,8 @@ struct ChangesView: View {
         if model.count == 0, model.failure == nil { Text("暂无变更") }
       }.refreshable { await model.refresh(force: true) }
     }
+    .modifier(PreviewMutationConfirmation(model: model, target: $mutation))
+    .onChange(of: model.mutationRevision) { _ in viewed.removeAll() }
     .task(id: active) {
       if active {
         await model.refresh()
@@ -55,7 +67,7 @@ struct ChangesView: View {
       NavigationLink(isActive: $showingPreview) {
         if let selected {
           FilePreview(
-            session: session, projectID: projectID, file: selected,
+            session: session, projectID: projectID, file: selected, model: model,
             didLoad: { viewed.insert(selected.id) }
           ).id(previewID)
         }
