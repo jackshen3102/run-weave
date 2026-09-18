@@ -1,5 +1,6 @@
 // Runweave's private tmux server uses the default copy-mode wheel bindings (-N 5).
 const TMUX_ROWS_PER_WHEEL = 5;
+const TMUX_SCROLL_SPEED_MULTIPLIER = 2;
 const GESTURE_IDLE_MS = 250;
 
 type ScrollEvent = Pick<WheelEvent, "deltaY" | "deltaMode" | "timeStamp">;
@@ -33,7 +34,8 @@ export function createTmuxScrollInput() {
           : event.deltaMode === 2
             ? lineHeight * rows
             : 1;
-      const pixels = event.deltaY * unit * sensitivity;
+      const pixels =
+        event.deltaY * unit * sensitivity * TMUX_SCROLL_SPEED_MULTIPLIER;
       if (!Number.isFinite(pixels) || pixels === 0) return null;
       if (
         event.timeStamp - lastEventAt > GESTURE_IDLE_MS ||
