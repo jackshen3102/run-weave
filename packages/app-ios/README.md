@@ -22,10 +22,10 @@ SwiftTerm 基于 1.19.0，以仓库内 [Vendor/SwiftTerm](Vendor/SwiftTerm/READM
 ```bash
 node scripts/ios.mjs doctor
 node scripts/ios.mjs build --simulator <UDID> --configuration Debug
-node scripts/ios.mjs run --simulator <UDID> --configuration Debug
+node scripts/ios.mjs run --task-dir <本工作区任务目录> --configuration Debug
 ```
 
-使用 doctor 列出的已安装 destination。支持 Debug、Profile、Release 三种配置；先构建，再安装对应配置。
+使用 doctor 列出的已安装 destination。支持 Debug、Profile、Release 三种配置。模拟器安装前先按[共享设备池](../../docs/cli/ios-simulators.md)申请任务；run 会构建当前源码、安装并核对二进制。
 Debug/Profile 真机构建不启用 APNs 推送，可使用 Personal Team 签名；Release 保留推送权限，
 需要支持 Push Notifications 的开发者团队和描述文件。
 模拟器使用 ad hoc 签名和专属 Keychain entitlement；产物在本目录

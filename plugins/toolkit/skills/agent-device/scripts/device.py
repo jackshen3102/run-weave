@@ -4,6 +4,8 @@
 import argparse
 import concurrent.futures
 import json
+import importlib.util
+from contextlib import nullcontext
 import os
 from pathlib import Path
 import re
@@ -15,6 +17,7 @@ import uuid
 
 
 VERSION = "0.21.3"
+sys.dont_write_bytecode = True
 
 
 def capture(args, timeout=15):
@@ -118,7 +121,34 @@ def preflight(root, config):
     return 0 if report["preflightOk"] else 2
 
 
-def invoke(root, config, command, private=False, daemon=False):
+def simulator_pool(root, kind):
+    if kind != "simulator":
+        return None
+    anchor = root
+    while not anchor.exists() and anchor != anchor.parent:
+        anchor = anchor.parent
+    repo = None
+    # A new/nonexistent task directory must not bypass the current project's policy.
+    for directory in (Path.cwd(), anchor):
+        result = subprocess.run(["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
+                                capture_output=True, text=True)
+        if result.returncode == 0:
+            candidate = Path(result.stdout.strip())
+            if (candidate / "packages/app-ios/ios/RunweaveNative.xcodeproj").exists():
+                repo = candidate
+                break
+    if repo is None:
+        return None
+    path = repo / "scripts/ios-simulators/pool.py"
+    if not path.exists():
+        raise RuntimeError("This Runweave worktree needs the shared simulator tooling update")
+    spec = importlib.util.spec_from_file_location("runweave_simulator_pool", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def invoke(root, config, command, private=False, daemon=False, operation=None):
     verify_version()
     env = os.environ.copy()
     env["AGENT_DEVICE_STATE_DIR"] = str(root / "state")
@@ -134,8 +164,16 @@ def invoke(root, config, command, private=False, daemon=False):
     if not daemon:
         args.extend(["--session", config["session"], "--platform", "ios", "--udid", config["udid"]])
     started = time.monotonic()
-    result = subprocess.run(args, env=env, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True)
+    if operation:
+        operation.owner["automationPending"] = True
+        operation.owner["automationStateDir"] = str(root / "state")
+        # Persist intent before a daemon may be spawned outside this command's process group.
+        pool = simulator_pool(root, config["kind"])
+        pool.save_owner(operation.owner)
+        result = operation.run(args, env=env, capture_output=True)
+    else:
+        result = subprocess.run(args, env=env, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True)
     output = result.stdout
     code = result.returncode
     # Pinned upstream CLI can return zero without a usable initial snapshot or settle result.
@@ -192,43 +230,53 @@ def main():
         for value in (options.app, options.runner_id):
             if value and not re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", value):
                 parser.error("invalid Bundle ID")
-        root.mkdir(parents=True, exist_ok=False)
-        config = {"kind": options.kind, "udid": options.udid, "app": options.app,
-                  "teamId": options.team_id, "runnerId": options.runner_id,
-                  "session": "qa-" + uuid.uuid4().hex[:12], "version": VERSION}
-        write_json(root / "session.json", config)
+        pool = simulator_pool(root, options.kind)
+        if not pool:
+            root.mkdir(parents=True, exist_ok=False)
+        context = pool.operation(root, options.app, options.udid) if pool else nullcontext()
+        with context:
+            if (root / "session.json").exists():
+                raise RuntimeError("Task already has a session; use a new task directory")
+            config = {"kind": options.kind, "udid": options.udid, "app": options.app,
+                      "teamId": options.team_id, "runnerId": options.runner_id,
+                      "session": "qa-" + uuid.uuid4().hex[:12], "version": VERSION}
+            write_json(root / "session.json", config)
         print(root)
         return 0
     config = json.loads((root / "session.json").read_text())
     if config.get("version") != VERSION:
         raise RuntimeError("Task was created for a different CLI version; create a new task")
-    if options.action == "check":
-        return preflight(root, config)
-    if options.action == "stop":
-        # Cleanup is allowed even after preflight failed; never stop another state directory.
-        close_code = invoke(root, config, ["close"])
-        stop_code = invoke(root, config, ["daemon", "stop", "--state-dir", str(root / "state"), "--clean"], daemon=True)
-        return stop_code or close_code
-    command = options.command
-    private = bool(command and command[0] == "--private")
-    if private:
-        command = command[1:]
-    if command and command[0] == "--":
-        command = command[1:]
-    if not command:
-        parser.error("run requires an agent-device command after --")
-    forbidden = ("--session", "--platform", "--udid", "--device", "--state-dir", "--serial")
-    if any(arg == flag or arg.startswith(flag + "=") for arg in command for flag in forbidden):
-        parser.error("device/session overrides are fixed by init; create a separate task")
-    if command[0] in ("daemon", "devices", "install", "reinstall", "uninstall"):
-        parser.error("use stop for cleanup; installation/discovery uses explicit native tooling")
-    if command[0] == "open":
-        if len(command) > 1 and not command[1].startswith("-"):
-            parser.error("open uses the App bound by init; do not pass another App")
-        command.insert(1, config["app"])
-    if command[0] == "open" and preflight(root, config):
-        return 2
-    return invoke(root, config, command, private)
+    pool = simulator_pool(root, config["kind"])
+    context = pool.operation(root, config["app"], config["udid"]) if pool else nullcontext()
+    with context as op:
+        if options.action == "check":
+            return preflight(root, config)
+        if options.action == "stop":
+            # Cleanup is allowed even after preflight failed; never stop another state directory.
+            close_code = invoke(root, config, ["close"], operation=op)
+            stop_code = invoke(root, config, ["daemon", "stop", "--state-dir", str(root / "state"), "--clean"], daemon=True, operation=op)
+            return stop_code or close_code
+        command = options.command
+        private = bool(command and command[0] == "--private")
+        if private:
+            command = command[1:]
+        if command and command[0] == "--":
+            command = command[1:]
+        if not command:
+            parser.error("run requires an agent-device command after --")
+        forbidden = ("--session", "--platform", "--udid", "--device", "--state-dir", "--serial")
+        if any(arg == flag or arg.startswith(flag + "=") for arg in command for flag in forbidden):
+            parser.error("device/session overrides are fixed by init; create a separate task")
+        if command[0] in ("daemon", "devices", "install", "reinstall", "uninstall"):
+            parser.error("use stop for cleanup; installation/discovery uses explicit native tooling")
+        if command[0] == "open":
+            if len(command) > 1 and not command[1].startswith("-"):
+                parser.error("open uses the App bound by init; do not pass another App")
+            command.insert(1, config["app"])
+        if command[0] == "open" and preflight(root, config):
+            return 2
+        return invoke(root, config, command, private, operation=op)
+
 
 
 if __name__ == "__main__":

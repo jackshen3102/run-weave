@@ -10,3 +10,5 @@
 - 纯展示组件不读凭据、不发网络；主题集中在 `DesignSystem`。
 
 构建与真实 HTTP DTO 验证见 [README](./README.md)。原生 UI 必须实际操作 Simulator 或设备取证。
+
+- 模拟器验证先按[共享设备池](../../docs/cli/ios-simulators.md)申请 随记 槽位，安装与 agent-device 共用 task-dir，整段任务结束后 finish；不得为 worktree 新建或克隆设备。

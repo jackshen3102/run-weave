@@ -15,7 +15,7 @@
 pnpm --filter @runweave/suiji-ios ios:doctor
 pnpm --filter @runweave/suiji-ios ios:build --simulator <UDID> --configuration Debug
 pnpm --filter @runweave/suiji-ios ios:build --simulator <UDID> --configuration Release
-pnpm --filter @runweave/suiji-ios ios:run --simulator <UDID> --configuration Debug
+pnpm --filter @runweave/suiji-ios ios:run --task-dir <本工作区任务目录> --configuration Debug
 ```
 
 产物位于根 `.runweave/suiji/ios-build/`。必须指定 Simulator UDID；run 安装指定配置的已有产物。
@@ -88,3 +88,5 @@ Runweave Native 为 `com.runweave.app.native`，已退役的旧 `app` 为 `com.r
 当前逐例状态与阻塞见根 `.runweave/suiji/physical/readiness-results.json`。
 执行器通过后仍须检查截图中的实际布局、末行与光标，并用独立 HTTP 读取核对保存结果；
 仅构建、安装或 XCTest 断言通过不能代替这一步。大字号用例结束后恢复设备原字号。
+
+模拟器安装前先按[共享设备池](../../docs/cli/ios-simulators.md)申请随记槽位；run 使用当前源码增量构建并核对安装，任务结束执行 finish。
