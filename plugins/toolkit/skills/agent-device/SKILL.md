@@ -11,7 +11,8 @@ description: 使用 agent-device CLI 在 iOS 模拟器和真机上复现问题�
 
 1. 先读工作区和目标包的 AGENTS.md。区分已安装 App 验收与当前代码验收；后者先按包入口构建、安装，记录产物来源。Runweave Native 是 `com.runweave.app.native`，独立随记是 `com.runweave.suiji`。
 2. 用 `xcrun simctl list devices` 或 `xcrun devicectl list devices` 发现设备；真机硬件 UDID 可从 `xcrun devicectl device info details --device <发现的ID> --json-output <本机文件>` 获得。必须指定目标，不以同名设备或第一台设备替代。
-3. 选择独立任务目录，通常为工作区 `.runweave/mobile-qa/<任务名>`。辅助脚本首次创建目录并固定设备、App 和随机 session；已有目录不覆盖。真机签名读 [iOS 准备与恢复](references/ios-setup.md)。
+3. Runweave 仓库的模拟器先运行 `node scripts/ios-simulators/cli.mjs start --app runweave --task-dir <绝对任务路径> --json`，随记将 app 参数改为 suiji；再按对应 iOS 包入口 `run --task-dir <同一目录>` 构建安装。使用返回的固定 UDID；所有 linked worktree 共用两台设备，忙时等待，不新建或克隆。其他项目仍遵循各自设备策略。
+4. 选择独立任务目录，通常为工作区 `.runweave/mobile-qa/<任务名>`。Runweave 模拟器使用 start 已创建的目录；其他目标由辅助脚本首次创建目录并固定设备、App 和随机 session；已有目录不覆盖。真机签名读 [iOS 准备与恢复](references/ios-setup.md)。
 
 下面的 `SKILL_DIR` 是本次实际加载的技能目录；`RUN_DIR` 是绝对路径。将示例占位符换成刚确认的目标：
 
@@ -24,7 +25,7 @@ python3 "$SKILL_DIR/scripts/device.py" check "$RUN_DIR"
 python3 "$SKILL_DIR/scripts/device.py" run "$RUN_DIR" -- open --foreground
 ```
 
-辅助脚本要求 PATH 上的 CLI 版本匹配；不会自动安装、升级或启用权限。预检只检查当前工具与目标可达性，**不证明签名可安装、UI Automation 已授权或没有其他 XCTest 占用**。先检查已知运行任务，冲突时换独立模拟器或等待占用者结束，不能杀掉他人 runner。首次 open 只有返回真实目标树后才证明本轮连接可用。
+辅助脚本要求 PATH 上的 CLI 版本匹配；不会自动安装、升级或启用权限。预检只检查当前工具与目标可达性，**不证明签名可安装、UI Automation 已授权或没有其他 XCTest 占用**。先检查已知运行任务，冲突时等待占用者结束；项目配置了设备池时不得另建设备绕过，不能杀掉他人 runner。首次 open 只有返回真实目标树后才证明本轮连接可用。
 
 ## 操作与判定
 
@@ -54,6 +55,8 @@ python3 "$SKILL_DIR/scripts/device.py" run "$RUN_DIR" -- screenshot "$RUN_DIR/fi
 ```bash
 python3 "$SKILL_DIR/scripts/device.py" stop "$RUN_DIR"
 ```
+
+Runweave 模拟器完成任务后执行 `node scripts/ios-simulators/cli.mjs finish --task-dir <任务目录> --json`；它清理本任务自动化并释放 lease，异常恢复按仓库 `docs/cli/ios-simulators.md`。
 
 stop 只清理该任务 state-dir 的会话、daemon 和 runner，不卸载 App，也不关闭模拟器。仅在本任务创建/拥有的模拟器上另行 shutdown。签名执行器按用户意图保留，不能为腾名额自动卸载其他 App。
 

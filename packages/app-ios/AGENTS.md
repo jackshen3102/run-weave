@@ -9,3 +9,5 @@
 - iOS 日常交互排查和修复验收使用 `$toolkit:agent-device`；当前源码验收仍先用 Xcode 构建、devicectl 安装。固定套件继续使用既有 XCUITest 执行器，见 [真机操作与取证](README.md#真机操作与取证)。
 - 在本目录执行 `node scripts/ios.mjs doctor`、`node scripts/ios.mjs build --simulator <UDID>`；产物在本目录 `.build/ios/`，不提交个人签名设置或构建输出。
 - 开发、安装、连接与诊断操作统一从 [README](README.md) 进入。
+
+- 模拟器验证先按[共享设备池](../../docs/cli/ios-simulators.md)申请 Runweave 槽位，安装与 agent-device 共用 task-dir，整段任务结束后 finish；不得为 worktree 新建或克隆设备。

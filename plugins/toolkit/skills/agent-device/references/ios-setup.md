@@ -28,3 +28,7 @@
 | 回放身份不匹配                         | 留存错误、重读结构或重新录制；不删除元数据强行通过                       |
 
 0.21.3 的本地实测曾出现精简树遗漏、卡片中心误触链接、动作发生后 XCTest 报错、录制祖先层级不匹配。它们是需要识别的失败模式，不是每次启动都必须执行的检查清单，也不能据此自动修改产品代码。
+
+## Runweave 共享模拟器
+
+在 Runweave linked worktree 中先通过仓库 `scripts/ios-simulators/cli.mjs` 申请 App 固定槽位，整个验证过程共用 task-dir 和 lease。初始化前用包内 run 入口构建安装；忙时等待，不另建设备。stop 只停止自动化，结束任务用 finish 释放占用。异常时查看 status 和本任务证据，再按 `docs/cli/ios-simulators.md` 对明确 lease 恢复，不能超时抢锁。技能必须由用户主动安装或更新，不由 Desktop 自动复制。

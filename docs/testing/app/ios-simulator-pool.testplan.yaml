@@ -1,0 +1,101 @@
+version: 1
+name: 两台 iOS 模拟器跨 worktree 复用验收
+description: >
+  共享模拟器设备池的验收合同；执行结果以对应运行记录和原生证据为准。
+  验证两台已有模拟器的跨 worktree 分配、整段任务占用、安装身份与恢复边界。
+  每例独立建立本例 lease 和证据目录；仅操作明确授权的测试设备与进程。
+  原生交互使用 toolkit:agent-device；格式校验不能代替实际设备与 UI 证据。
+cases:
+  - id: SIMPOOL-001
+    name: linked worktree 共用池且同 App 整段任务互斥
+    required: true
+    description: >
+      不同路径的 linked worktree 读取同一设备映射；安装后两次 UI 操作之间仍然独占，finish 后才允许复用。
+    preconditions:
+      - 候选 CLI、两个 iOS 入口和 agent-device 已接入；本例有两个同仓库的 linked worktree，均使用候选入口。
+      - 本例获准独占池中 Runweave 设备，无其他测试；设备上只有本例可安全读取的测试数据。
+    steps:
+      - 从两个 worktree 分别运行候选 status --json，保存结果，确认 repositoryId、两个槽位 UDID 完全相同。
+      - 在第一个 worktree 用独立 task-dir start Runweave 任务并安装本轮 App，通过 toolkit:agent-device 读取真实目标树，保存 lease 和 UDID。
+      - 保持第一任务未 finish 且暂停 UI 命令，从第二个 worktree 用自己的 task-dir 申请 Runweave；确认 device_busy 指向第一任务，没有设备创建、安装或 runner 启动。
+      - 回到第一任务读取新的目标树，确认会话仍有效；正常 finish 后第二个 worktree 再次申请，确认获得新 lease 且 UDID 不变，随后 finish 本例任务。
+  - id: SIMPOOL-002
+    name: 两个 App 可分别占用两台设备
+    required: true
+    description: >
+      Runweave 和随记在不同槽位并行验证，结束其中一项不会干扰另一台设备的任务。
+    preconditions:
+      - 本例获准独占已注册的两台设备；两个 App 均能从候选 worktree 构建，agent-device 可用。
+    steps:
+      - 分别 start Runweave 和随记并记录两个 lease，确认 UDID 不同且与各自槽位一致。
+      - 在各自 lease 中安装并使用 toolkit:agent-device 读取两个 App 的新目标树，确认两个任务同时存续。
+      - finish Runweave 后，在随记任务中再次读取新目标树，确认随记 runner 和 lease 未被清理；最后 finish 随记。
+  - id: SIMPOOL-003
+    name: 相同版本的不同源码构建可以准确切换
+    required: true
+    description: >
+      切换 worktree 后安装来源可验证，未提交源码会进入构建，且不会通过卸载或擦除设备清空 App 数据。
+    preconditions:
+      - 本例有两个授权修改的候选 worktree、同 Bundle ID 和同展示版本的 Runweave 构建，其 Debug 页面可加入不同可见标记。
+      - 本例拥有池中 Runweave 设备的使用窗口，能在 App 中建立本例专属非敏感测试数据。
+    steps:
+      - 在第一个 worktree 添加本例可见标记 A，start 后按候选流程构建安装，用 toolkit:agent-device 确认 A，记录安装后可执行文件摘要，建立本例测试数据并 finish。
+      - 在第二个 worktree 保持 HEAD 不变，仅修改本例可见标记为 B，start 后构建安装；核对输入摘要及设备实际可执行文件摘要对应本轮 B。
+      - 使用 toolkit:agent-device 读取新目标树，确认 B 出现且本例测试数据仍可读取；确认记录中无 uninstall 或 erase，随后清理本例数据、finish 并还原本例源码改动。
+  - id: SIMPOOL-004
+    name: 中断任务不会自动让出仍有 runner 的设备
+    required: true
+    description: >
+      一次有遗留子进程的任务中断始终保留占用，显式恢复只在确认本例资源退出后成功。
+    preconditions:
+      - 本例独占授权设备，候选入口支持记录操作子进程及恢复；本例 runner 仅执行只读操作且可安全终止。
+    steps:
+      - start 并启动本例自动化，记录 lease、操作 PID、runner PID 和启动身份；只中断本例调用进程，保留可辨识的本例 runner。
+      - 查询 status 并从另一个 task-dir start，再对旧 lease 请求 recover，确认均未抢占或释放设备，输出占用或恢复未完成的明确原因。
+      - 仅结束本例归属明确的 runner，重新读取进程证据后对同一 lease recover，确认可安全释放；新 task-dir 随后能 start，取证后 finish。
+  - id: SIMPOOL-005
+    name: 旧 lease 不能释放新任务
+    required: true
+    description: >
+      同一设备完成一次交接后，旧 task-dir 的 finish 或旧 lease 的 recover 不影响新持有者。
+    preconditions:
+      - 本例拥有授权设备窗口和两个独立 task-dir，所有操作均通过候选入口。
+    steps:
+      - 第一个 task-dir start 后正常 finish，保留其 lease；第二个 task-dir start，确认 UDID 相同但 lease 不同。
+      - 对第一个 task-dir 再次 finish，并对旧 lease 请求 recover；确认返回已完成或 lease_mismatch，不删除第二任务的锁。
+      - 核对 status 仍指向第二任务，通过第二任务执行一次只读设备检查并正常 finish。
+  - id: SIMPOOL-006
+    name: 非池中 UDID 不能通过托管入口使用
+    required: true
+    description: >
+      池映射和任务身份是实际约束；传入另一个 UDID 不会安装、启动、重新映射或创建设备。
+    preconditions:
+      - 候选入口已接入设备池；本例 start 得到一项有效 lease，另有一个仅用于错误输入的非池中 UDID。
+      - 本例已记录池映射、simctl 设备集合以及目标安装状态，错误输入目标不用于实际测试。
+    steps:
+      - 使用本例 task-dir 向两个 App 安装入口和 simulator agent-device 初始化入口传入不匹配的 UDID，确认均在设备操作前返回 unmanaged_simulator 或 lease_mismatch。
+      - 核对操作日志、池映射、设备集合和安装状态无变化；仅 finish 本例实际持有的 lease。
+  - id: SIMPOOL-007
+    name: 三轮完整验证不增加设备或 XCTest 克隆
+    required: true
+    description: >
+      重复任务复用两台固定设备，包含实际 XCTest 执行后，设备集合仍不增长。
+    preconditions:
+      - 本例获准使用两台池设备，有一份已审阅的只读模拟器 XCTest 场景且候选执行入口已接入 lease。
+      - 本例已记录 simctl 全设备 UDID 集合和两个池 UDID，执行期间没有其他任务创建或删除设备。
+    steps:
+      - 连续执行三轮 start、构建安装、实际 XCTest 场景、finish，每轮记录明确的 destination UDID、结果和子进程退出证据。
+      - 每轮后重新读取 simctl 全设备列表，确认新增 UDID 集合为空，池映射不变；检查 XCTest 未开启并行设备克隆。
+      - 核对三轮证据目录互相独立且可读取，每轮使用自己的 lease；最终 status 显示两槽没有本例遗留占用。
+  - id: SIMPOOL-008
+    name: 首次清理严格限制在授权设备清单
+    required: false
+    description: >
+      仅在单独授权的真实迁移窗口执行，删除明确列出的额外设备并保留池设备及清单外设备，报告实际空间变化。
+    preconditions:
+      - 设备池实际复用已验收；本例拥有经授权的候选删除 UDID 清单，清单内无在途任务或身份不明的 runner。
+      - 清单内设备的数据保留要求已处理，必要导出已验证；两个保留 UDID 和全部清单外设备均已记录，池映射在窗口内冻结。
+    steps:
+      - 删除前保存 simctl 列表、各目标目录 du -sk 和数据盘 df；再次核对删除清单与两个池 UDID 不相交，否则停止。
+      - 逐台执行仅针对授权 UDID 的删除，任一身份或占用状态变化立即停止，不执行全局删除或擦除。
+      - 重新获取设备列表，确认只有本例清单内已成功删除的 UDID 消失，两个池设备及清单外设备仍存在；重新测量 du 和 df，分别报告目录减少量及实际可用空间变化。
