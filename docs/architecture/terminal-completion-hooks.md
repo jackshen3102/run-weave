@@ -67,7 +67,7 @@ launcher 行为很窄：
 2. 解析事件名，兼容 `hook_event_name`、`hookEventName`、`eventName`、`event`。
 3. 只接受 `stop`、`subagent_stop`、`subagentstop`。
 4. 读取 `RUNWEAVE_HOOK_ENDPOINT`、`RUNWEAVE_HOOK_TOKEN`、`RUNWEAVE_TERMINAL_SESSION_ID`，缺任一则静默退出。
-5. Codex/Trae 的 `SessionStart`、`UserPromptSubmit`、`Stop` 会上报到 agent hook endpoint，用于维护 `TerminalState`。
+5. Codex/Trae 的 `SessionStart`、`UserPromptSubmit`、`Stop` 会上报到 agent hook endpoint，用于维护 `TerminalState`。Codex 的 `SessionStart` 若明确携带 `source: "compact"`，公共 hook bridge 会跳过 Backend 与 App Server 上报：上下文压缩不代表任务结束，保留原状态；其它来源仍按原流程处理。
 6. Stop / notify 类完成事件会发出桌面/飞书完成通知，并向 backend 上报 completion event。
 7. 所有错误静默失败，不影响原 AI CLI 结束流程。
 

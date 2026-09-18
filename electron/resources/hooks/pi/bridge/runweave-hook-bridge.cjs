@@ -337,6 +337,18 @@ async function main() {
     source === "pi" || source === "codex" || source === "trae"
       ? toAgentHookStateEvent(normalizedEvent)
       : null;
+  // Codex emits SessionStart after compaction while the same turn continues.
+  // Do not reset either Backend state or App Server projection for that event.
+  if (
+    source === "codex" &&
+    stateHookEvent === "SessionStart" &&
+    payload.source === "compact"
+  ) {
+    appendDebugLog("hook bridge skipped codex compaction session start", {
+      threadId,
+    });
+    return;
+  }
   const toolHook = extractToolHook(payload);
   // traex (normalized to "trae") emits a Notification hook when it needs the
   // user to come back and act. `permission_prompt` (about to prompt for
