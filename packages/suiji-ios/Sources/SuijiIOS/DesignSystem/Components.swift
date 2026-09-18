@@ -31,6 +31,7 @@ struct RecordCard<Destination: View>: View {
   let pending: Bool
   let busy: Bool
   let onStatusChange: (TaskStatus) -> Void
+  var onTag: ((String) -> Void)? = nil
   @ViewBuilder let destination: () -> Destination
   private var canChangeStatus: Bool { record.deletedAt == nil && record.kind == .task && (record.taskStatus == .open || record.taskStatus == .done) && !pending }
   private var reopening: Bool { record.taskStatus == .done }
@@ -70,9 +71,22 @@ struct RecordCard<Destination: View>: View {
         Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text").font(.subheadline).foregroundStyle(SuijiTheme.green).allowsHitTesting(false)
       }
       if pending && !busy { Label("状态结果待确认", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange).allowsHitTesting(false) }
-      Text(displayDate(record.createdAt)).font(.caption).foregroundStyle(.secondary).allowsHitTesting(false)
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 8) {
+          timestamp.fixedSize()
+          Spacer(minLength: 0)
+          RecordTags(tags: record.tags ?? [], onSelect: onTag, compact: true).fixedSize(horizontal: true, vertical: false)
+        }
+        VStack(alignment: .leading, spacing: 6) {
+          timestamp
+          RecordTags(tags: record.tags ?? [], onSelect: onTag, compact: true)
+        }
+      }
     }.padding(16)
       .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(SuijiTheme.border).allowsHitTesting(false))
+  }
+  private var timestamp: some View {
+    Text(displayDate(record.createdAt)).font(.caption).foregroundStyle(.secondary).allowsHitTesting(false)
   }
 }
 func displayDate(_ value: String) -> String {

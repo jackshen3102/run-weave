@@ -137,6 +137,9 @@ export function createApp(
     requestId: res.locals.requestId,
   });
   const root = "/api/suiji/v1";
+  app.get(`${root}/tags`, route(async (_req, res) => {
+    res.json(await records.tags(res.locals.auth.ownerId));
+  }));
   app.post(`${root}/reviews`, route(async (req, res) => {
     res.status(202).json(reviews.start(res.locals.auth.ownerId,
       keySchema.parse(req.get("Idempotency-Key")), reviewInput.parse(req.body), res.locals.requestId));

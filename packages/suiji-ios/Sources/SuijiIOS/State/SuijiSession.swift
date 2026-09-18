@@ -9,6 +9,8 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
   @Published var info: ServiceInfo?
   @Published var lastChangedRecord: SuijiRecord?
   @Published var records: [SuijiRecord] = []
+  @Published var availableTags: [String] = []
+  @Published var selectedTag = ""
   @Published var message = ""
   @Published var loading = false
   @Published var editor: EditorModel?
@@ -34,6 +36,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     let kind: String?
     let status: String?
     let query: String
+    let tag: String
     let trash: Bool
     let hideCompleted: Bool
   }
@@ -54,6 +57,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     let previous = client; generation = UUID(); listGeneration = UUID()
     editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil
     records = []; info = nil; store = nil; client = nil; pendingStatuses = []; statusBusy = []
+    availableTags = []; selectedTag = ""
     loading = false; nextCursor = nil; loadMoreError = nil; listScope = nil; message = ""; connecting = false
     return previous
   }
@@ -91,9 +95,9 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     let old = resetConnection(), current = generation
     do { try await old?.logout() } catch { if generation == current { message = error.localizedDescription } }
   }
-  func load(kind: String?, status: String?, q: String, more: Bool = false, trash: Bool = false, hideCompleted: Bool = false) async {
+  func load(kind: String?, status: String?, q: String, tag: String = "", more: Bool = false, trash: Bool = false, hideCompleted: Bool = false) async {
     guard let client, info != nil else { return }
-    let scope = ListScope(kind: kind, status: status, query: q, trash: trash, hideCompleted: hideCompleted)
+    let scope = ListScope(kind: kind, status: status, query: q, tag: tag, trash: trash, hideCompleted: hideCompleted)
     if more && (loading || nextCursor == nil || listScope != scope) { return }
     let current = generation, request = UUID(); listGeneration = request
     loading = true; loadMoreError = nil
@@ -104,7 +108,13 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     if let kind { items.append(URLQueryItem(name: "kind", value: kind)) }
     if let status { items.append(URLQueryItem(name: "taskStatus", value: status)) }
     if !q.isEmpty { items.append(URLQueryItem(name: "q", value: q)) }
+    if !tag.isEmpty { items.append(URLQueryItem(name: "tag", value: tag)) }
     do {
+      if !more {
+        let directory = try await client.request(TagDirectory.self, path: "api/suiji/v1/tags")
+        guard generation == current, listGeneration == request else { return }
+        availableTags = directory.items
+      }
       var cursor = more ? nextCursor : nil
       var incoming: [SuijiRecord] = [], pending: Set<String> = []
       repeat {
@@ -143,7 +153,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       }
       let restored = try await store.load(record?.id ?? "new")
       guard generation == current else { return }
-      let draft = restored ?? Draft(kind: record?.kind ?? kind, body: record?.body ?? body, recordID: record?.id, expectedVersion: record?.version, existing: record?.attachments ?? [])
+      let draft = restored ?? Draft(kind: record?.kind ?? kind, body: record?.body ?? body, tags: record?.tags ?? [], recordID: record?.id, expectedVersion: record?.version, existing: record?.attachments ?? [])
       let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits); editingModels[draft.id] = model; editor = model
       await model.persist()
       if restored != nil { await model.prepareForCapture(kind: kind, body: body) }
@@ -170,6 +180,14 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       try await store.removeStatus(record.id); pendingStatuses.remove(record.id)
       lastChangedRecord = result.record
       if let index = records.firstIndex(where: { $0.id == record.id }) { records[index] = result.record }; message = ""
+      if case .trash = action {
+        do {
+          let directory = try await client.request(TagDirectory.self, path: "api/suiji/v1/tags")
+          if current == generation { availableTags = directory.items }
+        } catch {
+          if current == generation { message = "记录已更新，标签列表刷新失败，请重新读取" }
+        }
+      }
     } catch let error as APIError {
       guard current == generation else { return }
       if !error.uncertain {

@@ -19,7 +19,7 @@ import SwiftUI
   func cancel() { active = false }
   func prepareForCapture(kind: RecordKind, body: String) async {
     guard draft.recordID == nil else { return }
-    if editable, !draft.conflict, draft.pending == nil, draft.body.isEmpty, draft.existing.isEmpty, draft.local.isEmpty {
+    if editable, !draft.conflict, draft.pending == nil, draft.body.isEmpty, (draft.tags ?? []).isEmpty, draft.existing.isEmpty, draft.local.isEmpty {
       guard draft.kind != kind || !body.isEmpty else { return }
       draft.kind = kind; draft.body = body; await persist()
     } else if !body.isEmpty {
@@ -54,6 +54,7 @@ import SwiftUI
     do {
       guard draft.body.unicodeScalars.count <= limits.bodyScalars, !draft.body.contains("\0") else { throw MessageError(message: "正文超出限额或包含无效字符") }
       guard !draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !draft.local.isEmpty || !draft.existing.isEmpty else { throw MessageError(message: "请输入正文或添加附件") }
+      if draft.pending == nil, let tags = draft.tags { draft.tags = try SuijiTags.normalize(tags) }
       draft.frozen = true; draft.revision += 1; try await store.save(draft)
       for index in draft.local.indices where draft.local[index].uploaded == nil {
         try checkActive()
@@ -66,6 +67,7 @@ import SwiftUI
       if draft.pending == nil {
         let ids = draft.existing.map(\.id) + draft.local.compactMap { $0.uploaded?.id }
         var payload: [String: Any] = ["kind": draft.kind.rawValue, "body": draft.body, "attachmentIds": ids]
+        if let tags = draft.tags { payload["tags"] = tags }
         if let version = draft.expectedVersion { payload["expectedVersion"] = version }
         draft.pending = PendingOperation(path: "api/suiji/v1/records" + (draft.recordID.map { "/" + $0 } ?? ""), method: draft.recordID == nil ? "POST" : "PATCH", payload: try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
         draft.revision += 1; try await store.save(draft)
@@ -74,6 +76,7 @@ import SwiftUI
       let result = try await client.request(RecordResponse.self, path: operation.path, method: operation.method, data: operation.payload, key: operation.key)
       try checkActive()
       guard result.record.body == draft.body, result.record.kind == draft.kind,
+        draft.tags == nil || (result.record.tags ?? []) == draft.tags,
         draft.recordID == nil || result.record.id == draft.recordID,
         UUID(uuidString: result.record.id) != nil, result.record.version >= (draft.expectedVersion ?? 1),
         result.record.attachments.map(\.id) == draft.existing.map(\.id) + draft.local.compactMap({ $0.uploaded?.id }) else { throw MessageError(message: "响应与保存内容不一致，请重试确认") }

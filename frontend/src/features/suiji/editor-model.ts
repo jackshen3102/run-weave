@@ -1,5 +1,6 @@
 import {
   SUIJI_LIMITS,
+  normalizeSuijiTags,
   type RecordResponse,
   type SuijiRecord,
   type UploadedAttachment,
@@ -92,7 +93,7 @@ export class SuijiEditorModel {
       });
   }
   edit(
-    update: Partial<Pick<SuijiDraft, "kind" | "body" | "existing" | "files">>,
+    update: Partial<Pick<SuijiDraft, "kind" | "body" | "tags" | "existing" | "files">>,
   ) {
     if (this.state.busy || this.state.draft.frozen) return;
     const draft = { ...this.state.draft, ...update };
@@ -141,6 +142,10 @@ export class SuijiEditorModel {
     try {
       this.check();
       let draft = this.state.draft;
+      if (!draft.pending && draft.tags !== undefined) {
+        draft = { ...draft, tags: normalizeSuijiTags(draft.tags) };
+        this.patch({ draft });
+      }
       if ([...draft.body].length > SUIJI_LIMITS.bodyScalars)
         throw new Error("正文最多 20,000 个字符");
       if (!draft.body.trim() && !draft.existing.length && !draft.files.length)
@@ -181,6 +186,7 @@ export class SuijiEditorModel {
               kind: draft.kind,
               ...(draft.id === "new" ? {} : { expectedVersion: draft.version }),
               body: draft.body,
+              ...(draft.tags === undefined ? {} : { tags: draft.tags }),
               attachmentIds: [
                 ...draft.existing.map((a) => a.id),
                 ...draft.files.map((a) => a.uploaded!.id),
@@ -258,7 +264,7 @@ export class SuijiEditorModel {
       draft,
       latest: undefined,
       conflict: false,
-      message: "已采用最新版本号与附件，本机正文和类型保留；请比较后手动保存",
+      message: "已采用最新版本号与附件，本机正文、类型和标签选择保留；请比较后手动保存",
     });
     void this.persist(draft).catch(() => undefined);
   }

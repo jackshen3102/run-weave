@@ -5,5 +5,7 @@ export const SUIJI_LIMITS = {
   markdownPerRecord: 1,
   defaultPageSize: 20,
   maxPageSize: 100,
+  tagsPerRecord: 2,
+  tagScalars: 20,
 } as const;
 export const SUIJI_PROTOCOL_VERSION = 1;

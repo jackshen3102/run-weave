@@ -4,6 +4,7 @@ import type { SuijiAttachment, SuijiRecord } from "@runweave/shared/suiji";
 import { Button } from "../../components/ui/button";
 import { SuijiPanel } from "./panel";
 import type { SuijiClient } from "../../services/suiji";
+import { RecordTags } from "./tags";
 
 export const statusText = (record: Pick<SuijiRecord, "kind" | "taskStatus">) =>
   record.kind === "note"
@@ -168,6 +169,7 @@ export function SuijiRecordDetail({
   record,
   onOpenLink,
   client,
+  onTag,
   onClose,
   onEdit,
   onStatus,
@@ -182,6 +184,7 @@ export function SuijiRecordDetail({
   record: SuijiRecord;
   onOpenLink?: (url: string) => void;
   client: SuijiClient;
+  onTag: (tag: string) => void;
   onClose: () => void;
   onEdit: () => void;
   onStatus: (status: "open" | "done" | "archived") => void;
@@ -206,6 +209,7 @@ export function SuijiRecordDetail({
         </p>
       ) : null}
       <RecordBody body={record.body} onOpenLink={onOpenLink} />
+      <RecordTags tags={record.tags} onSelect={onTag} />
       <div className="flex flex-wrap gap-2">
         {record.attachments.map((a) => (
           <SuijiAttachmentView key={a.id} attachment={a} client={client} />
@@ -301,5 +305,48 @@ export function SuijiRecordDetail({
         )}
       </div>
     </SuijiPanel>
+  );
+}
+
+export function SuijiRecordCard({
+  record,
+  pending,
+  onOpen,
+  onOpenLink,
+  onTag,
+}: {
+  record: SuijiRecord;
+  pending: boolean;
+  onOpen: () => void;
+  onOpenLink?: (url: string) => void;
+  onTag: (tag: string) => void;
+}) {
+  return (
+    <article className="relative flex flex-col gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition-colors hover:bg-accent">
+      <button
+        type="button"
+        aria-label={`查看记录：${record.body || "附件记录"}`}
+        onClick={onOpen}
+        className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      <span className="pointer-events-none relative flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>
+          {statusText(record)}
+          {pending ? " · 状态待确认" : ""}
+        </span>
+        <time>{recordDate(record.createdAt)}</time>
+      </span>
+      <RecordBody
+        onOpenLink={onOpenLink}
+        body={record.body || "附件记录"}
+        className="pointer-events-none relative line-clamp-5"
+      />
+      {record.attachments.length ? (
+        <span className="pointer-events-none relative text-xs text-muted-foreground">
+          {record.attachments.map((a) => a.fileName).join(" · ")}
+        </span>
+      ) : null}
+      <RecordTags tags={record.tags} onSelect={onTag} />
+    </article>
   );
 }
