@@ -1,6 +1,6 @@
 # 手机内置浏览器访问电脑本地服务
 
-状态：待实施。本文记录实施方案与拟定验收合同；两份新增 YAML 用例尚待编写，不代表功能已实现或通过验收。
+状态：待实施。本文记录实施方案与验收合同，不代表功能已实现或通过验收。
 粒度：L2；网络权限、凭据和资源回收部分按 L3 明确约束。
 
 ## 目标与范围
@@ -121,10 +121,10 @@ P2 验收：电脑只监听 loopback 时，真机仍能加载页面、API 和 WS
 
 ## 验证入口与通过条件
 
-拟新增用例（当前尚未创建，实施时按仓库格式补齐）：
+新增验收合同（待功能实现后执行）：
 
-- 访问与网页行为：`docs/testing/app/ios-local-browser.testplan.yaml`：HTTP、地址族、资源、接口、表单、HMR、TLS、跨网络及兼容。
-- 授权与生命周期：`docs/testing/app/ios-local-browser-lifecycle.testplan.yaml`：鉴权、目标边界、凭据、连接隔离、竞态、断网、撤销、回收与宿主回归。
+- [访问与网页行为](../testing/app/ios-local-browser.testplan.yaml)：HTTP、地址族、资源、接口、表单、HMR、TLS、跨网络及兼容。
+- [授权与生命周期](../testing/app/ios-local-browser-lifecycle.testplan.yaml)：鉴权、目标边界、凭据、连接隔离、竞态、断网、撤销、回收与宿主回归。
 
 实施后执行，当前不存在的 verifier 在 P1 创建：
 
