@@ -1,0 +1,211 @@
+version: 1
+name: iOS 通过当前电脑访问本地网页
+description: >
+  待实现目标合同，对应 docs/plans/2026-09-18-ios-local-browser.md；本文件不代表当前功能已可用。
+  验证原 URL 经手机临时代理和当前 Backend 的认证 WS 到达电脑 loopback 服务。
+  每例自行创建专用终端、候选 Backend 和带 runId 的 fixture，记录实际绑定地址、页面结果与脱敏请求日志，结束只清理本例资源。
+  原生操作使用 $toolkit:agent-device，按各宿主 README 安装当前源码；Simulator 遵守共享设备池，不用模拟器证明真机 loopback。
+  网页 fixture 预检使用 $toolkit:playwright-cli，预检不替代 WKWebView 验收。
+  缺少设备、TLS、蜂窝入口或可观测 fixture 时记 blocked；格式校验、截图或页面标题不能替代真实请求落点证据。
+
+cases:
+  - id: IOSLOCAL-001
+    name: 真机从终端访问只监听电脑回环的 HTTP 页面
+    required: true
+    description: >
+      用户主动打开本地地址后请求必须到达当前 Backend 主机，不能误连手机同端口；原 URL 各组成部分不丢失。
+    preconditions:
+      - 候选 App 已在物理 iPhone 登录本例 Backend 并打开专用终端，两台设备使用不同物理网络栈。
+      - 本例电脑服务仅监听 127.0.0.1，页面显示 runId、原始 Host、query 和 fragment；已用监听信息证明未绑定局域网地址。
+      - 手机同端口有本例拥有的诱饵 HTTP 服务，显示不同标记并记录访问次数；两端基线均已清零。
+    steps:
+      - 在终端分别输出 localhost 和 127.0.0.1 的本例 URL，带百分号编码路径、query 及 fragment；用正式内置打开入口逐一访问。
+      - 确认原生页显示电脑 runId、正确路径和 query，页面脚本读到原 fragment；更多菜单与复制结果保持对应原 URL。
+      - 比对两端请求记录；确认电脑服务收到请求，手机诱饵命中数为零，终端未收到 URL 作为输入。
+      - 停止本例手机代理对应通道后主动刷新；确认失败并可返回终端，手机诱饵仍未命中，证明无直连回退。
+
+  - id: IOSLOCAL-002
+    name: 回环地址规范化保持电脑侧目标语义
+    required: true
+    description: >
+      IPv4 等价表示、IPv6 及未指定地址按合同规范化，不逃到手机网络或被当作任意远程目标。
+    preconditions:
+      - 真机候选 App 已登录本例 Backend，专用终端可输出各地址链接。
+      - 本例电脑分别在 127.0.0.1、127.0.0.2 和 ::1 启动可区分服务，记录所有连接目的地址。
+      - 已准备 URL 解析器支持的 localhost 尾点、127.1、2130706433、0x7f000001、IPv4-mapped IPv6、0.0.0.0 和 IPv6 未指定地址样本。
+    steps:
+      - 从终端逐一内置打开 IPv4 等价样本；确认到达对应规范化的电脑回环地址，127.0.0.2 不错误改成 127.0.0.1。
+      - 内置打开 IPv6 loopback 和 mapped IPv4 样本；确认分别到达本例预期地址族的服务。
+      - 打开 0.0.0.0 与 IPv6 未指定地址；确认只连接电脑对应族的 loopback，URL 展示保持原值。
+      - 核对请求记录与客户端实际规范化目标一致；无法解析的非法表示须有明确拒绝且零目标连接，不得记为等价样本成功。
+
+  - id: IOSLOCAL-003
+    name: localhost 子域保留 Host 并兼容 Workspace Services
+    required: true
+    description: >
+      service.localhost 通过电脑 loopback 到达原 Host 路由，已有 Workspace Services 本机限制无需放宽。
+    preconditions:
+      - 候选 App 已登录本例 Backend，存在本例专用终端与自己管理的 ready Workspace Service。
+      - 已记录该服务真实稳定子域 URL、Backend 端口和独特页面 runId；电脑直接访问成功。
+    steps:
+      - 在手机终端输出并内置打开该完整子域 URL；确认展示对应服务 runId。
+      - 检查服务记录的 Host 与原稳定子域一致，Backend Host 代理看到的 TCP peer 为电脑 loopback。
+      - 通过手机直接向同一 Host 路由发起不经本地通道的请求；确认原本机入口限制仍拒绝，不能因本功能放开已有代理。
+
+  - id: IOSLOCAL-004
+    name: 页面全部静态资源与流式响应可完整加载
+    required: true
+    description: >
+      代理承载整个页面网络，资源路径和二进制内容保持一致，不只转发 HTML，也不截断长响应。
+    preconditions:
+      - 候选 App 已连接本例 Backend 并有专用终端，本例 HTTP 服务仅监听电脑 loopback。
+      - fixture 提供相对路径与根路径 CSS、JS、图片、绝对 localhost 资源和至少 8 MiB 的分块二进制响应，页面显示资源标记与预先记录的 SHA-256。
+    steps:
+      - 从终端打开页面；确认 CSS 样式、JS 标记和图片都出现，服务记录的路径无代理前缀污染。
+      - 由页面 fetch 分块响应并计算摘要；确认字节数及 SHA-256 与 fixture 一致，加载期间能操作回终端控件。
+      - 核对绝对 localhost 资源也落到电脑，本例流量记录没有只加载主文档后子资源失败的情况。
+
+  - id: IOSLOCAL-005
+    name: 同源和跨本地端口接口保持浏览器 CORS 规则
+    required: true
+    description: >
+      本地页面可调用电脑上另一端口的接口，但转发不增加浏览器跨域权限。
+    preconditions:
+      - 候选 App 的本例专用终端已准备 loopback 页面 URL。
+      - 本例电脑有页面服务及另一端口的 API 服务；API 提供允许页面 origin 与明确不允许页面 origin 的两个端点，并记录 OPTIONS 和业务调用。
+    steps:
+      - 打开页面，触发同源接口；确认页面显示来自电脑的 runId。
+      - 调用另一 localhost 端口的允许跨域端点；确认预检与响应符合 CORS，页面读到预期数据。
+      - 调用禁止跨域端点；确认页面脚本不能读取响应，不因代理改写 CORS 或伪造同源而成功；仅有网络到达记录不能判通过。
+
+  - id: IOSLOCAL-006
+    name: POST 表单和上传保持方法正文且不重复发送
+    required: true
+    description: >
+      真实网页业务请求保持请求方法、正文和提交次数，代理不把请求降成 GET 或自行重试。
+    preconditions:
+      - 候选 App 已登录本例 Backend，有专用终端与 loopback 表单 fixture。
+      - fixture 可回显 POST 方法、正文摘要和唯一提交标记计数；已准备可由设备文件选择器选择的本例无敏感小文件。
+    steps:
+      - 打开本地页面，填写唯一标记并提交 POST 表单；确认电脑收到一次 POST，字段和值完整，页面显示一次成功。
+      - 通过页面文件控件选择本例文件并上传；确认文件摘要与原文件相同，multipart 字段未被代理重写。
+      - 回终端再恢复页面；确认两次操作各自计数均为一，没有因呈现切换自动重发。
+
+  - id: IOSLOCAL-007
+    name: 真实开发服务器通过 WebSocket 完成热更新
+    required: true
+    description: >
+      Vite 页面使用绝对 localhost 的热更新连接时，源码变化可在手机当前页生效，不能以手动刷新或普通 WS echo 代替。
+    preconditions:
+      - 候选 App 已连接本例 Backend，专用终端和固定版本 Vite fixture 归本例独占。
+      - Vite 仅监听电脑 127.0.0.1，HMR 使用显式 localhost 地址；页面显示可更新模块文本和页面加载计数。
+    steps:
+      - 从终端内置打开 Vite URL；确认页面初始文本与电脑源码一致，HMR WS 在电脑侧建立。
+      - 修改本例支持 HMR 的模块文本；确认手机无需操作即显示新文本，页面加载计数不增加。
+      - 保存原生前后画面与 Vite/HMR 请求记录；只有手动刷新后出现文本变化时判失败。
+
+  - id: IOSLOCAL-008
+    name: 本地页的重定向和历史仍使用真实地址
+    required: true
+    description: >
+      保留原 origin 后，重定向、子框架及新窗口复用沿相同会话能力导航，历史不出现代理内部地址。
+    preconditions:
+      - 候选 App 有本例专用终端与 loopback 页面 A、B，A 可重定向到 B，B 含锚点、同源 iframe 和 target=_blank 本地链接。
+      - 页面显示 runId 及当前 location，并可检查真实请求。
+    steps:
+      - 从终端打开 A，进入重定向后的 B；确认完整地址和 location 为真实 B，query 与 fragment 正确。
+      - 点击锚点与新窗口链接；确认复用当前内置页，本地 iframe 显示预期内容，未启动外部浏览器。
+      - 执行后退、前进和刷新；确认页面历史符合原导航顺序，地址中没有 WS 路由、临时端口或认证参数。
+
+  - id: IOSLOCAL-009
+    name: 本地 HTTPS 和 WSS 保持端到端证书校验
+    required: true
+    description: >
+      转发只承载 TLS 字节，合法证书的 HTTPS/WSS 可用，非法证书不能通过宿主绕过。
+    preconditions:
+      - 本例设备已具备受控 fixture 合法证书的既有信任条件，不在测试中更改用户证书设置；另有未受信任证书端点。
+      - 电脑 loopback HTTPS 页面和 WSS echo 服务使用匹配 localhost 的证书，保存证书有效性及主机名证据。
+      - 候选 App 已连接本例 Backend，并有专用终端。
+    steps:
+      - 内置打开合法 HTTPS 页面并通过 WSS 发送本例唯一消息；确认页面显示正确回包，原 URL 保持 HTTPS。
+      - 从页面访问未受信任端点，再从终端直接打开它；确认失败且没有忽略证书继续访问入口。
+      - 核对证书终止发生在 fixture 而非代理，非法站点正文未执行；缺少合法信任环境时标 blocked，不跳过证书检查。
+
+  - id: IOSLOCAL-010
+    name: 本地页的公网资源仍从手机访问
+    required: true
+    description: >
+      本地会话的公网资源不经电脑代理，普通浏览也不被强制依赖电脑转发。
+    preconditions:
+      - 物理 iPhone 与电脑使用可由受控外部服务区分的出口，候选 App 可连接本例 Backend。
+      - 本例 loopback 页面引用受控公网脚本和图片；外部服务记录设备请求来源与无敏感 runId。
+    steps:
+      - 内置打开本地页；确认电脑提供主页面，公网脚本和图片加载成功。
+      - 比对外部服务记录；确认资源来自手机出口，Backend 通道中只有本地目标，没有向公网目标建立出站 TCP。
+      - 关闭本地页后从终端直接打开同一受控公网页；确认使用普通浏览会话，不新建电脑本地通道。
+
+  - id: IOSLOCAL-011
+    name: 蜂窝网络沿既有 Runweave 入口访问电脑本地服务
+    required: true
+    description: >
+      不同网络下只依赖已可用的 HTTPS/WSS Backend 入口，不要求暴露开发端口或手机与电脑同网。
+    preconditions:
+      - 物理 iPhone 有可用蜂窝网络，本例 Backend 有手机可达且通过现有认证的 HTTPS/WSS 入口。
+      - 本例开发服务仅监听电脑 127.0.0.1，提供页面、接口和 WS echo，未添加公网端口映射。
+      - 已记录电脑监听地址和本例入口；允许本次临时关闭手机 Wi-Fi 并在结束后恢复原设置。
+    steps:
+      - 关闭手机 Wi-Fi，重新获取设备状态；确认使用蜂窝网络且本例终端仍可连接。
+      - 输出并内置打开本地服务 URL；确认页面、接口与 WS echo 均返回电脑 runId。
+      - 对照请求日志确认全部电脑本地请求经原 HTTPS/WSS 入口，未生成另一公网代理端口；保存网络状态和原生操作证据。
+
+  - id: IOSLOCAL-012
+    name: 复制本地链接与外部打开不会泄露转发凭据
+    required: true
+    description: >
+      本地地址复制仍是原 URL，外部打开解释依赖 Runweave，不把不可用地址交给 Safari 或生成有凭据的链接。
+    preconditions:
+      - 候选 App 已从本例终端打开含无敏感 query 和 fragment 的 loopback 页面。
+      - 设备有本例用于读取剪贴板的文本区，已记录当前前台 App。
+    steps:
+      - 打开更多菜单查看并复制链接；确认粘贴值等于原 URL，未出现 Backend 地址、临时代理端口、token 或代理密码。
+      - 选择在默认浏览器打开；确认说明需要 Runweave 连接电脑，前台仍为 Runweave，无外部浏览器导航。
+      - 关闭提示后回终端再恢复；确认原本地页面仍可操作。
+
+  - id: IOSLOCAL-013
+    name: 旧 Backend 和关闭功能的 Backend 有明确兼容提示
+    required: true
+    description: >
+      能力协商失败不进入半可用代理状态，也不影响已连接终端和普通公网浏览。
+    preconditions:
+      - 本例独立 Backend fixture 可分别返回能力接口 404、不支持的 protocolVersion，以及功能关闭的 503；不更改用户正在使用的 Backend。
+      - 候选 App 已登录该 fixture，专用终端可用，另有手机可达的受控公网页面。
+    steps:
+      - 对每种能力响应独立建立浏览器会话并主动打开 localhost URL；确认分别说明电脑版本不支持或功能未启用，没有无限加载。
+      - 核对未打开本地代理目标通道、未修改电脑服务监听地址，且没有自动反复请求能力接口。
+      - 返回专用终端并主动打开公网页面；确认终端可用且公网浏览成功。
+
+  - id: IOSLOCAL-014
+    name: 本地目标拒绝连接或超时可由用户恢复
+    required: true
+    description: >
+      目标服务不可用时错误与当前 URL 对应，服务恢复后用户重试成功，不出现自动无限刷新。
+    preconditions:
+      - 候选 App 已连接本例 Backend 并有专用终端，具有独占的未监听 loopback 端口。
+      - 本例受控故障 fixture 能让另一目标 TCP 建连超过 10 秒并记录尝试次数，执行者只控制本例故障。
+    steps:
+      - 从终端打开未监听端口；确认显示本地服务未启动或不可达，保留失败 URL 和重试入口。
+      - 打开超时 fixture；确认按 10 秒连接超时终止并显示超时原因，不把准备状态永久挂起。
+      - 在原未监听端口启动本例页面服务后主动重试；确认显示正确 runId；在主动操作前没有自动重复连接或提交。
+
+  - id: IOSLOCAL-015
+    name: 普通 IP 与文件链接不会被误解释为电脑 localhost
+    required: true
+    description: >
+      转发能力只解释明确本地地址；172.0.0.1、局域网 IP 和 file URL 不被自动替换或授予电脑文件访问。
+    preconditions:
+      - 候选 App 已连接本例 Backend，有专用终端和可记录远程通道目标的脱敏观测。
+      - 已准备本例手机可达的局域网 HTTP 服务、172.0.0.1 的无敏感链接和 file URL，记录初始请求计数。
+    steps:
+      - 从终端打开本例局域网 IP；确认由手机到达该服务，没有新增 Backend loopback 通道。
+      - 尝试 172.0.0.1；无论手机网络成功或失败，确认地址未改写、Backend 未连接 127.0.0.1，不以该 IP 必须可达作为通过条件。
+      - 尝试 file URL；确认拒绝且说明需使用 HTTP 服务，没有读取手机或电脑本地文件。

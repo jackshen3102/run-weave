@@ -1,0 +1,231 @@
+version: 1
+name: iOS 本地网页通道授权与生命周期
+description: >
+  待实现目标合同，验证转发权限只属于当前有效的本地浏览会话，凭据、数据和 socket 不跨宿主或连接泄漏。
+  每例独立建立专用 App 账号、终端与 fixture，不继承前例状态；CLI 协议用例通过真实 Backend 和 TCP/WS 执行，原生用例使用 $toolkit:agent-device。
+  所有重启、撤销、故障及资源压测仅作用于本例独占资源，结束恢复本例设置并清理本例进程。
+  使用当前源码构建并核对安装；Simulator 按共享设备池申请。保存 runId、设备/进程归属、逐例原生证据及脱敏连接记录。
+  fixture 网页预检使用 $toolkit:playwright-cli；预检和类型检查都不算原生通过。缺必需环境能力记 blocked。
+
+cases:
+  - id: IOSLOCALSAFE-001
+    name: 只有有效原生 App 会话能够建立电脑通道
+    required: true
+    description: >
+      WS 升级同时遵守现有入口认证与有效 App Bearer，网页请求不能仅凭入口可达获得代理权限。
+    preconditions:
+      - 本例真实隔离 Backend 启用本地浏览及已有 tunnel-auth，存在有效 App 会话、普通非 App 会话和可撤销的测试会话。
+      - 本例 loopback TCP 服务能统计连接，协议客户端仅持有本例测试凭据且不将其写入报告。
+    steps:
+      - 分别以缺失、无效、已过期、已撤销 Bearer，以及非 App 会话发起升级；确认返回 401 或 403，目标连接数不增加。
+      - 使用有效 App Bearer 但缺入口认证，再携带网页 Origin 发起升级；确认仍拒绝且没有目标连接。
+      - 使用满足所有认证条件的原生握手并发送有效 open；确认仅此组合收到 ready 且目标连接增加一。
+
+  - id: IOSLOCALSAFE-002
+    name: Backend 拒绝任意远端和非法目标
+    required: true
+    description: >
+      即使调用方持有合法 App 凭据，通道也只能连接合同允许的电脑回环目标，不能成为通用开放代理。
+    preconditions:
+      - 本例隔离 Backend、有效 App 会话和专用终端均存在，可运行真实协议客户端。
+      - 本例记录 TCP connect 尝试，准备公网域名、私网 IP、172.0.0.1、localhost.evil.example、userinfo 伪装和本例控制的解析到回环的普通域名样本。
+    steps:
+      - 对各禁止目标发送 open，并覆盖字符串端口、0、负数与 65536；确认每次得到 invalid_target 且零出站连接。
+      - 对不存在的 terminalSessionId 发送合法本地目标；确认 source_unavailable，未尝试连接目标。
+      - 以本例真实终端及合法 loopback 端口发送 open；确认 ready，证明前面拒绝来自策略而非整体通道损坏。
+
+  - id: IOSLOCALSAFE-003
+    name: 网站收不到 Runweave 与代理凭据
+    required: true
+    description: >
+      宿主身份仅用于原生握手，网页请求、URL、脚本和诊断均不暴露宿主或临时代理凭据。
+    preconditions:
+      - 候选 App 已登录本例专用 Backend，测试凭据仅可在本例内存中作布尔比对。
+      - 本例本地页面及外部资源站点可记录请求头与 Cookie，页面能读取自身 URL 和可见脚本对象；网站另有自己的无敏感认证标记。
+    steps:
+      - 打开本地页，加载外部资源并触发接口；确认站点自己的认证标记按正常浏览器规则传输。
+      - 在本例环境内比对站点记录；确认没有宿主 Bearer、refresh token、入口认证 Cookie 或 Proxy-Authorization。
+      - 检查页面可见 URL、脚本对象、复制链接和诊断导出；确认无原生凭据与终端调用桥，仅保存布尔结果和脱敏摘要。
+
+  - id: IOSLOCALSAFE-004
+    name: 普通网页不能自动获得电脑本地访问能力
+    required: true
+    description: >
+      未经用户从终端主动开启本地会话，普通网页不能通过导航或子资源使宿主建立电脑通道。
+    preconditions:
+      - 候选 App 已从本例终端直接打开受控公网页面，当前没有本地网络 lease。
+      - 公网页面可尝试本地重定向、iframe、fetch、WebSocket 与新窗口，本例电脑 loopback 服务记录请求数。
+    steps:
+      - 在普通页面分别触发上述本地目标访问；确认没有自动建立电脑本地通道，电脑 fixture 请求数保持为零。
+      - 核对顶层本地导航被解释性拒绝，子资源失败不抢占整页，原终端仍可返回。
+      - 结束本例页面；不把本例结果解释成完整手机私网防火墙，因为该能力只承诺不自动授予电脑通道。
+
+  - id: IOSLOCALSAFE-005
+    name: 切换电脑隔离相同 localhost origin 与迟到回调
+    required: true
+    description: >
+      连接切换既撤销旧网络 owner，也隔离相同 localhost origin 的网站数据，旧响应不能更新新页。
+    preconditions:
+      - 候选 App 已配置本例独立 Backend A、B，各自终端及相同 localhost 端口的页面显示不同 runId。
+      - A 页面可设置 Cookie、LocalStorage、IndexedDB、缓存标记并维持延迟响应；B 可回显收到的数据但不会主动创建 A 的标记。
+    steps:
+      - 在 A 打开本地页，创建所有数据标记并发起延迟请求；保存 A 的实际页面及 socket 归属。
+      - 使用正式 UI 切换到 B，重新取得原生控件树并打开 B 的同 origin URL；确认显示 B 且读取不到 A 的数据。
+      - 释放 A 的延迟响应；确认 B 的标题、URL、提示和正文不被改变，A 通道已关闭且不再发新请求。
+      - 切回 A 后确认不自动复活旧页；显式重开为新临时会话，不能宣称恢复旧表单或 Cookie。
+
+  - id: IOSLOCALSAFE-006
+    name: 准备阶段来源失效不会迟到打开网页
+    required: true
+    description: >
+      能力请求或代理准备尚未结束时关闭来源终端，异步完成不能再呈现页面或保留无主通道。
+    preconditions:
+      - 候选 App 已登录本例 Backend 并进入专用终端，本例可控制能力响应或通道 ready 的延迟。
+      - 本例有可观测的本地代理监听和远端 socket 计数。
+    steps:
+      - 从终端打开本地 URL，在“正在连接电脑本地服务”状态离开该终端。
+      - 释放延迟响应并重新获取原生控件树；确认没有自动弹出旧网页或出现旧恢复入口。
+      - 核对本例未归属的代理 listener、TCP 和 WS 已回收，新终端不会收到旧 source 的错误提示。
+
+  - id: IOSLOCALSAFE-007
+    name: 收起恢复保留同一本地页面与临时数据
+    required: true
+    description: >
+      仅回终端不销毁本地浏览会话，恢复不会重复加载、清表单或重新创建 owner。
+    preconditions:
+      - 候选 App 已在本例终端打开本地页，页面含未提交文本、滚动位置、Cookie 与加载计数。
+      - 原终端有未发送草稿，本例记录页面会话及网络 lease 身份。
+    steps:
+      - 填入唯一文本、滚动页面后回终端，再通过正式恢复入口返回；确认现场和 Cookie 均保持。
+      - 重复两次收起恢复；确认加载计数不增加，使用同一本地网络 lease，终端草稿未变。
+
+  - id: IOSLOCALSAFE-008
+    name: 关闭本地页释放资源且下次打开为新会话
+    required: true
+    description: >
+      关闭与收起不同，确认关闭必须结束本地代理、通道和临时网站数据；重开不复活旧数据。
+    preconditions:
+      - 候选 App 的本例本地页已有 Cookie 与未提交表单，并每秒向电脑发送一次带会话标记的请求。
+      - 本例可以观察该 listener、TCP、WS 及页面归属，关闭前已记录基线。
+    steps:
+      - 发起关闭并取消；确认页面和周期请求仍属于原会话。
+      - 再次关闭并确认；待安全卸载完成后确认恢复入口消失，本例 listener/TCP/WS 计数归零且周期请求停止。
+      - 显式重开原 URL；确认新的页面会话与临时代理凭据，旧 Cookie 与表单不存在，界面已说明本地数据生命周期。
+
+  - id: IOSLOCALSAFE-009
+    name: 认证撤销能关闭已建立的本地通道
+    required: true
+    description: >
+      权限不只在握手时有效；测试 App 会话被撤销后，已有代理连接也在约定时间内失效。
+    preconditions:
+      - 本例独占 App 认证会话已通过真机或 Simulator 打开带持续 WS echo 的本地页。
+      - 执行者有权仅撤销本例会话，Backend 可记录撤销及 socket 关闭的单调时间戳。
+    steps:
+      - 撤销本例会话；确认从撤销到 Backend 关闭所有关联转发通道不超过 5 秒加一次可记录的调度误差。
+      - 尝试在原页面发送 echo 并新建连接；确认无法继续获得电脑响应，App 显示认证失效或连接不可用。
+      - 重新认证后确认必须主动重新打开页面，不恢复旧 lease 或重发旧业务请求。
+
+  - id: IOSLOCALSAFE-010
+    name: 断网不自动重放已送达的业务请求
+    required: true
+    description: >
+      业务写已到电脑但响应丢失时，网络恢复不能产生第二次提交或伪造成功。
+    preconditions:
+      - 候选 App 已打开本例本地表单；fixture 对唯一提交标记持久计数，并可在收到正文后延迟响应。
+      - 本例独占网络故障入口可只切断本例 WS，允许恢复连接但不干扰其他用户。
+    steps:
+      - 提交唯一标记，待电脑记录收到一次后切断本例通道；确认页面没有虚假成功。
+      - 恢复网络但不点击提交或重试，观察至少 45 秒；确认电脑提交计数仍为一，无自动重放正文。
+      - 按页面或宿主错误恢复入口返回可用状态；若 WebKit 提示重新提交，取消后确认计数仍为一，旧通道没有复活。
+
+  - id: IOSLOCALSAFE-011
+    name: Backend 重启不会遗留通道或自动恢复旧请求
+    required: true
+    description: >
+      同一例拥有完整重启生命周期，证明旧进程资源结束，新进程只接受新的主动浏览。
+    preconditions:
+      - 本例独占候选 Backend 进程可安全重启，App 已打开带持续连接的本地页。
+      - 本例目标服务与 Backend 分属独立受控进程，记录旧 Backend PID、端口及所有关联连接。
+    steps:
+      - 记录旧页与连接后停止 Backend；确认旧转发 TCP/WS 关闭，App 可见连接失败且仍可返回终端。
+      - 按同一配置启动新 Backend，重新取得 PID、入口、认证状态和原生控件树；不能复用旧 endpoint 观测结果。
+      - 在用户主动重试前确认目标没有旧业务请求重放；主动重新打开后确认通过新通道显示目标 runId。
+
+  - id: IOSLOCALSAFE-012
+    name: 通道数量与积压数据上限可执行且失败可回收
+    required: true
+    description: >
+      单个有效 App 会话的 32 连接与每方向 1 MiB 积压上限约束真实连接，超限不造成无界内存或遗留资源。
+    preconditions:
+      - 本例真实隔离 Backend 和有效 App 会话可供协议 verifier 使用，目标为本例慢读慢写 TCP fixture。
+      - 能读取本例连接计数与队列字节统计，已记录空闲基线；只向本例 fixture 发送无敏感数据。
+    steps:
+      - 建立 32 条活动转发连接后尝试第 33 条；确认新连接被 connection_limit 拒绝且不建立额外 TCP。
+      - 在同一会话中释放一条并新建；确认可用名额恢复。
+      - 对本例连接制造持续背压；确认停止读取或超过 1 MiB 时以 buffer_limit 关闭，不继续增长积压。
+      - 关闭本例全部客户端；确认计数、队列和定时器回到基线，其他本例受控健康连接未被整体误关闭。
+
+  - id: IOSLOCALSAFE-013
+    name: 非法帧和握手超时不能建立不受控连接
+    required: true
+    description: >
+      通道状态机必须先 open、后 ready、再数据，协议错误及时终止并释放资源。
+    preconditions:
+      - 本例真实 Backend、合法 App 会话、专用终端和可记录连接数的 loopback fixture 已建立。
+      - 协议客户端支持发送受控非法文本、二进制、超大帧和重复 open，每次使用独立连接。
+    steps:
+      - 升级后不发送 open，等待超过 5 秒；确认通道关闭且目标零连接。
+      - 逐一发送超 2 KiB 的 open、未知版本、ready 前二进制、重复 open 及超 64 KiB 的数据帧；确认每种输入都被相应协议错误终止。
+      - 核对每轮 socket 和缓冲区回到基线，没有将 JSON 控制帧转发到目标，也没有形成第二个目标连接。
+
+  - id: IOSLOCALSAFE-014
+    name: 随记宿主保持原浏览行为且不能继承电脑能力
+    required: true
+    description: >
+      共享包新增可选代理能力后，未注入能力的随记仍可访问公网并拒绝本地 URL。
+    preconditions:
+      - 当前共享源码已分别构建并安装 Runweave 与随记候选 App，已记录产物及各自沙箱身份。
+      - 随记有本例内容，含可达受控公网链接及 localhost 链接；Runweave 可独立建立本例电脑通道。
+    steps:
+      - 在 Runweave 建立本地浏览，再切到随记通过正式内容入口打开公网链接；确认正常展示且没有复用 Runweave 代理或网站数据。
+      - 在随记尝试本地链接；确认维持解释性拒绝，没有电脑代理请求或手机本地服务命中。
+      - 收起并恢复随记网页；确认来源内容与浏览连续性保持，证据来自随记原生 UI 而非只编译共享包。
+
+  - id: IOSLOCALSAFE-015
+    name: 清除网页数据等待本地文档与通道退役
+    required: true
+    description: >
+      清数据覆盖当前临时 store，旧文档不能在清理完成后继续请求或写回，也不清除电脑连接身份。
+    preconditions:
+      - 本例独占安装允许清除网页数据，候选 App 已登录测试 Backend 并有已保存终端草稿。
+      - 本地页已有各类网站存储标记并周期写入，存在可观测的未完成网络响应。
+    steps:
+      - 从正式 UI 确认清除网页数据；确认清理期间不能恢复或新开旧页面，未在旧文档退役前报告完成。
+      - 待完成后释放旧网络响应；确认旧文档没有再次写入标记或触发请求，本地 listener 与通道已释放。
+      - 重新打开本地 URL；确认标记不存在，Backend 登录与原终端草稿仍然保留。
+
+  - id: IOSLOCALSAFE-016
+    name: 手机临时代理仅允许本会话客户端使用
+    required: true
+    description: >
+      临时代理仅监听手机 loopback，并验证每会话生成的代理凭据，不能被同网设备或无凭据客户端借用。
+    preconditions:
+      - 本例设备候选 App 已建立本地浏览会话，执行者可用受控设备端客户端观测 listener 并发起 CONNECT。
+      - 本例电脑目标服务记录连接数，手机代理端口与凭据仅在测试进程内使用，不进入日志和报告。
+    steps:
+      - 检查监听绑定地址；确认不是 0.0.0.0、IPv6 未指定地址或局域网地址，同网设备无法直接连接。
+      - 在设备端分别无凭据和错误凭据发起 CONNECT；确认被代理认证拒绝，电脑目标连接数不增加。
+      - 通过当前合法 WKWebView 发起请求；确认成功；关闭后重新打开并使用旧代理凭据，确认旧 listener 已不存在或旧凭据被拒绝。
+
+  - id: IOSLOCALSAFE-017
+    name: 双向字节流和半关闭不会丢失末尾数据
+    required: true
+    description: >
+      WS 分帧不改变 TCP 字节顺序，eof 仅关闭一个方向，最后一批响应必须排空后才完整结束。
+    preconditions:
+      - 本例真实 Backend、有效 App 会话及专用终端可建立通道，TCP fixture 会在收到输入 EOF 后才返回响应。
+      - 协议 verifier 准备跨多个 64 KiB 帧的二进制输入和已知输出摘要，fixture 记录完整长度及摘要。
+    steps:
+      - 建立通道并按多帧发送输入后发送 eof；确认目标收到完整输入且读到单向 EOF，反向通道仍可接收。
+      - 接收目标分块输出直至其 EOF；确认字节数和摘要匹配，最后一帧未因 socket 关闭而丢失。
+      - 检查双方队列排空且连接关闭；任何截断、重复或把控制帧混入字节流均判失败。
