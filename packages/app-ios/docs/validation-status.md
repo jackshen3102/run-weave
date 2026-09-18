@@ -187,3 +187,62 @@ provider 使用本地 HTTP/2 TLS 服务验证 ES256 JWT、固定 APNs headers/�
 真实 sandbox/production 锁屏、前台 APNs 和点击通知路由未执行：可用推送签名、APNs 私钥与集中部署未配置。
 远程 Mac、真实手机离线撤销、完整后台时序、命令超时恢复、
 异常文件系统与完整多连接交互仍需按 YAML 合同补齐。构建或本地注入结果不能替代这些门槛。
+
+## 2026-09-18 本地网页预览
+
+实现边界见 [电脑本地网页预览](local-browser.md)。本轮核心验证使用当前 worktree 的 Debug App、
+iPhone 17 / iOS 26.6.1，以及独立 Dev Session `dvs-b52d4b` 的 Backend。
+局域网同端口被另一个会话占用后，使用本任务独占 TCP 入口转到该 Backend，并通过 `/health`
+核对 service identity；开发页面始终只监听电脑 127.0.0.1，未放宽监听。
+
+实际通过：
+
+- 正式终端链接进入本地预览；HTML、CSS、JS、query/fragment、8 MiB 数据与真实 WS echo 到达电脑；站点未收到 App/代理凭据。
+- POST 正文正确，计数为 1；收起恢复保留草稿和页面，无额外 POST；复制弹窗为原 URL，外部打开保留在 App 并解释连接依赖。
+- 确认关闭后，电脑目标端口仅剩 listener，无该浏览会话的活动 TCP。
+- Vite 6.4.1 模块变化自动出现在真机，页面加载次数仍为 1；不是手动刷新或普通 WS echo 替代。
+- 后端真实网络 verifier：App-only 鉴权、Origin 拒绝、目标限制、32 连接限额及回收、协议错误、8 MiB POST、来源撤销和 dispose。
+- 独立 TLS verifier：受信任且 host 匹配的 HTTPS 上游成功，错误 host 与不受信任证书失败；仅测试子进程使用临时 CA，未修改系统信任库。
+- Runweave Debug 真机与 Release Simulator 构建；随记 Debug Simulator 构建，以及公网 HTTPS 打开、收起、localhost 拒绝的原生回归。
+- Backend/Shared 类型检查、Backend lint、架构检查、生命周期 verifier、文档与 33 条测试合同格式校验。
+
+原始证据位于本机 `.runweave/mobile-qa/local-browser-implementation/`、
+`.runweave/mobile-qa/local-browser-suiji/`、`.runweave/browser-local-production/`。
+完整合同仍为 [页面](../../../docs/testing/app/ios-local-browser.testplan.yaml) 与
+[生命周期](../../../docs/testing/app/ios-local-browser-lifecycle.testplan.yaml) 两个计划。
+本轮没有逐条跑完 33 条：蜂窝 HTTPS/WSS 入口、手机同端口诱饵、多电脑/账户隔离矩阵、
+Workspace Services 稳定域名、原生 HTTPS/WSS、上传、CORS、断网写入响应丢失、长时背压等未全量验收。
+真机工具不支持读取剪贴板，因此只验证复制动作与原始 URL 弹窗，未宣称剪贴板内容已独立读取。
+
+最后收尾改动（兼容提示在导航后保留、历史地址比较、清除临时 store）在真机短暂断开后完成构建并于恢复连接后安装，
+未重复上述 UI 流程；上述真机成功结果不能视为 33 条全量通过。
+
+本任务创建的 Dev Session、TCP relay、页面/Vite/随记 fixture、终端和项目已清理；随记模拟器 lease 已释放，
+手机已移除 Local Preview QA 连接并恢复原“热点mac”连接。正式电脑 Backend 未更新。
+
+同日继续补验使用独立 Dev Session `dvs-1439de`。准备阶段延迟能力响应后离开来源终端，
+发现“正在连接电脑本地页面”提示会残留到新终端；已在来源失效时同步清除该准备提示。
+修复后的 Debug Simulator 实测迟到响应不再打开旧页、留下恢复入口或污染新终端提示。
+
+新增证据包括：原生相对重定向、iframe、新窗口复用、后退/前进/刷新，复制原 URL 并独立读取
+Simulator 剪贴板；能力接口 404/503/未知版本的解释性拒绝；POST 正文到达后只切断本地 WS，
+恢复网络后观察 59.654 秒仍只提交一次，主动刷新恢复。确认关闭后 listener/TCP/WS 已释放；
+清除数据后迟到响应不再触发旧页请求，新页 Cookie、LocalStorage、IndexedDB 为空，登录和终端草稿保留。
+实际 Simulator 代理只监听 loopback，无凭据及错误凭据 CONNECT 均返回 407。
+
+完整 Backend 的新 verifier 通过非法目标/端口、32 条连接限额与恢复、协议错误和超时、双向半关闭
+字节完整性断言；2,097,249 字节输入在 EOF 后得到完整 3,145,851 字节输出，最终目标连接为零。
+这些不等于内部缓冲区/定时器已插桩验证。修复后两个宿主 Debug Simulator、Runweave Release Simulator
+与 Debug 真机构建通过；更新已安装到手机，最后修复后的 UI 回归证据来自 Simulator。
+随记重新通过公网打开、收起恢复及 localhost 拒绝的原生专项回归。
+
+补验逐例矩阵与原始日志位于本机 `.runweave/browser-local-followup-record/REPORT.md`。
+33 条合同仍未全量完成：上传、Workspace Services、完整 Backend 重启和原生认证撤销等尚未逐例执行；
+蜂窝 HTTPS/WSS、手机同端口诱饵、双电脑隔离、受控公网 CORS/出口及原生背压观测还缺对应环境。
+清数据尚未覆盖 CacheStorage、周期写入与精确退役时序；没有据此将完整生命周期矩阵标为通过。
+补验的专用终端/项目、Dev Session、relay 和 fixtures 已清理；两个 Simulator lease 已释放，
+原连接已恢复，真机自动化已停止。
+
+随后通过统一桌面更新器将 `/Applications/Runweave.app` 更新为 0.214.0，正式 bundled Backend
+已包含本地预览能力。安装态终端的可见性与输入区可交互检查通过；本例临时原生认证会话读取能力接口
+返回 200、protocolVersion 1、32 连接及 64 KiB 帧上限，检查后已登出。此次安装态验收不替代手机完整流程重验。

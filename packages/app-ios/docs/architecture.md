@@ -229,3 +229,5 @@ connection generation、controller 身份和草稿 revision 隔离，同文新�
 
 首页与连接列表展示目标 Backend 的电量；提醒默认关闭。原生 `NotificationCoordinator` 管理用户授权、token、
 Keychain 撤销凭据和通知点击。跨端身份、采样、告警与部署合同见 [设备监控](../../../docs/architecture/device-monitor.md)。
+
+电脑本地页面通过可选宿主 lease、原生 CONNECT 和认证 WS 访问；协议、隔离与兼容边界见 [本地网页预览](local-browser.md)。

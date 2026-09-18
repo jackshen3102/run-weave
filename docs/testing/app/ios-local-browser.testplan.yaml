@@ -1,8 +1,8 @@
 version: 1
 name: iOS 通过当前电脑访问本地网页
 description: >
-  待实现目标合同，对应 docs/plans/2026-09-18-ios-local-browser.md；本文件不代表当前功能已可用。
-  验证原 URL 经手机临时代理和当前 Backend 的认证 WS 到达电脑 loopback 服务。
+  实现验收合同，对应 packages/app-ios/docs/local-browser.md；本文件不代表当前功能已可用。
+  验证原 URL 自动转换为临时预览域名，经手机代理和当前 Backend 的认证 WS 到达电脑 loopback 服务。
   每例自行创建专用终端、候选 Backend 和带 runId 的 fixture，记录实际绑定地址、页面结果与脱敏请求日志，结束只清理本例资源。
   原生操作使用 $toolkit:agent-device，按各宿主 README 安装当前源码；Simulator 遵守共享设备池，不用模拟器证明真机 loopback。
   网页 fixture 预检使用 $toolkit:playwright-cli，预检不替代 WKWebView 验收。
@@ -13,7 +13,7 @@ cases:
     name: 真机从终端访问只监听电脑回环的 HTTP 页面
     required: true
     description: >
-      用户主动打开本地地址后请求必须到达当前 Backend 主机，不能误连手机同端口；原 URL 各组成部分不丢失。
+      用户主动打开本地地址后请求必须到达当前 Backend 主机，不能误连手机同端口；路径、query 与 fragment 不丢失，页面 origin 如实使用预览域名。
     preconditions:
       - 候选 App 已在物理 iPhone 登录本例 Backend 并打开专用终端，两台设备使用不同物理网络栈。
       - 本例电脑服务仅监听 127.0.0.1，页面显示 runId、原始 Host、query 和 fragment；已用监听信息证明未绑定局域网地址。
@@ -36,7 +36,7 @@ cases:
     steps:
       - 从终端逐一内置打开 IPv4 等价样本；确认到达对应规范化的电脑回环地址，127.0.0.2 不错误改成 127.0.0.1。
       - 内置打开 IPv6 loopback 和 mapped IPv4 样本；确认分别到达本例预期地址族的服务。
-      - 打开 0.0.0.0 与 IPv6 未指定地址；确认只连接电脑对应族的 loopback，URL 展示保持原值。
+      - 打开 0.0.0.0 与 IPv6 未指定地址；确认只连接电脑对应族的 loopback，复制链接恢复原值，页面 location 使用预览域名。
       - 核对请求记录与客户端实际规范化目标一致；无法解析的非法表示须有明确拒绝且零目标连接，不得记为等价样本成功。
 
   - id: IOSLOCAL-003
@@ -63,20 +63,21 @@ cases:
     steps:
       - 从终端打开页面；确认 CSS 样式、JS 标记和图片都出现，服务记录的路径无代理前缀污染。
       - 由页面 fetch 分块响应并计算摘要；确认字节数及 SHA-256 与 fixture 一致，加载期间能操作回终端控件。
-      - 核对绝对 localhost 资源也落到电脑，本例流量记录没有只加载主文档后子资源失败的情况。
+      - 核对绝对 localhost 资源被阻止且未访问手机同端口；页面明确说明需使用相对地址，不能把它记为受支持资源。
 
   - id: IOSLOCAL-005
-    name: 同源和跨本地端口接口保持浏览器 CORS 规则
+    name: 相对接口可用且未授权本地地址不扩大访问范围
     required: true
     description: >
-      本地页面可调用电脑上另一端口的接口，但转发不增加浏览器跨域权限。
+      本地预览绑定单一目标端口；相对接口可用，写死 localhost 或其他端口的接口不能自动获得通道。
     preconditions:
       - 候选 App 的本例专用终端已准备 loopback 页面 URL。
-      - 本例电脑有页面服务及另一端口的 API 服务；API 提供允许页面 origin 与明确不允许页面 origin 的两个端点，并记录 OPTIONS 和业务调用。
+      - 本例电脑有页面服务及另一回环端口的 API 服务，后者记录被拒绝尝试的命中基线。
+      - 另有手机可达的受控公网页面 API，分别允许与拒绝预览 origin，并记录 OPTIONS 和业务调用；本地 fixture 页面可主动触发这些请求。
     steps:
       - 打开页面，触发同源接口；确认页面显示来自电脑的 runId。
-      - 调用另一 localhost 端口的允许跨域端点；确认预检与响应符合 CORS，页面读到预期数据。
-      - 调用禁止跨域端点；确认页面脚本不能读取响应，不因代理改写 CORS 或伪造同源而成功；仅有网络到达记录不能判通过。
+      - 调用另一 localhost 端口的端点；确认被阻止，未命中电脑或手机的该端口，不伪装为成功。
+      - 调用允许及禁止预览 origin 的受控公网接口；确认浏览器仍遵循 CORS，代理未改写 Origin 或响应权限。
 
   - id: IOSLOCAL-006
     name: POST 表单和上传保持方法正文且不重复发送
@@ -95,10 +96,10 @@ cases:
     name: 真实开发服务器通过 WebSocket 完成热更新
     required: true
     description: >
-      Vite 页面使用绝对 localhost 的热更新连接时，源码变化可在手机当前页生效，不能以手动刷新或普通 WS echo 代替。
+      Vite 页面使用当前预览域名的热更新连接时，源码变化可在手机当前页生效，不能以手动刷新或普通 WS echo 代替。
     preconditions:
       - 候选 App 已连接本例 Backend，专用终端和固定版本 Vite fixture 归本例独占。
-      - Vite 仅监听电脑 127.0.0.1，HMR 使用显式 localhost 地址；页面显示可更新模块文本和页面加载计数。
+      - Vite 仅监听电脑 127.0.0.1，HMR 从页面位置推导地址，未硬编码 localhost；页面显示可更新模块文本和页面加载计数。
     steps:
       - 从终端内置打开 Vite URL；确认页面初始文本与电脑源码一致，HMR WS 在电脑侧建立。
       - 修改本例支持 HMR 的模块文本；确认手机无需操作即显示新文本，页面加载计数不增加。
@@ -108,28 +109,28 @@ cases:
     name: 本地页的重定向和历史仍使用真实地址
     required: true
     description: >
-      保留原 origin 后，重定向、子框架及新窗口复用沿相同会话能力导航，历史不出现代理内部地址。
+      相对重定向、子框架及新窗口复用沿预览 origin 导航；绝对 localhost 重定向明确拒绝，历史不出现带凭据地址。
     preconditions:
-      - 候选 App 有本例专用终端与 loopback 页面 A、B，A 可重定向到 B，B 含锚点、同源 iframe 和 target=_blank 本地链接。
+      - 候选 App 有本例专用终端与 loopback 页面 A、B，A 可用相对 Location 重定向到 B，B 含锚点、同源 iframe 和 target=_blank 本地链接。
       - 页面显示 runId 及当前 location，并可检查真实请求。
     steps:
-      - 从终端打开 A，进入重定向后的 B；确认完整地址和 location 为真实 B，query 与 fragment 正确。
+      - 从终端打开 A，进入重定向后的 B；确认location 为预览域名下的 B，query 与 fragment 正确。
       - 点击锚点与新窗口链接；确认复用当前内置页，本地 iframe 显示预期内容，未启动外部浏览器。
       - 执行后退、前进和刷新；确认页面历史符合原导航顺序，地址中没有 WS 路由、临时端口或认证参数。
 
   - id: IOSLOCAL-009
-    name: 本地 HTTPS 和 WSS 保持端到端证书校验
+    name: HTTPS 上游由电脑校验证书且如实说明预览 origin
     required: true
     description: >
-      转发只承载 TLS 字节，合法证书的 HTTPS/WSS 可用，非法证书不能通过宿主绕过。
+      电脑到原 HTTPS 服务使用正常 TLS 主机名和证书校验；手机网页使用 HTTP 预览 origin，不承诺原 secure context、Secure Cookie 或原 origin。
     preconditions:
-      - 本例设备已具备受控 fixture 合法证书的既有信任条件，不在测试中更改用户证书设置；另有未受信任证书端点。
+      - 本例 Backend 的 Node 运行环境已具备受控 fixture 合法证书的既有信任条件，不在测试中更改用户证书设置；另有未受信任证书端点。
       - 电脑 loopback HTTPS 页面和 WSS echo 服务使用匹配 localhost 的证书，保存证书有效性及主机名证据。
       - 候选 App 已连接本例 Backend，并有专用终端。
     steps:
-      - 内置打开合法 HTTPS 页面并通过 WSS 发送本例唯一消息；确认页面显示正确回包，原 URL 保持 HTTPS。
+      - 内置打开合法 HTTPS 页面，通过基于预览 location 的相对 WS 发送唯一消息；确认电脑侧使用 TLS/WSS，网页 location 为 HTTP 预览域名，复制结果为原 HTTPS URL。
       - 从页面访问未受信任端点，再从终端直接打开它；确认失败且没有忽略证书继续访问入口。
-      - 核对证书终止发生在 fixture 而非代理，非法站点正文未执行；缺少合法信任环境时标 blocked，不跳过证书检查。
+      - 核对 Backend 对原 URL host 执行证书校验，非法站点正文未执行；缺少合法信任环境时标 blocked，不跳过证书检查。
 
   - id: IOSLOCAL-010
     name: 本地页的公网资源仍从手机访问

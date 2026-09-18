@@ -12,7 +12,9 @@ struct RunweaveNativeApp: App {
   var body: some Scene {
     WindowGroup {
       #if NATIVE_DIAGNOSTICS
-        if showingTerminalLab {
+        if ProcessInfo.processInfo.arguments.contains("--native-browser-proxy-probe") {
+          BrowserProxyProbe()
+        } else if showingTerminalLab {
           NavigationView {
             TerminalProbe()
               .navigationTitle("终端实验室")

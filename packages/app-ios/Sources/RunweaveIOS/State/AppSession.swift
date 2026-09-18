@@ -31,13 +31,9 @@ final class AppSession: ObservableObject {
 
   init() {
     imageDrafts.onChange = { [weak self] in self?.scheduleDraftSave() }
-    browser.currentSource = { [weak self] in self?.browserSource }
+    configureBrowser()
   }
 
-  var browserSource: BrowserContext? {
-    guard authenticated, let connection, let terminal, terminalController != nil else { return nil }
-    return BrowserContext(scope: [connection.scope, terminal.id], generation: String(generation))
-  }
   private(set) var api: APIClient?
   @Published private(set) var generation = 0
   @Published private(set) var metadataWrites = Set<String>()

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		EF932AB21F11001122330001 /* BrowserProxyProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF932AB21F11001122330002; };
 		A77C920851F940EF8A1C0011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A77C920851F940EF8A1C0012 /* Assets.xcassets */; };
 		BC1D04EF29A64F6783410091 /* Diagnostics/TerminalPerformanceCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1D04EF29A64F6783410092 /* Diagnostics/TerminalPerformanceCapture.swift */; };
 		28465006C5C473977D4EC761 /* Diagnostics/TerminalProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA9C736F19E7F60B7F6764AD /* Diagnostics/TerminalProbe.swift */; };
@@ -15,6 +16,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		EF932AB21F11001122330002 /* BrowserProxyProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics/BrowserProxyProbe.swift; sourceTree = "<group>"; };
 		A77C920851F940EF8A1C0012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = RunweaveNative/Assets.xcassets; sourceTree = "<group>"; };
 		BC1D04EF29A64F6783410092 /* Diagnostics/TerminalPerformanceCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics/TerminalPerformanceCapture.swift; sourceTree = "<group>"; };
 		61DE1B08FE2FC56EE9044434 /* RunweaveNative/RunweaveNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunweaveNative/RunweaveNativeApp.swift; sourceTree = "<group>"; };
@@ -37,6 +39,7 @@
 		AD936FCBED631FA67E05C3EA = {
 			isa = PBXGroup;
 			children = (
+				EF932AB21F11001122330002 /* BrowserProxyProbe.swift */,
 				A77C920851F940EF8A1C0012 /* Assets.xcassets */,
 				BC1D04EF29A64F6783410092 /* Diagnostics/TerminalPerformanceCapture.swift */,
 				61DE1B08FE2FC56EE9044434 /* RunweaveNative/RunweaveNativeApp.swift */,
@@ -113,6 +116,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EF932AB21F11001122330001 /* BrowserProxyProbe.swift in Sources */,
 				F2EED3E9AD51B8CDAEBE2A39 /* RunweaveNative/RunweaveNativeApp.swift in Sources */,
 				28465006C5C473977D4EC761 /* Diagnostics/TerminalProbe.swift in Sources */,
 				BC1D04EF29A64F6783410091 /* Diagnostics/TerminalPerformanceCapture.swift in Sources */,

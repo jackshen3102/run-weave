@@ -255,6 +255,18 @@ public actor APIClient {
         URLQueryItem(name: "deviceStatus", value: "1"),
       ])
   }
+  func localBrowserSocketRequest() async throws -> URLRequest {
+    guard !importingMobileLogin, var current = tokens else { throw APIError.credentialsUnavailable }
+    let epoch = authEpoch
+    if let expiry = current.expiresAt, expiry.timeIntervalSinceNow < 15 { current = try await refresh() }
+    guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
+    var request = URLRequest(url: try socketURL(path: "/ws/browser-local", query: []))
+    request.setValue("Bearer \(current.accessToken)", forHTTPHeaderField: "Authorization")
+    request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
+    request.setValue(connectionID, forHTTPHeaderField: "X-Connection-ID")
+    return request
+  }
+
   private nonisolated func socketURL(path: String, query: [URLQueryItem]) throws -> URL {
     guard var value = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
       throw APIError.invalidURL

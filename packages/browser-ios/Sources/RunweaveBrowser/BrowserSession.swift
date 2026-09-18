@@ -26,6 +26,8 @@ public final class BrowserSession: ObservableObject {
   @Published public private(set) var clearing = false
   @Published var prompt: Prompt?
   @Published public private(set) var dataStatus: String?
+  public var prepareLocalPreview: ((BrowserLocalTarget, BrowserContext) async throws -> BrowserLocalPreview)?
+  private var preparation: Task<Void, Never>?
   public var currentSource: (() -> BrowserContext?)?
   public var pageTitle: String? { page?.title }
   public var hasPrompt: Bool { prompt != nil }
@@ -107,7 +109,12 @@ public final class BrowserSession: ObservableObject {
       return
     case .internalOpen, .externalOpen: break
     }
-    guard case .web(let url) = BrowserURLPolicy.classify(intent.target) else {
+    let local = prepareLocalPreview != nil && BrowserLocalTarget(intent.target) != nil
+    if local && intent.action == .externalOpen {
+      message("电脑本地预览仅能在当前 App 的电脑连接中打开。", source: source)
+      return
+    }
+    guard case .web(let url) = BrowserURLPolicy.classify(intent.target, allowLocal: local) else {
       if case .denied(let reason) = BrowserURLPolicy.classify(intent.target) {
         message(reason, source: source)
       }
@@ -119,7 +126,7 @@ public final class BrowserSession: ObservableObject {
     case .internalOpen:
       if let page {
         guard page.source == source else { return }
-        if page.currentURL.absoluteString == url.absoluteString {
+        if page.currentURL.absoluteString == url.absoluteString || (page.localPreview != nil && page.exportURL.absoluteString == url.absoluteString) {
           resume()
           return
         }
@@ -131,7 +138,7 @@ public final class BrowserSession: ObservableObject {
   }
 
   private func create(_ url: URL, source: BrowserContext) {
-    guard !clearing, valid(source), case .web = BrowserURLPolicy.classify(url.absoluteString) else {
+    guard !clearing, valid(source), case .web = BrowserURLPolicy.classify(url.absoluteString, allowLocal: prepareLocalPreview != nil) else {
       return
     }
     guard let presentation = hostPresentation, presentation.source == source else {
@@ -141,7 +148,7 @@ public final class BrowserSession: ObservableObject {
     let presentationID = presentation.id
     invalidate()
     let expectedLifetime = lifetime
-    Task { [weak self] in
+    preparation = Task { [weak self] in
       guard let self, await self.waitForRetiredPages(), self.lifetime == expectedLifetime,
         self.valid(source), !self.clearing, self.page == nil
       else { return }
@@ -152,11 +159,34 @@ public final class BrowserSession: ObservableObject {
         self.dataStatus = "请先完成当前输入、媒体或系统操作，再主动重新打开网页。"
         return  // Drop the intent; becoming available later must not replay it.
       }
+      var preview: BrowserLocalPreview?
+      do {
+        if let target = BrowserLocalTarget(url.absoluteString), let prepare = self.prepareLocalPreview {
+          self.dataStatus = "正在连接电脑本地页面…"
+          preview = try await prepare(target, source)
+          try Task.checkCancellation()
+          try await preview?.configure()
+        }
+      } catch {
+        preview?.close()
+        if self.lifetime == expectedLifetime && self.valid(source) {
+          self.dataStatus = "本地预览未能打开：\(error.localizedDescription) 请主动重试。"
+          self.message(self.dataStatus!, source: source)
+        }
+        return
+      }
+      guard self.lifetime == expectedLifetime, self.valid(source), !Task.isCancelled,
+        self.hostPresentationAvailable(source: source, registrationID: presentationID) else {
+        preview?.close()
+        return
+      }
       self.dataStatus = nil
-      let next = BrowserPage(url: url, source: source, store: self.store, owner: self)
+      let pageURL = preview?.url ?? url
+      let next = BrowserPage(url: pageURL, source: source, store: preview?.store ?? self.store,
+        owner: self, localPreview: preview)
       self.page = next
       self.state = .presented
-      next.load(url)
+      next.load(pageURL)
     }
   }
 
@@ -176,6 +206,11 @@ public final class BrowserSession: ObservableObject {
   /// Invalidates callbacks synchronously, then retires the document without clearing identity.
   public func invalidate() {
     lifetime = UUID()
+    // Preparation notices belong to their source, even before a page exists.
+    if preparation != nil && page == nil && !clearing { dataStatus = nil }
+    preparation?.cancel()
+    preparation = nil
+    page?.localPreview?.close()
     let previous = page
     page = nil
     state = .empty
@@ -291,6 +326,7 @@ public final class BrowserSession: ObservableObject {
   private func clearData() {
     guard !clearing else { return }
     clearing = true
+    let localStores = (Array(retiringPages.values) + [page].compactMap { $0 }).compactMap { $0.localPreview?.store }
     invalidate()
     dataStatus = "正在卸载全部旧网页，尚未开始清除网站数据…"
     Task { [weak self] in
@@ -305,6 +341,9 @@ public final class BrowserSession: ObservableObject {
       // still rejects navigation even if SwiftUI retains its now-blank UIView after this point.
       // WebKit has no error-bearing deletion API, so verify records after its callback.
       let types = WKWebsiteDataStore.allWebsiteDataTypes()
+      for localStore in localStores {
+        await localStore.removeData(ofTypes: types, modifiedSince: .distantPast)
+      }
       self.store.removeData(ofTypes: types, modifiedSince: .distantPast) { [weak self] in
         Task { @MainActor in
           guard let self else { return }
