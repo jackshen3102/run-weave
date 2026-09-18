@@ -60,7 +60,19 @@ struct CaptureHome: View {
             })
           }
         }
-        if session.nextCursor != nil { Button(session.loading ? "读取中…" : "加载更多") { Task { await session.load(kind: kind, status: status, q: query, more: true, trash: tab == "trash", hideCompleted: tab == "records") } }.disabled(session.loading) }
+        if let cursor = session.nextCursor {
+          VStack(spacing: 8) {
+            if let error = session.loadMoreError {
+              Text(error).font(.footnote).foregroundStyle(.secondary)
+              Button("重试加载") { loadNextPage() }
+            } else {
+              ProgressView("正在加载更多")
+                .onAppear { loadNextPage() }
+            }
+          }.frame(maxWidth: .infinity).padding(.vertical, 12)
+            // A new cursor must trigger again if a short page leaves the footer visible.
+            .id(cursor)
+        }
       }.padding(.horizontal, 20).padding(.bottom, 90)
     }.background(SuijiTheme.background)
       .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -82,6 +94,9 @@ struct CaptureHome: View {
       }
       .scrollDismissesKeyboard(.interactively)
       .overlay(alignment: .bottomTrailing) { if tab != "trash" { CaptureButton { Task { await session.openEditor() } }.padding(20) } }
+  }
+  private func loadNextPage() {
+    Task { await session.load(kind: kind, status: status, q: query, more: true, trash: tab == "trash", hideCompleted: tab == "records") }
   }
   private var searchField: some View {
     HStack(spacing: 12) {
