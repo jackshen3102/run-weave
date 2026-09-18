@@ -31,6 +31,8 @@ struct PreviewFile: Decodable {
   let content: String
   let sizeBytes: Int
   let readonly: Bool
+  let base: String?
+  let mtimeMs: Double?
 }
 struct PreviewChange: Decodable, Identifiable {
   let path: String
@@ -49,7 +51,46 @@ struct PreviewDiff: Decodable {
 struct SelectedFile: Identifiable, Equatable {
   let path: String
   var changeKind: String?
+  var changeStatus: String?
   var id: String { (changeKind ?? "file") + ":" + path }
+}
+
+enum PreviewMutation {
+  case delete(path: String, mtimeMs: Double? = nil)
+  case reset(path: String, kind: String, status: String?)
+
+  var path: String {
+    switch self {
+    case .delete(let path, _), .reset(let path, _, _): return path
+    }
+  }
+  var title: String {
+    switch self {
+    case .delete: return "删除文件"
+    case .reset(_, "staged", _): return "Reset · 取消暂存"
+    case .reset: return "Reset · 丢弃修改"
+    }
+  }
+  var message: String {
+    let effect: String
+    switch self {
+    case .delete: effect = "将从电脑磁盘删除此文件，不会移入回收站。"
+    case .reset(_, "staged", _): effect = "仅取消此文件的暂存，保留工作区文件内容。"
+    case .reset(_, _, "untracked"): effect = "此文件尚未被 Git 跟踪，Reset 将直接删除文件，不会移入回收站。"
+    case .reset: effect = "将此文件恢复到暂存区版本，丢弃未暂存的修改。"
+    }
+    return "\(path)\n\n\(effect)"
+  }
+}
+
+func previewMutationError(_ error: Error) -> String {
+  if case APIError.http(409) = error {
+    return "操作未执行：文件或变更状态可能已变化，或项目路径不可用。请刷新后检查并重试。"
+  }
+  if case APIError.http(404) = error { return "文件已不存在，请刷新列表。" }
+  if case APIError.http(403) = error { return "无法操作项目范围外的文件，或当前连接没有操作权限。" }
+  if case APIError.http(400) = error { return "此操作只支持项目内的单个文件，不支持目录。" }
+  return displayError(error)
 }
 
 func previewError(_ error: Error) -> String {

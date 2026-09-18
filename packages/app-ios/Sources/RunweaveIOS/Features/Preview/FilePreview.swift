@@ -6,6 +6,7 @@ struct FilePreview: View {
   @ObservedObject var session: AppSession
   let projectID: String
   let file: SelectedFile
+  @ObservedObject var model: ProjectChangesModel
   var relatedChange: SelectedFile?
   var didLoad: (() -> Void)?
   @State private var payload: PreviewFile?
@@ -19,14 +20,17 @@ struct FilePreview: View {
   @State private var fullImage = false
   @State private var showingChange = false
   @State private var loadedMode: String?
+  @State private var mutation: PreviewMutation?
 
   init(
-    session: AppSession, projectID: String, file: SelectedFile, relatedChange: SelectedFile? = nil,
+    session: AppSession, projectID: String, file: SelectedFile, model: ProjectChangesModel,
+    relatedChange: SelectedFile? = nil,
     didLoad: (() -> Void)? = nil
   ) {
     self.session = session
     self.projectID = projectID
     self.file = file
+    self.model = model
     self.relatedChange = relatedChange
     self.didLoad = didLoad
     _mode = State(initialValue: file.changeKind == nil ? "preview" : "source")
@@ -82,6 +86,16 @@ struct FilePreview: View {
           if relatedChange != nil {
             Button("查看变更") { showingChange = true }
           }
+          if let kind = file.changeKind {
+            Button(kind == "staged" ? "Reset · 取消暂存" : "Reset · 丢弃修改", role: .destructive) {
+              mutation = .reset(path: file.path, kind: kind, status: file.changeStatus)
+            }.disabled(model.mutating)
+          }
+          if file.changeStatus != "deleted", payload?.base != "filesystem" {
+            Button("删除文件", role: .destructive) {
+              mutation = .delete(path: file.path, mtimeMs: payload?.mtimeMs)
+            }.disabled(model.mutating)
+          }
           Button("关闭预览") { dismiss() }
         } label: {
           Image(systemName: "ellipsis")
@@ -89,6 +103,10 @@ struct FilePreview: View {
         .accessibilityLabel("预览操作")
       }
     }
+    .modifier(PreviewMutationConfirmation(model: model, target: $mutation))
+    // Each presented level dismisses through its own native navigation binding.
+    // Clearing only the root link does not pop a nested preview on iOS.
+    .onChange(of: model.mutationRevision) { _ in dismiss() }
     .background {
       NavigationLink(isActive: $fullImage) {
         if let image {
@@ -102,7 +120,7 @@ struct FilePreview: View {
       .hidden()
       NavigationLink(isActive: $showingChange) {
         if let relatedChange {
-          FilePreview(session: session, projectID: projectID, file: relatedChange)
+          FilePreview(session: session, projectID: projectID, file: relatedChange, model: model)
         }
       } label: {
         EmptyView()
