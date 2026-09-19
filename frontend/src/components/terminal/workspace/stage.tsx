@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import type { TerminalPreviewFileLinkIntent } from "../preview/panel/file-link";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { ClientMode } from "../../../features/client-mode";
 import {
@@ -52,7 +53,9 @@ export function TerminalWorkspaceStage({
   showAgentTeamTool,
   onEditProject,
 }: TerminalWorkspaceStageProps) {
-  const { apiBase, token } = useTerminalRuntime();
+  const { apiBase, token, scope } = useTerminalRuntime();
+  const [fileLinkIntent, setFileLinkIntent] = useState<TerminalPreviewFileLinkIntent | null>(null);
+  const fileLinkSequence = useRef(0);
   const projectsQuery = useTerminalProjectsQuery();
   const sessionsQuery = useTerminalSessionsQuery();
   const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
@@ -146,6 +149,13 @@ export function TerminalWorkspaceStage({
       : activeParentProject?.projectId === activeProjectId
         ? activeParentProject
         : null;
+  const pendingFileLink = fileLinkIntent?.scope === scope &&
+    fileLinkIntent.projectId === activeProject?.projectId &&
+    fileLinkIntent.terminalSessionId === activeSession?.terminalSessionId
+    ? fileLinkIntent : null;
+  useEffect(() => {
+    setFileLinkIntent(null);
+  }, [scope, activeProjectId, activeSessionId]);
   const panelSplitEnabled = activeSession?.panelSplitEnabled ?? false;
   const activePanelWorkspace = activeSession
     ? (panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null)
@@ -207,6 +217,15 @@ export function TerminalWorkspaceStage({
                       key={`${apiBase}:${session.terminalSessionId}:surface:${agentRecoveryRevisionBySessionId[session.terminalSessionId] ?? 0}`}
                     >
                       <TerminalSurface
+                        onOpenFileLink={(reference, panelId) => {
+                          if (!isActive || !activeProject) return;
+                          setFileLinkIntent({ ...reference, panelId,
+                            id: ++fileLinkSequence.current, scope,
+                            projectId: activeProject.projectId,
+                            terminalSessionId: session.terminalSessionId,
+                          });
+                          useTerminalPreviewStore.getState().openPreview(activeProject.projectId);
+                        }}
                         active={isActive}
                         activeCommand={session.activeCommand}
                         clientMode={clientMode}
@@ -218,11 +237,7 @@ export function TerminalWorkspaceStage({
                           session.terminalState
                         }
                         paneWorkspace={
-                          session.panelSplitEnabled
-                            ? (panelWorkspaceBySessionId[
-                                session.terminalSessionId
-                              ] ?? null)
-                            : null
+                          panelWorkspaceBySessionId[session.terminalSessionId] ?? null
                         }
                         onResizePane={
                           !isMobileMonitor && session.panelSplitEnabled
@@ -237,7 +252,7 @@ export function TerminalWorkspaceStage({
                             : undefined
                         }
                         onViewportResize={
-                          session.panelSplitEnabled
+                          (session.panelSplitEnabled || (panelWorkspaceBySessionId[session.terminalSessionId]?.panels.length ?? session.panelCount ?? 1) > 1)
                             ? () => {
                                 onRefreshPanelWorkspace(
                                   session.terminalSessionId,
@@ -269,6 +284,8 @@ export function TerminalWorkspaceStage({
             }
           >
             <TerminalPreviewPanel
+              fileLinkIntent={pendingFileLink}
+              onFileLinkDone={() => setFileLinkIntent(null)}
               activeProject={activeProject}
               activeSession={activeSession}
               sessions={sessions}
@@ -296,6 +313,8 @@ export function TerminalWorkspaceStage({
                 }
               >
                 <TerminalPreviewPanel
+                  fileLinkIntent={pendingFileLink}
+                  onFileLinkDone={() => setFileLinkIntent(null)}
                   activeProject={activeProject}
                   activeSession={activeSession}
                   sessions={sessions}

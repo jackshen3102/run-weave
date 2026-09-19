@@ -1,3 +1,4 @@
+import { parseTerminalFileReference, type TerminalFileReference, type TerminalFileLinkContext } from "@runweave/shared/terminal/file-link";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RuntimeStatusItem } from "@runweave/shared/runtime-status";
@@ -55,6 +56,7 @@ interface TerminalSurfaceProps {
     cells: number,
   ) => void;
   onViewportResize?: () => void;
+  onOpenFileLink?: (reference: TerminalFileReference, panelId?: string) => void;
 }
 
 export function TerminalSurface({
@@ -68,6 +70,7 @@ export function TerminalSurface({
   terminalState,
   onResizePane,
   onViewportResize,
+  onOpenFileLink,
 }: TerminalSurfaceProps) {
   const { apiBase, onAuthExpired, token } = useTerminalRuntime();
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
@@ -94,6 +97,34 @@ export function TerminalSurface({
   const onViewportResizeRef = useRef(onViewportResize);
   const onAuthExpiredRef = useRef(onAuthExpired);
   const openTerminalLinkRef = useRef<(uri: string) => void>(() => undefined);
+  const openTerminalFileLink = useMemoizedFn((text: string, event: MouseEvent, context?: TerminalFileLinkContext) => {
+    if (!active || !onOpenFileLink) return;
+    const reference = parseTerminalFileReference(text);
+    if (!reference) {
+      setPasteError("This file link is not supported on the connected backend");
+      return;
+    }
+    let panelId: string | undefined;
+    if (paneWorkspace && paneWorkspace.panels.length > 1) {
+      const screen = terminalRef.current?.element?.querySelector(".xterm-screen");
+      const bounds = screen?.getBoundingClientRect();
+      const terminal = terminalRef.current;
+      if (!bounds || !terminal) return;
+      const x = Math.floor((event.clientX - bounds.left) * terminal.cols / bounds.width);
+      const y = Math.floor((event.clientY - bounds.top) * terminal.rows / bounds.height);
+      panelId = paneWorkspace.panels.find(({ geometry: g }) => g &&
+        x >= g.paneLeft && x < g.paneLeft + g.paneWidth &&
+        y >= g.paneTop && y < g.paneTop + g.paneHeight)?.panelId;
+      if (!panelId) {
+        setPasteError("Cannot determine the source terminal panel. Refresh the terminal and try again.");
+        return;
+      }
+    }
+    onOpenFileLink({ ...reference, context }, panelId);
+  });
+  const paneWorkspaceRef = useRef(paneWorkspace);
+  paneWorkspaceRef.current = paneWorkspace;
+  const openTerminalFileLinkRef = useRef(openTerminalFileLink);
   const tokenRef = useRef(token);
   const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
   const lastResizedAtRef = useRef<number | null>(null);
@@ -372,6 +403,8 @@ export function TerminalSurface({
     onViewportResizeRef,
     onUserInputData: floatingComposer.handleUserInputData,
     openTerminalLinkRef,
+    openTerminalFileLinkRef,
+    paneWorkspaceRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
     searchAddonRef: search.addonRef,

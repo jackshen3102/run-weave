@@ -168,6 +168,12 @@ export function TerminalWorkspaceShell({
       ) ?? null)
     : null;
   const panelSplitEnabled = activeSession?.panelSplitEnabled ?? false;
+  const activePanelWorkspace = useTerminalWorkspaceStore((state) =>
+    activeSession ? state.panelWorkspaceBySessionId[activeSession.terminalSessionId] : undefined,
+  );
+  const panelCount = activePanelWorkspace?.panels.length ?? activeSession?.panelCount ?? 1;
+  const hasMultiplePanels = panelCount > 1;
+  const missingPaneGeometry = !activePanelWorkspace || activePanelWorkspace.panels.some((panel) => !panel.geometry);
   const requestCreateProject = useMemoizedFn(() => {
     setPreviewActiveTool("preview");
     setProjectDialogError(null);
@@ -293,7 +299,8 @@ export function TerminalWorkspaceShell({
     if (
       !activeSession?.terminalSessionId ||
       isMobileMonitor ||
-      !panelSplitEnabled
+      !(panelSplitEnabled || hasMultiplePanels) ||
+      !missingPaneGeometry
     ) {
       return;
     }
@@ -318,8 +325,11 @@ export function TerminalWorkspaceShell({
     };
   }, [
     activeSession?.terminalSessionId,
+    panelCount,
+    missingPaneGeometry,
     apiBase,
     isMobileMonitor,
+    hasMultiplePanels,
     panelSplitEnabled,
     setActivePanelIdBySessionId,
     setPanelWorkspaceBySessionId,

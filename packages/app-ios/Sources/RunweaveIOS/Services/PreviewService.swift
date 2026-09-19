@@ -72,3 +72,15 @@ extension APIClient {
     previewCache.entries = previewCache.entries.filter { !$0.key.hasPrefix(prefix) }
   }
 }
+
+extension APIClient {
+  func terminalFileWorkspace(terminalID: String) async throws -> TerminalFileWorkspace {
+    try await authorized("/api/terminal/session/\(Self.pathComponent(terminalID))/panels")
+  }
+  func resolveTerminalFile(projectID: String, terminalID: String, path: String, panelID: String?, context: TerminalFileLinkContext?) async throws -> TerminalFileResolution {
+    var body: [String: Any] = ["path": path, "terminalSessionId": terminalID]
+    if let panelID { body["panelId"] = panelID }
+    if let context { body["context"] = ["linePrefix": context.linePrefix, "precedingLines": context.precedingLines] }
+    return try await authorized(previewPath(projectID, "resolve-link"), method: "POST", body: body)
+  }
+}

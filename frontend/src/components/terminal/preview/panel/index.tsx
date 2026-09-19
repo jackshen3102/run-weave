@@ -1,3 +1,4 @@
+import { TerminalPreviewFileLink, type TerminalPreviewFileLinkIntent } from "./file-link";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, type ReactNode } from "react";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
@@ -27,6 +28,8 @@ import { useTerminalMarkdownReferenceActions } from "../../markdown/use-actions"
 import { useTerminalPreviewFileMutations } from "../files/use-mutations";
 import { TerminalBrowserAutomationTool } from "../../automation/tool";
 interface TerminalPreviewPanelProps {
+  fileLinkIntent?: TerminalPreviewFileLinkIntent | null;
+  onFileLinkDone?: () => void;
   activeProject: TerminalProjectListItem | null;
   activeSession: TerminalSessionListItem | null;
   sessions: TerminalSessionListItem[];
@@ -57,6 +60,8 @@ function shouldIgnoreQuickSearchShortcut(target: EventTarget | null): boolean {
 }
 
 export function TerminalPreviewPanel({
+  fileLinkIntent,
+  onFileLinkDone,
   activeProject,
   activeSession,
   sessions,
@@ -250,18 +255,22 @@ export function TerminalPreviewPanel({
     },
   });
 
-  const openQuickSearchFileResult = useMemoizedFn(
-    (filePath: string, target?: { line: number; column: number }): void => {
+  const openPreviewFile = useMemoizedFn(
+    (filePath: string, target?: { line?: number; column?: number }): void => {
       if (!projectId || !confirmDiscardDraft()) {
         return;
       }
+      // Reopening the same file must discard an approved draft as well; query
+      // structural sharing may otherwise keep the editor's loaded object intact.
+      if (isDirty && filePreview) replaceLoadedFile(filePreview);
       quickSearch.closeSearch();
       setActiveTool("preview");
-      openFileInStore(projectId, filePath, "explorer");
-      void fileTree.revealFile(filePath);
+      const projectRelative = !filePath.startsWith("/") && hasProjectPath;
+      openFileInStore(projectId, filePath, projectRelative ? "explorer" : "file");
+      if (projectRelative) void fileTree.revealFile(filePath);
       clearFilePreview(filePath);
       setMarkdownScrollRatio(0);
-      markdownReference.setTarget(filePath, target);
+      markdownReference.setTarget(filePath, target?.line ? { line: target.line, column: target.column ?? 1 } : undefined);
     },
   );
 
@@ -317,7 +326,7 @@ export function TerminalPreviewPanel({
   let previewBody: ReactNode;
   if (!activeProject) {
     previewBody = renderPreviewEmpty("No project selected");
-  } else if (!hasProjectPath) {
+  } else if (!hasProjectPath && !((mode === "file" || mode === "explorer") && selectedFilePath?.startsWith("/"))) {
     previewBody = renderPreviewEmpty(
       "Set a project path to use Preview",
       <Button
@@ -541,10 +550,17 @@ export function TerminalPreviewPanel({
         onOpenChange={quickSearch.setOpen}
         onModeChange={quickSearch.setMode}
         onQueryChange={quickSearch.setQuery}
-        onOpenFile={openQuickSearchFileResult}
+        onOpenFile={openPreviewFile}
         onRevealDirectory={revealQuickSearchDirectory}
       />
 
+      {fileLinkIntent ? <TerminalPreviewFileLink
+        key={fileLinkIntent.id}
+        intent={fileLinkIntent}
+        onOpen={openPreviewFile}
+        onDone={() => onFileLinkDone?.()}
+        onError={handleRequestError}
+      /> : null}
       <TerminalPreviewRenameDialog
         error={mutations.error}
         path={mutations.renamePath}

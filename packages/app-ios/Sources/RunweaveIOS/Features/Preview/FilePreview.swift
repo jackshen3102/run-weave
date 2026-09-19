@@ -9,6 +9,9 @@ struct FilePreview: View {
   @ObservedObject var model: ProjectChangesModel
   var relatedChange: SelectedFile?
   var didLoad: (() -> Void)?
+  var targetLine: Int?
+  var targetColumn: Int?
+  var onClose: (() -> Void)?
   @State private var payload: PreviewFile?
   @State private var diff: PreviewDiff?
   @State private var lines: [DiffLine] = []
@@ -25,7 +28,7 @@ struct FilePreview: View {
   init(
     session: AppSession, projectID: String, file: SelectedFile, model: ProjectChangesModel,
     relatedChange: SelectedFile? = nil,
-    didLoad: (() -> Void)? = nil
+    didLoad: (() -> Void)? = nil, targetLine: Int? = nil, targetColumn: Int? = nil, onClose: (() -> Void)? = nil
   ) {
     self.session = session
     self.projectID = projectID
@@ -33,7 +36,10 @@ struct FilePreview: View {
     self.model = model
     self.relatedChange = relatedChange
     self.didLoad = didLoad
-    _mode = State(initialValue: file.changeKind == nil ? "preview" : "source")
+    self.targetLine = targetLine
+    self.targetColumn = targetColumn
+    self.onClose = onClose
+    _mode = State(initialValue: file.changeKind == nil && targetLine == nil ? "preview" : "source")
   }
 
   private var content: String { diff?.newContent ?? payload?.content ?? "" }
@@ -61,13 +67,17 @@ struct FilePreview: View {
         } else if mode == "preview", ["md", "markdown"].contains(suffix) {
           MarkdownPreview(content: content)
         } else {
-          GeometryReader { geometry in
-            ScrollView([.horizontal, .vertical]) {
-              Text(verbatim: content).font(.system(size: 13, design: .monospaced))
-                .textSelection(.enabled).padding()
-                .frame(
-                  minWidth: geometry.size.width, minHeight: geometry.size.height,
-                  alignment: .topLeading)
+          if let targetLine {
+            FileSourceLocation(content: content, line: targetLine, column: targetColumn ?? 1)
+          } else {
+            GeometryReader { geometry in
+              ScrollView([.horizontal, .vertical]) {
+                Text(verbatim: content).font(.system(size: 13, design: .monospaced))
+                  .textSelection(.enabled).padding()
+                  .frame(
+                    minWidth: geometry.size.width, minHeight: geometry.size.height,
+                    alignment: .topLeading)
+              }
             }
           }
         }
@@ -91,12 +101,12 @@ struct FilePreview: View {
               mutation = .reset(path: file.path, kind: kind, status: file.changeStatus)
             }.disabled(model.mutating)
           }
-          if file.changeStatus != "deleted", payload?.base != "filesystem" {
+          if file.changeStatus != "deleted", payload?.base != "filesystem", payload?.readonly != true, !file.readonly, !loading, failure == nil {
             Button("删除文件", role: .destructive) {
               mutation = .delete(path: file.path, mtimeMs: payload?.mtimeMs)
             }.disabled(model.mutating)
           }
-          Button("关闭预览") { dismiss() }
+          Button("关闭预览") { if let onClose { onClose() } else { dismiss() } }
         } label: {
           Image(systemName: "ellipsis")
         }
@@ -195,5 +205,52 @@ struct FilePreview: View {
       guard let decoded = UIImage(data: data) else { throw APIError.http(415) }
       if !Task.isCancelled { image = decoded }
     } catch { if !Task.isCancelled { failure = previewError(error) } }
+  }
+}
+
+private struct FileSourceLocation: View {
+  let content: String
+  let line: Int
+  let column: Int
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Text("第 \(line) 行 · 第 \(column) 列").font(.caption).padding(.horizontal)
+        .accessibilityIdentifier("preview-file-location")
+      FileSourceText(content: content, line: line, column: column)
+    }
+  }
+}
+
+private struct FileSourceText: UIViewRepresentable {
+  let content: String
+  let line: Int
+  let column: Int
+
+  func makeUIView(context: Context) -> UITextView {
+    let view = UITextView()
+    view.isEditable = false
+    view.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+    view.backgroundColor = .systemBackground
+    view.textColor = .label
+    view.accessibilityIdentifier = "preview-file-source"
+    return view
+  }
+
+  func updateUIView(_ view: UITextView, context: Context) {
+    guard view.text != content else { return }
+    view.text = content
+    let lines = content.components(separatedBy: "\n")
+    let index = min(max(0, line - 1), lines.count - 1)
+    let start = lines.prefix(index).reduce(0) { $0 + $1.utf16.count + 1 }
+    let offset = min(max(0, column - 1), lines[index].utf16.count)
+    let range = NSRange(location: start + offset, length: offset < lines[index].utf16.count ? 1 : 0)
+    let highlighted = NSMutableAttributedString(string: content, attributes: [
+      .font: UIFont.monospacedSystemFont(ofSize: 13, weight: .regular), .foregroundColor: UIColor.label])
+    if range.length > 0 {
+      highlighted.addAttribute(.backgroundColor, value: UIColor.systemYellow.withAlphaComponent(0.35), range: range)
+    }
+    view.attributedText = highlighted
+    view.selectedRange = range
+    DispatchQueue.main.async { view.scrollRangeToVisible(range) }
   }
 }

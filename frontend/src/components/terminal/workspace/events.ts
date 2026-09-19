@@ -197,7 +197,18 @@ export function useTerminalWorkspaceEvents({
             ) {
               continue;
             }
-            next[event.terminalSessionId] = workspace;
+            const previous = next[event.terminalSessionId];
+            const samePanels = previous?.panels.length === workspace.panels.length &&
+              workspace.panels.every((panel) => previous.panels.some((item) => item.panelId === panel.panelId));
+            // Focus events carry no tmux geometry. Retain the last measured layout
+            // only while panel membership is unchanged; structural changes refetch it.
+            next[event.terminalSessionId] = samePanels ? {
+              ...workspace,
+              panels: workspace.panels.map((panel) => ({
+                ...panel,
+                geometry: panel.geometry ?? previous.panels.find((item) => item.panelId === panel.panelId)?.geometry,
+              })),
+            } : workspace;
             changed = true;
           }
           return changed ? next : current;

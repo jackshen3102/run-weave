@@ -29,7 +29,7 @@ export interface TerminalPreviewAssetResponse {
   path: string;
   absolutePath: string;
   base: TerminalPreviewBase;
-  projectPath: string;
+  projectPath: string | null;
   mimeType: string;
   content: Buffer;
   sizeBytes: number;
@@ -90,7 +90,7 @@ export async function readPreviewFile(params: {
   projectPath: string | null | undefined;
   requestedPath: string;
 }): Promise<TerminalPreviewFileResponse> {
-  const projectPath = ensureProjectPath(params.projectPath);
+  const projectPath = params.projectPath ?? null;
   const { absolutePath, base, previewPath } = await resolvePreviewPath(
     projectPath,
     params.requestedPath,
@@ -306,7 +306,7 @@ export async function readPreviewAsset(params: {
   projectPath: string | null | undefined;
   requestedPath: string;
 }): Promise<TerminalPreviewAssetResponse> {
-  const projectPath = ensureProjectPath(params.projectPath);
+  const projectPath = params.projectPath ?? null;
   const { absolutePath, base, previewPath } = await resolvePreviewPath(
     projectPath,
     params.requestedPath,

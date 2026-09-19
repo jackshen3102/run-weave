@@ -72,7 +72,8 @@
     "./device-notifications": "./src/monitoring/device-notifications.ts",
     "./terminal/agent-resume": "./src/terminal/agent-resume.ts",
     "./experience": "./src/experience.ts",
-    "./browser-local-tunnel": "./src/browser/local-tunnel.ts"
+    "./browser-local-tunnel": "./src/browser/local-tunnel.ts",
+    "./terminal/file-link": "./src/terminal/file-link.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

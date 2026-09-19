@@ -354,3 +354,29 @@ diff --git a/Plugins/SwiftTermBuildInfoPlugin/plugin.swift b/Plugins/SwiftTermBu
  
          try FileManager.default.createDirectory(
              at: context.pluginWorkDirectoryURL,
+
+diff --git a/Sources/SwiftTerm/Terminal.swift b/Sources/SwiftTerm/Terminal.swift
+index 194f0c9c..b55d93ba 100644
+--- a/Sources/SwiftTerm/Terminal.swift
++++ b/Sources/SwiftTerm/Terminal.swift
+@@ -7204,0 +7205,9 @@ open class Terminal {
++    /// Display-buffer cells for host actions, including frozen history.
++    public func displayLine(atBufferRow row: Int) -> BufferLine? {
++        let buffer = displayBuffer
++        guard row >= 0, row < buffer.lines.count else { return nil }
++        return buffer.lines[row]
++    }
++
++    public var displayTopVisibleRow: Int { displayBuffer.yDisp }
++
+diff --git a/Sources/SwiftTerm/iOS/iOSTerminalView.swift b/Sources/SwiftTerm/iOS/iOSTerminalView.swift
+index 52df2c2c..ac6a6a09 100644
+--- a/Sources/SwiftTerm/iOS/iOSTerminalView.swift
++++ b/Sources/SwiftTerm/iOS/iOSTerminalView.swift
+@@ -159,0 +160,4 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
++    /// Optional host action using the same bidi-aware buffer hit as native links.
++    /// Returning true consumes only an unselected single tap; selection and scrolling are unchanged.
++    public var singleTapLinkHandler: ((Position) -> Bool)?
++
+@@ -815,0 +820 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
++            if singleTapLinkHandler?(hit) == true { return }

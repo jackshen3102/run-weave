@@ -7,6 +7,7 @@ import UIKit
 public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDelegate {
   public let terminalView: TerminalView
   public var view: UIView { terminalView }
+  public var openFileRequested: ((TerminalFileTap) -> Void)?
   public var openLinkRequested: ((BrowserOpenIntent) -> Void)?
   public var rawInput: (([UInt8]) -> Void)?
   public var viewportChanged: ((Int, Int) -> Void)?
@@ -73,6 +74,12 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
         guard let self, self.active else { return }
         self.openLinkRequested?(intent)
       }
+      view.singleTapLinkHandler = { [weak self, weak view] hit in
+        guard let self, self.active, let view,
+          let tap = TerminalFileTap.capture(view.getTerminal(), hit: hit) else { return false }
+        self.openFileRequested?(tap)
+        return true
+      }
       view.installLinkMenu()
       view.linkHighlightMode = .always
       view.opensLinksOnSingleTap = true
@@ -126,6 +133,8 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
     tmuxScroll = nil
     terminalView.terminalDelegate = nil
     (terminalView as? NativeTerminalView)?.disposeLinkMenu()
+    terminalView.singleTapLinkHandler = nil
+    openFileRequested = nil
     openLinkRequested = nil
     rawInput = nil
     viewportChanged = nil
@@ -156,7 +165,9 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   public func setTerminalTitle(source: TerminalView, title: String) {}
   public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
   public func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-    guard active else { return }
+    // Supported file links are consumed by singleTapLinkHandler. Do not send
+    // unsupported file:// targets through the browser fallback.
+    guard active, !link.lowercased().hasPrefix("file:") else { return }
     openLinkRequested?(BrowserOpenIntent(target: link, origin: .host, action: .internalOpen))
   }
   public func clipboardCopy(source: TerminalView, content: Data) {}
