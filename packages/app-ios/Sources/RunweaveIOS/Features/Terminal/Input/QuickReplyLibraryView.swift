@@ -21,10 +21,6 @@ struct QuickReplyLibraryView: View {
 
   var body: some View {
     List {
-      Section {
-        Text("仅此设备保存，不上传或同步；卸载后不保证恢复。")
-          .font(.caption).foregroundColor(.secondary)
-      }
       if store.loading { ProgressView("正在读取…") }
       if let error = store.readError {
         Section {
@@ -92,12 +88,10 @@ struct QuickReplyLibraryView: View {
         .accessibilityIdentifier("quick-reply-add")
       }
     }
-    .background {
-      NavigationLink(isActive: $showingEditor) {
+    .sheet(isPresented: $showingEditor) {
+      NavigationView {
         QuickReplyEditorView(item: editing)
-      } label: {
-        EmptyView()
-      }.hidden()
+      }.navigationViewStyle(.stack)
     }
     .confirmationDialog(
       "删除快捷回复？",
