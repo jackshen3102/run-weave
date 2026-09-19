@@ -172,3 +172,5 @@ Debug 的认证撤销按钮另需 `--native-auth-validation`，只用于本例�
 - [技术决策](docs/decisions.md)：依赖、签名、重试、预览和诊断约束。
 - [验收状态](docs/validation-status.md)：当前计划、已有证据边界与未关闭问题。
 - [编码约束](AGENTS.md)：本目录的变更与验证要求。
+
+模拟器安装前先按[共享设备池](../../docs/cli/ios-simulators.md)申请本 App 槽位，整个验证任务共用 task-dir，结束执行 finish。

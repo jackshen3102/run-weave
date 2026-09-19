@@ -1,3 +1,4 @@
+import { persistBackendHealthAuth } from "../../lib/backend-health-auth.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -128,6 +129,7 @@ export async function startDedicatedBackend({
     appServerToken = readFileSync(appServer.tokenPath, "utf8").trim();
   }
   const backendBaseEnv = { ...process.env };
+  await persistBackendHealthAuth(profileDir, sessionId, backendBaseEnv);
   for (const key of [
     "RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR",
     "RUNWEAVE_APP_SERVER_DISCOVERY",
@@ -187,7 +189,7 @@ export async function startDedicatedBackend({
       body?.resourceNamespace === namespace &&
       hasCapabilities(body?.capabilities, ["dev-session-identity-v1"]),
     processInfo,
-    { detectFailure: detectProfileConflict },
+    { detectFailure: detectProfileConflict, backendProfileDir: profileDir },
   );
   processInfo.processSignature = readProcessSignature(processInfo.pid);
   const lock = await readJson(lockPath);

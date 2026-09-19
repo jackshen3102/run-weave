@@ -58,6 +58,10 @@ export default defineConfig({
             },
           }
         : {}),
+      "/share/terminal": {
+        target: backendTarget,
+        changeOrigin: true,
+      },
       "/api": {
         target: backendTarget,
         changeOrigin: true,

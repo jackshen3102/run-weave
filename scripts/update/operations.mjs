@@ -266,6 +266,7 @@ export async function openApp(appPath, options = {}) {
     });
   }
   if (
+    process.env.RUNWEAVE_DEV_SESSION_ID ||
     process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND === "false" ||
     process.env.RUNWEAVE_APP_SERVER_DISCOVERY === "explicit"
   ) {

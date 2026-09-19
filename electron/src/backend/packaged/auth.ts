@@ -13,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { resolveBrowserProfileDir } from "@runweave/shared/browser-profile-node";
 import { isBetaChannel, isDev } from "../../desktop/config.js";
+import { localBackendAuthHeaders, restoreOwnedBackendHealthEnv } from "../health-auth.js";
 
 interface PackagedBackendAuthConfig {
   username: string;
@@ -252,11 +253,20 @@ export async function requestBetaCliAuth(
   baseUrl: string,
   authConfig: PackagedBackendAuthConfig,
 ): Promise<BetaCliAuthResponse> {
+  const profileDir = resolvePackagedBackendProfileDir();
+  const backendEnv = restoreOwnedBackendHealthEnv({
+    ...process.env,
+    BROWSER_PROFILE_DIR: profileDir,
+  });
+  const authHeaders = (endpoint: string): Record<string, string> =>
+    localBackendAuthHeaders(endpoint, profileDir, backendEnv);
   const refreshToken = readBetaCliRefreshToken();
   if (refreshToken) {
     const refreshResponse = await net.fetch(`${baseUrl}/api/auth/refresh`, {
       method: "POST",
+      redirect: "error",
       headers: {
+        ...authHeaders(`${baseUrl}/api/auth/refresh`),
         "Content-Type": "application/json",
         "x-auth-client": "electron",
       },
@@ -269,7 +279,9 @@ export async function requestBetaCliAuth(
 
   const loginResponse = await net.fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
+    redirect: "error",
     headers: {
+      ...authHeaders(`${baseUrl}/api/auth/login`),
       "Content-Type": "application/json",
       "x-auth-client": "electron",
     },

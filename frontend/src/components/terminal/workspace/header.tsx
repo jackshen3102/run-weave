@@ -11,9 +11,11 @@ import {
   MoreHorizontal,
   RefreshCw,
   Settings2,
+  Share2,
 } from "lucide-react";
 import { useMemoizedFn } from "ahooks";
 import { useState } from "react";
+import { useSnapshotShareStore } from "../../../features/terminal/state/snapshot-share-store";
 import type { ConnectionConfig } from "../../../features/connection/types";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useShallow } from "zustand/react/shallow";
@@ -124,6 +126,8 @@ export function TerminalWorkspaceHeader({
     useTerminalProjectContextsQuery(activeParentProjectId).data ??
     EMPTY_TERMINAL_PROJECT_CONTEXTS;
   const [recoveringAgent, setRecoveringAgent] = useState(false);
+  const sharing = useSnapshotShareStore((state) => state.pending);
+  const createShare = useSnapshotShareStore((state) => state.createShare);
   const activeParentProject =
     projects.find(
       (project) => project.projectId === activeParentProjectId,
@@ -144,6 +148,13 @@ export function TerminalWorkspaceHeader({
   const activeSession =
     sessions.find((session) => session.terminalSessionId === activeSessionId) ??
     null;
+  const activePanelId = activeSession
+    ? activePanelIdBySessionId[activeSession.terminalSessionId] ?? activeSession.activePanelId
+    : null;
+  const shareActivePanel = useMemoizedFn(async (): Promise<void> => {
+    if (!activeSession || !activePanelId) return;
+    await createShare(apiBase, token, activeSession.terminalSessionId, activePanelId);
+  });
   const openHistoryDrawer = (): void => {
     if (!activeSession) return;
     setHistoryTerminalSessionId(activeSession.terminalSessionId);
@@ -300,6 +311,13 @@ export function TerminalWorkspaceHeader({
             >
               <Copy className="h-4 w-4" />
               Copy terminal output…
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={loading || sharing || !activePanelId}
+              onSelect={() => { void shareActivePanel(); }}
+            >
+              <Share2 className="h-4 w-4" />
+              {sharing ? "正在创建快照…" : "分享终端快照"}
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={

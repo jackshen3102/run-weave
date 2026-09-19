@@ -11,6 +11,7 @@ import {
   stopSessionServices,
 } from "../services/index.mjs";
 import { processIdentityMatches } from "../services/runtime.mjs";
+import { cleanupIncompleteBetaStart } from "../services/beta-start-recovery.mjs";
 import { inspectMissingBetaLease } from "./missing-beta-lease.mjs";
 import {
   acquireBetaSlotRecoveryClaim,
@@ -207,6 +208,14 @@ export async function runStop(options, sourceRoot, helpers) {
       manifest = updateManifest(manifest, { state: "stopping" });
       await writeManifest(manifest);
       try {
+        if (betaSlot) {
+          await assertBetaSlotLease({
+            slotId: betaSlot.assignedSlotId,
+            ownerSessionId: manifest.devSessionId,
+            leaseNonce: betaSlot.leaseNonce,
+          });
+          await cleanupIncompleteBetaStart(manifest);
+        }
         let cleanup = await cleanupStaleSessionServices(
           manifest.services,
           retryingPartialCleanup ? { serviceNames: retryServiceNames } : {},

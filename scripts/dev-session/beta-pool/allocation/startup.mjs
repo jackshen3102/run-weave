@@ -36,6 +36,7 @@ export async function acquireStartBetaSlotLease({
           "beta_pool_storage_migration_busy",
           "beta_pool_storage_migration_blocked",
           "beta_pool_storage_conflict",
+          "beta_pool_recovery_claim_busy",
         ].includes(error.details?.code)
       ) {
         throw error;

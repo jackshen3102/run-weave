@@ -25,6 +25,8 @@ import { logger } from "../logging/index";
 import { LowDbTerminalQuickInputStore } from "../terminal/quick-input/lowdb-store";
 import { TerminalQuickInputService } from "../terminal/quick-input/service";
 import { loadOrCreateHookToken } from "../terminal/application/hook-token";
+import { TerminalSnapshotShareService } from "../terminal/snapshot-share/service";
+import { TerminalSnapshotShareStore } from "../terminal/snapshot-share/store";
 import { PtyService } from "../terminal/runtime/pty-service";
 import { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
 import { TmuxLifecycleCoordinator } from "../terminal/tmux/lifecycle-coordinator";
@@ -86,6 +88,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   authCookieName: string;
   authSecureCookies: boolean;
   terminalSessionManager: TerminalSessionManager;
+  terminalSnapshotShareService: TerminalSnapshotShareService;
   workspaceServiceManager: RuntimeStatusWorkspaceServiceManager;
   terminalQuickInputStore: LowDbTerminalQuickInputStore;
   terminalQuickInputService: TerminalQuickInputService;
@@ -337,6 +340,13 @@ async function assembleRuntimeServices(
   });
   resources.defer("tmux-output-watcher", () => tmuxOutputWatcher.dispose());
   await terminalSessionManager.initialize();
+  const terminalSnapshotShareService = new TerminalSnapshotShareService(
+    new TerminalSnapshotShareStore(storagePaths.terminalSnapshotShareDir),
+    terminalSessionManager,
+    tmuxService,
+  );
+  resources.defer("terminal-snapshot-shares", () => terminalSnapshotShareService.dispose());
+  await terminalSnapshotShareService.initialize();
   const workspaceServiceManager = new RuntimeStatusWorkspaceServiceManager(
     terminalSessionManager,
   );
@@ -563,6 +573,7 @@ async function assembleRuntimeServices(
     authCookieName: authConfig.refreshCookieName,
     authSecureCookies: authConfig.secureCookies,
     terminalSessionManager,
+    terminalSnapshotShareService,
     workspaceServiceManager,
     terminalQuickInputStore,
     terminalQuickInputService,

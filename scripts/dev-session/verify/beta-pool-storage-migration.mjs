@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
   acquireBetaSlotLease,
+  acquireBetaSlotRecoveryClaim,
+  releaseBetaSlotRecoveryClaim,
   inspectBetaPool,
   inspectBetaPoolStorage,
   prepareBetaPoolStorageForAllocation,
@@ -214,6 +217,159 @@ async function verifyConflictAndConcurrency(root) {
     (await inspectBetaPoolStorage({ homeDir: concurrentHome })).mode,
     "canonical",
   );
+}
+
+export async function verifyBetaRecoveryClaimTransitions(homeDir) {
+  const pool = await prepareBetaPoolStorageForAllocation({ homeDir });
+  const slotId = "pool-01";
+  const claimPath = path.join(pool.recoveryClaimsDir, `${slotId}.lock`);
+  const ownerPath = path.join(claimPath, "owner.json");
+  const guardPath = path.join(pool.recoveryClaimsDir, `.${slotId}.transition`);
+  const acquire = () => acquireBetaSlotRecoveryClaim(slotId, pool);
+  const assertGuardReleased = () =>
+    assert.rejects(fs.lstat(guardPath), { code: "ENOENT" });
+
+  // Ambiguous, missing and symlink owner records never imply dead ownership.
+  const original = await acquire();
+  const ownerBytes = await fs.readFile(ownerPath, "utf8");
+  for (const content of [
+    "{", "{}", "",
+    JSON.stringify({ ...original.claim, processSignature: "unproven-or-old-generation" }),
+  ]) {
+    await fs.writeFile(ownerPath, content);
+    assert.equal(await acquire(), null);
+    assert.equal(await fs.readFile(ownerPath, "utf8"), content);
+    await assertGuardReleased();
+  }
+  await fs.rename(ownerPath, path.join(homeDir, "retired-owner.json"));
+  assert.equal(await acquire(), null);
+  assert((await fs.lstat(claimPath)).isDirectory());
+  const externalOwner = path.join(homeDir, "external-owner.json");
+  await fs.writeFile(externalOwner, ownerBytes);
+  await fs.symlink(externalOwner, ownerPath);
+  assert.equal(await acquire(), null);
+  assert((await fs.lstat(ownerPath)).isSymbolicLink());
+  await assertGuardReleased();
+  await fs.rm(ownerPath);
+  await fs.writeFile(ownerPath, ownerBytes);
+  // Recreating a file cannot restore the original generation's release authority.
+  await assert.rejects(
+    releaseBetaSlotRecoveryClaim(original, pool),
+    /identity drifted/,
+  );
+  await assertGuardReleased();
+  await fs.rm(claimPath, { recursive: true }); // Only this fixture's deliberately corrupted claim.
+
+  // Real child publishes a claim then exits: the original owner is proven dead.
+  const moduleUrl = new URL("../beta-pool/index.mjs", import.meta.url);
+  const code = `
+    import { prepareBetaPoolStorageForAllocation, acquireBetaSlotRecoveryClaim } from ${JSON.stringify(moduleUrl.href)};
+    const pool = await prepareBetaPoolStorageForAllocation({homeDir:${JSON.stringify(homeDir)}});
+    const claim = await acquireBetaSlotRecoveryClaim(${JSON.stringify(slotId)}, pool);
+    process.stdout.write(JSON.stringify(claim.claim));
+  `;
+  const deadOwner = JSON.parse(
+    execFileSync(process.execPath, ["--input-type=module", "-e", code], {
+      encoding: "utf8",
+      timeout: 15_000,
+    }),
+  );
+  assert.throws(() => process.kill(deadOwner.pid, 0), { code: "ESRCH" });
+
+  // Schedule a real rename, then pause with the canonical name absent. No
+  // cooperating successor may publish before the transition guard exits.
+  const pauseRename = async (suffix, operation, whilePaused) => {
+    const rename = fs.rename;
+    let signal;
+    let resume;
+    const reached = new Promise((resolve) => {
+      signal = resolve;
+    });
+    const barrier = new Promise((resolve) => {
+      resume = resolve;
+    });
+    fs.rename = async (from, to) => {
+      await rename(from, to);
+      if (from === claimPath && to.endsWith(suffix)) {
+        signal();
+        await barrier;
+      }
+    };
+    const pending = operation();
+    try {
+      await Promise.race([
+        reached,
+        pending.then(() => {
+          throw new Error("rename barrier not reached");
+        }),
+      ]);
+      await assert.rejects(fs.lstat(claimPath), { code: "ENOENT" });
+      assert((await fs.lstat(guardPath)).isDirectory());
+      await whilePaused();
+    } finally {
+      resume();
+      try {
+        await pending;
+      } finally {
+        fs.rename = rename;
+      }
+    }
+    return await pending;
+  };
+  const recovered = await pauseRename(".stale", acquire, async () => {
+    assert.equal(await acquire(), null);
+  });
+  assert.notEqual(recovered.claim.claimNonce, deadOwner.claimNonce);
+  await assertGuardReleased();
+  await pauseRename(
+    ".released",
+    () => releaseBetaSlotRecoveryClaim(recovered, pool),
+    async () => {
+      assert.equal(await acquire(), null);
+    },
+  );
+  const successor = await acquire();
+  const successorBytes = await fs.readFile(ownerPath, "utf8");
+  await assert.rejects(
+    releaseBetaSlotRecoveryClaim(recovered, pool),
+    /identity drifted/,
+  );
+  assert.equal(await fs.readFile(ownerPath, "utf8"), successorBytes);
+  assert.equal(await acquire(), null);
+  await assertGuardReleased();
+
+  // An unavailable transition is never reaped, including by bounded release.
+  await fs.mkdir(guardPath);
+  const guardStats = await fs.lstat(guardPath);
+  try {
+    assert.equal(await acquire(), null);
+    await assert.rejects(
+      releaseBetaSlotRecoveryClaim(successor, pool),
+      /transition is busy/,
+    );
+    assert.equal((await fs.lstat(guardPath)).ino, guardStats.ino);
+    assert.equal(await fs.readFile(ownerPath, "utf8"), successorBytes);
+  } finally {
+    await fs.rmdir(guardPath); // This fixture created the guard, not a product resource.
+  }
+  await releaseBetaSlotRecoveryClaim(successor, pool);
+  await assertGuardReleased();
+
+  // Ordinary publish failure must leave neither a transition nor a candidate.
+  const rename = fs.rename;
+  fs.rename = async (from, to) => {
+    if (to === claimPath) throw new Error("fixture claim publication failure");
+    return await rename(from, to);
+  };
+  try {
+    await assert.rejects(acquire(), /fixture claim publication failure/);
+  } finally {
+    fs.rename = rename;
+  }
+  await assertGuardReleased();
+  assert.deepEqual(await fs.readdir(pool.recoveryClaimsDir), []);
+  const final = await acquire();
+  await releaseBetaSlotRecoveryClaim(final, pool);
 }
 
 export async function verifyBetaPoolStorageMigration(root) {

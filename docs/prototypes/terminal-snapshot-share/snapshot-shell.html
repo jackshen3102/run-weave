@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>快照分享方案 · Shell</title>
+  <link rel="stylesheet" href="./snapshot.css">
+</head>
+<body>
+<main aria-label="快照正文">
+<div class="code-line" id="L1"><a class="line-number" href="#L1" aria-label="第 1 行">1</a><code class="line-text">~/Code/runweave/.worktree/wt-1</code></div>
+<div class="code-line" id="L2"><a class="line-number" href="#L2" aria-label="第 2 行">2</a><code class="line-text">$ git branch --show-current</code></div>
+<div class="code-line" id="L3"><a class="line-number" href="#L3" aria-label="第 3 行">3</a><code class="line-text">feat/terminal-snapshot-share</code></div>
+<div class="code-line" id="L4"><a class="line-number" href="#L4" aria-label="第 4 行">4</a><code class="line-text"></code></div>
+<div class="code-line" id="L5"><a class="line-number" href="#L5" aria-label="第 5 行">5</a><code class="line-text">$ ls docs/prototypes/terminal-snapshot-share</code></div>
+<div class="code-line" id="L6"><a class="line-number" href="#L6" aria-label="第 6 行">6</a><code class="line-text">README.md  index.html  app.js  mock-state.json</code></div>
+<div class="code-line" id="L7"><a class="line-number" href="#L7" aria-label="第 7 行">7</a><code class="line-text">snapshot.html  snapshot-shell.html  expired.html  styles.css</code></div>
+<div class="code-line" id="L8"><a class="line-number" href="#L8" aria-label="第 8 行">8</a><code class="line-text"></code></div>
+<div class="code-line" id="L9"><a class="line-number" href="#L9" aria-label="第 9 行">9</a><code class="line-text">$ python3 -m http.server 6188 --bind 127.0.0.1</code></div>
+<div class="code-line" id="L10"><a class="line-number" href="#L10" aria-label="第 10 行">10</a><code class="line-text">Serving HTTP on 127.0.0.1 port 6188 ...</code></div>
+<div class="code-line" id="L11"><a class="line-number" href="#L11" aria-label="第 11 行">11</a><code class="line-text"></code></div>
+<div class="code-line" id="L12"><a class="line-number" href="#L12" aria-label="第 12 行">12</a><code class="line-text">127.0.0.1 - GET /index.html 200</code></div>
+<div class="code-line" id="L13"><a class="line-number" href="#L13" aria-label="第 13 行">13</a><code class="line-text">127.0.0.1 - GET /styles.css 200</code></div>
+<div class="code-line" id="L14"><a class="line-number" href="#L14" aria-label="第 14 行">14</a><code class="line-text">127.0.0.1 - GET /app.js 200</code></div>
+<div class="code-line" id="L15"><a class="line-number" href="#L15" aria-label="第 15 行">15</a><code class="line-text">127.0.0.1 - GET /mock-state.json 200</code></div>
+<div class="code-line" id="L16"><a class="line-number" href="#L16" aria-label="第 16 行">16</a><code class="line-text"></code></div>
+<div class="code-line" id="L17"><a class="line-number" href="#L17" aria-label="第 17 行">17</a><code class="line-text">$ </code></div>
+</main>
+<script type="module" src="./snapshot.js"></script>
+</body>
+</html>

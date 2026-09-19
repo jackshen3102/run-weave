@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>终端快照分享 · Runweave</title><link rel="stylesheet" href="./styles.css"></head>
+<body data-view="workspace">
+<main class="workspace">
+  <header class="workspace-header">
+    <span class="home-symbol" aria-hidden="true">⌂</span><span class="connection"><i class="dot"></i> Local Mac <span class="muted">⌄</span></span>
+    <span class="project-tab">Runweave <span class="muted">×</span></span><span class="muted project-add">＋</span>
+    <span class="header-spacer"></span><span class="quiet-label">随记</span><span class="runtime-status"><i class="dot green"></i> Backend 正常</span>
+    <button class="icon-button" id="more-actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" title="More actions">•••</button>
+  </header>
+  <div class="workspace-body">
+    <aside class="worktree-rail"><div class="rail-heading">WORKTREES <span>⌃</span></div>
+      <div class="worktree-item"><span>⌘ main</span><small>main</small></div>
+      <div class="worktree-item active"><span><i class="dot"></i> wt-1</span><small>feat/terminal-snapshot-share</small><span class="rail-count">2 panes</span></div>
+      <div class="worktree-item"><span>⌘ wt-2</span><small>fix/terminal-input</small></div>
+      <div class="rail-bottom">Runweave <span>本地工作区</span></div>
+    </aside>
+    <section class="terminal-workspace" aria-label="终端工作区">
+      <div class="session-tabs"><span class="session-tab active"><i class="dot"></i> 快照分享方案 <span class="pane-count">2</span><span class="muted">×</span></span><span class="session-tab muted">开发服务</span><span class="tab-add">＋</span></div>
+      <div class="panes" id="panes"></div>
+      <footer class="workspace-footer"><span>wt-1 <span class="separator">/</span> <span id="active-pane-label">Pi</span></span><span>UTF-8 <span class="separator">·</span> tmux</span></footer>
+    </section>
+  </div>
+</main>
+<div class="dropdown" id="actions-menu" role="menu" hidden>
+  <div class="menu-existing">◉ <span>Preview</span></div>
+  <div class="menu-existing">↗ <span>Open Prototypes</span></div>
+  <div class="menu-existing">▤ <span>Copy terminal output…</span></div>
+  <button role="menuitem" id="share-snapshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M5 12v8h14v-8"/></svg><span>分享终端快照</span></button>
+  <div class="menu-existing">↻ <span>Recover agent</span></div><div class="menu-divider"></div>
+  <div class="menu-existing">▧ <span>日志上报</span></div><div class="menu-existing">◎ <span>状态查询</span></div><div class="menu-divider"></div><div class="menu-existing">⚙ <span>Agent Team 模型配置</span></div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script type="module" src="./app.js"></script>
+</body></html>

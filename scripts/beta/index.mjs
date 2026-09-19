@@ -1,3 +1,4 @@
+import { commitHealthyBetaUpdate } from "./restore-state.mjs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -6,7 +7,6 @@ import {
   BetaHealthError,
   buildBetaStatus,
   getGitHead,
-  isPidLive,
   readJson,
   resolveBetaPaths,
   writeJson,
@@ -23,11 +23,11 @@ import {
   runUpdateProcess,
   runAppServerCli,
   waitForHealthyBeta,
+  withBetaLock,
 } from "./operations.mjs";
 import {
   BETA_SLOT_IDS,
   BETA_SLOT_POLICY,
-  applyBetaSlotRetention,
   assertBetaSlotId,
 } from "../dev-session/beta-pool/index.mjs";
 import { assertLoopbackUrl } from "../dev-session/contracts.mjs";
@@ -118,45 +118,6 @@ async function resolveSharedAppServer(lockPath) {
   };
 }
 
-async function withBetaLock(paths, operation) {
-  const lockPaths = [path.join(paths.instanceRoot, "update.lock")];
-  const handles = [];
-  try {
-    for (const lockPath of lockPaths) {
-      await fs.mkdir(path.dirname(lockPath), { recursive: true });
-      let handle;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          handle = await fs.open(lockPath, "wx", 0o600);
-          break;
-        } catch (error) {
-          if (error?.code !== "EEXIST") {
-            throw error;
-          }
-          const owner = await readJson(lockPath);
-          if (owner && isPidLive(owner.pid)) {
-            throw new Error(`Beta update is busy: ${lockPath}`);
-          }
-          await fs.rm(lockPath, { force: true });
-        }
-      }
-      if (!handle) {
-        throw new Error(`failed to acquire Beta update lock: ${lockPath}`);
-      }
-      await handle.writeFile(
-        `${JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() })}\n`,
-      );
-      handles.push({ handle, lockPath });
-    }
-    return await operation();
-  } finally {
-    for (const { handle, lockPath } of handles.reverse()) {
-      await handle.close();
-      await fs.rm(lockPath, { force: true });
-    }
-  }
-}
-
 async function update(
   paths,
   args,
@@ -197,7 +158,7 @@ async function update(
     const cause = new Error(`update process exited with code ${result.code}`);
     let recovery = "automatic-restore-failed";
     try {
-      await restoreBaseline(paths, baseline);
+      await restoreBaseline(paths, baseline, { relaunch: !paths.devSessionId });
       recovery = "automatic-restore-applied";
     } finally {
       const diagnostic = formatBetaUpdateFailure({
@@ -209,7 +170,7 @@ async function update(
       });
       console.error(diagnostic);
       await appendFailureDiagnostic(logPath, diagnostic);
-      await recordFailure(paths, baseline, logPath, cause.message);
+      await recordFailure(paths, baseline, logPath, cause.message, gitHead);
       await fs.rm(paths.pendingPath, { force: true });
     }
     if (throwOnFailure) {
@@ -230,30 +191,18 @@ async function update(
     logPath,
     lastFailure: null,
   });
-  if (
-    state.mode === "app" &&
-    baseline.priorAppBackupPath &&
-    baseline.priorAppBackupPath !== baseline.app.backupPath
-  ) {
-    await fs.rm(baseline.priorAppBackupPath, { force: true, recursive: true });
-  }
-  await fs.rm(paths.pendingPath, { force: true });
-
+  // Keep both generations and pending evidence until readiness commits.
+  let status;
   try {
-    const status = await waitForHealthyBeta(
+    status = await waitForHealthyBeta(
       paths,
       state.appServerAction === "update",
       startedAt,
     );
-    if (paths.slotId) {
-      await applyBetaSlotRetention({ slotId: paths.slotId });
-    }
-    console.log(JSON.stringify(status, null, 2));
-    return status;
   } catch (error) {
     let recovery = "automatic-restore-failed";
     try {
-      await restoreBaseline(paths, baseline);
+      await restoreBaseline(paths, baseline, { relaunch: !paths.devSessionId });
       recovery = "automatic-restore-applied";
     } finally {
       const diagnostic = formatBetaUpdateFailure({
@@ -273,6 +222,7 @@ async function update(
         baseline,
         logPath,
         error instanceof Error ? error.message : String(error),
+        gitHead,
       );
     }
     if (throwOnFailure) {
@@ -281,6 +231,17 @@ async function update(
     process.exitCode = 1;
     return null;
   }
+  // Readiness is committed before pruning. No later retention error may roll
+  // back using an older generation that retention has already removed.
+  const committed = await commitHealthyBetaUpdate(
+    paths,
+    state,
+    baseline,
+    logPath,
+  );
+  status.previous = committed.previous;
+  console.log(JSON.stringify(status, null, 2));
+  return status;
 }
 
 async function rollback(paths) {
@@ -293,7 +254,7 @@ async function rollback(paths) {
     forceApp: state.mode === "app",
   });
   await writeJson(paths.statePath, {
-    ...state,
+    ...(await readJson(paths.statePath)),
     appServerReleaseId: baseline.appServerReleaseId,
     appVersion: baseline.app.version,
     gitDirty: baseline.source?.gitDirty ?? null,
@@ -498,15 +459,17 @@ async function main() {
     return;
   }
   if (command === "stop") {
-    await quitBeta(paths);
-    if (!options.sharedAppServerLockPath) {
-      const appServerStop = await runAppServerCli(paths, "stop");
-      if (!appServerStop.ok && !/not running/i.test(appServerStop.stderr)) {
-        throw new Error(
-          `failed to stop Beta App Server: ${appServerStop.stderr}`,
-        );
+    await withBetaLock(paths, async () => {
+      await quitBeta(paths);
+      if (!options.sharedAppServerLockPath) {
+        const appServerStop = await runAppServerCli(paths, "stop");
+        if (!appServerStop.ok && !/not running/i.test(appServerStop.stderr)) {
+          throw new Error(
+            `failed to stop Beta App Server: ${appServerStop.stderr}`,
+          );
+        }
       }
-    }
+    });
     console.log(JSON.stringify(await buildBetaStatus(paths), null, 2));
     return;
   }

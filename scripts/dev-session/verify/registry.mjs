@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifyPrivateBackendHealth } from "./backend-profile-lock.mjs";
 import { execFile } from "node:child_process";
 import {
   mkdir,
@@ -79,6 +80,7 @@ export function createManifest({ sourceRoot, sessionId }) {
 }
 
 export async function verifyRegistry(sourceRoot, temporaryHome) {
+  await verifyPrivateBackendHealth(temporaryHome);
   const env = {
     ...process.env,
     HOME: temporaryHome,

@@ -360,6 +360,15 @@ async function runStart(options, sourceRoot) {
         revision,
         paths,
         fixtureScope,
+        onBetaStarting: async (responsibility) => {
+          manifest = updateManifest(manifest, {
+            services: {
+              ...manifest.services,
+              beta: { ...manifest.services.beta, ...responsibility },
+            },
+          });
+          await writeManifest(manifest);
+        },
       });
       manifest = updateManifest(manifest, {
         state: "ready",

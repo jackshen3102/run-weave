@@ -430,6 +430,17 @@ export class TmuxPaneService extends TmuxSessionService {
     }
   }
 
+  /** Capture all retained history of this exact pane, without ANSI output. */
+  async capturePaneSnapshot(target: TmuxPaneTarget): Promise<string> {
+    if (!/^%\d+$/.test(target.paneId)) throw new Error("Invalid pane target");
+    const result = await this.runTmux(
+      ["capture-pane", "-p", "-J", "-S", "-", "-t", target.paneId],
+      target,
+      { sensitiveOutput: true },
+    );
+    return result.stdout.replace(/\r\n/g, "\n").replace(/\n$/, "");
+  }
+
   async capturePane(
     target: TmuxTarget | TmuxPaneTarget,
     historyLines = CaptureHistoryLines,

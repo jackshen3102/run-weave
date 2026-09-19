@@ -28,6 +28,8 @@ export interface BackendProfileLockOwner {
   cwd: string;
   startedAt: string;
   runtimeReleaseId: string | null;
+  /** Backend-published process generation; absent on legacy locks. */
+  processSignature?: string;
 }
 
 export interface CreateBackendProfileLockOwnerOptions {
@@ -217,6 +219,9 @@ export function parseBackendProfileLockOwner(
     devSessionId:
       typeof owner.devSessionId === "string" ? owner.devSessionId : null,
     pid: owner.pid,
+    ...(typeof owner.processSignature === "string" && owner.processSignature
+      ? { processSignature: owner.processSignature }
+      : {}),
     port:
       typeof owner.port === "number" && Number.isInteger(owner.port)
         ? owner.port

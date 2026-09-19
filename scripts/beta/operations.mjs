@@ -1,4 +1,8 @@
 import { spawn } from "node:child_process";
+import {
+  publishRestoredBaseline,
+  snapshotPreviousRelease,
+} from "./restore-state.mjs";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -20,6 +24,48 @@ import {
   writeReleaseId,
 } from "./state.mjs";
 
+export async function withBetaLock(paths, operation) {
+  const lockPaths = [path.join(paths.instanceRoot, "update.lock")];
+  const handles = [];
+  try {
+    for (const lockPath of lockPaths) {
+      await fs.mkdir(path.dirname(lockPath), { recursive: true });
+      let handle;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          handle = await fs.open(lockPath, "wx", 0o600);
+          break;
+        } catch (error) {
+          if (error?.code !== "EEXIST") {
+            throw error;
+          }
+          const owner = await readJson(lockPath);
+          if (!Number.isInteger(owner?.pid) || owner.pid <= 0) {
+            throw new Error("Beta update lock ownership is unknown");
+          }
+          if (isPidLive(owner.pid)) {
+            throw new Error(`Beta update is busy: ${lockPath}`);
+          }
+          await fs.rm(lockPath, { force: true });
+        }
+      }
+      if (!handle) {
+        throw new Error(`failed to acquire Beta update lock: ${lockPath}`);
+      }
+      await handle.writeFile(
+        `${JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() })}\n`,
+      );
+      handles.push({ handle, lockPath });
+    }
+    return await operation();
+  } finally {
+    for (const { handle, lockPath } of handles.reverse()) {
+      await handle.close();
+      await fs.rm(lockPath, { force: true });
+    }
+  }
+}
+
 export async function collectBaseline(paths) {
   const state = await readJson(paths.statePath);
   return {
@@ -35,6 +81,7 @@ export async function collectBaseline(paths) {
       (await readJson(paths.desktopStatusPath))?.updatedAt ?? null,
     runtimeReleaseId: await readReleaseId(paths.runtimeCurrentPath),
     priorAppBackupPath: state?.previous?.app?.backupPath ?? null,
+    priorPrevious: snapshotPreviousRelease(state?.previous),
     source: {
       gitDirty: state?.gitDirty ?? null,
       gitHead: state?.gitHead ?? null,
@@ -60,8 +107,7 @@ export function buildUpdateEnv(
     RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: sharedAppServer
       ? path.join(sharedAppServer.homeDir, "cloud-sync")
       : paths.appServerCloudSyncDir,
-    RUNWEAVE_APP_SERVER_HOME:
-      sharedAppServer?.homeDir ?? paths.appServerHome,
+    RUNWEAVE_APP_SERVER_HOME: sharedAppServer?.homeDir ?? paths.appServerHome,
     RUNWEAVE_DESKTOP_CHANNEL: BETA_CHANNEL,
     RUNWEAVE_DESKTOP_INSTANCE_ID: paths.instanceId,
     RUNWEAVE_DESKTOP_CDP_PORT: String(paths.desktopCdpPort),
@@ -162,7 +208,7 @@ export async function quitBeta(paths) {
   const { executable, pid, processSignature } = ownership;
   await runCapture("osascript", [
     "-e",
-    `tell application "${paths.appName}" to quit`,
+    `if application "${paths.appPath}" is running then tell application "${paths.appPath}" to quit`,
   ]);
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline && isPidLive(pid)) {
@@ -179,6 +225,13 @@ export async function quitBeta(paths) {
       );
     }
     process.kill(pid, "SIGTERM");
+    const termDeadline = Date.now() + 10_000;
+    while (Date.now() < termDeadline && isPidLive(pid)) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    if (isPidLive(pid)) {
+      throw new Error("Beta desktop did not exit after identity-safe stop");
+    }
   }
 }
 
@@ -238,6 +291,27 @@ export async function restoreBaseline(paths, baseline, options = {}) {
   const appServerChanged =
     currentAppServerReleaseId !== baseline.appServerReleaseId;
 
+  const appBackupPath = baseline.app.backupPath ?? paths.appBackupPath;
+  let appBackupConsumed = false;
+  if (baseline.app.exists) {
+    const backup = await fs.lstat(appBackupPath).catch((error) => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    });
+    if (
+      appChanged &&
+      backup &&
+      (!backup.isDirectory() ||
+        backup.isSymbolicLink() ||
+        (await getPathIdentity(appBackupPath)) !== baseline.app.identity)
+    ) {
+      throw new Error("Beta rollback App backup identity drifted");
+    }
+    if (!backup && currentAppIdentity !== baseline.app.identity) {
+      throw new Error("Beta rollback App backup is missing");
+    }
+    appBackupConsumed = !backup; // Retry after an already completed rename.
+  }
   if (appChanged || runtimeChanged) {
     await quitBeta(paths);
   }
@@ -252,34 +326,37 @@ export async function restoreBaseline(paths, baseline, options = {}) {
       paths.appServerCurrentPath,
       baseline.appServerReleaseId,
     );
-    if (baseline.appServerReleaseId) {
-      const restart = await runAppServerCli(paths, "restart", baselineRevision);
-      if (!restart.ok) {
-        throw new Error(`failed to restore Beta App Server: ${restart.stderr}`);
-      }
-    }
   }
   if (appChanged) {
-    const appBackupPath = baseline.app.backupPath ?? paths.appBackupPath;
     if (baseline.app.exists && existsSync(appBackupPath)) {
       const failedPath = `${paths.appPath}.failed-${Date.now()}`;
       if (existsSync(paths.appPath)) {
         await fs.rename(paths.appPath, failedPath);
       }
       await fs.rename(appBackupPath, paths.appPath);
+      appBackupConsumed = true;
       await fs.rm(failedPath, { force: true, recursive: true });
     } else if (!baseline.app.exists) {
       await fs.rm(paths.appPath, { force: true, recursive: true });
     }
   }
+  await publishRestoredBaseline(paths, baseline, appBackupConsumed);
   if (
+    appServerChanged &&
+    baseline.appServerReleaseId &&
+    options.relaunch !== false
+  ) {
+    const restart = await runAppServerCli(paths, "restart", baselineRevision);
+    if (!restart.ok)
+      throw new Error(`failed to restore Beta App Server: ${restart.stderr}`);
+  }
+  if (
+    options.relaunch !== false &&
     (appChanged || runtimeChanged || appServerChanged) &&
     baseline.app.exists
   ) {
     await openBeta(paths, buildUpdateEnv(paths, baselineRevision));
   }
-
-  baseline.app.backupPath = baseline.priorAppBackupPath ?? null;
 
   return { appChanged, appServerChanged, runtimeChanged };
 }
@@ -348,30 +425,21 @@ export async function appendFailureDiagnostic(logPath, diagnostic) {
   });
 }
 
-export async function recordFailure(paths, baseline, logPath, summary) {
+export async function recordFailure(
+  paths,
+  _baseline,
+  logPath,
+  summary,
+  attemptedGitHead = null,
+) {
   const state = (await readJson(paths.statePath)) ?? {};
+  // Restoration owns artifact/source publication. A failed restore must not
+  // claim that current pointers were restored merely by writing diagnostics.
   await writeJson(paths.statePath, {
     ...state,
-    appServer: baseline.appServerReleaseId
-      ? {
-          ...(state.appServer ?? {}),
-          home: paths.appServerHome,
-          releaseId: baseline.appServerReleaseId,
-        }
-      : null,
-    appServerAction: baseline.appServerReleaseId ? "restored" : null,
-    appServerReleaseId: baseline.appServerReleaseId,
-    appVersion: baseline.app.version,
-    channel: BETA_CHANNEL,
-    gitDirty: baseline.source?.gitDirty ?? null,
-    gitHead: baseline.source?.gitHead ?? null,
-    previous: baseline,
-    runtimeReleaseId: baseline.runtimeReleaseId,
-    sourceRoot: baseline.source?.sourceRoot ?? paths.sourceRoot,
-    worktreeSnapshot: baseline.source?.worktreeSnapshot ?? null,
     lastFailure: {
       at: new Date().toISOString(),
-      attemptedGitHead: state.gitHead ?? null,
+      attemptedGitHead: attemptedGitHead ?? state.gitHead ?? null,
       component: "beta-update",
       logPath,
       summary,

@@ -71,3 +71,32 @@ cases:
     steps:
       - 运行 pnpm dev:session:verify 与 pnpm backend:verify-lifecycle，确认进程、registry 和真实 SQLite/tmux 集成验证通过。
       - 运行改动脚本的 eslint、架构检查、docs:check 和本测试计划的 testplan:validate，确认全部通过。
+  - id: DSS-007
+    name: Beta readiness 之前失败仍保留可恢复的责任身份
+    required: true
+    description: >
+      Beta updater 启动前登记控制责任。失败还原不重新启动 Dev Session baseline，
+      旧版缺少 PID 的 manifest 仅在 lease 与 desktop 身份共同确认后恢复。
+    preconditions:
+      - 按 planner 使用隔离 Beta Session；故障只针对本次自有资源，不操作其它槽位。
+    steps:
+      - 使用仅本次官方 planner/start 环境的 AUTH_ACCESS_TOKEN_TTL_SECONDS=0，使真实 Backend 在 updater 已启动而服务 PID 尚未提交时失败；不得用源码 stub 或低层手工启动绕过产品入口。
+      - 确认 starting manifest 在 updater 启动前已记录 Beta control 责任且不含凭据；失败还原后没有异步 relaunch，进程退出后才 reset 和 release。
+      - 对历史缺少 PID 的 stale Beta Session 执行 dev:stop --session <id> --cleanup-stale --json；确认匹配 lease owner 和 nonce、desktop Session 和 instance、可执行文件和当前签名后才停止，整个槽位无进程后才释放。
+      - 对不匹配 lease、desktop 身份或仍有未知 Backend/App Server 残留的隔离 fixture 重复恢复，确认 fail closed、lease 保留且不盲杀；重复成功停止保持幂等。
+  - id: DSS-008
+    name: 回滚消费备份后 artifact 指针与显式修复保持一致
+    required: true
+    description: >
+      lease 释放不等于槽位健康。真实备份消费、current/previous 发布和 retention 构成可复核闭环，
+      历史指针修复只允许精确绑定已释放 owner 的显式入口。
+    preconditions:
+      - 使用本次自有 Beta 槽位或既有 verifier 的隔离真实文件系统 fixture，不手工修改实际槽位状态。
+    steps:
+      - 运行既有 restored-artifact fixture，确认失败更新保留旧 previous 备份，恢复消费新 backup 后 current 内容与 inode 正确，previous 指向实际保留的代际，正常 retention 通过。
+      - 验证已接受更新提交后才清理旧代际，随后 standalone-style rollback 消费其 backup 不再引用已删除代际；缺失或身份漂移的备份拒绝恢复。
+      - 对官方 TTL 故障启动检查 receipt 不含 retentionFailed，pool 投影为 idle 且 retention healthy，没有 Desktop 或 App Server 重启；不能只凭 releasedLease 判定成功。
+      - 在隔离 fixture 中持有 recovery claim 与 Beta update lock，确认同进程及另一进程均不能为该槽位发布 lease，自动分配跳过它；释放 claim 后可分配，已有新 owner lease 时修复拒绝且状态字节不变。
+      - 验证缺失或损坏 claim owner 不被视作 dead；真实已退出 owner 可回收。暂停 takeover/release 的真实 rename 后确认 guard 仍排斥 successor，重复旧 release 不得删除新 generation；普通错误释放 guard，中断留下的 guard 不自动删除且 release 有界拒绝。
+      - 在隔离 fixture 中执行 repair-retained-state，确认只清空证明失效的 previous App 指针并留下 durable receipt，其他字段和文件不变。
+      - 对错误 inode、新 lease、新 failure、错误时间或未知 backup 路径重复修复，确认拒绝且状态字节不变；实际历史槽位仅在 reviewer 通过且 exact Session 与 lastFailure.at 对齐后由所有者调用公共修复命令。
