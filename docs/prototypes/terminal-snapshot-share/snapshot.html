@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>快照分享方案 · Pi</title>
+  <link rel="stylesheet" href="./snapshot.css">
+</head>
+<body>
+<main aria-label="快照正文">
+<div class="code-line" id="L1"><a class="line-number" href="#L1" aria-label="第 1 行">1</a><code class="line-text">~/Code/runweave/.worktree/wt-1</code></div>
+<div class="code-line" id="L2"><a class="line-number" href="#L2" aria-label="第 2 行">2</a><code class="line-text">$ pi</code></div>
+<div class="code-line" id="L3"><a class="line-number" href="#L3" aria-label="第 3 行">3</a><code class="line-text"></code></div>
+<div class="code-line" id="L4"><a class="line-number" href="#L4" aria-label="第 4 行">4</a><code class="line-text">Pi · Runweave</code></div>
+<div class="code-line" id="L5"><a class="line-number" href="#L5" aria-label="第 5 行">5</a><code class="line-text"></code></div>
+<div class="code-line" id="L6"><a class="line-number" href="#L6" aria-label="第 6 行">6</a><code class="line-text">› 检查终端历史的读取路径，确认快照分享可以复用哪些能力。</code></div>
+<div class="code-line" id="L7"><a class="line-number" href="#L7" aria-label="第 7 行">7</a><code class="line-text"></code></div>
+<div class="code-line" id="L8"><a class="line-number" href="#L8" aria-label="第 8 行">8</a><code class="line-text">我会先检查当前分屏的历史读取，再确认文本快照的边界。</code></div>
+<div class="code-line" id="L9"><a class="line-number" href="#L9" aria-label="第 9 行">9</a><code class="line-text"></code></div>
+<div class="code-line" id="L10"><a class="line-number" href="#L10" aria-label="第 10 行">10</a><code class="line-text">read backend/src/terminal/runtime/launcher.ts</code></div>
+<div class="code-line" id="L11"><a class="line-number" href="#L11" aria-label="第 11 行">11</a><code class="line-text">  readTerminalScrollbackCapture(session, manager, tmux, mode)</code></div>
+<div class="code-line" id="L12"><a class="line-number" href="#L12" aria-label="第 12 行">12</a><code class="line-text">  tmux 可用时优先 capture-pane；不可用时读取持久化历史。</code></div>
+<div class="code-line" id="L13"><a class="line-number" href="#L13" aria-label="第 13 行">13</a><code class="line-text"></code></div>
+<div class="code-line" id="L14"><a class="line-number" href="#L14" aria-label="第 14 行">14</a><code class="line-text">read backend/src/terminal/tmux/pane-service.ts</code></div>
+<div class="code-line" id="L15"><a class="line-number" href="#L15" aria-label="第 15 行">15</a><code class="line-text">  capture-pane -p -J -S -5000 -t &lt;pane&gt;</code></div>
+<div class="code-line" id="L16"><a class="line-number" href="#L16" aria-label="第 16 行">16</a><code class="line-text">  返回当前分屏仍保留的历史与屏幕文本。</code></div>
+<div class="code-line" id="L17"><a class="line-number" href="#L17" aria-label="第 17 行">17</a><code class="line-text"></code></div>
+<div class="code-line" id="L18"><a class="line-number" href="#L18" aria-label="第 18 行">18</a><code class="line-text">read packages/shared/src/terminal/limits.ts</code></div>
+<div class="code-line" id="L19"><a class="line-number" href="#L19" aria-label="第 19 行">19</a><code class="line-text">  TERMINAL_CLIENT_SCROLLBACK_LINES = 5_000</code></div>
+<div class="code-line" id="L20"><a class="line-number" href="#L20" aria-label="第 20 行">20</a><code class="line-text">  TERMINAL_PERSISTED_SCROLLBACK_BYTES = 10 * 1024 * 1024</code></div>
+<div class="code-line" id="L21"><a class="line-number" href="#L21" aria-label="第 21 行">21</a><code class="line-text">  TERMINAL_COMPACTED_SCROLLBACK_BYTES = 8 * 1024 * 1024</code></div>
+<div class="code-line" id="L22"><a class="line-number" href="#L22" aria-label="第 22 行">22</a><code class="line-text"></code></div>
+<div class="code-line" id="L23"><a class="line-number" href="#L23" aria-label="第 23 行">23</a><code class="line-text">结论</code></div>
+<div class="code-line" id="L24"><a class="line-number" href="#L24" aria-label="第 24 行">24</a><code class="line-text"></code></div>
+<div class="code-line" id="L25"><a class="line-number" href="#L25" aria-label="第 25 行">25</a><code class="line-text">1. 快照必须绑定当前选中的 panelId，不能混入其他分屏。</code></div>
+<div class="code-line" id="L26"><a class="line-number" href="#L26" aria-label="第 26 行">26</a><code class="line-text">2. 创建时固定文本内容，之后原终端继续输出也不改变快照。</code></div>
+<div class="code-line" id="L27"><a class="line-number" href="#L27" aria-label="第 27 行">27</a><code class="line-text">3. 行号属于快照文本；窗口换行不能改变引用行号。</code></div>
+<div class="code-line" id="L28"><a class="line-number" href="#L28" aria-label="第 28 行">28</a><code class="line-text">4. 已被历史缓冲区清理的内容无法恢复。</code></div>
+<div class="code-line" id="L29"><a class="line-number" href="#L29" aria-label="第 29 行">29</a><code class="line-text"></code></div>
+<div class="code-line" id="L30"><a class="line-number" href="#L30" aria-label="第 30 行">30</a><code class="line-text">现有代码位置</code></div>
+<div class="code-line" id="L31"><a class="line-number" href="#L31" aria-label="第 31 行">31</a><code class="line-text">  frontend/src/components/terminal/workspace/header.tsx</code></div>
+<div class="code-line" id="L32"><a class="line-number" href="#L32" aria-label="第 32 行">32</a><code class="line-text">  frontend/src/components/terminal/markdown/line-reference.tsx</code></div>
+<div class="code-line" id="L33"><a class="line-number" href="#L33" aria-label="第 33 行">33</a><code class="line-text">  backend/src/terminal/runtime/launcher.ts</code></div>
+<div class="code-line" id="L34"><a class="line-number" href="#L34" aria-label="第 34 行">34</a><code class="line-text"></code></div>
+<div class="code-line" id="L35"><a class="line-number" href="#L35" aria-label="第 35 行">35</a><code class="line-text">› 分享链接只读，24 小时后失效，正文要能直接被 Agent 读取。</code></div>
+<div class="code-line" id="L36"><a class="line-number" href="#L36" aria-label="第 36 行">36</a><code class="line-text"></code></div>
+<div class="code-line" id="L37"><a class="line-number" href="#L37" aria-label="第 37 行">37</a><code class="line-text">收到。分享页直接返回包含文本的 HTML；JS 只增强行范围高亮。</code></div>
+<div class="code-line" id="L38"><a class="line-number" href="#L38" aria-label="第 38 行">38</a><code class="line-text">快照文字按纯文本转义，例如 &lt;pane&gt; 不会被解释为 HTML 标签。</code></div>
+<div class="code-line" id="L39"><a class="line-number" href="#L39" aria-label="第 39 行">39</a><code class="line-text"></code></div>
+<div class="code-line" id="L40"><a class="line-number" href="#L40" aria-label="第 40 行">40</a><code class="line-text">不恢复原生 session，不连接实时输出，也不提供终端输入权限。</code></div>
+<div class="code-line" id="L41"><a class="line-number" href="#L41" aria-label="第 41 行">41</a><code class="line-text"></code></div>
+<div class="code-line" id="L42"><a class="line-number" href="#L42" aria-label="第 42 行">42</a><code class="line-text">已完成方案检查，等待下一步。</code></div>
+<div class="code-line" id="L43"><a class="line-number" href="#L43" aria-label="第 43 行">43</a><code class="line-text"></code></div>
+<div class="code-line" id="L44"><a class="line-number" href="#L44" aria-label="第 44 行">44</a><code class="line-text">──────────────────────────────────────────────────────────</code></div>
+<div class="code-line" id="L45"><a class="line-number" href="#L45" aria-label="第 45 行">45</a><code class="line-text">› </code></div>
+</main>
+<script type="module" src="./snapshot.js"></script>
+</body>
+</html>

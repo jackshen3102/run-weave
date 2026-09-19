@@ -1,3 +1,4 @@
+import { localBackendAuthHeaders } from "../health-auth.js";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
@@ -327,6 +328,13 @@ export async function connectExternalBackendRuntime(): Promise<PackagedBackendCo
     }
     const response = await fetch(`${backendUrl.replace(/\/+$/, "")}/health`, {
       signal: AbortSignal.timeout(2_000),
+      redirect: "error",
+      headers: localBackendAuthHeaders(
+        `${backendUrl.replace(/\/+$/, "")}/health`,
+        process.env.RUNWEAVE_SHARED_BACKEND_PROFILE_DIR || resolvePackagedBackendProfileDir(),
+        undefined,
+        Number(process.env.RUNWEAVE_SHARED_BACKEND_PID) || undefined,
+      ),
     });
     const health = (await response.json()) as {
       service?: string;

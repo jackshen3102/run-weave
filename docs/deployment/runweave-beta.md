@@ -30,6 +30,41 @@ Stable Runweave 中修改代码
 - 仓库固定使用 `pnpm@10.6.2`。首次构建前执行 `corepack enable && pnpm install`，并确认当前 worktree 能正常执行项目构建命令。
 - 需要页面级验收时，先用 `command -v playwright-cli` 确认 CLI 命令可用，并使用 `$toolkit:playwright-cli` skill 执行验收。
 
+## 私有健康握手与失败启动恢复
+
+启用 `RUNWEAVE_TUNNEL_AUTH_SCOPE=all` 时 `/health` 仍受保护。Dev Session 将本次自有
+Backend 的 tunnel 凭据原子保存到 profile 内 `backend-health-auth.json`（0600），只用于
+匹配 profile lock 的 loopback Backend 健康握手；禁止重定向，不写入 manifest、CLI JSON、
+日志、URL 或进程参数。后续 `dev:status` / `dev:open` 不需要保留原始启动环境。
+shared Backend 只读取目标 profile 的私有配置，不采用调用 shell 的无关 token，也不修改
+shared profile；没有匹配配置时受保护的 shared Backend 会被判为不可用，而非绕过鉴权。
+发送凭据前还必须验证 Backend 自己在取得 profile lock 时写入的 `processSignature`：
+规范化 locale/timezone 的当前进程签名在监听检查前后均须匹配。`lsof -F0pftn` 的有界
+PID/FD/地址族/数值地址清单中，至少一个 socket 能服务确切目标 loopback IP:port，且所有
+可能服务该端点的 socket 都只能属于该 Backend PID；同端口但已证实绑定其它指定地址的
+监听者不阻断。IPv4 wildcard 匹配 IPv4；IPv6 wildcard 因无法证明 V6ONLY 而匹配两个地址族；
+IPv4-mapped IPv6 按映射后的 IPv4 地址匹配，mapped-any 保守作为 IPv4 wildcard。
+不能在探测时为旧 lock 补认身份。lock 在检查期间变化也拒绝发送。
+这些请求需要系统 `/bin/ps` 与 `lsof` 的有界、明确证据；缺少工具、旧 lock 没有签名、
+PID 复用、未知/不完整清单，或匹配/可能匹配目标的其它监听者都保守拒绝；受保护的 shared
+Backend 需用新代码重启以发布原始代际证明。
+无 token 的 legacy 健康探测不要求新元数据；身份握手失败后的诊断重试不携带 tunnel 凭据。
+CDP 与 App Server 探测不携带该凭据。
+
+配置在发布前校验最终 JSON 的 UTF-8 字节数不超过 16 KiB；转义导致超限时拒绝写入并保留
+原文件，不把凭据写到诊断中。新 owner 总是重写配置（未提供 token 时显式记录禁用），
+mutable reset 会清除它；损坏配置
+或 owner 不匹配会拒绝握手，不回退到旧凭据。Electron 在同一自有 profile 重启时恢复相同
+配置；自有 Session 缺少配置时也拒绝重启，shared/legacy 缺少配置只允许无凭据探测。
+启动责任在 Beta updater 执行前登记；Dev Session 失败还原只恢复 artifacts，不重新
+打开旧 App，独立 Beta rollback 的启动语义不变。
+
+历史失败启动即使没有提交 PID，也可按 `dev:status` 指引使用
+`pnpm dev:stop --session <id> --cleanup-stale --json`。恢复必须匹配权威 lease 的 owner/nonce
+和 desktop status 的 Session、instance、路径、可执行文件、当前进程签名；停止后仍必须
+证明整个槽位无进程才 reset/release。未知 Backend/App Server 残留或身份漂移会保留 lease
+并报错，不能通过手工删除 manifest/lease 或按名称杀进程绕过。
+
 ## 快速开始
 
 ### 1. 只读规划
@@ -70,6 +105,49 @@ pnpm dev:pool recover --slot pool-03 --session <ownerSessionId> --json
 ```
 
 corrupt lease 无可读 owner 时省略 `--session`，仅允许“零 slot 进程 + 路径引用可信 + lease 文件 identity 稳定”的 guarded quarantine。不存在 `--force`、`--force-kill` 或 `--force-release` 绕过入口。
+
+### 已释放槽位的已证明回滚指针修复
+
+`releasedLease=true` 只证明进程/租约回收，不能把带 `retentionFailed` 的槽位视为健康。
+更新在 readiness 通过前保留原 previous snapshot 和备份；通过后才提交并清理旧代际。
+恢复消费 App backup 后，先发布实际 current/previous 状态，再执行独立 Beta 的重启；
+Dev Session 失败恢复仍不重启 Desktop 或 App Server。缺少或漂移的备份不能被标为恢复成功。
+
+历史版本可能已恢复 App 并释放 lease，却保留已删除的 previous backup 指针。该问题不会
+由 status、allocator、janitor 或普通 recover 自动修补。先只读检查目标槽位、Beta status 的
+`lastFailure.at` 和对应已释放 Session，再显式调用：
+
+```bash
+pnpm dev:pool --json
+pnpm runweave:beta:status --instance pool-01 --json
+pnpm dev:pool repair-retained-state --slot pool-01 --session <releasedSessionId> --failure-at <lastFailure.at> --json
+```
+
+此入口按 recovery claim → Session lock → Beta update lock 顺序持锁。新 lease 发布也必须
+独占同一个 recovery claim，并在锁内重查候选槽位；claim 不可重入，忙时自动分配跳过候选，
+显式指定槽位则拒绝。allocator 发布后释放 claim，不持有它进入启动或清理阶段。
+claim 的取得、dead-owner takeover 和释放还共用每槽 `.pool-XX.transition` 目录 guard，
+由原子的目录创建取得；guard 内不等待 Session/Beta 等外层锁。claim 释放最多等待此 guard
+1 秒，超时保留 claim。旧 claim 只有在记录、目录/文件 identity 与 generation 复核一致，
+且 PID 确认不存在时才可回收；缺失/损坏记录或仍存活（包括已复用）的 PID 都拒绝推断。
+若进程在 transition 内中断，guard 可能留下并使槽位不可分配；不自动回收该 guard，也不能
+手工删除绕过。此处不承诺任意崩溃恢复，普通 idle 投影也不证明 transition 可用。
+
+共同排他要求所有并行 allocator/recovery 使用此版本协议；不遵守 claim 或 transition guard
+的旧版本不在保证范围内，不能与修复并行。本改动不更改持久化 schema，也不提供混合版本的
+pool protocol/version gate；若需允许旧客户端并行，必须先另行设计并验收版本门禁。
+
+修复要求 lease 缺失、整槽无进程、
+最新 release receipt 与 Session/nonce/source 一致并记录相同的 previous-pointer retention 错误、
+failure 时间和恢复日志一致、安装 App 的
+inode/mtime identity 精确等于记录的 restored baseline、缺失 backup 路径只属于该槽位，
+并且实际 runtime current/previous 指针有效。写入前重新检查；只原子清空已证明失效的
+`previous.app.backupPath` 并在 warm state 写入 `retainedStateRepair` receipt，不删除 artifact、
+不修改历史 manifest/lease、不清除历史错误。之后正常 retention 校验必须通过。
+
+缺少原始 restore log、inode 漂移、更新的 lease/release/failure、跨 source 证据不一致、
+未知备份或符号链接都会拒绝；旧记录不足时槽位继续 blocked，不能绕过检查。执行后还应
+用 `dev:pool --json` 确认 retention healthy 和槽位 idle，不能只看命令退出或 lease 释放。
 
 池化实现必须同时满足：
 

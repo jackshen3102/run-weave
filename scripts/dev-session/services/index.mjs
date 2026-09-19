@@ -36,6 +36,7 @@ export async function startSessionServices({
   revision,
   paths,
   fixtureScope = null,
+  onBetaStarting = null,
 }) {
   await mkdir(paths.logsDir, { recursive: true, mode: 0o700 });
   const reservedPorts = new Set();
@@ -125,6 +126,7 @@ export async function startSessionServices({
         requestedSharedBackend,
         requestedSharedAppServer,
         fixtureScope,
+        onStarting: onBetaStarting,
         onSpawn,
       });
     }

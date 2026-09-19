@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { link, lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -80,6 +81,25 @@ export async function acquireBackendProfileLock(
   await mkdir(options.profileDir, { recursive: true });
   const lockFile = getBrowserProfileLockFile(options.profileDir);
   const owner = createBackendProfileLockOwner(options);
+  // Capture this Backend's generation at publication, never from caller env or
+  // a later observer of the PID. Legacy/unavailable evidence cannot authorize
+  // credential-bearing health probes, but unauthenticated startup still works.
+  try {
+    owner.processSignature =
+      execFileSync(
+        "/bin/ps",
+        ["-p", String(process.pid), "-o", "lstart=", "-o", "command="],
+        {
+          encoding: "utf8",
+          timeout: 1_000,
+          maxBuffer: 65_536,
+          env: { ...process.env, LC_ALL: "C", LANG: "C", TZ: "UTC" },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      ).trim() || undefined;
+  } catch {
+    owner.processSignature = undefined;
+  }
 
   for (;;) {
     const acquired = await tryCreateLockFile(lockFile, owner);

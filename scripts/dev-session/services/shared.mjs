@@ -81,6 +81,7 @@ export async function resolveSharedBackend(
   };
   const inspection = await inspectBackendHandshake(service);
   if (!inspection.ok) {
+    // Identity failure must never trigger another credential-bearing probe.
     const health = await fetchHealthJson(`${url}/health`);
     throwRequiredSharedError("Backend", required, {
       reason: inspection.reason,

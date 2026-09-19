@@ -39,6 +39,7 @@
     "./terminal/completion": "./src/terminal/runtime/completion.ts",
     "./terminal/events": "./src/terminal/runtime/events.ts",
     "./terminal/input": "./src/terminal/runtime/input.ts",
+    "./terminal/snapshot-share": "./src/terminal/snapshot-share.ts",
     "./terminal/panel": "./src/terminal/panel.ts",
     "./terminal/preview": "./src/terminal/preview.ts",
     "./terminal/project": "./src/terminal/project.ts",

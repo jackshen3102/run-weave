@@ -10,6 +10,8 @@ import {
   resolveBetaPaths,
 } from "../../beta/state.mjs";
 
+import { backendHealthHeaders } from "../../lib/backend-health-auth.mjs";
+
 const execFileAsync = promisify(execFile);
 const READY_TIMEOUT_MS = 30_000;
 const READY_INTERVAL_MS = 200;
@@ -85,7 +87,13 @@ export async function waitForJson(url, predicate, processInfo, options = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 750);
     try {
-      const response = await fetch(safeUrl, { signal: controller.signal });
+      const response = await fetch(safeUrl, {
+        signal: controller.signal,
+        redirect: "error",
+        headers: options.backendProfileDir
+          ? await backendHealthHeaders(safeUrl, options.backendProfileDir)
+          : {},
+      });
       if (response.ok) {
         const body = await response.json().catch(() => null);
         if (predicate(body)) {
@@ -136,12 +144,14 @@ export async function readJson(filePath) {
   }
 }
 
-export async function fetchHealthJson(url) {
+export async function fetchHealthJson(url, backendProfileDir = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 1_000);
   try {
     const response = await fetch(assertLoopbackUrl(url), {
       signal: controller.signal,
+      redirect: "error",
+      headers: backendProfileDir ? await backendHealthHeaders(url, backendProfileDir) : {},
     });
     return response.ok ? await response.json() : null;
   } catch {
@@ -216,7 +226,7 @@ export async function inspectBackendHandshake(service) {
   ) {
     return { ok: false, reason: "backend lock identity drifted" };
   }
-  const health = await fetchHealthJson(`${service.url}/health`);
+  const health = await fetchHealthJson(`${service.url}/health`, path.dirname(service.lockPath));
   const expectedDevSessionId = service.ownerDevSessionId ?? null;
   if (
     health?.status !== "ok" ||
@@ -418,7 +428,7 @@ export async function reconcileBetaSessionServices(services) {
   const [backendLock, backendHealth, appServerLock, appServerHealth] =
     await Promise.all([
       readJson(backend.lockPath),
-      fetchHealthJson(`${status.backend.baseUrl}/health`),
+      fetchHealthJson(`${status.backend.baseUrl}/health`, path.dirname(backend.lockPath)),
       readJson(appServer.lockPath),
       fetchHealthJson(`${status.appServer.baseUrl}/healthz`),
     ]);

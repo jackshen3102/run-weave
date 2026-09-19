@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
   acquireBetaSlotLease,
+  acquireBetaSlotRecoveryClaim,
+  releaseBetaSlotRecoveryClaim,
+  releaseBetaSlotLease,
+  prepareBetaPoolStorageForAllocation,
   createBetaPoolRecoveryReceipt,
   finalizeBetaSlotRelease,
   inspectBetaSlotProcessSafety,
@@ -15,7 +19,97 @@ import {
   runBetaPoolJanitor,
   runBetaPoolRecoveryPass,
 } from "../beta-pool/index.mjs";
+import { cleanupIncompleteBetaStart } from "../services/beta-start-recovery.mjs";
 import { resolveBetaUpdateTargets } from "../../update/core.mjs";
+import { withBetaLock } from "../../beta/operations.mjs";
+import { resolveBetaPaths } from "../../beta/state.mjs";
+
+export async function verifyBetaAllocationClaimExclusion(homeDir) {
+  const pool = await prepareBetaPoolStorageForAllocation({ homeDir });
+  const slotId = "pool-01";
+  const options = {
+    requestedSlotId: slotId,
+    ownerSessionId: "dvs-new-allocator",
+    ownerSourceRoot: process.cwd(),
+    ownerRevision: "allocation-claim-fixture",
+    ownerManifestPath: path.join(homeDir, "new-manifest.json"),
+    homeDir,
+  };
+  const claim = await acquireBetaSlotRecoveryClaim(slotId, pool);
+  assert(claim);
+  const ownerPath = path.join(claim.claimPath, "owner.json");
+  const ownerBefore = await fs.readFile(ownerPath, "utf8");
+  try {
+    const beta = resolveBetaPaths(
+      process.cwd(),
+      homeDir,
+      slotId,
+      "dvs-old-owner",
+    );
+    await withBetaLock(beta, async () => {
+      // Same-process acquisition must not become reentrant.
+      await assert.rejects(acquireBetaSlotLease(options), (error) => {
+        assert.equal(error.details?.code, "beta_pool_recovery_claim_busy");
+        return true;
+      });
+      // Another process using the start allocator must preserve explicit busy
+      // refusal rather than publishing or treating the claim as its own.
+      const startupUrl = new URL(
+        "../beta-pool/allocation/startup.mjs",
+        import.meta.url,
+      );
+      const code = `
+        import { acquireStartBetaSlotLease } from ${JSON.stringify(startupUrl.href)};
+        try {
+          await acquireStartBetaSlotLease({
+            requestedSlotId: ${JSON.stringify(slotId)},
+            sessionId: "dvs-child-allocator",
+            sourceRoot: ${JSON.stringify(process.cwd())},
+            revision: "fixture",
+            ownerManifestPath: ${JSON.stringify(options.ownerManifestPath)},
+            poolRecovery: { blocked: [] }, mergePoolRecovery() {},
+          });
+          throw new Error("lease published during repair claim");
+        } catch (error) {
+          if (error.details?.code !== "beta_pool_recovery_claim_busy") throw error;
+          process.stdout.write(error.details.code);
+        }
+      `;
+      assert.equal(
+        execFileSync(process.execPath, ["--input-type=module", "-e", code], {
+          encoding: "utf8",
+          timeout: 15_000,
+          env: { ...process.env, HOME: homeDir },
+        }),
+        "beta_pool_recovery_claim_busy",
+      );
+      await assert.rejects(
+        fs.lstat(path.join(pool.leasesDir, `${slotId}.lock`)),
+        { code: "ENOENT" },
+      );
+      const automatic = await acquireBetaSlotLease({
+        ...options,
+        requestedSlotId: null,
+      });
+      try {
+        assert.notEqual(automatic.lease.slotId, slotId);
+      } finally {
+        await releaseBetaSlotLease(automatic);
+      }
+      assert.equal(await fs.readFile(ownerPath, "utf8"), ownerBefore);
+    });
+  } finally {
+    await releaseBetaSlotRecoveryClaim(claim, pool);
+  }
+  const acquired = await acquireBetaSlotLease(options);
+  try {
+    assert.equal(acquired.lease.slotId, slotId);
+    // Allocation releases its short-lived claim even when returning a lease.
+    await assert.rejects(fs.lstat(claim.claimPath), { code: "ENOENT" });
+  } finally {
+    await releaseBetaSlotLease(acquired);
+  }
+}
 
 export async function verifyBetaSlotPoolRecovery(temporaryHome, oldLease) {
   const candidateOrderHome = path.join(temporaryHome, "candidate-order-home");
@@ -388,4 +482,51 @@ export async function verifyBetaSlotPoolRecovery(temporaryHome, oldLease) {
   assert(mergeCandidateOrderIndex > mergePoolRecoveryIndex);
   assert(mergeOrderingReasonIndex > mergeCandidateOrderIndex);
   assert(poolRecoveryOutputIndex > mergeOrderingReasonIndex);
+}
+
+export async function verifyIncompleteBetaStartOwnership(temporaryHome) {
+  const slotId = "pool-02";
+  const sourceRoot = process.cwd();
+  const owner = "dvs-incomplete-fixture";
+  const nonce = "incomplete-fixture-nonce";
+  const targets = resolveBetaUpdateTargets(temporaryHome, slotId);
+  const paths = resolveBetaPoolPaths(temporaryHome);
+  await fs.mkdir(paths.leasesDir, { recursive: true });
+  await fs.mkdir(targets.userData, { recursive: true });
+  const service = { ownership: "dedicated", slotId, leaseNonce: nonce };
+  const manifest = {
+    profile: "beta", devSessionId: owner, source: { root: sourceRoot },
+    targetEnvironment: { instanceId: slotId, betaSlot: { assignedSlotId: slotId, leaseNonce: nonce } },
+    services: { electron: { ...service }, beta: { ...service } },
+  };
+  const leasePath = path.join(paths.leasesDir, `${slotId}.lock`);
+  const lease = {
+    schemaVersion: 1, slotId, leaseNonce: nonce, ownerSessionId: owner,
+    ownerSourceRoot: sourceRoot, ownerRevision: "verify-revision",
+    ownerManifestPath: path.join(temporaryHome, "manifest.json"),
+    allocatorPid: process.pid, acquiredAt: new Date().toISOString(),
+  };
+  await fs.writeFile(leasePath, JSON.stringify({ ...lease, leaseNonce: "wrong-nonce" }));
+  await assert.rejects(cleanupIncompleteBetaStart(manifest, { homeDir: temporaryHome }), /lease owner identity drifted/);
+  await fs.writeFile(leasePath, JSON.stringify(lease));
+  const updateLock = path.join(targets.instanceRoot, "update.lock");
+  await fs.writeFile(updateLock, JSON.stringify({ pid: process.pid }));
+  await assert.rejects(cleanupIncompleteBetaStart(manifest, { homeDir: temporaryHome }), /update is busy/);
+  await fs.writeFile(updateLock, "{}");
+  await assert.rejects(cleanupIncompleteBetaStart(manifest, { homeDir: temporaryHome }), /ownership is unknown/);
+  await fs.rm(updateLock);
+  const status = {
+    channel: "beta", instanceId: slotId, devSessionId: owner,
+    app: {
+      pid: process.pid, path: targets.appPath, userDataPath: targets.userData,
+      executable: path.join(targets.appPath, "Contents", "MacOS", targets.appName),
+      startedAt: new Date().toISOString(), processSignature: "wrong-signature",
+    },
+  };
+  for (const change of [{ devSessionId: "other-owner" }, { instanceId: "pool-03" }, {}]) {
+    await fs.writeFile(path.join(targets.userData, "beta-desktop-status.json"), JSON.stringify({ ...status, ...change }));
+    await assert.rejects(cleanupIncompleteBetaStart(manifest, { homeDir: temporaryHome }), /desktop ownership cannot be proven/);
+    assert.equal(JSON.parse(await fs.readFile(leasePath, "utf8")).leaseNonce, nonce);
+    assert.equal(process.kill(process.pid, 0), true);
+  }
 }

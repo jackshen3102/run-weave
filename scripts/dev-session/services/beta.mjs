@@ -1,3 +1,4 @@
+import { persistBackendHealthAuth } from "../../lib/backend-health-auth.mjs";
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import os from "node:os";
@@ -55,6 +56,7 @@ export async function startDedicatedBeta({
   requestedSharedAppServer,
   fixtureScope = null,
   onSpawn,
+  onStarting,
 }) {
   const paths = resolveBetaPaths(
     sourceRoot,
@@ -138,6 +140,9 @@ export async function startDedicatedBeta({
       RUNWEAVE_SHARED_APP_SERVER_PID: String(sharedAppServer.pid),
     });
   }
+  if (!sharedBackend) {
+    await persistBackendHealthAuth(paths.profileDir, sessionId, launchEnv);
+  }
   const stopBetaControl = async () => {
     await execFileAsync(
       process.execPath,
@@ -150,6 +155,23 @@ export async function startDedicatedBeta({
       { cwd: sourceRoot, encoding: "utf8" },
     );
   };
+  await onStarting?.({
+    instanceId,
+    slotId,
+    leaseNonce,
+    ownerDevSessionId: sessionId,
+    channel: "beta",
+    appPath: paths.appPath,
+    userDataDir: paths.userData,
+    statusPath: paths.desktopStatusPath,
+    betaControl: {
+      command: process.execPath,
+      args: buildBetaStopArgs({ sourceRoot, instanceId, sessionId, sharedAppServer }),
+      cwd: sourceRoot,
+    },
+  });
+  // Register responsibility before the updater can launch any product process.
+  onSpawn(null, stopBetaControl);
   try {
     await execFileAsync(process.execPath, controlArgs, {
       cwd: sourceRoot,
@@ -212,7 +234,6 @@ export async function startDedicatedBeta({
     processSignature: readProcessSignature(status.desktop.pid),
     logPath: status.update.logPath,
   };
-  onSpawn(processInfo, stopBetaControl);
   const backendLockPath =
     sharedBackend?.lockPath ?? path.join(paths.profileDir, "backend.lock.json");
   const appServerLockPath =
@@ -220,7 +241,7 @@ export async function startDedicatedBeta({
   const [backendLock, backendHealth, appServerLock, appServerHealth] =
     await Promise.all([
       readJson(backendLockPath),
-      fetchHealthJson(`${status.backend.baseUrl}/health`),
+      fetchHealthJson(`${status.backend.baseUrl}/health`, path.dirname(backendLockPath)),
       readJson(appServerLockPath),
       fetchHealthJson(`${status.appServer.baseUrl}/healthz`),
     ]);

@@ -3,14 +3,15 @@
 当前命令实现位于 `packages/runweave-cli/`，修改 CLI 前先读
 `../../packages/runweave-cli/AGENTS.md`。
 
-| 任务                                         | 文档                                       |
-| -------------------------------------------- | ------------------------------------------ |
-| Terminal、Project、输入投递与 Agent 控制     | [terminal-cli.md](./terminal-cli.md)       |
-| Agent Team 创建、执行、观察和介入            | [agent-team-cli.md](./agent-team-cli.md)   |
-| iOS 两台模拟器跨 worktree 复用               | [ios-simulators.md](./ios-simulators.md)   |
-| 普通会话经验检索与结果回执                   | [experience-cli.md](./experience-cli.md)   |
-| Agent Self-Evolution 操作                    | [evolution-cli.md](./evolution-cli.md)     |
-| Terminal Browser Profile、网页工具与人工协助 | [browser-profile.md](./browser-profile.md) |
+| 任务                                         | 文档                                                       |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| Terminal、Project、输入投递与 Agent 控制     | [terminal-cli.md](./terminal-cli.md)                       |
+| Terminal 快照分享、匿名读取与有效期          | [terminal-snapshot-share.md](./terminal-snapshot-share.md) |
+| Agent Team 创建、执行、观察和介入            | [agent-team-cli.md](./agent-team-cli.md)                   |
+| iOS 两台模拟器跨 worktree 复用               | [ios-simulators.md](./ios-simulators.md)                   |
+| 普通会话经验检索与结果回执                   | [experience-cli.md](./experience-cli.md)                   |
+| Agent Self-Evolution 操作                    | [evolution-cli.md](./evolution-cli.md)                     |
+| Terminal Browser Profile、网页工具与人工协助 | [browser-profile.md](./browser-profile.md)                 |
 
 命令、参数、JSON 输出或退出码变化时，同一改动内更新对应文档。
 

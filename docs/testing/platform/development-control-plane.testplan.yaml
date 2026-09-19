@@ -114,3 +114,21 @@ cases:
     steps:
       - 用 CLI 创建、发送、focus、读取 history、订阅 events，并对未知/跨项目 ID 与错误认证重复操作。
       - 确认命令只影响指定资源，事件使 Web/App 收敛但不抢焦点，错误不猜测其它目标且 JSON 不泄露秘密。
+  - id: DCP-011
+    name: tunnel scope all 的私有健康握手与无启动环境的复查
+    required: true
+    description: >
+      Backend health 保持 tunnel 保护；控制面仅向匹配 profile lock 的 loopback Backend 发送凭据，
+      后续 status 和 open 不依赖最初 shell 环境，shared/CDP/App Server 不继承无关凭据。
+    preconditions:
+      - 当前源码经 planner 创建隔离 Beta，启动环境提供随机 tunnel token 和 RUNWEAVE_TUNNEL_AUTH_SCOPE=all，秘密不写到命令参数或验收输出。
+    steps:
+      - 确认 Electron packaged readiness、Beta component handshake 都成功，匿名 Backend /health 仍返回 401，携带正确凭据的请求成功。
+      - 在不含原始 tunnel 环境的后续命令中执行 dev:status 和 dev:open，确认 Session 和 surface ready，未出现连续 tunnel-auth.rejected 健康探测。
+      - 检查 profile 私有配置权限为 0600、owner 与 Backend lock 一致；CLI JSON、manifest、日志、URL 和进程参数均不包含凭据。
+      - 运行既有 dev:session:verify 的独立 HTTP fixture，确认 remote host、错误 owner/port、CDP/App Server 路径和重定向都不接收凭据；shared 探测只读取目标 profile 配置，失败后的诊断不带凭据。
+      - 在既有真实 HTTP fixture 中确认 Backend 自发布代际签名与确切 loopback IP:port 的监听 PID 同时匹配才发送凭据；错误监听者、同 PID/端口但旧代际、缺少代际证据都不收到凭据，后续调用改变 locale/timezone 不影响正确身份匹配。
+      - 同时启动不同 PID、同端口但不同指定 IPv4 地址的临时 listener，确认自有 loopback 健康握手成功且无凭据发往另一地址；自有 wildcard、IPv6 和 mapped socket 成功，外来匹配 socket 或无法排除双栈的 IPv6 wildcard 拒绝且不发送凭据，不操作实际非本任务监听者。
+      - 区分真实 lsof/HTTP 证据与构造清单检查：两个 adapter 的私有 parser 保持一致，构造 IPv4/IPv6/mapped/wildcard 清单按确切端点匹配，未知字段、地址族、非数值地址、错误端口或不完整 NUL record 均拒绝。
+      - 验证 JSON 转义后恰为 16 KiB 的配置可被 scripts 和 Electron 读取；超一字节以及 8192 个引号或反斜杠的 token 被拒绝且先前文件不变，错误不含 token。
+      - 停止 Session 并验证 mutable reset 清除私有 tunnel 配置；下一个无 token 的 owner 不继承旧凭据，损坏配置不得静默降级。

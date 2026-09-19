@@ -20,6 +20,7 @@ import { ConnectionsPage } from "./pages/connections-page";
 import { SystemMonitorPage } from "./pages/system-monitor-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
 import { PrototypesPage } from "./pages/prototypes-page";
+import { TerminalSnapshotShareNotification } from "./components/terminal/workspace/snapshot-share-notification";
 import { ActivityPage } from "./pages/activity-page";
 import { EvolutionPage } from "./pages/evolution-page";
 
@@ -32,7 +33,7 @@ const TERMINAL_LIST_PATH = "/terminal";
 const isElectron = window.electronAPI?.isElectron === true;
 
 export default function App() {
-  return <><RunweaveApp /><SuijiDrawer /></>;
+  return <><RunweaveApp /><SuijiDrawer /><TerminalSnapshotShareNotification /></>;
 }
 
 function RunweaveApp() {

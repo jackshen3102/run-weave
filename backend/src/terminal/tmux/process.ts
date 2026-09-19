@@ -225,6 +225,7 @@ export abstract class TmuxProcess {
   protected async runTmux(
     args: string[],
     target?: TmuxTarget,
+    options?: { sensitiveOutput?: boolean },
   ): Promise<{ stdout: string; stderr: string }> {
     await this.ensureSocketDirectory();
     const serverArgs = target
@@ -245,7 +246,7 @@ export abstract class TmuxProcess {
           sessionName: target?.sessionName,
           socketPath: target?.socketPath ?? this.socketPath,
           timeoutMs: TmuxCommandTimeoutMs,
-          error,
+          ...(options?.sensitiveOutput ? {} : { error }),
         });
       }
       throw error;

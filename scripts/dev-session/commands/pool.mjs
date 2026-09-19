@@ -2,10 +2,13 @@
 
 import { DevSessionError } from "../contracts.mjs";
 import { inspectBetaPool, recoverBetaPoolSlot } from "../beta-pool/index.mjs";
+import { repairBetaRetainedState } from "../beta-pool/recovery/retained-state.mjs";
 
 function parseArgs(argv) {
-  const command = argv[0] === "recover" ? "recover" : "status";
-  const args = command === "recover" ? argv.slice(1) : argv;
+  const command = ["recover", "repair-retained-state"].includes(argv[0])
+    ? argv[0]
+    : "status";
+  const args = command !== "status" ? argv.slice(1) : argv;
   const options = { command, json: false, slotId: null, sessionId: null };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -19,6 +22,7 @@ function parseArgs(argv) {
     const key = new Map([
       ["--slot", "slotId"],
       ["--session", "sessionId"],
+      ["--failure-at", "expectedFailureAt"],
     ]).get(arg);
     if (!key) {
       throw new DevSessionError(`unknown argument: ${arg}`, 2);
@@ -29,6 +33,9 @@ function parseArgs(argv) {
     }
     options[key] = value;
     index += 1;
+  }
+  if (options.expectedFailureAt && command !== "repair-retained-state") {
+    throw new DevSessionError("--failure-at requires repair-retained-state", 2);
   }
   return options;
 }
@@ -55,6 +62,17 @@ function printProjection(projection, json) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.command === "repair-retained-state") {
+    if (!options.slotId || !options.sessionId || !options.expectedFailureAt) {
+      throw new DevSessionError(
+        "repair-retained-state requires --slot, --session and --failure-at",
+        2,
+      );
+    }
+    const receipt = await repairBetaRetainedState(options);
+    process.stdout.write(`${JSON.stringify({ ok: true, receipt }, null, 2)}\n`);
+    return;
+  }
   if (options.command === "recover") {
     if (!options.slotId) {
       throw new DevSessionError("recover requires --slot", 2);

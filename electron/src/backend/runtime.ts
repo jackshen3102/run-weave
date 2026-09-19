@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import net from "node:net";
+import { localBackendAuthHeaders, restoreOwnedBackendHealthEnv } from "./health-auth.js";
 import path from "node:path";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 import {
@@ -205,6 +206,7 @@ function delay(ms: number): Promise<void> {
 async function waitForBackendReady(
   child: ChildProcess,
   backendUrl: string,
+  backendEnv: NodeJS.ProcessEnv,
 ): Promise<void> {
   const deadline = Date.now() + DEFAULT_HEALTHCHECK_TIMEOUT_MS;
 
@@ -222,6 +224,8 @@ async function waitForBackendReady(
       try {
         const response = await fetch(`${backendUrl}/health`, {
           signal: controller.signal,
+          redirect: "error",
+          headers: localBackendAuthHeaders(`${backendUrl}/health`, backendEnv.BROWSER_PROFILE_DIR!, backendEnv, child.pid),
         });
         if (response.ok) {
           return;
@@ -273,7 +277,7 @@ export async function startPackagedBackend(
     shellVersion?: string;
   } = {},
 ): Promise<PackagedBackendRuntime> {
-  const baseEnv = options.baseEnv ?? process.env;
+  const baseEnv = restoreOwnedBackendHealthEnv(options.baseEnv ?? process.env);
   const resourcesPath = options.resourcesPath ?? process.resourcesPath;
   const mergedEnv = buildPackagedBackendEnv({
     baseEnv,
@@ -400,7 +404,7 @@ async function startPackagedBackendForRelease(options: {
   });
 
   try {
-    await waitForBackendReady(child, backendUrl);
+    await waitForBackendReady(child, backendUrl, backendEnv);
   } catch (error) {
     options.onIncidentEvent?.({
       event: "packagedBackend.candidate.failed",
