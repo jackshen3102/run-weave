@@ -23,6 +23,7 @@ import {
   useTerminalSessionsQuery,
 } from "../../../features/terminal/queries/workspace";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { LOCAL_DEV_CONNECTION_ID } from "../../../features/connection/system-connection";
 import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import {
   formatHistoryPanelLabel,
@@ -47,7 +48,7 @@ export function TerminalWorkspaceOverlays({
   onConfirmDeleteProject,
   onSubmitSessionAlias,
 }: TerminalWorkspaceOverlaysProps) {
-  const { apiBase, token } = useTerminalRuntime();
+  const { activeConnectionId, apiBase, scope, token } = useTerminalRuntime();
   const projectsQuery = useTerminalProjectsQuery();
   const sessionsQuery = useTerminalSessionsQuery();
   const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
@@ -152,6 +153,8 @@ export function TerminalWorkspaceOverlays({
   return (
     <>
       <TerminalProjectDialog
+        key={scope}
+        canSelectDirectory={activeConnectionId === LOCAL_DEV_CONNECTION_ID}
         open={projectDialogMode !== null}
         mode={projectDialogMode ?? "create"}
         loading={loading}

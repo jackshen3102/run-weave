@@ -133,6 +133,11 @@ const electronApi = {
     ipcRenderer.invoke("viewer:check-app-server") as Promise<boolean>,
   openExternal: (url: string) =>
     ipcRenderer.invoke("viewer:open-external", url),
+  selectProjectDirectory: (defaultPath?: string) =>
+    ipcRenderer.invoke(
+      "viewer:select-project-directory",
+      defaultPath,
+    ) as Promise<string | null>,
   loadSuijiState: () => ipcRenderer.invoke("suiji:load"),
   saveSuijiProfile: (environment, profile) => ipcRenderer.invoke("suiji:save-profile", environment, profile),
   selectSuijiEnvironment: (environment) => ipcRenderer.invoke("suiji:select-environment", environment),

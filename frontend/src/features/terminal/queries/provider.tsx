@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { buildConnectionQueryScope } from "../../query/connection-query-provider";
 
 interface TerminalRuntimeContextValue {
+  activeConnectionId: string | null;
   apiBase: string;
   onAuthExpired?: () => void;
   scope: string;
@@ -29,8 +30,14 @@ export function TerminalRuntimeProvider({
     connectionId: activeConnectionId ?? null,
   });
   const value = useMemo<TerminalRuntimeContextValue>(
-    () => ({ apiBase, onAuthExpired, scope, token }),
-    [apiBase, onAuthExpired, scope, token],
+    () => ({
+      activeConnectionId: activeConnectionId ?? null,
+      apiBase,
+      onAuthExpired,
+      scope,
+      token,
+    }),
+    [activeConnectionId, apiBase, onAuthExpired, scope, token],
   );
   return (
     <TerminalRuntimeContext.Provider value={value}>
