@@ -81,7 +81,7 @@ function resolveTerminalInputData(
 
 function buildCodexSlashCommandSequence(
   command: string,
-  submitKey: "C-m" | "Tab",
+  submitKey: "Enter" | "Tab",
 ): TmuxKeySequenceItem[] {
   return [
     { type: "key", key: "C-u" },
@@ -96,7 +96,7 @@ function buildCodexSlashCommandSequence(
 
 function buildCodexSlashCommandPtyInput(
   command: string,
-  submitKey: "C-m" | "Tab",
+  submitKey: "Enter" | "Tab",
 ): string {
   return `\x15${command}${submitKey === "Tab" ? "\t" : "\r"}`;
 }
@@ -107,7 +107,7 @@ function buildPromptPasteInput(text: string): string {
 
 function buildPromptPastePtyInput(
   text: string,
-  submitKey: "C-m" | "Tab",
+  submitKey: "Enter" | "Tab",
 ): string {
   return `${buildPromptPasteInput(text)}${submitKey === "Tab" ? "\t" : "\r"}`;
 }
@@ -122,7 +122,7 @@ function splitPromptPaste(value: string): string[] {
 
 function buildPromptPasteSequence(
   text: string,
-  submitKey: "C-m" | "Tab",
+  submitKey: "Enter" | "Tab",
 ): TmuxKeySequenceItem[] {
   return [
     ...splitPromptPaste(buildPromptPasteInput(text)).map((value) => ({
@@ -222,8 +222,9 @@ export async function sendInputToSession(
     );
     const codexSlashCommand =
       mode === "codex_slash_command" ? normalizeCodexSlashCommand(data) : null;
+    // Extended key protocols distinguish Ctrl+M from the Enter key.
     const composerSubmitKey =
-      currentTerminalState?.state === "agent_running" ? "Tab" : "C-m";
+      currentTerminalState?.state === "agent_running" ? "Tab" : "Enter";
     const dispatchData =
       codexSlashCommand === null ? resolveTerminalInputData(data, mode) : null;
     const exitTmuxCopyMode = mode === "tmux_exit_copy_mode";
