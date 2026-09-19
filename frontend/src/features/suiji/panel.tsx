@@ -8,12 +8,16 @@ export function SuijiPanel({
   children,
   onBack,
   busy = false,
+  actions,
+  feedback,
 }: {
   title: ReactNode;
   description?: ReactNode;
   children: ReactNode;
   onBack: () => void;
   busy?: boolean;
+  actions?: ReactNode;
+  feedback?: ReactNode;
 }) {
   const id = useId();
   const panel = useRef<HTMLElement>(null);
@@ -40,6 +44,9 @@ export function SuijiPanel({
         <h2 id={id} className="min-w-0 truncate font-semibold">
           {title}
         </h2>
+        {actions ? (
+          <div className="ml-auto flex shrink-0 gap-2">{actions}</div>
+        ) : null}
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
         {description ? (
@@ -47,6 +54,7 @@ export function SuijiPanel({
         ) : null}
         {children}
       </div>
+      {feedback}
     </section>
   );
 }
