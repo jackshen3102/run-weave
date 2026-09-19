@@ -68,6 +68,28 @@ const EXTENSION_LANGUAGE_MAP: Record<string, string> = {
   ".vue": "html",
 };
 
+const TEXT_PREVIEW_LINK_EXTENSIONS = new Set([
+  ".txt",
+  ".log",
+  ".csv",
+  ".tsv",
+  ".ini",
+  ".conf",
+]);
+
+/** Conservative terminal entry policy; generic text preview remains available in Files. */
+export function isSupportedTerminalFileLinkPath(filePath: string): boolean {
+  if (/[\\/]$/.test(filePath)) return false;
+  const basename = filePath.split(/[\\/]/).at(-1) ?? "";
+  if (basename.lastIndexOf(".") <= 0) return false;
+  const extension = terminalPreviewExtensionOf(basename);
+  return (
+    IMAGE_PREVIEW_EXTENSIONS.has(extension) ||
+    Object.hasOwn(EXTENSION_LANGUAGE_MAP, extension) ||
+    TEXT_PREVIEW_LINK_EXTENSIONS.has(extension)
+  );
+}
+
 const SHORT_LANGUAGE_BADGE_BY_EXTENSION: Record<string, string> = {
   ".ts": "TS",
   ".tsx": "TSX",

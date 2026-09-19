@@ -4,6 +4,7 @@ import UIKit
 @MainActor
 public protocol TerminalSurface: AnyObject {
   var view: UIView { get }
+  var openFileRequested: ((TerminalFileTap) -> Void)? { get set }
   var openLinkRequested: ((BrowserOpenIntent) -> Void)? { get set }
   var rawInput: (([UInt8]) -> Void)? { get set }
   var viewportChanged: ((Int, Int) -> Void)? { get set }

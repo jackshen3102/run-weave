@@ -6,6 +6,7 @@ struct TerminalScreen: View {
   @ObservedObject var controller: SessionController
   @ObservedObject private var browser: BrowserSession
   let details: TerminalDetails
+  @State private var fileTap: TerminalFileTap?
   @State private var deleting = false
   @State private var showingHistory = false
   @State private var showingInfo = false
@@ -90,6 +91,10 @@ struct TerminalScreen: View {
     .onAppear {
       controller.surface.applyTheme(dark: theme != "light")
       connectBrowserIntents()
+      controller.openFileRequested = { tap in
+        guard session.terminalController === controller, session.terminal?.id == details.id else { return }
+        fileTap = tap
+      }
     }
     .onChange(of: theme) { controller.surface.applyTheme(dark: $0 != "light") }
     .task(id: canReadChanges) {
@@ -100,6 +105,7 @@ struct TerminalScreen: View {
       if status == "已连接" { Task { await changes.refresh() } }
     }
     .onDisappear {
+      controller.openFileRequested = nil
       changes.cancel()
       browser.unregisterHostPresentation(id: browserPresentationID, hostID: ObjectIdentifier(controller))
     }
@@ -117,6 +123,10 @@ struct TerminalScreen: View {
       set: { if !$0 { browser.collapse() } }
     )) { BrowserScreen(browser: browser) }
     .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented))
+    .sheet(item: $fileTap) { tap in
+      TerminalFilePreview(session: session, terminalID: details.id, projectID: details.projectId,
+        tap: tap, close: { fileTap = nil }, model: changes)
+    }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id) }
     .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id) }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session) }

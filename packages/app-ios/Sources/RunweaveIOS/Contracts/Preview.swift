@@ -52,6 +52,7 @@ struct SelectedFile: Identifiable, Equatable {
   let path: String
   var changeKind: String?
   var changeStatus: String?
+  var readonly = false
   var id: String { (changeKind ?? "file") + ":" + path }
 }
 
@@ -102,4 +103,48 @@ func previewError(_ error: Error) -> String {
 func isPreviewImage(_ path: String) -> Bool {
   ["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "avif"].contains(
     (path as NSString).pathExtension.lowercased())
+}
+
+// Mirrors shared/terminal/preview-core.ts isSupportedTerminalFileLinkPath.
+// The Files browser still supports generic text; terminal detection is conservative.
+private let terminalFileLinkExtensions: Set<String> = [
+  "png", "jpg", "jpeg", "gif", "webp", "avif",
+  "ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "md", "mdx",
+  "css", "scss", "less", "html", "htm", "xml", "svg", "yaml", "yml",
+  "py", "go", "rs", "rb", "java", "kt", "swift", "c", "cpp", "h", "hpp",
+  "cs", "sh", "bash", "zsh", "sql", "graphql", "gql", "toml", "dockerfile",
+  "lua", "php", "r", "vue", "txt", "log", "csv", "tsv", "ini", "conf",
+]
+
+func isSupportedTerminalFileLinkPath(_ path: String) -> Bool {
+  guard !path.hasSuffix("/"), !path.hasSuffix("\\") else { return false }
+  let basename = path.replacingOccurrences(of: "\\", with: "/").components(separatedBy: "/").last ?? ""
+  guard let dot = basename.lastIndex(of: "."), dot != basename.startIndex else { return false }
+  return terminalFileLinkExtensions.contains(String(basename[basename.index(after: dot)...]).lowercased())
+}
+
+struct TerminalFilePanel: Decodable {
+  struct Geometry: Decodable {
+    let paneLeft: Int
+    let paneTop: Int
+    let paneWidth: Int
+    let paneHeight: Int
+    let windowWidth: Int
+    let windowHeight: Int
+  }
+  let panelId: String
+  let geometry: Geometry?
+}
+struct TerminalFileWorkspace: Decodable { let panels: [TerminalFilePanel] }
+struct TerminalFileCandidate: Decodable, Identifiable {
+  let path: String
+  let absolutePath: String
+  let base: String
+  var id: String { absolutePath }
+}
+struct TerminalFileResolution: Decodable { let candidates: [TerminalFileCandidate] }
+
+struct TerminalFileLinkContext {
+  let linePrefix: String
+  let precedingLines: [String]
 }

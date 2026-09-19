@@ -38,12 +38,12 @@ export function useTerminalPreviewQueries(input: {
   const selectedChangePath = input.selectedChangePath ?? "";
   const selectedChangeKind = input.selectedChangeKind ?? "working";
   const searchEnabled =
-    Boolean(projectId) &&
+    Boolean(projectId && input.hasProjectPath) &&
     input.mode === "file" &&
     !input.query.trim().startsWith("/") &&
     debouncedSearch === input.query;
   const searchPending =
-    Boolean(projectId) &&
+    Boolean(projectId && input.hasProjectPath) &&
     input.mode === "file" &&
     !input.query.trim().startsWith("/") &&
     debouncedSearch !== input.query;

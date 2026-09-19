@@ -23,7 +23,7 @@ Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review cha
 
 - 搜索、目录、Git 与相对路径以当前生效 Project 的 `path` 为根；该 Project 可以是父项目或 Worktree 子项目。
   不从 terminal 的实时 `cwd` 推断根目录。解析规则见 [Worktree Context](./terminal-worktree-context.md)。
-- Project 没有有效路径时显示设置路径的错误，不退回 session cwd。切换同一 Project 内的 terminal 不重置预览内容；
+- Project 没有路径时，搜索、目录和 Git 仍要求设置路径；绝对路径文件可只读预览。终端文件链接可使用来源 session/panel cwd 解析相对路径，但不把 cwd 当作项目根。切换同一 Project 内的 terminal 不重置预览内容；
   切换 Project 后读取目标 Project 的选择与视图状态，不能继续展示旧项目的 diff。
 - store 按 Project 保存文件选择、查询、Changes 选择和 Markdown/SVG 视图，并持久化 `projects`；
   Sidecar 宽度单独持久化。当前初始化 `ui.open=true`，不能沿用旧方案的“默认关闭”假设。
@@ -46,6 +46,19 @@ Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review cha
   限制与支持格式以 [文件服务](../../backend/src/terminal/preview/preview.ts) 为准。
 - 读取失败保留可恢复的选择与输入，不能把失败响应当作空文件。Refresh 重读当前对象；Copy path 复制可定位路径，
   优先使用后端绝对路径，缺失时由 Project path 补齐；行引用通过渲染器选择范围产生，不复制整份正文作为路径。
+
+## 从终端打开文件
+
+- Desktop 与 Web 的终端文件路径使用 xterm link provider；HTTP(S) 仍由 WebLinksAddon 处理，OSC 8 的 `file://` 链接进入同一文件入口。
+- 文件入口只支持预览已识别的代码/文档扩展名、TXT/LOG/CSV/TSV/INI/CONF 和 PNG/JPEG/GIF/WebP/AVIF 图片；SVG 沿用预览定义。不自动识别目录、无扩展名文件、压缩包、PDF 或未知格式。Web 和 Backend 复用 `preview-core.ts` 的 `isSupportedTerminalFileLinkPath`，iOS 对照同一列表；后端仍需验证实际目标为普通文件，内容与大小限制由预览读取接口校验。文件树的通用文本读取不受此入口策略限制。
+- 支持上述文件的绝对路径、`./`、`../`、普通相对路径，以及 `:line:column`；空格路径需引号包围，扩展名不区分大小写。渲染时按 buffer cell 映射中文与软换行；tmux 分屏只识别 pane 内当前行，不跨 pane 合并文字。
+- 点击普通文件候选时，Web 重新核对命中内容，iOS 保存不可变缓冲区快照；两端携带路径起点之前的行内文字和同 pane 内最多四行上文。只有路径起点前是空白时，Backend 才逐行提取行尾路径片段并拼接，遇到空行、闭合分隔符、完整文件名、URI/提示符或超过 4096 字符时停止；提取到带说明文字或开括号的起始行后停止继续上溯。显式 OSC 8 与引号包围的路径不进行回溯。
+- 原始路径和所有拼接候选一起按来源 cwd/项目根校验，并按真实文件路径去重；不能因后半截碰巧存在就提前打开。唯一有效候选自动打开，多个有效候选由用户选择。这是点击时的有界候选恢复，不改变渲染链接范围，也不保证恢复任意排版、跨行引号空格路径或超过四行上文的路径。
+- 点击后通过 `POST /api/terminal/project/:id/preview/resolve-link` 在当前连接的 Backend 解析。Backend 校验 session/project/panel 归属；显式相对路径基于来源 cwd，普通相对路径检查 cwd 与项目根，多个有效候选由用户选择。
+- 当前 cwd 不代表历史输出产生时的 cwd；不猜测历史目录，也不递归扫描全盘寻找同名文件。找不到时显示错误，用户可使用绝对路径。
+- 配置项目根时，相对路径仍遵守 realpath 包含检查；项目外文件需显式绝对路径并保持只读。无项目根时，使用 cwd 解析的文件同样只读，文件响应的 `projectPath` 为 null。
+- 解析请求随连接、项目、terminal 或新点击切换取消。打开复用 Preview 的草稿确认、文件选择和行列定位；错误或取消不会替换正在编辑的内容。
+- 原生 iOS 使用 SwiftTerm 同一个单击命中与显示缓冲区快照，调用上述解析接口，复用 FilePreview 展示文本、Markdown 和图片；同名候选由用户选择，行列引用定位到原生文本选区。分屏按点击位置匹配实时 pane 几何；布局尺寸不符时提示重新点击。
 
 ## 编辑、冲突与 Git
 

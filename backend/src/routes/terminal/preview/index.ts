@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { Request, Response, Router } from "express";
 import { z } from "zod";
 import { logger } from "../../../logging/index";
@@ -19,6 +20,8 @@ import {
   TerminalPreviewError,
 } from "../../../terminal/preview/preview";
 
+import { resolveTerminalFileLink } from "../../../terminal/preview/file-link";
+
 const terminalPreviewLogger = logger.child({ component: "terminal-preview" });
 
 const previewFileSearchSchema = z.object({
@@ -33,6 +36,16 @@ const previewDirectorySchema = z.object({
 
 const previewFileSchema = z.object({
   path: z.string().min(1),
+});
+
+const previewFileLinkSchema = z.object({
+  path: z.string().min(1).max(4096),
+  terminalSessionId: z.string().min(1),
+  panelId: z.string().min(1).optional(),
+  context: z.object({
+    linePrefix: z.string().max(4096),
+    precedingLines: z.array(z.string().max(4096)).max(4),
+  }).optional(),
 });
 
 const previewSaveFileSchema = z.object({
@@ -125,6 +138,37 @@ export function registerTerminalPreviewRoutes(
   router: Router,
   terminalSessionManager: TerminalSessionManager,
 ): void {
+  router.post("/project/:id/preview/resolve-link", async (req, res) => {
+    const parsed = previewFileLinkSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Invalid file link", errors: parsed.error.flatten() });
+      return;
+    }
+    try {
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      const session = terminalSessionManager.getSession(parsed.data.terminalSessionId);
+      if (!session || session.projectId !== project.id) {
+        throw new TerminalPreviewError("Terminal does not belong to this project", 404);
+      }
+      if (!parsed.data.panelId && !path.isAbsolute(parsed.data.path) &&
+        terminalSessionManager.listPanels(session.id).length > 1) {
+        throw new TerminalPreviewError("Refresh the terminal panel layout before opening a relative file path", 409);
+      }
+      const panel = parsed.data.panelId ? terminalSessionManager.getPanel(parsed.data.panelId) : undefined;
+      if (parsed.data.panelId && (!panel || panel.terminalSessionId !== session.id)) {
+        throw new TerminalPreviewError("Terminal panel not found", 404);
+      }
+      res.json(await resolveTerminalFileLink({
+        projectPath: project.path,
+        cwd: panel?.cwd ?? session.cwd,
+        requestedPath: parsed.data.path,
+        context: parsed.data.context,
+      }));
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
   router.get("/project/:id/preview/files/search", async (req, res) => {
     const parsed = previewFileSearchSchema.safeParse(req.query);
     if (!parsed.success) {

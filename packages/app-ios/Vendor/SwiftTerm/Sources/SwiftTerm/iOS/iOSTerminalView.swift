@@ -157,6 +157,10 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     /// Implicit targets are HTTP(S) only and join actual soft wraps, never hard line breaks.
     public var opensLinksOnSingleTap: Bool = false
 
+    /// Optional host action using the same bidi-aware buffer hit as native links.
+    /// Returning true consumes only an unselected single tap; selection and scrolling are unchanged.
+    public var singleTapLinkHandler: ((Position) -> Bool)?
+
     /// Controls link highlighting and link activation behavior.
     public var linkHighlightMode: LinkHighlightMode = .hover {
         didSet {
@@ -813,6 +817,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         if opensLinksOnSingleTap, gestureRecognizer.view != nil,
            gestureRecognizer.state == .ended, !selection.active {
             let hit = calculateTapHit(gesture: gestureRecognizer).grid
+            if singleTapLinkHandler?(hit) == true { return }
             let explicit = terminal.link(at: .buffer(hit), mode: .explicitOnly)
             let detected = explicit ?? terminal.link(at: .buffer(hit), mode: .explicitAndImplicitSoftWrapped)
             if let link = detected,

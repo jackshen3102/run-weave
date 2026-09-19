@@ -31,7 +31,8 @@ RunweaveIOS 的 [Package.swift](../../Package.swift) 直接引用本目录，不
 - `LinkLookupMode.explicitAndImplicitSoftWrapped` 优先读取 OSC 8 的真实目标，普通文本只
   连接终端自然软折行。禁用上游通用 editor-wrap heuristic，不推测拼接硬换行。
   原 `.explicitAndImplicit` 行为不变。不新建 ANSI/单元格坐标映射或另一份 URL 正则。
-- URL 仍交给 Runweave 的 BrowserURLPolicy；本补丁不授权 local/未知协议，不发送链接到 PTY。
+- `singleTapLinkHandler` 将同一个 bidi-aware 命中位置交给宿主；宿主读取当前显示缓冲区的有限单元格快照，识别文件路径并调用 Backend 解析。已激活选区和滚动手势保持原行为。
+- HTTP(S) 仍交给 Runweave 的 BrowserURLPolicy；文件路径与 `file://` 只在连接的 Backend 预览，不发送链接到 PTY。
 - Buffer 的调试 dump 使用系统临时目录，不包含上游开发者的个人路径。
 - build-info 插件固定声明 `1.19.0-runweave.1`、上述 commit 与 modified 状态，避免把包外层
   Runweave 仓库的 Git 信息冒充上游来源；generator 源码不变。

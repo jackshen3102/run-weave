@@ -7202,6 +7202,15 @@ open class Terminal {
     }
 
     /// Returns a hyperlink or implicit link at the provided location.
+    /// Display-buffer cells for host actions, including frozen history.
+    public func displayLine(atBufferRow row: Int) -> BufferLine? {
+        let buffer = displayBuffer
+        guard row >= 0, row < buffer.lines.count else { return nil }
+        return buffer.lines[row]
+    }
+
+    public var displayTopVisibleRow: Int { displayBuffer.yDisp }
+
     public func link(at location: LinkLookupLocation, mode: LinkLookupMode) -> String?
     {
         return linkMatch(at: location, mode: mode)?.text

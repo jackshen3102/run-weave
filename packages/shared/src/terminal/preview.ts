@@ -136,7 +136,7 @@ export interface TerminalPreviewFileResponse {
   path: string;
   absolutePath: string;
   base: TerminalPreviewBase;
-  projectPath: string;
+  projectPath: string | null;
   language: string;
   content: string;
   sizeBytes: number;

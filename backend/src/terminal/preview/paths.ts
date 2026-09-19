@@ -49,7 +49,7 @@ function isInsidePath(rootPath: string, targetPath: string): boolean {
 }
 
 export async function resolvePreviewPath(
-  projectPath: string,
+  projectPath: string | null | undefined,
   requestedPath: string,
   options?: { allowAbsoluteOutsideProject?: boolean },
 ): Promise<{
@@ -66,7 +66,14 @@ export async function resolvePreviewPath(
     throw new TerminalPreviewError("Home paths are not supported", 400);
   }
 
-  const rootPath = await realpath(projectPath);
+  if (!projectPath) {
+    if (options?.allowAbsoluteOutsideProject && path.isAbsolute(trimmedPath)) {
+      const absolutePath = await realpath(trimmedPath).catch(() => path.resolve(trimmedPath));
+      return { absolutePath, base: "filesystem", previewPath: absolutePath, relativePath: absolutePath };
+    }
+    ensureProjectPath(projectPath);
+  }
+  const rootPath = await realpath(projectPath!);
   const requestedAbsolutePath = path.isAbsolute(trimmedPath);
   const candidatePath = requestedAbsolutePath
     ? path.resolve(trimmedPath)

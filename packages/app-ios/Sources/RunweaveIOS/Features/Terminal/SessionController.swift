@@ -77,12 +77,14 @@ public final class SessionController: ObservableObject {
     if canSend != next { canSend = next }
   }
 
+  public var openFileRequested: ((TerminalFileTap) -> Void)?
   public var openLinkRequested: ((BrowserOpenIntent) -> Void)?
 
   public init(api: APIClient, terminalID: String, readOnly: Bool = false) {
     self.api = api
     self.terminalID = terminalID
     self.readOnly = readOnly
+    surface.openFileRequested = { [weak self] tap in self?.openFileRequested?(tap) }
     surface.openLinkRequested = { [weak self] intent in self?.openLinkRequested?(intent) }
     surface.rawInput = { [weak self] bytes in
       guard let text = String(bytes: bytes, encoding: .utf8) else { return }
@@ -282,6 +284,7 @@ public final class SessionController: ObservableObject {
   }
 
   public func dispose() {
+    openFileRequested = nil
     openLinkRequested = nil
     disconnect()
     surface.dispose()

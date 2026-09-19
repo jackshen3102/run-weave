@@ -1,3 +1,4 @@
+import type { TerminalFileLinkRequest, TerminalFileLinkResponse } from "@runweave/shared/terminal/file-link";
 import type { TerminalPreviewChangeKind, TerminalPreviewDeleteFileRequest, TerminalPreviewDeleteFileResponse, TerminalPreviewDirectoryResponse, TerminalPreviewContentSearchResponse, TerminalPreviewFileDiffResponse, TerminalPreviewFileResponse, TerminalPreviewFileSearchResponse, TerminalPreviewFolderSearchResponse, TerminalPreviewGitChangesResponse, TerminalPreviewRenameFileRequest, TerminalPreviewResetChangeRequest, TerminalPreviewResetChangeResponse, TerminalPreviewSaveFileRequest, TerminalPreviewSaveFileResponse } from "@runweave/shared/terminal/preview";
 import { requestBlob, requestJson, requestVoid } from "../http";
 
@@ -266,4 +267,16 @@ export async function listTerminalProjectPreviewDirectory(
       },
     },
   );
+}
+
+export function resolveTerminalPreviewFileLink(
+  apiBase: string, token: string, projectId: string,
+  request: TerminalFileLinkRequest, signal?: AbortSignal,
+): Promise<TerminalFileLinkResponse> {
+  return requestJson<TerminalFileLinkResponse>(apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/resolve-link`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(request), signal,
+    });
 }

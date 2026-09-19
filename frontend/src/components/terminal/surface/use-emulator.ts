@@ -1,3 +1,6 @@
+import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
+import type { TerminalFileLinkContext } from "@runweave/shared/terminal/file-link";
+import { createTerminalFileLinkProvider } from "../emulator/file-links";
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import {
   createTmuxScrollInput,
@@ -47,7 +50,9 @@ interface UseTerminalEmulatorArgs {
   onTmuxScrollbackActiveChange: (active: boolean) => void;
   onUserInputData?: (data: string) => void;
   onViewportResizeRef: MutableRef<(() => void) | undefined>;
+  paneWorkspaceRef: MutableRef<TerminalPanelWorkspace | null>;
   openTerminalLinkRef: MutableRef<(uri: string) => void>;
+  openTerminalFileLinkRef: MutableRef<(text: string, event: MouseEvent, context?: TerminalFileLinkContext) => void>;
   refreshTerminalViewportRef: MutableRef<(() => void) | null>;
   runtimeKindRef: MutableRef<"tmux" | "pty" | null>;
   searchAddonRef: MutableRef<SearchAddon | null>;
@@ -79,6 +84,8 @@ export function useTerminalEmulator({
   onUserInputData,
   onViewportResizeRef,
   openTerminalLinkRef,
+  openTerminalFileLinkRef,
+  paneWorkspaceRef,
   refreshTerminalViewportRef,
   runtimeKindRef,
   searchAddonRef,
@@ -105,11 +112,12 @@ export function useTerminalEmulator({
     const unicode11Addon = new Unicode11Addon();
     const activateLink = (event: MouseEvent, uri: string) => {
       event.preventDefault();
-      openTerminalLinkRef.current(uri);
+      if (/^file:\/\//i.test(uri)) openTerminalFileLinkRef.current(uri, event);
+      else if (/^https?:\/\//i.test(uri)) openTerminalLinkRef.current(uri);
     };
     const terminal = new Terminal({
       allowProposedApi: true,
-      linkHandler: { activate: activateLink },
+      linkHandler: { activate: activateLink, allowNonHttpProtocols: true },
       cursorBlink: initialPreferences.cursorBlink,
       fontFamily: initialPreferences.fontFamily,
       fontSize: initialPreferences.fontSize,
@@ -136,6 +144,10 @@ export function useTerminalEmulator({
     terminal.loadAddon(searchAddon);
     terminal.loadAddon(unicode11Addon);
     terminal.loadAddon(new WebLinksAddon(activateLink));
+    terminal.registerLinkProvider(createTerminalFileLinkProvider(terminal, (event, text, _range, context) => {
+      event.preventDefault();
+      openTerminalFileLinkRef.current(text, event, context);
+    }, () => paneWorkspaceRef.current));
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
     const tmuxScroll = createTmuxScrollInput();
@@ -541,6 +553,8 @@ export function useTerminalEmulator({
     onUserInputData,
     onViewportResizeRef,
     openTerminalLinkRef,
+    openTerminalFileLinkRef,
+    paneWorkspaceRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
     searchAddonRef,
