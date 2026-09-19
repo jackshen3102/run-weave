@@ -32,6 +32,7 @@ struct ComposerView: View {
   let session: AppSession
   let controller: SessionController
   @StateObject private var state: TerminalComposerState
+  @StateObject private var textEditor = CommandTextEditor()
   @ObservedObject private var imageDrafts: TerminalImageDrafts
   let terminalID: String
   var active = true
@@ -49,8 +50,7 @@ struct ComposerView: View {
   @State private var savingReply = false
   @State private var replySnapshot = ""
   @State private var pendingReply: LocalQuickReply?
-  @State private var confirmingInsertion = false
-  @State private var inputHeight: CGFloat = 60
+  @State private var inputHeight: CGFloat = 37
   @State private var chromeHeight: CGFloat = 124
   @State private var showingFailure = false
   @State private var accessoryHeight: CGFloat = 0
@@ -101,16 +101,6 @@ struct ComposerView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 8) {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("输入终端").font(.subheadline.weight(.semibold))
-          Text(state.snapshot.targetLabel).font(.caption2).foregroundColor(.secondary).lineLimit(1)
-        }
-        Spacer(minLength: 0)
-        Button(action: onClose) {
-          Text("关闭").font(.subheadline).frame(minWidth: 44, minHeight: 44)
-        }.disabled(closeDisabled)
-      }
       #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--native-auth-validation"),
           verticalSizeClass != .compact,
@@ -126,6 +116,7 @@ struct ComposerView: View {
           }.font(.caption).disabled(!state.snapshot.canWrite)
         }
       #endif
+      quickReplyBar
       if hasAccessories {
         // On cramped keyboards/landscape, secondary content yields space to the editor and toolbar.
         ScrollView(.vertical) {
@@ -166,6 +157,9 @@ struct ComposerView: View {
     .frame(maxWidth: .infinity)
     .background(TerminalAppearance.background)
     .clipShape(RoundedRectangle(cornerRadius: 20))
+    .accessibilityAction(.escape) {
+      if !closeDisabled { onClose() }
+    }
     .background(composerMeasurement("panel"))
     .onPreferenceChange(ComposerMeasurements.self) { sizes in
       guard let panel = sizes["panel"], let editor = sizes["editor"] else { return }
@@ -173,14 +167,14 @@ struct ComposerView: View {
       let next = ceil(panel - editor - (sizes["accessoryViewport"] ?? 0))
       if abs(chromeHeight - next) > 0.5 { chromeHeight = next }
     }
+    .task { await quickReplies.loadIfNeeded() }
     .alert("操作失败", isPresented: $showingFailure) {
       Button("关闭", role: .cancel) {}
     } message: { Text(failure ?? "") }
     .sheet(isPresented: $showingReplies, onDismiss: {
-      if pendingReply != nil {
-        if (session.terminalDrafts[terminalID] ?? "").isEmpty { insertReply(append: false) }
-        else { confirmingInsertion = true }
-      } else { editing = true }
+      if let item = pendingReply { insertReply(item) }
+      pendingReply = nil
+      editing = true
     }) {
       NavigationView {
         QuickReplyLibraryView(onSelect: selectReply)
@@ -194,20 +188,42 @@ struct ComposerView: View {
     .sheet(isPresented: $savingReply, onDismiss: { editing = true }) {
       NavigationView {
         QuickReplyEditorView(initialBody: replySnapshot)
-          .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              Button("返回") { savingReply = false }.disabled(quickReplies.saving)
-            }
+      }.navigationViewStyle(.stack)
+    }
+  }
+
+  private var quickReplyBar: some View {
+    HStack(spacing: 8) {
+      if verticalSizeClass != .compact {
+        ForEach(quickReplies.items.prefix(3)) { item in
+          Button { insertReply(item) } label: {
+            Text(item.title).lineLimit(1).truncationMode(.tail)
+              .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 44)
+              .background(TerminalAppearance.panel)
+              .clipShape(RoundedRectangle(cornerRadius: 12))
           }
-      }.navigationViewStyle(.stack).interactiveDismissDisabled(quickReplies.saving)
+          .accessibilityLabel(item.title)
+          .accessibilityHint("在光标处插入快捷回复，不会发送")
+          .accessibilityIdentifier("quick-reply-pinned-\(item.id)")
+          .disabled(!quickReplies.canEdit)
+        }
+      }
+      Button {
+        editing = false
+        pendingReply = nil
+        showingReplies = true
+      } label: {
+        Text(quickReplies.items.isEmpty ? "快捷回复" : "全部")
+          .frame(minWidth: 44, minHeight: 44)
+      }
+      .accessibilityLabel("全部快捷回复")
+      .accessibilityIdentifier("quick-reply-open")
+      if quickReplies.items.isEmpty || verticalSizeClass == .compact { Spacer(minLength: 0) }
     }
-    .confirmationDialog("输入框已有文字", isPresented: $confirmingInsertion, titleVisibility: .visible) {
-      Button("追加到末尾") { insertReply(append: true) }
-      Button("替换文字", role: .destructive) { insertReply(append: false) }
-      Button("取消", role: .cancel) { pendingReply = nil; editing = true }
-    } message: {
-      Text("只修改当前输入框，图片附件保留；不会直接发送。")
-    }
+    .font(.subheadline)
+    .buttonStyle(.plain)
+    .foregroundColor(TerminalAppearance.accent)
+    .disabled(preventsDismissal || state.snapshot.inputBusy)
   }
 
   private var inputCard: some View {
@@ -234,7 +250,7 @@ struct ComposerView: View {
         get: { session.terminalDrafts[terminalID] ?? "" },
         set: { session.setDraft($0, terminalID: terminalID) }),
       isFocused: $editing, collapsesWhenUnfocused: false,
-      maximumHeight: maximumInputHeight, onHeightChange: { inputHeight = $0 }
+      maximumHeight: maximumInputHeight, onHeightChange: { inputHeight = $0 }, editor: textEditor
     )
     .frame(height: visibleInputHeight)
     .background(composerMeasurement("editor"))
@@ -262,31 +278,17 @@ struct ComposerView: View {
       .accessibilityLabel(showingShortcuts ? "收起快捷键" : "展开快捷键")
       .accessibilityValue(showingShortcuts ? "已展开" : "已收起")
       .accessibilityIdentifier("terminal-shortcuts-toggle")
-      Menu {
-        Button("选择快捷回复") {
-          editing = false
-          pendingReply = nil
-          showingReplies = true
-        }.accessibilityIdentifier("quick-reply-open")
-        Button("保存为快捷回复") {
-          replySnapshot = session.terminalDrafts[terminalID] ?? ""
-          editing = false
-          savingReply = true
-        }.disabled(!hasText)
+      Button {
+        replySnapshot = session.terminalDrafts[terminalID] ?? ""
+        editing = false
+        savingReply = true
       } label: {
         Image(systemName: "text.badge.plus").frame(width: 44, height: 44)
       }
-      .accessibilityLabel("快捷回复")
+      .accessibilityLabel("保存为快捷回复")
       .accessibilityIdentifier("terminal-quick-replies")
-      .disabled(preventsDismissal || state.snapshot.inputBusy)
+      .disabled(!hasText || preventsDismissal || state.snapshot.inputBusy)
       Spacer(minLength: 0)
-      if editing {
-        Button {
-          editing = false
-        } label: {
-          Image(systemName: "keyboard.chevron.compact.down")
-        }.accessibilityLabel("收起键盘")
-      }
       voice
       sendButton
     }
@@ -320,14 +322,12 @@ struct ComposerView: View {
     showingReplies = false
   }
 
-  private func insertReply(append: Bool) {
-    defer { pendingReply = nil; editing = true }
-    guard let item = pendingReply, session.terminal?.id == terminalID,
-      session.terminalController === controller else { return }
-    let previous = session.terminalDrafts[terminalID] ?? ""
-    session.setDraft(
-      append && !previous.isEmpty ? previous + "\n" + item.body : item.body,
-      terminalID: terminalID, suppressQuickInputHistory: true)
+  private func insertReply(_ item: LocalQuickReply) {
+    guard session.terminal?.id == terminalID, session.terminalController === controller,
+      !preventsDismissal, !state.snapshot.inputBusy,
+      let draft = textEditor.insert(item.body) else { return }
+    session.setDraft(draft, terminalID: terminalID, suppressQuickInputHistory: true)
+    editing = true
   }
 
   private func submit() {

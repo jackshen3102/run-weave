@@ -8,9 +8,11 @@ struct CommandTextView: UIViewRepresentable {
   var accessibilityLabel = "命令草稿"
   var maximumHeight: CGFloat? = nil
   var onHeightChange: ((CGFloat) -> Void)? = nil
+  var editor: CommandTextEditor? = nil
 
   func makeUIView(context: Context) -> GrowingCommandTextView {
     let view = GrowingCommandTextView()
+    editor?.view = view
     view.font = .preferredFont(forTextStyle: .body)
     view.adjustsFontForContentSizeCategory = true
     view.autocapitalizationType = .none
@@ -70,7 +72,22 @@ struct CommandTextView: UIViewRepresentable {
   }
 }
 
-/// Opt-in growing behavior; the quick reply editor keeps its existing fixed-height scrolling.
+/// Keep UIKit's selection and undo behavior when inserting a saved phrase.
+@MainActor
+final class CommandTextEditor: ObservableObject {
+  fileprivate weak var view: GrowingCommandTextView?
+
+  func insert(_ text: String) -> String? {
+    guard let view else { return nil }
+    view.unmarkText()
+    view.insertText(text)
+    view.revealSelectionAfterLayout = true
+    view.setNeedsLayout()
+    return view.text
+  }
+}
+
+/// Opt-in growing behavior with scrolling once the available height is filled.
 final class GrowingCommandTextView: UITextView {
   var maximumHeight: CGFloat?
   var onHeightChange: ((CGFloat) -> Void)?
@@ -83,7 +100,7 @@ final class GrowingCommandTextView: UITextView {
   override func layoutSubviews() {
     super.layoutSubviews()
     guard let maximumHeight, bounds.width > 0, let font else { return }
-    let minimum = ceil(font.lineHeight * 2 + textContainerInset.top + textContainerInset.bottom)
+    let minimum = ceil(font.lineHeight + textContainerInset.top + textContainerInset.bottom)
     let needed = max(minimum, ceil(sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height))
     // Report natural height. Keeping a previously capped height would prevent growth when
     // the keyboard disappears without any text change.
