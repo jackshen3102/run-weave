@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   nativeImage,
   net,
@@ -61,6 +62,42 @@ export function registerOpenExternalHandler(): void {
       return;
     }
   });
+}
+
+export function registerProjectDirectoryHandler(
+  getMainWindow: () => BrowserWindow | null,
+): void {
+  ipcMain.handle(
+    "viewer:select-project-directory",
+    async (event, defaultPath?: string): Promise<string | null> => {
+      const window = getMainWindow();
+      const senderUrl = new URL(event.senderFrame?.url ?? "about:blank");
+      const trusted = isDev
+        ? senderUrl.origin === new URL(DEV_SERVER_URL).origin
+        : senderUrl.protocol === `${CUSTOM_PROTOCOL}:` && senderUrl.host === "app";
+      if (
+        !window ||
+        window.isDestroyed() ||
+        event.sender !== window.webContents ||
+        event.senderFrame !== window.webContents.mainFrame ||
+        !trusted
+      ) {
+        throw new Error(
+          "Project directory selection requires the main app window.",
+        );
+      }
+      if (defaultPath !== undefined && typeof defaultPath !== "string") {
+        throw new Error("Invalid project directory.");
+      }
+      const result = await dialog.showOpenDialog(window, {
+        title: "Select Project Folder",
+        buttonLabel: "Select Folder",
+        defaultPath: defaultPath?.trim() || undefined,
+        properties: ["openDirectory"],
+      });
+      return result.canceled ? null : (result.filePaths[0] ?? null);
+    },
+  );
 }
 
 export function registerRuntimeStatsHandler(

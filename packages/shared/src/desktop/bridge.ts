@@ -114,6 +114,7 @@ export interface RunweaveElectronBridge {
   reloadRuntime: () => Promise<PackagedBackendConnectionState>;
   checkAppServer: () => Promise<boolean>;
   openExternal: (url: string) => Promise<void>;
+  selectProjectDirectory: (defaultPath?: string) => Promise<string | null>;
   loadSuijiState: () => Promise<SuijiDesktopState>;
   saveSuijiProfile: (environment: SuijiEnvironment, profile: SuijiProfile) => Promise<void>;
   selectSuijiEnvironment: (environment: SuijiEnvironment) => Promise<void>;

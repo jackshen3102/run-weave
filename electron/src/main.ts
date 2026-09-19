@@ -34,6 +34,7 @@ import {
   navigateWindowToPath,
   registerCustomProtocol,
   registerOpenExternalHandler,
+  registerProjectDirectoryHandler,
   registerRuntimeStatsHandler,
   registerSystemMonitorHandler,
   setApplicationIcon,
@@ -331,6 +332,7 @@ if (hasSingleInstanceLock) {
       writeBetaDesktopStatus();
       setApplicationIcon();
       registerOpenExternalHandler();
+      registerProjectDirectoryHandler(() => desktopRuntime.mainWindow);
       registerSuijiStorage();
       registerPackagedBackendHandlers();
       registerRuntimeStatsHandler(() => desktopRuntime.packagedBackend);
