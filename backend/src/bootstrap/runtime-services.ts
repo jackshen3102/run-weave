@@ -25,8 +25,8 @@ import { logger } from "../logging/index";
 import { LowDbTerminalQuickInputStore } from "../terminal/quick-input/lowdb-store";
 import { TerminalQuickInputService } from "../terminal/quick-input/service";
 import { loadOrCreateHookToken } from "../terminal/application/hook-token";
-import { TerminalSnapshotShareService } from "../terminal/snapshot-share/service";
-import { TerminalSnapshotShareStore } from "../terminal/snapshot-share/store";
+import type { TerminalSnapshotShareService } from "../terminal/snapshot-share/service";
+import { createTerminalSnapshotShares } from "./terminal-snapshot-shares";
 import { PtyService } from "../terminal/runtime/pty-service";
 import { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
 import { TmuxLifecycleCoordinator } from "../terminal/tmux/lifecycle-coordinator";
@@ -340,13 +340,7 @@ async function assembleRuntimeServices(
   });
   resources.defer("tmux-output-watcher", () => tmuxOutputWatcher.dispose());
   await terminalSessionManager.initialize();
-  const terminalSnapshotShareService = new TerminalSnapshotShareService(
-    new TerminalSnapshotShareStore(storagePaths.terminalSnapshotShareDir),
-    terminalSessionManager,
-    tmuxService,
-  );
-  resources.defer("terminal-snapshot-shares", () => terminalSnapshotShareService.dispose());
-  await terminalSnapshotShareService.initialize();
+  const terminalSnapshotShareService = await createTerminalSnapshotShares(resources, storagePaths.terminalSnapshotShareDir, terminalSessionManager, tmuxService);
   const workspaceServiceManager = new RuntimeStatusWorkspaceServiceManager(
     terminalSessionManager,
   );
