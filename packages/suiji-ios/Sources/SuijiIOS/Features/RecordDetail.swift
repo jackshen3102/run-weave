@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 struct AttachmentReader: View {
   let title: String
   let kind: String
@@ -25,6 +26,7 @@ struct RecordDetail: View {
   var citedVersion: Int? = nil
   @State private var refreshed: SuijiRecord?
   @State private var confirmingTrash = false
+  @State private var copyFeedback = ""
   @Environment(\.dismiss) private var dismiss
   @State private var attachment: Attachment?
   private var record: SuijiRecord {
@@ -62,7 +64,39 @@ struct RecordDetail: View {
         if !session.message.isEmpty { Text(session.message).font(.footnote).foregroundStyle(.orange) }
       }.padding(20).disabled(session.statusBusy.contains(record.id))
     }.navigationTitle(record.kind == .note ? "想法" : "待办").navigationBarTitleDisplayMode(.inline)
-      .toolbar { Button("编辑") { Task { await session.openEditor(record: record) } }.disabled(record.deletedAt != nil || pending || session.statusBusy.contains(record.id)) }
+      .overlay(alignment: .bottom) {
+        if !copyFeedback.isEmpty {
+          HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(SuijiTheme.green)
+            Text(copyFeedback).foregroundStyle(SuijiTheme.ink)
+          }.font(.footnote.weight(.medium))
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+            .padding(.horizontal, 20).padding(.bottom, 20)
+            .allowsHitTesting(false)
+            .accessibilityIdentifier("record-copy-feedback")
+        }
+      }
+      .toolbar {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+          Button {
+            UIPasteboard.general.string = record.body
+            copyFeedback = record.attachments.isEmpty ? "正文已复制" : "正文已复制，附件未包含"
+            UIAccessibility.post(notification: .announcement, argument: copyFeedback)
+          } label: {
+            Label("复制", systemImage: "doc.on.doc").labelStyle(.iconOnly)
+              .frame(minWidth: 44, minHeight: 44)
+          }.disabled(record.body.isEmpty).accessibilityIdentifier("copy-record-body")
+          Button("编辑") { Task { await session.openEditor(record: record) } }.disabled(record.deletedAt != nil || pending || session.statusBusy.contains(record.id))
+        }
+      }
+      .onChange(of: record.body) { _, _ in copyFeedback = "" }
+      .task(id: copyFeedback) {
+        guard !copyFeedback.isEmpty else { return }
+        do { try await Task.sleep(for: .seconds(2.5)) } catch { return }
+        copyFeedback = ""
+      }
       .confirmationDialog("移入回收站？正文和附件会保留，可随时恢复。", isPresented: $confirmingTrash, titleVisibility: .visible) {
         Button("移入回收站", role: .destructive) { Task { await session.changeRecord(record, action: .trash(true)) } }
         Button("取消", role: .cancel) {}

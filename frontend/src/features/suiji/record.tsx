@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import LinkifyIt from "linkify-it";
+import { useMemoizedFn } from "ahooks";
+import { Copy } from "lucide-react";
 import type { SuijiAttachment, SuijiRecord } from "@runweave/shared/suiji";
 import { Button } from "../../components/ui/button";
 import { SuijiPanel } from "./panel";
@@ -197,11 +199,68 @@ export function SuijiRecordDetail({
   citedVersion?: number;
 }) {
   const [confirmTrash, setConfirmTrash] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState("");
+  useEffect(() => {
+    setCopyFeedback("");
+  }, [record.id, record.body]);
+  useEffect(() => {
+    if (!copyFeedback) return;
+    const timer = window.setTimeout(() => setCopyFeedback(""), 2500);
+    return () => window.clearTimeout(timer);
+  }, [copyFeedback]);
+  const copyBody = useMemoizedFn(async () => {
+    setCopying(true);
+    setCopyFeedback("");
+    try {
+      await navigator.clipboard.writeText(record.body);
+      setCopyFeedback(
+        record.attachments.length ? "正文已复制，附件未包含" : "正文已复制",
+      );
+    } catch {
+      setCopyFeedback("复制失败，请重试或选择正文手动复制");
+    } finally {
+      setCopying(false);
+    }
+  });
   return (
     <SuijiPanel
       title={statusText(record)}
       description={recordDate(record.createdAt)}
       onBack={onClose}
+      actions={
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="复制"
+            title={record.body ? "复制" : "暂无正文可复制"}
+            disabled={!record.body || copying}
+            onClick={() => void copyBody()}
+          >
+            <Copy className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!writable || pending || busy || Boolean(record.deletedAt)}
+            onClick={onEdit}
+          >
+            编辑
+          </Button>
+        </>
+      }
+      feedback={
+        copyFeedback ? (
+          <div className="pointer-events-none absolute inset-x-4 bottom-5 z-10 flex justify-center">
+            <p
+              role="status"
+              className="rounded-full border bg-popover px-4 py-2.5 text-center text-sm text-popover-foreground shadow-lg"
+            >
+              {copyFeedback}
+            </p>
+          </div>
+        ) : null
+      }
     >
       {citedVersion !== undefined && citedVersion !== record.version ? (
         <p role="status" className="text-sm text-muted-foreground">
@@ -224,13 +283,6 @@ export function SuijiRecordDetail({
         </Button>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          disabled={!writable || pending || busy || Boolean(record.deletedAt)}
-          onClick={onEdit}
-        >
-          编辑
-        </Button>
         <Button
           variant="outline"
           disabled={Boolean(record.deletedAt)}
