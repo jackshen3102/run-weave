@@ -16,6 +16,8 @@ struct TerminalScreen: View {
   @State private var sharing = false
   @State private var shareFailure: String?
   @State private var showingComposer = false
+  @State private var showingInstantReplies = false
+  @State private var sendingInstantReply = false
   @AccessibilityFocusState private var composerTriggerFocused: Bool
   @State private var browserPresentationID = UUID()
   @State private var composerPreventsDismissal = false
@@ -150,6 +152,7 @@ struct TerminalScreen: View {
       TerminalComposerPresentation(
         session: session, controller: controller, terminalID: details.id,
         isPresented: $showingComposer, preventsDismissal: $composerPreventsDismissal,
+        showingInstantReplies: $showingInstantReplies,
         onDismiss: { composerTriggerFocused = true })
     }
     .confirmationDialog("删除终端？", isPresented: $deleting, titleVisibility: .visible) {
@@ -250,14 +253,21 @@ struct TerminalScreen: View {
   private var chat: some View {
     VStack(spacing: 0) {
       if session.health.status == .offline { Text("本地电脑暂时不可用").foregroundColor(.orange) }
-      if let failure = controller.failure { Text(failure).font(.caption).foregroundColor(.red) }
-      if let actionFailure { Text(actionFailure).font(.caption).foregroundColor(.red) }
+      if let failure = actionFailure ?? controller.failure {
+        Text(failure).font(.caption).foregroundColor(.red)
+      }
       if let notice = controller.notice { Text(notice).font(.caption).foregroundColor(.orange) }
       TerminalHostView(surface: controller.surface).frame(minHeight: 24)
         .padding(.horizontal, 12).padding(.top, 10)
         .overlay(alignment: .bottomTrailing) {
           floatingControls.padding(12)
         }
+      if showingInstantReplies {
+        TerminalInstantReplyBar(
+          enabled: session.canWrite && controller.canSend && !sendingInstantReply && !stoppingCommand,
+          sending: sendingInstantReply,
+          send: sendInstantReply, close: { showingInstantReplies = false })
+      }
     }
   }
 
@@ -326,6 +336,26 @@ struct TerminalScreen: View {
         try await session.stopCommand(details.id)
       } catch {
         if !(error is CancellationError) { actionFailure = displayError(error) }
+      }
+    }
+  }
+
+  private func sendInstantReply(_ text: String) {
+    guard session.terminal?.id == details.id, session.terminalController === controller,
+      session.canWrite, controller.canSend, !sendingInstantReply, !stoppingCommand else { return }
+    // Reserve synchronously so a second tap cannot enqueue another Task before inputBusy changes.
+    sendingInstantReply = true
+    actionFailure = nil
+    let epoch = session.generation
+    session.recordUserAction("instant-reply.send", terminalID: details.id)
+    Task { @MainActor in
+      defer { sendingInstantReply = false }
+      do {
+        try await session.sendInstantReply(text, terminalID: details.id, controller: controller)
+      } catch {
+        guard !(error is CancellationError), session.generation == epoch,
+          session.terminalController === controller, session.terminal?.id == details.id else { return }
+        actionFailure = "一键回复发送未确认，请先核对终端结果；不会自动重发。\n" + displayError(error)
       }
     }
   }
