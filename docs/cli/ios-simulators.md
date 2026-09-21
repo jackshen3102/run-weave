@@ -32,6 +32,10 @@ node scripts/ios-simulators/cli.mjs finish --task-dir .runweave/mobile-qa/my-tas
 ```
 
 `finish` 清理该任务的 daemon/runner 后释放设备；不会卸载 App、擦除数据或关闭模拟器。
+对 agent-device 0.21.3，先核验 runner 的任务归属及 PID 启动身份，再请求 XCTest 正常结束，
+确认退出后才清理 daemon，避免直接终止执行器触发 SpringBoard 崩溃。
+`runner-shutdown.json` 记录退出结果；身份不符、请求失败或退出超时会保留占用并返回
+`cleanup_incomplete`，检查任务证据后再对同一任务重试，不会退回强杀。
 技能的 `stop` 只停止自动化，完整任务仍须 `finish`。两次 UI 命令之间不会释放占用。
 同 App 的竞争请求返回 `device_busy` 和占用者，稍后重新申请；不会排队或创建第三台。
 两个 App 可以各占一台并行执行，第一版不借用另一 App 的槽位。
