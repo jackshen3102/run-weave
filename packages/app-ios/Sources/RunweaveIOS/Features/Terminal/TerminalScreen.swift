@@ -11,6 +11,10 @@ struct TerminalScreen: View {
   @State private var showingHistory = false
   @State private var showingInfo = false
   @State private var showingDiagnostics = false
+  @State private var snapshotShare: TerminalSnapshotShare?
+  @State private var shareOperation: Task<Void, Never>?
+  @State private var sharing = false
+  @State private var shareFailure: String?
   @State private var showingComposer = false
   @AccessibilityFocusState private var composerTriggerFocused: Bool
   @State private var browserPresentationID = UUID()
@@ -105,6 +109,7 @@ struct TerminalScreen: View {
       if status == "已连接" { Task { await changes.refresh() } }
     }
     .onDisappear {
+      shareOperation?.cancel()
       controller.openFileRequested = nil
       changes.cancel()
       browser.unregisterHostPresentation(id: browserPresentationID, hostID: ObjectIdentifier(controller))
@@ -130,6 +135,17 @@ struct TerminalScreen: View {
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id) }
     .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id) }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session) }
+    .sheet(item: $snapshotShare) { TerminalSnapshotShareSheet(url: $0.url) }
+    .onChange(of: session.generation) { _ in
+      shareOperation?.cancel()
+      snapshotShare = nil
+      shareFailure = nil
+    }
+    .alert("分享失败", isPresented: Binding(
+      get: { shareFailure != nil }, set: { if !$0 { shareFailure = nil } }
+    )) {
+      Button("好", role: .cancel) { shareFailure = nil }
+    } message: { Text(shareFailure ?? "") }
     .background {
       TerminalComposerPresentation(
         session: session, controller: controller, terminalID: details.id,
@@ -152,6 +168,8 @@ struct TerminalScreen: View {
     let info = $showingInfo
     let diagnostics = $showingDiagnostics
     let deletion = $deleting
+    let share = $snapshotShare
+    let sharePending = $sharing
     let browser = browser
     let registrationID = browserPresentationID
     // Bindings read current SwiftUI storage; capturing this View's Bool values would go stale.
@@ -161,11 +179,34 @@ struct TerminalScreen: View {
       let systemBusy = window.rootViewController?.presentedViewController != nil
       return !composer.wrappedValue && !history.wrappedValue && !info.wrappedValue
         && !diagnostics.wrappedValue && !deletion.wrappedValue && !systemBusy
+        && share.wrappedValue == nil && !sharePending.wrappedValue
         && browser.state != .presented && !browser.hasPrompt
     }
     controller.openLinkRequested = { intent in
       browser.open(intent, source: source, presentationAvailable:
         browser.hostPresentationAvailable(source: source, registrationID: registrationID))
+    }
+  }
+
+  private func shareSnapshot() {
+    guard session.canWrite, !sharing, session.terminalController === controller else { return }
+    sharing = true
+    shareFailure = nil
+    let epoch = session.generation
+    shareOperation = Task { @MainActor in
+      defer { sharing = false }
+      do {
+        let result = try await session.withConnection(reportFailure: false) {
+          try await $0.createTerminalSnapshotShare(id: details.id)
+        }
+        guard !Task.isCancelled, session.generation == epoch,
+          session.terminalController === controller, session.terminal?.id == details.id else { return }
+        snapshotShare = result
+      } catch {
+        guard !Task.isCancelled, !(error is CancellationError), session.generation == epoch,
+          session.terminalController === controller else { return }
+        shareFailure = displayError(error)
+      }
     }
   }
 
@@ -328,6 +369,7 @@ struct TerminalScreen: View {
         session: session, controller: controller, terminalID: details.id,
         cwd: cwd, canReturnToBottom: session.canWrite && controller.canSend,
         canReconnect: session.canReconnect, canDelete: session.canWrite,
+        canShare: session.canWrite, sharing: sharing, share: shareSnapshot,
         deleting: $deleting, showingHistory: $showingHistory,
         showingInfo: $showingInfo, showingDiagnostics: $showingDiagnostics
       ).equatable()

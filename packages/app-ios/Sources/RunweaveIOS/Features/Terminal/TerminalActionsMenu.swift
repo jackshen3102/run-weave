@@ -9,6 +9,9 @@ struct TerminalActionsMenu: View, Equatable {
   let canReturnToBottom: Bool
   let canReconnect: Bool
   let canDelete: Bool
+  let canShare: Bool
+  let sharing: Bool
+  let share: () -> Void
   @Binding var deleting: Bool
   @Binding var showingHistory: Bool
   @Binding var showingInfo: Bool
@@ -20,6 +23,7 @@ struct TerminalActionsMenu: View, Equatable {
       && lhs.terminalID == rhs.terminalID && lhs.cwd == rhs.cwd
       && lhs.canReturnToBottom == rhs.canReturnToBottom
       && lhs.canReconnect == rhs.canReconnect && lhs.canDelete == rhs.canDelete
+      && lhs.canShare == rhs.canShare && lhs.sharing == rhs.sharing
   }
 
   var body: some View {
@@ -29,6 +33,10 @@ struct TerminalActionsMenu: View, Equatable {
         Label("终端信息", systemImage: "info.circle")
       }
       Button("终端历史") { showingHistory = true }
+      Button(action: share) {
+        Label(sharing ? "正在创建快照…" : "分享终端快照", systemImage: "square.and.arrow.up")
+      }.disabled(!canShare || sharing)
+        .accessibilityIdentifier("terminal-share-snapshot")
       Button("诊断") { showingDiagnostics = true }
       Button("回到底部") { controller.returnToBottom() }.disabled(!canReturnToBottom)
       Button("重连") { Task { await session.reconnectTerminal() } }.disabled(!canReconnect)
