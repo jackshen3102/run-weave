@@ -23,6 +23,20 @@ export function createExperienceRouter(
     }
     next();
   });
+  router.get("/diagnose", async (request, response, next) => {
+    try {
+      const input = z
+        .object({
+          cwd: cwdSchema,
+          query: z.string().trim().min(2).max(4000).optional(),
+        })
+        .strict()
+        .parse(request.query);
+      response.json(await service.diagnose(input.cwd, input.query));
+    } catch (error) {
+      next(error);
+    }
+  });
   router.get("/status", async (request, response, next) => {
     try {
       if (!learning)

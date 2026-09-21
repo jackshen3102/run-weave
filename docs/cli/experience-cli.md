@@ -11,6 +11,8 @@ rw experience save --cwd "$PWD" --file revised.json --expected-revision UUID --j
 rw experience feedback --cwd "$PWD" --file receipt.json --json
 rw experience history --cwd "$PWD" --json
 rw experience status --cwd "$PWD" --json
+rw experience diagnose --cwd "$PWD" --json
+rw experience diagnose --cwd "$PWD" --query '全局 rw 更新后怎么确认实际版本' --json
 rw experience retry JOB_ID --cwd "$PWD" --json
 ```
 
@@ -133,6 +135,19 @@ Codex 由用户主动安装 Toolkit 插件，Pi 由用户主动安装同一 skil
 后台完成 hooks 不依赖 skill 是否被调用，skill 也不负责每次结束时手写记录。
 Codex 更新插件后需新建会话；Pi 需重新加载。入口已安装不保证模型每次都会选择，
 需要实际任务轨迹验证隐式发现、检索参数和后续行为。
+
+## 消费诊断
+
+`diagnose` 独立于学习开关，读取本仓库已保存的查询和回执，并检查当前经验的证据与有效期。
+返回总查询数、命中查询数、有回执的查询数、最近二十次查询，以及每条当前记录跨历史版本的
+返回/采用/拒绝次数。`used` 是 Agent 回执，不是已认证的收益；没有回执不推断为未采用或失败。
+统计覆盖库内已保存记录，没有区分自然任务与旧验收查询；不代表全部会话的调用率。
+
+可选 `--query` 使用与正式检索相同的触发词、有效性和前三条排序规则，逐条返回：
+`returned`（会返回）、`ranked_out`（超出前三条）、`excluded`（有效性不通过）、
+`trigger_mismatch`（缺少触发组），并列出 `matchedTerms` 与 `missingGroups`。
+这是当前经验版本的诊断预览，不产生 lookup、不支持提交采用回执，也不会把验证命中算进使用量。
+正式采用仍须使用 `search` 取得 lookup。历史查询结果保留当时版本，不用当前规则重写。
 
 ## 结果回执
 

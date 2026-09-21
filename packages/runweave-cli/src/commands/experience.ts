@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   ExperienceDraft,
+  ExperienceDiagnostics,
   ExperienceLearningStatus,
   ExperienceFeedback,
   ExperienceFeedbackInput,
@@ -19,7 +20,7 @@ import { CliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
 
 const usage =
-  "Usage: rw experience <search --query text|show id|save --file record.json|feedback --file receipt.json|history|status|retry jobId> [--cwd path] [--json]";
+  "Usage: rw experience <search --query text|show id|save --file record.json|feedback --file receipt.json|history|status|diagnose [--query text]|retry jobId> [--cwd path] [--json]";
 export async function runExperienceCommand(
   command: string | undefined,
   args: string[],
@@ -34,6 +35,7 @@ export async function runExperienceCommand(
       "feedback",
       "history",
       "status",
+      "diagnose",
       "retry",
     ].includes(command)
   )
@@ -61,12 +63,18 @@ export async function runExperienceCommand(
   };
   let result:
     | ExperienceLearningStatus
+    | ExperienceDiagnostics
     | { queued: boolean }
     | ExperienceSearchResult
     | ExperienceView
     | ExperienceFeedback
     | ExperienceFeedback[];
-  if (command === "status") {
+  if (command === "diagnose") {
+    const query = getStringOption(options, "query");
+    result = await auth.requestJson<ExperienceDiagnostics>(
+      `/api/experience/diagnose?${new URLSearchParams({ cwd, ...(query === undefined ? {} : { query }) })}`,
+    );
+  } else if (command === "status") {
     result = await auth.requestJson<ExperienceLearningStatus>(
       `/api/experience/status?${new URLSearchParams({ cwd })}`,
     );
