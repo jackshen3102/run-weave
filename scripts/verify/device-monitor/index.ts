@@ -8,9 +8,10 @@ import { sampleBattery } from "../../../backend/src/device-monitor/sampler";
 import { DeviceMonitorService } from "../../../backend/src/device-monitor/service";
 import { DeviceMonitorStore } from "../../../backend/src/device-monitor/store";
 import { GatewayStore } from "../../../packages/push-gateway/src/store";
-import { deliver } from "../../../packages/push-gateway/src/delivery";
-import { hash } from "../../../packages/push-gateway/src/auth";
+import { deliverNotification } from "../../../packages/push-gateway/src/notifications";
+import { verifyNotifications } from "./notifications";
 import type { APNsResult } from "../../../packages/push-gateway/src/apns";
+import type { ProviderNotification } from "../../../packages/push-gateway/src/types";
 import { fixture, eventually, pause } from "./fixture";
 import { verifyProvider } from "./provider";
 import { verifyCadence } from "./cadence";
@@ -167,7 +168,7 @@ async function thresholds() {
     async () => sample,
     async (s, a) => {
       sent.push({
-        level: a.level,
+        level: Number.parseInt(a.body, 10) <= 10 ? 10 : 20,
         notificationId: a.notificationId,
         token: s.deviceToken,
       });
@@ -249,6 +250,7 @@ async function thresholds() {
         deviceToken: before.deviceToken,
         displayName: before.displayName,
         version: before.version + 1,
+        categories: ["battery.low"],
       },
       "PUT",
     );
@@ -315,45 +317,40 @@ async function gatewayRecovery() {
     const owner = await f.login(),
       installation = randomUUID();
     const s = await f.register(owner, installation);
-    const make = () => {
-      const cycleId = randomUUID();
-      return {
-        notificationId: hash(
-          `${s.hostId}:${cycleId}:20:${installation}:sandbox`,
-        ),
-        subscriptionId: s.subscriptionId,
-        cycleId,
-        level: 20,
-        percent: 18,
-        observedAt: new Date().toISOString(),
-      };
-    };
+    const make = () => ({
+      eventId: randomUUID(),
+      subscriptionId: s.subscriptionId,
+      category: "battery.low",
+      title: "Fixture 电量低",
+      body: "18%，正在使用电池，请连接电源。",
+      occurredAt: new Date().toISOString(),
+    });
     const first = make();
     wait = true;
-    const pending = f.gatewayRequest("/v1/battery-alerts", first);
+    const pending = f.gatewayRequest("/v1/notifications", first);
     await eventually(() => !!release);
     assert.equal(
-      (await (await f.gatewayRequest("/v1/battery-alerts", first)).json())
-        .state,
+      (await (await f.gatewayRequest("/v1/notifications", first)).json()).state,
       "unknown",
     );
     release!();
     assert.equal((await (await pending).json()).state, "accepted");
     assert.equal(
-      (await (await f.gatewayRequest("/v1/battery-alerts", first)).json())
-        .state,
+      (await (await f.gatewayRequest("/v1/notifications", first)).json()).state,
       "accepted",
     );
     assert.equal(calls, 1);
     wait = false;
     outcome = { state: "unknown" };
     const uncertain = make();
-    await f.gatewayRequest("/v1/battery-alerts", uncertain);
-    await f.gatewayRequest("/v1/battery-alerts", uncertain);
+    const uncertainResult = await (
+      await f.gatewayRequest("/v1/notifications", uncertain)
+    ).json();
+    await f.gatewayRequest("/v1/notifications", uncertain);
     assert.equal(calls, 2);
     assert.equal(
       (
-        await f.gatewayRequest("/v1/battery-alerts", {
+        await f.gatewayRequest("/v1/notifications", {
           ...make(),
           url: "https://example.com",
         })
@@ -363,7 +360,7 @@ async function gatewayRecovery() {
     const foreign = randomUUID();
     assert.equal(
       (
-        await f.gatewayRequest("/v1/battery-alerts", {
+        await f.gatewayRequest("/v1/notifications", {
           ...make(),
           subscriptionId: foreign,
         })
@@ -390,18 +387,18 @@ async function gatewayRecovery() {
     let restored = new GatewayStore(recovery);
     restored.update((data) => {
       Object.assign(data, old);
-      data.deliveries[uncertain.notificationId]!.state = "sending";
+      data.deliveries[uncertainResult.notificationId]!.state = "sending";
     });
     restored.close();
     restored = new GatewayStore(recovery);
     assert.equal(
-      restored.snapshot().deliveries[uncertain.notificationId]?.state,
+      restored.snapshot().deliveries[uncertainResult.notificationId]?.state,
       "unknown",
     );
     const sender = Object.values(restored.snapshot().senders)[0]!;
     assert.equal(
       (
-        await deliver(restored, sender, first, async () => {
+        await deliverNotification(restored, sender, first, async () => {
           throw new Error("must not resend");
         })
       ).state,
@@ -409,7 +406,7 @@ async function gatewayRecovery() {
     );
     restored.close();
     pass(
-      "HTTPS gateway durable claim, concurrent dedupe, ambiguous outcome, strict template, revoke ownership and restart recovery",
+      "HTTPS gateway durable claim, concurrent dedupe, ambiguous outcome, strict envelope, revoke ownership and restart recovery",
     );
   } finally {
     await f.dispose();
@@ -420,10 +417,12 @@ async function tokenRotationAndRetry() {
   let sample = battery(18),
     release: ((result: APNsResult) => void) | undefined;
   let calls = 0;
+  const messages: ProviderNotification[] = [];
   const f = await fixture(
     async () => sample,
-    async () => {
+    async (_subscription, message) => {
       calls++;
+      messages.push(message);
       return await new Promise<APNsResult>((resolve) => {
         release = resolve;
       });
@@ -464,15 +463,35 @@ async function tokenRotationAndRetry() {
       (d) => d.state === "pending",
     )!;
     assert.ok(pending.nextAttemptAt - Date.now() > 5000);
+    sample = battery(17);
+    await f.monitor.sample();
+    await eventually(() => calls === 3, 8000);
+    assert.deepEqual(
+      messages[2],
+      messages[1],
+      "retry preserves original content and time despite sample changes",
+    );
+    release!({ state: "retry", retryAfterMs: 6000 });
+    await eventually(
+      () =>
+        f.monitorStore.snapshot().deliveries[pending.id]?.state === "pending",
+    );
+    const persisted = JSON.parse(
+      await readFile(path.join(f.directory, "monitor/state.json"), "utf8"),
+    );
+    assert.equal(
+      persisted.deliveries[pending.id].notification.body,
+      messages[1]!.body,
+    );
     sample = battery(18, true);
     await f.monitor.sample();
     await eventually(
       () =>
         f.monitorStore.snapshot().deliveries[pending.id]?.state === "cancelled",
     );
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
     pass(
-      "late old-token invalidation retains new token; Retry-After persisted and AC cancels pending retry",
+      "late old-token invalidation retains new token; stable event content survives sample changes and persistence; Retry-After respected and AC cancels pending retry",
     );
   } finally {
     release?.({ state: "unknown" });
@@ -560,6 +579,7 @@ async function main() {
     return;
   }
   await verifyProvider();
+  await verifyNotifications();
   await physicalSample();
   await monitoring();
   await thresholds();

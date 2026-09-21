@@ -29,7 +29,7 @@ export class GatewayStore {
       );
       this.db.prepare("INSERT OR IGNORE INTO state VALUES (1, ?)").run(
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
           senders: {},
           subscriptions: {},
           deliveries: {},
@@ -51,7 +51,7 @@ export class GatewayStore {
       .get() as { value: string };
     const value: GatewayData = JSON.parse(row.value);
     if (
-      value.schemaVersion !== 1 ||
+      value.schemaVersion !== 2 ||
       !value.senders ||
       !value.subscriptions ||
       !value.deliveries

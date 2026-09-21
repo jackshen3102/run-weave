@@ -32,3 +32,10 @@ export function requireValue(
 export function identifier(value: unknown): value is string {
   return typeof value === "string" && /^[a-zA-Z0-9_-]{8,128}$/.test(value);
 }
+export function categoryName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(value) &&
+    value.length <= 64
+  );
+}

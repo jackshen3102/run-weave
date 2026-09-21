@@ -1,0 +1,5 @@
+push.example.com {
+    @admin path /admin /admin/*
+    respond @admin 404
+    reverse_proxy 127.0.0.1:8092
+}

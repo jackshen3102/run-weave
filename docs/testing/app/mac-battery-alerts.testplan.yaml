@@ -60,15 +60,14 @@ cases:
       - 使用有效会话在请求体伪造 ownerSessionId、username、hostId 或不匹配的 connectionId，确认被拒而非跨身份落盘。
       - 核对合法状态响应不回显 deviceToken 或其他绑定的撤销凭据。
   - id: BATALERT-006
-    name: 网关限制发送者所在电脑的目标和模板
+    name: 网关只允许发送者操作所属电脑的目标
     required: true
     description: >
-      一台 Mac 的发送凭据不能给另一台 Mac 的订阅发消息，也不能把网关变成任意通知或请求代理。
+      一台 Mac 的发送凭据只能操作所属 host 的订阅，撤销凭据立即停止其后续发送。
     preconditions:
       - 本例网关拥有 A、B 两个独立 host 凭据及各自订阅，APNs 边界仅记录本例请求。
     steps:
       - 用 A 凭据操作 B 的订阅或发送记录，确认被拒且没有 APNs 请求。
-      - 尝试提供任意 token、URL、topic 或正文，确认严格校验拒绝；合法 A 记录只使用预设电量模板和所属目标。
       - 撤销 A 的发送凭据，确认 A 后续请求失效而 B 仍可正常处理。
   - id: BATALERT-007
     name: token 轮换不会被旧失败响应覆盖
@@ -135,9 +134,9 @@ cases:
     name: 并发及丢失确认不导致盲目重复发送
     required: true
     description: >
-      同一 notificationId 有唯一发送意图；APNs 可能已处理但结果未知时，不以重试制造重复通知。
+      相同目标、category 和 eventId 有唯一发送意图；APNs 可能已处理但结果未知时，不以重试制造重复通知。
     preconditions:
-      - 本例网关有持久状态，可并发提交同一 notificationId，并在 APNs 边界制造提交后确认丢失。
+      - 本例网关有持久状态，可并发提交同一 category/eventId 的通知，并在 APNs 边界制造提交后确认丢失。
     steps:
       - 并发提交同一记录，确认只有一次外发；对已有接受结果的重复请求返回相同已知状态。
       - 对本例另一条新记录制造提交后响应丢失，确认记录为 unknown，重复请求不自动再次发送。
@@ -149,7 +148,7 @@ cases:
     preconditions:
       - 本例独占网关目录，已有一条 accepted 记录和一条停在 sending 的记录，可安全重启本例网关。
     steps:
-      - 保存重启前状态后重启网关，重新取得实际地址和凭据，再提交同一组 notificationId。
+      - 保存重启前状态后重启网关，重新取得实际地址和凭据，再提交同一组 category/eventId 通知。
       - 确认 accepted 不重发，遗留 sending 转为 unknown 而非自动重投，其他新记录仍可处理。
   - id: BATALERT-015
     name: 重试始终服从最新状态与时间期限
@@ -160,7 +159,7 @@ cases:
       - 本例 Backend 和网关可在采样及 APNs 边界返回受控 429/5xx，能记录请求时刻和决策状态。
     steps:
       - 保持有效低电量并返回明确 429/5xx，确认尊重 Retry-After，最多按 5、30、120 秒重试且总期限不超过 5 分钟。
-      - 在同一重试流程中改为接电或样本过期，确认下一次尝试取消，不因为队列存在就继续发送。
+      - 在同一档位内改变电量样本，确认重试的标题、正文和 occurredAt 保持首次提交值；再改为接电或样本过期，确认下一次尝试取消，不因为队列存在就继续发送。
       - 对本例独立新记录在 20% 重试前升级到 10% 档，确认旧档停止，新的最高档位单独处理。
   - id: BATALERT-016
     name: 推送不可用不影响电量和终端

@@ -66,6 +66,5 @@ export function updateAlerts(
     for (const [key, value] of Object.entries(data.deliveries))
       if (value.cycleId === id) delete data.deliveries[key];
     delete data.endedCycles![id];
-    delete data.syncedCycles?.[id];
   }
 }

@@ -1,17 +1,37 @@
 import { connect } from "node:http2";
 import { sign } from "node:crypto";
-import type {
-  BatteryNotification,
-  PushDeliveryResult,
-} from "@runweave/shared/device-notifications";
-import type { Subscription } from "./types";
+import type { PushDeliveryResult } from "@runweave/shared/push-notifications";
+import type { ProviderNotification, Subscription } from "./types";
 import type { APNsConfiguration } from "./config";
-import { hash } from "./auth";
+import { requireValue } from "./auth";
 export type APNsResult = PushDeliveryResult & { invalidToken?: boolean };
 export type APNsTransport = (
   subscription: Subscription,
-  alert: BatteryNotification,
+  alert: ProviderNotification,
 ) => Promise<APNsResult>;
+
+export function encodePayload(
+  subscription: Subscription,
+  notification: ProviderNotification,
+): string {
+  const payload = JSON.stringify({
+    aps: {
+      alert: { title: notification.title, body: notification.body },
+      sound: "default",
+    },
+    protocolVersion: 1,
+    hostId: subscription.hostId,
+    notificationId: notification.notificationId,
+    category: notification.category,
+    occurredAt: notification.occurredAt,
+  });
+  requireValue(
+    Buffer.byteLength(payload, "utf8") <= 4096,
+    413,
+    "Notification payload too large",
+  );
+  return payload;
+}
 
 export function createAPNsTransport(
   config: APNsConfiguration,
@@ -20,6 +40,7 @@ export function createAPNsTransport(
   let token = "";
   let tokenAt = 0;
   return async (subscription, alert) => {
+    const payload = encodePayload(subscription, alert);
     if (!token || Date.now() - tokenAt > 45 * 60_000) {
       tokenAt = Date.now();
       const header = Buffer.from(
@@ -57,7 +78,7 @@ export function createAPNsTransport(
           "apns-push-type": "alert",
           "apns-priority": "10",
           "apns-expiration": "0",
-          "apns-collapse-id": hash(subscription.hostId).slice(0, 40),
+          "apns-collapse-id": alert.notificationId,
         });
         let status = 0;
         let retryAfterMs = 0;
@@ -98,23 +119,7 @@ export function createAPNsTransport(
             ].includes(reason),
           });
         });
-        request.end(
-          JSON.stringify({
-            aps: {
-              alert: {
-                title: `${subscription.displayName} 电量低`,
-                body: `${alert.percent}%，正在使用电池，请连接电源。`,
-              },
-              sound: "default",
-            },
-            protocolVersion: 1,
-            hostId: subscription.hostId,
-            notificationId: alert.notificationId,
-            level: alert.level,
-            percent: alert.percent,
-            observedAt: alert.observedAt,
-          }),
-        );
+        request.end(payload);
       });
     });
   };

@@ -1,4 +1,4 @@
-export type PushEnvironment = "sandbox" | "production";
+import type { PushEnvironment } from "../push-notifications";
 export interface DeviceNotificationRegistration {
   connectionId: string;
   deviceToken: string;
@@ -16,17 +16,4 @@ export interface DeviceNotificationSubscription {
   version: number;
   gatewayURL: string | null;
   revokeToken?: string | null;
-}
-export interface BatteryNotification {
-  notificationId: string;
-  subscriptionId: string;
-  cycleId: string;
-  level: 10 | 20;
-  percent: number;
-  observedAt: string;
-}
-export type PushDeliveryState = "accepted" | "unknown" | "retry" | "failed";
-export interface PushDeliveryResult {
-  state: PushDeliveryState;
-  retryAfterMs?: number;
 }

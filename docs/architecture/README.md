@@ -60,6 +60,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | App Server 总体架构                     | [app-server-architecture.md](./app-server-architecture.md) |
 | App Server Event Center 与 Work History | [app-server-event-center.md](./app-server-event-center.md) |
 | Mac 电量与手机提醒                      | [device-monitor.md](./device-monitor.md)                   |
+| 通用 APNs 通知接口、订阅与投递          | [推送服务](../../packages/push-gateway/README.md)          |
 | 本机系统资源监控                        | [system-monitor.md](./system-monitor.md)                   |
 
 ### Terminal

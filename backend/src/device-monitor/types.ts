@@ -1,4 +1,4 @@
-import type { PushEnvironment } from "@runweave/shared/device-notifications";
+import type { PushEnvironment } from "@runweave/shared/push-notifications";
 
 export interface DeviceSubscription {
   id: string;
@@ -31,6 +31,7 @@ export interface DeviceDelivery {
   attempts: number;
   createdAt: number;
   nextAttemptAt: number;
+  notification?: { title: string; body: string; occurredAt: string };
 }
 
 export interface DeviceMonitorData {
@@ -38,7 +39,6 @@ export interface DeviceMonitorData {
   hostId: string;
   cycle: { id: string; highest: 10 | 20; startedAt: number } | null;
   endedCycles?: Record<string, number>;
-  syncedCycles?: Record<string, boolean>;
   subscriptions: Record<string, DeviceSubscription>;
   deliveries: Record<string, DeviceDelivery>;
 }

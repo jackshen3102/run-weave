@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { Sender, Subscription } from "./types";
-import { equalSecret, identifier, requireValue } from "./auth";
+import { categoryName, equalSecret, identifier, requireValue } from "./auth";
 import type { GatewayStore } from "./store";
 export function register(
   store: GatewayStore,
@@ -16,6 +16,7 @@ export function register(
         "deviceToken",
         "displayName",
         "version",
+        "categories",
       ].includes(key),
     ),
   );
@@ -40,6 +41,15 @@ export function register(
       body.displayName.length <= 80,
   );
   requireValue(Number.isSafeInteger(body.version) && Number(body.version) >= 1);
+  const categories = body.categories;
+  requireValue(
+    Array.isArray(categories) &&
+      categories.length > 0 &&
+      categories.length <= 32 &&
+      categories.every(categoryName),
+  );
+  requireValue(new Set(categories).size === categories.length);
+  const normalizedCategories = [...categories].sort();
   return store.update((data) => {
     const previous = data.subscriptions[id];
     requireValue(!previous || previous.hostId === sender.hostId, 403);
@@ -58,7 +68,9 @@ export function register(
       if (body.version === previous.version) {
         requireValue(
           body.deviceToken === previous.deviceToken &&
-            body.displayName === previous.displayName,
+            body.displayName === previous.displayName &&
+            JSON.stringify(normalizedCategories) ===
+              JSON.stringify([...previous.categories].sort()),
           409,
         );
         return { revokeToken: previous.revokeToken };
@@ -79,6 +91,7 @@ export function register(
       deviceToken: String(body.deviceToken),
       displayName: String(body.displayName),
       version: Number(body.version),
+      categories: normalizedCategories,
       revoked: false,
       revokeToken:
         previous?.revokeToken ?? randomBytes(32).toString("base64url"),
