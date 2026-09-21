@@ -135,13 +135,11 @@ function getSessionAgentMetadataForMainPanel(
   "threadId" | "threadProvider" | "preview" | "terminalState"
 > {
   const sessionAgent = getSessionAgentForPanelBackfill(session);
-  if (
-    !sessionAgent ||
-    panelTerminalState.agent !== sessionAgent ||
-    (!session.threadId && !session.preview)
-  ) {
+  if (!sessionAgent || panelTerminalState.agent !== sessionAgent) {
     return {};
   }
+  // Stop clears thread/preview, but the known terminal state must still survive
+  // main-panel recovery instead of falling back to agent_starting.
   return {
     ...(session.threadId ? { threadId: session.threadId } : {}),
     ...(session.threadProvider

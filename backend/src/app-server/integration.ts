@@ -13,6 +13,7 @@ import { handleAgentHookEvent } from "./handlers/agent-hook";
 import { handleAgentLifecycleEvent } from "./handlers/agent-lifecycle";
 import { isEventOwnedByThisBackend } from "./ownership";
 import { startAppServerRuntimeStatusSource } from "./runtime-status-source";
+import { StartingPanelStateReconciler } from "./starting-panel-reconciler";
 
 const APP_SERVER_AGENT_EVENT_CONSUMER_ID = "backend:agent-events";
 
@@ -39,6 +40,7 @@ export async function initializeAppServerEventIntegration(
   let stopping: Promise<void> | null = null;
   let connection: AppServerConnectionInfo | null = null;
   const abort = new AbortController();
+  const panelReconciler = new StartingPanelStateReconciler(services);
 
   const stopConsumers = async (): Promise<void> => {
     await runtime.appServerSource?.stop();
@@ -58,7 +60,10 @@ export async function initializeAppServerEventIntegration(
   const reconcile = async (): Promise<void> => {
     // A connected stream needs no discovery polling. A disconnected stream
     // retains its cursor while we look for a replacement singleton address.
-    if (runtime.eventConsumer?.getStatusSnapshot().state === "connected") return;
+    if (runtime.eventConsumer?.getStatusSnapshot().state === "connected") {
+      if (connection) await panelReconciler.poll(new AppServerClient(connection), abort.signal);
+      return;
+    }
     try {
       const next = await discoverAppServer({ env: process.env });
       if (stopped) return;
