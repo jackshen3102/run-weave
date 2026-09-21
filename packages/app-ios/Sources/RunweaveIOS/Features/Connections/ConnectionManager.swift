@@ -117,8 +117,10 @@ struct ConnectionManager: View {
         Text("将移除此连接和它的本地登录凭据，远端项目和终端会保留。")
       }
     }.navigationViewStyle(.stack).interactiveDismissDisabled(busy || quickReplies.saving)
-      .task(id: store.connections.map(\.scope).joined(separator: "|")) {
-        await batteries.refresh(store.connections)
+      .task(id: store.connections.map(\.scope).joined(separator: "|") + "|" + (store.activeID ?? "")) {
+        let ordered = store.connections.filter { $0.id == store.activeID }
+          + store.connections.filter { $0.id != store.activeID }
+        await batteries.refresh(ordered)
       }
       .preferredColorScheme(theme == "light" ? .light : .dark)
       .sheet(isPresented: $showingCodexQuota) {

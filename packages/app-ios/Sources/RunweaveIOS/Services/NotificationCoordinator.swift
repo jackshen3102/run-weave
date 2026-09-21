@@ -171,7 +171,9 @@ public final class NotificationCoordinator: ObservableObject {
     tokenWaiters.removeAll()
     message = "系统推送注册失败，请检查签名和网络"
   }
-  func disable(_ connection: BackendConnection, client supplied: APIClient? = nil) async {
+  func disable(
+    _ connection: BackendConnection, client supplied: APIClient? = nil, reportFailure: Bool = true
+  ) async {
     guard var binding = bindings[connection.scope] else { return }
     versions[connection.scope, default: 0] += 1
     binding.enabled = false
@@ -189,8 +191,9 @@ public final class NotificationCoordinator: ObservableObject {
       } catch {}
       if supplied == nil { await api.close() }
     }
-    // Backend 204 may only have queued a gateway revocation. Confirm directly when possible.
-    if let subscription = binding.subscription, subscription.revokeToken != nil {
+    // Backend returns 204 only after gateway revocation is confirmed; use the saved gateway
+    // as a fallback when the Backend cannot confirm, not as a second required success.
+    if !revoked, let subscription = binding.subscription, subscription.revokeToken != nil {
       do {
         try await directRevoke(subscription)
         revoked = true
@@ -200,8 +203,8 @@ public final class NotificationCoordinator: ObservableObject {
       bindings[connection.scope]?.pendingRevoke = false
       bindings[connection.scope]?.subscription = nil
       do { try persist() } catch { message = "关闭提醒状态保存失败" }
-    } else {
-      message = "远端提醒关闭尚未确认"
+    } else if reportFailure {
+      message = "\(connection.name)：远端提醒关闭尚未确认"
     }
   }
   private func directRevoke(_ subscription: DeviceNotificationSubscription) async throws {
@@ -253,7 +256,7 @@ public final class NotificationCoordinator: ObservableObject {
     // Sequential requests stay within the three-connection limit and serialize revoke before sync.
     for binding in Array(bindings.values) where binding.pendingRevoke {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
-      await disable(binding.connection)
+      await disable(binding.connection, reportFailure: false)
     }
     guard tokenConfirmed, let deviceToken, let environment else { return }
     for binding in Array(bindings.values) where binding.enabled && !binding.pendingRevoke {

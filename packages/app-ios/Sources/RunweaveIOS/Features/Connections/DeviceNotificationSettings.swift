@@ -28,11 +28,9 @@ struct DeviceNotificationSettings: View {
             }
           })
       )
-      .disabled(
-        busy
-          || (availability?.available != true
-            && notifications.bindings[connection.scope]?.enabled != true)
-      )
+      // enable() checks the current Backend status before requesting notification permission.
+      // A missing or stale background status must not prevent that explicit retry.
+      .disabled(busy)
       .accessibilityIdentifier("device.notifications.enabled")
       if notifications.bindings[connection.scope]?.pendingRevoke == true {
         Text("远端提醒关闭尚未确认").foregroundColor(.orange)
