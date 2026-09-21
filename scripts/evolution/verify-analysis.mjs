@@ -26,7 +26,6 @@ import {
   writeAnalysisVerificationResult,
 } from "./verify-analysis-helpers.mjs";
 import { verifyNoveltyQualityGates } from "./verify-novelty-quality.mjs";
-
 async function verifyAnalysisFoundation() {
   const tempRoot = await mkdtemp(
     path.join(os.tmpdir(), "runweave-evolution-analysis-"),
@@ -90,7 +89,6 @@ async function verifyAnalysisFoundation() {
     ];
     analysisFixtureState.currentEvidenceEventId = initialFacts[0].eventId;
     await activityStore.record(initialFacts, Date.parse(capturedAt));
-
     const builder = new EvolutionContextPackBuilder(
       new ActivityQueryService(activityStore),
       evolutionStore,
@@ -139,7 +137,6 @@ async function verifyAnalysisFoundation() {
       expiringEvidence?.contentRefs[0]?.unavailableReason,
       "expires_before_run_deadline",
     );
-
     const frozenEvidenceIds = firstPack.evidence.map(
       (evidence) => evidence.evidenceId,
     );
@@ -267,7 +264,7 @@ async function verifyAnalysisFoundation() {
     );
 
     const temporaryRoot = path.join(tempRoot, "evolution", "tmp");
-    const { orchestrator, service } = createAnalysisHarness({
+    const { orchestrator, service } = await createAnalysisHarness({
       evolutionStore,
       activityStore,
       temporaryRoot,
@@ -309,8 +306,16 @@ async function verifyAnalysisFoundation() {
     assert.equal(firstPaginatedBoundary?.truncated, false);
     assert.equal(firstPaginatedArtifacts.contextPack?.evidence.length, 51);
     assert.equal(
-      (await evolutionStore.getWatermark(paginationProjectId, "activity"))
-        ?.value,
+      (
+        await evolutionStore.getWatermark(
+          (
+            await service.repositories.resolve({
+              projectId: paginationProjectId,
+            })
+          ).repositoryId,
+          "activity",
+        )
+      )?.value,
       firstPaginatedBoundary?.snapshotBoundary,
       "knowledge commit must advance through the fully drained frozen range",
     );
@@ -550,6 +555,31 @@ async function verifyAnalysisFoundation() {
       await evolutionStore.listCandidates()
     ).find((candidate) => candidate.assetId === deletionCandidate?.assetId);
     assert.equal(retiredDeletionCandidate?.lifecycle, "retired");
+
+    // A retired latest candidate may retain an old revision after its evidence
+    // invalidation was archived. A later maintenance pass must reuse that archive.
+    await evolutionStore.putCandidate({
+      ...retiredDeletionCandidate,
+      revisionId: `fixture_old_reference_${randomUUID()}`,
+      insightRevisionId: deletionInsight.revisionId,
+      updatedAt: new Date(Date.parse(capturedAt) + 11 * 60_000).toISOString(),
+    });
+    const archivedIds = (
+      await evolutionStore.getInsight(deletionInsight.insightId)
+    ).revisions
+      .map((item) => item.revisionId)
+      .sort();
+    await new EvolutionEvidenceReconciler(
+      new ActivityQueryService(activityStore),
+      evolutionStore,
+      () => new Date(Date.parse(capturedAt) + 12 * 60_000),
+    ).reconcile();
+    assert.deepEqual(
+      (await evolutionStore.getInsight(deletionInsight.insightId)).revisions
+        .map((item) => item.revisionId)
+        .sort(),
+      archivedIds,
+    );
 
     await verifyFencedKnowledgeCommit(service, evolutionStore, childA);
     verifyProviderSelectionPolicies();

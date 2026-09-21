@@ -31,6 +31,9 @@ export function defaultEvolutionScopePolicy(
 ): EvolutionScopePolicy {
   return {
     learningScopeId,
+    ...(/^[a-f0-9]{64}$/u.test(learningScopeId)
+      ? { repositoryId: learningScopeId }
+      : {}),
     revision: 0,
     memoryCanaryEnabled: false,
     canaryRate: 0,

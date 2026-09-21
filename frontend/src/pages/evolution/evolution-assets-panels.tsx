@@ -120,6 +120,7 @@ export function EvolutionCandidatesPanel({
                         size="sm"
                         disabled={
                           candidateActionPending ||
+                          !/^[a-f0-9]{64}$/u.test(candidate.learningScopeId) ||
                           !policy?.memoryCanaryEnabled ||
                           (policy.canaryRate ?? 0) <= 0
                         }
@@ -269,6 +270,17 @@ export function EvolutionSchedulesPanel({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-medium">{schedule.name}</h3>
+                  {schedule.pausedReason ? (
+                    <p className="mt-2 text-xs text-amber-600">
+                      已暂停：
+                      {schedule.pausedReason ===
+                      "repository_attribution_unresolved"
+                        ? "历史仓库或工作目录尚未确认"
+                        : schedule.pausedReason === "repository_unavailable"
+                          ? "仓库工作目录不可用"
+                          : "迁移完成后等待恢复"}
+                    </p>
+                  ) : null}
                   <EvolutionStatusPill
                     status={schedule.enabled ? "available" : "draft"}
                     label={schedule.enabled ? "已启用" : "已停用"}

@@ -1,4 +1,10 @@
 import {
+  isEvolutionRepositoryId,
+  type EvolutionRepositoryContext,
+  type EvolutionRepositoryAttribution,
+} from "./repository";
+export * from "./repository";
+import {
   buildTerminalChildProjectIdPrefix,
   resolveTerminalParentProjectId,
 } from "../terminal/project-context";
@@ -21,9 +27,18 @@ export const EVOLUTION_GLOBAL_SCOPE_ID = "global:runweave";
 
 export type EvolutionReflectionScope =
   | { type: "global" }
-  | { type: "project"; projectId: string };
+  | { type: "project"; projectId: string }
+  | { type: "repository"; cwd?: string; repositoryId?: string };
 
 export type LearningScopeRef =
+  | {
+      scopeType: "repository";
+      learningScopeId: string;
+      repositoryId: string;
+      cwd: string | null;
+      requestedProjectId: string | null;
+      projectSelector: null;
+    }
   | {
       scopeType: "global";
       learningScopeId: typeof EVOLUTION_GLOBAL_SCOPE_ID;
@@ -304,6 +319,13 @@ export interface InsightRevision {
 }
 
 export interface Insight {
+  repositoryId?: string;
+  attribution?: EvolutionRepositoryAttribution;
+  lineage?: {
+    canonicalInsightId: string;
+    memberIds: string[];
+    status: "resolved" | "contested";
+  };
   insightId: string;
   learningScopeId: string;
   topicKey: string;
@@ -340,6 +362,17 @@ export function resolveEvolutionLearningScope(
       projectSelector: null,
     };
   }
+  if (isEvolutionRepositoryId(requestedProjectId)) {
+    return {
+      scopeType: "repository",
+      learningScopeId: requestedProjectId,
+      repositoryId: requestedProjectId,
+      cwd: null,
+      requestedProjectId: null,
+      projectSelector: null,
+    };
+  }
+  // Legacy manifests remain decodable; live requests resolve Git identity in Backend.
   const learningScopeId = resolveTerminalParentProjectId(requestedProjectId);
   return {
     scopeType: "project",
@@ -393,9 +426,12 @@ export type EvolutionRunOutcome =
 export interface EvolutionRunDataRange {
   afterWatermark: string | null;
   atOrBefore: string;
+  snapshotBoundary?: number;
 }
 
 export interface EvolutionRun {
+  repository?: EvolutionRepositoryContext;
+  attribution?: EvolutionRepositoryAttribution;
   runId: string;
   learningScopeId: string;
   trigger: EvolutionTrigger;
@@ -432,6 +468,8 @@ export interface EvolutionProviderAvailability {
 }
 
 export interface EvolutionSchedule {
+  repository?: EvolutionRepositoryContext;
+  pausedReason?: string;
   scheduleId: string;
   learningScopeId: string;
   name: string;
@@ -450,7 +488,8 @@ export interface EvolutionSchedule {
 }
 
 export interface CreateEvolutionScheduleRequest {
-  projectId: string;
+  projectId?: string;
+  scope?: EvolutionReflectionScope;
   name: string;
   cronExpression: string;
   timezone: string;

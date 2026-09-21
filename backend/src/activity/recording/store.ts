@@ -1,3 +1,4 @@
+import { resolveActivityRepositories } from "./repository-bindings";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -38,7 +39,9 @@ function resolveWorkerEntry(env: NodeJS.ProcessEnv): URL {
   }
   const currentPath = fileURLToPath(import.meta.url);
   return new URL(
-    currentPath.endsWith(".ts") ? "../database/sqlite-worker.ts" : "../database/sqlite-worker.js",
+    currentPath.endsWith(".ts")
+      ? "../database/sqlite-worker.ts"
+      : "../database/sqlite-worker.js",
     import.meta.url,
   );
 }
@@ -65,6 +68,8 @@ export class ActivityStore {
   private readonly workerExit: Promise<void>;
   private nextRequestId = 1;
   private closed = false;
+  private closing = false;
+  private readonly recording = new Set<Promise<ActivityWriteAck[]>>();
 
   private constructor(params: {
     databasePath: string;
@@ -159,20 +164,45 @@ export class ActivityStore {
     events: ActivityEventInput[],
     nowMs?: number,
   ): Promise<ActivityWriteAck[]> {
-    return this.request({
-      op: "record",
-      events,
-      ...(nowMs != null ? { nowMs } : {}),
-    });
+    if (this.closing || this.closed)
+      return Promise.reject(new Error("activity_store_closed"));
+    const operation = resolveActivityRepositories(
+      events.map((event) => ({ eventId: event.eventId, cwd: event.scope.cwd })),
+    ).then((bindings) =>
+      this.request<ActivityWriteAck[]>({
+        op: "record",
+        events,
+        bindings,
+        ...(nowMs != null ? { nowMs } : {}),
+      }),
+    );
+    this.recording.add(operation);
+    void operation.then(
+      () => this.recording.delete(operation),
+      () => this.recording.delete(operation),
+    );
+    return operation;
   }
 
-  facts(query: ActivityFactsQuery): Promise<ActivityFactsPage> {
+  async facts(query: ActivityFactsQuery): Promise<ActivityFactsPage> {
+    await Promise.allSettled([...this.recording]);
     return this.request({ op: "facts", query });
   }
 
-  evolutionSnapshot(
+  async evolutionSnapshot(
     query: ActivityEvolutionSnapshotQuery,
   ): Promise<ActivityEvolutionSnapshotPage> {
+    await Promise.allSettled([...this.recording]);
+    if (query.atOrBeforeSnapshotBoundary === undefined) {
+      const pending = await this.request<
+        Array<{ eventId: string; cwd: string | null }>
+      >({ op: "pending-repositories" });
+      if (pending.length)
+        await this.request({
+          op: "bind-repositories",
+          bindings: await resolveActivityRepositories(pending),
+        });
+    }
     return this.request({ op: "evolution-snapshot", query });
   }
 
@@ -182,10 +212,11 @@ export class ActivityStore {
     return this.request({ op: "evolution-evidence-availability", eventIds });
   }
 
-  timeline(
+  async timeline(
     selector: ActivityTimelineSelector,
     query: ActivityFactsQuery,
   ): Promise<ActivityFactsPage> {
+    await Promise.allSettled([...this.recording]);
     return this.request({ op: "timeline", selector, query });
   }
 
@@ -282,6 +313,9 @@ export class ActivityStore {
     if (this.closed) {
       return;
     }
+    this.closing = true;
+    await Promise.allSettled([...this.recording]);
+    if (this.closed) return;
     void this.request({ op: "close" }).catch(() => undefined);
     this.closed = true;
     let timeout: NodeJS.Timeout | undefined;

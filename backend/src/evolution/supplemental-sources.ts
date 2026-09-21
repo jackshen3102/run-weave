@@ -1,3 +1,8 @@
+import type { AgentTeamRun } from "@runweave/shared/agent-team";
+import {
+  resolveRepositoryIdentity,
+  readRepositoryRevision,
+} from "../repository/identity";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import type {
@@ -25,9 +30,7 @@ export interface EvolutionSupplementalSourceReader {
   }): Promise<EvolutionSupplementalSources>;
 }
 
-export class DefaultEvolutionSupplementalSourceReader
-  implements EvolutionSupplementalSourceReader
-{
+export class DefaultEvolutionSupplementalSourceReader implements EvolutionSupplementalSourceReader {
   constructor(
     private readonly appServer: {
       getThreadDetail(threadId: string): Promise<unknown>;
@@ -115,9 +118,7 @@ export class DefaultEvolutionSupplementalSourceReader
     return collectedSource(
       "app_server",
       input,
-      results.flatMap((result) =>
-        result.evidence ? [result.evidence] : [],
-      ),
+      results.flatMap((result) => (result.evidence ? [result.evidence] : [])),
       results.flatMap((result) => (result.issue ? [result.issue] : [])),
     );
   }
@@ -125,6 +126,7 @@ export class DefaultEvolutionSupplementalSourceReader
   private async collectAgentTeam(
     runIds: string[],
     input: {
+      learningScope: LearningScopeRef;
       afterWatermark: string | null;
       snapshotBoundary: string;
     },
@@ -134,6 +136,32 @@ export class DefaultEvolutionSupplementalSourceReader
         try {
           const run = await this.agentTeam.getRun(runId);
           if (!run) throw new Error("agent_team_run_not_found");
+          if (input.learningScope.scopeType === "repository") {
+            const record = run as Partial<AgentTeamRun>;
+            const cwds = [
+              record.terminal?.cwd,
+              ...Object.values(record.roleRuntimes?.roles ?? {}).map(
+                (role) => role.terminal?.cwd ?? record.terminal?.cwd,
+              ),
+            ];
+            const ids = await Promise.all(
+              cwds.map((cwd) =>
+                cwd
+                  ? resolveRepositoryIdentity(cwd)
+                      .then((value) => value.repositoryId)
+                      .catch(() => null)
+                  : null,
+              ),
+            );
+            if (ids.some((id) => id !== input.learningScope.learningScopeId))
+              return {
+                issue: qualityIssue(
+                  "agent_team",
+                  "agent_team_repository_unresolved_or_mixed",
+                  runId,
+                ),
+              };
+          }
           const digest = sha256(canonicalJson(run));
           return {
             evidence: sourceEvidence({
@@ -158,9 +186,7 @@ export class DefaultEvolutionSupplementalSourceReader
     return collectedSource(
       "agent_team",
       input,
-      results.flatMap((result) =>
-        result.evidence ? [result.evidence] : [],
-      ),
+      results.flatMap((result) => (result.evidence ? [result.evidence] : [])),
       results.flatMap((result) => (result.issue ? [result.issue] : [])),
     );
   }
@@ -174,9 +200,10 @@ export class DefaultEvolutionSupplementalSourceReader
     if (input.learningScope.scopeType === "global") {
       return { sources: [], evidence: [], dataQualityIssues: [] };
     }
-    const configuredRoot = this.resolveProjectRoot(
-      input.learningScope.learningScopeId,
-    );
+    const configuredRoot =
+      input.learningScope.scopeType === "repository"
+        ? input.learningScope.cwd
+        : this.resolveProjectRoot(input.learningScope.learningScopeId);
     if (!configuredRoot) {
       return {
         sources: [],
@@ -193,6 +220,12 @@ export class DefaultEvolutionSupplementalSourceReader
     let root: string;
     try {
       root = await realpath(configuredRoot);
+      if (
+        input.learningScope.scopeType === "repository" &&
+        (await resolveRepositoryIdentity(root)).repositoryId !==
+          input.learningScope.repositoryId
+      )
+        throw new Error("repository_identity_changed");
     } catch {
       return {
         sources: [],
@@ -206,6 +239,7 @@ export class DefaultEvolutionSupplementalSourceReader
         ],
       };
     }
+    const revision = await readRepositoryRevision(root);
     const candidateFiles = new Set<string>([
       path.join(root, "AGENTS.md"),
       path.join(root, "docs", "architecture", "agent-self-evolution.md"),
@@ -235,6 +269,7 @@ export class DefaultEvolutionSupplementalSourceReader
             sourceRecordId: resolved,
             digest,
             originPath: resolved,
+            revision,
           }),
         );
       } catch {
@@ -285,6 +320,7 @@ function sourceEvidence(params: {
   sourceRecordId: string;
   digest: string;
   originPath?: string;
+  revision?: string | null;
   relationships?: Partial<ContextPackEvidenceRef["relationships"]>;
 }): ContextPackEvidenceRef {
   return {
@@ -298,7 +334,7 @@ function sourceEvidence(params: {
       projectId: null,
       path: params.originPath ?? null,
       branch: null,
-      revision: null,
+      revision: params.revision ?? null,
     },
     relationships: {
       terminalSessionId: null,
@@ -335,5 +371,8 @@ function unique(values: string[]): string[] {
 
 function withinRoot(root: string, candidate: string): boolean {
   const relative = path.relative(root, path.resolve(candidate));
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
 }

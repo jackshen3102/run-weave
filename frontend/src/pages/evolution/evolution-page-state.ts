@@ -5,7 +5,7 @@ import type {
   Insight,
   RuntimeTraceSummary,
 } from "@runweave/shared/evolution";
-import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { EvolutionRepository } from "@runweave/shared/evolution";
 import type {
   EvolutionScopeOption,
   EvolutionView,
@@ -24,27 +24,44 @@ export const EMPTY_SCHEDULES: EvolutionSchedule[] = [];
 export const EMPTY_CANDIDATES: CandidateAsset[] = [];
 export const EMPTY_INSIGHTS: Insight[] = [];
 export const EMPTY_TRACES: RuntimeTraceSummary[] = [];
-export const EMPTY_PROJECTS: TerminalProjectListItem[] = [];
+export const EMPTY_PROJECTS: EvolutionRepository[] = [];
 
 export function buildEvolutionScopeOptions(
-  projects: TerminalProjectListItem[],
+  projects: EvolutionRepository[],
 ): EvolutionScopeOption[] {
   return [
     {
       id: "global:runweave",
       kind: "global",
-      label: "全部工作区",
-      description: "复盘 Runweave 中所有工作区的完整流程",
+      label: "全部仓库",
+      description: `分别复盘 ${projects.filter((project) => project.available).length} 个可用仓库，最多 ${projects.filter((project) => project.available).length * 20} 分钟，顺序执行`,
     },
     ...projects.map((project) => ({
-      id: project.projectId,
-      kind: "project" as const,
+      id: project.repositoryId,
+      kind: "repository" as const,
+      cwd: project.paths[0],
+      available: project.available,
       label: project.name,
-      description: project.path ?? "包含该项目的主工作区与全部 Git worktree",
+      description: project.paths[0] ?? "仓库历史",
     })),
   ];
 }
 
 export function evolutionErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Evolution 请求失败";
+}
+
+export function filterEvolutionScope<
+  T extends {
+    learningScopeId: string;
+    attribution?: { repositoryIds: string[] };
+  },
+>(items: T[], scopeId: string): T[] {
+  return scopeId === "global:runweave"
+    ? items
+    : items.filter(
+        (item) =>
+          item.learningScopeId === scopeId ||
+          item.attribution?.repositoryIds.includes(scopeId),
+      );
 }

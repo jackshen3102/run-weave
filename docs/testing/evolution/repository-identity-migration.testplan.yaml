@@ -1,0 +1,221 @@
+version: 1
+name: Evolution 仓库身份与历史迁移验收
+description: >
+  定义仓库身份与显式历史迁移的行为验收合同。
+  验证 Evolution 与 Experience 使用同一 Git common-directory 身份，历史证据完整、隔离不弱化，
+  迁移可审计、幂等且可恢复。所有写入与故障注入使用独占副本或测试环境，禁止用生产库充当 fixture。
+
+cases:
+  - id: ERIM-001
+    name: 同一仓库的不同入口得到完全相同的身份
+    required: true
+    description: >
+      验证提取公共解析器不改变 Experience 既有 hash，且 Evolution 不因重复注册 Project 或进入 Worktree 而分裂知识。
+    preconditions:
+      - 独占 Git fixture 包含主工作区、linked worktree、子目录、符号链接以及指向同仓库的两个已注册 Project。
+      - 测试命名空间已有 Experience 记录，记录了改造前 repositoryId 和存储文件摘要。
+    steps:
+      - 从每个入口分别解析 Experience 与 Evolution scope；确认 repositoryId 均等于规范 common directory 的 SHA-256，且与改造前相同。
+      - 在隔离环境分别从两个 Project 创建 Run；确认按同一仓库查询能看到两者，Experience 旧记录仍可读且内容未被迁移修改。
+
+  - id: ERIM-002
+    name: 独立仓库和非 Git 路径不能共享知识身份
+    required: true
+    description: >
+      验证名称、remote URL 相同不能跨 clone 归并，submodule 独立，非 Git 输入不会回退成 Project 或全局身份。
+    preconditions:
+      - 独占 fixture 包含同名同 remote 的两个独立 clone、一个 submodule 和一个非 Git 目录。
+      - 每个 Git 仓库有可区分的知识数据；测试可注入无关 GIT_DIR 等继承变量。
+    steps:
+      - 在带干扰 Git 环境变量时从各 cwd 查询 scope；确认按各自 common directory 得到不同身份，结果不受继承变量污染。
+      - 分别查询各仓库知识；确认无其他 clone 或 submodule 的记录；非 Git cwd 创建 Run 明确失败且没有新增 scope、policy 或 Run。
+
+  - id: ERIM-003
+    name: 同一 Project 中跨仓库活动按实际仓库隔离
+    required: true
+    description: >
+      验证取消 Project 前缀作为知识归属依据后，同 Project 的跨仓库事件不会被整批迁入一个仓库。
+    preconditions:
+      - 独占 Activity fixture 在同一旧 Project 下有两个 Git 仓库 cwd 的事实和一个无可靠归属的临时目录事实。
+      - 各事件已记录原 eventId、payload 摘要及可核验归属依据。
+    steps:
+      - 执行迁移 audit 并应用副本；确认两个仓库的事件分别绑定，临时目录事件为 unresolved，没有仅按 Project 兜底。
+      - 为两个仓库分别冻结 Context Pack；确认各自只包含本仓库事件，原 projectId 和路径仍可追溯，未归属项进入明确的质量统计。
+
+  - id: ERIM-004
+    name: 已删除路径的历史保持可读且不被猜测归属
+    required: true
+    description: >
+      验证可靠历史绑定可以保留归属，没有可靠证据的旧临时仓库不会因名称或路径复用被吸收到当前仓库。
+    preconditions:
+      - 独占副本包含已删除 Worktree 的可靠仓库绑定和另一个缺少绑定的旧临时仓库。
+      - 当前存在名字相同但 common directory 不同的新仓库。
+    steps:
+      - 审计并迁移副本；确认前者仍归属原仓库，后者保留为 unresolved，未归到同名新仓库。
+      - 从历史 API 读取两者原 Run 和证据；确认全部可读，unresolved 对象不能被授权注入或自动恢复定时分析。
+
+  - id: ERIM-005
+    name: 迁移不改变不可变证据和历史实验身份
+    required: true
+    description: >
+      验证原始 artifact 的 ID、payload、digest、证据引用及旧 Canary assignment 均保持原样，归属信息来自附加索引。
+    preconditions:
+      - 独占一致性副本包含所有 Evolution artifact 类型及至少一个历史 RuntimeTrace。
+      - 已生成逐表主键集合、不可变 payload 和 digest 的迁移前清单。
+    steps:
+      - 对副本执行 apply 和 verify；确认每个原主键仍存在，不可变原文摘要及 RuntimeTrace assignmentHash、policyRevision、dispatchId 完全一致。
+      - 读取原 Context Pack 并重新校验 digest，沿 revision 和 evidence 引用读取对象；确认无断链，混合或未归属记录明确计入迁移账本。
+
+  - id: ERIM-006
+    name: 同仓库重复主题保留全部观点和来源
+    required: true
+    description: >
+      验证两个旧 scope 同 topicKey 归并不会触发唯一键丢失或按更新时间覆盖冲突结论。
+    preconditions:
+      - 独占副本含同仓库两个旧 scope；各有相同 topicKey 的 Insight，其中一组结论一致，另一组互相矛盾。
+      - 两组各有独立 revision、支持证据和反证，已记录全部 ID。
+    steps:
+      - 审计并迁移；确认 canonical ID 选择确定、lineage 完整，全部旧 revisionId 与证据均保留，重复执行不产生第二套 canonical 记录。
+      - 查询 Novelty 基线和详情；确认一致组可见全部来源，矛盾组明确 contested 或 needs_revalidation，不能因更新时间较晚自动成为可注入结论。
+
+  - id: ERIM-007
+    name: 新仓库初次回补不因旧水位较高遗漏事实
+    required: true
+    description: >
+      验证不同旧 scope 的水位合并后不取最大值跳过未处理事件，只有完整成功才能推进新仓库水位。
+    preconditions:
+      - 独占副本含同仓库两个旧 scope 的不同成功水位，较小与较大水位之间存在未处理事实。
+      - 已迁移可用知识基线，Provider 使用受控隔离配置且不触及正式库。
+    steps:
+      - 执行迁移；确认旧水位留存，新仓库回补起点为 0，创建一次受控回补后 Context Pack 包含中间未处理事实。
+      - 让回补完整成功；确认新水位推进至冻结上界，同一已知事实经 Novelty 门禁不会只因身份改变生成重复 Candidate。
+
+  - id: ERIM-008
+    name: 旧事件归属补录进入回补且不改变冻结中的 Pack
+    required: true
+    description: >
+      验证归属索引后补不会被已前进的 Activity watermark 永久跳过，也不改变正在分页的冻结证据集合。
+    preconditions:
+      - 独占环境中某仓库已有成功水位，并有水位之前的 unresolved 事件。
+      - 当前正在为同仓库分页建立冻结 Pack，可为该事件提供新的可靠归属证据。
+    steps:
+      - 在分页期间补录事件归属；确认当前 Pack 的归属版本和候选事件集合保持不变。
+      - 查看持久回补范围并执行下一次受控回补；确认新归属事件被处理一次，旧水位没有使其永久遗漏。
+
+  - id: ERIM-009
+    name: 迁移不继承扩大后的 Canary 授权
+    required: true
+    description: >
+      验证多个 Project 合到仓库不会通过 policy 合并或 Candidate 状态重写扩大原授权。
+    preconditions:
+      - 独占副本包含同仓库两份不同 policy，以及 canary、retired、needs_revalidation 的最新 Candidate。
+      - 每条 Candidate 有可核验来源及迁移前 revisionId。
+    steps:
+      - 迁移并读取新仓库 policy；确认 Canary 关闭、rate 为 0，旧 policy 与旧 revision 原文保留。
+      - 查询新 Candidate revision 并进行检索；确认原 canary 需重新授权、retired 不复活、needs_revalidation 不升级，迁移本身没有产生实际注入。
+
+  - id: ERIM-010
+    name: 定时任务仅在仓库和基线入口明确时恢复
+    required: true
+    description: >
+      验证迁移保留 Schedule 历史关系，明确归属的任务可恢复，混合或未知任务不会自动分析错误仓库。
+    preconditions:
+      - 独占副本包含原本启用且归属明确的 Schedule，以及归属混合和缺失 checkout 的 Schedule。
+      - 原 scheduleId、lastRunId、时间配置和启用状态已经记录。
+    steps:
+      - 在暂停调度期间迁移并完成 verify；确认原 scheduleId 和历史 Run 关系保留，期间没有 materialize 新 Run。
+      - 恢复新调度器；确认仅归属与 checkout 均明确的原启用任务恢复，其余保持暂停并提供原因，错过窗口仍遵守一次 catch-up 规则。
+
+  - id: ERIM-011
+    name: 迁移阻止旧 writer 与未完成状态写入
+    required: true
+    description: >
+      验证最低 writer 版本与维护窗口共同保护共享库，不把修改版本号误认为能停止已打开的旧连接。
+    preconditions:
+      - 独占 fixture 有一个旧 Backend 写连接和一个待升级 Backend，使用同一测试数据库。
+      - 测试可观察活动 owner、连接及迁移完成标记。
+    steps:
+      - 保持旧连接活动时请求 apply；确认被拒绝且未执行转换，说明冲突 writer。
+      - 停止旧 writer 并完成迁移，再启动旧版本；确认拒绝数据库写入；新 writer 在完成标记缺失时也不调度或注入。
+
+  - id: ERIM-012
+    name: 迁移清单防漂移且重复应用幂等
+    required: true
+    description: >
+      验证 audit 清单绑定输入数据，重复 apply 不复制知识或重复追加迁移 revision。
+    preconditions:
+      - 独占副本已生成 audit manifest，包含输入摘要和预期变化计数。
+    steps:
+      - 在副本增加一条相关记录后应用旧 manifest；确认因输入漂移拒绝且没有部分转换。
+      - 重新 audit 后 apply 两次；确认第二次返回 already_applied 或等价状态，revision、lineage、Schedule 和 watermark 数量未重复增加。
+
+  - id: ERIM-013
+    name: 跨库阶段中断可恢复且不放行半迁移状态
+    required: true
+    description: >
+      验证 Activity 索引和 Evolution 数据的分阶段事务中断后，账本能确定恢复点且不会产生混合身份写入。
+    preconditions:
+      - 独占成对副本已有 audit manifest 和备份，可在 Activity 提交后、Evolution 提交前注入进程退出。
+    steps:
+      - 执行 apply 并在指定边界退出；确认账本记录已完成阶段，新 Evolution 写入、调度和注入仍被阻止。
+      - 重启迁移工具继续同一 migrationId；确认只补未完成阶段，verify 通过后才写完成标记，原不可变摘要仍一致。
+
+  - id: ERIM-014
+    name: 开放业务写入前可从成对备份回滚
+    required: true
+    description: >
+      验证迁移后尚未恢复业务写入时，回滚能完整还原原 schema 与数据，不遗漏 WAL 中已提交事实。
+    preconditions:
+      - 独占源库在备份前有已提交 WAL 数据，两个库均有 SQLite 一致性备份和原摘要。
+      - 已迁移但仍处于维护窗口，尚无迁移后的业务写入。
+    steps:
+      - 执行 rollback 并以旧版本打开恢复后的两个库；确认 schema、全部原主键和 payload 摘要与备份一致，WAL 中原已提交事实仍可读。
+      - 读取旧 Run、Schedule、policy 与 evidence 链；确认均可使用且无残余迁移完成状态误导旧服务。
+
+  - id: ERIM-015
+    name: 存在迁移后业务写入时拒绝破坏性降级
+    required: true
+    description: >
+      验证 rollback 不用旧备份覆盖新系统已经产生的数据，不能把新仓库知识随意映射到旧 Project。
+    preconditions:
+      - 独占环境已经完成迁移并恢复新 writer，随后产生一个新 Run 和可识别新记录。
+      - 原迁移备份仍存在。
+    steps:
+      - 请求恢复旧备份；确认工具检测到迁移后业务写入并拒绝覆盖，明确要求保存增量和兼容修复方案。
+      - 核对新 Run、新记录及原历史；确认全部仍在，没有自动选择旧 Project ID 进行逆映射。
+
+  - id: ERIM-016
+    name: 页面按仓库去重且兼容可解析的旧链接
+    required: true
+    description: >
+      验证 UI 消费真实仓库 scope，多个 Project 不重复显示同一知识集合，旧 scope 歧义不静默跳转。
+    preconditions:
+      - 独占 Dev Session 已运行新版本，包含同仓库多个 Project、可唯一解析的旧 scope 和一个混合 scope。
+      - 该仓库已有可读 Run、Insight、Candidate、Schedule 和 Trace。
+    steps:
+      - 使用 toolkit:playwright-cli 打开真实 Evolution 页面；确认仓库只显示一项，五类列表均按统一身份展示且路径别名可辨认。
+      - 打开唯一映射旧链接与混合 scope 旧链接；确认前者能到正确仓库，后者说明历史混合归属而不悄悄选仓库。
+
+  - id: ERIM-017
+    name: 全部仓库操作按仓库分别保存且请求幂等
+    required: true
+    description: >
+      按方案推荐的全局入口语义验证一次操作创建独立仓库 Run，重复请求不重复建任务或生成跨仓库知识。
+    preconditions:
+      - 用户已确认按仓库分批的全局入口方案，独占环境有两个 Git 仓库及同仓库重复 Project。
+      - 可读取 batch、子 Run、全机 lease 及知识归属，Provider 使用受控隔离配置。
+    steps:
+      - 使用 toolkit:playwright-cli 点击全部仓库复盘，并重发相同 idempotency key 的请求；确认同一个 batch 每仓库只有一个 Run，重复 Project 不增加子 Run。
+      - 观察执行和结果；确认仍至多一个活动 runner，两个仓库的 Pack 与知识分别保存，部分失败可独立显示而不重跑成功子 Run。
+
+  - id: ERIM-018
+    name: 实际 worker 按 cwd 仓库获得知识
+    required: true
+    description: >
+      验证注入消费者也完成仓库身份迁移，不能只凭列表归并或 prepare 返回成功声称实际注入正确。
+    preconditions:
+      - 独占 Agent Team 环境中同 Project 可调度两个不同仓库 cwd 的 code worker。
+      - 两仓库各有仅在本 fixture 授权的可区分 Memory，另有一个非 Git cwd 场景。
+    steps:
+      - 分别实际调度各 worker，读取真实 startup prompt 与对应 dispatch 的 RuntimeTrace；确认只暴露实际 cwd 仓库中被授权的 revision，没有另一仓库内容。
+      - 调度非 Git cwd worker；确认原任务仍启动，Evolution 明确记录身份解析失败并跳过注入，没有退回父 Project 或全局知识。

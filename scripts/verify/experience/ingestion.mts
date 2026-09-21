@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -73,6 +73,8 @@ async function verify(
       command: "pi",
       cwd: root,
     });
+    const workerCwd = path.join(root, "worker-checkout");
+    await mkdir(workerCwd);
     const panelId = withPanel ? crypto.randomUUID() : null;
     if (panelId)
       await manager.upsertPanel({
@@ -82,7 +84,7 @@ async function verify(
         role: null,
         agentTeamRunId: null,
         agentTeamWorkerId: null,
-        cwd: root,
+        cwd: workerCwd,
         activeCommand: "pi",
         status: "running",
         createdAt: new Date(),
@@ -243,6 +245,20 @@ async function verify(
       terminalSessionId: session.id,
       limit: 100,
     });
+    assert.ok(
+      snapshot.facts.every(
+        (f) => f.scope.cwd === (withPanel ? workerCwd : root),
+      ),
+      JSON.stringify({
+        withPanel,
+        root,
+        workerCwd,
+        facts: snapshot.facts.map((f) => ({
+          eventName: f.eventName,
+          scope: f.scope,
+        })),
+      }),
+    );
     const source = {
       terminalSessionId: session.id,
       threadId,

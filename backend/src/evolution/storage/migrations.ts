@@ -1,7 +1,8 @@
+import { initializeEvolutionRepositories } from "./repository-database";
 import type Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 5;
-const MINIMUM_WRITER_VERSION = 1;
+const SCHEMA_VERSION = 6;
+const MINIMUM_WRITER_VERSION = 2;
 
 export function migrateEvolutionDatabase(database: Database.Database): void {
   database.exec(`
@@ -11,6 +12,36 @@ export function migrateEvolutionDatabase(database: Database.Database): void {
     )
   `);
   assertCompatibleWriter(database);
+  const version = database
+    .prepare("SELECT value FROM evolution_metadata WHERE key = ?")
+    .get("schemaVersion") as { value: string } | undefined;
+  if (version && Number(version.value) < 6) {
+    for (const table of [
+      "evolution_runs",
+      "evolution_schedules",
+      "insights",
+      "candidate_asset_revisions",
+      "evolution_policies",
+      "evolution_watermarks",
+    ]) {
+      if (
+        !database
+          .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
+          .get(table)
+      )
+        continue;
+      if (database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get())
+        throw new Error("evolution_repository_migration_required");
+    }
+  }
+  const state = database
+    .prepare("SELECT value FROM evolution_metadata WHERE key = ?")
+    .get("repositoryMigrationState") as { value: string } | undefined;
+  if (
+    (state && state.value !== "complete") ||
+    (version && Number(version.value) >= 6 && !state)
+  )
+    throw new Error("evolution_repository_migration_incomplete");
   database
     .transaction(() => {
       database.exec(`
@@ -272,6 +303,12 @@ export function migrateEvolutionDatabase(database: Database.Database): void {
             SELECT RAISE(ABORT, 'evolution_contribution_edge_immutable');
           END;
       `);
+      initializeEvolutionRepositories(database);
+      database
+        .prepare(
+          "INSERT INTO evolution_metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        )
+        .run("repositoryMigrationState", "complete");
       database
         .prepare(
           `INSERT INTO evolution_metadata (key, value) VALUES (?, ?)
@@ -280,7 +317,7 @@ export function migrateEvolutionDatabase(database: Database.Database): void {
         .run("schemaVersion", String(SCHEMA_VERSION));
       database
         .prepare(
-          "INSERT OR IGNORE INTO evolution_metadata (key, value) VALUES (?, ?)",
+          "INSERT INTO evolution_metadata (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         )
         .run("minimumWriterVersion", String(MINIMUM_WRITER_VERSION));
     })

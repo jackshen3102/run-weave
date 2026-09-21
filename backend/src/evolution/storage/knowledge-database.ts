@@ -11,6 +11,7 @@ import type {
   EvolutionEvidenceReconciliation,
   EvolutionRunKnowledgeCommit,
 } from "../analysis-store";
+import { readRepositoryAttribution } from "./repository-database";
 import { insertImmutable } from "./database-helpers";
 import { EvolutionFoundationDatabase } from "./foundation-database";
 
@@ -44,7 +45,15 @@ export class EvolutionKnowledgeDatabase {
          WHERE current_revision = 1`,
       )
       .all() as Array<{ payload_json: string }>;
-    return rows.map((row) => JSON.parse(row.payload_json) as CandidateAsset);
+    return rows.map((row) => {
+      const candidate = JSON.parse(row.payload_json) as CandidateAsset;
+      const attribution = readRepositoryAttribution(
+        this.database,
+        "candidate",
+        candidate.assetId,
+      );
+      return attribution ? { ...candidate, attribution } : candidate;
+    });
   }
 
   putCandidate(candidate: CandidateAsset): void {
@@ -74,6 +83,7 @@ export class EvolutionKnowledgeDatabase {
   }
 
   private insertInsightRevision(params: {
+    previousRevisionId?: string;
     insight: Omit<Insight, "revisions">;
     revision: InsightRevision;
     contributionEdges: ContributionEdge[];
@@ -156,13 +166,16 @@ export class EvolutionKnowledgeDatabase {
       .prepare(
         `UPDATE insights
          SET current_revision_id = ?, updated_at = ?
-         WHERE insight_id = ? AND updated_at <= ?`,
+         WHERE insight_id = ? AND updated_at <= ?
+           AND (? IS NULL OR current_revision_id = ?)`,
       )
       .run(
         params.revision.revisionId,
         params.insight.updatedAt,
         params.insight.insightId,
         params.insight.updatedAt,
+        params.previousRevisionId ?? null,
+        params.previousRevisionId ?? null,
       );
   }
 
@@ -197,33 +210,36 @@ export class EvolutionKnowledgeDatabase {
 
   listEvidenceDependencies(): EvolutionEvidenceDependency[] {
     const candidates = this.listCandidates();
-    return this.listInsights().map((insight) => {
-      const revision = insight.revisions.find(
-        (item) => item.revisionId === insight.currentRevisionId,
-      );
-      if (!revision) {
-        throw new Error("evolution_current_insight_revision_missing");
-      }
-      return {
-        insight: {
-          insightId: insight.insightId,
-          learningScopeId: insight.learningScopeId,
-          topicKey: insight.topicKey,
-          currentRevisionId: insight.currentRevisionId,
-          createdAt: insight.createdAt,
-          updatedAt: insight.updatedAt,
-        },
-        revision,
-        contributionEdges: this.readPayloadRows<ContributionEdge>(
-          `SELECT payload_json FROM contribution_edges
-           WHERE insight_revision_id = ? ORDER BY edge_id`,
-          revision.revisionId,
-        ),
-        candidates: candidates.filter(
-          (candidate) => candidate.insightRevisionId === revision.revisionId,
-        ),
-      };
-    });
+    const referenced = new Set(
+      candidates.map((candidate) => candidate.insightRevisionId),
+    );
+    return this.listInsights().flatMap((insight) =>
+      insight.revisions
+        .filter(
+          (revision) =>
+            revision.insightId === insight.insightId &&
+            (revision.revisionId === insight.currentRevisionId ||
+              referenced.has(revision.revisionId)),
+        )
+        .map((revision) => ({
+          insight: {
+            insightId: insight.insightId,
+            learningScopeId: insight.learningScopeId,
+            topicKey: insight.topicKey,
+            currentRevisionId: insight.currentRevisionId,
+            createdAt: insight.createdAt,
+            updatedAt: insight.updatedAt,
+          },
+          revision,
+          contributionEdges: this.readPayloadRows<ContributionEdge>(
+            "SELECT payload_json FROM contribution_edges WHERE insight_revision_id=? ORDER BY edge_id",
+            revision.revisionId,
+          ),
+          candidates: candidates.filter(
+            (candidate) => candidate.insightRevisionId === revision.revisionId,
+          ),
+        })),
+    );
   }
 
   applyEvidenceReconciliation(
@@ -296,23 +312,61 @@ export class EvolutionKnowledgeDatabase {
   }
 
   private toInsight(row: InsightRow): Insight {
+    const membership = this.database
+      .prepare(
+        "SELECT canonical_insight_id FROM evolution_topic_lineage WHERE legacy_insight_id=?",
+      )
+      .get(row.insight_id) as { canonical_insight_id: string } | undefined;
+    const members = membership
+      ? (this.database
+          .prepare(
+            "SELECT legacy_insight_id, status FROM evolution_topic_lineage WHERE canonical_insight_id=? ORDER BY legacy_insight_id",
+          )
+          .all(membership.canonical_insight_id) as Array<{
+          legacy_insight_id: string;
+          status: "resolved" | "contested";
+        }>)
+      : [];
+    const attribution = readRepositoryAttribution(
+      this.database,
+      "insight",
+      row.insight_id,
+    );
     return {
+      ...(attribution ? { attribution } : {}),
+      ...(membership
+        ? {
+            lineage: {
+              canonicalInsightId: membership.canonical_insight_id,
+              memberIds: members.map((member) => member.legacy_insight_id),
+              status: members.some((member) => member.status === "contested")
+                ? ("contested" as const)
+                : ("resolved" as const),
+            },
+          }
+        : {}),
       insightId: row.insight_id,
       learningScopeId: row.learning_scope_id,
+      ...(/^[a-f0-9]{64}$/u.test(row.learning_scope_id)
+        ? { repositoryId: row.learning_scope_id }
+        : {}),
       topicKey: row.topic_key,
       currentRevisionId: row.current_revision_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       revisions: this.readPayloadRows<InsightRevision>(
         `SELECT payload_json FROM insight_revisions
-         WHERE insight_id = ? ORDER BY created_at, revision_id`,
+         WHERE insight_id = ? OR insight_id IN (
+           SELECT legacy_insight_id FROM evolution_topic_lineage WHERE canonical_insight_id = ?
+         ) ORDER BY created_at, revision_id`,
+        row.insight_id,
         row.insight_id,
       ),
     };
   }
 
-  private readPayloadRows<T>(sql: string, value: string): T[] {
-    const rows = this.database.prepare(sql).all(value) as Array<{
+  private readPayloadRows<T>(sql: string, ...values: string[]): T[] {
+    const rows = this.database.prepare(sql).all(...values) as Array<{
       payload_json: string;
     }>;
     return rows.map((row) => JSON.parse(row.payload_json) as T);

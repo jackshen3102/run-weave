@@ -10,6 +10,7 @@ import type {
   RuntimeTraceSummary,
   TraceSegment,
 } from "@runweave/shared/evolution";
+import { readRepositoryAttribution } from "./repository-database";
 import { insertImmutable } from "./database-helpers";
 
 export class EvolutionArtifactDatabase {
@@ -51,7 +52,11 @@ export class EvolutionArtifactDatabase {
       .get(traceId) as { payload_json: string } | undefined;
     if (!row) return null;
     const trace = JSON.parse(row.payload_json) as RuntimeTraceSummary;
-    return { ...trace, events: this.listEvents(traceId) };
+    return {
+      ...trace,
+      attribution: readRepositoryAttribution(this.database, "trace", traceId),
+      events: this.listEvents(traceId),
+    };
   }
 
   listRuntimeTraces(runId: string): RuntimeTraceSummary[] {
@@ -74,11 +79,16 @@ export class EvolutionArtifactDatabase {
       ? (this.database
           .prepare(
             `SELECT trace_id FROM runtime_traces
-             WHERE json_extract(payload_json, '$.learningScopeId') = ?
+             WHERE json_extract(payload_json, '$.learningScopeId') = ? OR EXISTS (
+               SELECT 1 FROM evolution_repository_bindings binding, json_each(binding.payload_json, '$.repositoryIds') repo
+               WHERE binding.kind='trace' AND binding.id=runtime_traces.trace_id AND repo.value=?
+             )
              ORDER BY created_at DESC, trace_id
              LIMIT ?`,
           )
-          .all(learningScopeId, limit) as Array<{ trace_id: string }>)
+          .all(learningScopeId, learningScopeId, limit) as Array<{
+          trace_id: string;
+        }>)
       : (this.database
           .prepare(
             `SELECT trace_id FROM runtime_traces

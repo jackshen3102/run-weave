@@ -1,3 +1,4 @@
+import type { EvolutionRepositoryScopes } from "../../evolution/repository-scope";
 import { Router } from "express";
 import { z } from "zod";
 import type { EvolutionActivationStore } from "../../evolution/activation-store";
@@ -40,21 +41,26 @@ const retireCandidateSchema = z
 
 export function createEvolutionActivationRouter(
   store: EvolutionActivationStore,
+  repositories?: EvolutionRepositoryScopes | null,
 ): Router {
   const router = Router();
 
   router.get("/candidates", async (request, response) => {
     try {
-      const learningScopeId =
+      let learningScopeId =
         typeof request.query.learningScopeId === "string"
           ? request.query.learningScopeId.trim()
           : "";
+      if (learningScopeId && repositories)
+        learningScopeId = await repositories.queryScope(learningScopeId);
       const candidates = await store.listCandidates();
       response.setHeader("Cache-Control", "no-store");
       response.json({
         candidates: learningScopeId
           ? candidates.filter(
-              (candidate) => candidate.learningScopeId === learningScopeId,
+              (candidate) =>
+                candidate.learningScopeId === learningScopeId ||
+                candidate.attribution?.repositoryIds.includes(learningScopeId),
             )
           : candidates,
       });
@@ -80,80 +86,84 @@ export function createEvolutionActivationRouter(
     }
   });
 
-  router.post(
-    "/candidates/:candidateId/canary",
-    async (request, response) => {
-      try {
-        const { candidateId } = candidateParamsSchema.parse(request.params);
-        const candidate = (await store.listCandidates()).find(
-          (item) => item.assetId === candidateId,
-        );
-        if (!candidate) {
-          response.status(404).json({ error: "evolution_candidate_not_found" });
-          return;
-        }
-        if (candidate.lifecycle === "canary") {
-          response.json(candidate);
-          return;
-        }
-        const policy =
-          (await store.getPolicy(candidate.learningScopeId)) ??
-          defaultEvolutionScopePolicy(candidate.learningScopeId);
-        const decision = authorizeMemoryCanary(
-          candidate,
-          policy,
-          new Date().toISOString(),
-        );
-        if (!decision.changed) {
-          response.status(409).json({ error: decision.reason });
-          return;
-        }
-        await store.putCandidate(decision.candidate);
-        response.json(decision.candidate);
-      } catch (error) {
-        sendEvolutionError(response, error);
+  router.post("/candidates/:candidateId/canary", async (request, response) => {
+    try {
+      const { candidateId } = candidateParamsSchema.parse(request.params);
+      const candidate = (await store.listCandidates()).find(
+        (item) => item.assetId === candidateId,
+      );
+      if (!candidate) {
+        response.status(404).json({ error: "evolution_candidate_not_found" });
+        return;
       }
-    },
-  );
+      if (
+        !repositories ||
+        (await repositories.queryScope(candidate.learningScopeId)) !==
+          candidate.learningScopeId
+      )
+        throw new Error("evolution_repository_migration_required");
+      if (candidate.lifecycle === "canary") {
+        response.json(candidate);
+        return;
+      }
+      const policy =
+        (await store.getPolicy(candidate.learningScopeId)) ??
+        defaultEvolutionScopePolicy(candidate.learningScopeId);
+      const decision = authorizeMemoryCanary(
+        candidate,
+        policy,
+        new Date().toISOString(),
+      );
+      if (!decision.changed) {
+        response.status(409).json({ error: decision.reason });
+        return;
+      }
+      await store.putCandidate(decision.candidate);
+      response.json(decision.candidate);
+    } catch (error) {
+      sendEvolutionError(response, error);
+    }
+  });
 
-  router.post(
-    "/candidates/:candidateId/retire",
-    async (request, response) => {
-      try {
-        const { candidateId } = candidateParamsSchema.parse(request.params);
-        const { reason } = retireCandidateSchema.parse(request.body);
-        const candidate = (await store.listCandidates()).find(
-          (item) => item.assetId === candidateId,
-        );
-        if (!candidate) {
-          response.status(404).json({ error: "evolution_candidate_not_found" });
-          return;
-        }
-        if (candidate.lifecycle === "retired") {
-          response.json(candidate);
-          return;
-        }
-        const decision = retireCandidate(
-          candidate,
-          reason,
-          new Date().toISOString(),
-          "authenticated-api",
-        );
-        if (!decision.changed) {
-          response.status(409).json({ error: decision.reason });
-          return;
-        }
-        await store.putCandidate(decision.candidate);
-        response.json(decision.candidate);
-      } catch (error) {
-        sendEvolutionError(response, error);
+  router.post("/candidates/:candidateId/retire", async (request, response) => {
+    try {
+      const { candidateId } = candidateParamsSchema.parse(request.params);
+      const { reason } = retireCandidateSchema.parse(request.body);
+      const candidate = (await store.listCandidates()).find(
+        (item) => item.assetId === candidateId,
+      );
+      if (!candidate) {
+        response.status(404).json({ error: "evolution_candidate_not_found" });
+        return;
       }
-    },
-  );
+      if (candidate.lifecycle === "retired") {
+        response.json(candidate);
+        return;
+      }
+      const decision = retireCandidate(
+        candidate,
+        reason,
+        new Date().toISOString(),
+        "authenticated-api",
+      );
+      if (!decision.changed) {
+        response.status(409).json({ error: decision.reason });
+        return;
+      }
+      await store.putCandidate(decision.candidate);
+      response.json(decision.candidate);
+    } catch (error) {
+      sendEvolutionError(response, error);
+    }
+  });
 
   router.get("/scopes/:learningScopeId/policy", async (request, response) => {
     try {
-      const { learningScopeId } = scopeParamsSchema.parse(request.params);
+      const { learningScopeId: requestedScopeId } = scopeParamsSchema.parse(
+        request.params,
+      );
+      if (!repositories) throw new Error("evolution_repository_unavailable");
+      const learningScopeId = await repositories.queryScope(requestedScopeId);
       const policy =
         (await store.getPolicy(learningScopeId)) ??
         defaultEvolutionScopePolicy(learningScopeId);
@@ -166,7 +176,11 @@ export function createEvolutionActivationRouter(
 
   router.put("/scopes/:learningScopeId/policy", async (request, response) => {
     try {
-      const { learningScopeId } = scopeParamsSchema.parse(request.params);
+      const { learningScopeId: requestedScopeId } = scopeParamsSchema.parse(
+        request.params,
+      );
+      if (!repositories) throw new Error("evolution_repository_unavailable");
+      const learningScopeId = await repositories.queryScope(requestedScopeId);
       const input = policySchema.parse(request.body);
       const current =
         (await store.getPolicy(learningScopeId)) ??
@@ -188,8 +202,16 @@ export function createEvolutionActivationRouter(
 
   router.get("/runtime-traces", async (request, response) => {
     try {
-      const { runId, learningScopeId, dispatchId, limit } =
-        traceQuerySchema.parse(request.query);
+      const {
+        runId,
+        learningScopeId: requestedScopeId,
+        dispatchId,
+        limit,
+      } = traceQuerySchema.parse(request.query);
+      const learningScopeId =
+        requestedScopeId && repositories
+          ? await repositories.queryScope(requestedScopeId)
+          : requestedScopeId;
       const traces = runId
         ? await store.listRuntimeTraces(runId)
         : await store.listRecentRuntimeTraces(learningScopeId, limit);
@@ -247,6 +269,12 @@ function sendEvolutionError(
     error.message === "evolution_candidate_not_found"
   ) {
     response.status(404).json({ error: error.message });
+    return;
+  }
+  const message =
+    error instanceof Error ? error.message : "evolution_request_failed";
+  if (message.startsWith("evolution_repository_")) {
+    response.status(409).json({ error: message });
     return;
   }
   response.status(500).json({ error: "evolution_request_failed" });

@@ -31,7 +31,9 @@ export type {
 } from "./types.js";
 
 const DEFAULT_BACKEND_PORT = 5001;
-const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
+// First startup after an upgrade can back up and migrate both shared SQLite
+// databases before listening. Do not kill that work at the normal 30s boundary.
+const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 10 * 60_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
 const LAN_BIND_HOST = "0.0.0.0";
 const LOCALHOST_V4 = "127.0.0.1";

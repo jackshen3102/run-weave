@@ -21,7 +21,11 @@ const AGENT_HOOKS = ["codex", "trae", "traecli", "traex", "pi"] as const;
 
 const agentHookStateSchema = z
   .object({
-    pi: z.custom<import("@runweave/shared/terminal/pi-agent").PiAgentContext>(isPiAgentContext).optional(),
+    pi: z
+      .custom<
+        import("@runweave/shared/terminal/pi-agent").PiAgentContext
+      >(isPiAgentContext)
+      .optional(),
     activityEventId: z.string().uuid().optional(),
     operationId: z.string().trim().min(1).max(256).optional(),
     terminalSessionId: z.string().trim().min(1),
@@ -139,9 +143,14 @@ export function createInternalTerminalAgentHookRouter(options: {
         return;
       }
       if (parsed.data.agent === "pi") {
-        const result = await processTerminalAgentHook(options, { ...parsed.data, hookEvent: "AgentMetadata" });
-        if (result.status !== "recorded" &&
-            !(result.status === "ignored" && result.activityReplayAllowed)) {
+        const result = await processTerminalAgentHook(options, {
+          ...parsed.data,
+          hookEvent: "AgentMetadata",
+        });
+        if (
+          result.status !== "recorded" &&
+          !(result.status === "ignored" && result.activityReplayAllowed)
+        ) {
           res.status(202).json({ disposition: "ignored" });
           return;
         }
@@ -150,6 +159,7 @@ export function createInternalTerminalAgentHookRouter(options: {
         options.activity,
         parsed.data,
         hookActivityEvents,
+        resolveHookActivityCwd(options.terminalSessionManager, parsed.data),
       );
       res.status(202).json({
         terminalState: options.terminalStateService.getCurrent(
@@ -177,7 +187,12 @@ export function createInternalTerminalAgentHookRouter(options: {
       // App Server and the direct hook share Pi sequencing, but only the direct
       // hook carries Activity content. Do not lose it when state arrived first.
       if (result.activityReplayAllowed) {
-        recordAgentHookActivity(options.activity, parsed.data, hookActivityEvents);
+        recordAgentHookActivity(
+          options.activity,
+          parsed.data,
+          hookActivityEvents,
+          resolveHookActivityCwd(options.terminalSessionManager, parsed.data),
+        );
       }
       terminalStateLogger.info("terminal-state.hook.ignored", {
         message: "Terminal agent hook ignored because agent is not current",
@@ -204,7 +219,12 @@ export function createInternalTerminalAgentHookRouter(options: {
       panelId: result.panelId,
       state: result.terminalState.state,
     });
-    recordAgentHookActivity(options.activity, parsed.data, hookActivityEvents);
+    recordAgentHookActivity(
+      options.activity,
+      parsed.data,
+      hookActivityEvents,
+      resolveHookActivityCwd(options.terminalSessionManager, parsed.data),
+    );
     res.status(202).json({
       terminalState: result.terminalState,
       disposition: "recorded",
@@ -215,10 +235,32 @@ export function createInternalTerminalAgentHookRouter(options: {
   return router;
 }
 
+function resolveHookActivityCwd(
+  manager: TerminalSessionManager,
+  hook: AgentHookStateRequest,
+): string | undefined {
+  const session = manager.getSession(hook.terminalSessionId);
+  if (!session) return undefined;
+  if (hook.panelId) {
+    const panel = manager.getPanel(hook.panelId);
+    return panel?.terminalSessionId === session.id
+      ? (panel.cwd ?? undefined)
+      : undefined;
+  }
+  if (hook.tmuxPaneId) {
+    const panel = manager
+      .listPanels(session.id)
+      .find((item) => item.tmuxPaneId === hook.tmuxPaneId);
+    return panel?.cwd ?? undefined;
+  }
+  return session.cwd;
+}
+
 function recordAgentHookActivity(
   activity: TerminalActivityDependencies | undefined,
   hook: AgentHookStateRequest,
   hookActivityEvents: Map<string, ActivityEventInput>,
+  cwd?: string,
 ): void {
   if (!activity || hook.hookEvent === "AgentMetadata") return;
   const rawHookEvent = hook.rawHookEvent?.toLowerCase() ?? "";
@@ -256,12 +298,15 @@ function recordAgentHookActivity(
     eventName,
     actorType: hook.hookEvent === "UserPromptSubmit" ? "user" : "agent",
     actorAgent:
-      hook.agent === "pi" ? "pi" : hook.agent === "codex"
-        ? "codex"
-        : hook.agent.startsWith("trae")
-          ? "trae"
-          : "other",
+      hook.agent === "pi"
+        ? "pi"
+        : hook.agent === "codex"
+          ? "codex"
+          : hook.agent.startsWith("trae")
+            ? "trae"
+            : "other",
     scope: {
+      cwd,
       projectId: hook.projectId,
       terminalSessionId: hook.terminalSessionId,
       panelId: hook.panelId ?? undefined,

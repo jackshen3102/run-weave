@@ -20,6 +20,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
   private var unloadWaiters: [CheckedContinuation<Bool, Never>] = []
   private var unloadTimeout: Task<Void, Never>?
   private static let blankURL = URL(string: "about:blank")!
+  private static let localPreviewNoticeShownKey = "runweave.browser.localPreviewNoticeShown"
   private(set) var navigationRevision = 0
   private(set) var currentURL: URL
   private(set) var failure: String?
@@ -198,7 +199,6 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
     webView = WKWebView(frame: .zero, configuration: configuration)
     super.init()
     if let localPreview {
-      notice = localPreview.explanation
       localPreview.onFailure = { [weak self] message in
         guard let self, self.valid else { return }
         self.notice = message
@@ -248,7 +248,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
     cancelJavaScriptDialog()
     failure = nil
     failureURL = nil
-    notice = localPreview?.explanation
+    notice = nil
     requestedURL = url
     navigation = webView.load(URLRequest(url: url))
     changed()
@@ -257,6 +257,17 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
   func dismissNotice() {
     guard valid else { return }
     notice = nil
+    changed()
+  }
+
+  func showLocalPreviewNoticeIfNeeded() {
+    guard valid, owner?.state == .presented, notice == nil,
+      let localPreview, localPreview.allows(currentURL),
+      !UserDefaults.standard.bool(forKey: Self.localPreviewNoticeShownKey) else { return }
+    // Record actual presentation, not page construction. This is App-wide education,
+    // independent of the current computer, browser session, and temporary website data.
+    UserDefaults.standard.set(true, forKey: Self.localPreviewNoticeShownKey)
+    notice = localPreview.explanation
     changed()
   }
 
@@ -369,7 +380,10 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
         requestedURL = url
         failure = nil
         failureURL = nil
-        notice = localPreview.flatMap { $0.allows(url) ? $0.explanation : nil }
+        // Navigation may keep the first explanation visible, but must never recreate it.
+        if localPreview?.allows(url) != true || notice != localPreview?.explanation {
+          notice = nil
+        }
         changed()
       }
       decide(.allow)

@@ -1,3 +1,4 @@
+import type { EvolutionRepositoryAttribution } from "./repository";
 export type CandidateType =
   | "memory"
   | "prompt"
@@ -54,6 +55,8 @@ export interface CandidateLifecycleEvent {
 }
 
 export interface CandidateAsset {
+  repositoryId?: string;
+  attribution?: EvolutionRepositoryAttribution;
   assetId: string;
   revisionId: string;
   type: CandidateType;
@@ -79,6 +82,7 @@ export interface CandidateAsset {
 }
 
 export interface EvolutionScopePolicy {
+  repositoryId?: string;
   learningScopeId: string;
   revision: number;
   memoryCanaryEnabled: boolean;
@@ -148,6 +152,7 @@ export interface RuntimeTraceEvent {
 }
 
 export interface RuntimeTraceSummary {
+  attribution?: EvolutionRepositoryAttribution;
   traceId: string;
   learningScopeId: string;
   runId: string;

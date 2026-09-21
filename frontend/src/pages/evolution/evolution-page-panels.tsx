@@ -1,3 +1,4 @@
+import { evolutionRunLabel } from "./evolution-run-label";
 import type {
   CandidateAsset,
   EvolutionProviderAvailability,
@@ -27,7 +28,9 @@ export type EvolutionView =
 
 export interface EvolutionScopeOption {
   id: string;
-  kind: "global" | "project";
+  kind: "global" | "repository" | "legacy";
+  cwd?: string;
+  available?: boolean;
   label: string;
   description: string;
 }
@@ -169,7 +172,7 @@ export function EvolutionSidebar({
 }) {
   const selectedScope = scopes.find((scope) => scope.id === selectedScopeId);
   const globalScope = scopes.find((scope) => scope.kind === "global");
-  const projectScopes = scopes.filter((scope) => scope.kind === "project");
+  const projectScopes = scopes.filter((scope) => scope.kind === "repository");
 
   return (
     <aside className="flex min-h-0 flex-col border-r border-border/70 bg-card/55 p-3 max-md:border-b max-md:border-r-0">
@@ -278,12 +281,14 @@ export function EvolutionHeader({
   view,
   scopeLabel,
   reflectionPending,
+  reflectionDisabled,
   onStartReflection,
   onOpenSchedule,
 }: {
   view: EvolutionView;
   scopeLabel: string;
   reflectionPending: boolean;
+  reflectionDisabled?: boolean;
   onStartReflection: () => void;
   onOpenSchedule: () => void;
 }) {
@@ -308,7 +313,7 @@ export function EvolutionHeader({
         </Button>
         <Button
           size="sm"
-          disabled={reflectionPending}
+          disabled={reflectionPending || reflectionDisabled}
           onClick={onStartReflection}
         >
           <Sparkles className="h-4 w-4" />
@@ -352,7 +357,6 @@ export function EvolutionOverview({
   schedules,
   providers,
   runtimeAvailable,
-  scopeLabel,
   onSelectRun,
   onSelectView,
 }: {
@@ -362,7 +366,6 @@ export function EvolutionOverview({
   schedules: EvolutionSchedule[];
   providers: EvolutionProviderAvailability[];
   runtimeAvailable: boolean;
-  scopeLabel: string;
   onSelectRun: (runId: string) => void;
   onSelectView: (view: EvolutionView) => void;
 }) {
@@ -433,7 +436,7 @@ export function EvolutionOverview({
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="font-medium">{scopeLabel}</p>
+                  <p className="font-medium">{evolutionRunLabel(latestRun)}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {latestRun.profile} · {latestRun.providerPolicy} · attempt{" "}
                     {latestRun.attempt}

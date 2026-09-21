@@ -4,16 +4,15 @@ import type {
   ActivityEvolutionSnapshotPage,
   ActivityEvolutionSnapshotQuery,
 } from "@runweave/shared/activity";
-import { EVOLUTION_GLOBAL_SCOPE_ID } from "@runweave/shared/evolution";
+import {
+  EVOLUTION_GLOBAL_SCOPE_ID,
+  isEvolutionRepositoryId,
+} from "@runweave/shared/evolution";
 import {
   buildTerminalChildProjectIdPrefix,
   resolveTerminalParentProjectId,
 } from "@runweave/shared/terminal/project-context";
-import {
-  activeDeleteTombstoneSql,
-  type FactRow,
-  rowToFact,
-} from "./query";
+import { activeDeleteTombstoneSql, type FactRow, rowToFact } from "./query";
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/gu, "\\$&");
@@ -51,6 +50,10 @@ export function queryActivityEvolutionSnapshot(
   const eventNames = [...new Set(query.eventNames)];
   if (eventNames.length === 0 || eventNames.length > 64) {
     throw new Error("activity_evolution_invalid_event_names");
+  }
+
+  if (isEvolutionRepositoryId(learningScopeId)) {
+    return queryRepositorySnapshot(database, query);
   }
 
   const maxOffset = Number(
@@ -109,6 +112,62 @@ export function queryActivityEvolutionSnapshot(
     hasMore,
     ...(last ? { nextWatermark: last.activity_offset } : {}),
   };
+}
+
+function queryRepositorySnapshot(
+  database: Database.Database,
+  query: ActivityEvolutionSnapshotQuery,
+): ActivityEvolutionSnapshotPage {
+  // Bindings are append-only once resolved. Their cursor includes later backfills of
+  // old Activity offsets, while the evidence retains its original activityOffset.
+  return database.transaction(() => {
+    const maximum = (
+      database
+        .prepare(
+          "SELECT COALESCE(MAX(binding_offset), 0) AS n FROM activity_repository_bindings",
+        )
+        .get() as { n: number }
+    ).n;
+    const boundary = Math.min(
+      query.atOrBeforeSnapshotBoundary ?? maximum,
+      maximum,
+    );
+    const rows = database
+      .prepare(
+        `SELECT fact.*, binding.binding_offset AS repository_offset
+      FROM behavior_facts fact JOIN activity_repository_bindings binding ON binding.event_id = fact.event_id
+      WHERE binding.repository_id = ? AND binding.binding_offset > ? AND binding.binding_offset <= ?
+      AND fact.event_name IN (${query.eventNames.map(() => "?").join(",")})
+      AND ${activeDeleteTombstoneSql()}
+      ORDER BY binding.binding_offset LIMIT ?`,
+      )
+      .all(
+        query.learningScopeId,
+        query.afterWatermark,
+        boundary,
+        ...query.eventNames,
+        query.limit + 1,
+      ) as Array<FactRow & { repository_offset: number }>;
+    const page = rows.slice(0, query.limit);
+    const unresolved = (
+      database
+        .prepare(
+          `SELECT COUNT(*) AS n FROM behavior_facts fact
+      LEFT JOIN activity_repository_bindings binding ON binding.event_id = fact.event_id
+      WHERE binding.repository_id IS NULL AND ${activeDeleteTombstoneSql()}`,
+        )
+        .get() as { n: number }
+    ).n;
+    return {
+      learningScopeId: query.learningScopeId,
+      afterWatermark: query.afterWatermark,
+      snapshotBoundary: boundary,
+      facts: page.map((row) => rowToFact(database, row)),
+      hasMore: rows.length > query.limit,
+      unresolvedRepositoryCount: unresolved,
+      ...(page.length ? { nextWatermark: page.at(-1)!.repository_offset } : {}),
+    };
+  })();
 }
 
 export function queryActivityEvolutionEvidenceAvailability(

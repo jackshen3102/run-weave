@@ -305,6 +305,7 @@ export interface ActivityEvolutionSnapshotQuery {
 }
 
 export interface ActivityEvolutionSnapshotPage {
+  unresolvedRepositoryCount?: number;
   learningScopeId: string;
   afterWatermark: number;
   snapshotBoundary: number;

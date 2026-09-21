@@ -1,3 +1,4 @@
+import path from "node:path";
 import type {
   AnalysisProfile,
   CreateEvolutionRunRequest,
@@ -83,10 +84,11 @@ export async function runEvolutionCommand(
   }
 
   if (subcommand === "list") {
+    const learningScopeId = await resolveQueryScope(parsed.options, auth);
     const response = await requestEvolution(() =>
       auth.requestJson<EvolutionRunListResponse>(
         `/api/evolution/runs${buildQueryString({
-          learningScopeId: getStringOption(parsed.options, "learning-scope-id"),
+          learningScopeId,
           stage: resolveRunStage(getStringOption(parsed.options, "stage")),
           limit: resolveIntegerOption(parsed.options, "limit", 1, 200),
         })}`,
@@ -154,10 +156,11 @@ async function runScheduleCommand(
   }
 
   if (action === "list") {
+    const learningScopeId = await resolveQueryScope(options, auth);
     const response = await requestEvolution(() =>
       auth.requestJson<EvolutionScheduleListResponse>(
         `/api/evolution/schedules${buildQueryString({
-          learningScopeId: getStringOption(options, "learning-scope-id"),
+          learningScopeId,
         })}`,
       ),
     );
@@ -256,6 +259,20 @@ async function requestEvolution<T>(request: () => Promise<T>): Promise<T> {
   }
 }
 
+function buildRepositoryScope(
+  options: Record<string, string | boolean>,
+): Pick<CreateEvolutionRunRequest, "scope" | "projectId"> {
+  const projectId = getStringOption(options, "project-id");
+  const cwd = getStringOption(options, "cwd");
+  if (projectId && cwd)
+    throw new CliError("--cwd and --project-id conflict", 2);
+  return projectId
+    ? { projectId }
+    : {
+        scope: { type: "repository", cwd: path.resolve(cwd ?? process.cwd()) },
+      };
+}
+
 function buildCreateRunRequest(
   options: Record<string, string | boolean>,
 ): CreateEvolutionRunRequest {
@@ -267,7 +284,7 @@ function buildCreateRunRequest(
     getStringOption(options, "provider-policy"),
   );
   return {
-    projectId: requireStringOption(options, "project-id"),
+    ...buildRepositoryScope(options),
     ...(profile ? { profile } : {}),
     ...(providerPolicy ? { providerPolicy } : {}),
     ...(budget ? { budget } : {}),
@@ -287,7 +304,7 @@ function buildCreateScheduleRequest(
 ): CreateEvolutionScheduleRequest {
   const optional = buildScheduleOptions(options);
   return {
-    projectId: requireStringOption(options, "project-id"),
+    ...buildRepositoryScope(options),
     name: requireStringOption(options, "name"),
     cronExpression: requireStringOption(options, "cron"),
     timezone: requireStringOption(options, "timezone"),
@@ -457,4 +474,24 @@ function buildQueryString(
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function resolveQueryScope(
+  options: Record<string, string | boolean>,
+  auth: AuthContext,
+): Promise<string | undefined> {
+  const cwd = getStringOption(options, "cwd");
+  const scope = getStringOption(options, "learning-scope-id");
+  if (cwd && scope)
+    throw new CliError(
+      "--cwd and --learning-scope-id are mutually exclusive",
+      2,
+    );
+  if (!cwd) return scope;
+  const resolved = await requestEvolution(() =>
+    auth.requestJson<{ repositoryId: string }>(
+      `/api/evolution/scopes/resolve?cwd=${encodeURIComponent(path.resolve(cwd))}`,
+    ),
+  );
+  return resolved.repositoryId;
 }

@@ -1,6 +1,11 @@
+import type { EvolutionRepositoryScopes } from "./repository-scope";
+import type {
+  EvolutionReflectionBatch,
+  EvolutionRepositoryContext,
+} from "@runweave/shared/evolution";
+import { resolveRepositoryIdentity } from "../repository/identity";
 import crypto from "node:crypto";
 import {
-  EVOLUTION_GLOBAL_SCOPE_ID,
   type AnalysisProfile,
   type CreateEvolutionRunRequest,
   type CreateEvolutionScheduleRequest,
@@ -14,7 +19,6 @@ import {
   type ProviderPolicy,
   type UpdateEvolutionScheduleRequest,
 } from "@runweave/shared/evolution";
-import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import type { EvolutionActivationStore } from "./activation-store";
 import type { EvolutionAnalysisStore } from "./analysis-store";
 import type { EvolutionContextPackStore } from "./context-pack-store";
@@ -40,6 +44,10 @@ export class EvolutionService {
     private readonly analysisStore: EvolutionAnalysisStore | null = null,
     private readonly contextPackStore: EvolutionContextPackStore | null = null,
     private readonly activationStore: EvolutionActivationStore | null = null,
+    readonly repositories: EvolutionRepositoryScopes | null = null,
+    private readonly snapshotBoundary:
+      | ((repositoryId: string) => Promise<number>)
+      | null = null,
   ) {}
 
   isAvailable(): boolean {
@@ -50,9 +58,20 @@ export class EvolutionService {
     request: CreateEvolutionRunRequest,
     requestedBy: string,
   ): Promise<EvolutionRun> {
+    const run = await this.prepareManualRun(request, requestedBy);
+    await this.requireStore().createRun(run);
+    return run;
+  }
+
+  private async prepareManualRun(
+    request: CreateEvolutionRunRequest,
+    requestedBy: string,
+  ): Promise<EvolutionRun> {
     const now = this.now().toISOString();
     const store = this.requireStore();
-    const learningScopeId = resolveLearningScopeId(request);
+    if (!this.repositories) throw new Error("evolution_repository_unavailable");
+    const repository = await this.repositories.resolve(request);
+    const learningScopeId = repository.repositoryId;
     const requestedAfterWatermark = request.dataRange?.afterWatermark;
     const storedWatermark =
       requestedAfterWatermark === undefined
@@ -60,6 +79,7 @@ export class EvolutionService {
         : null;
     const run: EvolutionRun = {
       runId: crypto.randomUUID(),
+      repository,
       learningScopeId,
       trigger: { type: "manual", requestedBy },
       profile: request.profile ?? DEFAULT_PROFILE,
@@ -71,6 +91,9 @@ export class EvolutionService {
             ? (storedWatermark?.value ?? null)
             : requestedAfterWatermark,
         atOrBefore: request.dataRange?.atOrBefore ?? now,
+        snapshotBoundary:
+          request.dataRange?.snapshotBoundary ??
+          (await this.snapshotBoundary?.(learningScopeId)),
       },
       stage: "queued",
       outcome: null,
@@ -80,7 +103,6 @@ export class EvolutionService {
       completedAt: null,
       attempt: 0,
     };
-    await store.createRun(run);
     return run;
   }
 
@@ -103,7 +125,13 @@ export class EvolutionService {
     }
     return this.createManualRun(
       {
-        projectId: previous.learningScopeId,
+        scope: {
+          type: "repository",
+          repositoryId:
+            previous.repository?.repositoryId ??
+            (await this.repositories?.queryScope(previous.learningScopeId)),
+          cwd: previous.repository?.cwd,
+        },
         profile: previous.profile,
         providerPolicy: previous.providerPolicy,
         budget: previous.budget,
@@ -166,9 +194,7 @@ export class EvolutionService {
       novelty,
       insightRevisions,
       candidateIds: candidates
-        .filter((candidate) =>
-          revisionIds.has(candidate.insightRevisionId),
-        )
+        .filter((candidate) => revisionIds.has(candidate.insightRevisionId))
         .map((candidate) => candidate.assetId),
     };
   }
@@ -193,9 +219,12 @@ export class EvolutionService {
     const timezone = request.timezone.trim();
     const enabled = request.enabled ?? true;
     validateCronExpression(cronExpression);
+    if (!this.repositories) throw new Error("evolution_repository_unavailable");
+    const repository = await this.repositories.resolve(request);
     const schedule: EvolutionSchedule = {
       scheduleId: crypto.randomUUID(),
-      learningScopeId: resolveLearningScopeId(request.projectId),
+      repository,
+      learningScopeId: repository.repositoryId,
       name: request.name.trim(),
       cronExpression,
       timezone,
@@ -244,6 +273,10 @@ export class EvolutionService {
         : { dataWindow: request.dataWindow.trim() }),
       updatedAt: nowDate.toISOString(),
     };
+    if (schedule.enabled) {
+      await this.requireRepositoryContext(schedule.repository);
+      delete schedule.pausedReason;
+    }
     validateCronExpression(schedule.cronExpression);
     schedule.nextDueAt = schedule.enabled
       ? nextCronOccurrence(
@@ -285,8 +318,21 @@ export class EvolutionService {
         schedule.learningScopeId,
         "activity",
       );
+      try {
+        await this.requireRepositoryContext(schedule.repository);
+      } catch {
+        await store.putSchedule({
+          ...schedule,
+          enabled: false,
+          nextDueAt: null,
+          pausedReason: "repository_unavailable",
+          updatedAt: now,
+        });
+        continue;
+      }
       const run: EvolutionRun = {
         runId,
+        repository: schedule.repository,
         learningScopeId: schedule.learningScopeId,
         trigger: {
           type: "schedule",
@@ -299,6 +345,9 @@ export class EvolutionService {
         dataRange: {
           afterWatermark: watermark?.value ?? null,
           atOrBefore: now,
+          snapshotBoundary: await this.snapshotBoundary?.(
+            schedule.learningScopeId,
+          ),
         },
         stage: "queued",
         outcome: null,
@@ -335,6 +384,68 @@ export class EvolutionService {
     if (!(await this.requireStore().deleteSchedule(scheduleId))) {
       throw new Error("evolution_schedule_not_found");
     }
+  }
+
+  async createReflectionBatch(
+    idempotencyKey: string,
+    requestedBy: string,
+  ): Promise<EvolutionReflectionBatch> {
+    if (!this.repositories || !this.snapshotBoundary)
+      throw new Error("evolution_repository_unavailable");
+    const previous = (await this.repositories.store.repository({
+      op: "batch-get",
+      key: idempotencyKey,
+    })) as EvolutionReflectionBatch | null;
+    if (previous) return previous;
+    const repositories = (await this.repositories.list()).filter(
+      (item) => item.available,
+    );
+    if (!repositories.length) throw new Error("evolution_repository_required");
+    if (repositories.length > 100)
+      throw new Error("evolution_batch_repository_limit");
+    const boundary = await this.snapshotBoundary(repositories[0]!.repositoryId);
+    const now = this.now().toISOString();
+    const runs: EvolutionRun[] = [];
+    for (const repository of repositories)
+      runs.push(
+        await this.prepareManualRun(
+          {
+            scope: {
+              type: "repository",
+              repositoryId: repository.repositoryId,
+              cwd: repository.paths[0],
+            },
+            dataRange: { atOrBefore: now, snapshotBoundary: boundary },
+          },
+          requestedBy,
+        ),
+      );
+    const batch: EvolutionReflectionBatch = {
+      batchId: crypto.randomUUID(),
+      idempotencyKey,
+      createdAt: now,
+      snapshotBoundary: boundary,
+      runIds: runs.map((run) => run.runId),
+      repositoryIds: runs.map((run) => run.learningScopeId),
+      maxWallTimeMs: runs.reduce(
+        (total, run) => total + run.budget.maxWallTimeMs,
+        0,
+      ),
+    };
+    return (await this.repositories.store.repository({
+      op: "batch-create",
+      batch,
+      runs,
+    })) as EvolutionReflectionBatch;
+  }
+
+  private async requireRepositoryContext(
+    repository?: EvolutionRepositoryContext,
+  ): Promise<void> {
+    if (!repository) throw new Error("evolution_repository_migration_required");
+    const identity = await resolveRepositoryIdentity(repository.cwd);
+    if (identity.repositoryId !== repository.repositoryId)
+      throw new Error("evolution_repository_identity_conflict");
   }
 
   private requireStore(): EvolutionFoundationStore {
@@ -395,33 +506,6 @@ function mergeBudget(
   override?: Partial<EvolutionBudget>,
 ): EvolutionBudget {
   return { ...defaultEvolutionBudget(profile), ...override };
-}
-
-function resolveLearningScopeId(request: CreateEvolutionRunRequest): string;
-function resolveLearningScopeId(projectId: string): string;
-function resolveLearningScopeId(
-  input: CreateEvolutionRunRequest | string,
-): string {
-  if (typeof input === "string") {
-    const normalized = input.trim();
-    if (!normalized) throw new Error("evolution_project_id_required");
-    return normalized === EVOLUTION_GLOBAL_SCOPE_ID
-      ? EVOLUTION_GLOBAL_SCOPE_ID
-      : resolveTerminalParentProjectId(normalized);
-  }
-  if (input.scope && input.projectId !== undefined) {
-    throw new Error("evolution_scope_conflict");
-  }
-  if (input.scope?.type === "global") {
-    return EVOLUTION_GLOBAL_SCOPE_ID;
-  }
-  if (input.scope?.type === "project") {
-    return resolveLearningScopeId(input.scope.projectId);
-  }
-  if (input.projectId !== undefined) {
-    return resolveLearningScopeId(input.projectId);
-  }
-  throw new Error("evolution_scope_required");
 }
 
 function isTerminalStage(stage: EvolutionRunStage): boolean {

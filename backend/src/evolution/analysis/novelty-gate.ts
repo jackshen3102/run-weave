@@ -15,17 +15,16 @@ export function classifyClaimNovelty(
   );
   const baselineRevisions = baseline.flatMap((insight) =>
     insight.revisions
-      .filter((revision) => revision.revisionId === insight.currentRevisionId)
+      .filter(
+        (revision) =>
+          revision.revisionId === insight.currentRevisionId ||
+          insight.lineage?.memberIds.includes(revision.insightId),
+      )
       .map((revision) => ({ topicKey: insight.topicKey, revision })),
   );
-  const evidenceById = new Map(
-    evidence.map((item) => [item.evidenceId, item]),
-  );
+  const evidenceById = new Map(evidence.map((item) => [item.evidenceId, item]));
   return claims.map((claim) => {
-    const evidenceClassification = classifyEvidence(
-      claim,
-      evidenceById,
-    );
+    const evidenceClassification = classifyEvidence(claim, evidenceById);
     if (evidenceClassification) {
       return {
         claimId: claim.claimId,
@@ -43,6 +42,14 @@ export function classifyClaimNovelty(
       };
     }
     const insight = baselineByTopic.get(claim.topicKey);
+    if (insight?.lineage?.status === "contested") {
+      return {
+        claimId: claim.claimId,
+        novelty: "contradiction",
+        baselineRevisionId: insight.currentRevisionId,
+        rationale: "migrated_topic_has_conflicting_lineage",
+      };
+    }
     const current = insight?.revisions.find(
       (revision) => revision.revisionId === insight.currentRevisionId,
     );
@@ -79,7 +86,14 @@ export function classifyClaimNovelty(
         rationale: "statement_differs_from_current_insight_revision",
       };
     }
-    const currentEvidence = new Set(current.evidenceIds);
+    const currentEvidence = new Set(
+      (insight?.revisions ?? [current])
+        .filter(
+          (revision) =>
+            normalize(revision.statement) === normalize(current.statement),
+        )
+        .flatMap((revision) => revision.evidenceIds),
+    );
     const addedEvidence = claim.supportingEvidenceIds.some(
       (evidenceId) => !currentEvidence.has(evidenceId),
     );
@@ -152,7 +166,9 @@ function isBehaviorallyReadable(evidence: ContextPackEvidenceRef): boolean {
     return true;
   }
   if (evidence.source !== "activity") return false;
-  if (evidence.contentRefs.some((content) => content.availability === "available")) {
+  if (
+    evidence.contentRefs.some((content) => content.availability === "available")
+  ) {
     return true;
   }
   const eventName = evidence.activity?.eventName ?? "";
@@ -219,7 +235,8 @@ function isDuplicateRepresentative(
     )
     .sort(
       (left, right) =>
-        right.supportingEvidenceIds.length - left.supportingEvidenceIds.length ||
+        right.supportingEvidenceIds.length -
+          left.supportingEvidenceIds.length ||
         right.counterEvidenceIds.length - left.counterEvidenceIds.length ||
         left.claimId.localeCompare(right.claimId),
     );
@@ -256,10 +273,7 @@ function bestSemanticMatch(
   return bestScore >= 0.72 ? best : evidenceMatch;
 }
 
-function hasStrongEvidenceOverlap(
-  left: string[],
-  right: string[],
-): boolean {
+function hasStrongEvidenceOverlap(left: string[], right: string[]): boolean {
   const smallerEvidenceCount = Math.min(left.length, right.length);
   if (smallerEvidenceCount === 0) return false;
   const rightEvidence = new Set(right);

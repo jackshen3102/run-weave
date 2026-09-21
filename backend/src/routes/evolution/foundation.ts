@@ -45,6 +45,16 @@ const reflectionScopeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("global") }).strict(),
   z
     .object({
+      type: z.literal("repository"),
+      cwd: z.string().min(1).max(4096).optional(),
+      repositoryId: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/u)
+        .optional(),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("project"),
       projectId: z.string().trim().min(1).max(500),
     })
@@ -61,8 +71,7 @@ const createRunSchema = z
   })
   .strict()
   .refine(
-    (value) =>
-      (value.projectId === undefined) !== (value.scope === undefined),
+    (value) => (value.projectId === undefined) !== (value.scope === undefined),
     "evolution_scope_required",
   );
 const listRunsQuerySchema = z
@@ -92,7 +101,8 @@ const timezoneSchema = z
   .refine(isValidTimezone, "invalid_timezone");
 const createScheduleSchema = z
   .object({
-    projectId: z.string().trim().min(1).max(500),
+    projectId: z.string().trim().min(1).max(500).optional(),
+    scope: reflectionScopeSchema.optional(),
     name: z.string().trim().min(1).max(200),
     cronExpression: z.string().trim().min(1).max(200),
     timezone: timezoneSchema,
@@ -104,7 +114,7 @@ const createScheduleSchema = z
   })
   .strict();
 const updateScheduleSchema = createScheduleSchema
-  .omit({ projectId: true })
+  .omit({ projectId: true, scope: true })
   .partial()
   .refine((value) => Object.keys(value).length > 0, "empty_schedule_update");
 const listSchedulesQuerySchema = z
@@ -117,6 +127,61 @@ export function createEvolutionFoundationRouter(
   service: EvolutionService,
 ): Router {
   const router = Router();
+  router.get("/scopes", async (_request, response) => {
+    try {
+      if (!service.repositories) throw new Error("evolution_unavailable");
+      response.json({ repositories: await service.repositories.list() });
+    } catch (error) {
+      sendEvolutionError(response, error);
+    }
+  });
+  router.get("/scopes/resolve", async (request, response) => {
+    try {
+      if (!service.repositories) throw new Error("evolution_unavailable");
+      const input = z
+        .object({
+          cwd: z.string().min(1).optional(),
+          learningScopeId: z.string().min(1).optional(),
+        })
+        .strict()
+        .parse(request.query);
+      if (input.cwd && input.learningScopeId)
+        throw new Error("evolution_scope_conflict");
+      if (input.cwd)
+        response.json(
+          await service.repositories.resolve({
+            scope: { type: "repository", cwd: input.cwd },
+          }),
+        );
+      else if (input.learningScopeId)
+        response.json({
+          repositoryId: await service.repositories.queryScope(
+            input.learningScopeId,
+          ),
+        });
+      else throw new Error("evolution_repository_required");
+    } catch (error) {
+      sendEvolutionError(response, error);
+    }
+  });
+  router.post("/reflection-batches", async (request, response) => {
+    try {
+      const { idempotencyKey } = z
+        .object({ idempotencyKey: z.string().uuid() })
+        .strict()
+        .parse(request.body);
+      response
+        .status(201)
+        .json(
+          await service.createReflectionBatch(
+            idempotencyKey,
+            "authenticated-api",
+          ),
+        );
+    } catch (error) {
+      sendEvolutionError(response, error);
+    }
+  });
 
   router.post("/runs", async (request, response) => {
     try {
@@ -131,6 +196,10 @@ export function createEvolutionFoundationRouter(
   router.get("/runs", async (request, response) => {
     try {
       const query = listRunsQuerySchema.parse(request.query);
+      if (query.learningScopeId && service.repositories)
+        query.learningScopeId = await service.repositories.queryScope(
+          query.learningScopeId,
+        );
       response.setHeader("Cache-Control", "no-store");
       response.json({ runs: await service.listRuns(query) });
     } catch (error) {
@@ -196,7 +265,10 @@ export function createEvolutionFoundationRouter(
 
   router.get("/insights", async (request, response) => {
     try {
-      const { learningScopeId } = insightQuerySchema.parse(request.query);
+      let { learningScopeId } = insightQuerySchema.parse(request.query);
+      if (learningScopeId && service.repositories)
+        learningScopeId =
+          await service.repositories.queryScope(learningScopeId);
       response.setHeader("Cache-Control", "no-store");
       response.json({
         insights: await service.listInsights(learningScopeId),
@@ -233,7 +305,10 @@ export function createEvolutionFoundationRouter(
 
   router.get("/schedules", async (request, response) => {
     try {
-      const { learningScopeId } = listSchedulesQuerySchema.parse(request.query);
+      let { learningScopeId } = listSchedulesQuerySchema.parse(request.query);
+      if (learningScopeId && service.repositories)
+        learningScopeId =
+          await service.repositories.queryScope(learningScopeId);
       response.setHeader("Cache-Control", "no-store");
       response.json({
         schedules: await service.listSchedules(learningScopeId),
@@ -315,6 +390,17 @@ function sendEvolutionError(
     message === "evolution_project_id_required"
   ) {
     response.status(400).json({ error: message });
+    return;
+  }
+  if (
+    message === "evolution_scope_conflict" ||
+    message === "evolution_batch_repository_limit" ||
+    message.startsWith("evolution_repository_") ||
+    message === "evolution_global_requires_reflection_batch" ||
+    message.startsWith("repository_") ||
+    message === "evolution_project_not_found"
+  ) {
+    response.status(409).json({ error: message });
     return;
   }
   response.status(500).json({ error: "evolution_request_failed" });

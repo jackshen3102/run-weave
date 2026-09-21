@@ -35,10 +35,18 @@ V1 的长期知识提交只发生在同一个 fenced 事务的
 
 ## 学习范围与冻结边界
 
-用户只选择“全部工作区”或一个主项目。全局范围使用稳定的 `global:runweave` identity；
-项目范围的 `learningScopeId` 由主项目稳定 ID 决定，主项目与其动态 worktree 共用知识，
-不同主项目硬隔离。历史 workspace 即使路径已删除，仍按稳定 project ID 归属，不能用路径
-相似度猜测身份。
+Evolution 与 Experience 共用 `SHA256(realpath(git-common-dir))` 作为仓库身份。
+同仓库的主工作区、linked worktree、子目录和重复 Project 登记共享知识；独立 clone 与
+submodule 分开。Project 只承担入口和来源，非 Git 目录不回退到 Project 或全局范围。
+公共解析器见 `backend/src/repository/identity.ts`。仓库移动导致身份改变，迁移不猜测重绑定。
+
+页面的“全部仓库”创建持久 reflection batch：冻结当时可用仓库集合与取材上界，每仓库
+一个 Run，沿用全机 lease 顺序运行。幂等键防止重复创建，最多 100 个仓库，页面显示总预算。
+`global:runweave` 仅保留历史审计，新客户端不能创建旧全局 Run。
+
+仓库登记、历史归属和 topic lineage 位于 Evolution 附加表；旧冻结 artifact 不改写。
+归属不完整或跨仓库的历史保留可读，不能作为新仓库的可注入知识。同 topic 的旧 Insight
+保留原 revision 与支持/反证，冲突标记 contested，Candidate 等待重新验证。
 
 Context Pack 保存：
 
@@ -48,10 +56,18 @@ Context Pack 保存：
 - DataQualityIssue；
 - profile、deadline 和 Knowledge Baseline digest。
 
-Activity 查询以单调 `activityOffset` 冻结。一次手动或定时反思先读取该范围上次成功
+Activity 以事件仓库归属索引的单调 `binding_offset` 冻结，原始事实保留 `activityOffset`。
+新事件使用可信 cwd；旧事件须有可核验的会话或已有仓库绑定，不按 Project 前缀归属。
+工具回调优先使用经过会话归属校验的面板 cwd，Worker 分发使用对应角色的 cwd。
+完整 Agent Team Run 的仓库入口不明确或跨仓库时，不把它作为单仓库补充证据。
+晚到的归属补录取得新 cursor，因此不会漏在旧 watermark 之前；冻结中途补录不改变当前 Pack。
+未归属统计进入 DataQuality，不能声称覆盖全部历史。一次手动或定时反思先读取该范围上次成功
 watermark，再固定 `snapshotBoundary`，并自动分页读取到该边界；Context Pack 只有在全部分页
 合并完成后才进入分析，因此成功事务的 `processedThrough = snapshotBoundary`。新事件不会进入
 已建立的 Pack，而会由下一次增量反思处理。
+
+证据删除会检查当前 Insight 以及最新 Candidate 引用的历史 revision；已归档的失效修订按
+稳定 ID 复用原文和时间戳，重复维护不会重写不可变记录，也不会让旧 revision 抢占当前 head。
 
 ## 分析隔离与 Provider
 
@@ -177,3 +193,15 @@ pnpm build
 
 真实页面验收必须在受控 Dev Session 的 Electron/Web surface 中附着 Playwright，不能以静态
 构建或 fake Provider 代替。真实 canary 只证明链路可用；单次样本不触发自动 promotion。
+
+## 仓库身份迁移
+
+Backend 在启动 Activity/Evolution worker 前自动审计、备份并迁移旧 learning.sqlite，
+成功后才开放服务；已完成的库直接跳过，中断后恢复原清单。自动入口、显式工具、停写与回滚合同见
+[仓库身份迁移](../deployment/evolution-repository-migration.md)。新 schemaVersion 为 6，
+minimumWriterVersion 为 2；完成标记缺失或迁移中时新 writer 拒绝打开。
+Experience 的 hash、namespace 与存储不迁移。
+
+迁移仅追加归属和必要的 Candidate revision：旧 canary/promoted 最多进入 shadow，
+新仓库 Policy 默认关闭 Canary。新仓库 watermark 从 0 开始，旧知识参与 Novelty 基线；
+有冲突的 lineage 不按更新时间选真相。删除传播检查所有成员和仍被 Candidate 引用的 revision。

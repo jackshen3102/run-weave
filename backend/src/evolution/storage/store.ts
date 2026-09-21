@@ -1,3 +1,4 @@
+import type { RepositoryCommand, RepositoryResult } from "../repository-store";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -146,6 +147,10 @@ export class SqliteEvolutionActivationStore
       });
       this.worker.postMessage({ ...command, id });
     });
+  }
+
+  repository(command: RepositoryCommand): Promise<RepositoryResult> {
+    return this.request({ op: "repository", command });
   }
 
   listCandidates(): Promise<CandidateAsset[]> {
