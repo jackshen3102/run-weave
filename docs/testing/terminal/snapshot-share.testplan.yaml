@@ -1,239 +1,169 @@
 version: 1
-name: 终端不可变快照分享验收
-description: >
-  面向终端快照分享合同，验证指定 Panel 捕获、不可变持久化、免登录极简 HTML、
-  单份只读签名与控制权限隔离、24 小时有效期和浏览器行范围引用。不是当前产品已通过的证明。
-  所有数据破坏和期限 fixture 只允许用于本 Case 自行建立的隔离 Backend/profile。
-
+name: 统一公网终端快照分享验收
+description: 仅验证当前集中托管合同：业务 Backend 捕获并上传，Host 独占存储与读取。计划不是通过证据；所有破坏性 fixture 仅限自有隔离环境。
 cases:
   - id: TSS-001
-    name: 创建只捕获请求中显式指定的 Panel
+    name: 捕获只使用显式 Panel
     required: true
-    description: >
-      创建目标不随当前焦点变化，也不混入其他分屏；返回正文包含目标仍保留的历史和当前屏幕。
+    description: 请求目标不随焦点变化，返回正文不混入其他 Panel。
     preconditions:
-      - 隔离 Backend 已运行待验版本，具有有效创建凭据与可用 tmux 终端。
-      - 执行者可在同一 Session 自行创建两个 Panel，分别产生唯一 A、B 标记及足够滚动到历史区的普通文本。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 同一 Session 中有两个不同文本标记的 Panel。
     steps:
-      - 使 A 为活跃 Panel，通过认证 POST 显式指定 B 创建分享；确认返回 201，createdAt 与 expiresAt 相差 86400000 毫秒。
-      - 无凭据 GET 返回的 sharePath；确认只有 B 的历史和当前屏幕标记，没有 A 标记，行号从 1 连续编号。
-      - 核对 URL 不含登录或 tunnel 凭据，记录原始 HTML 与捕获标记；清理本 Case 的源终端，不改动其他终端。
-
+      - 令 A 活跃，认证请求指定 B 创建分享；确认 201、shareUrl 为配置的 HTTPS Host，期限差为 86400000 毫秒。
+      - 匿名读取 shareUrl，确认只有 B 的标记与历史；清理自有资源。
   - id: TSS-002
-    name: 创建后的快照不受源终端变化影响
+    name: 所有 Backend 只发布到统一 Host
     required: true
-    description: >
-      已发布的标题、正文和逻辑行号固定；源终端继续输出、清屏或删除均不能修改或提前删除快照。
+    description: 不同机器与同机 Backend 都不保存快照或签名密钥。
     preconditions:
-      - 隔离 Backend 中可自行创建一个专用 Session 并通过真实接口创建未到期分享。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 可建立第二个独立 Backend，并令其与 Host 同机，两个 Backend 使用同一个 Host。
     steps:
-      - 创建快照后读取并保存标题、全部行文本和行号的摘要。
-      - 向源 Panel 写入新标记、清屏并修改 Session 名称；重新读取快照，确认摘要和标题均未改变且不含新标记。
-      - 删除本 Case 的源 Session，再次匿名读取同一 URL；确认仍为 200 且内容摘要相同。
-
+      - 分别从两个 Backend 创建快照，确认 URL 均指向统一 Host，正文分别对应各自 Panel。
+      - 检查两个源 profile 均没有新快照目录或 .signing-key；仅 Host 出现对应持久化记录，清理自有资源。
   - id: TSS-003
-    name: 无效目标不得回退到其他终端历史
+    name: 源 Backend 退出不影响读取
     required: true
-    description: >
-      目标不存在、Panel 不属于 Session 或已经消失时创建明确失败，不能用默认 Panel 或旧 scrollback 生成链接。
+    description: 上传成功后的内容不依赖源进程或源终端。
     preconditions:
-      - 隔离 Backend 中存在两个由执行者创建的 Session，其中至少一个有两个 Panel。
-      - 执行者持有有效创建凭据，可记录本隔离存储目录的记录数量。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
     steps:
-      - 分别指定不存在的 Session、其他 Session 的 panelId、已删除的 Panel 创建分享；确认均返回 404，不返回 sharePath。
-      - 用缺失 Panel 段或多余路径段请求创建端点；确认不是成功创建，也不返回 SPA HTML 的 200。
-      - 核对快照记录数量未增加，其他活跃终端未收到输入或中断；清理本 Case 的源终端。
-
+      - 创建并保存正文摘要，停止本 Case 源 Backend 并确认源端口关闭。
+      - 从独立 HTTP 客户端读取公网链接，确认 200 且正文摘要不变；清理自有 Host 数据。
   - id: TSS-004
-    name: 无登录和无页面脚本时仍能读取完整正文
+    name: Host 重启保留有效链接
     required: true
-    description: >
-      分享正文在初始 HTML 中，Agent 不需要登录、执行 JS 或再次请求文本接口；页面只有正文和行号。
+    description: 同一存储和密钥重启后已发布链接继续有效。
     preconditions:
-      - 执行者可通过真实接口在隔离 Backend 自行创建一份包含 Unicode、空行、缩进和长行的分享。
-      - 可使用不携带 cookie 或 Authorization 的 HTTP 客户端及独立浏览器页面。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 本 Case 独占 Host 启停权和数据目录。
     steps:
-      - 使用无凭据 HTTP GET 读取分享，确认 200 和 text/html，初始响应含全部样例文本、title 与连续行号。
-      - 使用 $toolkit:playwright-cli 打开真实分享页，阻止页面 JS 加载后刷新；确认正文仍完整可选，未出现登录页、取数等待或空壳。
-      - 确认正文之外没有品牌栏、可见标题、时间信息、搜索框、复制按钮、状态栏；恢复浏览器脚本设置并释放本 Case 的页面。
-
+      - 创建快照，记录正文及密钥摘要，不输出密钥值。
+      - 停止并重新启动 Host，重新取得 fresh endpoint；确认原签名链接 200、正文和密钥摘要未变，清理自有资源。
   - id: TSS-005
-    name: 分享签名仅授予单份快照的读取权限
+    name: 未配置发布时明确拒绝
     required: true
-    description: >
-      公开读取在启用 tunnel 门禁时也不要求通用凭据，但既有 API、WS 与控制权限不得因此放开。
+    description: 普通 Backend 无配置仍可运行，但不能退回本地分享。
     preconditions:
-      - 独立隔离 Backend 启用 tunnel scope all，已有可用的正常 Backend 与 tunnel 认证路径。
-      - 执行者可自行创建专用源 Panel 和分享，不影响用户正常 Backend。
+      - 本 Case 的隔离 Backend 未配置任何公网发布变量，并拥有自有终端。
     steps:
-      - 使用正常凭据创建分享，再移除全部 Backend/tunnel header 与 cookie 读取该 URL；确认 200，未获得 auth 或 tunnel 的 Set-Cookie。
-      - 分别不带凭据和把 signature 或完整签名 URL 当作 bearer，访问终端列表、源 Panel input/interrupt 和 WS ticket；确认均被认证门禁拒绝，源 Panel 未出现操作标记。
-      - 使用分享 signature 尝试现有 WebSocket 升级入口；确认无法建立受控终端通道。
-      - 对公开前缀发送 POST、PUT、DELETE 以及附加子路径，确认 405 或 404，均无正文且不落入 SPA；正常认证的原 API 仍可使用。
-
+      - 请求分享，确认 503 和 SNAPSHOT_PUBLISH_NOT_CONFIGURED，无 shareUrl 或本地快照文件。
+      - 使用 $toolkit:playwright-cli 在真实 UI 点击分享，确认显示公网服务未配置，未复制链接；清理自有资源。
   - id: TSS-006
-    name: 终端文本和标题不能成为可执行 HTML
+    name: 上传失败不产生本地链接
     required: true
-    description: >
-      来自终端和名称的内容仅按文本显示，不能闭合 title、执行脚本、加载外部资源或修改页面结构。
+    description: 上游不可用或凭据错误时不降级、不静默重试。
     preconditions:
-      - 隔离 Backend 和真实终端可用，允许向本 Case 自有 Panel 输出无害的恶意标记字符串并修改名称。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 本 Case 可以更改自有发送端配置或停止自有 Host。
     steps:
-      - 向终端打印包含 script、img onerror、关闭 title 标签、引号、尖括号及 URL 的原样字符串，以含尖括号的名称创建真实快照。
-      - 使用 $toolkit:playwright-cli 打开分享；确认标记作为文字显示，不出现对应可执行元素、脚本副作用或由样例 URL 发起的网络请求。
-      - 检查成功和错误响应的 no-store、no-referrer、nosniff、noindex 以及 CSP；确认无任意脚本、连接和嵌入授权。
-      - 查看本隔离 Backend 的相关日志；确认没有正文、签名、签名密钥或完整分享 URL，只保留必要的脱敏字段。
-
+      - 分别使用错误上传凭据和不可连接的 HTTPS Host 请求分享，确认返回 SNAPSHOT_PUBLISH_FAILED，不返回成功链接。
+      - 确认源端没有落盘快照或签名密钥，恢复配置后再创建应成功；清理自有资源。
   - id: TSS-007
-    name: 到期判定不依赖定时清理或条件缓存
+    name: 上传凭据隔离
     required: true
-    description: >
-      到期后每次内容访问均被拒绝，清理任务尚未执行或携带条件请求也不能读到正文。
-      使用隔离存储期限 fixture 验证判断，不声称进行了 24 小时自然等待。
+    description: 只有专用上传凭据允许创建 Host 记录。
     preconditions:
-      - 独立隔离 Backend 使用本 Case 专属快照目录，允许修改本 Case 真实创建记录的 expiresAt 字段。
-      - 可直接读取该记录并确认 createdAt 与 expiresAt 的正常间隔；不允许修改机器时钟、用户目录或生产期限配置。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
     steps:
-      - 通过真实接口创建并匿名读取快照，确认成功且正常记录期限为 86400000 毫秒；保留原始字段作为证据。
-      - 仅把这一记录的 expiresAt 调到当前时间之前，不改 token、正文或 API 响应；在清理前立即 GET 和 HEAD，确认均为 404 且没有快照正文或历史标题。
-      - 携带 If-None-Match 和 If-Modified-Since 重复读取，确认仍为 404 而非 200 或 304；记录期限 fixture 的修改事实。
-      - 等待超过一次 60 秒维护周期，确认到期文件被清理，而本 Case 另建的未到期快照仍可读；删除本 Case 的临时记录。
-
+      - 用无凭据、错误凭据和一份只读分享签名 POST Host 上传接口，确认 401，记录数量不变。
+      - 用正确上传凭据上传纯文本，确认 201；尝试附加 html 字段或畸形 JSON，确认 400 且没有新记录，清理自有资源。
   - id: TSS-008
-    name: 同目录重启保留有效快照
+    name: 无效目标不得回退
     required: true
-    description: >
-      快照内容不依赖内存或源终端存在；Backend 使用相同 profile 重启后未到期链接仍然有效。
+    description: 不存在或不属于 Session 的 Panel 不能抓取其他终端。
     preconditions:
-      - 本 Case 独占隔离 Backend 的启停权与数据目录，可按 Dev Session 规则重新发现服务地址。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
     steps:
-      - 通过真实创建接口生成快照，记录完整签名 sharePath、标题、正文摘要、期限与本目录 .signing-key 的摘要，不输出密钥本身。
-      - 正常停止该隔离 Backend，确认停止期间地址不可读；保持存储目录不变后重新启动。
-      - 重新取得 fresh Backend endpoint，不复用过期 UI ref；用原签名 sharePath 免登录读取，确认正文、期限及签名密钥摘要完全不变。
-      - 按本 Case 的资源归属清理验证环境，不停止任何其他 Backend。
-
+      - 请求不存在的 Session、其他 Session 的 Panel 和已删除 Panel，确认 404，无新 Host 记录。
+      - 确认其他 Panel 未收到输入或中断，清理自有资源。
   - id: TSS-009
-    name: 创建落盘失败不返回可分享链接
+    name: 正文安全且初始响应完整
     required: true
-    description: >
-      存储提交失败时不得报告成功、泄露半份正文或留下可读取的半成品。
+    description: HTML 初始响应含完整转义正文，脚本和链接文本不执行。
     preconditions:
-      - 本 Case 专属隔离 Backend、源 Panel 和快照目录已建立，可安全地使该目录写入失败并恢复。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 自有 Panel 包含 Unicode、缩进、空行和脚本样式样例文本。
     steps:
-      - 在记录正常存储基线后，使本 Case 的目录不可写，通过真实认证接口创建；确认返回存储错误且响应没有 sharePath。
-      - 检查目录不存在已发布的部分记录，错误响应与日志不包含正文、token 或绝对路径。
-      - 恢复目录写权限后再次创建，确认成功且正文完整；恢复并清理本 Case 的权限与数据。
-
+      - 匿名 GET，确认 text/html、no-store、CSP 且无 ETag，初始响应含全部转义文本。
+      - 使用 $toolkit:playwright-cli 打开真实分享页，确认脚本文字可见且未执行，没有登录页或外部资源请求；清理自有资源。
   - id: TSS-010
-    name: 容量不足不得删除有效快照或静默截断
+    name: 签名严格绑定只读记录
     required: true
-    description: >
-      单份和总存储限制明确失败，不以删除未到期记录或截断正文的方式制造成功。
+    description: 缺失、篡改、跨记录移用或非规范参数均不能读取。
     preconditions:
-      - 本 Case 独占隔离存储目录，并可在自有 tmux fixture 中准备可读取历史超过 10 MiB 的输出，不调整用户 tmux 配置。
-      - 可通过真实创建请求填充至产品固定的记录数量或总字节配额，并在结束后删除本 Case 的资源。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
     steps:
-      - 对超过单份上限的目标请求创建，确认 413 和明确的输出超限错误，不返回被截断的成功快照。
-      - 用正常大小的真实捕获填满 100 份或 100 MiB 配额，再次创建，确认清理不能释放空间时返回 507。
-      - 随机读取此前未到期记录并核对摘要，确认未被驱逐或修改；清理仅属于本 Case 的配额数据与 tmux fixture。
-
+      - 创建 A、B 两份快照，正常 GET/HEAD 为 200。
+      - 依次移除签名、修改期限、交换参数顺序、重复或添加参数、将 A 签名移到 B；GET/HEAD 均为 404。
+      - POST 只读链接返回 405，业务 Backend 的 /share/terminal 返回 404；清理自有资源。
   - id: TSS-011
-    name: UI 一次分享操作绑定点击时的目标
+    name: 有效签名到期立即失效
     required: true
-    description: >
-      一次操作不因焦点或连接变化改抓目标，也不因重复点击产生重复请求。
+    description: 到期拒绝不依赖定时清理或条件缓存。
     preconditions:
-      - 隔离真实终端 UI 已登录，至少有两个具有不同标记的 Panel。
-      - 可以观测真实创建请求及延迟其网络传输，不替换后端响应。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 本 Case 可读写自有 Host 记录与密钥，只为此 fixture 制作过期签名，不修改系统时间。
     steps:
-      - 使用 $toolkit:playwright-cli 从顶部菜单分享当前 Panel；创建中切换选中 Panel，确认请求仍带原 panelId，最终快照包含原标记。
-      - 创建进行中重复点击入口，确认没有重复提交；恢复页面后对另一 Panel 正常分享，确认新目标可以单独创建。
-      - 核对通知中的链接绑定原请求使用的 Backend base，不读取新的活跃上下文；清理本 Case 的页面与终端。
-
+      - 创建快照后将自有记录时间整体移至过去，保持 24 小时间隔，生成匹配的新签名。
+      - 立即 GET、HEAD 和条件请求，确认均 404、无正文、无 304；清理自有记录，不声称经过自然 24 小时等待。
   - id: TSS-012
-    name: 剪贴板失败不被误报为创建失败或复制成功
+    name: 容量满不驱逐有效快照
     required: true
-    description: >
-      快照创建成功后复制失败仍保留链接，不自动重新创建、不显示已复制。
+    description: 达到固定记录或字节限额后明确失败，保留已有内容。
     preconditions:
-      - 本 Case 可自行建立隔离真实终端 UI 和源 Panel，并通过浏览器权限拒绝剪贴板写入。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 本 Case 独占 Host 配额和数据目录。
     steps:
-      - 使用 $toolkit:playwright-cli 在拒绝剪贴板写入的情况下创建分享，确认服务端返回 201。
-      - 确认 UI 提示创建成功但复制失败，保留打开或手动复制链接的途径；打开后可读取正文，不自动发送第二次创建请求。
-      - 恢复剪贴板权限后再执行一次分享并读回剪贴板，确认提示与实际复制结果一致；释放本 Case 资源。
-
+      - 通过真实上传填满 100 份或 100 MiB 配额，再创建应返回 507。
+      - 读取原有效记录核对摘要未变；只清理自有配额数据。
   - id: TSS-013
-    name: Web 同源链接经开发代理到达目标 Backend
+    name: 单份超限不截断
     required: true
-    description: >
-      空 API base 的分享 URL 使用当前 HTTP(S) origin，开发代理正确转发而不返回 Vite SPA。
+    description: 10 MiB UTF-8 正文上限同时约束发送端和 Host。
     preconditions:
-      - 本 Case 有已登录的 Web 同源开发环境和隔离 Backend，API base 为空。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
     steps:
-      - 使用 $toolkit:playwright-cli 创建一份真实分享，记录当前 origin 与实际 Backend 身份。
-      - 无凭据请求复制的链接，确认 origin 不变、/share/terminal 转发到同一 Backend，返回含正文的 HTML 而非 SPA。
-      - 清理本 Case 的源终端与页面，不修改其他连接配置。
-
+      - 用自有 tmux fixture 准备超限文本并创建，确认 413 且无成功链接。
+      - 直接上传超限正文到 Host，确认 413 且不生成记录；清理自有资源。
   - id: TSS-014
-    name: 显式连接链接保留 Backend 地址与部署路径
+    name: 分享操作冻结目标
     required: true
-    description: >
-      非空 API base 与 Electron 自定义 renderer origin 下，生成链接仍指向本次 Backend，且不泄露凭据。
+    description: 创建中切换焦点或连接不改变请求目标和公网结果。
     preconditions:
-      - 本 Case 有隔离 Electron renderer 及显式 HTTP(S) 连接，受控反向代理为该 Backend 提供路径前缀。
-      - 可通过该表面的 CDP 使用 $toolkit:playwright-cli，并记录连接地址与 Backend 身份。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 真实 UI 有两个不同标记 Panel，可延迟实际请求但不替换响应。
     steps:
-      - 在显式连接下创建分享，确认复制 URL 的协议、主机与路径前缀属于所选 Backend，不是 renderer 自定义协议。
-      - 无凭据请求链接，确认得到该快照正文；URL 不含 query token、userinfo 或登录参数。
-      - 释放本 Case 的页面与代理资源；若无法取得 Electron 表面或路径前缀环境，明确报告 blocked，不用 Web 同源证据替代。
-
+      - 使用 $toolkit:playwright-cli 点击分享后切换 Panel/连接，确认请求仍携带点击时目标。
+      - 进行中重复点击不增加请求，最终链接对应原标记且为 Host origin，不使用新连接地址；清理自有资源。
   - id: TSS-015
-    name: 行范围仅高亮并可由 URL 恢复
+    name: 剪贴板失败保留链接
     required: true
-    description: >
-      极简页仅增强行引用，选中范围不隐藏正文、不改变逻辑行号或浏览器原生文本操作。
+    description: 复制失败不自动重建快照或谎报复制成功。
     preconditions:
-      - 本 Case 可自行创建至少 40 行、包含长行与空行的真实快照，并使用 $toolkit:playwright-cli 打开。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 真实浏览器可以拒绝剪贴板写入。
     steps:
-      - 点击第 25 行，Shift 点击第 28 行；确认仅这 4 行高亮，地址含 #L25-L28，页面没有自定义复制或搜索按钮。
-      - 重新打开该地址，确认范围恢复且全文仍存在；缩到 390px 宽度，确认视觉折行不改变逻辑行号或选中数量。
-      - 用浏览器原生选择复制正文，确认可以获取文字；普通拖选不自动改 URL，搜索无需页面提供自定义输入框。
-      - 改为越界或无效 hash，再清空 hash，确认正文始终可读且不残留旧高亮；释放本 Case 的页面。
-
+      - 使用 $toolkit:playwright-cli 拒绝剪贴板后创建，确认 201 且通知保留手动复制或打开链接入口。
+      - 确认未发送第二次创建请求、未显示已复制；恢复权限并清理自有资源。
   - id: TSS-016
-    name: 损坏记录和猜测路径均不能读取其他数据
+    name: 行范围引用可恢复
     required: true
-    description: >
-      公开读取严格限定到合法 token 对应的完整快照，记录损坏时 fail closed，不回退源终端或文件路径。
+    description: 行高亮只增强引用，不隐藏正文或改变逻辑行号。
     preconditions:
-      - 本 Case 使用独立快照目录，可自行创建两份有效快照并只修改其中一份记录文件。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 自有快照至少 40 行，包含空行和长行。
     steps:
-      - 将一份真实创建记录改成损坏 JSON 或不支持的版本，匿名请求其 URL；确认非 200 且没有部分正文、源终端实时内容或绝对存储路径。
-      - 请求缺签名的 ID、非法 ID、路径遍历编码和旧版 43 字符 opaque-token URL，确认拒绝且不能读到目录、其他快照或 SPA 的 200 页面。
-      - 读取未改动的另一份快照，确认仍为 200 且内容正确；清理本 Case 的损坏 fixture。
-
+      - "使用 $toolkit:playwright-cli 点击第 25 行并 Shift 点击第 28 行，确认 4 行高亮和 #L25-L28。"
+      - 刷新后高亮恢复；改为 390px 宽度仍保持逻辑行号；无效 hash 清除高亮且保留全文，清理自有资源。
   - id: TSS-017
-    name: 签名不可缺失、篡改或移用于其他快照
+    name: 损坏记录封闭拒绝
     required: true
-    description: >
-      URL 凭据绑定单份快照 ID 与 expires，不能把有效签名移用于其他 ID 或延长到期时间。
-      非规范或重复字段均封闭拒绝，不保留旧无签名读取入口。
+    description: 一份损坏记录不会泄露文件或影响其他快照。
     preconditions:
-      - 隔离待验 Backend 已运行，可正常认证创建两份真实快照，并可使用无 cookie 或 Authorization 的 HTTP 客户端。
+      - 本 Case 拥有独立源 Backend、已配置专用 HTTPS Host 和上传凭据、自有 tmux Panel；所有数据与进程均隔离于生产环境。
+      - 本 Case 可修改自有 Host 的记录文件。
     steps:
-      - 分别创建 A、B，确认 URL 携带规范 expires 和 signature，expires 与返回的 expiresAt 相同且正常期限为 86400000 毫秒；有效 GET 与 HEAD 均 200。
-      - 分别去掉 signature、去掉 expires、修改签名字符、延长 expires，以及将 A 的参数移到 B 的 ID；GET 和 HEAD 均应 404，无快照正文。
-      - 重复签名或期限字段、添加额外参数、改用非规范期限编码或交换参数顺序；确认均 404，不返回 SPA 或缓存 304。
-      - 请求裸 ID 与旧版 opaque-token URL，确认均拒绝；再次读取原始完整签名 URL，确认仍 200，清理本 Case 资源。
-
-  - id: TSS-018
-    name: 密码学有效但已过期的签名也不得读取正文
-    required: true
-    description: >
-      过期请求不能仅凭验签成功得到正文；用专属目录时间 fixture 验证，不能声称经过了 24 小时自然等待。
-    preconditions:
-      - 独占隔离 Backend 与快照目录，允许修改本 Case 真实记录时间并读取该目录签名密钥以制作边界 fixture，不修改系统时钟或产品期限。
-    steps:
-      - 正常创建并读取快照，确认 .signing-key 为 32 字节、权限 0600，独立使用约定 HMAC-SHA256 域及 ID、expires 核对服务端签名一致，不输出密钥或完整链接。
-      - 仅将本 Case 记录的 createdAt 与 expiresAt 整体移到过去，保持两者差值为 86400000 毫秒；用自有密钥对这个 ID 和过去的 expires 生成有效签名。
-      - 使用该正确签名发送匿名 GET、HEAD 和条件请求，确认均 404，不含正文或原标题；恢复或清理仅属于本 Case 的记录。
+      - 创建两份快照并损坏其中一份 JSON，确认对应链接不返回 200 或部分正文。
+      - 请求路径遍历或非法 ID，确认无其他文件；未损坏快照仍可读，清理自有资源。

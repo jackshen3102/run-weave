@@ -12,7 +12,6 @@ export interface StoragePaths {
   browserProfileDir: string;
   authStoreFile: string;
   terminalSessionStoreFile: string;
-  terminalSnapshotShareDir: string;
   terminalQuickInputStoreFile: string;
   agentTeamModelStoreFile: string;
   backendLogDir: string;
@@ -103,7 +102,6 @@ export function resolveStoragePaths(
     browserProfileDir,
     authStoreFile,
     terminalSessionStoreFile,
-    terminalSnapshotShareDir: path.join(browserProfileDir, "terminal-snapshot-shares"),
     terminalQuickInputStoreFile,
     agentTeamModelStoreFile,
   } as StoragePaths;

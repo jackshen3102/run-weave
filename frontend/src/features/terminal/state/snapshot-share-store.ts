@@ -32,6 +32,10 @@ export const useSnapshotShareStore = create<SnapshotShareState>((set, get) => ({
       set({ result: { url: result.url, copied } });
     } catch (error) {
       // Do not retain or log fetch errors that could contain credentials/URLs.
+      if (error instanceof HttpError && error.message === "Public snapshot publishing is not configured") {
+        set({ error: "当前 Backend 尚未配置公网分享服务，请配置后重试。" });
+        return;
+      }
       set({ error: error instanceof HttpError
         ? `创建终端快照失败（HTTP ${error.status}）`
         : "创建终端快照失败，请检查 HTTP(S) 连接后重试。" });

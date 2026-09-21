@@ -1,3 +1,5 @@
+export const SNAPSHOT_MAX_TEXT_BYTES = 10 * 1024 * 1024;
+
 export interface TerminalSnapshotShareAccess {
   snapshotId: string;
   /** Signed absolute expiry, Unix epoch milliseconds. */
@@ -17,13 +19,18 @@ export function parseTerminalSnapshotSharePath(value: string): TerminalSnapshotS
     : null;
 }
 
-export interface CreateTerminalSnapshotShareResponse {
+export interface PublishTerminalSnapshotResponse {
   /** Relative signed read URL; preserve its expires/signature query parameters. */
   sharePath: string;
   title: string;
   createdAt: string;
   expiresAt: string;
   lineCount: number;
+}
+
+export interface CreateTerminalSnapshotShareResponse extends PublishTerminalSnapshotResponse {
+  /** Complete HTTPS read URL on the central snapshot host. */
+  shareUrl: string;
 }
 
 export type TerminalSnapshotShareErrorCode =
@@ -33,7 +40,14 @@ export type TerminalSnapshotShareErrorCode =
   | "SNAPSHOT_TOO_LARGE"
   | "SNAPSHOT_BUSY"
   | "SNAPSHOT_STORAGE_FULL"
+  | "SNAPSHOT_PUBLISH_NOT_CONFIGURED"
+  | "SNAPSHOT_PUBLISH_FAILED"
   | "SNAPSHOT_STORAGE_FAILED";
+
+export interface PublishTerminalSnapshotRequest {
+  title: string;
+  text: string;
+}
 
 export interface TerminalSnapshotShareErrorResponse {
   message: string;

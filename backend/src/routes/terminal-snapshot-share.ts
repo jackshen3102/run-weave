@@ -2,10 +2,10 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { Router } from "express";
 import { parseTerminalSnapshotSharePath } from "@runweave/shared/terminal/snapshot-share";
-import type { TerminalSnapshotShareService } from "../terminal/snapshot-share/service";
+import type { TerminalSnapshotHostService } from "../terminal/snapshot-share/host-service";
 import { renderTerminalSnapshot, renderTerminalSnapshotMissing, terminalSnapshotShareHeaders } from "../terminal/snapshot-share/render";
 
-export function createPublicTerminalSnapshotShareRouter(service: TerminalSnapshotShareService): Router {
+export function createPublicTerminalSnapshotShareRouter(service: Pick<TerminalSnapshotHostService, "read">): Router {
   const router = Router();
   // Consume the whole mount, including malformed paths, before auth/bootstrap/SPA.
   // Only snapshot-scoped signature verification is allowed; no login/tunnel bootstrap.

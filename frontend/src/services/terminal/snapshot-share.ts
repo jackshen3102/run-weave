@@ -13,40 +13,6 @@ function resolveShareApiBase(apiBase: string): string {
   return base.toString().replace(/\/+$/, "");
 }
 
-function isLoopbackHost(hostname: string): boolean {
-  return hostname === "localhost" || hostname === "[::1]" || /^127\.\d+\.\d+\.\d+$/.test(hostname);
-}
-
-async function resolveShareLinkBase(apiBase: string): Promise<string> {
-  const base = new URL(apiBase);
-  if (!isLoopbackHost(base.hostname)) return apiBase;
-
-  const getReport = window.electronAPI?.getRuntimeStatusReport;
-  if (!getReport) {
-    throw new Error("请先使用局域网 IP 连接后再分享，本机地址无法供其他设备访问");
-  }
-  const report = await getReport();
-  const backend = report.items.find((item) => item.id === "electron.packaged-backend");
-  const network = report.items.find((item) => item.id === "electron.local-network");
-  const backendAddress = backend?.facts.find((fact) => fact.id === "electron.packaged-backend.address")?.value;
-  const lanAddress = network?.facts.find((fact) => fact.id === "electron.local-network.primary")?.value;
-  if (!backendAddress || !lanAddress || network?.state !== "healthy") {
-    throw new Error("未找到可用的局域网 IP，请连接网络后重试");
-  }
-  const local = new URL(backendAddress);
-  const lan = new URL(lanAddress);
-  const normalizeHost = (host: string) => host === "localhost" ? "127.0.0.1" : host;
-  if (normalizeHost(local.hostname) !== normalizeHost(base.hostname) ||
-      local.port !== base.port || local.protocol !== base.protocol ||
-      lan.port !== local.port || lan.protocol !== local.protocol || isLoopbackHost(lan.hostname)) {
-    throw new Error("当前连接不是内置本机 Backend，请使用该 Backend 的局域网 IP 连接后再分享");
-  }
-  // Change only the copied link's host. Keep the original connection for the
-  // authenticated request, and retain its port, path prefix and signed query.
-  base.hostname = lan.hostname;
-  return base.toString().replace(/\/+$/, "");
-}
-
 export async function createTerminalSnapshotShare(
   apiBase: string,
   token: string,
@@ -56,7 +22,6 @@ export async function createTerminalSnapshotShare(
   // Freeze and validate before creating: connection changes cannot redirect the
   // request or its resulting link, and renderer custom protocols are never used.
   const base = resolveShareApiBase(apiBase);
-  const linkBase = await resolveShareLinkBase(base);
   const response = await requestJson<CreateTerminalSnapshotShareResponse>(
     base,
     `/api/terminal/session/${encodeURIComponent(sessionId)}/panels/${encodeURIComponent(panelId)}/shares`,
@@ -66,5 +31,11 @@ export async function createTerminalSnapshotShare(
   if (!access || access.expires !== Date.parse(response.expiresAt)) {
     throw new Error("Invalid terminal snapshot response");
   }
-  return { ...response, url: `${linkBase}${response.sharePath}` };
+  if (typeof response.shareUrl !== "string") throw new Error("Public snapshot URL is missing");
+  const publicUrl = new URL(response.shareUrl);
+  if (publicUrl.protocol !== "https:" || publicUrl.username || publicUrl.password || publicUrl.hash ||
+      `${publicUrl.pathname}${publicUrl.search}` !== response.sharePath) {
+    throw new Error("Invalid public terminal snapshot URL");
+  }
+  return { ...response, url: publicUrl.href };
 }
