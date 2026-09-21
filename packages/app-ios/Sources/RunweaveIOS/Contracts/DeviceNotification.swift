@@ -58,10 +58,8 @@ extension APIClient {
       body: ["subscriptionId": subscription.subscriptionId, "version": subscription.version])
   }
   func revokeNotifications(installation: String) async throws {
-    let _: NotificationEmptyResponse = try await authorized(
+    let _: EmptyResponse = try await authorized(
       "/api/device/notifications/subscriptions/\(Self.pathComponent(installation))",
       method: "DELETE")
   }
 }
-
-private struct NotificationEmptyResponse: Decodable {}

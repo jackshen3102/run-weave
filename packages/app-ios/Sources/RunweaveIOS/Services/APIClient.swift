@@ -415,7 +415,7 @@ private struct Ticket: Decodable {
   let expiresIn: Double
 }
 private struct Verification: Decodable { let valid: Bool }
-private struct EmptyResponse: Decodable {}
+struct EmptyResponse: Decodable {}
 private struct ServerFailure: Decodable { let message: String }
 private struct InputAcceptance: Decodable {
   let operationId: String
