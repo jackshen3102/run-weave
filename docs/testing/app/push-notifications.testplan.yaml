@@ -1,0 +1,28 @@
+version: 1
+name: 通用推送服务
+description: >
+  验证统一 APNs 网关的显式类别订阅和请求合同；每例使用独立状态、凭据与 APNs 记录器，不向真实手机发送。
+cases:
+  - id: PUSH-001
+    name: 电量与其他业务共用显式类别订阅
+    required: true
+    description: >
+      网关统一处理通知类别与正文，只有明确订阅的类别可投递；缺失类别列表不能隐式订阅电量。
+    preconditions:
+      - 本例使用隔离网关及有效 host 凭据，两个目标分别订阅 battery.low 和 task.completed，APNs 边界记录请求。
+    steps:
+      - 注册时省略 categories，确认返回 400 且没有创建订阅。
+      - 向统一通知接口提交两类合法通知，确认各自目标收到请求中的标题正文，均返回 notificationId 和投递状态。
+      - 给仅订阅 battery.low 的目标提交 task.completed，确认返回 403 且没有 APNs 请求。
+  - id: PUSH-002
+    name: 发送接口仅接受统一通知合同
+    required: true
+    description: >
+      所有业务共用统一发送入口与严格字段校验，电量专用接口不存在，无效请求不会外发。
+    preconditions:
+      - 本例隔离网关具有有效发送凭据和已注册的 battery.low 订阅，APNs 记录器可确认外发次数。
+    steps:
+      - 向 /v1/notifications 提交合法的事件 ID、类别、标题正文和发生时间，确认接受请求并返回稳定 notificationId。
+      - 对本例新事件额外提供 token、URL 或 topic，确认返回 400 且没有外发。
+      - 提供空标题或正文，确认返回 400；提供超过最终 UTF-8 负载上限的正文，确认返回 413 且没有外发。
+      - 请求旧电量发送和轮次结束路径，确认返回 404 且没有存储或 APNs 变更。

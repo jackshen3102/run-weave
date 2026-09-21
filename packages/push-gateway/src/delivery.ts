@@ -1,77 +1,72 @@
 import type {
-  BatteryNotification,
   PushDeliveryResult,
-} from "@runweave/shared/device-notifications";
+  PushNotificationResult,
+  PushNotificationRequest,
+} from "@runweave/shared/push-notifications";
 import type { APNsTransport } from "./apns";
-import { hash, identifier, requireValue } from "./auth";
+import { encodePayload } from "./apns";
+import { hash, requireValue } from "./auth";
 import type { GatewayStore } from "./store";
-import type { Sender } from "./types";
+import type { ProviderNotification, Sender } from "./types";
 
 export async function deliver(
   store: GatewayStore,
   sender: Sender,
-  body: Record<string, unknown>,
+  event: PushNotificationRequest,
   transport: APNsTransport,
-): Promise<PushDeliveryResult> {
-  requireValue(
-    Object.keys(body).every((key) =>
-      [
-        "notificationId",
-        "subscriptionId",
-        "cycleId",
-        "level",
-        "percent",
-        "observedAt",
-      ].includes(key),
-    ),
+): Promise<PushNotificationResult> {
+  let notification!: ProviderNotification;
+  const fingerprint = hash(
+    JSON.stringify([event.category, event.title, event.body, event.occurredAt]),
   );
-  requireValue(
-    identifier(body.notificationId) &&
-      identifier(body.subscriptionId) &&
-      identifier(body.cycleId),
-  );
-  requireValue(body.level === 10 || body.level === 20);
-  requireValue(
-    Number.isInteger(body.percent) &&
-      Number(body.percent) >= 0 &&
-      Number(body.percent) <= Number(body.level),
-  );
-  requireValue(
-    typeof body.observedAt === "string" &&
-      Number.isFinite(Date.parse(body.observedAt)),
-  );
-  const age = Date.now() - Date.parse(body.observedAt);
-  requireValue(age >= -30_000 && age <= 300_000, 422, "Stale observation");
-  const alert = body as unknown as BatteryNotification;
   const claim = store.update((data) => {
-    requireValue(
-      !data.completedCycles?.[`${sender.hostId}:${alert.cycleId}`],
-      410,
-      "Cycle completed",
-    );
-    const subscription = data.subscriptions[alert.subscriptionId];
+    const subscription = data.subscriptions[event.subscriptionId];
     requireValue(subscription && subscription.hostId === sender.hostId, 403);
+    requireValue(
+      sender.environments.includes(subscription.environment),
+      403,
+      "Environment not allowed",
+    );
     requireValue(
       !subscription.revoked &&
         subscription.invalidToken !== subscription.deviceToken,
       410,
       "Subscription inactive",
     );
-    const expectedID = hash(
-      [
-        sender.hostId,
-        alert.cycleId,
-        alert.level,
-        subscription.installationId,
-        subscription.environment,
-      ].join(":"),
-    );
     requireValue(
-      alert.notificationId === expectedID,
-      400,
-      "Invalid notification identity",
+      subscription.categories.includes(event.category),
+      403,
+      "Category not subscribed",
     );
+    notification = {
+      notificationId: hash(
+        JSON.stringify([
+          "notification-v1",
+          sender.hostId,
+          subscription.installationId,
+          subscription.environment,
+          event.category,
+          event.eventId,
+        ]),
+      ),
+      category: event.category,
+      title: event.title,
+      body: event.body,
+      occurredAt: event.occurredAt,
+    };
+    encodePayload(subscription, notification);
+    const expectedID = notification.notificationId;
+    // Generic events are fresh for five minutes; retain their claims for seven days.
+    for (const [id, delivery] of Object.entries(data.deliveries)) {
+      if (Date.now() - delivery.createdAt > 7 * 24 * 3600_000)
+        delete data.deliveries[id];
+    }
     const previous = data.deliveries[expectedID];
+    requireValue(
+      !previous || previous.fingerprint === fingerprint,
+      409,
+      "Event content changed",
+    );
     if (previous && previous.state !== "retry") {
       return {
         result: {
@@ -95,9 +90,15 @@ export async function deliver(
         } as PushDeliveryResult,
       };
     }
-    const recent = Object.values(data.deliveries).filter(
-      (d) => d.subscriptionId === subscription.id && now - d.updatedAt < 60_000,
-    );
+    const recent = Object.values(data.deliveries).filter((d) => {
+      const target = data.subscriptions[d.subscriptionId];
+      return (
+        d.hostId === sender.hostId &&
+        target?.installationId === subscription.installationId &&
+        target.environment === subscription.environment &&
+        now - d.updatedAt < 60_000
+      );
+    });
     requireValue(
       recent.reduce((sum, d) => sum + d.attempts, 0) < 4,
       429,
@@ -107,7 +108,7 @@ export async function deliver(
       id: expectedID,
       hostId: sender.hostId,
       subscriptionId: subscription.id,
-      cycleId: alert.cycleId,
+      fingerprint,
       state: "sending",
       attempts: (previous?.attempts ?? 0) + 1,
       createdAt: previous?.createdAt ?? now,
@@ -115,14 +116,18 @@ export async function deliver(
     };
     return { subscription: structuredClone(subscription) };
   });
-  if (claim.result) return claim.result;
+  if (claim.result)
+    return {
+      ...claim.result,
+      notificationId: notification.notificationId,
+    };
   const subscription = claim.subscription!;
   // No await between the durable claim and transport: revocation cannot race a queued submission.
-  const result = await transport(subscription, alert).catch(() => ({
+  const result = await transport(subscription, notification).catch(() => ({
     state: "unknown" as const,
   }));
   return store.update((data) => {
-    const delivery = data.deliveries[alert.notificationId]!;
+    const delivery = data.deliveries[notification.notificationId]!;
     delivery.state = result.state;
     delivery.updatedAt = Date.now();
     if (result.state === "retry") {
@@ -141,6 +146,7 @@ export async function deliver(
       current.invalidToken = subscription.deviceToken;
     }
     return {
+      notificationId: notification.notificationId,
       state: delivery.state,
       ...(delivery.retryAfterMs ? { retryAfterMs: delivery.retryAfterMs } : {}),
     };

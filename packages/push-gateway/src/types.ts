@@ -1,7 +1,7 @@
 import type {
   PushDeliveryResult,
   PushEnvironment,
-} from "@runweave/shared/device-notifications";
+} from "@runweave/shared/push-notifications";
 export interface Sender {
   hostId: string;
   environments: PushEnvironment[];
@@ -18,12 +18,21 @@ export interface Subscription {
   revoked: boolean;
   revokeToken: string;
   invalidToken?: string;
+  categories: string[];
+}
+/** Provider envelope prepared by the delivery engine, never accepted as raw HTTP input. */
+export interface ProviderNotification {
+  notificationId: string;
+  category: string;
+  title: string;
+  body: string;
+  occurredAt: string;
 }
 export interface Delivery {
   id: string;
   hostId: string;
   subscriptionId: string;
-  cycleId: string;
+  fingerprint: string;
   state: PushDeliveryResult["state"] | "sending";
   attempts: number;
   createdAt: number;
@@ -31,9 +40,8 @@ export interface Delivery {
   retryAfterMs?: number;
 }
 export interface GatewayData {
-  schemaVersion: 1;
+  schemaVersion: 2;
   senders: Record<string, Sender>;
   subscriptions: Record<string, Subscription>;
   deliveries: Record<string, Delivery>;
-  completedCycles?: Record<string, number>;
 }

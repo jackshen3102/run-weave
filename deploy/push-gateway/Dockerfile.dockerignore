@@ -1,0 +1,13 @@
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!packages/
+!packages/shared/
+!packages/shared/package.json
+!packages/shared/src/**
+!packages/push-gateway/
+!packages/push-gateway/package.json
+!packages/push-gateway/tsconfig.json
+!packages/push-gateway/src/**

@@ -26,8 +26,9 @@ node scripts/ios.mjs run --task-dir <本工作区任务目录> --configuration D
 ```
 
 使用 doctor 列出的已安装 destination。支持 Debug、Profile、Release 三种配置。模拟器安装前先按[共享设备池](../../docs/cli/ios-simulators.md)申请任务；run 会构建当前源码、安装并核对二进制。
-Debug/Profile 真机构建不启用 APNs 推送，可使用 Personal Team 签名；Release 保留推送权限，
-需要支持 Push Notifications 的开发者团队和描述文件。
+Debug/Profile 真机构建启用 APNs sandbox 推送，Release 使用 production；
+需要支持 Push Notifications 的 Apple Developer Program 团队和描述文件。
+推送密钥、网关和仅安装电量展示版的本地签名覆盖方式见[推送网关](../push-gateway/README.md#ios-签名和启用)。
 模拟器使用 ad hoc 签名和专属 Keychain entitlement；产物在本目录
 `.build/ios/DerivedData/Build/Products/`。脚本不启动 Backend，也不改变其他应用的配置。
 仓库根的 `pnpm ios:doctor`、`pnpm ios:build -- ...`、`pnpm ios:run -- ...` 只是同一脚本的快捷入口。

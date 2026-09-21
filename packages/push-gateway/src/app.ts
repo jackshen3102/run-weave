@@ -11,7 +11,7 @@ import {
   requireValue,
   senderFor,
 } from "./auth";
-import { deliver } from "./delivery";
+import { deliverNotification } from "./notifications";
 import type { GatewayStore } from "./store";
 import { register, revoke } from "./subscriptions";
 
@@ -78,23 +78,6 @@ export function createGateway(
         });
         return;
       }
-      const completedCycle =
-        /^\/v1\/cycles\/([a-zA-Z0-9_-]{8,128})\/complete$/.exec(path)?.[1];
-      if (completedCycle && req.method === "POST") {
-        requireValue(sender, 401);
-        store.update((data) => {
-          const key = `${sender.hostId}:${completedCycle}`;
-          (data.completedCycles ??= {})[key] ??= Date.now();
-          for (const [id, delivery] of Object.entries(data.deliveries)) {
-            const endedAt =
-              data.completedCycles[`${delivery.hostId}:${delivery.cycleId}`];
-            if (endedAt && Date.now() - endedAt > 7 * 24 * 3600_000)
-              delete data.deliveries[id];
-          }
-        });
-        reply(res, 204);
-        return;
-      }
       const subscription = /^\/v1\/subscriptions\/([a-zA-Z0-9_-]{8,128})$/.exec(
         path,
       )?.[1];
@@ -112,11 +95,16 @@ export function createGateway(
         );
         return;
       }
-      if (path === "/v1/battery-alerts" && req.method === "POST") {
+      if (path === "/v1/notifications" && req.method === "POST") {
         reply(
           res,
           200,
-          await deliver(store, sender, await readBody(req), transport),
+          await deliverNotification(
+            store,
+            sender,
+            await readBody(req),
+            transport,
+          ),
         );
         return;
       }

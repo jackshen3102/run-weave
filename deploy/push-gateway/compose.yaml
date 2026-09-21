@@ -1,0 +1,40 @@
+services:
+  gateway:
+    image: ${PUSH_GATEWAY_IMAGE:?immutable image required}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:mode=1777,size=64m"]
+    secrets: [apns_key, gateway_env]
+    ports: ["127.0.0.1:${PUSH_GATEWAY_HOST_PORT:-8092}:8092"]
+    volumes:
+      - type: bind
+        source: ${PUSH_GATEWAY_DATA_DIR:?absolute data directory required}
+        target: /data
+        bind:
+          create_host_path: false
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:8092/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+secrets:
+  apns_key:
+    file: ${PUSH_GATEWAY_APNS_KEY_FILE:?absolute key file required}
+  gateway_env:
+    file: ${PUSH_GATEWAY_ENV_FILE:?absolute environment file required}

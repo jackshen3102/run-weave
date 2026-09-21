@@ -1,10 +1,68 @@
 # Runweave 推送网关
 
-独立的 APNs provider，只发送已授权 Mac 的电量告警。私钥留在网关，Mac 保存按安装隔离的发送凭据，
-手机保存本连接的撤销凭据。它不依赖 App Server 或 Suiji，不提供通用通知正文或 URL 代理。
+独立的通用 APNs 通知服务，业务通过统一接口提供事件类型、标题和正文。私钥留在网关，
+调用方保存按 hostId 隔离的发送凭据，手机保存本连接的撤销凭据。当前 provider 固定为 Runweave iOS App；
+不是任意 App、Android 或邮件的推送平台。它不依赖 App Server 或 Suiji，不接受 URL 跳转或终端命令。
 跨端行为见 [设备监控合同](../../docs/architecture/device-monitor.md)。
 
+## 接入其他通知业务
+
+合同从 `@runweave/shared/push-notifications` 导入。所有业务统一调用 `POST /v1/notifications`，
+共用[投递引擎](./src/delivery.ts)和 APNs provider。电量提醒由 Backend 生成 `battery.low` 事件，
+阈值、轮次、取消条件和文案都由 Backend 决定；网关不含电量专用接口或业务逻辑。
+所有注册、发送请求都带 `Authorization: Bearer <该 host 的发送凭据>`；凭据不下发给手机。
+
+先由业务端在用户明确订阅后调用 `PUT /v1/subscriptions/:subscriptionId`：
+
+```json
+{
+  "installationId": "PHONE_INSTALLATION_UUID",
+  "environment": "sandbox",
+  "deviceToken": "APNS_HEX_DEVICE_TOKEN",
+  "displayName": "我的电脑",
+  "version": 1,
+  "categories": ["task.completed", "task.failed"]
+}
+```
+
+返回 `{ "revokeToken": "..." }`。业务端负责鉴权、用户授权、保存撤销凭据后的确认，确认前不发送；
+现有电量业务的两阶段确认继续由 Backend 执行。新业务应使用独立绑定，不覆盖电量业务拥有的订阅。
+手机可凭本绑定 revokeToken 调用 `DELETE /v1/subscriptions/:subscriptionId`；发送方也可用自己的凭据撤销。
+
+`categories` 必填，必须是 1–32 个不重复的类型名，无通配符、默认类别或字段省略兜底。
+它是完整替换列表；修改类型/token/displayName 必须递增 version，
+相同版本仅接受相同内容，已撤销 ID 不能重新注册。
+目前手机 UI 只提供低电量开关，任务事件生产和对应订阅 UI 尚未接入；开启低电量不会订阅其他类型。
+
+发送示例（用真实绑定 ID 和事件发生时间替换占位值）：
+
+```json
+{
+  "subscriptionId": "SUBSCRIPTION_UUID",
+  "eventId": "TASK_EVENT_UUID",
+  "category": "task.completed",
+  "title": "任务完成",
+  "body": "代码修改已完成，可以查看结果了。",
+  "occurredAt": "2026-09-20T00:00:00.000Z"
+}
+```
+
+- ID 为 8–128 位字母、数字、下划线或连字符；类别为最多 64 位小写字母/数字，可用点、下划线、连字符分段，首字母必须小写。
+- `battery.low` 和 `task.completed` 使用完全相同的接口与订阅校验，没有保留的业务类别。
+- title/body 非空，分别不超过 120/2000 个 UTF-16 code units；最终 APNs JSON 按 UTF-8 计不超过 4096 字节，超限返回 413。
+- `occurredAt` 是可解析日期字符串，建议 ISO 8601 UTC；超过 5 分钟或超前服务时钟超过 30 秒返回 422。
+- 业务端为每个事件生成稳定 eventId；重试保持 eventId、category、正文和时间不变。相同 host/安装/环境/category/eventId
+  共享 notificationId，地址别名不会重复通知；同一身份改变标题、正文或时间返回 409。
+- 返回 `{ "notificationId": "64位十六进制ID", "state": "accepted|unknown|retry|failed", "retryAfterMs": 5000 }`，
+  retryAfterMs 仅在需要重试时出现。HTTP 200 需继续检查 state；accepted 只表示 Apple 接受，不证明手机显示。
+  仅 retry 按返回间隔重试；unknown 不自动重发。HTTP 429/503 可退避后重试原请求，其余 4xx 应修正原因。
+
+通知 payload 包含 protocolVersion=1、hostId、notificationId、category 和 occurredAt。
+点击仍只定位已保存的电脑连接。业务 category 是应用自定义字段，不是 `aps.category` 的交互按钮配置。
+
 ## 部署
+
+AWS Lightsail Docker Compose 部署、Caddy 配置及本机调试见[部署操作指南](../../docs/deployment/push-gateway.md)。
 
 需要 Node.js 22、可写的持久目录、到 Apple 的 HTTP/2 出站网络，以及对手机和 Mac 可达的 HTTPS origin。
 服务默认只监听 `127.0.0.1:8092`，由运营者配置反向代理 TLS。不要把默认 HTTP 监听直接暴露到公网。
@@ -69,26 +127,34 @@ Backend 注册成功后，手机先将撤销凭据写入 Keychain，再确认订
 
 ## 投递与恢复
 
-- 20%/10% 告警由 Backend 根据新鲜电池供电样本决定，网关只接受固定模板。HTTP 200/APNs accepted 只表示 Apple 接受。
-- 每个 host 最多 100 条活跃绑定，每条每分钟最多 4 次提交；相同 host/安装/环境/轮次/档位共享稳定 notificationId。
+- 业务调用方决定何时提醒和通知内容。电量 Backend 负责 20%/10% 阈值和轮次，在第一次发送前持久化标题、正文和发生时间，
+  重试复用同一事件；样本变化仍参与取消判断，不改写已提交的事件内容。
+- 每个 host 最多 100 条活跃绑定；同 host/安装/环境的所有类别与地址别名共用每分钟最多 4 次提交的额度。
+  网关统一按 category/eventId 去重；电量 Backend 将轮次/档位编码为稳定的 eventId。
 - SQLite 事务先保存 sending，再进行 HTTP/2 请求。并发重复请求不重复发送；重启残留 sending 转为 unknown。
 - 明确 429/5xx 可按 5、30、120 秒有限重试，遵守更长的 Retry-After。超时或断线结果记为 unknown，不盲目重发。
-- APNs 使用 alert、priority 10、固定 topic、同 host 的 collapse-id、expiration 0。过期事实与已结束轮次被拒绝。
+- APNs 使用 alert、priority 10、固定 topic、expiration 0（不要求 Apple 离线存储），
+  collapse-id 统一使用 notificationId，独立事件不会互相覆盖。网关拒绝过期事件。
 - token 永久失败只标记提交时的 token 版本；迟到响应不会作废刚更新的新 token。
 - 撤销记录保留墓碑，迟到 PUT 返回 409。用户再次启用需要新绑定，目标级去重仍有效。
-- Backend 通知轮次结束后，网关在后续轮次退休请求中清理已结束超过 7 天的投递明细；活跃轮次不因 TTL 重新发送。
-  轮次结束标记与撤销墓碑继续保留。长期不产生新轮次时明细可能保留更久。
+- 网关只保留内容摘要，不保存标题正文；投递明细在 7 天后的下一次有效投递请求中清理。
+  7 天是事件 ID 去重窗口，业务仍须给新事件生成新 ID。
+- 当前网关状态 schema 为 2，不提供旧电量服务的数据迁移或接口适配。首次部署使用新数据目录，
+  Backend 与网关使用同一版本；开发试运行数据如需保留，应先离线备份，不直接覆盖。
 
 备份前停止服务，备份整个数据目录；恢复到独占目录后先执行脱敏状态检查，再开启正式发送。
 未知 schema 拒绝覆盖原数据。回滚前先停发并撤销订阅，保留状态目录；不要通过删除状态“清理”去重。
 
 ## 验证
 
+通用接口验收合同见[通用推送计划](../../docs/testing/app/push-notifications.testplan.yaml)。
 在仓库根执行 `node scripts/verify/device-monitor/run.mjs`。驱动创建自己的 HTTPS 证书、Backend/网关状态和登录，
-验证真实 HTTP/WS、SQLite、阈值、撤销、并发与恢复。provider 检查使用本地 HTTP/2 TLS 服务核对 ES256、headers 和响应处理；
+验证真实 HTTP/WS、SQLite、阈值、撤销、并发与恢复，以及通用接口的类别授权、内容冲突、超限、别名限流与重试。
+provider 检查使用本地 HTTP/2 TLS 服务核对 ES256、两种 payload、headers 和响应处理；
 不会向 Apple 发通知，也不更改系统证书信任。
 `node scripts/verify/device-monitor/run.mjs --cadence` 单独执行 130 秒、3 个客户端的采样频率检查。
 
 真实 sandbox/production 锁屏横幅、前台 APNs 与点击路由仍必须在正确签名的专用手机上取证。
 Apple 依据：[请求与 expiration](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns)、
+[payload 大小](https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/CreatingtheNotificationPayload.html)、
 [token 注册](<https://developer.apple.com/documentation/uikit/uiapplicationdelegate/application(_:didregisterforremotenotificationswithdevicetoken:)>)。

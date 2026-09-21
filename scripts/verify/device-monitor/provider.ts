@@ -4,7 +4,10 @@ import { createSecureServer, connect } from "node:http2";
 import { readFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { createAPNsTransport } from "../../../packages/push-gateway/src/apns";
-import type { Subscription } from "../../../packages/push-gateway/src/types";
+import type {
+  ProviderNotification,
+  Subscription,
+} from "../../../packages/push-gateway/src/types";
 
 export async function verifyProvider() {
   const { privateKey, publicKey } = generateKeyPairSync("ec", {
@@ -17,6 +20,9 @@ export async function verifyProvider() {
   let status = 200,
     calls = 0;
   const failures: Error[] = [];
+  let expectedBody = "18%，正在使用电池，请连接电源。";
+  let expectedCategory = "battery.low";
+  const collapseIds: string[] = [];
   server.on("stream", (stream, headers) => {
     let body = "";
     stream.setEncoding("utf8");
@@ -31,6 +37,7 @@ export async function verifyProvider() {
         assert.equal(headers["apns-priority"], "10");
         assert.equal(headers["apns-expiration"], "0");
         assert.ok(String(headers["apns-collapse-id"]).length <= 64);
+        collapseIds.push(String(headers["apns-collapse-id"]));
         const jwt = String(headers.authorization).slice(7).split(".");
         assert.equal(
           JSON.parse(Buffer.from(jwt[0]!, "base64url").toString()).alg,
@@ -50,10 +57,11 @@ export async function verifyProvider() {
         );
         const notification = JSON.parse(body);
         assert.equal(notification.protocolVersion, 1);
-        assert.equal(
-          notification.aps.alert.body,
-          "18%，正在使用电池，请连接电源。",
-        );
+        assert.equal(notification.category, expectedCategory);
+        assert.equal(notification.hostId, subscription.hostId);
+        assert.equal(notification.notificationId.length, 64);
+        assert.ok(Buffer.byteLength(body) <= 4096);
+        assert.equal(notification.aps.alert.body, expectedBody);
         assert.equal(notification.aps["content-available"], undefined);
         assert.equal(notification.url, undefined);
       } catch (error) {
@@ -98,14 +106,14 @@ export async function verifyProvider() {
     version: 1,
     revoked: false,
     revokeToken: "fixture-only",
+    categories: ["battery.low", "task.completed"],
   };
-  const alert = {
+  const alert: ProviderNotification = {
     notificationId: "ab".repeat(32),
-    subscriptionId: subscription.id,
-    cycleId: randomUUID(),
-    level: 20 as const,
-    percent: 18,
-    observedAt: new Date().toISOString(),
+    category: "battery.low",
+    title: "Fixture Mac 电量低",
+    body: expectedBody,
+    occurredAt: new Date().toISOString(),
   };
   try {
     assert.equal((await transport(subscription, alert)).state, "accepted");
@@ -125,9 +133,26 @@ export async function verifyProvider() {
       "https://api.push.apple.com",
     ]);
     assert.equal(calls, 3);
+    status = 200;
+    expectedBody = "代码修改已完成，请查看结果。";
+    expectedCategory = "task.completed";
+    const generic = {
+      ...alert,
+      notificationId: "cd".repeat(32),
+      category: expectedCategory,
+      title: "任务完成",
+      body: expectedBody,
+    };
+    assert.equal((await transport(subscription, generic)).state, "accepted");
+    assert.equal(collapseIds[3], generic.notificationId);
+    assert.notEqual(collapseIds[0], collapseIds[3]);
+    await assert.rejects(
+      transport(subscription, { ...generic, body: "中".repeat(2000) }),
+    );
+    assert.equal(calls, 4, "oversized UTF-8 payload never reaches provider");
     if (failures.length) throw failures[0];
     process.stdout.write(
-      "PASS real provider HTTP/2 + TLS, ES256 JWT, fixed APNs template/headers and 429/410 mapping (local APNs boundary)\n",
+      "PASS real provider HTTP/2 + TLS, ES256 JWT, battery + generic APNs payloads/headers and 429/410 mapping (local APNs boundary)\n",
     );
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));

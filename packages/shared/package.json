@@ -70,6 +70,7 @@
     "./device-status": "./src/monitoring/device-status.ts",
     "./battery": "./src/monitoring/battery.ts",
     "./device-notifications": "./src/monitoring/device-notifications.ts",
+    "./push-notifications": "./src/push-notifications.ts",
     "./terminal/agent-resume": "./src/terminal/agent-resume.ts",
     "./experience": "./src/experience.ts",
     "./browser-local-tunnel": "./src/browser/local-tunnel.ts",

@@ -1,7 +1,7 @@
 import type {
-  BatteryNotification,
+  PushNotificationRequest,
   PushDeliveryResult,
-} from "@runweave/shared/device-notifications";
+} from "@runweave/shared/push-notifications";
 import type { DeviceSubscription } from "./types";
 export class PushClientError extends Error {
   constructor(readonly status: number) {
@@ -77,6 +77,7 @@ export class PushClient {
       deviceToken: value.deviceToken,
       displayName: value.displayName,
       version: value.version,
+      categories: ["battery.low"],
     });
   }
   async revoke(id: string): Promise<void> {
@@ -87,15 +88,17 @@ export class PushClient {
         throw error;
     }
   }
-  completeCycle(id: string): Promise<void> {
-    return this.request(`/v1/cycles/${id}/complete`, "POST");
-  }
   async send(
-    alert: BatteryNotification,
+    notification: PushNotificationRequest,
     canSend?: () => boolean,
   ): Promise<PushDeliveryResult> {
     try {
-      return await this.request("/v1/battery-alerts", "POST", alert, canSend);
+      return await this.request(
+        "/v1/notifications",
+        "POST",
+        notification,
+        canSend,
+      );
     } catch (error) {
       if (
         error instanceof PushClientError &&

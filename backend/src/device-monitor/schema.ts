@@ -46,10 +46,17 @@ export const deviceMonitorSchema = z
           attempts: z.number().int().nonnegative(),
           createdAt: time,
           nextAttemptAt: time,
+          notification: z
+            .object({
+              title: z.string(),
+              body: z.string(),
+              occurredAt: z.string().datetime(),
+            })
+            .strict()
+            .optional(),
         })
         .passthrough(),
     ),
     endedCycles: z.record(time).optional(),
-    syncedCycles: z.record(z.boolean()).optional(),
   })
   .passthrough();

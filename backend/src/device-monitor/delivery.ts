@@ -64,19 +64,6 @@ export class BatteryAlerts {
       );
       updateAlerts(data, this.monitor.snapshot(), recipients);
     });
-    for (const id of Object.keys(
-      this.monitor.store.snapshot().endedCycles ?? {},
-    )) {
-      if (this.monitor.store.snapshot().syncedCycles?.[id]) continue;
-      try {
-        await this.subscriptions.push.completeCycle(id);
-        await this.monitor.store.update((data) => {
-          (data.syncedCycles ??= {})[id] = true;
-        });
-      } catch {
-        /* Retry retirement after the next sample without blocking new cycles. */
-      }
-    }
     for (const item of Object.values(
       this.monitor.store.snapshot().deliveries,
     )) {
@@ -106,9 +93,14 @@ export class BatteryAlerts {
           current.state = "cancelled";
           return null;
         }
+        current.notification ??= {
+          title: `${subscription.displayName} 电量低`,
+          body: `${snapshot.battery.percent}%，正在使用电池，请连接电源。`,
+          occurredAt: new Date(current.createdAt).toISOString(),
+        };
         current.state = "sending";
         current.attempts += 1;
-        return { subscription, snapshot };
+        return { subscription, notification: current.notification };
       });
       if (!claim) continue;
       // Re-read the live binding after fsync and again after relay identity verification.
@@ -120,6 +112,7 @@ export class BatteryAlerts {
           !!current &&
           this.subscriptions.valid(current) &&
           !!current.confirmed &&
+          this.monitor.store.snapshot().cycle?.id === item.cycleId &&
           batteryAlertLevel(this.monitor.snapshot()) === item.level
         );
       };
@@ -133,12 +126,10 @@ export class BatteryAlerts {
       try {
         result = await this.subscriptions.push.send(
           {
-            notificationId: item.id,
+            ...claim.notification,
+            eventId: item.id,
             subscriptionId: claim.subscription.id,
-            cycleId: item.cycleId,
-            level: item.level,
-            percent: claim.snapshot.battery.percent!,
-            observedAt: claim.snapshot.observedAt!,
+            category: "battery.low",
           },
           canSend,
         );
