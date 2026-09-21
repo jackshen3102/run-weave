@@ -1,6 +1,6 @@
 import { CodexQuotaProvider } from "./features/codex-quota/provider";
 import { MobileLoginProvider } from "./features/mobile-login/provider";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { SuijiDrawer } from "./features/suiji/drawer";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
@@ -23,6 +23,7 @@ import { PrototypesPage } from "./pages/prototypes-page";
 import { TerminalSnapshotShareNotification } from "./components/terminal/workspace/snapshot-share-notification";
 import { ActivityPage } from "./pages/activity-page";
 import { EvolutionPage } from "./pages/evolution-page";
+import { ScheduledTasksPage } from "./pages/scheduled-tasks-page";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
@@ -37,6 +38,7 @@ export default function App() {
 }
 
 function RunweaveApp() {
+  const location = useLocation();
   const clientMode = useClientMode(isElectron);
   const {
     connections,
@@ -69,6 +71,9 @@ function RunweaveApp() {
     apiBase,
     connectionId: activeConnectionId,
   });
+  const requestedReturn: unknown = location.state?.scope === queryScope ? location.state?.returnTo : null;
+  const loginReturnPath = typeof requestedReturn === "string" && /^\/scheduled-tasks(?:\/|\?|$)/u.test(requestedReturn)
+    ? requestedReturn : TERMINAL_LIST_PATH;
 
   const handleSelectConnection = (id: string) => {
     setActive(id);
@@ -109,6 +114,20 @@ function RunweaveApp() {
         <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
         <Routes>
           <Route
+            path="/scheduled-tasks/:taskId?"
+            element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
+              <ScheduledTasksPage
+                apiBase={apiBase}
+                token={token}
+                activeConnectionId={activeConnectionId}
+                connectionName={activeConnection?.name}
+                connections={connections}
+                onSelectConnection={isElectron ? handleSelectConnection : undefined}
+                onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
+              />
+            ) : <Navigate to="/login" replace state={{ returnTo: location.pathname + location.search, scope: queryScope }} />}
+          />
+          <Route
             path="/system-monitor"
             element={
               <SystemMonitorPage
@@ -142,9 +161,10 @@ function RunweaveApp() {
               ) : isAuthChecking ? (
                 authPendingView
               ) : token ? (
-                <Navigate to={TERMINAL_LIST_PATH} replace />
+                <Navigate to={loginReturnPath} replace />
               ) : (
                 <LoginPage
+                  returnTo={loginReturnPath}
                   apiBase={apiBase}
                   connectionId={activeConnectionId ?? undefined}
                   isElectron={isElectron}

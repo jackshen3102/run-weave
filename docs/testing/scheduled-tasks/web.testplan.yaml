@@ -1,0 +1,162 @@
+version: 1
+name: Web 定时任务与普通终端交互验收
+description: "待实施的 Web 行为合同。页面必须连接真实隔离 Backend；HTML 原型、静态检查及格式校验不能替代交互验收。iOS 不在范围内。"
+cases:
+  - id: SWT-001
+    name: "顶部入口与返回保留当前工作区"
+    required: true
+    description: "任务页面导航不改变原工作区上下文或停止其终端。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "进入已打开普通终端的 Worktree，记录父项目、子 projectId、Session 和一条持续输出标记。"
+      - "点击与随记并列的定时任务入口，确认一次进入任务页，默认父项目筛选；打开新建表单，确认默认精确 Worktree 上下文。"
+      - "取消表单并返回工作区，确认父项目、Worktree、终端选择与原来一致，输出仍连续且 Session 未重建。"
+  - id: SWT-002
+    name: "创建编辑持久化且保留历史快照"
+    required: true
+    description: "表单使用服务器预览，配置修改只改变未来运行。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "创建每周多日期任务，核对时区及服务器预览；刷新后字段与时间保持。"
+      - "完成一条运行后修改提示词，确认新配置更新，原历史仍保留原提示词、Agent 和项目快照。"
+  - id: SWT-003
+    name: "并发编辑冲突保留草稿"
+    required: true
+    description: "过期 revision 不能覆盖新配置。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "在两个标签打开同一任务编辑，第二标签先保存新版提示词。"
+      - "第一标签提交旧 revision，确认冲突提示与草稿保留；刷新详情确认较新配置未被覆盖。"
+  - id: SWT-004
+    name: "Backend 与项目筛选不会串数据"
+    required: true
+    description: "列表过滤与请求缓存只在当前 Backend scope 内生效。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+      - "本用例具备两个独立 Backend 和支持连接切换的现有 Web renderer，不用改写 mock 数据冒充跨连接。"
+    steps:
+      - "在两个隔离 Backend 建立同名项目与不同任务，使用两个可用连接进入任务页；切换后只显示目标 Backend 数据。"
+      - "让旧连接的列表响应延迟后再切连接，确认旧响应不能覆盖新页面；返回时各自任务仍正确。"
+      - "在同一 Backend 切父项目与所有项目过滤，确认子项目任务只归属正确父项目，点击后历史身份一致。"
+  - id: SWT-005
+    name: "关闭 Web 不停止定时任务"
+    required: true
+    description: "执行 owner 在 Backend，不依赖页面计时器或浏览器存活。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "通过 Web 创建未来一分钟左右的一次性无副作用任务，记录任务与终端数量，关闭本用例全部 Web 标签。"
+      - "保持 Backend 运行，跨过计划时间；重新打开真实页面并登录，确认任务已有真实完成事件与新 thread，终端数量不变。"
+      - "检查结果包含本次提示词的唯一标记，确认不是前端补发立即运行产生。"
+  - id: SWT-006
+    name: "运行中只查看进度而不并行恢复"
+    required: true
+    description: "运行记录的活动进度不能生成第二个同 thread owner。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "启动本用例可控长任务，点击运行记录，确认显示只读进度和停止入口，普通终端数没有变化。"
+      - "重复点击或从第二标签访问同记录，确认不能对仍在运行的 thread 提交新输入或启动恢复。"
+      - "等待后台真实完成后再次点击，确认此时能按需进入普通终端。"
+  - id: SWT-007
+    name: "已完成运行进入现有终端并复用"
+    required: true
+    description: "首次打开才增加终端；重复打开、刷新和多标签不重复创建。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "记录现有终端数量，从详情点击已完成运行；确认进入现有 terminal 路由与实际项目，等待真实恢复 ready。"
+      - "从任务记录和项目终端列表反复进入，并刷新页面；确认相同 terminalSessionId/panelId，数量只比打开前多一个。"
+      - "使用现有终端输入追问，确认原上下文可用，复制与滚动仍使用原组件；已完成任务结果不因追问变为运行中。"
+  - id: SWT-008
+    name: "通用来源回跳精确定位历史"
+    required: true
+    description: "普通终端的可选 source 只提供来源，不引入专属终端控制区。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "为同一任务准备两次运行，打开较早运行，点击来源名称。"
+      - "确认返回对应任务详情，较早 run 被滚动定位并突出，没有误选最新 run；返回后可再次复用同一终端。"
+      - "打开无 source 的普通终端，确认没有来源空占位、定时任务状态栏或额外输入组件。"
+  - id: SWT-009
+    name: "软删除保留可访问的历史和普通终端"
+    required: true
+    description: "删除清理未来安排，历史对话仍可从归档及来源访问。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "准备一个任务的两次已完成运行，只打开其中一次；确认删除后当前任务列表移除、后续安排禁用。"
+      - "通过已删除任务入口查看只读历史，打开此前未打开的运行，确认能恢复原对话且没有恢复调度。"
+      - "从此前已打开终端点击来源，确认可返回同一只读历史；已有终端与文件未被删除。"
+  - id: SWT-010
+    name: "断连不伪装空任务且保留草稿"
+    required: true
+    description: "Backend 离线显示连接故障，恢复后继续加载原数据。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "打开有历史任务的页面并填写未提交表单，断开本用例 Backend。"
+      - "确认明确离线提示，不能显示空任务成功；恢复连接后原数据可见且草稿保留。"
+  - id: SWT-011
+    name: "不可用 provider 有明确能力反馈"
+    required: true
+    description: "未通过持久执行与恢复门禁的 provider 不能假装启动成功。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "读取 capabilities 并在创建表单查看一个不可用 provider，确认显示 Backend 返回的原因且不可提交。"
+      - "选择可用 provider 创建无副作用任务，确认真实启动并按其 provider 身份记录，不存在静默切换。"
+  - id: SWT-012
+    name: "上下文失效恢复不落到父目录"
+    required: true
+    description: "缺失 Worktree 的打开错误可重试且不创建空对话。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "准备子项目中的已完成 run，让该 fixture Worktree 暂不可用，再点击记录。"
+      - "确认 context_unavailable、不切换父目录和不创建空对话；恢复路径后重试同记录，核对精确上下文和 thread。"
+  - id: SWT-013
+    name: "纯文本结果无需文件变更"
+    required: true
+    description: "无文件产出仍可正常完成并展示真实结果。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "独立完成纯文本调研任务，确认没有文件变更也能 completed，摘要和输出可读。"
+      - "在手机与桌面 Web 宽度查看该结果，确认没有横向溢出或把无产物标成失败。"
+  - id: SWT-014
+    name: "真实产物引用可访问"
+    required: true
+    description: "产物展示真实 URL，不伪造发布操作。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "用测试授权范围内已有真实文档 URL 作为任务输出引用，完成后点击该结果链接。"
+      - "确认打开原 URL，页面不把引用现有文档表述为本任务新建或发布成功。"
+  - id: SWT-015
+    name: "结果渲染不执行不可信内容"
+    required: true
+    description: "Agent 输出不能执行脚本或危险 URL。"
+    preconditions:
+      - "已按 $toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，取得正确 browser surface 与认证；使用 $toolkit:playwright-cli 操作真实页面。"
+      - "本用例独立创建临时项目、任务和所需真实运行记录；不依赖前一用例遗留状态，不修改用户已有项目。"
+    steps:
+      - "在隔离运行 fixture 中提供脚本协议链接和含 HTML 的输出事件，使用真实结果页面查看。"
+      - "确认文本安全呈现、危险链接不可执行，不发生 script side effect；安全 http/https 链接仍可使用。"

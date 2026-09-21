@@ -1,4 +1,5 @@
 import type { TerminalProjectListItem } from "../project";
+import type { ScheduledTaskSource } from "../../scheduled-tasks/types";
 import type { TerminalAgentKind, TerminalState } from "./state";
 
 export type TerminalRuntimePreference = "auto" | "tmux" | "pty";
@@ -32,6 +33,7 @@ export interface CreateTerminalEventsWsTicketResponse {
 export type TerminalLastThreadStatus = "idle" | "running";
 
 export interface TerminalSessionStatusResponse {
+  source?: ScheduledTaskSource;
   terminalSessionId: string;
   projectId: string;
   alias?: string | null;
@@ -59,6 +61,7 @@ export interface TerminalSessionStatusResponse {
 export type TerminalSessionHistoryResponse = TerminalSessionStatusResponse;
 
 export interface TerminalSessionListItem {
+  source?: ScheduledTaskSource;
   /** Backend-generated UTC timestamp; missing/null means unpinned. */
   pinnedAt?: string | null;
   terminalSessionId: string;

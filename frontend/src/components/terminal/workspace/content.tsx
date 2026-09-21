@@ -5,6 +5,7 @@ import type { TerminalState } from "@runweave/shared/terminal/state";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
+import { takeTerminalNavigation } from "../../../features/terminal/state/navigation";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
@@ -195,6 +196,14 @@ export function TerminalWorkspaceContent({
   }, [initialTerminalSessionId, setActiveSessionId]);
   useEffect(() => {
     resetWorkspaceForConnection(initialTerminalSessionIdRef.current);
+    const selection = takeTerminalNavigation(scope, initialTerminalSessionIdRef.current);
+    if (selection) {
+      const state = useTerminalWorkspaceStore.getState();
+      state.selectProjectContext(selection.parentProjectId, selection.projectId, selection.terminalSessionId);
+      if (selection.terminalSessionId && selection.panelId) {
+        state.setActivePanelIdBySessionId((current) => ({ ...current, [selection.terminalSessionId!]: selection.panelId! }));
+      }
+    }
     resetTerminalEventCursor();
   }, [resetTerminalEventCursor, resetWorkspaceForConnection, scope]);
   useEffect(() => {

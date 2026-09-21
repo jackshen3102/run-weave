@@ -1,0 +1,184 @@
+version: 1
+name: 定时任务 Backend 与 thread 恢复验收
+description: "计划态目标用例，须待对应实现完成后执行；格式通过不代表行为通过。测试只使用隔离资源。真实 provider 闭环不得被受控进程 fixture 替代。"
+cases:
+  - id: SRT-001
+    name: "真实持久 thread 可以在普通终端继续对话"
+    required: true
+    description: "无人打开时不创建 TerminalSession；打开后精确恢复同一真实 provider thread，而非重发提示词。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+      - "本用例必须使用真实可用 Codex 与现有终端 runtime，不允许预设回复代替。"
+    steps:
+      - "记录真实终端数量；创建 Codex 任务要求只回复本次随机标记，立即运行并等待真实完成；确认存在持久 threadId 和可读历史，终端数量未变化。"
+      - "调用 open-terminal，记录普通 terminalSessionId、panelId 和实际恢复后的 provider/thread；确认与运行保存身份相同且恢复为 ready。"
+      - "使用 $toolkit:playwright-cli 在现有终端页面追问此前标记，确认答复正确，任务原始 completed 结果保持；保存进程事件、thread 身份和浏览器证据。"
+      - "对准备启用的每个 provider 在独立样本重复本闭环；未通过者 capabilities 必须不可用。"
+  - id: SRT-002
+    name: "日历规则以服务器时区一致计算"
+    required: true
+    description: "日历预览与到点 materialize 使用同一规则，DST 不重复或凭空执行。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "通过生产 preview 接口验证 daily、weekdays、weekly 多日期、once；核对 UTC 与 Asia/Shanghai 的同一时间转换，拒绝空周日期、非法时区和过去的 once。"
+      - "在隔离真实 runtime fixture 的可控时钟下验证 America/Los_Angeles 春季不存在的 02:30 被跳过、秋季重复的 01:30 只取第一次；检查实际生成 occurrence 与 preview 一致。"
+      - "在选定 occurrence 前后运行调度 tick，确认仅生成一条对应 run；相同时刻重复 tick 不产生第二条。"
+  - id: SRT-003
+    name: "自动触发和手动重试不产生重复运行"
+    required: true
+    description: "数据库 occurrence 和请求幂等键决定唯一运行，不依赖浏览器按钮禁用。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "在真实持久化 runtime fixture 中并发执行两个到期扫描，保持同一 task revision 与 scheduledFor；确认只有一个 run 和一个 provider spawn。"
+      - "对另一空闲任务用相同 Idempotency-Key 并发发送人工请求；确认返回同一 runId；同键不同 prompt/body 被拒绝且无额外进程。"
+      - "运行尚未结束时以新键触发同任务，确认 409 指向现有 run；下个自动 occurrence 被记录 skipped/busy。"
+  - id: SRT-004
+    name: "Backend 离线错过安排不会批量补跑"
+    required: true
+    description: "同一 fixture 的停机与重启保留历史并按既定 missed 规则推进时间。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "创建近期到期的重复任务和仅一次任务，记录 nextRunAt 后停止本用例 Backend，跨过 60 秒迟到窗口。"
+      - "重启同一数据根并重新解析 fresh endpoint；确认没有 provider 批量启动，重复任务推进至未来，once 记录 missed 并禁用。"
+      - "读取重启前已有运行，确认其身份、摘要和配置快照未变。"
+  - id: SRT-005
+    name: "崩溃后的不确定执行不会自动重放"
+    required: true
+    description: "spawn 已发生但完成尚未提交的 run 不能因 lease 超时重跑，防止重复副作用。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "在生产执行链的隔离故障 fixture 中，让 provider 写入唯一标记后在结果提交前中断 Backend；记录进程组身份与真实副作用次数。"
+      - "重启同一数据根并重新取得 endpoint，确认先核对 owner/持久 provider 事实；无完成证据时保留 interrupted 结果与 thread，不再提交原提示词。"
+      - "模拟 owner 尚不能确认退出，确认该任务保持阻塞且无第二进程；完成本 fixture 的明确回收后才能解除占用，标记次数仍为一次。"
+  - id: SRT-006
+    name: "暂停只影响后续触发"
+    required: true
+    description: "暂停 Task 不终止已开始的执行，也不触发下一次安排。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "启动可控长任务并暂停其 Task；确认运行进程继续，已经排队的运行保持原状态。"
+      - "跨过下一个安排时间，确认没有新的 provider spawn；确认当前运行仍可正常完成并保留结果。"
+  - id: SRT-007
+    name: "停止请求幂等回收当前 owner"
+    required: true
+    description: "停止完成以实际进程退出为据，不回滚此前副作用。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "启动本用例可控长任务并生成标记，对 run 重复调用 stop；确认只有同一停止操作，退出前不是 cancelled。"
+      - "确认进程组退出后显示 cancelled，标记文件和历史保留；启动独立任务确认名额释放、没有遗留子进程。"
+  - id: SRT-008
+    name: "权限等待只在释放执行权后允许接管"
+    required: true
+    description: "同一 thread 在后台执行与交互终端间只能有一个输入 owner。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+      - "provider 已通过等待状态和恢复探测；若当前版本没有该能力，应先报告 capability 缺口，不能用匹配输出关键词伪造本用例。"
+    steps:
+      - "触发 provider 可证实的权限等待，保存结构化事件；确认 waiting 原因与 thread 被保留，没有自动批准操作。"
+      - "后台 owner 未退出时调用 open-terminal，确认 thread_busy 且没有第二个 Agent；确认退出后打开同一 thread 并完成所需人工处理。"
+      - "核对本次接管 operation 的完成只更新对应等待 run；随后再自由追问一轮，不修改已结束 run 的结果。"
+  - id: SRT-009
+    name: "并发打开只绑定一个普通终端"
+    required: true
+    description: "两个认证客户端同时打开同 run 时最终只新增一个 terminal 和一个 provider 恢复。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "独立准备一个有真实 thread 的已完成 run，记录终端数量，从两个认证客户端同时调用 open-terminal。"
+      - "确认最终返回同一 terminalSessionId/panelId，ready 身份相同，只增加一个终端和一次恢复；再次打开直接返回原绑定。"
+  - id: SRT-010
+    name: "绑定回写前崩溃仍找回已创建终端"
+    required: true
+    description: "跨存储创建窗口中断后通过 source 核对恢复绑定，不能重复创建。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "为本用例新 run 在 Terminal 已落库、binding 尚未回写时注入一次 Backend 中断，记录已创建终端 ID。"
+      - "重启相同隔离数据根并重新取得 endpoint，再次打开；确认复用原 source 关联终端，不再新建第二个，不重复提交原提示词。"
+  - id: SRT-011
+    name: "恢复失败重试使用同一绑定"
+    required: true
+    description: "可重试恢复失败不随点击次数增加终端数量。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "为本用例已完成 run 注入一次恢复启动失败，记录失败 binding。"
+      - "重复打开确认返回同一失败 binding；修复启动原因后重试并核对原 thread 恢复 ready，终端只增加一个。"
+  - id: SRT-012
+    name: "终端被重新使用后禁止覆盖"
+    required: true
+    description: "来源终端已切换 thread 时，必须经用户显式另开而非强占。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "准备已恢复任务对话的普通终端，明确切换到另一 thread；再打开原 run，确认 terminal_repurposed 且新 thread 与草稿不被覆盖。"
+      - "用户显式选择另开普通终端后确认新 binding 正确；旧终端及当前对话仍存在。"
+  - id: SRT-013
+    name: "Worktree 失效不能回退父目录"
+    required: true
+    description: "运行的子项目不可用时保留历史并拒绝恢复，不创建错目录终端。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "在独立已登记 Worktree 中完成运行，保存规范子 projectId 与 cwd，随后使本 fixture Worktree 暂时不可用。"
+      - "调用 open-terminal，确认 context_unavailable、历史可读且父目录没有替代终端；恢复原路径后确认精确恢复正确。"
+  - id: SRT-014
+    name: "缺失 thread 不能创建空对话冒充恢复"
+    required: true
+    description: "真实 provider 历史失效要保留错误，不能重发提示词。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "准备可恢复 run，临时隔离本 fixture 的 thread 历史文件，保持项目可用。"
+      - "调用 open-terminal，确认 thread_unavailable、没有新 thread，历史摘要仍可读；恢复原文件后重试恢复同 thread。"
+  - id: SRT-015
+    name: "未授权或越界请求不能启动执行"
+    required: true
+    description: "新的管理与打开 API 沿用认证及真实项目上下文授权。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "未登录调用列表、创建、输出、停止和 open-terminal，确认 401 且无新增进程、终端或 run。"
+      - "用有效身份提交未知 projectId、非法子 projectId、越界路径或不存在 run，确认 4xx 且不回退默认项目。"
+      - "检查正常响应和诊断日志不包含 token、完整私有环境或可任意读取的文件接口。"
+  - id: SRT-016
+    name: "运行限额终止进程并保留部分结果"
+    required: true
+    description: "超时和输出上限使用同一执行资源回收边界。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "在隔离执行 fixture 中分别产生超时与输出超限，确认失败原因可区分，部分输出和 thread 保留，进程组均退出。"
+      - "确认下一条独立任务能运行，原 run 不继续增长输出、不遗留后台子进程。"
+  - id: SRT-017
+    name: "优雅关闭先回收生产者再关闭存储"
+    required: true
+    description: "关闭顺序与幂等 dispose 保证运行结果和数据库完整。"
+    preconditions:
+      - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
+      - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
+    steps:
+      - "启动独立长任务并触发正常 Backend shutdown，确认停止 tick 后排空/终止自有执行，写入结果后才关闭 SQLite worker；重复 dispose 不再创建资源。"
+      - "重新打开同一数据库检查完整性与最后状态；确认独立 App Server 和用户终端不被本用例清理。"
