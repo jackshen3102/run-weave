@@ -38,6 +38,8 @@ struct DeviceNotificationSettings: View {
         Text(failure).foregroundColor(.orange)
       } else if let reason = availability?.reason {
         Text(reason).foregroundColor(.secondary)
+      } else if let failure = notifications.refreshFailures[connection.scope] {
+        Text(failure).foregroundColor(.orange)
       } else if notifications.bindings[connection.scope]?.subscription?.state == "pending" {
         Text("提醒正在同步，尚未启用").foregroundColor(.secondary)
       }
