@@ -8,6 +8,7 @@ export function toMetadataRecord(
   session: PersistedTerminalSessionRecord,
 ): PersistedTerminalSessionMetadataRecord {
   return {
+    source: session.source,
     id: session.id,
     projectId: session.projectId,
     alias: session.alias ?? null,

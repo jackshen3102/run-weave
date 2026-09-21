@@ -12,6 +12,7 @@ import {
   Eye,
   Home,
   MoreHorizontal,
+  NotebookPen,
   RefreshCw,
   Settings2,
   Share2,
@@ -46,6 +47,7 @@ import { TerminalProjectTabBar } from "../session/project-tab-bar";
 import { TerminalQuickInputPopover } from "../input/quick-input-popover";
 import { TerminalWorkspaceServicesPopover } from "./workspace-services-popover";
 import { RuntimeStatusEntry } from "../../runtime-status-entry";
+import { Tooltip } from "../../ui/tooltip";
 
 interface HeaderConnectionNavigation {
   connections?: ConnectionConfig[];
@@ -133,9 +135,8 @@ export function TerminalWorkspaceHeader({
   const sharing = useSnapshotShareStore((state) => state.pending);
   const createShare = useSnapshotShareStore((state) => state.createShare);
   const activeParentProject =
-    projects.find(
-      (project) => project.projectId === activeParentProjectId,
-    ) ?? null;
+    projects.find((project) => project.projectId === activeParentProjectId) ??
+    null;
   const activeContext =
     contexts.find((context) => context.projectId === activeProjectId) ?? null;
   const activeProject =
@@ -153,11 +154,17 @@ export function TerminalWorkspaceHeader({
     sessions.find((session) => session.terminalSessionId === activeSessionId) ??
     null;
   const activePanelId = activeSession
-    ? activePanelIdBySessionId[activeSession.terminalSessionId] ?? activeSession.activePanelId
+    ? (activePanelIdBySessionId[activeSession.terminalSessionId] ??
+      activeSession.activePanelId)
     : null;
   const shareActivePanel = useMemoizedFn(async (): Promise<void> => {
     if (!activeSession || !activePanelId) return;
-    await createShare(apiBase, token, activeSession.terminalSessionId, activePanelId);
+    await createShare(
+      apiBase,
+      token,
+      activeSession.terminalSessionId,
+      activePanelId,
+    );
   });
   const openHistoryDrawer = (): void => {
     if (!activeSession) return;
@@ -233,142 +240,180 @@ export function TerminalWorkspaceHeader({
         onRequestEditProject={requestEditProject}
         onSelectProject={onSelectProject}
       />
-      {!isMobileMonitor ? (
-        <TerminalQuickInputPopover
-          apiBase={apiBase}
-          token={token}
-          activeProject={activeProject}
-          activeSession={activeSession}
-          disabled={loading}
+      {activeSession?.source?.type === "scheduled-task" ? (
+        <ScheduledTaskSourceLink source={activeSession.source} />
+      ) : null}
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {!isMobileMonitor ? (
+          <TerminalQuickInputPopover
+            apiBase={apiBase}
+            token={token}
+            activeProject={activeProject}
+            activeSession={activeSession}
+            disabled={loading}
+          />
+        ) : null}
+        {!isMobileMonitor ? (
+          <TerminalWorkspaceServicesPopover
+            contextAvailable={Boolean(activeProject?.path)}
+            parentProjectId={activeParentProjectId}
+            projectId={activeProjectId}
+            disabled={loading}
+          />
+        ) : null}
+        <Tooltip content="随记">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="随记"
+            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+            onClick={() => useSuijiDrawer.getState().setOpen(true)}
+          >
+            <NotebookPen className="h-3.5 w-3.5" />
+          </Button>
+        </Tooltip>
+        <Tooltip content="定时任务">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="定时任务"
+            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+            onClick={() => enterScheduledTasks()}
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
+          </Button>
+        </Tooltip>
+        <RuntimeStatusEntry
+          iconOnly
+          className="h-6 w-6 border-slate-700 bg-slate-900 text-slate-300"
         />
-      ) : null}
-      {!isMobileMonitor ? (
-        <TerminalWorkspaceServicesPopover
-          contextAvailable={Boolean(activeProject?.path)}
-          parentProjectId={activeParentProjectId}
-          projectId={activeProjectId}
-          disabled={loading}
-        />
-      ) : null}
-      <button type="button" className="ml-auto rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-800" onClick={() => useSuijiDrawer.getState().setOpen(true)}>随记</button>
-      <button type="button" className="flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-800" onClick={() => enterScheduledTasks()}><CalendarClock className="h-3.5 w-3.5" />定时任务</button>
-      {activeSession?.source?.type === "scheduled-task" ? <ScheduledTaskSourceLink source={activeSession.source} /> : null}
-      <RuntimeStatusEntry className="h-6 max-w-[18rem] border-slate-700 bg-slate-900 text-slate-300" />
-      {!isMobileMonitor ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label="More actions"
-              title="More actions"
-              className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-            >
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-40">
-            {openCodexQuota ? <DropdownMenuItem onSelect={openCodexQuota}>Codex 额度</DropdownMenuItem> : null}
-            <DropdownMenuItem
-              disabled={loading || !activeProjectId}
-              onSelect={() => {
-                if (activeProjectId) {
-                  useTerminalPreviewStore
-                    .getState()
-                    .openPreview(activeProjectId);
+        {!isMobileMonitor ? (
+          <DropdownMenu>
+            <Tooltip align="end" content="更多操作">
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label="More actions"
+                  className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+            </Tooltip>
+            <DropdownMenuContent align="end" className="min-w-40">
+              {openCodexQuota ? (
+                <DropdownMenuItem onSelect={openCodexQuota}>
+                  Codex 额度
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                disabled={loading || !activeProjectId}
+                onSelect={() => {
+                  if (activeProjectId) {
+                    useTerminalPreviewStore
+                      .getState()
+                      .openPreview(activeProjectId);
+                  }
+                }}
+              >
+                <Eye className="h-4 w-4" />
+                Preview
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  const browserBaseUrl = ["http:", "https:"].includes(
+                    window.location.protocol,
+                  )
+                    ? window.location.origin
+                    : apiBase;
+                  const url = new URL(
+                    "/prototypes",
+                    browserBaseUrl || window.location.origin,
+                  );
+                  if (activeProjectId) {
+                    url.searchParams.set("project", activeProjectId);
+                  }
+                  if (window.electronAPI?.openExternal) {
+                    void window.electronAPI.openExternal(url.toString());
+                    return;
+                  }
+                  window.open(url.toString(), "_blank", "noopener,noreferrer");
+                }}
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open Prototypes
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!activeSession?.terminalSessionId}
+                onSelect={() => {
+                  if (activeSession?.terminalSessionId) {
+                    openHistoryDrawer();
+                  }
+                }}
+              >
+                <Copy className="h-4 w-4" />
+                Copy terminal output…
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={loading || sharing || !activePanelId}
+                onSelect={() => {
+                  void shareActivePanel();
+                }}
+              >
+                <Share2 className="h-4 w-4" />
+                {sharing ? "正在创建快照…" : "分享终端快照"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={
+                  recoveringAgent ||
+                  activeSession?.terminalState?.state !== "agent_idle" ||
+                  !["codex", "pi"].includes(
+                    activeSession.terminalState.agent ?? "",
+                  )
                 }
-              }}
-            >
-              <Eye className="h-4 w-4" />
-              Preview
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                const browserBaseUrl = ["http:", "https:"].includes(
-                  window.location.protocol,
-                )
-                  ? window.location.origin
-                  : apiBase;
-                const url = new URL(
-                  "/prototypes",
-                  browserBaseUrl || window.location.origin,
-                );
-                if (activeProjectId) {
-                  url.searchParams.set("project", activeProjectId);
-                }
-                if (window.electronAPI?.openExternal) {
-                  void window.electronAPI.openExternal(url.toString());
-                  return;
-                }
-                window.open(url.toString(), "_blank", "noopener,noreferrer");
-              }}
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open Prototypes
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!activeSession?.terminalSessionId}
-              onSelect={() => {
-                if (activeSession?.terminalSessionId) {
-                  openHistoryDrawer();
-                }
-              }}
-            >
-              <Copy className="h-4 w-4" />
-              Copy terminal output…
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={loading || sharing || !activePanelId}
-              onSelect={() => { void shareActivePanel(); }}
-            >
-              <Share2 className="h-4 w-4" />
-              {sharing ? "正在创建快照…" : "分享终端快照"}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={
-                recoveringAgent ||
-                activeSession?.terminalState?.state !== "agent_idle" ||
-                !["codex", "pi"].includes(activeSession.terminalState.agent ?? "")
-              }
-              onSelect={() => {
-                void recoverActiveAgent();
-              }}
-            >
-              <RefreshCw className="h-4 w-4" />
-              {recoveringAgent ? "Recovering agent…" : "Recover agent"}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                setDiagnosticLogOpen(true);
-              }}
-            >
-              <ClipboardList className="h-4 w-4" />
-              日志上报
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                setStatusLookupOpen(true);
-              }}
-            >
-              <Activity className="h-4 w-4" />
-              状态查询
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={() => {
-                setAgentTeamModelConfigOpen(true);
-              }}
-            >
-              <Settings2 className="h-4 w-4" />
-              <span>Agent Team 模型配置</span>
-              <span className="ml-auto rounded border border-indigo-400/30 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300">
-                全局
-              </span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
+                onSelect={() => {
+                  void recoverActiveAgent();
+                }}
+              >
+                <RefreshCw className="h-4 w-4" />
+                {recoveringAgent ? "Recovering agent…" : "Recover agent"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setDiagnosticLogOpen(true);
+                }}
+              >
+                <ClipboardList className="h-4 w-4" />
+                日志上报
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setStatusLookupOpen(true);
+                }}
+              >
+                <Activity className="h-4 w-4" />
+                状态查询
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  setAgentTeamModelConfigOpen(true);
+                }}
+              >
+                <Settings2 className="h-4 w-4" />
+                <span>Agent Team 模型配置</span>
+                <span className="ml-auto rounded border border-indigo-400/30 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300">
+                  全局
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+      </div>
     </div>
   );
 }

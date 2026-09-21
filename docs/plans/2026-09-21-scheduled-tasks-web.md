@@ -96,7 +96,7 @@ Worktree 已是子 Project，见[现有身份合同](../architecture/terminal-wo
 
 ### W4：整体验收与文档收尾
 
-- [ ] 执行 Backend 计划的 provider/runtime 门禁，再执行本计划 Web 用例；不能以原型截图替代。
+- [ ] Backend 已完成隔离 API/真实 Codex/thread 恢复冒烟；仍需用 Playwright 执行本计划 Web 用例，不能以原型截图替代。
 - [ ] 运行下面命令；只有改动涉及对应模块才扩大既有回归。
 - [ ] 更新真实实现涉及的架构/使用文档，标明原型为历史交互基准；完成后依仓库治理清理这两份过程计划，长期合同迁至活文档。
 

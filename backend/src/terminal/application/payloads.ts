@@ -38,6 +38,7 @@ export function toStatusPayload(
   scrollback = session.scrollback,
 ): TerminalSessionStatusResponse {
   return {
+    source: session.source,
     terminalSessionId: session.id,
     projectId: session.projectId,
     alias: session.alias,
@@ -68,6 +69,7 @@ export function toSessionListItem(
   panelWorkspace?: TerminalPanelWorkspace | null,
 ): TerminalSessionListItem {
   return {
+    source: session.source,
     terminalSessionId: session.id,
     projectId: session.projectId,
     alias: session.alias,

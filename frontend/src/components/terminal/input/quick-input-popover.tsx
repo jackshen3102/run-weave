@@ -19,6 +19,7 @@ import {
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
+import { Tooltip } from "../../ui/tooltip";
 import {
   buildQuickInputTitle,
   canInsertRaw,
@@ -260,18 +261,19 @@ export function TerminalQuickInputPopover({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label="快捷指令"
-          title="快捷指令"
-          className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-        >
-          <Zap className="h-3.5 w-3.5" />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip content="快捷指令">
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="快捷指令"
+            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+          >
+            <Zap className="h-3.5 w-3.5" />
+          </Button>
+        </PopoverTrigger>
+      </Tooltip>
       <PopoverContent
         align="end"
         className="w-[420px] rounded-lg border-slate-800 bg-slate-950 p-3 text-slate-100 shadow-[0_24px_80px_-34px_rgba(2,6,23,0.95)]"

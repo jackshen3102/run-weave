@@ -13,6 +13,7 @@ Activity、Evolution、认证与工作历史等运行时能力。
 - WebSocket 边界：`src/ws/`
 - Terminal 运行时：`src/terminal/`
 - Agent Team / Loop Engine：`src/agent-team/`
+- 定时任务：`src/scheduled-tasks/`；独立 SQLite、调度、provider 执行与普通终端恢复
 - 跨运行时合同：`../packages/shared/`
 
 详细系统语义从 `../docs/architecture/README.md` 进入，不要依据历史 plan 或 prototype 推断。
@@ -36,6 +37,7 @@ pnpm --filter @runweave/backend typecheck
 pnpm --filter @runweave/backend lint
 pnpm architecture:check
 pnpm backend:verify-lifecycle
+pnpm scheduled-tasks:verify-runtime
 ```
 
 生命周期端到端验收见

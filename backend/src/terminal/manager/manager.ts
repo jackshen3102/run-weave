@@ -201,6 +201,7 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
     const now = new Date();
     const projectId = options.projectId ?? this.getDefaultProjectId();
     const session = createRuntimeRecord({
+      source: options.source,
       id: createUniqueTerminalSessionId((candidate) =>
         this.sessions.has(candidate),
       ),

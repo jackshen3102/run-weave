@@ -5,9 +5,14 @@
 
 ## 当前交付边界
 
-Web 页面、共享 DTO 和 HTTP 消费层已落盘；当前 Backend 尚未实现
-`/api/scheduled-tasks`。因此当前连接会显示能力不可用提示，不能创建或运行任务。
-真实调度、持久 thread、普通终端精确恢复和跨连接验收尚未通过，不能据此宣称功能已交付。
+Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用独立 SQLite
+保存任务、运行快照、幂等记录与输出；调度不依赖页面存活。Codex 支持真实后台执行、停止、
+重启后不重放不确定运行，以及将持久 thread 按需恢复到一个普通终端。TraeX 和 Pi 在各自
+通过同等持久执行与恢复门禁前保持不可用。
+
+当前实现已通过隔离 Backend 的 API 闭环和真实 Codex thread 创建/恢复验证。完整 Web YAML
+仍需在具备 `$toolkit:runweave-dev-session` 与 `$toolkit:playwright-cli` 的环境执行后，才能
+宣称全部浏览器交互验收完成。
 
 [历史交互原型](../../docs/prototypes/agent-scheduled-tasks/README.md)仅用于视觉与交互参考。
 生产代码不读取原型的假数据、LocalStorage 任务或模拟回复。
@@ -39,6 +44,7 @@ Web 页面、共享 DTO 和 HTTP 消费层已落盘；当前 Backend 尚未实�
 静态检查：根计划中的 shared/frontend typecheck、frontend lint、architecture:check、
 docs:check，以及 [Web YAML](../../docs/testing/scheduled-tasks/web.testplan.yaml) 格式校验。
 
-真实验收必须先满足 [Backend 运行合同](../../docs/testing/scheduled-tasks/runtime.testplan.yaml)，
-再在隔离 Dev Session 用 Playwright CLI 执行 Web YAML。API 404 的降级检查只证明兼容提示，
-不替代任务管理、调度、恢复或跨连接验收。
+真实验收先执行 `pnpm scheduled-tasks:verify-runtime` 和
+[Backend 运行合同](../../docs/testing/scheduled-tasks/runtime.testplan.yaml)，再在隔离 Dev Session
+用 Playwright CLI 执行 Web YAML。API 404 的降级检查只证明旧 Backend 兼容提示，不替代
+任务管理、调度、恢复或跨连接验收。

@@ -3,6 +3,7 @@ import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session
 import type { TerminalReplySnapshot } from "../store/store";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
+import type { ScheduledTaskSource } from "@runweave/shared/scheduled-tasks";
 import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
 import type {
   PersistedTerminalProjectRecord,
@@ -33,6 +34,7 @@ export interface TerminalProjectContextRecord
     TerminalProjectContextListItem {}
 
 export interface TerminalSessionRecord {
+  source?: ScheduledTaskSource;
   pinnedAt?: string | null;
   id: string;
   projectId: string;
@@ -112,6 +114,7 @@ export interface RuntimeTerminalSessionRecord extends Omit<
 }
 
 export interface CreateTerminalSessionOptions {
+  source?: ScheduledTaskSource;
   projectId?: string;
   command: string;
   args?: string[];
@@ -151,6 +154,7 @@ export function buildSessionRecord(
   persisted: PersistedTerminalSessionMetadataRecord & { scrollback?: string },
 ): TerminalSessionRecord {
   return {
+    source: persisted.source,
     id: persisted.id,
     projectId: persisted.projectId,
     alias: persisted.alias ?? null,
@@ -233,6 +237,7 @@ export function toPersistedSession(
   session: TerminalSessionRecord,
 ): PersistedTerminalSessionRecord {
   return {
+    source: session.source,
     id: session.id,
     projectId: session.projectId,
     alias: session.alias,
