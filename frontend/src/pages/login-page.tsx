@@ -4,6 +4,7 @@ import { LoginPage as LoginScreen } from "../components/login-page";
 import type { LoginResponse } from "@runweave/shared/protocol";
 
 interface LoginPageProps {
+  returnTo?: string;
   apiBase: string;
   connectionId?: string;
   isElectron?: boolean;
@@ -15,6 +16,7 @@ interface LoginPageProps {
 }
 
 export function LoginPage({
+  returnTo = "/terminal",
   apiBase,
   connectionId,
   isElectron,
@@ -38,7 +40,7 @@ export function LoginPage({
       onOpenConnectionManager={onOpenConnectionManager}
       onSuccess={(session) => {
         onSuccess(session);
-        navigate("/terminal", { replace: true });
+        navigate(returnTo, { replace: true });
       }}
     />
     </>

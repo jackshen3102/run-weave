@@ -1,8 +1,11 @@
 import { useOpenCodexQuota } from "../../../features/codex-quota/context";
 import { useSuijiDrawer } from "../../../features/suiji/drawer-state";
+import { useEnterScheduledTasks } from "../../../features/scheduled-tasks/navigation";
+import { ScheduledTaskSourceLink } from "../../../features/scheduled-tasks/source-link";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import {
   Activity,
+  CalendarClock,
   ClipboardList,
   Copy,
   ExternalLink,
@@ -75,6 +78,7 @@ export function TerminalWorkspaceHeader({
   projects: projectCommands,
 }: TerminalWorkspaceHeaderProps) {
   const { apiBase, token } = useTerminalRuntime();
+  const enterScheduledTasks = useEnterScheduledTasks();
   const openCodexQuota = useOpenCodexQuota();
   const {
     activeConnectionId,
@@ -247,6 +251,8 @@ export function TerminalWorkspaceHeader({
         />
       ) : null}
       <button type="button" className="ml-auto rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-800" onClick={() => useSuijiDrawer.getState().setOpen(true)}>随记</button>
+      <button type="button" className="flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-800" onClick={() => enterScheduledTasks()}><CalendarClock className="h-3.5 w-3.5" />定时任务</button>
+      {activeSession?.source?.type === "scheduled-task" ? <ScheduledTaskSourceLink source={activeSession.source} /> : null}
       <RuntimeStatusEntry className="h-6 max-w-[18rem] border-slate-700 bg-slate-900 text-slate-300" />
       {!isMobileMonitor ? (
         <DropdownMenu>

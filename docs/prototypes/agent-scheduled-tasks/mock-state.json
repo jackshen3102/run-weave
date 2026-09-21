@@ -1,0 +1,206 @@
+{
+  "now": "2026-09-21T02:30:00Z",
+  "backends": [
+    {
+      "id": "local",
+      "name": "本机 · Mac",
+      "online": true,
+      "projects": [
+        {
+          "id": "runweave",
+          "name": "Runweave",
+          "path": "~/Code/runweave"
+        },
+        {
+          "id": "research",
+          "name": "Research",
+          "path": "~/Documents/research"
+        }
+      ]
+    },
+    {
+      "id": "server",
+      "name": "开发服务器",
+      "online": true,
+      "projects": [
+        {
+          "id": "services",
+          "name": "Services",
+          "path": "~/projects/services"
+        }
+      ]
+    },
+    {
+      "id": "remote",
+      "name": "远程工作站",
+      "online": false,
+      "projects": []
+    }
+  ],
+  "agents": ["Codex", "TraeX", "Pi"],
+  "tasks": [
+    {
+      "id": "docs",
+      "backendId": "local",
+      "projectId": "runweave",
+      "name": "每日文档整理",
+      "description": "检查文档与代码的一致性，更新过时内容",
+      "icon": "file",
+      "agent": "Codex",
+      "model": "默认",
+      "effort": "默认",
+      "enabled": true,
+      "prompt": "使用 $daily-doc-maintenance 检查项目文档与当前代码是否一致，更新过时内容，清理已经失效的过程文档。\n\n需要修改时，先创建独立 worktree，保留原目录的已有改动。完成后执行文档检查，创建 PR，并在结果里给出变更摘要、验证结果和 PR 链接。",
+      "schedule": {
+        "frequency": "daily",
+        "time": "06:00",
+        "timezone": "Asia/Shanghai",
+        "days": [1],
+        "date": "2026-09-22"
+      }
+    },
+    {
+      "id": "refactor",
+      "backendId": "local",
+      "projectId": "runweave",
+      "name": "代码整理与优化",
+      "description": "检查近期改动，修复有依据的问题",
+      "icon": "code",
+      "agent": "Codex",
+      "model": "默认",
+      "effort": "默认",
+      "enabled": true,
+      "prompt": "审查项目最近一天的代码变更，查找重复逻辑、职责混乱和可以复现的问题。\n\n先创建独立 worktree。只做有明确依据的优化，保持原有行为，执行与改动相称的验证并创建 PR。没有值得改动的问题时，说明检查范围与结论，不为完成任务而修改代码。",
+      "schedule": {
+        "frequency": "weekdays",
+        "time": "10:00",
+        "timezone": "Asia/Shanghai",
+        "days": [1, 2, 3, 4, 5],
+        "date": "2026-09-22"
+      }
+    },
+    {
+      "id": "research",
+      "backendId": "local",
+      "projectId": "research",
+      "name": "Agent 工具每周调研",
+      "description": "追踪 Agent 工具进展，整理为飞书文档",
+      "icon": "search",
+      "agent": "Codex",
+      "model": "默认",
+      "effort": "默认",
+      "enabled": true,
+      "prompt": "调研过去一周 Agent 开发工具的重要更新，优先阅读官方发布说明和一手资料。\n\n结合项目背景，筛选值得跟进的方向。将结论、来源链接和建议整理为飞书文档，返回文档链接。不需要修改本地代码。",
+      "schedule": {
+        "frequency": "weekly",
+        "time": "09:00",
+        "timezone": "Asia/Shanghai",
+        "days": [1],
+        "date": "2026-09-22"
+      }
+    }
+  ],
+  "runs": [
+    {
+      "id": "refactor-0921",
+      "taskId": "refactor",
+      "at": "2026-09-21T02:00:00Z",
+      "status": "running",
+      "trigger": "定时触发",
+      "duration": "30 分钟",
+      "unread": false,
+      "summary": "已完成最近一天的代码变更检查，正在验证终端状态更新中的重复订阅问题。",
+      "progress": "正在运行项目检查，尚未产出最终结论。",
+      "artifact": null
+    },
+    {
+      "id": "research-0921",
+      "taskId": "research",
+      "at": "2026-09-21T01:00:00Z",
+      "status": "waiting",
+      "trigger": "定时触发",
+      "duration": "12 分钟",
+      "unread": true,
+      "summary": "已完成 8 篇官方资料的阅读，整理了 3 个值得跟进的方向。\n调研内容已整理，创建飞书文档时需要重新授权。",
+      "progress": "需要重新连接飞书。打开会话完成授权后，可以继续发布调研结果。",
+      "artifact": null
+    },
+    {
+      "id": "docs-0921",
+      "taskId": "docs",
+      "at": "2026-09-20T22:00:00Z",
+      "status": "completed",
+      "trigger": "定时触发",
+      "duration": "8 分钟",
+      "unread": true,
+      "summary": "检查了 24 份文档，更新 3 处与当前代码不一致的说明，清理 2 份已完成的过程文档。\n文档检查通过，已创建 PR 等待查看。",
+      "artifact": {
+        "type": "pr",
+        "title": "更新终端与部署文档",
+        "subtitle": "Pull request · 5 个文件",
+        "body": "更新终端与部署文档\n\n变更摘要\n• 更新终端会话恢复说明。\n• 修正开发环境启动命令。\n• 补充后端连接的使用边界。\n• 清理 2 份已完成的过程文档。\n\n验证结果\npnpm docs:check — 通过\n\n代码分支\nmaintenance/docs-2026-09-21"
+      },
+      "workspace": {
+        "projectId": "runweave-docs",
+        "parentProjectId": "runweave",
+        "name": "docs-maintenance",
+        "cwd": "~/Code/runweave/.worktree/docs-maintenance"
+      }
+    },
+    {
+      "id": "docs-0920",
+      "taskId": "docs",
+      "at": "2026-09-19T22:00:00Z",
+      "status": "completed",
+      "trigger": "定时触发",
+      "duration": "4 分钟",
+      "unread": false,
+      "summary": "检查了 22 份文档，未发现需要更新的内容。未修改文件。",
+      "artifact": null
+    },
+    {
+      "id": "refactor-0918",
+      "taskId": "refactor",
+      "at": "2026-09-18T02:00:00Z",
+      "status": "failed",
+      "trigger": "定时触发",
+      "duration": "2 分钟",
+      "unread": false,
+      "summary": "独立工作目录创建成功，但依赖安装失败，无法继续验证。未修改业务代码。",
+      "progress": "依赖源连接超时。可以打开会话查看错误，排查后手动重试。",
+      "artifact": null
+    },
+    {
+      "id": "research-0914",
+      "taskId": "research",
+      "at": "2026-09-14T01:00:00Z",
+      "status": "completed",
+      "trigger": "定时触发",
+      "duration": "16 分钟",
+      "unread": false,
+      "summary": "整理了过去一周 Agent 工具的 3 个重要更新，并结合项目给出后续调研建议。结果已发布到飞书文档。",
+      "artifact": {
+        "type": "document",
+        "title": "Agent 工具周报 · 09.14",
+        "subtitle": "飞书文档 · 3 个研究方向",
+        "body": "Agent 工具周报 · 09.14\n\n本周关注\n1. 工具调用的可追踪性\n梳理调用记录与会话状态的关联方式，关注失败后的恢复体验。\n\n2. 长任务中的用户接手\n比较暂停、授权与恢复的交互，明确等待处理的入口。\n\n3. 项目上下文的复用\n关注项目指令、Skill 与工作目录之间的边界。\n\n下一步\n优先验证与当前项目使用场景匹配的交互，再评估引入成本。"
+      }
+    }
+  ],
+  "simulation": {
+    "queueMs": 900,
+    "runMs": 6500,
+    "completionSummary": "已完成提示词要求的检查，并整理了本次结果。可以打开会话查看执行过程。",
+    "queuedSummary": "已加入执行队列，正在准备项目和 Agent。",
+    "runningSummary": "已在所选项目中新建会话，正在执行任务。",
+    "continuedSummary": "已恢复执行，正在继续处理尚未完成的工作。",
+    "followupMs": 1300,
+    "followupReplies": {
+      "docs": "这次整理主要涉及终端会话恢复说明、开发环境启动命令和后端连接边界。已完成文档检查，没有修改业务代码。\n如果要继续检查，可以从相关模块的 README 与实际命令是否一致开始。",
+      "refactor": "当前检查范围是最近一天的代码变更。可以继续逐项核对问题的复现条件、改动范围和验证结果，再决定是否扩大重构范围。",
+      "research": "调研结论已整理到文档中，重点是工具调用的可追踪性、长任务接手和项目上下文复用。可以继续针对其中一个方向深入比较。",
+      "default": "可以继续围绕这次工作的结果展开。我会沿用当前会话的上下文，保留原任务的执行记录。"
+    },
+    "researchCompletion": "调研已完成，结果已发布为飞书文档。"
+  }
+}
