@@ -8,6 +8,7 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
   let terminalID: String
   @Binding var isPresented: Bool
   @Binding var preventsDismissal: Bool
+  @Binding var showingInstantReplies: Bool
   var onDismiss: () -> Void
   @EnvironmentObject private var quickReplies: LocalQuickReplyStore
   @Environment(\.scenePhase) private var scenePhase
@@ -43,7 +44,8 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
     AnyView(
       TerminalComposerSheet(
         session: session, controller: controller, terminalID: terminalID,
-        preventsDismissal: $preventsDismissal, onDismiss: onDismiss
+        preventsDismissal: $preventsDismissal, showingInstantReplies: $showingInstantReplies,
+        onDismiss: onDismiss
       )
       .environmentObject(quickReplies)
       .environment(\.scenePhase, scenePhase)

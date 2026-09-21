@@ -6,6 +6,7 @@ struct TerminalComposerSheet: View {
   let controller: SessionController
   let terminalID: String
   @Binding var preventsDismissal: Bool
+  @Binding var showingInstantReplies: Bool
   let onDismiss: () -> Void
 
   private var busy: Bool { preventsDismissal || quickReplies.saving }
@@ -19,6 +20,7 @@ struct TerminalComposerSheet: View {
         ComposerView(
           session: session, controller: controller, terminalID: terminalID,
           availableHeight: geometry.size.height, preventsDismissal: $preventsDismissal,
+          showingInstantReplies: $showingInstantReplies,
           onActionSucceeded: onDismiss, onClose: onDismiss, closeDisabled: busy
         )
         .id(ObjectIdentifier(controller))
@@ -40,6 +42,7 @@ struct ComposerView: View {
   let onClose: () -> Void
   let closeDisabled: Bool
   @Binding var preventsDismissal: Bool
+  @Binding var showingInstantReplies: Bool
   let onActionSucceeded: () -> Void
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   @State private var failure: String?
@@ -68,6 +71,7 @@ struct ComposerView: View {
   init(
     session: AppSession, controller: SessionController, terminalID: String, active: Bool = true,
     availableHeight: CGFloat, preventsDismissal: Binding<Bool>,
+    showingInstantReplies: Binding<Bool>,
     onActionSucceeded: @escaping () -> Void, onClose: @escaping () -> Void, closeDisabled: Bool
   ) {
     self.session = session
@@ -81,6 +85,7 @@ struct ComposerView: View {
     _state = StateObject(wrappedValue: TerminalComposerState(
       session: session, controller: controller, terminalID: terminalID))
     _preventsDismissal = preventsDismissal
+    _showingInstantReplies = showingInstantReplies
     self.onActionSucceeded = onActionSucceeded
   }
 
@@ -266,6 +271,24 @@ struct ComposerView: View {
 
   private func controls(voice: AnyView) -> some View {
     HStack(spacing: 2) {
+      Button {
+        showingInstantReplies.toggle()
+        if showingInstantReplies {
+          editing = false
+          onClose()
+        }
+      } label: {
+        Image(systemName: "bolt.bubble")
+          .foregroundColor(showingInstantReplies ? TerminalAppearance.accent : .secondary)
+          .frame(width: 44, height: 44)
+          .background(showingInstantReplies ? TerminalAppearance.accent.opacity(0.14) : .clear)
+          .clipShape(RoundedRectangle(cornerRadius: 12))
+      }
+      .accessibilityLabel(showingInstantReplies ? "收起一键回复" : "展开一键回复")
+      .accessibilityValue(showingInstantReplies ? "已展开" : "已收起")
+      .accessibilityHint("在终端底部显示可以和继续，点击立即发送")
+      .accessibilityIdentifier("terminal-instant-replies-toggle")
+      .disabled(closeDisabled || state.snapshot.inputBusy)
       Button {
         showingShortcuts.toggle()
       } label: {
