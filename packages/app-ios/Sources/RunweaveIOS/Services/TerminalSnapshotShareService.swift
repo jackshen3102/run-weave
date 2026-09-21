@@ -12,7 +12,8 @@ extension APIClient {
     try Task.checkCancellation()
     let response: TerminalSnapshotShareResponse = try await authorized(
       "\(path)/\(Self.pathComponent(workspace.activePanelId))/shares",
-      method: "POST", retryUnauthorized: false)
+      method: "POST", retryUnauthorized: false,
+      decodeError: TerminalSnapshotShareFailure.decode)
     return TerminalSnapshotShare(url: try response.resolveURL())
   }
 }
