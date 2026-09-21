@@ -280,7 +280,8 @@ public actor APIClient {
 
   func authorized<T: Decodable>(
     _ path: String, method: String = "GET", body: [String: Any]? = nil,
-    retryUnauthorized: Bool = true, decode: ((Data) throws -> T)? = nil
+    retryUnauthorized: Bool = true, decodeError: ((Int, Data) -> Error?)? = nil,
+    decode: ((Data) throws -> T)? = nil
   ) async throws -> T {
     guard !importingMobileLogin else { throw CancellationError() }
     guard var current = tokens else { throw APIError.credentialsUnavailable }
@@ -291,7 +292,8 @@ public actor APIClient {
     guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
     do {
       let value: T = try await request(
-        path, method: method, body: body, bearer: current.accessToken, decode: decode)
+        path, method: method, body: body, bearer: current.accessToken,
+        decodeError: decodeError, decode: decode)
       guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
       return value
     } catch APIError.http(401) {
@@ -308,7 +310,8 @@ public actor APIClient {
       guard retryUnauthorized else { throw APIError.writeRequiresRetry }
       do {
         let value: T = try await request(
-          path, method: method, body: body, bearer: renewed.accessToken, decode: decode)
+          path, method: method, body: body, bearer: renewed.accessToken,
+          decodeError: decodeError, decode: decode)
         guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
         return value
       } catch APIError.http(401) {
@@ -351,6 +354,7 @@ public actor APIClient {
 
   private func request<T: Decodable>(
     _ path: String, method: String, body: [String: Any]? = nil, bearer: String? = nil,
+    decodeError: ((Int, Data) -> Error?)? = nil,
     decode: ((Data) throws -> T)? = nil
   ) async throws -> T {
     let started = ProcessInfo.processInfo.systemUptime
@@ -388,7 +392,13 @@ public actor APIClient {
       // This precedes App authentication on the Backend; refreshing or deleting App tokens cannot fix it.
       throw APIError.tunnelAuthenticationRequired
     }
-    guard (200..<300).contains(http.statusCode) else { throw APIError.http(http.statusCode) }
+    guard (200..<300).contains(http.statusCode) else {
+      // Authentication errors retain their existing refresh and permission handling.
+      if http.statusCode != 401, http.statusCode != 403,
+        let failure = decodeError?(http.statusCode, data)
+      { throw failure }
+      throw APIError.http(http.statusCode)
+    }
     if let decode { return try decode(data) }
     if T.self == EmptyResponse.self {
       return try JSONDecoder().decode(T.self, from: Data("{}".utf8))
