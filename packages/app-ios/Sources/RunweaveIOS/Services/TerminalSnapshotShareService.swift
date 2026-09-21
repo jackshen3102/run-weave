@@ -13,7 +13,7 @@ extension APIClient {
     let response: TerminalSnapshotShareResponse = try await authorized(
       "\(path)/\(Self.pathComponent(workspace.activePanelId))/shares",
       method: "POST", retryUnauthorized: false)
-    return TerminalSnapshotShare(url: try response.resolveURL(base: baseURL))
+    return TerminalSnapshotShare(url: try response.resolveURL())
   }
 }
 

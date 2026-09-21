@@ -2,13 +2,14 @@ import Foundation
 
 // Mirrors packages/shared/src/terminal/snapshot-share.ts.
 struct TerminalSnapshotShareResponse: Decodable {
+  let shareUrl: String
   let sharePath: String
   let title: String
   let createdAt: String
   let expiresAt: String
   let lineCount: Int
 
-  func resolveURL(base: URL) throws -> URL {
+  func resolveURL() throws -> URL {
     let pattern = #"\A/share/terminal/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\?expires=([1-9][0-9]{0,15})&signature=[A-Za-z0-9_-]{43}\z"#
     let expression = try NSRegularExpression(pattern: pattern)
     let range = NSRange(sharePath.startIndex..., in: sharePath)
@@ -20,9 +21,14 @@ struct TerminalSnapshotShareResponse: Decodable {
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     guard let date = formatter.date(from: expiresAt),
       Int64((date.timeIntervalSince1970 * 1000).rounded()) == expiry,
-      let url = URL(string: base.absoluteString + sharePath)
+      let components = URLComponents(string: shareUrl),
+      components.scheme == "https",
+      let host = components.host, !host.isEmpty,
+      components.user == nil, components.password == nil, components.fragment == nil,
+      components.percentEncodedPath + "?" + (components.percentEncodedQuery ?? "") == sharePath,
+      let url = components.url
     else { throw APIError.invalidResponse }
-    // Keep the connection's port/path prefix and the signed query unchanged.
+    // The central Host owns the read URL; never derive it from the Backend connection.
     return url
   }
 }
