@@ -12,6 +12,8 @@ import re
 import shutil
 import subprocess
 import sys
+import time
+import urllib.request
 import uuid
 
 BASE = Path.home() / ".runweave"
@@ -210,6 +212,16 @@ class Operation:
         self.owner = owner
 
     def run(self, args, *, env=None, cwd=None, capture_output=False, timeout=None):
+        # Keep the safety boundary here: installed skill wrappers also use this
+        # operation, even when they predate the graceful shutdown protocol.
+        if args[:3] == ["agent-device", "daemon", "stop"] and "--clean" in args:
+            root = Path(self.owner["taskDir"])
+            state_index = args.index("--state-dir") + 1 if "--state-dir" in args else len(args)
+            if state_index >= len(args) or Path(args[state_index]).resolve() != root / "state":
+                fail("lease_mismatch", "Daemon cleanup must target this task's state directory")
+            if capture(["agent-device", "--version"]) != "0.21.3":
+                fail("cleanup_incomplete", "Cleanup requires agent-device 0.21.3")
+            drain_runner(root, self.owner, env or os.environ)
         child = {"program": Path(args[0]).name, "state": "spawning", "startedAt": now()}
         self.owner.setdefault("children", []).append(child)
         save_owner(self.owner)
@@ -318,6 +330,68 @@ def start(app, root):
             root.mkdir(parents=True)
             write(root / "simulator-lease.json", owner)
             return owner
+
+
+def drain_runner(root, owner, env):
+    """Finish XCTest before agent-device 0.21.3's --clean signals its process tree.
+
+    This pinned runner protocol shuts down the test, not the simulator. Never
+    send to a port without checking its durable task and process identities.
+    """
+    lease_dir = Path(env.get("AGENT_DEVICE_IOS_RUNNER_LEASE_DIR") or
+                     Path.home() / ".agent-device/apple-runner/leases")
+    path = lease_dir / f"{owner['udid']}.json"
+    report = {"at": now(), "udid": owner["udid"], "status": "blocked"}
+    try:
+        if not path.exists():
+            check_external_runner(owner["udid"])
+            report["status"] = "no_runner_lease"
+            return
+        lease = read(path)
+        if (not isinstance(lease, dict) or lease.get("schemaVersion") != 1 or lease.get("deviceId") != owner["udid"]
+                or lease.get("ownerStateDir") != str(root / "state")):
+            raise ValueError("Runner lease does not belong to this task")
+        pid, started = lease.get("runnerPid"), lease.get("runnerStartTime")
+        if type(pid) is not int or pid <= 0 or not isinstance(started, str) or not started:
+            raise ValueError("Runner process identity is incomplete")
+        current = identity(pid)
+        if current is None:
+            check_external_runner(owner["udid"])
+            report["status"] = "already_exited"
+            return
+        if current != started:
+            raise ValueError("Runner PID has been reused")
+        args = capture(["ps", "-ww", "-p", str(pid), "-o", "args="])
+        xctestrun = lease.get("xctestrunPath")
+        if ("xcodebuild" not in args or "AgentDeviceRunner" not in args
+                or owner["udid"] not in args or not isinstance(xctestrun, str)
+                or not xctestrun or xctestrun not in args):
+            raise ValueError("Runner command does not match its lease")
+        port = lease.get("port")
+        if type(port) is not int or not 0 < port < 65536:
+            raise ValueError("Invalid runner port")
+        report.update(runnerPid=pid, runnerStartTime=started)
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/command",
+            data=json.dumps({"command": "shutdown", "commandId": "pool-" + uuid.uuid4().hex}).encode(),
+            headers={"Content-Type": "application/json"})
+        # Loopback must never inherit an HTTP proxy from the user's shell.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=10) as response:
+            data = json.load(response)
+            if not isinstance(data, dict) or data.get("ok") is not True:
+                raise ValueError("Runner refused graceful shutdown")
+        deadline = time.monotonic() + 15
+        while identity(pid) == started:
+            if time.monotonic() >= deadline:
+                raise TimeoutError("XCTest did not exit after graceful shutdown")
+            time.sleep(0.1)
+        report["status"] = "graceful_exit"
+    except (OSError, ValueError, PoolError) as error:
+        report.update(status="blocked", error=str(error))
+        fail("cleanup_incomplete", f"Runner shutdown blocked; keep lease and inspect {root}/runner-shutdown.json")
+    finally:
+        write(root / "runner-shutdown.json", report)
 
 
 def finish(root, recovering=False):
