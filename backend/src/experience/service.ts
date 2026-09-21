@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
   ExperienceDraft,
+  ExperienceDiagnostics,
   ExperienceCandidate,
   ExperienceFeedback,
   ExperienceFeedbackInput,
@@ -24,6 +25,9 @@ interface Lookup {
   repositoryId: string;
   namespace: string;
   matches: Array<{ id: string; revision: string }>;
+  query: string;
+  at: string;
+  excluded: ExperienceSearchResult["excluded"];
 }
 
 export class ExperienceError extends Error {
@@ -98,6 +102,98 @@ export class ExperienceService {
         excluded,
       }),
     );
+    return result;
+  }
+
+  /** Read existing observations and preview retrieval without polluting usage history. */
+  async diagnose(cwd: string, query?: string): Promise<ExperienceDiagnostics> {
+    const scope = await this.scope(cwd);
+    const records = await this.records(scope);
+    const { lookups, feedback } = withExperienceStore(
+      scope.directory,
+      (store) => ({
+        lookups: store.list<Lookup>("lookups"),
+        feedback: store.list<ExperienceFeedback>("feedback"),
+      }),
+    );
+    const result: ExperienceDiagnostics = {
+      repositoryId: scope.repositoryId,
+      namespace: scope.namespace,
+      lookups: {
+        total: lookups.length,
+        withMatches: lookups.filter((lookup) => lookup.matches.length > 0)
+          .length,
+        withFeedback: new Set(feedback.map((receipt) => receipt.lookupId)).size,
+        recent: lookups
+          .sort((a, b) => b.at.localeCompare(a.at))
+          .slice(0, 20)
+          .map(({ query, at, matches, excluded }) => ({
+            query,
+            at,
+            matches,
+            excluded,
+          })),
+      },
+      feedback: {
+        used: feedback.filter((receipt) => receipt.decision === "used").length,
+        dismissed: feedback.filter(
+          (receipt) => receipt.decision === "dismissed",
+        ).length,
+        attribution: "agent_report",
+      },
+      records: [],
+    };
+    for (const record of records) {
+      const view = await this.inspect(record);
+      const receipts = feedback.filter((receipt) => receipt.id === record.id);
+      const groups =
+        query === undefined
+          ? undefined
+          : record.triggers.map((group) =>
+              group.filter((term) => matchesTerm(query, term)),
+            );
+      const missingGroups = groups
+        ? record.triggers.filter((_, index) => !groups[index]?.length)
+        : [];
+      result.records.push({
+        id: record.id,
+        revision: record.revision,
+        title: record.title,
+        available: view.available,
+        invalidReasons: view.invalidReasons,
+        returned: lookups.filter((lookup) =>
+          lookup.matches.some((match) => match.id === record.id),
+        ).length,
+        used: receipts.filter((receipt) => receipt.decision === "used").length,
+        dismissed: receipts.filter(
+          (receipt) => receipt.decision === "dismissed",
+        ).length,
+        ...(groups
+          ? {
+              queryMatch: {
+                matchedTerms: groups.flat(),
+                missingGroups,
+                outcome: missingGroups.length
+                  ? ("trigger_mismatch" as const)
+                  : !view.available
+                    ? ("excluded" as const)
+                    : ("ranked_out" as const),
+              },
+            }
+          : {}),
+      });
+    }
+    result.records
+      .filter((record) => record.queryMatch?.outcome === "ranked_out")
+      .sort(
+        (a, b) =>
+          b.queryMatch!.matchedTerms.length -
+            a.queryMatch!.matchedTerms.length || a.id.localeCompare(b.id),
+      )
+      .slice(0, 3)
+      .forEach((record) => {
+        record.queryMatch!.outcome = "returned";
+      });
     return result;
   }
 

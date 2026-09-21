@@ -45,6 +45,41 @@ export interface ExperienceSearchResult {
   matches: Array<ExperienceView & { matchedTerms: string[] }>;
   excluded: Array<{ id: string; reasons: string[] }>;
 }
+export interface ExperienceDiagnostics {
+  repositoryId: string;
+  namespace: string;
+  /** Saved observations, not a success rate or proof of benefit. */
+  lookups: {
+    total: number;
+    withMatches: number;
+    withFeedback: number;
+    recent: Array<{
+      query: string;
+      at: string;
+      matches: Array<{ id: string; revision: string }>;
+      excluded: Array<{ id: string; reasons: string[] }>;
+    }>;
+  };
+  feedback: { used: number; dismissed: number; attribution: "agent_report" };
+  records: Array<{
+    id: string;
+    revision: string;
+    title: string;
+    available: boolean;
+    invalidReasons: string[];
+    /** Counts include all historical revisions of this record. */
+    returned: number;
+    used: number;
+    dismissed: number;
+    /** Present only for a diagnostic query; never creates a lookup. */
+    queryMatch?: {
+      matchedTerms: string[];
+      missingGroups: string[][];
+      outcome: "returned" | "ranked_out" | "excluded" | "trigger_mismatch";
+    };
+  }>;
+}
+
 export interface ExperienceFeedbackInput {
   lookupId: string;
   id: string;
