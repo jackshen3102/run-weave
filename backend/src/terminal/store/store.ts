@@ -3,6 +3,7 @@ import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
+import type { ScheduledTaskSource } from "@runweave/shared/scheduled-tasks";
 
 /** Backend projection; text is null when history has no completed reply yet. */
 export interface TerminalReplySnapshot {
@@ -24,6 +25,7 @@ export interface PersistedTerminalProjectRecord {
 }
 
 export interface PersistedTerminalSessionRecord {
+  source?: ScheduledTaskSource;
   pinnedAt?: string | null;
   id: string;
   projectId: string;

@@ -51,6 +51,7 @@ import { registerRuntimeStatusRoutes } from "./routes/registration/runtime-statu
 import { createEvolutionActivationRouter } from "./routes/evolution/activation";
 import { createEvolutionFoundationRouter } from "./routes/evolution/foundation";
 import { createEvolutionMcpRouter } from "./routes/evolution/mcp";
+import { createScheduledTasksRouter } from "./routes/scheduled-tasks";
 import { createCorsMiddleware, parseConfiguredOrigins } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import {
@@ -293,6 +294,7 @@ function createHttpApp(
     createAgentTeamRouter(services.agentTeamService),
   );
   app.use("/api/race", requireAuth, createRaceRouter(services.raceService));
+  app.use("/api/scheduled-tasks", requireAuth, createScheduledTasksRouter(services.scheduledTaskService));
   app.use(
     "/api/experience",
     requireAuth,

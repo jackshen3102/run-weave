@@ -25,6 +25,7 @@ import {
 } from "../../../services/terminal/index";
 import { Button } from "../../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
+import { Tooltip } from "../../ui/tooltip";
 
 const CONFIG_EXAMPLE = `{
   "schemaVersion": 1,
@@ -181,7 +182,9 @@ export function TerminalWorkspaceServicesPopover({
   const [mutationError, setMutationError] = useState<string | null>(null);
   const data = contextAvailable ? query.data : undefined;
   const services = data?.services ?? [];
-  const readyCount = services.filter((service) => service.status === "ready").length;
+  const readyCount = services.filter(
+    (service) => service.status === "ready",
+  ).length;
   const hasError =
     contextAvailable &&
     (Boolean(query.error) ||
@@ -214,7 +217,9 @@ export function TerminalWorkspaceServicesPopover({
         );
         await invalidate();
       } catch (error) {
-        setMutationError(error instanceof Error ? error.message : String(error));
+        setMutationError(
+          error instanceof Error ? error.message : String(error),
+        );
       } finally {
         setBusy(null);
       }
@@ -235,7 +240,9 @@ export function TerminalWorkspaceServicesPopover({
         );
         await invalidate();
       } catch (error) {
-        setMutationError(error instanceof Error ? error.message : String(error));
+        setMutationError(
+          error instanceof Error ? error.message : String(error),
+        );
       } finally {
         setBusy(null);
       }
@@ -255,7 +262,9 @@ export function TerminalWorkspaceServicesPopover({
           useTerminalPreviewStore.getState().activateBrowser(profileId, null);
         }
       } catch (error) {
-        setMutationError(error instanceof Error ? error.message : String(error));
+        setMutationError(
+          error instanceof Error ? error.message : String(error),
+        );
       }
     },
   );
@@ -264,31 +273,31 @@ export function TerminalWorkspaceServicesPopover({
     contextAvailable &&
     query.error instanceof HttpError &&
     query.error.status === 403;
+  const triggerLabel = !contextAvailable
+    ? "Services · 未设置项目路径"
+    : query.isPending
+      ? "Services · 正在读取"
+      : `Services · ${readyCount}/${services.length} ready`;
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={disabled || !parentProjectId || !projectId}
-          className="relative h-6 shrink-0 rounded-md px-2 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-          data-testid="workspace-services-trigger"
-        >
-          <Server className="h-3.5 w-3.5" />
-          Services
-          <span className="text-slate-500">
-            {!contextAvailable
-              ? "—"
-              : query.isPending
-                ? "…"
-                : `${readyCount}/${services.length}`}
-          </span>
-          {hasError ? (
-            <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-rose-400" />
-          ) : null}
-        </Button>
-      </PopoverTrigger>
+      <Tooltip content={triggerLabel}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled || !parentProjectId || !projectId}
+            aria-label={triggerLabel}
+            className="relative h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+            data-testid="workspace-services-trigger"
+          >
+            <Server className="h-3.5 w-3.5" />
+            {hasError ? (
+              <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-rose-400" />
+            ) : null}
+          </Button>
+        </PopoverTrigger>
+      </Tooltip>
       <PopoverContent align="end" className="w-96 space-y-2 p-3">
         <div>
           <div className="text-sm font-semibold text-slate-100">
@@ -317,7 +326,9 @@ export function TerminalWorkspaceServicesPopover({
         ) : null}
         {data?.config.status === "missing" ? (
           <div className="space-y-2 text-xs text-slate-400">
-            <p>Add a repository-root runweave.json to declare local services.</p>
+            <p>
+              Add a repository-root runweave.json to declare local services.
+            </p>
             <pre className="overflow-x-auto rounded-lg bg-black/30 p-2 text-[10px] leading-4 text-slate-300">
               {CONFIG_EXAMPLE}
             </pre>

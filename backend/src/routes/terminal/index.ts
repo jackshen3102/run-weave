@@ -9,7 +9,6 @@ import type {
 } from "@runweave/shared/terminal/session";
 import type { AuthService } from "../../auth/service";
 import {
-  recordTerminalSessionCreated,
   recordTerminalSessionDeleted,
   type TerminalActivityDependencies,
 } from "../../terminal/runtime/activity-events";
@@ -26,7 +25,6 @@ import type { TerminalCompletionEventService } from "../../terminal/completion/e
 import type { TerminalEventService } from "../../terminal/state/terminal-event-service";
 import type { TerminalStateService } from "../../terminal/state/terminal-state-service";
 import {
-  ensureTerminalRuntime,
   isTmuxBackedSession,
   killTmuxSessionForTerminal,
   readTerminalScrollback,
@@ -44,7 +42,6 @@ import {
 import { resolveEffectiveTerminalState } from "../../terminal/application/terminal-state-projection";
 import {
   createTerminalSessionSchema,
-  resolveTerminalCreateDefaults,
   sanitizeTerminalError,
   TerminalCreateDefaultsError,
 } from "./sessions/helpers";
@@ -53,11 +50,11 @@ import { registerTerminalPrototypeGalleryRoutes } from "./preview/gallery";
 import { registerTerminalQuickInputRoutes } from "./input/quick";
 import { registerTerminalInputRoutes } from "./input/index";
 import {
-  ensureTerminalPanelWorkspace,
   registerTerminalPanelRoutes,
   resolvePanelTarget,
 } from "./panels/index";
 import type { WorkspaceServiceManager } from "../../terminal/workspace-service/manager";
+import { createTerminalSession } from "../../terminal/application/create-session";
 
 const terminalLogger = logger.child({ component: "terminal" });
 
@@ -242,165 +239,23 @@ export function createTerminalRouter(
         cwdProvided: Boolean(parsed.data.cwd),
         commandProvided: Boolean(parsed.data.command),
       });
-      if (
-        parsed.data.projectId &&
-        !terminalSessionManager.getProject(parsed.data.projectId)
-      ) {
-        const context = terminalSessionManager.getProjectContext(
-          parsed.data.projectId,
-        );
-        res.status(context ? 409 : 404).json({
-          message: context
-            ? "Terminal project context is unavailable"
-            : "Terminal project not found",
-        });
-        return;
-      }
-      const session = await terminalSessionManager.createSession(
-        resolveTerminalCreateDefaults(parsed.data, terminalSessionManager),
+      const session = await createTerminalSession(
+        terminalSessionManager,
+        parsed.data,
+        {
+          ptyService: options?.ptyService,
+          runtimeRegistry: options?.runtimeRegistry,
+          tmuxService: options?.tmuxService,
+          tmuxOutputWatcher: options?.tmuxOutputWatcher,
+          terminalEventService: options?.terminalEventService,
+          terminalStateService: options?.terminalStateService,
+          activity: options?.activity,
+        },
       );
-      if (options?.ptyService && options.runtimeRegistry) {
-        try {
-          let launchSession = session;
-          const runtimePreference = parsed.data.runtimePreference ?? "auto";
-          const shouldTryTmux =
-            runtimePreference === "auto" || runtimePreference === "tmux";
-          let attemptedTmuxTarget: ReturnType<
-            TmuxService["buildTarget"]
-          > | null = null;
-          const tmuxAvailable =
-            options.tmuxService && shouldTryTmux
-              ? await options.tmuxService.isAvailable()
-              : false;
-          const tmuxUnavailableReason =
-            options.tmuxService && shouldTryTmux && !tmuxAvailable
-              ? await options.tmuxService.getUnavailableReason()
-              : null;
-
-          if (options.tmuxService && shouldTryTmux && tmuxAvailable) {
-            const target = options.tmuxService.buildTarget(session.id);
-            attemptedTmuxTarget = target;
-            launchSession =
-              (await terminalSessionManager.updateRuntimeMetadata(session.id, {
-                runtimeKind: "tmux",
-                tmuxSessionName: target.sessionName,
-                tmuxSocketPath: target.socketPath,
-                recoverable: true,
-              })) ?? session;
-          } else if (options.tmuxService && shouldTryTmux) {
-            terminalLogger.warn("terminal.session.runtime.tmux-unavailable", {
-              message: "Terminal tmux unavailable; using pty runtime",
-              terminalSessionId: session.id,
-              reason: tmuxUnavailableReason ?? "tmux unavailable",
-            });
-            launchSession =
-              (await terminalSessionManager.updateRuntimeMetadata(session.id, {
-                runtimeKind: "pty",
-                tmuxUnavailableReason:
-                  tmuxUnavailableReason ?? "tmux unavailable",
-                recoverable: false,
-              })) ?? session;
-          }
-
-          try {
-            await ensureTerminalRuntime({
-              session: launchSession,
-              terminalSessionManager,
-              runtimeRegistry: options.runtimeRegistry,
-              ptyService: options.ptyService,
-              tmuxService: options.tmuxService,
-              tmuxOutputWatcher: options.tmuxOutputWatcher,
-              allowMissingTmuxSession: true,
-            });
-          } catch (error) {
-            if (
-              runtimePreference !== "auto" ||
-              !options.tmuxService ||
-              !isTmuxBackedSession(launchSession)
-            ) {
-              throw error;
-            }
-
-            const sanitizedError = sanitizeTerminalError(error);
-            terminalLogger.warn(
-              "terminal.session.runtime.tmux-launch-fallback",
-              {
-                message: "Tmux launch failed; falling back to pty",
-                terminalSessionId: session.id,
-                tmuxSessionName: attemptedTmuxTarget?.sessionName,
-                tmuxSocketPath: attemptedTmuxTarget?.socketPath,
-                error: sanitizedError,
-              },
-            );
-            if (attemptedTmuxTarget) {
-              await options.tmuxService.killSession(attemptedTmuxTarget);
-            }
-
-            launchSession =
-              (await terminalSessionManager.updateRuntimeMetadata(session.id, {
-                runtimeKind: "pty",
-                tmuxUnavailableReason: "tmux launch failed; fell back to pty",
-                recoverable: false,
-              })) ?? session;
-            await ensureTerminalRuntime({
-              session: launchSession,
-              terminalSessionManager,
-              runtimeRegistry: options.runtimeRegistry,
-              ptyService: options.ptyService,
-              tmuxService: options.tmuxService,
-              tmuxOutputWatcher: options.tmuxOutputWatcher,
-              allowMissingTmuxSession: true,
-            });
-          }
-        } catch (error) {
-          await terminalSessionManager.destroySession(session.id);
-          throw error;
-        }
-      }
       const payload: CreateTerminalSessionResponse = {
         terminalSessionId: session.id,
         terminalUrl: `/terminal/${session.id}`,
       };
-      const createdSession =
-        terminalSessionManager.getSession(session.id) ?? session;
-      if (options?.tmuxService && isTmuxBackedSession(createdSession)) {
-        try {
-          await ensureTerminalPanelWorkspace(
-            terminalSessionManager,
-            createdSession,
-            {
-              ptyService: options.ptyService,
-              runtimeRegistry: options.runtimeRegistry,
-              tmuxService: options.tmuxService,
-              tmuxOutputWatcher: options.tmuxOutputWatcher,
-              terminalEventService: options.terminalEventService,
-            },
-          );
-        } catch (error) {
-          terminalLogger.warn("terminal.session.default-panel.failed", {
-            message: "Create terminal default panel failed",
-            terminalSessionId: createdSession.id,
-            error,
-          });
-        }
-      }
-      options?.terminalEventService?.record({
-        kind: "terminal_session_created",
-        terminalSessionId: session.id,
-        projectId: createdSession.projectId,
-        payload: {
-          session: toSessionListItem(
-            createdSession,
-            resolveEffectiveTerminalState(
-              terminalSessionManager,
-              options.terminalStateService,
-              createdSession,
-            ),
-            toPanelWorkspacePayload(terminalSessionManager, createdSession.id),
-          ),
-        },
-      });
-      recordTerminalSessionCreated(options?.activity, createdSession);
       res.status(201).json(payload);
     } catch (error) {
       if (error instanceof TerminalCreateDefaultsError) {

@@ -7,8 +7,6 @@ import {
   type DeviceMonitoringRuntime,
 } from "../device-monitor/bootstrap";
 import { MobileLoginService } from "../auth/mobile-login";
-import { createHash } from "node:crypto";
-import os from "node:os";
 import path from "node:path";
 import type { ExperienceService } from "../experience/service";
 import { createExperienceLearning } from "../experience/bootstrap";
@@ -70,6 +68,12 @@ import { EvolutionToolTokenRegistry } from "../evolution/tools/token-registry";
 import { RaceRecordStore } from "../race/race-record-store";
 import { RaceService } from "../race/race-service";
 import { BackendRuntimeStatusService } from "../runtime-status/service";
+import type { ScheduledTaskService } from "../scheduled-tasks/service";
+import { createScheduledTasks } from "./scheduled-tasks";
+import {
+  resolveDefaultTmuxSocketPath,
+  resolvePersistentTmuxSocketPath,
+} from "./tmux-paths";
 
 export interface RuntimeServices extends DeviceMonitoringRuntime {
   start(controlPlaneBaseUrl: string): void;
@@ -114,6 +118,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   evolutionService: EvolutionService;
   experienceService: ExperienceService;
   experienceLearning: ExperienceLearningRuntime;
+  scheduledTaskService: ScheduledTaskService;
 }
 
 function resolveTerminalHookToken(
@@ -129,36 +134,6 @@ function shouldScanTmuxOrphans(env: NodeJS.ProcessEnv): boolean {
     env.TERMINAL_TMUX_SCAN_ORPHANS_ON_START?.trim().toLowerCase() === "true" ||
     env.TERMINAL_TMUX_CLEANUP_ORPHANS?.trim().toLowerCase() === "true"
   );
-}
-
-function resolveTmuxProfileId(browserProfileDir: string): string {
-  return createHash("sha256")
-    .update(browserProfileDir)
-    .digest("hex")
-    .slice(0, 12);
-}
-
-function resolvePersistentTmuxSocketPath(browserProfileDir: string): string {
-  return path.join(
-    os.homedir(),
-    ".runweave",
-    "tmux",
-    resolveTmuxProfileId(browserProfileDir),
-    "tmux.sock",
-  );
-}
-
-function resolveDefaultTmuxSocketPath(
-  browserProfileDir: string,
-  runtimeChannel: "stable" | "beta" | "dev",
-): string {
-  return runtimeChannel === "stable"
-    ? resolvePersistentTmuxSocketPath(browserProfileDir)
-    : path.join(
-        os.tmpdir(),
-        `rw-tmux-${resolveTmuxProfileId(browserProfileDir)}`,
-        "tmux.sock",
-      );
 }
 
 export async function createRuntimeServices(
@@ -395,6 +370,17 @@ async function assembleRuntimeServices(
       );
     },
   );
+  const scheduledTasks = await createScheduledTasks(resources, {
+    browserProfileDir: storagePaths.browserProfileDir,
+    terminalSessionManager,
+    terminalRuntimeRegistry,
+    ptyService,
+    tmuxService,
+    tmuxOutputWatcher,
+    terminalEventService,
+    terminalStateService,
+    terminalActivity,
+  });
   if (shouldScanTmuxOrphans(process.env)) {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
@@ -549,6 +535,7 @@ async function assembleRuntimeServices(
       agentTeamService.initialize();
       evolutionRuntime.start(controlPlaneBaseUrl);
       experienceLearning.start();
+      scheduledTasks.runtime?.start();
     },
     dispose: () => {
       disposed = true;
@@ -594,6 +581,7 @@ async function assembleRuntimeServices(
     evolutionService,
     experienceService,
     experienceLearning,
+    scheduledTaskService: scheduledTasks.service,
   };
   return services;
 }

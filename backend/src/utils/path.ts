@@ -25,6 +25,7 @@ interface StorageEnv extends BrowserProfileStorageEnv {
   RUNWEAVE_ACTIVITY_TEST_MODE?: string;
   RUNWEAVE_EVOLUTION_HOME?: string;
   RUNWEAVE_EVOLUTION_TEST_MODE?: string;
+  RUNWEAVE_SCHEDULED_TASKS_HOME?: string;
 }
 
 export interface ActivityStoragePaths {
@@ -36,6 +37,32 @@ export interface EvolutionStoragePaths {
   evolutionHomeDir: string;
   learningDatabaseFile: string;
   temporaryDir: string;
+}
+
+export interface ScheduledTaskStoragePaths {
+  scheduledTasksHomeDir: string;
+  scheduledTasksDatabaseFile: string;
+}
+
+export function resolveScheduledTaskStoragePaths(
+  env: NodeJS.ProcessEnv,
+  browserProfileDir: string,
+  homeDir: string = os.homedir(),
+): ScheduledTaskStoragePaths {
+  const configured = expandHomePath(
+    env.RUNWEAVE_SCHEDULED_TASKS_HOME,
+    homeDir,
+  );
+  const scheduledTasksHomeDir = path.resolve(
+    configured ?? path.join(browserProfileDir, "scheduled-tasks"),
+  );
+  return {
+    scheduledTasksHomeDir,
+    scheduledTasksDatabaseFile: path.join(
+      scheduledTasksHomeDir,
+      "scheduled-tasks.sqlite",
+    ),
+  };
 }
 
 export function resolveEvolutionStoragePaths(

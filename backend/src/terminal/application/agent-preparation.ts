@@ -38,7 +38,7 @@ const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
   "check_for_update_on_startup=false",
 ] as const;
 
-interface PrepareTerminalAgentInternalOptions {
+export interface PrepareTerminalAgentInternalOptions {
   resetPanelBeforeResume?: boolean;
   skipInitialPrompt?: boolean;
 }
