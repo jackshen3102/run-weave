@@ -6,6 +6,7 @@ import UserNotifications
 public final class NotificationCoordinator: ObservableObject {
   public static let shared = NotificationCoordinator()
   @Published private(set) var bindings: [String: NotificationBinding] = [:]
+  @Published private(set) var refreshFailures: [String: String] = [:]
   @Published var message: String?
   @Published var pendingHostID: String?
   private let vault = CredentialStore()
@@ -75,6 +76,7 @@ public final class NotificationCoordinator: ObservableObject {
     do { try store.select(selected.id) } catch { message = displayError(error) }
   }
   func enable(_ connection: BackendConnection) async throws {
+    refreshFailures[connection.scope] = nil
     guard validStorage else { throw AttachmentError("提醒设置无法读取") }
     let api = try APIClient(base: connection.url, connectionID: connection.id)
     defer { Task { await api.close() } }
@@ -175,6 +177,7 @@ public final class NotificationCoordinator: ObservableObject {
     _ connection: BackendConnection, client supplied: APIClient? = nil, reportFailure: Bool = true
   ) async {
     guard var binding = bindings[connection.scope] else { return }
+    refreshFailures[connection.scope] = nil
     versions[connection.scope, default: 0] += 1
     binding.enabled = false
     binding.pendingRevoke = true
@@ -281,10 +284,23 @@ public final class NotificationCoordinator: ObservableObject {
               try persist()
             }
           }
+          if versions[scope] ?? 0 == version {
+            refreshFailures[scope] = nil
+          }
         } else {
           try? await directRevoke(result)
         }
-      } catch { message = "部分电脑的提醒注册待更新" }
+      } catch {
+        // Automatic retries must not interrupt the user with a global alert on every foreground.
+        // Keep failures on the affected connection, ignoring cancelled or superseded refreshes.
+        if !Task.isCancelled, !(error is CancellationError),
+          (error as? URLError)?.code != .cancelled,
+          UIApplication.shared.applicationState != .background,
+          versions[scope] ?? 0 == version, bindings[scope]?.enabled == true
+        {
+          refreshFailures[scope] = "提醒注册待更新：\(displayError(error))"
+        }
+      }
       await api.close()
     }
   }
