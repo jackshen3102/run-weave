@@ -1,4 +1,5 @@
 import { LocalBrowserService } from "../browser-local/service";
+import { resolveTmuxShutdownPolicy } from "./tmux-shutdown-policy";
 import { createDeviceMonitor, type DeviceMonitoringRuntime } from "../device-monitor/bootstrap";
 import { MobileLoginService } from "../auth/mobile-login";
 import { createHash } from "node:crypto";
@@ -153,19 +154,13 @@ function resolveDefaultTmuxSocketPath(
   browserProfileDir: string,
   runtimeChannel: "stable" | "beta" | "dev",
 ): string {
-  return shouldPreserveTmuxOnShutdown(runtimeChannel)
+  return runtimeChannel === "stable"
     ? resolvePersistentTmuxSocketPath(browserProfileDir)
     : path.join(
         os.tmpdir(),
         `rw-tmux-${resolveTmuxProfileId(browserProfileDir)}`,
         "tmux.sock",
       );
-}
-
-function shouldPreserveTmuxOnShutdown(
-  runtimeChannel: "stable" | "beta" | "dev",
-): boolean {
-  return runtimeChannel === "stable";
 }
 
 export async function createRuntimeServices(
@@ -195,6 +190,7 @@ async function assembleRuntimeServices(
     process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta"
       ? process.env.RUNWEAVE_DESKTOP_CHANNEL
       : "dev";
+  const tmuxShutdownPolicy = resolveTmuxShutdownPolicy(runtimeChannel);
   const activity = await ActivityRuntime.create({
     env: process.env,
     browserProfileDir: storagePaths.browserProfileDir,
@@ -315,9 +311,7 @@ async function assembleRuntimeServices(
       ),
     env: process.env,
   });
-  const tmuxSocketPathsToCleanOnShutdown = shouldPreserveTmuxOnShutdown(
-    runtimeChannel,
-  )
+  const tmuxSocketPathsToCleanOnShutdown = tmuxShutdownPolicy === "preserve"
     ? []
     : [
         tmuxService.socketPath,
