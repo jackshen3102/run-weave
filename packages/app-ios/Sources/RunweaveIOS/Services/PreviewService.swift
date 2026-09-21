@@ -11,7 +11,9 @@ extension APIClient {
     components.queryItems = query.sorted { $0.key < $1.key }.map {
       URLQueryItem(name: $0.key, value: $0.value)
     }
-    return path + (components.percentEncodedQuery.map { "?" + $0 } ?? "")
+    // URLComponents leaves literal '+' intact, but the Backend query parser decodes it as a space.
+    let encodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+    return path + (encodedQuery.map { "?" + $0 } ?? "")
   }
   func previewSnapshot<T: Decodable>(
     projectID: String, resource: String, query: [String: String] = [:],
