@@ -1,8 +1,5 @@
-import { execFile } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
-import { realpath } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { promisify } from "node:util";
 import type {
   ExperienceDraft,
   ExperienceCandidate,
@@ -16,9 +13,7 @@ import { withExperienceStore, type ExperienceStorage } from "./storage";
 import { snapshotEvidence, inspectEvidence } from "./evidence";
 import { draftSchema, experienceIdSchema, feedbackSchema } from "./schema";
 
-const exec = promisify(execFile);
-const hash = (value: string | Buffer) =>
-  createHash("sha256").update(value).digest("hex");
+import { resolveRepositoryIdentity } from "../repository/identity";
 interface Scope {
   repositoryId: string;
   namespace: string;
@@ -47,12 +42,14 @@ export class ExperienceService {
   async scope(cwd: string): Promise<Scope> {
     if (!path.isAbsolute(cwd))
       throw new ExperienceError("experience_cwd_must_be_absolute");
-    const identity = await gitIdentity(cwd);
-    const repositoryId = hash(identity.common);
+    const identity = await resolveRepositoryIdentity(cwd).catch(() => {
+      throw new ExperienceError("experience_git_repository_required");
+    });
+    const repositoryId = identity.repositoryId;
     return {
       repositoryId,
       namespace: this.storage.namespace,
-      root: identity.root,
+      root: identity.worktreeRoot,
       directory: path.join(
         this.storage.home,
         this.storage.namespace,
@@ -330,36 +327,6 @@ export class ExperienceService {
       if (reason) reasons.push(reason);
     }
     return { record, available: !reasons.length, invalidReasons: reasons };
-  }
-}
-
-async function gitIdentity(
-  cwd: string,
-): Promise<{ root: string; common: string }> {
-  try {
-    const env = { ...process.env };
-    for (const key of [
-      "GIT_DIR",
-      "GIT_WORK_TREE",
-      "GIT_COMMON_DIR",
-      "GIT_INDEX_FILE",
-    ])
-      delete env[key];
-    const options = { cwd, env, timeout: 5000, maxBuffer: 64 * 1024 };
-    const [root, common] = await Promise.all([
-      exec("git", ["rev-parse", "--show-toplevel"], options),
-      exec(
-        "git",
-        ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-        options,
-      ),
-    ]);
-    return {
-      root: await realpath(root.stdout.trim()),
-      common: await realpath(common.stdout.trim()),
-    };
-  } catch {
-    throw new ExperienceError("experience_git_repository_required");
   }
 }
 

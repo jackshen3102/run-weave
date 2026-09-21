@@ -27,6 +27,21 @@ export function EvolutionInsightsPanel({ insights }: { insights: Insight[] }) {
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       {insight.topicKey}
                     </p>
+                    {insight.lineage?.status === "contested" ? (
+                      <p className="mt-2 text-sm text-amber-600">
+                        历史观点存在冲突，等待重新验证
+                      </p>
+                    ) : null}
+                    {insight.attribution &&
+                    insight.attribution.resolution !== "resolved" ? (
+                      <p className="mt-2 text-sm text-amber-600">
+                        历史归属
+                        {insight.attribution.resolution === "mixed"
+                          ? "涉及多个仓库"
+                          : "尚未确认"}
+                        ，仅供审计
+                      </p>
+                    ) : null}
                     <h3 className="mt-2 font-medium">
                       {current?.statement ?? "当前 revision 不可用"}
                     </h3>

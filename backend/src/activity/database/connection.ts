@@ -1,3 +1,9 @@
+import {
+  initializeRepositoryIndex,
+  bindActivityRepositories,
+  pendingRepositoryFacts,
+  type ActivityRepositoryBinding,
+} from "./repository-index";
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -31,7 +37,10 @@ import {
   runRetentionSweep,
   type ActivityMembershipSnapshot,
 } from "./maintenance";
-import { deriveAuditSubjectHmac, loadActivityContentKey } from "../security/crypto";
+import {
+  deriveAuditSubjectHmac,
+  loadActivityContentKey,
+} from "../security/crypto";
 import {
   recordIngestRejection,
   type ActivityIngestRejectionInput,
@@ -90,6 +99,9 @@ export class ActivityDatabase {
     this.database.pragma("synchronous = NORMAL");
     this.database.pragma("temp_store = MEMORY");
     withSqliteInitializationRetry(() => migrateActivityDatabase(this.database));
+    withSqliteInitializationRetry(() =>
+      initializeRepositoryIndex(this.database),
+    );
     for (const suffix of ["", "-wal", "-shm"]) {
       const filePath = `${options.databasePath}${suffix}`;
       if (fs.existsSync(filePath)) {
@@ -130,14 +142,42 @@ export class ActivityDatabase {
     }
   }
 
-  record(events: ActivityEventInput[], nowMs?: number) {
-    return recordActivityBatch(
-      this.database,
-      events,
-      this.contentKey,
-      () => nowMs ?? Date.now(),
-      this.options.maxDatabaseBytes,
-    );
+  pendingRepositories() {
+    return pendingRepositoryFacts(this.database);
+  }
+
+  bindRepositories(bindings: ActivityRepositoryBinding[]) {
+    this.database
+      .transaction(() => bindActivityRepositories(this.database, bindings))
+      .immediate();
+  }
+
+  record(
+    events: ActivityEventInput[],
+    nowMs?: number,
+    bindings: ActivityRepositoryBinding[] = [],
+  ) {
+    return this.database
+      .transaction(() => {
+        const result = recordActivityBatch(
+          this.database,
+          events,
+          this.contentKey,
+          () => nowMs ?? Date.now(),
+          this.options.maxDatabaseBytes,
+        );
+        const committed = new Set(
+          result
+            .filter((item) => item.status === "committed")
+            .map((item) => item.eventId),
+        );
+        bindActivityRepositories(
+          this.database,
+          bindings.filter((binding) => committed.has(binding.eventId)),
+        );
+        return result;
+      })
+      .immediate();
   }
 
   facts(query: ActivityFactsQuery) {

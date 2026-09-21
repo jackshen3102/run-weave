@@ -1,3 +1,4 @@
+import { readRepositoryAttribution } from "./repository-database";
 import type Database from "better-sqlite3";
 import type {
   EvolutionRun,
@@ -40,8 +41,8 @@ export class EvolutionFoundationDatabase {
           run_id, learning_scope_id, trigger_type, priority, trigger_json,
           profile, provider_policy, budget_json, data_range_json, stage,
           outcome, created_at_ms, updated_at_ms, started_at_ms,
-          completed_at_ms, attempt, owner_id, fencing_token
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
+          completed_at_ms, attempt, owner_id, fencing_token, repository_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`,
       )
       .run(
         run.runId,
@@ -60,6 +61,7 @@ export class EvolutionFoundationDatabase {
         nullableTimestamp(run.startedAt),
         nullableTimestamp(run.completedAt),
         run.attempt,
+        run.repository ? JSON.stringify(run.repository) : null,
       );
   }
 
@@ -67,15 +69,17 @@ export class EvolutionFoundationDatabase {
     const row = this.database
       .prepare("SELECT * FROM evolution_runs WHERE run_id = ?")
       .get(runId) as EvolutionRunRow | undefined;
-    return row ? toRun(row) : null;
+    return row ? this.presentRun(row) : null;
   }
 
   listRuns(query: EvolutionRunListQuery = {}): EvolutionRun[] {
     const conditions: string[] = [];
     const params: Array<string | number> = [];
     if (query.learningScopeId) {
-      conditions.push("learning_scope_id = ?");
-      params.push(query.learningScopeId);
+      conditions.push(
+        `(learning_scope_id = ? OR EXISTS (SELECT 1 FROM evolution_repository_bindings binding, json_each(binding.payload_json, '$.repositoryIds') item WHERE binding.kind = 'run' AND binding.id = evolution_runs.run_id AND item.value = ?))`,
+      );
+      params.push(query.learningScopeId, query.learningScopeId);
     }
     if (query.stage) {
       conditions.push("stage = ?");
@@ -90,7 +94,16 @@ export class EvolutionFoundationDatabase {
          ORDER BY created_at_ms DESC, run_id DESC LIMIT ?`,
       )
       .all(...params, limit) as EvolutionRunRow[];
-    return rows.map(toRun);
+    return rows.map((row) => this.presentRun(row));
+  }
+
+  private presentRun(row: EvolutionRunRow): EvolutionRun {
+    const attribution = readRepositoryAttribution(
+      this.database,
+      "run",
+      row.run_id,
+    );
+    return { ...toRun(row), ...(attribution ? { attribution } : {}) };
   }
 
   claimNextRun(params: {

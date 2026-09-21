@@ -1,3 +1,4 @@
+import type { RepositoryCommand, RepositoryResult } from "../repository-store";
 import type {
   CandidateAsset,
   ContributionEdge,
@@ -30,6 +31,7 @@ import type {
 } from "../foundation-store";
 
 export type EvolutionWorkerCommand =
+  | { id: number; op: "repository"; command: RepositoryCommand }
   | { id: number; op: "list-candidates" }
   | { id: number; op: "put-candidate"; candidate: CandidateAsset }
   | { id: number; op: "get-policy"; learningScopeId: string }
@@ -135,6 +137,7 @@ export type EvolutionWorkerRequest =
     : never;
 
 export type EvolutionWorkerResult =
+  | RepositoryResult
   | CandidateAsset[]
   | ContributionEdge[]
   | ContextPackManifest

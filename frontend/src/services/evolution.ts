@@ -1,4 +1,8 @@
 import type {
+  EvolutionRepository,
+  EvolutionReflectionBatch,
+} from "@runweave/shared/evolution";
+import type {
   CandidateAsset,
   CreateEvolutionRunRequest,
   CreateEvolutionScheduleRequest,
@@ -289,4 +293,35 @@ export function fetchEvolutionRuntimeTraces(
     `/api/evolution/runtime-traces${queryString(query)}`,
     { headers: authHeaders(token) },
   );
+}
+
+export function fetchEvolutionRepositories(
+  apiBase: string,
+  token: string,
+): Promise<{ repositories: EvolutionRepository[] }> {
+  return requestJson(apiBase, "/api/evolution/scopes", {
+    headers: authHeaders(token),
+  });
+}
+export function resolveEvolutionScope(
+  apiBase: string,
+  token: string,
+  learningScopeId: string,
+): Promise<{ repositoryId: string }> {
+  return requestJson(
+    apiBase,
+    `/api/evolution/scopes/resolve?${new URLSearchParams({ learningScopeId })}`,
+    { headers: authHeaders(token) },
+  );
+}
+export function createEvolutionBatch(
+  apiBase: string,
+  token: string,
+  idempotencyKey: string,
+): Promise<EvolutionReflectionBatch> {
+  return requestJson(apiBase, "/api/evolution/reflection-batches", {
+    method: "POST",
+    headers: jsonHeaders(token),
+    body: JSON.stringify({ idempotencyKey }),
+  });
 }

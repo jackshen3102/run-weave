@@ -1,5 +1,11 @@
-import { attachLocalBrowserWebSocketServer, localBrowserAuth } from "./ws/browser-local-server";
-import { LOCAL_BROWSER_MAX_CONNECTIONS, LOCAL_BROWSER_MAX_FRAME } from "@runweave/shared/browser-local-tunnel";
+import {
+  attachLocalBrowserWebSocketServer,
+  localBrowserAuth,
+} from "./ws/browser-local-server";
+import {
+  LOCAL_BROWSER_MAX_CONNECTIONS,
+  LOCAL_BROWSER_MAX_FRAME,
+} from "@runweave/shared/browser-local-tunnel";
 import { createExperienceRouter } from "./routes/experience";
 import { createTerminalSnapshotShareRouter } from "./routes/terminal/snapshot-share";
 import { createCodexQuotaRouter } from "./routes/codex-quota";
@@ -216,7 +222,10 @@ function createHttpApp(
       trustProxyHeaders: tunnelAuthConfig !== null,
     }),
   );
-  app.use("/api/auth/mobile-login", createMobileLoginRouter(services.mobileLoginService, services.authService));
+  app.use(
+    "/api/auth/mobile-login",
+    createMobileLoginRouter(services.mobileLoginService, services.authService),
+  );
   diagnosticLogRecorder.configurePersistence({
     persistRoot: resolveStoragePaths(process.env).backendLogDir,
   });
@@ -227,13 +236,34 @@ function createHttpApp(
   );
   registerRuntimeStatusRoutes(app, requireAuth, services.runtimeStatus);
   app.get("/api/browser/local/capabilities", requireAuth, (req, res) => {
-    if (!localBrowserAuth(req, services.authService)) { res.sendStatus(401); return; }
-    if (!services.localBrowserService.enabled) { res.status(503).json({ code: "disabled" }); return; }
-    res.json({ protocolVersion: 1, maxConnections: LOCAL_BROWSER_MAX_CONNECTIONS, maxFrameBytes: LOCAL_BROWSER_MAX_FRAME });
+    if (!localBrowserAuth(req, services.authService)) {
+      res.sendStatus(401);
+      return;
+    }
+    if (!services.localBrowserService.enabled) {
+      res.status(503).json({ code: "disabled" });
+      return;
+    }
+    res.json({
+      protocolVersion: 1,
+      maxConnections: LOCAL_BROWSER_MAX_CONNECTIONS,
+      maxFrameBytes: LOCAL_BROWSER_MAX_FRAME,
+    });
   });
   app.use("/api/codex/quota", requireAuth, createCodexQuotaRouter());
-  app.use("/api/device", requireAuth, createDeviceStatusRouter(services.deviceMonitor));
-  app.use("/api/device/notifications", requireAuth, createDeviceNotificationsRouter(services.batteryAlerts?.subscriptions ?? null, services.authService));
+  app.use(
+    "/api/device",
+    requireAuth,
+    createDeviceStatusRouter(services.deviceMonitor),
+  );
+  app.use(
+    "/api/device/notifications",
+    requireAuth,
+    createDeviceNotificationsRouter(
+      services.batteryAlerts?.subscriptions ?? null,
+      services.authService,
+    ),
+  );
   app.use(
     "/api/app",
     requireAuth,
@@ -262,21 +292,23 @@ function createHttpApp(
     requireAuth,
     createAgentTeamRouter(services.agentTeamService),
   );
-  app.use(
-    "/api/race",
-    requireAuth,
-    createRaceRouter(services.raceService),
-  );
+  app.use("/api/race", requireAuth, createRaceRouter(services.raceService));
   app.use(
     "/api/experience",
     requireAuth,
-    createExperienceRouter(services.experienceService, services.experienceLearning),
+    createExperienceRouter(
+      services.experienceService,
+      services.experienceLearning,
+    ),
   );
   app.use(
     "/api/evolution",
     requireAuth,
     createEvolutionFoundationRouter(services.evolutionService),
-    createEvolutionActivationRouter(services.evolutionActivationStore),
+    createEvolutionActivationRouter(
+      services.evolutionActivationStore,
+      services.evolutionService.repositories,
+    ),
   );
   app.use(
     "/api/terminal",
@@ -462,8 +494,14 @@ async function startRuntime(): Promise<void> {
     const transport = new TransportRuntime(server);
     resources.defer("transport", () => transport.dispose());
     const upgradeRouter = createHttpUpgradeRouter(server);
-    transport.addWebSocket(attachLocalBrowserWebSocketServer(upgradeRouter,
-      services.localBrowserService, services.authService, tunnelAuthConfig));
+    transport.addWebSocket(
+      attachLocalBrowserWebSocketServer(
+        upgradeRouter,
+        services.localBrowserService,
+        services.authService,
+        tunnelAuthConfig,
+      ),
+    );
 
     stage = "websocket-servers";
     attachWorkspaceServiceUpgradeProxy(
@@ -526,7 +564,10 @@ async function startRuntime(): Promise<void> {
     try {
       await resources.dispose();
     } catch (cleanupError) {
-      logger.error("backend.start.cleanup.failed", { stage, error: cleanupError });
+      logger.error("backend.start.cleanup.failed", {
+        stage,
+        error: cleanupError,
+      });
     }
     throw new BackendStartError(stage, error);
   }

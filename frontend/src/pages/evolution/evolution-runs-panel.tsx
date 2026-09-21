@@ -1,3 +1,4 @@
+import { evolutionRunLabel } from "./evolution-run-label";
 import type {
   EvolutionRun,
   EvolutionRunArtifacts,
@@ -16,7 +17,6 @@ import {
 
 export function EvolutionRunsPanel({
   runs,
-  scopeLabel,
   selectedRunId,
   traces,
   artifacts,
@@ -26,7 +26,6 @@ export function EvolutionRunsPanel({
   onRetryRun,
 }: {
   runs: EvolutionRun[];
-  scopeLabel: string;
   selectedRunId: string | null;
   traces: RuntimeTraceSummary[];
   artifacts: EvolutionRunArtifacts | undefined;
@@ -61,7 +60,7 @@ export function EvolutionRunsPanel({
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="min-w-0 truncate text-sm font-medium">
-                    {scopeLabel}
+                    {evolutionRunLabel(run)}
                   </p>
                   <EvolutionStatusPill
                     status={run.stage}
@@ -94,7 +93,12 @@ export function EvolutionRunsPanel({
                   {selectedRun.runId}
                 </h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {scopeLabel} · {selectedRun.trigger.type}
+                  {evolutionRunLabel(selectedRun)} · {selectedRun.trigger.type}
+                  {selectedRun.repository ? (
+                    <span className="block break-all">
+                      {selectedRun.repository.cwd}
+                    </span>
+                  ) : null}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -198,9 +202,7 @@ export function EvolutionRunsPanel({
                           </div>
                           <p className="mt-1 text-[0.68rem] text-muted-foreground">
                             {attempt.selectionReason}
-                            {attempt.errorCode
-                              ? ` · ${attempt.errorCode}`
-                              : ""}
+                            {attempt.errorCode ? ` · ${attempt.errorCode}` : ""}
                           </p>
                         </div>
                       ))}
@@ -280,7 +282,6 @@ export function EvolutionRunsPanel({
                 正在读取该 Run 的分析产物。
               </div>
             )}
-
           </>
         ) : (
           <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
@@ -355,11 +356,7 @@ export function EvolutionRunsPanel({
   );
 }
 
-function ReflectionResult({
-  artifacts,
-}: {
-  artifacts: EvolutionRunArtifacts;
-}) {
+function ReflectionResult({ artifacts }: { artifacts: EvolutionRunArtifacts }) {
   const activitySource = artifacts.contextPack?.sources.find(
     (source) => source.source === "activity",
   );
@@ -406,7 +403,7 @@ function ReflectionResult({
           <p className="mt-1 text-[0.68rem] text-muted-foreground">
             {activitySource?.truncated
               ? "仍有未处理数据"
-              : "冻结范围已全部覆盖"}
+              : "已覆盖本次冻结且归属明确的范围"}
           </p>
         </div>
       </div>

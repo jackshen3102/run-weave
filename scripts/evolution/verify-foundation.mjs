@@ -3,7 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { EVOLUTION_GLOBAL_SCOPE_ID } from "../../packages/shared/src/evolution/index.ts";
+import { execFileSync } from "node:child_process";
+import { resolveRepositoryIdentity } from "../../backend/src/repository/identity.ts";
+import { EvolutionRepositoryScopes } from "../../backend/src/evolution/repository-scope.ts";
 import { buildTerminalChildProjectId } from "../../packages/shared/src/terminal/project-context.ts";
 import { createEvolutionMcpRouter } from "../../backend/src/routes/evolution/mcp.ts";
 import { EvolutionService } from "../../backend/src/evolution/service.ts";
@@ -288,6 +290,14 @@ async function verifyFoundation() {
       );
     }
 
+    execFileSync("git", ["init", tempRoot], { stdio: "ignore" });
+    const scopes = new EvolutionRepositoryScopes(
+      stores[0],
+      () => [{ id: "fixture", name: "fixture", path: tempRoot }],
+      () => tempRoot,
+    );
+    const parentProjectId = (await resolveRepositoryIdentity(tempRoot))
+      .repositoryId;
     let clockMs = initialTime + 1_000;
     const service = new EvolutionService(
       stores[0],
@@ -296,8 +306,12 @@ async function verifyFoundation() {
         RUNWEAVE_CODEX_BIN: path.join(tempRoot, "missing-codex"),
         RUNWEAVE_TRAE_BIN: path.join(tempRoot, "missing-trae"),
       }),
+      null,
+      null,
+      null,
+      scopes,
+      async () => 100,
     );
-    const parentProjectId = "project:browser-viewer";
     const childProjectId = buildTerminalChildProjectId(
       parentProjectId,
       "agent-team-2",
@@ -442,13 +456,26 @@ async function verifyFoundation() {
       "one-click manual reflection must start after the last successful watermark",
     );
     await service.cancelRun(incrementalManualRun.runId);
-    const globalManualRun = await service.createManualRun(
-      { scope: { type: "global" } },
+    await assert.rejects(
+      service.createManualRun(
+        { scope: { type: "global" } },
+        "foundation-verifier",
+      ),
+      /evolution_global_requires_reflection_batch/,
+    );
+    const batch = await service.createReflectionBatch(
+      "foundation-idempotency",
       "foundation-verifier",
     );
-    assert.equal(globalManualRun.learningScopeId, EVOLUTION_GLOBAL_SCOPE_ID);
-    assert.equal(globalManualRun.dataRange.afterWatermark, null);
-    await service.cancelRun(globalManualRun.runId);
+    assert.deepEqual(
+      await service.createReflectionBatch(
+        "foundation-idempotency",
+        "foundation-verifier",
+      ),
+      batch,
+    );
+    assert.deepEqual(batch.repositoryIds, [parentProjectId]);
+    for (const id of batch.runIds) await service.cancelRun(id);
 
     const schedule = await service.createSchedule({
       projectId: childProjectId,
@@ -483,7 +510,17 @@ async function verifyFoundation() {
     });
     clockMs += 185_000;
     const schedulerServices = stores.map(
-      (store) => new EvolutionService(store, () => new Date(clockMs)),
+      (store) =>
+        new EvolutionService(
+          store,
+          () => new Date(clockMs),
+          undefined,
+          null,
+          null,
+          null,
+          scopes,
+          async () => 100,
+        ),
     );
     const materialized = (
       await Promise.all(

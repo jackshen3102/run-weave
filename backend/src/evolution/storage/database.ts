@@ -1,3 +1,5 @@
+import { executeRepositoryCommand } from "./repository-database";
+import type { RepositoryCommand } from "../repository-store";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -48,13 +50,22 @@ export class EvolutionActivationDatabase {
     this.database.pragma("journal_mode = WAL");
     this.database.pragma("busy_timeout = 5000");
     this.database.pragma("foreign_keys = ON");
-    migrateEvolutionDatabase(this.database);
+    try {
+      migrateEvolutionDatabase(this.database);
+    } catch (error) {
+      this.database.close();
+      throw error;
+    }
     this.foundation = new EvolutionFoundationDatabase(this.database);
     this.artifacts = new EvolutionArtifactDatabase(this.database);
     this.knowledge = new EvolutionKnowledgeDatabase(
       this.database,
       this.foundation,
     );
+  }
+
+  repository(command: RepositoryCommand) {
+    return executeRepositoryCommand(this.database, this.foundation, command);
   }
 
   getPolicy(learningScopeId: string): EvolutionScopePolicy | null {

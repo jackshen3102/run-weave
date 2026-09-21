@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { filterEvolutionScope } from "./evolution/evolution-page-state";
+import { useEvolutionScope } from "./evolution/use-evolution-scope";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemoizedFn } from "ahooks";
 import { useSearchParams } from "react-router-dom";
@@ -30,7 +32,7 @@ import {
   updateEvolutionSchedule,
   updateEvolutionScopePolicy,
 } from "../services/evolution";
-import { listTerminalProjects } from "../services/terminal/index";
+import { createEvolutionBatch } from "../services/evolution";
 import {
   EvolutionScheduleDialog,
   RetireEvolutionCandidateDialog,
@@ -42,19 +44,16 @@ import {
   EvolutionOverview,
   EvolutionSidebar,
   TERMINAL_STAGES,
-  type EvolutionScopeOption,
   type EvolutionView,
 } from "./evolution/evolution-page-panels";
 import { EvolutionInsightsPanel } from "./evolution/evolution-insights-panel";
 import {
   EMPTY_CANDIDATES,
   EMPTY_INSIGHTS,
-  EMPTY_PROJECTS,
   EMPTY_RUNS,
   EMPTY_SCHEDULES,
   EMPTY_TRACES,
   EVOLUTION_VIEWS,
-  buildEvolutionScopeOptions,
   evolutionErrorMessage,
 } from "./evolution/evolution-page-state";
 import { EvolutionRunsPanel } from "./evolution/evolution-runs-panel";
@@ -118,10 +117,6 @@ export function EvolutionPage({
         limit: 200,
       }),
   });
-  const projectsQuery = useQuery({
-    queryKey: ["evolution", "project-metadata", apiBase],
-    queryFn: () => listTerminalProjects(apiBase, token),
-  });
 
   const runs = runsQuery.data?.runs ?? EMPTY_RUNS;
   const schedules = schedulesQuery.data?.schedules ?? EMPTY_SCHEDULES;
@@ -129,39 +124,13 @@ export function EvolutionPage({
   const insights = insightsQuery.data?.insights ?? EMPTY_INSIGHTS;
   const traces = tracesQuery.data?.traces ?? EMPTY_TRACES;
   const providers = providersQuery.data?.providers ?? [];
-  const projects = projectsQuery.data ?? EMPTY_PROJECTS;
-  const scopeOptions = useMemo<EvolutionScopeOption[]>(
-    () => buildEvolutionScopeOptions(projects),
-    [projects],
-  );
-  const requestedScopeId = searchParams.get("scope") ?? "";
-  const selectedScopeId = scopeOptions.some(
-    (scope) => scope.id === requestedScopeId,
-  )
-    ? requestedScopeId
-    : EVOLUTION_GLOBAL_SCOPE_ID;
-  const selectedScope =
-    scopeOptions.find((scope) => scope.id === selectedScopeId) ??
-    scopeOptions[0]!;
-  const scopedRuns = selectedScopeId
-    ? runs.filter((run) => run.learningScopeId === selectedScopeId)
-    : runs;
-  const scopedSchedules = selectedScopeId
-    ? schedules.filter(
-        (schedule) => schedule.learningScopeId === selectedScopeId,
-      )
-    : schedules;
-  const scopedCandidates = selectedScopeId
-    ? candidates.filter(
-        (candidate) => candidate.learningScopeId === selectedScopeId,
-      )
-    : candidates;
-  const scopedInsights = selectedScopeId
-    ? insights.filter((insight) => insight.learningScopeId === selectedScopeId)
-    : insights;
-  const scopedTraces = selectedScopeId
-    ? traces.filter((trace) => trace.learningScopeId === selectedScopeId)
-    : traces;
+  const { scopeOptions, selectedScopeId, selectedScope, scopeError } =
+    useEvolutionScope(apiBase, token, searchParams.get("scope") ?? "");
+  const scopedRuns = filterEvolutionScope(runs, selectedScopeId);
+  const scopedSchedules = filterEvolutionScope(schedules, selectedScopeId);
+  const scopedCandidates = filterEvolutionScope(candidates, selectedScopeId);
+  const scopedInsights = filterEvolutionScope(insights, selectedScopeId);
+  const scopedTraces = filterEvolutionScope(traces, selectedScopeId);
   const requestedRunId = searchParams.get("run");
   const selectedRunId =
     (requestedRunId &&
@@ -200,7 +169,7 @@ export function EvolutionPage({
   const policyQuery = useQuery({
     queryKey: ["evolution", "policy", apiBase, selectedScopeId],
     queryFn: () => fetchEvolutionScopePolicy(apiBase, token, selectedScopeId),
-    enabled: view === "candidates" && selectedScopeId.length > 0,
+    enabled: view === "candidates" && selectedScope.kind === "repository",
   });
 
   const invalidateEvolution = useMemoizedFn(async () => {
@@ -256,13 +225,28 @@ export function EvolutionPage({
       await invalidateEvolution();
     },
   });
+  const [batchKey, setBatchKey] = useState(() => crypto.randomUUID());
+  const createBatchMutation = useMutation({
+    mutationFn: () => createEvolutionBatch(apiBase, token, batchKey),
+    onSuccess: async () => {
+      setBatchKey(crypto.randomUUID());
+      updateParams({ view: "runs", scope: EVOLUTION_GLOBAL_SCOPE_ID });
+      await invalidateEvolution();
+    },
+  });
   const startReflection = useMemoizedFn(() => {
+    if (selectedScope.kind === "global") {
+      createBatchMutation.mutate();
+      return;
+    }
+    if (selectedScope.kind !== "repository" || !selectedScope.available) return;
     createRunMutation.reset();
     createRunMutation.mutate({
-      scope:
-        selectedScope.kind === "global"
-          ? { type: "global" }
-          : { type: "project", projectId: selectedScope.id },
+      scope: {
+        type: "repository",
+        repositoryId: selectedScope.id,
+        cwd: selectedScope.cwd,
+      },
     });
   });
   const cancelRunMutation = useMutation({
@@ -420,6 +404,8 @@ export function EvolutionPage({
   });
 
   const firstError =
+    scopeError ??
+    createBatchMutation.error ??
     runsQuery.error ??
     providersQuery.error ??
     schedulesQuery.error ??
@@ -475,11 +461,20 @@ export function EvolutionPage({
           <EvolutionHeader
             view={view}
             scopeLabel={selectedScope.label}
-            reflectionPending={createRunMutation.isPending}
+            reflectionPending={
+              createRunMutation.isPending || createBatchMutation.isPending
+            }
+            reflectionDisabled={
+              selectedScope.kind === "legacy" ||
+              (selectedScope.kind === "repository" && !selectedScope.available)
+            }
             onStartReflection={startReflection}
             onOpenSchedule={openScheduleDialog}
           />
           <div className="min-h-0 flex-1 overflow-auto p-5 max-sm:p-3">
+            <p className="mb-3 text-sm text-muted-foreground">
+              {selectedScope.description}
+            </p>
             {firstError ? (
               <EvolutionErrorNotice
                 message={evolutionErrorMessage(firstError)}
@@ -498,7 +493,6 @@ export function EvolutionPage({
                   runtimeAvailable={
                     providersQuery.data?.runtimeAvailable ?? false
                   }
-                  scopeLabel={selectedScope.label}
                   onSelectRun={selectRun}
                   onSelectView={selectView}
                 />
@@ -506,7 +500,6 @@ export function EvolutionPage({
               {!initialLoading && view === "runs" ? (
                 <EvolutionRunsPanel
                   runs={scopedRuns}
-                  scopeLabel={selectedScope.label}
                   selectedRunId={selectedRunId}
                   traces={scopedTraces}
                   artifacts={artifactsQuery.data}
@@ -556,7 +549,7 @@ export function EvolutionPage({
               : null
           }
           schedule={editingSchedule}
-          initialProjectId={selectedScopeId}
+          initialProjectId={selectedScope.cwd ?? ""}
           onOpenChange={(open) => {
             if (!open) closeScheduleDialog();
           }}

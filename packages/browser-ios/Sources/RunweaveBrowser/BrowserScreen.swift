@@ -132,6 +132,7 @@ public struct BrowserScreen: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .onAppear { page.showLocalPreviewNoticeIfNeeded() }
     .overlay(alignment: .top) {
       if let message = browser.dataStatus ?? page.notice {
         HStack(alignment: .top, spacing: 8) {

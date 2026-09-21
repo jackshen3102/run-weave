@@ -13,11 +13,7 @@ import type {
 } from "../analysis-store";
 import { createCandidateAsset } from "./candidate-factory";
 
-const MATERIAL_CANDIDATE_NOVELTY = new Set([
-  "novel",
-  "contradiction",
-  "drift",
-]);
+const MATERIAL_CANDIDATE_NOVELTY = new Set(["novel", "contradiction", "drift"]);
 
 export interface CommitKnowledgeResult {
   insights: EvolutionPreparedInsightRevision[];
@@ -60,8 +56,7 @@ export class EvolutionInsightService {
         baselineByTopic.get(claim.topicKey) ??
         baseline.find((insight) =>
           insight.revisions.some(
-            (revision) =>
-              revision.revisionId === novelty.baselineRevisionId,
+            (revision) => revision.revisionId === novelty.baselineRevisionId,
           ),
         );
       const insightId =
@@ -89,6 +84,7 @@ export class EvolutionInsightService {
       const insight: Omit<Insight, "revisions"> = {
         insightId,
         learningScopeId: params.learningScopeId,
+        repositoryId: params.learningScopeId,
         topicKey: existing?.topicKey ?? claim.topicKey,
         currentRevisionId: revision.revisionId,
         createdAt: existing?.createdAt ?? params.createdAt,
@@ -122,6 +118,8 @@ export class EvolutionInsightService {
           },
           params.createdAt,
         );
+        if (existing?.lineage?.status === "contested")
+          candidate.lifecycle = "needs_revalidation";
         candidates.push(candidate);
       }
     }
@@ -129,9 +127,7 @@ export class EvolutionInsightService {
   }
 }
 
-function toContributionEdges(
-  revision: InsightRevision,
-): ContributionEdge[] {
+function toContributionEdges(revision: InsightRevision): ContributionEdge[] {
   return [
     ...revision.evidenceIds.map((evidenceId) =>
       edge(revision, evidenceId, "supports"),

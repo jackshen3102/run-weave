@@ -1,6 +1,11 @@
+import { createEvolutionStorage } from "./evolution-storage";
+import { prepareEvolutionRepositoryMigration } from "./evolution-migration";
 import { LocalBrowserService } from "../browser-local/service";
 import { resolveTmuxShutdownPolicy } from "./tmux-shutdown-policy";
-import { createDeviceMonitor, type DeviceMonitoringRuntime } from "../device-monitor/bootstrap";
+import {
+  createDeviceMonitor,
+  type DeviceMonitoringRuntime,
+} from "../device-monitor/bootstrap";
 import { MobileLoginService } from "../auth/mobile-login";
 import { createHash } from "node:crypto";
 import os from "node:os";
@@ -50,25 +55,18 @@ import {
 import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
 import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
-import {
-  InMemoryEvolutionActivationStore,
-  type EvolutionActivationStore,
-} from "../evolution/activation-store";
+import { type EvolutionActivationStore } from "../evolution/activation-store";
 import type { EvolutionAnalysisStore } from "../evolution/analysis-store";
 import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
 import { EvolutionContextPackBuilder } from "../evolution/context-pack";
-import { DefaultEvolutionMemoryProvider } from "../evolution/injection/memory-provider";
-import { EvolutionOutcomeObserver } from "../evolution/injection/outcome-observer";
+
 import { EvolutionEvidenceReconciler } from "../evolution/knowledge/evidence-reconciler";
-import { StructuredEvolutionMemorySelector } from "../evolution/knowledge/retrieval";
-import type { EvolutionFoundationStore } from "../evolution/foundation-store";
+
 import type { EvolutionContextPackStore } from "../evolution/context-pack-store";
 import { EvolutionRuntime } from "../evolution/runtime";
 import { EvolutionService } from "../evolution/service";
-import { SqliteEvolutionActivationStore } from "../evolution/storage/store";
 import { DefaultEvolutionSupplementalSourceReader } from "../evolution/supplemental-sources";
 import { EvolutionToolTokenRegistry } from "../evolution/tools/token-registry";
-import { EvolutionProviderAvailabilityService } from "../evolution/providers/availability";
 import { RaceRecordStore } from "../race/race-record-store";
 import { RaceService } from "../race/race-service";
 import { BackendRuntimeStatusService } from "../runtime-status/service";
@@ -185,6 +183,7 @@ async function assembleRuntimeServices(
 ): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
   const evolutionPaths = resolveEvolutionStoragePaths(process.env);
+  await prepareEvolutionRepositoryMigration(process.env);
   const runtimeChannel =
     process.env.RUNWEAVE_DESKTOP_CHANNEL === "stable" ||
     process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta"
@@ -204,9 +203,15 @@ async function assembleRuntimeServices(
     eventFactory: activityEventFactory,
     instanceId: activityInstanceId,
   } = activity;
-  const { experienceService, experienceLearning } = createExperienceLearning(activityStore, runtimeChannel);
+  const { experienceService, experienceLearning } = createExperienceLearning(
+    activityStore,
+    runtimeChannel,
+  );
   resources.defer("experience-learning", () => experienceLearning.dispose());
-  const terminalActivity = { recorder: activityRecorder, eventFactory: activityEventFactory };
+  const terminalActivity = {
+    recorder: activityRecorder,
+    eventFactory: activityEventFactory,
+  };
   const authConfig = loadAuthConfig();
   const authStore = new LowDbAuthStore(storagePaths.authStoreFile);
   resources.defer("auth-store", () => authStore.dispose());
@@ -233,12 +238,16 @@ async function assembleRuntimeServices(
   const terminalQuickInputStore = new LowDbTerminalQuickInputStore(
     storagePaths.terminalQuickInputStoreFile,
   );
-  resources.defer("terminal-quick-input-store", () => terminalQuickInputStore.dispose());
+  resources.defer("terminal-quick-input-store", () =>
+    terminalQuickInputStore.dispose(),
+  );
   await terminalQuickInputStore.initialize();
   const agentTeamModelConfigStore = new AgentTeamModelConfigStore(
     storagePaths.agentTeamModelStoreFile,
   );
-  resources.defer("agent-team-model-config", () => agentTeamModelConfigStore.dispose());
+  resources.defer("agent-team-model-config", () =>
+    agentTeamModelConfigStore.dispose(),
+  );
   await agentTeamModelConfigStore.initialize();
   const agentTeamModelSettingsService = new AgentTeamModelSettingsService(
     agentTeamModelConfigStore,
@@ -284,7 +293,9 @@ async function assembleRuntimeServices(
       },
     },
   );
-  resources.defer("terminal-session-manager", () => terminalSessionManager.dispose());
+  resources.defer("terminal-session-manager", () =>
+    terminalSessionManager.dispose(),
+  );
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalEventService,
     terminalSessionManager,
@@ -320,9 +331,13 @@ async function assembleRuntimeServices(
           : []),
       ];
   for (const socketPath of new Set(tmuxSocketPathsToCleanOnShutdown)) {
-    resources.defer("tmux-server", () => tmuxService.killServer(socketPath).then(() => undefined));
+    resources.defer("tmux-server", () =>
+      tmuxService.killServer(socketPath).then(() => undefined),
+    );
   }
-  resources.defer("terminal-runtimes", () => terminalRuntimeRegistry.disposeAll());
+  resources.defer("terminal-runtimes", () =>
+    terminalRuntimeRegistry.disposeAll(),
+  );
   const tmuxOutputWatcher = new TmuxOutputWatcher({
     outputDir: path.join(
       path.dirname(storagePaths.terminalSessionStoreFile),
@@ -338,8 +353,13 @@ async function assembleRuntimeServices(
   const workspaceServiceManager = new RuntimeStatusWorkspaceServiceManager(
     terminalSessionManager,
   );
-  resources.defer("workspace-services", () => workspaceServiceManager.dispose());
-  const environmentSync = syncExistingTmuxSessionEnvironments(terminalSessionManager, tmuxService)
+  resources.defer("workspace-services", () =>
+    workspaceServiceManager.dispose(),
+  );
+  const environmentSync = syncExistingTmuxSessionEnvironments(
+    terminalSessionManager,
+    tmuxService,
+  )
     .then((failures) => {
       for (const failure of failures) {
         logger.warn("terminal.tmux.environment-sync.startup.failed", {
@@ -378,55 +398,30 @@ async function assembleRuntimeServices(
   if (shouldScanTmuxOrphans(process.env)) {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
-  const outputRecovery = tmuxOutputWatcher.watchExistingSessions().catch((error) => {
-    logger.warn("terminal.tmux.output-watch.startup.failed", {
-      message: "Failed to recover tmux output watchers during startup",
-      error,
-    });
-  });
-  resources.defer("tmux-output-recovery", () => outputRecovery);
-  let evolutionActivationStore: EvolutionActivationStore;
-  let evolutionAnalysisStore: EvolutionAnalysisStore | null = null;
-  let evolutionFoundationStore: EvolutionFoundationStore | null = null;
-  let evolutionContextPackStore: EvolutionContextPackStore | null = null;
-  try {
-    const persistentEvolutionStore =
-      await SqliteEvolutionActivationStore.create({
-        databasePath: evolutionPaths.learningDatabaseFile,
-        env: process.env,
+  const outputRecovery = tmuxOutputWatcher
+    .watchExistingSessions()
+    .catch((error) => {
+      logger.warn("terminal.tmux.output-watch.startup.failed", {
+        message: "Failed to recover tmux output watchers during startup",
+        error,
       });
-    evolutionActivationStore = persistentEvolutionStore;
-    evolutionAnalysisStore = persistentEvolutionStore;
-    evolutionFoundationStore = persistentEvolutionStore;
-    evolutionContextPackStore = persistentEvolutionStore;
-  } catch (error) {
-    logger.warn("evolution.initialize.failed", {
-      component: "evolution",
-      message:
-        "Persistent Evolution activation is unavailable; Backend continues with disabled in-memory policy",
-      error,
     });
-    evolutionActivationStore = new InMemoryEvolutionActivationStore();
-  }
-  resources.defer("evolution-store", () => evolutionActivationStore.close());
-  const evolutionProviderAvailability =
-    new EvolutionProviderAvailabilityService();
-  const evolutionService = new EvolutionService(
-    evolutionFoundationStore,
-    undefined,
-    evolutionProviderAvailability,
+  resources.defer("tmux-output-recovery", () => outputRecovery);
+  const {
+    evolutionActivationStore,
     evolutionAnalysisStore,
+    evolutionFoundationStore,
     evolutionContextPackStore,
-    evolutionActivationStore,
-  );
-  const evolutionToolTokenRegistry = new EvolutionToolTokenRegistry();
-  resources.defer("evolution-tool-tokens", () => evolutionToolTokenRegistry.clear());
-  const evolutionMemoryProvider = new DefaultEvolutionMemoryProvider(
-    evolutionActivationStore,
-    new StructuredEvolutionMemorySelector(),
-  );
-  const evolutionOutcomeObserver = new EvolutionOutcomeObserver(
-    evolutionActivationStore,
+    evolutionProviderAvailability,
+    evolutionService,
+    evolutionToolTokenRegistry,
+    evolutionMemoryProvider,
+    evolutionOutcomeObserver,
+  } = await createEvolutionStorage(
+    evolutionPaths,
+    resources,
+    terminalSessionManager,
+    activityQueryService,
   );
   const agentTeamService = new AgentTeamService({
     terminalSessionManager,
@@ -526,13 +521,24 @@ async function assembleRuntimeServices(
     },
   );
   resources.defer("runtime-status", () => runtimeStatus.dispose());
-  const deviceMonitoring = await createDeviceMonitor(storagePaths.browserProfileDir, authService);
-  resources.defer("device-monitor", () => deviceMonitoring.deviceMonitor?.dispose());
-  resources.defer("battery-alerts", () => deviceMonitoring.batteryAlerts?.dispose());
+  const deviceMonitoring = await createDeviceMonitor(
+    storagePaths.browserProfileDir,
+    authService,
+  );
+  resources.defer("device-monitor", () =>
+    deviceMonitoring.deviceMonitor?.dispose(),
+  );
+  resources.defer("battery-alerts", () =>
+    deviceMonitoring.batteryAlerts?.dispose(),
+  );
   const mobileLoginService = new MobileLoginService(authService);
   resources.defer("mobile-login", () => mobileLoginService.dispose());
   const localBrowserService = new LocalBrowserService((authId, terminalId) =>
-    Boolean(authService.getActiveAppSession(authId) && terminalSessionManager.getSession(terminalId)));
+    Boolean(
+      authService.getActiveAppSession(authId) &&
+      terminalSessionManager.getSession(terminalId),
+    ),
+  );
   resources.defer("local-browser", () => localBrowserService.dispose());
   let disposed = false;
   const services: RuntimeServices = {

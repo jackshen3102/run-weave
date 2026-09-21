@@ -6,16 +6,16 @@ description: >
 
 cases:
   - id: ASEC-001
-    name: 同一主项目的动态 workspace 归入同一学习范围
+    name: 同一 Git 仓库的动态 workspace 归入同一学习范围
     required: true
     description: >
-      验证主项目、多个子 worktree 以及路径已删除但身份仍可解析的历史 workspace 使用同一 learningScopeId，且不同主项目的数据不会混入。
+      验证主项目、多个子 worktree 以及路径已删除但身份仍可解析的历史 workspace 使用同一 learningScopeId，且不同 Git 仓库的数据不会混入。
     preconditions:
-      - 已准备一个主项目、两个由该项目派生的 worktree workspace、一个已删除路径但保留历史事实的子 workspace，以及另一个无关主项目。
+      - 已准备一个主项目、两个由该项目派生的 worktree workspace、一个已删除路径但有可靠历史仓库绑定的子 workspace，以及另一个独立 Git 仓库。
       - 每个 workspace 都存在可区分的 Activity Fact 或 Agent Team Run。
     steps:
-      - 从任一现存子 workspace 创建指定窗口的手动 Evolution Run；确认 Run 返回的 learningScopeId 等于主项目身份，而不是子 workspace 的 projectId。
-      - 读取该 Run 的 Context Pack 清单；确认主项目及其三个子 workspace 的事实均可追溯，无关主项目事实不存在，原始 projectId、路径、分支和 revision 仍分别保留。
+      - 从任一现存子 workspace 创建指定窗口的手动 Evolution Run；确认 Run 返回的 learningScopeId 等于Git common directory 的 SHA-256 身份。
+      - 读取该 Run 的 Context Pack 清单；确认主项目及其三个子 workspace 的事实均可追溯，独立仓库事实不存在，原始 projectId、路径、分支和 revision 仍分别保留。
 
   - id: ASEC-002
     name: 手动触发通过统一状态机完成一次真实分析
@@ -196,12 +196,12 @@ cases:
     name: Evolution 独立页面提供一键范围复盘而不暴露运行参数
     required: true
     description: >
-      验证 /evolution 只让用户选择全部工作区或项目范围并一键复盘，后端自动使用上次成功水位、默认分析策略与完整冻结范围，
+      验证 /evolution 只让用户选择全部仓库或单仓库范围并一键复盘，后端自动使用上次成功水位、默认分析策略与完整冻结范围，
       页面直接呈现覆盖情况、关键建议、分歧、Novelty、Insight revision 和零产出结果，并链接回 Activity 证据。
     preconditions:
       - 已通过受控 Runweave 环境启动包含 Evolution API 的真实 Web 页面，并存在 completed、partial、contested 和 no_material_novelty 样本。
     steps:
-      - 使用 `$toolkit:playwright-cli` 打开 /evolution；确认范围选择只显示全部工作区和当前项目，点击一次复盘按钮即创建唯一 Run，不要求填写 Project ID、Profile、Provider、watermark 或预算。
+      - 使用 `$toolkit:playwright-cli` 打开 /evolution；确认范围选择只显示全部仓库和去重后的 Git 仓库，点击一次复盘按钮即为每个选定仓库创建唯一 Run，不要求填写 Project ID、Profile、Provider、watermark 或预算。
       - 查看新 Run 与四类样本详情；确认新 Run 从上次成功水位开始且冻结范围全部覆盖，页面优先显示关键建议、novel/contradiction/drift 与待处理分歧，不把 Activity 事实列表伪装成洞察；点击 Evidence 能进入对应 Activity/Work History 详情，浏览器控制台无错误。
 
   - id: ASEC-018

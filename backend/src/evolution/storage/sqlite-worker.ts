@@ -15,6 +15,8 @@ const database = new EvolutionActivationDatabase(
 
 function execute(command: EvolutionWorkerCommand): EvolutionWorkerResult {
   switch (command.op) {
+    case "repository":
+      return database.repository(command.command);
     case "list-candidates":
       return database.listCandidates();
     case "put-candidate":

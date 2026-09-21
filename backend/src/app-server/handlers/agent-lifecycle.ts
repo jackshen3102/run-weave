@@ -61,7 +61,15 @@ export async function handleAgentLifecycleEvent(
           hookEvent: observedStatus === "running" ? "UserPromptSubmit" : "Stop",
           threadId,
           operationId: readAppServerPayloadString(event.payload, "operationId"),
-          ...(isPiAgentContext((event.payload as Record<string, unknown>)?.pi) ? { pi: (event.payload as { pi: import("@runweave/shared/terminal/pi-agent").PiAgentContext }).pi } : {}),
+          ...(isPiAgentContext((event.payload as Record<string, unknown>)?.pi)
+            ? {
+                pi: (
+                  event.payload as {
+                    pi: import("@runweave/shared/terminal/pi-agent").PiAgentContext;
+                  }
+                ).pi,
+              }
+            : {}),
           panelId: event.scope?.terminalPanelId,
           tmuxPaneId: event.scope?.terminalTmuxPaneId,
         },
@@ -93,8 +101,10 @@ export async function handleAgentLifecycleEvent(
       eventName: "agent.lifecycle.observed",
       occurredAt: event.createdAt,
       actorType: "agent",
-      actorAgent: provider === "pi" ? "pi" : provider === "codex" ? "codex" : "trae",
+      actorAgent:
+        provider === "pi" ? "pi" : provider === "codex" ? "codex" : "trae",
       scope: {
+        cwd: panel?.cwd ?? session.cwd,
         projectId: session.projectId,
         terminalSessionId: session.id,
         panelId: panel?.id,
@@ -116,8 +126,7 @@ export async function handleAgentLifecycleEvent(
         lifecycleCursor:
           readAppServerPayloadString(event.payload, "lifecycleCursor") ??
           "unknown",
-        compensation:
-          readBoolean(event.payload, "compensation") ?? false,
+        compensation: readBoolean(event.payload, "compensation") ?? false,
         compensationReason:
           readAppServerPayloadString(event.payload, "compensationReason") ??
           null,
@@ -138,9 +147,9 @@ function resolvePanel(
   }
   const tmuxPaneId = event.scope?.terminalTmuxPaneId;
   return tmuxPaneId && terminalSessionId
-    ? terminalSessionManager
+    ? (terminalSessionManager
         .listPanels(terminalSessionId)
-        .find((panel) => panel.tmuxPaneId === tmuxPaneId) ?? null
+        .find((panel) => panel.tmuxPaneId === tmuxPaneId) ?? null)
     : null;
 }
 

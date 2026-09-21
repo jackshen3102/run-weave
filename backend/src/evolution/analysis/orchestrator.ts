@@ -112,14 +112,15 @@ export class EvolutionAnalysisOrchestrator {
       const manifest = await this.contextPackBuilder.buildActivityPack({
         runId: claim.run.runId,
         projectId: claim.run.learningScopeId,
+        repository: claim.run.repository,
+        atOrBeforeSnapshotBoundary: claim.run.dataRange.snapshotBoundary,
         profile: claim.run.profile,
         baselineDigest: baselineDigest(baseline),
         deadlineAt: new Date(deadlineAtMs).toISOString(),
         afterWatermark: numericWatermark(claim.run.dataRange.afterWatermark),
-        maxFacts: Math.max(
-          1,
-          Math.min(1_000, Math.floor(claim.run.budget.maxContextBytes / 1_000)),
-        ),
+        // Paging bounds database transfer, not model context. A small model
+        // budget must not turn a complete repository backfill into one-row RPCs.
+        signal,
       });
       await this.transition(claim, stage, "segmenting");
       stage = "segmenting";
@@ -198,11 +199,7 @@ export class EvolutionAnalysisOrchestrator {
       await this.transition(claim, stage, "novelty_check");
       stage = "novelty_check";
       await this.analysisStore.putClaims(claims);
-      const novelty = classifyClaimNovelty(
-        claims,
-        baseline,
-        manifest.evidence,
-      );
+      const novelty = classifyClaimNovelty(claims, baseline, manifest.evidence);
       await this.analysisStore.putClaimNovelty(novelty);
 
       await this.transition(claim, stage, "validating");

@@ -23,6 +23,7 @@ const DEFAULT_MAX_FACTS = 1_000;
 export interface BuildActivityContextPackInput {
   runId: string;
   projectId: string;
+  repository?: import("@runweave/shared/evolution").EvolutionRepositoryContext;
   profile: AnalysisProfile;
   baselineDigest: string;
   deadlineAt: string;
@@ -30,6 +31,7 @@ export interface BuildActivityContextPackInput {
   atOrBeforeSnapshotBoundary?: number;
   eventNames?: ActivityEventName[];
   maxFacts?: number;
+  signal?: AbortSignal;
 }
 
 export class EvolutionContextPackBuilder {
@@ -55,6 +57,16 @@ export class EvolutionContextPackBuilder {
     }
 
     const learningScope = resolveEvolutionLearningScope(input.projectId);
+    if (learningScope.scopeType === "repository") {
+      if (
+        !input.repository ||
+        input.repository.repositoryId !== learningScope.repositoryId
+      )
+        throw new Error("evolution_repository_context_required");
+      learningScope.cwd = input.repository.cwd;
+      learningScope.requestedProjectId =
+        input.repository.requestedProjectId ?? null;
+    }
     const normalizedDeadlineAt = new Date(deadlineAtMs).toISOString();
     const existing = await this.store.getContextPackByRun(runId);
     if (existing) {
@@ -87,7 +99,9 @@ export class EvolutionContextPackBuilder {
     let nextAfterWatermark = requestedAfterWatermark;
     let snapshotBoundary = input.atOrBeforeSnapshotBoundary;
     const facts: ActivityFactDto[] = [];
+    let unresolvedRepositoryCount = 0;
     while (true) {
+      input.signal?.throwIfAborted();
       const page = await this.activity.evolutionSnapshot({
         learningScopeId: learningScope.learningScopeId,
         afterWatermark: nextAfterWatermark,
@@ -97,6 +111,11 @@ export class EvolutionContextPackBuilder {
         eventNames: input.eventNames ?? [...ACTIVITY_EVENT_NAMES],
         limit: pageSize,
       });
+      input.signal?.throwIfAborted();
+      unresolvedRepositoryCount = Math.max(
+        unresolvedRepositoryCount,
+        page.unresolvedRepositoryCount ?? 0,
+      );
       snapshotBoundary ??= page.snapshotBoundary;
       if (page.snapshotBoundary !== snapshotBoundary) {
         throw new Error("evolution_context_pack_snapshot_boundary_changed");
@@ -128,6 +147,7 @@ export class EvolutionContextPackBuilder {
       recordCount: activityEvidence.length,
       truncated: false,
     };
+    input.signal?.throwIfAborted();
     const supplemental = this.supplementalSources
       ? await this.supplementalSources.collect({
           learningScope,
@@ -140,6 +160,18 @@ export class EvolutionContextPackBuilder {
     const evidence = [...activityEvidence, ...supplemental.evidence];
     const dataQualityIssues = [
       ...activityDataQualityIssues,
+      ...(unresolvedRepositoryCount > 0
+        ? [
+            {
+              issueId: "repository-unresolved",
+              source: "activity" as const,
+              code: "repository_attribution_incomplete",
+              severity: "warning" as const,
+              detail: `${unresolvedRepositoryCount} retained events have no verified repository attribution; coverage excludes them.`,
+              evidenceIds: [],
+            },
+          ]
+        : []),
       ...supplemental.dataQualityIssues,
     ];
     const digest = sha256(
@@ -164,6 +196,7 @@ export class EvolutionContextPackBuilder {
       evidence,
       dataQualityIssues,
     };
+    input.signal?.throwIfAborted();
     await this.store.putContextPack(manifest);
     return manifest;
   }

@@ -14,6 +14,7 @@ import type {
 } from "@runweave/shared/evolution";
 
 export interface EvolutionPreparedInsightRevision {
+  previousRevisionId?: string;
   insight: Omit<Insight, "revisions">;
   revision: InsightRevision;
   contributionEdges: ContributionEdge[];

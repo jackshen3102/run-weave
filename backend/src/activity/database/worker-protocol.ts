@@ -1,3 +1,4 @@
+import type { ActivityRepositoryBinding } from "./repository-index";
 import type {
   ActivityDataPolicyDto,
   ActivityContentValueDto,
@@ -18,7 +19,19 @@ import type { ActivityMembershipSnapshot } from "./maintenance";
 import type { ActivityIngestRejectionInput } from "./rejection";
 
 export type ActivityWorkerRequest =
-  | { id: number; op: "record"; events: ActivityEventInput[]; nowMs?: number }
+  | { id: number; op: "pending-repositories" }
+  | {
+      id: number;
+      op: "bind-repositories";
+      bindings: ActivityRepositoryBinding[];
+    }
+  | {
+      id: number;
+      op: "record";
+      events: ActivityEventInput[];
+      nowMs?: number;
+      bindings?: ActivityRepositoryBinding[];
+    }
   | { id: number; op: "facts"; query: ActivityFactsQuery }
   | {
       id: number;
@@ -88,6 +101,7 @@ export type ActivityWorkerCommand = ActivityWorkerRequest extends infer Request
   : never;
 
 export type ActivityWorkerResult =
+  | Array<{ eventId: string; cwd: string | null }>
   | ActivityWriteAck[]
   | ActivityFactsPage
   | ActivityEvolutionSnapshotPage

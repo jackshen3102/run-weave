@@ -1,3 +1,4 @@
+import { resolveAgentTeamRoleTerminal } from "../runtime/model-runtime";
 import { randomUUID } from "node:crypto";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import type {
@@ -81,6 +82,7 @@ export function recordAgentTeamRunTransition(
   activity: TerminalActivityDependencies | undefined,
   previous: AgentTeamRun | null,
   current: AgentTeamRun,
+  cwd?: string,
 ): void {
   if (!activity) return;
   const events: ActivityEventInput[] = [];
@@ -101,6 +103,7 @@ export function recordAgentTeamRunTransition(
         occurredAt: current.updatedAt,
         actorType: "system",
         scope: {
+          cwd: current.terminal.cwd ?? cwd,
           projectId: current.projectId,
           terminalSessionId: current.terminalSessionId,
           runId: current.runId,
@@ -147,6 +150,7 @@ export function recordAgentTeamRunTransition(
         occurredAt: dispatch.requestedAt,
         actorType: "system",
         scope: {
+          cwd: resolveAgentTeamRoleTerminal(current, dispatch.role).cwd ?? cwd,
           projectId: current.projectId,
           terminalSessionId: current.terminalSessionId,
           runId: current.runId,
@@ -196,6 +200,10 @@ export function recordAgentTeamRunTransition(
         occurredAt: item.recheckRequestedAt ?? current.updatedAt,
         actorType: "system",
         scope: {
+          cwd: activeDispatch
+            ? (resolveAgentTeamRoleTerminal(current, activeDispatch.role).cwd ??
+              cwd)
+            : undefined,
           projectId: current.projectId,
           terminalSessionId: current.terminalSessionId,
           runId: current.runId,
@@ -233,6 +241,10 @@ export function recordAgentTeamRunTransition(
         occurredAt: current.updatedAt,
         actorType: "system",
         scope: {
+          cwd: resultDispatch
+            ? (resolveAgentTeamRoleTerminal(current, resultDispatch.role).cwd ??
+              cwd)
+            : undefined,
           projectId: current.projectId,
           terminalSessionId: current.terminalSessionId,
           runId: current.runId,
@@ -269,6 +281,10 @@ export function recordAgentTeamRunTransition(
         occurredAt: current.updatedAt,
         actorType: "system",
         scope: {
+          cwd: resultDispatch
+            ? (resolveAgentTeamRoleTerminal(current, resultDispatch.role).cwd ??
+              cwd)
+            : undefined,
           projectId: current.projectId,
           terminalSessionId: current.terminalSessionId,
           runId: current.runId,

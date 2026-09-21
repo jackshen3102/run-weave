@@ -1,3 +1,31 @@
+import path from "node:path";
+import { mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+import { resolveTerminalParentProjectId } from "../../packages/shared/src/terminal/project-context.ts";
+import { EvolutionRepositoryScopes } from "../../backend/src/evolution/repository-scope.ts";
+import { resolveRepositoryIdentity } from "../../backend/src/repository/identity.ts";
+import { bindActivityRepositories } from "../../backend/src/activity/database/repository-index.ts";
+const require = createRequire(
+  new URL("../../backend/package.json", import.meta.url),
+);
+const Database = require("better-sqlite3");
+let fixtureRepositoryRoot = null;
+const repositoryPaths = new Map();
+function repositoryPath(projectId) {
+  const parent = resolveTerminalParentProjectId(projectId);
+  if (!repositoryPaths.has(parent)) {
+    const cwd = path.join(
+      fixtureRepositoryRoot,
+      createHash("sha256").update(parent).digest("hex").slice(0, 12),
+    );
+    mkdirSync(cwd, { recursive: true });
+    execFileSync("git", ["init", cwd], { stdio: "ignore" });
+    repositoryPaths.set(parent, cwd);
+  }
+  return repositoryPaths.get(parent);
+}
 import { ActivityEventFactory } from "../../backend/src/activity/recording/event-factory.ts";
 import { randomUUID } from "node:crypto";
 import { ActivityQueryService } from "../../backend/src/activity/database/service.ts";
@@ -107,7 +135,7 @@ export function createFact(factory, projectId, label, cwd) {
     actorAgent: "codex",
     scope: {
       projectId,
-      cwd,
+      cwd: fixtureRepositoryRoot ? repositoryPath(projectId) : cwd,
       threadId: `thread:${label}`,
       runId: `agent-team:${label}`,
     },
@@ -122,11 +150,48 @@ export function createFact(factory, projectId, label, cwd) {
   return event;
 }
 
-export function createAnalysisHarness({
+export async function createAnalysisHarness({
   evolutionStore,
   activityStore,
   temporaryRoot,
 }) {
+  fixtureRepositoryRoot = path.join(
+    path.dirname(temporaryRoot),
+    "repositories",
+  );
+  const scopes = new EvolutionRepositoryScopes(
+    evolutionStore,
+    () => [],
+    repositoryPath,
+  );
+  const activityDatabase = new Database(
+    path.join(
+      path.dirname(path.dirname(temporaryRoot)),
+      "activity/activity.sqlite",
+    ),
+  );
+  try {
+    const facts = activityDatabase
+      .prepare(
+        "SELECT event_id,project_id FROM behavior_facts WHERE project_id IS NOT NULL",
+      )
+      .all();
+    const bindings = [];
+    for (const fact of facts) {
+      const identity = await resolveRepositoryIdentity(
+        repositoryPath(fact.project_id),
+      );
+      bindings.push({
+        eventId: fact.event_id,
+        repositoryId: identity.repositoryId,
+        commonDirectory: identity.commonDirectory,
+        reason: "owned_analysis_fixture_registration",
+      });
+    }
+    bindActivityRepositories(activityDatabase, bindings);
+  } finally {
+    activityDatabase.close();
+  }
   const analysisNow = () => new Date(capturedAt);
   const service = new EvolutionService(
     evolutionStore,
@@ -146,6 +211,7 @@ export function createAnalysisHarness({
     evolutionStore,
     evolutionStore,
     evolutionStore,
+    scopes,
   );
   const orchestrator = new EvolutionAnalysisOrchestrator(
     evolutionStore,

@@ -91,7 +91,7 @@ export function EvolutionScheduleDialog({
   ) => void;
 }) {
   const [projectId, setProjectId] = useState(
-    schedule?.learningScopeId ?? initialProjectId,
+    schedule?.repository?.cwd ?? initialProjectId,
   );
   const [name, setName] = useState(schedule?.name ?? "");
   const [cronExpression, setCronExpression] = useState(
@@ -124,7 +124,11 @@ export function EvolutionScheduleDialog({
       providerPolicy,
       dataWindow: dataWindow.trim(),
     };
-    onSubmit(schedule ? shared : { ...shared, projectId: projectId.trim() });
+    onSubmit(
+      schedule
+        ? shared
+        : { ...shared, scope: { type: "repository", cwd: projectId.trim() } },
+    );
   });
 
   return (
@@ -143,7 +147,7 @@ export function EvolutionScheduleDialog({
 
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             {!schedule ? (
-              <FormField label="Project ID">
+              <FormField label="仓库工作目录">
                 <Input
                   required
                   value={projectId}

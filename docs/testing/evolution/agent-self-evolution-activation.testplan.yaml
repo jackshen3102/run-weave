@@ -21,7 +21,7 @@ cases:
     description: >
       验证检索先按 learning scope、状态、角色、版本、有效期和排除条件硬过滤，再以 FTS/结构化召回和 LLM Selector 判断相关性，任何语义判断都不能越权。
     preconditions:
-      - 已准备同一主项目不同 workspace 的相关 Memory、无关项目 Memory、已退休/过期 Memory、语义相似但有排除条件的 Memory 和超过上限的候选集。
+      - 已准备同一 Git 仓库不同 workspace 的相关 Memory、独立 Git 仓库 Memory、已退休/过期 Memory、语义相似但有排除条件的 Memory 和超过上限的候选集。
     steps:
       - 为一个 Agent Team code task 执行检索；确认相关 workspace Memory 可召回，无关 scope、错误角色、退休、过期和命中排除条件的记录在 Selector 前已剔除。
       - 检查 Selector 与最终结果；确认每个选择都有匹配理由，最多注入 3 条且总长度不超过策略上限，没有高置信匹配时返回空集合，未注入候选也进入 RuntimeTrace 审计。

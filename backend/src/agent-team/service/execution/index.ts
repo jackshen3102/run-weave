@@ -1,18 +1,15 @@
+import { resolveRepositoryIdentity } from "../../../repository/identity";
 import type {
   AgentTeamActiveWorkerDispatch,
   AgentTeamAcceptanceCase,
   AgentTeamRun,
   AgentTeamWorker,
 } from "@runweave/shared/agent-team";
-import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import type { TerminalSessionRecord } from "../../../terminal/manager/manager";
 import { createTerminalPanelSplit } from "../../../terminal/application/panel-split";
 import { resolveTmuxTarget } from "../../../terminal/runtime/launcher";
 import { AgentTeamError } from "../../errors";
-import {
-  partialPanelFromError,
-  type CreatedWorkerPanel,
-} from "./support";
+import { partialPanelFromError, type CreatedWorkerPanel } from "./support";
 import {
   buildBounceBackPrompt,
   buildWorkerStartupPrompt,
@@ -196,7 +193,11 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
       ) {
         try {
           const result = await this.evolutionMemoryProvider.prepare({
-            learningScopeId: resolveTerminalParentProjectId(run.projectId),
+            learningScopeId: (
+              await resolveRepositoryIdentity(
+                activeWorkerTerminal.cwd ?? session.cwd,
+              )
+            ).repositoryId,
             runId: run.runId,
             dispatchId: activeWorkerDispatch.dispatchId,
             workerRole: activeWorker.role,
@@ -233,10 +234,14 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
         evolutionContext,
       });
       try {
-        await this.agentLaunch.submitAgentLaunch(session, activeWorkerTerminal, {
-          panelId: activeWorker.panelId,
-          prompt: startupPrompt,
-        });
+        await this.agentLaunch.submitAgentLaunch(
+          session,
+          activeWorkerTerminal,
+          {
+            panelId: activeWorker.panelId,
+            prompt: startupPrompt,
+          },
+        );
       } catch (error) {
         return this.pauseForWorkerDispatchError(
           persistedRun,

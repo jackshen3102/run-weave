@@ -1,3 +1,4 @@
+import { isEvolutionRepositoryId } from "@runweave/shared/evolution";
 import { createHash } from "node:crypto";
 import type {
   CandidateApplicability,
@@ -63,6 +64,9 @@ export function createCandidateAsset(
     type: input.type,
     lifecycle: input.type === "memory" ? "shadow" : "draft",
     learningScopeId: input.learningScopeId,
+    ...(isEvolutionRepositoryId(input.learningScopeId)
+      ? { repositoryId: input.learningScopeId }
+      : {}),
     insightRevisionId: input.insightRevisionId,
     statement: input.statement,
     guidance: input.guidance,

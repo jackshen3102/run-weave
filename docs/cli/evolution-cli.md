@@ -7,11 +7,17 @@ Provider 状态。它不会在 Backend 不可用时降级为直接读写 `learni
 
 ## Run
 
+`run` 和 `schedule create` 默认使用调用目录；`--cwd` 可显式指定仓库工作目录。
+旧 `--project-id` 仍可作为兼容入口，由 Backend 解析其当前路径；不能与 `--cwd` 混用。
+不同 Project 指向同一个 Git common directory 时共享 `learningScopeId`。
+`list` 默认仍查询全部历史，显式 `--cwd` 才按仓库筛选；与 `--learning-scope-id` 互斥。
+旧 scope 查询只有已审计且唯一的映射才转换，歧义或缺少归属会返回明确错误。
+
 创建 standard/auto Run：
 
 ```bash
 rw evolution run \
-  --project-id <projectId> \
+  --cwd /absolute/path/to/repository \
   --analysis-profile standard \
   --provider-policy auto \
   --json
@@ -21,8 +27,8 @@ rw evolution run \
 
 ```bash
 rw evolution run \
-  --project-id <projectId> \
-  --after-watermark <activityOffset> \
+  --cwd /absolute/path/to/repository \
+  --after-watermark <repositoryBindingOffset> \
   --at-or-before 2026-07-25T01:00:00.000Z \
   --plain
 ```
@@ -44,6 +50,7 @@ rw evolution run \
 
 ```bash
 rw evolution list --limit 50 --json
+rw evolution list --cwd /absolute/path/to/repository --json
 rw evolution list --learning-scope-id <scopeId> --stage completed --plain
 rw evolution get <runId> --json
 ```
@@ -89,7 +96,7 @@ rw evolution schedule list --learning-scope-id <scopeId> --plain
 
 ```bash
 rw evolution schedule create \
-  --project-id <projectId> \
+  --cwd /absolute/path/to/repository \
   --name "daily evolution" \
   --cron "0 3 * * *" \
   --timezone Asia/Shanghai \
@@ -126,7 +133,7 @@ rw evolution schedule delete <scheduleId> --plain
 文本模式面向人阅读；JSON 模式返回 Backend 的稳定对象，适合脚本：
 
 ```bash
-run_json="$(rw evolution run --project-id <projectId> --json)"
+run_json="$(rw evolution run --cwd /absolute/path/to/repository --json)"
 run_id="$(printf '%s' "$run_json" | jq -r '.runId')"
 rw evolution get "$run_id" --json
 ```

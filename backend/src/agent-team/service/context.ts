@@ -61,7 +61,9 @@ export class AgentTeamServiceContext {
 
   protected trackBackgroundTask(task: Promise<void>): void {
     this.backgroundTasks.add(task);
-    void task.finally(() => this.backgroundTasks.delete(task)).catch(() => undefined);
+    void task
+      .finally(() => this.backgroundTasks.delete(task))
+      .catch(() => undefined);
   }
 
   constructor(options: AgentTeamServiceOptions) {
@@ -88,7 +90,13 @@ export class AgentTeamServiceContext {
       this.terminalSessionManager,
       this.paths,
       (previous, current) =>
-        recordAgentTeamRunTransition(options.activity, previous, current),
+        recordAgentTeamRunTransition(
+          options.activity,
+          previous,
+          current,
+          this.terminalSessionManager.getSession(current.terminalSessionId)
+            ?.cwd,
+        ),
     );
     this.promptSender = new AgentTeamPromptSender({
       terminalSessionManager: this.terminalSessionManager,

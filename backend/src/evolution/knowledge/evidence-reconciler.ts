@@ -89,17 +89,28 @@ export class EvolutionEvidenceReconciler {
         return [`${edge.evidenceId}:${status?.reason ?? "unavailable"}`];
       });
       const reason = `evidence_unavailable:${unavailableReasons.join(",")}`;
-      const revision = reconciledRevision(
+      const proposedRevision = reconciledRevision(
         dependency.revision,
         nextEdges,
         createdAt,
       );
+      // A latest candidate can still reference a historical revision whose
+      // invalidation has already been archived. Reuse that immutable revision
+      // instead of recreating its stable ID with a new timestamp.
+      const archived = await this.store.getInsight(
+        dependency.insight.insightId,
+      );
+      const revision =
+        archived?.revisions.find(
+          (item) => item.revisionId === proposedRevision.revisionId,
+        ) ?? proposedRevision;
       const insight = {
         ...dependency.insight,
         currentRevisionId: revision.revisionId,
-        updatedAt: createdAt,
+        updatedAt: revision.createdAt,
       };
       reconciledInsights.push({
+        previousRevisionId: dependency.revision.revisionId,
         insight,
         revision,
         contributionEdges: nextEdges.map((edge) => ({
@@ -110,7 +121,7 @@ export class EvolutionEvidenceReconciler {
             edge.relation,
           ]),
           insightRevisionId: revision.revisionId,
-          createdAt,
+          createdAt: revision.createdAt,
         })),
       });
       const supportEdges = nextEdges.filter(
@@ -164,14 +175,14 @@ function reconciledRevision(
     revisionId: stableId("irev", [
       current.revisionId,
       ...edges.map(
-        (edge) =>
-          `${edge.evidenceId}:${edge.relation}:${edge.availability}`,
+        (edge) => `${edge.evidenceId}:${edge.relation}:${edge.availability}`,
       ),
     ]),
-    confidence: Math.round(
-      Math.min(current.confidence, current.confidence * availabilityRatio) *
-        100,
-    ) / 100,
+    confidence:
+      Math.round(
+        Math.min(current.confidence, current.confidence * availabilityRatio) *
+          100,
+      ) / 100,
     createdAt,
   };
 }

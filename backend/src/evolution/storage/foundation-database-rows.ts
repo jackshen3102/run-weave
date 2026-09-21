@@ -6,6 +6,7 @@ import type {
 import { parseEvolutionTimestamp } from "./foundation-rules";
 
 export interface EvolutionRunRow {
+  repository_json: string | null;
   run_id: string;
   learning_scope_id: string;
   trigger_type: string;
@@ -35,6 +36,13 @@ export interface EvolutionLeaseRow {
 export function toRun(row: EvolutionRunRow): EvolutionRun {
   return {
     runId: row.run_id,
+    ...(row.repository_json
+      ? {
+          repository: JSON.parse(
+            row.repository_json,
+          ) as EvolutionRun["repository"],
+        }
+      : {}),
     learningScopeId: row.learning_scope_id,
     trigger: JSON.parse(row.trigger_json) as EvolutionRun["trigger"],
     profile: row.profile,

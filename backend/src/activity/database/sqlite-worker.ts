@@ -1,8 +1,5 @@
 import { isMainThread, parentPort, workerData } from "node:worker_threads";
-import {
-  ActivityDatabase,
-  type ActivityDatabaseOptions,
-} from "./connection";
+import { ActivityDatabase, type ActivityDatabaseOptions } from "./connection";
 import type {
   ActivityWorkerRequest,
   ActivityWorkerResponse,
@@ -18,8 +15,13 @@ const database = new ActivityDatabase(workerData as ActivityDatabaseOptions);
 
 function handleRequest(request: ActivityWorkerRequest): unknown {
   switch (request.op) {
+    case "pending-repositories":
+      return database.pendingRepositories();
+    case "bind-repositories":
+      database.bindRepositories(request.bindings);
+      return true;
     case "record":
-      return database.record(request.events, request.nowMs);
+      return database.record(request.events, request.nowMs, request.bindings);
     case "facts":
       return database.facts(request.query);
     case "evolution-snapshot":
