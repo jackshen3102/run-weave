@@ -26,6 +26,19 @@
 - 运行时 API 地址不依赖 `VITE_PROXY_TARGET` 兜底；需要跨源后端时应显式传入连接地址或通过入口代理收口。
 - Terminal 内执行的用户命令运行在用户项目 `cwd` 下；提交类提示通过快捷指令或用户输入发送给当前 terminal 中已运行的 agent 处理，不新增后端 Git executor，也不要求 `rw` 在用户项目 `PATH` 中可用。
 
+## 后端重启与终端保活
+
+长期运行的服务器应显式设置 `TERMINAL_TMUX_SHUTDOWN_POLICY=preserve`。策略与 Desktop channel
+独立；可销毁的环境可以配置 `cleanup`。完整默认值、校验与 socket 合同见
+[tmux 生命周期](../architecture/terminal-tmux-recovery.md#连接与恢复)。systemd 部署还应保留
+`KillMode=process`，避免服务管理器停止整个进程组；该设置本身不能阻止旧 Backend 主动清理 tmux。
+
+首次升级时，旧 Backend 内存中仍是旧策略，修改配置后普通 restart 仍可能终止活动任务。
+应先备份配置，在任务结束后的维护窗口切换；保持原 Profile、terminal store 与 socket 路径。
+新策略生效后的重启，应验证 Backend PID 改变，而 tmux server、pane 和任务 PID 不变，输出仍继续。
+需要无中断首次迁移时，必须另行验证旧进程切换、数据库恢复与 Profile 锁接管，不能直接强杀整个服务组。
+回滚时同样不得在活动任务期间恢复旧清理策略；不删除 socket 或数据文件来绕过启动失败。
+
 ## 鉴权与内部接口
 
 - `/api/auth/login` 对同一 IP、同一用户名和 IP+用户名组合做内存态频率限制；超过阈值时返回 `429` 和 `Retry-After`。

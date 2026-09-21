@@ -31,6 +31,16 @@ session 的 `running/exited`、runtime 是否 attached、tmux 是否存在以及
 
 ## 连接与恢复
 
+Backend 的 tmux 退出策略通过部署变量 `TERMINAL_TMUX_SHUTDOWN_POLICY` 独立配置：
+`preserve` 保留 tmux server 和用户任务，只释放本进程的连接与资源；`cleanup` 沿用所属环境的
+tmux 清理范围。未设置或空值兼容原行为（Stable 保留、Beta/Dev 清理），非法非空值在领域资源
+装配前拒绝启动。该策略也适用于装配失败的回收；不改变显式删除终端的语义。
+
+退出策略不影响 socket 选择：显式 `TERMINAL_TMUX_SOCKET_PATH` 优先，默认路径继续按 channel
+选择。服务器应明确设置 preserve，并保持 Profile、terminal store 和 socket 不变。
+Backend 重启仍会断开 WebSocket；只有原 tmux/pane/任务 PID 不变才算进程保活，恢复 Agent thread
+不能代替这一保证。首次从旧清理策略切换的运维边界见[部署概览](../deployment/overview.md#后端重启与终端保活)。
+
 1. WebSocket 根据 session/panel 身份取得 runtime；已有有效 runtime 时复用。
 2. tmux session 仍存在而 attach runtime 缺失时，重新 attach，并取得当前 pane 的 fresh snapshot。
 3. 最后一个终端 WebSocket 客户端断开后，attach runtime 最多保活 60 秒；到期或超过全局 8 个 idle
