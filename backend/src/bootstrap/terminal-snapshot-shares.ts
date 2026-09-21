@@ -1,19 +1,17 @@
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { TerminalSnapshotShareService } from "../terminal/snapshot-share/service";
-import { TerminalSnapshotShareStore } from "../terminal/snapshot-share/store";
 import type { TmuxService } from "../terminal/tmux/service";
 import type { ResourceScope } from "./resource-scope";
+import { createTerminalSnapshotPublisher } from "../terminal/snapshot-share/publisher";
 
-export async function createTerminalSnapshotShares(
+export function createTerminalSnapshotShares(
   resources: ResourceScope,
-  directory: string,
   sessions: TerminalSessionManager,
   tmuxService: TmuxService,
-): Promise<TerminalSnapshotShareService> {
+): TerminalSnapshotShareService {
   const service = new TerminalSnapshotShareService(
-    new TerminalSnapshotShareStore(directory), sessions, tmuxService,
+    sessions, tmuxService, createTerminalSnapshotPublisher(process.env),
   );
   resources.defer("terminal-snapshot-shares", () => service.dispose());
-  await service.initialize();
   return service;
 }

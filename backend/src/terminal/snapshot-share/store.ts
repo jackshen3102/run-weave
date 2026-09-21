@@ -2,11 +2,11 @@ import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from
 import { chmod, link, mkdir, open, readdir, readFile, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import type { CreateTerminalSnapshotShareResponse, TerminalSnapshotShareAccess } from "@runweave/shared/terminal/snapshot-share";
+import { SNAPSHOT_MAX_TEXT_BYTES, type PublishTerminalSnapshotResponse, type TerminalSnapshotShareAccess } from "@runweave/shared/terminal/snapshot-share";
 import { logger } from "../../logging/index";
 import { TerminalSnapshotShareError } from "./errors";
 
-export const SNAPSHOT_MAX_TEXT_BYTES = 10 * 1024 * 1024;
+export { SNAPSHOT_MAX_TEXT_BYTES };
 const MAX_STORAGE_BYTES = 100 * 1024 * 1024;
 const MAX_RECORDS = 100;
 const LIFETIME_MS = 86_400_000;
@@ -172,7 +172,7 @@ export class TerminalSnapshotShareStore {
     return this.serialize(async () => { await this.scan(); });
   }
 
-  save(title: string, text: string): Promise<CreateTerminalSnapshotShareResponse> {
+  save(title: string, text: string): Promise<PublishTerminalSnapshotResponse> {
     return this.serialize(async () => {
       if (Buffer.byteLength(text, "utf8") > SNAPSHOT_MAX_TEXT_BYTES) {
         throw new TerminalSnapshotShareError("SNAPSHOT_TOO_LARGE");

@@ -334,7 +334,7 @@ async function assembleRuntimeServices(
   });
   resources.defer("tmux-output-watcher", () => tmuxOutputWatcher.dispose());
   await terminalSessionManager.initialize();
-  const terminalSnapshotShareService = await createTerminalSnapshotShares(resources, storagePaths.terminalSnapshotShareDir, terminalSessionManager, tmuxService);
+  const terminalSnapshotShareService = createTerminalSnapshotShares(resources, terminalSessionManager, tmuxService);
   const workspaceServiceManager = new RuntimeStatusWorkspaceServiceManager(
     terminalSessionManager,
   );

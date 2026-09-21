@@ -1,7 +1,6 @@
 import { attachLocalBrowserWebSocketServer, localBrowserAuth } from "./ws/browser-local-server";
 import { LOCAL_BROWSER_MAX_CONNECTIONS, LOCAL_BROWSER_MAX_FRAME } from "@runweave/shared/browser-local-tunnel";
 import { createExperienceRouter } from "./routes/experience";
-import { createPublicTerminalSnapshotShareRouter } from "./routes/terminal-snapshot-share";
 import { createTerminalSnapshotShareRouter } from "./routes/terminal/snapshot-share";
 import { createCodexQuotaRouter } from "./routes/codex-quota";
 import { createDeviceNotificationsRouter } from "./routes/device-notifications";
@@ -118,8 +117,8 @@ function createHttpApp(
   const requireAuth = createRequireAuth(services.authService);
   const requireTunnelAuth = createTunnelAuthMiddleware(tunnelAuthConfig);
 
-  // Bearer share paths must not enter request logging, tunnel bootstrap, or SPA.
-  app.use("/share/terminal", createPublicTerminalSnapshotShareRouter(services.terminalSnapshotShareService));
+  // Only the central Host serves snapshots. Reject legacy local links before logging or SPA.
+  app.use("/share/terminal", (_req, res) => { res.status(404).set("Cache-Control", "no-store").end(); });
   app.use(createRequestContextMiddleware());
   app.use(createWorkspaceServiceHttpProxy(services.workspaceServiceManager));
   app.use("/api/device/notifications", express.json({ limit: "8kb" }));

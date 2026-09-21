@@ -7,6 +7,8 @@ const errors = {
   SNAPSHOT_TOO_LARGE: [413, "Terminal snapshot exceeds 10 MiB"],
   SNAPSHOT_BUSY: [429, "Too many snapshot creations in progress"],
   SNAPSHOT_STORAGE_FULL: [507, "Terminal snapshot storage is full"],
+  SNAPSHOT_PUBLISH_NOT_CONFIGURED: [503, "Public snapshot publishing is not configured"],
+  SNAPSHOT_PUBLISH_FAILED: [502, "Terminal snapshot could not be published"],
   SNAPSHOT_STORAGE_FAILED: [500, "Terminal snapshot could not be saved"],
 } as const;
 
