@@ -1,5 +1,6 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import type { ScheduledTask } from "@runweave/shared/scheduled-tasks";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "../../components/ui/button";
@@ -11,6 +12,7 @@ import {
 } from "../../components/ui/dropdown-menu";
 import { useScheduledApi, useRefreshTasks } from "./queries";
 import { RequestError } from "./presentation";
+import { useTaskNavigation } from "./navigation";
 
 export function TaskActions({
   task,
@@ -23,6 +25,18 @@ export function TaskActions({
 }) {
   const { api } = useScheduledApi();
   const refresh = useRefreshTasks();
+  const { go } = useTaskNavigation();
+  const location = useLocation();
+  const locationKey = useRef(location.key);
+  locationKey.current = location.key;
+  const runLocationKey = useRef<string | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const runKey = useRef<string | null>(null);
   const mutation = useMutation({
     mutationFn: async (action: "toggle" | "run" | "delete") => {
@@ -33,9 +47,21 @@ export function TaskActions({
         });
       if (action === "delete") return api.remove(task.id, task.revision);
       runKey.current ??= crypto.randomUUID();
+      runLocationKey.current = locationKey.current;
       const run = await api.start(task.id, runKey.current);
       runKey.current = null;
       return run;
+    },
+    onSuccess: (result, action) => {
+      if (
+        action === "run" &&
+        mounted.current &&
+        runLocationKey.current === locationKey.current &&
+        "taskId" in result
+      )
+        go(
+          `/scheduled-tasks/${encodeURIComponent(result.taskId)}?run=${encodeURIComponent(result.id)}`,
+        );
     },
     onSettled: () => {
       void refresh();

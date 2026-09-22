@@ -1,4 +1,8 @@
-import type { ScheduledTaskProvider } from "@runweave/shared/scheduled-tasks";
+import type {
+  ScheduledTaskProvider,
+  ScheduledExecutionPolicy,
+  ScheduledTaskOutcome,
+} from "@runweave/shared/scheduled-tasks";
 
 export interface ScheduledProviderRequest {
   runId: string;
@@ -6,6 +10,7 @@ export interface ScheduledProviderRequest {
   workingDirectory: string;
   model?: string;
   effort?: string;
+  executionPolicy?: ScheduledExecutionPolicy;
   maxOutputBytes: number;
   maxWallTimeMs: number;
   signal: AbortSignal;
@@ -18,6 +23,8 @@ export interface ScheduledProviderResult {
   provider: ScheduledTaskProvider;
   threadId: string;
   summary: string;
+  outcome: ScheduledTaskOutcome;
+  reason: string;
 }
 
 export interface ScheduledProviderAdapter {

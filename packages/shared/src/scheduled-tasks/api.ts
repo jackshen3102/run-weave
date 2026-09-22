@@ -1,5 +1,6 @@
 import type {
   ScheduledTaskConfig,
+  ScheduledExecutionPolicy,
   ScheduledTaskProvider,
   ScheduledTerminalBinding,
   TaskSchedule,
@@ -14,6 +15,7 @@ export interface ScheduledTaskCapabilities {
     reason?: string;
     models?: string[];
     efforts?: string[];
+    executionPolicies?: ScheduledExecutionPolicy[];
   }>;
   limits: {
     maxConcurrentRuns: number;

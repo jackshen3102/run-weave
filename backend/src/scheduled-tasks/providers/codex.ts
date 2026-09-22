@@ -1,4 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
+import {
+  parseScheduledResult,
+  scheduledPrompt,
+  scheduledResultSchema,
+} from "./result";
 import type {
   ScheduledProviderAdapter,
   ScheduledProviderRequest,
@@ -12,16 +21,48 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
 
   constructor(
     private readonly binary = process.env.RUNWEAVE_CODEX_BIN?.trim() || "codex",
+    private readonly autoReviewSupported = false,
   ) {}
 
   async run(
     request: ScheduledProviderRequest,
   ): Promise<ScheduledProviderResult> {
     if (request.signal.aborted) throw new Error("provider_cancelled");
+    if (request.executionPolicy === "auto-review" && !this.autoReviewSupported)
+      throw new Error("execution_policy_unavailable");
+    const directory = await mkdtemp(
+      path.join(os.tmpdir(), "runweave-scheduled-result-"),
+    );
+    try {
+      const schemaPath = path.join(directory, "result-schema.json");
+      await writeFile(schemaPath, JSON.stringify(scheduledResultSchema), {
+        mode: 0o600,
+      });
+      return await this.runWithSchema(request, schemaPath);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+
+  private async runWithSchema(
+    request: ScheduledProviderRequest,
+    schemaPath: string,
+  ): Promise<ScheduledProviderResult> {
+    if (request.signal.aborted) throw new Error("provider_cancelled");
     const args = [
       "exec",
-      "--sandbox",
-      "workspace-write",
+      ...(request.executionPolicy === "auto-review"
+        ? ["--approve-for-me"]
+        : [
+            "--sandbox",
+            "workspace-write",
+            "--config",
+            'approval_policy="never"',
+          ]),
+      "--config",
+      "sandbox_workspace_write.network_access=false",
+      "--output-schema",
+      schemaPath,
       "--skip-git-repo-check",
       "--color",
       "never",
@@ -70,24 +111,41 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
     timeout.unref();
     const onAbort = (): void => terminate("provider_cancelled");
     request.signal.addEventListener("abort", onAbort, { once: true });
-    child.stdin.end(request.prompt);
+    child.stdin.on("error", () => terminate("provider_stdin_failed"));
+    child.stdin.end(scheduledPrompt(request.prompt, request.runId));
 
     let threadId = "";
     let summary = "";
     let completed = false;
     let outputBytes = 0;
     let writeQueue = Promise.resolve(true);
+    const enqueue = (action: () => Promise<boolean>): void => {
+      writeQueue = writeQueue
+        .then((accepted) => (accepted ? action() : false))
+        .then(
+          (accepted) => {
+            if (!accepted) terminate("provider_output_limit_exceeded");
+            return accepted;
+          },
+          () => {
+            terminate("provider_output_persist_failed");
+            return false;
+          },
+        );
+    };
     let parseBuffer = "";
+    const decoders = {
+      stdout: new StringDecoder("utf8"),
+      stderr: new StringDecoder("utf8"),
+    };
     const capture = (source: "stdout" | "stderr", chunk: Buffer): void => {
       outputBytes += chunk.byteLength;
       if (outputBytes > request.maxOutputBytes) {
         terminate("provider_output_limit_exceeded");
         return;
       }
-      const text = chunk.toString("utf8");
-      writeQueue = writeQueue.then(
-        async (accepted) => accepted && request.onOutput(text),
-      );
+      const text = decoders[source].write(chunk);
+      enqueue(() => request.onOutput(text));
       if (source === "stdout") {
         parseBuffer += text;
         const lines = parseBuffer.split(/\r?\n/u);
@@ -100,9 +158,10 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
             typeof event.thread_id === "string"
           ) {
             threadId = event.thread_id;
-            writeQueue = writeQueue.then(async (accepted) => {
-              if (accepted) await request.onThread(threadId);
-              return accepted;
+            const startedThreadId = threadId;
+            enqueue(async () => {
+              await request.onThread(startedThreadId);
+              return true;
             });
           }
           if (event.type === "item.completed" && isAgentMessage(event.item))
@@ -131,13 +190,17 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
       }
       const outputAccepted = await writeQueue;
       const reason = terminationReasons.get(child);
-      if (!outputAccepted) throw new Error("provider_output_limit_exceeded");
       if (reason) throw new Error(reason);
+      if (!outputAccepted) throw new Error("provider_output_limit_exceeded");
       if (exit.error) throw exit.error;
       if (exit.code !== 0) throw new Error("provider_exit_nonzero");
       if (!threadId) throw new Error("provider_thread_missing");
       if (!completed) throw new Error("provider_completion_missing");
-      return { provider: this.provider, threadId, summary };
+      return {
+        provider: this.provider,
+        threadId,
+        ...parseScheduledResult(summary),
+      };
     } finally {
       clearTimeout(timeout);
       request.signal.removeEventListener("abort", onAbort);
@@ -165,6 +228,12 @@ function providerEnvironment(
     "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
     "RUNWEAVE_AGENT_TEAM_RUN_ID",
     "RUNWEAVE_AGENT_TEAM_WORKER_ID",
+    "RUNWEAVE_TMUX_SESSION_NAME",
+    "TMUX",
+    "TMUX_PANE",
+    "CODEX_THREAD_ID",
+    "CODEX_SESSION_ID",
+    "RUNWEAVE_APP_SERVER_TOKEN",
   ])
     delete env[key];
   return env;

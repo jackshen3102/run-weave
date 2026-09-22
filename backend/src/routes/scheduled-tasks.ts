@@ -32,6 +32,7 @@ const configShape = {
   prompt: z.string().trim().min(1).max(12_000),
   model: z.string().trim().min(1).max(200).optional(),
   effort: z.string().trim().min(1).max(100).optional(),
+  executionPolicy: z.enum(["sandbox", "auto-review"]).optional(),
   schedule: scheduleSchema,
 };
 const createTaskSchema = z
@@ -45,6 +46,7 @@ const updateTaskSchema = z
     prompt: configShape.prompt.optional(),
     model: z.string().trim().min(1).max(200).nullable().optional(),
     effort: z.string().trim().min(1).max(100).nullable().optional(),
+    executionPolicy: configShape.executionPolicy,
     schedule: scheduleSchema.optional(),
     enabled: z.boolean().optional(),
     expectedRevision: z.number().int().positive(),
