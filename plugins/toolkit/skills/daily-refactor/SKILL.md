@@ -73,25 +73,29 @@ before 硬门禁失败时，先判断是否由默认时间窗口内的业务代�
 4. 只选择一个可验证重构点：优先修复硬违规，其次处理临界文件、新增复杂度热点、状态双源或反向依赖；没有目标则走“无改动”总结。
 5. 重构前从 `docs/testing/command-matrix.md` 选择行为基线并实际执行。实现时应用 `toolkit:karpathy-guidelines`；涉及 React 时再应用 `toolkit:vercel-react-best-practices`，但不要为调用技能扩大范围。
 6. 完成最小、行为保持的 vertical slice 重构，清理仅由本轮产生的孤儿。
-7. 重跑同一组行为验证，保存 after 架构报告，执行架构报告比较器和 `pnpm quality:gate`。
+7. 重跑同一组行为验证，保存 after 架构报告，执行架构报告比较器和下述按范围选择的静态门禁。
 8. 让审查副 C 或主 C 的独立审查阶段检查最终 diff；存在未解决的高风险结论时不发布。
 9. 调用 `toolkit:github-pr`，由该 skill 负责提交、push、创建 PR、等待门禁和合并。
 10. 回复重构内容、架构指标前后值、验证结果、副 C 结论、CI、commit、分支、PR 和合并状态。
 
 ## 验证回归
 
+以 `docs/testing/layers.md`、`docs/testing/command-matrix.md` 和目标目录 `AGENTS.md` 的当前验证入口为准。`frontend/tests` 没有自动化用例是当前正常状态，不是待修复缺陷，也不构成本轮阻塞；不要为执行本技能新增或恢复 spec。
+
 重构前：
 
 - 完成 before 架构快照；记录本轮候选对应的文件行数、props/组件调用/函数长度和状态 owner。
-- 基于 diff 分析结果，从 `docs/testing/command-matrix.md` 选择受影响路径对应的 E2E 命令。
-- 前端业务代码变更至少跑一次相关 E2E；终端、Vim、Preview 等路径要跑对应专项 E2E。
+- 基于 diff 分析结果，从 `docs/testing/command-matrix.md` 选择受影响路径的 YAML 测试计划、现有验证命令与真实运行时验收方式，记录选定 case、fixture 和预期后置状态。
+- 前端业务代码变更使用 `toolkit:run-test-cases` 执行相关 YAML case，并通过 `toolkit:playwright-cli` 在真实页面取证；终端、Vim、Preview 等路径选择对应专项场景。Backend、Electron、CLI、shared 使用现有验证脚本及真实 API/协议/运行时冒烟；原生 iOS 使用 `toolkit:agent-device`。
 - 涉及 UI、交互、布局或 Preview 展示时，保存 before 截图到 `/tmp/runweave-daily-refactor/<date>/before/`，不要提交截图。
 
 重构后：
 
-- 先重跑重构前选定的同一组 E2E。
-- 如果变更影响 backend 或 packages/shared，再补充对应 default 测试。
+- 先重跑重构前选定的同一组 case 和验证命令，保持 fixture 条件及后置状态一致；逐项记录行为结果与证据路径。
+- 按目标目录 `AGENTS.md` 和命令矩阵执行受影响 package 的 `typecheck`、`lint`、必要的 `build` 及现有专项验证，不调用不存在的 default 测试。
 - 涉及 UI、交互、布局或 Preview 展示时，保存 after 截图到 `/tmp/runweave-daily-refactor/<date>/after/`，并对比 before/after。
-- 运行 after 架构快照比较、`pnpm architecture:verify` 和 `pnpm quality:gate`。
+- 运行 after 架构快照比较和 `pnpm architecture:verify`；涉及文档引用时补 `pnpm docs:check`。
 - 运行 `git diff --check`。
 - 如果同组验证失败、架构比较器失败、审查副 C 有未解决高风险结论，先修复并重新验证；无法修复则停止，禁止提交、push 和创建 PR。
+
+`pnpm test:e2e` 和仍强制调用该入口的 `pnpm quality:gate` 不作为本技能的必跑命令；通过以上静态门禁与真实行为验收判断本轮是否完成。只有当前仓库存在适用的 tracked spec 时，才按命令矩阵补跑对应自动化 E2E。若已运行聚合门禁，须如实报告各子步骤结果，不能把 `No tests found` 或外层退出 0 算作通过，也不能仅因无 spec 停止本轮。实际行为失败、环境/权限不可用或缺少必要 fixture 导致无法取证时仍须报告阻塞；不得修改门禁配置、降低架构阈值或绕过 GitHub 必需检查。
