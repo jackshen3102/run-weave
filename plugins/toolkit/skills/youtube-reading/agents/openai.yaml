@@ -1,0 +1,4 @@
+interface:
+  display_name: "YouTube 中文阅读稿"
+  short_description: "获取 YouTube 原文并保守校对翻译，交付含导读与完整正文的中文阅读稿"
+  default_prompt: "使用 $youtube-reading 将这个 YouTube 视频制作成中文阅读稿。"
