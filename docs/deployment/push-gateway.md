@@ -201,16 +201,34 @@ push_compose up -d --wait gateway
 
 管理容器使用相同镜像、挂载目录和秘密文件，不发布宿主端口。写入操作只允许在网关停止时执行，避免争用数据库独占锁。
 
-确认授权命令成功；输出文件只显示一次凭据。安全转存其中的凭据行到 Mac 的 `private/backend.env`，权限 `600`：
+确认授权命令成功；输出文件只显示一次凭据。把以下配置保存到目标 Backend 的
+`<browserProfileDir>/device-monitor/push.json`，目录权限 `700`、文件权限 `600`。
+hostId 使用该 Backend 的 `/api/device/status` 返回值，不复制其他安装的身份或凭据：
+
+```json
+{
+  "hostId": "YOUR_HOST_UUID",
+  "gatewayURL": "https://push.example.com",
+  "senderToken": "YOUR_HOST_SENDER_TOKEN"
+}
+```
+
+Backend 每次启动直接读取该文件，开机、Dock、命令行和更新重启使用相同路径，不依赖工作目录
+或启动包装脚本。配置独立于 App 和 runtime 安装目录，升级保留；修改后重启 Backend 生效。
+缺少文件表示未配置；格式错误、非 HTTPS origin 或 hostId 不匹配时关闭推送并记录不含凭据的警告，
+不影响电量展示和终端。Stable、Beta 和其他 profile 各自保存配置，不自动共用发送凭据。
+
+临时运行或部署注入仍可成对提供环境变量，优先于文件：
 
 ```dotenv
 RUNWEAVE_PUSH_GATEWAY_URL=https://push.example.com
 RUNWEAVE_PUSH_SENDER_TOKEN=YOUR_HOST_SENDER_TOKEN
 ```
 
-环境变量必须进入实际 Backend 进程并重启；无关终端的 export 不会更新运行中的桌面 App，也不会
-自动配置下次从 Dock 启动的进程。使用该安装的启动包装脚本装载环境文件，保留原 profile 和登录身份。
-采用公开证书后，不再需要为该网关指定本机私有 CA。`.p8` 留在云端网关，Mac 只保存发送凭据。
+只提供其中一个或提供空值属于配置错误，不与文件拼接，也不静默回退。环境变量不会自动写回文件。
+旧部署的 `private/backend.env` 需一次性转存到上述 profile 配置；仅在终端 export 无法保障下次
+从 Dock 启动。采用公开证书后，不再需要为该网关指定本机私有 CA。`.p8` 留在云端网关，
+Mac 只保存发送凭据，个人配置与凭据不得提交到仓库。
 
 手机在连接管理中启用“低电量提醒”，授予系统通知权限并完成订阅确认。
 如果之前绑定了本机试运行网关，先在旧网关可达时关闭提醒，完成撤销，再切换 URL 并重新启用；

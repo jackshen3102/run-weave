@@ -95,9 +95,9 @@ pnpm --filter @runweave/push-gateway start
 pnpm --filter @runweave/push-gateway admin add-host <hostId> sandbox
 ```
 
-正式分发使用 `production`，两种环境分别授权。命令仅显示一次新发送凭据；把它放入对应 Mac 的
-Backend 服务环境，配置 `RUNWEAVE_PUSH_GATEWAY_URL`（HTTPS origin，无路径、query 或用户信息）和
-`RUNWEAVE_PUSH_SENDER_TOKEN`，随后启动网关并重启该 Backend。
+正式分发使用 `production`，两种环境分别授权。命令仅显示一次新发送凭据；把网关 HTTPS origin、
+发送凭据与 hostId 保存到对应 Backend profile 的 `device-monitor/push.json`（权限 0600），
+随后启动网关并重启 Backend。文件格式和配置优先级见[持久配置](../../docs/deployment/push-gateway.md#6-授权-mac-和启用手机)。
 
 Backend 会核对凭据绑定的 hostId，不能将正式安装的凭据复用到新的 Dev/Beta profile。没有配置时只关闭提醒能力，
 电量和终端仍可用。同一 profile 重启保持 hostId；复制状态目录会复制安装身份，因此新安装必须使用独立目录。
