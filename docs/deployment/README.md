@@ -10,6 +10,7 @@
 | Electron 本地更新                        | [electron-local-updates.md](./electron-local-updates.md) |
 | 飞书应用通知与 Terminal 回复             | [feishu-app-integration.md](./feishu-app-integration.md) |
 | 推送服务 Lightsail / Docker Compose 部署 | [push-gateway.md](./push-gateway.md)                     |
+| Evolution 仓库身份升级与恢复             | [evolution-repository-migration.md](./evolution-repository-migration.md) |
 | 公网终端快照托管                         | [snapshot-share.md](./snapshot-share.md)                 |
 
 涉及 Electron 时读 `../../electron/AGENTS.md`；涉及 Dev Session / Beta Pool 时读

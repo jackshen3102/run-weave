@@ -10,7 +10,7 @@ flowchart LR
   I[Suiji SwiftUI App] --> H[独立 HTTP API]
   W[Web / Runweave 终端随记抽屉] --> H
   H --> S[记录 / 身份 / 附件业务服务]
-  A[外部 Agent] --> M[独立凭据的七工具 MCP]
+  A[外部 Agent] --> M[独立凭据的十工具 MCP]
   M --> S
   H --> R[手动创建回顾任务]
   R --> C[本地已登录 Codex CLI]
@@ -96,7 +96,7 @@ flowchart LR
 
 记录通过 `deleted_at` 保留删除标记，删除和恢复使用既有版本与幂等事务，不改变待办状态。
 Web 与原生 iOS 提供回收站列表、删除确认和恢复入口；普通列表与 Agent/AI 检索排除回收站。
-正文、附件和历史修订保留，不提供永久清空或定时清理。部署前执行新增迁移（schema 3）。
+正文、附件和历史修订保留，不提供永久清空或定时清理。回收站最初引入于 schema 3；当前部署需迁移至 schema 5，见[部署入口](../../deploy/suiji/README.md#跟进版本迁移)。
 
 ## 跟进与外部 Agent 成果
 
@@ -105,3 +105,17 @@ Web 与原生 iOS 提供回收站列表、删除确认和恢复入口；普通�
 Web/桌面与 iOS 提供跟进、成果阅读、复制交接；[随记 Skill](../../plugins/toolkit/skills/suiji/SKILL.md) 可在其他电脑读写同一服务，只有最终成功成果回写，用户确认后才由 Agent 完成待办。跟进里的用户补充不会触发 Agent。
 
 服务接口与版本合同以 [服务 README](../../packages/suiji-server/README.md#跟进与最终成果) 为准；当前实现需要 schema 5，线上启用情况及行为通过范围需要独立验证。
+
+### 验收入口与保留缺口
+
+跟进按 [服务](../testing/suiji/followups-service.testplan.yaml)、[客户端](../testing/suiji/followups-clients.testplan.yaml)
+和 [Agent](../testing/suiji/followups-agent.testplan.yaml) 分层取证。迁移的 2026-09-22 历史记录仍有两项
+环境阻塞：SUIJIFUA-011 需要第二台实际电脑与 HTTPS 配置；SUIJIFUS-020 需要完整异机部署恢复。
+本机数据库恢复、模拟器或真实 Agent 的本机执行不能替代它们，也不能据此宣称正式服务已发布。
+
+浏览器复用分别按 [桌面](../testing/suiji/desktop-browser-reuse.testplan.yaml) 与
+[iOS](../testing/suiji/ios-browser-reuse.testplan.yaml) 验收。2026-09-17 记录中的桌面故障/延迟、旧壳、
+双 Profile 与纯 Web 操作，以及原生业务草稿、来源失效、双 App 身份、选区/大字号、真实 SSO
+和飞书客户端交接尚无完整矩阵通过结论。共享实现以
+[Swift 浏览器包](../../packages/browser-ios/README.md) 为准，两个宿主仍需分别取证。
+上述为删除过程材料时保留的证据边界，本轮未重跑这些用例。

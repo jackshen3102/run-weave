@@ -23,6 +23,7 @@
 | [`evolution/`](./evolution/)       | Agent Self-Evolution                                 |
 | [`platform/`](./platform/)         | Dev Session、Beta Pool、桌面 companion 与 CLI 控制面 |
 | [`runbooks/`](./runbooks/)         | 可重复执行的人工操作流程                             |
+| [`scheduled-tasks/`](./scheduled-tasks/) | 定时任务调度、后台执行、Web 管理与普通终端恢复 |
 | [`suiji/`](./suiji/)               | 随记服务、MCP、Web 录入、AI 回顾、原生体验与部署恢复 |
 | [`terminal/`](./terminal/)         | Terminal、Browser、tmux、MCP 与 Worktree Context     |
 

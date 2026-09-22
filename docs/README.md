@@ -9,6 +9,7 @@
 | ----------------------------------------- | -------------------------------------------------- |
 | 先理解代码目录、运行时和依赖方向          | [architecture/README.md](./architecture/README.md) |
 | 查看重要架构选择及其取舍背景              | [adr/README.md](./adr/README.md)                   |
+| 管理定时任务、后台执行与终端恢复          | [接入边界](../frontend/docs/scheduled-tasks.md)、[运行配置](./deployment/overview.md#定时任务运行) |
 | 使用或修改 `rw` CLI、终端快照分享         | [cli/README.md](./cli/README.md)                   |
 | 启动、部署、更新或管理 Beta / Dev Session | [deployment/README.md](./deployment/README.md)     |
 | 选择质量门禁、日志或运行证据              | [quality/README.md](./quality/README.md)           |
