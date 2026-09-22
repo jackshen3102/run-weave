@@ -62,6 +62,23 @@ export function createKnowledgeInboxRouter(
       }
     };
   router.get(
+    "/shares/read",
+    respond(async (req, username) => {
+      const query = z.object({ reference: z.string().max(200), evidence: z.enum(["true", "false"]).default("false") }).strict().parse(req.query);
+      if (!service.shares) throw new InboxError(503, "分享服务不可用");
+      return service.shares.read(username, query.reference, query.evidence === "true");
+    }),
+  );
+  router.post(
+    "/items/:itemId/share",
+    respond(async (req, username) => {
+      z.object({}).strict().parse(req.query);
+      const input = z.object({ contentVersion: id, sourceRevision: z.string().min(1).max(200) }).strict().parse(req.body);
+      if (!service.shares) throw new InboxError(503, "分享服务不可用");
+      return service.shares.create(username, id.parse(req.params.itemId), input);
+    }),
+  );
+  router.get(
     "/repositories",
     respond(async (req) => {
       z.object({}).strict().parse(req.query);

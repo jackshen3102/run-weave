@@ -11,6 +11,7 @@
 | iOS 两台模拟器跨 worktree 复用               | [ios-simulators.md](./ios-simulators.md)                   |
 | 普通会话经验检索与结果回执                   | [experience-cli.md](./experience-cli.md)                   |
 | Agent Self-Evolution 操作                    | [evolution-cli.md](./evolution-cli.md)                     |
+| 成果引用与 Agent 复查                        | [knowledge-cli.md](./knowledge-cli.md)                     |
 | Terminal Browser Profile、网页工具与人工协助 | [browser-profile.md](./browser-profile.md)                 |
 
 命令、参数、JSON 输出或退出码变化时，同一改动内更新对应文档。

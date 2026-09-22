@@ -248,6 +248,9 @@ export function KnowledgeInbox({
               <p>正在读取详情…</p>
             ) : detail.data ? (
               <InboxDetail
+                key={`${apiBase}:${inboxAccount(token)}:${detail.data.itemId}:${detail.data.contentVersion}:${detail.data.sourceRevision}`}
+                apiBase={apiBase}
+                token={token}
                 item={detail.data}
                 busy={mutation.isPending}
                 disabled={!!query.error || !!detail.error || !navigator.onLine}

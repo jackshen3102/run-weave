@@ -102,6 +102,14 @@ struct KnowledgeInboxDetail: View {
         section("步骤", value.actions)
         section("避坑", value.avoid)
         section("验证说明", value.verification)
+        Button {
+          Task { await model.copyForAgent() }
+        } label: {
+          Label(model.copying ? "正在生成引用…" : "复制给 Agent", systemImage: "doc.on.doc")
+        }
+        .buttonStyle(.bordered)
+        .disabled(!model.canWrite || model.copying || !session.foreground || session.health.status == .offline || value.availability != "available")
+        if let message = model.copyMessage { Text(message).font(.caption).foregroundColor(.secondary) }
       }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
     }
     .navigationTitle("成果详情").navigationBarTitleDisplayMode(.inline)
@@ -117,6 +125,7 @@ struct KnowledgeInboxDetail: View {
         .padding().background(.regularMaterial)
     }
     .refreshable { await model.refreshDetail() }
+    .onDisappear { model.cancelShare() }
     .task(id: "\(session.generation):\(session.foreground):\(item.id)") {
       if session.foreground {
         if !initialized { model.select(item); initialized = true }

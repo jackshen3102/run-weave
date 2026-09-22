@@ -42,6 +42,11 @@ iOS 完整列表提供「自进化 / 经验 / 全部」来源筛选，首次默�
 禁用写入，不排队操作。旧 Backend 的 404 显示版本不支持。验收合同见
 [统一成果收件箱](../testing/evolution/results-inbox.testplan.yaml)。
 
+成果详情支持「复制给 Agent」：持久化独立于处理状态的正文及来源材料快照，
+通过正常鉴权的 `rw knowledge read` 读取，并另行返回当前版本/可用性。
+Activity 原文仍按实时保留期读取和摘要校验，不因分享永久保存。
+命令、身份隔离与证据边界见 [成果引用](../cli/knowledge-cli.md)。
+
 ## 运行闭环
 
 ```text

@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { KnowledgeInboxService } from "../knowledge-inbox/service";
 import { InboxStorage } from "../knowledge-inbox/storage";
+import { KnowledgeShareService } from "../knowledge-inbox/shares";
 import { EvolutionInboxSource } from "../knowledge-inbox/evolution-source";
 import { ExperienceInboxSource } from "../knowledge-inbox/experience-source";
 import { resolveExperienceStorage } from "../experience/storage";
@@ -30,8 +31,9 @@ export function createKnowledgeInbox(
       ? path.join(storage.home, "knowledge-inbox")
       : path.join(os.homedir(), ".runweave", "knowledge-inbox");
   // Lazy, operation-scoped SQLite connections isolate initialization failures from terminals.
+  const inboxStorage = new InboxStorage(path.join(home, storage.namespace));
   const service = new KnowledgeInboxService(
-    new InboxStorage(path.join(home, storage.namespace)),
+    inboxStorage,
     dependencies.evolutionService.repositories,
     [
       new EvolutionInboxSource(
@@ -43,6 +45,8 @@ export function createKnowledgeInbox(
     ],
     () => dependencies.terminalSessionManager.listProjects(),
   );
+  service.shares = new KnowledgeShareService(inboxStorage, service, dependencies.evolutionService,
+    dependencies.experienceService, dependencies.evolutionService.repositories);
   resources.defer("knowledge-inbox", () => service.dispose());
   return service;
 }

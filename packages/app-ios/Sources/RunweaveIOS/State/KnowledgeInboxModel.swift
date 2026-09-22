@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 @MainActor
 final class KnowledgeInboxModel: ObservableObject {
@@ -13,6 +14,8 @@ final class KnowledgeInboxModel: ObservableObject {
   @Published private(set) var partial = false
   @Published private(set) var loading = false
   @Published private(set) var writing = false
+  @Published private(set) var copying = false
+  @Published private(set) var copyMessage: String?
   @Published private(set) var unsupported = false
   @Published private(set) var offline = false
   @Published var state = "pending"
@@ -28,9 +31,12 @@ final class KnowledgeInboxModel: ObservableObject {
   private var detailID: String?
   private var detailVersion: String?
   private var writeTask: Task<InboxItem, Error>?
+  private var shareTask: Task<KnowledgeShareResult, Error>?
+  private var shareRequest = 0
 
   func reset(api: APIClient? = nil) {
     epoch = UUID()
+    cancelShare()
     writeTask?.cancel()
     writeTask = nil
     service = api.map { KnowledgeInboxService(api: $0) }
@@ -40,7 +46,30 @@ final class KnowledgeInboxModel: ObservableObject {
     loadedPages = 1; activeFilter = ""
     state = "pending"; source = "evolution"; repositoryID = ""; detailID = nil; detailVersion = nil
   }
-  func suspend() { writeTask?.cancel() }
+  func suspend() { writeTask?.cancel(); cancelShare() }
+  func cancelShare() { shareRequest += 1; shareTask?.cancel(); shareTask = nil; copying = false; copyMessage = nil }
+  func copyForAgent() async {
+    guard canWrite, !copying, let service, let item = detail, item.availability == "available" else { return }
+    let current = epoch
+    copying = true; copyMessage = nil
+    shareRequest += 1
+    let request = shareRequest
+    let task = Task { try await service.share(item) }
+    shareTask = task
+    defer { if epoch == current, shareRequest == request { copying = false; shareTask = nil } }
+    do {
+      let shared = try await task.value
+      guard epoch == current, shareRequest == request, detailID == item.id, detail?.contentVersion == item.contentVersion,
+        detail?.sourceRevision == item.sourceRevision, !task.isCancelled, !Task.isCancelled,
+        UIApplication.shared.applicationState == .active else { return }
+      UIPasteboard.general.string = shared.text
+      copyMessage = "已复制，粘贴给 Agent 即可"
+    } catch {
+      guard epoch == current, shareRequest == request, detailID == item.id, !task.isCancelled, !Task.isCancelled else { return }
+      copyMessage = "生成引用失败，请检查连接与服务版本后重试"
+      if case APIError.http(409) = error { copyMessage = "成果已变化，请刷新后重新复制" }
+    }
+  }
   var canWrite: Bool { service != nil && !writing && !offline && !unsupported && failure == nil && detailFailure == nil }
 
   func refreshPreview() async {
@@ -86,6 +115,7 @@ final class KnowledgeInboxModel: ObservableObject {
     } catch { if epoch == current, request == listRequest, filter == "\(state):\(source):\(repositoryID)" { receive(error) } }
   }
   func select(_ item: InboxItem) {
+    cancelShare()
     detailRequest += 1
     detailID = item.id; detailVersion = item.processedAt == nil ? nil : item.contentVersion
     detail = item; detailFailure = nil; actionFailure = nil

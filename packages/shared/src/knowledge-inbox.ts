@@ -1,4 +1,7 @@
-/** Human consumption only: these operations never authorize or invalidate knowledge. */
+import type { ContextPackEvidenceRef, EvolutionClaim, EvolutionCrossReview, InsightRevision } from "./evolution/index";
+import type { ExperienceRecord, ExperienceFeedback } from "./experience";
+
+/** Consumption only: these operations never authorize or invalidate knowledge. */
 export type InboxSource = "evolution" | "experience";
 export type InboxState = "pending" | "processed";
 export interface InboxListQuery {
@@ -29,6 +32,8 @@ export interface InboxItem extends InboxContent {
   source: InboxSource;
   sourceId: string;
   sourceRevision: string;
+  /** Exact source revision, independent of the public body's version hash. */
+  sourceRevisionId?: string;
   kind: "finding" | "suggestion" | "experience";
   title: string;
   validationLabel: string;
@@ -56,4 +61,53 @@ export interface InboxStateChange {
   state: InboxState;
   expectedContentVersion: string;
   expectedStateVersion: number;
+}
+
+/** An authenticated locator, never a bearer credential or an arbitrary URL. */
+export const KNOWLEDGE_REFERENCE_PATTERN = /^rw-knowledge:v1:([a-f0-9-]{36}):([a-f0-9-]{36})$/u;
+export interface KnowledgeShareRequest {
+  contentVersion: string;
+  sourceRevision: string;
+}
+export interface KnowledgeShareResult {
+  reference: string;
+  text: string;
+}
+export interface KnowledgeMaterial {
+  warnings: string[];
+  evolution?: {
+    revision: InsightRevision;
+    claims: EvolutionClaim[];
+    reviews: EvolutionCrossReview[];
+    evidence: ContextPackEvidenceRef[];
+  };
+  experience?: {
+    record: ExperienceRecord;
+    feedback: ExperienceFeedback[];
+  };
+}
+export interface KnowledgeSnapshot {
+  createdAt: string;
+  item: InboxItem;
+  material: KnowledgeMaterial;
+}
+export interface KnowledgeReadResult {
+  reference: string;
+  createdAt: string;
+  item: InboxItem;
+  current: {
+    availability: InboxItem["availability"];
+    contentVersion?: string;
+    sourceRevision?: string;
+    reason?: string;
+  };
+  material?: KnowledgeMaterial;
+  /** Live Activity contents, fetched with normal authenticated content reads by the CLI. */
+  contents?: Array<{
+    contentId: string;
+    status: "available" | "unavailable";
+    text?: string;
+    truncated?: boolean;
+    reason?: string;
+  }>;
 }

@@ -1,10 +1,12 @@
 import { chmodSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type {
   InboxSource,
   InboxStateChange,
+  KnowledgeSnapshot,
 } from "@runweave/shared/knowledge-inbox";
 import { InboxError, type PublishedItem } from "./types";
 
@@ -45,7 +47,10 @@ export class InboxStorage {
         CREATE TABLE IF NOT EXISTS user_state (username TEXT NOT NULL, item_id TEXT NOT NULL,
           version TEXT NOT NULL, state_version INTEGER NOT NULL, processed_at TEXT,
           PRIMARY KEY(username,item_id,version));
+        CREATE TABLE IF NOT EXISTS share_identity (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS knowledge_shares (id TEXT PRIMARY KEY, username TEXT NOT NULL, snapshot TEXT NOT NULL);
       `);
+      db.prepare("INSERT OR IGNORE INTO share_identity VALUES(1,?)").run(randomUUID());
       const columns = db
         .prepare("PRAGMA table_info(user_state)")
         .all() as Array<{ name: string }>;
@@ -66,6 +71,18 @@ export class InboxStorage {
 }
 export class InboxDatabase {
   constructor(private readonly db: Database.Database) {}
+  shareIdentity(): string {
+    return (this.db.prepare("SELECT identity FROM share_identity WHERE id=1").get() as { identity: string }).identity;
+  }
+  saveShare(username: string, snapshot: KnowledgeSnapshot): string {
+    const id = randomUUID();
+    this.db.prepare("INSERT INTO knowledge_shares VALUES(?,?,?)").run(id, username, JSON.stringify(snapshot));
+    return `rw-knowledge:v1:${this.shareIdentity()}:${id}`;
+  }
+  share(username: string, id: string): KnowledgeSnapshot | undefined {
+    const row = this.db.prepare("SELECT snapshot FROM knowledge_shares WHERE id=? AND username=?").get(id, username) as { snapshot: string } | undefined;
+    return row ? JSON.parse(row.snapshot) as KnowledgeSnapshot : undefined;
+  }
   revision(): number {
     return (
       this.db
