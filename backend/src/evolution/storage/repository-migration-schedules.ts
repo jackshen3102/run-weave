@@ -3,8 +3,8 @@ import path from "node:path";
 import type { EvolutionSchedule } from "@runweave/shared/evolution";
 import { resolveRepositoryIdentity } from "../../repository/identity";
 import { nextCronOccurrence } from "../cron";
-import type { MigrationManifest } from "./repository-migration-audit";
-import { openReadOnly } from "./repository-migration-audit";
+import type { MigrationManifest } from "./repository-migration-integrity";
+import { openReadOnly } from "./repository-migration-integrity";
 import { assertOffline } from "./repository-migration-files";
 import { verifyRepositoryMigration } from "./repository-migration-apply";
 
