@@ -32,6 +32,7 @@ export type ScheduledTaskWorkerCommand =
       occurrenceKey: string;
       nextRunAt: string | null;
       taskRevision: number;
+      expectedNextRunAt: string;
     }
   | {
       id: number;

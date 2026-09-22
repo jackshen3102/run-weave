@@ -8,6 +8,10 @@ export type TaskSchedule =
   | { kind: "weekly"; timezone: string; localTime: string; weekdays: number[] }
   | { kind: "once"; timezone: string; runAt: string };
 
+export type ScheduledMisfirePolicy =
+  | { mode: "skip" }
+  | { mode: "catch-up-latest"; maxDelaySeconds: number };
+
 export interface ScheduledTaskConfig {
   name: string;
   projectId: string;
@@ -18,6 +22,7 @@ export interface ScheduledTaskConfig {
   /** Absent on older tasks: preserve sandbox-only execution. */
   executionPolicy?: ScheduledExecutionPolicy;
   schedule: TaskSchedule;
+  misfirePolicy: ScheduledMisfirePolicy;
 }
 
 export interface ScheduledTask extends ScheduledTaskConfig {
@@ -54,6 +59,13 @@ export interface ScheduledRun {
   snapshot: ScheduledTaskConfig;
   trigger: "scheduled" | "manual";
   scheduledFor: string;
+  /** Admission timing, separate from time spent waiting in the execution queue. */
+  dispatch: {
+    evaluatedAt: string;
+    latenessMs: number;
+    catchUp: boolean;
+    coalescedFrom?: string;
+  } | null;
   status: ScheduledRunStatus;
   startedAt: string | null;
   finishedAt: string | null;

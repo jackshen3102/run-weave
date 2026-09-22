@@ -3,7 +3,7 @@ import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { logger } from "../logging/index";
 import { createScheduledRunRecord } from "./run-record";
-import { nextOccurrences } from "./schedule";
+import { latestOccurrence, nextOccurrences } from "./schedule";
 import type { ScheduledProviderAdapter } from "./providers/types";
 import type { ScheduledTaskStore } from "./storage/store";
 
@@ -104,8 +104,22 @@ export class ScheduledTaskRuntime {
   private async materializeDue(now: Date): Promise<void> {
     const due = await this.store.listDueTasks(now.toISOString());
     for (const task of due) {
-      const scheduledFor = task.nextRunAt;
-      if (!scheduledFor) continue;
+      const expectedNextRunAt = task.nextRunAt;
+      if (!expectedNextRunAt) continue;
+      const policy = task.misfirePolicy;
+      const latest =
+        policy.mode === "catch-up-latest"
+          ? latestOccurrence(task.schedule, now)
+          : null;
+      const scheduledFor =
+        latest && Date.parse(latest) >= Date.parse(expectedNextRunAt)
+          ? latest
+          : expectedNextRunAt;
+      const latenessMs = now.getTime() - Date.parse(scheduledFor);
+      const maxDelayMs =
+        policy.mode === "catch-up-latest"
+          ? policy.maxDelaySeconds * 1000
+          : LATE_WINDOW_MS;
       const nextRunAt =
         task.schedule.kind === "once"
           ? null
@@ -117,12 +131,23 @@ export class ScheduledTaskRuntime {
         scheduledFor,
         project?.path ?? "",
       );
-      if (now.getTime() - Date.parse(scheduledFor) > LATE_WINDOW_MS) {
+      run.dispatch = {
+        evaluatedAt: now.toISOString(),
+        latenessMs,
+        catchUp:
+          policy.mode === "catch-up-latest" &&
+          latenessMs > LATE_WINDOW_MS &&
+          latenessMs <= maxDelayMs,
+        ...(scheduledFor !== expectedNextRunAt
+          ? { coalescedFrom: expectedNextRunAt }
+          : {}),
+      };
+      if (latenessMs > maxDelayMs) {
         run.status = "skipped";
         run.finishedAt = now.toISOString();
         run.error = {
           code: "missed",
-          message: "The schedule was missed while the Backend was unavailable",
+          message: "The schedule exceeded its allowed delay and was skipped",
         };
       } else if (!project?.path) {
         run.status = "failed";
@@ -139,12 +164,27 @@ export class ScheduledTaskRuntime {
           message: `Provider ${task.provider} is unavailable`,
         };
       }
-      await this.store.materializeScheduledRun(
+      const stored = await this.store.materializeScheduledRun(
         run,
         `${task.id}:${task.revision}:${scheduledFor}`,
         nextRunAt,
         task.revision,
+        expectedNextRunAt,
       );
+      if (stored)
+        logger.info("scheduled-tasks.dispatch", {
+          component: "scheduled-tasks",
+          message: "Scheduled task dispatch evaluated",
+          taskId: task.id,
+          runId: stored.id,
+          revision: task.revision,
+          scheduledFor,
+          evaluatedAt: now.toISOString(),
+          latenessMs,
+          decision:
+            stored.error?.code ??
+            (run.dispatch.catchUp ? "catch-up" : "queued"),
+        });
     }
   }
 

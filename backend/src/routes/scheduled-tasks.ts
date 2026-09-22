@@ -33,6 +33,21 @@ const configShape = {
   model: z.string().trim().min(1).max(200).optional(),
   effort: z.string().trim().min(1).max(100).optional(),
   executionPolicy: z.enum(["sandbox", "auto-review"]).optional(),
+  misfirePolicy: z
+    .discriminatedUnion("mode", [
+      z.object({ mode: z.literal("skip") }).strict(),
+      z
+        .object({
+          mode: z.literal("catch-up-latest"),
+          maxDelaySeconds: z
+            .number()
+            .int()
+            .min(3600)
+            .max(604800)
+            .multipleOf(3600),
+        })
+        .strict(),
+    ]),
   schedule: scheduleSchema,
 };
 const createTaskSchema = z
@@ -47,6 +62,7 @@ const updateTaskSchema = z
     model: z.string().trim().min(1).max(200).nullable().optional(),
     effort: z.string().trim().min(1).max(100).nullable().optional(),
     executionPolicy: configShape.executionPolicy,
+    misfirePolicy: configShape.misfirePolicy.optional(),
     schedule: scheduleSchema.optional(),
     enabled: z.boolean().optional(),
     expectedRevision: z.number().int().positive(),

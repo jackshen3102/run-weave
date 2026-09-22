@@ -17,11 +17,11 @@ export class ScheduledTaskDatabase {
   constructor(databasePath: string) {
     mkdirSync(path.dirname(databasePath), { recursive: true, mode: 0o700 });
     this.database = new Database(databasePath);
-    this.database.pragma("journal_mode = WAL");
     this.database.pragma("busy_timeout = 5000");
     this.database.pragma("foreign_keys = ON");
     try {
       migrateScheduledTasks(this.database);
+      this.database.pragma("journal_mode = WAL");
     } catch (error) {
       this.database.close();
       throw error;
@@ -119,7 +119,8 @@ export class ScheduledTaskDatabase {
     occurrenceKey: string,
     nextRunAt: string | null,
     taskRevision: number,
-  ): ScheduledRun {
+    expectedNextRunAt: string,
+  ): ScheduledRun | null {
     return this.database.transaction(() => {
       const existing = this.database
         .prepare(
@@ -129,12 +130,18 @@ export class ScheduledTaskDatabase {
       if (existing) return parseRun(existing.payload_json);
       const task = this.requireTask(run.taskId);
       if (task.revision !== taskRevision) throw new Error("revision_conflict");
+      if (
+        !task.enabled ||
+        task.deletedAt ||
+        task.nextRunAt !== expectedNextRunAt
+      )
+        return null;
       const busy = this.findUnfinished(run.taskId);
       const stored = busy
         ? {
             ...run,
             status: "skipped" as const,
-            finishedAt: run.scheduledFor,
+            finishedAt: run.dispatch?.evaluatedAt ?? new Date().toISOString(),
             error: { code: "busy", message: "An earlier run is still active" },
           }
         : run;

@@ -94,6 +94,49 @@ export function nextOccurrences(
   return results;
 }
 
+/** Find the latest calendar occurrence without enumerating the downtime backlog. */
+export function latestOccurrence(
+  schedule: TaskSchedule,
+  through: Date,
+): string | null {
+  validateSchedule(schedule);
+  if (!Number.isFinite(through.getTime()))
+    throw new ScheduleValidationError("invalid occurrence search");
+  if (schedule.kind === "once") {
+    return Date.parse(schedule.runAt) <= through.getTime()
+      ? schedule.runAt
+      : null;
+  }
+  const [hour, minute] = schedule.localTime.split(":").map(Number) as [
+    number,
+    number,
+  ];
+  const localNow = localParts(through.getTime(), schedule.timezone);
+  const cursor = Date.UTC(localNow.year, localNow.month - 1, localNow.day);
+  for (let offset = 0; offset <= MAX_SEARCH_DAYS; offset += 1) {
+    const date = new Date(cursor - offset * DAY_MS);
+    const weekday = date.getUTCDay();
+    const eligible =
+      schedule.kind === "daily" ||
+      (schedule.kind === "weekdays" && weekday >= 1 && weekday <= 5) ||
+      (schedule.kind === "weekly" && schedule.weekdays.includes(weekday));
+    if (!eligible) continue;
+    const occurrence = resolveLocalMinute(
+      {
+        year: date.getUTCFullYear(),
+        month: date.getUTCMonth() + 1,
+        day: date.getUTCDate(),
+        hour,
+        minute,
+      },
+      schedule.timezone,
+    );
+    if (occurrence !== null && occurrence <= through.getTime())
+      return new Date(occurrence).toISOString();
+  }
+  return null;
+}
+
 function assertTimezone(timezone: string): void {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(0);
