@@ -23,6 +23,7 @@ import { HttpError } from "../../../services/http";
 import { updateTerminalSession } from "../../../services/terminal/index";
 import {
   hasValidProjectSessionSelection,
+  isCurrentSelection,
   resolvePreferredProjectId,
   resolvePreferredSessionId,
   selectTerminalProjectContext,
@@ -222,6 +223,7 @@ export function TerminalWorkspaceContent({
     setActiveSessionId(initialTerminalSessionId);
   }, [initialTerminalSessionId, setActiveSessionId]);
   useEffect(() => {
+    if (!isCurrentSelection(activeParentProjectId, activeProjectId, activeSessionId)) return;
     if (visibleProjects.length === 0) {
       return;
     }
@@ -256,6 +258,7 @@ export function TerminalWorkspaceContent({
     visibleProjects,
   ]);
   useEffect(() => {
+    if (!isCurrentSelection(activeParentProjectId, activeProjectId, activeSessionId)) return;
     if (!activeParentProjectId || contextsQuery.isPending) {
       return;
     }
@@ -324,6 +327,7 @@ export function TerminalWorkspaceContent({
     sessions,
   ]);
   useEffect(() => {
+    if (!isCurrentSelection(activeParentProjectId, activeProjectId, activeSessionId)) return;
     if (visibleSessions.length === 0) {
       if (!hasLoadedSessions) {
         return;
@@ -348,6 +352,7 @@ export function TerminalWorkspaceContent({
       ),
     );
   }, [
+    activeParentProjectId,
     activeProjectId,
     activeSessionId,
     hasLoadedSessions,
@@ -360,7 +365,13 @@ export function TerminalWorkspaceContent({
     if (!hasLoadedSessions || requestError) {
       return;
     }
-    if (activeSession?.terminalSessionId) {
+    // An earlier effect can apply an incoming navigation before this render's
+    // route notification runs. Do not publish the superseded selection.
+    if (
+      activeSession?.terminalSessionId &&
+      activeSession.terminalSessionId ===
+        useTerminalWorkspaceStore.getState().activeSessionId
+    ) {
       onActiveSessionChange?.(activeSession.terminalSessionId);
     }
   }, [

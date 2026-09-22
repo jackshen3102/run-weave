@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { ScheduledRun, ScheduledTask } from "@runweave/shared/scheduled-tasks";
+import type {
+  ScheduledRun,
+  ScheduledTask,
+} from "@runweave/shared/scheduled-tasks";
 
 export function createScheduledRunRecord(
   task: ScheduledTask,

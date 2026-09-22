@@ -24,9 +24,16 @@ export async function createScheduledTaskSubsystem(params: {
   terminalOptions: TerminalSessionCreationOptions;
 }): Promise<ScheduledTaskSubsystem> {
   const env = params.env ?? process.env;
-  const enabled = env.RUNWEAVE_SCHEDULED_TASKS_ENABLED?.trim().toLowerCase() !== "false";
-  const timeoutMs = positiveInteger(env.RUNWEAVE_SCHEDULED_TASK_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
-  const maxOutputBytes = positiveInteger(env.RUNWEAVE_SCHEDULED_TASK_MAX_OUTPUT_BYTES, DEFAULT_MAX_OUTPUT_BYTES);
+  const enabled =
+    env.RUNWEAVE_SCHEDULED_TASKS_ENABLED?.trim().toLowerCase() !== "false";
+  const timeoutMs = positiveInteger(
+    env.RUNWEAVE_SCHEDULED_TASK_TIMEOUT_MS,
+    DEFAULT_TIMEOUT_MS,
+  );
+  const maxOutputBytes = positiveInteger(
+    env.RUNWEAVE_SCHEDULED_TASK_MAX_OUTPUT_BYTES,
+    DEFAULT_MAX_OUTPUT_BYTES,
+  );
   const providerProbe = await probeScheduledProviders(env);
   const tmuxAvailable =
     (await params.terminalOptions.tmuxService?.isAvailable()) ?? false;
@@ -43,15 +50,30 @@ export async function createScheduledTaskSubsystem(params: {
   }
   const capabilities: ScheduledTaskCapabilities = {
     enabled,
-    ...(enabled ? {} : { reason: "Scheduled tasks are disabled by Backend configuration" }),
+    ...(enabled
+      ? {}
+      : { reason: "Scheduled tasks are disabled by Backend configuration" }),
     providers: providerProbe.capabilities,
     limits: { maxConcurrentRuns: 1, timeoutMs, maxOutputBytes },
   };
   try {
-    const store = await ScheduledTaskStore.create({ databasePath: params.databasePath, env });
-    const runtime = new ScheduledTaskRuntime(store, params.terminalSessionManager, providerProbe.adapters, enabled, { timeoutMs, maxOutputBytes });
+    const store = await ScheduledTaskStore.create({
+      databasePath: params.databasePath,
+      env,
+    });
+    const runtime = new ScheduledTaskRuntime(
+      store,
+      params.terminalSessionManager,
+      providerProbe.adapters,
+      enabled,
+      { timeoutMs, maxOutputBytes },
+    );
     await runtime.initialize();
-    const service = new ScheduledTaskService(store, params.terminalSessionManager, capabilities);
+    const service = new ScheduledTaskService(
+      store,
+      params.terminalSessionManager,
+      capabilities,
+    );
     service.attachRuntime(runtime);
     service.attachTerminalAttachment(
       new ScheduledTerminalAttachment(
@@ -68,7 +90,12 @@ export async function createScheduledTaskSubsystem(params: {
       error,
     });
     return {
-      service: new ScheduledTaskService(null, params.terminalSessionManager, capabilities, "Scheduled task storage failed to initialize"),
+      service: new ScheduledTaskService(
+        null,
+        params.terminalSessionManager,
+        capabilities,
+        "Scheduled task storage failed to initialize",
+      ),
       runtime: null,
       store: null,
     };

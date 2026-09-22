@@ -10,6 +10,7 @@ export interface ScheduledProviderRequest {
   maxWallTimeMs: number;
   signal: AbortSignal;
   onOutput: (text: string) => Promise<boolean>;
+  onSpawn: (pid: number) => Promise<void>;
   onThread: (threadId: string) => Promise<void>;
 }
 

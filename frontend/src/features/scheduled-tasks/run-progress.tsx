@@ -52,7 +52,7 @@ export function RunProgress({ run }: { run: ScheduledRun }) {
         {text || (output.isPending ? "正在读取进度…" : "暂无输出")}
       </pre>
       <RequestError error={output.error ?? stop.error} />
-      {["queued", "running", "waiting", "stopping"].includes(run.status) ? (
+      {["queued", "running", "stopping"].includes(run.status) ? (
         <Button
           variant="outline"
           size="sm"

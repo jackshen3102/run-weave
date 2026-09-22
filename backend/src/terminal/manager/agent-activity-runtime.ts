@@ -75,6 +75,7 @@ export class TerminalManagerAgentActivityRuntime extends TerminalManagerBufferRu
         : null;
       if (
         panelId &&
+        !this.hasPanelAgentPreparation(terminalSessionId, panelId) &&
         previous?.phase === "grace" &&
         previous.operationId &&
         generation?.operationId === previous.operationId

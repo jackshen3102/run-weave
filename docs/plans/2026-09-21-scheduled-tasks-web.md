@@ -1,8 +1,8 @@
 # Web 定时任务实施计划
 
-日期：2026-09-21。状态：Web 消费端已实现，Backend 依赖与端到端验收未完成。当前交付边界见 [Web 接入说明](../../frontend/docs/scheduled-tasks.md)。
+日期：2026-09-21。状态：Web 消费端与 Backend 核心闭环已实现，待完整浏览器矩阵验收。当前交付边界见 [Web 接入说明](../../frontend/docs/scheduled-tasks.md)。
 
-本轮实现路由、卡片/详情/表单、API 消费、共享 DTO、作用域查询、终端来源回跳及导航恢复；当前 Backend 没有 scheduled-tasks 路由，真实能力检查返回 404。因此 W2/W3 的真实业务验收及 W4 仍阻塞，保留两份过程计划，不将它们清理成“已完成”。
+Web 已实现路由、卡片/详情/表单、API 消费、共享 DTO、作用域查询、终端来源回跳及导航恢复；Backend 已实现 scheduled-tasks 路由、持久调度、真实 Codex 执行和普通终端恢复。完整 Web YAML 仍需按仓库门禁用 Playwright CLI 执行，因此 W4 保持未完成。
 
 ## 目标与交付范围
 
@@ -96,7 +96,7 @@ Worktree 已是子 Project，见[现有身份合同](../architecture/terminal-wo
 
 ### W4：整体验收与文档收尾
 
-- [ ] Backend 已完成隔离 API/真实 Codex/thread 恢复冒烟；仍需用 Playwright 执行本计划 Web 用例，不能以原型截图替代。
+- [x] Web 累计 15/15 通过，受影响的跨项目/Worktree 导航、恢复与草稿保护已做最终源码定向回归；Backend 16/17，SRT-008 因结构化权限等待/接管能力缺失未通过。
 - [ ] 运行下面命令；只有改动涉及对应模块才扩大既有回归。
 - [ ] 更新真实实现涉及的架构/使用文档，标明原型为历史交互基准；完成后依仓库治理清理这两份过程计划，长期合同迁至活文档。
 
@@ -109,7 +109,7 @@ pnpm docs:check
 pnpm testplan:validate docs/testing/scheduled-tasks/web.testplan.yaml
 ```
 
-不新增单元测试。实际页面验收必须使用 `$toolkit:playwright-cli`，启动/打开隔离 Dev Session 必须使用 `$toolkit:runweave-dev-session`。本轮没有启动 Dev Session。
+不新增单元测试。实际页面验收必须使用 `$toolkit:playwright-cli`，启动/打开隔离 Dev Session 必须使用 `$toolkit:runweave-dev-session`。2026-09-22 已在隔离 Dev Session 使用真实 Codex 与 Playwright CLI 续验；累计通过包含前轮证据，不表示所有用例都在最终源码上全量重跑。
 
 ## 验收与交付门禁
 

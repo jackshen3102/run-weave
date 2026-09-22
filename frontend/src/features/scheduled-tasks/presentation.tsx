@@ -54,6 +54,10 @@ export function safeArtifactUrl(url?: string) {
 }
 export function errorMessage(error: unknown) {
   if (error instanceof HttpError) {
+    if (error.code === "context_unavailable")
+      return "原项目或 Worktree 目录不可用。恢复原目录后，可重试打开此记录。";
+    if (error.code === "thread_unavailable")
+      return "原对话历史暂不可用。恢复历史后，可重试打开此记录。";
     if (error.status === 404)
       return "当前连接找不到此资源，或 Backend 尚未支持定时任务，请检查连接及版本。";
     if (error.status === 409)

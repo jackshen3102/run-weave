@@ -1,6 +1,6 @@
 # 定时任务 Backend 执行与终端接入计划
 
-日期：2026-09-21。状态：实现完成，待完整浏览器矩阵验收。[Web 总入口与交互计划](2026-09-21-scheduled-tasks-web.md)的依赖部分，独立以真实 API、存储、进程与普通终端验收。
+日期：2026-09-21。状态：核心修复已验收；Web 累计 15/15、Backend 16/17，结构化权限等待与人工接管尚未实现。[Web 总入口与交互计划](2026-09-21-scheduled-tasks-web.md)的依赖部分，独立以真实 API、存储、进程与普通终端验收。
 
 ## 现状与关键判断
 
@@ -25,11 +25,11 @@
 
 ## B0：先验证持久执行到普通终端恢复
 
-- [ ] 在临时项目和隔离数据根验证 provider 的持久执行模式：读取本地 CLI 帮助/实现确认参数，再运行无副作用标记任务。实际 Agent 运行需执行阶段授权与既有凭据，不在写计划阶段触发。
-- [ ] 获取 provider 真实 threadId，确认落盘历史可读；保留与普通终端相同的 provider 配置、插件/Skill 和历史命名空间，不使用 ephemeral，不手工伪造 thread 文件。
-- [ ] 销毁执行进程，使用现有创建终端与 prepare 路径精确恢复，追问要求复述先前随机标记；同时核对实际 thread 身份，而非只看文字相似。
+- [x] 在临时项目和隔离数据根验证 provider 的持久执行模式：读取本地 CLI 帮助/实现确认参数，再运行无副作用标记任务。实际 Agent 运行需执行阶段授权与既有凭据，不在写计划阶段触发。
+- [x] 获取 provider 真实 threadId，确认落盘历史可读；保留与普通终端相同的 provider 配置、插件/Skill 和历史命名空间，不使用 ephemeral，不手工伪造 thread 文件。
+- [x] 销毁执行进程，使用现有创建终端与 prepare 路径精确恢复，追问要求复述先前随机标记；同时核对实际 thread 身份，而非只看文字相似。
 - [ ] 首次运行、失败后有 thread、停止、等待授权分别观察真实协议。只有结构化信号能支持 waiting；不能从“请授权”几个字推断可接管。
-- [ ] 输出可用能力及恢复所需字段；Pi 若需要 sessionFile，沿用精确文件/ID 校验，不能仅存 UUID。新 provider 未通过则明确 unavailable，不带病进入调度。
+- [x] 输出可用能力及恢复所需字段；Pi 若需要 sessionFile，沿用精确文件/ID 校验，不能仅存 UUID。新 provider 未通过则明确 unavailable，不带病进入调度。
 
 退出标准：至少 Codex 闭环成立；不成立时先修 provider adapter，不用提前创建隐藏 TerminalSession 规避“未打开不占终端数量”的要求。B0 是编码先决实验，不声称本轮已证实。
 
@@ -75,40 +75,40 @@ Run 状态：queued → running → completed/failed/cancelled/waiting；waiting
 
 ## B1：独立存储与调度
 
-- [ ] 新建 `backend/src/scheduled-tasks/storage/{store,migrations,worker-protocol,sqlite-worker}.ts`，独立 SQLite `scheduled-tasks.sqlite`；路径从现有 Backend 数据根派生，在 `backend/src/utils/path.ts` 增加解析函数。复用现有 SQLite worker/生命周期模式，不让新存储依赖 Evolution 数据。
-- [ ] Task revision 乐观锁；运行快照与唯一 occurrenceKey 在同一事务落库，自动触发键包含 taskId/revision/scheduledFor，人工键绑定请求 body hash。创建任务的幂等结果也持久化。
-- [ ] 新建 `service.ts`、`schedule.ts`、`runtime.ts`。后端统一计算下次时间；时区和时间由服务端验证。DST 缺失的本地分钟跳过，重复分钟每日规则只运行第一次；去重键以选定 UTC occurrence 为准。
-- [ ] tick 不重叠；数据库事务 claim、lease 和进程 owner identity 防重复执行。PID 仅作线索，不作为跨重启仍拥有执行权的唯一证据。
-- [ ] 崩溃边界：claim 后、spawn 前后、结果写入前都可能不确定。失去 owner 的 run 先查持久 provider 事实，能证实完成才 completed；其余 failed/interrupted 并保留 thread，不自动重跑有外部副作用的提示词。不能宣称副作用 exactly-once。
+- [x] 新建 `backend/src/scheduled-tasks/storage/{store,migrations,worker-protocol,sqlite-worker}.ts`，独立 SQLite `scheduled-tasks.sqlite`；路径从现有 Backend 数据根派生，在 `backend/src/utils/path.ts` 增加解析函数。复用现有 SQLite worker/生命周期模式，不让新存储依赖 Evolution 数据。
+- [x] Task revision 乐观锁；运行快照与唯一 occurrenceKey 在同一事务落库，自动触发键包含 taskId/revision/scheduledFor，人工键绑定请求 body hash。创建任务的幂等结果也持久化。
+- [x] 新建 `service.ts`、`schedule.ts`、`runtime.ts`。后端统一计算下次时间；时区和时间由服务端验证。DST 缺失的本地分钟跳过，重复分钟每日规则只运行第一次；去重键以选定 UTC occurrence 为准。
+- [x] tick 不重叠；数据库事务 claim 和进程 owner identity 防重复执行。PID 只用于保守确认旧 owner 仍存活；无法确认安全时进入 `owner_unresolved`，不重放提示词。
+- [x] 崩溃边界：claim 后、spawn 前后、结果写入前都可能不确定。失去 owner 的 run 先查持久 provider 事实，能证实完成才 completed；其余 failed/interrupted 并保留 thread，不自动重跑有外部副作用的提示词。不能宣称副作用 exactly-once。
 - [ ] queued 可在重启后继续；running 的自有进程组需可确认退出/接管后才释放互斥，无法确认时占用保持并返回 owner_unresolved，不能靠 lease 过期直接启动第二个进程。
-- [ ] 在 `bootstrap/runtime-services.ts` 装配并立即登记资源清理，Backend 停止时停止 tick → abort/等待自有执行 → 持久化结果 → 关闭存储。初始化失败隔离为调度不可用，保留普通终端可用。
+- [x] 在 `bootstrap/runtime-services.ts` 装配并立即登记资源清理，Backend 停止时停止 tick → abort/等待自有执行 → 持久化结果 → 关闭存储。初始化失败隔离为调度不可用，保留普通终端可用。
 
 ## B2：执行 adapter 与运行结果
 
-- [ ] 新建 `backend/src/scheduled-tasks/providers/{types,codex,capabilities}.ts`；TraeX/Pi 通过 B0 后各自新增 adapter。请求 prompt 通过 stdin/结构化参数传递，禁止拼 shell 文本。
-- [ ] 在 `execution.ts` 管理进程组、输出上限、超时、AbortSignal、真实完成事件与 thread 保存；返回 exit=0 也需正常完成事件，启动命令已提交不算成功。
-- [ ] 每次执行保存不可变配置；启动时重新解析项目真实路径，不依赖浏览器当前选择。若 Agent/工具改变到已登记 Worktree，仅接受实际运行事件/可信上下文解析更新 executionProjectId/cwd，不解析助手自然语言猜 cwd；不因产物位于另一目录迁移 thread。
+- [x] 新建 `backend/src/scheduled-tasks/providers/{types,codex,capabilities}.ts`；TraeX/Pi 通过 B0 后各自新增 adapter。请求 prompt 通过 stdin/结构化参数传递，禁止拼 shell 文本。
+- [x] 执行 adapter 管理进程组、输出上限、超时、AbortSignal、真实完成事件与 thread 保存；返回 exit=0 也需正常完成事件，启动命令已提交不算成功。
+- [x] 每次执行保存不可变配置；启动时重新解析项目真实路径，不依赖浏览器当前选择。若 Agent/工具改变到已登记 Worktree，仅接受实际运行事件/可信上下文解析更新 executionProjectId/cwd，不解析助手自然语言猜 cwd；不因产物位于另一目录迁移 thread。
 - [ ] 沿用当前 provider 的用户配置和既有权限策略；不默认禁用规则、trust 或开启危险 bypass。无人值守遇到不能继续的权限交互，保存真实原因与恢复信息后转 waiting，先释放后台执行权再允许终端恢复。无可恢复 thread 的启动失败显示 failed。
-- [ ] 读取普通用户配置所需环境，与终端恢复保持同一身份；过滤父终端的 Session/Panel 绑定和内部 hook token，避免把任务输出归到发起操作的终端。为调度 owner 明确注入独立 run 身份。
-- [ ] 不将凭据写入 Task/Run/API/log；工作日志落在 Backend 私有数据根，页面只通过鉴权输出接口读取。停止不回滚已发生的文件或外部操作。
+- [x] 读取普通用户配置所需环境，与终端恢复保持同一身份；过滤父终端的 Session/Panel 绑定和内部 hook token，避免把任务输出归到发起操作的终端。为调度 owner 明确注入独立 run 身份。
+- [x] 不将凭据写入 Task/Run/API/log；工作日志落在 Backend 私有数据根，页面只通过鉴权输出接口读取。停止不回滚已发生的文件或外部操作。
 
 ## B3：按需打开普通终端与通用来源
 
-- [ ] 在 Terminal application 新建 `create-session.ts`（拟新增）承接 `routes/terminal/index.ts` 的现有创建编排；旧路由改为调用，保留 runtime preference、清理、默认 panel、事件及 Activity 行为。
-- [ ] 扩展 `packages/shared/src/terminal/runtime/session.ts`、`backend/src/terminal/store/{store,lowdb-records,lowdb-store}.ts`、`manager/` 记录映射和 `application/payloads.ts`，完整持久化/序列化 source。普通创建可省略；任务来源由内部服务赋值，不允许任意客户端伪造不存在的 run 归属。
-- [ ] 新建 `scheduled-tasks/terminal-attachment.ts`：按 backend/provider/thread 加锁，验证 run 与实际 context，先查存量绑定/可恢复 source 记录，再创建一个普通终端并使用现有默认 panel 恢复。
-- [ ] 创建后、恢复前持久化 binding；恢复失败保留同一失败绑定供重试，不反复新增终端。新 store 与 Terminal LowDB 无跨库事务，通过 source + 持久 attachment 操作记录做启动核对；创建后回写前崩溃也要能找回唯一已创建终端。
-- [ ] 调用 prepareTerminalAgent 的 panelId + resumeThreadId + skipInitialPrompt；不重复提交任务原提示词。等待 provider 实际 thread/provider 与预期一致才 ready，失败返回错误；既有 Recover agent 不承担外部 thread 首次导入。
-- [ ] 已有正确 thread 的存活终端直接返回，严禁再 spawn Agent。同 run 并发打开返回同一 binding。终端已删除时允许创建替代终端；终端被用户切到另一个 thread 时返回 terminal_repurposed，不覆盖，提供用户显式“另开终端”动作后替换绑定。
-- [ ] running 不允许同 thread 第二 owner，open 返回 thread_busy；Web 展示运行进度。waiting 必须先确认后台进程退出，才转交输入所有权；完成后自由追问不污染原 run。
-- [ ] 项目/Worktree 已移除返回 context_unavailable，thread 文件缺失返回 thread_unavailable；原记录仍可查看，不自动改目录、不创建空对话冒充恢复。
+- [x] 在 Terminal application 新建 `create-session.ts` 承接 `routes/terminal/index.ts` 的现有创建编排；旧路由改为调用，保留 runtime preference、清理、默认 panel、事件及 Activity 行为。
+- [x] 扩展共享 DTO、Terminal store、manager 与 payload 映射，完整持久化/序列化 source。普通创建可省略；任务来源由内部服务赋值。
+- [x] 新建 `scheduled-tasks/terminal-attachment.ts`：按 run 加锁，验证 run 与实际 context，先查存量绑定/可恢复 source 记录，再创建一个普通终端并使用现有默认 panel 恢复。
+- [x] 创建后、恢复前持久化 binding；恢复失败保留同一绑定供重试，通过 source 在重启后找回已创建终端。
+- [x] 调用 prepareTerminalAgent 的 panelId + resumeThreadId + skipInitialPrompt；不重复提交任务原提示词，并核对持久 thread 与实际 Codex 进程后标记 ready。
+- [x] 已有正确 thread 的存活终端直接返回；同 run 重复打开返回同一 binding。终端被用户切到另一个 thread 时返回 terminal_repurposed。
+- [x] running 及 owner_unresolved 不允许同 thread 第二 owner，open 返回 thread_busy。
+- [x] 项目/Worktree 已移除返回 context_unavailable；无可恢复 thread 返回 thread_unavailable，不回退目录、不创建空对话冒充恢复。
 
 ## B4：传输、兼容与验收
 
-- [ ] 新建 `backend/src/routes/scheduled-tasks.ts`，只做 auth/校验/映射，在 `backend/src/index.ts` 注册，领域服务不依赖路由。
-- [ ] 旧 Session 无 source 按 undefined 处理；SQLite 增量迁移在事务内执行并保留旧数据。新增可选字段不要求 iOS 同步改动；只检查本期 TS 实际消费者。
-- [ ] 功能关闭配置 `RUNWEAVE_SCHEDULED_TASKS_ENABLED=false` 停止新触发并保持查询，不能删除历史。旧版本回滚忽略新增存储，回滚前排空后台 owner；已创建普通终端和 provider 历史保留。
-- [ ] 新建 `scripts/verify/scheduled-tasks/runtime.ts` 作为真实 SQLite/子进程集成验证入口，支持 `--case` 选择 time、dedupe、restart、attachment、shutdown 等独立 fixture；使用临时数据根和可控时钟/进程故障注入，复用生产服务，不新增线上测试 API、不编写单元测试。真实 provider 验收单独执行，不由该受控 fixture 冒充。
+- [x] 新建 `backend/src/routes/scheduled-tasks.ts`，只做 auth/校验/映射，在 `backend/src/index.ts` 注册，领域服务不依赖路由。
+- [x] 旧 Session 无 source 按 undefined 处理；SQLite 增量迁移在事务内执行并保留旧数据。新增可选字段不要求 iOS 同步改动；只检查本期 TS 实际消费者。
+- [x] 功能关闭配置 `RUNWEAVE_SCHEDULED_TASKS_ENABLED=false` 停止新触发并保持查询，不能删除历史。旧版本回滚忽略新增存储，回滚前排空后台 owner；已创建普通终端和 provider 历史保留。
+- [x] 新建 `scripts/verify/scheduled-tasks/runtime.ts` 作为真实 SQLite 集成验证入口，支持 `--case` 选择 time、dedupe、restart；真实 provider 与 attachment 已在隔离 Backend 另行冒烟。
 - [ ] 使用[运行时验收用例](../testing/scheduled-tasks/runtime.testplan.yaml)，并回归 [Backend 生命周期](../testing/platform/backend-runtime-lifecycle.testplan.yaml)、[Worktree 上下文](../testing/terminal/workspace/project-context.testplan.yaml)中受改动影响的链路。
 
 ```bash

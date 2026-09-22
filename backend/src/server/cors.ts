@@ -94,11 +94,15 @@ export function createCorsMiddleware(
     "Authorization",
     "X-Auth-Client",
     "X-Connection-Id",
+    "Idempotency-Key",
   ];
 
   return (req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && (allowedOrigins.has(origin) || isAllowedLocalOrigin(origin))) {
+    if (
+      origin &&
+      (allowedOrigins.has(origin) || isAllowedLocalOrigin(origin))
+    ) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
     }
@@ -118,7 +122,9 @@ export function createCorsMiddleware(
   };
 }
 
-export function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
+export function parseConfiguredOrigins(
+  rawOrigins: string | undefined,
+): string[] {
   return (rawOrigins ?? "")
     .split(",")
     .map((origin) => origin.trim())

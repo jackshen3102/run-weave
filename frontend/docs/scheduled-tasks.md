@@ -9,10 +9,12 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
 保存任务、运行快照、幂等记录与输出；调度不依赖页面存活。Codex 支持真实后台执行、停止、
 重启后不重放不确定运行，以及将持久 thread 按需恢复到一个普通终端。TraeX 和 Pi 在各自
 通过同等持久执行与恢复门禁前保持不可用。
+当前 Codex 后台适配器使用 `codex exec --json`，尚不支持结构化权限等待与人工接管，
+也没有自动批准通道。执行失败时保留已知 thread，不通过匹配回复文本伪造 `waiting`。
+该能力缺口独立于后台执行与普通终端恢复，不得把后者的成功计作权限接管验收通过。
 
-当前实现已通过隔离 Backend 的 API 闭环和真实 Codex thread 创建/恢复验证。完整 Web YAML
-仍需在具备 `$toolkit:runweave-dev-session` 与 `$toolkit:playwright-cli` 的环境执行后，才能
-宣称全部浏览器交互验收完成。
+真实验收使用隔离 Dev Session、真实 provider 与 Playwright CLI，入口见下方测试计划。
+静态检查、格式校验和历史通过记录都不能替代受影响行为的浏览器回归。
 
 [历史交互原型](../../docs/prototypes/agent-scheduled-tasks/README.md)仅用于视觉与交互参考。
 生产代码不读取原型的假数据、LocalStorage 任务或模拟回复。
@@ -35,9 +37,11 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
 - 运行中只查看只读输出。可打开性由 Backend 的 `recoverable` 和真实 thread 决定；
   打开接口返回普通终端标识；Web 等待 Backend attachment 明确 ready 后，经现有路由进入终端，
   不将 command_submitted 当作恢复成功。恢复失败/超时留在记录页供重试，不创建专用输入区。
-  `source` 仅提供轻量回跳，Backend 仍需持久化和序列化该可选字段。
-- Agent 文本作为 React 文本显示。产物仅 http/https URL 可点击；受控文件引用没有
-  下载 URL 时只展示标签，不拼接本地路径。
+  原执行目录或 thread 历史缺失时拒绝恢复；ready 要求本次恢复的 thread 与 cwd 证据。
+  恢复失败后复用绑定重试；终端当前或最近对话已变化时，须显式另开，保留原对话和草稿。
+  `source` 持久化并序列化，提供精确到运行记录的轻量回跳。
+- 运行摘要渲染经过净化的 Markdown，禁用原始 HTML；仅 http/https 链接可在新窗口打开。
+  不加载摘要中的图片或脚本。受控文件引用没有下载 URL 时只展示标签，不拼接本地路径。
 
 ## 验证
 

@@ -84,7 +84,19 @@ export function useOpenRun() {
     },
     onSuccess: async (result) => {
       await Promise.all([
-        client.invalidateQueries({ queryKey: terminalQueryKeys.all(scope) }),
+        client
+          .invalidateQueries({ queryKey: terminalQueryKeys.all(scope) })
+          .then(() =>
+            // The terminal list is inactive while this page is open.
+            client.refetchQueries(
+              {
+                queryKey: terminalQueryKeys.sessions(scope),
+                exact: true,
+                type: "all",
+              },
+              { throwOnError: true },
+            ),
+          ),
         client.invalidateQueries({ queryKey: scheduledKeys.all(scope) }),
       ]);
       if (!mounted.current) return;
