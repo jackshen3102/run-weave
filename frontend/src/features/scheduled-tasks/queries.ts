@@ -9,6 +9,17 @@ import type { ScheduledTaskFilter } from "@runweave/shared/scheduled-tasks";
 import { useTerminalRuntime } from "../terminal/queries/provider";
 import { scheduledTasksApi } from "../../services/scheduled-tasks";
 
+import { getAgentTeamModelSettings } from "../../services/terminal/agent-team";
+
+export function useScheduledModelSettings() {
+  const { apiBase, token, scope } = useTerminalRuntime();
+  return useQuery({
+    queryKey: ["connection", scope, "agent-model-catalogs"],
+    queryFn: ({ signal }) => getAgentTeamModelSettings(apiBase, token, signal),
+    staleTime: 60_000,
+  });
+}
+
 export const scheduledKeys = {
   all: (scope: string) => ["connection", scope, "scheduled-tasks"] as const,
 };

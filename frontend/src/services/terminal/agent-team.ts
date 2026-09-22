@@ -39,11 +39,12 @@ export async function getAgentTeamRunForTerminal(
 export async function getAgentTeamModelSettings(
   apiBase: string,
   token: string,
+  signal?: AbortSignal,
 ): Promise<AgentTeamModelSettingsResponse> {
   return requestJson<AgentTeamModelSettingsResponse>(
     apiBase,
     "/api/agent-team/model-settings",
-    { headers: { Authorization: `Bearer ${token}` } },
+    { headers: { Authorization: `Bearer ${token}` }, signal },
   );
 }
 
