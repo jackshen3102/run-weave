@@ -45,6 +45,12 @@ struct KnowledgeInboxList: View {
   var body: some View {
     List {
       Section {
+        Picker("成果来源", selection: $model.source) {
+          Text("自进化").tag("evolution")
+          Text("经验").tag("experience")
+          Text("全部").tag("")
+        }.pickerStyle(.segmented)
+          .accessibilityIdentifier("knowledge-inbox-source")
         Picker("处理状态", selection: $model.state) {
           Text("待处理").tag("pending")
           Text("已处理").tag("processed")
@@ -62,13 +68,13 @@ struct KnowledgeInboxList: View {
       }
       if model.loading { ProgressView() }
       if !model.loading && model.items.isEmpty && model.failure == nil && !model.partial {
-        Text(model.state == "pending" ? "当前没有待处理成果" : "暂无处理历史").foregroundColor(.secondary)
+        Text(model.state == "pending" ? "当前筛选下没有待处理成果" : "当前筛选下暂无处理历史").foregroundColor(.secondary)
       }
       if model.nextCursor != nil { Button("加载更多") { Task { await model.refreshList(more: true) } }.disabled(model.loading) }
     }
     .navigationTitle("自进化")
     .refreshable { await model.refreshList() }
-    .task(id: "\(session.generation):\(session.foreground):\(model.state):\(model.repositoryID)") {
+    .task(id: "\(session.generation):\(session.foreground):\(model.state):\(model.source):\(model.repositoryID)") {
       if session.foreground { await model.poll("list") }
     }
   }

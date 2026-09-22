@@ -1,19 +1,14 @@
 import type {
   InboxItem,
+  InboxListQuery,
   InboxPage,
-  InboxState,
   InboxStateChange,
 } from "@runweave/shared/knowledge-inbox";
 import { requestJson } from "./http";
 export function fetchInbox(
   apiBase: string,
   token: string,
-  query: {
-    state: InboxState;
-    repositoryId?: string;
-    cursor?: string;
-    limit?: number;
-  },
+  query: InboxListQuery,
   signal?: AbortSignal,
 ): Promise<InboxPage> {
   const params = new URLSearchParams();

@@ -1,6 +1,14 @@
 /** Human consumption only: these operations never authorize or invalidate knowledge. */
 export type InboxSource = "evolution" | "experience";
 export type InboxState = "pending" | "processed";
+export interface InboxListQuery {
+  state: InboxState;
+  /** Omit to include both sources. Filtering happens before pagination. */
+  source?: InboxSource;
+  repositoryId?: string;
+  limit?: number;
+  cursor?: string;
+}
 export interface InboxRepository {
   repositoryId: string;
   displayName: string;
