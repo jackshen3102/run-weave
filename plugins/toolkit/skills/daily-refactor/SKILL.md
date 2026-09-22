@@ -19,7 +19,7 @@ description: 仅当用户明确要求使用 daily-refactor skill 时使用；用
 - 不重构框架代码、文档、配置文件、单测、集成测试、E2E 或其他测试文件。
 - 默认时间窗口内如果存在超过 600 行的业务代码文件，必须优先选择该文件做重构拆分；拆分后单个业务代码文件不应继续超过 600 行，除非存在明确的框架或生成代码约束并在回复中说明。
 - 架构硬门禁按全仓执行，选点和代码修改仍限定在时间窗口内受影响的业务代码；不要为修复窗口外或非业务代码债务扩大本轮范围。
-- 没有高置信度目标，或无法证明行为保持时，不创建空洞重构 PR；直接按“无改动”发送总结。
+- 没有高置信度目标，或无法证明行为保持时，不创建空洞重构 PR；直接在当前对话中回复“无改动”总结。
 
 ## 防劣化完成定义
 
@@ -76,7 +76,7 @@ before 硬门禁失败时，先判断是否由默认时间窗口内的业务代�
 7. 重跑同一组行为验证，保存 after 架构报告，执行架构报告比较器和 `pnpm quality:gate`。
 8. 让审查副 C 或主 C 的独立审查阶段检查最终 diff；存在未解决的高风险结论时不发布。
 9. 调用 `toolkit:github-pr`，由该 skill 负责提交、push、创建 PR、等待门禁和合并。
-10. 发送一次飞书总结通知，随后回复重构内容、架构指标前后值、验证结果、副 C 结论、CI、commit、分支、PR 和合并状态。
+10. 回复重构内容、架构指标前后值、验证结果、副 C 结论、CI、commit、分支、PR 和合并状态。
 
 ## 验证回归
 
@@ -95,45 +95,3 @@ before 硬门禁失败时，先判断是否由默认时间窗口内的业务代�
 - 运行 after 架构快照比较、`pnpm architecture:verify` 和 `pnpm quality:gate`。
 - 运行 `git diff --check`。
 - 如果同组验证失败、架构比较器失败、审查副 C 有未解决高风险结论，先修复并重新验证；无法修复则停止，禁止提交、push 和创建 PR。
-
-## 飞书总结通知
-
-在最终回复前，必须发送一次飞书总结通知；如果本轮因为权限、冲突、验证失败、PR 门禁或人工评审无法完成，也发送一次阻塞摘要。不要调用
-`runweave-hook-bridge.cjs`，因为它是 AI CLI Stop hook + Runweave terminal completion 上报链路，会依赖 `RUNWEAVE_*` 身份并可能产生额外副作用。这里直接复用现有飞书脚本的 webhook 配置、加签、日志和静默失败策略。
-
-通知内容控制在 2500 字以内，至少包含：
-
-- skill：`daily-refactor`
-- 结果：成功 / 无改动 / 阻塞 / 失败
-- 重构范围与核心改动
-- 架构指标 before/after 与比较器结果
-- 验证命令与结果
-- 副 C 结论，或未启用 sub-agent 时的串行降级说明
-- commit、分支、PR 链接、合并状态（如果已产生）
-- 待人工处理项（如果有）
-
-发送命令使用当前总结替换 `summary` 变量；脚本不存在、`jq` 缺失或飞书 env 未配置时不要阻塞最终回复，但要在最终回复里说明“飞书通知未确认发送”：
-
-```bash
-summary='本次 daily-refactor 总结...'
-notify_script="${RUNWEAVE_FEISHU_NOTIFY_SCRIPT:-$HOME/.runweave/hooks/feishu_stop_notify.sh}"
-if [ ! -x "$notify_script" ] && [ -x "plugins/toolkit/hooks/feishu_stop_notify.sh" ]; then
-  notify_script="plugins/toolkit/hooks/feishu_stop_notify.sh"
-fi
-if [ -x "$notify_script" ] && command -v jq >/dev/null 2>&1; then
-  jq -nc \
-    --arg source "${RUNWEAVE_HOOK_SOURCE:-codex}" \
-    --arg cwd "$PWD" \
-    --arg session_id "${CODEX_SESSION_ID:-daily-refactor}" \
-    --arg terminal_id "${RUNWEAVE_TERMINAL_SESSION_ID:-}" \
-    --arg body "$summary" \
-    '{
-      hook_event_name: "Stop",
-      source: $source,
-      cwd: $cwd,
-      session_id: $session_id,
-      terminalSessionId: $terminal_id,
-      last_assistant_message: $body
-    }' | "$notify_script" || true
-fi
-```
