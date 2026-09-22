@@ -24,7 +24,7 @@ export async function createDeviceMonitor(
     );
     let push: PushClient | null = null;
     try {
-      push = PushClient.configured(monitor.snapshot().hostId);
+      push = await PushClient.configured(monitor.snapshot().hostId, profileDirectory);
     } catch {
       logger.warn("device-monitor.push.configuration.invalid");
     }
