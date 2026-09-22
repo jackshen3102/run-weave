@@ -2,6 +2,7 @@ import { evolutionRunLabel } from "./evolution-run-label";
 import type {
   CandidateAsset,
   EvolutionProviderAvailability,
+  EvolutionRuntimeUnavailableReason,
   EvolutionRun,
   EvolutionSchedule,
   Insight,
@@ -357,6 +358,7 @@ export function EvolutionOverview({
   schedules,
   providers,
   runtimeAvailable,
+  runtimeUnavailableReason,
   onSelectRun,
   onSelectView,
 }: {
@@ -366,6 +368,7 @@ export function EvolutionOverview({
   schedules: EvolutionSchedule[];
   providers: EvolutionProviderAvailability[];
   runtimeAvailable: boolean;
+  runtimeUnavailableReason?: EvolutionRuntimeUnavailableReason | null;
   onSelectRun: (runId: string) => void;
   onSelectView: (view: EvolutionView) => void;
 }) {
@@ -380,7 +383,7 @@ export function EvolutionOverview({
       {!runtimeAvailable || unavailableProviders.length > 0 ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
           {!runtimeAvailable
-            ? "Evolution runtime 当前不可用；页面保持只读并展示后端返回的降级状态。"
+            ? runtimeUnavailableMessage(runtimeUnavailableReason)
             : `${unavailableProviders
                 .map(
                   (item) =>
@@ -522,4 +525,21 @@ function currentInsightRevision(insight: Insight) {
   return insight.revisions.find(
     (revision) => revision.revisionId === insight.currentRevisionId,
   );
+}
+
+function runtimeUnavailableMessage(
+  reason?: EvolutionRuntimeUnavailableReason | null,
+): string {
+  switch (reason) {
+    case "migration_required":
+      return "Evolution 数据需要迁移，当前不可用。请管理员按仓库身份迁移指南完成备份、迁移和校验后重启后端。";
+    case "migration_incomplete":
+      return "Evolution 数据迁移尚未完成，当前不可用。请管理员检查迁移状态，完成校验后重启后端。";
+    case "schema_incompatible":
+      return "当前后端版本无法读取 Evolution 数据。请升级到兼容版本后重试。";
+    case "storage_unavailable":
+      return "Evolution 存储初始化失败，当前不可用。请管理员检查后端日志与数据目录，修复后重启后端。";
+    default:
+      return "Evolution runtime 当前不可用；页面保持只读并展示后端返回的降级状态。";
+  }
 }

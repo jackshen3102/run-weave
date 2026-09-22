@@ -1,6 +1,7 @@
 import type { EvolutionRepositoryScopes } from "./repository-scope";
 import type {
   EvolutionReflectionBatch,
+  EvolutionRuntimeUnavailableReason,
   EvolutionRepositoryContext,
 } from "@runweave/shared/evolution";
 import { resolveRepositoryIdentity } from "../repository/identity";
@@ -48,10 +49,17 @@ export class EvolutionService {
     private readonly snapshotBoundary:
       | ((repositoryId: string) => Promise<number>)
       | null = null,
+    private readonly initializationFailure: EvolutionRuntimeUnavailableReason | null = null,
   ) {}
 
   isAvailable(): boolean {
     return this.store !== null;
+  }
+
+  getRuntimeUnavailableReason(): EvolutionRuntimeUnavailableReason | null {
+    return this.isAvailable()
+      ? null
+      : (this.initializationFailure ?? "storage_unavailable");
   }
 
   async createManualRun(

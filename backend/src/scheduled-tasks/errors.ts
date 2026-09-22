@@ -16,6 +16,15 @@ export function scheduledTaskErrorFromStorage(
   const message = error instanceof Error ? error.message : String(error);
   const [code, detail] = message.split(":", 2);
   switch (code) {
+    case "scheduled_record_invalid": {
+      const [, recordKind, recordId, field] = message.split(":");
+      return new ScheduledTaskError(
+        code,
+        503,
+        "Persisted scheduled task record is invalid",
+        { recordKind, recordId, field },
+      );
+    }
     case "scheduled_task_not_found":
     case "scheduled_run_not_found":
       return new ScheduledTaskError(

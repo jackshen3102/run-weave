@@ -518,3 +518,17 @@ export interface EvolutionWatermark {
   runId: string;
   updatedAt: string;
 }
+
+/** Safe public initialization reasons; raw storage errors stay in Backend logs. */
+export type EvolutionRuntimeUnavailableReason =
+  | "migration_required"
+  | "migration_incomplete"
+  | "schema_incompatible"
+  | "storage_unavailable";
+
+export interface EvolutionProvidersResponse {
+  runtimeAvailable: boolean;
+  /** Optional for compatibility with older Backends. Null when available. */
+  runtimeUnavailableReason?: EvolutionRuntimeUnavailableReason | null;
+  providers: EvolutionProviderAvailability[];
+}

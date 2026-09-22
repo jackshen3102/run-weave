@@ -1,14 +1,11 @@
 import type {
   EvolutionBudget,
-  EvolutionProviderAvailability,
+  EvolutionProvidersResponse,
   EvolutionRun,
   EvolutionSchedule,
 } from "@runweave/shared/evolution";
 
-export interface EvolutionProvidersResponse {
-  runtimeAvailable: boolean;
-  providers: EvolutionProviderAvailability[];
-}
+export type { EvolutionProvidersResponse } from "@runweave/shared/evolution";
 
 export function formatRun(run: EvolutionRun): string {
   return [
@@ -41,6 +38,9 @@ export function formatRunList(runs: EvolutionRun[]): string {
 export function formatProviders(response: EvolutionProvidersResponse): string {
   return [
     `Evolution runtime: ${response.runtimeAvailable ? "available" : "unavailable"}`,
+    ...(!response.runtimeAvailable && response.runtimeUnavailableReason
+      ? [`Runtime reason: ${response.runtimeUnavailableReason}`]
+      : []),
     ...response.providers.map(
       (provider) =>
         `${provider.provider}: ${provider.available ? "available" : "unavailable"}; binary=${provider.binaryAvailable}; authenticated=${provider.authenticated}; version=${provider.version ?? "-"}; reason=${provider.reason ?? "-"}`,

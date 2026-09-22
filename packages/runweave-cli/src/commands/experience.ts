@@ -1,3 +1,4 @@
+import { runExperienceInbox } from "./experience-inbox.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type {
@@ -20,7 +21,7 @@ import { CliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
 
 const usage =
-  "Usage: rw experience <search --query text|show id|save --file record.json|feedback --file receipt.json|history|status|diagnose [--query text]|retry jobId> [--cwd path] [--json]";
+  "Usage: rw experience <list [--limit N|--all]|process id [--expected-content-version hash]|search --query text|show id|save --file record.json|feedback --file receipt.json|history|status|diagnose [--query text]|retry jobId> [--cwd path] [--json]";
 export async function runExperienceCommand(
   command: string | undefined,
   args: string[],
@@ -29,6 +30,8 @@ export async function runExperienceCommand(
   if (
     !command ||
     ![
+      "list",
+      "process",
       "search",
       "show",
       "save",
@@ -40,13 +43,32 @@ export async function runExperienceCommand(
     ].includes(command)
   )
     throw new CliError(usage, 2);
-  const { options, positionals } = parseArgs(args, new Set(["json", "plain"]));
+  const { options, positionals } = parseArgs(
+    args,
+    new Set(["json", "plain", "all"]),
+  );
   const cwd = path.resolve(getStringOption(options, "cwd") ?? process.cwd());
   const auth = await resolveAuthContext({
     profileName: getStringOption(options, "profile"),
     backendPort: getStringOption(options, "backend-port"),
     env: io.env,
   });
+  if (command === "list" || command === "process") {
+    const result = await runExperienceInbox(
+      command,
+      positionals,
+      options,
+      cwd,
+      auth,
+    );
+    const mode = resolveOutputMode(options);
+    writeOutput(
+      io.stdout,
+      mode,
+      mode === "json" ? result : JSON.stringify(result, null, 2),
+    );
+    return;
+  }
   const post = <T>(route: string, body: unknown) =>
     auth.requestJson<T>(`/api/experience/${route}`, {
       method: "POST",
