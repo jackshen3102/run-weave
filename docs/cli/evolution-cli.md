@@ -156,3 +156,9 @@ rw evolution get "$run_id" --json
   [agent-self-evolution-core.testplan.yaml](../testing/evolution/agent-self-evolution-core.testplan.yaml)
 - 激活测试计划：
   [agent-self-evolution-activation.testplan.yaml](../testing/evolution/agent-self-evolution-activation.testplan.yaml)
+
+`rw evolution providers` 在运行时不可用时显示 `Runtime reason`；JSON 的
+`runtimeUnavailableReason` 区分 `migration_required`、`migration_incomplete`、
+`schema_incompatible` 与 `storage_unavailable`。正常时为 `null`，旧后端可能省略此字段。
+迁移类错误按 [仓库身份迁移指南](../deployment/evolution-repository-migration.md) 处理；
+版本不兼容需升级后端，其他存储故障需检查后端日志与数据目录。诊断响应不暴露原始数据库错误。

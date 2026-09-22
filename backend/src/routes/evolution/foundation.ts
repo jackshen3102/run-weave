@@ -256,6 +256,7 @@ export function createEvolutionFoundationRouter(
       response.setHeader("Cache-Control", "no-store");
       response.json({
         runtimeAvailable: service.isAvailable(),
+        runtimeUnavailableReason: service.getRuntimeUnavailableReason(),
         providers: await service.listProviders(),
       });
     } catch (error) {

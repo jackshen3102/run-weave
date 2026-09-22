@@ -6,7 +6,7 @@ import type {
   CandidateAsset,
   CreateEvolutionRunRequest,
   CreateEvolutionScheduleRequest,
-  EvolutionProviderAvailability,
+  EvolutionProvidersResponse,
   EvolutionRun,
   EvolutionRunArtifacts,
   EvolutionRunStage,
@@ -125,10 +125,7 @@ export function retryEvolutionRun(
 export function fetchEvolutionProviders(
   apiBase: string,
   token: string,
-): Promise<{
-  runtimeAvailable: boolean;
-  providers: EvolutionProviderAvailability[];
-}> {
+): Promise<EvolutionProvidersResponse> {
   return requestJson(apiBase, "/api/evolution/providers", {
     headers: authHeaders(token),
   });

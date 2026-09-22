@@ -104,87 +104,101 @@ export class ScheduledTaskRuntime {
   private async materializeDue(now: Date): Promise<void> {
     const due = await this.store.listDueTasks(now.toISOString());
     for (const task of due) {
-      const expectedNextRunAt = task.nextRunAt;
-      if (!expectedNextRunAt) continue;
-      const policy = task.misfirePolicy;
-      const latest =
-        policy.mode === "catch-up-latest"
-          ? latestOccurrence(task.schedule, now)
-          : null;
-      const scheduledFor =
-        latest && Date.parse(latest) >= Date.parse(expectedNextRunAt)
-          ? latest
-          : expectedNextRunAt;
-      const latenessMs = now.getTime() - Date.parse(scheduledFor);
-      const maxDelayMs =
-        policy.mode === "catch-up-latest"
-          ? policy.maxDelaySeconds * 1000
-          : LATE_WINDOW_MS;
-      const nextRunAt =
-        task.schedule.kind === "once"
-          ? null
-          : (nextOccurrences(task.schedule, now, 1)[0] ?? null);
-      const project = this.terminalSessionManager.getProject(task.projectId);
-      const run = createScheduledRunRecord(
-        task,
-        "scheduled",
-        scheduledFor,
-        project?.path ?? "",
-      );
-      run.dispatch = {
-        evaluatedAt: now.toISOString(),
-        latenessMs,
-        catchUp:
-          policy.mode === "catch-up-latest" &&
-          latenessMs > LATE_WINDOW_MS &&
-          latenessMs <= maxDelayMs,
-        ...(scheduledFor !== expectedNextRunAt
-          ? { coalescedFrom: expectedNextRunAt }
-          : {}),
-      };
-      if (latenessMs > maxDelayMs) {
-        run.status = "skipped";
-        run.finishedAt = now.toISOString();
-        run.error = {
-          code: "missed",
-          message: "The schedule exceeded its allowed delay and was skipped",
-        };
-      } else if (!project?.path) {
-        run.status = "failed";
-        run.finishedAt = now.toISOString();
-        run.error = {
-          code: "context_unavailable",
-          message: "The scheduled project directory is unavailable",
-        };
-      } else if (!this.providers.has(task.provider)) {
-        run.status = "failed";
-        run.finishedAt = now.toISOString();
-        run.error = {
-          code: "provider_unavailable",
-          message: `Provider ${task.provider} is unavailable`,
-        };
-      }
-      const stored = await this.store.materializeScheduledRun(
-        run,
-        `${task.id}:${task.revision}:${scheduledFor}`,
-        nextRunAt,
-        task.revision,
-        expectedNextRunAt,
-      );
-      if (stored)
-        logger.info("scheduled-tasks.dispatch", {
-          component: "scheduled-tasks",
-          message: "Scheduled task dispatch evaluated",
-          taskId: task.id,
-          runId: stored.id,
-          revision: task.revision,
+      try {
+        const expectedNextRunAt = task.nextRunAt;
+        if (!expectedNextRunAt) continue;
+        const policy = task.misfirePolicy;
+        const latest =
+          policy.mode === "catch-up-latest"
+            ? latestOccurrence(task.schedule, now)
+            : null;
+        const scheduledFor =
+          latest && Date.parse(latest) >= Date.parse(expectedNextRunAt)
+            ? latest
+            : expectedNextRunAt;
+        const latenessMs = now.getTime() - Date.parse(scheduledFor);
+        const maxDelayMs =
+          policy.mode === "catch-up-latest"
+            ? policy.maxDelaySeconds * 1000
+            : LATE_WINDOW_MS;
+        const nextRunAt =
+          task.schedule.kind === "once"
+            ? null
+            : (nextOccurrences(task.schedule, now, 1)[0] ?? null);
+        const project = this.terminalSessionManager.getProject(task.projectId);
+        const run = createScheduledRunRecord(
+          task,
+          "scheduled",
           scheduledFor,
+          project?.path ?? "",
+        );
+        run.dispatch = {
           evaluatedAt: now.toISOString(),
           latenessMs,
-          decision:
-            stored.error?.code ??
-            (run.dispatch.catchUp ? "catch-up" : "queued"),
+          catchUp:
+            policy.mode === "catch-up-latest" &&
+            latenessMs > LATE_WINDOW_MS &&
+            latenessMs <= maxDelayMs,
+          ...(scheduledFor !== expectedNextRunAt
+            ? { coalescedFrom: expectedNextRunAt }
+            : {}),
+        };
+        if (latenessMs > maxDelayMs) {
+          run.status = "skipped";
+          run.finishedAt = now.toISOString();
+          run.error = {
+            code: "missed",
+            message: "The schedule exceeded its allowed delay and was skipped",
+          };
+        } else if (!project?.path) {
+          run.status = "failed";
+          run.finishedAt = now.toISOString();
+          run.error = {
+            code: "context_unavailable",
+            message: "The scheduled project directory is unavailable",
+          };
+        } else if (!this.providers.has(task.provider)) {
+          run.status = "failed";
+          run.finishedAt = now.toISOString();
+          run.error = {
+            code: "provider_unavailable",
+            message: `Provider ${task.provider} is unavailable`,
+          };
+        }
+        const stored = await this.store.materializeScheduledRun(
+          run,
+          `${task.id}:${task.revision}:${scheduledFor}`,
+          nextRunAt,
+          task.revision,
+          expectedNextRunAt,
+        );
+        if (stored)
+          logger.info("scheduled-tasks.dispatch", {
+            component: "scheduled-tasks",
+            message: "Scheduled task dispatch evaluated",
+            taskId: task.id,
+            runId: stored.id,
+            revision: task.revision,
+            scheduledFor,
+            evaluatedAt: now.toISOString(),
+            latenessMs,
+            decision:
+              stored.error?.code ??
+              (run.dispatch.catchUp ? "catch-up" : "queued"),
+          });
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !error.message.startsWith("scheduled_record_invalid:")
+        )
+          throw error;
+        logger.warn("scheduled-tasks.dispatch.record.invalid", {
+          component: "scheduled-tasks",
+          message: "Task dispatch blocked by invalid persisted record",
+          taskId: task.id,
+          error,
         });
+      }
     }
   }
 

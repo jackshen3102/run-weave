@@ -199,3 +199,22 @@ id 与 revision。其他项目、未召回的记录或伪造版本不能冒充�
 采集修复验收：[学习来源采集](../testing/experience/learning-ingestion.testplan.yaml)，
 执行 `pnpm --filter @runweave/backend exec tsx ../scripts/verify/experience/ingestion.mts`。
 它使用独占临时存储、真实 HTTP 路由和 SQLite worker，不向 production 写入验收记录。
+
+## 未处理经验与处理闭环
+
+```bash
+rw experience list --limit 10 --json  # 默认 10 条，只返回未处理经验
+rw experience list --all --json       # 自动翻页，返回当前仓库全部未处理经验
+rw experience process <experience-id> --expected-content-version <contentVersion> --json
+```
+
+`list` 先按当前认证用户、当前仓库、experience 来源和 pending 状态过滤，再按内容更新时间
+倒序取最近 N 条；`--limit` 与 `--all` 互斥。N 可超过服务端单页上限，CLI 自动分页。
+结果包含条目正文、`sourceId`（经验 ID）、`contentVersion` 和 `stateVersion`；原始经验及证据
+仍通过 `show <sourceId>` 读取。分页期间数据并非固定快照，服务端冲突会直接报错，需重新查询。
+来源不可用时命令失败，不把故障当作“没有未处理经验”。只支持后端登记仓库的收件箱。
+
+`process` 将指定经验版本标记为当前用户已处理。建议传入分析时取得的 `contentVersion`，
+内容已更新则拒绝；省略时使用命令开始查询到的版本。更新同时校验服务端状态版本，冲突不自动
+重试。重复处理同一版本不重复写入。后续出现新内容版本时，新版本仍进入未处理列表。
+此操作与手机、桌面成果收件箱共用状态，不修改经验有效性，不提交使用反馈。

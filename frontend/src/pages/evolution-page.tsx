@@ -506,6 +506,7 @@ function EvolutionManagementPage({
                   candidates={scopedCandidates}
                   schedules={scopedSchedules}
                   providers={providers}
+                  runtimeUnavailableReason={providersQuery.data?.runtimeUnavailableReason}
                   runtimeAvailable={
                     providersQuery.data?.runtimeAvailable ?? false
                   }

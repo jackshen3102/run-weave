@@ -1,3 +1,4 @@
+import type { EvolutionRuntimeUnavailableReason } from "@runweave/shared/evolution";
 import { DefaultEvolutionMemoryProvider } from "../evolution/injection/memory-provider";
 import { StructuredEvolutionMemorySelector } from "../evolution/knowledge/retrieval";
 import { EvolutionOutcomeObserver } from "../evolution/injection/outcome-observer";
@@ -31,6 +32,7 @@ export async function createEvolutionStorage(
   let evolutionAnalysisStore: EvolutionAnalysisStore | null = null;
   let evolutionFoundationStore: EvolutionFoundationStore | null = null;
   let evolutionContextPackStore: EvolutionContextPackStore | null = null;
+  let runtimeUnavailableReason: EvolutionRuntimeUnavailableReason | null = null;
   try {
     const persistentEvolutionStore =
       await SqliteEvolutionActivationStore.create({
@@ -43,6 +45,15 @@ export async function createEvolutionStorage(
     evolutionFoundationStore = persistentEvolutionStore;
     evolutionContextPackStore = persistentEvolutionStore;
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    runtimeUnavailableReason =
+      message === "evolution_repository_migration_required"
+        ? "migration_required"
+        : message === "evolution_repository_migration_incomplete"
+          ? "migration_incomplete"
+          : message === "evolution_schema_incompatible"
+            ? "schema_incompatible"
+            : "storage_unavailable";
     logger.warn("evolution.initialize.failed", {
       component: "evolution",
       message:
@@ -80,6 +91,7 @@ export async function createEvolutionStorage(
           limit: 1,
         })
       ).snapshotBoundary,
+    runtimeUnavailableReason,
   );
   const evolutionToolTokenRegistry = new EvolutionToolTokenRegistry();
   resources.defer("evolution-tool-tokens", () =>
