@@ -1,3 +1,5 @@
+import { FollowupService } from "../followups/service";
+import { followupRouter } from "./followups";
 import { randomUUID } from "node:crypto";
 import express, {
   type Request,
@@ -44,6 +46,7 @@ export function createApp(
     auth = new AuthService(pool, config),
     records = new RecordService(pool),
     attachments = new AttachmentService(pool, store);
+  const followups = new FollowupService(pool);
   const reviews = new ReviewService(config, records, attachments);
   app.disable("x-powered-by");
   app.set("trust proxy", false);
@@ -64,7 +67,7 @@ export function createApp(
     }),
   );
   app.use(express.json({ limit: "256kb" }));
-  app.use("/mcp", createMcpRouter(pool, records, attachments, config));
+  app.use("/mcp", createMcpRouter(pool, records, attachments, config, followups, store));
   app.use("/api", webCors(config.SUIJI_WEB_ORIGINS));
   app.post(
     "/api/auth/login",
@@ -127,6 +130,7 @@ export function createApp(
         schemaVersion: schema.rows[0].version,
         limits: SUIJI_LIMITS,
         ai: reviews.info(),
+        features: { followups: true },
       });
     }),
   );
@@ -137,6 +141,7 @@ export function createApp(
     requestId: res.locals.requestId,
   });
   const root = "/api/suiji/v1";
+  app.use(`${root}/records`, followupRouter(followups));
   app.get(`${root}/tags`, route(async (_req, res) => {
     res.json(await records.tags(res.locals.auth.ownerId));
   }));

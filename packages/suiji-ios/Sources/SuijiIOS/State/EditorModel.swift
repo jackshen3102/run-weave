@@ -10,6 +10,7 @@ import SwiftUI
   let client: APIClient
   let store: DraftStore
   let limits: Limits
+  var onFollowupSaved: ((FollowupResponse) -> Void)?
   private var active = true
   init(draft: Draft, client: APIClient, store: DraftStore, limits: Limits) {
     self.draft = draft; self.client = client; self.store = store; self.limits = limits
@@ -54,7 +55,7 @@ import SwiftUI
     do {
       guard draft.body.unicodeScalars.count <= limits.bodyScalars, !draft.body.contains("\0") else { throw MessageError(message: "正文超出限额或包含无效字符") }
       guard !draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !draft.local.isEmpty || !draft.existing.isEmpty else { throw MessageError(message: "请输入正文或添加附件") }
-      if draft.pending == nil, let tags = draft.tags { draft.tags = try SuijiTags.normalize(tags) }
+      if draft.followupRecordID == nil, draft.pending == nil, let tags = draft.tags { draft.tags = try SuijiTags.normalize(tags) }
       draft.frozen = true; draft.revision += 1; try await store.save(draft)
       for index in draft.local.indices where draft.local[index].uploaded == nil {
         try checkActive()
@@ -66,13 +67,21 @@ import SwiftUI
       }
       if draft.pending == nil {
         let ids = draft.existing.map(\.id) + draft.local.compactMap { $0.uploaded?.id }
-        var payload: [String: Any] = ["kind": draft.kind.rawValue, "body": draft.body, "attachmentIds": ids]
-        if let tags = draft.tags { payload["tags"] = tags }
-        if let version = draft.expectedVersion { payload["expectedVersion"] = version }
-        draft.pending = PendingOperation(path: "api/suiji/v1/records" + (draft.recordID.map { "/" + $0 } ?? ""), method: draft.recordID == nil ? "POST" : "PATCH", payload: try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
+        var payload: [String: Any] = ["body": draft.body, "attachmentIds": ids]
+        if draft.followupRecordID == nil { payload["kind"] = draft.kind.rawValue }
+        if draft.followupRecordID == nil, let tags = draft.tags { payload["tags"] = tags }
+        if draft.followupRecordID == nil, let version = draft.expectedVersion { payload["expectedVersion"] = version }
+        draft.pending = PendingOperation(path: draft.followupRecordID.map { "api/suiji/v1/records/" + $0 + "/followups" } ?? ("api/suiji/v1/records" + (draft.recordID.map { "/" + $0 } ?? "")), method: draft.recordID == nil ? "POST" : "PATCH", payload: try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
         draft.revision += 1; try await store.save(draft)
       }
       try checkActive(); guard let operation = draft.pending else { return }
+      if let recordID = draft.followupRecordID {
+        let result = try await client.request(FollowupResponse.self, path: operation.path, method: operation.method, data: operation.payload, key: operation.key)
+        try checkActive()
+        guard result.followup.recordId == recordID, result.followup.body == draft.body,
+          result.followup.attachments.map(\.id) == draft.local.compactMap({ $0.uploaded?.id }) else { throw MessageError(message: "跟进响应与保存内容不一致，请重试确认") }
+        try await store.remove(draft); confirmed = true; message = "已保存"; onFollowupSaved?(result); return
+      }
       let result = try await client.request(RecordResponse.self, path: operation.path, method: operation.method, data: operation.payload, key: operation.key)
       try checkActive()
       guard result.record.body == draft.body, result.record.kind == draft.kind,

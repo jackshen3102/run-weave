@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useMemoizedFn } from "ahooks";
-import type { SuijiRecord } from "@runweave/shared/suiji";
+import type { SuijiRecord, FollowupResponse } from "@runweave/shared/suiji";
 import { Button } from "../../components/ui/button";
 import { SuijiPanel } from "./panel";
 import type { SuijiEditorModel } from "./editor-model";
@@ -10,18 +10,22 @@ export function SuijiEditor({
   model,
   onClose,
   onSaved,
+  onFollowupSaved,
   onDiscard,
   availableTags,
 }: {
   model: SuijiEditorModel;
   onClose: () => void;
   onSaved: (record: SuijiRecord) => void;
+  onFollowupSaved?: (result: FollowupResponse) => void;
   onDiscard: () => void;
   availableTags: string[];
 }) {
   const state = useSyncExternalStore(model.subscribe, model.snapshot),
     { draft, busy } = state;
   const saved = useMemoizedFn(onSaved);
+  const followed = useMemoizedFn((result: FollowupResponse) => onFollowupSaved?.(result));
+  useEffect(() => { if (state.savedFollowup) followed(state.savedFollowup); }, [state.savedFollowup, followed]);
   const discarded = useMemoizedFn(onDiscard);
   useEffect(() => {
     if (state.saved) saved(state.saved);
@@ -31,7 +35,7 @@ export function SuijiEditor({
   }, [state.discarded, discarded]);
   return (
     <SuijiPanel
-      title={draft.id === "new" ? "记下一点什么" : "编辑记录"}
+      title={model.followupRecordId ? "追加跟进" : draft.id === "new" ? "记下一点什么" : "编辑记录"}
       onBack={onClose}
       busy={busy}
       description={
@@ -41,7 +45,7 @@ export function SuijiEditor({
       }
     >
       <fieldset disabled={busy || draft.frozen} className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
+        {!model.followupRecordId ? <div className="flex items-center gap-3">
           <span>类型</span>
           <div
             role="group"
@@ -67,22 +71,23 @@ export function SuijiEditor({
             ))}
           </div>
         </div>
-        {draft.id !== "new" ? (
+        : null}
+        {!model.followupRecordId && draft.id !== "new" ? (
           <p className="text-sm text-muted-foreground">
             切换为待办时设为未完成；切换为想法时清除待办状态。
           </p>
         ) : null}
         <label className="flex flex-col gap-2">
-          原文
+          {model.followupRecordId ? "跟进内容" : "原文"}
           <textarea
-            aria-label="原文"
+            aria-label={model.followupRecordId ? "跟进内容" : "原文"}
             value={draft.body}
             onChange={(e) => model.edit({ body: e.target.value })}
             placeholder="此刻的想法、一个链接，或者以后想做的事……"
             className="min-h-56 resize-y rounded-xl border bg-background p-4 leading-relaxed outline-none focus:ring-2 focus:ring-ring"
           />
         </label>
-        <TagEditor selected={draft.tags} available={availableTags} onChange={(tags) => model.edit({ tags })} />
+        {!model.followupRecordId ? <TagEditor selected={draft.tags} available={availableTags} onChange={(tags) => model.edit({ tags })} /> : null}
         <span className="text-right text-xs text-muted-foreground">
           {[...draft.body].length.toLocaleString()} / 20,000
         </span>

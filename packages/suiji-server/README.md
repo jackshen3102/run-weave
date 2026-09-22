@@ -45,7 +45,7 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
-标签版本要求 schema 4，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
+标签最初引入于 schema 4；当前跟进版本要求 schema 5，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -139,7 +139,7 @@ Docker 镜像固定安装 Codex CLI 0.153.4；容器登录与配置见[部署入
 客户端会话保留近期追问上下文，刷新后消失。另存回答只预填编辑器，由用户点击保存。
 
 [回顾服务](./src/reviews/service.ts)为每次任务提供独立的回环只读 MCP 与随机凭据，
-固定 owner 和 all/open/record 范围。它与外部 Agent 的七工具 `/mcp` 相互独立，
+固定 owner 和 all/open/record 范围。它与外部 Agent 的十工具 `/mcp` 相互独立，
 仅有 list/search/get/read_attachment，模型不能调用写入、shell、浏览器或外部 Apps。
 最多 32 次工具调用、300 条摘要、30 条完整版本、60,000 个正文标量与 8 次附件读取。
 引用 ID、版本及逐字片段必须通过本次真实读取快照核验，失败不返回伪引用。
@@ -187,8 +187,20 @@ pnpm architecture:check
 
 ## 回收站
 
-迁移到 schema 4 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
+迁移到 schema 5 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
 分页游标绑定筛选。App 可按 ID 查看回收站原文和附件，不能编辑或变更待办状态。恢复不改变待办原状态。
 每次删除或恢复沿用版本校验、单事务修订及幂等请求；客户端先持久化意图，结果未知时仅由用户手动确认原请求。
 Web 和原生 iOS 均提供回收站入口、删除确认及恢复。已有本机正文草稿保留，恢复后保存仍须通过版本校验。
 Agent MCP 与 AI 新检索排除回收站正文和附件；已生成的历史回答不追溯擦除。本版本不提供自动清理或永久删除。
+
+## 跟进与最终成果
+
+schema 5 增加独立、只追加的跟进及附件关系；部署前执行追加迁移。跟进不改原文、父记录版本、修订或待办状态。记录响应新增可选 followupSummary，info.features.followups 标明能力；旧客户端兼容，新客户端对旧服务隐藏新入口。
+
+App 使用 GET/POST `/api/suiji/v1/records/:id/followups`，POST 带 Idempotency-Key；分页默认 20、最多 50，sequence 倒序，游标绑定记录。跟进最多 20000 Unicode 标量，支持一张 JPEG/PNG 和一个 UTF-8 Markdown，各 5 MiB。附件绑定父记录但关系独立，原文编辑不会删除成果附件。App 可只读回收站跟进，Agent 不可新读取，任何入口不可新追加；恢复保留数据。
+
+外部 MCP 共 10 工具：原七工具加 get_service_info、list_followups、append_followup。列表与搜索增加精确 tag。新 POST `/mcp/uploads` 使用同一 MCP 个人凭据上传单个 multipart file，actor 固定 agent；原 App token 不可互用。agentName/sessionId 是可选自报显示信息，不代表独立身份。认证/关闭/过期/Origin 拒绝同时作用于上传。
+
+相同写意图沿用原幂等键与完整参数，结果未知时手动确认，不自动重放。不同 Agent 的不同追加都保留；成果与任务状态独立，用户在 App 完成或明确指示 Agent 完成即可。Skill 只写最终成功成果，不写过程、失败、中断，不触发后续执行。
+
+入口见 [随记 Skill](../../plugins/toolkit/skills/suiji/SKILL.md)；验收分别见 [服务](../../docs/testing/suiji/followups-service.testplan.yaml)、[客户端](../../docs/testing/suiji/followups-clients.testplan.yaml)、[Agent](../../docs/testing/suiji/followups-agent.testplan.yaml)。这些是验收合同，实际通过范围须读取本次证据，不能由文档推断上线状态。

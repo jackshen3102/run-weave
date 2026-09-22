@@ -16,7 +16,8 @@ struct PendingOperation: Codable, Sendable {
   let payload: Data
 }
 struct Draft: Codable, Identifiable, Sendable {
-  var id: String { recordID ?? "new" }
+  var id: String { followupRecordID ?? recordID ?? "new" }
+  var followupRecordID: String?
   var kind: RecordKind = .task
   var body = ""
   // nil in older drafts means preserve the server tags on edit.
@@ -46,19 +47,22 @@ actor DraftStore {
     guard id == "new" || UUID(uuidString: id) != nil else { throw MessageError(message: "草稿标识无效") }
     return root.appendingPathComponent(prefix + id + ".json")
   }
-  func load(_ id: String) throws -> Draft? {
-    let path = try url(id)
-    guard FileManager.default.fileExists(atPath: path.path) else { revisions[id] = nil; return nil }
-    let value = try JSONDecoder().decode(Draft.self, from: Data(contentsOf: path)); revisions[id] = value.revision; return value
+  func load(_ id: String, followup: Bool = false) throws -> Draft? {
+    let key = followup ? "followup:" + id : id
+    let path = try url(id, prefix: followup ? "followup-" : "draft-")
+    guard FileManager.default.fileExists(atPath: path.path) else { revisions[key] = nil; return nil }
+    let value = try JSONDecoder().decode(Draft.self, from: Data(contentsOf: path)); revisions[key] = value.revision; return value
   }
   func save(_ value: Draft) throws {
-    if let revision = revisions[value.id], revision > value.revision { return }
-    try JSONEncoder().encode(value).write(to: url(value.id), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-    revisions[value.id] = value.revision
+    let key = value.followupRecordID == nil ? value.id : "followup:" + value.id
+    if let revision = revisions[key], revision > value.revision { return }
+    try JSONEncoder().encode(value).write(to: url(value.id, prefix: value.followupRecordID == nil ? "draft-" : "followup-"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    revisions[key] = value.revision
   }
   func remove(_ value: Draft) throws {
-    try FileManager.default.removeItem(at: url(value.id))
-    revisions[value.id] = Int.max // Reject older autosaves still queued at confirmation time.
+    let key = value.followupRecordID == nil ? value.id : "followup:" + value.id
+    try FileManager.default.removeItem(at: url(value.id, prefix: value.followupRecordID == nil ? "draft-" : "followup-"))
+    revisions[key] = Int.max // Reject older autosaves still queued at confirmation time.
     for item in value.local { try? FileManager.default.removeItem(at: root.appendingPathComponent(item.id)) }
   }
   func importFile(data: Data, fileName: String, mimeType: String, kind: String, limit: Int) throws -> LocalAttachment {

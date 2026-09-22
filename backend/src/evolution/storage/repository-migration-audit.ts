@@ -1,4 +1,5 @@
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
+import { openEvolutionDatabase } from "./sqlite-driver";
 import { createHash, randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import path from "node:path";
@@ -60,7 +61,7 @@ export function manifestDigest(manifest: MigrationManifest): string {
   return hash(JSON.stringify(content));
 }
 export function openReadOnly(file: string): Database.Database {
-  const database = new Database(file, { readonly: true, fileMustExist: true });
+  const database = openEvolutionDatabase(file, { readonly: true, fileMustExist: true });
   database.pragma("query_only = ON");
   return database;
 }

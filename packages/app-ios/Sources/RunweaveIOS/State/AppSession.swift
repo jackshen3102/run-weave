@@ -6,7 +6,9 @@ import SwiftUI
 @MainActor
 final class AppSession: ObservableObject {
   @Published private(set) var connection: BackendConnection?
-  @Published private(set) var authenticated = false
+  @Published private(set) var authenticated = false {
+    didSet { if oldValue != authenticated { knowledgeInbox.reset(api: authenticated ? api : nil) } }
+  }
   @Published private(set) var checking = false
   @Published private(set) var loading = false
   @Published private(set) var writing = false
@@ -22,6 +24,7 @@ final class AppSession: ObservableObject {
   let browser = BrowserSession(configuration: BrowserPresentationConfiguration(
     applicationName: "Runweave", returnLabel: "回终端",
     clearDataMessage: "清除此 App 全部内置网站的登录与存储数据？网页将关闭，不影响电脑连接或终端草稿。网站登录独立于电脑连接。"))
+  let knowledgeInbox = KnowledgeInboxModel()
   let deviceStatus = DeviceStatusStore()
   let imageDrafts = TerminalImageDrafts()
   let draftArchive = ConnectionDraftArchive()
@@ -389,6 +392,7 @@ final class AppSession: ObservableObject {
   private func setForeground(_ value: Bool) {
     guard foreground != value else { return }
     foreground = value
+    if !value { knowledgeInbox.suspend() }
     if !value {
       saveDraftsNow()
       deviceStatus.suspend()

@@ -104,3 +104,9 @@ node deploy/suiji/release.mjs restore --config /absolute/isolated-config.json --
 迁移校验和锁等直接命令检查单独记录，不能替代发布链路或异机恢复验收。
 详见 [架构与交付状态](../../docs/architecture/suiji.md) 和
 [部署恢复合同](../../docs/testing/suiji/deployment-recovery.testplan.yaml)。
+
+## 跟进版本迁移
+
+跟进要求 schema 5。先做静止备份，再运行追加迁移和部署兼容镜像；旧 schema 4 二进制不能直接启动新数据库。备份和恢复核对包含 record_followups、followup_attachments 数量；旧备份按其 schemaVersion 保持兼容。认证回读覆盖普通/回收站记录、跟进与全部附件字节。
+
+回退优先使用支持当前 schema 的修复镜像，不删表回退；恢复旧备份会丢失恢复点之后的写入，需要单独明确授权。随记 Skill 的上传入口 `/mcp/uploads` 与 `/mcp` 使用相同个人凭据和关停策略，不使用 App 会话或数据库凭据。

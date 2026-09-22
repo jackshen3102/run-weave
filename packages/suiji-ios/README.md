@@ -90,3 +90,11 @@ Runweave Native 为 `com.runweave.app.native`，已退役的旧 `app` 为 `com.r
 仅构建、安装或 XCTest 断言通过不能代替这一步。大字号用例结束后恢复设备原字号。
 
 模拟器安装前先按[共享设备池](../../docs/cli/ios-simulators.md)申请随记槽位，整个验证任务共用 task-dir；run 使用当前源码增量构建并核对安装，任务结束执行 finish。
+
+## 跟进与 Agent 交接
+
+连接支持 followups 的服务后，卡片显示跟进数量与最新摘要，详情提供分页跟进、追加和“交给 Agent”。复制正文仍保留；交接文本含服务身份与记录 ID，不含凭据。进入详情/刷新读取远端结果，没有自动执行或实时推送。
+
+追加使用 EditorModel 的跟进模式，DraftStore 按父记录保存在独立 followup 命名空间；复用附件导入、请求冻结和手动重试，不污染原文草稿。任务完成仍使用原入口。纯追加不增加父版本，摘要按最新 sequence 合并。旧服务缺能力字段时隐藏新入口。
+
+mapping:check 可附加 `SUIJI_VERIFY_FOLLOWUP_RECORD_ID`，核对真实跟进页和摘要 Swift 往返映射。行为用例见 [跟进客户端](../../docs/testing/suiji/followups-clients.testplan.yaml)，构建/安装不等于其行为全部通过。

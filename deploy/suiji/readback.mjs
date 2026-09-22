@@ -38,52 +38,100 @@ export async function authenticatedReadback(config, credentials, sql) {
       throw new Error("Readback identity/protocol mismatch");
     let cursor = null,
       count = 0;
-    do {
-      const page = await (
-        await request(
-          "/api/suiji/v1/records?limit=100" +
-            (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""),
-          { headers },
-        )
-      ).json();
-      for (const record of page.items) {
-        if (!/^[a-f0-9-]{36}$/.test(record.id))
-          throw new Error("Invalid returned record ID");
-        const stored = JSON.parse(
-          await sql(
-            `SELECT snapshot FROM record_revisions WHERE record_id='${record.id}' AND version=${Number(record.version)}`,
-          ),
-        );
-        if (
-          record.body !== stored.body ||
-          record.version !== stored.version ||
-          record.taskStatus !== stored.taskStatus ||
-          JSON.stringify(record.attachments) !==
-            JSON.stringify(stored.attachments)
-        ) {
-          // JSONB may reorder object keys; compare canonical attachment fields below.
-          const fields = (items) =>
-            items.map((a) => [
-              a.id,
-              a.kind,
-              a.fileName,
-              a.mimeType,
-              a.byteSize,
-              a.position,
-            ]);
+    let followupCount = 0;
+    for (const trash of info.schemaVersion >= 3 ? [false, true] : [false]) {
+      cursor = null;
+      do {
+        const page = await (
+          await request(
+            "/api/suiji/v1/records?limit=100" +
+              (trash ? "&trash=true" : "") +
+              (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""),
+            { headers },
+          )
+        ).json();
+        for (const record of page.items) {
+          if (!/^[a-f0-9-]{36}$/.test(record.id))
+            throw new Error("Invalid returned record ID");
+          const stored = JSON.parse(
+            await sql(
+              `SELECT snapshot FROM record_revisions WHERE record_id='${record.id}' AND version=${Number(record.version)}`,
+            ),
+          );
           if (
             record.body !== stored.body ||
             record.version !== stored.version ||
             record.taskStatus !== stored.taskStatus ||
-            JSON.stringify(fields(record.attachments)) !==
-              JSON.stringify(fields(stored.attachments))
-          )
-            throw new Error("Record/snapshot readback mismatch");
+            JSON.stringify(record.attachments) !==
+              JSON.stringify(stored.attachments)
+          ) {
+            // JSONB may reorder object keys; compare canonical attachment fields below.
+            const fields = (items) =>
+              items.map((a) => [
+                a.id,
+                a.kind,
+                a.fileName,
+                a.mimeType,
+                a.byteSize,
+                a.position,
+              ]);
+            if (
+              record.body !== stored.body ||
+              record.version !== stored.version ||
+              record.taskStatus !== stored.taskStatus ||
+              JSON.stringify(fields(record.attachments)) !==
+                JSON.stringify(fields(stored.attachments))
+            )
+              throw new Error("Record/snapshot readback mismatch");
+          }
+          if (info.features?.followups) {
+            let followupCursor = null;
+            const seen = [];
+            do {
+              const followups = await (
+                await request(
+                  `/api/suiji/v1/records/${record.id}/followups` +
+                    (followupCursor
+                      ? "?cursor=" + encodeURIComponent(followupCursor)
+                      : ""),
+                  { headers },
+                )
+              ).json();
+              seen.push(...followups.items);
+              followupCursor = followups.nextCursor;
+            } while (followupCursor);
+            const expected = JSON.parse(
+              await sql(
+                `SELECT coalesce(json_agg(json_build_object('id',f.id,'body',f.body,'sequence',f.sequence,'actor',f.actor,'agentName',f.agent_name,'sessionId',f.session_id,'attachments',(SELECT coalesce(json_agg(attachment_id ORDER BY position),'[]'::json) FROM followup_attachments WHERE followup_id=f.id)) ORDER BY sequence DESC),'[]'::json) FROM record_followups f WHERE record_id='${record.id}'`,
+              ),
+            );
+            const values = seen.map((item) => ({
+              id: item.id,
+              body: item.body,
+              sequence: item.sequence,
+              actor: item.source.actor,
+              agentName: item.source.agentName ?? null,
+              sessionId: item.source.sessionId ?? null,
+              attachments: item.attachments.map((file) => file.id),
+            }));
+            if (
+              JSON.stringify(values) !== JSON.stringify(expected) ||
+              record.followupSummary?.count !== seen.length
+            )
+              throw new Error("Followup readback mismatch");
+            followupCount += seen.length;
+          }
+          count++;
         }
-        count++;
-      }
-      cursor = page.nextCursor;
-    } while (cursor);
+        cursor = page.nextCursor;
+      } while (cursor);
+    }
+    if (
+      info.features?.followups &&
+      followupCount !==
+        Number(await sql("SELECT count(*) FROM record_followups"))
+    )
+      throw new Error("Followup count mismatch");
     if (count !== Number(await sql("SELECT count(*) FROM records")))
       throw new Error("Readback record count mismatch");
     const attachments = JSON.parse(
@@ -103,6 +151,7 @@ export async function authenticatedReadback(config, credentials, sql) {
     }
     return {
       records: count,
+      followups: followupCount,
       attachments: attachments.length,
       schemaVersion: info.schemaVersion,
     };

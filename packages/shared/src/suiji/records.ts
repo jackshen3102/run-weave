@@ -1,14 +1,10 @@
+import type { SuijiAttachment } from "./attachments";
+export type { SuijiAttachment, UploadedAttachment } from "./attachments";
+import type { FollowupSummary } from "./followups";
 export type RecordKind = "note" | "task";
 export type TaskStatus = "open" | "done" | "archived";
-export type UploadedAttachment = {
-  id: string;
-  kind: "image" | "markdown";
-  fileName: string;
-  mimeType: string;
-  byteSize: number;
-};
-export type SuijiAttachment = UploadedAttachment & { position: number };
 export type SuijiRecord = {
+  followupSummary?: FollowupSummary;
   id: string;
   kind: RecordKind;
   body: string;

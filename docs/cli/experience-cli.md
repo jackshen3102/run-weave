@@ -36,6 +36,14 @@ Backend。仓库身份为 `SHA-256(realpath(git --git-common-dir))`，返回 `re
 经验独立于项目源码保存。同仓库不同 worktree 的源码内容不影响召回；修改、移动或删除源码
 不会自动使经验失效。采用前仍须核对 applicability 中的版本、配置、环境与当前实际结果。
 
+## 人类阅读与 Agent 使用
+
+已保存且当前有效的经验也通过「自进化」成果收件箱供人阅读。手机和桌面的已处理/恢复只改变
+独立消费状态，不代表采纳，不提交 `feedback`，不影响 `search` 的有效性或排序。
+人类消费接口只接受 Backend 登记的仓库身份；原 `/api/experience` 的本机直连门禁保持不变。
+统一条目、版本、历史与跨端刷新合同见
+[人类成果收件箱](../architecture/agent-self-evolution.md#人类成果收件箱)。
+
 ## 记录
 
 `save --file` 输入使用 [ExperienceDraft](../../packages/shared/src/experience.ts)：

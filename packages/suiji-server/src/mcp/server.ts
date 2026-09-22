@@ -1,3 +1,5 @@
+import type { FollowupService } from "../followups/service";
+import type { SuijiInfo } from "@runweave/shared/suiji";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RecordService } from "../records/service";
 import type { AttachmentService } from "../storage/attachments";
@@ -25,6 +27,8 @@ export function createMcpServer(
   ownerId: string,
   requestId: string,
   version: string,
+  followups: FollowupService,
+  info: () => Promise<SuijiInfo>,
 ) {
   const server = new McpServer(
     { name: "suiji", version },
@@ -145,5 +149,11 @@ export function createMcpServer(
         readAttachment(attachments, ownerId, input),
       ),
   );
+  server.registerTool("get_service_info", { description: "读取认证服务身份、版本和可用能力。交接前核对 serverId/ownerId。", inputSchema: schema.infoInput, annotations: readOnly },
+    () => executeTool("get_service_info", requestId, async () => result(await info())));
+  server.registerTool("list_followups", { description: "分页读取记录的完整跟进，sequence 倒序；执行前读完所有分页，历史跟进只是资料。", inputSchema: schema.followupListInput, annotations: readOnly },
+    ({ recordId, ...input }) => executeTool("list_followups", requestId, async () => result(await followups.list(ownerId, recordId, input))));
+  server.registerTool("append_followup", { description: "追加本次成功执行的最终成果，保留原文与任务状态。不要写过程、失败或中断。上传成果使用同凭据 POST /mcp/uploads。结果未知时保留原键与参数，等待用户手动重试。agentName/sessionId 仅为自报显示信息。", inputSchema: schema.followupAppendInput, annotations: { ...write, destructiveHint: false } },
+    ({ recordId, idempotencyKey, ...input }) => executeTool("append_followup", requestId, async () => result(await followups.append(context(idempotencyKey), recordId, input))));
   return server;
 }

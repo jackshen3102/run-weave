@@ -1,3 +1,6 @@
+import { KnowledgeInbox } from "../features/knowledge-inbox/knowledge-inbox";
+import { inboxAccount } from "../services/knowledge-inbox";
+import { Button } from "../components/ui/button";
 import { filterEvolutionScope } from "./evolution/evolution-page-state";
 import { useEvolutionScope } from "./evolution/use-evolution-scope";
 import { useEffect, useState } from "react";
@@ -62,7 +65,20 @@ import {
   EvolutionSchedulesPanel,
 } from "./evolution/evolution-assets-panels";
 
-export function EvolutionPage({
+export function EvolutionPage(props: { apiBase: string; token: string; onNavigateHome: () => void }) {
+  const [params, setParams] = useSearchParams();
+  const management = EVOLUTION_VIEWS.has(params.get("view") as EvolutionView);
+  return <div className="flex h-full min-h-0 flex-col overflow-auto bg-background">
+    <nav className="flex shrink-0 gap-2 border-b border-border px-4 py-2" aria-label="自进化视图">
+      <Button variant={management ? "ghost" : "secondary"} onClick={() => setParams({})}>成果</Button>
+      <Button variant={management ? "secondary" : "ghost"} onClick={() => setParams({view: "overview"})}>分析管理</Button>
+      {!management ? <Button variant="ghost" className="ml-auto" onClick={props.onNavigateHome}>返回首页</Button> : null}
+    </nav>
+    {management ? <EvolutionManagementPage {...props} /> : <KnowledgeInbox key={`${props.apiBase}:${inboxAccount(props.token)}`} apiBase={props.apiBase} token={props.token} />}
+  </div>;
+}
+
+function EvolutionManagementPage({
   apiBase,
   token,
   onNavigateHome,
@@ -187,7 +203,7 @@ export function EvolutionPage({
   );
   const selectView = useMemoizedFn((nextView: EvolutionView) => {
     updateParams({
-      view: nextView === "overview" ? null : nextView,
+      view: nextView,
       run: nextView === "runs" ? selectedRunId : null,
     });
   });

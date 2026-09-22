@@ -1,3 +1,4 @@
+import { createKnowledgeInboxRouter } from "./routes/knowledge-inbox";
 import {
   attachLocalBrowserWebSocketServer,
   localBrowserAuth,
@@ -295,6 +296,7 @@ function createHttpApp(
   );
   app.use("/api/race", requireAuth, createRaceRouter(services.raceService));
   app.use("/api/scheduled-tasks", requireAuth, createScheduledTasksRouter(services.scheduledTaskService));
+  app.use("/api/knowledge-inbox", createKnowledgeInboxRouter(services.knowledgeInboxService, services.authService));
   app.use(
     "/api/experience",
     requireAuth,

@@ -1,3 +1,4 @@
+import { followupSummaries } from "../followups/repository";
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import type {
@@ -92,8 +93,10 @@ export class RecordService {
       const items: SuijiRecord[] = [];
       for (const row of rows.slice(0, limit))
         items.push(
-          await getRecord(client, owner, row.id, false, query.trash === "true"),
+          await getRecord(client, owner, row.id, false, query.trash === "true", false),
         );
+      const summaries = await followupSummaries(client, owner, items.map(item => item.id));
+      for (const item of items) item.followupSummary = summaries.get(item.id);
       const last = items.at(-1);
       return {
         items,

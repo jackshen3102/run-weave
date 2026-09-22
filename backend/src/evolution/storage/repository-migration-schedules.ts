@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { openEvolutionDatabase } from "./sqlite-driver";
 import path from "node:path";
 import type { EvolutionSchedule } from "@runweave/shared/evolution";
 import { resolveRepositoryIdentity } from "../../repository/identity";
@@ -44,7 +44,7 @@ export async function resumeMigratedSchedules(
       "evolution.sqlite",
     ),
   );
-  const database = new Database(file);
+  const database = openEvolutionDatabase(file);
   try {
     database
       .transaction(() => {

@@ -1,6 +1,7 @@
 import os from "node:os";
 import { mkdtempSync, copyFileSync } from "node:fs";
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
+import { openEvolutionDatabase } from "./sqlite-driver";
 import { execFileSync } from "node:child_process";
 import {
   chmodSync,
@@ -111,7 +112,7 @@ export function databaseClone(file: string): {
   const clone = path.join(directory, "expected.sqlite");
   copyFileSync(file, clone);
   chmodSync(clone, 0o600);
-  const database = new Database(clone);
+  const database = openEvolutionDatabase(clone);
   return {
     database,
     dispose: () => {

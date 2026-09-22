@@ -70,6 +70,7 @@ struct RecordCard<Destination: View>: View {
       ForEach(record.attachments) { attachment in
         Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text").font(.subheadline).foregroundStyle(SuijiTheme.green).allowsHitTesting(false)
       }
+      if let summary = record.followupSummary, let latest = summary.latest { Text("跟进 \(summary.count) 条 · " + latest.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(1).allowsHitTesting(false) }
       if pending && !busy { Label("状态结果待确认", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange).allowsHitTesting(false) }
       ViewThatFits(in: .horizontal) {
         HStack(spacing: 8) {

@@ -1,0 +1,212 @@
+version: 1
+name: "随记跟进服务与数据合同"
+description: "验收合同，配套 2026-09-21 随记跟进计划；使用真实 PostgreSQL 18、对象存储和 HTTP/MCP。每例自行建立专用 fixture，不依赖前例数据，只操作本例服务。实际执行范围见对应计划和本次证据，不由格式校验推断。"
+cases:
+  - id: SUIJIFUS-001
+    name: "追加跟进不改变原记录内容和状态"
+    required: true
+    description: "App 与 Agent 的跟进独立保存，追加不产生原文修订或任务状态变化。"
+    preconditions:
+      - "本例独占已迁移的隔离服务，App HTTP 与 MCP 均可用；自行创建想法和 open、done、archived 三种状态的待办，各有唯一正文、标签、原附件，记录版本及修订数。"
+    steps:
+      - "分别用 App 和 MCP 为各记录追加一条本例成果；确认跟进可读、序号从 1 递增且来源对应入口。"
+      - "对比各父记录；确认正文、类型、标签、原附件、version、updatedAt、taskStatus 和修订数均与追加前相同；跟进数量为实际新增数。"
+
+  - id: SUIJIFUS-002
+    name: "跟进输入遵守正文与附件空值边界"
+    required: true
+    description: "相同输入约束在 HTTP 和 MCP 生效，不合法内容无副作用。"
+    preconditions:
+      - "本例有一条专用正常记录及一个尚未绑定的合法附件，准备互不复用的操作键。"
+    steps:
+      - "分别经 HTTP 和 MCP 提交空白正文且无附件、NUL、孤立代理项、20001 个 Unicode 标量；确认参数错误且跟进数为零。"
+      - "分别提交 20000 个合法标量（包含 emoji）及空正文加合法附件；确认完整保存，没有以 UTF-16 长度截断；超限或重复 attachmentIds 请求被拒绝。"
+
+  - id: SUIJIFUS-003
+    name: "跟进分页在并发新增时不重复不跨记录"
+    required: true
+    description: "游标固定父记录和向前翻阅边界，新追加在重新读取首屏后可见。"
+    preconditions:
+      - "本例自行创建两条记录，为第一条追加 55 条带唯一序号正文的跟进；可调用真实 HTTP 与 MCP。"
+    steps:
+      - "以默认分页读取第一条；确认第一页为最新 20 条完整正文，sequence 严格倒序。"
+      - "另追加一条成果，再沿原 cursor 读完；确认原 55 条无重复无遗漏，新成果只在重新读取首屏时出现。"
+      - "将原游标用于第二条记录，或传超过 50 的 limit；确认参数错误；HTTP 与 MCP 在合法分页下返回相同 ID 集合。"
+
+  - id: SUIJIFUS-004
+    name: "摘要随跟进变化且不依赖父记录版本"
+    required: true
+    description: "卡片数据来源的摘要准确，返回原文版本相同也必须表达新跟进。"
+    preconditions:
+      - "本例专用记录无跟进，记录父 version；HTTP list/get 和 MCP get_record 均可用。"
+    steps:
+      - "读取记录，确认 count 为 0、latest 为 null；追加一条超过 120 标量且含 emoji 的跟进后重读。"
+      - "确认三种读取均给出 count 1、最新跟进 ID/sequence 和前 120 个完整标量，父 version 不变。"
+      - "再追加只有附件的跟进；确认 count 2、最新摘要为附件名，分页及列表仍维持原记录创建时间排序。"
+
+  - id: SUIJIFUS-005
+    name: "多个 Agent 并发追加各自成果全部保留"
+    required: true
+    description: "不同意图并发追加共享父记录，不互相覆盖或要求父版本。"
+    preconditions:
+      - "本例有一条专用记录、两个独立 MCP Client 和两份不同成果/操作键，可读取实际数据库结果。"
+    steps:
+      - "同步发起两个 append_followup，随后读取跟进；确认两次均成功、两个不同 ID、sequence 唯一连续、count 为 2。"
+      - "确认各自来源显示信息和正文对应原请求，父正文及状态不变，没有 VERSION_CONFLICT。"
+
+  - id: SUIJIFUS-006
+    name: "相同意图并发重试只保存一次"
+    required: true
+    description: "业务幂等键决定副作用，JSON-RPC ID 或重试次数不产生重复成果。"
+    preconditions:
+      - "本例有一条专用记录，两个 MCP Client 使用相同 append payload 和相同 idempotencyKey，可分别设置不同 JSON-RPC ID。"
+    steps:
+      - "并发提交两次再原样重放；确认返回同一 followup ID 和 sequence。"
+      - "读取跟进及本例 mutation_requests；确认仅一个成果和一个已提交的操作结果，没有重复附件关系。"
+
+  - id: SUIJIFUS-007
+    name: "幂等键拒绝改参数并允许独立相同成果"
+    required: true
+    description: "同键只表示同一意图，不按正文内容去重。"
+    preconditions:
+      - "本例有两条专用记录，可用 App 和 MCP；准备一个成功写入键及多个新键。"
+    steps:
+      - "用成功键修改正文、父 recordId 或更换 App/MCP 入口重放；确认 IDEMPOTENCY_KEY_REUSED，原跟进不变。"
+      - "对同一父记录用两个新键提交完全相同正文；确认分别保存两个成果；原成功键原参数仍返回原 ID。"
+
+  - id: SUIJIFUS-008
+    name: "追加与附件绑定在一个事务中成功或回滚"
+    required: true
+    description: "无效附件不能留下半条跟进、部分绑定或不可重试的幂等占位。"
+    preconditions:
+      - "本例有一条专用记录和一个合法未绑定附件；可通过只读数据库连接观察本例数据。"
+    steps:
+      - "用一个新的操作键提交合法附件加不存在的附件 ID；确认 NOT_FOUND。"
+      - "检查本例跟进、关系、附件绑定和 mutation_requests；确认没有新增或部分绑定。"
+      - "使用该未提交成功的键改为有效附件参数再提交；确认成功且只产生一条跟进。"
+
+  - id: SUIJIFUS-009
+    name: "附件不能跨父记录关联"
+    required: true
+    description: "不可变附件可在同一父记录复用，但跨父记录请求必须失败。"
+    preconditions:
+      - "本例自行创建两条记录，将专用 Markdown 绑定第一条；准备各自新增跟进的操作键。"
+    steps:
+      - "把该附件加入第二条的跟进；确认拒绝，第二条无新增关系。"
+      - "把同一附件加入第一条的跟进；确认可读且字节一致，没有移动原附件或复制对象。"
+
+  - id: SUIJIFUS-010
+    name: "编辑原文不会移除跟进成果附件"
+    required: true
+    description: "原文附件关系和跟进附件关系分别维护。"
+    preconditions:
+      - "本例专用记录已有原文附件和一条带独立 Markdown 附件的跟进，保存成果文件摘要。"
+    steps:
+      - "通过原编辑接口修改正文并清空原文 attachmentIds；确认原文编辑成功。"
+      - "通过跟进列表取得成果附件并分别从 App 下载和 MCP read_attachment 读取；确认内容及摘要不变，跟进关系仍存在。"
+
+  - id: SUIJIFUS-011
+    name: "回收站跟进保留且按入口限制读取"
+    required: true
+    description: "回收站禁止新追加，App 可读、外部 Agent 新检索不可读，恢复不丢成果。"
+    preconditions:
+      - "本例创建正常记录和一条带附件成果，记录成果 ID、字节摘要及原任务状态。"
+    steps:
+      - "用 App 将记录移入回收站；确认 App 可查看跟进及附件，App 新追加被拒绝。"
+      - "用 MCP get_record、list_followups、read_attachment 进行新读取及新键追加；确认均不暴露回收站内容或写入。"
+      - "用 App 恢复本条记录，再读跟进；确认原成果、附件和任务状态保留，可以用新键追加。"
+
+  - id: SUIJIFUS-012
+    name: "追加与移入回收站的竞争具有确定提交顺序"
+    required: true
+    description: "同一个父记录锁决定追加是否合法，不能在删除提交后再插入新成果。"
+    preconditions:
+      - "本例可控制两个真实数据库连接的事务时序，并自行建立两条不同的正常记录，每条分别用于一个锁顺序。"
+    steps:
+      - "让第一条记录的 trash 先持有父记录锁，发起追加后提交 trash；确认追加在等待后失败且没有成果。"
+      - "让第二条记录的追加先持有父记录锁，发起 trash 后提交追加；确认成果成功保存，随后记录进入回收站，App 可只读查看它。"
+
+  - id: SUIJIFUS-013
+    name: "MCP 及配套上传共用独立凭据边界"
+    required: true
+    description: "新增上传入口不绕过关闭、认证、来源和凭据隔离。"
+    preconditions:
+      - "本例独占可重启的隔离服务，分别持有 App token 和受保护的 MCP token，具备一张合法小图片；可调整本例 MCP 配置。"
+    steps:
+      - "对工具请求及 /mcp/uploads 分别使用无 token、错误 token、App token；确认 401；有效 MCP token 无 Origin 时成功，有 Origin 时为 403。"
+      - "将本例配置改为过期并重启，重新获取服务端点；确认旧 MCP 凭据两条入口均被拒绝，App 登录和读取仍可用。"
+      - "关闭本例 MCP 并重启、重新获取端点；确认两条入口均 404；不得重启或修改其他服务。"
+
+  - id: SUIJIFUS-014
+    name: "来源类别由入口决定而显示名称不构成身份"
+    required: true
+    description: "客户端不能伪造 actor/owner，Agent 自报会话只用于显示。"
+    preconditions:
+      - "本例有 App 会话、MCP Client 和一条专用记录。"
+    steps:
+      - "经 App 提交 actor、ownerId、agentName 或 sessionId，经 MCP 提交 actor、ownerId、createdAt、sequence；确认未知字段被拒绝，未落跟进。"
+      - "经 MCP 提交合法 agentName/sessionId，确认返回 actor=agent；经 App 正常追加确认 actor=app。"
+      - "提交超限名称或包含控制字符的会话标识；确认参数错误；数据库身份始终为认证入口的 owner。"
+
+  - id: SUIJIFUS-015
+    name: "迁移保留旧记录附件和已提交幂等结果"
+    required: true
+    description: "升级只新增跟进结构，不重写历史数据或旧 App 请求摘要。"
+    preconditions:
+      - "本例独占功能迁移前版本的真实数据库、对象存储和服务；自行创建旧记录、修订、附件和成功 App 写请求，记录内容、摘要及幂等响应并备份。"
+    steps:
+      - "停止本例旧服务，使用新迁移工具执行追加迁移；确认旧迁移摘要不变，迁移次数只增加实际新增数量。"
+      - "启动新服务并重新取得端点；读取旧记录确认原文、状态、版本、修订数、附件字节不变，跟进数为零。"
+      - "原参数原键重放旧 App 请求；确认返回原响应且没有重复记录；追加一条新成果确认新表可写。"
+
+  - id: SUIJIFUS-016
+    name: "服务重启保留成果与原请求重放结果"
+    required: true
+    description: "进程生命周期不影响已提交成果和业务幂等记录。"
+    preconditions:
+      - "本例独占已迁移服务与数据库，先创建专用记录并提交一条带附件的跟进，保存原键、完整 payload、成果 ID 和附件摘要。"
+    steps:
+      - "停止并重新启动本例服务，重新取得端点并认证；确认跟进和附件完整可读。"
+      - "使用原键原参数重放成果请求；确认同一 ID/sequence，跟进总数不增加，原附件字节一致。"
+
+  - id: SUIJIFUS-017
+    name: "Agent 上传沿用文件类型大小和幂等限制"
+    required: true
+    description: "multipart 入口支持真实成果文件，同时保留现有文件边界。"
+    preconditions:
+      - "本例隔离服务启用 MCP，准备完整 JPEG、PNG、UTF-8 Markdown、无效 UTF-8、伪装图片、空文件、恰好 5 MiB 的合法 Markdown 及超过 5 MiB 文件。"
+    steps:
+      - "用 /mcp/uploads 上传各合法文件；确认返回真实类型及字节数，相同键同文件重放返回同一附件 ID。"
+      - "上传空文件、伪装类型、非法 UTF-8、超过 5 MiB 文件或多个 file 字段；确认 400/413，无可绑定的错误附件。"
+
+  - id: SUIJIFUS-018
+    name: "能力发现和现有 MCP 工具保持一致"
+    required: true
+    description: "新能力显式发现，原工具合同和传输限制保留。"
+    preconditions:
+      - "本例服务已迁移并启用 MCP，有一条专用正常记录；持有实际服务身份用于核对。"
+    steps:
+      - "读取 App info 与 MCP get_service_info；确认身份、版本、followups 能力一致；tools/list 为原七工具加三个新增工具。"
+      - "确认原 GET /mcp 为 405，新 /mcp/uploads 只走上传处理；原 create/replace 对未支持的 attachmentIds 等字段仍严格拒绝。"
+      - "向普通 JSON 业务入口提交超过现有 256 KiB 的请求；确认仍拒绝，二进制上传没有扩大其他入口的限制。"
+
+  - id: SUIJIFUS-019
+    name: "Agent 标签搜索保持原文覆盖范围"
+    required: true
+    description: "精确标签与关键词取交集，新增跟进不被误称为可搜索全文。"
+    preconditions:
+      - "本例已启用 MCP，自行创建两条含相同关键词、不同标签的正常记录；在其中一条追加含独有关键词的跟进。"
+    steps:
+      - "调用 list_records 和 search_records 带精确 tag；确认仅返回标签匹配的记录，搜索还需满足正文关键词。"
+      - "搜索只存在于跟进里的独有词；确认不命中，响应覆盖说明仍为原记录正文，不宣称跟进或附件全文检索。"
+
+  - id: SUIJIFUS-020
+    name: "备份恢复包含跟进关系和成果文件"
+    required: true
+    description: "备份清单与恢复回读覆盖新表和成果，恢复后的身份和数据一致。"
+    preconditions:
+      - "本例独占可销毁的源服务和空恢复目录，有兼容镜像及迁移权限；自行建立两条带跟进的记录，其中一条在回收站，两条均含成果附件，并保存 ID、正文和文件摘要。"
+    steps:
+      - "按部署入口停止本例写入并运行备份；确认清单含跟进及关系表数量、对象摘要、稳定身份和实际 schema 版本。"
+      - "使用本例备份恢复到本例空目录并启动兼容服务，重新获取端点和会话；执行回读核对。"
+      - "确认恢复后的身份、原文、跟进序号及内容、回收站状态、附件字节和幂等结果与备份前一致；回读不得只核对原记录而跳过跟进。"

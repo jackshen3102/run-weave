@@ -6,7 +6,8 @@ import {
   currentFingerprints,
   databaseClone,
 } from "./repository-migration-files";
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
+import { openEvolutionDatabase } from "./sqlite-driver";
 import {
   chmodSync,
   copyFileSync,
@@ -103,8 +104,8 @@ export async function applyRepositoryMigration(
       };
       privateJson(journalFile, journal);
     }
-    const evolution = new Database(files.evolution),
-      activity = new Database(files.activity);
+    const evolution = openEvolutionDatabase(files.evolution),
+      activity = openEvolutionDatabase(files.activity);
     try {
       evolution.pragma("foreign_keys = ON");
       activity.pragma("foreign_keys = ON");
