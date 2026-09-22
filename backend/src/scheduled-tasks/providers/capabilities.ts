@@ -6,7 +6,10 @@ import type { ScheduledProviderAdapter } from "./types";
 
 const execFileAsync = promisify(execFile);
 
-export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{ capabilities: ScheduledTaskCapabilities["providers"]; adapters: Map<string, ScheduledProviderAdapter> }> {
+export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
+  capabilities: ScheduledTaskCapabilities["providers"];
+  adapters: Map<string, ScheduledProviderAdapter>;
+}> {
   const codexBinary = env.RUNWEAVE_CODEX_BIN?.trim() || "codex";
   let codexAvailable = false;
   let codexReason: string | undefined;
@@ -21,13 +24,28 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
     codexReason = "Codex CLI is unavailable or not authenticated";
   }
   const adapters = new Map<string, ScheduledProviderAdapter>();
-  if (codexAvailable) adapters.set("codex", new CodexScheduledTaskProvider(codexBinary));
+  if (codexAvailable)
+    adapters.set("codex", new CodexScheduledTaskProvider(codexBinary));
   return {
     adapters,
     capabilities: [
-      { provider: "codex", available: codexAvailable, ...(codexReason ? { reason: codexReason } : {}) },
-      { provider: "trae", available: false, reason: "TraeX persistent background execution has not passed the recovery gate" },
-      { provider: "pi", available: false, reason: "Pi persistent background execution has not passed the recovery gate" },
+      {
+        provider: "codex",
+        available: codexAvailable,
+        ...(codexReason ? { reason: codexReason } : {}),
+      },
+      {
+        provider: "trae",
+        available: false,
+        reason:
+          "TraeX persistent background execution has not passed the recovery gate",
+      },
+      {
+        provider: "pi",
+        available: false,
+        reason:
+          "Pi persistent background execution has not passed the recovery gate",
+      },
     ],
   };
 }

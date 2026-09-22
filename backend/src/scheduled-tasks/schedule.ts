@@ -26,10 +26,16 @@ export function validateSchedule(schedule: TaskSchedule): void {
   if (schedule.kind === "weekly") {
     const unique = new Set(schedule.weekdays);
     if (unique.size === 0 || unique.size !== schedule.weekdays.length) {
-      throw new ScheduleValidationError("weekly weekdays must be non-empty and unique");
+      throw new ScheduleValidationError(
+        "weekly weekdays must be non-empty and unique",
+      );
     }
-    if ([...unique].some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
-      throw new ScheduleValidationError("weekdays must be integers from 0 through 6");
+    if (
+      [...unique].some((day) => !Number.isInteger(day) || day < 0 || day > 6)
+    ) {
+      throw new ScheduleValidationError(
+        "weekdays must be integers from 0 through 6",
+      );
     }
   }
 }
@@ -57,7 +63,11 @@ export function nextOccurrences(
     Date.UTC(localNow.year, localNow.month - 1, localNow.day),
   );
   const results: string[] = [];
-  for (let offset = 0; offset <= MAX_SEARCH_DAYS && results.length < limit; offset += 1) {
+  for (
+    let offset = 0;
+    offset <= MAX_SEARCH_DAYS && results.length < limit;
+    offset += 1
+  ) {
     const date = new Date(cursor.getTime() + offset * DAY_MS);
     const weekday = date.getUTCDay();
     const eligible =
@@ -100,7 +110,10 @@ interface LocalMinute {
   minute: number;
 }
 
-function resolveLocalMinute(target: LocalMinute, timezone: string): number | null {
+function resolveLocalMinute(
+  target: LocalMinute,
+  timezone: string,
+): number | null {
   const naive = Date.UTC(
     target.year,
     target.month - 1,
@@ -108,11 +121,21 @@ function resolveLocalMinute(target: LocalMinute, timezone: string): number | nul
     target.hour,
     target.minute,
   );
-  const sampleTimes = [naive, naive - DAY_MS, naive + DAY_MS, naive - DAY_MS / 2, naive + DAY_MS / 2];
-  const offsets = new Set(sampleTimes.map((time) => timezoneOffsetAt(time, timezone)));
+  const sampleTimes = [
+    naive,
+    naive - DAY_MS,
+    naive + DAY_MS,
+    naive - DAY_MS / 2,
+    naive + DAY_MS / 2,
+  ];
+  const offsets = new Set(
+    sampleTimes.map((time) => timezoneOffsetAt(time, timezone)),
+  );
   const matches = [...offsets]
     .map((offset) => naive - offset)
-    .filter((candidate) => sameLocalMinute(localParts(candidate, timezone), target))
+    .filter((candidate) =>
+      sameLocalMinute(localParts(candidate, timezone), target),
+    )
     .sort((left, right) => left - right);
   return matches[0] ?? null;
 }

@@ -47,30 +47,54 @@ export class ScheduledTaskService {
   }
 
   capabilities(): ScheduledTaskCapabilities {
-    if (this.unavailableReason) throw new ScheduledTaskError("scheduler_unavailable", 503, this.unavailableReason);
+    if (this.unavailableReason)
+      throw new ScheduledTaskError(
+        "scheduler_unavailable",
+        503,
+        this.unavailableReason,
+      );
     return this.capabilitiesValue;
   }
 
   preview(schedule: TaskSchedule, now = new Date()): SchedulePreviewResponse {
     try {
-      return { now: now.toISOString(), occurrences: nextOccurrences(schedule, now, 3) };
+      const occurrences = nextOccurrences(schedule, now, 3);
+      if (schedule.kind === "once" && occurrences.length === 0) {
+        throw new ScheduleValidationError(
+          "once schedule must be in the future",
+        );
+      }
+      return { now: now.toISOString(), occurrences };
     } catch (error) {
       throw scheduleError(error);
     }
   }
 
-  async create(input: CreateScheduledTaskRequest, idempotencyKey: string): Promise<ScheduledTask> {
+  async create(
+    input: CreateScheduledTaskRequest,
+    idempotencyKey: string,
+  ): Promise<ScheduledTask> {
     this.requireEnabled();
     this.requireProvider(input.provider);
     try {
       validateSchedule(input.schedule);
+      if (
+        input.schedule.kind === "once" &&
+        nextOccurrences(input.schedule, new Date(), 1).length === 0
+      ) {
+        throw new ScheduleValidationError(
+          "once schedule must be in the future",
+        );
+      }
     } catch (error) {
       throw scheduleError(error);
     }
     const store = this.requireStore();
     const project = this.requireProject(input.projectId);
     const now = new Date();
-    const nextRunAt = input.enabled ? this.requireNextOccurrence(input.schedule, now) : null;
+    const nextRunAt = input.enabled
+      ? this.requireNextOccurrence(input.schedule, now)
+      : null;
     const task: ScheduledTask = {
       ...normalizeConfig(input),
       id: randomUUID(),
@@ -82,7 +106,12 @@ export class ScheduledTaskService {
       deletedAt: null,
     };
     try {
-      return await store.createTask(task, this.terminalSessionManager.resolveParentProjectId(project.id), idempotencyKey, hash(input));
+      return await store.createTask(
+        task,
+        this.terminalSessionManager.resolveParentProjectId(project.id),
+        idempotencyKey,
+        hash(input),
+      );
     } catch (error) {
       throw scheduledTaskErrorFromStorage(error);
     }
@@ -90,28 +119,57 @@ export class ScheduledTaskService {
 
   async getTask(taskId: string): Promise<ScheduledTask> {
     const task = await this.requireStore().getTask(taskId);
-    if (!task) throw new ScheduledTaskError("scheduled_task_not_found", 404, "Scheduled task not found");
+    if (!task)
+      throw new ScheduledTaskError(
+        "scheduled_task_not_found",
+        404,
+        "Scheduled task not found",
+      );
     return task;
   }
 
-  async list(filter: ScheduledTaskFilter): Promise<ScheduledTaskPage<ScheduledTask>> {
+  async list(
+    filter: ScheduledTaskFilter,
+  ): Promise<ScheduledTaskPage<ScheduledTask>> {
     const all = await this.requireStore().listTasks();
     const query = filter.q?.trim().toLocaleLowerCase();
     const filtered = all.filter((task) => {
       if (Boolean(task.deletedAt) !== Boolean(filter.archived)) return false;
       if (filter.projectId && task.projectId !== filter.projectId) return false;
-      if (filter.parentProjectId && this.terminalSessionManager.resolveParentProjectId(task.projectId) !== filter.parentProjectId) return false;
-      if (query && !`${task.name}\n${task.prompt}`.toLocaleLowerCase().includes(query)) return false;
+      if (
+        filter.parentProjectId &&
+        this.terminalSessionManager.resolveParentProjectId(task.projectId) !==
+          filter.parentProjectId
+      )
+        return false;
+      if (
+        query &&
+        !`${task.name}\n${task.prompt}`.toLocaleLowerCase().includes(query)
+      )
+        return false;
       return true;
     });
     return paginate(filtered, filter.cursor, filter.limit);
   }
 
-  async update(taskId: string, input: UpdateScheduledTaskRequest): Promise<ScheduledTask> {
+  async update(
+    taskId: string,
+    input: UpdateScheduledTaskRequest,
+  ): Promise<ScheduledTask> {
     this.requireEnabled();
     const current = await this.getTask(taskId);
-    if (current.deletedAt) throw new ScheduledTaskError("invalid_input", 400, "Deleted tasks are read-only");
-    if (current.revision !== input.expectedRevision) throw new ScheduledTaskError("revision_conflict", 409, "The task changed; refresh before saving");
+    if (current.deletedAt)
+      throw new ScheduledTaskError(
+        "invalid_input",
+        400,
+        "Deleted tasks are read-only",
+      );
+    if (current.revision !== input.expectedRevision)
+      throw new ScheduledTaskError(
+        "revision_conflict",
+        409,
+        "The task changed; refresh before saving",
+      );
     const now = new Date();
     const projectId = input.projectId ?? current.projectId;
     const project = this.requireProject(projectId);
@@ -119,11 +177,21 @@ export class ScheduledTaskService {
     this.requireProvider(input.provider ?? current.provider);
     try {
       validateSchedule(schedule);
+      if (
+        schedule.kind === "once" &&
+        nextOccurrences(schedule, now, 1).length === 0
+      ) {
+        throw new ScheduleValidationError(
+          "once schedule must be in the future",
+        );
+      }
     } catch (error) {
       throw scheduleError(error);
     }
     const enabled = input.enabled ?? current.enabled;
-    const nextRunAt = enabled ? this.requireNextOccurrence(schedule, now) : null;
+    const nextRunAt = enabled
+      ? this.requireNextOccurrence(schedule, now)
+      : null;
     const task: ScheduledTask = {
       ...current,
       ...input,
@@ -148,23 +216,47 @@ export class ScheduledTaskService {
       revision: current.revision + 1,
       updatedAt: now.toISOString(),
     };
-    delete (task as ScheduledTask & { expectedRevision?: number }).expectedRevision;
+    delete (task as ScheduledTask & { expectedRevision?: number })
+      .expectedRevision;
     try {
-      return await this.requireStore().updateTask(task, input.expectedRevision, this.terminalSessionManager.resolveParentProjectId(project.id));
+      return await this.requireStore().updateTask(
+        task,
+        input.expectedRevision,
+        this.terminalSessionManager.resolveParentProjectId(project.id),
+      );
     } catch (error) {
       throw scheduledTaskErrorFromStorage(error);
     }
   }
 
-  async remove(taskId: string, expectedRevision: number): Promise<ScheduledTask> {
+  async remove(
+    taskId: string,
+    expectedRevision: number,
+  ): Promise<ScheduledTask> {
     this.requireEnabled();
     const current = await this.getTask(taskId);
     if (current.deletedAt) return current;
-    if (current.revision !== expectedRevision) throw new ScheduledTaskError("revision_conflict", 409, "The task changed; refresh before deleting");
+    if (current.revision !== expectedRevision)
+      throw new ScheduledTaskError(
+        "revision_conflict",
+        409,
+        "The task changed; refresh before deleting",
+      );
     const now = new Date().toISOString();
-    const task: ScheduledTask = { ...current, revision: current.revision + 1, enabled: false, nextRunAt: null, updatedAt: now, deletedAt: now };
+    const task: ScheduledTask = {
+      ...current,
+      revision: current.revision + 1,
+      enabled: false,
+      nextRunAt: null,
+      updatedAt: now,
+      deletedAt: now,
+    };
     try {
-      return await this.requireStore().updateTask(task, expectedRevision, this.terminalSessionManager.resolveParentProjectId(task.projectId));
+      return await this.requireStore().updateTask(
+        task,
+        expectedRevision,
+        this.terminalSessionManager.resolveParentProjectId(task.projectId),
+      );
     } catch (error) {
       throw scheduledTaskErrorFromStorage(error);
     }
@@ -173,13 +265,22 @@ export class ScheduledTaskService {
   async start(taskId: string, idempotencyKey: string): Promise<ScheduledRun> {
     this.requireEnabled();
     const task = await this.getTask(taskId);
-    if (task.deletedAt) throw new ScheduledTaskError("invalid_input", 400, "Deleted tasks cannot run");
+    if (task.deletedAt)
+      throw new ScheduledTaskError(
+        "invalid_input",
+        400,
+        "Deleted tasks cannot run",
+      );
     this.requireProvider(task.provider);
     const project = this.requireProject(task.projectId);
     const now = new Date().toISOString();
     const run = createScheduledRunRecord(task, "manual", now, project.path!);
     try {
-      const created = await this.requireStore().createManualRun(run, idempotencyKey, hash({ taskId }));
+      const created = await this.requireStore().createManualRun(
+        run,
+        idempotencyKey,
+        hash({ taskId }),
+      );
       this.runtime?.wake();
       return created;
     } catch (error) {
@@ -187,22 +288,39 @@ export class ScheduledTaskService {
     }
   }
 
-  async listRuns(taskId: string, cursor?: string, limit?: number): Promise<ScheduledTaskPage<ScheduledRun>> {
+  async listRuns(
+    taskId: string,
+    cursor?: string,
+    limit?: number,
+  ): Promise<ScheduledTaskPage<ScheduledRun>> {
     await this.getTask(taskId);
     return paginate(await this.requireStore().listRuns(taskId), cursor, limit);
   }
 
   async getRun(runId: string): Promise<ScheduledRun> {
     const run = await this.requireStore().getRun(runId);
-    if (!run) throw new ScheduledTaskError("scheduled_run_not_found", 404, "Scheduled run not found");
+    if (!run)
+      throw new ScheduledTaskError(
+        "scheduled_run_not_found",
+        404,
+        "Scheduled run not found",
+      );
     return run;
   }
 
   async output(runId: string, cursor?: string): Promise<ScheduledRunOutput> {
     const offset = decodeOffset(cursor);
     try {
-      const chunk = await this.requireStore().readOutput(runId, offset, OUTPUT_PAGE_BYTES);
-      return { text: chunk.text, nextCursor: String(chunk.nextOffset), hasMore: chunk.nextOffset < chunk.totalBytes };
+      const chunk = await this.requireStore().readOutput(
+        runId,
+        offset,
+        OUTPUT_PAGE_BYTES,
+      );
+      return {
+        text: chunk.text,
+        nextCursor: String(chunk.nextOffset),
+        hasMore: chunk.nextOffset < chunk.totalBytes,
+      };
     } catch (error) {
       throw scheduledTaskErrorFromStorage(error);
     }
@@ -231,30 +349,53 @@ export class ScheduledTaskService {
   }
 
   private requireStore(): ScheduledTaskStore {
-    if (!this.store) throw new ScheduledTaskError("scheduler_unavailable", 503, this.unavailableReason ?? "Scheduled task storage is unavailable");
+    if (!this.store)
+      throw new ScheduledTaskError(
+        "scheduler_unavailable",
+        503,
+        this.unavailableReason ?? "Scheduled task storage is unavailable",
+      );
     return this.store;
   }
 
   private requireEnabled(): void {
     this.capabilities();
-    if (!this.capabilitiesValue.enabled) throw new ScheduledTaskError("scheduler_unavailable", 503, this.capabilitiesValue.reason ?? "Scheduled tasks are disabled");
+    if (!this.capabilitiesValue.enabled)
+      throw new ScheduledTaskError(
+        "scheduler_unavailable",
+        503,
+        this.capabilitiesValue.reason ?? "Scheduled tasks are disabled",
+      );
   }
 
   private requireProvider(provider: string): void {
-    const capability = this.capabilitiesValue.providers.find((item) => item.provider === provider);
-    if (!capability?.available) throw new ScheduledTaskError("provider_unavailable", 503, capability?.reason ?? "Provider unavailable");
+    const capability = this.capabilitiesValue.providers.find(
+      (item) => item.provider === provider,
+    );
+    if (!capability?.available)
+      throw new ScheduledTaskError(
+        "provider_unavailable",
+        503,
+        capability?.reason ?? "Provider unavailable",
+      );
   }
 
   private requireProject(projectId: string) {
     const project = this.terminalSessionManager.getProject(projectId);
-    if (!project?.path || !isDirectory(project.path)) throw new ScheduledTaskError("context_unavailable", 409, "The selected project directory is unavailable");
+    if (!project?.path || !isDirectory(project.path))
+      throw new ScheduledTaskError(
+        "context_unavailable",
+        409,
+        "The selected project directory is unavailable",
+      );
     return project;
   }
 
   private requireNextOccurrence(schedule: TaskSchedule, now: Date): string {
     try {
       const next = nextOccurrences(schedule, now, 1)[0];
-      if (!next) throw new ScheduleValidationError("schedule has no future occurrence");
+      if (!next)
+        throw new ScheduleValidationError("schedule has no future occurrence");
       return next;
     } catch (error) {
       throw scheduleError(error);
@@ -263,20 +404,51 @@ export class ScheduledTaskService {
 }
 
 function normalizeConfig(input: CreateScheduledTaskRequest | ScheduledTask) {
-  return { name: input.name.trim(), projectId: input.projectId, provider: input.provider, prompt: input.prompt.trim(), ...(input.model?.trim() ? { model: input.model.trim() } : {}), ...(input.effort?.trim() ? { effort: input.effort.trim() } : {}), schedule: input.schedule };
+  return {
+    name: input.name.trim(),
+    projectId: input.projectId,
+    provider: input.provider,
+    prompt: input.prompt.trim(),
+    ...(input.model?.trim() ? { model: input.model.trim() } : {}),
+    ...(input.effort?.trim() ? { effort: input.effort.trim() } : {}),
+    schedule: input.schedule,
+  };
 }
-function paginate<T>(items: T[], cursor?: string, requestedLimit?: number): ScheduledTaskPage<T> {
+function paginate<T>(
+  items: T[],
+  cursor?: string,
+  requestedLimit?: number,
+): ScheduledTaskPage<T> {
   const offset = decodeOffset(cursor);
   const limit = Math.min(100, Math.max(1, requestedLimit ?? 50));
   const page = items.slice(offset, offset + limit);
-  return { items: page, nextCursor: offset + page.length < items.length ? String(offset + page.length) : null };
+  return {
+    items: page,
+    nextCursor:
+      offset + page.length < items.length ? String(offset + page.length) : null,
+  };
 }
 function decodeOffset(cursor?: string): number {
   if (!cursor) return 0;
   const value = Number(cursor);
-  if (!Number.isSafeInteger(value) || value < 0) throw new ScheduledTaskError("invalid_input", 400, "Invalid cursor");
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new ScheduledTaskError("invalid_input", 400, "Invalid cursor");
   return value;
 }
-function hash(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
-function isDirectory(value: string): boolean { try { return existsSync(value) && statSync(value).isDirectory(); } catch { return false; } }
-function scheduleError(error: unknown): ScheduledTaskError { return new ScheduledTaskError("invalid_schedule", 400, error instanceof Error ? error.message : "Invalid schedule"); }
+function hash(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+function isDirectory(value: string): boolean {
+  try {
+    return existsSync(value) && statSync(value).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function scheduleError(error: unknown): ScheduledTaskError {
+  return new ScheduledTaskError(
+    "invalid_schedule",
+    400,
+    error instanceof Error ? error.message : "Invalid schedule",
+  );
+}

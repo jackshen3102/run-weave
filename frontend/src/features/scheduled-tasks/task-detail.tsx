@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
 import { useSearchParams } from "react-router-dom";
 import type {
   ScheduledRun,
@@ -16,6 +17,7 @@ import {
 } from "./presentation";
 import { RunProgress } from "./run-progress";
 import { useOpenRun } from "./open-run";
+import { RunSummary } from "./run-summary";
 
 function RunRecord({
   run,
@@ -29,6 +31,10 @@ function RunRecord({
   const open = useOpenRun();
   const running = ["queued", "running", "stopping"].includes(run.status);
   const canOpen = !running && run.recoverable && Boolean(run.threadRef);
+  const openRecord = useMemoizedFn(() => {
+    if (canOpen) open.mutate(run.id);
+    else setExpanded((value) => !value);
+  });
   useEffect(() => {
     if (highlighted)
       ref.current?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -43,10 +49,7 @@ function RunRecord({
         type="button"
         className="w-full text-left"
         disabled={open.isPending}
-        onClick={() => {
-          if (canOpen) open.mutate(run.id);
-          else setExpanded((value) => !value);
-        }}
+        onClick={openRecord}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm font-medium">
@@ -60,28 +63,29 @@ function RunRecord({
           {run.trigger === "manual" ? "手动运行" : "定时触发"} · 配置版本{" "}
           {run.taskRevision}
         </p>
-        {run.summary ? (
-          <p className="mt-3 whitespace-pre-wrap break-words text-sm">
-            {run.summary}
-          </p>
-        ) : null}
-        {run.error ? (
-          <p className="mt-2 break-words text-sm text-destructive">
-            {run.error.message} ({run.error.code})
-          </p>
-        ) : null}
-        <p className="mt-3 text-xs text-primary">
-          {open.isPending
-            ? open.attachmentState === "starting" ||
-              open.attachmentState === "creating"
-              ? "正在恢复对话…"
-              : "正在打开…"
-            : canOpen
-              ? "打开对话并继续追问 →"
-              : running
-                ? "查看运行进度"
-                : "查看记录"}
+      </button>
+      {run.summary ? <RunSummary text={run.summary} /> : null}
+      {run.error ? (
+        <p className="mt-2 break-words text-sm text-destructive">
+          {run.error.message} ({run.error.code})
         </p>
+      ) : null}
+      <button
+        type="button"
+        className="mt-3 text-left text-xs text-primary"
+        disabled={open.isPending}
+        onClick={openRecord}
+      >
+        {open.isPending
+          ? open.attachmentState === "starting" ||
+            open.attachmentState === "creating"
+            ? "正在恢复对话…"
+            : "正在打开…"
+          : canOpen
+            ? "打开对话并继续追问 →"
+            : running
+              ? "查看运行进度"
+              : "查看记录"}
       </button>
       {run.terminalBinding?.attachmentState === "starting" ||
       run.terminalBinding?.attachmentState === "creating" ? (
