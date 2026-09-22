@@ -49,6 +49,20 @@ URL 或 Git；Electron 用户需把变量传给其内置 Backend，不能只设�
 后续手动重试会产生新快照，未返回的记录按原有效期清理。
 不兼容或迁移旧的本地分享链接。
 
+### macOS 登录环境加载脚本
+
+已有 LaunchAgent 使用 `~/.runweave/snapshot-share/load-environment.py` 时，从仓库更新脚本：
+
+```bash
+install -m 700 deploy/snapshot-share/load-environment.py "$HOME/.runweave/snapshot-share/load-environment.py"
+```
+
+脚本由 `/usr/bin/python3` 执行，读取同目录的 `publish.env`（凭据文件保持 `0600`）。
+使用不带引号的 `KEY=VALUE`，支持空行、整行 `#` 注释和等号两侧空白；不执行 shell 展开。
+写入前先解析整个文件并检查两项配置均非空，格式错误不会提前写入其中一项；空配置不写入或清除
+现有环境。`launchctl` 的两次写入本身不是事务，命令执行失败仍可能留下部分更新，需修复后重跑。
+此脚本只设置 GUI 环境，不更新已运行进程；它执行成功不能代替实际 Backend 的配置和分享验收。
+
 ## 接口和验证
 
 - `POST /api/snapshot-shares`：专用 bearer 认证；JSON `{title, text}`，成功返回 201 和既有
