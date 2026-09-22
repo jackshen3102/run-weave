@@ -19,6 +19,7 @@ struct ConnectionManager: View {
   @State private var checkingIDs = Set<String>()
   @State private var statuses: [String: String] = [:]
   @AppStorage("native.theme") private var theme = "dark"
+  @AppStorage(ScreenAwakeModifier.preferenceKey) private var keepScreenAwake = true
 
   var body: some View {
     NavigationView {
@@ -45,6 +46,13 @@ struct ConnectionManager: View {
             Text("深色").tag("dark")
             Text("浅色").tag("light")
           }.pickerStyle(.segmented)
+        }
+        Section(
+          header: Text("屏幕"),
+          footer: Text("在 Runweave 前台使用期间防止自动息屏。离开应用后恢复系统设置，开启会增加耗电。")
+        ) {
+          Toggle("保持屏幕常亮", isOn: $keepScreenAwake)
+            .accessibilityIdentifier("keep-screen-awake")
         }
         if let error = store.storageError { Section { Text(error).foregroundColor(.red) } }
         Section(header: Text("Backend")) {

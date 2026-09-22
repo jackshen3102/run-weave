@@ -6,6 +6,9 @@ Runweave 的原生 iOS 应用，使用 SwiftUI/UIKit 和 SwiftTerm，通过 HTTP
 内置浏览器使用相邻的 [RunweaveBrowser Swift Package](../browser-ios/README.md)，与随记共享实现；终端来源和呈现条件仍由本 App 管理。
 Bundle ID 为 `com.runweave.app.native`，保留已有安装的连接、主题和安全凭据。
 
+应用在前台活跃期间默认保持屏幕常亮；可在“连接管理 → 屏幕”关闭，选择会保存在本机。
+该设置覆盖正式页面与诊断实验室，离开应用后恢复系统息屏规则；不阻止手动锁屏，也不替代 UI Automation 授权。
+
 ## 构建与安装
 
 需要 macOS、Xcode、iOS SDK 和 Metal Toolchain。应用部署版本以 Xcode host 的
