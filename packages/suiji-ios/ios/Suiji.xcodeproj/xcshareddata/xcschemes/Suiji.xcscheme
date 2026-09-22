@@ -10,14 +10,14 @@
             ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
             <ActionContent
                title = "Capture build inputs"
-               scriptText = "set -eu&#10;rm -f &quot;$BUILD_DIR/.runweave-identity/runweave-$CONFIGURATION-$PLATFORM_NAME.json&quot;&#10;/usr/bin/env python3 -B &quot;$PROJECT_DIR/../../../scripts/ios-build/identity.py&quot; begin runweave&#10;">
+               scriptText = "set -eu&#10;rm -f &quot;$BUILD_DIR/.runweave-identity/suiji-$CONFIGURATION-$PLATFORM_NAME.json&quot;&#10;/usr/bin/env python3 -B &quot;$PROJECT_DIR/../../../scripts/ios-build/identity.py&quot; begin suiji&#10;">
                <EnvironmentBuildable>
                   <BuildableReference
                      BuildableIdentifier = "primary"
                      BlueprintIdentifier = "34A04005BCAF206EEC990BD9"
-                     BuildableName = "RunweaveNative.app"
-                     BlueprintName = "RunweaveNative"
-                     ReferencedContainer = "container:RunweaveNative.xcodeproj">
+                     BuildableName = "Suiji.app"
+                     BlueprintName = "Suiji"
+                     ReferencedContainer = "container:Suiji.xcodeproj">
                   </BuildableReference>
                </EnvironmentBuildable>
             </ActionContent>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "34A04005BCAF206EEC990BD9"
-               BuildableName = "RunweaveNative.app"
-               BlueprintName = "RunweaveNative"
-               ReferencedContainer = "container:RunweaveNative.xcodeproj">
+               BuildableName = "Suiji.app"
+               BlueprintName = "Suiji"
+               ReferencedContainer = "container:Suiji.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -62,9 +62,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "34A04005BCAF206EEC990BD9"
-            BuildableName = "RunweaveNative.app"
-            BlueprintName = "RunweaveNative"
-            ReferencedContainer = "container:RunweaveNative.xcodeproj">
+            BuildableName = "Suiji.app"
+            BlueprintName = "Suiji"
+            ReferencedContainer = "container:Suiji.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -79,9 +79,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "34A04005BCAF206EEC990BD9"
-            BuildableName = "RunweaveNative.app"
-            BlueprintName = "RunweaveNative"
-            ReferencedContainer = "container:RunweaveNative.xcodeproj">
+            BuildableName = "Suiji.app"
+            BlueprintName = "Suiji"
+            ReferencedContainer = "container:Suiji.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

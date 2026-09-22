@@ -1,3 +1,4 @@
+import IOSBuildIdentity
 import SwiftUI
 
 struct ConnectionManager: View {
@@ -9,6 +10,7 @@ struct ConnectionManager: View {
   var onMobileLogin: () -> Void = {}
   @StateObject private var batteries = ConnectionBatteryStore()
   @State private var scanning = false
+  @State private var showingBuildIdentity = false
   @State private var showingCodexQuota = false
   @State private var editingID: String?
   @State private var name = ""
@@ -41,6 +43,7 @@ struct ConnectionManager: View {
             Button("Codex 额度") { showingCodexQuota = true }
           }
         }
+        Section { Button("构建信息") { showingBuildIdentity = true } }
         Section(header: Text("外观")) {
           Picker("主题", selection: $theme) {
             Text("深色").tag("dark")
@@ -134,6 +137,7 @@ struct ConnectionManager: View {
       .sheet(isPresented: $showingCodexQuota) {
         CodexQuotaView(session: session, quota: codexQuota)
       }
+      .sheet(isPresented: $showingBuildIdentity) { BuildIdentityView() }
       .sheet(isPresented: $scanning) {
         MobileLoginView(store: store, session: session) {
           scanning = false

@@ -1,4 +1,5 @@
 import SwiftUI
+import IOSBuildIdentity
 
 public struct RootView: View {
   @Environment(\.scenePhase) private var scenePhase
@@ -92,6 +93,7 @@ private struct LoginView: View {
   @State private var username = "admin"
   @State private var password = ""
   @State private var submitting = false
+  @State private var showingBuildIdentity = false
   @State private var failure: String?
 
   var body: some View {
@@ -118,6 +120,7 @@ private struct LoginView: View {
           submitting || session.connection == nil
             || username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty)
       }.disabled(submitting)
+      Section { Button("构建信息") { showingBuildIdentity = true } }
       if let message = failure ?? session.error { Section { Text(message).foregroundColor(.red) } }
       if session.health.status == .offline {
         Section {
@@ -127,6 +130,6 @@ private struct LoginView: View {
           Button("重新检测") { Task { await session.refresh() } }
         }
       }
-    }
+    }.sheet(isPresented: $showingBuildIdentity) { BuildIdentityView() }
   }
 }

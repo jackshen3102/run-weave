@@ -9,7 +9,7 @@ import {
 import { resolve } from "node:path";
 import { acquireLock } from "./lock.mjs";
 import { preflight } from "./preflight.mjs";
-import { loadSuite, prepare } from "./prepare.mjs";
+import { loadSuite, prepare, recordInstallIdentity } from "./prepare.mjs";
 import {
   alive,
   bundleID,
@@ -206,6 +206,14 @@ export async function runBatch(options) {
       installReceipt = readJSON(resolve(dir, "install.json"));
     } catch {
       /* No installation proof. */
+    }
+    if (installReceipt) {
+      await recordInstallIdentity(
+        artifacts.app,
+        report.device.identifier,
+        dir,
+        lock,
+      );
     }
     const installedTarget = installReceipt?.result?.installedApplications?.find(
       (item) => item.bundleID === bundleID,

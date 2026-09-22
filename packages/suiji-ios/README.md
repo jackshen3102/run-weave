@@ -98,3 +98,9 @@ Runweave Native 为 `com.runweave.app.native`，已退役的旧 `app` 为 `com.r
 追加使用 EditorModel 的跟进模式，DraftStore 按父记录保存在独立 followup 命名空间；复用附件导入、请求冻结和手动重试，不污染原文草稿。任务完成仍使用原入口。纯追加不增加父版本，摘要按最新 sequence 合并。旧服务缺能力字段时隐藏新入口。
 
 mapping:check 可附加 `SUIJI_VERIFY_FOLLOWUP_RECORD_ID`，核对真实跟进页和摘要 Swift 往返映射。行为用例见 [跟进客户端](../../docs/testing/suiji/followups-clients.testplan.yaml)，构建/安装不等于其行为全部通过。
+
+## 源码构建身份
+
+共享 scheme 构建时生成安装包内的 `BuildIdentity.json`，记录提交、源码指纹及构建配置。
+连接页或连接设置中的“构建信息”可按需离线导出该文件。
+本功能不采集运行日志；回查构建和安装记录见 [构建身份](../ios-build-identity/README.md)。

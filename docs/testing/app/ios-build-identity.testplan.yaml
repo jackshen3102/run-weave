@@ -1,0 +1,163 @@
+version: 1
+name: iOS 源码构建身份与安装追溯
+description: >
+  验证安装包身份、源码输入和本机构建安装证据的对应关系。
+  每例只使用本例持有的隔离源码副本、构建目录与设备租约，不依赖其他例的结果。
+  通用用例分别以 Runweave 和随记为目标独立执行并保存两份结果，不能用一个 App 的结果代替另一个。
+  原生交互使用 toolkit:agent-device；Simulator 使用共享池并在结束后 finish。
+  构建、安装工具返回、实际运行身份和 UI 导出分别留证；本文件格式通过不代表行为通过。
+
+cases:
+  - id: IOSBUILD-001
+    name: 脚本构建产物与本机记录使用同一身份
+    required: true
+    description: >
+      一次脚本构建成功后，主 bundle 的 BuildIdentity.json 与按 buildId 保存的本机记录一致。
+    preconditions:
+      - 目标 App 的身份注入已实现，本例持有可构建的源码副本、独立构建目录和已分配 Simulator UDID。
+      - 已记录当前源码 HEAD、实际输入清单、配置和工具链，Python 3 与 Xcode 可用。
+    steps:
+      - 在目标包执行 node scripts/ios.mjs build 并指定本例 Simulator 和 Debug；确认命令成功。
+      - 从产物主 bundle 解析 BuildIdentity.json；确认 schemaVersion 为 1，buildId 非空，App、配置、SDK、HEAD 与本例一致。
+      - 按 buildId 找到本机 manifest；确认身份与 bundle 一致，构建成功证据真实存在，没有未经安装就声称安装或运行成功。
+
+  - id: IOSBUILD-002
+    name: 直接 Xcode 构建会注入身份
+    required: true
+    description: >
+      不经过 Node 或 Simulator 包装脚本，Xcode 宿主仍执行身份生成并生成对应记录。
+    preconditions:
+      - 目标宿主已接入构建阶段，本例独立 DerivedData 尚无构建产物。
+      - 本例具有 Xcode 操作能力和分配的 Simulator，目标工程及签名条件可用。
+    steps:
+      - 直接在 Xcode 打开目标工程，选择本例 Simulator 执行 Build；保存构建日志与真实产物路径。
+      - 解析产物中的身份与本机 manifest；确认来源于本次构建，配置与目标一致，没有依赖包装脚本提前生成的文件。
+      - 检查记录状态；确认没有可靠安装回执时保持未观测，不因 Xcode 构建成功就声称手机运行了该产物。
+
+  - id: IOSBUILD-003
+    name: 同一提交下的本地源码修改改变输入指纹
+    required: true
+    description: >
+      指纹反映作用域内磁盘源码；同一 HEAD 的修改不能被当作同一份源码。
+    preconditions:
+      - 本例拥有专用源码副本和构建目录，可修改其中无业务副作用的 Swift 注释或资源，不能修改用户工作区。
+      - 目标 App 的输入清单和生成排除规则已明确，本例 HEAD 在所有构建中保持不变。
+    steps:
+      - 对未修改输入构建 A 并记录身份；确认 sourceState 为 clean。
+      - 修改目标 Sources 中一个已跟踪文件并构建 B；确认 HEAD 相同、sourceState 为 modified，inputsSHA256 与 A 不同。
+      - 在作用域内增加可编译的未跟踪 Swift 文件并构建 C，再删除该文件构建 D；确认 C 与 B 不同，D 恢复到 B 的源码指纹，各次 buildId 独立。
+      - 核对本例各 manifest；确认没有将 modified 构建标成仅凭 HEAD 即可精确恢复。
+
+  - id: IOSBUILD-004
+    name: 指纹覆盖本地依赖且排除生成输出
+    required: true
+    description: >
+      本地 Swift 依赖变化必须使指纹变化，生成目录和不相关文档不能造成输入自污染。
+    preconditions:
+      - 本例独立源码副本含 browser-ios、ios-build-identity，以及目标 App 的实际依赖和排除规则。
+      - 本例可在专用副本中对依赖源码进行无业务副作用的修改。
+    steps:
+      - 构建基线并记录指纹；修改实际使用的本地依赖源码后再次构建，确认 inputsSHA256 改变。
+      - 保持所有构建输入不变，仅增加构建输出、本机构建记录和不相关文档；再次构建，确认源码指纹保持不变。
+      - 核对输入清单与身份算法版本；确认依赖锁定文件及生成器本身在范围内，BuildIdentity.json 不反过来参与自身哈希。
+
+  - id: IOSBUILD-005
+    name: 增量重建刷新构建身份但保持相同源码指纹
+    required: true
+    description: >
+      无源码变化的连续构建可以共享源码指纹，但必须具有不同的构建身份，不能沿用旧资源。
+    preconditions:
+      - 本例独立源码副本和 DerivedData 可连续构建，期间没有其他任务修改源码。
+      - 目标 App 已接入构建开始和结束的身份阶段。
+    steps:
+      - 在同一 DerivedData 连续完成两次构建，不清理中间缓存；保存两份 bundle 身份及日志。
+      - 确认两个 inputsSHA256 相同，buildId 不同且 builtAt 对应各次构建，两个本机记录均可回查。
+
+  - id: IOSBUILD-006
+    name: 构建中输入变化使本次产物不可接受
+    required: true
+    description: >
+      构建开始与结束输入不一致时明确失败，不能生成成功或安装证据。
+    preconditions:
+      - 本例可控制专用源码副本的构建时机，在开始采集后、结束复核前修改一个输入文件。
+      - 本例已有一份独立保留的旧成功产物，用于确认失败不会被旧产物掩盖。
+    steps:
+      - 开始构建并在指定窗口修改本例输入；确认结束复核报告输入变化且构建失败。
+      - 检查本机记录与安装动作；确认本次没有成功状态或安装回执，旧成功产物身份没有被覆盖成新身份。
+      - 停止修改并重新完整构建；确认只有这次稳定构建可形成新的有效产物和成功记录。
+
+  - id: IOSBUILD-007
+    name: 无 Git 元数据时不伪造源码提交
+    required: true
+    description: >
+      从无 .git 的完整源码副本构建仍可记录实际输入，但提交和干净状态明确为未知。
+    preconditions:
+      - 本例拥有位于其他 Git 仓库之外、不含 .git 的完整可构建源码副本，依赖可解析。
+      - 使用直接 xcodebuild，避免包装器的 Git 工作区约束遮蔽身份生成行为。
+    steps:
+      - 直接构建目标宿主并解析 bundle 身份；确认构建成功、inputsSHA256 可用、sourceRevision 为 null、sourceState 为 unknown。
+      - 核对本机 manifest；确认没有沿用旧提交、父目录提交或将 unknown 写为 clean。
+
+  - id: IOSBUILD-008
+    name: 多工作区和配置构建互不覆盖
+    required: true
+    description: >
+      不同工作区和目标配置的构建资源及记录必须准确归属于各自产物。
+    preconditions:
+      - 本例有两个隔离源码副本及独立 DerivedData，其中一个含已知输入修改。
+      - 本例可分别构建 Debug 和 Release，设备资源不与其他任务冲突。
+    steps:
+      - 分别在两个副本构建 Debug 与 Release，保留各自产物及 manifest。
+      - 确认 buildId、配置、输入指纹及本机源码路径对应正确，没有读到另一工作区的临时身份。
+      - 确认 Release 也包含构建身份，未引入 Debug 实验室或注入入口。
+
+  - id: IOSBUILD-009
+    name: 手机运行 A 时不会被工作区 B 冒充
+    required: true
+    description: >
+      已安装 App 的导出以 bundle 身份为准，不能读取电脑当前 HEAD 或最新构建作为运行身份。
+    preconditions:
+      - 本例持有目标 App 的 Simulator 租约、独立源码副本和可用构建信息导出入口。
+      - 本例可自行构建、安装 A，并在同一副本修改源码构建 B，期间不安装 B。
+    steps:
+      - 构建并安装 A，使用 toolkit:agent-device 启动目标 App 并导出基线；确认导出的 buildId 为 A。
+      - 修改本例源码并构建 B，保留手机上的 A；再次实际操作 App 导出，确认导出的身份仍与 A 的 bundle 文件完全一致。
+      - 按导出的 buildId 回查 A 的 manifest；确认 Agent 能判定当前工作区指纹属于 B，与 A 不匹配，不能声称已还原 A 的未提交源码。
+
+  - id: IOSBUILD-010
+    name: 安装失败不产生成功回执
+    required: true
+    description: >
+      安装记录真实区分构建成功和安装失败，不能仅凭产物存在就标记已安装。
+    preconditions:
+      - 本例已有独立构建的有效产物，并持有专用 Simulator 租约。
+      - 可让本例安装命令明确失败，例如使用本例制作的无效安装包；不破坏真实产物或占用他人设备。
+    steps:
+      - 经接入追溯的安装入口执行失败安装，保存工具原始结果；确认记录为安装失败且不存在成功回执。
+      - 检查此前成功构建记录仍保留，未生成运行观察或 UI 验收通过状态。
+
+  - id: IOSBUILD-011
+    name: 真机签名产物可运行并导出对应构建身份
+    required: true
+    description: >
+      真机闭环证明签名前注入未破坏签名，运行中的 App 身份与本次安装产物一致。
+    preconditions:
+      - 本例持有已连接、配对、解锁的 iPhone 租约及目标 App 有效签名条件。
+      - 本例可自行构建目标 App，已读取 toolkit:agent-device，设备未被其他任务占用。
+    steps:
+      - 用目标宿主真实构建真机产物并执行 codesign --verify --deep --strict；确认成功且 bundle 身份可解析。
+      - 用 devicectl 安装，保存本次工具回执并关联 buildId；确认安装成功证据与目标 Bundle ID、设备对应。
+      - 启动 App 并重新获取原生 UI，通过 toolkit:agent-device 导出构建信息；确认 JSON 与安装产物内的 BuildIdentity.json 一致，单独保存交互和 JSON 证据。
+      - 只在真实完成导出后判定此例通过；设备或 UI 自动化不可用时记录 blocked，不用安装成功代替。
+
+  - id: IOSBUILD-012
+    name: 身份生成失败不能沿用旧身份继续构建
+    required: true
+    description: >
+      生成器或必要依赖失败必须使本次构建失败，不能复用缓存中的旧 BuildIdentity.json。
+    preconditions:
+      - 本例专用源码副本及 DerivedData 已自行完成一次有效构建并保存旧产物身份。
+      - 可仅在本例构建环境让身份生成器返回失败，不修改全局 Python、Git 或他人环境。
+    steps:
+      - 对本例注入生成失败并进行增量构建；确认 Xcode 明确失败且日志指向身份生成错误。
+      - 检查本机追溯状态；确认没有把旧产物或旧 buildId 登记为本次成功构建，也未执行安装。
