@@ -60,6 +60,16 @@ Trae family 的 ready 判定必须来自当前启动轮次的真实输出。Agen
 
 另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 的独立 Codex app-server 进程也可以用 `thread/read=active` 写入 `payload.compensation=true` 的 lifecycle observation，把陈旧 projection 恢复为 `agent_running`。独立进程返回的 `idle`、`notLoaded`、`systemError` 和读取失败都不是其它 TUI 进程已停止的证据；`agent_running -> agent_idle` 只接受同一 thread rollout 中不早于当前 projection 的 `task_complete` 或 `turn_aborted`。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
 
+Backend 还对停留在 `agent_starting` 的 Panel 做受限补偿，入口见
+[StartingPanelStateReconciler](../../backend/src/app-server/starting-panel-reconciler.ts)。仅当 Session/Panel
+仍在运行、当前命令与 provider/thread 一致、活动租约为 active，且没有 preparation 或 operation
+generation 时，才读取 App Server 的 ThreadRef 列表投影。投影必须身份已解析，匹配当前项目、cwd
+和 Panel，且更新时间不早于活动观测；未带 Panel 的旧投影仅允许用于唯一运行 Panel。
+
+请求完成后重新核对 Panel、thread、命令、pane 和活动版本；只有新鲜的 idle/running 投影能把
+starting 改为 idle/running。每 30 秒最多检查 8 个候选，单轮 2 秒预算；超时、取消、身份缺失
+或响应迟到保持原状态。该路径不重放 hook、不制造完成通知，也不用于 running → idle 的判定。
+
 终端 session 生命周期是最高优先级 guard。只要 session 已退出，读取当前状态时必须返回 `shell_idle`，即使内存里残留了 agent 状态或 active command。
 
 ## API
@@ -111,7 +121,7 @@ GET /api/app-server/threads
 GET /api/app-server/threads/:threadId
 ```
 
-这个入口用于排查某个 `threadId` 或 `terminalSessionId` 当前在 App Server projection 中的状态和归属。它不能替代 `/api/terminal/session/:terminalSessionId/state`，也不能作为 Stop 按钮、handoff 或 App 展示的权威状态源。
+这个客户端入口用于排查某个 `threadId` 或 `terminalSessionId` 当前在 App Server projection 中的状态和归属。Backend 的 starting 补偿另受上文身份与新鲜度门禁约束；客户端查询不能替代 `/api/terminal/session/:terminalSessionId/state`，也不能作为 Stop 按钮、handoff 或 App 展示的权威状态源。
 
 ## 与完成通知的边界
 

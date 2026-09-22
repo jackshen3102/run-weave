@@ -93,3 +93,34 @@ pnpm runtime:pack-and-install
 - Electron shell、preload API、菜单、CDP Proxy、原生模块、权限模型变化仍需完整客户端更新。
 - `node-pty` 等原生模块继续使用打包内置资源；runtime 包不承诺携带新的原生 ABI。
 - manifest 路径、zip 解压和 sha256 校验是安全边界；坏包应失败并回滚，而不是部分加载。
+
+## 定时任务运行
+
+定时任务由 Backend 持有，关闭页面不停止调度；未打开运行记录时不创建终端。
+管理与恢复合同见 [定时任务接入](../../frontend/docs/scheduled-tasks.md)，HTTP/DTO 分别以
+[路由](../../backend/src/routes/scheduled-tasks.ts)与 [共享合同](../../packages/shared/src/scheduled-tasks/index.ts)为准。
+任务、运行配置快照、幂等记录和输出存于独立 `scheduled-tasks.sqlite`，默认目录为
+`<browserProfileDir>/scheduled-tasks`，可用 `RUNWEAVE_SCHEDULED_TASKS_HOME` 指定。
+
+| 配置 | 默认值与用途 |
+| --- | --- |
+| `RUNWEAVE_SCHEDULED_TASKS_ENABLED` | 默认启用；`false` 禁用后台调度 |
+| `RUNWEAVE_SCHEDULED_TASK_TIMEOUT_MS` | 7200000（2 小时），单次后台执行上限 |
+| `RUNWEAVE_SCHEDULED_TASK_MAX_OUTPUT_BYTES` | 16777216（16 MiB），单次输出上限 |
+| `RUNWEAVE_CODEX_BIN` | `codex`；启动时检查 CLI、登录状态及 tmux 可用性 |
+
+Backend 每 5 秒检查到期任务，最多同时执行一个后台任务；同任务未结束时不重叠。
+迟到超过 60 秒记录 missed 并跳到未来安排，不回放休眠或停机期间的历史执行。
+暂停只影响后续安排；停止运行等待自有进程退出，不回滚已发生的文件或外部操作。
+重启后对旧 owner 的判断保持保守，无法确认退出时返回 `owner_unresolved`，不靠租约超时重放提示词。
+关闭 Backend 时先停止调度并排空执行，再关闭存储；存储初始化失败时接口报告调度不可用。
+
+当前只启用通过可用性检查的 Codex，TraeX/Pi 不可用；结构化权限等待和人工接管尚未实现。
+后台运行过滤父终端身份，以独立 run ID 记录，不应借用交互式终端的 Session/Panel 身份。
+普通终端恢复必须确认原 thread 与 cwd，命令已提交不等于 attachment ready；后续自由追问不改已完成运行结果。
+
+Electron 与 runtime 发布产物必须包含 `scheduled-tasks-sqlite-worker.cjs`；实际 worker 由
+`RUNWEAVE_SCHEDULED_TASKS_WORKER_ENTRY` 指向当前产物。只替换页面或 Backend 主 bundle 不足以交付该能力。
+验证入口为 `pnpm scheduled-tasks:verify-runtime`、[Backend 合同](../testing/scheduled-tasks/runtime.testplan.yaml)
+和 [Web 合同](../testing/scheduled-tasks/web.testplan.yaml)。既有记录的 SRT-008 权限等待/接管仍未通过，
+其他历史通过记录不代表本轮重跑；本次文档维护不启动任务或恢复真实对话。

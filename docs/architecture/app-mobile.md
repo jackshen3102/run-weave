@@ -37,6 +37,12 @@ runtime。迁移对照中的模块覆盖不能代替对应运行时的输入、�
 发布需先升级 Backend；未知实现若忽略未知字段，不在已验证兼容承诺内。实际终端/Agent 历史不属于
 快捷回复库的纯本地承诺。
 
+一键回复与个人回复库分开：在输入器中展开一键回复后，终端底部提供“可以”“继续”，点击立即按 line
+模式发送并回车，不消耗或改写文字/附件草稿，也不收录 Backend 快捷历史。离线、不可写、
+发送中或停止中禁用；未确认的发送显示错误，不自动重发。实现入口为
+[TerminalInstantReplyBar](../../packages/app-ios/Sources/RunweaveIOS/Features/Terminal/Input/TerminalInstantReplyBar.swift)。
+本轮仅核对源码，未执行原生按钮交互验收。
+
 ## 手机扫码登录
 
 Electron 已登录连接的“当前连接 → 连接手机”入口与 iOS 连接管理的“扫码连接电脑”配合使用。
@@ -74,3 +80,7 @@ iOS 扫码使用独立临时客户端，不借用原连接 Bearer；相机只在
 当前问题与证据边界见 [验收状态](../../packages/app-ios/docs/validation-status.md)。
 历史 Ionic/Capacitor 客户端已退役，其源码与迁移过程可从 Git 历史查阅。
 App Server 是独立的桌面事件服务，名称中的 App 不表示旧移动客户端依赖。
+
+真机预检与批内复用的入口见 [iOS README](../../packages/app-ios/README.md#真机操作与取证)，
+合同见 [设备预检计划](../testing/app/ios-device-preflight-reuse.testplan.yaml)。历史记录中的系统
+授权等待未在自然再授权窗口完成验收，不能从构建成功或批执行通过推断该分支已验证。
