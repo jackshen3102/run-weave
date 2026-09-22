@@ -7,6 +7,7 @@ import { runActivityCommand } from "./commands/activity.js";
 import { runAuthCommand } from "./commands/auth.js";
 import { runExperienceCommand } from "./commands/experience.js";
 import { runEvolutionCommand } from "./commands/evolution.js";
+import { runKnowledgeCommand } from "./commands/knowledge.js";
 import { runHealthCommand } from "./commands/health.js";
 import { runFeishuCommand } from "./commands/feishu.js";
 import { runProjectCommand } from "./commands/project.js";
@@ -74,6 +75,10 @@ export async function runCli(
       await runExperienceCommand(subcommand, args, io);
       return 0;
     }
+    if (group === "knowledge") {
+      await runKnowledgeCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "evolution") {
       await runEvolutionCommand(subcommand, args, io);
       return 0;
@@ -91,7 +96,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw <activity|agent-team|app|app-server|auth|browser|evolution|experience|feishu|project|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <activity|agent-team|app|app-server|auth|browser|evolution|experience|knowledge|feishu|project|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

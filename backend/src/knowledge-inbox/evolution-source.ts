@@ -173,6 +173,7 @@ export class EvolutionInboxSource implements InboxSourceReader {
         projectName: publicText(repository.name),
         source: this.source,
         sourceId: insight.insightId,
+        sourceRevisionId: revision.revisionId,
         sourceRevision: digest(
           JSON.stringify([
             revision.revisionId,

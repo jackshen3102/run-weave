@@ -20,6 +20,7 @@ import {
   type PublishedItem,
 } from "./types";
 import { digest, publicText } from "./projection";
+import type { KnowledgeShareService } from "./shares";
 
 type InboxQuery = InboxListQuery & { limit: number };
 interface Snapshot {
@@ -28,6 +29,7 @@ interface Snapshot {
   revision: number;
 }
 export class KnowledgeInboxService {
+  shares?: KnowledgeShareService;
   private tail: Promise<unknown> = Promise.resolve();
   private closed = false;
   constructor(

@@ -3,8 +3,16 @@ import type {
   InboxListQuery,
   InboxPage,
   InboxStateChange,
+  KnowledgeShareResult,
 } from "@runweave/shared/knowledge-inbox";
 import { requestJson } from "./http";
+export function shareInboxItem(apiBase: string, token: string, item: InboxItem): Promise<KnowledgeShareResult> {
+  return requestJson(apiBase, `/api/knowledge-inbox/items/${encodeURIComponent(item.itemId)}/share`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ contentVersion: item.contentVersion, sourceRevision: item.sourceRevision }),
+  });
+}
 export function fetchInbox(
   apiBase: string,
   token: string,

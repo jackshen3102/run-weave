@@ -1,5 +1,10 @@
 import Foundation
 
+struct KnowledgeShareResult: Decodable {
+  let reference: String
+  let text: String
+}
+
 struct InboxRepository: Decodable, Identifiable {
   let repositoryId: String
   let displayName: String

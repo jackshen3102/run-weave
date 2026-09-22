@@ -2,6 +2,11 @@ import Foundation
 
 struct KnowledgeInboxService {
   let api: APIClient
+  func share(_ item: InboxItem) async throws -> KnowledgeShareResult {
+    try await api.authorized("/api/knowledge-inbox/items/\(APIClient.pathComponent(item.id))/share", method: "POST", body: [
+      "contentVersion": item.contentVersion, "sourceRevision": item.sourceRevision,
+    ], retryUnauthorized: false)
+  }
   func list(state: String = "pending", source: String = "", repositoryID: String = "", limit: Int = 20, cursor: String? = nil) async throws -> InboxPage {
     var query = URLComponents()
     query.queryItems = [URLQueryItem(name: "state", value: state), URLQueryItem(name: "limit", value: String(limit))]
