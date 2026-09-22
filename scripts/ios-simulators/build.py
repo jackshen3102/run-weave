@@ -5,30 +5,14 @@ import os
 from pathlib import Path
 import plistlib
 import subprocess
+import sys
+import json
+import uuid
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ios-build"))
+from identity import fingerprint, directory as identity_directory
 
 from pool import APPS, capture, devices, fail, guard, load_pool, now, operation, project, task, write
-
-
-def inputs(paths):
-    digest = hashlib.sha256()
-    for base in paths:
-        def visit(path):
-            if path.name in (".git", ".build", ".swiftpm", "xcuserdata", "__pycache__"):
-                return
-            if path.is_symlink():
-                fail("artifact_unverified", f"Build input symlink is not supported: {path}", 1)
-            if path.is_dir():
-                for child in sorted(path.iterdir()):
-                    visit(child)
-            elif path.is_file():
-                digest.update(str(path.relative_to(base.parent)).encode() + b"\0")
-                digest.update(str(path.stat().st_mode).encode() + b"\0")
-                digest.update(path.read_bytes())
-            else:
-                digest.update(str(path.relative_to(base.parent)).encode() + b"\0")
-                digest.update(b"missing")
-        visit(base)
-    return digest.hexdigest()
 
 
 def binary(app):
@@ -84,17 +68,18 @@ def run_app(options):
             if result.returncode:
                 fail("command_failed", f"{args[0]} exited {result.returncode}", 1)
             return result.stdout.strip() if captured else None
-        paths = [package / "Package.swift", package / "Package.resolved", package / "Sources",
-                 package / "ios", root / "packages/browser-ios"]
-        if app_name == "runweave":
-            paths.append(package / "Vendor")
-        before = inputs(paths)
+        before = fingerprint(root, app_name)[0]
         run(["xcodebuild", *flags, "-configuration", options.configuration,
              "-destination", f"platform=iOS Simulator,id={udid}",
              "CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-", "build"])
-        if before != inputs(paths):
+        if before != fingerprint(root, app_name)[0]:
             fail("artifact_unverified", "Build inputs changed during compilation; rebuild before installation", 1)
-        artifact = {"worktree": str(root), "repositoryId": repository,
+        identity = json.loads((app / "BuildIdentity.json").read_text())
+        if identity["inputsSHA256"] != before or identity["appId"] != app_name:
+            fail("artifact_unverified", "Bundle build identity differs from input fingerprint", 1)
+        evidence_dir = identity_directory(root, identity)
+        write(evidence_dir / "build-result.json", {"buildId": identity["buildId"], "status": "built", "at": now(), "appPath": str(app)})
+        artifact = {"buildId": identity["buildId"], "identity": identity,"worktree": str(root), "repositoryId": repository,
                     "head": capture(["git", "rev-parse", "HEAD"], root),
                     "inputsSHA256": before, "configuration": options.configuration,
                     "appPath": str(app), "builtAt": now(), **binary(app)}
@@ -105,10 +90,17 @@ def run_app(options):
             if device["state"] != "Booted":
                 run(["xcrun", "simctl", "boot", udid])
             run(["xcrun", "simctl", "bootstatus", udid, "-b"])
-            run(["xcrun", "simctl", "install", udid, str(app)])
+            receipt = {"buildId": identity["buildId"], "device": udid, "at": now(), "runtimeObserved": False}
+            receipt_file = evidence_dir / ("install-" + str(uuid.uuid4()) + ".json")
+            try:
+                run(["xcrun", "simctl", "install", udid, str(app)])
+            except BaseException:
+                write(receipt_file, {**receipt, "status": "failed"})
+                raise
             installed = Path(run(["xcrun", "simctl", "get_app_container", udid, APPS[app_name], "app"], True))
-            if binary(installed) != binary(app):
+            if binary(installed) != binary(app) or (installed / "BuildIdentity.json").read_bytes() != (app / "BuildIdentity.json").read_bytes():
                 fail("artifact_unverified", "Installed executable differs from this worktree's build", 1)
+            write(receipt_file, {**receipt, "status": "installed", "binarySHA256": binary(installed)["binarySHA256"]})
             artifact.update(udid=udid, lease=op.owner["lease"], installedAt=now())
             write(Path(options.task_dir) / "installed-app.json", artifact)
             run(["xcrun", "simctl", "launch", udid, APPS[app_name]])

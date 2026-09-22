@@ -1,3 +1,4 @@
+import IOSBuildIdentity
 import SwiftUI
 
 struct EnvironmentPicker: View {
@@ -14,6 +15,7 @@ struct EnvironmentPicker: View {
 struct ConnectionView: View {
   @ObservedObject var session: SuijiSession
   @State private var password = ""
+  @State private var showingBuildIdentity = false
   var body: some View {
     NavigationStack {
       Form {
@@ -31,9 +33,11 @@ struct ConnectionView: View {
           }.disabled(session.username.isEmpty || password.isEmpty || session.endpoint.isEmpty)
           Button("恢复已有登录") { Task { await session.connect() } }.disabled(session.endpoint.isEmpty)
         }.disabled(session.connecting)
+        Section { Button("构建信息") { showingBuildIdentity = true } }
         if session.connecting { Section { ProgressView("正在连接\(session.environment.label)环境…") } }
         if !session.message.isEmpty { Section { Text(session.message).foregroundStyle(.orange) } }
       }.navigationTitle("\(session.environment.label)账户")
+        .sheet(isPresented: $showingBuildIdentity) { BuildIdentityView() }
     }
   }
 }
@@ -41,6 +45,7 @@ struct ConnectionView: View {
 struct ConnectionSettingsView: View {
   @ObservedObject var session: SuijiSession
   @Environment(\.dismiss) private var dismiss
+  @State private var showingBuildIdentity = false
   var body: some View {
     NavigationStack {
       Form {
@@ -52,10 +57,12 @@ struct ConnectionSettingsView: View {
           Text("已登录\(session.environment.label)环境").foregroundStyle(.secondary)
           Button("更换服务地址") { dismiss(); Task { await session.editConnection() } }
         }
+        Section { Button("构建信息") { showingBuildIdentity = true } }
         Section {
           Button("退出\(session.environment.label)账户", role: .destructive) { dismiss(); Task { await session.logout() } }
         } footer: { Text("只退出当前环境，保留本机草稿。") }
       }.navigationTitle("连接设置").toolbar { Button("关闭") { dismiss() } }
+        .sheet(isPresented: $showingBuildIdentity) { BuildIdentityView() }
     }
   }
 }

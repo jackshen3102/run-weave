@@ -178,3 +178,9 @@ Debug 的认证撤销按钮另需 `--native-auth-validation`，只用于本例�
 - [编码约束](AGENTS.md)：本目录的变更与验证要求。
 
 模拟器安装前先按[共享设备池](../../docs/cli/ios-simulators.md)申请本 App 槽位，整个验证任务共用 task-dir，结束执行 finish。
+
+## 源码构建身份
+
+共享 scheme 构建时生成安装包内的 `BuildIdentity.json`，记录提交、源码指纹及构建配置。
+连接页或连接设置中的“构建信息”可按需离线导出该文件。
+本功能不采集运行日志；回查构建和安装记录见 [构建身份](../ios-build-identity/README.md)。

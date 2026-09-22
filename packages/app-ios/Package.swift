@@ -7,11 +7,11 @@ let package = Package(
   products: [.library(name: "RunweaveIOS", targets: ["RunweaveIOS"])],
   dependencies: [
     .package(path: "Vendor/SwiftTerm"),
-    .package(path: "../browser-ios")
+    .package(path: "../browser-ios"), .package(path: "../ios-build-identity")
   ],
   targets: [
     .target(name: "RunweaveIOS", dependencies: [
-      "SwiftTerm", .product(name: "RunweaveBrowser", package: "browser-ios")
+      "SwiftTerm", .product(name: "RunweaveBrowser", package: "browser-ios"), .product(name: "IOSBuildIdentity", package: "ios-build-identity")
     ])
   ],
   swiftLanguageModes: [.v5]

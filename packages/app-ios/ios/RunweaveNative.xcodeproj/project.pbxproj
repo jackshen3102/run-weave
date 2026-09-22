@@ -58,6 +58,7 @@
 				878A52FC5FF6A57D50B7B870 /* Sources */,
 				E2AA269EB967A8853A258BFA /* Frameworks */,
 				41D311A605520FC7B8B9A980 /* Resources */,
+				AABCDEF12345678900000001 /* Verify build identity */,
 			);
 			buildRules = (
 			);
@@ -111,6 +112,21 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+        AABCDEF12345678900000001 /* Verify build identity */ = {
+            isa = PBXShellScriptBuildPhase;
+            alwaysOutOfDate = 1;
+            buildActionMask = 2147483647;
+            files = ();
+            inputPaths = ();
+            outputPaths = ("$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/BuildIdentity.json");
+            name = "Verify build identity";
+            runOnlyForDeploymentPostprocessing = 0;
+            shellPath = /bin/sh;
+            shellScript = "set -eu\n/usr/bin/env python3 -B \"$PROJECT_DIR/../../../scripts/ios-build/identity.py\" finish runweave\n";
+        };
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		878A52FC5FF6A57D50B7B870 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -149,6 +165,7 @@
 				APS_ENVIRONMENT = development;
 				RUNWEAVE_APNS_ENVIRONMENT = sandbox;
 				CODE_SIGN_STYLE = Automatic;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P9654G8Z76;
 				INFOPLIST_FILE = RunweaveNative/Info.plist;
@@ -174,6 +191,7 @@
 				APS_ENVIRONMENT = development;
 				RUNWEAVE_APNS_ENVIRONMENT = sandbox;
 				CODE_SIGN_STYLE = Automatic;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P9654G8Z76;
 				INFOPLIST_FILE = RunweaveNative/Info.plist;
@@ -227,6 +245,7 @@
 				APS_ENVIRONMENT = production;
 				RUNWEAVE_APNS_ENVIRONMENT = production;
 				CODE_SIGN_STYLE = Automatic;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P9654G8Z76;
 				EXCLUDED_SOURCE_FILE_NAMES = TerminalProbe.swift;

@@ -120,6 +120,12 @@ function appInputs(dependencies) {
     resolve(pkg, "Package.swift"),
     resolve(pkg, "Package.resolved"),
     resolve(pkg, "Sources"),
+    resolve(pkg, "Vendor"),
+    resolve(pkg, "../browser-ios/Sources"),
+    resolve(pkg, "../browser-ios/Package.swift"),
+    resolve(pkg, "../ios-build-identity/Sources"),
+    resolve(pkg, "../ios-build-identity/Package.swift"),
+    resolve(pkg, "../../scripts/ios-build"),
     resolve(pkg, "ios"),
     resolve(dependencies, "checkouts"),
     resolve(dependencies, "workspace-state.json"),
@@ -287,7 +293,39 @@ export async function prepare(ctx) {
       5,
       app,
     );
-  ctx.data.app = { input, content, path: app, reuse: Boolean(reuse) };
+  const buildIdentity = readJSON(resolve(app, "BuildIdentity.json"));
+  if (
+    buildIdentity.bundleId !== bundleID ||
+    buildIdentity.schemaVersion !== 1 ||
+    !buildIdentity.buildId
+  )
+    throw new DeviceError(
+      "artifact_unverified",
+      "preparing",
+      "Missing App build identity",
+      5,
+      app,
+    );
+  await required(
+    "python3",
+    [
+      "-B",
+      resolve(pkg, "../../scripts/ios-build/cli.py"),
+      "inspect",
+      "--app-path",
+      app,
+    ],
+    ctx,
+    "app-build-identity",
+    30000,
+  );
+  ctx.data.app = {
+    input,
+    content,
+    path: app,
+    reuse: Boolean(reuse),
+    buildId: buildIdentity.buildId,
+  };
   ctx.save();
 
   const template = resolve(pkg, "scripts/device/runner");
@@ -452,4 +490,22 @@ async function validateTestRun(file, derivedData, ctx) {
     if (!path.startsWith(derivedData + "/") || !existsSync(path)) return false;
   }
   return true;
+}
+
+export async function recordInstallIdentity(app, device, dir, lock) {
+  return command(
+    "python3",
+    [
+      "-B",
+      resolve(pkg, "../../scripts/ios-build/cli.py"),
+      "record-install",
+      "--app-path",
+      app,
+      "--receipt",
+      resolve(dir, "install.json"),
+      "--device",
+      device,
+    ],
+    { dir, name: "install-build-identity", owner: lock },
+  );
 }
