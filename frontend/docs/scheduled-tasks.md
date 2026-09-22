@@ -53,6 +53,8 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
   打开接口返回普通终端标识；Web 等待 Backend attachment 明确 ready 后，经现有路由进入终端，
   不将 command_submitted 当作恢复成功。恢复失败/超时留在记录页供重试，不创建专用输入区。
   原执行目录或 thread 历史缺失时拒绝恢复；ready 要求本次恢复的 thread 与 cwd 证据。
+  恢复命令显式传入该次运行快照的模型、推理强度和执行权限，不读取任务的新配置，也不继承
+  本机全局权限覆盖。模型与推理强度通过本次 Codex 设置事件确认后才标记 ready。
   恢复失败后复用绑定重试；终端当前或最近对话已变化时，须显式另开，保留原对话和草稿。
   `source` 持久化并序列化，提供精确到运行记录的轻量回跳。
 - 运行摘要渲染经过净化的 Markdown，禁用原始 HTML；仅 http/https 链接可在新窗口打开。

@@ -1,3 +1,4 @@
+import type { ScheduledTaskConfig } from "@runweave/shared/scheduled-tasks";
 import { open } from "node:fs/promises";
 import { codexAppServerClient } from "../../voice/codex-app-server-client";
 import { ScheduledTaskError } from "../errors";
@@ -50,6 +51,7 @@ export async function confirmCodexResume(
   checkpoint: ResumeCheckpoint,
   threadId: string,
   cwd: string,
+  config: Pick<ScheduledTaskConfig, "model" | "effort">,
 ): Promise<boolean> {
   const file = await open(checkpoint.path, "r");
   try {
@@ -74,7 +76,11 @@ export async function confirmCodexResume(
           record.type === "event_msg" &&
           record.payload?.type === "thread_settings_applied" &&
           record.payload.thread_id === threadId &&
-          record.payload.thread_settings?.cwd === cwd
+          record.payload.thread_settings?.cwd === cwd &&
+          (!config.model ||
+            record.payload.thread_settings.model === config.model) &&
+          (!config.effort ||
+            record.payload.thread_settings.reasoning_effort === config.effort)
         );
       } catch {
         return false;

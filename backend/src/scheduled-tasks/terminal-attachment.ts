@@ -1,3 +1,4 @@
+import { codexScheduledArgs } from "./providers/codex-options";
 import { stat } from "node:fs/promises";
 import type {
   OpenScheduledRunResponse,
@@ -268,6 +269,7 @@ export class ScheduledTerminalAttachment {
           prompt: "Resume scheduled task conversation",
           panelId,
           resumeThreadId: run.threadRef.threadId,
+          args: codexScheduledArgs(run.snapshot),
           cwd: run.cwd,
         },
         { resetPanelBeforeResume: true, skipInitialPrompt: true },
@@ -319,6 +321,7 @@ export class ScheduledTerminalAttachment {
             checkpoint,
             run.threadRef.threadId,
             run.cwd,
+            run.snapshot,
           ))
         ) {
           await this.manager.updatePanelThreadId(

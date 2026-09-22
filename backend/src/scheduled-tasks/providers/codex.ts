@@ -1,3 +1,4 @@
+import { codexScheduledArgs } from "./codex-options";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -51,16 +52,6 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
     if (request.signal.aborted) throw new Error("provider_cancelled");
     const args = [
       "exec",
-      ...(request.executionPolicy === "auto-review"
-        ? ["--approve-for-me"]
-        : [
-            "--sandbox",
-            "workspace-write",
-            "--config",
-            'approval_policy="never"',
-          ]),
-      "--config",
-      "sandbox_workspace_write.network_access=false",
       "--output-schema",
       schemaPath,
       "--skip-git-repo-check",
@@ -69,13 +60,7 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
       "--json",
       "--cd",
       request.workingDirectory,
-      ...(request.model ? ["--model", request.model] : []),
-      ...(request.effort
-        ? [
-            "--config",
-            `model_reasoning_effort=${JSON.stringify(request.effort)}`,
-          ]
-        : []),
+      ...codexScheduledArgs(request),
       "-",
     ];
     const child = spawn(this.binary, args, {

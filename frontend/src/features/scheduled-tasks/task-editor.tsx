@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "../../components/ui/dialog";
+import { TaskModelSettings } from "./model-settings";
 import { TaskProjectSelect } from "./project-select";
 import { useScheduledApi, useRefreshTasks, scheduledKeys } from "./queries";
 import { displayTime, fieldClass, RequestError } from "./presentation";
@@ -177,10 +178,13 @@ export function TaskEditor({
               className={fieldClass}
               value={draft.provider}
               onChange={(e) =>
-                change(
-                  "provider",
-                  e.target.value as CreateScheduledTaskRequest["provider"],
-                )
+                setDraft((current) => ({
+                  ...current,
+                  provider: e.target
+                    .value as CreateScheduledTaskRequest["provider"],
+                  model: "",
+                  effort: "",
+                }))
               }
             >
               {capabilities.providers.map((item) => (
@@ -204,6 +208,15 @@ export function TaskEditor({
               {provider?.reason ?? "当前 Agent 不可用"}
             </p>
           ) : null}
+          <TaskModelSettings
+            key={draft.provider}
+            provider={draft.provider}
+            model={draft.model ?? ""}
+            effort={draft.effort ?? ""}
+            onChange={(model, effort) =>
+              setDraft((current) => ({ ...current, model, effort }))
+            }
+          />
           <label className="grid gap-1 text-sm">
             任务提示词
             <textarea
@@ -399,45 +412,6 @@ export function TaskEditor({
                 : "超过计划时间 60 秒仍未调度则跳过，等待下一次安排。"}
             </p>
           </section>
-          <details className="rounded-lg border p-3">
-            <summary className="cursor-pointer text-sm">高级设置</summary>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className="grid gap-1 text-sm">
-                模型
-                <Input
-                  value={draft.model}
-                  onChange={(e) => change("model", e.target.value)}
-                  placeholder="Agent 默认配置"
-                  list="scheduled-models"
-                />
-                <datalist id="scheduled-models">
-                  {provider?.models?.map((model) => (
-                    <option key={model} value={model} />
-                  ))}
-                </datalist>
-              </label>
-              <label className="grid gap-1 text-sm">
-                推理强度
-                <select
-                  className={fieldClass}
-                  value={draft.effort}
-                  onChange={(e) => change("effort", e.target.value)}
-                >
-                  <option value="">Agent 默认配置</option>
-                  {[
-                    ...new Set([
-                      ...(provider?.efforts ?? []),
-                      ...(draft.effort ? [draft.effort] : []),
-                    ]),
-                  ].map((effort) => (
-                    <option key={effort} value={effort}>
-                      {effort}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </details>
           {validationError ? (
             <p role="alert" className="text-sm text-destructive">
               {validationError}
