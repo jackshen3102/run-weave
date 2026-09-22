@@ -131,6 +131,10 @@ export function buildPackagedBackendEnv(options: {
             path.dirname(options.backendPaths.activityWorkerEntry),
             "evolution-sqlite-worker.cjs",
           ),
+          RUNWEAVE_SCHEDULED_TASKS_WORKER_ENTRY: path.join(
+            path.dirname(options.backendPaths.activityWorkerEntry),
+            "scheduled-tasks-sqlite-worker.cjs",
+          ),
           RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR:
             options.backendPaths.betterSqlitePackageDir,
           RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING:

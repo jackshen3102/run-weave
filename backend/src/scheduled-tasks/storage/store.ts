@@ -220,6 +220,17 @@ function resolveWorkerEntry(env: NodeJS.ProcessEnv): URL {
   const configured = env.RUNWEAVE_SCHEDULED_TASKS_WORKER_ENTRY?.trim();
   if (configured) return pathToFileURL(path.resolve(configured));
   const current = fileURLToPath(import.meta.url);
+  if (current.endsWith(".cjs")) {
+    // Older desktop shells already provide the selected runtime's Activity
+    // worker path. Use that same resource directory for runtime-only updates.
+    const activityEntry = env.RUNWEAVE_ACTIVITY_WORKER_ENTRY?.trim();
+    return pathToFileURL(
+      path.join(
+        path.dirname(activityEntry ? path.resolve(activityEntry) : current),
+        "scheduled-tasks-sqlite-worker.cjs",
+      ),
+    );
+  }
   return new URL(
     current.endsWith(".ts") ? "./sqlite-worker.ts" : "./sqlite-worker.js",
     import.meta.url,

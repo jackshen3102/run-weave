@@ -121,7 +121,23 @@ await build({
   format: "cjs",
   external: ["better-sqlite3"],
 });
-finalizeActivitySqliteRuntime(activityWorkerEntry, evolutionWorkerEntry);
+const scheduledTasksWorkerEntry = path.resolve(
+  outputDir,
+  "backend",
+  "scheduled-tasks-sqlite-worker.cjs",
+);
+await build({
+  ...shared,
+  entryPoints: ["../backend/src/scheduled-tasks/storage/sqlite-worker.ts"],
+  outfile: scheduledTasksWorkerEntry,
+  format: "cjs",
+  external: ["better-sqlite3"],
+});
+finalizeActivitySqliteRuntime(
+  activityWorkerEntry,
+  evolutionWorkerEntry,
+  scheduledTasksWorkerEntry,
+);
 
 await build({
   ...shared,
