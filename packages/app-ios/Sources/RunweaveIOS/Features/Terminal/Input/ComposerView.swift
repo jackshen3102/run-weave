@@ -278,7 +278,7 @@ struct ComposerView: View {
           onClose()
         }
       } label: {
-        Image(systemName: "bolt.bubble")
+        Image(systemName: "bolt.fill")
           .foregroundColor(showingInstantReplies ? TerminalAppearance.accent : .secondary)
           .frame(width: 44, height: 44)
           .background(showingInstantReplies ? TerminalAppearance.accent.opacity(0.14) : .clear)
