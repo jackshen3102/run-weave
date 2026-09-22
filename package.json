@@ -76,6 +76,7 @@
     "cli:publish:local": "pnpm cli:version:bump && pnpm cli:build && node ./scripts/release/publish-cli-local.mjs",
     "toolkit:sync": "node ./scripts/toolkit/sync.mjs",
     "toolkit:sync:staged": "node ./scripts/toolkit/sync.mjs --if-staged",
+    "toolkit:validate": "node ./scripts/toolkit/validate.mjs",
     "toolkit:verify-hooks": "pnpm --filter ./electron exec tsx ../scripts/toolkit/verify/index.mjs",
     "perf:terminal": "node ./scripts/performance/terminal.mjs",
     "quality:gate": "node ./scripts/quality/gate.mjs",
