@@ -1,10 +1,10 @@
 import type { EvolutionRepository } from "@runweave/shared/evolution";
 import type {
   InboxItem,
+  InboxListQuery,
   InboxPage,
   InboxRepository,
   InboxSourceStatus,
-  InboxState,
   InboxStateChange,
 } from "@runweave/shared/knowledge-inbox";
 import type { EvolutionRepositoryScopes } from "../evolution/repository-scope";
@@ -21,12 +21,7 @@ import {
 } from "./types";
 import { digest, publicText } from "./projection";
 
-export interface InboxQuery {
-  state: InboxState;
-  repositoryId?: string;
-  limit: number;
-  cursor?: string;
-}
+type InboxQuery = InboxListQuery & { limit: number };
 interface Snapshot {
   repositories: EvolutionRepository[];
   sourceStatus: InboxSourceStatus;
@@ -125,6 +120,7 @@ export class KnowledgeInboxService {
           .catalog()
           .flatMap((catalog) => {
             if (
+              (query.source && query.source !== catalog.item.source) ||
               !snapshot.repositories.some(
                 (repo) => repo.repositoryId === catalog.item.repositoryId,
               ) ||
@@ -171,6 +167,7 @@ export class KnowledgeInboxService {
               ? Buffer.from(
                   JSON.stringify({
                     state: query.state,
+                    ...(query.source ? { source: query.source } : {}),
                     repositoryId: query.repositoryId ?? "",
                     itemId: last.itemId,
                     contentUpdatedAt: last.contentUpdatedAt,
@@ -299,8 +296,11 @@ function decodeCursor(query: InboxQuery): Boundary | null {
     ) as Record<string, unknown>;
     if (
       Object.keys(cursor).sort().join() !==
-        "contentUpdatedAt,itemId,repositoryId,state" ||
+        (query.source
+          ? "contentUpdatedAt,itemId,repositoryId,source,state"
+          : "contentUpdatedAt,itemId,repositoryId,state") ||
       cursor.state !== query.state ||
+      cursor.source !== query.source ||
       cursor.repositoryId !== (query.repositoryId ?? "") ||
       typeof cursor.itemId !== "string" ||
       !/^[a-f0-9]{64}$/u.test(cursor.itemId) ||

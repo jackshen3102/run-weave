@@ -17,6 +17,11 @@ Backend API 访问，不直接打开数据库。
 [`knowledge-inbox.ts`](../../packages/shared/src/knowledge-inbox.ts)，发布与消费边界见
 [`knowledge-inbox/`](../../backend/src/knowledge-inbox/)。
 
+iOS 完整列表提供「自进化 / 经验 / 全部」来源筛选，首次默认自进化（洞察与建议），
+与项目、处理状态组合使用。列表 API 的可选 `source` 在分页前过滤；省略仍返回两种来源，
+分页游标绑定来源、项目与处理状态，切换筛选须从第一页读取。此筛选需 Backend 同时支持
+`source` 参数；首页四条预览保持全部来源。
+
 只有归属明确、已提交且仍有可用支持的 Insight 和当前有效的已保存 Experience 可发布。
 关联 Candidate 作为建议补充，不额外产生卡片；待验证建议带明确标签。无效、争议、归属未决
 与内部候选不进入默认列表。详情只包含脱敏正文，不暴露证据、日志、绝对路径或运行 artifact；

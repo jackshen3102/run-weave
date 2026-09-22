@@ -16,6 +16,7 @@ final class KnowledgeInboxModel: ObservableObject {
   @Published private(set) var unsupported = false
   @Published private(set) var offline = false
   @Published var state = "pending"
+  @Published var source = "evolution"
   @Published var repositoryID = ""
   private var service: KnowledgeInboxService?
   private var epoch = UUID()
@@ -37,7 +38,7 @@ final class KnowledgeInboxModel: ObservableObject {
     failure = nil; detailFailure = nil; actionFailure = nil; unsupported = false; offline = false
     partial = false; writing = false; loading = false
     loadedPages = 1; activeFilter = ""
-    state = "pending"; repositoryID = ""; detailID = nil; detailVersion = nil
+    state = "pending"; source = "evolution"; repositoryID = ""; detailID = nil; detailVersion = nil
   }
   func suspend() { writeTask?.cancel() }
   var canWrite: Bool { service != nil && !writing && !offline && !unsupported && failure == nil && detailFailure == nil }
@@ -56,7 +57,8 @@ final class KnowledgeInboxModel: ObservableObject {
   func refreshList(more: Bool = false) async {
     guard let service, !unsupported else { return }
     let current = epoch
-    let filter = "\(state):\(repositoryID)"
+    let selectedState = state, selectedSource = source, selectedRepository = repositoryID
+    let filter = "\(selectedState):\(selectedSource):\(selectedRepository)"
     if activeFilter != filter { items = []; nextCursor = nil; loadedPages = 1; activeFilter = filter }
     let cursor = more ? nextCursor : nil
     if more && cursor == nil { return }
@@ -65,22 +67,23 @@ final class KnowledgeInboxModel: ObservableObject {
     loading = true
     defer { if epoch == current, request == listRequest { loading = false } }
     do {
-      var page = try await service.list(state: state, repositoryID: repositoryID, cursor: cursor)
+      var page = try await service.list(state: selectedState, source: selectedSource, repositoryID: selectedRepository, cursor: cursor)
       var freshItems = page.items
       if !more && loadedPages > 1 {
         for _ in 1..<loadedPages {
-          guard let next = page.nextCursor, epoch == current, !Task.isCancelled else { break }
-          page = try await service.list(state: state, repositoryID: repositoryID, cursor: next)
+          guard let next = page.nextCursor, epoch == current, request == listRequest,
+            filter == "\(state):\(source):\(repositoryID)", !Task.isCancelled else { break }
+          page = try await service.list(state: selectedState, source: selectedSource, repositoryID: selectedRepository, cursor: next)
           freshItems += page.items
         }
       }
-      guard epoch == current, request == listRequest, filter == "\(state):\(repositoryID)", !Task.isCancelled else { return }
+      guard epoch == current, request == listRequest, filter == "\(state):\(source):\(repositoryID)", !Task.isCancelled else { return }
       var seen = Set<String>()
       items = ((more ? items : []) + freshItems).filter { seen.insert($0.id).inserted }
       if more { loadedPages += 1 }
       nextCursor = page.nextCursor; repositories = page.repositories
       partial = page.sourceStatus.status == "partial"; failure = nil; offline = false
-    } catch { if epoch == current, request == listRequest { receive(error) } }
+    } catch { if epoch == current, request == listRequest, filter == "\(state):\(source):\(repositoryID)" { receive(error) } }
   }
   func select(_ item: InboxItem) {
     detailRequest += 1
