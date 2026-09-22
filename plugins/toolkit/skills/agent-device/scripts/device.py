@@ -95,15 +95,23 @@ def check_developer_tools():
     return output
 
 
-def preflight(root, config):
+def check_signing(config):
+    if not (config.get("teamId") and config.get("runnerId")):
+        raise RuntimeError("UI automation requires --team-id and --runner-id at init; launch does not")
+    return "Runner signing identifiers configured; provisioning is not verified"
+
+
+def preflight(root, config, automation=True):
     checks = {
-        "cli": verify_version,
-        "node": check_node,
         "xcode": lambda: capture(["xcodebuild", "-version"]),
         "target": lambda: check_target(config),
     }
+    if automation:
+        checks.update(cli=verify_version, node=check_node)
     if config["kind"] == "device":
-        checks.update(lock=lambda: check_lock(config), developerTools=check_developer_tools)
+        checks.update(lock=lambda: check_lock(config))
+        if automation:
+            checks.update(developerTools=check_developer_tools, signing=lambda: check_signing(config))
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(checks)) as pool:
         pending = {name: pool.submit(check) for name, check in checks.items()}
@@ -113,6 +121,7 @@ def preflight(root, config):
             except (OSError, RuntimeError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
                 results[name] = {"ok": False, "error": str(error)}
     report = {"preflightOk": all(r["ok"] for r in results.values()),
+              "purpose": "automation" if automation else "launch",
               "automationReady": False, "checks": results,
               "unchecked": ["runner provisioning/install quota", "UI Automation authorization",
                             "other XCTest users", "app build provenance"]}
@@ -148,6 +157,64 @@ def simulator_pool(root, kind):
     return module
 
 
+def launch_app(root, config):
+    """Native launch only: wireless updates must not depend on XCTest readiness."""
+    if config["kind"] != "device":
+        raise RuntimeError("launch is for physical devices; simulators use the managed run entry")
+    if preflight(root, config, automation=False):
+        return 2
+    stamp = str(time.time_ns())
+    native = root / f"{stamp}-launch-native.json"
+    started = time.monotonic()
+    print("Launching installed App via CoreDevice; no XCTest or UI verification.", file=sys.stderr, flush=True)
+    result = subprocess.run([
+        "xcrun", "devicectl", "device", "process", "launch", "--device", config["udid"],
+        "--timeout", "30", "--json-output", str(native), config["app"],
+    ], capture_output=True, text=True, timeout=40)
+    data = json.loads(native.read_text()) if native.exists() else {}
+    pid = data.get("result", {}).get("process", {}).get("processIdentifier")
+    code = result.returncode or (0 if type(pid) is int and pid > 0 else 2)
+    report = {"command": "launch", "app": config["app"], "exit": code,
+              "seconds": round(time.monotonic() - started, 3), "processIdentifier": pid,
+              "automationReady": False, "uiVerified": False, "nativeResult": str(native)}
+    write_json(root / f"{stamp}-launch.json", report)
+    if native.exists():
+        native.chmod(0o600)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    if code:
+        print("Native launch failed; inspect nativeResult. No automatic retry.", file=sys.stderr)
+    return code
+
+
+def runner_diagnostic(root, runner_log, offset, output):
+    # Inspect only this invocation, not a failure left by an earlier runner.
+    text = ""
+    try:
+        with runner_log.open("rb") as stream:
+            size = runner_log.stat().st_size
+            stream.seek(max(offset if size >= offset else 0, size - 256_000))
+            text = stream.read().decode("utf-8", errors="replace")
+    except OSError:
+        pass
+    markers = [marker for marker in (
+        "exited with code 74", "Exiting due to IDE disconnection",
+        "Failed to retrieve test configuration from IDE", "Connection peer refused channel request",
+    ) if marker in text]
+    if not markers and "xcodebuild exited early" not in output:
+        return None
+    transport = None
+    try:
+        transport = json.loads((root / "preflight.json").read_text())["checks"]["target"]["detail"].get("transport")
+    except (OSError, ValueError, KeyError, AttributeError):
+        pass
+    return {"code": "ios_xctest_bootstrap_failed" if markers else "ios_runner_exited_early",
+            "transportAtPreflight": transport, "runnerLog": str(runner_log),
+            "evidence": markers, "automationReady": False,
+            "hint": "App launch and UI automation are separate. For launch-only use launch; "
+                    "UI acceptance remains blocked. Inspect the runner log before retrying; "
+                    "increasing a connection timeout cannot revive an exited runner."}
+
+
 def invoke(root, config, command, private=False, daemon=False, operation=None):
     verify_version()
     env = os.environ.copy()
@@ -158,12 +225,19 @@ def invoke(root, config, command, private=False, daemon=False, operation=None):
                 "AGENT_DEVICE_IOS_PROVISIONING_PROFILE", "AGENT_DEVICE_IOS_SIGNING_IDENTITY"):
         env.pop(key, None)
     if config["kind"] == "device":
-        env["AGENT_DEVICE_IOS_TEAM_ID"] = config["teamId"]
-        env["AGENT_DEVICE_IOS_BUNDLE_ID"] = config["runnerId"]
+        if not daemon and command[0] != "close":
+            check_signing(config)
+        if config.get("teamId") and config.get("runnerId"):
+            env["AGENT_DEVICE_IOS_TEAM_ID"] = config["teamId"]
+            env["AGENT_DEVICE_IOS_BUNDLE_ID"] = config["runnerId"]
     args = ["agent-device", *command]
     if not daemon:
         args.extend(["--session", config["session"], "--platform", "ios", "--udid", config["udid"]])
     started = time.monotonic()
+    runner_log = root / "state" / "sessions" / config["session"] / "runner.log"
+    runner_offset = runner_log.stat().st_size if runner_log.exists() else 0
+    print(f"COMMAND_START {command[0]}: waiting for agent-device; UI commands may start XCTest.",
+          file=sys.stderr, flush=True)
     if operation:
         operation.owner["automationPending"] = True
         operation.owner["automationStateDir"] = str(root / "state")
@@ -193,6 +267,12 @@ def invoke(root, config, command, private=False, daemon=False, operation=None):
         logfile.chmod(0o600)
     metric = {"id": stamp, "command": command[0], "seconds": round(time.monotonic() - started, 3),
               "upstreamExit": result.returncode, "exit": code, "outputSaved": not private}
+    if code and not private and config["kind"] == "device":
+        diagnostic = runner_diagnostic(root, runner_log, runner_offset, output)
+        if diagnostic:
+            write_json(root / f"{stamp}.diagnostic.json", diagnostic)
+            metric["diagnostic"] = diagnostic["code"]
+            print("AUTOMATION_DIAGNOSTIC " + json.dumps(diagnostic), file=sys.stderr)
     with (root / "metrics.jsonl").open("a") as stream:
         stream.write(json.dumps(metric) + "\n")
     (root / "metrics.jsonl").chmod(0o600)
@@ -214,7 +294,7 @@ def main():
     init.add_argument("--app", required=True)
     init.add_argument("--team-id")
     init.add_argument("--runner-id")
-    for action in ("check", "stop"):
+    for action in ("check", "stop", "launch"):
         sub.add_parser(action).add_argument("root", type=Path)
     run = sub.add_parser("run", help="Pass a CLI command after --; open uses the bound App")
     run.add_argument("root", type=Path)
@@ -223,8 +303,8 @@ def main():
     options = parser.parse_args()
     root = options.root.resolve()
     if options.action == "init":
-        if options.kind == "device" and not (options.team_id and options.runner_id):
-            parser.error("physical device requires --team-id and --runner-id")
+        if bool(options.team_id) != bool(options.runner_id):
+            parser.error("provide both --team-id and --runner-id, or neither for launch-only")
         if not re.fullmatch(r"[A-Za-z0-9-]+", options.udid):
             parser.error("invalid UDID")
         for value in (options.app, options.runner_id):
@@ -246,6 +326,8 @@ def main():
     config = json.loads((root / "session.json").read_text())
     if config.get("version") != VERSION:
         raise RuntimeError("Task was created for a different CLI version; create a new task")
+    if options.action == "launch":
+        return launch_app(root, config)
     pool = simulator_pool(root, config["kind"])
     context = pool.operation(root, config["app"], config["udid"]) if pool else nullcontext()
     with context as op:

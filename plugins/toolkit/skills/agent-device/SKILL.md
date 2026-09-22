@@ -27,6 +27,21 @@ python3 "$SKILL_DIR/scripts/device.py" run "$RUN_DIR" -- open --foreground
 
 辅助脚本要求 PATH 上的 CLI 版本匹配；不会自动安装、升级或启用权限。预检只检查当前工具与目标可达性，**不证明签名可安装、UI Automation 已授权或没有其他 XCTest 占用**。先检查已知运行任务，冲突时等待占用者结束；项目配置了设备池时不得另建设备绕过，不能杀掉他人 runner。首次 open 只有返回真实目标树后才证明本轮连接可用。
 
+## 无线更新后的仅启动检查
+
+真机无线 `localNetwork` 与 USB `wired` 均可使用，不把 USB 作为硬性前置。区分两个目标：
+
+- **安装/更新后启动 App**：按原生包入口完成构建安装、核对产物后，用 `launch` 直接走 CoreDevice，不创建 XCTest runner。可用不带 `--team-id` / `--runner-id` 的新任务目录执行 `init --kind device --udid <硬件UDID> --app <BundleID>`；这里只省略自动化 runner 签名，产品 App 的安装签名要求不变。
+- **页面操作或 UI 验收**：仍使用带 runner 签名的任务和 `run -- open --foreground`、快照及实际交互；不能用 `launch` 替代。操作前确认没有其他任务正在使用目标手机。
+
+```bash
+python3 "$SKILL_DIR/scripts/device.py" launch "$RUN_DIR"
+```
+
+`launch` 不安装、不强制重启、不自动重试；返回本次设备连接方式、进程 PID 和原生结果文件，明确标记 `uiVerified: false` / `automationReady: false`。它不启动 agent-device daemon，纯 launch 任务无需 `stop`。无线启动成功不等于 UI 自动化可用，更不等于完整更新/业务验收通过。
+
+`open` 失败时，包装器检查**本次调用新增**的 runner 日志；code 74 / IDE 通道断开会返回 `ios_xctest_bootstrap_failed` 诊断及日志位置，不再仅依赖笼统的连接超时提示。原错误退出状态保留，不自动降级为 launch 成功，不自动重放动作。私密命令不写额外诊断文件。无线 XCTest 失败不阻止另行执行明确的仅启动检查；只有确实需要 UI 时才排查无线调试链路或选择 USB 对照。
+
 ## 操作与判定
 
 ```bash
