@@ -31,7 +31,7 @@ struct RecordDetail: View {
   @State private var attachment: Attachment?
   private var record: SuijiRecord {
     let candidates = [original, refreshed, session.lastChangedRecord.flatMap { $0.id == original.id ? $0 : nil }, session.records.first { $0.id == original.id }].compactMap { $0 }
-    return candidates.max { $0.version < $1.version } ?? original
+    return candidates.reduce(original) { mergeSuijiRecord($0, $1) }
   }
   private var pending: Bool { session.pendingStatuses.contains(record.id) }
   var body: some View {
@@ -46,6 +46,15 @@ struct RecordDetail: View {
         ForEach(record.attachments) { item in Button { attachment = item } label: { Label(item.fileName, systemImage: item.kind == "image" ? "photo" : "doc.text") } }
         Text(displayDate(record.createdAt)).font(.caption).foregroundStyle(.secondary)
         if record.deletedAt != nil { Text("已在回收站，恢复后可继续编辑。").foregroundStyle(.secondary) }
+        if let info = session.info, info.features?.followups == true {
+          if record.deletedAt == nil {
+            Button("交给 Agent") {
+              do { UIPasteboard.general.string = try suijiHandoff(endpoint: session.endpoint, info: info, recordID: record.id); copyFeedback = "交接指令已复制" }
+              catch { copyFeedback = "复制失败，请重试" }
+            }
+          }
+          FollowupsView(session: session, record: record)
+        }
         if let onReview, record.deletedAt == nil { Button("聊聊这条") { onReview(record) } }
         if pending { Button("操作结果待确认 · 重试确认") { Task { await session.changeRecord(record, action: .status(.done)) } } }
         else if record.deletedAt == nil, record.taskStatus == .open {

@@ -1,0 +1,171 @@
+version: 1
+name: "随记跟进客户端交互"
+description: "验收合同；Web 通过 playwright-cli 操作真实 Electron 随记抽屉，iOS 通过 agent-device 操作本次构建的共享池 Simulator。每例独占 fixture，开始前自行建数据；原生与 Web 分别取证，静态结果不能替代行为。"
+cases:
+  - id: SUIJIFUC-001
+    name: "Web 列表与详情读取最新跟进"
+    required: true
+    description: "原文版本不变时仍可刷新摘要、分页和阅读成果。"
+    preconditions:
+      - "本例独占已登录隔离服务的真实 Electron 随记抽屉及其浏览器页，已确认正确 Dev Session/页面；自行建立无跟进记录和含 25 条跟进的记录，最新跟进含可打开的测试 HTTP(S) 链接和 Markdown 附件。"
+    steps:
+      - "使用 $toolkit:playwright-cli 打开列表；确认无跟进卡片无空占位，有跟进卡片显示 25 条及最新摘要。"
+      - "进入详情，确认原文保持完整，跟进按序号倒序，加载更早内容可读完全部 25 条；打开成果链接和附件，确认沿用已有浏览器/阅读器并能返回原详情。"
+      - "通过本例专属 API 另追加成果，不改父 version；在当前 UI 手动重新读取后确认摘要、数量和新成果更新，没有被版本相等过滤。"
+
+  - id: SUIJIFUC-002
+    name: "Web 手动追加只保存跟进"
+    required: true
+    description: "点击追加保存一条补充，不派发任务、不改变待办完成状态。"
+    preconditions:
+      - "本例独占已登录隔离服务的真实 Electron 随记抽屉及其浏览器页，已确认正确 Dev Session/页面；自行创建一条 open 待办，准备一张图片和一个 Markdown；可通过脱敏请求记录和真实服务读取核对本例结果。"
+    steps:
+      - "使用 $toolkit:playwright-cli 在详情输入“按方案二继续做”并添加两个成果附件，点击保存。"
+      - "确认只新增一条 actor=app 的跟进，正文和附件准确，卡片摘要同步，待办仍 open；请求仅有上传、跟进写入和读取，不出现执行、派发或通知调用。"
+
+  - id: SUIJIFUC-003
+    name: "Web 复制交接包含稳定身份且不泄露凭据"
+    required: true
+    description: "复制正文与交接为两个直接入口，交接从当前记录生成而不执行任务。"
+    preconditions:
+      - "本例独占已登录隔离服务的真实 Electron 随记抽屉及其浏览器页，已确认正确 Dev Session/页面；本例正常记录包含长正文和附件，可读取本例应用剪贴板内容，记录当前 endpoint/serverId/ownerId/recordId。"
+    steps:
+      - "使用 $toolkit:playwright-cli 点击复制正文，检查剪贴板仅是原正文；再直接点击交给 Agent/复制交接指令。"
+      - "检查新的剪贴板文本含 suiji-handoff-v1 及四项目标身份、读取最新上下文和最终成果规则，不含凭据、完整附件或自动完成指令；应用显示复制成功。"
+      - "确认复制未产生业务写入和终端启动，原文和状态不变。"
+
+  - id: SUIJIFUC-004
+    name: "Web 用户直接完成不受跟进限制"
+    required: true
+    description: "已有完成操作保持直接可用，不引入审批状态或要求先写成果。"
+    preconditions:
+      - "本例独占已登录隔离服务的真实 Electron 随记抽屉及其浏览器页，已确认正确 Dev Session/页面；本例有一条 open 待办及一条已有成果但仍 open 的待办。"
+    steps:
+      - "使用 $toolkit:playwright-cli 分别对两条待办点击完成；确认服务均为 done，没有新审批对象或强制追加跟进。"
+      - "在已完成筛选读取本例记录，确认原成果保留；恢复为未完成，确认沿用既有状态接口。"
+
+  - id: SUIJIFUC-005
+    name: "Web 跟进草稿收起后可恢复"
+    required: true
+    description: "未点击保存的跟进和本地附件只留在独立草稿中，不污染原文编辑器。"
+    preconditions:
+      - "本例独占已登录隔离服务的真实 Electron 随记抽屉及其浏览器页，已确认正确 Dev Session/页面；本例专用记录没有跟进，当前没有其他编辑器草稿；可通过脱敏请求记录和真实服务读取核对本例结果。"
+    steps:
+      - "使用 $toolkit:playwright-cli 输入唯一跟进正文并选择本地附件，等待草稿落盘后收起跟进编辑区，再打开它。"
+      - "确认正文和附件恢复；服务仍为零条跟进、没有新增上传或业务写请求；进入原文编辑器确认未被这份草稿覆盖。"
+      - "返回跟进并明确保存；确认只追加一条对应成果。"
+
+  - id: SUIJIFUC-006
+    name: "Web 未知保存结果重启后仅手动确认"
+    required: true
+    description: "成功响应丢失不会导致重复写入，客户端重建本身不重放业务意图。"
+    preconditions:
+      - "本例独占已登录隔离服务的真实 Electron 随记抽屉及其浏览器页，已确认正确 Dev Session/页面；本例独占专用记录及可控网络代理，能够只丢弃本例跟进 POST 的成功响应，同时读取服务实际提交结果。"
+    steps:
+      - "使用 $toolkit:playwright-cli 输入成果并保存，代理确认服务已提交后丢弃成功响应；确认客户端提示结果未确认并冻结原参数，数据库只有一条成果。"
+      - "刷新本例页面并重新取得真实页面引用，重新打开详情；确认原请求已恢复但没有自动 POST。"
+      - "使用 $toolkit:playwright-cli 点击手动确认/重试；检查请求仍为原键原参数，返回原成果 ID；最终只有一条成果，冻结状态解除。"
+
+  - id: SUIJIFUC-007
+    name: "Web 切换连接隔离草稿及迟到响应"
+    required: true
+    description: "不同服务身份的跟进不能串入当前连接。"
+    preconditions:
+      - "本例独占已登录隔离服务的真实 Electron 随记抽屉及其浏览器页，已确认正确 Dev Session/页面；本例持有两个不同身份的隔离服务 A/B，A 有待恢复跟进草稿和一条可延迟的跟进读取响应，B 有不同记录。"
+    steps:
+      - "使用 $toolkit:playwright-cli 在 A 发起读取后切换 B，再释放 A 的迟到响应。"
+      - "确认 B 不出现 A 的成果、摘要或草稿，没有向 B 重发 A 的写入；切回 A 后可恢复 A 原草稿，身份保持对应。"
+
+  - id: SUIJIFUC-008
+    name: "Web 连接旧服务保留原有功能"
+    required: true
+    description: "缺少能力字段时不展示无法使用的入口，也不影响原文和状态操作。"
+    preconditions:
+      - "本例独占已登录隔离服务的真实 Electron 随记抽屉及其浏览器页，已确认正确 Dev Session/页面；本例实际连接未实现 followups 的兼容旧服务及专用记录，info 不包含 features.followups。"
+    steps:
+      - "使用 $toolkit:playwright-cli 查看列表详情；确认没有跟进追加和交接入口，不向旧服务循环请求不存在的跟进接口。"
+      - "复制正文、编辑专用记录并完成待办；确认沿用原能力成功，客户端不因缺少 summary 字段解码失败。"
+
+  - id: SUIJIFUC-009
+    name: "iOS 列表与详情读取最新跟进"
+    required: true
+    description: "原文版本不变时仍可刷新摘要、分页和阅读成果。"
+    preconditions:
+      - "本例独占共享池申请的随记 Simulator 槽位，已安装本次构建并登录隔离服务；自行建立无跟进记录和含 25 条跟进的记录，最新跟进含可打开的测试 HTTP(S) 链接和 Markdown 附件。"
+    steps:
+      - "使用 $toolkit:agent-device 打开列表；确认无跟进卡片无空占位，有跟进卡片显示 25 条及最新摘要。"
+      - "进入详情，确认原文保持完整，跟进按序号倒序，加载更早内容可读完全部 25 条；打开成果链接和附件，确认沿用已有浏览器/阅读器并能返回原详情。"
+      - "通过本例专属 API 另追加成果，不改父 version；在当前 UI 手动重新读取后确认摘要、数量和新成果更新，没有被版本相等过滤。"
+
+  - id: SUIJIFUC-010
+    name: "iOS 手动追加只保存跟进"
+    required: true
+    description: "点击追加保存一条补充，不派发任务、不改变待办完成状态。"
+    preconditions:
+      - "本例独占共享池申请的随记 Simulator 槽位，已安装本次构建并登录隔离服务；自行创建一条 open 待办，准备一张图片和一个 Markdown；可通过脱敏请求记录和真实服务读取核对本例结果。"
+    steps:
+      - "使用 $toolkit:agent-device 在详情输入“按方案二继续做”并添加两个成果附件，点击保存。"
+      - "确认只新增一条 actor=app 的跟进，正文和附件准确，卡片摘要同步，待办仍 open；请求仅有上传、跟进写入和读取，不出现执行、派发或通知调用。"
+
+  - id: SUIJIFUC-011
+    name: "iOS 复制交接包含稳定身份且不泄露凭据"
+    required: true
+    description: "复制正文与交接为两个直接入口，交接从当前记录生成而不执行任务。"
+    preconditions:
+      - "本例独占共享池申请的随记 Simulator 槽位，已安装本次构建并登录隔离服务；本例正常记录包含长正文和附件，可读取本例应用剪贴板内容，记录当前 endpoint/serverId/ownerId/recordId。"
+    steps:
+      - "使用 $toolkit:agent-device 点击复制正文，检查剪贴板仅是原正文；再直接点击交给 Agent/复制交接指令。"
+      - "检查新的剪贴板文本含 suiji-handoff-v1 及四项目标身份、读取最新上下文和最终成果规则，不含凭据、完整附件或自动完成指令；应用显示复制成功。"
+      - "确认复制未产生业务写入和终端启动，原文和状态不变。"
+
+  - id: SUIJIFUC-012
+    name: "iOS 用户直接完成不受跟进限制"
+    required: true
+    description: "已有完成操作保持直接可用，不引入审批状态或要求先写成果。"
+    preconditions:
+      - "本例独占共享池申请的随记 Simulator 槽位，已安装本次构建并登录隔离服务；本例有一条 open 待办及一条已有成果但仍 open 的待办。"
+    steps:
+      - "使用 $toolkit:agent-device 分别对两条待办点击完成；确认服务均为 done，没有新审批对象或强制追加跟进。"
+      - "在已完成筛选读取本例记录，确认原成果保留；恢复为未完成，确认沿用既有状态接口。"
+
+  - id: SUIJIFUC-013
+    name: "iOS 跟进草稿收起后可恢复"
+    required: true
+    description: "未点击保存的跟进和本地附件只留在独立草稿中，不污染原文编辑器。"
+    preconditions:
+      - "本例独占共享池申请的随记 Simulator 槽位，已安装本次构建并登录隔离服务；本例专用记录没有跟进，当前没有其他编辑器草稿；可通过脱敏请求记录和真实服务读取核对本例结果。"
+    steps:
+      - "使用 $toolkit:agent-device 输入唯一跟进正文并选择本地附件，等待草稿落盘后收起跟进编辑区，再打开它。"
+      - "确认正文和附件恢复；服务仍为零条跟进、没有新增上传或业务写请求；进入原文编辑器确认未被这份草稿覆盖。"
+      - "返回跟进并明确保存；确认只追加一条对应成果。"
+
+  - id: SUIJIFUC-014
+    name: "iOS 未知保存结果重启后仅手动确认"
+    required: true
+    description: "成功响应丢失不会导致重复写入，客户端重建本身不重放业务意图。"
+    preconditions:
+      - "本例独占共享池申请的随记 Simulator 槽位，已安装本次构建并登录隔离服务；本例独占专用记录及可控网络代理，能够只丢弃本例跟进 POST 的成功响应，同时读取服务实际提交结果。"
+    steps:
+      - "使用 $toolkit:agent-device 输入成果并保存，代理确认服务已提交后丢弃成功响应；确认客户端提示结果未确认并冻结原参数，数据库只有一条成果。"
+      - "结束并重启本例 App，重新取得设备 UI 状态并进入详情；确认原请求已恢复但没有自动 POST。"
+      - "使用 $toolkit:agent-device 点击手动确认/重试；检查请求仍为原键原参数，返回原成果 ID；最终只有一条成果，冻结状态解除。"
+
+  - id: SUIJIFUC-015
+    name: "iOS 切换连接隔离草稿及迟到响应"
+    required: true
+    description: "不同服务身份的跟进不能串入当前连接。"
+    preconditions:
+      - "本例独占共享池申请的随记 Simulator 槽位，已安装本次构建并登录隔离服务；本例持有两个不同身份的隔离服务 A/B，A 有待恢复跟进草稿和一条可延迟的跟进读取响应，B 有不同记录。"
+    steps:
+      - "使用 $toolkit:agent-device 在 A 发起读取后切换 B，再释放 A 的迟到响应。"
+      - "确认 B 不出现 A 的成果、摘要或草稿，没有向 B 重发 A 的写入；切回 A 后可恢复 A 原草稿，身份保持对应。"
+
+  - id: SUIJIFUC-016
+    name: "iOS 连接旧服务保留原有功能"
+    required: true
+    description: "缺少能力字段时不展示无法使用的入口，也不影响原文和状态操作。"
+    preconditions:
+      - "本例独占共享池申请的随记 Simulator 槽位，已安装本次构建并登录隔离服务；本例实际连接未实现 followups 的兼容旧服务及专用记录，info 不包含 features.followups。"
+    steps:
+      - "使用 $toolkit:agent-device 查看列表详情；确认没有跟进追加和交接入口，不向旧服务循环请求不存在的跟进接口。"
+      - "复制正文、编辑专用记录并完成待办；确认沿用原能力成功，客户端不因缺少 summary 字段解码失败。"

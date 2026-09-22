@@ -15,16 +15,16 @@ struct RecordEditorSheet: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 18) {
-          Picker("记录类型", selection: $model.draft.kind) { Text("想法").tag(RecordKind.note); Text("待办").tag(RecordKind.task) }
-            .pickerStyle(.segmented).disabled(!model.editable)
+          if model.draft.followupRecordID == nil { Picker("记录类型", selection: $model.draft.kind) { Text("想法").tag(RecordKind.note); Text("待办").tag(RecordKind.task) }
+            .pickerStyle(.segmented).disabled(!model.editable) }
           if model.draft.recordID != nil {
             Text("切换为待办时设为未完成；切换为想法时清除待办状态。").font(.footnote).foregroundStyle(.secondary)
           }
           TextEditor(text: $model.draft.body).contentMargins(.bottom, 20, for: .scrollContent)
             .frame(height: 240).focused($focused).disabled(!model.editable)
-            .accessibilityLabel("正文").scrollContentBackground(.hidden).padding(8).foregroundStyle(SuijiTheme.ink).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityLabel(model.draft.followupRecordID == nil ? "正文" : "跟进内容").scrollContentBackground(.hidden).padding(8).foregroundStyle(SuijiTheme.ink).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 12))
           Text("\(model.draft.body.unicodeScalars.count) / \(model.limits.bodyScalars)").font(.caption).foregroundStyle(.secondary)
-          tagEditor
+          if model.draft.followupRecordID == nil { tagEditor }
           ForEach(model.draft.existing) { attachment in
             HStack { Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text"); Spacer()
               Button("移除") { model.draft.existing.removeAll { $0.id == attachment.id }; Task { await model.persist() } }.disabled(!model.editable)
@@ -58,7 +58,7 @@ struct RecordEditorSheet: View {
           Button("放弃草稿", role: .destructive) { discarding = true }.disabled(!model.editable)
         }.padding(20)
       }.background(SuijiTheme.background)
-      .navigationTitle(model.draft.recordID == nil ? "随手记下" : "编辑记录").navigationBarTitleDisplayMode(.inline)
+      .navigationTitle(model.draft.followupRecordID != nil ? "追加跟进" : model.draft.recordID == nil ? "随手记下" : "编辑记录").navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("收起") { focused = false; dismiss() } }
         ToolbarItem(placement: .confirmationAction) {

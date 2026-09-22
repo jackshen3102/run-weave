@@ -6,6 +6,7 @@ const pkg = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const artifacts = path.resolve(pkg, "../../.runweave/suiji/mapping");
 const endpoint = process.env.SUIJI_VERIFY_URL;
 const token = process.env.SUIJI_VERIFY_TOKEN;
+const followupRecordId = process.env.SUIJI_VERIFY_FOLLOWUP_RECORD_ID;
 const reviewId = process.env.SUIJI_VERIFY_REVIEW_ID;
 if (!endpoint || !token)
   throw new Error(
@@ -15,6 +16,7 @@ await mkdir(artifacts, { recursive: true, mode: 0o700 });
 for (const [name, route] of [
   ["info", "/api/suiji/v1/info"],
   ["page", "/api/suiji/v1/records?limit=100"],
+  ...(followupRecordId ? [["followups", "/api/suiji/v1/records/" + encodeURIComponent(followupRecordId) + "/followups"]] : []),
   ...(reviewId
     ? [["review", "/api/suiji/v1/reviews/" + encodeURIComponent(reviewId)]]
     : []),
@@ -42,6 +44,8 @@ guard info.ai?.enabled == true, review.status == "completed", review.answer != n
 try JSONEncoder().encode(review).write(to: URL(fileURLWithPath: root + "/review-roundtrip.json"))`
     : ""
 }
+${followupRecordId ? `let followups = try JSONDecoder().decode(FollowupPage.self, from: Data(contentsOf: URL(fileURLWithPath: root + "/followups.json")))
+try JSONEncoder().encode(followups).write(to: URL(fileURLWithPath: root + "/followups-roundtrip.json"))` : ""}
 print("Decoded actual HTTP info and \\(page.items.count) records with production Swift DTOs")
 `,
 );
@@ -54,6 +58,7 @@ run([
   "swiftc",
   path.join(pkg, "Sources/SuijiIOS/Contracts/Contracts.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/Reviews.swift"),
+  path.join(pkg, "Sources/SuijiIOS/Contracts/Followups.swift"),
   path.join(artifacts, "main.swift"),
   "-o",
   path.join(artifacts, "mapping"),
@@ -130,4 +135,18 @@ if (reviewId) {
   console.log(
     "Actual completed CLI review, citations, versions and coverage match Swift Codable roundtrip",
   );
+}
+
+if (followupRecordId) {
+  const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().filter(key => value[key] !== null).map(key => [key, canonical(value[key])])) : value;
+  for (const name of ["followups"]) {
+    const source = JSON.parse(await readFile(path.join(artifacts, name + ".json"), "utf8"));
+    const mapped = JSON.parse(await readFile(path.join(artifacts, name + "-roundtrip.json"), "utf8"));
+    if (JSON.stringify(canonical(source)) !== JSON.stringify(canonical(mapped))) throw new Error("Followup mapping mismatch");
+  }
+  for (const record of before.items) {
+    const mapped = after.items.find(item => item.id === record.id);
+    if (JSON.stringify(canonical(record.followupSummary)) !== JSON.stringify(canonical(mapped.followupSummary))) throw new Error("Followup summary mapping mismatch");
+  }
+  console.log("Real followups and record summaries match Swift Codable roundtrip");
 }

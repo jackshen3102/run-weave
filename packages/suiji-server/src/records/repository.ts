@@ -1,3 +1,4 @@
+import { followupSummaries } from "../followups/repository";
 import type pg from "pg";
 import type { SuijiRecord, SuijiAttachment } from "@runweave/shared/suiji";
 import { missing } from "../errors";
@@ -7,6 +8,7 @@ export async function getRecord(
   id: string,
   lock = false,
   includeTrash = false,
+  includeSummary = true,
 ): Promise<SuijiRecord> {
   const row = (
     await client.query(
@@ -22,6 +24,7 @@ export async function getRecord(
     )
   ).rows as SuijiAttachment[];
   return {
+    ...(includeSummary ? { followupSummary: (await followupSummaries(client, ownerId, [id])).get(id)! } : {}),
     id: row.id,
     kind: row.kind,
     body: row.body,

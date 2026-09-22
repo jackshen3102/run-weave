@@ -42,6 +42,10 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `write-plan`
 - `write-test-cases`
 
+## 随记
+
+[`suiji`](./skills/suiji/SKILL.md) 支持在任意终端搜索随记或读取交接指令，成功后只追加最终成果；用户确认后可完成待办。该目录可单独安装，Python 客户端不依赖本仓库或 Runweave Backend。
+
 ## 验证
 
 以下命令从仓库根目录执行。

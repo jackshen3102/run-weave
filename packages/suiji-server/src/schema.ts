@@ -26,7 +26,7 @@ export const body = z
     (value) => [...value].length <= SUIJI_LIMITS.bodyScalars,
     "正文最多 20000 个 Unicode 标量",
   );
-const attachmentIds = z
+export const attachmentIds = z
   .array(uuid)
   .max(SUIJI_LIMITS.imagesPerRecord + SUIJI_LIMITS.markdownPerRecord);
 export const createSchema = z
@@ -109,3 +109,12 @@ export const keySchema = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9_-]+$/);
+
+export const followupFields = { body, attachmentIds: attachmentIds.optional() };
+export const appendFollowupSchema = z.object(followupFields).strict();
+export const followupListSchema = z.object({
+  cursor: z.string().max(2048).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+}).strict();
+export const sourceLabel = (max: number) => body.refine(value =>
+  value.trim().length > 0 && [...value].length <= max && ![...value].some(char => char.codePointAt(0)! < 32 || char.codePointAt(0) === 127), "来源标识不合法");

@@ -2,6 +2,7 @@ import {
   SUIJI_LIMITS,
   normalizeSuijiTags,
   type RecordResponse,
+  type FollowupResponse,
   type SuijiRecord,
   type UploadedAttachment,
 } from "@runweave/shared/suiji";
@@ -22,12 +23,14 @@ export class SuijiEditorModel {
     conflict: boolean;
     latest?: SuijiRecord;
     saved?: SuijiRecord;
+    savedFollowup?: FollowupResponse;
     discarded?: boolean;
   };
   constructor(
     draft: SuijiDraft,
     private client: SuijiClient,
     private store: SuijiDraftStore,
+    readonly followupRecordId?: string,
   ) {
     this.state = {
       draft,
@@ -38,6 +41,7 @@ export class SuijiEditorModel {
       conflict: false,
     };
   }
+  private get storeKey() { return this.followupRecordId ? "followup:" + this.followupRecordId : "draft:" + this.state.draft.id; }
   subscribe = (callback: () => void) => {
     this.listeners.add(callback);
     return () => {
@@ -58,7 +62,7 @@ export class SuijiEditorModel {
   async discard() {
     if (this.state.busy || this.state.draft.frozen) return;
     this.patch({ busy: true });
-    try { await this.queue; this.check(); await this.store.remove("draft:" + this.state.draft.id); this.patch({ discarded: true }); }
+    try { await this.queue; this.check(); await this.store.remove(this.storeKey); this.patch({ discarded: true }); }
     catch (error) { this.patch({ message: error instanceof Error ? error.message : "放弃草稿失败" }); }
     finally { this.patch({ busy: false }); }
   }
@@ -75,7 +79,7 @@ export class SuijiEditorModel {
     ++this.writes;
     this.patch({ localSaving: true });
     const pending = this.queue.then(() =>
-      this.store.set("draft:" + snapshot.id, snapshot),
+      this.store.set(this.storeKey, snapshot),
     );
     this.queue = pending.catch(() => undefined);
     return pending
@@ -137,12 +141,12 @@ export class SuijiEditorModel {
     }
   }
   async save() {
-    if (this.state.busy || this.state.saved) return;
+    if (this.state.busy || this.state.saved || this.state.savedFollowup) return;
     this.patch({ busy: true, message: "" });
     try {
       this.check();
       let draft = this.state.draft;
-      if (!draft.pending && draft.tags !== undefined) {
+      if (!this.followupRecordId && !draft.pending && draft.tags !== undefined) {
         draft = { ...draft, tags: normalizeSuijiTags(draft.tags) };
         this.patch({ draft });
       }
@@ -177,16 +181,15 @@ export class SuijiEditorModel {
         draft = {
           ...draft,
           pending: {
-            path:
+            path: this.followupRecordId ? `/api/suiji/v1/records/${this.followupRecordId}/followups` :
               "/api/suiji/v1/records" +
               (draft.id === "new" ? "" : "/" + draft.id),
-            method: draft.id === "new" ? "POST" : "PATCH",
+            method: this.followupRecordId || draft.id === "new" ? "POST" : "PATCH",
             key: crypto.randomUUID(),
             data: {
-              kind: draft.kind,
-              ...(draft.id === "new" ? {} : { expectedVersion: draft.version }),
+              ...(this.followupRecordId ? {} : { kind: draft.kind, ...(draft.id === "new" ? {} : { expectedVersion: draft.version }) }),
               body: draft.body,
-              ...(draft.tags === undefined ? {} : { tags: draft.tags }),
+              ...(this.followupRecordId || draft.tags === undefined ? {} : { tags: draft.tags }),
               attachmentIds: [
                 ...draft.existing.map((a) => a.id),
                 ...draft.files.map((a) => a.uploaded!.id),
@@ -199,15 +202,21 @@ export class SuijiEditorModel {
       }
       this.check();
       const pending = draft.pending!;
-      const result = await this.client.request<RecordResponse>(
+      const result = await this.client.request<RecordResponse | FollowupResponse>(
         pending.path,
         pending.method,
         pending.data,
         pending.key,
       );
       this.check();
-      await this.store.remove("draft:" + draft.id);
-      this.patch({ saved: result.record });
+      if (this.followupRecordId) {
+        if (!("followup" in result) || result.followup.recordId !== this.followupRecordId || result.followup.body !== draft.body ||
+          JSON.stringify(result.followup.attachments.map(item => item.id)) !== JSON.stringify(draft.files.map(item => item.uploaded!.id)) ||
+          result.followupSummary.latest?.sequence !== result.followup.sequence) throw new Error("跟进响应与保存内容不一致，请手动重试确认");
+      }
+      await this.store.remove(this.storeKey);
+      if ("followup" in result) this.patch({ savedFollowup: result });
+      else this.patch({ saved: result.record });
     } catch (error) {
       if (!this.active) return;
       if (error instanceof SuijiHttpError && !error.uncertain) {

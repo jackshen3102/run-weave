@@ -58,8 +58,17 @@ export function createBackup({
           "SELECT coalesce(json_agg(json_build_object('key',object_key,'sha256',sha256,'bytes',byte_size)), '[]'::json) FROM attachments",
         ),
       );
+      const schemaVersion = Number(
+        await sql("SELECT count(*) FROM suiji_migrations"),
+      );
+      const followupCounts =
+        schemaVersion >= 5
+          ? ",'followups',(SELECT count(*) FROM record_followups),'followupAttachments',(SELECT count(*) FROM followup_attachments)"
+          : "";
       const counts = await sql(
-        "SELECT json_build_object('records',(SELECT count(*) FROM records),'revisions',(SELECT count(*) FROM record_revisions),'mutations',(SELECT count(*) FROM mutation_requests),'attachments',(SELECT count(*) FROM attachments))",
+        "SELECT json_build_object('records',(SELECT count(*) FROM records),'revisions',(SELECT count(*) FROM record_revisions),'mutations',(SELECT count(*) FROM mutation_requests),'attachments',(SELECT count(*) FROM attachments)" +
+          followupCounts +
+          ")",
       );
       manifest = {
         version: 1,

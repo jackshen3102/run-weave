@@ -10,6 +10,7 @@ public struct Attachment: Codable, Identifiable, Equatable, Sendable {
   public var position: Int?
 }
 public struct SuijiRecord: Codable, Identifiable, Equatable, Sendable {
+  public var followupSummary: FollowupSummary? = nil
   public let id: String
   public let kind: RecordKind
   public let body: String
@@ -54,6 +55,7 @@ public struct Limits: Codable, Sendable {
   public let maxPageSize: Int
 }
 public struct ServiceInfo: Codable, Sendable {
+  let features: FollowupFeatures?
   public let protocolVersion: Int
   public let appVersion: String
   public let schemaVersion: Int

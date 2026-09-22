@@ -459,9 +459,15 @@ try {
       )
         throw new Error("Restored attachment checksum mismatch");
     }
+    const followupCounts =
+      manifest.schemaVersion >= 5
+        ? ",'followups',(SELECT count(*) FROM record_followups),'followupAttachments',(SELECT count(*) FROM followup_attachments)"
+        : "";
     const counts = JSON.parse(
       await sql(
-        "SELECT json_build_object('records',(SELECT count(*) FROM records),'revisions',(SELECT count(*) FROM record_revisions),'mutations',(SELECT count(*) FROM mutation_requests),'attachments',(SELECT count(*) FROM attachments))",
+        "SELECT json_build_object('records',(SELECT count(*) FROM records),'revisions',(SELECT count(*) FROM record_revisions),'mutations',(SELECT count(*) FROM mutation_requests),'attachments',(SELECT count(*) FROM attachments)" +
+          followupCounts +
+          ")",
       ),
     );
     if (JSON.stringify(counts) !== JSON.stringify(manifest.counts))

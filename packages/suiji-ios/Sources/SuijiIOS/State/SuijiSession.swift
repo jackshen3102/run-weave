@@ -159,6 +159,29 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       if restored != nil { await model.prepareForCapture(kind: kind, body: body) }
     } catch { if generation == current { message = error.localizedDescription } }
   }
+  func acceptFollowupRecord(_ record: SuijiRecord) {
+    records = records.map { $0.id == record.id ? mergeSuijiRecord($0, record) : $0 }
+    lastChangedRecord = lastChangedRecord.flatMap { $0.id == record.id ? mergeSuijiRecord($0, record) : nil } ?? record
+  }
+  func openFollowup(_ record: SuijiRecord) async {
+    guard let client, let store, let info, info.features?.followups == true, record.deletedAt == nil else { return }
+    let current = generation, key = "followup:" + record.id
+    if let cached = editingModels[key], cached.canReopen { editor = cached; return }
+    do {
+      let restored = try await store.load(record.id, followup: true)
+      guard generation == current else { return }
+      var draft = restored ?? Draft(kind: .note)
+      draft.followupRecordID = record.id
+      let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits)
+      model.onFollowupSaved = { [weak self] result in
+        guard let self, self.generation == current else { return }
+        var updated = self.records.first { $0.id == record.id } ?? record
+        updated.followupSummary = result.followupSummary
+        self.acceptFollowupRecord(updated)
+      }
+      editingModels[key] = model; editor = model; await model.persist()
+    } catch { if generation == current { message = error.localizedDescription } }
+  }
   func changeRecord(_ record: SuijiRecord, action: RecordAction) async {
     guard let client, let store, !statusBusy.contains(record.id) else { return }
     let current = generation; statusBusy.insert(record.id)

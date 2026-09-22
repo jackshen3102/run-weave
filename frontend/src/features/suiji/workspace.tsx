@@ -1,3 +1,4 @@
+import { useFollowupActions } from "./followup-actions";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useDebounce, useMemoizedFn } from "ahooks";
@@ -247,6 +248,7 @@ export function SuijiWorkspace({
       }
     },
   );
+  const { acceptRecord, editFollowup } = useFollowupActions({ client, store, writable, alive, models, setEditor, setItems, setDetail, setMessage });
   const changeRecord = useMemoizedFn(
     async (
       record: SuijiRecord,
@@ -544,6 +546,9 @@ export function SuijiWorkspace({
           onOpenLink={onOpenLink}
           {...detail}
           client={client}
+          info={info}
+          onFollowup={() => void editFollowup(detail.record)}
+          onRecord={acceptRecord}
           onTag={selectTag}
           onClose={() => setDetail(undefined)}
           onEdit={() => void edit(detail.record)}
@@ -568,13 +573,20 @@ export function SuijiWorkspace({
           availableTags={availableTags}
           onClose={() => setEditor(undefined)}
           onDiscard={() => {
-            models.current.delete(editor.state.draft.id);
+            models.current.delete(editor.followupRecordId ? "followup:" + editor.followupRecordId : editor.state.draft.id);
             editor.dispose();
             setEditor(undefined);
           }}
+          onFollowupSaved={(result) => {
+            const id = result.followup.recordId;
+            models.current.delete("followup:" + id);
+            editor.dispose(); setEditor(undefined);
+            if (detail?.record.id === id) acceptRecord({ ...detail.record, followupSummary: result.followupSummary });
+            void load();
+          }}
           onSaved={(record) => {
             if (detail) setDetail({ record });
-            models.current.delete(editor.state.draft.id);
+            models.current.delete(editor.followupRecordId ? "followup:" + editor.followupRecordId : editor.state.draft.id);
             editor.dispose();
             setEditor(undefined);
             void load();

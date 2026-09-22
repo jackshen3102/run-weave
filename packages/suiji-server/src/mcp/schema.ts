@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { body, keySchema, uuid } from "../schema";
+import { body, keySchema, uuid, listSchema, followupFields, sourceLabel } from "../schema";
 
 const filters = {
+  tag: listSchema.shape.tag,
   kind: z.enum(["note", "task"]).optional(),
   taskStatus: z.enum(["open", "done", "archived"]).optional(),
   from: z.string().datetime().optional(),
@@ -52,3 +53,11 @@ export const attachmentInput = z
     limit: z.number().int().min(1).max(16000).default(4000),
   })
   .strict();
+
+export const infoInput = z.object({}).strict();
+export const followupListInput = z.object({ recordId: uuid,
+  cursor: z.string().max(2048).optional(), limit: z.number().int().min(1).max(50).default(20),
+}).strict();
+export const followupAppendInput = z.object({ recordId: uuid, ...followupFields,
+  agentName: sourceLabel(80).optional(), sessionId: sourceLabel(128).optional(), idempotencyKey: keySchema,
+}).strict();

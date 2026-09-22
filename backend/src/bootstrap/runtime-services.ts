@@ -1,35 +1,29 @@
+import type { RuntimeServices } from "./runtime-services-contract";
+export type { RuntimeServices } from "./runtime-services-contract";
+import { createKnowledgeInbox } from "./knowledge-inbox";
 import { createEvolutionStorage } from "./evolution-storage";
 import { prepareEvolutionRepositoryMigration } from "./evolution-migration";
 import { LocalBrowserService } from "../browser-local/service";
 import { resolveTmuxShutdownPolicy } from "./tmux-shutdown-policy";
 import {
   createDeviceMonitor,
-  type DeviceMonitoringRuntime,
 } from "../device-monitor/bootstrap";
 import { MobileLoginService } from "../auth/mobile-login";
 import path from "node:path";
-import type { ExperienceService } from "../experience/service";
 import { createExperienceLearning } from "../experience/bootstrap";
-import type { ExperienceLearningRuntime } from "../experience/learning-runtime";
 import crypto from "node:crypto";
-import type { AuthStore } from "../auth/store";
 import { LowDbAuthStore } from "../auth/lowdb-store";
 import { loadAuthConfig } from "../auth/config";
 import { AuthService } from "../auth/service";
 import { AgentTeamService } from "../agent-team/service";
 import { AgentTeamModelConfigStore } from "../agent-team/runtime/model-config-store";
 import { AgentTeamModelSettingsService } from "../agent-team/model-catalog/service";
-import type { ActivityEventFactory } from "../activity/recording/event-factory";
-import type { ActivityQueryService } from "../activity/database/service";
-import type { ActivityRecorder } from "../activity/recording/recorder";
-import type { ActivityStore } from "../activity/recording/store";
 import { ActivityRuntime } from "../activity/runtime";
 import { ResourceScope } from "./resource-scope";
 import { logger } from "../logging/index";
 import { LowDbTerminalQuickInputStore } from "../terminal/quick-input/lowdb-store";
 import { TerminalQuickInputService } from "../terminal/quick-input/service";
 import { loadOrCreateHookToken } from "../terminal/application/hook-token";
-import type { TerminalSnapshotShareService } from "../terminal/snapshot-share/service";
 import { createTerminalSnapshotShares } from "./terminal-snapshot-shares";
 import { PtyService } from "../terminal/runtime/pty-service";
 import { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
@@ -42,7 +36,6 @@ import { TerminalCompletionEventService } from "../terminal/completion/event-ser
 import { TerminalEventService } from "../terminal/state/terminal-event-service";
 import { TerminalStateService } from "../terminal/state/terminal-state-service";
 import { TerminalStateStore } from "../terminal/state/terminal-state-store";
-import type { TerminalActivityDependencies } from "../terminal/runtime/activity-events";
 import { LowDbTerminalSessionStore } from "../terminal/store/lowdb-store";
 import { logOrphanedTmuxSessions } from "../terminal/tmux/orphan-scan";
 import { syncExistingTmuxSessionEnvironments } from "../terminal/tmux/session-environment-sync";
@@ -53,73 +46,22 @@ import {
 import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
 import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
-import { type EvolutionActivationStore } from "../evolution/activation-store";
-import type { EvolutionAnalysisStore } from "../evolution/analysis-store";
 import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
 import { EvolutionContextPackBuilder } from "../evolution/context-pack";
 
 import { EvolutionEvidenceReconciler } from "../evolution/knowledge/evidence-reconciler";
 
-import type { EvolutionContextPackStore } from "../evolution/context-pack-store";
 import { EvolutionRuntime } from "../evolution/runtime";
-import { EvolutionService } from "../evolution/service";
 import { DefaultEvolutionSupplementalSourceReader } from "../evolution/supplemental-sources";
-import { EvolutionToolTokenRegistry } from "../evolution/tools/token-registry";
 import { RaceRecordStore } from "../race/race-record-store";
 import { RaceService } from "../race/race-service";
 import { BackendRuntimeStatusService } from "../runtime-status/service";
-import type { ScheduledTaskService } from "../scheduled-tasks/service";
 import { createScheduledTasks } from "./scheduled-tasks";
 import {
   resolveDefaultTmuxSocketPath,
   resolvePersistentTmuxSocketPath,
 } from "./tmux-paths";
 
-export interface RuntimeServices extends DeviceMonitoringRuntime {
-  start(controlPlaneBaseUrl: string): void;
-  dispose(): Promise<void>;
-  runtimeStatus: BackendRuntimeStatusService;
-  activityStore: ActivityStore | null;
-  activityRecorder: ActivityRecorder;
-  activityQueryService: ActivityQueryService;
-  activityEventFactory: ActivityEventFactory;
-  terminalActivity: TerminalActivityDependencies;
-  authStore: AuthStore;
-  authService: AuthService;
-  mobileLoginService: MobileLoginService;
-  localBrowserService: LocalBrowserService;
-  authCookieName: string;
-  authSecureCookies: boolean;
-  terminalSessionManager: TerminalSessionManager;
-  terminalSnapshotShareService: TerminalSnapshotShareService;
-  workspaceServiceManager: RuntimeStatusWorkspaceServiceManager;
-  terminalQuickInputStore: LowDbTerminalQuickInputStore;
-  terminalQuickInputService: TerminalQuickInputService;
-  terminalStateService: TerminalStateService;
-  agentTeamService: AgentTeamService;
-  agentTeamModelConfigStore: AgentTeamModelConfigStore;
-  raceService: RaceService;
-  appServerHistoryGateway: AppServerHistoryGateway;
-  workHistoryService: WorkHistoryService;
-  terminalEventService: TerminalEventService;
-  terminalCompletionEventService: TerminalCompletionEventService;
-  attentionService: AttentionService;
-  terminalRuntimeRegistry: TerminalRuntimeRegistry;
-  tmuxLifecycleCoordinator: TmuxLifecycleCoordinator;
-  ptyService: PtyService;
-  tmuxService: TmuxService;
-  tmuxOutputWatcher: TmuxOutputWatcher;
-  tmuxSocketPathsToCleanOnShutdown: readonly string[];
-  evolutionActivationStore: EvolutionActivationStore;
-  evolutionAnalysisStore: EvolutionAnalysisStore | null;
-  evolutionContextPackStore: EvolutionContextPackStore | null;
-  evolutionToolTokenRegistry: EvolutionToolTokenRegistry;
-  evolutionRuntime: EvolutionRuntime;
-  evolutionService: EvolutionService;
-  experienceService: ExperienceService;
-  experienceLearning: ExperienceLearningRuntime;
-  scheduledTaskService: ScheduledTaskService;
-}
 
 function resolveTerminalHookToken(
   env: NodeJS.ProcessEnv,
@@ -409,6 +351,10 @@ async function assembleRuntimeServices(
     terminalSessionManager,
     activityQueryService,
   );
+  const knowledgeInboxService = createKnowledgeInbox(resources, {
+    evolutionService, evolutionAnalysisStore, evolutionFoundationStore,
+    activityQueryService, experienceService, terminalSessionManager,
+  });
   const agentTeamService = new AgentTeamService({
     terminalSessionManager,
     terminalEventService,
@@ -579,6 +525,7 @@ async function assembleRuntimeServices(
     evolutionToolTokenRegistry,
     evolutionRuntime,
     evolutionService,
+    knowledgeInboxService,
     experienceService,
     experienceLearning,
     scheduledTaskService: scheduledTasks.service,

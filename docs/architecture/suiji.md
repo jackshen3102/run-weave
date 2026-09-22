@@ -97,3 +97,11 @@ flowchart LR
 记录通过 `deleted_at` 保留删除标记，删除和恢复使用既有版本与幂等事务，不改变待办状态。
 Web 与原生 iOS 提供回收站列表、删除确认和恢复入口；普通列表与 Agent/AI 检索排除回收站。
 正文、附件和历史修订保留，不提供永久清空或定时清理。部署前执行新增迁移（schema 3）。
+
+## 跟进与外部 Agent 成果
+
+记录保留原始正文，跟进独立追加到 record_followups；父记录版本和完成状态不随追加改变。原文与跟进附件分别关联同一个父记录的不可变对象。HTTP 和 MCP 复用 FollowupService 与既有幂等事务；多 Agent 追加保留各自成果，不引入调度、审批或执行状态。
+
+Web/桌面与 iOS 提供跟进、成果阅读、复制交接；[随记 Skill](../../plugins/toolkit/skills/suiji/SKILL.md) 可在其他电脑读写同一服务，只有最终成功成果回写，用户确认后才由 Agent 完成待办。跟进里的用户补充不会触发 Agent。
+
+服务接口与版本合同以 [服务 README](../../packages/suiji-server/README.md#跟进与最终成果) 为准；当前实现需要 schema 5，线上启用情况及行为通过范围需要独立验证。

@@ -73,6 +73,7 @@
     "./device-notifications": "./src/monitoring/device-notifications.ts",
     "./push-notifications": "./src/push-notifications.ts",
     "./terminal/agent-resume": "./src/terminal/agent-resume.ts",
+    "./knowledge-inbox": "./src/knowledge-inbox.ts",
     "./experience": "./src/experience.ts",
     "./browser-local-tunnel": "./src/browser/local-tunnel.ts",
     "./terminal/file-link": "./src/terminal/file-link.ts"

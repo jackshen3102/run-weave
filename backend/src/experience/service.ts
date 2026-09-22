@@ -242,6 +242,21 @@ export class ExperienceService {
     return this.records(await this.scope(cwd));
   }
 
+  /** Read-only publication boundary; does not create lookups or feedback. */
+  async publicationRecords(cwd: string): Promise<Array<{
+    view: ExperienceView; revisions: ExperienceRecord[];
+  }>> {
+    const scope = await this.scope(cwd);
+    const records = await this.records(scope);
+    const revisions = withExperienceStore(scope.directory, (store) =>
+      store.list<ExperienceRecord>("revisions"),
+    );
+    return Promise.all(records.map(async (record) => ({
+      view: await this.inspect(record),
+      revisions: revisions.filter((revision) => revision.id === record.id),
+    })));
+  }
+
   async candidates(cwd: string): Promise<ExperienceCandidate[]> {
     const scope = await this.scope(cwd);
     const candidates = withExperienceStore(scope.directory, (store) =>

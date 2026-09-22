@@ -1,0 +1,202 @@
+version: 1
+name: 自进化统一成果收件箱验收
+description: >
+  第一版验收合同：Evolution 与 Experience 在相同仓库身份下统一展示，
+  由独立用户状态控制待处理和历史，不改变知识有效性或 Agent 使用行为。
+  所有写入、源内容变更和故障注入使用独占测试命名空间；禁止修改正式知识库。
+  格式校验不代表功能或跨端行为已通过。
+
+cases:
+  - id: INBOX-001
+    name: 两种来源按稳定仓库身份聚合且不自动合并相似内容
+    required: true
+    description: >
+      同仓不同 worktree 和重复 Project 登记不复制条目，独立 clone 隔离，跨来源相似内容仍分别存在。
+    preconditions:
+      - 已实现的 Backend 使用独占测试命名空间，含同仓主工作区及 linked worktree、重复 Project 登记和独立 clone。
+      - 主仓有已提交且支持有效的 Insight 及其关联 Candidate，还有已发布有效 Experience；两个来源正文主题相似，ID 不同。
+    steps:
+      - 使用真实认证 API 从各入口查询仓库和成果；确认主工作区与 worktree 使用同一 repositoryId，关联 Candidate 不另增重复卡片。
+      - 确认相似 Insight 和 Experience 分别可见，独立 clone 的项目筛选不返回主仓内容，来源 ID 不因显示名变化而改变。
+
+  - id: INBOX-002
+    name: 默认只发布当前有效成果
+    required: true
+    description: >
+      失效和内部审核记录不能混入待处理；有支持的已提交建议可以展示但明确待验证。
+    preconditions:
+      - 独占源库包含有效已提交 Insight、只有内部 draft 的 Candidate、支持证据全部失效的 Insight、归属 unresolved 的旧 Insight。
+      - 同一环境包含 active 可用 Experience、过期记录、needs_revalidation 记录和 pending 学习候选。
+    steps:
+      - 查询待处理 API；确认只有有效已提交 Insight 和可用 Experience 出现，内部候选及失效或归属不明记录均不出现。
+      - 读取有效建议详情；确认显示待验证或适用前提提示，没有将 confidence 或 promoted 包装成已证明收益。
+
+  - id: INBOX-003
+    name: 四条预览在过滤后稳定排序和分页
+    required: true
+    description: >
+      已处理项不占预览名额，首次既有数据可以入列，同时间稳定排序且相邻分页不重复。
+    preconditions:
+      - 独占库至少有七条有效成果，来自两个项目和两种来源，包含上线前旧内容及相同正文时间的不同条目。
+      - 当前用户已处理其中两条，且这些条目的正文时间晚于其余部分条目。
+    steps:
+      - 查询 limit 为四的待处理列表；确认返回剩余内容中最新四条，不因提前截断后过滤少返回，旧有效内容也被纳入。
+      - 连续使用游标读取后续页并重复第一请求；确认固定数据下排序稳定、无重复漏项，错误筛选游标返回 400。
+
+  - id: INBOX-004
+    name: 标记处理不修改知识或生成采用回执
+    required: true
+    description: >
+      人类消费状态只影响默认列表，不改变 Agent 可用性、源 lifecycle、policy 或反馈统计。
+    preconditions:
+      - 独占库有可见 Insight 和 Experience，已记录源记录、Canary policy、Experience lookup/feedback 的数量及内容摘要。
+      - 当前用户的两条内容均为待处理，持有详情返回的内容版本和状态版本。
+    steps:
+      - 对两条内容分别提交已处理；确认待处理列表隐藏它们，已处理历史可以读取处理时正文。
+      - 比较源数据和策略摘要；确认完全未变，lookup/feedback 未增加，经验是否可检索仍由原规则决定。
+
+  - id: INBOX-005
+    name: 并发消费状态采用版本校验且重放幂等
+    required: true
+    description: >
+      同账号两个会话不能用旧状态覆盖新操作，完全相同的处理重放不新增历史或反向改变状态。
+    preconditions:
+      - 同一独占 Backend 的两个真实登录会话属于同一 username，不同 sessionId。
+      - 两端持有同一条待处理内容的相同 contentVersion 和 stateVersion。
+    steps:
+      - 第一会话提交处理并重放相同请求；确认均返回已处理，历史不重复增加。
+      - 第一会话按最新版本恢复待处理，再由第二会话提交最早的处理请求；确认返回 409，不把已经恢复的条目隐藏。
+
+  - id: INBOX-006
+    name: 实质正文更新重新待处理而维护变更不打扰
+    required: true
+    description: >
+      业务字段变化产生新内容版本，标题、时间、证据维护和纯空白变动不改变处理结果。
+    preconditions:
+      - 独占库中一条有效 Experience 和一条有效 Insight 已被当前用户处理，保存了内容版本及排序时间。
+      - 执行者可通过真实源存储合同创建新 revision，始终维持该记录可用；不用替换消费 API 响应。
+    steps:
+      - 分别更新显示标题、时间戳、证据引用及纯空白；刷新投影，确认条目仍在已处理且原 contentVersion 和排序时间不变。
+      - 更新 Experience 的适用条件或步骤，并更新 Insight 的结论或关联建议；确认各自以原 itemId 重新进入待处理，显示有更新，旧处理正文仍能在历史查看。
+      - 用更新前详情的版本提交已处理；确认返回 409，新正文仍待处理。
+
+  - id: INBOX-007
+    name: 恢复只恢复有效内容且不覆盖新版本
+    required: true
+    description: >
+      有效已处理内容可以恢复；失效内容不能强制重新发布，旧历史恢复不能吞掉或替换当前更新。
+    preconditions:
+      - 独占库有三条已处理内容，分别保持有效、随后源失效、随后源发生实质更新。
+      - 三条内容的处理历史和旧内容版本均已保存。
+    steps:
+      - 恢复第一条；确认同一条目重回待处理，可再次处理，源内容不变。
+      - 恢复失效条目；确认返回 409，历史仍可读且明确不可用，默认列表不出现。
+      - 对已有新正文的第三条恢复旧历史；确认当前新版本仍待处理，旧正文不替换当前 head，响应明确当前版本。
+
+  - id: INBOX-008
+    name: 重启后保留处理状态和内容版本
+    required: true
+    description: >
+      Backend 正常重启不丢失人类消费状态，也不把既有正文当新版本全部重新入列。
+    preconditions:
+      - 本 case 独占 Backend、数据目录及测试命名空间，允许重启该实例。
+      - 已创建并处理一条有效成果，记录其 itemId、contentVersion 和处理历史。
+    steps:
+      - 记录重启前 API 结果，正常停止再启动同一数据目录的 Backend，重新发现地址并取得有效认证。
+      - 查询待处理和历史；确认该条仍已处理，contentVersion 不变，没有因为启动重建投影而出现有更新。
+
+  - id: INBOX-009
+    name: 新接口保留认证和仓库路径边界
+    required: true
+    description: >
+      手机可正常读取和处理已发布内容，但不能冒充用户、指定文件路径、越过已有经验接口的本机限制。
+    preconditions:
+      - 独占 Backend 配有真实认证及至少一个已登记仓库，具备远端或转发请求入口。
+      - 已取得本账号有效 access token、无效 token、合法和不存在的 itemId。
+    steps:
+      - 无 token 和无效 token 查询或写状态；确认均返回 401。
+      - 使用合法 token 通过手机连接路径查询并处理已登记仓库内容；确认成功，body 中自报 username、cwd、namespace 等非法字段被拒绝为 400。
+      - 请求不存在或不可见 item；确认返回 404，不能从任意绝对路径读出经验或证据；从远端调用原 Experience 接口仍受原本机门禁限制。
+
+  - id: INBOX-010
+    name: 手机首页在关注下显示四条成果及正确空态
+    required: true
+    description: >
+      首页内容区不依赖存在关注终端，不出现第五条；入口可进入完整列表并按项目筛选。
+    preconditions:
+      - iOS 已构建安装目标源码版本，连接独占 Backend；设备通过共享槽位和 agent-device 取得，不新建 worktree 专属模拟器。
+      - 测试环境有两个项目及至少五条可用待处理成果，首页没有关注终端。
+    steps:
+      - 使用 $toolkit:agent-device 打开真实首页；确认项目列表前仍有自进化入口，只显示最新四条，每条有项目名及类型。
+      - 点击查看全部并按项目筛选；确认可以看到第五条且筛选只保留指定仓库，截图与 API 顺序对应。
+      - 在同一 fixture 中将全部内容标记处理后刷新首页；确认显示已处理完，不拿历史内容填充四条。
+
+  - id: INBOX-011
+    name: 手机查看不自动处理且详情只含成果内容
+    required: true
+    description: >
+      打开和退出详情不改变处理状态，详情不展示原始日志或诊断数据，显式处理才隐藏。
+    preconditions:
+      - 已安装目标 iOS 并连接独占 Backend，其中有当前用户未处理的有效建议和 Experience。
+      - 已记录其 contentVersion 和处理状态，源材料包含不能出现在消费详情的原始工具输出。
+    steps:
+      - 使用 $toolkit:agent-device 分别打开详情再返回；确认条目仍待处理，详情仅有成果正文、已有适用条件/做法、项目、时间和必要提示，没有原始日志、模型运行统计或空字段占位。
+      - 点击其中一条已处理；确认成功后退出默认列表并补下一条，在已处理页仍可打开和恢复。
+
+  - id: INBOX-012
+    name: 手机与桌面同账号处理状态同步
+    required: true
+    description: >
+      不同登录会话使用同一账号消费状态，前台最迟一个十五秒轮询周期加请求耗时同步，本端处理不重复出现。
+    preconditions:
+      - 目标 iOS 与桌面 renderer 连接同一个独占 Backend，以同一账号的不同会话登录。
+      - 两端均打开真实成果列表，具有同一条有效待处理成果，页面保持前台可见。
+    steps:
+      - 使用 $toolkit:agent-device 在手机点击已处理；使用 $toolkit:playwright-cli 附着正确桌面页面，确认在同步窗口内条目从桌面待处理消失并进入历史。
+      - 在桌面历史恢复该条；确认手机在同步窗口内重新出现，两个操作都不触发 Canary 或经验采用回执。
+
+  - id: INBOX-013
+    name: 连接切换不串用成果或消费状态
+    required: true
+    description: >
+      相同账号名在不同 Backend 不代表同一消费范围，旧请求迟到不得覆盖新连接页面。
+    preconditions:
+      - iOS 已安装目标源码版本，有两个独占 Backend 连接，两者账号同名但内容可区分。
+      - 第一连接的列表响应可延迟，第二连接正常响应。
+    steps:
+      - 使用 $toolkit:agent-device 在第一连接发起列表读取后切换第二连接；释放第一连接延迟响应，确认页面仍只有第二连接内容。
+      - 返回第一连接；确认重新加载其自身状态，第二连接的处理操作没有作用到第一连接。
+
+  - id: INBOX-014
+    name: 来源故障不伪装成全部处理完
+    required: true
+    description: >
+      单源失败显示部分不可用，双源失败明确报错，故障不撤回有效条目或生成新正文版本。
+    preconditions:
+      - 独占 Backend 有两个来源的有效内容与已处理状态，允许对源适配器依赖制造实际读取失败。
+      - 目标 iOS 已安装并连接，记录故障前条目版本。
+    steps:
+      - 使一个源读取失败；查询 API 并使用 $toolkit:agent-device 查看页面，确认 sourceStatus 为 partial、可用源正常展示且页面提示不完整，不显示全部处理完。
+      - 使两个源均读取失败；确认 API 为 503、页面可重试且不覆盖既有状态；解除故障后确认原正文版本和处理记录未变。
+
+  - id: INBOX-015
+    name: 手机离线时不执行或排队消费写入
+    required: true
+    description: >
+      离线可读缓存但不排队状态变更；恢复连接后以服务端为准。
+    preconditions:
+      - 目标 iOS 已从独占 Backend 成功加载成果，能控制该连接网络可达性，不改动其他连接。
+    steps:
+      - 断开该连接网络并使用 $toolkit:agent-device 查看成果；确认明确离线，处理和恢复不可用，没有本地伪成功或待发送写入。
+      - 恢复网络并返回页面；确认立即刷新服务端状态，离线期间没有追加处理记录。
+
+  - id: INBOX-016
+    name: 旧 Backend 不支持时明确提示而不回退敏感接口
+    required: true
+    description: >
+      客户端遇到不支持的成果接口时显示版本提示，不将 404 当空列表或改用手机传 cwd 的 Experience 接口。
+    preconditions:
+      - 目标 iOS 已安装，连接一个可认证但确实未实现 knowledge-inbox 路由的隔离旧 Backend。
+    steps:
+      - 使用 $toolkit:agent-device 打开首页及成果入口；确认显示当前服务版本不支持，没有反复全局报错，也不显示已处理完。
+      - 检查本 case 的实际网络记录；确认未调用带任意 cwd 的 Experience 读写作为回退路径。

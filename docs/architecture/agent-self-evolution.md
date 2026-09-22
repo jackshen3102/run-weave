@@ -8,6 +8,35 @@ Runweave Evolution 把本机 Activity、Work History、Agent Team 与仓库基�
 产品入口是 `/evolution`，持久化状态位于用户级 Evolution SQLite。Web、CLI 和 Agent 都通过
 Backend API 访问，不直接打开数据库。
 
+## 人类成果收件箱
+
+`/evolution` 默认进入「成果」，原运行、候选、策略和计划在「分析管理」中保留。
+手机首页在关注区下、项目列表前展示最新四条待处理成果，没有关注终端也保留入口。
+两端通过带正常访问令牌的 `/api/knowledge-inbox` 消费已登记仓库的 Evolution 与 Experience，
+不接受客户端路径、namespace 或自报用户。共享 DTO 见
+[`knowledge-inbox.ts`](../../packages/shared/src/knowledge-inbox.ts)，发布与消费边界见
+[`knowledge-inbox/`](../../backend/src/knowledge-inbox/)。
+
+只有归属明确、已提交且仍有可用支持的 Insight 和当前有效的已保存 Experience 可发布。
+关联 Candidate 作为建议补充，不额外产生卡片；待验证建议带明确标签。无效、争议、归属未决
+与内部候选不进入默认列表。详情只包含脱敏正文，不暴露证据、日志、绝对路径或运行 artifact；
+客户端按纯文本渲染，不执行 HTML、不加载远程图片。
+
+处理状态独立存于 `~/.runweave/knowledge-inbox/<Experience namespace>/store.sqlite`，
+按经认证的 username、条目、正文版本隔离。打开详情不自动处理；处理/恢复只写消费库，
+不改知识生命周期、Canary、检索或采用回执。同名账号仅在同一 Backend 存储范围内共享。
+状态写入携带正文版本与状态版本；旧正文或并发旧状态返回 409，已完成请求可幂等重放。
+已处理历史保留当时的脱敏正文；失效后保留历史但禁止恢复，旧版本恢复不覆盖当前新正文。
+
+正文版本是结论、适用条件、建议、步骤、避坑和验证说明经 NFKC/空白规范化后的确定性哈希。
+标题、维护时间和证据引用不触发重新待处理；这不等于识别语义等价改写。首次导入保留源正文
+时间，已有版本不因刷新重新排序。多个 Backend 以投影代数 CAS 拒绝迟到旧读取；来源读取前后
+核对一致性，源故障不撤回缓存投影。单源失败标记 partial，双源失败返回 503。
+
+客户端可见时每 15 秒刷新，回到前台或操作后立即刷新；不是即时推送。离线内容只作缓存展示，
+禁用写入，不排队操作。旧 Backend 的 404 显示版本不支持。验收合同见
+[统一成果收件箱](../testing/evolution/results-inbox.testplan.yaml)。
+
 ## 运行闭环
 
 ```text

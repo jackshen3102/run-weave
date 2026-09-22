@@ -32,11 +32,11 @@ cases:
     name: 发现的工具只暴露严格业务能力
     required: true
     description: >
-      七个工具有明确输入和注解，未知字段不能更改身份、来源或记录结构。
+      十个工具有明确输入和注解，未知字段不能更改身份、来源或记录结构。
     preconditions:
       - 本例官方 MCP Client 已连接启用 MCP 的隔离服务。
     steps:
-      - 调用 tools/list；确认只有计划中的七个业务工具，读取与写入注解正确，没有 SQL、shell、删除和上传工具。
+      - 调用 tools/list；确认原七个工具与 get_service_info、list_followups、append_followup 共十个业务工具，读取与写入注解正确，没有 SQL、shell、删除或任意文件访问工具，二进制上传仅经认证的 /mcp/uploads。
       - 对创建与替换传 ownerId、actor、createdVia、attachmentIds 等未知字段；确认拒绝且没有写入。
       - 对写操作省略幂等键，对修改省略版本；确认拒绝；调用未知工具确认协议错误，不伪造业务成功。
 

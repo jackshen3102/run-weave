@@ -77,6 +77,7 @@ struct HomeView: View {
           }
         }
       }
+      KnowledgeInboxPreview(session: session, model: session.knowledgeInbox)
       ForEach(groups) { group in
         Section {
           if searching || expanded.contains(group.id) {
@@ -117,7 +118,7 @@ struct HomeView: View {
       }
     }
     .searchable(text: $query, prompt: "Search projects and terminals")
-    .refreshable { await session.refresh() }
+    .refreshable { await session.refresh(); await session.knowledgeInbox.refreshPreview() }
     .onChange(of: session.overview?.projects.map(\.id)) { _ in initializeExpansion() }
     .onChange(of: session.generation) { _ in
       expanded.removeAll()
