@@ -78,6 +78,7 @@ function verifyManifestTree(root, manifestFileName) {
       ? [
           manifest.workerEntry,
           manifest.evolutionWorkerEntry,
+          manifest.scheduledTasksWorkerEntry,
           "node_modules/better-sqlite3/",
         ]
       : null;
@@ -142,23 +143,20 @@ const request=(op)=>new Promise((resolve,reject)=>{const requestId=++id;pending.
   );
 }
 
-function runEvolutionWorker(
+function runStorageWorker(
   workerEntry,
   databasePath,
   label,
   executable = electronExecutable,
 ) {
-  const harnessPath = path.join(
-    tempRoot,
-    `${label}-evolution-worker-verify.cjs`,
-  );
+  const harnessPath = path.join(tempRoot, `${label}-storage-worker-verify.cjs`);
   writeFileSync(
     harnessPath,
     `const {Worker}=require('node:worker_threads');
 const worker=new Worker(${JSON.stringify(workerEntry)},{workerData:{databasePath:${JSON.stringify(databasePath)}}});
 let id=0;const pending=new Map();worker.on('message',(m)=>{const p=pending.get(m.id);if(!p)return;pending.delete(m.id);m.ok?p.resolve(m.result):p.reject(new Error(m.error));});worker.on('error',(e)=>{throw e});
 const request=(op)=>new Promise((resolve,reject)=>{const requestId=++id;pending.set(requestId,{resolve,reject});worker.postMessage({...op,id:requestId});});
-(async()=>{if(!(await request({op:'integrity'})))throw new Error('evolution worker integrity failed');const exited=new Promise((resolve)=>worker.once('exit',resolve));await request({op:'close'});await exited;console.log(JSON.stringify({integrity:true}));})().catch((error)=>{console.error(error);process.exitCode=1;});`,
+(async()=>{if(!(await request({op:'integrity'})))throw new Error('storage worker integrity failed');const exited=new Promise((resolve)=>worker.once('exit',resolve));await request({op:'close'});await exited;console.log(JSON.stringify({integrity:true}));})().catch((error)=>{console.error(error);process.exitCode=1;});`,
   );
   return JSON.parse(
     run(executable, [harnessPath], { ELECTRON_RUN_AS_NODE: "1" }),
@@ -212,10 +210,20 @@ try {
     resourcesBackendDir,
     manifest.evolutionWorkerEntry,
   );
-  const evolutionOutput = runEvolutionWorker(
+  const evolutionOutput = runStorageWorker(
     evolutionWorkerEntry,
     path.join(tempRoot, "electron-evolution.sqlite"),
     "electron-runtime",
+  );
+
+  const scheduledTasksWorkerEntry = path.join(
+    resourcesBackendDir,
+    manifest.scheduledTasksWorkerEntry,
+  );
+  const scheduledTasksOutput = runStorageWorker(
+    scheduledTasksWorkerEntry,
+    path.join(tempRoot, "electron-scheduled-tasks.sqlite"),
+    "electron-scheduled-tasks-runtime",
   );
 
   const externalRootValue =
@@ -242,10 +250,15 @@ try {
       path.join(tempRoot, "external.sqlite"),
       "external-runtime",
     );
-    runEvolutionWorker(
+    runStorageWorker(
       path.join(externalRoot, "backend", "evolution-sqlite-worker.cjs"),
       path.join(tempRoot, "external-evolution.sqlite"),
       "external-runtime",
+    );
+    runStorageWorker(
+      path.join(externalRoot, "backend", "scheduled-tasks-sqlite-worker.cjs"),
+      path.join(tempRoot, "external-scheduled-tasks.sqlite"),
+      "external-scheduled-tasks-runtime",
     );
     externalVerified = true;
   }
@@ -277,10 +290,16 @@ try {
       "packaged-runtime",
       packagedExecutable,
     );
-    runEvolutionWorker(
+    runStorageWorker(
       path.join(packagedBackend, packagedManifest.evolutionWorkerEntry),
       path.join(tempRoot, "packaged-evolution.sqlite"),
       "packaged-runtime",
+      packagedExecutable,
+    );
+    runStorageWorker(
+      path.join(packagedBackend, packagedManifest.scheduledTasksWorkerEntry),
+      path.join(tempRoot, "packaged-scheduled-tasks.sqlite"),
+      "packaged-scheduled-tasks-runtime",
       packagedExecutable,
     );
     packagedVerified = true;
@@ -298,6 +317,7 @@ try {
           output: {
             activity: electronOutput,
             evolution: evolutionOutput,
+            scheduledTasks: scheduledTasksOutput,
           },
           stagingAppDir,
         },

@@ -138,6 +138,13 @@ if (
 ) {
   throw new Error("Evolution SQLite Electron runtime is missing");
 }
+if (
+  !existsSync(
+    path.join(resourcesBackendDir, "scheduled-tasks-sqlite-worker.cjs"),
+  )
+) {
+  throw new Error("Scheduled tasks SQLite Electron runtime is missing");
+}
 const activityRuntimeManifest = JSON.parse(
   readFileSync(
     path.join(resourcesBackendDir, "activity-sqlite-runtime-manifest.json"),

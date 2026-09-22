@@ -57,11 +57,13 @@ function resolveNativeBinding(packageDir) {
 export function finalizeActivitySqliteRuntime(
   workerEntry,
   evolutionWorkerEntry,
+  scheduledTasksWorkerEntry,
 ) {
   const nodeModules = path.join(stagingAppDir, "node_modules");
   if (
     !existsSync(workerEntry) ||
     !existsSync(evolutionWorkerEntry) ||
+    !existsSync(scheduledTasksWorkerEntry) ||
     !existsSync(nodeModules)
   ) {
     throw new Error("Activity SQLite staging is incomplete");
@@ -88,6 +90,7 @@ export function finalizeActivitySqliteRuntime(
   const runtimeRoots = [
     workerEntry,
     evolutionWorkerEntry,
+    scheduledTasksWorkerEntry,
     ...runtimePackageNames.map((packageName) =>
       path.join(runtimeNodeModules, packageName),
     ),
@@ -122,6 +125,7 @@ export function finalizeActivitySqliteRuntime(
         arch: process.arch,
         workerEntry: "activity-sqlite-worker.cjs",
         evolutionWorkerEntry: "evolution-sqlite-worker.cjs",
+        scheduledTasksWorkerEntry: "scheduled-tasks-sqlite-worker.cjs",
         packageEntry: "node_modules/better-sqlite3/lib/index.js",
         packageManifest: "node_modules/better-sqlite3/package.json",
         nativeBinding: nativeBindingRelative,

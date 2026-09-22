@@ -221,6 +221,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             filter: [
               "activity-sqlite-worker.cjs",
               "evolution-sqlite-worker.cjs",
+              "scheduled-tasks-sqlite-worker.cjs",
               "activity-sqlite-runtime-manifest.json",
               "node_modules/**/*",
             ],
