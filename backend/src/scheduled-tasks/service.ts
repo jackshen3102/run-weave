@@ -76,6 +76,7 @@ export class ScheduledTaskService {
   ): Promise<ScheduledTask> {
     this.requireEnabled();
     this.requireProvider(input.provider);
+    this.requireExecutionPolicy(input.provider, input.executionPolicy);
     try {
       validateSchedule(input.schedule);
       if (
@@ -175,6 +176,10 @@ export class ScheduledTaskService {
     const project = this.requireProject(projectId);
     const schedule = input.schedule ?? current.schedule;
     this.requireProvider(input.provider ?? current.provider);
+    this.requireExecutionPolicy(
+      input.provider ?? current.provider,
+      input.executionPolicy ?? current.executionPolicy,
+    );
     try {
       validateSchedule(schedule);
       if (
@@ -272,6 +277,7 @@ export class ScheduledTaskService {
         "Deleted tasks cannot run",
       );
     this.requireProvider(task.provider);
+    this.requireExecutionPolicy(task.provider, task.executionPolicy);
     const project = this.requireProject(task.projectId);
     const now = new Date().toISOString();
     const run = createScheduledRunRecord(task, "manual", now, project.path!);
@@ -380,6 +386,22 @@ export class ScheduledTaskService {
       );
   }
 
+  private requireExecutionPolicy(
+    provider: string,
+    policy?: ScheduledTask["executionPolicy"],
+  ): void {
+    if (!policy || policy === "sandbox") return;
+    const capability = this.capabilitiesValue.providers.find(
+      (item) => item.provider === provider,
+    );
+    if (!capability?.executionPolicies?.includes(policy))
+      throw new ScheduledTaskError(
+        "execution_policy_unavailable",
+        409,
+        "当前 Agent 不支持自动审批，请更新 Codex 或选择仅沙箱执行。",
+      );
+  }
+
   private requireProject(projectId: string) {
     const project = this.terminalSessionManager.getProject(projectId);
     if (!project?.path || !isDirectory(project.path))
@@ -409,6 +431,9 @@ function normalizeConfig(input: CreateScheduledTaskRequest | ScheduledTask) {
     projectId: input.projectId,
     provider: input.provider,
     prompt: input.prompt.trim(),
+    ...(input.executionPolicy
+      ? { executionPolicy: input.executionPolicy }
+      : {}),
     ...(input.model?.trim() ? { model: input.model.trim() } : {}),
     ...(input.effort?.trim() ? { effort: input.effort.trim() } : {}),
     schedule: input.schedule,

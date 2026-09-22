@@ -43,6 +43,22 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
 - 运行摘要渲染经过净化的 Markdown，禁用原始 HTML；仅 http/https 链接可在新窗口打开。
   不加载摘要中的图片或脚本。受控文件引用没有下载 URL 时只展示标签，不拼接本地路径。
 
+## 执行权限与结果
+
+- 任务的 `executionPolicy` 随配置版本保存，并冻结到每次运行快照。未配置的旧任务继续使用
+  `sandbox`：工作区普通文件可写，Git 元数据与命令联网受限，不能申请提权。
+- `auto-review` 保留 Codex workspace-write 沙箱，由 Codex 自动审查需要额外权限的操作；
+  不是无限制执行。Backend 从本机 `codex exec --help` 检测可用性，旧 CLI 不支持时拒绝该模式。
+  两种模式都不修改全局 Codex 配置。参考 [Codex 自动审批](https://learn.chatgpt.com/docs/agent-approvals-security)。
+- Codex 使用 JSON Schema 返回 `outcome`、`summary`、`reason`。只有完整退出并返回有效的
+  `succeeded` 才记录 completed；blocked / failed 记录 failed 并保留 Agent 的具体原因。
+  缺失或非法结果不能降级为成功。结果是 Agent 对业务执行的报告，不是独立验收证明。
+- 旧 completed 记录没有业务结果，界面显示“运行已结束”并提示检查摘要，不反向猜测历史状态。
+  受阻记录仍可恢复对话，修正配置后需新建一次运行，旧快照不变。
+- 后台运行有独立 run ID，移除继承的 Terminal、tmux、Codex 会话身份；不伪造终端身份完成通知。
+  依赖交互式终端身份的通知脚本需要单独适配，通知失败须如实反映在结果中。
+- 点击立即运行成功后进入本次记录，直接查看进度、错误和权限快照。
+
 ## 验证
 
 静态检查：根计划中的 shared/frontend typecheck、frontend lint、architecture:check、

@@ -19,6 +19,7 @@ export function createScheduledRunRecord(
       projectId: task.projectId,
       provider: task.provider,
       prompt: task.prompt,
+      executionPolicy: task.executionPolicy ?? "sandbox",
       ...(task.model ? { model: task.model } : {}),
       ...(task.effort ? { effort: task.effort } : {}),
       schedule: task.schedule,

@@ -1,4 +1,6 @@
 export type ScheduledTaskProvider = "codex" | "trae" | "pi";
+export type ScheduledExecutionPolicy = "sandbox" | "auto-review";
+export type ScheduledTaskOutcome = "succeeded" | "blocked" | "failed";
 
 /** Weekdays use 0 = Sunday through 6 = Saturday. All timestamps are UTC ISO strings. */
 export type TaskSchedule =
@@ -13,6 +15,8 @@ export interface ScheduledTaskConfig {
   prompt: string;
   model?: string;
   effort?: string;
+  /** Absent on older tasks: preserve sandbox-only execution. */
+  executionPolicy?: ScheduledExecutionPolicy;
   schedule: TaskSchedule;
 }
 
@@ -54,6 +58,8 @@ export interface ScheduledRun {
   startedAt: string | null;
   finishedAt: string | null;
   summary: string | null;
+  /** Agent-reported business result; absent on legacy runs. */
+  outcome?: ScheduledTaskOutcome;
   error: { code: string; message: string } | null;
   artifacts: Array<{
     label: string;

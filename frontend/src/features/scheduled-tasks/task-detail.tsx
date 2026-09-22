@@ -56,7 +56,11 @@ function RunRecord({
             {displayTime(run.startedAt ?? run.scheduledFor)}
           </span>
           <span className="rounded-md bg-muted px-2 py-1 text-xs">
-            {statusLabel[run.status]}
+            {run.outcome === "blocked"
+              ? "执行受阻"
+              : run.status === "completed" && !run.outcome
+                ? "运行已结束"
+                : statusLabel[run.status]}
           </span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
@@ -65,6 +69,11 @@ function RunRecord({
         </p>
       </button>
       {run.summary ? <RunSummary text={run.summary} /> : null}
+      {run.status === "completed" && !run.outcome ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          此历史运行未记录任务结果，请根据摘要确认是否完成。
+        </p>
+      ) : null}
       {run.error ? (
         <p className="mt-2 break-words text-sm text-destructive">
           {run.error.message} ({run.error.code})
@@ -132,6 +141,10 @@ function RunRecord({
           <p className="mt-1">
             模型：{run.snapshot.model || "默认"} · 推理：
             {run.snapshot.effort || "默认"}
+            {" · 权限："}
+            {run.snapshot.executionPolicy === "auto-review"
+              ? "自动审批"
+              : "仅沙箱"}
           </p>
           <p className="mt-2 whitespace-pre-wrap break-words">
             {run.snapshot.prompt}
@@ -192,6 +205,12 @@ export function TaskDetail({
             {task.data.projectId} · {task.data.provider}
           </p>
           <p className="mt-2 text-sm">{scheduleLabel(task.data.schedule)}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            执行权限：
+            {task.data.executionPolicy === "auto-review"
+              ? "自动审批"
+              : "仅沙箱"}
+          </p>
           <p className="mt-2 text-sm text-muted-foreground">
             {task.data.enabled
               ? `下次运行：${displayTime(task.data.nextRunAt, task.data.schedule.timezone)}`

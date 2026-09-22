@@ -48,6 +48,7 @@ export function TaskEditor({
     prompt: task?.prompt ?? "",
     model: task?.model ?? "",
     effort: task?.effort ?? "",
+    executionPolicy: task?.executionPolicy,
     enabled: task?.enabled ?? true,
     schedule: task?.schedule ?? {
       kind: "daily",
@@ -211,6 +212,37 @@ export function TaskEditor({
               placeholder="描述任务、执行要求和期望产出；可以引用 Skill。"
             />
           </label>
+          <section className="grid gap-3 rounded-lg border p-3">
+            <label className="grid gap-1 text-sm">
+              执行权限
+              <select
+                className={fieldClass}
+                value={draft.executionPolicy ?? "sandbox"}
+                onChange={(e) =>
+                  change(
+                    "executionPolicy",
+                    e.target
+                      .value as CreateScheduledTaskRequest["executionPolicy"],
+                  )
+                }
+              >
+                <option value="sandbox">仅沙箱</option>
+                <option
+                  value="auto-review"
+                  disabled={
+                    !provider?.executionPolicies?.includes("auto-review")
+                  }
+                >
+                  自动审批
+                </option>
+              </select>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {draft.executionPolicy === "auto-review"
+                ? "保留沙箱，Git 写入、联网等越界操作由 Codex 自动审查；拒绝或无法审批时记录为受阻。"
+                : "可修改工作区普通文件；Git 元数据写入和命令联网受限。需要创建 Worktree、提交或拉取时，可选择自动审批。"}
+            </p>
+          </section>
           <section className="grid gap-3 rounded-lg border p-3">
             <label className="grid gap-1 text-sm">
               时间规则

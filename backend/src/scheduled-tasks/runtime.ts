@@ -165,6 +165,7 @@ export class ScheduledTaskRuntime {
         workingDirectory: project.path,
         model: initial.snapshot.model,
         effort: initial.snapshot.effort,
+        executionPolicy: initial.snapshot.executionPolicy,
         maxOutputBytes: this.limits.maxOutputBytes,
         maxWallTimeMs: this.limits.timeoutMs,
         signal: controller.signal,
@@ -187,12 +188,23 @@ export class ScheduledTaskRuntime {
         controller.signal.aborted || persisted.status === "stopping";
       current = await this.store.putRun({
         ...persisted,
-        status: cancelled ? "cancelled" : "completed",
+        status: cancelled
+          ? "cancelled"
+          : result.outcome === "succeeded"
+            ? "completed"
+            : "failed",
+        ...(cancelled ? {} : { outcome: result.outcome }),
         finishedAt,
         summary: cancelled ? persisted.summary : result.summary || null,
         error: cancelled
           ? { code: "cancelled", message: "The scheduled run was cancelled" }
-          : null,
+          : result.outcome === "succeeded"
+            ? null
+            : {
+                code:
+                  result.outcome === "blocked" ? "task_blocked" : "task_failed",
+                message: result.reason || result.summary,
+              },
         threadRef: { provider: result.provider, threadId: result.threadId },
         recoverable: true,
       });
@@ -231,6 +243,16 @@ function providerErrorMessage(code: string): string {
       return "The provider did not return a persistent thread identity";
     case "provider_completion_missing":
       return "The provider exited without a confirmed completion event";
+    case "provider_result_invalid":
+      return "Agent 未返回有效的任务结果，无法确认成功。请查看输出或打开对话。";
+    case "provider_output_persist_failed":
+      return "运行输出或对话身份保存失败，已停止执行，请检查存储状态。";
+    case "provider_stdin_failed":
+      return "无法向 Agent 发送任务，请检查 CLI 启动输出。";
+    case "provider_exit_nonzero":
+      return "Agent 异常退出，请展开输出检查认证、配置或 CLI 错误。";
+    case "execution_policy_unavailable":
+      return "当前 Codex 不支持自动审批，请更新 Codex 或选择仅沙箱执行。";
     case "cancelled":
     case "provider_cancelled":
       return "The scheduled run was cancelled";
