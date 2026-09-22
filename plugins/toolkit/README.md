@@ -42,6 +42,8 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `write-plan`
 - `write-test-cases`
 
+- [youtube-reading](./skills/youtube-reading/SKILL.md)：YouTube 字幕与本机识别、保守校对翻译，交付导读与完整中文正文。
+
 ## 随记
 
 [`suiji`](./skills/suiji/SKILL.md) 支持在任意终端搜索随记或读取交接指令，成功后只追加最终成果；用户确认后可完成待办。该目录可单独安装，Python 客户端不依赖本仓库或 Runweave Backend。

@@ -1,0 +1,199 @@
+version: 1
+name: YouTube 中文阅读稿 Skill 验收
+description: >
+  待实现能力的目标验收计划，不代表当前已通过。依照
+  docs/plans/2026-09-23-youtube-reading-skill.md 中拟定的 CLI 与数据合同，
+  验证 Mac 本机获取和转写、当前 Agent 保守校对/翻译，以及仅含导读和正文的阅读稿。
+  每条使用独立任务目录；记录实际命令、输出和证据，不新增单元测试。
+cases:
+  - id: YTR-001
+    name: 首次安装建立可校验的专用运行时
+    required: true
+    description: 在空运行时目录完成依赖和模型安装，doctor 能确认版本与摘要，且不修改系统环境。
+    preconditions:
+      - 实现已提供 setup、doctor，Mac 具备安装说明列出的系统前置工具和下载网络。
+      - 为本 case 创建空的 runtime-root，记录系统 Python、FFmpeg 路径和版本。
+    steps:
+      - 对空目录执行 doctor；确认非零退出且列出缺少的运行时和模型。
+      - 对同一目录执行 setup，再执行 doctor；确认成功、模型摘要匹配锁文件，安装仅落入指定目录。
+      - 再执行 setup；确认复用有效文件，系统工具路径和版本与安装前一致。
+  - id: YTR-002
+    name: 运行时模型损坏不会被当作可用模型
+    required: true
+    description: 校验发现损坏模型时拒绝识别，并通过重新安装恢复该运行时。
+    preconditions:
+      - 在本 case 独立 runtime-root 中已自行完成 setup，保留有效模型摘要。
+    steps:
+      - 只截断本 case 的模型副本，执行 doctor；确认报告摘要不符而不是通过。
+      - 在此运行时尝试 prepare；确认在识别前失败，未生成最终阅读稿。
+      - 执行 setup 修复；确认模型重新通过摘要检查，doctor 返回成功。
+  - id: YTR-003
+    name: 两条真实无字幕中文视频可完整转写
+    required: true
+    description: 无人工和自动字幕时走本机音频识别，两条教程均能得到可理解的完整时间范围文本。
+    preconditions:
+      - 可用 Mac 运行时已准备好；为两条视频分别建立独立输出目录。
+      - 当场检查 e5O8A5pcVgg 和 H1kVXogxpQQ 的字幕接口与下载器元数据，均没有人工或自动字幕；状态变化时选同频道经相同检查的无字幕替代视频并记录。
+    steps:
+      - 分别执行 prepare，记录下载与 ASR 耗时；确认无字幕后下载真实音频，source_kind 为 ASR，状态进入 awaiting_ai。
+      - 对照音频开头、中间、结尾各 60 秒及异常区间抽听；确认无整句遗漏、虚构句子或改变关键意思的错误，少量同音字单独记录。
+      - 核对所有分块和全局时间戳；确认覆盖从开场至片尾口述，未仅转写首段，记录此为抽样质量结论。
+  - id: YTR-004
+    name: 有可用原语言字幕时优先使用字幕
+    required: true
+    description: 获取到可用原语言字幕时将其作为正文来源，不误用自动翻译轨作为原文。
+    preconditions:
+      - 本 case 独立目录和可用运行时已建立。
+      - 当场选定有人工中文字幕的视频，保存字幕轨清单和语言信息。
+    steps:
+      - 执行 prepare；确认 source 中原字幕对应段标记为人工字幕，文字和顺序与选定轨一致。
+      - 检查日志与元数据；确认未将自动翻译轨标为原语言人工字幕，缺口补齐如有发生单独标记来源。
+  - id: YTR-005
+    name: 字幕中的有声缺口能够补齐
+    required: true
+    description: 字幕取得成功不掩盖口述缺口，只为缺口中的真实人声补入文字。
+    preconditions:
+      - 本 case 独立目录和可用运行时已建立，已获得 FaeRWZOy4r8 的字幕与音频。
+      - 重新核对该视频 101.683 至 126.533 秒的字幕缺口与人声；若线上字幕已补齐，用其本地字幕副本移除该区间形成明确标注的缺口 fixture，原副本保留。
+    steps:
+      - 使用该输入执行材料整理和缺口检查；确认识别候选缺口并从相同音频时间段补入内容。
+      - 抽听整个补齐区间；确认保留口述，边界无重复、顺序正确且 source_kind 标记补齐来源，静音未被补成句子。
+  - id: YTR-006
+    name: AI 校对仅修改有依据的识别错误
+    required: true
+    description: 当前 Agent 能修正明确术语和同音字，同时保持数字、否定、条件、例子和口语表达。
+    preconditions:
+      - 本 case 有独立 source fixture，包含 Claude Code 标题下的 Cloud Code、GitHub 上下文中的医术、权限上下文中的全线管理，以及正确的数字、否定句和口语重复。
+      - fixture 的正确含义和允许修改位置已由执行者书面登记，当前 Agent 可读取上下文。
+    steps:
+      - 按 Skill 让当前 Agent 实际生成 review；确认三个明确错误分别改为 Claude Code、issue、权限管理，并记录对应来源段和理由。
+      - 比对 fixture 中登记的不变量；确认数字、否定、条件与例子未改，正常口语重复未被删减，没有新增观点或整段润色。
+  - id: YTR-007
+    name: 无法确认的命令不会被 AI 补写
+    required: true
+    description: 源音频或文字没有给出完整命令时，AI 标记不确定而不根据常识发明参数。
+    preconditions:
+      - 本 case 独立 source fixture 中包含非交互命令 cloud.code.code 和一个自造的不明确文件名，且没有可确认其拼写的上下文或画面。
+    steps:
+      - 让当前 Agent 按 Skill 校对并输出 review；确认保留待核对标记与时间，没有补出源材料不存在的命令参数或路径。
+      - 生成本 case 阅读稿；确认不确定信息仍可见，未在导读中将该命令作为已确认事实。
+  - id: YTR-008
+    name: 可疑重复通过局部音频重识别处理
+    required: true
+    description: 重复修复具有音频来源依据，不通过无条件文字去重删掉真实口语。
+    preconditions:
+      - 本 case 独立任务保存 e5O8A5pcVgg 音频及 11 分 08 秒附近重复识别的原型输出；若原型已清理，使用该音频和明确标注的人为重复转写 fixture。
+    steps:
+      - 让当前 Agent 定位重复区间并调用 retranscribe；确认仅处理最多 60 秒的局部音频，保留重识别候选及绝对时间。
+      - 对照音频和候选应用修复；确认异常重复被消除且实际口述未丢失，remove_duplicate 均关联重识别证据和保留段。
+  - id: YTR-009
+    name: 英文内容逐段翻译为中文
+    required: true
+    description: 英文样本输出中文正文，信息、数字与语气保持一致，不生成缩写版文章。
+    preconditions:
+      - 本 case 独立任务已获取 NASA 视频 EJXTZ5jpSmk 的英文原文，当前 Agent 可执行翻译。
+    steps:
+      - 让当前 Agent 实际完成逐段翻译并生成阅读稿；确认每个源段都有唯一对应结果，英文句子已翻译，必要专名允许保留。
+      - 逐段对照短样本；确认信息、数字、单位、否定和不确定语气保留，未省略例子或添加背景知识。
+  - id: YTR-010
+    name: 中英文混说保留中文并翻译英文句子
+    required: true
+    description: 混合语言材料按内容处理，中文不被再次改写，英文术语不被强制译成错误中文。
+    preconditions:
+      - 本 case 独立任务使用执行者自制的中英混说短音频，附原稿，包含中文说明、完整英文句子与 Claude Code 等术语。
+    steps:
+      - 通过同一材料处理入口完成识别与 AI 校对翻译；确认英文句子变为中文，中文原意保留，术语拼写统一。
+      - 对照自制原稿；确认不存在因全局错误语言设置导致的整段乱码、缺句或重复翻译。
+  - id: YTR-011
+    name: 无人声材料不会生成虚构正文
+    required: true
+    description: 自制无语音音频不能因 ASR 幻觉变成有观点的文章。
+    preconditions:
+      - 本 case 独立任务使用自制 30 秒无语音音乐或环境音，执行者已完整听过并确认没有可辨认口述。
+    steps:
+      - 用同一音频处理入口执行识别和 AI 检查；确认没有把音乐、音效或偶发识别词扩写为口述。
+      - 生成结果；确认正文说明未识别到可确认的口述内容，导读不虚构主题观点，仍只有两个主章节。
+  - id: YTR-012
+    name: 长内容分块后来源映射完整
+    required: true
+    description: 分块处理超过单次上下文预算的文本，合并时每个源段恰好保留一次且顺序正确。
+    preconditions:
+      - 本 case 独立任务使用至少 18000 字符的自制 source fixture，每段含唯一编号，边界包含跨段句子。
+    steps:
+      - 执行分块并让当前 Agent 逐块处理；确认核心文本块不超过 6000 字符，相邻只读上下文未重复输出。
+      - 合并 review 并 finalize；确认所有编号按顺序恰好出现一次，跨段句意连贯且最后一段存在。
+      - 保存完整 reading.md 摘要，再从 review 副本删除一个源段并尝试 finalize；确认覆盖校验拒绝缺段结果，原成功阅读稿摘要不变。
+  - id: YTR-013
+    name: 中断后从已完成阶段恢复
+    required: true
+    description: 同一任务中断不会丢失已完成块，恢复不会重新下载或重算有效块。
+    preconditions:
+      - 本 case 独立任务使用至少 21 分钟的可用音频，能产生多个识别块。
+    steps:
+      - 执行 prepare，在至少一块完成且下一块尚未完成时终止本 case 进程；记录已完成文件摘要与 manifest，确认没有最终阅读稿。
+      - 对同一 job-dir 执行 resume；确认使用已完成材料，只重做未完成块，原有已完成块摘要不变，最终到达 awaiting_ai。
+  - id: YTR-014
+    name: 缓存只复用输入和处理版本仍然有效的阶段
+    required: true
+    description: 同一视频再次提交复用有效阶段；校对版本变化只使校对及导读失效，不重算音频。
+    preconditions:
+      - 本 case 独立任务已自行完成一次处理，保存 reading.md 和源材料摘要、版本记录。
+    steps:
+      - 在相同版本与相同输出根目录下再次 prepare；确认报告缓存命中和原获取时间，没有再次下载或 ASR。
+      - 在本 case 的技能工作副本中更新校对提示词版本，再执行 prepare；确认校对与导读变为待处理，源材料和 ASR 摘要不变，不能把旧校对标为新版本已完成。
+  - id: YTR-015
+    name: 不支持的输入在下载前被拒绝
+    required: true
+    description: 非视频链接和不可信输入不会成为任意网络下载或 shell 命令。
+    preconditions:
+      - 本 case 有独立输出目录，准备纯频道链接、纯播放列表链接、非 YouTube URL 和含 shell 元字符的非法 URL 文本。
+    steps:
+      - 分别用参数数组传给 prepare；确认均返回明确输入错误，未启动下载或执行输入中的命令。
+      - 检查本 case 输出目录；确认没有被误创建的最终阅读稿。
+  - id: YTR-016
+    name: 等价视频链接处理同一个完整视频
+    required: true
+    description: 短链接、watch 链接和带时间或列表参数的同一 video ID 均规范化为单视频全文任务。
+    preconditions:
+      - 本 case 有一个实际可访问的视频 ID 和独立输出根目录，准备其 youtu.be、watch 及带 t/list 参数的链接。
+    steps:
+      - 逐个提交等价链接；确认规范化 video ID 相同，带 t 参数没有裁掉前文，带 list 参数没有下载其他视频。
+      - 在包含中文和空格的输出路径运行其中一个任务；确认读取、恢复和最终路径定位正常。
+  - id: YTR-017
+    name: 最终阅读稿仅包含导读与正文
+    required: true
+    description: 最终文件结构固定且可独立阅读，导读没有额外观点，正文不被摘要替代。
+    preconditions:
+      - 本 case 独立任务有完整 source、通过校验的 review 和当前 Agent 根据该正文生成的 guide。
+    steps:
+      - 执行 finalize 并打开 reading.md；确认只有导读和正文两个二级标题，没有独立总结或思维导图。
+      - 核对标题、来源链接、时间定位及正文段落映射；确认导读中的信息均可追溯到正文，正文完整保留，内部日志未混入文章。
+  - id: YTR-018
+    name: 获取失败可明确归因且不会无限重试
+    required: true
+    description: 网络超时和平台拒绝都能在获取阶段停止，不伪装为无字幕成功或生成虚构正文。
+    preconditions:
+      - 本 case 建立两个隔离任务，通过仅作用于本次进程的请求适配 fixture 分别返回连接超时和访问拒绝；不更改系统代理或网络。
+    steps:
+      - 执行两种获取失败场景；确认超时每次按 15 秒边界处理且最多追加 2 次重试，拒绝访问报告相应错误而非反复尝试登录。
+      - 检查 manifest 和输出；确认失败阶段为获取、错误原因明确、没有最终阅读稿，未读取浏览器 Cookie。
+  - id: YTR-019
+    name: 同一任务并发执行不会交错写入
+    required: true
+    description: 两个进程竞争同一任务时只有一个持有写入权，退出后的陈旧锁可被安全恢复。
+    preconditions:
+      - 本 case 有独立输出根目录和可运行的材料任务，能够定位自己启动的进程。
+    steps:
+      - 启动第一个任务并在其持锁期间启动第二个相同任务；确认第二个返回 JOB_BUSY，第一份 manifest 和材料没有被覆盖。
+      - 终止本 case 的持锁进程并确认进程已结束，再执行 resume；确认回收陈旧锁并正常恢复，不影响其他任务目录。
+  - id: YTR-020
+    name: 新会话可通过 Skill 交付真实阅读稿
+    required: true
+    description: 实际安装后，新会话中给链接即可走完获取、AI 校对、导读和交付，证明能力不依赖旧测试会话状态。
+    preconditions:
+      - 技能源码和配套脚本已通过实际安装方式被当前宿主发现，可用运行时已准备好。
+      - 独立新会话有本机工具能力和独立输出目录，准备一条当场确认可访问的中文无字幕教程链接。
+    steps:
+      - 在新会话中要求按 youtube-reading 处理该链接；确认实际读取技能、调用本机脚本，并由当前 Agent 完成校对和导读，未让用户手动拼接命令。
+      - 打开最终返回的本地文件链接；确认 reading.md 存在且只有导读和正文，manifest 为 complete，必要的不确定片段标记仍保留。
+      - 保存新会话执行记录与各阶段耗时；确认没有依赖原型临时目录，也未把当前会话的 AI 处理宣称为独立离线模型。
