@@ -12,12 +12,17 @@ public struct ScreenAwakeModifier: ViewModifier {
 
   public func body(content: Content) -> some View {
     content
-      .onAppear { updateIdleTimer() }
-      .onChange(of: scenePhase) { _ in updateIdleTimer() }
-      .onChange(of: keepScreenAwake) { _ in updateIdleTimer() }
+      .onAppear { updateIdleTimer(phase: scenePhase, enabled: keepScreenAwake) }
+      .onChange(of: scenePhase) { phase in
+        updateIdleTimer(phase: phase, enabled: keepScreenAwake)
+      }
+      .onChange(of: keepScreenAwake) { enabled in
+        updateIdleTimer(phase: scenePhase, enabled: enabled)
+      }
   }
 
-  private func updateIdleTimer() {
-    UIApplication.shared.isIdleTimerDisabled = keepScreenAwake && scenePhase == .active
+  private func updateIdleTimer(phase: ScenePhase, enabled: Bool) {
+    // onChange's captured environment can still contain the previous value.
+    UIApplication.shared.isIdleTimerDisabled = enabled && phase == .active
   }
 }
