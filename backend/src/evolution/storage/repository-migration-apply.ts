@@ -36,7 +36,7 @@ import {
   tableDigest,
   tables,
   type MigrationManifest,
-} from "./repository-migration-audit";
+} from "./repository-migration-integrity";
 
 interface Journal {
   migrationId: string;

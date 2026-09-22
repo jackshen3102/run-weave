@@ -13,7 +13,7 @@ import {
   renameSync,
 } from "node:fs";
 import path from "node:path";
-import { fingerprint, openReadOnly } from "./repository-migration-audit";
+import { fingerprint, openReadOnly } from "./repository-migration-integrity";
 
 export function privateJson(file: string, value: unknown): void {
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });

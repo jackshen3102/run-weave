@@ -6,11 +6,11 @@ import {
   resolveActivityStoragePaths,
   resolveEvolutionStoragePaths,
 } from "../utils/path";
+import { auditRepositoryMigration } from "../evolution/storage/repository-migration-audit";
 import {
-  auditRepositoryMigration,
   openReadOnly,
   type MigrationManifest,
-} from "../evolution/storage/repository-migration-audit";
+} from "../evolution/storage/repository-migration-integrity";
 import { applyRepositoryMigration } from "../evolution/storage/repository-migration-apply";
 import {
   assertOffline,
