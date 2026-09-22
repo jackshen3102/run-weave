@@ -58,13 +58,20 @@ uv run --with pyyaml python "$CODEX_HOME/skills/.system/plugin-creator/scripts/v
   plugins/toolkit
 ```
 
-验证每个 skill：
+验证单个 skill（使用项目内入口，官方校验器保持只读）：
 
 ```bash
-CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+pnpm toolkit:validate -- plugins/toolkit/skills/github-pr
+```
+
+入口需要 `uv`，从 `CODEX_HOME`（默认 `~/.codex`）定位官方 `skill-creator` 校验器，在隔离环境准备 PyYAML 后调用；不修改全局 Python 依赖、官方技能、项目 Python 环境或提交钩子。首次准备依赖可能需要网络。正常校验的输出与退出码原样保留：0 为通过，1 为内容不合格；启动、依赖准备或执行异常返回 2，不能当作内容校验失败。
+
+验证每个 skill（任一失败立即停止，避免后续成功掩盖失败）：
+
+```bash
 for skill_dir in plugins/toolkit/skills/*; do
   [ -d "$skill_dir" ] || continue
-  uv run --with pyyaml python "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" "$skill_dir"
+  pnpm toolkit:validate -- "$skill_dir" || exit "$?"
 done
 ```
 
