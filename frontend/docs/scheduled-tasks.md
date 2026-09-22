@@ -19,6 +19,21 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
 [历史交互原型](../../docs/prototypes/agent-scheduled-tasks/README.md)仅用于视觉与交互参考。
 生产代码不读取原型的假数据、LocalStorage 任务或模拟回复。
 
+## 错过执行时间
+
+新建任务默认「恢复后补最近一次」，允许延迟 24 小时，可配置 1 至 168 小时整数。
+旧任务在数据库升级时写入「错过就跳过」（60 秒宽限），历史配置快照同步迁移。
+创建请求必须明确提供 `misfirePolicy`；PATCH 省略字段表示不修改。策略进入每次运行的配置快照。
+数据库先迁移至当前格式再启动调度，详见 [存储升级规则](../../backend/src/scheduled-tasks/storage/README.md)。
+
+补跑仅选取最近且未超过有效期的安排，更早安排合并忽略；不批量回放积压。
+有效期约束调度入队，入队后的正常排队不再次过期。同任务已有未结束运行时仍跳过为 busy，
+全局并发仍为 1。已开始后中断的运行不自动重发提示词。暂停后重新启用不追溯暂停期间。
+
+历史分别展示计划时间、实际开始时间、调度延迟与排队等待；旧 missed 记录显示中性的超期原因，
+不根据迟到推断宕机。电脑休眠期间不会执行，准点执行需要持续在线的 Backend。
+补跑验收见 [补跑测试计划](../../docs/testing/scheduled-tasks/catch-up.testplan.yaml)。
+
 ## 接入边界
 
 - [服务层](../src/services/scheduled-tasks.ts)只使用既有鉴权 HTTP 客户端。

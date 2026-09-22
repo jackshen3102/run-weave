@@ -1,5 +1,6 @@
 import type {
   ScheduledRunStatus,
+  ScheduledMisfirePolicy,
   TaskSchedule,
 } from "@runweave/shared/scheduled-tasks";
 import { HttpError } from "../../services/http";
@@ -92,4 +93,17 @@ export function RequestError({ error }: { error: unknown }) {
       ))}
     </div>
   ) : null;
+}
+
+export function misfirePolicyLabel(policy: ScheduledMisfirePolicy) {
+  return policy.mode === "catch-up-latest"
+    ? `恢复后补最近一次 · 允许延迟 ${policy.maxDelaySeconds / 3600} 小时`
+    : "错过就跳过 · 宽限 60 秒";
+}
+export function displayDuration(milliseconds: number) {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟`;
+  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟`;
 }

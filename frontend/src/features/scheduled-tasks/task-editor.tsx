@@ -49,6 +49,9 @@ export function TaskEditor({
     model: task?.model ?? "",
     effort: task?.effort ?? "",
     executionPolicy: task?.executionPolicy,
+    misfirePolicy: task
+      ? task.misfirePolicy
+      : { mode: "catch-up-latest", maxDelaySeconds: 86400 },
     enabled: task?.enabled ?? true,
     schedule: task?.schedule ?? {
       kind: "daily",
@@ -351,6 +354,50 @@ export function TaskEditor({
               ) : null}
             </div>
             <RequestError error={preview.error} />
+          </section>
+          <section className="grid gap-3 rounded-lg border p-3">
+            <label className="grid gap-1 text-sm">
+              错过执行时间
+              <select
+                className={fieldClass}
+                value={draft.misfirePolicy.mode}
+                onChange={(e) =>
+                  change(
+                    "misfirePolicy",
+                    e.target.value === "skip"
+                      ? { mode: "skip" }
+                      : { mode: "catch-up-latest", maxDelaySeconds: 86400 },
+                  )
+                }
+              >
+                <option value="catch-up-latest">恢复后补最近一次</option>
+                <option value="skip">错过就跳过</option>
+              </select>
+            </label>
+            {draft.misfirePolicy.mode === "catch-up-latest" ? (
+              <label className="grid gap-1 text-sm">
+                允许延迟（小时）
+                <Input
+                  type="number"
+                  required
+                  min={1}
+                  max={168}
+                  step={1}
+                  value={draft.misfirePolicy.maxDelaySeconds / 3600 || ""}
+                  onChange={(e) =>
+                    change("misfirePolicy", {
+                      mode: "catch-up-latest",
+                      maxDelaySeconds: Number(e.target.value) * 3600,
+                    })
+                  }
+                />
+              </label>
+            ) : null}
+            <p className="text-xs text-muted-foreground">
+              {draft.misfirePolicy.mode === "catch-up-latest"
+                ? "在允许延迟内只补最近一次，更早的安排合并忽略；已有运行时不重复启动。"
+                : "超过计划时间 60 秒仍未调度则跳过，等待下一次安排。"}
+            </p>
           </section>
           <details className="rounded-lg border p-3">
             <summary className="cursor-pointer text-sm">高级设置</summary>

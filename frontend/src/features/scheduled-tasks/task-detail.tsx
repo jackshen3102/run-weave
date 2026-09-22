@@ -10,6 +10,8 @@ import { useTask, useRuns, useRun } from "./queries";
 import { TaskActions } from "./task-actions";
 import {
   displayTime,
+  displayDuration,
+  misfirePolicyLabel,
   RequestError,
   safeArtifactUrl,
   scheduleLabel,
@@ -68,6 +70,47 @@ function RunRecord({
           {run.taskRevision}
         </p>
       </button>
+      {run.trigger === "scheduled" ? (
+        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+          <p>
+            计划时间：
+            {displayTime(run.scheduledFor, run.snapshot.schedule.timezone)}
+          </p>
+          <p>
+            实际开始：
+            {run.startedAt
+              ? displayTime(run.startedAt, run.snapshot.schedule.timezone)
+              : "尚未开始"}
+          </p>
+          {run.dispatch ? (
+            <>
+              <p>
+                {run.dispatch.catchUp ? "延迟执行 · " : ""}调度延迟：
+                {displayDuration(run.dispatch.latenessMs)}
+              </p>
+              {run.startedAt ? (
+                <p>
+                  排队等待：
+                  {displayDuration(
+                    Date.parse(run.startedAt) -
+                      Date.parse(run.dispatch.evaluatedAt),
+                  )}
+                </p>
+              ) : null}
+              {run.dispatch.coalescedFrom ? (
+                <p>
+                  更早的安排已合并忽略（从{" "}
+                  {displayTime(
+                    run.dispatch.coalescedFrom,
+                    run.snapshot.schedule.timezone,
+                  )}{" "}
+                  起）
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {run.summary ? <RunSummary text={run.summary} /> : null}
       {run.status === "completed" && !run.outcome ? (
         <p className="mt-2 text-xs text-muted-foreground">
@@ -76,7 +119,10 @@ function RunRecord({
       ) : null}
       {run.error ? (
         <p className="mt-2 break-words text-sm text-destructive">
-          {run.error.message} ({run.error.code})
+          {run.error.code === "missed"
+            ? "超过允许的延迟，已跳过"
+            : run.error.message}{" "}
+          ({run.error.code})
         </p>
       ) : null}
       <button
@@ -138,6 +184,9 @@ function RunRecord({
             {run.snapshot.projectId}
           </p>
           <p className="mt-1">{scheduleLabel(run.snapshot.schedule)}</p>
+          <p className="mt-1">
+            {misfirePolicyLabel(run.snapshot.misfirePolicy)}
+          </p>
           <p className="mt-1">
             模型：{run.snapshot.model || "默认"} · 推理：
             {run.snapshot.effort || "默认"}

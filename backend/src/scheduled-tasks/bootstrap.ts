@@ -94,7 +94,12 @@ export async function createScheduledTaskSubsystem(params: {
         null,
         params.terminalSessionManager,
         capabilities,
-        "Scheduled task storage failed to initialize",
+        error instanceof Error &&
+          /^scheduled_tasks_schema_(too_new|history_mismatch|legacy_mismatch|migration_failed)$/.test(
+            error.message,
+          )
+          ? `Scheduled task database migration blocked (${error.message})`
+          : "Scheduled task storage failed to initialize",
       ),
       runtime: null,
       store: null,

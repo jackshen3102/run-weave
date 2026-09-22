@@ -43,6 +43,7 @@ function execute(command: ScheduledTaskWorkerCommand) {
         command.occurrenceKey,
         command.nextRunAt,
         command.taskRevision,
+        command.expectedNextRunAt,
       );
     case "create-manual-run":
       return database.createManualRun(

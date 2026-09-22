@@ -40,7 +40,7 @@ cases:
   - id: SRT-004
     name: "Backend 离线错过安排不会批量补跑"
     required: true
-    description: "同一 fixture 的停机与重启保留历史并按既定 missed 规则推进时间。"
+    description: "同一 fixture 的停机与重启保留历史；本用例使用显式 skip 或缺省策略，按原有 missed 规则推进时间。"
     preconditions:
       - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
       - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"

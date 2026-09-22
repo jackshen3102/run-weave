@@ -1,0 +1,53 @@
+version: 1
+name: 定时任务补跑策略验收
+description: "补跑策略专项验收；覆盖补跑选择、事务幂等、兼容和界面解释。格式通过不代表行为通过。"
+cases:
+  - id: SCU-001
+    name: "补跑只选择有效期内最近一次安排"
+    required: true
+    description: "使用补跑实现；多日积压只生成最近一次，期限包含等号，沿用时区和 DST 规则。"
+    preconditions:
+      - "补跑策略已实现；本用例拥有独立临时数据库、受控时钟与无副作用 provider，结束只清理自有资源。"
+    steps:
+      - "为 daily、weekdays、weekly、once 分别建立独立任务样本，设置 catch-up-latest 和 24 小时有效期，使用生产调度链处理已错过的时间；确认最近 occurrence 在期限内仅产生一个 queued 或已执行 Run，更早安排不产生批量运行。"
+      - "用独立样本覆盖迟到 60 秒、9 小时、恰好 24 小时及 24 小时加 1 毫秒；前三者允许执行，最后者 skipped/missed，无 provider spawn。"
+      - "覆盖周末和夏令时缺失/重复分钟；确认选中时间遵循原日历规则，下一次严格晚于当前时间，once 生成记录后禁用。"
+  - id: SCU-002
+    name: "补跑事务在重复唤醒和重启后不重复入队"
+    required: true
+    description: "同一计划时间只创建一次运行，陈旧 revision 或 nextRunAt 决策不能插入第二次。"
+    preconditions:
+      - "补跑实现已完成；本用例拥有独立 Backend、数据库和受控 provider，可暂停执行并记录 spawn 次数。"
+    steps:
+      - "建立过期但在有效期内的补跑任务，重复唤醒并保留一个陈旧调度决策；确认唯一 occurrence 与 nextRunAt 在同一事务持久化。"
+      - "在 Run 已入队但未执行时重启同一 fixture，重新取得 fresh endpoint，恢复执行并重放陈旧决策；确认只有一个 Run 且 provider 只启动一次。"
+      - "收集数据库和 spawn 证据，停止并清理本用例资源。"
+  - id: SCU-003
+    name: "迁移后的旧任务及局部更新保持明确策略"
+    required: true
+    description: "旧任务经迁移得到明确 skip 策略；PATCH 省略策略不覆盖已保存的新策略。"
+    preconditions:
+      - "补跑合同已实现；本用例拥有独立数据根、认证 API 和无副作用 provider。"
+    steps:
+      - "启动包含缺少 misfirePolicy 旧任务的隔离旧库，确认迁移补齐 skip；处理迟到 61 秒的安排，确认 skipped/missed，不自动改为补跑。"
+      - "创建显式补跑任务，用合法 revision 发送省略策略的更新；确认策略仍为补跑，用过期 revision 更新返回冲突。"
+      - "提交不在 1 至 168 小时整数范围的有效期；确认 invalid_input 且未写入变更，结束清理自有资源。"
+  - id: SCU-004
+    name: "补跑仍遵守同任务占用保护"
+    required: true
+    description: "已有未结束 Run 时不为同任务创建第二个执行，避免补跑积压。"
+    preconditions:
+      - "补跑实现已完成；本用例拥有独立数据根和可控制状态的 provider fixture。"
+    steps:
+      - "分别为 queued、running、stopping、waiting 建立独立任务样本，推进至需补跑的 occurrence；确认新 occurrence 为 skipped/busy，原 Run 不变，额外 spawn 为零。"
+      - "确认 skipped 的 finishedAt 为实际判断时间，nextRunAt 推进到未来；回收自有进程和数据库。"
+  - id: SCU-005
+    name: "界面持久化补跑策略并如实解释延迟"
+    required: true
+    description: "真实编辑器与历史页面展示保存的策略、计划时间和实际开始时间，不虚构停机原因。"
+    preconditions:
+      - "补跑 Web 与 Backend 已实现；本用例拥有隔离项目和可用页面，准备延迟运行与历史 missed 样本。"
+    steps:
+      - "使用 $toolkit:playwright-cli 新建任务，确认默认补跑 24 小时；切换策略并保存刷新，核对请求和页面持久值一致。"
+      - "打开延迟样本，确认展示延迟执行、计划时间和实际开始时间；排队样本不伪造开始时间。"
+      - "打开旧 missed 样本，确认不会把缺乏诊断证据的延迟断言为 Backend 宕机；保存页面证据并清理本用例任务。"

@@ -216,6 +216,7 @@ export class ScheduledTaskService {
             ? undefined
             : input.effort.trim(),
       schedule,
+      misfirePolicy: input.misfirePolicy ?? current.misfirePolicy,
       enabled,
       nextRunAt,
       revision: current.revision + 1,
@@ -437,6 +438,7 @@ function normalizeConfig(input: CreateScheduledTaskRequest | ScheduledTask) {
     ...(input.model?.trim() ? { model: input.model.trim() } : {}),
     ...(input.effort?.trim() ? { effort: input.effort.trim() } : {}),
     schedule: input.schedule,
+    misfirePolicy: input.misfirePolicy,
   };
 }
 function paginate<T>(

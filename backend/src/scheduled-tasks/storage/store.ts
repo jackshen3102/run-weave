@@ -110,13 +110,15 @@ export class ScheduledTaskStore {
     occurrenceKey: string,
     nextRunAt: string | null,
     taskRevision: number,
+    expectedNextRunAt: string,
   ) {
-    return this.request<ScheduledRun>({
+    return this.request<ScheduledRun | null>({
       op: "materialize-scheduled-run",
       run,
       occurrenceKey,
       nextRunAt,
       taskRevision,
+      expectedNextRunAt,
     });
   }
   createManualRun(

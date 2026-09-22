@@ -6,14 +6,24 @@ import type {
   ScheduledRun,
   ScheduledTask,
 } from "@runweave/shared/scheduled-tasks";
-import { nextOccurrences } from "../../../backend/src/scheduled-tasks/schedule";
+import { ScheduledTaskRuntime } from "../../../backend/src/scheduled-tasks/runtime";
+import type { TerminalSessionManager } from "../../../backend/src/terminal/manager/manager";
+import {
+  latestOccurrence,
+  nextOccurrences,
+} from "../../../backend/src/scheduled-tasks/schedule";
 import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
+
+import { verifyMigrations } from "./migrations";
 
 const selected = readSelectedCase(process.argv.slice(2));
 const cases: Record<string, () => Promise<void>> = {
+  migrations: verifyMigrations,
   time: verifyTime,
   dedupe: verifyDedupe,
   restart: verifyRestart,
+  catchUp: verifyCatchUp,
+  catchUpExecution: verifyCatchUpExecution,
 };
 
 void main();
@@ -53,6 +63,36 @@ async function verifyTime(): Promise<void> {
     ),
     ["2026-11-01T08:30:00.000Z"],
   );
+  for (const [schedule, through, expected] of [
+    [
+      { kind: "weekdays", timezone: "Asia/Shanghai", localTime: "00:00" },
+      "2026-09-27T01:00:00Z",
+      "2026-09-24T16:00:00.000Z",
+    ],
+    [
+      { kind: "weekly", timezone: "UTC", localTime: "09:00", weekdays: [1] },
+      "2026-09-23T10:00:00Z",
+      "2026-09-21T09:00:00.000Z",
+    ],
+    [
+      { kind: "daily", timezone: "America/Los_Angeles", localTime: "02:30" },
+      "2026-03-08T12:00:00Z",
+      "2026-03-07T10:30:00.000Z",
+    ],
+    [
+      { kind: "daily", timezone: "America/Los_Angeles", localTime: "01:30" },
+      "2026-11-01T10:00:00Z",
+      "2026-11-01T08:30:00.000Z",
+    ],
+  ] as const) {
+    assert.equal(
+      latestOccurrence(
+        schedule as ScheduledTask["schedule"],
+        new Date(through),
+      ),
+      expected,
+    );
+  }
 }
 
 async function verifyDedupe(): Promise<void> {
@@ -169,6 +209,183 @@ async function verifyRestart(): Promise<void> {
   }
 }
 
+async function verifyCatchUp(): Promise<void> {
+  await withStore(async (store) => {
+    const runtime = new ScheduledTaskRuntime(
+      store,
+      {
+        getProject: () => ({ path: os.tmpdir() }),
+      } as unknown as TerminalSessionManager,
+      new Map([
+        [
+          "codex",
+          {
+            provider: "codex",
+            run: async () => {
+              throw new Error("materialization must not execute a provider");
+            },
+          },
+        ],
+      ]),
+      true,
+      { timeoutMs: 1000, maxOutputBytes: 1000 },
+    );
+    const now = new Date("2026-09-23T09:00:00.000Z");
+    try {
+      for (const [index, delay] of [
+        60_000,
+        9 * 3600_000,
+        86400_000,
+        86400_001,
+      ].entries()) {
+        const at = new Date(now.getTime() - delay).toISOString();
+        const task: ScheduledTask = {
+          ...taskFixture(),
+          schedule: { kind: "once", timezone: "UTC", runAt: at },
+          nextRunAt: at,
+          misfirePolicy: { mode: "catch-up-latest", maxDelaySeconds: 86400 },
+        };
+        await store.createTask(
+          task,
+          task.projectId,
+          `boundary-${index}`,
+          "hash",
+        );
+        await runtime["materializeDue"](now);
+        const runs = await store.listRuns(task.id);
+        assert.equal(runs.length, 1);
+        assert.equal(runs[0]?.status, delay > 86400_000 ? "skipped" : "queued");
+        assert.equal(runs[0]?.dispatch?.latenessMs, delay);
+        assert.equal((await store.getTask(task.id))?.enabled, false);
+      }
+      const task: ScheduledTask = {
+        ...taskFixture(),
+        nextRunAt: "2020-01-01T09:00:00.000Z",
+        misfirePolicy: { mode: "catch-up-latest", maxDelaySeconds: 86400 },
+      };
+      await store.createTask(task, task.projectId, "backlog", "hash");
+      await runtime["materializeDue"](now);
+      await runtime["materializeDue"](now);
+      const runs = await store.listRuns(task.id);
+      assert.equal(runs.length, 1);
+      const run = runs[0]!;
+      assert.equal(run.scheduledFor, now.toISOString());
+      assert.equal(run.dispatch?.coalescedFrom, task.nextRunAt);
+      assert.equal(
+        (await store.getTask(task.id))?.nextRunAt,
+        "2026-09-24T09:00:00.000Z",
+      );
+      assert.equal(
+        await store.materializeScheduledRun(
+          {
+            ...run,
+            id: crypto.randomUUID(),
+            scheduledFor: "2026-09-22T09:00:00.000Z",
+          },
+          "stale-occurrence",
+          "2026-09-24T09:00:00.000Z",
+          task.revision,
+          task.nextRunAt!,
+        ),
+        null,
+      );
+      // Admission is durable: a new runtime must not duplicate or expire queued work.
+      const recovered = new ScheduledTaskRuntime(
+        store,
+        {} as TerminalSessionManager,
+        new Map(),
+        false,
+        { timeoutMs: 1000, maxOutputBytes: 1000 },
+      );
+      await recovered.initialize();
+      assert.equal((await store.getRun(run.id))?.status, "queued");
+      await recovered.dispose();
+      await runtime["materializeDue"](new Date("2026-09-24T10:00:00.000Z"));
+      const busy = (await store.listRuns(task.id)).find(
+        (item) => item.id !== run.id,
+      )!;
+      assert.equal(busy.error?.code, "busy");
+      assert.equal(busy.finishedAt, "2026-09-24T10:00:00.000Z");
+      const legacy = {
+        ...taskFixture(),
+        nextRunAt: "2026-09-22T09:00:00.000Z",
+      };
+      await store.createTask(legacy, legacy.projectId, "legacy", "hash");
+      await runtime["materializeDue"](now);
+      assert.equal((await store.listRuns(legacy.id))[0]?.error?.code, "missed");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+}
+
+async function verifyCatchUpExecution(): Promise<void> {
+  await withStore(async (store) => {
+    const at = new Date(Date.now() - 9 * 3600_000).toISOString();
+    const task: ScheduledTask = {
+      ...taskFixture(),
+      nextRunAt: at,
+      schedule: { kind: "once", timezone: "UTC", runAt: at },
+      misfirePolicy: { mode: "catch-up-latest", maxDelaySeconds: 86400 },
+    };
+    await store.createTask(task, task.projectId, "execute-catch-up", "hash");
+    let invocations = 0;
+    const runtime = new ScheduledTaskRuntime(
+      store,
+      {
+        getProject: () => ({ path: os.tmpdir() }),
+      } as unknown as TerminalSessionManager,
+      new Map([
+        [
+          "codex",
+          {
+            provider: "codex",
+            run: async () => {
+              invocations += 1;
+              return {
+                provider: "codex",
+                threadId: "controlled-fixture-thread",
+                summary: "verified",
+                outcome: "succeeded",
+                reason: "",
+              };
+            },
+          },
+        ],
+      ]),
+      true,
+      { timeoutMs: 1000, maxOutputBytes: 1000 },
+    );
+    try {
+      await runtime.initialize();
+      runtime.start();
+      const deadline = Date.now() + 5000;
+      while (
+        (await store.listRuns(task.id))[0]?.status !== "completed" &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      const runs = await store.listRuns(task.id);
+      assert.equal(runs.length, 1);
+      assert.equal(runs[0]?.status, "completed");
+      assert.equal(runs[0]?.dispatch?.catchUp, true);
+      await runtime.dispose();
+      await store.recoverInterruptedRuns(
+        new Date().toISOString(),
+        "restarted-fixture",
+      );
+      assert.equal(
+        await store.claimNextRun("restarted-fixture", new Date().toISOString()),
+        null,
+      );
+      assert.equal(invocations, 1);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+}
+
 async function withStore(
   run: (store: ScheduledTaskStore) => Promise<void>,
 ): Promise<void> {
@@ -194,6 +411,7 @@ function taskFixture(): ScheduledTask {
     projectId: "fixture-project",
     provider: "codex",
     prompt: "fixture",
+    misfirePolicy: { mode: "skip" },
     schedule: { kind: "daily", timezone: "UTC", localTime: "09:00" },
     enabled: true,
     nextRunAt: "2026-09-22T09:00:00.000Z",
@@ -216,9 +434,11 @@ function runFixture(
       provider: task.provider,
       prompt: task.prompt,
       schedule: task.schedule,
+      misfirePolicy: task.misfirePolicy,
     },
     trigger,
     scheduledFor: "2026-09-21T00:00:00.000Z",
+    dispatch: null,
     status: "queued",
     startedAt: null,
     finishedAt: null,
