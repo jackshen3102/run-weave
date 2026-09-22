@@ -11,27 +11,30 @@ struct RunweaveNativeApp: App {
 
   var body: some Scene {
     WindowGroup {
-      #if NATIVE_DIAGNOSTICS
-        if ProcessInfo.processInfo.arguments.contains("--native-browser-proxy-probe") {
-          BrowserProxyProbe()
-        } else if showingTerminalLab {
-          NavigationView {
-            TerminalProbe()
-              .navigationTitle("终端实验室")
-              .navigationBarTitleDisplayMode(.inline)
-              .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                  Button("返回首页") { showingTerminalLab = false }
+      Group {
+        #if NATIVE_DIAGNOSTICS
+          if ProcessInfo.processInfo.arguments.contains("--native-browser-proxy-probe") {
+            BrowserProxyProbe()
+          } else if showingTerminalLab {
+            NavigationView {
+              TerminalProbe()
+                .navigationTitle("终端实验室")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                  ToolbarItem(placement: .navigationBarLeading) {
+                    Button("返回首页") { showingTerminalLab = false }
+                  }
                 }
-              }
+            }
+            .navigationViewStyle(.stack)
+          } else {
+            RootView()
           }
-          .navigationViewStyle(.stack)
-        } else {
+        #else
           RootView()
-        }
-      #else
-        RootView()
-      #endif
+        #endif
+      }
+      .modifier(ScreenAwakeModifier())
     }
   }
 }

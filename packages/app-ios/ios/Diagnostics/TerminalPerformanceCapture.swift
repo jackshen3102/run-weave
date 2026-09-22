@@ -26,7 +26,6 @@
     private var lastReceipt = 0.0
     private var lastCommit = 0.0
     private var failure: String?
-    private var previousIdleTimerDisabled = false
     private var writes = DispatchQueue(label: "native.profile.evidence", qos: .utility)
 
     func start(_ controller: SessionController) {
@@ -55,8 +54,6 @@
         return
       }
       running = true
-      previousIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
-      UIApplication.shared.isIdleTimerDisabled = true
       status = "正在采样 · 最长 11 分钟"
       controller.outputMetrics.$receivedBytes.sink { [weak self] total in
         guard let self, self.running, total > self.baseReceived + self.received else { return }
@@ -100,7 +97,6 @@
     func stop() {
       guard running else { return }
       running = false
-      UIApplication.shared.isIdleTimerDisabled = previousIdleTimerDisabled
       timer?.invalidate()
       timer = nil
       subscriptions.removeAll()
