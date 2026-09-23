@@ -5,6 +5,7 @@ struct HomeTerminalRow: View {
   @ObservedObject var session: AppSession
   let terminal: HomeTerminal
   let projectName: String?
+  var branchStatus: HomeBranchStatus? = nil
   let rename: () -> Void
   let delete: () -> Void
   @State private var showingCopied = false
@@ -33,7 +34,17 @@ struct HomeTerminalRow: View {
           if session.metadataWrites.contains(terminal.id) { ProgressView() }
           TerminalStatusBadge(terminal: terminal)
         }
-        if let projectName { Text(projectName).font(.caption).foregroundColor(.secondary) }
+        if let projectName {
+          HStack(spacing: 5) {
+            Text(projectName).lineLimit(1).truncationMode(.middle)
+            if let branchStatus, branchStatus.state != "not-repository" {
+              Text("·")
+              HomeBranchStatusLabel(status: branchStatus)
+                .frame(maxWidth: 160, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false).layoutPriority(1)
+            }
+          }.font(.caption).foregroundColor(.secondary).lineLimit(1)
+        }
         HStack {
           Text(terminal.subtitle).lineLimit(2)
           Spacer()

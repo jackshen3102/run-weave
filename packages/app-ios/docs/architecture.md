@@ -61,6 +61,14 @@ session ID 和 overview 数据源。关注区按未读、执行中或启动中�
 生成并持久化，缺失或 null 表示未置顶。最近置顶在前，同时间按 session ID 排序；重复置顶不改变
 时间，输出、退出和重命名不改变位置。数据随所连接的 Backend 隔离，桌面端不增加置顶 UI。
 
+关注区第二行在项目名后显示紧凑的 `main ↓5` 或 `main ✓`（仅表示不落后），长项目名优先截断；
+普通项目行和终端页不添加状态。独立 `POST /api/app/home/branch-status` 只接受会话 ID，Backend
+用会话当前 cwd 的 HEAD 对比远端默认分支；优先 origin，否则仅使用唯一 remote。非 Git 目录隐藏，
+无法确定基准、浅克隆或无共同历史不伪造零。请求与 overview 分离，不阻塞列表加载。
+首页前台按十分钟缓存更新，离开首页或后台停止轮询；下拉刷新和现有菜单刷新主动更新（服务端合并
+两秒内重复请求）。同一 Git common directory 共用远端 fetch，各 worktree 独立计算；失败保留旧计数并
+显示“待更新”。不会自动 rebase，零落后不代表工作区干净或 rebase 没有冲突。
+
 重命名复用共享 `alias`，空值清除别名；Backend 和 Swift 均按最多 80 个 UTF-16 code units
 校验。PATCH 响应是 session list item，标题仍取 overview；修改成功后刷新失败会单独提示已保存，
 不自动重发修改。写入忙状态按终端共享，generation 和 overview 请求序号隔离旧连接与旧快照。

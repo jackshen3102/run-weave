@@ -118,6 +118,27 @@ export interface AppHomeOverviewResponse {
   sessions: AppHomeOverviewSession[];
 }
 
+/** Separate from overview: fetching Git must never delay the terminal list. */
+export interface AppHomeBranchStatusRequest {
+  terminalSessionIds: string[];
+  refresh?: boolean;
+}
+
+export interface AppHomeBranchStatus {
+  terminalSessionId: string;
+  cwd: string;
+  state: "ready" | "stale" | "unavailable" | "not-repository";
+  /** Remote default branch name, never the feature branch's upstream. */
+  baseBranch?: string;
+  behind?: number;
+  /** Last successful remote update and comparison (UTC). Absent when unknown. */
+  checkedAt?: string;
+}
+
+export interface AppHomeBranchStatusResponse {
+  statuses: AppHomeBranchStatus[];
+}
+
 export interface UpdateTerminalSessionRequest {
   pinned?: boolean;
   alias?: string | null;
