@@ -50,7 +50,9 @@ Pi 实例及 sequence。成功 completion 只接收当前匹配的 settled，接
 
 Web Composer、iOS `line` 和 `rw` 共用 Backend 输入路径。扩展提供 uid 私有目录下的
 Unix socket（目录 0700、socket 0600），按当前 terminal/session/instance 校验请求，
-调用 `ctx.ui.setEditorText` 完整替换草稿；Backend 再通过同一 Pane 的原生 Enter 提交（首发基线为默认键位配置）。
+调用 `ctx.ui.setEditorText` 完整替换草稿；Backend 再通过同一 Pane 的原生按键提交（基线为默认键位配置）。
+普通发送使用 Enter；桌面悬浮输入框的「排队」使用 Alt+Enter，复用 Pi 的 follow-up 队列，
+等待当前工作结束后再处理。Runweave 不另行保存或调度队列。
 同 Pane 的结构化输入互斥；重复请求或不可用扩展返回错误，调用方保留草稿。原始按键
 与 Escape 保留既有通道。Pi 的 Ctrl+U 仅删除当前行，不能用于完整替换多行草稿。
 

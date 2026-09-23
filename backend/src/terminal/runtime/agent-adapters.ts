@@ -1,5 +1,6 @@
 import { buildAgentResumeArgs } from "@runweave/shared/terminal/agent-resume";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
+import type { TerminalPromptSubmitKey } from "@runweave/shared/terminal/input";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TmuxPaneTarget, TmuxService } from "../tmux/service";
 import { replacePiEditor } from "./pi-editor";
@@ -13,6 +14,7 @@ interface PromptContext {
   requestId: string;
   text: string;
   submit: boolean;
+  submitKey?: TerminalPromptSubmitKey;
 }
 
 interface AgentAdapter {
@@ -38,6 +40,7 @@ const piAdapter: AgentAdapter = {
     requestId,
     text,
     submit,
+    submitKey = "Enter",
   }) {
     if (!pi)
       throw new Error("Pi pane identity unavailable; draft was retained");
@@ -56,7 +59,7 @@ const piAdapter: AgentAdapter = {
         text,
       });
       if (submit)
-        await tmux.sendKeySequence(target, [{ type: "key", key: "Enter" }]);
+        await tmux.sendKeySequence(target, [{ type: "key", key: submitKey }]);
     } finally {
       inputOwners.delete(ownerKey);
     }

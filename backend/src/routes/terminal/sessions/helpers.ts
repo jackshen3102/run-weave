@@ -42,6 +42,7 @@ export const sendTerminalInputSchema = z
       ])
       .optional(),
     submit: z.boolean().optional(),
+    submitKey: z.enum(["Enter", "Tab", "M-Enter"]).optional(),
     recordQuickInput: z.boolean().optional(),
     operationId: z.string().trim().min(1).optional(),
     quickInputSource: z
@@ -56,7 +57,13 @@ export const sendTerminalInputSchema = z
     panelAlias: z.string().trim().min(1).optional(),
     role: z.string().trim().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (input) =>
+      input.submitKey === undefined ||
+      (input.mode === "prompt_replace" && input.submit === true),
+    { message: "submitKey requires prompt_replace with submit=true" },
+  );
 
 export const sendTerminalInterruptSchema = z
   .object({
