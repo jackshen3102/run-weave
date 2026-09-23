@@ -16,6 +16,7 @@
 - [终端图片附件](../../../docs/testing/app/ios-native-image-attachments.testplan.yaml)
 - [本地快捷回复](../../../docs/testing/app/ios-native-local-quick-replies.testplan.yaml)
 - [草稿隐私元数据兼容](../../../docs/testing/app/ios-native-draft-privacy.testplan.yaml)
+- [变更文件能力与版本预览](../../../docs/testing/app/change-preview-capabilities.testplan.yaml)
 - [输入、媒体、预览与主题](../../../docs/testing/app/ios-native-features.testplan.yaml)
 - [扫码跨端交互](../../../docs/testing/app/mobile-qr-login.testplan.yaml)
 - [扫码协议与凭据](../../../docs/testing/app/mobile-qr-login-protocol.testplan.yaml)
@@ -252,3 +253,12 @@ Simulator 剪贴板；能力接口 404/503/未知版本的解释性拒绝；POST
 随后通过统一桌面更新器将 `/Applications/Runweave.app` 更新为 0.214.0，正式 bundled Backend
 已包含本地预览能力。安装态终端的可见性与输入区可交互检查通过；本例临时原生认证会话读取能力接口
 返回 200、protocolVersion 1、32 连接及 64 KiB 帧上限，检查后已登出。此次安装态验收不替代手机完整流程重验。
+
+## 变更文件能力与版本预览
+
+2026-09-23，真实临时 Git 仓库及鉴权 HTTP 路由已验证 HEAD/index/工作区字节隔离、删除前版本、
+重命名原路径、未跟踪与空文件、二进制/无效 UTF-8、大小限制、空仓库、路径穿越和项目外符号链接、
+过期版本冲突及不修改索引。原生 UI、已查看标记、缩放返回和 Swift 构建尚未验收：当前环境无 Xcode。
+Web UI 亦未验收：本轮 source root `/root/run-weave` 的 Beta Session `dvs-480324`（pool-02）
+因端口分配到 65536 启动失败；未附着任何浏览器，Session 已停止、lease 已释放。
+服务端行为验证不能替代这些界面验收。

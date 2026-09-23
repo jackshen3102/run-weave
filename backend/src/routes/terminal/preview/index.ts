@@ -1,3 +1,4 @@
+import { readPreviewChangeAsset } from "../../../terminal/preview/git";
 import path from "node:path";
 import type { Request, Response, Router } from "express";
 import { z } from "zod";
@@ -430,6 +431,20 @@ export function registerTerminalPreviewRoutes(
     } catch (error) {
       handlePreviewError(res, error);
     }
+  });
+
+  router.get("/project/:id/preview/change-asset", async (req, res) => {
+    const parsed = previewFileDiffSchema.extend({
+      side: z.enum(["old", "new"]), version: z.string().regex(/^[a-f0-9]{64}$/),
+    }).strict().safeParse(req.query);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid change asset query" }); return; }
+    try {
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      const payload = await readPreviewChangeAsset({ projectId: project.id, projectPath: project.path,
+        requestedPath: parsed.data.path, changeKind: parsed.data.kind,
+        side: parsed.data.side, version: parsed.data.version });
+      res.type(payload.mimeType).set("Cache-Control", "no-store").send(payload.content);
+    } catch (error) { handlePreviewError(res, error); }
   });
 
   router.get("/project/:id/preview/file-diff", async (req, res) => {

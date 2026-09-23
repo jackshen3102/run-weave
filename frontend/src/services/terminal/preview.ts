@@ -194,11 +194,13 @@ export async function getTerminalProjectPreviewAsset(
   token: string,
   projectId: string,
   filePath: string,
+  change?: { kind: TerminalPreviewChangeKind; side: "old" | "new"; version: string },
 ): Promise<Blob> {
-  const query = new URLSearchParams({ path: filePath });
+  const query = new URLSearchParams({ path: filePath, ...change });
+  const resource = change ? "change-asset" : "asset";
   return requestBlob(
     apiBase,
-    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/asset?${query.toString()}`,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/${resource}?${query.toString()}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,

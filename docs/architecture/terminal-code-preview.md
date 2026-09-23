@@ -69,6 +69,14 @@ Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review cha
 - 切换文件、刷新、关闭或改变任务时，涉及丢弃未保存草稿的动作须走现有确认流程。
 - 删除、重命名只针对项目内支持的普通文件；不扩展到目录、项目外路径或批量操作。
 - Review changes 分 Staged / Working 两组，先读索引，再按选择懒加载单文件 diff；Diff Editor 只读。
+- 变更预览由 `file-diff` 的内容能力与两侧状态决定；图片直接预览，Markdown/SVG 保留 Diff/Preview，
+  普通文本默认 Diff。空文件、无文本变化、不支持格式、超限和读取失败分别展示，不用空字符串隐去错误。
+- Staged 比较 HEAD → index，Working 比较 index → 工作区；重命名保留原路径。图片使用鉴权
+  `preview/change-asset`，参数限于 path、kind、side、version，默认新侧，删除时展示旧侧并标注版本。
+  version 为响应字节摘要，变化返回 409 供重新加载；不会用磁盘图片冒充暂存版本。旧 Backend 缺少能力字段时，
+  新客户端的图片回退必须标注工作区版本，已删除图片提示服务端不支持。
+- Git 图片按原始字节读取，文本限制 1 MiB，图片限制 5 MiB；不支持的二进制、冲突索引和特殊文件显式降级。
+  读取期间文件变化不返回拼接内容，Git status 禁用可选索引写入。既有取消暂存、丢弃修改与删除确认语义不变。
 - 单文件 Reset Changes 需要确认：staged 执行 unstage，working 丢弃该文件工作区改动，untracked 普通文件删除。
   这不授权 stage、commit、checkout 或批量 reset。语义以 [Git service](../../backend/src/terminal/preview/git.ts) 为准。
 
