@@ -12,7 +12,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "auth:init": "tsx scripts/admin.ts init",
     "auth:reset": "tsx scripts/admin.ts reset",
-    "mcp:credential": "tsx scripts/mcp-credential.ts"
+    "mcp:credential": "tsx scripts/mcp-credential.ts",
+    "mcp:credentials": "tsx scripts/mcp-credentials.ts"
   },
   "dependencies": {
     "@runweave/shared": "workspace:*",

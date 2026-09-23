@@ -1,5 +1,13 @@
 import { mkdir, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
+export async function credentialChecksum(sql) {
+  // Canonical epoch timestamps avoid session timezone affecting backup verification.
+  const rows = await sql(`SELECT coalesce(json_agg(json_build_array(id,owner_id,name,token_sha256,
+    extract(epoch from created_at),extract(epoch from expires_at),extract(epoch from revoked_at),
+    extract(epoch from last_used_at),source) ORDER BY id),'[]'::json) FROM mcp_credentials`);
+  return createHash("sha256").update(rows).digest("hex");
+}
 export function createBackup({
   config,
   env,
@@ -65,9 +73,10 @@ export function createBackup({
         schemaVersion >= 5
           ? ",'followups',(SELECT count(*) FROM record_followups),'followupAttachments',(SELECT count(*) FROM followup_attachments)"
           : "";
+      const credentialCounts = schemaVersion >= 6 ? ",'mcpCredentials',(SELECT count(*) FROM mcp_credentials)" : "";
       const counts = await sql(
         "SELECT json_build_object('records',(SELECT count(*) FROM records),'revisions',(SELECT count(*) FROM record_revisions),'mutations',(SELECT count(*) FROM mutation_requests),'attachments',(SELECT count(*) FROM attachments)" +
-          followupCounts +
+          followupCounts + credentialCounts +
           ")",
       );
       manifest = {
@@ -85,6 +94,7 @@ export function createBackup({
         ),
         objects,
         counts: JSON.parse(counts),
+        ...(schemaVersion >= 6 ? { credentialChecksum: await credentialChecksum(sql) } : {}),
         checksums: {
           "database.dump": await sum(path.join(directory, "database.dump")),
           "attachments.tar": await sum(path.join(directory, "attachments.tar")),

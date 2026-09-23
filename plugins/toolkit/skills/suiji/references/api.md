@@ -13,6 +13,19 @@
 }
 ```
 
+配置发现优先采用用户明确给出的路径；本机可检查 `$HOME/.config/suiji/config.json`，不得猜测 HOME 为 /root。
+客户端文件可显式加载，无需把秘密写入 shell 启动文件：
+
+```bash
+python3 scripts/suiji.py --config /private/suiji.json --env-file /private/device/client.env info
+```
+
+`--env-file` 只接受配置 tokenEnv 对应的一行 `变量名=43位token`，不执行 shell、不展开变量；
+要求受保护文件（0600，拒绝符号链接），环境中已有不同值时返回 TOKEN_SOURCE_CONFLICT，在联网前停止。
+未传该选项则继续使用原有环境变量。先核对 handoff 与本地配置，再向指定地址发送凭据并验证服务身份。
+每台设备通过服务端 `mcp-credentials register` 独立登记摘要；Mac token 不需要复制到其他设备。
+新版服务支持多 token，不能再覆盖服务器旧摘要来新增设备；管理命令见服务仓库的随记服务 README。
+
 服务器需启用 MCP 个人凭据及跟进能力。缺少配置时向用户说明缺少哪项；不读取 App 密码替代。远程必须 HTTPS，loopback 开发服务可以 HTTP。脚本拒绝重定向。
 
 以下从 Skill 目录执行，配置路径由当前用户环境提供，不要求固定工作目录：

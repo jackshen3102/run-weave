@@ -8,7 +8,7 @@ import type pg from "pg";
 import type { Config } from "../config";
 import type { RecordService } from "../records/service";
 import type { AttachmentService } from "../storage/attachments";
-import { authenticateMcp } from "./auth";
+import { authenticateMcp, McpAuthenticationUnavailable } from "./auth";
 import { createMcpServer } from "./server";
 
 export function createMcpRouter(
@@ -21,7 +21,7 @@ export function createMcpRouter(
 ) {
   const router = Router();
   router.use((req, res, next) => {
-    if (!config.SUIJI_MCP_TOKEN_SHA256) {
+    if (!config.SUIJI_MCP_ENABLED) {
       res.status(404).json({ error: "MCP_DISABLED" });
       return;
     }
@@ -30,10 +30,17 @@ export function createMcpRouter(
       res.status(403).json({ error: "MCP_ORIGIN_NOT_ALLOWED" });
       return;
     }
-    void authenticateMcp(pool, config, req.headers.authorization).then(owner => {
-      res.locals.mcpOwner = owner;
+    void authenticateMcp(pool, req.headers.authorization).then(context => {
+      res.locals.mcpOwner = context.ownerId;
+      res.locals.mcpCredentialId = context.credentialId;
       next();
-    }, next);
+    }, error => {
+      if (error instanceof McpAuthenticationUnavailable) {
+        res.status(503).json({ error: "MCP_UNAVAILABLE" });
+        return;
+      }
+      next(error);
+    });
   });
   router.use(mcpUploads(attachments, store));
   router.all("/", (req, res, next) => {

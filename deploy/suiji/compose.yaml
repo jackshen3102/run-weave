@@ -28,6 +28,8 @@ services:
       SUIJI_AI_PROVIDER: ${SUIJI_AI_PROVIDER:-disabled}
       SUIJI_AI_TIMEOUT_SECONDS: ${SUIJI_AI_TIMEOUT_SECONDS:-180}
       SUIJI_CODEX_HOME: /data/codex
+      SUIJI_MCP_ENABLED: ${SUIJI_MCP_ENABLED:-false}
+      # Forward legacy values only so direct starts reject an unperformed migration.
       SUIJI_MCP_TOKEN_SHA256: ${SUIJI_MCP_TOKEN_SHA256:-}
       SUIJI_MCP_TOKEN_EXPIRES_AT: ${SUIJI_MCP_TOKEN_EXPIRES_AT:-}
     secrets: [api_password]

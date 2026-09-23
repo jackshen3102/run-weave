@@ -1,4 +1,4 @@
-import { createBackup } from "./backup.mjs";
+import { createBackup, credentialChecksum } from "./backup.mjs";
 import { authenticatedReadback } from "./readback.mjs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -11,6 +11,7 @@ import {
   open,
   rm,
   stat,
+  rename,
 } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -110,9 +111,11 @@ if (
 if (apiURL.hostname !== config.domain)
   throw new Error("domain must match apiURL hostname");
 const env = {};
-for (const line of (await readFile(config.envFile, "utf8")).split("\n")) {
+const originalEnv = await readFile(config.envFile, "utf8");
+if ((await stat(config.envFile)).mode & 0o077) throw new Error("Deployment env must be private");
+for (const line of originalEnv.split("\n")) {
   if (!line.trim() || line.startsWith("#")) continue;
-  const match = line.match(/^([A-Z_]+)=(.*)$/);
+  const match = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
   if (!match) throw new Error("Invalid deployment env format");
   env[match[1]] = match[2];
 }
@@ -150,15 +153,28 @@ if (action === "backup" && !state)
 env.SUIJI_IMAGE =
   action === "deploy" ? flags.image : (state?.image ?? env.SUIJI_IMAGE);
 env.SUIJI_REVISION = env.SUIJI_REVISION || env.SUIJI_IMAGE;
+const legacyDigest = env.SUIJI_MCP_TOKEN_SHA256;
+const legacyExpiry = env.SUIJI_MCP_TOKEN_EXPIRES_AT;
+if (Boolean(legacyDigest) !== Boolean(legacyExpiry) ||
+    (legacyDigest && (!/^[a-f0-9]{64}$/.test(legacyDigest) || !Number.isFinite(Date.parse(legacyExpiry)))))
+  throw new Error("Invalid legacy MCP configuration; preserve original deployment");
+if (env.SUIJI_MCP_ENABLED !== undefined && !["true", "false"].includes(env.SUIJI_MCP_ENABLED))
+  throw new Error("Invalid MCP enable flag");
 const commandEnv = { ...process.env, ...env };
+// Never inherit a shell's MCP credentials or switch from an unrelated service.
+commandEnv.SUIJI_MCP_ENABLED = action === "restore" ? "false" : (env.SUIJI_MCP_ENABLED ?? (legacyDigest ? "true" : "false"));
+commandEnv.SUIJI_MCP_TOKEN_SHA256 = "";
+commandEnv.SUIJI_MCP_TOKEN_EXPIRES_AT = "";
+const composeFiles = config.composeFiles ?? [path.join(here, "compose.yaml")];
+if (!Array.isArray(composeFiles) || !composeFiles.length || composeFiles.some(f => typeof f !== "string" || !path.isAbsolute(f)))
+  throw new Error("composeFiles must contain absolute paths in deployment order");
 const composeArgs = [
   "compose",
   "--project-name",
   config.project,
   "--env-file",
   config.envFile,
-  "-f",
-  path.join(here, "compose.yaml"),
+  ...composeFiles.flatMap(file => ["-f", file]),
 ];
 function run(program, argv, { file, input, inputFile, capture = true } = {}) {
   return new Promise((resolve, reject) => {
@@ -263,8 +279,18 @@ await lock.writeFile(
   }),
 );
 let phase = "preflight";
+let oldApiStopped = false;
 try {
   await compose(["config", "--quiet"]);
+  const existingApi = await compose(["ps", "-aq", "api"]);
+  if (action === "deploy" && existingApi && !state)
+    throw new Error("Existing API has no release-state; reconcile deployment state before migration");
+  if (existingApi) {
+    const labels = JSON.parse(await run("docker", ["inspect", "--format", "{{json .Config.Labels}}", existingApi]));
+    const actualFiles = labels["com.docker.compose.project.config_files"]?.split(",") ?? [];
+    if (JSON.stringify(actualFiles.slice(1)) !== JSON.stringify(composeFiles.slice(1)))
+      throw new Error("Preserve the existing ordered Compose overrides in composeFiles before deployment");
+  }
   if (action === "backup") {
     phase = "backup";
     console.log(JSON.stringify({ backup: await snapshot() }));
@@ -273,7 +299,13 @@ try {
     if (state) {
       phase = "backup";
       commandEnv.SUIJI_IMAGE = state.image;
-      await snapshot();
+      try {
+        await snapshot(false);
+        oldApiStopped = true;
+      } catch (error) {
+        await compose(["start", "api"]);
+        throw error;
+      }
     }
     commandEnv.SUIJI_IMAGE = flags.image;
     phase = "artifact";
@@ -300,11 +332,28 @@ try {
     ]);
     await compose(["up", "-d", "--wait", "db"]);
     phase = "migration";
+    if (state) await compose(["stop", "--timeout", "-1", "api"]);
     await compose(["run", "--rm", "-T", "admin", "migrate"]);
     if (Number(await sql("SELECT count(*) FROM owners")) === 0)
       await compose(["run", "--rm", "-T", "admin", "init"], {
         input: JSON.stringify(ownerCredentials),
       });
+    phase = "mcp-credential-migration";
+    if (legacyDigest) {
+      const identity = JSON.parse(await sql("SELECT json_build_object('serverId',server_id,'ownerId',id) FROM server_identity CROSS JOIN owners"));
+      await compose(["run", "--rm", "-T", "admin", "mcp-credentials", "import-legacy"], {
+        input: JSON.stringify({ version: 1, ...identity, name: "迁移的原有凭据", tokenSha256: legacyDigest, expiresAt: new Date(legacyExpiry).toISOString() }),
+      });
+    }
+    // Persist only after import succeeds; the old config is retained for diagnosis, not blind schema rollback.
+    if (legacyDigest || env.SUIJI_MCP_TOKEN_SHA256 !== undefined || env.SUIJI_MCP_TOKEN_EXPIRES_AT !== undefined) {
+      await writeFile(path.join(config.targetPath, `deployment-env-before-mcp-${Date.now()}`), originalEnv, { mode: 0o600, flag: "wx" });
+      const updated = originalEnv.split("\n").filter(line => !/^SUIJI_MCP_(TOKEN_SHA256|TOKEN_EXPIRES_AT|ENABLED)=/.test(line)).join("\n") +
+        `\nSUIJI_MCP_ENABLED=${commandEnv.SUIJI_MCP_ENABLED}\n`;
+      const temporary = config.envFile + ".mcp-migration.tmp";
+      await writeFile(temporary, updated, { mode: 0o600, flag: "wx" });
+      await rename(temporary, config.envFile);
+    }
     phase = "replace";
     await compose(["up", "-d", "--wait", "--no-deps", "api"]);
     phase = "ready";
@@ -463,13 +512,17 @@ try {
       manifest.schemaVersion >= 5
         ? ",'followups',(SELECT count(*) FROM record_followups),'followupAttachments',(SELECT count(*) FROM followup_attachments)"
         : "";
+    const credentialCounts = manifest.schemaVersion >= 6 ? ",'mcpCredentials',(SELECT count(*) FROM mcp_credentials)" : "";
     const counts = JSON.parse(
       await sql(
         "SELECT json_build_object('records',(SELECT count(*) FROM records),'revisions',(SELECT count(*) FROM record_revisions),'mutations',(SELECT count(*) FROM mutation_requests),'attachments',(SELECT count(*) FROM attachments)" +
-          followupCounts +
+          followupCounts + credentialCounts +
           ")",
       ),
     );
+    if (manifest.schemaVersion >= 6 &&
+        await credentialChecksum(sql) !== manifest.credentialChecksum)
+      throw new Error("Restored credential state mismatch");
     if (JSON.stringify(counts) !== JSON.stringify(manifest.counts))
       throw new Error("Restored database counts mismatch");
     const identity = JSON.parse(
@@ -479,6 +532,8 @@ try {
     );
     if (JSON.stringify(identity) !== JSON.stringify(manifest.identity))
       throw new Error("Restored identity mismatch");
+    const restoredEnv = originalEnv.split("\n").filter(line => !/^SUIJI_MCP_(TOKEN_SHA256|TOKEN_EXPIRES_AT|ENABLED)=/.test(line)).join("\n") + "\nSUIJI_MCP_ENABLED=false\n";
+    await writeFile(config.envFile, restoredEnv, { mode: 0o600 });
     await compose(["up", "-d", "--wait", "--no-deps", "api"]);
     await healthy(manifest.image);
     const readback = await authenticatedReadback(config, ownerCredentials, sql);
@@ -499,7 +554,21 @@ try {
     );
   }
 } catch (error) {
-  const failure = { event: "release_failed", phase, message: error.message };
+  let previousApiResumed = false;
+  if (oldApiStopped && state) {
+    try {
+      // Only resume the untouched old container when its original schema is still supported.
+      const version = Number(await sql("SELECT count(*) FROM suiji_migrations"));
+      const id = await compose(["ps", "-aq", "api"]);
+      if (version === state.schemaVersion && id &&
+          await run("docker", ["inspect", "--format", "{{.Image}}", id]) ===
+          await run("docker", ["image", "inspect", "--format", "{{.Id}}", state.image])) {
+        await compose(["start", "api"]);
+        previousApiResumed = true;
+      }
+    } catch { /* Keep the original failure and never guess schema compatibility. */ }
+  }
+  const failure = { event: "release_failed", phase, message: error.message, previousApiResumed };
   await writeFile(
     path.join(config.targetPath, `failure-${Date.now()}.json`),
     JSON.stringify(failure),
