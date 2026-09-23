@@ -58,8 +58,8 @@ public struct TerminalFileTap: Identifiable {
     var wrapped = Set<Int>()
     var first = hit.row
     while first > max(0, hit.row - 31), terminal.displayLine(atBufferRow: first)?.isWrapped == true { first -= 1 }
-    for row in max(0, first - 4)...first + 31 {
-      guard let line = terminal.displayLine(atBufferRow: row), row <= hit.row || line.isWrapped else { break }
+    for row in max(0, first - 4)...max(first + 31, hit.row + 4) {
+      guard let line = terminal.displayLine(atBufferRow: row) else { break }
       if line.isWrapped { wrapped.insert(row) }
       var items: [(String, Int, Int)] = []
       for col in 0..<min(terminal.cols, line.count) {
@@ -83,8 +83,13 @@ public struct TerminalFileTap: Identifiable {
     var text = ""
     var offset: Int?
     var positions: [(row: Int, col: Int)] = []
-    // Split panes have no reliable soft-wrap markers: restrict to the clicked pane row.
-    let sourceRows = geometry == nil ? cells.keys.filter { $0 >= firstRow }.sorted() : [row]
+    // Split panes have no reliable soft-wrap markers; only join their bounded
+    // path continuations below, never the neighboring pane's text.
+    var lastRow = row
+    if geometry == nil {
+      while wrapped.contains(lastRow + 1), cells[lastRow + 1] != nil { lastRow += 1 }
+    }
+    let sourceRows = geometry == nil ? Array(firstRow...lastRow) : [row]
     for sourceRow in sourceRows {
       for cell in cells[sourceRow] ?? [] where cell.col >= left && cell.col < right {
         if sourceRow == row, col >= cell.col, col < cell.col + cell.width { offset = text.utf16.count }
@@ -98,7 +103,12 @@ public struct TerminalFileTap: Identifiable {
     let string = text as NSString
     for match in regex.matches(in: text, range: NSRange(location: 0, length: string.length)) {
       guard NSLocationInRange(offset, match.range) else { continue }
-      let raw = string.substring(with: match.range).replacingOccurrences(of: #"[.!?:]+$"#, with: "", options: .regularExpression)
+      var raw = string.substring(with: match.range).replacingOccurrences(of: #"[.!?:]+$"#, with: "", options: .regularExpression)
+      if TerminalFileReference.parse(raw) == nil,
+        string.substring(from: NSMaxRange(match.range)).trimmingCharacters(in: .whitespaces).isEmpty,
+        let continued = continuedPath(raw, after: lastRow, left: left, right: right, geometry: geometry) {
+        raw = continued
+      }
       guard var reference = TerminalFileReference.parse(raw) else { return nil }
       if !raw.hasPrefix("\""), !raw.hasPrefix("'"), !raw.hasPrefix("`"),
         !raw.lowercased().hasPrefix("file://"), match.range.location < positions.count {
@@ -113,6 +123,38 @@ public struct TerminalFileTap: Identifiable {
         }
       }
       return reference
+    }
+    return nil
+  }
+
+  /// TUI renderers wrap paths with hard newlines and indentation rather than
+  /// terminal soft wraps. Only extend an unfinished path at the end of a row;
+  /// never concatenate the row padding or consume prose/bullets on the next row.
+  private func continuedPath(_ fragment: String, after lastRow: Int, left: Int, right: Int,
+    geometry: TerminalFilePanel.Geometry?) -> String? {
+    guard !fragment.contains("://"),
+      fragment.range(of: #"[\s<>\"'`()\[\]{},;|&$#!?]"#, options: .regularExpression) == nil else { return nil }
+    let minimumRow = geometry.map { row - viewportRow + $0.paneTop } ?? 0
+    let originRow = geometry == nil ? firstRow : row
+    let previous = originRow > minimumRow
+      ? (cells[originRow - 1] ?? []).filter { $0.col >= left && $0.col < right }.map(\.text).joined()
+      : ""
+    let previousToken = previous.split(whereSeparator: \.isWhitespace).last.map(String.init) ?? ""
+    guard fragment.contains("/") || (previousToken.contains("/") && TerminalFileReference.parse(previousToken) == nil) else { return nil }
+    let bottom = geometry.map { row - viewportRow + $0.paneTop + $0.paneHeight - 1 } ?? lastRow + 4
+    guard lastRow < bottom else { return nil }
+    var path = fragment
+    for nextRow in (lastRow + 1)...min(lastRow + 4, bottom) {
+      let text = (cells[nextRow] ?? []).filter { $0.col >= left && $0.col < right }.map(\.text).joined()
+      let trimmed = text.trimmingCharacters(in: .whitespaces)
+      guard !trimmed.isEmpty,
+        let range = trimmed.range(of: #"^[^\s<>\"'`()\[\]{},;|&$#!?]+"#, options: .regularExpression) else { return nil }
+      let token = String(trimmed[range])
+      guard token != "-", token != "•", !token.contains("://") else { return nil }
+      path += token
+      let candidate = path.replacingOccurrences(of: #"[.!?:]+$"#, with: "", options: .regularExpression)
+      if TerminalFileReference.parse(candidate) != nil { return candidate }
+      guard range.upperBound == trimmed.endIndex else { return nil }
     }
     return nil
   }
