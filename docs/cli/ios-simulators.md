@@ -38,7 +38,9 @@ node scripts/ios-simulators/cli.mjs finish --task-dir .runweave/mobile-qa/my-tas
 `cleanup_incomplete`，检查任务证据后再对同一任务重试，不会退回强杀。
 技能的 `stop` 只停止自动化，完整任务仍须 `finish`。两次 UI 命令之间不会释放占用。
 同 App 的竞争请求返回 `device_busy` 和占用者，稍后重新申请；不会排队或创建第三台。
-两个 App 可以各占一台并行执行，第一版不借用另一 App 的槽位。
+两个 App 默认各用固定槽位。用户明确授权时可用 `start --app runweave --slot suiji --task-dir <新目录> --json`
+借用空闲槽位（反向同理）；不改变注册表，lease 分别记录实际 App 与物理槽位，安装仍检查 App 身份。
+借用期间另一任务无法取得同一设备；finish 后归还槽位，不删除原有 App 或数据。
 
 固定 XCTest 用 `node scripts/ios-simulators/cli.mjs exec --task-dir <目录> -- xcodebuild <套件参数>`。
 工具固定 destination 为 lease 的 UDID，并关闭并行测试；不接受调用者覆盖 destination/并行参数。

@@ -7,7 +7,10 @@ import SwiftUI
 final class AppSession: ObservableObject {
   @Published private(set) var connection: BackendConnection?
   @Published private(set) var authenticated = false {
-    didSet { if oldValue != authenticated { knowledgeInbox.reset(api: authenticated ? api : nil) } }
+    didSet {
+      if oldValue != authenticated { knowledgeInbox.reset(api: authenticated ? api : nil) }
+      if !authenticated { showingScheduledTasks = false; scheduledSource = nil }
+    }
   }
   @Published private(set) var checking = false
   @Published private(set) var loading = false
@@ -15,6 +18,8 @@ final class AppSession: ObservableObject {
   @Published private(set) var overview: HomeOverview?
   @Published private(set) var health = DeviceHealthSnapshot()
   @Published var error: String?
+  @Published var showingScheduledTasks = false
+  @Published var scheduledSource: ScheduledTaskSource?
   @Published var terminal: TerminalDetails?
   @Published private(set) var terminalController: SessionController?
   // Retained when expired authentication dismisses the terminal, scoped to the active connection.
@@ -79,6 +84,7 @@ final class AppSession: ObservableObject {
   }
 
   func activate(_ connection: BackendConnection?) async {
+    let returnToScheduledTasks = showingScheduledTasks
     generation += 1
     let epoch = generation
     let previous = api
@@ -118,6 +124,9 @@ final class AppSession: ObservableObject {
       await probe(epoch: epoch)
       guard generation == epoch, !Task.isCancelled else { return }
       if authenticated { await reload() }
+      if generation == epoch, authenticated, returnToScheduledTasks {
+        showingScheduledTasks = true
+      }
     } catch {
       guard generation == epoch else { return }
       checking = false
@@ -320,6 +329,14 @@ final class AppSession: ObservableObject {
       if terminal?.id == id { closeTerminal() }
       await reload()
     } catch { if epoch == generation { await handle(error, epoch: epoch) } }
+  }
+
+  func openScheduledSource(_ source: ScheduledTaskSource) {
+    guard source.type == "scheduled-task" else { return }
+    scheduledSource = source
+    // Replace the Home terminal destination in place; do not race a pop with a second push.
+    showingScheduledTasks = true
+    closeTerminal()
   }
 
   func closeTerminal() {
@@ -583,6 +600,8 @@ final class AppSession: ObservableObject {
   }
 
   private func stopResources() {
+    showingScheduledTasks = false
+    scheduledSource = nil
     deviceStatus.suspend()
     clearBellMarkers()
     acknowledgementWrites.removeAll()
