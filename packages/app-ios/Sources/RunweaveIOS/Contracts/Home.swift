@@ -64,6 +64,7 @@ struct HomeTerminal: Codable, Identifiable {
 }
 
 struct TerminalDetails: Decodable, Identifiable {
+  var source: ScheduledTaskSource? = nil
   let terminalSessionId: String
   let projectId: String
   var alias: String?

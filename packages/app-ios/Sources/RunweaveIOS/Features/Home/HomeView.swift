@@ -155,6 +155,7 @@ struct HomeView: View {
     .toolbar {
       ToolbarItem(placement: .navigationBarTrailing) {
         Menu {
+          Button("定时任务") { session.showingScheduledTasks = true }
           Button("新增项目") { newProject = true }.disabled(!session.canWrite)
           Button("刷新") { Task { await refreshHome() } }
           Button("诊断") { showingDiagnostics = true }

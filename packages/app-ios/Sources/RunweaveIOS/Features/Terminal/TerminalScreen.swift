@@ -2,10 +2,13 @@ import RunweaveBrowser
 import SwiftUI
 
 struct TerminalScreen: View {
+  @Environment(\.dismiss) private var dismiss
   @ObservedObject var session: AppSession
   @ObservedObject var controller: SessionController
   @ObservedObject private var browser: BrowserSession
   let details: TerminalDetails
+  let sourceIsParent: Bool
+  @State private var scheduledSourceName: String?
   @State private var fileTap: TerminalFileTap?
   @State private var deleting = false
   @State private var showingHistory = false
@@ -28,11 +31,12 @@ struct TerminalScreen: View {
   @ObservedObject private var imageDrafts: TerminalImageDrafts
   @AppStorage("native.theme") private var theme = "dark"
 
-  init(session: AppSession, controller: SessionController, details: TerminalDetails) {
+  init(session: AppSession, controller: SessionController, details: TerminalDetails, sourceIsParent: Bool = false) {
     self.session = session
     self.controller = controller
     self.browser = session.browser
     self.details = details
+    self.sourceIsParent = sourceIsParent
     _changes = StateObject(wrappedValue: ProjectChangesModel(session: session, terminal: details))
     self.imageDrafts = session.imageDrafts
   }
@@ -72,6 +76,16 @@ struct TerminalScreen: View {
     VStack(spacing: 0) {
       if let error = session.error {
         Text(error).font(.caption).foregroundColor(.red).padding(.horizontal)
+      }
+      if let source = details.source, source.type == "scheduled-task" {
+        Button {
+          // Pop the nested destination before disposing its terminal controller.
+          // Home owns an in-place destination replacement and must not pop.
+          if sourceIsParent { dismiss() }
+          session.openScheduledSource(source)
+        } label: {
+          Label("来源：\(scheduledSourceName ?? "定时任务")", systemImage: "calendar.badge.clock").font(.caption).lineLimit(1)
+        }.padding(.vertical, 5).accessibilityIdentifier("scheduled-task-source")
       }
       tabs
       ZStack {
@@ -115,6 +129,14 @@ struct TerminalScreen: View {
       controller.openFileRequested = nil
       changes.cancel()
       browser.unregisterHostPresentation(id: browserPresentationID, hostID: ObjectIdentifier(controller))
+    }
+    .task(id: details.source?.taskId) {
+      guard let source = details.source, source.type == "scheduled-task" else { return }
+      do {
+        let task = try await session.withConnection(reportFailure: false) { try await ScheduledTasksService(api: $0).task(source.taskId) }
+        try Task.checkCancellation()
+        scheduledSourceName = task.config.name
+      } catch {}
     }
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)

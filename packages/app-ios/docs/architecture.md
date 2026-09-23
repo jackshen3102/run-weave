@@ -58,6 +58,23 @@ Backend、Web/Electron 和 App Server 继续由仓库各自入口维护，iOS �
 图片资源缓存键包含 kind、side 和内容版本；重试重新取得元数据，取消任务不标记已查看。
 图片解码成功或文本内容可读后才更新已查看标记；二进制、超限、读失败不伪装成已查看内容。
 
+## 定时任务
+
+首页更多菜单进入原生定时任务页，Task/Run 与 Web/Electron 共用当前 Backend 的
+`/api/scheduled-tasks`。Swift 合同见 `Contracts/ScheduledTasks.swift`，传输见
+`Services/ScheduledTasksService.swift`，状态与页面见 `State/ScheduledTasksModel.swift`、
+`Features/ScheduledTasks/`。手机不承担调度；关闭 App 不会关闭服务端安排。
+
+可见页面在前台在线时轮询，切后台、进入终端或关闭页面停止读取；连接 generation 隔离迟到结果。
+创建和立即运行使用稳定的幂等 key，修改/删除使用 expectedRevision；不确定的新建提交锁定当前表单，
+重试沿用原请求，冲突保留草稿。时间预览、可用 Agent/权限、项目目录与模型目录均取 Backend。
+
+运行中仅查看输出，服务端确认 recoverable 后才可按需恢复普通终端；attachmentState=ready
+之前不导航、不自行重发 prompt。复用既有 terminalSessionId，原绑定被改用时先确认另开。
+RootView 使用单一导航入口呈现首页终端或定时任务页，任务页内部可继续进入终端。
+首页终端的 source 回跳直接替换根目的地，不依赖 pop 后的固定延时；来源可定位 Run，
+不改变项目/Worktree 归属。未知 URL 不作为终端路由，产物仅允许 http/https 外链。
+
 ## 首页终端查找
 
 首页保持项目分组，手动置顶、未读完成和在线执行中的终端另在顶部“关注”区集中显示，两处使用同一

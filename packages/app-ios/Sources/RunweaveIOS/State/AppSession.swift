@@ -7,7 +7,10 @@ import SwiftUI
 final class AppSession: ObservableObject {
   @Published private(set) var connection: BackendConnection?
   @Published private(set) var authenticated = false {
-    didSet { if oldValue != authenticated { knowledgeInbox.reset(api: authenticated ? api : nil) } }
+    didSet {
+      if oldValue != authenticated { knowledgeInbox.reset(api: authenticated ? api : nil) }
+      if !authenticated { showingScheduledTasks = false; scheduledSource = nil }
+    }
   }
   @Published private(set) var checking = false
   @Published private(set) var loading = false
@@ -15,6 +18,8 @@ final class AppSession: ObservableObject {
   @Published private(set) var overview: HomeOverview?
   @Published private(set) var health = DeviceHealthSnapshot()
   @Published var error: String?
+  @Published var showingScheduledTasks = false
+  @Published var scheduledSource: ScheduledTaskSource?
   @Published var terminal: TerminalDetails?
   @Published private(set) var terminalController: SessionController?
   // Retained when expired authentication dismisses the terminal, scoped to the active connection.
@@ -79,6 +84,7 @@ final class AppSession: ObservableObject {
   }
 
   func activate(_ connection: BackendConnection?) async {
+    let returnToScheduledTasks = showingScheduledTasks
     generation += 1
     let epoch = generation
     let previous = api
@@ -118,6 +124,9 @@ final class AppSession: ObservableObject {
       await probe(epoch: epoch)
       guard generation == epoch, !Task.isCancelled else { return }
       if authenticated { await reload() }
+      if generation == epoch, authenticated, returnToScheduledTasks {
+        showingScheduledTasks = true
+      }
     } catch {
       guard generation == epoch else { return }
       checking = false
@@ -359,26 +368,6 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func isCommandActive(_ id: String) -> Bool {
-    overview?.sessions.first { $0.id == id }?.terminalState.state == "agent_running"
-  }
-
-  func stopCommand(_ id: String) async throws {
-    guard canWrite, terminal?.id == id else { throw APIError.offline }
-    try await withConnection { try await $0.interrupt(id: id) }
-    // The authoritative terminal-state event decides whether the Agent stopped.
-  }
-
-  func appendDraft(_ text: String, terminalID: String) {
-    guard !text.isEmpty else { return }
-    let previous = terminalDrafts[terminalID] ?? ""
-    setDraft(
-      previous
-        + (previous.isEmpty || previous.hasSuffix(" ") || previous.hasSuffix("\n") ? "" : " ")
-        + text,
-      terminalID: terminalID)
-  }
-
   func recordUserAction(_ action: String, terminalID: String) {
     guard terminal?.id == terminalID else { return }
     terminalController?.recordUserAction(action)
@@ -583,6 +572,8 @@ final class AppSession: ObservableObject {
   }
 
   private func stopResources() {
+    showingScheduledTasks = false
+    scheduledSource = nil
     deviceStatus.suspend()
     clearBellMarkers()
     acknowledgementWrites.removeAll()

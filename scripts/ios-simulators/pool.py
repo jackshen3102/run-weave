@@ -196,11 +196,12 @@ def task(root, app=None, udid=None, allow_finished=False):
     if allow_finished and lease.get("finishedAt"):
         return lease
     pool = load_pool(repository)
-    if pool["slots"][lease["app"]]["udid"] != lease["udid"]:
+    slot = lease.get("slot", lease["app"])
+    if slot not in APPS or pool["slots"][slot]["udid"] != lease["udid"]:
         fail("lease_mismatch", "Task's device is no longer the registered slot")
     owner = owner_at(lease["udid"])
     if not owner or owner.get("lease") != lease["lease"] or any(
-            owner.get(key) != lease.get(key) for key in ("worktree", "repositoryId", "taskDir", "app")):
+            owner.get(key) != lease.get(key) for key in ("worktree", "repositoryId", "taskDir", "app", "slot")):
         fail("lease_mismatch", "Task does not own this device")
     if owner.get("finishedAt") and not allow_finished:
         fail("lease_mismatch", "Task has already finished")
@@ -294,7 +295,7 @@ def adopt(runweave, suiji):
             return pool
 
 
-def start(app, root):
+def start(app, root, slot=None):
     worktree, repository = project()
     root = Path(root).resolve()
     if not root.is_relative_to(worktree) or root == worktree:
@@ -306,7 +307,7 @@ def start(app, root):
         fail("lease_mismatch", "Task path belongs to another linked worktree", 2)
     with guard(repository):
         pool = load_pool(repository)
-        udid = pool["slots"][app]["udid"]
+        udid = pool["slots"][slot or app]["udid"]
         with guard(udid):
             device = devices().get(udid)
             if not device or not device.get("isAvailable"):
@@ -318,7 +319,7 @@ def start(app, root):
             if root.exists():
                 fail("invalid_argument", "Use a new task directory; existing tasks are never overwritten", 2)
             owner = {"schemaVersion": 1, "kind": "simulator-pool", "lease": uuid.uuid4().hex,
-                     "repositoryId": repository, "worktree": str(worktree), "app": app,
+                     "repositoryId": repository, "worktree": str(worktree), "app": app, "slot": slot or app,
                      "udid": udid, "taskDir": str(root), "startedAt": now(), "children": [],
                      "automationPending": False}
             try:
@@ -464,6 +465,7 @@ def main():
     start_parser = sub.add_parser("start")
     start_parser.add_argument("--app", choices=APPS, required=True)
     start_parser.add_argument("--task-dir", required=True)
+    start_parser.add_argument("--slot", choices=APPS, help="Explicitly borrow a registered slot; App identity is unchanged")
     start_parser.add_argument("--json", action="store_true")
     finish_parser = sub.add_parser("finish")
     finish_parser.add_argument("--task-dir", required=True)
@@ -487,7 +489,7 @@ def main():
     elif options.command == "adopt":
         result = adopt(options.runweave, options.suiji)
     elif options.command == "start":
-        result = start(options.app, options.task_dir)
+        result = start(options.app, options.task_dir, options.slot)
     elif options.command == "finish":
         result = finish(options.task_dir)
     elif options.command == "recover":

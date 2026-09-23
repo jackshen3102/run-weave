@@ -26,19 +26,17 @@ public struct RootView: View {
         }
       }
       .background {
-        NavigationLink(
-          isActive: Binding(
-            get: { session.terminal != nil },
-            set: { if !$0 { session.closeTerminal() } })
-        ) {
-          if let details = session.terminal, let controller = session.terminalController {
+        NavigationLink(isActive: Binding(
+          get: { session.showingScheduledTasks || session.terminal != nil },
+          set: { if !$0 { session.closeTerminal(); session.showingScheduledTasks = false } }
+        )) {
+          if session.showingScheduledTasks {
+            ScheduledTasksView(session: session, manageConnections: { managingConnections = true }).id(session.generation)
+          } else if let details = session.terminal, let controller = session.terminalController {
             TerminalScreen(session: session, controller: controller, details: details)
               .id("\(session.generation):\(details.id):\(details.projectId)")
           }
-        } label: {
-          EmptyView()
-        }
-        .hidden()
+        } label: { EmptyView() }.hidden()
       }
       .navigationTitle(session.authenticated ? "Runweave" : "Sign in")
       .toolbar {
