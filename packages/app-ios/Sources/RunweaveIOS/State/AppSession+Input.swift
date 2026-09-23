@@ -1,6 +1,26 @@
 import Foundation
 
 extension AppSession {
+  func isCommandActive(_ id: String) -> Bool {
+    overview?.sessions.first { $0.id == id }?.terminalState.state == "agent_running"
+  }
+
+  func stopCommand(_ id: String) async throws {
+    guard canWrite, terminal?.id == id else { throw APIError.offline }
+    try await withConnection { try await $0.interrupt(id: id) }
+    // The authoritative terminal-state event decides whether the Agent stopped.
+  }
+
+  func appendDraft(_ text: String, terminalID: String) {
+    guard !text.isEmpty else { return }
+    let previous = terminalDrafts[terminalID] ?? ""
+    setDraft(
+      previous
+        + (previous.isEmpty || previous.hasSuffix(" ") || previous.hasSuffix("\n") ? "" : " ")
+        + text,
+      terminalID: terminalID)
+  }
+
   /// Sends a fixed reply without consuming or changing the composer's text and attachments.
   func sendInstantReply(_ text: String, terminalID: String, controller: SessionController) async throws {
     guard canWrite, terminal?.id == terminalID, terminalController === controller else {

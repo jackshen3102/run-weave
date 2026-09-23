@@ -331,14 +331,6 @@ final class AppSession: ObservableObject {
     } catch { if epoch == generation { await handle(error, epoch: epoch) } }
   }
 
-  func openScheduledSource(_ source: ScheduledTaskSource) {
-    guard source.type == "scheduled-task" else { return }
-    scheduledSource = source
-    // Replace the Home terminal destination in place; do not race a pop with a second push.
-    showingScheduledTasks = true
-    closeTerminal()
-  }
-
   func closeTerminal() {
     browser.invalidate()
     routeRequest += 1
@@ -374,26 +366,6 @@ final class AppSession: ObservableObject {
       }
       throw error
     }
-  }
-
-  func isCommandActive(_ id: String) -> Bool {
-    overview?.sessions.first { $0.id == id }?.terminalState.state == "agent_running"
-  }
-
-  func stopCommand(_ id: String) async throws {
-    guard canWrite, terminal?.id == id else { throw APIError.offline }
-    try await withConnection { try await $0.interrupt(id: id) }
-    // The authoritative terminal-state event decides whether the Agent stopped.
-  }
-
-  func appendDraft(_ text: String, terminalID: String) {
-    guard !text.isEmpty else { return }
-    let previous = terminalDrafts[terminalID] ?? ""
-    setDraft(
-      previous
-        + (previous.isEmpty || previous.hasSuffix(" ") || previous.hasSuffix("\n") ? "" : " ")
-        + text,
-      terminalID: terminalID)
   }
 
   func recordUserAction(_ action: String, terminalID: String) {
