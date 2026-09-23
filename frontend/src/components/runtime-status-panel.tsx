@@ -1,6 +1,7 @@
 import { useMemoizedFn } from "ahooks";
 import { ChevronRight, Copy, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
+import { runtimeStatusItemAttention } from "@runweave/shared/runtime-status";
 import type {
   RuntimeStatusCapabilityId,
   RuntimeStatusCapabilitySnapshot,
@@ -54,6 +55,7 @@ function isAwaitingLogin(items: RuntimeStatusItem[]): boolean {
 }
 
 function RuntimeStatusItemRow({ item }: { item: RuntimeStatusItem }) {
+  const attention = runtimeStatusItemAttention(item.capabilityId, item.state);
   const copy = useMemoizedFn(async (value: string) => {
     await copyRuntimeStatusText(value);
   });
@@ -69,7 +71,7 @@ function RuntimeStatusItemRow({ item }: { item: RuntimeStatusItem }) {
           <p className="mt-1 text-xs text-muted-foreground">{item.summary}</p>
         </div>
         <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <span className={`h-2 w-2 rounded-full ${STATE_DOT[item.state]}`} />
+          <span className={`h-2 w-2 rounded-full ${attention === "warning" ? "bg-amber-500" : STATE_DOT[item.state]}`} />
           {STATE_LABELS[item.state]}
         </span>
       </div>
@@ -115,15 +117,16 @@ function RuntimeStatusItemRow({ item }: { item: RuntimeStatusItem }) {
 }
 
 function CapabilitySection({ capability }: { capability: RuntimeStatusCapabilitySnapshot }) {
-  const [open, setOpen] = useState(capability.state === "unhealthy");
+  const attention = capability.attention;
+  const [open, setOpen] = useState(attention !== "none");
   const awaitingLogin = isAwaitingLogin(capability.items);
   return (
-    <section className="overflow-hidden rounded-xl border border-border/70" data-runtime-status-capability={capability.capabilityId} data-runtime-status-state={capability.state}>
+    <section className="overflow-hidden rounded-xl border border-border/70" data-runtime-status-attention={attention} data-runtime-status-capability={capability.capabilityId} data-runtime-status-state={capability.state}>
       <button type="button" className="flex w-full items-center justify-between gap-3 bg-muted/30 px-4 py-3 text-left" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
         <span className="text-sm font-medium">{CAPABILITY_LABELS[capability.capabilityId]}</span>
         <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-          <span className={`h-2 w-2 rounded-full ${STATE_DOT[capability.state]}`} />
-          {capability.state === "blocked" && awaitingLogin ? "待登录" : STATE_LABELS[capability.state]}
+          <span className={`h-2 w-2 rounded-full ${attention === "warning" ? "bg-amber-500" : STATE_DOT[capability.state]}`} />
+          {capability.state === "blocked" && awaitingLogin ? "待登录" : attention === "warning" ? "Warning" : STATE_LABELS[capability.state]}
           <ChevronRight className={`h-3.5 w-3.5 transition ${open ? "rotate-90" : ""}`} />
         </span>
       </button>
@@ -191,7 +194,7 @@ export function RuntimeStatusPanel() {
               <article key={node.id} className="space-y-3 rounded-2xl border border-border/70 bg-card/60 p-4" data-runtime-status-node={node.id}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{node.roles.includes("local") ? "本机节点" : "连接节点"}</h2>{node.roles.map((role) => <span key={role} className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">{role === "local" ? "本机" : "当前连接"}</span>)}</div><button type="button" className="mt-1 inline-flex max-w-full items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground" aria-label={`${node.roles.includes("local") ? "复制本机" : "复制当前连接"}地址`} onClick={() => void copyAddress(node.address)}><span className="truncate">{node.address}</span><Copy className="h-3 w-3 shrink-0" /></button></div>
-                  <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"><span className={`h-2 w-2 rounded-full ${STATE_DOT[node.state]}`} />{node.state === "blocked" && awaitingLogin ? "待登录" : STATE_LABELS[node.state]}</span>
+                  <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"><span className={`h-2 w-2 rounded-full ${node.unhealthyCapabilityCount > 0 ? "bg-red-500" : node.warningCapabilityCount > 0 ? "bg-amber-500" : STATE_DOT[node.state]}`} />{node.unhealthyCapabilityCount > 0 ? "异常" : node.warningCapabilityCount > 0 ? "Warning" : node.state === "blocked" && awaitingLogin ? "待登录" : STATE_LABELS[node.state]}</span>
                 </div>
                 {awaitingLogin ? <p className="text-sm text-muted-foreground">服务可连接，登录后查看详细状态。</p> : null}
                 <div className="space-y-2">{node.capabilities.map((capability) => <CapabilitySection key={capability.capabilityId} capability={capability} />)}</div>

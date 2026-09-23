@@ -172,7 +172,10 @@ cpSync(resourcesBackendDir, path.join(releaseDir, "backend"), {
   recursive: true,
   dereference: true,
 });
-cpSync(cliEntry, path.join(releaseDir, "cli", "index.cjs"));
+cpSync(path.dirname(cliEntry), path.join(releaseDir, "cli"), {
+  recursive: true,
+  dereference: true,
+});
 
 const files = listFiles(releaseDir)
   .filter((filePath) => filePath !== "manifest.json")

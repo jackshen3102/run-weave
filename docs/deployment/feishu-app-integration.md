@@ -168,6 +168,15 @@ exec /absolute/path/to/rw feishu bridge --json
 它不保证合盖或主动选择睡眠后仍可远程使用。需要恢复自动休眠时停止 Bridge。
 手机可以使用移动网络，无需与 Mac 在同一局域网；Mac 必须联网并持续运行。
 
+Bridge、飞书状态写入和 CLI 凭证刷新使用操作系统文件描述符锁。锁文件以 `.native`
+结尾并永久保留；锁的占用由内核决定，进程正常退出、崩溃或机器重启会释放，休眠不会
+使仍在运行的 Bridge 丢失锁。不要删除或替换 `.native` 文件，否则可能产生两个不同
+inode 的锁，破坏单实例约束。旧版 `bridge.pid` 的内容不再参与锁判断。
+
+从 PID 锁版本升级时，先停止旧 Bridge 和正在写入同一配置/状态目录的旧 CLI，再安装
+新 CLI 并启动 Bridge；不要让新旧锁协议的进程并行写同一目录。CLI 的 npm 包、桌面包
+和独立 runtime 都必须携带 `fs-native-extensions` 原生依赖，不能只复制一个 JS 入口。
+
 LaunchAgent 使用 `~/Library/LaunchAgents/com.runweave.feishu-bridge.plist`，设置
 `RunAtLoad=true` 和 `KeepAlive=true`。`KeepAlive` 只负责重启退出的进程，不阻止系统
 休眠。重启命令：

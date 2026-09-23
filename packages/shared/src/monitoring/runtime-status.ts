@@ -94,7 +94,51 @@ export interface RuntimeStatusCapabilitySnapshot {
   capabilityId: RuntimeStatusCapabilityId;
   state: RuntimeStatusState;
   unhealthy: boolean;
+  attention: RuntimeStatusAttention;
   items: RuntimeStatusItem[];
+}
+
+// Attention is separate from the owner's lifecycle state. An optional service
+// can be unhealthy without making the core application an error.
+export type RuntimeStatusAttention = "none" | "warning" | "error";
+
+export function runtimeStatusItemAttention(
+  capabilityId: RuntimeStatusCapabilityId,
+  state: RuntimeStatusState,
+): RuntimeStatusAttention {
+  if (state === "unhealthy")
+    return capabilityId === "feishu" ? "warning" : "error";
+  if (["unconfigured", "unsupported", "recovering", "blocked"].includes(state))
+    return "warning";
+  return "none";
+}
+
+function capabilityAttention(
+  capabilityItems: RuntimeStatusItem[],
+  allItems: RuntimeStatusItem[],
+): RuntimeStatusAttention {
+  const byId = new Map(allItems.map((item) => [item.id, item]));
+  const attention = capabilityItems.map((item) => {
+    // Report an existing upstream cause once. A missing dependency has no
+    // visible cause, so keep the warning on the nearest blocked service.
+    if (
+      item.state === "blocked" &&
+      item.dependsOn.some((id) => {
+        const upstream = byId.get(id);
+        return (
+          upstream !== undefined &&
+          (upstream.state === "unhealthy" || upstream.state === "blocked")
+        );
+      })
+    )
+      return "none";
+    return runtimeStatusItemAttention(item.capabilityId, item.state);
+  });
+  return attention.includes("error")
+    ? "error"
+    : attention.includes("warning")
+      ? "warning"
+      : "none";
 }
 
 export const RUNTIME_STATUS_CAPABILITY_ORDER: readonly RuntimeStatusCapabilityId[] =
@@ -255,6 +299,7 @@ export function aggregateRuntimeStatusCapabilities(
         capabilityId,
         state,
         unhealthy: state === "unhealthy",
+        attention: capabilityAttention(capabilityItems, items),
         items: capabilityItems,
       },
     ];

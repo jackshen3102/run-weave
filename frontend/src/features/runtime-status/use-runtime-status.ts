@@ -11,6 +11,7 @@ export interface RuntimeStatusContextValue {
   currentAddress: string;
   overallState: RuntimeStatusState;
   unhealthyCapabilityIds: RuntimeStatusCapabilityId[];
+  warningCapabilityIds: RuntimeStatusCapabilityId[];
   refreshing: boolean;
   panelOpen: boolean;
   setPanelOpen: (open: boolean) => void;

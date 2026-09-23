@@ -75,6 +75,31 @@ async function sha256(file) {
   }
 }
 
+async function nativeRuntimeHash(entry) {
+  const root = path.join(
+    path.dirname(entry),
+    "node_modules",
+    "fs-native-extensions",
+  );
+  const hash = createHash("sha256");
+  async function visit(directory) {
+    const entries = await fs.readdir(directory, { withFileTypes: true });
+    for (const item of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const file = path.join(directory, item.name);
+      if (item.isDirectory()) await visit(file);
+      else
+        hash.update(path.relative(root, file)).update(await fs.readFile(file));
+    }
+  }
+  try {
+    await visit(root);
+    return hash.digest("hex");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 export async function runCliUpdate({ sourceRoot, plan }) {
   if (plan.action === "skip") return plan;
   const env = { ...process.env };
@@ -89,6 +114,9 @@ export async function runCliUpdate({ sourceRoot, plan }) {
   );
   const expectedHash = await sha256(sourceEntry);
   if (!expectedHash) throw new Error("CLI build did not produce dist/index.js");
+  const expectedNativeHash = await nativeRuntimeHash(sourceEntry);
+  if (!expectedNativeHash)
+    throw new Error("CLI build did not include the native lock runtime");
   // Recheck the target before mutation; another npm prefix must not be updated by accident.
   const current = await planCliUpdate({ sourceRoot, channel: "stable" });
   if (
@@ -100,7 +128,9 @@ export async function runCliUpdate({ sourceRoot, plan }) {
     );
   }
   const needsInstall =
-    !current.commandPath || (await sha256(plan.entry)) !== expectedHash;
+    !current.commandPath ||
+    (await sha256(plan.entry)) !== expectedHash ||
+    (await nativeRuntimeHash(plan.entry)) !== expectedNativeHash;
   if (needsInstall) {
     await runChecked(
       process.execPath,
@@ -114,7 +144,10 @@ export async function runCliUpdate({ sourceRoot, plan }) {
       "Global CLI installed but rw is not on the login shell PATH.",
     );
   await checkCommand(commandPath, plan.entry);
-  if ((await sha256(commandPath)) !== expectedHash) {
+  if (
+    (await sha256(commandPath)) !== expectedHash ||
+    (await nativeRuntimeHash(plan.entry)) !== expectedNativeHash
+  ) {
     throw new Error("The rw command does not match the current CLI build.");
   }
   const version = (
@@ -125,6 +158,7 @@ export async function runCliUpdate({ sourceRoot, plan }) {
     action: needsInstall ? "updated" : "unchanged",
     commandPath,
     sha256: expectedHash,
+    nativeRuntimeSha256: expectedNativeHash,
     version,
   };
 }

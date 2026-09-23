@@ -195,6 +195,11 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
         ],
         extraResources: [
           {
+            from: path.join(buildRoot, "electron", "dist", "cli", "node_modules"),
+            to: "node_modules",
+            filter: ["**/*"],
+          },
+          {
             from: path.join(electronDist, "companion"),
             to: "companion",
             filter: ["**/*"],
