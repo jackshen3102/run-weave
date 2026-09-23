@@ -8,6 +8,7 @@ struct HomeView: View {
   }
 
   @ObservedObject var session: AppSession
+  @StateObject private var branchStatuses = HomeBranchStatusModel()
   @State private var query = ""
   @State private var expanded = Set<String>()
   @State private var newProject = false
@@ -53,7 +54,20 @@ struct HomeView: View {
 
   private func row(_ terminal: HomeTerminal, projectName: String? = nil) -> some View {
     HomeTerminalRow(session: session, terminal: terminal, projectName: projectName,
+      branchStatus: projectName == nil ? nil : branchStatuses.status(for: terminal, generation: session.generation, online: session.health.status == .online),
       rename: { renaming = terminal }, delete: { deleting = terminal })
+  }
+
+  private var branchRefreshKey: [String] {
+    [String(session.generation), String(session.foreground), String(session.authenticated),
+      session.health.status.rawValue, session.terminal?.id ?? ""]
+      + attention.map { "\($0.id):\($0.cwd)" }.sorted()
+  }
+
+  private func refreshHome() async {
+    await session.refresh()
+    await session.knowledgeInbox.refreshPreview()
+    await branchStatuses.refresh(session: session, terminals: attention, force: true)
   }
 
   var body: some View {
@@ -118,7 +132,16 @@ struct HomeView: View {
       }
     }
     .searchable(text: $query, prompt: "Search projects and terminals")
-    .refreshable { await session.refresh(); await session.knowledgeInbox.refreshPreview() }
+    .refreshable { await refreshHome() }
+    .task(id: branchRefreshKey) {
+      guard session.foreground, session.authenticated, session.health.status == .online,
+        session.terminal == nil else { return }
+      while !Task.isCancelled {
+        await branchStatuses.refresh(session: session, terminals: attention)
+        do { try await Task.sleep(nanoseconds: 30_000_000_000) }
+        catch { return }
+      }
+    }
     .onChange(of: session.overview?.projects.map(\.id)) { _ in initializeExpansion() }
     .onChange(of: session.generation) { _ in
       expanded.removeAll()
@@ -133,7 +156,7 @@ struct HomeView: View {
       ToolbarItem(placement: .navigationBarTrailing) {
         Menu {
           Button("新增项目") { newProject = true }.disabled(!session.canWrite)
-          Button("刷新") { Task { await session.refresh() } }
+          Button("刷新") { Task { await refreshHome() } }
           Button("诊断") { showingDiagnostics = true }
           Button("Logout", role: .destructive) { Task { await session.logout() } }
         } label: {

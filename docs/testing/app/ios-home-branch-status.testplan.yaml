@@ -1,0 +1,83 @@
+version: 1
+name: iOS 关注区分支落后状态
+description: >
+  验证关注区项目名同一行的紧凑落后状态、独立刷新和连接隔离。每例独立建立归属本例的
+  Backend、Git 仓库与终端，不对用户工作目录操作；原生界面使用 toolkit:agent-device
+  在候选构建上取证。未执行的用例不视为通过。
+cases:
+  - id: IOSBRANCH-001
+    name: 状态只占关注区现有第二行
+    required: true
+    description: >
+      关注区第二行显示项目名、默认分支与落后数，项目名优先截断，状态不换行；普通项目行和终端页不新增状态。
+    preconditions:
+      - 候选 App 已安装在本例拥有的模拟器槽位或授权真机，连接隔离 Backend，有两个置顶 Git 终端分别落后 main 5 次和 0 次。
+      - 项目名和另一个默认分支名包含足够长的中英文，执行者可以切换窄屏尺寸和系统字号。
+    steps:
+      - 用 agent-device 打开首页，确认第二行分别显示“项目名 · main ↓5”和“项目名 · main ✓”，没有刷新按钮或领先数量。
+      - 在窄屏和放大字号下检查长名称，确认第二行不换行，项目名优先截断，提交数可读；保存截图和控件树。
+      - 展开下方项目组并打开对应终端，确认这些位置没有新状态；检查辅助功能标签读出完整默认分支和落后提交数。
+  - id: IOSBRANCH-002
+    name: 依据每个 worktree HEAD 比较远程默认分支
+    required: true
+    description: >
+      独立 HTTP 状态接口计算真实 Git 差集，同仓库多个 worktree 共用一次远端 fetch，不误用 feature upstream。
+    preconditions:
+      - 本例独占一个 Backend 和本地 bare remote，默认分支为 trunk，有最新主工作区、落后 2 次且领先 1 次的 feature worktree，以及落后 2 次的 detached worktree。
+      - 三个会话的 cwd 分别指向上述工作区，Git trace 输出仅写入本例目录。
+    steps:
+      - 用有效认证 POST /api/app/home/branch-status 请求三个会话，确认 baseBranch 都是 trunk，behind 依次是 0、2、2，state 为 ready 且带 checkedAt。
+      - 核对 Git trace 只有一次 fetch，HEAD、当前分支、工作文件和暂存区未被改动。
+  - id: IOSBRANCH-003
+    name: 只在首页前台低频自动更新
+    required: true
+    description: >
+      首页加载不等待 Git，十分钟内复用缓存；前台到期更新，离开首页和进入后台停止周期请求。
+    preconditions:
+      - 候选 App 连接本例 Backend，有一个置顶 Git 终端，执行者可观察请求时间及 Git trace，远端可以独立增加提交。
+    steps:
+      - 打开首页，确认 overview 和列表先出现，Git 状态随后更新；让远端增加一次提交，在十分钟内反复进入首页，确认不重新 fetch。
+      - 保持首页前台，等待缓存到期，确认约十分钟后落后数量增加一次，期间没有高频 fetch。
+      - 进入终端页并让缓存过期，确认不再发周期请求；返回首页后刷新。再进入后台并等待到期，确认不请求，恢复前台后更新。
+  - id: IOSBRANCH-004
+    name: 下拉刷新更新缓存且不添加新入口
+    required: true
+    description: >
+      下拉刷新复用现有交互，主动获取远端新提交并更新第二行，保留项目和终端身份。
+    preconditions:
+      - 候选 App 连接本例 Backend，关注区已有 ready 状态；上次查询超过两秒，远端有一个新提交尚未进入缓存。
+    steps:
+      - 在首页下拉刷新，确认现有列表正常刷新，Git trace 有 fetch，落后数增加一次。
+      - 核对关注区和普通项目区会话身份一致，没有新增刷新按钮、导航入口或自动 rebase 命令。
+  - id: IOSBRANCH-005
+    name: 远端故障保留旧数值并标记待更新
+    required: true
+    description: >
+      网络失败不把未知状态变成零；成功恢复后清除待更新，非 Git 目录不展示状态。
+    preconditions:
+      - 本例拥有可中断的 Git remote、隔离 Backend 和候选 App，关注区已成功取得一个非零落后数；另有非 Git 目录及无 remote 的 Git 终端。
+    steps:
+      - 中断本例 remote，间隔超过两秒后下拉刷新，确认原计数保留且显示“待更新”，没有变为 main ✓。
+      - 确认无 remote 的 Git 终端显示待更新但没有数字，非 Git 终端不展示 Git 状态。
+      - 恢复 remote，间隔超过两秒后下拉刷新，确认 ready 数值恢复且待更新消失。
+  - id: IOSBRANCH-006
+    name: 切换连接与工作目录隔离缓存
+    required: true
+    description: >
+      迟到结果不能进入其他连接，终端切换 cwd 后不能沿用原仓库数值。
+    preconditions:
+      - 本例拥有两个 Backend，使用候选 App 可切换连接；两者分支落后数不同，旧连接查询可被延迟。
+    steps:
+      - 在旧连接触发延迟状态请求后切换到新连接，释放旧响应，确认新连接只显示自己的仓库计数。
+      - 在本例终端切换到另一个 Git 工作目录并让 overview 更新 cwd，确认旧数值立即退出显示，新状态依据新的 cwd 取得。
+  - id: IOSBRANCH-007
+    name: 接口仅接受会话 ID 且保持既有鉴权
+    required: true
+    description: >
+      客户端不能提交文件系统路径，非法输入被拒绝，未知会话不触发 Git。
+    preconditions:
+      - 本例隔离 Backend 已启动，执行者有有效登录凭证和一个专用终端 ID，可观察 Git trace。
+    steps:
+      - 未认证 POST /api/app/home/branch-status，确认被既有认证中间件拒绝且没有 Git 操作。
+      - 使用有效凭证发送额外 cwd 字段、超过 100 个 ID 或非布尔 refresh，确认返回 400。
+      - 请求未知 ID，确认 statuses 为空且没有 Git 操作；重复同一个有效 ID，确认只返回一项。

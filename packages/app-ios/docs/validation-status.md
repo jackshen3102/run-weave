@@ -50,6 +50,12 @@ p95 41.56 ms，输入提交 p95 4.51 ms，第二/第十分钟 RSS 163.44/163.89 
 
 ## 首页查找验收
 
+2026-09-23 新增[关注区分支状态验收](../../../docs/testing/app/ios-home-branch-status.testplan.yaml)。
+真实临时 Git 仓库已验证不同 worktree/分叉/detached HEAD 计数、默认分支 trunk、共享 fetch、缓存、
+主动刷新、远端失败保留旧值和恢复、浅克隆与无共同历史降级；隔离 HTTP 路由验证输入边界与会话 cwd。
+当前 Linux 环境缺少 Xcode/Swift，候选 iOS 构建、单行布局和原生刷新生命周期尚未验收。
+这些服务端检查不等同于该 YAML 的原生用例通过。
+
 2026-09-07，`ios-native-home-discovery.testplan.yaml` 的 IOSHOME-001 至 IOSHOME-011
 已在本轮隔离 Backend、真实 shell 和 iOS 26.5 Simulator 上取证。覆盖置顶与取消、幂等与重启恢复、
 连接切换迟到响应、搜索展开恢复、Unicode 别名、写入/刷新失败、离线禁用、鉴权、删除和真实输入。

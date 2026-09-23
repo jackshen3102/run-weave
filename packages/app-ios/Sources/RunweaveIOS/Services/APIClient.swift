@@ -155,6 +155,11 @@ public actor APIClient {
     let _: Verification = try await authorized("/api/auth/verify")
   }
   func overview() async throws -> HomeOverview { try await authorized("/api/app/home/overview") }
+  func homeBranchStatuses(ids: [String], refresh: Bool) async throws -> HomeBranchStatusResponse {
+    try await authorized("/api/app/home/branch-status", method: "POST",
+      body: ["terminalSessionIds": ids, "refresh": refresh])
+  }
+
   func details(id: String) async throws -> TerminalDetails {
     try await authorized("/api/terminal/session/\(Self.pathComponent(id))")
   }

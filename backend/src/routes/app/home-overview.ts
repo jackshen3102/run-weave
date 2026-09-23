@@ -2,6 +2,8 @@ import type { AppHomeOverviewResponse, AppHomeOverviewSession } from "@runweave/
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import { discoverAppServer } from "@runweave/shared/app-server/discovery";
 import { Router } from "express";
+import { z } from "zod";
+import { HomeBranchStatusService } from "../../terminal/git/home-branch-status";
 import path from "node:path";
 import { logger } from "../../logging/index";
 import { AppServerClient } from "../../app-server/client";
@@ -326,6 +328,21 @@ export function createAppHomeOverviewRouter(options: {
   terminalStateService: TerminalStateService;
 }) {
   const router = Router();
+  const branchStatus = new HomeBranchStatusService();
+  const branchRequest = z.object({
+    terminalSessionIds: z.array(z.string().min(1).max(200)).max(100),
+    refresh: z.boolean().optional(),
+  }).strict();
+
+  router.post("/home/branch-status", async (req, res) => {
+    const parsed = branchRequest.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid branch status request" }); return; }
+    const ids = new Set(parsed.data.terminalSessionIds);
+    const sessions = options.terminalSessionManager.listSessions().filter((session) => ids.has(session.id));
+    const statuses = await Promise.all(sessions.map((session) =>
+      branchStatus.status(session.id, session.cwd, parsed.data.refresh)));
+    res.json({ statuses });
+  });
 
   router.get("/home/overview", async (_req, res) => {
     try {
