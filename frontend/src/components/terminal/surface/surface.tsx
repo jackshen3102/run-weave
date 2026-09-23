@@ -552,6 +552,8 @@ export function TerminalSurface({
           onOpen={floatingComposer.onOpen}
           onScrollToBottom={floatingComposer.onScrollToBottom}
           onSend={floatingComposer.onSend}
+          onQueue={floatingComposer.onQueue}
+          queueKey={floatingComposer.queueKey}
         />
       }
       terminalContainerRef={terminalContainerRef}

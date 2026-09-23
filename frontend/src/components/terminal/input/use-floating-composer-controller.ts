@@ -7,9 +7,11 @@ import {
 } from "@runweave/common/terminal";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { TerminalState } from "@runweave/shared/terminal/state";
+import type { TerminalPromptSubmitKey } from "@runweave/shared/terminal/input";
 import type { ClientMode } from "../../../features/client-mode";
 import {
   applyTerminalDraftInput,
+  getFloatingComposerQueueKey,
   shouldEnableFloatingComposer,
 } from "../../../features/terminal/input/floating-composer";
 import { logTerminalPerf } from "../../../features/terminal/output/performance";
@@ -214,6 +216,13 @@ function useTerminalFloatingDraftController({
     sessionRunning: sessionStatus === "running",
     terminalState,
   });
+  const activePanel = paneWorkspace?.panels.find(
+    (panel) => panel.panelId === paneWorkspace.activePanelId,
+  );
+  const queueKey = getFloatingComposerQueueKey({
+    activeCommand: activePanel?.activeCommand ?? activeCommand,
+    terminalState: activePanel?.terminalState ?? terminalState,
+  });
 
   const clearInputLagFallbackTimer = useMemoizedFn(() => {
     if (inputLagFallbackTimerRef.current === null) {
@@ -277,7 +286,9 @@ function useTerminalFloatingDraftController({
   });
 
   const sendDraftToTui = useMemoizedFn(
-    async (options: { submit?: boolean } = {}): Promise<boolean> => {
+    async (
+      options: { submit?: boolean; submitKey?: TerminalPromptSubmitKey } = {},
+    ): Promise<boolean> => {
       if (floatingDraftSyncPendingRef.current) {
         return false;
       }
@@ -310,6 +321,7 @@ function useTerminalFloatingDraftController({
             data: draftToReplay,
             mode: "prompt_replace",
             submit: shouldSubmit,
+            ...(options.submitKey ? { submitKey: options.submitKey } : {}),
             ...(panelId ? { panelId } : {}),
           },
           AbortSignal.timeout(20_000),
@@ -376,6 +388,14 @@ function useTerminalFloatingDraftController({
     setInputLagFallbackActive(false);
     setFloatingComposerOpen(false);
     scrollToBottom();
+  });
+
+  const handleQueue = useMemoizedFn(async () => {
+    if (!floatingDraftRef.current || !queueKey) return;
+    if (!(await sendDraftToTui({ submit: true, submitKey: queueKey }))) return;
+    clearInputLagFallbackTimer();
+    setInputLagFallbackActive(false);
+    setFloatingComposerOpen(true);
   });
 
   useEffect(() => {
@@ -453,6 +473,8 @@ function useTerminalFloatingDraftController({
     handleOutputReceived,
     handleDraftChange,
     handleSend,
+    handleQueue,
+    queueKey,
     handleUserInputData,
     inputLagFallbackActive,
     onClose: handleClose,
@@ -553,6 +575,8 @@ export function useTerminalFloatingComposerController({
     onOpen: draft.onOpen,
     onScrollToBottom: scroll.scrollToBottom,
     onSend: draft.handleSend,
+    onQueue: draft.handleQueue,
+    queueKey: draft.queueKey,
     onTmuxExitCopyModeRequest: scroll.requestTmuxExitCopyMode,
     scrollButtonMode,
     setBufferType,

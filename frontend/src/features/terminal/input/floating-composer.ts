@@ -1,5 +1,6 @@
 import type { TerminalState, TerminalStateValue } from "@runweave/shared/terminal/state";
 import type { ClientMode } from "../../client-mode";
+import type { TerminalPromptSubmitKey } from "@runweave/shared/terminal/input";
 
 export const TERMINAL_FLOATING_COMPOSER_SHOW_ROWS = 8;
 export const TERMINAL_FLOATING_COMPOSER_HIDE_ROWS = 2;
@@ -42,6 +43,18 @@ function commandBasename(command: string | null): string | null {
 
   const basename = firstToken.split(/[\\/]/).pop()?.toLowerCase();
   return basename || null;
+}
+
+export function getFloatingComposerQueueKey(params: {
+  activeCommand: string | null;
+  terminalState?: TerminalState;
+}): Exclude<TerminalPromptSubmitKey, "Enter"> | null {
+  const agent =
+    commandBasename(params.activeCommand) ?? params.terminalState?.agent;
+  if (agent === "pi") return "M-Enter";
+  if (agent && ["codex", "trae", "traex", "traecli"].includes(agent))
+    return "Tab";
+  return null;
 }
 
 function isNonEditingTerminalControlInput(data: string): boolean {

@@ -8,6 +8,8 @@ export type TerminalInputMode =
   | "prompt_replace"
   | "tmux_exit_copy_mode";
 
+export type TerminalPromptSubmitKey = "Enter" | "Tab" | "M-Enter";
+
 export type TerminalQuickInputListKind = "recent" | "pinned" | "all";
 
 export type TerminalQuickInputMode =
@@ -60,6 +62,8 @@ export interface SendTerminalInputRequest {
   data: string;
   mode?: TerminalInputMode;
   submit?: boolean;
+  /** Native key for prompt_replace with submit=true; defaults to Enter. */
+  submitKey?: TerminalPromptSubmitKey;
   operationId?: string;
   quickInputSource?: TerminalQuickInputSource;
   /** false skips quick-input history; omitted or true preserves existing recording. */

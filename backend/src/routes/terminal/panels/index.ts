@@ -412,6 +412,7 @@ export function registerTerminalPanelRoutes(
         operationId,
         paneTarget,
         parsed.data.submit,
+        parsed.data.submitKey,
       );
       recordPanelEvent(
         terminalSessionManager,

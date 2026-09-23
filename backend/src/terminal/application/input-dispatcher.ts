@@ -3,6 +3,7 @@ import { getAgentForCommand } from "../state/terminal-state-service";
 import type {
   SendTerminalInputResponse,
   TerminalInputMode,
+  TerminalPromptSubmitKey,
 } from "@runweave/shared/terminal-protocol";
 import { aiDiagnosticLog } from "../../diagnostic-logs/recorder";
 import type {
@@ -136,15 +137,16 @@ function buildPromptPasteSequence(
 function buildPromptReplaceSequence(
   text: string,
   submit: boolean,
+  submitKey: TerminalPromptSubmitKey,
 ): TmuxKeySequenceItem[] {
   return [
     { type: "key", key: "C-u" },
     {
       type: "literal",
-      value: text,
+      value: submitKey === "Enter" ? text : buildPromptPasteInput(text),
       delayAfterMs: submit ? CODEX_COMPOSER_SUBMIT_DELAY_MS : undefined,
     },
-    ...(submit ? [{ type: "key" as const, key: "Enter" }] : []),
+    ...(submit ? [{ type: "key" as const, key: submitKey }] : []),
   ];
 }
 
@@ -152,6 +154,7 @@ async function writePromptReplacePtyInput(
   runtime: PtyRuntime,
   text: string,
   submit: boolean,
+  submitKey: TerminalPromptSubmitKey,
 ): Promise<void> {
   runtime.write("\x15");
   await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
@@ -160,11 +163,13 @@ async function writePromptReplacePtyInput(
   runtime.write("\x0b");
   await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
   if (text) {
-    runtime.write(text);
+    runtime.write(submitKey === "Enter" ? text : buildPromptPasteInput(text));
   }
   if (submit) {
     await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
-    runtime.write("\r");
+    runtime.write(
+      submitKey === "Tab" ? "\t" : submitKey === "M-Enter" ? "\x1b\r" : "\r",
+    );
   }
 }
 
@@ -197,6 +202,7 @@ export async function sendInputToSession(
   operationId?: string,
   paneTarget?: TmuxPaneTarget,
   submit?: boolean,
+  submitKey: TerminalPromptSubmitKey = "Enter",
 ): Promise<SendTerminalInputResponse> {
   if (!options?.runtimeRegistry || !options.ptyService) {
     throw new Error("Terminal runtime service unavailable");
@@ -237,6 +243,8 @@ export async function sendInputToSession(
       codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
       promptPasteSubmitKey: mode === "prompt_paste" ? composerSubmitKey : null,
       promptReplaceSubmit: mode === "prompt_replace" ? submit === true : null,
+      promptReplaceSubmitKey:
+        mode === "prompt_replace" && submit ? submitKey : null,
       exitTmuxCopyMode,
     });
     if (isTmuxBackedSession(session) && options.tmuxService) {
@@ -289,6 +297,7 @@ export async function sendInputToSession(
           requestId: operationId ?? buildTerminalInputOperationId(),
           text: data,
           submit: mode !== "prompt_replace" || submit === true,
+          submitKey: mode === "prompt_replace" ? submitKey : undefined,
         });
       } else if (exitTmuxCopyMode) {
         await options.tmuxService.cancelCopyMode(target);
@@ -307,7 +316,7 @@ export async function sendInputToSession(
         await options.tmuxService.cancelCopyMode(target, { strict: true });
         await options.tmuxService.sendKeySequence(
           target,
-          buildPromptReplaceSequence(data, submit === true),
+          buildPromptReplaceSequence(data, submit === true, submitKey),
         );
       } else if (mode === "line") {
         await options.tmuxService.sendKeySequence(
@@ -324,6 +333,7 @@ export async function sendInputToSession(
             ensured.runtime,
             data,
             submit === true,
+            submitKey,
           );
         } else {
           ensured.runtime.write(

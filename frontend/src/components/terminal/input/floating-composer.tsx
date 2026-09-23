@@ -6,6 +6,7 @@ import {
   type RefObject,
 } from "react";
 import type { Terminal } from "@xterm/xterm";
+import type { TerminalPromptSubmitKey } from "@runweave/shared/terminal/input";
 import { ArrowDown, ArrowUp, PencilLine, X } from "lucide-react";
 
 const TEXTAREA_MAX_HEIGHT = 96;
@@ -39,6 +40,8 @@ interface TerminalFloatingComposerProps {
   onOpen: () => void;
   onScrollToBottom: () => void;
   onSend: () => void;
+  onQueue: () => void;
+  queueKey: Exclude<TerminalPromptSubmitKey, "Enter"> | null;
 }
 
 function resizeTextarea(textarea: HTMLTextAreaElement | null): void {
@@ -66,6 +69,8 @@ export function TerminalFloatingComposer({
   onOpen,
   onScrollToBottom,
   onSend,
+  onQueue,
+  queueKey,
 }: TerminalFloatingComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -84,6 +89,17 @@ export function TerminalFloatingComposer({
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+      return;
+    }
+    const queueShortcut =
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      ((queueKey === "Tab" && event.key === "Tab" && !event.altKey) ||
+        (queueKey === "M-Enter" && event.key === "Enter" && event.altKey));
+    if (queueShortcut && draft.length > 0) {
+      event.preventDefault();
+      if (!sending) onQueue();
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
@@ -186,17 +202,38 @@ export function TerminalFloatingComposer({
               }}
               onKeyDown={handleKeyDown}
             />
-            <button
-              type="button"
-              aria-label="Send"
-              title="Send"
-              className="grid h-7 w-7 place-items-center rounded-full border border-cyan-400/40 bg-cyan-400/18 text-cyan-50 transition hover:border-cyan-300/60 hover:bg-cyan-400/28 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:bg-cyan-400/35 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800/70 disabled:text-slate-500"
-              disabled={sending || draft.length === 0}
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={onSend}
-            >
-              <ArrowUp aria-hidden="true" className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              {queueKey ? (
+                <button
+                  type="button"
+                  aria-label="排队"
+                  title={`排队 (${queueKey === "Tab" ? "Tab" : "Alt+Enter"}) · 使用 Agent 原生行为`}
+                  className="h-7 rounded-full border border-slate-600 bg-slate-900/70 px-2 text-xs text-slate-200 transition hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-500"
+                  disabled={sending || draft.length === 0}
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    onQueue();
+                    textareaRef.current?.focus();
+                  }}
+                >
+                  排队{" "}
+                  <span className="text-[10px] text-slate-400">
+                    {queueKey === "Tab" ? "⇥" : "Alt+Enter"}
+                  </span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                aria-label="Send"
+                title="Send"
+                className="grid h-7 w-7 place-items-center rounded-full border border-cyan-400/40 bg-cyan-400/18 text-cyan-50 transition hover:border-cyan-300/60 hover:bg-cyan-400/28 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:bg-cyan-400/35 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800/70 disabled:text-slate-500"
+                disabled={sending || draft.length === 0}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={onSend}
+              >
+                <ArrowUp aria-hidden="true" className="h-4 w-4" />
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
