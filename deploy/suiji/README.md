@@ -49,11 +49,37 @@ docker compose --env-file /absolute/deployment.env -f deploy/suiji/compose.yaml 
 
 ## 可选 MCP
 
-先按[服务入口](../../packages/suiji-server/README.md#外部-agent-mcp)生成个人凭据。
-将生成的 `server.env` 中两项摘要/期限配置加入受保护的 deployment env；Compose 将它们传给 API。
-不把含原 token 的 `client.env` 放到服务器配置或镜像中。TLS 反向代理将 `/mcp` 转到同一个 API 端口。
-更新配置后通过现有发布流程重建 API 容器使其生效；轮换凭据需同步更新 Agent 环境变量。
-移除两项并重建 API 可关闭 MCP，未配置时 HTTP 和原生客户端继续工作。本阶段没有 schema 迁移。
+先按[服务入口](../../packages/suiji-server/README.md#外部-agent-mcp)在设备生成凭据，
+只将 `registration.json` 送服务器登记。deployment env 设置 `SUIJI_MCP_ENABLED=true`，首次启用需重建 API。
+之后注册和撤销不需要重启。`client.env` 的原文只留在客户端，不上传到服务器或镜像。
+TLS 反向代理将 `/mcp` 与 `/mcp/uploads` 转到同一 API 端口。
+全局关闭设置 `SUIJI_MCP_ENABLED=false` 并重建 API；不删除凭据或影响 App 会话。
+
+## 多凭据迁移
+
+本版要求 schema 6。沿用 `release.mjs deploy` 的发布锁、异机备份及不可变镜像。
+已有部署必须有可信的 release-state；缺失时先核对真实镜像和部署信息，不能把它当成首次部署。
+若实际服务使用多个 Compose 文件，release config 必须通过 `composeFiles` 数组按顺序列出全部绝对路径，
+首项指向新版本 compose，其余保留现有 override。发现已有 override 而配置未声明时发布会停止。
+
+发布流程备份后停旧 API，追加迁移，再把 deployment env 中旧 `SUIJI_MCP_TOKEN_SHA256` 与
+`SUIJI_MCP_TOKEN_EXPIRES_AT` 通过管理员 `import-legacy` 原样登记。不接触原文、不延长期限。
+导入成功后保存原 env 的受保护备份，移除旧两项，持久化新开关，再启动新版。
+没有旧 MCP 配置则默认保持关闭；显式 false 也不会被迁移打开。
+失败时保留现场，不自动删除新表或回退不兼容镜像。
+
+手动迁移时 `admin mcp-credentials import-legacy` 接收 stdin JSON：
+`version:1, serverId, ownerId, name, tokenSha256, expiresAt`，摘要与期限取自受保护旧配置。
+重复导入不延长期限，不恢复已撤销条目。先确认导入成功，再移除旧配置并开启新开关；
+直接启动带旧配置的新版 API 会报迁移错误，避免静默失联。
+
+迁移前后由原客户端使用同一 token 各做一次只读请求，确认服务身份和访问都保持；
+新增设备使用独立 token 验证。schema 5 的旧镜像不能运行 schema 6 数据库，失败后使用兼容修复镜像。
+旧备份仍可在隔离环境按其镜像恢复，不能直接覆盖有新数据的生产库。
+
+schema 6 备份额外核对凭据数量与稳定字段校验摘要，包含撤销状态；备份里没有 token 原文。
+恢复目标强制持久化 MCP 关闭。恢复旧备份可能复活恢复点之后撤销的 token，生产恢复前应核对之后的撤销记录；
+无法核对时先撤销全部恢复凭据，再登记新的客户端摘要，最后显式开启 MCP。
 
 ## Codex 回顾
 

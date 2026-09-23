@@ -16,6 +16,7 @@ const env = z.object({
   SUIJI_CODEX_BIN: z.string().min(1).default("codex"),
   SUIJI_CODEX_HOME: z.string().min(1).optional(),
   SUIJI_AI_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(600).default(180),
+  SUIJI_MCP_ENABLED: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
   SUIJI_MCP_TOKEN_SHA256: z.string().regex(/^[a-f0-9]{64}$/).or(z.literal("")).optional(),
   SUIJI_MCP_TOKEN_EXPIRES_AT: z.string().datetime().or(z.literal("")).optional(),
 });
@@ -36,8 +37,8 @@ export function readConfig() {
     throw new Error("SUIJI_CODEX_HOME must be absolute");
   if (c.NODE_ENV === "production" && c.SUIJI_AI_PROVIDER === "codex-cli" && !c.SUIJI_CODEX_HOME)
     throw new Error("Production Codex requires a persistent SUIJI_CODEX_HOME for its login");
-  if (Boolean(c.SUIJI_MCP_TOKEN_SHA256) !== Boolean(c.SUIJI_MCP_TOKEN_EXPIRES_AT))
-    throw new Error("MCP requires both token digest and expiration configuration");
+  if (c.SUIJI_MCP_TOKEN_SHA256 || c.SUIJI_MCP_TOKEN_EXPIRES_AT)
+    throw new Error("Import legacy MCP credential and remove legacy environment fields before starting");
   if (!path.isAbsolute(c.SUIJI_STORAGE_DIR))
     throw new Error("SUIJI_STORAGE_DIR must be absolute");
   if (c.NODE_ENV === "production") {

@@ -45,7 +45,7 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
-标签最初引入于 schema 4；当前跟进版本要求 schema 5，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
+标签最初引入于 schema 4；当前运行版本要求 schema 6，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -66,18 +66,36 @@ HTTP、修订与幂等结果在一个 PostgreSQL 事务提交。同键唯一约�
 `/mcp` 使用 Streamable HTTP，默认关闭。与 App 共用记录服务，但使用独立 Bearer 凭据；
 不接受 App access/refresh token，不向 Agent 提供数据库或登录密码。每次请求校验有效期。
 
+每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 6；
+`SUIJI_MCP_ENABLED=true` 开启 MCP，默认 false。注册、撤销不重启服务；App 会话不受影响。
+
 ```bash
-# 父目录须已存在，输出目录必须是新的绝对路径；文件为 0600、目录为 0700。
-pnpm --filter @runweave/suiji-server mcp:credential --output-dir /absolute/new-credential --days 90
-# 服务加载 server.env 的摘要和期限，原 client.env 留在个人 Agent 所在设备。
-node --env-file=/absolute/api.env --env-file=/absolute/new-credential/server.env packages/suiji-server/dist/index.js
+# 真实 serverId/ownerId 来自已验证的服务身份；父目录存在，输出目录必须是新绝对路径。
+pnpm --filter @runweave/suiji-server mcp:credential --name Mac --server-id <UUID> --owner-id <UUID> --output-dir /absolute/new-device
+# 在服务器上执行，沿用真实 deployment env、project 和全部 Compose 文件（含 override）。
+docker compose --env-file /absolute/deployment.env --project-name <project> -f deploy/suiji/compose.yaml run --rm -T admin mcp-credentials register < /absolute/registration.json
+docker compose --env-file /absolute/deployment.env --project-name <project> -f deploy/suiji/compose.yaml run --rm -T admin mcp-credentials list
+docker compose --env-file /absolute/deployment.env --project-name <project> -f deploy/suiji/compose.yaml run --rm -T admin mcp-credentials revoke --id <UUID>
 ```
 
-服务配置为 `SUIJI_MCP_TOKEN_SHA256` 与 `SUIJI_MCP_TOKEN_EXPIRES_AT`；缺少任一项拒绝启动。
-两项同时未设置或为空则关闭 MCP，HTTP 继续可用。到期只拒绝 MCP；轮换时生成新凭据、替换服务配置并重启，
-关闭时移除两项并重启。客户端文件含原始 token，不进入 Git，也不通过命令参数传递。
-这是一套单人预配置凭据，不提供 OAuth；需要 OAuth 的客户端不属于当前已验证兼容范围。
-带 Origin 的浏览器请求被拒绝，本阶段供无 Origin 的 Agent CLI 使用；公网必须经 HTTPS。
+本地目录权限 0700，`client.env` 和 `registration.json` 为 0600。前者含原文，始终留在设备上；
+后者含版本 1、稳定 ID、名称、serverId、ownerId、tokenSha256 和 expiresAt，可经安全渠道送服务器。
+默认期限 90 天，`--days` 允许 1–365。原文不打印、不进 Git、不进命令参数。
+`--legacy` 仅为维护旧版服务生成旧格式文件，不能与名称/身份参数混用，不用于多凭据登记。
+
+管理命令的 JSON 输入走 stdin；服务身份不匹配返回 IDENTITY_MISMATCH；非法输入返回 INVALID_INPUT。
+同 ID 同内容重复登记不重复创建；同 ID 或同摘要被其他内容占用返回 CREDENTIAL_CONFLICT。
+已撤销或过期的 ID 不可复活，重复登记返回 CREDENTIAL_INACTIVE；重复撤销成功且时间不变，未知 ID 返回 NOT_FOUND。
+列表仅包含元数据，状态优先 revoked、expired、active，不返回摘要或原文。
+最近使用时间精度为一分钟，表示成功认证而非业务成功。
+
+鉴权逐请求查数据库：失效/错误 token 为 401，数据库故障为 503；不缓存有效凭据。
+撤销提交后开始鉴权的请求被拒绝，已通过鉴权的在途请求可完成；上传入口遵循同一规则。
+多把 token 共用 owner 的现有 MCP 权限，不改变业务幂等空间或 actor；不支持 scopes 或 OAuth。
+浏览器 Origin 仍被拒绝，公网仍要求 HTTPS。
+
+旧版迁移见[部署说明](../../deploy/suiji/README.md#多凭据迁移)。只导入摘要和原期限即可保留旧 token，
+无需复制 Mac 上的原文。服务启动不自动导入，也不会因重启恢复已撤销凭据。
 
 Codex CLI 示例配置如下，地址替换为实际随记服务。让启动 Codex 的进程从受保护的 `client.env`
 注入 `SUIJI_MCP_TOKEN`；配置只引用环境变量名。参数已核对本机 CLI 帮助及
@@ -107,9 +125,9 @@ Markdown 默认每页 4000、最多 16000 标量；图片沿用服务现有 5 Mi
 业务成功同时有 structuredContent 和 JSON 文本；业务失败为 isError 与结构化错误，协议和参数校验由 SDK 处理。
 所有写入共用原版本与幂等事务，结果不确定时必须沿用原键和完整参数。
 App 旧请求摘要保持兼容；Agent 使用可信操作前缀隔离，同键跨不同入口拒绝。createdVia 不随编辑改变，修订 actor 记录当前入口。
-没有新增迁移或长期 MCP 会话，关闭 MCP 不改变 schema 和 App 数据。
+不创建长期 MCP 会话；凭据表由 schema 6 迁移创建，关闭 MCP 不改变 schema 和 App 数据。
 
-验收合同：[MCP 与 Agent](../../docs/testing/suiji/mcp-agent.testplan.yaml)。
+验收合同：[MCP 与 Agent](../../docs/testing/suiji/mcp-agent.testplan.yaml)、[多设备凭据](../../docs/testing/suiji/mcp-credentials.testplan.yaml)。
 
 ## AI 回顾
 
@@ -187,7 +205,7 @@ pnpm architecture:check
 
 ## 回收站
 
-迁移到 schema 5 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
+迁移到 schema 6 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
 分页游标绑定筛选。App 可按 ID 查看回收站原文和附件，不能编辑或变更待办状态。恢复不改变待办原状态。
 每次删除或恢复沿用版本校验、单事务修订及幂等请求；客户端先持久化意图，结果未知时仅由用户手动确认原请求。
 Web 和原生 iOS 均提供回收站入口、删除确认及恢复。已有本机正文草稿保留，恢复后保存仍须通过版本校验。

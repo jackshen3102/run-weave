@@ -5,6 +5,7 @@ import hashlib
 import http.client
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import sys
@@ -155,6 +156,7 @@ def run_intent(client, path, intent):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
+    parser.add_argument("--env-file", help="Protected 0600 file containing only the configured token variable")
     parser.add_argument("command", choices=["info", "list", "search", "get", "followups", "handoff", "read-attachment", "upload", "append", "complete", "retry"])
     for option in ("record-id", "attachment-id", "query", "tag", "status", "kind", "cursor", "input", "request", "file"):
         parser.add_argument("--" + option)
@@ -178,6 +180,18 @@ def main():
         if target.get("format") != "suiji-handoff-v1" or endpoint(target["endpoint"]) != endpoint(config["endpoint"]) or any(target[key] != config[key] for key in ("serverId", "ownerId")):
             raise Failure("HANDOFF_IDENTITY_MISMATCH; configure the target connection")
         args.record_id = target["recordId"]
+    if args.env_file:
+        lines = private_read(args.env_file).decode("utf-8").splitlines()
+        entries = [line for line in lines if line.strip()]
+        if len(entries) != 1:
+            raise Failure("INVALID_TOKEN_FILE")
+        key, separator, token = entries[0].partition("=")
+        if not separator or key != config["tokenEnv"] or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+            raise Failure("INVALID_TOKEN_FILE")
+        existing = os.environ.get(key)
+        if existing is not None and existing != token:
+            raise Failure("TOKEN_SOURCE_CONFLICT")
+        os.environ[key] = token
     client = Client(config)
     info = client.verify()
     if args.command == "info":
