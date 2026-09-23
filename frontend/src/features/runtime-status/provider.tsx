@@ -260,11 +260,16 @@ export function RuntimeStatusProvider({
     new Set(
       nodes.flatMap((node) =>
         node.capabilities
-          .filter((capability) => capability.unhealthy)
+          .filter((capability) => capability.attention === "error")
           .map((capability) => capability.capabilityId),
       ),
     ),
   ) as RuntimeStatusCapabilityId[];
+  const warningCapabilityIds = Array.from(
+    new Set(nodes.flatMap((node) => node.capabilities
+      .filter((capability) => capability.attention === "warning")
+      .map((capability) => capability.capabilityId))),
+  ).filter((id) => !unhealthyCapabilityIds.includes(id));
   const overallState = aggregateRuntimeStatusState(
     nodes.length > 0 ? nodes.map((node) => node.state) : ["checking"],
   );
@@ -274,6 +279,7 @@ export function RuntimeStatusProvider({
       currentAddress,
       overallState,
       unhealthyCapabilityIds,
+      warningCapabilityIds,
       refreshing,
       panelOpen,
       setPanelOpen,
@@ -289,6 +295,7 @@ export function RuntimeStatusProvider({
       refreshing,
       setFrontendItem,
       unhealthyCapabilityIds,
+      warningCapabilityIds,
     ],
   );
 

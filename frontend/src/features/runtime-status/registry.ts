@@ -35,6 +35,7 @@ export interface RuntimeStatusNodeView {
   capabilities: RuntimeStatusCapabilitySnapshot[];
   state: RuntimeStatusState;
   unhealthyCapabilityCount: number;
+  warningCapabilityCount: number;
   generatedAt: number;
 }
 
@@ -176,16 +177,11 @@ function mergeReports(
   const bySource = new Map(current.map((report) => [report.source.id, report]));
   for (const report of incoming) {
     const existing = bySource.get(report.source.id);
-    if (!existing) {
+    // Each source reports a complete snapshot; merging items retains entries
+    // that the newer report has removed (for example, an unreported Bridge).
+    if (!existing || report.observedAt >= existing.observedAt) {
       bySource.set(report.source.id, report);
-      continue;
     }
-    const items = new Map(existing.items.map((item) => [item.id, item]));
-    for (const item of report.items) items.set(item.id, item);
-    bySource.set(report.source.id, {
-      ...(report.observedAt >= existing.observedAt ? report : existing),
-      items: [...items.values()],
-    });
   }
   return [...bySource.values()];
 }
@@ -235,6 +231,7 @@ export function buildRuntimeStatusNodes(input: {
       capabilities: [],
       state: "checking",
       unhealthyCapabilityCount: 0,
+      warningCapabilityCount: 0,
       generatedAt: endpoint.observedAt,
     });
   }
@@ -251,6 +248,7 @@ export function buildRuntimeStatusNodes(input: {
       capabilities: [],
       state: "checking",
       unhealthyCapabilityCount: 0,
+      warningCapabilityCount: 0,
       generatedAt: input.electronReport.observedAt,
     };
     nodes.set(nodeId, localNode);
@@ -319,7 +317,10 @@ export function buildRuntimeStatusNodes(input: {
         capabilities.map((capability) => capability.state),
       ),
       unhealthyCapabilityCount: capabilities.filter(
-        (capability) => capability.unhealthy,
+        (capability) => capability.attention === "error",
+      ).length,
+      warningCapabilityCount: capabilities.filter(
+        (capability) => capability.attention === "warning",
       ).length,
     };
   });

@@ -23,4 +23,6 @@
 消息等待上限为创建后 120 秒，已开始发送但结果未知的消息不会自动重发。
 认证共享 profile 会自动重新读取并串行刷新；使用环境变量指定的 access token 时需由调用方
 更新。启动时后端暂时不可用不阻止飞书连接；首次使用仍需 `rw auth login`。
+单实例和状态写入锁由操作系统持有，崩溃/重启后自动释放，不根据持久化 PID 判断存活。
+升级旧锁协议及安装依赖的要求见 [飞书部署](../deployment/feishu-app-integration.md)。
 详细合同见 [桌面与飞书完成通知](../architecture/terminal-completion-notifications.md)。

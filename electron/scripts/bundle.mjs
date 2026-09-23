@@ -1,3 +1,4 @@
+import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
 import { buildAgentAssets } from "../../scripts/agents/build.mjs";
 import { rmSync } from "node:fs";
 import { build } from "esbuild";
@@ -144,9 +145,12 @@ await build({
   ...importMetaUrlShim,
   entryPoints: ["../packages/runweave-cli/src/index.ts"],
   outdir: `${outputDir}/cli`,
+  external: ["fs-native-extensions"],
   format: "cjs",
   outExtension: { ".js": ".cjs" },
 });
+
+copyNativeLockRuntime(path.join(outputDir, "cli"));
 
 await buildCompanionAgent(outputDir);
 

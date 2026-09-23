@@ -67,18 +67,18 @@ export class RuntimeStatusRegistry {
         source: {
           id: "feishu-bridge",
           runtime: "feishu-bridge",
-          instanceId: "feishu-bridge:unconfigured",
+          instanceId: "feishu-bridge:unreported",
           capabilityId: "feishu",
         },
         observedAt: now,
         validForMs: 15_000,
         items: [
           {
-            id: "feishu.configuration",
+            id: "feishu.bridge-report",
             capabilityId: "feishu",
-            label: "飞书配置",
-            state: "unconfigured",
-            summary: "尚未收到飞书 Bridge 状态",
+            label: "飞书 Bridge",
+            state: "blocked",
+            summary: "尚未收到飞书 Bridge 状态，请检查配置及服务是否已启动",
             observedAt: now,
             dependsOn: ["backend.process"],
             recovery: null,

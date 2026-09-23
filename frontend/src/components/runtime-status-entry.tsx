@@ -20,56 +20,87 @@ export function RuntimeStatusEntry(props: {
   className?: string;
   iconOnly?: boolean;
 }) {
-  const { overallState, unhealthyCapabilityIds, panelOpen, setPanelOpen } =
-    useRuntimeStatus();
+  const {
+    overallState,
+    unhealthyCapabilityIds,
+    warningCapabilityIds,
+    panelOpen,
+    setPanelOpen,
+  } = useRuntimeStatus();
   const unhealthyCount = unhealthyCapabilityIds.length;
-  const tooltip =
-    overallState === "unhealthy"
-      ? `运行状态 · ${unhealthyCount} 个异常能力域`
-      : "运行状态";
+  const warningCount = warningCapabilityIds.length;
+  const attention =
+    unhealthyCount > 0 ? "error" : warningCount > 0 ? "warning" : "none";
+  const tooltip = `运行状态${unhealthyCount ? ` · ${unhealthyCount} 个异常服务` : ""}${warningCount ? ` · ${warningCount} 个服务需关注` : ""}`;
+  const tone =
+    attention === "error"
+      ? STATE_TONE.unhealthy
+      : attention === "warning"
+        ? STATE_TONE.recovering
+        : STATE_TONE[overallState];
 
   const entry = (
     <button
       type="button"
       className={cn(
         "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2 text-xs shadow-sm transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
-        STATE_TONE[overallState],
         props.iconOnly && "relative w-8 justify-center gap-0 rounded-md px-0",
         props.className,
+        tone,
       )}
       data-runtime-status-state={overallState}
-      aria-label={props.iconOnly ? `${tooltip}，点击查看详情` : "打开运行状态"}
+      data-runtime-status-attention={attention}
+      aria-label={`${tooltip}，点击查看详情`}
       aria-haspopup="dialog"
       aria-expanded={panelOpen}
-      title={
-        props.iconOnly
-          ? undefined
-          : overallState === "unhealthy"
-            ? "运行异常，点击查看详情"
-            : "运行状态"
-      }
+      title={props.iconOnly ? undefined : `${tooltip}，点击查看详情`}
       onClick={() => setPanelOpen(true)}
     >
-      {overallState === "unhealthy" ? (
+      {attention !== "none" ? (
         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
       ) : (
         <Activity className="h-3.5 w-3.5 shrink-0" />
       )}
       {props.iconOnly ? null : (
-        <span>{overallState === "unhealthy" ? "异常" : "状态"}</span>
-      )}
-      {unhealthyCount > 0 ? (
-        <span
-          className={cn(
-            "shrink-0 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white",
-            props.iconOnly &&
-              "absolute -right-1 -top-1 flex h-3 min-w-3 items-center justify-center px-0.5 text-[8px] leading-none",
-          )}
-          aria-label={`${unhealthyCount} 个异常能力域`}
-        >
-          {unhealthyCount}
+        <span>
+          {attention === "error"
+            ? "异常"
+            : attention === "warning"
+              ? "Warning"
+              : "状态"}
         </span>
-      ) : null}
+      )}
+      {[
+        {
+          count: unhealthyCount,
+          kind: "error",
+          tone: "bg-red-600",
+          label: "异常服务",
+        },
+        {
+          count: warningCount,
+          kind: "warning",
+          tone: "bg-amber-600",
+          label: "服务需关注",
+        },
+      ]
+        .filter(({ count }) => count > 0)
+        .map(({ count, kind, tone: badgeTone, label }, index) => (
+          <span
+            key={kind}
+            className={cn(
+              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white",
+              badgeTone,
+              props.iconOnly &&
+                "absolute -right-1 flex h-3 min-w-3 items-center justify-center px-0.5 text-[8px] leading-none",
+              props.iconOnly && (index === 0 ? "-top-1" : "-bottom-1"),
+            )}
+            aria-label={`${count} 个${label}`}
+            data-runtime-status-badge={kind}
+          >
+            {count}
+          </span>
+        ))}
     </button>
   );
 
