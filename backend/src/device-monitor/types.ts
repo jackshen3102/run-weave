@@ -12,6 +12,8 @@ export interface DeviceSubscription {
   version: number;
   enabled: boolean;
   synced: boolean;
+  /** HTTPS origin this registration/version belongs to; absent on legacy records. */
+  gatewayURL?: string;
   confirmed?: boolean;
   revokeToken: string | null;
 }

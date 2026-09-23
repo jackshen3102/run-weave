@@ -37,6 +37,9 @@ export class DeviceSubscriptions {
       owner.connectionId === value.connectionId
     );
   }
+  isSynced(value: DeviceSubscription): boolean {
+    return !!this.push && value.gatewayURL === this.push.url && value.synced;
+  }
   private dto(value: DeviceSubscription): DeviceNotificationSubscription {
     return {
       subscriptionId: value.id,
@@ -45,12 +48,15 @@ export class DeviceSubscriptions {
       environment: value.environment,
       state: !value.enabled
         ? "disabled"
-        : value.synced && value.confirmed
+        : this.isSynced(value) && value.confirmed
           ? "enabled"
           : "pending",
       version: value.version,
       gatewayURL: this.push?.url ?? null,
-      revokeToken: value.revokeToken,
+      revokeToken:
+        this.push && value.gatewayURL === this.push.url
+          ? value.revokeToken
+          : null,
     };
   }
   status(sessionId: string) {
@@ -137,8 +143,13 @@ export class DeviceSubscriptions {
         version: (existing?.version ?? 0) + 1,
         enabled: true,
         synced: false,
-        confirmed: existing?.confirmed ?? false,
-        revokeToken: existing?.revokeToken ?? null,
+        gatewayURL: this.push!.url,
+        confirmed:
+          existing?.gatewayURL === this.push!.url
+            ? (existing.confirmed ?? false)
+            : false,
+        revokeToken:
+          existing?.gatewayURL === this.push!.url ? existing.revokeToken : null,
       };
       data.subscriptions[next.id] = next;
       return next;
@@ -153,13 +164,38 @@ export class DeviceSubscriptions {
       await this.disable(value.id);
       return;
     }
+    // Persist the target and invalidate old acknowledgements before network I/O.
+    // A failed attempt can retry the same version after restart.
+    const gatewayURL = this.push.url;
+    if (value.gatewayURL !== gatewayURL) {
+      const rebound = await this.store.update((data) => {
+        const current = data.subscriptions[value.id];
+        if (
+          !current ||
+          !this.valid(current) ||
+          current.version !== value.version
+        )
+          return null;
+        current.gatewayURL = gatewayURL;
+        current.version += 1;
+        current.synced = false;
+        current.confirmed = false;
+        current.revokeToken = null;
+        return current;
+      });
+      if (!rebound) return;
+      value = rebound;
+    }
     try {
       const response = await this.push.register(value);
       this.failure = null;
       const revoke = await this.store.update((data) => {
         const current = data.subscriptions[value.id];
         if (!current || !this.valid(current)) return true;
-        if (current.version === value.version) {
+        if (
+          current.version === value.version &&
+          current.gatewayURL === gatewayURL
+        ) {
           current.synced = true;
           current.revokeToken = response.revokeToken;
         }
@@ -194,7 +230,7 @@ export class DeviceSubscriptions {
         current.connectionId !== owner.connectionId ||
         current.installationId !== installationId ||
         current.version !== version ||
-        !current.synced ||
+        !this.isSynced(current) ||
         !current.revokeToken
       ) {
         throw new SubscriptionError(409, "订阅已变化，请重新同步");
@@ -220,6 +256,9 @@ export class DeviceSubscriptions {
         const s = data.subscriptions[id];
         if (s && !s.enabled) {
           s.synced = true;
+          s.gatewayURL = this.push!.url;
+          s.revokeToken = null;
+          s.confirmed = false;
           s.deviceToken = "";
         }
       });
@@ -246,7 +285,7 @@ export class DeviceSubscriptions {
     for (const value of Object.values(this.store.snapshot().subscriptions)) {
       if (!this.valid(value)) {
         if (value.enabled || !value.synced) await this.disable(value.id);
-      } else if (!value.synced) await this.sync(value);
+      } else if (!this.isSynced(value)) await this.sync(value);
       if (this.failure) break; // One unreachable relay must not consume 100 sequential timeouts.
     }
   }

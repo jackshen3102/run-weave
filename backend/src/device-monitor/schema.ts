@@ -15,6 +15,7 @@ const subscription = z
     version: z.number().int().positive(),
     enabled: z.boolean(),
     synced: z.boolean(),
+    gatewayURL: z.string().url().optional(),
     confirmed: z.boolean().optional(),
     revokeToken: z.string().nullable(),
   })

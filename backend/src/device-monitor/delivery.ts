@@ -60,7 +60,10 @@ export class BatteryAlerts {
     await this.subscriptions.reconcile();
     await this.monitor.store.update((data) => {
       const recipients = Object.values(data.subscriptions).filter(
-        (s) => this.subscriptions.valid(s) && s.synced && !!s.confirmed,
+        (s) =>
+          this.subscriptions.valid(s) &&
+          this.subscriptions.isSynced(s) &&
+          !!s.confirmed,
       );
       updateAlerts(data, this.monitor.snapshot(), recipients);
     });
@@ -79,7 +82,7 @@ export class BatteryAlerts {
         const subscription = Object.values(data.subscriptions).find(
           (s) =>
             targetFor(s) === item.target &&
-            s.synced &&
+            this.subscriptions.isSynced(s) &&
             !!s.confirmed &&
             this.subscriptions.valid(s),
         );
@@ -111,6 +114,7 @@ export class BatteryAlerts {
           !this.stopped &&
           !!current &&
           this.subscriptions.valid(current) &&
+          this.subscriptions.isSynced(current) &&
           !!current.confirmed &&
           this.monitor.store.snapshot().cycle?.id === item.cycleId &&
           batteryAlertLevel(this.monitor.snapshot()) === item.level

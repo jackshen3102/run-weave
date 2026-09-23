@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ActivityFactDto } from "@runweave/shared/activity";
 import type { ActivityStore } from "../activity/recording/store";
 import { redactExcerpt } from "./evidence";
@@ -17,6 +18,8 @@ export interface LearningFact {
   toolUseId: string | null;
   toolName: string | null;
   text: string;
+  /** Text-only analysis cannot use omitted images to establish an outcome. */
+  omittedImageContent?: boolean;
 }
 
 /** Use stored tool results, never a completion summary as proof of success. */
@@ -71,7 +74,7 @@ export async function readLearningFacts(
       ].includes(fact.eventName)
     )
       continue;
-    const text = await readFactText(store, fact);
+    const { text, omittedImageContent } = await readFactText(store, fact);
     bytes += Buffer.byteLength(text);
     if (bytes > 160_000) throw new Error("experience_turn_too_large");
     output.push({
@@ -86,6 +89,7 @@ export async function readLearningFacts(
           ? fact.payload.toolName
           : null,
       text,
+      ...(omittedImageContent ? { omittedImageContent: true } : {}),
     });
   }
   return output;
@@ -94,18 +98,64 @@ export async function readLearningFacts(
 async function readFactText(
   store: ActivityStore,
   fact: ActivityFactDto,
-): Promise<string> {
+): Promise<{ text: string; omittedImageContent: boolean }> {
   const parts: string[] = [];
+  let omittedImageContent = false;
   for (const descriptor of fact.contentDescriptors) {
     if (descriptor.availability !== "available")
       throw new Error("experience_source_expired");
     const value = await store.content(descriptor.contentId);
     if (typeof value?.bytesBase64 !== "string")
       throw new Error("experience_source_unavailable");
-    const text = Buffer.from(value.bytesBase64, "base64").toString("utf8");
+    const raw = Buffer.from(value.bytesBase64, "base64").toString("utf8");
+    const projected =
+      fact.eventName === "agent.tool.completed"
+        ? projectToolImages(raw)
+        : { text: raw, omittedImageContent: false };
+    const text = projected.text;
+    omittedImageContent ||= projected.omittedImageContent;
     if (Buffer.byteLength(text) > 40_000)
       throw new Error("experience_source_too_large");
     parts.push(redactExcerpt(text));
   }
-  return parts.join("\n");
+  return { text: parts.join("\n"), omittedImageContent };
+}
+
+/** Keep the original Activity content intact; only project known image blocks. */
+function projectToolImages(text: string): {
+  text: string;
+  omittedImageContent: boolean;
+} {
+  let blocks: unknown;
+  try {
+    blocks = JSON.parse(text);
+  } catch {
+    return { text, omittedImageContent: false };
+  }
+  if (!Array.isArray(blocks)) return { text, omittedImageContent: false };
+  let omittedImageContent = false;
+  const projected = blocks.map((block: unknown) => {
+    if (
+      !block ||
+      typeof block !== "object" ||
+      !("type" in block) ||
+      block.type !== "input_image" ||
+      !("image_url" in block) ||
+      typeof block.image_url !== "string" ||
+      !block.image_url.startsWith("data:")
+    )
+      return block;
+    omittedImageContent = true;
+    return {
+      type: "omitted_image",
+      reason:
+        "Image not inspected by text-only experience analysis; not outcome evidence",
+      sourceBytes: Buffer.byteLength(block.image_url),
+      sha256: createHash("sha256").update(block.image_url).digest("hex"),
+    };
+  });
+  return {
+    text: omittedImageContent ? JSON.stringify(projected) : text,
+    omittedImageContent,
+  };
 }
