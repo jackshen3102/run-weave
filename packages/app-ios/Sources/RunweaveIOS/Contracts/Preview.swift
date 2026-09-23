@@ -43,10 +43,46 @@ struct PreviewChanges: Decodable {
   let staged: [PreviewChange]
   let working: [PreviewChange]
 }
+struct PreviewContentSide: Decodable {
+  let source: String
+  let path: String
+  let state: String
+  let contentKind: String?
+  let sizeBytes: Int?
+  let mimeType: String?
+  let version: String?
+
+  var problem: String? {
+    switch state {
+    case "too-large": return "文件太大，无法预览"
+    case "unsupported": return "此文件不支持内容预览"
+    case "read-failed": return "读取文件失败，请重试"
+    default: return nil
+    }
+  }
+}
 struct PreviewDiff: Decodable {
   let path: String
   let oldContent: String
   let newContent: String
+  let status: String?
+  let oldPath: String?
+  let contentKind: String?
+  let diffState: String?
+  let oldSide: PreviewContentSide?
+  let newSide: PreviewContentSide?
+
+  var previewSide: PreviewContentSide? { status == "deleted" ? oldSide : newSide }
+  var previewContent: String { status == "deleted" ? oldContent : newContent }
+  var problem: String? {
+    if contentKind == "image" { return previewSide?.problem }
+    return newSide?.problem ?? oldSide?.problem
+  }
+  var versionLabel: String {
+    let source = previewSide?.source
+    let label = source == "index" ? "暂存版本" : source == "head" ? "已提交版本" : "工作区版本"
+    return status == "deleted" ? "已删除 · 删除前版本 · " + label : label
+  }
 }
 struct SelectedFile: Identifiable, Equatable {
   let path: String

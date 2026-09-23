@@ -1,18 +1,17 @@
+import { readChangeContent } from "./change-content";
 import { execFile } from "node:child_process";
-import { lstat, readFile, realpath, stat, unlink } from "node:fs/promises";
+import { lstat, realpath, unlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { TerminalPreviewChangeFile, TerminalPreviewChangeKind, TerminalPreviewFileDiffResponse, TerminalPreviewGitChangesResponse, TerminalPreviewGitStatus, TerminalPreviewResetChangeResponse } from "@runweave/shared/terminal/preview";
 import {
   TerminalPreviewError,
   ensureProjectPath,
-  isLikelyBinary,
-  resolvePreviewPath,
   toRelativePath,
 } from "./paths";
 
 const execFileAsync = promisify(execFile);
-const GIT_FILE_CONTENT_MAX_BYTES = 1024 * 1024;
+
 
 class GitRepositoryMissingError extends TerminalPreviewError {
   constructor() {
@@ -30,7 +29,7 @@ async function runGit(
       cwd,
       maxBuffer: options?.maxBuffer ?? 4 * 1024 * 1024,
       timeout: 5_000,
-      env: { ...process.env, LC_ALL: "C" },
+      env: { ...process.env, LC_ALL: "C", GIT_LITERAL_PATHSPECS: "1", GIT_OPTIONAL_LOCKS: "0" },
     });
     return result.stdout;
   } catch (error) {
@@ -168,13 +167,14 @@ function parseGitStatus(
     const indexStatus = record[0] ?? " ";
     const workingStatus = record[1] ?? " ";
     const repoPath = record.slice(3);
+    let originalPath: string | undefined;
     if (
       indexStatus === "R" ||
       indexStatus === "C" ||
       workingStatus === "R" ||
       workingStatus === "C"
     ) {
-      index += 1;
+      originalPath = stripProjectPrefix(records[++index] ?? "", projectRelativeToRepo) ?? undefined;
     }
     const projectPath = stripProjectPrefix(repoPath, projectRelativeToRepo);
     if (!projectPath) {
@@ -192,12 +192,14 @@ function parseGitStatus(
       staged.set(projectPath, {
         path: projectPath,
         status: mapGitStatus(indexStatus),
+        ...(["R", "C"].includes(indexStatus) ? { oldPath: originalPath } : {}),
       });
     }
     if (workingStatus !== " ") {
       working.set(projectPath, {
         path: projectPath,
         status: mapGitStatus(workingStatus),
+        ...(["R", "C"].includes(workingStatus) ? { oldPath: originalPath } : {}),
       });
     }
   }
@@ -245,43 +247,6 @@ export async function getPreviewGitChanges(params: {
     repoRoot,
     ...parsed,
   };
-}
-
-async function readGitBlob(
-  repoRoot: string,
-  ref: string,
-  repoPath: string,
-): Promise<string> {
-  try {
-    const result = await execFileAsync("git", ["show", `${ref}:${repoPath}`], {
-      cwd: repoRoot,
-      maxBuffer: GIT_FILE_CONTENT_MAX_BYTES,
-      timeout: 5_000,
-    });
-    return result.stdout;
-  } catch {
-    return "";
-  }
-}
-
-async function readWorkingFile(absolutePath: string): Promise<string> {
-  const stats = await stat(absolutePath).catch(() => null);
-  if (!stats || !stats.isFile() || stats.size > GIT_FILE_CONTENT_MAX_BYTES) {
-    return "";
-  }
-  const content = await readFile(absolutePath);
-  return isLikelyBinary(content) ? "" : content.toString("utf8");
-}
-
-function findChangeStatus(
-  changes: Pick<TerminalPreviewGitChangesResponse, "staged" | "working">,
-  kind: TerminalPreviewChangeKind,
-  relativePath: string,
-): TerminalPreviewGitStatus {
-  return (
-    changes[kind].find((change) => change.path === relativePath)?.status ??
-    "unknown"
-  );
 }
 
 export async function resetPreviewGitChange(params: {
@@ -337,47 +302,66 @@ export async function resetPreviewGitChange(params: {
   };
 }
 
-export async function getPreviewFileDiff(params: {
+type ChangeRequest = {
   projectId: string;
   projectPath: string | null | undefined;
   requestedPath: string;
   changeKind: TerminalPreviewChangeKind;
-}): Promise<TerminalPreviewFileDiffResponse> {
-  const projectPath = ensureProjectPath(params.projectPath);
-  const { absolutePath, relativePath } = await resolvePreviewPath(
-    projectPath,
-    params.requestedPath,
-  );
-  const { repoRoot, projectRelativeToRepo } =
-    await resolveGitContext(projectPath);
-  const repoPath = toRepoPath(projectRelativeToRepo, relativePath);
-  const statusOutput = await runGit(
-    repoRoot,
-    ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", repoPath],
-    { maxBuffer: 1024 * 1024 },
-  );
-  const changes = parseGitStatus(statusOutput, projectRelativeToRepo);
-  const status = findChangeStatus(changes, params.changeKind, relativePath);
-  const oldContent =
-    params.changeKind === "staged"
-      ? await readGitBlob(repoRoot, "HEAD", repoPath)
-      : await readGitBlob(repoRoot, "", repoPath);
-  const newContent =
-    params.changeKind === "staged"
-      ? await readGitBlob(repoRoot, "", repoPath)
-      : await readWorkingFile(absolutePath);
+};
 
-  return {
-    kind: "file-diff",
-    projectId: params.projectId,
-    projectPath,
-    repoRoot,
-    changeKind: params.changeKind,
-    path: relativePath,
-    absolutePath,
-    status,
-    oldContent,
-    newContent,
-    readonly: true,
+async function readComparison(params: ChangeRequest) {
+  const projectPath = ensureProjectPath(params.projectPath);
+  const { absolutePath, relativePath } = await resolvePreviewGitPath(projectPath, params.requestedPath);
+  const { repoRoot, projectRelativeToRepo } = await resolveGitContext(projectPath);
+  // Preserve rename source paths: a destination-only pathspec loses Git's rename pairing.
+  const changes = await getPreviewGitChanges(params);
+  const change = changes[params.changeKind].find((entry) => entry.path === relativePath);
+  if (!change) throw new TerminalPreviewError("Change no longer exists; refresh the list", 409);
+  if (["renamed", "copied"].includes(change.status) && !change.oldPath) {
+    throw new TerminalPreviewError("Original path is outside the project", 403);
+  }
+  const oldPath = change.oldPath ?? relativePath;
+  const read = (filePath: string, source: "head" | "index" | "working") => readChangeContent({
+    projectPath, repoRoot, repoPath: toRepoPath(projectRelativeToRepo, filePath), filePath, source,
+  });
+  const [old, next] = await Promise.all([
+    read(oldPath, params.changeKind === "staged" ? "head" : "index"),
+    read(relativePath, params.changeKind === "staged" ? "index" : "working"),
+  ]);
+  if (next.side.state === "missing" && change.status !== "deleted") {
+    throw new TerminalPreviewError("Change moved; refresh the list", 409);
+  }
+  if (old.side.state === "missing" && !["added", "untracked"].includes(change.status)) {
+    throw new TerminalPreviewError("Original version moved; refresh the list", 409);
+  }
+  const preferred = change.status === "deleted" ? old : next;
+  const textComparable = [old, next].every(({ side }) => side.state === "missing"
+    || (side.state === "ready" && side.contentKind === "text"));
+  const payload: TerminalPreviewFileDiffResponse = {
+    kind: "file-diff", projectId: params.projectId, projectPath, repoRoot,
+    changeKind: params.changeKind, path: relativePath, absolutePath, status: change.status,
+    oldPath: change.oldPath, oldContent: old.text, newContent: next.text, readonly: true,
+    contentKind: preferred.side.contentKind ?? "binary",
+    diffState: textComparable ? old.text === next.text ? "unchanged" : "available" : "unavailable",
+    oldSide: old.side, newSide: next.side,
   };
+  return { payload, old, next };
+}
+
+export async function getPreviewFileDiff(params: ChangeRequest): Promise<TerminalPreviewFileDiffResponse> {
+  return (await readComparison(params)).payload;
+}
+
+export async function readPreviewChangeAsset(params: ChangeRequest & {
+  side: "old" | "new"; version: string;
+}) {
+  const comparison = await readComparison(params);
+  const content = params.side === "old" ? comparison.old : comparison.next;
+  if (content.side.state === "too-large") throw new TerminalPreviewError("Image exceeds preview limit", 413);
+  if (content.side.state === "read-failed") throw new TerminalPreviewError("Unable to read image; retry", 500);
+  if (content.side.version !== params.version) throw new TerminalPreviewError("Image changed; reload preview", 409);
+  if (content.side.state !== "ready" || content.side.contentKind !== "image" || !content.bytes) {
+    throw new TerminalPreviewError("Image format is not supported", 415);
+  }
+  return { content: content.bytes, mimeType: content.side.mimeType! };
 }

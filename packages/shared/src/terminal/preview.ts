@@ -187,6 +187,7 @@ export interface TerminalPreviewResetChangeResponse {
 
 export interface TerminalPreviewChangeFile {
   path: string;
+  oldPath?: string;
   status: TerminalPreviewGitStatus;
 }
 
@@ -200,6 +201,17 @@ export interface TerminalPreviewGitChangesResponse {
   working: TerminalPreviewChangeFile[];
 }
 
+export interface TerminalPreviewContentSide {
+  source: "head" | "index" | "working";
+  path: string;
+  state: "ready" | "missing" | "too-large" | "unsupported" | "read-failed";
+  contentKind?: "text" | "image" | "binary";
+  sizeBytes?: number;
+  mimeType?: string;
+  /** Digest of the exact bytes returned by the versioned resource endpoint. */
+  version?: string;
+}
+
 export interface TerminalPreviewFileDiffResponse {
   kind: "file-diff";
   projectId: string;
@@ -211,5 +223,10 @@ export interface TerminalPreviewFileDiffResponse {
   status: TerminalPreviewGitStatus;
   oldContent: string;
   newContent: string;
+  oldPath?: string;
+  contentKind?: "text" | "image" | "binary";
+  diffState?: "available" | "unchanged" | "unavailable";
+  oldSide?: TerminalPreviewContentSide;
+  newSide?: TerminalPreviewContentSide;
   readonly: true;
 }

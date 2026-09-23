@@ -1,3 +1,4 @@
+import { detectImageMimeType, IMAGE_PREVIEW_MAX_BYTES } from "./image-format";
 import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { TerminalPreviewFileResponse, TerminalPreviewBase, TerminalPreviewDeleteFileResponse, TerminalPreviewResetChangeResponse, TerminalPreviewSaveFileResponse, TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
@@ -21,7 +22,7 @@ export { searchPreviewContent } from "./content-search";
 export { getPreviewFileDiff, getPreviewGitChanges } from "./git";
 
 const FILE_PREVIEW_MAX_BYTES = 1024 * 1024;
-const IMAGE_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
+
 
 export interface TerminalPreviewAssetResponse {
   kind: "asset";
@@ -35,54 +36,6 @@ export interface TerminalPreviewAssetResponse {
   sizeBytes: number;
   cacheControl: "no-store";
   readonly: true;
-}
-
-function detectImageMimeType(buffer: Buffer, filePath: string): string | null {
-  const extension = path.extname(filePath).toLowerCase();
-  if (extension === ".svg") {
-    const sample = buffer
-      .subarray(0, Math.min(buffer.length, 4096))
-      .toString("utf8");
-    if (/<svg[\s>]/i.test(sample)) {
-      return "image/svg+xml";
-    }
-  }
-  if (
-    buffer.length >= 8 &&
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47 &&
-    buffer[4] === 0x0d &&
-    buffer[5] === 0x0a &&
-    buffer[6] === 0x1a &&
-    buffer[7] === 0x0a
-  ) {
-    return "image/png";
-  }
-  if (
-    buffer.length >= 3 &&
-    buffer[0] === 0xff &&
-    buffer[1] === 0xd8 &&
-    buffer[2] === 0xff
-  ) {
-    return "image/jpeg";
-  }
-  const header = buffer.subarray(0, 12).toString("ascii");
-  if (header.startsWith("GIF87a") || header.startsWith("GIF89a")) {
-    return "image/gif";
-  }
-  if (header.startsWith("RIFF") && header.slice(8, 12) === "WEBP") {
-    return "image/webp";
-  }
-  if (
-    buffer.length >= 12 &&
-    buffer.subarray(4, 8).toString("ascii") === "ftyp" &&
-    buffer.subarray(8, 12).toString("ascii") === "avif"
-  ) {
-    return "image/avif";
-  }
-  return null;
 }
 
 export async function readPreviewFile(params: {

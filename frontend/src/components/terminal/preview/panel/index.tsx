@@ -521,7 +521,10 @@ export function TerminalPreviewPanel({
           changesViewMode,
           fileKind:
             mode === "changes" && selectedChangePath
-              ? getTerminalPreviewFileKind(selectedChangePath, null)
+              ? fileDiff?.path === selectedChangePath && fileDiff.changeKind === selectedChangeKind
+                && fileDiff.contentKind && (fileDiff.contentKind !== "text" || fileDiff.diffState === "unavailable")
+                ? "unsupported"
+                : getTerminalPreviewFileKind(selectedChangePath, null)
               : fileKind,
           markdownViewMode,
           mode,

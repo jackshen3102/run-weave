@@ -42,9 +42,14 @@ extension APIClient {
   func file(projectID: String, path: String) async throws -> PreviewFile {
     try await cachedPreview(previewPath(projectID, "file", ["path": path]))
   }
-  func diff(projectID: String, path: String, kind: String) async throws -> PreviewDiff {
-    try await cachedPreview(previewPath(projectID, "file-diff", ["path": path, "kind": kind]))
+  func diff(projectID: String, path: String, kind: String, force: Bool = false) async throws -> PreviewDiff {
+    try await cachedPreview(previewPath(projectID, "file-diff", ["path": path, "kind": kind]), force: force)
   }
+  func changeAsset(projectID: String, path: String, kind: String, side: String, version: String) async throws -> Data {
+    try await cachedPreview(previewPath(projectID, "change-asset",
+      ["path": path, "kind": kind, "side": side, "version": version]), decode: { $0 })
+  }
+
   func asset(projectID: String, path: String) async throws -> Data {
     try await cachedPreview(previewPath(projectID, "asset", ["path": path]), decode: { $0 })
   }

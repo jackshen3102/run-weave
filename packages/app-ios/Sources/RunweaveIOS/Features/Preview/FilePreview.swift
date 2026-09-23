@@ -23,6 +23,7 @@ struct FilePreview: View {
   @State private var fullImage = false
   @State private var showingChange = false
   @State private var loadedMode: String?
+  @State private var loadRevision = 0
   @State private var mutation: PreviewMutation?
 
   init(
@@ -39,29 +40,58 @@ struct FilePreview: View {
     self.targetLine = targetLine
     self.targetColumn = targetColumn
     self.onClose = onClose
-    _mode = State(initialValue: file.changeKind == nil && targetLine == nil ? "preview" : "source")
+    _mode = State(initialValue: (file.changeKind == nil && targetLine == nil) || isPreviewImage(file.path) ? "preview" : "source")
   }
 
-  private var content: String { diff?.newContent ?? payload?.content ?? "" }
+  private var content: String { diff?.previewContent ?? payload?.content ?? "" }
   private var suffix: String { (file.path as NSString).pathExtension.lowercased() }
+  private var isImage: Bool {
+    diff?.contentKind == "image" || (diff?.contentKind == nil && isPreviewImage(file.path))
+  }
+  private var canSwitch: Bool {
+    ["md", "markdown", "svg"].contains(suffix) && !isImage && diff?.problem == nil
+  }
+  private var versionLabel: String? {
+    guard file.changeKind != nil, let diff else { return nil }
+    if diff.newSide == nil, isImage { return "工作区版本（服务器尚不支持 Git 图片版本）" }
+    return diff.versionLabel
+  }
   var body: some View {
     VStack(spacing: 4) {
       Text(file.path).font(.caption).foregroundColor(.secondary).lineLimit(2)
         .padding(.horizontal).padding(.top, 8)
-      if file.changeKind != nil || ["md", "markdown", "svg"].contains(suffix) {
+      if let versionLabel { Text(versionLabel).font(.caption).foregroundColor(.secondary) }
+      if let oldPath = diff?.oldPath, oldPath != file.path {
+        Text("重命名自：\(oldPath)").font(.caption).foregroundColor(.secondary)
+      }
+      if canSwitch {
         Picker("查看方式", selection: $mode) {
           Text(file.changeKind == nil ? "Source" : "Diff").tag("source")
           Text("Preview").tag("preview")
         }.pickerStyle(.segmented).padding(.horizontal)
       }
       if loading { ProgressView() }
-      if let failure { Text(failure).foregroundColor(.red) }
+      if let failure {
+        Text(failure).foregroundColor(.red)
+        Button("重新加载") { loadedMode = nil; loadRevision += 1 }
+      }
       if !loading, failure == nil {
-        if mode == "source", file.changeKind != nil {
-          DiffView(lines: lines)
+        if let problem = diff?.problem {
+          Text(problem).foregroundColor(.secondary).padding()
+          if let size = diff?.previewSide?.sizeBytes {
+            Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+              .font(.caption).foregroundColor(.secondary)
+          }
+          Button("重新加载") { loadedMode = nil; loadRevision += 1 }
+        } else if !isImage, mode == "source", file.changeKind != nil {
+          if diff?.diffState == "unchanged" || lines.isEmpty {
+            Text(content.isEmpty ? "文件为空" : "无文本内容变化").foregroundColor(.secondary).padding()
+          } else { DiffView(lines: lines) }
         } else if let image {
           ImagePreview(image: image).onTapGesture { fullImage = true }
           Button("全屏查看") { fullImage = true }
+        } else if content.isEmpty {
+          Text("文件为空").foregroundColor(.secondary).padding()
         } else if mode == "preview", suffix == "svg" {
           SVGPreview(content: content)
         } else if mode == "preview", ["md", "markdown"].contains(suffix) {
@@ -137,7 +167,7 @@ struct FilePreview: View {
       }
       .hidden()
     }
-    .task(id: mode) {
+    .task(id: "\(mode):\(loadRevision)") {
       // A child navigation pop must not replace the retained content with a spinner.
       guard loadedMode != mode else { return }
       await load(mode: mode)
@@ -146,7 +176,10 @@ struct FilePreview: View {
   private func load(mode: String) async {
     loading = true
     failure = nil
-    if let api = session.api {
+    image = nil
+    diff = nil
+    lines = []
+    if file.changeKind == nil, let api = session.api {
       if isPreviewImage(file.path), mode == "preview" {
         let saved: Data? = await api.previewSnapshot(
           projectID: projectID, resource: "asset",
@@ -168,20 +201,43 @@ struct FilePreview: View {
       }
     }
     do {
-      if mode == "preview", isPreviewImage(file.path) {
-        await loadImage()
-      } else if let kind = file.changeKind {
+      if let kind = file.changeKind {
         let value = try await session.withConnection {
-          try await $0.diff(projectID: projectID, path: file.path, kind: kind)
+          try await $0.diff(projectID: projectID, path: file.path, kind: kind, force: true)
         }
         guard !Task.isCancelled else { return }
-        let built = await Task.detached(priority: .userInitiated) {
-          DiffBuilder.build(old: value.oldContent, new: value.newContent)
-        }.value
-        guard !Task.isCancelled else { return }
         diff = value
-        lines = built
-        didLoad?()
+        if value.problem == nil {
+          if isImage {
+            if let side = value.previewSide, let version = side.version {
+              let data = try await session.withConnection {
+                try await $0.changeAsset(projectID: projectID, path: file.path, kind: kind,
+                  side: value.status == "deleted" ? "old" : "new", version: version)
+              }
+              guard !Task.isCancelled else { return }
+              guard let decoded = UIImage(data: data) else {
+                failure = "图片无法解码，请重新加载或检查文件格式"
+                loading = false
+                return
+              }
+              image = decoded
+            } else if file.changeStatus == "deleted" {
+              failure = "服务器尚不支持已删除图片的版本预览"
+              loading = false
+              return
+            } else {
+              await loadImage()
+            }
+          } else {
+            let built = await Task.detached(priority: .userInitiated) {
+              DiffBuilder.build(old: value.oldContent, new: value.newContent)
+            }.value
+            guard !Task.isCancelled else { return }
+            lines = built
+          }
+          guard !Task.isCancelled else { return }
+          if failure == nil { didLoad?() }
+        }
       } else if isPreviewImage(file.path) {
         await loadImage()
       } else {
@@ -191,7 +247,13 @@ struct FilePreview: View {
         guard !Task.isCancelled else { return }
         payload = value
       }
-    } catch { if !Task.isCancelled { failure = previewError(error) } }
+    } catch {
+      if !Task.isCancelled {
+        if file.changeKind != nil, case APIError.http(409) = error {
+          failure = "文件或变更版本已变化，请重新加载；若变更已消失，请返回刷新列表。"
+        } else { failure = previewError(error) }
+      }
+    }
     if !Task.isCancelled {
       loading = false
       if failure == nil { loadedMode = mode }
@@ -202,8 +264,12 @@ struct FilePreview: View {
       let data = try await session.withConnection {
         try await $0.asset(projectID: projectID, path: file.path)
       }
-      guard let decoded = UIImage(data: data) else { throw APIError.http(415) }
-      if !Task.isCancelled { image = decoded }
+      guard !Task.isCancelled else { return }
+      guard let decoded = UIImage(data: data) else {
+        failure = "图片无法解码，请重新加载或检查文件格式"
+        return
+      }
+      image = decoded
     } catch { if !Task.isCancelled { failure = previewError(error) } }
   }
 }

@@ -87,7 +87,7 @@ export function TerminalPreviewChangesView({
     diff.data.changeKind === selection.kind;
   const selectedChangePending =
     Boolean(selection.path && selection.kind) && !fileDiffMatchesSelection;
-  const showDiffLoading = diff.loading || selectedChangePending;
+  const showDiffLoading = diff.loading || (selectedChangePending && !diff.error);
   const revealMarkdownSourceLine = useMemoizedFn((line: number): void => {
     if (diff.data) {
       markdownReference.setTarget(diff.data.path, { line, column: 1 });
@@ -100,23 +100,47 @@ export function TerminalPreviewChangesView({
     displayPath: string,
   ): ReactNode => {
     const fileKind = getTerminalPreviewFileKind(displayPath, null);
-    if (fileKind === "image" && currentFileDiff.status === "deleted") {
-      return renderPreviewEmpty("Image deleted");
+    const side = currentFileDiff.status === "deleted" ? currentFileDiff.oldSide : currentFileDiff.newSide;
+    const isImage = currentFileDiff.contentKind === "image" || (!currentFileDiff.contentKind && fileKind === "image");
+    const problem = isImage ? side : [currentFileDiff.newSide, currentFileDiff.oldSide]
+      .find((value) => value && !["ready", "missing"].includes(value.state));
+    if (problem && !["ready", "missing"].includes(problem.state)) {
+      const message = problem.state === "too-large" ? "文件太大，无法预览"
+        : problem.state === "read-failed" ? "读取文件失败，请重试" : "此文件不支持内容预览";
+      return <div className="p-6 text-sm text-slate-400">
+        <p>{message}</p><p>{displayPath}{problem.sizeBytes !== undefined ? ` · ${problem.sizeBytes} bytes` : ""}</p>
+        <button className="mt-3 underline" onClick={() => commands.reloadDiff(currentFileDiff.path, currentFileDiff.changeKind)}>重新加载</button>
+      </div>;
     }
-    if (fileKind === "image") {
+    if (isImage) {
+      if (!side && currentFileDiff.status === "deleted") return renderPreviewEmpty("服务器尚不支持已删除图片的版本预览");
+      const label = side?.source === "index" ? "暂存版本" : side?.source === "head" ? "已提交版本" : "工作区版本";
       return (
-        <Suspense fallback={renderPreviewEmpty("Loading image preview...")}>
-          <TerminalImagePreview
-            apiBase={apiBase}
-            token={token}
-            projectId={activeProject.projectId}
-            path={displayPath}
-            refreshKey={0}
-            onAuthExpired={onAuthExpired}
-          />
-        </Suspense>
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="px-3 py-1 text-xs text-slate-400">
+            {currentFileDiff.status === "deleted" ? "已删除 · 删除前版本 · " : ""}{label}
+            {!side ? "（服务器尚不支持 Git 图片版本）" : ""}
+            {currentFileDiff.oldPath ? ` · 重命名自 ${currentFileDiff.oldPath}` : ""}
+          </div>
+          <div className="min-h-0 flex-1">
+            <Suspense fallback={renderPreviewEmpty("Loading image preview...")}>
+              <TerminalImagePreview
+                key={`${currentFileDiff.changeKind}:${displayPath}:${side?.version ?? "legacy"}`}
+                apiBase={apiBase} token={token} projectId={activeProject.projectId}
+                path={displayPath} refreshKey={0} onAuthExpired={onAuthExpired}
+                change={side?.version ? { kind: currentFileDiff.changeKind,
+                  side: currentFileDiff.status === "deleted" ? "old" : "new", version: side.version } : undefined}
+                onReload={() => commands.reloadDiff(currentFileDiff.path, currentFileDiff.changeKind)}
+              />
+            </Suspense>
+          </div>
+        </div>
       );
     }
+    if ((currentFileDiff.diffState === "unchanged" && (selection.viewMode !== "preview" || !["markdown", "svg"].includes(fileKind))) || (!currentFileDiff.oldContent && !currentFileDiff.newContent)) {
+      return renderPreviewEmpty(`${currentFileDiff.oldPath ? `重命名自 ${currentFileDiff.oldPath} · ` : ""}${currentFileDiff.newContent || currentFileDiff.oldContent ? "无文本内容变化" : "文件为空"}`);
+    }
+    const previewContent = currentFileDiff.status === "deleted" ? currentFileDiff.oldContent : currentFileDiff.newContent;
     if (selection.viewMode === "preview" && fileKind === "markdown") {
       return (
         <Suspense fallback={renderPreviewEmpty("Loading markdown preview...")}>
@@ -124,7 +148,7 @@ export function TerminalPreviewChangesView({
             apiBase={apiBase}
             token={token}
             projectId={activeProject.projectId}
-            content={currentFileDiff.newContent}
+            content={previewContent}
             path={currentFileDiff.path}
             lineReferencePath={currentFileDiff.absolutePath}
             canInsertLineReference={markdownReference.canInsert}
@@ -140,7 +164,7 @@ export function TerminalPreviewChangesView({
     if (selection.viewMode === "preview" && fileKind === "svg") {
       return (
         <Suspense fallback={renderPreviewEmpty("Loading SVG preview...")}>
-          <TerminalSvgPreview content={currentFileDiff.newContent} />
+          <TerminalSvgPreview content={previewContent} />
         </Suspense>
       );
     }
@@ -166,7 +190,11 @@ export function TerminalPreviewChangesView({
 
   let content: ReactNode;
   if (diff.error && !showDiffLoading) {
-    content = renderPreviewEmpty(diff.error);
+    content = <div className="p-6 text-sm text-rose-300">
+      <p>{diff.error}</p>
+      {selection.path && selection.kind && <button className="mt-3 underline"
+        onClick={() => commands.reloadDiff(selection.path!, selection.kind!)}>重新加载</button>}
+    </div>;
   } else if (showDiffLoading && diff.data) {
     content = (
       <div className="relative h-full min-h-0 overflow-hidden">

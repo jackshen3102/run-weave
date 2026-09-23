@@ -1,0 +1,46 @@
+version: 1
+name: 变更文件的能力预览与版本一致性
+description: >
+  变更预览的验收合同；原生与 Web UI 尚未执行，服务端已有独立真实 Git/HTTP 验证。每例独立拥有临时 Git 仓库、Backend、登录上下文与客户端。
+  UI 用例分别在原生和 Web 上独立执行并记录结果，使用 agent-device 和 playwright-cli；缺少某端环境时该端单独记录阻塞。
+cases:
+  - id: CHGPREVIEW-001
+    name: 图片入口直接预览且没有无效 Diff 开关
+    required: true
+    description: 图片直接展示可见内容，不先进入空白文本 Diff，原有缩放返回保持有效。
+    preconditions:
+      - 本例客户端连接隔离 Backend，专用项目包含一个未跟踪 PNG 和一个暂存 JPEG，内容可肉眼区分。
+    steps:
+      - 从变更列表分别打开两张图片，确认直接显示图片且没有 Diff/Preview 分段控件。
+      - 放大并返回列表，确认返回路径正常；图片成功显示后已查看状态更新，解码失败时显示可读原因。
+  - id: CHGPREVIEW-002
+    name: 暂存和工作区展示各自真实版本
+    required: true
+    description: 相同路径不混淆 HEAD、index 与磁盘内容，包括删除前的版本。
+    preconditions:
+      - 本例独占 Git 仓库，已提交图片 A、暂存图片 B，再将磁盘修改为图片 C；三者字节和视觉内容不同。
+      - 本例能调用认证资源接口并计算响应摘要。
+    steps:
+      - 请求 staged 新侧资源，确认字节等于 B；请求 working 新侧资源，确认字节等于 C，旧侧分别等于 A 和 B。
+      - 在本例删除磁盘图片，确认 working 删除预览提供 B；将删除暂存后，确认 staged 删除预览提供 A。
+      - 核对 kind、side、版本标识在缓存中隔离，过期版本请求不能成功返回另一个版本的字节。
+  - id: CHGPREVIEW-003
+    name: 不能比较与真实空内容明确区分
+    required: true
+    description: 不支持的内容、超限和读取失败不表现为空白 Diff，真实空文件也有明确状态。
+    preconditions:
+      - 本例仓库含空文本、新增代码、Markdown、SVG、非图片二进制及超过服务端限制的文件，允许仅对本例资源制造读取失败。
+    steps:
+      - 从变更列表查看各文件，确认代码显示 Diff，Markdown/SVG 提供有意义的 Diff/Preview 切换，空文件明确显示为空。
+      - 确认二进制说明不支持内容预览、超限说明文件过大；制造读取失败，确认显示可重试错误而不是空 Diff。
+      - 将本例文件重命名且不改内容，确认保留旧路径与新路径，界面说明重命名或无文本变化。
+  - id: CHGPREVIEW-004
+    name: 版本资源继承认证及项目路径边界
+    required: true
+    description: 新的 Git 图片读取能力不能绕过认证或将客户端输入变成任意 Git ref 或项目外路径。
+    preconditions:
+      - 本例有隔离 Backend、有效登录凭证及项目外的专用哨兵文件。
+    steps:
+      - 无凭证访问变更图片资源，确认被认证拒绝。
+      - 使用有效凭证提交项目外路径、路径穿越及非法 kind、side 或任意 ref 参数，确认拒绝且不返回哨兵文件内容。
+      - 使用本例合法变更请求，确认返回正确图片 MIME、大小限制有效，Git 分支、索引及工作文件均未修改。
