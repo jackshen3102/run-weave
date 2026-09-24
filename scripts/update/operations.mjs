@@ -4,7 +4,11 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { commandName } from "./core.mjs";
-import { appName, electronBuilderConfig } from "./context.mjs";
+import { appName, electronBuilderConfig, isBetaTarget } from "./context.mjs";
+import {
+  assertNoActiveScheduledRuns,
+  scheduledTaskDatabasePath,
+} from "./scheduled-task-guard.mjs";
 import {
   readJsonFile,
   run,
@@ -227,6 +231,11 @@ export async function quitApp() {
     return;
   }
 
+  if ((await getRunningAppLines()).length > 0) {
+    await assertNoActiveScheduledRuns(
+      scheduledTaskDatabasePath({ beta: isBetaTarget }),
+    );
+  }
   await run("osascript", ["-e", `tell application "${appName}" to quit`]);
   await waitForAppExit();
 }

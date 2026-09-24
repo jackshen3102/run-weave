@@ -111,6 +111,8 @@ pnpm runweave:update --dry-run
    `--version`。`cli verification` 和更新 state 的 `cli` 保存动作、路径、版本和哈希。
    不递增源码版本号，因此同版本号也会按内容更新。CLI 失败则整个命令失败，不报告全部完成。
 
+更新 Desktop 前及退出 App 前检查本机未结束的定时任务；有任务正在排队或执行时停止更新，待运行结束后重试，避免关闭 Backend 取消任务。
+
 桌面 runtime 的 `cli/index.cjs` 与全局 npm 包是两个入口。更新前检查登录 shell 的 `rw`
 是否属于当前 npm prefix；冲突时停止，避免更新了一个包却继续使用另一份命令。该检查也适用于
 dry-run，但 dry-run 不构建或安装。更新后的接口验收使用全局 `rw` 和本轮目标 Backend，
