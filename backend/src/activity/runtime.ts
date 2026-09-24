@@ -22,9 +22,10 @@ export class ActivityRuntime {
     readonly store: ActivityStore | null,
     readonly eventFactory: ActivityEventFactory,
     readonly instanceId: string,
+    unavailableReason?: string,
   ) {
     this.recorder = new ActivityRecorder(store);
-    this.queryService = new ActivityQueryService(store);
+    this.queryService = new ActivityQueryService(store, unavailableReason);
     this.maintenanceOwnerId = `${instanceId}:${crypto.randomUUID()}`;
   }
 
@@ -51,19 +52,22 @@ export class ActivityRuntime {
       backendProfileId: path.basename(browserProfileDir),
     });
     let store: ActivityStore | null = null;
+    let unavailableReason: string | undefined;
     try {
       store = await ActivityStore.create({
         databasePath: resolveActivityStoragePaths(env).activityDatabaseFile,
         env,
       });
     } catch (error) {
+      unavailableReason = error instanceof Error && /^activity_[a-z_]+$/.test(error.message)
+        ? error.message : "activity_initialization_failed";
       logger.warn("activity.initialize.failed", {
         component: "activity",
         message: "Activity is unavailable; Backend will continue without it",
         error,
       });
     }
-    const runtime = new ActivityRuntime(store, eventFactory, instanceId);
+    const runtime = new ActivityRuntime(store, eventFactory, instanceId, unavailableReason);
     try {
       if (store) {
         await runtime.recorder.recordBatch([

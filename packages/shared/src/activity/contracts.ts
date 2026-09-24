@@ -353,6 +353,9 @@ export interface ActivitySourceDto {
 
 export interface ActivityDataPolicyDto {
   available: boolean;
+  /** Omitted by older Backends; event availability alone does not imply content storage. */
+  contentStorage?: "available" | "unavailable";
+  contentUnavailableReason?: string;
   databasePathLabel: string;
   factRetentionDays: number;
   contentRetentionDays: number;

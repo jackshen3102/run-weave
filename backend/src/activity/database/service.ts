@@ -5,9 +5,13 @@ import type {
   ActivityTimelineSelector,
 } from "@runweave/shared/activity";
 import type { ActivityStore } from "../recording/store";
+import { ACTIVITY_RETENTION_DAYS, type ActivityDataPolicyDto } from "@runweave/shared/activity";
 
 export class ActivityQueryService {
-  constructor(private readonly store: ActivityStore | null) {}
+  constructor(
+    private readonly store: ActivityStore | null,
+    private readonly unavailableReason = "activity_unavailable",
+  ) {}
 
   private requireStore(): ActivityStore {
     if (!this.store) {
@@ -36,8 +40,21 @@ export class ActivityQueryService {
     return this.requireStore().sources();
   }
 
-  policy() {
-    return this.requireStore().policy();
+  policy(): Promise<ActivityDataPolicyDto> {
+    if (this.store) return this.store.policy();
+    return Promise.resolve({
+      available: false,
+      contentStorage: "unavailable",
+      contentUnavailableReason: this.unavailableReason,
+      unavailableReason: this.unavailableReason,
+      databasePathLabel: "~/.runweave/activity/activity.sqlite",
+      factRetentionDays: ACTIVITY_RETENTION_DAYS.fact,
+      contentRetentionDays: ACTIVITY_RETENTION_DAYS.content,
+      databaseBytes: 0,
+      journalMode: "unknown",
+      schemaVersion: 0,
+      pendingDeleteJobs: 0,
+    });
   }
 
   preview(scope: ActivityOperationScope, asOfActivityOffset?: number) {

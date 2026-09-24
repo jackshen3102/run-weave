@@ -99,6 +99,9 @@ async function readFactText(
   store: ActivityStore,
   fact: ActivityFactDto,
 ): Promise<{ text: string; omittedImageContent: boolean }> {
+  if (fact.contentDescriptors.length === 0) {
+    throw new Error("experience_source_unavailable");
+  }
   const parts: string[] = [];
   let omittedImageContent = false;
   for (const descriptor of fact.contentDescriptors) {

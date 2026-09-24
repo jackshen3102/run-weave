@@ -39,6 +39,7 @@ import {
 } from "./maintenance";
 import {
   deriveAuditSubjectHmac,
+  decryptActivityValue,
   loadActivityContentKey,
 } from "../security/crypto";
 import {
@@ -129,7 +130,24 @@ export class ActivityDatabase {
                 : {}),
             },
             path.dirname(options.databasePath),
+            !this.database.prepare(`SELECT 1 FROM activity_contents
+              UNION ALL SELECT 1 FROM external_refs
+              UNION ALL SELECT 1 FROM activity_access_audit
+              UNION ALL SELECT 1 FROM activity_delete_jobs LIMIT 1`).get(),
           );
+          // Refuse a replaced key before accepting any new encrypted content.
+          const encrypted = this.database.prepare(`SELECT ciphertext, nonce, auth_tag AS authTag
+            FROM activity_contents WHERE ciphertext IS NOT NULL
+            UNION ALL SELECT locator_ciphertext, locator_nonce, locator_auth_tag
+            FROM external_refs WHERE locator_ciphertext IS NOT NULL LIMIT 1`).get() as
+            { ciphertext: Buffer; nonce: Buffer; authTag: Buffer } | undefined;
+          if (contentKey && encrypted) {
+            try {
+              decryptActivityValue(encrypted, contentKey);
+            } catch {
+              throw new Error("activity_content_key_mismatch");
+            }
+          }
           this.database.exec("COMMIT");
           return contentKey;
         } catch (error) {
@@ -201,7 +219,11 @@ export class ActivityDatabase {
   }
 
   policy() {
-    return queryActivityDataPolicy(this.database, this.options.databasePath);
+    return {
+      ...queryActivityDataPolicy(this.database, this.options.databasePath),
+      contentStorage: this.contentKey ? "available" as const : "unavailable" as const,
+      ...(!this.contentKey ? { contentUnavailableReason: "activity_content_key_unavailable" } : {}),
+    };
   }
 
   content(contentId: string) {

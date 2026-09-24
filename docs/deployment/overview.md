@@ -39,6 +39,24 @@
 需要无中断首次迁移时，必须另行验证旧进程切换、数据库恢复与 Profile 锁接管，不能直接强杀整个服务组。
 回滚时同样不得在活动任务期间恢复旧清理策略；不删除 socket 或数据文件来绕过启动失败。
 
+## Activity 正文密钥
+
+Activity 正文与外部引用使用 AES-256-GCM 加密。macOS 沿用 Keychain；Linux 正常运行时在
+Activity 数据目录首次创建 `.activity-content-key`，目录权限为 `0700`，密钥必须属于运行
+Backend 的系统用户且权限为 `0600`。同一数据目录的 Backend 共用密钥，重启不会更换。
+备份和迁移必须同时保存数据库与密钥，并保持运行用户和权限。不要在实际服务中开启
+`RUNWEAVE_ACTIVITY_TEST_MODE` 来代替正式存储。
+
+已有正文、引用或审计数据但密钥缺失时拒绝自动生成；密钥格式、权限或已有密文校验失败也会
+停止 Activity 初始化，其他 Backend 功能继续运行。应恢复对应的原密钥，而不是删除数据或
+生成新密钥。`GET /api/activity/policy` 的 `available` 表示事件存储，`contentStorage` 另行
+表示正文能力；旧 Backend 省略后者时不能推断正文可用。初始化失败包含脱敏原因码。
+容量不足等正文降级会保留事件，但写入回执带原因码，同时记录 `activity.content.omitted`。
+过去 Linux 未保存的正文不会随升级自动恢复；Experience 将无正文与合法空输出区分处理。
+
+Linux 正常密钥路径、跨 worker 共用、重启读取、密钥损坏/缺失与恢复的隔离验收包含在
+`pnpm activity:verify`；该验收只使用临时目录，不修改当前服务数据。
+
 ## 鉴权与内部接口
 
 - `/api/auth/login` 对同一 IP、同一用户名和 IP+用户名组合做内存态频率限制；超过阈值时返回 `429` 和 `Retry-After`。
@@ -102,12 +120,12 @@ pnpm runtime:pack-and-install
 任务、运行配置快照、幂等记录和输出存于独立 `scheduled-tasks.sqlite`，默认目录为
 `<browserProfileDir>/scheduled-tasks`，可用 `RUNWEAVE_SCHEDULED_TASKS_HOME` 指定。
 
-| 配置 | 默认值与用途 |
-| --- | --- |
-| `RUNWEAVE_SCHEDULED_TASKS_ENABLED` | 默认启用；`false` 禁用后台调度 |
-| `RUNWEAVE_SCHEDULED_TASK_TIMEOUT_MS` | 7200000（2 小时），单次后台执行上限 |
-| `RUNWEAVE_SCHEDULED_TASK_MAX_OUTPUT_BYTES` | 16777216（16 MiB），单次输出上限 |
-| `RUNWEAVE_CODEX_BIN` | `codex`；启动时检查 CLI、登录状态及 tmux 可用性 |
+| 配置                                       | 默认值与用途                                    |
+| ------------------------------------------ | ----------------------------------------------- |
+| `RUNWEAVE_SCHEDULED_TASKS_ENABLED`         | 默认启用；`false` 禁用后台调度                  |
+| `RUNWEAVE_SCHEDULED_TASK_TIMEOUT_MS`       | 7200000（2 小时），单次后台执行上限             |
+| `RUNWEAVE_SCHEDULED_TASK_MAX_OUTPUT_BYTES` | 16777216（16 MiB），单次输出上限                |
+| `RUNWEAVE_CODEX_BIN`                       | `codex`；启动时检查 CLI、登录状态及 tmux 可用性 |
 
 Backend 每 5 秒检查到期任务，最多同时执行一个后台任务；同任务未结束时不重叠。
 迟到超过 60 秒记录 missed 并跳到未来安排，不回放休眠或停机期间的历史执行。

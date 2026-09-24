@@ -40,7 +40,12 @@ export async function listPreviewDirectory(params: {
   limit?: number;
 }): Promise<TerminalPreviewDirectoryResponse> {
   const projectPath = ensureProjectPath(params.projectPath);
-  const rootPath = await realpath(projectPath);
+  const rootPath = await realpath(projectPath).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+      throw new TerminalPreviewError("Project directory not found; update the project path", 409);
+    }
+    throw error;
+  });
   const gitignoreRules = await loadPreviewGitignoreRules(rootPath);
 
   const requestedPath = params.relativePath.trim();
