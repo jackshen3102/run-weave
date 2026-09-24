@@ -73,10 +73,38 @@ function formatErrorPayloadMessage(payload: ErrorPayload): string | null {
     return null;
   }
   const panelCandidates = formatPanelCandidates(payload.details);
-  if (!panelCandidates) {
+  const fieldErrors = formatFieldErrors(payload.details);
+  if (!panelCandidates && !fieldErrors) {
     return message;
   }
-  return `${message}\n${panelCandidates}`;
+  return [message, panelCandidates, fieldErrors].filter(Boolean).join("\n");
+}
+
+function formatFieldErrors(details: unknown): string | null {
+  if (!details || typeof details !== "object") return null;
+  const { fieldErrors, formErrors } = details as {
+    fieldErrors?: unknown;
+    formErrors?: unknown;
+  };
+  const lines: string[] = [];
+  if (
+    fieldErrors &&
+    typeof fieldErrors === "object" &&
+    !Array.isArray(fieldErrors)
+  ) {
+    for (const [field, errors] of Object.entries(fieldErrors)) {
+      if (!Array.isArray(errors)) continue;
+      for (const error of errors) {
+        if (typeof error === "string") lines.push(`${field}: ${error}`);
+      }
+    }
+  }
+  if (Array.isArray(formErrors)) {
+    for (const error of formErrors) {
+      if (typeof error === "string") lines.push(error);
+    }
+  }
+  return lines.length ? lines.join("\n") : null;
 }
 
 function formatPanelCandidates(details: unknown): string | null {

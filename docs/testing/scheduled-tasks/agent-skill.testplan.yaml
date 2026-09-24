@@ -1,0 +1,105 @@
+version: 1
+name: Agent 创建与编辑定时任务验收
+description: >
+  验证终端 Agent 使用 scheduled-task Skill 整理自然语言请求、只读校验并等待用户确认，
+  然后在隔离 Runweave Backend 中精确创建或编辑任务；每条用例独立建立和清理任务。
+cases:
+  - id: SAT-001
+    name: 创建必须等待最终配置确认
+    required: true
+    description: >
+      Agent 在用户确认完整草稿前不写任务；确认后只新增一条，与审核内容一致。
+    preconditions:
+      - 隔离 Backend、已登录 rw profile、可用 Codex 和独立测试项目均已就绪；终端 Agent 已加载本次 Skill。
+      - 本用例有独立数据根，且记录初始任务列表；结束时只清理本用例任务。
+    steps:
+      - 在终端告诉 Agent 为测试项目创建每天当地时间 09:00 的无副作用任务；确认 Agent 展示完整提示词、项目、时区、provider、权限、补跑策略、启用状态、后续时间预览和请求摘要。
+      - 在确认前读取同一 Backend 的任务列表；确认没有新增任务。
+      - 明确确认所展示的最终配置；确认 Agent 调用创建接口一次并返回 taskId，重新读取任务后核对全部字段与已确认草稿一致，列表仅新增一条。
+  - id: SAT-002
+    name: 时间或执行条件有问题时阻止创建
+    required: true
+    description: >
+      歧义时间、过期一次性时间或不可用 provider 不会被 Agent 猜测成有效任务。
+    preconditions:
+      - 隔离 Backend、已登录 rw profile 和独立测试项目均已就绪；终端 Agent 已加载本次 Skill。
+      - 本用例记录初始任务列表，结束时无需保留任务。
+    steps:
+      - 要求“明早”执行但不提供足以唯一确定时区的上下文；确认 Agent 追问或明确给出待确认解释，不调用创建接口。
+      - 提供已经过去的一次性时间或 Backend capabilities 标为不可用的 provider；确认只读校验报告具体问题，不请求最终创建确认，也不新增任务。
+  - id: SAT-003
+    name: 编辑只改已确认字段
+    required: true
+    description: >
+      Agent 先读取精确任务，再展示修改后的完整配置；确认前原 revision 和字段不变，确认后只更新目标任务。
+    preconditions:
+      - 隔离 Backend、已登录 rw profile 和可用 Codex 均已就绪；终端 Agent 已加载本次 Skill。
+      - 本用例独立创建一个无副作用任务并记录 taskId、revision 与完整原配置；结束时只清理该任务。
+    steps:
+      - 告诉 Agent 修改该 taskId 的提示词与每周运行日；确认展示原值、新值、完整最终配置、服务器时间预览和请求摘要。
+      - 在确认前重新读取任务；确认 revision 与字段没有变化。
+      - 明确确认草稿；确认目标任务 revision 增加一次、指定字段更新，未提及字段保持原值，没有产生第二个任务。
+  - id: SAT-004
+    name: 并发修改后旧草稿不能覆盖新版本
+    required: true
+    description: >
+      校验与确认之间任务 revision 改变时，Agent 停止旧 PATCH 并要求重新核对。
+    preconditions:
+      - 隔离 Backend、已登录 rw profile 和独立测试任务均已就绪；终端 Agent 已加载本次 Skill。
+      - 本用例另有一个认证客户端可修改同一任务；结束时只清理该任务。
+    steps:
+      - 让 Agent 读取并校验编辑草稿，在用户尚未确认时由另一客户端修改该任务，记录新 revision。
+      - 确认旧草稿后观察 Agent 行为；确认不会覆盖新 revision，明确展示冲突及重新整理的差异，较新配置仍保留。
+  - id: SAT-005
+    name: 确认后的文件变化被拒绝
+    required: true
+    description: >
+      写入命令用 SHA-256 绑定已审核的请求文件，文件变化后没有写入。
+    preconditions:
+      - 隔离 Backend、已登录 rw profile 和独立测试项目均已就绪；CLI 可以读取本用例专用草稿文件。
+      - 本用例记录初始任务列表；结束时只清理本用例资源。
+    steps:
+      - 对创建草稿执行只读校验并记录 SHA-256，之后改变草稿一个字段，使用旧摘要尝试创建；确认 CLI 在联网写入前拒绝且没有新增任务。
+  - id: SAT-006
+    name: 确认后的目标 Backend 变化被拒绝
+    required: true
+    description: >
+      写入命令用审核时的 Backend 地址绑定目标连接，不会把任务写到另一条连接。
+    preconditions:
+      - 两个独立 Backend、已登录对应 profile 和独立测试项目均已就绪；CLI 可以读取本用例专用草稿文件。
+      - 两个 Backend 均记录初始任务列表；结束时只清理本用例资源。
+    steps:
+      - 对 Backend A 的创建草稿执行只读校验并记录 SHA-256 与地址，把写入命令指向 Backend B 但仍传 A 的预期地址；确认 CLI 拒绝且 B 无新增任务。
+  - id: SAT-007
+    name: 创建响应不确定时同键只产生一条任务
+    required: true
+    description: >
+      创建请求发生响应丢失后，Agent 保留原请求与幂等键；重放不会产生第二个任务。
+    preconditions:
+      - 隔离 Backend、独立测试项目、已登录 rw profile 和能在响应阶段断开的本用例代理均已就绪。
+      - 本用例有独立数据根及唯一草稿；结束时只清理本用例任务。
+    steps:
+      - 校验并确认草稿，通过代理让创建请求到达 Backend 但丢弃响应；确认 Agent 不声称创建失败后改用新键，也不生成第二份草稿。
+      - 使用原文件、摘要、Backend 与 Idempotency-Key 核对或重试；确认返回同一 taskId，列表仅有一条对应任务。
+  - id: SAT-008
+    name: 编辑响应不确定时先读回再决定
+    required: true
+    description: >
+      PATCH 响应丢失时 Agent 不盲目重复编辑；以新 revision 和字段确认实际结果。
+    preconditions:
+      - 隔离 Backend、独立测试任务、已登录 rw profile 和能在响应阶段断开的本用例代理均已就绪。
+      - 本用例记录任务原 revision 与字段；结束时只清理该任务。
+    steps:
+      - 校验并确认补丁，通过代理让 PATCH 到达 Backend 但丢弃响应；确认 Agent 首先 GET 目标 taskId。
+      - 核对任务新 revision 和字段已更新；确认 Agent 报告实际已写入且未发送第二次 PATCH，其他字段不变。
+  - id: SAT-009
+    name: 同名任务必须先精确定位
+    required: true
+    description: >
+      多条候选任务同名时 Agent 不猜测目标 ID，不修改任一任务。
+    preconditions:
+      - 隔离 Backend、已登录 rw profile 和终端 Agent 已加载本次 Skill。
+      - 本用例在两个独立测试项目中各创建一个同名任务，记录两个 taskId 与 revision；结束时只清理这两条任务。
+    steps:
+      - 要求 Agent 修改该名称的任务但不提供项目或 taskId；确认 Agent 列出可区分的候选并请求选择，不生成编辑写入请求。
+      - 重新读取两条任务；确认 revision 与字段均未变化。
