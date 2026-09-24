@@ -233,7 +233,6 @@ export function useConnections(storageKey: string): UseConnectionsResult {
         browserMessage: runtime?.browserMessage ?? null,
         remoteStatus: runtime?.status ?? "connecting",
         installationId: runtime?.installationId ?? null,
-        agents: runtime?.agents,
         canEdit: false,
       };
     });

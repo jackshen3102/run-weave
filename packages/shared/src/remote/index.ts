@@ -29,7 +29,6 @@ export interface ConnectionRuntime {
   message: string | null;
   browserAvailable?: boolean;
   browserMessage?: string | null;
-  agents?: RemoteCapabilities["agents"];
 }
 
 export interface SshRemoteConnection {
@@ -64,13 +63,6 @@ export interface RemoteCapabilities {
     workspaceServices: boolean;
     desktopBrowser: boolean;
   };
-  agents?: Array<{
-    kind: "pi" | "codex";
-    state: "ready" | "missing_cli" | "needs_configuration" | "needs_auth";
-    version: string | null;
-    provider: string | null;
-    model: string | null;
-  }>;
 }
 
 export interface DesktopBrowserBindingRequest {

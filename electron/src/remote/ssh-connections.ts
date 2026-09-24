@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import net from "node:net";
+import { startManualPortForward } from "./manual-port-forward.js";
 import type {
   ConnectionRuntime,
   SshRemoteConnection,
@@ -29,7 +30,7 @@ interface ManagedConnection {
   binding: DesktopBrowserBinding | null;
   bindingAuthToken: string | null;
   browserRetryTimer: NodeJS.Timeout | null;
-  manualForwards: Map<number, { child: ChildProcessWithoutNullStreams; localPort: number }>;
+  manualForwards: Map<number, ReturnType<typeof startManualPortForward>>;
 }
 
 const connections = new Map<string, ManagedConnection>();
@@ -470,7 +471,6 @@ export function registerRemoteConnectionHandlers(): void {
     if (connection.runtime.generation === generation) {
       update(connection, {
         installationId: capabilities.installationId,
-        agents: Array.isArray(capabilities.agents) ? capabilities.agents : undefined,
       });
     }
     return capabilities;
@@ -525,38 +525,31 @@ export function registerRemoteConnectionHandlers(): void {
     const connection = connections.get(connectionId);
     if (!connection || connection.runtime.status !== "ready") throw new Error("Remote connection is unavailable");
     const port = Number(remotePort);
-    const existing = connection.manualForwards.get(port);
-    if (existing && existing.child.exitCode === null) {
-      return {
-        connectionId,
-        remotePort: port,
-        desktopUrl: `http://127.0.0.1:${existing.localPort}`,
-        generation: connection.runtime.generation,
-      } satisfies ManualRemotePortAccess;
+    const generation = connection.runtime.generation;
+    let forward = connection.manualForwards.get(port);
+    if (!forward || forward.child.exitCode !== null || forward.child.signalCode !== null || forward.child.killed) {
+      forward = startManualPortForward(connection.config.host, port);
+      const current = forward;
+      connection.manualForwards.set(port, current);
+      current.child.once("exit", () => {
+        if (connection.manualForwards.get(port) === current) connection.manualForwards.delete(port);
+      });
     }
-    const localPort = await findFreePort();
-    const child = spawn("ssh", [
-      "-N", "-T", "-o", "ExitOnForwardFailure=yes",
-      "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
-      "-o", "StrictHostKeyChecking=yes",
-      "-L", `127.0.0.1:${localPort}:127.0.0.1:${port}`,
-      connection.config.host,
-    ], { stdio: "pipe" });
-    let stderr = "";
-    child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-2048); });
-    child.on("error", (error) => { stderr = error.message; });
-    connection.manualForwards.set(port, { child, localPort });
-    child.on("exit", () => {
-      if (connection.manualForwards.get(port)?.child === child) connection.manualForwards.delete(port);
-    });
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    if (child.exitCode !== null || connection.manualForwards.get(port)?.child !== child) {
-      throw new Error(stderr.trim() || "Remote port forward failed");
+    try {
+      await forward.ready;
+      if (connection.runtime.generation !== generation || connection.runtime.status !== "ready" ||
+          connection.manualForwards.get(port) !== forward || forward.child.killed) {
+        throw new Error("SSH 连接已变化，请重新转发");
+      }
+    } catch (error) {
+      if (connection.manualForwards.get(port) === forward) connection.manualForwards.delete(port);
+      forward.child.kill("SIGTERM");
+      throw error;
     }
     return {
       connectionId,
       remotePort: port,
-      desktopUrl: `http://127.0.0.1:${localPort}`,
+      desktopUrl: `http://127.0.0.1:${port}`,
       generation: connection.runtime.generation,
     } satisfies ManualRemotePortAccess;
   });
