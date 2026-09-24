@@ -107,6 +107,9 @@ export function createScheduledTasksRouter(
   router.post("/preview", (req, res) =>
     handle(res, () => service.preview(previewSchema.parse(req.body).schedule)),
   );
+  router.post("/validate-create", (req, res) =>
+    handle(res, () => service.validateCreate(createTaskSchema.parse(req.body))),
+  );
   router.get("/runs/:runId/output", (req, res) =>
     handle(res, async () => {
       const { runId } = runParams.parse(req.params);
@@ -173,6 +176,14 @@ export function createScheduledTasksRouter(
   router.patch("/:taskId", (req, res) =>
     handle(res, () =>
       service.update(
+        taskParams.parse(req.params).taskId,
+        updateTaskSchema.parse(req.body),
+      ),
+    ),
+  );
+  router.post("/:taskId/validate-update", (req, res) =>
+    handle(res, () =>
+      service.validateUpdate(
         taskParams.parse(req.params).taskId,
         updateTaskSchema.parse(req.body),
       ),

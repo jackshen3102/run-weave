@@ -8,6 +8,7 @@ import type {
   ScheduledTaskCapabilities,
   ScheduledTaskFilter,
   ScheduledTaskPage,
+  ScheduledTaskValidation,
   SchedulePreviewResponse,
   TaskSchedule,
   UpdateScheduledTaskRequest,
@@ -74,6 +75,35 @@ export class ScheduledTaskService {
     input: CreateScheduledTaskRequest,
     idempotencyKey: string,
   ): Promise<ScheduledTask> {
+    const { store, project, nextRunAt, now } = this.prepareCreate(input);
+    const task: ScheduledTask = {
+      ...normalizeConfig(input),
+      id: randomUUID(),
+      revision: 1,
+      enabled: input.enabled,
+      nextRunAt,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      deletedAt: null,
+    };
+    try {
+      return await store.createTask(
+        task,
+        this.terminalSessionManager.resolveParentProjectId(project.id),
+        idempotencyKey,
+        hash(input),
+      );
+    } catch (error) {
+      throw scheduledTaskErrorFromStorage(error);
+    }
+  }
+
+  validateCreate(input: CreateScheduledTaskRequest): ScheduledTaskValidation {
+    const { project, nextRunAt, now } = this.prepareCreate(input);
+    return validationResult(input, project, nextRunAt, now, null);
+  }
+
+  private prepareCreate(input: CreateScheduledTaskRequest) {
     this.requireEnabled();
     this.requireProvider(input.provider);
     this.requireExecutionPolicy(input.provider, input.executionPolicy);
@@ -96,26 +126,7 @@ export class ScheduledTaskService {
     const nextRunAt = input.enabled
       ? this.requireNextOccurrence(input.schedule, now)
       : null;
-    const task: ScheduledTask = {
-      ...normalizeConfig(input),
-      id: randomUUID(),
-      revision: 1,
-      enabled: input.enabled,
-      nextRunAt,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      deletedAt: null,
-    };
-    try {
-      return await store.createTask(
-        task,
-        this.terminalSessionManager.resolveParentProjectId(project.id),
-        idempotencyKey,
-        hash(input),
-      );
-    } catch (error) {
-      throw scheduledTaskErrorFromStorage(error);
-    }
+    return { store, project, nextRunAt, now };
   }
 
   async getTask(taskId: string): Promise<ScheduledTask> {
@@ -157,6 +168,36 @@ export class ScheduledTaskService {
     taskId: string,
     input: UpdateScheduledTaskRequest,
   ): Promise<ScheduledTask> {
+    const { task, project } = await this.prepareUpdate(taskId, input);
+    try {
+      return await this.requireStore().updateTask(
+        task,
+        input.expectedRevision,
+        this.terminalSessionManager.resolveParentProjectId(project.id),
+      );
+    } catch (error) {
+      throw scheduledTaskErrorFromStorage(error);
+    }
+  }
+
+  async validateUpdate(
+    taskId: string,
+    input: UpdateScheduledTaskRequest,
+  ): Promise<ScheduledTaskValidation> {
+    const { task, project, now } = await this.prepareUpdate(taskId, input);
+    return validationResult(
+      task,
+      project,
+      task.nextRunAt,
+      now,
+      input.expectedRevision,
+    );
+  }
+
+  private async prepareUpdate(
+    taskId: string,
+    input: UpdateScheduledTaskRequest,
+  ) {
     this.requireEnabled();
     const current = await this.getTask(taskId);
     if (current.deletedAt)
@@ -224,15 +265,7 @@ export class ScheduledTaskService {
     };
     delete (task as ScheduledTask & { expectedRevision?: number })
       .expectedRevision;
-    try {
-      return await this.requireStore().updateTask(
-        task,
-        input.expectedRevision,
-        this.terminalSessionManager.resolveParentProjectId(project.id),
-      );
-    } catch (error) {
-      throw scheduledTaskErrorFromStorage(error);
-    }
+    return { task, project, now };
   }
 
   async remove(
@@ -424,6 +457,24 @@ export class ScheduledTaskService {
       throw scheduleError(error);
     }
   }
+}
+
+function validationResult(
+  input: CreateScheduledTaskRequest | ScheduledTask,
+  project: { id: string; name: string; path: string | null },
+  nextRunAt: string | null,
+  now: Date,
+  currentRevision: number | null,
+): ScheduledTaskValidation {
+  return {
+    config: { ...normalizeConfig(input), enabled: input.enabled },
+    project: { id: project.id, name: project.name, path: project.path! },
+    provider: input.provider,
+    enabled: input.enabled,
+    nextRunAt,
+    occurrences: nextOccurrences(input.schedule, now, 3),
+    currentRevision,
+  };
 }
 
 function normalizeConfig(input: CreateScheduledTaskRequest | ScheduledTask) {

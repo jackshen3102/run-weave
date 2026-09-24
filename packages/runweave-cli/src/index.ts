@@ -13,6 +13,7 @@ import { runFeishuCommand } from "./commands/feishu.js";
 import { runProjectCommand } from "./commands/project.js";
 import { runTerminalCommand } from "./commands/terminal.js";
 import { runBrowserCommand } from "./commands/browser.js";
+import { runScheduledTaskCommand } from "./commands/scheduled-task.js";
 import { toCliError } from "./errors.js";
 import { readCliVersion } from "./version.js";
 
@@ -87,6 +88,10 @@ export async function runCli(
       await runProjectCommand(subcommand, args, io);
       return 0;
     }
+    if (group === "scheduled-task") {
+      await runScheduledTaskCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "terminal") {
       await runTerminalCommand(subcommand, args, io);
       return 0;
@@ -96,7 +101,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw <activity|agent-team|app|app-server|auth|browser|evolution|experience|knowledge|feishu|project|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <activity|agent-team|app|app-server|auth|browser|evolution|experience|knowledge|feishu|project|scheduled-task|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

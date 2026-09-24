@@ -38,6 +38,17 @@ export interface ScheduledTaskFilter {
 export interface CreateScheduledTaskRequest extends ScheduledTaskConfig {
   enabled: boolean;
 }
+
+/** Read-only validation result for the exact create or update request. */
+export interface ScheduledTaskValidation {
+  config: CreateScheduledTaskRequest;
+  project: { id: string; name: string; path: string };
+  provider: ScheduledTaskProvider;
+  enabled: boolean;
+  nextRunAt: string | null;
+  occurrences: string[];
+  currentRevision: number | null;
+}
 export interface UpdateScheduledTaskRequest extends Omit<
   Partial<CreateScheduledTaskRequest>,
   "model" | "effort"
