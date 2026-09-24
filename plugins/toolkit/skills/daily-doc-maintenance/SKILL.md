@@ -11,8 +11,8 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 
 ## 硬边界
 
-- 只允许改 `docs/**/*.md`、`README.md` 中的文档入口、文档引用的图片/草图资产，以及本 skill 自身被明确要求更新时的 skill 文档。
-- 禁止修改 `src/`、`server/`、`electron/`、`packages/`、`scripts/`、测试、配置、lockfile、构建产物。
+- 只允许改 `docs/**/*.md`、`README.md` 中的文档入口、文档引用的图片/草图资产，以及本 skill 自身被明确要求更新时的 skill 文档。删除过程文档造成 `docs/testing/**/*.testplan.yaml` 中的路径或说明引用失效时，可仅修正这些引用；不得改用例行为、步骤、预期或验收门槛。
+- 禁止修改 `src/`、`server/`、`electron/`、`packages/`、`scripts/`、其他测试、配置、lockfile、构建产物。
 - 不新增前端单测、Vitest、coverage 配置；文档整理不触发前端 TDD。
 - 不因为文档发现代码问题就顺手修代码；只在最终报告里列出“代码侧待处理”。
 - 不创建长期新文档，除非用户明确要求。默认把新增或零散文档合并进已有权威文档，然后删除冗余文档。
@@ -93,6 +93,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
    - 优先更新已有权威文档，不新建长期文档。
    - 更新 `docs/README.md` 的路由表，确保入口能找到当前权威文档。
    - 清理 `docs/plans/**` 和 `docs/review/**`：先迁移仍有效的结论、验收入口、架构边界或风险判断，再删除原文件及其仅被这些文件引用的资产。
+   - 删除前搜索全仓引用；若现有测试计划指向待删文件，只修正过期引用并运行 `pnpm testplan:validate <path>`，再删除。无法保留原用例语义时停止并报告冲突。
    - 删除文档前必须确认：核心内容已合并、没有被 `docs/README.md` 或其他文档继续引用、不是仍有价值的历史决策记录。
    - 删除图片/草图前必须确认没有文档引用。
 
@@ -103,7 +104,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 
 7. 验证。
    - 运行 `git diff --check`。
-   - 运行 `git diff --name-only`，确认只有允许的文档范围变化。
+   - 运行 `git diff --name-only`，确认只有允许的文档范围变化及上述测试计划引用修正。
    - 运行 `find docs/plans docs/review -type f` 或等价命令，确认两个目录下不再有文件；如果目录不存在，记录为已清理。
    - 删除文档或资产后，用 `rg` 检查仓库内没有残留链接或过期引用。
    - 不为纯文档整理运行前端单测；只有用户要求或文档工具链需要时才补充更重验证。

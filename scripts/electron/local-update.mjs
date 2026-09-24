@@ -3,6 +3,10 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
 import path from "node:path";
+import {
+  assertNoActiveScheduledRuns,
+  scheduledTaskDatabasePath,
+} from "../update/scheduled-task-guard.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "../..");
 const appName = process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME ?? "Runweave";
@@ -196,6 +200,9 @@ async function quitApp() {
     return;
   }
 
+  if ((await getRunningAppLines()).length > 0) {
+    await assertNoActiveScheduledRuns(scheduledTaskDatabasePath());
+  }
   await run("osascript", ["-e", `tell application "${appName}" to quit`]);
   await waitForAppExit();
 }

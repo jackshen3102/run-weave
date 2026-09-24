@@ -28,6 +28,7 @@ import {
   resolveCodesignIdentity,
 } from "./system.mjs";
 import {
+  getRunningAppLines,
   openApp,
   restartApp,
   runAppServerUpdate,
@@ -35,6 +36,10 @@ import {
   runRuntimeUpdate,
   writeUpdateState,
 } from "./operations.mjs";
+import {
+  assertNoActiveScheduledRuns,
+  scheduledTaskDatabasePath,
+} from "./scheduled-task-guard.mjs";
 
 async function main() {
   const args = parseRunweaveUpdateArgs(process.argv.slice(2));
@@ -99,6 +104,16 @@ async function main() {
     plan,
     verifyDesktop: args.verifyDesktop,
   });
+  if (
+    !args.dryRun &&
+    process.platform === "darwin" &&
+    (plan.mode === "app" || !args.noRestart) &&
+    (await getRunningAppLines()).length > 0
+  ) {
+    await assertNoActiveScheduledRuns(
+      scheduledTaskDatabasePath({ beta: isBetaTarget }),
+    );
+  }
   const cliPlan = await planCliUpdate({ sourceRoot, channel });
   const gitHead = await getGitHead(sourceRoot);
   const gitDirty = await getGitStatusDirty(sourceRoot);
