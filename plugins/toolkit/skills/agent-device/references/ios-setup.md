@@ -33,4 +33,4 @@
 
 ## Runweave 共享模拟器
 
-在 Runweave linked worktree 中先通过仓库 `scripts/ios-simulators/cli.mjs` 申请 App 固定槽位，整个验证过程共用 task-dir 和 lease。初始化前用包内 run 入口构建安装；忙时等待，不另建设备。stop 只停止自动化，结束任务用 finish 释放占用。异常时查看 status 和本任务证据，再按 `docs/cli/ios-simulators.md` 对明确 lease 恢复，不能超时抢锁。技能必须由用户主动安装或更新，不由 Desktop 自动复制。
+在 Runweave linked worktree 中先通过仓库 `scripts/ios-simulators/cli.mjs` 申请设备，两个 App 可使用池中任一台；整个验证过程共用 task-dir 和 lease。初始化前用包内 run 入口构建安装；两台都忙且安全回收失败时等待，不另建设备。stop 只停止自动化，结束任务用 finish 释放占用。异常时查看 status 和本任务证据，再按 `docs/cli/ios-simulators.md` 对明确 lease 恢复；空闲超时只在安全清理成功后回收，不能强行抢锁。技能必须由用户主动安装或更新，不由 Desktop 自动复制。

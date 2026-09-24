@@ -10,4 +10,4 @@
 - 在本目录执行 `node scripts/ios.mjs doctor`、`node scripts/ios.mjs build --simulator <UDID>`；产物在本目录 `.build/ios/`，不提交个人签名设置或构建输出。
 - 开发、安装、连接与诊断操作统一从 [README](README.md) 进入。
 
-- 模拟器验证先按[共享设备池](../../docs/cli/ios-simulators.md)申请 Runweave 槽位，安装与 agent-device 共用 task-dir，整段任务结束后 finish；不得为 worktree 新建或克隆设备。
+- 模拟器验证先按[共享设备池](../../docs/cli/ios-simulators.md)以 Runweave App 身份申请设备，两台均可使用；安装与 agent-device 共用 task-dir，整段任务结束后 finish；不得为 worktree 新建或克隆设备。
