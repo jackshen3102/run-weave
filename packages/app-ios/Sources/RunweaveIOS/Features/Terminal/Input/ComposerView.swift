@@ -51,8 +51,6 @@ struct ComposerView: View {
   @State private var showingShortcuts = false
   @State private var editing = true
   @State private var showingReplies = false
-  @State private var savingReply = false
-  @State private var replySnapshot = ""
   @State private var pendingReply: LocalQuickReply?
   @State private var inputHeight: CGFloat = 37
   @State private var chromeHeight: CGFloat = 124
@@ -123,18 +121,6 @@ struct ComposerView: View {
         }
       #endif
       quickReplyBar
-      if let key = state.snapshot.queueKey {
-        HStack {
-          Spacer()
-          Button { submit(queue: true) } label: {
-            Label("排队", systemImage: "text.badge.plus")
-              .font(.subheadline).frame(minHeight: 44)
-          }
-          .accessibilityIdentifier("terminal-composer-queue")
-          .accessibilityHint(key == .tab ? "使用 Tab 加入 Agent 原生队列" : "使用 Alt+Enter 加入 Agent 原生队列")
-          .disabled(sendDisabled || !hasContent || state.snapshot.inputBusy)
-        }
-      }
       if hasAccessories {
         // On cramped keyboards/landscape, secondary content yields space to the editor and toolbar.
         ScrollView(.vertical) {
@@ -203,11 +189,6 @@ struct ComposerView: View {
           }
       }.navigationViewStyle(.stack).interactiveDismissDisabled(quickReplies.saving)
     }
-    .sheet(isPresented: $savingReply, onDismiss: { editing = true }) {
-      NavigationView {
-        QuickReplyEditorView(initialBody: replySnapshot)
-      }.navigationViewStyle(.stack)
-    }
   }
 
   private var quickReplyBar: some View {
@@ -247,14 +228,14 @@ struct ComposerView: View {
   private var inputCard: some View {
     MediaControls(
       session: session, terminalID: terminalID, canWrite: state.snapshot.canWrite,
-      visible: active && !showingReplies && !savingReply,
+      visible: active && !showingReplies,
       preventsDismissal: $preventsDismissal
-    ) { attachment, voice in
+    ) { attachment, _ in
       VStack(spacing: 8) {
         editor
         HStack(spacing: 2) {
           attachment
-          controls(voice: voice)
+          controls
         }
       }
     }
@@ -282,7 +263,7 @@ struct ComposerView: View {
     }
   }
 
-  private func controls(voice: AnyView) -> some View {
+  private var controls: some View {
     HStack(spacing: 2) {
       Button {
         showingInstantReplies.toggle()
@@ -314,18 +295,16 @@ struct ComposerView: View {
       .accessibilityLabel(showingShortcuts ? "收起快捷键" : "展开快捷键")
       .accessibilityValue(showingShortcuts ? "已展开" : "已收起")
       .accessibilityIdentifier("terminal-shortcuts-toggle")
-      Button {
-        replySnapshot = session.terminalDrafts[terminalID] ?? ""
-        editing = false
-        savingReply = true
-      } label: {
-        Image(systemName: "text.badge.plus").frame(width: 44, height: 44)
-      }
-      .accessibilityLabel("保存为快捷回复")
-      .accessibilityIdentifier("terminal-quick-replies")
-      .disabled(!hasText || preventsDismissal || state.snapshot.inputBusy)
       Spacer(minLength: 0)
-      voice
+      if let key = state.snapshot.queueKey {
+        Button { submit(queue: true) } label: {
+          Image(systemName: "text.badge.plus").frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("排队")
+        .accessibilityIdentifier("terminal-composer-queue")
+        .accessibilityHint(key == .tab ? "使用 Tab 加入 Agent 原生队列" : "使用 Alt+Enter 加入 Agent 原生队列")
+        .disabled(sendDisabled || !hasContent || state.snapshot.inputBusy)
+      }
       sendButton
     }
     .buttonStyle(TerminalControlButtonStyle())
