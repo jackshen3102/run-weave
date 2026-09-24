@@ -71,6 +71,7 @@ flowchart LR
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 服务数据         | [20 条](../testing/suiji/service-records.testplan.yaml)通过，真实 PostgreSQL 18.6、HTTP、文件与受控故障                                               |
 | 外部 MCP         | [13 条](../testing/suiji/mcp-agent.testplan.yaml)通过，含真实 Codex CLI 读改写与独立 HTTP 读回                                                        |
+| 多设备 MCP 凭据  | [13 条](../testing/suiji/mcp-credentials.testplan.yaml)在隔离 PostgreSQL 与真实服务通过；生产发布、Mac 原 token 和异机恢复仍待取证                    |
 | Web / 桌面录入   | [12 条](../testing/suiji/web-capture.testplan.yaml)通过，实际 Beta 独立窗口和同一构建的 HTTP 页面，含附件、断线、草稿、冲突、身份、多标签页及窗口重开 |
 | 本地 AI          | [12 条](../testing/suiji/ai-review.testplan.yaml)通过，真实 Codex 发问、追问、范围与只读验证；非法引用、慢进程等使用明确的故障注入                    |
 | Swift 构建 / DTO | Debug、Release Simulator 构建通过；Debug 已签名安装并启动于 iPhone 17；真实 HTTP 的 63 条记录及已完成 AI 回答通过生产 Codable 字段回编码核对          |

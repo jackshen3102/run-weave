@@ -23,6 +23,7 @@
 | [`evolution/`](./evolution/)       | Agent Self-Evolution                                 |
 | [`platform/`](./platform/)         | Dev Session、Beta Pool、桌面 companion 与 CLI 控制面 |
 | [`runbooks/`](./runbooks/)         | 可重复执行的人工操作流程                             |
+| [`skills/`](./skills/)             | Toolkit 技能的真实输入、输出与验收边界               |
 | [`scheduled-tasks/`](./scheduled-tasks/) | 定时任务调度、后台执行、Web 管理与普通终端恢复 |
 | [`suiji/`](./suiji/)               | 随记服务、MCP、Web 录入、AI 回顾、原生体验与部署恢复 |
 | [`terminal/`](./terminal/)         | Terminal、Browser、tmux、MCP 与 Worktree Context     |
@@ -36,3 +37,7 @@ pnpm testplan:verify
 
 静态门禁不是 UI 或运行行为证据。测试计划要求浏览器或桌面行为时，必须按根 `AGENTS.md`
 执行真实环境验证并保留计划要求的证据。
+
+YouTube 阅读稿的[验收计划](./skills/youtube-reading.testplan.yaml)要求区分脚本产物、
+字幕与画面对照、实际音频抽听；来源段映射完整不等于语义或听辨准确。未完成抽听的用例
+不得标为通过。技能的当前操作合同见 [youtube-reading](../../plugins/toolkit/skills/youtube-reading/SKILL.md)。
