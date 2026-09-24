@@ -33,6 +33,9 @@ import {
   tmuxLogger,
 } from "./internals";
 
+// Hex arguments expand each byte; bound each command for tmux's IPC size limit.
+const LiteralInputChunkBytes = 512;
+
 export class TmuxPaneService extends TmuxSessionService {
   async listPanes(target: TmuxTarget): Promise<TmuxPaneInfo[]> {
     const result = await this.runTmux(
@@ -387,10 +390,17 @@ export class TmuxPaneService extends TmuxSessionService {
             value: item.value,
           }),
         });
-        await this.runTmux(
-          ["send-keys", "-t", tmuxTarget, "-l", "--", item.value],
-          target,
-        );
+        // -l still passes characters through extended-key encoding, which can
+        // discard LF. -H marks each UTF-8 byte literal, including paste markers.
+        const bytes = Buffer.from(item.value, "utf8");
+        for (let offset = 0; offset < bytes.length; offset += LiteralInputChunkBytes) {
+          const chunk = bytes.subarray(offset, offset + LiteralInputChunkBytes);
+          await this.runTmux(
+            ["send-keys", "-t", tmuxTarget, "-H",
+              ...Array.from(chunk, (byte) => byte.toString(16).padStart(2, "0"))],
+            target,
+          );
+        }
       }
       await delayAfterTmuxKey(item.delayAfterMs);
     }
