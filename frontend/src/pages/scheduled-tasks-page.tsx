@@ -31,6 +31,7 @@ interface Props {
   apiBase: string;
   token: string;
   activeConnectionId: string | null;
+  activeConnectionGeneration?: number;
   connectionName?: string;
   connections: ConnectionConfig[];
   onSelectConnection?: (id: string) => void;
@@ -40,12 +41,14 @@ export function ScheduledTasksPage(props: Props) {
   const scope = buildConnectionQueryScope({
     apiBase: props.apiBase,
     connectionId: props.activeConnectionId,
+    generation: props.activeConnectionGeneration,
   });
   return (
     <TerminalRuntimeProvider
       apiBase={props.apiBase}
       token={props.token}
       activeConnectionId={props.activeConnectionId}
+      connectionGeneration={props.activeConnectionGeneration}
     >
       <ScheduledTasksContent key={scope} {...props} />
     </TerminalRuntimeProvider>

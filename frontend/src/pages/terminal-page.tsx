@@ -10,6 +10,7 @@ interface TerminalRoutePageProps {
   connections?: ConnectionConfig[];
   activeConnectionId?: string | null;
   connectionName?: string;
+  activeConnection?: ConnectionConfig | null;
   onSelectConnection?: (connectionId: string) => void;
   onOpenConnectionManager?: () => void;
   onAuthExpired: () => void;
@@ -22,6 +23,7 @@ export function TerminalRoutePage({
   connections,
   activeConnectionId,
   connectionName,
+  activeConnection,
   onSelectConnection,
   onOpenConnectionManager,
   onAuthExpired,
@@ -38,6 +40,10 @@ export function TerminalRoutePage({
         connection={{
           activeConnectionId,
           connectionName,
+          remote: activeConnection?.kind === "ssh" ? {
+            generation: activeConnection.generation ?? 0,
+            browserProfileId: activeConnection.browserProfileId ?? null,
+          } : null,
           connections,
           onOpenConnectionManager,
           onSelectConnection,
@@ -47,8 +53,7 @@ export function TerminalRoutePage({
           if (activeTerminalSessionId === terminalSessionId) {
             return;
           }
-
-          navigate(`/terminal/${encodeURIComponent(activeTerminalSessionId)}`, {
+          navigate(activeTerminalSessionId ? `/terminal/${encodeURIComponent(activeTerminalSessionId)}` : "/terminal", {
             replace: true,
           });
         }}

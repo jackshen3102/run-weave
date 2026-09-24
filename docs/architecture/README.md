@@ -55,6 +55,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | 任务                                    | 文档                                                       |
 | --------------------------------------- | ---------------------------------------------------------- |
 | 网络拓扑、Backend 与 Electron 连接      | [network-topology.md](./network-topology.md)               |
+| SSH 远程项目、多连接归属和 Browser 通道 | [ssh-remote-projects.md](./ssh-remote-projects.md)         |
 | 跨运行时状态来源、聚合与安全边界        | [runtime-status.md](./runtime-status.md)                   |
 | App 移动端连接、页面和安全边界          | [app-mobile.md](./app-mobile.md)                           |
 | App Server 总体架构                     | [app-server-architecture.md](./app-server-architecture.md) |
@@ -79,12 +80,12 @@ Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.m
 
 ### Agent 系统
 
-| 任务                     | 文档                                                         |
-| ------------------------ | ------------------------------------------------------------ |
+| 任务                       | 文档                                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[运行配置](../deployment/overview.md#定时任务运行) |
-| Agent Team / Loop Engine | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md) |
-| 普通会话项目经验         | [检索与证据回执](../cli/experience-cli.md)                   |
-| Agent Self-Evolution     | [agent-self-evolution.md](./agent-self-evolution.md)         |
+| Agent Team / Loop Engine   | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md)                                                          |
+| 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                            |
+| Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                  |
 
 ## 随记
 

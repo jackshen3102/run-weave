@@ -14,8 +14,9 @@ export function setTerminalNavigation(
 }
 export function takeTerminalNavigation(scope: string, sessionId?: string) {
   const selection = pending.get(scope);
+  if (!selection || (sessionId && selection.terminalSessionId !== sessionId)) {
+    return undefined;
+  }
   pending.delete(scope);
-  return selection && (!sessionId || selection.terminalSessionId === sessionId)
-    ? selection
-    : undefined;
+  return selection;
 }

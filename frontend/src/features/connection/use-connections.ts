@@ -1,7 +1,9 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PackagedBackendConnectionState } from "@runweave/shared/runtime-monitor";
+import type { ConnectionRuntime } from "@runweave/shared/remote";
 import type { ConnectionConfig, ConnectionStore } from "./types";
+import { useProjectBindings } from "./project-bindings";
 import {
   buildLocalDevelopmentConnection,
   LOCAL_DEV_CONNECTION_ID,
@@ -74,6 +76,7 @@ export interface UseConnectionsResult {
   connections: ConnectionConfig[];
   activeConnection: ConnectionConfig | null;
   addConnection: (name: string, url: string) => ConnectionConfig;
+  addRemoteConnection: (name: string, host: string, backendPort: number, browserProfileId: "profile-1" | "profile-2" | "profile-3" | null, approvedBrowserGroupId: string | null) => ConnectionConfig;
   removeConnection: (id: string) => void;
   updateConnection: (
     id: string,
@@ -89,6 +92,7 @@ const NOOP_RESULT: UseConnectionsResult = {
   connections: [],
   activeConnection: null,
   addConnection: () => NOOP_CONN,
+  addRemoteConnection: () => NOOP_CONN,
   removeConnection: () => {},
   updateConnection: () => {},
   setActive: () => {},
@@ -104,6 +108,59 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     useState<PackagedBackendConnectionState | null>(() =>
       getInitialPackagedBackendState(),
     );
+  const [remoteRuntimes, setRemoteRuntimes] = useState<Record<string, ConnectionRuntime>>({});
+  const managedRemoteIds = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!isElectron || !window.electronAPI?.connectRemote) return;
+    const api = window.electronAPI;
+    const unsubscribe = api.onRemoteConnectionStateChange?.((runtime) => {
+      setRemoteRuntimes((previous) => ({ ...previous, [runtime.connectionId]: runtime }));
+    });
+    void api.listRemoteConnections?.().then((runtimes) => {
+      setRemoteRuntimes((previous) => ({
+        ...Object.fromEntries(runtimes.map((runtime) => [runtime.connectionId, runtime])),
+        ...previous,
+      }));
+    });
+    return () => unsubscribe?.();
+  }, []);
+
+  useEffect(() => {
+    if (!isElectron || !window.electronAPI?.connectRemote) return;
+    const remoteConnections = store.connections.filter((connection) => connection.kind === "ssh");
+    const nextIds = new Set(remoteConnections.map((connection) => connection.id));
+    for (const id of managedRemoteIds.current) {
+      if (!nextIds.has(id)) void window.electronAPI.disconnectRemote?.(id);
+    }
+    managedRemoteIds.current = nextIds;
+    for (const connection of remoteConnections) {
+      if (!connection.sshHost || !connection.sshBackendPort) continue;
+      void window.electronAPI.connectRemote({
+        connectionId: connection.id,
+        host: connection.sshHost,
+        backendPort: connection.sshBackendPort,
+        browserProfileId: connection.browserProfileId ?? null,
+        approvedBrowserGroupId: connection.approvedBrowserGroupId ?? null,
+      }).then((runtime) => {
+        setRemoteRuntimes((previous) => ({ ...previous, [runtime.connectionId]: runtime }));
+      }).catch((error: unknown) => {
+        setRemoteRuntimes((previous) => ({
+          ...previous,
+          [connection.id]: {
+            connectionId: connection.id,
+            generation: 0,
+            installationId: null,
+            serviceInstanceId: null,
+            apiBase: null,
+            status: "failed",
+            lastObservedAt: null,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        }));
+      });
+    }
+  }, [store.connections]);
   const localDevelopmentConnection = useMemo(
     () => buildLocalDevelopmentConnection(packagedBackendState),
     [packagedBackendState],
@@ -159,29 +216,40 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     saveStore(storageKey, next);
   });
 
-  const activeConnection = useMemo(() => {
-    if (store.activeId === LOCAL_DEV_CONNECTION_ID) {
-      return localDevelopmentConnection;
-    }
-
-    const userConnection =
-      store.connections.find((c) => c.id === store.activeId) ?? null;
-    if (userConnection) {
-      return userConnection;
-    }
-
-    return localDevelopmentConnection;
-  }, [localDevelopmentConnection, store]);
-
   const connections = useMemo(() => {
     const userConnections = store.connections.filter(
       (connection) => connection.id !== LOCAL_DEV_CONNECTION_ID,
-    );
+    ).map((connection) => {
+      if (connection.kind !== "ssh") return connection;
+      const runtime = remoteRuntimes[connection.id];
+      return {
+        ...connection,
+        url: runtime?.apiBase ?? "",
+        available: runtime?.status === "ready",
+        statusMessage: runtime?.message ?? runtime?.status ?? "连接中",
+        canReconnect: runtime?.status === "failed",
+        generation: runtime?.generation ?? 0,
+        browserAvailable: runtime?.browserAvailable ?? false,
+        browserMessage: runtime?.browserMessage ?? null,
+        remoteStatus: runtime?.status ?? "connecting",
+        installationId: runtime?.installationId ?? null,
+        agents: runtime?.agents,
+        canEdit: false,
+      };
+    });
 
     return localDevelopmentConnection
       ? [localDevelopmentConnection, ...userConnections]
       : userConnections;
-  }, [localDevelopmentConnection, store.connections]);
+  }, [localDevelopmentConnection, remoteRuntimes, store.connections]);
+
+  const activeConnection = useMemo(() => {
+    if (store.activeId === LOCAL_DEV_CONNECTION_ID) {
+      return localDevelopmentConnection;
+    }
+    return connections.find((connection) => connection.id === store.activeId)
+      ?? localDevelopmentConnection;
+  }, [connections, localDevelopmentConnection, store.activeId]);
 
   const addConnection = useMemoizedFn(
     (name: string, url: string): ConnectionConfig => {
@@ -199,6 +267,27 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     },
   );
 
+  const addRemoteConnection = useMemoizedFn(
+    (name: string, host: string, backendPort: number, browserProfileId: "profile-1" | "profile-2" | "profile-3" | null, approvedBrowserGroupId: string | null): ConnectionConfig => {
+      const connection: ConnectionConfig = {
+        id: crypto.randomUUID(),
+        name: name.trim(),
+        url: "",
+        createdAt: Date.now(),
+        kind: "ssh",
+        sshHost: host.trim(),
+        sshBackendPort: backendPort,
+        browserProfileId,
+        approvedBrowserGroupId,
+      };
+      persist((previous) => ({
+        connections: [...previous.connections, connection],
+        activeId: connection.id,
+      }));
+      return connection;
+    },
+  );
+
   const removeConnection = useMemoizedFn((id: string) => {
     if (id === LOCAL_DEV_CONNECTION_ID) {
       return;
@@ -208,6 +297,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
       connections: prev.connections.filter((c) => c.id !== id),
       activeId: prev.activeId === id ? null : prev.activeId,
     }));
+    useProjectBindings.getState().removeConnection(id);
   });
 
   const updateConnection = useMemoizedFn(
@@ -241,6 +331,19 @@ export function useConnections(storageKey: string): UseConnectionsResult {
   });
 
   const reconnectSystemConnection = useMemoizedFn(async (id: string) => {
+    const remote = storeRef.current.connections.find((connection) => connection.id === id && connection.kind === "ssh");
+    if (remote?.sshHost && remote.sshBackendPort && window.electronAPI?.connectRemote) {
+      await window.electronAPI.disconnectRemote?.(id);
+      const runtime = await window.electronAPI.connectRemote({
+        connectionId: id,
+        host: remote.sshHost,
+        backendPort: remote.sshBackendPort,
+        browserProfileId: remote.browserProfileId ?? null,
+        approvedBrowserGroupId: remote.approvedBrowserGroupId ?? null,
+      });
+      setRemoteRuntimes((previous) => ({ ...previous, [id]: runtime }));
+      return runtime.status === "ready";
+    }
     if (
       !shouldExposeLocalDevelopmentConnection(
         isElectron,
@@ -266,6 +369,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
         connections,
         activeConnection,
         addConnection,
+        addRemoteConnection,
         removeConnection,
         updateConnection,
         setActive,

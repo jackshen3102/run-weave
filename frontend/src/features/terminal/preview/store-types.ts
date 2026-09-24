@@ -62,6 +62,10 @@ export interface TerminalPreviewProjectState {
 export interface TerminalPreviewStore {
   ui: TerminalPreviewUiState;
   projects: Record<string, TerminalPreviewProjectState>;
+  connectionScope: string | null;
+  projectsByConnection: Record<string, Record<string, TerminalPreviewProjectState>>;
+  unassignedLegacyProjects: Record<string, TerminalPreviewProjectState>;
+  setConnectionScope: (connectionId: string) => void;
   changesRefreshRevisionByProjectId: Record<string, number>;
   browser: {
     revision: number;

@@ -47,12 +47,14 @@ const STATUS_STYLES: Record<WorkspaceServiceSnapshot["status"], string> = {
 function WorkspaceServiceRow({
   busyAction,
   onOpen,
+  resolveUrl,
   onStart,
   onStop,
   service,
 }: {
   busyAction: "start" | "stop" | null;
   onOpen: (service: WorkspaceServiceSnapshot) => Promise<void>;
+  resolveUrl: (service: WorkspaceServiceSnapshot) => Promise<string>;
   onStart: (service: WorkspaceServiceSnapshot) => Promise<void>;
   onStop: (service: WorkspaceServiceSnapshot) => Promise<void>;
   service: WorkspaceServiceSnapshot;
@@ -62,7 +64,7 @@ function WorkspaceServiceRow({
   const handleStop = useMemoizedFn(() => onStop(service));
   const handleOpen = useMemoizedFn(() => onOpen(service));
   const handleCopy = useMemoizedFn(async (): Promise<void> => {
-    await navigator.clipboard.writeText(service.url);
+    await navigator.clipboard.writeText(await resolveUrl(service));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
   });
@@ -168,7 +170,7 @@ export function TerminalWorkspaceServicesPopover({
   parentProjectId: string | null;
   projectId: string | null;
 }) {
-  const { apiBase, scope, token } = useTerminalRuntime();
+  const { activeConnectionId, apiBase, remote, scope, token } = useTerminalRuntime();
   const { queryClient } = useTerminalWorkspaceQueryClient();
   const query = useTerminalWorkspaceServicesQuery(
     parentProjectId,
@@ -248,14 +250,31 @@ export function TerminalWorkspaceServicesPopover({
       }
     },
   );
+  const resolveServiceUrl = useMemoizedFn(async (service: WorkspaceServiceSnapshot): Promise<string> => {
+    if (!remote) return service.url;
+    if (!activeConnectionId || !parentProjectId || !projectId || !window.electronAPI?.resolveRemoteService) {
+      throw new Error("Remote service resolver is unavailable");
+    }
+    const resolved = await window.electronAPI.resolveRemoteService({
+      connectionId: activeConnectionId,
+      parentProjectId,
+      projectId,
+      serviceId: service.name,
+    }, token);
+    if (resolved.generation !== remote.generation) {
+      throw new Error("Remote service connection changed; refresh and try again");
+    }
+    return resolved.desktopUrl;
+  });
   const handleOpen = useMemoizedFn(
     async (service: WorkspaceServiceSnapshot): Promise<void> => {
       if (!projectId) return;
       setMutationError(null);
       try {
         const profileId = await openTerminalBrowserUrl({
-          url: service.url,
-          projectId,
+          url: await resolveServiceUrl(service),
+          projectId: remote && activeConnectionId ? `${activeConnectionId}:${projectId}` : projectId,
+          profileId: remote?.browserProfileId ?? undefined,
           placement: { kind: "new-group" },
         });
         if (profileId) {
@@ -355,6 +374,7 @@ export function TerminalWorkspaceServicesPopover({
             onStart={handleStart}
             onStop={handleStop}
             onOpen={handleOpen}
+            resolveUrl={resolveServiceUrl}
           />
         ))}
         {mutationError ? (

@@ -62,6 +62,8 @@ import { DesktopCompanionAgent } from "./companion/agent.js";
 import { stopAllTerminalBrowserWhistles } from "./browser/whistle/runtime.js";
 import { registerTerminalBrowserAutomationHandlers } from "./browser/automation/runtime.js";
 import { registerRuntimeStatusHandlers } from "./monitoring/runtime-status.js";
+import { registerAttentionNotificationHandlers } from "./monitoring/attention-notifications.js";
+import { registerRemoteConnectionHandlers, stopRemoteConnections } from "./remote/ssh-connections.js";
 function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 512;
 }
@@ -335,6 +337,7 @@ if (hasSingleInstanceLock) {
       registerProjectDirectoryHandler(() => desktopRuntime.mainWindow);
       registerSuijiStorage();
       registerPackagedBackendHandlers();
+      registerRemoteConnectionHandlers();
       registerRuntimeStatsHandler(() => desktopRuntime.packagedBackend);
       registerSystemMonitorHandler(() => desktopRuntime.packagedBackend);
       registerTerminalBrowserHandlers();
@@ -345,6 +348,7 @@ if (hasSingleInstanceLock) {
         getCompanion: () => companionAgent,
         isCompanionEnabled: () => companionEnabled,
       });
+      registerAttentionNotificationHandlers(() => desktopRuntime.mainWindow);
       if (!isBetaChannel) {
         await installHooksIfNeeded({
           resourcesDir: process.env.RUNWEAVE_ELECTRON_RESOURCES_DIR
@@ -559,6 +563,7 @@ app.on("before-quit", (event) => {
   desktopRuntime.stoppingPackagedBackendsForQuit = true;
   void (async () => {
     await Promise.allSettled([
+      Promise.resolve().then(stopRemoteConnections),
       desktopRuntime.cdpProxy?.stop() ?? Promise.resolve(),
       stopAllTerminalBrowserWhistles(),
       desktopRuntime.packagedBackend?.stop() ?? Promise.resolve(),

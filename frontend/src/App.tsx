@@ -1,9 +1,14 @@
 import { CodexQuotaProvider } from "./features/codex-quota/provider";
 import { MobileLoginProvider } from "./features/mobile-login/provider";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 import { SuijiDrawer } from "./features/suiji/drawer";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
+import { ConnectionWorkspaceObservers } from "./features/connection/workspace-overview";
+import { setTerminalNavigation } from "./features/terminal/state/navigation";
+import { useProjectBindings } from "./features/connection/project-bindings";
+import { RemoteConnectionInterrupted } from "./features/connection/remote-connection-interrupted";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";
 import { useAttentionOpenIntents } from "./features/attention/use-attention-open-intents";
 import { useDesktopCompanionHost } from "./features/attention/use-desktop-companion-host";
@@ -39,11 +44,13 @@ export default function App() {
 
 function RunweaveApp() {
   const location = useLocation();
+  const navigate = useNavigate();
   const clientMode = useClientMode(isElectron);
   const {
     connections,
     activeConnection,
     addConnection,
+    addRemoteConnection,
     removeConnection,
     updateConnection,
     setActive,
@@ -70,6 +77,7 @@ function RunweaveApp() {
   const queryScope = buildConnectionQueryScope({
     apiBase,
     connectionId: activeConnectionId,
+    generation: activeConnection?.kind === "ssh" ? activeConnection.generation : undefined,
   });
   const requestedReturn: unknown = location.state?.scope === queryScope ? location.state?.returnTo : null;
   const loginReturnPath = typeof requestedReturn === "string" && /^\/scheduled-tasks(?:\/|\?|$)/u.test(requestedReturn)
@@ -78,6 +86,23 @@ function RunweaveApp() {
   const handleSelectConnection = (id: string) => {
     setActive(id);
   };
+
+  useEffect(() => {
+    if (!isElectron) return;
+    return window.electronAPI?.onAttentionNotificationOpen?.((target) => {
+      const connection = connections.find((item) => item.id === target.connectionId);
+      if (!connection || connection.available === false) return;
+      if (connection.kind === "ssh" && !useProjectBindings.getState().bindings.some((binding) => binding.connectionId === connection.id && binding.remoteProjectId === target.parentProjectId)) return;
+      setTerminalNavigation(buildConnectionQueryScope({ apiBase: connection.url, connectionId: connection.id, generation: connection.kind === "ssh" ? connection.generation : undefined }), {
+        parentProjectId: target.parentProjectId,
+        projectId: target.projectId,
+        terminalSessionId: target.terminalSessionId,
+        ...(target.panelId ? { panelId: target.panelId } : {}),
+      });
+      setActive(connection.id);
+      navigate(`/terminal/${encodeURIComponent(target.terminalSessionId)}`);
+    });
+  }, [connections, navigate, setActive]);
 
   const handleAddConnection = (name: string, url: string) => {
     addConnection(name, url);
@@ -120,6 +145,7 @@ function RunweaveApp() {
                 apiBase={apiBase}
                 token={token}
                 activeConnectionId={activeConnectionId}
+                activeConnectionGeneration={activeConnection?.kind === "ssh" ? activeConnection.generation : undefined}
                 connectionName={activeConnection?.name}
                 connections={connections}
                 onSelectConnection={isElectron ? handleSelectConnection : undefined}
@@ -145,6 +171,7 @@ function RunweaveApp() {
                   connections={connections}
                   activeId={activeConnection?.id ?? null}
                   onAdd={handleAddConnection}
+                  onAddRemote={addRemoteConnection}
                   onRemove={removeConnection}
                   onSelect={handleSelectConnection}
                   onEdit={updateConnection}
@@ -265,7 +292,7 @@ function RunweaveApp() {
             path="/terminal"
             element={
               needsConnection ? (
-                <Navigate to="/connections" replace />
+                activeConnection?.kind === "ssh" ? <RemoteConnectionInterrupted connection={activeConnection} connections={connections} onSelectConnection={handleSelectConnection} onOpenConnectionManager={openConnectionManager} onReconnect={() => void reconnectSystemConnection(activeConnection.id)} /> : <Navigate to="/connections" replace />
               ) : isAuthChecking ? (
                 authPendingView
               ) : token ? (
@@ -278,6 +305,7 @@ function RunweaveApp() {
                   connectionName={
                     isElectron ? activeConnection?.name : undefined
                   }
+                  activeConnection={activeConnection}
                   onSelectConnection={
                     isElectron ? handleSelectConnection : undefined
                   }
@@ -295,7 +323,7 @@ function RunweaveApp() {
             path="/terminal/:terminalSessionId"
             element={
               needsConnection ? (
-                <Navigate to="/connections" replace />
+                activeConnection?.kind === "ssh" ? <RemoteConnectionInterrupted connection={activeConnection} connections={connections} onSelectConnection={handleSelectConnection} onOpenConnectionManager={openConnectionManager} onReconnect={() => void reconnectSystemConnection(activeConnection.id)} /> : <Navigate to="/connections" replace />
               ) : isAuthChecking ? (
                 authPendingView
               ) : token ? (
@@ -308,6 +336,7 @@ function RunweaveApp() {
                   connectionName={
                     isElectron ? activeConnection?.name : undefined
                   }
+                  activeConnection={activeConnection}
                   onSelectConnection={
                     isElectron ? handleSelectConnection : undefined
                   }
@@ -378,7 +407,10 @@ function RunweaveApp() {
       </RuntimeStatusProvider>
     </DevSessionBackendGuard>
   );
-  return isElectron && activeConnection && token && sessionId && authStatus !== "unauthenticated"
-    ? <MobileLoginProvider key={`${activeConnection.id}:${apiBase}:${sessionId}`} connection={activeConnection} token={token}>{content}</MobileLoginProvider>
-    : content;
+  return <>
+    {isElectron && <ConnectionWorkspaceObservers connections={connections} activeConnectionId={activeConnectionId} activeToken={token} observeActive={location.pathname === "/connections"} />}
+    {isElectron && activeConnection && token && sessionId && authStatus !== "unauthenticated"
+      ? <MobileLoginProvider key={`${activeConnection.id}:${apiBase}:${sessionId}`} connection={activeConnection} token={token}>{content}</MobileLoginProvider>
+      : content}
+  </>;
 }
