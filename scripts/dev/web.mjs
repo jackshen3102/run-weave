@@ -192,19 +192,23 @@ function normalizeProbeHosts(host) {
 }
 
 export async function resolvePort(startPort, options = {}) {
+  if (!Number.isInteger(startPort) || startPort < 1 || startPort > 65_535) {
+    throw new RangeError(`invalid starting port: ${startPort}; expected 1-65535`);
+  }
   const reservedPorts = options.reservedPorts ?? new Set();
   const hosts = options.hosts ?? normalizeProbeHosts(options.host);
   const isPortAvailableFn = options.isPortAvailable ?? isPortAvailable;
-  let port = startPort;
-  while (
-    reservedPorts.has(port) ||
-    !(await Promise.all(hosts.map((host) => isPortAvailableFn(port, host)))).every(
-      Boolean,
-    )
-  ) {
-    port += 1;
+  for (let port = startPort; port <= 65_535; port += 1) {
+    if (
+      !reservedPorts.has(port) &&
+      (await Promise.all(hosts.map((host) => isPortAvailableFn(port, host)))).every(
+        Boolean,
+      )
+    ) {
+      return port;
+    }
   }
-  return port;
+  throw new Error(`no available port in range ${startPort}-65535`);
 }
 
 export function delay(ms) {
