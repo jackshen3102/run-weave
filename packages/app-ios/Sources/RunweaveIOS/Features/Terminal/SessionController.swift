@@ -243,7 +243,8 @@ public final class SessionController: ObservableObject {
     }
   }
 
-  func sendCommand(_ text: String, mode: String, recordQuickInput: Bool? = nil) async throws {
+  func sendCommand(_ text: String, mode: String, recordQuickInput: Bool? = nil,
+    submitKey: TerminalPromptSubmitKey? = nil) async throws {
     guard canSend else { throw APIError.offline }
     let epoch = generation
     inputBusy = true
@@ -256,7 +257,8 @@ public final class SessionController: ObservableObject {
         try await api.terminalInput(id: terminalID, data: "", mode: "tmux_exit_copy_mode")
         guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
       }
-      try await api.terminalInput(id: terminalID, data: text, mode: mode, recordQuickInput: recordQuickInput)
+      try await api.terminalInput(id: terminalID, data: text, mode: mode, recordQuickInput: recordQuickInput,
+        submitKey: submitKey)
     }
     commandTask = operation
     defer {

@@ -10,6 +10,7 @@ interface ActivityRuntimeManifest {
   arch?: unknown;
   workerEntry?: unknown;
   evolutionWorkerEntry?: unknown;
+  scheduledTasksWorkerEntry?: unknown;
   packageEntry?: unknown;
   packageManifest?: unknown;
   nativeBinding?: unknown;
@@ -80,6 +81,7 @@ export function validateBundledActivityRuntime(resourcesPath: string): boolean {
         manifest.nodeModuleAbi !== process.versions.modules) ||
       !isSafeRelativePath(manifest.workerEntry) ||
       !isSafeRelativePath(manifest.evolutionWorkerEntry) ||
+      !isSafeRelativePath(manifest.scheduledTasksWorkerEntry) ||
       !isSafeRelativePath(manifest.packageEntry) ||
       !isSafeRelativePath(manifest.packageManifest) ||
       !isSafeRelativePath(manifest.nativeBinding) ||
@@ -109,6 +111,7 @@ export function validateBundledActivityRuntime(resourcesPath: string): boolean {
     const roots = [
       manifest.workerEntry,
       manifest.evolutionWorkerEntry,
+      manifest.scheduledTasksWorkerEntry,
       "node_modules/better-sqlite3",
     ].map((relative) => path.join(root, relative));
     const actual = roots
