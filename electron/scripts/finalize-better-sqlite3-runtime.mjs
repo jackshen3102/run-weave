@@ -72,12 +72,30 @@ export function finalizeActivitySqliteRuntime(
   const runtimeNodeModules = path.join(resourcesBackendDir, "node_modules");
   mkdirSync(runtimeNodeModules, { recursive: true });
   const runtimePackageNames = ["better-sqlite3"];
+  const prebuildPlatform =
+    process.platform === "linux" &&
+    !process.report.getReport().header.glibcVersionRuntime
+      ? "linuxmusl"
+      : process.platform;
+  const targetPrebuild = `${prebuildPlatform}-${process.arch}.node`;
   for (const packageName of runtimePackageNames) {
-    cpSync(
-      path.join(nodeModules, packageName),
-      path.join(runtimeNodeModules, packageName),
-      { recursive: true, dereference: true },
-    );
+    const source = path.join(nodeModules, packageName);
+    cpSync(source, path.join(runtimeNodeModules, packageName), {
+      recursive: true,
+      dereference: true,
+      filter: (entry) => {
+        const relative = path.relative(source, entry);
+        return (
+          !relative ||
+          relative === "lib" ||
+          relative.startsWith(`lib${path.sep}`) ||
+          relative === "prebuilds" ||
+          relative === path.join("prebuilds", targetPrebuild) ||
+          relative === "package.json" ||
+          relative === "LICENSE"
+        );
+      },
+    });
   }
 
   const nativeBinding = resolveNativeBinding(
