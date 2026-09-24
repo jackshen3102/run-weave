@@ -1,6 +1,22 @@
 # Pi Codex Recovery 实现与验证
 
-日期：2026-09-13。实现完成，11 条本地故障验收及真实 OpenAI 服务验证均通过。本文记录当前版本的验证范围与证据入口，不保证未来网络可用性。
+当前验证日期：2026-09-24，Pi 0.87.1。本文区分当前升级验证与下方 Pi 0.85.1 的历史基线，不保证未来网络可用性。
+
+## Pi 0.87.1 升级验证
+
+本机宿主已升级到 0.87.1，旧扩展仍在请求前要求 0.85.1，已在独立真实 TUI 复现原始错误。当前实现适配 transcript 中的系统提示词与工具声明，依赖固定为 0.87.1；普通配置遇到其他宿主版本时不注册恢复 provider，保留原生请求与重试。
+
+- 类型检查、lint、frozen-lockfile 安装及 YAML 格式校验通过；其他 workspace importer 的锁定依赖未改变。
+- [验收计划](../../../docs/testing/terminal/runtime/pi-codex-recovery.testplan.yaml)的 PCR-001 至 PCR-011 在 Pi 0.87.1 真实 tmux TUI 中全部通过，包括真实 5 分钟网络期限、取消、工具只执行一次、部分输出替换及压缩恢复。除独立配置守卫 PCR-009 外，均使用 shared 配置并保留原生 retry。
+- PCR-012 使用 Pi 0.85.1 作为当前实现未验证的宿主；两次请求跨新建会话均经原生 provider 成功，恢复控制器未启动，设置未改变。
+- 完整部署副本使用全局 Pi 0.87.1 重跑 PCR-004 通过。安装后退出重开，真实 OpenAI 请求执行一次 read 并返回 `PI_0871_RECOVERY_OK`；两次模型调用均经 WS 成功，0 次重试。普通用户设置的 SHA-256 保持不变。
+- 全局扩展启用的非交互 JSON 请求返回 `PI_NATIVE_0871_OK`，9.04 秒自然退出，退出码 0。
+
+热重载消除了旧版本守卫，但本次已打开会话的首个请求缺少系统提示词和 read 声明；完整退出重开后通过。因此安装操作仍要求重启，不把 `/reload` 当作完整生效保证。
+
+机器可读[结果汇总](../../../.runweave/pi-codex-recovery/pi-0.87.1/results.json)、[真实请求](../../../.runweave/pi-codex-recovery/pi-0.87.1/live/verdict.json)和[安装收据](../../../.runweave/pi-codex-recovery/pi-0.87.1/installation.json)保存在本工作区忽略目录，不随 Git 分发。故障注入只使用 loopback 与假凭据；真实请求仅读取本次临时验收文件。
+
+以下为 2026-09-13 的 Pi 0.85.1 历史验证。
 
 ## 实现
 
@@ -80,7 +96,7 @@ PI_CODING_AGENT_DIR="$PWD/.runweave/pi-codex-recovery/live/agent-codex-recovery"
 
 在 `recovery.json` 显式设置 `profile: "shared"` 后，普通目录可启用扩展。只有收到 TUI 的 `session_start` 时才注册恢复 provider；非 TUI 保留原生 provider 及资源清理。此方式不改写全局 retry 设置，其他 provider 沿用原行为。仍会被公开分类器识别为临时失败的最终错误，先展示原始原因，再返回明确终态；上下文溢出保留给原生压缩。
 
-已部署至 `~/.pi/packages/pi-codex-recovery`，通过 `pi install` 安装到普通 `~/.pi/agent`。Pi 将本地包保存为相对路径 `../packages/pi-codex-recovery`。原有 `pi-web-access`、`pi-subagents`、模型、技能、子代理设置与登录均保留；只新增包条目和 `recovery.json` 的显式启用设置。安装前设置备份路径见[安装收据](../../../.runweave/pi-codex-recovery/global/installation.json)。无需保留 worktree 才能运行已部署的扩展。
+已部署至 `~/.pi/packages/pi-codex-recovery`，通过 `pi install` 安装到普通 `~/.pi/agent`。Pi 将本地包保存为相对路径 `../packages/pi-codex-recovery`。原有 `pi-web-access`、模型、技能设置与登录均保留；只新增包条目和 `recovery.json` 的显式启用设置。安装前设置备份路径见[安装收据](../../../.runweave/pi-codex-recovery/global/installation.json)。无需保留 worktree 才能运行已部署的扩展。
 
 普通配置兼容探针使用真实临时 Pi TUI，并保持 `retry.enabled=true`：
 
