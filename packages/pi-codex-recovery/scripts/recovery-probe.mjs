@@ -28,11 +28,14 @@ if(fs.existsSync(existingFd)){fs.mkdirSync(path.join(profile,'bin'));fs.symlinkS
 const cwd = path.join(work, 'workspace'); fs.mkdirSync(cwd);
 const socket = path.join(work, 'tmux.sock');
 const cli = option('--pi', path.join(root, 'node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js'));
+const piVersion = execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim();
+const validatedVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).devDependencies['@earendil-works/pi-coding-agent'];
+if(caseId==='PCR-012' && (!sharedProfile || piVersion===validatedVersion))throw new Error('PCR-012 requires --shared-profile and --pi pointing to an unvalidated Pi version.');
 const observerLog = path.join(out, 'observer.jsonl');
 const serviceLog = path.join(out, 'service.jsonl');
 const observer = path.join(work, 'observer.ts');
 const settings = { retry: { enabled: sharedProfile }, defaultProvider: 'openai-codex', defaultModel: 'gpt-6-astra',
-  lastChangelogVersion:'0.85.1', defaultThinkingLevel: 'off', defaultProjectTrust: 'always', hideThinkingBlock: true };
+  lastChangelogVersion:piVersion, defaultThinkingLevel: 'off', defaultProjectTrust: 'always', hideThinkingBlock: true };
 const writeSettings = () => fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify(settings));
 if(caseId==='PCR-009') settings.retry.enabled=true;
 if(caseId==='PCR-010') settings.compaction={enabled:true,reserveTokens:2000,keepRecentTokens:5};
@@ -70,7 +73,7 @@ const events = (text='NEW_FINAL', tool, complete=true) => {
 };
 function reply(send, end, body) {
  calls++; phaseCalls++; lastInput=body.input ?? [];
- log({event:'model_request',call:calls,phaseCall:phaseCalls,input:lastInput,scenario});
+ log({event:'model_request',call:calls,phaseCall:phaseCalls,input:lastInput,instructions:body.instructions,tools:body.tools,scenario});
  if (scenario==='PCR-004' && calls===1) { for(const e of events('OLD_PARTIAL','discarded',false))send(e);setTimeout(end,800);return; }
  if (scenario==='PCR-004' && calls===2) { for(const e of events('NEW_FINAL','committed'))send(e);return; }
  if (scenario==='PCR-005' && calls===1) { for(const e of events('TOOL_FIRST','once'))send(e);return; }
@@ -107,11 +110,12 @@ wss.on('connection',ws=>ws.on('message',data=>reply(e=>ws.send(JSON.stringify(e)
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const port=server.address().port;
 fs.writeFileSync(path.join(profile,'recovery.json'),JSON.stringify({baseUrl:`http://127.0.0.1:${port}`,...(sharedProfile?{profile:'shared'}:{})}));
+if(caseId==='PCR-012')fs.writeFileSync(path.join(profile,'models.json'),JSON.stringify({providers:{'openai-codex':{baseUrl:`http://127.0.0.1:${port}`}}}));
 const tmux = (...args) => execFileSync('tmux',['-S',socket,...args],{encoding:'utf8'});
 const quote = s => "'"+s.replaceAll("'","'\\''")+"'";
 let started=false;
 function launch(dir=profile, print=false) {
- const argv=[process.execPath,cli,'--no-extensions','-e',path.join(root,'src/index.ts'),'-e',observer,'--no-skills','--no-prompt-templates','--no-themes',...(print?['--print','fixture request']:[])];
+ const argv=[process.execPath,cli,'--no-extensions','-e',path.join(root,'src/index.ts'),'-e',observer,'--no-skills','--no-prompt-templates','--no-themes','--append-system-prompt','PI_RECOVERY_SYSTEM_MARKER',...(print?['--print','fixture request']:[])];
  const command=`cd ${quote(cwd)} && PI_CODING_AGENT_DIR=${quote(dir)} ${argv.map(quote).join(' ')} 2>${quote(path.join(out,'stderr.log'))}`;
  tmux('new-session','-d','-x','150','-y','45','-s','probe',command);started=true;
 }
@@ -211,9 +215,22 @@ try {
  } else if(caseId==='PCR-011') {
   scenario='unknown';await run('FAKE_BODY_MARKER');assert.equal(posts,6);assert.equal(recovery().filter(e=>e.event==='network_wait').length,0);
   const diagnostic=fs.readFileSync(path.join(profile,'recovery.jsonl'),'utf8');assert(!diagnostic.includes('FAKE_BODY_MARKER'));assert(!diagnostic.includes('FAKE_SECRET_MARKER'));assert(!diagnostic.includes(fakeToken));
+ } else if(caseId==='PCR-012') {
+  assert(capture('native-version').includes("using Pi's native Codex provider"));
+  await run();await newSession();await run('second native request');
+  assert.equal(calls,2);assert.equal(terminals().length,0);
+  assert.equal(recovery().filter(e=>e.event==='native_version').length,2);
+  assert.equal(recovery().filter(e=>e.event==='attempt'||e.event==='guard_rejected').length,0);
+  const ended=observe().filter(e=>e.type==='message_end'&&e.message.role==='assistant');
+  assert.equal(ended.length,2);assert(ended.every(e=>e.message.stopReason==='stop'));
+  assert.equal(hashFile(ordinarySettings),ordinaryHash);
  } else throw new Error('Unknown case '+caseId);
- assertNoExtra();if(sharedProfile)assert.equal(JSON.parse(fs.readFileSync(path.join(profile,'settings.json'),'utf8')).retry.enabled,true);if(started)capture('final');
- fs.writeFileSync(path.join(out,'verdict.json'),JSON.stringify({case:caseId,status:'passed',sharedProfile,upgrades,posts,calls,fixture:work,cli},null,2));
+ for(const request of readLines(serviceLog).filter(e=>e.event==='model_request'&&e.scenario!=='compact')) {
+  assert(request.instructions.includes('PI_RECOVERY_SYSTEM_MARKER'));
+  assert(request.tools.some(tool=>tool.name==='fixture_tick'));
+ }
+ if(caseId!=='PCR-012')assertNoExtra();if(sharedProfile)assert.equal(JSON.parse(fs.readFileSync(path.join(profile,'settings.json'),'utf8')).retry.enabled,true);if(started)capture('final');
+ fs.writeFileSync(path.join(out,'verdict.json'),JSON.stringify({case:caseId,status:'passed',sharedProfile,upgrades,posts,calls,fixture:work,cli,piVersion},null,2));
  console.log(JSON.stringify({case:caseId,status:'passed',output:out,upgrades,posts,calls}));
 } catch(error) {
  if(started)try{capture('failure');}catch{ /* The failed TUI may already have exited. */ }

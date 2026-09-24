@@ -1,6 +1,6 @@
 # Pi Codex Recovery
 
-Pi provider 扩展，兼容 Pi 0.85.1。增强 Codex TUI 的错误恢复，不修改 Pi 安装包。支持普通 Pi 配置显式启用，以及原有的独立验收配置。
+Pi provider 扩展，恢复控制器兼容 Pi 0.87.1。增强 Codex TUI 的错误恢复，不修改 Pi 安装包。支持普通 Pi 配置显式启用，以及原有的独立验收配置。普通配置在其他 Pi 版本上提示后保留原生 Codex provider，不阻断请求；独立验收配置仍要求匹配版本。
 
 ## 日常 Pi 安装
 
@@ -27,7 +27,7 @@ pi install "$HOME/.pi/packages/pi-codex-recovery"
 
 普通配置下，仅 Codex TUI 使用此扩展的恢复控制器；print、JSON、RPC（包括子代理的非 TUI 调用）交回原生 Codex provider，其他 provider 不受影响。普通配置原有插件、模型选择和重试设置保持原样。
 
-Pi 0.85.1 没有公开的单条消息禁止重试字段，其公开分类器根据错误文字判断是否重新开始。扩展对已经结束恢复、但仍会被分类为临时失败的错误，先在 TUI 展示原始原因，再返回明确的最终失败文案，避免外层重复预算。上下文溢出继续交给原生压缩。原始原因只即时展示，不写入恢复诊断；会话中保存最终失败文案。升级 Pi 时必须复验此分类合同，不能直接放宽版本守卫。
+Pi 0.87.1 没有公开的单条消息禁止重试字段，其公开分类器根据错误文字判断是否重新开始。扩展对已经结束恢复、但仍会被分类为临时失败的错误，先在 TUI 展示原始原因，再返回明确的最终失败文案，避免外层重复预算。上下文溢出继续交给原生压缩。原始原因只即时展示，不写入恢复诊断；会话中保存最终失败文案。升级 Pi 时必须复验此分类合同，不能直接放宽版本守卫。
 
 ## 独立配置安装与启动
 
@@ -67,7 +67,7 @@ HTTP 使用 Pi 进程已配置的 fetch；WS 使用 `ws` 并按公开 Pi 代理�
 
 ## 验收
 
-当前版本已通过 11 条本地故障用例与真实 OpenAI 请求、连接复用和 read 工具验证，范围与证据见[验证记录](docs/validation.md)。
+验收覆盖 11 条恢复用例、未验证宿主的原生回退，以及真实 OpenAI 请求与 read 工具。各 Pi 版本的实际执行范围与证据见[验证记录](docs/validation.md)。
 
 在仓库根目录运行：
 
@@ -77,6 +77,8 @@ node packages/pi-codex-recovery/scripts/recovery-probe.mjs --case PCR-001 --outp
 ```
 
 普通配置兼容验证可为探针增加 `--shared-profile`：使用临时普通目录并保持 `retry.enabled=true`。PCR-001 此时返回原生分类器认定可重试的错误，确认恢复结束不会启动额外外层重试。PCR-009 专门验证独立配置守卫，不支持该开关。
+
+PCR-012 使用 `--shared-profile --pi <未验证版本的 dist/bundle/cli.js>`，验证普通配置仍能发出原生请求。探针将两种 provider 都限定到本机 fixture，并检查实际请求包含系统提示词与工具定义。
 
 按 PCR-001 至 PCR-011 顺序逐条执行，每条使用新的输出目录，遇到失败先修复当前项再继续。PCR-006 使用真实默认 5 分钟期限。探针需要 tmux，并启动真实 Pi TUI、独立临时配置、本地 HTTP/WS 服务；工具只修改临时计数记录。不包含单元测试，也不依赖测试替换恢复控制器。
 
@@ -97,10 +99,10 @@ node packages/pi-codex-recovery/scripts/recovery-probe.mjs --case PCR-001 --outp
 
 ### Pi 版本升级与回滚
 
-依赖锁定 Pi 0.85.1。升级前重新检查公开 provider、模型目录、Responses parser、TUI partial 快照语义及上述故障矩阵，验证通过后才调整版本守卫。
+实现与开发依赖锁定 Pi 0.87.1。该版本的 provider 接收 transcript，系统提示词与工具定义从 system 消息读取。升级前重新检查公开 provider、模型目录、请求上下文、Responses parser、TUI partial 快照语义及上述故障矩阵，验证通过后才调整版本守卫。peer 范围允许其他宿主加载扩展，但不代表恢复控制器兼容：普通配置在版本不匹配时不注册恢复 provider，继续使用宿主原生请求和重试；独立配置拒绝请求，避免在已关闭原生重试的配置中静默降级。
 
 普通配置回滚：执行 `pi remove "$HOME/.pi/packages/pi-codex-recovery"`，重新启动 Pi。此安装不改动原生 retry 设置，无需恢复它。
 
 独立配置回滚：退出专用实例，恢复使用原 `pi`。可移除专用配置中的扩展路径或保留整个专用目录供查阅，不删除凭据和历史。若把专用目录改为无插件运行，须自行恢复 Pi 的重试设置，避免留下 `retry.enabled=false`。
 
-请求构造中的小段代码改编自 MIT 许可的 `@earendil-works/pi-ai` 0.85.1；许可证见同目录 `THIRD_PARTY_LICENSE`。其余转换、解析、OAuth 与模型目录直接复用公开模块。
+请求构造中的小段代码改编自 MIT 许可的 `@earendil-works/pi-ai` 0.87.1；许可证见同目录 `THIRD_PARTY_LICENSE`。其余转换、解析、OAuth 与模型目录直接复用公开模块。

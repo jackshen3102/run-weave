@@ -3,17 +3,20 @@ import { basename, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { getAgentDir, SettingsManager, VERSION, type ExtensionAPI, type ExtensionContext } from '@earendil-works/pi-coding-agent';
-import { clampThinkingLevel, type Model, type Api, type Context, type SimpleStreamOptions, type StreamOptions } from '@earendil-works/pi-ai';
+import { clampThinkingLevel, type Model, type Api, type TranscriptContext, type SimpleStreamOptions, type StreamOptions } from '@earendil-works/pi-ai';
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
 import { processResponsesStream } from '@earendil-works/pi-ai/api/openai-responses-shared';
 import { createGrammarToolInputProperties } from '@earendil-works/pi-ai/api/constrained-sampling';
 import { buildBaseOptions } from '@earendil-works/pi-ai/api/simple-options';
 import { getPiUserAgent } from '@earendil-works/pi-ai/utils/pi-user-agent';
+import { getDeclaredTools, resolveTranscript } from '@earendil-works/pi-ai/utils/transcript';
 import { isContextOverflow, isRetryableAssistantError } from '@earendil-works/pi-ai/compat';
 import { buildRequestBody } from './request.js';
 import { recover, RecoveryError, type RecordEvent, type SessionState } from './recovery.ts';
 import { ResponseTransport } from './transport.ts';
 import { emptyMessage, StreamAdapter } from './stream-adapter.ts';
+
+const VALIDATED_PI_VERSION = '0.87.1';
 
 export default function extension(pi: ExtensionAPI) {
   const base = openaiCodexProvider(); const transport = new ResponseTransport();
@@ -25,7 +28,7 @@ export default function extension(pi: ExtensionAPI) {
   try { sharedProfile = JSON.parse(readFileSync(join(agentDir, 'recovery.json'), 'utf8')).profile === 'shared'; }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   function guard() {
-    if (VERSION !== '0.85.1') throw new Error('Codex recovery requires Pi 0.85.1; validate upgrades before use.');
+    if (VERSION !== VALIDATED_PI_VERSION) throw new Error(`Codex recovery is validated with Pi ${VALIDATED_PI_VERSION}; current Pi is ${VERSION}. Use the matching Pi version for this isolated profile.`);
     if (!ctx || ctx.mode !== 'tui') throw new Error('Codex recovery supports TUI mode only.');
     if (sharedProfile) return;
     const dir = realpathSync(agentDir);
@@ -60,7 +63,7 @@ export default function extension(pi: ExtensionAPI) {
       fallback: '已切换 SSE，继续恢复', success: '连接已恢复' };
     if (labels[event.event]) ctx?.ui.setStatus('codex-recovery', labels[event.event]);
   }
-  function stream(model: Model<Api>, context: Context, options: StreamOptions = {}) {
+  function stream(model: Model<Api>, context: TranscriptContext, options: StreamOptions = {}) {
     const adapter = new StreamAdapter(model);
     void (async () => {
       let ownsCall = false;
@@ -74,9 +77,10 @@ export default function extension(pi: ExtensionAPI) {
         try { account = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())['https://api.openai.com/auth'].chatgpt_account_id; }
         catch { throw new Error('Invalid Codex credential. Use /login.'); }
         if (typeof account !== 'string' || !account) throw new Error('Missing Codex account. Use /login.');
-        const grammar = createGrammarToolInputProperties(context.tools, model.compat && 'supportsOpenAIGrammarTools' in model.compat ? model.compat.supportsOpenAIGrammarTools ?? false : false);
+        const normalizedContext = resolveTranscript(context, model.compat && 'supportsMidConvoSystemMessages' in model.compat ? model.compat.supportsMidConvoSystemMessages : false);
+        const grammar = createGrammarToolInputProperties(getDeclaredTools(normalizedContext.messages), model.compat && 'supportsOpenAIGrammarTools' in model.compat ? model.compat.supportsOpenAIGrammarTools ?? false : false);
         const cacheKey = createHash('sha256').update(session).digest('hex');
-        let body: unknown = buildRequestBody(model, context, options, cacheKey, grammar);
+        let body: unknown = buildRequestBody(model, normalizedContext, options, cacheKey, grammar);
         body = await options.onPayload?.(body, model) ?? body;
         const url = endpoint(model);
         const headers = new Headers(model.headers as HeadersInit);
@@ -105,7 +109,7 @@ export default function extension(pi: ExtensionAPI) {
         const output = emptyMessage(model);
         output.stopReason = (ownsCall && (active?.signal.aborted || options.signal?.aborted)) || (error instanceof RecoveryError && error.kind === 'aborted') ? 'aborted' : 'error';
         output.errorMessage = error instanceof Error ? error.message : 'Codex recovery failed';
-        // Pi 0.85.1 exposes a text-based classifier, not a per-message retry veto.
+        // Pi exposes a text-based classifier, not a per-message retry veto.
         // Keep overflow available to native compaction. For other terminal failures,
         // show the cause in the TUI and return a non-transient final error so neither
         // agent turns nor summaries restart this already-completed recovery budget.
@@ -121,7 +125,7 @@ export default function extension(pi: ExtensionAPI) {
     })();
     return adapter.stream;
   }
-  function streamSimple(model: Model<Api>, context: Context, options: SimpleStreamOptions = {}) {
+  function streamSimple(model: Model<Api>, context: TranscriptContext, options: SimpleStreamOptions = {}) {
     const reasoning = options.reasoning ? clampThinkingLevel(model, options.reasoning) : undefined;
     const full = { ...buildBaseOptions(model, context, options, options.apiKey),
       toolChoice: options.toolChoice, reasoningEffort: reasoning === 'off' ? undefined : reasoning };
@@ -133,6 +137,12 @@ export default function extension(pi: ExtensionAPI) {
   pi.on('session_start', (_event, context) => {
     ctx = context; session = context.sessionManager.getSessionId(); state = { transport: 'ws' }; transport.close();
     if (sharedProfile && context.mode !== 'tui') { log({ event: 'native_mode' }); return; }
+    // An optional recovery extension must not block ordinary Pi after an upgrade.
+    // Keep the host provider and its retry/cleanup behavior until compatibility is validated.
+    if (sharedProfile && VERSION !== VALIDATED_PI_VERSION) {
+      context.ui.notify(`Codex recovery has not been validated with Pi ${VERSION} (validated: ${VALIDATED_PI_VERSION}); using Pi's native Codex provider.`, 'warning');
+      log({ event: 'native_version' }); return;
+    }
     if (sharedProfile) pi.registerProvider({ ...base, stream, streamSimple });
     try { guard(); log({ event: 'ready' }); }
     catch (error) { context.ui.notify((error as Error).message, 'error'); log({ event: 'guard_rejected' }); }
