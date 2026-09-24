@@ -100,6 +100,7 @@ export function useTerminalPreviewPanelData({
   const projectState = useTerminalPreviewStore((state) =>
     activeProject ? state.projects[activeProject.projectId] : undefined,
   );
+  const connectionId = useTerminalPreviewStore((state) => state.connectionScope);
   const changesRefreshRevision = useTerminalPreviewStore((state) =>
     activeProject
       ? (state.changesRefreshRevisionByProjectId[
@@ -160,6 +161,7 @@ export function useTerminalPreviewPanelData({
   const editor = useTerminalPreviewFileEditor({
     apiBase,
     token,
+    connectionId,
     projectId,
     selectedFilePath,
     filePreview,

@@ -5,6 +5,7 @@ import {
   type TerminalBrowserProfileId,
 } from "@runweave/shared/terminal-browser-profile";
 import { CliError } from "../errors.js";
+import type { RemoteBrowserResolveResponse } from "@runweave/shared/remote";
 
 export interface BrowserCommandIo {
   stdout: Pick<NodeJS.WriteStream, "write">;
@@ -123,11 +124,88 @@ function fallbackResolution(
   };
 }
 
+async function resolveRemoteBrowserProfile(
+  options: ResolveOptions,
+  io: BrowserCommandIo,
+): Promise<ResolvedTerminalBrowserProfile> {
+  const terminalSessionId = io.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim();
+  const projectId = io.env.RUNWEAVE_PROJECT_ID?.trim();
+  const hookToken = io.env.RUNWEAVE_HOOK_TOKEN?.trim();
+  const base = io.env.RUNWEAVE_BASE_URL?.trim() ||
+    (io.env.RUNWEAVE_BACKEND_PORT ? `http://127.0.0.1:${io.env.RUNWEAVE_BACKEND_PORT}` : "");
+  if (!terminalSessionId || !projectId || !hookToken || !base) {
+    throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: Remote Browser identity is unavailable", 3);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const capabilityResponse = await fetch(
+      `${base.replace(/\/+$/, "")}/api/terminal/session/${encodeURIComponent(terminalSessionId)}/browser/capability`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-runweave-hook-token": hookToken },
+        body: JSON.stringify({ projectId }),
+        signal: controller.signal,
+      },
+    );
+    if (!capabilityResponse.ok) {
+      throw new CliError(`REMOTE_CAPABILITY_UNSUPPORTED: capability request returned HTTP ${capabilityResponse.status}`, 3);
+    }
+    const issued = (await capabilityResponse.json()) as { capability?: string };
+    if (!issued.capability) throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: missing terminal capability", 3);
+    const response = await fetch(
+      `${base.replace(/\/+$/, "")}/api/terminal/session/${encodeURIComponent(terminalSessionId)}/browser/resolve`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${issued.capability}` },
+        body: JSON.stringify({
+          projectId,
+          explicitProfileId: options.profileId,
+          browserGroupId: options.groupId,
+        }),
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as { code?: string; message?: string } | null;
+      throw new CliError(`${error?.code ?? "DESKTOP_UNAVAILABLE"}: ${error?.message ?? `HTTP ${response.status}`}`, response.status === 403 ? 4 : 3);
+    }
+    const resolved = (await response.json()) as RemoteBrowserResolveResponse;
+    return {
+      profileId: resolved.profileId,
+      source: options.profileId ? "explicit" : "global-default",
+      projectId,
+      route: { kind: "unassigned" },
+      cdpEndpoint: resolved.cdpEndpoint,
+      browserGroupId: resolved.browserGroupId,
+      automationAttribution: "terminal",
+      whistle: {
+        profileId: resolved.profileId,
+        status: "stopped",
+        host: "127.0.0.1",
+        port: resolved.profileId === "profile-1" ? 8081 : resolved.profileId === "profile-2" ? 8082 : 8083,
+        storage: resolved.profileId,
+        pid: null,
+        error: null,
+      },
+    };
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    throw new CliError(`DESKTOP_UNAVAILABLE: ${error instanceof Error ? error.message : String(error)}`, 3);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function resolveBrowserProfile(
   args: string[],
   io: BrowserCommandIo,
 ): Promise<ResolvedTerminalBrowserProfile> {
   const options = parseResolveOptions(args);
+  if (!io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT?.trim() &&
+      (io.env.RUNWEAVE_TERMINAL_SESSION_ID || io.env.RUNWEAVE_PROJECT_ID)) {
+    return resolveRemoteBrowserProfile(options, io);
+  }
   const ambient = parseAmbientEndpoint(io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT);
   const projectId = io.env.RUNWEAVE_PROJECT_ID?.trim() || null;
   const groupId = options.groupId ?? ambient.ambientGroupId;

@@ -1,9 +1,11 @@
 import type { SuijiDesktopState, SuijiEnvironment, SuijiProfile } from "../suiji/desktop";
+import type { ConnectionRuntime, DesktopBrowserBinding, ManualRemotePortAccess, RemoteCapabilities, RemoteServiceRef, ResolvedServiceAccess, SshRemoteConnection } from "../remote/index";
 import type { BrowserAssistanceTarget } from "../browser/assistance";
 import type {
   AttentionOpenDispatch,
   AttentionOpenIntent,
   AttentionOpenResult,
+  AttentionNotificationTarget,
   CompanionPresentationState,
   CompanionWindowDragRequest,
 } from "../attention";
@@ -87,6 +89,18 @@ export interface RunweaveCompanionBridge {
 export interface RunweaveElectronBridge {
   platform: string;
   isElectron: boolean;
+  showAttentionNotification: (target: AttentionNotificationTarget) => Promise<boolean>;
+  onAttentionNotificationOpen: (listener: (target: AttentionNotificationTarget) => void) => () => void;
+  connectRemote: (connection: SshRemoteConnection) => Promise<ConnectionRuntime>;
+  disconnectRemote: (connectionId: string) => Promise<void>;
+  listRemoteConnections: () => Promise<ConnectionRuntime[]>;
+  bindRemoteBrowser: (connectionId: string, token: string) => Promise<DesktopBrowserBinding>;
+  inspectRemote: (connectionId: string, token: string) => Promise<RemoteCapabilities>;
+  resolveRemoteService: (ref: RemoteServiceRef, token: string) => Promise<ResolvedServiceAccess>;
+  forwardRemotePort: (connectionId: string, remotePort: number) => Promise<ManualRemotePortAccess>;
+  onRemoteConnectionStateChange: (
+    listener: (state: ConnectionRuntime) => void,
+  ) => () => void;
   managesPackagedBackend: boolean;
   backendUrl: string;
   onAttentionOpenIntent: (

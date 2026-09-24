@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { buildConnectionQueryScope } from "../../query/connection-query-provider";
+import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 
 interface TerminalRuntimeContextValue {
   activeConnectionId: string | null;
@@ -7,6 +8,7 @@ interface TerminalRuntimeContextValue {
   onAuthExpired?: () => void;
   scope: string;
   token: string;
+  remote: { generation: number; browserProfileId: TerminalBrowserProfileId | null } | null;
 }
 
 const TerminalRuntimeContext =
@@ -18,16 +20,21 @@ export function TerminalRuntimeProvider({
   children,
   onAuthExpired,
   token,
+  remote = null,
+  connectionGeneration,
 }: {
   activeConnectionId?: string | null;
   apiBase: string;
   children: ReactNode;
   onAuthExpired?: () => void;
   token: string;
+  remote?: { generation: number; browserProfileId: TerminalBrowserProfileId | null } | null;
+  connectionGeneration?: number;
 }) {
   const scope = buildConnectionQueryScope({
     apiBase,
     connectionId: activeConnectionId ?? null,
+    generation: remote?.generation ?? connectionGeneration,
   });
   const value = useMemo<TerminalRuntimeContextValue>(
     () => ({
@@ -36,8 +43,9 @@ export function TerminalRuntimeProvider({
       onAuthExpired,
       scope,
       token,
+      remote,
     }),
-    [activeConnectionId, apiBase, onAuthExpired, scope, token],
+    [activeConnectionId, apiBase, onAuthExpired, remote, scope, token],
   );
   return (
     <TerminalRuntimeContext.Provider value={value}>

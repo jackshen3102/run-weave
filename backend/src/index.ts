@@ -76,6 +76,7 @@ import {
 } from "./server/profile-lock";
 import { resolveRuntimeConfig } from "./server/runtime-config";
 import { resolveStoragePaths } from "./utils/path";
+import { registerRemoteBrowserRoutes } from "./remote/routes";
 import { attachTerminalEventsWebSocketServer } from "./ws/terminal-events-server";
 import { attachTerminalWebSocketServer } from "./ws/terminal-server";
 import { codexAppServerClient } from "./voice/codex-app-server-client";
@@ -124,7 +125,6 @@ function createHttpApp(
   const app = express();
   const requireAuth = createRequireAuth(services.authService);
   const requireTunnelAuth = createTunnelAuthMiddleware(tunnelAuthConfig);
-
   // Only the central Host serves snapshots. Reject legacy local links before logging or SPA.
   app.use("/share/terminal", (_req, res) => { res.status(404).set("Cache-Control", "no-store").end(); });
   app.use(createRequestContextMiddleware());
@@ -148,7 +148,6 @@ function createHttpApp(
   app.get("/health", requireTunnelAuth, (_req, res) => {
     res.json(buildHealthPayload(process.env, backendIdentity));
   });
-
   // Internal endpoint for Electron to propagate CDP proxy endpoint in dev mode.
   // In production, the env is inherited via child process spawn.
   app.put("/internal/cdp-endpoint", requireTunnelAuth, (req, res) => {
@@ -216,6 +215,7 @@ function createHttpApp(
     res.status(404).json({ message: "Not found" });
   });
   app.use("/api", requireTunnelAuth);
+  registerRemoteBrowserRoutes(app, services.authService, services.terminalSessionManager, requireTunnelAuth, resolveStoragePaths(process.env).browserProfileDir, backendIdentity?.backendId ?? String(process.pid));
   app.use(
     "/api/auth",
     createAuthRouter(services.authService, {

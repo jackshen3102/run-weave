@@ -3,6 +3,7 @@ import type { StateCreator } from "zustand";
 import { persist } from "zustand/middleware";
 import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
 import { TERMINAL_BROWSER_DEFAULT_PROFILE_ID } from "@runweave/shared/terminal-browser-profile";
+import { LOCAL_DEV_CONNECTION_ID } from "../../connection/system-connection";
 import {
   createInitialTerminalBrowserState,
   createTerminalPreviewBrowserActions,
@@ -100,6 +101,27 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
     activeTool: "preview",
   },
   projects: {},
+  connectionScope: null,
+  projectsByConnection: {},
+  unassignedLegacyProjects: {},
+  setConnectionScope: (connectionId) => {
+    set((state: TerminalPreviewStore) => {
+      if (state.connectionScope === connectionId) return state;
+      const projectsByConnection = state.connectionScope
+        ? { ...state.projectsByConnection, [state.connectionScope]: state.projects }
+        : state.projectsByConnection;
+      const useLegacy = connectionId === LOCAL_DEV_CONNECTION_ID &&
+        !projectsByConnection[connectionId];
+      return {
+        connectionScope: connectionId,
+        projectsByConnection,
+        projects: projectsByConnection[connectionId] ??
+          (useLegacy ? state.unassignedLegacyProjects : {}),
+        unassignedLegacyProjects: useLegacy ? {} : state.unassignedLegacyProjects,
+        changesRefreshRevisionByProjectId: {},
+      };
+    });
+  },
   changesRefreshRevisionByProjectId: {},
   browser: createInitialTerminalBrowserState(),
   browserByProfile: {},
@@ -347,12 +369,27 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
 export const useTerminalPreviewStore = create<TerminalPreviewStore>()(
   persist(createTerminalPreviewStore, {
     name: TERMINAL_PREVIEW_PROJECTS_STORAGE_KEY,
-    partialize: (state) => ({ projects: state.projects }),
-    merge: (persistedState, currentState) => ({
-      ...currentState,
-      projects:
-        (persistedState as Pick<TerminalPreviewStore, "projects">).projects ??
-        {},
+    partialize: (state) => ({
+      version: 2,
+      projectsByConnection: state.connectionScope
+        ? { ...state.projectsByConnection, [state.connectionScope]: state.projects }
+        : state.projectsByConnection,
+      unassignedLegacyProjects: state.unassignedLegacyProjects,
     }),
+    merge: (persistedState, currentState) => {
+      const saved = persistedState as {
+        version?: number;
+        projects?: Record<string, TerminalPreviewProjectState>;
+        projectsByConnection?: Record<string, Record<string, TerminalPreviewProjectState>>;
+        unassignedLegacyProjects?: Record<string, TerminalPreviewProjectState>;
+      } | null;
+      return {
+        ...currentState,
+        projectsByConnection: saved?.version === 2 ? saved.projectsByConnection ?? {} : {},
+        unassignedLegacyProjects: saved?.version === 2
+          ? saved.unassignedLegacyProjects ?? {}
+          : saved?.projects ?? {},
+      };
+    },
   }),
 );

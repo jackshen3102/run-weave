@@ -36,6 +36,17 @@ export interface AttentionSnapshot {
   slots: AttentionSlot[];
 }
 
+export interface AttentionNotificationTarget {
+  connectionId: string;
+  attentionId: string;
+  parentProjectId: string;
+  projectId: string;
+  terminalSessionId: string;
+  panelId: string | null;
+  title: string;
+  body: string;
+}
+
 export type CompanionPresentationLoadState =
   | "checking"
   | "ready"

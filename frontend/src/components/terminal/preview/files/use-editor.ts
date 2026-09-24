@@ -3,6 +3,7 @@ import { useMemoizedFn } from "ahooks";
 import type { TerminalPreviewFileResponse } from "@runweave/shared/terminal/preview";
 import { HttpError } from "../../../../services/http";
 import { saveTerminalProjectPreviewFile } from "../../../../services/terminal/preview";
+import { previewDraftKey, usePreviewDrafts } from "../../../../features/terminal/preview/drafts";
 
 interface LoadedFileState {
   editorContent: string;
@@ -20,6 +21,7 @@ const EMPTY_FILE_STATE: LoadedFileState = {
 export function useTerminalPreviewFileEditor(input: {
   apiBase: string;
   token: string;
+  connectionId: string | null;
   projectId: string | null;
   selectedFilePath?: string;
   filePreview: TerminalPreviewFileResponse | null;
@@ -33,6 +35,7 @@ export function useTerminalPreviewFileEditor(input: {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveConflict, setSaveConflict] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const draftKey = previewDraftKey(input.connectionId, input.projectId, input.selectedFilePath ?? null);
 
   useEffect(() => {
     if (!input.selectedFilePath) {
@@ -50,7 +53,13 @@ export function useTerminalPreviewFileEditor(input: {
       });
       return;
     }
-    setLoadedFile({
+    const draft = draftKey ? usePreviewDrafts.getState().drafts[draftKey] : null;
+    setLoadedFile(draft ? {
+      editorContent: draft.editorContent,
+      loadedContent: draft.loadedContent,
+      loadedMtimeMs: draft.loadedMtimeMs,
+      path: input.filePreview.path,
+    } : {
       editorContent: input.filePreview.content,
       loadedContent: input.filePreview.content,
       loadedMtimeMs: input.filePreview.mtimeMs,
@@ -59,10 +68,24 @@ export function useTerminalPreviewFileEditor(input: {
     setSaveError(null);
     setSaveConflict(false);
     setLastSavedAt(null);
-  }, [input.filePreview, input.selectedFilePath]);
+  }, [draftKey, input.filePreview, input.selectedFilePath]);
 
   const isDirty =
     input.editable && loadedFile.editorContent !== loadedFile.loadedContent;
+
+  useEffect(() => {
+    if (!draftKey || loadedFile.path !== input.selectedFilePath || loadedFile.loadedMtimeMs === undefined) return;
+    if (loadedFile.editorContent === loadedFile.loadedContent) {
+      usePreviewDrafts.getState().remove(draftKey);
+    } else {
+      usePreviewDrafts.getState().put(draftKey, {
+        editorContent: loadedFile.editorContent,
+        loadedContent: loadedFile.loadedContent,
+        loadedMtimeMs: loadedFile.loadedMtimeMs,
+        savedAt: Date.now(),
+      });
+    }
+  }, [draftKey, input.selectedFilePath, loadedFile]);
 
   const setEditorContent = useMemoizedFn((content: string) => {
     setLoadedFile((current) => ({ ...current, editorContent: content }));
@@ -72,6 +95,7 @@ export function useTerminalPreviewFileEditor(input: {
 
   const replaceLoadedFile = useMemoizedFn(
     (file: TerminalPreviewFileResponse) => {
+      if (draftKey) usePreviewDrafts.getState().remove(draftKey);
       setLoadedFile({
         editorContent: file.content,
         loadedContent: file.content,
@@ -85,6 +109,7 @@ export function useTerminalPreviewFileEditor(input: {
   );
 
   const clearEditor = useMemoizedFn(() => {
+    if (draftKey) usePreviewDrafts.getState().remove(draftKey);
     setLoadedFile(EMPTY_FILE_STATE);
     setSaveError(null);
     setSaveConflict(false);
@@ -118,6 +143,7 @@ export function useTerminalPreviewFileEditor(input: {
           },
         );
         input.onFileSaved(payload);
+        if (draftKey) usePreviewDrafts.getState().remove(draftKey);
         setLoadedFile({
           editorContent: payload.content,
           loadedContent: payload.content,

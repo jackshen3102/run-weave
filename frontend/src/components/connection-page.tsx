@@ -3,35 +3,59 @@ import { Button } from "./ui/button";
 import type { ConnectionConfig } from "../features/connection/types";
 import { shouldShowReconnectAction } from "../features/connection/system-connection";
 import { RuntimeStatusEntry } from "./runtime-status-entry";
+import type { ManualRemotePortAccess } from "@runweave/shared/remote";
+import { openTerminalBrowserUrl } from "../features/terminal/navigation/open-browser";
+import { useConnectionWorkspaceOverview } from "../features/connection/workspace-overview";
+import { useProjectBindings } from "../features/connection/project-bindings";
+import { getConnectionAuth } from "../features/auth/storage";
+import { createTerminalProject } from "../services/terminal/projects";
 
 interface ConnectionPageProps {
   connections: ConnectionConfig[];
   activeId: string | null;
   onAdd: (name: string, url: string) => void;
+  onAddRemote: (name: string, host: string, backendPort: number, browserProfileId: "profile-1" | "profile-2" | "profile-3" | null, approvedBrowserGroupId: string | null) => void;
   onRemove: (id: string) => void;
   onSelect: (id: string) => void;
   onEdit: (id: string, patch: { name?: string; url?: string }) => void;
   onReconnect?: (id: string) => Promise<boolean>;
+  onForwardPort?: (id: string, remotePort: number) => Promise<ManualRemotePortAccess>;
 }
 
 export function ConnectionPage({
   connections,
   activeId,
   onAdd,
+  onAddRemote,
   onRemove,
   onSelect,
   onEdit,
   onReconnect,
+  onForwardPort,
 }: ConnectionPageProps) {
   const [showForm, setShowForm] = useState(connections.length === 0);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [connectionKind, setConnectionKind] = useState<"url" | "ssh">("url");
+  const [sshHost, setSshHost] = useState("");
+  const [sshBackendPort, setSshBackendPort] = useState("5001");
+  const [browserProfileId, setBrowserProfileId] = useState<"profile-1" | "profile-2" | "profile-3" | null>(null);
+  const [approvedBrowserGroupId, setApprovedBrowserGroupId] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editUrl, setEditUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [forwardPort, setForwardPort] = useState<Record<string, string>>({});
+  const [forwarded, setForwarded] = useState<ManualRemotePortAccess | null>(null);
+  const [projectDirectory, setProjectDirectory] = useState<Record<string, string>>({});
+  const [projectName, setProjectName] = useState<Record<string, string>>({});
+  const [projectBusy, setProjectBusy] = useState<string | null>(null);
+  const overviews = useConnectionWorkspaceOverview((state) => state.byConnectionId);
+  const bindings = useProjectBindings((state) => state.bindings);
+  const bindProject = useProjectBindings((state) => state.add);
+  const unbindProject = useProjectBindings((state) => state.remove);
 
   const testConnection = async (targetUrl: string): Promise<boolean> => {
     setTesting(true);
@@ -63,6 +87,22 @@ export function ConnectionPage({
 
     if (!trimmedName) {
       setError("请输入连接名称");
+      return;
+    }
+    if (connectionKind === "ssh") {
+      const port = Number(sshBackendPort);
+      if (!/^[a-zA-Z0-9_.@-]{1,255}$/.test(sshHost.trim()) || !Number.isInteger(port) || port < 1 || port > 65535) {
+        setError("请输入有效的 SSH 主机和 Backend 端口");
+        return;
+      }
+      const groupId = approvedBrowserGroupId.trim();
+      if (groupId.length > 512) { setError("Browser 工作组 ID 不能超过 512 个字符"); return; }
+      setError(null);
+      onAddRemote(trimmedName, sshHost.trim(), port, browserProfileId, groupId || null);
+      setName("");
+      setSshHost("");
+      setApprovedBrowserGroupId("");
+      setShowForm(false);
       return;
     }
     if (!trimmedUrl) {
@@ -125,6 +165,10 @@ export function ConnectionPage({
 
         {showForm && (
           <div className="mt-6 space-y-4">
+            <div className="flex gap-2" role="group" aria-label="连接方式">
+              <Button variant={connectionKind === "url" ? "default" : "outline"} onClick={() => setConnectionKind("url")}>后端地址</Button>
+              <Button variant={connectionKind === "ssh" ? "default" : "outline"} onClick={() => setConnectionKind("ssh")}>SSH 远程项目</Button>
+            </div>
             <div className="space-y-2">
               <label
                 className="text-xs uppercase tracking-[0.24em] text-muted-foreground/70"
@@ -140,7 +184,22 @@ export function ConnectionPage({
                 className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"
               />
             </div>
-            <div className="space-y-2">
+            {connectionKind === "ssh" && <div className="space-y-2">
+              <label className="text-xs uppercase tracking-[0.24em] text-muted-foreground/70" htmlFor="ssh-host">SSH 主机或配置别名</label>
+              <input id="ssh-host" placeholder="例如：shenxiaojie.316@10.37.216.239" value={sshHost} onChange={(event) => setSshHost(event.target.value)} className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50" />
+              <label className="text-xs uppercase tracking-[0.24em] text-muted-foreground/70" htmlFor="ssh-backend-port">远端 Backend 端口</label>
+              <input id="ssh-backend-port" type="number" min="1" max="65535" value={sshBackendPort} onChange={(event) => setSshBackendPort(event.target.value)} className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50" />
+              <label className="text-xs uppercase tracking-[0.24em] text-muted-foreground/70" htmlFor="ssh-browser-profile">本地 Browser 授权范围</label>
+              <select id="ssh-browser-profile" value={browserProfileId ?? "default"} onChange={(event) => setBrowserProfileId(event.target.value === "default" ? null : event.target.value as "profile-1" | "profile-2" | "profile-3")} className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50">
+                <option value="default">当前默认 Profile</option>
+                <option value="profile-1">Browser 1</option>
+                <option value="profile-2">Browser 2</option>
+                <option value="profile-3">Browser 3</option>
+              </select>
+              <label className="text-xs uppercase tracking-[0.24em] text-muted-foreground/70" htmlFor="ssh-browser-group">允许复用的工作组 ID（可选）</label>
+              <input id="ssh-browser-group" value={approvedBrowserGroupId} onChange={(event) => setApprovedBrowserGroupId(event.target.value)} placeholder="只允许远端复用此本地工作组" className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50" />
+            </div>}
+            {connectionKind === "url" && <div className="space-y-2">
               <label
                 className="text-xs uppercase tracking-[0.24em] text-muted-foreground/70"
                 htmlFor="conn-url"
@@ -160,7 +219,7 @@ export function ConnectionPage({
                 }}
                 className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"
               />
-            </div>
+            </div>}
 
             {testResult === "connected" && (
               <p className="text-sm text-green-500">✓ 连接成功</p>
@@ -206,7 +265,7 @@ export function ConnectionPage({
             {connections.map((conn) => (
               <li
                 key={conn.id}
-                className={`group flex items-center justify-between rounded-2xl border px-5 py-4 transition ${
+                className={`group flex flex-wrap items-center justify-between rounded-2xl border px-5 py-4 transition ${
                   conn.id === activeId
                     ? "border-primary/40 bg-primary/5"
                     : "border-border/60 bg-background/60 hover:border-border"
@@ -257,13 +316,17 @@ export function ConnectionPage({
                     >
                       <p className="text-sm font-medium">{conn.name}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {conn.url || "内置本地后端未连接"}
+                        {conn.kind === "ssh" ? `${conn.sshHost}:${conn.sshBackendPort}` : conn.url || "内置本地后端未连接"}
                       </p>
                       {conn.available === false && conn.statusMessage ? (
                         <p className="mt-1 text-xs text-amber-600">
                           {conn.statusMessage}
                         </p>
                       ) : null}
+                      {conn.browserMessage ? <p className="mt-1 text-xs text-amber-600">Browser: {conn.browserMessage}</p> : null}
+                      {conn.kind === "ssh" && conn.agents ? <div className="mt-1 text-xs text-muted-foreground">
+                        {conn.agents.map((agent) => <p key={agent.kind}>{agent.kind}: {agent.state === "ready" ? `就绪${agent.provider && agent.model ? ` · ${agent.provider}/${agent.model}` : ""}` : agent.state === "missing_cli" ? "未安装 CLI；请在远端运行用户下安装" : agent.state === "needs_configuration" ? "未设置默认模型；请在远端补齐配置" : "需在远端登录模型账号"}</p>)}
+                      </div> : null}
                       {conn.isSystem && conn.runtimeSource ? (
                         <p className="mt-1 text-xs text-muted-foreground">
                           Runtime: {conn.runtimeSource}
@@ -318,6 +381,57 @@ export function ConnectionPage({
                     ) : null}
                   </>
                 )}
+                {conn.kind === "ssh" && conn.available && onForwardPort ? (
+                  <div className="mt-2 flex w-full items-center gap-2 border-t border-border/50 pt-2 text-xs">
+                    <label htmlFor={`forward-${conn.id}`}>远端端口</label>
+                    <input id={`forward-${conn.id}`} type="number" min="1" max="65535" value={forwardPort[conn.id] ?? "3000"} onChange={(event) => setForwardPort((previous) => ({ ...previous, [conn.id]: event.target.value }))} className="w-24 rounded-md border border-border bg-background px-2 py-1" />
+                    <Button size="sm" variant="outline" onClick={() => {
+                      const port = Number(forwardPort[conn.id] ?? "3000");
+                      if (!Number.isInteger(port) || port < 1 || port > 65535) { setError("请输入有效端口"); return; }
+                      void onForwardPort(conn.id, port).then((result) => {
+                        setForwarded(result);
+                        setError(null);
+                      }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+                    }}>转发</Button>
+                    {forwarded?.connectionId === conn.id && forwarded.generation === conn.generation ? (
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        void openTerminalBrowserUrl({ url: forwarded.desktopUrl, profileId: conn.browserProfileId ?? undefined, placement: { kind: "new-group" } });
+                      }}>打开 {forwarded.desktopUrl}</Button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {conn.kind === "ssh" && conn.available ? (
+                  <div className="mt-3 w-full space-y-2 border-t border-border/50 pt-3 text-xs">
+                    <p className="font-medium">加入远端项目</p>
+                    {(overviews[conn.id]?.projects ?? []).map((project) => {
+                      const added = bindings.some((binding) => binding.connectionId === conn.id && binding.remoteProjectId === project.projectId);
+                      return <div key={project.projectId} className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate">{project.name} · {project.path ?? "无目录"}</span>
+                        <Button size="sm" variant={added ? "secondary" : "outline"} onClick={() => added ? unbindProject(conn.id, project.projectId) : bindProject(conn.id, project)}>
+                          {added ? "移出桌面" : "加入桌面"}
+                        </Button>
+                      </div>;
+                    })}
+                    <div className="flex flex-wrap gap-2">
+                      <input aria-label="远端项目名称" placeholder="项目名称" value={projectName[conn.id] ?? ""} onChange={(event) => setProjectName((previous) => ({ ...previous, [conn.id]: event.target.value }))} className="min-w-24 flex-1 rounded-md border border-border bg-background px-2 py-1" />
+                      <input aria-label="远端项目目录" placeholder="Linux 绝对目录" value={projectDirectory[conn.id] ?? ""} onChange={(event) => setProjectDirectory((previous) => ({ ...previous, [conn.id]: event.target.value }))} className="min-w-32 flex-[2] rounded-md border border-border bg-background px-2 py-1" />
+                      <Button size="sm" variant="outline" disabled={projectBusy === conn.id} onClick={() => {
+                        const name = projectName[conn.id]?.trim();
+                        const directory = projectDirectory[conn.id]?.trim();
+                        const token = getConnectionAuth(conn.id)?.accessToken;
+                        if (!name || !directory?.startsWith("/") || !token) { setError("请输入项目名称和 Linux 绝对目录，并先登录远端 Backend"); return; }
+                        setProjectBusy(conn.id);
+                        void createTerminalProject(conn.url, token, { name, path: directory }).then((project) => {
+                          bindProject(conn.id, project);
+                          useConnectionWorkspaceOverview.getState().update(conn.id, { projects: [...(useConnectionWorkspaceOverview.getState().byConnectionId[conn.id]?.projects ?? []), project] });
+                          setProjectName((previous) => ({ ...previous, [conn.id]: "" }));
+                          setProjectDirectory((previous) => ({ ...previous, [conn.id]: "" }));
+                          setError(null);
+                        }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setProjectBusy(null));
+                      }}>创建并加入</Button>
+                    </div>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -336,6 +450,7 @@ export function ConnectionPage({
             </Button>
           </div>
         )}
+        {error && !showForm ? <p className="mt-4 text-sm text-red-500" role="alert">{error}</p> : null}
       </section>
     </main>
   );

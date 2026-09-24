@@ -7,6 +7,15 @@ CDP Group scope：
 rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json]
 ```
 
+SSH 远端终端也使用同一命令。未设置 `PLAYWRIGHT_MCP_CDP_ENDPOINT`、但存在 Runweave
+终端或项目身份时，CLI 自动通过远端 Backend 申请访问凭证并解析桌面 Browser；需要
+`RUNWEAVE_TERMINAL_SESSION_ID`、`RUNWEAVE_PROJECT_ID`、`RUNWEAVE_HOOK_TOKEN`，以及
+`RUNWEAVE_BASE_URL` 或 `RUNWEAVE_BACKEND_PORT`。桌面负责建立 SSH 反向隧道，Agent
+无需自行转发端口。远端返回的 CDP 地址带一次性 60 秒票据，应立即连接；重连时重新解析。
+身份不完整返回 `REMOTE_CAPABILITY_UNSUPPORTED`，桌面通道不可用返回
+`DESKTOP_UNAVAILABLE`，越权访问返回 `BROWSER_SCOPE_DENIED`。远端 Profile 与工作组受桌面
+连接配置约束；完整通道合同见 [SSH 远程项目](../architecture/ssh-remote-projects.md)。
+
 - 默认 Profile 顺序是当前 `RUNWEAVE_PROJECT_ID` 的 Worktree 绑定，再回退全局默认值。
 - `--profile` 只覆盖本次解析，不修改偏好。
 - 当前 Terminal 有 `RUNWEAVE_TERMINAL_SESSION_ID` 且未传 `--group-id` 时，resolver 为该 Terminal

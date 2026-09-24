@@ -5,7 +5,7 @@ import type { TerminalState } from "@runweave/shared/terminal/state";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
-import { takeTerminalNavigation } from "../../../features/terminal/state/navigation";
+import { isProjectBound, useProjectBindings } from "../../../features/connection/project-bindings";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
@@ -22,6 +22,7 @@ import { resolveCachedTerminalSurfaceIds } from "../../../features/terminal/stat
 import { HttpError } from "../../../services/http";
 import { updateTerminalSession } from "../../../services/terminal/index";
 import {
+  applyPendingTerminalNavigation,
   hasValidProjectSessionSelection,
   isCurrentSelection,
   resolvePreferredProjectId,
@@ -64,6 +65,7 @@ export function TerminalWorkspaceContent({
   const sessionsQuery = useTerminalSessionsQuery();
   const { queryClient } = useTerminalWorkspaceQueryClient();
   const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
+  const bindings = useProjectBindings((state) => state.bindings);
   const sessions = sessionsQuery.data ?? EMPTY_TERMINAL_SESSIONS;
   const hasLoadedSessions = projectsQuery.isFetched && sessionsQuery.isFetched;
   const {
@@ -121,7 +123,6 @@ export function TerminalWorkspaceContent({
   const removeProjectPreview = useTerminalPreviewStore(
     (state) => state.removeProjectPreview,
   );
-
   const selectActiveProject = useMemoizedFn((projectId: string) => {
     const recentSelection = loadRecentTerminalSelection(scope);
     const storedContextId =
@@ -145,13 +146,14 @@ export function TerminalWorkspaceContent({
       selectProjectContext(projectId, effectiveProjectId, currentSessionId);
       return;
     }
-    selectProjectContext(
-      projectId,
-      effectiveProjectId,
-      resolvePreferredSessionId(scope, effectiveProjectId, projectSessions),
-    );
+    const nextSessionId = resolvePreferredSessionId(scope, effectiveProjectId, projectSessions);
+    if (!nextSessionId && initialTerminalSessionId) onActiveSessionChange?.(null);
+    selectProjectContext(projectId, effectiveProjectId, nextSessionId);
   });
   const selectActiveContext = useMemoizedFn((projectId: string) => {
+    if (initialTerminalSessionId && !sessions.some((session) => session.projectId === projectId)) {
+      onActiveSessionChange?.(null);
+    }
     selectTerminalProjectContext({
       activeParentProjectId,
       projectId,
@@ -160,7 +162,7 @@ export function TerminalWorkspaceContent({
       selectProjectContext,
     });
   });
-  const visibleProjects = projects;
+  const visibleProjects = connection?.remote && activeConnectionId ? projects.filter((project) => isProjectBound(bindings, activeConnectionId, project.projectId)) : projects;
   const visibleSessions = useMemo(() => {
     if (!activeProjectId) {
       return [];
@@ -197,16 +199,11 @@ export function TerminalWorkspaceContent({
   }, [initialTerminalSessionId, setActiveSessionId]);
   useEffect(() => {
     resetWorkspaceForConnection(initialTerminalSessionIdRef.current);
-    const selection = takeTerminalNavigation(scope, initialTerminalSessionIdRef.current);
-    if (selection) {
-      const state = useTerminalWorkspaceStore.getState();
-      state.selectProjectContext(selection.parentProjectId, selection.projectId, selection.terminalSessionId);
-      if (selection.terminalSessionId && selection.panelId) {
-        state.setActivePanelIdBySessionId((current) => ({ ...current, [selection.terminalSessionId!]: selection.panelId! }));
-      }
-    }
     resetTerminalEventCursor();
   }, [resetTerminalEventCursor, resetWorkspaceForConnection, scope]);
+  useEffect(() => {
+    applyPendingTerminalNavigation(scope, initialTerminalSessionId);
+  }, [initialTerminalSessionId, scope]);
   useEffect(() => {
     if (!requestError || loading) {
       return;
@@ -548,7 +545,6 @@ export function TerminalWorkspaceContent({
       return changed ? next : current;
     });
   }, [sessionIds, sessions, setTerminalStateBySessionId]);
-
   const {
     createSession,
     closeSession,

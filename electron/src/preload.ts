@@ -4,6 +4,7 @@ import type {
   TerminalBrowserAnnotationUpdate,
   TerminalBrowserBounds,
 } from "@runweave/shared/desktop-bridge";
+import type { ConnectionRuntime, DesktopBrowserBinding, ManualRemotePortAccess, RemoteCapabilities, RemoteServiceRef, ResolvedServiceAccess, SshRemoteConnection } from "@runweave/shared/remote";
 import type {
   TerminalBrowserCreateTabRequest,
   TerminalBrowserStateChangedEvent,
@@ -53,10 +54,37 @@ import type {
 import type {
   AttentionOpenDispatch,
   AttentionOpenResult,
+  AttentionNotificationTarget,
 } from "@runweave/shared/attention";
 
 const electronApi = {
   platform: process.platform,
+  showAttentionNotification: (target: AttentionNotificationTarget) =>
+    ipcRenderer.invoke("attention:notify", target) as Promise<boolean>,
+  onAttentionNotificationOpen: (listener: (target: AttentionNotificationTarget) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, target: AttentionNotificationTarget) => listener(target);
+    ipcRenderer.on("attention:notification-open", wrapped);
+    return () => ipcRenderer.off("attention:notification-open", wrapped);
+  },
+  connectRemote: (connection: SshRemoteConnection) =>
+    ipcRenderer.invoke("remote:connect", connection) as Promise<ConnectionRuntime>,
+  disconnectRemote: (connectionId: string) =>
+    ipcRenderer.invoke("remote:disconnect", connectionId) as Promise<void>,
+  listRemoteConnections: () =>
+    ipcRenderer.invoke("remote:list") as Promise<ConnectionRuntime[]>,
+  bindRemoteBrowser: (connectionId: string, token: string) =>
+    ipcRenderer.invoke("remote:bind-browser", connectionId, token) as Promise<DesktopBrowserBinding>,
+  inspectRemote: (connectionId: string, token: string) =>
+    ipcRenderer.invoke("remote:inspect", connectionId, token) as Promise<RemoteCapabilities>,
+  resolveRemoteService: (ref: RemoteServiceRef, token: string) =>
+    ipcRenderer.invoke("remote:resolve-service", ref, token) as Promise<ResolvedServiceAccess>,
+  forwardRemotePort: (connectionId: string, remotePort: number) =>
+    ipcRenderer.invoke("remote:forward-port", connectionId, remotePort) as Promise<ManualRemotePortAccess>,
+  onRemoteConnectionStateChange: (listener: (state: ConnectionRuntime) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, state: ConnectionRuntime) => listener(state);
+    ipcRenderer.on("remote:connection-state", wrapped);
+    return () => ipcRenderer.off("remote:connection-state", wrapped);
+  },
   onAttentionOpenIntent: (
     listener: (intent: AttentionOpenDispatch) => void,
   ) => {

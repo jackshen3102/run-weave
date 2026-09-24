@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
+import { takeTerminalNavigation } from "../../../features/terminal/state/navigation";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
@@ -7,6 +8,16 @@ import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,
 } from "../../../features/terminal/input/recent-selection";
+
+export function applyPendingTerminalNavigation(scope: string, sessionId?: string): void {
+  const selection = takeTerminalNavigation(scope, sessionId);
+  if (!selection) return;
+  const state = useTerminalWorkspaceStore.getState();
+  state.selectProjectContext(selection.parentProjectId, selection.projectId, selection.terminalSessionId);
+  if (selection.terminalSessionId && selection.panelId) {
+    state.setActivePanelIdBySessionId((current) => ({ ...current, [selection.terminalSessionId!]: selection.panelId! }));
+  }
+}
 
 // Effects from one render must not reconcile a selection replaced by an earlier
 // effect (for example, an explicit navigation to a different project).
@@ -100,8 +111,14 @@ export function hasValidProjectSessionSelection(
   projectId: string | null,
   terminalSessionId: string | null,
 ): boolean {
-  if (!parentProjectId || !projectId || !terminalSessionId) {
+  if (!parentProjectId || !projectId) {
     return false;
+  }
+
+  if (!terminalSessionId) {
+    return projects.some((project) => project.projectId === parentProjectId) &&
+      resolveTerminalParentProjectId(projectId) === parentProjectId &&
+      !sessions.some((session) => session.projectId === projectId);
   }
 
   return (

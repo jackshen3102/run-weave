@@ -49,11 +49,15 @@ export function useTerminalProjectContextsQuery(
   parentProjectId: string | null,
 ) {
   const { apiBase, scope, token } = useTerminalRuntime();
+  const projects = useTerminalProjectsQuery();
+  const belongsToConnection = projects.data?.some(
+    (project) => project.projectId === parentProjectId,
+  ) ?? false;
   return useQuery({
     queryKey: terminalQueryKeys.projectContexts(scope, parentProjectId ?? ""),
     queryFn: () =>
       listTerminalProjectContexts(apiBase, token, parentProjectId ?? ""),
-    enabled: Boolean(parentProjectId),
+    enabled: Boolean(parentProjectId && belongsToConnection),
     refetchInterval: 3_000,
     refetchOnWindowFocus: true,
   });
@@ -65,6 +69,10 @@ export function useTerminalWorkspaceServicesQuery(
   enabled = true,
 ) {
   const { apiBase, scope, token } = useTerminalRuntime();
+  const projects = useTerminalProjectsQuery();
+  const belongsToConnection = projects.data?.some(
+    (project) => project.projectId === parentProjectId,
+  ) ?? false;
   return useQuery({
     queryKey: terminalQueryKeys.workspaceServices(
       scope,
@@ -78,7 +86,7 @@ export function useTerminalWorkspaceServicesQuery(
         parentProjectId ?? "",
         projectId ?? "",
       ),
-    enabled: enabled && Boolean(parentProjectId && projectId),
+    enabled: enabled && Boolean(parentProjectId && projectId && belongsToConnection),
     refetchInterval: workspaceServiceRefetchInterval,
     refetchOnWindowFocus: true,
     retry: false,

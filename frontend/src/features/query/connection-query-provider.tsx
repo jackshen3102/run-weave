@@ -12,9 +12,10 @@ const QUERY_GC_TIME_MS = 30 * 60_000;
 export function buildConnectionQueryScope(input: {
   apiBase: string;
   connectionId: string | null;
+  generation?: number;
 }): string {
   const apiBase = input.apiBase.trim().replace(/\/+$/, "") || "same-origin";
-  return `${input.connectionId ?? "web"}::${apiBase}`;
+  return `${input.connectionId ?? "web"}::${apiBase}${input.generation === undefined ? "" : `::${input.generation}`}`;
 }
 
 export function ConnectionQueryProvider({

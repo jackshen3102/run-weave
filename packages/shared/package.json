@@ -27,6 +27,7 @@
     "./app-server/types": "./src/app-server/types.ts",
     "./browser-profile-node": "./src/browser/profile-node.ts",
     "./desktop-bridge": "./src/desktop/bridge.ts",
+    "./remote": "./src/remote/index.ts",
     "./diagnostic-logs": "./src/monitoring/diagnostic-logs.ts",
     "./evolution": "./src/evolution/index.ts",
     "./protocol": "./src/protocol.ts",

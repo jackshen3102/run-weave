@@ -3,6 +3,17 @@ export interface ConnectionConfig {
   name: string;
   url: string;
   createdAt: number;
+  kind?: "ssh";
+  sshHost?: string;
+  sshBackendPort?: number;
+  browserProfileId?: "profile-1" | "profile-2" | "profile-3" | null;
+  approvedBrowserGroupId?: string | null;
+  generation?: number;
+  browserAvailable?: boolean;
+  browserMessage?: string | null;
+  remoteStatus?: "disconnected" | "connecting" | "ready" | "reconnecting" | "needs_auth" | "incompatible" | "failed";
+  installationId?: string | null;
+  agents?: import("@runweave/shared/remote").RemoteCapabilities["agents"];
   available?: boolean;
   statusMessage?: string | null;
   canReconnect?: boolean;
