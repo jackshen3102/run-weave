@@ -1,7 +1,6 @@
 import type { Express, RequestHandler } from "express";
 import type { RemoteCapabilities } from "@runweave/shared/remote";
 import { loadInstallationId } from "./installation-id";
-import { getRemoteAgentReadiness } from "./agent-readiness";
 
 export function registerRemoteCapabilitiesRoute(
   app: Express,
@@ -23,7 +22,6 @@ export function registerRemoteCapabilitiesRoute(
           workspaceServices: true,
           desktopBrowser: true,
         },
-        agents: await getRemoteAgentReadiness(),
       };
       res.json(payload);
     } catch {

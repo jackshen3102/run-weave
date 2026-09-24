@@ -13,7 +13,6 @@ export interface ConnectionConfig {
   browserMessage?: string | null;
   remoteStatus?: "disconnected" | "connecting" | "ready" | "reconnecting" | "needs_auth" | "incompatible" | "failed";
   installationId?: string | null;
-  agents?: import("@runweave/shared/remote").RemoteCapabilities["agents"];
   available?: boolean;
   statusMessage?: string | null;
   canReconnect?: boolean;

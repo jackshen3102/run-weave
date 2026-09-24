@@ -29,7 +29,6 @@ interface ConnectionSwitcherProps {
   onOpenConnectionManager: () => void;
   currentProjects?: TerminalProjectListItem[];
   currentSessions?: TerminalSessionListItem[];
-  onSelectProject?: (projectId: string) => void;
   className?: string;
 }
 
@@ -41,7 +40,6 @@ export function ConnectionSwitcher({
   onOpenConnectionManager,
   currentProjects = [],
   currentSessions = [],
-  onSelectProject,
   className,
 }: ConnectionSwitcherProps) {
   const [open, setOpen] = useState(false);
@@ -108,27 +106,6 @@ export function ConnectionSwitcher({
               </div>
               {isActive ? <Check className="mt-0.5 h-4 w-4 text-primary" /> : null}
             </DropdownMenuItem>
-            {projects.map((project) => {
-              const projectSessions = sessions.filter((session) => session.projectId === project.projectId);
-              const running = projectSessions.filter((session) => session.terminalState?.state === "agent_running").length;
-              return <DropdownMenuItem key={`${connection.id}:${project.projectId}`} disabled={!live} className="pl-6" onSelect={() => {
-                if (isActive) {
-                  onSelectProject?.(project.projectId);
-                } else {
-                  setTerminalNavigation(buildConnectionQueryScope({ apiBase: connection.url, connectionId: connection.id, generation: connection.kind === "ssh" ? connection.generation : undefined }), {
-                    parentProjectId: project.projectId,
-                    projectId: project.projectId,
-                    terminalSessionId: null,
-                  });
-                  onSelectConnection(connection.id);
-                  navigate("/terminal");
-                }
-                setOpen(false);
-              }}>
-                <span className="min-w-0 flex-1 truncate">{project.name}</span>
-                <span className="text-xs text-muted-foreground">{live ? `${running} 工作中 / ${projectSessions.length} 终端` : "历史状态"}</span>
-              </DropdownMenuItem>;
-            })}
             {attention.filter((slot) => connection.kind !== "ssh" || bindings.some((binding) => binding.connectionId === connection.id && binding.remoteProjectId === slot.parentProjectId)).map((slot) => (
               <DropdownMenuItem key={`${connection.id}:${slot.attentionId}`} className="pl-6" onSelect={() => openAttention(connection, slot)}>
                 <span className="min-w-0 flex-1 truncate text-amber-600">{slot.projectName} · {slot.title}</span>
