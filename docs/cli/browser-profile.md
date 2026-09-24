@@ -30,8 +30,10 @@ SSH 远端终端也使用同一命令。未设置 `PLAYWRIGHT_MCP_CDP_ENDPOINT`�
   `automationAttribution`，诊断信息写 stderr。返回的 `cdpEndpoint` 可能带短期 token，不应写入日志、
   项目文件或长期缓存。
 
-旧桌面没有 resolver 时，无显式 `--profile` 的调用会带警告回退到 ambient endpoint；旧版本不
-支持 Worktree 绑定或临时 Profile 覆盖，显式覆盖会失败，避免把错误的 Browser 当作已选择目标。
+远端结果中的 `source`、`route` 和 `whistle` 来自桌面解析时的真实快照，经 Backend 原样传递。
+`whistle.host`、端口和 PID 指向桌面机器，并非远端服务器；`ready` 表示桌面代理就绪，
+不单独证明某次请求命中规则。缺失状态或旧桌面没有 resolver 时明确失败，不伪造 `stopped`，
+也不回退到未经解析的 Browser。桌面、远端 Backend 和 CLI 需一起更新。
 
 ## WebMCP 网页工具（实验能力）
 

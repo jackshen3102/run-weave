@@ -1,7 +1,8 @@
+import { isRemoteBrowserProfileState, type RemoteBrowserGatewayResponse } from "@runweave/shared/remote";
 import { randomBytes } from "node:crypto";
 import http from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
-import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
+import type { TerminalBrowserProfileId, ResolvedTerminalBrowserProfile } from "@runweave/shared/terminal-browser-profile";
 
 interface Ticket {
   endpoint: string;
@@ -97,10 +98,8 @@ export async function createRemoteBrowserGateway(input: {
         body: JSON.stringify(scope),
         signal: AbortSignal.timeout(5_000),
       });
-      const resolution = (await response.json().catch(() => null)) as {
-        profileId?: unknown; browserGroupId?: unknown; cdpEndpoint?: unknown; error?: { code?: string };
-      } | null;
-      if (!response.ok || typeof resolution?.cdpEndpoint !== "string" ||
+      const resolution = (await response.json().catch(() => null)) as (Partial<ResolvedTerminalBrowserProfile> & { error?: { code?: string } }) | null;
+      if (!response.ok || !isRemoteBrowserProfileState(resolution) || typeof resolution?.cdpEndpoint !== "string" ||
           typeof resolution.profileId !== "string" || typeof resolution.browserGroupId !== "string") {
         res.writeHead(response.status >= 400 ? response.status : 503, { "content-type": "application/json" });
         res.end(JSON.stringify({ code: resolution?.error?.code ?? "DESKTOP_UNAVAILABLE" }));
@@ -109,7 +108,10 @@ export async function createRemoteBrowserGateway(input: {
       const ticket = randomBytes(32).toString("hex");
       tickets.set(ticket, { endpoint: resolution.cdpEndpoint, expiresAt: Date.now() + 60_000 });
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ticket, profileId: resolution.profileId, browserGroupId: resolution.browserGroupId }));
+      res.end(JSON.stringify({
+        ticket, profileId: resolution.profileId, browserGroupId: resolution.browserGroupId,
+        source: resolution.source, route: resolution.route, whistle: resolution.whistle,
+      } satisfies RemoteBrowserGatewayResponse));
     })().catch(() => {
       if (!res.headersSent) res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ code: "DESKTOP_UNAVAILABLE" }));
     });

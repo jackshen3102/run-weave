@@ -1,9 +1,11 @@
+import { isRemoteBrowserProfileState } from "@runweave/shared/remote";
 import { randomBytes, randomUUID } from "node:crypto";
 import type {
   DesktopBrowserBinding,
   DesktopBrowserBindingRequest,
   RemoteBrowserResolveRequest,
   RemoteBrowserResolveResponse,
+  RemoteBrowserGatewayResponse,
 } from "@runweave/shared/remote";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 
@@ -150,10 +152,8 @@ export class DesktopBrowserBindings {
     } catch {
       throw new RemoteBrowserError("DESKTOP_UNAVAILABLE", 503, "Desktop Browser is unreachable");
     }
-    const payload = (await response.json().catch(() => null)) as {
-      ticket?: unknown; profileId?: unknown; browserGroupId?: unknown; code?: unknown;
-    } | null;
-    if (!response.ok || typeof payload?.ticket !== "string" ||
+    const payload = (await response.json().catch(() => null)) as (Partial<RemoteBrowserGatewayResponse> & { code?: unknown }) | null;
+    if (!response.ok || !isRemoteBrowserProfileState(payload) || typeof payload?.ticket !== "string" ||
         typeof payload.profileId !== "string" || typeof payload.browserGroupId !== "string") {
       throw new RemoteBrowserError(
         typeof payload?.code === "string" ? payload.code : "DESKTOP_UNAVAILABLE",
@@ -166,6 +166,9 @@ export class DesktopBrowserBindings {
       browserGroupId: payload.browserGroupId,
       cdpEndpoint: `ws://127.0.0.1:${binding.reversePort}/ticket/${payload.ticket}`,
       expiresIn: 60,
+      source: payload.source,
+      route: payload.route,
+      whistle: payload.whistle,
     };
   }
 }
