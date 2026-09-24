@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two explicit simulator slots; durable task ownership, never time-based takeover."""
+"""Two shared simulator slots with durable, safely reclaimable task ownership."""
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -18,6 +18,7 @@ import uuid
 
 BASE = Path.home() / ".runweave"
 APPS = {"runweave": "com.runweave.app.native", "suiji": "com.runweave.suiji"}
+IDLE_SECONDS = 30 * 60
 
 
 class PoolError(RuntimeError):
@@ -172,6 +173,23 @@ def unsettled(owner):
     return False
 
 
+def idle_seconds(owner):
+    activity = [owner.get("lastActivityAt"), owner.get("startedAt"),
+                (owner.get("operation") or {}).get("endedAt")]
+    activity.extend(child.get("endedAt") for child in owner.get("children", []))
+    try:
+        latest = max(datetime.fromisoformat(value) for value in activity if value)
+        return max(0, (datetime.now(timezone.utc) - latest).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def active_operation(owner):
+    operation = owner.get("operation") or {}
+    return (not operation.get("endedAt") and operation.get("pid") and operation.get("startIdentity")
+            and identity(operation["pid"]) == operation.get("startIdentity"))
+
+
 def save_owner(owner):
     current = owner_at(owner["udid"])
     if not current or current.get("lease") != owner["lease"]:
@@ -255,12 +273,14 @@ def operation(root, app=None, udid=None):
         if unsettled(owner):
             fail("cleanup_incomplete", "A prior operation still has live or unknown children")
         owner["operation"] = {"pid": os.getpid(), "startIdentity": identity(os.getpid()), "startedAt": now()}
+        owner["lastActivityAt"] = now()
         save_owner(owner)
         op = Operation(owner)
         try:
             yield op
         finally:
             owner["operation"]["endedAt"] = now()
+            owner["lastActivityAt"] = now()
             save_owner(owner)
 
 
@@ -305,32 +325,67 @@ def start(app, root, slot=None):
         anchor = anchor.parent
     if project(anchor)[0] != worktree:
         fail("lease_mismatch", "Task path belongs to another linked worktree", 2)
+    if root.exists():
+        fail("invalid_argument", "Use a new task directory; existing tasks are never overwritten", 2)
     with guard(repository):
         pool = load_pool(repository)
-        udid = pool["slots"][slot or app]["udid"]
-        with guard(udid):
-            device = devices().get(udid)
-            if not device or not device.get("isAvailable"):
-                fail("pool_device_missing", f"Unavailable registered simulator: {udid}", 2)
-            current = owner_at(udid)
-            if current:
-                fail("device_busy", json.dumps(current, ensure_ascii=False), 3)
-            check_external_runner(udid)
-            if root.exists():
-                fail("invalid_argument", "Use a new task directory; existing tasks are never overwritten", 2)
-            owner = {"schemaVersion": 1, "kind": "simulator-pool", "lease": uuid.uuid4().hex,
-                     "repositoryId": repository, "worktree": str(worktree), "app": app, "slot": slot or app,
-                     "udid": udid, "taskDir": str(root), "startedAt": now(), "children": [],
-                     "automationPending": False}
+        choices = [slot] if slot else [app, next(name for name in APPS if name != app)]
+        available = devices()
+
+        def reserve(name):
+            udid = pool["slots"][name]["udid"]
+            with guard(udid):
+                device = available.get(udid)
+                if not device or not device.get("isAvailable") or owner_at(udid):
+                    return None
+                check_external_runner(udid)
+                if root.exists():
+                    fail("invalid_argument", "Use a new task directory; existing tasks are never overwritten", 2)
+                owner = {"schemaVersion": 1, "kind": "simulator-pool", "lease": uuid.uuid4().hex,
+                         "repositoryId": repository, "worktree": str(worktree), "app": app, "slot": name,
+                         "udid": udid, "taskDir": str(root), "startedAt": now(), "lastActivityAt": now(),
+                         "children": [], "automationPending": False}
+                try:
+                    udid_path(udid).mkdir(parents=True)
+                except FileExistsError:
+                    fail("device_busy", "Another device tool owns this UDID", 3)
+                # A failure after mkdir deliberately leaves unknown ownership, never silently unlocks.
+                write(udid_path(udid) / "owner.json", owner)
+                root.mkdir(parents=True)
+                write(root / "simulator-lease.json", owner)
+                return owner
+
+        for name in choices:
             try:
-                udid_path(udid).mkdir(parents=True)
-            except FileExistsError:
-                fail("device_busy", "Another device tool owns this UDID", 3)
-            # A failure after mkdir deliberately leaves unknown ownership, never silently unlocks.
-            write(udid_path(udid) / "owner.json", owner)
-            root.mkdir(parents=True)
-            write(root / "simulator-lease.json", owner)
-            return owner
+                owner = reserve(name)
+                if owner:
+                    return owner
+            except PoolError as error:
+                if error.code != "device_busy":
+                    raise
+
+        for name in choices:
+            udid = pool["slots"][name]["udid"]
+            current = owner_at(udid)
+            age = idle_seconds(current) if current else None
+            if age is None or age < IDLE_SECONDS or active_operation(current) or unsettled(current):
+                continue
+            try:
+                finish(current["taskDir"], recovering=True, idle_lease=current["lease"])
+            except (KeyError, PoolError):
+                # Unknown ownership or incomplete cleanup must keep the old lease.
+                continue
+            try:
+                owner = reserve(name)
+                if owner:
+                    return owner
+            except PoolError as error:
+                if error.code != "device_busy":
+                    raise
+        occupied = {name: owner_at(pool["slots"][name]["udid"]) for name in choices}
+        if any(occupied.values()):
+            fail("device_busy", json.dumps(occupied, ensure_ascii=False), 3)
+        fail("pool_device_missing", "No registered simulator is available", 2)
 
 
 def drain_runner(root, owner, env):
@@ -395,13 +450,16 @@ def drain_runner(root, owner, env):
         write(root / "runner-shutdown.json", report)
 
 
-def finish(root, recovering=False):
+def finish(root, recovering=False, idle_lease=None):
     initial = task(root, allow_finished=True)
     with guard(initial["udid"]):
         current = owner_at(initial["udid"])
         if initial.get("finishedAt") and (not current or current.get("lease") != initial["lease"]):
             return {"code": "already_finished", "lease": initial["lease"]}
         owner = task(root, allow_finished=True)
+        if idle_lease and (owner["lease"] != idle_lease or active_operation(owner)
+                           or (idle_seconds(owner) or 0) < IDLE_SECONDS):
+            fail("device_busy", "Lease is active or changed before idle recovery", 3)
         if unsettled(owner):
             fail("cleanup_incomplete", "A prior operation still has live or unknown children")
         op = Operation(owner)
@@ -441,12 +499,15 @@ def status():
     for app, slot in pool["slots"].items():
         owner = owner_at(slot["udid"])
         device = available.get(slot["udid"])
-        active = owner and owner.get("operation", {})
-        active = active and identity(active.get("pid")) == active.get("startIdentity") and not active.get("endedAt")
+        active = owner and active_operation(owner)
         state = "missing" if not device or not device.get("isAvailable") else (
             "blocked" if owner and (owner.get("schemaVersion") != 1 or (unsettled(owner) and not active))
             else "busy" if owner else "free")
-        slots[app] = {**slot, "state": state, "deviceState": device and device["state"], "owner": owner}
+        age = idle_seconds(owner) if owner else None
+        slots[app] = {**slot, "state": state, "deviceState": device and device["state"],
+                      "idleSeconds": round(age) if age is not None else None,
+                      "idleExpired": bool(state == "busy" and age is not None and age >= IDLE_SECONDS and not active),
+                      "owner": owner}
     ids = {slot["udid"] for slot in slots.values()}
     return {"repositoryId": repository, "worktree": str(root), "slots": slots,
             "unmanagedDevices": [{"udid": d["udid"], "name": d["name"], "state": d["state"]}

@@ -1,6 +1,7 @@
 # 共享 iOS 模拟器
 
-Runweave 仓库的 linked worktree 共用两台已有模拟器，Runweave 和随记各固定一台。
+Runweave 仓库的 linked worktree 共用两台已有模拟器。两个 App 都能使用任一台设备；
+注册表中的 App 名称仅决定默认优先顺序，不限制设备能运行哪个 App。
 项目身份取 Git common directory 的真实路径摘要；端口、分支和 worktree 路径不改变设备池。
 安装入口需要 macOS、Xcode、Node 和 Python 3.9+。原生 UI 使用主动安装的 agent-device 0.21.3。
 本功能不安装技能，不依赖 Desktop 或 Backend。
@@ -37,10 +38,16 @@ node scripts/ios-simulators/cli.mjs finish --task-dir .runweave/mobile-qa/my-tas
 `runner-shutdown.json` 记录退出结果；身份不符、请求失败或退出超时会保留占用并返回
 `cleanup_incomplete`，检查任务证据后再对同一任务重试，不会退回强杀。
 技能的 `stop` 只停止自动化，完整任务仍须 `finish`。两次 UI 命令之间不会释放占用。
-同 App 的竞争请求返回 `device_busy` 和占用者，稍后重新申请；不会排队或创建第三台。
-两个 App 默认各用固定槽位。用户明确授权时可用 `start --app runweave --slot suiji --task-dir <新目录> --json`
-借用空闲槽位（反向同理）；不改变注册表，lease 分别记录实际 App 与物理槽位，安装仍检查 App 身份。
-借用期间另一任务无法取得同一设备；finish 后归还槽位，不删除原有 App 或数据。
+默认优先选择 App 同名槽位，忙时自动使用另一台空闲设备；两台都不可用才返回
+`device_busy` 或 `pool_device_missing`。`--slot` 可指定只申请某一台；lease 分别记录实际 App
+与物理槽位，安装仍检查 App 身份。任务结束后不删除另一 App 或数据。
+
+若两台都被占用，`start` 会尝试回收连续 **30 分钟**没有托管操作的租约。
+回收仍要核对原 lease、无活动操作、无未退出子进程，并通过 `finish` 的 daemon/runner
+安全清理流程；任何身份不明、runner 清理失败或设备外部占用都会保留旧租约并返回占用。
+长时间分析期间需要保留设备的任务，应在空闲期限前通过同一 task-dir 执行托管操作；
+旧任务在回收后不能继续操作或释放新租约。`status --json` 显示 `idleSeconds` 和
+`idleExpired`，后者仅表示达到回收时限，仍可能因清理未完成而无法回收。
 
 固定 XCTest 用 `node scripts/ios-simulators/cli.mjs exec --task-dir <目录> -- xcodebuild <套件参数>`。
 工具固定 destination 为 lease 的 UDID，并关闭并行测试；不接受调用者覆盖 destination/并行参数。
@@ -67,7 +74,8 @@ node scripts/ios-simulators/cli.mjs recover --lease <旧lease> --udid <UDID> --j
 ```
 
 活跃/未知子进程、损坏 owner 或未完成的 runner 清理都会阻塞恢复。
-工具不按超时抢锁，不 killall，不自动重放业务操作；旧 lease 不能释放后来任务。
+工具只在安全清理成功后回收过期空闲租约，不按超时强行抢锁，不 killall，
+不自动重放业务操作；旧 lease 不能释放后来任务。
 `free/busy/blocked/missing` 是池状态，`Booted/Shutdown` 是设备状态，关机不表示空闲。
 退出码：成功 0，构建/执行失败 1，参数/映射错误 2，占用 3，身份或清理未确定 4。
 
