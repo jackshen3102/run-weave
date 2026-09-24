@@ -62,6 +62,7 @@ export class BatteryAlerts {
       const recipients = Object.values(data.subscriptions).filter(
         (s) =>
           this.subscriptions.valid(s) &&
+          (s.kind ?? "battery") === "battery" &&
           this.subscriptions.isSynced(s) &&
           !!s.confirmed,
       );
@@ -82,6 +83,7 @@ export class BatteryAlerts {
         const subscription = Object.values(data.subscriptions).find(
           (s) =>
             targetFor(s) === item.target &&
+            (s.kind ?? "battery") === "battery" &&
             this.subscriptions.isSynced(s) &&
             !!s.confirmed &&
             this.subscriptions.valid(s),

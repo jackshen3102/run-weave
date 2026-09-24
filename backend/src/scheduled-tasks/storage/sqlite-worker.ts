@@ -55,6 +55,8 @@ function execute(command: ScheduledTaskWorkerCommand) {
       return database.getRun(command.runId);
     case "list-runs":
       return database.listRuns(command.taskId);
+    case "list-recently-finished-runs":
+      return database.listRecentlyFinishedRuns(command.since);
     case "claim-next-run":
       return database.claimNextRun(command.ownerId, command.now);
     case "put-run":

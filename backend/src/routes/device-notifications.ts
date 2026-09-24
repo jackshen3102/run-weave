@@ -14,6 +14,7 @@ const registration = z
     displayName: z.string().trim().min(1).max(80),
     enabled: z.boolean(),
     explicitEnable: z.boolean().optional(),
+    kind: z.enum(["battery", "scheduled-task"]).optional(),
   })
   .strict();
 export function createDeviceNotificationsRouter(
@@ -33,6 +34,7 @@ export function createDeviceNotificationsRouter(
     [
       "/status",
       "/subscriptions/:installationId",
+      "/subscriptions/:installationId/kinds/:kind",
       "/subscriptions/:installationId/confirm",
     ],
     async (req, res) => {
@@ -45,6 +47,7 @@ export function createDeviceNotificationsRouter(
               available: false,
               reason: "电量监控暂不可用",
               subscriptions: [],
+              supportedKinds: ["battery", "scheduled-task"],
             });
             return;
           }
@@ -57,6 +60,11 @@ export function createDeviceNotificationsRouter(
         const id = req.params.installationId;
         if (!z.string().uuid().safeParse(id).success)
           throw new SubscriptionError(400, "Invalid installationId");
+        const kind = z
+          .enum(["battery", "scheduled-task"])
+          .safeParse(req.params.kind ?? "battery");
+        if (!kind.success)
+          throw new SubscriptionError(400, "Invalid notification kind");
         if (req.method === "POST" && req.path.endsWith("/confirm")) {
           const body = z
             .object({
@@ -81,6 +89,11 @@ export function createDeviceNotificationsRouter(
           const input = registration.safeParse(req.body);
           if (!input.success)
             throw new SubscriptionError(400, "Invalid registration");
+          if ((input.data.kind ?? "battery") !== kind.data)
+            throw new SubscriptionError(
+              400,
+              "Notification kind does not match path",
+            );
           res.json(
             await service.register(identity.sessionId, String(id), input.data),
           );
@@ -90,6 +103,7 @@ export function createDeviceNotificationsRouter(
           const confirmed = await service.revoke(
             identity.sessionId,
             String(id),
+            kind.data,
           );
           if (!confirmed)
             throw new SubscriptionError(503, "远端提醒关闭尚未确认");

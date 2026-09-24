@@ -43,6 +43,7 @@ export type ScheduledTaskWorkerCommand =
     }
   | { id: number; op: "get-run"; runId: string }
   | { id: number; op: "list-runs"; taskId: string }
+  | { id: number; op: "list-recently-finished-runs"; since: string }
   | { id: number; op: "claim-next-run"; ownerId: string; now: string }
   | { id: number; op: "put-run"; run: ScheduledRun }
   | {

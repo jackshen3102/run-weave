@@ -7,6 +7,9 @@ export interface DeviceSubscription {
   username: string;
   sessionId: string;
   environment: PushEnvironment;
+  /** Missing on older battery subscriptions. */
+  kind?: "battery" | "scheduled-task";
+  confirmedAt?: string;
   deviceToken: string;
   displayName: string;
   version: number;
@@ -16,6 +19,28 @@ export interface DeviceSubscription {
   gatewayURL?: string;
   confirmed?: boolean;
   revokeToken: string | null;
+}
+
+export interface ScheduledTaskDelivery {
+  id: string;
+  runId: string;
+  subscriptionId: string;
+  notification: {
+    category: "task.completed" | "task.failed";
+    title: string;
+    body: string;
+    occurredAt: string;
+  };
+  state:
+    | "pending"
+    | "sending"
+    | "accepted"
+    | "unknown"
+    | "cancelled"
+    | "failed";
+  attempts: number;
+  createdAt: number;
+  nextAttemptAt: number;
 }
 
 export interface DeviceDelivery {
@@ -43,4 +68,5 @@ export interface DeviceMonitorData {
   endedCycles?: Record<string, number>;
   subscriptions: Record<string, DeviceSubscription>;
   deliveries: Record<string, DeviceDelivery>;
+  taskDeliveries?: Record<string, ScheduledTaskDelivery>;
 }

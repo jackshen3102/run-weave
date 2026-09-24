@@ -63,17 +63,24 @@ public struct RootView: View {
     .onAppear {
       if connections.active == nil { managingConnections = true }
       notifications.consume(in: connections)
-      notifications.foreground()
+      notifications.foreground(connections: connections.connections)
     }
     .onChange(of: session.generation) { _ in codexQuota.reset() }
-    .onChange(of: session.authenticated) { if !$0 { codexQuota.reset() } }
+    .onChange(of: session.authenticated) { authenticated in
+      if !authenticated { codexQuota.reset() }
+      else { notifications.refreshAutomaticTasks(connections: connections.connections) }
+    }
+    .onChange(of: connections.connections.map(\.scope).joined(separator: "|")) { _ in
+      notifications.refreshAutomaticTasks(connections: connections.connections)
+    }
     .onChange(of: notifications.pendingHostID) { _ in notifications.consume(in: connections) }
     .alert("电脑提醒", isPresented: Binding(get: { notifications.message != nil }, set: { if !$0 { notifications.message = nil } })) {
       Button("好") { notifications.message = nil }
     } message: { Text(notifications.message ?? "") }
     .onChange(of: scenePhase) { phase in
       session.setScenePhase(phase)
-      if phase == .active { notifications.foreground() } else { notifications.suspend() }
+      if phase == .active { notifications.foreground(connections: connections.connections) }
+      else { notifications.suspend() }
     }
     .sheet(isPresented: $managingConnections) {
       ConnectionManager(store: connections, session: session, codexQuota: codexQuota) {

@@ -57,6 +57,7 @@ import { RaceRecordStore } from "../race/race-record-store";
 import { RaceService } from "../race/race-service";
 import { BackendRuntimeStatusService } from "../runtime-status/service";
 import { createScheduledTasks } from "./scheduled-tasks";
+import { ScheduledTaskAlerts } from "../device-monitor/scheduled-task-alerts";
 import {
   resolveDefaultTmuxSocketPath,
   resolvePersistentTmuxSocketPath,
@@ -463,6 +464,15 @@ async function assembleRuntimeServices(
   resources.defer("battery-alerts", () =>
     deviceMonitoring.batteryAlerts?.dispose(),
   );
+  const taskAlerts =
+    scheduledTasks.store && deviceMonitoring.batteryAlerts
+      ? new ScheduledTaskAlerts(
+          scheduledTasks.store,
+          deviceMonitoring.batteryAlerts.subscriptions,
+        )
+      : null;
+  if (taskAlerts)
+    resources.defer("scheduled-task-alerts", () => taskAlerts.dispose());
   const mobileLoginService = new MobileLoginService(authService);
   resources.defer("mobile-login", () => mobileLoginService.dispose());
   const localBrowserService = new LocalBrowserService((authId, terminalId) =>
@@ -482,6 +492,7 @@ async function assembleRuntimeServices(
       evolutionRuntime.start(controlPlaneBaseUrl);
       experienceLearning.start();
       scheduledTasks.runtime?.start();
+      taskAlerts?.start();
     },
     dispose: () => {
       disposed = true;

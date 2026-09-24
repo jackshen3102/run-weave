@@ -10,6 +10,8 @@ const subscription = z
     username: z.string(),
     sessionId: z.string(),
     environment,
+    kind: z.enum(["battery", "scheduled-task"]).optional(),
+    confirmedAt: z.string().datetime().optional(),
     deviceToken: z.string(),
     displayName: z.string(),
     version: z.number().int().positive(),
@@ -58,6 +60,36 @@ export const deviceMonitorSchema = z
         })
         .passthrough(),
     ),
+    taskDeliveries: z
+      .record(
+        z
+          .object({
+            id: z.string(),
+            runId: z.string().uuid(),
+            subscriptionId: z.string().uuid(),
+            notification: z
+              .object({
+                category: z.enum(["task.completed", "task.failed"]),
+                title: z.string(),
+                body: z.string(),
+                occurredAt: z.string().datetime(),
+              })
+              .strict(),
+            state: z.enum([
+              "pending",
+              "sending",
+              "accepted",
+              "unknown",
+              "cancelled",
+              "failed",
+            ]),
+            attempts: z.number().int().nonnegative(),
+            createdAt: time,
+            nextAttemptAt: time,
+          })
+          .passthrough(),
+      )
+      .optional(),
     endedCycles: z.record(time).optional(),
   })
   .passthrough();
