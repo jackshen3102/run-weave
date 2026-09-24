@@ -12,6 +12,7 @@ directories:
 files:
   - dist/**/*
   - "!dist/companion/**/*"
+  - "!dist/backend/**/*"
   - resources/**/*
   - "!resources/icons/raw/**"
   - "!node_modules/**/*"
@@ -43,6 +44,7 @@ extraResources:
   - from: dist/backend
     to: backend
     filter:
+      - "index.cjs"
       - "activity-sqlite-worker.cjs"
       - "evolution-sqlite-worker.cjs"
       - "scheduled-tasks-sqlite-worker.cjs"

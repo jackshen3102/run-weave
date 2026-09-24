@@ -1,39 +1,56 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
-import { rebuild } from "@electron/rebuild";
 import {
   artifactRoot,
   betterSqliteVersion,
   electronVersion,
+  repoRoot,
   stagingAppDir,
 } from "./activity-sqlite-runtime-paths.mjs";
 
+const packageDir = path.join(
+  repoRoot,
+  "backend",
+  "node_modules",
+  "better-sqlite3",
+);
+const installedVersion = JSON.parse(
+  readFileSync(path.join(packageDir, "package.json"), "utf8"),
+).version;
+if (installedVersion !== betterSqliteVersion) {
+  throw new Error(
+    `Expected better-sqlite3 ${betterSqliteVersion}, found ${installedVersion}; run pnpm install --frozen-lockfile`,
+  );
+}
+const prebuildPlatform =
+  process.platform === "linux" &&
+  !process.report.getReport().header.glibcVersionRuntime
+    ? "linuxmusl"
+    : process.platform;
+const targetPrebuild = `${prebuildPlatform}-${process.arch}.node`;
+if (!existsSync(path.join(packageDir, "prebuilds", targetPrebuild))) {
+  throw new Error(`better-sqlite3 prebuild is missing: ${targetPrebuild}`);
+}
+
 rmSync(artifactRoot, { recursive: true, force: true });
-mkdirSync(stagingAppDir, { recursive: true });
-writeFileSync(
-  path.join(stagingAppDir, "package.json"),
-  `${JSON.stringify(
-    {
-      name: "runweave-activity-sqlite-runtime",
-      private: true,
-      version: "1.0.0",
-      dependencies: { "better-sqlite3": betterSqliteVersion },
-    },
-    null,
-    2,
-  )}\n`,
-);
-execFileSync(
-  "npm",
-  ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock"],
-  { cwd: stagingAppDir, stdio: "inherit" },
-);
-await rebuild({
-  buildPath: stagingAppDir,
-  electronVersion,
-  arch: process.arch,
-  force: true,
-  onlyModules: ["better-sqlite3"],
+const stagingNodeModules = path.join(stagingAppDir, "node_modules");
+mkdirSync(stagingNodeModules, { recursive: true });
+cpSync(packageDir, path.join(stagingNodeModules, "better-sqlite3"), {
+  recursive: true,
+  dereference: true,
+  filter: (entry) => {
+    const relative = path.relative(packageDir, entry);
+    return (
+      !relative ||
+      relative === "lib" ||
+      relative.startsWith(`lib${path.sep}`) ||
+      relative === "prebuilds" ||
+      relative === path.join("prebuilds", targetPrebuild) ||
+      relative === "package.json" ||
+      relative === "LICENSE"
+    );
+  },
 });
-console.log(`[activity-sqlite] prepared ${electronVersion}/${process.platform}/${process.arch}`);
+console.log(
+  `[activity-sqlite] prepared ${electronVersion}/${process.platform}/${process.arch}`,
+);

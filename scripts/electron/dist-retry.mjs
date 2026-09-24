@@ -185,7 +185,12 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
           {
             from: electronAppDir,
             to: ".",
-            filter: ["package.json", "dist/**/*", "!dist/companion/**/*"],
+            filter: [
+              "package.json",
+              "dist/**/*",
+              "!dist/companion/**/*",
+              "!dist/backend/**/*",
+            ],
           },
           {
             from: path.join(ELECTRON_DIR, "resources"),
@@ -195,7 +200,13 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
         ],
         extraResources: [
           {
-            from: path.join(buildRoot, "electron", "dist", "cli", "node_modules"),
+            from: path.join(
+              buildRoot,
+              "electron",
+              "dist",
+              "cli",
+              "node_modules",
+            ),
             to: "node_modules",
             filter: ["**/*"],
           },
@@ -224,6 +235,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             from: path.join(electronDist, "backend"),
             to: "backend",
             filter: [
+              "index.cjs",
               "activity-sqlite-worker.cjs",
               "evolution-sqlite-worker.cjs",
               "scheduled-tasks-sqlite-worker.cjs",

@@ -118,13 +118,7 @@ export function resolveBundledRuntimeRelease(
     source: "bundled",
     releaseId: BUNDLED_RUNTIME_RELEASE_ID,
     frontendDistDir: path.join(resourcesPath, "frontend", "dist"),
-    backendEntry: path.join(
-      resourcesPath,
-      "app.asar",
-      "dist",
-      "backend",
-      "index.cjs",
-    ),
+    backendEntry: path.join(resourcesPath, "backend", "index.cjs"),
     cliEntry: path.join(
       resourcesPath,
       "app.asar",

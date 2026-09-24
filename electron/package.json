@@ -23,7 +23,6 @@
     "@runweave/agent-bridge": "workspace:*"
   },
   "devDependencies": {
-    "@electron/rebuild": "4.2.0",
     "@types/node": "^22.13.10",
     "@types/ws": "^8.5.14",
     "electron": "44.2.0",
