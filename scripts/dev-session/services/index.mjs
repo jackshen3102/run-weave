@@ -57,10 +57,16 @@ export async function startSessionServices({
         candidate += 1;
         continue;
       }
-      const availablePort = await resolvePort(candidate, {
-        reservedPorts,
-        host: "127.0.0.1",
-      });
+      let availablePort;
+      try {
+        availablePort = await resolvePort(candidate, {
+          reservedPorts,
+          host: "127.0.0.1",
+        });
+      } catch (error) {
+        await lease.release();
+        throw error;
+      }
       if (availablePort !== candidate) {
         await lease.release();
         candidate = availablePort;
