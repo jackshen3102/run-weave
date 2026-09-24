@@ -5,7 +5,7 @@ import {
   type TerminalBrowserProfileId,
 } from "@runweave/shared/terminal-browser-profile";
 import { CliError } from "../errors.js";
-import type { RemoteBrowserResolveResponse } from "@runweave/shared/remote";
+import { isRemoteBrowserProfileState, type RemoteBrowserResolveResponse } from "@runweave/shared/remote";
 
 export interface BrowserCommandIo {
   stdout: Pick<NodeJS.WriteStream, "write">;
@@ -60,9 +60,7 @@ function parseResolveOptions(args: string[]): ResolveOptions {
 
 function parseAmbientEndpoint(raw: string | undefined): {
   resolverUrl: string;
-  ambientEndpoint: string;
   ambientGroupId: string | null;
-  ambientProfileId: TerminalBrowserProfileId | null;
 } {
   if (!raw?.trim()) {
     throw new CliError("PLAYWRIGHT_MCP_CDP_ENDPOINT is required", 3);
@@ -84,43 +82,9 @@ function parseAmbientEndpoint(raw: string | undefined): {
       2,
     );
   }
-  const ambientProfile = parsed.searchParams.get("profileId");
   return {
     resolverUrl: `http://127.0.0.1:${parsed.port}/runweave/browser-profile/resolve`,
-    ambientEndpoint: raw,
     ambientGroupId: parsed.searchParams.get("groupId")?.trim() || null,
-    ambientProfileId: isTerminalBrowserProfileId(ambientProfile)
-      ? ambientProfile
-      : null,
-  };
-}
-
-function fallbackResolution(
-  ambientEndpoint: string,
-  profileId: TerminalBrowserProfileId | null,
-  projectId: string | null,
-): ResolvedTerminalBrowserProfile {
-  const resolvedProfileId = profileId ?? "profile-1";
-  return {
-    profileId: resolvedProfileId,
-    source: "global-default",
-    projectId,
-    route: { kind: "unassigned" },
-    cdpEndpoint: ambientEndpoint,
-    whistle: {
-      profileId: resolvedProfileId,
-      status: "stopped",
-      host: "127.0.0.1",
-      port:
-        resolvedProfileId === "profile-1"
-          ? 8081
-          : resolvedProfileId === "profile-2"
-            ? 8082
-            : 8083,
-      storage: resolvedProfileId,
-      pid: null,
-      error: null,
-    },
   };
 }
 
@@ -171,23 +135,18 @@ async function resolveRemoteBrowserProfile(
       throw new CliError(`${error?.code ?? "DESKTOP_UNAVAILABLE"}: ${error?.message ?? `HTTP ${response.status}`}`, response.status === 403 ? 4 : 3);
     }
     const resolved = (await response.json()) as RemoteBrowserResolveResponse;
+    if (!isRemoteBrowserProfileState(resolved)) {
+      throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: Desktop Browser Profile state is missing or invalid; update the desktop, remote Backend and CLI together", 3);
+    }
     return {
       profileId: resolved.profileId,
-      source: options.profileId ? "explicit" : "global-default",
+      source: resolved.source,
       projectId,
-      route: { kind: "unassigned" },
+      route: resolved.route,
       cdpEndpoint: resolved.cdpEndpoint,
       browserGroupId: resolved.browserGroupId,
       automationAttribution: "terminal",
-      whistle: {
-        profileId: resolved.profileId,
-        status: "stopped",
-        host: "127.0.0.1",
-        port: resolved.profileId === "profile-1" ? 8081 : resolved.profileId === "profile-2" ? 8082 : 8083,
-        storage: resolved.profileId,
-        pid: null,
-        error: null,
-      },
+      whistle: resolved.whistle,
     };
   } catch (error) {
     if (error instanceof CliError) throw error;
@@ -237,20 +196,7 @@ export async function resolveBrowserProfile(
 
   let result: ResolvedTerminalBrowserProfile;
   if (response.status === 404) {
-    if (options.profileId) {
-      throw new CliError(
-        "This Runweave version does not support explicit Terminal Browser Profile selection",
-        4,
-      );
-    }
-    io.stderr.write(
-      "Warning: Terminal Browser Profile resolver is unavailable; using the ambient endpoint. Worktree Profile bindings are not supported by this Runweave version.\n",
-    );
-    result = fallbackResolution(
-      ambient.ambientEndpoint,
-      ambient.ambientProfileId,
-      projectId,
-    );
+    throw new CliError("This Runweave version does not provide Browser Profile state; update the desktop", 3);
   } else if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
       error?: TerminalBrowserErrorPayload;
