@@ -14,6 +14,7 @@ import {
   type StoredRow,
 } from "./validation";
 import { migrateScheduledTasks } from "./migrations";
+import { appendScheduledOutput, readScheduledOutput } from "./output";
 import type { ScheduledOutputChunk } from "./worker-protocol";
 
 const UNFINISHED = ["queued", "running", "stopping", "waiting"] as const;
@@ -331,28 +332,7 @@ export class ScheduledTaskDatabase {
   }
 
   appendOutput(runId: string, text: string, maxBytes: number): boolean {
-    const existing = this.database
-      .prepare("SELECT content FROM scheduled_run_output WHERE run_id = ?")
-      .get(runId) as { content: string } | undefined;
-    if (!this.getRun(runId)) throw new Error("scheduled_run_not_found");
-    const content = `${existing?.content ?? ""}${text}`;
-    if (Buffer.byteLength(content) > maxBytes) return false;
-    this.database.transaction(() => {
-      this.database
-        .prepare(
-          `INSERT INTO scheduled_run_output(run_id, content) VALUES (?, ?) ON CONFLICT(run_id) DO UPDATE SET content = excluded.content`,
-        )
-        .run(runId, content);
-      const run = this.requireRun(runId);
-      const next = {
-        ...run,
-        outputCursor: String(Buffer.byteLength(content)),
-      };
-      this.database
-        .prepare("UPDATE scheduled_runs SET payload_json = ? WHERE id = ?")
-        .run(JSON.stringify(next), runId);
-    })();
-    return true;
+    return appendScheduledOutput(this.database, runId, text, maxBytes);
   }
 
   readOutput(
@@ -360,21 +340,7 @@ export class ScheduledTaskDatabase {
     offset: number,
     maxBytes: number,
   ): ScheduledOutputChunk {
-    if (!this.getRun(runId)) throw new Error("scheduled_run_not_found");
-    const row = this.database
-      .prepare("SELECT content FROM scheduled_run_output WHERE run_id = ?")
-      .get(runId) as { content: string } | undefined;
-    const buffer = Buffer.from(row?.content ?? "", "utf8");
-    const safeOffset = Math.min(Math.max(0, offset), buffer.byteLength);
-    const end = safeUtf8End(
-      buffer,
-      Math.min(buffer.byteLength, safeOffset + maxBytes),
-    );
-    return {
-      text: buffer.subarray(safeOffset, end).toString("utf8"),
-      nextOffset: end,
-      totalBytes: buffer.byteLength,
-    };
+    return readScheduledOutput(this.database, runId, offset, maxBytes);
   }
 
   putBinding(runId: string, binding: ScheduledTerminalBinding): ScheduledRun {
@@ -523,16 +489,6 @@ export class ScheduledTaskDatabase {
       )
       .run(scope, key, requestHash, resourceId, now);
   }
-}
-
-function safeUtf8End(buffer: Buffer, proposedEnd: number): number {
-  if (proposedEnd >= buffer.byteLength) return buffer.byteLength;
-  let lead = proposedEnd;
-  while (lead > 0 && (buffer[lead]! & 0xc0) === 0x80) lead -= 1;
-  if (lead === proposedEnd) return proposedEnd;
-  const byte = buffer[lead]!;
-  const width = byte >= 0xf0 ? 4 : byte >= 0xe0 ? 3 : byte >= 0xc0 ? 2 : 1;
-  return lead + width <= proposedEnd ? proposedEnd : lead;
 }
 
 function processIsAlive(pid: number): boolean {
