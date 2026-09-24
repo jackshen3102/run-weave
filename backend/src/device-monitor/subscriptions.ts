@@ -46,6 +46,7 @@ export class DeviceSubscriptions {
       hostId: this.store.snapshot().hostId,
       installationId: value.installationId,
       environment: value.environment,
+      kind: value.kind ?? "battery",
       state: !value.enabled
         ? "disabled"
         : this.isSynced(value) && value.confirmed
@@ -66,6 +67,7 @@ export class DeviceSubscriptions {
         available: false,
         reason: "请重新登录此电脑以开启提醒",
         subscriptions: [],
+        supportedKinds: ["battery", "scheduled-task"],
       };
     const latest = new Map<string, DeviceSubscription>();
     for (const value of Object.values(this.store.snapshot().subscriptions)) {
@@ -73,14 +75,14 @@ export class DeviceSubscriptions {
         value.username === owner.username &&
         value.connectionId === owner.connectionId
       ) {
-        const key = `${value.installationId}:${value.environment}`;
+        const key = `${value.installationId}:${value.environment}:${value.kind ?? "battery"}`;
         if (!latest.get(key)?.enabled || value.enabled) latest.set(key, value);
       }
     }
     const targets = new Set(
-      [...latest.values()].map(
-        (value) => `${value.installationId}:${value.environment}`,
-      ),
+      [...latest.values()]
+        .filter((value) => (value.kind ?? "battery") === "battery")
+        .map((value) => `${value.installationId}:${value.environment}`),
     );
     const last = Object.values(this.store.snapshot().deliveries)
       .filter((value) => targets.has(value.target))
@@ -93,6 +95,7 @@ export class DeviceSubscriptions {
           : null;
     return {
       available: !!this.push,
+      supportedKinds: ["battery", "scheduled-task"],
       reason: this.push
         ? (this.failure ?? deliveryFailure)
         : "此电脑尚未配置推送服务",
@@ -109,8 +112,9 @@ export class DeviceSubscriptions {
     if (owner.connectionId !== input.connectionId)
       throw new SubscriptionError(403, "连接身份不匹配");
     if (!this.push) throw new SubscriptionError(503, "此电脑尚未配置推送服务");
+    const kind = input.kind ?? "battery";
     if (!input.enabled) {
-      await this.revoke(sessionId, installationId);
+      await this.revoke(sessionId, installationId, kind);
       return null;
     }
     const value = await this.store.update((data) => {
@@ -122,9 +126,10 @@ export class DeviceSubscriptions {
           s.connectionId === owner.connectionId &&
           s.installationId === installationId &&
           s.environment === input.environment &&
+          (s.kind ?? "battery") === kind &&
           s.enabled,
       );
-      if (!existing && !input.explicitEnable)
+      if (!existing && kind === "battery" && !input.explicitEnable)
         throw new SubscriptionError(409, "提醒已关闭，请手动重新开启");
       if (
         !existing &&
@@ -138,6 +143,7 @@ export class DeviceSubscriptions {
         sessionId,
         username: owner.username,
         environment: input.environment,
+        kind,
         deviceToken: input.deviceToken,
         displayName: input.displayName,
         version: (existing?.version ?? 0) + 1,
@@ -148,6 +154,10 @@ export class DeviceSubscriptions {
           existing?.gatewayURL === this.push!.url
             ? (existing.confirmed ?? false)
             : false,
+        confirmedAt:
+          existing?.gatewayURL === this.push!.url
+            ? existing.confirmedAt
+            : undefined,
         revokeToken:
           existing?.gatewayURL === this.push!.url ? existing.revokeToken : null,
       };
@@ -180,6 +190,7 @@ export class DeviceSubscriptions {
         current.version += 1;
         current.synced = false;
         current.confirmed = false;
+        current.confirmedAt = undefined;
         current.revokeToken = null;
         return current;
       });
@@ -236,6 +247,7 @@ export class DeviceSubscriptions {
         throw new SubscriptionError(409, "订阅已变化，请重新同步");
       }
       current.confirmed = true;
+      current.confirmedAt ??= new Date().toISOString();
       return current;
     });
     this.onChange?.();
@@ -266,13 +278,18 @@ export class DeviceSubscriptions {
       this.failure = "推送暂不可用，关闭提醒待同步";
     }
   }
-  async revoke(sessionId: string, installationId: string): Promise<boolean> {
+  async revoke(
+    sessionId: string,
+    installationId: string,
+    kind: "battery" | "scheduled-task" = "battery",
+  ): Promise<boolean> {
     const owner = this.owner(sessionId);
     const values = Object.values(this.store.snapshot().subscriptions).filter(
       (s) =>
         s.username === owner.username &&
         s.connectionId === owner.connectionId &&
-        s.installationId === installationId,
+        s.installationId === installationId &&
+        (s.kind ?? "battery") === kind,
     );
     for (const value of values) await this.disable(value.id);
     this.onChange?.();

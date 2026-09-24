@@ -139,6 +139,12 @@ export class ScheduledTaskStore {
   listRuns(taskId: string) {
     return this.request<ScheduledRun[]>({ op: "list-runs", taskId });
   }
+  listRecentlyFinishedRuns(since: string) {
+    return this.request<ScheduledRun[]>({
+      op: "list-recently-finished-runs",
+      since,
+    });
+  }
   claimNextRun(ownerId: string, now: string) {
     return this.request<ScheduledRun | null>({
       op: "claim-next-run",

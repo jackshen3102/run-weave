@@ -31,20 +31,24 @@ Backend 负责所在 Mac 的电量事实，原生 iOS 负责前台展示和用�
 
 ## 提醒授权
 
-每条连接默认关闭。iOS 主动启用时请求系统权限、注册 APNs token；token 和安装 UUID 存 Keychain。
+每条连接的低电量提醒由用户手动开启。定时任务提醒对已登录、支持推送的电脑默认开启：iOS 在前台自动请求系统通知权限并注册 APNs token；token 和安装 UUID 存 Keychain。系统权限被拒绝时无法投递。
 普通提醒不使用 Critical Alerts 或后台静默推送。
 
 [通知 API](../../backend/src/routes/device-notifications.ts)使用真实 Bearer 会话，要求 App 登录的 connectionId 匹配：
 
-| API                                                                    | 行为                                                                   |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `GET /api/device/notifications/status`                                 | 能力和当前身份的最新绑定，不返回 device token                          |
-| `PUT /api/device/notifications/subscriptions/:installationId`          | 注册或更新 token，返回绑定、版本、网关 origin 和撤销凭据               |
-| `POST /api/device/notifications/subscriptions/:installationId/confirm` | 手机持久化撤销凭据后，按 subscriptionId/version 确认；此前不发送       |
-| `DELETE /api/device/notifications/subscriptions/:installationId`       | 关闭当前连接绑定；远端未确认时返回不可用，由手机继续直接撤销或保留待办 |
+| API                                                                                   | 行为                                                                   |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `GET /api/device/notifications/status`                                                | 能力和当前身份的最新绑定，不返回 device token                          |
+| `PUT /api/device/notifications/subscriptions/:installationId`                         | 注册或更新 token，返回绑定、版本、网关 origin 和撤销凭据               |
+| `PUT /api/device/notifications/subscriptions/:installationId/kinds/scheduled-task`    | 独立注册任务提醒；旧 Backend 返回 404，不触碰电量订阅                  |
+| `POST /api/device/notifications/subscriptions/:installationId/confirm`                | 手机持久化撤销凭据后，按 subscriptionId/version 确认；此前不发送       |
+| `DELETE /api/device/notifications/subscriptions/:installationId`                      | 关闭当前连接绑定；远端未确认时返回不可用，由手机继续直接撤销或保留待办 |
+| `DELETE /api/device/notifications/subscriptions/:installationId/kinds/scheduled-task` | 只关闭任务提醒绑定                                                     |
 
-注册输入为 connectionId、deviceToken、environment、displayName、enabled 和 explicitEnable。
-后台 token 同步不能创建被撤销的绑定；只有用户主动启用传 explicitEnable 才可创建新的 subscriptionId。
+注册输入为 connectionId、deviceToken、environment、displayName、enabled、explicitEnable 和可选 kind。
+旧客户端省略 kind 时仍按 battery 处理；scheduled-task 使用独立 subscriptionId，订阅
+`task.completed` 与 `task.failed`。旧路径只管理 battery；任务路径不影响电量订阅。
+低电量提醒只有用户主动启用传 explicitEnable 才可创建新的 subscriptionId；定时任务提醒默认注册，无需开关。后台 token 同步不能重新创建被撤销的电量绑定。
 同 host/installation/environment 的不同地址别名共用一次目标投递，关闭一个别名不关闭另一个。
 正常认证刷新保留 sessionId；会话失效后不再提交提醒。旧会话缺少 connectionId 时，电量仍可查看，提醒需重新登录后启用。
 
@@ -63,6 +67,11 @@ Backend 持久化待发记录，首次发送前固定通知内容与发生时间
 网关再保存发送 claim 后调用 APNs；相同 notificationId 并发最多一次外发，未知结果不盲目重试。
 明确 429/5xx 最多 3 次重试，总期限 5 分钟；运维与 APNs 细节以网关 README 为准。
 网关身份预检拒绝错误 host 凭据。缺少推送配置只降低提醒能力，不阻断电量与终端。
+
+[定时任务提醒](../../backend/src/device-monitor/scheduled-task-alerts.ts)读取最近五分钟进入 completed 或 failed
+终态的运行记录，只为终态发生前已确认的任务订阅生成待发记录。任务运行 ID 作为稳定 eventId；
+Backend 持久化投递状态，明确可重试错误最多尝试四次，结果未知时不盲目重发。
+通知只包含任务名和成败提示，具体结果在应用中查看；skipped 与 cancelled 不作为成败通知。
 Backend 从本 profile 的 `device-monitor/push.json` 读取持久推送配置，成对显式环境变量可覆盖。
 配置加载不依赖桌面启动方式；文件中的 hostId 必须匹配当前安装，详见[部署配置](../deployment/push-gateway.md#6-授权-mac-和启用手机)。
 

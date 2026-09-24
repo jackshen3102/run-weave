@@ -23,6 +23,16 @@ public final class NotificationCoordinator: ObservableObject {
   private var refreshAgain = false
   private var tokenConfirmed = false
   private var resumeTask: Task<Void, Never>?
+  private var automaticConnections: [BackendConnection] = []
+  func binding(_ connection: BackendConnection, kind: NotificationKind) -> NotificationBinding? {
+    bindings[key(connection, kind)]
+  }
+  func refreshFailure(_ connection: BackendConnection, kind: NotificationKind) -> String? {
+    refreshFailures[key(connection, kind)]
+  }
+  private func key(_ connection: BackendConnection, _ kind: NotificationKind) -> String {
+    kind == .battery ? connection.scope : "\(connection.scope):\(kind.rawValue)"
+  }
   private struct Stored: Codable {
     var installation: String
     var deviceToken: String?
@@ -75,13 +85,17 @@ public final class NotificationCoordinator: ObservableObject {
     }
     do { try store.select(selected.id) } catch { message = displayError(error) }
   }
-  func enable(_ connection: BackendConnection) async throws {
-    refreshFailures[connection.scope] = nil
+  func enable(_ connection: BackendConnection, kind: NotificationKind = .battery) async throws {
+    let scope = key(connection, kind)
+    refreshFailures[scope] = nil
     guard validStorage else { throw AttachmentError("提醒设置无法读取") }
     let api = try APIClient(base: connection.url, connectionID: connection.id)
     defer { Task { await api.close() } }
     let availability = try await api.notificationStatus()
     guard availability.available else { throw AttachmentError(availability.reason ?? "推送暂不可用") }
+    if kind == .scheduledTask, availability.supportedKinds?.contains(.scheduledTask) != true {
+      throw AttachmentError("此电脑版本尚不支持定时任务提醒，请先更新 Backend")
+    }
     let settings = await UNUserNotificationCenter.current().notificationSettings()
     if settings.authorizationStatus == .notDetermined {
       guard
@@ -95,45 +109,45 @@ public final class NotificationCoordinator: ObservableObject {
       throw AttachmentError("系统通知未允许，可在 iOS 设置中开启")
     }
     guard let environment else { throw AttachmentError("当前签名未配置推送环境") }
-    if bindings[connection.scope]?.pendingRevoke == true {
-      await disable(connection, client: api)
-      guard bindings[connection.scope]?.pendingRevoke != true else {
+    if bindings[scope]?.pendingRevoke == true {
+      await disable(connection, kind: kind, client: api)
+      guard bindings[scope]?.pendingRevoke != true else {
         throw AttachmentError("远端提醒关闭尚未确认")
       }
     }
-    let version = (versions[connection.scope] ?? 0) + 1
-    versions[connection.scope] = version
+    let version = (versions[scope] ?? 0) + 1
+    versions[scope] = version
     let token = try await registrationToken()
-    guard versions[connection.scope] == version else { throw CancellationError() }
-    bindings[connection.scope] = NotificationBinding(
-      connection: connection, enabled: true, pendingRevoke: false)
+    guard versions[scope] == version else { throw CancellationError() }
+    bindings[scope] = NotificationBinding(
+      connection: connection, kind: kind, enabled: true, pendingRevoke: false)
     try persist()
     do {
       let response = try await api.registerNotifications(
         installation: installation, token: token,
-        environment: environment, name: connection.name, explicit: true)
-      guard versions[connection.scope] == version, bindings[connection.scope]?.enabled == true
+        environment: environment, name: connection.name, explicit: kind == .battery, kind: kind)
+      guard versions[scope] == version, bindings[scope]?.enabled == true
       else {
         try? await directRevoke(response)
         return
       }
-      bindings[connection.scope]?.subscription = response
+      bindings[scope]?.subscription = response
       knownHosts[connection.scope] = response.hostId
       try persist()
       if response.revokeToken != nil, UIApplication.shared.applicationState != .background {
         let confirmed = try await api.confirmNotifications(response)
-        if versions[connection.scope] == version, bindings[connection.scope]?.enabled == true {
-          bindings[connection.scope]?.subscription = confirmed
+        if versions[scope] == version, bindings[scope]?.enabled == true {
+          bindings[scope]?.subscription = confirmed
           try persist()
         }
       }
       if response.state == "disabled" {
-        bindings[connection.scope]?.enabled = false
+        bindings[scope]?.enabled = false
         try persist()
       }
     } catch {
       // A lost response can still have created a binding. Retain a revocation intent.
-      await disable(connection, client: api)
+      await disable(connection, kind: kind, client: api)
       throw error
     }
   }
@@ -174,14 +188,24 @@ public final class NotificationCoordinator: ObservableObject {
     message = "系统推送注册失败，请检查签名和网络"
   }
   func disable(
-    _ connection: BackendConnection, client supplied: APIClient? = nil, reportFailure: Bool = true
+    _ connection: BackendConnection, kind: NotificationKind? = nil,
+    client supplied: APIClient? = nil, reportFailure: Bool = true
   ) async {
-    guard var binding = bindings[connection.scope] else { return }
-    refreshFailures[connection.scope] = nil
-    versions[connection.scope, default: 0] += 1
+    for selected in kind.map({ [$0] }) ?? NotificationKind.allCases {
+      await disableOne(connection, kind: selected, client: supplied, reportFailure: reportFailure)
+    }
+  }
+  private func disableOne(
+    _ connection: BackendConnection, kind: NotificationKind,
+    client supplied: APIClient?, reportFailure: Bool
+  ) async {
+    let scope = key(connection, kind)
+    guard var binding = bindings[scope] else { return }
+    refreshFailures[scope] = nil
+    versions[scope, default: 0] += 1
     binding.enabled = false
     binding.pendingRevoke = true
-    bindings[connection.scope] = binding
+    bindings[scope] = binding
     do { try persist() } catch {
       message = "关闭提醒状态保存失败"
       return
@@ -189,7 +213,7 @@ public final class NotificationCoordinator: ObservableObject {
     var revoked = false
     if let api = supplied ?? (try? APIClient(base: connection.url, connectionID: connection.id)) {
       do {
-        try await api.revokeNotifications(installation: installation)
+        try await api.revokeNotifications(installation: installation, kind: kind)
         revoked = true
       } catch {}
       if supplied == nil { await api.close() }
@@ -203,8 +227,8 @@ public final class NotificationCoordinator: ObservableObject {
       } catch { revoked = false }
     }
     if revoked {
-      bindings[connection.scope]?.pendingRevoke = false
-      bindings[connection.scope]?.subscription = nil
+      bindings[scope]?.pendingRevoke = false
+      bindings[scope]?.subscription = nil
       do { try persist() } catch { message = "关闭提醒状态保存失败" }
     } else if reportFailure {
       message = "\(connection.name)：远端提醒关闭尚未确认"
@@ -235,13 +259,18 @@ public final class NotificationCoordinator: ObservableObject {
     resumeTask?.cancel()
     resumeTask = nil
   }
-  func foreground() {
+  func foreground(connections: [BackendConnection]) {
+    automaticConnections = connections
     tokenConfirmed = false
     if bindings.values.contains(where: { $0.enabled }), environment != nil {
       UIApplication.shared.registerForRemoteNotifications()
     }
     resumeTask?.cancel()
     resumeTask = Task { await refreshEnabled() }
+  }
+  func refreshAutomaticTasks(connections: [BackendConnection]) {
+    automaticConnections = connections
+    Task { await refreshEnabled() }
   }
   func refreshEnabled() async {
     guard !refreshing else {
@@ -259,49 +288,68 @@ public final class NotificationCoordinator: ObservableObject {
     // Sequential requests stay within the three-connection limit and serialize revoke before sync.
     for binding in Array(bindings.values) where binding.pendingRevoke {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
-      await disable(binding.connection, reportFailure: false)
+      await disable(binding.connection, kind: binding.kind ?? .battery, reportFailure: false)
     }
-    guard tokenConfirmed, let deviceToken, let environment else { return }
-    for binding in Array(bindings.values) where binding.enabled && !binding.pendingRevoke {
-      guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
-      let scope = binding.connection.scope
-      let version = versions[scope] ?? 0
-      guard
-        let api = try? APIClient(base: binding.connection.url, connectionID: binding.connection.id)
-      else { continue }
-      do {
-        let result = try await api.registerNotifications(
-          installation: installation, token: deviceToken,
-          environment: environment, name: binding.connection.name, explicit: false)
-        if versions[scope] ?? 0 == version, bindings[scope]?.enabled == true {
-          bindings[scope]?.subscription = result
-          if result.state == "disabled" { bindings[scope]?.enabled = false }
-          try persist()
-          if result.revokeToken != nil, result.state != "disabled", !Task.isCancelled, UIApplication.shared.applicationState != .background {
-            let confirmed = try await api.confirmNotifications(result)
-            if versions[scope] ?? 0 == version, bindings[scope]?.enabled == true {
-              bindings[scope]?.subscription = confirmed
-              try persist()
+    if tokenConfirmed, let deviceToken, let environment {
+      for binding in Array(bindings.values) where binding.enabled && !binding.pendingRevoke {
+        guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
+        let kind = binding.kind ?? .battery
+        let scope = key(binding.connection, kind)
+        let version = versions[scope] ?? 0
+        guard
+          let api = try? APIClient(base: binding.connection.url, connectionID: binding.connection.id)
+        else { continue }
+        do {
+          let result = try await api.registerNotifications(
+            installation: installation, token: deviceToken,
+            environment: environment, name: binding.connection.name, explicit: false, kind: kind)
+          if versions[scope] ?? 0 == version, bindings[scope]?.enabled == true {
+            bindings[scope]?.subscription = result
+            if result.state == "disabled" { bindings[scope]?.enabled = false }
+            try persist()
+            if result.revokeToken != nil, result.state != "disabled", !Task.isCancelled, UIApplication.shared.applicationState != .background {
+              let confirmed = try await api.confirmNotifications(result)
+              if versions[scope] ?? 0 == version, bindings[scope]?.enabled == true {
+                bindings[scope]?.subscription = confirmed
+                try persist()
+              }
             }
+            if versions[scope] ?? 0 == version {
+              refreshFailures[scope] = nil
+            }
+          } else {
+            try? await directRevoke(result)
           }
-          if versions[scope] ?? 0 == version {
-            refreshFailures[scope] = nil
+        } catch {
+          // Automatic retries must not interrupt the user with a global alert on every foreground.
+          // Keep failures on the affected connection, ignoring cancelled or superseded refreshes.
+          if !Task.isCancelled, !(error is CancellationError),
+            (error as? URLError)?.code != .cancelled,
+            UIApplication.shared.applicationState != .background,
+            versions[scope] ?? 0 == version, bindings[scope]?.enabled == true
+          {
+            refreshFailures[scope] = "提醒注册待更新：\(displayError(error))"
           }
-        } else {
-          try? await directRevoke(result)
         }
+        await api.close()
+      }
+    }
+    for connection in automaticConnections {
+      guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
+      let scope = key(connection, .scheduledTask)
+      if bindings[scope]?.enabled == true || bindings[scope]?.pendingRevoke == true { continue }
+      guard let api = try? APIClient(base: connection.url, connectionID: connection.id) else { continue }
+      let authenticated = await api.hasCredentials()
+      await api.close()
+      guard authenticated else { continue }
+      do {
+        try await enable(connection, kind: .scheduledTask)
+        refreshFailures[scope] = nil
       } catch {
-        // Automatic retries must not interrupt the user with a global alert on every foreground.
-        // Keep failures on the affected connection, ignoring cancelled or superseded refreshes.
-        if !Task.isCancelled, !(error is CancellationError),
-          (error as? URLError)?.code != .cancelled,
-          UIApplication.shared.applicationState != .background,
-          versions[scope] ?? 0 == version, bindings[scope]?.enabled == true
-        {
-          refreshFailures[scope] = "提醒注册待更新：\(displayError(error))"
+        if !Task.isCancelled, UIApplication.shared.applicationState != .background {
+          refreshFailures[scope] = "定时任务提醒注册待更新：\(displayError(error))"
         }
       }
-      await api.close()
     }
   }
   public func received(_ info: [AnyHashable: Any], tapped: Bool) -> Bool {

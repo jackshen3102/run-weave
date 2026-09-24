@@ -1,10 +1,16 @@
 import Foundation
 
+enum NotificationKind: String, Codable, CaseIterable {
+  case battery
+  case scheduledTask = "scheduled-task"
+}
+
 struct DeviceNotificationSubscription: Codable {
   let subscriptionId: String
   let hostId: String
   let installationId: String
   let environment: String
+  let kind: NotificationKind?
   let state: String
   let version: Int
   let gatewayURL: String?
@@ -14,9 +20,11 @@ struct DeviceNotificationStatus: Decodable {
   let available: Bool
   let reason: String?
   let subscriptions: [DeviceNotificationSubscription]
+  let supportedKinds: [NotificationKind]?
 }
 struct NotificationBinding: Codable {
   let connection: BackendConnection
+  var kind: NotificationKind?
   var subscription: DeviceNotificationSubscription?
   var enabled: Bool
   var pendingRevoke: Bool
@@ -40,13 +48,16 @@ extension APIClient {
   }
   func registerNotifications(
     installation: String, token: String, environment: String,
-    name: String, explicit: Bool
+    name: String, explicit: Bool, kind: NotificationKind
   ) async throws -> DeviceNotificationSubscription {
-    try await authorized(
-      "/api/device/notifications/subscriptions/\(Self.pathComponent(installation))", method: "PUT",
+    let route = "/api/device/notifications/subscriptions/\(Self.pathComponent(installation))"
+      + (kind == .battery ? "" : "/kinds/\(kind.rawValue)")
+    return try await authorized(
+      route, method: "PUT",
       body: [
         "connectionId": connectionID, "deviceToken": token, "environment": environment,
         "displayName": String(name.prefix(80)), "enabled": true, "explicitEnable": explicit,
+        "kind": kind.rawValue,
       ])
   }
   func confirmNotifications(_ subscription: DeviceNotificationSubscription) async throws
@@ -57,9 +68,11 @@ extension APIClient {
       method: "POST",
       body: ["subscriptionId": subscription.subscriptionId, "version": subscription.version])
   }
-  func revokeNotifications(installation: String) async throws {
+  func revokeNotifications(installation: String, kind: NotificationKind) async throws {
+    let route = "/api/device/notifications/subscriptions/\(Self.pathComponent(installation))"
+      + (kind == .battery ? "" : "/kinds/\(kind.rawValue)")
     let _: EmptyResponse = try await authorized(
-      "/api/device/notifications/subscriptions/\(Self.pathComponent(installation))",
+      route,
       method: "DELETE")
   }
 }

@@ -210,6 +210,19 @@ export class ScheduledTaskDatabase {
     ).map((row) => parseRun(row));
   }
 
+  listRecentlyFinishedRuns(since: string): ScheduledRun[] {
+    return (
+      this.database
+        .prepare(
+          "SELECT * FROM scheduled_runs WHERE status IN ('completed', 'failed') AND CASE WHEN json_valid(payload_json) THEN json_extract(payload_json, '$.finishedAt') END >= ? ORDER BY id",
+        )
+        .all(since) as StoredRow[]
+    ).flatMap((row) => {
+      const run = this.readBackground(row, parseRun);
+      return run ? [run] : [];
+    });
+  }
+
   claimNextRun(ownerId: string, now: string): ScheduledRun | null {
     return this.database.transaction(() => {
       const rows = this.database

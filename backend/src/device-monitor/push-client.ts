@@ -32,27 +32,38 @@ export class PushClient {
     }
     this.url = parsed.origin;
   }
-  static async configured(hostId: string, profileDirectory: string): Promise<PushClient | null> {
+  static async configured(
+    hostId: string,
+    profileDirectory: string,
+  ): Promise<PushClient | null> {
     const url = process.env.RUNWEAVE_PUSH_GATEWAY_URL;
     const token = process.env.RUNWEAVE_PUSH_SENDER_TOKEN;
     // Explicit overrides are a pair; never combine credentials from different sources.
     if (url !== undefined || token !== undefined) {
-      if (!url?.trim() || !token?.trim()) throw new Error("Incomplete push configuration");
+      if (!url?.trim() || !token?.trim())
+        throw new Error("Incomplete push configuration");
       return new PushClient(url.trim(), token.trim(), hostId);
     }
     let raw: string;
     try {
-      raw = await readFile(path.join(profileDirectory, "device-monitor", "push.json"), "utf8");
+      raw = await readFile(
+        path.join(profileDirectory, "device-monitor", "push.json"),
+        "utf8",
+      );
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
-    const config = z.object({
-      hostId: z.string().uuid(),
-      gatewayURL: z.string().trim().min(1),
-      senderToken: z.string().trim().min(1),
-    }).strict().parse(JSON.parse(raw));
-    if (config.hostId !== hostId) throw new Error("Push configuration belongs to another host");
+    const config = z
+      .object({
+        hostId: z.string().uuid(),
+        gatewayURL: z.string().trim().min(1),
+        senderToken: z.string().trim().min(1),
+      })
+      .strict()
+      .parse(JSON.parse(raw));
+    if (config.hostId !== hostId)
+      throw new Error("Push configuration belongs to another host");
     return new PushClient(config.gatewayURL, config.senderToken, hostId);
   }
   private async request<T>(
@@ -98,7 +109,10 @@ export class PushClient {
       deviceToken: value.deviceToken,
       displayName: value.displayName,
       version: value.version,
-      categories: ["battery.low"],
+      categories:
+        value.kind === "scheduled-task"
+          ? ["task.completed", "task.failed"]
+          : ["battery.low"],
     });
   }
   async revoke(id: string): Promise<void> {
