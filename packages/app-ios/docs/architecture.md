@@ -138,6 +138,11 @@ iOS 收到完成和状态变化事件后刷新 overview，并丢弃刷新期间�
 失败则保留面板、错误和草稿。Agent 执行期间终端右下角独立显示停止按钮，
 不要求先打开输入面板。录音、麦克风权限请求或转写进行中时禁止交互关闭，避免视图销毁取消媒体操作。
 
+Codex / Trae / Traex / TraeCLI 与 Pi 的输入面板还提供“排队”：前者复用 Tab，Pi 复用 Alt+Enter，
+通过 `prompt_replace`、`submit=true` 和 `submitKey` 一次提交完整草稿。队列展示与消费归 Agent CLI，
+iOS 不保存第二套队列；Claude 和普通 Shell 不显示入口。排队确认后保留面板和输入焦点，
+只清理本次发送的草稿与附件；失败保留草稿且不自动重发。普通发送与停止语义保持不变。
+
 ## 终端内置网页
 
 浏览器实现位于独立 [RunweaveBrowser](../../browser-ios/README.md) 包，终端的选区识别留在

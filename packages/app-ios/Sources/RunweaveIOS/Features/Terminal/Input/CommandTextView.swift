@@ -77,6 +77,12 @@ struct CommandTextView: UIViewRepresentable {
 final class CommandTextEditor: ObservableObject {
   fileprivate weak var view: GrowingCommandTextView?
 
+  func commitComposition() -> String? {
+    guard let view, view.markedTextRange != nil else { return nil }
+    view.unmarkText()
+    return view.text
+  }
+
   func insert(_ text: String) -> String? {
     guard let view else { return nil }
     view.unmarkText()

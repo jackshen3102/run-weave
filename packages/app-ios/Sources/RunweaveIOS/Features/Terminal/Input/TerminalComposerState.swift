@@ -11,6 +11,7 @@ final class TerminalComposerState: ObservableObject {
     let canSend: Bool
     let inputBusy: Bool
     let commandActive: Bool
+    let queueKey: TerminalPromptSubmitKey?
 
     @MainActor init(session: AppSession, controller: SessionController, terminalID: String) {
       draft = session.terminalDrafts[terminalID] ?? ""
@@ -24,6 +25,7 @@ final class TerminalComposerState: ObservableObject {
       canSend = controller.canSend
       inputBusy = controller.inputBusy
       commandActive = session.isCommandActive(terminalID)
+      queueKey = session.composerQueueKey(terminalID: terminalID)
     }
   }
 

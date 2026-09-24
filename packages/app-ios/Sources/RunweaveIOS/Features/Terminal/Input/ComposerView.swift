@@ -47,6 +47,7 @@ struct ComposerView: View {
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   @State private var failure: String?
   @State private var stopping = false
+  @State private var submitting = false
   @State private var showingShortcuts = false
   @State private var editing = true
   @State private var showingReplies = false
@@ -92,7 +93,7 @@ struct ComposerView: View {
   private var images: [TerminalDraftImage] { imageDrafts.images[terminalID] ?? [] }
   private var hasContent: Bool { hasText || !images.isEmpty }
   private var sendDisabled: Bool {
-    !state.snapshot.canWrite || !state.snapshot.canSend || stopping
+    !state.snapshot.canWrite || !state.snapshot.canSend || stopping || submitting
       || (!showStop && (!hasContent || images.contains { $0.path == nil }))
   }
   private var hasText: Bool {
@@ -122,6 +123,18 @@ struct ComposerView: View {
         }
       #endif
       quickReplyBar
+      if let key = state.snapshot.queueKey {
+        HStack {
+          Spacer()
+          Button { submit(queue: true) } label: {
+            Label("排队", systemImage: "text.badge.plus")
+              .font(.subheadline).frame(minHeight: 44)
+          }
+          .accessibilityIdentifier("terminal-composer-queue")
+          .accessibilityHint(key == .tab ? "使用 Tab 加入 Agent 原生队列" : "使用 Alt+Enter 加入 Agent 原生队列")
+          .disabled(sendDisabled || !hasContent || state.snapshot.inputBusy)
+        }
+      }
       if hasAccessories {
         // On cramped keyboards/landscape, secondary content yields space to the editor and toolbar.
         ScrollView(.vertical) {
@@ -320,7 +333,7 @@ struct ComposerView: View {
   }
 
   private var sendButton: some View {
-    Button(action: submit) {
+    Button { submit() } label: {
       Group {
         if stopping || state.snapshot.inputBusy {
           ProgressView().tint(TerminalAppearance.background)
@@ -353,29 +366,35 @@ struct ComposerView: View {
     editing = true
   }
 
-  private func submit() {
+  private func submit(queue: Bool = false) {
     guard session.terminal?.id == terminalID, session.terminalController === controller,
-      session.canWrite, controller.canSend, !stopping else { return }
+      session.canWrite, controller.canSend, !stopping, !submitting else { return }
+    if queue, let committed = textEditor.commitComposition() {
+      session.setDraft(committed, terminalID: terminalID)
+    }
     failure = nil
     // Presentation is a deduplicated snapshot; actions always validate the current source state.
     let draft = session.terminalDrafts[terminalID] ?? ""
-    let stop = session.isCommandActive(terminalID)
+    guard !queue || (session.composerQueueKey(terminalID: terminalID) != nil
+      && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty)) else { return }
+    let stop = !queue && session.isCommandActive(terminalID)
       && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty
-    if !stop {
+    if !stop && !queue {
       editing = false
       showingShortcuts = false
     }
-    session.recordUserAction(stop ? "composer.stop" : "composer.send", terminalID: terminalID)
+    session.recordUserAction(stop ? "composer.stop" : (queue ? "composer.queue" : "composer.send"), terminalID: terminalID)
     if stop { stopping = true }
+    submitting = true
     Task {
-      defer { stopping = false }
+      defer { stopping = false; submitting = false }
       do {
         if stop {
           try await session.stopCommand(terminalID)
         } else {
-          try await session.sendCommand(terminalID: terminalID)
+          try await session.sendCommand(terminalID: terminalID, queue: queue)
         }
-        onActionSucceeded()
+        if queue { editing = true } else { onActionSucceeded() }
       } catch {
         if !(error is CancellationError) {
           failure = stop ? displayError(error) : displayInputError(error)
