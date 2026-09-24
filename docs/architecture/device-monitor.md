@@ -82,6 +82,6 @@ Backend 从本 profile 的 `device-monitor/push.json` 读取持久推送配置�
 ## 验证边界
 
 协议驱动为 `node scripts/verify/device-monitor/run.mjs`，验收合同为
-[电量展示](../testing/app/mac-battery-monitor.testplan.yaml)与[低电量推送](../testing/app/mac-battery-alerts.testplan.yaml)。
+[电量展示](../testing/app/mac-battery-monitor.testplan.yaml)、[低电量推送](../testing/app/mac-battery-alerts.testplan.yaml)与[通用推送类别](../testing/app/push-notifications.testplan.yaml)。
 本地记录器不等于真实 APNs 接受，APNs 接受也不等于手机展示；当前原生运行证据与未完成项见
 [iOS 验收状态](../../packages/app-ios/docs/validation-status.md)。
