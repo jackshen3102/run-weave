@@ -457,7 +457,14 @@ export function recordActivityBatch(
         ingestedAt,
       );
       advanceProducerContiguous(database, event, ingestedAt);
-      return { eventId: event.eventId, status: "committed", activityOffset };
+      return {
+        eventId: event.eventId, status: "committed", activityOffset,
+        ...(hasDescriptors && !keepDescriptors ? {
+          code: contentKey === null
+            ? "activity_content_key_unavailable"
+            : "activity_content_storage_budget_exceeded",
+        } : {}),
+      };
     });
   });
   return write.immediate();

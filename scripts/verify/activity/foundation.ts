@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +13,9 @@ import type {
 import { ActivityEventFactory } from "../../../backend/src/activity/recording/event-factory";
 import { listActivitySchemas } from "../../../backend/src/activity/recording/registry";
 import { ActivityStore } from "../../../backend/src/activity/recording/store";
+import { ActivityQueryService } from "../../../backend/src/activity/database/service";
+import { EvolutionContextPackBuilder } from "../../../backend/src/evolution/context-pack";
+import { resolveRepositoryIdentity } from "../../../backend/src/repository/identity";
 
 const currentFile = fileURLToPath(import.meta.url);
 const requireFromBackend = createRequire(
@@ -145,12 +148,74 @@ function contentEvent(
   return event;
 }
 
+async function verifyLinuxContentStorage(root: string): Promise<void> {
+  const home = path.join(root, "linux-production");
+  const databasePath = path.join(home, "activity.sqlite");
+  const keyPath = path.join(home, ".activity-content-key");
+  const env = { ...process.env, RUNWEAVE_ACTIVITY_TEST_MODE: "false", RUNWEAVE_ACTIVITY_WORKER_ENTRY: "" };
+  const open = () => ActivityStore.create({ databasePath, env });
+  const stores = await Promise.all([open(), open()]);
+  const event = contentEvent(factory("linux-production-key"), {
+    projectId: "linux-production-key", text: "persistent encrypted output",
+  });
+  event.scope.cwd = process.cwd();
+  try {
+    assert.equal((await stores[0]!.policy()).contentStorage, "available");
+    assert.equal((await stores[0]!.record([event]))[0]?.status, "committed");
+    assert.equal((await stores[1]!.content(event.contents[0]!.contentId))?.availability, "available");
+  } finally {
+    await Promise.all(stores.map((store) => store.close()));
+  }
+  const key = await readFile(keyPath);
+  assert.equal((await stat(keyPath)).mode & 0o777, 0o600);
+  assert.equal((await stat(home)).mode & 0o777, 0o700);
+  const reopened = await open();
+  try {
+    const content = await reopened.content(event.contents[0]!.contentId);
+    assert.equal(Buffer.from(content?.bytesBase64 ?? "", "base64").toString(), "persistent encrypted output");
+    const repository = await resolveRepositoryIdentity(process.cwd());
+    const builder = new EvolutionContextPackBuilder(new ActivityQueryService(reopened), {
+      getContextPack: async () => null,
+      getContextPackByRun: async () => null,
+      putContextPack: async () => {},
+    });
+    const pack = await builder.buildActivityPack({
+      runId: crypto.randomUUID(), projectId: repository.repositoryId,
+      repository: { repositoryId: repository.repositoryId, cwd: process.cwd() },
+      profile: "quick", baselineDigest: "isolated-verification",
+      deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    assert.equal(pack.evidence.find((item) => item.sourceRecordId === event.eventId)?.contentRefs[0]?.availability, "available");
+  } finally {
+    await reopened.close();
+  }
+  await chmod(keyPath, 0o644);
+  await assert.rejects(open(), /activity_content_key_permissions_invalid/);
+  await chmod(keyPath, 0o600);
+  await writeFile(keyPath, "corrupt");
+  await assert.rejects(open(), /activity_content_key_invalid/);
+  assert.equal(await readFile(keyPath, "utf8"), "corrupt");
+  await writeFile(keyPath, crypto.randomBytes(32).toString("base64"));
+  await assert.rejects(open(), /activity_content_key_mismatch/);
+  await rm(keyPath);
+  await assert.rejects(open(), /activity_content_key_missing_restore_required/);
+  await assert.rejects(stat(keyPath), { code: "ENOENT" });
+  await writeFile(keyPath, key, { mode: 0o600 });
+  const restored = await open();
+  try {
+    assert.equal((await restored.content(event.contents[0]!.contentId))?.availability, "available");
+  } finally {
+    await restored.close();
+  }
+}
+
 async function main(): Promise<void> {
   const root = await mkdtemp(path.join(os.tmpdir(), "runweave-activity-verify-"));
   const activityHome = path.join(root, "activity");
   const databasePath = path.join(activityHome, "activity.sqlite");
   const startedAt = new Date().toISOString();
   try {
+    if (process.platform === "linux") await verifyLinuxContentStorage(root);
     await Promise.all([
       spawnWriter([databasePath, activityHome, "stable-writer", "stable", "100"]),
       spawnWriter([databasePath, activityHome, "beta-writer", "beta", "100"]),
@@ -370,7 +435,9 @@ async function main(): Promise<void> {
         text: "metadata must survive without persisted content",
         occurredAt: new Date().toISOString(),
       });
-      assert.equal((await quotaStore.record([quotaEvent]))[0]?.status, "committed");
+      const quotaAck = (await quotaStore.record([quotaEvent]))[0];
+      assert.equal(quotaAck?.status, "committed");
+      assert.equal(quotaAck?.code, "activity_content_storage_budget_exceeded");
       const quotaFacts = await readAllFacts(quotaStore, "quota-fixture");
       assert.equal(quotaFacts.length, 1);
       assert.equal(quotaFacts[0]?.contentDescriptors.length, 0);
@@ -394,6 +461,7 @@ async function main(): Promise<void> {
       databasePath,
       multiProcessFacts: 300,
       checks: [
+        ...(process.platform === "linux" ? ["linux-production-key-restart-and-failure-recovery"] : []),
         "three-process-wal",
         "exclusive-first-key-initialization",
         "idempotency-and-conflict",

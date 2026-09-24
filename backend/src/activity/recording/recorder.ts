@@ -21,7 +21,16 @@ export class ActivityRecorder {
       }));
     }
     try {
-      return await this.store.record(events);
+      const acknowledgements = await this.store.record(events);
+      for (const ack of acknowledgements) {
+        if (ack.status === "committed" && ack.code) {
+          logger.warn("activity.content.omitted", {
+            component: "activity", eventId: ack.eventId, code: ack.code,
+            message: "Activity event saved without its content",
+          });
+        }
+      }
+      return acknowledgements;
     } catch (error) {
       logger.warn("activity.record.failed", {
         component: "activity",

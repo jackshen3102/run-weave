@@ -26,6 +26,7 @@ const express = require("express");
 async function verify(
   caseId: "EXPLEARN-001" | "EXPLEARN-002",
   withPanel: boolean,
+  productionKey = false,
 ) {
   const root = await mkdtemp(path.join(os.tmpdir(), "experience-ingestion-"));
   const store = await ActivityStore.create({
@@ -33,7 +34,7 @@ async function verify(
     env: {
       ...process.env,
       RUNWEAVE_ACTIVITY_WORKER_ENTRY: "",
-      RUNWEAVE_ACTIVITY_TEST_MODE: "true",
+      RUNWEAVE_ACTIVITY_TEST_MODE: productionKey ? "false" : "true",
       RUNWEAVE_ACTIVITY_HOME: root,
     },
   });
@@ -281,6 +282,14 @@ async function verify(
       learned.find((f) => f.kind === "agent.tool.completed")!.text,
       "",
     );
+    const missingThread = crypto.randomUUID();
+    await store.record([factory.create({
+      eventName: "user.query.submit_requested",
+      scope: { threadId: missingThread, terminalSessionId: session.id, panelId: panelId ?? undefined },
+    })]);
+    await assert.rejects(readLearningFacts(store, {
+      ...source, threadId: missingThread, completedAt: new Date().toISOString(), asOfActivityOffset: undefined,
+    }), /experience_source_unavailable/);
     // Oversized content must still fail closed through the real Activity writer.
     const oversized = factory.create({
       eventName: "agent.tool.completed",
@@ -323,3 +332,8 @@ async function verify(
 
 for (const caseId of ["EXPLEARN-001", "EXPLEARN-002"] as const)
   for (const withPanel of [false, true]) await verify(caseId, withPanel);
+
+if (process.platform === "linux") {
+  await verify("EXPLEARN-002", true, true);
+  console.log("Linux production key PASS: real HTTP hook, SQLite content and learning source; no test key");
+}

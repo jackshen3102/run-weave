@@ -1,12 +1,61 @@
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { constants, closeSync, existsSync, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const KEYCHAIN_SERVICE = "com.runweave.activity";
 const KEYCHAIN_ACCOUNT = "content-key-v1";
 const KEY_BYTES = 32;
 const SECURITY_ITEM_NOT_FOUND_STATUS = 44;
+
+// The database initialization transaction serializes users of this key file.
+// Publish a complete key atomically so a crash cannot leave a partial key.
+function loadLinuxKey(activityHome: string, allowCreate: boolean): Buffer {
+  const keyPath = path.join(activityHome, ".activity-content-key");
+  const read = (): Buffer => {
+    const fd = openSync(keyPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const info = fstatSync(fd);
+      if (!info.isFile() || (info.mode & 0o777) !== 0o600 || info.uid !== process.getuid?.()) {
+        throw new Error("activity_content_key_permissions_invalid");
+      }
+      return decodeKey(readFileSync(fd, "utf8"));
+    } finally {
+      closeSync(fd);
+    }
+  };
+  try {
+    return read();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (!allowCreate) throw new Error("activity_content_key_missing_restore_required");
+  mkdirSync(activityHome, { recursive: true, mode: 0o700 });
+  const temporary = `${keyPath}.${crypto.randomUUID()}.tmp`;
+  try {
+    const fd = openSync(temporary, "wx", 0o600);
+    try {
+      writeFileSync(fd, crypto.randomBytes(KEY_BYTES).toString("base64"));
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    try {
+      linkSync(temporary, keyPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+  } finally {
+    unlinkSync(temporary);
+  }
+  const directory = openSync(activityHome, constants.O_RDONLY);
+  try {
+    fsyncSync(directory);
+  } finally {
+    closeSync(directory);
+  }
+  return read();
+}
 
 export interface ActivityEncryptedValue {
   ciphertext: Buffer;
@@ -90,6 +139,7 @@ function createKeychainKey(keychainPath: string): Buffer {
 export function loadActivityContentKey(
   env: NodeJS.ProcessEnv,
   activityHome?: string,
+  allowCreate = true,
 ): Buffer | null {
   if (env.RUNWEAVE_ACTIVITY_TEST_MODE === "true") {
     const configured = env.RUNWEAVE_ACTIVITY_TEST_KEY?.trim();
@@ -113,6 +163,10 @@ export function loadActivityContentKey(
         return decodeKey(readFileSync(keyPath, "utf8"));
       }
     }
+  }
+  if (process.platform === "linux") {
+    if (!activityHome) throw new Error("activity_home_required");
+    return loadLinuxKey(activityHome, allowCreate);
   }
   if (process.platform !== "darwin") {
     return null;
