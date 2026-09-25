@@ -102,6 +102,11 @@ export interface CreateTerminalPrototypePreviewTicketResponse {
   expiresIn: number;
 }
 
+export interface CreateTerminalHtmlPreviewTicketResponse {
+  path: string;
+  expiresIn: number;
+}
+
 export interface TerminalPreviewFileSearchResponse {
   kind: "file-search";
   projectId: string;

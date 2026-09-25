@@ -34,6 +34,11 @@ struct PreviewFile: Decodable {
   let base: String?
   let mtimeMs: Double?
 }
+
+struct HtmlPreviewTicket: Decodable {
+  let path: String
+  let expiresIn: Int
+}
 struct PreviewChange: Decodable, Identifiable {
   let path: String
   let status: String

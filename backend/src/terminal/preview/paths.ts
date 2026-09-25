@@ -113,6 +113,7 @@ export function detectLanguage(filePath: string): string {
     case ".css":
       return "css";
     case ".html":
+    case ".htm":
       return "html";
     case ".js":
     case ".jsx":

@@ -87,6 +87,7 @@ Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review cha
 | 普通文本/代码 | Monaco；是否可编辑由文件能力决定，Diff 始终只读                       |
 | Markdown      | 默认 Preview，可切 Source/Split；沿用文件编辑权限，不创建新的顶层任务 |
 | 独立 SVG      | 默认 Preview，可切 Source；XML 经净化后在无权限 sandbox iframe 中预览 |
+| 本地 HTML     | 默认 Preview，可切 Source；短期票据提供同目录静态资源，隔离执行脚本   |
 | 图片          | 独立 asset 读取；Web 使用公共图片预览与 lightbox，支持缩放和平移      |
 
 Markdown 默认值以 store 为准，不能沿用旧草图中的 Split 默认值。Split 的滚动同步、行引用与选区行为见
@@ -97,6 +98,7 @@ Markdown 默认值以 store 为准，不能沿用旧草图中的 Split 默认值
   不能由页面内容绕过项目路径和协议检查。
 - 独立 SVG 使用 [SVG renderer](../../frontend/src/components/terminal/preview/renderers/svg.tsx) 的净化与 sandbox，
   不把原始 XML 直接注入工作台 DOM。
+- `.html`/`.htm` 在 Files/Explorer 中可渲染完整页面。Backend 票据绑定 Project 和 HTML 绝对路径，静态资源只读且限制在文件所在目录内；桌面端使用无 `allow-same-origin` 的 iframe，原生 iOS 使用非持久化 WKWebView。两端 Source 均可查看，桌面端继续使用现有编辑/保存能力，iOS 保持只读。
 - Monaco 与富内容渲染按需加载；只读能力不能仅靠隐藏按钮，后端写接口仍执行路径和文件类型校验。
 - Web 图片基础能力属于 `packages/common`；原生 Swift 实现独立维护，不能由 Web 实现推断 iOS 已具备相同行为。
 

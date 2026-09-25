@@ -45,6 +45,7 @@ import { createInternalTerminalCompletionRouter } from "./routes/terminal/comple
 import { createTerminalRouter } from "./routes/terminal/index";
 import { createTestRouter } from "./routes/test";
 import { createPrototypePreviewRouter } from "./routes/prototype/preview";
+import { createHtmlPreviewRouter } from "./routes/prototype/html-preview";
 import { createVoiceRouter } from "./routes/voice";
 import { createWorkHistoryRouter } from "./routes/work-history";
 import { createAttentionRouter } from "./routes/attention";
@@ -136,14 +137,11 @@ function createHttpApp(
   );
   app.use(createTunnelTokenBootstrapMiddleware(tunnelAuthConfig));
 
-  app.use(
-    "/prototype-preview",
-    requireTunnelAuth,
-    createPrototypePreviewRouter(
-      services.terminalSessionManager,
-      services.authService,
-    ),
-  );
+  app.use("/prototype-preview", requireTunnelAuth, createPrototypePreviewRouter(
+    services.terminalSessionManager,
+    services.authService,
+  ));
+  app.use("/html-preview", requireTunnelAuth, createHtmlPreviewRouter(services.terminalSessionManager, services.authService));
 
   app.get("/health", requireTunnelAuth, (_req, res) => {
     res.json(buildHealthPayload(process.env, backendIdentity));

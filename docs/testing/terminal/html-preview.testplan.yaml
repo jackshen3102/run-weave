@@ -1,0 +1,46 @@
+version: 1
+name: 本地 HTML 文件桌面与 iOS 预览
+description: >
+  验证 Terminal 文件入口在桌面与原生 iOS 上渲染 HTML，保留源码视图，
+  并通过 Backend 票据限制本地资源访问。
+
+cases:
+  - id: HTP-001
+    name: 桌面文件预览加载页面和相对资源
+    required: true
+    description: >
+      桌面 Terminal 打开 HTML 后显示预览，CSS 与脚本生效，用户交互更新页面；
+      切换 Source 后显示文件原文。
+    preconditions:
+      - 独立 Dev Session 的项目目录内有 HTML、相对 CSS 和 JavaScript，HTML 按钮可修改页面文字。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 附着该 Dev Session 的 desktop surface，从 Files/Explorer 打开 HTML。
+      - 检查 iframe 内标题、CSS 计算样式和脚本设置的 DOM 标记，点击按钮并确认文字变化。
+      - 切换 Source，确认显示 HTML 原文且 iframe 已卸载；再切回 Preview，确认页面重新加载。
+
+  - id: HTP-002
+    name: iOS 文件预览加载页面和相对资源
+    required: true
+    description: >
+      当前源码构建安装到受管模拟器后，原生文件入口显示 HTML 预览，
+      样式和脚本交互有效，Source 显示原文。
+    preconditions:
+      - 已按共享设备池规则租用 Runweave 模拟器并安装本次构建。
+      - iOS 已登录与桌面相同的测试 Backend，该 Backend 的项目目录包含 HTML、CSS 与可点击脚本按钮。
+    steps:
+      - 使用 `$toolkit:agent-device` 在 Terminal 的文件列表打开 HTML，确认 Preview 和 Source 切换控件及页面标题出现。
+      - 截图确认 CSS 背景生效，点击 HTML 按钮并在原生快照中确认文字变化。
+      - 切换 Source，确认显示原始 HTML 内容且不再显示网页按钮。
+
+  - id: HTP-003
+    name: 票据只读并限制同目录资源
+    required: true
+    description: >
+      有效票据可读取 HTML 与同目录 CSS/JS；软链接越界、无效票据和写入方法被拒绝。
+    preconditions:
+      - 测试 Backend 的项目内有 HTML、CSS、JS，并有一个指向目录外文件的软链接。
+      - 已用有效 access token 为该 HTML 申请预览票据。
+    steps:
+      - 请求票据 URL 对应 HTML、CSS、JS，确认均为 200 且 HTML 带 no-store、nosniff 与 sandbox 响应头。
+      - 请求软链接越界路径，确认返回 403 且不包含目标文件内容。
+      - 改写票据后请求入口，确认返回 401；向有效入口发送 POST，确认返回 405 且 Allow 为 `GET, HEAD`。

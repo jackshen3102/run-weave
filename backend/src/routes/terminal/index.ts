@@ -47,6 +47,7 @@ import {
 } from "./sessions/helpers";
 import { registerTerminalTicketRoutes } from "./input/ticket";
 import { registerTerminalPrototypeGalleryRoutes } from "./preview/gallery";
+import { registerTerminalHtmlPreviewRoutes } from "./preview/html";
 import { registerTerminalQuickInputRoutes } from "./input/quick";
 import { registerTerminalInputRoutes } from "./input/index";
 import {
@@ -207,6 +208,7 @@ export function createTerminalRouter(
     terminalSessionManager,
     options?.authService,
   );
+  registerTerminalHtmlPreviewRoutes(router, terminalSessionManager, options?.authService);
   if (options?.quickInputService) {
     registerTerminalQuickInputRoutes(router, options.quickInputService);
   }

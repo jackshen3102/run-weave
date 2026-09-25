@@ -8,6 +8,7 @@ export type SignedTokenType =
   | "terminal-events-ws"
   | "devtools"
   | "prototype-preview"
+  | "html-preview"
   | "legacy-temp";
 
 export interface TokenResource {
@@ -17,6 +18,7 @@ export interface TokenResource {
   projectId?: string;
   prototypeSource?: string;
   prototypeSlug?: string;
+  htmlPath?: string;
 }
 
 interface BaseTokenPayload {
@@ -83,6 +85,10 @@ function decodePayload(encodedPayload: string): BaseTokenPayload | null {
               prototypeSlug:
                 typeof parsed.resource.prototypeSlug === "string"
                   ? parsed.resource.prototypeSlug
+                  : undefined,
+              htmlPath:
+                typeof parsed.resource.htmlPath === "string"
+                  ? parsed.resource.htmlPath
                   : undefined,
             }
           : undefined,
