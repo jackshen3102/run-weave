@@ -1,4 +1,4 @@
-export type TerminalPreviewFileKind = "markdown" | "svg" | "image" | "text";
+export type TerminalPreviewFileKind = "markdown" | "svg" | "html" | "image" | "text";
 
 export type MarkdownPreviewHrefResolution =
   | { kind: "preview-file"; path: string; hash?: string }
@@ -153,6 +153,9 @@ export function getTerminalPreviewFileKind(
   }
   if (normalizedLanguage === "svg" || extension === ".svg") {
     return "svg";
+  }
+  if (normalizedLanguage === "html" || extension === ".html" || extension === ".htm") {
+    return "html";
   }
   if (isSupportedTerminalImagePreviewPath(filePath)) {
     return "image";

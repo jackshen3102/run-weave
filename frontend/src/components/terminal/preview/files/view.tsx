@@ -52,6 +52,10 @@ const TerminalImagePreview = lazy(() =>
   })),
 );
 
+const TerminalHtmlPreview = lazy(() =>
+  import("../renderers/html").then((module) => ({ default: module.TerminalHtmlPreview })),
+);
+
 export function renderPreviewEmpty(
   title: string,
   action?: ReactNode,
@@ -285,6 +289,24 @@ export function TerminalPreviewFileView({
           <TerminalSvgPreview content={editorContent} />
         </Suspense>
       );
+  } else if (filePreview && fileKind === "html") {
+    fileContent = <Suspense fallback={renderPreviewEmpty("Loading HTML preview...")}>
+      <TerminalHtmlPreview
+        key={`${filePreview.absolutePath}:${revealPosition?.key ?? ""}`}
+        apiBase={apiBase}
+        token={token}
+        projectId={projectId}
+        path={filePreview.path}
+        content={editorContent}
+        savedContent={filePreview.content}
+        mtimeMs={filePreview.mtimeMs}
+        refreshKey={assetRefreshKey}
+        editable={editable}
+        lineReferencePath={filePreview.absolutePath}
+        initialRevealPosition={revealPosition}
+        onContentChange={onEditorContentChange}
+      />
+    </Suspense>;
   } else if (filePreview) {
     fileContent = (
       <Suspense fallback={renderPreviewEmpty("Loading editor...")}>

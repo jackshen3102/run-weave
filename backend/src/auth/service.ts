@@ -265,7 +265,8 @@ export class AuthService {
       | "terminal-ws"
       | "terminal-events-ws"
       | "devtools"
-      | "prototype-preview";
+      | "prototype-preview"
+      | "html-preview";
     resource: TokenResource;
     ttlMs: number;
   }): { token: string; expiresIn: number };
@@ -279,7 +280,8 @@ export class AuthService {
             | "terminal-ws"
             | "terminal-events-ws"
             | "devtools"
-            | "prototype-preview";
+            | "prototype-preview"
+            | "html-preview";
           resource: TokenResource;
           ttlMs: number;
         },
@@ -325,7 +327,8 @@ export class AuthService {
         | "terminal-ws"
         | "terminal-events-ws"
         | "devtools"
-        | "prototype-preview";
+        | "prototype-preview"
+        | "html-preview";
       resource: TokenResource;
     },
   ): TemporaryTokenVerification | null {
@@ -349,7 +352,8 @@ export class AuthService {
       actual.tabId !== params.resource.tabId ||
       actual.projectId !== params.resource.projectId ||
       actual.prototypeSource !== params.resource.prototypeSource ||
-      actual.prototypeSlug !== params.resource.prototypeSlug
+      actual.prototypeSlug !== params.resource.prototypeSlug ||
+      actual.htmlPath !== params.resource.htmlPath
     ) {
       return null;
     }

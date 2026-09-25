@@ -16,6 +16,7 @@ struct FilePreview: View {
   @State private var diff: PreviewDiff?
   @State private var lines: [DiffLine] = []
   @State private var image: UIImage?
+  @State private var htmlURL: URL?
   @State private var failure: String?
   @State private var loading = true
   @State private var mode = "preview"
@@ -49,7 +50,7 @@ struct FilePreview: View {
     diff?.contentKind == "image" || (diff?.contentKind == nil && isPreviewImage(file.path))
   }
   private var canSwitch: Bool {
-    ["md", "markdown", "svg"].contains(suffix) && !isImage && diff?.problem == nil
+    ["md", "markdown", "svg", "html", "htm"].contains(suffix) && !isImage && diff?.problem == nil && (!["html", "htm"].contains(suffix) || file.changeKind == nil)
   }
   private var versionLabel: String? {
     guard file.changeKind != nil, let diff else { return nil }
@@ -94,6 +95,8 @@ struct FilePreview: View {
           Text("文件为空").foregroundColor(.secondary).padding()
         } else if mode == "preview", suffix == "svg" {
           SVGPreview(content: content)
+        } else if mode == "preview", ["html", "htm"].contains(suffix), let htmlURL {
+          HtmlPreview(url: htmlURL)
         } else if mode == "preview", ["md", "markdown"].contains(suffix) {
           MarkdownPreview(content: content)
         } else {
@@ -177,6 +180,7 @@ struct FilePreview: View {
     loading = true
     failure = nil
     image = nil
+    htmlURL = nil
     diff = nil
     lines = []
     if file.changeKind == nil, let api = session.api {
@@ -246,6 +250,16 @@ struct FilePreview: View {
         }
         guard !Task.isCancelled else { return }
         payload = value
+        if mode == "preview", ["html", "htm"].contains(suffix) {
+          let ticket = try await session.withConnection {
+            try await $0.htmlPreviewTicket(projectID: projectID, path: file.path)
+          }
+          guard !Task.isCancelled else { return }
+          if let api = session.api {
+            htmlURL = URL(string: api.baseURL.absoluteString + ticket.path)
+          }
+          if htmlURL == nil { throw APIError.invalidURL }
+        }
       }
     } catch {
       if !Task.isCancelled {
