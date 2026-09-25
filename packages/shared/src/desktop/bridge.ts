@@ -65,6 +65,13 @@ export type {
   TerminalBrowserUpdate,
 } from "../browser/workspace";
 
+/** Per-renderer-document revision; host identity comes from the IPC sender. */
+export interface TerminalBrowserPresentationState {
+  revision: number;
+  active: boolean;
+  suppressed: boolean;
+}
+
 export interface TerminalBrowserBounds {
   x: number;
   y: number;
@@ -169,6 +176,7 @@ export interface RunweaveElectronBridge {
   terminalBrowserStop: (tabId: string) => Promise<void>;
   terminalBrowserGoBack: (tabId: string) => Promise<TerminalBrowserSnapshot>;
   terminalBrowserGoForward: (tabId: string) => Promise<TerminalBrowserSnapshot>;
+  terminalBrowserSetPresentation: (state: TerminalBrowserPresentationState) => Promise<void>;
   terminalBrowserShow: (tabId: string) => Promise<void>;
   terminalBrowserResolveAssistanceTarget: (
     target: BrowserAssistanceTarget,

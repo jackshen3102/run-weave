@@ -1,4 +1,5 @@
-import { useEffect, type RefObject } from "react";
+import { setBrowserPresentationHost } from "../../../../features/terminal/browser-presentation/coordinator";
+import { useEffect, useLayoutEffect, type RefObject } from "react";
 import type {
   TerminalBrowserTabState,
   TerminalPreviewStore,
@@ -69,6 +70,17 @@ export function useTerminalBrowserViewport({
     syncBounds,
   ]);
 
+  useLayoutEffect(() => {
+    if (!isElectron) return;
+    void setBrowserPresentationHost(active && electronTabsSynced, activeTabId ?? null);
+  }, [active, activeTabId, electronTabsSynced, isElectron]);
+
+  // A target change is not a host unmount: keep an existing overlay acknowledged.
+  useLayoutEffect(() => {
+    if (!isElectron) return;
+    return () => { void setBrowserPresentationHost(false, null); };
+  }, [isElectron]);
+
   useEffect(() => {
     if (!isElectron || !electronTabsSynced || !activeTabId) {
       return;
@@ -78,7 +90,6 @@ export function useTerminalBrowserViewport({
       clearTabBounds(activeTabId, true);
       return;
     }
-    void window.electronAPI?.terminalBrowserShow?.(activeTabId);
     const element = surfaceContainerRef.current;
     if (!element) {
       return;
@@ -88,6 +99,7 @@ export function useTerminalBrowserViewport({
     observer.observe(element);
     window.addEventListener("resize", handleWindowResize);
     syncBounds(true);
+    void window.electronAPI?.terminalBrowserShow?.(activeTabId);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", handleWindowResize);

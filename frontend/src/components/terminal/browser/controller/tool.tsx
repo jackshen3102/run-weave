@@ -1,5 +1,4 @@
-import { useSuijiDrawer } from "../../../../features/suiji/drawer-state";
-import { useMemoizedFn } from "ahooks";
+import { useBrowserPresentation } from "../../../../features/terminal/browser-presentation/coordinator";
 import { useEffect, useState } from "react";
 import { useTerminalBrowserController } from "./use-controller";
 import { TerminalBrowserErrorBanners } from "../header/errors";
@@ -31,10 +30,9 @@ export function TerminalBrowserTool({
   terminalSessionId,
 }: TerminalBrowserToolProps) {
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
-  const suijiOpen = useSuijiDrawer((state) => state.open);
+  const presentation = useBrowserPresentation();
   const controller = useTerminalBrowserController({
     active,
-    nativeViewSuppressed: profileSettingsOpen || suijiOpen,
     profileId,
     activationProjectId,
     activationRevision,
@@ -42,17 +40,6 @@ export function TerminalBrowserTool({
     token,
     terminalSessionId,
   });
-
-  const activeTabId = controller?.activeTab.id ?? null;
-  const controllerIsElectron = controller?.isElectron === true;
-  const handleProfileSettingsOpenChange = useMemoizedFn(
-    async (open: boolean): Promise<void> => {
-      if (open && controllerIsElectron && activeTabId) {
-        await window.electronAPI?.terminalBrowserHide?.(activeTabId);
-      }
-      setProfileSettingsOpen(open);
-    },
-  );
 
   useEffect(() => {
     if (!active) {
@@ -166,9 +153,7 @@ export function TerminalBrowserTool({
           resolving: profileResolving,
           resolutionError: profileError,
           settingsOpen: profileSettingsOpen,
-          onSettingsOpenChange: (open) => {
-            void handleProfileSettingsOpenChange(open);
-          },
+          onSettingsOpenChange: setProfileSettingsOpen,
         }}
         utilities={{
           isElectron,
@@ -187,6 +172,11 @@ export function TerminalBrowserTool({
         selecting={annotationState.selecting}
         onDone={() => void setAnnotationSelecting(false)}
       />
+      {presentation.error ? (
+        <div role="alert" className="p-2 text-sm text-amber-400">
+          {presentation.error} <button onClick={presentation.retry}>重试显示切换</button>
+        </div>
+      ) : null}
       <TerminalBrowserErrorBanners
         errors={[
           profileError,
@@ -197,6 +187,7 @@ export function TerminalBrowserTool({
         ]}
       />
       <TerminalBrowserSurface
+        suppressed={presentation.suppressed}
         annotations={{
           error: annotationError,
           open: annotationPanelOpen,

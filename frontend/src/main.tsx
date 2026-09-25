@@ -39,10 +39,15 @@ if (buildChannel === "beta") {
   document.body.append(badge);
 }
 
-createRoot(document.getElementById("root")!).render(
-  <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </ThemeProvider>,
-);
+// Explicit acceptance surface; excluded from Stable builds and normal navigation.
+if ((import.meta.env.DEV || buildChannel === "beta") && new URLSearchParams(location.search).has("browser-overlay-harness")) {
+  void import("./e2e/browser-overlay-harness").then((fixture) => fixture.mountBrowserOverlayHarness());
+} else {
+  createRoot(document.getElementById("root")!).render(
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </ThemeProvider>,
+  );
+}

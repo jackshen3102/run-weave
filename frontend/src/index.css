@@ -397,3 +397,9 @@ canvas {
     animation: suiji-drawer-enter 180ms ease-out;
   }
 }
+
+/* Keep layout/focus measurable while the native surface acknowledges yielding. */
+[data-native-overlay-pending] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

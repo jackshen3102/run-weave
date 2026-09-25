@@ -75,4 +75,14 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ["frontend/src/**/*.{ts,tsx}"],
+    ignores: ["frontend/src/components/ui/**"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [{
+        group: ["@radix-ui/react-dialog", "@radix-ui/react-alert-dialog", "@radix-ui/react-popover", "@radix-ui/react-select", "@radix-ui/react-dropdown-menu", "@radix-ui/react-context-menu"],
+        message: "Use components/ui floating surfaces so native Browser occlusion is coordinated.",
+      }] }],
+    },
+  },
 );

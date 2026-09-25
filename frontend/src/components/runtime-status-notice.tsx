@@ -1,3 +1,4 @@
+import { useOverlayRef } from "../features/overlay/use-overlay-ref";
 import { AlertTriangle, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { RuntimeStatusCapabilityId } from "@runweave/shared/runtime-status";
@@ -46,9 +47,10 @@ export function RuntimeStatusNotice() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  const overlayRef = useOverlayRef<HTMLDivElement>(undefined, "intersection");
   if (!notice || !unhealthyCapabilityIds.includes(notice)) return null;
   return (
-    <div role="status" aria-live="polite" className="fixed right-4 bottom-4 z-[70] flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-xl border border-red-500/40 bg-background p-4 text-foreground shadow-2xl" data-runtime-status-notice={notice}>
+    <div ref={overlayRef} role="status" aria-live="polite" className="fixed right-4 bottom-4 z-[70] flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-xl border border-red-500/40 bg-background p-4 text-foreground shadow-2xl" data-runtime-status-notice={notice}>
       <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
       <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setPanelOpen(true); setNotice(null); }}>
         <span className="block text-sm font-semibold">{CAPABILITY_LABELS[notice]}运行异常</span>

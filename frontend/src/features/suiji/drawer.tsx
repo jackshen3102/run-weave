@@ -1,3 +1,4 @@
+import { useOverlayRef } from "../overlay/use-overlay-ref";
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { useSuijiBrowserNavigation } from "./browser-navigation";
@@ -7,6 +8,7 @@ const SuijiPage = lazy(() => import("./connection"));
 export function SuijiDrawer() {
   const { open, opened, setOpen } = useSuijiDrawer();
   const dialog = useRef<HTMLDialogElement>(null);
+  const overlayRef = useOverlayRef(dialog, "window");
   const browser = useSuijiBrowserNavigation(() => dialog.current?.close());
   const location = useLocation();
   useEffect(() => {
@@ -18,7 +20,7 @@ export function SuijiDrawer() {
   }, [open]);
   return (
     <dialog
-      ref={dialog}
+      ref={overlayRef}
       aria-label="随记抽屉"
       aria-modal="true"
       className="suiji-drawer fixed inset-y-0 left-auto right-0 m-0 h-dvh max-h-none w-[480px] max-w-full overflow-hidden border-0 border-l bg-background p-0 text-foreground shadow-2xl backdrop:bg-black/30"

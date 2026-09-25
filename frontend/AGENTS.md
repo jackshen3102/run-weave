@@ -21,6 +21,7 @@
   `../packages/common/AGENTS.md`。
 - Electron 能力通过 `window.electronAPI` / `window.companionAPI` bridge 使用，不从前端直接导入
   Electron 主进程模块。
+- 新增浮层优先使用 `src/components/ui`；手写或第三方浮层必须接入统一 presence，不在业务中调用 Browser hide/show。策略与示例见 [浮层协调](docs/overlay-coordination.md)。
 - 不新增单元测试；浏览器行为按 `../docs/testing/README.md` 选择 YAML 计划并使用真实
   Playwright 验证。不要引用不存在的历史 spec。
 

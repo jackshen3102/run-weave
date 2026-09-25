@@ -1,0 +1,5 @@
+<!doctype html><meta charset="utf-8"><title>Overlay controlled page</title>
+<style>body {background:#35d5c4;color:#073b34;font:22px sans-serif;min-height:1600px;padding:24px} input,button{font:inherit}</style>
+<h1>Native Browser fixture</h1><p id="loads"></p><label>Unsubmitted value <input id="draft"></label>
+<p><button id="counter">Clicks: 0</button></p><a href="https://example.com/#overlay-page-open" target="_blank">Open another fixture</a>
+<script>let clicks=0;document.querySelector('#counter').onclick=()=>document.querySelector('#counter').textContent=`Clicks: ${++clicks}`;const loads=window.overlayLoads=(window.overlayLoads||0)+1;document.querySelector('#loads').textContent=`Loads: ${loads}`;</script>

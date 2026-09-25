@@ -1,3 +1,4 @@
+import { useOverlayRef } from "../../features/overlay/use-overlay-ref";
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
@@ -11,16 +12,19 @@ const SheetPortal = DialogPrimitive.Portal;
 const SheetOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
-  <DialogPrimitive.Overlay
-    ref={ref}
-    className={cn(
-      "fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-[1px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-      className,
-    )}
-    {...props}
-  />
-));
+>(({ className, ...props }, ref) => {
+  const overlayRef = useOverlayRef(ref, "window");
+  return (
+    <DialogPrimitive.Overlay
+      ref={overlayRef}
+      className={cn(
+        "fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-[1px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        className,
+      )}
+      {...props}
+    />
+  );
+});
 SheetOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const SHEET_SIDE_CLASSNAMES = {
@@ -56,30 +60,33 @@ const SheetContent = React.forwardRef<
       ...props
     },
     ref,
-  ) => (
-    <SheetPortal>
-      {showOverlay ? <SheetOverlay className={overlayClassName} /> : null}
-      <DialogPrimitive.Content
-        ref={ref}
-        className={cn(
-          "fixed z-50 flex flex-col gap-4 border-border/60 bg-background p-6 text-foreground shadow-[0_28px_90px_-40px_rgba(15,23,42,0.82)] transition ease-out data-[state=open]:animate-in data-[state=closed]:animate-out",
-          SHEET_SIDE_CLASSNAMES[side],
-          className,
-        )}
-        {...props}
-      >
-        {children}
-        {!hideClose ? (
-          <DialogPrimitive.Close
-            className="absolute top-4 right-4 inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:border-border hover:text-foreground focus:outline-none"
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        ) : null}
-      </DialogPrimitive.Content>
-    </SheetPortal>
-  ),
+  ) => {
+    const overlayRef = useOverlayRef(ref, "intersection");
+    return (
+      <SheetPortal>
+        {showOverlay ? <SheetOverlay className={overlayClassName} /> : null}
+        <DialogPrimitive.Content
+          ref={overlayRef}
+          className={cn(
+            "fixed z-50 flex flex-col gap-4 border-border/60 bg-background p-6 text-foreground shadow-[0_28px_90px_-40px_rgba(15,23,42,0.82)] transition ease-out data-[state=open]:animate-in data-[state=closed]:animate-out",
+            SHEET_SIDE_CLASSNAMES[side],
+            className,
+          )}
+          {...props}
+        >
+          {children}
+          {!hideClose ? (
+            <DialogPrimitive.Close
+              className="absolute top-4 right-4 inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:border-border hover:text-foreground focus:outline-none"
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          ) : null}
+        </DialogPrimitive.Content>
+      </SheetPortal>
+    );
+  },
 );
 SheetContent.displayName = DialogPrimitive.Content.displayName;
 

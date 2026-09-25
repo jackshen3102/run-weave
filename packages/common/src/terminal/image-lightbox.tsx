@@ -1,3 +1,4 @@
+import { ImageLightboxPresence } from "./image-lightbox-lifecycle";
 import { useState } from "react";
 import Lightbox from "yet-another-react-lightbox";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
@@ -41,12 +42,11 @@ export function RunweaveImageLightbox({
       open={open}
       plugins={LIGHTBOX_PLUGINS}
       render={{
-        controls: () =>
-          title ? (
+        controls: () => <><ImageLightboxPresence />{title ? (
             <div className="rw-image-lightbox__title" title={title}>
               {title}
             </div>
-          ) : null,
+          ) : null}</>,
       }}
       slides={[{ src, alt }]}
       toolbar={{ buttons: ["zoom", "close"] }}

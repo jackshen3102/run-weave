@@ -1,3 +1,4 @@
+import { useOverlayRef } from "../../features/overlay/use-overlay-ref";
 import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
@@ -15,6 +16,7 @@ export function Tooltip({
   side?: "bottom" | "top";
 }) {
   const [open, setOpen] = useState(false);
+  const overlayRef = useOverlayRef<HTMLSpanElement>(undefined, "intersection", open);
 
   return (
     <span
@@ -28,6 +30,7 @@ export function Tooltip({
     >
       {children}
       <span
+        ref={overlayRef}
         role="tooltip"
         aria-hidden={!open}
         className={cn(

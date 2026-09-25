@@ -1,5 +1,9 @@
 import { useMemoizedFn } from "ahooks";
-import * as Dialog from "@radix-ui/react-dialog";
+import {
+  Dialog as Root, DialogPortal as Portal, DialogOverlay as Overlay,
+  DialogSurface as Content, DialogTitle as Title, DialogDescription as Description,
+  DialogClose as Close,
+} from "./ui/dialog";
 import { useEffect, useMemo, useState } from "react";
 import type { DiagnosticLogResult, DiagnosticLogStatus } from "@runweave/shared/diagnostic-logs";
 import {
@@ -267,27 +271,27 @@ export function DiagnosticLogEntry({
     : null;
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm" />
-        <Dialog.Content className="fixed top-[50%] left-[50%] z-50 flex max-h-[84vh] w-[min(48rem,calc(100vw-2rem))] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 rounded-md border border-border bg-background p-4 shadow-xl">
+    <Root open={open} onOpenChange={onOpenChange}>
+      <Portal>
+        <Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm" />
+        <Content className="fixed top-[50%] left-[50%] z-50 flex max-h-[84vh] w-[min(48rem,calc(100vw-2rem))] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 rounded-md border border-border bg-background p-4 shadow-xl">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex flex-wrap items-center gap-2">
-                <Dialog.Title className="text-lg font-semibold">
+                <Title className="text-lg font-semibold">
                   日志上报
-                </Dialog.Title>
+                </Title>
                 {statusBadge}
               </div>
-              <Dialog.Description className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              <Description className="max-w-2xl text-sm leading-6 text-muted-foreground">
                 开始记录后复现问题，结束时会把本轮 Web 与服务端诊断日志保存到服务端目录。
-              </Dialog.Description>
+              </Description>
             </div>
-            <Dialog.Close asChild>
+            <Close asChild>
               <Button type="button" variant="secondary" size="sm">
                 关闭
               </Button>
-            </Dialog.Close>
+            </Close>
           </div>
 
           <div className="flex flex-col gap-3 rounded-md border border-border/70 bg-muted/20 p-3">
@@ -384,8 +388,8 @@ export function DiagnosticLogEntry({
               />
             </div>
           ) : null}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        </Content>
+      </Portal>
+    </Root>
   );
 }

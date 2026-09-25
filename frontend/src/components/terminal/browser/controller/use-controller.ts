@@ -24,7 +24,6 @@ import {
 
 export function useTerminalBrowserController({
   active,
-  nativeViewSuppressed,
   profileId,
   activationProjectId,
   activationRevision,
@@ -32,7 +31,6 @@ export function useTerminalBrowserController({
   token,
   terminalSessionId,
 }: TerminalBrowserControllerOptions) {
-  const nativeViewActive = active && !nativeViewSuppressed;
   const {
     activeTabId,
     applyBrowserWorkspace,
@@ -104,7 +102,7 @@ export function useTerminalBrowserController({
     syncBounds,
     setMinimumViewportWidth,
   } = useTerminalBrowserViewport({
-    active: nativeViewActive,
+    active,
     activeTab,
     annotationPanelOpen,
     browserViewRef,
@@ -176,7 +174,7 @@ export function useTerminalBrowserController({
           return;
         }
         applyElectronWorkspace(workspace, force);
-        if (workspace.activeTabId && nativeViewActive) {
+        if (workspace.activeTabId && active) {
           await window.electronAPI?.terminalBrowserShow?.(
             workspace.activeTabId,
           );
@@ -268,7 +266,7 @@ export function useTerminalBrowserController({
     if (isElectron && !electronTabsSynced) {
       return;
     }
-    if (!activeTabId || !activeTabUrl || !nativeViewActive || !isElectron) {
+    if (!activeTabId || !activeTabUrl || !active || !isElectron) {
       syncBounds(true);
       return;
     }
@@ -285,7 +283,7 @@ export function useTerminalBrowserController({
     electronTabsSynced,
     isElectron,
     navigateTab,
-    nativeViewActive,
+    active,
     syncBounds,
   ]);
 

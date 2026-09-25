@@ -1,3 +1,4 @@
+import { setBrowserPresentationBounds } from "../../../../features/terminal/browser-presentation/coordinator";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
@@ -240,6 +241,7 @@ export function useTerminalBrowserBounds({
         emulationScale,
         horizontalOffsetX: scrollLeft,
       };
+      setBrowserPresentationBounds(nextBounds);
       const boundsKey = [
         nextBounds.x,
         nextBounds.y,
