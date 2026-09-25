@@ -6,7 +6,6 @@ import type {
   TunnelHostConfig,
   TunnelHostRuntime,
   TunnelSnapshot,
-  TunnelState,
 } from "@runweave/shared/tunnels";
 import {
   desktopStateOwner,
@@ -18,6 +17,7 @@ import { startSsh, freePort, type SshProcess } from "./ssh-process.js";
 import { TunnelStore } from "./store.js";
 import { TunnelCredentials } from "./credentials.js";
 import { BrowserChannel } from "./browser-channel.js";
+import { childState, failure } from "./runtime-state.js";
 
 interface Host {
   config: TunnelHostConfig;
@@ -35,20 +35,6 @@ interface Host {
   busy: boolean;
   retryAt: number;
   failures: number;
-}
-const childState = (
-  state: TunnelState["state"],
-  error: TunnelState["error"] = null,
-): TunnelState => ({ state, error });
-function failure(error: unknown): NonNullable<TunnelState["error"]> {
-  const text = error instanceof Error ? error.message : "TUNNEL_FAILED";
-  const code = /^[A-Z_]+/.exec(text)?.[0] ?? "TUNNEL_FAILED";
-  return {
-    code,
-    message: text.includes(": ")
-      ? text.slice(text.indexOf(": ") + 2)
-      : "通道不可用，请检查 SSH 配置和远端服务",
-  };
 }
 export class TunnelManager {
   readonly store = new TunnelStore();
