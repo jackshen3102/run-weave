@@ -34,6 +34,7 @@ struct ComposerView: View {
   let session: AppSession
   let controller: SessionController
   @StateObject private var state: TerminalComposerState
+  @StateObject private var modelSettings = TerminalAgentSettingsModel()
   @StateObject private var textEditor = CommandTextEditor()
   @ObservedObject private var imageDrafts: TerminalImageDrafts
   let terminalID: String
@@ -171,7 +172,19 @@ struct ComposerView: View {
       let next = ceil(panel - editor - (sizes["accessoryViewport"] ?? 0))
       if abs(chromeHeight - next) > 0.5 { chromeHeight = next }
     }
-    .task { await quickReplies.loadIfNeeded() }
+    .task {
+      await quickReplies.loadIfNeeded()
+      await modelSettings.refresh(session: session, terminalID: terminalID)
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 10_000_000_000)
+        if !Task.isCancelled && modelSettings.page == .input {
+          await modelSettings.refresh(session: session, terminalID: terminalID)
+        }
+      }
+    }
+    .onChange(of: modelSettings.page) { page in
+      editing = page == .input
+    }
     .alert("操作失败", isPresented: $showingFailure) {
       Button("关闭", role: .cancel) {}
     } message: { Text(failure ?? "") }
@@ -232,9 +245,29 @@ struct ComposerView: View {
       preventsDismissal: $preventsDismissal
     ) { attachment, _ in
       VStack(spacing: 8) {
-        editor
+        if modelSettings.page == .input {
+          editor
+        } else {
+          TerminalAgentSettingsView(
+            model: modelSettings, session: session, terminalID: terminalID,
+            height: min(200, max(70, maximumInputHeight))
+          )
+          .background(composerMeasurement("editor"))
+        }
         HStack(spacing: 2) {
           attachment
+          if let summary = modelSettings.summary {
+            Button {
+              editing = false
+              modelSettings.showModels()
+            } label: {
+              Text(summary).font(.caption.weight(.medium)).lineLimit(1)
+                .frame(minHeight: 44)
+            }
+            .accessibilityLabel("当前终端模型与推理强度：\(summary)")
+            .accessibilityIdentifier("terminal-agent-settings-open")
+            .disabled(modelSettings.saving)
+          }
           controls
         }
       }

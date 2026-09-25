@@ -166,6 +166,20 @@ public actor APIClient {
   func history(id: String) async throws -> TerminalDetails {
     try await authorized("/api/terminal/session/\(Self.pathComponent(id))/history")
   }
+  func terminalAgentSettings(id: String) async throws -> TerminalAgentSettingsResponse {
+    try await authorized("/api/terminal/session/\(Self.pathComponent(id))/agent-settings",
+      decodeError: { _, data in try? JSONDecoder().decode(TerminalAgentSettingsFailure.self, from: data) })
+  }
+  func updateTerminalAgentSettings(id: String, settings: TerminalAgentSettings,
+    model: String, effort: String) async throws -> TerminalAgentSettingsResponse {
+    try await authorized("/api/terminal/session/\(Self.pathComponent(id))/agent-settings",
+      method: "PUT",
+      body: ["panelId": settings.panelId as Any? ?? NSNull(),
+        "threadId": settings.threadId, "expectedRevision": settings.revision,
+        "model": model, "reasoningEffort": effort],
+      retryUnauthorized: false,
+      decodeError: { _, data in try? JSONDecoder().decode(TerminalAgentSettingsFailure.self, from: data) })
+  }
   func createProject(name: String, path: String?) async throws -> TerminalProject {
     try await authorized(
       "/api/terminal/project", method: "POST",

@@ -80,7 +80,7 @@ import { resolveStoragePaths } from "./utils/path";
 import { registerRemoteBrowserRoutes } from "./remote/routes";
 import { attachTerminalEventsWebSocketServer } from "./ws/terminal-events-server";
 import { attachTerminalWebSocketServer } from "./ws/terminal-server";
-import { codexAppServerClient } from "./voice/codex-app-server-client";
+import { codexAppServerClient, traexAppServerClient } from "./voice/codex-app-server-client";
 import {
   createRuntimeServices,
   type RuntimeServices,
@@ -478,7 +478,7 @@ async function startRuntime(): Promise<void> {
       runtimeReleaseId: process.env.RUNWEAVE_RUNTIME_RELEASE_ID,
     });
     resources.defer("profile-lock", () => profileLock.release());
-    resources.defer("codex-client", () => codexAppServerClient.shutdown());
+    resources.defer("agent-clients", () => { codexAppServerClient.shutdown(); traexAppServerClient.shutdown(); });
     stage = "tunnel-auth-config";
     const tunnelAuthConfig = loadTunnelAuthConfig(process.env);
     stage = "runtime-services";

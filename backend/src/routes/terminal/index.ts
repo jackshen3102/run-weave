@@ -56,6 +56,12 @@ import {
 } from "./panels/index";
 import type { WorkspaceServiceManager } from "../../terminal/workspace-service/manager";
 import { createTerminalSession } from "../../terminal/application/create-session";
+import {
+  getTerminalAgentSettings,
+  updateTerminalAgentSettings,
+  TerminalAgentSettingsError,
+} from "../../terminal/runtime/terminal-agent-settings";
+import { sendTerminalPanelRouteError } from "./panels/common";
 
 const terminalLogger = logger.child({ component: "terminal" });
 
@@ -116,6 +122,41 @@ export function createTerminalRouter(
   },
 ): Router {
   const router = Router();
+
+  const agentSettingsUpdateSchema = z.object({
+    panelId: z.string().min(1).nullable(),
+    threadId: z.string().min(1),
+    expectedRevision: z.string().min(1),
+    model: z.string().min(1),
+    reasoningEffort: z.string().min(1),
+  }).strict();
+  const sendAgentSettingsError = (res: Parameters<typeof sendTerminalPanelRouteError>[0], error: unknown) => {
+    if (error instanceof TerminalAgentSettingsError) {
+      res.status(error.status).json({ code: error.code, message: error.message });
+    } else if (!sendTerminalPanelRouteError(res, error)) {
+      terminalLogger.warn("terminal.agent-settings.failed", { error });
+      res.status(503).json({ code: "agent_settings_unavailable", message: "Agent 设置暂不可用" });
+    }
+  };
+  router.get("/session/:id/agent-settings", async (req, res) => {
+    try {
+      const session = terminalSessionManager.getSession(req.params.id);
+      if (!session) { res.status(404).json({ code: "agent_settings_unavailable", message: "终端不存在" }); return; }
+      if (!options?.tmuxService) { res.status(503).json({ code: "agent_settings_unavailable", message: "终端服务不可用" }); return; }
+      const panelId = typeof req.query.panelId === "string" ? req.query.panelId : undefined;
+      res.json(await getTerminalAgentSettings(terminalSessionManager, options.tmuxService, session, panelId));
+    } catch (error) { sendAgentSettingsError(res, error); }
+  });
+  router.put("/session/:id/agent-settings", async (req, res) => {
+    const parsed = agentSettingsUpdateSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ code: "invalid_request", message: "模型设置参数无效" }); return; }
+    try {
+      const session = terminalSessionManager.getSession(req.params.id);
+      if (!session) { res.status(404).json({ code: "agent_settings_unavailable", message: "终端不存在" }); return; }
+      if (!options?.tmuxService) { res.status(503).json({ code: "agent_settings_unavailable", message: "终端服务不可用" }); return; }
+      res.json(await updateTerminalAgentSettings(terminalSessionManager, options.tmuxService, session, parsed.data));
+    } catch (error) { sendAgentSettingsError(res, error); }
+  });
 
   registerTerminalProjectRoutes(router, terminalSessionManager, {
     runtimeRegistry: options?.runtimeRegistry,
