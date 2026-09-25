@@ -1,0 +1,124 @@
+version: 1
+name: 桌面 Browser 浮层统一协调
+description: >
+  验证 macOS Electron 的原生网页不会覆盖应用浮层，
+  并在浮层退出后恢复正确页面。每例独立建立隔离 Dev Session 与受控页面；
+  使用 toolkit:runweave-dev-session 获得所属 surface，toolkit:playwright-cli 操作真实页面，
+  computer-use 检查原生合成窗口与点击命中。仅 DOM 可见或 renderer 截图不能判为通过。
+cases:
+  - id: BOV-001
+    name: 标准模态组件自动使原生网页让位
+    required: true
+    description: 公共模态组件无业务 hide 调用仍能完整呈现内容与遮罩，关闭后保留原网页实例和输入。
+    preconditions:
+      - 候选桌面已通过隔离 Dev Session 打开 Browser，受控网页显示加载计数且包含未提交表单。
+      - 当前源码的开发验收入口可独立打开公共 Dialog、AlertDialog 和带遮罩的 Sheet，不包含业务专用 hide 调用。
+    steps:
+      - 使用 $toolkit:playwright-cli 填写网页表单，并逐个打开各模态组件；通过 computer-use 检查真实窗口的内容和遮罩均盖在网页位置上。
+      - 点击浮层控件并输入；确认动作落在浮层，底层网页点击计数未增加。
+      - 每次关闭后确认原表单、滚动位置和加载计数保持，网页恢复交互；清理本例 fixture。
+  - id: BOV-002
+    name: 局部浮层只在空间相交时触发避让
+    required: true
+    description: 菜单、子菜单、选择器、Popover、Tooltip 与通知采用实际覆盖范围，非相交状态不隐藏网页。
+    preconditions:
+      - 候选桌面 Browser 打开受控网页，开发验收入口提供上述标准组件及固定通知，并可控制触发器位置。
+      - 本例没有任何模态遮罩，窗口尺寸可调整。
+    steps:
+      - 使用 $toolkit:playwright-cli 在左侧非相交位置分别打开浮层；通过 computer-use 确认网页仍实时显示。
+      - 将同类触发器置于 Browser 边缘，打开并使内容或子菜单跨入网页；确认网页让位、浮层完整且可操作。
+      - 在保持浮层打开时调整窗口或滚动使其跨入再离开 Browser；确认判断跟随实际位置，退出稳定后恢复且边缘不持续闪烁。
+  - id: BOV-003
+    name: 嵌套浮层由最后一个遮挡决定恢复
+    required: true
+    description: 关闭嵌套中的任意一层不能释放仍存在的其它遮挡，退出动画期间也不能露出原生网页。
+    preconditions:
+      - 候选桌面 Browser 已打开受控网页，开发验收入口可在 Sheet 内打开 Dialog 和 Select。
+    steps:
+      - 使用 $toolkit:playwright-cli 建立三层浮层，逐层关闭；computer-use 检查只关闭内层时网页持续隐藏。
+      - 在同一 fixture 重新打开后先卸载外层，再关闭剩余有效层；确认只释放已移除登记，不提前恢复网页。
+      - 关闭最后一层并在退出动画中观察合成窗口；确认动画结束才恢复，重复快速开关后没有永久隐藏。
+  - id: BOV-004
+    name: 历史自定义浮层使用统一协调
+    required: true
+    description: 绕过公共 primitives 的已有入口完成迁移后也能遮盖网页，不需要 Browser 订阅各业务开关。
+    preconditions:
+      - 候选桌面 Browser 打开受控网页，专用测试项目允许打开项目弹窗、诊断弹窗、随记抽屉及 Portal 菜单。
+    steps:
+      - 使用 $toolkit:playwright-cli 分别打开各入口；computer-use 检查与 Browser 重叠处完整可见且可点击。
+      - 逐个取消关闭；确认恢复原网页且不提交项目删除、诊断录制或随记业务写入。
+  - id: BOV-005
+    name: 图片公共能力内部打开也能登记与释放
+    required: true
+    description: 公共图片缩略图内部控制的 Lightbox 与显式打开的 Lightbox 均受统一协调，退出完成后恢复。
+    preconditions:
+      - 候选桌面 Browser 已打开，专用 fixture 同时提供 RunweaveImagePreview 与显式 RunweaveImageLightbox。
+    steps:
+      - 使用 $toolkit:playwright-cli 分别从两种入口打开图片；computer-use 确认全屏图片及工具栏不被网页覆盖。
+      - 缩放后关闭并观察退出动画；确认最后一帧之后网页恢复，再次打开关闭不遗留登记。
+  - id: BOV-006
+    name: 遮挡期间新建或激活 Tab 不抢回显示
+    required: true
+    description: 主进程的 page-open、CDP 创建与激活路径必须持续遵守窗口级遮挡约束。
+    preconditions:
+      - 候选桌面的 Browser group 归本例独占，受控网页和该 group 的 CDP 可用，公共模态浮层已打开。
+    steps:
+      - 使用 $toolkit:playwright-cli 在所属 terminal-browser surface 触发受控页面的新标签链接，并通过所属 CDP 创建及激活测试 Tab。
+      - 每次操作后 computer-use 检查主窗口浮层仍完整可见，原生网页没有盖回；核对 Tab 创建事实与呈现状态分别正确。
+      - 关闭浮层；确认只显示当前应激活的 Tab，清理本例所创建的标签。
+  - id: BOV-007
+    name: 恢复采用最新 Profile 和工具状态
+    required: true
+    description: 浮层释放不能回放旧 Profile 或已经离开的 Browser 工具。
+    preconditions:
+      - 候选桌面有本例独占的两个 Profile，各有可辨识页面，开发验收入口可在遮挡期间发起既有工具和 Profile 状态变化。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开遮挡后发起 Profile 切换，关闭浮层；computer-use 确认仅恢复最新 Profile 的页面。
+      - 再打开遮挡，切换到其它工具后关闭；确认 Browser 保持隐藏，主动返回 Browser 后才显示最新页面。
+  - id: BOV-008
+    name: 布局侧栏保留可用网页并按最新尺寸恢复
+    required: true
+    description: 既有布局避让不被错误归类为覆盖，临时浮层解除后使用最新 viewport bounds。
+    preconditions:
+      - 候选桌面 Browser 打开可辨识边界的受控页面，设备、请求头和标注面板可用。
+    steps:
+      - 使用 $toolkit:playwright-cli 分别打开三个布局面板；computer-use 确认剩余网页区域继续显示且面板未被覆盖。
+      - 在布局面板打开时再打开公共弹窗，调整窗口和 Browser 宽度后关闭弹窗；确认网页恢复到当前预留区域，不覆盖侧栏、不露出旧 bounds。
+  - id: BOV-009
+    name: renderer 重载后不遗留遮挡状态
+    required: true
+    description: 旧 document 的登记与异步结果在重载后失效，新 renderer 明确初始化后才恢复网页。
+    preconditions:
+      - 候选隔离桌面已打开 Browser 与公共弹窗，本例可只重载主 renderer，独占其生命周期。
+    steps:
+      - 使用 $toolkit:playwright-cli 保存当前页面身份后触发主 renderer 重载；computer-use 观察初始化阶段没有原生网页压在登录或恢复 UI 上。
+      - 重新取得该 Dev Session 的 fresh desktop surface，进入 Browser；确认未残留遮挡、仅显示当前所选 Tab，旧 IPC 完成不改变新状态。
+  - id: BOV-010
+    name: 自动化捕获宿主归还时服从主窗口协调
+    required: true
+    description: 捕获宿主的借用与归还不造成主窗口浮层被覆盖，也不因新裁决误停捕获。
+    preconditions:
+      - 候选隔离桌面有本例专用自动化 target，Automation 观测可取得帧并能进入 capture host 路径。
+    steps:
+      - 使用 $toolkit:playwright-cli 启动该 target 的自动化观测并打开公共浮层；确认预览仍取得属于该 target 的有效帧。
+      - 在浮层存在时停止观测并归还 viewport；computer-use 确认主窗口没有原生网页盖回。
+      - 关闭浮层并主动返回 Browser；确认当前 target 可显示，临时捕获窗口已清理。
+  - id: BOV-011
+    name: IPC 失败与乱序不导致永久阻塞
+    required: true
+    description: 对呈现 IPC 的受控延迟、拒绝和旧 revision 不会回退新状态或让公共浮层永久等待。
+    preconditions:
+      - 候选隔离桌面具备只影响本例 presentation IPC 的开发故障注入，能记录版本与实际 visible 状态。
+    steps:
+      - 使用 $toolkit:playwright-cli 交替开关浮层并延迟旧请求；确认旧 revision 完成后不会撤销新的遮挡状态。
+      - 拒绝一次隐藏请求；确认统一重试或旧 hide 回退发生，持续失败时浮层可关闭且错误可见，不假报已避让。
+      - 在隐藏成功后拒绝恢复请求；确认网页保持隐藏且可主动重试，解除注入后恢复，清理注入。
+  - id: BOV-012
+    name: 普通 Web 不等待 Electron 呈现协议
+    required: true
+    description: 无 Electron bridge 的普通 Web 中标准浮层保持原有焦点、开关和退出行为。
+    preconditions:
+      - 当前源码的隔离 Web surface 可用，window.electronAPI 不存在，开发验收入口包含公共浮层与图片预览。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开、键盘切换、按 Escape 关闭标准弹窗及图片浮层；确认无需 IPC 即可显示并恢复触发器焦点。
+      - 确认无 Browser 原生占位、无限等待或 bridge 缺失错误。

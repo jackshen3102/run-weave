@@ -1,3 +1,4 @@
+import { useOverlayRef } from "../../../features/overlay/use-overlay-ref";
 import {
   useEffect,
   useRef,
@@ -364,10 +365,12 @@ export function TerminalSessionTab({
     </div>
   );
 
+  const detailsOverlayRef = useOverlayRef<HTMLDivElement>();
   const detailsCard =
     showStateDetails && detailsOpen && detailsPosition
       ? createPortal(
           <div
+            ref={detailsOverlayRef}
             className="pointer-events-none z-50 w-64 rounded-md border border-slate-700 bg-slate-950/95 p-3 text-slate-100 shadow-xl"
             style={{
               position: "fixed",

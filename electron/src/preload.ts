@@ -234,6 +234,8 @@ const electronApi = {
     ipcRenderer.invoke("terminal-browser:go-back", tabId),
   terminalBrowserGoForward: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:go-forward", tabId),
+  terminalBrowserSetPresentation: (state) =>
+    ipcRenderer.invoke("terminal-browser:set-presentation", state),
   terminalBrowserShow: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:show", tabId),
   terminalBrowserResolveAssistanceTarget: (target) =>

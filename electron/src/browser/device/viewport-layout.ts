@@ -1,3 +1,4 @@
+import { applyTerminalBrowserPresentation, isTerminalBrowserPresentationBorrowed } from "../view/presentation.js";
 import type { BrowserWindow } from "electron";
 import { getTerminalBrowserContentWidth } from "@runweave/shared/terminal-browser-minimum-width";
 import type { TerminalBrowserBounds } from "@runweave/shared/desktop-bridge";
@@ -19,6 +20,7 @@ export function layoutTerminalBrowserViewport(
   const viewportBounds = clampTerminalBrowserBounds(win, bounds);
   entry.viewportBounds = viewportBounds;
   relayoutTerminalBrowserViewport(entry, bounds.horizontalOffsetX);
+  applyTerminalBrowserPresentation(win);
 }
 
 export function relayoutTerminalBrowserViewport(
@@ -26,7 +28,7 @@ export function relayoutTerminalBrowserViewport(
   requestedHorizontalOffsetX: unknown = entry.horizontalOffsetX,
 ): void {
   const viewportBounds = entry.viewportBounds;
-  if (!viewportBounds) {
+  if (!viewportBounds || isTerminalBrowserPresentationBorrowed(entry)) {
     return;
   }
   const contentWidth = getTerminalBrowserContentWidth(

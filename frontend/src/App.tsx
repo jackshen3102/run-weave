@@ -1,3 +1,4 @@
+import { OverlayProvider } from "./features/overlay/provider";
 import { CodexQuotaProvider } from "./features/codex-quota/provider";
 import { MobileLoginProvider } from "./features/mobile-login/provider";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -39,7 +40,7 @@ const TERMINAL_LIST_PATH = "/terminal";
 const isElectron = window.electronAPI?.isElectron === true;
 
 export default function App() {
-  return <><RunweaveApp /><SuijiDrawer /><TerminalSnapshotShareNotification /></>;
+  return <OverlayProvider><RunweaveApp /><SuijiDrawer /><TerminalSnapshotShareNotification /></OverlayProvider>;
 }
 
 function RunweaveApp() {

@@ -391,7 +391,7 @@ pnpm docs:check
 | 临时网关范围                      | 固定 Browser 2/当前终端 Group；未授权 HTTP 和修改 scope 的 WS upgrade 均返回 403；只有 1 条成功控制连接                                              |
 | 清理                              | 实验终端、项目、Vite 服务、临时目录、正反向隧道和实验登录会话已清理；本地页面恢复 about:blank，两端 CLI detach；原项目/终端保留，原 Backend 实例未变 |
 
-证据： [结构化记录](../../artifacts/ssh-remote-projects-20260924-0829/evidence.json)、[远端 Playwright 截图](../../artifacts/ssh-remote-projects-20260924-0829/remote-playwright.png)。这些是本机实验产物。
+证据：本机实验曾生成结构化记录和远端 Playwright 截图，位于被 Git 忽略的 `artifacts/ssh-remote-projects-20260924-0829/`；当前检出中未保留这些产物。
 
 ### 新发现与真实边界
 

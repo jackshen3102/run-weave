@@ -1,3 +1,4 @@
+import { registerTerminalBrowserPresentationHandler } from "./view/presentation.js";
 import { BrowserWindow, ipcMain } from "electron";
 import type { BrowserAssistanceTarget } from "@runweave/shared/terminal-browser-assistance";
 import { getTerminalBrowserCdpTargets } from "./proxy/api.js";
@@ -88,6 +89,7 @@ function resolveTerminalBrowserEntryKey(
 }
 
 export function registerTerminalBrowserHandlers(): void {
+  registerTerminalBrowserPresentationHandler();
   ipcMain.handle("terminal-browser:resolve-assistance-target", (event, binding: BrowserAssistanceTarget) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const target = win && binding && getTerminalBrowserCdpTargets().find((candidate) =>

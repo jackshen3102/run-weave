@@ -1,3 +1,4 @@
+import { hideTerminalBrowserPresentation, selectTerminalBrowserPresentation, isTerminalBrowserPresentationBorrowed } from "./presentation.js";
 import type { BrowserWindow, WebContentsView } from "electron";
 import {
   findTerminalBrowserEntryForWindow,
@@ -13,18 +14,10 @@ export function detachTerminalBrowser(
   tabId?: string,
 ): void {
   if (!tabId) {
-    for (const entry of terminalBrowserRuntime.entries.values()) {
-      if (entry.windowId === win.id) {
-        entry.viewportView.setVisible(false);
-        entry.visible = false;
-      }
-    }
-    return;
-  }
-  const found = findTerminalBrowserEntryForWindow(win, tabId);
-  if (found) {
-    found.entry.viewportView.setVisible(false);
-    found.entry.visible = false;
+    hideTerminalBrowserPresentation(win);
+  } else {
+    const entry = findTerminalBrowserEntryForWindow(win, tabId)?.entry;
+    if (entry) hideTerminalBrowserPresentation(win, entry);
   }
 }
 
@@ -42,22 +35,14 @@ export function attachTerminalBrowser(
   const attachedTabId =
     terminalBrowserRuntime.attachedByWorkspaceKey.get(workspaceKey);
   if (attachedTabId === tabId && entry.attached) {
-    entry.viewportView.setVisible(true);
-    entry.visible = true;
+    selectTerminalBrowserPresentation(win, entry);
     return;
   }
-  for (const candidate of terminalBrowserRuntime.entries.values()) {
-    if (candidate.windowId === win.id) {
-      candidate.viewportView.setVisible(false);
-      candidate.visible = false;
-    }
-  }
-  if (!entry.attached) {
+  if (!entry.attached && !isTerminalBrowserPresentationBorrowed(entry)) {
     win.contentView.addChildView(entry.viewportView);
     entry.attached = true;
   }
-  entry.viewportView.setVisible(true);
-  entry.visible = true;
+  selectTerminalBrowserPresentation(win, entry);
   terminalBrowserRuntime.attachedByWorkspaceKey.set(workspaceKey, tabId);
   entry.lastActiveAt = Date.now();
   recordBrowserTabEvent({

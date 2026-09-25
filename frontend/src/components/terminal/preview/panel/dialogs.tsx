@@ -1,3 +1,4 @@
+import { useOverlayRef } from "../../../../features/overlay/use-overlay-ref";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,11 +36,12 @@ export function TerminalPreviewRenameDialog({
   onPathChange,
   onSubmit,
 }: RenameDialogProps) {
+  const overlayRef = useOverlayRef<HTMLDivElement>(undefined, "window");
   if (!target) {
     return null;
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+    <div ref={overlayRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
       <section
         role="dialog"
         aria-modal="true"

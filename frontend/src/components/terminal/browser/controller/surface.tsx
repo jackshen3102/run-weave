@@ -66,6 +66,7 @@ interface BrowserSurfaceEnvironment {
 }
 
 interface TerminalBrowserSurfaceProps {
+  suppressed: boolean;
   annotations: BrowserAnnotationPanel;
   device: BrowserDevicePanel;
   environment: BrowserSurfaceEnvironment;
@@ -77,6 +78,7 @@ interface TerminalBrowserSurfaceProps {
 }
 
 export function TerminalBrowserSurface({
+  suppressed,
   annotations,
   device,
   environment,
@@ -205,7 +207,9 @@ export function TerminalBrowserSurface({
               width: mobileDisplaySize.width,
               height: mobileDisplaySize.height,
             }}
-          />
+          >
+            {suppressed ? <BrowserPlaceholder /> : null}
+          </div>
         </div>
       ) : (
         <div
@@ -218,7 +222,9 @@ export function TerminalBrowserSurface({
               ? HORIZONTAL_VIEWPORT_TRACK_HEIGHT_PX
               : 0,
           }}
-        />
+        >
+          {suppressed ? <BrowserPlaceholder /> : null}
+        </div>
       )}
       {!deviceState.mobile && horizontalViewport.overflowing ? (
         <div
@@ -283,4 +289,10 @@ export function TerminalBrowserSurface({
       ) : null}
     </div>
   );
+}
+
+function BrowserPlaceholder() {
+  return <div className="flex h-full w-full items-center justify-center bg-slate-950 p-4 text-center text-xs text-slate-500" data-browser-placeholder="" onPointerDown={(event) => event.stopPropagation()}>
+    关闭浮层后继续浏览
+  </div>;
 }

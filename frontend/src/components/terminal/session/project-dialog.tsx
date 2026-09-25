@@ -1,3 +1,4 @@
+import { useOverlayRef } from "../../../features/overlay/use-overlay-ref";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import { Button } from "../../ui/button";
@@ -37,6 +38,7 @@ export function TerminalProjectDialog({
       : undefined;
   const busy = loading || selecting;
 
+  const overlayRef = useOverlayRef<HTMLDivElement>(undefined, "window");
   useEffect(() => {
     if (!open) {
       return;
@@ -91,7 +93,7 @@ export function TerminalProjectDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+    <div ref={overlayRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
       <section className="w-full max-w-md rounded-[1.75rem] border border-slate-800/80 bg-slate-950 p-6 shadow-[0_34px_120px_-72px_rgba(15,23,42,0.92)]">
         <div className="flex items-start justify-between gap-4">
           <div>

@@ -1,3 +1,5 @@
+import { borrowTerminalBrowserPresentation } from "../view/presentation.js";
+import { relayoutTerminalBrowserViewport } from "../device/viewport-layout.js";
 import { BaseWindow, BrowserWindow, ipcMain, type WebContents } from "electron";
 import type {
   TerminalBrowserAutomationActionKind,
@@ -185,6 +187,7 @@ function attachCaptureSurface(
   if (!owner || !entry) {
     return null;
   }
+  const releasePresentation = borrowTerminalBrowserPresentation(owner, entry);
   if (entry.visible) {
     entry.viewportView.setVisible(false);
     entry.visible = false;
@@ -204,6 +207,7 @@ function attachCaptureSurface(
           previousBackgroundThrottling,
         );
       }
+      releasePresentation(() => relayoutTerminalBrowserViewport(entry));
     };
   }
   if (wasAttached) {
@@ -267,6 +271,7 @@ function attachCaptureSurface(
     entry.viewportView.setVisible(false);
     entry.viewportView.setBounds(previousViewportBounds);
     entry.view.setBounds(previousContentBounds);
+    releasePresentation(() => relayoutTerminalBrowserViewport(entry));
   };
 }
 

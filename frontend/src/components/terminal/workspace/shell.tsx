@@ -3,7 +3,6 @@ import { useMemoizedFn } from "ahooks";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { ConnectionConfig } from "../../../features/connection/types";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useShallow } from "zustand/react/shallow";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
@@ -136,9 +135,6 @@ export function TerminalWorkspaceShell({
   );
   const loading =
     mutationLoading || projectsQuery.isPending || sessionsQuery.isPending;
-  const setPreviewActiveTool = useTerminalPreviewStore(
-    (state) => state.setActiveTool,
-  );
   const visibleSessions = useMemo(() => {
     if (!activeProjectId) {
       return [];
@@ -175,12 +171,10 @@ export function TerminalWorkspaceShell({
   const hasMultiplePanels = panelCount > 1;
   const missingPaneGeometry = !activePanelWorkspace || activePanelWorkspace.panels.some((panel) => !panel.geometry);
   const requestCreateProject = useMemoizedFn(() => {
-    setPreviewActiveTool("preview");
     setProjectDialogError(null);
     setProjectDialogMode("create");
   });
   const requestEditProject = useMemoizedFn((projectId?: string) => {
-    setPreviewActiveTool("preview");
     if (projectId) {
       onSelectProject(projectId);
     }
@@ -189,7 +183,6 @@ export function TerminalWorkspaceShell({
   });
   const requestDeleteProject = useMemoizedFn(
     (project: TerminalProjectListItem) => {
-      setPreviewActiveTool("preview");
       setProjectPendingDeletion(project);
     },
   );
