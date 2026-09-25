@@ -145,6 +145,61 @@ function createDesktopVerificationLaunchEnv({
   return env;
 }
 
+export class AppBuildError extends Error {
+  constructor(cause) {
+    super(
+      `Electron app build failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+    this.name = "AppBuildError";
+  }
+}
+
+export class DesktopVerificationError extends Error {
+  constructor(details) {
+    super(`Desktop verification did not become ready: ${JSON.stringify(details)}`);
+    this.name = "DesktopVerificationError";
+    this.details = details;
+  }
+}
+
+export function describeDesktopVerificationState({
+  appPath,
+  cdpError,
+  endpoint,
+  expectedAppVersion,
+  runningAppLines,
+  status,
+  statusPath,
+  targets,
+}) {
+  const desktopTarget = Array.isArray(targets)
+    ? targets.find(
+        (target) =>
+          target?.type === "page" &&
+          (target.url?.startsWith("runweave://app") ||
+            target.url?.startsWith("browser-viewer://app")),
+      )
+    : null;
+  return {
+    appPath,
+    appRunning: runningAppLines.some((line) =>
+      line.includes(`${appPath}/Contents/`),
+    ),
+    cdpError,
+    endpoint,
+    expectedAppVersion,
+    pageUrl: desktopTarget?.url ?? null,
+    statusAppPath: status?.app?.path ?? null,
+    statusAppVersion: status?.app?.version ?? null,
+    statusPath,
+    statusPathExists: status !== null,
+    statusPid: status?.app?.pid ?? null,
+    statusWindowVisible: status?.window?.visible ?? null,
+    targetCount: Array.isArray(targets) ? targets.length : null,
+  };
+}
+
 export function resolveDesktopVerificationResult({
   appPath,
   endpoint,
@@ -198,31 +253,51 @@ async function waitForDesktopVerification({
   expectedAppVersion,
   statusPath,
 }) {
+  let lastStatus = null;
+  let lastTargets = null;
+  let lastCdpError = null;
   for (let attempt = 1; attempt <= 60; attempt += 1) {
-    const status = readJsonFile(statusPath);
-    if (status) {
+    lastStatus = readJsonFile(statusPath);
+    if (lastStatus) {
       try {
         const response = await fetch(`${endpoint}/json/list`);
-        const targets = response.ok ? await response.json() : null;
+        if (!response.ok) {
+          lastCdpError = `HTTP ${response.status}`;
+          lastTargets = null;
+        } else {
+          lastTargets = await response.json();
+          lastCdpError = null;
+        }
         const result = resolveDesktopVerificationResult({
           appPath,
           endpoint,
           expectedAppVersion,
-          status,
+          status: lastStatus,
           statusPath,
-          targets,
+          targets: lastTargets,
         });
         if (result) {
           return result;
         }
-      } catch {
-        // The renderer and CDP endpoint can become ready after the process starts.
+      } catch (error) {
+        lastCdpError =
+          error instanceof Error ? error.message : String(error);
+        lastTargets = null;
       }
     }
     await wait(500);
   }
-  throw new Error(
-    `Desktop verification did not become ready at ${statusPath}`,
+  throw new DesktopVerificationError(
+    describeDesktopVerificationState({
+      appPath,
+      cdpError: lastCdpError,
+      endpoint,
+      expectedAppVersion,
+      runningAppLines: await getRunningAppLines(),
+      status: lastStatus,
+      statusPath,
+      targets: lastTargets,
+    }),
   );
 }
 
@@ -481,32 +556,36 @@ export async function runAppUpdate({
     "mac-arm64",
     `${appName}.app`,
   );
-  await runChecked(
-    "node",
-    [
-      "./scripts/electron/dist-retry.mjs",
-      "--config",
-      electronBuilderConfig,
-      "--mac",
-      "--arm64",
-    ],
-    {
-      cwd: sourceRoot,
-      env: {
-        ...process.env,
-        RUNWEAVE_DESKTOP_CHANNEL: channel,
-        RUNWEAVE_DESKTOP_SOURCE_REVISION: gitHead ?? "unknown",
-        RUNWEAVE_ELECTRON_BUILD_VERSION: appBuildVersion,
-        VITE_RUNWEAVE_CHANNEL: channel,
-        VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
-        VITE_RUNWEAVE_VERSION: appBuildVersion,
-        ...(codesignIdentity
-          ? { RUNWEAVE_CODESIGN_IDENTITY: codesignIdentity }
-          : {}),
-        RUNWEAVE_SKIP_ELECTRON_VERSION_BUMP: "true",
+  try {
+    await runChecked(
+      "node",
+      [
+        "./scripts/electron/dist-retry.mjs",
+        "--config",
+        electronBuilderConfig,
+        "--mac",
+        "--arm64",
+      ],
+      {
+        cwd: sourceRoot,
+        env: {
+          ...process.env,
+          RUNWEAVE_DESKTOP_CHANNEL: channel,
+          RUNWEAVE_DESKTOP_SOURCE_REVISION: gitHead ?? "unknown",
+          RUNWEAVE_ELECTRON_BUILD_VERSION: appBuildVersion,
+          VITE_RUNWEAVE_CHANNEL: channel,
+          VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
+          VITE_RUNWEAVE_VERSION: appBuildVersion,
+          ...(codesignIdentity
+            ? { RUNWEAVE_CODESIGN_IDENTITY: codesignIdentity }
+            : {}),
+          RUNWEAVE_SKIP_ELECTRON_VERSION_BUMP: "true",
+        },
       },
-    },
-  );
+    );
+  } catch (error) {
+    throw new AppBuildError(error);
+  }
   await quitApp();
   await installBuiltApp({ appBackupPath, appPath, releaseAppPath });
   if (launchAfterInstall) {

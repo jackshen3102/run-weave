@@ -28,6 +28,7 @@ import {
   resolveCodesignIdentity,
 } from "./system.mjs";
 import {
+  AppBuildError,
   getRunningAppLines,
   openApp,
   restartApp,
@@ -221,11 +222,11 @@ async function main() {
         sourceRoot,
       });
     } catch (error) {
-      if (!codesignIdentity.identity) {
+      if (!(error instanceof AppBuildError) || !codesignIdentity.identity) {
         throw error;
       }
       console.warn(
-        `[runweave-update] app update failed with codesign identity ${codesignIdentity.identity}; refreshing identity once`,
+        `[runweave-update] Electron app build failed while using codesign identity ${codesignIdentity.identity}; refreshing identity once`,
       );
       codesignIdentity = await resolveCodesignIdentity(sourceRoot, {
         exclude: [codesignIdentity.identity],
