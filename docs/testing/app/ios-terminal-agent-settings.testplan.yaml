@@ -1,0 +1,88 @@
+version: 1
+name: iOS 当前终端 Codex 与 TraeX 模型设置验收
+description: >
+  验证 iOS 命令面板能够读取并只修改当前 Codex 或 TraeX thread 的模型与推理强度，按模型后推理强度的两步流程操作，
+  并在并发、失败、Pi 不支持和多终端边界下保持 provider-aware 权威状态、草稿与终端隔离。
+cases:
+  - id: IOSAGENTSETTINGS-001
+    name: 当前设置与 provider thread 权威状态一致
+    required: true
+    description: >
+      分别打开 Codex 与 TraeX 终端的输入面板后，设置摘要来自对应 provider thread 的结构化状态，而不是全局配置或终端文本。
+    preconditions:
+      - 候选 App 已连接真实 Backend，并打开本轮独占的 Codex 与 TraeX 终端。
+      - 执行者可以通过对应 app-server thread/list 读取两个终端 threadId 的当前设置。
+    steps:
+      - 分别使用 Codex 和 TraeX thread/list 记录目标 threadId 的 model 与 reasoningEffort；打开对应 iOS 输入面板，确认摘要一致。
+      - 让两个 provider 的全局默认配置与当前 thread 不同；重新打开输入面板，确认仍显示各自 thread 的实际值。
+      - 关闭再打开两个输入面板；确认设置保持 provider 隔离，命令草稿和终端视口没有变化。
+  - id: IOSAGENTSETTINGS-002
+    name: 模型后推理强度的两步设置流程
+    required: true
+    description: >
+      用户从命令面板单一入口先选模型，再在原位置选择该模型支持的推理强度，完成后返回输入状态。
+    preconditions:
+      - 当前 Codex 或 TraeX catalog 至少有两个可见模型，目标模型至少有两个推理档位。
+      - 当前输入面板中保留一段唯一未发送草稿。
+    steps:
+      - 点击当前设置摘要；确认首先显示普通可滚动模型列表，列表无搜索框，当前模型有明确选中状态。
+      - 点击另一模型；确认输入面板未关闭、未发送草稿，原区域直接进入推理强度列表，标题标识刚选择的模型。
+      - 选择一个受支持的推理强度；确认设置区域关闭并回到输入状态，摘要更新，草稿原样保留。
+      - 用对应 provider 的 thread/list 核对 model 与 reasoningEffort 均已应用到目标 thread。
+  - id: IOSAGENTSETTINGS-003
+    name: 推理强度严格跟随模型能力
+    required: true
+    description: >
+      第二步只展示所选模型当前 catalog 声明支持的推理档位，不允许提交不支持组合。
+    preconditions:
+      - 当前 catalog 中存在推理档位集合不同的两个模型。
+      - 已记录两个模型各自的 supportedReasoningEfforts 与默认档位。
+    steps:
+      - 选择支持 ultra 的模型；确认第二步包含其全部声明档位且不包含 catalog 外值。
+      - 返回模型页并选择不支持 ultra 的模型；确认第二步不显示 ultra，暂存强度回退为该模型默认档位。
+      - 分别在 Codex 和 TraeX 终端完成选择；确认 Backend 接受各自 catalog 内的组合，对应 provider 权威状态与摘要一致。
+  - id: IOSAGENTSETTINGS-004
+    name: 设置只作用于目标终端和当前面板
+    required: true
+    description: >
+      Codex 与 TraeX 终端或同 provider 多面板同时存在时，设置请求不能串到其他 provider 或 thread。
+    preconditions:
+      - 已创建本轮独占的 Codex 与 TraeX 终端，并另准备一个同 provider 的第二 thread，记录各自初始设置。
+    steps:
+      - 在 iOS 聚焦目标 A 并完成一次模型与推理强度设置；确认请求携带的 provider、terminal、panel 身份与 A 一致。
+      - 分别读取所有目标 thread 状态；确认仅 A 更新，另一个 provider 和同 provider 的第二 thread 均保持原值。
+      - 切换终端打开输入面板；确认摘要来自各自 thread，而非最近一次全局选择。
+  - id: IOSAGENTSETTINGS-005
+    name: 冲突失败不丢失命令草稿
+    required: true
+    description: >
+      执行中、revision 冲突或对应 provider 未确认设置时不能伪报成功，也不能影响未发送输入。
+    preconditions:
+      - 当前输入面板有唯一文字草稿和一张本例图片草稿。
+      - Backend 可让目标 thread 进入执行中，或为本例制造 revision 过期与确认超时。
+    steps:
+      - 在 Agent 执行中尝试提交设置；确认返回可读的忙碌提示，摘要不改变，草稿和附件保留且没有自动重试。
+      - 在选择期间从电脑端改变 thread 设置，再提交旧 revision；确认客户端刷新权威值并提示设置已变化，草稿和附件仍保留。
+      - 注入设置确认超时；确认界面不宣称成功，重新读取后以 thread 权威状态为准。
+  - id: IOSAGENTSETTINGS-006
+    name: Pi 排除与 provider 不可用状态安全降级
+    required: true
+    description: >
+      Pi、普通 shell、无有效 thread 身份或对应 provider catalog 不可用时不展示虚假设置，也不影响原有输入能力。
+    preconditions:
+      - 已准备本轮专用 Pi、普通 shell、Codex 和 TraeX 终端，并可模拟任一 provider app-server 不可用。
+    steps:
+      - 打开 Pi 与普通 shell 输入面板；确认模型设置入口不显示，原有附件、快捷回复、快捷键、语音和发送入口可用。
+      - 打开缺少 threadId 的 Codex 或 TraeX 启动阶段终端；确认不显示伪造默认值，threadId 可用后能刷新为真实设置。
+      - 分别模拟 Codex 与 TraeX app-server/catalog 不可用；确认只影响对应 provider，命令仍可正常发送且不会修改全局配置。
+  - id: IOSAGENTSETTINGS-007
+    name: 电脑端 Codex 与 TraeX 设置变化同步到手机
+    required: true
+    description: >
+      当前 thread 在电脑 Codex 或 TraeX TUI 中改变模型或推理强度后，手机最终展示对应 provider 的权威设置。
+    preconditions:
+      - 手机与电脑连接本轮独占的 Codex 和 TraeX thread，Backend 能读取各自 provider 的 thread/list。
+    steps:
+      - 保持 iOS 终端可见，分别在电脑端切换 Codex 与 TraeX 的模型和推理强度；确认对应 provider 的 thread/list 显示新值。
+      - 确认对应 iOS 摘要更新为新值，另一 provider 终端不受影响，未打开的设置面板不自动弹出，命令草稿保持不变。
+      - 在手机再次打开两步设置；确认模型与推理强度选中项均与各自电脑端最新设置一致。

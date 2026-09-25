@@ -39,6 +39,7 @@
     "./terminal": "./src/terminal/index.ts",
     "./terminal/pi-agent": "./src/terminal/pi-agent.ts",
     "./terminal/agent-preparation": "./src/terminal/runtime/agent-preparation.ts",
+    "./terminal/agent-settings": "./src/terminal/agent-settings.ts",
     "./terminal/completion": "./src/terminal/runtime/completion.ts",
     "./terminal/events": "./src/terminal/runtime/events.ts",
     "./terminal/input": "./src/terminal/runtime/input.ts",

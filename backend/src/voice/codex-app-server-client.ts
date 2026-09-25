@@ -38,6 +38,7 @@ const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
 const CODEX_APP_SERVER_ARGS = ["app-server"] as const;
 
 export class CodexAppServerClient {
+  constructor(private readonly provider: "codex" | "traex" = "codex") {}
   private child: ChildProcessWithoutNullStreams | null = null;
   private nextRequestId = 1;
   private stdoutBuffer = "";
@@ -91,7 +92,7 @@ export class CodexAppServerClient {
 
   private writeRequest(method: string, params?: unknown): Promise<unknown> {
     const child = this.ensureChild();
-    const id = `runweave-voice-${this.nextRequestId++}`;
+    const id = `runweave-${this.provider}-${this.nextRequestId++}`;
     const message = JSON.stringify({ id, method, params });
 
     return new Promise((resolve, reject) => {
@@ -152,7 +153,7 @@ export class CodexAppServerClient {
 
     this.stdoutBuffer = "";
     this.stderrBuffer = "";
-    const launchPlan = resolveCodexLaunchPlan(process.env);
+    const launchPlan = resolveCodexLaunchPlan(process.env, this.provider);
     this.child = spawn(launchPlan.command, launchPlan.args, {
       env: buildCodexProcessEnv(process.env, launchPlan),
       stdio: ["pipe", "pipe", "pipe"],
@@ -264,6 +265,7 @@ export class CodexAppServerClient {
 }
 
 export const codexAppServerClient = new CodexAppServerClient();
+export const traexAppServerClient = new CodexAppServerClient("traex");
 
 interface CodexLaunchPlan {
   command: string;
@@ -271,9 +273,12 @@ interface CodexLaunchPlan {
   description: string;
 }
 
-function resolveCodexLaunchPlan(env: NodeJS.ProcessEnv): CodexLaunchPlan {
-  const args = buildCodexAppServerArgs();
-  const configured = env.CODEX_BIN?.trim();
+function resolveCodexLaunchPlan(
+  env: NodeJS.ProcessEnv,
+  provider: "codex" | "traex",
+): CodexLaunchPlan {
+  const args = provider === "codex" ? buildCodexAppServerArgs() : ["app-server"];
+  const configured = (provider === "codex" ? env.CODEX_BIN : env.TRAEX_BIN)?.trim();
   if (configured && isExecutableFile(configured)) {
     return {
       command: configured,
@@ -282,7 +287,9 @@ function resolveCodexLaunchPlan(env: NodeJS.ProcessEnv): CodexLaunchPlan {
     };
   }
 
-  for (const candidate of resolveCodexBinaryCandidates(env)) {
+  for (const candidate of provider === "codex"
+    ? resolveCodexBinaryCandidates(env)
+    : resolveTraexBinaryCandidates(env)) {
     if (isExecutableFile(candidate)) {
       return {
         command: candidate,
@@ -293,10 +300,17 @@ function resolveCodexLaunchPlan(env: NodeJS.ProcessEnv): CodexLaunchPlan {
   }
 
   return {
-    command: "codex",
+    command: provider,
     args,
-    description: "codex",
+    description: provider,
   };
+}
+
+function resolveTraexBinaryCandidates(env: NodeJS.ProcessEnv): string[] {
+  return [
+    ...(env.PATH ?? "").split(path.delimiter).filter(Boolean).map((entry) => path.join(entry, "traex")),
+    path.join(os.homedir(), ".local", "bin", "traex"),
+  ];
 }
 
 function buildCodexAppServerArgs(): string[] {

@@ -1,0 +1,70 @@
+{
+  "activeModelId": "gpt-6-sol",
+  "activeReasoning": "high",
+  "models": [
+    {
+      "id": "gpt-6-astra",
+      "name": "GPT-6-Astra",
+      "mark": "A",
+      "detail": "最复杂、高要求的任务",
+      "defaultReasoning": "medium",
+      "reasoning": ["low", "medium", "high", "xhigh", "max", "ultra"]
+    },
+    {
+      "id": "gpt-6-sol",
+      "name": "GPT-6-Sol",
+      "mark": "S",
+      "detail": "编码与日常工作的主力模型",
+      "defaultReasoning": "medium",
+      "reasoning": ["low", "medium", "high", "xhigh", "max", "ultra"]
+    },
+    {
+      "id": "gpt-6-luna",
+      "name": "GPT-6-Luna",
+      "mark": "L",
+      "detail": "简单任务，快速且经济",
+      "defaultReasoning": "medium",
+      "reasoning": ["low", "medium", "high", "xhigh", "max"]
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6-Sol",
+      "mark": "S",
+      "detail": "旧版复杂编码模型",
+      "defaultReasoning": "low",
+      "reasoning": ["low", "medium", "high", "xhigh", "max", "ultra"]
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT-5.6-Terra",
+      "mark": "T",
+      "detail": "旧版均衡模型",
+      "defaultReasoning": "medium",
+      "reasoning": ["low", "medium", "high", "xhigh", "max", "ultra"]
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6-Luna",
+      "mark": "L",
+      "detail": "旧版快速模型",
+      "defaultReasoning": "medium",
+      "reasoning": ["low", "medium", "high", "xhigh", "max"]
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT-5.5",
+      "mark": "5",
+      "detail": "旧版编码模型",
+      "defaultReasoning": "medium",
+      "reasoning": ["low", "medium", "high", "xhigh"]
+    }
+  ],
+  "reasoningLabels": {
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "xhigh": "超高",
+    "max": "最大",
+    "ultra": "极致"
+  }
+}
