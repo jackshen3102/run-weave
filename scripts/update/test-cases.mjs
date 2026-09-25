@@ -25,7 +25,12 @@ import {
   validateResolvedUpdateOptions,
   validateUpdateTargetIsolation,
 } from "./core.mjs";
-import { resolveDesktopVerificationResult } from "./operations.mjs";
+import {
+  AppBuildError,
+  describeDesktopVerificationState,
+  DesktopVerificationError,
+  resolveDesktopVerificationResult,
+} from "./operations.mjs";
 
 const cases = [
   {
@@ -336,6 +341,69 @@ const cases = [
         }),
         null,
       );
+    },
+  },
+  {
+    name: "desktop verification diagnostics distinguish missing status from CDP and identity failures",
+    run() {
+      const missingStatus = describeDesktopVerificationState({
+        appPath: "/Applications/Runweave.app",
+        cdpError: null,
+        endpoint: "http://127.0.0.1:9223",
+        expectedAppVersion: "0.155.0",
+        runningAppLines: [
+          "1234 /Applications/Runweave.app/Contents/MacOS/Runweave",
+        ],
+        status: null,
+        statusPath: "/tmp/desktop-verification.json",
+        targets: null,
+      });
+      assert.equal(missingStatus.appRunning, true);
+      assert.equal(missingStatus.statusPathExists, false);
+      assert.equal(missingStatus.targetCount, null);
+
+      const mismatchedStatus = describeDesktopVerificationState({
+        appPath: "/Applications/Runweave.app",
+        cdpError: "fetch failed",
+        endpoint: "http://127.0.0.1:9223",
+        expectedAppVersion: "0.155.0",
+        runningAppLines: [],
+        status: {
+          app: { path: "/tmp/Runweave.app", pid: 1234, version: "0.154.0" },
+          window: { visible: false },
+        },
+        statusPath: "/tmp/desktop-verification.json",
+        targets: [{ type: "page", url: "https://example.com" }],
+      });
+      assert.deepEqual(mismatchedStatus, {
+        appPath: "/Applications/Runweave.app",
+        appRunning: false,
+        cdpError: "fetch failed",
+        endpoint: "http://127.0.0.1:9223",
+        expectedAppVersion: "0.155.0",
+        pageUrl: null,
+        statusAppPath: "/tmp/Runweave.app",
+        statusAppVersion: "0.154.0",
+        statusPath: "/tmp/desktop-verification.json",
+        statusPathExists: true,
+        statusPid: 1234,
+        statusWindowVisible: false,
+        targetCount: 1,
+      });
+      assert.match(
+        new DesktopVerificationError(missingStatus).message,
+        /"statusPathExists":false/,
+      );
+    },
+  },
+  {
+    name: "app build failures have a dedicated error type",
+    run() {
+      const cause = new Error("builder exited with code 1");
+      const error = new AppBuildError(cause);
+      assert.equal(error.name, "AppBuildError");
+      assert.equal(error.cause, cause);
+      assert.match(error.message, /Electron app build failed/);
     },
   },
   {
