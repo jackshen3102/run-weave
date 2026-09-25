@@ -63,7 +63,7 @@ import { stopAllTerminalBrowserWhistles } from "./browser/whistle/runtime.js";
 import { registerTerminalBrowserAutomationHandlers } from "./browser/automation/runtime.js";
 import { registerRuntimeStatusHandlers } from "./monitoring/runtime-status.js";
 import { registerAttentionNotificationHandlers } from "./monitoring/attention-notifications.js";
-import { registerRemoteConnectionHandlers, stopRemoteConnections } from "./remote/ssh-connections.js";
+import { registerTunnelHandlers, stopTunnels } from "./tunnels/ipc.js";
 function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 512;
 }
@@ -337,7 +337,7 @@ if (hasSingleInstanceLock) {
       registerProjectDirectoryHandler(() => desktopRuntime.mainWindow);
       registerSuijiStorage();
       registerPackagedBackendHandlers();
-      registerRemoteConnectionHandlers();
+      registerTunnelHandlers();
       registerRuntimeStatsHandler(() => desktopRuntime.packagedBackend);
       registerSystemMonitorHandler(() => desktopRuntime.packagedBackend);
       registerTerminalBrowserHandlers();
@@ -563,7 +563,7 @@ app.on("before-quit", (event) => {
   desktopRuntime.stoppingPackagedBackendsForQuit = true;
   void (async () => {
     await Promise.allSettled([
-      Promise.resolve().then(stopRemoteConnections),
+      Promise.resolve().then(stopTunnels),
       desktopRuntime.cdpProxy?.stop() ?? Promise.resolve(),
       stopAllTerminalBrowserWhistles(),
       desktopRuntime.packagedBackend?.stop() ?? Promise.resolve(),

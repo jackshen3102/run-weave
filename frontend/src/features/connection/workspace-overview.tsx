@@ -4,8 +4,6 @@ import type { TerminalProjectListItem } from "@runweave/shared/terminal/project"
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { AttentionSnapshot } from "@runweave/shared/attention";
 import { useScopedAuth } from "../auth/use-scoped-auth";
-import { getConnectionAuth } from "../auth/storage";
-import { useProjectBindings } from "./project-bindings";
 import { useTerminalEventsConnection } from "../terminal/connection/use-events";
 import { listTerminalProjects, listTerminalSessions } from "../../services/terminal/index";
 import { useAttentionSnapshot } from "../attention/use-attention-snapshot";
@@ -16,7 +14,7 @@ export interface ConnectionWorkspaceOverview {
   sessions: TerminalSessionListItem[];
   attention: AttentionSnapshot | null;
   observedAt: string | null;
-  status: "ready" | "disconnected" | "needs_auth";
+  status: "ready" | "disconnected" | "needs_auth" | "checking";
 }
 
 interface OverviewStore {
@@ -34,7 +32,7 @@ export const useConnectionWorkspaceOverview = create<OverviewStore>((set) => ({
         sessions: [],
         attention: null,
         observedAt: null,
-        status: "disconnected",
+        status: "checking",
         ...state.byConnectionId[connectionId],
         ...patch,
       },
@@ -51,10 +49,8 @@ function publishNewAttention(connection: ConnectionConfig, snapshot: AttentionSn
   while (seen.size > 500) seen.delete(seen.values().next().value!);
   observedAttentionIds.set(connection.id, seen);
   if (!previous) return;
-  const bindings = useProjectBindings.getState().bindings;
   for (const slot of snapshot.slots) {
     if (previous.has(slot.attentionId) || slot.state === "working") continue;
-    if (connection.kind === "ssh" && !bindings.some((binding) => binding.connectionId === connection.id && binding.remoteProjectId === slot.parentProjectId)) continue;
     void window.electronAPI?.showAttentionNotification?.({
       connectionId: connection.id,
       attentionId: slot.attentionId,
@@ -122,53 +118,37 @@ function AuthenticatedObserver({
   return null;
 }
 
-function ConnectionObserver({ connection }: { connection: ConnectionConfig }) {
+type ScopedAuthState = ReturnType<typeof useScopedAuth>;
+
+function ConnectionObserverState({ connection, token, status, onAuthExpired }: {
+  connection: ConnectionConfig;
+  token: string | null;
+  status: ScopedAuthState["status"];
+  onAuthExpired: () => void;
+}) {
   const update = useConnectionWorkspaceOverview((state) => state.update);
-  const { token, clearToken } = useScopedAuth({
+  useEffect(() => {
+    if (!connection.url || connection.available === false) {
+      update(connection.id, { status: "disconnected" });
+    } else if (status === "checking") {
+      update(connection.id, { status: "checking" });
+    } else if (status === "unauthenticated" || !token) {
+      update(connection.id, { status: "needs_auth" });
+    }
+  }, [connection.available, connection.id, connection.url, status, token, update]);
+  // Never send an expired access token while its refresh is still in flight.
+  if (!connection.url || status !== "authenticated" || !token || connection.available === false) return null;
+  return <AuthenticatedObserver key={`${connection.id}:${connection.generation ?? 0}`} connection={connection} token={token} onAuthExpired={onAuthExpired} />;
+}
+
+function ConnectionObserver({ connection }: { connection: ConnectionConfig }) {
+  const { token, status, clearToken } = useScopedAuth({
     apiBase: connection.url,
     connectionId: connection.id,
     isElectron: true,
     webStorageKey: "viewer.auth.token",
   });
-  useEffect(() => {
-    if (!connection.url || connection.available === false) {
-      update(connection.id, { status: "disconnected" });
-    } else if (!token) {
-      update(connection.id, { status: "needs_auth" });
-    }
-  }, [connection.available, connection.id, connection.url, token, update]);
-  if (!connection.url || !token || connection.available === false) return null;
-  return <AuthenticatedObserver key={`${connection.id}:${connection.generation ?? 0}`} connection={connection} token={token} onAuthExpired={clearToken} />;
-}
-
-function BrowserBindingObserver({ connection, activeToken }: { connection: ConnectionConfig; activeToken: string | null }) {
-  const token = activeToken ?? getConnectionAuth(connection.id)?.accessToken ?? null;
-  useEffect(() => {
-    const api = window.electronAPI;
-    if (!token || !connection.url || !api?.inspectRemote) return;
-    let cancelled = false;
-    let inFlight = false;
-    let bound = false;
-    const inspectAndBind = async () => {
-      if (cancelled || bound || inFlight) return;
-      inFlight = true;
-      try {
-        const capabilities = await api.inspectRemote!(connection.id, token);
-        if (!cancelled && connection.browserAvailable && capabilities.capabilities.desktopBrowser && api.bindRemoteBrowser) {
-          await api.bindRemoteBrowser(connection.id, token);
-          bound = true;
-        }
-      } catch {
-        // A bridge may become ready after capability inspection; retry without changing Terminal access.
-      } finally {
-        inFlight = false;
-      }
-    };
-    void inspectAndBind();
-    const timer = window.setInterval(() => { void inspectAndBind(); }, 5_000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [connection.browserAvailable, connection.generation, connection.id, connection.url, token]);
-  return null;
+  return <ConnectionObserverState connection={connection} token={token} status={status} onAuthExpired={clearToken} />;
 }
 
 function ActiveAttentionObserver({ connection, token }: { connection: ConnectionConfig; token: string | null }) {
@@ -192,19 +172,23 @@ export function ConnectionWorkspaceObservers({
   connections,
   activeConnectionId,
   activeToken,
+  activeAuthStatus,
+  onActiveAuthExpired,
   observeActive,
 }: {
   connections: ConnectionConfig[];
   activeConnectionId: string | null;
   activeToken: string | null;
+  activeAuthStatus: ScopedAuthState["status"];
+  onActiveAuthExpired: () => void;
   observeActive: boolean;
 }) {
   return <>
-    {connections.filter((connection) => observeActive || connection.id !== activeConnectionId).map((connection) => (
+    {connections.filter((connection) => connection.id !== activeConnectionId).map((connection) => (
       <ConnectionObserver key={connection.id} connection={connection} />
     ))}
-    {connections.filter((connection) => connection.kind === "ssh").map((connection) => (
-      <BrowserBindingObserver key={`browser:${connection.id}`} connection={connection} activeToken={connection.id === activeConnectionId ? activeToken : null} />
+    {observeActive && connections.filter((connection) => connection.id === activeConnectionId).map((connection) => (
+      <ConnectionObserverState key={`active:${connection.id}`} connection={connection} token={activeToken} status={activeAuthStatus} onAuthExpired={onActiveAuthExpired} />
     ))}
     {!observeActive && connections.filter((connection) => connection.id === activeConnectionId).map((connection) => (
       <ActiveAttentionObserver key={`attention:${connection.id}`} connection={connection} token={activeToken} />

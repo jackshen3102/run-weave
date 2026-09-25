@@ -8,7 +8,7 @@ interface TerminalRuntimeContextValue {
   onAuthExpired?: () => void;
   scope: string;
   token: string;
-  remote: { generation: number; browserProfileId: TerminalBrowserProfileId | null } | null;
+  remote: { endpointId: string; generation: number; browserProfileId: TerminalBrowserProfileId | null } | null;
 }
 
 const TerminalRuntimeContext =
@@ -28,7 +28,7 @@ export function TerminalRuntimeProvider({
   children: ReactNode;
   onAuthExpired?: () => void;
   token: string;
-  remote?: { generation: number; browserProfileId: TerminalBrowserProfileId | null } | null;
+  remote?: { endpointId: string; generation: number; browserProfileId: TerminalBrowserProfileId | null } | null;
   connectionGeneration?: number;
 }) {
   const scope = buildConnectionQueryScope({

@@ -13,8 +13,10 @@ SSH 远端终端也使用同一命令。未设置 `PLAYWRIGHT_MCP_CDP_ENDPOINT`�
 `RUNWEAVE_BASE_URL` 或 `RUNWEAVE_BACKEND_PORT`。桌面负责建立 SSH 反向隧道，Agent
 无需自行转发端口。远端返回的 CDP 地址带一次性 60 秒票据，应立即连接；重连时重新解析。
 身份不完整返回 `REMOTE_CAPABILITY_UNSUPPORTED`，桌面通道不可用返回
-`DESKTOP_UNAVAILABLE`，越权访问返回 `BROWSER_SCOPE_DENIED`。远端 Profile 与工作组受桌面
-连接配置约束；完整通道合同见 [SSH 远程项目](../architecture/ssh-remote-projects.md)。
+`DESKTOP_UNAVAILABLE`，越权访问返回 `BROWSER_SCOPE_DENIED`。未选择终端归属返回 `BROWSER_BINDING_REQUIRED`；需在桌面为该终端选择通道，不能按最后注册者猜测。
+Backend 协议 2 的响应包含 `binding`（desktopId、hostId、generation、id），旧通道重建后必须重新 resolve。
+远端 Profile 与工作组受桌面
+独立隧道配置约束；完整通道合同见 [SSH 远程项目](../architecture/ssh-remote-projects.md)。
 
 - 默认 Profile 顺序是当前 `RUNWEAVE_PROJECT_ID` 的 Worktree 绑定，再回退全局默认值。
 - `--profile` 只覆盖本次解析，不修改偏好。

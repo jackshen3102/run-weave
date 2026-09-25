@@ -1,5 +1,6 @@
+import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin } from "../tunnels/index";
 import type { SuijiDesktopState, SuijiEnvironment, SuijiProfile } from "../suiji/desktop";
-import type { ConnectionRuntime, DesktopBrowserBinding, ManualRemotePortAccess, RemoteCapabilities, RemoteServiceRef, ResolvedServiceAccess, SshRemoteConnection } from "../remote/index";
+import type { RemoteServiceRef, ResolvedServiceAccess } from "../remote/index";
 import type { BrowserAssistanceTarget } from "../browser/assistance";
 import type {
   AttentionOpenDispatch,
@@ -98,16 +99,18 @@ export interface RunweaveElectronBridge {
   isElectron: boolean;
   showAttentionNotification: (target: AttentionNotificationTarget) => Promise<boolean>;
   onAttentionNotificationOpen: (listener: (target: AttentionNotificationTarget) => void) => () => void;
-  connectRemote: (connection: SshRemoteConnection) => Promise<ConnectionRuntime>;
-  disconnectRemote: (connectionId: string) => Promise<void>;
-  listRemoteConnections: () => Promise<ConnectionRuntime[]>;
-  bindRemoteBrowser: (connectionId: string, token: string) => Promise<DesktopBrowserBinding>;
-  inspectRemote: (connectionId: string, token: string) => Promise<RemoteCapabilities>;
-  resolveRemoteService: (ref: RemoteServiceRef, token: string) => Promise<ResolvedServiceAccess>;
-  forwardRemotePort: (connectionId: string, remotePort: number) => Promise<ManualRemotePortAccess>;
-  onRemoteConnectionStateChange: (
-    listener: (state: ConnectionRuntime) => void,
-  ) => () => void;
+  listTunnels: () => Promise<TunnelSnapshot>;
+  saveTunnels: (input: TunnelConfigUpdate) => Promise<TunnelSnapshot>;
+  connectTunnel: (hostId: string) => Promise<void>;
+  disconnectTunnel: (hostId: string) => Promise<void>;
+  retryTunnel: (hostId: string, forwardId?: string) => Promise<void>;
+  loginTunnelBrowser: (input: TunnelLogin) => Promise<{persistent: boolean}>;
+  selectTunnelBrowser: (hostId: string, terminalId: string) => Promise<void>;
+  importTunnels: (input: TunnelImport) => Promise<TunnelSnapshot>;
+  onTunnelsChanged: (listener: (snapshot: TunnelSnapshot) => void) => () => void;
+  onTunnelNotice: (listener: (message: string) => void) => () => void;
+  onOpenTunnels: (listener: () => void) => () => void;
+  resolveTunnelService: (ref: RemoteServiceRef, token: string) => Promise<ResolvedServiceAccess>;
   managesPackagedBackend: boolean;
   backendUrl: string;
   onAttentionOpenIntent: (
@@ -215,6 +218,7 @@ export interface RunweaveElectronBridge {
     profileId: TerminalBrowserProfileId,
     rules: TerminalBrowserHeaderState["rules"],
   ) => Promise<TerminalBrowserHeaderState>;
+  terminalBrowserRestoreProfilePreferences: () => Promise<TerminalBrowserProfilePreferences>;
   terminalBrowserGetProfilePreferences: () => Promise<TerminalBrowserProfilePreferences>;
   terminalBrowserUpdateProfilePreferences: (
     update: TerminalBrowserProfilePreferenceUpdate,

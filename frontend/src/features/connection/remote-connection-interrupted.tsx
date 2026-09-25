@@ -22,10 +22,10 @@ export function RemoteConnectionInterrupted({
     <ConnectionSwitcher connections={connections} activeConnectionId={connection.id} onSelectConnection={onSelectConnection} onOpenConnectionManager={onOpenConnectionManager} />
     <section className="max-w-lg space-y-3 rounded-xl border border-slate-700 p-5">
       <h1 className="text-lg font-semibold">{connection.name} · {connection.remoteStatus === "connecting" || connection.remoteStatus === "reconnecting" ? "正在重连" : "连接不可用"}</h1>
-      <p className="text-sm text-slate-300">{connection.statusMessage ?? "SSH 或远端 Backend 暂时不可用"}</p>
+      <p className="text-sm text-slate-300">{connection.statusMessage ?? "等待 SSH 通道，可在端口与隧道中连接主机"}</p>
       {lastObserved ? <p className="text-xs text-slate-400">上次终端状态更新：{lastObserved}。下方为历史信息，不代表终端仍在运行。</p> : null}
       {overview ? <p className="text-sm text-slate-300">已记录 {overview.projects.length} 个项目、{overview.sessions.length} 个终端。</p> : null}
-      <div className="flex gap-2"><Button onClick={onReconnect}>重新连接</Button><Button variant="outline" onClick={onOpenConnectionManager}>连接管理</Button></div>
+      <div className="flex gap-2"><Button onClick={onReconnect}>打开端口与隧道</Button><Button variant="outline" onClick={onOpenConnectionManager}>连接管理</Button></div>
     </section>
   </main>;
 }

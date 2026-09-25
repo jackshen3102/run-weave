@@ -20,7 +20,8 @@ const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
 
 export async function createRemoteBrowserGateway(input: {
-  connectionId: string;
+  desktopId: string;
+  hostId: string;
   generation: number;
   allowedProfileId: TerminalBrowserProfileId | null;
   approvedBrowserGroupId: string | null;
@@ -39,7 +40,9 @@ export async function createRemoteBrowserGateway(input: {
       if (req.method === "GET" && req.url === "/check") {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({
-          connectionId: input.connectionId,
+          protocolVersion: 2,
+          desktopId: input.desktopId,
+          hostId: input.hostId,
           generation: input.generation,
         }));
         return;
@@ -59,14 +62,15 @@ export async function createRemoteBrowserGateway(input: {
         chunks.push(Buffer.from(chunk));
       }
       const request = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
-        connectionId?: unknown;
+        desktopId?: unknown;
+        hostId?: unknown;
         generation?: unknown;
         projectId?: unknown;
         terminalSessionId?: unknown;
         explicitProfileId?: unknown;
         browserGroupId?: unknown;
       };
-      if (request.connectionId !== input.connectionId ||
+      if (request.desktopId !== input.desktopId || request.hostId !== input.hostId ||
           request.generation !== input.generation ||
           typeof request.projectId !== "string" || !request.projectId || request.projectId.length > 256 ||
           typeof request.terminalSessionId !== "string" || !request.terminalSessionId || request.terminalSessionId.length > 256 ||
@@ -87,8 +91,8 @@ export async function createRemoteBrowserGateway(input: {
         return;
       }
       const scope = {
-        projectId: `${input.connectionId}:${request.projectId}`,
-        terminalSessionId: `${input.connectionId}:${request.terminalSessionId}`,
+        projectId: `${input.desktopId}:${input.hostId}:${request.projectId}`,
+        terminalSessionId: `${input.desktopId}:${input.hostId}:${request.terminalSessionId}`,
         browserGroupId: request.browserGroupId ?? null,
         explicitProfileId: input.allowedProfileId,
       };

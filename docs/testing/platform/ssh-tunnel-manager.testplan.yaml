@@ -1,0 +1,157 @@
+version: 1
+name: "独立 SSH 隧道与本机配置验收"
+description: "验证用户级文件持久化、连接独立、真实转发、Browser 归属、手机只读和一次性迁移。只操作每个用例自有 fixture。"
+cases:
+  - id: STM-001
+    name: "管理作用域不跟随连接和项目"
+    required: true
+    description: "同一 Electron 生命周期中，关闭面板、切换连接和项目都不改配置或隧道进程。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例有两个可切换后端和项目，一条同号转发已建立。"
+    steps:
+      - "使用 toolkit:playwright-cli 附着本例 dev:open 返回的 fresh desktop surface，从更多菜单打开端口与隧道，记录 hostId、配置 revision、文件摘要及转发 PID。"
+      - "关闭面板，切换连接和项目，再打开；确认同一 hostId、revision、配置摘要及转发 PID，真实转发请求仍成功。"
+      - "结束时仅清理本例隧道与 fixture。"
+  - id: STM-002
+    name: "配置在同用户目录重启后恢复"
+    required: true
+    description: "重启恢复配置与自动连接意图，不沿用旧 PID 或运行状态。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "已保存非默认端口与 /chat/ 路径、autoConnect 主机及另一个不自动连接的主机。"
+    steps:
+      - "记录 userData 下 tunnels/config.json 与实际进程状态；完整停止本例 Electron 后用同一 userData 启动。"
+      - "重新 dev:open 获取 fresh endpoint 并用 toolkit:playwright-cli 打开管理面板；确认端口、路径、主机 ID、autoConnect 不变，只有 autoConnect 主机重建为新 PID。"
+      - "确认非自动主机保持未连接；结束并清理本例进程。"
+  - id: STM-003
+    name: "保存失败保留最后有效配置"
+    required: true
+    description: "文件写入失败不能伪成功或应用未保存配置。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例已保存有效配置，可以仅对该 fixture 目录注入写入失败。"
+    steps:
+      - "记录文件摘要、revision 和活跃转发；注入写入失败，再通过可信桌面 IPC 或 UI 修改端口并保存。"
+      - "确认返回 CONFIG_WRITE_FAILED，原文件、revision 和原转发保持，未启动新端口；恢复目录权限后保存成功并读回新 revision。"
+  - id: STM-004
+    name: "并发编辑拒绝陈旧 revision"
+    required: true
+    description: "单一 main 写入者不能被两个窗口的陈旧快照覆盖。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "两个本例主窗口已读到相同配置 revision。"
+    steps:
+      - "窗口 A 保存配置，确认 revision 增加；窗口 B 用旧 expectedRevision 保存不同内容。"
+      - "确认 B 得到 CONFIG_REVISION_CONFLICT，磁盘只含 A 已确认的数据；B 重新读取可看到最新配置。"
+  - id: STM-005
+    name: "普通端口转发不要求远端 Backend"
+    required: true
+    description: "只具备 SSH 的服务器也可建立真实同号 HTTP 与 WebSocket 转发。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "远端没有 Runweave Backend 或 Agent，只在本例空闲固定端口运行返回唯一标识的 HTTP/WebSocket fixture。"
+    steps:
+      - "使用 toolkit:playwright-cli 附着本例 dev:open 返回的 fresh desktop surface，添加 SSH 主机和同号端口，连接并启用转发。"
+      - "确认只监听本机 127.0.0.1 的指定端口；HTTP 与 WebSocket 都收到远端 fixture 标识，无 Backend 登录或 Agent 安装前置。"
+  - id: STM-006
+    name: "本机端口冲突不自动换端口"
+    required: true
+    description: "冲突只使对应转发失败，不影响其它转发或抢占监听者。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例拥有一个占用目标端口的独立 listener，另有一条有效转发。"
+    steps:
+      - "启用冲突端口，确认 LOCAL_PORT_IN_USE，未出现替代监听端口，占用 listener PID 和已有转发不变。"
+      - "释放本例占用者后显式重试；确认在原端口成功建立，配置 port 未变。"
+  - id: STM-007
+    name: "禁用期间迟到启动不能复活资源"
+    required: true
+    description: "同一条转发的旧 generation 回调不能越过停用意图。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "能延迟本例 SSH 握手或启动完成。"
+    steps:
+      - "发起转发并在 starting 阶段关闭其开关，再解除延迟。"
+      - "确认此转发最终 disabled 且没有 listener/遗留子进程，旧 ready 回调不能显示转发中；其他转发仍存活。"
+  - id: STM-008
+    name: "Browser 认证失败不影响普通转发"
+    required: true
+    description: "Browser needs_auth 与 SSH 可达、普通端口可用分别判断。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "普通转发已建立；远端 Backend 可达但该主机没有有效登录。"
+    steps:
+      - "启用 Browser 通道；确认出现该通道的登录入口或 needs_auth，不要求新建可见连接。"
+      - "持续请求普通转发，确认成功且进程不变；读取脱敏快照，确认 Browser 的认证错误没有改变 SSH ready。"
+  - id: STM-009
+    name: "远端 Browser 访问限定正确 Profile"
+    required: true
+    description: "真实远端 CLI 经本机通道访问获准 Browser，不能访问其它 Profile。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例独占 Browser 2，远端 Backend/CLI 为候选版本且已授权，另有无秘密的 Browser 3 隔离 fixture。"
+    steps:
+      - "为主机配置只允许 Browser 2，在远端有效终端执行 rw browser profile resolve --json；通过 toolkit:playwright-cli attach 返回的短期 endpoint，读取本例页面标识。"
+      - "确认路由归属、Profile 与实际页面一致；尝试指定未授权 Browser 3 被拒绝，Browser 3 fixture 不变；detach 并清理本例通道。"
+  - id: STM-010
+    name: "多个桌面绑定不按最后注册者猜测"
+    required: true
+    description: "远端终端必须显式选择经认证的桌面；新绑定和相同标识的其他登录不能接管已选 Browser。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例拥有两个独立桌面实例及同一远端测试 Backend，两个实例的 Browser 页面可区分。"
+    steps:
+      - "仅注册桌面 A，在未分配桌面的终端申请 capability，确认 BROWSER_BINDING_REQUIRED；再注册 B 并重试，仍不得按最后注册者猜测。"
+      - "为本例终端显式选择 A 后解析并读取 A 的页面；B 再次注册不改变归属，覆盖活跃绑定返回冲突。"
+      - "使用另一个登录会话注册与 A 相同 desktopId 和 hostId 的测试绑定；确认已选终端仍只解析到 A，A 失联时拒绝解析而不切换到同标识的另一会话。"
+  - id: STM-011
+    name: "SSH 重连作废旧 Browser 凭据"
+    required: true
+    description: "一次连接代际更换后旧 capability/票据不能继续访问本机。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "已有可用 Browser 通道，保存尚未使用的短期票据与 binding generation。"
+    steps:
+      - "断开本例 SSH 再重连；确认旧票据和旧 generation 解析拒绝，没有重放之前的浏览器操作。"
+      - "在同一有效远端终端重新 resolve 并 attach，确认新通道可读本例页面；detach。"
+  - id: STM-012
+    name: "手机角色只能读取当前节点数据"
+    required: true
+    description: "Backend 的只读接口不越过节点或桌面根，也不泄露秘密。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "准备 A/B 两个独立 Backend；A 获准读取本例桌面根，B 无桌面根；具有各自普通用户 Bearer，配置中含唯一测试 secret。"
+    steps:
+      - "对 A 无 Token GET /api/tunnels，确认 401；用 A 用户 Token 获取脱敏配置，确认 owner 和文件 revision 一致且不含测试 secret、票据或绝对密钥路径。"
+      - "用 B 用户读取 B，确认 DESKTOP_STATE_UNAVAILABLE，不返回 A 数据；尝试通过参数指定 A 目录被拒绝；普通用户不能经 HTTP 修改配置。"
+  - id: STM-013
+    name: "执行器退出后状态不伪装运行"
+    required: true
+    description: "Backend 持续可读时，Electron 退出或报告超时必须让运行快照失效。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例使用独立持续运行的 dedicated Backend，Electron 状态快照为 ready。"
+    steps:
+      - "记录配置 revision；只停止本例 Electron，继续用有效 Bearer 查询 /api/tunnels。"
+      - "确认配置仍可读且 revision 不变，最迟 15 秒后运行状态 offline/unknown，不能继续把最后 ready 当当前事实；重新连接 Backend 不启动 SSH。"
+  - id: STM-014
+    name: "旧 SSH 配置幂等迁移"
+    required: true
+    description: "同一次迁移中断/重试不会丢失端口路径或重复创建主机。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例专用 userData 含旧 SSH 连接、非默认转发端口和路径，已备份且可在导入落盘后、旧存储提交前中断。"
+    steps:
+      - "触发迁移并在指定边界中断，再用同 userData 启动并重新取得 fresh surface，继续同 migrationId。"
+      - "确认只生成一个 host，端口和路径不变，旧草稿未被误启用；读回校验成功后才清除旧运行字段，无新旧执行器并行。"
+  - id: STM-015
+    name: "仅 SSH 可达的旧连接仍能访问"
+    required: true
+    description: "迁移后的连接只消费独立隧道 endpoint，不丢终端入口、不拥有隧道生命周期。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例旧 Backend 只能通过 SSH 访问，没有可用直连 URL，已有测试项目和终端。"
+    steps:
+      - "迁移到新主机配置与 endpoint 引用后显式连接主机；从原连接入口打开相同项目/终端，确认身份未变且没有复制项目。"
+      - "删除本例连接记录后确认独立隧道仍存活；从管理面板断开才释放本例隧道，远端终端仍存活。"

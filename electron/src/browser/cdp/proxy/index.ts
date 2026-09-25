@@ -187,6 +187,15 @@ export async function startCdpProxy(
         return;
       }
 
+      // Discovery reports the running host even when profile preferences need
+      // repair. The WebSocket upgrade still resolves and validates its scope;
+      // a successful identity probe never authorizes browser operations.
+      if (new URL(url, endpoint).pathname === "/json/version" &&
+          !new URL(url, endpoint).search) {
+        sendJsonResponse(res, 200, buildVersionResponse(wsUrl, options.identity));
+        return;
+      }
+
       let scope: Scope;
       try {
         scope = resolveScope(url, endpoint);

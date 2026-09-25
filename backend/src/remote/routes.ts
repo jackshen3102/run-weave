@@ -1,3 +1,4 @@
+import { registerDesktopNetworkRoutes } from "../tunnels/routes";
 import { timingSafeEqual } from "node:crypto";
 import type { Express } from "express";
 import type { DesktopBrowserBindingRequest, RemoteBrowserResolveRequest } from "@runweave/shared/remote";
@@ -32,6 +33,7 @@ export function registerRemoteBrowserRoutes(
 ): void {
   const bindings = new DesktopBrowserBindings(sessions);
   const requireAuth = createRequireAuth(auth);
+  registerDesktopNetworkRoutes(app, requireAuth);
   registerRemoteCapabilitiesRoute(app, requireTunnelAuth, requireAuth, browserProfileDir, backendId);
   app.post("/api/desktop-browser/bindings", requireAuth, async (req, res) => {
     const owner = auth.verifyAccessToken(readBearerToken(req) ?? "")?.sessionId;
@@ -39,6 +41,17 @@ export function registerRemoteBrowserRoutes(
     try {
       res.status(201).json(await bindings.bind(owner, req.body as DesktopBrowserBindingRequest));
     } catch (error) { sendError(res, error); }
+  });
+  app.get("/api/desktop-browser/bindings", requireAuth, (req, res) => {
+    const owner = auth.verifyAccessToken(readBearerToken(req) ?? "")?.sessionId;
+    if (!owner) { res.sendStatus(401); return; }
+    res.json(bindings.list(owner));
+  });
+  app.put("/api/terminal/session/:id/browser/binding", requireAuth, (req, res) => {
+    const owner = auth.verifyAccessToken(readBearerToken(req) ?? "")?.sessionId;
+    if (!owner || typeof req.body?.bindingId !== "string") { res.sendStatus(400); return; }
+    try { bindings.select(owner, String(req.params.id), req.body.bindingId); res.sendStatus(204); }
+    catch (error) { sendError(res, error); }
   });
   app.delete("/api/desktop-browser/bindings/:id", requireAuth, (req, res) => {
     const owner = auth.verifyAccessToken(readBearerToken(req) ?? "")?.sessionId;

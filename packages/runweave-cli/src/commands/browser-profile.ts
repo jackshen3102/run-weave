@@ -113,7 +113,8 @@ async function resolveRemoteBrowserProfile(
       },
     );
     if (!capabilityResponse.ok) {
-      throw new CliError(`REMOTE_CAPABILITY_UNSUPPORTED: capability request returned HTTP ${capabilityResponse.status}`, 3);
+      const error = await capabilityResponse.json().catch(() => null) as {code?:string;message?:string}|null;
+      throw new CliError(`${error?.code ?? "REMOTE_CAPABILITY_UNSUPPORTED"}: ${error?.message ?? `HTTP ${capabilityResponse.status}`}`, 3);
     }
     const issued = (await capabilityResponse.json()) as { capability?: string };
     if (!issued.capability) throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: missing terminal capability", 3);
@@ -135,7 +136,7 @@ async function resolveRemoteBrowserProfile(
       throw new CliError(`${error?.code ?? "DESKTOP_UNAVAILABLE"}: ${error?.message ?? `HTTP ${response.status}`}`, response.status === 403 ? 4 : 3);
     }
     const resolved = (await response.json()) as RemoteBrowserResolveResponse;
-    if (!isRemoteBrowserProfileState(resolved)) {
+    if (resolved.protocolVersion !== 2 || resolved.binding?.protocolVersion !== 2 || !isRemoteBrowserProfileState(resolved)) {
       throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: Desktop Browser Profile state is missing or invalid; update the desktop, remote Backend and CLI together", 3);
     }
     return {

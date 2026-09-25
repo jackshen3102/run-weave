@@ -1,0 +1,34 @@
+{
+  "activeConnection": "devbox",
+  "hosts": [
+    {
+      "id": "devbox",
+      "name": "devbox",
+      "target": "devbox",
+      "autoStart": true,
+      "status": "connected",
+      "expanded": true,
+      "backendPort": 5001,
+      "profile": "Browser 1",
+      "browser": true,
+      "forwards": [
+        { "id": "web", "name": "Web 开发服务", "port": 3001, "enabled": true },
+        { "id": "api", "name": "API 服务", "port": 8080, "enabled": false }
+      ]
+    },
+    {
+      "id": "staging",
+      "name": "staging",
+      "target": "developer@staging.example.com",
+      "autoStart": false,
+      "status": "disconnected",
+      "expanded": false,
+      "backendPort": 5001,
+      "profile": "Browser 2",
+      "browser": false,
+      "forwards": [
+        { "id": "preview", "name": "预览服务", "port": 3000, "enabled": true }
+      ]
+    }
+  ]
+}

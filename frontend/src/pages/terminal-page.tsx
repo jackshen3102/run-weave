@@ -40,7 +40,8 @@ export function TerminalRoutePage({
         connection={{
           activeConnectionId,
           connectionName,
-          remote: activeConnection?.kind === "ssh" ? {
+          remote: activeConnection?.tunnelEndpointId ? {
+            endpointId: activeConnection.tunnelEndpointId,
             generation: activeConnection.generation ?? 0,
             browserProfileId: activeConnection.browserProfileId ?? null,
           } : null,

@@ -390,10 +390,6 @@ export function TerminalWorktreeRail({
                   profilePreferences?.defaultProfileId;
                 const browserSummary = browserProfileId
                   ? `${browserProfileId.replace("profile-", "P")} · ${
-                      browserPreference?.devServerPort
-                        ? `:${browserPreference.devServerPort}`
-                        : "no port"
-                    } · ${
                       browserPreference?.preferredProfileId ? "bound" : "global"
                     }`
                   : null;

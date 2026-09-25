@@ -3,11 +3,9 @@ export interface ConnectionConfig {
   name: string;
   url: string;
   createdAt: number;
-  kind?: "ssh";
-  sshHost?: string;
-  sshBackendPort?: number;
+  tunnelEndpointId?: string;
+  tunnelHostId?: string;
   browserProfileId?: "profile-1" | "profile-2" | "profile-3" | null;
-  approvedBrowserGroupId?: string | null;
   generation?: number;
   browserAvailable?: boolean;
   browserMessage?: string | null;

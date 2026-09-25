@@ -50,6 +50,8 @@ export async function startDedicatedBeta({
   revision,
   desktopCdpPort,
   terminalBrowserCdpPort,
+  whistlePorts,
+  portLeaseRoot,
   sharedBackend,
   sharedAppServer,
   requestedSharedBackend,
@@ -87,7 +89,7 @@ export async function startDedicatedBeta({
       sharedAppServer.lockPath,
     );
   }
-  const launchEnv = { ...process.env };
+  const launchEnv = { ...process.env, RUNWEAVE_WHISTLE_PORTS: whistlePorts.join(",") };
   Object.assign(
     launchEnv,
     buildAgentTeamFixtureEnvironment(fixtureScope, {
@@ -163,6 +165,8 @@ export async function startDedicatedBeta({
     channel: "beta",
     appPath: paths.appPath,
     userDataDir: paths.userData,
+    whistlePorts,
+    portLeaseRoot,
     statusPath: paths.desktopStatusPath,
     betaControl: {
       command: process.execPath,
@@ -269,6 +273,8 @@ export async function startDedicatedBeta({
     pid: status.desktop.pid,
     sourceRevision: revision,
     userDataDir: status.desktop.userDataPath,
+    whistlePorts,
+    portLeaseRoot,
     statusPath: status.desktop.statusPath,
     desktopCdpEndpoint: status.cdp.desktop.endpoint,
     terminalBrowserCdpEndpoint: status.cdp.terminalBrowser.endpoint,

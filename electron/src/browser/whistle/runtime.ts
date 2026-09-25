@@ -1,3 +1,4 @@
+import { getRuntimeBrowserProfileConfig } from "../profile/endpoints.js";
 import { app } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
@@ -5,7 +6,6 @@ import { existsSync, mkdirSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import {
-  getTerminalBrowserProfileConfig,
   TERMINAL_BROWSER_PROFILE_IDS,
   type TerminalBrowserErrorPayload,
   type TerminalBrowserProfileId,
@@ -26,7 +26,7 @@ interface WhistleRecord {
 
 const records = new Map<TerminalBrowserProfileId, WhistleRecord>(
   TERMINAL_BROWSER_PROFILE_IDS.map((profileId) => {
-    const config = getTerminalBrowserProfileConfig(profileId);
+    const config = getRuntimeBrowserProfileConfig(profileId);
     return [
       profileId,
       {
@@ -162,7 +162,7 @@ async function waitUntilReady(
   profileId: TerminalBrowserProfileId,
   child: ChildProcess,
 ): Promise<void> {
-  const config = getTerminalBrowserProfileConfig(profileId);
+  const config = getRuntimeBrowserProfileConfig(profileId);
   const deadline = Date.now() + READY_TIMEOUT_MS;
   let lastError = "Whistle did not respond";
   while (Date.now() < deadline) {
@@ -198,7 +198,7 @@ async function waitUntilReady(
 async function startOwnedWhistle(
   profileId: TerminalBrowserProfileId,
 ): Promise<TerminalBrowserWhistleState> {
-  const config = getTerminalBrowserProfileConfig(profileId);
+  const config = getRuntimeBrowserProfileConfig(profileId);
   const record = records.get(profileId)!;
   updateState(profileId, { status: "starting", pid: null, error: null });
 

@@ -1,9 +1,9 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PackagedBackendConnectionState } from "@runweave/shared/runtime-monitor";
-import type { ConnectionRuntime } from "@runweave/shared/remote";
+import { useTunnelStore } from "../tunnels/store";
+import { migrateLegacyTunnels } from "../tunnels/migration";
 import type { ConnectionConfig, ConnectionStore } from "./types";
-import { useProjectBindings } from "./project-bindings";
 import {
   buildLocalDevelopmentConnection,
   LOCAL_DEV_CONNECTION_ID,
@@ -75,8 +75,7 @@ type StoreUpdater = (prev: ConnectionStore) => ConnectionStore;
 export interface UseConnectionsResult {
   connections: ConnectionConfig[];
   activeConnection: ConnectionConfig | null;
-  addConnection: (name: string, url: string) => ConnectionConfig;
-  addRemoteConnection: (name: string, host: string, backendPort: number, browserProfileId: "profile-1" | "profile-2" | "profile-3" | null, approvedBrowserGroupId: string | null) => ConnectionConfig;
+  addConnection: (name: string, url: string, tunnelEndpointId?: string) => ConnectionConfig;
   removeConnection: (id: string) => void;
   updateConnection: (
     id: string,
@@ -92,7 +91,6 @@ const NOOP_RESULT: UseConnectionsResult = {
   connections: [],
   activeConnection: null,
   addConnection: () => NOOP_CONN,
-  addRemoteConnection: () => NOOP_CONN,
   removeConnection: () => {},
   updateConnection: () => {},
   setActive: () => {},
@@ -108,59 +106,15 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     useState<PackagedBackendConnectionState | null>(() =>
       getInitialPackagedBackendState(),
     );
-  const [remoteRuntimes, setRemoteRuntimes] = useState<Record<string, ConnectionRuntime>>({});
-  const managedRemoteIds = useRef(new Set<string>());
-
+  const snapshot = useTunnelStore((state) => state.snapshot);
   useEffect(() => {
-    if (!isElectron || !window.electronAPI?.connectRemote) return;
-    const api = window.electronAPI;
-    const unsubscribe = api.onRemoteConnectionStateChange?.((runtime) => {
-      setRemoteRuntimes((previous) => ({ ...previous, [runtime.connectionId]: runtime }));
-    });
-    void api.listRemoteConnections?.().then((runtimes) => {
-      setRemoteRuntimes((previous) => ({
-        ...Object.fromEntries(runtimes.map((runtime) => [runtime.connectionId, runtime])),
-        ...previous,
-      }));
-    });
-    return () => unsubscribe?.();
-  }, []);
-
-  useEffect(() => {
-    if (!isElectron || !window.electronAPI?.connectRemote) return;
-    const remoteConnections = store.connections.filter((connection) => connection.kind === "ssh");
-    const nextIds = new Set(remoteConnections.map((connection) => connection.id));
-    for (const id of managedRemoteIds.current) {
-      if (!nextIds.has(id)) void window.electronAPI.disconnectRemote?.(id);
-    }
-    managedRemoteIds.current = nextIds;
-    for (const connection of remoteConnections) {
-      if (!connection.sshHost || !connection.sshBackendPort) continue;
-      void window.electronAPI.connectRemote({
-        connectionId: connection.id,
-        host: connection.sshHost,
-        backendPort: connection.sshBackendPort,
-        browserProfileId: connection.browserProfileId ?? null,
-        approvedBrowserGroupId: connection.approvedBrowserGroupId ?? null,
-      }).then((runtime) => {
-        setRemoteRuntimes((previous) => ({ ...previous, [runtime.connectionId]: runtime }));
-      }).catch((error: unknown) => {
-        setRemoteRuntimes((previous) => ({
-          ...previous,
-          [connection.id]: {
-            connectionId: connection.id,
-            generation: 0,
-            installationId: null,
-            serviceInstanceId: null,
-            apiBase: null,
-            status: "failed",
-            lastObservedAt: null,
-            message: error instanceof Error ? error.message : String(error),
-          },
-        }));
-      });
-    }
-  }, [store.connections]);
+    if (!isElectron) return;
+    void migrateLegacyTunnels(storageKey).then(() => {
+      const next = loadStore(storageKey);
+      storeRef.current = next;
+      setStoreState(next);
+    }).catch((error: unknown) => useTunnelStore.getState().setError(String(error)));
+  }, [storageKey]);
   const localDevelopmentConnection = useMemo(
     () => buildLocalDevelopmentConnection(packagedBackendState),
     [packagedBackendState],
@@ -220,18 +174,21 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     const userConnections = store.connections.filter(
       (connection) => connection.id !== LOCAL_DEV_CONNECTION_ID,
     ).map((connection) => {
-      if (connection.kind !== "ssh") return connection;
-      const runtime = remoteRuntimes[connection.id];
+      if (!connection.tunnelEndpointId) return connection;
+      const endpoint = snapshot?.config.backendEndpoints.find(e => e.id === connection.tunnelEndpointId);
+      const host = snapshot?.config.hosts.find(h => h.id === endpoint?.hostId);
+      const runtime = snapshot?.hosts.find(h => h.hostId === endpoint?.hostId);
+      const url = runtime?.endpoints[connection.tunnelEndpointId] ?? "";
       return {
-        ...connection,
-        url: runtime?.apiBase ?? "",
-        available: runtime?.status === "ready",
-        statusMessage: runtime?.message ?? runtime?.status ?? "连接中",
-        canReconnect: runtime?.status === "failed",
+        ...connection, url, tunnelHostId: endpoint?.hostId,
+        available: Boolean(url) && runtime?.state === "ready",
+        statusMessage: runtime?.error?.message ?? "等待 SSH 通道，请在端口与隧道中连接主机",
+        canReconnect: false,
         generation: runtime?.generation ?? 0,
-        browserAvailable: runtime?.browserAvailable ?? false,
-        browserMessage: runtime?.browserMessage ?? null,
-        remoteStatus: runtime?.status ?? "connecting",
+        browserProfileId: host?.browser.profileId ?? null,
+        browserAvailable: runtime?.browser.state === "ready",
+        browserMessage: runtime?.browser.error?.message ?? null,
+        remoteStatus: runtime?.state ?? "disconnected",
         installationId: runtime?.installationId ?? null,
         canEdit: false,
       };
@@ -240,7 +197,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     return localDevelopmentConnection
       ? [localDevelopmentConnection, ...userConnections]
       : userConnections;
-  }, [localDevelopmentConnection, remoteRuntimes, store.connections]);
+  }, [localDevelopmentConnection, snapshot, store.connections]);
 
   const activeConnection = useMemo(() => {
     if (store.activeId === LOCAL_DEV_CONNECTION_ID) {
@@ -251,39 +208,19 @@ export function useConnections(storageKey: string): UseConnectionsResult {
   }, [connections, localDevelopmentConnection, store.activeId]);
 
   const addConnection = useMemoizedFn(
-    (name: string, url: string): ConnectionConfig => {
+    (name: string, url: string, tunnelEndpointId?: string): ConnectionConfig => {
       const conn: ConnectionConfig = {
         id: crypto.randomUUID(),
         name: name.trim(),
         url: url.trim().replace(/\/+$/, ""),
         createdAt: Date.now(),
+        ...(tunnelEndpointId ? {tunnelEndpointId} : {}),
       };
       persist((prev) => ({
         connections: [...prev.connections, conn],
         activeId: conn.id,
       }));
       return conn;
-    },
-  );
-
-  const addRemoteConnection = useMemoizedFn(
-    (name: string, host: string, backendPort: number, browserProfileId: "profile-1" | "profile-2" | "profile-3" | null, approvedBrowserGroupId: string | null): ConnectionConfig => {
-      const connection: ConnectionConfig = {
-        id: crypto.randomUUID(),
-        name: name.trim(),
-        url: "",
-        createdAt: Date.now(),
-        kind: "ssh",
-        sshHost: host.trim(),
-        sshBackendPort: backendPort,
-        browserProfileId,
-        approvedBrowserGroupId,
-      };
-      persist((previous) => ({
-        connections: [...previous.connections, connection],
-        activeId: connection.id,
-      }));
-      return connection;
     },
   );
 
@@ -296,7 +233,6 @@ export function useConnections(storageKey: string): UseConnectionsResult {
       connections: prev.connections.filter((c) => c.id !== id),
       activeId: prev.activeId === id ? null : prev.activeId,
     }));
-    useProjectBindings.getState().removeConnection(id);
   });
 
   const updateConnection = useMemoizedFn(
@@ -330,19 +266,6 @@ export function useConnections(storageKey: string): UseConnectionsResult {
   });
 
   const reconnectSystemConnection = useMemoizedFn(async (id: string) => {
-    const remote = storeRef.current.connections.find((connection) => connection.id === id && connection.kind === "ssh");
-    if (remote?.sshHost && remote.sshBackendPort && window.electronAPI?.connectRemote) {
-      await window.electronAPI.disconnectRemote?.(id);
-      const runtime = await window.electronAPI.connectRemote({
-        connectionId: id,
-        host: remote.sshHost,
-        backendPort: remote.sshBackendPort,
-        browserProfileId: remote.browserProfileId ?? null,
-        approvedBrowserGroupId: remote.approvedBrowserGroupId ?? null,
-      });
-      setRemoteRuntimes((previous) => ({ ...previous, [id]: runtime }));
-      return runtime.status === "ready";
-    }
     if (
       !shouldExposeLocalDevelopmentConnection(
         isElectron,
@@ -368,7 +291,6 @@ export function useConnections(storageKey: string): UseConnectionsResult {
         connections,
         activeConnection,
         addConnection,
-        addRemoteConnection,
         removeConnection,
         updateConnection,
         setActive,

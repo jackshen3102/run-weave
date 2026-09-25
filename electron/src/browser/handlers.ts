@@ -69,10 +69,11 @@ import { registerTerminalBrowserWorkspaceHandlers } from "./workspace/handlers.j
 import { restoreTerminalBrowserTabsForWindow } from "./restore.js";
 import {
   getTerminalBrowserProfilePreferences,
-  updateTerminalBrowserProfilePreferences,
+  restoreTerminalBrowserProfilePreferences,
 } from "./profile/preferences.js";
 import {
   getTerminalBrowserProfileRuntimeStates,
+  updateProfilePreferencesAndApply,
   resolveTerminalBrowserProfile,
   setTerminalBrowserProfileProxyMode,
 } from "./profile/runtime.js";
@@ -136,12 +137,13 @@ export function registerTerminalBrowserHandlers(): void {
     },
   );
 
+  ipcMain.handle("terminal-browser:restore-profile-preferences", () => restoreTerminalBrowserProfilePreferences());
   ipcMain.handle("terminal-browser:get-profile-preferences", () =>
     getTerminalBrowserProfilePreferences(),
   );
   ipcMain.handle(
     "terminal-browser:update-profile-preferences",
-    (_event, update) => updateTerminalBrowserProfilePreferences(update),
+    (event, update) => updateProfilePreferencesAndApply(update, BrowserWindow.fromWebContents(event.sender)?.id),
   );
   ipcMain.handle("terminal-browser:get-profile-runtimes", () =>
     getTerminalBrowserProfileRuntimeStates(),
@@ -296,6 +298,7 @@ export function registerTerminalBrowserHandlers(): void {
       }
 
       const entry = getExistingTerminalBrowserEntry(win, tabId, "navigate");
+      await resolveTerminalBrowserProfile({projectId:null,explicitProfileId:entry.profileId,browserGroupId:entry.browserGroupId??null},{excludedWindowId:win.id});
       const { view } = entry;
       entry.lastKnownUrl = safeUrl;
       try {

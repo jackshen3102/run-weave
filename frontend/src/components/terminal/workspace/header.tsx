@@ -1,3 +1,5 @@
+import { useTerminalBrowserTunnelBinding } from "../../../features/tunnels/terminal-binding";
+import { useTunnelStore } from "../../../features/tunnels/store";
 import { useOpenCodexQuota } from "../../../features/codex-quota/context";
 import { useSuijiDrawer } from "../../../features/suiji/drawer-state";
 import { useEnterScheduledTasks } from "../../../features/scheduled-tasks/navigation";
@@ -128,6 +130,7 @@ export function TerminalWorkspaceHeader({
       bumpAgentRecoveryRevision: state.bumpAgentRecoveryRevision,
     })),
   );
+  const tunnelBindingItems = useTerminalBrowserTunnelBinding({apiBase,token,terminalId:activeSessionId});
   const contexts =
     useTerminalProjectContextsQuery(activeParentProjectId).data ??
     EMPTY_TERMINAL_PROJECT_CONTEXTS;
@@ -228,8 +231,6 @@ export function TerminalWorkspaceHeader({
           activeConnectionName={connectionName}
           onSelectConnection={onSelectConnection}
           onOpenConnectionManager={onOpenConnectionManager}
-          currentProjects={projects}
-          currentSessions={sessions}
           className="h-6 shrink-0 rounded-md border border-slate-800 bg-slate-900 px-2 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-slate-100"
         />
       ) : null}
@@ -307,6 +308,8 @@ export function TerminalWorkspaceHeader({
               </DropdownMenuTrigger>
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-40">
+              {tunnelBindingItems}
+              {window.electronAPI?.isElectron && <DropdownMenuItem onSelect={() => useTunnelStore.getState().setOpen(true)}>端口与隧道</DropdownMenuItem>}
               {openCodexQuota ? (
                 <DropdownMenuItem onSelect={openCodexQuota}>
                   Codex 额度

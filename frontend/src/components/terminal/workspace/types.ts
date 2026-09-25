@@ -7,7 +7,7 @@ export interface TerminalWorkspaceConnectionOptions {
   connectionName?: string;
   onSelectConnection?: (connectionId: string) => void;
   onOpenConnectionManager?: () => void;
-  remote?: { generation: number; browserProfileId: "profile-1" | "profile-2" | "profile-3" | null } | null;
+  remote?: { endpointId: string; generation: number; browserProfileId: "profile-1" | "profile-2" | "profile-3" | null } | null;
 }
 
 export interface TerminalWorkspaceProps {
