@@ -1,5 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+
 export interface SshProcess {
   child: ChildProcessWithoutNullStreams;
   ready: Promise<void>;
@@ -7,15 +11,22 @@ export interface SshProcess {
 }
 export function startSsh(host: string, forwards: string[] = []): SshProcess {
   const marker = "runweave-tunnel-ready";
+  const socketDir = forwards.length
+    ? mkdtempSync(path.join(os.tmpdir(), "rw-ssh-"))
+    : null;
+  const socketPath = socketDir ? path.join(socketDir, "s") : null;
   const child = spawn(
     "ssh",
     [
       "-N",
       "-T",
+      ...(socketPath ? ["-M", "-S", socketPath, "-o", "ControlPersist=no"] : []),
       "-o",
       "BatchMode=yes",
       "-o",
       "StrictHostKeyChecking=yes",
+      "-o",
+      "ClearAllForwardings=yes",
       "-o",
       "ExitOnForwardFailure=yes",
       "-o",
@@ -33,8 +44,17 @@ export function startSsh(host: string, forwards: string[] = []): SshProcess {
     ],
     { stdio: "pipe" },
   );
+  if (socketDir)
+    child.once("close", () => {
+      try {
+        rmSync(socketDir, { recursive: true, force: true });
+      } catch {
+        /* A cleanup failure must not crash the desktop process. */
+      }
+    });
   let stdout = "",
     stderr = "";
+  let control: ChildProcessWithoutNullStreams | null = null;
   const ready = new Promise<void>((resolve, reject) => {
     let done = false;
     const finish = (error?: Error) => {
@@ -42,9 +62,40 @@ export function startSsh(host: string, forwards: string[] = []): SshProcess {
       done = true;
       clearTimeout(timer);
       if (error) {
+        control?.kill("SIGTERM");
         child.kill("SIGTERM");
         reject(error);
       } else resolve();
+    };
+    const applyForwards = () => {
+      if (!socketPath) {
+        finish();
+        return;
+      }
+      // ClearAllForwardings also clears command-line -L/-R; add only our forwards
+      // through this private master socket, without rereading the user's alias.
+      control = spawn(
+        "ssh",
+        [
+          "-F", "/dev/null", "-S", socketPath, "-O", "forward",
+          "-o", "ExitOnForwardFailure=yes", ...forwards, host,
+        ],
+        { stdio: "pipe" },
+      );
+      control.stderr.on("data", (data: Buffer) => {
+        stderr = (stderr + data.toString()).slice(-4096);
+      });
+      control.once("error", () =>
+        finish(new Error("SSH_START_FAILED: 无法设置 SSH 转发")));
+      control.once("exit", (code) => {
+        if (code === 0) finish();
+        else
+          finish(new Error(
+            /address already in use|cannot listen to port/i.test(stderr)
+              ? "LOCAL_PORT_IN_USE: 本机端口已被占用，请释放端口或修改服务端口"
+              : "SSH_FORWARD_FAILED: 无法设置 SSH 转发",
+          ));
+      });
     };
     const timer = setTimeout(
       () => finish(new Error("SSH_TIMEOUT: SSH 建立连接超时")),
@@ -52,7 +103,8 @@ export function startSsh(host: string, forwards: string[] = []): SshProcess {
     );
     child.stdout.on("data", (data: Buffer) => {
       stdout = (stdout + data.toString()).slice(-4096);
-      if (stdout.split(/\r?\n/).includes(marker)) finish();
+      if (stdout.split(/\r?\n/).includes(marker) && !control && !done)
+        applyForwards();
     });
     child.stderr.on("data", (data: Buffer) => {
       stderr = (stderr + data.toString()).slice(-4096);
@@ -80,6 +132,7 @@ export function startSsh(host: string, forwards: string[] = []): SshProcess {
     child,
     ready,
     stop: async () => {
+      control?.kill("SIGTERM");
       if (!child.pid || child.exitCode !== null || child.signalCode !== null)
         return;
       await new Promise<void>((resolve) => {
@@ -118,6 +171,8 @@ export async function remoteFreePort(host: string): Promise<number> {
     "BatchMode=yes",
     "-o",
     "StrictHostKeyChecking=yes",
+    "-o",
+    "ClearAllForwardings=yes",
     "-o",
     "ConnectTimeout=10",
     host,

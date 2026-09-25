@@ -6,7 +6,6 @@ import type {
   TunnelHostConfig,
   TunnelHostRuntime,
   TunnelSnapshot,
-  TunnelState,
 } from "@runweave/shared/tunnels";
 import {
   desktopStateOwner,
@@ -18,6 +17,7 @@ import { startSsh, freePort, type SshProcess } from "./ssh-process.js";
 import { TunnelStore } from "./store.js";
 import { TunnelCredentials } from "./credentials.js";
 import { BrowserChannel } from "./browser-channel.js";
+import { childState, failure } from "./runtime-state.js";
 
 interface Host {
   config: TunnelHostConfig;
@@ -25,6 +25,7 @@ interface Host {
   desired: boolean;
   control: SshProcess | null;
   forwards: Map<string, SshProcess>;
+  forwardRetries: Map<string, { retryAt: number; failures: number }>;
   backends: Map<number, { process: SshProcess; url: string }>;
   channel: BrowserChannel | null;
   browserBusy: boolean;
@@ -34,20 +35,6 @@ interface Host {
   busy: boolean;
   retryAt: number;
   failures: number;
-}
-const childState = (
-  state: TunnelState["state"],
-  error: TunnelState["error"] = null,
-): TunnelState => ({ state, error });
-function failure(error: unknown): NonNullable<TunnelState["error"]> {
-  const text = error instanceof Error ? error.message : "TUNNEL_FAILED";
-  const code = /^[A-Z_]+/.exec(text)?.[0] ?? "TUNNEL_FAILED";
-  return {
-    code,
-    message: text.includes(": ")
-      ? text.slice(text.indexOf(": ") + 2)
-      : "通道不可用，请检查 SSH 配置和远端服务",
-  };
 }
 export class TunnelManager {
   readonly store = new TunnelStore();
@@ -70,6 +57,7 @@ export class TunnelManager {
       desired: false,
       control: null,
       forwards: new Map(),
+      forwardRetries: new Map(),
       backends: new Map(),
       channel: null,
       browserBusy: false,
@@ -159,6 +147,11 @@ export class TunnelManager {
         )
           void this.connect(h.config.id);
         if (h.desired && h.runtime.state === "ready") {
+          for (const f of h.config.forwards) {
+            const retry = h.forwardRetries.get(f.id);
+            if (f.enabled && retry?.retryAt && Date.now() >= retry.retryAt)
+              void this.forward(h, f.id);
+          }
           void this.browser(h);
           void this.restoreEndpoints(h);
         }
@@ -252,6 +245,7 @@ export class TunnelManager {
       ...[...h.backends.values()].map((x) => x.process),
     ];
     h.forwards.clear();
+    h.forwardRetries.clear();
     h.backends.clear();
     h.runtime.endpoints = {};
     for (const f of h.config.forwards)
@@ -275,6 +269,8 @@ export class TunnelManager {
   private async forward(h: Host, id: string) {
     const f = h.config.forwards.find((f) => f.id === id);
     if (!f || !f.enabled || h.forwards.has(id)) return;
+    const retry = h.forwardRetries.get(id);
+    if (retry) retry.retryAt = 0;
     const generation = h.runtime.generation;
     h.runtime.forwards[id] = childState("starting");
     this.publish();
@@ -292,24 +288,46 @@ export class TunnelManager {
         return;
       }
       h.runtime.forwards[id] = childState("ready");
+      const readyAt = Date.now();
       process.child.once("exit", () => {
         if (active()) {
           h.forwards.delete(id);
+          if (Date.now() - readyAt >= 60_000) h.forwardRetries.delete(id);
           h.runtime.forwards[id] = childState("failed", {
             code: "FORWARD_DISCONNECTED",
-            message: "端口转发已中断，请重试",
+            message: "端口转发已中断，正在重连",
           });
-          this.notify(`${h.config.name} 的端口 ${f.port} 转发中断`);
+          if (!h.forwardRetries.has(id))
+            this.notify(`${h.config.name} 的端口 ${f.port} 转发中断`);
+          this.scheduleForward(h, id);
           this.publish();
         }
       });
     } catch (error) {
       if (active()) {
         h.forwards.delete(id);
-        h.runtime.forwards[id] = childState("failed", failure(error));
+        const problem = failure(error);
+        if (["SSH_TIMEOUT", "SSH_DISCONNECTED"].includes(problem.code)) {
+          h.runtime.forwards[id] = childState("failed", {
+            ...problem,
+            message: `${problem.message}，正在重试`,
+          });
+          this.scheduleForward(h, id);
+        } else {
+          h.runtime.forwards[id] = childState("failed", problem);
+          h.forwardRetries.delete(id);
+        }
       }
     }
     this.publish();
+  }
+  private scheduleForward(h: Host, id: string) {
+    const previous = h.forwardRetries.get(id)?.failures ?? 0;
+    const delays = [1000, 2000, 5000, 10000, 30000];
+    h.forwardRetries.set(id, {
+      retryAt: Date.now() + delays[Math.min(previous, delays.length - 1)]!,
+      failures: previous + 1,
+    });
   }
   private endpoint(h: Host, port: number): Promise<string> {
     const pending = h.endpointPending.get(port);
@@ -475,8 +493,11 @@ export class TunnelManager {
           if (migrationId && next.autoConnect) void this.connect(next.id);
           continue;
         }
-        if (h.config.sshTarget !== next.sshTarget) {
+        const targetChanged = h.config.sshTarget !== next.sshTarget;
+        const reconnect = targetChanged && h.desired;
+        if (targetChanged) {
           await this.disconnect(next.id);
+          h.failures = 0;
           this.credentials.forget(next.id);
         }
         for (const [id, process] of h.forwards) {
@@ -487,6 +508,12 @@ export class TunnelManager {
             await process.stop();
             delete h.runtime.forwards[id];
           }
+        }
+        for (const id of h.forwardRetries.keys()) {
+          const old = h.config.forwards.find((f) => f.id === id);
+          const fresh = next.forwards.find((f) => f.id === id);
+          if (!fresh?.enabled || old?.port !== fresh.port)
+            h.forwardRetries.delete(id);
         }
         const browserChanged =
           JSON.stringify(h.config.browser) !== JSON.stringify(next.browser);
@@ -518,7 +545,11 @@ export class TunnelManager {
         for (const id of Object.keys(h.runtime.forwards))
           if (!next.forwards.some((f) => f.id === id))
             delete h.runtime.forwards[id];
-        if (h.runtime.state === "ready") await this.applyChildren(h);
+        if (reconnect) {
+          h.desired = true;
+          h.retryAt = Date.now();
+          if (!h.busy) void this.connect(next.id);
+        } else if (h.runtime.state === "ready") await this.applyChildren(h);
       }
       this.appliedRevision = config.revision;
       this.publish();
