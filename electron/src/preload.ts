@@ -1,10 +1,11 @@
+import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin } from "@runweave/shared/tunnels";
 import { contextBridge, ipcRenderer, shell } from "electron";
 import type {
   RunweaveElectronBridge,
   TerminalBrowserAnnotationUpdate,
   TerminalBrowserBounds,
 } from "@runweave/shared/desktop-bridge";
-import type { ConnectionRuntime, DesktopBrowserBinding, ManualRemotePortAccess, RemoteCapabilities, RemoteServiceRef, ResolvedServiceAccess, SshRemoteConnection } from "@runweave/shared/remote";
+import type { RemoteServiceRef, ResolvedServiceAccess } from "@runweave/shared/remote";
 import type {
   TerminalBrowserCreateTabRequest,
   TerminalBrowserStateChangedEvent,
@@ -66,25 +67,26 @@ const electronApi = {
     ipcRenderer.on("attention:notification-open", wrapped);
     return () => ipcRenderer.off("attention:notification-open", wrapped);
   },
-  connectRemote: (connection: SshRemoteConnection) =>
-    ipcRenderer.invoke("remote:connect", connection) as Promise<ConnectionRuntime>,
-  disconnectRemote: (connectionId: string) =>
-    ipcRenderer.invoke("remote:disconnect", connectionId) as Promise<void>,
-  listRemoteConnections: () =>
-    ipcRenderer.invoke("remote:list") as Promise<ConnectionRuntime[]>,
-  bindRemoteBrowser: (connectionId: string, token: string) =>
-    ipcRenderer.invoke("remote:bind-browser", connectionId, token) as Promise<DesktopBrowserBinding>,
-  inspectRemote: (connectionId: string, token: string) =>
-    ipcRenderer.invoke("remote:inspect", connectionId, token) as Promise<RemoteCapabilities>,
-  resolveRemoteService: (ref: RemoteServiceRef, token: string) =>
-    ipcRenderer.invoke("remote:resolve-service", ref, token) as Promise<ResolvedServiceAccess>,
-  forwardRemotePort: (connectionId: string, remotePort: number) =>
-    ipcRenderer.invoke("remote:forward-port", connectionId, remotePort) as Promise<ManualRemotePortAccess>,
-  onRemoteConnectionStateChange: (listener: (state: ConnectionRuntime) => void) => {
-    const wrapped = (_event: Electron.IpcRendererEvent, state: ConnectionRuntime) => listener(state);
-    ipcRenderer.on("remote:connection-state", wrapped);
-    return () => ipcRenderer.off("remote:connection-state", wrapped);
+  listTunnels: () => ipcRenderer.invoke("tunnels:list") as Promise<TunnelSnapshot>,
+  saveTunnels: (input: TunnelConfigUpdate) => ipcRenderer.invoke("tunnels:save-config", input) as Promise<TunnelSnapshot>,
+  connectTunnel: (id: string) => ipcRenderer.invoke("tunnels:connect", id) as Promise<void>,
+  disconnectTunnel: (id: string) => ipcRenderer.invoke("tunnels:disconnect", id) as Promise<void>,
+  retryTunnel: (id: string, forwardId?: string) => ipcRenderer.invoke("tunnels:retry", id, forwardId) as Promise<void>,
+  loginTunnelBrowser: (input: TunnelLogin) => ipcRenderer.invoke("tunnels:login", input) as Promise<{persistent: boolean}>,
+  selectTunnelBrowser: (id: string, terminalId: string) => ipcRenderer.invoke("tunnels:select-browser", id, terminalId) as Promise<void>,
+  importTunnels: (input: TunnelImport) => ipcRenderer.invoke("tunnels:import", input) as Promise<TunnelSnapshot>,
+  onTunnelsChanged: (listener: (snapshot: TunnelSnapshot) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, snapshot: TunnelSnapshot) => listener(snapshot);
+    ipcRenderer.on("tunnels:changed", wrapped); return () => ipcRenderer.off("tunnels:changed", wrapped);
   },
+  onTunnelNotice: (listener: (message: string) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, message: string) => listener(message);
+    ipcRenderer.on("tunnels:notice", wrapped); return () => ipcRenderer.off("tunnels:notice", wrapped);
+  },
+  onOpenTunnels: (listener: () => void) => {
+    const wrapped = () => listener(); ipcRenderer.on("tunnels:open", wrapped); return () => ipcRenderer.off("tunnels:open", wrapped);
+  },
+  resolveTunnelService: (ref: RemoteServiceRef, token: string) => ipcRenderer.invoke("tunnels:resolve-service", ref, token) as Promise<ResolvedServiceAccess>,
   onAttentionOpenIntent: (
     listener: (intent: AttentionOpenDispatch) => void,
   ) => {
@@ -298,6 +300,7 @@ const electronApi = {
       profileId,
       rules,
     ) as Promise<TerminalBrowserHeaderState>,
+  terminalBrowserRestoreProfilePreferences: () => ipcRenderer.invoke("terminal-browser:restore-profile-preferences") as Promise<TerminalBrowserProfilePreferences>,
   terminalBrowserGetProfilePreferences: () =>
     ipcRenderer.invoke(
       "terminal-browser:get-profile-preferences",

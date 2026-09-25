@@ -252,11 +252,11 @@ export function TerminalWorkspaceServicesPopover({
   );
   const resolveServiceUrl = useMemoizedFn(async (service: WorkspaceServiceSnapshot): Promise<string> => {
     if (!remote) return service.url;
-    if (!activeConnectionId || !parentProjectId || !projectId || !window.electronAPI?.resolveRemoteService) {
+    if (!activeConnectionId || !parentProjectId || !projectId || !window.electronAPI?.resolveTunnelService) {
       throw new Error("Remote service resolver is unavailable");
     }
-    const resolved = await window.electronAPI.resolveRemoteService({
-      connectionId: activeConnectionId,
+    const resolved = await window.electronAPI.resolveTunnelService({
+      endpointId: remote.endpointId,
       parentProjectId,
       projectId,
       serviceId: service.name,

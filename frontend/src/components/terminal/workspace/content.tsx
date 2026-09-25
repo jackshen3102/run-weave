@@ -5,7 +5,6 @@ import type { TerminalState } from "@runweave/shared/terminal/state";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
-import { isProjectBound, useProjectBindings } from "../../../features/connection/project-bindings";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
@@ -65,7 +64,6 @@ export function TerminalWorkspaceContent({
   const sessionsQuery = useTerminalSessionsQuery();
   const { queryClient } = useTerminalWorkspaceQueryClient();
   const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
-  const bindings = useProjectBindings((state) => state.bindings);
   const sessions = sessionsQuery.data ?? EMPTY_TERMINAL_SESSIONS;
   const hasLoadedSessions = projectsQuery.isFetched && sessionsQuery.isFetched;
   const {
@@ -162,7 +160,7 @@ export function TerminalWorkspaceContent({
       selectProjectContext,
     });
   });
-  const visibleProjects = connection?.remote && activeConnectionId ? projects.filter((project) => isProjectBound(bindings, activeConnectionId, project.projectId)) : projects;
+  const visibleProjects = projects;
   const visibleSessions = useMemo(() => {
     if (!activeProjectId) {
       return [];

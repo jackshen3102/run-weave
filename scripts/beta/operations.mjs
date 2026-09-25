@@ -108,6 +108,10 @@ export function buildUpdateEnv(
       ? path.join(sharedAppServer.homeDir, "cloud-sync")
       : paths.appServerCloudSyncDir,
     RUNWEAVE_APP_SERVER_HOME: sharedAppServer?.homeDir ?? paths.appServerHome,
+    RUNWEAVE_WHISTLE_PORTS: paths.slotId
+      ? [0,1,2].map(index=>18100+Number(paths.slotId.slice(-2))*10+index).join(",")
+      : process.env.RUNWEAVE_WHISTLE_PORTS || "18081,18082,18083",
+    RUNWEAVE_DESKTOP_STATE_DIR: paths.userData,
     RUNWEAVE_DESKTOP_CHANNEL: BETA_CHANNEL,
     RUNWEAVE_DESKTOP_INSTANCE_ID: paths.instanceId,
     RUNWEAVE_DESKTOP_CDP_PORT: String(paths.desktopCdpPort),

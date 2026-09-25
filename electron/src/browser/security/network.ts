@@ -1,10 +1,10 @@
+import { getRuntimeBrowserProfileConfig } from "../profile/endpoints.js";
 import {
   normalizeTerminalBrowserHeaderRules,
   type TerminalBrowserHeaderRule,
   type TerminalBrowserHeaderState,
 } from "@runweave/shared/terminal-browser-headers";
 import {
-  getTerminalBrowserProfileConfig,
   type TerminalBrowserProfileId,
   type TerminalBrowserProfileProxyMode,
 } from "@runweave/shared/terminal-browser-profile";
@@ -41,7 +41,7 @@ async function verifyTerminalBrowserProfileProxy(
   }
   let externalRoute: string | null = null;
   if (proxyMode === "whistle") {
-    const whistlePort = getTerminalBrowserProfileConfig(profileId).whistlePort;
+    const whistlePort = getRuntimeBrowserProfileConfig(profileId).whistlePort;
     externalRoute = await browserSession.resolveProxy(
       EXTERNAL_PROXY_PROBE_URL,
     );
@@ -145,7 +145,7 @@ export async function configureTerminalBrowserProfileProxy(
   profileId: TerminalBrowserProfileId,
   proxyMode: TerminalBrowserProfileProxyMode,
 ): Promise<void> {
-  const config = getTerminalBrowserProfileConfig(profileId);
+  const config = getRuntimeBrowserProfileConfig(profileId);
   const browserSession = getTerminalBrowserSession(profileId);
   await browserSession.setProxy(
     proxyMode === "whistle"

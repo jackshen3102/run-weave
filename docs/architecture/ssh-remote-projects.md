@@ -1,55 +1,83 @@
-# SSH 远程项目
+# SSH 隧道、远端终端与本机 Browser
 
-macOS 桌面可同时保存本地 Backend、普通 Backend URL 和多条 SSH 连接。每个远端项目由
-`connectionId + remoteProjectId + remoteDirectory` 标识；同一台 Linux 的多个项目复用
-一条 SSH 连接。终端、Agent、文件和 Git 操作仍由该 Linux Backend 执行，桌面只负责
-聚合项目与终端元数据、展示状态、连接归属和本地 Browser。
+## 配置和生命周期
 
-## 连接与身份
+桌面右上角「更多 → 端口与隧道」管理 SSH 主机、开发端口转发与 Browser 回连。
+配置属于桌面用户，不属于连接或项目。关闭抽屉、切换/删除连接、重载 renderer 不停止隧道；
+显式断开主机或退出 Electron 才回收本实例的 SSH 子进程，不结束远端终端。
 
-- Electron 使用系统 `ssh` 和现有 SSH 配置，以 `-L` 建立 Backend 隧道。首次连接只
-  检查 `/health`；用户仍须使用该 Backend 自己的账号登录。登录后 `/api/remote/capabilities`
-  返回协议版本、数据安装身份、运行实例身份和 Backend 功能。
-- `connectionId` 是桌面持久身份；本地端口随 SSH 重建而变，不能当作项目或缓存身份。
-  请求缓存以连接和 generation 分域，预览状态和未保存草稿以连接、项目和文件分域。
-  同一个安装身份若经两个 SSH 别名重复加入，桌面提示复用原连接。
-- 每条后台连接只订阅终端元数据事件和 Attention 快照，不附着所有终端屏幕输出。
-  断线时保留最后观察时间，并将旧终端数标作历史信息。远端 tmux 不由桌面断开操作结束。
-- Attention 从各连接分别读取，入口带连接身份。Terminal 工作区可以跨连接跳到
-  对应项目和终端；新出现的 Attention 按连接与事件身份去重，在桌面失焦时发送系统通知，
-  点击通知跳到所属连接的项目和终端。全局其它页面仍使用当前连接。
+Electron main 是唯一写入者，在当前 userData 下维护：
 
-## 开发服务与 Browser
+- `tunnels/config.json`：主机、同号转发、Browser 配置、可选 Backend endpoint、revision。
+- `tunnels/credentials.enc`：系统 safeStorage 加密的独立 Browser 登录；加密不可用时仅本次运行保留。
+- `tunnels/runtime.json` 和 `desktop-network.json`：脱敏运行快照，不是配置源。
+- `terminal-browser-profiles.json`：Profile 的代理模式、开发端口和项目首选 Browser。
+- `terminal-browser-whistle/`：Whistle 自己维护的规则、Values 和证书。
 
-- 受管 Workspace Service 必须先从所属 Backend 重取服务快照，验证项目、服务身份和
-  `.localhost` 主机名，再把端口映射到该连接的 `-L` 本地端口。手动开发进程须显式输入
-  远端端口。两个 Linux 的同号端口各有独立本地入口；HTTP 和 WebSocket 均由 SSH 传输。
-- 本地 Browser 的三个 Profile、工作组、Cookie 和代理配置维持原有语义。远端 Browser
-  经 SSH `-R` 接到 Electron 的短期认证网关；Backend 只向拥有有效终端身份的 CLI
-  发放一次性 60 秒票据。网关校验连接、generation、项目、终端、Profile 和获准复用的
-  工作组，并将归因加上连接身份。没有显式认可的工作组不可由远端指定。
-- 停止桌面或 SSH 隧道会撤销 Browser 通道。连接恢复后 Agent 必须重新 resolve 并观察
-  页面；未知结果的点击、输入和保存不会自动重放。Browser 失败不代表 tmux 终端结束。
+配置原子落盘后应用，陈旧 revision 被拒绝，失败不覆盖最后有效配置。
+Stable 沿用原用户目录，Beta/Dev Session 使用独立 userData、认证目录与 Whistle 端口租约；
+同目录正常重启恢复已保存意图。默认 Direct 只作用于尚无显式设置的测试 Profile。
 
-## 运行前提与限制
+## 同号开发端口与 Backend 连接
 
-连接目标须已有可用 Backend。安装依赖、部署和源码更新由 Agent 根据服务器实际环境
-引导或执行，操作要点见 [独立 Backend 部署](../deployment/backend-standalone.md#通过-agent-维护远端环境)。
-桌面负责连接、认证、能力检查与错误展示，不安装或升级远端服务。
+系统 SSH 使用现有 SSH 配置和主机密钥；普通转发仅要求 SSH 与目标服务，不检查或安装 Agent、
+不要求 Runweave Backend。用户端口严格 `127.0.0.1:P → 远端 127.0.0.1:P`，支持 HTTP/WebSocket。
+占用即报错，不随机换端口、不抢占其他进程。路径与端口随主机配置保存。
 
-SSH 接入不探测或要求安装任何 Agent，也不检查模型配置和 Agent 登录状态。
-远端终端可运行任意命令；只有用户选择运行某个 Agent 时，才需要自行准备对应工具与配置。
-已有终端可跨桌面和 Backend 重启恢复，前提是远端 tmux socket 与数据目录保留。
-Backend 自己启动的 Workspace Service 在 Backend 重启时会回收，不能按 tmux 的保活
-合同推断服务仍在运行。普通 localhost 转发不保证硬编码其它主机名、严格 Origin 或
-生产域名语义的应用透明工作。
+可选 Backend endpoint 为仅 SSH 可达的 Backend 提供内部动态入口。连接记录仅引用 endpoint，
+连接页既不启动隧道也不持有 SSH 配置；主机离线时等待通道。普通 URL 连接可完全独立使用。
+受管 Workspace Service 先经所属 Backend 验证服务/项目和 `.localhost` 身份，再使用该 Backend 的内部入口并保留服务主机名。
 
-连接页的手动开发端口转发固定使用同一个本地与远端端口（例如 `127.0.0.1:8080`
-转发到远端 `127.0.0.1:8080`），不随机分配、自动避让或维护异端口映射。
-本地端口被占用时直接失败，由用户调整服务端口或释放占用。端口和网页路径按连接保存；
-SSH 断开会结束转发，重连后再次点击转发仍使用原端口。
+一次性导入先保存受限加密备份，main 按 migrationId 幂等落盘、读回确认后删除旧运行字段。
+旧转发草稿默认关闭。只有认证后确认同 installationId 才合并重复 SSH/URL 入口并保留普通 URL 名称；
+无法确认则保留入口。旧 SSH 执行器和旧转发 IPC 已移除，不运行两套实现。
 
-实现入口：[共享合同](../../packages/shared/src/remote/index.ts)、
-[Electron SSH 管理](../../electron/src/remote/ssh-connections.ts)、
-[Backend 能力与 Browser 绑定](../../backend/src/remote/routes.ts)、
-[桌面工作区聚合](../../frontend/src/features/connection/workspace-overview.tsx)。
+后台连接观察器等待认证/续期完成后请求数据；当前连接复用主页面认证，不并行刷新同一会话。
+连接切换菜单只显示名称与选中标记。Attention 仍分别订阅连接的终端元数据；
+点击提醒跳转到所属连接/项目/终端，不需要将项目统计放回连接菜单。
+
+## Browser 通道和并发
+
+Browser 回连链路是远端 Backend → SSH `-R` → 本机认证网关 → 获准 Profile/Group。
+Browser 单独登录、刷新认证；失败只影响此子通道，不影响普通端口转发。
+桌面、远端 Backend 与 CLI 需支持协议 2。身份由 desktopId、hostId、generation 和登录会话共同约束，
+Backend 心跳过期后不再选择此 binding。
+
+终端必须显式选择有效 binding；桌面根据认证后的 Backend 安装身份匹配本机通道，唯一候选可由
+桌面自动选择，多个候选由用户选择。Backend 不按最后注册顺序猜测，未选择返回
+`BROWSER_BINDING_REQUIRED`；覆盖仍活跃的其他桌面归属返回 `BROWSER_BINDING_CONFLICT`。
+同一逻辑所有者重建通道后可以重新解析，其他登录不能用相同 ID 接管。
+
+CLI 通过有效终端身份取得 capability，再申请一次性 60 秒 CDP 票据。网关验证项目、终端、
+Profile、获准 Group 与代际。旧 capability/票据在通道重建后失效，Agent 必须重新 resolve/观察，
+不会重放未知结果的操作。没有获准的 Group 不能由远端指定。
+
+通道不是互斥锁。本地用户仍可操作同一个 Browser；不同标签可并行，同一标签的导航/输入可能互相
+覆盖。同 Profile 共享 Cookie、登录态与代理配置；不同 Profile 保持隔离。
+
+## 代理意图与运行状态
+
+代理目标归 Profile。切换连接/项目或远端 Agent resolve 只读取设置，不改写开发端口。
+项目首选 Browser 只影响选择哪个 Profile。旧项目端口通过明确的迁移选择写入 Profile，不取最后一项。
+
+先保存代理意图再应用。启动失败保留 Whistle 选择并显示错误，不静默改 Direct；业务页导航前准备代理。
+正式版三个监听端口为 8081/8082/8083；受管测试实例使用 manifest 中的独立集合，不漂移到正式端口。
+`ready` 只说明代理进程状态，命中规则需通过实际请求与服务标识验证。
+
+## 手机角色的只读范围
+
+受认证的 `GET /api/tunnels` 与 `GET /api/desktop-network` 只读取当前 Backend 被明确授予的同机
+`RUNWEAVE_DESKTOP_STATE_DIR`，无该根返回 `DESKTOP_STATE_UNAVAILABLE`。不接受查询参数指定其他路径，
+不提供 HTTP 写配置接口，不通过数据库同步。手机连到哪个 Backend，就读取哪个节点可见的桌面状态。
+
+快照超过 15 秒或执行器退出显示 offline，不把历史 ready 当当前事实。代理摘要仅包含模式、是否有规则、
+状态和错误，不返回规则正文、刷新令牌或 gateway key。读取不会启动 SSH 或 Whistle。
+
+远端终端/Agent 仍由远端 Backend 执行，可运行任意命令。tmux 存活取决于远端 socket/数据目录；
+Backend 启动的 Workspace Service 生命周期不同，不能按 tmux 的保活合同推断。
+部署见 [独立 Backend 部署](../deployment/backend-standalone.md#通过-agent-维护远端环境)。
+
+实现入口：[共享隧道合同](../../packages/shared/src/tunnels/index.ts)、
+[Electron 执行器](../../electron/src/tunnels/manager.ts)、
+[Backend Browser 绑定](../../backend/src/remote/browser-bindings.ts)、
+[本机只读模型](../../backend/src/tunnels/read-model.ts)。

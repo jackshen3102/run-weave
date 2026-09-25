@@ -19,6 +19,7 @@ const shared = {
 };
 
 const desktopBuildDefines = {
+  __RUNWEAVE_WHISTLE_PORTS__: JSON.stringify(process.env.RUNWEAVE_WHISTLE_PORTS ?? null),
   __RUNWEAVE_DESKTOP_CHANNEL__: JSON.stringify(
     process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta" ? "beta" : "stable",
   ),

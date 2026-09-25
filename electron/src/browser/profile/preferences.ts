@@ -1,16 +1,14 @@
-import { app, BrowserWindow } from "electron";
+import { BrowserWindow } from "electron";
+import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import {
-  copyFileSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+  desktopStateRoot,
+  writePrivateJson,
+} from "../../desktop/local-state.js";
+import { getProfileWhistlePorts } from "./endpoints.js";
 import path from "node:path";
 import {
   createDefaultTerminalBrowserProfilePreferences,
   isTerminalBrowserProfileId,
-  TERMINAL_BROWSER_PROFILE_CONFIGS,
   TERMINAL_BROWSER_PROFILE_IDENTIFIER_MAX_LENGTH,
   type TerminalBrowserProfileId,
   type TerminalBrowserProfilePreferenceUpdate,
@@ -21,16 +19,10 @@ import {
 import { TerminalBrowserError } from "../errors.js";
 
 const STORE_FILE = "terminal-browser-profiles.json";
-const RESERVED_PORTS: Set<number> = new Set(
-  Object.values(TERMINAL_BROWSER_PROFILE_CONFIGS).map(
-    (profile) => profile.whistlePort,
-  ),
-);
-
 let currentPreferences: TerminalBrowserProfilePreferences | null = null;
 
 function storePath(): string {
-  return path.join(app.getPath("userData"), STORE_FILE);
+  return path.join(desktopStateRoot(), STORE_FILE);
 }
 
 function clonePreferences(
@@ -122,11 +114,11 @@ export function normalizeTerminalBrowserDevServerPort(
     !Number.isInteger(value) ||
     value < 1 ||
     value > 65535 ||
-    RESERVED_PORTS.has(value)
+    getProfileWhistlePorts().includes(value)
   ) {
     throw new TerminalBrowserError(
       "INVALID_DEV_SERVER_PORT",
-      "Dev Server port must be an integer from 1 to 65535 and cannot use 8081, 8082, or 8083",
+      "Dev Server port must be an integer from 1 to 65535 and cannot use a Profile proxy listening port",
       { value },
     );
   }
@@ -149,9 +141,6 @@ function normalizeWorktreePreference(
   return {
     preferredProfileId:
       candidate.preferredProfileId as TerminalBrowserProfileId | null,
-    devServerPort: normalizeTerminalBrowserDevServerPort(
-      candidate.devServerPort,
-    ),
   };
 }
 
@@ -163,7 +152,7 @@ function normalizePersistedPreferences(
   }
   const candidate = value as Record<string, unknown>;
   if (
-    candidate.version !== 1 ||
+    candidate.version !== 2 ||
     !isTerminalBrowserProfileId(candidate.defaultProfileId) ||
     !candidate.worktrees ||
     typeof candidate.worktrees !== "object" ||
@@ -197,8 +186,29 @@ function normalizePersistedPreferences(
     normalizeTerminalBrowserProjectId(projectId);
     worktrees[projectId] = normalizeWorktreePreference(preference);
   }
+  const profilePorts: TerminalBrowserProfilePreferences["profilePorts"] = {};
+  const pendingPortMigration: TerminalBrowserProfilePreferences["pendingPortMigration"] =
+    {};
+  for (const [id, value] of Object.entries(candidate.profilePorts ?? {})) {
+    if (!isTerminalBrowserProfileId(id))
+      throw new Error("Invalid profile port");
+    profilePorts[id] = normalizeTerminalBrowserDevServerPort(value);
+  }
+  for (const [id, value] of Object.entries(
+    candidate.pendingPortMigration ?? {},
+  )) {
+    if (!isTerminalBrowserProfileId(id) || !Array.isArray(value))
+      throw new Error("Invalid pending migration");
+    pendingPortMigration[id] = value.map((port) => {
+      const normalized = normalizeTerminalBrowserDevServerPort(port);
+      if (!normalized) throw new Error("Invalid migration port");
+      return normalized;
+    });
+  }
   return {
-    version: 1,
+    version: 2,
+    profilePorts,
+    pendingPortMigration,
     defaultProfileId: candidate.defaultProfileId,
     businessOrigin: normalizeTerminalBrowserBusinessOrigin(
       candidate.businessOrigin,
@@ -226,9 +236,9 @@ function backupUnreadableStore(target: string): void {
 function loadPreferences(): TerminalBrowserProfilePreferences {
   const target = storePath();
   try {
-    return normalizePersistedPreferences(
-      JSON.parse(readFileSync(target, "utf8")),
-    );
+    const raw = JSON.parse(readFileSync(target, "utf8"));
+    if (raw?.version === 1) return importLegacyPreferences(target, raw);
+    return normalizePersistedPreferences(raw);
   } catch (error) {
     if (
       error &&
@@ -242,7 +252,11 @@ function loadPreferences(): TerminalBrowserProfilePreferences {
       error: error instanceof Error ? error.message : String(error),
     });
     backupUnreadableStore(target);
-    return createDefaultTerminalBrowserProfilePreferences();
+    throw new TerminalBrowserError(
+      "PROFILE_CONFIG_CORRUPT",
+      "Browser 配置损坏，已保留原文件，请从备份恢复",
+      {},
+    );
   }
 }
 
@@ -250,10 +264,20 @@ function persistPreferences(
   preferences: TerminalBrowserProfilePreferences,
 ): void {
   const target = storePath();
-  const temporary = `${target}.tmp-${process.pid}`;
-  mkdirSync(path.dirname(target), { recursive: true });
-  writeFileSync(temporary, `${JSON.stringify(preferences, null, 2)}\n`, "utf8");
-  renameSync(temporary, target);
+  try {
+    if (existsSync(target))
+      writePrivateJson(
+        `${target}.bak`,
+        JSON.parse(readFileSync(target, "utf8")),
+      );
+    writePrivateJson(target, preferences);
+  } catch {
+    throw new TerminalBrowserError(
+      "PROFILE_CONFIG_WRITE_FAILED",
+      "Browser 配置未保存，原配置保持不变",
+      {},
+    );
+  }
 }
 
 function notifyPreferencesChanged(
@@ -269,8 +293,15 @@ function notifyPreferencesChanged(
   }
 }
 
+let preferenceLoadError: unknown = null;
 export function getTerminalBrowserProfilePreferences(): TerminalBrowserProfilePreferences {
-  currentPreferences ??= loadPreferences();
+  if (preferenceLoadError) throw preferenceLoadError;
+  try {
+    currentPreferences ??= loadPreferences();
+  } catch (error) {
+    preferenceLoadError = error;
+    throw error;
+  }
   return clonePreferences(currentPreferences);
 }
 
@@ -317,7 +348,6 @@ export function updateTerminalBrowserProfilePreferences(
     const projectId = normalizeTerminalBrowserProjectId(update.projectId);
     const existing = next.worktrees[projectId] ?? {
       preferredProfileId: null,
-      devServerPort: null,
     };
     const preferredProfileId =
       update.preferredProfileId === undefined
@@ -333,15 +363,18 @@ export function updateTerminalBrowserProfilePreferences(
         { profileId: preferredProfileId },
       );
     }
-    const devServerPort =
-      update.devServerPort === undefined
-        ? existing.devServerPort
-        : normalizeTerminalBrowserDevServerPort(update.devServerPort);
-    if (preferredProfileId === null && devServerPort === null) {
-      delete next.worktrees[projectId];
-    } else {
-      next.worktrees[projectId] = { preferredProfileId, devServerPort };
-    }
+    if (preferredProfileId === null) delete next.worktrees[projectId];
+    else next.worktrees[projectId] = { preferredProfileId };
+  } else if (update.scope === "profile") {
+    if (!isTerminalBrowserProfileId(update.profileId))
+      throw new TerminalBrowserError(
+        "INVALID_BROWSER_PROFILE",
+        "Unknown Profile",
+      );
+    next.profilePorts[update.profileId] = normalizeTerminalBrowserDevServerPort(
+      update.devServerPort,
+    );
+    delete next.pendingPortMigration[update.profileId];
   } else {
     throw new Error("Invalid terminal browser profile preference scope");
   }
@@ -349,4 +382,64 @@ export function updateTerminalBrowserProfilePreferences(
   currentPreferences = next;
   notifyPreferencesChanged(clonePreferences(next));
   return clonePreferences(next);
+}
+
+// One-time schema import: keep the complete old file as a private backup. Port
+// candidates remain pending until explicitly selected; runtime never reads them.
+function importLegacyPreferences(
+  target: string,
+  raw: Record<string, unknown>,
+): TerminalBrowserProfilePreferences {
+  const pending: TerminalBrowserProfilePreferences["pendingPortMigration"] = {};
+  const worktrees: Record<string, TerminalBrowserWorktreePreference> = {};
+  if (
+    !raw.worktrees ||
+    typeof raw.worktrees !== "object" ||
+    !isTerminalBrowserProfileId(raw.defaultProfileId)
+  )
+    throw new Error("Invalid legacy preferences");
+  for (const [id, entry] of Object.entries(raw.worktrees)) {
+    const value = entry as {
+      preferredProfileId: TerminalBrowserProfileId | null;
+      devServerPort: unknown;
+    };
+    normalizeTerminalBrowserProjectId(id);
+    worktrees[id] = normalizeWorktreePreference(value);
+    const port = normalizeTerminalBrowserDevServerPort(value.devServerPort);
+    if (port) {
+      const profile = value.preferredProfileId ?? raw.defaultProfileId;
+      pending[profile] = [...new Set([...(pending[profile] ?? []), port])];
+    }
+  }
+  const next = normalizePersistedPreferences({
+    ...raw,
+    version: 2,
+    worktrees,
+    profilePorts: {},
+    pendingPortMigration: pending,
+  });
+  writePrivateJson(`${target}.v1-backup`, raw);
+  writePrivateJson(target, next);
+  return next;
+}
+
+export function restoreTerminalBrowserProfilePreferences(): TerminalBrowserProfilePreferences {
+  const target = storePath();
+  let recovered: TerminalBrowserProfilePreferences;
+  try {
+    recovered = normalizePersistedPreferences(
+      JSON.parse(readFileSync(`${target}.bak`, "utf8")),
+    );
+  } catch {
+    throw new TerminalBrowserError(
+      "PROFILE_CONFIG_CORRUPT",
+      "没有有效的配置备份，请保留当前文件并手动恢复",
+    );
+  }
+  if (existsSync(target)) copyFileSync(target, `${target}.bad-${Date.now()}`);
+  writePrivateJson(target, recovered);
+  currentPreferences = recovered;
+  preferenceLoadError = null;
+  notifyPreferencesChanged(clonePreferences(recovered));
+  return clonePreferences(recovered);
 }

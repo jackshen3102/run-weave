@@ -355,7 +355,7 @@ export async function withSessionLock(sessionId, callback, env = process.env) {
   }
 }
 
-export async function acquireServicePortLease(root, port, sessionId) {
+export async function acquireServicePortLease(root, port, sessionId, { sessionLifetime = false } = {}) {
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new DevSessionError("service port lease requires a valid port", 4, {
       port,
@@ -391,7 +391,7 @@ export async function acquireServicePortLease(root, port, sessionId) {
       );
       candidateStats = await candidateHandle.stat();
       await candidateHandle.writeFile(
-        `${JSON.stringify({ pid: process.pid, sessionId: safeSessionId, acquiredAt: new Date().toISOString() })}\n`,
+        `${JSON.stringify({ pid: process.pid, sessionId: safeSessionId, sessionLifetime, acquiredAt: new Date().toISOString() })}\n`,
         "utf8",
       );
       await candidateHandle.chmod(0o600);
@@ -453,7 +453,11 @@ export async function acquireServicePortLease(root, port, sessionId) {
         Number.isInteger(owner.pid) &&
         owner.pid > 0 &&
         typeof owner.sessionId === "string";
-      if (!validOwner || isProcessLive(owner.pid)) {
+      if (validOwner && owner.sessionLifetime) {
+        const manifest = await readJsonFile(path.join(safeRoot, assertDevSessionId(owner.sessionId), "manifest.json"), safeRoot);
+        if (!manifest || manifest.devSessionId !== owner.sessionId || !["stopped"].includes(manifest.state)) return null;
+      }
+      if (!validOwner || (!owner.sessionLifetime && isProcessLive(owner.pid))) {
         return null;
       }
       try {
@@ -520,5 +524,16 @@ function isProcessLive(pid) {
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function releaseSessionPortLeases(root, ports, sessionId) {
+  for (const port of ports) {
+    if(!Number.isInteger(port)||port<1||port>65535)throw new DevSessionError('invalid owned port',4);
+    const lockPath=path.join(root,'.port-leases',`${port}.lock`);
+    const existing=await readJsonFileWithStats(lockPath,root);
+    if(!existing)continue;
+    if(existing.value?.sessionId!==sessionId||existing.value?.sessionLifetime!==true)throw new DevSessionError('port lease owner changed',5,{port});
+    await removeFileNoFollow(lockPath,root,existing.stats);
   }
 }

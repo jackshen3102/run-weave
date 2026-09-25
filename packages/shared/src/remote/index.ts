@@ -5,44 +5,8 @@ export interface ResourceRef {
   id: string;
 }
 
-export interface ProjectBinding {
-  connectionId: string;
-  remoteProjectId: string;
-  remoteDirectory: string;
-}
-
-export type ConnectionRuntimeStatus =
-  | "disconnected"
-  | "connecting"
-  | "ready"
-  | "reconnecting"
-  | "needs_auth"
-  | "incompatible"
-  | "failed";
-
-export interface ConnectionRuntime {
-  connectionId: string;
-  generation: number;
-  installationId: string | null;
-  serviceInstanceId: string | null;
-  apiBase: string | null;
-  status: ConnectionRuntimeStatus;
-  lastObservedAt: string | null;
-  message: string | null;
-  browserAvailable?: boolean;
-  browserMessage?: string | null;
-}
-
-export interface SshRemoteConnection {
-  connectionId: string;
-  host: string;
-  backendPort: number;
-  browserProfileId: "profile-1" | "profile-2" | "profile-3" | null;
-  approvedBrowserGroupId?: string | null;
-}
-
 export interface RemoteServiceRef {
-  connectionId: string;
+  endpointId: string;
   parentProjectId: string;
   projectId: string;
   serviceId: string;
@@ -68,15 +32,19 @@ export interface RemoteCapabilities {
 }
 
 export interface DesktopBrowserBindingRequest {
-  connectionId: string;
+  protocolVersion: 2;
+  desktopId: string;
+  hostId: string;
   generation: number;
   reversePort: number;
   gatewayKey: string;
 }
 
 export interface DesktopBrowserBinding {
+  protocolVersion: 2;
   id: string;
-  connectionId: string;
+  desktopId: string;
+  hostId: string;
   generation: number;
 }
 
@@ -112,14 +80,9 @@ export interface RemoteBrowserGatewayResponse extends RemoteBrowserProfileState 
 }
 
 export interface RemoteBrowserResolveResponse extends RemoteBrowserProfileState {
+  protocolVersion: 2;
+  binding: DesktopBrowserBinding;
   browserGroupId: string;
   cdpEndpoint: string;
   expiresIn: number;
-}
-
-export interface ManualRemotePortAccess {
-  connectionId: string;
-  remotePort: number;
-  desktopUrl: string;
-  generation: number;
 }

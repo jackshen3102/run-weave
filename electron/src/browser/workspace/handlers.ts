@@ -1,3 +1,4 @@
+import { resolveTerminalBrowserProfile } from "../profile/runtime.js";
 import { BrowserWindow, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
 import type { TerminalBrowserCreateTabRequest } from "@runweave/shared/terminal-browser-workspace";
@@ -40,7 +41,7 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
 
   ipcMain.handle(
     "terminal-browser:create-tab",
-    (event, request: TerminalBrowserCreateTabRequest): void => {
+    async (event, request: TerminalBrowserCreateTabRequest): Promise<void> => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (
         !win ||
@@ -79,6 +80,7 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
       if (!safeUrl) {
         throw new Error("Invalid terminal browser URL");
       }
+      await resolveTerminalBrowserProfile({projectId:null,explicitProfileId:request.profileId,browserGroupId:browserGroupId??null},{excludedWindowId:win.id});
       const view = getOrCreateTerminalBrowserView(
         win,
         request.profileId,

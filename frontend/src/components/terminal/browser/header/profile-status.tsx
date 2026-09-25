@@ -7,6 +7,7 @@ import {
   type TerminalBrowserProfileRuntimeState,
 } from "@runweave/shared/terminal-browser-profile";
 import { Settings2 } from "lucide-react";
+import { useOverlayRef } from "../../../../features/overlay/use-overlay-ref";
 import { useTerminalPreviewStore } from "../../../../features/terminal/preview/store";
 import { Button } from "../../../ui/button";
 import { TerminalBrowserProfileSettings } from "./profile-settings";
@@ -35,6 +36,7 @@ export function TerminalBrowserProfileStatus({
   const [proxySwitching, setProxySwitching] = useState(false);
   const [proxyError, setProxyError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const settingsOverlayRef = useOverlayRef<HTMLDivElement>();
   const activateBrowser = useTerminalPreviewStore(
     (state) => state.activateBrowser,
   );
@@ -51,7 +53,7 @@ export function TerminalBrowserProfileStatus({
       setRuntime(
         runtimes?.find((item) => item.profileId === profileId) ?? null,
       );
-    });
+    }).catch(error => { if (!cancelled) setProxyError(String(error)); });
     const unsubscribe = window.electronAPI?.onTerminalBrowserProfileChanged?.(
       (event) => {
         if (event.kind === "preferences") {
@@ -79,6 +81,23 @@ export function TerminalBrowserProfileStatus({
   }, [onOpenChange, open]);
 
   const proxyEnabled = runtime?.proxyMode !== "direct";
+  const restorePreferences = useMemoizedFn(async () => {
+    if (proxySwitching) return;
+    setProxySwitching(true);
+    try {
+      const next = await window.electronAPI?.terminalBrowserRestoreProfilePreferences?.();
+      if (!next) throw new Error("Profile preferences are unavailable");
+      setPreferences(next);
+      setProxyError(null);
+      const runtimes = await window.electronAPI?.terminalBrowserGetProfileRuntimes?.();
+      setRuntime(runtimes?.find((item) => item.profileId === profileId) ?? null);
+      activateBrowser(profileId, projectId);
+    } catch (error) {
+      setProxyError(String(error));
+    } finally {
+      setProxySwitching(false);
+    }
+  });
   const toggleProxy = useMemoizedFn(async () => {
     if (!runtime || proxySwitching) {
       return;
@@ -140,7 +159,7 @@ export function TerminalBrowserProfileStatus({
         <Settings2 className="h-3 w-3" />
       </Button>
       {open ? (
-        <div className="absolute right-0 top-8 z-50 w-80 rounded-md border border-slate-700 bg-slate-900 p-3 shadow-xl">
+        <div ref={settingsOverlayRef} className="absolute right-0 top-8 z-50 w-80 rounded-md border border-slate-700 bg-slate-900 p-3 shadow-xl">
           <div className="space-y-1 text-[11px]">
             <div className="flex justify-between gap-3 text-slate-200">
               <strong>{config.label}</strong>
@@ -179,14 +198,14 @@ export function TerminalBrowserProfileStatus({
             <div className="flex justify-between text-slate-400">
               <span>Whistle</span>
               <span>
-                {status} · 127.0.0.1:{config.whistlePort}
+                {status} · 127.0.0.1:{runtime?.whistle.port ?? "—"}
               </span>
             </div>
             <div className="flex justify-between text-slate-400">
               <span>Route</span>
               <span data-testid="terminal-browser-route">{routeLabel}</span>
             </div>
-            {proxyError ? (
+            {runtime?.applyError ? (<p role="alert" className="break-words text-rose-300">已保存，应用失败：{runtime.applyError.message}</p>) : proxyError ? (
               <p className="break-words text-rose-300">{proxyError}</p>
             ) : resolutionError ? (
               <p className="break-words text-rose-300">{resolutionError}</p>
@@ -209,12 +228,18 @@ export function TerminalBrowserProfileStatus({
               Open Whistle Console
             </Button>
           </div>
+          {proxyError?.includes('PROFILE_CONFIG_CORRUPT') && <Button size="sm" disabled={proxySwitching} onClick={()=>{void restorePreferences();}}>从有效备份恢复</Button>}
+          {runtime?.applyError && <Button size="sm" onClick={()=>{void window.electronAPI?.terminalBrowserSetProfileProxyMode?.(profileId,runtime.proxyMode).then(setRuntime).catch(error=>setProxyError(String(error)));}}>重试应用代理</Button>}
           {preferences ? (
             <TerminalBrowserProfileSettings
               profileId={profileId}
               projectId={projectId}
               preferences={preferences}
-              onPreferencesChange={setPreferences}
+              onPreferencesChange={(next) => {
+                setPreferences(next);
+                setProxyError(null);
+                activateBrowser(profileId, projectId);
+              }}
               onReactivate={() => activateBrowser(profileId, projectId)}
             />
           ) : null}

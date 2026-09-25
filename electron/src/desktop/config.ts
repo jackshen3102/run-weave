@@ -2,6 +2,7 @@ import { app, protocol } from "electron";
 import os from "node:os";
 import path from "node:path";
 
+declare const __RUNWEAVE_WHISTLE_PORTS__: string | null;
 declare const __RUNWEAVE_DESKTOP_CHANNEL__: "stable" | "beta";
 declare const __RUNWEAVE_DESKTOP_SOURCE_REVISION__: string;
 declare const __RUNWEAVE_DESKTOP_INSTANCE_ID__: string | null;
@@ -12,24 +13,27 @@ declare const __RUNWEAVE_DESKTOP_CDP_PORT__: string | null;
 declare const __RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__: string | null;
 declare const __RUNWEAVE_APP_SERVER_HOME__: string | null;
 
+if (__RUNWEAVE_WHISTLE_PORTS__)
+  process.env.RUNWEAVE_WHISTLE_PORTS = __RUNWEAVE_WHISTLE_PORTS__;
+
 export const desktopChannel = __RUNWEAVE_DESKTOP_CHANNEL__;
 export const desktopSourceRevision = __RUNWEAVE_DESKTOP_SOURCE_REVISION__;
 export const isBetaChannel = desktopChannel === "beta";
 export const BETA_DESKTOP_CDP_PORT = 9335;
 const desktopInstanceId =
-  process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim() ||
-  __RUNWEAVE_DESKTOP_INSTANCE_ID__;
+  __RUNWEAVE_DESKTOP_INSTANCE_ID__ ||
+  process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim();
 const explicitUserDataPath =
-  process.env.RUNWEAVE_DESKTOP_USER_DATA_DIR?.trim() ||
-  __RUNWEAVE_DESKTOP_USER_DATA_DIR__;
+  __RUNWEAVE_DESKTOP_USER_DATA_DIR__ ||
+  process.env.RUNWEAVE_DESKTOP_USER_DATA_DIR?.trim();
 export const isManagedDevSession = Boolean(
   (process.env.RUNWEAVE_DEV_SESSION_ID?.trim() ||
     __RUNWEAVE_DEV_SESSION_ID__) &&
-    explicitUserDataPath,
+  explicitUserDataPath,
 );
 const configuredDesktopCdpPort = parseOptionalPort(
-  process.env.RUNWEAVE_DESKTOP_CDP_PORT ??
-    __RUNWEAVE_DESKTOP_CDP_PORT__ ??
+  __RUNWEAVE_DESKTOP_CDP_PORT__ ??
+    process.env.RUNWEAVE_DESKTOP_CDP_PORT ??
     undefined,
 );
 
@@ -37,23 +41,24 @@ if (desktopInstanceId) {
   process.env.RUNWEAVE_DESKTOP_INSTANCE_ID = desktopInstanceId;
 }
 if (__RUNWEAVE_DEV_SESSION_ID__) {
-  process.env.RUNWEAVE_DEV_SESSION_ID ??= __RUNWEAVE_DEV_SESSION_ID__;
+  process.env.RUNWEAVE_DEV_SESSION_ID = __RUNWEAVE_DEV_SESSION_ID__;
 }
-process.env.RUNWEAVE_SOURCE_REVISION ??= desktopSourceRevision;
+process.env.RUNWEAVE_SOURCE_REVISION = desktopSourceRevision;
 if (__RUNWEAVE_DESKTOP_STATUS_PATH__) {
-  process.env.RUNWEAVE_DESKTOP_STATUS_PATH ??= __RUNWEAVE_DESKTOP_STATUS_PATH__;
+  process.env.RUNWEAVE_DESKTOP_STATUS_PATH = __RUNWEAVE_DESKTOP_STATUS_PATH__;
 }
 if (__RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__) {
-  process.env.RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT ??=
+  process.env.RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT =
     __RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__;
 }
 if (__RUNWEAVE_APP_SERVER_HOME__) {
-  process.env.RUNWEAVE_APP_SERVER_HOME ??= __RUNWEAVE_APP_SERVER_HOME__;
+  process.env.RUNWEAVE_APP_SERVER_HOME = __RUNWEAVE_APP_SERVER_HOME__;
 }
 process.env.RUNWEAVE_DESKTOP_CHANNEL = desktopChannel;
 
 if (explicitUserDataPath) {
   app.setPath("userData", path.resolve(explicitUserDataPath));
+  process.env.RUNWEAVE_DESKTOP_USER_DATA_DIR = app.getPath("userData");
 }
 
 if (isBetaChannel) {
@@ -64,6 +69,10 @@ if (isBetaChannel) {
     app.setPath("userData", path.join(app.getPath("appData"), "Runweave Beta"));
   }
 }
+
+if (process.env.RUNWEAVE_DEV_SESSION_ID && !explicitUserDataPath)
+  throw new Error("Dev Session requires an isolated userData directory");
+process.env.RUNWEAVE_DESKTOP_STATE_DIR = app.getPath("userData");
 
 const desktopCdpPort =
   configuredDesktopCdpPort ?? (isBetaChannel ? BETA_DESKTOP_CDP_PORT : null);
@@ -78,15 +87,15 @@ if (desktopCdpPort) {
 }
 
 if (isBetaChannel) {
-  process.env.BROWSER_PROFILE_DIR ??= path.join(
+  process.env.BROWSER_PROFILE_DIR = path.join(
     app.getPath("userData"),
     "browser-profile",
   );
-  process.env.AUTH_STORE_FILE ??= path.join(
+  process.env.AUTH_STORE_FILE = path.join(
     process.env.BROWSER_PROFILE_DIR,
     "auth-store.json",
   );
-  process.env.RUNWEAVE_CONFIG_FILE ??= path.join(
+  process.env.RUNWEAVE_CONFIG_FILE = path.join(
     app.getPath("userData"),
     "cli",
     "config.json",
@@ -97,7 +106,7 @@ if (isBetaChannel) {
     ".runweave",
     "app-server-beta",
   );
-  process.env.RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR ??= path.join(
+  process.env.RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR = path.join(
     process.env.RUNWEAVE_APP_SERVER_HOME,
     "cloud-sync",
   );

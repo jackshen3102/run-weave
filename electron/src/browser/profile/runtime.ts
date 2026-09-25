@@ -15,16 +15,22 @@ import {
   type TerminalBrowserProfileProxyMode,
   type TerminalBrowserProfileRuntimeState,
   type TerminalBrowserRoute,
+  type TerminalBrowserProfilePreferenceUpdate,
+  type TerminalBrowserErrorPayload,
 } from "@runweave/shared/terminal-browser-profile";
 import { desktopRuntime } from "../../desktop/runtime-state.js";
 import { isManagedDevSession } from "../../desktop/config.js";
 import { ensureTerminalBrowserCertificateTrust } from "../security/certificate.js";
-import { TerminalBrowserError } from "../errors.js";
+import {
+  TerminalBrowserError,
+  toTerminalBrowserErrorPayload,
+} from "../errors.js";
 import {
   getTerminalBrowserProfilePreferences,
   normalizeTerminalBrowserGroupId,
   normalizeTerminalBrowserProjectId,
   saveTerminalBrowserProfileProxyMode,
+  updateTerminalBrowserProfilePreferences,
 } from "./preferences.js";
 import { terminalBrowserRuntime } from "../runtime.js";
 import {
@@ -43,6 +49,7 @@ interface ProfileRuntimeRecord {
   proxyMode: TerminalBrowserProfileProxyMode;
   route: TerminalBrowserRoute;
   mutationQueue: Promise<unknown>;
+  applyError: TerminalBrowserErrorPayload | null;
   cdpConnectionCount: number;
 }
 
@@ -58,7 +65,8 @@ function getProfileRecord(
       proxyMode:
         getTerminalBrowserProfilePreferences().proxyModes?.[profileId] ??
         (isManagedDevSession ? "direct" : "whistle"),
-      route: { kind: "unassigned" },
+      route: desiredRoute(profileId),
+      applyError: null,
       mutationQueue: Promise.resolve(),
       cdpConnectionCount: 0,
     };
@@ -101,6 +109,7 @@ export function getTerminalBrowserProfileRuntimeState(
     proxyMode: record.proxyMode,
     route: structuredClone(record.route),
     whistle: getTerminalBrowserWhistleState(profileId),
+    applyError: record.applyError,
     visibleViewCount: getVisibleViewCount(profileId),
     cdpConnectionCount: record.cdpConnectionCount,
   };
@@ -210,10 +219,8 @@ export async function resolveTerminalBrowserProfile(
   const record = getProfileRecord(profileId);
 
   const mutation = record.mutationQueue.then(async () => {
-    const requestedRoute: TerminalBrowserRoute =
-      record.proxyMode === "whistle" && worktree?.devServerPort
-        ? { kind: "dev-server", port: worktree.devServerPort }
-        : { kind: "unassigned" };
+    const requestedRoute = desiredRoute(profileId);
+    assertPortMigrationResolved(profileId);
     const routeChanges = !routesEqual(record.route, requestedRoute);
     const visibleViewCount = getVisibleViewCount(
       profileId,
@@ -258,6 +265,7 @@ export async function resolveTerminalBrowserProfile(
         preferences.businessOrigin,
       );
     }
+    record.applyError = null;
     notifyRuntimeChanged(profileId);
     const automationToken =
       terminalSessionId && browserGroupId
@@ -278,7 +286,13 @@ export async function resolveTerminalBrowserProfile(
       whistle: getTerminalBrowserWhistleState(profileId),
     } satisfies ResolvedTerminalBrowserProfile;
   });
-  record.mutationQueue = mutation.catch(() => undefined);
+  record.mutationQueue = mutation.catch((error) => {
+    record.applyError = toTerminalBrowserErrorPayload(
+      error,
+      "BROWSER_PROFILE_PROXY_CONFIGURATION_FAILED",
+    );
+    notifyRuntimeChanged(profileId);
+  });
   return await mutation;
 }
 
@@ -288,20 +302,14 @@ export async function setTerminalBrowserProfileProxyMode(
 ): Promise<TerminalBrowserProfileRuntimeState> {
   const record = getProfileRecord(profileId);
   const mutation = record.mutationQueue.then(async () => {
-    if (
-      record.proxyMode === proxyMode &&
-      (proxyMode !== "whistle" ||
-        getTerminalBrowserWhistleState(profileId).status === "ready")
-    ) {
-      saveTerminalBrowserProfileProxyMode(profileId, proxyMode);
-      return getTerminalBrowserProfileRuntimeState(profileId);
-    }
-
+    saveTerminalBrowserProfileProxyMode(profileId, proxyMode);
+    record.proxyMode = proxyMode;
+    record.route = desiredRoute(profileId);
+    notifyRuntimeChanged(profileId);
     if (proxyMode === "whistle") {
-      record.proxyMode = "whistle";
-      notifyRuntimeChanged(profileId);
-      const whistle = await ensureTerminalBrowserWhistle(profileId);
+      assertPortMigrationResolved(profileId);
       await configureTerminalBrowserProfileProxy(profileId, "whistle");
+      const whistle = await ensureTerminalBrowserWhistle(profileId);
       await ensureTerminalBrowserCertificateTrust(profileId);
       await setWhistleReservedValue(
         profileId,
@@ -312,15 +320,94 @@ export async function setTerminalBrowserProfileProxyMode(
       );
     } else {
       await configureTerminalBrowserProfileProxy(profileId, "direct");
-      record.route = { kind: "unassigned" };
     }
 
     record.proxyMode = proxyMode;
-    saveTerminalBrowserProfileProxyMode(profileId, proxyMode);
+    record.applyError = null;
     await reloadTerminalBrowserProfileAfterProxyChange(profileId);
     notifyRuntimeChanged(profileId);
     return getTerminalBrowserProfileRuntimeState(profileId);
   });
-  record.mutationQueue = mutation.catch(() => undefined);
+  record.mutationQueue = mutation.catch((error) => {
+    record.applyError = toTerminalBrowserErrorPayload(
+      error,
+      "BROWSER_PROFILE_PROXY_CONFIGURATION_FAILED",
+    );
+    notifyRuntimeChanged(profileId);
+  });
   return await mutation;
+}
+
+function desiredRoute(
+  profileId: TerminalBrowserProfileId,
+): TerminalBrowserRoute {
+  const port = getTerminalBrowserProfilePreferences().profilePorts[profileId];
+  return port ? { kind: "dev-server", port } : { kind: "unassigned" };
+}
+function assertPortMigrationResolved(
+  profileId: TerminalBrowserProfileId,
+): void {
+  if (
+    getTerminalBrowserProfilePreferences().pendingPortMigration[profileId]
+      ?.length
+  )
+    throw new TerminalBrowserError(
+      "PROFILE_PORT_MIGRATION_REQUIRED",
+      "请在 Browser 设置中确认旧开发端口，原代理规则已保留",
+      { profileId },
+    );
+}
+export async function updateProfilePreferencesAndApply(
+  update: TerminalBrowserProfilePreferenceUpdate,
+  windowId?: number,
+) {
+  if (update?.scope !== "profile")
+    return updateTerminalBrowserProfilePreferences(update);
+  if (!isTerminalBrowserProfileId(update.profileId))
+    throw new TerminalBrowserError(
+      "INVALID_BROWSER_PROFILE",
+      "Unknown Profile",
+    );
+  const profileId = update.profileId;
+  const record = getProfileRecord(profileId);
+  const mutation = record.mutationQueue.then(async () => {
+    const nextPort = update.devServerPort;
+    if (
+      nextPort !==
+        getTerminalBrowserProfilePreferences().profilePorts[profileId] &&
+      (record.cdpConnectionCount > 0 ||
+        getVisibleViewCount(profileId, windowId) > 0)
+    )
+      throw new TerminalBrowserError(
+        "BROWSER_PROFILE_ROUTE_CONFLICT",
+        "Browser 正在被其他窗口或 Agent 使用，请结束操作后再修改代理目标",
+        { profileId },
+      );
+    const preferences = updateTerminalBrowserProfilePreferences(update);
+    record.route = desiredRoute(profileId);
+    if (record.proxyMode === "whistle") {
+      const whistle = await ensureTerminalBrowserWhistle(profileId);
+      await setWhistleReservedValue(
+        profileId,
+        whistle.port,
+        record.route.kind === "dev-server"
+          ? `127.0.0.1:${record.route.port}`
+          : null,
+      );
+      await configureTerminalBrowserProfileProxy(profileId, "whistle");
+      await ensureTerminalBrowserCertificateTrust(profileId);
+    }
+    record.applyError = null;
+    notifyRuntimeChanged(profileId);
+    reloadTerminalBrowserBusinessOrigin(profileId, preferences.businessOrigin);
+    return preferences;
+  });
+  record.mutationQueue = mutation.catch((error) => {
+    record.applyError = toTerminalBrowserErrorPayload(
+      error,
+      "BROWSER_PROFILE_PROXY_CONFIGURATION_FAILED",
+    );
+    notifyRuntimeChanged(profileId);
+  });
+  return mutation;
 }

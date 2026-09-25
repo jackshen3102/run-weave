@@ -5,8 +5,7 @@ import type { ConnectionConfig } from "../features/connection/types";
 interface ConnectionsPageProps {
   connections: ConnectionConfig[];
   activeId: string | null;
-  onAdd: (name: string, url: string) => void;
-  onAddRemote: (name: string, host: string, backendPort: number, browserProfileId: "profile-1" | "profile-2" | "profile-3" | null, approvedBrowserGroupId: string | null) => void;
+  onAdd: (name: string, url: string, tunnelEndpointId?: string) => void;
   onRemove: (id: string) => void;
   onSelect: (id: string) => void;
   onEdit: (id: string, patch: { name?: string; url?: string }) => void;
@@ -17,7 +16,6 @@ export function ConnectionsPage({
   connections,
   activeId,
   onAdd,
-  onAddRemote,
   onRemove,
   onSelect,
   onEdit,
@@ -30,12 +28,9 @@ export function ConnectionsPage({
     <ConnectionScreen
       connections={connections}
       activeId={activeId}
-      onAdd={(name, url) => {
-        onAdd(name, url);
+      onAdd={(name, url, endpointId) => {
+        onAdd(name, url, endpointId);
         navigate("/terminal", { replace: true });
-      }}
-      onAddRemote={(name, host, backendPort, browserProfileId, approvedBrowserGroupId) => {
-        onAddRemote(name, host, backendPort, browserProfileId, approvedBrowserGroupId);
       }}
       onRemove={onRemove}
       onSelect={(id) => {
@@ -53,7 +48,6 @@ export function ConnectionsPage({
 
         return false;
       }}
-      onForwardPort={(id, remotePort) => window.electronAPI!.forwardRemotePort!(id, remotePort)}
     />
     </>
   );

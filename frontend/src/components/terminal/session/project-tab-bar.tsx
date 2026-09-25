@@ -8,8 +8,6 @@ import {
 } from "../../../features/terminal/queries/workspace";
 import { useTerminalAggregateStatus } from "../../../features/terminal/status/use-aggregate-status";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
-import { useProjectBindings } from "../../../features/connection/project-bindings";
-import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { Button } from "../../ui/button";
 import {
   ContextMenu,
@@ -43,12 +41,7 @@ export const TerminalProjectTabBar = memo(function TerminalProjectTabBar({
   onRequestEditProject,
   onSelectProject,
 }: TerminalProjectTabBarProps) {
-  const allProjects = useTerminalProjectsQuery().data ?? EMPTY_TERMINAL_PROJECTS;
-  const { activeConnectionId, remote } = useTerminalRuntime();
-  const bindings = useProjectBindings((state) => state.bindings);
-  const projects = remote && activeConnectionId
-    ? allProjects.filter((project) => bindings.some((binding) => binding.connectionId === activeConnectionId && binding.remoteProjectId === project.projectId))
-    : allProjects;
+  const projects = useTerminalProjectsQuery().data ?? EMPTY_TERMINAL_PROJECTS;
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeParentProjectId,
   );
@@ -118,15 +111,7 @@ export const TerminalProjectTabBar = memo(function TerminalProjectTabBar({
       <SortableTabs
         items={projects}
         getItemId={getProjectId}
-        onReorder={(fromIndex, toIndex) => {
-          const sourceId = projects[fromIndex]?.projectId;
-          const targetId = projects[toIndex]?.projectId;
-          if (!sourceId || !targetId) return;
-          onReorderProjects(
-            allProjects.findIndex((project) => project.projectId === sourceId),
-            allProjects.findIndex((project) => project.projectId === targetId),
-          );
-        }}
+        onReorder={onReorderProjects}
         className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0"
         renderTab={renderProjectTab}
       />

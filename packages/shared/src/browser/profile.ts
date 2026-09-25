@@ -13,7 +13,6 @@ export const TERMINAL_BROWSER_PROFILE_CONFIGS = {
     label: "Browser 1",
     shortLabel: "P1",
     partition: "persist:runweave-terminal-browser",
-    whistlePort: 8081,
     whistleStorage: "profile-1",
   },
   "profile-2": {
@@ -21,7 +20,6 @@ export const TERMINAL_BROWSER_PROFILE_CONFIGS = {
     label: "Browser 2",
     shortLabel: "P2",
     partition: "persist:runweave-terminal-browser-profile-2",
-    whistlePort: 8082,
     whistleStorage: "profile-2",
   },
   "profile-3": {
@@ -29,7 +27,6 @@ export const TERMINAL_BROWSER_PROFILE_CONFIGS = {
     label: "Browser 3",
     shortLabel: "P3",
     partition: "persist:runweave-terminal-browser-profile-3",
-    whistlePort: 8083,
     whistleStorage: "profile-3",
   },
 } as const satisfies Record<
@@ -39,7 +36,6 @@ export const TERMINAL_BROWSER_PROFILE_CONFIGS = {
     label: string;
     shortLabel: string;
     partition: string;
-    whistlePort: number;
     whistleStorage: string;
   }
 >;
@@ -55,11 +51,12 @@ export type TerminalBrowserRoute =
 
 export interface TerminalBrowserWorktreePreference {
   preferredProfileId: TerminalBrowserProfileId | null;
-  devServerPort: number | null;
 }
 
 export interface TerminalBrowserProfilePreferences {
-  version: 1;
+  version: 2;
+  profilePorts: Partial<Record<TerminalBrowserProfileId, number | null>>;
+  pendingPortMigration: Partial<Record<TerminalBrowserProfileId, number[]>>;
   defaultProfileId: TerminalBrowserProfileId;
   businessOrigin: string | null;
   /** Missing entries retain the host's default until explicitly selected. */
@@ -79,8 +76,8 @@ export type TerminalBrowserProfilePreferenceUpdate =
       scope: "worktree";
       projectId: string;
       preferredProfileId?: TerminalBrowserProfileId | null;
-      devServerPort?: number | null;
-    };
+    }
+  | { scope: "profile"; profileId: TerminalBrowserProfileId; devServerPort: number | null };
 
 export interface ResolveTerminalBrowserProfileRequest {
   projectId: string | null;
@@ -123,6 +120,7 @@ export interface TerminalBrowserProfileRuntimeState {
   proxyMode: TerminalBrowserProfileProxyMode;
   route: TerminalBrowserRoute;
   whistle: TerminalBrowserWhistleState;
+  applyError: TerminalBrowserErrorPayload | null;
   visibleViewCount: number;
   cdpConnectionCount: number;
 }
@@ -149,6 +147,9 @@ export type TerminalBrowserProfileChangedEvent =
     };
 
 export type TerminalBrowserErrorCode =
+  | "PROFILE_PORT_MIGRATION_REQUIRED"
+  | "PROFILE_CONFIG_CORRUPT"
+  | "PROFILE_CONFIG_WRITE_FAILED"
   | "INVALID_BROWSER_PROFILE"
   | "INVALID_DEV_SERVER_PORT"
   | "INVALID_BUSINESS_ORIGIN"
@@ -179,7 +180,9 @@ export function getTerminalBrowserProfileConfig(
 
 export function createDefaultTerminalBrowserProfilePreferences(): TerminalBrowserProfilePreferences {
   return {
-    version: 1,
+    version: 2,
+    profilePorts: {},
+    pendingPortMigration: {},
     defaultProfileId: TERMINAL_BROWSER_DEFAULT_PROFILE_ID,
     businessOrigin: null,
     worktrees: {},

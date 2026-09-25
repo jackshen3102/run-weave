@@ -23,12 +23,14 @@ export function TerminalBrowserProfileSettings({
   onPreferencesChange,
   onReactivate,
 }: TerminalBrowserProfileSettingsProps) {
+  const profilePort = preferences.profilePorts[profileId];
+  const pendingPorts = preferences.pendingPortMigration[profileId] ?? [];
   const worktree = projectId ? preferences.worktrees[projectId] : undefined;
   const [businessOrigin, setBusinessOrigin] = useState(
     preferences.businessOrigin ?? "",
   );
   const [devServerPort, setDevServerPort] = useState(
-    worktree?.devServerPort ? String(worktree.devServerPort) : "",
+    profilePort ? String(profilePort) : "",
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,9 +38,9 @@ export function TerminalBrowserProfileSettings({
   useEffect(() => {
     setBusinessOrigin(preferences.businessOrigin ?? "");
     setDevServerPort(
-      worktree?.devServerPort ? String(worktree.devServerPort) : "",
+      profilePort ? String(profilePort) : "",
     );
-  }, [preferences.businessOrigin, worktree?.devServerPort]);
+  }, [preferences.businessOrigin, profilePort]);
 
   const update = async (
     value: TerminalBrowserProfilePreferenceUpdate,
@@ -153,8 +155,16 @@ export function TerminalBrowserProfileSettings({
               Use {TERMINAL_BROWSER_PROFILE_CONFIGS[profileId].label} for current Worktree
             </Button>
           </div>
+
+        </div>
+      ) : (
+        <p className="text-[10px] text-slate-500">
+          选择项目后可设置首选 Browser。代理设置始终属于当前 Browser。
+        </p>
+      )}
+      {pendingPorts.length>0 && <div role="status" className="space-y-2 rounded border border-amber-500/40 p-2 text-xs text-amber-300"><p>发现旧项目端口，请选择此 Browser 的固定目标，或在下方留空后点击 Apply。</p><div className="flex gap-2">{pendingPorts.map(port=><Button key={port} size="sm" variant="outline" disabled={saving} onClick={()=>{void update({scope:'profile',profileId,devServerPort:port});}}>{port}</Button>)}</div></div>}
           <label className="block space-y-1 text-[11px] text-slate-400">
-            <span>Dev Server port</span>
+            <span>{TERMINAL_BROWSER_PROFILE_CONFIGS[profileId].label} · 开发服务端口（本机持久化）</span>
             <div className="flex gap-1">
               <input
                 data-testid="terminal-browser-dev-server-port"
@@ -172,25 +182,19 @@ export function TerminalBrowserProfileSettings({
                 disabled={saving}
                 onClick={() => {
                   void update({
-                    scope: "worktree",
-                    projectId,
+                    scope: "profile",
+                    profileId,
                     devServerPort:
                       devServerPort.trim() === ""
                         ? null
                         : Number(devServerPort),
-                  }).then((saved) => saved && onReactivate());
+                  });
                 }}
               >
                 Apply
               </Button>
             </div>
           </label>
-        </div>
-      ) : (
-        <p className="text-[10px] text-slate-500">
-          Select a Worktree to configure its Profile and Dev Server port.
-        </p>
-      )}
       {error ? <p className="text-[10px] text-rose-300">{error}</p> : null}
     </div>
   );

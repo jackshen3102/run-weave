@@ -1,0 +1,84 @@
+version: 1
+name: "桌面代理用户级持久化与环境隔离验收"
+description: "覆盖 Profile 配置归属、重启恢复、失败一致性、环境隔离和旧目标迁移；不把原型或 HTTP 200 视为代理通过证据。"
+cases:
+  - id: DNP-001
+    name: "同 Profile 切换连接和项目不改代理目标"
+    required: true
+    description: "代理数据属于桌面 Profile，导航上下文不能覆盖它。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例 Profile 1 已保存代理模式、显式开发端口及用户 Rules/Values；准备两个连接与两个项目。"
+    steps:
+      - "使用 toolkit:playwright-cli 附着本例 dev:open 返回的 fresh desktop surface，记录 Profile 偏好、Whistle 用户规则及保留 Value；依次切换连接和项目并解析同一 Profile。"
+      - "确认保存模式、目标、规则正文及选中状态不变，真实业务请求仍命中原 fixture；只允许显式选择其它 Profile 改变所查看的配置。"
+  - id: DNP-002
+    name: "同 userData 重启恢复代理意图和规则"
+    required: true
+    description: "一次完整 Electron 重启保持已保存模式、规则、Cookie，重新建立实际运行态。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "独占 Profile 1 已开启 Whistle 并保存唯一规则；Profile 2 显式 Direct；同 userData 可安全重启。"
+    steps:
+      - "记录配置、规则选择状态、fixture Cookie 与 PID；完整停止/重启本例 Electron，重新通过 dev:open 获取 fresh endpoint。"
+      - "使用 toolkit:playwright-cli 打开相同 Profile；确认 P1 保留 Whistle、P2 保留 Direct，规则及 Cookie 未丢失，不复用旧 PID；实际请求命中原规则。"
+  - id: DNP-003
+    name: "落盘失败不伪装保存成功"
+    required: true
+    description: "Profile 文件写入失败不改变旧保存意图和有效运行配置。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例拥有可注入写入失败的用户目录和正常代理状态。"
+    steps:
+      - "记录偏好摘要与实际代理路径，注入文件写入失败后修改代理模式。"
+      - "确认明确写入错误，偏好摘要未变，运行态未假装新模式成功；恢复写入条件后再次保存可读回。"
+  - id: DNP-004
+    name: "代理启动失败保留已经保存的意图"
+    required: true
+    description: "启用意图保存后，即使固定运行端口被占用也不静默变 Direct。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例用户明确选择 Whistle，启动前由自有 fixture 占用该环境分配的代理端口。"
+    steps:
+      - "保存开启代理并等待结果；确认偏好仍为 Whistle，界面显示启动失败/端口占用，业务 URL 没有回退 Direct 导航。"
+      - "释放自有占用者后显式重试；确认原端口 ready 且真实请求经过该 Profile Whistle，未覆盖规则。"
+  - id: DNP-005
+    name: "正式模式与 Dev Session 并行隔离"
+    required: true
+    description: "不同环境不能共享持久化目录、代理端口、CA 或进程清理权。"
+    preconditions:
+      - "候选实现与 planner 已支持环境端口集合；本例拥有一个正常安装模式的专用隔离 fixture 和一个受管 Dev Session，不使用用户真实 Stable 数据。"
+      - "分别准备可区分的规则、Cookie 和 SSH 主机标识，记录两个 userData 与 runtime 端口。"
+    steps:
+      - "同时显式开启两环境同名 Profile 的 Whistle，用 toolkit:playwright-cli 分别读取实际页面与代理记录；确认各自只命中自己的规则，目录与端口集合不重叠。"
+      - "停止或 reset 本例 Dev Session；确认安装模式 fixture 的配置文件、规则、Cookie、Whistle PID 与隧道仍存活；清理最后一个自有 fixture。"
+  - id: DNP-006
+    name: "代理未就绪前不恢复业务导航"
+    required: true
+    description: "重启恢复页面必须等待代理正确配置，不先直连再补代理。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例已保存业务页与 Whistle 意图，可在下一次启动延迟本例 Whistle readiness；fixture 能记录直接与代理请求。"
+    steps:
+      - "重启同 userData 并重新获取 fresh surface，打开需恢复的 Profile；在代理未 ready 期间确认业务 URL 没有发出 Direct 请求。"
+      - "解除延迟后确认导航发生且请求记录来自预期 Whistle，页面为 fixture 标识；不凭状态 ready 单独判通过。"
+  - id: DNP-007
+    name: "损坏偏好文件不会被默认值覆盖"
+    required: true
+    description: "损坏配置应明确可恢复，不以默认模式覆盖用户存量规则。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例专用 userData 有有效备份和 Whistle 唯一规则，能够停止并改坏本例偏好文件。"
+    steps:
+      - "停止本例 Electron，备份后损坏偏好文件，重新启动并取得 fresh endpoint。"
+      - "确认显示配置读取/恢复错误，坏文件与有效备份保留，Whistle 规则目录未被清空；执行产品恢复入口后确认读回有效配置。"
+  - id: DNP-008
+    name: "多个旧项目目标迁移要求明确选择"
+    required: true
+    description: "同一 Profile 多个旧端口不按遍历顺序静默选取。"
+    preconditions:
+      - "候选实现已完成；使用 toolkit:runweave-dev-session 建立本例独占的桌面 userData、Backend 与测试 SSH 主机，资源归属明确，不操作用户生产隧道。"
+      - "本例旧偏好有两个 Worktree 指向同一 Profile、使用不同 devServerPort，旧数据已备份。"
+    steps:
+      - "启动迁移；确认展示该 Profile 的端口冲突和显式选择，确认前旧数据未被删除或悄悄应用任一新目标。"
+      - "选定其中一个端口并保存；确认新 Profile 级目标等于选择值，切换两个项目均不再改目标，普通用户 Rules/Values 保持。"

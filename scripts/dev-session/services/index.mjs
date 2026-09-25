@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 
 import { resolvePort } from "../../dev/web.mjs";
 import { DevSessionError, assertLoopbackUrl } from "../contracts.mjs";
-import { acquireServicePortLease } from "../registry.mjs";
+import { acquireServicePortLease, releaseSessionPortLeases } from "../registry.mjs";
 import {
   inspectAppServerHandshake,
   inspectBackendHandshake,
@@ -41,7 +41,9 @@ export async function startSessionServices({
   await mkdir(paths.logsDir, { recursive: true, mode: 0o700 });
   const reservedPorts = new Set();
   const portLeases = [];
-  const reservePort = async (startPort) => {
+  let successful = false;
+  let retainLifetimeLeases = false;
+  const reservePort = async (startPort, sessionLifetime = false, fixed = false) => {
     let candidate = startPort;
     while (candidate <= 65_535) {
       if (reservedPorts.has(candidate)) {
@@ -52,8 +54,10 @@ export async function startSessionServices({
         paths.root,
         candidate,
         sessionId,
+        { sessionLifetime },
       );
       if (!lease) {
+        if(fixed)throw new DevSessionError(`fixed proxy port ${candidate} is leased`,4);
         candidate += 1;
         continue;
       }
@@ -69,11 +73,12 @@ export async function startSessionServices({
       }
       if (availablePort !== candidate) {
         await lease.release();
+        if(fixed)throw new DevSessionError(`fixed proxy port ${candidate} is occupied`,4);
         candidate = availablePort;
         continue;
       }
       reservedPorts.add(candidate);
-      portLeases.push(lease);
+      portLeases.push({ ...lease, sessionLifetime });
       return candidate;
     }
     throw new DevSessionError(`no service port available from ${startPort}`, 1);
@@ -118,13 +123,18 @@ export async function startSessionServices({
       }
       const desktopCdpPort = await reservePort(9335);
       const terminalBrowserCdpPort = await reservePort(9336);
-      return await startDedicatedBeta({
+      const slotNumber=Number(plan.targetEnvironment.betaSlot.assignedSlotId.slice(-2));
+      const whistlePorts=[];
+      for(let index=0;index<3;index++)whistlePorts.push(await reservePort(18100+slotNumber*10+index,true,true));
+      const started=await startDedicatedBeta({
         sourceRoot: plan.sourceRoot,
         sessionId,
         instanceId: plan.targetEnvironment.instanceId,
         slotId: plan.targetEnvironment.betaSlot.assignedSlotId,
         leaseNonce: plan.targetEnvironment.betaSlot.leaseNonce,
         revision,
+        whistlePorts,
+        portLeaseRoot: paths.root,
         desktopCdpPort,
         terminalBrowserCdpPort,
         sharedBackend,
@@ -135,6 +145,7 @@ export async function startSessionServices({
         onStarting: onBetaStarting,
         onSpawn,
       });
+      successful=true;return started;
     }
     const requestedSharedBackend = resolveDevSessionBackendSharing(
       plan,
@@ -221,7 +232,11 @@ export async function startSessionServices({
     if (plan.services.electron.ownership === "dedicated") {
       const desktopCdpPort = await reservePort(9223);
       const terminalBrowserCdpPort = await reservePort(9224);
+      const whistlePorts=[];
+      for(let index=0;index<3;index++)whistlePorts.push(await reservePort(17000,true));
       desktop = await startDedicatedElectron({
+        whistlePorts,
+        portLeaseRoot: paths.root,
         sourceRoot: plan.sourceRoot,
         sessionId,
         instanceId: plan.targetEnvironment.instanceId ?? sessionId,
@@ -236,6 +251,7 @@ export async function startSessionServices({
         onSpawn,
       });
     }
+    successful=true;
     return {
       frontend,
       backend,
@@ -258,6 +274,7 @@ export async function startSessionServices({
         );
       });
     }
+    retainLifetimeLeases = cleanupFailures.length > 0 || error?.details?.resetUnsafe === true;
     if (plan.profile === "beta" && cleanupFailures.length > 0) {
       throw new DevSessionError(
         "Beta start failed and identity-safe cleanup did not complete",
@@ -272,6 +289,7 @@ export async function startSessionServices({
     throw error;
   } finally {
     for (const lease of portLeases.reverse()) {
+      if ((successful || retainLifetimeLeases) && lease.sessionLifetime) continue;
       await lease.release();
     }
   }
@@ -364,6 +382,7 @@ export async function stopSessionServices(
       } else {
         service.stopResult = await stopOwnedProcess(service.process);
       }
+      if(service.whistlePorts)await releaseSessionPortLeases(service.portLeaseRoot,service.whistlePorts,service.ownerDevSessionId);
     }
   }
 }
@@ -442,6 +461,7 @@ export async function cleanupStaleSessionServices(
     inspectedService.cleanupStatus = "stopped-identity-verified";
     stoppedServices.push(serviceName);
   }
+  if(stoppedServices.includes("electron") && services.electron.whistlePorts)await releaseSessionPortLeases(services.electron.portLeaseRoot,services.electron.whistlePorts,services.electron.ownerDevSessionId);
   return {
     services: cleanedServices,
     summary: {

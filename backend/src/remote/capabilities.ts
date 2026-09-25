@@ -12,7 +12,7 @@ export function registerRemoteCapabilitiesRoute(
   app.get("/api/remote/capabilities", requireTunnelAuth, requireAuth, async (_req, res) => {
     try {
       const payload: RemoteCapabilities = {
-        protocolVersion: 1,
+        protocolVersion: 2,
         installationId: await loadInstallationId(browserProfileDir),
         serviceInstanceId: `backend:${backendId}`,
         capabilities: {
