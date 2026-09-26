@@ -358,7 +358,7 @@ export function resolveBetaReconciliationPaths(services) {
   } catch {
     return null;
   }
-  const homeDir = path.resolve(beta.userDataDir, "../../../../../..");
+  const homeDir = path.resolve(beta.userDataDir, "../../../../..");
   const paths = resolveBetaPaths(
     beta.betaControl.cwd,
     homeDir,
@@ -377,6 +377,21 @@ export function resolveBetaReconciliationPaths(services) {
     return null;
   }
   return paths;
+}
+
+function isCanonicalLoopbackEndpoint(endpoint) {
+  try {
+    const url = new URL(assertLoopbackUrl(endpoint));
+    return (
+      url.origin === endpoint &&
+      url.protocol === "http:" &&
+      url.hostname === "127.0.0.1" &&
+      Number.isInteger(Number(url.port)) &&
+      Number(url.port) > 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function reconcileBetaSessionServices(services) {
@@ -404,9 +419,9 @@ export async function reconcileBetaSessionServices(services) {
     status.desktop.appPath !== beta.appPath ||
     status.desktop.userDataPath !== beta.userDataDir ||
     status.desktop.statusPath !== beta.statusPath ||
-    status.cdp.desktop.endpoint !== services.cdp.desktop.endpoint ||
-    status.cdp.terminalBrowser.endpoint !==
-      services.cdp.terminalBrowser.endpoint ||
+    !isCanonicalLoopbackEndpoint(status.cdp.desktop.endpoint) ||
+    !isCanonicalLoopbackEndpoint(status.cdp.terminalBrowser.endpoint) ||
+    status.cdp.desktop.endpoint === status.cdp.terminalBrowser.endpoint ||
     !status.desktop.healthy ||
     !status.backend.healthy ||
     !status.appServer.healthy ||
@@ -497,6 +512,8 @@ export async function reconcileBetaSessionServices(services) {
           : `beta-control:${beta.instanceId}`,
       pid: status.desktop.pid,
       sourceRevision: revision,
+      desktopCdpEndpoint: status.cdp.desktop.endpoint,
+      terminalBrowserCdpEndpoint: status.cdp.terminalBrowser.endpoint,
       process: desktopProcess,
     };
   }
@@ -551,11 +568,13 @@ export async function reconcileBetaSessionServices(services) {
   reconciled.cdp.desktop = {
     ...reconciled.cdp.desktop,
     pid: status.desktop.pid,
+    endpoint: status.cdp.desktop.endpoint,
     sourceRevision: revision,
   };
   reconciled.cdp.terminalBrowser = {
     ...reconciled.cdp.terminalBrowser,
     pid: status.desktop.pid,
+    endpoint: status.cdp.terminalBrowser.endpoint,
     sourceRevision: revision,
   };
   return {

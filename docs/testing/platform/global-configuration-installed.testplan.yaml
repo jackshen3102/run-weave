@@ -19,7 +19,7 @@ cases:
     preconditions:
       - "已安装支持新方案的打包 Dev Session Desktop，有可安全退出的独立 fixture。"
     steps:
-      - "记录配置和数据身份，退出 Desktop 后从 Dock 正常打开；重新附着实际页面，确认配置根及身份保持；用 toolkit:playwright-cli 检查设置生效状态，不以截图代替请求证据。"
+      - "记录配置和数据身份，退出 Desktop 后从系统应用入口（Dock 或 LaunchServices）正常打开；用 dev:status 重新取得进程与端口，确认控制面恢复 ready，dev:open 指向当前实例；重新附着实际页面，确认配置根及身份保持，用 toolkit:playwright-cli 检查设置生效状态，不以截图代替请求证据。"
   - id: GCI-003
     name: "软件升级保持配置"
     required: true
@@ -27,7 +27,7 @@ cases:
     preconditions:
       - "独立打包 Dev Session fixture 可通过项目已有更新入口执行一次真实升级，任务占用已核对。"
     steps:
-      - "记录配置摘要、schema、身份、数据库路径和必要业务记录，执行受控升级；重新取得实际运行身份，确认保留且可读取原业务数据。"
+      - "记录配置摘要、schema、身份、数据库路径和必要业务记录，执行受控升级；重新取得实际运行身份，确认保留且可读取原业务数据。若启动时 CLI 自动续期令牌，只允许 cli.profiles.dev 的 accessToken、refreshToken、expiresAt、baseUrl 与 revision 变化；核对差异和旧文件私有备份，不把摘要变化误判为业务配置丢失。"
   - id: GCI-004
     name: "测试重建与正式安装隔离"
     required: true
@@ -53,5 +53,5 @@ cases:
       - "独立打包 Dev Session 有可用版本及合法配置、终端数据；准备可控制启动失败的候选产物，候选与原程序均支持当前 schema。"
       - "已记录原 releaseId、配置字节摘要、instanceId 和其他环境摘要，fixture 没有在途真实任务。"
     steps:
-      - "通过 Session 的受管升级入口安装候选，触发候选启动失败；确认失败状态明确，控制面保持或恢复原版本。"
-      - "重新取得 endpoint 和页面，核对原 releaseId 与 instanceId；通过 toolkit:playwright-cli 执行终端标记命令取得输出，配置摘要和原数据保持，其他环境无写入。"
+      - "通过 Session 的受管升级入口安装候选，触发候选启动失败；确认失败状态明确，原 App 自动恢复到候选安装前的二进制摘要，失败瞬间配置字节摘要不变。Dev Session 控制面进入 failed 时，按归属明确的停止和启动入口重新拉起原程序；不能将磁盘恢复写成程序已自动重启。"
+      - "重新取得 endpoint 和页面，核对原 releaseId 与 instanceId；通过 toolkit:playwright-cli 执行终端标记命令取得输出，原数据保持，其他环境无本测试引起的写入。重启如发生 CLI 自动续期，仅允许 cli.profiles.dev 的 accessToken、refreshToken、expiresAt、baseUrl 与 revision 变化，并核对旧文件私有备份。"
