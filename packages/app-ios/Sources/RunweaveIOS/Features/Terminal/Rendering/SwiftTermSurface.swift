@@ -80,7 +80,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
         self.openFileRequested?(tap)
         return true
       }
-      view.installLinkMenu()
+      view.installSelectionMenu()
       view.linkHighlightMode = .always
       view.opensLinksOnSingleTap = true
       view.acceptsTerminalResponses = { [weak self] in self?.isTmux?() != true }
@@ -132,7 +132,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
     isTmux = nil
     tmuxScroll = nil
     terminalView.terminalDelegate = nil
-    (terminalView as? NativeTerminalView)?.disposeLinkMenu()
+    (terminalView as? NativeTerminalView)?.disposeSelectionMenu()
     terminalView.singleTapLinkHandler = nil
     openFileRequested = nil
     openLinkRequested = nil
