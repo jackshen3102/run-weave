@@ -8,6 +8,7 @@
 - Electron bridge 宿主声明：`src/types/desktop-bridge.d.ts`
 - 页面级入口：`src/pages/`
 - 定时任务 Web 接入与后端依赖边界：[scheduled-tasks.md](docs/scheduled-tasks.md)
+- Web 自动采集配置、部署与验收：[clarity-autocapture.md](docs/clarity-autocapture.md)
 - 按能力聚合的状态与 UI：`src/features/`
 - 后端 HTTP 调用：`src/services/`
 - 端到端测试允许位置：`tests/`（当前无 tracked spec，实际清单以 Git 为准）
