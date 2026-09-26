@@ -6,6 +6,7 @@ import type {
 
 export interface ScheduledProviderRequest {
   runId: string;
+  projectId: string;
   prompt: string;
   workingDirectory: string;
   model?: string;

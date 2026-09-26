@@ -1,0 +1,115 @@
+version: 1
+name: 定时任务 Full Access 真实环境验收
+description: >
+  验证定时任务只有一个显式 full-access 权限档位，具体 Browser、iOS 模拟器及其它工具由提示词和 Skill
+  决定；真实 UI 操作、权限隔离、资源回收和失败结果均可独立取证。所有用例使用隔离 Backend、项目、
+  Browser group、模拟器 lease 和测试账号，不操作用户工作任务或正式数据。格式通过不代表行为通过。
+cases:
+  - id: SFA-001
+    name: Full Access 合同不改变旧任务权限
+    required: true
+    description: >
+      Backend 只新增 full-access 枚举，旧任务和未填写权限的任务仍冻结为 sandbox，非法权限不会被降级接受。
+    preconditions:
+      - 隔离 Backend 使用临时数据根和独立测试项目，当前 Codex CLI 支持结构化结果与 danger-full-access。
+      - 本例记录初始 capabilities 和任务列表，结束只清理本例创建的任务。
+    steps:
+      - 读取 capabilities；确认 Codex executionPolicies 同时包含 sandbox、auto-review 和 full-access，且没有 Browser、模拟器、网络或 Git 的独立任务能力字段。
+      - 分别创建未填写 executionPolicy、显式 sandbox、auto-review 和 full-access 的四个任务并立即生成 Run；确认每个 Run snapshot 分别冻结为 sandbox、sandbox、auto-review 和 full-access。
+      - 提交未知 executionPolicy；确认 validate 与正式写入均明确拒绝，任务列表和已有 revision 不变。
+  - id: SFA-002
+    name: Full Access 启动参数与身份边界正确
+    required: true
+    description: >
+      full-access 子进程无 workspace-write 和命令联网限制，取得本次项目及 Browser scope，但不继承交互式终端或敏感服务身份。
+    preconditions:
+      - 隔离 Backend 配置可记录本例 provider 的真实 argv、环境变量名称和脱敏 Browser endpoint，不记录凭据值。
+      - 本例项目、run ID 和 ambient Browser endpoint 均带可区分标识，另有独立 sandbox Run 作为对照。
+    steps:
+      - 启动 full-access Run；确认 argv 包含 danger-full-access 与 never approval，不包含 workspace-write 或 sandbox_workspace_write.network_access=false，也没有待人工响应的审批请求。
+      - 检查子进程环境；确认 RUNWEAVE_SCHEDULED_TASK_RUN_ID 和 RUNWEAVE_PROJECT_ID 分别等于本次 Run 与项目，Browser endpoint 的 groupId 只属于本次 Run。
+      - 确认环境不含 Terminal/Panel、tmux、Hook token、App Server token、Agent Team worker 或旧 Codex thread/session 身份；对照 sandbox Run 仍保留原沙箱和禁网参数。
+  - id: SFA-003
+    name: Web 只提供一个完全访问权限选项
+    required: true
+    description: >
+      Web 用户只选择 executionPolicy，不配置 Browser、模拟器或其它能力；选择结果和风险在 Task 与 Run 中准确展示。
+    preconditions:
+      - 已按 toolkit:runweave-dev-session 启动当前源码的隔离 Web/Backend，并取得正确 desktop surface。
+      - 已使用 toolkit:playwright-cli 附着该 surface，Backend capabilities 发布 full-access。
+    steps:
+      - 打开新建定时任务表单；确认执行权限只有仅沙箱、自动审批和完全访问，没有 Browser、模拟器、网络或 Git 能力开关。
+      - 选择完全访问；确认页面明确提示无沙箱、不等待交互审批及本机访问风险，保存后详情显示完全访问。
+      - 立即运行并查看本次配置快照；确认仍显示 full-access；向页面注入未知权限 fixture 时确认显示未知权限并禁止保存，而不是显示成仅沙箱。
+  - id: SFA-004
+    name: iOS 只提供一个完全访问权限选项
+    required: true
+    description: >
+      原生 iOS 与共享合同一致地选择、保存和展示 full-access，不把未知权限误报为 sandbox。
+    preconditions:
+      - 本例已从共享池取得 Runweave 模拟器 lease，并按 packages/app-ios 入口安装当前 Debug App。
+      - App 连接隔离 Backend，Backend capabilities 发布 full-access；使用 toolkit:agent-device 操作真实原生 UI。
+    steps:
+      - 打开新建定时任务页面和高级设置；确认只有仅沙箱、自动审批和完全访问三个权限选项，没有 Browser、模拟器或工具能力开关。
+      - 选择完全访问并保存；重新进入详情和运行快照，确认均显示完全访问及风险提示，字段值仍为 full-access。
+      - 读取未知权限 fixture；确认 App 显示未知权限并阻止原样保存，随后只清理本例任务并释放模拟器 lease。
+  - id: SFA-005
+    name: 提示词驱动真实 Browser 复现
+    required: true
+    description: >
+      full-access 只提供执行权限；任务提示词明确要求 Playwright 时，后台 Agent 能在真实 Runweave Browser 完成页面观察和交互。
+    preconditions:
+      - 隔离 Dev Session 提供可用 Terminal Browser surface、真实 Codex、已安装 toolkit:playwright-cli 和独立测试项目。
+      - 受控页面包含本例唯一 marker、可点击控件和点击后可读取的 DOM 状态；本例记录初始 Browser workspace。
+    steps:
+      - 创建 full-access 任务，提示词明确要求使用 toolkit:playwright-cli 打开受控页面、读取 marker、点击控件并读取变化后的 DOM，且禁止静态代码分析代替；立即运行。
+      - 检查 Agent 通过 rw browser profile resolve 取得任务项目对应的 Profile 和本次 run group，在真实页面完成操作；确认输出含实际 URL、marker 和交互前后状态。
+      - 等待 Run 返回 succeeded；使用独立的 toolkit:playwright-cli 连接重新读取页面，确认最终 DOM 与摘要一致，并清理本例页面和 Browser 连接。
+  - id: SFA-006
+    name: 提示词驱动真实 iOS 模拟器操作
+    required: true
+    description: >
+      full-access 任务在提示词要求时能自行申请共享模拟器、运行 App、执行真实 UI 操作、保存证据并释放自己的 lease。
+    preconditions:
+      - macOS、Xcode、共享模拟器池、agent-device 0.21.3 和 Runweave Debug App 测试环境可用，开始前记录池与 simctl 设备集合。
+      - 隔离项目包含可稳定到达的无副作用 UI 场景和本例唯一 marker，未预先为 scheduled run 申请设备。
+    steps:
+      - 创建 full-access 任务，提示词明确要求使用 toolkit:agent-device 和共享池，以 run ID 派生唯一 task-dir，启动 App、读取控件树、完成一次可逆点击并核对变化后的 UI；立即运行。
+      - 检查任务实际执行 start、构建或复用安装、agent-device UI 操作与 finish；确认使用池内 UDID，证据中的控件树、截图和后置状态均属于本次 run。
+      - 确认 Run 返回 succeeded，池中没有本例遗留 lease、daemon 或 XCTest runner，simctl 设备集合没有新增或克隆设备。
+  - id: SFA-007
+    name: Browser 不可用时不得用静态分析冒充成功
+    required: true
+    description: >
+      提示词要求真实 Browser 而 surface 不可用时，full-access Run 明确受阻，不把代码阅读、构建或 HTTP 探测记录为复现成功。
+    preconditions:
+      - 隔离 Backend 的 Browser endpoint 被本例可恢复地设为不可用，项目源码和普通 shell 仍可读取。
+      - 任务提示词要求使用 toolkit:playwright-cli 观察唯一页面状态，并明确禁止替代验证。
+    steps:
+      - 运行 full-access 任务；确认 Browser resolver 或 CDP 连接返回具体不可用原因，Agent 不创建伪造的页面证据。
+      - 等待 Run 结束；确认 outcome 为 blocked、summary/reason 指明 Browser 环境缺口，没有声称已复现或已通过 UI 验收。
+      - 恢复本例 Browser endpoint，确认没有遗留连接、标签页或被修改的用户 Browser Profile。
+  - id: SFA-008
+    name: 模拟器池占满时不抢占或克隆设备
+    required: true
+    description: >
+      提示词要求真实模拟器而两台共享设备均有活跃 owner 时，full-access 不绕过池规则或伪造 UI 成功。
+    preconditions:
+      - 两台池设备分别由本例可控 fixture 持有有效且活跃的 lease，记录 owner、UDID 和 simctl 设备集合。
+      - full-access 任务提示词要求使用 toolkit:agent-device 完成真实 iOS UI 操作并在无法取得 lease 时报告 blocked。
+    steps:
+      - 运行任务；确认共享池返回占用，任务未直接调用未托管模拟器、未终止其他 owner、未新建或克隆设备。
+      - 确认 Run outcome 为 blocked，reason 指明没有可用 simulator lease，摘要没有把构建或源码检查表述为 UI 验收。
+      - 释放本例 fixture lease；确认原 owner 之外没有 scheduled run 遗留的 task-dir、daemon、runner 或锁。
+  - id: SFA-009
+    name: 不同定时运行的 Browser scope 相互隔离
+    required: true
+    description: >
+      每次 scheduled run 使用独立 Browser group，后一个任务不能观察或操作前一个任务的私有页面和状态。
+    preconditions:
+      - 隔离 Dev Session 的同一 Profile 可创建多个 Browser group，两个 full-access 任务分别使用独立受控页面与唯一 marker。
+      - 两个任务均要求 toolkit:playwright-cli 只操作自身页面，测试执行者记录运行前 workspace 与连接数。
+    steps:
+      - 依次运行两个任务；确认两次解析得到不同且与各自 run ID 对应的 groupId，各自只能列出和操作本组页面。
+      - 在第二个任务中尝试引用第一个任务的 targetId；确认 CDP scope 拒绝或不可见，第一个页面状态不变。
+      - 两次运行结束后释放连接并清理本例页面；确认没有跨组标签页移动、Profile 冲突或用户现有页面变化。

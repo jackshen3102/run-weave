@@ -1,5 +1,8 @@
 export type ScheduledTaskProvider = "codex" | "trae" | "pi";
-export type ScheduledExecutionPolicy = "sandbox" | "auto-review";
+export type ScheduledExecutionPolicy =
+  | "sandbox"
+  | "auto-review"
+  | "full-access";
 export type ScheduledTaskOutcome = "succeeded" | "blocked" | "failed";
 
 /** Weekdays use 0 = Sunday through 6 = Saturday. All timestamps are UTC ISO strings. */

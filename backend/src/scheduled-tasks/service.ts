@@ -432,7 +432,7 @@ export class ScheduledTaskService {
       throw new ScheduledTaskError(
         "execution_policy_unavailable",
         409,
-        "当前 Agent 不支持自动审批，请更新 Codex 或选择仅沙箱执行。",
+        "当前 Agent 不支持所选执行权限，请更新 Codex 或选择其他权限。",
       );
   }
 

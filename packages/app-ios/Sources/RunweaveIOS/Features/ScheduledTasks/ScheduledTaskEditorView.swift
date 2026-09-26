@@ -68,7 +68,8 @@ struct ScheduledTaskEditorView: View {
     if TimeZone(identifier: draft.schedule.timezone) == nil { return "请选择有效时区" }
     if draft.schedule.kind == "weekly" && (draft.schedule.weekdays ?? []).isEmpty { return "请至少选择一周中的一天" }
     if draft.schedule.kind == "once", (draft.schedule.runAt.flatMap(scheduledParseDate) ?? .distantPast) <= Date() { return "仅一次的执行时间必须在未来" }
-    if let policy = draft.executionPolicy, !(provider?.executionPolicies ?? ["sandbox"]).contains(policy) { return "此 Agent 当前不支持所选执行权限" }
+    if !draft.executionPolicyKnown { return "任务包含未知执行权限，请先选择受支持的权限" }
+    if !(provider?.executionPolicies ?? ["sandbox"]).contains(draft.resolvedExecutionPolicy) { return "此 Agent 当前不支持所选执行权限" }
     if previewSchedule != draft.schedule || preview?.occurrences.isEmpty != false || previewFailure != nil { return "请等待时间预览通过" }
     return nil
   }
@@ -213,11 +214,21 @@ struct ScheduledTaskEditorView: View {
         ForEach(selectedModel?.reasoningEfforts ?? [], id: \.self) { Text($0).tag($0) }
       }
       if let modelFailure { Text(modelFailure).font(.caption).foregroundColor(.orange); Button("重试加载模型") { Task { await loadModels() } } }
-      Picker("执行权限", selection: Binding(get: { draft.executionPolicy ?? "sandbox" }, set: { draft.executionPolicy = $0 })) {
+      Picker("执行权限", selection: Binding(get: { draft.resolvedExecutionPolicy }, set: { draft.executionPolicy = $0 })) {
+        if !draft.executionPolicyKnown { Text("未知权限").tag(draft.resolvedExecutionPolicy).disabled(true) }
         Text("仅沙箱").tag("sandbox")
         if provider?.executionPolicies?.contains("auto-review") == true || draft.executionPolicy == "auto-review" {
           Text("自动审批").tag("auto-review").disabled(provider?.executionPolicies?.contains("auto-review") != true)
         }
+        if provider?.executionPolicies?.contains("full-access") == true || draft.executionPolicy == "full-access" {
+          Text("完全访问").tag("full-access").disabled(provider?.executionPolicies?.contains("full-access") != true)
+        }
+      }
+      if draft.resolvedExecutionPolicy == "full-access" {
+        Text("无沙箱且不等待交互审批，可联网、操作 Browser、模拟器及本机文件；仅用于可信任务与提示词。")
+          .font(.caption).foregroundColor(.orange)
+      } else if !draft.executionPolicyKnown {
+        Text("未知权限：请选择受支持的权限后再保存。").font(.caption).foregroundColor(.orange)
       }
       Picker("错过执行时间", selection: $draft.misfirePolicy.mode) {
         Text("恢复后补最近一次").tag("catch-up-latest"); Text("错过就跳过").tag("skip")

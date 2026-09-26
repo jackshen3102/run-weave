@@ -22,7 +22,7 @@ rw scheduled-task create --file /private/draft.json --sha256 <验证响应的 sh
 rw scheduled-task update <task-id> --file /private/patch.json --sha256 <验证响应的 sha256> --expected-backend <验证响应的 backend> --json
 ```
 
-创建文件是 `CreateScheduledTaskRequest`：`name`、`projectId`、`provider`、`prompt`、`schedule`、`misfirePolicy`、`enabled` 必填；`model`、`effort`、`executionPolicy` 可选。编辑文件是 `UpdateScheduledTaskRequest`：只放修改字段和从 `get` 读取的 `expectedRevision`；`model`、`effort` 可用 `null` 恢复默认。具体字段与合法范围以 Backend 的严格 schema 和 `validate-*` 结果为准。默认不开启任何额外运行或删除操作。
+创建文件是 `CreateScheduledTaskRequest`：`name`、`projectId`、`provider`、`prompt`、`schedule`、`misfirePolicy`、`enabled` 必填；`model`、`effort`、`executionPolicy` 可选。`executionPolicy` 可为 `sandbox`、`auto-review` 或 `full-access`，省略时仍为 sandbox；可用值以当前 Backend capabilities 为准，不支持的值会被 `validate-*` 明确拒绝而不会降级。`full-access` 无沙箱且不等待交互审批，可联网并访问 Browser、模拟器和本机文件，只应使用可信提示词。Browser、模拟器、网络或 Git 不是额外配置字段，是否使用由完整提示词和对应 Skill 决定。编辑文件是 `UpdateScheduledTaskRequest`：只放修改字段和从 `get` 读取的 `expectedRevision`；`model`、`effort` 可用 `null` 恢复默认。具体字段与合法范围以 Backend 的严格 schema 和 `validate-*` 结果为准。默认不开启任何额外运行或删除操作。
 
 创建时保留本次 UUID 与原文件。若请求结果未知，只能用**相同文件、摘要、Backend 和 Idempotency-Key**核对或重试；新键会创建第二个任务。编辑没有幂等键：结果未知时先 `get`，核对 revision 和字段，不能盲目重复 `update`。旧 revision 返回冲突，应重新读取、整理并请用户再次确认。认证失效时沿用 `rw auth` 的 profile 刷新机制，不把 token 写入草稿或命令参数。
 

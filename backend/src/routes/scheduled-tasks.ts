@@ -32,7 +32,9 @@ const configShape = {
   prompt: z.string().trim().min(1).max(12_000),
   model: z.string().trim().min(1).max(200).optional(),
   effort: z.string().trim().min(1).max(100).optional(),
-  executionPolicy: z.enum(["sandbox", "auto-review"]).optional(),
+  executionPolicy: z
+    .enum(["sandbox", "auto-review", "full-access"])
+    .optional(),
   misfirePolicy: z
     .discriminatedUnion("mode", [
       z.object({ mode: z.literal("skip") }).strict(),

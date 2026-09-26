@@ -11,6 +11,7 @@ import { TaskActions } from "./task-actions";
 import {
   displayTime,
   displayDuration,
+  executionPolicyLabel,
   misfirePolicyLabel,
   RequestError,
   safeArtifactUrl,
@@ -191,9 +192,7 @@ function RunRecord({
             模型：{run.snapshot.model || "默认"} · 推理：
             {run.snapshot.effort || "默认"}
             {" · 权限："}
-            {run.snapshot.executionPolicy === "auto-review"
-              ? "自动审批"
-              : "仅沙箱"}
+            {executionPolicyLabel(run.snapshot.executionPolicy)}
           </p>
           <p className="mt-2 whitespace-pre-wrap break-words">
             {run.snapshot.prompt}
@@ -256,9 +255,7 @@ export function TaskDetail({
           <p className="mt-2 text-sm">{scheduleLabel(task.data.schedule)}</p>
           <p className="mt-2 text-sm text-muted-foreground">
             执行权限：
-            {task.data.executionPolicy === "auto-review"
-              ? "自动审批"
-              : "仅沙箱"}
+            {executionPolicyLabel(task.data.executionPolicy)}
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
             {task.data.enabled
