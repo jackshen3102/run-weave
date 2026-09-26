@@ -5448,6 +5448,38 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；fs.readFile(failure.logPath)"
   },
   {
+    "file": "scripts/dev-session/beta-pool/recovery/runtime-references.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "仅把当前进程环境传给 Session registry 锁和 manifest 定位；Session 根被显式覆盖，不从环境补齐业务配置。"
+  },
+  {
+    "file": "scripts/dev-session/beta-pool/recovery/runtime-references.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(backupPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "显式修复前将 Beta 槽位 warm-state 原始字节写成 0600 私有备份，不写 settings.yaml。"
+  },
+  {
+    "file": "scripts/dev-session/beta-pool/recovery/runtime-references.mjs",
+    "kind": "file-io",
+    "expression": "handle.readFile()",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取 Beta 槽位 warm-state 原件以核对期望 SHA-256，避免修复时覆盖并发修改。"
+  },
+  {
+    "file": "scripts/dev-session/beta-pool/recovery/runtime-references.mjs",
+    "kind": "file-io",
+    "expression": "handle.writeFile(original)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "修复后安全检查失败时逐字节恢复槽位 warm-state，保持原数据和回退证据。"
+  },
+  {
     "file": "scripts/dev-session/beta-pool/retention.mjs",
     "kind": "file-io",
     "expression": "fs .readFile(targets.statePath)",
