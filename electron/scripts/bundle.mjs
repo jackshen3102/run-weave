@@ -146,7 +146,7 @@ await build({
   entryPoints: ["../backend/src/scheduled-tasks/storage/sqlite-worker.ts"],
   outfile: scheduledTasksWorkerEntry,
   format: "cjs",
-  external: ["better-sqlite3"],
+  external: ["better-sqlite3", "fs-native-extensions"],
 });
 finalizeActivitySqliteRuntime(
   activityWorkerEntry,

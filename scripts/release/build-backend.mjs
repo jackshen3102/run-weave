@@ -159,6 +159,7 @@ cpSync(
   path.join(repoRoot, "scripts", "install", "backend.mjs"),
   path.join(releaseDir, "install.mjs"),
 );
+copyNativeLockRuntime(backendDir);
 
 const files = listFiles(releaseDir).map((file) => ({
   path: file,
@@ -201,5 +202,3 @@ console.log(`[backend-release] built ${releaseDir}`);
 console.log(
   `[backend-release] archive ${path.join(artifactsRoot, `${releaseId}.tar.gz`)}`,
 );
-
-copyNativeLockRuntime(backendDir);
