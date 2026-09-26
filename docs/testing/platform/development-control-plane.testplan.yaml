@@ -132,3 +132,92 @@ cases:
       - 区分真实 lsof/HTTP 证据与构造清单检查：两个 adapter 的私有 parser 保持一致，构造 IPv4/IPv6/mapped/wildcard 清单按确切端点匹配，未知字段、地址族、非数值地址、错误端口或不完整 NUL record 均拒绝。
       - 验证 JSON 转义后恰为 16 KiB 的配置可被 scripts 和 Electron 读取；超一字节以及 8192 个引号或反斜杠的 token 被拒绝且先前文件不变，错误不含 token。
       - 停止 Session 并验证 mutable reset 清除私有 tunnel 配置；下一个无 token 的 owner 不继承旧凭据，损坏配置不得静默降级。
+
+  - id: DCP-012
+    name: Beta 完整 App 更新只生成安装所需产物
+    required: true
+    description: >
+      验证本机 Beta 完整 App 更新直接安装当前源码构建的解包 App，不等待本次无用的 DMG/ZIP；
+      Stable 分发产物和 Beta 的安装、回滚、身份核对语义不变。
+    preconditions:
+      - 当前 worktree 有必须完整更新 App 的源码变更，目标 Beta 槽位可安全分配，已记录 Stable 与目标槽位基线。
+    steps:
+      - 通过 `$toolkit:runweave-dev-session` 以显式 beta profile 启动并记录更新计划、构建产物时间和实际安装的 App identity；确认本次 Beta 构建没有等待 DMG/ZIP 生成。
+      - 用 `dev:status`、`dev:open --surface desktop` 和 `$toolkit:playwright-cli` 确认页面属于当前 worktree revision、Session 和槽位；核对安装与回滚状态，Stable 及其它槽位基线不变。
+      - 停止本次 Session；确认槽位 lease 正常释放。完整 App 更新失败的回滚边界继续由 DCP-008 验证。
+
+  - id: DCP-013
+    name: 自有 Beta Backend 的桌面会话自动取得认证
+    required: true
+    description: >
+      验证 fresh Beta userData 与本次自有 loopback Backend 身份一致时，桌面无需输入密码就进入
+      已认证的终端页面；认证只对当前 Session 和当前窗口生效。
+    preconditions:
+      - 可通过 `$toolkit:runweave-dev-session` 启动独占 Backend 的 Beta Session，且该槽位 userData 已按正常 release 合同重建。
+    steps:
+      - 启动 Session，读取 manifest、lease、Backend lock 与 `dev:open --surface desktop` 身份，再使用 `$toolkit:playwright-cli` 附着目标桌面；确认无需表单输入即可进入已认证页面。
+      - 用当前页面调用受保护的 Terminal 读取接口，确认已认证且 Backend instance 与 manifest 一致；核对 CLI JSON、manifest、日志和页面 URL 不含账号密码或 token。
+      - 停止本次 Session；确认其 lease 释放，旧认证没有被保存成下一 owner 可复用的槽位资料。
+
+  - id: DCP-014
+    name: 非自有 Backend 不接受 Beta 桌面自动认证
+    required: true
+    description: >
+      验证 shared 或 external Backend 的身份无法与当前 Beta 自有 Backend 匹配时，不向该目标
+      发送本机 Beta 凭据，也不把其它 Session 的会话注入桌面。
+    preconditions:
+      - 可创建引用明确 shared Backend 的 Beta Session，另有不同 Backend instance 作为干扰，均已记录地址与 lock 身份。
+    steps:
+      - 启动引用 shared Backend 的 Beta Session，通过 `dev:open --surface desktop` 与 `$toolkit:playwright-cli` 查看真实页面；确认仍要求正常登录，干扰 Backend 不获得 Beta 自动认证请求。
+      - 让 Backend lock、Session 或窗口来源出现身份不匹配；确认自动认证拒绝，页面不进入已认证状态，且错误不含凭据。
+      - 停止本次 Session；确认 shared Backend 和干扰实例保持原状态。
+
+  - id: DCP-015
+    name: 准备项目后精确打开可执行的目标终端
+    required: true
+    description: >
+      验证单次 `dev:session --ready-project` 根据当前 worktree 的真实路径准备项目与 terminal，
+      shell 实际执行探针且桌面选中同一 terminal。
+    preconditions:
+      - 当前 worktree 路径存在，可启动本次自有 Backend 与桌面 surface，已有另一个项目和 terminal 用作干扰。
+    steps:
+      - 使用 `$toolkit:runweave-dev-session` 启动并传入当前 worktree 的绝对项目路径；确认 JSON 返回当前 Backend 下的 projectId、terminalSessionId、shellReady 与身份，单独记录整段耗时。
+      - 通过 `rw` 对返回的 terminalSessionId 发送唯一探针并读取 snapshot；确认命令输出实际出现，且项目真实路径匹配本次 worktree。
+      - 使用 `dev:open --session <id> --surface desktop` 与 `$toolkit:playwright-cli` 确认桌面 URL、选中项目、Terminal emulator 对应返回的同一 ID；项目确保操作没有创建重复项目或误选干扰 terminal。
+      - 停止本次 Session，确认只回收该 Session 自有资源。
+
+  - id: DCP-016
+    name: 常规 Beta runtime 更新在 30 秒内达到终端可用
+    required: true
+    description: >
+      验证常规源码 runtime 更新的用户等待时间从发起初始化到准确源码的目标 terminal
+      实际执行探针且桌面选中为止，不超过 30 秒；构建预备时间单独报告。
+    preconditions:
+      - 准备 20 个独立的常规 runtime 变更现场，均有可用 Beta 槽位，并能记录发起前的源码与预备产物指纹。
+    steps:
+      - 每轮通过 `$toolkit:runweave-dev-session` 发起初始化，记录单调时钟阶段时长、源码/产物指纹、Session/lease 身份和 shell/UI 后置证据；每轮按归属停止。
+      - 分别报告预备构建耗时与发起后的 20 个等待时长；确认正确源码的终端与页面全部真实可用，等待时长的 p95 不超过 30 秒，任何错误指纹或仅 API ready 的轮次均不得计为通过。
+
+  - id: DCP-017
+    name: Beta 完整 App 更新在 30 秒内达到终端可用
+    required: true
+    description: >
+      验证 Electron 或安装敏感变更触发完整 App 更新时，发起初始化到当前源码 App 的目标 terminal
+      实际执行探针且桌面选中为止，等待时长的 p95 不超过 30 秒。
+    preconditions:
+      - 准备 20 个独立且确实需要完整 App 更新的源码现场；每轮有可安全分配的 Beta 槽位，并记录 Stable、目标槽位和预备产物指纹基线。
+    steps:
+      - 每轮通过 `$toolkit:runweave-dev-session` 发起初始化，记录单调时钟阶段时长、安装 App identity、Session/lease、Backend、shell 探针与 `$toolkit:playwright-cli` 桌面目标证据；每轮按归属停止。
+      - 分别报告预备构建耗时与发起后的 20 个等待时长；确认安装 App 与当前源码匹配、Stable 基线不变，等待时长的 p95 不超过 30 秒；旧产物、错误目标或只到登录页的轮次不得计为通过。
+
+  - id: DCP-018
+    name: 同源码 Beta 构建复用与失效
+    required: true
+    description: >
+      验证停止旧 Session 后只有源码、构建环境、App 安装目录与 App Server release 均匹配时
+      才复用构建；新 Session 的 lease、Backend、userData、认证和终端必须重新建立。
+    preconditions:
+      - 同一 worktree 已完成一次完整 Beta 更新并正常停止；可修改一个源码文件或前端构建环境。
+    steps:
+      - 在源码和构建环境不变时重新启动，核对本次没有触发构建，且新 Session ID、Backend lock、终端探针和桌面身份均属于新 owner。
+      - 修改源码、前端构建环境或安装 App identity 后分别启动，确认缓存失效并重新构建；旧 userData、凭据或服务身份不得被带入。

@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { PackagedBackendConnectionState } from "@runweave/shared/runtime-monitor";
+import type { LoginResponse } from "@runweave/shared/protocol";
 import {
   startPackagedBackend,
   type PackagedBackendRuntime,
@@ -21,6 +22,7 @@ import {
   desktopChannel,
   desktopSourceRevision,
   isBetaChannel,
+  isManagedDevSession,
   isDev,
 } from "../../desktop/config.js";
 import { desktopRuntime } from "../../desktop/runtime-state.js";
@@ -32,6 +34,7 @@ import {
 import {
   buildPackagedBackendBaseEnv,
   ensureBetaCliProfile,
+  requestBetaDevSessionAuth,
   resolvePackagedBackendProfileDir,
 } from "./auth.js";
 
@@ -415,6 +418,31 @@ export async function reloadLocalRuntime(): Promise<PackagedBackendConnectionSta
 }
 
 export function registerPackagedBackendHandlers(): void {
+  ipcMain.handle(
+    "viewer:get-dev-session-auth",
+    async (event, backendUrl: string): Promise<LoginResponse> => {
+      const window = desktopRuntime.mainWindow;
+      const runtime = desktopRuntime.packagedBackend;
+      const senderUrl = event.senderFrame?.url ?? "";
+      if (
+        !isBetaChannel ||
+        !isManagedDevSession ||
+        process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND !== "true" ||
+        !window || window.isDestroyed() ||
+        event.sender !== window.webContents ||
+        event.senderFrame !== window.webContents.mainFrame ||
+        !senderUrl.startsWith("runweave://app/") ||
+        typeof backendUrl !== "string" ||
+        !runtime || !runtime.child.pid ||
+        !desktopRuntime.packagedBackendState.available ||
+        backendUrl !== runtime.backendUrl ||
+        backendUrl !== desktopRuntime.packagedBackendState.backendUrl
+      ) {
+        throw new Error("Dev Session auth requires the owned Beta main window and Backend");
+      }
+      return await requestBetaDevSessionAuth(backendUrl, runtime.child.pid);
+    },
+  );
   ipcMain.handle(
     "viewer:get-packaged-backend-state",
     async (): Promise<PackagedBackendConnectionState> => {

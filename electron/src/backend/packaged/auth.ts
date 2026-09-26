@@ -12,6 +12,7 @@ import { randomBytes } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { resolveBrowserProfileDir } from "@runweave/shared/browser-profile-node";
+import type { LoginResponse } from "@runweave/shared/protocol";
 import { isBetaChannel, isDev } from "../../desktop/config.js";
 import { localBackendAuthHeaders, restoreOwnedBackendHealthEnv } from "../health-auth.js";
 
@@ -296,6 +297,40 @@ export async function requestBetaCliAuth(
     );
   }
   return (await loginResponse.json()) as BetaCliAuthResponse;
+}
+
+export async function requestBetaDevSessionAuth(
+  baseUrl: string,
+  backendPid: number,
+): Promise<LoginResponse> {
+  const profileDir = resolvePackagedBackendProfileDir();
+  const backendEnv = restoreOwnedBackendHealthEnv({
+    ...process.env,
+    BROWSER_PROFILE_DIR: profileDir,
+  });
+  const endpoint = `${baseUrl}/api/auth/login`;
+  const authConfig = resolveBetaPackagedBackendAuthConfig();
+  const response = await net.fetch(endpoint, {
+    method: "POST",
+    redirect: "error",
+    headers: {
+      ...localBackendAuthHeaders(endpoint, profileDir, backendEnv, backendPid),
+      "Content-Type": "application/json",
+      "x-auth-client": "electron",
+    },
+    body: JSON.stringify({
+      username: authConfig.username,
+      password: authConfig.password,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Beta Dev Session login failed with status ${response.status}`);
+  }
+  const session = (await response.json()) as LoginResponse;
+  if (!session.accessToken || !session.refreshToken || !session.sessionId || !session.expiresIn) {
+    throw new Error("Beta Dev Session login returned an incomplete session");
+  }
+  return session;
 }
 
 export async function ensureBetaCliProfile(baseUrl: string): Promise<void> {

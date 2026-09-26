@@ -42,6 +42,7 @@ import {
   updateManifest,
 } from "./commands/manifest.mjs";
 import { cleanupFailedStart } from "./commands/start-cleanup.mjs";
+import { prepareBetaProject } from "./ready-project.mjs";
 
 function parseArgs(argv) {
   const command = argv[0] ?? "start";
@@ -77,6 +78,7 @@ function parseArgs(argv) {
       ["--changed-file", "changedFiles"],
       ["--service", "serviceOverrides"],
       ["--instance", "instanceId"],
+      ["--ready-project", "readyProject"],
     ]);
     const key = valueOptions.get(arg);
     if (!key) {
@@ -95,6 +97,14 @@ function parseArgs(argv) {
   }
   if (options.cleanupStale && command !== "stop") {
     throw new DevSessionError("--cleanup-stale is only valid with stop", 2);
+  }
+  if (options.readyProject && command !== "start") {
+    throw new DevSessionError("--ready-project is only valid with start", 2);
+  }
+  if (options.readyProject && options.serviceOverrides.some((value) =>
+    value.startsWith("backend=") && value !== "backend=dedicated"
+  )) {
+    throw new DevSessionError("--ready-project requires a dedicated Backend", 2);
   }
   return options;
 }
@@ -206,10 +216,12 @@ async function runStart(options, sourceRoot) {
   let plan = buildDevSessionPlan({
     sourceRoot,
     changedFiles,
-    explicitProfile: options.profile,
+    explicitProfile: options.profile ?? (options.readyProject ? "beta" : undefined),
     explicitSurface: options.surface,
     explicitInstance: options.instanceId,
-    serviceOverrides: options.serviceOverrides,
+    serviceOverrides: options.readyProject
+      ? [...options.serviceOverrides, "backend=dedicated"]
+      : options.serviceOverrides,
   });
   if (options.dryRun) {
     const fixtureScope = await resolveAgentTeamFixtureScope({
@@ -243,6 +255,9 @@ async function runStart(options, sourceRoot) {
         noProcessesStarted: true,
       },
     );
+  }
+  if (options.readyProject && plan.profile !== "beta") {
+    throw new DevSessionError("--ready-project requires the beta profile", 2);
   }
   const sessionId = assertDevSessionId(
     options.sessionId ?? createReadableSessionId(),
@@ -370,14 +385,16 @@ async function runStart(options, sourceRoot) {
           await writeManifest(manifest);
         },
       });
-      manifest = updateManifest(manifest, {
-        state: "ready",
-        services: startedServices,
-      });
+      manifest = updateManifest(manifest, { services: startedServices });
+      const readyProject = options.readyProject
+        ? await prepareBetaProject(manifest, options.readyProject)
+        : null;
+      manifest = updateManifest(manifest, { state: "ready" });
       await writeManifest(manifest);
       printResult(
         {
           ...publicManifest(manifest),
+          ...(readyProject ? { readyProject } : {}),
           ...(plan.profile === "beta" ? { poolRecovery } : {}),
         },
         options.json,

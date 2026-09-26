@@ -2,11 +2,11 @@ import { OverlayProvider } from "./features/overlay/provider";
 import { CodexQuotaProvider } from "./features/codex-quota/provider";
 import { MobileLoginProvider } from "./features/mobile-login/provider";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { TunnelDrawer } from "./features/tunnels/drawer";
 import { useTunnelStore } from "./features/tunnels/store";
 import { SuijiDrawer } from "./features/suiji/drawer";
-import { resolveNeedsConnection } from "./features/connection/system-connection";
+import { LOCAL_DEV_CONNECTION_ID, resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
 import { ConnectionWorkspaceObservers } from "./features/connection/workspace-overview";
 import { setTerminalNavigation } from "./features/terminal/state/navigation";
@@ -79,6 +79,23 @@ function RunweaveApp() {
     connectionId: activeConnectionId,
     webStorageKey: AUTH_TOKEN_STORAGE_KEY,
   });
+  const devSessionAuthAttempt = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      activeConnectionId !== LOCAL_DEV_CONNECTION_ID ||
+      !apiBase || token || authStatus !== "unauthenticated" ||
+      !window.electronAPI?.getDevSessionAuth ||
+      devSessionAuthAttempt.current === apiBase
+    ) return;
+    devSessionAuthAttempt.current = apiBase;
+    let cancelled = false;
+    void window.electronAPI.getDevSessionAuth(apiBase).then((session) => {
+      if (!cancelled) setSession(session);
+    }).catch(() => {
+      // Shared or unavailable Backends keep the normal login page.
+    });
+    return () => { cancelled = true; };
+  }, [activeConnectionId, apiBase, authStatus, setSession, token]);
 
   const needsConnection = resolveNeedsConnection(isElectron, activeConnection);
   const isAuthChecking = !needsConnection && authStatus === "checking";

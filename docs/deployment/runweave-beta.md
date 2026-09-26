@@ -67,6 +67,27 @@ mutable reset 会清除它；损坏配置
 
 ## 快速开始
 
+需要直接进入当前 worktree 的可用终端时，在该 worktree 执行：
+
+```bash
+pnpm dev:session --ready-project "$(pwd)" --json
+```
+
+此入口会选择 Beta 和自有 Backend，使用当前槽位的 CLI 认证确保项目、创建默认 tmux
+终端，并在 shell 执行 `pwd` 后返回 `readyProject.projectId`、`terminalSessionId` 与
+`shellReady`。桌面仅对这个自有 Backend 的主窗口自动取得会话；shared/external Backend
+仍按常规方式登录。页面级验收需通过返回 Session 的 `dev:open --surface desktop` 附着，
+核对页面实际选中该终端。
+
+Beta 安装只构建解包 App，不生成仅供分发的 DMG/ZIP。槽位保留的 App、App Server release
+与当前 worktree 的 Git HEAD、未提交构建输入内容、前端构建环境及安装目录身份全部一致时，
+下次新 Session 可复用这些构建产物；仍会重新获取 lease、启动进程、重建 userData 和认证。
+`docs/` 下的未提交文档变化不触发 App 重建。其它条件不符就执行完整构建。
+复用仅针对同一源码现场，不能把其耗时当成源码变更后完整构建的耗时。
+2026-09-26 最终源码的单次实测：完整构建到 shell 探针成功为 53.544 秒；
+停止后同源码复用为 10.379 秒，到桌面终端可见为 11.971 秒。
+30 秒目标尚未覆盖源码变更后的完整构建，也没有 p95 结论。
+
 ### 1. 只读规划
 
 ```bash

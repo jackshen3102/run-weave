@@ -11,6 +11,23 @@ import {
 } from "./core.mjs";
 import { codesignEnvFileRelativePath } from "./context.mjs";
 
+export function fingerprintFrontendBuildEnv(env) {
+  const values = Object.entries(env)
+    .filter(([name, value]) => name.startsWith("VITE_") && typeof value === "string")
+    .sort(([left], [right]) => left.localeCompare(right));
+  return createHash("sha256").update(JSON.stringify(values)).digest("hex");
+}
+
+export async function getPathIdentity(targetPath) {
+  try {
+    const stat = await fs.stat(targetPath);
+    return `${stat.dev}:${stat.ino}:${stat.mtimeMs}`;
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 export function createDesktopLaunchEnv() {
   const env = { ...process.env };
   for (const name of Object.keys(env)) {

@@ -8,9 +8,14 @@ import {
   buildBetaStatus,
   getGitHead,
   readJson,
+  runCapture,
   resolveBetaPaths,
   writeJson,
+  getPathIdentity,
+  isPidLive,
+  readReleaseId,
 } from "./state.mjs";
+import { createWorktreeSnapshot, fingerprintFrontendBuildEnv } from "../update/system.mjs";
 import {
   appendFailureDiagnostic,
   buildUpdateEnv,
@@ -37,6 +42,12 @@ import {
   purgeLegacyBeta,
   restoreLegacyBeta,
 } from "./legacy.mjs";
+
+function buildInputSnapshot(snapshot) {
+  return Object.fromEntries(
+    Object.entries(snapshot ?? {}).filter(([file]) => !file.startsWith("docs/")),
+  );
+}
 
 function parseControlArgs(args) {
   const options = {
@@ -137,6 +148,56 @@ async function update(
       process.exitCode = result.code;
     }
     return;
+  }
+
+  if (paths.devSessionId && args.includes("--mode") && args[args.indexOf("--mode") + 1] === "app") {
+    const state = await readJson(paths.statePath);
+    const currentSnapshot = await createWorktreeSnapshot(paths.sourceRoot);
+    const sameSource = state?.channel === BETA_CHANNEL &&
+      state.mode === "app" &&
+      state.sourceRoot === paths.sourceRoot &&
+      state.gitHead === gitHead &&
+      JSON.stringify(buildInputSnapshot(state.worktreeSnapshot)) ===
+        JSON.stringify(buildInputSnapshot(currentSnapshot)) &&
+      state.frontendBuildEnvFingerprint === fingerprintFrontendBuildEnv({
+        ...env,
+        VITE_RUNWEAVE_VERSION: state.appVersion,
+      });
+    const sameApp = state?.appPath === paths.appPath &&
+      typeof state.appIdentity === "string" &&
+      state.appIdentity === await getPathIdentity(paths.appPath);
+    const sameAppServer = sharedAppServer || (
+      state?.appServerReleaseId &&
+      state.appServerReleaseId === await readReleaseId(paths.appServerCurrentPath)
+    );
+    const pending = await fs.lstat(paths.pendingPath).then(
+      () => true,
+      (error) => {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      },
+    );
+    if (sameSource && sameApp && sameAppServer && !state.lastFailure &&
+      !pending) {
+      const startedAt = Date.now();
+      const cliBuild = await runCapture("node", ["scripts/bundle.mjs"], {
+        cwd: path.join(paths.sourceRoot, "packages", "runweave-cli"),
+        env: { ...env, RUNWEAVE_CLI_BUNDLE_OUTFILE: paths.controlCliPath },
+      });
+      if (!cliBuild.ok) {
+        throw new Error("cached Beta CLI preparation failed");
+      }
+      if (!sharedAppServer) {
+        const start = await runAppServerCli(paths, "start", gitHead);
+        if (!start.ok) {
+          throw new Error("cached Beta App Server failed to start");
+        }
+      }
+      await openBeta(paths, env);
+      const status = await waitForHealthyBeta(paths, true, startedAt);
+      console.log(JSON.stringify({ ...status, reusedBuild: true }, null, 2));
+      return status;
+    }
   }
 
   const startedAt = Date.now();
@@ -462,11 +523,25 @@ async function main() {
     await withBetaLock(paths, async () => {
       await quitBeta(paths);
       if (!options.sharedAppServerLockPath) {
-        const appServerStop = await runAppServerCli(paths, "stop");
-        if (!appServerStop.ok && !/not running/i.test(appServerStop.stderr)) {
-          throw new Error(
-            `failed to stop Beta App Server: ${appServerStop.stderr}`,
-          );
+        const controlCliExists = await fs.access(paths.controlCliPath).then(
+          () => true,
+          (error) => {
+            if (error.code === "ENOENT") return false;
+            throw error;
+          },
+        );
+        if (!controlCliExists) {
+          const lock = await readJson(paths.appServerLockPath);
+          if (lock?.pid && isPidLive(lock.pid)) {
+            throw new Error("cannot stop a live Beta App Server without its CLI");
+          }
+        } else {
+          const appServerStop = await runAppServerCli(paths, "stop");
+          if (!appServerStop.ok && !/not running/i.test(appServerStop.stderr)) {
+            throw new Error(
+              `failed to stop Beta App Server: ${appServerStop.stderr}`,
+            );
+          }
         }
       }
     });
