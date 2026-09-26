@@ -1,10 +1,10 @@
 # Runweave Beta 开发与使用指南
 
-Runweave Beta 是 macOS 本机开发通道。正式版 Runweave（Stable）继续承载终端和开发上下文；当前源码 worktree 通过 Beta 控制命令构建并部署到本机 Beta 实例，作为被开发、重启、验证和回滚的目标。
+本文中的 Beta 是 macOS 打包测试资源池的历史名称，不是独立运行环境或发行通道。正式版 Runweave（Stable）继续承载终端和开发上下文；测试只能通过 `pnpm dev:session` 创建有归属的 Dev Session，再由控制面使用 Beta 池槽位构建、重启、验证和恢复。
 
 日常开发不再自行命名 Beta 实例。`pnpm dev:session` 从固定的 `pool-01` 至 `pool-05` 中分配一个槽位，并用 lease 隔离并行 worktree；调用方只保存返回的 `devSessionId`。`default`、`agent-a` 等自定义实例只作为既有 legacy 资源被只读盘点、停止或显式清理，不能再更新、打开或回滚。
 
-`dev-session --profile beta` 使用独立的固定池策略：只会分配 `pool-01` 至 `pool-05`，不再按 Session 创建新的 App 或实例目录。`--dry-run` 只返回非权威容量快照；真实 start 才获取 lease，stop 完成进程身份校验、mutable reset、release retention 和 metadata 落盘后才释放。`update`、`open`、`rollback` 等低层可变操作只接受固定池 ID；既有 legacy instance 只允许只读盘点、停止和显式 cleanup，不再允许创建或更新。
+`dev-session --profile beta` 使用独立的固定池策略：只会分配 `pool-01` 至 `pool-05`，不再按 Session 创建新的 App 或实例目录。`--dry-run` 只返回非权威容量快照；真实 start 才获取 lease，stop 完成进程身份校验、mutable reset、release retention 和 metadata 落盘后才释放。`update`、`open`、`rollback` 等低层可变操作须匹配活动 Dev Session 的 manifest 和槽位 lease；不能单独创建或重开 Beta。既有 legacy instance 只允许只读盘点、停止和显式 cleanup，不再允许创建或更新。
 
 池槽位的 Desktop Runtime 与 update state 位于实例根目录的 `runtime/` 和 `warm-state/`，不在会被整体替换的 `user-data/` 中。每槽 Desktop Runtime、App Server Runtime 只保留 current + previous；App 回滚副本使用不带 `.app` 后缀的隐藏 rollback 目录，避免被 LaunchServices 注册。legacy 资源只由 `legacy-inventory` 盘点，必须通过单实例 `legacy-cleanup` 进入 quarantine，并用 operation id 显式 restore 或二次确认 purge。
 
