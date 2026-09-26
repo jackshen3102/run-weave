@@ -431,9 +431,6 @@ async function verify(paths) {
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   const { forwarded, options } = parseControlArgs(args);
-  if (["update", "open", "rollback"].includes(command)) {
-    assertBetaSlotId(options.instanceId);
-  }
   await assertManagedBetaLaunch({
     command,
     instanceId: options.instanceId,
@@ -441,6 +438,9 @@ async function main() {
     sourceRoot: process.cwd(),
     homeDir: os.homedir(),
   });
+  if (["update", "open", "rollback"].includes(command)) {
+    assertBetaSlotId(options.instanceId);
+  }
   if (command === "migrate") {
     throw new Error(
       "legacy Beta migration is retired; use dev:session and legacy-cleanup",
