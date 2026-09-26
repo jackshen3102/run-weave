@@ -1,7 +1,9 @@
 import { createReadStream } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
 import { TerminalPreviewError, resolvePreviewPath } from "./paths";
+import { getPreviewFileDiff } from "./git";
 
 const MAX_HTML_BYTES = 1024 * 1024;
 const MAX_RESOURCE_BYTES = 5 * 1024 * 1024;
@@ -13,6 +15,25 @@ export async function resolveHtmlPreviewEntry(projectPath: string | null | undef
   if (!info?.isFile()) throw new TerminalPreviewError("HTML file not found", 404);
   if (info.size > MAX_HTML_BYTES) throw new TerminalPreviewError("HTML file exceeds preview limit", 413);
   return absolutePath;
+}
+
+export async function resolveHtmlChangePreview(params: {
+  projectId: string;
+  projectPath: string | null | undefined;
+  requestedPath: string;
+  changeKind: TerminalPreviewChangeKind;
+  version: string;
+}): Promise<{ htmlPath: string; content: Buffer }> {
+  if (!/\.html?$/i.test(params.requestedPath)) throw new TerminalPreviewError("Only HTML files can be previewed", 415);
+  const diff = await getPreviewFileDiff(params);
+  const side = diff.status === "deleted" ? diff.oldSide : diff.newSide;
+  if (side?.version !== params.version) throw new TerminalPreviewError("HTML changed; reload preview", 409);
+  if (side.state !== "ready" || side.contentKind !== "text") {
+    throw new TerminalPreviewError("HTML content is unavailable", 415);
+  }
+  const content = Buffer.from(diff.status === "deleted" ? diff.oldContent : diff.newContent, "utf8");
+  if (content.length > MAX_HTML_BYTES) throw new TerminalPreviewError("HTML file exceeds preview limit", 413);
+  return { htmlPath: diff.absolutePath, content };
 }
 
 export async function resolveHtmlPreviewResource(entryPath: string, requestedPath: string): Promise<{

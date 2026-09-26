@@ -466,7 +466,7 @@ export function TerminalPreviewPanelShell({
             ) : null}
             {mode === "changes" &&
             selectedChangePath &&
-            (fileKind === "markdown" || fileKind === "svg") ? (
+            (fileKind === "markdown" || fileKind === "svg" || fileKind === "html") ? (
               <div className="flex shrink-0 rounded-md border border-slate-800 p-0.5">
                 {(["diff", "preview"] as const).map((viewMode) => (
                   <button

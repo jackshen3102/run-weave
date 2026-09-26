@@ -42,8 +42,14 @@ extension APIClient {
   func file(projectID: String, path: String) async throws -> PreviewFile {
     try await cachedPreview(previewPath(projectID, "file", ["path": path]))
   }
-  func htmlPreviewTicket(projectID: String, path: String) async throws -> HtmlPreviewTicket {
-    try await authorized(previewPath(projectID, "html-ticket"), method: "POST", body: ["path": path])
+  func htmlPreviewTicket(projectID: String, path: String, changeKind: String? = nil,
+                         version: String? = nil) async throws -> HtmlPreviewTicket {
+    var body = ["path": path]
+    if let changeKind, let version {
+      body["changeKind"] = changeKind
+      body["version"] = version
+    }
+    return try await authorized(previewPath(projectID, "html-ticket"), method: "POST", body: body)
   }
   func diff(projectID: String, path: String, kind: String, force: Bool = false) async throws -> PreviewDiff {
     try await cachedPreview(previewPath(projectID, "file-diff", ["path": path, "kind": kind]), force: force)
