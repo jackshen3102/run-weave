@@ -28,7 +28,7 @@ node scripts/ios.mjs build --simulator <UDID> --configuration Debug
 node scripts/ios.mjs run --task-dir <本工作区任务目录> --configuration Debug
 ```
 
-使用 doctor 列出的已安装 destination。支持 Debug、Profile、Release 三种配置。模拟器安装前先按[共享设备池](../../docs/cli/ios-simulators.md)申请任务；run 会构建当前源码、安装并核对二进制。
+使用 doctor 列出的已安装 destination。支持 Debug、Profile、Release 三种配置。模拟器安装前先按[共享设备池](../../docs/cli/ios-simulators.md)申请任务；run 会核对当前源码、构建产物和设备上的二进制，按需构建或安装后启动。
 Debug/Profile 真机构建启用 APNs sandbox 推送，Release 使用 production；
 需要支持 Push Notifications 的 Apple Developer Program 团队和描述文件。
 推送密钥、网关和仅安装电量展示版的本地签名覆盖方式见[推送网关](../push-gateway/README.md#ios-签名和启用)。

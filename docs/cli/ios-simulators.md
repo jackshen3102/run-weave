@@ -17,7 +17,13 @@ node packages/app-ios/scripts/ios.mjs run --task-dir "$PWD/.runweave/mobile-qa/m
 ```
 
 随记使用 `--app suiji` 申请，并调用 `packages/suiji-ios/scripts/ios.mjs run`。
-`run` 执行当前 worktree 的增量构建、安装和二进制核对，然后启动 App。
+`run` 核对当前 worktree 的 iOS 构建输入、Xcode/SDK、配置与本地 App 完整内容；
+一致时复用构建，否则执行 Xcode 增量构建。它再核对目标设备已安装的 Bundle ID、
+二进制、资源与 `BuildIdentity.json`；一致时直接启动，否则安装并复核后启动。
+结果的 `reusedBuild`、`reusedInstall` 分别说明两段是否复用，`installed-app.json`
+记录本次 lease 与核对时间。复用只省去重复准备工作，不能用 `simctl launch` 的返回值代替
+真实列表、终端或登录验收。Debug、Profile、Release 各保留自己的产物身份；源码输入、
+构建工具链或显式 Xcode 配置变化时仍须重新构建。
 默认 Debug，可指定 `--configuration Debug|Profile|Release`。
 `--simulator` 可省略；若提供，必须与 task-dir 中记录的 UDID 相同。
 单独 `build --simulator <UDID>` 不安装、不占用设备，但与同目录构建互斥。
@@ -84,8 +90,8 @@ node scripts/ios-simulators/cli.mjs recover --lease <旧lease> --udid <UDID> --j
 设备按 App 复用，所以同 Bundle ID 的不同分支共享登录、草稿和设置。
 每例自行建立前置状态，仅清理本例数据；不兼容的数据迁移或干净设备测试需要单独维护窗口。
 构建目录仍按 worktree 隔离，不共享 DerivedData。
-`installed-app.json` 记录 HEAD、含未提交源码的输入摘要、产物路径、已核对的二进制摘要、UDID 和 lease；
-Debug dylib 也参与二进制摘要。二进制核对不能替代真实 UI 或业务结果验收。
+`installed-app.json` 记录构建时 HEAD、含未提交源码的输入摘要、产物路径、已核对的二进制与完整 App 内容摘要、UDID 和 lease；
+Debug dylib 也参与二进制摘要。产物核对不能替代真实 UI 或业务结果验收。
 
 两台上限由托管入口落实，无法禁止手工 simctl 或未升级的旧脚本。
 所有参与验证的 worktree 和用户主动安装的技能都需要使用新入口；不自动复制到用户技能目录。
