@@ -75,7 +75,9 @@ export async function verifyBetaSlotPool(
     ),
     (error) =>
       error?.code === 1 &&
-      /Beta dev-session instance must be one of pool-01/.test(error.stderr),
+      /standalone Beta launch and rollback are retired; use pnpm dev:session/.test(
+        error.stderr,
+      ),
   );
   assert.equal(
     await fs
