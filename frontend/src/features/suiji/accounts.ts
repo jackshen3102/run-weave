@@ -1,3 +1,4 @@
+import { deviceStorage, deviceSessionStorage } from "../device-storage";
 import type {
   SuijiDesktopState,
   SuijiEnvironment,
@@ -20,21 +21,21 @@ const desktop = () => {
 // Web retains tab-scoped tokens. Password persistence is a desktop capability.
 export async function loadAccounts(): Promise<SuijiDesktopState> {
   if (window.electronAPI?.isElectron) return desktop().loadSuijiState!();
-  const saved = localStorage.getItem(key);
+  const saved = deviceStorage.getItem(key);
   const state: SuijiDesktopState = saved
     ? JSON.parse(saved)
     : {
         active: "production",
         profiles: {
           production: {
-            endpoint: localStorage.getItem("suiji.endpoint.v1") ?? "",
+            endpoint: deviceStorage.getItem("suiji.endpoint.v1") ?? "",
             username: "",
           },
           development: { endpoint: "http://127.0.0.1:4783", username: "" },
         },
       };
   for (const env of ["production", "development"] as const) {
-    const session = sessionStorage.getItem(`${key}:${env}`);
+    const session = deviceSessionStorage.getItem(`${key}:${env}`);
     if (session) state.profiles[env].session = JSON.parse(session);
   }
   return state;
@@ -48,15 +49,15 @@ export async function saveProfile(
   const state = await loadAccounts();
   state.profiles[environment] = profile;
   if (profile.session)
-    sessionStorage.setItem(
+    deviceSessionStorage.setItem(
       `${key}:${environment}`,
       JSON.stringify(profile.session),
     );
-  else sessionStorage.removeItem(`${key}:${environment}`);
+  else deviceSessionStorage.removeItem(`${key}:${environment}`);
   saveWebMetadata(state);
 }
 function saveWebMetadata(state: SuijiDesktopState) {
-  localStorage.setItem(
+  deviceStorage.setItem(
     key,
     JSON.stringify({
       ...state,

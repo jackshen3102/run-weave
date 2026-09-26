@@ -1,22 +1,10 @@
+import { configurationLibrary as configuration } from "../lib/configuration.mjs";
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-export function scheduledTaskDatabasePath({ beta = false } = {}) {
-  const profileDir = beta
-    ? process.env.BROWSER_PROFILE_DIR
-    : path.join(
-        os.homedir(),
-        ".runweave",
-        "browser-profile",
-        createHash("sha256").update("/").digest("hex").slice(0, 8),
-      );
-  if (!profileDir) {
-    throw new Error("Cannot determine the target Backend profile for update");
-  }
-  return path.join(profileDir, "scheduled-tasks", "scheduled-tasks.sqlite");
+export function scheduledTaskDatabasePath() {
+  return path.join(configuration.configurationPath("storage.scheduledTasksDirectory", "scheduled-tasks"), "scheduled-tasks.sqlite");
 }
 
 export async function assertNoActiveScheduledRuns(databasePath) {

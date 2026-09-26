@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { configurationLibrary } from "../lib/configuration.mjs";
 import {
   publishRestoredBaseline,
   snapshotPreviousRelease,
@@ -82,6 +83,7 @@ export async function collectBaseline(paths) {
     runtimeReleaseId: await readReleaseId(paths.runtimeCurrentPath),
     priorAppBackupPath: state?.previous?.app?.backupPath ?? null,
     priorPrevious: snapshotPreviousRelease(state?.previous),
+    devSessionId: paths.devSessionId,
     source: {
       gitDirty: state?.gitDirty ?? null,
       gitHead: state?.gitHead ?? null,
@@ -101,7 +103,6 @@ export function buildUpdateEnv(
   const env = {
     ...process.env,
     BROWSER_PROFILE_DIR: paths.profileDir,
-    RUNWEAVE_CONFIG_FILE: paths.cliConfigPath,
     RUNWEAVE_CLI_BUNDLE_OUTFILE: paths.controlCliPath,
     RUNWEAVE_APP_BACKUP_PATH: appBackupPath,
     RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: sharedAppServer
@@ -169,6 +170,7 @@ export function buildUpdateArgs(paths, args) {
     paths.appServerHome,
     "--state-path",
     paths.statePath,
+    "--instance", paths.devSessionId,
     ...args,
   ];
 }
@@ -271,7 +273,7 @@ export async function runAppServerCli(paths, command, sourceRevision = null) {
   }
   return await runCapture(
     "node",
-    [cliEntry, "app-server", command, "--home", paths.appServerHome],
+    [cliEntry, "app-server", command, "--home", paths.appServerHome, "--instance", paths.devSessionId],
     {
       env: buildUpdateEnv(
         paths,
@@ -316,7 +318,16 @@ export async function restoreBaseline(paths, baseline, options = {}) {
     }
     appBackupConsumed = !backup; // Retry after an already completed rename.
   }
-  if (appChanged || runtimeChanged) {
+  if ((appChanged || runtimeChanged || appServerChanged) && paths.devSessionId) {
+    const context = configurationLibrary.resolveConfigurationContext({ args: ["--instance", paths.devSessionId], home: paths.homeDir });
+    const saved = new configurationLibrary.ConfigurationStore(context).read().value;
+    const targets = [];
+    if (baseline.app.exists) targets.push((await readJson(path.join(appChanged && existsSync(appBackupPath) ? appBackupPath : paths.appPath, "Contents", "Resources", "configuration-compatibility.json"))));
+    if (baseline.runtimeReleaseId) targets.push((await readJson(path.join(paths.runtimeHome, "releases", baseline.runtimeReleaseId, "manifest.json")))?.configuration);
+    if (baseline.appServerReleaseId) targets.push((await readJson(path.join(paths.appServerHome, "runtime", "releases", baseline.appServerReleaseId, "manifest.json")))?.configuration);
+    if (targets.some(target => !configurationLibrary.supportsConfiguration(target, saved))) throw new Error("CONFIG_RELEASE_INCOMPATIBLE: restore requires a compatible program; settings.yaml was not changed");
+  }
+  if (appChanged || runtimeChanged || appServerChanged) {
     await quitBeta(paths);
   }
   if (appServerChanged) {

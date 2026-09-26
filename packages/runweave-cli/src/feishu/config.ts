@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { CliError } from "../errors.js";
 
 export interface FeishuConfig {
@@ -12,9 +13,9 @@ export function resolveFeishuConfig(
   env: NodeJS.ProcessEnv,
   options: { requireTargetChatId?: boolean } = {},
 ): FeishuConfig {
-  const appId = env.FEISHU_APP_ID?.trim();
-  const appSecret = env.FEISHU_APP_SECRET?.trim();
-  const targetChatId = env.FEISHU_TARGET_CHAT_ID?.trim();
+  const appId = settingText("services.feishu.appId")?.trim();
+  const appSecret = settingText("services.feishu.appSecret")?.trim();
+  const targetChatId = settingText("services.feishu.targetChatId")?.trim();
   if (!appId || !appSecret || (options.requireTargetChatId && !targetChatId)) {
     throw new CliError(
       options.requireTargetChatId
@@ -24,13 +25,13 @@ export function resolveFeishuConfig(
     );
   }
   const allowedOpenIds = new Set(
-    (env.FEISHU_ALLOWED_OPEN_IDS ?? "")
+    (settingText("services.feishu.allowedOpenIds") ?? "")
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean),
   );
   const notifyOpenIds = new Set(
-    (env.FEISHU_NOTIFY_OPEN_IDS ?? "")
+    (settingText("services.feishu.notifyOpenIds") ?? "")
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean),

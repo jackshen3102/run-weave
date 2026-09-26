@@ -11,7 +11,7 @@ export interface AgentTeamCatalogProbe {
 }
 
 export function runCatalogCommand(
-  command: "codex" | "traex",
+  command: string,
   args: string[],
   env: NodeJS.ProcessEnv,
 ): Promise<string> {

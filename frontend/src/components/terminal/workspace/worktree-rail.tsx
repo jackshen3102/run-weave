@@ -1,3 +1,4 @@
+import { deviceStorage } from "../../../features/device-storage";
 import {
   Fragment,
   useEffect,
@@ -71,7 +72,7 @@ function clampRailWidth(width: number): number {
 
 function readRailWidth(scope: string): number {
   const storedWidth = Number.parseInt(
-    localStorage.getItem(railWidthStorageKey(scope)) ?? "",
+    deviceStorage.getItem(railWidthStorageKey(scope)) ?? "",
     10,
   );
   return Number.isFinite(storedWidth)
@@ -112,7 +113,7 @@ export function TerminalWorktreeRail({
   );
   const { byContextProjectId } = useTerminalAggregateStatus();
   const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem(railCollapsedStorageKey(scope)) === "true",
+    () => deviceStorage.getItem(railCollapsedStorageKey(scope)) === "true",
   );
   const [width, setWidth] = useState(() => readRailWidth(scope));
   const [resizing, setResizing] = useState(false);
@@ -155,7 +156,7 @@ export function TerminalWorktreeRail({
     }
     document.body.style.cursor = resizeState.previousCursor;
     document.body.style.userSelect = resizeState.previousUserSelect;
-    localStorage.setItem(
+    deviceStorage.setItem(
       railWidthStorageKey(resizeState.scope),
       String(resizeState.width),
     );
@@ -201,14 +202,14 @@ export function TerminalWorktreeRail({
       }
       event.preventDefault();
       setWidth(nextWidth);
-      localStorage.setItem(railWidthStorageKey(scope), String(nextWidth));
+      deviceStorage.setItem(railWidthStorageKey(scope), String(nextWidth));
     },
   );
 
   useEffect(() => {
     stopResize();
     setCollapsed(
-      localStorage.getItem(railCollapsedStorageKey(scope)) === "true",
+      deviceStorage.getItem(railCollapsedStorageKey(scope)) === "true",
     );
     setWidth(readRailWidth(scope));
   }, [scope, stopResize]);
@@ -238,7 +239,7 @@ export function TerminalWorktreeRail({
   const toggleCollapsed = useMemoizedFn(() => {
     setCollapsed((current) => {
       const next = !current;
-      localStorage.setItem(railCollapsedStorageKey(scope), String(next));
+      deviceStorage.setItem(railCollapsedStorageKey(scope), String(next));
       return next;
     });
   });

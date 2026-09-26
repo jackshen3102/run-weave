@@ -1,3 +1,4 @@
+import { configuration, settingText } from "@runweave/config-node";
 import type { ActivityStore } from "../activity/recording/store";
 import { logger } from "../logging/index";
 import { ExperienceService } from "./service";
@@ -8,12 +9,14 @@ export function createExperienceLearning(
   activity: ActivityStore | null,
   channel: "stable" | "beta" | "dev",
 ) {
-  const storage = resolveExperienceStorage(process.env);
+  const storage = resolveExperienceStorage();
   const experienceService = new ExperienceService(storage);
-  const enabled =
-    process.env.RUNWEAVE_EXPERIENCE_LEARNING === "true" ||
+  let valid = true;
+  try { configuration().requireDomain("knowledge"); } catch { valid = false; }
+  const enabled = valid && (
+    settingText("knowledge.experience.learning") === "true" ||
     (channel === "stable" &&
-      process.env.RUNWEAVE_EXPERIENCE_LEARNING !== "false");
+      settingText("knowledge.experience.learning") !== "false"));
   const experienceLearning = new ExperienceLearningRuntime(
     storage,
     experienceService,

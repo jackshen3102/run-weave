@@ -21,9 +21,6 @@
     "./app-server-events": "./src/app-server/events.ts",
     "./app-server-node": "./src/app-server/node.ts",
     "./app-server": "./src/app-server/index.ts",
-    "./app-server/discovery": "./src/app-server/discovery.ts",
-    "./app-server/paths": "./src/app-server/paths.ts",
-    "./app-server/runtime-release": "./src/app-server/runtime-release.ts",
     "./app-server/types": "./src/app-server/types.ts",
     "./browser-profile-node": "./src/browser/profile-node.ts",
     "./desktop-bridge": "./src/desktop/bridge.ts",
@@ -79,7 +76,8 @@
     "./knowledge-inbox": "./src/knowledge-inbox.ts",
     "./experience": "./src/experience.ts",
     "./browser-local-tunnel": "./src/browser/local-tunnel.ts",
-    "./terminal/file-link": "./src/terminal/file-link.ts"
+    "./terminal/file-link": "./src/terminal/file-link.ts",
+    "./configuration": "./src/configuration/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

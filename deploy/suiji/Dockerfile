@@ -3,6 +3,7 @@ WORKDIR /repo
 RUN corepack enable && corepack prepare pnpm@10.6.2 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/shared packages/shared
+COPY packages/config-node packages/config-node
 COPY packages/suiji-server packages/suiji-server
 RUN pnpm install --frozen-lockfile --filter @runweave/suiji-server... --ignore-scripts
 RUN pnpm --filter @runweave/suiji-server build && pnpm --filter @runweave/suiji-server deploy --prod --legacy /output
@@ -15,6 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /app
 COPY --from=build --chown=node:node /output /app
 COPY --chown=node:node deploy/suiji/entrypoint.mjs /app/entrypoint.mjs
-ENV NODE_ENV=production SUIJI_HOST=0.0.0.0 SUIJI_PORT=4783 SUIJI_STORAGE_DIR=/data/attachments
+ENV NODE_ENV=production
 ENTRYPOINT ["node", "/app/entrypoint.mjs"]
 CMD ["serve"]

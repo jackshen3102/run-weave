@@ -89,7 +89,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
       gestures.sendScroll = { [weak self] input, rows in self?.tmuxScroll?(input, rows) ?? false }
       self.gestures = gestures
     }
-    applyTheme(dark: UserDefaults.standard.string(forKey: "native.theme") != "light")
+    applyTheme(dark: DevicePreferences.theme != "light")
     terminalView.accessibilityIdentifier = "native-terminal"
   }
 

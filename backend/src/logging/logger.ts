@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import DailyRotateFile from "winston-daily-rotate-file";
 import winston from "winston";
 import { resolveStoragePaths } from "../utils/path";
@@ -56,12 +57,12 @@ const jsonLineFormat = winston.format.combine(
   }),
 );
 
-function resolveLogLevel(env: NodeJS.ProcessEnv): string {
-  return env.RUNWEAVE_LOG_LEVEL?.trim() || "info";
+function resolveLogLevel(): string {
+  return settingText("logging.level")?.trim() || "info";
 }
 
-function resolveLogToFile(env: NodeJS.ProcessEnv): boolean {
-  return env.RUNWEAVE_LOG_TO_FILE?.trim().toLowerCase() !== "false";
+function resolveLogToFile(): boolean {
+  return settingText("logging.toFile")?.trim().toLowerCase() !== "false";
 }
 
 function shouldWriteLegacyConsole(env: NodeJS.ProcessEnv): boolean {
@@ -79,8 +80,8 @@ function writeLegacyConsole(fields: LegacyConsoleFields | undefined): void {
   }
 }
 
-function buildTransports(env: NodeJS.ProcessEnv): winston.transport[] {
-  const storagePaths = resolveStoragePaths(env);
+function buildTransports(): winston.transport[] {
+  const storagePaths = resolveStoragePaths();
   const transports: winston.transport[] = [
     makeResilientTransport(
       new winston.transports.Console({
@@ -90,7 +91,7 @@ function buildTransports(env: NodeJS.ProcessEnv): winston.transport[] {
     ),
   ];
 
-  if (resolveLogToFile(env)) {
+  if (resolveLogToFile()) {
     transports.push(
       makeResilientTransport(
         new DailyRotateFile({
@@ -100,7 +101,7 @@ function buildTransports(env: NodeJS.ProcessEnv): winston.transport[] {
           maxFiles: "3d",
           maxSize: "50m",
           zippedArchive: false,
-          level: resolveLogLevel(env),
+          level: resolveLogLevel(),
         }),
         "file",
       ),
@@ -188,11 +189,11 @@ class WinstonBackendLogger implements BackendLogger {
   }
 }
 
-function createWinstonLogger(env: NodeJS.ProcessEnv): winston.Logger {
+function createWinstonLogger(): winston.Logger {
   return winston.createLogger({
-    level: resolveLogLevel(env),
+    level: resolveLogLevel(),
     format: jsonLineFormat,
-    transports: buildTransports(env),
+    transports: buildTransports(),
     exitOnError: false,
   });
 }
@@ -230,9 +231,8 @@ export const logger: BackendLogger = createDynamicLogger();
 export function initializeLogger(
   options: CreateLoggerOptions = {},
 ): InitializedLogger {
-  const env = options.env ?? process.env;
   const previousWinstonLogger = activeWinstonLogger;
-  activeWinstonLogger = createWinstonLogger(env);
+  activeWinstonLogger = createWinstonLogger();
   activeLogger = new WinstonBackendLogger(
     activeWinstonLogger,
     options.defaultFields,
@@ -241,8 +241,8 @@ export function initializeLogger(
 
   return {
     logger: activeLogger,
-    logDir: resolveStoragePaths(env).backendLogDir,
-    logToFile: resolveLogToFile(env),
+    logDir: resolveStoragePaths().backendLogDir,
+    logToFile: resolveLogToFile(),
   };
 }
 

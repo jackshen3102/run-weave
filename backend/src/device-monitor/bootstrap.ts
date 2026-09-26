@@ -1,3 +1,4 @@
+import { configuration } from "@runweave/config-node";
 import path from "node:path";
 import type { AuthService } from "../auth/service";
 import { logger } from "../logging/index";
@@ -16,6 +17,7 @@ export async function createDeviceMonitor(
 ) {
   let monitor: DeviceMonitorService | null = null;
   let alerts: BatteryAlerts | null = null;
+  let disposeConfiguration = () => {};
   try {
     monitor = new DeviceMonitorService(
       await DeviceMonitorStore.create(
@@ -24,14 +26,21 @@ export async function createDeviceMonitor(
     );
     let push: PushClient | null = null;
     try {
-      push = await PushClient.configured(monitor.snapshot().hostId, profileDirectory);
+      push = await PushClient.configured(monitor.snapshot().hostId);
     } catch {
+      configuration().reportError("services.pushSender");
       logger.warn("device-monitor.push.configuration.invalid");
     }
     alerts = new BatteryAlerts(
       monitor,
       new DeviceSubscriptions(monitor.store, auth, push),
     );
+    const subscriptions = alerts.subscriptions;
+    const hostId = monitor.snapshot().hostId;
+    disposeConfiguration = configuration().register("services.pushSender", async (snapshot) => {
+      const next = await PushClient.configured(hostId, snapshot);
+      subscriptions.replacePushClient(next);
+    });
     alerts.start();
     monitor.start();
   } catch {
@@ -40,5 +49,5 @@ export async function createDeviceMonitor(
         "Device monitoring unavailable; terminal services remain available",
     });
   }
-  return { deviceMonitor: monitor, batteryAlerts: alerts };
+  return { deviceMonitor: monitor, batteryAlerts: alerts, disposeConfiguration };
 }

@@ -1,3 +1,4 @@
+import type { EnvironmentContext } from "../configuration/types";
 export const APP_SERVER_SERVICE_NAME = "runweave-app-server";
 export const APP_SERVER_PROTOCOL_VERSION = 1;
 export const APP_SERVER_RUNTIME_SCHEMA_VERSION = 1;
@@ -25,6 +26,7 @@ export interface AppServerConnectionInfo {
 }
 
 export interface AppServerHealth {
+  environment?: EnvironmentContext;
   ok: boolean;
   service: string;
   protocolVersion: number;

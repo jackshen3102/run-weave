@@ -25,7 +25,7 @@ export function createKnowledgeInbox(
     terminalSessionManager: TerminalSessionManager;
   },
 ): KnowledgeInboxService {
-  const storage = resolveExperienceStorage(process.env);
+  const storage = resolveExperienceStorage();
   const home =
     process.env.RUNWEAVE_EXPERIENCE_TEST_MODE === "true"
       ? path.join(storage.home, "knowledge-inbox")

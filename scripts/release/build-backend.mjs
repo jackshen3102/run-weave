@@ -1,3 +1,4 @@
+import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -99,7 +100,7 @@ const shared = {
   platform: "node",
   target: "node22",
   format: "cjs",
-  external: ["better-sqlite3", "node-pty"],
+  external: ["better-sqlite3", "node-pty", "fs-native-extensions"],
   define: { "import.meta.url": "__IMPORT_META_URL__" },
   banner: {
     js: "const __IMPORT_META_URL__ = require('url').pathToFileURL(__filename).href;",
@@ -200,3 +201,5 @@ console.log(`[backend-release] built ${releaseDir}`);
 console.log(
   `[backend-release] archive ${path.join(artifactsRoot, `${releaseId}.tar.gz`)}`,
 );
+
+copyNativeLockRuntime(backendDir);

@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@runweave/shared": "workspace:*",
-    "better-sqlite3": "13.0.3"
+    "better-sqlite3": "13.0.3",
+    "@runweave/config-node": "workspace:*"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

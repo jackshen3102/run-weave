@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { z } from "zod";
+import { readConfigurationPath } from "@runweave/shared/configuration";
+import { settingText, configuration, type ConfigurationSnapshot } from "@runweave/config-node";
 import type {
   PushNotificationRequest,
   PushDeliveryResult,
@@ -13,6 +12,9 @@ export class PushClientError extends Error {
 }
 export class PushClient {
   private verifiedHost = false;
+  private pendingRequests = 0;
+  private retired = false;
+  private onDrained?: () => void;
   private controller = new AbortController();
   constructor(
     readonly url: string,
@@ -34,44 +36,36 @@ export class PushClient {
   }
   static async configured(
     hostId: string,
-    profileDirectory: string,
+    snapshot?: ConfigurationSnapshot,
   ): Promise<PushClient | null> {
-    const url = process.env.RUNWEAVE_PUSH_GATEWAY_URL;
-    const token = process.env.RUNWEAVE_PUSH_SENDER_TOKEN;
+    if (!snapshot) configuration().requireDomain("services.pushSender");
+    const get = (key: string) => snapshot ? readConfigurationPath(snapshot.value, `services.pushSender.${key}`) : settingText(`services.pushSender.${key}`);
+    const url = get("gatewayURL");
+    const token = get("senderToken");
+    const configuredHost = get("hostId");
     // Explicit overrides are a pair; never combine credentials from different sources.
-    if (url !== undefined || token !== undefined) {
-      if (!url?.trim() || !token?.trim())
+    if (url != null || token != null) {
+      if (typeof url !== "string" || typeof token !== "string" || !url.trim() || !token.trim() || configuredHost !== hostId)
         throw new Error("Incomplete push configuration");
       return new PushClient(url.trim(), token.trim(), hostId);
     }
-    let raw: string;
-    try {
-      raw = await readFile(
-        path.join(profileDirectory, "device-monitor", "push.json"),
-        "utf8",
-      );
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
-    }
-    const config = z
-      .object({
-        hostId: z.string().uuid(),
-        gatewayURL: z.string().trim().min(1),
-        senderToken: z.string().trim().min(1),
-      })
-      .strict()
-      .parse(JSON.parse(raw));
-    if (config.hostId !== hostId)
-      throw new Error("Push configuration belongs to another host");
-    return new PushClient(config.gatewayURL, config.senderToken, hostId);
+    return null;
   }
+
   private async request<T>(
     path: string,
     method: string,
     body?: unknown,
     canSend?: () => boolean,
   ): Promise<T> {
+    this.pendingRequests += 1;
+    try { return await this.performRequest<T>(path, method, body, canSend); }
+    finally {
+      this.pendingRequests -= 1;
+      if (this.retired && this.pendingRequests === 0) this.finishRetirement();
+    }
+  }
+  private async performRequest<T>(path: string, method: string, body?: unknown, canSend?: () => boolean): Promise<T> {
     if (path !== "/v1/sender" && !this.verifiedHost) {
       const identity = await this.request<{ hostId: string }>(
         "/v1/sender",
@@ -99,9 +93,18 @@ export class PushClient {
       ? (undefined as T)
       : ((await response.json()) as T);
   }
-  dispose(): void {
-    this.controller.abort();
+  retire(): Promise<void> {
+    this.retired = true;
+    if (!this.pendingRequests) { this.finishRetirement(); return Promise.resolve(); }
+    return new Promise((resolve) => { this.onDrained = resolve; });
   }
+  private finishRetirement(): void {
+    this.controller.abort();
+    this.credential = "";
+    this.onDrained?.();
+    this.onDrained = undefined;
+  }
+  dispose(): void { this.controller.abort(); }
   register(value: DeviceSubscription): Promise<{ revokeToken: string }> {
     return this.request(`/v1/subscriptions/${value.id}`, "PUT", {
       installationId: value.installationId,

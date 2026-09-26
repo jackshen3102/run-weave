@@ -19,12 +19,10 @@ import {
 import { resumeMigratedSchedules } from "../evolution/storage/repository-migration-schedules";
 
 /** Runs before either SQLite worker or any business producer is started. */
-export async function prepareEvolutionRepositoryMigration(
-  env: NodeJS.ProcessEnv,
-) {
+export async function prepareEvolutionRepositoryMigration() {
   const { evolutionHomeDir, learningDatabaseFile } =
-    resolveEvolutionStoragePaths(env);
-  const { activityDatabaseFile } = resolveActivityStoragePaths(env);
+    resolveEvolutionStoragePaths();
+  const { activityDatabaseFile } = resolveActivityStoragePaths();
   // Use a data-directory lock, not the Backend profile lock: multiple profiles
   // share these databases. Publication and dead-owner recovery are atomic.
   const lock = await acquireBackendProfileLock({

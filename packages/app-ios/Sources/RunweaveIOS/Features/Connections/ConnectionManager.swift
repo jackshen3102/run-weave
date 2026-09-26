@@ -12,6 +12,7 @@ struct ConnectionManager: View {
   @State private var scanning = false
   @State private var showingBuildIdentity = false
   @State private var showingCodexQuota = false
+  @State private var showingConfiguration = false
   @State private var editingID: String?
   @State private var name = ""
   @State private var url = ""
@@ -20,8 +21,8 @@ struct ConnectionManager: View {
   @State private var deleting: BackendConnection?
   @State private var checkingIDs = Set<String>()
   @State private var statuses: [String: String] = [:]
-  @AppStorage("native.theme") private var theme = "dark"
-  @AppStorage(ScreenAwakeModifier.preferenceKey) private var keepScreenAwake = true
+  @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
+  @AppStorage(DevicePreferences.screenAwakeKey, store: DevicePreferences.store) private var keepScreenAwake = true
 
   var body: some View {
     NavigationView {
@@ -40,18 +41,19 @@ struct ConnectionManager: View {
         }
         if session.authenticated {
           Section(header: Text(session.connection?.name ?? "当前电脑")) {
+            Button("电脑配置") { showingConfiguration = true }
             Button("Codex 额度") { showingCodexQuota = true }
           }
         }
         Section { Button("构建信息") { showingBuildIdentity = true } }
-        Section(header: Text("外观")) {
+        Section(header: Text("本手机 · 外观")) {
           Picker("主题", selection: $theme) {
             Text("深色").tag("dark")
             Text("浅色").tag("light")
           }.pickerStyle(.segmented)
         }
         Section(
-          header: Text("屏幕"),
+          header: Text("本手机 · 屏幕"),
           footer: Text("在 Runweave 前台使用期间防止自动息屏。离开应用后恢复系统设置，开启会增加耗电。")
         ) {
           Toggle("保持屏幕常亮", isOn: $keepScreenAwake)
@@ -134,6 +136,7 @@ struct ConnectionManager: View {
         await batteries.refresh(ordered)
       }
       .preferredColorScheme(theme == "light" ? .light : .dark)
+      .sheet(isPresented: $showingConfiguration) { ConfigurationView(session: session) }
       .sheet(isPresented: $showingCodexQuota) {
         CodexQuotaView(session: session, quota: codexQuota)
       }

@@ -281,90 +281,21 @@ function assertProfileSatisfies(selectedProfile, requiredProfile, impacts) {
   }
 }
 
-function defaultServices(profile, impacts, requiredProfile) {
-  const impactProfiles = new Set(
-    impacts.length > 0
-      ? impacts.map((impact) => impact.profile)
-      : [requiredProfile],
-  );
-  const backendAffected = ["fullstack", "app-server", "beta"].some(
-    (impactProfile) => impactProfiles.has(impactProfile),
-  );
-  const appServerAffected = ["app-server", "beta"].some((impactProfile) =>
-    impactProfiles.has(impactProfile),
-  );
-  const services = {
-    frontend: { ownership: "disabled" },
-    backend: { ownership: "disabled" },
-    appServer: { ownership: "disabled" },
-    electron: { ownership: "disabled" },
-    beta: { ownership: "disabled" },
+function defaultServices(profile) {
+  // Profiles select launch and acceptance surfaces. All mutable services are
+  // owned by the Session even when their source code is unchanged.
+  const desktop = profile === "electron" || profile === "beta";
+  return {
+    frontend: { ownership: "dedicated" },
+    backend: { ownership: "dedicated" },
+    appServer: { ownership: "dedicated" },
+    electron: { ownership: desktop ? "dedicated" : "disabled" },
+    beta: { ownership: profile === "beta" ? "dedicated" : "disabled" },
     cdp: {
-      desktop: { ownership: "disabled" },
-      terminalBrowser: { ownership: "disabled" },
+      desktop: { ownership: desktop ? "dedicated" : "disabled" },
+      terminalBrowser: { ownership: desktop ? "dedicated" : "disabled" },
     },
   };
-  if (profile === "frontend") {
-    services.frontend = { ownership: "dedicated" };
-    services.backend = {
-      ownership: "shared-declared",
-      sharedReason: "Backend code and shared contract are unchanged",
-    };
-    services.appServer = {
-      ownership: "shared-declared",
-      sharedReason: "App Server code and lifecycle are unchanged",
-    };
-  } else if (profile === "fullstack") {
-    services.frontend = { ownership: "dedicated" };
-    services.backend = { ownership: "dedicated" };
-    services.appServer = {
-      ownership: "shared-declared",
-      sharedReason: "App Server code and lifecycle are unchanged",
-    };
-  } else if (profile === "app-server") {
-    services.frontend = { ownership: "dedicated" };
-    services.backend = { ownership: "dedicated" };
-    services.appServer = { ownership: "dedicated" };
-  } else if (profile === "electron") {
-    services.frontend = { ownership: "dedicated" };
-    services.backend = backendAffected
-      ? { ownership: "dedicated" }
-      : {
-          ownership: "shared-declared",
-          sharedReason: "Backend is outside the changed-path impact closure",
-        };
-    services.appServer = {
-      ownership: appServerAffected ? "dedicated" : "shared-declared",
-      ...(!appServerAffected
-        ? {
-            sharedReason:
-              "App Server is outside the changed-path impact closure",
-          }
-        : {}),
-    };
-    services.electron = { ownership: "dedicated" };
-    services.cdp.desktop = { ownership: "dedicated" };
-    services.cdp.terminalBrowser = { ownership: "dedicated" };
-  } else {
-    services.frontend = { ownership: "dedicated" };
-    services.backend = backendAffected
-      ? { ownership: "dedicated" }
-      : {
-          ownership: "shared-declared",
-          sharedReason: "Backend is outside the changed-path impact closure",
-        };
-    services.appServer = appServerAffected
-      ? { ownership: "dedicated" }
-      : {
-          ownership: "shared-declared",
-          sharedReason: "App Server is outside the changed-path impact closure",
-        };
-    services.beta = { ownership: "dedicated" };
-    services.electron = { ownership: "dedicated" };
-    services.cdp.desktop = { ownership: "dedicated" };
-    services.cdp.terminalBrowser = { ownership: "dedicated" };
-  }
-  return services;
 }
 
 function applyServiceOverrides(services, overrides) {

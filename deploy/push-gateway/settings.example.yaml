@@ -1,0 +1,16 @@
+schemaVersion: 1
+revision: 0
+kind: stable
+instanceId: stable
+domainVersions:
+  services.pushGateway: 1
+migrations: {}
+services:
+  pushGateway:
+    directory: /data
+    bind: 0.0.0.0
+    port: 8092
+    keyId: REPLACE_WITH_APNS_KEY_ID
+    teamId: REPLACE_WITH_APPLE_TEAM_ID
+    privateKeyFile: /run/secrets/apns_key
+    adminToken: REPLACE_WITH_A_DEDICATED_RANDOM_TOKEN

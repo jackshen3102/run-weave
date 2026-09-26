@@ -2,7 +2,7 @@ import type {
   AppServerThreadDetailResponse,
   AppServerThreadListResponse,
 } from "@runweave/shared/app-server-events";
-import { discoverAppServer } from "@runweave/shared/app-server/discovery";
+import { discoverAppServer } from "@runweave/config-node/app-server/discovery";
 import { AppServerClient } from "../app-server/client";
 
 const DEFAULT_TIMEOUT_MS = 5_000;

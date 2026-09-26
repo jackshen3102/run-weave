@@ -1,3 +1,4 @@
+import { verifyBackendEnvironment } from "./environment.js";
 import type { LoginRequest } from "@runweave/shared/protocol";
 import { calculateExpiresAt, type RunweaveProfile } from "../config/profile-store.js";
 import { requestJson } from "./http.js";
@@ -27,6 +28,7 @@ export interface AuthClient {
 export function createAuthClient(): AuthClient {
   return {
     async login(params) {
+      await verifyBackendEnvironment(params.baseUrl);
       const payload = await requestJson<LoginResponse>(
         params.baseUrl,
         "/api/auth/login",
@@ -51,6 +53,7 @@ export function createAuthClient(): AuthClient {
     },
 
     async refresh(profile, signal) {
+      await verifyBackendEnvironment(profile.baseUrl);
       if (!profile.refreshToken) {
         return profile;
       }

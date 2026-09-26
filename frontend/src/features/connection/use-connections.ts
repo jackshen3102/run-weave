@@ -1,3 +1,4 @@
+import { deviceStorage } from "../device-storage";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PackagedBackendConnectionState } from "@runweave/shared/runtime-monitor";
@@ -51,7 +52,7 @@ function normalizeDesktopBackendState(
 }
 
 function loadStore(storageKey: string): ConnectionStore {
-  const raw = localStorage.getItem(storageKey);
+  const raw = deviceStorage.getItem(storageKey);
   if (!raw) return DEFAULT_STORE;
 
   try {
@@ -67,7 +68,7 @@ function loadStore(storageKey: string): ConnectionStore {
 }
 
 function saveStore(storageKey: string, store: ConnectionStore): void {
-  localStorage.setItem(storageKey, JSON.stringify(store));
+  deviceStorage.setItem(storageKey, JSON.stringify(store));
 }
 
 type StoreUpdater = (prev: ConnectionStore) => ConnectionStore;

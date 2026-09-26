@@ -68,21 +68,17 @@ AWS Lightsail Docker Compose 部署、Caddy 配置及本机调试见[部署操�
 需要 Node.js 22、可写的持久目录、到 Apple 的 HTTP/2 出站网络，以及对手机和 Mac 可达的 HTTPS origin。
 服务默认只监听 `127.0.0.1:8092`，由运营者配置反向代理 TLS。不要把默认 HTTP 监听直接暴露到公网。
 
-| 环境变量                                 | 说明                                                 |
-| ---------------------------------------- | ---------------------------------------------------- |
-| `PUSH_GATEWAY_DATA_DIR`                  | 必填，SQLite、WAL 和单实例锁的独占持久目录           |
-| `APNS_PRIVATE_KEY_FILE`                  | 必填，运营者保管的 `.p8` 文件绝对路径                |
-| `APNS_KEY_ID`、`APNS_TEAM_ID`            | 必填，与私钥和 App ID 对应                           |
-| `PUSH_GATEWAY_BIND`、`PUSH_GATEWAY_PORT` | 默认 `127.0.0.1`、`8092`                             |
-| `PUSH_GATEWAY_ADMIN_TOKEN`               | 可选，启用脱敏管理员状态接口；独立高熵密钥           |
-| `PUSH_GATEWAY_ADMIN_URL`                 | 管理 CLI 的目标 origin，默认 `http://127.0.0.1:8092` |
-
-配置通过受限权限的服务环境文件装载，不提交私钥、token 或个人配置。首次安装在仓库根执行：
+配置保存在所属实例 `settings.yaml` 的 `services.pushGateway` 域，参见
+[YAML 模板](../../deploy/push-gateway/settings.example.yaml)。`directory`、`privateKeyFile`、
+`keyId`、`teamId` 为必填；`bind`/`port` 默认为 `127.0.0.1`/`8092`，
+`adminToken` 控制脱敏管理员接口。业务环境变量不再作为启动配置来源。
+配置目录为 0700，文件为 0600，APNs 私钥保留私有文件引用。
+首次安装准备 YAML 后，在仓库根执行：
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm --filter @runweave/push-gateway typecheck
-pnpm --filter @runweave/push-gateway start
+pnpm --filter @runweave/push-gateway start -- --instance stable
 ```
 
 `GET /health` 只返回进程活性，不证明 APNs 凭据有效或手机已收到提醒。持有管理员凭据时可执行

@@ -1,9 +1,9 @@
+import { configurationLibrary } from "../lib/configuration.mjs";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
-import { commandName } from "./core.mjs";
 import { appName, electronBuilderConfig, isBetaTarget } from "./context.mjs";
 import {
   assertNoActiveScheduledRuns,
@@ -14,7 +14,6 @@ import {
   readJsonFile,
   run,
   runCapture,
-  runCaptureChecked,
   runChecked,
   wait,
 } from "./system.mjs";
@@ -344,7 +343,7 @@ export async function openApp(appPath, options = {}) {
   if (
     process.env.RUNWEAVE_DEV_SESSION_ID ||
     process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND === "false" ||
-    process.env.RUNWEAVE_APP_SERVER_DISCOVERY === "explicit"
+    configurationLibrary.settingText("appServer.discovery") === "explicit"
   ) {
     const executable = path.join(appPath, "Contents", "MacOS", appName);
     await fs.access(executable);
@@ -419,119 +418,6 @@ export async function installBuiltApp({
   }
 }
 
-export async function runRuntimeUpdate({
-  channel,
-  gitHead,
-  installedAppVersion,
-  runtimeHome,
-  sourceRoot,
-}) {
-  const releaseId = `local-${Date.now()}`;
-  const shellVersionArg = installedAppVersion
-    ? [`--shell-version=${installedAppVersion}`]
-    : [];
-
-  const artifactsRoot = path.resolve(
-    process.env.RUNWEAVE_RUNTIME_ARTIFACTS_ROOT ??
-      path.join(sourceRoot, ".runtime-artifacts"),
-  );
-  const runtimeZipPath = path.join(
-    artifactsRoot,
-    `runweave-runtime-${releaseId}.zip`,
-  );
-  const runtimeManifestPath = path.join(
-    artifactsRoot,
-    releaseId,
-    "manifest.json",
-  );
-  await runChecked(
-    commandName("pnpm"),
-    ["runtime:build", "--", `--release-id=${releaseId}`, ...shellVersionArg],
-    {
-      cwd: sourceRoot,
-      env: {
-        ...process.env,
-        VITE_RUNWEAVE_CHANNEL: channel,
-        VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
-        VITE_RUNWEAVE_VERSION: installedAppVersion ?? "unknown",
-      },
-    },
-  );
-  await runChecked(
-    commandName("pnpm"),
-    [
-      "runtime:install",
-      "--",
-      runtimeZipPath,
-      `--runtime-home=${runtimeHome}`,
-      ...shellVersionArg,
-    ],
-    { cwd: sourceRoot },
-  );
-
-  const manifest = readJsonFile(runtimeManifestPath);
-  if (manifest?.releaseId !== releaseId) {
-    throw new Error(
-      `runtime manifest identity mismatch: expected ${releaseId}`,
-    );
-  }
-  return manifest;
-}
-
-export async function runAppServerUpdate({
-  appServerHome,
-  controlCliPath,
-  sourceRoot,
-}) {
-  const instanceKey = path.basename(path.resolve(appServerHome));
-  const releaseId = `local-app-server-${instanceKey}-${Date.now()}`;
-  const cliEntry =
-    controlCliPath ??
-    path.join(
-      sourceRoot,
-      "packages",
-      "runweave-cli",
-      "dist",
-      "index.js",
-    );
-
-  await runChecked(
-    "node",
-    [
-      "./scripts/install/app-server.mjs",
-      `--release-id=${releaseId}`,
-      `--home=${appServerHome}`,
-    ],
-    { cwd: sourceRoot },
-  );
-  await fs.access(cliEntry);
-
-  const restart = await runCaptureChecked(
-    "node",
-    [
-      cliEntry,
-      "app-server",
-      "restart",
-      "--home",
-      appServerHome,
-    ],
-    { cwd: sourceRoot },
-  );
-
-  let status = null;
-  try {
-    status = JSON.parse(restart.stdout);
-  } catch {
-    status = null;
-  }
-
-  return {
-    home: appServerHome,
-    releaseId,
-    status,
-  };
-}
-
 export async function runAppUpdate({
   appBackupPath,
   appBuildVersion,
@@ -581,6 +467,8 @@ export async function runAppUpdate({
   } catch (error) {
     throw new AppBuildError(error);
   }
+  const capability = readJsonFile(path.join(releaseAppPath, "Contents", "Resources", "configuration-compatibility.json"));
+  if (!configurationLibrary.supportsConfiguration(capability, configurationLibrary.configuration().store.read().value)) throw new Error("CONFIG_RELEASE_INCOMPATIBLE");
   await quitApp();
   await installBuiltApp({ appBackupPath, appPath, releaseAppPath });
   if (launchAfterInstall) {
@@ -593,3 +481,5 @@ export async function writeUpdateState(statePath, state) {
   await fs.mkdir(path.dirname(statePath), { recursive: true });
   await fs.writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`);
 }
+
+export { runRuntimeUpdate, runAppServerUpdate } from "./runtime-updates.mjs";

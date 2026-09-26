@@ -20,7 +20,6 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
   private var unloadWaiters: [CheckedContinuation<Bool, Never>] = []
   private var unloadTimeout: Task<Void, Never>?
   private static let blankURL = URL(string: "about:blank")!
-  private static let localPreviewNoticeShownKey = "runweave.browser.localPreviewNoticeShown"
   private(set) var navigationRevision = 0
   private(set) var currentURL: URL
   private(set) var failure: String?
@@ -263,10 +262,10 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
   func showLocalPreviewNoticeIfNeeded() {
     guard valid, owner?.state == .presented, notice == nil,
       let localPreview, localPreview.allows(currentURL),
-      !UserDefaults.standard.bool(forKey: Self.localPreviewNoticeShownKey) else { return }
+      !BrowserPreferences.localPreviewNoticeShown else { return }
     // Record actual presentation, not page construction. This is App-wide education,
     // independent of the current computer, browser session, and temporary website data.
-    UserDefaults.standard.set(true, forKey: Self.localPreviewNoticeShownKey)
+    BrowserPreferences.localPreviewNoticeShown = true
     notice = localPreview.explanation
     changed()
   }

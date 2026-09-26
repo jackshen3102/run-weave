@@ -55,7 +55,7 @@ export class ActivityRuntime {
     let unavailableReason: string | undefined;
     try {
       store = await ActivityStore.create({
-        databasePath: resolveActivityStoragePaths(env).activityDatabaseFile,
+        databasePath: resolveActivityStoragePaths().activityDatabaseFile,
         env,
       });
     } catch (error) {

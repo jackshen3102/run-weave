@@ -1,17 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { settingText } from "@runweave/config-node";
 import { acquireProcessLock } from "../runtime/process-lock.js";
 import { constants } from "node:fs";
-import {
-  access,
-  chmod,
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import os from "node:os";
+import { access, chmod } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { ConfigurationStore, ConfigurationError, resolveConfigurationContext } from "@runweave/config-node";
+import { configurationPathSegment, isConfigurationObject, type ConfigurationValue } from "@runweave/shared/configuration";
 import { CliError } from "../errors.js";
 
 export interface RunweaveProfile {
@@ -35,49 +29,38 @@ export interface ResolvedProfile {
 const DEFAULT_PROFILE = "local";
 const DEFAULT_BACKEND_PORT = "5001";
 
-export function resolveConfigPath(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  return (
-    env.RUNWEAVE_CONFIG_FILE?.trim() ||
-    path.join(os.homedir(), ".runweave", "config.json")
-  );
+export function resolveConfigPath(): string {
+  return path.join(resolveConfigurationContext().configRoot, "settings.yaml");
 }
 
 export class ProfileStore {
   readonly filePath: string;
+  private readonly store: ConfigurationStore;
+  private observed?: { revision: number; digest: string };
 
   constructor(filePath = resolveConfigPath()) {
-    this.filePath = filePath;
+    const context = resolveConfigurationContext();
+    this.store = new ConfigurationStore(context);
+    if (filePath !== this.store.file) throw new ConfigurationError("CONFIG_LEGACY_PATH_UNSUPPORTED");
+    this.filePath = this.store.file;
   }
 
   async load(): Promise<RunweaveConfig | null> {
-    try {
-      const raw = await readFile(this.filePath, "utf8");
-      const parsed = JSON.parse(raw) as RunweaveConfig;
-      return {
-        activeProfile: parsed.activeProfile || DEFAULT_PROFILE,
-        profiles: parsed.profiles ?? {},
-      };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return null;
-      }
-      throw error;
-    }
+    const snapshot = this.store.read();
+    if (snapshot.issues.cli?.length) throw new ConfigurationError("CONFIG_DOMAIN_INVALID", ["cli"]);
+    this.observed = { revision: snapshot.value.revision, digest: snapshot.digest };
+    const cli = snapshot.value.cli;
+    if (!isConfigurationObject(cli)) return null;
+    return { activeProfile: typeof cli.activeProfile === "string" ? cli.activeProfile : DEFAULT_PROFILE,
+      profiles: (cli.profiles ?? {}) as unknown as Record<string, RunweaveProfile> };
   }
 
   async save(config: RunweaveConfig): Promise<void> {
-    await mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
-    const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporaryPath, `${JSON.stringify(config, null, 2)}\n`, {
-        mode: 0o600,
-      });
-      await rename(temporaryPath, this.filePath);
-    } finally {
-      await rm(temporaryPath, { force: true });
-    }
+    resolveConfigurationContext({ requireExplicit: true });
+    if (!this.observed) throw new ConfigurationError("CONFIG_READ_BEFORE_WRITE_REQUIRED");
+    const saved = this.store.patch({ expectedRevision: this.observed.revision, expectedDigest: this.observed.digest,
+      changes: { cli: config as unknown as ConfigurationValue } });
+    this.observed = { revision: saved.value.revision, digest: saved.digest };
   }
 
   async saveProfile(name: string, profile: RunweaveProfile): Promise<void> {
@@ -90,24 +73,28 @@ export class ProfileStore {
     signal?: AbortSignal,
     activate = false,
   ): Promise<RunweaveProfile> {
-    const lock = await acquireProcessLock(
-      `${this.filePath}.lock`,
-      15_000,
-      signal,
-    );
+    resolveConfigurationContext({ requireExplicit: true });
+    if (!name || name.length > 512 || ["__proto__", "constructor", "prototype"].includes(name)) throw new ConfigurationError("CONFIG_PROFILE_NAME_INVALID");
+    const lock = await acquireProcessLock(`${this.filePath}.cli-refresh`, 15_000, signal);
     try {
-      const config = (await this.load()) ?? {
-        activeProfile: name,
-        profiles: {},
-      };
-      const profile = await update(config.profiles[name]);
-      config.profiles[name] = profile;
-      if (activate) config.activeProfile = name;
-      await this.save(config);
-      return profile;
-    } finally {
-      await lock.release();
-    }
+      const previous = (await this.load())?.profiles[name];
+      const profile = await update(previous);
+      for (let attempt = 0; ; attempt++) {
+        signal?.throwIfAborted();
+        const current = this.store.read();
+        const latest = (await this.load())?.profiles[name];
+        if (JSON.stringify(latest) !== JSON.stringify(previous)) throw new ConfigurationError("CONFIG_PROFILE_CHANGED");
+        try {
+          this.store.patch({ expectedRevision: current.value.revision, expectedDigest: current.digest,
+            changes: { [`cli.profiles.${configurationPathSegment(name)}`]: profile as unknown as ConfigurationValue,
+              ...(activate ? { "cli.activeProfile": name } : {}) } });
+          return profile;
+        } catch (error) {
+          if (!(error instanceof ConfigurationError) || !["CONFIG_WRITE_BUSY", "CONFIG_REVISION_CONFLICT"].includes(error.code) || attempt >= 20) throw error;
+          await delay(50, undefined, { signal });
+        }
+      }
+    } finally { await lock.release(); }
   }
 
   async resolve(
@@ -123,20 +110,6 @@ export class ProfileStore {
       explicitBackendPort: options?.backendPort,
       configuredBaseUrl: saved?.baseUrl,
     });
-    const envAccessToken = env.RUNWEAVE_ACCESS_TOKEN?.trim();
-
-    if (envAccessToken) {
-      return {
-        name,
-        profile: {
-          ...saved,
-          baseUrl,
-          accessToken: envAccessToken,
-        },
-        usesEnvAccessToken: true,
-      };
-    }
-
     if (!saved?.accessToken && !saved?.refreshToken) {
       throw new CliError(
         `Runweave profile "${name}" is not logged in. Run rw auth login first.`,
@@ -171,7 +144,6 @@ export function resolveRunweaveBaseUrl(params: {
   explicitBackendPort?: string;
   configuredBaseUrl?: string;
 }): string {
-  const env = params.env ?? process.env;
   const explicitBaseUrl = params.explicitBaseUrl?.trim();
   if (explicitBaseUrl) {
     return normalizeBaseUrl(explicitBaseUrl);
@@ -182,12 +154,9 @@ export function resolveRunweaveBaseUrl(params: {
     return `http://127.0.0.1:${normalizeBackendPort(explicitBackendPort)}`;
   }
 
-  const envBaseUrl = env.RUNWEAVE_BASE_URL?.trim();
-  if (envBaseUrl) {
-    return normalizeBaseUrl(envBaseUrl);
-  }
+  if (params.configuredBaseUrl) return normalizeBaseUrl(params.configuredBaseUrl);
 
-  const backendPort = env.RUNWEAVE_BACKEND_PORT?.trim();
+  const backendPort = settingText("backend.server.port")?.trim();
   if (backendPort) {
     return `http://127.0.0.1:${normalizeBackendPort(backendPort)}`;
   }
@@ -199,7 +168,7 @@ function normalizeBackendPort(value: string): string {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new CliError(
-      "RUNWEAVE_BACKEND_PORT must be an integer from 1 to 65535",
+      "Backend port must be an integer from 1 to 65535",
       2,
     );
   }

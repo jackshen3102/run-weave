@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { open, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -35,7 +36,7 @@ export class CodexRolloutLifecycleReader implements CodexRolloutLifecycleReaderL
 
   constructor(sessionsRoot?: string) {
     const configuredRoot =
-      sessionsRoot ?? process.env.RUNWEAVE_CODEX_SESSIONS_DIR;
+      sessionsRoot ?? settingText("agents.codex.sessionsDirectory");
     this.sessionsRoots = configuredRoot
       ? [path.resolve(configuredRoot)]
       : [

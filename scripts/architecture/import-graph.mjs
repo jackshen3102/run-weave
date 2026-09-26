@@ -18,6 +18,7 @@ const RESOLUTION_SUFFIXES = [
 ];
 
 const PACKAGE_ROOTS = new Map([
+  ["@runweave/config-node", "packages/config-node/src/index.ts"],
   ["@runweave/suiji-server", "packages/suiji-server/src/index.ts"],
   ["@runweave/shared", "packages/shared/src/index.ts"],
   ["@runweave/common", "packages/common/src"],
@@ -266,6 +267,7 @@ function isForbiddenEdge(edge) {
     if (
       edge.specifier.startsWith("@runweave/") &&
       edge.specifier !== "@runweave/shared/suiji" &&
+      !(edge.source === "packages/suiji-server/src/config.ts" && edge.specifier === "@runweave/config-node") &&
       !edge.specifier.startsWith("@runweave/suiji-server")
     )
       return true;

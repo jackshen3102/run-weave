@@ -1,3 +1,5 @@
+import { settingText, type ConfigurationSnapshot } from "@runweave/config-node";
+import { readConfigurationPath } from "@runweave/shared/configuration";
 import { z } from "zod";
 import { SNAPSHOT_MAX_TEXT_BYTES, parseTerminalSnapshotSharePath, type CreateTerminalSnapshotShareResponse, type PublishTerminalSnapshotRequest } from "@runweave/shared/terminal/snapshot-share";
 import { TerminalSnapshotShareError } from "./errors";
@@ -18,12 +20,12 @@ export function snapshotHostOrigin(value: string): string {
   return url.origin;
 }
 
-export function createTerminalSnapshotPublisher(env: NodeJS.ProcessEnv): TerminalSnapshotPublisher | undefined {
-  const url = env.RUNWEAVE_SNAPSHOT_PUBLISH_URL;
-  const token = env.RUNWEAVE_SNAPSHOT_PUBLISH_TOKEN;
+export function createTerminalSnapshotPublisher(snapshot?: ConfigurationSnapshot): TerminalSnapshotPublisher | undefined {
+  const url = snapshot ? readConfigurationPath(snapshot.value, "services.snapshotPublisher.url") : settingText("services.snapshotPublisher.url");
+  const token = snapshot ? readConfigurationPath(snapshot.value, "services.snapshotPublisher.token") : settingText("services.snapshotPublisher.token");
   if (!url && !token) return undefined;
-  if (!url || !token || !/^[A-Za-z0-9_-]{32,256}$/.test(token)) {
-    throw new Error("Configure both RUNWEAVE_SNAPSHOT_PUBLISH_URL and a valid RUNWEAVE_SNAPSHOT_PUBLISH_TOKEN");
+  if (typeof url !== "string" || typeof token !== "string" || !/^[A-Za-z0-9_-]{32,256}$/.test(token)) {
+    throw new Error("CONFIG_SNAPSHOT_PUBLISHER_INVALID");
   }
   return new TerminalSnapshotPublisher(snapshotHostOrigin(url), token);
 }

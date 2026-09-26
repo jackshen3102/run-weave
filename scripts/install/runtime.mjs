@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { configurationLibrary } from "../lib/configuration.mjs";
 import {
   cpSync,
   existsSync,
@@ -251,6 +252,9 @@ function readManifest(packageRoot) {
 }
 
 function validateManifest(packageRoot, manifest, targetShellVersion) {
+  const context = configurationLibrary.resolveConfigurationContext({ requireExplicit: true });
+  const saved = new configurationLibrary.ConfigurationStore(context).read();
+  if (!configurationLibrary.supportsConfiguration(manifest.configuration, saved.value)) throw new Error("CONFIG_RELEASE_INCOMPATIBLE");
   if (manifest.schemaVersion !== 1) {
     throw new Error("Unsupported runtime manifest schemaVersion");
   }

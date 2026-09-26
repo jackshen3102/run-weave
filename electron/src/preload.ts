@@ -1,4 +1,5 @@
 import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin } from "@runweave/shared/tunnels";
+import type { ConfigurationStatus } from "@runweave/shared/configuration";
 import { contextBridge, ipcRenderer, shell } from "electron";
 import type {
   RunweaveElectronBridge,
@@ -183,6 +184,7 @@ const electronApi = {
     ipcRenderer.invoke(
       "runtime-status:get-report",
     ) as Promise<RuntimeStatusReport>,
+  getLocalConfigurationStatus: () => ipcRenderer.invoke("runtime-status:configuration") as Promise<ConfigurationStatus>,
   copyRuntimeStatusText: (value: string) =>
     ipcRenderer.invoke("runtime-status:copy-text", value) as Promise<boolean>,
   showRuntimeStatusNotification: (input: {

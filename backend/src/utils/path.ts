@@ -1,12 +1,6 @@
-import os from "node:os";
 import path from "node:path";
-import {
-  expandHomePath,
-  resolveBrowserProfileDir,
-  type BrowserProfileStorageEnv,
-} from "@runweave/shared/browser-profile-node";
-
-export { expandHomePath };
+import { configurationPath, settingText } from "@runweave/config-node";
+export { expandHomePath } from "@runweave/shared/browser-profile-node";
 
 export interface StoragePaths {
   browserProfileDir: string;
@@ -16,129 +10,30 @@ export interface StoragePaths {
   agentTeamModelStoreFile: string;
   backendLogDir: string;
 }
+export interface ActivityStoragePaths { activityHomeDir: string; activityDatabaseFile: string }
+export interface EvolutionStoragePaths { evolutionHomeDir: string; learningDatabaseFile: string; temporaryDir: string }
+export interface ScheduledTaskStoragePaths { scheduledTasksHomeDir: string; scheduledTasksDatabaseFile: string }
 
-interface StorageEnv extends BrowserProfileStorageEnv {
-  AUTH_STORE_FILE?: string;
-  TERMINAL_SESSION_STORE_FILE?: string;
-  RUNWEAVE_BACKEND_LOG_DIR?: string;
-  RUNWEAVE_ACTIVITY_HOME?: string;
-  RUNWEAVE_ACTIVITY_TEST_MODE?: string;
-  RUNWEAVE_EVOLUTION_HOME?: string;
-  RUNWEAVE_EVOLUTION_TEST_MODE?: string;
-  RUNWEAVE_SCHEDULED_TASKS_HOME?: string;
+export function resolveScheduledTaskStoragePaths(): ScheduledTaskStoragePaths {
+  const scheduledTasksHomeDir = configurationPath("storage.scheduledTasksDirectory", "scheduled-tasks");
+  return { scheduledTasksHomeDir, scheduledTasksDatabaseFile: path.join(scheduledTasksHomeDir, "scheduled-tasks.sqlite") };
 }
-
-export interface ActivityStoragePaths {
-  activityHomeDir: string;
-  activityDatabaseFile: string;
+export function resolveEvolutionStoragePaths(): EvolutionStoragePaths {
+  const evolutionHomeDir = configurationPath("storage.evolutionDirectory", "evolution");
+  return { evolutionHomeDir, learningDatabaseFile: path.join(evolutionHomeDir, "learning.sqlite"), temporaryDir: path.join(evolutionHomeDir, "tmp") };
 }
-
-export interface EvolutionStoragePaths {
-  evolutionHomeDir: string;
-  learningDatabaseFile: string;
-  temporaryDir: string;
+export function resolveActivityStoragePaths(): ActivityStoragePaths {
+  const activityHomeDir = configurationPath("storage.activityDirectory", "activity");
+  return { activityHomeDir, activityDatabaseFile: path.join(activityHomeDir, "activity.sqlite") };
 }
-
-export interface ScheduledTaskStoragePaths {
-  scheduledTasksHomeDir: string;
-  scheduledTasksDatabaseFile: string;
-}
-
-export function resolveScheduledTaskStoragePaths(
-  env: NodeJS.ProcessEnv,
-  browserProfileDir: string,
-  homeDir: string = os.homedir(),
-): ScheduledTaskStoragePaths {
-  const configured = expandHomePath(
-    env.RUNWEAVE_SCHEDULED_TASKS_HOME,
-    homeDir,
-  );
-  const scheduledTasksHomeDir = path.resolve(
-    configured ?? path.join(browserProfileDir, "scheduled-tasks"),
-  );
+export function resolveStoragePaths(): StoragePaths {
+  const browserProfileDir = configurationPath("storage.browserProfileDirectory", "backend");
+  const authStoreFile = settingText("storage.authStoreFile") ?? path.join(browserProfileDir, "auth-store.json");
+  const terminalSessionStoreFile = settingText("storage.terminalSessionStoreFile") ?? path.join(browserProfileDir, "terminal-session-store.json");
   return {
-    scheduledTasksHomeDir,
-    scheduledTasksDatabaseFile: path.join(
-      scheduledTasksHomeDir,
-      "scheduled-tasks.sqlite",
-    ),
+    browserProfileDir, authStoreFile, terminalSessionStoreFile,
+    terminalQuickInputStoreFile: settingText("storage.terminalQuickInputStoreFile") ?? path.join(path.dirname(terminalSessionStoreFile), "terminal-quick-inputs.json"),
+    agentTeamModelStoreFile: path.join(browserProfileDir, "agent-provider-catalogs.json"),
+    backendLogDir: settingText("logging.backendDirectory") ?? path.join(browserProfileDir, "logs", "backend"),
   };
-}
-
-export function resolveEvolutionStoragePaths(
-  env: NodeJS.ProcessEnv,
-  homeDir: string = os.homedir(),
-): EvolutionStoragePaths {
-  const testHome =
-    env.RUNWEAVE_EVOLUTION_TEST_MODE === "true"
-      ? expandHomePath(env.RUNWEAVE_EVOLUTION_HOME, homeDir)
-      : undefined;
-  const evolutionHomeDir = path.resolve(
-    testHome ?? path.join(homeDir, ".runweave", "evolution"),
-  );
-  return {
-    evolutionHomeDir,
-    learningDatabaseFile: path.join(evolutionHomeDir, "learning.sqlite"),
-    temporaryDir: path.join(evolutionHomeDir, "tmp"),
-  };
-}
-
-export function resolveActivityStoragePaths(
-  env: NodeJS.ProcessEnv,
-  homeDir: string = os.homedir(),
-): ActivityStoragePaths {
-  const testHome =
-    env.RUNWEAVE_ACTIVITY_TEST_MODE === "true"
-      ? expandHomePath(env.RUNWEAVE_ACTIVITY_HOME, homeDir)
-      : undefined;
-  const activityHomeDir = path.resolve(
-    testHome ?? path.join(homeDir, ".runweave", "activity"),
-  );
-  return {
-    activityHomeDir,
-    activityDatabaseFile: path.join(activityHomeDir, "activity.sqlite"),
-  };
-}
-
-export function resolveStoragePaths(
-  env: StorageEnv,
-  homeDir: string = os.homedir(),
-  projectPath: string = process.cwd(),
-): StoragePaths {
-  const browserProfileDir = resolveBrowserProfileDir(env, homeDir, projectPath);
-  const authStoreFile = path.resolve(
-    expandHomePath(env.AUTH_STORE_FILE, homeDir) ??
-      path.join(browserProfileDir, "auth-store.json"),
-  );
-  const terminalSessionStoreFile = path.resolve(
-    expandHomePath(env.TERMINAL_SESSION_STORE_FILE, homeDir) ??
-      path.join(browserProfileDir, "terminal-session-store.json"),
-  );
-  const terminalQuickInputStoreFile = path.resolve(
-    path.join(path.dirname(terminalSessionStoreFile), "terminal-quick-inputs.json"),
-  );
-  const agentTeamModelStoreFile = path.resolve(
-    path.join(browserProfileDir, "agent-team-model-settings.json"),
-  );
-  const backendLogDir = path.resolve(
-    expandHomePath(env.RUNWEAVE_BACKEND_LOG_DIR, homeDir) ??
-      path.join(browserProfileDir, "logs", "backend"),
-  );
-
-  const storagePaths = {
-    browserProfileDir,
-    authStoreFile,
-    terminalSessionStoreFile,
-    terminalQuickInputStoreFile,
-    agentTeamModelStoreFile,
-  } as StoragePaths;
-
-  Object.defineProperty(storagePaths, "backendLogDir", {
-    value: backendLogDir,
-    enumerable: false,
-    configurable: false,
-    writable: false,
-  });
-
-  return storagePaths;
 }

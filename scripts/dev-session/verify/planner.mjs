@@ -21,23 +21,14 @@ export function verifyPlanner(sourceRoot) {
   assert.equal(frontend.profile, "frontend");
   assert.equal(frontend.selectedBy, "changed-paths");
 
-  const requiredSharedBackend = buildDevSessionPlan({
-    sourceRoot,
-    changedFiles: ["frontend/src/App.tsx"],
-    explicitProfile: "frontend",
-    serviceOverrides: [
-      "backend=shared-declared",
-      "appServer=dedicated",
-    ],
-  });
-  assert.equal(
-    requiredSharedBackend.services.backend.ownership,
-    "shared-declared",
-  );
-  assert.equal(
-    requiredSharedBackend.services.backend.selectedBy,
-    "explicit-service",
-  );
+  for (const profile of ["frontend", "fullstack", "app-server", "electron", "beta"]) {
+    for (const service of ["backend", "appServer"]) {
+      expectDevSessionError(() => buildDevSessionPlan({
+        sourceRoot, changedFiles: ["frontend/src/App.tsx"], explicitProfile: profile,
+        serviceOverrides: [`${service}=shared-declared`],
+      }), 4);
+    }
+  }
 
   const explicitFullstack = buildDevSessionPlan({
     sourceRoot,
@@ -61,24 +52,20 @@ export function verifyPlanner(sourceRoot) {
   assert.deepEqual(explicitElectron.unsupportedServices, []);
   assert.equal(
     explicitElectron.services.backend.ownership,
-    "shared-declared",
+    "dedicated",
   );
   assert.equal(
     explicitElectron.services.appServer.ownership,
-    "shared-declared",
+    "dedicated",
   );
 
   const explicitBeta = buildDevSessionPlan({
     sourceRoot,
     changedFiles: ["frontend/src/App.tsx"],
     explicitProfile: "beta",
-    serviceOverrides: [
-      "backend=shared-declared",
-      "appServer=shared-declared",
-    ],
   });
-  assert.equal(explicitBeta.services.backend.ownership, "shared-declared");
-  assert.equal(explicitBeta.services.appServer.ownership, "shared-declared");
+  assert.equal(explicitBeta.services.backend.ownership, "dedicated");
+  assert.equal(explicitBeta.services.appServer.ownership, "dedicated");
   const betaWithBackendImpact = buildDevSessionPlan({
     sourceRoot,
     changedFiles: ["backend/src/index.ts"],
@@ -87,7 +74,7 @@ export function verifyPlanner(sourceRoot) {
   assert.equal(betaWithBackendImpact.services.backend.ownership, "dedicated");
   assert.equal(
     betaWithBackendImpact.services.appServer.ownership,
-    "shared-declared",
+    "dedicated",
   );
   const betaWithAppServerImpact = buildDevSessionPlan({
     sourceRoot,
@@ -119,7 +106,7 @@ export function verifyPlanner(sourceRoot) {
     );
     assert.equal(
       combinedBackendElectronImpact.services.appServer.ownership,
-      "shared-declared",
+      "dedicated",
       backendChangedFile,
     );
   }
@@ -228,16 +215,7 @@ export function verifyPlanner(sourceRoot) {
   }
   assert(incompleteProfileError instanceof DevSessionError);
   assert.equal(incompleteProfileError.exitCode, 4);
-  assert.deepEqual(incompleteProfileError.details.missingServices, [
-    "appServer",
-    "backend",
-  ]);
-  assert.deepEqual(incompleteProfileError.details.requiredOwnership, {
-    backend: "dedicated",
-    appServer: "dedicated",
-  });
-  assert.deepEqual(incompleteProfileError.details.requestedOwnership, {
-    backend: "shared-declared",
-    appServer: "shared-declared",
-  });
+  assert.deepEqual(incompleteProfileError.details.missingServices, ["appServer"]);
+  assert.deepEqual(incompleteProfileError.details.requiredOwnership, {});
+  assert.deepEqual(incompleteProfileError.details.requestedOwnership, {});
 }

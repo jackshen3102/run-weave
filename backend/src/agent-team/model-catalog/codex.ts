@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import type { AgentTeamCatalogModel } from "@runweave/shared/agent-team-model-config";
 import {
   isRecord,
@@ -11,11 +12,12 @@ import {
 export async function probeCodexCatalog(
   env: NodeJS.ProcessEnv,
 ): Promise<AgentTeamCatalogProbe> {
+  const binary = settingText("agents.codex.binary") ?? "codex";
   const version = normalizeVersion(
-    await runCatalogCommand("codex", ["--version"], env),
+    await runCatalogCommand(binary, ["--version"], env),
   );
   const payload = parseJsonObject(
-    await runCatalogCommand("codex", ["debug", "models"], env),
+    await runCatalogCommand(binary, ["debug", "models"], env),
     "codex debug models",
   );
   const entries = Array.isArray(payload.models) ? payload.models : null;

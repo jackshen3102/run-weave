@@ -1,3 +1,4 @@
+import { configurationLibrary as configuration } from "../lib/configuration.mjs";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -22,8 +23,7 @@ const releaseAppPath =
     `${appName}.app`,
   );
 const feedUrl = withTrailingSlash(
-  process.env.RUNWEAVE_LOCAL_UPDATES_URL ??
-    process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL ??
+  configuration.settingText("updates.url") ??
     "http://127.0.0.1:5500/updates/mac/",
 );
 const feedCheckUrl = new URL("latest-mac.yml", feedUrl).toString();

@@ -1,3 +1,4 @@
+import { configuration, settingText } from "@runweave/config-node";
 import type { TranscribeVoiceRequest, TranscribeVoiceResponse } from "@runweave/shared/voice";
 import { codexAppServerClient } from "./codex-app-server-client";
 
@@ -55,13 +56,13 @@ export async function transcribeVoice(
   appendOptionalFormField(
     formData,
     "language",
-    readVoiceConfig("RUNWEAVE_VOICE_TRANSCRIPTION_LANGUAGE") ||
+    readVoiceConfig("voice.transcription.language") ||
       DEFAULT_TRANSCRIPTION_LANGUAGE,
   );
   appendOptionalFormField(
     formData,
     "prompt",
-    readVoiceConfig("RUNWEAVE_VOICE_TRANSCRIPTION_PROMPT") ||
+    readVoiceConfig("voice.transcription.prompt") ||
       DEFAULT_TRANSCRIPTION_PROMPT,
   );
 
@@ -117,7 +118,7 @@ async function fetchChatGptTranscription(
       headers: {
         Accept: "application/json",
         "Accept-Language":
-          readVoiceConfig("RUNWEAVE_VOICE_TRANSCRIPTION_ACCEPT_LANGUAGE") ||
+          readVoiceConfig("voice.transcription.acceptLanguage") ||
           DEFAULT_ACCEPT_LANGUAGE,
         Authorization: `Bearer ${token}`,
         Origin: "https://chatgpt.com",
@@ -152,7 +153,8 @@ function appendOptionalFormField(
 }
 
 function readVoiceConfig(name: string): string | null {
-  const value = process.env[name];
+  configuration().requireDomain("voice");
+  const value = settingText(name);
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 

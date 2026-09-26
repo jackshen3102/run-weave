@@ -75,7 +75,7 @@ export async function verifyBetaSlotStorage(
     slotId: "pool-05",
     homeDir: diskBudgetHome,
     applicationsDir: diskBudgetApplications,
-    env: { RUNWEAVE_BETA_POOL_MIN_FREE_BYTES: "0" },
+    minimumFreeBytes: 0,
   });
   assert(diskBudget.plannedWriteBytes > 0);
 
@@ -96,7 +96,7 @@ export async function verifyBetaSlotStorage(
       slotId: "pool-04",
       homeDir: diskBudgetHome,
       applicationsDir: diskBudgetApplications,
-      env: { RUNWEAVE_BETA_POOL_MIN_FREE_BYTES: "0" },
+      minimumFreeBytes: 0,
     }),
     /refusing to size a symlinked Beta path/,
   );
@@ -106,9 +106,7 @@ export async function verifyBetaSlotStorage(
       sourceRoot: process.cwd(),
       slotId: "pool-05",
       homeDir: temporaryHome,
-      env: {
-        RUNWEAVE_BETA_POOL_MIN_FREE_BYTES: String(Number.MAX_SAFE_INTEGER - 1),
-      },
+      minimumFreeBytes: Number.MAX_SAFE_INTEGER - 1,
     }),
     (error) => {
       assert.equal(

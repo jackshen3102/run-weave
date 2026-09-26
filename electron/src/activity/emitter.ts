@@ -8,7 +8,7 @@ import type {
 } from "@runweave/shared/activity";
 import { desktopChannel, desktopSourceRevision } from "../desktop/config.js";
 import { desktopRuntime } from "../desktop/runtime-state.js";
-import { resolvePackagedBackendAuthEnv } from "../backend/packaged/auth.js";
+import { readPackagedBackendCredentials } from "../backend/packaged/auth.js";
 
 const bootId = crypto.randomUUID();
 const bootStartedAt = new Date().toISOString();
@@ -38,11 +38,11 @@ function sanitizeUrl(value: string): string {
 }
 
 async function login(baseUrl: string): Promise<string> {
-  const auth = resolvePackagedBackendAuthEnv(process.env);
+  const auth = readPackagedBackendCredentials();
   const response = await net.fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-auth-client": "electron" },
-    body: JSON.stringify({ username: auth.AUTH_USERNAME, password: auth.AUTH_PASSWORD }),
+    body: JSON.stringify({ username: auth.username, password: auth.password }),
   });
   if (!response.ok) throw new Error(`activity_electron_login_failed:${response.status}`);
   const payload = (await response.json()) as { accessToken?: string };

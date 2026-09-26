@@ -209,7 +209,7 @@ export default function runweave(pi: ExtensionAPI) {
     context = ctx;
     // Resolve the actual pane rather than trusting an inherited parent panel ID.
     const result = spawnSync(
-      process.env.TMUX_BINARY || "tmux",
+      process.env.RUNWEAVE_RUNTIME_TMUX_BINARY || "tmux",
       [
         "-S",
         tmuxSocket,

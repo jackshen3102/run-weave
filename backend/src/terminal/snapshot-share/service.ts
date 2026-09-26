@@ -16,20 +16,22 @@ export class TerminalSnapshotShareService {
   constructor(
     private readonly sessions: TerminalSessionManager,
     private readonly tmuxService: TmuxService,
-    private readonly publisher?: TerminalSnapshotPublisher,
+    private publisher?: TerminalSnapshotPublisher,
   ) {}
+
+  replacePublisher(publisher: TerminalSnapshotPublisher | undefined): void { this.publisher = publisher; }
 
   create(sessionId: string, panelId: string): Promise<CreateTerminalSnapshotShareResponse> {
     if (this.disposed) return Promise.reject(new TerminalSnapshotShareError("SNAPSHOT_CAPTURE_UNAVAILABLE"));
     if (!this.publisher) return Promise.reject(new TerminalSnapshotShareError("SNAPSHOT_PUBLISH_NOT_CONFIGURED"));
     if (this.creations.size >= 4) return Promise.reject(new TerminalSnapshotShareError("SNAPSHOT_BUSY"));
-    const creation = this.captureAndPublish(sessionId, panelId);
+    const creation = this.captureAndPublish(sessionId, panelId, this.publisher);
     this.creations.add(creation);
     void creation.finally(() => this.creations.delete(creation)).catch(() => undefined);
     return creation;
   }
 
-  private async captureAndPublish(sessionId: string, panelId: string): Promise<CreateTerminalSnapshotShareResponse> {
+  private async captureAndPublish(sessionId: string, panelId: string, publisher: TerminalSnapshotPublisher): Promise<CreateTerminalSnapshotShareResponse> {
     let title: string;
     let text: string;
     try {
@@ -53,8 +55,7 @@ export class TerminalSnapshotShareService {
       throw new TerminalSnapshotShareError(code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "SNAPSHOT_TOO_LARGE"
         : code === "ENOENT" || isTimeoutError(error) ? "SNAPSHOT_CAPTURE_UNAVAILABLE" : "SNAPSHOT_TARGET_UNAVAILABLE");
     }
-    if (!this.publisher) throw new TerminalSnapshotShareError("SNAPSHOT_PUBLISH_NOT_CONFIGURED");
-    return this.publisher.publish(title, text);
+    return publisher.publish(title, text);
   }
 
   dispose(): Promise<void> {

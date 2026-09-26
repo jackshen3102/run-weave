@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import { settingText, configuration } from "@runweave/config-node";
 
 interface AuthConfig {
   username: string;
@@ -27,21 +27,13 @@ function parsePositiveMs(
   return ttlSeconds * 1000;
 }
 
-function isStrictAuthConfigRequired(): boolean {
-  return (
-    process.env.NODE_ENV === "production" ||
-    process.env.ELECTRON_RUN_AS_NODE === "1" ||
-    Boolean(process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim())
-  );
-}
-
 function requireStrictAuthValue(
   value: string | undefined,
   envName: string,
 ): string {
   const normalized = value?.trim();
   if (!normalized) {
-    throw new Error(`[viewer-be] missing required auth env: ${envName}`);
+    throw new Error(`[viewer-be] missing required configuration field: ${envName}`);
   }
   return normalized;
 }
@@ -54,7 +46,7 @@ function rejectUnsafeStrictAuthDefaults(
   if (
     username === "admin" &&
     password === "admin" &&
-    process.env.RUNWEAVE_DESKTOP_CHANNEL !== "beta"
+    configuration().context.kind === "stable"
   ) {
     throw new Error("[viewer-be] refusing default admin/admin credentials");
   }
@@ -67,49 +59,35 @@ function rejectUnsafeStrictAuthDefaults(
 }
 
 export function loadAuthConfig(): AuthConfig {
-  const username = process.env.AUTH_USERNAME?.trim();
-  const password = process.env.AUTH_PASSWORD?.trim();
-  const jwtSecret = process.env.AUTH_JWT_SECRET?.trim();
-  const strictAuthConfigRequired = isStrictAuthConfigRequired();
-  const resolvedUsername = strictAuthConfigRequired
-    ? requireStrictAuthValue(username, "AUTH_USERNAME")
-    : username || "admin";
-  const resolvedPassword = strictAuthConfigRequired
-    ? requireStrictAuthValue(password, "AUTH_PASSWORD")
-    : password || "admin";
-  const resolvedJwtSecret = strictAuthConfigRequired
-    ? requireStrictAuthValue(jwtSecret, "AUTH_JWT_SECRET")
-    : jwtSecret || crypto.randomBytes(32).toString("base64url");
-
-  if (strictAuthConfigRequired) {
-    rejectUnsafeStrictAuthDefaults(
-      resolvedUsername,
-      resolvedPassword,
-      resolvedJwtSecret,
-    );
-  }
+  const username = settingText("backend.auth.username")?.trim();
+  const password = settingText("backend.auth.password")?.trim();
+  const jwtSecret = settingText("backend.auth.jwtSecret")?.trim();
+  configuration().requireDomain("backend.auth");
+  const resolvedUsername = requireStrictAuthValue(username, "backend.auth.username");
+  const resolvedPassword = requireStrictAuthValue(password, "backend.auth.password");
+  const resolvedJwtSecret = requireStrictAuthValue(jwtSecret, "backend.auth.jwtSecret");
+  rejectUnsafeStrictAuthDefaults(resolvedUsername, resolvedPassword, resolvedJwtSecret);
 
   return {
     username: resolvedUsername,
     password: resolvedPassword,
     jwtSecret: resolvedJwtSecret,
     accessTokenTtlMs: parsePositiveMs(
-      process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS ??
-        process.env.AUTH_TOKEN_TTL_SECONDS,
+      settingText("backend.auth.accessTokenTtlSeconds"),
       24 * 60 * 60 * 1000,
-      process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS != null
+      settingText("backend.auth.accessTokenTtlSeconds") != null
         ? "AUTH_ACCESS_TOKEN_TTL_SECONDS"
         : "AUTH_TOKEN_TTL_SECONDS",
     ),
     refreshTokenTtlMs: parsePositiveMs(
-      process.env.AUTH_REFRESH_TOKEN_TTL_SECONDS,
+      settingText("backend.auth.refreshTokenTtlSeconds"),
       30 * 24 * 60 * 60 * 1000,
       "AUTH_REFRESH_TOKEN_TTL_SECONDS",
     ),
     refreshCookieName:
-      process.env.AUTH_REFRESH_COOKIE_NAME?.trim() || "viewer_refresh",
+      settingText("backend.auth.refreshCookieName")?.trim() || "viewer_refresh",
     secureCookies:
-      process.env.AUTH_COOKIE_SECURE?.trim().toLowerCase() !== "false",
+      settingText("backend.auth.secureCookies")?.trim().toLowerCase() !== "false",
   };
 }
 

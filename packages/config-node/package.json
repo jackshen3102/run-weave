@@ -1,0 +1,26 @@
+{
+  "name": "@runweave/config-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./app-server/discovery": "./src/app-server/discovery.ts",
+    "./app-server/paths": "./src/app-server/paths.ts",
+    "./app-server/runtime-release": "./src/app-server/runtime-release.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@runweave/shared": "workspace:*",
+    "yaml": "2.8.2",
+    "fs-native-extensions": "1.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  }
+}

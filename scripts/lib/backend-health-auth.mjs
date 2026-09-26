@@ -1,3 +1,4 @@
+import { configurationLibrary as configuration } from "./configuration.mjs";
 import { isIP } from "node:net";
 import { constants } from "node:fs";
 import fs from "node:fs/promises";
@@ -8,25 +9,19 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-const FILE_NAME = "backend-health-auth.json";
+const FILE_NAME = "backend-health-binding.json";
 
 // This private, mutable profile file is never part of a manifest or status DTO.
 export async function persistBackendHealthAuth(profileDir, sessionId, env) {
   if (!(sessionId === null || (typeof sessionId === "string" && sessionId))) {
     throw new Error("invalid Backend health configuration owner");
   }
-  const token = env.RUNWEAVE_TUNNEL_TOKEN?.trim() || null;
-  if (token && (token.length > 8_192 || !/^[\x21-\x7e]+$/.test(token))) {
-    throw new Error("invalid Backend tunnel credential");
-  }
-  const serialized = JSON.stringify({
-    ownerDevSessionId: sessionId,
-    token,
-    scope:
-      env.RUNWEAVE_TUNNEL_AUTH_SCOPE?.trim().toLowerCase() === "all"
-        ? "all"
-        : "forwarded",
-  });
+  void env;
+  const context = configuration.resolveConfigurationContext({ args: ["--instance", sessionId ?? "stable"] });
+  const snapshot = new configuration.ConfigurationStore(context).read();
+  const ownedProfile = snapshot.value.storage?.browserProfileDirectory ?? path.join(context.configRoot, "data", "backend");
+  if (configuration.canonicalPath(profileDir) !== configuration.canonicalPath(ownedProfile)) throw new Error("Backend health binding profile mismatch");
+  const serialized = JSON.stringify({ ownerDevSessionId: sessionId, configRoot: context.configRoot });
   if (Buffer.byteLength(serialized, "utf8") > 16_384) {
     throw new Error("oversized private Backend health configuration");
   }
@@ -68,22 +63,14 @@ export async function readBackendHealthAuth(profileDir) {
     if (bytesRead > 16_384)
       throw new Error("oversized private Backend health configuration");
     const config = JSON.parse(bytes.subarray(0, bytesRead).toString("utf8"));
-    if (
-      !(
-        config.ownerDevSessionId === null ||
-        (typeof config.ownerDevSessionId === "string" &&
-          config.ownerDevSessionId)
-      ) ||
-      !(
-        config.token === null ||
-        (typeof config.token === "string" &&
-          /^[\x21-\x7e]+$/.test(config.token))
-      ) ||
-      !["all", "forwarded"].includes(config.scope)
-    ) {
-      throw new Error("invalid private Backend health configuration");
-    }
-    return config;
+    if (!(config.ownerDevSessionId === null || typeof config.ownerDevSessionId === "string") || typeof config.configRoot !== "string") throw new Error("invalid Backend health binding");
+    const context = configuration.resolveConfigurationContext({ args: ["--instance", config.ownerDevSessionId ?? "stable", "--config-dir", config.configRoot] });
+    const snapshot = new configuration.ConfigurationStore(context).read();
+    const ownedProfile = snapshot.value.storage?.browserProfileDirectory ?? path.join(context.configRoot, "data", "backend");
+    if (configuration.canonicalPath(profileDir) !== configuration.canonicalPath(ownedProfile) || snapshot.issues["backend.tunnelAuth"]?.length) throw new Error("Backend health binding mismatch");
+    const token = snapshot.value.backend?.tunnelAuth?.token ?? null;
+    if (token !== null && typeof token !== "string") throw new Error("invalid Backend health credential");
+    return { ownerDevSessionId: config.ownerDevSessionId, token, scope: snapshot.value.backend?.tunnelAuth?.scope ?? "forwarded" };
   } catch (error) {
     if (error?.code === "ENOENT") return null;
     // JSON parse errors can contain credential bytes. Never expose the cause.

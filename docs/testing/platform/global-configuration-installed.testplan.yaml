@@ -1,0 +1,57 @@
+version: 1
+name: "统一配置安装态与升级恢复"
+description: "目标行为验收计划，执行进度与证据见全局配置实施方案。所有安装与升级都在归属明确的打包 Dev Session 内执行；保留安装态能力后才退役旧 Beta 入口。"
+cases:
+  - id: GCI-001
+    name: "Dev Session 安装态首启"
+    required: true
+    description: "源码改动通过 planner 选择隔离打包模式，实际安装产物直接加载 Session 的 YAML。"
+    preconditions:
+      - "已有新 Dev Session 控制面和可用打包资源，测试源码改动涉及 updater；记录 Stable 安装、配置与数据摘要。"
+    steps:
+      - "按 toolkit:runweave-dev-session 规划并创建打包模式；确认 planner 自动覆盖安装态，资源租约、产物路径和配置根绑定 Dev 身份。"
+      - "启动实际打包 App，重新取得进程和 endpoint；确认 release/source 身份与构建相符，Backend 加载 settings.yaml，无第三种 Beta 身份。"
+      - "用 toolkit:playwright-cli 在实际桌面页面执行专用终端标记命令并取得输出；确认 Stable 的安装、配置与数据未被写入。"
+  - id: GCI-002
+    name: "Desktop 退出重开"
+    required: true
+    description: "从正常桌面入口重新打开可读取同一配置。"
+    preconditions:
+      - "已安装支持新方案的打包 Dev Session Desktop，有可安全退出的独立 fixture。"
+    steps:
+      - "记录配置和数据身份，退出 Desktop 后从 Dock 正常打开；重新附着实际页面，确认配置根及身份保持；用 toolkit:playwright-cli 检查设置生效状态，不以截图代替请求证据。"
+  - id: GCI-003
+    name: "软件升级保持配置"
+    required: true
+    description: "更新二进制不会覆盖全局配置或身份。"
+    preconditions:
+      - "独立打包 Dev Session fixture 可通过项目已有更新入口执行一次真实升级，任务占用已核对。"
+    steps:
+      - "记录配置摘要、schema、身份、数据库路径和必要业务记录，执行受控升级；重新取得实际运行身份，确认保留且可读取原业务数据。"
+  - id: GCI-004
+    name: "测试重建与正式安装隔离"
+    required: true
+    description: "Dev Session 的测试构建和重建不会修改 Stable 或其他 Session。"
+    preconditions:
+      - "唯一 Stable 与 Dev Session A、B 已建立，可通过既有 Dev Session 入口重建 A。"
+    steps:
+      - "记录三方配置、运行产物和数据摘要，仅按 toolkit:runweave-dev-session 重建 A；确认只改变 A 的预期测试产物，Stable 安装与配置、B 的产物及数据未被写入。"
+  - id: GCI-005
+    name: "不兼容回退受控"
+    required: true
+    description: "旧版本不能覆盖新 schema 或丢失迁移后修改。"
+    preconditions:
+      - "独立打包 Dev Session 已升级 schema 并有新修改，存在旧二进制和对应私有备份；Stable 安装及配置已记录基线。"
+    steps:
+      - "通过受管更新入口请求回退；确认兼容性检查阻止切换至不支持新 YAML 的版本；通过明确恢复流程查看差异后恢复匹配版本，重新取得 endpoint 核对身份及选择保留的数据，Stable 基线不变，不能静默覆盖新修改。"
+      - "使用 rw config backups 选择本实例兼容备份；restore --dry-run 只展示变化字段与摘要。执行必须携带 expected-revision、expected-digest 和 expected-backup-digest；预览后任何一方变化均拒绝，成功恢复前的完整配置保留在私有备份中，revision 单调递增。"
+  - id: GCI-006
+    name: "安装态升级失败恢复"
+    required: true
+    description: "新程序未通过启动检查时恢复原可用程序，不能回退已保存的配置或损伤其他环境。"
+    preconditions:
+      - "独立打包 Dev Session 有可用版本及合法配置、终端数据；准备可控制启动失败的候选产物，候选与原程序均支持当前 schema。"
+      - "已记录原 releaseId、配置字节摘要、instanceId 和其他环境摘要，fixture 没有在途真实任务。"
+    steps:
+      - "通过 Session 的受管升级入口安装候选，触发候选启动失败；确认失败状态明确，控制面保持或恢复原版本。"
+      - "重新取得 endpoint 和页面，核对原 releaseId 与 instanceId；通过 toolkit:playwright-cli 执行终端标记命令取得输出，配置摘要和原数据保持，其他环境无写入。"

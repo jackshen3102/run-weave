@@ -1,3 +1,4 @@
+import { copyNativeLockRuntime } from "../../packages/config-node/scripts/native-runtime.mjs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -9,8 +10,11 @@ await build({
   entryPoints: ["backend/src/snapshot-share-host.ts"],
   outfile: "deploy/snapshot-share/dist/host.cjs",
   bundle: true,
+  external: ["fs-native-extensions"],
   platform: "node",
   format: "cjs",
   target: "node22",
 });
 console.log("Built deploy/snapshot-share/dist/host.cjs");
+
+copyNativeLockRuntime(fileURLToPath(new URL("./dist", import.meta.url)));

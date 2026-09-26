@@ -1,3 +1,4 @@
+import { configuration, configurationArguments, setting } from "@runweave/config-node";
 import { spawn, type ChildProcess } from "node:child_process";
 import net from "node:net";
 import { localBackendAuthHeaders, restoreOwnedBackendHealthEnv } from "./health-auth.js";
@@ -144,13 +145,6 @@ export function buildPackagedBackendEnv(options: {
   };
 }
 
-function readRequiredAuthEnv(env: NodeJS.ProcessEnv): void {
-  for (const name of ["AUTH_USERNAME", "AUTH_PASSWORD", "AUTH_JWT_SECRET"]) {
-    if (!env[name]?.trim()) {
-      throw new Error(`[electron] missing required backend env: ${name}`);
-    }
-  }
-}
 
 async function isPortAvailable(port: number, host: string): Promise<boolean> {
   return await new Promise<boolean>((resolve) => {
@@ -290,7 +284,7 @@ export async function startPackagedBackend(
     backendPort: 0,
     backendPaths: resolvePackagedBackendPaths(resourcesPath),
   });
-  readRequiredAuthEnv(mergedEnv);
+  configuration().requireDomain("backend.auth");
 
   const candidatePlan = resolvePackagedBackendRuntimeCandidates({
     runtimeRoot: options.runtimeRoot ?? null,
@@ -368,7 +362,9 @@ async function startPackagedBackendForRelease(options: {
     options.baseEnv,
     options.onIncidentEvent,
   );
-  const backendPort = await findAvailablePort(DEFAULT_BACKEND_PORT);
+  const backendPort = configuration().context.kind === "stable"
+    ? setting<number>("backend.server.port", DEFAULT_BACKEND_PORT)!
+    : await findAvailablePort(DEFAULT_BACKEND_PORT);
   const backendUrl = `http://127.0.0.1:${backendPort}`;
   const appServerConnection =
     (await options.ensureAppServer?.(release, options.baseEnv)) ?? null;
@@ -379,7 +375,7 @@ async function startPackagedBackendForRelease(options: {
     appServerConnection,
   });
 
-  const child = spawn(process.execPath, [backendPaths.backendEntry], {
+  const child = spawn(process.execPath, [backendPaths.backendEntry, ...configurationArguments(configuration().context), "--port", String(backendPort), "--host", setting<string>("backend.server.host", LAN_BIND_HOST)!], {
     env: backendEnv,
     stdio: "pipe",
   });

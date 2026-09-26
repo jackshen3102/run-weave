@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readdirSync } from "node:fs";
 import os from "node:os";
@@ -340,7 +341,7 @@ interface CodexLaunchPlan {
 
 function resolveCodexLaunchPlan(env: NodeJS.ProcessEnv): CodexLaunchPlan {
   const args = buildCodexAppServerArgs();
-  const configured = env.CODEX_BIN?.trim();
+  const configured = settingText("agents.codex.binary")?.trim();
   if (configured && isExecutableFile(configured)) {
     return {
       command: configured,

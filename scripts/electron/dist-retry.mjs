@@ -200,6 +200,10 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
         ],
         extraResources: [
           {
+            from: path.join(electronDist, "configuration-compatibility.json"),
+            to: "configuration-compatibility.json",
+          },
+          {
             from: path.join(
               buildRoot,
               "electron",

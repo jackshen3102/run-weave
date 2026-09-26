@@ -1,5 +1,6 @@
 import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin } from "../tunnels/index";
 import type { LoginResponse } from "../protocol";
+import type { ConfigurationStatus } from "../configuration";
 import type { SuijiDesktopState, SuijiEnvironment, SuijiProfile } from "../suiji/desktop";
 import type { RemoteServiceRef, ResolvedServiceAccess } from "../remote/index";
 import type { BrowserAssistanceTarget } from "../browser/assistance";
@@ -96,6 +97,7 @@ export interface RunweaveCompanionBridge {
 }
 
 export interface RunweaveElectronBridge {
+  getLocalConfigurationStatus: () => Promise<ConfigurationStatus>;
   platform: string;
   isElectron: boolean;
   showAttentionNotification: (target: AttentionNotificationTarget) => Promise<boolean>;

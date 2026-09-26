@@ -1,3 +1,5 @@
+import { ConfigurationPanel } from "../features/configuration/panel";
+import { DesktopConfigurationStatus } from "../features/configuration/desktop-status";
 import { useTunnelStore } from "../features/tunnels/store";
 import { useMemoizedFn } from "ahooks";
 import { ChevronRight, Copy, RefreshCw } from "lucide-react";
@@ -157,7 +159,7 @@ function RuntimeResources() {
   );
 }
 
-export function RuntimeStatusPanel() {
+export function RuntimeStatusPanel({ apiBase, token }: { apiBase: string; token: string | null }) {
   const { nodes, panelOpen, setPanelOpen, refresh, refreshing } = useRuntimeStatus();
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const copyAddress = useMemoizedFn(async (value: string) => {
@@ -190,6 +192,8 @@ export function RuntimeStatusPanel() {
           </div>
         </SheetHeader>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
+          <ConfigurationPanel key={`${apiBase}:${token ?? ""}`} apiBase={apiBase} token={token} />
+          <DesktopConfigurationStatus />
           {nodes.map((node) => {
             const awaitingLogin = node.capabilities.some((capability) => isAwaitingLogin(capability.items));
             return (

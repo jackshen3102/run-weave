@@ -1,3 +1,4 @@
+import { settingText, configuration, acquireConfigurationOwner } from "@runweave/config-node";
 import express from "express";
 import path from "node:path";
 import { createServer } from "node:http";
@@ -7,20 +8,22 @@ import { TerminalSnapshotHostService } from "./terminal/snapshot-share/host-serv
 import { TerminalSnapshotShareStore } from "./terminal/snapshot-share/store";
 
 async function main(): Promise<void> {
-  const token = process.env.RUNWEAVE_SNAPSHOT_UPLOAD_TOKEN;
-  const directory = process.env.RUNWEAVE_SNAPSHOT_HOST_DIR;
-  const port = Number(process.env.RUNWEAVE_SNAPSHOT_HOST_PORT ?? "8093");
+  configuration().requireDomain("services.snapshotHost");
+  const token = settingText("services.snapshotHost.uploadToken");
+  const directory = settingText("services.snapshotHost.directory");
+  const port = Number(settingText("services.snapshotHost.port") ?? "8093");
   if (!token || !/^[A-Za-z0-9_-]{32,256}$/.test(token) || !directory || !path.isAbsolute(directory) ||
       !Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("Invalid snapshot host configuration");
   }
+  const owner = acquireConfigurationOwner(configuration().context, "snapshot-host");
   const service = new TerminalSnapshotHostService(new TerminalSnapshotShareStore(directory));
   const app = express();
   app.disable("x-powered-by");
   app.disable("etag");
   let ready = false;
   app.use((_req, res, next) => { if (!ready) res.status(503).end(); else next(); });
-  app.get("/health", (_req, res) => { res.json({ ok: true }); });
+  app.get("/health", (_req, res) => { res.json({ ok: true, environment: configuration().context }); });
   app.use("/share/terminal", createPublicTerminalSnapshotShareRouter(service));
   app.use("/api/snapshot-shares", createTerminalSnapshotUploadRouter(service, token));
   app.use((_req, res) => { res.status(404).end(); });
@@ -56,6 +59,7 @@ async function main(): Promise<void> {
     await drained;
     await service.dispose();
     clearTimeout(deadline);
+    owner.release();
   };
   process.once("SIGTERM", () => { void stop(); });
   process.once("SIGINT", () => { void stop(); });

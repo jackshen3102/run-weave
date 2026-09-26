@@ -1,5 +1,6 @@
+import { settingText } from "@runweave/config-node";
 import path from "node:path";
-import { discoverAppServer, getAppServerStatus } from "@runweave/shared/app-server/discovery";
+import { discoverAppServer, getAppServerStatus } from "@runweave/config-node/app-server/discovery";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 import { logger } from "../logging/index";
 import { resolveStoragePaths } from "../utils/path";
@@ -25,7 +26,7 @@ export async function initializeAppServerEventIntegration(
 ): Promise<void> {
   const runtime = services.runtimeStatus;
   if (runtime.appServerIntegrationHandle) return;
-  if (process.env.RUNWEAVE_APP_SERVER_DISCOVERY?.trim() === "disabled") {
+  if (settingText("appServer.discovery")?.trim() === "disabled") {
     runtime.appServerIntegration = {
       state: "disabled",
       summary: "App Server 集成已主动禁用",
@@ -136,7 +137,7 @@ async function connectAppServerEventIntegration(
   signal: AbortSignal,
 ): Promise<void> {
   const client = new AppServerClient(connection);
-  const storagePaths = resolveStoragePaths(process.env);
+  const storagePaths = resolveStoragePaths();
   const backendInstanceId = `backend:${process.pid}:${backendBaseUrl}`;
   const startedEvent = await client.postEvent({
     kind: "backend.started",
@@ -223,7 +224,7 @@ async function describeUnavailableAppServer(): Promise<AppServerIntegrationStatu
   let configured = Boolean(
     env.RUNWEAVE_APP_SERVER_URL?.trim() || env.RUNWEAVE_APP_SERVER_TOKEN?.trim(),
   );
-  if (env.RUNWEAVE_APP_SERVER_DISCOVERY?.trim() !== "explicit") {
+  if (settingText("appServer.discovery")?.trim() !== "explicit") {
     const status = await getAppServerStatus({ env });
     configured ||= Boolean(status.lock || status.hasToken || status.currentRuntime);
   }

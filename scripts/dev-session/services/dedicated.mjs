@@ -1,3 +1,4 @@
+import { sessionConfiguration } from "../configuration.mjs";
 import { persistBackendHealthAuth } from "../../lib/backend-health-auth.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -39,7 +40,7 @@ export async function startDedicatedAppServer({
   const processInfo = spawnDetached({
     name: "app-server",
     command: "pnpm",
-    args: ["--filter", "@runweave/app-server", "dev"],
+    args: ["--filter", "@runweave/app-server", "dev", ...sessionConfiguration(sessionId, paths).args, "--port", String(port)],
     cwd: sourceRoot,
     env: {
       ...process.env,
@@ -148,6 +149,7 @@ export async function startDedicatedBackend({
       "./backend",
       "dev",
       "--",
+      ...sessionConfiguration(sessionId, paths).args,
       "--port",
       String(port),
       "--host",
@@ -324,6 +326,7 @@ export async function startDedicatedFrontend({
       "./frontend",
       "dev",
       "--",
+      ...sessionConfiguration(sessionId, paths).args,
       "--port",
       String(port),
       "--host",
@@ -383,7 +386,6 @@ export async function startDedicatedElectron({
   const userDataDir = path.join(electronStateDir, "user-data");
   const statusPath = path.join(electronStateDir, "desktop-status.json");
   const desktopProfileDir = path.join(userDataDir, "browser-profile");
-  const cliConfigPath = path.join(userDataDir, "cli", "config.json");
   const bundleDir = path.join(electronStateDir, "bundle");
   await mkdir(userDataDir, { recursive: true, mode: 0o700 });
   bundleElectron(electronDir, {
@@ -418,7 +420,6 @@ export async function startDedicatedElectron({
     RUNWEAVE_RENDERER_DIST_DIR: path.join(sourceRoot, "frontend/dist"),
     BROWSER_PROFILE_DIR: desktopProfileDir,
     AUTH_STORE_FILE: path.join(desktopProfileDir, "auth-store.json"),
-    RUNWEAVE_CONFIG_FILE: cliConfigPath,
     ...(appServer?.homeDir
       ? { RUNWEAVE_APP_SERVER_HOME: appServer.homeDir }
       : appServer?.lockPath
@@ -429,7 +430,7 @@ export async function startDedicatedElectron({
   const processInfo = spawnDetached({
     name: channel === "beta" ? "beta" : "electron",
     command: electronBin,
-    args: [path.join(bundleDir, "main.cjs")],
+    args: [path.join(bundleDir, "main.cjs"), ...sessionConfiguration(sessionId, paths).args],
     cwd: sourceRoot,
     env: electronEnv,
     logPath: path.join(paths.logsDir, `${channel}-electron.log`),

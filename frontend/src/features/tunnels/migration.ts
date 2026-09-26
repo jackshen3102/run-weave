@@ -1,3 +1,4 @@
+import { deviceStorage } from "../device-storage";
 import type { RunweaveElectronBridge } from "@runweave/shared/desktop-bridge";
 import type {
   TunnelHostConfig,
@@ -22,7 +23,7 @@ async function migrate(storageKey: string) {
   if (!api) return;
   const snapshot = await api.listTunnels();
   useTunnelStore.getState().setSnapshot(snapshot);
-  const raw = localStorage.getItem(storageKey);
+  const raw = deviceStorage.getItem(storageKey);
   if (!raw) return;
   const store = JSON.parse(raw) as ConnectionStore;
   type Legacy = ConnectionConfig & {
@@ -39,8 +40,8 @@ async function migrate(storageKey: string) {
   const hosts: TunnelHostConfig[] = [];
   const endpoints: TunnelBackendEndpoint[] = [];
   const backups: Record<string, string> = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
+  for (let i = 0; i < deviceStorage.length; i++) {
+    const key = deviceStorage.key(i);
     if (
       key &&
       (key === storageKey ||
@@ -48,12 +49,12 @@ async function migrate(storageKey: string) {
         key.includes("connection-auth") ||
         key.includes("project-binding"))
     )
-      backups[key] = localStorage.getItem(key)!;
+      backups[key] = deviceStorage.getItem(key)!;
   }
   for (const c of legacy) {
     if (!c.sshHost || !c.sshBackendPort)
       throw new Error("旧 SSH 配置不完整，已保留原数据，请检查后再导入");
-    const draftRaw = localStorage.getItem(`viewer.remote-forward.${c.id}`);
+    const draftRaw = deviceStorage.getItem(`viewer.remote-forward.${c.id}`);
     const draft = draftRaw
       ? (JSON.parse(draftRaw) as { port: string; path: string })
       : null;
@@ -161,12 +162,12 @@ async function migrate(storageKey: string) {
           }
         : c,
     );
-  localStorage.setItem(storageKey, JSON.stringify(store));
+  deviceStorage.setItem(storageKey, JSON.stringify(store));
   // The old project allow-list is only retained in the encrypted import backup.
   // Ordinary connections now display all projects returned by their Backend.
-  localStorage.removeItem("viewer.remote-project-bindings.v1");
+  deviceStorage.removeItem("viewer.remote-project-bindings.v1");
   for (const c of legacy) {
-    localStorage.removeItem(`viewer.remote-forward.${c.id}`);
+    deviceStorage.removeItem(`viewer.remote-forward.${c.id}`);
     if (merged.has(c.id)) clearConnectionAuth(c.id);
   }
   useTunnelStore.getState().setSnapshot(imported);

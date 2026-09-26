@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import pkg from "electron-updater";
 import type { UpdateInfo } from "electron-updater";
 import { BrowserWindow, dialog } from "electron";
@@ -16,15 +17,13 @@ function getAutoUpdater() {
 export function initAutoUpdater(win: BrowserWindow): void {
   mainWindow = win;
   const updateBaseUrl = getCustomUpdateBaseUrl(
-    process.env.RUNWEAVE_LOCAL_UPDATES_URL ??
-      process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL,
+    settingText("updates.url"),
   );
   const packagedUpdateBaseUrl = getPackagedUpdateBaseUrl(process.resourcesPath);
   const activeUpdateBaseUrl = updateBaseUrl ?? packagedUpdateBaseUrl;
   const autoInstallLocalUpdates = shouldAutoInstallLocalUpdates({
     explicitValue:
-      process.env.RUNWEAVE_AUTO_INSTALL_LOCAL_UPDATES ??
-      process.env.BROWSER_VIEWER_AUTO_INSTALL_LOCAL_UPDATES,
+      settingText("updates.autoInstallLocal"),
     updateBaseUrl: activeUpdateBaseUrl,
   });
 

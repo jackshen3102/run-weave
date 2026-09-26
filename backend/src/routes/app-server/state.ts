@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { AppServerThreadDetailResponse, AppServerThreadListResponse, AppServerThreadResponse } from "@runweave/shared/app-server-events";
-import { discoverAppServer } from "@runweave/shared/app-server/discovery";
+import { discoverAppServer } from "@runweave/config-node/app-server/discovery";
 import {
   AppServerHistoryGateway,
   AppServerHistoryGatewayError,

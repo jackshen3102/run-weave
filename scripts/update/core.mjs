@@ -85,11 +85,15 @@ export const INSTALLED_APP_CONTROL_PATH_PREFIXES = [
 
 export const APP_SENSITIVE_PATH_PREFIXES = [
   "electron/src/",
+  "packages/config-node/",
+  "packages/shared/src/configuration/",
   ...INSTALLED_APP_CONTROL_PATH_PREFIXES,
 ];
 
 export const APP_SERVER_SENSITIVE_PATH_PREFIXES = [
   "app-server/",
+  "packages/config-node/",
+  "packages/shared/src/configuration/",
   "packages/runweave-cli/src/commands/app-server.ts",
   "packages/shared/src/app-server",
   "packages/shared/src/index.ts",
@@ -139,6 +143,7 @@ export function resolveDefaultUpdateStatePath(homeDir = os.homedir()) {
 export function resolveBetaUpdateTargets(
   homeDir = os.homedir(),
   instanceId = "default",
+  devSessionId = null,
 ) {
   if (!homeDir) {
     throw new Error("Cannot resolve user home directory");
@@ -154,9 +159,11 @@ export function resolveBetaUpdateTargets(
     "instances",
     safeInstanceId,
   );
-  const userData = path.join(instanceRoot, "user-data");
+  if (devSessionId && !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(devSessionId)) throw new Error("CONFIG_INSTANCE_INVALID");
+  const sessionRoot = devSessionId ? path.join(homeDir, ".runweave", "dev-sessions", devSessionId) : null;
+  const userData = sessionRoot ? path.join(sessionRoot, "electron", "user-data") : path.join(instanceRoot, "user-data");
   const poolSlot = BETA_SLOT_ID_PATTERN.test(safeInstanceId);
-  const runtimeHome = poolSlot
+  const runtimeHome = sessionRoot ? path.join(sessionRoot, "runtime", "backend") : poolSlot
     ? path.join(instanceRoot, "runtime")
     : path.join(userData, "runtime");
   const warmStateRoot = poolSlot
@@ -165,7 +172,7 @@ export function resolveBetaUpdateTargets(
   return {
     appName,
     appPath: path.join("/Applications", `${appName}.app`),
-    appServerHome: path.join(
+    appServerHome: sessionRoot ? path.join(sessionRoot, "app-server") : path.join(
       homeDir,
       ".runweave",
       "app-server-beta",
@@ -176,6 +183,8 @@ export function resolveBetaUpdateTargets(
     instanceRoot,
     poolSlot,
     runtimeHome,
+    // Slot metadata owns the installed artifact/backup pointers. User settings
+    // and mutable runtime data remain exclusively inside the Session root.
     statePath: path.join(warmStateRoot, "state.json"),
     userData,
     warmStateRoot,
@@ -193,12 +202,13 @@ export function validateUpdateTargetIsolation({
   instanceId = process.env.RUNWEAVE_DESKTOP_INSTANCE_ID ?? "default",
   runtimeHome,
   statePath,
+  devSessionId = null,
 }) {
   if (channel !== "beta") {
     return;
   }
 
-  const expected = resolveBetaUpdateTargets(homeDir, instanceId);
+  const expected = resolveBetaUpdateTargets(homeDir, instanceId, devSessionId);
   const checks = [
     ["app name", appName, expected.appName],
     ["app path", path.resolve(appPath), path.resolve(expected.appPath)],

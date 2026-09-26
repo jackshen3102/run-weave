@@ -1,3 +1,4 @@
+import { configuration, configurationArguments, resolveConfigurationContext } from "@runweave/config-node";
 import { spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -6,15 +7,15 @@ import {
   discoverAppServer,
   getAppServerStatus,
   removeStaleAppServerLock,
-} from "@runweave/shared/app-server/discovery";
+} from "@runweave/config-node/app-server/discovery";
 import {
   resolveAppServerHomeDir,
   resolveAppServerStatePaths,
-} from "@runweave/shared/app-server/paths";
+} from "@runweave/config-node/app-server/paths";
 import {
   installAppServerRuntimeRelease,
   resolveCurrentAppServerRuntimeRelease,
-} from "@runweave/shared/app-server/runtime-release";
+} from "@runweave/config-node/app-server/runtime-release";
 import type {
   AppServerConnectionInfo,
   AppServerRuntimeRelease,
@@ -40,6 +41,7 @@ export async function runAppServerCommand(
     env: NodeJS.ProcessEnv;
   },
 ): Promise<void> {
+  if (subcommand !== "status") resolveConfigurationContext({ requireExplicit: true });
   const options = parseOptions(args);
   const env = buildScopedEnv(io.env, options);
   const command = subcommand ?? "";
@@ -169,7 +171,7 @@ async function spawnDetachedAppServer(
   const paths = resolveAppServerStatePaths({ env });
   await mkdir(paths.stateDir, { recursive: true });
   const outputFd = openSync(paths.logPath, "a");
-  const child = spawn(process.execPath, [runtime.entry], {
+  const child = spawn(process.execPath, [runtime.entry, ...configurationArguments(configuration().context)], {
     detached: true,
     env: {
       ...env,
@@ -194,6 +196,8 @@ function parseOptions(args: string[]): AppServerCommandOptions {
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
+    if (arg?.startsWith("--instance=") || arg?.startsWith("--config-dir=")) continue;
+    if (arg === "--instance" || arg === "--config-dir") { index += 1; continue; }
     if (!arg) {
       continue;
     }
@@ -234,9 +238,9 @@ function buildScopedEnv(
   env: NodeJS.ProcessEnv,
   options: AppServerCommandOptions,
 ): NodeJS.ProcessEnv {
+  resolveAppServerHomeDir({ homeDir: options.home ?? undefined });
   return {
     ...env,
-    ...(options.home ? { RUNWEAVE_APP_SERVER_HOME: options.home } : {}),
     RUNWEAVE_APP_SERVER_URL: undefined,
     RUNWEAVE_APP_SERVER_TOKEN: undefined,
   };

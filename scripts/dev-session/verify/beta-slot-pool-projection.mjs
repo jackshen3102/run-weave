@@ -272,6 +272,8 @@ export async function verifyBetaRestoredArtifacts(homeDir) {
   const sessionId = "dvs-restore-artifacts";
   const applicationsDir = path.join(homeDir, "applications");
   const paths = resolveBetaPaths(sourceRoot, homeDir, slotId, sessionId);
+  const configurationContext = configurationLibrary.resolveConfigurationContext({ home: homeDir, args: ["--instance", sessionId] });
+  new configurationLibrary.ConfigurationStore(configurationContext).initialize(configurationLibrary.emptyConfiguration(configurationContext));
   paths.appPath = path.join(applicationsDir, path.basename(paths.appPath));
   paths.appBackupPath = resolveBetaAppBackupPrefix(slotId, applicationsDir);
   const olderBackup = `${paths.appBackupPath}-1`;
@@ -290,6 +292,12 @@ export async function verifyBetaRestoredArtifacts(homeDir) {
   }
   await fs.writeFile(path.join(paths.appPath, "fixture"), "installed-baseline");
   await fs.writeFile(path.join(olderBackup, "fixture"), "older-generation");
+  for (const appPath of [paths.appPath, olderBackup]) {
+    await writeJson(path.join(appPath, "Contents", "Resources", "configuration-compatibility.json"), configurationLibrary.CONFIGURATION_COMPATIBILITY);
+  }
+  for (const runtime of [paths.runtimeHome, path.join(paths.appServerHome, "runtime")]) {
+    for (const release of ["current", "older"]) await writeJson(path.join(runtime, "releases", release, "manifest.json"), { configuration: configurationLibrary.CONFIGURATION_COMPATIBILITY });
+  }
   const source = {
     sourceRoot,
     gitHead: "verify",
@@ -559,3 +567,4 @@ export async function verifyBetaRestoredArtifacts(homeDir) {
     "idle",
   );
 }
+import { configurationLibrary } from "../../lib/configuration.mjs";

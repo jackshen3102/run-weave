@@ -1,4 +1,6 @@
 import { mkdir } from "node:fs/promises";
+import { configuration, ConfigurationError } from "@runweave/config-node";
+import { readConfigurationPath } from "@runweave/shared/configuration";
 import path from "node:path";
 import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
@@ -9,7 +11,7 @@ import type {
 } from "./store";
 
 interface AuthStoreData {
-  auth: PersistedAuthRecord | null;
+  auth: { refreshSessions: PersistedRefreshSessionRecord[] } | null;
 }
 
 const DEFAULT_DATA: AuthStoreData = {
@@ -19,6 +21,7 @@ const DEFAULT_DATA: AuthStoreData = {
 export class LowDbAuthStore implements AuthStore {
   private database: Low<AuthStoreData> | null = null;
   private pendingWrite: Promise<void> = Promise.resolve();
+  private credentials: Omit<PersistedAuthRecord, "refreshSessions"> | null = null;
 
   constructor(private readonly storeFile: string) {}
 
@@ -32,13 +35,18 @@ export class LowDbAuthStore implements AuthStore {
     });
     await database.read();
     database.data ||= { auth: null };
-    if (!database.data.auth) {
-      database.data.auth = structuredClone(defaultRecord);
-      await database.write();
-    }
-    database.data.auth.refreshSessions ||= [];
+    const legacy = database.data.auth as Partial<PersistedAuthRecord> | null;
+    if (legacy && ["username", "password", "jwtSecret"].some((key) => {
+      const name = key as "username" | "password" | "jwtSecret";
+      return legacy[name] !== undefined && legacy[name] !== defaultRecord[name];
+    })) throw new ConfigurationError("CONFIG_AUTH_MIGRATION_CONFLICT", ["backend.auth"]);
+    const credentials = { username: defaultRecord.username, password: defaultRecord.password, jwtSecret: defaultRecord.jwtSecret, updatedAt: defaultRecord.updatedAt };
+    this.credentials = credentials;
+    database.data.auth = { refreshSessions: legacy?.refreshSessions ?? defaultRecord.refreshSessions };
     this.database = database;
-    return structuredClone(database.data.auth);
+    // The database owns sessions only; credentials are authoritative in YAML.
+    await database.write();
+    return { ...credentials, refreshSessions: structuredClone(database.data.auth.refreshSessions) };
   }
 
   async updatePassword(params: {
@@ -47,12 +55,16 @@ export class LowDbAuthStore implements AuthStore {
     updatedAt: string;
   }): Promise<PersistedAuthRecord> {
     return await this.enqueueWrite(async () => {
-      const auth = this.getAuthRecord();
-      auth.password = params.password;
-      auth.jwtSecret = params.jwtSecret;
-      auth.updatedAt = params.updatedAt;
-      await this.getDatabase().write();
-      return structuredClone(auth);
+      if (!this.credentials) throw new ConfigurationError("CONFIG_AUTH_NOT_INITIALIZED");
+      const runtime = configuration();
+      const current = runtime.store.read();
+      for (const key of ["username", "password", "jwtSecret"] as const) {
+        if (readConfigurationPath(current.value, `backend.auth.${key}`) !== this.credentials[key]) throw new ConfigurationError("CONFIG_REVISION_CONFLICT", ["backend.auth"]);
+      }
+      const saved = runtime.store.patch({ expectedRevision: current.value.revision, expectedDigest: current.digest, changes: { "backend.auth.password": params.password, "backend.auth.jwtSecret": params.jwtSecret } });
+      this.credentials = { ...this.credentials, ...params };
+      runtime.markSnapshotApplied(saved, "backend.auth");
+      return { ...this.credentials, refreshSessions: structuredClone(this.getAuthRecord().refreshSessions) };
     });
   }
 
@@ -153,7 +165,7 @@ export class LowDbAuthStore implements AuthStore {
     return this.database;
   }
 
-  private getAuthRecord(): PersistedAuthRecord {
+  private getAuthRecord(): { refreshSessions: PersistedRefreshSessionRecord[] } {
     const auth = this.getDatabase().data.auth;
     if (!auth) {
       throw new Error("[viewer-be] auth store not initialized");

@@ -1,0 +1,12 @@
+schemaVersion: 1
+revision: 0
+kind: stable
+instanceId: stable
+domainVersions:
+  services.snapshotHost: 1
+migrations: {}
+services:
+  snapshotHost:
+    directory: /var/lib/runweave-snapshot-share/data
+    port: 8093
+    uploadToken: REPLACE_WITH_A_DEDICATED_RANDOM_TOKEN

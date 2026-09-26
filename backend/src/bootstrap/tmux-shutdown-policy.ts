@@ -1,10 +1,11 @@
+import { settingText } from "@runweave/config-node";
 import { logger } from "../logging/index";
 
 /** Deployment policy must not change the identity of existing tmux sockets. */
 export function resolveTmuxShutdownPolicy(
   runtimeChannel: "stable" | "beta" | "dev",
 ): "preserve" | "cleanup" {
-  const configured = process.env.TERMINAL_TMUX_SHUTDOWN_POLICY?.trim();
+  const configured = settingText("terminal.tmux.shutdownPolicy")?.trim();
   if (configured && configured !== "preserve" && configured !== "cleanup") {
     throw new Error("TERMINAL_TMUX_SHUTDOWN_POLICY must be preserve or cleanup");
   }

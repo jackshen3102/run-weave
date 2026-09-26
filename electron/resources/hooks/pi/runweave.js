@@ -208,7 +208,7 @@ function runweave(pi) {
     }
     context = ctx;
     const result = spawnSync(
-      process.env.TMUX_BINARY || "tmux",
+      process.env.RUNWEAVE_RUNTIME_TMUX_BINARY || "tmux",
       [
         "-S",
         tmuxSocket,

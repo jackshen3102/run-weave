@@ -1,0 +1,169 @@
+version: 1
+name: "统一配置存储与权限"
+description: "目标行为验收计划。统一配置功能尚未实现；仅格式校验不能计为行为通过。每例使用归属明确的独立测试目录，不操作正式凭据。"
+cases:
+  - id: GCS-001
+    name: "目录与工作目录无关"
+    required: true
+    description: "同一实例在不同 cwd 解析相同配置根和内容。"
+    preconditions:
+      - "已有实现统一配置的构建及独立测试用户目录。"
+    steps:
+      - "保存唯一配置标记，分别从仓库、另一 worktree、临时目录读取；确认实际路径、instanceId 和 revision 相同。"
+  - id: GCS-002
+    name: "旧配置无损迁移"
+    required: true
+    description: "同环境旧来源迁移为一个权威版本，身份与值不变。"
+    preconditions:
+      - "独立目录内准备旧 CLI profile、Backend 身份、分享成组配置和推送配置，记录脱敏摘要。"
+    steps:
+      - "运行迁移 dry-run；确认完整列出来源、目标和身份且未改文件。"
+      - "执行迁移；核对连接 ID、当前 profile、hostId、凭据摘要和数据路径均保留；目标为独立 settings.yaml，旧 config.json 和其他已迁移来源不再被新程序读取或同步。"
+  - id: GCS-003
+    name: "迁移冲突不猜测"
+    required: true
+    description: "来源冲突时不发布半套目标配置。"
+    preconditions:
+      - "独立旧配置中同一服务有两组不同但合法的地址与凭据。"
+    steps:
+      - "执行迁移；确认报告脱敏冲突字段且未修改权威版本；明确选择整组来源后迁移，确认未拼接两组值。"
+  - id: GCS-004
+    name: "迁移重试幂等"
+    required: true
+    description: "重复执行同一迁移不改变实例身份和已提交版本。"
+    preconditions:
+      - "独立 fixture 已按其自身旧来源完成一次迁移，保存迁移 ID 和目标摘要。"
+    steps:
+      - "重复执行该迁移；确认没有重新生成身份、额外 revision 或重复导入数据。"
+  - id: GCS-005
+    name: "单次写入崩溃恢复"
+    required: true
+    description: "写入中断只暴露完整旧版或完整新版。"
+    preconditions:
+      - "有可控制写入中断阶段的集成验证入口，fixture 不含真实凭据。"
+    steps:
+      - "分别在写临时文件及 rename 后中断写入进程；每次独立重建 fixture 并恢复，确认 settings.yaml 可解析且为完整旧版或新版，未产生半个凭据组。"
+  - id: GCS-006
+    name: "并发更新不丢字段"
+    required: true
+    description: "多进程对旧 revision 的竞争写入最多成功一次。"
+    preconditions:
+      - "两个独立 CLI 进程读取同一 fixture revision。"
+    steps:
+      - "并发修改不同域；确认一方成功，另一方明确冲突且没有覆盖成功字段；重新读取后重试，确认两个更新均保留。"
+  - id: GCS-007
+    name: "不支持版本拒写"
+    required: true
+    description: "实现版本检查的新客户端拒绝未知整体 schema；真实历史 CLI 单独验收。"
+    preconditions:
+      - "独立 fixture 使用高于当前支持版本的 schema，并记录原文件摘要。"
+    steps:
+      - "读取和修改；确认返回版本不支持，不用默认值替代，文件摘要保持。"
+  - id: GCS-008
+    name: "损坏配置不重建"
+    required: true
+    description: "已有配置损坏时保留原件且不生成新身份。"
+    preconditions:
+      - "独立 fixture 有已存在身份的非法 YAML 配置。"
+    steps:
+      - "启动并尝试修改；确认明确配置错误，服务不宣称 ready，原文件未被清空，未新建另一实例目录。"
+  - id: GCS-009
+    name: "私有文件与脱敏"
+    required: true
+    description: "磁盘文件受保护，公开读接口不返回密钥。"
+    preconditions:
+      - "独立 fixture 含可搜索的合成密钥标记，启动已授权的测试 Backend。"
+    steps:
+      - "检查配置和备份权限为 0600、目录为 0700；读取 CLI show、API、诊断和错误输出，确认不含合成密钥原文。"
+  - id: GCS-010
+    name: "凭据更新三态"
+    required: true
+    description: "省略、替换、删除凭据语义明确。"
+    preconditions:
+      - "测试 Backend 有一组完整的合成服务配置。"
+    steps:
+      - "分别只改非敏感字段、提交新完整凭据组、显式删除该组；确认保留、替换、unconfigured 状态正确，脱敏占位不可保存为凭据。"
+  - id: GCS-011
+    name: "远程修改权限"
+    required: true
+    description: "远程接口只允许授权范围内的配置字段。"
+    preconditions:
+      - "独立 Backend 有所有者与未授权请求 fixture。"
+    steps:
+      - "未授权请求读写均被拒绝；所有者通过远程 API 修改允许的服务字段成功；通过同一接口修改 JWT、全局根、可执行路径、数据库凭据、APNs 或更新源均被拒绝。"
+  - id: GCS-012
+    name: "保存与生效分开"
+    required: true
+    description: "保存成功不冒充消费者已采用新版本。"
+    preconditions:
+      - "测试消费者支持失败模拟且已有可用配置。"
+    steps:
+      - "保存一个格式合法但应用失败的新配置；确认 savedRevision 前进而 appliedRevision 保持旧值，并返回明确错误；修复后 reload，确认版本收敛。"
+  - id: GCS-013
+    name: "手工修改显式加载"
+    required: true
+    description: "文件修改只有经过校验 reload 后才进入运行服务。"
+    preconditions:
+      - "独立 Backend 正在使用已知 revision，允许本机拥有者编辑文件。"
+    steps:
+      - "本机编辑合法配置并 reload；确认读取最新磁盘摘要后递增版本并报告生效状态；非法编辑 reload 被拒，旧运行快照继续明确显示，磁盘错误原件保留。"
+  - id: GCS-014
+    name: "旧业务环境不覆盖新文件"
+    required: true
+    description: "正式业务配置不随父进程环境改变。"
+    preconditions:
+      - "独立实例文件含配置 A，父环境注入冲突配置 B，并放置 cwd dotenv。"
+    steps:
+      - "从该父进程启动；确认服务使用 A 且诊断标明忽略旧来源，API/日志不泄露 B 的凭据；删除文件的必要配置后确认不会从 B 自动补齐。"
+  - id: GCS-015
+    name: "CLI 认证刷新与设置并发"
+    required: true
+    description: "刷新连接 Token 不覆盖其他配置域。"
+    preconditions:
+      - "独立 CLI profile 具备合成可刷新登录，并可与设置写入并发。"
+    steps:
+      - "同时执行 refresh 和设置更新；确认通过共用锁/revision 保留新 Token 与设置，冲突按显式重试处理，不退回旧凭据。"
+  - id: GCS-016
+    name: "治理门禁覆盖绕过方式"
+    required: true
+    description: "新增未经登记的持久配置入口被拒绝。"
+    preconditions:
+      - "统一配置检查已接入 CI，使用可清理的独立源码 fixture。"
+    steps:
+      - "分别加入业务 process.env 点访问、解构、动态键、dotenv 和绕过统一模块的 JSON/YAML 配置读写；确认检查拒绝并定位源码；合法系统变量 adapter 通过，清理 fixture。"
+  - id: GCS-017
+    name: "真实旧 CLI 不覆盖新配置"
+    required: true
+    description: "迁移后真实历史 rw 只写旧 config.json，无法通过默认路径或受管启动链改写 settings.yaml。"
+    preconditions:
+      - "独立测试用户目录已迁移 CLI 域，准备不含新版本检查的历史 rw 二进制及本地合成认证服务；禁止连接正式 Backend。"
+      - "新 YAML 含认证、分享和推送合成字段；记录两文件 realpath、inode 与新文件摘要，确认无链接关系。"
+    steps:
+      - "使用旧二进制的默认路径完成一次登录和一次成功 Token 刷新；确认旧 JSON 确实发生写入而新 YAML 字节、revision、全部字段保持。"
+      - "从新版和受管终端入口重新读取；确认只读取新 YAML，旧 JSON 更新不被同步或 fallback，启动参数及环境不把新路径交给旧 CLI。"
+  - id: GCS-018
+    name: "可选域错误仅隔离该功能"
+    required: true
+    description: "新启动时可选服务配置非法不阻止核心终端就绪，且错误可由管理入口修复。"
+    preconditions:
+      - "独立 Backend 的核心身份、存储和其他域合法，分享域包含 schema 不接受的字段值，外部请求均接入合成服务。"
+    steps:
+      - "启动并获取新 endpoint；确认核心 ready、分享 error 且无发布请求；登录后在测试终端执行唯一标记命令并取得输出。"
+      - "通过显式实例目标修正分享字段；确认该域 applied，身份及既有终端保持，可向合成发布服务发送专用 fixture。"
+  - id: GCS-019
+    name: "核心域错误拒绝降级"
+    required: true
+    description: "YAML 可解析但认证或身份归属不合法时，不能按可选域方式忽略并启动。"
+    preconditions:
+      - "独立 fixture 的 YAML 语法有效但缺失必需 JWT 身份字段；记录文件与数据目录摘要，环境提供诱导 fallback 的合成值。"
+    steps:
+      - "启动核心服务；确认未宣称 ready、未使用环境值、未生成新身份；离线 doctor 返回脱敏字段错误，原文件和数据摘要保持。"
+  - id: GCS-020
+    name: "不同消费者的域版本兼容"
+    required: true
+    description: "支持整体 schema 的消费者不覆盖未知的其他消费者域，也不因此阻塞自身已支持域。"
+    preconditions:
+      - "独立文件整体 schema 受支持，含 Backend 已支持域和更高版本 Desktop 域；记录 Desktop 域的值和注释。"
+    steps:
+      - "使用该 Backend 和相应 CLI 读取并修改支持域；确认修改成功，未知 Desktop 域保持，无法消费它的组件明确报告版本错误。"
+      - "尝试修改未知域；确认拒绝且文件不变，不以默认对象替换未知内容。"

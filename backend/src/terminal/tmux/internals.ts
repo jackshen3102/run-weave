@@ -1,3 +1,4 @@
+import { CONFIGURATION_FIELDS } from "@runweave/shared/configuration";
 import { accessSync, constants } from "node:fs";
 import path from "node:path";
 import { logger } from "../../logging/index";
@@ -19,6 +20,9 @@ export const InteractivePaneReadyTimeoutMs = 2_500;
 export const DEFAULT_UTF8_LOCALE = "en_US.UTF-8";
 export const TMUX_RUNTIME_OPTION_ARGS = ["set-option", "-g", "mouse", "on"];
 export const TMUX_SANITIZE_ENV_ARGS = [
+  ...CONFIGURATION_FIELDS.filter((field) => field.sensitive).flatMap((field) => field.environmentKeys),
+  "RUNWEAVE_ACCESS_TOKEN",
+  "RUNWEAVE_CONFIG_FILE",
   "npm_config_prefix",
   "NPM_CONFIG_PREFIX",
   "npm_config_registry",

@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { app } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { access } from "node:fs/promises";
@@ -30,7 +31,7 @@ const READY_TIMEOUT_MS = 5_000;
 const STOP_TIMEOUT_MS = 1_500;
 
 function resolveExecutablePath(): string {
-  const configured = process.env.RUNWEAVE_COMPANION_AGENT_EXECUTABLE?.trim();
+  const configured = settingText("agents.companion.binary")?.trim();
   if (configured) return path.resolve(configured);
   const runtimeRoot = app.isPackaged ? process.resourcesPath : __dirname;
   return path.join(

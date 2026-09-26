@@ -1,3 +1,4 @@
+import { deviceStorage } from "../../../../features/device-storage";
 import { useEffect, useState } from "react";
 import {
   normalizeTerminalBrowserHeaderRules,
@@ -28,38 +29,19 @@ export function useTerminalBrowserHeaderRules(
     let cancelled = false;
     const loadHeaderRules = async (): Promise<void> => {
       try {
-        const profileStorageKey = storageKey(profileId);
-        const scopedRules = window.localStorage.getItem(profileStorageKey);
-        const legacyRules =
-          profileId === "profile-1" && scopedRules === null
-            ? window.localStorage.getItem(LEGACY_HEADER_RULES_STORAGE_KEY)
-            : null;
-        const rawRules = scopedRules ?? legacyRules;
-        const persistedRules = rawRules
-          ? normalizeTerminalBrowserHeaderRules(JSON.parse(rawRules))
-          : [];
-        if (cancelled) {
-          return;
-        }
-        setHeaderRules(persistedRules);
-        if (!window.electronAPI?.terminalBrowserSetHeaderRules) {
-          throw new Error("Header rules are unavailable");
-        }
-        const state = await window.electronAPI.terminalBrowserSetHeaderRules(
-          profileId,
-          persistedRules,
-        );
-        if (!cancelled && state) {
-          setHeaderRules(state.rules);
-          setHeaderError(null);
-          if (legacyRules !== null) {
-            window.localStorage.setItem(
-              profileStorageKey,
-              JSON.stringify(state.rules),
-            );
-            window.localStorage.removeItem(LEGACY_HEADER_RULES_STORAGE_KEY);
+        if (!window.electronAPI?.terminalBrowserGetHeaderRules) throw new Error("Header rules are unavailable");
+        const state = await window.electronAPI.terminalBrowserGetHeaderRules(profileId);
+        if (cancelled) return;
+        if (!state.configured) {
+          const rawRules = deviceStorage.getItem(storageKey(profileId)) ?? (profileId === "profile-1" ? deviceStorage.getItem(LEGACY_HEADER_RULES_STORAGE_KEY) : null);
+          if (rawRules !== null) {
+            setHeaderRules(normalizeTerminalBrowserHeaderRules(JSON.parse(rawRules)));
+            setHeaderError("检测到旧请求头规则。请检查后点击保存，迁入当前桌面配置；旧规则暂未应用。");
+            return;
           }
         }
+        setHeaderRules(state.rules);
+        setHeaderError(null);
       } catch (error) {
         if (!cancelled) {
           setHeaderRules([]);
@@ -90,26 +72,7 @@ export function useTerminalBrowserHeaderRules(
       if (!window.electronAPI?.terminalBrowserSetHeaderRules) {
         throw new Error("Header rules are unavailable");
       }
-      const profileStorageKey = storageKey(profileId);
-      const previousRules = window.localStorage.getItem(profileStorageKey);
-      window.localStorage.setItem(
-        profileStorageKey,
-        JSON.stringify(normalizedRules),
-      );
-      let state;
-      try {
-        state = await window.electronAPI.terminalBrowserSetHeaderRules(
-          profileId,
-          normalizedRules,
-        );
-      } catch (error) {
-        if (previousRules === null) {
-          window.localStorage.removeItem(profileStorageKey);
-        } else {
-          window.localStorage.setItem(profileStorageKey, previousRules);
-        }
-        throw error;
-      }
+      const state = await window.electronAPI.terminalBrowserSetHeaderRules(profileId, normalizedRules);
       setHeaderRules(state.rules);
       return true;
     } catch (error) {

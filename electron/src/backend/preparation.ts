@@ -1,3 +1,4 @@
+import { configurationPath } from "@runweave/config-node";
 import {
   accessSync,
   chmodSync,
@@ -16,7 +17,6 @@ import {
   readBackendProfileLockOwner,
   readParentPid,
   readProcessCommand,
-  resolveBrowserProfileDir,
   waitForProcessExit,
 } from "@runweave/shared/browser-profile-node";
 import type { RuntimeRelease } from "../runtime/release.js";
@@ -130,7 +130,8 @@ export async function recoverOrphanedPackagedBackendLock(
   env: NodeJS.ProcessEnv,
   onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void,
 ): Promise<void> {
-  const profileDir = resolveBrowserProfileDir(env);
+  void env;
+  const profileDir = configurationPath("storage.browserProfileDirectory", "backend");
   const lockFile = getBrowserProfileLockFile(profileDir);
   const owner = await readBackendProfileLockOwner(lockFile);
   if (!owner || !isProcessLive(owner.pid)) {

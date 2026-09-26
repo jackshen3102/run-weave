@@ -517,7 +517,12 @@ export async function verifyRegistry(sourceRoot, temporaryHome) {
     },
     env,
   );
-  assert.equal((await statusPromise).error?.code, 5);
+  const concurrentStatus = await statusPromise;
+  // Process startup may finish after the writer releases its lock. Either
+  // refusal while locked or observing the committed stopped state is valid;
+  // returning the pre-stop ready snapshot is never valid.
+  if (concurrentStatus.error) assert.equal(concurrentStatus.error.code, 5);
+  else assert.equal(JSON.parse(concurrentStatus.result.stdout).state, "stopped");
   assert.equal(
     (await readManifest(raceSession.devSessionId, env)).state,
     "stopped",

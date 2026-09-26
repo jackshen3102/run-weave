@@ -2,7 +2,7 @@
 
 本文用于首次部署到 **Lightsail 单台 Linux 实例上的 Docker Compose**，命令以 **Ubuntu 24.04 LTS、普通登录用户 ubuntu** 为例。
 如果现有实例使用其他系统，保留网络与服务配置步骤，按实际发行版调整安装命令；不要覆盖已有应用或磁盘。
-环境变量、订阅授权和投递语义以[网关说明](../../packages/push-gateway/README.md)为准。
+YAML 配置、订阅授权和投递语义以[网关说明](../../packages/push-gateway/README.md)为准。
 
 ```text
 Mac / 业务调用方 → https://push.example.com:443
@@ -89,7 +89,7 @@ sudo docker image inspect runweave-push:release-001 --format '{{.Id}}'
 `docker buildx build --platform linux/amd64 --load ...`，或在目标服务器构建。
 
 镜像按[Dockerfile](../../deploy/push-gateway/Dockerfile)安装 Node 22、依赖并编译 Linux SQLite 原生模块；
-仅复制 shared 和网关代码。专用 Dockerfile.dockerignore 限定上下文，不把私钥、本机配置或工作区资料送入构建。
+复制 shared、config-node 和网关代码。专用 Dockerfile.dockerignore 限定上下文，不把私钥、本机配置或工作区资料送入构建。
 当前入口使用 tsx，镜像打包时保留所需依赖。宿主机不复制 Mac node_modules。
 
 ## 4. 准备配置、持久目录并启动容器
@@ -107,19 +107,11 @@ sudo chmod 600 /srv/runweave-push/deployment.env
 
 镜像以 UID/GID **1000:1000** 运行。将 Apple `.p8` 安全上传并安装为
 `/srv/runweave-push/private/apns.p8`，owner `1000:1000`、权限 `600`。
-根据 [gateway.env.example](../../deploy/push-gateway/gateway.env.example)创建
-`/srv/runweave-push/private/gateway.env`，同样 owner `1000:1000`、权限 `600`：
-
-```dotenv
-APNS_KEY_ID=YOUR_KEY_ID
-APNS_TEAM_ID=YOUR_TEAM_ID
-PUSH_GATEWAY_ADMIN_TOKEN=YOUR_RANDOM_ADMIN_TOKEN
-```
-
-管理员 token 使用独立高熵随机值，生成后直接存入受限文件；上传时的暂存副本也需保护并在安装后清理。
-私钥和环境文件作为 Compose secrets 只读挂载到容器；Node 从文件加载环境，不把秘密写入镜像或 Compose 明文配置。
-本地 Compose 的文件型 secret 使用 bind mount，因此必须设置宿主文件权限，不能依赖 secret 的 uid/gid 声明改属主。
-见 [Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/)。
+根据 [settings.example.yaml](../../deploy/push-gateway/settings.example.yaml) 创建
+`/srv/runweave-push/config/settings.yaml`。目录权限 `700`、文件权限 `600`，owner 均为
+`1000:1000`。填写 `services.pushGateway` 的 APNs 标识、管理员凭据与容器内路径。
+管理员 token 使用独立随机值；`.p8` 仍通过 Compose secret 挂载，不写进 YAML。
+配置目录可写，用于私有备份及同一用户的 Stable owner 锁；服务不会改写 APNs 私钥。
 
 用 `sudoedit /srv/runweave-push/deployment.env` 填入镜像 ID 和真实绝对路径：
 
@@ -128,7 +120,7 @@ PUSH_GATEWAY_IMAGE=sha256:REPLACE_WITH_LOCAL_IMAGE_ID
 PUSH_GATEWAY_HOST_PORT=8092
 PUSH_GATEWAY_DATA_DIR=/srv/runweave-push/data
 PUSH_GATEWAY_APNS_KEY_FILE=/srv/runweave-push/private/apns.p8
-PUSH_GATEWAY_ENV_FILE=/srv/runweave-push/private/gateway.env
+PUSH_GATEWAY_CONFIG_DIR=/srv/runweave-push/config
 ```
 
 该文件只保存镜像引用和路径；不要加入 Apple 私钥内容或管理员 token。容器内部固定监听 0.0.0.0:8092，
@@ -252,7 +244,7 @@ Debug/Profile 使用 sandbox，Release 使用 production，须分别核对签名
 ```bash
 push_compose ps
 push_compose logs --tail=100 gateway
-push_compose exec -T gateway node --env-file=/run/secrets/gateway_env --import tsx src/admin.ts status
+push_compose exec -T gateway node --import tsx src/admin.ts status --instance stable --config-dir /config
 push_compose restart gateway
 df -h /srv/runweave-push/data
 ```
@@ -278,7 +270,7 @@ Lightsail **Snapshots** 的自动快照可作为额外恢复点。当前保留�
 push_compose config --quiet
 push_compose up -d --wait --force-recreate gateway
 curl --fail https://push.example.com/health
-push_compose exec -T gateway node --env-file=/run/secrets/gateway_env --import tsx src/admin.ts status
+push_compose exec -T gateway node --import tsx src/admin.ts status --instance stable --config-dir /config
 ```
 
 验证原订阅仍在并完成真实通知检查。同 schema 镜像回退只切镜像，不恢复旧数据库；旧快照可能丢失后续撤销记录。
@@ -306,37 +298,13 @@ pnpm --filter @runweave/push-gateway exec node --import tsx -e \
   "import('better-sqlite3').then(({default:D})=>{const db=new D(':memory:');db.close()})"
 ```
 
-此节不是 Lightsail 部署的前置步骤。需要在 Mac 调试时，把私钥、环境文件和数据放在以下目录；代码使用独立、固定版本的 checkout，避免日常切分支改变服务：
-
-```text
-~/.runweave/push-gateway/
-  private/apns.p8
-  private/gateway.env
-  private/backend.env
-  data/
-  logs/
-```
-
-私有目录权限设为 `700`，私钥和环境文件设为 `600`。`gateway.env` 使用简单 `KEY=value`
-格式，填入实际值，不保留占位符：
-
-```dotenv
-PUSH_GATEWAY_BIND=127.0.0.1
-PUSH_GATEWAY_PORT=8092
-PUSH_GATEWAY_DATA_DIR=/absolute/path/to/push-gateway/data
-APNS_PRIVATE_KEY_FILE=/absolute/path/to/push-gateway/private/apns.p8
-APNS_KEY_ID=YOUR_KEY_ID
-APNS_TEAM_ID=YOUR_TEAM_ID
-PUSH_GATEWAY_ADMIN_TOKEN=YOUR_RANDOM_ADMIN_TOKEN
-```
-
-生成管理员 token 时把 `openssl rand -hex 32` 的输出直接保存到受限文件，不粘贴到聊天或日志。
-在仓库根用 Node 的环境文件入口启动；将示例路径替换为实际路径：
+此节不是 Lightsail 部署的前置步骤。Mac 调试使用本用户唯一的 `~/.runweave/settings.yaml`，
+在 `services.pushGateway` 中设置独占数据目录、APNs 文件绝对路径、Key ID/Team ID 及管理员凭据。
+不要在同一用户下另造 Stable 配置根；测试通过 Dev Session 的显式身份与私有目录隔离。
+文件为 `600`、目录为 `700`。使用本机 Node 启动已构建的对应版本：
 
 ```bash
-pnpm --filter @runweave/push-gateway exec node \
-  --env-file=/absolute/path/to/push-gateway/private/gateway.env \
-  --import tsx src/index.ts
+pnpm --filter @runweave/push-gateway exec node --import tsx src/index.ts --instance stable
 ```
 
 需要常驻时用用户 LaunchAgent 管理同一个命令，指定绝对 Node 路径、网关包的 WorkingDirectory、

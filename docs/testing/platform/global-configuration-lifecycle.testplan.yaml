@@ -1,0 +1,128 @@
+version: 1
+name: "统一配置环境与生命周期"
+description: "目标行为验收计划。每台主机每个用户只有一个 Stable，允许多个用于测试的 Dev Session，没有独立 Beta 环境；各用例独立建立 fixture。涉及真机/整机重启需已有授权窗口，未执行即未验收。"
+cases:
+  - id: GCL-001
+    name: "唯一 Stable"
+    required: true
+    description: "第二次启动不能创建第二套 Stable 运行实例。"
+    preconditions:
+      - "独立测试用户目录已有运行中的 Stable Backend。"
+    steps:
+      - "从另一入口重复启动 Stable，包含尝试不同端口或另一个 Stable 根；确认附着已验证的原实例或明确拒绝，原配置、PID owner 和终端数据不变。"
+  - id: GCL-002
+    name: "不创建独立 Beta 环境"
+    required: true
+    description: "目标运行模型只接受 Stable 和 Dev Session，历史 Beta 入口不会建立第三种环境。"
+    preconditions:
+      - "已实现新环境合同，准备旧 Beta 参数和一份有归属标记的旧 Beta 数据 fixture，Stable 保持独立运行。"
+    steps:
+      - "通过旧 Beta 创建或更新入口请求运行；确认明确提示迁移至 Dev Session，不新建 Beta、不静默操作 Stable，旧数据和 Stable 摘要不变。"
+  - id: GCL-003
+    name: "多 Dev Session 隔离"
+    required: true
+    description: "开发实例与其他环境不会混用状态。"
+    preconditions:
+      - "通过 toolkit:runweave-dev-session 的既有入口建立两个独立 Dev Session，并记录已有 Stable 摘要。"
+    steps:
+      - "在两个 Dev 中分别生成合成终端、任务与日志；确认归属、tmux socket、数据库和 App Server 身份分别绑定各自 Session，其他环境摘要不变。"
+  - id: GCL-004
+    name: "缺配置不跨环境回退"
+    required: true
+    description: "Dev Session 缺少配置时不会借用 Stable 凭据。"
+    preconditions:
+      - "Stable 有合成分享/推送/飞书配置，两个独立 Dev Session 没有这些配置。"
+    steps:
+      - "分别启动这两个 Dev Session；确认相关能力明确 unconfigured，没有携带 Stable 合成凭据的外发请求，未生成 Stable 发送者或订阅身份。"
+  - id: GCL-005
+    name: "路径归属拒绝绕过"
+    required: true
+    description: "非 Stable 可写路径不能指向其他实例。"
+    preconditions:
+      - "已有两个隔离实例和仅用于测试的目录符号链接。"
+    steps:
+      - "把当前实例的可写 data/runtime/userData 路径分别设置成另一实例绝对路径、穿越路径和符号链接；确认校验或启动拒绝，另一实例文件摘要不变。"
+  - id: GCL-006
+    name: "握手身份不符拒绝"
+    required: true
+    description: "端口可达不代表连接到正确环境。"
+    preconditions:
+      - "两个不同实例的 Backend 均可达，客户端目标已绑定实例 A。"
+    steps:
+      - "把目标连接入口指向 B；确认身份校验失败且配置/终端请求不会按 A 的身份发给 B，不自动回退 Stable。"
+  - id: GCL-007
+    name: "写操作不靠缺省目标"
+    required: true
+    description: "无绑定入口且未指定实例时，无论在哪种 Shell 内都拒绝写操作；明确目标后只写该实例。"
+    preconditions:
+      - "独立测试用户有 Stable 和 Dev Session，记录两方 settings.yaml、数据和产物摘要；准备普通 Shell 与 Dev Shell。"
+    steps:
+      - "在两个 Shell 中清除环境上下文并绕过绑定入口，以无实例参数的 rw 请求配置修改、迁移、reload、更新和清理；确认全部拒绝，两个环境摘要不变。"
+      - "使用显式 Dev 实例参数修改合成偏好；确认只改 Dev，输出带经验证的实例身份；显式参数与绑定入口冲突时拒绝。"
+  - id: GCL-008
+    name: "Backend 重启恢复"
+    required: true
+    description: "同一实例重启后直接读取持久配置。"
+    preconditions:
+      - "独立实例具备已保存且已生效的合成业务配置，不提供业务环境变量。"
+    steps:
+      - "记录 instanceId、revision、数据归属并重启 Backend；重新取得 endpoint，确认身份、配置和原数据保持，按实际消费者验证配置被使用。"
+  - id: GCL-009
+    name: "整机重启保持配置"
+    required: true
+    description: "真实电脑重启后仍使用同一持久配置。"
+    preconditions:
+      - "已获整机重启时间窗口，保存工作，准备不含私人内容的分享 fixture，明确唯一 Stable 和重启前身份。"
+    steps:
+      - "记录重启前配置及分享结果，执行真实整机重启；登录后重新取得进程和 endpoint，确认唯一 Stable 和配置版本保持。"
+      - "通过同一 Stable 发布专用 fixture 并匿名读取公网内容，确认发布和读取成功；没有实际重启不得判 pass。"
+  - id: GCL-010
+    name: "Session 清理范围隔离"
+    required: true
+    description: "结束一个 Dev 只清理它拥有的临时资源。"
+    preconditions:
+      - "唯一 Stable 和两个独立 Dev Session 已建立，清理对象 owner 可核验。"
+    steps:
+      - "按 toolkit:runweave-dev-session 结束其中一个 Dev；确认另一个 Dev Session、Stable 的配置及资源保持，未用全局删除或模糊进程匹配。"
+  - id: GCL-011
+    name: "多环境迁移身份守恒"
+    required: true
+    description: "旧环境只迁移可证明属于自己的配置和记录。"
+    preconditions:
+      - "独立 fixture 含旧 Stable、两个 Dev Session 注册信息及待退役 Beta 遗留数据，另有一份归属不明的共享记录。"
+    steps:
+      - "生成并执行各自迁移草稿；确认 Stable 与 Dev Session 各自只含所属配置和记录，旧 Beta 数据明确归档或按用户指定导入测试资料，归属不明项报告冲突并保留，未复制 Stable 凭据或建立 Beta 身份。"
+  - id: GCL-012
+    name: "Web 切换不误写"
+    required: true
+    description: "Web 切换 Backend 后旧请求不能写到新目标。"
+    preconditions:
+      - "两个独立 Backend 均可管理设置，准备可延迟的请求 fixture。"
+    steps:
+      - "用 toolkit:playwright-cli 在独立 Web 客户端发起 A 的设置操作并切换到 B；确认请求取消或结果仍严格归 A，B 配置摘要不变，UI 不把 A 的状态展示为 B。"
+  - id: GCL-013
+    name: "手机切换不误写"
+    required: true
+    description: "手机切换 Backend 后在途设置请求不能误写新目标。"
+    preconditions:
+      - "两个独立 Backend 均可管理设置，iOS 测试客户端已连接 A，具备可延迟请求的 fixture。"
+    steps:
+      - "用 toolkit:agent-device 在手机发起 A 的设置操作后切换 B；确认旧请求取消或仅归 A，B 摘要不变，手机不把 A 的结果展示为 B。"
+  - id: GCL-014
+    name: "嵌套 Shell 保持实例绑定"
+    required: true
+    description: "嵌套登录 Shell 能验证原 Dev 目标，失去绑定时拒绝写入。"
+    preconditions:
+      - "独立 Dev Session 提供绑定 rw 入口，测试用户 Stable 有基线摘要。"
+    steps:
+      - "在所属终端进入嵌套登录 Shell，通过绑定入口修改合成偏好；确认实例仍为原 Dev，Stable 摘要不变。"
+      - "从同一 Shell 绕过绑定入口并清除上下文，再执行无目标写命令；确认拒绝且不尝试连接 Stable。"
+  - id: GCL-015
+    name: "tmux 恢复保持实例绑定"
+    required: true
+    description: "恢复既有 tmux 会话后不能因旧端口或失效 owner 将命令发送到其他实例。"
+    preconditions:
+      - "独立 Dev Session 有可断开恢复的 tmux 终端和持久 manifest；另有 Stable 基线及用于身份冲突的独立 Backend。"
+    steps:
+      - "断开并恢复同一 tmux 终端，重新取得终端和服务身份；执行绑定写命令，确认仍只写原 Dev。"
+      - "把 fixture 的服务发现指向不同身份 Backend，再执行绑定写命令；确认握手拒绝，其他实例摘要不变。"

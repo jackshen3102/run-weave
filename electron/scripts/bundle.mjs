@@ -1,6 +1,7 @@
 import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
 import { buildAgentAssets } from "../../scripts/agents/build.mjs";
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
+import { configurationLibrary } from "../../scripts/lib/configuration.mjs";
 import { build } from "esbuild";
 import path from "node:path";
 import { finalizeActivitySqliteRuntime } from "./finalize-better-sqlite3-runtime.mjs";
@@ -13,7 +14,7 @@ const outputDir = process.env.RUNWEAVE_ELECTRON_BUNDLE_OUTDIR ?? "dist";
 const shared = {
   bundle: true,
   platform: "node",
-  external: ["electron"],
+  external: ["electron", "fs-native-extensions"],
   sourcemap: true,
   target: "node20",
 };
@@ -69,15 +70,27 @@ await build({
     ...importMetaUrlShim.define,
     ...desktopBuildDefines,
   },
-  entryPoints: ["src/main.ts"],
+  entryPoints: [{ in: "src/bootstrap.ts", out: "main" }],
   outdir: outputDir,
+  format: "cjs",
+  outExtension: { ".js": ".cjs" },
+});
+
+writeFileSync(path.join(outputDir, "configuration-compatibility.json"), JSON.stringify(configurationLibrary.CONFIGURATION_COMPATIBILITY));
+
+await build({
+  ...shared,
+  entryPoints: ["src/preload.ts"],
+  outdir: outputDir,
+  platform: "browser",
+  external: ["electron", "fs-native-extensions"],
   format: "cjs",
   outExtension: { ".js": ".cjs" },
 });
 
 await build({
   ...shared,
-  entryPoints: ["src/preload.ts"],
+  entryPoints: ["src/configuration-setup-preload.ts"],
   outdir: outputDir,
   platform: "browser",
   external: ["electron"],
@@ -95,7 +108,7 @@ await build({
   entryPoints: ["../backend/src/index.ts"],
   outdir: `${outputDir}/backend`,
   format: "cjs",
-  external: ["node-pty", "better-sqlite3"],
+  external: ["node-pty", "better-sqlite3", "fs-native-extensions"],
   outExtension: { ".js": ".cjs" },
 });
 
@@ -158,3 +171,5 @@ await buildCompanionAgent(outputDir);
 console.log(
   "[bundle] electron main + preload + backend/cli + companion runtime built successfully",
 );
+
+copyNativeLockRuntime(outputDir);

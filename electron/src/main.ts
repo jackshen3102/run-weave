@@ -1,4 +1,5 @@
 import "./desktop/config.js";
+import { configuration } from "@runweave/config-node";
 import { app, BrowserWindow, dialog, ipcMain, Menu, net } from "electron";
 import type {
   AttentionOpenDispatch,
@@ -56,6 +57,7 @@ import {
 import { registerCdpProxyHandlers } from "./browser/cdp/handlers.js";
 import {
   readCompanionEnabled,
+  markCompanionPreferenceApplied,
   writeCompanionEnabled,
 } from "./companion/preferences.js";
 import { DesktopCompanionAgent } from "./companion/agent.js";
@@ -478,25 +480,32 @@ if (hasSingleInstanceLock) {
         : null;
       companionEnabled = companionSupported && (await readCompanionEnabled());
       const setCompanionEnabled = (enabled: boolean): void => {
+        try { writeCompanionEnabled(companionSupported && enabled); }
+        catch (error) {
+          configuration().reportError("desktop.preferences.companion.enabled");
+          console.error("[companion-agent] failed to save preference", error);
+          return;
+        }
         companionEnabled = companionSupported && enabled;
-        void writeCompanionEnabled(companionEnabled);
         desktopRuntime.mainWindow?.webContents.send(
           "attention:companion-enabled-changed",
           companionEnabled,
         );
         if (companionEnabled) {
-          void companionAgent?.start().catch((error) => {
+          void companionAgent?.start().then(markCompanionPreferenceApplied).catch((error) => {
+            configuration().reportError("desktop.preferences.companion.enabled");
             console.error("[companion-agent] failed to start", error);
           });
         } else {
-          void companionAgent?.stop();
+          void companionAgent?.stop().then(markCompanionPreferenceApplied).catch(() => configuration().reportError("desktop.preferences.companion.enabled"));
         }
       };
       if (companionEnabled) {
-        void companionAgent?.start().catch((error) => {
+        void companionAgent?.start().then(markCompanionPreferenceApplied).catch((error) => {
+          configuration().reportError("desktop.preferences.companion.enabled");
           console.error("[companion-agent] failed to start", error);
         });
-      }
+      } else if (companionSupported) markCompanionPreferenceApplied();
       desktopRuntime.mainWindow.webContents.send(
         "attention:companion-enabled-changed",
         companionEnabled,

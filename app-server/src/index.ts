@@ -1,3 +1,5 @@
+import { configuration, acquireConfigurationOwner } from "@runweave/config-node";
+import { settingText } from "@runweave/config-node";
 import { PiSessionReader } from "./pi/session-reader.js";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
@@ -30,6 +32,8 @@ import { createAppServerRuntimeStatusReport } from "./runtime-status.js";
 
 async function main(): Promise<void> {
   const config = resolveAppServerConfig();
+  const owner = acquireConfigurationOwner(configuration().context, "app-server");
+  process.once("exit", () => owner.release());
   const serviceInstanceId =
     config.serviceInstanceId ?? `app-server:${randomUUID()}`;
   await mkdir(config.stateDir, { recursive: true });
@@ -40,6 +44,7 @@ async function main(): Promise<void> {
       phase: "preflight",
       ...buildLockLogFields(preflight.lock),
     });
+    owner.release();
     return;
   }
 
@@ -85,12 +90,12 @@ async function main(): Promise<void> {
     traeLifecycleReader,
     piSessionReader,
     startDelayMs: parseOptionalPositiveInteger(
-      process.env.RUNWEAVE_APP_SERVER_THREAD_STATUS_START_DELAY_MS ??
-        process.env.RUNWEAVE_APP_SERVER_CODEX_STATUS_START_DELAY_MS,
+      settingText("appServer.threadStatusStartDelayMs") ??
+        settingText("appServer.codexStatusStartDelayMs"),
     ),
     intervalMs: parseOptionalPositiveInteger(
-      process.env.RUNWEAVE_APP_SERVER_THREAD_STATUS_INTERVAL_MS ??
-        process.env.RUNWEAVE_APP_SERVER_CODEX_STATUS_INTERVAL_MS,
+      settingText("appServer.threadStatusIntervalMs") ??
+        settingText("appServer.codexStatusIntervalMs"),
     ),
   });
   const app = createHttpApp({

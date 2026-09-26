@@ -1,7 +1,7 @@
 import {
   discoverAppServer,
   getAppServerStatus,
-} from "@runweave/shared/app-server/discovery";
+} from "@runweave/config-node/app-server/discovery";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 
 export interface AppServerCliLogger {

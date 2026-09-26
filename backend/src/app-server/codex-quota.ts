@@ -1,10 +1,11 @@
-import { discoverAppServer } from "@runweave/shared/app-server/discovery";
+import { settingText } from "@runweave/config-node";
+import { discoverAppServer } from "@runweave/config-node/app-server/discovery";
 import { emptyCodexQuota, parseCodexQuotaSnapshot, type CodexQuotaSnapshot } from "@runweave/shared/app-server/codex-quota";
 
 /** Forward only the normalized quota contract; never query this Backend's Codex process. */
 export async function readCodexQuota(force: boolean, signal: AbortSignal): Promise<CodexQuotaSnapshot> {
   try {
-    if (process.env.RUNWEAVE_APP_SERVER_DISCOVERY?.trim() === "disabled") return emptyCodexQuota("unavailable");
+    if (settingText("appServer.discovery")?.trim() === "disabled") return emptyCodexQuota("unavailable");
     const connection = await discoverAppServer({ env: process.env });
     if (!connection) return emptyCodexQuota("unavailable");
     const response = await fetch(`${connection.baseUrl}/codex/quota${force ? "?refresh=1" : ""}`, {

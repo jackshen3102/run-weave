@@ -1,3 +1,5 @@
+import { configuration, settingText } from "@runweave/config-node";
+import { notifyFeishuWebhook } from "../feishu/webhook-notifier.js";
 import { runBridgeConnection } from "../feishu/bridge-runtime.js";
 import * as Lark from "@larksuiteoapi/node-sdk";
 import { getStringOption, parseArgs, resolveOutputMode } from "../args.js";
@@ -33,10 +35,18 @@ export async function runFeishuCommand(
 ): Promise<void> {
   const parsed = parseArgs(args, new Set(["json", "plain", "stdin"]));
   const mode = resolveOutputMode(parsed.options);
+  configuration().requireDomain("services.feishu");
+  if (subcommand === "notify" && settingText("services.feishu.legacyWebhook.transport") === "webhook") {
+    if (parsed.options.stdin !== true) throw new CliError("rw feishu notify requires --stdin", 2);
+    const payload = JSON.parse(await readStdin(io.stdin)) as NotifyPayload;
+    await notifyFeishuWebhook(readRequiredString(payload.notificationText, "notificationText"));
+    writeOutput(io.stdout, mode, { sent: true, transport: "webhook" });
+    return;
+  }
   const config = resolveFeishuConfig(io.env, {
     requireTargetChatId: subcommand === "notify" || subcommand === "bridge",
   });
-  const store = new FeishuStateStore(io.env);
+  const store = new FeishuStateStore();
   const client = createFeishuClient(config.appId, config.appSecret);
 
   if (subcommand === "notify") {

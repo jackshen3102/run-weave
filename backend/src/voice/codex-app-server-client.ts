@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
@@ -291,7 +292,7 @@ function resolveCodexLaunchPlan(
   provider: "codex" | "traex",
 ): CodexLaunchPlan {
   const args = provider === "codex" ? buildCodexAppServerArgs() : ["app-server"];
-  const configured = (provider === "codex" ? env.CODEX_BIN : env.TRAEX_BIN)?.trim();
+  const configured = (provider === "codex" ? settingText("agents.codex.binary") : settingText("agents.traex.binary"))?.trim();
   if (configured && isExecutableFile(configured)) {
     return {
       command: configured,

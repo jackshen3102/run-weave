@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type {
@@ -34,7 +35,7 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
   capabilities: ScheduledTaskCapabilities["providers"];
   adapters: Map<string, ScheduledProviderAdapter>;
 }> {
-  const codexBinary = env.RUNWEAVE_CODEX_BIN?.trim() || "codex";
+  const codexBinary = settingText("agents.codex.binary")?.trim() || "codex";
   let codexAvailable = false;
   let codexReason: string | undefined;
   let autoReviewSupported = false;

@@ -1,3 +1,4 @@
+import { verifyBackendEnvironment } from "./environment.js";
 import {
   type ResolvedProfile,
   type RunweaveProfile,
@@ -6,6 +7,7 @@ import {
 import { HttpError } from "../errors.js";
 import { createAuthClient, isExpired } from "./auth-client.js";
 import { requestJson, requestVoid } from "./http.js";
+import { resolveConfigurationContext } from "@runweave/config-node";
 
 export interface AuthContext {
   profileName: string;
@@ -82,6 +84,10 @@ async function requestWithAuth<T>(params: {
   init?: RequestInit;
   parse: "json" | "void";
 }): Promise<T> {
+  if (!["GET", "HEAD", "OPTIONS"].includes((params.init?.method ?? "GET").toUpperCase())) {
+    resolveConfigurationContext({ requireExplicit: true });
+    await verifyBackendEnvironment(params.state.current.baseUrl);
+  }
   const makeInit = (accessToken: string): RequestInit => ({
     ...params.init,
     headers: {

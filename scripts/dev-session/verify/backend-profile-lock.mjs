@@ -1,7 +1,9 @@
 import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
-import { readFile, stat, writeFile } from "node:fs/promises";
-import { createHash, randomBytes } from "node:crypto";
+import { configurationLibrary as configuration } from "../../lib/configuration.mjs";
+import { copyNativeLockRuntime } from "../../../packages/config-node/scripts/native-runtime.mjs";
+import { readFile, stat, writeFile, rm } from "node:fs/promises";
+import { randomUUID, randomBytes } from "node:crypto";
 import {
   backendHealthHeaders,
   persistBackendHealthAuth,
@@ -105,9 +107,14 @@ export async function verifyBackendProfileLockPublication(
 }
 
 export async function verifyPrivateBackendHealth(temporaryHome) {
-  const profileDir = path.join(temporaryHome, "health-profile");
+  const owner = `dvs-health-${randomUUID().slice(0, 8)}`;
+  const context = configuration.resolveConfigurationContext({ args: ["--instance", owner] });
+  const profileDir = path.join(context.configRoot, "data", "backend");
   const secret = randomBytes(32).toString("hex");
-  const owner = "dvs-health";
+  const store = new configuration.ConfigurationStore(context);
+  const value = configuration.emptyConfiguration(context);
+  value.backend = { tunnelAuth: { token: secret, scope: "all" } };
+  store.initialize(value);
   let expectedSecret = secret;
   let redirect = false;
   let redirectRequests = 0;
@@ -196,6 +203,7 @@ export async function verifyPrivateBackendHealth(temporaryHome) {
     );
     const electronHelper = path.join(temporaryHome, "electron-health-auth.mjs");
     const adapters = [];
+    copyNativeLockRuntime(temporaryHome);
     for (const [file, outfile] of [
       ["electron/src/backend/health-auth.ts", electronHelper],
       [
@@ -207,18 +215,25 @@ export async function verifyPrivateBackendHealth(temporaryHome) {
       // production API/test hook or replacing the real HTTP probe helpers.
       await build({
         stdin: {
-          contents: `${await readFile(file, "utf8")}\nexport { healthListenerPidsForEndpoint, healthListenerMatchesEndpoint };`,
+          contents: `${await readFile(file, "utf8")}\nexport { healthListenerPidsForEndpoint, healthListenerMatchesEndpoint };${file.endsWith(".ts") ? '\nexport { initializeConfiguration } from "@runweave/config-node";' : ""}`,
           resolveDir: path.dirname(path.resolve(file)),
           loader: file.endsWith(".ts") ? "ts" : "js",
         },
         outfile,
         bundle: true,
+        external: ["fs-native-extensions"],
+        banner: { js: "import { createRequire as fixtureCreateRequire } from 'node:module'; const require = fixtureCreateRequire(import.meta.url);" },
+        plugins: [{ name: "configuration-source-location", setup(build) {
+          build.onResolve({ filter: /^\.\/configuration\.mjs$/ }, () => ({ path: path.resolve("scripts/lib/configuration.mjs"), external: true }));
+        } }],
         platform: "node",
         format: "esm",
         logLevel: "silent",
       });
       adapters.push(await import(pathToFileURL(outfile).href));
     }
+    const runtime = adapters[0].initializeConfiguration(context);
+    runtime.register("backend.tunnelAuth", () => {});
     const { localBackendAuthHeaders, restoreOwnedBackendHealthEnv } =
       adapters[0];
     for (const name of [
@@ -316,7 +331,7 @@ export async function verifyPrivateBackendHealth(temporaryHome) {
       RUNWEAVE_TUNNEL_TOKEN: secret,
       RUNWEAVE_TUNNEL_AUTH_SCOPE: "all",
     });
-    const configPath = path.join(profileDir, "backend-health-auth.json");
+    const configPath = path.join(profileDir, "backend-health-binding.json");
     assert.equal((await stat(configPath)).mode & 0o777, 0o600);
     const lock = {
       pid: process.pid,
@@ -452,102 +467,36 @@ export async function verifyPrivateBackendHealth(temporaryHome) {
       for (const probe of probes) assert.equal(await probe(url), null);
       assert.equal(authenticatedRequests, before);
     }
+    // A different identity, including Stable, cannot borrow this Dev's token.
     await writeFile(lockPath, JSON.stringify({ ...lock, devSessionId: null }));
-    await persistBackendHealthAuth(profileDir, null, {
-      RUNWEAVE_TUNNEL_TOKEN: secret,
-    });
-    assert.deepEqual(await fetchHealthJson(url, profileDir), { status: "ok" });
-    assert.deepEqual(await electronProbe(url), { status: "ok" });
+    for (const probe of probes) assert.equal(await probe(url), null);
     await writeFile(lockPath, JSON.stringify(lock));
-    // A valid transport identity may still fail the application handshake.
-    // Its diagnostic retry must be unauthenticated, not a second secret send.
-    const sourceRoot = path.resolve(process.cwd());
-    const diagnosticProfile = path.join(
-      temporaryHome,
-      ".runweave",
-      "browser-profile",
-      createHash("sha256").update(sourceRoot).digest("hex").slice(0, 8),
-    );
-    await persistBackendHealthAuth(diagnosticProfile, null, {
-      RUNWEAVE_TUNNEL_TOKEN: secret,
-    });
-    await writeFile(
-      path.join(diagnosticProfile, "backend.lock.json"),
-      JSON.stringify({
-        ...lock,
-        devSessionId: null,
-        backendId: "fixture",
-        startedAt: new Date().toISOString(),
-        cwd: sourceRoot,
-      }),
-      { mode: 0o600 },
-    );
-    const beforeDiagnostic = authenticatedRequests;
-    const diagnostic = await execFileAsync(
-      process.execPath,
-      [
-        "--input-type=module",
-        "-e",
-        `
-      import { resolveSharedBackend } from './scripts/dev-session/services/shared.mjs';
-      const service = await resolveSharedBackend(process.cwd(), 'fixture-revision');
-      console.log(JSON.stringify({unavailable: service === null}));
-    `,
-      ],
-      { cwd: sourceRoot, env: { ...process.env, HOME: temporaryHome } },
-    );
-    assert.equal(JSON.parse(diagnostic.stdout.trim()).unavailable, true);
-    assert.equal(authenticatedRequests - beforeDiagnostic, 1);
+    const binding = await readFile(configPath, "utf8");
+    assert.equal(binding.includes(secret), false);
+    assert.equal(JSON.parse(binding).configRoot, context.configRoot);
     await writeFile(configPath, `invalid-${secret}`);
     await assert.rejects(
       backendHealthHeaders(url, profileDir),
       (error) => !error.message.includes(secret),
     );
-    assert.throws(
-      () => localBackendAuthHeaders(url, profileDir),
-      (error) => !error.message.includes(secret),
-    );
-
-    // Byte limit applies to the serialized JSON, not unescaped token length.
-    const overhead = Buffer.byteLength(
-      JSON.stringify({ ownerDevSessionId: owner, token: "", scope: "all" }),
-    );
-    const remaining = 16_384 - overhead;
-    const boundaryToken =
-      '"'.repeat(Math.floor(remaining / 2)) + (remaining % 2 ? "a" : "");
-    await persistBackendHealthAuth(profileDir, owner, {
-      RUNWEAVE_TUNNEL_TOKEN: boundaryToken,
-      RUNWEAVE_TUNNEL_AUTH_SCOPE: "all",
-    });
-    assert.equal((await stat(configPath)).size, 16_384);
-    assert.equal(
-      (await readBackendHealthAuth(profileDir)).token === boundaryToken,
-      true,
-    );
-    assert.equal(
-      restoreOwnedBackendHealthEnv({
-        BROWSER_PROFILE_DIR: profileDir,
-        RUNWEAVE_DEV_SESSION_ID: owner,
-      }).RUNWEAVE_TUNNEL_TOKEN === boundaryToken,
-      true,
-    );
-    const previous = await readFile(configPath, "utf8");
-    for (const token of [
-      boundaryToken + "a",
-      '"'.repeat(8_192),
-      "\\".repeat(8_192),
+    // Desktop owns the already-loaded YAML snapshot, not the probe binding file.
+    assert.equal(localBackendAuthHeaders(url, profileDir).Authorization, `Bearer ${secret}`);
+    for (const invalid of [
+      JSON.stringify({ ...JSON.parse(binding), ownerDevSessionId: "another-owner" }),
+      JSON.stringify({ ...JSON.parse(binding), padding: "x".repeat(16_384) }),
     ]) {
-      await assert.rejects(
-        persistBackendHealthAuth(profileDir, owner, {
-          RUNWEAVE_TUNNEL_TOKEN: token,
-          RUNWEAVE_TUNNEL_AUTH_SCOPE: "all",
-        }),
-        (error) =>
-          error.message === "oversized private Backend health configuration",
-      );
-      assert.equal((await readFile(configPath, "utf8")) === previous, true);
+      await writeFile(configPath, invalid);
+      await assert.rejects(backendHealthHeaders(url, profileDir), (error) => !error.message.includes(secret));
     }
-    await persistBackendHealthAuth(profileDir, owner, {});
+    await writeFile(configPath, binding, { mode: 0o600 });
+    assert.equal((await readBackendHealthAuth(profileDir)).token, secret);
+    assert.equal(restoreOwnedBackendHealthEnv({
+      RUNWEAVE_TUNNEL_TOKEN: "obsolete-token", RUNWEAVE_TUNNEL_AUTH_SCOPE: "all",
+    }).RUNWEAVE_TUNNEL_TOKEN, undefined);
+    const saved = store.read();
+    store.patch({ expectedRevision: saved.value.revision, expectedDigest: saved.digest,
+      changes: { "backend.tunnelAuth.token": null } });
+    await runtime.reload();
     expectedSecret = null;
     // No-token legacy health must not depend on new lock metadata/OS proof.
     await writeFile(
@@ -571,5 +520,6 @@ export async function verifyPrivateBackendHealth(temporaryHome) {
     const exited = once(unrelated, "exit");
     unrelated.kill("SIGTERM");
     await exited;
+    await rm(context.configRoot, { recursive: true, force: true });
   }
 }

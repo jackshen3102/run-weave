@@ -23,7 +23,8 @@
     "pg": "8.23.0",
     "node-pg-migrate": "9.0.0",
     "busboy": "1.6.0",
-    "sharp": "0.35.4"
+    "sharp": "0.35.4",
+    "@runweave/config-node": "workspace:*"
   },
   "devDependencies": {
     "@types/express": "^5.0.1",

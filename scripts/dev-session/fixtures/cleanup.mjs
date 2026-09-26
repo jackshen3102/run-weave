@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { configurationLibrary as configuration } from "../../lib/configuration.mjs";
 
 import { DevSessionError, assertLoopbackUrl } from "../contracts.mjs";
 
@@ -267,71 +266,15 @@ function unique(values) {
 }
 
 async function resolveCleanupAuth(manifest, baseUrl) {
-  const configPath = manifest.services?.electron?.userDataDir
-    ? path.join(manifest.services.electron.userDataDir, "cli", "config.json")
-    : null;
-  if (configPath) {
-    try {
-      const config = JSON.parse(await readFile(configPath, "utf8"));
-      const profileName = config.activeProfile || "beta";
-      const profile = config.profiles?.[profileName] ?? config.profiles?.beta;
-      if (profile?.accessToken) {
-        return { accessToken: profile.accessToken };
-      }
-      if (profile?.refreshToken) {
-        const refreshed = await requestAuth(baseUrl, "/api/auth/refresh", {
-          refreshToken: profile.refreshToken,
-        });
-        if (refreshed.accessToken) {
-          return { accessToken: refreshed.accessToken };
-        }
-      }
-    } catch {
-      // Fall through to the dedicated local Backend credentials.
-    }
-  }
-  const backendProfileDir = manifest.services?.backend?.profileDir;
-  if (
-    typeof backendProfileDir === "string" &&
-    path.isAbsolute(backendProfileDir)
-  ) {
-    const authStorePath = path.join(backendProfileDir, "auth-store.json");
-    try {
-      const authStore = JSON.parse(await readFile(authStorePath, "utf8"));
-      const username = authStore?.auth?.username;
-      const password = authStore?.auth?.password;
-      if (
-        typeof username !== "string" ||
-        !username.trim() ||
-        typeof password !== "string" ||
-        !password
-      ) {
-        throw new DevSessionError(
-          "fixture Backend auth store does not contain credentials",
-          5,
-        );
-      }
-      const login = await requestAuth(baseUrl, "/api/auth/login", {
-        username,
-        password,
-      });
-      if (!login.accessToken) {
-        throw new DevSessionError("fixture Backend login returned no token", 5);
-      }
-      return { accessToken: login.accessToken };
-    } catch (error) {
-      if (error?.code !== "ENOENT") {
-        throw error;
-      }
-    }
-  }
-  const login = await requestAuth(baseUrl, "/api/auth/login", {
-    username: process.env.AUTH_USERNAME?.trim() || "admin",
-    password: process.env.AUTH_PASSWORD?.trim() || "admin",
-  });
-  if (!login.accessToken) {
-    throw new DevSessionError("fixture Backend login returned no token", 5);
-  }
+  const context = configuration.resolveConfigurationContext({ args: ["--instance", manifest.devSessionId] });
+  const snapshot = new configuration.ConfigurationStore(context).read();
+  const auth = snapshot.value.backend?.auth;
+  if (snapshot.issues["backend.auth"]?.length || typeof auth?.username !== "string" || typeof auth?.password !== "string") throw new DevSessionError("fixture Backend configuration is unavailable", 5);
+  const response = await fetch(`${baseUrl}/health`, { redirect: "error" });
+  const health = await response.json();
+  if (!response.ok || health.environment?.kind !== context.kind || health.environment?.instanceId !== context.instanceId || health.environment?.configRoot !== context.configRoot) throw new DevSessionError("fixture Backend identity mismatch", 5);
+  const login = await requestAuth(baseUrl, "/api/auth/login", { username: auth.username, password: auth.password });
+  if (!login.accessToken) throw new DevSessionError("fixture Backend login returned no token", 5);
   return { accessToken: login.accessToken };
 }
 

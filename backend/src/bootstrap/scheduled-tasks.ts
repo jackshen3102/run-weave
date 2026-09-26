@@ -24,7 +24,7 @@ export async function createScheduledTasks(
     terminalActivity: TerminalActivityDependencies;
   },
 ): Promise<ScheduledTaskSubsystem> {
-  const paths = resolveScheduledTaskStoragePaths(process.env, input.browserProfileDir);
+  const paths = resolveScheduledTaskStoragePaths();
   const subsystem = await createScheduledTaskSubsystem({
     databasePath: paths.scheduledTasksDatabaseFile,
     terminalSessionManager: input.terminalSessionManager,

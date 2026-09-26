@@ -1,6 +1,8 @@
 export function parseRunweaveUpdateArgs(argv) {
   const result = {
     appPath: null,
+    configurationInstance: null,
+    configurationRoot: null,
     appServerHome: null,
     appServerMode: "auto",
     dryRun: false,
@@ -23,6 +25,10 @@ export function parseRunweaveUpdateArgs(argv) {
       return value;
     };
 
+    if (arg === "--instance") { result.configurationInstance = readValue(arg); continue; }
+    if (arg.startsWith("--instance=")) { result.configurationInstance = arg.slice(11); continue; }
+    if (arg === "--config-dir") { result.configurationRoot = readValue(arg); continue; }
+    if (arg.startsWith("--config-dir=")) { result.configurationRoot = arg.slice(13); continue; }
     if (arg === "--dry-run") {
       result.dryRun = true;
       continue;
