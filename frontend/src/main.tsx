@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { ThemeProvider } from "./components/theme-provider";
+import { initializeClarity } from "./features/analytics/clarity";
 import "./index.css";
 import "./pwa";
 
@@ -43,6 +44,7 @@ if (buildChannel === "beta") {
 if ((import.meta.env.DEV || buildChannel === "beta") && new URLSearchParams(location.search).has("browser-overlay-harness")) {
   void import("./e2e/browser-overlay-harness").then((fixture) => fixture.mountBrowserOverlayHarness());
 } else {
+  initializeClarity();
   createRoot(document.getElementById("root")!).render(
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <BrowserRouter>

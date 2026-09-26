@@ -14,19 +14,20 @@
 
 ## 按能力找计划
 
-| 目录                               | 范围                                                 |
-| ---------------------------------- | ---------------------------------------------------- |
-| [`agent-team/`](./agent-team/)     | Agent Team 生命周期、执行、恢复、配置与干预          |
-| [`app/`](./app/)                   | 原生 iOS、App Server 与设备连接                      |
-| [`architecture/`](./architecture/) | 跨运行时架构与 Activity 数据底座                     |
-| [`browser/`](./browser/)           | 浏览器和原型画廊                                     |
-| [`evolution/`](./evolution/)       | Agent Self-Evolution                                 |
-| [`platform/`](./platform/)         | Dev Session、Beta Pool、桌面 companion 与 CLI 控制面 |
-| [`runbooks/`](./runbooks/)         | 可重复执行的人工操作流程                             |
-| [`skills/`](./skills/)             | Toolkit 技能的真实输入、输出与验收边界               |
-| [`scheduled-tasks/`](./scheduled-tasks/) | 定时任务调度、后台执行、Web 管理与普通终端恢复 |
-| [`suiji/`](./suiji/)               | 随记服务、MCP、Web 录入、AI 回顾、原生体验与部署恢复 |
-| [`terminal/`](./terminal/)         | Terminal、Browser、tmux、MCP 与 Worktree Context     |
+| 目录                                     | 范围                                                 |
+| ---------------------------------------- | ---------------------------------------------------- |
+| [`agent-team/`](./agent-team/)           | Agent Team 生命周期、执行、恢复、配置与干预          |
+| [`app/`](./app/)                         | 原生 iOS、App Server 与设备连接                      |
+| [`architecture/`](./architecture/)       | 跨运行时架构与 Activity 数据底座                     |
+| [`analytics/`](./analytics/)             | Web 纯无埋点接入、行为回放与采集边界验收             |
+| [`browser/`](./browser/)                 | 浏览器和原型画廊                                     |
+| [`evolution/`](./evolution/)             | Agent Self-Evolution                                 |
+| [`platform/`](./platform/)               | Dev Session、Beta Pool、桌面 companion 与 CLI 控制面 |
+| [`runbooks/`](./runbooks/)               | 可重复执行的人工操作流程                             |
+| [`skills/`](./skills/)                   | Toolkit 技能的真实输入、输出与验收边界               |
+| [`scheduled-tasks/`](./scheduled-tasks/) | 定时任务调度、后台执行、Web 管理与普通终端恢复       |
+| [`suiji/`](./suiji/)                     | 随记服务、MCP、Web 录入、AI 回顾、原生体验与部署恢复 |
+| [`terminal/`](./terminal/)               | Terminal、Browser、tmux、MCP 与 Worktree Context     |
 
 ## 验证
 
