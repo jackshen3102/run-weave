@@ -2,6 +2,7 @@ import http from "node:http";
 import type { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import type { RemoteAccessConfig } from "@runweave/shared/tunnels";
+import { isBetaChannel } from "../desktop/config.js";
 import { remoteFreePort, startSsh, type SshProcess } from "./ssh-process.js";
 
 // Only user-facing Backend routes cross this boundary. Backend authentication is
@@ -25,6 +26,11 @@ export class RemoteAccessChannel {
     if (this.stopped) throw new Error("TUNNEL_CANCELLED");
   }
   async start() {
+    if (isBetaChannel) {
+      throw new Error(
+        "REMOTE_ACCESS_INSECURE_AUTH: Beta Backend 使用固定登录凭据，不能开放远程访问",
+      );
+    }
     const target = new URL(this.backendUrl);
     if (
       target.protocol !== "http:" ||

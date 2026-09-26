@@ -155,3 +155,14 @@ cases:
     steps:
       - "迁移到新主机配置与 endpoint 引用后显式连接主机；从原连接入口打开相同项目/终端，确认身份未变且没有复制项目。"
       - "删除本例连接记录后确认独立隧道仍存活；从管理面板断开才释放本例隧道，远端终端仍存活。"
+  - id: STM-016
+    name: "Beta 固定凭据不能经远程访问通道暴露"
+    required: true
+    description: "Beta Backend 使用固定账号密码时，启用远程访问必须在建立监听前失败。"
+    preconditions:
+      - "本例使用隔离的 Beta 桌面、专属 userData、测试 SSH 主机及可到达的内网地址和端口；不操作用户现有隧道。"
+      - "Beta Backend 已就绪，登录凭据为该渠道固定的 admin/admin。"
+    steps:
+      - "在测试主机配置中启用远程访问并连接；确认通道状态为 failed，错误码为 REMOTE_ACCESS_INSECURE_AUTH，且没有在远端地址和端口建立监听。"
+      - "从另一台可达设备请求该地址的 /api/auth/login；确认无法连接，也不能用固定凭据获取访问令牌。"
+      - "关闭本例连接并清理专属资源；确认普通 SSH 转发与 Backend 本机访问仍可用。"
