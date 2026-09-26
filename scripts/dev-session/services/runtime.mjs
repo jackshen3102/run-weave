@@ -5,12 +5,15 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { DevSessionError, assertLoopbackUrl } from "../contracts.mjs";
-import {
-  buildBetaStatus,
-  resolveBetaPaths,
-} from "../../beta/state.mjs";
+import { buildBetaStatus } from "../../beta/state.mjs";
 
 import { backendHealthHeaders } from "../../lib/backend-health-auth.mjs";
+import {
+  isCanonicalLoopbackEndpoint,
+  resolveBetaReconciliationPaths,
+} from "./beta-reconciliation-paths.mjs";
+
+export { resolveBetaReconciliationPaths } from "./beta-reconciliation-paths.mjs";
 
 const execFileAsync = promisify(execFile);
 const READY_TIMEOUT_MS = 30_000;
@@ -151,7 +154,9 @@ export async function fetchHealthJson(url, backendProfileDir = null) {
     const response = await fetch(assertLoopbackUrl(url), {
       signal: controller.signal,
       redirect: "error",
-      headers: backendProfileDir ? await backendHealthHeaders(url, backendProfileDir) : {},
+      headers: backendProfileDir
+        ? await backendHealthHeaders(url, backendProfileDir)
+        : {},
     });
     return response.ok ? await response.json() : null;
   } catch {
@@ -226,7 +231,10 @@ export async function inspectBackendHandshake(service) {
   ) {
     return { ok: false, reason: "backend lock identity drifted" };
   }
-  const health = await fetchHealthJson(`${service.url}/health`, path.dirname(service.lockPath));
+  const health = await fetchHealthJson(
+    `${service.url}/health`,
+    path.dirname(service.lockPath),
+  );
   const expectedDevSessionId = service.ownerDevSessionId ?? null;
   if (
     health?.status !== "ok" ||
@@ -325,75 +333,6 @@ export async function inspectElectronHandshake(service) {
   return { ok: true, reason: null };
 }
 
-export function resolveBetaReconciliationPaths(services) {
-  const beta = services.beta;
-  const pooledBeta = /^pool-0[1-5]$/.test(beta?.instanceId ?? "");
-  const desktopEndpoint = services.cdp?.desktop?.endpoint;
-  const terminalBrowserEndpoint = services.cdp?.terminalBrowser?.endpoint;
-  if (
-    beta?.ownership !== "dedicated" ||
-    beta.channel !== "beta" ||
-    !beta.instanceId ||
-    (pooledBeta &&
-      (beta.slotId !== beta.instanceId ||
-        typeof beta.leaseNonce !== "string" ||
-        !beta.leaseNonce)) ||
-    !beta.ownerDevSessionId ||
-    !beta.userDataDir ||
-    !beta.betaControl?.cwd ||
-    !desktopEndpoint ||
-    !terminalBrowserEndpoint
-  ) {
-    return null;
-  }
-  let desktopCdpPort;
-  let terminalBrowserCdpPort;
-  try {
-    desktopCdpPort = Number(
-      new URL(assertLoopbackUrl(desktopEndpoint)).port,
-    );
-    terminalBrowserCdpPort = Number(
-      new URL(assertLoopbackUrl(terminalBrowserEndpoint)).port,
-    );
-  } catch {
-    return null;
-  }
-  const homeDir = path.resolve(beta.userDataDir, "../../../../..");
-  const paths = resolveBetaPaths(
-    beta.betaControl.cwd,
-    homeDir,
-    beta.instanceId,
-    beta.ownerDevSessionId,
-    { desktopCdpPort, terminalBrowserCdpPort },
-  );
-  if (
-    paths.userData !== beta.userDataDir ||
-    paths.desktopStatusPath !== beta.statusPath ||
-    paths.appPath !== beta.appPath ||
-    `http://127.0.0.1:${paths.desktopCdpPort}` !== desktopEndpoint ||
-    `http://127.0.0.1:${paths.terminalBrowserCdpPort}` !==
-      terminalBrowserEndpoint
-  ) {
-    return null;
-  }
-  return paths;
-}
-
-function isCanonicalLoopbackEndpoint(endpoint) {
-  try {
-    const url = new URL(assertLoopbackUrl(endpoint));
-    return (
-      url.origin === endpoint &&
-      url.protocol === "http:" &&
-      url.hostname === "127.0.0.1" &&
-      Number.isInteger(Number(url.port)) &&
-      Number(url.port) > 0
-    );
-  } catch {
-    return false;
-  }
-}
-
 export async function reconcileBetaSessionServices(services) {
   const paths = resolveBetaReconciliationPaths(services);
   if (!paths) {
@@ -443,7 +382,10 @@ export async function reconcileBetaSessionServices(services) {
   const [backendLock, backendHealth, appServerLock, appServerHealth] =
     await Promise.all([
       readJson(backend.lockPath),
-      fetchHealthJson(`${status.backend.baseUrl}/health`, path.dirname(backend.lockPath)),
+      fetchHealthJson(
+        `${status.backend.baseUrl}/health`,
+        path.dirname(backend.lockPath),
+      ),
       readJson(appServer.lockPath),
       fetchHealthJson(`${status.appServer.baseUrl}/healthz`),
     ]);
