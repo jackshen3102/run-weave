@@ -11,7 +11,29 @@ export interface TunnelForwardConfig {
   path: string;
   enabled: boolean;
 }
+export interface RemoteAccessConfig {
+  enabled: boolean;
+  listenAddress: string;
+  port: number;
+}
+export interface RemoteAccessRuntime extends TunnelState {
+  address: string | null;
+  checkedAt: number | null;
+}
+export function isPrivateRelayAddress(value: string): boolean {
+  const parts = value.split(".");
+  if (
+    parts.length !== 4 ||
+    parts.some((p) => !/^(0|[1-9][0-9]{0,2})$/.test(p) || Number(p) > 255)
+  )
+    return false;
+  const [a, b] = parts.map(Number);
+  return (
+    a === 10 || (a === 172 && b! >= 16 && b! <= 31) || (a === 192 && b === 168)
+  );
+}
 export interface TunnelHostConfig {
+  remoteAccess?: RemoteAccessConfig;
   id: string;
   name: string;
   sshTarget: string;
@@ -53,6 +75,7 @@ export interface TunnelState {
   error: { code: string; message: string } | null;
 }
 export interface TunnelHostRuntime {
+  remoteAccess?: RemoteAccessRuntime;
   hostId: string;
   generation: number;
   state: "disconnected" | "connecting" | "ready" | "reconnecting" | "failed";
@@ -156,6 +179,20 @@ export function validateTunnelUpdate(value: unknown): TunnelConfigUpdate {
       new Set(forwards.map((f) => f.port)).size !== forwards.length
     )
       throw new Error("DUPLICATE_TUNNEL_PORT");
+    const r = h.remoteAccess;
+    if (
+      r &&
+      (typeof r.enabled !== "boolean" ||
+        typeof r.listenAddress !== "string" ||
+        !port(r.port) ||
+        r.port < 1024 ||
+        (r.enabled
+          ? !isPrivateRelayAddress(r.listenAddress)
+          : r.listenAddress !== "" && !isPrivateRelayAddress(r.listenAddress)))
+    )
+      throw new Error(
+        "远程访问需要有效的服务器内网 IPv4 地址及 1024–65535 端口",
+      );
     const b = h.browser;
     if (
       !b ||
@@ -174,6 +211,15 @@ export function validateTunnelUpdate(value: unknown): TunnelConfigUpdate {
       id: h.id,
       name: h.name.trim(),
       sshTarget: h.sshTarget,
+      ...(r
+        ? {
+            remoteAccess: {
+              enabled: r.enabled,
+              listenAddress: r.listenAddress,
+              port: r.port,
+            },
+          }
+        : {}),
       autoConnect: h.autoConnect,
       forwards,
       browser: {

@@ -2,6 +2,7 @@ import type { RunweaveElectronBridge } from "@runweave/shared/desktop-bridge";
 import { useEffect, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import type { TunnelHostConfig } from "@runweave/shared/tunnels";
+import { RemoteAccessStatus } from "./remote-access";
 import { HostForm } from "./host-form";
 import { BrowserStatus } from "./browser-status";
 import { labels } from "./presentation";
@@ -185,8 +186,9 @@ export function TunnelDrawer() {
           {!snapshot && !error && <p>读取配置中…</p>}
           {snapshot?.config.hosts.length === 0 && !editing && (
             <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-              添加 SSH 主机后，可转发开发服务端口，或允许远端 Agent 使用本机
-              Browser。
+              添加 SSH
+              主机后，可配置手机远程访问本机、转发开发服务端口，或允许远端 Agent
+              使用本机 Browser。
             </div>
           )}
           {snapshot?.config.hosts.map((host) => {
@@ -325,6 +327,12 @@ export function TunnelDrawer() {
                     })
                   )}
                 </div>
+                <RemoteAccessStatus
+                  host={host}
+                  runtime={runtime}
+                  run={run}
+                  busy={busy}
+                />
                 <BrowserStatus
                   host={host}
                   runtime={runtime}

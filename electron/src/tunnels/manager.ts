@@ -3,8 +3,6 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
   TunnelConfigUpdate,
-  TunnelHostConfig,
-  TunnelHostRuntime,
   TunnelSnapshot,
 } from "@runweave/shared/tunnels";
 import {
@@ -13,29 +11,17 @@ import {
   writePrivateJson,
 } from "../desktop/local-state.js";
 import { desktopProxySummaries } from "../browser/profile/network-summary.js";
-import { startSsh, freePort, type SshProcess } from "./ssh-process.js";
+import { startSsh, freePort } from "./ssh-process.js";
+import { BrowserChannel } from "./browser-channel.js";
 import { TunnelStore } from "./store.js";
 import { TunnelCredentials } from "./credentials.js";
-import { BrowserChannel } from "./browser-channel.js";
+import {
+  refreshRemoteAccess,
+  stopRemoteAccess,
+} from "./remote-access-owner.js";
+import { createTunnelHost, type Host } from "./host-state.js";
 import { childState, failure } from "./runtime-state.js";
 
-interface Host {
-  config: TunnelHostConfig;
-  runtime: TunnelHostRuntime;
-  desired: boolean;
-  control: SshProcess | null;
-  forwards: Map<string, SshProcess>;
-  forwardRetries: Map<string, { retryAt: number; failures: number }>;
-  backends: Map<number, { process: SshProcess; url: string }>;
-  channel: BrowserChannel | null;
-  browserBusy: boolean;
-  browserEpoch: number;
-  endpointPending: Map<number, Promise<string>>;
-  lastBrowserRefresh: number;
-  busy: boolean;
-  retryAt: number;
-  failures: number;
-}
 export class TunnelManager {
   readonly store = new TunnelStore();
   readonly credentials = new TunnelCredentials();
@@ -49,41 +35,7 @@ export class TunnelManager {
   private publishedError: string | null = null;
   constructor() {
     for (const config of this.store.read().hosts)
-      this.hosts.set(config.id, this.create(config));
-  }
-  private create(config: TunnelHostConfig): Host {
-    return {
-      config,
-      desired: false,
-      control: null,
-      forwards: new Map(),
-      forwardRetries: new Map(),
-      backends: new Map(),
-      channel: null,
-      browserBusy: false,
-      browserEpoch: 0,
-      endpointPending: new Map(),
-      lastBrowserRefresh: 0,
-      busy: false,
-      retryAt: 0,
-      failures: 0,
-      runtime: {
-        hostId: config.id,
-        generation: Date.now(),
-        state: "disconnected",
-        error: null,
-        forwards: Object.fromEntries(
-          config.forwards.map((f) => [
-            f.id,
-            childState(f.enabled ? "waiting" : "disabled"),
-          ]),
-        ),
-        browser: childState(config.browser.enabled ? "waiting" : "disabled"),
-        installationId: null,
-        bindingId: null,
-        endpoints: {},
-      },
-    };
+      this.hosts.set(config.id, createTunnelHost(config));
   }
   snapshot(): TunnelSnapshot {
     const config = this.store.read();
@@ -152,6 +104,11 @@ export class TunnelManager {
             if (f.enabled && retry?.retryAt && Date.now() >= retry.retryAt)
               void this.forward(h, f.id);
           }
+          void refreshRemoteAccess(
+            h,
+            () => this.current(h, h.runtime.generation),
+            () => this.publish(),
+          );
           void this.browser(h);
           void this.restoreEndpoints(h);
         }
@@ -254,6 +211,7 @@ export class TunnelManager {
       control?.stop(),
       ...jobs.map((p) => p.stop()),
       this.stopBrowser(h),
+      stopRemoteAccess(h),
     ]);
   }
   async disconnect(id: string) {
@@ -449,6 +407,11 @@ export class TunnelManager {
       }
     }
     void this.browser(h);
+    void refreshRemoteAccess(
+      h,
+      () => this.current(h, h.runtime.generation),
+      () => this.publish(),
+    );
   }
   private async restoreEndpoints(h: Host) {
     const generation = h.runtime.generation;
@@ -488,7 +451,7 @@ export class TunnelManager {
       for (const next of config.hosts) {
         let h = this.hosts.get(next.id);
         if (!h) {
-          h = this.create(next);
+          h = createTunnelHost(next);
           this.hosts.set(next.id, h);
           if (migrationId && next.autoConnect) void this.connect(next.id);
           continue;
@@ -517,7 +480,11 @@ export class TunnelManager {
         }
         const browserChanged =
           JSON.stringify(h.config.browser) !== JSON.stringify(next.browser);
+        const remoteChanged =
+          JSON.stringify(h.config.remoteAccess) !==
+          JSON.stringify(next.remoteAccess);
         h.config = next;
+        if (remoteChanged) await stopRemoteAccess(h);
         if (browserChanged) await this.stopBrowser(h);
         const required = new Set(
           config.backendEndpoints
@@ -582,7 +549,14 @@ export class TunnelManager {
     const h = this.hosts.get(id);
     if (!h) throw new Error("TUNNEL_NOT_FOUND");
     if (h.runtime.state !== "ready") return this.connect(id);
-    if (forwardId) await this.forward(h, forwardId);
+    if (forwardId === "remote-access") {
+      await stopRemoteAccess(h);
+      await refreshRemoteAccess(
+        h,
+        () => this.current(h, h.runtime.generation),
+        () => this.publish(),
+      );
+    } else if (forwardId) await this.forward(h, forwardId);
     else {
       await this.stopBrowser(h);
       await this.browser(h);

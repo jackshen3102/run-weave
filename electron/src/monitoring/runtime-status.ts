@@ -12,6 +12,8 @@ import type { DesktopCompanionAgent } from "../companion/agent.js";
 import { desktopRuntime } from "../desktop/runtime-state.js";
 import { resolveLocalConnectionAddresses } from "../desktop/connection-address.js";
 
+import { getTunnelRuntimeSnapshot } from "../tunnels/ipc.js";
+
 const electronInstanceId =
   process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim() ||
   `electron:${process.pid}:${randomUUID()}`;
@@ -141,6 +143,7 @@ export function buildElectronRuntimeStatusReport(options: {
         : [],
     },
     buildCompanionItem(options.companionEnabled, companion, now),
+    ...remoteAccessItems(now),
     ...getTerminalBrowserProfileRuntimeStates().map((profile) => {
       const expected =
         profile.proxyMode === "whistle" &&
@@ -327,4 +330,53 @@ function isNotificationInput(value: unknown): value is {
     safeText(candidate.title, 160) &&
     safeText(candidate.body, 512)
   );
+}
+
+function remoteAccessItems(now: number): RuntimeStatusItem[] {
+  const snapshot = getTunnelRuntimeSnapshot();
+  return (snapshot?.config.hosts ?? [])
+    .filter((h) => h.remoteAccess?.enabled)
+    .map((host) => {
+      const runtime = snapshot?.hosts.find((h) => h.hostId === host.id);
+      const remote = runtime?.remoteAccess;
+      const failed =
+        runtime?.state === "failed" ||
+        remote?.state === "failed" ||
+        remote?.state === "needs_auth";
+      const healthy =
+        runtime?.state === "ready" &&
+        remote?.state === "ready" &&
+        now - (remote.checkedAt ?? 0) < 30000;
+      const disconnected = runtime?.state === "disconnected";
+      return {
+        ...item(
+          `electron.remote-access:${host.id}`,
+          `远程访问本机 · ${host.name}`,
+          healthy
+            ? "healthy"
+            : failed
+              ? "unhealthy"
+              : disconnected
+                ? "disabled"
+                : "recovering",
+          healthy
+            ? "中转入口已验证，手机仍需接入相同网络或 VPN"
+            : (runtime?.error?.message ??
+                remote?.error?.message ??
+                (disconnected
+                  ? "主机已断开，连接后恢复远程访问"
+                  : "正在连接并检查中转入口")),
+          now,
+        ),
+        facts: [
+          {
+            id: `remote-access.address:${host.id}`,
+            label: "中转地址",
+            value: `http://${host.remoteAccess!.listenAddress}:${host.remoteAccess!.port}`,
+            kind: "address" as const,
+            copyable: true,
+          },
+        ],
+      };
+    });
 }
