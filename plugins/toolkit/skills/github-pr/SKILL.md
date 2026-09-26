@@ -30,18 +30,22 @@ description: 当用户要求提交代码并合并到 GitHub（提交 PR、走完
 
 ## 流程
 
+用户委托全流程后，本次改动引起的确定性门禁失败属于 Agent 的修复工作。先读失败输出、修复并重跑原门禁，再继续提交、推送或合并；不要在可修复时停下询问用户是否要处理，也不要把失败日志当作最终交付。只有修复需要改变用户目标、扩大到无关代码，或确实缺少权限、外部资源时，才说明具体阻塞并请求必要输入。
+
 ### 1. 提交代码
 
 - 根据用户请求和 diff 确定本次范围，检查已有暂存内容；使用 `git add -- <本次路径>`，同文件混有其他任务改动时按 hunk 暂存。只有用户明确要求全部改动且已核对范围时才用 `git add -A`。已有无关暂存内容也不能夹带提交或擅自取消暂存，必要时使用独立 worktree 承载本次补丁。
 - `git fetch origin` 后核对目标分支与本次提交范围；如改动已合并，验证实际内容后报告，避免重复 PR。新分支不能夹带当前分支上无关的领先提交。脏工作区不要直接 rebase，也不要为方便操作而 stash、reset 或清理他人改动。
 - 读 `git diff --cached` 复核最终范围，按目标仓库惯例生成 commit message；无明确惯例时使用 Conventional Commits，描述意图而非文件列表。
 - 默认基于 commit subject 新建分支：`git checkout -b <type>/<slug>`；用户要求当前分支则跳过。
-- `git commit`。pre-commit hook 失败时按输出处理依赖/环境问题或本次代码问题，复核 hook 生成的改动再重试。不修改无关代码来凑检查通过，不跳过 hook。
+- `git commit`。pre-commit hook 失败时按输出处理依赖/环境问题或本次代码问题，复核 hook 生成的改动、只暂存本次修复再重试。不修改无关代码来凑检查通过，不跳过 hook。
 - 工作区无改动但分支已有领先提交时，直接进入开 PR。
 
 ### 2. 创建 PR
 
-- `git push -u origin <branch>`；等待 hook 与推送成功退出后再开 PR。被拒（non-fast-forward）先 fetch 并检查远端新增提交的归属，再在工作区安全时 rebase，不能覆盖其他人的更新。
+- `git push -u origin <branch>`；等待 hook 与推送成功退出后再开 PR。推送失败先区分本地 pre-push 门禁、远端保护规则与 non-fast-forward，不把它们统称为 GitHub 故障。
+- **本地 pre-push 门禁失败**：读取具体失败项并核对是否由本次改动引起；若是，直接修复、只暂存修复范围、提交并重跑原门禁，再推送。例如架构检查报 `New >600 line file is not in the legacy baseline` 时，核对文件和行数，按职责抽取独立逻辑并保持行为，重新运行架构检查；不要压缩排版、扩大历史基线、跳过 hook，或把“是否修复”交给用户选择。若失败来自既有无关代码，也先核对能否在授权范围内安全修复；确实不能时报告准确的失败项与阻塞原因。
+- 远端拒绝为 non-fast-forward 时先 fetch 并检查远端新增提交的归属，再在工作区安全时 rebase，不能覆盖其他人的更新。分支保护拒绝时核对实际规则，不用强推或绕过保护制造成功。
 - 创建前按明确仓库、head/base 查询 open PR；存在则复用。命令超时或返回不确定时先查询远端是否已成功，避免盲目重试。
 - 把说明写入临时文件，再用 `gh pr create --repo <仓库> --base <目标分支> --head <branch> --title <subject> --body-file <文件>`，保留换行和字面量。body 写清改动要点与实际验证情况。
 - 记录 PR 编号/URL 供后续轮询。
@@ -67,7 +71,7 @@ gh pr checks <pr> --repo <仓库> --json name,state,bucket,link
 - **CI pending**：优先 `gh pr checks <pr> --repo <仓库> --watch --interval 20 --fail-fast`，通过异步执行等待并定期更新进度。普通 checks 的退出码 8 表示 pending，不是失败；查询/API 错误也不能当作 CI 失败。检查尚未注册、返回为空时核对仓库工作流，不能直接认定通过。等待超时报告仍在等待，不宣称完成。
 - **代码冲突（CONFLICTING/DIRTY）**：本地 `git fetch origin && git rebase origin/<目标分支>`，解决冲突后 `git push --force-with-lease`（GitHub 仓库允许 `--force-with-lease`）。
 - **落后基线（BEHIND）**：仓库门禁要求更新时，同上 rebase 后重推；仅目标分支有新提交且仍可正常合并时不重复 rebase。每次重推后，旧 SHA 的检查和评审结论不能替代新 SHA 的状态。
-- **门禁失败**：拉取失败 check 的日志，定位并修复，提交后重新推送触发重跑；取消的检查、非预期跳过的必需检查也要查明原因。只在明确瞬时故障时有限重试，同一错误无新证据不循环重跑。
+- **门禁失败**：拉取失败 check 的日志，定位并修复，提交后重新推送触发重跑；与 pre-push 一样，本次改动造成的确定性失败由 Agent 负责修复，不停下让用户决定是否继续。取消的检查、非预期跳过的必需检查也要查明原因。只在明确瞬时故障时有限重试，同一错误无新证据不循环重跑。
 - **CHANGES_REQUESTED**：这是人工评审要求改动；总结评审意见，做出修改后重推，不要绕过评审。
 - 合并前重新读取 `headRefOid`：当前提交的应运行检查已通过、评审要求已满足、无冲突且无其他阻塞才允许直接合并。`APPROVED` 不代表 CI 通过，`CLEAN` 不替代检查明细；`UNKNOWN` 继续等待。不要仅查 `--required` 而漏掉本次应运行的检查。若读取期间 head 改变，重新验证新 head。
 

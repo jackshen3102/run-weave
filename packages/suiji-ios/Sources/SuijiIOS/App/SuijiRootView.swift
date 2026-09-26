@@ -36,8 +36,8 @@ struct CaptureHome: View {
       NavigationStack { feed.navigationTitle("待办") }.tabItem { Label("待办", systemImage: "checklist") }.tag("tasks")
       NavigationStack { feed.navigationTitle("回收站") }.tabItem { Label("回收站", systemImage: "trash") }.tag("trash")
       NavigationStack { ReviewView(session: session, model: review) }.tabItem { Label("AI", systemImage: "sparkles") }.tag("ai")
-    }.task(id: loadKey) { if tab != "ai" { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideCompleted: tab == "records") } }
-      .sheet(item: $session.editor, onDismiss: { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideCompleted: tab == "records") } }) { RecordEditorSheet(model: $0, availableTags: session.availableTags) }
+    }.task(id: loadKey) { if tab != "ai" { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }
+      .sheet(item: $session.editor, onDismiss: { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }) { RecordEditorSheet(model: $0, availableTags: session.availableTags) }
       .onReceive(session.$selectedTag.dropFirst()) { _ in if tab == "ai" { tab = "records" } }
       .onDisappear { review.stopWatching() }
       .sheet(isPresented: $settings) { ConnectionSettingsView(session: session) }
@@ -50,7 +50,7 @@ struct CaptureHome: View {
         if tab == "tasks" { FilterBar(values: TaskStatus.allCases.map { ($0.rawValue, $0.label) }, selected: $taskStatus) }
         else { FilterBar(values: [("", "全部"), ("note", "想法"), ("task", "待办")], selected: $filter) }
         TagFilter(available: session.availableTags, selected: $session.selectedTag)
-        if !session.message.isEmpty { Text(session.message).foregroundStyle(.orange); Button("重新读取") { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideCompleted: tab == "records") } } }
+        if !session.message.isEmpty { Text(session.message).foregroundStyle(.orange); Button("重新读取") { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } } }
         if session.loading && visibleRecords.isEmpty { ProgressView("正在读取") }
         else if visibleRecords.isEmpty { EmptyState(title: (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "回收站为空" : "还没有记录") : "没有搜索结果", detail: (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "删除的记录会保留在这里，可随时恢复。" : "点右下角加号，记下此刻的想法。") : "试试其他标签或正文关键词。") }
         ForEach(visibleRecords) { record in
@@ -91,14 +91,14 @@ struct CaptureHome: View {
         }
         if previous == .interacting && phase != .interacting && phase != .tracking && refreshOnRelease {
           refreshOnRelease = false
-          if !session.loading { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideCompleted: tab == "records") } }
+          if !session.loading { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }
         }
       }
       .scrollDismissesKeyboard(.interactively)
       .overlay(alignment: .bottomTrailing) { if tab != "trash" { CaptureButton { Task { await session.openEditor() } }.padding(20) } }
   }
   private func loadNextPage() {
-    Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, more: true, trash: tab == "trash", hideCompleted: tab == "records") }
+    Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, more: true, trash: tab == "trash", hideClosedTasks: tab == "records") }
   }
   private var searchField: some View {
     HStack(spacing: 12) {

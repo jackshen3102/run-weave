@@ -29,6 +29,7 @@ export function ConnectionPage({
   const [url, setUrl] = useState("");
   const [endpointId,setEndpointId]=useState("");
   const tunnels=useTunnelStore(state=>state.snapshot);
+  const openTunnels = useTunnelStore(state => state.setOpen);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -130,6 +131,11 @@ export function ConnectionPage({
 
         {showForm && (
           <div className="mt-6 space-y-4">
+            {window.electronAPI?.isElectron && (
+              <Button type="button" variant="outline" onClick={() => openTunnels(true)}>
+                配置 SSH 主机与 Backend 入口
+              </Button>
+            )}
             <div className="space-y-2">
               <label
                 className="text-xs uppercase tracking-[0.24em] text-muted-foreground/70"

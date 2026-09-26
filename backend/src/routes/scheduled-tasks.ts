@@ -20,7 +20,7 @@ const scheduleSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("once"),
       timezone,
-      runAt: z.string().datetime({ offset: true }),
+      runAt: z.string().datetime(),
     })
     .strict(),
 ]);

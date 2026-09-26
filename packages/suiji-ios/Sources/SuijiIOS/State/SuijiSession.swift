@@ -38,7 +38,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     let query: String
     let tag: String
     let trash: Bool
-    let hideCompleted: Bool
+    let hideClosedTasks: Bool
   }
   private var listScope: ListScope?
   private var profiles: ConnectionProfiles
@@ -95,9 +95,9 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     let old = resetConnection(), current = generation
     do { try await old?.logout() } catch { if generation == current { message = error.localizedDescription } }
   }
-  func load(kind: String?, status: String?, q: String, tag: String = "", more: Bool = false, trash: Bool = false, hideCompleted: Bool = false) async {
+  func load(kind: String?, status: String?, q: String, tag: String = "", more: Bool = false, trash: Bool = false, hideClosedTasks: Bool = false) async {
     guard let client, info != nil else { return }
-    let scope = ListScope(kind: kind, status: status, query: q, tag: tag, trash: trash, hideCompleted: hideCompleted)
+    let scope = ListScope(kind: kind, status: status, query: q, tag: tag, trash: trash, hideClosedTasks: hideClosedTasks)
     if more && (loading || nextCursor == nil || listScope != scope) { return }
     let current = generation, request = UUID(); listGeneration = request
     loading = true; loadMoreError = nil
@@ -125,8 +125,8 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
           for record in page.items { if try await store.status(record.id) != nil { pending.insert(record.id) } }
         }
         guard generation == current, listGeneration == request else { return }
-        // Filter server reads only: a completion stays visible until the next reload.
-        incoming = page.items.filter { !hideCompleted || $0.taskStatus != .done || pending.contains($0.id) }
+        // Filter server reads only: a status change stays visible until the next reload.
+        incoming = page.items.filter { !hideClosedTasks || ($0.taskStatus != .done && $0.taskStatus != .archived) || pending.contains($0.id) }
         cursor = page.nextCursor
       } while incoming.isEmpty && cursor != nil
       records = more ? records + incoming.filter { new in !records.contains { $0.id == new.id } } : incoming
