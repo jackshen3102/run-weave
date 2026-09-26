@@ -1,4 +1,4 @@
-import { configuration, configurationArguments, setting } from "@runweave/config-node";
+import { configuration, configurationArguments, configurationPath, setting } from "@runweave/config-node";
 import { spawn, type ChildProcess } from "node:child_process";
 import net from "node:net";
 import { localBackendAuthHeaders, restoreOwnedBackendHealthEnv } from "./health-auth.js";
@@ -225,7 +225,7 @@ async function waitForBackendReady(
         const response = await fetch(`${backendUrl}/health`, {
           signal: controller.signal,
           redirect: "error",
-          headers: localBackendAuthHeaders(`${backendUrl}/health`, backendEnv.BROWSER_PROFILE_DIR!, backendEnv, child.pid),
+          headers: localBackendAuthHeaders(`${backendUrl}/health`, configurationPath("storage.browserProfileDirectory", "backend"), backendEnv, child.pid),
         });
         if (response.ok) {
           return;
