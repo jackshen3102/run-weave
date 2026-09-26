@@ -19,7 +19,7 @@ struct TerminalScreen: View {
   @State private var sharing = false
   @State private var shareFailure: String?
   @State private var showingComposer = false
-  @State private var showingInstantReplies = false
+  @AppStorage("native.terminal.instantReplies.visible") private var showingInstantReplies = false
   @State private var sendingInstantReply = false
   @AccessibilityFocusState private var composerTriggerFocused: Bool
   @State private var browserPresentationID = UUID()
