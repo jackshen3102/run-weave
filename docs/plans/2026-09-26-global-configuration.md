@@ -1,8 +1,8 @@
 # Runweave 全局配置统一方案
 
-状态：用户已批准，实施中。交付分支 `feat/unified-instance-configuration`，基于 `09fd5a41`（并行合入 #595～#598 后复核）。
+状态：用户已批准，实施中。配置源码已由 [PR #599](https://github.com/jackshen3102/run-weave/pull/599) 合并到 `main`（`e989e567`）；历史槽位恢复补丁位于 `fix/config-dev-pool-retention-recovery`。源码合并不代表 Stable 安装、手机更新或全部验收完成。
 
-当前执行记录（2026-09-26 21:25）：统一 YAML 库、143 字段合同、CLI 管理、Backend/Desktop/App Server/独立服务和 Web/iOS 配置入口已进入实现与验收阶段，尚未发布到 Stable，未更新用户手机。以下记录区分代码、安装和真实交互，不据此宣称全部阶段完成。
+当前执行记录（2026-09-27 00:34）：统一 YAML 库、143 字段合同、CLI 管理、Backend/Desktop/App Server/独立服务和 Web/iOS 配置入口已进入实现与验收阶段，尚未发布到 Stable，未更新用户手机。以下记录区分代码、安装和真实交互，不据此宣称全部阶段完成。
 
 | 范围           | 当前证据                                                                                                                                                                                                                                                                                                                                                                                                                 | 尚未完成                                                                                       |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
@@ -37,6 +37,12 @@ GCL-006 已完成真实双实例验收：打包 Dev `dvs-0a2782` 与 `dvs-9b5296
 GCL-008 已执行同实例打包 Backend 重启：先在 Dev YAML 保存合成语音语言 `en`，重启前后实际 PID 为 73388/78097，`/health` 身份和配置根相同；认证消费者均用 YAML 凭据实际登录，配置 API 两次报告语音值 `en` 且状态 applied，原项目 ID 仍存在。绑定 CLI 的会话凭据重写使 savedRevision 从 18 到 19，未把整份 YAML 字节相同误当成条件；测试语音值已恢复 null，Session 已停止。证据为 `gcl8-before.json`、`gcl8-after.json`。
 
 GCI-001 使用当前变更按 planner 新建 `dvs-d915e5`，选择 beta 安装模式但运行身份为 Dev，而非第三种 Beta；真实安装 App 及 Backend/CLI 均绑定该实例根。Playwright 附着 `dev:open` 的 Desktop CDP，页面专用终端命令输出已保存。与启动前相比，Stable App Info/可执行文件及旧 CLI/分享/飞书来源五个文件摘要保持，Stable YAML 未生成；临时终端关闭、Playwright detach、Session 停止并释放租约。证据为 `gci1-evidence.json`、`gci1-stable-before.json`、`gci1-stable-after.json`、`gci1-new-dev-desktop.txt`。
+
+GCI-002 正常退出确实终止了打包 Desktop 与 Backend；系统应用入口重开后，实际 PID 从 17344/17407 变为 70141/70160，配置 instanceId、根、revision=4 和原项目 ID 保持，证据为 `gci2-before.json`、`gci2-after.json`。Dock 图标无法通过当前原生自动化接口定位；重开后 Dev Session manifest 仍记录旧 PID 并进入 stale，`dev:open` 拒绝页面 CDP，因此不计通过。按精确任务进程身份结束重开的 App/Backend，再按控制面指引完成 stale cleanup，Session 停止且租约释放。
+
+GCI-004 先以打包 A/fullstack B，再以两个实际打包 Dev 复核：A `dvs-d915e5` 占 pool-05，B `dvs-9b5296` 占 pool-04。A 停止并重建后 Desktop/Backend PID 更换，原项目数据 SHA 保持；B 的 PID、YAML、项目数据和 App Server 指针逐项保持，两个 Session 服务健康均为 live，Stable App 与五份旧来源 SHA 保持。A YAML 仅因 CLI 登录态刷新改变 revision、accessToken、refreshToken、expiresAt，原字节仍在私有自动备份中。证据为 `gci4-before.json`、`gci4-after.json`、`gci4b-before.json`、`gci4b-after.json`；两实例均已停止并释放租约。当前 Stable 尚无新 YAML，因此仍记为强部分证据。
+
+双打包实例首次启动时发现 pool-02～05 四个无租约槽位引用了被其他槽位清理的同一 Dev Session release，均被判 broken。根因是 Backend/App Server runtime 在 Session 根下跨槽位共享，而清理器只保留当前槽位的引用。PR #599 已包含跨槽位保留集合修复：隔离 fixture 验证两个 runtime 的被引用 release 保留、孤立 release 清除；Dev Session 64 项回归通过。后续补丁提供带期望 SHA、只读预览、0600 原件备份和锁内复核的显式历史修复入口；pool-02～05 逐个预览与修复后五槽恢复 idle，随后两个真实打包 Dev 同时就绪。该修复不伪造已丢失的旧 release，也不修改 Stable 或 Session YAML；不代替升级和失败恢复验收。
 
 未完成门槛仍包括完整配置来源/默认合同复核、旧独立 Beta 入口退役、首次初始化与安装态完整备份恢复流程、跨环境/切换/升级失败矩阵、独立测试用户下 Stable 验证、真实整机重启及真机验收。本机 Docker daemon 不可用。模拟器测试连接与凭据已移除、原连接恢复、租约已释放；本机 HTTPS fixture 已停止且测试发布配置已清除。Stable 和用户手机未更新。五份测试计划的 49 条 required 用例不得因局部证据被整体标记通过。
 

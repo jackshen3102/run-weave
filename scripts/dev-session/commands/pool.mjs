@@ -3,9 +3,14 @@
 import { DevSessionError } from "../contracts.mjs";
 import { inspectBetaPool, recoverBetaPoolSlot } from "../beta-pool/index.mjs";
 import { repairBetaRetainedState } from "../beta-pool/recovery/retained-state.mjs";
+import { repairBetaRuntimeReferences } from "../beta-pool/recovery/runtime-references.mjs";
 
 function parseArgs(argv) {
-  const command = ["recover", "repair-retained-state"].includes(argv[0])
+  const command = [
+    "recover",
+    "repair-retained-state",
+    "repair-runtime-references",
+  ].includes(argv[0])
     ? argv[0]
     : "status";
   const args = command !== "status" ? argv.slice(1) : argv;
@@ -16,6 +21,10 @@ function parseArgs(argv) {
       options.json = true;
       continue;
     }
+    if (arg === "--dry-run") {
+      options.dryRun = true;
+      continue;
+    }
     if (["--force", "--force-kill", "--force-release"].includes(arg)) {
       throw new DevSessionError(`${arg} is not supported`, 2);
     }
@@ -23,6 +32,7 @@ function parseArgs(argv) {
       ["--slot", "slotId"],
       ["--session", "sessionId"],
       ["--failure-at", "expectedFailureAt"],
+      ["--expected-digest", "expectedDigest"],
     ]).get(arg);
     if (!key) {
       throw new DevSessionError(`unknown argument: ${arg}`, 2);
@@ -36,6 +46,18 @@ function parseArgs(argv) {
   }
   if (options.expectedFailureAt && command !== "repair-retained-state") {
     throw new DevSessionError("--failure-at requires repair-retained-state", 2);
+  }
+  if (options.expectedDigest && command !== "repair-runtime-references") {
+    throw new DevSessionError(
+      "--expected-digest requires repair-runtime-references",
+      2,
+    );
+  }
+  if (options.dryRun && command !== "repair-runtime-references") {
+    throw new DevSessionError(
+      "--dry-run requires repair-runtime-references",
+      2,
+    );
   }
   return options;
 }
@@ -62,6 +84,17 @@ function printProjection(projection, json) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.command === "repair-runtime-references") {
+    if (!options.slotId || !options.sessionId || !options.expectedDigest) {
+      throw new DevSessionError(
+        "repair-runtime-references requires --slot, --session and --expected-digest",
+        2,
+      );
+    }
+    const receipt = await repairBetaRuntimeReferences(options);
+    process.stdout.write(`${JSON.stringify({ ok: true, receipt }, null, 2)}\n`);
+    return;
+  }
   if (options.command === "repair-retained-state") {
     if (!options.slotId || !options.sessionId || !options.expectedFailureAt) {
       throw new DevSessionError(

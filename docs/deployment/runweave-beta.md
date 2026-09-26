@@ -144,7 +144,16 @@ pnpm runweave:beta:status --instance pool-01 --json
 pnpm dev:pool repair-retained-state --slot pool-01 --session <releasedSessionId> --failure-at <lastFailure.at> --json
 ```
 
-此入口按 recovery claim → Session lock → Beta update lock 顺序持锁。新 lease 发布也必须
+如果旧槽位引用的 Backend 或 App Server release 已经不存在，先确认其原 Session 已停止、槽位无租约和进程，再针对该槽位 warm-state 文件的 SHA-256 做只读预览：
+
+```bash
+pnpm dev:pool repair-runtime-references --slot pool-02 --session <stoppedSessionId> --expected-digest <state.json SHA-256> --dry-run --json
+pnpm dev:pool repair-runtime-references --slot pool-02 --session <stoppedSessionId> --expected-digest <同一 SHA-256> --json
+```
+
+该入口在 recovery claim、Session lock 和 Beta update lock 下重新检查摘要与归属，仅在当前 release 指针指向一个实际存在的目录时，用它替换已经丢失的当前引用；已经丢失的 previous 引用明确置空。原始 warm-state 以 0600 私有文件留在同一槽位，修复后必须通过完整 retention 安全检查，否则还原原状态并拒绝。它不重建已经丢失的旧二进制，也不修改 Session 配置、项目数据或 Stable；预览结果必须先由操作者核对。多个槽位复用同一 Session runtime 时，后续清理会保留全部槽位仍引用的 release，避免再次删掉别的槽位的回退目标。
+
+这两个显式修复入口均按 recovery claim → Session lock → Beta update lock 顺序持锁。新 lease 发布也必须
 独占同一个 recovery claim，并在锁内重查候选槽位；claim 不可重入，忙时自动分配跳过候选，
 显式指定槽位则拒绝。allocator 发布后释放 claim，不持有它进入启动或清理阶段。
 claim 的取得、dead-owner takeover 和释放还共用每槽 `.pool-XX.transition` 目录 guard，
