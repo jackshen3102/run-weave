@@ -325,7 +325,7 @@ export function SuijiWorkspace({
         ? record.kind === "task" && record.taskStatus === status
         : !kind || record.kind === kind) &&
       (tab !== "records" ||
-        record.taskStatus !== "done" ||
+        (record.taskStatus !== "done" && record.taskStatus !== "archived") ||
         pending.has(record.id)),
   );
   return (

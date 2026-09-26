@@ -1,4 +1,5 @@
 import SwiftUI
+import MarkdownUI
 
 struct ScheduledRunView: View {
   @ObservedObject var session: AppSession
@@ -24,7 +25,7 @@ struct ScheduledRunView: View {
         Text(run.statusLabel).font(.caption).foregroundColor(run.outcome == "blocked" || run.status == "failed" ? .orange : .secondary)
       }
       Text("\(run.trigger == "manual" ? "手动运行" : "定时触发") · 配置版本 \(run.taskRevision)").font(.caption).foregroundColor(.secondary)
-      if let summary = run.summary { Text(summary).font(.subheadline).textSelection(.enabled) }
+      if let summary = run.summary { Markdown(summary).markdownTheme(.gitHub).font(.subheadline).textSelection(.enabled) }
       if run.status == "completed" && run.outcome == nil { Text("此历史记录未记录任务结果，请根据摘要确认。").font(.caption) }
       if let error = run.error { Text(error.code == "missed" ? "超过允许的延迟，已跳过" : error.message).font(.caption).foregroundColor(.orange) }
       if run.trigger == "scheduled" {
