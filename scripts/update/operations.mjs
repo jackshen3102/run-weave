@@ -10,6 +10,7 @@ import {
   scheduledTaskDatabasePath,
 } from "./scheduled-task-guard.mjs";
 import {
+  createDesktopLaunchEnv,
   readJsonFile,
   run,
   runCapture,
@@ -20,16 +21,6 @@ import {
 
 const DESKTOP_VERIFICATION_PORT_START = 9223;
 const DESKTOP_VERIFICATION_PORT_ATTEMPTS = 50;
-
-function createDesktopLaunchEnv() {
-  const env = { ...process.env };
-  for (const name of Object.keys(env)) {
-    if (name.toLowerCase().startsWith("npm_")) {
-      delete env[name];
-    }
-  }
-  return env;
-}
 
 export async function getRunningAppLines() {
   const result = await runCapture("ps", ["-axo", "pid=,comm="]);
@@ -331,6 +322,7 @@ export async function openApp(appPath, options = {}) {
     await fs.mkdir(path.dirname(statusPath), { recursive: true });
     await fs.rm(statusPath, { force: true });
     const child = spawn(executable, [], {
+      cwd: appPath,
       detached: true,
       env: createDesktopVerificationLaunchEnv({
         appServerHome: desktopVerification.appServerHome,
@@ -357,6 +349,7 @@ export async function openApp(appPath, options = {}) {
     const executable = path.join(appPath, "Contents", "MacOS", appName);
     await fs.access(executable);
     const child = spawn(executable, [], {
+      cwd: appPath,
       detached: true,
       env: createDesktopLaunchEnv(),
       stdio: "ignore",
@@ -364,6 +357,7 @@ export async function openApp(appPath, options = {}) {
     child.unref();
   } else {
     await runChecked("open", ["-n", appPath], {
+      cwd: appPath,
       env: createDesktopLaunchEnv(),
     });
   }
