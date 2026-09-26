@@ -1,11 +1,13 @@
 import { existsSync, readFileSync, mkdirSync, openSync, closeSync, writeFileSync, fsyncSync, renameSync, unlinkSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import { CONFIGURATION_FIELDS, readConfigurationPath, isConfigurationObject, type ConfigurationFile, type ConfigurationObject, type ConfigurationValue, type EnvironmentContext } from "@runweave/shared/configuration";
 import { emptyConfiguration, setConfigurationValue, ConfigurationStore } from "./store";
 import { assertPrivateDirectory, readPrivateFile } from "./private-file";
 import { ConfigurationError } from "./errors";
 import { validateDomains, redactConfiguration, domainForPath } from "./validation";
+import { assertOwnedPath, canonicalPath } from "./context";
 
 export interface MigrationSource { file: string; domain: string; format: "json" | "env" }
 export interface MigrationDraft { value: ConfigurationFile; sources: { file: string; digest: string; domain: string }[]; conflicts: string[] }
@@ -50,6 +52,7 @@ export function prepareMigration(context: EnvironmentContext, sources: Migration
   const migratedDomains = new Set(Object.keys(value.migrations));
   for (const source of sources) {
     if (!path.isAbsolute(source.file)) throw new ConfigurationError("CONFIG_SOURCE_PATH_REQUIRED");
+    assertMigrationSourceOwner(context, source.file);
     if (migratedDomains.has(source.domain)) continue;
     const raw = readFileSync(source.file, "utf8");
     const digest = createHash("sha256").update(raw).digest("hex");
@@ -153,6 +156,7 @@ export function backupMigrationSources(context: EnvironmentContext, draft: Migra
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   assertPrivateDirectory(directory);
   for (const source of draft.sources) {
+    assertMigrationSourceOwner(context, source.file);
     const raw = readFileSync(source.file);
     if (createHash("sha256").update(raw).digest("hex") !== source.digest) throw new ConfigurationError("CONFIG_SOURCE_CHANGED");
     const target = path.join(directory, `migration-${source.digest}.source`);
@@ -167,4 +171,22 @@ export function backupMigrationSources(context: EnvironmentContext, draft: Migra
   }
   const fd = openSync(directory, "r");
   try { fsyncSync(fd); } finally { closeSync(fd); }
+}
+
+function assertMigrationSourceOwner(context: EnvironmentContext, file: string): void {
+  if (context.kind === "dev") {
+    assertOwnedPath(context, file);
+    return;
+  }
+  const home = os.userInfo().homedir;
+  const source = canonicalPath(file);
+  const otherEnvironmentRoots = [
+    path.join(home, ".runweave", "dev-sessions"),
+    path.join(home, ".runweave", "beta-pool"),
+    path.join(home, ".runweave", "app-server-beta"),
+    path.join(home, "Library", "Application Support", "Runweave Beta"),
+  ];
+  if (otherEnvironmentRoots.some((root) => source === canonicalPath(root) || source.startsWith(`${canonicalPath(root)}${path.sep}`))) {
+    throw new ConfigurationError("CONFIG_SOURCE_OWNER_MISMATCH");
+  }
 }
