@@ -215,6 +215,7 @@ export class ScheduledTaskRuntime {
       if (!provider) throw new Error("provider_unavailable");
       const result = await provider.run({
         runId: initial.id,
+        projectId: initial.snapshot.projectId,
         prompt: initial.snapshot.prompt,
         workingDirectory: project.path,
         model: initial.snapshot.model,

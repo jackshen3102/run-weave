@@ -48,7 +48,7 @@ struct ScheduledRunView: View {
           Text("\(run.snapshot.name) · \(run.snapshot.provider) · \(run.executionProjectId)")
           Text(run.snapshot.schedule.label)
           Text(run.snapshot.misfirePolicy.label)
-          Text("模型：\(run.snapshot.model ?? "默认") · 推理：\(run.snapshot.effort ?? "默认") · \(run.snapshot.executionPolicy == "auto-review" ? "自动审批" : "仅沙箱")")
+          Text("模型：\(run.snapshot.model ?? "默认") · 推理：\(run.snapshot.effort ?? "默认") · \(run.snapshot.executionPolicyLabel)")
           Text(run.snapshot.prompt).textSelection(.enabled)
         }.font(.caption)
       }

@@ -37,7 +37,9 @@ const config = z.object({
   prompt: text,
   model: text.optional(),
   effort: text.optional(),
-  executionPolicy: z.enum(["sandbox", "auto-review"]).optional(),
+  executionPolicy: z
+    .enum(["sandbox", "auto-review", "full-access"])
+    .optional(),
   schedule,
   misfirePolicy: z.discriminatedUnion("mode", [
     z.object({ mode: z.literal("skip") }),

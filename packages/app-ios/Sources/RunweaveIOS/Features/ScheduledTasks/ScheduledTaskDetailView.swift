@@ -22,7 +22,7 @@ struct ScheduledTaskDetailView: View {
             Text(task.enabled ? "下次运行：\(scheduledDate(task.nextRunAt, timezone: task.config.schedule.timezone))" : "已暂停后续安排")
             if task.deletedAt != nil { Text("此任务已删除，历史仍可查看和打开。").foregroundColor(.secondary) }
             DisclosureGroup("任务提示词") { Text(task.config.prompt).textSelection(.enabled) }
-            Text("模型：\(task.config.model ?? "默认") · 推理：\(task.config.effort ?? "默认") · \(task.config.executionPolicy == "auto-review" ? "自动审批" : "仅沙箱")")
+            Text("模型：\(task.config.model ?? "默认") · 推理：\(task.config.effort ?? "默认") · \(task.config.executionPolicyLabel)")
               .font(.caption).foregroundColor(.secondary)
           }
         }

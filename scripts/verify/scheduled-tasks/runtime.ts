@@ -7,6 +7,12 @@ import type {
   ScheduledTask,
 } from "@runweave/shared/scheduled-tasks";
 import { ScheduledTaskRuntime } from "../../../backend/src/scheduled-tasks/runtime";
+import {
+  codexScheduledExecutionPolicies,
+  detectCodexScheduledFeatures,
+} from "../../../backend/src/scheduled-tasks/providers/capabilities";
+import { codexScheduledEnvironment } from "../../../backend/src/scheduled-tasks/providers/codex";
+import { codexScheduledArgs } from "../../../backend/src/scheduled-tasks/providers/codex-options";
 import type { TerminalSessionManager } from "../../../backend/src/terminal/manager/manager";
 import {
   latestOccurrence,
@@ -24,6 +30,7 @@ const cases: Record<string, () => Promise<void>> = {
   restart: verifyRestart,
   catchUp: verifyCatchUp,
   catchUpExecution: verifyCatchUpExecution,
+  fullAccess: verifyFullAccess,
 };
 
 void main();
@@ -36,6 +43,105 @@ async function main(): Promise<void> {
   }
   if (selected && !cases[selected])
     throw new Error(`unknown case: ${selected}`);
+}
+
+async function verifyFullAccess(): Promise<void> {
+  assert.deepEqual(codexScheduledArgs({}), [
+    "--sandbox",
+    "workspace-write",
+    "--config",
+    'approval_policy="never"',
+    "--config",
+    "sandbox_workspace_write.network_access=false",
+  ]);
+  assert.deepEqual(codexScheduledArgs({ executionPolicy: "auto-review" }), [
+    "--approve-for-me",
+    "--config",
+    "sandbox_workspace_write.network_access=false",
+  ]);
+  assert.deepEqual(codexScheduledArgs({ executionPolicy: "full-access" }), [
+    "--sandbox",
+    "danger-full-access",
+    "--config",
+    'approval_policy="never"',
+  ]);
+  assert.deepEqual(
+    detectCodexScheduledFeatures(
+      "--output-schema <FILE> --approve-for-me --sandbox <MODE> danger-full-access",
+    ),
+    { autoReview: true, fullAccess: true },
+  );
+  assert.deepEqual(detectCodexScheduledFeatures("--output-schema <FILE>"), {
+    autoReview: false,
+    fullAccess: false,
+  });
+  assert.deepEqual(
+    codexScheduledExecutionPolicies(
+      "--output-schema <FILE> --approve-for-me danger-full-access",
+    ),
+    ["sandbox", "auto-review", "full-access"],
+  );
+  assert.deepEqual(
+    codexScheduledExecutionPolicies("--output-schema <FILE>"),
+    ["sandbox"],
+  );
+
+  const source: NodeJS.ProcessEnv = {
+    KEEP_ME: "yes",
+    RUNWEAVE_PROJECT_ID: "inherited-project",
+    RUNWEAVE_TERMINAL_SESSION_ID: "terminal",
+    RUNWEAVE_TERMINAL_PANEL_ID: "panel",
+    RUNWEAVE_TERMINAL_AGENT_OPERATION_ID: "operation",
+    RUNWEAVE_AGENT_TEAM_RUN_ID: "team-run",
+    RUNWEAVE_AGENT_TEAM_WORKER_ID: "worker",
+    RUNWEAVE_TMUX_SESSION_NAME: "tmux-session",
+    RUNWEAVE_HOOK_TOKEN: "hook",
+    RUNWEAVE_APP_SERVER_TOKEN: "app-server",
+    CODEX_THREAD_ID: "thread",
+    CODEX_SESSION_ID: "session",
+    TMUX: "tmux",
+    TMUX_PANE: "pane",
+    PLAYWRIGHT_MCP_CDP_ENDPOINT:
+      "http://127.0.0.1:3210/devtools/browser?token=fixture&groupId=ambient",
+  };
+  const runId = "run-full-access";
+  const environment = codexScheduledEnvironment(
+    source,
+    runId,
+    "snapshot-project",
+  );
+  assert.equal(environment.KEEP_ME, "yes");
+  assert.equal(environment.RUNWEAVE_SCHEDULED_TASK_RUN_ID, runId);
+  assert.equal(environment.RUNWEAVE_PROJECT_ID, "snapshot-project");
+  const endpoint = new URL(environment.PLAYWRIGHT_MCP_CDP_ENDPOINT!);
+  assert.equal(endpoint.searchParams.get("token"), "fixture");
+  assert.equal(
+    endpoint.searchParams.get("groupId"),
+    `browser-group-scheduled-${runId}`,
+  );
+  for (const key of [
+    "RUNWEAVE_TERMINAL_SESSION_ID",
+    "RUNWEAVE_TERMINAL_PANEL_ID",
+    "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
+    "RUNWEAVE_AGENT_TEAM_RUN_ID",
+    "RUNWEAVE_AGENT_TEAM_WORKER_ID",
+    "RUNWEAVE_TMUX_SESSION_NAME",
+    "RUNWEAVE_HOOK_TOKEN",
+    "RUNWEAVE_APP_SERVER_TOKEN",
+    "CODEX_THREAD_ID",
+    "CODEX_SESSION_ID",
+    "TMUX",
+    "TMUX_PANE",
+  ])
+    assert.equal(environment[key], undefined);
+  assert.equal(
+    codexScheduledEnvironment(
+      { PLAYWRIGHT_MCP_CDP_ENDPOINT: "https://example.com:3210" },
+      runId,
+      "snapshot-project",
+    ).PLAYWRIGHT_MCP_CDP_ENDPOINT,
+    undefined,
+  );
 }
 
 async function verifyTime(): Promise<void> {
@@ -340,7 +446,8 @@ async function verifyCatchUpExecution(): Promise<void> {
           "codex",
           {
             provider: "codex",
-            run: async () => {
+            run: async (request) => {
+              assert.equal(request.projectId, task.projectId);
               invocations += 1;
               return {
                 provider: "codex",

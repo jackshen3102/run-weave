@@ -1,10 +1,34 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { ScheduledTaskCapabilities } from "@runweave/shared/scheduled-tasks";
+import type {
+  ScheduledExecutionPolicy,
+  ScheduledTaskCapabilities,
+} from "@runweave/shared/scheduled-tasks";
 import { CodexScheduledTaskProvider } from "./codex";
 import type { ScheduledProviderAdapter } from "./types";
 
 const execFileAsync = promisify(execFile);
+
+export function detectCodexScheduledFeatures(help: string): {
+  autoReview: boolean;
+  fullAccess: boolean;
+} {
+  return {
+    autoReview: help.includes("--approve-for-me"),
+    fullAccess: help.includes("danger-full-access"),
+  };
+}
+
+export function codexScheduledExecutionPolicies(
+  help: string,
+): ScheduledExecutionPolicy[] {
+  const features = detectCodexScheduledFeatures(help);
+  return [
+    "sandbox",
+    ...(features.autoReview ? (["auto-review"] as const) : []),
+    ...(features.fullAccess ? (["full-access"] as const) : []),
+  ];
+}
 
 export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
   capabilities: ScheduledTaskCapabilities["providers"];
@@ -14,6 +38,8 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
   let codexAvailable = false;
   let codexReason: string | undefined;
   let autoReviewSupported = false;
+  let fullAccessSupported = false;
+  let executionPolicies: ScheduledExecutionPolicy[] = ["sandbox"];
   try {
     await execFileAsync(codexBinary, ["--version"], { timeout: 10_000, env });
     await execFileAsync(codexBinary, ["login", "status"], {
@@ -26,7 +52,10 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
     });
     if (!stdout.includes("--output-schema"))
       throw new Error("structured_result_unsupported");
-    autoReviewSupported = stdout.includes("--approve-for-me");
+    const features = detectCodexScheduledFeatures(stdout);
+    autoReviewSupported = features.autoReview;
+    fullAccessSupported = features.fullAccess;
+    executionPolicies = codexScheduledExecutionPolicies(stdout);
     codexAvailable = true;
   } catch {
     codexReason =
@@ -36,7 +65,11 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
   if (codexAvailable)
     adapters.set(
       "codex",
-      new CodexScheduledTaskProvider(codexBinary, autoReviewSupported),
+      new CodexScheduledTaskProvider(
+        codexBinary,
+        autoReviewSupported,
+        fullAccessSupported,
+      ),
     );
   return {
     adapters,
@@ -44,9 +77,7 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
       {
         provider: "codex",
         available: codexAvailable,
-        executionPolicies: autoReviewSupported
-          ? ["sandbox", "auto-review"]
-          : ["sandbox"],
+        executionPolicies,
         ...(codexReason ? { reason: codexReason } : {}),
       },
       {

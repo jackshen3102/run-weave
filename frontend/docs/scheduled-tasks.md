@@ -10,7 +10,7 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
 重启后不重放不确定运行，以及将持久 thread 按需恢复到一个普通终端。TraeX 和 Pi 在各自
 通过同等持久执行与恢复门禁前保持不可用。
 当前 Codex 后台适配器使用 `codex exec --json`，尚不支持结构化权限等待与人工接管，
-也没有自动批准通道。执行失败时保留已知 thread，不通过匹配回复文本伪造 `waiting`。
+可按本机 CLI 能力提供自动审批或完全访问，但都不提供运行中的人工审批通道。执行失败时保留已知 thread，不通过匹配回复文本伪造 `waiting`。
 该能力缺口独立于后台执行与普通终端恢复，不得把后者的成功计作权限接管验收通过。
 
 真实验收使用隔离 Dev Session、真实 provider 与 Playwright CLI，入口见下方测试计划。
@@ -66,14 +66,25 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
   `sandbox`：工作区普通文件可写，Git 元数据与命令联网受限，不能申请提权。
 - `auto-review` 保留 Codex workspace-write 沙箱，由 Codex 自动审查需要额外权限的操作；
   不是无限制执行。Backend 从本机 `codex exec --help` 检测可用性，旧 CLI 不支持时拒绝该模式。
-  两种模式都不修改全局 Codex 配置。参考 [Codex 自动审批](https://learn.chatgpt.com/docs/agent-approvals-security)。
+  参考 [Codex 自动审批](https://learn.chatgpt.com/docs/agent-approvals-security)。
+- `full-access` 使用 `danger-full-access` 且不等待交互审批，不设置 workspace-write 命令禁网；
+  可联网并操作 Browser、共享模拟器和本机文件，只适用于可信任务与提示词。Backend 仅在本机
+  `codex exec --help` 同时支持结构化结果与该沙箱模式时发布能力，不支持时明确拒绝而不降级。
+  所有模式都不修改用户全局 Codex 配置。
+- 权限只有上述单一档位。Browser、模拟器、Git 或其它工具是否执行由任务提示词、仓库规则和已安装
+  Skill 决定，不存在独立能力开关，Backend 也不解析提示词来预先申请资源。
 - Codex 使用 JSON Schema 返回 `outcome`、`summary`、`reason`。只有完整退出并返回有效的
   `succeeded` 才记录 completed；blocked / failed 记录 failed 并保留 Agent 的具体原因。
   缺失或非法结果不能降级为成功。结果是 Agent 对业务执行的报告，不是独立验收证明。
 - 旧 completed 记录没有业务结果，界面显示“运行已结束”并提示检查摘要，不反向猜测历史状态。
   受阻记录仍可恢复对话，修正配置后需新建一次运行，旧快照不变。
-- 后台运行有独立 run ID，移除继承的 Terminal、tmux、Codex 会话身份；不伪造终端身份完成通知。
+- 后台运行有独立 run ID 和冻结的 project ID；合法的本机 Browser endpoint 会改写为
+  `browser-group-scheduled-<runId>` 的独立 scope。运行仍移除继承的 Terminal、tmux、Codex 会话身份，
+  Browser group 不构成终端身份，也不用于伪造终端通知。
   依赖交互式终端身份的通知脚本需要单独适配，通知失败须如实反映在结果中。
+- 提示词要求 Browser 或 iOS UI 时必须分别按 `toolkit:playwright-cli` 或 `toolkit:agent-device` 完成真实
+  操作和证据核对；Browser、模拟器池、登录或系统权限不可用时报告 blocked，不用代码阅读、构建或
+  HTTP 探测冒充 UI 成功。模拟器 lease 由任务按共享池 Skill 申请和释放，Backend 不代为持有。
 - 点击立即运行成功后进入本次记录，直接查看进度、错误和权限快照。
 
 ## 验证

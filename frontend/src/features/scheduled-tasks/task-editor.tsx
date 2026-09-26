@@ -18,7 +18,13 @@ import {
 import { TaskModelSettings } from "./model-settings";
 import { TaskProjectSelect } from "./project-select";
 import { useScheduledApi, useRefreshTasks, scheduledKeys } from "./queries";
-import { displayTime, fieldClass, RequestError } from "./presentation";
+import {
+  displayTime,
+  executionPolicyLabel,
+  fieldClass,
+  isKnownExecutionPolicy,
+  RequestError,
+} from "./presentation";
 
 export function TaskEditor({
   task,
@@ -65,6 +71,12 @@ export function TaskEditor({
   const provider = capabilities.providers.find(
     (item) => item.provider === draft.provider,
   );
+  const selectedExecutionPolicy = draft.executionPolicy ?? "sandbox";
+  const executionPolicyAvailable =
+    isKnownExecutionPolicy(selectedExecutionPolicy) &&
+    (provider?.executionPolicies ?? ["sandbox"]).includes(
+      selectedExecutionPolicy,
+    );
   const schedule = useDebounce(draft.schedule, { wait: 350 });
   const preview = useQuery({
     queryKey: [...scheduledKeys.all(scope), "preview", schedule],
@@ -131,6 +143,14 @@ export function TaskEditor({
       setValidationError("请至少选择一个运行日期。");
       return;
     }
+    if (!executionPolicyAvailable) {
+      setValidationError(
+        isKnownExecutionPolicy(selectedExecutionPolicy)
+          ? "当前 Agent 不支持所选执行权限。"
+          : "任务包含未知执行权限，请先选择受支持的权限。",
+      );
+      return;
+    }
     if (
       !capabilities.enabled ||
       !provider?.available ||
@@ -184,6 +204,7 @@ export function TaskEditor({
                     .value as CreateScheduledTaskRequest["provider"],
                   model: "",
                   effort: "",
+                  executionPolicy: "sandbox",
                 }))
               }
             >
@@ -233,7 +254,7 @@ export function TaskEditor({
               执行权限
               <select
                 className={fieldClass}
-                value={draft.executionPolicy ?? "sandbox"}
+                value={selectedExecutionPolicy}
                 onChange={(e) =>
                   change(
                     "executionPolicy",
@@ -242,6 +263,11 @@ export function TaskEditor({
                   )
                 }
               >
+                {!isKnownExecutionPolicy(selectedExecutionPolicy) ? (
+                  <option value={String(selectedExecutionPolicy)} disabled>
+                    未知权限
+                  </option>
+                ) : null}
                 <option value="sandbox">仅沙箱</option>
                 <option
                   value="auto-review"
@@ -251,12 +277,24 @@ export function TaskEditor({
                 >
                   自动审批
                 </option>
+                <option
+                  value="full-access"
+                  disabled={
+                    !provider?.executionPolicies?.includes("full-access")
+                  }
+                >
+                  完全访问
+                </option>
               </select>
             </label>
             <p className="text-xs text-muted-foreground">
-              {draft.executionPolicy === "auto-review"
+              {selectedExecutionPolicy === "full-access"
+                ? "无沙箱且不等待交互审批，可联网、操作 Browser、模拟器及本机文件；仅用于可信任务与提示词。"
+                : selectedExecutionPolicy === "auto-review"
                 ? "保留沙箱，Git 写入、联网等越界操作由 Codex 自动审查；拒绝或无法审批时记录为受阻。"
-                : "可修改工作区普通文件；Git 元数据写入和命令联网受限。需要创建 Worktree、提交或拉取时，可选择自动审批。"}
+                : selectedExecutionPolicy === "sandbox"
+                  ? "可修改工作区普通文件；Git 元数据写入和命令联网受限。需要创建 Worktree、提交或拉取时，可选择自动审批。"
+                  : `${executionPolicyLabel(selectedExecutionPolicy)}：请选择受支持的权限后再保存。`}
             </p>
           </section>
           <section className="grid gap-3 rounded-lg border p-3">
@@ -430,7 +468,10 @@ export function TaskEditor({
             <Button
               type="submit"
               disabled={
-                save.isPending || !capabilities.enabled || !provider?.available
+                save.isPending ||
+                !capabilities.enabled ||
+                !provider?.available ||
+                !executionPolicyAvailable
               }
             >
               {save.isPending ? "正在保存…" : "保存任务"}

@@ -47,6 +47,16 @@ struct ScheduledTaskConfig: Codable, Equatable {
   var executionPolicy: String?
   var schedule = ScheduledTaskSchedule()
   var misfirePolicy = ScheduledMisfirePolicy()
+  var resolvedExecutionPolicy: String { executionPolicy ?? "sandbox" }
+  var executionPolicyKnown: Bool { ["sandbox", "auto-review", "full-access"].contains(resolvedExecutionPolicy) }
+  var executionPolicyLabel: String {
+    switch resolvedExecutionPolicy {
+    case "sandbox": return "仅沙箱"
+    case "auto-review": return "自动审批"
+    case "full-access": return "完全访问"
+    default: return "未知权限"
+    }
+  }
   func body(editing: Bool) -> [String: Any] {
     var value: [String: Any] = ["name": name.trimmingCharacters(in: .whitespacesAndNewlines),
       "projectId": projectId, "provider": provider, "prompt": prompt.trimmingCharacters(in: .whitespacesAndNewlines),

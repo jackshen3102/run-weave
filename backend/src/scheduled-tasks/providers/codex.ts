@@ -23,6 +23,7 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
   constructor(
     private readonly binary = process.env.RUNWEAVE_CODEX_BIN?.trim() || "codex",
     private readonly autoReviewSupported = false,
+    private readonly fullAccessSupported = false,
   ) {}
 
   async run(
@@ -30,6 +31,8 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
   ): Promise<ScheduledProviderResult> {
     if (request.signal.aborted) throw new Error("provider_cancelled");
     if (request.executionPolicy === "auto-review" && !this.autoReviewSupported)
+      throw new Error("execution_policy_unavailable");
+    if (request.executionPolicy === "full-access" && !this.fullAccessSupported)
       throw new Error("execution_policy_unavailable");
     const directory = await mkdtemp(
       path.join(os.tmpdir(), "runweave-scheduled-result-"),
@@ -65,7 +68,11 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
     ];
     const child = spawn(this.binary, args, {
       cwd: request.workingDirectory,
-      env: providerEnvironment(process.env, request.runId),
+      env: codexScheduledEnvironment(
+        process.env,
+        request.runId,
+        request.projectId,
+      ),
       stdio: ["pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
       windowsHide: true,
@@ -193,13 +200,15 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
   }
 }
 
-function providerEnvironment(
+export function codexScheduledEnvironment(
   source: NodeJS.ProcessEnv,
   runId: string,
+  projectId: string,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...source,
     RUNWEAVE_SCHEDULED_TASK_RUN_ID: runId,
+    RUNWEAVE_PROJECT_ID: projectId,
   };
   for (const key of [
     "AUTH_USERNAME",
@@ -221,7 +230,34 @@ function providerEnvironment(
     "RUNWEAVE_APP_SERVER_TOKEN",
   ])
     delete env[key];
+  const endpoint = scopedBrowserEndpoint(
+    source.PLAYWRIGHT_MCP_CDP_ENDPOINT,
+    runId,
+  );
+  if (endpoint) env.PLAYWRIGHT_MCP_CDP_ENDPOINT = endpoint;
+  else delete env.PLAYWRIGHT_MCP_CDP_ENDPOINT;
   return env;
+}
+
+function scopedBrowserEndpoint(
+  raw: string | undefined,
+  runId: string,
+): string | null {
+  if (!raw?.trim()) return null;
+  try {
+    const endpoint = new URL(raw);
+    const loopbackHosts = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+    if (
+      !["http:", "ws:"].includes(endpoint.protocol) ||
+      !loopbackHosts.has(endpoint.hostname) ||
+      !endpoint.port
+    )
+      return null;
+    endpoint.searchParams.set("groupId", `browser-group-scheduled-${runId}`);
+    return endpoint.toString();
+  } catch {
+    return null;
+  }
 }
 
 function parseEvent(line: string): Record<string, unknown> | null {

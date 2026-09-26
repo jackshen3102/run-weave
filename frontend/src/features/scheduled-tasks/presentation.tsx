@@ -1,4 +1,5 @@
 import type {
+  ScheduledExecutionPolicy,
   ScheduledRunStatus,
   ScheduledMisfirePolicy,
   TaskSchedule,
@@ -17,6 +18,17 @@ export const statusLabel: Record<ScheduledRunStatus, string> = {
   cancelled: "已停止",
   skipped: "已跳过",
 };
+export function isKnownExecutionPolicy(
+  policy: unknown,
+): policy is ScheduledExecutionPolicy {
+  return ["sandbox", "auto-review", "full-access"].includes(String(policy));
+}
+export function executionPolicyLabel(policy: unknown) {
+  if (policy === undefined || policy === "sandbox") return "仅沙箱";
+  if (policy === "auto-review") return "自动审批";
+  if (policy === "full-access") return "完全访问";
+  return "未知权限";
+}
 export function displayTime(
   time: string | null | undefined,
   timezone?: string,
