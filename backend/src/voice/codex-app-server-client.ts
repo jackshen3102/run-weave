@@ -154,28 +154,42 @@ export class CodexAppServerClient {
     this.stdoutBuffer = "";
     this.stderrBuffer = "";
     const launchPlan = resolveCodexLaunchPlan(process.env, this.provider);
-    this.child = spawn(launchPlan.command, launchPlan.args, {
+    const child = spawn(launchPlan.command, launchPlan.args, {
       env: buildCodexProcessEnv(process.env, launchPlan),
       stdio: ["pipe", "pipe", "pipe"],
     });
+    this.child = child;
 
-    this.child.on("spawn", () => {
+    child.on("spawn", () => {
       codexAppServerLogger.info("voice.codex-app-server.started", {
         message: "Codex app-server started for voice transcription",
         launchCommand: launchPlan.description,
       });
     });
-    this.child.on("error", (error) => {
-      codexAppServerLogger.warn("voice.codex-app-server.error", {
-        message: "Codex app-server failed",
-        error,
-      });
+    const failChild = (error: Error): void => {
+      if (this.child !== child) return;
       this.failAll(error);
       this.child = null;
       this.initialized = false;
       this.initializePromise = null;
+    };
+    child.stdin.on("error", (error) => {
+      codexAppServerLogger.warn("voice.codex-app-server.stdin-failed", {
+        message: "Codex app-server input stream failed",
+        error,
+      });
+      failChild(error);
+      if (child.exitCode === null && !child.killed) child.kill("SIGTERM");
     });
-    this.child.on("close", (code, signal) => {
+    child.on("error", (error) => {
+      codexAppServerLogger.warn("voice.codex-app-server.error", {
+        message: "Codex app-server failed",
+        error,
+      });
+      failChild(error);
+    });
+    child.on("close", (code, signal) => {
+      if (this.child !== child) return;
       const details = this.stderrBuffer.trim();
       codexAppServerLogger.warn("voice.codex-app-server.closed", {
         message: "Codex app-server closed",
@@ -183,20 +197,19 @@ export class CodexAppServerClient {
         signal,
         stderr: details || null,
       });
-      this.failAll(
+      failChild(
         new Error(
           details ||
             `Codex app-server exited with code ${code}${signal ? ` (${signal})` : ""}.`,
         ),
       );
-      this.child = null;
-      this.initialized = false;
-      this.initializePromise = null;
     });
-    this.child.stdout.on("data", (chunk: Buffer) => {
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (this.child !== child) return;
       this.handleStdout(chunk.toString("utf8"));
     });
-    this.child.stderr.on("data", (chunk: Buffer) => {
+    child.stderr.on("data", (chunk: Buffer) => {
+      if (this.child !== child) return;
       this.stderrBuffer = `${this.stderrBuffer}${chunk.toString("utf8")}`.slice(
         -4_096,
       );
