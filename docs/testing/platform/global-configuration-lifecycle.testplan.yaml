@@ -17,7 +17,8 @@ cases:
     preconditions:
       - "已实现新环境合同，准备旧 Beta 参数和一份有归属标记的旧 Beta 数据 fixture，Stable 保持独立运行。"
     steps:
-      - "通过旧 Beta 创建或更新入口请求运行；确认明确提示迁移至 Dev Session，不新建 Beta、不静默操作 Stable，旧数据和 Stable 摘要不变。"
+      - "通过旧 Beta update/open/rollback 入口请求运行，并尝试伪造不存在的 --dev-session；确认均明确提示迁移至有效 Dev Session，不新建 Beta、不静默操作 Stable，旧数据和 Stable 摘要不变。"
+      - "经 toolkit:runweave-dev-session 创建真实测试实例；确认有归属的打包启动、status/open/stop 仍可用，结束后槽位租约释放；旧入口的只读 status 保持可用。"
   - id: GCL-003
     name: "多 Dev Session 隔离"
     required: true

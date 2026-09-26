@@ -42,6 +42,7 @@ import {
   purgeLegacyBeta,
   restoreLegacyBeta,
 } from "./legacy.mjs";
+import { assertManagedBetaLaunch } from "./managed-session.mjs";
 
 function buildInputSnapshot(snapshot) {
   return Object.fromEntries(
@@ -433,6 +434,13 @@ async function main() {
   if (["update", "open", "rollback"].includes(command)) {
     assertBetaSlotId(options.instanceId);
   }
+  await assertManagedBetaLaunch({
+    command,
+    instanceId: options.instanceId,
+    devSessionId: options.devSessionId,
+    sourceRoot: process.cwd(),
+    homeDir: os.homedir(),
+  });
   if (command === "migrate") {
     throw new Error(
       "legacy Beta migration is retired; use dev:session and legacy-cleanup",
