@@ -1,6 +1,16 @@
 import SwiftUI
 
+private struct InstantReply: Identifiable {
+  let id: String
+  let text: String
+}
+
 struct TerminalInstantReplyBar: View {
+  private let replies = [
+    InstantReply(id: "yes", text: "可以"),
+    InstantReply(id: "continue", text: "继续"),
+    InstantReply(id: "decline", text: "不需要"),
+  ]
   let enabled: Bool
   let sending: Bool
   let send: (String) -> Void
@@ -8,19 +18,19 @@ struct TerminalInstantReplyBar: View {
 
   var body: some View {
     HStack(spacing: 10) {
-      ForEach(["可以", "继续"], id: \.self) { text in
-        Button { send(text) } label: {
+      ForEach(replies) { reply in
+        Button { send(reply.text) } label: {
           HStack(spacing: 8) {
-            Text(text).font(.subheadline.weight(.medium))
+            Text(reply.text).font(.subheadline.weight(.medium))
             Image(systemName: "return").font(.caption)
           }
           .frame(maxWidth: .infinity, minHeight: 44)
           .background(TerminalAppearance.accent.opacity(0.14))
           .clipShape(RoundedRectangle(cornerRadius: 12))
         }
-        .accessibilityLabel("发送“\(text)”")
+        .accessibilityLabel("发送“\(reply.text)”")
         .accessibilityHint("立即发送并回车，保留输入草稿")
-        .accessibilityIdentifier(text == "可以" ? "terminal-instant-reply-yes" : "terminal-instant-reply-continue")
+        .accessibilityIdentifier("terminal-instant-reply-\(reply.id)")
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
       }
