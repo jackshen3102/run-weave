@@ -18,7 +18,7 @@ pnpm --filter @runweave/suiji-ios ios:build --simulator <UDID> --configuration R
 pnpm --filter @runweave/suiji-ios ios:run --task-dir <本工作区任务目录> --configuration Debug
 ```
 
-产物位于根 `.runweave/suiji/ios-build/`。必须指定 Simulator UDID；run 安装指定配置的已有产物。
+产物位于根 `.runweave/suiji/ios-build/`。必须指定 Simulator UDID；run 会核对当前源码、构建产物和设备上的二进制，按需构建或安装后启动。
 真机由 Xcode 显式配置签名团队，本工程不提供个人团队默认值。Release 只接受 HTTPS；
 Debug 可配置本地服务，网络声明仅允许本地网络，没有全局 ATS 明文例外。
 

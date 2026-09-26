@@ -111,9 +111,14 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     if !tag.isEmpty { items.append(URLQueryItem(name: "tag", value: tag)) }
     do {
       if !more {
-        let directory = try await client.request(TagDirectory.self, path: "api/suiji/v1/tags")
-        guard generation == current, listGeneration == request else { return }
-        availableTags = directory.items
+        Task { @MainActor [weak self] in
+          guard let self else { return }
+          do {
+            let directory = try await client.request(TagDirectory.self, path: "api/suiji/v1/tags")
+            guard generation == current, listGeneration == request else { return }
+            availableTags = directory.items
+          } catch { /* Tags do not block the record list. */ }
+        }
       }
       var cursor = more ? nextCursor : nil
       var incoming: [SuijiRecord] = [], pending: Set<String> = []

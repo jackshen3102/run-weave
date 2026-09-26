@@ -122,3 +122,17 @@ cases:
       - 两台均占用时申请新任务；确认只回收空闲已过期且 daemon/runner 清理成功的原租约，新任务获得不同 lease 且旧任务不能操作或释放它。
       - 分别检查活动操作、未退出子进程和 runner 清理失败状态；确认申请返回占用，原 owner、进程和设备数据保留。
       - 在未过期任务上执行托管操作并读取 status，确认 idleSeconds 重置，未被提前回收；最后完成本例所有租约。
+  - id: SIMPOOL-011
+    name: 两款 App 的同源码构建与安装复用不越过身份边界
+    required: true
+    description: >
+      已准备好的源码和设备安装身份完全一致时，两款 App 可直接启动；源码、构建配置、
+      Xcode/SDK 或设备上 App 内容变化时必须重新构建或安装，并保留真实页面验收。
+    preconditions:
+      - 本例独占两台已注册模拟器，Runweave 与随记均已在各自设备完成一次当前源码 Debug 构建安装。
+      - 另有可安全修改并还原的隔离源码现场，用于验证缓存失效；两款 App 有可用的测试登录环境。
+    steps:
+      - 分别在新 task-dir 重新 start、run，确认 `reusedBuild` 与 `reusedInstall` 均为 true，buildId 和完整 App 摘要与当前源码产物及目标设备一致，新 lease 不复用旧任务身份。
+      - 用 toolkit:agent-device 冷启动并读取真实控件树，确认随记列表和 Runweave 项目列表或指定终端可操作；单独记录从 run 发起到业务后置状态的耗时。
+      - 在隔离源码现场修改 iOS 构建输入后执行 run，确认 `reusedBuild` 为 false，安装身份随新 buildId 更新；改用 Release 配置也不得复用 Debug 产物，切回未变的 Debug 输入仍可匹配自己的产物。
+      - 将设备上 App 内容与本地产物制造本例可恢复的不一致，确认 run 不跳过安装；恢复本例产物并在每轮 finish 后核对两台 lease 均释放。
