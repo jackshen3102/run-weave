@@ -9,7 +9,7 @@ final class NativeTerminalView: TerminalView {
   var acceptsTerminalResponses: () -> Bool = { true }
   var linkIntent: ((BrowserOpenIntent) -> Void)?
   private var menuObserver: NSObjectProtocol?
-  private var linkMenu: AnyObject?
+  private var selectionMenu: AnyObject?
   private var menuPoint = CGPoint.zero
 
   override func mouseModeChanged(source: Terminal) {
@@ -27,16 +27,20 @@ final class NativeTerminalView: TerminalView {
     return super.gestureRecognizerShouldBegin(gestureRecognizer)
   }
 
-  func installLinkMenu() {
+  func installSelectionMenu() {
     // Observe SwiftTerm's own recognizer after its hit testing. Do not install a competing pan
     // or maintain a second ANSI/cell map. Long press selects via SwiftTerm's public API.
     for recognizer in gestureRecognizers ?? [] where recognizer is UILongPressGestureRecognizer {
-      recognizer.addTarget(self, action: #selector(selectLinkAtLongPress(_:)))
+      recognizer.addTarget(self, action: #selector(selectAtLongPress(_:)))
+    }
+    for case let recognizer as UITapGestureRecognizer in gestureRecognizers ?? []
+      where recognizer.numberOfTapsRequired > 1 {
+      recognizer.addTarget(self, action: #selector(selectionTapped(_:)))
     }
     if #available(iOS 16.0, *) {
       let menu = UIEditMenuInteraction(delegate: self)
       addInteraction(menu)
-      linkMenu = menu
+      selectionMenu = menu
     }
     menuObserver = NotificationCenter.default.addObserver(
       forName: UIMenuController.willShowMenuNotification, object: nil, queue: .main
@@ -44,45 +48,50 @@ final class NativeTerminalView: TerminalView {
       MainActor.assumeIsolated {
         DispatchQueue.main.async { [weak self] in
           self?.observeSelectionPans()
-          self?.presentSelectedLinkMenu()
+          self?.presentSelectionMenu()
         }
       }
     }
   }
 
-  func disposeLinkMenu() {
+  func disposeSelectionMenu() {
     if let menuObserver { NotificationCenter.default.removeObserver(menuObserver) }
     menuObserver = nil
-    if #available(iOS 16.0, *), let menu = linkMenu as? UIEditMenuInteraction {
+    if #available(iOS 16.0, *), let menu = selectionMenu as? UIEditMenuInteraction {
       menu.dismissMenu()
       removeInteraction(menu)
     }
-    linkMenu = nil
+    selectionMenu = nil
     for recognizer in gestureRecognizers ?? [] {
-      recognizer.removeTarget(self, action: #selector(selectLinkAtLongPress(_:)))
+      recognizer.removeTarget(self, action: #selector(selectAtLongPress(_:)))
       recognizer.removeTarget(self, action: #selector(selectionPanEnded(_:)))
+      recognizer.removeTarget(self, action: #selector(selectionTapped(_:)))
     }
     if isFirstResponder { UIMenuController.shared.hideMenu() }
     linkIntent = nil
   }
 
-  @objc private func selectLinkAtLongPress(_ gesture: UILongPressGestureRecognizer) {
-    guard gesture.state == .began, !hasActiveSelection, linkIntent != nil else { return }
+  @objc private func selectAtLongPress(_ gesture: UILongPressGestureRecognizer) {
+    guard gesture.state == .began, !hasActiveSelection, menuObserver != nil else { return }
     menuPoint = gesture.location(in: self)
     // Target invocation order is not an API guarantee. Wait for SwiftTerm to capture its
     // bidi-aware buffer position before asking it to select; never derive our own hit map.
     DispatchQueue.main.async { [weak self] in
-      guard let self, self.linkIntent != nil, !self.hasActiveSelection else { return }
+      guard let self, self.menuObserver != nil, !self.hasActiveSelection else { return }
       self.select(nil)
       self.observeSelectionPans()
       // SwiftTerm may show its legacy menu before this asynchronous selection exists.
       // Re-evaluate after selection rather than relying on an already-delivered notification.
-      self.presentSelectedLinkMenu()
+      self.presentSelectionMenu()
     }
   }
 
+  @objc private func selectionTapped(_ gesture: UITapGestureRecognizer) {
+    if gesture.state == .ended { menuPoint = gesture.location(in: self) }
+  }
+
   private func observeSelectionPans() {
-    guard linkIntent != nil else { return }
+    guard menuObserver != nil else { return }
     // SwiftTerm installs its selection pan dynamically. Observe it without adding a competing
     // recognizer or retaining removed pans; remove/add keeps our target registration unique.
     for recognizer in gestureRecognizers ?? [] where recognizer is UIPanGestureRecognizer {
@@ -92,19 +101,34 @@ final class NativeTerminalView: TerminalView {
   }
 
   @objc private func selectionPanEnded(_ gesture: UIPanGestureRecognizer) {
-    guard gesture.state == .ended, linkIntent != nil else { return }
+    guard gesture.state == .ended, hasActiveSelection, menuObserver != nil else { return }
+    menuPoint = gesture.location(in: self)
     // Updating an already visible legacy menu need not emit another willShow notification.
     // Wait until SwiftTerm has finished extending the selection and updating its own menu.
     DispatchQueue.main.async { [weak self] in
-      self?.presentSelectedLinkMenu()
+      self?.presentSelectionMenu()
     }
   }
 
-  private func presentSelectedLinkMenu() {
-    guard isFirstResponder, selectedLink != nil else { return }
-    if #available(iOS 16.0, *), let menu = linkMenu as? UIEditMenuInteraction {
+  private func presentSelectionMenu() {
+    guard menuObserver != nil, isFirstResponder, hasActiveSelection else { return }
+    if #available(iOS 16.0, *), let menu = selectionMenu as? UIEditMenuInteraction {
       UIMenuController.shared.hideMenu()
-      menu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: menuPoint))
+      let point = CGPoint(x: min(max(menuPoint.x, bounds.minX), bounds.maxX),
+        y: min(max(menuPoint.y, bounds.minY), bounds.maxY))
+      menu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: point))
+    } else {
+      UIMenuController.shared.update()
+    }
+  }
+
+  override func selectionChanged(source: Terminal) {
+    super.selectionChanged(source: source)
+    // SwiftTerm dismisses its legacy menu when selection is cleared. Keep our
+    // menu in the same lifecycle, including copy, cancelled drags and new output.
+    if !hasActiveSelection, #available(iOS 16.0, *),
+      let menu = selectionMenu as? UIEditMenuInteraction {
+      menu.dismissMenu()
     }
   }
 
@@ -169,7 +193,20 @@ final class NativeTerminalView: TerminalView {
 extension NativeTerminalView: UIEditMenuInteractionDelegate {
   func editMenuInteraction(_ interaction: UIEditMenuInteraction,
     menuFor configuration: UIEditMenuConfiguration, suggestedActions: [UIMenuElement]) -> UIMenu? {
-    UIMenu(children: suggestedActions + linkActions())
+    guard hasActiveSelection else { return nil }
+    // suggestedActions can reflect the menu opened before the asynchronous
+    // long-press selection. Build Copy from the actual terminal selection instead.
+    let copy = UIAction(title: "复制", image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
+      guard let self, self.hasActiveSelection else { return }
+      self.copy(nil)
+    }
+    let paste = UIAction(title: "粘贴") { [weak self] _ in self?.paste(nil) }
+    let selectAll = UIAction(title: "全选") { [weak self] _ in
+      guard let self else { return }
+      self.selectAll(nil)
+      DispatchQueue.main.async { [weak self] in self?.presentSelectionMenu() }
+    }
+    return UIMenu(children: [copy, paste, selectAll] + linkActions())
   }
 }
 
