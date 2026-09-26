@@ -434,9 +434,6 @@ importers:
 
   packages/runweave-cli:
     dependencies:
-      "@runweave/config-node":
-        specifier: workspace:*
-        version: link:../config-node
       fs-native-extensions:
         specifier: 1.5.1
         version: 1.5.1
@@ -444,6 +441,9 @@ importers:
         specifier: ^1.70.0
         version: 1.70.0
     devDependencies:
+      "@runweave/config-node":
+        specifier: workspace:*
+        version: link:../config-node
       "@runweave/shared":
         specifier: workspace:*
         version: link:../shared
