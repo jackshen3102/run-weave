@@ -88,7 +88,9 @@ rw config migrate --source-manifest /private/path/sources.json --instance stable
 `feishu_notify.env`。通过 `--backend-profile <绝对目录>` 选择认证、推送和模型配置的
 旧 Backend profile，通过 `--desktop-data <绝对目录>` 选择桌面认证、隧道、浏览器和伴随窗口来源。
 选择 Backend profile 时还会保留原数据库、终端、日志等存储路径，不移动数据。
-Dev 来源必须位于自身目录；同域来源冲突需要使用来源清单明确选择，不能自动挑最新文件。
+Dev 来源必须位于自身目录，显式 `--source-manifest` 也会按实例归属校验；
+Stable 迁移拒绝 Dev Session 与历史 Beta 目录中的来源，需分别保留或归档这些测试数据。
+同域来源冲突需要使用来源清单明确选择，不能自动挑最新文件。
 其他域须提供归属明确的来源清单，默认发现不等于全仓迁移完成。
 
 发布产物声明支持的 YAML schema 和域版本。受管安装/回退在切换程序前检查兼容性；

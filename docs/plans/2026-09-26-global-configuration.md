@@ -56,6 +56,8 @@ GCL-012 使用实际打包 Dev A `dvs-84d719`（pool-04）与 B `dvs-9c8116`（p
 
 GCL-013 使用同一双 Dev，在本轮源码构建并安装的 iOS 模拟器 `0986DF97-0644-4138-847E-5BC690CFEF7E` 中，通过原生 UI 分别添加并登录 A/B。A 经本地只延迟配置 PATCH 的代理连接；原生设置页显示 A `dvs-84d719`、版本 3，输入合成语音语言 `en` 并保存，代理记录 `PATCH /api/configuration` 被保持；随即关闭设置页并切换 B，代理在转发前记录 `client-aborted-before-forward`。B 的原生设置页显示 `dvs-9c8116`、版本 3，A/B/Stable YAML 摘要均保持上述基线。测试连接及凭据已从模拟器移除，原有 Quick Reply QA 连接恢复；agent-device 会话、模拟器租约、本地代理和两个 Dev Session 均已停止。模拟器交互不代表 iPhone 17 真机页面已验收。证据为 `gcl12-gcl13-switch-evidence.json` 与本轮模拟器任务目录中的 agent-device 命令记录。
 
+GCL-011 的来源归属边界补查发现，显式 `--source-manifest` 原先仅要求绝对路径，Dev 可以选另一实例的文件。现在迁移预览与提交前的来源备份都复核归属：用合成 A/B 目录真实运行 CLI，A 指向 B 的绝对路径、符号链接及正式提交均返回 `CONFIG_PATH_OUTSIDE_INSTANCE`；A 仅迁移自身的 `voice.transcription.language=en`，保存版本 1 且来源私有备份为 0600，B 没有生成 YAML。Stable 指向 Dev 文件或经 `/tmp` 符号链接指向 Dev 的预览均返回 `CONFIG_SOURCE_OWNER_MISMATCH`，Stable YAML SHA 仍为 `f5f0b13c…`。测试目录已按精确清单删除，证据为 `gcl11-source-ownership-evidence.json`。旧 Beta 归档与归属不明共享记录的冲突处置尚未执行，故 GCL-011 不计通过。
+
 GCL-010 与上段共用双 Dev fixture：停止 A 时 pool-03 租约释放、该槽位进程归零，B 仍为 ready，`dev:open` 维持 pool-04 的 PID 20232 与 CDP 9337，Playwright 页面持续显示 `GCL010_B_20260927`。B 的 YAML 和终端滚动记录 SHA、Stable YAML/App Info SHA 与 Stable Desktop/Backend PID 均与 A 停止前相同；没有使用全局删除或模糊进程匹配。证据为 `gcl10-gci4-main-evidence.json`。
 
 双打包实例首次启动时发现 pool-02～05 四个无租约槽位引用了被其他槽位清理的同一 Dev Session release，均被判 broken。根因是 Backend/App Server runtime 在 Session 根下跨槽位共享，而清理器只保留当前槽位的引用。PR #599 已包含跨槽位保留集合修复：隔离 fixture 验证两个 runtime 的被引用 release 保留、孤立 release 清除；Dev Session 64 项回归通过。后续补丁提供带期望 SHA、只读预览、0600 原件备份和锁内复核的显式历史修复入口；pool-02～05 逐个预览与修复后五槽恢复 idle，随后两个真实打包 Dev 同时就绪。该修复不伪造已丢失的旧 release，也不修改 Stable 或 Session YAML；不代替升级和失败恢复验收。
