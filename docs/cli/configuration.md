@@ -79,6 +79,11 @@ rw config migrate --source-manifest /private/path/sources.json --instance stable
 同一域不同来源必须先明确选择，不自动拼接凭据。迁移保留私有来源备份，并把来源摘要和
 迁移标记写入同一个 YAML 提交；已迁移域再次执行不会重新读取旧来源。
 
+认证迁移保留所选旧 Backend 的用户名、密码和 JWT 密钥，包括已有的 `admin/admin`，
+不强制轮换凭据或使登录会话失效。未迁移的新 Stable 身份仍拒绝 `admin/admin`，
+所有未迁移的新身份仍拒绝内置默认 JWT 密钥。
+旧模型文件的 `config: null` 表示尚未保存角色设置；迁移保留默认选择，不导入模型目录缓存。
+
 默认仅发现当前配置根下的旧 CLI `config.json`、`snapshot-share/publish.env` 和
 `feishu_notify.env`。通过 `--backend-profile <绝对目录>` 选择认证、推送和模型配置的
 旧 Backend profile，通过 `--desktop-data <绝对目录>` 选择桌面认证、隧道、浏览器和伴随窗口来源。

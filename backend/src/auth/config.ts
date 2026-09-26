@@ -43,7 +43,10 @@ function rejectUnsafeStrictAuthDefaults(
   password: string,
   jwtSecret: string,
 ): void {
+  // Explicitly migrated identities keep their signing key and existing sessions.
+  const migratedAuth = configuration().store.read().value.migrations["backend.auth"];
   if (
+    !migratedAuth &&
     username === "admin" &&
     password === "admin" &&
     configuration().context.kind === "stable"
@@ -51,8 +54,9 @@ function rejectUnsafeStrictAuthDefaults(
     throw new Error("[viewer-be] refusing default admin/admin credentials");
   }
   if (
-    jwtSecret === "runweave-local-jwt-secret" ||
-    jwtSecret === "browser-viewer-local-jwt-secret"
+    !migratedAuth &&
+    (jwtSecret === "runweave-local-jwt-secret" ||
+      jwtSecret === "browser-viewer-local-jwt-secret")
   ) {
     throw new Error("[viewer-be] refusing default packaged JWT secret");
   }

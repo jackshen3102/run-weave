@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { configurationLibrary } from "../lib/configuration.mjs";
+import { copyNativeLockRuntime } from "../../packages/config-node/scripts/native-runtime.mjs";
 import {
   cpSync,
   existsSync,
@@ -173,6 +174,7 @@ cpSync(resourcesBackendDir, path.join(releaseDir, "backend"), {
   recursive: true,
   dereference: true,
 });
+copyNativeLockRuntime(path.join(releaseDir, "backend"));
 cpSync(path.dirname(cliEntry), path.join(releaseDir, "cli"), {
   recursive: true,
   dereference: true,
