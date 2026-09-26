@@ -13,7 +13,7 @@ declare const __RUNWEAVE_DESKTOP_CDP_PORT__: string | null;
 declare const __RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__: string | null;
 declare const __RUNWEAVE_APP_SERVER_HOME__: string | null;
 
-if (__RUNWEAVE_WHISTLE_PORTS__)
+if (!process.env.RUNWEAVE_WHISTLE_PORTS && __RUNWEAVE_WHISTLE_PORTS__)
   process.env.RUNWEAVE_WHISTLE_PORTS = __RUNWEAVE_WHISTLE_PORTS__;
 
 export const desktopChannel = __RUNWEAVE_DESKTOP_CHANNEL__;
@@ -21,37 +21,37 @@ export const desktopSourceRevision = __RUNWEAVE_DESKTOP_SOURCE_REVISION__;
 export const isBetaChannel = desktopChannel === "beta";
 export const BETA_DESKTOP_CDP_PORT = 9335;
 const desktopInstanceId =
-  __RUNWEAVE_DESKTOP_INSTANCE_ID__ ||
-  process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim();
+  process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim() ||
+  __RUNWEAVE_DESKTOP_INSTANCE_ID__;
 const explicitUserDataPath =
-  __RUNWEAVE_DESKTOP_USER_DATA_DIR__ ||
-  process.env.RUNWEAVE_DESKTOP_USER_DATA_DIR?.trim();
+  process.env.RUNWEAVE_DESKTOP_USER_DATA_DIR?.trim() ||
+  __RUNWEAVE_DESKTOP_USER_DATA_DIR__;
 export const isManagedDevSession = Boolean(
   (process.env.RUNWEAVE_DEV_SESSION_ID?.trim() ||
     __RUNWEAVE_DEV_SESSION_ID__) &&
   explicitUserDataPath,
 );
 const configuredDesktopCdpPort = parseOptionalPort(
-  __RUNWEAVE_DESKTOP_CDP_PORT__ ??
-    process.env.RUNWEAVE_DESKTOP_CDP_PORT ??
+  process.env.RUNWEAVE_DESKTOP_CDP_PORT ??
+    __RUNWEAVE_DESKTOP_CDP_PORT__ ??
     undefined,
 );
 
 if (desktopInstanceId) {
   process.env.RUNWEAVE_DESKTOP_INSTANCE_ID = desktopInstanceId;
 }
-if (__RUNWEAVE_DEV_SESSION_ID__) {
+if (!process.env.RUNWEAVE_DEV_SESSION_ID && __RUNWEAVE_DEV_SESSION_ID__) {
   process.env.RUNWEAVE_DEV_SESSION_ID = __RUNWEAVE_DEV_SESSION_ID__;
 }
 process.env.RUNWEAVE_SOURCE_REVISION = desktopSourceRevision;
-if (__RUNWEAVE_DESKTOP_STATUS_PATH__) {
+if (!process.env.RUNWEAVE_DESKTOP_STATUS_PATH && __RUNWEAVE_DESKTOP_STATUS_PATH__) {
   process.env.RUNWEAVE_DESKTOP_STATUS_PATH = __RUNWEAVE_DESKTOP_STATUS_PATH__;
 }
-if (__RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__) {
+if (!process.env.RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT && __RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__) {
   process.env.RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT =
     __RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__;
 }
-if (__RUNWEAVE_APP_SERVER_HOME__) {
+if (!process.env.RUNWEAVE_APP_SERVER_HOME && __RUNWEAVE_APP_SERVER_HOME__) {
   process.env.RUNWEAVE_APP_SERVER_HOME = __RUNWEAVE_APP_SERVER_HOME__;
 }
 process.env.RUNWEAVE_DESKTOP_CHANNEL = desktopChannel;

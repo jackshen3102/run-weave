@@ -19,9 +19,11 @@ import {
 } from "./context.mjs";
 import {
   createWorktreeSnapshot,
+  fingerprintFrontendBuildEnv,
   getGitChangedFilesSinceState,
   getGitHead,
   getGitStatusDirty,
+  getPathIdentity,
   readInstalledMacAppVersion,
   readJsonFile,
   readPackageVersion,
@@ -286,6 +288,15 @@ async function main() {
     appServerReleaseId:
       appServerRelease?.releaseId ?? previousAppServerReleaseId,
     appPath,
+    appIdentity: await getPathIdentity(appPath),
+    frontendBuildEnvFingerprint: plan.mode === "app"
+      ? fingerprintFrontendBuildEnv({
+          ...process.env,
+          VITE_RUNWEAVE_CHANNEL: channel,
+          VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
+          VITE_RUNWEAVE_VERSION: appBuildVersion,
+        })
+      : state?.frontendBuildEnvFingerprint ?? null,
     appVersion: nextInstalledVersion ?? installedAppVersion,
     gitDirty,
     gitHead,

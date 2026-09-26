@@ -132,6 +132,8 @@ const electronApi = {
     process.env.RUNWEAVE_BACKEND_URL ??
     process.env.BROWSER_VIEWER_BACKEND_URL ??
     "",
+  getDevSessionAuth: (backendUrl: string) =>
+    ipcRenderer.invoke("viewer:get-dev-session-auth", backendUrl),
   getPackagedBackendState: () =>
     ipcRenderer.invoke(
       "viewer:get-packaged-backend-state",

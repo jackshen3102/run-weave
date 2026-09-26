@@ -1,4 +1,5 @@
 import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin } from "../tunnels/index";
+import type { LoginResponse } from "../protocol";
 import type { SuijiDesktopState, SuijiEnvironment, SuijiProfile } from "../suiji/desktop";
 import type { RemoteServiceRef, ResolvedServiceAccess } from "../remote/index";
 import type { BrowserAssistanceTarget } from "../browser/assistance";
@@ -113,6 +114,7 @@ export interface RunweaveElectronBridge {
   resolveTunnelService: (ref: RemoteServiceRef, token: string) => Promise<ResolvedServiceAccess>;
   managesPackagedBackend: boolean;
   backendUrl: string;
+  getDevSessionAuth: (backendUrl: string) => Promise<LoginResponse>;
   onAttentionOpenIntent: (
     listener: (intent: AttentionOpenDispatch) => void,
   ) => () => void;

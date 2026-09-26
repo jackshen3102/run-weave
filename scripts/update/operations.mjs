@@ -559,6 +559,7 @@ export async function runAppUpdate({
         electronBuilderConfig,
         "--mac",
         "--arm64",
+        ...(channel === "beta" ? ["--dir"] : []),
       ],
       {
         cwd: sourceRoot,
