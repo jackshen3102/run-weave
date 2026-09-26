@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { CreateTerminalHtmlPreviewTicketResponse } from "@runweave/shared/terminal/preview";
+import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
 import { requestJson } from "../../../../services/http";
 import { TerminalMonacoViewer } from "./monaco";
 
@@ -16,9 +17,13 @@ interface Props {
   lineReferencePath: string;
   initialRevealPosition?: { line: number; column: number; key: string };
   onContentChange: (content: string) => void;
+  change?: { kind: TerminalPreviewChangeKind; version: string };
+  previewOnly?: boolean;
 }
 
 export function TerminalHtmlPreview(props: Props) {
+  const changeKind = props.change?.kind;
+  const changeVersion = props.change?.version;
   const [mode, setMode] = useState<"preview" | "source">(props.initialRevealPosition ? "source" : "preview");
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,18 +36,20 @@ export function TerminalHtmlPreview(props: Props) {
     void requestJson<CreateTerminalHtmlPreviewTicketResponse>(
       props.apiBase,
       `/api/terminal/project/${encodeURIComponent(props.projectId)}/preview/html-ticket`,
-      { method: "POST", headers: { Authorization: `Bearer ${props.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ path: props.path }) },
+      { method: "POST", headers: { Authorization: `Bearer ${props.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ path: props.path,
+        ...(changeKind && changeVersion ? { changeKind, version: changeVersion } : {}) }) },
     ).then((ticket) => {
       if (active) setUrl(`${props.apiBase.replace(/\/$/, "")}${ticket.path}`);
     }).catch((reason: unknown) => {
       if (active) setError(reason instanceof Error ? reason.message : String(reason));
     });
     return () => { active = false; };
-  }, [mode, props.apiBase, props.token, props.projectId, props.path, props.mtimeMs, props.refreshKey, revision]);
+  }, [mode, props.apiBase, props.token, props.projectId, props.path, props.mtimeMs, props.refreshKey,
+    changeKind, changeVersion, revision]);
 
   return <div className="flex h-full min-h-0 flex-col">
     <div className="flex shrink-0 items-center gap-1 border-b border-slate-800 px-2 py-1 text-xs">
-      {(["preview", "source"] as const).map((choice) => <button key={choice} type="button" onClick={() => setMode(choice)} className={mode === choice ? "rounded bg-slate-700 px-2 py-1 text-white" : "rounded px-2 py-1 text-slate-400"}>{choice === "preview" ? "Preview" : "Source"}</button>)}
+      {!props.previewOnly && (["preview", "source"] as const).map((choice) => <button key={choice} type="button" onClick={() => setMode(choice)} className={mode === choice ? "rounded bg-slate-700 px-2 py-1 text-white" : "rounded px-2 py-1 text-slate-400"}>{choice === "preview" ? "Preview" : "Source"}</button>)}
       {mode === "preview" && <button type="button" className="ml-auto px-2 text-slate-400" onClick={() => setRevision((value) => value + 1)}>Refresh</button>}
       {mode === "preview" && props.content !== props.savedContent && <span className="text-amber-400">Save to update preview</span>}
     </div>

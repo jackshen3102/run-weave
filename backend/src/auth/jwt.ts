@@ -19,6 +19,7 @@ export interface TokenResource {
   prototypeSource?: string;
   prototypeSlug?: string;
   htmlPath?: string;
+  htmlChange?: string;
 }
 
 interface BaseTokenPayload {
@@ -89,6 +90,10 @@ function decodePayload(encodedPayload: string): BaseTokenPayload | null {
               htmlPath:
                 typeof parsed.resource.htmlPath === "string"
                   ? parsed.resource.htmlPath
+                  : undefined,
+              htmlChange:
+                typeof parsed.resource.htmlChange === "string"
+                  ? parsed.resource.htmlChange
                   : undefined,
             }
           : undefined,

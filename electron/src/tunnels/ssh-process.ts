@@ -9,7 +9,11 @@ export interface SshProcess {
   ready: Promise<void>;
   stop(): Promise<void>;
 }
-export function startSsh(host: string, forwards: string[] = []): SshProcess {
+export function startSsh(
+  host: string,
+  forwards: string[] = [],
+  command?: string,
+): SshProcess {
   const marker = "runweave-tunnel-ready";
   const socketDir = forwards.length
     ? mkdtempSync(path.join(os.tmpdir(), "rw-ssh-"))
@@ -18,7 +22,7 @@ export function startSsh(host: string, forwards: string[] = []): SshProcess {
   const child = spawn(
     "ssh",
     [
-      "-N",
+      ...(command ? [] : ["-N"]),
       "-T",
       ...(socketPath ? ["-M", "-S", socketPath, "-o", "ControlPersist=no"] : []),
       "-o",
@@ -36,11 +40,12 @@ export function startSsh(host: string, forwards: string[] = []): SshProcess {
       "-o",
       "ConnectTimeout=10",
       "-o",
-      "PermitLocalCommand=yes",
+      `PermitLocalCommand=${command ? "no" : "yes"}`,
       "-o",
       `LocalCommand=echo ${marker}`,
       ...forwards,
       host,
+      ...(command ? [command] : []),
     ],
     { stdio: "pipe" },
   );
@@ -115,13 +120,19 @@ export function startSsh(host: string, forwards: string[] = []): SshProcess {
     child.once("exit", () =>
       finish(
         new Error(
-          /address already in use|cannot listen to port/i.test(stderr)
-            ? "LOCAL_PORT_IN_USE: 本机端口已被占用，请释放端口或修改服务端口"
+          /address already in use|cannot listen to port|EADDRINUSE|remote port forwarding failed/i.test(
+            stderr,
+          )
+            ? "PORT_IN_USE: 通道端口已被占用，请修改端口或稍后重试"
             : /permission denied|host key verification failed|REMOTE HOST IDENTIFICATION/i.test(
                   stderr,
                 )
               ? "SSH_AUTH_FAILED: SSH 身份或主机密钥验证失败，请检查本机 SSH 配置"
-              : "SSH_DISCONNECTED: SSH 连接中断",
+              : /EADDRNOTAVAIL/.test(stderr)
+                ? "RELAY_ADDRESS_INVALID: 服务器没有此内网地址，请修改中转服务器地址"
+                : /node:.*not found|node:.*command not found/i.test(stderr)
+                  ? "RELAY_NODE_MISSING: 中转服务器需要安装 Node.js，并可通过 SSH 执行 node"
+                  : "SSH_DISCONNECTED: 服务器不可达或连接中断，请检查网络、VPN 和 SSH 配置",
         ),
       ),
     );
@@ -198,6 +209,8 @@ export async function remoteFreePort(host: string): Promise<number> {
   });
   const port = Number(output.trim());
   if (code !== 0 || !Number.isInteger(port) || port < 1 || port > 65535)
-    throw new Error("BROWSER_PORT_FAILED: 无法创建远端浏览器通道");
+    throw new Error(
+      "REMOTE_PORT_FAILED: 无法分配远端通道端口，请确认 SSH 可连接且服务器可执行 node",
+    );
   return port;
 }

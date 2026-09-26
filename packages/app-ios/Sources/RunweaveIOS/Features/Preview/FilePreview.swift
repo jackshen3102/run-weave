@@ -50,7 +50,7 @@ struct FilePreview: View {
     diff?.contentKind == "image" || (diff?.contentKind == nil && isPreviewImage(file.path))
   }
   private var canSwitch: Bool {
-    ["md", "markdown", "svg", "html", "htm"].contains(suffix) && !isImage && diff?.problem == nil && (!["html", "htm"].contains(suffix) || file.changeKind == nil)
+    ["md", "markdown", "svg", "html", "htm"].contains(suffix) && !isImage && diff?.problem == nil
   }
   private var versionLabel: String? {
     guard file.changeKind != nil, let diff else { return nil }
@@ -238,6 +238,22 @@ struct FilePreview: View {
             }.value
             guard !Task.isCancelled else { return }
             lines = built
+            if mode == "preview", ["html", "htm"].contains(suffix) {
+              guard let version = value.previewSide?.version else {
+                failure = "HTML 版本不可用，请重新加载"
+                loading = false
+                return
+              }
+              let ticket = try await session.withConnection {
+                try await $0.htmlPreviewTicket(projectID: projectID, path: file.path,
+                  changeKind: kind, version: version)
+              }
+              guard !Task.isCancelled else { return }
+              if let api = session.api {
+                htmlURL = URL(string: api.baseURL.absoluteString + ticket.path)
+              }
+              if htmlURL == nil { throw APIError.invalidURL }
+            }
           }
           guard !Task.isCancelled else { return }
           if failure == nil { didLoad?() }

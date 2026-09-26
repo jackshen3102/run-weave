@@ -1,3 +1,4 @@
+import { useTunnelStore } from "../features/tunnels/store";
 import { useMemoizedFn } from "ahooks";
 import { ChevronRight, Copy, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
@@ -106,6 +107,7 @@ function RuntimeStatusItemRow({ item }: { item: RuntimeStatusItem }) {
       ) : null}
       <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground/80">
         <span>更新于 {formatObservedAt(item.observedAt)}</span>
+        {item.id.includes("electron.remote-access:") ? <button type="button" className="text-xs underline" onClick={() => useTunnelStore.getState().setOpen(true)}>管理远程访问</button> : null}
         {item.navigation ? (
           <button type="button" className="inline-flex items-center gap-0.5 hover:text-foreground" onClick={() => window.location.assign(item.navigation!.route)}>
             {item.navigation.label}<ChevronRight className="h-3 w-3" />

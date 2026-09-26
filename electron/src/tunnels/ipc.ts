@@ -101,3 +101,7 @@ export function registerTunnelHandlers(): void {
 export async function stopTunnels() {
   await manager?.stop();
 }
+
+export function getTunnelRuntimeSnapshot() {
+  return manager?.snapshot() ?? null;
+}

@@ -353,7 +353,8 @@ export class AuthService {
       actual.projectId !== params.resource.projectId ||
       actual.prototypeSource !== params.resource.prototypeSource ||
       actual.prototypeSlug !== params.resource.prototypeSlug ||
-      actual.htmlPath !== params.resource.htmlPath
+      actual.htmlPath !== params.resource.htmlPath ||
+      actual.htmlChange !== params.resource.htmlChange
     ) {
       return null;
     }

@@ -7,6 +7,7 @@ import type {
 } from "@runweave/shared/tunnels";
 import { validateTunnelUpdate } from "@runweave/shared/tunnels";
 import { Button } from "../../components/ui/button";
+import { RemoteAccessForm } from "./remote-access";
 import { inputClass } from "./presentation";
 export function HostForm({
   host,
@@ -99,6 +100,10 @@ export function HostForm({
         />
         启动桌面端时自动连接
       </label>
+      <RemoteAccessForm
+        value={draft.remoteAccess}
+        onChange={(remoteAccess) => patch({ remoteAccess })}
+      />
       <h4 className="border-t border-border pt-3 font-medium">开发服务端口</h4>
       {draft.forwards.map((f, index) => (
         <fieldset key={f.id} className="space-y-2 rounded-lg bg-muted/30 p-3">

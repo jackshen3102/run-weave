@@ -22,6 +22,9 @@ import {
   type TerminalPreviewLineTarget,
   TerminalSvgPreview,
 } from "../files/view";
+import { TerminalHtmlPreview } from "../renderers/html";
+
+const ignoreContentChange = () => {};
 
 interface ChangesQueryState {
   data: TerminalPreviewGitChangesResponse | null;
@@ -137,7 +140,7 @@ export function TerminalPreviewChangesView({
         </div>
       );
     }
-    if ((currentFileDiff.diffState === "unchanged" && (selection.viewMode !== "preview" || !["markdown", "svg"].includes(fileKind))) || (!currentFileDiff.oldContent && !currentFileDiff.newContent)) {
+    if ((currentFileDiff.diffState === "unchanged" && (selection.viewMode !== "preview" || !["markdown", "svg", "html"].includes(fileKind))) || (!currentFileDiff.oldContent && !currentFileDiff.newContent)) {
       return renderPreviewEmpty(`${currentFileDiff.oldPath ? `重命名自 ${currentFileDiff.oldPath} · ` : ""}${currentFileDiff.newContent || currentFileDiff.oldContent ? "无文本内容变化" : "文件为空"}`);
     }
     const previewContent = currentFileDiff.status === "deleted" ? currentFileDiff.oldContent : currentFileDiff.newContent;
@@ -167,6 +170,19 @@ export function TerminalPreviewChangesView({
           <TerminalSvgPreview content={previewContent} />
         </Suspense>
       );
+    }
+    if (selection.viewMode === "preview" && fileKind === "html") {
+      const version = side?.version;
+      if (!version) return renderPreviewEmpty("HTML 版本不可用，请重新加载");
+      return <TerminalHtmlPreview
+        key={`${currentFileDiff.changeKind}:${currentFileDiff.path}:${version}`}
+        apiBase={apiBase} token={token} projectId={activeProject.projectId}
+        path={currentFileDiff.path} content={previewContent} savedContent={previewContent}
+        mtimeMs={0} refreshKey={0} editable={false}
+        lineReferencePath={currentFileDiff.absolutePath}
+        onContentChange={ignoreContentChange}
+        change={{ kind: currentFileDiff.changeKind, version }} previewOnly
+      />;
     }
     return (
       <Suspense fallback={renderPreviewEmpty("Loading editor...")}>
