@@ -11,6 +11,16 @@ import {
 } from "./core.mjs";
 import { codesignEnvFileRelativePath } from "./context.mjs";
 
+export function createDesktopLaunchEnv() {
+  const env = { ...process.env };
+  for (const name of Object.keys(env)) {
+    if (name.toLowerCase().startsWith("npm_")) {
+      delete env[name];
+    }
+  }
+  return env;
+}
+
 export function wait(delayMs) {
   return new Promise((resolve) => {
     setTimeout(resolve, delayMs);
