@@ -1,9 +1,9 @@
+import { settingText, configuration, configurationPath } from "@runweave/config-node";
 import { isIP } from "node:net";
 import {
   constants,
   closeSync,
   fstatSync,
-  lstatSync,
   openSync,
   readSync,
 } from "node:fs";
@@ -17,73 +17,22 @@ interface BackendHealthAuth {
   scope: "all" | "forwarded";
 }
 
-function readBackendHealthAuth(profileDir: string): BackendHealthAuth | null {
-  let fd: number | undefined;
-  try {
-    const directory = lstatSync(profileDir);
-    if (!directory.isDirectory() || directory.isSymbolicLink())
-      throw new Error("invalid Backend health profile directory");
-    fd = openSync(
-      path.join(profileDir, "backend-health-auth.json"),
-      constants.O_RDONLY | constants.O_NOFOLLOW,
-    );
-    const stat = fstatSync(fd);
-    if (
-      !stat.isFile() ||
-      stat.size > 16_384 ||
-      (stat.mode & 0o077) !== 0 ||
-      stat.uid !== process.getuid?.()
-    ) {
-      throw new Error("invalid private Backend health configuration");
-    }
-    const bytes = Buffer.alloc(16_385);
-    const bytesRead = readSync(fd, bytes, 0, bytes.length, 0);
-    if (bytesRead > 16_384)
-      throw new Error("oversized private Backend health configuration");
-    const config = JSON.parse(
-      bytes.subarray(0, bytesRead).toString("utf8"),
-    ) as BackendHealthAuth;
-    if (
-      !(
-        config.ownerDevSessionId === null ||
-        (typeof config.ownerDevSessionId === "string" &&
-          config.ownerDevSessionId)
-      ) ||
-      !(
-        config.token === null ||
-        (typeof config.token === "string" &&
-          /^[\x21-\x7e]+$/.test(config.token))
-      ) ||
-      !["all", "forwarded"].includes(config.scope)
-    ) {
-      throw new Error("invalid private Backend health configuration");
-    }
-    return config;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    // Parser errors may include the secret; only emit a fixed diagnostic.
-    throw new Error("invalid private Backend health configuration");
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
+function readBackendHealthAuth(profileDir: string): BackendHealthAuth {
+  const runtime = configuration();
+  if (path.resolve(profileDir) !== configurationPath("storage.browserProfileDirectory", "backend")) throw new Error("Backend health profile identity drifted");
+  runtime.requireDomain("backend.tunnelAuth");
+  return {
+    ownerDevSessionId: runtime.context.kind === "dev" ? runtime.context.instanceId : null,
+    token: settingText("backend.tunnelAuth.token") ?? null,
+    scope: settingText("backend.tunnelAuth.scope") === "all" ? "all" : "forwarded",
+  };
 }
 
-export function restoreOwnedBackendHealthEnv(
-  env: NodeJS.ProcessEnv,
-): NodeJS.ProcessEnv {
-  if (!env.BROWSER_PROFILE_DIR || !env.RUNWEAVE_DEV_SESSION_ID) return env;
-  const config = readBackendHealthAuth(env.BROWSER_PROFILE_DIR);
-  if (!config) {
-    throw new Error("owned Backend health configuration is missing");
-  }
-  if (config.ownerDevSessionId !== env.RUNWEAVE_DEV_SESSION_ID) {
-    throw new Error("Backend health configuration owner drifted");
-  }
-  return {
-    ...env,
-    RUNWEAVE_TUNNEL_TOKEN: config.token ?? "",
-    RUNWEAVE_TUNNEL_AUTH_SCOPE: config.scope,
-  };
+export function restoreOwnedBackendHealthEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const result = { ...env };
+  delete result.RUNWEAVE_TUNNEL_TOKEN;
+  delete result.RUNWEAVE_TUNNEL_AUTH_SCOPE;
+  return result;
 }
 
 export function localBackendAuthHeaders(
@@ -109,15 +58,12 @@ export function localBackendAuthHeaders(
     );
   }
   const config = readBackendHealthAuth(profileDir);
-  const token = ownedEnv
-    ? ownedEnv.RUNWEAVE_TUNNEL_TOKEN?.trim()
-    : config?.token;
+  const token = config.token;
+  if (ownedEnv?.RUNWEAVE_DEV_SESSION_ID && ownedEnv.RUNWEAVE_DEV_SESSION_ID !== config.ownerDevSessionId) throw new Error("Backend environment identity drifted");
   if (!token) return {};
   const recorded = readHealthProfileLock(profileDir);
   const lock = recorded.value;
-  const owner = ownedEnv
-    ? (ownedEnv.RUNWEAVE_DEV_SESSION_ID ?? null)
-    : config?.ownerDevSessionId;
+  const owner = config.ownerDevSessionId;
   const hosts =
     target.hostname === "127.0.0.1" ? ["127.0.0.1", "0.0.0.0"] : ["::1", "::"];
   if (

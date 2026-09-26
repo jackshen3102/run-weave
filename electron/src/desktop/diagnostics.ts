@@ -1,13 +1,9 @@
 import { app, dialog, shell } from "electron";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import os from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   BROWSER_PROFILE_LOCK_FILE_NAME,
   getBrowserProfileLockFile,
-  resolveDefaultBrowserProfileDir,
-  resolveBrowserProfileRootDir,
-  resolveLegacyBrowserProfileRootDir,
 } from "@runweave/shared/browser-profile-node";
 import type { PackagedBackendRuntimeIncidentEvent } from "../backend/runtime.js";
 import { DesktopIncidentLogger } from "./incident-logger.js";
@@ -46,30 +42,9 @@ export function readJsonFile(filePath: string): unknown {
 }
 
 export function collectBackendLockSnapshots(): Array<Record<string, unknown>> {
-  const snapshots: Array<Record<string, unknown>> = [];
-  const profileRoots = [
-    resolveBrowserProfileRootDir(os.homedir()),
-    resolveLegacyBrowserProfileRootDir(os.homedir()),
-  ];
-  for (const profileRoot of profileRoots) {
-    if (!existsSync(profileRoot)) {
-      continue;
-    }
-    for (const entry of readdirSync(profileRoot).slice(0, 50)) {
-      const profileDir = path.join(profileRoot, entry);
-      const lockFile = getBrowserProfileLockFile(profileDir);
-      if (!existsSync(lockFile)) {
-        continue;
-      }
-      snapshots.push({
-        profileRoot,
-        profileDir,
-        lockFile,
-        owner: readJsonFile(lockFile),
-      });
-    }
-  }
-  return snapshots;
+  const profileDir = resolvePackagedBackendProfileDir();
+  const lockFile = getBrowserProfileLockFile(profileDir);
+  return existsSync(lockFile) ? [{ profileDir, lockFile, owner: readJsonFile(lockFile) }] : [];
 }
 
 export function buildDesktopDiagnosticSnapshot(): Record<string, unknown> {
@@ -97,10 +72,7 @@ export function buildDesktopDiagnosticSnapshot(): Record<string, unknown> {
     lastKnownGoodRuntime: runtimeRoot
       ? readJsonFile(path.join(runtimeRoot, "last-known-good.json"))
       : null,
-    defaultBackendProfileDir: resolveDefaultBrowserProfileDir(
-      process.cwd(),
-      os.homedir(),
-    ),
+    defaultBackendProfileDir: resolvePackagedBackendProfileDir(),
     packagedBackendProfileDir: resolvePackagedBackendProfileDir(),
     backendProfileLockFileName: BROWSER_PROFILE_LOCK_FILE_NAME,
     backendLocks: collectBackendLockSnapshots(),

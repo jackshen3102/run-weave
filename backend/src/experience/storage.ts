@@ -1,5 +1,5 @@
+import { configuration, configurationPath } from "@runweave/config-node";
 import { chmodSync, mkdirSync } from "node:fs";
-import os from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
 import type Database from "better-sqlite3";
@@ -11,26 +11,9 @@ export interface ExperienceStorage {
   namespace: string;
 }
 
-export function resolveExperienceStorage(
-  env: NodeJS.ProcessEnv,
-  homeDir = os.homedir(),
-): ExperienceStorage {
-  const namespace =
-    env.RUNWEAVE_EXPERIENCE_NAMESPACE ??
-    (env.RUNWEAVE_EXPERIENCE_TEST_MODE === "true"
-      ? "test"
-      : env.RUNWEAVE_DESKTOP_CHANNEL === "stable"
-        ? "production"
-        : env.RUNWEAVE_DESKTOP_CHANNEL === "beta"
-          ? "beta"
-          : "development");
-  if (!/^[a-z0-9][a-z0-9-]{0,79}$/u.test(namespace))
-    throw new Error("Invalid RUNWEAVE_EXPERIENCE_NAMESPACE");
-  const home =
-    env.RUNWEAVE_EXPERIENCE_TEST_MODE === "true" && env.RUNWEAVE_EXPERIENCE_HOME
-      ? path.resolve(env.RUNWEAVE_EXPERIENCE_HOME)
-      : path.join(homeDir, ".runweave", "experience");
-  return { home, namespace };
+export function resolveExperienceStorage(): ExperienceStorage {
+  const { kind, instanceId } = configuration().context;
+  return { home: configurationPath("storage.experienceDirectory", "experience"), namespace: kind === "stable" ? "production" : instanceId };
 }
 
 type Bucket =

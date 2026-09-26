@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { configurationLibrary } from "../lib/configuration.mjs";
 import {
   cpSync,
   existsSync,
@@ -193,6 +194,7 @@ const treeSha256 = createHash("sha256")
   .digest("hex");
 
 const manifest = {
+  configuration: configurationLibrary.CONFIGURATION_COMPATIBILITY,
   schemaVersion: 1,
   releaseId,
   runtimeApiVersion,

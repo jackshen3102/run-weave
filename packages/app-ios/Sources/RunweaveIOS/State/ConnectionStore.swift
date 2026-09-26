@@ -14,8 +14,6 @@ final class ConnectionStore: ObservableObject {
   @Published private(set) var connections: [BackendConnection] = []
   @Published private(set) var activeID: String?
   @Published private(set) var storageError: String?
-  private let defaults = UserDefaults.standard
-  private let key = "native.connections.v1"
   private struct Stored: Codable {
     let connections: [BackendConnection]
     let activeID: String?
@@ -23,7 +21,7 @@ final class ConnectionStore: ObservableObject {
   var active: BackendConnection? { connections.first { $0.id == activeID } }
 
   init() {
-    guard let data = defaults.data(forKey: key) else { return }
+    guard let data = DevicePreferences.connections else { return }
     do {
       let stored = try JSONDecoder().decode(Stored.self, from: data)
       guard Set(stored.connections.map(\.id)).count == stored.connections.count else {
@@ -101,10 +99,10 @@ final class ConnectionStore: ObservableObject {
   private func persist(_ next: [BackendConnection], active: String?) throws {
     guard storageError == nil else { throw APIError.invalidResponse }
     let data = try JSONEncoder().encode(Stored(connections: next, activeID: active))
-    let previous = defaults.data(forKey: key)
-    defaults.set(data, forKey: key)
-    guard defaults.data(forKey: key) == data else {
-      if let previous { defaults.set(previous, forKey: key) } else { defaults.removeObject(forKey: key) }
+    let previous = DevicePreferences.connections
+    DevicePreferences.connections = data
+    guard DevicePreferences.connections == data else {
+      if let previous { DevicePreferences.connections = previous } else { DevicePreferences.connections = nil }
       throw MobileLoginFailure(message: "本地连接保存失败，请检查存储后重试。")
     }
     connections = next

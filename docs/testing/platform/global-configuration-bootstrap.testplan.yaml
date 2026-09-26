@@ -1,0 +1,45 @@
+version: 1
+name: "统一配置首次启动"
+description: "验收单一 Stable 的首次安装入口，区分全新身份创建、已有数据迁移和损坏文件诊断；每条用例使用独立操作系统用户或等效隔离虚拟机，不接触用户现有 Stable。"
+cases:
+  - id: GCB-001
+    name: "全新 Stable 首启创建身份"
+    required: true
+    description: "无旧配置和旧数据的安装仅创建一份私有 YAML，重启后 Backend 与 Desktop 使用同一 Stable 身份。"
+    preconditions:
+      - "独立测试用户没有 Runweave Stable YAML、旧 CLI/分享/飞书来源和 Desktop 本地身份数据；记录其空配置根及安装包版本。"
+      - "测试安装包包含配置首启入口，测试用户拥有自己的家目录且不会指向当前用户 Stable。"
+    steps:
+      - "从 Dock 打开实际安装 App；用 $computer-use 确认显示本机初始化表单而不是主终端或空白窗口。"
+      - "输入合成用户名和至少 16 字符的合成密码，确认全新安装并提交；确认只生成该用户的一份 0600 settings.yaml，目录 0700，输出和窗口不显示 JWT 或密码。"
+      - "等待 App 自动重启并重新取得进程与 endpoint；确认 Desktop/Backend 均为同一 Stable、配置根及 revision，登录后在实际终端执行唯一标记命令并读取输出。"
+  - id: GCB-002
+    name: "旧来源首启只提示迁移"
+    required: true
+    description: "没有 YAML 但存在旧身份或分享来源时，只显示迁移路径，不创建新身份或覆盖旧数据。"
+    preconditions:
+      - "独立测试用户没有 settings.yaml，但具有可识别的旧 CLI 或 Desktop 身份来源；记录旧文件与数据摘要。"
+      - "测试安装包可从该用户的 Dock 正常启动，旧来源不连接真实外部服务。"
+    steps:
+      - "从 Dock 打开实际安装 App；用 $computer-use 确认显示迁移提示和脱敏预览命令，不出现全新身份提交表单。"
+      - "关闭提示后确认 settings.yaml 不存在、旧文件和业务数据摘要保持，Backend 未以新身份宣称 ready。"
+      - "以该测试用户运行 rw config migrate --instance stable --dry-run --json；确认预览标明来源和目标，不写入配置。"
+  - id: GCB-003
+    name: "无效首次认证不落盘"
+    required: true
+    description: "弱密码、两次密码不一致或未确认全新安装都不能创建 Stable 配置。"
+    preconditions:
+      - "独立测试用户没有 Stable 配置和旧来源，实际安装 App 的首次初始化表单已打开。"
+    steps:
+      - "用 $computer-use 分别提交弱密码、密码确认不一致和未勾选确认的合成输入；确认页面给出拒绝或原生表单拦截，settings.yaml 始终不存在。"
+      - "关闭 App 后重新打开；确认仍是初始化入口，未生成 Backend 身份或隐式默认认证。"
+  - id: GCB-004
+    name: "损坏现有 YAML 保留原件"
+    required: true
+    description: "已有 YAML 损坏时不回退到全新初始化或旧来源，原件与数据保持。"
+    preconditions:
+      - "独立测试用户有一份身份归属正确但语法损坏的 0600 settings.yaml 和可辨认的数据标记；记录文件与数据摘要。"
+      - "测试安装包可从该用户的 Dock 启动。"
+    steps:
+      - "从 Dock 打开实际安装 App；用 $computer-use 确认显示明确配置错误，不显示创建新身份表单或可用主终端。"
+      - "运行 rw config doctor --instance stable；确认返回脱敏 YAML 错误和位置，原 YAML 字节、数据摘要及 Stable 身份保持。"

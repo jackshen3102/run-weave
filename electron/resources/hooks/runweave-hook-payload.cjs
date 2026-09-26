@@ -49,7 +49,7 @@ function readTmuxPaneContext(spawnSync) {
   while (attempts < 2) {
     attempts += 1;
     result = spawnSync(
-      process.env.TMUX_BINARY || "tmux",
+      process.env.RUNWEAVE_RUNTIME_TMUX_BINARY || "tmux",
       [
         "-S",
         socketPath,

@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import net from "node:net";
 import tls from "node:tls";
 import { WebSocket } from "ws";
@@ -24,7 +25,7 @@ function loopback(host: string): string | null {
 }
 
 export class LocalBrowserService {
-  readonly enabled = process.env.RUNWEAVE_BROWSER_LOCAL_ENABLED !== "0";
+  readonly enabled = settingText("desktop.browser.localEnabled") !== "false";
   private readonly streams = new Map<
     WebSocket,
     { authId: string; close: () => void }

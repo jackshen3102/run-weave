@@ -19,7 +19,7 @@ struct TerminalScreen: View {
   @State private var sharing = false
   @State private var shareFailure: String?
   @State private var showingComposer = false
-  @AppStorage("native.terminal.instantReplies.visible") private var showingInstantReplies = false
+  @AppStorage(DevicePreferences.instantRepliesVisibleKey, store: DevicePreferences.store) private var showingInstantReplies = false
   @State private var sendingInstantReply = false
   @AccessibilityFocusState private var composerTriggerFocused: Bool
   @State private var browserPresentationID = UUID()
@@ -29,7 +29,7 @@ struct TerminalScreen: View {
   @State private var tab = "Chat"
   @StateObject private var changes: ProjectChangesModel
   @ObservedObject private var imageDrafts: TerminalImageDrafts
-  @AppStorage("native.theme") private var theme = "dark"
+  @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
 
   init(session: AppSession, controller: SessionController, details: TerminalDetails, sourceIsParent: Bool = false) {
     self.session = session

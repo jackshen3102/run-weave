@@ -1,6 +1,6 @@
 # 随记云服务
 
-独立 PostgreSQL HTTP 运行时；只依赖第三方库与 `@runweave/shared/suiji`。
+独立 PostgreSQL HTTP 运行时；依赖第三方库与 `@runweave/shared/suiji`；`src/config.ts` 通过 `@runweave/config-node` 读取实例配置，其他领域代码不得直接访问该文件库。
 不能导入 Backend、App Server、Electron、CLI 或 UI 实现。
 
 - `src/http` 只处理传输；业务入口是 `records/service.ts`、`auth/service.ts`、`storage/attachments.ts`。

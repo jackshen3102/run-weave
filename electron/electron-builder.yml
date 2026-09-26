@@ -18,6 +18,8 @@ files:
   - "!node_modules/**/*"
 
 extraResources:
+  - from: dist/configuration-compatibility.json
+    to: configuration-compatibility.json
   - from: dist/cli/node_modules
     to: node_modules
     filter:

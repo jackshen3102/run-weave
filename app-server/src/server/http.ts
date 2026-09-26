@@ -149,6 +149,7 @@ export function createHttpApp(options: {
     res.json({
       ok: true,
       service: APP_SERVER_SERVICE_NAME,
+      environment: configuration().context,
       protocolVersion: APP_SERVER_PROTOCOL_VERSION,
       pid: process.pid,
       version: options.version,
@@ -397,3 +398,4 @@ function isRunStatus(value: string): value is AppServerAgentRunStatus {
     value === "unknown"
   );
 }
+import { configuration } from "@runweave/config-node";

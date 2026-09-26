@@ -1,3 +1,4 @@
+import { configuration, supportsConfiguration } from "@runweave/config-node";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -37,6 +38,7 @@ interface BundledActivityManifest {
 }
 
 interface RuntimeManifest {
+  configuration?: unknown;
   schemaVersion?: unknown;
   releaseId?: unknown;
   frontend?: {
@@ -146,7 +148,8 @@ export function resolveBundledRuntimeRelease(
 }
 
 export function resolveRuntimeRoot(userDataPath: string): string {
-  return path.join(userDataPath, "runtime");
+  const context = configuration().context;
+  return context.kind === "dev" ? path.join(context.configRoot, "runtime", "backend") : path.join(userDataPath, "runtime");
 }
 
 function readJsonFile<T>(filePath: string): T | null {
@@ -352,6 +355,7 @@ export function resolveExternalRuntimeRelease(options: {
     const manifest = readJsonFile<RuntimeManifest>(manifestPath);
     if (
       !manifest ||
+      !supportsConfiguration(manifest.configuration, configuration().store.read().value) ||
       !validateManifestPaths(manifest, releaseId, options.shellVersion ?? null)
     ) {
       return null;

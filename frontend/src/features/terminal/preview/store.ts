@@ -1,6 +1,7 @@
+import { deviceStorage } from "../../device-storage";
 import { create } from "zustand";
 import type { StateCreator } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
 import { TERMINAL_BROWSER_DEFAULT_PROFILE_ID } from "@runweave/shared/terminal-browser-profile";
 import { LOCAL_DEV_CONNECTION_ID } from "../../connection/system-connection";
@@ -61,7 +62,7 @@ function readStoredSidecarWidth(): number | undefined {
     return undefined;
   }
   try {
-    const rawWidth = window.localStorage.getItem(
+    const rawWidth = deviceStorage.getItem(
       TERMINAL_SIDECAR_WIDTH_STORAGE_KEY,
     );
     if (!rawWidth) {
@@ -82,7 +83,7 @@ function persistSidecarWidth(widthPx: number): void {
     return;
   }
   try {
-    window.localStorage.setItem(
+    deviceStorage.setItem(
       TERMINAL_SIDECAR_WIDTH_STORAGE_KEY,
       String(normalizedWidth),
     );
@@ -369,6 +370,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
 export const useTerminalPreviewStore = create<TerminalPreviewStore>()(
   persist(createTerminalPreviewStore, {
     name: TERMINAL_PREVIEW_PROJECTS_STORAGE_KEY,
+    storage: createJSONStorage(() => deviceStorage),
     partialize: (state) => ({
       version: 2,
       projectsByConnection: state.connectionScope

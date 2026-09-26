@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { codexScheduledArgs } from "./codex-options";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
@@ -21,7 +22,7 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
   readonly provider = "codex" as const;
 
   constructor(
-    private readonly binary = process.env.RUNWEAVE_CODEX_BIN?.trim() || "codex",
+    private readonly binary = settingText("agents.codex.binary")?.trim() || "codex",
     private readonly autoReviewSupported = false,
     private readonly fullAccessSupported = false,
   ) {}

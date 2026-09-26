@@ -7,9 +7,14 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     tmpfs: ["/tmp:mode=1777,size=64m"]
-    secrets: [apns_key, gateway_env]
+    secrets: [apns_key]
     ports: ["127.0.0.1:${PUSH_GATEWAY_HOST_PORT:-8092}:8092"]
     volumes:
+      - type: bind
+        source: ${PUSH_GATEWAY_CONFIG_DIR:?private YAML directory required}
+        target: /config
+        bind:
+          create_host_path: false
       - type: bind
         source: ${PUSH_GATEWAY_DATA_DIR:?absolute data directory required}
         target: /data
@@ -36,5 +41,3 @@ services:
 secrets:
   apns_key:
     file: ${PUSH_GATEWAY_APNS_KEY_FILE:?absolute key file required}
-  gateway_env:
-    file: ${PUSH_GATEWAY_ENV_FILE:?absolute environment file required}

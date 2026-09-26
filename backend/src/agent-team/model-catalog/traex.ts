@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import type { AgentTeamCatalogModel } from "@runweave/shared/agent-team-model-config";
 import {
   isRecord,
@@ -11,17 +12,18 @@ import {
 export async function probeTraexCatalog(
   env: NodeJS.ProcessEnv,
 ): Promise<AgentTeamCatalogProbe> {
+  const binary = settingText("agents.traex.binary") ?? "traex";
   const version = normalizeVersion(
-    await runCatalogCommand("traex", ["--version"], env),
+    await runCatalogCommand(binary, ["--version"], env),
   );
   const publicValue = JSON.parse(
-    await runCatalogCommand("traex", ["models", "--json"], env),
+    await runCatalogCommand(binary, ["models", "--json"], env),
   ) as unknown;
   if (!Array.isArray(publicValue)) {
     throw new Error("traex models --json did not return an array");
   }
   const debugPayload = parseJsonObject(
-    await runCatalogCommand("traex", ["debug", "models"], env),
+    await runCatalogCommand(binary, ["debug", "models"], env),
     "traex debug models",
   );
   if (!Array.isArray(debugPayload.models)) {

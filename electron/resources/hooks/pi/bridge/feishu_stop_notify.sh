@@ -2,13 +2,9 @@
 
 set -uo pipefail
 
-CONFIG_FILE="${FEISHU_NOTIFY_ENV:-${HOME}/.runweave/feishu_notify.env}"
-LOG_FILE="${FEISHU_NOTIFY_LOG:-${HOME}/.runweave/feishu_notify.log}"
-OPENSSL_BIN="${OPENSSL_BIN:-/opt/homebrew/bin/openssl}"
-
-if [[ ! -f "$CONFIG_FILE" && -f /etc/runweave/feishu.env ]]; then
-  CONFIG_FILE=/etc/runweave/feishu.env
-fi
+# A Hook has no independent configuration source. The bound CLI owns YAML access.
+[[ -n "${RUNWEAVE_RUNTIME_CONFIG_ROOT:-}" && -n "${RUNWEAVE_RUNTIME_INSTANCE_ID:-}" ]] || exit 0
+LOG_FILE="${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/feishu-notify.log"
 
 log() {
   local message="$1"
@@ -42,17 +38,6 @@ truncate_text() {
   else
     printf '%s' "$text"
   fi
-}
-
-load_config() {
-  if [[ ! -f "$CONFIG_FILE" ]]; then
-    log "skip: config file missing"
-    return 1
-  fi
-
-  # shellcheck disable=SC1090
-  source "$CONFIG_FILE"
-  return 0
 }
 
 build_message_text() {
@@ -121,68 +106,11 @@ resolve_terminal_id() {
   printf 'unknown'
 }
 
-send_webhook_message() {
-  local text="$1"
-
-  if [[ -z "${FEISHU_WEBHOOK_URL:-}" ]]; then
-    return 1
-  fi
-
-  local body
-  if [[ -n "${FEISHU_WEBHOOK_SECRET:-}" ]]; then
-    local timestamp sign openssl_cmd
-    timestamp="$(date +%s)"
-    openssl_cmd="$OPENSSL_BIN"
-    if [[ ! -x "$openssl_cmd" ]]; then
-      openssl_cmd="$(command -v openssl || true)"
-    fi
-    if [[ -z "$openssl_cmd" ]]; then
-      log "webhook failed: openssl not found for signed webhook"
-      return 0
-    fi
-    sign="$(printf '' | "$openssl_cmd" dgst -sha256 -hmac "${timestamp}"$'\n'"${FEISHU_WEBHOOK_SECRET}" -binary | base64 | tr -d '\n')"
-    body="$(jq -nc --arg text "$text" --arg timestamp "$timestamp" --arg sign "$sign" \
-      '{timestamp:$timestamp, sign:$sign, msg_type:"text", content:{text:$text}}')"
-  else
-    body="$(jq -nc --arg text "$text" '{msg_type:"text", content:{text:$text}}')"
-  fi
-
-  local response
-  response="$(curl --connect-timeout 3 --max-time 5 -sS \
-    -H 'Content-Type: application/json' \
-    -d "$body" \
-    "$FEISHU_WEBHOOK_URL" 2>&1)"
-  local status=$?
-  if ((status != 0)); then
-    log "webhook failed: curl exit ${status}"
-    return 0
-  fi
-
-  local code
-  code="$(printf '%s' "$response" | jq -r '.code // .StatusCode // 0' 2>/dev/null || printf '0')"
-  if [[ "$code" != "0" ]]; then
-    log "webhook failed: response code ${code}"
-  fi
-  return 0
-}
-
 send_app_message() {
   local text="$1"
-  export FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_TARGET_CHAT_ID
-  export FEISHU_ALLOWED_OPEN_IDS
-  export FEISHU_NOTIFY_OPEN_IDS
-  export RUNWEAVE_FEISHU_STATE_DIR
-  local rw_bin
-  local -a rw_command
-  rw_bin="${RUNWEAVE_CLI_BIN:-$(command -v rw || true)}"
-  if [[ -n "$rw_bin" && -x "$rw_bin" ]]; then
-    rw_command=("$rw_bin")
-  elif [[ -n "$rw_bin" && -f "$rw_bin" ]] && command -v node >/dev/null 2>&1; then
-    rw_command=(node "$rw_bin")
-  else
-    log "app notify failed: rw CLI not found"
-    return 0
-  fi
+  local rw_bin="${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw"
+  [[ -x "$rw_bin" ]] || return 0
+  local -a rw_command=("$rw_bin")
 
   local notify_payload
   notify_payload="$(printf '%s' "$PAYLOAD" | jq -c --arg text "$text" '. + {notificationText:$text}' 2>/dev/null || true)"
@@ -205,7 +133,6 @@ main() {
     *) return 0 ;;
   esac
 
-  load_config || return 0
   if ! command -v jq >/dev/null 2>&1; then
     log "skip: jq missing"
     return 0
@@ -215,9 +142,6 @@ main() {
   cwd="$(json_get '.cwd' "${PWD:-unknown}")"
   script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
   extractor="${script_dir}/runweave-hook-payload.cjs"
-  if [[ ! -f "$extractor" ]]; then
-    extractor="${HOME}/.runweave/bin/runweave-hook-payload.cjs"
-  fi
   content="$(printf '%s' "$PAYLOAD" | "${RUNWEAVE_HOOK_NODE:-node}" "$extractor" 2>/dev/null || true)"
   if [[ -z "$content" ]]; then
     content="$(json_get '.last_assistant_message // .message // .body' '(任务已完成)')"
@@ -226,15 +150,7 @@ main() {
   terminal_id="$(resolve_terminal_id)"
   text="$(build_message_text "$cwd" "$terminal_id" "$content")"
 
-  if [[ "${FEISHU_NOTIFY_DEBUG_PAYLOAD:-0}" == "1" ]]; then
-    printf '%s\n' "$PAYLOAD" >>"${HOME}/.runweave/feishu_notify_payload.log" 2>/dev/null || true
-  fi
-
-  case "${FEISHU_NOTIFY_TRANSPORT:-app}" in
-    app) send_app_message "$text" ;;
-    webhook) send_webhook_message "$text" ;;
-    *) log "invalid FEISHU_NOTIFY_TRANSPORT" ;;
-  esac
+  send_app_message "$text"
   return 0
 }
 

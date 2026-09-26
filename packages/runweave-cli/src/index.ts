@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { withConfigurationArguments } from "@runweave/config-node";
 import { stdin, stdout, stderr } from "node:process";
 import { runAppServerCommand } from "./commands/app-server.js";
 import { runAppCommand } from "./commands/app.js";
@@ -16,6 +17,7 @@ import { runBrowserCommand } from "./commands/browser.js";
 import { runScheduledTaskCommand } from "./commands/scheduled-task.js";
 import { toCliError } from "./errors.js";
 import { readCliVersion } from "./version.js";
+import { runConfigCommand } from "./commands/config.js";
 
 export async function runCli(
   argv: string[],
@@ -26,8 +28,23 @@ export async function runCli(
     env: NodeJS.ProcessEnv;
   } = { stdout, stderr, stdin, env: process.env },
 ): Promise<number> {
+  return withConfigurationArguments(argv, async () => {
   try {
-    const [group, subcommand, ...args] = argv;
+    const commandArgs: string[] = [];
+    const contextArgs: string[] = [];
+    for (let i = 0; i < argv.length; i++) {
+      const arg = argv[i]!;
+      if (/^--(instance|config-dir)(=|$)/.test(arg)) {
+        contextArgs.push(arg);
+        if (!arg.includes("=") && argv[i + 1]) contextArgs.push(argv[++i]!);
+      } else commandArgs.push(arg);
+    }
+    const [group, subcommand, ...tail] = commandArgs;
+    const args = [...tail, ...contextArgs];
+    if (group === "config") {
+      await runConfigCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "--version" || group === "-v") {
       io.stdout.write(`${readCliVersion().version}\n`);
       return 0;
@@ -101,7 +118,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw <activity|agent-team|app|app-server|auth|browser|evolution|experience|knowledge|feishu|project|scheduled-task|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <config|activity|agent-team|app|app-server|auth|browser|evolution|experience|knowledge|feishu|project|scheduled-task|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {
@@ -109,6 +126,7 @@ export async function runCli(
     io.stderr.write(`${cliError.message}\n`);
     return cliError.exitCode;
   }
+  });
 }
 
 if (require.main === module) {

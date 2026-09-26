@@ -1,3 +1,4 @@
+import { settingText, configuration } from "@runweave/config-node";
 import type { RuntimeServices } from "./runtime-services-contract";
 export type { RuntimeServices } from "./runtime-services-contract";
 import { createKnowledgeInbox } from "./knowledge-inbox";
@@ -60,7 +61,6 @@ import { createScheduledTasks } from "./scheduled-tasks";
 import { ScheduledTaskAlerts } from "../device-monitor/scheduled-task-alerts";
 import {
   resolveDefaultTmuxSocketPath,
-  resolvePersistentTmuxSocketPath,
 } from "./tmux-paths";
 
 
@@ -72,10 +72,10 @@ function resolveTerminalHookToken(
   return existing || loadOrCreateHookToken(tokenFilePath);
 }
 
-function shouldScanTmuxOrphans(env: NodeJS.ProcessEnv): boolean {
+function shouldScanTmuxOrphans(): boolean {
   return (
-    env.TERMINAL_TMUX_SCAN_ORPHANS_ON_START?.trim().toLowerCase() === "true" ||
-    env.TERMINAL_TMUX_CLEANUP_ORPHANS?.trim().toLowerCase() === "true"
+    settingText("terminal.tmux.scanOrphansOnStart")?.trim().toLowerCase() === "true" ||
+    settingText("terminal.tmux.cleanupOrphans")?.trim().toLowerCase() === "true"
   );
 }
 
@@ -99,14 +99,10 @@ async function assembleRuntimeServices(
   resources: ResourceScope,
   serviceInstanceId?: string,
 ): Promise<RuntimeServices> {
-  const storagePaths = resolveStoragePaths(process.env);
-  const evolutionPaths = resolveEvolutionStoragePaths(process.env);
-  await prepareEvolutionRepositoryMigration(process.env);
-  const runtimeChannel =
-    process.env.RUNWEAVE_DESKTOP_CHANNEL === "stable" ||
-    process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta"
-      ? process.env.RUNWEAVE_DESKTOP_CHANNEL
-      : "dev";
+  const storagePaths = resolveStoragePaths();
+  const evolutionPaths = resolveEvolutionStoragePaths();
+  await prepareEvolutionRepositoryMigration();
+  const runtimeChannel = configuration().context.kind;
   const tmuxShutdownPolicy = resolveTmuxShutdownPolicy(runtimeChannel);
   const activity = await ActivityRuntime.create({
     env: process.env,
@@ -233,7 +229,6 @@ async function assembleRuntimeServices(
   const ptyService = new PtyService();
   const tmuxService = new TmuxService({
     socketPath:
-      process.env.TERMINAL_TMUX_SOCKET_PATH ??
       resolveDefaultTmuxSocketPath(
         storagePaths.browserProfileDir,
         runtimeChannel,
@@ -244,9 +239,6 @@ async function assembleRuntimeServices(
     ? []
     : [
         tmuxService.socketPath,
-        ...(runtimeChannel === "beta"
-          ? [resolvePersistentTmuxSocketPath(storagePaths.browserProfileDir)]
-          : []),
       ];
   for (const socketPath of new Set(tmuxSocketPathsToCleanOnShutdown)) {
     resources.defer("tmux-server", () =>
@@ -324,7 +316,7 @@ async function assembleRuntimeServices(
     terminalStateService,
     terminalActivity,
   });
-  if (shouldScanTmuxOrphans(process.env)) {
+  if (shouldScanTmuxOrphans()) {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
   const outputRecovery = tmuxOutputWatcher
@@ -458,6 +450,7 @@ async function assembleRuntimeServices(
     storagePaths.browserProfileDir,
     authService,
   );
+  resources.defer("push-configuration", deviceMonitoring.disposeConfiguration);
   resources.defer("device-monitor", () =>
     deviceMonitoring.deviceMonitor?.dispose(),
   );

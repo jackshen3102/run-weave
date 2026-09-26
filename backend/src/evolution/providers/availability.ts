@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { EvolutionProviderAvailability } from "@runweave/shared/evolution";
@@ -26,11 +27,11 @@ export class EvolutionProviderAvailabilityService {
     const commands: ProviderCommand[] = [
       {
         provider: "codex",
-        binary: this.env.RUNWEAVE_CODEX_BIN?.trim() || "codex",
+        binary: settingText("agents.codex.binary")?.trim() || "codex",
       },
       {
         provider: "trae",
-        binary: this.env.RUNWEAVE_TRAE_BIN?.trim() || "trae-cli",
+        binary: settingText("agents.traex.binary")?.trim() || "traex",
       },
     ];
     const value = await Promise.all(commands.map((command) => probe(command)));

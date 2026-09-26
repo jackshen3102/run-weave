@@ -1,3 +1,4 @@
+import { deviceStorage } from "../../device-storage";
 interface RecentTerminalSelection {
   projectId: string;
   terminalSessionId: string | null;
@@ -18,7 +19,7 @@ function buildStorageKey(apiBase: string): string {
 export function loadRecentTerminalSelection(
   apiBase: string,
 ): RecentTerminalSelection | null {
-  const raw = localStorage.getItem(buildStorageKey(apiBase));
+  const raw = deviceStorage.getItem(buildStorageKey(apiBase));
   if (!raw) {
     return null;
   }
@@ -96,7 +97,7 @@ export function saveRecentTerminalSelection(
     [selection.parentProjectId]: selection.projectId,
   };
 
-  localStorage.setItem(
+  deviceStorage.setItem(
     buildStorageKey(apiBase),
     JSON.stringify({
       projectId: selection.parentProjectId,
@@ -125,7 +126,7 @@ export function removeRecentTerminalProjectContext(
   if (nextContextProjectIds[parentProjectId] === childProjectId) {
     nextContextProjectIds[parentProjectId] = parentProjectId;
   }
-  localStorage.setItem(
+  deviceStorage.setItem(
     buildStorageKey(apiBase),
     JSON.stringify({
       projectId: currentSelection.projectId,

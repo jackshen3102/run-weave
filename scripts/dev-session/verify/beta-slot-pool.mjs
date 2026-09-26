@@ -190,6 +190,7 @@ export async function verifyBetaSlotPool(
       electronBuilderConfig: BETA_UPDATE_BUILDER_CONFIG,
       homeDir: temporaryHome,
       instanceId: betaPaths.instanceId,
+      devSessionId: betaPaths.devSessionId,
       runtimeHome: updateArg("--runtime-home"),
       statePath: updateArg("--state-path"),
     });

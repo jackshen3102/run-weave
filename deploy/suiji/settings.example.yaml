@@ -1,0 +1,19 @@
+schemaVersion: 1
+revision: 0
+kind: stable
+instanceId: stable
+domainVersions:
+  services.suiji: 1
+migrations: {}
+services:
+  suiji:
+    databaseURL: postgresql://suiji_api:REPLACE_WITH_URL_ENCODED_PASSWORD@db:5432/suiji
+    storageDirectory: /data/attachments
+    host: 0.0.0.0
+    port: 4783
+    webOrigins: []
+    mcpEnabled: false
+    ai:
+      provider: disabled
+      codexHome: /data/codex
+      timeoutSeconds: 180

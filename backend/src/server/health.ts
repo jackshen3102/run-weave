@@ -1,3 +1,4 @@
+import { configuration } from "@runweave/config-node";
 import type { BackendHealthPayload } from "@runweave/shared/runtime-monitor";
 
 export function buildHealthPayload(
@@ -7,6 +8,7 @@ export function buildHealthPayload(
   const runtimeReleaseId = env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim();
   return {
     status: "ok",
+    environment: configuration().context,
     ...(identity
       ? {
           service: "runweave-backend" as const,
@@ -15,8 +17,8 @@ export function buildHealthPayload(
           capabilities: ["dev-session-identity-v1"],
         }
       : {}),
-    ...(env.RUNWEAVE_DEV_SESSION_ID?.trim()
-      ? { devSessionId: env.RUNWEAVE_DEV_SESSION_ID.trim() }
+    ...(configuration().context.kind === "dev"
+      ? { devSessionId: configuration().context.instanceId }
       : {}),
     ...(env.RUNWEAVE_SOURCE_REVISION?.trim()
       ? { sourceRevision: env.RUNWEAVE_SOURCE_REVISION.trim() }

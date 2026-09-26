@@ -21,8 +21,24 @@ export class DeviceSubscriptions {
   constructor(
     readonly store: DeviceMonitorStore,
     readonly auth: AuthService,
-    readonly push: PushClient | null,
+    public push: PushClient | null,
   ) {}
+  private readonly retired = new Set<PushClient>();
+  replacePushClient(push: PushClient | null): void {
+    if (this.push) {
+      const previous = this.push;
+      this.retired.add(previous);
+      void previous.retire().then(() => this.retired.delete(previous));
+    }
+    this.push = push;
+    this.failure = null;
+    this.onChange?.();
+  }
+  disposePushClients(): void {
+    this.push?.dispose();
+    for (const client of this.retired) client.dispose();
+    this.retired.clear();
+  }
   private owner(sessionId: string) {
     const owner = this.auth.getActiveAppSession(sessionId);
     if (!owner) throw new SubscriptionError(403, "需要有效的手机登录");
@@ -108,10 +124,11 @@ export class DeviceSubscriptions {
     installationId: string,
     input: DeviceNotificationRegistration,
   ) {
+    const push = this.push;
     const owner = this.owner(sessionId);
     if (owner.connectionId !== input.connectionId)
       throw new SubscriptionError(403, "连接身份不匹配");
-    if (!this.push) throw new SubscriptionError(503, "此电脑尚未配置推送服务");
+    if (!push) throw new SubscriptionError(503, "此电脑尚未配置推送服务");
     const kind = input.kind ?? "battery";
     if (!input.enabled) {
       await this.revoke(sessionId, installationId, kind);
@@ -149,17 +166,17 @@ export class DeviceSubscriptions {
         version: (existing?.version ?? 0) + 1,
         enabled: true,
         synced: false,
-        gatewayURL: this.push!.url,
+        gatewayURL: push!.url,
         confirmed:
-          existing?.gatewayURL === this.push!.url
+          existing?.gatewayURL === push!.url
             ? (existing.confirmed ?? false)
             : false,
         confirmedAt:
-          existing?.gatewayURL === this.push!.url
+          existing?.gatewayURL === push!.url
             ? existing.confirmedAt
             : undefined,
         revokeToken:
-          existing?.gatewayURL === this.push!.url ? existing.revokeToken : null,
+          existing?.gatewayURL === push!.url ? existing.revokeToken : null,
       };
       data.subscriptions[next.id] = next;
       return next;
@@ -169,14 +186,15 @@ export class DeviceSubscriptions {
     return this.dto(this.store.snapshot().subscriptions[value.id]!);
   }
   async sync(value: DeviceSubscription): Promise<void> {
-    if (!this.push) return;
+    const push = this.push;
+    if (!push) return;
     if (!this.valid(value)) {
       await this.disable(value.id);
       return;
     }
     // Persist the target and invalidate old acknowledgements before network I/O.
     // A failed attempt can retry the same version after restart.
-    const gatewayURL = this.push.url;
+    const gatewayURL = push.url;
     if (value.gatewayURL !== gatewayURL) {
       const rebound = await this.store.update((data) => {
         const current = data.subscriptions[value.id];
@@ -198,7 +216,7 @@ export class DeviceSubscriptions {
       value = rebound;
     }
     try {
-      const response = await this.push.register(value);
+      const response = await push.register(value);
       this.failure = null;
       const revoke = await this.store.update((data) => {
         const current = data.subscriptions[value.id];
@@ -212,7 +230,7 @@ export class DeviceSubscriptions {
         }
         return false;
       });
-      if (revoke) await this.push.revoke(value.id);
+      if (revoke) await push.revoke(value.id);
     } catch (error) {
       this.failure = "推送暂不可用，注册待同步";
       if (
@@ -254,6 +272,7 @@ export class DeviceSubscriptions {
     return this.dto(value);
   }
   async disable(id: string): Promise<void> {
+    const push = this.push;
     await this.store.update((data) => {
       const s = data.subscriptions[id];
       if (s) {
@@ -262,13 +281,13 @@ export class DeviceSubscriptions {
       }
     });
     try {
-      if (!this.push) return;
-      await this.push.revoke(id);
+      if (!push) return;
+      await push.revoke(id);
       await this.store.update((data) => {
         const s = data.subscriptions[id];
         if (s && !s.enabled) {
           s.synced = true;
-          s.gatewayURL = this.push!.url;
+          s.gatewayURL = push!.url;
           s.revokeToken = null;
           s.confirmed = false;
           s.deviceToken = "";

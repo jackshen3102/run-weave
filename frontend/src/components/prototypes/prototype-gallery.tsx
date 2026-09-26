@@ -1,3 +1,4 @@
+import { deviceStorage } from "../../features/device-storage";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -51,7 +52,7 @@ function sidebarCollapsedStorageKey(apiBase: string): string {
 
 function readStoredSelection(apiBase: string): PrototypeSelection | null {
   try {
-    const value = window.localStorage.getItem(selectionStorageKey(apiBase));
+    const value = deviceStorage.getItem(selectionStorageKey(apiBase));
     if (!value) {
       return null;
     }
@@ -70,7 +71,7 @@ function readStoredSelection(apiBase: string): PrototypeSelection | null {
 function readStoredSidebarCollapsed(apiBase: string): boolean {
   try {
     return (
-      window.localStorage.getItem(sidebarCollapsedStorageKey(apiBase)) ===
+      deviceStorage.getItem(sidebarCollapsedStorageKey(apiBase)) ===
       "true"
     );
   } catch {
@@ -80,7 +81,7 @@ function readStoredSidebarCollapsed(apiBase: string): boolean {
 
 function persistSidebarCollapsed(apiBase: string, collapsed: boolean): void {
   try {
-    window.localStorage.setItem(
+    deviceStorage.setItem(
       sidebarCollapsedStorageKey(apiBase),
       String(collapsed),
     );
@@ -94,7 +95,7 @@ function persistSelection(
   selection: PrototypeSelection,
 ): void {
   try {
-    window.localStorage.setItem(
+    deviceStorage.setItem(
       selectionStorageKey(apiBase),
       JSON.stringify(selection),
     );

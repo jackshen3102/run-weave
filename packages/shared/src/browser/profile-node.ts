@@ -15,10 +15,6 @@ const BROWSER_PROFILE_DATA_FILE_NAMES = [
   "terminal-session-store.json",
 ] as const;
 
-export interface BrowserProfileStorageEnv {
-  BROWSER_PROFILE_DIR?: string;
-}
-
 export interface BackendProfileLockOwner {
   backendId: string;
   devSessionId: string | null;
@@ -106,17 +102,6 @@ export function resolveLegacyDefaultBrowserProfileDir(
   }
 
   return path.join(legacyProfileRootDir, resolveProfileId(trimmedProjectPath));
-}
-
-export function resolveBrowserProfileDir(
-  env: BrowserProfileStorageEnv,
-  homeDir: string = os.homedir(),
-  projectPath: string = process.cwd(),
-): string {
-  return path.resolve(
-    expandHomePath(env.BROWSER_PROFILE_DIR, homeDir) ??
-      resolveDefaultBrowserProfileDir(projectPath, homeDir),
-  );
 }
 
 export function getBrowserProfileLockFile(profileDir: string): string {

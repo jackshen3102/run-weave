@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { BrowserWindow, View, WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
 import { createTerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
@@ -89,7 +90,7 @@ export function getOrCreateTerminalBrowserView(
       sandbox: true,
       // Opt in only this browser surface; keep the desktop renderer unchanged.
       enableBlinkFeatures:
-        process.env.RUNWEAVE_BROWSER_WEBMCP === "1" ? "WebMCP" : undefined,
+        settingText("desktop.browser.webMcpEnabled") === "true" ? "WebMCP" : undefined,
     },
   });
   const viewportView = new View();

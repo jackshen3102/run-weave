@@ -9,12 +9,14 @@ import { resolveBetaUpdateTargets } from "../../../update/core.mjs";
 import { DevSessionError, assertPathInside } from "../../contracts.mjs";
 import {
   DEFAULT_BETA_POOL_MIN_FREE_BYTES,
+  BETA_SLOT_IDS,
   assertBetaSlotId,
   atomicWriteJson,
 } from "../core.mjs";
 import {
   assertNoBetaSlotSymlinkComponents,
   readBetaSlotWarmState,
+  resolveBetaSlotRetentionTargets,
   validateBetaRuntimeReleaseAllowlist,
   validateBetaSlotRetentionState,
 } from "../retention.mjs";
@@ -130,20 +132,17 @@ export async function assertBetaPoolDiskBudget({
   slotId,
   homeDir = os.homedir(),
   applicationsDir = "/Applications",
-  env = process.env,
+  minimumFreeBytes = DEFAULT_BETA_POOL_MIN_FREE_BYTES,
   cleanedBytes = 0,
 }) {
   const targets = resolveBetaUpdateTargets(homeDir, assertBetaSlotId(slotId));
   const appPath = path.join(applicationsDir, path.basename(targets.appPath));
-  const configured = env.RUNWEAVE_BETA_POOL_MIN_FREE_BYTES?.trim();
-  const configuredFloor = configured
-    ? Number(configured)
-    : DEFAULT_BETA_POOL_MIN_FREE_BYTES;
+  const configuredFloor = minimumFreeBytes;
   if (!Number.isSafeInteger(configuredFloor) || configuredFloor < 0) {
     throw new DevSessionError(
-      "RUNWEAVE_BETA_POOL_MIN_FREE_BYTES must be a non-negative integer",
+      "developer.minimumFreeBytes must be a non-negative integer",
       2,
-      { value: configured ?? null },
+      { field: "developer.minimumFreeBytes" },
     );
   }
   const estimates = await Promise.all([
@@ -224,6 +223,38 @@ async function pruneRuntime(runtimeHome, previousReleaseId, validated = null) {
   return { retainedReleaseIds: [...allowlist], cleanedBytes };
 }
 
+async function collectSharedRuntimeReleaseReferences(homeDir, slotId, runtimeHome, ownAllowlist, releaseField, resolveRuntimeHome) {
+  const retained = new Set(ownAllowlist);
+  for (const otherSlotId of BETA_SLOT_IDS) {
+    if (otherSlotId === slotId) continue;
+    const otherTargets = await resolveBetaSlotRetentionTargets(homeDir, otherSlotId);
+    if (path.resolve(resolveRuntimeHome(otherTargets)) !== path.resolve(runtimeHome)) continue;
+    const otherState = await readBetaSlotWarmState(otherTargets, otherSlotId);
+    if (otherState?.[releaseField]) retained.add(otherState[releaseField]);
+    if (otherState?.devSessionId === otherState?.previous?.devSessionId && otherState?.previous?.[releaseField]) {
+      retained.add(otherState.previous[releaseField]);
+    }
+    const pendingPath = path.join(otherTargets.instanceRoot, "diagnostics", "pending.json");
+    const pendingStats = await fs.lstat(pendingPath).catch(error => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    });
+    if (pendingStats) {
+      if (!pendingStats.isFile() || pendingStats.isSymbolicLink()) {
+        throw new DevSessionError("Beta pending update pointer is unsafe", 5, { slotId: otherSlotId, pendingPath });
+      }
+      let pending;
+      try {
+        pending = JSON.parse(await fs.readFile(pendingPath, "utf8"));
+      } catch {
+        throw new DevSessionError("Beta pending update pointer is corrupt", 5, { slotId: otherSlotId, pendingPath });
+      }
+      if (pending?.baseline?.[releaseField]) retained.add(pending.baseline[releaseField]);
+    }
+  }
+  return retained;
+}
+
 async function pruneLogs(logDir) {
   const entries = [];
   for (const entry of await fs.readdir(logDir).catch(() => [])) {
@@ -266,7 +297,7 @@ export async function applyBetaSlotRetention({
   homeDir = os.homedir(),
   applicationsDir = "/Applications",
 }) {
-  const targets = resolveBetaUpdateTargets(homeDir, assertBetaSlotId(slotId));
+  const targets = await resolveBetaSlotRetentionTargets(homeDir, slotId);
   await assertNoBetaSlotSymlinkComponents(homeDir, targets.runtimeHome);
   await assertNoBetaSlotSymlinkComponents(
     path.join(homeDir, ".runweave"),
@@ -375,12 +406,17 @@ export async function applyBetaSlotRetention({
     appBackupMigrated = true;
   }
   const allBackupPaths = [...backupPaths, ...legacyBackupPaths];
+  const appServerRuntimeHome = path.join(targets.appServerHome, "runtime");
+  const [sharedDesktopAllowlist, sharedAppServerAllowlist] = await Promise.all([
+    collectSharedRuntimeReleaseReferences(homeDir, slotId, targets.runtimeHome, desktopAllowlist, "runtimeReleaseId", other => other.runtimeHome),
+    collectSharedRuntimeReleaseReferences(homeDir, slotId, appServerRuntimeHome, appServerAllowlist, "appServerReleaseId", other => path.join(other.appServerHome, "runtime")),
+  ]);
   const [desktopRuntime, appServerRuntime, logs] = await Promise.all([
-    pruneRuntime(targets.runtimeHome, desktopPrevious, desktopAllowlist),
+    pruneRuntime(targets.runtimeHome, desktopPrevious, sharedDesktopAllowlist),
     pruneRuntime(
-      path.join(targets.appServerHome, "runtime"),
+      appServerRuntimeHome,
       appServerPrevious,
-      appServerAllowlist,
+      sharedAppServerAllowlist,
     ),
     pruneLogs(path.join(targets.instanceRoot, "diagnostics", "logs")),
   ]);

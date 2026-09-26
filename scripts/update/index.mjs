@@ -1,3 +1,4 @@
+import { configurationLibrary } from "../lib/configuration.mjs";
 import os from "node:os";
 import path from "node:path";
 import { planCliUpdate, runCliUpdate } from "./cli.mjs";
@@ -46,6 +47,8 @@ import {
 
 async function main() {
   const args = parseRunweaveUpdateArgs(process.argv.slice(2));
+  const configuration = configurationLibrary.initializeConfiguration(configurationLibrary.resolveConfigurationContext({ requireExplicit: !args.dryRun }));
+  if ((configuration.context.kind === "dev") !== isBetaTarget) throw new Error("CONFIG_UPDATE_TARGET_MISMATCH");
   const sourceRoot = path.resolve(args.sourceRoot);
   const appPath = path.resolve(args.appPath ?? `/Applications/${appName}.app`);
   const ambientRuntimeHome = isBetaTerminal
@@ -80,6 +83,7 @@ async function main() {
     channel,
     electronBuilderConfig,
     instanceId: process.env.RUNWEAVE_DESKTOP_INSTANCE_ID ?? "default",
+    devSessionId: configuration.context.kind === "dev" ? configuration.context.instanceId : null,
     runtimeHome,
     statePath,
   });
@@ -272,6 +276,7 @@ async function main() {
   console.log(`[runweave-update] cli verification: ${JSON.stringify(cli)}`);
   const nextInstalledVersion = await readInstalledMacAppVersion(appPath);
   await writeUpdateState(statePath, {
+    devSessionId: configuration.context.kind === "dev" ? configuration.context.instanceId : null,
     channel,
     cli,
     appServer: {

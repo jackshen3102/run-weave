@@ -1,5 +1,6 @@
+import { deviceStorage } from "../../device-storage";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export interface PreviewDraft {
   editorContent: string;
@@ -32,4 +33,4 @@ export const usePreviewDrafts = create<PreviewDraftStore>()(persist((set) => ({
     delete drafts[key];
     return { drafts };
   }),
-}), { name: "runweave.terminal.preview.drafts.v1", version: 1, partialize: (state) => ({ drafts: state.drafts }) }));
+}), { storage: createJSONStorage(() => deviceStorage), name: "runweave.terminal.preview.drafts.v1", version: 1, partialize: (state) => ({ drafts: state.drafts }) }));

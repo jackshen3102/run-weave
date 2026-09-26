@@ -1,3 +1,4 @@
+import { deviceStorage } from "../device-storage";
 import { useMemoizedFn } from "ahooks";
 import { useState } from "react";
 
@@ -9,16 +10,16 @@ interface UseAuthTokenResult {
 
 export function useAuthToken(storageKey: string): UseAuthTokenResult {
   const [token, setTokenState] = useState<string | null>(() => {
-    return localStorage.getItem(storageKey);
+    return deviceStorage.getItem(storageKey);
   });
 
   const setToken = useMemoizedFn((nextToken: string): void => {
-    localStorage.setItem(storageKey, nextToken);
+    deviceStorage.setItem(storageKey, nextToken);
     setTokenState(nextToken);
   });
 
   const clearToken = useMemoizedFn((): void => {
-    localStorage.removeItem(storageKey);
+    deviceStorage.removeItem(storageKey);
     setTokenState(null);
   });
 

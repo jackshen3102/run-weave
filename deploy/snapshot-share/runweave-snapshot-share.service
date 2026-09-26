@@ -6,9 +6,8 @@ After=network.target
 Type=simple
 User=runweave-share
 Group=runweave-share
-EnvironmentFile=/etc/runweave/snapshot-share.env
 # Set the installed Node 22+ executable path for this server.
-ExecStart=/usr/bin/node /opt/runweave-snapshot-share/host.cjs
+ExecStart=/usr/bin/node /opt/runweave-snapshot-share/host.cjs --instance stable --config-dir /var/lib/runweave-snapshot-share/.runweave
 WorkingDirectory=/var/lib/runweave-snapshot-share
 StateDirectory=runweave-snapshot-share
 StateDirectoryMode=0700

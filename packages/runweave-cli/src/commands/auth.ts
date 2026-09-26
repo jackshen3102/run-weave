@@ -8,6 +8,7 @@ import {
 } from "../config/profile-store.js";
 import { CliError, toCliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
+import { resolveConfigurationContext } from "@runweave/config-node";
 
 export async function runAuthCommand(
   subcommand: string | undefined,
@@ -38,6 +39,7 @@ async function login(
   },
 ): Promise<void> {
   const parsed = parseArgs(args, new Set(["json", "plain"]));
+  resolveConfigurationContext({ requireExplicit: true });
   const mode = resolveOutputMode(parsed.options);
   const profileName = getStringOption(parsed.options, "profile") ?? "local";
   const baseUrl = resolveRunweaveBaseUrl({
@@ -90,7 +92,7 @@ async function status(
       baseUrl: auth.baseUrl,
       authenticated: true,
       expiresAt: savedProfile?.expiresAt ?? null,
-      source: io.env.RUNWEAVE_ACCESS_TOKEN?.trim() ? "env" : "profile",
+      source: "profile",
     });
   } catch (error) {
     const cliError = toCliError(error);

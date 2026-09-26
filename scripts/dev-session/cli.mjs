@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { initializeSessionConfiguration, sessionConfiguration } from "./configuration.mjs";
 
 import { randomBytes } from "node:crypto";
 import path from "node:path";
@@ -316,6 +317,7 @@ async function runStart(options, sourceRoot) {
           },
         );
       }
+      initializeSessionConfiguration(sessionId, paths);
       let manifest = createManifest({
         plan,
         sessionId,
@@ -364,6 +366,7 @@ async function runStart(options, sourceRoot) {
           slotId: slotLease.lease.slotId,
         });
         diskSummary = await assertBetaPoolDiskBudget({
+          minimumFreeBytes: sessionConfiguration(sessionId, paths).store.read().value.developer?.minimumFreeBytes,
           sourceRoot,
           slotId: slotLease.lease.slotId,
           cleanedBytes: startRetention.cleanedBytes,

@@ -1,3 +1,4 @@
+import { settingText, configuration, acquireConfigurationOwner } from "@runweave/config-node";
 import path from "node:path";
 import { z } from "zod";
 const env = z.object({
@@ -21,7 +22,20 @@ const env = z.object({
   SUIJI_MCP_TOKEN_EXPIRES_AT: z.string().datetime().or(z.literal("")).optional(),
 });
 export function readConfig() {
-  const parsed = env.safeParse(process.env);
+  configuration().requireDomain("services.suiji");
+  const values: Record<string, string | undefined> = {
+    NODE_ENV: process.env.NODE_ENV,
+    SUIJI_APP_VERSION: process.env.SUIJI_APP_VERSION,
+    SUIJI_MCP_TOKEN_SHA256: process.env.SUIJI_MCP_TOKEN_SHA256,
+    SUIJI_MCP_TOKEN_EXPIRES_AT: process.env.SUIJI_MCP_TOKEN_EXPIRES_AT,
+  };
+  const keys = {
+    DATABASE_URL: "databaseURL", SUIJI_STORAGE_DIR: "storageDirectory", SUIJI_HOST: "host", SUIJI_PORT: "port",
+    SUIJI_ACCESS_SECONDS: "accessSeconds", SUIJI_REFRESH_SECONDS: "refreshSeconds", SUIJI_LOGIN_ATTEMPTS: "loginAttempts", SUIJI_LOGIN_WINDOW_SECONDS: "loginWindowSeconds",
+    SUIJI_WEB_ORIGINS: "webOrigins", SUIJI_AI_PROVIDER: "ai.provider", SUIJI_CODEX_BIN: "ai.codexBinary", SUIJI_CODEX_HOME: "ai.codexHome", SUIJI_AI_TIMEOUT_SECONDS: "ai.timeoutSeconds", SUIJI_MCP_ENABLED: "mcpEnabled",
+  };
+  for (const [key, field] of Object.entries(keys)) values[key] = settingText(`services.suiji.${field}`);
+  const parsed = env.safeParse(values);
   if (!parsed.success)
     throw new Error(
       `Invalid configuration fields: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`,
@@ -53,3 +67,7 @@ export function readConfig() {
   return c;
 }
 export type Config = ReturnType<typeof readConfig>;
+
+export function acquireServerOwner() {
+  return acquireConfigurationOwner(configuration().context, "suiji-server");
+}

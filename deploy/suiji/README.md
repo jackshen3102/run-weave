@@ -50,10 +50,10 @@ docker compose --env-file /absolute/deployment.env -f deploy/suiji/compose.yaml 
 ## 可选 MCP
 
 先按[服务入口](../../packages/suiji-server/README.md#外部-agent-mcp)在设备生成凭据，
-只将 `registration.json` 送服务器登记。deployment env 设置 `SUIJI_MCP_ENABLED=true`，首次启用需重建 API。
+只将 `registration.json` 送服务器登记。在 `settings.yaml` 设置 `services.suiji.mcpEnabled: true`，首次启用需重建 API。
 之后注册和撤销不需要重启。`client.env` 的原文只留在客户端，不上传到服务器或镜像。
 TLS 反向代理将 `/mcp` 与 `/mcp/uploads` 转到同一 API 端口。
-全局关闭设置 `SUIJI_MCP_ENABLED=false` 并重建 API；不删除凭据或影响 App 会话。
+全局关闭设置 `services.suiji.mcpEnabled: false` 并重建 API；不删除凭据或影响 App 会话。
 
 ## 多凭据迁移
 
@@ -98,9 +98,9 @@ docker compose --env-file /absolute/deployment.env --project-name <project> -f d
 参考 [Codex 无界面设备登录](https://learn.chatgpt.com/docs/auth#login-on-headless-devices)。
 认证内容不放进镜像、仓库或日志；Codex 需要能写回该目录以刷新登录。目录不属于记录/附件业务备份。
 
-确认已登录后，在 deployment env 设置 `SUIJI_AI_PROVIDER=codex-cli`，
-可选设置 `SUIJI_AI_TIMEOUT_SECONDS`（默认 180），通过原发布流程重建 API 容器。
-Compose 将持久目录作为 `SUIJI_CODEX_HOME=/data/codex` 传给服务。
+确认已登录后，在 YAML 设置 `services.suiji.ai.provider: codex-cli`，
+可选设置 `services.suiji.ai.timeoutSeconds`（默认 180），通过原发布流程重建 API 容器。
+YAML 的 `services.suiji.ai.codexHome` 必须设置为 `/data/codex`。
 手机重新连接后进入「AI」提问；是否启用仍以实际鉴权 `info.ai.enabled` 为准。
 验收必须创建一次真实回顾并检查回答及原文引用，镜像构建和 CLI 登录成功不代表模型调用已通过。
 
@@ -136,3 +136,12 @@ node deploy/suiji/release.mjs restore --config /absolute/isolated-config.json --
 跟进要求 schema 5。先做静止备份，再运行追加迁移和部署兼容镜像；旧 schema 4 二进制不能直接启动新数据库。备份和恢复核对包含 record_followups、followup_attachments 数量；旧备份按其 schemaVersion 保持兼容。认证回读覆盖普通/回收站记录、跟进与全部附件字节。
 
 回退优先使用支持当前 schema 的修复镜像，不删表回退；恢复旧备份会丢失恢复点之后的写入，需要单独明确授权。随记 Skill 的上传入口 `/mcp/uploads` 与 `/mcp` 使用相同个人凭据和关停策略，不使用 App 会话或数据库凭据。
+
+## 服务 YAML 配置
+
+Compose 的 `SUIJI_CONFIG_DIR` 指向仓库外私有目录，挂载到容器 `/config`。
+按 [settings.example.yaml](./settings.example.yaml) 创建 `settings.yaml`，目录 0700、文件 0600，
+属主为容器 UID/GID 1000:1000。该目录需可写以保存 owner 锁及配置备份。
+`services.suiji.databaseURL` 使用受限数据库账号 `suiji_api`，密码需 URL 编码；不能使用管理员账号。
+数据库管理员密码仍由 Compose secret 供迁移工具读取，不放入服务运行配置。
+发布工具的 config.json、Compose 的镜像/卷路径参数属于部署清单；不会覆盖服务 YAML 的业务字段。

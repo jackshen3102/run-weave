@@ -10,7 +10,7 @@ public struct RootView: View {
   @ObservedObject private var notifications = NotificationCoordinator.shared
   @State private var managingConnections = false
   @State private var mobileLoginRevision = 0
-  @AppStorage("native.theme") private var theme = "dark"
+  @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
 
   public init() {}
 

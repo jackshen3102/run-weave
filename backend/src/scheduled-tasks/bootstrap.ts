@@ -1,3 +1,4 @@
+import { configuration, settingText } from "@runweave/config-node";
 import type { ScheduledTaskCapabilities } from "@runweave/shared/scheduled-tasks";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { logger } from "../logging/index";
@@ -24,14 +25,22 @@ export async function createScheduledTaskSubsystem(params: {
   terminalOptions: TerminalSessionCreationOptions;
 }): Promise<ScheduledTaskSubsystem> {
   const env = params.env ?? process.env;
+  try { configuration().requireDomain("scheduledTasks"); }
+  catch {
+    return { service: new ScheduledTaskService(null, params.terminalSessionManager, {
+      enabled: false, reason: "Scheduled task configuration is invalid", providers: [],
+      limits: { maxConcurrentRuns: 1, timeoutMs: DEFAULT_TIMEOUT_MS, maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES },
+    }, "Scheduled task configuration is invalid"), runtime: null, store: null };
+  }
+
   const enabled =
-    env.RUNWEAVE_SCHEDULED_TASKS_ENABLED?.trim().toLowerCase() !== "false";
+    settingText("scheduledTasks.enabled")?.trim().toLowerCase() !== "false";
   const timeoutMs = positiveInteger(
-    env.RUNWEAVE_SCHEDULED_TASK_TIMEOUT_MS,
+    settingText("scheduledTasks.timeoutMs"),
     DEFAULT_TIMEOUT_MS,
   );
   const maxOutputBytes = positiveInteger(
-    env.RUNWEAVE_SCHEDULED_TASK_MAX_OUTPUT_BYTES,
+    settingText("scheduledTasks.maxOutputBytes"),
     DEFAULT_MAX_OUTPUT_BYTES,
   );
   const providerProbe = await probeScheduledProviders(env);

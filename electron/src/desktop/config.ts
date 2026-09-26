@@ -1,6 +1,7 @@
+import { initializeConfiguration, configurationArguments, acquireConfigurationOwner, assertOwnedPath } from "@runweave/config-node";
 import { app, protocol } from "electron";
-import os from "node:os";
 import path from "node:path";
+import { resolveDesktopConfigurationContext } from "./configuration-context.js";
 
 declare const __RUNWEAVE_WHISTLE_PORTS__: string | null;
 declare const __RUNWEAVE_DESKTOP_CHANNEL__: "stable" | "beta";
@@ -12,6 +13,14 @@ declare const __RUNWEAVE_DESKTOP_STATUS_PATH__: string | null;
 declare const __RUNWEAVE_DESKTOP_CDP_PORT__: string | null;
 declare const __RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__: string | null;
 declare const __RUNWEAVE_APP_SERVER_HOME__: string | null;
+
+// Installed Dev Sessions carry their immutable identity in the bundle so Dock
+// relaunches resolve exactly the same file without GUI environment inheritance.
+const configRuntime = initializeConfiguration(resolveDesktopConfigurationContext());
+if (__RUNWEAVE_DESKTOP_CHANNEL__ === "beta" && configRuntime.context.kind !== "dev") throw new Error("Installed tests require a Dev Session identity");
+const configurationOwner = acquireConfigurationOwner(configRuntime.context, "desktop");
+app.once("will-quit", () => configurationOwner.release());
+export const desktopConfigurationArguments = configurationArguments(configRuntime.context);
 
 if (!process.env.RUNWEAVE_WHISTLE_PORTS && __RUNWEAVE_WHISTLE_PORTS__)
   process.env.RUNWEAVE_WHISTLE_PORTS = __RUNWEAVE_WHISTLE_PORTS__;
@@ -57,6 +66,7 @@ if (!process.env.RUNWEAVE_APP_SERVER_HOME && __RUNWEAVE_APP_SERVER_HOME__) {
 process.env.RUNWEAVE_DESKTOP_CHANNEL = desktopChannel;
 
 if (explicitUserDataPath) {
+  assertOwnedPath(configRuntime.context, explicitUserDataPath);
   app.setPath("userData", path.resolve(explicitUserDataPath));
   process.env.RUNWEAVE_DESKTOP_USER_DATA_DIR = app.getPath("userData");
 }
@@ -86,31 +96,6 @@ if (desktopCdpPort) {
   app.commandLine.appendSwitch("remote-debugging-port", String(desktopCdpPort));
 }
 
-if (isBetaChannel) {
-  process.env.BROWSER_PROFILE_DIR = path.join(
-    app.getPath("userData"),
-    "browser-profile",
-  );
-  process.env.AUTH_STORE_FILE = path.join(
-    process.env.BROWSER_PROFILE_DIR,
-    "auth-store.json",
-  );
-  process.env.RUNWEAVE_CONFIG_FILE = path.join(
-    app.getPath("userData"),
-    "cli",
-    "config.json",
-  );
-  delete process.env.RUNWEAVE_ACCESS_TOKEN;
-  process.env.RUNWEAVE_APP_SERVER_HOME ??= path.join(
-    os.homedir(),
-    ".runweave",
-    "app-server-beta",
-  );
-  process.env.RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR = path.join(
-    process.env.RUNWEAVE_APP_SERVER_HOME,
-    "cloud-sync",
-  );
-}
 
 function parseOptionalPort(raw: string | undefined): number | null {
   if (!raw?.trim()) {

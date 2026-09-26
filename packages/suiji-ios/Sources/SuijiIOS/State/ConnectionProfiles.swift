@@ -17,7 +17,6 @@ struct ConnectionProfiles: Codable {
   var active: ConnectionEnvironment = .production
   var production = ConnectionProfile()
   var development = ConnectionProfile()
-  private static let key = "suiji.connections.v1"
 
   subscript(environment: ConnectionEnvironment) -> ConnectionProfile {
     get { environment == .production ? production : development }
@@ -25,14 +24,14 @@ struct ConnectionProfiles: Codable {
   }
 
   static func restore(endpoint: URL?) -> Self {
-    var profiles = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
-      ?? Self(production: ConnectionProfile(endpoint: UserDefaults.standard.string(forKey: "suiji.endpoint") ?? ""))
+    var profiles = DevicePreferences.connections.flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
+      ?? Self(production: ConnectionProfile(endpoint: DevicePreferences.legacyEndpoint))
     if let endpoint { profiles[profiles.active].endpoint = endpoint.absoluteString }
     return profiles
   }
 
   func save() {
     guard let data = try? JSONEncoder().encode(self) else { return }
-    UserDefaults.standard.set(data, forKey: Self.key)
+    DevicePreferences.connections = data
   }
 }

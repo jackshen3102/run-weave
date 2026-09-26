@@ -8,7 +8,7 @@ import { validateBetaSlotRetentionState } from "../dev-session/beta-pool/retenti
 // Keep a single retained generation, not an ever-growing rollback history.
 export function snapshotPreviousRelease(previous) {
   if (!previous?.app) return null;
-  const { app, runtimeReleaseId, appServerReleaseId, source, capturedAt } =
+  const { app, runtimeReleaseId, appServerReleaseId, source, capturedAt, devSessionId } =
     previous;
   return structuredClone({
     app,
@@ -16,6 +16,7 @@ export function snapshotPreviousRelease(previous) {
     appServerReleaseId,
     source,
     capturedAt,
+    devSessionId,
   });
 }
 
@@ -30,6 +31,7 @@ export async function publishRestoredBaseline(
     (appBackupConsumed ? null : snapshotPreviousRelease(baseline));
   const restored = {
     ...state,
+    devSessionId: paths.devSessionId,
     appServer: baseline.appServerReleaseId
       ? {
           ...(state.appServer ?? {}),
@@ -72,6 +74,7 @@ export async function commitHealthyBetaUpdate(
 ) {
   await writeJson(paths.statePath, {
     ...state,
+    devSessionId: paths.devSessionId,
     channel: "beta",
     previous: { ...baseline, priorPrevious: null, priorAppBackupPath: null },
     logPath,

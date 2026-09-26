@@ -1,6 +1,6 @@
 import type { AppHomeOverviewResponse, AppHomeOverviewSession } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
-import { discoverAppServer } from "@runweave/shared/app-server/discovery";
+import { discoverAppServer } from "@runweave/config-node/app-server/discovery";
 import { Router } from "express";
 import { z } from "zod";
 import { HomeBranchStatusService } from "../../terminal/git/home-branch-status";

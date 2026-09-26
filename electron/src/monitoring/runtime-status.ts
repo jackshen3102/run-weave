@@ -1,4 +1,5 @@
 import { BrowserWindow, Notification, clipboard, ipcMain } from "electron";
+import { configuration } from "@runweave/config-node";
 import { randomUUID } from "node:crypto";
 import {
   isRuntimeStatusCapabilityId,
@@ -222,6 +223,11 @@ export function registerRuntimeStatusHandlers(options: {
       managesPackagedBackend:
         process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND?.trim() !== "false",
     });
+  });
+  ipcMain.handle("runtime-status:configuration", (event) => {
+    requireMainRenderer(event.sender.id);
+    const status = configuration().status();
+    return { ...status, values: {}, consumers: Object.fromEntries(Object.entries(status.consumers).filter(([key]) => key.startsWith("desktop.") || key === "updates")) };
   });
   ipcMain.handle("runtime-status:copy-text", (event, value: unknown): boolean => {
     requireMainRenderer(event.sender.id);

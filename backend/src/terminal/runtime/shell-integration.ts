@@ -1,5 +1,5 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { configuration } from "@runweave/config-node";
 import path from "node:path";
 
 const ESC = "\\u001b";
@@ -127,7 +127,10 @@ function ensureZshHookDirectory(): string {
     return cachedZshHookDir;
   }
 
-  const hookDir = mkdtempSync(path.join(os.tmpdir(), ZSH_HOOK_PREFIX));
+  const runtimeRoot = path.join(configuration().context.configRoot, "runtime");
+  mkdirSync(runtimeRoot, { recursive: true, mode: 0o700 });
+  const hookDir = mkdtempSync(path.join(runtimeRoot, ZSH_HOOK_PREFIX));
+  const boundBin = path.join(runtimeRoot, "bin").replace(/'/g, "'\\''");
   const sourceOriginalScript = (startupFile: string) =>
     [
       '_runweave_original_zdotdir="${RUNWEAVE_ORIGINAL_ZDOTDIR:-${BROWSER_VIEWER_ORIGINAL_ZDOTDIR:-$HOME}}"',
@@ -142,6 +145,7 @@ function ensureZshHookDirectory(): string {
     `if [[ "$_runweave_original_zdotdir" != */${ZSH_HOOK_PREFIX}* && -r "$_runweave_original_zdotdir/.zshrc" ]]; then`,
     '  source "$_runweave_original_zdotdir/.zshrc"',
     "fi",
+    `export PATH='${boundBin}':"$PATH"`,
     'typeset -ga precmd_functions',
     'typeset -ga preexec_functions',
     '_runweave_normalize_command() {',
@@ -187,11 +191,8 @@ function ensureZshHookDirectory(): string {
     '  preexec_functions+=(_runweave_preexec)',
     "fi",
     "_runweave_precmd",
-    'if [[ -n "${RUNWEAVE_ORIGINAL_ZDOTDIR:-}" ]]; then',
-    '  export ZDOTDIR="${RUNWEAVE_ORIGINAL_ZDOTDIR}"',
-    "else",
-    "  unset ZDOTDIR",
-    "fi",
+    // Nested login shells also need the bound CLI. The managed startup files
+    // source the user's original files before restoring this instance's PATH.
     "",
   ].join("\n");
 

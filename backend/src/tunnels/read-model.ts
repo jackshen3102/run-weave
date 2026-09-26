@@ -1,3 +1,5 @@
+import { configuration, assertOwnedPath } from "@runweave/config-node";
+import { readConfigurationPath } from "@runweave/shared/configuration";
 import {
   constants,
   closeSync,
@@ -34,10 +36,13 @@ export function readDesktopNetwork(): DesktopNetworkSnapshot {
   const root = process.env.RUNWEAVE_DESKTOP_STATE_DIR?.trim();
   if (!root || !path.isAbsolute(root))
     throw new DesktopStateError("DESKTOP_STATE_UNAVAILABLE");
+  const runtime = configuration();
+  assertOwnedPath(runtime.context, root);
   try {
-    const raw = readJson(
-      path.join(root, "tunnels", "config.json"),
-    ) as TunnelConfig;
+    const saved = runtime.store.read();
+    if (saved.issues["desktop.tunnels"]?.length) throw new DesktopStateError("DESKTOP_STATE_INVALID");
+    const value = readConfigurationPath(saved.value, "desktop.tunnels") as unknown as Omit<TunnelConfig, "schemaVersion">;
+    const raw: TunnelConfig = { ...value, schemaVersion: 1 };
     const clean = validateTunnelUpdate({
       ...raw,
       expectedRevision: raw.revision,
@@ -48,7 +53,7 @@ export function readDesktopNetwork(): DesktopNetworkSnapshot {
       path.join(root, "desktop-network.json"),
     ) as DesktopNetworkSnapshot;
     const snapshot = network.tunnels;
-    const expectedSession = process.env.RUNWEAVE_DEV_SESSION_ID?.trim() || null;
+    const expectedSession = runtime.context.kind === "dev" ? runtime.context.instanceId : null;
     if (
       snapshot?.schemaVersion !== 1 ||
       snapshot.owner?.desktopId !== raw.desktopId ||

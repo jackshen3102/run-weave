@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { readdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -32,7 +33,7 @@ export class TraeThreadLifecycleReader {
   constructor(sessionsRoot?: string) {
     this.sessionsRoot = path.resolve(
       sessionsRoot ??
-        process.env.RUNWEAVE_TRAE_SESSIONS_DIR ??
+        settingText("agents.traex.sessionsDirectory") ??
         path.join(os.homedir(), ".trae", "cli", "sessions"),
     );
   }

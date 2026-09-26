@@ -1,4 +1,6 @@
-import { rmSync } from "node:fs";
+import { configurationLibrary, explicitConfigurationArguments } from "../lib/configuration.mjs";
+import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
+import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -24,6 +26,7 @@ rmSync(artifactDir, { recursive: true, force: true });
 
 await build({
   bundle: true,
+  external: ["fs-native-extensions"],
   define: {
     "import.meta.url": "__IMPORT_META_URL__",
   },
@@ -37,6 +40,9 @@ await build({
   sourcemap: true,
   target: "node20",
 });
+
+copyNativeLockRuntime(artifactDir);
+writeFileSync(path.join(artifactDir, "configuration-compatibility.json"), JSON.stringify(configurationLibrary.APP_SERVER_CONFIGURATION_COMPATIBILITY));
 
 const isolatedCliEntry = process.env.RUNWEAVE_CLI_BUNDLE_OUTFILE?.trim();
 const cliEntry = isolatedCliEntry
@@ -59,6 +65,7 @@ run("node", [
   "--release-id",
   releaseId,
   ...(homeArg ? ["--home", homeArg] : []),
+  ...explicitConfigurationArguments(),
 ]);
 
 function createReleaseId() {

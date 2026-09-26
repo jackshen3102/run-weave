@@ -1,0 +1,38 @@
+version: 1
+name: "统一配置 YAML 格式与编辑"
+description: "目标行为验收计划，执行进度与证据见全局配置实施方案。仅使用合成配置验证 YAML 1.2 受限语法、无损编辑及 JSON 单向迁移，格式校验不代表行为通过。"
+cases:
+  - id: GCY-001
+    name: "拒绝有歧义及扩展语法"
+    required: true
+    description: "所有入口使用一致的受限 YAML 解析规则，非法输入不被静默解释或执行。"
+    preconditions:
+      - "独立 fixture 已有有效配置与可用进程；准备重复键、非字符串键、自定义标签、锚点别名、merge key、多文档、非映射顶层、超过 1 MiB 或嵌套超过 32 层的合成输入。"
+    steps:
+      - "逐个在独立副本中通过 CLI validate/import 和 Backend reload 加载这些输入；确认均拒绝并给脱敏位置错误，不写默认值、不执行标签或读取外部文件，原运行快照保持。"
+  - id: GCY-002
+    name: "标量类型往返保持"
+    required: true
+    description: "字符串、布尔、数字、空值和数组经读写后维持 schema 声明的类型和值。"
+    preconditions:
+      - "独立 YAML 含带前导零 ID、日期形字符串、冒号及井号、美元符号、Unicode、多行字符串，以及布尔、数字、null 和数组字段；值均为合成数据。"
+    steps:
+      - "通过统一 writer 修改一个无关字段后重读；确认所有样例类型和值保持，字符串没有环境插值或 Shell 执行，错误类型通过字段 schema 拒绝而非隐式转换。"
+  - id: GCY-003
+    name: "注释编辑与并发写入"
+    required: true
+    description: "writer 保留无关注释且发现未递增 revision 的手工修改，不能覆盖用户刚编辑的内容。"
+    preconditions:
+      - "独立 YAML 含字段注释、固定顺序和已知 revision；CLI 已读取原字节摘要，另有本机编辑入口。"
+    steps:
+      - "手工只修改注释而保持 revision，再让旧快照 CLI 保存；确认摘要冲突并拒绝，手工内容保持。"
+      - "CLI 重新读取后修改目标字段；确认 revision 前进，无关字段、注释和顺序保持，文件及备份权限符合私有配置合同。"
+  - id: GCY-004
+    name: "旧 JSON 单向迁移 YAML"
+    required: true
+    description: "迁移保持 JSON 中的类型、凭据组和身份，后续没有 JSON/YAML 双向同步。"
+    preconditions:
+      - "独立旧 JSON 来源含合成连接、字符串 ID、凭据组和布尔字段；目标 settings.yaml 尚不存在，旧来源与目标无链接关系。"
+    steps:
+      - "显式指定实例执行 dry-run 和迁移；确认类型、值及身份保持，目标采用受限 YAML，旧文件有私有备份。"
+      - "修改旧 JSON 后重新读取并重跑已完成的迁移；确认新 YAML 不被覆盖，迁移 ID 与 revision 保持，旧 JSON 不成为 fallback。"

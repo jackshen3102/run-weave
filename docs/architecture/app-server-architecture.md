@@ -141,7 +141,7 @@ stateDiagram-v2
 
 Client 通过显式环境配置或 home 的发现记录定位已有 owner，失败时按消费者职责降级，不隐式安装或启动。
 HTTP/WebSocket 的鉴权、Origin 限制与发现参数见 [Event Center](./app-server-event-center.md#发现与鉴权)；
-真实发现分支以 [shared discovery](../../packages/shared/src/app-server/discovery.ts) 为准。
+真实发现分支以 [实例 discovery](../../packages/config-node/src/app-server/discovery.ts) 为准。
 
 ## 事件模型
 

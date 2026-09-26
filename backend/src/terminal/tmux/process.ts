@@ -1,7 +1,8 @@
+import { configuration, settingText } from "@runweave/config-node";
 import { constants } from "node:fs";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { execFile as nodeExecFile } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -44,13 +45,7 @@ export abstract class TmuxProcess {
     this.now = options?.now ?? (() => Date.now());
     this.socketPath =
       options?.socketPath ??
-      path.join(
-        options?.socketDir ?? os.tmpdir(),
-        `runweave-${createHash("sha256")
-          .update(process.cwd())
-          .digest("hex")
-          .slice(0, 8)}.tmux.sock`,
-      );
+      path.join(options?.socketDir ?? path.join(configuration().context.configRoot, "runtime"), "tmux.sock");
   }
 
   readonly socketPath: string;
@@ -61,7 +56,7 @@ export abstract class TmuxProcess {
 
   get binary(): string {
     return resolveExecutableFromPath(
-      this.env.TMUX_BINARY?.trim() || "tmux",
+      settingText("terminal.tmux.binary")?.trim() || "tmux",
       this.env,
     );
   }
@@ -84,10 +79,10 @@ export abstract class TmuxProcess {
   }
 
   private async probeAvailability(): Promise<TmuxAvailability> {
-    if (this.env.TERMINAL_TMUX_ENABLED?.trim().toLowerCase() === "false") {
+    if (settingText("terminal.tmux.enabled")?.trim().toLowerCase() === "false") {
       return {
         available: false,
-        reason: "tmux disabled by TERMINAL_TMUX_ENABLED=false",
+        reason: "tmux disabled by configuration",
       };
     }
     if (!["darwin", "linux", "freebsd", "openbsd"].includes(process.platform)) {

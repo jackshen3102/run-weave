@@ -1,3 +1,4 @@
+import { deviceStorage } from "../device-storage";
 export interface ConnectionAuthRecord {
   token?: string;
   accessToken?: string;
@@ -14,7 +15,7 @@ export const CONNECTION_AUTH_STORAGE_KEY = "viewer.auth.connection-auth";
 const LEGACY_ACCESS_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 function loadConnectionAuthStore(): ConnectionAuthStore {
-  const raw = localStorage.getItem(CONNECTION_AUTH_STORAGE_KEY);
+  const raw = deviceStorage.getItem(CONNECTION_AUTH_STORAGE_KEY);
   if (!raw) {
     return {};
   }
@@ -31,11 +32,11 @@ function loadConnectionAuthStore(): ConnectionAuthStore {
 }
 
 function saveConnectionAuthStore(store: ConnectionAuthStore): void {
-  localStorage.setItem(CONNECTION_AUTH_STORAGE_KEY, JSON.stringify(store));
+  deviceStorage.setItem(CONNECTION_AUTH_STORAGE_KEY, JSON.stringify(store));
 }
 
 export function cleanupLegacyAuthStorage(): void {
-  localStorage.removeItem(REMEMBERED_CREDENTIALS_STORAGE_KEY);
+  deviceStorage.removeItem(REMEMBERED_CREDENTIALS_STORAGE_KEY);
 
   const store = loadConnectionAuthStore();
   const sanitizedEntries = Object.entries(store).flatMap(

@@ -1,3 +1,4 @@
+import { deviceStorage } from "../device-storage";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HttpError } from "../../services/http";
@@ -31,7 +32,7 @@ interface AuthSessionState {
 
 function loadWebSession(storageKey: string): AuthSessionState | null {
   cleanupLegacyAuthStorage();
-  const raw = localStorage.getItem(storageKey);
+  const raw = deviceStorage.getItem(storageKey);
   if (!raw) {
     return null;
   }
@@ -68,7 +69,7 @@ function loadWebSession(storageKey: string): AuthSessionState | null {
 }
 
 function saveWebSession(storageKey: string, session: AuthSessionState): void {
-  localStorage.setItem(storageKey, JSON.stringify(session));
+  deviceStorage.setItem(storageKey, JSON.stringify(session));
 }
 
 function toSessionState(session: {
@@ -207,7 +208,7 @@ export function useScopedAuth({
         clearConnectionAuth(connectionId);
       }
     } else {
-      localStorage.removeItem(webStorageKey);
+      deviceStorage.removeItem(webStorageKey);
     }
 
     setSessionState(null);
@@ -335,7 +336,7 @@ export function useScopedAuth({
             clearConnectionAuth(connectionId);
           }
           if (!isElectron) {
-            localStorage.removeItem(webStorageKey);
+            deviceStorage.removeItem(webStorageKey);
           }
         }
 
@@ -458,7 +459,7 @@ export function useScopedAuth({
               clearConnectionAuth(connectionId);
             }
             if (!isElectron) {
-              localStorage.removeItem(webStorageKey);
+              deviceStorage.removeItem(webStorageKey);
             }
           }
 

@@ -1,3 +1,6 @@
+import { initializeBackendConfiguration } from "./bootstrap/configuration";
+import { createConfigurationRouter } from "./routes/configuration";
+import { settingText } from "@runweave/config-node";
 import { createKnowledgeInboxRouter } from "./routes/knowledge-inbox";
 import {
   attachLocalBrowserWebSocketServer,
@@ -13,21 +16,18 @@ import { createCodexQuotaRouter } from "./routes/codex-quota";
 import { createDeviceNotificationsRouter } from "./routes/device-notifications";
 import { createDeviceStatusRouter } from "./routes/device-status";
 import { createMobileLoginRouter } from "./routes/mobile-login";
-import "dotenv/config";
 import http from "node:http";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import { ResourceScope } from "./bootstrap/resource-scope";
 import { TransportRuntime } from "./server/transport-runtime";
-import { migrateLegacyBrowserProfileRootIfNeeded } from "@runweave/shared/browser-profile-node";
 import { createRequireAuth } from "./auth/middleware";
 import { initializeAppServerEventIntegration } from "./app-server/integration";
 import { diagnosticLogRecorder } from "./diagnostic-logs/recorder";
 import {
   createRequestContextMiddleware,
   flushAndCloseLogger,
-  initializeLogger,
   logger,
 } from "./logging/index";
 import { createAuthRouter } from "./routes/auth";
@@ -133,9 +133,10 @@ function createHttpApp(
   app.use("/api/device/notifications", express.json({ limit: "8kb" }));
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
-    createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
+    createCorsMiddleware(parseConfiguredOrigins(settingText("backend.server.frontendOrigin"))),
   );
   app.use(createTunnelTokenBootstrapMiddleware(tunnelAuthConfig));
+  app.use("/api/configuration", requireTunnelAuth, requireAuth, createConfigurationRouter());
 
   app.use("/prototype-preview", requireTunnelAuth, createPrototypePreviewRouter(
     services.terminalSessionManager,
@@ -213,7 +214,7 @@ function createHttpApp(
     res.status(404).json({ message: "Not found" });
   });
   app.use("/api", requireTunnelAuth);
-  registerRemoteBrowserRoutes(app, services.authService, services.terminalSessionManager, requireTunnelAuth, resolveStoragePaths(process.env).browserProfileDir, backendIdentity?.backendId ?? String(process.pid));
+  registerRemoteBrowserRoutes(app, services.authService, services.terminalSessionManager, requireTunnelAuth, resolveStoragePaths().browserProfileDir, backendIdentity?.backendId ?? String(process.pid));
   app.use(
     "/api/auth",
     createAuthRouter(services.authService, {
@@ -227,7 +228,7 @@ function createHttpApp(
     createMobileLoginRouter(services.mobileLoginService, services.authService),
   );
   diagnosticLogRecorder.configurePersistence({
-    persistRoot: resolveStoragePaths(process.env).backendLogDir,
+    persistRoot: resolveStoragePaths().backendLogDir,
   });
   app.use(
     "/api/diagnostic-logs",
@@ -457,21 +458,13 @@ async function startRuntime(): Promise<void> {
   let stage: BackendStartStage = "runtime-config";
   const resources = new ResourceScope();
   try {
+    const config = initializeBackendConfiguration(resources);
     const runtimeConfig = resolveRuntimeConfig();
     stage = "storage-migration";
-    const migration = await migrateLegacyBrowserProfileRootIfNeeded();
-    if (migration.migrated.length > 0) {
-      logger.info("backend.browserProfile.migrated", {
-        component: "backend",
-        legacyRoot: migration.legacyRoot,
-        targetRoot: migration.targetRoot,
-        profileIds: migration.migrated,
-      });
-    }
-    const storagePaths = resolveStoragePaths(process.env);
+    const storagePaths = resolveStoragePaths();
     stage = "profile-lock";
     const profileLock: BackendProfileLock = await acquireBackendProfileLock({
-      devSessionId: process.env.RUNWEAVE_DEV_SESSION_ID,
+      devSessionId: config.context.kind === "dev" ? config.context.instanceId : undefined,
       profileDir: storagePaths.browserProfileDir,
       port: runtimeConfig.preferredPort,
       host: runtimeConfig.host,
@@ -480,12 +473,18 @@ async function startRuntime(): Promise<void> {
     resources.defer("profile-lock", () => profileLock.release());
     resources.defer("agent-clients", () => { codexAppServerClient.shutdown(); traexAppServerClient.shutdown(); });
     stage = "tunnel-auth-config";
-    const tunnelAuthConfig = loadTunnelAuthConfig(process.env);
+    const tunnelAuthConfig = loadTunnelAuthConfig();
     stage = "runtime-services";
     const services = await createRuntimeServices(
       `backend:${profileLock.getOwner().backendId}`,
     );
     resources.defer("runtime-services", () => services.dispose());
+    config.markApplied("backend.server", "backend.auth", "backend.tunnelAuth", "storage", "terminal", "logging", "agents.codex", "agents.traex");
+    for (const domain of ["scheduledTasks", "knowledge", "appServer"]) {
+      try { config.requireDomain(domain); config.markApplied(domain); } catch { config.reportError(domain); }
+    }
+    resources.defer("voice-configuration", config.register("voice", () => {}));
+    resources.defer("model-configuration", config.register("agents.team", () => {}));
     stage = "http-app";
     const app = createHttpApp(
       services,
@@ -557,7 +556,7 @@ async function startRuntime(): Promise<void> {
     logger.info("backend.started", {
       component: "backend",
       message: "Backend started",
-      logDir: resolveStoragePaths(process.env).backendLogDir,
+      logDir: resolveStoragePaths().backendLogDir,
       host: runtimeConfig.host,
       port,
       runtimeReleaseId: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || null,
@@ -575,12 +574,6 @@ async function startRuntime(): Promise<void> {
   }
 }
 
-const loggerState = initializeLogger({ env: process.env });
-logger.debug("backend.logger.initialized", {
-  component: "backend",
-  logDir: loggerState.logDir,
-  logToFile: loggerState.logToFile,
-});
 
 startRuntime().catch(async (error: unknown) => {
   const startError =

@@ -23,6 +23,7 @@ export interface RuntimeStatsSnapshot {
 }
 
 export interface BackendHealthPayload {
+  environment?: import("../configuration").EnvironmentContext;
   status: "ok";
   service?: "runweave-backend";
   serviceInstanceId?: string;

@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-/* global fetch, process, require, URL */
+/* global __dirname, fetch, process, require, URL */
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 const { spawn, spawnSync } = require("node:child_process");
 const { setTimeout } = require("node:timers");
-const os = require("node:os");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -76,7 +75,7 @@ function readTmuxSessionEnv() {
   }
 
   const result = spawnSync(
-    "tmux",
+    process.env.RUNWEAVE_RUNTIME_TMUX_BINARY || "tmux",
     ["-S", socketPath, "show-environment", "-t", sessionName],
     {
       encoding: "utf8",
@@ -160,7 +159,7 @@ function notifyDesktop(source, options = {}) {
 
 function notifyFeishu(payload, source, terminalSessionId, terminalPanelId) {
   if (process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY === "1") return;
-  const script = `${os.homedir()}/.runweave/hooks/feishu_stop_notify.sh`;
+  const script = path.join(__dirname, "feishu_stop_notify.sh");
   try {
     if (!fs.existsSync(script)) {
       return;

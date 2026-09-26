@@ -1,3 +1,4 @@
+import { settingText, configuration } from "@runweave/config-node";
 export interface RuntimeConfig {
   preferredPort: number;
   strictPort: boolean;
@@ -43,13 +44,14 @@ export function parsePort(
 
 export function resolveRuntimeConfig(): RuntimeConfig {
   const rawCliPort = readCliOption("port");
-  const rawHost = readCliOption("host") ?? process.env.HOST;
+  const rawHost = readCliOption("host") ?? settingText("backend.server.host");
 
   return {
-    preferredPort: parsePort(rawCliPort ?? process.env.PORT, 5000),
+    preferredPort: parsePort(rawCliPort ?? settingText("backend.server.port"), 5001),
     strictPort:
+      configuration().context.kind === "stable" ||
       rawCliPort != null ||
-      process.env.PORT_STRICT?.trim().toLowerCase() === "true",
-    host: rawHost?.trim() || undefined,
+      settingText("backend.server.strictPort")?.trim().toLowerCase() === "true",
+    host: rawHost?.trim() || "127.0.0.1",
   };
 }

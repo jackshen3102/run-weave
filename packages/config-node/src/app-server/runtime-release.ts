@@ -4,19 +4,24 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { supportsConfiguration } from "@runweave/shared/configuration";
+import { ConfigurationError } from "../errors";
+import { configuration } from "../runtime";
 import {
   APP_SERVER_PROTOCOL_VERSION,
   APP_SERVER_RUNTIME_SCHEMA_VERSION,
   type AppServerRuntimeRelease,
-} from "./types";
+} from "@runweave/shared/app-server/types";
 import { resolveAppServerRuntimeRoot } from "./paths";
 
 interface AppServerRuntimeManifest {
+  configuration?: unknown;
   schemaVersion?: unknown;
   releaseId?: unknown;
   appServer?: {
@@ -56,6 +61,7 @@ export function resolveCurrentAppServerRuntimeRelease(
   if (!isValidAppServerRuntimeManifest(manifest, releaseId)) {
     return null;
   }
+  if (!supportsConfiguration(manifest.configuration, configuration().store.read().value)) return null;
 
   const entry = resolveInside(releaseDir, manifest.appServer.entry);
   if (!entry || !existsSync(entry)) {
@@ -96,6 +102,12 @@ export function installAppServerRuntimeRelease(options: {
   if (!existsSync(sourceEntry)) {
     throw new Error(`App-server entry does not exist: ${sourceEntry}`);
   }
+  // The artifact declares its own capability. A newer installer must never
+  // label an arbitrary older executable with the installer's schema support.
+  const capability = readJsonFile<unknown>(path.join(path.dirname(sourceEntry), "configuration-compatibility.json"));
+  if (!supportsConfiguration(capability, configuration().store.read().value)) {
+    throw new ConfigurationError("CONFIG_RELEASE_INCOMPATIBLE");
+  }
 
   const runtimeRoot =
     options.runtimeRoot ?? resolveAppServerRuntimeRoot({ env: options.env });
@@ -107,20 +119,19 @@ export function installAppServerRuntimeRelease(options: {
   rmSync(tempReleaseDir, { recursive: true, force: true });
   mkdirSync(path.dirname(targetEntry), { recursive: true });
   cpSync(sourceEntry, targetEntry);
+  const nativeModules = path.join(path.dirname(sourceEntry), "node_modules");
+  if (!existsSync(nativeModules)) throw new Error("CONFIG_NATIVE_LOCK_RUNTIME_MISSING");
+  cpSync(nativeModules, path.join(path.dirname(targetEntry), "node_modules"), { recursive: true });
 
   const manifest = {
+    configuration: capability,
     schemaVersion: APP_SERVER_RUNTIME_SCHEMA_VERSION,
     releaseId: options.releaseId,
     protocolVersion: APP_SERVER_PROTOCOL_VERSION,
     appServer: {
       entry: "app-server/index.cjs",
     },
-    files: [
-      {
-        path: "app-server/index.cjs",
-        sha256: sha256(targetEntry),
-      },
-    ],
+    files: runtimeFiles(tempReleaseDir).map((file) => ({ path: file, sha256: sha256(path.join(tempReleaseDir, file)) })),
   };
   writeFileSync(
     path.join(tempReleaseDir, "manifest.json"),
@@ -219,4 +230,12 @@ function isValidAppServerRuntimeManifest(
         /^[a-f0-9]{64}$/i.test(file.sha256),
     ),
   );
+}
+
+function runtimeFiles(root: string, prefix = ""): string[] {
+  return readdirSync(path.join(root, prefix), { withFileTypes: true }).flatMap((entry) => {
+    const relative = path.posix.join(prefix, entry.name);
+    if (entry.isSymbolicLink()) throw new Error("CONFIG_RUNTIME_SYMLINK_FORBIDDEN");
+    return entry.isDirectory() ? runtimeFiles(root, relative) : [relative];
+  });
 }

@@ -1,3 +1,4 @@
+import { ConfigurationDomain } from "@runweave/config-node";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type {
@@ -19,19 +20,18 @@ export interface PersistedAgentTeamProviderCatalog {
 }
 
 interface AgentTeamModelStoreData {
-  config: AgentTeamGlobalModelConfig | null;
   catalogs: Partial<
     Record<AgentTeamModelProvider, PersistedAgentTeamProviderCatalog>
   >;
 }
 
 const DEFAULT_DATA: AgentTeamModelStoreData = {
-  config: null,
   catalogs: {},
 };
 
 export class AgentTeamModelConfigStore {
   private database: Low<AgentTeamModelStoreData> | null = null;
+  private readonly configuration = new ConfigurationDomain<Omit<AgentTeamGlobalModelConfig, "schemaVersion">>("agents.team");
   private pendingWrite: Promise<void> = Promise.resolve();
 
   constructor(private readonly storeFile: string) {}
@@ -45,10 +45,6 @@ export class AgentTeamModelConfigStore {
     await database.read();
     const raw = database.data as unknown;
     database.data = {
-      config:
-        isRecord(raw) && isAgentTeamGlobalModelConfig(raw.config)
-          ? structuredClone(raw.config)
-          : null,
       catalogs: {
         ...(isRecord(raw) &&
         isRecord(raw.catalogs) &&
@@ -66,8 +62,9 @@ export class AgentTeamModelConfigStore {
   }
 
   getConfig(): AgentTeamGlobalModelConfig | null {
-    const config = this.getDatabase().data.config;
-    return config ? structuredClone(config) : null;
+    const value = this.configuration.read();
+    const config = value ? { ...value, schemaVersion: 1 as const } : null;
+    return isAgentTeamGlobalModelConfig(config) ? config : null;
   }
 
   getCatalog(
@@ -79,8 +76,8 @@ export class AgentTeamModelConfigStore {
 
   async saveConfig(config: AgentTeamGlobalModelConfig): Promise<void> {
     await this.enqueueWrite(async () => {
-      this.getDatabase().data.config = structuredClone(config);
-      await this.getDatabase().write();
+      this.configuration.read();
+      this.configuration.write({ roles: structuredClone(config.roles), updatedAt: config.updatedAt });
     });
   }
 

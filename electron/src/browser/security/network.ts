@@ -1,3 +1,4 @@
+import { ConfigurationDomain } from "@runweave/config-node";
 import { getRuntimeBrowserProfileConfig } from "../profile/endpoints.js";
 import {
   normalizeTerminalBrowserHeaderRules,
@@ -19,6 +20,13 @@ const headerRulesByProfile = new Map<
   TerminalBrowserProfileId,
   TerminalBrowserHeaderRule[]
 >();
+const headerStores = new Map<TerminalBrowserProfileId, ConfigurationDomain<TerminalBrowserHeaderRule[]>>();
+const configuredHeaderProfiles = new Set<TerminalBrowserProfileId>();
+function headerStore(profileId: TerminalBrowserProfileId) {
+  let store = headerStores.get(profileId);
+  if (!store) { store = new ConfigurationDomain<TerminalBrowserHeaderRule[]>(`desktop.browser.headerRules.${profileId}`); headerStores.set(profileId, store); }
+  return store;
+}
 const registeredHeaderSessions = new WeakSet<Electron.Session>();
 const WORKSPACE_SERVICE_PROXY_PROBE_URL =
   "http://runweave-proxy-probe.localhost";
@@ -64,7 +72,12 @@ async function verifyTerminalBrowserProfileProxy(
 export function getTerminalBrowserHeaderState(
   profileId: TerminalBrowserProfileId,
 ): TerminalBrowserHeaderState {
-  return { rules: headerRulesByProfile.get(profileId) ?? [] };
+  if (!headerRulesByProfile.has(profileId)) {
+    const saved = headerStore(profileId).read();
+    headerRulesByProfile.set(profileId, normalizeTerminalBrowserHeaderRules(saved ?? []));
+    if (saved !== undefined) configuredHeaderProfiles.add(profileId);
+  }
+  return { rules: headerRulesByProfile.get(profileId) ?? [], configured: configuredHeaderProfiles.has(profileId) };
 }
 
 export function wildcardUrlPatternMatches(
@@ -96,6 +109,7 @@ export function setRequestHeader(
 export function ensureTerminalBrowserHeaderDispatcher(
   profileId: TerminalBrowserProfileId,
 ): void {
+  getTerminalBrowserHeaderState(profileId);
   const browserSession = getTerminalBrowserSession(profileId);
   if (registeredHeaderSessions.has(browserSession)) {
     return;
@@ -129,6 +143,7 @@ export function ensureTerminalBrowserHeaderDispatcher(
     },
   );
   registeredHeaderSessions.add(browserSession);
+  headerStore(profileId).markApplied();
 }
 
 export function setTerminalBrowserHeaderRules(
@@ -136,8 +151,12 @@ export function setTerminalBrowserHeaderRules(
   rules: unknown,
 ): TerminalBrowserHeaderState {
   const normalized = normalizeTerminalBrowserHeaderRules(rules);
+  const store = headerStore(profileId);
+  store.write(normalized);
   headerRulesByProfile.set(profileId, normalized);
+  configuredHeaderProfiles.add(profileId);
   ensureTerminalBrowserHeaderDispatcher(profileId);
+  store.markApplied();
   return getTerminalBrowserHeaderState(profileId);
 }
 

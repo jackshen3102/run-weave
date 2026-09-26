@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { runProviderProcess } from "./process-runner";
 import { buildEvolutionMcpConfigArgs } from "./mcp-config";
 import { buildEvolutionRestrictedFeatureArgs } from "./restricted-features";
@@ -11,7 +12,7 @@ export class CodexEvolutionProvider implements EvolutionProviderAdapter {
   readonly provider = "codex" as const;
 
   constructor(
-    private readonly binary = process.env.RUNWEAVE_CODEX_BIN?.trim() || "codex",
+    private readonly binary = settingText("agents.codex.binary")?.trim() || "codex",
   ) {}
 
   run(request: EvolutionProviderRequest): Promise<EvolutionProviderResult> {

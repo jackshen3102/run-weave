@@ -3,10 +3,10 @@ import UIKit
 
 /// Applies the same screen policy to every app page, including diagnostic entry points.
 public struct ScreenAwakeModifier: ViewModifier {
-  static let preferenceKey = "native.keepScreenAwake"
+  static let preferenceKey = DevicePreferences.screenAwakeKey
 
   @Environment(\.scenePhase) private var scenePhase
-  @AppStorage(ScreenAwakeModifier.preferenceKey) private var keepScreenAwake = true
+  @AppStorage(DevicePreferences.screenAwakeKey, store: DevicePreferences.store) private var keepScreenAwake = true
 
   public init() {}
 

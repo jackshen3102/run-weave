@@ -6,7 +6,7 @@ import {
   resolveBetaAppBackupPrefix,
   resolveBetaUpdateTargets,
 } from "../../update/core.mjs";
-import { DevSessionError, assertPathInside } from "../contracts.mjs";
+import { DevSessionError, assertPathInside, assertDevSessionId } from "../contracts.mjs";
 import { assertBetaSlotId } from "./core.mjs";
 
 async function lstatOptional(targetPath) {
@@ -63,6 +63,9 @@ export async function validateBetaRuntimeReleaseAllowlist(
     Boolean(value) &&
     !value.includes("/") &&
     !value.includes("..");
+  if (pointer.releaseId === null && pointer.restoredEmpty === true && previousReleaseId == null) {
+    return new Set();
+  }
   if (!isSafeReleaseId(pointer.releaseId)) {
     throw retentionStateError("runtime current pointer is corrupt", {
       runtimeHome,
@@ -261,8 +264,9 @@ export async function validateBetaSlotRetentionState({
   state,
   applicationsDir,
 }) {
-  const desktopPrevious = state?.previous?.runtimeReleaseId ?? null;
-  const appServerPrevious = state?.previous?.appServerReleaseId ?? null;
+  const sameRuntimeOwner = (state?.devSessionId ?? null) === (state?.previous?.devSessionId ?? null);
+  const desktopPrevious = sameRuntimeOwner ? state?.previous?.runtimeReleaseId ?? null : null;
+  const appServerPrevious = sameRuntimeOwner ? state?.previous?.appServerReleaseId ?? null : null;
   const [desktopAllowlist, appServerAllowlist] = await Promise.all([
     validateBetaRuntimeReleaseAllowlist(targets.runtimeHome, desktopPrevious),
     validateBetaRuntimeReleaseAllowlist(
@@ -327,8 +331,8 @@ export async function inspectBetaSlotRetentionSafety({
   homeDir = os.homedir(),
   applicationsDir = "/Applications",
 }) {
-  const targets = resolveBetaUpdateTargets(homeDir, assertBetaSlotId(slotId));
   try {
+    const targets = await resolveBetaSlotRetentionTargets(homeDir, slotId);
     await assertNoBetaSlotSymlinkComponents(homeDir, targets.runtimeHome);
     await assertNoBetaSlotSymlinkComponents(
       path.join(homeDir, ".runweave"),
@@ -358,4 +362,13 @@ export async function inspectBetaSlotRetentionSafety({
       details: error.details ?? null,
     };
   }
+}
+
+export async function resolveBetaSlotRetentionTargets(homeDir, slotId) {
+  const legacy = resolveBetaUpdateTargets(homeDir, assertBetaSlotId(slotId));
+  await assertNoBetaSlotSymlinkComponents(homeDir, legacy.statePath);
+  const state = await readBetaSlotWarmState(legacy, slotId);
+  if (state?.devSessionId == null) return legacy;
+  assertDevSessionId(state.devSessionId);
+  return resolveBetaUpdateTargets(homeDir, slotId, state.devSessionId);
 }

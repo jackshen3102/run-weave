@@ -165,7 +165,7 @@ export class BatteryAlerts {
   }
   async dispose(): Promise<void> {
     this.stopped = true;
-    this.subscriptions.push?.dispose();
+    this.subscriptions.disposePushClients();
     clearTimeout(this.timer);
     this.unsubscribe?.();
     this.subscriptions.onChange = undefined;

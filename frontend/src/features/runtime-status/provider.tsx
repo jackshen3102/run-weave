@@ -302,7 +302,7 @@ export function RuntimeStatusProvider({
   return (
     <RuntimeStatusContext.Provider value={value}>
       {children}
-      <RuntimeStatusPanel />
+      <RuntimeStatusPanel apiBase={apiBase} token={token} />
       <RuntimeStatusNotice />
     </RuntimeStatusContext.Provider>
   );

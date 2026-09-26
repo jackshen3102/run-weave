@@ -13,6 +13,7 @@ export interface TerminalBrowserHeaderRule {
 }
 
 export interface TerminalBrowserHeaderState {
+  configured?: boolean;
   rules: TerminalBrowserHeaderRule[];
 }
 

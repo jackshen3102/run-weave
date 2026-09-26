@@ -35,13 +35,14 @@ export function resolveBetaPaths(
   devSessionId = null,
   ports = {},
 ) {
-  const targets = resolveBetaUpdateTargets(homeDir, instanceId);
+  const targets = resolveBetaUpdateTargets(homeDir, instanceId, devSessionId);
   const userData = targets.userData;
   const updateDir = targets.poolSlot
     ? path.join(targets.instanceRoot, "diagnostics")
     : path.join(userData, "update");
   const appServerHome = targets.appServerHome;
   return {
+    homeDir,
     sourceRoot: path.resolve(sourceRoot),
     appName: targets.appName,
     appPath: targets.appPath,
@@ -71,7 +72,7 @@ export function resolveBetaPaths(
     desktopStatusPath: path.join(userData, "beta-desktop-status.json"),
     logDir: path.join(updateDir, "logs"),
     pendingPath: path.join(updateDir, "pending.json"),
-    profileDir: path.join(userData, "browser-profile"),
+    profileDir: devSessionId ? path.join(homeDir, ".runweave", "dev-sessions", devSessionId, "browser-profile") : path.join(userData, "browser-profile"),
     runtimeHome: targets.runtimeHome,
     runtimeArtifactsRoot: path.join(targets.instanceRoot, "runtime-artifacts"),
     runtimeBuildRoot: path.join(targets.instanceRoot, "build", "runtime"),
@@ -106,7 +107,9 @@ export async function readReleaseId(pointerPath) {
 
 export async function writeReleaseId(pointerPath, releaseId) {
   if (!releaseId) {
-    await fs.rm(pointerPath, { force: true });
+    // Explicitly record a restored empty baseline. An absent pointer with
+    // release artifacts remains corruption; retention must not guess intent.
+    await writeJson(pointerPath, { releaseId: null, restoredEmpty: true });
     return;
   }
   await writeJson(pointerPath, {

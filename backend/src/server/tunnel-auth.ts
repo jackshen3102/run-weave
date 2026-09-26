@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import crypto from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
@@ -154,19 +155,17 @@ function writeTunnelCookie(
   response.setHeader("Set-Cookie", attrs.join("; "));
 }
 
-export function loadTunnelAuthConfig(
-  env: NodeJS.ProcessEnv,
-): TunnelAuthConfig | null {
-  const token = env.RUNWEAVE_TUNNEL_TOKEN?.trim();
+export function loadTunnelAuthConfig(): TunnelAuthConfig | null {
+  const token = settingText("backend.tunnelAuth.token")?.trim();
   if (!token) {
     return null;
   }
 
   return {
     token,
-    cookieName: env.RUNWEAVE_TUNNEL_COOKIE_NAME?.trim() || DEFAULT_COOKIE_NAME,
+    cookieName: settingText("backend.tunnelAuth.cookieName")?.trim() || DEFAULT_COOKIE_NAME,
     scope:
-      env.RUNWEAVE_TUNNEL_AUTH_SCOPE?.trim().toLowerCase() === "all"
+      settingText("backend.tunnelAuth.scope")?.trim().toLowerCase() === "all"
         ? "all"
         : "forwarded",
   };

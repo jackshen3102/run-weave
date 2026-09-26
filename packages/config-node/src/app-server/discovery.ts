@@ -1,3 +1,4 @@
+import { settingText, configuration } from "../runtime";
 import { readFile, rm } from "node:fs/promises";
 import {
   APP_SERVER_PROTOCOL_VERSION,
@@ -7,9 +8,16 @@ import {
   type AppServerLock,
   type AppServerRuntimeSource,
   type AppServerStatus,
-} from "./types";
+} from "@runweave/shared/app-server/types";
 import { resolveAppServerStatePaths, trimTrailingSlash } from "./paths";
 import { resolveCurrentAppServerRuntimeRelease } from "./runtime-release";
+import { isConfigurationObject, type EnvironmentContext } from "@runweave/shared/configuration";
+import { ConfigurationError } from "../errors";
+
+function assertEnvironment(health: AppServerHealth): void {
+  const expected = configuration().context;
+  if (health.environment?.kind !== expected.kind || health.environment.instanceId !== expected.instanceId || health.environment.configRoot !== expected.configRoot) throw new ConfigurationError("CONFIG_APP_SERVER_IDENTITY_MISMATCH");
+}
 
 export async function discoverAppServer(
   options: {
@@ -18,7 +26,7 @@ export async function discoverAppServer(
   } = {},
 ): Promise<AppServerConnectionInfo | null> {
   const env = options.env ?? process.env;
-  const discoveryMode = env.RUNWEAVE_APP_SERVER_DISCOVERY?.trim();
+  const discoveryMode = settingText("appServer.discovery");
   if (discoveryMode === "disabled") {
     return null;
   }
@@ -59,6 +67,7 @@ export async function getAppServerStatus(
         })
       : null;
 
+  if (health) assertEnvironment(health);
   return {
     available: Boolean(baseUrl && token && health),
     baseUrl: health && baseUrl ? baseUrl : null,
@@ -101,6 +110,7 @@ export async function fetchAppServerHealth(
   try {
     const response = await fetch(`${baseUrl}/healthz`, {
       signal: controller.signal,
+      redirect: "error",
     });
     if (!response.ok) {
       return null;
@@ -121,6 +131,7 @@ export async function fetchAppServerHealth(
       ok: true,
       service: APP_SERVER_SERVICE_NAME,
       protocolVersion: APP_SERVER_PROTOCOL_VERSION,
+      environment: isConfigurationObject(body.environment) && ["stable", "dev"].includes(String(body.environment.kind)) && typeof body.environment.instanceId === "string" && typeof body.environment.configRoot === "string" ? body.environment as unknown as EnvironmentContext : undefined,
       pid: body.pid,
       version: typeof body.version === "string" ? body.version : undefined,
       serviceInstanceId:
@@ -189,12 +200,15 @@ async function discoverFromEnv(
 ): Promise<AppServerConnectionInfo | null> {
   const baseUrl = env.RUNWEAVE_APP_SERVER_URL?.trim();
   const token = env.RUNWEAVE_APP_SERVER_TOKEN?.trim();
-  if (!baseUrl || !token) {
+  if (!baseUrl && !token) {
     return null;
   }
+  if (!baseUrl || !token) throw new ConfigurationError("CONFIG_APP_SERVER_HANDSHAKE_INCOMPLETE");
   const normalizedBaseUrl = trimTrailingSlash(baseUrl);
   const health = await fetchAppServerHealth(normalizedBaseUrl);
-  return health ? { baseUrl: normalizedBaseUrl, token } : null;
+  if (!health) throw new ConfigurationError("CONFIG_APP_SERVER_HANDSHAKE_FAILED");
+  assertEnvironment(health);
+  return { baseUrl: normalizedBaseUrl, token };
 }
 
 function isAppServerLock(value: unknown): value is AppServerLock {

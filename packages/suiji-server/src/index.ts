@@ -1,9 +1,10 @@
-import { readConfig } from "./config";
+import { readConfig, acquireServerOwner } from "./config";
 import { createPool } from "./db/pool";
 import { LocalFileStore } from "./storage/local-files";
 import { createApp } from "./http/app";
-const config = readConfig(),
-  pool = createPool(config.DATABASE_URL),
+const config = readConfig();
+const owner = acquireServerOwner();
+const pool = createPool(config.DATABASE_URL),
   store = new LocalFileStore(config.SUIJI_STORAGE_DIR);
 await store.initialize();
 const dbVersion = (await pool.query("SHOW server_version_num")).rows[0]
@@ -59,7 +60,7 @@ const stop = () => {
   clearInterval(metrics);
   app.closeReviews();
   server.close(() => {
-    void pool.end();
+    void pool.end().finally(() => owner.release());
   });
 };
 process.on("SIGINT", stop);

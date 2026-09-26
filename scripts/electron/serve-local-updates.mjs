@@ -1,18 +1,13 @@
+import { configurationLibrary as configuration } from "../lib/configuration.mjs";
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 const workspaceRoot = process.cwd();
 const rootDir = path.join(workspaceRoot, ".local-updates");
-const host =
-  process.env.RUNWEAVE_LOCAL_UPDATES_HOST ??
-  process.env.BROWSER_VIEWER_LOCAL_UPDATES_HOST ??
-  "127.0.0.1";
-const port = Number(
-  process.env.RUNWEAVE_LOCAL_UPDATES_PORT ??
-    process.env.BROWSER_VIEWER_LOCAL_UPDATES_PORT ??
-    "5500",
-);
+configuration.initializeConfiguration(configuration.resolveConfigurationContext({ requireExplicit: true }));
+const host = configuration.settingText("updates.serverHost") ?? "127.0.0.1";
+const port = Number(configuration.settingText("updates.serverPort") ?? "5500");
 
 const contentTypes = new Map([
   [".yml", "text/yaml; charset=utf-8"],

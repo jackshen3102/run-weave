@@ -1,8 +1,8 @@
+import { configurationPath } from "@runweave/config-node";
 import type { FeishuInboundMessageEvent } from "./bridge-message-handler.js";
 import { acquireProcessLock } from "../runtime/process-lock.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 export type DeliveryStatus =
@@ -66,10 +66,8 @@ export class FeishuStateStore {
   private readonly bridgeLeasePath: string;
   private readonly activeDeliveries = new Set<string>();
 
-  constructor(env: NodeJS.ProcessEnv) {
-    const stateDir =
-      env.RUNWEAVE_FEISHU_STATE_DIR?.trim() ||
-      join(homedir(), ".runweave", "feishu");
+  constructor() {
+    const stateDir = configurationPath("storage.feishuDirectory", "feishu");
     this.filePath = join(stateDir, "bridge-state.json");
     this.lockPath = join(stateDir, ".bridge-state.lock");
     this.bridgeLeasePath = join(stateDir, "bridge.pid");

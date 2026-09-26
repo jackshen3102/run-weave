@@ -1,3 +1,4 @@
+import { configurationLibrary } from "../lib/configuration.mjs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
@@ -5,11 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   filterChangedFilesAgainstSnapshot,
-  readDotenvValue,
-  RUNWEAVE_CODESIGN_IDENTITY_ENV,
-  upsertDotenvValue,
 } from "./core.mjs";
-import { codesignEnvFileRelativePath } from "./context.mjs";
 
 export function fingerprintFrontendBuildEnv(env) {
   const values = Object.entries(env)
@@ -170,37 +167,10 @@ export async function listCodesignIdentities() {
     .filter(Boolean);
 }
 
-export async function writeCodesignIdentityConfig(
-  configPath,
-  rawConfig,
-  identity,
-) {
-  await fs.mkdir(path.dirname(configPath), { recursive: true });
-  await fs.writeFile(
-    configPath,
-    upsertDotenvValue(
-      rawConfig ?? "",
-      RUNWEAVE_CODESIGN_IDENTITY_ENV,
-      identity,
-    ),
-  );
-}
-
-export async function resolveCodesignIdentity(sourceRoot, options = {}) {
-  const explicitIdentity = process.env[RUNWEAVE_CODESIGN_IDENTITY_ENV]?.trim();
-  if (explicitIdentity) {
-    return {
-      identity: explicitIdentity,
-      source: "environment",
-    };
-  }
-
-  const configPath = path.join(sourceRoot, codesignEnvFileRelativePath);
+export async function resolveCodesignIdentity(_sourceRoot, options = {}) {
+  const runtime = configurationLibrary.configuration();
   const persistConfig = options.persistConfig ?? true;
-  const rawConfig = await readTextFile(configPath);
-  const configuredIdentity = rawConfig
-    ? readDotenvValue(rawConfig, RUNWEAVE_CODESIGN_IDENTITY_ENV)?.trim()
-    : null;
+  const configuredIdentity = configurationLibrary.settingText("developer.codesignIdentity")?.trim();
   const excluded = new Set(options.exclude ?? []);
   const identities = await listCodesignIdentities();
 
@@ -211,7 +181,7 @@ export async function resolveCodesignIdentity(sourceRoot, options = {}) {
   ) {
     return {
       identity: configuredIdentity,
-      source: codesignEnvFileRelativePath,
+      source: "settings.yaml:developer.codesignIdentity",
     };
   }
 
@@ -224,7 +194,9 @@ export async function resolveCodesignIdentity(sourceRoot, options = {}) {
   }
 
   if (persistConfig) {
-    await writeCodesignIdentityConfig(configPath, rawConfig, nextIdentity);
+    configurationLibrary.resolveConfigurationContext({ requireExplicit: true });
+    const current = runtime.store.read();
+    runtime.store.patch({ expectedRevision: current.value.revision, expectedDigest: current.digest, changes: { "developer.codesignIdentity": nextIdentity } });
   }
   return {
     identity: nextIdentity,

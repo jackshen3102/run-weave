@@ -1,3 +1,4 @@
+import { settingText } from "@runweave/config-node";
 import { runProviderProcess } from "./process-runner";
 import { buildEvolutionMcpConfigArgs } from "./mcp-config";
 import { buildEvolutionRestrictedFeatureArgs } from "./restricted-features";
@@ -11,8 +12,8 @@ export class TraeEvolutionProvider implements EvolutionProviderAdapter {
   readonly provider = "trae" as const;
 
   constructor(
-    private readonly binary = process.env.RUNWEAVE_TRAE_BIN?.trim() ||
-      "trae-cli",
+    private readonly binary = settingText("agents.traex.binary")?.trim() ||
+      "traex",
   ) {}
 
   run(request: EvolutionProviderRequest): Promise<EvolutionProviderResult> {

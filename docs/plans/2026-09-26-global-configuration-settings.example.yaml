@@ -1,0 +1,233 @@
+# 设计展示样例，尚未实现；不是当前机器配置，也不可直接用于部署。
+# 所有私密值为占位，未读取本机凭据。null 表示待迁移/待填写，不代表默认值。
+# 展示所有拟议全局字段；独立服务域放在该服务自己的配置根，按实际角色选取。
+# <name>/<id>/<role> 是动态键占位；fast/max 属于不同 provider，不能照抄为有效角色配置。
+# 数值仅为展示值；真实安装保留既有配置，不能用此样例覆盖。
+
+schemaVersion: 1
+revision: 1
+kind: stable
+instanceId: stable
+domainVersions:
+  backend.server: 1
+  backend.auth: 1
+  backend.tunnelAuth: 1
+  services.snapshotPublisher: 1
+  services.snapshotHost: 1
+  services.pushSender: 1
+  services.pushGateway: 1
+  services.feishu: 1
+  agents.codex: 1
+  agents.traex: 1
+  agents.companion: 1
+  terminal: 1
+  scheduledTasks: 1
+  voice: 1
+  knowledge: 1
+  storage: 1
+  logging: 1
+  appServer: 1
+  updates: 1
+  developer: 1
+  desktop.browser: 1
+  services.suiji: 1
+  cli: 1
+  desktop.preferences: 1
+  desktop.tunnels: 1
+  agents.team: 1
+migrations: {}
+backend:
+  server:
+    port: 5001
+    host: 127.0.0.1
+    strictPort: true
+    frontendOrigin: null
+  auth:
+    username: <本机填写>
+    password: <本机填写>
+    jwtSecret: <保留迁移值>
+    accessTokenTtlSeconds: 86400
+    refreshTokenTtlSeconds: 2592000
+    refreshCookieName: viewer_refresh
+    secureCookies: true
+  tunnelAuth:
+    scope: null
+    cookieName: null
+    token: null
+services:
+  snapshotPublisher:
+    url: https://share.example.invalid
+    token: <本机填写>
+  snapshotHost:
+    directory: null
+    port: null
+    uploadToken: null
+  pushSender:
+    gatewayURL: https://push.example.invalid
+    senderToken: <本机填写>
+    hostId: null
+  pushGateway:
+    keyId: null
+    teamId: null
+    privateKeyFile: null
+    directory: null
+    port: null
+    bind: null
+    adminToken: null
+  feishu:
+    appId: null
+    appSecret: null
+    targetChatId: null
+    allowedOpenIds: []
+    notifyOpenIds: []
+    legacyWebhook:
+      url: null
+      secret: null
+      transport: null
+  suiji:
+    databaseURL: null
+    storageDirectory: null
+    host: null
+    port: null
+    accessSeconds: null
+    refreshSeconds: null
+    loginAttempts: null
+    loginWindowSeconds: null
+    webOrigins: []
+    ai:
+      provider: null
+      codexBinary: null
+      codexHome: null
+      timeoutSeconds: null
+    mcpEnabled: null
+agents:
+  codex:
+    binary: codex
+    sessionsDirectory: null
+  traex:
+    binary: traex
+    sessionsDirectory: null
+  companion:
+    binary: null
+  team:
+    roles:
+      <role>:
+        provider: null
+        model: null
+        reasoningEffort: null
+        fast: null
+        max: null
+    updatedAt: null
+terminal:
+  tmux:
+    enabled: null
+    binary: null
+    shutdownPolicy: null
+    scanOrphansOnStart: null
+    cleanupOrphans: null
+scheduledTasks:
+  enabled: null
+  timeoutMs: null
+  maxOutputBytes: null
+voice:
+  transcription:
+    language: null
+    acceptLanguage: null
+    prompt: null
+knowledge:
+  experience:
+    learning: null
+storage:
+  browserProfileDirectory: null
+  authStoreFile: null
+  terminalSessionStoreFile: null
+  activityDirectory: null
+  evolutionDirectory: null
+  experienceDirectory: null
+  scheduledTasksDirectory: null
+  feishuDirectory: null
+  terminalQuickInputStoreFile: null
+logging:
+  level: null
+  toFile: null
+  backendDirectory: null
+appServer:
+  discovery: null
+  stateDirectory: null
+  cloudSyncDirectory: null
+  codexStatusIntervalMs: null
+  codexStatusStartDelayMs: null
+  threadStatusIntervalMs: null
+  threadStatusStartDelayMs: null
+updates:
+  url: null
+  autoInstallLocal: null
+  serverHost: null
+  serverPort: null
+developer:
+  codesignIdentity: null
+  minimumFreeBytes: null
+desktop:
+  browser:
+    localEnabled: null
+    webMcpEnabled: null
+    proxy:
+      enabled: false
+      port: null
+    defaultProfileId: null
+    businessOrigin: null
+    profilePorts:
+      <profileId>: null
+    proxyModes:
+      <profileId>: null
+    worktrees:
+      <projectId>:
+        preferredProfileId: null
+    headerRules:
+      <profileId>:
+        - id: null
+          enabled: null
+          operation: null
+          name: null
+          value: null
+          urlPattern: null
+    pendingPortMigration: {}
+  preferences:
+    companion:
+      enabled: true
+  tunnels:
+    desktopId: null
+    hosts:
+      - id: null
+        name: null
+        sshTarget: null
+        autoConnect: null
+        remoteAccess:
+          enabled: null
+          listenAddress: null
+          port: null
+        forwards:
+          - id: null
+            name: null
+            port: null
+            path: null
+            enabled: null
+        browser:
+          enabled: null
+          backendPort: null
+          profileId: null
+          approvedBrowserGroupId: null
+    backendEndpoints:
+      - id: null
+        hostId: null
+        remotePort: null
+    revision: 0
+    completedImports: []
+cli:
+  activeProfile: <保留迁移值>
+  profiles:
+    <name>:
+      baseUrl: null
+      accessToken: null
+      refreshToken: null
+      expiresAt: null

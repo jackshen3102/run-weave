@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { resolveBetaPaths } from "../beta/state.mjs";
+import { configurationLibrary as configuration } from "../lib/configuration.mjs";
 import { DevSessionError } from "./contracts.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -20,8 +21,9 @@ export async function prepareBetaProject(manifest, requestedPath) {
     manifest.targetEnvironment.instanceId,
     manifest.devSessionId,
   );
-  const config = JSON.parse(await fs.readFile(paths.cliConfigPath, "utf8"));
-  const profile = config.profiles?.[config.activeProfile];
+  const context = configuration.resolveConfigurationContext({ args: ["--instance", manifest.devSessionId] });
+  const config = new configuration.ConfigurationStore(context).read().value.cli;
+  const profile = config?.profiles?.[config.activeProfile];
   if (
     profile?.baseUrl !== manifest.services.backend.url ||
     typeof profile.accessToken !== "string" ||
@@ -29,12 +31,12 @@ export async function prepareBetaProject(manifest, requestedPath) {
   ) {
     throw new DevSessionError("Beta CLI profile does not match the owned Backend", 4);
   }
-  const env = { ...process.env, RUNWEAVE_CONFIG_FILE: paths.cliConfigPath };
-  for (const name of ["RUNWEAVE_BASE_URL", "RUNWEAVE_BACKEND_PORT", "RUNWEAVE_ACCESS_TOKEN"]) {
+  const env = { ...process.env };
+  for (const name of ["RUNWEAVE_BASE_URL", "RUNWEAVE_BACKEND_PORT", "RUNWEAVE_ACCESS_TOKEN", "RUNWEAVE_CONFIG_FILE"]) {
     delete env[name];
   }
   const runCli = async (...args) => {
-    const { stdout } = await execFileAsync(process.execPath, [paths.controlCliPath, ...args, "--json"], {
+    const { stdout } = await execFileAsync(process.execPath, [paths.controlCliPath, ...configuration.configurationArguments(context), ...args, "--json"], {
       cwd: manifest.source.root,
       env,
       maxBuffer: 2 * 1024 * 1024,

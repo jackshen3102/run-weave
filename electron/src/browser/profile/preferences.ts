@@ -1,11 +1,8 @@
 import { BrowserWindow } from "electron";
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
-import {
-  desktopStateRoot,
-  writePrivateJson,
-} from "../../desktop/local-state.js";
+import { ConfigurationDomain } from "@runweave/config-node";
+import { requireDesktopMigration } from "../../desktop/configuration-migration.js";
+import type { ConfigurationValue } from "@runweave/shared/configuration";
 import { getProfileWhistlePorts } from "./endpoints.js";
-import path from "node:path";
 import {
   createDefaultTerminalBrowserProfilePreferences,
   isTerminalBrowserProfileId,
@@ -18,12 +15,9 @@ import {
 } from "@runweave/shared/terminal-browser-profile";
 import { TerminalBrowserError } from "../errors.js";
 
-const STORE_FILE = "terminal-browser-profiles.json";
+const store = new ConfigurationDomain<Partial<TerminalBrowserProfilePreferences>>("desktop.browser");
 let currentPreferences: TerminalBrowserProfilePreferences | null = null;
-
-function storePath(): string {
-  return path.join(desktopStateRoot(), STORE_FILE);
-}
+const preferenceKeys = ["defaultProfileId", "businessOrigin", "profilePorts", "proxyModes", "worktrees", "pendingPortMigration"] as const;
 
 function clonePreferences(
   preferences: TerminalBrowserProfilePreferences,
@@ -218,66 +212,26 @@ function normalizePersistedPreferences(
   };
 }
 
-function backupUnreadableStore(target: string): void {
-  const backupPath = `${target}.bad-${Date.now()}`;
-  try {
-    copyFileSync(target, backupPath);
-    console.warn("[electron] backed up invalid terminal browser profiles", {
-      backupPath,
-    });
-  } catch (error) {
-    console.warn("[electron] failed to back up terminal browser profiles", {
-      path: target,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
 function loadPreferences(): TerminalBrowserProfilePreferences {
-  const target = storePath();
-  try {
-    const raw = JSON.parse(readFileSync(target, "utf8"));
-    if (raw?.version === 1) return importLegacyPreferences(target, raw);
-    return normalizePersistedPreferences(raw);
-  } catch (error) {
-    if (
-      error &&
-      typeof error === "object" &&
-      (error as { code?: unknown }).code === "ENOENT"
-    ) {
-      return createDefaultTerminalBrowserProfilePreferences();
-    }
-    console.warn("[electron] failed to read terminal browser profiles", {
-      path: target,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    backupUnreadableStore(target);
-    throw new TerminalBrowserError(
-      "PROFILE_CONFIG_CORRUPT",
-      "Browser 配置损坏，已保留原文件，请从备份恢复",
-      {},
-    );
-  }
+  requireDesktopMigration("desktop.browser.defaultProfileId", "terminal-browser-profiles.json");
+  const saved = store.read();
+  const defaults = createDefaultTerminalBrowserProfilePreferences();
+  const normalized = normalizePersistedPreferences({ ...defaults, ...saved,
+    defaultProfileId: saved?.defaultProfileId ?? defaults.defaultProfileId,
+    worktrees: saved?.worktrees ?? defaults.worktrees,
+    version: 2 });
+  store.markApplied(preferenceKeys.map(key => `desktop.browser.${key}`));
+  return normalized;
 }
 
-function persistPreferences(
-  preferences: TerminalBrowserProfilePreferences,
-): void {
-  const target = storePath();
-  try {
-    if (existsSync(target))
-      writePrivateJson(
-        `${target}.bak`,
-        JSON.parse(readFileSync(target, "utf8")),
-      );
-    writePrivateJson(target, preferences);
-  } catch {
-    throw new TerminalBrowserError(
-      "PROFILE_CONFIG_WRITE_FAILED",
-      "Browser 配置未保存，原配置保持不变",
-      {},
-    );
+function persistPreferences(preferences: TerminalBrowserProfilePreferences): void {
+  const changes: Record<string, ConfigurationValue> = {};
+  for (const key of preferenceKeys) {
+    const value = preferences[key];
+    if (value !== undefined) changes[`desktop.browser.${key}`] = value as ConfigurationValue;
   }
+  try { store.patch(changes); }
+  catch (error) { currentPreferences = null; preferenceLoadError = null; throw error; }
 }
 
 function notifyPreferencesChanged(
@@ -314,6 +268,7 @@ export function saveTerminalBrowserProfileProxyMode(
   next.proxyModes = { ...next.proxyModes, [profileId]: proxyMode };
   persistPreferences(next);
   currentPreferences = next;
+  store.markApplied(preferenceKeys.map(key => `desktop.browser.${key}`));
   notifyPreferencesChanged(clonePreferences(next));
 }
 
@@ -380,64 +335,15 @@ export function updateTerminalBrowserProfilePreferences(
   }
   persistPreferences(next);
   currentPreferences = next;
+  store.markApplied(preferenceKeys.map(key => `desktop.browser.${key}`));
   notifyPreferencesChanged(clonePreferences(next));
   return clonePreferences(next);
 }
 
-// One-time schema import: keep the complete old file as a private backup. Port
-// candidates remain pending until explicitly selected; runtime never reads them.
-function importLegacyPreferences(
-  target: string,
-  raw: Record<string, unknown>,
-): TerminalBrowserProfilePreferences {
-  const pending: TerminalBrowserProfilePreferences["pendingPortMigration"] = {};
-  const worktrees: Record<string, TerminalBrowserWorktreePreference> = {};
-  if (
-    !raw.worktrees ||
-    typeof raw.worktrees !== "object" ||
-    !isTerminalBrowserProfileId(raw.defaultProfileId)
-  )
-    throw new Error("Invalid legacy preferences");
-  for (const [id, entry] of Object.entries(raw.worktrees)) {
-    const value = entry as {
-      preferredProfileId: TerminalBrowserProfileId | null;
-      devServerPort: unknown;
-    };
-    normalizeTerminalBrowserProjectId(id);
-    worktrees[id] = normalizeWorktreePreference(value);
-    const port = normalizeTerminalBrowserDevServerPort(value.devServerPort);
-    if (port) {
-      const profile = value.preferredProfileId ?? raw.defaultProfileId;
-      pending[profile] = [...new Set([...(pending[profile] ?? []), port])];
-    }
-  }
-  const next = normalizePersistedPreferences({
-    ...raw,
-    version: 2,
-    worktrees,
-    profilePorts: {},
-    pendingPortMigration: pending,
-  });
-  writePrivateJson(`${target}.v1-backup`, raw);
-  writePrivateJson(target, next);
-  return next;
-}
-
+// Recovery is explicit and uses the private unified-file backup, then retries read.
 export function restoreTerminalBrowserProfilePreferences(): TerminalBrowserProfilePreferences {
-  const target = storePath();
-  let recovered: TerminalBrowserProfilePreferences;
-  try {
-    recovered = normalizePersistedPreferences(
-      JSON.parse(readFileSync(`${target}.bak`, "utf8")),
-    );
-  } catch {
-    throw new TerminalBrowserError(
-      "PROFILE_CONFIG_CORRUPT",
-      "没有有效的配置备份，请保留当前文件并手动恢复",
-    );
-  }
-  if (existsSync(target)) copyFileSync(target, `${target}.bad-${Date.now()}`);
-  writePrivateJson(target, recovered);
+  store.restore(["defaultProfileId", "businessOrigin", "profilePorts", "proxyModes", "worktrees", "pendingPortMigration"].map((key) => `desktop.browser.${key}`));
+  const recovered = loadPreferences();
   currentPreferences = recovered;
   preferenceLoadError = null;
   notifyPreferencesChanged(clonePreferences(recovered));

@@ -22,7 +22,7 @@ export async function resolveCliBaseUrl(params: {
   store?: ProfileStore;
 }): Promise<CliBaseUrlContext> {
   const env = params.env ?? process.env;
-  const store = params.store ?? new ProfileStore(resolveConfigPath(env));
+  const store = params.store ?? new ProfileStore(resolveConfigPath());
   const config = await store.load();
   const profileName =
     params.profileName ?? config?.activeProfile ?? DEFAULT_PROFILE;

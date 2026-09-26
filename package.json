@@ -55,7 +55,7 @@
     "prestart": "pnpm build",
     "start": "pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001",
     "build": "pnpm -r build",
-    "lint": "pnpm -r lint",
+    "lint": "pnpm configuration:check && pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm test:e2e",
     "test:e2e": "pnpm --filter @runweave/frontend test:e2e",
@@ -87,7 +87,8 @@
     "ios:build": "node packages/app-ios/scripts/ios.mjs build",
     "ios:run": "node packages/app-ios/scripts/ios.mjs run",
     "agents:build": "node scripts/agents/build.mjs",
-    "pi:install": "node scripts/agents/install-pi.mjs"
+    "pi:install": "node scripts/agents/install-pi.mjs",
+    "configuration:check": "node ./scripts/quality/configuration.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --fix",

@@ -1,3 +1,4 @@
+import { deviceStorage } from "../../device-storage";
 const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-fe]";
 const TERMINAL_PERF_LOG_STORAGE_KEY = "viewer.terminal.perfLogs";
 
@@ -7,7 +8,7 @@ function isTerminalPerfLoggingEnabled(): boolean {
   }
 
   try {
-    return localStorage.getItem(TERMINAL_PERF_LOG_STORAGE_KEY) === "true";
+    return deviceStorage.getItem(TERMINAL_PERF_LOG_STORAGE_KEY) === "true";
   } catch {
     return false;
   }

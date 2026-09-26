@@ -1,3 +1,4 @@
+import { CONFIGURATION_FIELDS } from "@runweave/shared/configuration";
 export function isNpmProcessEnvName(name: string): boolean {
   return name.toLowerCase().startsWith("npm_");
 }
@@ -15,6 +16,9 @@ export function sanitizeTerminalProcessEnv(
 ): NodeJS.ProcessEnv {
   const sanitized = { ...env };
   removeNpmProcessEnv(sanitized);
+  for (const field of CONFIGURATION_FIELDS) if (field.sensitive) for (const key of field.environmentKeys) delete sanitized[key];
+  delete sanitized.RUNWEAVE_ACCESS_TOKEN;
+  delete sanitized.RUNWEAVE_CONFIG_FILE;
   delete sanitized.NO_COLOR;
   delete sanitized.ELECTRON_RUN_AS_NODE;
   delete sanitized.FRONTEND_DIST_DIR;
