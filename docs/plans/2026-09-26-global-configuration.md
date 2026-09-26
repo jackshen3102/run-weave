@@ -20,7 +20,7 @@
 
 完整 Dev Session 生命周期回归现已通过 64 项检查（`dev-session-verification-final.log`）；之前的活跃槽位干扰已通过只停止本任务资源消除，健康探测 fixture 已迁至 YAML，状态/停止并发断言按合法时序核对最终状态。行列号诊断版本已通过全量类型、lint 与安装产物复核；随后新增的显式备份恢复已通过配置库/共享合同/CLI 类型检查、CLI 构建和真实 CLI 冲突/恢复验证，治理与架构检查通过。重建时绑定 CLI 的地址与凭据随新 Backend 端口更新，revision 从 5 到 6；其余字段保持，不将该结果写成严格的配置字节保持通过。
 
-本轮另用全新打包实例 `dvs-0a2782` 复核 GCS-008/019：损坏 YAML 被启动控制面和 CLI 拒绝；缺失 JWT 与整组认证时，即使注入旧环境变量也没有补齐，配置原件及数据摘要保持。缺失单项认证最初只向安装控制面返回健康超时，已将 Backend 核心域和必要认证值的启动前检查接入 Dev Session 入口，重验返回明确字段错误。嵌套登录 Shell 原先命中旧全局 `rw`，修复 ZDOTDIR 生命周期后从真实安装态终端写入当前 Dev，跨实例参数与绕过绑定入口的无目标写入均拒绝。测试终端已关闭，Playwright 已 detach，该 Session 已停止并还原测试偏好。并行合入的 Clarity 两个构建键与 iOS 即时回复设备键已补入清单/设备 adapter；最新配置治理检查覆盖 1104 个访问点。
+本轮另用全新打包实例 `dvs-0a2782` 复核 GCS-008/019：损坏 YAML 被启动控制面和 CLI 拒绝；缺失 JWT 与整组认证时，即使注入旧环境变量也没有补齐，配置原件及数据摘要保持。缺失单项认证最初只向安装控制面返回健康超时，已将 Backend 核心域和必要认证值的启动前检查接入 Dev Session 入口，重验返回明确字段错误。嵌套登录 Shell 原先命中旧全局 `rw`，修复 ZDOTDIR 生命周期后从真实安装态终端写入当前 Dev，跨实例参数与绕过绑定入口的无目标写入均拒绝。测试终端已关闭，Playwright 已 detach，该 Session 已停止并还原测试偏好。并行合入的 Clarity 两个构建键与 iOS 即时回复设备键已补入清单/设备 adapter；最新配置治理检查覆盖 1108 个访问点。
 
 GCL-005 的独立目录探针补到 9 次真实 CLI 路径拒绝，覆盖另一 Dev 的绝对路径、`..` 穿越与符号链接，`data`、`runtime`、`electron/user-data` 归属函数全部拒绝，两个 YAML 摘要不变；实际安装态覆盖 userData 的拒绝仍待补。GCI-005 的安装态复核已在同一打包 Dev 完成：未来 schema 阻断启动、脱敏预览、三摘要恢复、完整未来文件私有备份、App 重新就绪、原项目 ID 与终端命令输出保留，恢复偏好后停止资源。证据为 `owned-paths-evidence.json`、`installed-recovery-prepare-evidence.json`、`installed-recovery-running-evidence.json`、`installed-recovery-terminal.txt`；这两项因测试合同中的额外边界尚未计入通过数。
 
