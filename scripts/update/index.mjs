@@ -270,6 +270,7 @@ async function main() {
       appServerRelease = await runAppServerUpdate({
         appServerHome,
         controlCliPath: process.env.RUNWEAVE_CLI_BUNDLE_OUTFILE?.trim() || null,
+        gitHead,
         sourceRoot,
       });
     }

@@ -67,19 +67,14 @@ export async function runRuntimeUpdate({
 export async function runAppServerUpdate({
   appServerHome,
   controlCliPath,
+  gitHead,
   sourceRoot,
 }) {
   const instanceKey = path.basename(path.resolve(appServerHome));
   const releaseId = `local-app-server-${instanceKey}-${Date.now()}`;
   const cliEntry =
     controlCliPath ??
-    path.join(
-      sourceRoot,
-      "packages",
-      "runweave-cli",
-      "dist",
-      "index.js",
-    );
+    path.join(sourceRoot, "packages", "runweave-cli", "dist", "index.js");
 
   await runChecked(
     "node",
@@ -103,7 +98,10 @@ export async function runAppServerUpdate({
       appServerHome,
       ...explicitConfigurationArguments(),
     ],
-    { cwd: sourceRoot },
+    {
+      cwd: sourceRoot,
+      env: { ...process.env, RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown" },
+    },
   );
 
   let status = null;
