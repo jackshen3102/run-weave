@@ -42,14 +42,16 @@ const result=cp.spawnSync(process.execPath,[binding.entry,'--instance',binding.i
 process.exit(result.status??1);
 `;
   const runner = path.join(bin, "bound-cli.cjs");
+  const command = path.join(bin, "rw");
   const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
   for (const [file, content, mode] of [
     [runner, source, 0o600],
-    [path.join(bin, "rw"), `#!/bin/sh\nexec env ELECTRON_RUN_AS_NODE=1 ${quote(process.execPath)} ${quote(runner)} "$@"\n`, 0o700],
+    [command, `#!/bin/sh\nexec env ELECTRON_RUN_AS_NODE=1 ${quote(process.execPath)} ${quote(runner)} "$@"\n`, 0o700],
   ] as const) {
     const temporary = `${file}.${randomUUID()}.tmp`;
     writeFileSync(temporary, content, { mode, flag: "wx" });
     renameSync(temporary, file);
   }
+  process.env.RUNWEAVE_CLI_BIN = command;
   process.env.PATH = `${bin}${path.delimiter}${process.env.PATH ?? ""}`;
 }

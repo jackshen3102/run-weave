@@ -15,6 +15,7 @@ import { runProjectCommand } from "./commands/project.js";
 import { runTerminalCommand } from "./commands/terminal.js";
 import { runBrowserCommand } from "./commands/browser.js";
 import { runScheduledTaskCommand } from "./commands/scheduled-task.js";
+import { runEfficiencyCommand } from "./commands/efficiency.js";
 import { toCliError } from "./errors.js";
 import { readCliVersion } from "./version.js";
 import { runConfigCommand } from "./commands/config.js";
@@ -109,6 +110,10 @@ export async function runCli(
       await runScheduledTaskCommand(subcommand, args, io);
       return 0;
     }
+    if (group === "efficiency") {
+      await runEfficiencyCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "terminal") {
       await runTerminalCommand(subcommand, args, io);
       return 0;
@@ -118,7 +123,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw <config|activity|agent-team|app|app-server|auth|browser|evolution|experience|knowledge|feishu|project|scheduled-task|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <config|activity|agent-team|app|app-server|auth|browser|efficiency|evolution|experience|knowledge|feishu|project|scheduled-task|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {
