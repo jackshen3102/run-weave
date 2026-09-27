@@ -155,6 +155,8 @@ Web desktop terminal 的 floating composer 是 `TerminalState` 的消费方之�
 
 浮动 composer 维护 Web 侧 draft mirror：普通字符、换行、Backspace、Ctrl+U、bracketed paste 等可识别输入会同步为 draft；焦点报告和鼠标控制序列会忽略；未知 escape sequence 会让本 session 暂停 floating composer，直到用户回到底部或 agent/session metadata 变化后重新评估。composer 发送或回到底部同步草稿时，会保守使用 Ctrl+U + draft 替换真实 TUI 输入行；这个 replay 只允许在 supported agent/TUI gate 内发生。
 
+桌面端一键回复复用同一 eligibility、draft mirror、active Pane 定位和 pending 锁，在 Terminal 右侧以可收起抽屉提供“可以”“继续”“不需要”。固定回复通过既有 `prompt_replace + submit` 输入合同提交，并明确设置 `recordQuickInput: false`，因此不进入 Backend 快捷指令历史。发送固定回复后 Web 侧原草稿继续保留并标记为待同步；结果未知时不自动重发，目标 Terminal 或 Pane 变化后旧请求也不得改写新目标的抽屉状态。
+
 ## 运行限制
 
 当前状态模型支持 Codex 与 Trae 系列 CLI。Claude、Coco 或普通 shell 命令需要后续扩展 `TerminalAgentKind` 或新增 `shell_running`，不要通过 tail 文本猜测提前混入当前模型。

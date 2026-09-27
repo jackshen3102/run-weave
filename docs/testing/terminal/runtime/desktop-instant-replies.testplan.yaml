@@ -1,0 +1,116 @@
+version: 1
+name: 桌面终端一键回复验收
+description: >
+  验证桌面端受支持的 Agent 终端可通过右侧快捷抽屉安全发送“可以”“继续”“不需要”，且目标、
+  草稿、快捷历史、并发和失败语义符合现有 Terminal 输入合同。
+
+cases:
+  - id: DIR-001
+    name: 固定回复按原文提交到当前终端
+    required: true
+    description: >
+      验证桌面 Terminal surface 的右侧快捷抽屉展示三个固定回复，任一回复只提交一次完全相同的文本，
+      并保持抽屉展开供继续使用。
+    preconditions:
+      - 已使用真实 Dev Session 打开一个 running 状态、支持 floating composer 的 Agent 终端。
+      - 当前终端处于可接受输入的状态，且没有未提交草稿。
+    steps:
+      - 使用 $toolkit:playwright-cli 附着该 Dev Session 的真实桌面 renderer；确认终端右侧中部显示“展开一键回复”入口。
+      - 点击入口；确认右侧抽屉依次显示“可以”“继续”“不需要”和收起按钮，且没有改动顶部“快捷指令”入口。
+      - 依次在 Agent 可接受输入时点击三个回复；每次确认只产生一个目标 input POST，请求正文为对应原文、mode 为 prompt_replace、submit 为 true、recordQuickInput 为 false。
+      - 每次确认终端只收到并提交对应回复一次，页面显示已发送反馈且抽屉保持展开；出现重复文本、额外回车或自动关闭即判失败。
+
+  - id: DIR-002
+    name: 一键回复保留未提交草稿
+    required: true
+    description: >
+      验证固定回复不会消费、拼接或覆盖桌面浮动输入器中的既有草稿，原草稿之后仍可由用户显式发送一次。
+    preconditions:
+      - 已使用真实 Dev Session 打开一个 running 状态、支持安全草稿镜像的 Agent 终端。
+      - 当前 Terminal 和 active Pane 已记录，输入器中不存在其他 pending 请求。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开浮动输入器，输入一段唯一草稿但不提交；确认编辑器显示完整草稿。
+      - 展开右侧一键回复抽屉并点击“继续”；确认终端本次只提交“继续”，未提交“唯一草稿继续”或其他拼接文本。
+      - 等待请求成功；确认浮动输入器仍显示原唯一草稿，内容和顺序不变。
+      - 显式发送保留的草稿；确认终端只再收到该草稿一次，证明草稿不是截图或失效副本。
+
+  - id: DIR-003
+    name: 多 Pane 回复只发送到活动目标
+    required: true
+    description: >
+      验证多 Pane Terminal 中的一键回复携带当前 active panelId，不会发送到默认 Pane 或上一次活动 Pane。
+    preconditions:
+      - 已使用真实 Dev Session 创建一个含两个可区分 Pane 的 running Terminal，两个 Pane 均可观察输入结果。
+      - 第二个 Pane 已成为 active Pane，且两个 Pane 都没有未提交草稿。
+    steps:
+      - 使用 $toolkit:playwright-cli 附着真实桌面 renderer，记录当前 Terminal ID 和第二个 Pane 的 panelId。
+      - 展开右侧一键回复抽屉并点击“可以”；确认唯一 input POST 指向当前 Terminal，且正文中的 panelId 等于第二个 Pane。
+      - 观察两个 Pane；确认只有第二个 Pane 收到并提交“可以”，第一个 Pane 没有输入、回车或状态变化。
+
+  - id: DIR-004
+    name: 一键回复不进入快捷指令历史
+    required: true
+    description: >
+      验证固定回复不会创建、恢复或更新 Backend 快捷输入记录，用户已有的最近输入与固定模板保持不变。
+    preconditions:
+      - 已使用真实 Dev Session 打开一个可发送输入的 supported Agent Terminal。
+      - Backend 快捷指令库中已有可识别的固定和最近记录，并已取得发送前完整列表及 useCount。
+    steps:
+      - 使用 $toolkit:playwright-cli 展开右侧一键回复抽屉并发送“可以”；确认请求明确携带 recordQuickInput 为 false 且返回 inputAccepted。
+      - 重新读取 fixed、recent 和 all 三类快捷指令；确认条目 ID、正文、固定状态和 useCount 与发送前一致，也没有新增“可以”。
+      - 打开顶部“快捷指令”弹层；确认原有搜索、固定模板和最近输入仍可见，未混入三个内置回复。
+
+  - id: DIR-005
+    name: pending 锁阻止重复发送
+    required: true
+    description: >
+      验证一键回复请求未结束时所有回复和普通提交动作被锁定，快速重复操作只产生一个输入请求。
+    preconditions:
+      - 已使用真实 Dev Session 打开一个 running 状态、支持 floating composer 的 Agent 终端。
+      - 可在真实 renderer 中延迟目标 input 请求的响应，并可统计该请求次数。
+    steps:
+      - 使用 $toolkit:playwright-cli 延迟下一次 input POST，展开右侧抽屉并快速连续点击“继续”两次；确认只发出一个 POST。
+      - 在响应返回前检查右侧抽屉和浮动输入器；确认三个回复、普通发送和排队动作均不可再次触发。
+      - 放行成功响应；确认 pending 状态解除且只出现一次成功反馈，终端也只提交一次“继续”。
+
+  - id: DIR-006
+    name: 未确认结果不自动重发
+    required: true
+    description: >
+      验证网络失败或超时后的结果被视为未知，页面保留草稿和回复栏并提示先核对终端，且不会自动产生第二次请求。
+    preconditions:
+      - 已使用真实 Dev Session 打开一个 running 状态、支持安全草稿镜像的 Agent 终端。
+      - 可在真实 renderer 中让下一次 input POST 连接中断或超过客户端超时，并可统计请求次数。
+    steps:
+      - 使用 $toolkit:playwright-cli 在浮动输入器写入唯一草稿但不提交，再展开回复栏并点击“不需要”。
+      - 让该请求返回网络失败或超时；确认页面显示“发送结果未确认，请先核对终端结果；不会自动重发。”，
+        右侧抽屉和原草稿均保留。
+      - 等待超过一次正常重试间隔；确认仍只有一个 input POST，页面没有自动改成成功，也没有清空错误或草稿。
+
+  - id: DIR-007
+    name: 不安全终端状态不暴露回复入口
+    required: true
+    description: >
+      验证一键回复只在桌面、running、受支持且草稿镜像可靠的 Agent 终端可用，避免向无法安全保留输入的目标发送。
+    preconditions:
+      - 已准备可切换的 supported Agent Terminal、普通 shell Terminal 和 exited Terminal。
+      - 可分别以 desktop 与 mobile monitor client mode 打开这些 Terminal surface。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开 desktop 模式的 supported Agent Terminal；确认一键回复入口可见。
+      - 切换到普通 shell、exited Terminal、mobile monitor 模式或触发草稿镜像不支持状态；逐一确认入口隐藏或已展开抽屉立即关闭，且没有 input POST。
+      - 切回原 supported Agent Terminal；确认可以重新展开右侧抽屉，旧目标的成功或错误反馈没有泄漏到当前页面。
+
+  - id: DIR-008
+    name: 一键回复资格跟随当前活动 Pane
+    required: true
+    description: >
+      验证同一 Terminal 同时包含 Agent Pane 和普通 shell Pane 时，一键回复入口严格跟随活动 Pane，
+      不会依据其他 Pane 或 session 级 Agent 状态向 shell 发送固定回复。
+    preconditions:
+      - 已使用真实 Dev Session 创建一个包含两个 running Pane 的 Terminal，其中一个是 supported Agent，另一个是普通 shell。
+      - Agent Pane 当前为 active Pane，两个 Pane 均无未提交草稿或 pending 输入请求。
+    steps:
+      - 使用 $toolkit:playwright-cli 附着真实桌面 renderer；确认 Agent Pane 活动时右侧显示“展开一键回复”入口，并展开抽屉。
+      - 将普通 shell Pane 切换为 active Pane；确认已展开抽屉立即关闭，右侧不再显示一键回复入口，且切换过程没有产生 input POST。
+      - 在 shell Pane 保持活动时操作原入口所在区域并检查网络请求；确认没有固定回复 input POST，也没有清空或提交 shell 当前输入行。
+      - 切回 Agent Pane；确认一键回复入口重新出现，且 shell Pane 没有收到“可以”“继续”或“不需要”。

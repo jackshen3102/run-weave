@@ -1,10 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Terminal } from "@xterm/xterm";
-import {
-  scrollTerminalToBottom,
-  type TerminalBottomState,
-} from "@runweave/common/terminal";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalPromptSubmitKey } from "@runweave/shared/terminal/input";
@@ -17,100 +13,10 @@ import {
 import { logTerminalPerf } from "../../../features/terminal/output/performance";
 import { sendTerminalInput as sendTerminalInputRequest } from "../../../services/terminal/index";
 import type { TerminalFloatingComposerDiagnostics } from "./floating-composer";
+import { useTerminalInstantReplyController } from "./use-terminal-instant-reply-controller";
+import type { TerminalScrollController } from "./use-terminal-scroll-controller";
 
-const TMUX_EXIT_COPY_MODE_REQUEST_COOLDOWN_MS = 1_000;
 const INPUT_LAG_FALLBACK_DELAY_MS = 150;
-
-type TerminalRuntimeKindRef = RefObject<"tmux" | "pty" | null>;
-
-interface UseTerminalScrollControllerOptions {
-  active: boolean;
-  apiBase: string;
-  runtimeKindRef: TerminalRuntimeKindRef;
-  terminalRef: RefObject<Terminal | null>;
-  terminalSessionId: string;
-  token: string;
-}
-
-export function useTerminalScrollController({
-  active,
-  apiBase,
-  runtimeKindRef,
-  terminalRef,
-  terminalSessionId,
-  token,
-}: UseTerminalScrollControllerOptions) {
-  const tmuxExitCopyModeRequestedAtRef = useRef(0);
-  const [bottomOffsetRows, setBottomOffsetRows] = useState(0);
-  const [terminalAtBottom, setTerminalAtBottom] = useState(true);
-  const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false);
-  const [tmuxScrollbackActive, setTmuxScrollbackActive] = useState(false);
-
-  const requestTmuxExitCopyMode = useMemoizedFn(() => {
-    const now = Date.now();
-    if (
-      now - tmuxExitCopyModeRequestedAtRef.current <
-      TMUX_EXIT_COPY_MODE_REQUEST_COOLDOWN_MS
-    ) {
-      return;
-    }
-    tmuxExitCopyModeRequestedAtRef.current = now;
-
-    const sendExitRequest = () => {
-      void sendTerminalInputRequest(apiBase, token, terminalSessionId, {
-        data: "",
-        mode: "tmux_exit_copy_mode",
-      });
-    };
-
-    sendExitRequest();
-    window.setTimeout(sendExitRequest, 250);
-    window.setTimeout(sendExitRequest, 800);
-  });
-
-  const scrollToBottom = useMemoizedFn(() => {
-    const terminal = terminalRef.current;
-    if (!terminal) {
-      return;
-    }
-    if (runtimeKindRef.current === "tmux") {
-      requestTmuxExitCopyMode();
-    }
-    scrollTerminalToBottom(terminal);
-    setTerminalAtBottom(true);
-    setBottomOffsetRows(0);
-    setHasNewOutputBelow(false);
-    setTmuxScrollbackActive(false);
-    terminal.focus();
-  });
-
-  const handleBottomStateChange = useMemoizedFn(
-    (state: TerminalBottomState) => {
-      setTerminalAtBottom(state.isAtBottom);
-      setBottomOffsetRows(state.bottomOffsetRows);
-      if (state.isAtBottom) {
-        setHasNewOutputBelow(false);
-      }
-    },
-  );
-
-  const showScrollToBottomControl =
-    active && (!terminalAtBottom || hasNewOutputBelow || tmuxScrollbackActive);
-
-  return {
-    bottomOffsetRows,
-    handleBottomStateChange,
-    hasNewOutputBelow,
-    requestTmuxExitCopyMode,
-    scrollToBottom,
-    setHasNewOutputBelow,
-    setTerminalAtBottom,
-    setTmuxScrollbackActive,
-    showScrollToBottomControl,
-    terminalAtBottom,
-    tmuxScrollbackActive,
-  };
-}
 
 interface UseTerminalFloatingDraftControllerOptions {
   activeCommand: string | null;
@@ -208,20 +114,29 @@ function useTerminalFloatingDraftController({
     };
   }, [apiBase, terminalSessionId, paneWorkspace?.activePanelId]);
 
-  const eligible = shouldEnableFloatingComposer({
-    activeCommand,
-    bufferType,
-    clientMode,
-    searchOpen,
-    sessionRunning: sessionStatus === "running",
-    terminalState,
-  });
   const activePanel = paneWorkspace?.panels.find(
     (panel) => panel.panelId === paneWorkspace.activePanelId,
   );
+  const targetActiveCommand = paneWorkspace
+    ? (activePanel?.activeCommand ?? null)
+    : activeCommand;
+  const targetTerminalState = paneWorkspace
+    ? activePanel?.terminalState
+    : terminalState;
+  const targetSessionRunning = paneWorkspace
+    ? activePanel?.status === "running"
+    : sessionStatus === "running";
+  const eligible = shouldEnableFloatingComposer({
+    activeCommand: targetActiveCommand,
+    bufferType,
+    clientMode,
+    searchOpen,
+    sessionRunning: targetSessionRunning,
+    terminalState: targetTerminalState,
+  });
   const queueKey = getFloatingComposerQueueKey({
-    activeCommand: activePanel?.activeCommand ?? activeCommand,
-    terminalState: activePanel?.terminalState ?? terminalState,
+    activeCommand: targetActiveCommand,
+    terminalState: targetTerminalState,
   });
 
   const clearInputLagFallbackTimer = useMemoizedFn(() => {
@@ -372,6 +287,25 @@ function useTerminalFloatingDraftController({
       Boolean(sendError));
   const visible = available && floatingComposerOpen;
   const showTrigger = available && !floatingComposerOpen;
+  const handleInstantReplySent = useMemoizedFn(() => {
+    lastSyncedTuiDraftRef.current = "";
+    floatingDraftDirtyRef.current = floatingDraftRef.current.length > 0;
+    if (floatingDraftDirtyRef.current) {
+      setFloatingComposerOpen(true);
+    }
+  });
+  const instantReply = useTerminalInstantReplyController({
+    apiBase,
+    available: eligible && draftMirrorSupported,
+    error,
+    onSent: handleInstantReplySent,
+    panelId: paneWorkspace?.activePanelId,
+    requestScopeRef,
+    sendPendingRef: floatingDraftSyncPendingRef,
+    setSending,
+    terminalSessionId,
+    token,
+  });
 
   const handleSend = useMemoizedFn(async () => {
     if (!floatingDraft) {
@@ -435,11 +369,11 @@ function useTerminalFloatingDraftController({
     clearInputLagFallbackTimer();
     setInputLagFallbackActive(false);
   }, [
-    activeCommand,
+    targetActiveCommand,
     clearInputLagFallbackTimer,
     terminalSessionId,
-    terminalState?.agent,
-    terminalState?.state,
+    targetTerminalState?.agent,
+    targetTerminalState?.state,
   ]);
 
   useEffect(() => {
@@ -477,7 +411,13 @@ function useTerminalFloatingDraftController({
     queueKey,
     handleUserInputData,
     inputLagFallbackActive,
+    instantReplyAvailable: instantReply.available,
+    instantReplyFeedback: instantReply.feedback,
+    instantReplyOpen: instantReply.open,
     onClose: handleClose,
+    onInstantReplyClose: instantReply.onClose,
+    onInstantReplyOpen: instantReply.onOpen,
+    onInstantReplySend: instantReply.onSend,
     onOpen: () => setFloatingComposerOpen(true),
     showTrigger,
     visible,
@@ -492,7 +432,7 @@ interface UseTerminalFloatingComposerControllerOptions {
   paneWorkspace: TerminalPanelWorkspace | null;
   searchOpen: boolean;
   sessionStatus: "running" | "exited";
-  scroll: ReturnType<typeof useTerminalScrollController>;
+  scroll: TerminalScrollController;
   terminalRef: RefObject<Terminal | null>;
   terminalSessionId: string;
   terminalState?: TerminalState;
@@ -561,6 +501,11 @@ export function useTerminalFloatingComposerController({
     requestAnimationFrame(() => terminalRef.current?.focus());
   });
 
+  const handleInstantReplyClose = useMemoizedFn(() => {
+    draft.onInstantReplyClose();
+    requestAnimationFrame(() => terminalRef.current?.focus());
+  });
+
   return {
     diagnostics,
     draft: draft.draft,
@@ -570,8 +515,14 @@ export function useTerminalFloatingComposerController({
     handleOutputReceived: draft.handleOutputReceived,
     handleUserInputData: draft.handleUserInputData,
     hasNewOutputBelow: scroll.hasNewOutputBelow,
+    instantReplyAvailable: draft.instantReplyAvailable,
+    instantReplyFeedback: draft.instantReplyFeedback,
+    instantReplyOpen: draft.instantReplyOpen,
     onClose: handleClose,
     onDraftChange: draft.handleDraftChange,
+    onInstantReplyClose: handleInstantReplyClose,
+    onInstantReplyOpen: draft.onInstantReplyOpen,
+    onInstantReplySend: draft.onInstantReplySend,
     onOpen: draft.onOpen,
     onScrollToBottom: scroll.scrollToBottom,
     onSend: draft.handleSend,

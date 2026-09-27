@@ -8,6 +8,11 @@ import {
 import type { Terminal } from "@xterm/xterm";
 import type { TerminalPromptSubmitKey } from "@runweave/shared/terminal/input";
 import { ArrowDown, ArrowUp, PencilLine, X } from "lucide-react";
+import {
+  TerminalInstantReplyRail,
+  type TerminalInstantReply,
+  type TerminalInstantReplyFeedback,
+} from "./instant-reply-rail";
 
 const TEXTAREA_MAX_HEIGHT = 96;
 
@@ -31,12 +36,18 @@ interface TerminalFloatingComposerProps {
   sending: boolean;
   sendError: string | null;
   hasNewOutputBelow: boolean;
+  instantReplyAvailable: boolean;
+  instantReplyFeedback: TerminalInstantReplyFeedback | null;
+  instantReplyOpen: boolean;
   scrollButtonMode: "floating" | "legacy" | "none";
   showTrigger: boolean;
   terminalRef: RefObject<Terminal | null>;
   visible: boolean;
   onClose: () => void;
   onDraftChange: (value: string) => void;
+  onInstantReplyClose: () => void;
+  onInstantReplyOpen: () => void;
+  onInstantReplySend: (reply: TerminalInstantReply) => void;
   onOpen: () => void;
   onScrollToBottom: () => void;
   onSend: () => void;
@@ -60,12 +71,18 @@ export function TerminalFloatingComposer({
   sending,
   sendError,
   hasNewOutputBelow,
+  instantReplyAvailable,
+  instantReplyFeedback,
+  instantReplyOpen,
   scrollButtonMode,
   showTrigger,
   terminalRef,
   visible,
   onClose,
   onDraftChange,
+  onInstantReplyClose,
+  onInstantReplyOpen,
+  onInstantReplySend,
   onOpen,
   onScrollToBottom,
   onSend,
@@ -144,6 +161,15 @@ export function TerminalFloatingComposer({
       data-testid="terminal-floating-composer-diagnostics"
       {...diagnosticsAttributes}
     >
+      <TerminalInstantReplyRail
+        available={instantReplyAvailable}
+        feedback={instantReplyFeedback}
+        open={instantReplyOpen}
+        sending={sending}
+        onClose={onInstantReplyClose}
+        onOpen={onInstantReplyOpen}
+        onSend={onInstantReplySend}
+      />
       {visible ? (
         <div className="absolute right-2 bottom-3.5 left-2 flex flex-col items-center gap-1">
           {sendError ? (
