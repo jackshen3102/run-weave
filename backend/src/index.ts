@@ -54,6 +54,7 @@ import { createEvolutionActivationRouter } from "./routes/evolution/activation";
 import { createEvolutionFoundationRouter } from "./routes/evolution/foundation";
 import { createEvolutionMcpRouter } from "./routes/evolution/mcp";
 import { createScheduledTasksRouter } from "./routes/scheduled-tasks";
+import { createExecutionEfficiencyRouter } from "./routes/execution-efficiency";
 import { createCorsMiddleware, parseConfiguredOrigins } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import {
@@ -295,6 +296,7 @@ function createHttpApp(
   );
   app.use("/api/race", requireAuth, createRaceRouter(services.raceService));
   app.use("/api/scheduled-tasks", requireAuth, createScheduledTasksRouter(services.scheduledTaskService));
+  app.use("/api/execution-efficiency", requireAuth, createExecutionEfficiencyRouter(services.executionEfficiencyService));
   app.use("/api/knowledge-inbox", createKnowledgeInboxRouter(services.knowledgeInboxService, services.authService));
   app.use(
     "/api/experience",

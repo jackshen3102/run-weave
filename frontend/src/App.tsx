@@ -31,6 +31,7 @@ import { TerminalSnapshotShareNotification } from "./components/terminal/workspa
 import { ActivityPage } from "./pages/activity-page";
 import { EvolutionPage } from "./pages/evolution-page";
 import { ScheduledTasksPage } from "./pages/scheduled-tasks-page";
+import { ExecutionEfficiencyPage } from "./pages/execution-efficiency-page";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
@@ -105,7 +106,7 @@ function RunweaveApp() {
     generation: activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined,
   });
   const requestedReturn: unknown = location.state?.scope === queryScope ? location.state?.returnTo : null;
-  const loginReturnPath = typeof requestedReturn === "string" && /^\/scheduled-tasks(?:\/|\?|$)/u.test(requestedReturn)
+  const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|execution-efficiency)(?:\/|\?|$)/u.test(requestedReturn)
     ? requestedReturn : TERMINAL_LIST_PATH;
 
   const handleSelectConnection = (id: string) => {
@@ -162,6 +163,21 @@ function RunweaveApp() {
         <CodexQuotaProvider key={`${queryScope}:${sessionId ?? ""}:${token ? "authenticated" : "anonymous"}`} apiBase={apiBase} token={token} connectionName={activeConnection?.name ?? "当前连接"} onUnauthorized={clearToken}>
         <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
         <Routes>
+          <Route
+            path="/execution-efficiency/:findingId?"
+            element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
+              <ExecutionEfficiencyPage
+                apiBase={apiBase}
+                token={token}
+                activeConnectionId={activeConnectionId}
+                activeConnectionGeneration={activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined}
+                connectionName={activeConnection?.name}
+                connections={connections}
+                onSelectConnection={isElectron ? handleSelectConnection : undefined}
+                onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
+              />
+            ) : <Navigate to="/login" replace state={{ returnTo: location.pathname + location.search, scope: queryScope }} />}
+          />
           <Route
             path="/scheduled-tasks/:taskId?"
             element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (

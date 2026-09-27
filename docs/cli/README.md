@@ -11,6 +11,7 @@
 | Agent Team 创建、执行、观察和介入            | [agent-team-cli.md](./agent-team-cli.md)                   |
 | iOS 两台模拟器跨 worktree 复用               | [ios-simulators.md](./ios-simulators.md)                   |
 | 普通会话经验检索与结果回执                   | [experience-cli.md](./experience-cli.md)                   |
+| 定时采集、分析并处理执行效率候选             | [execution-efficiency.md](./execution-efficiency.md)       |
 | Agent Self-Evolution 操作                    | [evolution-cli.md](./evolution-cli.md)                     |
 | 成果引用与 Agent 复查                        | [knowledge-cli.md](./knowledge-cli.md)                     |
 | Agent 整理、校验并确认后创建或编辑定时任务   | [scheduled-task-cli.md](./scheduled-task-cli.md)           |

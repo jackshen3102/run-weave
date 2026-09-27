@@ -38,6 +38,7 @@ import type { EvolutionToolTokenRegistry } from "../evolution/tools/token-regist
 import type { RaceService } from "../race/race-service";
 import type { ScheduledTaskService } from "../scheduled-tasks/service";
 import type { BackendRuntimeStatusService } from "../runtime-status/service";
+import type { ExecutionEfficiencyService } from "../execution-efficiency/service";
 
 export interface RuntimeServices extends DeviceMonitoringRuntime {
   start(controlPlaneBaseUrl: string): void;
@@ -84,4 +85,5 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   experienceService: ExperienceService;
   experienceLearning: ExperienceLearningRuntime;
   scheduledTaskService: ScheduledTaskService;
+  executionEfficiencyService: ExecutionEfficiencyService;
 }
