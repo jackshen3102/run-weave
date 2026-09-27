@@ -43,16 +43,15 @@ export function TerminalInstantReplyRail({
         aria-expanded="false"
         aria-label="展开一键回复"
         title="展开一键回复"
-        className="pointer-events-auto absolute top-1/2 right-0 flex -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-lg border border-r-0 border-slate-700/90 bg-[#07111f]/95 px-2 py-2.5 text-[11px] font-medium text-slate-300 shadow-2xl shadow-slate-950/45 backdrop-blur transition hover:border-cyan-400/45 hover:bg-slate-900 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+        className="pointer-events-auto absolute top-1/2 right-0 flex h-7 w-6 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-slate-700/90 bg-[#07111f]/95 p-0 text-slate-300 shadow-2xl shadow-slate-950/45 backdrop-blur transition hover:border-cyan-400/45 hover:bg-slate-900 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
         data-testid="terminal-instant-reply-trigger"
         onPointerDown={(event) => event.preventDefault()}
         onClick={onOpen}
       >
         <MessageSquareReply
           aria-hidden="true"
-          className="h-4 w-4 text-cyan-300"
+          className="h-3.5 w-3.5 text-cyan-300"
         />
-        <span className="[writing-mode:vertical-rl]">一键回复</span>
       </button>
     );
   }
