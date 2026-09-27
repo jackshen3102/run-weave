@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 import IOSBuildIdentity
 
@@ -106,8 +107,8 @@ private struct LoginView: View {
       Section(header: Text("Runweave")) {
         if session.connection == nil { Button("先添加一个 Runweave 后端连接", action: manageConnections) }
         TextField("Username", text: $username).textContentType(.username).autocapitalization(.none)
-          .disableAutocorrection(true)
-        SecureField("Password", text: $password).textContentType(.password)
+          .disableAutocorrection(true).clarityMask()
+        SecureField("Password", text: $password).textContentType(.password).clarityMask()
         Button {
           submitting = true
           failure = nil

@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 import WebKit
 
@@ -11,6 +12,7 @@ struct HtmlPreview: UIViewRepresentable {
     configuration.websiteDataStore = .nonPersistent()
     configuration.defaultWebpagePreferences.allowsContentJavaScript = true
     let view = WKWebView(frame: .zero, configuration: configuration)
+    ClaritySDK.maskView(view)
     view.navigationDelegate = context.coordinator
     view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
     return view

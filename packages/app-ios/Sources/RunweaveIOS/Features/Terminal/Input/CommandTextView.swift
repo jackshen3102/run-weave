@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 import UIKit
 
@@ -12,6 +13,7 @@ struct CommandTextView: UIViewRepresentable {
 
   func makeUIView(context: Context) -> GrowingCommandTextView {
     let view = GrowingCommandTextView()
+    ClaritySDK.maskView(view)
     editor?.view = view
     view.font = .preferredFont(forTextStyle: .body)
     view.adjustsFontForContentSizeCategory = true

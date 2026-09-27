@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct ComposerImageAttachments: View {
@@ -12,7 +13,7 @@ struct ComposerImageAttachments: View {
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(alignment: .top, spacing: 8) {
           ForEach(Array(images.enumerated()), id: \.element.id) { index, image in
-            tile(image, number: index + 1)
+            tile(image, number: index + 1).clarityMask()
           }
         }.padding(.vertical, 8).padding(.trailing, 8)
       }

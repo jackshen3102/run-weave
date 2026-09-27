@@ -3346,10 +3346,18 @@
   {
     "file": "frontend/src/features/analytics/clarity.ts",
     "kind": "environment",
+    "expression": "import.meta.env.DEV",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Vite development and Dev Session pages are excluded from Clarity collection."
+  },
+  {
+    "file": "frontend/src/features/analytics/clarity.ts",
+    "kind": "environment",
     "expression": "import.meta.env.VITE_CLARITY_ENABLED",
     "count": 1,
     "category": "build",
-    "reason": "Web-only Clarity opt-in is embedded at frontend build time; it is not a host or instance setting."
+    "reason": "Web Clarity is enabled by default; an explicit false value disables it at build time."
   },
   {
     "file": "frontend/src/features/analytics/clarity.ts",
@@ -3357,7 +3365,15 @@
     "expression": "import.meta.env.VITE_CLARITY_PROJECT_ID",
     "count": 1,
     "category": "build",
-    "reason": "Web-only Clarity project ID is embedded at frontend build time and cannot be changed by YAML reload."
+    "reason": "Web Clarity defaults to the production project ID and can be overridden at build time."
+  },
+  {
+    "file": "frontend/src/features/analytics/clarity.ts",
+    "kind": "environment",
+    "expression": "import.meta.env.VITE_RUNWEAVE_DEV_SESSION_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Dev Session identity excludes its frontend from Clarity collection, including production-mode builds."
   },
   {
     "file": "frontend/src/features/dev-session-backend-guard.tsx",

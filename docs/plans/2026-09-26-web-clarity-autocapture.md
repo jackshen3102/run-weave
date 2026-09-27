@@ -1,5 +1,7 @@
 # Web 首期 Clarity 纯无埋点实施计划
 
+> 本文记录 2026-09-26 的初版方案，默认关闭的配置约定已经被[默认启用方案](2026-09-27-ios-clarity-autocapture.md)取代；当前行为以该方案和 `frontend/docs/clarity-autocapture.md` 为准。
+
 日期：2026-09-26。粒度：L2。状态：待实施，当前只交付计划与测试案例。
 随记记录：`6eb2e507-908d-4d74-83dc-08855a016be8`。
 

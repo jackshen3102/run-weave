@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct HomeView: View {
@@ -204,8 +205,8 @@ private struct NewProjectView: View {
   var body: some View {
     NavigationView {
       Form {
-        TextField("项目名称", text: $name)
-        TextField("项目路径（可选）", text: $path).autocapitalization(.none).disableAutocorrection(true)
+        TextField("项目名称", text: $name).clarityMask()
+        TextField("项目路径（可选）", text: $path).autocapitalization(.none).disableAutocorrection(true).clarityMask()
         if let failure { Text(failure).foregroundColor(.red) }
         Button(busy ? "创建中…" : "创建项目") {
           busy = true

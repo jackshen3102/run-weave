@@ -1,11 +1,14 @@
 type ClarityQueue = ((...args: unknown[]) => void) & { q?: unknown[][] };
 
 const SCRIPT_ID = "runweave-clarity-script";
+const DEFAULT_PROJECT_ID = "yo8dc0des6";
 
 export function initializeClarity(): void {
-  const projectId = import.meta.env.VITE_CLARITY_PROJECT_ID?.trim();
+  const projectId = (import.meta.env.VITE_CLARITY_PROJECT_ID ?? DEFAULT_PROJECT_ID).trim();
   if (
-    import.meta.env.VITE_CLARITY_ENABLED !== "true" ||
+    import.meta.env.VITE_CLARITY_ENABLED === "false" ||
+    import.meta.env.DEV ||
+    Boolean(import.meta.env.VITE_RUNWEAVE_DEV_SESSION_ID?.trim()) ||
     !projectId ||
     !/^[a-zA-Z0-9]+$/.test(projectId) ||
     !["http:", "https:"].includes(window.location.protocol) ||

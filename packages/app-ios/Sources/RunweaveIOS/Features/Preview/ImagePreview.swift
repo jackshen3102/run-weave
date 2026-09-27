@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 import UIKit
 import WebKit
@@ -7,6 +8,7 @@ struct ImagePreview: UIViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator() }
   func makeUIView(context: Context) -> UIScrollView {
     let scroll = UIScrollView()
+    ClaritySDK.maskView(scroll)
     scroll.minimumZoomScale = 1
     scroll.maximumZoomScale = 5
     scroll.delegate = context.coordinator
@@ -51,6 +53,7 @@ struct SVGPreview: UIViewRepresentable {
     configuration.websiteDataStore = .nonPersistent()
     configuration.defaultWebpagePreferences.allowsContentJavaScript = false
     let view = WKWebView(frame: .zero, configuration: configuration)
+    ClaritySDK.maskView(view)
     view.navigationDelegate = context.coordinator
     return view
   }

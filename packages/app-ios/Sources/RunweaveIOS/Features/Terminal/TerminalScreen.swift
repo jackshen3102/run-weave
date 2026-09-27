@@ -1,3 +1,4 @@
+import Clarity
 import RunweaveBrowser
 import SwiftUI
 
@@ -150,11 +151,12 @@ struct TerminalScreen: View {
     .fullScreenCover(isPresented: Binding(
       get: { browser.state == .presented },
       set: { if !$0 { browser.collapse() } }
-    )) { BrowserScreen(browser: browser) }
+    )) { BrowserScreen(browser: browser).clarityMask() }
     .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented))
     .sheet(item: $fileTap) { tap in
       TerminalFilePreview(session: session, terminalID: details.id, projectID: details.projectId,
         tap: tap, close: { fileTap = nil }, model: changes)
+        .clarityMask()
     }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id) }
     .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id) }
