@@ -43,10 +43,21 @@ export class RemoteAccessChannel {
       try {
         const url = new URL(req.url ?? "/", "http://relay.invalid");
         const decoded = decodeURIComponent(url.pathname);
+        const segments = decoded.split("/");
         if (
           decoded.includes("\\") ||
           decoded.includes("%") ||
-          decoded !== url.pathname
+          segments.length !== url.pathname.split("/").length ||
+          segments.some(
+            (segment) =>
+              segment === "." ||
+              segment === ".." ||
+              [...segment].some(
+                (character) =>
+                  character.charCodeAt(0) < 32 ||
+                  character.charCodeAt(0) === 127,
+              ),
+          )
         )
           return null;
         return url.pathname === "/health" ||
