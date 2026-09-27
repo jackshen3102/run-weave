@@ -1,0 +1,55 @@
+{
+  "workspace": {
+    "connection": "Local Mac",
+    "project": "browser-viewer",
+    "branch": "agent-team-2"
+  },
+  "projects": [
+    { "id": "browser-viewer", "label": "browser-viewer", "active": true },
+    { "id": "runweave-site", "label": "runweave-site", "active": false },
+    { "id": "toolkit", "label": "toolkit", "active": false }
+  ],
+  "sessions": [
+    { "id": "trae", "label": "TraeCode", "active": true, "running": true },
+    {
+      "id": "backend",
+      "label": "backend dev",
+      "active": false,
+      "running": true
+    }
+  ],
+  "quickInputs": [
+    {
+      "title": "继续完成当前任务",
+      "body": "继续完成当前任务，完成后运行验证。"
+    },
+    { "title": "先给实施方案", "body": "先给我一个可执行方案，不要改代码。" }
+  ],
+  "replies": [
+    { "id": "yes", "text": "可以" },
+    { "id": "continue", "text": "继续" },
+    { "id": "decline", "text": "不需要" }
+  ],
+  "terminal": {
+    "title": "TraeCode",
+    "status": "waiting for input",
+    "panel": "main",
+    "cwd": "/workspace/runweave",
+    "lines": [
+      { "tone": "muted", "text": "Runweave Terminal · trae · main" },
+      { "tone": "command", "text": "❯ trae" },
+      { "tone": "muted", "text": "" },
+      {
+        "tone": "agent",
+        "text": "方案已经整理完成，桌面端会提供独立的一键回复入口。"
+      },
+      {
+        "tone": "agent",
+        "text": "发送时会保留当前草稿，并且不会写入快捷指令历史。"
+      },
+      { "tone": "muted", "text": "" },
+      { "tone": "agent", "text": "要继续按这个方案实现吗？" }
+    ]
+  },
+  "defaultDraft": ""
+}

@@ -27,10 +27,8 @@ import { TerminalMobileControls } from "../input/mobile-controls";
 import { TerminalSearchToolbar } from "../input/search-toolbar";
 import { TerminalSurfaceLayout } from "./surface-layout";
 import { useTerminalEmulator } from "./use-emulator";
-import {
-  useTerminalFloatingComposerController,
-  useTerminalScrollController,
-} from "../input/use-floating-composer-controller";
+import { useTerminalFloatingComposerController } from "../input/use-floating-composer-controller";
+import { useTerminalScrollController } from "../input/use-terminal-scroll-controller";
 import { useTerminalOutputStream } from "./use-output-stream";
 import { useTerminalSnapshotRestore } from "./use-snapshot-restore";
 import {
@@ -543,12 +541,18 @@ export function TerminalSurface({
           sending={floatingComposer.sending}
           sendError={floatingComposer.sendError}
           hasNewOutputBelow={floatingComposer.hasNewOutputBelow}
+          instantReplyAvailable={floatingComposer.instantReplyAvailable}
+          instantReplyFeedback={floatingComposer.instantReplyFeedback}
+          instantReplyOpen={floatingComposer.instantReplyOpen}
           scrollButtonMode={floatingComposer.scrollButtonMode}
           showTrigger={floatingComposer.showTrigger}
           terminalRef={terminalRef}
           visible={floatingComposer.visible}
           onClose={floatingComposer.onClose}
           onDraftChange={floatingComposer.onDraftChange}
+          onInstantReplyClose={floatingComposer.onInstantReplyClose}
+          onInstantReplyOpen={floatingComposer.onInstantReplyOpen}
+          onInstantReplySend={floatingComposer.onInstantReplySend}
           onOpen={floatingComposer.onOpen}
           onScrollToBottom={floatingComposer.onScrollToBottom}
           onSend={floatingComposer.onSend}
