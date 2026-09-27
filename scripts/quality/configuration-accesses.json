@@ -992,6 +992,30 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；handle.writeFile(serializeBackendProfileLockOwner(owner))"
   },
   {
+    "file": "backend/src/task-handoff/analysis.ts",
+    "kind": "file-io",
+    "expression": "writeFile(outputSchemaPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFile(outputSchemaPath)"
+  },
+  {
+    "file": "backend/src/task-handoff/service.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(this.directory, `${key}.json`))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(path.join(this.directory, `${key}.json`))"
+  },
+  {
+    "file": "backend/src/task-handoff/service.ts",
+    "kind": "file-io",
+    "expression": "writeFile(temporary)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFile(temporary)"
+  },
+  {
     "file": "backend/src/terminal/application/hook-token.ts",
     "kind": "file-io",
     "expression": "readFileSync(filePath)",
