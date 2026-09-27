@@ -1,3 +1,4 @@
+import { HANDOFF_INPUT_EVENT, type HandoffInputGuard } from "../../../features/terminal/input/handoff-guard";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Terminal } from "@xterm/xterm";
@@ -391,6 +392,29 @@ function useTerminalFloatingDraftController({
     },
     [clearInputLagFallbackTimer],
   );
+
+  const guardHandoffInput = useMemoizedFn((event: Event) => {
+    const detail = (event as CustomEvent<HandoffInputGuard>).detail;
+    if (detail.apiBase !== apiBase || detail.terminalSessionId !== terminalSessionId || detail.panelId !== (paneWorkspace?.activePanelId ?? null)) return;
+    if (!eligible || !draftMirrorSupported || error || floatingDraftSyncPendingRef.current) {
+      detail.message = "终端输入未就绪或正在发送，请稍后再试。";
+      return;
+    }
+    if (floatingDraftRef.current.trim() || lastSyncedTuiDraftRef.current.trim()) {
+      detail.message = "终端中有未发送的草稿，请先处理草稿，再继续验收。";
+      return;
+    }
+    floatingDraftSyncPendingRef.current = true;
+    setSending(true);
+    detail.release = () => {
+      floatingDraftSyncPendingRef.current = false;
+      setSending(false);
+    };
+  });
+  useEffect(() => {
+    window.addEventListener(HANDOFF_INPUT_EVENT, guardHandoffInput);
+    return () => window.removeEventListener(HANDOFF_INPUT_EVENT, guardHandoffInput);
+  }, [guardHandoffInput]);
 
   const handleClose = useMemoizedFn(() => {
     clearInputLagFallbackTimer();

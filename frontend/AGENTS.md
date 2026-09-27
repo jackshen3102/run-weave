@@ -8,6 +8,7 @@
 - Electron bridge 宿主声明：`src/types/desktop-bridge.d.ts`
 - 页面级入口：`src/pages/`
 - 定时任务 Web 接入与后端依赖边界：[scheduled-tasks.md](docs/scheduled-tasks.md)
+- 普通终端任务交接：[task-handoff.md](docs/task-handoff.md)
 - 执行效率计量、人工状态与连接隔离：[execution-efficiency.md](docs/execution-efficiency.md)
 - Web 自动采集配置、部署与验收：[clarity-autocapture.md](docs/clarity-autocapture.md)
 - 按能力聚合的状态与 UI：`src/features/`

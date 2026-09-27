@@ -60,6 +60,8 @@ export interface UpdateTerminalQuickInputRequest {
 
 export interface SendTerminalInputRequest {
   data: string;
+  /** Reject handoff input when the Codex thread is no longer idle or has changed. */
+  expectedThreadId?: string;
   mode?: TerminalInputMode;
   submit?: boolean;
   /** Native key for prompt_replace with submit=true; defaults to Enter. */

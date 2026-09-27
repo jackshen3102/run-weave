@@ -1,3 +1,4 @@
+import { TerminalHandoffPanel } from "../../handoff/panel";
 import { TerminalPreviewFileLink, type TerminalPreviewFileLinkIntent } from "./file-link";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, type ReactNode } from "react";
@@ -540,6 +541,7 @@ export function TerminalPreviewPanel({
         body={previewBody}
         agentTeamBody={agentTeamBody}
         raceBody={raceBody}
+        handoffBody={<TerminalHandoffPanel sessionId={activeSession?.terminalSessionId ?? null} />}
       />
 
       <TerminalPreviewQuickSearch

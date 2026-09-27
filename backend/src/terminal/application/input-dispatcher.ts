@@ -1,3 +1,4 @@
+import { resolveReplyThread } from "../completion/reply-preview";
 import { getAgentAdapter } from "../runtime/agent-adapters";
 import { getAgentForCommand } from "../state/terminal-state-service";
 import type {
@@ -203,6 +204,7 @@ export async function sendInputToSession(
   paneTarget?: TmuxPaneTarget,
   submit?: boolean,
   submitKey: TerminalPromptSubmitKey = "Enter",
+  expectedThreadId?: string,
 ): Promise<SendTerminalInputResponse> {
   if (!options?.runtimeRegistry || !options.ptyService) {
     throw new Error("Terminal runtime service unavailable");
@@ -264,6 +266,11 @@ export async function sendInputToSession(
               .listPanels(session.id)
               .find((candidate) => candidate.tmuxPaneId === target.paneId)
           : undefined;
+      if (expectedThreadId) {
+        const owner = panel ?? session;
+        const identity = resolveReplyThread(owner);
+        if (identity?.id !== expectedThreadId || identity.provider !== "codex" || owner.terminalState?.state !== "agent_idle") throw new Error("会话已切换或 Agent 正在运行，未发送交接内容。");
+      }
       const adapter = getAgentAdapter(
         getAgentForCommand(panel?.activeCommand ?? session.activeCommand),
       );
@@ -327,6 +334,10 @@ export async function sendInputToSession(
         await options.tmuxService.sendInput(target, dispatchData ?? "");
       }
     } else {
+      if (expectedThreadId) {
+        const identity = resolveReplyThread(session);
+        if (identity?.id !== expectedThreadId || identity.provider !== "codex" || session.terminalState?.state !== "agent_idle") throw new Error("会话已切换或 Agent 正在运行，未发送交接内容。");
+      }
       if (!exitTmuxCopyMode) {
         if (mode === "prompt_replace") {
           await writePromptReplacePtyInput(

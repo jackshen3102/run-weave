@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900"><style>text{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#cbd5e1;font-size:12px}.mono{font-family:Menlo,"PingFang SC",monospace;font-size:13px}</style>
+<rect x="0" y="0" width="1440" height="900" rx="0" fill="#020617"/>
+<path d="M0 32H1440" stroke="#1e293b"/>
+<text x="12" y="21" style="font-size:18px;fill:#cbd5e1;font-weight:400" class="">⌂</text>
+<rect x="38" y="4" width="89" height="24" rx="6" fill="#0f172a" stroke="#1e293b"/>
+<circle cx="49" cy="16" r="3" fill="#34d399"/>
+<text x="59" y="20" style="font-size:12px;fill:#cbd5e1;font-weight:400" class="">Local Mac</text>
+<rect x="135" y="4" width="141" height="24" rx="6" fill="#1e293b" stroke="#075985"/>
+<circle cx="147" cy="16" r="3" fill="#38bdf8"/>
+<text x="157" y="20" style="font-size:12px;fill:#cbd5e1;font-weight:400" class="">browser-viewer</text>
+<rect x="284" y="4" width="69" height="24" rx="6" fill="#0f172a" stroke="#1e293b"/>
+<text x="296" y="20" style="font-size:12px;fill:#cbd5e1;font-weight:400" class="">toolkit</text>
+<text x="364" y="21" style="font-size:17px;fill:#cbd5e1;font-weight:400" class="">+</text>
+<text x="1240" y="21" style="font-size:16px;fill:#94a3b8;font-weight:400" class="">ϟ</text>
+<text x="1270" y="21" style="font-size:16px;fill:#94a3b8;font-weight:400" class="">◇</text>
+<text x="1300" y="21" style="font-size:16px;fill:#94a3b8;font-weight:400" class="">▤</text>
+<text x="1330" y="21" style="font-size:16px;fill:#94a3b8;font-weight:400" class="">◷</text>
+<text x="1360" y="21" style="font-size:16px;fill:#94a3b8;font-weight:400" class="">◉</text>
+<text x="1396" y="21" style="font-size:16px;fill:#94a3b8;font-weight:400" class="">···</text>
+<path d="M236 32L236 900" stroke="#1e293b"/>
+<path d="M0 60H236" stroke="#1e293b"/>
+<text x="9" y="50" style="font-size:10px;fill:#64748b;font-weight:600" class="">WORKTREES  4</text>
+<text x="215" y="51" style="font-size:16px;fill:#cbd5e1;font-weight:400" class="">‹</text>
+<rect x="8" y="72" width="220" height="49" rx="6" fill="#020617"/>
+<text x="18" y="91" style="font-size:15px;fill:#64748b;font-weight:400" class="">⑂</text>
+<text x="39" y="91" style="font-size:12px;fill:#cbd5e1;font-weight:400" class="">browser-viewer</text>
+<text x="39" y="108" style="font-size:9px;fill:#64748b;font-weight:400" class="">main   ·   P1</text>
+<circle cx="212" cy="94" r="3" fill="#475569"/>
+<rect x="8" y="129" width="220" height="49" rx="6" fill="#020617"/>
+<text x="18" y="148" style="font-size:15px;fill:#64748b;font-weight:400" class="">⑂</text>
+<text x="39" y="148" style="font-size:12px;fill:#cbd5e1;font-weight:400" class="">agent-team-1</text>
+<text x="39" y="165" style="font-size:9px;fill:#64748b;font-weight:400" class="">agent-team-1   ·   P1</text>
+<circle cx="212" cy="151" r="3" fill="#475569"/>
+<rect x="8" y="186" width="220" height="49" rx="6" fill="#0f172a" stroke="#0c4a6e"/>
+<text x="18" y="205" style="font-size:15px;fill:#64748b;font-weight:400" class="">⑂</text>
+<text x="39" y="205" style="font-size:12px;fill:#f8fafc;font-weight:400" class="">agent-team-2</text>
+<text x="39" y="222" style="font-size:9px;fill:#64748b;font-weight:400" class="">agent-team-2   ·   P1</text>
+<circle cx="212" cy="208" r="3" fill="#38bdf8"/>
+<rect x="8" y="243" width="220" height="49" rx="6" fill="#020617"/>
+<text x="18" y="262" style="font-size:15px;fill:#64748b;font-weight:400" class="">⑂</text>
+<text x="39" y="262" style="font-size:12px;fill:#cbd5e1;font-weight:400" class="">wt-1</text>
+<text x="39" y="279" style="font-size:9px;fill:#64748b;font-weight:400" class="">wt-1   ·   P1</text>
+<circle cx="212" cy="265" r="3" fill="#475569"/>
+<rect x="236" y="32" width="166" height="26" rx="0" fill="#0f172a"/>
+<path d="M236 58H1440" stroke="#1e293b"/>
+<path d="M402 32L402 58" stroke="#1e293b"/>
+<circle cx="247" cy="45" r="3" fill="#34d399"/>
+<text x="258" y="49" style="font-size:12px;fill:#cbd5e1;font-weight:400" class="">快捷回复修复</text>
+<text x="384" y="49" style="font-size:14px;fill:#64748b;font-weight:400" class="">×</text>
+<text x="414" y="49" style="font-size:16px;fill:#cbd5e1;font-weight:400" class="">+</text>
+<rect x="237" y="59" width="583" height="841" rx="0" fill="#0b1220"/>
+<text x="249" y="92" style="font-size:13px;fill:#64748b;font-weight:400" class="mono">╭──────────────────────────────────────────╮</text>
+<text x="249" y="117" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="mono">│ &gt;_ OpenAI Codex                          │</text>
+<text x="249" y="142" style="font-size:13px;fill:#94a3b8;font-weight:400" class="mono">│ directory: …/browser-viewer/agent-team-2 │</text>
+<text x="249" y="167" style="font-size:13px;fill:#64748b;font-weight:400" class="mono">╰──────────────────────────────────────────╯</text>
+<text x="252" y="210" style="font-size:13px;fill:#f1f5f9;font-weight:400" class="mono">› 只修复快捷回复发错终端的问题</text>
+<text x="252" y="254" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="mono">• 已修复活动终端的判断逻辑。</text>
+<text x="252" y="279" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="mono">  新增用例 DIR-008 通过。</text>
+<text x="252" y="304" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="mono">  原有用例尚未在本次修改后回归。</text>
+<text x="252" y="350" style="font-size:13px;fill:#94a3b8;font-weight:400" class="mono">• 验收记录</text>
+<text x="252" y="378" style="font-size:13px;fill:#6ee7b7;font-weight:400" class="mono">  ✓ DIR-008  活动终端切换</text>
+<text x="252" y="403" style="font-size:13px;fill:#64748b;font-weight:400" class="mono">    1 passed</text>
+<text x="252" y="468" style="font-size:13px;fill:#f1f5f9;font-weight:400" class="mono">› 还有哪些待验收？</text>
+<text x="252" y="513" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="mono">• 还需确认旧用例的回归范围，并验证</text>
+<text x="252" y="538" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="mono">  真实 Agent 与 Shell 混合切换。</text>
+<path d="M249 797H806" stroke="#1e293b"/>
+<text x="252" y="829" style="font-size:17px;fill:#f8fafc;font-weight:400" class="">›</text>
+<rect x="275" y="815" width="7" height="17" rx="0" fill="#94a3b8"/>
+<path d="M249 848H806" stroke="#1e293b"/>
+<text x="252" y="873" style="font-size:11px;fill:#64748b;font-weight:400" class="mono">? for shortcuts</text>
+<text x="676" y="873" style="font-size:10px;fill:#64748b;font-weight:400" class="mono">78% context left</text>
+<rect x="820" y="58" width="620" height="842" rx="0" fill="#020617"/>
+<path d="M820 58L820 900" stroke="#1e293b"/>
+<path d="M820 105H1440" stroke="#1e293b"/>
+<rect x="828" y="66" width="534" height="30" rx="6" fill="#0f172a" stroke="#1e293b"/>
+<text x="838" y="85" style="font-size:12px;fill:#94a3b8;font-weight:400" class="">Preview</text>
+<text x="900" y="85" style="font-size:12px;fill:#94a3b8;font-weight:400" class="">Automation</text>
+<text x="990" y="85" style="font-size:12px;fill:#94a3b8;font-weight:400" class="">Browser 1</text>
+<text x="1066" y="85" style="font-size:12px;fill:#94a3b8;font-weight:400" class="">Browser 2</text>
+<text x="1144" y="85" style="font-size:12px;fill:#94a3b8;font-weight:400" class="">Browser 3</text>
+<text x="1222" y="85" style="font-size:12px;fill:#94a3b8;font-weight:400" class="">Race</text>
+<rect x="1265" y="69" width="89" height="24" rx="3" fill="#334155"/>
+<text x="1276" y="85" style="font-size:12px;fill:#f8fafc;font-weight:400" class="">任务交接</text>
+<text x="1377" y="86" style="font-size:16px;fill:#94a3b8;font-weight:400" class="">⛶</text>
+<text x="1410" y="85" style="font-size:18px;fill:#94a3b8;font-weight:400" class="">×</text>
+<text x="840" y="134" style="font-size:14px;fill:#f1f5f9;font-weight:600" class="">快捷回复修复</text>
+<circle cx="841" cy="155" r="3" fill="#34d399"/>
+<text x="851" y="159" style="font-size:11px;fill:#94a3b8;font-weight:400" class="">Codex · 等待输入</text>
+<text x="1301" y="159" style="font-size:11px;fill:#64748b;font-weight:400" class="">更新于 14:32</text>
+<path d="M820 176H1440" stroke="#1e293b"/>
+<text x="840" y="207" style="font-size:11px;fill:#94a3b8;font-weight:400" class="">当前目标</text>
+<text x="1388" y="207" style="font-size:12px;fill:#38bdf8;font-weight:400" class="">编辑</text>
+<text x="840" y="237" style="font-size:15px;fill:#f1f5f9;font-weight:500" class="">修复快捷回复发错终端的问题</text>
+<text x="840" y="282" style="font-size:11px;fill:#94a3b8;font-weight:400" class="">已有结果</text>
+<rect x="840" y="296" width="580" height="70" rx="6" fill="#0f172a" stroke="#1e293b"/>
+<text x="854" y="322" style="font-size:14px;fill:#34d399;font-weight:400" class="">✓</text>
+<text x="878" y="322" style="font-size:13px;fill:#e2e8f0;font-weight:400" class="">新增用例 DIR-008 已通过</text>
+<text x="878" y="347" style="font-size:11px;fill:#64748b;font-weight:400" class="">当前修改 · 活动终端切换</text>
+<text x="1347" y="334" style="font-size:12px;fill:#38bdf8;font-weight:400" class="">查看记录</text>
+<rect x="840" y="374" width="580" height="53" rx="6" fill="#0f172a" stroke="#1e293b"/>
+<text x="855" y="405" style="font-size:15px;fill:#94a3b8;font-weight:400" class="">○</text>
+<text x="878" y="405" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="">发送目标判断已修复</text>
+<rect x="1335" y="389" width="71" height="23" rx="4" fill="#1e293b"/>
+<text x="1344" y="405" style="font-size:10px;fill:#94a3b8;font-weight:400" class="">Agent 报告</text>
+<text x="840" y="465" style="font-size:11px;fill:#94a3b8;font-weight:400" class="">待验收</text>
+<text x="1393" y="465" style="font-size:11px;fill:#64748b;font-weight:400" class="">2 项</text>
+<rect x="840" y="480" width="580" height="118" rx="6" fill="#0f172a" stroke="#1e293b"/>
+<circle cx="858" cy="503" r="3" fill="#fbbf24"/>
+<text x="878" y="508" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="">受影响的旧用例回归</text>
+<text x="878" y="533" style="font-size:11px;fill:#94a3b8;font-weight:400" class="">7 项结果来自修复前版本</text>
+<path d="M854 547H1406" stroke="#1e293b"/>
+<text x="851" y="578" style="font-size:15px;fill:#94a3b8;font-weight:400" class="">○</text>
+<text x="878" y="578" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="">真实 Agent 与 Shell 混合切换</text>
+<path d="M820 791H1440" stroke="#1e293b"/>
+<text x="840" y="818" style="font-size:11px;fill:#94a3b8;font-weight:400" class="">下一步</text>
+<text x="840" y="844" style="font-size:13px;fill:#cbd5e1;font-weight:400" class="">确认回归范围，继续执行验收。</text>
+<text x="840" y="880" style="font-size:12px;fill:#38bdf8;font-weight:400" class="">查看完整历史</text>
+<rect x="1292" y="858" width="128" height="30" rx="6" fill="#0369a1"/>
+<text x="1321" y="878" style="font-size:12px;fill:#f8fafc;font-weight:500" class="">继续验收 →</text>
+</svg>

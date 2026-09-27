@@ -1,3 +1,4 @@
+import { createTaskHandoffRouter } from "./routes/task-handoff";
 import { initializeBackendConfiguration } from "./bootstrap/configuration";
 import { createConfigurationRouter } from "./routes/configuration";
 import { settingText } from "@runweave/config-node";
@@ -279,6 +280,7 @@ function createHttpApp(
     requireAuth,
     createAppServerStateRouter(services.appServerHistoryGateway),
   );
+  app.use("/api/task-handoff", requireAuth, createTaskHandoffRouter(services.taskHandoffService));
   app.use(
     "/api/work-history",
     requireAuth,

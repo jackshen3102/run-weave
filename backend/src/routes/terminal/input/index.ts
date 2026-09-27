@@ -201,6 +201,7 @@ export function registerTerminalInputRoutes(
         panelTarget?.paneTarget,
         parsed.data.submit,
         parsed.data.submitKey,
+        parsed.data.expectedThreadId,
       );
       if (
         options?.quickInputService &&
