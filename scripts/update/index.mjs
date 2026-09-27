@@ -47,8 +47,13 @@ import {
 
 async function main() {
   const args = parseRunweaveUpdateArgs(process.argv.slice(2));
-  const configuration = configurationLibrary.initializeConfiguration(configurationLibrary.resolveConfigurationContext({ requireExplicit: !args.dryRun }));
-  if ((configuration.context.kind === "dev") !== isBetaTarget) throw new Error("CONFIG_UPDATE_TARGET_MISMATCH");
+  const configuration = configurationLibrary.initializeConfiguration(
+    configurationLibrary.resolveConfigurationContext({
+      requireExplicit: !args.dryRun,
+    }),
+  );
+  if ((configuration.context.kind === "dev") !== isBetaTarget)
+    throw new Error("CONFIG_UPDATE_TARGET_MISMATCH");
   const sourceRoot = path.resolve(args.sourceRoot);
   const appPath = path.resolve(args.appPath ?? `/Applications/${appName}.app`);
   const ambientRuntimeHome = isBetaTerminal
@@ -83,7 +88,10 @@ async function main() {
     channel,
     electronBuilderConfig,
     instanceId: process.env.RUNWEAVE_DESKTOP_INSTANCE_ID ?? "default",
-    devSessionId: configuration.context.kind === "dev" ? configuration.context.instanceId : null,
+    devSessionId:
+      configuration.context.kind === "dev"
+        ? configuration.context.instanceId
+        : null,
     runtimeHome,
     statePath,
   });
@@ -199,8 +207,11 @@ async function main() {
   let desktopVerificationResult = null;
   const previousAppServerReleaseId =
     state?.appServerReleaseId ?? state?.appServer?.releaseId ?? null;
-  const deferBetaRestartUntilAppServer =
-    isBetaTarget && plan.appServer.action === "update" && !args.noRestart;
+  // The Desktop passes its discovered App Server address to the packaged
+  // Backend at launch. Restarting App Server afterwards can change its port,
+  // leaving that Backend pinned to the old address until Desktop restarts.
+  const deferDesktopRestartUntilAppServer =
+    plan.appServer.action === "update" && !args.noRestart;
   if (plan.mode === "runtime") {
     runtimeRelease = await runRuntimeUpdate({
       channel,
@@ -209,7 +220,7 @@ async function main() {
       runtimeHome,
       sourceRoot,
     });
-    if (!args.noRestart && !deferBetaRestartUntilAppServer) {
+    if (!args.noRestart && !deferDesktopRestartUntilAppServer) {
       desktopVerificationResult = await restartApp(appPath, {
         desktopVerification,
       });
@@ -223,7 +234,7 @@ async function main() {
         channel,
         codesignIdentity: codesignIdentity.identity,
         gitHead,
-        launchAfterInstall: !deferBetaRestartUntilAppServer,
+        launchAfterInstall: !deferDesktopRestartUntilAppServer,
         desktopVerification,
         sourceRoot,
       });
@@ -247,36 +258,50 @@ async function main() {
         channel,
         codesignIdentity: codesignIdentity.identity,
         gitHead,
-        launchAfterInstall: !deferBetaRestartUntilAppServer,
+        launchAfterInstall: !deferDesktopRestartUntilAppServer,
         desktopVerification,
         sourceRoot,
       });
     }
   }
-  if (plan.appServer.action === "update") {
-    appServerRelease = await runAppServerUpdate({
-      appServerHome,
-      controlCliPath:
-        process.env.RUNWEAVE_CLI_BUNDLE_OUTFILE?.trim() || null,
-      sourceRoot,
-    });
-  }
-  if (deferBetaRestartUntilAppServer) {
-    if (plan.mode === "runtime") {
-      desktopVerificationResult = await restartApp(appPath, {
-        desktopVerification,
-      });
-    } else {
-      desktopVerificationResult = await openApp(appPath, {
-        desktopVerification,
+  let appServerUpdateError = null;
+  try {
+    if (plan.appServer.action === "update") {
+      appServerRelease = await runAppServerUpdate({
+        appServerHome,
+        controlCliPath: process.env.RUNWEAVE_CLI_BUNDLE_OUTFILE?.trim() || null,
+        gitHead,
+        sourceRoot,
       });
     }
+  } catch (error) {
+    appServerUpdateError = error;
   }
+  if (deferDesktopRestartUntilAppServer) {
+    try {
+      desktopVerificationResult =
+        plan.mode === "runtime"
+          ? await restartApp(appPath, { desktopVerification })
+          : await openApp(appPath, { desktopVerification });
+    } catch (error) {
+      if (appServerUpdateError) {
+        throw new AggregateError(
+          [appServerUpdateError, error],
+          "App Server update failed and Desktop could not restart",
+        );
+      }
+      throw error;
+    }
+  }
+  if (appServerUpdateError) throw appServerUpdateError;
   const cli = await runCliUpdate({ sourceRoot, plan: cliPlan });
   console.log(`[runweave-update] cli verification: ${JSON.stringify(cli)}`);
   const nextInstalledVersion = await readInstalledMacAppVersion(appPath);
   await writeUpdateState(statePath, {
-    devSessionId: configuration.context.kind === "dev" ? configuration.context.instanceId : null,
+    devSessionId:
+      configuration.context.kind === "dev"
+        ? configuration.context.instanceId
+        : null,
     channel,
     cli,
     appServer: {
@@ -294,14 +319,15 @@ async function main() {
       appServerRelease?.releaseId ?? previousAppServerReleaseId,
     appPath,
     appIdentity: await getPathIdentity(appPath),
-    frontendBuildEnvFingerprint: plan.mode === "app"
-      ? fingerprintFrontendBuildEnv({
-          ...process.env,
-          VITE_RUNWEAVE_CHANNEL: channel,
-          VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
-          VITE_RUNWEAVE_VERSION: appBuildVersion,
-        })
-      : state?.frontendBuildEnvFingerprint ?? null,
+    frontendBuildEnvFingerprint:
+      plan.mode === "app"
+        ? fingerprintFrontendBuildEnv({
+            ...process.env,
+            VITE_RUNWEAVE_CHANNEL: channel,
+            VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
+            VITE_RUNWEAVE_VERSION: appBuildVersion,
+          })
+        : (state?.frontendBuildEnvFingerprint ?? null),
     appVersion: nextInstalledVersion ?? installedAppVersion,
     gitDirty,
     gitHead,

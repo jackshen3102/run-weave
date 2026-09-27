@@ -7987,9 +7987,9 @@
     "file": "scripts/update/runtime-updates.mjs",
     "kind": "environment-forward",
     "expression": "...process.env",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
+    "reason": "更新器向 runtime 构建和 App Server 重启子进程转发启动环境；后者显式覆盖源码版本，持久配置仍由配置库读取。"
   },
   {
     "file": "scripts/update/system.mjs",
