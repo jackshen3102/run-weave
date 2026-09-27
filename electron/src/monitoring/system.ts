@@ -70,13 +70,20 @@ function hashAppKey(value: string): string {
   return `app:${crypto.createHash("sha256").update(value).digest("hex").slice(0, 16)}`;
 }
 
-function resolveExecutableName(command: string): string {
-  const executable = command.trim().split(/\s+/)[0] ?? command.trim();
-  return path.basename(executable) || command.trim();
+function resolveExecutableName(executablePath: string): string {
+  return path.basename(executablePath) || executablePath;
 }
 
-function resolveAppIdentity(command: string): AppIdentity {
-  const appMatch = command.match(/(\/.*?\.app)(?:\/|\s|$)/);
+function resolveAppIdentity(executablePath: string): AppIdentity {
+  const simulatorRuntime = executablePath.match(/\/Profiles\/Runtimes\/([^/]+)\.simruntime\/Contents\/Resources\/RuntimeRoot\//);
+  if (simulatorRuntime?.[1]) {
+    return {
+      appKey: `simulator:${simulatorRuntime[1]}`,
+      appName: `${simulatorRuntime[1]} Simulator`,
+    };
+  }
+
+  const appMatch = executablePath.match(/(\/.*?\.app)(?:\/|$)/);
   if (appMatch?.[1]) {
     return {
       appKey: appMatch[1],
@@ -84,8 +91,7 @@ function resolveAppIdentity(command: string): AppIdentity {
     };
   }
 
-  const executable = command.trim().split(/\s+/)[0] ?? command.trim();
-  const appName = basenameWithoutAppSuffix(executable) || command.trim();
+  const appName = basenameWithoutAppSuffix(executablePath) || executablePath;
   return {
     appKey: appName,
     appName,
@@ -110,13 +116,13 @@ export function parsePsOutput(
     const ppid = Number(match[2]);
     const cpuPercent = Number(match[3]);
     const rssKb = Number(match[4]);
-    const command = match[5]?.trim() ?? "";
-    if (!Number.isFinite(pid) || !command) {
+    const executablePath = match[5]?.trim() ?? "";
+    if (!Number.isFinite(pid) || !executablePath) {
       continue;
     }
 
-    const identity = resolveAppIdentity(command);
-    const executableName = resolveExecutableName(command);
+    const identity = resolveAppIdentity(executablePath);
+    const executableName = resolveExecutableName(executablePath);
     processes.push({
       pid,
       ppid,
@@ -358,7 +364,7 @@ export function parseBattery(
 async function sampleProcesses(
   currentProcessIds: ReadonlySet<number>,
 ): Promise<RawSystemMonitorProcess[]> {
-  const output = await runCommand("ps", ["-axo", "pid,ppid,pcpu,rss,command"]);
+  const output = await runCommand("ps", ["-ww", "-axo", "pid,ppid,pcpu,rss,comm"]);
   return output ? parsePsOutput(output, currentProcessIds) : [];
 }
 
