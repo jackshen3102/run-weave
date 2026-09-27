@@ -13,7 +13,8 @@ export type TerminalSidecarTool =
   | "automation"
   | "browser"
   | "agent-team"
-  | "race";
+  | "race"
+  | "handoff";
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 

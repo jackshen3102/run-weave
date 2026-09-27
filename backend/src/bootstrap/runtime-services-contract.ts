@@ -1,3 +1,4 @@
+import type { TaskHandoffService } from "../task-handoff/service";
 import type { ExperienceService } from "../experience/service";
 import type { ExperienceLearningRuntime } from "../experience/learning-runtime";
 import type { AuthStore } from "../auth/store";
@@ -66,6 +67,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   raceService: RaceService;
   appServerHistoryGateway: AppServerHistoryGateway;
   workHistoryService: WorkHistoryService;
+  taskHandoffService: TaskHandoffService;
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
   attentionService: AttentionService;

@@ -31,6 +31,7 @@ export const updateTerminalSessionSchema = z
 export const sendTerminalInputSchema = z
   .object({
     data: z.string(),
+    expectedThreadId: z.string().trim().min(1).max(200).optional(),
     mode: z
       .enum([
         "raw",

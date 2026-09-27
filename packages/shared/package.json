@@ -78,7 +78,8 @@
     "./experience": "./src/experience.ts",
     "./browser-local-tunnel": "./src/browser/local-tunnel.ts",
     "./terminal/file-link": "./src/terminal/file-link.ts",
-    "./configuration": "./src/configuration/index.ts"
+    "./configuration": "./src/configuration/index.ts",
+    "./task-handoff": "./src/task-handoff.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

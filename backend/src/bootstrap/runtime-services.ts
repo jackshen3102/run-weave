@@ -45,6 +45,7 @@ import {
   resolveStoragePaths,
 } from "../utils/path";
 import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
+import { TaskHandoffService } from "../task-handoff/service";
 import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
 import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
@@ -211,10 +212,16 @@ async function assembleRuntimeServices(
   resources.defer("terminal-session-manager", () =>
     terminalSessionManager.dispose(),
   );
+  const appServerHistoryGateway = new AppServerHistoryGateway();
+  const taskHandoffService = new TaskHandoffService(path.join(storagePaths.browserProfileDir, "task-handoff"), terminalSessionManager, appServerHistoryGateway, activityStore);
+  resources.defer("task-handoff", () => taskHandoffService.dispose());
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalEventService,
     terminalSessionManager,
-    (event) => experienceLearning.enqueue(event),
+    async (event) => {
+      await experienceLearning.enqueue(event);
+      if (event.kind === "completion" && event.terminalSessionId) await taskHandoffService?.completed(event.terminalSessionId, event.payload.panelId ?? null);
+    },
   );
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
   const tmuxLifecycleCoordinator = new TmuxLifecycleCoordinator();
@@ -382,7 +389,6 @@ async function assembleRuntimeServices(
     ),
   });
   await raceService.initialize();
-  const appServerHistoryGateway = new AppServerHistoryGateway();
   const workHistoryService = new WorkHistoryService(
     terminalSessionManager,
     activityQueryService,
@@ -520,6 +526,7 @@ async function assembleRuntimeServices(
     raceService,
     appServerHistoryGateway,
     workHistoryService,
+    taskHandoffService,
     terminalEventService,
     terminalCompletionEventService,
     attentionService,

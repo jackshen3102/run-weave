@@ -12,7 +12,11 @@ description: 仅当用户在当前请求中显式指定 $toolkit:runweave-change
 - 仅当用户在当前请求中显式点名 `$toolkit:runweave-change-validation` 时使用本技能。
 - 未显式点名时，不因代码修改、Bug 修复、功能实现、重构、运行行为、共享协议、服务生命周期、UI 或 CDP 验收而自动使用。
 - 显式调用只对当前请求有效，不跨请求或后续轮次延续。
-- 未调用本技能时，按当前任务与仓库约束执行范围相称的验证，不默认启动完整 Dev Session。
+- “提交所有代码”、调用 `$toolkit:github-pr`，或 diff 涉及 UI、Backend、共享协议与服务生命周期，
+  都不构成显式调用。
+- 未调用本技能时，不执行本技能定义的 diff 规划、隔离 Worktree、Dev Session、UI/CDP 验收或
+  Before/After 取证。纯提交、推送或 PR 流程只处理 Git 操作自然触发的已有 hook 与远端 CI，
+  不从改动范围推导额外验证。
 
 ## 必需技能
 
