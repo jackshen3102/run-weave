@@ -1,10 +1,11 @@
-import { CONFIGURATION_FIELDS, readConfigurationPath, type ConfigurationValue, type ConfigurationStatus, type EnvironmentContext } from "@runweave/shared/configuration";
+import { CONFIGURATION_FIELDS, readConfigurationPath, type ConfigurationValue, type ConfigurationStatus, type ConfigurationFieldStatus, type EnvironmentContext } from "@runweave/shared/configuration";
 import { ConfigurationStore, type ConfigurationSnapshot } from "./store";
 import { resolveConfigurationContext } from "./context";
 import { domainForPath, redactConfiguration } from "./validation";
 import { ConfigurationError } from "./errors";
 import path from "node:path";
 import { assertOwnedPath } from "./context";
+import { explainConfigurationValue, resolveConfigurationValue } from "./resolution";
 
 export class ConfigurationRuntime {
   readonly store: ConfigurationStore;
@@ -23,9 +24,9 @@ export class ConfigurationRuntime {
   get<T extends ConfigurationValue>(key: string, fallback?: T): T | undefined {
     const domain = domainForPath(key);
     const snapshot = this.snapshots.get(domain) ?? this.snapshot;
-    if (snapshot.issues[domain]?.length) return fallback;
-    const value = readConfigurationPath(snapshot.value, key);
-    return value === undefined || value === null ? fallback : value as T;
+    const resolved = resolveConfigurationValue(snapshot, key);
+    // Caller fallbacks remain for consumer-owned rules and invalid/unset domains.
+    return resolved.value === undefined ? fallback : resolved.value as T;
   }
   requireDomain(domain: string): void {
     const snapshot = this.snapshots.get(domain) ?? this.snapshot;
@@ -89,6 +90,7 @@ export class ConfigurationRuntime {
       savedRevision: saved.value.revision,
       digest: saved.digest,
       values: redactConfiguration(saved.value),
+      fieldStates: this.fieldStates(saved),
       consumers: Object.fromEntries([...new Set([...CONFIGURATION_FIELDS.map((field) => field.domain), ...Object.keys(saved.value.domainVersions), ...this.applied.keys()])].map((domain) => {
         const issues = saved.issues[domainForPath(domain)] ?? (this.applyErrors.has(domain) ? [{ path: domain, code: "CONFIG_APPLY_FAILED" }] : []);
         const appliedRevision = this.applied.get(domain) ?? null;
@@ -99,6 +101,22 @@ export class ConfigurationRuntime {
         return [domain, { appliedRevision, state: issues.length ? "error" : empty && (appliedRevision === null || ["services.snapshotPublisher", "services.pushSender", "services.feishu"].includes(domain)) ? "unconfigured" : appliedRevision !== null && unchanged ? "applied" : "restartRequired", issues }];
       })),
     };
+  }
+  private fieldStates(saved: ConfigurationSnapshot): Record<string, ConfigurationFieldStatus> {
+    return Object.fromEntries(CONFIGURATION_FIELDS.filter(field => !field.path.includes("<") && !field.path.includes("[]")).map(field => {
+      // Domain editors may report a single adopted leaf; prefer the most specific owner.
+      const owner = [...this.applied.keys()].filter(key => field.path === key || field.path.startsWith(`${key}.`)).sort((a, b) => b.length - a.length)[0];
+      const applied = owner ? this.snapshots.get(owner) : undefined;
+      const hasError = Boolean(saved.issues[domainForPath(field.path)]?.length || this.applyErrors.has(field.domain) || owner && this.applyErrors.has(owner));
+      // Compare private values before redaction, so rotating a credential is still pending.
+      const matches = applied && JSON.stringify(resolveConfigurationValue(applied, field.path)) === JSON.stringify(resolveConfigurationValue(saved, field.path));
+      return [field.path, {
+        saved: explainConfigurationValue(saved, field.path).resolved,
+        ...(applied ? { applied: explainConfigurationValue(applied, field.path).resolved } : {}),
+        appliedRevision: owner ? this.applied.get(owner)! : null,
+        state: hasError ? "error" : !applied ? "notObserved" : matches ? "applied" : "pending",
+      } satisfies ConfigurationFieldStatus];
+    }));
   }
 }
 

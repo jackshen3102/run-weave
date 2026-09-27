@@ -7,6 +7,7 @@ import {
   discoverMigrationSources, retainSelectedStorage,
   prepareMigration, migrationPreview, redactConfiguration, backupMigrationSources,
   readInitialAuthFile, prepareInitialConfiguration, assertNewStableInstallation,
+  explainConfigurationValue,
   type MigrationSource,
 } from "@runweave/config-node";
 import { CONFIGURATION_FIELDS, type ConfigurationValue } from "@runweave/shared/configuration";
@@ -20,13 +21,22 @@ export async function runConfigCommand(command: string | undefined, args: string
 }): Promise<void> {
   const parsed = parseArgs(args, new Set(["json", "plain", "dry-run", "confirm-new-install"]));
   const mode = resolveOutputMode(parsed.options);
-  const write = !["path", "show", "validate", "doctor", "keys", "backups"].includes(command ?? "");
+  const write = !["path", "show", "explain", "validate", "doctor", "keys", "backups"].includes(command ?? "");
   const context = resolveConfigurationContext({ args, requireExplicit: write });
   const store = new ConfigurationStore(context);
   const output = (value: unknown) => writeOutput(io.stdout, mode, mode === "plain" && typeof value !== "string" ? JSON.stringify(value, null, 2) : value);
   if (command === "path") { output(mode === "json" ? { ...context, file: store.file } : store.file); return; }
   if (command === "keys") { output(CONFIGURATION_FIELDS); return; }
   if (command === "backups") { output(store.backups()); return; }
+  if (command === "explain") {
+    const key = parsed.positionals[0];
+    if (!key || parsed.positionals.length !== 1) throw new CliError("Usage: rw config explain <key> [--instance <id>] [--json]", 2);
+    const snapshot = store.read();
+    const explanation = explainConfigurationValue(snapshot, key);
+    output({ environment: context, file: store.file, revision: snapshot.value.revision, digest: snapshot.digest, ...explanation });
+    if (explanation.issues.length) throw new ConfigurationError("CONFIG_VALIDATION_FAILED");
+    return;
+  }
   if (command === "init") {
     assertNewStableInstallation(context);
     const authFile = getStringOption(parsed.options, "auth-file");
@@ -111,7 +121,7 @@ export async function runConfigCommand(command: string | undefined, args: string
     output({ environment: context, savedRevision: next.value.revision, digest: next.digest, state: "restartRequired" });
     return;
   }
-  throw new CliError("Usage: rw config <path|show|keys|init|validate|doctor|backups|restore|reload|set|import|import-env|migrate> [--instance <id>] [--config-dir <absolute path>]", 2);
+  throw new CliError("Usage: rw config <path|show|explain|keys|init|validate|doctor|backups|restore|reload|set|import|import-env|migrate> [--instance <id>] [--config-dir <absolute path>]", 2);
 }
 
 function parseJsonFile(file: string): unknown {

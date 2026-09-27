@@ -11,6 +11,21 @@ export interface ConfigurationFile extends ConfigurationObject {
   migrations: ConfigurationObject;
 }
 export interface ConfigurationIssue { path: string; code: string }
+export interface ConfigurationValueResolution {
+  source: "saved" | "default" | "consumerDefault" | "unset" | "invalid";
+  value?: ConfigurationValue;
+}
+export interface ConfigurationExplanation {
+  path: string;
+  domain: string;
+  owner: string;
+  apply: ConfigurationField["apply"];
+  default: ConfigurationField["default"];
+  savedValue?: ConfigurationValue;
+  resolved: ConfigurationValueResolution;
+  issues: ConfigurationIssue[];
+  application: "notObserved";
+}
 export interface ConfigurationLocation { line: number; column: number }
 export interface ConfigurationField {
   owner: string;
@@ -37,6 +52,12 @@ export interface ConfigurationConsumerState {
   state: "applied" | "restartRequired" | "error" | "unconfigured";
   issues: ConfigurationIssue[];
 }
+export interface ConfigurationFieldStatus {
+  saved: ConfigurationValueResolution;
+  applied?: ConfigurationValueResolution;
+  appliedRevision: number | null;
+  state: "applied" | "pending" | "error" | "notObserved";
+}
 export interface ConfigurationStatus {
   environment: EnvironmentIdentity;
   savedRevision: number | null;
@@ -44,6 +65,8 @@ export interface ConfigurationStatus {
   diskError?: { code: string; location?: ConfigurationLocation };
   values: ConfigurationObject;
   consumers: Record<string, ConfigurationConsumerState>;
+  /** Optional for compatibility with older Backend and Desktop versions; values are redacted. */
+  fieldStates?: Record<string, ConfigurationFieldStatus>;
 }
 
 export type PublicConfigurationField = Pick<ConfigurationField, "path" | "type" | "domain" | "sensitive" | "apply" | "description" | "default">;
