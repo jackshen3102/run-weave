@@ -9,8 +9,8 @@ CPU 和内存也可作为 Runtime Status 抽屉的次级诊断信息，但资源
 
 - 入口：Electron 菜单提供 `System Monitor`，快捷键为 `CmdOrCtrl+Shift+M`；前端路由为 `/system-monitor`。
 - 总览：展示系统 CPU 总占用、内存使用、内存压力、Swap、电池电量、充电状态、剩余时间和放电速率。
-- 列表：按应用聚合进程，默认展示 CPU 和内存 Top 结果，并支持按 CPU 或内存排序。
-- 详情：展开应用后展示当前窗口内的进程 PID、进程名、CPU 和内存。
+- 列表：按应用或模拟器运行时聚合进程，默认展示 CPU 和 RSS 合计 Top 结果，并支持按 CPU 或 RSS 合计排序。
+- 详情：展开后展示当前窗口内的进程 PID、可执行文件名、CPU 和 RSS。
 - 平台：只在 macOS Electron 客户端提供完整数据；非 Electron 或非 macOS 环境展示空态。
 
 ## 数据边界
@@ -21,10 +21,10 @@ CPU 和内存也可作为 Runtime Status 抽屉的次级诊断信息，但资源
 - 内存：`os.totalmem()` / `os.freemem()`，并结合 `vm_stat` 估算 active、wired、compressed 等已用内存。
 - 内存压力：`memory_pressure`，无法解析时返回 `unknown`。
 - Swap：`sysctl vm.swapusage`。
-- 进程：`ps -axo pid,ppid,pcpu,rss,command`，主进程解析后只返回 UI 需要的字段。
+- 进程：`ps -ww -axo pid,ppid,pcpu,rss,comm`，读取完整可执行路径而不读取参数；主进程只返回 UI 需要的字段。
 - 电池：`pmset -g batt` 与 `ioreg -r -n AppleSmartBattery`。
 
-主进程把同一 `.app` 下的进程聚合为应用；非 `.app` 进程退化为可执行名聚合。`appKey` 使用哈希值，避免把本机完整 app 路径作为稳定标识暴露给前端。
+主进程把同一 `.app` 下的进程聚合为应用，模拟器 RuntimeRoot 下的服务按 iOS 运行时版本聚合；其他进程按可执行名聚合。`appKey` 使用哈希值，避免把本机完整 app 路径作为稳定标识暴露给前端。应用行的 RSS 合计会重复计入进程间共享页，不能视为该应用独占的物理内存；判断整机内存紧张程度应看总览的内存压力。
 
 ## 隐私与安全
 

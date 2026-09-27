@@ -450,7 +450,7 @@ def drain_runner(root, owner, env):
         write(root / "runner-shutdown.json", report)
 
 
-def finish(root, recovering=False, idle_lease=None):
+def finish(root, recovering=False, idle_lease=None, keep_booted=False):
     initial = task(root, allow_finished=True)
     with guard(initial["udid"]):
         current = owner_at(initial["udid"])
@@ -483,6 +483,9 @@ def finish(root, recovering=False, idle_lease=None):
         if unsettled(owner):
             fail("cleanup_incomplete", "Owned child process group has not exited")
         check_external_runner(owner["udid"])
+        if not keep_booted:
+            from device_shutdown import shutdown_simulator
+            shutdown_simulator(owner["udid"])
         owner["finishedAt"] = now()
         owner["recovered"] = recovering
         save_owner(owner)
@@ -530,6 +533,7 @@ def main():
     start_parser.add_argument("--json", action="store_true")
     finish_parser = sub.add_parser("finish")
     finish_parser.add_argument("--task-dir", required=True)
+    finish_parser.add_argument("--keep-booted", action="store_true")
     finish_parser.add_argument("--json", action="store_true")
     recover = sub.add_parser("recover")
     recover.add_argument("--lease", required=True)
@@ -552,7 +556,7 @@ def main():
     elif options.command == "start":
         result = start(options.app, options.task_dir, options.slot)
     elif options.command == "finish":
-        result = finish(options.task_dir)
+        result = finish(options.task_dir, keep_booted=options.keep_booted)
     elif options.command == "recover":
         owner = owner_at(options.udid)
         if not owner or owner.get("lease") != options.lease or owner.get("kind") != "simulator-pool":

@@ -38,7 +38,9 @@ python3 "$SKILL_DIR/scripts/device.py" run "$PWD/.runweave/mobile-qa/my-task" --
 node scripts/ios-simulators/cli.mjs finish --task-dir .runweave/mobile-qa/my-task --json
 ```
 
-`finish` 清理该任务的 daemon/runner 后释放设备；不会卸载 App、擦除数据或关闭模拟器。
+`finish` 清理该任务的 daemon/runner、确认模拟器关机后再释放设备；不会卸载 App 或擦除数据。
+连续执行任务且需要避免下次开机耗时时，可显式传入 `--keep-booted`。此时设备租约会释放，
+但模拟器持续占用内存；任务结束后应关闭不再使用的设备。`recover` 始终按默认关机流程执行。
 对 agent-device 0.21.3，先核验 runner 的任务归属及 PID 启动身份，再请求 XCTest 正常结束，
 确认退出后才清理 daemon，避免直接终止执行器触发 SpringBoard 崩溃。
 `runner-shutdown.json` 记录退出结果；身份不符、请求失败或退出超时会保留占用并返回
@@ -82,7 +84,8 @@ node scripts/ios-simulators/cli.mjs recover --lease <旧lease> --udid <UDID> --j
 活跃/未知子进程、损坏 owner 或未完成的 runner 清理都会阻塞恢复。
 工具只在安全清理成功后回收过期空闲租约，不按超时强行抢锁，不 killall，
 不自动重放业务操作；旧 lease 不能释放后来任务。
-`free/busy/blocked/missing` 是池状态，`Booted/Shutdown` 是设备状态，关机不表示空闲。
+`free/busy/blocked/missing` 是池状态，`Booted/Shutdown` 是设备状态；
+`finish` 默认产生 `free + Shutdown`，显式保留开机时产生 `free + Booted`。
 退出码：成功 0，构建/执行失败 1，参数/映射错误 2，占用 3，身份或清理未确定 4。
 
 ## 数据和证据边界

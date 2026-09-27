@@ -219,7 +219,7 @@ function AppRow(params: {
                         CPU Core
                       </th>
                       <th className="w-28 px-3 py-2 text-right font-medium">
-                        Memory
+                        RSS
                       </th>
                     </tr>
                   </thead>
@@ -427,7 +427,7 @@ export function SystemMonitorPage({ onNavigateHome }: SystemMonitorPageProps) {
         <section className="flex flex-col rounded-lg border border-border/70 bg-card/85 shadow-[0_24px_90px_-58px_rgba(17,24,39,0.75)]">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-lg font-semibold">Top Apps</h2>
+              <h2 className="text-lg font-semibold">Top Apps &amp; Runtimes</h2>
               <p className="mt-1 text-xs text-muted-foreground">
                 Last sample {formatTime(snapshot?.sampledAt ?? null)}
               </p>
@@ -445,7 +445,7 @@ export function SystemMonitorPage({ onNavigateHome }: SystemMonitorPageProps) {
                 size="sm"
                 onClick={() => setSortKey("memory")}
               >
-                Memory
+                RSS Sum
               </Button>
             </div>
           </div>
@@ -458,7 +458,7 @@ export function SystemMonitorPage({ onNavigateHome }: SystemMonitorPageProps) {
                     CPU Core
                   </th>
                   <th className="w-36 px-4 py-3 text-right font-medium">
-                    Memory
+                    RSS Sum
                   </th>
                   <th className="w-28 px-4 py-3 text-right font-medium">
                     Procs
@@ -499,7 +499,8 @@ export function SystemMonitorPage({ onNavigateHome }: SystemMonitorPageProps) {
           <div className="border-t border-border/70 px-4 py-3 text-xs text-muted-foreground">
             Data source: ps + os.cpus delta + memory_pressure + sysctl + pmset +
             ioreg. App and process CPU use macOS per-core scale; 100% equals one
-            logical core. No sudo.
+            logical core. RSS sums include shared memory more than once; use
+            system memory pressure to judge actual memory strain. No sudo.
           </div>
         </section>
       </div>

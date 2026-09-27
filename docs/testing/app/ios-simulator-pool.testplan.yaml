@@ -136,3 +136,28 @@ cases:
       - 用 toolkit:agent-device 冷启动并读取真实控件树，确认随记列表和 Runweave 项目列表或指定终端可操作；单独记录从 run 发起到业务后置状态的耗时。
       - 在隔离源码现场修改 iOS 构建输入后执行 run，确认 `reusedBuild` 为 false，安装身份随新 buildId 更新；改用 Release 配置也不得复用 Debug 产物，切回未变的 Debug 输入仍可匹配自己的产物。
       - 将设备上 App 内容与本地产物制造本例可恢复的不一致，确认 run 不跳过安装；恢复本例产物并在每轮 finish 后核对两台 lease 均释放。
+  - id: SIMPOOL-012
+    name: 默认 finish 在释放租约前关闭模拟器
+    required: true
+    description: >
+      任务结束后即使模拟器仍在运行，也必须先确认目标设备关机再释放本任务租约；
+      下一个任务可在同一设备开机并继续使用已安装的 App 和数据。
+    preconditions:
+      - 本例获准独占一台池内模拟器，设备可开机，且没有外部 XCTest 或其他设备使用者。
+      - 本例有两个新的独立 task-dir，不依赖此前用例的设备状态。
+    steps:
+      - 在第一目录 start 并通过托管 run 使设备开机，记录目标 UDID 与本例 lease；确认设备为 Booted。
+      - 不带 --keep-booted 执行 finish；确认返回成功后同一 UDID 为 Shutdown、池状态为 free，原模拟器进程不再运行，App 和数据未被擦除。
+      - 在第二目录 start 并通过托管 run 重新开机；确认仍使用同一 UDID、取得新 lease，已安装内容按身份核对而非因关机被清空；最后正常 finish 并再次确认 Shutdown。
+  - id: SIMPOOL-013
+    name: 显式保留开机只影响本次 finish
+    required: true
+    description: >
+      连续验证显式选择保留开机时，设备在租约释放后保持 Booted；
+      后续任务默认 finish 仍会关闭设备。
+    preconditions:
+      - 本例获准独占一台池内模拟器，设备可开机，且没有外部 XCTest 或其他设备使用者。
+      - 本例有两个新的独立 task-dir，不依赖此前用例的设备状态。
+    steps:
+      - 在第一目录 start 并通过托管 run 使设备开机；带 --keep-booted 执行 finish，确认同一 UDID 为 Booted 且池状态为 free。
+      - 在第二目录 start，确认获得同一 UDID 的新 lease 并可继续托管操作；不带 --keep-booted 执行 finish，确认设备为 Shutdown 且池状态为 free。
