@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct ScheduledTaskEditorView: View {
@@ -79,7 +80,7 @@ struct ScheduledTaskEditorView: View {
         basicFields
         Section("提示词") {
           TextEditor(text: $draft.prompt).frame(minHeight: 140)
-            .accessibilityLabel("任务提示词").disabled(uncertain)
+            .accessibilityLabel("任务提示词").disabled(uncertain).clarityMask()
         }
         scheduleFields
         Section {
@@ -144,7 +145,7 @@ struct ScheduledTaskEditorView: View {
   }
   private var basicFields: some View {
     Section("任务") {
-      TextField("名称", text: $draft.name).disabled(uncertain).accessibilityIdentifier("scheduled-name")
+      TextField("名称", text: $draft.name).disabled(uncertain).accessibilityIdentifier("scheduled-name").clarityMask()
       Picker("项目", selection: $draft.projectId) {
         Text("选择项目").tag("")
         if !draft.projectId.isEmpty && !contexts.contains(where: { $0.id == draft.projectId }) { Text("\(draft.projectId)（待校验）").tag(draft.projectId) }

@@ -9,6 +9,18 @@ Bundle ID 为 `com.runweave.app.native`，保留已有安装的连接、主题�
 应用在前台活跃期间默认保持屏幕常亮；可在“连接管理 → 屏幕”关闭，选择会保存在本机。
 该设置覆盖正式页面与诊断实验室，离开应用后恢复系统息屏规则；不阻止手动锁屏，也不替代 UI Automation 授权。
 
+## Clarity 自动采集
+
+原生 App 的 Debug、Profile、Release 默认包含并初始化 Microsoft Clarity iOS SDK `4.1.0`，项目是
+[Runweave iOS](https://clarity.microsoft.com/projects/view/yofefg4fsy/settings)（`yofefg4fsy`）。
+项目设置为 Strict masking，WebView DOM capture 关闭。代码另对登录和配置输入、任务提示词、终端、命令输入、文件预览及内置浏览器遮盖。
+SDK 在主线程启动时初始化一次，不上报自定义用户 ID、事件或 Runweave 连接标识；没有用户操作开关。
+
+构建时传入 `RUNWEAVE_CLARITY_ENABLED=NO` 可以关闭初始化，或用 `RUNWEAVE_CLARITY_PROJECT_ID=<移动测试项目 ID>` 覆盖项目。
+这些是 Xcode 构建设置，改动后必须重新构建并安装；旧 App 不会自动停采。项目 ID 是公开标识。
+发布前按[接入与验收方案](../../docs/plans/2026-09-27-ios-clarity-autocapture.md)核对隐私披露、真实设备上传和云端回放遮盖。
+构建、安装、启动、页面交互与云端数据分别留证，不能互相代替。
+
 ## 构建与安装
 
 需要 macOS、Xcode、iOS SDK 和 Metal Toolchain。应用部署版本以 Xcode host 的

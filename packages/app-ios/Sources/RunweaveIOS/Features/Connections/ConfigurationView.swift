@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct ConfigurationView: View {
@@ -44,10 +45,10 @@ struct ConfigurationView: View {
                   Text("替换").tag("replace")
                   Text("删除").tag("delete")
                 }
-                if replacing.contains(field.path) { SecureField("新凭据", text: binding(field.path)).autocapitalization(.none) }
+                if replacing.contains(field.path) { SecureField("新凭据", text: binding(field.path)).autocapitalization(.none).clarityMask() }
               } else {
                 TextField(field.type.hasPrefix("array") ? "JSON 数组" : field.type == "boolean" ? "true 或 false" : "留空恢复默认值", text: binding(field.path))
-                  .autocapitalization(.none).disableAutocorrection(true)
+                  .autocapitalization(.none).disableAutocorrection(true).clarityMask()
               }
             }.disabled(busy)
           }

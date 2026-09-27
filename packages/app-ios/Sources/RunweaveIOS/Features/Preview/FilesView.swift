@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct FilesView: View {
@@ -22,7 +23,7 @@ struct FilesView: View {
   var body: some View {
     VStack(spacing: 4) {
       TextField("搜索文件", text: $query).textFieldStyle(.roundedBorder).padding(.horizontal)
-        .autocapitalization(.none).disableAutocorrection(true).focused($searchFocused)
+        .autocapitalization(.none).disableAutocorrection(true).focused($searchFocused).clarityMask()
       ScrollView(.horizontal) {
         HStack {
           if loading { ProgressView().controlSize(.small) }

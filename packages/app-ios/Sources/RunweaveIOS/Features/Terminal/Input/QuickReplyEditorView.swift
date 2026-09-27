@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 import UIKit
 
@@ -33,7 +34,7 @@ struct QuickReplyEditorView: View {
     Form {
       Section(header: Text("标题")) {
         TextField("可选，留空从正文生成", text: $title)
-          .accessibilityIdentifier("quick-reply-title")
+          .accessibilityIdentifier("quick-reply-title").clarityMask()
       }
       Section(header: Text("正文")) {
         CommandTextView(

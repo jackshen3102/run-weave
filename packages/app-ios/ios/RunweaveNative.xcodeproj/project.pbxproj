@@ -164,6 +164,8 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = RunweaveNative/Device.entitlements;
 				APS_ENVIRONMENT = development;
 				RUNWEAVE_APNS_ENVIRONMENT = sandbox;
+				RUNWEAVE_CLARITY_ENABLED = YES;
+				RUNWEAVE_CLARITY_PROJECT_ID = yofefg4fsy;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CURRENT_PROJECT_VERSION = 1;
@@ -190,6 +192,8 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = RunweaveNative/Device.entitlements;
 				APS_ENVIRONMENT = development;
 				RUNWEAVE_APNS_ENVIRONMENT = sandbox;
+				RUNWEAVE_CLARITY_ENABLED = YES;
+				RUNWEAVE_CLARITY_PROJECT_ID = yofefg4fsy;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CURRENT_PROJECT_VERSION = 1;
@@ -244,6 +248,8 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = RunweaveNative/Device.entitlements;
 				APS_ENVIRONMENT = production;
 				RUNWEAVE_APNS_ENVIRONMENT = production;
+				RUNWEAVE_CLARITY_ENABLED = YES;
+				RUNWEAVE_CLARITY_PROJECT_ID = yofefg4fsy;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CURRENT_PROJECT_VERSION = 1;

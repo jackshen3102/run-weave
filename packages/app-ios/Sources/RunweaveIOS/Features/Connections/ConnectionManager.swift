@@ -1,4 +1,5 @@
 import IOSBuildIdentity
+import Clarity
 import SwiftUI
 
 struct ConnectionManager: View {
@@ -103,9 +104,9 @@ struct ConnectionManager: View {
           }
         }
         Section(header: Text(editingID == nil ? "新增连接" : "编辑连接")) {
-          TextField("名称", text: $name)
+          TextField("名称", text: $name).clarityMask()
           TextField("URL", text: $url).keyboardType(.URL).autocapitalization(.none)
-            .disableAutocorrection(true)
+            .disableAutocorrection(true).clarityMask()
           if let failure { Text(failure).foregroundColor(.red) }
           Button(editingID == nil ? "添加并切换" : "保存") { save() }.disabled(
             url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.storageError != nil

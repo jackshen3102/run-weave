@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct RenameTerminalView: View {
@@ -18,7 +19,7 @@ struct RenameTerminalView: View {
     NavigationView {
       Form {
         Section {
-          TextField("自定义名称", text: $name)
+          TextField("自定义名称", text: $name).clarityMask()
           Text("留空保存可恢复自动名称，最多 80 个字符，部分符号占两个字符。")
             .font(.caption).foregroundColor(.secondary)
         }

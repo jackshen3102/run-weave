@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct ScheduledTasksView: View {
@@ -77,7 +78,7 @@ struct ScheduledTasksView: View {
     List {
       Section {
         Text(session.connection?.name ?? "当前电脑").font(.caption).foregroundColor(.secondary)
-        TextField("搜索任务", text: $model.query).accessibilityIdentifier("scheduled-search")
+        TextField("搜索任务", text: $model.query).accessibilityIdentifier("scheduled-search").clarityMask()
         Picker("项目", selection: $model.project) {
           Text("所有项目").tag("")
           ForEach(session.overview?.projects ?? []) { Text($0.name).tag($0.id) }
