@@ -13,6 +13,7 @@
 rw config path --instance stable --json
 rw config keys --json
 rw config show --instance stable --json
+rw config explain backend.server.port --instance stable --json
 rw config validate --instance stable --json
 rw config doctor --instance stable --json
 ```
@@ -20,6 +21,23 @@ rw config doctor --instance stable --json
 `path` 默认只输出文件路径，`--json` 同时返回实例身份与配置根。其他配置命令默认输出可读的结构化结果，脚本可显式使用 `--json`。`show` 只输出脱敏值。`keys` 列出注册字段的类型、敏感标记、远程修改权限和生效方式。
 `doctor` 额外列出当前权威 YAML、发现的旧来源文件、父进程里存在的旧环境键名和 cwd 中是否有 `.env`；不读取或输出旧环境值。键名只表明检测到潜在迁移来源，不能据此断定运行时的端口等启动上下文也被忽略。
 无目标只读查询默认定位 Stable；来自 Dev Session 的冲突上下文会被拒绝。
+
+`explain <key>` 使用与运行时 `get` / `setting` / `settingText` 相同的解析规则，报告单个字段的
+保存值、解析值、来源、所属模块和生效方式。显式值优先，缺失或 `null` 使用字段目录中的固定
+默认值；`false`、`0`、空字符串和空数组保留原值。默认值只在读取时解析，不回写 YAML。
+固定默认值优先于调用方 fallback；域校验失败时不使用默认值掩盖错误。
+
+`resolved.source` 为 `saved`、`default`、`unset`、`consumerDefault` 或 `invalid`。
+`consumerDefault` 表示依赖宿主、平台或业务上下文，由消费模块继续解析；输出 `default.rule`
+说明规则，不猜测最终值。动态规则与 `ConfigurationDomain.read()` 的原始编辑快照保持原有行为。
+敏感字段只报告 `configured`，不输出内容；域无效时给出字段问题并以非零状态退出。
+此命令只读本地文件，`application: notObserved` 明确表示没有观测运行中进程，不能据此判断已生效；
+运行时仍按启动或成功重载的快照读取，保存新值不会提前改变旧快照。
+
+运行状态面板中的“当前连接电脑的配置”复用同一解析规则，分别显示已保存配置的取值、来源和
+当前进程采用值。输入框保持原始保存值，“恢复默认”只在提交时写入 `null`，不会把默认值固化。
+尚未收到所属模块的应用记录时显示“尚未确认”；重载失败保留先前采用值。
+该状态不代表其他进程已应用或业务连接已验证可用。旧服务没有字段来源时保留原有域状态展示。
 
 ## 写入
 

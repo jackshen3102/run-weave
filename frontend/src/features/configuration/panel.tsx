@@ -4,6 +4,7 @@ import type { ConfigurationValue, PublicConfigurationField, PublicConfigurationS
 import { requestConfiguration } from "../../services/configuration";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { ConfigurationFieldDetails } from "./field-status";
 
 const states = { applied: "已生效", restartRequired: "等待所属服务重启", error: "配置错误", unconfigured: "未配置" };
 export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token: string | null }) {
@@ -46,15 +47,17 @@ export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token:
       {failure && <p role="alert" className="text-sm text-red-500">{failure}</p>}
       {status && <>
         <p className="text-xs">{status.environment.kind === "stable" ? "Stable" : "Dev Session"} · {status.environment.instanceId} · 保存版本 {status.savedRevision ?? "不可读取"}</p>
+        <p className="text-xs text-muted-foreground">输入框编辑保存值，默认值不会自动写入。应用状态来自当前连接的服务，不代表其他服务或业务连接已验证可用。</p>
         {status.diskError && <p role="alert">磁盘配置无法读取，请在当前电脑运行 rw config doctor。</p>}
         {status.fields.filter(field => !field.path.includes("<")).map(field => {
           const changed = Object.hasOwn(draft, field.path);
           const value = changed ? draft[field.path] : status.values[field.path];
           const text = value == null ? "" : typeof value === "string" ? value : JSON.stringify(value);
           const consumer = status.consumers[field.domain];
+          const fieldState = status.fieldStates?.[field.path];
           return <div key={field.path} className="space-y-1 border-b border-border/60 pb-3">
             <label className="text-sm" htmlFor={`config-${field.path}`}>{field.description}</label>
-            <p className="text-xs text-muted-foreground">{consumer ? states[consumer.state] : "状态未知"}{consumer?.appliedRevision != null ? ` · 生效版本 ${consumer.appliedRevision}` : ""}</p>
+            {fieldState ? <ConfigurationFieldDetails field={field} status={fieldState} changed={changed} /> : <p className="text-xs text-muted-foreground">{consumer ? states[consumer.state] : "状态未知"}{consumer?.appliedRevision != null ? ` · 生效版本 ${consumer.appliedRevision}` : ""} · 当前服务未提供字段来源</p>}
             {field.sensitive ? <>
               <select disabled={busy} aria-label={`${field.description}操作`} className="h-9 w-full rounded border bg-background px-2 text-sm" value={!changed ? "keep" : draft[field.path] === null ? "delete" : "replace"} onChange={event => setDraft(current => {
                 const next = { ...current }; if (event.target.value === "keep") delete next[field.path]; else next[field.path] = event.target.value === "delete" ? null : ""; return next;
@@ -64,6 +67,7 @@ export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token:
               {changed && draft[field.path] !== null && <Input disabled={busy} id={`config-${field.path}`} type="password" autoComplete="new-password" value={draft[field.path] ?? ""} onChange={event => setDraft(current => ({ ...current, [field.path]: event.target.value }))} />}
             </> : <Input disabled={busy} id={`config-${field.path}`} value={text} placeholder={"value" in field.default && field.default.value != null ? String(field.default.value) : "未设置"} onChange={event => setDraft(current => ({ ...current, [field.path]: event.target.value }))} />}
             {!field.sensitive && <p className="text-[11px] text-muted-foreground">{field.type === "boolean" ? "填写 true 或 false" : field.type.startsWith("array") ? '填写 JSON 数组，例如 ["id1", "id2"]' : "留空恢复默认值"}</p>}
+            {!field.sensitive && <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDraft(current => ({ ...current, [field.path]: null }))}>恢复默认</Button>}
           </div>;
         })}
         <Button disabled={busy || !Object.keys(draft).length || status.savedRevision == null} onClick={() => void run(true)}>{busy ? "处理中…" : "保存配置"}</Button>
