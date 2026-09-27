@@ -1778,7 +1778,15 @@
   {
     "file": "electron/resources/hooks/feishu_stop_notify.sh",
     "kind": "native-or-shell",
-    "expression": "local rw_bin=\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw\"",
+    "expression": "\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/bin/rw\"; do",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Hook 使用所属实例的固定 CLI、运行日志路径、终端身份和 Node 启动路径；凭据由 CLI 读取。"
+  },
+  {
+    "file": "electron/resources/hooks/feishu_stop_notify.sh",
+    "kind": "native-or-shell",
+    "expression": "\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw\" \\",
     "count": 1,
     "category": "runtime-context",
     "reason": "Hook 使用所属实例的固定 CLI、运行日志路径、终端身份和 Node 启动路径；凭据由 CLI 读取。"
@@ -1866,7 +1874,15 @@
   {
     "file": "electron/resources/hooks/pi/bridge/feishu_stop_notify.sh",
     "kind": "native-or-shell",
-    "expression": "local rw_bin=\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw\"",
+    "expression": "\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/bin/rw\"; do",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Hook 使用所属实例的固定 CLI、运行日志路径、终端身份和 Node 启动路径；凭据由 CLI 读取。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/feishu_stop_notify.sh",
+    "kind": "native-or-shell",
+    "expression": "\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw\" \\",
     "count": 1,
     "category": "runtime-context",
     "reason": "Hook 使用所属实例的固定 CLI、运行日志路径、终端身份和 Node 启动路径；凭据由 CLI 读取。"
@@ -3634,7 +3650,15 @@
   {
     "file": "packages/agent-bridge/hooks/feishu_stop_notify.sh",
     "kind": "native-or-shell",
-    "expression": "local rw_bin=\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw\"",
+    "expression": "\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/bin/rw\"; do",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Hook 使用所属实例的固定 CLI、运行日志路径、终端身份和 Node 启动路径；凭据由 CLI 读取。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/feishu_stop_notify.sh",
+    "kind": "native-or-shell",
+    "expression": "\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw\" \\",
     "count": 1,
     "category": "runtime-context",
     "reason": "Hook 使用所属实例的固定 CLI、运行日志路径、终端身份和 Node 启动路径；凭据由 CLI 读取。"
@@ -4930,7 +4954,15 @@
   {
     "file": "plugins/toolkit/hooks/feishu_stop_notify.sh",
     "kind": "native-or-shell",
-    "expression": "local rw_bin=\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw\"",
+    "expression": "\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/bin/rw\"; do",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Hook 使用所属实例的固定 CLI、运行日志路径、终端身份和 Node 启动路径；凭据由 CLI 读取。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/feishu_stop_notify.sh",
+    "kind": "native-or-shell",
+    "expression": "\"${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw\" \\",
     "count": 1,
     "category": "runtime-context",
     "reason": "Hook 使用所属实例的固定 CLI、运行日志路径、终端身份和 Node 启动路径；凭据由 CLI 读取。"

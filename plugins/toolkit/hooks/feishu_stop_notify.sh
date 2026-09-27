@@ -108,9 +108,20 @@ resolve_terminal_id() {
 
 send_app_message() {
   local text="$1"
-  local rw_bin="${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw"
-  [[ -x "$rw_bin" ]] || return 0
-  local -a rw_command=("$rw_bin")
+  local rw_bin=""
+  local candidate
+  for candidate in \
+    "${RUNWEAVE_RUNTIME_CONFIG_ROOT}/runtime/bin/rw" \
+    "${RUNWEAVE_RUNTIME_CONFIG_ROOT}/bin/rw"; do
+    if [[ -x "$candidate" ]]; then
+      rw_bin="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$rw_bin" ]]; then
+    log "app notify failed: bound rw CLI not found"
+    return 0
+  fi
 
   local notify_payload
   notify_payload="$(printf '%s' "$PAYLOAD" | jq -c --arg text "$text" '. + {notificationText:$text}' 2>/dev/null || true)"
@@ -118,7 +129,7 @@ send_app_message() {
     log "app notify failed: invalid payload"
     return 0
   fi
-  if ! printf '%s' "$notify_payload" | "${rw_command[@]}" feishu notify --stdin --json >/dev/null 2>>"$LOG_FILE"; then
+  if ! printf '%s' "$notify_payload" | "$rw_bin" feishu notify --stdin --json >/dev/null 2>>"$LOG_FILE"; then
     log "app notify failed: rw feishu notify returned non-zero"
   fi
 }
