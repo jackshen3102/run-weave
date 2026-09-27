@@ -8934,5 +8934,13 @@
     "count": 1,
     "category": "tooling",
     "reason": "CLI 显式读取用户指定的分析结果文件，不作为 settings.yaml 配置来源。"
+  },
+  {
+    "file": "scripts/token-report/cli.mjs",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "CODEX_HOME 属于外部 Codex 日志位置，仅供离线只读报告工具使用。"
   }
 ]
