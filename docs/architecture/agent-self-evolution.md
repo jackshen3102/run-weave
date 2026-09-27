@@ -95,6 +95,11 @@ Context Pack 保存：
 - DataQualityIssue；
 - profile、deadline 和 Knowledge Baseline digest。
 
+`agent.tool.completed` 仅表示工具调用结束。Hook 将上游明确提供的整数退出码或布尔错误标记
+传入 Activity 的 `result`；失败信号优先，退出码保存为 `exit_code:<n>`。没有这些字段时保持
+未知，不从正文或事件名称推断成功。旧 Backend 不支持结果字段时，桥接器保留正文和事件、
+省略新增字段重试；升级后只影响新事件，不补写历史结果。
+
 Activity 以事件仓库归属索引的单调 `binding_offset` 冻结，原始事实保留 `activityOffset`。
 新事件使用可信 cwd；旧事件须有可核验的会话或已有仓库绑定，不按 Project 前缀归属。
 工具回调优先使用经过会话归属校验的面板 cwd，Worker 分发使用对应角色的 cwd。

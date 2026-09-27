@@ -5,9 +5,11 @@ import {
   assertFileMissing,
   getToolkitHookCommand,
   runLauncher,
+  respondToToolHook,
   runToolkitHookCommand,
   verifyPtyProviderInference,
   verifyPreToolHook,
+  verifyToolOutcomeHooks,
   verifyTmuxPaneContextFailure,
   verifyTraexNotificationCompletion,
   writeAppServerDiscoveryFiles,
@@ -42,8 +44,7 @@ try {
         token: request.headers["x-runweave-hook-token"],
         body: body ? JSON.parse(body) : null,
       });
-      response.writeHead(202, { "content-type": "application/json" });
-      response.end(JSON.stringify({ ok: true }));
+      respondToToolHook(requests.at(-1).body, response);
     });
   });
   const appServer = createServer((request, response) => {
@@ -115,6 +116,11 @@ try {
       path.join(homeDir, ".runweave", "app-server", "app-server.lock.json"),
       "hook bridge must not start app-server or create an app-server lock",
     );
+    requests.length = 0;
+    await verifyToolOutcomeHooks({
+      command: getToolkitHookCommand(toolkitHooksConfig, "PostToolUse"),
+      homeDir, endpoint, requests,
+    });
     requests.length = 0;
 
     const isolatedAppServerHome = path.join(homeDir, "isolated-app-server");
