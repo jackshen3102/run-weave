@@ -36,8 +36,12 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
 - iOS 日常交互排查与修复验收：使用 `$toolkit:agent-device`；固定 XCTest 套件仍按包入口执行。
 - 实际执行 `pnpm dev:session`、`dev:status`、`dev:open` 或 `dev:stop`：必须使用
   `$toolkit:runweave-dev-session`；生命周期细则见 `scripts/dev-session/AGENTS.md`。
-- `$toolkit:runweave-change-validation` 只在用户当前请求显式点名时触发；否则执行与改动范围
-  相称的验证，不默认启动完整 Dev Session。
+- `$toolkit:runweave-change-validation` 只在用户当前请求显式点名时触发；“提交所有代码”、
+  调用 `$toolkit:github-pr`，或 diff 涉及 UI、Backend、共享协议与服务生命周期，都不构成
+  显式触发。
+- 未显式点名且当前请求只是提交、推送或创建/合并 PR 时，不主动增加“与改动范围相称”的
+  验证步骤，不启动 Dev Session 或 UI 验收；只允许 Git 操作自然触发已有 commit/push hook，
+  并跟进远端 CI。实现任务本身明确要求的验证不受此条影响。
 - 原生 iOS、Electron、Backend、Frontend、App Server、CLI 和共享包的专属边界与验证命令，
   以各自就近 `AGENTS.md` 为准。
 
