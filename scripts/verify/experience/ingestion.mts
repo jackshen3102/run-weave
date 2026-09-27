@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { spawnSync } from "node:child_process";
 import { ActivityStore } from "../../../backend/src/activity/recording/store";
 import { ActivityEventFactory } from "../../../backend/src/activity/recording/event-factory";
 import { ActivityRecorder } from "../../../backend/src/activity/recording/recorder";
@@ -23,6 +24,7 @@ const require = createRequire(
   new URL("../../../backend/package.json", import.meta.url),
 );
 const express = require("express");
+const { extractToolHook } = require(new URL("../../../packages/agent-bridge/hooks/runweave-hook-payload.cjs", import.meta.url).pathname);
 async function verify(
   caseId: "EXPLEARN-001" | "EXPLEARN-002",
   withPanel: boolean,
@@ -282,6 +284,40 @@ async function verify(
       learned.find((f) => f.kind === "agent.tool.completed")!.text,
       "",
     );
+    assert.equal(snapshot.facts.find((f) => f.eventName === "agent.tool.completed")!.result, undefined);
+    // Real command outcomes -> provider metadata -> authenticated HTTP -> SQLite.
+    // Identical stdout must never be used to infer success.
+    const success = spawnSync(process.execPath, ["-e", "process.stdout.write('same output');process.exit(0)"], { encoding: "utf8" });
+    const failure = spawnSync(process.execPath, ["-e", "process.stdout.write('same output');process.exit(7)"], { encoding: "utf8" });
+    assert.equal(success.status, 0);
+    assert.equal(failure.status, 7);
+    const outcomes = [
+      { response: { stdout: success.stdout, exit_code: success.status }, expected: { status: "succeeded", code: "exit_code:0" } },
+      { response: { stdout: failure.stdout, exit_code: failure.status }, expected: { status: "failed", code: "exit_code:7" } },
+      { response: failure.stdout, expected: undefined },
+      { response: '{"exit_code":0,"is_error":false}', expected: undefined },
+      { response: { exit_code: "0", is_error: "false" }, expected: undefined },
+      { response: { is_error: true }, expected: { status: "failed" } },
+      { response: { is_error: false }, expected: { status: "succeeded" } },
+      { response: { exit_code: 0, is_error: true }, expected: { status: "failed", code: "exit_code:0" } },
+    ];
+    for (const [index, outcome] of outcomes.entries()) {
+      const eventId = crypto.randomUUID();
+      const body: AgentHookStateRequest = {
+        ...newer,
+        activityEventId: eventId,
+        hookEvent: "ToolCompleted",
+        pi: { ...pi, sequence: 6 + index, event: "tool_execution_end" },
+        ...extractToolHook({ tool_use_id: crypto.randomUUID(), tool_name: "Bash", tool_response: outcome.response }),
+      };
+      assert.equal((await post(body)).status, 202);
+      await post(body); // Duplicate delivery must preserve the same outcome.
+      const page = await store.facts({ threadId, limit: 100 });
+      const matching = page.facts.filter((f) => f.eventId === eventId);
+      assert.equal(matching.length, 1);
+      assert.deepEqual(matching[0].result, outcome.expected);
+    }
+    console.log("Tool outcomes PASS: explicit success/failure persisted; unknown stays unknown; duplicate delivery is idempotent");
     const missingThread = crypto.randomUUID();
     await store.record([factory.create({
       eventName: "user.query.submit_requested",

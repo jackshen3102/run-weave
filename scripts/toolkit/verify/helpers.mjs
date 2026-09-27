@@ -539,3 +539,45 @@ export async function verifyTraexNotificationCompletion(params) {
     "codex permission_prompt must not record a completion",
   );
 }
+
+export function respondToToolHook(body, response) {
+  const legacy = body?.toolUseId === "legacy-outcome" && body.toolExecution;
+  response.writeHead(legacy ? 400 : 202, { "content-type": "application/json" });
+  response.end(JSON.stringify(legacy
+    ? { errors: { formErrors: ["Unrecognized key(s) in object: 'toolExecution'"] } }
+    : { ok: true }));
+}
+
+export async function verifyToolOutcomeHooks(params) {
+  for (const [index, sample] of [
+    { tool_response: { exit_code: 7, stdout: "same output" }, expected: { exitCode: 7 } },
+    { tool_response: "same output", exit_code: 0, expected: { exitCode: 0 } },
+    { tool_response: "same output", is_error: true, expected: { isError: true } },
+    { tool_response: "same output", expected: undefined },
+    { tool_use_id: "legacy-outcome", tool_response: "same output", exit_code: 7, expected: undefined },
+  ].entries()) {
+    const { expected, ...payload } = sample;
+    const before = params.requests.length;
+    await runToolkitHookCommand(
+      params.command,
+      "codex",
+      {
+        HOME: params.homeDir,
+        RUNWEAVE_TOOLKIT_PLUGIN_ROOT: toolkitDir,
+        RUNWEAVE_HOOK_ENDPOINT: params.endpoint,
+        RUNWEAVE_HOOK_TOKEN: "outcome-verification",
+        RUNWEAVE_TERMINAL_SESSION_ID: "terminal-outcome",
+        RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+      },
+      { hook_event_name: "PostToolUse", tool_use_id: `outcome-${index}`, tool_name: "Bash", ...payload },
+    );
+    assert.equal(params.requests.length, before + (sample.tool_use_id === "legacy-outcome" ? 2 : 1));
+    if (sample.tool_use_id === "legacy-outcome") {
+      assert.equal(params.requests.at(-1).body.activityEventId, params.requests.at(-2).body.activityEventId);
+    }
+    assert.equal(params.requests.at(-1).body.hookEvent, "ToolCompleted");
+    assert.deepEqual(params.requests.at(-1).body.toolExecution, expected);
+    assert.deepEqual(params.requests.at(-1).body.toolResult, sample.tool_response);
+  }
+  console.log("Tool outcome Hook transport PASS: explicit signals preserved, unknown omitted");
+}

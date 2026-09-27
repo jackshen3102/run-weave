@@ -269,7 +269,8 @@ function runweave(pi) {
     "tool_execution_end",
     (event, ctx) => publish(ctx, "tool_execution_end", "PostToolUse", {
       tool_use_id: event.toolCallId,
-      tool_name: event.toolName
+      tool_name: event.toolName,
+      is_error: event.isError
     })
   );
   pi.on("ui_prompt_start", (_event, ctx) => {

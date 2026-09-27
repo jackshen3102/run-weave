@@ -219,7 +219,7 @@ async function postAgentHook({
   operationId,
   pi,
 }) {
-  const body = JSON.stringify({
+  let body = JSON.stringify({
     activityEventId,
     ...(pi ? { pi } : {}),
     ...(operationId ? { operationId } : {}),
@@ -241,6 +241,9 @@ async function postAgentHook({
     ...(toolHook?.toolResult !== undefined
       ? { toolResult: toolHook.toolResult }
       : {}),
+    ...(hookEvent === "ToolCompleted" && toolHook?.toolExecution
+      ? { toolExecution: toolHook.toolExecution }
+      : {}),
     agent,
     hookEvent,
   });
@@ -255,6 +258,19 @@ async function postAgentHook({
         },
         body,
       });
+      if (response.status === 400 && attempt === 1 && toolHook?.toolExecution) {
+        const error = await response.json().catch(() => null);
+        if (error?.errors?.formErrors?.includes(
+          "Unrecognized key(s) in object: 'toolExecution'",
+        )) {
+          // Older Backends reject unknown fields. Preserve the tool event and
+          // its content there, leaving the outcome unknown until they upgrade.
+          const legacy = JSON.parse(body);
+          delete legacy.toolExecution;
+          body = JSON.stringify(legacy);
+          continue;
+        }
+      }
       if (response.ok || response.status < 500 || attempt === 2) {
         return { ok: response.ok, status: response.status, attempt };
       }

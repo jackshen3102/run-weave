@@ -247,6 +247,8 @@ export interface AgentHookStateRequest {
   toolName?: string;
   toolInput?: unknown;
   toolResult?: unknown;
+  /** Explicit provider execution signals; absence means unknown, not success. */
+  toolExecution?: { exitCode?: number; isError?: boolean };
   agent: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
 }

@@ -51,6 +51,13 @@ const agentHookStateSchema = z
     toolName: z.string().trim().min(1).max(256).optional(),
     toolInput: z.unknown().optional(),
     toolResult: z.unknown().optional(),
+    toolExecution: z
+      .object({
+        exitCode: z.number().int().safe().optional(),
+        isError: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -294,8 +301,20 @@ function recordAgentHookActivity(
     activity.recorder.record(existingEvent);
     return;
   }
+  const execution = hook.hookEvent === "ToolCompleted" ? hook.toolExecution : undefined;
+  const result: ActivityEventInput["result"] =
+    execution?.exitCode !== undefined || execution?.isError !== undefined
+      ? {
+          status: execution.isError === true ||
+            (execution.exitCode !== undefined && execution.exitCode !== 0)
+            ? "failed" : "succeeded",
+          ...(execution.exitCode !== undefined
+            ? { code: `exit_code:${execution.exitCode}` } : {}),
+        }
+      : undefined;
   const event = activity.eventFactory.create({
     eventName,
+    result,
     actorType: hook.hookEvent === "UserPromptSubmit" ? "user" : "agent",
     actorAgent:
       hook.agent === "pi"

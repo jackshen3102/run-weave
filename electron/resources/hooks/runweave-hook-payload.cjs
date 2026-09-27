@@ -260,6 +260,15 @@ function extractToolHook(payload) {
   const toolUseId =
     payload?.tool_use_id ?? payload?.toolUseId ?? payload?.tool_call_id;
   const toolName = payload?.tool_name ?? payload?.toolName ?? payload?.name;
+  const toolResult = payload?.tool_response ?? payload?.tool_result ?? payload?.output;
+  // Read provider metadata only. Text output (including JSON-looking text) is
+  // untrusted tool content and cannot establish execution success or failure.
+  const exitCode = payload?.exit_code ?? toolResult?.exit_code;
+  const isError = payload?.is_error ?? toolResult?.is_error;
+  const toolExecution = {
+    ...(Number.isSafeInteger(exitCode) ? { exitCode } : {}),
+    ...(typeof isError === "boolean" ? { isError } : {}),
+  };
   return {
     toolUseId:
       typeof toolUseId === "string" && toolUseId.trim()
@@ -268,8 +277,8 @@ function extractToolHook(payload) {
     toolName:
       typeof toolName === "string" && toolName.trim() ? toolName.trim() : null,
     toolInput: payload?.tool_input ?? payload?.input,
-    toolResult:
-      payload?.tool_response ?? payload?.tool_result ?? payload?.output,
+    toolResult,
+    ...(Object.keys(toolExecution).length ? { toolExecution } : {}),
   };
 }
 
