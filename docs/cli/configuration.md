@@ -133,3 +133,13 @@ rw config restore <backup-id> --instance stable \
 即使当前文件使用较新的整体 schema，也只检查身份和版本元数据来生成恢复预览，不解释其
 未知业务字段。语法已损坏、无法核对身份的当前文件仍拒绝自动恢复，原件保留。
 恢复结果是待重启；它不会自动切换二进制或启动服务。继续使用受管更新入口核对目标程序兼容性。
+
+## 验收边界
+
+配置存储、首次启动、运行生命周期、安装态和 YAML 编辑分别使用
+[存储](../testing/platform/global-configuration-store.testplan.yaml)、
+[首次启动](../testing/platform/global-configuration-bootstrap.testplan.yaml)、
+[生命周期](../testing/platform/global-configuration-lifecycle.testplan.yaml)、
+[安装态](../testing/platform/global-configuration-installed.testplan.yaml)和
+[YAML](../testing/platform/global-configuration-yaml.testplan.yaml)测试计划取证。
+格式校验、构建、安装、启动、实际消费配置、升级和整机重启是不同证据；已安装 Stable 的迁移和完整生命周期验收尚未完成，不能由源码或隔离环境通过推定。

@@ -91,4 +91,4 @@ Browser 回连依旧依赖真实 Runweave 后端、认证与终端身份。原�
 
 用户确认配置为桌面用户级文件，不属于当前连接、项目或 Backend 数据库。正式版沿用桌面 userData，Dev Session 使用独立目录；SSH 与 Browser 代理都要持久化且环境隔离。手机将来只读取所连接 Backend 的同机桌面配置，不做跨机器汇总。本轮不修改原型模拟持久化来冒充产品能力。
 
-实施文件：[独立隧道管理计划](../../plans/2026-09-25-independent-ssh-tunnel-manager.md)、[代理持久化与隔离计划](../../plans/2026-09-25-desktop-proxy-persistence.md)。计划属于临时过程材料；实施结束移除该计划链接并替换为正式架构入口。
+当前实现和配置归属以[SSH 隧道、远端终端与本机 Browser](../../architecture/ssh-remote-projects.md)为准；本页保留交互原型及其验收边界。
