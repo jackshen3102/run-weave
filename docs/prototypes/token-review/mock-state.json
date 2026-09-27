@@ -1,0 +1,428 @@
+{
+  "schemaVersion": 2,
+  "project": {
+    "root": "browser-viewer",
+    "worktrees": ["main", "wt-1", "agent-team-2"]
+  },
+  "generatedAt": "2026-09-26",
+  "sessions": [
+    {
+      "id": "devsession",
+      "file": "rollout-2026-09-26T10-40-21-01a0db95-c8af-7c30-a9ba-4300045a033b.jsonl",
+      "cwd": "main",
+      "title": "Dev Session · 测试现场初始化",
+      "usage": {
+        "input": 21372182,
+        "cachedInput": 21074048,
+        "output": 58019,
+        "reasoningOutput": null,
+        "total": 21430201
+      },
+      "coverage": {
+        "warnings": [],
+        "duplicates": 0
+      },
+      "turns": [
+        {
+          "id": "review",
+          "title": "Dev Session · 测试现场初始化",
+          "usage": {
+            "input": 21372182,
+            "cachedInput": 21074048,
+            "output": 58019,
+            "reasoningOutput": null,
+            "total": 21430201
+          },
+          "usageSamples": 1,
+          "findings": [
+            {
+              "id": "cold-start-time",
+              "rule": "manual-review",
+              "title": "首次完整构建到终端可用耗时 53.54 秒",
+              "categories": ["代码", "流程"],
+              "status": "candidate",
+              "reason": "单次完整构建到 shell 可用为 53.544 秒，超过该任务明确的 30 秒目标。优先定位完整构建和环境准备阶段的耗时。",
+              "uncertainty": "同源码复用为 10.379 秒，条件与首次完整构建不同，不能直接相减作为优化收益。只有一次完整构建样本，尚无稳定性或 p95 结论。",
+              "evidence": [
+                {
+                  "line": 1695,
+                  "label": "完整构建到 shell 可用",
+                  "text": "exit 0 elapsed 53.544\nstate ready · shellReady: true",
+                  "source": "rollout-2026-09-26T10-40-21-01a0db95-c8af-7c30-a9ba-4300045a033b.jsonl"
+                },
+                {
+                  "line": 1748,
+                  "label": "同源码复用，单独场景",
+                  "text": "time_command 10.379 · time_ui 11.971 · ui_ok True",
+                  "source": "rollout-2026-09-26T10-40-21-01a0db95-c8af-7c30-a9ba-4300045a033b.jsonl"
+                },
+                {
+                  "line": 1915,
+                  "label": "原任务目标与历史结论",
+                  "text": "目标 30 秒；同源码复用达到目标，源码变化后的首次完整构建尚未达到。暂无 p95 结论。",
+                  "source": "rollout-2026-09-26T10-40-21-01a0db95-c8af-7c30-a9ba-4300045a033b.jsonl"
+                }
+              ],
+              "assessment": "candidate",
+              "lastSeen": "2026-09-26",
+              "dimension": "time",
+              "measurement": {
+                "kind": "elapsed",
+                "seconds": 53.544,
+                "targetSeconds": 30,
+                "sampleCount": 1,
+                "boundary": "发起完整构建与现场准备 → shellReady: true",
+                "sourceLine": 1695,
+                "comparison": "同源码复用：10.379 秒；单独场景，不参与节省量计算"
+              },
+              "admission": "实测 53.544 秒，超过任务明确的 30 秒目标；首次完整构建仍需定位瓶颈。",
+              "suggestion": "先分段测量完整构建、安装和现场准备；对相同源码、缓存状态与完成条件做前后比较。"
+            }
+          ],
+          "coverage": []
+        }
+      ]
+    },
+    {
+      "id": "short-waits",
+      "file": "rollout-2026-09-26T10-50-04-01a0db9e-ae44-7c93-a75a-56b79863fa07.jsonl",
+      "cwd": ".worktree/daily-refactor-20260926-ed28e2b5",
+      "turns": [
+        {
+          "id": "wait-windows",
+          "title": "等待子 Agent 期间的 12 次短等待调用",
+          "usage": {
+            "input": 689270,
+            "cachedInput": 672896,
+            "output": 906,
+            "total": 690176
+          },
+          "usageSamples": 12,
+          "findings": [
+            {
+              "id": "wait-token-input",
+              "dimension": "tokens",
+              "assessment": "candidate",
+              "title": "12 次短等待调用相关输入累计 689.3K Token",
+              "categories": ["Agent 行为", "工具"],
+              "lastSeen": "2026-09-26",
+              "reason": "12 次相同的 10 秒等待调用中，9 次返回超时。其相邻用量采样区间累计处理 689,270 输入 Token；值得评估减少模型反复恢复上下文的次数。",
+              "uncertainty": "其中 672,896 为缓存输入，未缓存输入仅 16,374。累计量包含准备调用的推理，不是工具自身消耗或可全部节省量。尚无等价执行的对照结果，费用与净收益未知。",
+              "admission": "有 12 个可定位的调用区间及累计用量差值，关联大量上下文重复处理。是否值得优化仍需结合缓存与实际计费复核。",
+              "suggestion": "评估较长等待或完成通知能否减少唤醒次数；保留必要的中途响应，再比较同类任务的输入、缓存和输出。",
+              "measurement": {
+                "kind": "token-windows",
+                "samples": [
+                  {
+                    "beforeLine": 135,
+                    "afterLine": 142,
+                    "callLine": 138,
+                    "outputLine": 141,
+                    "before": {
+                      "input_tokens": 542069,
+                      "cached_input_tokens": 498176,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 3686,
+                      "reasoning_output_tokens": 866,
+                      "total_tokens": 545755
+                    },
+                    "after": {
+                      "input_tokens": 591316,
+                      "cached_input_tokens": 542976,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 3762,
+                      "reasoning_output_tokens": 919,
+                      "total_tokens": 595078
+                    },
+                    "result": true
+                  },
+                  {
+                    "beforeLine": 151,
+                    "afterLine": 158,
+                    "callLine": 154,
+                    "outputLine": 157,
+                    "before": {
+                      "input_tokens": 640664,
+                      "cached_input_tokens": 592000,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 4368,
+                      "reasoning_output_tokens": 1246,
+                      "total_tokens": 645032
+                    },
+                    "after": {
+                      "input_tokens": 691349,
+                      "cached_input_tokens": 641152,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 4415,
+                      "reasoning_output_tokens": 1270,
+                      "total_tokens": 695764
+                    },
+                    "result": true
+                  },
+                  {
+                    "beforeLine": 179,
+                    "afterLine": 186,
+                    "callLine": 182,
+                    "outputLine": 185,
+                    "before": {
+                      "input_tokens": 844496,
+                      "cached_input_tokens": 792960,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 4991,
+                      "reasoning_output_tokens": 1404,
+                      "total_tokens": 849487
+                    },
+                    "after": {
+                      "input_tokens": 897382,
+                      "cached_input_tokens": 844288,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 5035,
+                      "reasoning_output_tokens": 1425,
+                      "total_tokens": 902417
+                    },
+                    "result": true
+                  },
+                  {
+                    "beforeLine": 200,
+                    "afterLine": 209,
+                    "callLine": 205,
+                    "outputLine": 208,
+                    "before": {
+                      "input_tokens": 1003425,
+                      "cached_input_tokens": 949760,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 5378,
+                      "reasoning_output_tokens": 1522,
+                      "total_tokens": 1008803
+                    },
+                    "after": {
+                      "input_tokens": 1057068,
+                      "cached_input_tokens": 1002624,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 5570,
+                      "reasoning_output_tokens": 1605,
+                      "total_tokens": 1062638
+                    },
+                    "result": true
+                  },
+                  {
+                    "beforeLine": 226,
+                    "afterLine": 236,
+                    "callLine": 231,
+                    "outputLine": 235,
+                    "before": {
+                      "input_tokens": 1164858,
+                      "cached_input_tokens": 1109760,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 5868,
+                      "reasoning_output_tokens": 1657,
+                      "total_tokens": 1170726
+                    },
+                    "after": {
+                      "input_tokens": 1219692,
+                      "cached_input_tokens": 1158912,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 5992,
+                      "reasoning_output_tokens": 1758,
+                      "total_tokens": 1225684
+                    },
+                    "result": false
+                  },
+                  {
+                    "beforeLine": 236,
+                    "afterLine": 245,
+                    "callLine": 241,
+                    "outputLine": 244,
+                    "before": {
+                      "input_tokens": 1219692,
+                      "cached_input_tokens": 1158912,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 5992,
+                      "reasoning_output_tokens": 1758,
+                      "total_tokens": 1225684
+                    },
+                    "after": {
+                      "input_tokens": 1274884,
+                      "cached_input_tokens": 1213568,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 6022,
+                      "reasoning_output_tokens": 1765,
+                      "total_tokens": 1280906
+                    },
+                    "result": true
+                  },
+                  {
+                    "beforeLine": 245,
+                    "afterLine": 252,
+                    "callLine": 248,
+                    "outputLine": 251,
+                    "before": {
+                      "input_tokens": 1274884,
+                      "cached_input_tokens": 1213568,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 6022,
+                      "reasoning_output_tokens": 1765,
+                      "total_tokens": 1280906
+                    },
+                    "after": {
+                      "input_tokens": 1330131,
+                      "cached_input_tokens": 1268608,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 6130,
+                      "reasoning_output_tokens": 1850,
+                      "total_tokens": 1336261
+                    },
+                    "result": true
+                  },
+                  {
+                    "beforeLine": 259,
+                    "afterLine": 266,
+                    "callLine": 262,
+                    "outputLine": 265,
+                    "before": {
+                      "input_tokens": 1385511,
+                      "cached_input_tokens": 1323648,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 6249,
+                      "reasoning_output_tokens": 1872,
+                      "total_tokens": 1391760
+                    },
+                    "after": {
+                      "input_tokens": 1441022,
+                      "cached_input_tokens": 1378816,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 6291,
+                      "reasoning_output_tokens": 1891,
+                      "total_tokens": 1447313
+                    },
+                    "result": false
+                  },
+                  {
+                    "beforeLine": 266,
+                    "afterLine": 276,
+                    "callLine": 271,
+                    "outputLine": 275,
+                    "before": {
+                      "input_tokens": 1441022,
+                      "cached_input_tokens": 1378816,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 6291,
+                      "reasoning_output_tokens": 1891,
+                      "total_tokens": 1447313
+                    },
+                    "after": {
+                      "input_tokens": 1496936,
+                      "cached_input_tokens": 1434112,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 6324,
+                      "reasoning_output_tokens": 1901,
+                      "total_tokens": 1503260
+                    },
+                    "result": false
+                  },
+                  {
+                    "beforeLine": 400,
+                    "afterLine": 407,
+                    "callLine": 403,
+                    "outputLine": 406,
+                    "before": {
+                      "input_tokens": 2347990,
+                      "cached_input_tokens": 2271232,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 9817,
+                      "reasoning_output_tokens": 3193,
+                      "total_tokens": 2357807
+                    },
+                    "after": {
+                      "input_tokens": 2416591,
+                      "cached_input_tokens": 2339584,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 9915,
+                      "reasoning_output_tokens": 3193,
+                      "total_tokens": 2426506
+                    },
+                    "result": true
+                  },
+                  {
+                    "beforeLine": 407,
+                    "afterLine": 414,
+                    "callLine": 410,
+                    "outputLine": 413,
+                    "before": {
+                      "input_tokens": 2416591,
+                      "cached_input_tokens": 2339584,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 9915,
+                      "reasoning_output_tokens": 3193,
+                      "total_tokens": 2426506
+                    },
+                    "after": {
+                      "input_tokens": 2485315,
+                      "cached_input_tokens": 2408064,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 9952,
+                      "reasoning_output_tokens": 3207,
+                      "total_tokens": 2495267
+                    },
+                    "result": true
+                  },
+                  {
+                    "beforeLine": 414,
+                    "afterLine": 421,
+                    "callLine": 417,
+                    "outputLine": 420,
+                    "before": {
+                      "input_tokens": 2485315,
+                      "cached_input_tokens": 2408064,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 9952,
+                      "reasoning_output_tokens": 3207,
+                      "total_tokens": 2495267
+                    },
+                    "after": {
+                      "input_tokens": 2554101,
+                      "cached_input_tokens": 2476672,
+                      "cache_write_input_tokens": 0,
+                      "output_tokens": 10027,
+                      "reasoning_output_tokens": 3259,
+                      "total_tokens": 2564128
+                    },
+                    "result": true
+                  }
+                ],
+                "model": "gpt-6-sol",
+                "billingKnown": false,
+                "boundary": "每次等待调用前的最近累计用量 → 对应返回后的首条累计用量；12 个不重叠区间求和"
+              },
+              "evidence": [
+                {
+                  "line": 138,
+                  "label": "相同短等待参数",
+                  "text": "wait_agent({\"timeout_ms\":10000})\n共 12 次，其中 9 次 timed_out: true",
+                  "source": "rollout-2026-09-26T10-50-04-01a0db9e-ae44-7c93-a75a-56b79863fa07.jsonl"
+                },
+                {
+                  "line": 142,
+                  "label": "第一段差值示例",
+                  "text": "input: 591316 − 542069 = 49247\ncached: 542976 − 498176 = 44800\noutput: 3762 − 3686 = 76",
+                  "source": "rollout-2026-09-26T10-50-04-01a0db9e-ae44-7c93-a75a-56b79863fa07.jsonl"
+                },
+                {
+                  "line": 421,
+                  "label": "最后一段差值示例",
+                  "text": "第 12 段输入 68786、缓存输入 68608、输出 75；全部 12 段明细见测量口径。",
+                  "source": "rollout-2026-09-26T10-50-04-01a0db9e-ae44-7c93-a75a-56b79863fa07.jsonl"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "monitor": {
+    "taskName": null,
+    "runs": []
+  },
+  "provenance": "历史日志人工核查：2 个效率候选；不代表定时分析已经运行。"
+}

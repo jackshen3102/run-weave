@@ -3,6 +3,7 @@ import { useTunnelStore } from "../../../features/tunnels/store";
 import { useOpenCodexQuota } from "../../../features/codex-quota/context";
 import { useSuijiDrawer } from "../../../features/suiji/drawer-state";
 import { useEnterScheduledTasks } from "../../../features/scheduled-tasks/navigation";
+import { useEnterExecutionEfficiency } from "../../../features/execution-efficiency/navigation";
 import { ScheduledTaskSourceLink } from "../../../features/scheduled-tasks/source-link";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import {
@@ -11,6 +12,7 @@ import {
   ClipboardList,
   Copy,
   ExternalLink,
+  Gauge,
   Eye,
   Home,
   MoreHorizontal,
@@ -83,6 +85,7 @@ export function TerminalWorkspaceHeader({
 }: TerminalWorkspaceHeaderProps) {
   const { apiBase, token } = useTerminalRuntime();
   const enterScheduledTasks = useEnterScheduledTasks();
+  const enterExecutionEfficiency = useEnterExecutionEfficiency();
   const openCodexQuota = useOpenCodexQuota();
   const {
     activeConnectionId,
@@ -286,6 +289,18 @@ export function TerminalWorkspaceHeader({
             onClick={() => enterScheduledTasks()}
           >
             <CalendarClock className="h-3.5 w-3.5" />
+          </Button>
+        </Tooltip>
+        <Tooltip content="执行效率">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="执行效率"
+            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+            onClick={() => enterExecutionEfficiency()}
+          >
+            <Gauge className="h-3.5 w-3.5" />
           </Button>
         </Tooltip>
         <RuntimeStatusEntry
