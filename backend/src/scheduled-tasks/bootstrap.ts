@@ -11,6 +11,7 @@ import type { TerminalSessionCreationOptions } from "../terminal/application/cre
 
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 60_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 16 * 1_024 * 1_024;
+const DEFAULT_MAX_CONCURRENT_RUNS = 4;
 
 export interface ScheduledTaskSubsystem {
   service: ScheduledTaskService;
@@ -29,7 +30,7 @@ export async function createScheduledTaskSubsystem(params: {
   catch {
     return { service: new ScheduledTaskService(null, params.terminalSessionManager, {
       enabled: false, reason: "Scheduled task configuration is invalid", providers: [],
-      limits: { maxConcurrentRuns: 1, timeoutMs: DEFAULT_TIMEOUT_MS, maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES },
+      limits: { maxConcurrentRuns: DEFAULT_MAX_CONCURRENT_RUNS, timeoutMs: DEFAULT_TIMEOUT_MS, maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES },
     }, "Scheduled task configuration is invalid"), runtime: null, store: null };
   }
 
@@ -42,6 +43,10 @@ export async function createScheduledTaskSubsystem(params: {
   const maxOutputBytes = positiveInteger(
     settingText("scheduledTasks.maxOutputBytes"),
     DEFAULT_MAX_OUTPUT_BYTES,
+  );
+  const maxConcurrentRuns = positiveInteger(
+    settingText("scheduledTasks.maxConcurrentRuns"),
+    DEFAULT_MAX_CONCURRENT_RUNS,
   );
   const providerProbe = await probeScheduledProviders(env);
   const tmuxAvailable =
@@ -63,7 +68,7 @@ export async function createScheduledTaskSubsystem(params: {
       ? {}
       : { reason: "Scheduled tasks are disabled by Backend configuration" }),
     providers: providerProbe.capabilities,
-    limits: { maxConcurrentRuns: 1, timeoutMs, maxOutputBytes },
+    limits: { maxConcurrentRuns, timeoutMs, maxOutputBytes },
   };
   try {
     const store = await ScheduledTaskStore.create({
@@ -75,7 +80,7 @@ export async function createScheduledTaskSubsystem(params: {
       params.terminalSessionManager,
       providerProbe.adapters,
       enabled,
-      { timeoutMs, maxOutputBytes },
+      { maxConcurrentRuns, timeoutMs, maxOutputBytes },
     );
     await runtime.initialize();
     const service = new ScheduledTaskService(

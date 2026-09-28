@@ -102,9 +102,7 @@ export function TerminalQuickInputRow({
           </IconButton>
           <IconButton
             disabled={busy || !canBackgroundRun}
-            title={item.data.trimStart().startsWith("$toolkit:update-runweave-desktop")
-              ? "当前版本不支持后台更新桌面应用"
-              : "后台运行"}
+            title="后台运行"
             onClick={() => void onBackgroundRun(item)}
           >
             <Play className="h-3.5 w-3.5" />
