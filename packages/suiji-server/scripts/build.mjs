@@ -10,7 +10,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node22",
-  external: ["fs-native-extensions", "express", "pg", "node-pg-migrate", "busboy", "sharp", "@modelcontextprotocol/sdk"],
+  external: ["fs-native-extensions", "express", "pg", "node-pg-migrate", "busboy", "sharp", "@modelcontextprotocol/sdk", "yaml"],
   entryNames: "[name]",
 });
 await cp("migrations", "dist/migrations", { recursive: true });

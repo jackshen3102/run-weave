@@ -1,2 +1,3 @@
 # Preserve vendored upstream bytes and the recorded patch/hash provenance.
 packages/app-ios/Vendor/SwiftTerm/
+pnpm-lock.yaml

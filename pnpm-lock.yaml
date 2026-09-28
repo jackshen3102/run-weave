@@ -553,6 +553,9 @@ importers:
       sharp:
         specifier: 0.35.4
         version: 0.35.4(@types/node@22.19.15)
+      yaml:
+        specifier: 2.8.2
+        version: 2.8.2
       zod:
         specifier: 3.25.76
         version: 3.25.76
