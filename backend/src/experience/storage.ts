@@ -22,7 +22,8 @@ type Bucket =
   | "lookups"
   | "feedback"
   | "candidates"
-  | "jobs";
+  | "jobs"
+  | "learning-checkpoints";
 
 /** Only short synchronous transactions hold SQLite locks; evidence I/O happens outside.
  * Each operation closes its connection, including on failure. No long-lived owner or worker.
@@ -76,6 +77,18 @@ class ExperienceStore {
         "INSERT OR REPLACE INTO documents (bucket, id, value) VALUES (?, ?, ?)",
       )
       .run(bucket, id, JSON.stringify(value));
+  }
+
+  deleteCheckpointPrefix(prefix: string): void {
+    this.database
+      .prepare("DELETE FROM documents WHERE bucket = ? AND substr(id, 1, ?) = ?")
+      .run("learning-checkpoints", prefix.length, prefix);
+  }
+
+  expireCheckpoints(): void {
+    this.database
+      .prepare("DELETE FROM documents WHERE bucket = ? AND json_extract(value, '$.expiresAt') <= ?")
+      .run("learning-checkpoints", Date.now());
   }
 
   transaction<T>(operation: () => T): T {

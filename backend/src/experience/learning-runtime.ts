@@ -4,7 +4,8 @@ import type { ActivityStore } from "../activity/recording/store";
 import type { ExperienceService } from "./service";
 import { ExperienceLearningAnalysis } from "./learning-analysis";
 import { ExperienceLearningQueue, digest } from "./learning-queue";
-import { readLearningFacts } from "./learning-source";
+import { LearningDeferred } from "./learning-segments";
+import { readLearningFacts, type LearningFact } from "./learning-source";
 import type { ExperienceStorage } from "./storage";
 
 export class ExperienceLearningRuntime {
@@ -118,21 +119,41 @@ export class ExperienceLearningRuntime {
     const job = this.queue.claim();
     if (!job) return;
     this.abort = new AbortController();
+    const heartbeat = setInterval(() => {
+      try {
+        this.queue.update(job, {});
+      } catch {
+        this.abort?.abort();
+      }
+    }, 30_000);
+    heartbeat.unref();
     try {
-      const facts = await readLearningFacts(this.activity, job.source);
+      const cached = this.queue.checkpoint(job, "source-v1") as
+        | LearningFact[]
+        | undefined;
+      const facts =
+        cached ?? (await readLearningFacts(this.activity, job.source));
+      this.abort.signal.throwIfAborted();
+      if (!cached) this.queue.saveCheckpoint(job, "source-v1", facts);
       const result = await this.analysis.run(job, facts, this.abort.signal);
+      this.queue.clearCheckpoints(job);
       this.queue.update(job, result);
     } catch (error) {
       this.queue.update(job, {
-        status: this.stopping ? "queued" : "failed",
+        status:
+          this.stopping || error instanceof LearningDeferred
+            ? "queued"
+            : "failed",
         reason: this.stopping
           ? "interrupted_for_restart"
           : error instanceof Error
             ? error.message
             : "experience_learning_failed",
       });
-      if (!this.stopping) this.onError(error);
+      if (!this.stopping && !(error instanceof LearningDeferred))
+        this.onError(error);
     } finally {
+      clearInterval(heartbeat);
       this.abort = null;
     }
   }

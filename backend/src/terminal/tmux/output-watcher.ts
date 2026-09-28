@@ -36,6 +36,7 @@ interface TmuxOutputWatcherOptions {
   tmuxService: TmuxService;
   tmuxLifecycleCoordinator?: TmuxLifecycleCoordinator;
   pollIntervalMs?: number;
+  reconciliationIntervalMs?: number;
   maxTransportBytes?: number;
   startupMaxSessions?: number;
   startupConcurrency?: number;
@@ -50,6 +51,7 @@ export interface TmuxPaneOutputCursor {
 }
 
 const DEFAULT_TMUX_OUTPUT_POLL_INTERVAL_MS = 500;
+const DEFAULT_TMUX_RECONCILIATION_INTERVAL_MS = 5_000;
 const DEFAULT_TMUX_OUTPUT_MAX_TRANSPORT_BYTES = 1024 * 1024;
 const DEFAULT_TMUX_OUTPUT_STARTUP_MAX_SESSIONS = 8;
 const DEFAULT_TMUX_OUTPUT_STARTUP_CONCURRENCY = 2;
@@ -59,6 +61,7 @@ const tmuxOutputLogger = logger.child({ component: "terminal" });
 export class TmuxOutputWatcher {
   private readonly outputDir: string;
   private readonly pollIntervalMs: number;
+  private readonly reconciliationIntervalMs: number;
   private readonly maxTransportBytes: number;
   private readonly terminalSessionManager: TerminalSessionManager;
   private readonly tmuxService: TmuxService;
@@ -67,6 +70,9 @@ export class TmuxOutputWatcher {
   private readonly startupConcurrency: number;
   private readonly watchedPanes = new Map<string, WatchedTmuxPane>();
   private pollTimer: NodeJS.Timeout | null = null;
+  private reconciliationTimer: NodeJS.Timeout | null = null;
+  private polling: Promise<void> | null = null;
+  private reconciling: Promise<void> | null = null;
   private nextWatcherGeneration = 1;
   private readonly outputPoller: TmuxOutputPoller;
   private disposed = false;
@@ -75,6 +81,8 @@ export class TmuxOutputWatcher {
     this.outputDir = options.outputDir;
     this.pollIntervalMs =
       options.pollIntervalMs ?? DEFAULT_TMUX_OUTPUT_POLL_INTERVAL_MS;
+    this.reconciliationIntervalMs =
+      options.reconciliationIntervalMs ?? DEFAULT_TMUX_RECONCILIATION_INTERVAL_MS;
     this.maxTransportBytes =
       options.maxTransportBytes ?? DEFAULT_TMUX_OUTPUT_MAX_TRANSPORT_BYTES;
     this.startupMaxSessions =
@@ -94,6 +102,7 @@ export class TmuxOutputWatcher {
       this.watchedPanes,
       (terminalSessionId) => this.unwatchSession(terminalSessionId),
       (watched) => this.invalidatePaneCursor(watched),
+      () => this.disposed,
     );
   }
 
@@ -140,6 +149,7 @@ export class TmuxOutputWatcher {
     const hasSession = await this.tmuxService
       .hasSession(target)
       .catch(() => true);
+    if (this.disposed) return;
     if (
       !isInteractiveShellLaunch(session.command, session.args) &&
       !hasSession
@@ -164,7 +174,9 @@ export class TmuxOutputWatcher {
       });
       return;
     }
+    if (this.disposed) return;
     const paneId = await this.tmuxService.readSelectedPane(target);
+    if (this.disposed) return;
     if (!paneId) {
       tmuxOutputLogger.warn("terminal.tmux.output-watch.pane-missing", {
         message: "Failed to resolve selected tmux pane for output watcher",
@@ -355,10 +367,11 @@ export class TmuxOutputWatcher {
 
   async dispose(): Promise<void> {
     this.disposed = true;
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
+    this.stopPolling();
+    await Promise.all([this.polling, this.reconciling]);
+    await Promise.all(
+      Array.from(this.watchedPanes.values()).map((watched) => watched.polling),
+    );
     await Promise.all(
       Array.from(this.watchedPanes.values()).map((watched) =>
         this.stopPipe(watched.terminalSessionId, watched),
@@ -375,6 +388,7 @@ export class TmuxOutputWatcher {
       recordSessionOutput: boolean;
     },
   ): Promise<WatchedTmuxPane | null> {
+    if (this.disposed) return null;
     const key = resolvePaneWatcherKey(session.id, target.paneId);
     const existing = this.watchedPanes.get(key);
     if (existing && isSamePaneTarget(existing.target, target)) {
@@ -405,6 +419,11 @@ export class TmuxOutputWatcher {
       return null;
     }
 
+    if (this.disposed) {
+      await this.tmuxService.stopPaneOutputPipe(target);
+      return null;
+    }
+
     const watched: WatchedTmuxPane = {
       decoder: new StringDecoder("utf8"),
       filePath,
@@ -428,29 +447,57 @@ export class TmuxOutputWatcher {
   }
 
   private ensurePolling(): void {
-    if (this.pollTimer || this.watchedPanes.size === 0) {
-      return;
+    if (this.disposed || this.watchedPanes.size === 0) return;
+    if (!this.pollTimer) {
+      this.pollTimer = setInterval(() => {
+        if (this.disposed || this.polling) return;
+        this.polling = this.pollAll()
+          .catch((reason) => this.logPollingFailures([{ status: "rejected", reason }], "output"))
+          .finally(() => { this.polling = null; });
+      }, this.pollIntervalMs);
+      this.pollTimer.unref?.();
     }
-    this.pollTimer = setInterval(() => {
-      void this.pollAll();
-    }, this.pollIntervalMs);
-    this.pollTimer.unref?.();
+    if (!this.reconciliationTimer) {
+      this.reconciliationTimer = setInterval(() => {
+        if (this.disposed || this.reconciling) return;
+        this.reconciling = this.removeMissingPaneWatchers()
+          .catch((reason) => this.logPollingFailures([{ status: "rejected", reason }], "reconciliation"))
+          .finally(() => { this.reconciling = null; });
+      }, this.reconciliationIntervalMs);
+      this.reconciliationTimer.unref?.();
+    }
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
+    this.pollTimer = null;
+    this.reconciliationTimer = null;
   }
 
   private stopPollingIfIdle(): void {
-    if (this.watchedPanes.size === 0 && this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
+    if (this.watchedPanes.size === 0) this.stopPolling();
   }
 
   private async pollAll(): Promise<void> {
-    await this.removeMissingPaneWatchers();
-    await Promise.all(
+    const results = await Promise.allSettled(
       Array.from(this.watchedPanes.values()).map((watched) =>
         this.outputPoller.pollPane(watched),
       ),
     );
+    this.logPollingFailures(results, "output");
+  }
+
+  private logPollingFailures(results: PromiseSettledResult<unknown>[], phase: string): void {
+    for (const result of results) {
+      if (result.status === "rejected") {
+        tmuxOutputLogger.warn("terminal.tmux.output-watch.poll.failed", {
+          message: "Tmux output watcher background work failed",
+          phase,
+          error: result.reason,
+        });
+      }
+    }
   }
 
   private async removeMissingPaneWatchers(): Promise<void> {
@@ -463,15 +510,24 @@ export class TmuxOutputWatcher {
         watchedBySession.set(watched.terminalSessionId, [watched]);
       }
     }
-    await Promise.all(
+    const results = await Promise.allSettled(
       Array.from(watchedBySession.entries()).map(
         async ([terminalSessionId, watchedPanes]) => {
+          if (this.disposed) return;
           const session =
             this.terminalSessionManager.getSession(terminalSessionId);
           if (!session || !shouldWatchSession(session)) {
             await this.unwatchSession(terminalSessionId);
             return;
           }
+          for (const watched of watchedPanes) {
+            if (watched.reconcileSessionLifecycle) {
+              await this.outputPoller.reconcileSessionLifecycle(watched);
+            }
+          }
+          if (this.disposed || !watchedPanes.some((watched) =>
+            this.watchedPanes.get(resolvePaneWatcherKey(terminalSessionId, watched.target.paneId)) === watched,
+          )) return;
           let livePaneIds: Set<string>;
           try {
             livePaneIds = new Set(
@@ -484,7 +540,11 @@ export class TmuxOutputWatcher {
           }
           await Promise.all(
             watchedPanes
-              .filter((watched) => !livePaneIds.has(watched.target.paneId))
+              .filter((watched) =>
+                !this.disposed &&
+                this.watchedPanes.get(resolvePaneWatcherKey(terminalSessionId, watched.target.paneId)) === watched &&
+                !livePaneIds.has(watched.target.paneId),
+              )
               .map((watched) =>
                 this.unwatchPane(terminalSessionId, watched.target.paneId),
               ),
@@ -492,6 +552,7 @@ export class TmuxOutputWatcher {
         },
       ),
     );
+    this.logPollingFailures(results, "reconciliation");
   }
 
   private invalidatePaneCursor(watched: WatchedTmuxPane): void {

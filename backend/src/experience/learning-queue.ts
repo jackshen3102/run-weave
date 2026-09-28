@@ -57,6 +57,7 @@ export class ExperienceLearningQueue {
   claim(): LearningJob | null {
     return withExperienceStore(this.directory, (store) =>
       store.transaction(() => {
+        store.expireCheckpoints();
         const jobs = store.list<LearningJob>("jobs");
         const now = Date.now();
         if (
@@ -69,7 +70,7 @@ export class ExperienceLearningQueue {
               j.status === "queued" ||
               (j.status === "running" && j.leaseUntil <= now),
           )
-          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+          .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))[0];
         if (!job) return null;
         const claimed: LearningJob = {
           ...job,
@@ -97,8 +98,45 @@ export class ExperienceLearningQueue {
         store.put("jobs", job.jobId, {
           ...current,
           ...update,
+          leaseUntil: nowLease(),
           updatedAt: new Date().toISOString(),
         });
+      }),
+    );
+  }
+  checkpoint(job: LearningJob, key: string): unknown {
+    return withExperienceStore(this.directory, (store) => {
+      const saved = store.get<{ expiresAt: number; value: unknown }>(
+        "learning-checkpoints",
+        `${job.jobId}:${key}`,
+      );
+      return saved && saved.expiresAt > Date.now() ? saved.value : undefined;
+    });
+  }
+  saveCheckpoint(job: LearningJob, key: string, value: unknown): void {
+    withExperienceStore(this.directory, (store) =>
+      store.transaction(() => {
+        const current = store.get<LearningJob>("jobs", job.jobId);
+        if (
+          current?.claim !== job.claim ||
+          current.status !== "running" ||
+          current.leaseUntil <= Date.now()
+        )
+          throw new Error("experience_learning_claim_lost");
+        store.put("learning-checkpoints", `${job.jobId}:${key}`, {
+          expiresAt: Date.now() + 7 * 86400_000,
+          value,
+        });
+      }),
+    );
+  }
+  clearCheckpoints(job: LearningJob): void {
+    withExperienceStore(this.directory, (store) =>
+      store.transaction(() => {
+        const current = store.get<LearningJob>("jobs", job.jobId);
+        if (current?.claim !== job.claim || current.leaseUntil <= Date.now())
+          throw new Error("experience_learning_claim_lost");
+        store.deleteCheckpointPrefix(`${job.jobId}:`);
       }),
     );
   }
@@ -119,4 +157,8 @@ export class ExperienceLearningQueue {
       }),
     );
   }
+}
+
+function nowLease(): number {
+  return Date.now() + 5 * 60_000;
 }
