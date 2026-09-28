@@ -9006,5 +9006,69 @@
     "count": 1,
     "category": "external-protocol",
     "reason": "CODEX_HOME 属于外部 Codex 日志位置，仅供离线只读报告工具使用。"
+  },
+  {
+    "file": "packages/runweave-mcp/src/commands.ts",
+    "kind": "environment",
+    "expression": "process.env.PATH",
+    "count": 1,
+    "category": "system",
+    "reason": "沿用调用者的系统命令搜索路径，并补充当前 Node 所在目录，供 MCP shell 调用 rw 等已安装工具。"
+  },
+  {
+    "file": "packages/runweave-mcp/src/commands.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "个人 full-access 命令继承 MCP 启动账号的进程环境；实例持久配置仍由现有配置库解析。"
+  },
+  {
+    "file": "packages/runweave-mcp/src/commands.ts",
+    "kind": "file-io",
+    "expression": "appendFileSync(path.join(directory, name))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "追加本工具创建的命令 stdout/stderr 临时输出，支持游标续读，关闭服务或淘汰记录时清理。"
+  },
+  {
+    "file": "packages/runweave-mcp/src/commands.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(directory, s))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "在命令独有的临时目录初始化 stdout/stderr 输出文件，属于执行状态而非持久业务配置。"
+  },
+  {
+    "file": "packages/runweave-mcp/src/files.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Git 证据查询继承当前进程环境并设置 GIT_OPTIONAL_LOCKS=0，用于读取工作区版本和修改状态。"
+  },
+  {
+    "file": "packages/runweave-mcp/src/sources.ts",
+    "kind": "environment",
+    "expression": "process.env.CLAUDE_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "读取 Claude 自有配置目录以发现原生会话记录，遵循外部工具的目录合同，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "packages/runweave-mcp/src/sources.ts",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "读取 Codex 自有数据目录以发现原生会话记录，遵循外部工具的目录合同，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "packages/runweave-mcp/src/sources.ts",
+    "kind": "environment",
+    "expression": "process.env.PI_CODING_AGENT_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "读取 Pi 自有 Agent 目录以发现原生会话记录，遵循外部工具的目录合同，不建立 Runweave 配置副本。"
   }
 ]

@@ -271,6 +271,13 @@ export interface ActivityExternalRefDescriptorDto {
 }
 
 export interface ActivityFactsQuery {
+  /** Inclusive occurrence time (ISO 8601). */
+  from?: string;
+  /** Exclusive occurrence time (ISO 8601). */
+  to?: string;
+  eventId?: string;
+  operationId?: string;
+  correlationId?: string;
   runtimeChannel?: ActivityRuntimeChannel;
   runtimeSurface?: ActivityRuntimeSurface;
   projectId?: string;

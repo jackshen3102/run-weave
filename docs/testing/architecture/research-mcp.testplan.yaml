@@ -1,0 +1,131 @@
+version: 1
+name: Research MCP 自用调查验收
+description: >
+  验证个人 MCP 能复用现有完整访问能力，取得原始证据并完成代码与数据调查。
+  本地能力已实现，ChatGPT/Tunnel 用例需要额外账号配置；命令写入、故障注入均在各 case 独立拥有的临时 fixture 中进行。
+
+cases:
+  - id: RMCP-001
+    name: 来源目录和环境筛选准确反映已有数据
+    required: true
+    description: >
+      可读取运行账号已有的项目和环境数据，不新增数据授权步骤；筛选条件只决定本次调查范围。
+    preconditions:
+      - 独立服务已连接含 A、B 两项目及 Stable、Beta、Dev 数据的 fixture，账号能访问全部记录。
+    steps:
+      - 查看目录并分别查询各项目和环境；确认均可直接读取，结果标明实际来源及覆盖时间。
+      - 仅筛选 Stable 后查询；确认结果按条件过滤，未接入的业务来源明确不可用。
+
+  - id: RMCP-002
+    name: 原生调查记录保留工具参数和结果
+    required: true
+    description: >
+      调查读取保留原生工具记录及真实关联标识，不受 UI 消息投影限制，也不将时间相邻推断为确定因果。
+    preconditions:
+      - 独立 provider 会话 fixture 含用户消息、助手消息、工具调用和结果，以及缺 turnId 和仅时间相邻的干扰记录。
+    steps:
+      - 读取会话及关联证据；确认工具参数、结果和 provider/thread 标识存在。
+      - 检查关联依据；确认缺失 ID 明确未知，仅时间相邻记录只标为候选。
+
+  - id: RMCP-003
+    name: 搜索与原文分片支持继续读取
+    required: true
+    description: >
+      标准 search/fetch 返回可对应的证据，长文本可完整分片读取，截断不能伪装全文。
+    preconditions:
+      - 独立来源含已知短记录和超过单次输出长度的长记录，原文及片段摘要有独立清单。
+    steps:
+      - 搜索并读取两种记录，继续读取长记录的各分片；确认 schema、ID、来源版本和片段顺序正确。
+      - 对照原文清单复算完整内容；确认无静默遗漏，每条证据有可定位的引用。
+
+  - id: RMCP-004
+    name: 结构化查询的统计与分页可复算
+    required: true
+    description: >
+      固定范围的统计口径明确，翻页期间追加记录不导致原查询重复或漏项，部分读取如实说明。
+    preconditions:
+      - 独立 Activity fixture 超过一页，数量和各状态分布已有清单，执行者可追加本 case 的新事件。
+    steps:
+      - 查询明细与分布，翻页期间追加事件；确认同次分页按原水位完成，新查询才纳入追加事件。
+      - 对照清单复算计数与分母；确认结果的查询条件、水位、覆盖和截断状态可解释。
+
+  - id: RMCP-005
+    name: 未预设问题可以通过命令和脚本完成探索
+    required: true
+    description: >
+      run_command 沿用运行账号能力，可在明确 cwd 内读取和写入，不要求先新增数据适配器或授权条目。
+    preconditions:
+      - 本 case 独立临时目录含一个未注册到来源目录的 SQLite fixture，已知数据答案由执行者持有。
+      - 运行账号可读写该目录，数据库客户端或脚本解释器已安装。
+    steps:
+      - 通过 run_command 发现表结构、执行自定义查询并将统计写入本 case 的临时报告；确认取得预设查询工具未覆盖的答案。
+      - 独立读回临时报告；确认实际写入成功，返回 cwd、命令、退出状态和输出位置；完成后清理本 case 的目录。
+
+  - id: RMCP-006
+    name: 取消长命令会停止其执行并保留已完成输出
+    required: true
+    description: >
+      长命令状态与真实进程一致，取消能结束对应执行，已产生的输出仍可分片读取。
+    preconditions:
+      - 本 case 独立临时目录和持续输出后等待的可终止脚本已准备，脚本不产生后台脱离进程。
+    steps:
+      - 运行脚本并取得 commandId，读取部分输出后取消命令；确认对应进程停止、状态转为已取消。
+      - 再次读取已完成输出和状态；确认输出仍对应原命令，后续命令可以正常执行，结束后清理临时目录。
+
+  - id: RMCP-007
+    name: 无法确认历史版本时保留未知
+    required: true
+    description: >
+      数据版本和代码版本分开返回，bundled 或缺失版本不能被当前 HEAD 替代。
+    preconditions:
+      - 独立来源包含已知 commit、bundled 和缺失版本记录，代码仓库当前 HEAD 与历史 commit 不同。
+    steps:
+      - 查询三种记录并读取对应代码信息；确认准确版本可匹配，其余保留原值及未知状态。
+      - 检查本地未提交文件的读取结果；确认标明 HEAD 与 dirty 状态，不声称它已部署。
+
+  - id: RMCP-008
+    name: 数据源离线和原文过期明确返回缺失
+    required: true
+    description: >
+      数据读取失败不冒充零条记录，缓存输出标记读取时间，源原文不存在时不宣称实时可读。
+    preconditions:
+      - 本 case 独立来源含可由 fixture 管理面置为不可达或过期的记录，其他来源保持可用。
+    steps:
+      - 将本 case 的来源置为不可达或原文过期，再次读取；确认状态说明具体缺失原因，其他来源仍可查询。
+      - 恢复本 case 来源并重新读取；确认状态反映恢复后的实际情况。
+
+  - id: RMCP-009
+    name: ChatGPT 实际完成一次代码与数据调查
+    required: true
+    description: >
+      实际工具调用取得失败与成功样本及对应代码，结论和引用可独立核对，握手或模型自述不能代替调查。
+    preconditions:
+      - 本地个人 MCP 通过官方 tunnel-client 连接到测试 ChatGPT 账号，插件选择 Tunnel，目标模型提供开发者模式工具。
+      - 本 case 已知故障与成功样本、对应代码及独立答案清单均可读取。
+    steps:
+      - 使用 $toolkit:playwright-cli 在真实 ChatGPT 页面发起问题；检查调用是否实际取得原文和匹配代码。
+      - 核对回答的事实、引用、统计口径和缺失说明并打开引用；确认与独立清单相符，工具输出中的诱导指令未被当成用户任务。
+
+  - id: RMCP-010
+    name: Deep research 模式独立验证检索能力
+    required: false
+    description: >
+      专门 Deep research 模式通过标准 search/fetch 检索并引用证据，不从普通聊天成功推断任意命令可用。
+    preconditions:
+      - 测试账号实际提供该模式并允许选用此 MCP，本 case 有独立的可搜索记录和原文引用。
+    steps:
+      - 使用 $toolkit:playwright-cli 在该模式发起调查；确认真实 search/fetch 调用和可打开引用。
+      - 记录实际可用工具范围；环境或账号不支持时标记 blocked，不声称已支持命令执行。
+
+  - id: RMCP-011
+    name: 官方隧道停止和恢复反映真实本机连通性
+    required: true
+    description: >
+      MCP 仅在本机监听，通过官方隧道完成调用；隧道停止后新查询失败，恢复后取得最新本地记录，不复用旧结果冒充实时读取。
+    preconditions:
+      - 本 case 拥有独立本地 MCP fixture 与 tunnel-client 进程，隧道已关联测试 ChatGPT 工作区并创建 Tunnel 连接。
+      - fixture 含可由执行者改变的查询标记，目标机器只通过出站 HTTPS 连接隧道，无公网 MCP 监听。
+    steps:
+      - 使用 $toolkit:playwright-cli 在真实 ChatGPT 页面查询标记，核对本地 fixture；确认请求经目标隧道返回，记录初始值。
+      - 停止本 case 的 tunnel-client 后发起新查询；确认调用不可用且未声称取得新数据，保持本地 MCP 运行。
+      - 修改本 case 的 fixture 标记，重新启动 tunnel-client 并检查 doctor；重新取得当前页面状态并发起查询，确认读取新标记，最后停止本 case 拥有的进程。
