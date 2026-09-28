@@ -44,6 +44,11 @@ export function TunnelDrawer() {
   const [editing, setEditing] = useState<TunnelHostConfig | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
+    if (!notice?.endsWith(" 连接中断")) return;
+    const timer = window.setTimeout(() => setNotice(null), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [notice, setNotice]);
+  useEffect(() => {
     const api = window.electronAPI as RunweaveElectronBridge | undefined;
     if (!api?.isElectron) return;
     let disposed = false;

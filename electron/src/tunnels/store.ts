@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { requireDesktopMigration } from "../desktop/configuration-migration.js";
 import { ConfigurationDomain, configuration, ConfigurationError } from "@runweave/config-node";
 import { validateTunnelUpdate, isTunnelId, type TunnelConfig, type TunnelConfigUpdate } from "@runweave/shared/tunnels";
@@ -22,7 +23,19 @@ export class TunnelStore {
     this.domain.markApplied();
   }
   private persist(value: TunnelConfig): void {
-    this.domain.write({ revision: value.revision, desktopId: value.desktopId, hosts: value.hosts, backendEndpoints: value.backendEndpoints, completedImports: value.completedImports });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const saved = this.domain.read();
+      const clean = saved ? validateTunnelUpdate({ ...saved, expectedRevision: saved.revision }) : null;
+      const observed = saved && clean ? { revision: saved.revision, desktopId: saved.desktopId, hosts: clean.hosts, backendEndpoints: clean.backendEndpoints, completedImports: saved.completedImports } : null;
+      const current = { revision: this.current.revision, desktopId: this.current.desktopId, hosts: this.current.hosts, backendEndpoints: this.current.backendEndpoints, completedImports: this.current.completedImports };
+      if (observed ? !isDeepStrictEqual(observed, current) : this.current.revision !== 0) throw new ConfigurationError("CONFIG_REVISION_CONFLICT");
+      try {
+        this.domain.write({ revision: value.revision, desktopId: value.desktopId, hosts: value.hosts, backendEndpoints: value.backendEndpoints, completedImports: value.completedImports });
+        return;
+      } catch (error) {
+        if (!(error instanceof ConfigurationError) || error.code !== "CONFIG_REVISION_CONFLICT" || attempt === 2) throw error;
+      }
+    }
   }
   read(): TunnelConfig { return structuredClone(this.current); }
   save(input: TunnelConfigUpdate, migrationId?: string): TunnelConfig {

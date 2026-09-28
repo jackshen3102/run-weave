@@ -46,7 +46,7 @@ cases:
       - 已通过 desktop surface 打开 Worktree Rail 和 Browser Profile 设置面板。
     steps:
       - 将两个 Worktree 都绑定 Profile 1，在 Browser 1 设置中保存开发端口 3000；确认两个 Worktree 都使用这个 Profile 级目标，Rail 不保存或显示独立端口。
-      - 将第三个 Worktree 绑定 Profile 2，在 Browser 2 设置中把端口留空；确认显示 P2，没有自动填入或从终端日志猜测端口。
+      - 将第三个 Worktree 绑定 Profile 2；确认保存后立即打开 Browser 2。在 Browser 2 设置中把端口留空；确认显示 P2，没有自动填入或从终端日志猜测端口。
       - 清除第四个 Worktree 的 Profile 绑定；确认其设置显示跟随全局默认，而不是自动占用一个空闲 Profile。
 
   - id: TBMP-004
@@ -138,17 +138,17 @@ cases:
       - 确认冲突过程中没有新开替代 Profile、没有清理原 Browser Group，也没有修改两个 Worktree 的持久化绑定。
 
   - id: TBMP-010
-    name: Profile 空闲后切换路由只刷新业务页面并保留存储
+    name: Profile 空闲后切换路由不自动刷新页面并保留存储
     required: true
     description: >
-      验证 Profile 无可见 view 和 CDP 连接后可从 3000 切到 3001，切换只更新 Whistle Value并
-      reloadIgnoringCache，Cookie、Web Storage、Service Worker 和页面身份不被清理。
+      验证 Profile 无可见 view 和 CDP 连接后可从 3000 切到 3001，切换只更新 Whistle Value；
+      用户刷新页面后命中新目标，Cookie、Web Storage、Service Worker 和页面身份不被清理。
     preconditions:
       - Profile 1 当前为 3000，已有业务 origin 页面、非业务 origin 页面及可识别的 Cookie、LocalStorage、IndexedDB 和 Service Worker 状态。
       - Profile 1 已从所有窗口隐藏且所有 CDP client 已 detach；3001 fixture 可用。
       - Profile 1 已从设置中显式开启 Proxy。
     steps:
-      - 在 Browser 1 设置中显式保存目标 3001 后解析 Profile 1；确认解析成功，Whistle 保留 Value 变为 127.0.0.1:3001，业务页面重新加载后显示 DEV-3001。
+      - 在 Browser 1 设置中显式保存目标 3001 后解析 Profile 1；确认解析成功，Whistle 保留 Value 变为 127.0.0.1:3001，页面未自动刷新；手动刷新业务页面后显示 DEV-3001。
       - 读取业务页面的 Cookie、LocalStorage、IndexedDB、Service Worker registration、tabId 和 Group；确认均与切换前一致，没有执行清理或创建替代页面。
       - 检查非业务 origin 页面；确认它没有因本次路由切换被批量刷新，Profile 1 也未调用全局浏览数据重置。
 
@@ -267,7 +267,7 @@ cases:
       - 重启 renderer 后重新打开三个 Header 面板；确认规则仍按 Profile 分开，Profile 1 的旧全局 Header 设置只迁移一次且没有复制到 Profile 2/3。
 
   - id: TBMP-019
-    name: Profile 设置拒绝非法 origin、端口和 Profile ID
+    name: Profile 设置拒绝非法端口和 Profile ID
     required: true
     description: >
       验证 Profile 偏好和 resolver 对输入边界 fail closed，非法值不会部分写入配置、启动子进程
@@ -277,7 +277,6 @@ cases:
       - UI 设置面板和 `rw browser profile resolve` 均可操作。
     steps:
       - 分别提交端口 0、65536、非整数和固定代理端口 P1_PORT；确认每次均返回 INVALID_DEV_SERVER_PORT，原配置不变且没有新 listener。
-      - 分别提交含 path/query 的 business URL、非 http(s) scheme 和空白外的畸形 origin；确认被拒绝，原 business origin 不变。
       - 通过 CLI 提交 Profile 0、4、任意字符串以及超长 group/project 标识；确认返回非零退出码和稳定错误，未访问其它 partition、文件路径或 CDP Target。
 
   - id: TBMP-020

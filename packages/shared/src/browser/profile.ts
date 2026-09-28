@@ -58,7 +58,6 @@ export interface TerminalBrowserProfilePreferences {
   profilePorts: Partial<Record<TerminalBrowserProfileId, number | null>>;
   pendingPortMigration: Partial<Record<TerminalBrowserProfileId, number[]>>;
   defaultProfileId: TerminalBrowserProfileId;
-  businessOrigin: string | null;
   /** Missing entries retain the host's default until explicitly selected. */
   proxyModes?: Partial<
     Record<TerminalBrowserProfileId, TerminalBrowserProfileProxyMode>
@@ -70,7 +69,6 @@ export type TerminalBrowserProfilePreferenceUpdate =
   | {
       scope: "global";
       defaultProfileId?: TerminalBrowserProfileId;
-      businessOrigin?: string | null;
     }
   | {
       scope: "worktree";
@@ -152,7 +150,6 @@ export type TerminalBrowserErrorCode =
   | "PROFILE_CONFIG_WRITE_FAILED"
   | "INVALID_BROWSER_PROFILE"
   | "INVALID_DEV_SERVER_PORT"
-  | "INVALID_BUSINESS_ORIGIN"
   | "INVALID_PROJECT_ID"
   | "INVALID_TERMINAL_SESSION_ID"
   | "INVALID_BROWSER_GROUP_ID"
@@ -184,7 +181,6 @@ export function createDefaultTerminalBrowserProfilePreferences(): TerminalBrowse
     profilePorts: {},
     pendingPortMigration: {},
     defaultProfileId: TERMINAL_BROWSER_DEFAULT_PROFILE_ID,
-    businessOrigin: null,
     worktrees: {},
   };
 }

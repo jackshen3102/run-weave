@@ -21,9 +21,10 @@ export function HostForm({
   onSaved: (next: TunnelSnapshot) => void;
 }) {
   const [draft, setDraft] = useState(host);
-  const [revision] = useState(snapshot.config.revision);
+  const [originalHost] = useState(() => snapshot.config.hosts.find((h) => h.id === host.id) ?? null);
+  const [originalEndpoints] = useState(() => snapshot.config.backendEndpoints.filter((e) => e.hostId === host.id));
   const [endpoints, setEndpoints] = useState(
-    snapshot.config.backendEndpoints.filter((e) => e.hostId === host.id),
+    originalEndpoints,
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -33,8 +34,13 @@ export function HostForm({
     setError(null);
     setSaving(true);
     try {
+      const currentHost = snapshot.config.hosts.find((h) => h.id === host.id) ?? null;
+      const currentEndpoints = snapshot.config.backendEndpoints.filter((e) => e.hostId === host.id);
+      if (JSON.stringify(currentHost) !== JSON.stringify(originalHost) || JSON.stringify(currentEndpoints) !== JSON.stringify(originalEndpoints)) {
+        throw new Error("这台主机的配置已被其他操作修改，当前输入已保留。请重新打开编辑器核对后保存。");
+      }
       const update = validateTunnelUpdate({
-        expectedRevision: revision,
+        expectedRevision: snapshot.config.revision,
         hosts: [
           ...snapshot.config.hosts.filter((h) => h.id !== host.id),
           draft,
@@ -52,7 +58,8 @@ export function HostForm({
         ),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message.includes("CONFIG_REVISION_CONFLICT") ? "配置刚被其他操作修改，当前输入已保留，请重试保存。" : message);
     } finally {
       setSaving(false);
     }

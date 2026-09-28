@@ -1,5 +1,5 @@
 import { BrowserWindow } from "electron";
-import { ConfigurationDomain } from "@runweave/config-node";
+import { ConfigurationDomain, ConfigurationError } from "@runweave/config-node";
 import { requireDesktopMigration } from "../../desktop/configuration-migration.js";
 import type { ConfigurationValue } from "@runweave/shared/configuration";
 import { getProfileWhistlePorts } from "./endpoints.js";
@@ -17,7 +17,7 @@ import { TerminalBrowserError } from "../errors.js";
 
 const store = new ConfigurationDomain<Partial<TerminalBrowserProfilePreferences>>("desktop.browser");
 let currentPreferences: TerminalBrowserProfilePreferences | null = null;
-const preferenceKeys = ["defaultProfileId", "businessOrigin", "profilePorts", "proxyModes", "worktrees", "pendingPortMigration"] as const;
+const preferenceKeys = ["defaultProfileId", "profilePorts", "proxyModes", "worktrees", "pendingPortMigration"] as const;
 
 function clonePreferences(
   preferences: TerminalBrowserProfilePreferences,
@@ -57,44 +57,6 @@ export function normalizeTerminalBrowserGroupId(value: unknown): string | null {
     );
   }
   return value;
-}
-
-export function normalizeTerminalBrowserBusinessOrigin(
-  value: unknown,
-): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  if (typeof value !== "string") {
-    throw new TerminalBrowserError(
-      "INVALID_BUSINESS_ORIGIN",
-      "Business origin must be an http or https origin",
-    );
-  }
-  const normalized = value.trim();
-  if (!normalized) {
-    return null;
-  }
-  try {
-    const parsed = new URL(normalized);
-    if (
-      !["http:", "https:"].includes(parsed.protocol) ||
-      parsed.username ||
-      parsed.password ||
-      parsed.pathname !== "/" ||
-      parsed.search ||
-      parsed.hash
-    ) {
-      throw new Error("not an origin");
-    }
-    return parsed.origin;
-  } catch {
-    throw new TerminalBrowserError(
-      "INVALID_BUSINESS_ORIGIN",
-      "Business origin must be an http or https URL without path, query, or hash",
-      { value: normalized.slice(0, 200) },
-    );
-  }
 }
 
 export function normalizeTerminalBrowserDevServerPort(
@@ -204,9 +166,6 @@ function normalizePersistedPreferences(
     profilePorts,
     pendingPortMigration,
     defaultProfileId: candidate.defaultProfileId,
-    businessOrigin: normalizeTerminalBrowserBusinessOrigin(
-      candidate.businessOrigin,
-    ),
     proxyModes,
     worktrees,
   };
@@ -259,7 +218,23 @@ export function getTerminalBrowserProfilePreferences(): TerminalBrowserProfilePr
   return clonePreferences(currentPreferences);
 }
 
+function retryPreferenceWrite<T>(write: () => T): T {
+  try {
+    return write();
+  } catch (error) {
+    if (!(error instanceof ConfigurationError) || error.code !== "CONFIG_REVISION_CONFLICT") throw error;
+    return write();
+  }
+}
+
 export function saveTerminalBrowserProfileProxyMode(
+  profileId: TerminalBrowserProfileId,
+  proxyMode: TerminalBrowserProfileProxyMode,
+): void {
+  retryPreferenceWrite(() => saveTerminalBrowserProfileProxyModeOnce(profileId, proxyMode));
+}
+
+function saveTerminalBrowserProfileProxyModeOnce(
   profileId: TerminalBrowserProfileId,
   proxyMode: TerminalBrowserProfileProxyMode,
 ): void {
@@ -273,6 +248,12 @@ export function saveTerminalBrowserProfileProxyMode(
 }
 
 export function updateTerminalBrowserProfilePreferences(
+  update: TerminalBrowserProfilePreferenceUpdate,
+): TerminalBrowserProfilePreferences {
+  return retryPreferenceWrite(() => updateTerminalBrowserProfilePreferencesOnce(update));
+}
+
+function updateTerminalBrowserProfilePreferencesOnce(
   update: TerminalBrowserProfilePreferenceUpdate,
 ): TerminalBrowserProfilePreferences {
   if (!update || typeof update !== "object") {
@@ -293,11 +274,6 @@ export function updateTerminalBrowserProfilePreferences(
     }
     if (update.defaultProfileId !== undefined) {
       next.defaultProfileId = update.defaultProfileId;
-    }
-    if (update.businessOrigin !== undefined) {
-      next.businessOrigin = normalizeTerminalBrowserBusinessOrigin(
-        update.businessOrigin,
-      );
     }
   } else if (update.scope === "worktree") {
     const projectId = normalizeTerminalBrowserProjectId(update.projectId);
@@ -342,7 +318,7 @@ export function updateTerminalBrowserProfilePreferences(
 
 // Recovery is explicit and uses the private unified-file backup, then retries read.
 export function restoreTerminalBrowserProfilePreferences(): TerminalBrowserProfilePreferences {
-  store.restore(["defaultProfileId", "businessOrigin", "profilePorts", "proxyModes", "worktrees", "pendingPortMigration"].map((key) => `desktop.browser.${key}`));
+  store.restore(["defaultProfileId", "profilePorts", "proxyModes", "worktrees", "pendingPortMigration"].map((key) => `desktop.browser.${key}`));
   const recovered = loadPreferences();
   currentPreferences = recovered;
   preferenceLoadError = null;
