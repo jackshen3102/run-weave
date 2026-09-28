@@ -4792,6 +4792,30 @@
     "reason": "SUIJI_MCP_TOKEN_SHA256：按来源迁移/退役，不建立第二配置来源；作用仅限此调用点。"
   },
   {
+    "file": "packages/suiji-server/src/corrections/codex.ts",
+    "kind": "file-io",
+    "expression": "readFile(outputPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取本次纠错任务的临时模型结果；任务结束即删除，不作为服务配置来源。"
+  },
+  {
+    "file": "packages/suiji-server/src/corrections/codex.ts",
+    "kind": "file-io",
+    "expression": "writeFile(outputPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "在隔离临时目录创建本次纠错任务的结果文件，任务结束即删除，不保存配置。"
+  },
+  {
+    "file": "packages/suiji-server/src/corrections/codex.ts",
+    "kind": "file-io",
+    "expression": "writeFile(schemaPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "在隔离临时目录写入本次 Codex 结构化输出 schema，任务结束即删除，不保存配置。"
+  },
+  {
     "file": "packages/suiji-server/src/reviews/codex.ts",
     "kind": "file-io",
     "expression": "readFile(outputPath)",
