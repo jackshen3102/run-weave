@@ -81,13 +81,19 @@ Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.m
 
 ### Agent 系统
 
-| 任务                       | 文档                                                                                                                  |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[运行配置](../deployment/overview.md#定时任务运行) |
-| 执行效率计量与人工闭环     | [Web、Backend 与 CLI 接入边界](../../frontend/docs/execution-efficiency.md)                                           |
-| Agent Team / Loop Engine   | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md)                                                          |
-| 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                            |
-| Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                  |
+| 任务                       | 文档                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[运行配置](../deployment/overview.md#定时任务运行)     |
+| 快捷指令后台运行           | [定时任务接入边界](../../frontend/docs/scheduled-tasks.md)、[验收计划](../testing/background-commands/core.testplan.yaml) |
+| 执行效率计量与人工闭环     | [Web、Backend 与 CLI 接入边界](../../frontend/docs/execution-efficiency.md)                                               |
+| Agent Team / Loop Engine   | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md)                                                              |
+| 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                                |
+| Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                      |
+
+快捷指令的“后台运行”接入现有定时任务的 task/run 存储与单并发队列。Backend 校验已保存指令、
+实际项目目录和后台默认模型；请求按幂等键去重，运行快照保留项目与 worktree 来源。Web 可查看运行
+记录并按原有恢复合同打开对话；当前实现不依赖独立 worker 或桌面自更新。通知、恢复及跨端交互仍须按
+[快捷指令验收计划](../testing/background-commands/core.testplan.yaml)取得真实证据，代码接通不等于端到端验收通过。
 
 ## 随记
 
