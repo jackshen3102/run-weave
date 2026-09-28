@@ -18,6 +18,7 @@
 | ------------------------------------------------ | ---------------------------------------------------- |
 | [`agent-team/`](./agent-team/)                   | Agent Team 生命周期、执行、恢复、配置与干预          |
 | [`app/`](./app/)                                 | 原生 iOS、App Server 与设备连接                      |
+| [`archive/`](./archive/)                         | 已被新版行为取代的历史验收合同                       |
 | [`architecture/`](./architecture/)               | 跨运行时架构与 Activity 数据底座                     |
 | [`analytics/`](./analytics/)                     | Web 纯无埋点接入、行为回放与采集边界验收             |
 | [`browser/`](./browser/)                         | 浏览器和原型画廊                                     |

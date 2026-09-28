@@ -1,0 +1,36 @@
+{
+  "project": "browser-viewer",
+  "worktree": "wt-1",
+  "items": [
+    {
+      "id": "github-pr",
+      "title": "创建 github pr",
+      "data": "$toolkit:github-pr main 本地所有代码",
+      "mode": "line",
+      "pinned": true,
+      "canRunInBackground": true
+    },
+    {
+      "id": "rebase",
+      "title": "rebase main",
+      "data": "rebase main",
+      "mode": "line",
+      "pinned": true,
+      "canRunInBackground": false
+    },
+    {
+      "id": "continue",
+      "title": "继续",
+      "data": "继续",
+      "mode": "line",
+      "pinned": true,
+      "canRunInBackground": false
+    }
+  ],
+  "run": {
+    "model": "gpt-6-luna",
+    "policy": "完全访问",
+    "result": "PR #634 已合并",
+    "summary": "55 个文件已提交并合并到 main。GitHub quality 检查通过。"
+  }
+}

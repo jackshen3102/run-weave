@@ -7,6 +7,8 @@ public struct RootView: View {
   @StateObject private var connections = ConnectionStore()
   @StateObject private var session = AppSession()
   @StateObject private var quickReplies = LocalQuickReplyStore()
+  @StateObject private var quickInputs = BackendQuickInputModel()
+  @StateObject private var quickReplyMigration = QuickReplyMigrationStore()
   @StateObject private var codexQuota = CodexQuotaStore()
   @ObservedObject private var notifications = NotificationCoordinator.shared
   @State private var managingConnections = false
@@ -67,9 +69,9 @@ public struct RootView: View {
       Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
       notifications.foreground(connections: connections.connections)
     }
-    .onChange(of: session.generation) { _ in codexQuota.reset() }
+    .onChange(of: session.generation) { _ in codexQuota.reset(); quickInputs.reset() }
     .onChange(of: session.authenticated) { authenticated in
-      if !authenticated { codexQuota.reset() }
+      if !authenticated { codexQuota.reset(); quickInputs.reset() }
       else {
         notifications.refreshAutomaticTasks(connections: connections.connections)
         Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
@@ -103,6 +105,8 @@ public struct RootView: View {
       }
     }
     .environmentObject(quickReplies)
+    .environmentObject(quickInputs)
+    .environmentObject(quickReplyMigration)
   }
 }
 

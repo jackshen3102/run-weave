@@ -1,7 +1,7 @@
 version: 1
 name: iOS 纯本地快捷回复验收
 description: >
-  目标功能的实施后验收计划，当前不表示功能已实现或已通过。
+  历史旧版合同，仅用于原生 iOS 纯本地快捷回复；新版以 app/ios-backend-quick-inputs.testplan.yaml 验收。
   验证个人长文本回复只保存在手机、跨终端和电脑可用，选择只填入草稿，显式发送且不收录服务端快捷历史。
   原生 UI 通过 packages/app-ios/README.md 规定的 Xcode、devicectl 与既有 XCUITest 执行器取证，保存控件树和 xcresult；
   Playwright 或构建通过不能代替原生行为。每例独立建立自有 fixture，不依赖上一例的条目、登录或终端。

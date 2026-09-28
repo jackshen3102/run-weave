@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import type { CreateTerminalQuickInputRequest, TerminalQuickInputItem, TerminalQuickInputListKind, TerminalQuickInputMode, TerminalQuickInputSource, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
+import { createHash, randomUUID } from "node:crypto";
+import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, TerminalQuickInputItem, TerminalQuickInputListKind, TerminalQuickInputMode, TerminalQuickInputSource, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { logger } from "../../logging/index";
 import type {
@@ -33,11 +33,20 @@ export class TerminalQuickInputValidationError extends Error {
   }
 }
 
+export class TerminalQuickInputConflictError extends Error {
+  constructor(readonly code: "list_changed" | "input_changed") {
+    super(code === "list_changed" ? "Quick input list changed" : "Quick input changed");
+  }
+}
+
 export interface ListTerminalQuickInputsParams {
   projectId?: string | null;
   q?: string | null;
   kind?: TerminalQuickInputListKind;
   limit?: number;
+  scope?: "global";
+  order?: "manual";
+  cursor?: string;
 }
 
 export interface RecordTerminalQuickInputParams {
@@ -113,14 +122,44 @@ export class TerminalQuickInputService {
     return sortItems(items, kind).slice(0, limit);
   }
 
+  async listPage(params: ListTerminalQuickInputsParams): Promise<ListTerminalQuickInputsResponse> {
+    await this.pendingMutation;
+    const query = params.q?.trim().toLowerCase() ?? "";
+    const all = await this.store.list();
+    const global = all.filter((item) => item.hiddenAt == null && item.pinned && item.projectId == null);
+    const ordered = sortManual(global);
+    const orderVersion = hash(ordered.map((item) => item.id).join("\n"));
+    const filtered = ordered.filter((item) =>
+      !query || item.title.toLowerCase().includes(query) || item.data.toLowerCase().includes(query));
+    const fingerprint = hash(JSON.stringify({ query, items: filtered.map((item) => [item.id, item.updatedAt]) }));
+    const offset = params.cursor ? decodeCursor(params.cursor, fingerprint) : 0;
+    const limit = clampLimit(params.limit);
+    const items = filtered.slice(offset, offset + limit);
+    const nextOffset = offset + items.length;
+    return {
+      items,
+      nextCursor: nextOffset < filtered.length ? encodeCursor(nextOffset, fingerprint) : null,
+      orderVersion,
+    };
+  }
+
   async createPinned(
     input: CreateTerminalQuickInputRequest,
   ): Promise<TerminalQuickInputItem> {
-    const normalized = normalizePersistableInput(input);
     return this.enqueueMutation(async () => {
-      const now = new Date().toISOString();
       const items = await this.store.list();
-      const existing = findDuplicate(items, normalized);
+      const importId = input.clientImportId?.toLowerCase();
+      if (importId) {
+        const imported = items.find((item) => item.clientImportId?.toLowerCase() === importId);
+        if (imported) return imported;
+      }
+      const normalized = normalizePersistableInput(input);
+      if (importId && normalized.projectId !== null) {
+        throw new TerminalQuickInputValidationError("Imported quick inputs must be global");
+      }
+      if (normalized.projectId === null) ensureManualOrders(items);
+      const now = new Date().toISOString();
+      const existing = importId ? null : findDuplicate(items, normalized);
       let result: TerminalQuickInputItem;
       if (existing) {
         result = {
@@ -143,12 +182,14 @@ export class TerminalQuickInputService {
           projectId: normalized.projectId,
           terminalSessionId: normalized.terminalSessionId,
           cwd: normalized.cwd,
-          source: "web_terminal_quick_input",
+          source: input.source ?? "web_terminal_quick_input",
           pinned: true,
           createdAt: now,
           updatedAt: now,
           hiddenAt: null,
           useCount: 0,
+          ...(normalized.projectId === null ? { manualOrder: globalPinned(items).length } : {}),
+          ...(importId ? { clientImportId: importId } : {}),
         };
         items.push(result);
       }
@@ -164,15 +205,25 @@ export class TerminalQuickInputService {
     return this.enqueueMutation(async () => {
       const items = await this.store.list();
       const item = items.find((candidate) => candidate.id === id);
-      if (!item) {
+      if (!item || item.hiddenAt != null) {
         return null;
+      }
+      if (patch.expectedUpdatedAt && item.updatedAt !== patch.expectedUpdatedAt) {
+        throw new TerminalQuickInputConflictError("input_changed");
+      }
+      const data = patch.data ?? item.data;
+      const mode = patch.mode ?? item.mode;
+      if (patch.data !== undefined || patch.mode !== undefined) {
+        normalizePersistableInput({ title: patch.title ?? item.title, data, mode, projectId: item.projectId });
       }
       const next: TerminalQuickInputItem = {
         ...item,
         title: patch.title !== undefined ? patch.title.trim() : item.title,
+        data,
+        mode,
         projectId: normalizeProjectScopeProjectId(item.projectId ?? null),
         pinned: patch.pinned !== undefined ? patch.pinned : item.pinned,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nextTimestamp(item.updatedAt),
       };
       if (!next.title) {
         next.title = buildTitle(next.data);
@@ -180,6 +231,28 @@ export class TerminalQuickInputService {
       replaceItem(items, next);
       await this.store.replaceAll(applyRetention(items));
       return next;
+    });
+  }
+
+  async move(id: string, beforeId: string | null, expectedOrderVersion: string): Promise<string> {
+    return this.enqueueMutation(async () => {
+      const items = await this.store.list();
+      const ordered = sortManual(globalPinned(items));
+      const version = hash(ordered.map((item) => item.id).join("\n"));
+      if (version !== expectedOrderVersion) throw new TerminalQuickInputConflictError("list_changed");
+      if (beforeId === id) return version;
+      const source = ordered.findIndex((item) => item.id === id);
+      if (source < 0) throw new TerminalQuickInputValidationError("Quick input is not global and pinned");
+      if (beforeId !== null && !ordered.some((item) => item.id === beforeId)) {
+        throw new TerminalQuickInputValidationError("Move target is not global and pinned");
+      }
+      const [item] = ordered.splice(source, 1);
+      if (!item) throw new TerminalQuickInputValidationError("Quick input is not global and pinned");
+      const target = beforeId === null ? ordered.length : ordered.findIndex((candidate) => candidate.id === beforeId);
+      ordered.splice(target, 0, item);
+      ordered.forEach((entry, index) => replaceItem(items, { ...entry, manualOrder: index }));
+      await this.store.replaceAll(items);
+      return hash(ordered.map((entry) => entry.id).join("\n"));
     });
   }
 
@@ -280,7 +353,7 @@ export class TerminalQuickInputService {
         ...item,
         projectId: normalizeProjectScopeProjectId(item.projectId ?? null),
         lastUsedAt: now,
-        updatedAt: now,
+        updatedAt: nextTimestamp(item.updatedAt),
         useCount: item.useCount + 1,
       };
       replaceItem(items, next);
@@ -409,4 +482,46 @@ function clampLimit(limit: number | undefined): number {
     return 50;
   }
   return Math.min(100, Math.max(1, Math.floor(limit)));
+}
+
+function globalPinned(items: TerminalQuickInputItem[]): TerminalQuickInputItem[] {
+  return items.filter((item) => item.hiddenAt == null && item.pinned && item.projectId == null);
+}
+
+function sortManual(items: TerminalQuickInputItem[]): TerminalQuickInputItem[] {
+  return [...items].sort((left, right) => {
+    const first = left.manualOrder ?? Number.MAX_SAFE_INTEGER;
+    const second = right.manualOrder ?? Number.MAX_SAFE_INTEGER;
+    return first - second || left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
+  });
+}
+
+function ensureManualOrders(items: TerminalQuickInputItem[]): void {
+  sortManual(globalPinned(items)).forEach((item, index) => {
+    if (item.manualOrder !== index) replaceItem(items, { ...item, manualOrder: index });
+  });
+}
+
+function hash(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function encodeCursor(offset: number, fingerprint: string): string {
+  return Buffer.from(JSON.stringify({ offset, fingerprint })).toString("base64url");
+}
+
+function decodeCursor(cursor: string, fingerprint: string): number {
+  let value: unknown;
+  try { value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")); }
+  catch { throw new TerminalQuickInputValidationError("Invalid quick input cursor"); }
+  if (!value || typeof value !== "object" || !("offset" in value) || !("fingerprint" in value) ||
+    !Number.isInteger(value.offset) || (value.offset as number) < 0 || typeof value.fingerprint !== "string") {
+    throw new TerminalQuickInputValidationError("Invalid quick input cursor");
+  }
+  if (value.fingerprint !== fingerprint) throw new TerminalQuickInputConflictError("list_changed");
+  return value.offset as number;
+}
+
+function nextTimestamp(previous: string): string {
+  return new Date(Math.max(Date.now(), Date.parse(previous) + 1)).toISOString();
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TerminalComposerSheet: View {
-  @EnvironmentObject private var quickReplies: LocalQuickReplyStore
+  @EnvironmentObject private var quickInputs: BackendQuickInputModel
   let session: AppSession
   let controller: SessionController
   let terminalID: String
@@ -9,7 +9,7 @@ struct TerminalComposerSheet: View {
   @Binding var showingInstantReplies: Bool
   let onDismiss: () -> Void
 
-  private var busy: Bool { preventsDismissal || quickReplies.saving }
+  private var busy: Bool { preventsDismissal || quickInputs.saving }
 
   var body: some View {
     GeometryReader { geometry in
@@ -30,7 +30,7 @@ struct TerminalComposerSheet: View {
 }
 
 struct ComposerView: View {
-  @EnvironmentObject private var quickReplies: LocalQuickReplyStore
+  @EnvironmentObject private var quickInputs: BackendQuickInputModel
   let session: AppSession
   let controller: SessionController
   @StateObject private var state: TerminalComposerState
@@ -52,7 +52,7 @@ struct ComposerView: View {
   @State private var showingShortcuts = false
   @State private var editing = true
   @State private var showingReplies = false
-  @State private var pendingReply: LocalQuickReply?
+  @State private var pendingReply: BackendQuickInput?
   @State private var inputHeight: CGFloat = 37
   @State private var chromeHeight: CGFloat = 124
   @State private var showingFailure = false
@@ -173,7 +173,7 @@ struct ComposerView: View {
       if abs(chromeHeight - next) > 0.5 { chromeHeight = next }
     }
     .task {
-      await quickReplies.loadIfNeeded()
+      await quickInputs.loadIfNeeded(session)
       await modelSettings.refresh(session: session, terminalID: terminalID)
       while !Task.isCancelled {
         try? await Task.sleep(nanoseconds: 10_000_000_000)
@@ -194,20 +194,25 @@ struct ComposerView: View {
       editing = true
     }) {
       NavigationView {
-        QuickReplyLibraryView(onSelect: selectReply)
+        QuickReplyLibraryView(session: session, projectId: session.terminal?.projectId,
+          onSelect: selectReply, onOpenRun: { run in
+            showingReplies = false
+            onClose()
+            session.openScheduledSource(ScheduledTaskSource(type: "scheduled-task", taskId: run.taskId, runId: run.id))
+          })
           .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-              Button("返回") { showingReplies = false }.disabled(quickReplies.saving)
+              Button("返回") { showingReplies = false }.disabled(quickInputs.saving)
             }
           }
-      }.navigationViewStyle(.stack).interactiveDismissDisabled(quickReplies.saving)
+      }.navigationViewStyle(.stack).interactiveDismissDisabled(quickInputs.saving)
     }
   }
 
   private var quickReplyBar: some View {
     HStack(spacing: 8) {
       if verticalSizeClass != .compact {
-        ForEach(quickReplies.items.prefix(3)) { item in
+        ForEach(quickInputs.items.prefix(3)) { item in
           Button { insertReply(item) } label: {
             Text(item.title).lineLimit(1).truncationMode(.tail)
               .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 44)
@@ -217,7 +222,7 @@ struct ComposerView: View {
           .accessibilityLabel(item.title)
           .accessibilityHint("在光标处插入快捷回复，不会发送")
           .accessibilityIdentifier("quick-reply-pinned-\(item.id)")
-          .disabled(!quickReplies.canEdit)
+          .disabled(!quickInputs.canEdit(session))
         }
       }
       Button {
@@ -225,12 +230,12 @@ struct ComposerView: View {
         pendingReply = nil
         showingReplies = true
       } label: {
-        Text(quickReplies.items.isEmpty ? "快捷回复" : "全部")
+        Text(quickInputs.items.isEmpty ? "快捷回复" : "全部")
           .frame(minWidth: 44, minHeight: 44)
       }
       .accessibilityLabel("全部快捷回复")
       .accessibilityIdentifier("quick-reply-open")
-      if quickReplies.items.isEmpty || verticalSizeClass == .compact { Spacer(minLength: 0) }
+      if quickInputs.items.isEmpty || verticalSizeClass == .compact { Spacer(minLength: 0) }
     }
     .font(.subheadline)
     .buttonStyle(.plain)
@@ -364,17 +369,18 @@ struct ComposerView: View {
     .opacity(sendDisabled ? 0.4 : 1)
   }
 
-  private func selectReply(_ item: LocalQuickReply) {
+  private func selectReply(_ item: BackendQuickInput) {
     guard session.terminal?.id == terminalID, session.terminalController === controller else { return }
     pendingReply = item
     showingReplies = false
   }
 
-  private func insertReply(_ item: LocalQuickReply) {
+  private func insertReply(_ item: BackendQuickInput) {
     guard session.terminal?.id == terminalID, session.terminalController === controller,
       !preventsDismissal, !state.snapshot.inputBusy,
-      let draft = textEditor.insert(item.body) else { return }
+      let draft = textEditor.insert(item.data) else { return }
     session.setDraft(draft, terminalID: terminalID, suppressQuickInputHistory: true)
+    Task { await quickInputs.markUsed(session, id: item.id) }
     editing = true
   }
 

@@ -10,7 +10,9 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
   @Binding var preventsDismissal: Bool
   @Binding var showingInstantReplies: Bool
   var onDismiss: () -> Void
+  @EnvironmentObject private var quickInputs: BackendQuickInputModel
   @EnvironmentObject private var quickReplies: LocalQuickReplyStore
+  @EnvironmentObject private var quickReplyMigration: QuickReplyMigrationStore
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.colorScheme) private var colorScheme
 
@@ -48,6 +50,8 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
         onDismiss: onDismiss
       )
       .environmentObject(quickReplies)
+      .environmentObject(quickInputs)
+      .environmentObject(quickReplyMigration)
       .environment(\.scenePhase, scenePhase)
       .preferredColorScheme(colorScheme)
       .tint(TerminalAppearance.accent)

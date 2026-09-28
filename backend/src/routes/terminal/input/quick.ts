@@ -4,6 +4,7 @@ import type { ScheduledTaskService } from "../../../scheduled-tasks/service";
 import { ScheduledTaskError } from "../../../scheduled-tasks/errors";
 import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
 import {
+  TerminalQuickInputConflictError,
   TerminalQuickInputValidationError,
   type TerminalQuickInputService,
 } from "../../../terminal/quick-input/service";
@@ -16,9 +17,19 @@ const quickInputModeSchema = z.enum([
 
 const listQuickInputsSchema = z.object({
   projectId: z.string().trim().min(1).optional(),
+  scope: z.literal("global").optional(),
+  order: z.literal("manual").optional(),
+  cursor: z.string().min(1).optional(),
   q: z.string().optional(),
   kind: z.enum(["recent", "pinned", "all"]).default("all"),
   limit: z.coerce.number().int().min(1).max(100).default(50),
+}).superRefine((value, context) => {
+  if (value.scope && (value.projectId || value.kind !== "pinned" || value.order !== "manual")) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Global scope requires pinned manual order" });
+  }
+  if (!value.scope && (value.order || value.cursor)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Manual order requires global scope" });
+  }
 });
 
 const createQuickInputSchema = z
@@ -29,6 +40,8 @@ const createQuickInputSchema = z
     projectId: z.string().trim().min(1).nullable().optional(),
     terminalSessionId: z.string().trim().min(1).nullable().optional(),
     cwd: z.string().trim().min(1).nullable().optional(),
+    source: z.literal("ios_quick_reply").optional(),
+    clientImportId: z.string().uuid().optional(),
   })
   .strict();
 
@@ -36,6 +49,9 @@ const updateQuickInputSchema = z
   .object({
     title: z.string().trim().max(120).optional(),
     pinned: z.boolean().optional(),
+    data: z.string().optional(),
+    mode: quickInputModeSchema.optional(),
+    expectedUpdatedAt: z.string().datetime().optional(),
   })
   .strict();
 
@@ -81,10 +97,20 @@ export function registerTerminalQuickInputRoutes(
       return;
     }
 
-    const payload: ListTerminalQuickInputsResponse = {
-      items: await quickInputService.list(parsed.data),
-    };
-    res.json(payload);
+    try {
+      const payload: ListTerminalQuickInputsResponse = parsed.data.scope === "global"
+        ? await quickInputService.listPage(parsed.data)
+        : { items: await quickInputService.list(parsed.data) };
+      res.json(payload);
+    } catch (error) {
+      if (error instanceof TerminalQuickInputConflictError) {
+        res.status(409).json({ code: error.code, message: error.message });
+      } else if (error instanceof TerminalQuickInputValidationError) {
+        res.status(400).json({ code: "invalid_input", message: error.message });
+      } else {
+        res.status(500).json({ code: "quick_input_list_failed", message: "Failed to list quick inputs" });
+      }
+    }
   });
 
   router.post("/quick-inputs", async (req, res) => {
@@ -126,12 +152,45 @@ export function registerTerminalQuickInputRoutes(
       return;
     }
 
-    const item = await quickInputService.update(req.params.id, parsed.data);
-    if (!item) {
-      res.status(404).json({ message: "Terminal quick input not found" });
+    try {
+      const item = await quickInputService.update(req.params.id, parsed.data);
+      if (!item) {
+        res.status(404).json({ message: "Terminal quick input not found" });
+        return;
+      }
+      res.json(item);
+    } catch (error) {
+      if (error instanceof TerminalQuickInputConflictError) {
+        res.status(409).json({ code: error.code, message: error.message });
+      } else if (error instanceof TerminalQuickInputValidationError) {
+        res.status(400).json({ code: "invalid_input", message: error.message });
+      } else {
+        res.status(500).json({ code: "quick_input_update_failed", message: "Failed to update quick input" });
+      }
+    }
+  });
+
+  router.post("/quick-inputs/:id/move", async (req, res) => {
+    const parsed = z.object({
+      beforeId: z.string().uuid().nullable(),
+      expectedOrderVersion: z.string().length(64),
+    }).strict().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ code: "invalid_input", message: "Invalid quick input move request" });
       return;
     }
-    res.json(item);
+    try {
+      const orderVersion = await quickInputService.move(req.params.id, parsed.data.beforeId, parsed.data.expectedOrderVersion);
+      res.json({ orderVersion });
+    } catch (error) {
+      if (error instanceof TerminalQuickInputConflictError) {
+        res.status(409).json({ code: error.code, message: error.message });
+      } else if (error instanceof TerminalQuickInputValidationError) {
+        res.status(400).json({ code: "invalid_input", message: error.message });
+      } else {
+        res.status(500).json({ code: "quick_input_move_failed", message: "Failed to move quick input" });
+      }
+    }
   });
 
   router.delete("/quick-inputs/:id", async (req, res) => {
