@@ -258,14 +258,8 @@ async function chooseModelAndEffort(
   effort: string,
 ): Promise<void> {
   const initial = await capture(tmux, target.pane);
-  // The TraeX placeholder is rendered dim; user-entered text is not.
-  // eslint-disable-next-line no-control-regex
-  const traeIdlePlaceholder = /^(?:\x1b\[[0-9;]*m)*❯(?:\x1b\[[0-9;]*m)* \x1b\[2m[^\n]+/m;
-  const idlePrompt = target.provider === "codex"
-    ? /› Ask Codex to do anything/.test(initial.split("\n").slice(-12).join("\n"))
-    : traeIdlePlaceholder.test(await tmux.capturePaneWithAnsi(target.pane))
-      && !/Working…|esc to interrupt/.test(initial);
-  if (!idlePrompt) fail(409, "terminal_busy", "Agent 正在执行或电脑端有未提交输入");
+  // Rendered placeholders and projected Agent state do not expose the actual
+  // composer buffer. Attempt the native menu and confirm its result instead.
   const wasMax = /\(MAX\)/.test(initial);
   let submitted = false;
   try {
@@ -346,10 +340,6 @@ export async function updateTerminalAgentSettings(
     const latestThread = await readThread(target.provider, target.threadId);
     if (settingsFor(target, latestThread, models).revision !== current.revision) {
       fail(409, "settings_changed", "模型设置已变化，请刷新后重试");
-    }
-    const state = manager.getPanel(target.panelId)?.terminalState?.state;
-    if (state === "agent_running" || state === "agent_starting") {
-      fail(409, "terminal_busy", "Agent 正在执行，完成后再切换模型");
     }
     await chooseModelAndEffort(tmux, target, model, request.reasoningEffort);
     const deadline = Date.now() + 5_000;
