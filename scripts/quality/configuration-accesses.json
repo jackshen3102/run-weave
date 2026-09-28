@@ -3410,6 +3410,14 @@
   {
     "file": "frontend/src/features/analytics/clarity.ts",
     "kind": "environment",
+    "expression": "import.meta.env.VITE_RUNWEAVE_CHANNEL",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Beta build identity excludes its frontend from Clarity collection."
+  },
+  {
+    "file": "frontend/src/features/analytics/clarity.ts",
+    "kind": "environment",
     "expression": "import.meta.env.VITE_RUNWEAVE_DEV_SESSION_ID",
     "count": 1,
     "category": "runtime-context",

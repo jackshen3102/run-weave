@@ -5,14 +5,18 @@ const DEFAULT_PROJECT_ID = "yo8dc0des6";
 
 export function initializeClarity(): void {
   const projectId = (import.meta.env.VITE_CLARITY_PROJECT_ID ?? DEFAULT_PROJECT_ID).trim();
+  const isDesktop = window.electronAPI?.isElectron === true;
+  const supportedProtocol = isDesktop
+    ? window.location.protocol === "runweave:"
+    : ["http:", "https:"].includes(window.location.protocol);
   if (
     import.meta.env.VITE_CLARITY_ENABLED === "false" ||
     import.meta.env.DEV ||
+    import.meta.env.VITE_RUNWEAVE_CHANNEL === "beta" ||
     Boolean(import.meta.env.VITE_RUNWEAVE_DEV_SESSION_ID?.trim()) ||
     !projectId ||
     !/^[a-zA-Z0-9]+$/.test(projectId) ||
-    !["http:", "https:"].includes(window.location.protocol) ||
-    window.electronAPI?.isElectron === true ||
+    !supportedProtocol ||
     window.companionAPI !== undefined ||
     document.getElementById(SCRIPT_ID)
   ) {
