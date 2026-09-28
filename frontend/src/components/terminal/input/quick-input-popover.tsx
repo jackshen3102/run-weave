@@ -1,6 +1,5 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
 import type {
   TerminalQuickInputItem,
   TerminalQuickInputListKind,
@@ -23,6 +22,7 @@ import { HttpError } from "../../../services/http";
 import { useEnterScheduledTasks } from "../../../features/scheduled-tasks/navigation";
 import { RunRecord } from "../../../features/scheduled-tasks/task-detail";
 import { statusLabel } from "../../../features/scheduled-tasks/presentation";
+import { useQuickInputBackgroundRuns } from "../../../features/scheduled-tasks/use-quick-input-background-runs";
 import { useRuntimeStatus } from "../../../features/runtime-status/use-runtime-status";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -72,9 +72,14 @@ export function TerminalQuickInputPopover({
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
-  const [backgroundRun, setBackgroundRun] = useState<ScheduledRun | null>(null);
+  const { backgroundRun, setBackgroundRun, backgroundAvailable } =
+    useQuickInputBackgroundRuns(
+      apiBase,
+      token,
+      activeProject?.projectId ?? null,
+      open,
+    );
   const [showRunDetail, setShowRunDetail] = useState(false);
-  const [backgroundAvailable, setBackgroundAvailable] = useState(true);
   const pendingRunKeys = useRef(new Map<string, string>());
   const enterScheduledTasks = useEnterScheduledTasks();
   const { setPanelOpen } = useRuntimeStatus();
@@ -125,34 +130,6 @@ export function TerminalQuickInputPopover({
   useEffect(() => {
     void refresh();
   }, [activeProject?.projectId, debouncedQuery, kind, open, refresh]);
-
-  useEffect(() => {
-    const projectId = activeProject?.projectId;
-    if (!open || !projectId) return;
-    let cancelled = false;
-    void scheduledTasksApi(apiBase, token)
-      .quickInputRuns({ source: "quick-input", projectId, limit: 1 })
-      .then((page) => {
-        if (cancelled) return;
-        setBackgroundAvailable(true);
-        setBackgroundRun((current) => current?.snapshot.projectId === projectId &&
-          (!page.items[0] || current.scheduledFor >= page.items[0].scheduledFor)
-          ? current : page.items[0] ?? null);
-      })
-      .catch((caught) => {
-        if (!cancelled && caught instanceof HttpError && caught.status === 404)
-          setBackgroundAvailable(false);
-      });
-    return () => { cancelled = true; };
-  }, [apiBase, token, open, activeProject?.projectId]);
-
-  useEffect(() => {
-    if (!open || !backgroundRun || !["queued", "running", "stopping"].includes(backgroundRun.status)) return;
-    const timer = window.setInterval(() => {
-      void scheduledTasksApi(apiBase, token).run(backgroundRun.id).then(setBackgroundRun).catch(() => undefined);
-    }, 3_000);
-    return () => window.clearInterval(timer);
-  }, [apiBase, token, open, backgroundRun]);
 
   useEffect(() => {
     if (backgroundRun && !["queued", "running", "stopping"].includes(backgroundRun.status)) {
