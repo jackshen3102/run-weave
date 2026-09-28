@@ -7,6 +7,7 @@ import type {
   EfficiencyDimension,
   EfficiencyFindingStatus,
 } from "@runweave/shared/execution-efficiency";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { ConnectionSwitcher } from "../components/connection-switcher";
@@ -59,7 +60,8 @@ function ExecutionEfficiencyContent(props: Props) {
   const { workspace, go, back } = useEfficiencyNavigation();
   const projects = useTerminalProjectsQuery();
   const [selectedProject, setSelectedProject] = useState(
-    workspace.projectId ?? workspace.parentProjectId ?? "",
+    workspace.parentProjectId ??
+      resolveTerminalParentProjectId(workspace.projectId ?? ""),
   );
   const projectId = selectedProject || projects.data?.[0]?.projectId || "";
   const [dimension, setDimension] = useState<EfficiencyDimension>("duration");
