@@ -87,7 +87,7 @@ export function prepareMigration(context: EnvironmentContext, sources: Migration
             pending[profile] = [...new Set([...(pending[profile] as number[] ?? []), Number(preference.devServerPort)])];
           }
         }
-        setConfigurationValue(draft, source.domain, { defaultProfileId: parsed.defaultProfileId, businessOrigin: parsed.businessOrigin ?? null, proxyModes: parsed.proxyModes ?? {}, profilePorts: {}, worktrees, pendingPortMigration: pending });
+        setConfigurationValue(draft, source.domain, { defaultProfileId: parsed.defaultProfileId, proxyModes: parsed.proxyModes ?? {}, profilePorts: {}, worktrees, pendingPortMigration: pending });
       } else if (source.domain === "agents.team") {
         // A populated catalog cache can exist before any role settings are saved.
         if (parsed.config === null) {

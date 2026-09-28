@@ -80,7 +80,7 @@ export function TerminalBrowserProfileStatus({
     return () => window.removeEventListener("pointerdown", close);
   }, [onOpenChange, open]);
 
-  const proxyEnabled = runtime?.proxyMode !== "direct";
+  const proxyEnabled = runtime?.proxyMode === "whistle";
   const restorePreferences = useMemoizedFn(async () => {
     if (proxySwitching) return;
     setProxySwitching(true);
@@ -123,23 +123,31 @@ export function TerminalBrowserProfileStatus({
       setProxySwitching(false);
     }
   });
+  const openWhistleConsole = useMemoizedFn(async () => {
+    setProxyError(null);
+    try {
+      await window.electronAPI?.terminalBrowserOpenWhistleConsole?.(profileId);
+    } catch (error) {
+      setProxyError(error instanceof Error ? error.message : String(error));
+    }
+  });
 
   const status = resolving
     ? "starting"
     : (runtime?.whistle.status ?? "stopped");
-  const statusClass = resolutionError
+  const statusClass = resolutionError || proxyError || runtime?.applyError
     ? "bg-rose-500"
     : !proxyEnabled
       ? "bg-slate-500"
       : status === "ready"
-        ? "bg-emerald-400"
+        ? "bg-sky-400"
         : status === "failed"
           ? "bg-rose-500"
           : "bg-amber-400";
-  const routeLabel =
+  const targetLabel =
     runtime?.route.kind === "dev-server"
       ? `127.0.0.1:${runtime.route.port}`
-      : "Unassigned";
+      : "Not configured";
 
   return (
     <div ref={containerRef} className="relative">
@@ -150,8 +158,8 @@ export function TerminalBrowserProfileStatus({
         variant="ghost"
         className="h-7 gap-1 px-1.5 text-[10px]"
         aria-expanded={open}
-        aria-label={`${config.label}: ${proxyEnabled ? "proxy enabled" : "direct connection"}`}
-        title={proxyEnabled ? "Whistle proxy enabled" : "Direct connection"}
+        aria-label={`${config.label}: ${proxyEnabled ? "Whistle selected" : "direct connection"}`}
+        title={proxyEnabled ? "Whistle selected; request routing depends on its rules" : "Direct connection"}
         onClick={() => onOpenChange(!open)}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${statusClass}`} />
@@ -163,10 +171,10 @@ export function TerminalBrowserProfileStatus({
           <div className="space-y-1 text-[11px]">
             <div className="flex justify-between gap-3 text-slate-200">
               <strong>{config.label}</strong>
-              <span>{proxyEnabled ? "Proxy" : "Direct"}</span>
+              <span>{proxyEnabled ? "Whistle selected" : "Direct"}</span>
             </div>
             <div className="flex items-center justify-between gap-3 text-slate-400">
-              <span>Connection</span>
+              <span>Connection mode</span>
               <Button
                 data-testid="terminal-browser-profile-proxy-toggle"
                 type="button"
@@ -184,27 +192,34 @@ export function TerminalBrowserProfileStatus({
                 title={
                   proxyEnabled
                     ? "Switch this Profile to a direct connection"
-                    : "Enable the Whistle proxy for this Profile"
+                    : "Use Whistle for this Profile"
                 }
                 onClick={() => void toggleProxy()}
               >
                 {proxySwitching
                   ? "Switching…"
                   : proxyEnabled
-                    ? "Enabled"
+                    ? "Whistle"
                     : "Direct"}
               </Button>
             </div>
             <div className="flex justify-between text-slate-400">
-              <span>Whistle</span>
+              <span>Whistle process</span>
               <span>
                 {status} · 127.0.0.1:{runtime?.whistle.port ?? "—"}
               </span>
             </div>
             <div className="flex justify-between text-slate-400">
-              <span>Route</span>
-              <span data-testid="terminal-browser-route">{routeLabel}</span>
+              <span>Configured target</span>
+              <span data-testid="terminal-browser-route">{targetLabel}</span>
             </div>
+            <div className="flex justify-between text-slate-400">
+              <span>Business routing</span>
+              <span>{proxyEnabled ? "Not verified" : "Bypassed"}</span>
+            </div>
+            <p className="text-slate-500">{proxyEnabled
+              ? "Whistle ready only confirms the local proxy is running. Rules determine whether requests use the configured target."
+              : "Direct mode bypasses Whistle. The configured target is inactive."}</p>
             {runtime?.applyError ? (<p role="alert" className="break-words text-rose-300">已保存，应用失败：{runtime.applyError.message}</p>) : proxyError ? (
               <p className="break-words text-rose-300">{proxyError}</p>
             ) : resolutionError ? (
@@ -219,14 +234,12 @@ export function TerminalBrowserProfileStatus({
               size="sm"
               variant="ghost"
               className="h-7 w-full"
-              onClick={() => {
-                void window.electronAPI?.terminalBrowserOpenWhistleConsole?.(
-                  profileId,
-                );
-              }}
+              disabled={!runtime || resolving || proxySwitching}
+              onClick={() => void openWhistleConsole()}
             >
               Open Whistle Console
             </Button>
+            {!proxyEnabled ? <p className="text-slate-500">Opening the console does not change the connection mode.</p> : null}
           </div>
           {proxyError?.includes('PROFILE_CONFIG_CORRUPT') && <Button size="sm" disabled={proxySwitching} onClick={()=>{void restorePreferences();}}>从有效备份恢复</Button>}
           {runtime?.applyError && <Button size="sm" onClick={()=>{void window.electronAPI?.terminalBrowserSetProfileProxyMode?.(profileId,runtime.proxyMode).then(setRuntime).catch(error=>setProxyError(String(error)));}}>重试应用代理</Button>}
@@ -235,12 +248,14 @@ export function TerminalBrowserProfileStatus({
               profileId={profileId}
               projectId={projectId}
               preferences={preferences}
-              onPreferencesChange={(next) => {
+              onPreferencesChange={(next, update) => {
                 setPreferences(next);
                 setProxyError(null);
-                activateBrowser(profileId, projectId);
+                const selectedProfileId = update.scope === "worktree"
+                  ? next.worktrees[update.projectId]?.preferredProfileId ?? next.defaultProfileId
+                  : profileId;
+                activateBrowser(selectedProfileId, projectId);
               }}
-              onReactivate={() => activateBrowser(profileId, projectId)}
             />
           ) : null}
         </div>

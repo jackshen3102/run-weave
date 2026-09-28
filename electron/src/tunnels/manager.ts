@@ -33,6 +33,7 @@ export class TunnelManager {
   private appliedRevision = this.store.read().revision;
   private channelGeneration = Date.now();
   private publishedError: string | null = null;
+  private disconnectNotices = new Map<string, NodeJS.Timeout>();
   constructor() {
     for (const config of this.store.read().hosts)
       this.hosts.set(config.id, createTunnelHost(config));
@@ -86,6 +87,11 @@ export class TunnelManager {
       });
       notice.show();
     }
+  }
+  private clearDisconnectNotice(id: string) {
+    const timer = this.disconnectNotices.get(id);
+    if (timer) clearTimeout(timer);
+    this.disconnectNotices.delete(id);
   }
   start() {
     this.timer = setInterval(() => {
@@ -145,6 +151,7 @@ export class TunnelManager {
       if (!this.current(h, generation)) return;
       h.runtime.state = "ready";
       h.failures = 0;
+      this.clearDisconnectNotice(id);
       process.child.once("exit", () => {
         if (this.current(h, generation)) void this.connectionLost(h);
       });
@@ -179,7 +186,18 @@ export class TunnelManager {
       message: "SSH 连接中断，正在重连",
     };
     this.schedule(h);
-    this.notify(`${h.config.name} 连接中断`);
+    this.clearDisconnectNotice(h.config.id);
+    const timer = setTimeout(() => {
+      this.disconnectNotices.delete(h.config.id);
+      if (
+        this.online &&
+        h.desired &&
+        this.hosts.get(h.config.id) === h &&
+        h.runtime.state !== "ready"
+      )
+        this.notify(`${h.config.name} 连接中断`);
+    }, 20_000);
+    this.disconnectNotices.set(h.config.id, timer);
     this.publish();
   }
   private async stopBrowser(h: Host) {
@@ -217,6 +235,7 @@ export class TunnelManager {
   async disconnect(id: string) {
     const h = this.hosts.get(id);
     if (!h) return;
+    this.clearDisconnectNotice(id);
     h.desired = false;
     h.retryAt = 0;
     await this.stopResources(h);

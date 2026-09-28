@@ -59,6 +59,8 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
     if (value.domainVersions[domain] !== undefined && value.domainVersions[domain] !== 1) { issue(key, "CONFIG_DOMAIN_VERSION_UNSUPPORTED"); continue; }
     const field = fieldForPath(key);
     if (!field) {
+      // Accept the retired Browser value in existing YAML without exposing it as a setting.
+      if (key === "desktop.browser.businessOrigin") continue;
       if (isConfigurationObject(entry) && !Object.keys(entry).length && isConfigurationContainer(key) || Array.isArray(entry) && !entry.length && isConfigurationContainer(key, true)) continue;
       issue(key, "CONFIG_FIELD_UNKNOWN"); continue;
     }

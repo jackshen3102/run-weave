@@ -35,7 +35,6 @@ import {
 import { terminalBrowserRuntime } from "../runtime.js";
 import {
   configureTerminalBrowserProfileProxy,
-  reloadTerminalBrowserBusinessOrigin,
   reloadTerminalBrowserProfileAfterProxyChange,
 } from "../security/network.js";
 import { setWhistleReservedValue } from "../whistle/client.js";
@@ -259,12 +258,6 @@ export async function resolveTerminalBrowserProfile(
       await configureTerminalBrowserProfileProxy(profileId, "direct");
     }
     record.route = requestedRoute;
-    if (routeChanges) {
-      reloadTerminalBrowserBusinessOrigin(
-        profileId,
-        preferences.businessOrigin,
-      );
-    }
     record.applyError = null;
     notifyRuntimeChanged(profileId);
     const automationToken =
@@ -399,7 +392,6 @@ export async function updateProfilePreferencesAndApply(
     }
     record.applyError = null;
     notifyRuntimeChanged(profileId);
-    reloadTerminalBrowserBusinessOrigin(profileId, preferences.businessOrigin);
     return preferences;
   });
   record.mutationQueue = mutation.catch((error) => {

@@ -192,25 +192,3 @@ export async function reloadTerminalBrowserProfileAfterProxyChange(
     }
   }
 }
-
-export function reloadTerminalBrowserBusinessOrigin(
-  profileId: TerminalBrowserProfileId,
-  businessOrigin: string | null,
-): void {
-  if (!businessOrigin) {
-    return;
-  }
-  for (const entry of terminalBrowserRuntime.entries.values()) {
-    if (entry.profileId !== profileId || entry.view.webContents.isDestroyed()) {
-      continue;
-    }
-    try {
-      const url = entry.view.webContents.getURL() || entry.lastKnownUrl;
-      if (new URL(url).origin === businessOrigin) {
-        entry.view.webContents.reloadIgnoringCache();
-      }
-    } catch {
-      continue;
-    }
-  }
-}
