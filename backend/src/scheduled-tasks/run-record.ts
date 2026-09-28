@@ -24,6 +24,7 @@ export function createScheduledRunRecord(
       ...(task.effort ? { effort: task.effort } : {}),
       schedule: task.schedule,
       misfirePolicy: task.misfirePolicy,
+      ...(task.origin ? { origin: task.origin } : {}),
     },
     trigger,
     scheduledFor,

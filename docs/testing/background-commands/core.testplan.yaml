@@ -1,0 +1,121 @@
+version: 1
+name: 快捷指令一键后台运行验收（收敛版）
+description: >
+  验收合同。复用现有 ScheduledTaskService、队列、存储、输出、恢复和推送，验证快捷入口与项目归属。
+  自更新、独立 worker、维护租约和跨重启继续执行不在范围内。每例独立 fixture；格式通过不代表行为通过。
+cases:
+  - id: BGC-001
+    name: 一次点击进入现有后台队列
+    required: true
+    description: 点击一次创建真实 ScheduledRun，原终端不接收指令，内部任务不会暴露为可配置日程。
+    preconditions:
+      - 已完成计划 A 的生产接入，按 toolkit:runweave-dev-session 启动隔离源码实例，配置有效 Codex 和后台默认值。
+      - 本例拥有可安全执行技能的临时项目及获准测试远端、已保存技能指令和带草稿的空闲终端。
+    steps:
+      - 使用 toolkit:playwright-cli 点击后台运行；确认没有配置表单或新终端，原草稿保持，原终端没有收到输入。
+      - 核对 ScheduledRun 的同一 runId 从 queued 到 running 再到终态，实际 cwd 和持久输出正确，使用现有队列。
+      - 核对关联内部任务 disabled 且 nextRunAt 为空、来源为 quick-input；定时任务列表不出现可编辑日程，公开启用接口不能将它变成定时任务。
+  - id: BGC-002
+    name: 父项目模板执行在实际 worktree
+    required: true
+    description: 模板共享作用域不改变执行目录，失效或变化的目录不能回退。
+    preconditions:
+      - 本例隔离父项目有两个登记的 worktree 和一条共享快捷指令，能核对 provider 的真实 cwd。
+    steps:
+      - 使用 toolkit:playwright-cli 分别从两个 worktree 启动；核对 run 的 projectId、cwd 和名称快照分别对应点击位置。
+      - 在本例另一条排队运行开始前移除或改动其目录映射；确认执行被拒绝，没有在父目录或新目录产生副作用。
+  - id: BGC-003
+    name: 重试和重复点击不重复执行
+    required: true
+    description: 内部任务创建、入队和幂等在同一事务完成，同一模板/context 活跃时只查看原运行。
+    preconditions:
+      - 本例独立 provider 集成 fixture 记录执行次数，HTTP 边界可丢弃一次成功响应；无用户数据。
+    steps:
+      - 同键并发提交，丢弃首个成功响应后重试；确认返回同一 runId，内部任务与运行各一条，provider 只执行一次。
+      - 更新模板使用时间后重试原请求，仍返回原 run；同键异请求返回 409，不能覆盖快照。
+      - 活跃期间用新键点击同一模板/context，确认返回原活跃 ID 且不再执行；结束后明确新点击才生成下一次 run。
+  - id: BGC-004
+    name: 后台默认值和命令资格明确
+    required: true
+    description: 一次配置后直接运行，不静默改变模型或权限，不开放桌面自更新。
+    preconditions:
+      - 本例独立 Backend 可控制模型目录、技能安装和 provider 能力，能够读取实际启动参数。
+    steps:
+      - 缺少后台模型时确认显示一次性设置入口；保存有效默认值后通过 toolkit:playwright-cli 再点击，确认不弹配置表单。
+      - 核对 provider 参数来自后台默认值且冻结到 run；前台模型变化不影响本次执行。
+      - 对不可用模型、未安装技能、交互 slash 输入及 update-runweave-desktop 后台请求确认具体拒绝且未 spawn；不升权或静默替换模型。
+  - id: BGC-005
+    name: 查看过程和结果复用持久运行
+    required: true
+    description: 关闭弹出层后任务继续，重新打开可读同一运行的进度和最终结果。
+    preconditions:
+      - 本例有独立真实运行，持续输出可辨认编号并最终生成结构化结果；Backend 持续运行。
+    steps:
+      - 使用 toolkit:playwright-cli 打开查看运行，记录 runId 和游标；关闭弹出层再重新打开，确认同一 run 的输出继续前进且无重复拼接。
+      - 等待结束，确认摘要/原因按有效 outcome 展示并可查完整输出；删除模板后通过原 taskId/runId 仍可读历史。
+  - id: BGC-006
+    name: 恢复使用原 thread 且不产生第二个 owner
+    required: true
+    description: 后台未释放时不可接管，完成后复用既有终端恢复合同。
+    preconditions:
+      - 本例隔离项目使用真实 provider，已启用 tmux，能够核对 thread、cwd 和配置快照。
+    steps:
+      - 活跃时调用原 open-terminal 接口，确认 thread_busy 且无新终端。
+      - 结束后并发打开两次，确认仅一个绑定；ready 后使用 toolkit:playwright-cli 核对原 thread、cwd、模型和权限，追问保留原上下文。
+  - id: BGC-007
+    name: 通知首先识别原项目和 worktree
+    required: true
+    description: 成功、失败和受阻文案来自业务结果与运行快照，切换项目不会改变通知归属。
+    preconditions:
+      - 本例隔离任务通知链路可记录 payload，独立项目覆盖同名 wt-1、无 worktree 和长名称。
+    steps:
+      - 分别生成 succeeded、failed、blocked 结果，部分运行中改名并切换当前项目；确认标题使用启动时项目/worktree，正文写任务名和结果原因。
+      - 核对同名 wt-1 带各自父项目名、无 worktree 不添加虚假名称、长名称保留辨识部分且满足 payload 限制。
+      - 核对缺失结构化结果不能产生成功文案，主动取消不能产生成功通知。
+  - id: BGC-008
+    name: macOS 通知打开对应记录
+    required: true
+    description: Desktop 在后台时通知可见，浮层关闭不影响通知，点击仍定位原运行。
+    preconditions:
+      - 计划 B 的桌面通知已接通；本例隔离 Desktop 允许系统通知，已有独立真实运行。
+      - 已加载 computer-use 技能操作系统通知，renderer 使用 toolkit:playwright-cli。
+    steps:
+      - 关闭快捷浮层并把 Desktop 放到后台；结束运行，使用 Computer Use 核对真实通知的项目/worktree。
+      - 点击通知，确认窗口唤起并打开正确 taskId/runId 的结果；刷新不重复提醒，不自动创建终端。
+  - id: BGC-009
+    name: iPhone 通知直达既有运行详情
+    required: true
+    description: 真机收到推送并打开原 ScheduledRunView，网关 accepted 不能替代实际到达证据。
+    preconditions:
+      - 计划 B 的网关 target 与原生消费者已接通；本例获准测试 iPhone 已安装目标版本并确认有效任务提醒订阅。
+      - 本例 Backend、独立运行和认证可用，使用 toolkit:agent-device 操作原生 UI。
+    steps:
+      - App 放到后台后结束本例运行，核对真机通知项目/worktree；保留实际到达证据。
+      - 点击通知，确认选择正确 host 对应连接、读取原 run 并进入已有详情，可以查看过程；没有重新执行命令。
+  - id: BGC-010
+    name: 多连接的响应和通知不串项目
+    required: true
+    description: 查询和通知以 Backend scope/runId 定位，不按当前项目名称猜目标。
+    preconditions:
+      - 本例两个隔离 Backend 各有同名项目和不同运行，renderer 保存两条有效连接；允许控制响应延迟。
+    steps:
+      - 使用 toolkit:playwright-cli 在 A 查询后切到 B，再放行 A 的响应；确认 B 不显示 A 数据且不被旧响应导航。
+      - 打开 A 的通知目标，确认进入 A 的原 run；host 未绑定或离线时显示具体原因，不进入 B 的同名项目。
+  - id: BGC-011
+    name: 新接入不绕过 Backend 鉴权
+    required: true
+    description: 启动和跨项目读取都受现有认证及模板作用域校验，通知 ID 不提供访问权限。
+    preconditions:
+      - 本例隔离 Backend 有两个不同父项目、独立快捷指令和 run，并提供有效/无效认证客户端。
+    steps:
+      - 无凭据调用新启动/运行列表及原详情/输出接口，确认 401 或 403，无状态变化。
+      - 有效客户端用 A 的项目模板请求 B 的 context，确认拒绝且没有执行；仅携带通知 runId 仍不能绕过鉴权。
+  - id: BGC-012
+    name: 快捷运行保持原定时任务队列语义
+    required: true
+    description: 新接入复用原单并发队列，普通任务与内部任务互不改写，不需要新 worker 或新队列。
+    preconditions:
+      - 本例隔离数据库有独立普通定时任务和快捷来源任务，使用可控制结束时间的 provider 集成 fixture。
+    steps:
+      - 两类任务交错入队，核对仍由原 claimNextRun 按既有规则执行，活跃 provider 不超过一个。
+      - 确认暂停或启用普通定时任务不会启用快捷来源内部任务，后者只由明确点击入队，既有调度仍能继续执行。

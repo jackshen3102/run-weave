@@ -1,4 +1,5 @@
 import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, TerminalQuickInputItem, TerminalQuickInputListKind, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
+import type { ScheduledRun, StartQuickInputRunRequest } from "@runweave/shared/scheduled-tasks";
 import { requestJson, requestVoid } from "../http";
 
 export async function listTerminalQuickInputs(
@@ -105,6 +106,28 @@ export async function markTerminalQuickInputUsed(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function startTerminalQuickInputRun(
+  apiBase: string,
+  token: string,
+  id: string,
+  payload: StartQuickInputRunRequest,
+  idempotencyKey: string,
+): Promise<ScheduledRun> {
+  return requestJson<ScheduledRun>(
+    apiBase,
+    `/api/terminal/quick-inputs/${encodeURIComponent(id)}/run`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(payload),
     },
   );
 }

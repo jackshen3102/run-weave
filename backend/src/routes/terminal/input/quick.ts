@@ -1,5 +1,7 @@
 import type { Router } from "express";
 import { z } from "zod";
+import type { ScheduledTaskService } from "../../../scheduled-tasks/service";
+import { ScheduledTaskError } from "../../../scheduled-tasks/errors";
 import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
 import {
   TerminalQuickInputValidationError,
@@ -40,7 +42,35 @@ const updateQuickInputSchema = z
 export function registerTerminalQuickInputRoutes(
   router: Router,
   quickInputService: TerminalQuickInputService,
+  scheduledTaskService?: ScheduledTaskService,
 ): void {
+  if (scheduledTaskService) router.post("/quick-inputs/:id/run", async (req, res) => {
+    try {
+      const id = z.string().uuid().parse(req.params.id);
+      const body = z.object({
+        projectId: z.string().trim().min(1),
+        expectedInputUpdatedAt: z.string().datetime(),
+      }).strict().parse(req.body);
+      const key = req.headers["idempotency-key"];
+      if (typeof key !== "string" || !key.trim() || key.length > 200)
+        throw new ScheduledTaskError("invalid_input", 400, "Idempotency-Key header is required");
+      res.status(202).json(await scheduledTaskService.startQuickInput(
+        id,
+        body.projectId,
+        body.expectedInputUpdatedAt,
+        key.trim(),
+        quickInputService,
+      ));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ code: "invalid_input", message: "Invalid quick input run request" });
+      } else if (error instanceof ScheduledTaskError) {
+        res.status(error.statusCode).json({ code: error.code, message: error.message, details: error.details });
+      } else {
+        res.status(500).json({ code: "quick_input_run_failed", message: "Quick input run failed" });
+      }
+    }
+  });
   router.get("/quick-inputs", async (req, res) => {
     const parsed = listQuickInputsSchema.safeParse(req.query);
     if (!parsed.success) {

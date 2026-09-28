@@ -8,6 +8,7 @@ import type {
   ScheduledTaskCapabilities,
   ScheduledTaskFilter,
   ScheduledTaskPage,
+  QuickInputRunFilter,
   SchedulePreviewResponse,
   TaskSchedule,
   UpdateScheduledTaskRequest,
@@ -83,6 +84,13 @@ export function scheduledTasksApi(apiBase: string, token: string) {
       ),
     run: (runId: string, signal?: AbortSignal) =>
       request<ScheduledRun>(`/runs/${id(runId)}`, { signal }),
+    quickInputRuns: (filter: QuickInputRunFilter, signal?: AbortSignal) => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(filter)) {
+        if (value !== undefined) params.set(key, String(value));
+      }
+      return request<ScheduledTaskPage<ScheduledRun>>(`/runs?${params}`, { signal });
+    },
     output: (runId: string, cursor?: string, signal?: AbortSignal) =>
       request<ScheduledRunOutput>(
         `/runs/${id(runId)}/output${cursor ? `?cursor=${id(cursor)}` : ""}`,

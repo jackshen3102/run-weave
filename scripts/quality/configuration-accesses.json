@@ -9070,5 +9070,69 @@
     "count": 1,
     "category": "external-protocol",
     "reason": "读取 Pi 自有 Agent 目录以发现原生会话记录，遵循外部工具的目录合同，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "scripts/background-command-worker/job-store.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFile(file)",
+    "count": 3,
+    "category": "runtime-state",
+    "reason": "读取独立更新 job 的私有记录，不作为 settings.yaml 配置来源。"
+  },
+  {
+    "file": "scripts/background-command-worker/job-store.mjs",
+    "kind": "file-io",
+    "expression": "handle.writeFile(`${JSON.stringify({ ...event, runId, ownerNonce })}\\n`)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "追加独立更新 job 的有序事件，不作为 settings.yaml 配置来源。"
+  },
+  {
+    "file": "scripts/background-command-worker/job-store.mjs",
+    "kind": "file-io",
+    "expression": "handle.writeFile(`${JSON.stringify(value)}\\n`)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "写入独立更新 job 的私有状态，不作为 settings.yaml 配置来源。"
+  },
+  {
+    "file": "frontend/src/components/terminal/input/quick-input-popover.tsx",
+    "kind": "device-or-env-loader",
+    "expression": "sessionStorage.getItem(storageKey)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取当前页面快捷指令提交幂等键，属于临时请求状态，不作为实例配置来源。"
+  },
+  {
+    "file": "frontend/src/components/terminal/input/quick-input-popover.tsx",
+    "kind": "device-or-env-loader",
+    "expression": "sessionStorage.removeItem(storageKey)",
+    "count": 3,
+    "category": "runtime-state",
+    "reason": "已确认提交结果后清理当前页面幂等键，不作为实例配置来源。"
+  },
+  {
+    "file": "frontend/src/components/terminal/input/quick-input-popover.tsx",
+    "kind": "device-or-env-loader",
+    "expression": "sessionStorage.setItem(storageKey, key)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "保存当前页面快捷指令提交幂等键用于未知响应重试，不作为实例配置来源。"
+  },
+  {
+    "file": "frontend/src/features/scheduled-tasks/use-quick-input-notifications.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.getItem(storageKey)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取桌面通知去重游标和已提示 ID，不作为实例配置来源。"
+  },
+  {
+    "file": "frontend/src/features/scheduled-tasks/use-quick-input-notifications.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.setItem(storageKey, JSON.stringify(saved))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "持久化桌面通知去重游标和已提示 ID，不作为实例配置来源。"
   }
 ]

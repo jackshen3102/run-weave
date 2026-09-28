@@ -22,7 +22,7 @@ import { RunProgress } from "./run-progress";
 import { useOpenRun } from "./open-run";
 import { RunSummary } from "./run-summary";
 
-function RunRecord({
+export function RunRecord({
   run,
   highlighted,
 }: {
@@ -67,8 +67,9 @@ function RunRecord({
           </span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          {run.trigger === "manual" ? "手动运行" : "定时触发"} · 配置版本{" "}
-          {run.taskRevision}
+          {run.snapshot.origin?.kind === "quick-input"
+            ? `${run.snapshot.origin.projectName}${run.snapshot.origin.worktreeName ? ` / ${run.snapshot.origin.worktreeName}` : ""} · 后台运行`
+            : `${run.trigger === "manual" ? "手动运行" : "定时触发"} · 配置版本 ${run.taskRevision}`}
         </p>
       </button>
       {run.trigger === "scheduled" ? (
@@ -184,10 +185,10 @@ function RunRecord({
             {run.snapshot.name} · {run.snapshot.provider} ·{" "}
             {run.snapshot.projectId}
           </p>
-          <p className="mt-1">{scheduleLabel(run.snapshot.schedule)}</p>
-          <p className="mt-1">
-            {misfirePolicyLabel(run.snapshot.misfirePolicy)}
-          </p>
+          {run.snapshot.origin?.kind === "quick-input" ? null : (
+            <><p className="mt-1">{scheduleLabel(run.snapshot.schedule)}</p>
+            <p className="mt-1">{misfirePolicyLabel(run.snapshot.misfirePolicy)}</p></>
+          )}
           <p className="mt-1">
             模型：{run.snapshot.model || "默认"} · 推理：
             {run.snapshot.effort || "默认"}
@@ -242,7 +243,8 @@ export function TaskDetail({
             <h2 className="min-w-0 break-words text-xl font-semibold">
               {task.data.name}
             </h2>
-            <TaskActions task={task.data} onEdit={onEdit} readOnly={readOnly} />
+            {task.data.origin?.kind === "quick-input" ? null :
+              <TaskActions task={task.data} onEdit={onEdit} readOnly={readOnly} />}
           </div>
           {task.data.deletedAt ? (
             <p className="mt-3 text-sm text-muted-foreground">
@@ -252,16 +254,17 @@ export function TaskDetail({
           <p className="mt-3 break-words text-sm text-muted-foreground">
             {task.data.projectId} · {task.data.provider}
           </p>
-          <p className="mt-2 text-sm">{scheduleLabel(task.data.schedule)}</p>
+          {task.data.origin?.kind === "quick-input" ? null :
+            <p className="mt-2 text-sm">{scheduleLabel(task.data.schedule)}</p>}
           <p className="mt-2 text-sm text-muted-foreground">
             执行权限：
             {executionPolicyLabel(task.data.executionPolicy)}
           </p>
-          <p className="mt-2 text-sm text-muted-foreground">
+          {task.data.origin?.kind === "quick-input" ? null : <p className="mt-2 text-sm text-muted-foreground">
             {task.data.enabled
               ? `下次运行：${displayTime(task.data.nextRunAt, task.data.schedule.timezone)}`
               : "已暂停后续安排"}
-          </p>
+          </p>}
           <details className="mt-4 text-sm">
             <summary className="cursor-pointer">任务提示词</summary>
             <p className="mt-2 whitespace-pre-wrap break-words">

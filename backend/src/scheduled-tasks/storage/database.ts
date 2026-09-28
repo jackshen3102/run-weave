@@ -7,6 +7,7 @@ import type {
   ScheduledTerminalBinding,
 } from "@runweave/shared/scheduled-tasks";
 import { logger } from "../../logging/index";
+import { createScheduledRunRecord } from "../run-record";
 import {
   InvalidScheduledRecord,
   parseTask,
@@ -15,6 +16,7 @@ import {
 } from "./validation";
 import { migrateScheduledTasks } from "./migrations";
 import { appendScheduledOutput, readScheduledOutput } from "./output";
+import { listQuickInputRuns } from "./quick-input-runs";
 import type { ScheduledOutputChunk } from "./worker-protocol";
 
 const UNFINISHED = ["queued", "running", "stopping", "waiting"] as const;
@@ -193,6 +195,76 @@ export class ScheduledTaskDatabase {
     })();
   }
 
+  findQuickInputRun(
+    quickInputId: string,
+    projectId: string,
+    idempotencyKey: string,
+    requestHash: string,
+  ): ScheduledRun | null {
+    const existing = this.readIdempotency(
+      `quick-input-run:${quickInputId}:${projectId}`,
+      idempotencyKey,
+    );
+    if (!existing) return null;
+    if (existing.requestHash !== requestHash)
+      throw new Error("idempotency_conflict");
+    return this.requireRun(existing.resourceId);
+  }
+
+  createQuickInputRun(
+    candidate: ScheduledTask,
+    parentProjectId: string,
+    cwd: string,
+    idempotencyKey: string,
+    requestHash: string,
+  ): ScheduledRun {
+    return this.database.transaction(() => {
+      const quickInputId = candidate.origin?.quickInputId;
+      if (!quickInputId || candidate.origin?.kind !== "quick-input")
+        throw new Error("invalid_quick_input_task");
+      const prior = this.findQuickInputRun(
+        quickInputId,
+        candidate.projectId,
+        idempotencyKey,
+        requestHash,
+      );
+      if (prior) return prior;
+      const row = this.database
+        .prepare(
+          `SELECT * FROM scheduled_tasks WHERE project_id = ? AND deleted_at IS NULL
+           AND json_valid(payload_json)
+           AND json_extract(payload_json, '$.origin.kind') = 'quick-input'
+           AND json_extract(payload_json, '$.origin.quickInputId') = ? LIMIT 1`,
+        )
+        .get(candidate.projectId, quickInputId) as StoredRow | undefined;
+      const previous = row ? parseTask(row) : null;
+      if (previous) {
+        const busy = this.findUnfinished(previous.id);
+        if (busy) throw new Error(`run_busy:${busy.id}`);
+      }
+      const task: ScheduledTask = previous
+        ? {
+            ...candidate,
+            id: previous.id,
+            revision: previous.revision + 1,
+            createdAt: previous.createdAt,
+          }
+        : candidate;
+      if (previous) this.updateTaskRow(task, parentProjectId);
+      else this.insertTask(task, parentProjectId);
+      const run = createScheduledRunRecord(task, "manual", task.updatedAt, cwd);
+      this.insertRun(run, `manual:${run.id}`);
+      this.insertIdempotency(
+        `quick-input-run:${quickInputId}:${task.projectId}`,
+        idempotencyKey,
+        requestHash,
+        run.id,
+        task.updatedAt,
+      );
+      return run;
+    })();
+  }
+
   getRun(runId: string): ScheduledRun | null {
     const row = this.database
       .prepare("SELECT * FROM scheduled_runs WHERE id = ?")
@@ -208,6 +280,11 @@ export class ScheduledTaskDatabase {
         )
         .all(taskId) as Array<StoredRow>
     ).map((row) => parseRun(row));
+  }
+
+  listQuickInputRuns(projectId?: string, finishedSince?: string): ScheduledRun[] {
+    return listQuickInputRuns(this.database, projectId, finishedSince,
+      (row) => this.readBackground(row, parseRun));
   }
 
   listRecentlyFinishedRuns(since: string): ScheduledRun[] {

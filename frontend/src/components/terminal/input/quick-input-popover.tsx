@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
 import type {
   TerminalQuickInputItem,
   TerminalQuickInputListKind,
@@ -12,10 +13,17 @@ import {
   createTerminalQuickInput,
   deleteTerminalQuickInput,
   listTerminalQuickInputs,
+  startTerminalQuickInputRun,
   markTerminalQuickInputUsed,
   sendTerminalInput,
   updateTerminalQuickInput,
 } from "../../../services/terminal/index";
+import { scheduledTasksApi } from "../../../services/scheduled-tasks";
+import { HttpError } from "../../../services/http";
+import { useEnterScheduledTasks } from "../../../features/scheduled-tasks/navigation";
+import { RunRecord } from "../../../features/scheduled-tasks/task-detail";
+import { statusLabel } from "../../../features/scheduled-tasks/presentation";
+import { useRuntimeStatus } from "../../../features/runtime-status/use-runtime-status";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
@@ -64,6 +72,13 @@ export function TerminalQuickInputPopover({
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
+  const [backgroundRun, setBackgroundRun] = useState<ScheduledRun | null>(null);
+  const [showRunDetail, setShowRunDetail] = useState(false);
+  const [backgroundAvailable, setBackgroundAvailable] = useState(true);
+  const pendingRunKeys = useRef(new Map<string, string>());
+  const enterScheduledTasks = useEnterScheduledTasks();
+  const { setPanelOpen } = useRuntimeStatus();
+  const [needsBackgroundConfig, setNeedsBackgroundConfig] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualTitle, setManualTitle] = useState("");
   const [manualData, setManualData] = useState("");
@@ -110,6 +125,40 @@ export function TerminalQuickInputPopover({
   useEffect(() => {
     void refresh();
   }, [activeProject?.projectId, debouncedQuery, kind, open, refresh]);
+
+  useEffect(() => {
+    const projectId = activeProject?.projectId;
+    if (!open || !projectId) return;
+    let cancelled = false;
+    void scheduledTasksApi(apiBase, token)
+      .quickInputRuns({ source: "quick-input", projectId, limit: 1 })
+      .then((page) => {
+        if (cancelled) return;
+        setBackgroundAvailable(true);
+        setBackgroundRun((current) => current?.snapshot.projectId === projectId &&
+          (!page.items[0] || current.scheduledFor >= page.items[0].scheduledFor)
+          ? current : page.items[0] ?? null);
+      })
+      .catch((caught) => {
+        if (!cancelled && caught instanceof HttpError && caught.status === 404)
+          setBackgroundAvailable(false);
+      });
+    return () => { cancelled = true; };
+  }, [apiBase, token, open, activeProject?.projectId]);
+
+  useEffect(() => {
+    if (!open || !backgroundRun || !["queued", "running", "stopping"].includes(backgroundRun.status)) return;
+    const timer = window.setInterval(() => {
+      void scheduledTasksApi(apiBase, token).run(backgroundRun.id).then(setBackgroundRun).catch(() => undefined);
+    }, 3_000);
+    return () => window.clearInterval(timer);
+  }, [apiBase, token, open, backgroundRun]);
+
+  useEffect(() => {
+    if (backgroundRun && !["queued", "running", "stopping"].includes(backgroundRun.status)) {
+      setFeedback((current) => current?.includes("查看运行") ? null : current);
+    }
+  }, [backgroundRun]);
 
   const handleSend = useMemoizedFn(
     async (item: TerminalQuickInputItem): Promise<void> => {
@@ -204,6 +253,61 @@ export function TerminalQuickInputPopover({
         await refresh();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught));
+      } finally {
+        setBusyItemId(null);
+      }
+    },
+  );
+
+  const handleBackgroundRun = useMemoizedFn(
+    async (item: TerminalQuickInputItem): Promise<void> => {
+      const projectId = activeProject?.projectId;
+      if (!projectId || busyItemId) return;
+      const scope = `${apiBase}:${projectId}:${item.id}:${item.updatedAt}`;
+      const storageKey = `runweave:quick-input-run:${scope}`;
+      let savedKey: string | null = null;
+      try { savedKey = sessionStorage.getItem(storageKey); } catch { /* unavailable */ }
+      const key = pendingRunKeys.current.get(scope) ?? savedKey ?? crypto.randomUUID();
+      pendingRunKeys.current.set(scope, key);
+      try { sessionStorage.setItem(storageKey, key); } catch { /* unavailable */ }
+      setBusyItemId(item.id);
+      setFeedback("提交中");
+      setError(null);
+      setNeedsBackgroundConfig(false);
+      try {
+        const run = await startTerminalQuickInputRun(
+          apiBase, token, item.id,
+          { projectId, expectedInputUpdatedAt: item.updatedAt }, key,
+        );
+        pendingRunKeys.current.delete(scope);
+        try { sessionStorage.removeItem(storageKey); } catch { /* unavailable */ }
+        setBackgroundRun(run);
+        setShowRunDetail(false);
+        setFeedback("排队中 · 查看运行");
+      } catch (caught) {
+        const runId = caught instanceof HttpError && caught.code === "run_busy"
+          && typeof (caught.details as { runId?: unknown } | undefined)?.runId === "string"
+          ? (caught.details as { runId: string }).runId : null;
+        if (runId) {
+          try {
+            const run = await scheduledTasksApi(apiBase, token).run(runId);
+            pendingRunKeys.current.delete(scope);
+            try { sessionStorage.removeItem(storageKey); } catch { /* unavailable */ }
+            setBackgroundRun(run);
+            setShowRunDetail(false);
+            setFeedback("运行中 · 查看运行");
+          } catch (readError) {
+            setError(readError instanceof Error ? readError.message : String(readError));
+          }
+        } else {
+          setNeedsBackgroundConfig(caught instanceof HttpError && caught.code === "config_required");
+          if (caught instanceof HttpError && caught.status < 500) {
+            pendingRunKeys.current.delete(scope);
+            try { sessionStorage.removeItem(storageKey); } catch { /* unavailable */ }
+          }
+          setFeedback(caught instanceof HttpError && caught.status < 500 ? null : "正在确认");
+          setError(caught instanceof Error ? caught.message : String(caught));
+        }
       } finally {
         setBusyItemId(null);
       }
@@ -329,6 +433,34 @@ export function TerminalQuickInputPopover({
               {error}
             </p>
           ) : null}
+          {needsBackgroundConfig ? (
+            <button type="button" className="text-xs text-sky-300 underline" onClick={() => {
+              setOpen(false); setPanelOpen(true);
+            }}>设置后台模型</button>
+          ) : null}
+
+          {backgroundRun ? (
+            <button
+              type="button"
+              className="rounded-md border border-sky-900/70 bg-sky-950/40 px-2 py-1.5 text-left text-xs text-sky-200"
+              onClick={() => {
+                setShowRunDetail((value) => !value);
+              }}
+            >
+              {backgroundRun.snapshot.origin?.projectName ?? backgroundRun.snapshot.name}
+              {backgroundRun.snapshot.origin?.worktreeName ? ` / ${backgroundRun.snapshot.origin.worktreeName}` : ""}
+              {` · ${backgroundRun.outcome === "blocked" ? "执行受阻" : statusLabel[backgroundRun.status]} · 查看运行`}
+            </button>
+          ) : null}
+          {showRunDetail && backgroundRun ? (
+            <div className="max-h-[400px] space-y-2 overflow-y-auto">
+              <RunRecord key={backgroundRun.id} run={backgroundRun} highlighted={false} />
+              <button type="button" className="text-xs text-sky-300 underline"
+                onClick={() => enterScheduledTasks(`/scheduled-tasks/${encodeURIComponent(backgroundRun.taskId)}?run=${encodeURIComponent(backgroundRun.id)}`)}>
+                打开完整记录
+              </button>
+            </div>
+          ) : null}
 
           <div className="max-h-[360px] overflow-auto pr-1">
             {loading ? (
@@ -352,6 +484,10 @@ export function TerminalQuickInputPopover({
                     onCopy={handleCopy}
                     onTogglePinned={handleTogglePinned}
                     onDelete={handleDelete}
+                    onBackgroundRun={handleBackgroundRun}
+                    canBackgroundRun={backgroundAvailable && Boolean(activeProject) && !disabled &&
+                      ["line", "prompt_paste"].includes(item.mode) &&
+                      /^\$toolkit:github-pr(?=\s|$)/u.test(item.data.trimStart())}
                   />
                 ))}
               </div>

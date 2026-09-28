@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="834" height="568" viewBox="0 0 834 568" role="img" aria-labelledby="title desc">
+<title id="title">快捷指令 · 一键后台运行</title>
+<desc id="desc">在 Runweave 现有快捷指令卡片空余的按钮位增加后台运行操作。</desc>
+<style>text{font-family:ui-sans-serif,system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}</style>
+<rect x="0" y="0" width="834" height="568" rx="0" fill="#020617"/>
+<rect x="1" y="14" width="831" height="550" rx="17" fill="#020617" stroke="#243348" stroke-width="2"/>
+<text x="18" y="67" fill="#f1f5f9" font-size="27" font-weight="650" >快捷指令</text>
+<rect x="11" y="97" width="802" height="75" rx="17" fill="#020617" stroke="#64b8ca" stroke-width="4"/>
+<rect x="18" y="104" width="788" height="60" rx="11" fill="#0f172a" stroke="#2a3a4e" stroke-width="1"/>
+<g transform="translate(36 121) scale(1.125)" fill="none" stroke="#64748b" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16.2 16.2 5.2 5.2"/></g>
+<text x="76" y="145" fill="#64748b" font-size="27" font-weight="400" >搜索最近输入或模板</text>
+<rect x="18" y="192" width="788" height="67" rx="11" fill="#0f172a" stroke="#263449" stroke-width="2"/>
+<rect x="23" y="198" width="260" height="55" rx="7" fill="#334155"/>
+<text x="129" y="235" fill="#f1f5f9" font-size="25" font-weight="650" >固定</text>
+<text x="388" y="235" fill="#94a3b8" font-size="24" font-weight="500" >最近</text>
+<text x="646" y="235" fill="#94a3b8" font-size="24" font-weight="500" >全部</text>
+<rect x="18" y="284" width="780" height="149" rx="11" fill="#0c1527" stroke="#27364a" stroke-width="2"/>
+<text x="36" y="327" fill="#f1f5f9" font-size="25" font-weight="650" >创建 github pr</text>
+<rect x="213" y="302" width="61" height="36" rx="7" fill="#020617" stroke="#34465f" stroke-width="2"/>
+<text x="226" y="328" fill="#94a3b8" font-size="21" font-weight="500" >line</text>
+<text x="36" y="369" fill="#94a3b8" font-size="22" font-weight="500" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">$toolkit:github-pr main 本地所有代码</text>
+<text x="36" y="408" fill="#64748b" font-size="18" font-weight="500" >browser-viewer / wt-1 · 14d ago</text>
+
+<g transform="translate(631 308) scale(1.2916666666666667)" fill="none" stroke="#94a3b8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20M9 4h7l-1 5 3 3v2H9M6 14h6v7"/></g>
+<g transform="translate(688 308) scale(1.2916666666666667)" fill="none" stroke="#94a3b8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4v10a4 4 0 0 1-4 4H5m5-5-5 5 5 5"/></g>
+<g transform="translate(744 308) scale(1.2916666666666667)" fill="none" stroke="#94a3b8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="15" height="18" rx="2"/><rect x="9" y="2" width="7" height="4" rx="1"/></g>
+<g transform="translate(631 367) scale(1.2916666666666667)" fill="none" stroke="#94a3b8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="m21 3-8 18-3-8-8-3 19-7ZM10 13l11-10"/></g>
+<g transform="translate(688 367) scale(1.2916666666666667)" fill="none" stroke="#94a3b8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16m-12 0V4h8v2M6 6l1 15h10l1-15M10 10v7m4-7v7"/></g>
+<rect x="740" y="363" width="43" height="42" rx="8" fill="#103542" stroke="#367d8e" stroke-width="1.5"/><g transform="translate(744 367) scale(1.2916666666666667)" fill="none" stroke="#64b8ca" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4V8Z"/></g>
+<rect x="653" y="421" width="140" height="36" rx="7" fill="#334155" stroke="#42536a" stroke-width="1"/>
+<text x="671" y="446" fill="#f1f5f9" font-size="18" font-weight="550" >后台运行</text>
+<a href="running.svg">
+<rect x="738" y="361" width="50" height="50" rx="0" fill="transparent"/>
+</a>
+<path d="M18 458H806" stroke="#27364a" stroke-width="2"/>
+<g transform="translate(35 497) scale(1.125)" fill="none" stroke="#f1f5f9" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M4 12h16"/></g>
+<text x="74" y="522" fill="#f1f5f9" font-size="25" font-weight="500" >保存快捷指令</text>
+</svg>

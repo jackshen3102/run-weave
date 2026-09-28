@@ -24,6 +24,7 @@ export function encodePayload(
     notificationId: notification.notificationId,
     category: notification.category,
     occurredAt: notification.occurredAt,
+    ...(notification.target ? { target: notification.target } : {}),
   });
   requireValue(
     Buffer.byteLength(payload, "utf8") <= 4096,

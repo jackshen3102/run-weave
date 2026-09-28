@@ -34,4 +34,29 @@ export function registerAttentionNotificationHandlers(getMainWindow: () => Brows
     notification.show();
     return true;
   });
+  ipcMain.handle("scheduled-run:notify", (event, value: unknown): boolean => {
+    const window = getMainWindow();
+    if (!window || window.webContents.id !== event.sender.id) throw new Error("Main window sender required");
+    if (!value || typeof value !== "object") throw new Error("Invalid scheduled run notification");
+    const target = value as Record<string, unknown>;
+    if (!isId(target.connectionId) || !isId(target.runId) ||
+      typeof target.title !== "string" || !target.title.trim() || target.title.length > 120 ||
+      typeof target.body !== "string" || target.body.length > 240) {
+      throw new Error("Invalid scheduled run notification");
+    }
+    if (window.isVisible() && window.isFocused()) return false;
+    const key = `scheduled-run:${target.connectionId}:${target.runId}`;
+    if (shown.has(key)) return false;
+    shown.add(key);
+    if (shown.size > 500) shown.delete(shown.values().next().value!);
+    const notification = new Notification({ title: target.title, body: target.body, silent: true });
+    notification.on("click", () => {
+      window.show(); window.focus();
+      window.webContents.send("scheduled-run:notification-open", {
+        connectionId: target.connectionId, runId: target.runId,
+      });
+    });
+    notification.show();
+    return true;
+  });
 }

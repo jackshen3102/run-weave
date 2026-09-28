@@ -98,6 +98,13 @@ const paginationSchema = z
   .strict();
 const taskParams = z.object({ taskId: z.string().uuid() }).strict();
 const runParams = z.object({ runId: z.string().uuid() }).strict();
+const quickInputRunsSchema = z.object({
+  source: z.literal("quick-input"),
+  projectId: z.string().trim().min(1).optional(),
+  finishedSince: z.string().datetime().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+}).strict();
 
 export function createScheduledTasksRouter(
   service: ScheduledTaskService,
@@ -111,6 +118,9 @@ export function createScheduledTasksRouter(
   );
   router.post("/validate-create", (req, res) =>
     handle(res, () => service.validateCreate(createTaskSchema.parse(req.body))),
+  );
+  router.get("/runs", (req, res) =>
+    handle(res, () => service.listQuickInputRuns(quickInputRunsSchema.parse(req.query))),
   );
   router.get("/runs/:runId/output", (req, res) =>
     handle(res, async () => {

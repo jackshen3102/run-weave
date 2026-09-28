@@ -2,7 +2,7 @@ import { OverlayProvider } from "./features/overlay/provider";
 import { CodexQuotaProvider } from "./features/codex-quota/provider";
 import { MobileLoginProvider } from "./features/mobile-login/provider";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TunnelDrawer } from "./features/tunnels/drawer";
 import { useTunnelStore } from "./features/tunnels/store";
 import { SuijiDrawer } from "./features/suiji/drawer";
@@ -30,6 +30,9 @@ import { TerminalSnapshotShareNotification } from "./components/terminal/workspa
 import { ActivityPage } from "./pages/activity-page";
 import { EvolutionPage } from "./pages/evolution-page";
 import { ScheduledTasksPage } from "./pages/scheduled-tasks-page";
+import { useQuickInputNotifications } from "./features/scheduled-tasks/use-quick-input-notifications";
+import { scheduledTasksApi } from "./services/scheduled-tasks";
+import { HttpError } from "./services/http";
 import { ExecutionEfficiencyPage } from "./pages/execution-efficiency-page";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -103,6 +106,12 @@ function RunweaveApp() {
     connectionId: activeConnectionId,
     generation: activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined,
   });
+  const [pendingScheduledRunOpen, setPendingScheduledRunOpen] = useState<{ connectionId: string; runId: string } | null>(null);
+  const [scheduledRunOpenError, setScheduledRunOpenError] = useState<string | null>(null);
+  const quickInputNotice = useQuickInputNotifications(
+    apiBase, token, activeConnectionId,
+    isElectron && authStatus !== "unauthenticated",
+  );
   const requestedReturn: unknown = location.state?.scope === queryScope ? location.state?.returnTo : null;
   const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|execution-efficiency)(?:\/|\?|$)/u.test(requestedReturn)
     ? requestedReturn : TERMINAL_LIST_PATH;
@@ -126,6 +135,44 @@ function RunweaveApp() {
       navigate(`/terminal/${encodeURIComponent(target.terminalSessionId)}`);
     });
   }, [connections, navigate, setActive]);
+  useEffect(() => {
+    if (!isElectron) return;
+    return window.electronAPI?.onScheduledRunNotificationOpen?.((target) => {
+      const connection = connections.find((item) => item.id === target.connectionId);
+      if (!connection) {
+        setScheduledRunOpenError("通知对应的连接已不存在，无法打开运行记录");
+        return;
+      }
+      if (connection.available === false) {
+        setScheduledRunOpenError("通知对应的连接当前不可用，请恢复连接后重试");
+        return;
+      }
+      setScheduledRunOpenError(null);
+      setPendingScheduledRunOpen(target);
+      setActive(connection.id);
+    });
+  }, [connections, setActive]);
+  useEffect(() => {
+    if (!pendingScheduledRunOpen || pendingScheduledRunOpen.connectionId !== activeConnectionId) return;
+    if (!token) {
+      navigate("/login", { state: { scope: queryScope, returnTo: "/scheduled-tasks" } });
+      return;
+    }
+    let cancelled = false;
+    void scheduledTasksApi(apiBase, token).run(pendingScheduledRunOpen.runId)
+      .then((run) => {
+        if (cancelled) return;
+        setPendingScheduledRunOpen(null);
+        navigate(`/scheduled-tasks/${encodeURIComponent(run.taskId)}?run=${encodeURIComponent(run.id)}`);
+      }).catch((error: unknown) => {
+        if (cancelled) return;
+        setPendingScheduledRunOpen(null);
+        setScheduledRunOpenError(error instanceof HttpError && error.status === 404
+          ? "这条运行记录已不存在，无法打开通知目标"
+          : "无法读取通知对应的运行记录，请检查连接和登录状态后重试");
+      });
+    return () => { cancelled = true; };
+  }, [activeConnectionId, apiBase, navigate, pendingScheduledRunOpen, queryScope, token]);
 
   const handleAddConnection = (name: string, url: string, endpointId?: string) => {
     addConnection(name, url, endpointId);
@@ -415,6 +462,15 @@ function RunweaveApp() {
     </DevSessionBackendGuard>
   );
   return <>
+    {scheduledRunOpenError ? <button type="button" role="alert"
+      className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-rose-700 bg-card p-3 text-left text-sm shadow-lg"
+      onClick={() => setScheduledRunOpenError(null)}>{scheduledRunOpenError} · 点击关闭</button> : null}
+    {quickInputNotice ? <button type="button" role="status"
+      className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border bg-card p-3 text-left shadow-lg"
+      onClick={() => navigate(`/scheduled-tasks/${encodeURIComponent(quickInputNotice.taskId)}?run=${encodeURIComponent(quickInputNotice.runId)}`)}>
+      <strong className="block text-sm">{quickInputNotice.title}</strong>
+      <span className="text-xs">{quickInputNotice.body}</span>
+    </button> : null}
     {isElectron && <ConnectionWorkspaceObservers connections={connections} activeConnectionId={activeConnectionId} activeToken={token} activeAuthStatus={authStatus} onActiveAuthExpired={clearToken} observeActive={location.pathname === "/connections"} />}
     {isElectron && activeConnection && token && sessionId && authStatus !== "unauthenticated"
       ? <MobileLoginProvider key={`${activeConnection.id}:${apiBase}:${sessionId}`} connection={activeConnection} token={token}>{content}</MobileLoginProvider>

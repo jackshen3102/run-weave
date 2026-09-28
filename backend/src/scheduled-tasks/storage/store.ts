@@ -133,11 +133,46 @@ export class ScheduledTaskStore {
       requestHash,
     });
   }
+  findQuickInputRun(
+    quickInputId: string,
+    projectId: string,
+    idempotencyKey: string,
+    requestHash: string,
+  ) {
+    return this.request<ScheduledRun | null>({
+      op: "find-quick-input-run",
+      quickInputId,
+      projectId,
+      idempotencyKey,
+      requestHash,
+    });
+  }
+  createQuickInputRun(
+    task: ScheduledTask,
+    parentProjectId: string,
+    cwd: string,
+    idempotencyKey: string,
+    requestHash: string,
+  ) {
+    return this.request<ScheduledRun>({
+      op: "create-quick-input-run",
+      task,
+      parentProjectId,
+      cwd,
+      idempotencyKey,
+      requestHash,
+    });
+  }
   getRun(runId: string) {
     return this.request<ScheduledRun | null>({ op: "get-run", runId });
   }
   listRuns(taskId: string) {
     return this.request<ScheduledRun[]>({ op: "list-runs", taskId });
+  }
+  listQuickInputRuns(projectId?: string, finishedSince?: string) {
+    return this.request<ScheduledRun[]>({
+      op: "list-quick-input-runs", projectId, finishedSince,
+    });
   }
   listRecentlyFinishedRuns(since: string) {
     return this.request<ScheduledRun[]>({

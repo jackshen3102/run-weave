@@ -33,6 +33,7 @@ import {
 import type { TmuxService } from "../../terminal/tmux/service";
 import type { TmuxOutputWatcher } from "../../terminal/tmux/output-watcher";
 import type { TerminalQuickInputService } from "../../terminal/quick-input/service";
+import type { ScheduledTaskService } from "../../scheduled-tasks/service";
 import {
   toHistoryPayload,
   toPanelWorkspacePayload,
@@ -116,6 +117,7 @@ export function createTerminalRouter(
     terminalEventService?: TerminalEventService;
     terminalStateService?: TerminalStateService;
     quickInputService?: TerminalQuickInputService;
+    scheduledTaskService?: ScheduledTaskService;
     activity?: TerminalActivityDependencies;
     worktreeDeletionOwnerHooks?: TerminalWorktreeDeletionOwnerHooks;
     workspaceServiceManager?: WorkspaceServiceManager;
@@ -251,7 +253,7 @@ export function createTerminalRouter(
   );
   registerTerminalHtmlPreviewRoutes(router, terminalSessionManager, options?.authService);
   if (options?.quickInputService) {
-    registerTerminalQuickInputRoutes(router, options.quickInputService);
+    registerTerminalQuickInputRoutes(router, options.quickInputService, options.scheduledTaskService);
   }
   registerTerminalPanelRoutes(router, terminalSessionManager, {
     ptyService: options?.ptyService,

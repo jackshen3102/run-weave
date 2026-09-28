@@ -41,8 +41,26 @@ export type ScheduledTaskWorkerCommand =
       idempotencyKey: string;
       requestHash: string;
     }
+  | {
+      id: number;
+      op: "find-quick-input-run";
+      quickInputId: string;
+      projectId: string;
+      idempotencyKey: string;
+      requestHash: string;
+    }
+  | {
+      id: number;
+      op: "create-quick-input-run";
+      task: ScheduledTask;
+      parentProjectId: string;
+      cwd: string;
+      idempotencyKey: string;
+      requestHash: string;
+    }
   | { id: number; op: "get-run"; runId: string }
   | { id: number; op: "list-runs"; taskId: string }
+  | { id: number; op: "list-quick-input-runs"; projectId?: string; finishedSince?: string }
   | { id: number; op: "list-recently-finished-runs"; since: string }
   | { id: number; op: "claim-next-run"; ownerId: string; now: string }
   | { id: number; op: "put-run"; run: ScheduledRun }
