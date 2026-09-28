@@ -26,6 +26,6 @@
 
 ## 范围
 
-这是用于评审入口、过程与结果的静态 SVG。指令、运行状态、通知和结果均为示意，没有实际触发 GitHub PR。`result.svg` 中的 PR #123 是示例文本。模型、权限和通知合同见[收敛后的实施计划](../../plans/2026-09-28-background-plugin-commands.md)。桌面自更新、独立 worker 和维护租约已移出本期。
+这是用于评审入口、过程与结果的静态 SVG。指令、运行状态、通知和结果均为示意，没有实际触发 GitHub PR。`result.svg` 中的 PR #123 是示例文本。当前接入边界见[架构索引](../../architecture/README.md#agent-系统)，行为验收见[快捷指令测试计划](../../testing/background-commands/core.testplan.yaml)。桌面自更新、独立 worker 和维护租约不属于当前接入范围。
 
 原先的独立任务列表/创建弹窗方案已撤回。SVG 使用当前快捷指令组件的 slate 配色与布局；新增操作只占现有卡片空位。

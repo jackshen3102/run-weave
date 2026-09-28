@@ -9,7 +9,7 @@ cases:
     required: true
     description: 点击一次创建真实 ScheduledRun，原终端不接收指令，内部任务不会暴露为可配置日程。
     preconditions:
-      - 已完成计划 A 的生产接入，按 toolkit:runweave-dev-session 启动隔离源码实例，配置有效 Codex 和后台默认值。
+      - 快捷指令后台运行已完成生产接入，按 toolkit:runweave-dev-session 启动隔离源码实例，配置有效 Codex 和后台默认值。
       - 本例拥有可安全执行技能的临时项目及获准测试远端、已保存技能指令和带草稿的空闲终端。
     steps:
       - 使用 toolkit:playwright-cli 点击后台运行；确认没有配置表单或新终端，原草稿保持，原终端没有收到输入。
@@ -77,7 +77,7 @@ cases:
     required: true
     description: Desktop 在后台时通知可见，浮层关闭不影响通知，点击仍定位原运行。
     preconditions:
-      - 计划 B 的桌面通知已接通；本例隔离 Desktop 允许系统通知，已有独立真实运行。
+      - 快捷运行的桌面通知已接通；本例隔离 Desktop 允许系统通知，已有独立真实运行。
       - 已加载 computer-use 技能操作系统通知，renderer 使用 toolkit:playwright-cli。
     steps:
       - 关闭快捷浮层并把 Desktop 放到后台；结束运行，使用 Computer Use 核对真实通知的项目/worktree。
@@ -87,7 +87,7 @@ cases:
     required: true
     description: 真机收到推送并打开原 ScheduledRunView，网关 accepted 不能替代实际到达证据。
     preconditions:
-      - 计划 B 的网关 target 与原生消费者已接通；本例获准测试 iPhone 已安装目标版本并确认有效任务提醒订阅。
+      - 快捷运行的网关 target 与原生消费者已接通；本例获准测试 iPhone 已安装目标版本并确认有效任务提醒订阅。
       - 本例 Backend、独立运行和认证可用，使用 toolkit:agent-device 操作原生 UI。
     steps:
       - App 放到后台后结束本例运行，核对真机通知项目/worktree；保留实际到达证据。

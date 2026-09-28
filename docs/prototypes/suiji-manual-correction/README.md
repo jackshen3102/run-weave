@@ -57,4 +57,4 @@
 
 纠错是固定样本替换；词库、草稿、保存均为浏览器内存状态，刷新会复位。此原型没有真实 Codex、语音识别、后端请求或账号同步。它只能验证交互，无法衡量纠错准确率。
 
-[早期实施草案](../../plans/2026-09-28-suiji-manual-transcript-correction.md)和其中的自动学习验收方案暂不作为本轮交互的实现依据。原型仍待用户评审；交互稳定后再调整实施计划与验收方案。
+当前服务合同见[随记服务文档](../../../packages/suiji-server/README.md#手动文字纠错)，实际行为按[手动纠错](../../testing/suiji/manual-correction.testplan.yaml)与[显式收词](../../testing/suiji/manual-correction-learning.testplan.yaml)分别验收。原型仍是模拟交互，不能作为真实服务或跨端验收证据。
