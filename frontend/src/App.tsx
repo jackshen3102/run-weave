@@ -21,7 +21,6 @@ import {
   buildConnectionQueryScope,
   ConnectionQueryProvider,
 } from "./features/query/connection-query-provider";
-import { HomePage } from "./pages/home-page";
 import { LoginPage } from "./pages/login-page";
 import { ConnectionsPage } from "./pages/connections-page";
 import { SystemMonitorPage } from "./pages/system-monitor-page";
@@ -36,7 +35,6 @@ import { ExecutionEfficiencyPage } from "./pages/execution-efficiency-page";
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
 const CONNECTIONS_STORAGE_KEY = "viewer.connections";
-const HOME_PATH = "/home";
 const TERMINAL_LIST_PATH = "/terminal";
 
 const isElectron = window.electronAPI?.isElectron === true;
@@ -197,8 +195,8 @@ function RunweaveApp() {
             path="/system-monitor"
             element={
               <SystemMonitorPage
-                onNavigateHome={() => {
-                  window.location.assign(HOME_PATH);
+                onNavigateTerminal={() => {
+                  window.location.assign(TERMINAL_LIST_PATH);
                 }}
               />
             }
@@ -262,36 +260,6 @@ function RunweaveApp() {
             }
           />
           <Route
-            path={HOME_PATH}
-            element={
-              needsConnection ? (
-                <Navigate to="/connections" replace />
-              ) : isAuthChecking ? (
-                authPendingView
-              ) : token ? (
-                <HomePage
-                  apiBase={apiBase}
-                  token={token}
-                  clientMode={clientMode}
-                  clearToken={clearToken}
-                  connections={connections}
-                  activeConnectionId={activeConnectionId}
-                  connectionName={
-                    isElectron ? activeConnection?.name : undefined
-                  }
-                  onSelectConnection={
-                    isElectron ? handleSelectConnection : undefined
-                  }
-                  onOpenConnectionManager={
-                    isElectron ? openConnectionManager : undefined
-                  }
-                />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
-          <Route
             path="/activity"
             element={
               needsConnection ? (
@@ -302,7 +270,7 @@ function RunweaveApp() {
                 <ActivityPage
                   apiBase={apiBase}
                   token={token}
-                  onNavigateHome={() => window.location.assign(HOME_PATH)}
+                  onNavigateTerminal={() => window.location.assign(TERMINAL_LIST_PATH)}
                 />
               ) : (
                 <Navigate to="/login" replace />
@@ -320,7 +288,7 @@ function RunweaveApp() {
                 <EvolutionPage
                   apiBase={apiBase}
                   token={token}
-                  onNavigateHome={() => window.location.assign(HOME_PATH)}
+                  onNavigateTerminal={() => window.location.assign(TERMINAL_LIST_PATH)}
                 />
               ) : (
                 <Navigate to="/login" replace />

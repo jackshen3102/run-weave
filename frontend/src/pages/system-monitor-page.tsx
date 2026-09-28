@@ -2,12 +2,12 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Activity,
+  ArrowLeft,
   Battery,
   BatteryCharging,
   ChevronDown,
   ChevronRight,
   Cpu,
-  Home,
   MemoryStick,
   Pause,
   Play,
@@ -44,7 +44,7 @@ const REFRESH_INTERVALS = [
 const VISIBLE_APP_COUNT = 50;
 
 interface SystemMonitorPageProps {
-  onNavigateHome?: () => void;
+  onNavigateTerminal?: () => void;
 }
 
 function MetricBar(params: { value: number | null; tone?: "ok" | "warn" }) {
@@ -99,7 +99,7 @@ function OverviewCard(params: {
 function EmptyState(params: {
   title: string;
   body: string;
-  onNavigateHome?: () => void;
+  onNavigateTerminal?: () => void;
 }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
@@ -113,10 +113,10 @@ function EmptyState(params: {
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           {params.body}
         </p>
-        {params.onNavigateHome ? (
-          <Button className="mt-6" onClick={params.onNavigateHome}>
-            <Home className="mr-2 h-4 w-4" />
-            Home
+        {params.onNavigateTerminal ? (
+          <Button className="mt-6" onClick={params.onNavigateTerminal}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Terminals
           </Button>
         ) : null}
       </section>
@@ -258,7 +258,7 @@ function AppRow(params: {
   );
 }
 
-export function SystemMonitorPage({ onNavigateHome }: SystemMonitorPageProps) {
+export function SystemMonitorPage({ onNavigateTerminal }: SystemMonitorPageProps) {
   const [intervalMs, setIntervalMs] = useState(5_000);
   const [paused, setPaused] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("cpu");
@@ -274,7 +274,7 @@ export function SystemMonitorPage({ onNavigateHome }: SystemMonitorPageProps) {
       <EmptyState
         title="Mac only beta"
         body="System Monitor is available in the macOS Electron client."
-        onNavigateHome={onNavigateHome}
+        onNavigateTerminal={onNavigateTerminal}
       />
     );
   }
@@ -284,7 +284,7 @@ export function SystemMonitorPage({ onNavigateHome }: SystemMonitorPageProps) {
       <EmptyState
         title="macOS required"
         body="This snapshot source is only implemented for macOS."
-        onNavigateHome={onNavigateHome}
+        onNavigateTerminal={onNavigateTerminal}
       />
     );
   }
@@ -316,10 +316,10 @@ export function SystemMonitorPage({ onNavigateHome }: SystemMonitorPageProps) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <RuntimeStatusEntry />
-            {onNavigateHome ? (
-              <Button variant="ghost" size="sm" onClick={onNavigateHome}>
-                <Home className="mr-2 h-4 w-4" />
-                Home
+            {onNavigateTerminal ? (
+              <Button variant="ghost" size="sm" onClick={onNavigateTerminal}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Terminals
               </Button>
             ) : null}
             <DropdownMenu>

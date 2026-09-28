@@ -10,8 +10,8 @@ cases:
       - "本用例使用当前待验收源码的隔离 Web/Backend、合成账号与数据；云端采集使用独立生产模式构建；用 $toolkit:playwright-cli 操作有界面的真实 Chrome，保留用户原有标签。"
       - "本用例拥有不传任何 Clarity 环境变量的独立生产模式前端构建，能清理本用例浏览器缓存与存储；不依赖已有 SDK 状态。"
     steps:
-      - "用 $toolkit:playwright-cli 进入 /home，确认页面可操作，且项目 tag 仅有一个，地址包含生产项目 ID yo8dc0des6；记录构建配置、tag 与实际脚本请求。"
-      - "切换主题，打开并取消 Change Password；确认交互完成且没有第二个项目 tag。清理本用例页面。"
+      - "用 $toolkit:playwright-cli 进入 /terminal，确认页面可操作，且项目 tag 仅有一个，地址包含生产项目 ID yo8dc0des6；记录构建配置、tag 与实际脚本请求。"
+      - "打开应用菜单切换主题，再从菜单打开并取消修改密码；确认交互完成且没有第二个项目 tag。清理本用例页面。"
   - id: "WCA-002"
     name: "普通 Web 的每个 Document 只初始化一次"
     required: true
@@ -20,8 +20,8 @@ cases:
       - "本用例使用当前待验收源码的隔离 Web/Backend、合成账号与数据；云端采集使用独立生产模式构建；用 $toolkit:playwright-cli 操作有界面的真实 Chrome，保留用户原有标签。"
       - "本用例配置 enabled=true 及实际有效的测试项目 ID；能在隔离 Vite 页面通过实际模块入口重复调用 initializeClarity，且可观察脚本与请求。"
     steps:
-      - "用 $toolkit:playwright-cli 打开真实 /home，确认 React 可操作、官方项目 tag 地址正确且数量为 1；保存实际下发的版本脚本 URL。"
-      - "在同一 Document 通过模块入口连续调用 initializeClarity 三次，并通过页面按钮进行 Activity 导航及浏览器返回；确认项目 tag 仍只有一个，没有重复项目 tag 加载。版本脚本与多条 collect 不能误判为重复初始化。"
+      - "用 $toolkit:playwright-cli 打开真实 /terminal，确认 React 可操作、官方项目 tag 地址正确且数量为 1；保存实际下发的版本脚本 URL。"
+      - "在同一 Document 通过模块入口连续调用 initializeClarity 三次，并通过应用菜单进行 Activity 导航及浏览器返回；确认项目 tag 仍只有一个，没有重复项目 tag 加载。版本脚本与多条 collect 不能误判为重复初始化。"
       - "完整刷新本用例页面，确认新的 Document 允许初始化一次，项目 tag 数量仍为 1；本 case 不依赖云端统计去证明本地幂等。"
   - id: "WCA-003"
     name: "Electron 主窗口不启用 Web 采集"
@@ -53,7 +53,7 @@ cases:
       - "本用例使用当前待验收源码的隔离 Web/Backend、合成账号与数据；云端采集使用独立生产模式构建；用 $toolkit:playwright-cli 操作有界面的真实 Chrome，保留用户原有标签。"
       - "本用例独立使用已启用 Clarity 的隔离 Web 构建和可访问的测试项目；Strict masking 已生效，cookies/consent 已按测试环境要求设置；测试项目允许此次浏览器流量。用开始时间、URL 和操作顺序定位本次新会话，不使用手工事件或 identify。"
     steps:
-      - "用 $toolkit:playwright-cli 进入 /home，等待 SDK 加载；先鼠标点击主题按钮，再以 Enter 激活主题按钮；分别确认实际主题改变并记录顺序与时间。"
+      - "用 $toolkit:playwright-cli 进入 /terminal，等待 SDK 加载并打开应用菜单；先鼠标点击主题按钮，再聚焦该按钮以 Enter 激活；分别确认实际主题改变并记录顺序与时间。"
       - "在 Clarity 官方后台打开本次会话，按现场动作时间与页面状态逐项核对；记录项目、SDK 版本、会话链接和截图。最多观察 30 分钟，每次等待不超过 60 秒；环境条件不足记 blocked，缺少证据不算通过。"
       - "播放对应片段，确认两次操作位置、顺序及两次主题变化可辨认；Strict 下不要求按钮文字可读。仅有 collect 200 或会话列表条目不能通过。"
   - id: "WCA-006"
@@ -77,7 +77,7 @@ cases:
       - "本用例独立使用已启用 Clarity 的隔离 Web 构建和可访问的测试项目；Strict masking 已生效，cookies/consent 已按测试环境要求设置；测试项目允许此次浏览器流量。用开始时间、URL 和操作顺序定位本次新会话，不使用手工事件或 identify。"
       - "本用例保持同一浏览器上下文及项目 cookies 策略，关闭其他本项目测试标签，避免混淆会话。"
     steps:
-      - "用 $toolkit:playwright-cli 从 /home 点击 Activity 进入 /activity，再使用浏览器后退回 /home，点击 Evolution 进入 /evolution；记录 URL 顺序与每步页面呈现。"
+      - "用 $toolkit:playwright-cli 从 /terminal 打开应用菜单并点击 Activity 进入 /activity，再使用浏览器后退回 /terminal，重新打开应用菜单并点击 Evolution 进入 /evolution；记录 URL 顺序与每步页面呈现。"
       - "在 Clarity 官方后台打开本次会话，按现场动作时间与页面状态逐项核对；记录项目、SDK 版本、会话链接和截图。最多观察 30 分钟，每次等待不超过 60 秒；环境条件不足记 blocked，缺少证据不算通过。"
       - "在该会话页面片段或回放导航信息中确认上述 URL 及页面顺序，返回后的动作仍能关联；不得用前一次测试会话、手工 pageview 或跨设备身份合并兜底。"
   - id: "WCA-008"
@@ -87,7 +87,7 @@ cases:
     preconditions:
       - "本用例使用当前待验收源码的隔离 Web/Backend、合成账号与数据；云端采集使用独立生产模式构建；用 $toolkit:playwright-cli 操作有界面的真实 Chrome，保留用户原有标签。"
       - "本用例独立使用已启用 Clarity 的隔离 Web 构建和可访问的测试项目；Strict masking 已生效，cookies/consent 已按测试环境要求设置；测试项目允许此次浏览器流量。用开始时间、URL 和操作顺序定位本次新会话，不使用手工事件或 identify。"
-      - "本用例可从 /home 打开运行状态面板；调整本用例视口使原有 overflow-y-auto 容器真实溢出，scrollHeight 大于 clientHeight，使用合成环境状态。"
+      - "本用例可从 /terminal 打开运行状态面板；调整本用例视口使原有 overflow-y-auto 容器真实溢出，scrollHeight 大于 clientHeight，使用合成环境状态。"
     steps:
       - "用 $toolkit:playwright-cli 打开运行状态面板，记录容器 scrollTop 和当前顶部条目；鼠标悬停容器后滚轮向下，再向上，分别记录实际 scrollTop 与可见内容。不得注入额外列表或滚动事件。"
       - "在 Clarity 官方后台打开本次会话，按现场动作时间与页面状态逐项核对；记录项目、SDK 版本、会话链接和截图。最多观察 30 分钟，每次等待不超过 60 秒；环境条件不足记 blocked，缺少证据不算通过。"
@@ -101,7 +101,7 @@ cases:
       - "本用例独立使用已启用 Clarity 的隔离 Web 构建和可访问的测试项目；Strict masking 已生效，cookies/consent 已按测试环境要求设置；测试项目允许此次浏览器流量。用开始时间、URL 和操作顺序定位本次新会话，不使用手工事件或 identify。"
       - "本用例只使用合成数据；准备可编辑的合成项目名称和密码弹窗，可在新会话开始前读取实际项目 masking 设置与下发脚本；无需真实凭据作为测试标记。"
     steps:
-      - "用 $toolkit:playwright-cli 在合成项目名称与 Change Password 输入中分别填入两段仅字母的唯一标记，取消密码提交；让合成项目名称作为可见文本出现，并记录它所在布局。"
+      - "用 $toolkit:playwright-cli 在合成项目名称与从应用菜单打开的修改密码输入中分别填入两段仅字母的唯一标记，取消密码提交；让合成项目名称作为可见文本出现，并记录它所在布局。"
       - "保存本次实际 SDK 请求并按实际格式解码检查，再在官方后台回放核对：合成输入值以及被 Strict 覆盖的 DOM 文本记录不能保留原文，云端相应区域也应被遮盖；不能把压缩原始字节搜索不到当作遮盖证据。"
       - "单独记录 URL 与属性的实际可见范围，不宣称 Strict 对它们全面脱敏；清理合成项目与本用例数据，不添加逐组件 masking 标签。"
   - id: "WCA-010"
@@ -112,8 +112,8 @@ cases:
       - "本用例使用当前待验收源码的隔离 Web/Backend、合成账号与数据；云端采集使用独立生产模式构建；用 $toolkit:playwright-cli 操作有界面的真实 Chrome，保留用户原有标签。"
       - "本用例拥有有效启用构建及新的浏览器上下文；能仅对本页 Clarity tag 和版本脚本实施网络阻断，Runweave API 保持可达。"
     steps:
-      - "加载前用 $toolkit:playwright-cli 对 Clarity 脚本请求设为失败，再打开 /home；确认应用在脚本始终不可用时仍完成渲染。"
-      - "切换主题，打开并取消 Change Password，进入 Activity 并返回；确认各步成功，无采集故障导致的弹窗、白屏或应用未捕获异常。"
+      - "加载前用 $toolkit:playwright-cli 对 Clarity 脚本请求设为失败，再打开 /terminal；确认应用在脚本始终不可用时仍完成渲染。"
+      - "通过应用菜单切换主题、打开并取消修改密码、进入 Activity 并返回；确认各步成功，无采集故障导致的弹窗、白屏或应用未捕获异常。"
       - "持续观察 60 秒，确认应用没有重复注入项目 tag 的重试循环；只记录相关脚本网络失败，不误判为业务 API 失败。移除本用例路由规则并清理页面。"
   - id: "WCA-011"
     name: "上传不可用时普通操作不受阻"
@@ -124,7 +124,7 @@ cases:
       - "本用例在独立页面已成功加载官方脚本；能识别并仅阻断实际 Clarity collect 请求，保持项目脚本和 Runweave API 可达。"
     steps:
       - "用 $toolkit:playwright-cli 阻断该页面实际 collect 请求，确认至少一条真实上传请求失败。"
-      - "交替打开关闭 Change Password 十次并切换主题；确认每次都完成且没有上传失败引起的业务弹窗、卡死或应用未捕获异常。"
+      - "通过应用菜单交替打开关闭修改密码十次并切换主题；确认每次都完成且没有上传失败引起的业务弹窗、卡死或应用未捕获异常。"
       - "保存相关网络失败与 UI 后置状态；不要求被阻断行为在云端出现，也不约束 SDK 内部重试次数。撤销本页阻断并清理 fixture。"
   - id: "WCA-012"
     name: "关闭配置经重建刷新后不再新采集"
@@ -136,7 +136,7 @@ cases:
     steps:
       - "用启用构建打开本用例页面，确认 SDK 已加载并存在采集请求，保存 before 构建和页面身份。"
       - "在同一 fixture 关闭 VITE_CLARITY_ENABLED，重新构建并部署；确认仅改进程环境但未重建不是有效步骤。旧页面尚未刷新时不声称已停止。"
-      - "使用 $toolkit:playwright-cli 完整刷新本用例页面，重新取得 DOM 引用并核对新构建；执行主题切换和弹窗开关，确认当前 Document 没有 tag、版本脚本和新采集请求，UI 仍响应。"
+      - "使用 $toolkit:playwright-cli 完整刷新本用例页面，重新取得 DOM 引用并核对新构建；通过应用菜单执行主题切换和修改密码弹窗开关，确认当前 Document 没有 tag、版本脚本和新采集请求，UI 仍响应。"
       - "清理本用例部署和页面；若缓存仍提供旧构建则先处理该 fixture 的更新问题，本项不能算通过。"
   - id: "WCA-013"
     name: "启用采集符合首期交互性能门槛"
@@ -169,9 +169,9 @@ cases:
     preconditions:
       - "本用例使用当前待验收源码的隔离 Web/Backend、合成账号与数据；云端采集使用独立生产模式构建；用 $toolkit:playwright-cli 操作有界面的真实 Chrome，保留用户原有标签。"
       - "本用例独立使用已启用 Clarity 的隔离 Web 构建和可访问的测试项目；Strict masking 已生效，cookies/consent 已按测试环境要求设置；测试项目允许此次浏览器流量。用开始时间、URL 和操作顺序定位本次新会话，不使用手工事件或 identify。"
-      - "本用例在当前版本的 /home 页面独立产生了足够使后台生成点击图的合成访问；能按 URL、设备、时间筛选，只使用此次数据。"
+      - "本用例在当前版本的 /terminal 页面独立产生了足够使后台生成点击图的合成访问；能按 URL、设备、时间筛选，只使用此次数据。"
     steps:
-      - "用 $toolkit:playwright-cli 在 /home 对主题与 Change Password 入口进行已记录数量的点击，关闭弹窗；等待后台出现该页面的点击热力图。"
+      - "用 $toolkit:playwright-cli 在 /terminal 打开应用菜单，对主题与修改密码入口进行已记录数量的点击，关闭弹窗；等待后台出现该页面的点击热力图。"
       - "在官方后台核对页面截图版本和入口位置，确认热点落在实际点击区域，能够返回相应会话观察；不以动态内容未出现在热力图判本功能失败。"
       - "若官方后台未生成图或数据不足则记 blocked，不借其他网站、其他版本的热力图证明本用例。"
   - id: "WCA-016"
@@ -182,7 +182,7 @@ cases:
       - "本用例具备有界面的 Firefox、隔离 Web/Backend 和合成账号；通过 $toolkit:playwright-cli 控制该真实浏览器。"
       - "本用例独立使用已启用 Clarity 的隔离 Web 构建和可访问的测试项目；Strict masking 已生效，cookies/consent 已按测试环境要求设置；测试项目允许此次浏览器流量。用开始时间、URL 和操作顺序定位本次新会话，不使用手工事件或 identify。"
     steps:
-      - "用 $toolkit:playwright-cli 打开 /home，等待 SDK 加载，切换主题并打开关闭 Change Password，记录实际版本、操作时间和页面状态。"
+      - "用 $toolkit:playwright-cli 打开 /terminal，等待 SDK 加载，通过应用菜单切换主题并打开关闭修改密码，记录实际版本、操作时间和页面状态。"
       - "在 Clarity 官方后台打开本次会话，按现场动作时间与页面状态逐项核对；记录项目、SDK 版本、会话链接和截图。最多观察 30 分钟，每次等待不超过 60 秒；环境条件不足记 blocked，缺少证据不算通过。"
       - "确认云端回放对应此 Firefox 新会话、点击和弹层变化可辨认；未实际运行 Firefox 时不能用 Chrome 设备模拟替代。"
   - id: "WCA-017"
@@ -192,23 +192,23 @@ cases:
     preconditions:
       - "本用例有独立的生产模式构建与浏览器 fixture，能够分别传入空白、斜线和引号作为 VITE_CLARITY_PROJECT_ID；页面网络未阻断 Clarity。"
     steps:
-      - "分别以空白、含斜线、含引号的 ID 构建并打开新的 /home Document，记录本次构建 ID 与实际下发资源。"
-      - "用 $toolkit:playwright-cli 切换主题，确认页面仍可操作且三种构建均无 Clarity tag、版本脚本或 collect 请求；清理各自的页面。"
+      - "分别以空白、含斜线、含引号的 ID 构建并打开新的 /terminal Document，记录本次构建 ID 与实际下发资源。"
+      - "用 $toolkit:playwright-cli 打开应用菜单切换主题，确认页面仍可操作且三种构建均无 Clarity tag、版本脚本或 collect 请求；清理各自的页面。"
   - id: "WCA-018"
     name: "Vite 开发服务不加载采集器"
     required: true
     description: "真实 Vite 开发模式始终排除 Clarity，即使显式传入启用标志与合法项目 ID。"
     preconditions:
-      - "本用例有独立 Vite 开发服务与可操作的 /home 页面，启动时传入 VITE_CLARITY_ENABLED=true 和验收项目 ID yo6azwkf18。"
+      - "本用例有独立 Vite 开发服务与可操作的 /terminal 页面，启动时传入 VITE_CLARITY_ENABLED=true 和验收项目 ID yo6azwkf18。"
     steps:
-      - "用 $toolkit:playwright-cli 打开该开发服务的 /home，确认实际加载开发模块并完成主题切换。"
+      - "用 $toolkit:playwright-cli 打开该开发服务的 /terminal，确认实际加载开发模块并通过应用菜单完成主题切换。"
       - "观察页面脚本和网络，确认没有 Clarity tag、版本脚本或 collect 请求；停止本用例独立服务。"
   - id: "WCA-019"
     name: "Runweave Dev Session 不加载采集器"
     required: true
     description: "真实 Runweave Dev Session 前端排除 Clarity，且页面仍能完成普通交互。"
     preconditions:
-      - "本用例按 $toolkit:runweave-dev-session 获得独立 Runweave Dev Session，确认实际前端带 VITE_RUNWEAVE_DEV_SESSION_ID；该 session 有可操作的合成 /home 页面。"
+      - "本用例按 $toolkit:runweave-dev-session 获得独立 Runweave Dev Session，确认实际前端带 VITE_RUNWEAVE_DEV_SESSION_ID；该 session 有可操作的合成 /terminal 页面。"
     steps:
-      - "用 $toolkit:playwright-cli 打开此 session 的真实 /home，确认页面属于该 Dev Session 并完成一次主题切换。"
+      - "用 $toolkit:playwright-cli 打开此 session 的真实 /terminal，确认页面属于该 Dev Session 并通过应用菜单完成一次主题切换。"
       - "观察页面脚本和网络，确认没有 Clarity tag、版本脚本或 collect 请求；按 session 所有权清理本用例资源。"

@@ -20,6 +20,7 @@ import { useTerminalRuntime } from "../../../features/terminal/queries/provider"
 import { TerminalPanelTargetBar } from "../input/panel-target-bar";
 import { TerminalSurface } from "../surface/surface";
 import { TerminalBrowserAssistance } from "../browser/assistance";
+import { Button } from "../../ui/button";
 
 const TerminalPreviewPanel = lazy(() =>
   import("../preview/panel/index").then((module) => ({
@@ -42,16 +43,20 @@ interface StagePanelCommands {
 
 interface TerminalWorkspaceStageProps {
   clientMode: ClientMode;
+  loading: boolean;
   panels: StagePanelCommands;
   showAgentTeamTool: boolean;
   onEditProject: () => void;
+  onCreateSession: () => void;
 }
 
 export function TerminalWorkspaceStage({
   clientMode,
+  loading,
   panels,
   showAgentTeamTool,
   onEditProject,
+  onCreateSession,
 }: TerminalWorkspaceStageProps) {
   const { apiBase, token, scope } = useTerminalRuntime();
   const [fileLinkIntent, setFileLinkIntent] = useState<TerminalPreviewFileLinkIntent | null>(null);
@@ -266,8 +271,13 @@ export function TerminalWorkspaceStage({
                 })}
               </>
             ) : (
-              <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">
-                No terminal tab yet. Create one to start.
+              <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-sm text-slate-400">
+                <p>No terminal tab yet. Create one to start.</p>
+                {isMobileMonitor ? (
+                  <Button type="button" onClick={onCreateSession} disabled={loading}>
+                    新建终端
+                  </Button>
+                ) : null}
               </div>
             )}
           </div>

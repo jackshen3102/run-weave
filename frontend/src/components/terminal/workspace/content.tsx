@@ -48,7 +48,6 @@ export function TerminalWorkspaceContent({
   initialTerminalSessionId,
   onActiveSessionChange,
   onNoSessionAvailable,
-  onNavigateHome,
   onAuthExpired,
   className,
 }: TerminalWorkspaceProps) {
@@ -568,7 +567,6 @@ export function TerminalWorkspaceContent({
         activeConnectionId,
         connectionName,
         connections,
-        onNavigateHome,
         onOpenManager: onOpenConnectionManager,
         onSelect: onSelectConnection,
       }}

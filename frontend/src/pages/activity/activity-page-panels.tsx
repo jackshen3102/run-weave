@@ -166,13 +166,13 @@ export function ActivitySidebar({
 export function ActivityHeader({
   search,
   runtimeChannel,
-  onNavigateHome,
+  onNavigateTerminal,
   onSearchChange,
   onRuntimeChannelChange,
 }: {
   search: string;
   runtimeChannel: ActivityRuntimeChannel | "";
-  onNavigateHome: () => void;
+  onNavigateTerminal: () => void;
   onSearchChange: (value: string) => void;
   onRuntimeChannelChange: (value: ActivityRuntimeChannel | "") => void;
 }) {
@@ -183,11 +183,11 @@ export function ActivityHeader({
           variant="ghost"
           size="sm"
           className="max-md:h-10 max-md:w-10 max-md:shrink-0 max-md:p-0"
-          onClick={onNavigateHome}
-          aria-label="Back home"
+          onClick={onNavigateTerminal}
+          aria-label="Back to terminals"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          <span className="max-md:sr-only">Home</span>
+          <span className="max-md:sr-only">Terminals</span>
         </Button>
         <div className="min-w-0">
           <h1 className="font-semibold">Activity</h1>
