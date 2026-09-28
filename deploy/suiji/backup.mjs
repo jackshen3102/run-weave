@@ -8,6 +8,11 @@ export async function credentialChecksum(sql) {
     extract(epoch from last_used_at),source) ORDER BY id),'[]'::json) FROM mcp_credentials`);
   return createHash("sha256").update(rows).digest("hex");
 }
+export async function lexiconChecksum(sql) {
+  const rows = await sql(`SELECT coalesce(json_agg(json_build_array(owner_id,version,entries,
+    extract(epoch from updated_at)) ORDER BY owner_id),'[]'::json) FROM correction_lexicons`);
+  return createHash("sha256").update(rows).digest("hex");
+}
 export function createBackup({
   config,
   env,
@@ -74,9 +79,10 @@ export function createBackup({
           ? ",'followups',(SELECT count(*) FROM record_followups),'followupAttachments',(SELECT count(*) FROM followup_attachments)"
           : "";
       const credentialCounts = schemaVersion >= 6 ? ",'mcpCredentials',(SELECT count(*) FROM mcp_credentials)" : "";
+      const lexiconCounts = schemaVersion >= 7 ? ",'correctionLexicons',(SELECT count(*) FROM correction_lexicons)" : "";
       const counts = await sql(
         "SELECT json_build_object('records',(SELECT count(*) FROM records),'revisions',(SELECT count(*) FROM record_revisions),'mutations',(SELECT count(*) FROM mutation_requests),'attachments',(SELECT count(*) FROM attachments)" +
-          followupCounts + credentialCounts +
+          followupCounts + credentialCounts + lexiconCounts +
           ")",
       );
       manifest = {
@@ -95,6 +101,7 @@ export function createBackup({
         objects,
         counts: JSON.parse(counts),
         ...(schemaVersion >= 6 ? { credentialChecksum: await credentialChecksum(sql) } : {}),
+        ...(schemaVersion >= 7 ? { lexiconChecksum: await lexiconChecksum(sql) } : {}),
         checksums: {
           "database.dump": await sum(path.join(directory, "database.dump")),
           "attachments.tar": await sum(path.join(directory, "attachments.tar")),

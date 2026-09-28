@@ -1,0 +1,35 @@
+{
+  "record": {
+    "kind": "note",
+    "body": "我我今天想把 Runwave 的 iOS 版那个那个词库做好，明天下午 3 点跟卡斯特尔对一下。",
+    "savedBody": "我我今天想把 Runwave 的 iOS 版那个那个词库做好，明天下午 3 点跟卡斯特尔对一下。"
+  },
+  "lexicon": [
+    {
+      "canonical": "Runweave",
+      "variants": ["润威夫"]
+    },
+    {
+      "canonical": "随记",
+      "variants": ["随机"]
+    }
+  ],
+  "correction": {
+    "replacements": [
+      {
+        "from": "Runwave",
+        "to": "Runweave",
+        "kind": "spelling"
+      },
+      {
+        "from": "我我",
+        "to": "我"
+      },
+      {
+        "from": "那个那个",
+        "to": "那个"
+      }
+    ],
+    "uncertainTerms": ["卡斯特尔"]
+  }
+}
