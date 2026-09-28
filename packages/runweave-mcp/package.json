@@ -1,0 +1,27 @@
+{
+  "name": "@runweave/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node dist/index.cjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@runweave/cli": "workspace:*",
+    "@runweave/config-node": "workspace:*",
+    "@runweave/shared": "workspace:*",
+    "express": "^4.21.2",
+    "fs-native-extensions": "1.5.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.13.10",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2"
+  }
+}

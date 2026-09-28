@@ -19,6 +19,11 @@ import type { ActivityStore } from "../../activity/recording/store";
 import { logger } from "../../logging/index";
 
 const factsQuerySchema = z.object({
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+  eventId: z.string().min(1).max(256).optional(),
+  operationId: z.string().min(1).max(256).optional(),
+  correlationId: z.string().min(1).max(256).optional(),
   runtimeChannel: z.enum(["stable", "beta", "dev", "external"]).optional(),
   runtimeSurface: z.enum(["backend", "desktop", "web", "app", "cli", "hook", "shell"]).optional(),
   projectId: z.string().min(1).max(256).optional(),

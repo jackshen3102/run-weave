@@ -4,6 +4,9 @@
   "private": true,
   "license": "MIT",
   "type": "commonjs",
+  "exports": {
+    "./client": "./src/client/auth-context.ts"
+  },
   "bin": {
     "rw": "./dist/index.js"
   },

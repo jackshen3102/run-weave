@@ -160,6 +160,9 @@ function buildQueryParts(query: ActivityFactsQuery, asOf: number): QueryParts {
   const where = ["fact.activity_offset <= @asOf", activeDeleteTombstoneSql()];
   const params: Record<string, string | number> = { asOf };
   const filters: Array<[keyof ActivityFactsQuery, string]> = [
+    ["eventId", "event_id"],
+    ["operationId", "operation_id"],
+    ["correlationId", "correlation_id"],
     ["runtimeChannel", "runtime_channel"],
     ["runtimeSurface", "runtime_surface"],
     ["projectId", "project_id"],
@@ -176,6 +179,16 @@ function buildQueryParts(query: ActivityFactsQuery, asOf: number): QueryParts {
       where.push(`fact.${column} = @${key}`);
       params[key] = value;
     }
+  }
+  for (const [key, operator] of [["from", ">="], ["to", "<"]] as const) {
+    if (!query[key]) continue;
+    const timestamp = Date.parse(query[key]);
+    if (!Number.isFinite(timestamp)) throw new Error("activity_time_range_invalid");
+    where.push(`fact.occurred_at_ms ${operator} @${key}`);
+    params[key] = timestamp;
+  }
+  if (query.from && query.to && Date.parse(query.from) >= Date.parse(query.to)) {
+    throw new Error("activity_time_range_invalid");
   }
   if (query.search) {
     where.push(`(fact.event_name LIKE @search ESCAPE '\\'
