@@ -198,19 +198,27 @@ function createDelivery(
   run: ScheduledRun,
   subscriptionId: string,
 ): ScheduledTaskDelivery {
-  const completed = run.status === "completed";
+  const completed = run.status === "completed" &&
+    (run.snapshot.origin?.kind !== "quick-input" || run.outcome === "succeeded");
+  const origin = run.snapshot.origin;
+  const quick = origin?.kind === "quick-input";
+  const project = quick ? `${origin.projectName}${origin.worktreeName ? ` / ${origin.worktreeName}` : ""}` : "";
+  const title = quick
+    ? `${project} · ${completed && run.outcome === "succeeded" ? "已完成" : "需要处理"}`
+    : completed ? "定时任务已完成" : "定时任务失败";
   return {
     id,
     runId: run.id,
     subscriptionId,
     notification: {
       category: completed ? "task.completed" : "task.failed",
-      title: completed ? "定时任务已完成" : "定时任务失败",
-      body: `${run.snapshot.name}：${completed ? "已完成" : "运行失败"}，请打开 Runweave 查看结果。`.slice(
+      title: title.slice(-120),
+      body: `${run.snapshot.name} · ${quick ? completed ? "已完成，打开查看结果" : "失败或受阻，打开查看原因" : completed ? "已完成" : "运行失败，请打开 Runweave 查看结果"}`.slice(
         0,
         240,
       ),
       occurredAt: run.finishedAt!,
+      ...(quick ? { target: { resourceType: "scheduled-run" as const, resourceId: run.id } } : {}),
     },
     state: "pending",
     attempts: 0,

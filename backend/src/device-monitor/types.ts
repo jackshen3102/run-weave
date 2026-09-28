@@ -30,6 +30,7 @@ export interface ScheduledTaskDelivery {
     title: string;
     body: string;
     occurredAt: string;
+    target?: { resourceType: "scheduled-run"; resourceId: string };
   };
   state:
     | "pending"

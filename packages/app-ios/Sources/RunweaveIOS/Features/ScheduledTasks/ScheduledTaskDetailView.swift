@@ -14,12 +14,16 @@ struct ScheduledTaskDetailView: View {
             HStack {
               Text(task.config.name).font(.title2.bold())
               Spacer()
-              ScheduledTaskActions(model: model, task: task, edit: { edit(task) })
+              if task.config.origin?.kind != "quick-input" {
+                ScheduledTaskActions(model: model, task: task, edit: { edit(task) })
+              }
             }
-            Text("\(scheduledProjectLabel(task.config.projectId, session: session)) · \(task.config.provider)").font(.subheadline)
-            Text(task.config.schedule.label)
-            Text(task.config.misfirePolicy.label).font(.caption).foregroundColor(.secondary)
-            Text(task.enabled ? "下次运行：\(scheduledDate(task.nextRunAt, timezone: task.config.schedule.timezone))" : "已暂停后续安排")
+            Text("\(task.config.origin?.label ?? scheduledProjectLabel(task.config.projectId, session: session)) · \(task.config.provider)").font(.subheadline)
+            if task.config.origin?.kind != "quick-input" {
+              Text(task.config.schedule.label)
+              Text(task.config.misfirePolicy.label).font(.caption).foregroundColor(.secondary)
+              Text(task.enabled ? "下次运行：\(scheduledDate(task.nextRunAt, timezone: task.config.schedule.timezone))" : "已暂停后续安排")
+            }
             if task.deletedAt != nil { Text("此任务已删除，历史仍可查看和打开。").foregroundColor(.secondary) }
             DisclosureGroup("任务提示词") { Text(task.config.prompt).textSelection(.enabled) }
             Text("模型：\(task.config.model ?? "默认") · 推理：\(task.config.effort ?? "默认") · \(task.config.executionPolicyLabel)")

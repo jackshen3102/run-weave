@@ -5,6 +5,7 @@ import {
   CornerDownLeft,
   Pin,
   PinOff,
+  Play,
   Send,
   Trash2,
 } from "lucide-react";
@@ -18,6 +19,8 @@ export function TerminalQuickInputRow({
   onCopy,
   onTogglePinned,
   onDelete,
+  onBackgroundRun,
+  canBackgroundRun,
 }: {
   item: TerminalQuickInputItem;
   busy: boolean;
@@ -27,6 +30,8 @@ export function TerminalQuickInputRow({
   onCopy: (item: TerminalQuickInputItem) => Promise<void>;
   onTogglePinned: (item: TerminalQuickInputItem) => Promise<void>;
   onDelete: (item: TerminalQuickInputItem) => Promise<void>;
+  onBackgroundRun: (item: TerminalQuickInputItem) => Promise<void>;
+  canBackgroundRun: boolean;
 }) {
   const insertAllowed = canInsertRaw(item);
   const insertTitle = insertAllowed
@@ -94,6 +99,15 @@ export function TerminalQuickInputRow({
             onClick={() => void onDelete(item)}
           >
             <Trash2 className="h-3.5 w-3.5" />
+          </IconButton>
+          <IconButton
+            disabled={busy || !canBackgroundRun}
+            title={item.data.trimStart().startsWith("$toolkit:update-runweave-desktop")
+              ? "当前版本不支持后台更新桌面应用"
+              : "后台运行"}
+            onClick={() => void onBackgroundRun(item)}
+          >
+            <Play className="h-3.5 w-3.5" />
           </IconButton>
         </div>
       </div>

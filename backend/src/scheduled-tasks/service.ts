@@ -8,13 +8,16 @@ import type {
   ScheduledTaskCapabilities,
   ScheduledTaskFilter,
   ScheduledTaskPage,
+  QuickInputRunFilter,
   ScheduledTaskValidation,
   SchedulePreviewResponse,
   TaskSchedule,
   UpdateScheduledTaskRequest,
 } from "@runweave/shared/scheduled-tasks";
+import type { TerminalQuickInputService } from "../terminal/quick-input/service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { ScheduledTaskError, scheduledTaskErrorFromStorage } from "./errors";
+import { startQuickInputRun } from "./quick-input-run";
 import type { ScheduledTaskRuntime } from "./runtime";
 import type { ScheduledTerminalAttachment } from "./terminal-attachment";
 import type { OpenScheduledRunResponse } from "@runweave/shared/scheduled-tasks";
@@ -146,6 +149,7 @@ export class ScheduledTaskService {
     const all = await this.requireStore().listTasks();
     const query = filter.q?.trim().toLocaleLowerCase();
     const filtered = all.filter((task) => {
+      if (task.origin?.kind === "quick-input") return false;
       if (Boolean(task.deletedAt) !== Boolean(filter.archived)) return false;
       if (filter.projectId && task.projectId !== filter.projectId) return false;
       if (
@@ -200,6 +204,7 @@ export class ScheduledTaskService {
   ) {
     this.requireEnabled();
     const current = await this.getTask(taskId);
+    this.requirePublicTask(current);
     if (current.deletedAt)
       throw new ScheduledTaskError(
         "invalid_input",
@@ -274,6 +279,7 @@ export class ScheduledTaskService {
   ): Promise<ScheduledTask> {
     this.requireEnabled();
     const current = await this.getTask(taskId);
+    this.requirePublicTask(current);
     if (current.deletedAt) return current;
     if (current.revision !== expectedRevision)
       throw new ScheduledTaskError(
@@ -304,6 +310,7 @@ export class ScheduledTaskService {
   async start(taskId: string, idempotencyKey: string): Promise<ScheduledRun> {
     this.requireEnabled();
     const task = await this.getTask(taskId);
+    this.requirePublicTask(task);
     if (task.deletedAt)
       throw new ScheduledTaskError(
         "invalid_input",
@@ -328,6 +335,24 @@ export class ScheduledTaskService {
     }
   }
 
+  async startQuickInput(
+    quickInputId: string,
+    projectId: string,
+    expectedInputUpdatedAt: string,
+    idempotencyKey: string,
+    quickInputs: TerminalQuickInputService,
+  ): Promise<ScheduledRun> {
+    this.requireEnabled();
+    return startQuickInputRun({
+      quickInputId, projectId, expectedInputUpdatedAt, idempotencyKey,
+      quickInputs, store: this.requireStore(), manager: this.terminalSessionManager,
+      requireProject: (id) => this.requireProject(id),
+      requireProvider: (provider) => this.requireProvider(provider),
+      requireExecutionPolicy: (provider, policy) => this.requireExecutionPolicy(provider, policy),
+      wake: () => this.runtime?.wake(),
+    });
+  }
+
   async listRuns(
     taskId: string,
     cursor?: string,
@@ -335,6 +360,11 @@ export class ScheduledTaskService {
   ): Promise<ScheduledTaskPage<ScheduledRun>> {
     await this.getTask(taskId);
     return paginate(await this.requireStore().listRuns(taskId), cursor, limit);
+  }
+
+  async listQuickInputRuns(filter: QuickInputRunFilter): Promise<ScheduledTaskPage<ScheduledRun>> {
+    const runs = await this.requireStore().listQuickInputRuns(filter.projectId, filter.finishedSince);
+    return paginate(runs, filter.cursor, filter.limit);
   }
 
   async getRun(runId: string): Promise<ScheduledRun> {
@@ -396,6 +426,15 @@ export class ScheduledTaskService {
         this.unavailableReason ?? "Scheduled task storage is unavailable",
       );
     return this.store;
+  }
+
+  private requirePublicTask(task: ScheduledTask): void {
+    if (task.origin?.kind === "quick-input")
+      throw new ScheduledTaskError(
+        "invalid_input",
+        400,
+        "Quick input runs cannot be edited or started as schedules",
+      );
   }
 
   private requireEnabled(): void {

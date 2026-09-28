@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="834" height="568" viewBox="0 0 834 568" role="img" aria-labelledby="title desc">
+<title id="title">快捷指令 · 执行过程</title>
+<desc id="desc">点击快捷指令卡片上的查看运行，按需查看过程或最终结果的静态原型。</desc>
+<style>text{font-family:ui-sans-serif,system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif} a{cursor:pointer}</style>
+<rect x="0" y="0" width="834" height="568" rx="0" fill="#020617"/>
+<rect x="1" y="14" width="831" height="550" rx="17" fill="#020617" stroke="#243348" stroke-width="2"/>
+<g transform="translate(24 44) scale(1.25)" fill="none" stroke="#94a3b8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></g>
+<a href="running.svg"><rect x="18" y="35" width="42" height="45" fill="transparent"/></a>
+<text x="74" y="67" fill="#f1f5f9" font-size="27" font-weight="650" >创建 github pr</text>
+<text x="74" y="90" fill="#94a3b8" font-size="17" font-weight="400" >browser-viewer / wt-1</text>
+<rect x="18" y="99" width="798" height="86" rx="10" fill="#0f172a" stroke="#27364a" stroke-width="2"/>
+<g transform="translate(38 123) scale(1.125)" fill="none" stroke="#64b8ca" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-8-8"/></g>
+<text x="77" y="146" fill="#f1f5f9" font-size="23" font-weight="600" >后台运行中</text>
+<text x="77" y="173" fill="#94a3b8" font-size="17" font-weight="400" >可离开此页；点击通知或卡片可随时回来看</text>
+<text x="18" y="227" fill="#f1f5f9" font-size="21" font-weight="600" >执行过程</text>
+<text x="718" y="227" fill="#64748b" font-size="17" font-weight="400" >实时更新</text>
+<rect x="18" y="246" width="798" height="208" rx="10" fill="#0c1527" stroke="#27364a" stroke-width="2"/>
+<text x="36" y="282" fill="#64748b" font-size="17" font-weight="500" >示例输出</text>
+<text x="36" y="315" fill="#94a3b8" font-size="19" font-weight="400" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">› 检查当前项目与工作区</text>
+<text x="36" y="349" fill="#94a3b8" font-size="19" font-weight="400" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">› 执行已保存的技能指令</text>
+<text x="36" y="383" fill="#94a3b8" font-size="19" font-weight="400" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">› 等待远端检查结果…</text>
+<text x="36" y="428" fill="#64748b" font-size="16" font-weight="400" >输出可滚动查看</text>
+<text x="18" y="506" fill="#64b8ca" font-size="18" font-weight="500" >模拟运行结束后查看结果 →</text>
+<a href="result.svg"><rect x="14" y="480" width="320" height="42" fill="transparent"/></a>
+</svg>

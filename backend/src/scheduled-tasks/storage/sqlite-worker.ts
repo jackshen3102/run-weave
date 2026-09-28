@@ -51,10 +51,27 @@ function execute(command: ScheduledTaskWorkerCommand) {
         command.idempotencyKey,
         command.requestHash,
       );
+    case "find-quick-input-run":
+      return database.findQuickInputRun(
+        command.quickInputId,
+        command.projectId,
+        command.idempotencyKey,
+        command.requestHash,
+      );
+    case "create-quick-input-run":
+      return database.createQuickInputRun(
+        command.task,
+        command.parentProjectId,
+        command.cwd,
+        command.idempotencyKey,
+        command.requestHash,
+      );
     case "get-run":
       return database.getRun(command.runId);
     case "list-runs":
       return database.listRuns(command.taskId);
+    case "list-quick-input-runs":
+      return database.listQuickInputRuns(command.projectId, command.finishedSince);
     case "list-recently-finished-runs":
       return database.listRecentlyFinishedRuns(command.since);
     case "claim-next-run":

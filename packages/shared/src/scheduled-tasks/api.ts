@@ -35,6 +35,17 @@ export interface ScheduledTaskFilter {
   cursor?: string;
   limit?: number;
 }
+export interface StartQuickInputRunRequest {
+  projectId: string;
+  expectedInputUpdatedAt: string;
+}
+export interface QuickInputRunFilter {
+  source: "quick-input";
+  projectId?: string;
+  finishedSince?: string;
+  cursor?: string;
+  limit?: number;
+}
 export interface CreateScheduledTaskRequest extends ScheduledTaskConfig {
   enabled: boolean;
 }

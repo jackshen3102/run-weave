@@ -2,6 +2,7 @@ export {
   createTerminalQuickInput,
   deleteTerminalQuickInput,
   listTerminalQuickInputs,
+  startTerminalQuickInputRun,
   markTerminalQuickInputUsed,
   updateTerminalQuickInput,
 } from "./quick-inputs";

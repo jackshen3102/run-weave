@@ -15,6 +15,13 @@ export type ScheduledMisfirePolicy =
   | { mode: "skip" }
   | { mode: "catch-up-latest"; maxDelaySeconds: number };
 
+export interface ScheduledQuickInputOrigin {
+  kind: "quick-input";
+  quickInputId: string;
+  projectName: string;
+  worktreeName: string | null;
+}
+
 export interface ScheduledTaskConfig {
   name: string;
   projectId: string;
@@ -26,6 +33,8 @@ export interface ScheduledTaskConfig {
   executionPolicy?: ScheduledExecutionPolicy;
   schedule: TaskSchedule;
   misfirePolicy: ScheduledMisfirePolicy;
+  /** Present only for an internal task created from a saved quick input. */
+  origin?: ScheduledQuickInputOrigin;
 }
 
 export interface ScheduledTask extends ScheduledTaskConfig {

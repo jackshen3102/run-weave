@@ -64,17 +64,30 @@ public struct RootView: View {
     .onAppear {
       if connections.active == nil { managingConnections = true }
       notifications.consume(in: connections)
+      Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
       notifications.foreground(connections: connections.connections)
     }
     .onChange(of: session.generation) { _ in codexQuota.reset() }
     .onChange(of: session.authenticated) { authenticated in
       if !authenticated { codexQuota.reset() }
-      else { notifications.refreshAutomaticTasks(connections: connections.connections) }
+      else {
+        notifications.refreshAutomaticTasks(connections: connections.connections)
+        Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
+      }
     }
     .onChange(of: connections.connections.map(\.scope).joined(separator: "|")) { _ in
       notifications.refreshAutomaticTasks(connections: connections.connections)
     }
-    .onChange(of: notifications.pendingHostID) { _ in notifications.consume(in: connections) }
+    .onChange(of: notifications.pendingHostID) { _ in
+      notifications.consume(in: connections)
+      Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
+    }
+    .onChange(of: connections.active?.scope) { _ in
+      Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
+    }
+    .onChange(of: session.health.status) { _ in
+      Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
+    }
     .alert("电脑提醒", isPresented: Binding(get: { notifications.message != nil }, set: { if !$0 { notifications.message = nil } })) {
       Button("好") { notifications.message = nil }
     } message: { Text(notifications.message ?? "") }

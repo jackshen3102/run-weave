@@ -64,6 +64,12 @@ export class TerminalQuickInputService {
 
   constructor(private readonly store: TerminalQuickInputStore) {}
 
+  async getById(id: string): Promise<TerminalQuickInputItem | null> {
+    await this.pendingMutation;
+    const item = (await this.store.list()).find((candidate) => candidate.id === id);
+    return item?.hiddenAt == null ? item ?? null : null;
+  }
+
   async list(
     params: ListTerminalQuickInputsParams,
   ): Promise<TerminalQuickInputItem[]> {

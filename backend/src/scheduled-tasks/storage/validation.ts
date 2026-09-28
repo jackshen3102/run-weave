@@ -48,6 +48,14 @@ const config = z.object({
       maxDelaySeconds: z.number().int().positive().max(604800),
     }),
   ]),
+  origin: z
+    .object({
+      kind: z.literal("quick-input"),
+      quickInputId: text,
+      projectName: text,
+      worktreeName: text.nullable(),
+    })
+    .optional(),
 });
 const taskSchema: z.ZodType<ScheduledTask> = config.extend({
   id: text,

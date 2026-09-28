@@ -210,7 +210,8 @@ export class ScheduledTaskRuntime {
       const project = this.terminalSessionManager.getProject(
         initial.snapshot.projectId,
       );
-      if (!project?.path) throw new Error("context_unavailable");
+      if (!project?.path || project.path !== initial.cwd)
+        throw new Error("context_unavailable");
       const provider = this.providers.get(initial.snapshot.provider);
       if (!provider) throw new Error("provider_unavailable");
       const result = await provider.run({

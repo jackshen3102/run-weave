@@ -17,7 +17,7 @@ export async function deliver(
 ): Promise<PushNotificationResult> {
   let notification!: ProviderNotification;
   const fingerprint = hash(
-    JSON.stringify([event.category, event.title, event.body, event.occurredAt]),
+    JSON.stringify([event.category, event.title, event.body, event.occurredAt, event.target]),
   );
   const claim = store.update((data) => {
     const subscription = data.subscriptions[event.subscriptionId];
@@ -53,6 +53,7 @@ export async function deliver(
       title: event.title,
       body: event.body,
       occurredAt: event.occurredAt,
+      ...(event.target ? { target: event.target } : {}),
     };
     encodePayload(subscription, notification);
     const expectedID = notification.notificationId;

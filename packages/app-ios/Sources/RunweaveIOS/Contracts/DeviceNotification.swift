@@ -32,6 +32,7 @@ struct NotificationBinding: Codable {
 struct BatteryPush {
   let hostID: String
   let notificationID: String
+  let scheduledRunID: String?
   init?(_ info: [AnyHashable: Any]) {
     guard (info["protocolVersion"] as? Int) == 1,
       let host = info["hostId"] as? String, UUID(uuidString: host) != nil,
@@ -40,6 +41,13 @@ struct BatteryPush {
     else { return nil }
     hostID = host
     notificationID = id
+    if let target = info["target"] as? [String: String],
+      target["resourceType"] == "scheduled-run",
+      let runID = target["resourceId"], UUID(uuidString: runID) != nil {
+      scheduledRunID = runID
+    } else {
+      scheduledRunID = nil
+    }
   }
 }
 extension APIClient {

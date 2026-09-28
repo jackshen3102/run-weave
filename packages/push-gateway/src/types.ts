@@ -27,6 +27,7 @@ export interface ProviderNotification {
   title: string;
   body: string;
   occurredAt: string;
+  target?: { resourceType: "scheduled-run"; resourceId: string };
 }
 export interface Delivery {
   id: string;

@@ -9,6 +9,8 @@ public final class NotificationCoordinator: ObservableObject {
   @Published private(set) var refreshFailures: [String: String] = [:]
   @Published var message: String?
   @Published var pendingHostID: String?
+  private var pendingScheduledRun: (hostID: String, runID: String)?
+  private var openingScheduledRun = false
   private let vault = CredentialStore()
   private let account = "native.notifications.v1"
   private var installation = UUID().uuidString
@@ -84,6 +86,28 @@ public final class NotificationCoordinator: ObservableObject {
       return
     }
     do { try store.select(selected.id) } catch { message = displayError(error) }
+  }
+  func openPendingScheduledRun(in session: AppSession, store: ConnectionStore) async {
+    guard !openingScheduledRun, let target = pendingScheduledRun,
+      let active = store.active, knownHosts[active.scope] == target.hostID,
+      session.authenticated, session.foreground, session.health.status == .online,
+      session.connection?.id == active.id else { return }
+    openingScheduledRun = true
+    defer { openingScheduledRun = false }
+    do {
+      let run = try await session.withConnection(reportFailure: false) {
+        try await ScheduledTasksService(api: $0).run(target.runID)
+      }
+      guard pendingScheduledRun?.runID == target.runID,
+        store.active?.id == active.id, session.connection?.id == active.id,
+        session.authenticated else { return }
+      pendingScheduledRun = nil
+      session.openScheduledSource(ScheduledTaskSource(type: "scheduled-task", taskId: run.taskId, runId: run.id))
+    } catch {
+      guard pendingScheduledRun?.runID == target.runID else { return }
+      pendingScheduledRun = nil
+      message = "无法打开此运行记录：\(displayError(error))"
+    }
   }
   func enable(_ connection: BackendConnection, kind: NotificationKind = .battery) async throws {
     let scope = key(connection, kind)
@@ -354,7 +378,10 @@ public final class NotificationCoordinator: ObservableObject {
   }
   public func received(_ info: [AnyHashable: Any], tapped: Bool) -> Bool {
     guard let push = BatteryPush(info) else { return false }
-    if tapped { pendingHostID = push.hostID }
+    if tapped {
+      if let runID = push.scheduledRunID { pendingScheduledRun = (push.hostID, runID) }
+      pendingHostID = push.hostID
+    }
     guard !seen.contains(push.notificationID) else { return false }
     seen.append(push.notificationID)
     if seen.count > 256 { seen.removeFirst(seen.count - 256) }

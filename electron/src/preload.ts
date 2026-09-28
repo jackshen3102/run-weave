@@ -68,6 +68,13 @@ const electronApi = {
     ipcRenderer.on("attention:notification-open", wrapped);
     return () => ipcRenderer.off("attention:notification-open", wrapped);
   },
+  showScheduledRunNotification: (target: { connectionId: string; runId: string; title: string; body: string }) =>
+    ipcRenderer.invoke("scheduled-run:notify", target) as Promise<boolean>,
+  onScheduledRunNotificationOpen: (listener: (target: { connectionId: string; runId: string }) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, target: { connectionId: string; runId: string }) => listener(target);
+    ipcRenderer.on("scheduled-run:notification-open", wrapped);
+    return () => ipcRenderer.off("scheduled-run:notification-open", wrapped);
+  },
   listTunnels: () => ipcRenderer.invoke("tunnels:list") as Promise<TunnelSnapshot>,
   saveTunnels: (input: TunnelConfigUpdate) => ipcRenderer.invoke("tunnels:save-config", input) as Promise<TunnelSnapshot>,
   connectTunnel: (id: string) => ipcRenderer.invoke("tunnels:connect", id) as Promise<void>,

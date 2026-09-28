@@ -23,6 +23,7 @@ export interface PushNotificationRequest {
   title: string;
   body: string;
   occurredAt: string;
+  target?: { resourceType: "scheduled-run"; resourceId: string };
 }
 
 export interface PushNotificationResult extends PushDeliveryResult {

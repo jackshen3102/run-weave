@@ -38,6 +38,13 @@ struct ScheduledMisfirePolicy: Codable, Equatable {
   var label: String { mode == "skip" ? "错过就跳过" : "恢复后补最近一次（\((maxDelaySeconds ?? 86400) / 3600) 小时内）" }
 }
 struct ScheduledTaskConfig: Codable, Equatable {
+  struct QuickInputOrigin: Codable, Equatable {
+    let kind: String
+    let quickInputId: String
+    let projectName: String
+    let worktreeName: String?
+    var label: String { projectName + (worktreeName.map { " / " + $0 } ?? "") }
+  }
   var name = ""
   var projectId = ""
   var provider = "codex"
@@ -45,6 +52,7 @@ struct ScheduledTaskConfig: Codable, Equatable {
   var model: String?
   var effort: String?
   var executionPolicy: String?
+  var origin: QuickInputOrigin?
   var schedule = ScheduledTaskSchedule()
   var misfirePolicy = ScheduledMisfirePolicy()
   var resolvedExecutionPolicy: String { executionPolicy ?? "sandbox" }
