@@ -43,11 +43,8 @@ import {
   clearTerminalBrowserAnnotationAndNotify,
   sendTerminalBrowserTabUpdate,
 } from "./updates.js";
-import {
-  recordBrowserNavigationFinished,
-  recordBrowserNavigationStarted,
-  recordBrowserTabEvent,
-} from "../../activity/emitter.js";
+import { recordBrowserTabEvent } from "../../activity/emitter.js";
+import { attachBrowserNavigationActivity } from "../../activity/browser-navigation.js";
 import {
   attachTerminalBrowser,
   detachTerminalBrowser,
@@ -175,6 +172,10 @@ export function getOrCreateTerminalBrowserView(
     pendingUpdateTimer: null,
   };
 
+  attachBrowserNavigationActivity(view.webContents, () => ({
+    tabId,
+    browserGroupId: entry.browserGroupId,
+  }));
   view.webContents.on("devtools-opened", () => {
     entry.devtoolsOpen = true;
     sendTerminalBrowserTabUpdate(win, tabId, entry);
@@ -188,7 +189,7 @@ export function getOrCreateTerminalBrowserView(
   });
   view.webContents.on(
     "did-start-navigation",
-    (_event, url, _inPlace, isMainFrame) => {
+    (_event, _url, _inPlace, isMainFrame) => {
       if (isMainFrame) {
         entry.faviconGeneration += 1;
         // A same-origin page can intentionally have no favicon. Keeping the
@@ -197,11 +198,6 @@ export function getOrCreateTerminalBrowserView(
         entry.faviconDataUrl = null;
         entry.navigationError = null;
         sendTerminalBrowserTabUpdate(win, tabId, entry, true);
-        recordBrowserNavigationStarted({
-          tabId,
-          browserGroupId: entry.browserGroupId,
-          url,
-        });
       }
     },
   );
@@ -220,20 +216,14 @@ export function getOrCreateTerminalBrowserView(
       scheduleTerminalBrowserTabsSave();
     }
   });
-  view.webContents.on("did-navigate", (_event, url) => {
+  view.webContents.on("did-navigate", () => {
     entry.navigationError = null;
     clearTerminalBrowserAnnotationAndNotify(win, tabId);
     sendTerminalBrowserTabUpdate(win, tabId, entry);
-    recordBrowserNavigationFinished({
-      tabId,
-      browserGroupId: entry.browserGroupId,
-      url,
-      status: "completed",
-    });
   });
   view.webContents.on(
     "did-fail-load",
-    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
       if (!isMainFrame) return;
       if (errorCode !== -3) {
         entry.navigationError = (errorDescription || String(errorCode)).slice(
@@ -242,13 +232,6 @@ export function getOrCreateTerminalBrowserView(
         );
         sendTerminalBrowserTabUpdate(win, tabId, entry, false);
       }
-      recordBrowserNavigationFinished({
-        tabId,
-        browserGroupId: entry.browserGroupId,
-        url: validatedURL,
-        status: errorCode === -3 ? "cancelled" : "failed",
-        code: errorDescription || String(errorCode),
-      });
     },
   );
   view.webContents.on("did-navigate-in-page", () => {

@@ -12,7 +12,6 @@ import { readPackagedBackendCredentials } from "../backend/packaged/auth.js";
 
 const bootId = crypto.randomUUID();
 const bootStartedAt = new Date().toISOString();
-const navigationIds = new Map<string, string>();
 let sequence = 0;
 let accessToken: string | null = null;
 
@@ -136,34 +135,33 @@ export function recordBrowserNavigationStarted(params: {
   tabId: string;
   browserGroupId: string;
   url: string;
-}): void {
+}): string {
   const operationId = crypto.randomUUID();
-  navigationIds.set(params.tabId, operationId);
   record({
     eventName: "browser.navigation.started",
     ...params,
     operationId,
     payload: { to: sanitizeUrl(params.url) },
   });
+  return operationId;
 }
 
 export function recordBrowserNavigationFinished(params: {
+  operationId: string;
   tabId: string;
   browserGroupId: string;
   url: string;
   status: "completed" | "failed" | "cancelled";
   code?: string;
 }): void {
-  const operationId = navigationIds.get(params.tabId) ?? crypto.randomUUID();
-  navigationIds.delete(params.tabId);
   record({
     eventName: `browser.navigation.${params.status}`,
     tabId: params.tabId,
     browserGroupId: params.browserGroupId,
-    operationId,
+    operationId: params.operationId,
     payload: { to: sanitizeUrl(params.url) },
     result: {
-      status: params.status === "completed" ? "succeeded" : "failed",
+      status: params.status === "completed" ? "succeeded" : params.status,
       ...(params.code ? { code: params.code } : {}),
     },
   });
