@@ -14,7 +14,7 @@
 - [终端与渲染](../../../docs/testing/app/ios-native-terminal.testplan.yaml)
 - [认证、连接与资源生命周期](../../../docs/testing/app/ios-native-session.testplan.yaml)
 - [终端图片附件](../../../docs/testing/app/ios-native-image-attachments.testplan.yaml)
-- [本地快捷回复](../../../docs/testing/app/ios-native-local-quick-replies.testplan.yaml)
+- [Backend 全局快捷回复与后台运行](../../../docs/testing/app/ios-backend-quick-inputs.testplan.yaml)
 - [草稿隐私元数据兼容](../../../docs/testing/app/ios-native-draft-privacy.testplan.yaml)
 - [变更文件能力与版本预览](../../../docs/testing/app/change-preview-capabilities.testplan.yaml)
 - [输入、媒体、预览与主题](../../../docs/testing/app/ios-native-features.testplan.yaml)
@@ -109,7 +109,9 @@ Simulator 或真机交互验收。
 不能据此宣称所有转场零掉帧；该小样本也不覆盖所有设备、大文件、弱网与系统中断。
 此前 `preview-left-*` / `preview-right-*` 为已移除的自定义手势方案，不作为当前版本证据。
 
-## 本地快捷回复验证
+## 旧版本本地快捷回复验证
+
+以下证据属于切换 Backend 数据源之前的本地库版本，不作为新版全局列表、导入或后台运行的验收结果。
 
 2026-09-12，本轮候选通过 iOS 26.5 独占 Simulator Debug 构建与既有 XCUITest 执行器的专项交互：
 无连接时新增含技能名称的多行回复、标题/正文搜索、编辑、手动排序、取消删除、确认删除和进程重启恢复；

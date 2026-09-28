@@ -3,9 +3,10 @@ import SwiftUI
 import UIKit
 
 struct QuickReplyEditorView: View {
-  @EnvironmentObject private var store: LocalQuickReplyStore
+  @EnvironmentObject private var store: BackendQuickInputModel
+  @ObservedObject var session: AppSession
   @Environment(\.dismiss) private var dismiss
-  private let id: UUID?
+  private let item: BackendQuickInput?
   private let originalTitle: String
   private let originalBody: String
   @State private var title: String
@@ -17,17 +18,18 @@ struct QuickReplyEditorView: View {
   @ScaledMetric private var minimumBodyHeight: CGFloat = 64
   @ScaledMetric private var maximumBodyHeight: CGFloat = 260
 
-  init(item: LocalQuickReply? = nil, initialBody: String = "") {
-    id = item?.id
+  init(session: AppSession, item: BackendQuickInput? = nil, initialBody: String = "") {
+    self.session = session
+    self.item = item
     originalTitle = item?.title ?? ""
-    originalBody = item?.body ?? ""
+    originalBody = item?.data ?? ""
     _title = State(initialValue: item?.title ?? "")
-    _text = State(initialValue: item?.body ?? initialBody)
+    _text = State(initialValue: item?.data ?? initialBody)
   }
 
   private var hasChanges: Bool { title != originalTitle || text != originalBody }
   private var canSave: Bool {
-    store.canEdit && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    store.canEdit(session) && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   var body: some View {
@@ -46,10 +48,10 @@ struct QuickReplyEditorView: View {
         .accessibilityIdentifier("quick-reply-body")
       }
       if let failure { Section { Text(failure).foregroundColor(.red) } }
-      if let error = store.readError { Section { Text(error).foregroundColor(.red) } }
+      if let error = store.failure { Section { Text(error).foregroundColor(.red) } }
     }
     .disabled(store.saving)
-    .navigationTitle(id == nil ? "新增快捷回复" : "编辑快捷回复")
+    .navigationTitle(item == nil ? "新增快捷回复" : "编辑快捷回复")
     .navigationBarTitleDisplayMode(.inline)
     .navigationBarBackButtonHidden(true)
     .toolbar {
@@ -71,7 +73,7 @@ struct QuickReplyEditorView: View {
       Button("放弃更改", role: .destructive) { dismiss() }
       Button("继续编辑", role: .cancel) {}
     }
-    .task { await store.loadIfNeeded() }
+    .task { await store.loadIfNeeded(session) }
   }
 
   private func requestExit() {
@@ -84,7 +86,7 @@ struct QuickReplyEditorView: View {
     failure = nil
     Task {
       do {
-        try await store.save(id: id, title: title, body: text)
+        try await store.save(session, item: item, title: title, body: text)
         dismiss()
       } catch { failure = error.localizedDescription }
     }

@@ -21,7 +21,8 @@ export type TerminalQuickInputSource =
   | "web_terminal_quick_input"
   | "web_git_submit"
   | "web_browser_annotation"
-  | "api_terminal_input";
+  | "api_terminal_input"
+  | "ios_quick_reply";
 
 export interface TerminalQuickInputItem {
   id: string;
@@ -38,10 +39,14 @@ export interface TerminalQuickInputItem {
   lastUsedAt?: string;
   hiddenAt?: string | null;
   useCount: number;
+  manualOrder?: number;
+  clientImportId?: string;
 }
 
 export interface ListTerminalQuickInputsResponse {
   items: TerminalQuickInputItem[];
+  nextCursor?: string | null;
+  orderVersion?: string;
 }
 
 export interface CreateTerminalQuickInputRequest {
@@ -51,11 +56,16 @@ export interface CreateTerminalQuickInputRequest {
   projectId?: string | null;
   terminalSessionId?: string | null;
   cwd?: string | null;
+  source?: "ios_quick_reply";
+  clientImportId?: string;
 }
 
 export interface UpdateTerminalQuickInputRequest {
   title?: string;
   pinned?: boolean;
+  data?: string;
+  mode?: TerminalQuickInputMode;
+  expectedUpdatedAt?: string;
 }
 
 export interface SendTerminalInputRequest {
