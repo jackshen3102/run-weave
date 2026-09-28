@@ -1,5 +1,4 @@
 import { TmuxPaneService } from "./pane-service";
-import type { TmuxPaneTarget } from "./types";
 
 export type {
   KillOrphanedTmuxSessionsOptions,
@@ -22,15 +21,4 @@ export {
   TmuxRebuildLimitError,
 } from "./types";
 
-export class TmuxService extends TmuxPaneService {
-  /** Keep SGR attributes to distinguish a dim TUI placeholder from user input. */
-  async capturePaneWithAnsi(target: TmuxPaneTarget): Promise<string> {
-    if (!/^%\d+$/.test(target.paneId)) throw new Error("Invalid pane target");
-    const result = await this.runTmux(
-      ["capture-pane", "-p", "-e", "-J", "-S", "-0", "-t", target.paneId],
-      target,
-      { sensitiveOutput: true },
-    );
-    return result.stdout.replace(/\r\n/g, "\n");
-  }
-}
+export class TmuxService extends TmuxPaneService {}
