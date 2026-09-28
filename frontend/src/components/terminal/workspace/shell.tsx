@@ -36,7 +36,6 @@ interface WorkspaceConnectionNavigation {
   connectionName?: string;
   onSelect?: (connectionId: string) => void;
   onOpenManager?: () => void;
-  onNavigateHome?: () => void;
 }
 
 interface WorkspaceProjectCommands {
@@ -76,7 +75,6 @@ export function TerminalWorkspaceShell({
     activeConnectionId,
     connectionName,
     connections,
-    onNavigateHome,
     onOpenManager: onOpenConnectionManager,
     onSelect: onSelectConnection,
   } = connection;
@@ -342,11 +340,11 @@ export function TerminalWorkspaceShell({
       <TerminalWorkspaceHeader
         loading={loading}
         isMobileMonitor={isMobileMonitor}
+        onCreateSession={onRequestCreateSession}
         connection={{
           activeConnectionId,
           connectionName,
           connections,
-          onNavigateHome,
           onOpenManager: onOpenConnectionManager,
           onSelect: onSelectConnection,
         }}
@@ -384,6 +382,8 @@ export function TerminalWorkspaceShell({
           />
           <TerminalWorkspaceStage
             clientMode={clientMode}
+            loading={loading}
+            onCreateSession={onRequestCreateSession}
             showAgentTeamTool={showAgentTeamTool}
             onEditProject={() => requestEditProject()}
             panels={{

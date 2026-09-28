@@ -10,7 +10,7 @@ import type {
 import {
   CalendarClock,
   History,
-  Home,
+  ArrowLeft,
   Lightbulb,
   Play,
   RefreshCw,
@@ -160,7 +160,7 @@ export function EvolutionSidebar({
   providers,
   onSelectView,
   onSelectScope,
-  onNavigateHome,
+  onNavigateTerminal,
 }: {
   view: EvolutionView;
   scopes: EvolutionScopeOption[];
@@ -169,7 +169,7 @@ export function EvolutionSidebar({
   providers: EvolutionProviderAvailability[];
   onSelectView: (view: EvolutionView) => void;
   onSelectScope: (scopeId: string) => void;
-  onNavigateHome: () => void;
+  onNavigateTerminal: () => void;
 }) {
   const selectedScope = scopes.find((scope) => scope.id === selectedScopeId);
   const globalScope = scopes.find((scope) => scope.kind === "global");
@@ -184,9 +184,9 @@ export function EvolutionSidebar({
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Evolution</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={onNavigateHome}>
-          <Home className="h-4 w-4" />
-          <span className="sr-only">返回首页</span>
+        <Button variant="ghost" size="icon" onClick={onNavigateTerminal}>
+          <ArrowLeft className="h-4 w-4" />
+          <span className="sr-only">返回终端</span>
         </Button>
       </div>
 

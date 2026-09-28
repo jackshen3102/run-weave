@@ -1,0 +1,105 @@
+version: 1
+name: Web Home 路由移除与终端主页入口验收
+description: >
+  验证 Web 和 Electron 终端主页承接原 Home 的导航与账户入口，手机 Web 在零终端状态仍可创建会话。
+cases:
+  - id: WHR-001
+    name: 旧 Home 地址收敛到终端主页
+    required: true
+    description: >
+      已登录访问根路径或旧 Home 地址进入终端主页，未登录进入登录页，均不渲染旧 Home 或产生跳转循环。
+    preconditions:
+      - 隔离 Web 与 Backend 已启动，存在可登录的测试账号。
+      - 有一个仅供本例使用的浏览器上下文。
+    steps:
+      - 使用 $toolkit:playwright-cli 登录后分别打开 / 和 /home；确认最终 URL 为 /terminal，页面出现终端工作区而不是旧 Home 空态，无 404 或重复跳转。
+      - 退出登录后重新打开 /home；确认进入 /login，重新登录后进入 /terminal。
+
+  - id: WHR-002
+    name: 抽屉开关保留当前终端状态
+    required: true
+    description: >
+      应用菜单作为浮层打开和关闭，不能重建当前终端或清除未发送输入。
+    preconditions:
+      - 隔离 Web 与 Backend 已启动并登录，测试终端有可辨认的输出与未发送草稿。
+    steps:
+      - 使用 $toolkit:playwright-cli 记录当前终端会话 ID、输出与草稿，点击“当前连接”前的应用菜单图标；确认左侧抽屉出现且 URL 仍为当前 /terminal 地址。
+      - 用 Escape 关闭，再打开并用关闭按钮关闭；确认会话 ID、输出与草稿不变，终端仍可输入。
+
+  - id: WHR-003
+    name: 导航入口与返回路径可达
+    required: true
+    description: >
+      应用菜单保留原 Home 的分析入口，独立页面的返回动作直接回终端主页。
+    preconditions:
+      - 隔离 Web 与 Backend 已启动并登录，测试账号可读取 Activity 与 Evolution。
+    steps:
+      - 使用 $toolkit:playwright-cli 从 /terminal 的应用菜单进入 Activity，确认 URL 为 /activity；点击返回终端，确认 URL 为 /terminal。
+      - 从应用菜单进入 Evolution 成果视图，返回终端；再进入 Evolution 分析管理视图并从其返回控件返回终端，确认每次都没有落到 /home。
+
+  - id: WHR-004
+    name: 手机零会话可创建终端
+    required: true
+    description: >
+      手机 Web 在没有终端会话时仍有可见的创建入口，创建后进入新会话，失败时显示错误。
+    preconditions:
+      - 隔离 Web 与 Backend 已启动并登录，当前测试连接没有终端会话。
+      - 使用真实手机视口的独立浏览器上下文，测试连接允许创建会话。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开 /terminal，确认零会话空态有“新建终端”按钮，左侧应用菜单也有“新建终端”。
+      - 从空态点击创建，确认出现一个新终端标签和对应的会话 URL；再次从菜单创建，确认出现另一个会话，两个入口都使用手机运行时偏好。
+      - 清理本例创建的会话。
+
+  - id: WHR-005
+    name: 手机创建失败保留原会话
+    required: true
+    description: >
+      创建失败显示错误，已选中的会话仍可使用。
+    preconditions:
+      - 可恢复的隔离测试 Backend 已启动，手机 Web 已登录并选中一个专用会话。
+    steps:
+      - 在可恢复的测试 Backend 故障条件下使用 $toolkit:playwright-cli 从应用菜单新建终端；确认显示错误且原会话仍保持选中。
+      - 恢复 Backend；确认原会话可继续输入，没有产生半完成的新标签。
+
+  - id: WHR-006
+    name: 修改密码保留认证语义
+    required: true
+    description: >
+      修改密码错误保留登录态并提示，成功后清理当前连接认证。
+    preconditions:
+      - 隔离 Web 与 Backend 已启动，使用可重置密码的专用测试账号登录。
+    steps:
+      - 使用 $toolkit:playwright-cli 从应用菜单打开修改密码，填入错误的当前密码并提交；确认显示专用错误且仍在终端主页，关闭对话框后终端仍可用。
+      - 再以正确的当前密码修改，确认进入 /login，旧密码无法登录而新密码可以登录；恢复测试账号原密码。
+
+  - id: WHR-007
+    name: 主动退出返回登录页
+    required: true
+    description: >
+      退出登录清除当前登录态，重新登录回到终端主页。
+    preconditions:
+      - 隔离 Web 与 Backend 已启动，测试账号已登录。
+    steps:
+      - 使用 $toolkit:playwright-cli 从 /terminal 的应用菜单退出登录；确认进入 /login。
+      - 重新登录；确认进入 /terminal，没有返回旧 Home。
+
+  - id: WHR-008
+    name: Electron 系统监控入口与抽屉浮层可用
+    required: true
+    description: >
+      Electron 显示 System Monitor 入口且抽屉盖在原生 Browser 视图之上。
+    preconditions:
+      - 本例有独立启动的 Electron Dev Session 和可登录测试账号，终端右侧 Browser 已显示网页。
+    steps:
+      - 使用 $toolkit:playwright-cli 附着 Electron renderer 打开应用菜单；确认抽屉在 Browser 视图上方且能点击，并有 System Monitor 入口。
+      - 点击 System Monitor，确认 URL 为 /system-monitor；点击返回终端，确认 URL 为 /terminal。
+
+  - id: WHR-009
+    name: 纯 Web 不显示系统监控入口
+    required: true
+    description: >
+      System Monitor 仅限 Electron，在纯 Web 的应用菜单不可见。
+    preconditions:
+      - 隔离 Web 与 Backend 已启动，测试账号已登录。
+    steps:
+      - 在纯 Web 页面打开应用菜单；确认没有 System Monitor 入口。

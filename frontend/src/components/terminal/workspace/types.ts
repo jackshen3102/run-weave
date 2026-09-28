@@ -18,7 +18,6 @@ export interface TerminalWorkspaceProps {
   initialTerminalSessionId?: string;
   onActiveSessionChange?: (terminalSessionId: string | null) => void;
   onNoSessionAvailable?: () => void;
-  onNavigateHome?: () => void;
   onAuthExpired?: () => void;
   className?: string;
 }

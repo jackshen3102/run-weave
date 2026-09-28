@@ -14,7 +14,6 @@ import {
   ExternalLink,
   Gauge,
   Eye,
-  Home,
   MoreHorizontal,
   NotebookPen,
   RefreshCw,
@@ -52,6 +51,7 @@ import { TerminalQuickInputPopover } from "../input/quick-input-popover";
 import { TerminalWorkspaceServicesPopover } from "./workspace-services-popover";
 import { RuntimeStatusEntry } from "../../runtime-status-entry";
 import { Tooltip } from "../../ui/tooltip";
+import { TerminalAppMenu } from "./app-menu";
 
 interface HeaderConnectionNavigation {
   connections?: ConnectionConfig[];
@@ -59,7 +59,6 @@ interface HeaderConnectionNavigation {
   connectionName?: string;
   onSelect?: (connectionId: string) => void;
   onOpenManager?: () => void;
-  onNavigateHome?: () => void;
 }
 
 interface HeaderProjectCommands {
@@ -74,6 +73,7 @@ interface TerminalWorkspaceHeaderProps {
   connection: HeaderConnectionNavigation;
   loading: boolean;
   isMobileMonitor: boolean;
+  onCreateSession: () => void;
   projects: HeaderProjectCommands;
 }
 
@@ -81,6 +81,7 @@ export function TerminalWorkspaceHeader({
   connection,
   loading,
   isMobileMonitor,
+  onCreateSession,
   projects: projectCommands,
 }: TerminalWorkspaceHeaderProps) {
   const { apiBase, token } = useTerminalRuntime();
@@ -91,7 +92,6 @@ export function TerminalWorkspaceHeader({
     activeConnectionId,
     connectionName,
     connections,
-    onNavigateHome,
     onOpenManager: onOpenConnectionManager,
     onSelect: onSelectConnection,
   } = connection;
@@ -211,19 +211,11 @@ export function TerminalWorkspaceHeader({
   });
   return (
     <div className="flex h-8 items-center gap-1.5 border-b border-slate-800 px-2">
-      {onNavigateHome && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label="Go home"
-          title="Go home"
-          className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-          onClick={onNavigateHome}
-        >
-          <Home className="h-3.5 w-3.5" />
-        </Button>
-      )}
+      <TerminalAppMenu
+        isMobileMonitor={isMobileMonitor}
+        loading={loading}
+        onCreateSession={onCreateSession}
+      />
       {connections?.length &&
       activeConnectionId &&
       onSelectConnection &&

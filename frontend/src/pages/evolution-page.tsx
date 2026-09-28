@@ -65,14 +65,14 @@ import {
   EvolutionSchedulesPanel,
 } from "./evolution/evolution-assets-panels";
 
-export function EvolutionPage(props: { apiBase: string; token: string; onNavigateHome: () => void }) {
+export function EvolutionPage(props: { apiBase: string; token: string; onNavigateTerminal: () => void }) {
   const [params, setParams] = useSearchParams();
   const management = EVOLUTION_VIEWS.has(params.get("view") as EvolutionView);
   return <div className="flex h-full min-h-0 flex-col overflow-auto bg-background">
     <nav className="flex shrink-0 gap-2 border-b border-border px-4 py-2" aria-label="自进化视图">
       <Button variant={management ? "ghost" : "secondary"} onClick={() => setParams({})}>成果</Button>
       <Button variant={management ? "secondary" : "ghost"} onClick={() => setParams({view: "overview"})}>分析管理</Button>
-      {!management ? <Button variant="ghost" className="ml-auto" onClick={props.onNavigateHome}>返回首页</Button> : null}
+      {!management ? <Button variant="ghost" className="ml-auto" onClick={props.onNavigateTerminal}>返回终端</Button> : null}
     </nav>
     {management ? <EvolutionManagementPage {...props} /> : <KnowledgeInbox key={`${props.apiBase}:${inboxAccount(props.token)}`} apiBase={props.apiBase} token={props.token} />}
   </div>;
@@ -81,11 +81,11 @@ export function EvolutionPage(props: { apiBase: string; token: string; onNavigat
 function EvolutionManagementPage({
   apiBase,
   token,
-  onNavigateHome,
+  onNavigateTerminal,
 }: {
   apiBase: string;
   token: string;
-  onNavigateHome: () => void;
+  onNavigateTerminal: () => void;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -471,7 +471,7 @@ function EvolutionManagementPage({
           providers={providers}
           onSelectView={selectView}
           onSelectScope={selectScope}
-          onNavigateHome={onNavigateHome}
+          onNavigateTerminal={onNavigateTerminal}
         />
         <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <EvolutionHeader

@@ -39,11 +39,11 @@ const ACTIVITY_VIEWS = new Set<ActivityView>([
 export function ActivityPage({
   apiBase,
   token,
-  onNavigateHome,
+  onNavigateTerminal,
 }: {
   apiBase: string;
   token: string;
-  onNavigateHome: () => void;
+  onNavigateTerminal: () => void;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
@@ -202,7 +202,7 @@ export function ActivityPage({
           <ActivityHeader
             search={search}
             runtimeChannel={runtimeChannel}
-            onNavigateHome={onNavigateHome}
+            onNavigateTerminal={onNavigateTerminal}
             onSearchChange={updateSearch}
             onRuntimeChannelChange={updateRuntimeChannel}
           />
