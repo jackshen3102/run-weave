@@ -14,7 +14,7 @@ export function webCors(origins: string): RequestHandler {
       res.set("Access-Control-Expose-Headers", "X-Request-Id,Retry-After");
     }
     if (req.method === "OPTIONS") {
-      res.set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+      res.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
       res.set(
         "Access-Control-Allow-Headers",
         "Authorization,Content-Type,Idempotency-Key",

@@ -570,8 +570,9 @@ export function SuijiWorkspace({
       {editor ? (
         <SuijiEditor
           model={editor}
+          correctionAvailable={info.features?.correction}
           availableTags={availableTags}
-          onClose={() => setEditor(undefined)}
+          onClose={() => { void editor.cancelCorrection(); setEditor(undefined); }}
           onDiscard={() => {
             models.current.delete(editor.followupRecordId ? "followup:" + editor.followupRecordId : editor.state.draft.id);
             editor.dispose();

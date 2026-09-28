@@ -36,6 +36,12 @@ export async function authenticatedReadback(config, credentials, sql) {
       info.protocolVersion !== 1
     )
       throw new Error("Readback identity/protocol mismatch");
+    if (info.schemaVersion >= 7) {
+      const lexicon = await (await request("/api/suiji/v1/correction-lexicon", { headers })).json();
+      const stored = JSON.parse(await sql("SELECT coalesce((SELECT json_build_object('version',version,'entries',entries) FROM correction_lexicons WHERE owner_id=(SELECT id FROM owners)),json_build_object('version',0,'entries','[]'::json))"));
+      if (JSON.stringify(lexicon) !== JSON.stringify(stored))
+        throw new Error("Readback correction lexicon mismatch");
+    }
     let cursor = null,
       count = 0;
     let followupCount = 0;

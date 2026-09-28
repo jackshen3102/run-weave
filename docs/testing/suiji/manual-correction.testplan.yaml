@@ -1,0 +1,175 @@
+version: 1
+name: 随记手动文字纠错
+description: >
+  在隔离随记服务、真实 Web 页面与原生 iPhone 编辑器验证词库、手动 Codex 纠错及草稿应用边界。
+  只执行本计划不能证明模型对所有输入都保持原意，语义样本须逐条人工核对。
+cases:
+  - id: CORRECT-001
+    name: 词库跨设备同步
+    required: true
+    description: 同一 owner 的词库修改跨客户端可见，读取结果与保存版本一致。
+    preconditions:
+      - 隔离服务已迁移到支持纠错词库的 schema，准备同一 owner 的两台已登录客户端。
+    steps:
+      - 在客户端 A 新增标准写法 Runweave 和误识别写法 Runwave；确认服务返回递增版本，客户端 B 重新读取后显示同一词条。
+  - id: CORRECT-002
+    name: 词库请求幂等
+    required: true
+    description: 同一次词库替换只有一个版本结果，重用键修改请求被拒绝。
+    preconditions:
+      - 隔离服务有已登录 owner 和可读取的词库版本。
+    steps:
+      - 用相同 Idempotency-Key 重放相同 PUT；确认返回相同版本与条目，不再增加版本；用同一键换正文确认冲突。
+  - id: CORRECT-003
+    name: 词库鉴权与连接隔离
+    required: true
+    description: 词库只对当前随记服务的已登录会话开放，其他服务的 token 与匿名请求不能读取。
+    preconditions:
+      - 准备两个独立随记服务及各自已登录会话，服务 A 有包含私有名称的词库。
+    steps:
+      - 用服务 B 的 App Bearer 请求服务 A 的词库 GET 和 PUT；确认均被拒绝，随后以 A 的会话回读仍能看到原有私有名称。
+      - 不携带有效 App Bearer 请求服务 A 的词库；确认返回未认证，响应和日志不含 A 的私有名称。
+  - id: CORRECT-004
+    name: 纠错必须手动触发
+    required: true
+    description: 输入正文、打开编辑器和保存草稿均不启动 Codex，只有点击纠错才创建任务。
+    preconditions:
+      - 隔离服务启用已登录的真实 Codex CLI，owner 的词库含 Runweave 及常见误识别写法。
+      - 准备语音转写样本，包含私有名称、相邻重复、错词、数字、URL 和 Markdown 标记。
+    steps:
+      - 输入样本但不触发纠错；确认没有纠错任务或 Codex 进程。
+      - 点击纠正文字；确认创建一个纠错任务，并启动真实 Codex CLI。
+  - id: CORRECT-005
+    name: 不确定私有词保持原文
+    required: true
+    description: 词库无法确定的名称不被模型猜改，并明确列出不确定原文片段。
+    preconditions:
+      - 隔离服务启用真实 Codex CLI，准备词库中没有的歧义私有名称样本。
+    steps:
+      - 手动发起纠错并等待结果；核对歧义名称仍保持原文，响应的不确定项来自原文，未编造一个看似正确的新名称。
+  - id: CORRECT-006
+    name: 纠错任务重放
+    required: true
+    description: 同 owner 同键同文本只运行一次，同键更换文本被拒绝。
+    preconditions:
+      - 隔离服务启用可观察启动次数的 Codex CLI，准备两个 owner 会话。
+    steps:
+      - 以 owner A 使用同一键和文本重复 POST；确认任务 ID 相同且 Codex 仅启动一次；同键换文本被拒绝。
+  - id: CORRECT-007
+    name: 取消释放资源
+    required: true
+    description: 用户取消后，Codex 子进程终止，普通记录能力可继续使用。
+    preconditions:
+      - 隔离服务配置可控制的长时间 Codex 进程，当前纠错任务正在运行。
+    steps:
+      - 取消当前任务并查询状态；确认 cancelled，进程与临时文件已清理，随后保存一条普通记录成功。
+  - id: CORRECT-008
+    name: AI 未启用不阻断记录
+    required: true
+    description: 服务未启用 AI 时不给候选，普通记录和词库仍可使用。
+    preconditions:
+      - 隔离服务分别具备禁用 AI 和无法启动 Codex 的配置，准备一条已有记录及词库。
+    steps:
+      - 在禁用配置读取 info 并请求纠错；确认能力不可用且不产生候选，普通记录保存仍成功。
+  - id: CORRECT-009
+    name: Web 编辑器预览与手动应用
+    required: true
+    description: 真实 Web 页面中候选不自动保存，应用只更新本机草稿，云端需单独保存。
+    preconditions:
+      - 真实 Web 页面连接隔离服务，服务纠错可用，已登录并打开一条可编辑记录。
+    steps:
+      - 使用 $toolkit:playwright-cli 输入转写样本并点击纠正文字；展开查看原文并与候选核对，云端记录正文及版本未变。
+      - 点击取消；确认草稿不变。再次纠错后点击应用；确认编辑器正文变为候选且云端版本未变，点击保存后云端正文才变化。
+  - id: CORRECT-010
+    name: Web 旧候选不能覆盖新输入
+    required: true
+    description: 在等待候选期间修改正文后，旧结果不能覆盖新输入。
+    preconditions:
+      - 真实 Web 页面连接可延迟纠错响应的隔离服务，并有两个可切换的连接身份。
+    steps:
+      - 使用 $toolkit:playwright-cli 提交纠错后继续修改正文；等待结果并点击应用，确认被拒绝且新输入保留。
+  - id: CORRECT-011
+    name: iPhone 编辑器预览与手动应用
+    required: true
+    description: 原生 iPhone 经系统语音输入后，纠错只修改用户确认的本机草稿。
+    preconditions:
+      - 随记 App 已安装在可操作的 iPhone 或模拟器，已登录启用真实 Codex 的隔离服务。
+    steps:
+      - 使用 $toolkit:agent-device 在正文编辑器通过系统输入法语音输入样本并点击纠正文字；展开查看原文并核对候选及不确定项，云端正文与版本未变。
+      - 点击应用后确认编辑器正文变化，本机草稿恢复仍含该文本；再点击保存，确认云端正文才更新。
+  - id: CORRECT-012
+    name: iPhone 旧候选不能覆盖新输入
+    required: true
+    description: 原生编辑器正文变化后，旧候选不可应用。
+    preconditions:
+      - 随记 App 连接可延迟纠错响应的隔离服务，有可编辑正文及可模拟保存结果未知的网络条件。
+    steps:
+      - 使用 $toolkit:agent-device 发起纠错后手动改正文，候选返回后尝试应用；确认改后的原文保留。
+  - id: CORRECT-013
+    name: 词库版本冲突保留远端修改
+    required: true
+    description: 旧版本词库写入被拒绝，另一设备的已保存条目不丢失。
+    preconditions:
+      - 隔离服务有同一 owner 的两台已登录客户端，均已读取同一词库版本。
+    steps:
+      - 客户端 B 修改词库并保存；客户端 A 沿用旧版本提交不同内容，确认收到 VERSION_CONFLICT。
+      - 在 A 重新读取；确认能看到 B 的修改且版本未被失败请求改变。
+  - id: CORRECT-014
+    name: 词库非法输入不改变已有条目
+    required: true
+    description: 空项、重复词和超出限额的词库被拒绝，已有版本与内容不变。
+    preconditions:
+      - 隔离服务有已登录 owner 和已保存的合法词库。
+    steps:
+      - 分别提交重复标准写法、与其他条目冲突的别名、空项和超过上限的条目；确认每次被拒绝。
+      - 重新读取词库；确认版本和已有内容均未变化。
+  - id: CORRECT-015
+    name: 候选保守订正语音转写
+    required: true
+    description: 真实 Codex 候选只订正误词、语法、标点和相邻重复，不扩写或改变事实。
+    preconditions:
+      - 隔离服务启用已登录 Codex，词库含标准写法 Runweave 与误识别写法 Runwave。
+      - 准备含私有名称、重复口语、数字、URL 和 Markdown 标记的转写样本。
+    steps:
+      - 手动提交样本并读取完成结果；逐条人工对比原文与候选，确认词库名称被正确采用、相邻重复被删除，数字、URL、事实、Markdown 结构及原意保留，未新增句子或结论。
+  - id: CORRECT-016
+    name: 纠错任务鉴权
+    required: true
+    description: 匿名请求和其他服务的 token 无权查询或取消当前服务的纠错任务。
+    preconditions:
+      - 两个独立随记服务各有已登录会话，服务 A 已创建纠错任务。
+    steps:
+      - 不携带 token 或使用服务 B 的 App Bearer 查询、取消 A 的任务；确认均被拒绝。
+      - 以 A 的有效会话查询任务；确认任务未被取消。
+  - id: CORRECT-017
+    name: 超时释放资源
+    required: true
+    description: 纠错超时后任务失败且子进程和临时文件清理，普通记录仍可读取。
+    preconditions:
+      - 隔离服务配置可控制的长时间 Codex 进程和短超时。
+    steps:
+      - 发起纠错并等待超时；确认状态为 failed，子进程与临时文件清理，普通记录读取成功。
+  - id: CORRECT-018
+    name: Codex 启动失败不修改记录
+    required: true
+    description: CLI 执行失败时不产生候选，记录、词库和日志保持安全状态。
+    preconditions:
+      - 隔离服务配置无法启动的 Codex 路径，已有记录及私有词库。
+    steps:
+      - 请求纠错并等待失败；确认没有候选，记录正文、版本和词库内容不变，日志不含原文和私有词。
+  - id: CORRECT-019
+    name: Web 切换连接隔离旧候选
+    required: true
+    description: 旧连接的延迟响应不能写入新连接的草稿。
+    preconditions:
+      - 真实 Web 页面可切换两个连接身份，隔离服务可延迟纠错响应。
+    steps:
+      - 使用 $toolkit:playwright-cli 在连接 A 发起纠错后切换到连接 B；让 A 的旧响应返回，确认 B 的草稿未被覆盖。
+  - id: CORRECT-020
+    name: iPhone 冻结草稿拒绝候选
+    required: true
+    description: 保存结果待确认时，纠错候选不能修改被冻结的草稿和原保存请求。
+    preconditions:
+      - 随记 App 连接可延迟响应的隔离服务，可让保存进入结果待确认状态。
+    steps:
+      - 使用 $toolkit:agent-device 发起纠错并让保存进入待确认冻结状态；候选返回后尝试应用，确认被拒绝且原保存请求内容未改变。

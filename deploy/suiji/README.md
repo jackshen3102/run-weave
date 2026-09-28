@@ -57,7 +57,7 @@ TLS 反向代理将 `/mcp` 与 `/mcp/uploads` 转到同一 API 端口。
 
 ## 多凭据迁移
 
-本版要求 schema 6。沿用 `release.mjs deploy` 的发布锁、异机备份及不可变镜像。
+多凭据功能从 schema 6 引入；当前服务要求 schema 7。沿用 `release.mjs deploy` 的发布锁、异机备份及不可变镜像。
 已有部署必须有可信的 release-state；缺失时先核对真实镜像和部署信息，不能把它当成首次部署。
 若实际服务使用多个 Compose 文件，release config 必须通过 `composeFiles` 数组按顺序列出全部绝对路径，
 首项指向新版本 compose，其余保留现有 override。发现已有 override 而配置未声明时发布会停止。
@@ -136,6 +136,12 @@ node deploy/suiji/release.mjs restore --config /absolute/isolated-config.json --
 跟进要求 schema 5。先做静止备份，再运行追加迁移和部署兼容镜像；旧 schema 4 二进制不能直接启动新数据库。备份和恢复核对包含 record_followups、followup_attachments 数量；旧备份按其 schemaVersion 保持兼容。认证回读覆盖普通/回收站记录、跟进与全部附件字节。
 
 回退优先使用支持当前 schema 的修复镜像，不删表回退；恢复旧备份会丢失恢复点之后的写入，需要单独明确授权。随记 Skill 的上传入口 `/mcp/uploads` 与 `/mcp` 使用相同个人凭据和关停策略，不使用 App 会话或数据库凭据。
+
+## 纠错词库版本迁移
+
+手动文字纠错要求 schema 7。按上述发布流程先停 API 并完成静止异机备份，再执行新增迁移、发布兼容镜像，最后发布 Web 与 iPhone 入口。schema 6 镜像不能直接运行 schema 7；回退使用兼容修复镜像或按隔离恢复流程从备份恢复，不删除词库表。关闭 AI 时仍可读取和维护词库，普通记录保存不依赖 Codex。
+
+schema 7 备份清单包含词库行数和内容校验和；恢复时核对校验和，并通过当前 owner 的鉴权 HTTP 回读词库，同时核对记录、跟进和附件。启用入口前，使用服务账号验证真实 Codex CLI 登录与纠错样本，逐条人工核对候选是否保留数字、URL、事实和 Markdown 结构。CLI 登录、镜像部署或 App 构建不能替代实际编辑器验收。
 
 ## 服务 YAML 配置
 

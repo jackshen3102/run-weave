@@ -7,17 +7,90 @@ import SwiftUI
   @Published var message = ""
   @Published var latest: SuijiRecord?
   @Published var confirmed = false
+  @Published var correction: SuijiCorrection?
+  @Published var correctionSource: String?
+  @Published var correctionBusy = false
+  @Published var correctionMessage = ""
+  @Published var lexicon: CorrectionLexicon?
+  @Published var lexiconPending = false
+  let correctionAvailable: Bool
+  let correctionSupported: Bool
+  private var correctionTask: Task<Void, Never>?
+  private var correctionKey: String?
   let client: APIClient
   let store: DraftStore
   let limits: Limits
   var onFollowupSaved: ((FollowupResponse) -> Void)?
   private var active = true
-  init(draft: Draft, client: APIClient, store: DraftStore, limits: Limits) {
+  init(draft: Draft, client: APIClient, store: DraftStore, limits: Limits, correctionCapability: Bool? = nil) {
     self.draft = draft; self.client = client; self.store = store; self.limits = limits
+    self.correctionAvailable = correctionCapability == true; self.correctionSupported = correctionCapability != nil
   }
   var canReopen: Bool { active && !confirmed }
   var editable: Bool { !busy && !draft.frozen && !confirmed && active }
-  func cancel() { active = false }
+  func cancel() { active = false; correctionTask?.cancel() }
+  func cancelCorrection() async {
+    correctionTask?.cancel()
+    if let id = correction?.id { _ = try? await client.request(SuijiCorrection.self, path: "api/suiji/v1/corrections/" + id, method: "DELETE") }
+    correction = nil; correctionSource = nil; correctionBusy = false; correctionKey = nil; correctionMessage = ""
+  }
+  func loadLexicon() async {
+    do { let value = try await client.request(CorrectionLexicon.self, path: "api/suiji/v1/correction-lexicon"); try checkActive(); lexicon = value
+      lexiconPending = (try await store.lexiconIntent()) != nil
+    } catch { if active { correctionMessage = error.localizedDescription } }
+  }
+  func correct() async {
+    guard correctionAvailable, editable, !correctionBusy, !draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    if correctionKey != nil && correctionSource != draft.body {
+      correctionMessage = "原请求结果待确认；请先取消，再对新正文发起纠错"
+      return
+    }
+    let source = draft.body, key = correctionKey ?? UUID().uuidString
+    correctionKey = key; correctionSource = source; correction = nil; correctionBusy = true; correctionMessage = "正在纠正文字…"
+    let task = Task { @MainActor in
+      do {
+        let payload = try JSONEncoder().encode(["text": source])
+        var job = try await client.request(SuijiCorrection.self, path: "api/suiji/v1/corrections", method: "POST", data: payload, key: key)
+        try checkActive(); correction = job
+        while job.status == "running" {
+          try await Task.sleep(for: .seconds(1)); try Task.checkCancellation(); try checkActive()
+          job = try await client.request(SuijiCorrection.self, path: "api/suiji/v1/corrections/" + job.id)
+          correction = job
+        }
+        try Task.checkCancellation(); try checkActive()
+        correction = job; correctionKey = nil
+        correctionMessage = job.status == "completed" ? "" : (job.error ?? "纠错未完成")
+      } catch is CancellationError { }
+      catch { if active { correctionMessage = "纠错结果待确认；再次点击会沿用同一请求。" + error.localizedDescription } }
+      if active { correctionBusy = false }
+    }
+    correctionTask = task
+    await task.value
+  }
+  func applyCorrection() async {
+    guard editable, let correction, correction.status == "completed", let text = correction.correctedText,
+      correctionSource == draft.body else { correctionMessage = "正文或编辑会话已变化，请重新纠错"; return }
+    draft.body = text; self.correction = nil; correctionSource = nil
+    await persist(); correctionMessage = "已应用到本机草稿；点击保存才会更新记录"
+  }
+  func putLexicon(_ entries: [CorrectionEntry]) async throws {
+    try checkActive()
+    guard let lexicon else { throw MessageError(message: "请先读取词库") }
+    let pending = try await store.lexiconIntent()
+    let intent = pending ?? LexiconIntent(key: UUID().uuidString, expectedVersion: lexicon.version, entries: entries)
+    if pending == nil { try await store.saveLexiconIntent(intent) }
+    lexiconPending = true
+    do {
+      struct Payload: Encodable { let expectedVersion: Int; let entries: [CorrectionEntry] }
+      let payload = try JSONEncoder().encode(Payload(expectedVersion: intent.expectedVersion, entries: intent.entries))
+      let value = try await client.request(CorrectionLexicon.self, path: "api/suiji/v1/correction-lexicon", method: "PUT", data: payload, key: intent.key)
+      try checkActive(); try await store.removeLexiconIntent(); self.lexicon = value; lexiconPending = false; correctionMessage = "已记住；可在词库中撤销"
+    } catch {
+      if let api = error as? APIError, !api.uncertain { try? await store.removeLexiconIntent(); lexiconPending = false }
+      correctionMessage = error.localizedDescription
+      throw error
+    }
+  }
   func prepareForCapture(kind: RecordKind, body: String) async {
     guard draft.recordID == nil else { return }
     if editable, !draft.conflict, draft.pending == nil, draft.body.isEmpty, (draft.tags ?? []).isEmpty, draft.existing.isEmpty, draft.local.isEmpty {

@@ -1,0 +1,77 @@
+version: 1
+name: 随记纠错词库显式收录
+description: >
+  验证 Web 和 iPhone 只在用户点词、编辑并确认后写入账号词库，草稿应用与词库写入相互独立。
+cases:
+  - id: LEARN-001
+    name: 生成和应用候选不改变词库
+    required: true
+    description: 纠错候选可以标出改正的词，但生成候选、取消预览与应用草稿都不改变词库版本。
+    preconditions:
+      - 隔离服务启用真实 Codex CLI，词库已有标准词 Runweave 且无别名 Runwave。
+      - 真实 Web 页面打开包含 Runwave 的可编辑草稿。
+    steps:
+      - 使用 $toolkit:playwright-cli 点击纠正文字并等待候选；通过 API 读取词库，确认版本和条目不变。
+      - 点击应用到草稿；再次读取词库，确认版本和条目仍不变。
+  - id: LEARN-002
+    name: Web 点词确认后加入词库
+    required: true
+    description: 用户点候选中的词并明确确认，才向已有标准词追加误识别写法。
+    preconditions:
+      - 真实 Web 页面连接隔离服务，词库含 Runweave，无 Runwave 别名，已取得对应纠错候选。
+    steps:
+      - 使用 $toolkit:playwright-cli 点击候选中带下划线的 Runweave；确认正确写法与误识别写法可编辑。
+      - 点击取消；读取词库确认不变。再次点词并点击加入词库；确认 Runwave 追加到 Runweave，版本递增，原有别名保留。
+  - id: LEARN-003
+    name: Web 正文选词新增标准词
+    required: true
+    description: 编辑器选中的短词仅填充确认表单，用户点击加入词库后才创建标准词。
+    preconditions:
+      - 真实 Web 页面连接隔离服务，词库无 Castor，编辑器可输入正文。
+    steps:
+      - 使用 $toolkit:playwright-cli 输入并选中 Castor，点击记住选词；确认正确写法为 Castor、误识别写法为空，词库仍无该词。
+      - 点击加入词库；确认词库新增 Castor 且无别名，当前正文不变。
+  - id: LEARN-004
+    name: iPhone 显式收词
+    required: true
+    description: iPhone 的纠错候选和正文选词必须经确认后才写入同一账号词库。
+    preconditions:
+      - 原生 iPhone App 连接启用真实 Codex CLI 的隔离服务，词库可跨设备读取。
+    steps:
+      - 使用 $toolkit:agent-device 打开正文编辑器，发起纠错并点候选中的改正词；取消记住，确认词库不变。
+      - 再点该词并确认加入词库；在另一已登录客户端读取，确认新写法可见。
+  - id: LEARN-005
+    name: 撤销本次添加
+    required: true
+    description: 添加后的撤销只恢复添加前词库，不改变正文或云端记录。
+    preconditions:
+      - 真实 Web 页面连接隔离服务，已有可编辑记录与一个标准词，当前编辑会话刚显式添加别名。
+    steps:
+      - 使用 $toolkit:playwright-cli 点击撤销本次添加；确认词库回到添加前的条目，草稿正文和云端记录均不变。
+  - id: LEARN-006
+    name: 词库版本冲突不覆盖另一设备
+    required: true
+    description: 另一设备先保存时，旧版本添加被拒绝，远端词条保留且用户可重新读取。
+    preconditions:
+      - 同一 owner 的客户端 A、B 已读取同一词库版本，A 正在编辑加入词库表单。
+    steps:
+      - 在 B 新增词条并保存；在 A 点击加入词库，确认出现版本冲突。
+      - A 刷新词库，确认 B 的词条仍在且 A 的词未静默写入。
+  - id: LEARN-007
+    name: 结果未知时只保留原写入意图
+    required: true
+    description: 写入响应丢失后客户端保留原请求键与内容，恢复联网不自动重发。
+    preconditions:
+      - 隔离服务可在提交词库后丢弃响应，客户端已准备一条显式确认的词库添加。
+    steps:
+      - 点击加入词库并丢弃响应；确认本地显示待确认，保存原请求键与完整内容。
+      - 恢复网络但不点击；确认没有自动重发。点击手动重试确认；确认服务仅返回首次提交的版本。
+  - id: LEARN-008
+    name: 非法或重复词条被拒绝
+    required: true
+    description: 超长、空项、重复标准写法与别名冲突都不会改变已有词库。
+    preconditions:
+      - 隔离服务有已登录 owner 和已保存的词库版本。
+    steps:
+      - 分别提交空项、超过 80 标量的词、重复标准写法、已被其他词占用的别名及第 6 个别名；确认每次被拒绝。
+      - 回读词库，确认版本和原条目保持不变。

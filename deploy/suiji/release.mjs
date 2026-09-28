@@ -1,4 +1,4 @@
-import { createBackup, credentialChecksum } from "./backup.mjs";
+import { createBackup, credentialChecksum, lexiconChecksum } from "./backup.mjs";
 import { authenticatedReadback } from "./readback.mjs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -513,16 +513,20 @@ try {
         ? ",'followups',(SELECT count(*) FROM record_followups),'followupAttachments',(SELECT count(*) FROM followup_attachments)"
         : "";
     const credentialCounts = manifest.schemaVersion >= 6 ? ",'mcpCredentials',(SELECT count(*) FROM mcp_credentials)" : "";
+    const lexiconCounts = manifest.schemaVersion >= 7 ? ",'correctionLexicons',(SELECT count(*) FROM correction_lexicons)" : "";
     const counts = JSON.parse(
       await sql(
         "SELECT json_build_object('records',(SELECT count(*) FROM records),'revisions',(SELECT count(*) FROM record_revisions),'mutations',(SELECT count(*) FROM mutation_requests),'attachments',(SELECT count(*) FROM attachments)" +
-          followupCounts + credentialCounts +
+          followupCounts + credentialCounts + lexiconCounts +
           ")",
       ),
     );
     if (manifest.schemaVersion >= 6 &&
         await credentialChecksum(sql) !== manifest.credentialChecksum)
       throw new Error("Restored credential state mismatch");
+    if (manifest.schemaVersion >= 7 &&
+        await lexiconChecksum(sql) !== manifest.lexiconChecksum)
+      throw new Error("Restored correction lexicon mismatch");
     if (JSON.stringify(counts) !== JSON.stringify(manifest.counts))
       throw new Error("Restored database counts mismatch");
     const identity = JSON.parse(

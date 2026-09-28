@@ -5,6 +5,9 @@ import {
   type FollowupResponse,
   type SuijiRecord,
   type UploadedAttachment,
+  type CorrectionLexicon,
+  type CorrectionLexiconEntry,
+  type SuijiCorrection,
 } from "@runweave/shared/suiji";
 import { SuijiClient, SuijiHttpError } from "../../services/suiji";
 import { SuijiDraftStore, type SuijiDraft } from "./drafts";
@@ -25,7 +28,15 @@ export class SuijiEditorModel {
     saved?: SuijiRecord;
     savedFollowup?: FollowupResponse;
     discarded?: boolean;
+    correction?: SuijiCorrection;
+    correctionSource?: string;
+    correctionBusy?: boolean;
+    lexicon?: CorrectionLexicon;
+    correctionMessage?: string;
+    lexiconPending?: boolean;
   };
+  private correctionAbort?: AbortController;
+  private correctionKey?: string;
   constructor(
     draft: SuijiDraft,
     private client: SuijiClient,
@@ -51,6 +62,7 @@ export class SuijiEditorModel {
   snapshot = () => this.state;
   dispose() {
     this.active = false;
+    this.correctionAbort?.abort();
     this.listeners.clear();
   }
   settled() {
@@ -101,8 +113,92 @@ export class SuijiEditorModel {
   ) {
     if (this.state.busy || this.state.draft.frozen) return;
     const draft = { ...this.state.draft, ...update };
-    this.patch({ draft });
+    this.patch({ draft, ...(update.body !== undefined && update.body !== this.state.draft.body ? { correction: undefined, correctionSource: undefined } : {}) });
     void this.persist(draft).catch(() => undefined);
+  }
+  async loadLexicon() {
+    try {
+      const pending = await this.store.get<{ key: string; data: { expectedVersion: number; entries: CorrectionLexiconEntry[] } }>("lexicon-intent");
+      this.check();
+      this.patch({ lexiconPending: !!pending });
+      const lexicon = await this.client.request<CorrectionLexicon>("/api/suiji/v1/correction-lexicon");
+      this.check();
+      this.patch({ lexicon });
+    } catch (error) {
+      if (this.active) this.patch({ correctionMessage: error instanceof Error ? error.message : "词库读取失败" });
+    }
+  }
+  async correct() {
+    const text = this.state.draft.body;
+    if (this.state.busy || this.state.draft.frozen || !text.trim() || this.state.correctionBusy) return;
+    if (this.correctionKey && this.state.correctionSource !== text) {
+      this.patch({ correctionMessage: "原请求结果待确认；请先取消，再对新正文发起纠错" });
+      return;
+    }
+    const abort = new AbortController();
+    this.correctionAbort = abort;
+    const key = this.correctionKey ?? crypto.randomUUID();
+    this.correctionKey = key;
+    this.patch({ correctionBusy: true, correction: undefined, correctionSource: text, correctionMessage: "正在纠正文字…" });
+    try {
+      let job = await this.client.request<SuijiCorrection>("/api/suiji/v1/corrections", "POST", { text }, key, abort.signal);
+      this.check();
+      this.patch({ correction: job });
+      while (job.status === "running" && !abort.signal.aborted) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+        this.check();
+        job = await this.client.request<SuijiCorrection>("/api/suiji/v1/corrections/" + job.id, "GET", undefined, undefined, abort.signal);
+        this.patch({ correction: job });
+      }
+      this.check();
+      if (abort.signal.aborted) return;
+      this.correctionKey = undefined;
+      this.patch({ correction: job, correctionMessage: job.status === "completed" ? "" : job.error ?? "纠错未完成" });
+    } catch (error) {
+      if (this.active && !abort.signal.aborted)
+        this.patch({ correctionMessage: "纠错结果待确认；再次点击会沿用同一请求。" + (error instanceof Error ? error.message : "") });
+    } finally {
+      if (this.correctionAbort === abort) { this.correctionAbort = undefined; this.patch({ correctionBusy: false }); }
+    }
+  }
+  async cancelCorrection() {
+    const id = this.state.correction?.id;
+    this.correctionAbort?.abort();
+    if (id) await this.client.request<SuijiCorrection>("/api/suiji/v1/corrections/" + id, "DELETE").catch(() => undefined);
+    this.correctionKey = undefined;
+    this.patch({ correction: undefined, correctionSource: undefined, correctionBusy: false, correctionMessage: "" });
+  }
+  applyCorrection() {
+    const { correction, correctionSource, draft } = this.state;
+    if (!correction || correction.status !== "completed" || !correction.correctedText ||
+      correctionSource !== draft.body || draft.frozen || this.state.busy || !this.active || !this.client.active) {
+      this.patch({ correctionMessage: "正文或编辑会话已变化，请重新纠错" });
+      return;
+    }
+    this.edit({ body: correction.correctedText });
+    this.patch({ correctionMessage: "已应用到本机草稿；点击保存才会更新记录" });
+  }
+  async putLexicon(entries: CorrectionLexiconEntry[]) {
+    this.check();
+    const lexicon = this.state.lexicon;
+    if (!lexicon) throw new Error("请先读取词库");
+    const saved = await this.store.get<{ key: string; data: { expectedVersion: number; entries: CorrectionLexiconEntry[] } }>("lexicon-intent");
+    const intent = saved ?? { key: crypto.randomUUID(), data: { expectedVersion: lexicon.version, entries } };
+    await this.store.set("lexicon-intent", intent);
+    this.patch({ lexiconPending: true });
+    try {
+      const next = await this.client.request<CorrectionLexicon>("/api/suiji/v1/correction-lexicon", "PUT", intent.data, intent.key);
+      this.check();
+      await this.store.remove("lexicon-intent");
+      this.patch({ lexicon: next, lexiconPending: false, correctionMessage: "已记住；可在词库中撤销" });
+    } catch (error) {
+      if (error instanceof SuijiHttpError && !error.uncertain) {
+        await this.store.remove("lexicon-intent");
+        this.patch({ lexiconPending: false });
+      }
+      this.patch({ correctionMessage: error instanceof Error ? error.message : "词库结果待确认，请手动重试" });
+      throw error;
+    }
   }
   async addFile(file: File) {
     try {

@@ -32,6 +32,9 @@ import { createMcpRouter } from "../mcp/router";
 import { webCors } from "./cors";
 import { ReviewService } from "../reviews/service";
 import { reviewInput } from "../reviews/schema";
+import { CorrectionLexicons } from "../corrections/lexicon";
+import { CorrectionService } from "../corrections/service";
+import { correctionInput, lexiconInput } from "../corrections/schema";
 const route =
   (fn: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => {
@@ -48,6 +51,8 @@ export function createApp(
     attachments = new AttachmentService(pool, store);
   const followups = new FollowupService(pool);
   const reviews = new ReviewService(config, records, attachments);
+  const lexicons = new CorrectionLexicons(pool);
+  const corrections = new CorrectionService(config, lexicons);
   app.disable("x-powered-by");
   app.set("trust proxy", false);
   app.use((_req, res, next) => {
@@ -130,7 +135,7 @@ export function createApp(
         schemaVersion: schema.rows[0].version,
         limits: SUIJI_LIMITS,
         ai: reviews.info(),
-        features: { followups: true },
+        features: { followups: true, correction: corrections.info() },
       });
     }),
   );
@@ -141,6 +146,22 @@ export function createApp(
     requestId: res.locals.requestId,
   });
   const root = "/api/suiji/v1";
+  app.get(`${root}/correction-lexicon`, route(async (_req, res) => {
+    res.json(await lexicons.get(res.locals.auth.ownerId));
+  }));
+  app.put(`${root}/correction-lexicon`, route(async (req, res) => {
+    res.json(await lexicons.put(context(req, res), lexiconInput.parse(req.body)));
+  }));
+  app.post(`${root}/corrections`, route(async (req, res) => {
+    res.status(202).json(corrections.start(res.locals.auth.ownerId,
+      keySchema.parse(req.get("Idempotency-Key")), correctionInput.parse(req.body)));
+  }));
+  app.get(`${root}/corrections/:id`, route(async (req, res) => {
+    res.json(corrections.get(res.locals.auth.ownerId, uuid.parse(req.params.id)));
+  }));
+  app.delete(`${root}/corrections/:id`, route(async (req, res) => {
+    res.json(corrections.cancel(res.locals.auth.ownerId, uuid.parse(req.params.id)));
+  }));
   app.use(`${root}/records`, followupRouter(followups));
   app.get(`${root}/tags`, route(async (_req, res) => {
     res.json(await records.tags(res.locals.auth.ownerId));
@@ -319,5 +340,5 @@ export function createApp(
         });
     },
   );
-  return Object.assign(app, { closeReviews: () => reviews.close() });
+  return Object.assign(app, { closeReviews: () => { reviews.close(); corrections.close(); } });
 }

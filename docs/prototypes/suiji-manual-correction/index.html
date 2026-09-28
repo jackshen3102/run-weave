@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>随记 · 纠正文字</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; color: #202b29; background: #f3f6f5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .5; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #88baa5; outline-offset: 2px; }
+    .hidden { display: none !important; }
+    .app { min-height: 100vh; display: grid; grid-template-rows: 68px minmax(0, 1fr); }
+    .global-header { display: flex; align-items: center; justify-content: space-between; padding: 0 32px; background: #fcfdfc; border-bottom: 1px solid #dfe5e2; }
+    .brand { display: flex; align-items: center; gap: 10px; color: #24483b; font-size: 19px; font-weight: 720; }
+    .brand-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; background: #087b60; color: white; }
+    .account { display: flex; align-items: center; gap: 10px; color: #68736e; font-size: 13px; }
+    .account-dot { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #e6f3ee; color: #087b60; font-weight: 700; }
+    .workspace { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(470px, 570px); min-height: 0; }
+    .library { padding: 34px max(24px, calc((100vw - 1240px)/2)); background: #f5f7f5; }
+    .library h1 { margin: 0 0 5px; font-size: 29px; }
+    .library-header { display: flex; justify-content: space-between; gap: 16px; }
+    .library-subtitle { margin: 0; color: #7b8580; font-size: 13px; }
+    .library-new, .save-button, .primary-button { min-height: 40px; padding: 9px 16px; border: 0; border-radius: 10px; background: #087b60; color: #fff; font-weight: 650; }
+    .filters { display: flex; gap: 8px; margin: 24px 0 20px; }
+    .filter { padding: 9px 16px; border: 0; border-radius: 99px; background: transparent; color: #5e6a64; }
+    .filter.active { background: #e6f3ee; color: #17684e; font-weight: 650; }
+    .record-list { display: grid; gap: 12px; max-width: 550px; }
+    .record-card { padding: 18px; border: 1px solid #dfe5e2; border-radius: 16px; background: #fff; }
+    .record-card.selected { border-color: #91bda7; box-shadow: 0 5px 25px #0d4f3520; }
+    .record-card small, .record-card footer { color: #849088; font-size: 12px; }
+    .record-card p { margin: 11px 0; line-height: 1.6; }
+    .editor-surface { overflow: auto; min-height: 0; background: #fff; border-left: 1px solid #dfe5e2; box-shadow: -16px 0 35px #334f3d0b; }
+    .surface-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 72px; padding: 16px 24px; border-bottom: 1px solid #e8ece9; background: #fff; }
+    .surface-heading h2 { margin: 0; font-size: 19px; }
+    .surface-heading span { display: block; margin-top: 3px; color: #8a948d; font-size: 12px; }
+    .icon-button { min-width: 40px; min-height: 40px; border: 0; border-radius: 10px; background: transparent; color: #66756d; font-size: 23px; }
+    .surface-body { padding: 26px 27px 38px; }
+    .section-label { display: block; margin-bottom: 9px; color: #5d6a62; font-size: 13px; font-weight: 650; }
+    .kind-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; max-width: 250px; margin-bottom: 27px; padding: 4px; border-radius: 12px; background: #f0f3f0; }
+    .kind-switch button { min-height: 35px; border: 0; border-radius: 9px; background: transparent; color: #6c7970; }
+    .kind-switch button.active { background: #fff; color: #1d4b39; box-shadow: 0 1px 5px #29492f14; font-weight: 650; }
+    .body-editor { width: 100%; min-height: 235px; padding: 16px; resize: vertical; border: 1px solid #dce5df; border-radius: 13px; background: #fff; color: #27352d; line-height: 1.7; font-size: 16px; }
+    .body-count { display: block; margin: 7px 0 18px; text-align: right; color: #929b95; font-size: 12px; }
+    .correction-row, .tag-row, .attachment-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .correction-button { display: inline-flex; align-items: center; gap: 8px; min-height: 43px; padding: 0 15px; border: 1px solid #a7cbb7; border-radius: 11px; background: #eef8f2; color: #086b51; font-weight: 650; }
+    .sparkle { font-size: 18px; }
+    .text-button, .add-tag, .attachment-row button { padding: 9px 8px; border: 0; background: transparent; color: #087b60; font-weight: 620; }
+    .send-note, .draft-status { color: #86918b; font-size: 12px; line-height: 1.5; }
+    .send-note { margin: 9px 0 0; }
+    .draft-status { min-height: 22px; margin: 12px 0 25px; }
+    .draft-status.warning { color: #a96727; }
+    .separator { height: 1px; margin: 24px 0; background: #e9eee9; }
+    .tag-chip { padding: 6px 11px; border-radius: 99px; background: #e9f3ed; color: #2b6549; font-size: 12px; }
+    .detail-body { white-space: pre-wrap; line-height: 1.75; font-size: 16px; }
+    .detail-meta { color: #7b887f; font-size: 13px; }
+    .overlay { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: #1c312850; }
+    .dialog { width: min(760px, 100%); max-height: min(88vh, 900px); overflow: auto; border: 1px solid #d9e3db; border-radius: 20px; background: #fff; box-shadow: 0 25px 90px #0c241c35; }
+    .dialog-head { display: flex; justify-content: space-between; gap: 18px; padding: 24px 26px 18px; border-bottom: 1px solid #edf0ec; }
+    .dialog-head h2 { margin: 0 0 5px; font-size: 21px; }
+    .dialog-head p { margin: 0; color: #839087; font-size: 13px; line-height: 1.5; }
+    .dialog-content { padding: 22px 26px 12px; }
+    .result-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.9; font-size: 16px; }
+    .corrected-word { display: inline; padding: 2px 3px; border: 0; border-bottom: 1px dashed #087b60; border-radius: 4px; background: #e8f4ec; color: #086b51; }
+    .original-disclosure { margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5ebe6; color: #77837b; font-size: 13px; }
+    .original-disclosure summary { cursor: pointer; }
+    .original-disclosure p { margin: 12px 0 0; white-space: pre-wrap; line-height: 1.8; }
+    .uncertain, .stale { margin: 18px 0 0; padding: 11px 13px; border-radius: 10px; background: #fff6e8; color: #865c2e; font-size: 13px; }
+    .stale { color: #9a4d35; }
+    #preview-overlay .dialog { max-width: 570px; }
+    #remember-overlay { z-index: 12; }
+    #remember-overlay .dialog { max-width: 420px; }
+    .remember-form { display: grid; gap: 18px; }
+    .remember-form label { color: #52685a; font-size: 13px; font-weight: 600; }
+    .remember-form input { display: block; width: 100%; margin-top: 8px; padding: 12px; border: 1px solid #d9e4dc; border-radius: 10px; }
+    .remember-form small { display: block; margin-top: 8px; color: #829087; font-size: 12px; font-weight: 400; line-height: 1.5; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 18px 26px 24px; }
+    .secondary-button { min-height: 40px; padding: 9px 16px; border: 1px solid #dce5de; border-radius: 10px; background: #fff; color: #476051; font-weight: 600; }
+    .lexicon-list { display: grid; gap: 8px; margin-bottom: 22px; }
+    .lexicon-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 13px; border: 1px solid #e0e8e1; border-radius: 11px; }
+    .lexicon-item strong { display: block; font-size: 14px; }
+    .lexicon-item span { display: block; margin-top: 3px; color: #87948a; font-size: 12px; }
+    .lexicon-item button { border: 0; background: transparent; color: #a45848; }
+    .lexicon-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; }
+    .lexicon-form label { color: #607367; font-size: 12px; font-weight: 650; }
+    .lexicon-form input { display: block; width: 100%; min-height: 40px; margin-top: 6px; padding: 9px 11px; border: 1px solid #d9e4dc; border-radius: 9px; }
+    .dialog-error { margin: 10px 0 0; color: #a54d3a; font-size: 13px; }
+    .toast { position: fixed; left: 50%; bottom: 25px; z-index: 20; display: flex; align-items: center; gap: 18px; width: max-content; max-width: calc(100vw - 32px); transform: translateX(-50%); padding: 10px 16px; border-radius: 10px; background: #234b36; color: #fff; font-size: 13px; }
+    .toast button { padding: 5px 0; border: 0; background: transparent; color: #c4f5d9; font-weight: 650; }
+    @media (max-width: 800px) {
+      .app { display: block; }
+      .global-header, .library { display: none; }
+      .workspace { display: block; }
+      .editor-surface { min-height: 100vh; border: 0; box-shadow: none; background: #f3f6f5; }
+      .surface-header { min-height: 60px; padding: 8px 13px; background: #f7faf7; }
+      .surface-heading { text-align: center; }
+      .surface-heading h2 { font-size: 17px; }
+      .surface-heading span { display: none; }
+      .surface-body { padding: 21px 18px 45px; }
+      .body-editor { min-height: 240px; }
+      .overlay { align-items: end; padding: 0; }
+      .dialog { width: 100%; max-height: 92vh; border-radius: 20px 20px 0 0; }
+      .dialog-head { padding: 22px 20px 15px; }
+      .dialog-content { padding: 18px 20px 8px; }
+      .dialog-actions { padding: 15px 20px 30px; }
+      .lexicon-form { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="global-header"><div class="brand"><span class="brand-mark">✎</span>随记</div><div class="account"><span>个人空间</span><span class="account-dot">S</span></div></header>
+    <div class="workspace">
+      <aside class="library">
+        <div class="library-header"><div><h1>随记</h1><p class="library-subtitle">随手记下，随时回来</p></div><button class="library-new" type="button" id="new-record">＋ 新记录</button></div>
+        <nav class="filters" aria-label="记录筛选"><button class="filter active" type="button">全部</button><button class="filter" type="button">待办</button><button class="filter" type="button">回收站</button></nav>
+        <div class="record-list"><article class="record-card selected"><small>想法 · 今天</small><p id="list-record-body"></p><footer>本机草稿</footer></article><article class="record-card"><small>待办 · 昨天</small><p>整理本周需要跟进的事项</p><footer>未完成</footer></article></div>
+      </aside>
+      <main class="editor-surface">
+        <section id="editor-view">
+          <header class="surface-header"><button class="icon-button" type="button" id="close-editor" aria-label="收起编辑器">‹</button><div class="surface-heading"><h2>编辑记录</h2><span>原文</span></div><button class="save-button" type="button" id="save-record">保存</button></header>
+          <div class="surface-body">
+            <span class="section-label">记录类型</span>
+            <div class="kind-switch" role="group" aria-label="记录类型"><button type="button" data-kind="note" class="active">想法</button><button type="button" data-kind="task">待办</button></div>
+            <label class="section-label" for="record-body">原文</label>
+            <textarea class="body-editor" id="record-body" aria-label="原文" spellcheck="false"></textarea>
+            <span class="body-count" id="body-count"></span>
+            <div class="correction-row"><button class="correction-button" type="button" id="correct-text"><span class="sparkle" aria-hidden="true">✦</span><span id="correction-label">纠正文字</span></button><button class="text-button hidden" type="button" id="remember-selection">记住选词</button><button class="text-button" type="button" id="open-lexicon">词库</button></div>
+            <p class="send-note">纠正时，本次文字和词库会发送给 Codex。</p>
+            <p class="draft-status" id="draft-status" role="status">本机草稿已保存</p>
+            <div class="separator"></div><span class="section-label">标签</span><div class="tag-row"><span class="tag-chip">随记</span><button class="add-tag" type="button">＋标签</button></div>
+            <div class="separator"></div><span class="section-label">附件</span><div class="attachment-row"><button type="button">＋ 图片</button><button type="button">＋ Markdown</button></div>
+          </div>
+        </section>
+        <section id="detail-view" class="hidden">
+          <header class="surface-header"><button class="icon-button" type="button" id="back-to-list" aria-label="返回记录">‹</button><div class="surface-heading"><h2>记录详情</h2></div><button class="text-button" type="button" id="edit-again">编辑</button></header>
+          <div class="surface-body"><p class="detail-meta">想法 · 刚刚保存</p><p class="detail-body" id="saved-body"></p><span class="tag-chip">随记</span></div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <div class="overlay hidden" id="preview-overlay" role="presentation">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+      <div class="dialog-head"><div><h2 id="preview-title">纠正结果</h2><p>错词、语法与重复</p></div><button class="icon-button" type="button" id="close-preview" aria-label="关闭纠正结果">×</button></div>
+      <div class="dialog-content">
+        <p class="result-text" id="preview-candidate"></p>
+        <p class="uncertain hidden" id="uncertain-note"></p>
+        <details class="original-disclosure" id="original-disclosure"><summary>查看原文</summary><p id="preview-original"></p></details>
+        <p class="stale hidden" id="stale-note">草稿已变化，请重新纠正后再应用。</p>
+      </div>
+      <div class="dialog-actions"><button class="secondary-button" type="button" id="cancel-preview">取消</button><button class="primary-button" type="button" id="apply-correction">应用到草稿</button></div>
+    </section>
+  </div>
+  <div class="overlay hidden" id="lexicon-overlay" role="presentation">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="lexicon-title">
+      <div class="dialog-head"><div><h2 id="lexicon-title">词库</h2><p>你确认过的名称和写法</p></div><button class="icon-button" type="button" id="close-lexicon" aria-label="关闭词库">×</button></div>
+      <div class="dialog-content">
+        <div class="lexicon-list" id="lexicon-list"></div>
+        <form class="lexicon-form" id="lexicon-form">
+          <label>标准写法<input id="canonical-input" name="canonical" autocomplete="off" placeholder="例如 Runweave" required maxlength="80" /></label>
+          <label>常见误识别写法<input id="variant-input" name="variants" autocomplete="off" placeholder="多个用逗号分隔" /></label>
+          <button class="primary-button" type="submit">添加</button>
+        </form>
+        <p class="dialog-error hidden" id="lexicon-error" role="alert"></p>
+      </div>
+      <div class="dialog-actions"><button class="secondary-button" type="button" id="cancel-lexicon">取消</button><button class="primary-button" type="button" id="save-lexicon">保存词库</button></div>
+    </section>
+  </div>
+  <div class="overlay hidden" id="remember-overlay" role="presentation">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="remember-title">
+      <div class="dialog-head"><div><h2 id="remember-title">记住这个写法</h2></div><button class="icon-button" type="button" id="close-remember" aria-label="关闭记住写法">×</button></div>
+      <form id="remember-form">
+        <div class="dialog-content remember-form">
+          <label>正确写法<input id="remember-canonical" autocomplete="off" required maxlength="80" /></label>
+          <label>常见误识别写法（选填）<input id="remember-variant" autocomplete="off" maxlength="80" /><small>用于之后手动纠正文字时参考。</small></label>
+          <p class="dialog-error hidden" id="remember-error" role="alert"></p>
+        </div>
+        <div class="dialog-actions"><button class="secondary-button" type="button" id="cancel-remember">取消</button><button class="primary-button" type="submit">加入词库</button></div>
+      </form>
+    </section>
+  </div>
+  <div class="toast hidden" id="toast" role="status"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

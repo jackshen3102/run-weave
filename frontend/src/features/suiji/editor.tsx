@@ -1,10 +1,11 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useMemoizedFn } from "ahooks";
 import type { SuijiRecord, FollowupResponse } from "@runweave/shared/suiji";
 import { Button } from "../../components/ui/button";
 import { SuijiPanel } from "./panel";
 import type { SuijiEditorModel } from "./editor-model";
 import { RecordTags, TagEditor } from "./tags";
+import { SuijiCorrectionPanel } from "./correction-panel";
 
 export function SuijiEditor({
   model,
@@ -13,6 +14,7 @@ export function SuijiEditor({
   onFollowupSaved,
   onDiscard,
   availableTags,
+  correctionAvailable,
 }: {
   model: SuijiEditorModel;
   onClose: () => void;
@@ -20,10 +22,12 @@ export function SuijiEditor({
   onFollowupSaved?: (result: FollowupResponse) => void;
   onDiscard: () => void;
   availableTags: string[];
+  correctionAvailable?: boolean;
 }) {
   const state = useSyncExternalStore(model.subscribe, model.snapshot),
     { draft, busy } = state;
   const saved = useMemoizedFn(onSaved);
+  const [selectedText, setSelectedText] = useState("");
   const followed = useMemoizedFn((result: FollowupResponse) => onFollowupSaved?.(result));
   useEffect(() => { if (state.savedFollowup) followed(state.savedFollowup); }, [state.savedFollowup, followed]);
   const discarded = useMemoizedFn(onDiscard);
@@ -83,10 +87,15 @@ export function SuijiEditor({
             aria-label={model.followupRecordId ? "跟进内容" : "原文"}
             value={draft.body}
             onChange={(e) => model.edit({ body: e.target.value })}
+            onSelect={(e) => {
+              const target = e.currentTarget;
+              setSelectedText(target.value.slice(target.selectionStart, target.selectionEnd).trim().slice(0, 80));
+            }}
             placeholder="此刻的想法、一个链接，或者以后想做的事……"
             className="min-h-56 resize-y rounded-xl border bg-background p-4 leading-relaxed outline-none focus:ring-2 focus:ring-ring"
           />
         </label>
+        {correctionAvailable !== undefined ? <SuijiCorrectionPanel model={model} selectedText={selectedText} available={correctionAvailable} /> : null}
         {!model.followupRecordId ? <TagEditor selected={draft.tags} available={availableTags} onChange={(tags) => model.edit({ tags })} /> : null}
         <span className="text-right text-xs text-muted-foreground">
           {[...draft.body].length.toLocaleString()} / 20,000

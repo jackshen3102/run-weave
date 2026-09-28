@@ -45,7 +45,7 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
-标签最初引入于 schema 4；当前运行版本要求 schema 6，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
+标签最初引入于 schema 4；当前运行版本要求 schema 7，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -66,7 +66,7 @@ HTTP、修订与幂等结果在一个 PostgreSQL 事务提交。同键唯一约�
 `/mcp` 使用 Streamable HTTP，默认关闭。与 App 共用记录服务，但使用独立 Bearer 凭据；
 不接受 App access/refresh token，不向 Agent 提供数据库或登录密码。每次请求校验有效期。
 
-每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 6；
+每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 7；
 `SUIJI_MCP_ENABLED=true` 开启 MCP，默认 false。注册、撤销不重启服务；App 会话不受影响。
 
 ```bash
@@ -166,6 +166,22 @@ Docker 镜像固定安装 Codex CLI 0.153.4；容器登录与配置见[部署入
 coverage 来自实际工具调用，回答并不保证遍历全部历史。info 的可选 ai 字段说明当前能力。
 验收见 [AI 回顾](../../docs/testing/suiji/ai-review.testplan.yaml)。
 
+## 手动文字纠错与词库
+
+`info.features.correction` 仅在 `SUIJI_AI_PROVIDER=codex-cli` 时为 true；未提供该字段的旧服务由客户端隐藏入口。纠错沿用上文的 CLI 登录和超时配置。点击编辑器的“纠正文字”后才发送本次正文及当前 owner 的词库快照。纠错 CLI 不接随记 MCP，也不读取记录、附件、文件或网页；结果只作为候选，服务不执行记录或词库写入。
+
+| 接口                                   | 合同                                                                                      |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `GET /api/suiji/v1/correction-lexicon` | 当前 owner 的 `{version,entries}`；空库为版本 0                                           |
+| `PUT /api/suiji/v1/correction-lexicon` | Bearer + Idempotency-Key，`{expectedVersion,entries}` 整份替换；冲突返回 VERSION_CONFLICT |
+| `POST /api/suiji/v1/corrections`       | Bearer + Idempotency-Key，`{text}`，202 返回任务                                          |
+| `GET /api/suiji/v1/corrections/:id`    | 当前 owner 查询状态、候选全文、不确定词与可点选的纠正词                                   |
+| `DELETE /api/suiji/v1/corrections/:id` | 取消当前 owner 的任务与模型进程                                                           |
+
+schema 7 的 `correction_lexicons` 按 owner 存储。最多 200 个标准写法；每个可有 0–5 个误识别写法。每个写法去首尾空白后为 1–80 个 Unicode 标量，不能包含控制字符，也不能在整个词库重复。词库写入与记录保存分别提交。只有用户点击候选中的词或选中正文短词，编辑并确认“加入词库”后才写入；应用候选、手动修改正文及保存记录都不自动学习。词库写入结果未知时客户端保留同一请求键，等待用户手动确认。
+
+同 owner 最多一个运行中的纠错任务，进程内最多保留 100 个任务，完成后保留 30 分钟。CLI 失败、超时与取消不会改变原记录。原文、词库及模型原始诊断不写日志。验收见[手动纠错](../../docs/testing/suiji/manual-correction.testplan.yaml)和[显式收词](../../docs/testing/suiji/manual-correction-learning.testplan.yaml)。
+
 ## Web 与 Runweave 桌面
 
 桌面首页、连接/登录页及终端顶部的“随记”打开独立 `/suiji` 窗口，主窗口保持原页面。
@@ -205,7 +221,7 @@ pnpm architecture:check
 
 ## 回收站
 
-迁移到 schema 6 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
+迁移到当前要求的 schema 7 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
 分页游标绑定筛选。App 可按 ID 查看回收站原文和附件，不能编辑或变更待办状态。恢复不改变待办原状态。
 每次删除或恢复沿用版本校验、单事务修订及幂等请求；客户端先持久化意图，结果未知时仅由用户手动确认原请求。
 Web 和原生 iOS 均提供回收站入口、删除确认及恢复。已有本机正文草稿保留，恢复后保存仍须通过版本校验。

@@ -10,6 +10,7 @@ struct RecordEditorSheet: View {
   @State private var discarding = false
   @State private var choosingTag = false
   @State private var preview: LocalAttachment?
+  @State private var textSelection: TextSelection?
   @FocusState private var focused: Bool
   var body: some View {
     NavigationStack {
@@ -20,10 +21,11 @@ struct RecordEditorSheet: View {
           if model.draft.recordID != nil {
             Text("切换为待办时设为未完成；切换为想法时清除待办状态。").font(.footnote).foregroundStyle(.secondary)
           }
-          TextEditor(text: $model.draft.body).contentMargins(.bottom, 20, for: .scrollContent)
+          TextEditor(text: $model.draft.body, selection: $textSelection).contentMargins(.bottom, 20, for: .scrollContent)
             .frame(height: 240).focused($focused).disabled(!model.editable)
             .accessibilityLabel(model.draft.followupRecordID == nil ? "正文" : "跟进内容").scrollContentBackground(.hidden).padding(8).foregroundStyle(SuijiTheme.ink).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 12))
           Text("\(model.draft.body.unicodeScalars.count) / \(model.limits.bodyScalars)").font(.caption).foregroundStyle(.secondary)
+          if model.correctionSupported { CorrectionPanel(model: model, selectedText: selectedText) }
           if model.draft.followupRecordID == nil { tagEditor }
           ForEach(model.draft.existing) { attachment in
             HStack { Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text"); Spacer()
@@ -60,14 +62,14 @@ struct RecordEditorSheet: View {
       }.background(SuijiTheme.background)
       .navigationTitle(model.draft.followupRecordID != nil ? "追加跟进" : model.draft.recordID == nil ? "随手记下" : "编辑记录").navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("收起") { focused = false; dismiss() } }
+        ToolbarItem(placement: .cancellationAction) { Button("收起") { focused = false; Task { await model.cancelCorrection() }; dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
           Button(model.busy ? "保存中…" : model.draft.frozen ? "重试确认" : "保存") { focused = false; Task { await model.save(); if model.confirmed { dismiss() } } }
             .disabled(model.busy || model.draft.conflict)
         }
         ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { focused = false } }
       }
-      .onChange(of: model.draft.body) { _, _ in Task { await model.persist() } }
+      .onChange(of: model.draft.body) { _, _ in textSelection = nil; Task { await model.persist() } }
       .onChange(of: model.draft.kind) { _, _ in Task { await model.persist() } }
       .onChange(of: model.draft.tags) { _, _ in Task { await model.persist() } }
       .onChange(of: photo) { _, item in Task { await importPhoto(item) } }
@@ -83,6 +85,11 @@ struct RecordEditorSheet: View {
         }
       }
     }
+  }
+  private var selectedText: String? {
+    guard case .selection(let range) = textSelection?.indices, !range.isEmpty else { return nil }
+    let text = String(model.draft.body[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty || text.unicodeScalars.count > 80 ? nil : text
   }
   private var tagEditor: some View {
     VStack(alignment: .leading, spacing: 8) {

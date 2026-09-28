@@ -81,4 +81,15 @@ actor DraftStore {
     try JSONEncoder().encode(operation).write(to: url(id, prefix: "status-"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
   }
   func removeStatus(_ id: String) throws { try FileManager.default.removeItem(at: url(id, prefix: "status-")) }
+  func lexiconIntent() throws -> LexiconIntent? {
+    let path = root.appendingPathComponent("lexicon-intent.json")
+    guard FileManager.default.fileExists(atPath: path.path) else { return nil }
+    return try JSONDecoder().decode(LexiconIntent.self, from: Data(contentsOf: path))
+  }
+  func saveLexiconIntent(_ intent: LexiconIntent) throws {
+    try JSONEncoder().encode(intent).write(to: root.appendingPathComponent("lexicon-intent.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+  }
+  func removeLexiconIntent() throws {
+    try FileManager.default.removeItem(at: root.appendingPathComponent("lexicon-intent.json"))
+  }
 }
