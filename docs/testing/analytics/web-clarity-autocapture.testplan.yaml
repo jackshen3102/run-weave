@@ -1,6 +1,6 @@
 version: 1
-name: "Web Clarity 首期纯无埋点验收"
-description: "默认启用行为合同：仅全局初始化官方 Clarity，验证普通 Web 自动采集、开发环境排除、云端回放、降级与回滚。19 条用例相互独立，17 条 required、2 条全量回归扩展。格式校验不代表功能已通过；不做终端专门处理，不新增手工事件。"
+name: "Web 与 Mac Stable Clarity 纯无埋点验收"
+description: "默认启用行为合同：仅全局初始化官方 Clarity，验证普通 Web 和 Mac Stable 自动采集、Beta 与开发环境排除、云端回放、降级与回滚。20 条用例相互独立，18 条 required、2 条全量回归扩展。格式校验不代表功能已通过；不做终端专门处理，不新增手工事件。"
 cases:
   - id: "WCA-001"
     name: "普通 Web 生产构建默认加载生产项目"
@@ -24,15 +24,16 @@ cases:
       - "在同一 Document 通过模块入口连续调用 initializeClarity 三次，并通过应用菜单进行 Activity 导航及浏览器返回；确认项目 tag 仍只有一个，没有重复项目 tag 加载。版本脚本与多条 collect 不能误判为重复初始化。"
       - "完整刷新本用例页面，确认新的 Document 允许初始化一次，项目 tag 数量仍为 1；本 case 不依赖云端统计去证明本地幂等。"
   - id: "WCA-003"
-    name: "Electron 主窗口不启用 Web 采集"
+    name: "Mac Stable 主窗口自动采集"
     required: true
-    description: "即使共享前端构建带有启用配置，真实 Electron renderer 也不初始化 Clarity。"
+    description: "真实打包 Mac Stable 主窗口在 runweave: 协议下加载 Clarity，产生可定位的云端会话。"
     preconditions:
-      - "当前源码对应的隔离 Electron 测试实例可用，已用 $computer-use 准备并核对版本；同一前端构建包含有效 Clarity 配置。"
-      - "拥有该实例专属 renderer endpoint；按目标 surface 使用 $toolkit:playwright-cli，不能将普通网页注入假 bridge 当作实际桌面证据。"
+      - "当前源码对应的隔离 Mac Stable 实例可用，已准备并核对版本；生产模式前端构建覆盖独立 Clarity 验收项目 ID，且该项目使用 Strict masking。"
+      - "拥有该实例专属 renderer endpoint、合成账号与数据；按目标 surface 使用 $toolkit:playwright-cli，不能将普通网页注入假 bridge 当作实际桌面证据。"
     steps:
-      - "打开实际主窗口，确认真实 electronAPI.isElectron 为 true；用 $toolkit:playwright-cli 查看脚本与网络，记录实例及构建身份。"
-      - "进行普通导航并打开关闭一个已有菜单；确认没有 Clarity 项目 tag、版本脚本和采集请求，原有菜单仍响应。"
+      - "打开实际主窗口，确认真实 electronAPI.isElectron 为 true、页面协议为 runweave:、构建通道为 stable；用 $toolkit:playwright-cli 查看项目 tag、版本脚本与 collect 请求，记录实例及构建身份。"
+      - "用合成数据导航并打开关闭一个已有菜单，确认项目 tag 只有一个、原有菜单仍响应；检查页面 URL、元素属性与终端等敏感内容的实际上传范围。"
+      - "在 Clarity 验收项目按时间和操作顺序定位这次新会话，核对回放中的导航与菜单；只有云端录制可用且敏感内容符合采集边界才判通过。"
       - "清理本用例资源并从受控 renderer detach；不关闭用户正在使用的桌面实例。"
   - id: "WCA-004"
     name: "Companion 入口不加载采集器"
@@ -212,3 +213,13 @@ cases:
     steps:
       - "用 $toolkit:playwright-cli 打开此 session 的真实 /terminal，确认页面属于该 Dev Session 并通过应用菜单完成一次主题切换。"
       - "观察页面脚本和网络，确认没有 Clarity tag、版本脚本或 collect 请求；按 session 所有权清理本用例资源。"
+  - id: "WCA-020"
+    name: "Mac Beta 主窗口不加载采集器"
+    required: true
+    description: "真实 Beta 构建即使包含有效项目 ID，也不初始化 Clarity。"
+    preconditions:
+      - "当前源码对应的隔离 Mac Beta 实例可用，前端构建中 VITE_RUNWEAVE_CHANNEL=beta 且包含有效 Clarity 项目 ID；拥有该实例专属 renderer endpoint。"
+    steps:
+      - "用 $toolkit:playwright-cli 打开真实 Beta 主窗口，确认实际 electronAPI.isElectron 为 true、页面协议为 runweave:、页面标识为 Beta。"
+      - "进行普通导航并打开关闭一个已有菜单，确认没有 Clarity 项目 tag、版本脚本和 collect 请求，原有菜单仍响应。"
+      - "从受控 renderer detach 并按实例所有权清理本用例资源；不关闭用户正在使用的桌面实例。"
