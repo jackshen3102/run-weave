@@ -86,14 +86,43 @@ struct RecordEditorSheet: View {
   }
   private var tagEditor: some View {
     VStack(alignment: .leading, spacing: 8) {
-      ForEach(model.draft.tags ?? [], id: \.self) { tag in
+      let recent = Array(availableTags.prefix(6))
+      ForEach((model.draft.tags ?? []).filter { !recent.contains($0) }, id: \.self) { tag in
         Button { model.draft.tags?.removeAll { $0 == tag } } label: {
           HStack { TagLabel(name: tag); Image(systemName: "xmark.circle") }
         }.accessibilityLabel("移除标签：" + tag)
       }
       Button("＋标签") { focused = false; choosingTag = true }.disabled((model.draft.tags ?? []).count >= 2)
       if (model.draft.tags ?? []).count >= 2 { Text("最多 2 个标签").font(.caption).foregroundStyle(.secondary) }
+      if !recent.isEmpty {
+        Text("最近使用").font(.caption).foregroundStyle(.secondary)
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
+          ForEach(recent, id: \.self) { tag in
+            let selected = model.draft.tags?.contains(tag) == true
+            Button { toggleTag(tag) } label: {
+              HStack(spacing: 4) {
+                Text(verbatim: tag).lineLimit(2)
+                if selected { Image(systemName: "checkmark") }
+                Spacer(minLength: 0)
+              }
+              .font(.subheadline).foregroundStyle(SuijiTheme.ink)
+              .padding(.horizontal, 12).frame(minHeight: 44)
+              .background(selected ? Color.accentColor.opacity(0.18) : SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .disabled(!selected && (model.draft.tags ?? []).count >= 2)
+            .accessibilityLabel("标签：" + tag)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+          }
+        }
+      }
     }.disabled(!model.editable)
+  }
+  private func toggleTag(_ tag: String) {
+    var selected = model.draft.tags ?? []
+    if selected.contains(tag) { selected.removeAll { $0 == tag } }
+    else if selected.count < 2 { selected.append(tag) }
+    model.draft.tags = selected
   }
   private func importPhoto(_ item: PhotosPickerItem?) async {
     guard let item else { return }

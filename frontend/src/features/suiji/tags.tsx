@@ -62,6 +62,7 @@ export function TagEditor({
   const [open, setOpen] = useState(false),
     [query, setQuery] = useState(""),
     [error, setError] = useState("");
+  const recent = available.slice(0, 6);
   const add = (name: string) => {
     try {
       onChange(normalizeSuijiTags([...selected, name]));
@@ -72,19 +73,20 @@ export function TagEditor({
       setError((reason as Error).message);
     }
   };
+  const remove = (name: string) => {
+    onChange(selected.filter((tag) => tag !== name));
+    setError("");
+  };
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        {selected.map((tag) => (
+        {selected.filter((tag) => !recent.includes(tag)).map((tag) => (
           <button
             key={tag}
             type="button"
             aria-label={`移除标签：${tag}`}
             className={`rounded-full px-2.5 py-1 text-sm break-all ${tagColor(tag)}`}
-            onClick={() => {
-              onChange(selected.filter((item) => item !== tag));
-              setError("");
-            }}
+            onClick={() => remove(tag)}
           >
             {tag} ×
           </button>
@@ -94,6 +96,7 @@ export function TagEditor({
           variant="ghost"
           size="sm"
           disabled={selected.length >= 2}
+          aria-expanded={open}
           onClick={() => setOpen(!open)}
         >
           ＋标签
@@ -102,6 +105,28 @@ export function TagEditor({
           <span className="text-xs text-muted-foreground">最多 2 个标签</span>
         ) : null}
       </div>
+      {recent.length ? (
+        <div role="group" aria-label="最近使用的标签" className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">最近使用</span>
+          {recent.map((tag) => {
+            const checked = selected.includes(tag);
+            return (
+              <Button
+                key={tag}
+                type="button"
+                variant={checked ? "default" : "outline"}
+                size="sm"
+                aria-pressed={checked}
+                disabled={!checked && selected.length >= 2}
+                onClick={() => checked ? remove(tag) : add(tag)}
+              >
+                {tag}
+                {checked ? " ✓" : ""}
+              </Button>
+            );
+          })}
+        </div>
+      ) : null}
       {open && selected.length < 2 ? (
         <div className="flex flex-col gap-2 rounded-xl border p-3">
           <Input
