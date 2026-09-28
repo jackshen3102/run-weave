@@ -11,6 +11,7 @@ const TICK_MS = 5_000;
 const LATE_WINDOW_MS = 60_000;
 
 export interface ScheduledTaskRuntimeLimits {
+  maxConcurrentRuns?: number;
   timeoutMs: number;
   maxOutputBytes: number;
 }
@@ -18,9 +19,9 @@ export interface ScheduledTaskRuntimeLimits {
 export class ScheduledTaskRuntime {
   private readonly ownerId = `scheduled:${process.pid}:${randomUUID()}`;
   private readonly active = new Map<string, AbortController>();
+  private readonly executions = new Map<string, Promise<void>>();
   private timer: NodeJS.Timeout | null = null;
   private pass: Promise<void> | null = null;
-  private activeExecution: Promise<void> | null = null;
   private disposed = false;
 
   constructor(
@@ -70,28 +71,40 @@ export class ScheduledTaskRuntime {
     this.disposed = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    await this.pass;
     for (const controller of this.active.values()) controller.abort();
-    await Promise.allSettled(
-      [this.pass, this.activeExecution].filter(
-        (value): value is Promise<void> => Boolean(value),
-      ),
-    );
+    await Promise.allSettled(this.executions.values());
   }
 
   private async runPass(): Promise<void> {
     if (!this.enabled) return;
     await this.recoverAbandonedRuns();
     await this.materializeDue(new Date());
-    if (this.activeExecution) return;
-    const run = await this.store.claimNextRun(
-      this.ownerId,
-      new Date().toISOString(),
-    );
-    if (!run) return;
-    this.activeExecution = this.execute(run).finally(() => {
-      this.activeExecution = null;
-      this.wake();
-    });
+    const limit = this.limits.maxConcurrentRuns ?? 4;
+    while (!this.disposed && this.executions.size < limit) {
+      const run = await this.store.claimNextRun(
+        this.ownerId,
+        new Date().toISOString(),
+      );
+      if (!run) return;
+      if (this.disposed) {
+        await this.store.putRun({ ...run, status: "queued", startedAt: null });
+        return;
+      }
+      const execution = this.execute(run)
+        .catch((error) => {
+          logger.warn("scheduled-tasks.execution.failed", {
+            component: "scheduled-tasks",
+            runId: run.id,
+            error,
+          });
+        })
+        .finally(() => {
+          this.executions.delete(run.id);
+          this.wake();
+        });
+      this.executions.set(run.id, execution);
+    }
   }
 
   private async recoverAbandonedRuns(): Promise<void> {

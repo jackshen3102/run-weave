@@ -89,7 +89,7 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
       catch { issue(key, "CONFIG_SERVICE_ORIGIN_INVALID"); }
     }
     if (field.sensitive && typeof entry === "string" && ["<redacted>", "********"].includes(entry)) issue(key, "CONFIG_SECRET_VALUE_INVALID");
-    if (typeof entry === "number" && (/port$/i.test(key) && (entry < 1 || entry > 65535) || /(?:TtlSeconds|timeoutMs|maxOutputBytes|Seconds|IntervalMs)$/.test(key) && entry <= 0 || /DelayMs$/.test(key) && entry < 0)) issue(key, "CONFIG_FIELD_RANGE_INVALID");
+    if (typeof entry === "number" && (/port$/i.test(key) && (entry < 1 || entry > 65535) || /(?:TtlSeconds|timeoutMs|maxOutputBytes|maxConcurrentRuns|Seconds|IntervalMs)$/.test(key) && entry <= 0 || /DelayMs$/.test(key) && entry < 0)) issue(key, "CONFIG_FIELD_RANGE_INVALID");
     const mutablePath = key.startsWith("storage.") || key === "logging.backendDirectory" || ["appServer.stateDirectory", "appServer.cloudSyncDirectory", "services.snapshotHost.directory", "services.pushGateway.directory", "services.suiji.storageDirectory"].includes(key);
     if (typeof entry === "string" && mutablePath) {
       try { if (!path.isAbsolute(entry)) throw new Error(); assertOwnedPath(context, entry); } catch { issue(key, "CONFIG_PATH_OUTSIDE_INSTANCE"); }

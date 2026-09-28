@@ -72,14 +72,14 @@ export function TerminalQuickInputPopover({
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
-  const { backgroundRun, setBackgroundRun, backgroundAvailable } =
+  const { backgroundRuns, upsertBackgroundRun, backgroundAvailable } =
     useQuickInputBackgroundRuns(
       apiBase,
       token,
       activeProject?.projectId ?? null,
       open,
     );
-  const [showRunDetail, setShowRunDetail] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const pendingRunKeys = useRef(new Map<string, string>());
   const enterScheduledTasks = useEnterScheduledTasks();
   const { setPanelOpen } = useRuntimeStatus();
@@ -132,10 +132,11 @@ export function TerminalQuickInputPopover({
   }, [activeProject?.projectId, debouncedQuery, kind, open, refresh]);
 
   useEffect(() => {
-    if (backgroundRun && !["queued", "running", "stopping"].includes(backgroundRun.status)) {
+    if (backgroundRuns.length > 0 && backgroundRuns.every((run) =>
+      !["queued", "running", "stopping"].includes(run.status))) {
       setFeedback((current) => current?.includes("查看运行") ? null : current);
     }
-  }, [backgroundRun]);
+  }, [backgroundRuns]);
 
   const handleSend = useMemoizedFn(
     async (item: TerminalQuickInputItem): Promise<void> => {
@@ -258,8 +259,8 @@ export function TerminalQuickInputPopover({
         );
         pendingRunKeys.current.delete(scope);
         try { sessionStorage.removeItem(storageKey); } catch { /* unavailable */ }
-        setBackgroundRun(run);
-        setShowRunDetail(false);
+        upsertBackgroundRun(run);
+        setSelectedRunId(null);
         setFeedback("排队中 · 查看运行");
       } catch (caught) {
         const runId = caught instanceof HttpError && caught.code === "run_busy"
@@ -270,8 +271,8 @@ export function TerminalQuickInputPopover({
             const run = await scheduledTasksApi(apiBase, token).run(runId);
             pendingRunKeys.current.delete(scope);
             try { sessionStorage.removeItem(storageKey); } catch { /* unavailable */ }
-            setBackgroundRun(run);
-            setShowRunDetail(false);
+            upsertBackgroundRun(run);
+            setSelectedRunId(null);
             setFeedback("运行中 · 查看运行");
           } catch (readError) {
             setError(readError instanceof Error ? readError.message : String(readError));
@@ -339,6 +340,7 @@ export function TerminalQuickInputPopover({
     }
     return "还没有快捷指令";
   }, [debouncedQuery, kind]);
+  const selectedRun = backgroundRuns.find((run) => run.id === selectedRunId) ?? null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -416,24 +418,26 @@ export function TerminalQuickInputPopover({
             }}>设置后台模型</button>
           ) : null}
 
-          {backgroundRun ? (
-            <button
-              type="button"
-              className="rounded-md border border-sky-900/70 bg-sky-950/40 px-2 py-1.5 text-left text-xs text-sky-200"
-              onClick={() => {
-                setShowRunDetail((value) => !value);
-              }}
-            >
-              {backgroundRun.snapshot.origin?.projectName ?? backgroundRun.snapshot.name}
-              {backgroundRun.snapshot.origin?.worktreeName ? ` / ${backgroundRun.snapshot.origin.worktreeName}` : ""}
-              {` · ${backgroundRun.outcome === "blocked" ? "执行受阻" : statusLabel[backgroundRun.status]} · 查看运行`}
-            </button>
+          {backgroundRuns.length > 0 ? (
+            <div className="max-h-[140px] space-y-1 overflow-y-auto">
+              {backgroundRuns.map((run) => (
+                <button
+                  key={run.id}
+                  type="button"
+                  className="block w-full rounded-md border border-sky-900/70 bg-sky-950/40 px-2 py-1.5 text-left text-xs text-sky-200"
+                  onClick={() => setSelectedRunId((value) => value === run.id ? null : run.id)}
+                >
+                  {run.snapshot.name}
+                  {` · ${run.outcome === "blocked" ? "执行受阻" : statusLabel[run.status]} · 查看运行`}
+                </button>
+              ))}
+            </div>
           ) : null}
-          {showRunDetail && backgroundRun ? (
+          {selectedRun ? (
             <div className="max-h-[400px] space-y-2 overflow-y-auto">
-              <RunRecord key={backgroundRun.id} run={backgroundRun} highlighted={false} />
+              <RunRecord key={selectedRun.id} run={selectedRun} highlighted={false} />
               <button type="button" className="text-xs text-sky-300 underline"
-                onClick={() => enterScheduledTasks(`/scheduled-tasks/${encodeURIComponent(backgroundRun.taskId)}?run=${encodeURIComponent(backgroundRun.id)}`)}>
+                onClick={() => enterScheduledTasks(`/scheduled-tasks/${encodeURIComponent(selectedRun.taskId)}?run=${encodeURIComponent(selectedRun.id)}`)}>
                 打开完整记录
               </button>
             </div>
@@ -462,9 +466,7 @@ export function TerminalQuickInputPopover({
                     onTogglePinned={handleTogglePinned}
                     onDelete={handleDelete}
                     onBackgroundRun={handleBackgroundRun}
-                    canBackgroundRun={backgroundAvailable && Boolean(activeProject) && !disabled &&
-                      ["line", "prompt_paste"].includes(item.mode) &&
-                      /^\$toolkit:github-pr(?=\s|$)/u.test(item.data.trimStart())}
+                    canBackgroundRun={backgroundAvailable && Boolean(activeProject) && !disabled}
                   />
                 ))}
               </div>

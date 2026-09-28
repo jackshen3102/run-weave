@@ -21,6 +21,7 @@ import {
 import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
 
 import { verifyMigrations } from "./migrations";
+import { verifyConcurrent } from "./concurrent";
 
 const selected = readSelectedCase(process.argv.slice(2));
 const cases: Record<string, () => Promise<void>> = {
@@ -30,6 +31,7 @@ const cases: Record<string, () => Promise<void>> = {
   restart: verifyRestart,
   catchUp: verifyCatchUp,
   catchUpExecution: verifyCatchUpExecution,
+  concurrent: () => withStore((store) => verifyConcurrent(store, taskFixture, runFixture)),
   fullAccess: verifyFullAccess,
 };
 

@@ -1,8 +1,8 @@
 version: 1
 name: 快捷指令一键后台运行验收（收敛版）
 description: >
-  验收合同。复用现有 ScheduledTaskService、队列、存储、输出、恢复和推送，验证快捷入口与项目归属。
-  自更新、独立 worker、维护租约和跨重启继续执行不在范围内。每例独立 fixture；格式通过不代表行为通过。
+  验收合同。复用现有 ScheduledTaskService、队列、存储、输出、恢复和推送，验证快捷入口、项目归属与并发。
+  每例独立 fixture；格式通过不代表行为通过。
 cases:
   - id: BGC-001
     name: 一次点击进入现有后台队列
@@ -35,24 +35,26 @@ cases:
       - 更新模板使用时间后重试原请求，仍返回原 run；同键异请求返回 409，不能覆盖快照。
       - 活跃期间用新键点击同一模板/context，确认返回原活跃 ID 且不再执行；结束后明确新点击才生成下一次 run。
   - id: BGC-004
-    name: 后台默认值和命令资格明确
+    name: 后台默认值和任意快捷内容
     required: true
-    description: 一次配置后直接运行，不静默改变模型或权限，不开放桌面自更新。
+    description: 默认完全访问且选定模型后直接运行，不按命令前缀或输入模式过滤快捷指令，不静默改变模型或权限。
     preconditions:
       - 本例独立 Backend 可控制模型目录、技能安装和 provider 能力，能够读取实际启动参数。
     steps:
       - 缺少后台模型时确认显示一次性设置入口；保存有效默认值后通过 toolkit:playwright-cli 再点击，确认不弹配置表单。
-      - 核对 provider 参数来自后台默认值且冻结到 run；前台模型变化不影响本次执行。
-      - 对不可用模型、未安装技能、交互 slash 输入及 update-runweave-desktop 后台请求确认具体拒绝且未 spawn；不升权或静默替换模型。
+      - 不配置执行权限时核对 run 快照为 full-access，provider 使用 danger-full-access 且不等待交互审批；模型来自后台默认值并冻结到 run，前台模型变化不影响本次执行。
+      - 对普通文本、技能指令、slash 输入和 update-runweave-desktop 指令分别提交；确认均可创建运行且提示词保留原文，不因命令名称或模式预先拒绝。
+      - 不可用模型仍在启动前拒绝；运行时缺少技能或能力时记录具体受阻原因，不把入队当作业务成功。
   - id: BGC-005
-    name: 查看过程和结果复用持久运行
+    name: 同时查看多条运行的过程和结果
     required: true
-    description: 关闭弹出层后任务继续，重新打开可读同一运行的进度和最终结果。
+    description: 关闭弹出层后任务继续，重新打开可分别查看两条运行的进度和最终结果。
     preconditions:
-      - 本例有独立真实运行，持续输出可辨认编号并最终生成结构化结果；Backend 持续运行。
+      - 本例有两条独立真实运行，持续输出各自可辨认编号并最终生成结构化结果；Backend 持续运行。
     steps:
-      - 使用 toolkit:playwright-cli 打开查看运行，记录 runId 和游标；关闭弹出层再重新打开，确认同一 run 的输出继续前进且无重复拼接。
-      - 等待结束，确认摘要/原因按有效 outcome 展示并可查完整输出；删除模板后通过原 taskId/runId 仍可读历史。
+      - 使用 toolkit:playwright-cli 分别启动两条快捷指令；确认弹出层列出两个 runId，能分别打开详情和读取各自输出。
+      - 关闭弹出层再重新打开，确认两条运行仍可见、各自输出继续前进且无重复拼接。
+      - 等待结束，确认两条摘要/原因按有效 outcome 展示并可查完整输出；删除模板后通过原 taskId/runId 仍可读历史。
   - id: BGC-006
     name: 恢复使用原 thread 且不产生第二个 owner
     required: true
@@ -113,9 +115,9 @@ cases:
   - id: BGC-012
     name: 快捷运行保持原定时任务队列语义
     required: true
-    description: 新接入复用原单并发队列，普通任务与内部任务互不改写，不需要新 worker 或新队列。
+    description: 新接入复用原队列，在配置的并发上限内运行，普通任务与内部任务互不改写。
     preconditions:
       - 本例隔离数据库有独立普通定时任务和快捷来源任务，使用可控制结束时间的 provider 集成 fixture。
     steps:
-      - 两类任务交错入队，核对仍由原 claimNextRun 按既有规则执行，活跃 provider 不超过一个。
+      - 将并发上限设为 2，让两类任务交错入队；确认两个不同任务同时进入 provider，第三个排队，活跃 provider 不超过两个。
       - 确认暂停或启用普通定时任务不会启用快捷来源内部任务，后者只由明确点击入队，既有调度仍能继续执行。

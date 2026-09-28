@@ -1,9 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
 import { settingText } from "@runweave/config-node";
 import { parseTerminalChildProjectId } from "@runweave/shared/terminal/project-context";
 import type { ScheduledExecutionPolicy, ScheduledRun, ScheduledTask } from "@runweave/shared/scheduled-tasks";
@@ -12,8 +7,6 @@ import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { probeCodexCatalog } from "../agent-team/model-catalog/codex";
 import { ScheduledTaskError, scheduledTaskErrorFromStorage } from "./errors";
 import type { ScheduledTaskStore } from "./storage/store";
-
-const execFileAsync = promisify(execFile);
 
 export async function startQuickInputRun(args: {
   quickInputId: string;
@@ -45,11 +38,6 @@ export async function startQuickInputRun(args: {
     throw new ScheduledTaskError("quick_input_not_found", 404, "Quick input not found");
   if (input.updatedAt !== expectedInputUpdatedAt)
     throw new ScheduledTaskError("input_changed", 409, "Quick input changed; refresh before running");
-  if (!["line", "prompt_paste"].includes(input.mode) ||
-    !/^\$toolkit:github-pr(?=\s|$)/u.test(input.data.trimStart())) {
-    throw new ScheduledTaskError("unsupported_quick_input", 400,
-      "Only saved toolkit:github-pr instructions can run in the background");
-  }
   const project = args.requireProject(projectId);
   const parentProjectId = args.manager.resolveParentProjectId(projectId);
   if (input.projectId && input.projectId !== parentProjectId)
@@ -58,8 +46,7 @@ export async function startQuickInputRun(args: {
   if (!parent?.name)
     throw new ScheduledTaskError("context_unavailable", 409, "Parent project is unavailable");
   args.requireProvider("codex");
-  await requireGithubSkill();
-  const executionPolicy = settingText("scheduledTasks.quickInputDefaults.executionPolicy")?.trim() || "auto-review";
+  const executionPolicy = settingText("scheduledTasks.quickInputDefaults.executionPolicy")?.trim() || "full-access";
   if (!["sandbox", "auto-review", "full-access"].includes(executionPolicy))
     throw new ScheduledTaskError("config_required", 409, "Background execution policy is invalid");
   args.requireExecutionPolicy("codex", executionPolicy as ScheduledExecutionPolicy);
@@ -92,26 +79,4 @@ export async function startQuickInputRun(args: {
   } catch (error) {
     throw scheduledTaskErrorFromStorage(error);
   }
-}
-
-async function requireGithubSkill(): Promise<void> {
-  let listing: { installed?: Array<{ name?: string; enabled?: boolean; version?: string; source?: { path?: string } }> };
-  try {
-    const binary = settingText("agents.codex.binary")?.trim() || "codex";
-    const { stdout } = await execFileAsync(binary, ["plugin", "list", "--json"], {
-      timeout: 30_000, maxBuffer: 1_000_000,
-    });
-    listing = JSON.parse(stdout) as typeof listing;
-  } catch (error) {
-    const code = error && typeof error === "object" && "code" in error && typeof error.code === "string"
-      ? error.code : "invalid_response";
-    throw new ScheduledTaskError("skill_unavailable", 503, `Codex plugin availability could not be checked (${code})`);
-  }
-  const plugin = listing.installed?.find((item) => item.name === "toolkit" && item.enabled);
-  const skill = plugin && [
-    plugin.source?.path ? path.join(plugin.source.path, "skills", "github-pr", "SKILL.md") : "",
-    plugin.version ? path.join(homedir(), ".codex", "plugins", "cache", "runweave", "toolkit", plugin.version, "skills", "github-pr", "SKILL.md") : "",
-  ].some((candidate) => candidate && existsSync(candidate));
-  if (!skill)
-    throw new ScheduledTaskError("skill_unavailable", 400, "The toolkit:github-pr skill is not installed and enabled");
 }
