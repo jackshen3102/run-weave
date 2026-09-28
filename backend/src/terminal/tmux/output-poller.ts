@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat, truncate } from "node:fs/promises";
 import { StringDecoder } from "node:string_decoder";
 import { logger } from "../../logging/index";
-import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
+import type { TerminalSessionManager } from "../manager/manager";
 import { appendToScrollbackBuffer } from "../scrollback/scrollback-buffer";
 import type { TmuxLifecycleCoordinator } from "./lifecycle-coordinator";
 import {
@@ -29,9 +29,11 @@ export class TmuxOutputPoller {
       terminalSessionId: string,
     ) => Promise<void>,
     private readonly invalidatePaneCursor: (watched: WatchedTmuxPane) => void,
+    private readonly isDisposed: () => boolean,
   ) {}
 
   async pollPane(watched: WatchedTmuxPane): Promise<boolean> {
+    if (this.isDisposed()) return false;
     if (watched.polling) {
       return watched.polling;
     }
@@ -42,21 +44,19 @@ export class TmuxOutputPoller {
   }
 
   private async pollPaneNow(watched: WatchedTmuxPane): Promise<boolean> {
+    const isCurrent = () => this.watchedPanes.get(
+      resolvePaneWatcherKey(watched.terminalSessionId, watched.target.paneId),
+    ) === watched;
+    if (!isCurrent()) return false;
     const terminalSessionId = watched.terminalSessionId;
     const session = this.terminalSessionManager.getSession(terminalSessionId);
     if (!session || !shouldWatchSession(session)) {
-      await this.unwatchSession(terminalSessionId);
       return false;
     }
 
     try {
-      if (
-        watched.reconcileSessionLifecycle &&
-        (await this.reconcileNonInteractiveSessionExit(session, watched))
-      ) {
-        return false;
-      }
       const fileStat = await stat(watched.filePath);
+      if (!isCurrent()) return false;
       if (fileStat.size < watched.offset) {
         watched.offset = 0;
         this.invalidatePaneCursor(watched);
@@ -85,6 +85,7 @@ export class TmuxOutputPoller {
           end: fileStat.size - 1,
         });
         stream.on("data", (chunk) => {
+          if (!isCurrent()) return;
           const output = watched.decoder.write(
             Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
           );
@@ -120,11 +121,12 @@ export class TmuxOutputPoller {
     }
   }
 
-  private async reconcileNonInteractiveSessionExit(
-    session: TerminalSessionRecord,
-    watched: WatchedTmuxPane,
-  ): Promise<boolean> {
+  async reconcileSessionLifecycle(watched: WatchedTmuxPane): Promise<boolean> {
+    const isCurrent = () => !this.isDisposed() &&
+      this.watchedPanes.get(resolvePaneWatcherKey(watched.terminalSessionId, watched.target.paneId)) === watched;
+    const session = this.terminalSessionManager.getSession(watched.terminalSessionId);
     if (
+      !isCurrent() || !session || !shouldWatchSession(session) ||
       !session.activeCommand ||
       isInteractiveShellLaunch(session.command, session.args)
     ) {
@@ -146,14 +148,18 @@ export class TmuxOutputPoller {
       }
       metadata = null;
     }
-    if (metadata?.activeCommand) {
+    if (!isCurrent() || metadata?.activeCommand) {
       return false;
     }
 
+    // Drain the final output before exit handling removes this watcher.
+    await this.pollPane(watched);
+    if (!isCurrent() || !shouldWatchSession(session)) return false;
     await this.terminalSessionManager.updateSessionMetadata(session.id, {
       cwd: session.cwd,
       activeCommand: null,
     });
+    if (!isCurrent()) return false;
     const shouldFinalizeExit =
       this.tmuxLifecycleCoordinator?.shouldFinalizeNonInteractiveExit(
         session.id,

@@ -18,6 +18,8 @@ export interface LearningFact {
   toolUseId: string | null;
   toolName: string | null;
   text: string;
+  /** Position in the full redacted source; offsets use UTF-16 code units. */
+  source?: { eventId: string; sha256: string; start: number; end: number };
   /** Text-only analysis cannot use omitted images to establish an outcome. */
   omittedImageContent?: boolean;
 }
@@ -76,7 +78,8 @@ export async function readLearningFacts(
       continue;
     const { text, omittedImageContent } = await readFactText(store, fact);
     bytes += Buffer.byteLength(text);
-    if (bytes > 160_000) throw new Error("experience_turn_too_large");
+    if (bytes > 4 * 1024 * 1024)
+      throw new Error("experience_partial_source_budget_exceeded");
     output.push({
       id: fact.eventId,
       kind: fact.eventName,
@@ -117,8 +120,8 @@ async function readFactText(
         : { text: raw, omittedImageContent: false };
     const text = projected.text;
     omittedImageContent ||= projected.omittedImageContent;
-    if (Buffer.byteLength(text) > 40_000)
-      throw new Error("experience_source_too_large");
+    if (Buffer.byteLength(text) > 4 * 1024 * 1024)
+      throw new Error("experience_partial_source_budget_exceeded");
     parts.push(redactExcerpt(text));
   }
   return { text: parts.join("\n"), omittedImageContent };

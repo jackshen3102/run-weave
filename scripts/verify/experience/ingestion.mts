@@ -15,6 +15,11 @@ import { TerminalStateService } from "../../../backend/src/terminal/state/termin
 import { handleAgentHookEvent } from "../../../backend/src/app-server/handlers/agent-hook";
 import { createInternalTerminalAgentHookRouter } from "../../../backend/src/routes/terminal/state";
 import { readLearningFacts } from "../../../backend/src/experience/learning-source";
+import { ExperienceService } from "../../../backend/src/experience/service";
+import { ExperienceLearningQueue } from "../../../backend/src/experience/learning-queue";
+import { ExperienceLearningAnalysis } from "../../../backend/src/experience/learning-analysis";
+import { LearningDeferred, splitLearningFacts } from "../../../backend/src/experience/learning-segments";
+import type { LearningFact } from "../../../backend/src/experience/learning-source";
 import type { AgentHookStateRequest } from "@runweave/shared/terminal/events";
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 
@@ -326,7 +331,7 @@ async function verify(
     await assert.rejects(readLearningFacts(store, {
       ...source, threadId: missingThread, completedAt: new Date().toISOString(), asOfActivityOffset: undefined,
     }), /experience_source_unavailable/);
-    // Oversized content must still fail closed through the real Activity writer.
+    // Large text must survive the real Activity writer without silent truncation.
     const oversized = factory.create({
       eventName: "agent.tool.completed",
       actorType: "agent",
@@ -342,19 +347,18 @@ async function verify(
       contentId: crypto.randomUUID(),
       role: "tool_result",
       mediaType: "text/plain",
-      bytesBase64: Buffer.from("x".repeat(40_001)).toString("base64"),
+      bytesBase64: Buffer.from("证据🙂".repeat(19_000) + "LATE_FAILURE").toString("base64"),
     });
     assert.equal((await store.record([oversized]))[0].status, "committed");
-    await assert.rejects(
-      readLearningFacts(store, {
-        ...source,
-        completedAt: new Date().toISOString(),
-        asOfActivityOffset: undefined,
-      }),
-      /experience_source_too_large/,
-    );
+    const largeFacts = await readLearningFacts(store, {
+      ...source,
+      completedAt: new Date().toISOString(),
+      asOfActivityOffset: undefined,
+    });
+    assert.equal(largeFacts.find((fact) => fact.id === oversized.eventId)?.text, "证据🙂".repeat(19_000) + "LATE_FAILURE");
+    await verifySegmentedLearning(root, largeFacts);
     console.log(
-      "EXPLEARN-002 PASS: empty stdout remains valid; complete prompt/tool/response recovered; oversized evidence fails closed",
+      "EXPLEARN-002 PASS: empty stdout remains valid; complete prompt/tool/response recovered; large evidence preserved intact",
     );
   } finally {
     await new Promise<void>((resolve, reject) =>
@@ -364,6 +368,96 @@ async function verify(
     await store.close();
     await rm(root, { recursive: true, force: true });
   }
+}
+
+// Real SQLite queue/candidate/evidence lifecycle; a controlled provider injects
+// a misleading early candidate and a later contradiction, plus one interrupted call.
+async function verifySegmentedLearning(root: string, facts: LearningFact[]) {
+  const pieces = splitLearningFacts(facts);
+  for (const fact of facts) {
+    assert.equal(pieces.filter((p) => p.id === fact.id || p.source?.eventId === fact.id).map((p) => p.text).join(""), fact.text);
+  }
+  const storage = { home: root, namespace: "segmented" };
+  const service = new ExperienceService(storage);
+  const scope = await service.scope(process.cwd());
+  let queue = new ExperienceLearningQueue(storage);
+  const jobId = crypto.randomUUID();
+  const input = {
+    jobId, repositoryId: scope.repositoryId, cwd: scope.root,
+    threadId: "segmented-acceptance", createdAt: new Date().toISOString(),
+    source: { terminalSessionId: "fixture", threadId: "segmented-acceptance", panelId: null, completedAt: new Date().toISOString(), channel: "dev" as const },
+  };
+  queue.enqueue(input);
+  const request = pieces.find((p) => p.kind === "agent.tool.requested")!;
+  const result = pieces.find((p) => p.source && p.toolUseId === request.toolUseId)!;
+  const counts = new Map<string, number>();
+  let interrupted = false;
+  let yielded = false;
+  let audited = 0;
+  const provider = {
+    provider: "codex" as const,
+    async run({ prompt }: { prompt: string }) {
+      let output: unknown;
+      if (prompt.startsWith("整理长任务")) {
+        const index = prompt.match(/第 (\d+)\//)![1];
+        counts.set(index, (counts.get(index) ?? 0) + 1);
+        if (index === "2" && counts.get(index)! <= 2) {
+          interrupted = true;
+          throw new Error("provider_output_invalid_json");
+        }
+        output = { coverage: index === "1" && counts.get(index) === 1 ? "incomplete" : "complete", observations: "Early output; later failure must be checked", limitations: "partial input", evidenceIds: [] };
+      } else if (prompt.startsWith("从长任务索引")) {
+        output = { evidenceIds: [request.id, result.id], reason: "retrieve raw evidence" };
+      } else if (prompt.startsWith("从本轮")) {
+        assert.ok(prompt.includes("已按索引取回的原始证据"));
+        assert.ok(prompt.includes(result.text));
+        output = { reason: "controlled candidate", candidate: {
+          draft: { id: "segmented-acceptance", title: "A deliberately unsupported success",
+            triggers: [["terminal"], ["verification"]], applicability: "fixture only",
+            avoid: ["ignore errors"], actions: ["run command"], verification: ["all operations succeeded"] },
+          evidenceIds: [request.id, result.id],
+        } };
+      } else if (prompt.startsWith("独立检查候选")) {
+        audited++;
+        const raw = prompt.split("本段原文=")[1];
+        output = { verdict: raw.includes("LATE_FAILURE") ? "contradicted" : "compatible", reason: "checked raw segment" };
+      } else throw new Error("Unexpected final approval after contradiction");
+      return { provider: "codex" as const, durationMs: 0, events: [], output };
+    },
+  };
+  for (let batch = 0; batch < 12; batch++) {
+    queue = new ExperienceLearningQueue(storage); // Reopen persisted progress.
+    const job = queue.claim()!;
+    assert.ok(job);
+    try {
+      const outcome = await new ExperienceLearningAnalysis(service, queue, provider).run(job, facts, new AbortController().signal);
+      queue.update(job, outcome);
+      assert.equal(outcome.status, "completed");
+      const candidate = (await service.candidates(scope.root))[0];
+      assert.equal(candidate.review?.verdict, "contradicted");
+      assert.equal((await service.listRecords(scope.root)).length, 0);
+      assert.ok(interrupted && yielded && audited >= 4);
+      assert.equal(counts.get("1"), 2, "incomplete output must retry; completed segment must not rerun");
+      assert.equal(counts.get("2"), 3, "only failed segment should retry");
+      assert.ok(candidate.record.evidence.every((e) => Buffer.byteLength(e.archived!.text) < 64 * 1024));
+      queue.clearCheckpoints(job);
+      assert.throws(() => queue.saveCheckpoint(job, "late", {}), /claim_lost/);
+      console.log("Segmented learning PASS: full source, persisted retry/resume, fair scheduling, late contradiction prevents promotion, bounded evidence, stale claim rejected");
+      return;
+    } catch (error) {
+      if (!(error instanceof LearningDeferred) && !["provider_output_invalid_json", "experience_partial_segment_analysis_incomplete"].includes((error as Error).message)) throw error;
+      queue.update(job, { status: error instanceof LearningDeferred ? "queued" : "failed", reason: (error as Error).message });
+      if (!(error instanceof LearningDeferred)) queue.retry(scope.repositoryId, jobId);
+      else if (!yielded) {
+        yielded = true;
+        queue.enqueue({ ...input, jobId: "other", createdAt: "2000-01-01T00:00:00.000Z" });
+        const other = queue.claim()!;
+        assert.equal(other.jobId, "other", "long analysis must yield to other work");
+        queue.update(other, { status: "skipped" });
+      }
+    }
+  }
+  throw new Error("segmented analysis never completed");
 }
 
 for (const caseId of ["EXPLEARN-001", "EXPLEARN-002"] as const)

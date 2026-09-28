@@ -271,7 +271,7 @@ async function verifyTmuxPaneRawOutputHarness() {
     );
 
     await runTmux(["kill-pane", "-t", workerPaneId]);
-    await watcher.pollAll();
+    await watcher.removeMissingPaneWatchers();
     check(
       "tmux-dead-pane-watcher-is-removed",
       watcher.watchedPanes.size === 1 && !watcher.watchedPanes.has(workerKey),
@@ -283,9 +283,90 @@ async function verifyTmuxPaneRawOutputHarness() {
       watcher.watchedPanes.size === 0,
       Array.from(watcher.watchedPanes.keys()),
     );
+    await verifyPollingIsolation(root, session, tmuxService, runTmux, mainTarget);
   } finally {
     await watcher?.dispose();
     await runTmux(["kill-server"]).catch(() => undefined);
+  }
+}
+
+// Exercise production timers and real tmux pipes while tmux queries wait on a
+// controlled server-side barrier. No installed server or user session is touched.
+async function verifyPollingIsolation(root, session, tmuxService, runTmux, target) {
+  const listPanes = tmuxService.listPanes.bind(tmuxService);
+  const readPaneMetadata = tmuxService.readPaneMetadata.bind(tmuxService);
+  const originalArgs = session.args;
+  let output = "";
+  let listCalls = 0;
+  let activeQueries = 0;
+  let maxActiveQueries = 0;
+  let metadataCalls = 0;
+  const manager = {
+    getSession: (id) => id === session.id ? session : null,
+    appendOutput: (_id, text) => { output += text; },
+    updateSessionMetadata: async () => {},
+    markExited: () => { throw new Error("live fixture must not be marked exited"); },
+  };
+  const watcher = new TmuxOutputWatcher({
+    outputDir: path.join(root, "isolation-output"),
+    terminalSessionManager: manager,
+    tmuxService,
+    pollIntervalMs: 25,
+    reconciliationIntervalMs: 50,
+  });
+  tmuxService.listPanes = async (value) => {
+    const call = ++listCalls;
+    activeQueries += 1;
+    maxActiveQueries = Math.max(maxActiveQueries, activeQueries);
+    try {
+      if (call === 1) await runTmux(["wait-for", "release-pane-query"]);
+      if (call === 2) throw new Error("fixture transient query failure");
+      return await listPanes(value);
+    } finally {
+      activeQueries -= 1;
+    }
+  };
+  try {
+    await watcher.watchSession(session);
+    await waitForFixtureCondition(() => listCalls === 1, "reconciliation did not start");
+    await sendTmuxFixtureCommand(runTmux, target.paneId, "printf 'OUTPUT_DURING_QUERY_STALL\\n'");
+    await waitForFixtureCondition(() => output.includes("OUTPUT_DURING_QUERY_STALL"), "output blocked on list-panes");
+    await new Promise((resolve) => setTimeout(resolve, 220));
+    check("tmux-query-stall-does-not-overlap-or-block-output", listCalls === 1 && maxActiveQueries === 1 && activeQueries === 1, { listCalls, maxActiveQueries });
+    await runTmux(["wait-for", "-S", "release-pane-query"]);
+    await waitForFixtureCondition(() => listCalls >= 3, "reconciliation did not recover after failure");
+    check("tmux-query-failure-recovers-without-overlap", maxActiveQueries === 1, { listCalls, maxActiveQueries });
+    await watcher.unwatchSession(session.id);
+    check("tmux-idle-stops-both-schedulers", !watcher.pollTimer && !watcher.reconciliationTimer, {});
+    await watcher.watchSession(session);
+    check("tmux-watch-rearms-both-schedulers", Boolean(watcher.pollTimer && watcher.reconciliationTimer), {});
+
+    // Exercise the noninteractive metadata path independently of list-panes.
+    session.args = ["-c"];
+    tmuxService.readPaneMetadata = async (...args) => {
+      metadataCalls += 1;
+      await runTmux(["wait-for", "release-metadata-query"]);
+      return readPaneMetadata(...args);
+    };
+    await waitForFixtureCondition(() => metadataCalls === 1, "metadata reconciliation did not start");
+    await sendTmuxFixtureCommand(runTmux, target.paneId, "printf 'OUTPUT_DURING_METADATA_STALL\\n'");
+    await waitForFixtureCondition(() => output.includes("OUTPUT_DURING_METADATA_STALL"), "output blocked on metadata");
+    let disposed = false;
+    const disposal = watcher.dispose().then(() => { disposed = true; });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    check("tmux-dispose-waits-for-inflight-reconciliation", !disposed && metadataCalls === 1, { disposed, metadataCalls });
+    await runTmux(["wait-for", "-S", "release-metadata-query"]);
+    await disposal;
+    const callsAtDispose = listCalls + metadataCalls;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    check("tmux-dispose-leaves-no-timers-or-late-queries", disposed && !watcher.pollTimer && !watcher.reconciliationTimer && watcher.watchedPanes.size === 0 && callsAtDispose === listCalls + metadataCalls, { listCalls, metadataCalls });
+  } finally {
+    await runTmux(["wait-for", "-S", "release-pane-query"]);
+    await runTmux(["wait-for", "-S", "release-metadata-query"]);
+    await watcher.dispose();
+    tmuxService.listPanes = listPanes;
+    tmuxService.readPaneMetadata = readPaneMetadata;
+    session.args = originalArgs;
   }
 }
 
