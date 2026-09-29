@@ -27,6 +27,7 @@ import { SuijiEditor } from "./editor";
 import { SuijiRecordCard, SuijiRecordDetail } from "./record";
 import { SuijiReviewPanel } from "./review";
 import { TagFilter } from "./tags";
+import { LoadMoreTrigger, useLoadMore } from "./load-more";
 
 export function SuijiWorkspace({
   connection,
@@ -102,7 +103,7 @@ export function SuijiWorkspace({
     };
   }, [acquire, store]);
   const load = useMemoizedFn(async (more = false) => {
-    if (tab === "ai" || (more && (!cursor || loading))) return;
+    if (tab === "ai" || !pagination.begin(more, cursor, loading)) return;
     const sequence = ++generation.current;
     setLoading(true);
     setMessage("");
@@ -151,8 +152,10 @@ export function SuijiWorkspace({
           ]),
       );
     } catch (error) {
-      if (alive.current && sequence === generation.current)
+      if (alive.current && sequence === generation.current) {
+        pagination.fail(more);
         setMessage(error instanceof Error ? error.message : "读取失败");
+      }
     } finally {
       if (alive.current && sequence === generation.current) setLoading(false);
     }
@@ -160,6 +163,13 @@ export function SuijiWorkspace({
   useEffect(() => {
     if (active) void load();
   }, [load, tab, kind, status, search, tag, active]);
+  const pagination = useLoadMore({
+    active,
+    disabled: tab === "ai" || Boolean(detail || editor),
+    loading,
+    cursor,
+    load,
+  });
   const selectTag = useMemoizedFn((value: string) => {
     ++generation.current;
     ++detailRequest.current;
@@ -350,7 +360,7 @@ export function SuijiWorkspace({
       <div
         className={detail || editor ? "hidden" : "flex min-h-0 flex-1 flex-col"}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
+        <div ref={pagination.scrollContainer} className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
           {!writable ? (
             <div className="flex items-center justify-between gap-4 rounded-xl border p-4 text-sm">
               <p>另一随记页面正在编辑，当前可浏览。关闭那一页后可接管编辑。</p>
@@ -488,17 +498,8 @@ export function SuijiWorkspace({
                     </p>
                   </div>
                 ) : null}
-                <div className="flex justify-center gap-3">
-                  {cursor ? (
-                    <Button
-                      variant="outline"
-                      disabled={loading}
-                      onClick={() => void load(true)}
-                    >
-                      加载更多
-                    </Button>
-                  ) : null}
-                </div>
+                <LoadMoreTrigger cursor={cursor} failed={pagination.failed} loading={loading}
+                  trigger={pagination.trigger} onRetry={() => void load(true)} />
               </section>
             </>
           ) : null}
