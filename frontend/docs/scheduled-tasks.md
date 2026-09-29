@@ -3,6 +3,11 @@
 入口是终端工作区顶部与“随记”并列的“定时任务”，路由为
 `/scheduled-tasks/:taskId?`，来源回跳使用 `?run=:runId`。
 
+快捷指令的后台运行使用 `/background-runs/:runId` 独立详情页，展示本次运行的
+进度、结果和继续对话入口；返回时恢复原工作区。快捷入口、通知和终端来源链接
+按运行的 `snapshot.origin.kind` 选择详情页面。旧的定时任务运行链接若指向
+`quick-input` 来源，也会跳转到后台运行详情；普通定时任务继续使用原任务页。
+
 ## 当前交付边界
 
 Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用独立 SQLite

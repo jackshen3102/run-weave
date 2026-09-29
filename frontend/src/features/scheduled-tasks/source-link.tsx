@@ -1,6 +1,7 @@
 import type { ScheduledTaskSource } from "@runweave/shared/scheduled-tasks";
 import { useRun } from "./queries";
 import { useEnterScheduledTasks } from "./navigation";
+import { runDetailsPath } from "./run-details-path";
 
 export function ScheduledTaskSourceLink({
   source,
@@ -18,7 +19,9 @@ export function ScheduledTaskSourceLink({
       }
       onClick={() =>
         enter(
-          `/scheduled-tasks/${encodeURIComponent(source.taskId)}?run=${encodeURIComponent(source.runId)}`,
+          run.data?.taskId === source.taskId
+            ? runDetailsPath(run.data)
+            : `/scheduled-tasks/${encodeURIComponent(source.taskId)}?run=${encodeURIComponent(source.runId)}`,
         )
       }
     >

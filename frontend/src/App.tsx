@@ -30,6 +30,8 @@ import { TerminalSnapshotShareNotification } from "./components/terminal/workspa
 import { ActivityPage } from "./pages/activity-page";
 import { EvolutionPage } from "./pages/evolution-page";
 import { ScheduledTasksPage } from "./pages/scheduled-tasks-page";
+import { BackgroundRunPage } from "./pages/background-run-page";
+import { backgroundRunPath, runDetailsPath } from "./features/scheduled-tasks/run-details-path";
 import { useQuickInputNotifications } from "./features/scheduled-tasks/use-quick-input-notifications";
 import { scheduledTasksApi } from "./services/scheduled-tasks";
 import { HttpError } from "./services/http";
@@ -113,7 +115,7 @@ function RunweaveApp() {
     isElectron && authStatus !== "unauthenticated",
   );
   const requestedReturn: unknown = location.state?.scope === queryScope ? location.state?.returnTo : null;
-  const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|execution-efficiency)(?:\/|\?|$)/u.test(requestedReturn)
+  const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|background-runs|execution-efficiency)(?:\/|\?|$)/u.test(requestedReturn)
     ? requestedReturn : TERMINAL_LIST_PATH;
 
   const handleSelectConnection = (id: string) => {
@@ -163,7 +165,7 @@ function RunweaveApp() {
       .then((run) => {
         if (cancelled) return;
         setPendingScheduledRunOpen(null);
-        navigate(`/scheduled-tasks/${encodeURIComponent(run.taskId)}?run=${encodeURIComponent(run.id)}`);
+        navigate(runDetailsPath(run));
       }).catch((error: unknown) => {
         if (cancelled) return;
         setPendingScheduledRunOpen(null);
@@ -208,6 +210,18 @@ function RunweaveApp() {
         <CodexQuotaProvider key={`${queryScope}:${sessionId ?? ""}:${token ? "authenticated" : "anonymous"}`} apiBase={apiBase} token={token} connectionName={activeConnection?.name ?? "当前连接"} onUnauthorized={clearToken}>
         <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
         <Routes>
+          <Route
+            path="/background-runs/:runId"
+            element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
+              <BackgroundRunPage
+                apiBase={apiBase}
+                token={token}
+                activeConnectionId={activeConnectionId}
+                activeConnectionGeneration={activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined}
+                connectionName={activeConnection?.name}
+              />
+            ) : <Navigate to="/login" replace state={{ returnTo: location.pathname + location.search, scope: queryScope }} />}
+          />
           <Route
             path="/execution-efficiency/:findingId?"
             element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
@@ -467,7 +481,7 @@ function RunweaveApp() {
       onClick={() => setScheduledRunOpenError(null)}>{scheduledRunOpenError} · 点击关闭</button> : null}
     {quickInputNotice ? <button type="button" role="status"
       className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border bg-card p-3 text-left shadow-lg"
-      onClick={() => navigate(`/scheduled-tasks/${encodeURIComponent(quickInputNotice.taskId)}?run=${encodeURIComponent(quickInputNotice.runId)}`)}>
+      onClick={() => navigate(backgroundRunPath(quickInputNotice.runId))}>
       <strong className="block text-sm">{quickInputNotice.title}</strong>
       <span className="text-xs">{quickInputNotice.body}</span>
     </button> : null}
