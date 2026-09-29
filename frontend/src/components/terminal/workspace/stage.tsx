@@ -314,7 +314,7 @@ export function TerminalWorkspaceStage({
               className="min-h-0 shrink-0"
               style={{ width: previewReservedWidth }}
             />
-            <div className="absolute inset-0 z-20">
+            <div className="absolute inset-0 z-40">
               <Suspense
                 fallback={
                   <aside className="flex h-full w-full items-center justify-center bg-slate-950 text-sm text-slate-400">
