@@ -15,7 +15,7 @@ export function markdown(report) {
     "",
     `项目：${report.project.root}`,
     `起始时间：${report.since}`,
-    `选中 ${report.sessions.length} 个会话；输入 ${number(report.usage.input)}，缓存输入 ${number(report.usage.cachedInput)}，输出 ${number(report.usage.output)} Token。`,
+    `全量纳入 ${report.sessions.length} 个会话；输入 ${number(report.usage.input)}，缓存输入 ${number(report.usage.cachedInput)}，输出 ${number(report.usage.output)} Token。`,
     "",
     "缓存输入已包含在输入中；推理输出已包含在输出中。总量不是费用或可节省量。规则只提供候选疑点；未调用模型。",
     "",
@@ -47,7 +47,7 @@ export function markdown(report) {
   lines.push(
     "## 数据覆盖",
     "",
-    "仅统计所选会话的可见记录，不自动合并子 Agent 或审批评估用量。未命中规则不代表没有问题。",
+    "统计时间范围内全部已结束的本项目会话，子 Agent 独立列出；审批评估、仍在运行和其他项目的会话计入排除数。未命中规则不代表没有问题。",
   );
   for (const session of report.sessions) {
     lines.push(
@@ -147,6 +147,6 @@ export async function casePacket(report, id) {
       };
     }
   throw new Error(
-    "所选疑点不在本次报告中；请使用生成报告时相同的范围和数量参数。",
+    "所选疑点不在本次报告中；请使用生成报告时相同的时间和项目范围参数。",
   );
 }

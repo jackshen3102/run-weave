@@ -121,8 +121,6 @@ export async function listLogs(roots, since) {
 }
 
 export async function readSession(candidate, scope, since) {
-  if (candidate.size > 64 * 1024 * 1024)
-    return { excluded: "日志超过 64 MiB 扫描上限" };
   const stream = createReadStream(candidate.file, {
     end: Math.max(0, candidate.size - 1),
   });
@@ -178,11 +176,6 @@ export async function readSession(candidate, scope, since) {
         );
         if (!scope.worktrees.some((root) => inside(root, directory)))
           return { excluded: "其他项目" };
-        if (
-          meta.forked_from_id ||
-          (meta.source && typeof meta.source === "object")
-        )
-          return { excluded: "分叉或子 Agent 会话（未归并）" };
       }
       if (record.type === "turn_context")
         current = getTurn(
@@ -344,6 +337,7 @@ export async function readSession(candidate, scope, since) {
   }
   return {
     id: meta.id,
+    parentSessionId: meta.forked_from_id ?? null,
     file: candidate.file,
     cwd: meta.cwd,
     title: included[0].title,

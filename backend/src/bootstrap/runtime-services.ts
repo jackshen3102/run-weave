@@ -59,7 +59,6 @@ import { RaceRecordStore } from "../race/race-record-store";
 import { RaceService } from "../race/race-service";
 import { BackendRuntimeStatusService } from "../runtime-status/service";
 import { createScheduledTasks } from "./scheduled-tasks";
-import { createExecutionEfficiency } from "./execution-efficiency";
 import { ScheduledTaskAlerts } from "../device-monitor/scheduled-task-alerts";
 import {
   resolveDefaultTmuxSocketPath,
@@ -324,11 +323,6 @@ async function assembleRuntimeServices(
     terminalStateService,
     terminalActivity,
   });
-  const executionEfficiencyService = createExecutionEfficiency(resources, {
-    browserProfileDir: storagePaths.browserProfileDir,
-    terminalSessionManager,
-    scheduledTaskService: scheduledTasks.service,
-  });
   if (shouldScanTmuxOrphans()) {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
@@ -546,7 +540,6 @@ async function assembleRuntimeServices(
     experienceService,
     experienceLearning,
     scheduledTaskService: scheduledTasks.service,
-    executionEfficiencyService,
   };
   return services;
 }

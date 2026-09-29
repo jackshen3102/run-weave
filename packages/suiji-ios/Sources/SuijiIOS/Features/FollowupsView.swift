@@ -11,13 +11,14 @@ struct FollowupsView: View {
   @State private var attachment: Attachment?
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Divider()
       HStack {
         Text("跟进 \(record.followupSummary?.count ?? items.count) 条").font(.headline)
         Spacer()
         Button("刷新跟进") { Task { await load() } }.disabled(busy)
       }
-      if record.deletedAt == nil { Button("追加跟进") { Task { await session.openFollowup(record) } } }
+      if items.isEmpty && !busy && message.isEmpty {
+        Text("还没有跟进").font(.subheadline).foregroundStyle(.secondary)
+      }
       ForEach(items) { item in
         VStack(alignment: .leading, spacing: 8) {
           Text((item.source.actor == "app" ? "你" : "Agent" + (item.source.agentName.map { " · " + $0 } ?? "")) + " · " + displayDate(item.createdAt)).font(.caption).foregroundStyle(.secondary)

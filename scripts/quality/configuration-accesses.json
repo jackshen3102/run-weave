@@ -8992,38 +8992,6 @@
     "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \"README.md\"))"
   },
   {
-    "file": "backend/src/execution-efficiency/collector/log-files.ts",
-    "kind": "environment",
-    "expression": "env.CODEX_HOME",
-    "count": 1,
-    "category": "external-protocol",
-    "reason": "CODEX_HOME 属于外部 Codex 日志位置，只用于解析只读会话目录。"
-  },
-  {
-    "file": "backend/src/execution-efficiency/collector/log-files.ts",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_EFFICIENCY_LOG_ROOT",
-    "count": 1,
-    "category": "test",
-    "reason": "执行效率隔离验收注入只读日志根，不作为实例持久配置。"
-  },
-  {
-    "file": "packages/runweave-cli/src/commands/efficiency.ts",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_PROJECT_ID",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_PROJECT_ID 由定时任务运行注入，只标识本次执行上下文。"
-  },
-  {
-    "file": "packages/runweave-cli/src/commands/efficiency.ts",
-    "kind": "file-io",
-    "expression": "readFile(filePath)",
-    "count": 1,
-    "category": "tooling",
-    "reason": "CLI 显式读取用户指定的分析结果文件，不作为 settings.yaml 配置来源。"
-  },
-  {
     "file": "scripts/token-report/cli.mjs",
     "kind": "environment",
     "expression": "process.env.CODEX_HOME",
