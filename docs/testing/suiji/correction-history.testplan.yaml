@@ -1,0 +1,113 @@
+version: 1
+name: 随记纠错历史辅助
+description: >
+  验证历史辅助默认关闭、保存反馈可追溯、相关人工修改仅作弱参考，并能在 Web 与 iPhone 管理和删除。
+cases:
+  - id: CHIST-001
+    name: 默认关闭与能力声明
+    required: true
+    description: 新账号升级后历史辅助默认关闭，旧请求仍能完成纠错且不产生历史快照。
+    preconditions:
+      - 隔离服务已迁移到 schema 8，存在新账号并启用真实 Codex CLI。
+    steps:
+      - 读取 info 和历史设置；确认 correctionHistory 能力为 true 且 historyEnabled 为 false。
+      - 用只含 text 的旧格式请求发起纠错；完成后读取历史列表，确认没有新项目。
+  - id: CHIST-002
+    name: Web 应用编辑保存后形成配对
+    required: true
+    description: Web 应用候选、继续修改并成功保存后，历史显示输入、候选及真实保存版本的正文。
+    preconditions:
+      - 真实 Web 页面连接隔离服务，当前账号已开启历史辅助，测试正文含唯一标记。
+    steps:
+      - 使用 $toolkit:playwright-cli 输入正文并点击纠正文字；等待候选后应用到草稿，再手动修改一个局部词。
+      - 点击保存并查看纠错历史；确认输入、候选、最终正文和记录版本与服务端修订快照一致。
+  - id: CHIST-003
+    name: iPhone 应用编辑保存后形成配对
+    required: true
+    description: 原生 iPhone 应用候选并修改后保存，重启仍能查看同账号配对历史。
+    preconditions:
+      - 当前代码构建安装的独立随记 App 连接隔离服务，账号已开启历史辅助。
+    steps:
+      - 使用 $toolkit:agent-device 发起纠错、应用候选、手工修改并保存；确认正文成功保存。
+      - 重新启动 App 并打开历史辅助；确认该条历史显示候选与实际保存正文。
+  - id: CHIST-004
+    name: 取消和未应用不学习
+    required: true
+    description: 关闭预览、取消候选及未应用时保存，不产生可用于后续纠错的历史示例。
+    preconditions:
+      - 隔离服务已开启历史辅助，真实 Web 页面有可编辑草稿。
+    steps:
+      - 使用 $toolkit:playwright-cli 分别取消一条候选，以及生成候选后不应用而直接保存。
+      - 读取历史列表并发起相关新纠错；确认两次候选没有形成已关联历史或修改示例。
+  - id: CHIST-005
+    name: 无新修订和错误保存键不生成反馈
+    required: true
+    description: 反馈必须对应本次真正保存的新修订，错误键或版本不能伪造学习记录。
+    preconditions:
+      - 隔离服务已有可反馈纠错快照及一条现存记录。
+    steps:
+      - 用错误保存键、错误版本和无新修订的重放结果分别提交反馈；确认被拒绝或不产生新历史。
+      - 回读记录修订和历史列表；确认既有记录正文未变且没有伪造配对。
+  - id: CHIST-006
+    name: 保存成功与反馈故障隔离
+    required: true
+    description: 反馈服务故障不能把成功保存显示为失败，也不能再次创建记录修订。
+    preconditions:
+      - 隔离服务可以在记录提交成功后模拟反馈请求失败，真实 Web 页面有待保存的候选草稿。
+    steps:
+      - 使用 $toolkit:playwright-cli 保存正文并使反馈失败；确认页面显示记录已保存和待反馈状态。
+      - 恢复反馈接口并点击手动重试；确认修订版本不增加，历史只关联一次。
+  - id: CHIST-007
+    name: 设置版本冲突及关闭立即生效
+    required: true
+    description: 设置按版本更新，关闭后新纠错不采集也不读取旧示例。
+    preconditions:
+      - 同一账号的两台客户端都已读取同一历史设置版本，服务端已有人工修改历史。
+    steps:
+      - 在客户端 A 关闭历史辅助，在 B 用旧版本提交设置；确认 B 收到版本冲突。
+      - 发起相同语境纠错并读取结果和历史；确认未新增历史快照，模型请求不含旧示例。
+  - id: CHIST-008
+    name: 删除和清空只影响纠错派生文本
+    required: true
+    description: 删除单条或清空历史后不能再查看或检索对应文本，记录正文与词库保持原样。
+    preconditions:
+      - 隔离服务有至少两条已关联历史、对应记录和正式词库条目。
+    steps:
+      - 使用 $toolkit:playwright-cli 删除一条并刷新历史；确认只剩另一条。
+      - 清空历史并刷新；确认列表为空、相似纠错不再使用旧示例，记录正文和词库版本不变。
+  - id: CHIST-009
+    name: 服务身份隔离与回收站排除
+    required: true
+    description: 一个服务身份的历史不可被另一隔离服务查看或使用，回收站记录不提供修改示例。
+    preconditions:
+      - 两个隔离服务各有一个 owner，服务 A 已保存关联历史及可回收的原记录。
+    steps:
+      - 用服务 B 的凭据访问服务 A 的历史 ID，并在 B 发起相似纠错；确认跨服务访问被拒绝且 B 的模型请求无 A 的示例。
+      - 将 A 的原记录移入回收站，再用 A 发起相似纠错；确认模型请求不含该条示例。
+  - id: CHIST-010
+    name: 正确输入和事实边界
+    required: true
+    description: 历史示例不能把原本正确的文本改错，也不能改动数字、否定和新的计划事实。
+    preconditions:
+      - 隔离服务已开启历史辅助，预置相关人工修改历史和独立对照样本。
+    steps:
+      - 分别提交正确句子、含金额日期和否定的句子，以及与旧历史计划冲突的新句子。
+      - 对比历史关闭时的结果；确认没有由历史引入的误改，数字、否定和新事实保持本次输入。
+  - id: CHIST-011
+    name: 示例检索故障降级
+    required: true
+    description: 历史检索失败时仍能用本次正文和正式词库生成候选，保存流程不受影响。
+    preconditions:
+      - 隔离服务已开启历史辅助且可以单独制造历史查询失败，真实 Codex CLI 可用。
+    steps:
+      - 制造历史检索失败并发起纠错；确认候选仍返回，模型请求仅含本次正文和正式词库。
+      - 应用并保存；确认记录成功提交。
+  - id: CHIST-012
+    name: 历史翻页与删除后刷新
+    required: true
+    description: 超过一页的历史可以完整浏览，删除后列表不再显示已删项。
+    preconditions:
+      - 隔离服务同一账号已有至少 21 条已关联历史，Web 和 iPhone 都已登录。
+    steps:
+      - 使用 $toolkit:playwright-cli 在 Web 打开历史辅助并点击加载更多；确认出现第 21 条。
+      - 使用 $toolkit:agent-device 在 iPhone 加载更多并删除其中一条；刷新两端确认该条消失。

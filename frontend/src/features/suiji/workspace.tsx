@@ -231,7 +231,7 @@ export function SuijiWorkspace({
             existing: record?.attachments ?? [],
             files: [],
           };
-          model = new SuijiEditorModel(draft, client, store);
+          model = new SuijiEditorModel(draft, client, store, undefined, info.features?.correctionHistory === true);
           models.current.set(id, model);
           if (restored && body)
             setMessage(

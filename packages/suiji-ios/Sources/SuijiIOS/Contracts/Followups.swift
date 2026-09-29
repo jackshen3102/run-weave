@@ -27,7 +27,7 @@ public struct SuijiFollowup: Codable, Identifiable, Equatable, Sendable {
 }
 struct FollowupPage: Codable, Sendable { let items: [SuijiFollowup]; let nextCursor: String? }
 struct FollowupResponse: Codable, Sendable { let followup: SuijiFollowup; let followupSummary: FollowupSummary }
-struct FollowupFeatures: Codable, Sendable { let followups: Bool; let correction: Bool? }
+struct FollowupFeatures: Codable, Sendable { let followups: Bool; let correction: Bool?; let correctionHistory: Bool? }
 func mergeSuijiRecord(_ old: SuijiRecord, _ new: SuijiRecord) -> SuijiRecord {
   var value = old.version > new.version ? old : new
   value.followupSummary = (old.followupSummary?.latest?.sequence ?? 0) > (new.followupSummary?.latest?.sequence ?? 0) ? old.followupSummary : new.followupSummary ?? old.followupSummary

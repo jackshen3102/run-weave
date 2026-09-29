@@ -5,6 +5,7 @@ struct CorrectionPanel: View {
   let selectedText: String?
   @State private var showOriginal = false
   @State private var managing = false
+  @State private var managingHistory = false
   @State private var canonical = ""
   @State private var variant = ""
   @State private var formVisible = false
@@ -16,6 +17,9 @@ struct CorrectionPanel: View {
         Button(model.correctionBusy ? "正在纠正…" : "纠正文字") { Task { await model.correct() } }
           .disabled(!model.correctionAvailable || !model.editable || model.correctionBusy || model.draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         Button("纠错词库") { managing.toggle() }
+        if model.historySupported {
+          Button("历史辅助") { managingHistory.toggle(); if managingHistory { Task { await model.loadHistory() } } }
+        }
       }
       Text("点击后，本次文字和专有词库会经 Codex CLI 发送给模型提供方。").font(.caption).foregroundStyle(.secondary)
       if !model.correctionAvailable { Text("此服务尚未启用文字纠错；词库仍可管理。").font(.caption).foregroundStyle(.secondary) }
@@ -23,6 +27,34 @@ struct CorrectionPanel: View {
         Button("记住选词") { canonical = selectedText; variant = ""; formVisible = true }
       }
       if !model.correctionMessage.isEmpty { Text(model.correctionMessage).font(.footnote).accessibilityIdentifier("correction-status") }
+      if model.feedbackPending { Button("手动重试历史反馈") { Task { await model.retryFeedback() } } }
+      if managingHistory && model.historySupported {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("历史辅助").font(.headline)
+          Text("开启后，随记服务端保存纠错前文本、候选和实际保存的正文；下次纠错会把少量相关修改示例连同本次文字发送给模型提供方。不会自动修改正式词库。")
+            .font(.caption).foregroundStyle(.secondary)
+          Toggle("启用历史辅助", isOn: Binding(get: { model.preferences?.historyEnabled ?? false },
+            set: { enabled in Task { await model.setHistoryEnabled(enabled) } }))
+            .disabled(model.preferences == nil)
+          Text("关闭后不再新增或使用历史。清空只删除纠错派生记录，不删除随记正文或词库。")
+            .font(.caption).foregroundStyle(.secondary)
+          HStack {
+            Button("刷新历史") { Task { await model.loadHistory() } }
+            Button("清空纠错历史") { Task { await model.deleteHistory() } }
+              .disabled(model.history?.items.isEmpty != false)
+          }
+          ForEach(model.history?.items ?? []) { item in
+            VStack(alignment: .leading) {
+              Text("候选：" + item.correctedText)
+              Text("保存：" + item.finalText)
+              Button("删除") { Task { await model.deleteHistory(item.id) } }
+            }.padding(8).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+          }
+          if let cursor = model.history?.nextCursor {
+            Button("加载更多") { Task { await model.loadHistory(cursor: cursor) } }
+          }
+        }
+      }
       if model.lexiconPending { Button("手动重试确认词库写入") { Task {
         let before = model.lexicon?.entries ?? []
         do { try await model.putLexicon(before); undoEntries = before; formVisible = false } catch {}
@@ -77,7 +109,7 @@ struct CorrectionPanel: View {
         }
       }
     }
-    .task { await model.loadLexicon() }
+    .task { await model.loadLexicon(); await model.loadPreferences() }
   }
   private func remember() async {
     guard let entries = model.lexicon?.entries else { return }

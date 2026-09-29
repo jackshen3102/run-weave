@@ -34,7 +34,8 @@ import { ReviewService } from "../reviews/service";
 import { reviewInput } from "../reviews/schema";
 import { CorrectionLexicons } from "../corrections/lexicon";
 import { CorrectionService } from "../corrections/service";
-import { correctionInput, lexiconInput } from "../corrections/schema";
+import { CorrectionHistory } from "../corrections/history";
+import { correctionInput, lexiconInput, preferenceInput, feedbackInput } from "../corrections/schema";
 const route =
   (fn: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => {
@@ -52,7 +53,8 @@ export function createApp(
   const followups = new FollowupService(pool);
   const reviews = new ReviewService(config, records, attachments);
   const lexicons = new CorrectionLexicons(pool);
-  const corrections = new CorrectionService(config, lexicons);
+  const correctionHistory = new CorrectionHistory(pool);
+  const corrections = new CorrectionService(config, lexicons, correctionHistory);
   app.disable("x-powered-by");
   app.set("trust proxy", false);
   app.use((_req, res, next) => {
@@ -135,7 +137,7 @@ export function createApp(
         schemaVersion: schema.rows[0].version,
         limits: SUIJI_LIMITS,
         ai: reviews.info(),
-        features: { followups: true, correction: corrections.info() },
+        features: { followups: true, correction: corrections.info(), correctionHistory: true },
       });
     }),
   );
@@ -153,7 +155,7 @@ export function createApp(
     res.json(await lexicons.put(context(req, res), lexiconInput.parse(req.body)));
   }));
   app.post(`${root}/corrections`, route(async (req, res) => {
-    res.status(202).json(corrections.start(res.locals.auth.ownerId,
+    res.status(202).json(await corrections.start(res.locals.auth.ownerId,
       keySchema.parse(req.get("Idempotency-Key")), correctionInput.parse(req.body)));
   }));
   app.get(`${root}/corrections/:id`, route(async (req, res) => {
@@ -161,6 +163,29 @@ export function createApp(
   }));
   app.delete(`${root}/corrections/:id`, route(async (req, res) => {
     res.json(corrections.cancel(res.locals.auth.ownerId, uuid.parse(req.params.id)));
+  }));
+  app.get(`${root}/correction-preferences`, route(async (_req, res) => {
+    res.json(await correctionHistory.preferences(res.locals.auth.ownerId));
+  }));
+  app.put(`${root}/correction-preferences`, route(async (req, res) => {
+    const value = await correctionHistory.put(context(req, res), preferenceInput.parse(req.body));
+    corrections.cancelOwner(res.locals.auth.ownerId);
+    res.json(value);
+  }));
+  app.post(`${root}/corrections/:id/feedback`, route(async (req, res) => {
+    res.json(await correctionHistory.feedback(context(req, res), uuid.parse(req.params.id), feedbackInput.parse(req.body)));
+  }));
+  app.get(`${root}/correction-history`, route(async (req, res) => {
+    const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
+    res.json(await correctionHistory.list(res.locals.auth.ownerId, cursor));
+  }));
+  app.delete(`${root}/correction-history/:id`, route(async (req, res) => {
+    res.json(await correctionHistory.remove(context(req, res), uuid.parse(req.params.id)));
+  }));
+  app.delete(`${root}/correction-history`, route(async (req, res) => {
+    const value = await correctionHistory.clear(context(req, res));
+    corrections.cancelOwner(res.locals.auth.ownerId);
+    res.json(value);
   }));
   app.use(`${root}/records`, followupRouter(followups));
   app.get(`${root}/tags`, route(async (_req, res) => {

@@ -159,7 +159,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       let restored = try await store.load(record?.id ?? "new")
       guard generation == current else { return }
       let draft = restored ?? Draft(kind: record?.kind ?? kind, body: record?.body ?? body, tags: record?.tags ?? [], recordID: record?.id, expectedVersion: record?.version, existing: record?.attachments ?? [])
-      let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits, correctionCapability: info.features?.correction); editingModels[draft.id] = model; editor = model
+      let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits, correctionCapability: info.features?.correction, historyCapability: info.features?.correctionHistory); editingModels[draft.id] = model; editor = model
       await model.persist()
       if restored != nil { await model.prepareForCapture(kind: kind, body: body) }
     } catch { if generation == current { message = error.localizedDescription } }
@@ -177,7 +177,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       guard generation == current else { return }
       var draft = restored ?? Draft(kind: .note)
       draft.followupRecordID = record.id
-      let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits, correctionCapability: info.features?.correction)
+      let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits, correctionCapability: info.features?.correction, historyCapability: info.features?.correctionHistory)
       model.onFollowupSaved = { [weak self] result in
         guard let self, self.generation == current else { return }
         var updated = self.records.first { $0.id == record.id } ?? record
