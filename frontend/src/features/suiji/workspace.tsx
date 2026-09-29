@@ -49,10 +49,14 @@ export function SuijiWorkspace({
   const [searchVisible, setSearchVisible] = useState(false);
   const search = useDebounce(query, { wait: 250 });
   const detailRequest = useRef(0);
+  const scrollContainer = useRef<HTMLDivElement>(null);
+  const loadMoreTrigger = useRef<HTMLDivElement>(null);
+  const requestedCursor = useRef<string | null>(null);
   const [items, setItems] = useState<SuijiRecord[]>([]),
     [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false),
     [message, setMessage] = useState("");
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [detail, setDetail] = useState<{
     record: SuijiRecord;
     citedVersion?: number;
@@ -102,10 +106,15 @@ export function SuijiWorkspace({
     };
   }, [acquire, store]);
   const load = useMemoizedFn(async (more = false) => {
-    if (tab === "ai" || (more && (!cursor || loading))) return;
+    if (
+      tab === "ai" ||
+      (more && (!cursor || loading || requestedCursor.current === cursor))
+    ) return;
+    requestedCursor.current = more ? cursor : null;
     const sequence = ++generation.current;
     setLoading(true);
     setMessage("");
+    setLoadMoreFailed(false);
     if (!more) {
       setItems([]);
       setCursor(null);
@@ -151,8 +160,13 @@ export function SuijiWorkspace({
           ]),
       );
     } catch (error) {
-      if (alive.current && sequence === generation.current)
+      if (alive.current && sequence === generation.current) {
+        if (more) {
+          requestedCursor.current = null;
+          setLoadMoreFailed(true);
+        }
         setMessage(error instanceof Error ? error.message : "读取失败");
+      }
     } finally {
       if (alive.current && sequence === generation.current) setLoading(false);
     }
@@ -160,6 +174,22 @@ export function SuijiWorkspace({
   useEffect(() => {
     if (active) void load();
   }, [load, tab, kind, status, search, tag, active]);
+  useEffect(() => {
+    const root = scrollContainer.current;
+    const target = loadMoreTrigger.current;
+    if (
+      !active || tab === "ai" || detail || editor || loading ||
+      !cursor || loadMoreFailed || !root || !target
+    ) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        observer.disconnect();
+        void load(true);
+      }
+    }, { root, rootMargin: "0px 0px 200px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [active, tab, detail, editor, loading, cursor, loadMoreFailed, load]);
   const selectTag = useMemoizedFn((value: string) => {
     ++generation.current;
     ++detailRequest.current;
@@ -350,7 +380,7 @@ export function SuijiWorkspace({
       <div
         className={detail || editor ? "hidden" : "flex min-h-0 flex-1 flex-col"}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
+        <div ref={scrollContainer} className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
           {!writable ? (
             <div className="flex items-center justify-between gap-4 rounded-xl border p-4 text-sm">
               <p>另一随记页面正在编辑，当前可浏览。关闭那一页后可接管编辑。</p>
@@ -488,14 +518,14 @@ export function SuijiWorkspace({
                     </p>
                   </div>
                 ) : null}
-                <div className="flex justify-center gap-3">
-                  {cursor ? (
+                <div ref={loadMoreTrigger} className="flex min-h-px justify-center gap-3">
+                  {cursor && loadMoreFailed ? (
                     <Button
                       variant="outline"
                       disabled={loading}
                       onClick={() => void load(true)}
                     >
-                      加载更多
+                      重试加载
                     </Button>
                   ) : null}
                 </div>
