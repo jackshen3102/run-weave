@@ -46,7 +46,7 @@ struct RecordDetail: View {
       VStack(alignment: .leading, spacing: 20) {
         if let citedVersion, citedVersion != record.version { Text("此记录已更新；回答引用的是版本 \(citedVersion)，下方是当前原文。").font(.footnote).foregroundStyle(.secondary) }
         if let status = record.taskStatus { TaskStatusBadge(status: status) }
-        RecordBody(text: record.body, textStyle: .title1, fontWeight: .semibold)
+        RecordBody(text: record.body)
           .frame(maxWidth: .infinity, alignment: .leading)
         if let tags = record.tags, !tags.isEmpty {
           RecordTags(tags: tags) { session.selectedTag = $0; dismiss() }

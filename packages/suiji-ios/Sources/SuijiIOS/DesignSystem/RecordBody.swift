@@ -6,8 +6,6 @@ struct RecordBody: UIViewRepresentable {
   let text: String
   var lineLimit: Int = 0
   var linksOnly: Bool = false
-  var textStyle: UIFont.TextStyle = .body
-  var fontWeight: UIFont.Weight = .regular
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.suijiOpenLink) private var openLink
   private static let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
@@ -52,7 +50,7 @@ struct RecordBody: UIViewRepresentable {
       }
       view.attributedText = attributed
     }
-    view.font = .systemFont(ofSize: UIFont.preferredFont(forTextStyle: textStyle).pointSize, weight: fontWeight)
+    view.font = .preferredFont(forTextStyle: .body)
     view.textColor = UIColor(SuijiTheme.ink)
     view.linkTextAttributes = [.foregroundColor: UIColor(SuijiTheme.green), .underlineStyle: NSUnderlineStyle.single.rawValue]
     view.textContainer.maximumNumberOfLines = lineLimit
