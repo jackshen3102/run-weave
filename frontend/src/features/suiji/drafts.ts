@@ -17,7 +17,10 @@ export type DraftFile = {
   key: string;
   uploaded?: UploadedAttachment;
 };
+export type CorrectionTrace = { correctionId: string; inputText: string; correctedText: string; applied: boolean };
+export type FeedbackIntent = { correctionId: string; key: string; recordId: string; recordVersion: number; saveKey: string };
 export type SuijiDraft = {
+  correctionTrace?: CorrectionTrace;
   id: string;
   kind: RecordKind;
   body: string;

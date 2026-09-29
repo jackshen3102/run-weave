@@ -8,9 +8,11 @@ import {
   type CorrectionLexicon,
   type CorrectionLexiconEntry,
   type SuijiCorrection,
+  type CorrectionPreferences,
+  type CorrectionHistoryPage,
 } from "@runweave/shared/suiji";
 import { SuijiClient, SuijiHttpError } from "../../services/suiji";
-import { SuijiDraftStore, type SuijiDraft } from "./drafts";
+import { SuijiDraftStore, type SuijiDraft, type FeedbackIntent } from "./drafts";
 
 export class SuijiEditorModel {
   private listeners = new Set<() => void>();
@@ -34,6 +36,9 @@ export class SuijiEditorModel {
     lexicon?: CorrectionLexicon;
     correctionMessage?: string;
     lexiconPending?: boolean;
+    preferences?: CorrectionPreferences;
+    history?: CorrectionHistoryPage;
+    feedbackPending?: boolean;
   };
   private correctionAbort?: AbortController;
   private correctionKey?: string;
@@ -42,6 +47,7 @@ export class SuijiEditorModel {
     private client: SuijiClient,
     private store: SuijiDraftStore,
     readonly followupRecordId?: string,
+    readonly historySupported = false,
   ) {
     this.state = {
       draft,
@@ -69,6 +75,7 @@ export class SuijiEditorModel {
     return this.queue;
   }
   initialize() {
+    void this.loadFeedbackState();
     return this.persist();
   }
   async discard() {
@@ -141,7 +148,9 @@ export class SuijiEditorModel {
     this.correctionKey = key;
     this.patch({ correctionBusy: true, correction: undefined, correctionSource: text, correctionMessage: "正在纠正文字…" });
     try {
-      let job = await this.client.request<SuijiCorrection>("/api/suiji/v1/corrections", "POST", { text }, key, abort.signal);
+      let job = await this.client.request<SuijiCorrection>("/api/suiji/v1/corrections", "POST",
+        { text, ...(this.historySupported && !this.followupRecordId ? { feedbackCapable: true,
+          ...(this.state.draft.id !== "new" ? { recordId: this.state.draft.id } : {}) } : {}) }, key, abort.signal);
       this.check();
       this.patch({ correction: job });
       while (job.status === "running" && !abort.signal.aborted) {
@@ -175,7 +184,13 @@ export class SuijiEditorModel {
       this.patch({ correctionMessage: "正文或编辑会话已变化，请重新纠错" });
       return;
     }
-    this.edit({ body: correction.correctedText });
+    const nextDraft = { ...draft, body: correction.correctedText,
+      correctionTrace: correction.historyId && this.state.correctionSource ? {
+        correctionId: correction.id, inputText: this.state.correctionSource,
+        correctedText: correction.correctedText, applied: true,
+      } : undefined };
+    this.patch({ draft: nextDraft, correction: undefined, correctionSource: undefined });
+    void this.persist(nextDraft).catch(() => undefined);
     this.patch({ correctionMessage: "已应用到本机草稿；点击保存才会更新记录" });
   }
   async putLexicon(entries: CorrectionLexiconEntry[]) {
@@ -310,7 +325,18 @@ export class SuijiEditorModel {
           JSON.stringify(result.followup.attachments.map(item => item.id)) !== JSON.stringify(draft.files.map(item => item.uploaded!.id)) ||
           result.followupSummary.latest?.sequence !== result.followup.sequence) throw new Error("跟进响应与保存内容不一致，请手动重试确认");
       }
+      if ("record" in result && (result.record.body !== draft.body ||
+        (draft.id !== "new" && result.record.id !== draft.id))) {
+        throw new Error("记录响应与保存正文不一致，请手动重试确认");
+      }
+      if ("record" in result && draft.correctionTrace?.applied &&
+        (draft.version === undefined || result.record.version > draft.version)) {
+        await this.enqueueFeedback({ correctionId: draft.correctionTrace.correctionId,
+          key: crypto.randomUUID(), recordId: result.record.id,
+          recordVersion: result.record.version, saveKey: pending.key }).catch(() => undefined);
+      }
       await this.store.remove(this.storeKey);
+      if ("record" in result) void this.retryFeedback();
       if ("followup" in result) this.patch({ savedFollowup: result });
       else this.patch({ saved: result.record });
     } catch (error) {
@@ -334,6 +360,63 @@ export class SuijiEditorModel {
     } finally {
       this.patch({ busy: false });
     }
+  }
+  async loadPreferences() {
+    if (!this.historySupported) return;
+    try {
+      const preferences = await this.client.request<CorrectionPreferences>("/api/suiji/v1/correction-preferences");
+      this.check(); this.patch({ preferences });
+    } catch (error) { this.patch({ correctionMessage: error instanceof Error ? error.message : "读取历史设置失败" }); }
+  }
+  async setHistoryEnabled(enabled: boolean) {
+    const old = this.state.preferences;
+    if (!old) return;
+    try {
+      const preferences = await this.client.request<CorrectionPreferences>("/api/suiji/v1/correction-preferences",
+        "PUT", { expectedVersion: old.version, historyEnabled: enabled }, crypto.randomUUID());
+      this.check(); this.patch({ preferences });
+    } catch (error) { this.patch({ correctionMessage: error instanceof Error ? error.message : "设置失败" }); }
+  }
+  async loadHistory(cursor?: string) {
+    if (!this.historySupported) return;
+    try {
+      const history = await this.client.request<CorrectionHistoryPage>("/api/suiji/v1/correction-history" +
+        (cursor ? "?cursor=" + encodeURIComponent(cursor) : ""));
+      this.check(); this.patch({ history: cursor && this.state.history
+        ? { items: [...this.state.history.items, ...history.items], nextCursor: history.nextCursor } : history });
+    } catch (error) { this.patch({ correctionMessage: error instanceof Error ? error.message : "历史读取失败" }); }
+  }
+  async deleteHistory(id?: string) {
+    try {
+      await this.client.request("/api/suiji/v1/correction-history" + (id ? "/" + id : ""),
+        "DELETE", undefined, crypto.randomUUID());
+      this.check(); await this.loadHistory(); await this.loadPreferences();
+    } catch (error) { this.patch({ correctionMessage: error instanceof Error ? error.message : "删除失败" }); }
+  }
+  private async loadFeedbackState() {
+    const items = await this.store.get<FeedbackIntent[]>("feedback-intents").catch(() => undefined);
+    if (this.active) this.patch({ feedbackPending: !!items?.length });
+  }
+  private async enqueueFeedback(intent: FeedbackIntent) {
+    const items = await this.store.get<FeedbackIntent[]>("feedback-intents") ?? [];
+    await this.store.set("feedback-intents", [...items, intent]);
+    this.patch({ feedbackPending: true });
+  }
+  async retryFeedback() {
+    const items = await this.store.get<FeedbackIntent[]>("feedback-intents").catch(() => undefined);
+    if (!items?.length) return;
+    const remaining: FeedbackIntent[] = [];
+    for (const intent of items) {
+      try {
+        await this.client.request("/api/suiji/v1/corrections/" + intent.correctionId + "/feedback",
+          "POST", { recordId: intent.recordId, recordVersion: intent.recordVersion, saveKey: intent.saveKey }, intent.key);
+      } catch (error) {
+        if (!(error instanceof SuijiHttpError) || error.uncertain) remaining.push(intent);
+      }
+    }
+    if (remaining.length) await this.store.set("feedback-intents", remaining);
+    else await this.store.remove("feedback-intents");
+    this.patch({ feedbackPending: !!remaining.length });
   }
   async loadLatest() {
     if (this.state.busy || this.state.draft.id === "new") return;

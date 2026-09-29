@@ -13,8 +13,12 @@ import SwiftUI
   @Published var correctionMessage = ""
   @Published var lexicon: CorrectionLexicon?
   @Published var lexiconPending = false
+  @Published var preferences: CorrectionPreferences?
+  @Published var history: CorrectionHistoryPage?
+  @Published var feedbackPending = false
   let correctionAvailable: Bool
   let correctionSupported: Bool
+  let historySupported: Bool
   private var correctionTask: Task<Void, Never>?
   private var correctionKey: String?
   let client: APIClient
@@ -22,9 +26,10 @@ import SwiftUI
   let limits: Limits
   var onFollowupSaved: ((FollowupResponse) -> Void)?
   private var active = true
-  init(draft: Draft, client: APIClient, store: DraftStore, limits: Limits, correctionCapability: Bool? = nil) {
+  init(draft: Draft, client: APIClient, store: DraftStore, limits: Limits, correctionCapability: Bool? = nil, historyCapability: Bool? = nil) {
     self.draft = draft; self.client = client; self.store = store; self.limits = limits
     self.correctionAvailable = correctionCapability == true; self.correctionSupported = correctionCapability != nil
+    self.historySupported = historyCapability == true
   }
   var canReopen: Bool { active && !confirmed }
   var editable: Bool { !busy && !draft.frozen && !confirmed && active }
@@ -49,7 +54,10 @@ import SwiftUI
     correctionKey = key; correctionSource = source; correction = nil; correctionBusy = true; correctionMessage = "正在纠正文字…"
     let task = Task { @MainActor in
       do {
-        let payload = try JSONEncoder().encode(["text": source])
+        struct Input: Encodable { let text: String; let recordId: String?; let feedbackCapable: Bool? }
+        let eligible = historySupported && draft.followupRecordID == nil
+        let payload = try JSONEncoder().encode(Input(text: source, recordId: eligible ? draft.recordID : nil,
+          feedbackCapable: eligible ? true : nil))
         var job = try await client.request(SuijiCorrection.self, path: "api/suiji/v1/corrections", method: "POST", data: payload, key: key)
         try checkActive(); correction = job
         while job.status == "running" {
@@ -70,7 +78,12 @@ import SwiftUI
   func applyCorrection() async {
     guard editable, let correction, correction.status == "completed", let text = correction.correctedText,
       correctionSource == draft.body else { correctionMessage = "正文或编辑会话已变化，请重新纠错"; return }
-    draft.body = text; self.correction = nil; correctionSource = nil
+    draft.body = text
+    if correction.historyId != nil, let correctionSource {
+      draft.correctionTrace = CorrectionTrace(correctionId: correction.id, inputText: correctionSource,
+        correctedText: text, applied: true)
+    } else { draft.correctionTrace = nil }
+    self.correction = nil; correctionSource = nil
     await persist(); correctionMessage = "已应用到本机草稿；点击保存才会更新记录"
   }
   func putLexicon(_ entries: [CorrectionEntry]) async throws {
@@ -162,7 +175,18 @@ import SwiftUI
         draft.recordID == nil || result.record.id == draft.recordID,
         UUID(uuidString: result.record.id) != nil, result.record.version >= (draft.expectedVersion ?? 1),
         result.record.attachments.map(\.id) == draft.existing.map(\.id) + draft.local.compactMap({ $0.uploaded?.id }) else { throw MessageError(message: "响应与保存内容不一致，请重试确认") }
+      if let trace = draft.correctionTrace, trace.applied,
+        draft.expectedVersion == nil || result.record.version > draft.expectedVersion!, let operation = draft.pending {
+        do {
+          var intents = try await store.feedbackIntents()
+          intents.append(CorrectionFeedbackIntent(correctionId: trace.correctionId, key: UUID().uuidString,
+            recordId: result.record.id, recordVersion: result.record.version, saveKey: operation.key))
+          try await store.saveFeedbackIntents(intents)
+          feedbackPending = true
+        } catch { correctionMessage = "记录已保存；历史反馈在本机排队失败" }
+      }
       try await store.remove(draft); confirmed = true; message = "已保存"
+      await retryFeedback()
     } catch is CancellationError { return }
     catch let error as APIError {
       guard active else { return }
@@ -175,6 +199,54 @@ import SwiftUI
       draft.revision += 1
       do { try await store.save(draft) } catch { message += " 本机状态写入失败，请保留页面。" }
     } catch { if active { message = draft.frozen ? "保存结果待确认：\(error.localizedDescription)" : error.localizedDescription } }
+  }
+  func loadPreferences() async {
+    guard historySupported else { return }
+    do { let value = try await client.request(CorrectionPreferences.self, path: "api/suiji/v1/correction-preferences")
+      try checkActive(); preferences = value
+      feedbackPending = !(try await store.feedbackIntents()).isEmpty
+    } catch { if active { correctionMessage = error.localizedDescription } }
+  }
+  func setHistoryEnabled(_ enabled: Bool) async {
+    guard let preferences else { return }
+    do {
+      struct Payload: Encodable { let expectedVersion: Int; let historyEnabled: Bool }
+      let data = try JSONEncoder().encode(Payload(expectedVersion: preferences.version, historyEnabled: enabled))
+      let value = try await client.request(CorrectionPreferences.self, path: "api/suiji/v1/correction-preferences",
+        method: "PUT", data: data, key: UUID().uuidString)
+      try checkActive(); self.preferences = value
+    } catch { if active { correctionMessage = error.localizedDescription } }
+  }
+  func loadHistory(cursor: String? = nil) async {
+    guard historySupported else { return }
+    do { let path = "api/suiji/v1/correction-history" + (cursor.map { "?cursor=" + ($0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "") } ?? "")
+      let value = try await client.request(CorrectionHistoryPage.self, path: path)
+      try checkActive(); history = cursor == nil ? value : CorrectionHistoryPage(items: (history?.items ?? []) + value.items, nextCursor: value.nextCursor)
+    } catch { if active { correctionMessage = error.localizedDescription } }
+  }
+  func deleteHistory(_ id: String? = nil) async {
+    do {
+      _ = try await client.request(EmptyResponse.self, path: "api/suiji/v1/correction-history" + (id.map { "/" + $0 } ?? ""),
+        method: "DELETE", key: UUID().uuidString)
+      try checkActive(); await loadHistory(); await loadPreferences()
+    } catch { if active { correctionMessage = error.localizedDescription } }
+  }
+  func retryFeedback() async {
+    guard let intents = try? await store.feedbackIntents(), !intents.isEmpty else { feedbackPending = false; return }
+    var remaining: [CorrectionFeedbackIntent] = []
+    for intent in intents {
+      do {
+        struct Payload: Encodable { let recordId: String; let recordVersion: Int; let saveKey: String }
+        let data = try JSONEncoder().encode(Payload(recordId: intent.recordId,
+          recordVersion: intent.recordVersion, saveKey: intent.saveKey))
+        _ = try await client.request(EmptyResponse.self, path: "api/suiji/v1/corrections/" + intent.correctionId + "/feedback",
+          method: "POST", data: data, key: intent.key)
+      } catch let error as APIError {
+        if error.uncertain { remaining.append(intent) }
+      } catch { remaining.append(intent) }
+    }
+    do { try await store.saveFeedbackIntents(remaining); feedbackPending = !remaining.isEmpty }
+    catch { feedbackPending = true }
   }
   private func checkActive() throws { if !active { throw CancellationError() } }
   func compare() async {

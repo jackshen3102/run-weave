@@ -27,7 +27,15 @@ export const lexiconInput = z.object({
 export function validateEntries(entries: CorrectionLexiconEntry[]) {
   return lexiconInput.parse({ expectedVersion: 0, entries }).entries;
 }
-export const correctionInput = z.object({ text: body.refine((s) => s.trim().length > 0, "纠错文本不能为空") }).strict();
+export const correctionInput = z.object({
+  text: body.refine((s) => s.trim().length > 0, "纠错文本不能为空"),
+  recordId: z.string().uuid().optional(),
+  feedbackCapable: z.boolean().optional(),
+}).strict();
+export const preferenceInput = z.object({ expectedVersion: z.number().int().min(0), historyEnabled: z.boolean() }).strict();
+export const feedbackInput = z.object({
+  recordId: z.string().uuid(), recordVersion: z.number().int().positive(), saveKey: z.string().uuid(),
+}).strict();
 export const modelCorrection = z.object({
   correctedText: body.refine((s) => s.trim().length > 0),
   uncertainTerms: z.array(z.string().min(1).max(80)).max(10),

@@ -28,6 +28,7 @@ struct Draft: Codable, Identifiable, Sendable {
   var local: [LocalAttachment] = []
   var frozen = false
   var pending: PendingOperation?
+  var correctionTrace: CorrectionTrace?
   var conflict = false
   var revision: Int = 0
 }
@@ -81,6 +82,15 @@ actor DraftStore {
     try JSONEncoder().encode(operation).write(to: url(id, prefix: "status-"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
   }
   func removeStatus(_ id: String) throws { try FileManager.default.removeItem(at: url(id, prefix: "status-")) }
+  func feedbackIntents() throws -> [CorrectionFeedbackIntent] {
+    let path = root.appendingPathComponent("correction-feedback-intents.json")
+    guard FileManager.default.fileExists(atPath: path.path) else { return [] }
+    return try JSONDecoder().decode([CorrectionFeedbackIntent].self, from: Data(contentsOf: path))
+  }
+  func saveFeedbackIntents(_ values: [CorrectionFeedbackIntent]) throws {
+    try JSONEncoder().encode(values).write(to: root.appendingPathComponent("correction-feedback-intents.json"),
+      options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+  }
   func lexiconIntent() throws -> LexiconIntent? {
     let path = root.appendingPathComponent("lexicon-intent.json")
     guard FileManager.default.fileExists(atPath: path.path) else { return nil }
