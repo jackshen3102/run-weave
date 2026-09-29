@@ -2,7 +2,7 @@ version: 1
 name: iOS Backend 快捷回复与后台运行验收
 description: >
   新版功能的验收合同，具体通过情况以实际模拟器及 Backend 证据为准。验证手机快捷回复只以当前已登录 Backend
-  中 projectId 为 null 的 pinned 列表为权威数据，保留原有填入操作，并安全导入旧本机归档及启动既有后台运行。
+  中 projectId 为 null 的 pinned 列表为权威数据，保留原有填入操作，旧本机归档不再读取或导入，并可启动既有后台运行。
   各例使用独占测试 Backend、连接、项目、终端和设备容器，按 toolkit:agent-device 操作原生 UI；
   构建、静态检查和原型截图不能替代原生行为或真实 Backend 证据。
 cases:
@@ -93,62 +93,28 @@ cases:
       - 用 toolkit:agent-device 打开快捷回复；确认显示需要更新电脑的明确提示，不出现旧本机回复或旧 Backend 的部分列表。
       - 尝试新增或后台运行；确认无法提交且旧 Backend 无相关写入。
   - id: IOSQUICK-009
-    name: 旧归档只在明确确认后导入指定电脑
+    name: 旧归档不再导入
     required: true
     description: >
-      验证升级不静默上传旧本机文字；确认后导入选定 Backend，原归档字节及顺序保留。
+      验证升级后手机不读取或上传旧本机文字，不显示导入入口，原归档文件保持原样。
     preconditions:
       - 独占手机容器用旧版 App 正式保存两条合法本机回复并记录归档哈希；随后同 Bundle ID 覆盖安装候选版。
       - 手机已登录独占新 Backend A，能检查完整快捷库前后快照。
     steps:
-      - 用 toolkit:agent-device 在 A 打开快捷回复，确认只见 A 的 pinned 项及旧记录导入提示；暂缓导入，核对 A 未收到旧正文。
-      - 打开导入说明，确认目标连接名/地址与上传条数可见，再明确确认；核对 A 新增两条全局 pinned 项，标题、全文及原顺序正确。
-      - 重启 App 并核对旧文件哈希；确认原文件未删除或改写，也没有再次自动导入。
+      - 用 toolkit:agent-device 在 A 打开快捷回复，确认只见 A 的 pinned 项，没有旧记录或导入入口；核对 A 未收到旧正文。
+      - 重启 App 并核对旧文件哈希；确认原文件未删除或改写，Backend 仍未收到旧正文。
   - id: IOSQUICK-010
-    name: 旧归档导入按 Backend 分别授权
+    name: 所有全局快捷指令可在实际 worktree 后台运行
     required: true
     description: >
-      验证用户授权导入 A 不代表授权 B；切换连接不会自动跨电脑复制旧回复。
+      验证所有已保存的全局快捷指令均出现后台入口，不受正文前缀和输入模式限制；运行使用当前实际 worktree，原终端与草稿不受影响。
     preconditions:
-      - 独占手机旧归档有唯一合法回复，已登录两个独占新 Backend A、B；两端无该内容。
+      - 独占 Backend 配置有效后台模型和权限；有获准测试的父项目及其 worktree。
+      - 手机当前终端在该 worktree，Backend 有正文不含特定技能前缀的 line、prompt_paste 和 codex_slash_command 全局 pinned 指令，以及项目绑定 pinned 指令，原终端含草稿。
     steps:
-      - 用 toolkit:agent-device 在 A 明确确认导入；核对 A 收到旧回复，B 保持为空。
-      - 切换到 B；确认仍显示以 B 为目标的独立导入提示，B 无旧回复。
-      - 在 B 暂缓导入并重启 App；确认 B 仍为空，A 的导入状态不被当作 B 的授权。
-  - id: IOSQUICK-011
-    name: 被拒导入项仍能在手机读取
-    required: true
-    description: >
-      验证 Backend 敏感校验拒绝单项时不吞掉旧数据，迁移详情明确失败且能只读复制原文。
-    preconditions:
-      - 独占手机旧归档含一条合法回复和一条命中 Backend 敏感规则的回复，原文件哈希已记录。
-      - 已登录独占新 Backend，能核对服务端完整快捷库。
-    steps:
-      - 用 toolkit:agent-device 明确确认导入；确认合法项进入 Backend，敏感项显示具体失败原因且未上传为 pinned 项。
-      - 在迁移详情查看并复制敏感项全文；确认原文件哈希不变，界面不宣称整批成功，也未绕过敏感内容规则。
-  - id: IOSQUICK-012
-    name: 导入响应丢失后同 ID 重试不重复
-    required: true
-    description: >
-      验证导入成功响应未知时复用旧 UUID，Backend 只保留一条导入项，也不覆盖已有同文标题。
-    preconditions:
-      - 独占手机旧归档有一条合法回复，独占 Backend 已有同正文但不同标题的 pinned 项。
-      - 可在 Backend 完成首次导入后只丢弃该次成功响应，并核对完整快捷库。
-    steps:
-      - 用 toolkit:agent-device 确认导入并丢弃首次成功响应；确认 App 显示待确认状态，旧文件保持。
-      - 恢复响应后由用户明确重试；确认相同 clientImportId 返回同一导入项，只有一条导入记录，原有同文项标题不变。
-  - id: IOSQUICK-013
-    name: 后台按钮在实际 worktree 运行合格指令
-    required: true
-    description: >
-      验证只有合格的已保存指令出现后台入口；点击后运行使用当前实际 worktree，原终端与草稿不受影响。
-    preconditions:
-      - 独占 Backend 配置有效后台模型、权限和 toolkit:github-pr；有获准测试远端、父项目及其 worktree。
-      - 手机当前终端在该 worktree，Backend 有合格全局项、不合格全局项及合格但绑定项目的 pinned 指令，原终端含草稿。
-    steps:
-      - 用 toolkit:agent-device 打开快捷回复，确认只有合格全局项提供后台运行入口；项目绑定指令连列表都不出现。点击全局项一次并记录 runId。
+      - 用 toolkit:agent-device 打开快捷回复，确认三种模式的全局项均提供后台运行入口；项目绑定指令连列表都不出现。点击其中一条安全指令一次并记录 runId。
       - 核对同一 runId 从 queued 到终态，来源 quickInputId 与执行目录为当前实际 worktree；原终端没有收到输入，草稿保持。
-  - id: IOSQUICK-014
+  - id: IOSQUICK-011
     name: 后台请求未知结果不重复执行
     required: true
     description: >
@@ -159,7 +125,7 @@ cases:
     steps:
       - 用 toolkit:agent-device 点击一次后台运行，丢弃首次成功响应；确认 UI 显示结果待确认且未用新幂等键自动提交。
       - 恢复响应并通过同一操作查询或重试；确认只关联原 runId，Backend 只有一条 run 和一次 provider 执行。
-  - id: IOSQUICK-015
+  - id: IOSQUICK-012
     name: 重启 App 后仍可查看同一运行和原对话
     required: true
     description: >
@@ -171,7 +137,7 @@ cases:
       - 用 toolkit:agent-device 在运行中关闭快捷列表，终止并重启 App，重新取得新进程控件树与 UI 引用。
       - 回到同一连接的快捷回复；确认「查看运行」定位原 runId，输出和状态从 Backend 继续读取，没有新 run。
       - 等待终态，在已有详情中确认摘要、结果与完整输出；若 run 标记 recoverable，点现有入口确认恢复原 thread。
-  - id: IOSQUICK-016
+  - id: IOSQUICK-013
     name: 过期编辑不覆盖别端正文
     required: true
     description: >
@@ -181,7 +147,7 @@ cases:
     steps:
       - 手机用 toolkit:agent-device 打开编辑并修改正文，另一客户端先保存同一条目。
       - 手机提交旧版本；确认显示 409 对应的冲突提示且编辑稿仍在，Backend 正文保持另一客户端已提交内容。
-  - id: IOSQUICK-017
+  - id: IOSQUICK-014
     name: 过期排序不覆盖别端顺序
     required: true
     description: >
@@ -191,7 +157,7 @@ cases:
     steps:
       - 手机用 toolkit:agent-device 进入排序状态，另一客户端先移动一条并确认 Backend 顺序已更新。
       - 手机按旧 orderVersion 提交移动；确认显示排序冲突、刷新当前顺序，Backend 保留另一客户端先提交的顺序。
-  - id: IOSQUICK-018
+  - id: IOSQUICK-015
     name: 同一 Backend 切换项目仍使用同一全局列表
     required: true
     description: >

@@ -5,7 +5,6 @@ import SwiftUI
 struct ConnectionManager: View {
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var quickInputs: BackendQuickInputModel
-  @EnvironmentObject private var quickReplyMigration: QuickReplyMigrationStore
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
   let codexQuota: CodexQuotaStore
@@ -118,7 +117,7 @@ struct ConnectionManager: View {
       .disabled(busy)
       .navigationTitle("连接管理")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar { Button("关闭") { dismiss() }.disabled(busy || quickInputs.saving || quickReplyMigration.importing) }
+      .toolbar { Button("关闭") { dismiss() }.disabled(busy || quickInputs.saving) }
       .confirmationDialog(
         "删除本地连接？",
         isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -131,7 +130,7 @@ struct ConnectionManager: View {
       } message: {
         Text("将移除此连接和它的本地登录凭据，远端项目和终端会保留。")
       }
-    }.navigationViewStyle(.stack).interactiveDismissDisabled(busy || quickInputs.saving || quickReplyMigration.importing)
+    }.navigationViewStyle(.stack).interactiveDismissDisabled(busy || quickInputs.saving)
       .task(id: store.connections.map(\.scope).joined(separator: "|") + "|" + (store.activeID ?? "")) {
         let ordered = store.connections.filter { $0.id == store.activeID }
           + store.connections.filter { $0.id != store.activeID }

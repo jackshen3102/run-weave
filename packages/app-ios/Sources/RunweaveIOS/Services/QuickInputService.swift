@@ -24,11 +24,10 @@ struct QuickInputService {
     return page
   }
 
-  func create(title: String, data: String, clientImportId: String? = nil) async throws -> BackendQuickInput {
-    var body: [String: Any] = [
+  func create(title: String, data: String) async throws -> BackendQuickInput {
+    let body: [String: Any] = [
       "title": title, "data": data, "mode": "line", "projectId": NSNull(), "source": "ios_quick_reply",
     ]
-    if let clientImportId { body["clientImportId"] = clientImportId }
     return try await request("", method: "POST", body: body)
   }
 

@@ -193,13 +193,14 @@ final class BackendQuickInputModel: ObservableObject {
   }
 
   func start(_ session: AppSession, item: BackendQuickInput, projectId: String) async throws -> ScheduledRun {
-    guard canEdit(session), item.canRunInBackground, !projectId.isEmpty,
+    guard canEdit(session), !projectId.isEmpty,
       !starting.contains(item.id) else { throw APIError.offline }
     starting.insert(item.id)
     defer { starting.remove(item.id) }
     await refresh(session)
-    guard canEdit(session), let currentItem = items.first(where: { $0.id == item.id }),
-      currentItem.canRunInBackground else { throw APIError.invalidResponse }
+    guard canEdit(session), let currentItem = items.first(where: { $0.id == item.id }) else {
+      throw APIError.invalidResponse
+    }
     guard currentItem.data == item.data, currentItem.mode == item.mode else {
       throw BackendQuickInputFailure(code: "input_changed", message: "Quick input changed")
     }
