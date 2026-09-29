@@ -16,7 +16,15 @@ struct ScheduledTasksView: View {
   private var polling: Bool { visible && session.foreground && session.health.status == .online && session.terminal == nil && editor == nil }
   var body: some View {
     Group {
-      if model.targetID != nil {
+      if let run = model.backgroundRun {
+        List {
+          ScheduledStatusView(session: session, model: model)
+          Section {
+            Text(run.snapshot.name).font(.title2.bold())
+            ScheduledRunView(session: session, model: model, run: run, highlighted: true).id(run.id)
+          }
+        }.refreshable { await model.refresh() }
+      } else if model.targetID != nil {
         ScheduledTaskDetailView(session: session, model: model, edit: { editor = ScheduledEditorSelection(task: $0) })
       } else {
         ScrollViewReader { proxy in
@@ -24,28 +32,28 @@ struct ScheduledTasksView: View {
         }
       }
     }
-    .navigationBarBackButtonHidden(model.targetID != nil)
-    .navigationTitle("定时任务")
+    .navigationBarBackButtonHidden(model.targetID != nil && model.backgroundRun == nil && !model.resolvingRun)
+    .navigationTitle(model.backgroundRun != nil ? "后台运行" : model.resolvingRun ? "运行详情" : "定时任务")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .navigationBarLeading) {
-        if model.targetID != nil {
+        if model.targetID != nil && model.backgroundRun == nil && !model.resolvingRun {
           Button { model.select(nil) } label: { Label("任务列表", systemImage: "chevron.left") }
         }
       }
       ToolbarItem(placement: .bottomBar) {
         Button(action: manageConnections) {
           Label(session.connection?.name ?? "当前电脑", systemImage: "desktopcomputer")
-        }.accessibilityLabel("定时任务连接管理")
+        }.accessibilityLabel(model.backgroundRun != nil ? "后台运行连接管理" : "定时任务连接管理")
       }
       ToolbarItem(placement: .navigationBarTrailing) {
-        HStack {
+        if model.backgroundRun == nil && !model.resolvingRun { HStack {
           Button { editor = ScheduledEditorSelection(task: nil) } label: { Image(systemName: "plus") }
             .accessibilityLabel("新建定时任务").disabled(!model.canWrite)
           Menu {
             Button(model.archived ? "当前任务" : "已删除任务") { model.select(nil); model.archived.toggle() }
           } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("任务列表更多")
-        }
+        } }
       }
     }
     .modifier(ScheduledTerminalDestination(session: session, ownsRoute: true))
@@ -57,7 +65,7 @@ struct ScheduledTasksView: View {
     .onAppear { visible = true; consumeSource() }
     .onDisappear { visible = false }
     .onChange(of: session.scheduledSource) { _ in consumeSource() }
-    .task(id: "\(polling):\(model.filterID):\(model.targetID ?? "")") {
+    .task(id: "\(polling):\(model.filterID):\(model.targetID ?? ""):\(model.highlightedRun ?? "")") {
       guard polling else { return }
       do {
         try await Task.sleep(nanoseconds: 250_000_000)

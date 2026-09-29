@@ -77,7 +77,10 @@ struct ScheduledRunView: View {
     }
     .padding(.vertical, 8)
     .listRowBackground(highlighted ? Color.accentColor.opacity(0.08) : Color.clear)
-    .onAppear { visible = true }
+    .onAppear {
+      visible = true
+      if highlighted && run.snapshot.origin?.kind == "quick-input" { expanded = true }
+    }
     .onDisappear { visible = false; operation?.cancel() }
     .onChange(of: session.foreground) { if !$0 { operation?.cancel() } }
     .task(id: "\(active):\(expanded):\(run.status)") {

@@ -28,6 +28,10 @@ final class ScheduledTasksModel: ObservableObject {
   var current: Bool { generation == session.generation && session.authenticated }
   var canWrite: Bool { current && session.canWrite && capabilities?.enabled == true && !writing }
   var filterID: String { "\(query)\u{0}\(project)\u{0}\(archived)" }
+  var backgroundRun: ScheduledRun? {
+    runs.first { $0.id == highlightedRun && $0.snapshot.origin?.kind == "quick-input" }
+  }
+  var resolvingRun: Bool { highlightedRun != nil && runs.isEmpty }
 
   func call<T>(_ operation: (ScheduledTasksService) async throws -> T) async throws -> T {
     guard current else { throw CancellationError() }
@@ -55,6 +59,16 @@ final class ScheduledTasksModel: ObservableObject {
       guard current, request == ticket, !Task.isCancelled else { return }
       capabilities = caps
       if let selected {
+        let target: ScheduledRun?
+        if let id = highlightedRun {
+          target = try await call { try await $0.run(id) }
+          guard target?.taskId == selected else { throw ScheduledFailure(code: "wrong_task", message: "此运行不属于当前任务。") }
+        } else { target = nil }
+        guard current, request == ticket, !Task.isCancelled else { return }
+        if let target, target.snapshot.origin?.kind == "quick-input" {
+          detail = nil; runs = [target]; runsCursor = nil; failure = nil
+          return
+        }
         let task = try await call { try await $0.task(selected) }
         var page = try await call { try await $0.runs(selected, cursor: more ? runsCursor : nil) }
         var records = page.items
@@ -65,10 +79,8 @@ final class ScheduledTasksModel: ObservableObject {
             records += page.items
           }
         }
-        if let id = highlightedRun {
-          let target = try await call { try await $0.run(id) }
-          guard target.taskId == selected else { throw ScheduledFailure(code: "wrong_task", message: "此运行不属于当前任务。") }
-          records.removeAll { $0.id == id }; records.insert(target, at: 0)
+        if let target {
+          records.removeAll { $0.id == target.id }; records.insert(target, at: 0)
         }
         guard current, request == ticket, targetID == selected, !Task.isCancelled else { return }
         detail = task

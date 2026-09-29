@@ -21,6 +21,7 @@ import { scheduledTasksApi } from "../../../services/scheduled-tasks";
 import { HttpError } from "../../../services/http";
 import { useEnterScheduledTasks } from "../../../features/scheduled-tasks/navigation";
 import { RunRecord } from "../../../features/scheduled-tasks/task-detail";
+import { runDetailsPath } from "../../../features/scheduled-tasks/run-details-path";
 import { statusLabel } from "../../../features/scheduled-tasks/presentation";
 import { useQuickInputBackgroundRuns } from "../../../features/scheduled-tasks/use-quick-input-background-runs";
 import { useRuntimeStatus } from "../../../features/runtime-status/use-runtime-status";
@@ -437,7 +438,7 @@ export function TerminalQuickInputPopover({
             <div className="max-h-[400px] space-y-2 overflow-y-auto">
               <RunRecord key={selectedRun.id} run={selectedRun} highlighted={false} />
               <button type="button" className="text-xs text-sky-300 underline"
-                onClick={() => enterScheduledTasks(`/scheduled-tasks/${encodeURIComponent(selectedRun.taskId)}?run=${encodeURIComponent(selectedRun.id)}`)}>
+                onClick={() => enterScheduledTasks(runDetailsPath(selectedRun))}>
                 打开完整记录
               </button>
             </div>

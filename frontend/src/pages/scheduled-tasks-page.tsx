@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import { onlineManager } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useDebounce } from "ahooks";
 import { ArrowLeft, CalendarClock, MoreHorizontal, Plus } from "lucide-react";
 import type { ScheduledTask } from "@runweave/shared/scheduled-tasks";
@@ -18,7 +18,8 @@ import { TerminalRuntimeProvider } from "../features/terminal/queries/provider";
 import { useTerminalProjectsQuery } from "../features/terminal/queries/workspace";
 import { buildConnectionQueryScope } from "../features/query/connection-query-provider";
 import { useTaskNavigation } from "../features/scheduled-tasks/navigation";
-import { useCapabilities, useTasks } from "../features/scheduled-tasks/queries";
+import { useCapabilities, useRun, useTasks } from "../features/scheduled-tasks/queries";
+import { runDetailsPath } from "../features/scheduled-tasks/run-details-path";
 import {
   fieldClass,
   RequestError,
@@ -60,6 +61,9 @@ function ScheduledTasksContent(props: Props) {
     () => onlineManager.isOnline(),
   );
   const { taskId } = useParams<{ taskId: string }>();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const linkedRun = useRun(taskId ? searchParams.get("run") : null, false);
   const { workspace, go, back } = useTaskNavigation();
   const [parentId, setParentId] = useState(workspace.parentProjectId ?? "");
   const [archived, setArchived] = useState(false);
@@ -74,6 +78,9 @@ function ScheduledTasksContent(props: Props) {
     available && !taskId,
   );
   const records = tasks.data?.pages.flatMap((page) => page.items) ?? [];
+  if (linkedRun.data?.taskId === taskId && linkedRun.data?.snapshot.origin?.kind === "quick-input") {
+    return <Navigate to={runDetailsPath(linkedRun.data)} replace state={location.state} />;
+  }
   return (
     <main className="min-h-dvh bg-background text-foreground">
       <header className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
