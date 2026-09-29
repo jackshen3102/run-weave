@@ -13,15 +13,10 @@ export interface StoragePaths {
 export interface ActivityStoragePaths { activityHomeDir: string; activityDatabaseFile: string }
 export interface EvolutionStoragePaths { evolutionHomeDir: string; learningDatabaseFile: string; temporaryDir: string }
 export interface ScheduledTaskStoragePaths { scheduledTasksHomeDir: string; scheduledTasksDatabaseFile: string }
-export interface ExecutionEfficiencyStoragePaths { homeDir: string; databaseFile: string }
 
 export function resolveScheduledTaskStoragePaths(): ScheduledTaskStoragePaths {
   const scheduledTasksHomeDir = configurationPath("storage.scheduledTasksDirectory", "scheduled-tasks");
   return { scheduledTasksHomeDir, scheduledTasksDatabaseFile: path.join(scheduledTasksHomeDir, "scheduled-tasks.sqlite") };
-}
-export function resolveExecutionEfficiencyStoragePaths(browserProfileDir: string): ExecutionEfficiencyStoragePaths {
-  const homeDir = path.join(browserProfileDir, "execution-efficiency");
-  return { homeDir, databaseFile: path.join(homeDir, "efficiency.sqlite") };
 }
 export function resolveEvolutionStoragePaths(): EvolutionStoragePaths {
   const evolutionHomeDir = configurationPath("storage.evolutionDirectory", "evolution");

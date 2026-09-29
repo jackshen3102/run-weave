@@ -35,7 +35,6 @@ import { backgroundRunPath, runDetailsPath } from "./features/scheduled-tasks/ru
 import { useQuickInputNotifications } from "./features/scheduled-tasks/use-quick-input-notifications";
 import { scheduledTasksApi } from "./services/scheduled-tasks";
 import { HttpError } from "./services/http";
-import { ExecutionEfficiencyPage } from "./pages/execution-efficiency-page";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
@@ -115,7 +114,7 @@ function RunweaveApp() {
     isElectron && authStatus !== "unauthenticated",
   );
   const requestedReturn: unknown = location.state?.scope === queryScope ? location.state?.returnTo : null;
-  const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|background-runs|execution-efficiency)(?:\/|\?|$)/u.test(requestedReturn)
+  const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|background-runs)(?:\/|\?|$)/u.test(requestedReturn)
     ? requestedReturn : TERMINAL_LIST_PATH;
 
   const handleSelectConnection = (id: string) => {
@@ -219,21 +218,6 @@ function RunweaveApp() {
                 activeConnectionId={activeConnectionId}
                 activeConnectionGeneration={activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined}
                 connectionName={activeConnection?.name}
-              />
-            ) : <Navigate to="/login" replace state={{ returnTo: location.pathname + location.search, scope: queryScope }} />}
-          />
-          <Route
-            path="/execution-efficiency/:findingId?"
-            element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
-              <ExecutionEfficiencyPage
-                apiBase={apiBase}
-                token={token}
-                activeConnectionId={activeConnectionId}
-                activeConnectionGeneration={activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined}
-                connectionName={activeConnection?.name}
-                connections={connections}
-                onSelectConnection={isElectron ? handleSelectConnection : undefined}
-                onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
               />
             ) : <Navigate to="/login" replace state={{ returnTo: location.pathname + location.search, scope: queryScope }} />}
           />

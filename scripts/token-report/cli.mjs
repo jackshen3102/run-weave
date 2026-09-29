@@ -10,11 +10,11 @@ import {
 } from "./logs.mjs";
 import { casePacket, markdown } from "./report.mjs";
 
-const USAGE = `用法：pnpm token:report [--cwd PATH] [--days 7 | --since ISO_DATE] [--limit 10] [--json] [--case ID]
+const USAGE = `用法：pnpm token:report [--cwd PATH] [--days 30 | --since ISO_DATE] [--json] [--case ID]
   --sessions-dir PATH  指定本机 Codex JSONL 日志目录（默认同时读取 sessions、archived_sessions）
-  --json               输出可导入原型的 JSON 报告
+  --json               输出机器可读的完整 JSON 报告
   --case ID            输出该疑点的局部证据与分析请求；不调用模型
-  --limit N            按日志更新时间选择最近 N 个已结束且有数据的项目会话（1–100）
+  --days N             读取最近 N 天的全部本项目会话（默认 30 天）
   --since ISO_DATE     仅统计此 UTC 时间以后的用量增量；日期格式 YYYY-MM-DD 或 ISO 8601
 日志只读，结果写 stdout；不会连接 Backend、模型或其他网络服务。`;
 
@@ -26,7 +26,6 @@ async function main() {
       cwd: { type: "string" },
       days: { type: "string" },
       since: { type: "string" },
-      limit: { type: "string" },
       "sessions-dir": { type: "string" },
       json: { type: "boolean" },
       case: { type: "string" },
@@ -39,12 +38,9 @@ async function main() {
   }
   if (values.days && values.since)
     throw new Error("--days 与 --since 不能同时使用");
-  const days = Number(values.days ?? 7),
-    limit = Number(values.limit ?? 10);
+  const days = Number(values.days ?? 30);
   if (!Number.isInteger(days) || days < 1 || days > 3650)
     throw new Error("--days 必须为 1–3650 的整数");
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100)
-    throw new Error("--limit 必须为 1–100 的整数");
   const since = values.since
     ? Date.parse(values.since)
     : Date.now() - days * 86_400_000;
@@ -69,7 +65,6 @@ async function main() {
     seen = new Set(),
     usage = emptyUsage();
   for (const file of files) {
-    if (sessions.length >= limit) break;
     scan.inspected++;
     try {
       const session = await readSession(file, project, since);
@@ -77,7 +72,7 @@ async function main() {
         scan.excluded[session.excluded] =
           (scan.excluded[session.excluded] ?? 0) + 1;
         if (
-          !/其他项目|审批评估|分叉或子 Agent|时间范围|仍在进行/.test(
+          !/其他项目|审批评估|时间范围|仍在进行/.test(
             session.excluded,
           )
         )
@@ -101,11 +96,10 @@ async function main() {
   }
   scan.durationMs = Math.round(performance.now() - started);
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     project,
     since: new Date(since).toISOString(),
-    limit,
     usage,
     sessions,
     scan,
