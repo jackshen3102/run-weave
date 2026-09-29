@@ -73,6 +73,13 @@ export const deviceMonitorSchema = z
                 title: z.string(),
                 body: z.string(),
                 occurredAt: z.string().datetime(),
+                target: z
+                  .object({
+                    resourceType: z.literal("scheduled-run"),
+                    resourceId: z.string(),
+                  })
+                  .strict()
+                  .optional(),
               })
               .strict(),
             state: z.enum([
