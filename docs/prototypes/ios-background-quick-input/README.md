@@ -2,7 +2,7 @@
 
 本版按当前 iOS 使用方式重画：终端输入区打开「全部」后仍进入原有「快捷回复」列表；搜索、排序、新增、点整行填入输入框、右侧 `···` 管理保持原位。只对符合资格的已保存 `$toolkit:github-pr` 条目，在原行下增加「后台运行」；启动后同一行显示运行中和「查看运行」。结果沿用已有运行详情的列表式结构，不另起一套卡片界面。
 
-与上一版相比，**全部快捷回复/指令统一取自当前 Backend 的全局已保存列表**（`projectId:null`、pinned），与手机当前项目无关。项目绑定项和自动记录的最近输入都不进入手机快捷回复；界面不分「当前项目」和「本机」两组。原 `LocalQuickReplyStore` 不再是新界面的数据源；离线时不能悄悄退回本机旧列表。本机旧记录的确认导入与保留规则见[实施计划](../../plans/2026-09-28-ios-backend-quick-inputs.md)。
+与上一版相比，**全部快捷回复/指令统一取自当前 Backend 的全局已保存列表**（`projectId:null`、pinned），与手机当前项目无关。项目绑定项和自动记录的最近输入都不进入手机快捷回复；界面不分「当前项目」和「本机」两组。旧本机归档的当前处理方式见[iOS 架构](../../architecture/app-mobile.md#全局快捷回复输入策略)。本原型的资格限制与导入设想是历史设计，不代表当前实现。
 
 [三态图片](prototype-preview.png)。在仓库根目录运行 `python3 -m http.server 6194 --directory docs/prototypes/ios-background-quick-input`，打开 `http://127.0.0.1:6194/` 可点击原行验证填入输入框，也可点「后台运行 → 查看运行」。`?state=ready`、`?state=running`、`?state=detail-running`、`?state=result` 用于直接查看状态；`?gallery=1` 是总览图专用辅助视图，图外的阶段标题不进入产品。
 

@@ -133,7 +133,7 @@ Terminal 顶栏右侧外露 `快捷指令` 入口，用户可通过固定快捷�
 - `DELETE /api/terminal/quick-inputs/:id`：软隐藏该项并取消固定；后续同内容再次成功发送会恢复为最近输入。
 - `POST /api/terminal/quick-inputs/:id/used`：只用于复制或插入成功后的使用统计；快捷指令发送成功由 Terminal input 成功路径记录，避免双重计数。
 - iOS 使用 `GET /api/terminal/quick-inputs?kind=pinned&scope=global&order=manual&limit=100&cursor=…`；显式 `scope=global` 只返回 `projectId:null` 项，分页响应额外携带 `nextCursor/orderVersion`。省略 scope 的既有 Web 查询继续按原作用域及最近使用时间排序。
-- iOS 创建项固定全局；导入旧本机 UUID 时附带 `clientImportId`，Backend 按 ID 幂等且不覆盖同文条目。`PATCH` 可带正文与 `expectedUpdatedAt` 拒绝过期编辑；`POST /api/terminal/quick-inputs/:id/move` 用 `expectedOrderVersion` 只移动全局 pinned 项。
+- iOS 创建项固定全局，不读取或导入旧本机归档。`PATCH` 可带正文与 `expectedUpdatedAt` 拒绝过期编辑；`POST /api/terminal/quick-inputs/:id/move` 用 `expectedOrderVersion` 只移动全局 pinned 项。
 
 列表只返回 `hiddenAt == null` 的记录。`kind=recent` 返回未固定项，`kind=pinned` 返回固定项，`kind=all` 固定项优先；最近输入最多保留 200 条，裁剪只影响未固定的可见 recent。
 
