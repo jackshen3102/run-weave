@@ -8,14 +8,6 @@ struct BackendQuickInput: Decodable, Identifiable, Equatable {
   let projectId: String?
   let pinned: Bool
   let updatedAt: String
-  let clientImportId: String?
-
-  var canRunInBackground: Bool {
-    projectId == nil && pinned && ["line", "prompt_paste"].contains(mode)
-      && data.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("$toolkit:github-pr")
-      && (data.trimmingCharacters(in: .whitespacesAndNewlines).dropFirst("$toolkit:github-pr".count).first
-        .map { $0.isWhitespace } ?? true)
-  }
 }
 
 struct BackendQuickInputPage: Decodable {

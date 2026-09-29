@@ -6,9 +6,7 @@ public struct RootView: View {
   @Environment(\.scenePhase) private var scenePhase
   @StateObject private var connections = ConnectionStore()
   @StateObject private var session = AppSession()
-  @StateObject private var quickReplies = LocalQuickReplyStore()
   @StateObject private var quickInputs = BackendQuickInputModel()
-  @StateObject private var quickReplyMigration = QuickReplyMigrationStore()
   @StateObject private var codexQuota = CodexQuotaStore()
   @ObservedObject private var notifications = NotificationCoordinator.shared
   @State private var managingConnections = false
@@ -104,9 +102,7 @@ public struct RootView: View {
         mobileLoginRevision += 1
       }
     }
-    .environmentObject(quickReplies)
     .environmentObject(quickInputs)
-    .environmentObject(quickReplyMigration)
   }
 }
 

@@ -7,15 +7,12 @@ struct QuickReplyLibraryView: View {
   }
 
   @EnvironmentObject private var model: BackendQuickInputModel
-  @EnvironmentObject private var legacy: LocalQuickReplyStore
-  @EnvironmentObject private var migration: QuickReplyMigrationStore
   @ObservedObject var session: AppSession
   let projectId: String?
   let onSelect: ((BackendQuickInput) -> Void)?
   let onOpenRun: ((ScheduledRun) -> Void)?
   @State private var query = ""
   @State private var editorTarget: EditorTarget?
-  @State private var showingMigration = false
   @State private var deleting: BackendQuickInput?
   @State private var failure: String?
   @State private var editMode: EditMode = .inactive
@@ -29,22 +26,8 @@ struct QuickReplyLibraryView: View {
 
   private var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
   private var visible: [BackendQuickInput] { model.visible(query: query.trimmingCharacters(in: .whitespacesAndNewlines)) }
-  private var remainingLegacy: Int {
-    migration.remaining(legacy.items, scope: session.connection?.scope).count
-  }
-
   var body: some View {
     List {
-      if session.connection != nil && remainingLegacy > 0 {
-        Section {
-          Button("此手机有 \(remainingLegacy) 条旧快捷回复 · 导入到当前电脑") {
-            showingMigration = true
-          }
-          Text("旧记录仍保存在手机；导入前不会上传，也不作为当前快捷回复使用。")
-            .font(.caption).foregroundColor(.secondary)
-        }
-      }
-      if legacy.readError != nil { Text(legacy.readError ?? "").foregroundColor(.red) }
       if model.loading { ProgressView("正在读取…") }
       if let error = model.failure {
         Section {
@@ -79,7 +62,7 @@ struct QuickReplyLibraryView: View {
                 Image(systemName: "ellipsis").frame(width: 44, height: 44)
               }.accessibilityLabel("管理 \(item.title)")
             }
-            if let projectId, let onOpenRun, item.canRunInBackground {
+            if let projectId, let onOpenRun {
               HStack(spacing: 12) {
                 if let run = model.run(for: item.id, projectId: projectId) {
                   Text(run.statusLabel).font(.caption).foregroundColor(.secondary)
@@ -136,7 +119,6 @@ struct QuickReplyLibraryView: View {
       NavigationView { QuickReplyEditorView(session: session, item: target.item) }
         .navigationViewStyle(.stack)
     }
-    .sheet(isPresented: $showingMigration) { QuickReplyMigrationView(session: session) }
     .confirmationDialog("删除快捷回复？", isPresented: Binding(
       get: { deleting != nil }, set: { if !$0 { deleting = nil } }
     ), titleVisibility: .visible) {
@@ -153,8 +135,6 @@ struct QuickReplyLibraryView: View {
     }
     .task(id: session.generation) {
       await model.loadIfNeeded(session)
-      await legacy.loadIfNeeded()
-      await migration.loadIfNeeded()
     }
     .task(id: query) {
       if searching { try? await Task.sleep(nanoseconds: 250_000_000) }
