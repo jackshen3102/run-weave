@@ -52,6 +52,7 @@ final class AppSession: ObservableObject {
   private var overviewRevision = 0
   private var pendingOverviewEvents: [TerminalEvent] = []
   private var overviewTask: Task<Void, Never>?
+  private var overviewReloadRequested = false
   private var probeTask: Task<Void, Never>?
   private var resumeTask: Task<Void, Never>?
   private var routeRequest = 0
@@ -176,23 +177,32 @@ final class AppSession: ObservableObject {
   @discardableResult
   func reload() async -> Bool {
     guard let api, authenticated, foreground else { return false }
+    guard !loading else {
+      overviewReloadRequested = true
+      return false
+    }
     let epoch = generation
     loadingRequest += 1
     let request = loadingRequest
     let revision = overviewRevision
     pendingOverviewEvents.removeAll(keepingCapacity: true)
     loading = true
+    defer {
+      if generation == epoch, request == loadingRequest {
+        loading = false
+        if overviewReloadRequested { scheduleReload() }
+      }
+    }
     do {
       var value = try await api.overview()
       guard generation == epoch, request == loadingRequest, !Task.isCancelled else { return false }
       // Structural changes require a fresh snapshot. State/metadata updates are replayed below,
       // so a busy real Backend cannot indefinitely invalidate otherwise usable snapshots.
       if revision != overviewRevision {
-        loading = false
-        scheduleReload()
+        overviewReloadRequested = true
         return false
       }
-      Self.patch(pendingOverviewEvents, into: &value)
+      HomeOverviewEventPatcher.patch(pendingOverviewEvents, into: &value)
       pendingOverviewEvents.removeAll(keepingCapacity: true)
       overview = value
       health.status = .online
@@ -394,6 +404,7 @@ final class AppSession: ObservableObject {
       probeTask = nil
       overviewTask?.cancel()
       overviewTask = nil
+      overviewReloadRequested = false
       terminalController?.disconnect()
     } else {
       let epoch = generation
@@ -493,10 +504,15 @@ final class AppSession: ObservableObject {
     }
     let structural = Set([
       "project_created", "project_deleted", "terminal_session_created", "terminal_session_deleted",
-      "completion", "terminal_state_changed",
     ])
     if batch.contains(where: { structural.contains($0.kind) }) {
       overviewRevision += 1
+    }
+    let refresh = structural.union([
+      "completion", "terminal_state_changed", "terminal_session_metadata_changed",
+      "terminal_panel_created", "terminal_panel_updated", "terminal_panel_deleted", "terminal_panel_focused",
+    ])
+    if batch.contains(where: { refresh.contains($0.kind) }) {
       scheduleReload()
     }
     let updates = batch.filter {
@@ -513,48 +529,25 @@ final class AppSession: ObservableObject {
       }
     }
     if !updates.isEmpty, var value = overview {
-      Self.patch(updates, into: &value)
+      HomeOverviewEventPatcher.patch(updates, into: &value)
       overview = value
     }
   }
 
-  private static func patch(_ batch: [TerminalEvent], into overview: inout HomeOverview) {
-    for event in batch {
-      guard let id = event.terminalSessionId,
-        let index = overview.sessions.firstIndex(where: { $0.id == id })
-      else { continue }
-      if event.kind == "completion", let revision = event.payload.completionRevision {
-        overview.sessions[index].completionRevision = max(
-          overview.sessions[index].completionRevision ?? 0, revision)
-        continue
-      }
-      guard let next = event.payload.next else { continue }
-      if event.kind == "terminal_state_changed", let state = next.state {
-        overview.sessions[index].terminalState = TerminalState(state: state, agent: next.agent)
-        let exited = overview.sessions[index].status == "exited"
-        let labels = [
-          "agent_running": ("running", "Agent Running"),
-          "agent_starting": ("agent-starting", "Agent Starting"),
-          "agent_idle": ("agent-idle", "Agent Idle"),
-        ]
-        let pair = exited ? ("exited", "Exited") : (labels[state] ?? ("idle", "Idle"))
-        overview.sessions[index].displayStatus = pair.0
-        overview.sessions[index].displayStatusLabel = pair.1
-      } else if event.kind == "terminal_session_metadata_changed", let cwd = next.cwd {
-        if overview.sessions[index].subtitle == event.payload.previous?.cwd {
-          overview.sessions[index].subtitle = cwd
-        }
-        overview.sessions[index].cwd = cwd
-        overview.sessions[index].activeCommand = next.activeCommand
-      }
-    }
-  }
-
   private func scheduleReload() {
-    overviewTask?.cancel()
+    overviewReloadRequested = true
+    // Events arriving during a read request one follow-up, rather than cancelling
+    // the only response that can replace the previous thread's reply subtitle.
+    guard overviewTask == nil, !loading, authenticated, foreground else { return }
+    let epoch = generation
     overviewTask = Task { [weak self] in
       do { try await Task.sleep(nanoseconds: 50_000_000) } catch { return }
-      await self?.reload()
+      guard let self, self.generation == epoch, !Task.isCancelled else { return }
+      self.overviewReloadRequested = false
+      await self.reload()
+      guard self.generation == epoch, !Task.isCancelled else { return }
+      self.overviewTask = nil
+      if self.overviewReloadRequested { self.scheduleReload() }
     }
   }
 
@@ -586,6 +579,7 @@ final class AppSession: ObservableObject {
     probeTask = nil
     overviewTask?.cancel()
     overviewTask = nil
+    overviewReloadRequested = false
     closeTerminal()
   }
 }
