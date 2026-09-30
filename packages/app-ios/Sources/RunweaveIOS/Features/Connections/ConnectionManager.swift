@@ -137,17 +137,17 @@ struct ConnectionManager: View {
         await batteries.refresh(ordered)
       }
       .preferredColorScheme(theme == "light" ? .light : .dark)
-      .sheet(isPresented: $showingConfiguration) { ConfigurationView(session: session) }
+      .sheet(isPresented: $showingConfiguration) { ConfigurationView(session: session).mobileAnalyticsScreen(.configuration) }
       .sheet(isPresented: $showingCodexQuota) {
-        CodexQuotaView(session: session, quota: codexQuota)
+        CodexQuotaView(session: session, quota: codexQuota).mobileAnalyticsScreen(.codexQuota)
       }
-      .sheet(isPresented: $showingBuildIdentity) { BuildIdentityView() }
+      .sheet(isPresented: $showingBuildIdentity) { BuildIdentityView().mobileAnalyticsScreen(.buildInfo) }
       .sheet(isPresented: $scanning) {
         MobileLoginView(store: store, session: session) {
           scanning = false
           onMobileLogin()
           dismiss()
-        }
+        }.mobileAnalyticsScreen(.mobileLogin)
       }
   }
 

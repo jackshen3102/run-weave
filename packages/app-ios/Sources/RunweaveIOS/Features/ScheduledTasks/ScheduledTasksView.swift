@@ -60,7 +60,7 @@ struct ScheduledTasksView: View {
     .sheet(item: $editor) { selection in
       ScheduledTaskEditorView(session: session, model: model, task: selection.task) { task in
         model.select(task.id); editor = nil
-      }
+      }.mobileAnalyticsScreen(.scheduledTaskEditor)
     }
     .onAppear { visible = true; consumeSource() }
     .onDisappear { visible = false }
@@ -75,6 +75,7 @@ struct ScheduledTasksView: View {
         }
       } catch {}
     }
+    .mobileAnalyticsScreen(.scheduledTasks)
   }
   private func consumeSource() {
     if let source = session.scheduledSource {

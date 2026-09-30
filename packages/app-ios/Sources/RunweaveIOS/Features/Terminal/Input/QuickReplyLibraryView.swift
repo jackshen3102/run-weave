@@ -117,6 +117,7 @@ struct QuickReplyLibraryView: View {
     }
     .sheet(item: $editorTarget) { target in
       NavigationView { QuickReplyEditorView(session: session, item: target.item) }
+        .mobileAnalyticsScreen(.quickReplyEditor)
         .navigationViewStyle(.stack)
     }
     .confirmationDialog("删除快捷回复？", isPresented: Binding(
@@ -147,6 +148,7 @@ struct QuickReplyLibraryView: View {
         try? await Task.sleep(nanoseconds: 5_000_000_000)
       }
     }
+    .mobileAnalyticsScreen(.quickReplies)
   }
 
   private func edit(_ item: BackendQuickInput) { editorTarget = EditorTarget(item: item) }
