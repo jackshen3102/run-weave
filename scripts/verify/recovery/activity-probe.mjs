@@ -43,7 +43,7 @@ async function main() {
     entry,
     `const {parentPort}=require('node:worker_threads');
     parentPort.on('message', request => {
-      if(request.op==='integrity' && ${JSON.stringify(mode)}!=='startup-silent') {
+      if(request.op==='ready' && ${JSON.stringify(mode)}!=='startup-silent') {
         parentPort.postMessage({id:request.id,ok:true,result:true}); return;
       }
       if(request.op==='sources') {

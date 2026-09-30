@@ -19,11 +19,13 @@ description: 使用 agent-device CLI 在 iOS 模拟器和真机上复现问题�
 ```bash
 python3 "$SKILL_DIR/scripts/device.py" init "$RUN_DIR" \
   --kind device --udid "$IOS_UDID" --app com.runweave.suiji \
-  --team-id "$IOS_TEAM_ID" --runner-id "$IOS_RUNNER_ID"
-# 模拟器改为 --kind simulator，省略两个签名参数；先启动本任务拥有的模拟器。
+  --team-id "$IOS_TEAM_ID"
+# 模拟器改为 --kind simulator，省略签名参数；先启动本任务拥有的模拟器。
 python3 "$SKILL_DIR/scripts/device.py" check "$RUN_DIR"
 python3 "$SKILL_DIR/scripts/device.py" run "$RUN_DIR" -- open --foreground
 ```
+
+真机 UI 自动化固定共用 `com.runweave.agentdevice`，签名团队登记于 `~/.runweave/agent-device/runners/`。只传 `--team-id` 即可；显式 `--runner-id` 只允许这个固定值，禁止按 App、日期或任务新建身份。旧任务的其他 Runner ID 只允许 stop，不再用于 UI；重新 init 使用共享身份。任务仍保留独立 session 和证据目录。真机从首次托管 run 到 stop 持有跨 worktree 的设备锁；失败保留归属，使用原 task-dir stop，不按 PID 消失抢锁。
 
 辅助脚本要求 PATH 上的 CLI 版本匹配；不会自动安装、升级或启用权限。预检只检查当前工具与目标可达性，**不证明签名可安装、UI Automation 已授权或没有其他 XCTest 占用**。先检查已知运行任务，冲突时等待占用者结束；项目配置了设备池时不得另建设备绕过，不能杀掉他人 runner。首次 open 只有返回真实目标树后才证明本轮连接可用。
 
@@ -76,3 +78,9 @@ Runweave 模拟器完成任务后执行 `node scripts/ios-simulators/cli.mjs fin
 stop 只清理该任务 state-dir 的会话、daemon 和 runner，不卸载 App，也不关闭模拟器。仅在本任务创建/拥有的模拟器上另行 shutdown。签名执行器按用户意图保留，不能为腾名额自动卸载其他 App。
 
 交付说明：测试的设备、App/构建来源、业务后置条件及证据、失败/未执行项、清理结果。任务目录的 `metrics.jsonl` 只记录命令类型、耗时和退出码，不记录命令参数；编号 `.log` 是 CLI 原始输出。业务结论由 Agent 结合实际状态填写，不把命令 exit 0 自动标成用例通过。
+
+## 历史产物维护
+
+使用技能的 `scripts/resources.py status --workspace <仓库路径>` 查看任务与 Runner 缓存，`prune --workspace <仓库路径>` 先生成回收清单，`prune --workspace <仓库路径> --apply` 执行。任务及 `~/.agent-device/logs/qa-*` 自动化日志分别保留最近 20 个、14 天且各不超过 1 GiB；设备锁保护的任务和对应日志不删除。每个签名团队/平台只保留最新共享 Runner 构建；旧身份缓存删除。清理时有 Xcode/XCTest/Agent Device 进程则阻塞，不终止其他任务。stop 成功后自动按这些上限回收已登记任务与缓存；手动 prune 可跨 linked worktree 发现历史目录。其他活动任务导致清理推迟时，会给出提示，随后执行 prune；仅更新脚本不会回收历史磁盘。
+
+`--all-history --apply` 是维护者明确要求删除全部历史证据时的一次性入口，不用于日常收尾。该入口额外删除仓库 `.runweave` 下由 Xcode `info.plist` 与 Build 目录确认的历史 DerivedData；保留当前包 `.build`。它仍保留占用任务和共享 Runner 构建，不卸载产品 App，不擦除模拟器，也不删除业务数据库。工具不会自动卸载手机上的旧 Runner；迁移时核对空闲、明确 Bundle ID 清单，再由维护者卸载。小型清理清单位于 `~/.runweave/agent-device/last-cleanup.json`。

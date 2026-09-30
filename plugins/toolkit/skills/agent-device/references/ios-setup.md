@@ -6,9 +6,9 @@
 
 真机需要信任配对、Developer Mode、可用签名、设备连接与必要的解锁。`DevToolsSecurity -status` 为 disabled 时，按当前任务已有授权处理；启用需要管理员权限，系统密码由用户在系统界面输入。不能把全部连接超时都归因于锁屏或 UI Automation 提示。
 
-从当前工程/有效 provisioning profile 确认 Team ID，**证书名称括号里的 ID 不一定是 provisioning 的 Team ID**。使用独立 runner Bundle ID，基础 App 与 `<id>.uitests.xctrunner` 都需要可用签名；不要改变产品 App 的 Bundle ID 或重签成新安装。
+从当前工程/有效 provisioning profile 确认 Team ID，**证书名称括号里的 ID 不一定是 provisioning 的 Team ID**。真机自动化复用固定 `com.runweave.agentdevice`，基础 App 与 `com.runweave.agentdevice.uitests.xctrunner` 都需要可用签名；不要改变产品 App 的 Bundle ID 或重签成新安装。
 
-若 CLI `xcodebuild` 报 `No Accounts`，先检查 Xcode Apple Accounts，不能直接断言用户未登录。GUI 已登录而新描述文件缺失时，可复制上游包内 `dist/apple` 到本机任务目录（保留相对 Swift package 路径），仅修改副本的 Team 与基础 Bundle ID，用 Xcode Signing & Capabilities 自动签名，并在指定真机上 Build For Testing。成功后再回到原 CLI 验证；不要修改已安装上游源码。个人签名值只放本机任务配置。
+若 CLI `xcodebuild` 报 `No Accounts`，先检查 Xcode Apple Accounts，不能直接断言用户未登录。GUI 已登录而新描述文件缺失时，可复制上游包内 `dist/apple` 到本机任务目录（保留相对 Swift package 路径），仅修改副本的 Team，基础 Bundle ID 固定为共享身份，用 Xcode Signing & Capabilities 自动签名，并在指定真机上 Build For Testing。成功后再回到原 CLI 验证；不要修改已安装上游源码。个人签名值只放本机任务配置。
 
 免费开发者签名可能因设备已有 App 数量达到上限而拒绝安装。先列出冲突 App；若要替换旧测试 runner，确认它空闲、找到可恢复安装包并验证签名，依据用户授权再卸载。不能卸载 Runweave/随记来绕过限制，也不能用另一个工具的 Bundle ID 静默覆盖旧 runner。
 

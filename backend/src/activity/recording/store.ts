@@ -1,4 +1,5 @@
 import { resolveActivityRepositories } from "./repository-bindings";
+import { logger } from "../../logging/index";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -131,14 +132,22 @@ export class ActivityStore {
       env,
     });
     try {
-      if (!(await store.integrity())) {
-        throw new Error("activity_integrity_check_failed");
-      }
+      // The worker handles requests only after database and key initialization.
+      // Full integrity scans remain an explicit diagnostic operation.
+      await store.request({ op: "ready" });
       return store;
     } catch (error) {
       // The factory owns the worker until it successfully returns a store.
       store.fail(new Error("activity_store_closed"));
-      await store.close();
+      try {
+        await store.close();
+      } catch (cleanupError) {
+        logger.warn("activity.initialize.cleanup.failed", {
+          component: "activity",
+          message: "Activity initialization failed and worker cleanup also failed",
+          error: cleanupError,
+        });
+      }
       throw error;
     }
   }

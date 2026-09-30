@@ -18,6 +18,7 @@ import uuid
 
 VERSION = "0.21.3"
 sys.dont_write_bytecode = True
+import resources
 
 
 def capture(args, timeout=15):
@@ -97,7 +98,8 @@ def check_developer_tools():
 
 def check_signing(config):
     if not (config.get("teamId") and config.get("runnerId")):
-        raise RuntimeError("UI automation requires --team-id and --runner-id at init; launch does not")
+        raise RuntimeError("UI automation requires --team-id at init; launch does not")
+    resources.shared_runner(config["teamId"], config["runnerId"])
     return "Runner signing identifiers configured; provisioning is not verified"
 
 
@@ -303,8 +305,11 @@ def main():
     options = parser.parse_args()
     root = options.root.resolve()
     if options.action == "init":
-        if bool(options.team_id) != bool(options.runner_id):
-            parser.error("provide both --team-id and --runner-id, or neither for launch-only")
+        if options.runner_id and not options.team_id:
+            parser.error("--runner-id requires --team-id")
+        if options.kind == "device" and options.team_id:
+            with resources.guard():
+                options.runner_id = resources.shared_runner(options.team_id, options.runner_id)
         if not re.fullmatch(r"[A-Za-z0-9-]+", options.udid):
             parser.error("invalid UDID")
         for value in (options.app, options.runner_id):
@@ -321,15 +326,26 @@ def main():
                       "teamId": options.team_id, "runnerId": options.runner_id,
                       "session": "qa-" + uuid.uuid4().hex[:12], "version": VERSION}
             write_json(root / "session.json", config)
+            with resources.guard():
+                resources.register(root)
         print(root)
         return 0
     config = json.loads((root / "session.json").read_text())
     if config.get("version") != VERSION:
         raise RuntimeError("Task was created for a different CLI version; create a new task")
     if options.action == "launch":
-        return launch_app(root, config)
+        if config["kind"] != "device":
+            raise RuntimeError("launch is for physical devices")
+        with resources.physical_operation(root, config):
+            result = launch_app(root, config)
+            resources.finished(root, config)
+            return result
+    if options.action == "run" and config["kind"] == "device":
+        check_signing(config)
     pool = simulator_pool(root, config["kind"])
-    context = pool.operation(root, config["app"], config["udid"]) if pool else nullcontext()
+    context = pool.operation(root, config["app"], config["udid"]) if pool else (
+        resources.physical_operation(root, config) if config["kind"] == "device" and options.action != "check"
+        else nullcontext())
     with context as op:
         if options.action == "check":
             return preflight(root, config)
@@ -337,6 +353,8 @@ def main():
             # Cleanup is allowed even after preflight failed; never stop another state directory.
             close_code = invoke(root, config, ["close"], operation=op)
             stop_code = invoke(root, config, ["daemon", "stop", "--state-dir", str(root / "state"), "--clean"], daemon=True, operation=op)
+            if not (stop_code or close_code) and config["kind"] == "device":
+                resources.finished(root, config)
             return stop_code or close_code
         command = options.command
         private = bool(command and command[0] == "--private")
@@ -363,7 +381,13 @@ def main():
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        result = main()
+        if result == 0 and len(sys.argv) > 1 and sys.argv[1] == "stop":
+            try:
+                resources.prune(apply=True)
+            except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+                print(f"Artifact pruning deferred: {error}", file=sys.stderr)
+        sys.exit(result)
     except (OSError, RuntimeError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
         code = getattr(error, "code", None)
         if code is not None:
