@@ -1,3 +1,4 @@
+import { invalidateTerminalInput } from "../runtime/input-admission";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type {
@@ -20,6 +21,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
       return;
     }
 
+    invalidateTerminalInput(session);
     session.status = "exited";
     session.exitCode = exitCode;
     const lastActivityAt = this.touchSessionActivity(session, "immediate");
@@ -37,6 +39,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
       return;
     }
 
+    invalidateTerminalInput(session);
     session.status = "running";
     session.exitCode = undefined;
     const lastActivityAt = this.touchSessionActivity(session, "immediate");
@@ -90,6 +93,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
       );
     }
     session.cwd = metadata.cwd;
+    invalidateTerminalInput(session);
     session.activeCommand = nextActiveCommand;
     const storedThreadProvider =
       session.threadProvider ?? (session.threadId ? "codex" : undefined);
@@ -282,6 +286,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
     }
 
     if (pi) session.pi = pi;
+    invalidateTerminalInput(session);
     if (nextThreadId) {
       session.threadId = nextThreadId;
       session.threadProvider = nextProvider;
@@ -413,6 +418,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
       return session;
     }
 
+    invalidateTerminalInput(session);
     session.terminalState = terminalState;
     await this.sessionStore.updateSessionTerminalState({
       terminalSessionId,
@@ -479,6 +485,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
     this.pendingActivityUpdates.delete(terminalSessionId);
     this.clearRecentAgentActivitiesForSession(terminalSessionId);
     this.clearPanelAgentOperationState(terminalSessionId);
+    invalidateTerminalInput(session);
     this.sessions.delete(terminalSessionId);
     for (const panel of this.panels.values()) {
       if (panel.terminalSessionId === terminalSessionId) {
@@ -488,6 +495,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
     this.panelWorkspaces.delete(terminalSessionId);
     await this.sessionStore.deletePanelsForSession(terminalSessionId);
     await this.sessionStore.deleteSession(terminalSessionId);
+    await this.observer.onSessionDeleted?.(terminalSessionId);
     return true;
   }
 }

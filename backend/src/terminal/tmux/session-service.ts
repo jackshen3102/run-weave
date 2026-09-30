@@ -7,6 +7,7 @@ import type {
   TmuxRebuildAttempt,
   TmuxSessionInfo,
   TmuxTarget,
+  TmuxPaneTarget,
 } from "./types";
 import { TmuxRebuildLimitError } from "./types";
 import { isNpmProcessEnvName } from "../runtime/env";
@@ -24,6 +25,13 @@ import {
 } from "./internals";
 
 export class TmuxSessionService extends TmuxProcess {
+  async textAttachmentProcessIdentity(target: TmuxPaneTarget): Promise<{ panePid: number; clientPids: number[] }> {
+    const pane = await this.runTmux(["display-message", "-p", "-t", target.paneId, "#{pane_pid}"], target, { sensitiveOutput: true });
+    const clients = await this.runTmux(["list-clients", "-t", target.sessionName, "-F", "#{client_pid}"], target, { sensitiveOutput: true });
+    return { panePid: Number(pane.stdout.trim()), clientPids: clients.stdout.trim().split(/\s+/).filter(Boolean).map(Number) };
+  }
+
+
   buildSessionName(terminalSessionId: string): string {
     const safeId = terminalSessionId
       .trim()

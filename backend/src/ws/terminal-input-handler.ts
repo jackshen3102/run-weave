@@ -1,7 +1,9 @@
+import type { TmuxService } from "../terminal/tmux/service";
+import { resolveTmuxTarget } from "../terminal/runtime/launcher";
 import type { WebSocket } from "ws";
 import type { PtyRuntime } from "../terminal/runtime/pty-service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
-import { beginTerminalInput } from "../terminal/runtime/input-admission";
+import { beginTerminalInput, queueBehindTextAttachment } from "../terminal/runtime/input-admission";
 import type { TerminalOutputBatcher } from "../terminal/runtime/output-batcher";
 import {
   logTerminalPerf,
@@ -27,6 +29,7 @@ interface TerminalInputHandlerOptions {
   inputState: TerminalClientInputState;
   outputBatcher: TerminalOutputBatcher;
   runtime: PtyRuntime;
+  tmuxService?: TmuxService;
   scheduleMetadataSync: () => void;
   socket: WebSocket;
   terminalSessionId: string;
@@ -38,6 +41,7 @@ export function createTerminalInputHandler({
   inputState,
   outputBatcher,
   runtime,
+  tmuxService,
   scheduleMetadataSync,
   socket,
   terminalSessionId,
@@ -71,11 +75,21 @@ export function createTerminalInputHandler({
         const writeStartedAt = performance.now();
         const session = terminalSessionManager.getSession(terminalSessionId);
         if (!session) throw new Error("Terminal session is unavailable");
-        const release = beginTerminalInput(session);
-        try {
-          runtime.write(parsed.data);
-        } finally {
-          release();
+        const panelId = terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId;
+        const panel = panelId ? terminalSessionManager.getPanel(panelId) : undefined;
+        const pane = panel && tmuxService ? { ...resolveTmuxTarget(session, tmuxService), paneId: panel.tmuxPaneId } : null;
+        const queued = queueBehindTextAttachment(session, async () => {
+          if (terminalSessionManager.getSession(session.id) !== session || session.status !== "running") throw new Error("Terminal target exited; queued input was not written");
+          if (pane && tmuxService) {
+            if (terminalSessionManager.getPanel(panel!.id) !== panel || panel!.status !== "running") throw new Error("Terminal panel exited; queued input was not written");
+            await tmuxService.sendKeySequence(pane, [{ type: "literal", value: parsed.data }]);
+          } else runtime.write(parsed.data);
+        });
+        if (queued) {
+          void queued.catch((error) => handleRuntimeActionError(socket, terminalSessionId, "input", error));
+        } else {
+          const release = beginTerminalInput(session);
+          try { runtime.write(parsed.data); } finally { release(); }
         }
         if (/[\r\n]/.test(parsed.data)) {
           scheduleMetadataSync();

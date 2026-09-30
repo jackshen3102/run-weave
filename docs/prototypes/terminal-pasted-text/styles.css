@@ -1,0 +1,629 @@
+:root {
+  color-scheme: dark;
+  --bg: #090d14;
+  --border: #253041;
+  --muted: #7f8da2;
+  --text: #dce4ef;
+  --cyan: #70d9ee;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    sans-serif;
+  font-size: 13px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+button,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  color: inherit;
+}
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+[hidden] {
+  display: none !important;
+}
+.muted {
+  color: var(--muted);
+}
+.spacer {
+  flex: 1;
+}
+i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #6bc3a3;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* Workspace chrome follows the existing terminal prototype. */
+.app {
+  height: 100dvh;
+  min-height: 540px;
+  display: flex;
+  flex-direction: column;
+}
+.topbar {
+  height: 49px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 18px;
+  background: #0f1520;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.brand {
+  font-size: 21px;
+  color: #aebbcf;
+}
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.project {
+  height: 49px;
+  border-bottom: 2px solid #8292a8;
+  padding: 17px 12px;
+}
+.project span {
+  margin-left: 36px;
+  color: #748298;
+}
+.healthy {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #7f9f94;
+}
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 202px minmax(0, 1fr);
+}
+.sidebar {
+  position: relative;
+  background: #0c121c;
+  border-right: 1px solid var(--border);
+  padding: 25px 12px;
+}
+.rail-label {
+  color: #64748b;
+  letter-spacing: 1.5px;
+  font-size: 10px;
+  padding: 0 10px 17px;
+  display: flex;
+  justify-content: space-between;
+}
+.worktree {
+  padding: 13px 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  color: #8795a9;
+  position: relative;
+}
+.worktree.active {
+  background: #172231;
+  border: 1px solid #2d3b4e;
+  color: #e1e9f5;
+}
+.worktree strong {
+  font-size: 12px;
+  font-weight: 500;
+  display: block;
+}
+.worktree small {
+  font:
+    10px ui-monospace,
+    monospace;
+  display: block;
+  margin: 8px 0 0 17px;
+  color: #718299;
+}
+.rail-badge {
+  font-size: 9px;
+  color: #91a7bb;
+  margin: 12px 0 0 17px;
+  display: block;
+}
+.rail-footer {
+  position: absolute;
+  bottom: 20px;
+  left: 22px;
+  font-size: 11px;
+  color: #637287;
+}
+.rail-footer span {
+  display: block;
+  font-size: 10px;
+  margin-top: 5px;
+  color: #45556b;
+}
+.terminal-workspace {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.session-tabs {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: #101722;
+  border-bottom: 1px solid var(--border);
+  padding: 0 14px;
+  font-size: 11px;
+}
+.session {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 2px solid #7895b6;
+}
+.session span {
+  margin: 0 8px 0 20px;
+  color: #6b7c94;
+}
+.terminal-header {
+  height: 42px;
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #192331;
+  font-size: 11px;
+}
+.agent-mark {
+  color: #a8c6b5;
+  margin-right: 7px;
+}
+.agent-status {
+  color: #8c9d91;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+}
+.terminal-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #090e17;
+}
+.terminal-output {
+  padding: 30px 34px 24px;
+  overflow-y: auto;
+  flex: 1;
+  font:
+    12px/1.85 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    "PingFang SC",
+    monospace;
+}
+.command {
+  color: #76869d;
+  margin-bottom: 18px;
+}
+.command span {
+  color: #b4bdcc;
+  margin-right: 14px;
+}
+.codex-header {
+  border: 1px solid #344152;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 19px 14px;
+  border-radius: 5px;
+  color: #8c9db4;
+  font-size: 11px;
+  min-width: 360px;
+}
+.codex-header strong {
+  color: #dce5f1;
+  font-size: 13px;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+.prompt {
+  margin: 30px 0 24px;
+  color: #b5c0ce;
+}
+.prompt span {
+  color: #8c9db4;
+  margin-right: 12px;
+}
+.agent-response {
+  display: flex;
+  gap: 14px;
+}
+.bullet {
+  color: #b7d8c8;
+  font-size: 11px;
+  padding-top: 2px;
+}
+.agent-response p {
+  margin: 0 0 10px;
+}
+.files {
+  margin: 20px 0;
+  color: #708098;
+  font-size: 11px;
+}
+.files span {
+  color: #8ba5c4;
+  margin-right: 12px;
+}
+.result-line {
+  font-size: 11px;
+}
+/* Attachment cards sit above the existing floating input. */
+.composer {
+  margin: 0 24px 22px;
+  border: 1px solid #3b5266;
+  border-radius: 10px;
+  background: #101b2a;
+  box-shadow: 0 8px 28px #0003;
+  flex-shrink: 0;
+  padding: 13px 14px 10px;
+}
+.composer:focus-within {
+  border-color: #527487;
+}
+.attachments {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.attachments:empty {
+  display: none;
+}
+.attachment {
+  display: flex;
+  align-items: center;
+  max-width: 300px;
+  min-width: 254px;
+  background: #19283a;
+  border: 1px solid #34465c;
+  border-radius: 7px;
+  margin-bottom: 11px;
+  overflow: hidden;
+}
+.attachment-open {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+}
+.file-icon {
+  width: 34px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid #597186;
+  border-radius: 4px;
+  background: #213448;
+  color: #a0c6dc;
+  font:
+    9px ui-monospace,
+    monospace;
+  letter-spacing: 0.5px;
+}
+.attachment-text {
+  min-width: 0;
+}
+.attachment-name {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+.attachment-meta {
+  display: block;
+  font-size: 10px;
+  color: #879ab2;
+}
+.attachment-remove {
+  border: 0;
+  background: transparent;
+  margin-right: 7px;
+  color: #8193a9;
+  align-self: flex-start;
+  padding: 6px 4px;
+  font-size: 18px;
+}
+.attachment-open:hover {
+  background: #203249;
+}
+.attachment-remove:hover {
+  color: #fff;
+}
+.input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.input-mark {
+  color: #7189a2;
+  align-self: flex-start;
+  padding-top: 6px;
+  font-size: 17px;
+}
+textarea {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  min-height: 31px;
+  max-height: 96px;
+  resize: none;
+  border: 0;
+  padding: 7px 0 5px;
+  background: transparent;
+  color: #dce6f2;
+  font:
+    12px/1.6 ui-monospace,
+    Menlo,
+    "PingFang SC",
+    monospace;
+  outline: none !important;
+}
+textarea::placeholder {
+  color: #71829a;
+}
+.send {
+  border: 1px solid #427487;
+  background: #214654;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1;
+  color: #bcecf6;
+}
+.send:hover {
+  background: #2a5869;
+}
+.input-status {
+  font-size: 11px;
+  color: #9badc3;
+  padding: 10px 25px 3px;
+}
+.workspace-footer {
+  height: 27px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #192331;
+  padding: 0 16px;
+  color: #5f7189;
+  font:
+    10px ui-monospace,
+    monospace;
+}
+.workspace-footer b {
+  font-weight: 400;
+  margin: 0 8px;
+  color: #3f4d62;
+}
+/* Text preview. */
+dialog {
+  padding: 0;
+  background: #111b29;
+  color: var(--text);
+  border: 1px solid #3a4d64;
+  border-radius: 12px;
+  width: min(760px, calc(100vw - 40px));
+  height: min(650px, calc(100dvh - 80px));
+  box-shadow: 0 24px 100px #0009;
+}
+dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+dialog::backdrop {
+  background: #03070ec9;
+  backdrop-filter: blur(3px);
+}
+.preview-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+h1 {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 6px;
+}
+.preview-header p {
+  margin: 0;
+  font-size: 11px;
+  color: #8194ac;
+}
+.icon-button {
+  background: transparent;
+  border: 0;
+  font-size: 24px;
+  color: #8c9db4;
+  margin-left: auto;
+}
+.preview-header .file-icon {
+  width: 32px;
+  height: 38px;
+}
+pre {
+  margin: 0;
+  padding: 25px 30px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    12px/1.95 ui-monospace,
+    Menlo,
+    "PingFang SC",
+    monospace;
+  color: #bdcada;
+}
+.preview-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding: 16px 22px;
+}
+.button {
+  background: #213146;
+  border: 1px solid #3b4c62;
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 9px 13px;
+}
+.button.primary {
+  background: #285468;
+  border-color: #3c7086;
+  color: #d2f5ff;
+}
+.button.subtle {
+  border-color: transparent;
+  background: transparent;
+  color: #9aadc4;
+}
+#toast {
+  position: fixed;
+  bottom: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #263b4e;
+  border: 1px solid #4a647a;
+  padding: 11px 18px;
+  border-radius: 7px;
+  box-shadow: 0 6px 22px #0005;
+  font-size: 12px;
+  z-index: 5;
+}
+.sent-message {
+  margin-top: 25px;
+  padding: 16px 18px;
+  border-left: 2px solid #48748a;
+  background: #101c2a;
+  white-space: pre-wrap;
+}
+.sent-file {
+  display: block;
+  color: #8dc8da;
+  font-size: 11px;
+  margin-top: 7px;
+}
+.pending {
+  opacity: 0.65;
+}
+@media (max-width: 760px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    display: none;
+  }
+  .healthy {
+    display: none;
+  }
+  .topbar {
+    gap: 13px;
+  }
+  .terminal-output {
+    padding: 24px 20px;
+  }
+  .composer {
+    margin: 0 12px 14px;
+  }
+  .codex-header {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .preview-footer {
+    padding: 12px;
+  }
+  .preview-footer .button {
+    padding: 8px;
+    font-size: 10px;
+  }
+  .attachment {
+    min-width: 230px;
+    max-width: 100%;
+  }
+  pre {
+    padding: 18px;
+  }
+  .topbar .project span {
+    margin-left: 12px;
+  }
+}
+
+#tui-input {
+  padding: 16px;
+  background: #0b1220;
+}
+#tui-input[hidden],
+#tui-notice[hidden] {
+  display: none;
+}
+#tui-draft {
+  width: 100%;
+  min-height: 56px;
+  color: #e2e8f0;
+  background: transparent;
+  border: 0;
+  font: 12px monospace;
+}
+#tui-notice {
+  padding: 12px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 12px;
+}
+#tui-notice button {
+  margin-left: 12px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}

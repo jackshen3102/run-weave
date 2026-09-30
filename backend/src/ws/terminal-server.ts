@@ -507,6 +507,7 @@ export function attachTerminalWebSocketServer(
     heartbeat.start();
 
     handleClientMessage = createTerminalInputHandler({
+      tmuxService,
       clientId,
       inputState,
       outputBatcher,

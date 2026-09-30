@@ -49,6 +49,7 @@ interface UseTerminalEmulatorArgs {
   onTmuxExitCopyModeRequest: () => void;
   onTmuxScrollbackActiveChange: (active: boolean) => void;
   onUserInputData?: (data: string) => void;
+  onTextPaste: (event: ClipboardEvent, purpose: "tui") => boolean;
   onViewportResizeRef: MutableRef<(() => void) | undefined>;
   paneWorkspaceRef: MutableRef<TerminalPanelWorkspace | null>;
   openTerminalLinkRef: MutableRef<(uri: string) => void>;
@@ -82,6 +83,7 @@ export function useTerminalEmulator({
   onTmuxExitCopyModeRequest,
   onTmuxScrollbackActiveChange,
   onUserInputData,
+  onTextPaste,
   onViewportResizeRef,
   openTerminalLinkRef,
   openTerminalFileLinkRef,
@@ -355,6 +357,7 @@ export function useTerminalEmulator({
     window.addEventListener("focus", refreshTerminalViewport);
 
     const handlePaste = (event: ClipboardEvent) => {
+      if (onTextPaste(event, "tui")) return;
       const imageItem = Array.from(event.clipboardData?.items ?? []).find(
         (item) => item.kind === "file" && item.type.startsWith("image/"),
       );
@@ -471,7 +474,7 @@ export function useTerminalEmulator({
         };
       }
     };
-    helperTextarea?.addEventListener("paste", handlePasteEvent, true);
+    container.addEventListener("paste", handlePasteEvent, true);
     helperTextarea?.addEventListener(
       "compositionstart",
       handleCompositionStart,
@@ -504,7 +507,7 @@ export function useTerminalEmulator({
       }
       document.removeEventListener("visibilitychange", refreshTerminalViewport);
       window.removeEventListener("focus", refreshTerminalViewport);
-      helperTextarea?.removeEventListener("paste", handlePasteEvent, true);
+      container.removeEventListener("paste", handlePasteEvent, true);
       helperTextarea?.removeEventListener(
         "compositionstart",
         handleCompositionStart,
@@ -551,6 +554,7 @@ export function useTerminalEmulator({
     onTmuxExitCopyModeRequest,
     onTmuxScrollbackActiveChange,
     onUserInputData,
+  onTextPaste,
     onViewportResizeRef,
     openTerminalLinkRef,
     openTerminalFileLinkRef,

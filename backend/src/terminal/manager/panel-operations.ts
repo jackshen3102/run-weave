@@ -1,3 +1,4 @@
+import { invalidateTerminalInput } from "../runtime/input-admission";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalAgentKind, TerminalState } from "@runweave/shared/terminal/state";
 import {
@@ -43,6 +44,8 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
   async upsertPanelWorkspace(
     workspace: TerminalPanelWorkspaceRecord,
   ): Promise<TerminalPanelWorkspaceRecord> {
+    const inputSession = this.getSession(workspace.terminalSessionId);
+    if (inputSession) invalidateTerminalInput(inputSession);
     this.panelWorkspaces.set(workspace.terminalSessionId, {
       ...workspace,
       panelIds: [...workspace.panelIds],
@@ -54,6 +57,8 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
   }
 
   async upsertPanel(panel: TerminalPanelRecord): Promise<TerminalPanelRecord> {
+    const inputSession = this.getSession(panel.terminalSessionId);
+    if (inputSession) invalidateTerminalInput(inputSession);
     this.panels.set(panel.id, panel);
     await this.sessionStore.upsertPanel({ panel: toPersistedPanel(panel) });
     return panel;
@@ -70,6 +75,8 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     if (workspace.activePanelId === panelId) {
       return workspace;
     }
+    const inputSession = this.getSession(terminalSessionId);
+    if (inputSession) invalidateTerminalInput(inputSession);
     workspace.activePanelId = panelId;
     await this.sessionStore.updatePanelWorkspace({
       workspace: toPersistedPanelWorkspace(workspace),
@@ -110,6 +117,8 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     if (!panel) {
       return;
     }
+    const inputSession = this.getSession(panel.terminalSessionId);
+    if (inputSession) invalidateTerminalInput(inputSession);
     panel.status = "exited";
     panel.exitCode = exitCode;
     panel.lastActivityAt = new Date();
@@ -143,6 +152,8 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
       return panel;
     }
 
+    const inputSession = this.getSession(panel.terminalSessionId);
+    if (inputSession) invalidateTerminalInput(inputSession);
     if (nextThreadId) {
       panel.threadId = nextThreadId;
       panel.threadProvider = nextProvider;
@@ -219,6 +230,8 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
       return panel;
     }
 
+    const inputSession = this.getSession(panel.terminalSessionId);
+    if (inputSession) invalidateTerminalInput(inputSession);
     panel.lastThreadId = nextThreadId;
     panel.lastThreadProvider = nextProvider;
     panel.lastThreadStatus = status;
@@ -251,6 +264,8 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
       return panel;
     }
 
+    const inputSession = this.getSession(panel.terminalSessionId);
+    if (inputSession) invalidateTerminalInput(inputSession);
     panel.terminalState = terminalState;
     await this.sessionStore.updatePanelTerminalState({
       panelId,

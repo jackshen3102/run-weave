@@ -285,6 +285,7 @@ export function TerminalSurface({
     sendInput(data);
   });
   const floatingComposer = useTerminalFloatingComposerController({
+    active,
     activeCommand,
     apiBase,
     clientMode,
@@ -400,6 +401,7 @@ export function TerminalSurface({
     onBufferTypeChange: floatingComposer.setBufferType,
     onViewportResizeRef,
     onUserInputData: floatingComposer.handleUserInputData,
+    onTextPaste: floatingComposer.textAttachments.capture,
     openTerminalLinkRef,
     openTerminalFileLinkRef,
     paneWorkspaceRef,
@@ -537,6 +539,7 @@ export function TerminalSurface({
       controls={
         <TerminalFloatingComposer
           diagnostics={floatingComposer.diagnostics}
+          textAttachments={floatingComposer.textAttachments}
           draft={floatingComposer.draft}
           sending={floatingComposer.sending}
           sendError={floatingComposer.sendError}

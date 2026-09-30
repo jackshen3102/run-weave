@@ -25,7 +25,7 @@ import type {
 } from "../tmux/service";
 import type { TmuxOutputWatcher } from "../tmux/output-watcher";
 import type { TerminalStateService } from "../state/terminal-state-service";
-import { beginTerminalInput } from "../runtime/input-admission";
+import { beginTerminalInput, queueBehindTextAttachment } from "../runtime/input-admission";
 import {
   buildTerminalInputOperationId,
   TERMINAL_INTERRUPT_ESCAPE_INPUT,
@@ -40,6 +40,9 @@ const PROMPT_PASTE_CHUNK_SIZE = 3000;
 type TerminalInputDispatchOptions = {
   /** Internal shell launch after a pane respawn, before command observation catches up. */
   agentLaunch?: boolean;
+  textAttachmentLease?: boolean;
+  textAttachmentQueueDrain?: boolean;
+  beforeTextAttachmentWrite?: () => void;
   ptyService?: PtyService;
   runtimeRegistry?: TerminalRuntimeRegistry;
   tmuxService?: TmuxService;
@@ -213,8 +216,19 @@ export async function sendInputToSession(
     throw new Error("Terminal tmux service unavailable");
   }
 
+  if (!options.textAttachmentLease && !options.textAttachmentQueueDrain) {
+    const panelId = terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId;
+    const panel = panelId ? terminalSessionManager.getPanel(panelId) : undefined;
+    const fixedPane = paneTarget ?? (panel && options.tmuxService ? { ...resolveTmuxTarget(session, options.tmuxService), paneId: panel.tmuxPaneId } : undefined);
+    let result: SendTerminalInputResponse | undefined;
+    const queued = queueBehindTextAttachment(session, async () => {
+      if (terminalSessionManager.getSession(session.id) !== session || session.status !== "running") throw new Error("Terminal target exited; input was not written");
+      result = await sendInputToSession(terminalSessionManager, { ...options, textAttachmentQueueDrain: true }, session, data, mode, operationId, fixedPane, submit, submitKey, expectedThreadId);
+    });
+    if (queued) { await queued; return result!; }
+  }
   const release =
-    mode === "tmux_exit_copy_mode" ? () => {} : beginTerminalInput(session);
+    mode === "tmux_exit_copy_mode" || options.textAttachmentLease ? () => {} : beginTerminalInput(session);
   try {
     const ensured = await ensureTerminalRuntime({
       session,
@@ -321,6 +335,7 @@ export async function sendInputToSession(
       } else if (mode === "prompt_replace") {
         // Replace the prompt only after leaving scrollback on the same target pane.
         await options.tmuxService.cancelCopyMode(target, { strict: true });
+        options.beforeTextAttachmentWrite?.();
         await options.tmuxService.sendKeySequence(
           target,
           buildPromptReplaceSequence(data, submit === true, submitKey),
@@ -372,4 +387,16 @@ export async function sendInputToSession(
   } finally {
     release();
   }
+}
+
+/** Caller owns input admission and supplies a fixed pane; never submits or replaces a draft. */
+export async function pasteTextAttachmentReference(
+  tmux: TmuxService,
+  target: TmuxPaneTarget,
+  reference: string,
+  recheck: () => void,
+): Promise<void> {
+  await tmux.cancelCopyMode(target, { strict: true });
+  recheck();
+  await tmux.sendKeySequence(target, [{ type: "literal", value: buildPromptPasteInput(reference) }]);
 }

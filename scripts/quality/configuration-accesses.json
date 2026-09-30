@@ -1040,6 +1040,38 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFileSync(filePath)"
   },
   {
+    "file": "backend/src/terminal/attachments/text-attachment-service.ts",
+    "kind": "file-io",
+    "expression": "handle.readFile()",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "受管理的 Terminal 附件正文或归属与操作回执 metadata；业务运行数据，不作为持久配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/attachments/text-attachment-service.ts",
+    "kind": "file-io",
+    "expression": "handle.writeFile(data)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "受管理的 Terminal 附件正文或归属与操作回执 metadata；业务运行数据，不作为持久配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/attachments/text-attachment-service.ts",
+    "kind": "file-io",
+    "expression": "this.readFile(path.join(directory, \"metadata.json\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "受管理的 Terminal 附件正文或归属与操作回执 metadata；业务运行数据，不作为持久配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/attachments/text-attachment-service.ts",
+    "kind": "file-io",
+    "expression": "this.readFile(this.describe(record).filePath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "受管理的 Terminal 附件正文或归属与操作回执 metadata；业务运行数据，不作为持久配置来源。"
+  },
+  {
     "file": "backend/src/terminal/git/home-branch-status.ts",
     "kind": "environment-forward",
     "expression": "...process.env",

@@ -12,6 +12,7 @@ Activity、Evolution、认证与工作历史等运行时能力。
 - HTTP 边界：`src/routes/`
 - WebSocket 边界：`src/ws/`
 - Terminal 运行时：`src/terminal/`
+- Terminal 长文本文件、执行资格与交付恢复：[文本附件合同](docs/terminal-text-attachments.md)
 - Agent Team / Loop Engine：`src/agent-team/`
 - 定时任务：`src/scheduled-tasks/`；独立 SQLite、调度、provider 执行与普通终端恢复
 - 跨运行时合同：`../packages/shared/`
