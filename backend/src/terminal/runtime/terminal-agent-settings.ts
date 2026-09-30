@@ -217,7 +217,7 @@ async function selectRow(
 ): Promise<void> {
   const rows = menuRows(menu);
   const desired = rows.find((row) => predicate(row.label));
-  if (!desired) fail(409, "model_unavailable", "模型菜单与当前目录不一致，请稍后重试");
+  if (!desired) fail(409, "model_unavailable", "Agent 菜单中未找到所选选项，请刷新设置后重试");
   if (!searchable && desired.number <= 9) {
     await press(tmux, pane, String(desired.number));
     return;
@@ -297,8 +297,13 @@ async function chooseModelAndEffort(
         (label) => label.includes(wasMax ? "/ Max" : "/ Standard"), false);
     }
     } else {
+      // Codex renders display names, which can differ from catalog IDs.
+      const names = [model.id, model.label].map((name) => name.toLowerCase());
       await selectRow(tmux, target.pane, menu,
-        (label) => label.startsWith(model.id + " ") || label === model.id, false);
+        (label) => names.some((name) => {
+          const text = label.toLowerCase();
+          return text === name || text.startsWith(name + " ");
+        }), false);
     }
     await chooseEffort(tmux, target.pane, effort);
     submitted = true;
