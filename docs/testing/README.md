@@ -42,6 +42,12 @@ pnpm testplan:verify
 静态门禁不是 UI 或运行行为证据。测试计划要求浏览器或桌面行为时，必须按根 `AGENTS.md`
 执行真实环境验证并保留计划要求的证据。
 
+终端长文本附件以[专项计划](./terminal/runtime/text-attachments.testplan.yaml)和
+[既有输入回归](./terminal/runtime/activity-composer.testplan.yaml)为验收合同。当前本地能力仍未完成
+整体验收：TXT-014 缺完整 runtime 退出/删除证据，TAC-003 缺真实 Run 前提且后续回归未执行；
+`pnpm backend:verify-lifecycle` 在既有 Activity 初始化检查失败。远端能力保持关闭。
+这些未闭环项不能由格式校验、构建或原型交互判为通过。
+
 YouTube 阅读稿的[验收计划](./skills/youtube-reading.testplan.yaml)要求区分脚本产物、
 字幕与画面对照、实际音频抽听；来源段映射完整不等于语义或听辨准确。未完成抽听的用例
 不得标为通过。技能的当前操作合同见 [youtube-reading](../../plugins/toolkit/skills/youtube-reading/SKILL.md)。
