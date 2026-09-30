@@ -8,7 +8,6 @@ final class TerminalAgentSettingsModel: ObservableObject {
   @Published private(set) var response: TerminalAgentSettingsResponse?
   @Published private(set) var page: Page = .input
   @Published private(set) var selectedModelID: String?
-  @Published private(set) var loading = false
   @Published private(set) var saving = false
   @Published private(set) var error: String?
 
@@ -39,23 +38,21 @@ final class TerminalAgentSettingsModel: ObservableObject {
   func refresh(session: AppSession, terminalID: String) async {
     guard let api = session.api, session.terminal?.id == terminalID else { return }
     let generation = session.generation
-    if response == nil { loading = true }
-    defer { loading = false }
     do {
       let next = try await api.terminalAgentSettings(id: terminalID)
       guard !Task.isCancelled, session.generation == generation,
         session.api === api, session.terminal?.id == terminalID,
         next.settings.terminalSessionId == terminalID else { return }
       if !saving {
-        response = next
-        if page == .input { error = nil }
+        if response != next { response = next }
+        if page == .input, error != nil { error = nil }
       }
     } catch {
       guard !Task.isCancelled, session.generation == generation,
         session.api === api, session.terminal?.id == terminalID else { return }
       if let failure = error as? TerminalAgentSettingsFailure,
         failure.code == "agent_settings_unavailable" {
-        response = nil
+        if response != nil { response = nil }
       } else if page != .input {
         self.error = displayError(error)
       }

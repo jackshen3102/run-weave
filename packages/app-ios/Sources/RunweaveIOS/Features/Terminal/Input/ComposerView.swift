@@ -121,7 +121,9 @@ struct ComposerView: View {
           }.font(.caption).disabled(!state.snapshot.canWrite)
         }
       #endif
-      quickReplyBar
+      if verticalSizeClass != .compact, !quickInputs.items.isEmpty {
+        quickReplyBar
+      }
       if hasAccessories {
         // On cramped keyboards/landscape, secondary content yields space to the editor and toolbar.
         ScrollView(.vertical) {
@@ -211,31 +213,18 @@ struct ComposerView: View {
 
   private var quickReplyBar: some View {
     HStack(spacing: 8) {
-      if verticalSizeClass != .compact {
-        ForEach(quickInputs.items.prefix(3)) { item in
-          Button { insertReply(item) } label: {
-            Text(item.title).lineLimit(1).truncationMode(.tail)
-              .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 44)
-              .background(TerminalAppearance.panel)
-              .clipShape(RoundedRectangle(cornerRadius: 12))
-          }
-          .accessibilityLabel(item.title)
-          .accessibilityHint("在光标处插入快捷回复，不会发送")
-          .accessibilityIdentifier("quick-reply-pinned-\(item.id)")
-          .disabled(!quickInputs.canEdit(session))
+      ForEach(quickInputs.items.prefix(3)) { item in
+        Button { insertReply(item) } label: {
+          Text(item.title).lineLimit(1).truncationMode(.tail)
+            .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 44)
+            .background(TerminalAppearance.panel)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
+        .accessibilityLabel(item.title)
+        .accessibilityHint("在光标处插入快捷回复，不会发送")
+        .accessibilityIdentifier("quick-reply-pinned-\(item.id)")
+        .disabled(!quickInputs.canEdit(session))
       }
-      Button {
-        editing = false
-        pendingReply = nil
-        showingReplies = true
-      } label: {
-        Text(quickInputs.items.isEmpty ? "快捷回复" : "全部")
-          .frame(minWidth: 44, minHeight: 44)
-      }
-      .accessibilityLabel("全部快捷回复")
-      .accessibilityIdentifier("quick-reply-open")
-      if quickInputs.items.isEmpty || verticalSizeClass == .compact { Spacer(minLength: 0) }
     }
     .font(.subheadline)
     .buttonStyle(.plain)
@@ -260,20 +249,22 @@ struct ComposerView: View {
           .background(composerMeasurement("editor"))
         }
         HStack(spacing: 2) {
-          attachment
+          actionsMenu(attachment: attachment)
+            .layoutPriority(1)
           if let summary = modelSettings.summary {
             Button {
               editing = false
               modelSettings.showModels()
             } label: {
-              Text(summary).font(.caption.weight(.medium)).lineLimit(1)
-                .frame(minHeight: 44)
+              Text(summary).font(.caption.weight(.medium)).lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
             .accessibilityLabel("当前终端模型与推理强度：\(summary)")
             .accessibilityIdentifier("terminal-agent-settings-open")
             .disabled(modelSettings.saving)
           }
-          controls
+          Spacer(minLength: 0)
+          controls.layoutPriority(1)
         }
       }
     }
@@ -301,8 +292,26 @@ struct ComposerView: View {
     }
   }
 
-  private var controls: some View {
-    HStack(spacing: 2) {
+  private func actionsMenu(attachment: AnyView) -> some View {
+    Menu {
+      attachment
+      Button {
+        editing = false
+        pendingReply = nil
+        showingReplies = true
+      } label: {
+        Label("快捷指令", systemImage: "text.bubble")
+      }
+      .accessibilityIdentifier("quick-reply-open")
+      .disabled(preventsDismissal || state.snapshot.inputBusy)
+      if let key = state.snapshot.queueKey {
+        Button { submit(queue: true) } label: {
+          Label("排队", systemImage: "text.badge.plus")
+        }
+        .accessibilityIdentifier("terminal-composer-queue")
+        .accessibilityHint(key == .tab ? "使用 Tab 加入 Agent 原生队列" : "使用 Alt+Enter 加入 Agent 原生队列")
+        .disabled(sendDisabled || !hasContent || state.snapshot.inputBusy)
+      }
       Button {
         showingInstantReplies.toggle()
         if showingInstantReplies {
@@ -310,17 +319,24 @@ struct ComposerView: View {
           onClose()
         }
       } label: {
-        Image(systemName: "bolt.fill")
-          .foregroundColor(showingInstantReplies ? TerminalAppearance.accent : .secondary)
-          .frame(width: 44, height: 44)
-          .background(showingInstantReplies ? TerminalAppearance.accent.opacity(0.14) : .clear)
-          .clipShape(RoundedRectangle(cornerRadius: 12))
+        Label(showingInstantReplies ? "收起一键回复" : "展开一键回复", systemImage: "bolt.fill")
       }
       .accessibilityLabel(showingInstantReplies ? "收起一键回复" : "展开一键回复")
       .accessibilityValue(showingInstantReplies ? "已展开" : "已收起")
       .accessibilityHint("在终端底部显示可以和继续，点击立即发送")
       .accessibilityIdentifier("terminal-instant-replies-toggle")
       .disabled(closeDisabled || state.snapshot.inputBusy)
+    } label: {
+      Image(systemName: "plus")
+        .foregroundColor(TerminalAppearance.accent)
+        .frame(width: 44, height: 44)
+    }
+    .accessibilityLabel("更多输入操作")
+    .accessibilityIdentifier("terminal-composer-actions")
+  }
+
+  private var controls: some View {
+    HStack(spacing: 2) {
       Button {
         showingShortcuts.toggle()
       } label: {
@@ -333,16 +349,6 @@ struct ComposerView: View {
       .accessibilityLabel(showingShortcuts ? "收起快捷键" : "展开快捷键")
       .accessibilityValue(showingShortcuts ? "已展开" : "已收起")
       .accessibilityIdentifier("terminal-shortcuts-toggle")
-      Spacer(minLength: 0)
-      if let key = state.snapshot.queueKey {
-        Button { submit(queue: true) } label: {
-          Image(systemName: "text.badge.plus").frame(width: 44, height: 44)
-        }
-        .accessibilityLabel("排队")
-        .accessibilityIdentifier("terminal-composer-queue")
-        .accessibilityHint(key == .tab ? "使用 Tab 加入 Agent 原生队列" : "使用 Alt+Enter 加入 Agent 原生队列")
-        .disabled(sendDisabled || !hasContent || state.snapshot.inputBusy)
-      }
       sendButton
     }
     .buttonStyle(TerminalControlButtonStyle())

@@ -29,12 +29,12 @@ extension AppSession {
         continue
       }
       bellTasks[id]?.cancel()
-      bellMarkers.insert(id)
+      if !bellMarkers.contains(id) { bellMarkers.insert(id) }
       let epoch = generation
       bellTasks[id] = Task { [weak self] in
         do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
         guard let self, self.generation == epoch else { return }
-        self.bellMarkers.remove(id)
+        if self.bellMarkers.contains(id) { self.bellMarkers.remove(id) }
         self.bellTasks.removeValue(forKey: id)
       }
     }
@@ -42,12 +42,12 @@ extension AppSession {
 
   func clearBellMarker(_ id: String) {
     bellTasks.removeValue(forKey: id)?.cancel()
-    bellMarkers.remove(id)
+    if bellMarkers.contains(id) { bellMarkers.remove(id) }
   }
 
   func clearBellMarkers() {
     for task in bellTasks.values { task.cancel() }
     bellTasks.removeAll()
-    bellMarkers.removeAll()
+    if !bellMarkers.isEmpty { bellMarkers.removeAll() }
   }
 }
