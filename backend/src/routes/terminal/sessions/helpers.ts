@@ -31,6 +31,7 @@ export const updateTerminalSessionSchema = z
 export const sendTerminalInputSchema = z
   .object({
     data: z.string(),
+    textAttachmentIds: z.array(z.string().uuid()).min(1).max(20).optional(),
     expectedThreadId: z.string().trim().min(1).max(200).optional(),
     mode: z
       .enum([

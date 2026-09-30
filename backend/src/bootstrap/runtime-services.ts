@@ -1,3 +1,5 @@
+import { TerminalTextAttachmentService } from "../terminal/attachments/text-attachment-service";
+import { TerminalTextAttachmentDelivery } from "../terminal/attachments/text-attachment-delivery";
 import { settingText, configuration } from "@runweave/config-node";
 import type { RuntimeServices } from "./runtime-services-contract";
 export type { RuntimeServices } from "./runtime-services-contract";
@@ -173,9 +175,11 @@ async function assembleRuntimeServices(
   );
   const terminalEventService = new TerminalEventService();
   let terminalStateService: TerminalStateService | null = null;
+  let textAttachmentFiles: TerminalTextAttachmentService | null = null;
   const terminalSessionManager = new TerminalSessionManager(
     terminalSessionStore,
     {
+      onSessionDeleted: async (id) => { await textAttachmentFiles?.deleted(id); },
       onBell: ({ terminalSessionId, projectId, count }) => {
         terminalEventService.record({
           kind: "terminal_bell",
@@ -266,6 +270,11 @@ async function assembleRuntimeServices(
   });
   resources.defer("tmux-output-watcher", () => tmuxOutputWatcher.dispose());
   await terminalSessionManager.initialize();
+  textAttachmentFiles = new TerminalTextAttachmentService(path.join(storagePaths.browserProfileDir, "terminal-text-attachments"));
+  resources.defer("terminal-text-attachments", () => textAttachmentFiles?.dispose());
+  await textAttachmentFiles.initialize();
+  const textAttachmentDelivery = new TerminalTextAttachmentDelivery(textAttachmentFiles, terminalSessionManager, tmuxService, terminalRuntimeRegistry, ptyService);
+  resources.defer("terminal-text-attachment-delivery", () => textAttachmentDelivery.dispose());
   const terminalSnapshotShareService = createTerminalSnapshotShares(resources, terminalSessionManager, tmuxService);
   const workspaceServiceManager = new RuntimeStatusWorkspaceServiceManager(
     terminalSessionManager,
@@ -486,6 +495,7 @@ async function assembleRuntimeServices(
     ...deviceMonitoring,
     start: (controlPlaneBaseUrl) => {
       if (disposed) return;
+      textAttachmentFiles?.start();
       activity.start();
       agentTeamService.initialize();
       evolutionRuntime.start(controlPlaneBaseUrl);
@@ -521,6 +531,7 @@ async function assembleRuntimeServices(
     appServerHistoryGateway,
     workHistoryService,
     taskHandoffService,
+    textAttachmentDelivery,
     terminalEventService,
     terminalCompletionEventService,
     attentionService,

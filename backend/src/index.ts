@@ -329,6 +329,7 @@ function createHttpApp(
     "/api/terminal",
     requireAuth,
     createTerminalRouter(services.terminalSessionManager, {
+      textAttachmentDelivery: services.textAttachmentDelivery,
       ptyService: services.ptyService,
       runtimeRegistry: services.terminalRuntimeRegistry,
       tmuxService: services.tmuxService,

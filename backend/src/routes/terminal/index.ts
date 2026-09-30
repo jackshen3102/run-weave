@@ -1,3 +1,4 @@
+import type { TerminalTextAttachmentDelivery } from "../../terminal/attachments/text-attachment-delivery";
 import { registerTerminalSessionUpdateRoute } from "./sessions/update";
 import { Router } from "express";
 import { registerBrowserAssistanceRoutes } from "./browser-assistance";
@@ -108,6 +109,7 @@ async function readTerminalHistory(
 export function createTerminalRouter(
   terminalSessionManager: TerminalSessionManager,
   options?: {
+    textAttachmentDelivery?: TerminalTextAttachmentDelivery;
     ptyService?: PtyService;
     runtimeRegistry?: TerminalRuntimeRegistry;
     tmuxService?: TmuxService;

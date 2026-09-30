@@ -9,6 +9,7 @@
 - 页面级入口：`src/pages/`
 - 定时任务 Web 接入与后端依赖边界：[scheduled-tasks.md](docs/scheduled-tasks.md)
 - 普通终端任务交接：[task-handoff.md](docs/task-handoff.md)
+- 长文本粘贴、双入口与草稿恢复：[terminal-text-attachments.md](docs/terminal-text-attachments.md)
 - Web 自动采集配置、部署与验收：[clarity-autocapture.md](docs/clarity-autocapture.md)
 - 按能力聚合的状态与 UI：`src/features/`
 - 后端 HTTP 调用：`src/services/`

@@ -259,3 +259,34 @@ export async function createTerminalSessionClipboardImage(
     },
   );
 }
+
+export async function terminalTextAttachmentRequest<T>(
+  apiBase: string, token: string, sessionId: string, suffix: string,
+  method = "GET", payload?: unknown,
+): Promise<T> {
+  return requestJson<T>(apiBase, `/api/terminal/session/${encodeURIComponent(sessionId)}/text-attachments${suffix}`, {
+    method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }), signal: AbortSignal.timeout(20_000),
+  });
+}
+
+export async function terminalTextAttachmentAction(
+  apiBase: string, token: string, sessionId: string, id: string, action: "release" | "retain",
+): Promise<void> {
+  return requestVoid(apiBase, `/api/terminal/session/${encodeURIComponent(sessionId)}/text-attachments/${encodeURIComponent(id)}${action === "retain" ? "/retain" : ""}`, {
+    method: action === "retain" ? "POST" : "DELETE", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000),
+  });
+}
+
+export async function readTerminalTextAttachment(
+  apiBase: string, token: string, sessionId: string, attachment: import("@runweave/shared/terminal/text-attachments").TerminalTextAttachment,
+): Promise<string> {
+  const { requestText } = await import("../http");
+  const text = await requestText(apiBase, `/api/terminal/session/${encodeURIComponent(sessionId)}/text-attachments/${encodeURIComponent(attachment.id)}/content`, {
+    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000),
+  });
+  const bytes = new TextEncoder().encode(text);
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  if (text.length !== attachment.utf16Length || bytes.length !== attachment.utf8Bytes || hash !== attachment.sha256) throw new Error("附件内容校验失败");
+  return text;
+}

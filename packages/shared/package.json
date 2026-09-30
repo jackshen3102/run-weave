@@ -39,6 +39,7 @@
     "./terminal/agent-settings": "./src/terminal/agent-settings.ts",
     "./terminal/completion": "./src/terminal/runtime/completion.ts",
     "./terminal/events": "./src/terminal/runtime/events.ts",
+    "./terminal/text-attachments": "./src/terminal/runtime/text-attachments.ts",
     "./terminal/input": "./src/terminal/runtime/input.ts",
     "./terminal/snapshot-share": "./src/terminal/snapshot-share.ts",
     "./terminal/panel": "./src/terminal/panel.ts",

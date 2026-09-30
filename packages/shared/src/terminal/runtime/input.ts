@@ -69,6 +69,7 @@ export interface UpdateTerminalQuickInputRequest {
 }
 
 export interface SendTerminalInputRequest {
+  textAttachmentIds?: string[];
   data: string;
   /** Reject handoff input when the Codex thread is no longer idle or has changed. */
   expectedThreadId?: string;

@@ -1,3 +1,4 @@
+import { invalidateTerminalInput } from "../runtime/input-admission";
 import { randomUUID } from "node:crypto";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal-protocol";
 import type { TerminalState } from "@runweave/shared/terminal/state";
@@ -194,6 +195,7 @@ export async function ensureTmuxPanelWorkspace(
         shouldClearAgentThreadMetadata ||
         shouldBackfillSessionAgentMetadata
       ) {
+        invalidateTerminalInput(session);
         const updatedAt = new Date();
         if (previousActiveCommand !== effectiveActiveCommand) {
           await terminalSessionManager.observePanelActiveCommand(

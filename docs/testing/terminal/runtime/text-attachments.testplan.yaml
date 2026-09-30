@@ -1,0 +1,234 @@
+version: 1
+name: 终端长文本附件验收
+description: >
+  验证 Codex 浮动输入框及直接 TUI 粘贴共用
+  Backend txt 存储，且目标绑定、原文保留、交付结果和清理边界可靠。所有用例独立建立测试
+  session；浏览器使用 toolkit:playwright-cli，Dev Session 使用 toolkit:runweave-dev-session。
+cases:
+  - id: TXT-001
+    name: 长度阈值和原文字节保持一致
+    required: true
+    description: 验证纯文本以 UTF-16 长度判定附件化，落盘保存完整 UTF-8 原文。
+    preconditions:
+      - 已取得包含本功能的真实 Dev Session 和空闲 Codex 浮动输入框，执行环境能力已启用。
+      - 已准备 4999 与 5000 个 ASCII 字符、2500 个 emoji，以及超过阈值且含中文、CRLF、制表符的原文及其 UTF-8 哈希。
+    steps:
+      - 使用 $toolkit:playwright-cli 逐个粘贴样本，每次独立清空测试草稿；确认 4999 字符保持文本，其余生成单份附件。
+      - 读取各附件实际 Backend 文件；确认字节数和哈希与对应原文完全相同，无换行转换或裁剪。
+      - 预览含特殊字符附件；确认以纯文本显示，HTML 字样不作为 DOM 执行。
+
+  - id: TXT-002
+    name: 浮动附件编辑保持草稿与附件独立
+    required: true
+    description: 验证多附件定向移除和全文恢复不会改动其他附件或无关草稿。
+    preconditions:
+      - 真实 Dev Session 的空闲 Codex 浮动输入框已有一段可辨识文字，且能力已启用。
+      - 已准备两份同长度但正文不同的长文本。
+    steps:
+      - 使用 $toolkit:playwright-cli 依次粘贴两份正文；确认两个 ID 不同的附件均保存成功，原文字未变。
+      - 选中原文字中间的一段，将第一份附件放回输入框；确认仅该选区替换为完整原文，第一份附件移除，第二份保留。
+      - 移除第二份附件；确认恢复后的正文不变，没有向 TUI 发送输入。
+
+  - id: TXT-003
+    name: 浮动输入器提交真实可读附件
+    required: true
+    description: 验证发送或排队提交附件 ID，Codex 能读取真实文件，成功后才消费对应草稿。
+    preconditions:
+      - 真实 Dev Session 中已启用本地 Codex 附件能力，能够观察 input 请求和 Agent 工具读取结果。
+      - 已准备包含唯一首尾标记的长文本及读取首尾标记的简短指令。
+    steps:
+      - 使用 $toolkit:playwright-cli 粘贴长文本并填写读取指令，点击发送；确认 input 携带附件 ID 且提交一次。
+      - 观察实际 Agent 工具读取及回答；确认文件首尾标记一致，成功响应后对应草稿与卡片清空。
+      - 在该测试 session 新建仅含附件的草稿；确认发送可用。再以新草稿执行排队入口；确认两种入口均经过相同附件归属校验和保护，未将全文展开入 TUI。
+
+  - id: TXT-004
+    name: 不打开浮动输入框也能粘贴附件
+    required: true
+    description: 验证直接 TUI 在原编辑位置插入一次短引用，保留已有草稿且不自动提交。
+    preconditions:
+      - 真实 Dev Session 中 Codex 空闲、能力已启用，浮动输入框关闭，TUI 已有可辨识未提交草稿。
+      - 已准备含唯一首尾标记的长文本，能够观察原始输入帧和 Agent 工具读取。
+    steps:
+      - 使用 $toolkit:playwright-cli 在真实 xterm 粘贴长文本；确认浮动输入框没有打开，独立提示从保存中变成已插入。
+      - 核对 TUI 草稿和输入帧；确认旧草稿保留，只有一次路径粘贴，无全文、Ctrl-U 或提交 Enter，Codex 没有自行开始任务。
+      - 用户显式补充读取文件首尾标记的指令并提交；确认 Codex 实际读取目标文件且标记一致。
+      - 关闭附件提示；确认已插入路径和真实文件仍存在。
+
+  - id: TXT-005
+    name: 保存期间切换面板不向新目标写入
+    required: true
+    description: 验证提交点之前更换活动 panel 使待插入失效，正文可恢复且两边均无错误输入。
+    preconditions:
+      - 一个真实测试 Terminal 有两个可辨识 panel，原 panel 为启用能力的空闲 Codex。
+      - 可延迟文件创建响应且观察两个 panel 输入；尚未发起 insert。
+    steps:
+      - 使用 $toolkit:playwright-cli 在原 TUI 粘贴长文本，延迟创建响应，切换至另一 panel 后放行响应。
+      - 确认未发起 insert，两个 panel 均未收到该路径；回原 panel 后可看到未插入提示并复制完整原文。
+
+  - id: TXT-006
+    name: 保存期间继续输入取消延迟插入
+    required: true
+    description: 验证用户继续打字或提交后，保存结果不会追加到发生变化的草稿。
+    preconditions:
+      - 真实测试 session 的空闲 Codex TUI 已启用能力，可延迟文件创建响应。
+    steps:
+      - 使用 $toolkit:playwright-cli 粘贴长文本并延迟响应；输入一段短文字后放行响应。
+      - 确认短文字按原生路径完整到达，附件显示未插入，未出现延迟路径且原文仍可复制。
+      - 在同一 session 新建独立草稿，重复延迟粘贴并显式提交一条短指令；确认附件不会进入下一轮输入。
+
+  - id: TXT-007
+    name: 其他客户端输入使旧插入资格失效
+    required: true
+    description: 验证服务端输入 revision 覆盖其他客户端，不能仅依赖本地 generation。
+    preconditions:
+      - 两个独立客户端连接同一真实测试 session 的 Codex panel，能力已启用。
+      - 可暂停客户端 A 创建结束后的 insert 请求，且能从客户端 B 发送真实输入。
+    steps:
+      - 使用 $toolkit:playwright-cli 让 A 创建 TUI 附件并暂停 insert；用 B 输入唯一短文字，确认已被 Backend 接收。
+      - 放行 A 的 insert；确认服务端明确拒绝冲突，短文字未损坏，旧路径未写入且 A 保留恢复项。
+
+  - id: TXT-008
+    name: 交付结果未知时不自动重放
+    required: true
+    description: 验证输入已可能写入而响应丢失时保留文件与恢复项，通过只读查询核对结果。
+    preconditions:
+      - 真实测试 session 的 Codex TUI 已启用能力，可在 Backend 已处理 insert 后丢弃客户端响应。
+      - 能统计写入次数、查询 operationId 并读取 Backend 附件文件。
+    steps:
+      - 使用 $toolkit:playwright-cli 发起长文本粘贴，令 insert 响应中断；确认 UI 没有自动显示成功或发起第二次写入。
+      - 查询原 operationId；确认若有 accepted 回执则只更新原 scope，若 unknown 则提示核对 TUI，均不再写入。
+      - 核对路径最多插入一次，文件未被删除，原文仍可取得；不得通过新 operationId 自动重试。
+
+  - id: TXT-009
+    name: 文件接口限制访问归属
+    required: true
+    description: 验证创建、预览、释放和状态查询均服从既有 Terminal 权限与 session 绑定。
+    preconditions:
+      - 已准备受保护 Backend、有效测试凭据及两个独立测试 session，其中一个已创建附件。
+      - 能以缺少凭据或无权限身份直接调用附件接口。
+    steps:
+      - 使用缺少凭据或无权限身份调用创建、content、retain、DELETE 和 operation 查询；确认被拒绝且响应不泄漏正文。
+      - 使用有效凭据把附件 ID 放入另一个 session 的 content、insert、DELETE 和 input 请求；确认拒绝归属冲突，原文件仍可正常读取。
+      - 提交路径穿越及任意 filePath 字段；确认不能在管理根目录外读写文件。
+
+  - id: TXT-010
+    name: 大小或存储失败不丢原文
+    required: true
+    description: 验证限制及确定的写入失败均不产生悬空引用，不截断正文。
+    preconditions:
+      - 已准备隔离真实 Backend 和空闲 Codex 输入区，允许在该测试附件目录注入配额或写入错误。
+      - 已准备恰好 1 MiB 和超过 1 MiB 的 UTF-8 长文本，可独立恢复磁盘条件。
+    steps:
+      - 使用 $toolkit:playwright-cli 粘贴边界样本；确认 1 MiB 可完整保存，超限样本显示大小原因并可复制完整原文。
+      - 在同一隔离存储 fixture 分别达到 session 配额和制造写入失败；确认每次均不插入路径、不产生成功卡片，原文完整可恢复。
+      - 恢复存储条件，显式重新发起一次保存；确认得到完整文件且没有复用半写文件。
+
+  - id: TXT-011
+    name: 非受支持上下文保持原生粘贴
+    required: true
+    description: 验证自动转换只使用当前 panel 的真实资格，Agent 退出后也不能插入旧路径。
+    preconditions:
+      - 真实测试 Terminal 有 Codex 和普通 shell panel，可在测试 panel 运行 Vim 或手动 SSH 等未确认上下文。
+      - 能观察 capability、创建请求和终端输入，且能延迟 Codex 附件创建响应。
+    steps:
+      - 使用 $toolkit:playwright-cli 在 shell、Vim、未确认远程上下文及正在运行的 Agent 中粘贴长文本；确认没有附件请求，文本走既有行为。
+      - 在空闲 Codex 开始一次延迟保存，退出 Agent 后放行；确认未插入路径，shell 未执行文件引用。
+
+  - id: TXT-012
+    name: 创建与插入的幂等键不重复副作用
+    required: true
+    description: 验证相同操作重复到达时复用结果，不生成多份文件或多次输入。
+    preconditions:
+      - 已取得真实隔离 Backend 的 Codex session 和附件接口访问权，可直接控制 operationId。
+    steps:
+      - 同一 operationId 和 payload 连续提交两次 create；确认返回同一附件 ID，磁盘仅一份正文。
+      - 同一 insert operationId 和 payload 提交两次；确认第二次返回原回执，TUI 路径仅出现一次。
+      - 复用原 operationId 改变正文或目标；确认返回 409，不改动原附件或目标输入。
+
+  - id: TXT-013
+    name: 重启后保护文件且不重放不确定投递
+    required: true
+    description: 验证 Backend 重启是可恢复边界，已引用文件可读，dispatching 不会自动再次写入。
+    preconditions:
+      - 已取得独占的隔离 Dev Session，允许本例停止并重启 Backend，且能够在持久化 dispatching 后暂停投递。
+      - 已有一份确认引用的测试附件，并能记录原文件哈希和 operationId。
+    steps:
+      - 再创建一次投递，在 dispatching 已持久化后停止 Backend；仅对本例拥有的实例操作。
+      - 按 $toolkit:runweave-dev-session 恢复实例并取得 fresh endpoint；使用 $toolkit:playwright-cli 重新附着真实页面。
+      - 读取原确认引用的文件；确认哈希不变。查询中断操作；确认是 unknown 且没有自动输入，文件也未清理。
+
+  - id: TXT-014
+    name: 生命周期清理不提前删除引用
+    required: true
+    description: 验证清理依据引用和明确删除状态，终端退出或关闭提示不会触发已引用文件回收。
+    preconditions:
+      - 独立隔离 Backend 有本例创建的 draft、referenced 和残留临时文件，清理时钟可通过隔离 fixture 驱动。
+      - 仅本例目录允许修改时间及 metadata，其他用户目录不在操作范围。
+    steps:
+      - 令 session 退出但不删除，推进清理时钟超过 7 天；确认 referenced 文件保留，过期无续期 draft 及超过 24 小时临时文件被回收。
+      - 重新建立一份未过期 draft 并续期；确认原截止点清理不会删除它。
+      - 明确删除该测试 session；确认 7 天保留期内 referenced 仍在，超过保留期后才回收。
+      - 在本例目录放入归属不明 metadata；确认清理跳过而非猜测删除。
+
+  - id: TXT-015
+    name: DOM 捕获与既有输入保持单次分发
+    required: true
+    description: 验证根元素和隐藏 textarea 都能捕获长文本，其他粘贴分支不被误拦截。
+    preconditions:
+      - 已启用能力的真实 Codex surface 可观察 DOM paste、网络请求和输入帧，浮动输入框关闭。
+      - 已有可用图片剪贴板样例、短文本及程序化 Preview 引用入口。
+    steps:
+      - 使用 $toolkit:playwright-cli 分别对 xterm 根元素和 helper textarea 分发长文本 paste；每次确认一个 create 和一个 insert，无原正文重复发送。
+      - 分别执行短文本、图片和 Preview 程序注入；确认仍走原分支且不额外创建 txt。
+
+  - id: TXT-016
+    name: 远端 Backend 文件由远端 Agent 读取
+    required: false
+    description: 仅在申请开启远端能力时执行，验证路径归属与真实沙箱读取；未通过保持远端能力关闭。
+    preconditions:
+      - 已准备与浏览器不同机器的受控测试 Backend，其 Codex 由 Runweave 管理且支持本能力验证模式。
+      - 能观察远端文件和 Codex 读取工具，准备含唯一标记与已知哈希的长文本。
+    steps:
+      - 使用 $toolkit:playwright-cli 在远端测试终端粘贴并显式提交读取指令；确认文件存在于远端 Backend 管理目录。
+      - 检查实际远端 Codex 工具读取和回答；确认读取远端路径且标记一致，不依赖浏览器本机同名文件。
+      - 在受限沙箱无法读取的等价环境核对能力；确认能力关闭或明确拒绝，不声称文件可读。
+
+  - id: TXT-017
+    name: 不支持附件的旧 Backend 维持原生输入
+    required: true
+    description: 验证能力协商失败时不拦截原文。
+    preconditions:
+      - 已取得隔离的新 renderer 与不提供附件接口的旧 Backend。
+      - 测试终端无真实用户工作，可观察网络及原始输入。
+    steps:
+      - 使用 $toolkit:playwright-cli 连接旧 Backend 并粘贴长文本；确认按原生文本输入，没有成功附件假象或吞掉正文。
+
+  - id: TXT-018
+    name: 旧客户端输入合同保持兼容
+    required: true
+    description: 验证新增附件协议不改变无附件输入行为。
+    preconditions:
+      - 已取得新 Backend 的隔离测试终端和既有 input 接口访问权，可观察实际输入。
+    steps:
+      - 对新 Backend 发送不带 textAttachmentIds 的旧格式 input；确认原始数据和提交语义不变。
+
+  - id: TXT-019
+    name: copy mode 退出与投递保序
+    required: true
+    description: 验证退出 tmux copy mode 后仅插入一次引用，投递期间到达的后续输入不丢失。
+    preconditions:
+      - 已启用能力的真实 Codex 测试终端进入 tmux copy mode，能控制退出模式到投递之间的延迟并观察输入顺序。
+    steps:
+      - 使用 $toolkit:playwright-cli 粘贴长文本并在 insert 已取得服务端投递资格后短暂暂停写入，再输入唯一短文字。
+      - 放行投递；确认先退出 copy mode，再插入一次路径，再出现完整短文字，无字面 ESC、Ctrl-U 或提交 Enter。
+      - 打开浮动输入框；确认镜像含对应路径且没有重复，或明确标为不可靠并禁用覆盖发送，不能以失真草稿覆盖真实 TUI。
+
+  - id: TXT-020
+    name: 保存中禁止发送且取消不会复活附件
+    required: true
+    description: 验证 pending 附件不能被提交，移除后迟到响应不会重新添加卡片。
+    preconditions:
+      - 真实 Codex 浮动输入框已启用能力，存在文字草稿，可延迟附件创建响应。
+    steps:
+      - 使用 $toolkit:playwright-cli 粘贴长文本并暂停创建响应；确认发送、排队均不可触发且没有 input 请求。
+      - 移除 pending 附件后放行成功响应；确认卡片未复活、文字草稿未变，未引用文件进入释放流程。

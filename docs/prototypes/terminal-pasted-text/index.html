@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>长文本附件 · Runweave</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <span class="brand">⌘</span
+        ><span class="connection"
+          ><i></i> Local Mac <span class="muted">⌄</span></span
+        ><span class="project">Runweave <span>×</span></span
+        ><span class="muted">＋</span><span class="spacer"></span
+        ><span class="muted">随记</span
+        ><span class="healthy"><i></i> Backend 正常</span
+        ><span class="muted">•••</span>
+      </header>
+      <div class="workspace">
+        <aside class="sidebar">
+          <div class="rail-label">WORKTREES <span>⌃</span></div>
+          <div class="worktree active">
+            <strong>⌘ main</strong><small>main</small
+            ><span class="rail-badge">1 terminal</span>
+          </div>
+          <div class="worktree">
+            <strong>⌘ wt-1</strong><small>feat/terminal-input</small>
+          </div>
+          <div class="rail-footer">Runweave<span>本地工作区</span></div>
+        </aside>
+        <section class="terminal-workspace">
+          <div class="session-tabs">
+            <div class="session active">
+              <i></i> 长文本粘贴方案 <span>×</span>
+            </div>
+            <span class="muted">＋</span>
+          </div>
+          <header class="terminal-header">
+            <span
+              ><span class="agent-mark">✳</span> Codex
+              <span class="muted">· main</span></span
+            ><span class="agent-status"><i></i> 等待输入</span>
+          </header>
+          <div class="terminal-stage">
+            <div
+              class="terminal-output"
+              id="terminal-output"
+              aria-label="终端输出"
+            >
+              <div class="command"><span>❯</span> codex</div>
+              <div class="codex-header">
+                <strong>OpenAI Codex</strong><span>GPT-6-Astra · high</span
+                ><span>~/Code/browser-hub/browser-viewer</span>
+              </div>
+              <p class="prompt">
+                <span>›</span> 先调研桌面端长文本粘贴的交互。
+              </p>
+              <div class="agent-response">
+                <span class="bullet">●</span>
+                <div>
+                  <p>已核实桌面端的复制与粘贴链路。</p>
+                  <p>
+                    复制保留回复内容。长文本粘贴到输入框后，会被保存为文本附件。
+                  </p>
+                  <p>附件可以预览、移除，也可以放回输入框继续编辑。</p>
+                  <div class="files">
+                    <span>Read</span> composer · clipboard · attachments
+                  </div>
+                  <p class="muted result-line">调研完成，等待下一步指令。</p>
+                </div>
+              </div>
+            </div>
+            <section class="composer" aria-label="终端输入区">
+              <div
+                id="attachments"
+                class="attachments"
+                aria-label="文本附件"
+              ></div>
+              <div class="input-row">
+                <span class="input-mark" aria-hidden="true">›</span
+                ><textarea
+                  id="draft"
+                  aria-label="终端输入"
+                  placeholder="输入指令…"
+                  rows="1"
+                ></textarea
+                ><button id="send" class="send" aria-label="发送" title="发送">
+                  ↑
+                </button>
+              </div>
+              <div
+                id="input-status"
+                class="input-status"
+                role="status"
+                hidden
+              ></div>
+            </section>
+          </div>
+          <section id="tui-input" hidden>
+            <textarea
+              id="tui-draft"
+              aria-label="TUI 输入"
+              spellcheck="false"
+            ></textarea>
+            <div id="tui-notice" role="status" hidden></div>
+          </section>
+          <footer class="workspace-footer">
+            <span>main <b>/</b> Codex</span><span>UTF-8 <b>·</b> tmux</span>
+          </footer>
+        </section>
+      </div>
+    </main>
+    <dialog id="preview" aria-labelledby="preview-title">
+      <header class="preview-header">
+        <div class="file-icon">TXT</div>
+        <div>
+          <h1 id="preview-title"></h1>
+          <p id="preview-meta"></p>
+        </div>
+        <button id="close-preview" class="icon-button" aria-label="关闭预览">
+          ×
+        </button>
+      </header>
+      <pre id="preview-content" tabindex="0"></pre>
+      <footer class="preview-footer">
+        <button id="remove-preview" class="button subtle">移除附件</button
+        ><span class="spacer"></span
+        ><button id="restore" class="button primary">放回输入框</button>
+      </footer>
+    </dialog>
+    <div id="toast" role="status" hidden></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

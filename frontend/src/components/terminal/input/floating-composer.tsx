@@ -1,3 +1,5 @@
+import type { TerminalTextAttachmentsController } from "../../../features/terminal/input/text-attachments";
+import { TerminalTextAttachments } from "./text-attachments";
 import {
   useEffect,
   useLayoutEffect,
@@ -31,6 +33,7 @@ export interface TerminalFloatingComposerDiagnostics {
 }
 
 interface TerminalFloatingComposerProps {
+  textAttachments: TerminalTextAttachmentsController;
   diagnostics: TerminalFloatingComposerDiagnostics;
   draft: string;
   sending: boolean;
@@ -66,6 +69,7 @@ function resizeTextarea(textarea: HTMLTextAreaElement | null): void {
 }
 
 export function TerminalFloatingComposer({
+  textAttachments,
   diagnostics,
   draft,
   sending,
@@ -114,14 +118,14 @@ export function TerminalFloatingComposer({
       !event.metaKey &&
       ((queueKey === "Tab" && event.key === "Tab" && !event.altKey) ||
         (queueKey === "M-Enter" && event.key === "Enter" && event.altKey));
-    if (queueShortcut && draft.length > 0) {
+    if (queueShortcut && (draft.length > 0 || textAttachments.ids.length > 0)) {
       event.preventDefault();
-      if (!sending) onQueue();
+      if (!sending && !textAttachments.blocked && diagnostics.draftMirrorSupported) onQueue();
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      if (!sending) {
+      if (!sending && !textAttachments.blocked && diagnostics.draftMirrorSupported) {
         onSend();
       }
       return;
@@ -133,6 +137,8 @@ export function TerminalFloatingComposer({
   };
 
   const diagnosticsAttributes = {
+    "data-text-attachment-enabled": String(textAttachments.enabled),
+    "data-text-attachment-capability-reason": textAttachments.capabilityReason ?? "",
     "data-floating-composer-active-command": diagnostics.activeCommand ?? "",
     "data-floating-composer-at-bottom": String(diagnostics.terminalAtBottom),
     "data-floating-composer-bottom-offset-rows": diagnostics.bottomOffsetRows,
@@ -161,6 +167,9 @@ export function TerminalFloatingComposer({
       data-testid="terminal-floating-composer-diagnostics"
       {...diagnosticsAttributes}
     >
+      <div className="absolute top-2 right-2 left-2">
+        <TerminalTextAttachments controller={textAttachments} purpose="tui" />
+      </div>
       <TerminalInstantReplyRail
         available={instantReplyAvailable}
         feedback={instantReplyFeedback}
@@ -199,6 +208,7 @@ export function TerminalFloatingComposer({
           {scrollButtonMode === "floating" ? (
             <ScrollButton onClick={onScrollToBottom} />
           ) : null}
+          <TerminalTextAttachments controller={textAttachments} purpose="composer" textareaRef={textareaRef} onDraftChange={onDraftChange} />
           <section
             aria-label="Floating terminal composer"
             className="pointer-events-auto grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-2 rounded-lg border border-slate-700/90 bg-[#07111f]/95 px-2.5 py-2 shadow-2xl shadow-slate-950/45 backdrop-blur transition focus-within:border-cyan-400/45 focus-within:shadow-[0_18px_50px_rgba(2,6,23,0.52),0_0_0_1px_rgba(34,211,238,0.12)]"
@@ -226,6 +236,7 @@ export function TerminalFloatingComposer({
                 resizeTextarea(event.currentTarget);
                 onDraftChange(event.currentTarget.value);
               }}
+              onPaste={(event) => textAttachments.capture(event, "composer")}
               onKeyDown={handleKeyDown}
             />
             <div className="flex items-center gap-2">
@@ -235,7 +246,7 @@ export function TerminalFloatingComposer({
                   aria-label="排队"
                   title={`排队 (${queueKey === "Tab" ? "Tab" : "Alt+Enter"}) · 使用 Agent 原生行为`}
                   className="h-7 rounded-full border border-slate-600 bg-slate-900/70 px-2 text-xs text-slate-200 transition hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-500"
-                  disabled={sending || draft.length === 0}
+                  disabled={sending || textAttachments.blocked || !diagnostics.draftMirrorSupported || (draft.length === 0 && textAttachments.ids.length === 0)}
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => {
                     onQueue();
@@ -253,7 +264,7 @@ export function TerminalFloatingComposer({
                 aria-label="Send"
                 title="Send"
                 className="grid h-7 w-7 place-items-center rounded-full border border-cyan-400/40 bg-cyan-400/18 text-cyan-50 transition hover:border-cyan-300/60 hover:bg-cyan-400/28 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:bg-cyan-400/35 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800/70 disabled:text-slate-500"
-                disabled={sending || draft.length === 0}
+                disabled={sending || textAttachments.blocked || !diagnostics.draftMirrorSupported || (draft.length === 0 && textAttachments.ids.length === 0)}
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={onSend}
               >
