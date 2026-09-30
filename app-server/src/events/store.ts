@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   AppServerEventEnvelope,
@@ -64,7 +65,7 @@ export class AppServerEventStore {
     this.nextId = getNextEventId(loadedEvents);
     this.events = filterRetainedEvents(loadedEvents, this.getCutoffTimeMs());
     if (this.events.length !== lines.length) {
-      await this.rewriteEventLog();
+      await this.rewriteEventLog(this.events);
     }
     this.lastPrunedAtMs = Date.now();
   }
@@ -149,21 +150,39 @@ export class AppServerEventStore {
       this.events,
       this.getCutoffTimeMs(),
     );
-    this.lastPrunedAtMs = Date.now();
     if (retainedEvents.length === this.events.length) {
+      this.lastPrunedAtMs = Date.now();
       return;
     }
+    await this.rewriteEventLog(retainedEvents);
     this.events = retainedEvents;
-    await this.rewriteEventLog();
+    this.lastPrunedAtMs = Date.now();
   }
 
-  private async rewriteEventLog(): Promise<void> {
-    await writeFile(
-      this.eventLogPath,
-      this.events.map((event) => JSON.stringify(event)).join("\n") +
-        (this.events.length > 0 ? "\n" : ""),
-      { encoding: "utf8" },
-    );
+  private async rewriteEventLog(events: AppServerEventEnvelope[]): Promise<void> {
+    const temporaryPath = `${this.eventLogPath}.${randomUUID()}.tmp`;
+    try {
+      const file = await open(temporaryPath, "wx", 0o600);
+      try {
+        await file.writeFile(
+          events.map((event) => JSON.stringify(event)).join("\n") +
+            (events.length > 0 ? "\n" : ""),
+          { encoding: "utf8" },
+        );
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+      await rename(temporaryPath, this.eventLogPath);
+      const directory = await open(path.dirname(this.eventLogPath), "r");
+      try {
+        await directory.sync();
+      } finally {
+        await directory.close();
+      }
+    } finally {
+      await unlink(temporaryPath).catch(() => undefined);
+    }
   }
 }
 
