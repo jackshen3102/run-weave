@@ -3,6 +3,10 @@ import { spawn } from "node:child_process";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  tsxImport,
+  writeVerificationConfiguration,
+} from "../verify/recovery/configuration.mjs";
+import {
   buildCompletionEvent,
   buildHookEvent,
 } from "./app-server-threadref-fixture.mjs";
@@ -22,25 +26,41 @@ export function createStateSyncHarness({
     return buildCompletionEvent(ids, reason, rawHookEvent, { source });
   }
 
-  function startAppServer({ stateDir, syncDir }) {
-    const child = spawn(process.execPath, ["app-server/dist/index.js"], {
-      cwd: repoRoot,
-      env: {
-        ...process.env,
-        RUNWEAVE_APP_SERVER_STATE_DIR: stateDir,
-        RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: syncDir,
-        RUNWEAVE_APP_SERVER_PORT: "0",
-        RUNWEAVE_APP_SERVER_CODEX_STATUS_START_DELAY_MS: "100",
-        RUNWEAVE_APP_SERVER_CODEX_STATUS_INTERVAL_MS: "100",
-        RUNWEAVE_CODEX_SESSIONS_DIR: path.join(stateDir, "codex-sessions"),
-        CODEX_BIN: fakeCodexBinPath,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
+  async function startAppServer({ stateDir, syncDir }) {
+    const verificationRoot = path.dirname(stateDir);
+    await writeVerificationConfiguration(verificationRoot, {
+      "appServer.stateDirectory": stateDir,
+      "appServer.cloudSyncDirectory": syncDir,
+      "appServer.threadStatusStartDelayMs": 100,
+      "appServer.threadStatusIntervalMs": 100,
+      "agents.codex.sessionsDirectory": path.join(stateDir, "codex-sessions"),
+      "agents.codex.binary": fakeCodexBinPath,
     });
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        tsxImport,
+        path.join(repoRoot, "scripts/verify/recovery/bootstrap.mjs"),
+        verificationRoot,
+        repoRoot,
+        path.join(repoRoot, "app-server/dist/index.js"),
+        "--port",
+        "0",
+      ],
+      {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
     return waitForReady(child, stateDir);
   }
 
   async function waitForReady(child, stateDir) {
+    child.stdout.resume();
     let stderr = "";
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk) => {
@@ -174,49 +194,6 @@ export function createStateSyncHarness({
       .split(/\r?\n/)
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-  }
-
-  async function writeFakeCodexBin(filePath) {
-    await writeFile(
-      filePath,
-      `#!/usr/bin/env node
-  import readline from "node:readline";
-
-  const rl = readline.createInterface({ input: process.stdin });
-
-  rl.on("line", (line) => {
-    const message = JSON.parse(line);
-    if (!message.id) {
-      return;
-    }
-    if (message.method === "initialize") {
-      process.stdout.write(JSON.stringify({ id: message.id, result: {} }) + "\\n");
-      return;
-    }
-    if (message.method === "thread/read" || message.method === "thread/resume") {
-      const threadId = message.params?.threadId;
-      const type =
-        threadId === "thread-idle-observation"
-          ? "idle"
-          : threadId === "thread-cross-process"
-            ? message.method === "thread/read"
-              ? "notLoaded"
-              : "idle"
-          : threadId === "thread-active-compensation"
-            ? "active"
-            : null;
-      process.stdout.write(
-        JSON.stringify({
-          id: message.id,
-          result: type ? { thread: { status: { type } } } : {},
-        }) + "\\n",
-      );
-    }
-  });
-  `,
-      "utf8",
-    );
-    await chmod(filePath, 0o755);
   }
 
   async function writeCodexLifecycle(
@@ -415,4 +392,48 @@ export function createStateSyncHarness({
     waitFor,
     writeFakeCodexBin,
   };
+}
+
+export async function writeFakeCodexBin(filePath) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(
+    filePath,
+    `#!/usr/bin/env node
+import readline from "node:readline";
+
+const rl = readline.createInterface({ input: process.stdin });
+
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (!message.id) {
+    return;
+  }
+  if (message.method === "initialize") {
+    process.stdout.write(JSON.stringify({ id: message.id, result: {} }) + "\\n");
+    return;
+  }
+  if (message.method === "thread/read" || message.method === "thread/resume") {
+    const threadId = message.params?.threadId;
+    const type =
+      threadId === "thread-idle-observation"
+        ? "idle"
+        : threadId === "thread-cross-process"
+          ? message.method === "thread/read"
+            ? "notLoaded"
+            : "idle"
+        : threadId === "thread-active-compensation"
+          ? "active"
+          : null;
+    process.stdout.write(
+      JSON.stringify({
+        id: message.id,
+        result: type ? { thread: { status: { type } } } : {},
+      }) + "\\n",
+    );
+  }
+});
+`,
+    "utf8",
+  );
+  await chmod(filePath, 0o755);
 }

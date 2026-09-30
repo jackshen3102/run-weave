@@ -30,13 +30,12 @@ const source = {
   pid: 12345,
 };
 
-const stateDir = await mkdtemp(
+const verificationRoot = await mkdtemp(
   path.join(os.tmpdir(), "runweave-app-server-state-sync-"),
 );
-const syncDir = await mkdtemp(
-  path.join(os.tmpdir(), "runweave-app-server-cloud-sync-"),
-);
-const badSyncPath = path.join(os.tmpdir(), `runweave-sync-file-${process.pid}`);
+const stateDir = path.join(verificationRoot, "state");
+const syncDir = path.join(verificationRoot, "cloud-sync");
+const badSyncPath = path.join(verificationRoot, "not-a-directory");
 const fakeCodexBinPath = path.join(stateDir, "fake-codex-app-server.mjs");
 
 const {
@@ -100,9 +99,7 @@ try {
   await stopAppServer(appServer);
   appServer = null;
   await writeFile(badSyncPath, "not-a-directory", "utf8");
-  const badSyncStateDir = await mkdtemp(
-    path.join(os.tmpdir(), "runweave-app-server-bad-sync-"),
-  );
+  const badSyncStateDir = path.join(verificationRoot, "bad-sync-state");
   let badSyncServer = null;
   try {
     badSyncServer = await startAppServer({
@@ -123,7 +120,7 @@ try {
   if (appServer) {
     await stopAppServer(appServer);
   }
-  await rm(stateDir, { recursive: true, force: true });
+  await rm(verificationRoot, { recursive: true, force: true });
   await rm(syncDir, { recursive: true, force: true });
   await rm(badSyncPath, { force: true });
 }
