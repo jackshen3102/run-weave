@@ -24,7 +24,7 @@ export class BackendRuntimeStatusService {
   constructor(
     serviceInstanceId: string,
     private readonly dependencies: {
-      activityStoreAvailable: boolean;
+      activityStoreAvailable: () => boolean;
       agentTeamService: AgentTeamService;
       evolutionRuntime: EvolutionRuntime;
       workspaceServiceManager: BackendRuntimeStatusInput["workspaceServiceManager"];
@@ -35,7 +35,7 @@ export class BackendRuntimeStatusService {
       return createBackendRuntimeStatusReport({
         serviceInstanceId: this.registry.serviceInstanceId,
         listener: this.listener,
-        activityStoreAvailable: this.dependencies.activityStoreAvailable,
+        activityStoreAvailable: this.dependencies.activityStoreAvailable(),
         eventConsumer: this.eventConsumer?.getStatusSnapshot() ?? null,
         appServerIntegration: this.appServerIntegration,
         watchdog: this.dependencies.agentTeamService.getRecheckWatchdogStatus(),

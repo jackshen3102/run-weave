@@ -68,8 +68,8 @@ export async function createBackendRuntimeStatusReport(
       label: "Activity store",
       state: services.activityStoreAvailable ? "healthy" : "unhealthy",
       summary: services.activityStoreAvailable
-        ? "Activity store 已初始化"
-        : "Activity store 初始化失败",
+        ? "Activity store worker 可用"
+        : "Activity store 不可用",
       observedAt: now,
       dependsOn: ["backend.process"],
       recovery: null,
