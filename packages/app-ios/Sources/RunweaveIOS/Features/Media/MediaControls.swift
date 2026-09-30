@@ -84,7 +84,7 @@ struct MediaControls<Content: View>: View {
       pickerGeneration = session.generation
       picking = true
     } label: {
-      Image(systemName: "plus")
+      Label("添加图片", systemImage: "photo")
     }.accessibilityLabel("添加图片")
       .disabled(busy || recorder.recording || !canWrite)
   }

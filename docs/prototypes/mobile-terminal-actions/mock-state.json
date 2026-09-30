@@ -1,0 +1,18 @@
+{
+  "project": "browser-viewer",
+  "worktree": "wt-1",
+  "device": "MacBook Pro",
+  "model": "GPT-6-Sol · 高",
+  "draft": "检查当前改动，重点关注输入框的交互。",
+  "queueSupported": true,
+  "commands": [
+    {"id":"review","title":"评审当前改动","body":"评审当前工作区的改动，指出需要处理的问题，先不修改代码。","icon":"review"},
+    {"id":"pr","title":"提交 PR","body":"使用 github-pr Skill 提交当前代码，并跟进检查与合并。","icon":"branch"},
+    {"id":"docs","title":"整理项目文档","body":"检查项目文档与代码是否一致，整理需要更新的内容。","icon":"file"},
+    {"id":"summary","title":"总结本次工作","body":"总结本次改动、验证结果，以及仍需处理的事项。","icon":"spark"}
+  ],
+  "files": [
+    {"name":"输入框截图.png","source":"photos"},
+    {"name":"需求说明.md","source":"files"}
+  ]
+}

@@ -1,11 +1,11 @@
 import Foundation
 
-struct TerminalAgentSettingsResponse: Decodable {
+struct TerminalAgentSettingsResponse: Decodable, Equatable {
   let settings: TerminalAgentSettings
   let models: [TerminalAgentModelOption]
 }
 
-struct TerminalAgentSettings: Decodable {
+struct TerminalAgentSettings: Decodable, Equatable {
   let terminalSessionId: String
   let panelId: String?
   let threadId: String
@@ -15,7 +15,7 @@ struct TerminalAgentSettings: Decodable {
   let revision: String
 }
 
-struct TerminalAgentModelOption: Decodable, Identifiable {
+struct TerminalAgentModelOption: Decodable, Identifiable, Equatable {
   let id: String
   let label: String
   let description: String

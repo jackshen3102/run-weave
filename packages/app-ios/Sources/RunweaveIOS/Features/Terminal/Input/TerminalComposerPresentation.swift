@@ -29,6 +29,7 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
     context.coordinator.parent = self
     // Read the binding during SwiftUI's update so presentation changes invalidate this bridge.
     context.coordinator.requested = isPresented
+    context.coordinator.inputs = Inputs(self)
     // Presentation is a UIKit side effect, outside SwiftUI's update transaction.
     DispatchQueue.main.async { [weak coordinator = context.coordinator] in coordinator?.update() }
   }
@@ -69,20 +70,25 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
     weak var anchor: Anchor?
     var presented: Container?
     var requested = false
+    var inputs: Inputs?
     private var dismissing = false
 
     init(_ parent: TerminalComposerPresentation) { self.parent = parent }
 
     func update() {
-      guard let anchor, anchor.view.window != nil, !dismissing else { return }
+      guard let anchor, anchor.view.window != nil, !dismissing, let inputs else { return }
       if requested {
         if let presented {
+          // AppSession also publishes changes for other terminals. Updating the hosting root
+          // invalidates an open UIKit menu even when none of its inputs changed.
+          guard presented.inputs != inputs else { return }
+          presented.inputs = inputs
           presented.host.rootView = content(id: presented.id)
           return
         }
         guard anchor.presentedViewController == nil else { return }
         let id = UUID()
-        let next = Container(id: id, content: content(id: id))
+        let next = Container(id: id, inputs: inputs, content: content(id: id))
         presented = next
         anchor.present(next, animated: true)
       } else if let presented {
@@ -107,12 +113,38 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
     }
   }
 
+  /// The presentation owns only identity, bindings and forwarded environment values.
+  /// ComposerView observes its terminal's data through TerminalComposerState independently.
+  struct Inputs: Equatable {
+    let session: ObjectIdentifier
+    let controller: ObjectIdentifier
+    let terminalID: String
+    let quickInputs: ObjectIdentifier
+    let preventsDismissal: Bool
+    let showingInstantReplies: Bool
+    let scenePhase: ScenePhase
+    let colorScheme: ColorScheme
+
+    init(_ presentation: TerminalComposerPresentation) {
+      session = ObjectIdentifier(presentation.session)
+      controller = ObjectIdentifier(presentation.controller)
+      terminalID = presentation.terminalID
+      quickInputs = ObjectIdentifier(presentation.quickInputs)
+      preventsDismissal = presentation.preventsDismissal
+      showingInstantReplies = presentation.showingInstantReplies
+      scenePhase = presentation.scenePhase
+      colorScheme = presentation.colorScheme
+    }
+  }
+
   final class Container: UIViewController {
     let id: UUID
+    var inputs: Inputs
     let host: UIHostingController<AnyView>
 
-    init(id: UUID, content: AnyView) {
+    init(id: UUID, inputs: Inputs, content: AnyView) {
       self.id = id
+      self.inputs = inputs
       host = UIHostingController(rootView: content)
       super.init(nibName: nil, bundle: nil)
       modalPresentationStyle = .overFullScreen
