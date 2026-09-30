@@ -45,5 +45,10 @@ pnpm scheduled-tasks:verify-runtime
 源码验证从安装态终端发起时，应清除继承的 `RUNWEAVE_ACTIVITY_WORKER_ENTRY` 和
 `RUNWEAVE_EVOLUTION_WORKER_ENTRY`，避免误用已安装版本的 SQLite worker；运行时集成脚本自行隔离这些路径。
 
+Activity worker 意外退出（含退出码 0）、报错或请求超时后，存储进入失败状态，不自动重启；
+后续请求立即拒绝，runtime status 动态反映可用性。请求期限为 10 秒，包含记录的仓库解析，
+为现有 5 秒 SQLite 锁等待留出执行余量。`ActivityStore.close()` 的记录排空与退出共用 2 秒
+期限，强制终止另等最多 500 毫秒；仍未退出时明确报错，不把资源回收未完成报告为成功。
+
 若实际使用 `dev:session` 系列命令，必须按根 `AGENTS.md` 使用
 `$toolkit:runweave-dev-session`。

@@ -32,6 +32,10 @@ interface PendingRequest {
   reject: (error: Error) => void;
 }
 
+const REQUEST_TIMEOUT_MS = 10_000;
+const CLOSE_TIMEOUT_MS = 2_000;
+const TERMINATION_TIMEOUT_MS = 500;
+
 function resolveWorkerEntry(env: NodeJS.ProcessEnv): URL {
   const configured = env.RUNWEAVE_ACTIVITY_WORKER_ENTRY?.trim();
   if (configured) {
@@ -69,6 +73,9 @@ export class ActivityStore {
   private nextRequestId = 1;
   private closed = false;
   private closing = false;
+  private failure: Error | null = null;
+  private readonly operationRejections = new Set<(error: Error) => void>();
+  private disposal: Promise<void> | null = null;
   private readonly recording = new Set<Promise<ActivityWriteAck[]>>();
 
   private constructor(params: {
@@ -105,11 +112,11 @@ export class ActivityStore {
         pending.reject(new Error(response.error));
       }
     });
-    this.worker.on("error", (error) => this.rejectAll(error));
+    this.worker.on("error", (error) => this.fail(error));
     this.worker.on("exit", (code) => {
       resolveWorkerExit?.();
-      if (!this.closed && code !== 0) {
-        this.rejectAll(new Error(`activity_sqlite_worker_exited:${code}`));
+      if (!this.closed) {
+        this.fail(new Error(`activity_sqlite_worker_exited:${code}`));
       }
     });
   }
@@ -130,9 +137,8 @@ export class ActivityStore {
       return store;
     } catch (error) {
       // The factory owns the worker until it successfully returns a store.
-      store.closed = true;
-      await store.worker.terminate();
-      store.rejectAll(new Error("activity_store_closed"));
+      store.fail(new Error("activity_store_closed"));
+      await store.close();
       throw error;
     }
   }
@@ -144,20 +150,65 @@ export class ActivityStore {
     this.pending.clear();
   }
 
-  private request<T extends ActivityWorkerResult>(
-    request: ActivityWorkerCommand,
+  isAvailable(): boolean {
+    return !this.failure && !this.closing && !this.closed;
+  }
+
+  private fail(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    for (const reject of this.operationRejections) reject(error);
+    this.operationRejections.clear();
+    this.rejectAll(error);
+    void this.worker.terminate().catch(() => undefined);
+  }
+
+  private withDeadline<T>(
+    operation: () => Promise<T>,
+    name: string,
   ): Promise<T> {
     if (this.closed) {
       return Promise.reject(new Error("activity_store_closed"));
     }
-    const id = this.nextRequestId++;
-    return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, {
-        resolve: (value) => resolve(value as T),
-        reject,
-      });
-      this.worker.postMessage({ ...request, id });
+    if (this.failure) return Promise.reject(this.failure);
+    let rejectOperation!: (error: Error) => void;
+    const result = new Promise<T>((resolve, reject) => {
+      rejectOperation = reject;
+      this.operationRejections.add(rejectOperation);
+      try {
+        void operation().then(resolve, reject);
+      } catch (error) {
+        reject(error);
+      }
     });
+    const timeout = setTimeout(
+      () => this.fail(new Error(`activity_sqlite_worker_timeout:${name}`)),
+      REQUEST_TIMEOUT_MS,
+    );
+    return result.finally(() => {
+      clearTimeout(timeout);
+      this.operationRejections.delete(rejectOperation);
+    });
+  }
+
+  private request<T extends ActivityWorkerResult>(
+    request: ActivityWorkerCommand,
+  ): Promise<T> {
+    return this.withDeadline(() => {
+      const id = this.nextRequestId++;
+      return new Promise<T>((resolve, reject) => {
+        this.pending.set(id, {
+          resolve: (value) => resolve(value as T),
+          reject,
+        });
+        try {
+          this.worker.postMessage({ ...request, id });
+        } catch (error) {
+          this.pending.delete(id);
+          reject(error);
+        }
+      });
+    }, request.op);
   }
 
   record(
@@ -166,16 +217,17 @@ export class ActivityStore {
   ): Promise<ActivityWriteAck[]> {
     if (this.closing || this.closed)
       return Promise.reject(new Error("activity_store_closed"));
-    const operation = resolveActivityRepositories(
-      events.map((event) => ({ eventId: event.eventId, cwd: event.scope.cwd })),
-    ).then((bindings) =>
-      this.request<ActivityWriteAck[]>({
+    const operation = this.withDeadline(async () => {
+      const bindings = await resolveActivityRepositories(
+        events.map((event) => ({ eventId: event.eventId, cwd: event.scope.cwd })),
+      );
+      return this.request<ActivityWriteAck[]>({
         op: "record",
         events,
         bindings,
         ...(nowMs != null ? { nowMs } : {}),
-      }),
-    );
+      });
+    }, "record");
     this.recording.add(operation);
     void operation.then(
       () => this.recording.delete(operation),
@@ -184,26 +236,30 @@ export class ActivityStore {
     return operation;
   }
 
-  async facts(query: ActivityFactsQuery): Promise<ActivityFactsPage> {
-    await Promise.allSettled([...this.recording]);
-    return this.request({ op: "facts", query });
+  facts(query: ActivityFactsQuery): Promise<ActivityFactsPage> {
+    return this.withDeadline(async () => {
+      await Promise.allSettled([...this.recording]);
+      return this.request({ op: "facts", query });
+    }, "facts");
   }
 
-  async evolutionSnapshot(
+  evolutionSnapshot(
     query: ActivityEvolutionSnapshotQuery,
   ): Promise<ActivityEvolutionSnapshotPage> {
-    await Promise.allSettled([...this.recording]);
-    if (query.atOrBeforeSnapshotBoundary === undefined) {
-      const pending = await this.request<
-        Array<{ eventId: string; cwd: string | null }>
-      >({ op: "pending-repositories" });
-      if (pending.length)
-        await this.request({
-          op: "bind-repositories",
-          bindings: await resolveActivityRepositories(pending),
-        });
-    }
-    return this.request({ op: "evolution-snapshot", query });
+    return this.withDeadline(async () => {
+      await Promise.allSettled([...this.recording]);
+      if (query.atOrBeforeSnapshotBoundary === undefined) {
+        const pending = await this.request<
+          Array<{ eventId: string; cwd: string | null }>
+        >({ op: "pending-repositories" });
+        if (pending.length)
+          await this.request({
+            op: "bind-repositories",
+            bindings: await resolveActivityRepositories(pending),
+          });
+      }
+      return this.request({ op: "evolution-snapshot", query });
+    }, "evolution-snapshot");
   }
 
   evolutionEvidenceAvailability(
@@ -212,12 +268,14 @@ export class ActivityStore {
     return this.request({ op: "evolution-evidence-availability", eventIds });
   }
 
-  async timeline(
+  timeline(
     selector: ActivityTimelineSelector,
     query: ActivityFactsQuery,
   ): Promise<ActivityFactsPage> {
-    await Promise.allSettled([...this.recording]);
-    return this.request({ op: "timeline", selector, query });
+    return this.withDeadline(async () => {
+      await Promise.allSettled([...this.recording]);
+      return this.request({ op: "timeline", selector, query });
+    }, "timeline");
   }
 
   sources(): Promise<ActivitySourceDto[]> {
@@ -309,24 +367,45 @@ export class ActivityStore {
     return this.request({ op: "integrity" });
   }
 
-  async close(): Promise<void> {
-    if (this.closed) {
-      return;
+  close(): Promise<void> {
+    if (!this.disposal) {
+      this.closing = true;
+      this.disposal = this.closeWorker();
     }
-    this.closing = true;
-    await Promise.allSettled([...this.recording]);
-    if (this.closed) return;
-    void this.request({ op: "close" }).catch(() => undefined);
-    this.closed = true;
+    return this.disposal;
+  }
+
+  private async closeWorker(): Promise<void> {
+    const graceful = Promise.allSettled([...this.recording]).then(async () => {
+      if (this.closed) return;
+      if (!this.failure) void this.request({ op: "close" }).catch(() => undefined);
+      this.closed = true;
+      await this.workerExit;
+    });
     let timeout: NodeJS.Timeout | undefined;
     const exited = await Promise.race([
-      this.workerExit.then(() => true),
+      graceful.then(() => true),
       new Promise<boolean>((resolve) => {
-        timeout = setTimeout(() => resolve(false), 2_000);
+        timeout = setTimeout(() => resolve(false), CLOSE_TIMEOUT_MS);
       }),
     ]);
     if (timeout) clearTimeout(timeout);
-    if (!exited) await this.worker.terminate();
-    this.rejectAll(new Error("activity_store_closed"));
+    this.closed = true;
+    this.fail(new Error("activity_store_closed"));
+    if (!exited) {
+      try {
+        await Promise.race([
+          this.workerExit,
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error("activity_sqlite_worker_termination_timeout")),
+              TERMINATION_TIMEOUT_MS,
+            );
+          }),
+        ]);
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+    }
   }
 }

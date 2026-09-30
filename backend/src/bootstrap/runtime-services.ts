@@ -445,7 +445,7 @@ async function assembleRuntimeServices(
   const runtimeStatus = new BackendRuntimeStatusService(
     serviceInstanceId ?? activityInstanceId,
     {
-      activityStoreAvailable: activityStore !== null,
+      activityStoreAvailable: () => activityStore?.isAvailable() ?? false,
       agentTeamService,
       evolutionRuntime,
       workspaceServiceManager,
