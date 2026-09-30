@@ -99,7 +99,7 @@ async function verifyActivity(mode) {
     error: /^rejected:injected-worker-error$/,
     silent: /^rejected:activity_sqlite_worker_timeout:/,
     "silent-close": /^rejected:activity_store_closed$/,
-    "startup-silent": /^rejected:activity_sqlite_worker_timeout:integrity$/,
+    "startup-silent": /^rejected:activity_sqlite_worker_timeout:ready$/,
   }[mode];
   const rejected = (label) => cause.test(byLabel(label)?.result ?? "");
   let passed = probe.code === 0;

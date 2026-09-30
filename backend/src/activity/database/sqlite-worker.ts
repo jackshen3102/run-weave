@@ -15,6 +15,8 @@ const database = new ActivityDatabase(workerData as ActivityDatabaseOptions);
 
 function handleRequest(request: ActivityWorkerRequest): unknown {
   switch (request.op) {
+    case "ready":
+      return true;
     case "pending-repositories":
       return database.pendingRepositories();
     case "bind-repositories":

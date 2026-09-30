@@ -19,6 +19,7 @@ import type { ActivityMembershipSnapshot } from "./maintenance";
 import type { ActivityIngestRejectionInput } from "./rejection";
 
 export type ActivityWorkerRequest =
+  | { id: number; op: "ready" }
   | { id: number; op: "pending-repositories" }
   | {
       id: number;

@@ -46,6 +46,10 @@ pnpm scheduled-tasks:verify-runtime
 源码验证从安装态终端发起时，应清除继承的 `RUNWEAVE_ACTIVITY_WORKER_ENTRY` 和
 `RUNWEAVE_EVOLUTION_WORKER_ENTRY`，避免误用已安装版本的 SQLite worker；运行时集成脚本自行隔离这些路径。
 
+Activity 启动仅等待 worker 完成数据库打开、schema 初始化和密钥校验，不执行全库完整性或外键扫描；
+`ActivityStore.integrity()` 保留为显式诊断能力，不在启动或后台维护中自动调用。
+初始化失败与 worker 清理失败分别记录，清理错误不得覆盖原始初始化错误。
+
 Activity worker 意外退出（含退出码 0）、报错或请求超时后，存储进入失败状态，不自动重启；
 后续请求立即拒绝，runtime status 动态反映可用性。请求期限为 10 秒，包含记录的仓库解析，
 为现有 5 秒 SQLite 锁等待留出执行余量。`ActivityStore.close()` 的记录排空与退出共用 2 秒
