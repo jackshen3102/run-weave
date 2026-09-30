@@ -35,6 +35,8 @@ import { backgroundRunPath, runDetailsPath } from "./features/scheduled-tasks/ru
 import { useQuickInputNotifications } from "./features/scheduled-tasks/use-quick-input-notifications";
 import { scheduledTasksApi } from "./services/scheduled-tasks";
 import { HttpError } from "./services/http";
+import { ClarityNavigationObserver } from "./features/analytics/clarity-navigation-observer";
+import { ClarityDrawerObserver } from "./features/analytics/clarity-drawer-observer";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
@@ -47,6 +49,7 @@ export default function App() {
   return (
     <OverlayProvider>
       <RunweaveApp />
+      <ClarityDrawerObserver />
       <SuijiDrawer />
       <TunnelDrawer />
       <TerminalSnapshotShareNotification />
@@ -460,6 +463,8 @@ function RunweaveApp() {
     </DevSessionBackendGuard>
   );
   return <>
+    <ClarityNavigationObserver isDesktop={isElectron} needsConnection={needsConnection}
+      isAuthChecking={isAuthChecking} authenticated={Boolean(token)} />
     {scheduledRunOpenError ? <button type="button" role="alert"
       className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-rose-700 bg-card p-3 text-left text-sm shadow-lg"
       onClick={() => setScheduledRunOpenError(null)}>{scheduledRunOpenError} · 点击关闭</button> : null}

@@ -13,6 +13,7 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
   @EnvironmentObject private var quickInputs: BackendQuickInputModel
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.mobileAnalyticsDepth) private var analyticsDepth
 
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -48,6 +49,8 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
         preventsDismissal: $preventsDismissal, showingInstantReplies: $showingInstantReplies,
         onDismiss: onDismiss
       )
+      .mobileAnalyticsScreen(.composer)
+      .environment(\.mobileAnalyticsDepth, analyticsDepth)
       .environmentObject(quickInputs)
       .environment(\.scenePhase, scenePhase)
       .preferredColorScheme(colorScheme)

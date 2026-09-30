@@ -100,8 +100,9 @@ public struct RootView: View {
       ConnectionManager(store: connections, session: session, codexQuota: codexQuota) {
         managingConnections = false
         mobileLoginRevision += 1
-      }
+      }.mobileAnalyticsScreen(.connections)
     }
+    .mobileAnalyticsScreen(session.checking ? .connecting : session.authenticated ? .home : .login)
     .environmentObject(quickInputs)
   }
 }
@@ -149,6 +150,6 @@ private struct LoginView: View {
           Button("重新检测") { Task { await session.refresh() } }
         }
       }
-    }.sheet(isPresented: $showingBuildIdentity) { BuildIdentityView() }
+    }.sheet(isPresented: $showingBuildIdentity) { BuildIdentityView().mobileAnalyticsScreen(.buildInfo) }
   }
 }

@@ -170,12 +170,12 @@ struct HomeView: View {
       NewProjectView(session: session) { id in
         expanded.insert(id)
         query = ""
-      }
+      }.mobileAnalyticsScreen(.newProject)
     }
     .sheet(item: $renaming) { terminal in
-      RenameTerminalView(session: session, terminal: terminal)
+      RenameTerminalView(session: session, terminal: terminal).mobileAnalyticsScreen(.renameTerminal)
     }
-    .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session) }
+    .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session).mobileAnalyticsScreen(.diagnostics) }
     .confirmationDialog(
       "删除终端？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
       titleVisibility: .visible

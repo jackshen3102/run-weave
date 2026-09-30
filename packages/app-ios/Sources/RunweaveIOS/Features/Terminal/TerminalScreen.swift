@@ -151,17 +151,17 @@ struct TerminalScreen: View {
     .fullScreenCover(isPresented: Binding(
       get: { browser.state == .presented },
       set: { if !$0 { browser.collapse() } }
-    )) { BrowserScreen(browser: browser).clarityMask() }
+    )) { BrowserScreen(browser: browser).clarityMask().mobileAnalyticsScreen(.browser) }
     .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented))
     .sheet(item: $fileTap) { tap in
       TerminalFilePreview(session: session, terminalID: details.id, projectID: details.projectId,
         tap: tap, close: { fileTap = nil }, model: changes)
-        .clarityMask()
+        .clarityMask().mobileAnalyticsScreen(.filePreview)
     }
-    .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id) }
-    .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id) }
-    .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session) }
-    .sheet(item: $snapshotShare) { TerminalSnapshotShareSheet(url: $0.url) }
+    .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
+    .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id).mobileAnalyticsScreen(.terminalInfo) }
+    .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session).mobileAnalyticsScreen(.diagnostics) }
+    .sheet(item: $snapshotShare) { TerminalSnapshotShareSheet(url: $0.url).mobileAnalyticsScreen(.share) }
     .onChange(of: session.generation) { _ in
       shareOperation?.cancel()
       snapshotShare = nil
@@ -185,6 +185,7 @@ struct TerminalScreen: View {
     } message: {
       Text("删除后将结束该远端终端会话。")
     }
+    .mobileAnalyticsScreen(tab == "Files" ? .terminalFiles : tab == "Changes" ? .terminalChanges : .terminalChat)
   }
 
   private func connectBrowserIntents() {
