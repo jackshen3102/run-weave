@@ -8674,22 +8674,6 @@
   {
     "file": "scripts/verify/backend/runtime-lifecycle.ts",
     "kind": "environment",
-    "expression": "process.env.AUTH_STORE_FILE",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；process.env.AUTH_STORE_FILE"
-  },
-  {
-    "file": "scripts/verify/backend/runtime-lifecycle.ts",
-    "kind": "environment",
-    "expression": "process.env.TERMINAL_TMUX_SHUTDOWN_POLICY",
-    "count": 4,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；process.env.TERMINAL_TMUX_SHUTDOWN_POLICY"
-  },
-  {
-    "file": "scripts/verify/backend/runtime-lifecycle.ts",
-    "kind": "environment",
     "expression": "process.env.TERMINAL_TMUX_SOCKET_PATH",
     "count": 2,
     "category": "test",
@@ -9134,5 +9118,173 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "持久化桌面通知去重游标和已提示 ID，不作为实例配置来源。"
+  },
+  {
+    "file": "scripts/verify/recovery/activity-probe.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(entry)",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/bootstrap.mjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_ACTIVITY_WORKER_ENTRY",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/bootstrap.mjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_EVOLUTION_WORKER_ENTRY",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/bootstrap.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(root, \"verification-context.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/configuration.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(root, \"verification-context.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/configuration.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(store.file)",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/events-probe.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(log)",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/events-probe.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(path.join(root, \"appends.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/events-probe.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(path.join(root, \"expected.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/events-probe.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(path.join(root, \"settings.yaml\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/lifecycle-fixture.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "file-io",
+    "expression": "readFile(new URL(script, import.meta.url))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(root, \"appends.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(root, \"expected.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(stateDir, \"app-server-token\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(stateDir, \"app-server.lock.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(stateDir, \"cloud-sync/events/app-server-events.jsonl\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(output, \"results.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(output, `activity-${mode}.log`))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/verify/recovery/run.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(output, `events-${mode}-${stage}.log`))",
+    "count": 1,
+    "category": "test",
+    "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
   }
 ]

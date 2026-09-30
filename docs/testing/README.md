@@ -9,6 +9,7 @@
 | ------------------------------- | ----------------------------------------------------------------------- |
 | YAML schema、Case ID 与拆分规则 | [test-plan-format.md](./test-plan-format.md)                            |
 | 自动化、脚本和人工证据分层      | [layers.md](./layers.md)                                                |
+| Activity 与事件日志恢复故障验证 | [恢复验证入口](../../scripts/verify/recovery/README.md)                 |
 | 按改动类型选择命令              | [command-matrix.md](./command-matrix.md)                                |
 | iOS 日常交互排查与修复验收      | [agent-device 技能](../../plugins/toolkit/skills/agent-device/SKILL.md) |
 

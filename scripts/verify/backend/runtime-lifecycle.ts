@@ -11,6 +11,18 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { configuration } from "@runweave/config-node";
+import {
+  isolateLifecycle as isolate,
+  configureLifecycle as configure,
+  runLifecycleCase,
+} from "../recovery/lifecycle-fixture.mjs";
+import {
+  resolveActivityStoragePaths,
+  resolveStoragePaths,
+} from "../../../backend/src/utils/path";
+import { resolveDefaultTmuxSocketPath } from "../../../backend/src/bootstrap/tmux-paths";
 import { ActivityRuntime } from "../../../backend/src/activity/runtime";
 import { ActivityStore } from "../../../backend/src/activity/recording/store";
 import { createRuntimeServices } from "../../../backend/src/bootstrap/runtime-services";
@@ -23,34 +35,8 @@ let root: string;
 const originalEnv = { ...process.env };
 const checks: string[] = [];
 
-function isolate(name: string, channel = "dev"): string {
-  const directory = path.join(root, name);
-  Object.assign(process.env, {
-    NODE_ENV: "development",
-    ELECTRON_RUN_AS_NODE: "",
-    RUNWEAVE_RUNTIME_RELEASE_ID: "",
-    RUNWEAVE_DESKTOP_CHANNEL: channel,
-    BROWSER_PROFILE_DIR: directory,
-    RUNWEAVE_DEV_BROWSER_PROFILE_DIR: directory,
-    AUTH_STORE_FILE: path.join(directory, "auth.json"),
-    TERMINAL_SESSION_STORE_FILE: path.join(directory, "sessions.json"),
-    RUNWEAVE_ACTIVITY_TEST_MODE: "true",
-    RUNWEAVE_ACTIVITY_HOME: path.join(directory, "activity"),
-    RUNWEAVE_EVOLUTION_TEST_MODE: "true",
-    RUNWEAVE_EVOLUTION_HOME: path.join(directory, "evolution"),
-    RUNWEAVE_APP_SERVER_DISCOVERY: "disabled",
-    RUNWEAVE_ACTIVITY_WORKER_ENTRY: "",
-    RUNWEAVE_EVOLUTION_WORKER_ENTRY: "",
-    TERMINAL_TMUX_SOCKET_PATH: path.join(directory, "tmux.sock"),
-    TERMINAL_TMUX_SHUTDOWN_POLICY: "",
-    TERMINAL_TMUX_SCAN_ORPHANS_ON_START: "false",
-    TERMINAL_TMUX_CLEANUP_ORPHANS: "false",
-  });
-  return directory;
-}
-
 async function verifyActivityDrain(): Promise<void> {
-  const directory = isolate("activity-drain");
+  const directory = await isolate("activity-drain");
   const runtime = await ActivityRuntime.create({
     env: process.env,
     browserProfileDir: directory,
@@ -116,7 +102,7 @@ async function verifyActivityDrain(): Promise<void> {
     await runtime.dispose();
   }
   const reopened = await ActivityStore.create({
-    databasePath: path.join(directory, "activity", "activity.sqlite"),
+    databasePath: resolveActivityStoragePaths().activityDatabaseFile,
     env: process.env,
   });
   try {
@@ -146,8 +132,8 @@ async function verifyChannel(
   channel: "stable" | "dev" | "beta",
   policy?: "preserve" | "cleanup",
 ): Promise<void> {
-  isolate(`channel-${channel}-${policy ?? "default"}`, channel);
-  process.env.TERMINAL_TMUX_SHUTDOWN_POLICY = policy ?? "";
+  await isolate(`channel-${channel}-${policy ?? "default"}`);
+  await configure({ "terminal.tmux.shutdownPolicy": policy ?? null });
   const runtime = await createRuntimeServices(`lifecycle:${channel}`);
   const socket = runtime.tmuxService.socketPath;
   const tmux = (...args: string[]) =>
@@ -229,11 +215,10 @@ async function verifyChannel(
 }
 
 async function verifyInvalidTmuxPolicy(): Promise<void> {
-  const directory = isolate("invalid-tmux-policy", "beta");
-  process.env.TERMINAL_TMUX_SHUTDOWN_POLICY = "presrve";
+  const directory = await isolate("invalid-tmux-policy");
   await assert.rejects(
-    createRuntimeServices("invalid-policy"),
-    /TERMINAL_TMUX_SHUTDOWN_POLICY must be preserve or cleanup/,
+    configure({ "terminal.tmux.shutdownPolicy": "presrve" }),
+    /CONFIG_VALIDATION_FAILED.*terminal.tmux.shutdownPolicy/,
   );
   await assert.rejects(access(path.join(directory, "activity")), {
     code: "ENOENT",
@@ -241,29 +226,27 @@ async function verifyInvalidTmuxPolicy(): Promise<void> {
   checks.push("invalid tmux policy rejected before Activity resource creation");
 }
 
-async function verifyDefaultSocketPolicy(): Promise<void> {
-  for (const channel of ["stable", "dev", "beta"] as const) {
-    const directory = isolate(`default-socket-${channel}`, channel);
-    delete process.env.TERMINAL_TMUX_SOCKET_PATH;
-    const profileId = crypto
-      .createHash("sha256")
-      .update(directory)
-      .digest("hex")
-      .slice(0, 12);
-    const expected =
-      channel === "stable"
-        ? path.join(os.homedir(), ".runweave", "tmux", profileId, "tmux.sock")
-        : path.join(os.tmpdir(), `rw-tmux-${profileId}`, "tmux.sock");
-    for (const policy of ["preserve", "cleanup"]) {
-      process.env.TERMINAL_TMUX_SHUTDOWN_POLICY = policy;
-      const runtime = await createRuntimeServices(
-        `socket:${channel}:${policy}`,
-      );
-      try {
-        assert.equal(runtime.tmuxService.socketPath, expected);
-      } finally {
-        await runtime.dispose();
-      }
+async function verifyDefaultSocketPolicy(
+  channel: "stable" | "dev" | "beta",
+): Promise<void> {
+  const directory = await isolate(`default-socket-${channel}`);
+  delete process.env.TERMINAL_TMUX_SOCKET_PATH;
+  const profileId = crypto
+    .createHash("sha256")
+    .update(directory)
+    .digest("hex")
+    .slice(0, 12);
+  const expected =
+    channel === "stable"
+      ? path.join(os.homedir(), ".runweave", "tmux", profileId, "tmux.sock")
+      : path.join(os.tmpdir(), `rw-tmux-${profileId}`, "tmux.sock");
+  for (const policy of ["preserve", "cleanup"]) {
+    await configure({ "terminal.tmux.shutdownPolicy": policy });
+    const runtime = await createRuntimeServices(`socket:${channel}:${policy}`);
+    try {
+      assert.equal(runtime.tmuxService.socketPath, expected);
+    } finally {
+      await runtime.dispose();
     }
   }
   checks.push(
@@ -272,10 +255,14 @@ async function verifyDefaultSocketPolicy(): Promise<void> {
 }
 
 async function verifyPreserveOnAssemblyFailure(): Promise<void> {
-  const directory = isolate("tmux-assembly-failure", "beta");
-  process.env.TERMINAL_TMUX_SHUTDOWN_POLICY = "preserve";
+  const directory = await isolate("tmux-assembly-failure");
+  await configure({ "terminal.tmux.shutdownPolicy": "preserve" });
   await mkdir(directory, { recursive: true });
-  const socket = process.env.TERMINAL_TMUX_SOCKET_PATH!;
+  const socket = resolveDefaultTmuxSocketPath(
+    directory,
+    configuration().context.kind,
+  );
+  await mkdir(path.dirname(socket), { recursive: true });
   execFileSync("tmux", [
     "-S",
     socket,
@@ -300,7 +287,7 @@ async function verifyPreserveOnAssemblyFailure(): Promise<void> {
       { encoding: "utf8" },
     );
   const before = identity();
-  const authStore = process.env.AUTH_STORE_FILE!;
+  const authStore = resolveStoragePaths().authStoreFile;
   await mkdir(authStore);
   try {
     await assert.rejects(createRuntimeServices("assembly-failure"));
@@ -318,7 +305,7 @@ async function verifyPreserveOnAssemblyFailure(): Promise<void> {
 }
 
 async function verifyEvolutionDrain(): Promise<void> {
-  isolate("evolution-drain");
+  await isolate("evolution-drain");
   const runtime = await createRuntimeServices("lifecycle:evolution-drain");
   const store =
     runtime.evolutionActivationStore as SqliteEvolutionActivationStore;
@@ -368,7 +355,7 @@ async function verifyEvolutionDrain(): Promise<void> {
 }
 
 async function verifyCleanupFailure(): Promise<void> {
-  isolate("cleanup-failure");
+  await isolate("cleanup-failure");
   const runtime = await createRuntimeServices("lifecycle:cleanup-failure");
   const order: string[] = [];
   const workspaceDispose = runtime.workspaceServiceManager.dispose.bind(
@@ -460,7 +447,46 @@ async function verifyProviderCancellation(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  root = await mkdtemp(path.join(os.tmpdir(), "rw-lifecycle-"));
+  if (process.argv[2] === "--case") {
+    root = configuration().context.configRoot;
+    const [, , , name, channel, policy] = process.argv;
+    switch (name) {
+      case "activity":
+        await verifyActivityDrain();
+        break;
+      case "channel":
+        await verifyChannel(
+          channel as "stable" | "dev" | "beta",
+          policy === "default" ? undefined : (policy as "preserve" | "cleanup"),
+        );
+        break;
+      case "socket":
+        await verifyDefaultSocketPolicy(channel as "stable" | "dev" | "beta");
+        break;
+      case "invalid":
+        await verifyInvalidTmuxPolicy();
+        break;
+      case "assembly":
+        await verifyPreserveOnAssemblyFailure();
+        break;
+      case "evolution":
+        await verifyEvolutionDrain();
+        break;
+      case "cleanup":
+        await verifyCleanupFailure();
+        break;
+      case "provider":
+        await verifyProviderCancellation();
+        break;
+      default:
+        throw new Error("unknown lifecycle verification case");
+    }
+    console.log(JSON.stringify({ ok: true, checks }));
+    return;
+  }
+  root = await mkdtemp(
+    path.join(process.platform === "darwin" ? "/tmp" : os.tmpdir(), "rw-lc-"),
+  );
   const unrelatedSocket = path.join(root, "unrelated.sock");
   execFileSync("tmux", [
     "-S",
@@ -487,19 +513,20 @@ async function main(): Promise<void> {
     );
   const originalUnrelatedIdentity = unrelatedIdentity();
   try {
-    await verifyActivityDrain();
+    await runCase("activity");
     for (const channel of ["stable", "dev", "beta"] as const) {
       for (const policy of [undefined, "preserve", "cleanup"] as const) {
-        await verifyChannel(channel, policy);
+        await runCase("channel", channel, policy ?? "default");
         assert.equal(unrelatedIdentity(), originalUnrelatedIdentity);
       }
     }
-    await verifyDefaultSocketPolicy();
-    await verifyInvalidTmuxPolicy();
-    await verifyPreserveOnAssemblyFailure();
-    await verifyEvolutionDrain();
-    await verifyCleanupFailure();
-    await verifyProviderCancellation();
+    for (const channel of ["stable", "dev", "beta"] as const)
+      await runCase("socket", channel);
+    await runCase("invalid");
+    await runCase("assembly");
+    await runCase("evolution");
+    await runCase("cleanup");
+    await runCase("provider");
     console.log(JSON.stringify({ ok: true, checks }, null, 2));
   } finally {
     execFileSync("tmux", ["-S", unrelatedSocket, "kill-server"]);
@@ -508,6 +535,22 @@ async function main(): Promise<void> {
     Object.assign(process.env, originalEnv);
     await rm(root, { recursive: true, force: true });
   }
+}
+
+async function runCase(
+  name: string,
+  channel = "dev",
+  policy = "default",
+): Promise<void> {
+  checks.push(
+    ...(await runLifecycleCase(
+      root,
+      fileURLToPath(import.meta.url),
+      name,
+      channel,
+      policy,
+    )),
+  );
 }
 
 void main().catch((error) => {

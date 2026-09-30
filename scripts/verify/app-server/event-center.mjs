@@ -5,6 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  tsxImport,
+  writeVerificationConfiguration,
+} from "../recovery/configuration.mjs";
+import { writeFakeCodexBin } from "../../lib/app-server-state-sync-harness.mjs";
+import {
   assertHttpStatus,
   assertPolicyCloseWebSocket,
   assertPostRejected,
@@ -22,14 +27,25 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../..",
 );
-const stateDir = await mkdtemp(path.join(os.tmpdir(), "runweave-app-server-"));
-const cloudSyncDir = path.join(stateDir, "app-server-cloud-sync-sim");
+const verificationRoot = await mkdtemp(
+  path.join(os.tmpdir(), "runweave-app-server-"),
+);
+const stateDir = path.join(verificationRoot, "state");
+const cloudSyncDir = path.join(verificationRoot, "cloud-sync");
+const fakeCodexBinPath = path.join(verificationRoot, "fake-codex.mjs");
 
 let appServer = null;
 try {
   await run("pnpm", ["--filter", "@runweave/app-server", "build"]);
   await verifyConcurrentEventAppend();
   await verifyEventLogRetention();
+  await writeFakeCodexBin(fakeCodexBinPath);
+  await writeVerificationConfiguration(verificationRoot, {
+    "appServer.stateDirectory": stateDir,
+    "appServer.cloudSyncDirectory": cloudSyncDir,
+    "agents.codex.binary": fakeCodexBinPath,
+    "agents.codex.sessionsDirectory": path.join(stateDir, "codex-sessions"),
+  });
   appServer = await startAppServer();
   const lock = await readLock();
   const token = (
@@ -38,8 +54,14 @@ try {
   const baseUrl = `http://${lock.host}:${lock.port}`;
 
   const duplicate = await runSecondAppServer();
-  assert.equal(duplicate.code, 0);
-  assert.match(duplicate.stdout, /already running/);
+  assert.equal(duplicate.code, 1, duplicate.stderr);
+  assert.match(duplicate.stderr, /CONFIG_INSTANCE_ALREADY_RUNNING/);
+  assert.deepEqual(
+    await readLock(),
+    lock,
+    "second owner must not replace the live lock",
+  );
+  assert.equal((await fetch(`${baseUrl}/healthz`)).status, 200);
 
   const first = await postEvent(baseUrl, token, {
     kind: "diagnostic.created",
@@ -121,17 +143,14 @@ try {
   if (appServer) {
     await stopAppServer(appServer);
   }
-  await rm(stateDir, { recursive: true, force: true });
+  await rm(verificationRoot, { recursive: true, force: true });
 }
 
 function startAppServer() {
-  const child = spawn(process.execPath, ["app-server/dist/index.js"], {
+  const child = spawn(process.execPath, appServerArguments(), {
     cwd: repoRoot,
     env: {
       ...process.env,
-      RUNWEAVE_APP_SERVER_STATE_DIR: stateDir,
-      RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: cloudSyncDir,
-      RUNWEAVE_APP_SERVER_PORT: "0",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -139,6 +158,7 @@ function startAppServer() {
 }
 
 async function waitForReady(child) {
+  child.stdout.resume();
   let stderr = "";
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk) => {
@@ -165,13 +185,10 @@ async function waitForReady(child) {
 
 function runSecondAppServer() {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["app-server/dist/index.js"], {
+    const child = spawn(process.execPath, appServerArguments(), {
       cwd: repoRoot,
       env: {
         ...process.env,
-        RUNWEAVE_APP_SERVER_STATE_DIR: stateDir,
-        RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: cloudSyncDir,
-        RUNWEAVE_APP_SERVER_PORT: "0",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -188,6 +205,19 @@ function runSecondAppServer() {
     child.on("error", reject);
     child.on("close", (code) => resolve({ code, stdout, stderr }));
   });
+}
+
+function appServerArguments() {
+  return [
+    "--import",
+    tsxImport,
+    path.join(repoRoot, "scripts/verify/recovery/bootstrap.mjs"),
+    verificationRoot,
+    repoRoot,
+    path.join(repoRoot, "app-server/dist/index.js"),
+    "--port",
+    "0",
+  ];
 }
 
 function run(command, args) {
