@@ -137,7 +137,7 @@ export function createApp(
         schemaVersion: schema.rows[0].version,
         limits: SUIJI_LIMITS,
         ai: reviews.info(),
-        features: { followups: true, correction: corrections.info(), correctionHistory: true },
+        features: { followups: true, changes: true, correction: corrections.info(), correctionHistory: true },
       });
     }),
   );

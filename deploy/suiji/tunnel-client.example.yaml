@@ -1,0 +1,24 @@
+# Draft only: create a dedicated AWS Suiji tunnel after explicit registration approval.
+# Do not reuse the Mac runweave-local tunnel or credentials.
+config_version: 1
+control_plane:
+  base_url: "https://api.openai.com"
+  tunnel_id: "REPLACE_WITH_DEDICATED_SUIJI_TUNNEL_ID"
+  api_key: "file:/etc/suiji-tunnel/secrets/runtime-api-key"
+health:
+  listen_addr: "127.0.0.1:0"
+admin_ui:
+  open_browser: false
+log:
+  level: info
+  format: json
+mcp:
+  server_urls:
+    - channel: main
+      url: "https://suiji.jackshen310.cn/mcp"
+  # The file contains the COMPLETE header value: Bearer <dedicated read-only token>.
+  # A bare token environment reference does not add the Bearer prefix.
+  extra_headers:
+    - "Authorization: file:/etc/suiji-tunnel/secrets/mcp-authorization"
+  discovery_extra_headers:
+    - "Authorization: file:/etc/suiji-tunnel/secrets/mcp-authorization"

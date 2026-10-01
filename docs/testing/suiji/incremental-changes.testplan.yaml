@@ -1,0 +1,60 @@
+version: 1
+name: 随记增量发现合同
+description: >
+  在隔离 PostgreSQL 18 验证变化日志、稳定分页及只读 MCP；不连接或修改生产，不验证 Lumi 自动执行。
+cases:
+  - id: CHANGES-001
+    name: 完整库存和记录可见性变化可发现
+    required: true
+    description: >
+      schema 9 迁移生成现有记录库存，后续创建、编辑、状态及删除恢复均有变化元数据，回收站不泄露正文。
+    preconditions:
+      - 使用隔离 PostgreSQL 18 和临时数据库，已安装工作区依赖。
+    steps:
+      - 在 schema 8 创建带跟进的记录及回收站记录，迁移到 schema 9；无游标读取，确认每条现有记录都有 snapshot 且跟进可独立读完。
+      - 创建、编辑、完成、删除及恢复记录；确认按序号发现相应事件，删除时 get_record 和 list_followups 拒绝读取，变化仅含元数据。
+  - id: CHANGES-002
+    name: 变化与成功写事务原子一致
+    required: true
+    description: >
+      跟进单独产生事件，幂等重放、无变化编辑与回滚不新增事件；并发事务不能跨越未提交序号。
+    preconditions:
+      - 使用隔离 schema 9 数据库，可通过两个独立 PostgreSQL client 控制提交与回滚。
+    steps:
+      - 追加 agent 跟进并用原幂等键重试；确认仅一条跟进事件，父版本和状态不变，actor 为 agent。
+      - 执行无变化编辑及触发回滚的写入；确认事件总数和 checkpoint 没有变化。
+      - 保持一笔事件写事务未提交，让另一事务请求 owner 计数器；确认后者等待锁，读取不能看到未提交事件，回滚后无假事件。
+  - id: CHANGES-003
+    name: 分页和 checkpoint 不漏掉下一轮变化
+    required: true
+    description: >
+      一轮固定上界；消费最后及空页仍有游标，新写入留到下一轮，非法或错 owner 游标要求重新同步。
+    preconditions:
+      - 使用隔离 schema 9 数据库，有多条可分页变化和独立 owner 标识。
+    steps:
+      - 用 limit 1 读取第一页，期间新增变化，持续读取到 hasMore=false；确认本轮序号无重复、无缺口，新变化仅在下一轮返回。
+      - 使用最终 nextCursor 轮询空页；确认返回可继续使用的 checkpoint。
+      - 使用错误 owner、错误服务身份、超过日志末尾及非法编码的游标；确认 INVALID_ARGUMENT，不返回其他 owner 数据。
+  - id: CHANGES-004
+    name: MCP 提供严格只读元数据工具合同
+    required: true
+    description: >
+      list_changes 已注册且声明只读，输入边界严格，响应不含正文；不将工具标记误认为 token 权限限制。
+    preconditions:
+      - 使用隔离 schema 9 数据库及实际 MCP client/server transport。
+    steps:
+      - 通过 MCP listTools 确认 list_changes 的 readOnlyHint=true，再调用 list_changes；确认响应包含 items、nextCursor、hasMore 且没有正文或凭据。
+      - 传 limit 0、51 或未知筛选字段；确认输入校验拒绝。现有 Bearer 的写工具权限不因新增工具而改变。
+
+  - id: CHANGES-005
+    name: 只读凭据在服务端拒绝实际写调用
+    required: true
+    description: >
+      schema 10 保留旧凭据读写能力，独立只读凭据不能写入或重放写结果，上传在处理文件前拒绝。
+    preconditions:
+      - 使用隔离 PostgreSQL 18、schema 9 旧凭据和实际 HTTP MCP client/server，凭据均为临时合成数据。
+    steps:
+      - 迁移到 schema 10，确认旧凭据为 read-write 且仍可创建记录；登记 read-only 凭据，确认读取变化和服务身份成功。
+      - 使用只读凭据实际调用全部四个写工具及 POST /mcp/uploads；确认均为 FORBIDDEN，记录、跟进、附件及变化没有增加。
+      - 用相同注册 ID/摘要重复登记 read-only，确认幂等；改为 read-write 重放，确认冲突拒绝，实际权限未提升。
+      - 用同一业务幂等键跨工具调用，确认 IDEMPOTENCY_KEY_REUSED 且没有假变化。

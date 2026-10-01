@@ -57,7 +57,7 @@ TLS 反向代理将 `/mcp` 与 `/mcp/uploads` 转到同一 API 端口。
 
 ## 多凭据迁移
 
-多凭据功能从 schema 6 引入；当前服务要求 schema 7。沿用 `release.mjs deploy` 的发布锁、异机备份及不可变镜像。
+多凭据功能从 schema 6 引入；当前服务要求 schema 10。沿用 `release.mjs deploy` 的发布锁、异机备份及不可变镜像。
 已有部署必须有可信的 release-state；缺失时先核对真实镜像和部署信息，不能把它当成首次部署。
 若实际服务使用多个 Compose 文件，release config 必须通过 `composeFiles` 数组按顺序列出全部绝对路径，
 首项指向新版本 compose，其余保留现有 override。发现已有 override 而配置未声明时发布会停止。
@@ -151,3 +151,38 @@ Compose 的 `SUIJI_CONFIG_DIR` 指向仓库外私有目录，挂载到容器 `/c
 `services.suiji.databaseURL` 使用受限数据库账号 `suiji_api`，密码需 URL 编码；不能使用管理员账号。
 数据库管理员密码仍由 Compose secret 供迁移工具读取，不放入服务运行配置。
 发布工具的 config.json、Compose 的镜像/卷路径参数属于部署清单；不会覆盖服务 YAML 的业务字段。
+
+增量发现和只读凭据分别追加 schema 9 / 10。发布需沿用停写、异机备份、迁移和不可变镜像流程；
+旧凭据保留 read-write，新的只读持续连接需另行授权登记。合同见[服务入口](../../packages/suiji-server/README.md#mcp-只读凭据)。
+
+## AWS 专用 Lumi 连接草稿
+
+[tunnel-client 配置示例](./tunnel-client.example.yaml)只提供占位符与本机 secret 文件引用，
+未注册或运行任何真实连接。运行在随记 AWS 主机或另一台独立常驻云主机，不依赖 Mac、
+Runweave Desktop 或原 `runweave-local` Tunnel。API 仍使用现有 HTTPS `/mcp`；数据库不暴露，
+Tunnel 健康/UI 仅监听 loopback。此配置字段依据本机官方 tunnel-client 0.0.15 的 sample 与 help；
+目标云主机的二进制安装、配置 doctor、网络与 ChatGPT/Lumi 端选择必须在实施时重新核验。
+
+集中授权后按顺序实施：
+
+1. 核对 AWS 目标、受保护 release config、Compose project/override、当前不可变镜像、备份位置和停写窗口。
+   使用既有发布流程备份并升级至 schema 10；schema 9 建立变化日志、schema 10 增加凭据权限。
+   旧服务仅支持 schema 8，迁移后不能直接切回旧二进制；发布前准备兼容的恢复方案。
+2. 在云主机使用生成命令 `mcp-credential --scope read-only` 准备专用凭据；管理员通过 stdin 登记
+   仅含摘要的 registration JSON。原文仅存目标运行时的受保护文件，不发到聊天或镜像。
+   先验证身份、增量读取和实际写入/上传拒绝。旧 Mac 凭据保留原 scope，不复用它作为长期云访问。
+3. 用户在 OpenAI 平台的 Tunnels 页面创建/授权专用 Suiji Tunnel，取得其 ID；通过安全输入方式
+   把运行期 API key 写入 AWS 的 `runtime-api-key` 文件。Tunnel ID 可反馈，密钥不可回传。
+   `mcp-authorization` 文件由云主机上的受保护步骤形成完整 Bearer 值；两个文件均为 0600，
+   只让独立运行时账号读取。这里不提供秘密值或签发/上传脚本。
+4. 安装适配 AWS 架构的官方 tunnel-client，复制示例至 `/etc/suiji-tunnel/profile.yaml` 并替换专用 ID。
+   先执行 `tunnel-client doctor --config /etc/suiji-tunnel/profile.yaml --explain`，
+   再执行 `tunnel-client run --config /etc/suiji-tunnel/profile.yaml`。确认 ready 后才配置独立进程管理，
+   进程守护、密钥轮换、撤销和升级由该云运行时负责。无需给 UI 或数据库新增公网端口。
+5. 用户在 ChatGPT/Lumi 选择新建的专用连接并批准只读访问，核对 serverId/ownerId、schema 10、
+   `features.changes`，完整走过初始分页与下一轮增量。Lumi 仅发现和分析；成果写回与任务状态仍需独立授权。
+
+这里的只读权限允许读取整个 owner 的正文、跟进及附件，不能按标签限制。停用时停止该专用运行时、
+撤销专用随记凭据并断开平台连接；不修改其他设备或 Tunnel。机器/进程离线会停止新读取。
+备份恢复后需清空 Lumi 发现索引重新同步。上述发布、凭据登记和持续连接均为待实施步骤，
+路线选择不等于秘密签发或生产写入已获批准。
