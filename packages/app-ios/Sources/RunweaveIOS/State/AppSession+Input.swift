@@ -22,13 +22,13 @@ extension AppSession {
   }
 
   /// Sends a fixed reply without consuming or changing the composer's text and attachments.
-  func sendInstantReply(_ text: String, terminalID: String, controller: SessionController) async throws {
+  func sendInstantReply(_ text: String, terminalID: String, controller: SessionController, mode: String = "line") async throws {
     guard canWrite, terminal?.id == terminalID, terminalController === controller else {
       throw APIError.offline
     }
     let epoch = generation
     do {
-      try await controller.sendCommand(text, mode: "line", recordQuickInput: false)
+      try await controller.sendCommand(text, mode: mode, recordQuickInput: false)
       guard generation == epoch, terminalController === controller, !Task.isCancelled else {
         throw CancellationError()
       }

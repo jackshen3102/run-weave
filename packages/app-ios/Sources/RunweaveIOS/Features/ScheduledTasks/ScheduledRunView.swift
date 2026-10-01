@@ -118,20 +118,7 @@ struct ScheduledRunView: View {
       opening = true; failure = nil
       defer { opening = false }
       do {
-        let opened = try await model.call { try await $0.open(run.id, replace: replace) }
-        var state = opened.attachmentState
-        var error = opened.error
-        let deadline = Date().addingTimeInterval(90)
-        while state != "ready" {
-          if state == "failed" { throw ScheduledFailure(code: "restore_failed", message: error ?? "对话恢复失败，请重试。") }
-          guard Date() < deadline else { throw ScheduledFailure(code: "restore_timeout", message: "对话尚未确认恢复，请稍后重试打开同一记录。") }
-          try await Task.sleep(nanoseconds: 3_000_000_000)
-          let latest = try await model.call { try await $0.run(run.id) }
-          guard let binding = latest.terminalBinding, binding.terminalSessionId == opened.terminalSessionId, binding.panelId == opened.panelId else {
-            throw ScheduledFailure(code: "binding_changed", message: "终端绑定已变化，请重新打开此记录。")
-          }
-          state = binding.attachmentState; error = binding.error
-        }
+        let opened = try await model.call { try await $0.restoreTerminal(run.id, replace: replace) }
         try Task.checkCancellation()
         guard active, model.current else { return }
         await session.openTerminal(opened.terminalSessionId)

@@ -1,0 +1,55 @@
+version: 1
+name: iOS 后台任务终端入口验收
+description: >
+  验证快捷指令的后台任务详情可恢复原对话，缺少可恢复对话时可新建同执行项目和工作区的终端。
+  使用独占 Dev Session、测试连接与共享池模拟器，通过 toolkit:agent-device 操作真实原生界面；构建不能替代交互结果。
+cases:
+  - id: IOSRUNOPEN-001
+    name: 受阻任务恢复原对话
+    required: true
+    description: 恢复有真实可用 thread 的受阻任务，服务端确认 ready 后进入普通终端的对话页，保留原工作区和历史。
+    preconditions:
+      - 隔离 Backend 有真实执行后受阻且 recoverable 的 Codex 快捷指令运行，记录其 threadId、cwd、executionProjectId。
+      - 手机已登录此 Backend，并从另一终端的快捷指令 Tab 打开目标运行详情。
+    steps:
+      - 用 toolkit:agent-device 点击打开对话并继续追问；确认恢复期间显示正在恢复对话且不能重复点击。
+      - 等服务端 attachmentState 为 ready；确认所有运行详情弹层收起并进入对话页，实际终端绑定的 threadId、cwd 和 projectId 与原运行一致。
+      - 返回快捷指令 Tab，再从所有后台任务列表打开同一运行并恢复；确认复用同一终端绑定，不额外生成任务或重发 prompt。
+  - id: IOSRUNOPEN-002
+    name: 无对话任务新建原工作区终端
+    required: true
+    description: 缺少可恢复对话的失败记录说明原因，显式操作只新建运行原项目及工作区的普通终端。
+    preconditions:
+      - 隔离 Backend 有 threadRef 为空且 recoverable 为 false 的失败快捷指令记录，其执行项目为一个可用 Worktree。
+      - 手机已登录，并从另一个项目的终端打开此记录详情，测试者可读取前后的终端列表。
+    steps:
+      - 用 toolkit:agent-device 查看详情；确认显示没有可恢复对话的说明和新建项目终端按钮。
+      - 点击新建项目终端；确认详情弹层关闭并进入对话页，Backend 只增加一个普通终端，projectId 和 cwd 等于运行快照，未重发任务 prompt。
+  - id: IOSRUNOPEN-003
+    name: 不可用工作区阻止新建终端
+    required: true
+    description: 运行原工作区已不存在或路径变化时，留在详情并解释失败，不回退到主项目或当前终端项目。
+    preconditions:
+      - 隔离 Backend 有无可恢复对话的失败运行，原 executionProjectId 或 cwd 已不可用，手机正显示此详情。
+    steps:
+      - 用 toolkit:agent-device 点击新建项目终端；确认显示工作区不可用提示并保留运行输出。
+      - 核对 Backend 终端列表无新增，原终端仍存在且没有被发送 prompt。
+  - id: IOSRUNOPEN-004
+    name: 原终端被改用时显式确认另开
+    required: true
+    description: 已恢复的终端被用于另一段对话后，不覆盖新对话；只有用户确认才另开终端恢复目标运行。
+    preconditions:
+      - 隔离 Backend 有可恢复历史运行，其绑定终端随后真实启动了不同 thread 的 Codex 对话，记录两个 threadId。
+      - 手机已登录并显示目标历史运行详情。
+    steps:
+      - 用 toolkit:agent-device 点击打开对话并继续追问；确认出现原终端已用于另一个对话的确认框。
+      - 取消后确认未新增终端且新对话保留；再次打开并确认另开，确认进入原运行对话的新终端，旧终端仍绑定另一段对话。
+  - id: IOSRUNOPEN-005
+    name: 离开详情取消恢复导航
+    required: true
+    description: 恢复尚未 ready 时离开详情或切后台，迟到结果不得把当前页面导航到目标终端。
+    preconditions:
+      - 隔离 Backend 有可恢复运行，可使其恢复过程稳定停留在 starting，手机已登录并显示此详情。
+    steps:
+      - 用 toolkit:agent-device 点击恢复，并在正在恢复期间关闭详情；待服务端 ready 后，确认页面保持原终端和原 Tab，不自动跳转。
+      - 重新进入目标详情，主动点击恢复；确认可打开已准备好的同一绑定终端。

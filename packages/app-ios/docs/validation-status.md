@@ -8,6 +8,7 @@
 仓库 `docs/testing/app/` 中的原生计划是当前合同：
 
 - [首页关注、搜索与重命名](../../../docs/testing/app/ios-native-home-discovery.testplan.yaml)
+- [后台任务终端入口](../../../docs/testing/app/ios-background-terminal-access.testplan.yaml)
 - [终端悬浮输入布局](../../../docs/testing/app/ios-native-terminal-layout.testplan.yaml)
 - [内置浏览器与终端连续性](../../../docs/testing/app/ios-native-browser.testplan.yaml)
 - [网页身份与导航安全](../../../docs/testing/app/ios-native-browser-safety.testplan.yaml)
@@ -35,6 +36,21 @@ iOS 26.5 / iPhone 17 Simulator 的当前源码 Debug 构建与原生交互已验
 删除收缩、键盘收放、横屏、大字体、中文拼音候选、快捷回复追加/替换、附件失败布局、发送成功/失败，
 以及关闭重开后的迟到确认隔离。本轮使用本机隔离 HTTP/WS fixture；正文增长和键盘收放未新增 resize，
 不代表真实 Backend/PTY 端到端、真机、第三方键盘、外接键盘或 VoiceOver 已验收。
+
+2026-10-01 快捷指令已迁入文件之后的独立 Tab，无搜索，紧凑卡片直接发送或后台运行，
+菜单提供草稿追加；看板跨当前电脑所有项目展示需处理及活动运行，首页最多三条。
+当前源码在共享 iOS 26.5 Simulator 构建、安装并经 agent-device 与隔离 Backend 交互核对：
+直接发送与文本草稿保留、菜单追加、新增/编辑/删除/排序、当前 worktree 后台提交、
+跨项目四任务与更多列表、真实输出滚动及停止终态。长输出限制独立区域，停止后详情保持打开。
+本轮未执行完整 18 条回归，也未验证真机、VoiceOver、大字体、附件保留的设备流程、
+迟到连接响应或旧 Backend 兼容；上述结果不能代替这些用例。
+
+同日补验受阻可发现性：以隔离 Backend 持久状态记录在原生模拟器核对受阻、失败、旧版失败及
+waiting 优先展示与橙色高亮、原因及跨项目标签、三行上限、需处理计数、与近期结果不重复。
+受阻详情不提供停止，运行中详情保留停止；同一记录从运行中转受阻进入看板，再转成功退出看板
+并仅留在近期结果。此专项使用关闭实际执行的状态 fixture，不声称复现了 provider 自然受阻。
+专项证据位于 `.runweave/mobile-qa/quick-command-attention-20261001/`；测试计划已扩为 19 条，
+没有执行完整计划。当前修复构建已覆盖安装并在 iPhone 17 启动，真机交互本轮未验证。
 
 ## 已有证据及适用边界
 
@@ -334,3 +350,21 @@ Web UI 亦未验收：本轮 source root `/root/run-weave` 的 Beta Session `dvs
 26 条测试任务已归档，两个专用项目及终端、临时目录已清理；测试连接与凭据已删除，
 恢复“家里mac”。隔离 Session `dvs-80f70b`、故障代理和本次自动化已停止，正式数据未改动。
 本轮未扩展到旧 Backend/503/认证失效、全部安排保存组合和 Web 同时在线 UI 对照，不能标为全量验收。
+
+## 后台任务终端入口补回（2026-10-01）
+
+新版快捷指令运行详情补回原对话恢复入口；没有可恢复对话的已结束运行提供新建原项目终端，
+创建前校验 executionProjectId、cwd 及工作区 availability。恢复共用既有 ScheduledTasksService，
+ready 后进入终端对话 Tab，关闭详情和全部任务列表两层弹窗；不自动重发任务 prompt。
+
+当前源码 Debug 模拟器构建通过；共享池 Runweave 模拟器
+`0986DF97-0644-4138-847E-5BC690CFEF7E` 在隔离 Session `dvs-d58f79` 上通过：
+真实 Codex 受阻运行恢复同 thread/cwd/projectId，全部任务嵌套详情重复打开复用同一终端并切回对话页，
+从其他项目新建无对话记录的原 Worktree 普通终端，以及原目录不匹配时留在详情提示失败且无新增终端。
+无对话和不可用目录使用隔离状态 fixture；原对话恢复使用实际执行的后台任务，未伪造 thread。
+
+入口计划 IOSRUNOPEN-001～003 已执行；004（原终端被改用）和 005（关闭详情取消迟到导航）
+本轮未执行完整交互回归，不能标为全量验收。证据见本机
+`.runweave/mobile-qa/background-terminal-access-20261001/`；没有安装到手机，真机本轮未验收。
+
+本轮测试连接/凭据、隔离项目/终端及快捷指令已删除，Session 已停止，共享模拟器租约已归还。

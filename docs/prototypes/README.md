@@ -10,6 +10,8 @@
 
 ## 当前参考入口
 
+- `terminal-quick-commands/`：终端快捷指令 Tab、全局后台任务看板和当前项目执行的冻结历史原型。
+
 - `activity-action-center-live-references/`：基于当前 Activity、Agent Team 门禁和 pane-scoped outbox 的 Action Center + Live Reference 待评审原型。
 - `activity-insights-hub/`：Activity 事实、Timeline、Sources 与 Data Policy 的冻结交互原型。
 - `agent-team-attention-summary/`：Agent Team run 注意力摘要与待处理项原型。

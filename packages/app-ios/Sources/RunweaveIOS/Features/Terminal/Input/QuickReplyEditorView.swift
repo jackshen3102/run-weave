@@ -41,7 +41,7 @@ struct QuickReplyEditorView: View {
       Section(header: Text("正文")) {
         CommandTextView(
           text: $text, isFocused: $editingBody, collapsesWhenUnfocused: false,
-          accessibilityLabel: "快捷回复正文", maximumHeight: maximumBodyHeight,
+          accessibilityLabel: "快捷指令正文", maximumHeight: maximumBodyHeight,
           onHeightChange: { bodyHeight = $0 }
         )
         .frame(height: min(maximumBodyHeight, max(minimumBodyHeight, bodyHeight)))
@@ -51,7 +51,7 @@ struct QuickReplyEditorView: View {
       if let error = store.failure { Section { Text(error).foregroundColor(.red) } }
     }
     .disabled(store.saving)
-    .navigationTitle(item == nil ? "新增快捷回复" : "编辑快捷回复")
+    .navigationTitle(item == nil ? "新增快捷指令" : "编辑快捷指令")
     .navigationBarTitleDisplayMode(.inline)
     .navigationBarBackButtonHidden(true)
     .toolbar {

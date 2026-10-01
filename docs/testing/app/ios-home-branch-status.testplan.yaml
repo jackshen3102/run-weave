@@ -81,3 +81,36 @@ cases:
       - 未认证 POST /api/app/home/branch-status，确认被既有认证中间件拒绝且没有 Git 操作。
       - 使用有效凭证发送额外 cwd 字段、超过 100 个 ID 或非布尔 refresh，确认返回 400。
       - 请求未知 ID，确认 statuses 为空且没有 Git 操作；重复同一个有效 ID，确认只返回一项。
+  - id: IOSBRANCH-008
+    name: 返回首页重算本地 HEAD 且复用远端缓存
+    required: true
+    description: >
+      同目录 rebase 改变 HEAD 后，返回首页重新计算落后数，不等待十分钟，也不重复拉取新鲜的远端基准。
+    preconditions:
+      - 候选 App 连接本例隔离 Backend，有一个置顶 Git 终端落后远端默认分支两次提交，执行者可观察 Git trace。
+      - 首页已显示 ready 落后数，远端成功缓存仍在十分钟内，上次状态计算超过两秒。
+    steps:
+      - 用 agent-device 进入该终端，在本例工作目录 rebase 到已拉取的远端默认分支，确认目录未变且 HEAD 已改变。
+      - 返回首页，确认状态更新为默认分支与勾号；核对 Git trace 没有新增 fetch。
+  - id: IOSBRANCH-009
+    name: 远端短暂失败后前台自动重试
+    required: true
+    description: >
+      远端查询失败保留旧数值，远端恢复后在首页下一次约三十秒的自动重试中恢复 ready，不等待十分钟或手动刷新。
+    preconditions:
+      - 候选 App 连接本例隔离 Backend，置顶 Git 终端已显示 ready，执行者可中断并恢复本例远端且观察请求与 Git trace。
+      - 上次成功查询超过两秒，远端新增一次提交尚未进入缓存。
+    steps:
+      - 中断本例远端，用 agent-device 下拉刷新，确认旧计数保留并标记待更新，Backend 本身保持在线。
+      - 恢复本例远端并保持首页前台，不做手动刷新；确认下一次约三十秒自动重试执行 fetch、计数增加一次且待更新消失。
+  - id: IOSBRANCH-010
+    name: 电脑连接恢复立即重新查询分支状态
+    required: true
+    description: >
+      电脑恢复在线触发分支查询，重新读取本地 HEAD，不受此前成功缓存的十分钟期限限制。
+    preconditions:
+      - 候选 App 连接本例隔离 Backend，置顶 Git 终端已显示落后两次提交的 ready 状态，远端成功缓存仍在十分钟内。
+      - 本例可中断手机到 Backend 的连接而保持 Backend 进程及远端缓存，执行者可观察请求与 Git trace。
+    steps:
+      - 中断手机到 Backend 的连接，用 agent-device 确认首页显示电脑离线；在本例终端工作目录 rebase 到已拉取的默认分支。
+      - 恢复连接，保持首页前台；确认电脑恢复在线后发起分支查询、状态显示勾号，且没有新增 fetch。

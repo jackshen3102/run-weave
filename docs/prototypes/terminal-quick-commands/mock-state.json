@@ -1,0 +1,98 @@
+{
+  "connection": "家里 mac",
+  "context": {
+    "projectId": "browser-viewer:wt-1",
+    "projectName": "browser-viewer",
+    "worktreeName": "wt-1",
+    "terminalId": "terminal-a"
+  },
+  "commands": [
+    {
+      "id": "pr",
+      "title": "创建 PR",
+      "data": "使用 $toolkit:github-pr 提交当前改动，创建 PR 并完成合并流程。"
+    },
+    {
+      "id": "update",
+      "title": "更新 Runweave",
+      "data": "使用 $toolkit:update-runweave-desktop 更新本地客户端，并验证桌面终端页面。"
+    },
+    {
+      "id": "rebase",
+      "title": "rebase main",
+      "data": "fetch 最新 origin/main 并 rebase，保留全部本地改动。"
+    },
+    { "id": "clear", "title": "/clear", "data": "/clear" }
+  ],
+  "backgroundDefaults": {
+    "model": "GPT-6.1-Sol",
+    "effort": "中",
+    "executionPolicy": "完全访问"
+  },
+  "runs": [
+    {
+      "id": "run-pr",
+      "commandId": "pr",
+      "title": "创建 PR",
+      "projectId": "browser-viewer:wt-2",
+      "projectName": "browser-viewer",
+      "worktreeName": "wt-2",
+      "status": "running",
+      "elapsed": "3分12秒",
+      "prompt": "提交当前改动，创建 PR 并完成合并流程。",
+      "output": "正在核对当前分支与工作区改动。\n\n已检查提交范围。\n正在执行增量检查，准备创建 PR。"
+    },
+    {
+      "id": "run-check",
+      "commandId": "check",
+      "title": "检查改动",
+      "projectId": "coze-space",
+      "projectName": "coze-space",
+      "worktreeName": null,
+      "status": "running",
+      "elapsed": "1分08秒",
+      "prompt": "检查当前项目的改动。",
+      "output": "已读取工作区差异。\n正在检查页面调用与状态更新链路。"
+    }
+  ],
+  "extraRuns": [
+    {
+      "id": "run-update",
+      "commandId": "update",
+      "title": "更新 Runweave",
+      "projectId": "browser-viewer",
+      "projectName": "browser-viewer",
+      "worktreeName": null,
+      "status": "running",
+      "elapsed": "42秒",
+      "prompt": "更新本地客户端。",
+      "output": "正在准备客户端更新。"
+    },
+    {
+      "id": "run-rebase",
+      "commandId": "rebase",
+      "title": "rebase main",
+      "projectId": "suiji:feature",
+      "projectName": "suiji",
+      "worktreeName": "feature",
+      "status": "queued",
+      "elapsed": "等待执行",
+      "prompt": "rebase main",
+      "output": "暂无输出"
+    },
+    {
+      "id": "run-pr-space",
+      "commandId": "pr",
+      "title": "创建 PR",
+      "projectId": "coze-space:wt-1",
+      "projectName": "coze-space",
+      "worktreeName": "wt-1",
+      "status": "queued",
+      "elapsed": "等待执行",
+      "prompt": "创建 PR",
+      "output": "暂无输出"
+    }
+  ],
+  "terminalHistory": "• 当前会话已就绪。",
+  "draft": ""
+}

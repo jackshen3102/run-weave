@@ -5,6 +5,7 @@ import type { AppHomeBranchStatus } from "@runweave/shared/terminal/session";
 
 const exec = promisify(execFile);
 const TTL = 10 * 60_000;
+const RECHECK_TTL = 2_000;
 type Snapshot = Omit<AppHomeBranchStatus, "terminalSessionId" | "cwd">;
 type Entry<T> = { at: number; value?: T; pending?: Promise<T>; failed?: boolean };
 
@@ -54,7 +55,8 @@ export class HomeBranchStatusService {
     const entry = this.entry(this.snapshots, cwd);
     const remoteExpired = entry.value?.state === "ready" && entry.value.checkedAt
       && Date.now() - Date.parse(entry.value.checkedAt) >= TTL;
-    if (!entry.pending && (!entry.value || remoteExpired || Date.now() - entry.at >= (refresh ? 2_000 : TTL))) {
+    // Local HEAD can change while the remote snapshot is still fresh.
+    if (!entry.pending && (!entry.value || remoteExpired || Date.now() - entry.at >= RECHECK_TTL)) {
       entry.pending = this.limited(() => this.compare(cwd, refresh)).catch((): Snapshot =>
         entry.value?.behind !== undefined
           ? { ...entry.value, state: "stale" } : { state: "unavailable" },
@@ -83,7 +85,8 @@ export class HomeBranchStatusService {
     if (!remote) return { state: "unavailable" };
     const url = await git(cwd, ["remote", "get-url", remote]);
     const entry = this.entry(this.remotes, `${common}\0${remote}\0${url}`);
-    if (!entry.pending && (!entry.at || Date.now() - entry.at >= (refresh ? 2_000 : TTL))) {
+    // Failed fetches only coalesce bursts; clients control the retry interval.
+    if (!entry.pending && (!entry.at || Date.now() - entry.at >= (refresh || entry.failed ? RECHECK_TTL : TTL))) {
       entry.pending = (async () => {
         const head = await git(cwd, ["ls-remote", "--symref", remote, "HEAD"]);
         const base = /^ref: refs\/heads\/(.+)\tHEAD$/m.exec(head)?.[1];

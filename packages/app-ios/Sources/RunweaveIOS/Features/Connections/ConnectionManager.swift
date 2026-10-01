@@ -37,7 +37,7 @@ struct ConnectionManager: View {
           NavigationLink {
             QuickReplyLibraryView(session: session)
           } label: {
-            Label("快捷回复", systemImage: "text.badge.plus")
+            Label("快捷指令", systemImage: "text.badge.plus")
           }.accessibilityIdentifier("connection-quick-replies")
         }
         if session.authenticated {

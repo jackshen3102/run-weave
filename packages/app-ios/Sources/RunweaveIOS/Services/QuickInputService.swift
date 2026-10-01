@@ -4,7 +4,7 @@ struct QuickInputService {
   let api: APIClient
   private let base = "/api/terminal/quick-inputs"
 
-  func list(query: String = "", cursor: String? = nil) async throws -> BackendQuickInputPage {
+  func list(cursor: String? = nil) async throws -> BackendQuickInputPage {
     var components = URLComponents()
     components.queryItems = [
       URLQueryItem(name: "kind", value: "pinned"),
@@ -12,11 +12,10 @@ struct QuickInputService {
       URLQueryItem(name: "order", value: "manual"),
       URLQueryItem(name: "limit", value: "100"),
     ]
-    if !query.isEmpty { components.queryItems?.append(URLQueryItem(name: "q", value: query)) }
     if let cursor { components.queryItems?.append(URLQueryItem(name: "cursor", value: cursor)) }
     let page: BackendQuickInputPage = try await request("?" + (components.percentEncodedQuery ?? ""))
     guard page.orderVersion != nil else {
-      throw BackendQuickInputFailure(code: "upgrade_required", message: "此电脑尚不支持全局快捷回复，请先更新电脑端。")
+      throw BackendQuickInputFailure(code: "upgrade_required", message: "此电脑尚不支持全局快捷指令，请先更新电脑端。")
     }
     guard page.items.allSatisfy({ $0.projectId == nil && $0.pinned }) else {
       throw APIError.invalidResponse
@@ -57,14 +56,14 @@ struct QuickInputService {
     ], key: key)
   }
 
-  func runs(projectId: String, cursor: String? = nil) async throws -> ScheduledPage<ScheduledRun> {
+  func runs(projectId: String? = nil, cursor: String? = nil) async throws -> ScheduledPage<ScheduledRun> {
     var components = URLComponents()
     components.queryItems = [
       URLQueryItem(name: "source", value: "quick-input"),
-      URLQueryItem(name: "projectId", value: projectId),
       URLQueryItem(name: "limit", value: "100"),
     ]
     if let cursor { components.queryItems?.append(URLQueryItem(name: "cursor", value: cursor)) }
+    if let projectId { components.queryItems?.append(URLQueryItem(name: "projectId", value: projectId)) }
     return try await api.authorized("/api/scheduled-tasks/runs?" + (components.percentEncodedQuery ?? ""))
   }
 
