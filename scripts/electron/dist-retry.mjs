@@ -240,6 +240,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             to: "backend",
             filter: [
               "index.cjs",
+              "resource-sampler",
               "activity-sqlite-worker.cjs",
               "evolution-sqlite-worker.cjs",
               "scheduled-tasks-sqlite-worker.cjs",

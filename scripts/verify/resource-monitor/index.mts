@@ -1,26 +1,14 @@
 // Isolated HTTP/lifecycle acceptance fixtures, not unit tests. No user process is signalled.
 import assert from "node:assert/strict";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { AuthService } from "../../../backend/src/auth/service";
-import { createRequireAuth } from "../../../backend/src/auth/middleware";
-import { createResourceMonitorRouter } from "../../../backend/src/routes/resource-monitor";
-import { DeviceMonitorService } from "../../../backend/src/device-monitor/service";
-import { DeviceMonitorStore } from "../../../backend/src/device-monitor/store";
 import { ResourceMonitorStore } from "../../../backend/src/resource-monitor/store";
-import { ResourceMonitorService } from "../../../backend/src/resource-monitor/service";
-import { RuntimeStatusWorkspaceServiceManager } from "../../../backend/src/runtime-status/workspace-service-manager";
 import {
   createResourceSampler,
   readIdentity,
-  type ResourceSample,
 } from "../../../backend/src/resource-monitor/sampler";
 import { ResourceCounters } from "../../../backend/src/resource-monitor/counters";
 import { signedBatteryCurrent } from "../../../packages/shared/src/monitoring/battery";
@@ -29,7 +17,6 @@ import {
   pause,
   checks,
   baseSample,
-  fixture,
   run,
   window,
 } from "./fixtures.mts";
@@ -379,6 +366,75 @@ await run(
     }
   },
 );
+await run(
+  "owned service routes through manager stop and verifies exit",
+  async (f) => {
+    f.enableProject();
+    const file = path.join(f.directory, "owned.cjs");
+    await writeFile(
+      file,
+      "const fs=require('fs');fs.writeFileSync('owned.pid',String(process.pid));require('http').createServer((_,r)=>r.end('ok')).listen(Number(process.env.RUNWEAVE_SERVICE_PORT),'127.0.0.1')",
+    );
+    const quote = (value: string) =>
+      "'" + value.replaceAll("'", "'\"'\"'") + "'";
+    await writeFile(
+      path.join(f.directory, "runweave.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        services: {
+          fixture: {
+            command: `exec ${quote(process.execPath)} ${quote(file)}`,
+            healthCheck: { path: "/health" },
+          },
+        },
+      }),
+    );
+    const listed = await f.manager.list("fixture-project", "fixture-project");
+    await f.manager.start({
+      parentProjectId: "fixture-project",
+      projectId: "fixture-project",
+      serviceName: "fixture",
+      configRevision: listed.config.revision!,
+    });
+    let pid = 0;
+    for (let i = 0; i < 40; i++) {
+      try {
+        pid = Number(
+          await readFile(path.join(f.directory, "owned.pid"), "utf8"),
+        );
+        break;
+      } catch {
+        await pause(50);
+      }
+    }
+    assert(pid > 0);
+    assert(f.manager.findOwnedProcess(pid));
+    const identity = (await readIdentity(pid, AbortSignal.timeout(5000)))!;
+    f.next.identities.set(identity.processInstanceId, identity);
+    f.next.snapshot.processes.push({
+      ...f.next.snapshot.processes[0]!,
+      pid,
+      processInstanceId: identity.processInstanceId,
+    });
+    await f.monitor.sample();
+    assert.equal(
+      f.monitor.snapshot(true).snapshot!.processes.find((p) => p.pid === pid)!
+        .actionKind,
+      "stop_service",
+    );
+    const result = await (
+      await f.request(
+        `/processes/${identity.processInstanceId}/terminate`,
+        "POST",
+        { requestId: randomUUID(), force: false },
+      )
+    ).json();
+    assert.equal(result.state, "exited");
+    assert.equal(await readIdentity(pid, AbortSignal.timeout(5000)), null);
+    assert.equal(f.manager.findOwnedProcess(pid), null);
+  },
+);
+
 await run(
   "many idle apps cannot evict the actual high-use observation",
   async (f) => {

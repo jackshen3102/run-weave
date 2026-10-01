@@ -1,23 +1,23 @@
 export function formatPercent(value: number | null): string {
   if (value === null || !Number.isFinite(value)) {
-    return "-";
+    return "—";
   }
   return `${value.toFixed(value >= 10 ? 0 : 1)}%`;
 }
 
 export function formatMemory(mb: number): string {
   if (!Number.isFinite(mb)) {
-    return "-";
+    return "—";
   }
   if (mb >= 1024) {
-    return `${(mb / 1024).toFixed(mb >= 10 * 1024 ? 1 : 2)} GB`;
+    return `${(mb / 1024).toFixed(mb >= 10 * 1024 ? 1 : 2)} GiB`;
   }
-  return `${Math.round(mb)} MB`;
+  return `${Math.round(mb)} MiB`;
 }
 
 export function formatTime(timestamp: number | null): string {
   if (!timestamp) {
-    return "-";
+    return "—";
   }
   return new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",

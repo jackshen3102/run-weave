@@ -1,14 +1,12 @@
 // Isolated HTTP/lifecycle acceptance fixtures, not unit tests. No user process is signalled.
-import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import { AuthService } from "../../../backend/src/auth/service";
 import { createRequireAuth } from "../../../backend/src/auth/middleware";
 import { createResourceMonitorRouter } from "../../../backend/src/routes/resource-monitor";
@@ -17,13 +15,7 @@ import { DeviceMonitorStore } from "../../../backend/src/device-monitor/store";
 import { ResourceMonitorStore } from "../../../backend/src/resource-monitor/store";
 import { ResourceMonitorService } from "../../../backend/src/resource-monitor/service";
 import { RuntimeStatusWorkspaceServiceManager } from "../../../backend/src/runtime-status/workspace-service-manager";
-import {
-  createResourceSampler,
-  readIdentity,
-  type ResourceSample,
-} from "../../../backend/src/resource-monitor/sampler";
-import { ResourceCounters } from "../../../backend/src/resource-monitor/counters";
-import { signedBatteryCurrent } from "../../../packages/shared/src/monitoring/battery";
+import { type ResourceSample } from "../../../backend/src/resource-monitor/sampler";
 export const repositoryRoot = fileURLToPath(
   new URL("../../../", import.meta.url),
 );
@@ -96,9 +88,21 @@ export async function fixture() {
     }),
   );
   await device.sample();
+  let projectEnabled = false;
   const manager = new RuntimeStatusWorkspaceServiceManager({
-    getProjectContext: () => null,
-    listProjects: () => [],
+    getProjectContext: (id: string) =>
+      projectEnabled && id === "fixture-project"
+        ? {
+            availability: "available",
+            isPrimary: true,
+            name: "fixture",
+            parentProjectId: "fixture-project",
+            projectId: "fixture-project",
+            path: directory,
+          }
+        : null,
+    listProjects: () =>
+      projectEnabled ? [{ id: "fixture-project", name: "fixture" }] : [],
   } as never);
   let next = baseSample();
   let calls = 0;
@@ -160,6 +164,10 @@ export async function fixture() {
     });
   return {
     directory,
+    enableProject() {
+      projectEnabled = true;
+      manager.setProxyPort(49999);
+    },
     set tick(value: number) {
       tick = value;
     },
