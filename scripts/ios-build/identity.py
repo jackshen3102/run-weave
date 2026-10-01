@@ -97,6 +97,7 @@ def phase(action, app):
                         bundleId=APPS[app][1], sourceRevision=revision, sourceState=state,
                         inputsSHA256=digest, builtAt=now(), configuration=env["CONFIGURATION"],
                         platform=env["PLATFORM_NAME"], architecture=env.get("ARCHS", "unknown"),
+                        appVersion=env.get("MARKETING_VERSION"), appBuild=env.get("CURRENT_PROJECT_VERSION"),
                         xcodeVersion=command(["xcodebuild", "-version"]), sdkVersion=env.get("SDK_VERSION", "unknown"))
         value = dict(identity=identity, worktree=str(root), inputs=files, stage="inputsCaptured")
         write(directory(root, identity) / "manifest.json", value)
@@ -112,6 +113,8 @@ def phase(action, app):
             raise ValueError("Git revision changed during compilation")
         if identity["configuration"] != env["CONFIGURATION"] or identity["platform"] != env["PLATFORM_NAME"]:
             raise ValueError("Build identity context mismatch")
+        if identity["appVersion"] != env.get("MARKETING_VERSION") or identity["appBuild"] != env.get("CURRENT_PROJECT_VERSION"):
+            raise ValueError("Build version changed during compilation")
         product = Path(env["TARGET_BUILD_DIR"]) / env["UNLOCALIZED_RESOURCES_FOLDER_PATH"]
         write(product / "BuildIdentity.json", identity)
         value.update(stage="inputsVerified", appPath=str(product), verifiedAt=now())

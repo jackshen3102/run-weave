@@ -178,6 +178,7 @@ export async function preflight(options, dir, ownRunId) {
       identifier: device?.identifier,
       name: device?.deviceProperties?.name,
       osVersion: device?.deviceProperties?.osVersionNumber,
+      transport: device?.connectionProperties?.transportType ?? null,
     },
     checks,
     team,

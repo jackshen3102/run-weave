@@ -39,6 +39,9 @@ public enum MobileAnalytics {
     guard initialized else { return }
     _ = ClaritySDK.setOnSessionStartedCallback { _ in
       Task { @MainActor in
+        for (key, value) in AppBuildMetadata.fields {
+          _ = ClaritySDK.setCustomTag(key: key, value: value)
+        }
         reportedScreen = nil
         reportScreen()
       }

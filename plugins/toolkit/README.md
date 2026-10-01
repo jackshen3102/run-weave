@@ -13,6 +13,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 ## 已包含的 Skills
 
 - [`agent-device`](./skills/agent-device/SKILL.md)：iOS 模拟器和真机上的 Agent 交互验收，包含设备预检、独立会话及证据记录。
+- [`update-runweave-ios`](./skills/update-runweave-ios/SKILL.md)：通过统一 CLI 更新 Runweave 到 iPhone，自动递增产品版本和构建号并核对安装和启动；也可脱离 Agent 直接执行命令。
 - `brainstorming`
 - `code-grounded-requirements`
 - `daily-doc-maintenance`

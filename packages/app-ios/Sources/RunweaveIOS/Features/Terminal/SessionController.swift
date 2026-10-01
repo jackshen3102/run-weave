@@ -493,6 +493,7 @@ public final class SessionController: ObservableObject {
       "committedOffset": committedCursor?.offset ?? -1,
       "streamId": committedCursor?.streamId ?? "",
     ]
+    value.merge(AppBuildMetadata.fields.mapValues { $0 as Any }) { _, next in next }
     value.merge(extra) { _, next in next }
     if let entry = DiagnosticRecord.terminal(value) {
       DiagnosticStore.shared.append(scope: api.connectionID, entry)

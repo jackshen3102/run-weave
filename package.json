@@ -87,6 +87,7 @@
     "quality:gate": "node ./scripts/quality/gate.mjs",
     "prepare": "husky",
     "ios:doctor": "node packages/app-ios/scripts/ios.mjs doctor",
+    "ios:update": "node packages/app-ios/scripts/ios.mjs update",
     "ios:build": "node packages/app-ios/scripts/ios.mjs build",
     "ios:run": "node packages/app-ios/scripts/ios.mjs run",
     "agents:build": "node scripts/agents/build.mjs",

@@ -26,6 +26,46 @@ Release 真机仍可传入 `RUNWEAVE_CLARITY_ENABLED=NO` 关闭初始化，或�
 
 ## 构建与安装
 
+### 一条命令更新到 iPhone
+
+在仓库根运行 `pnpm ios:update --devices` 获取硬件 UDID。首次明确指定手机和签名团队，
+成功后保存本机默认目标：
+
+```bash
+pnpm ios:update --device <硬件UDID> --team <TEAM_ID> --save-target
+```
+
+以后运行 `pnpm ios:update` 即完成检查、按需构建、签名检查、安装、安装版本核对和启动。
+不需要 Agent 或 XCTest runner。支持 USB 和已配对可达的无线连接；首次配对/信任、Developer
+Mode、Xcode 签名登录和 Swift package 插件审批仍需按正常系统流程准备。锁屏时命令提示并
+最多等待 120 秒，解锁后自动继续；超时非零退出，重新执行可复用已验证的产物。
+保持 Bundle ID、Keychain 和应用数据，不卸载旧 App。
+
+默认 Release，沿用生产 Clarity 和 APNs production；可传入 `--configuration Debug` 或
+`Profile`（默认关闭分析、APNs sandbox）。签名必须支持现有 entitlement，不自动删减推送能力。
+`--dry-run` 只读预览，不消耗构建号、不保存目标、不安装；`--json` 将最终结果输出为 JSON，
+进度输出到 stderr。另一个显式目标不自动覆盖已保存手机，须添加 `--save-target` 才保存。
+脚本消费 stdout 时使用 `pnpm --silent ios:update --json` 或独立 Node 入口，避免 pnpm 的命令提示混入 JSON。
+
+每个新产物自动递增产品版本的补丁位，例如 `0.1.0 → 0.1.1 → 0.1.2`，界面直接显示产品版本。
+独立构建号仍自动递增并记录在诊断、分析标签和构建信息导出中；同一可信产物重复安装保持版本和构建号不变。
+版本分配参考工程默认、本机历史和目标手机；发布阶段可使用 `--version 0.2.0` 指定尚未使用的新产品版本。
+不自动修改或提交工程配置。本机号源跨 worktree 共享；跨电脑并发的全局排序需另设统一号源。
+直接 Xcode 构建仍使用工程默认版本，但包含独立构建身份。
+
+无需 pnpm workspace 安装时，在本包执行 `node scripts/ios.mjs update`（相同参数）。要求
+macOS、Node、Python 3 和完整 Xcode。默认目标和号源保存在 `~/.runweave/ios-update/`，
+本轮日志及回执在工作区 `.runweave/ios-updates/<runId>/`，成功记录在 `last-success.json`。
+运行不会拉代码、切分支或更新 Backend，使用当前磁盘源码，包括未提交改动。
+
+退出码：0 为安装版本和启动进程均核对成功；2 为参数/配置；3 为环境、设备或占用阻塞；
+4 为构建/签名；5 为安装/安装身份；6 为启动失败。安装成功但启动失败会分别报告。
+成功结果的 `uiVerified` 仍为 false，业务页面和 Clarity 云端回放需独立验收。新 Clarity
+会话附带 `app_version`、`app_build`、`build_id`、`source_revision`、`source_state` 标签；
+旧会话不会被补写。
+
+### Xcode 与模拟器入口
+
 需要 macOS、Xcode、iOS SDK 和 Metal Toolchain。应用部署版本以 Xcode host 的
 `IPHONEOS_DEPLOYMENT_TARGET` 为准；Swift package 的最低平台声明不等于应用已验证的最低系统。
 SwiftTerm 基于 1.19.0，以仓库内 [Vendor/SwiftTerm](Vendor/SwiftTerm/README.md) 本地 package

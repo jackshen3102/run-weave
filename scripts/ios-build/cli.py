@@ -7,7 +7,7 @@ import plistlib
 import subprocess
 import sys
 import uuid
-from identity import APPS, directory, fingerprint, now, write
+from identity import APPS, directory, fingerprint, git_identity, now, write
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -26,7 +26,11 @@ def inspect(app):
         if path.is_file():
             digest.update(path.relative_to(app).as_posix().encode() + b"\0")
             digest.update(hashlib.sha256(path.read_bytes()).digest())
-    result = dict(identity=value, appPath=str(app), productSHA256=digest.hexdigest(), observedAt=now(), stage="signedProductObserved")
+    version, build = info["CFBundleShortVersionString"], info["CFBundleVersion"]
+    if ((value.get("appVersion") is not None and value["appVersion"] != version)
+            or (value.get("appBuild") is not None and value["appBuild"] != build)):
+        raise ValueError("Build identity version differs from signed Info.plist")
+    result = dict(identity=value, appPath=str(app), version=version, buildNumber=build, productSHA256=digest.hexdigest(), observedAt=now(), stage="signedProductObserved")
     write(directory(ROOT, value) / ("inspection-" + str(uuid.uuid4()) + ".json"), result)
     return result
 
@@ -58,8 +62,13 @@ def main():
             item.add_argument("--device", required=True)
     item = commands.add_parser("lookup")
     item.add_argument("--build-id", required=True)
+    item = commands.add_parser("source")
+    item.add_argument("--app", choices=APPS, required=True)
     args = parser.parse_args()
-    if args.command == "lookup":
+    if args.command == "source":
+        revision, state = git_identity(ROOT, args.app)
+        value = dict(inputsSHA256=fingerprint(ROOT, args.app)[0], sourceRevision=revision, sourceState=state)
+    elif args.command == "lookup":
         uuid.UUID(args.build_id)
         matches = list((ROOT / ".runweave/ios-builds").glob("*/" + args.build_id + "/manifest.json"))
         if len(matches) != 1:

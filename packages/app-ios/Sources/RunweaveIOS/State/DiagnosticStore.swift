@@ -173,6 +173,7 @@ extension DiagnosticRecord {
       "attemptId", "errorDomain", "errorCode", "underlyingDomain", "underlyingCode", "closeCode",
       "retry", "retryDelayMs", "receivedBytes", "consumedBytes", "outputFrames", "consumeFrames",
       "committedOffset", "streamId",
+      "app_version", "app_build", "build_id", "source_revision", "source_state",
     ]
     var details: [String: String] = [:]
     for key in allowed { if let value = event[key] { details[key] = String(describing: value) } }
@@ -186,6 +187,7 @@ extension DiagnosticRecord {
     if let error { fields.merge(errorFields(error)) { _, next in next } }
     fields["uptime"] = String(ProcessInfo.processInfo.systemUptime)
     fields["appVersion"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    fields.merge(AppBuildMetadata.fields) { _, next in next }
     return DiagnosticRecord(at: formatter.string(from: Date()), source: "native-ios:connection", message: message, details: fields)
   }
 
