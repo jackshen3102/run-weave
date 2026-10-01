@@ -2,9 +2,17 @@ import { WebSocket } from "ws";
 import type { AppServerEventEnvelope, AppServerEventListResponse, AppServerEventStreamMessage, AppServerSyncStatusResponse, AppServerThreadDetailResponse, AppServerThreadListResponse, AppServerThreadResponse, CreateAppServerEventRequest } from "@runweave/shared/app-server-events";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 import type { RuntimeStatusReport } from "@runweave/shared/runtime-status";
+import type { AppServerThreadPreviewsResponse } from "@runweave/shared/app-server-events";
 
 export class AppServerClient {
   constructor(private readonly connection: AppServerConnectionInfo) {}
+
+  async getThreadPreviews(threadIds: string[], signal?: AbortSignal): Promise<AppServerThreadPreviewsResponse | null> {
+    const url = new URL(`${this.connection.baseUrl}/threads/previews`);
+    for (const id of threadIds) url.searchParams.append("threadId", id);
+    const response = await fetch(url, { headers: this.headers(), signal });
+    return response.ok ? await response.json() as AppServerThreadPreviewsResponse : null;
+  }
 
   async postEvent(
     event: CreateAppServerEventRequest,

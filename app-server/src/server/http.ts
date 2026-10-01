@@ -2,6 +2,7 @@ import type { CodexQuotaService } from "../codex/quota.js";
 import { emptyCodexQuota } from "@runweave/shared/app-server/codex-quota";
 import { createThreadReaders } from "../agents/thread-readers.js";
 import { PiSessionReader } from "../pi/session-reader.js";
+import type { ThreadPreviewReader } from "../agents/thread-previews.js";
 import express from "express";
 import { z } from "zod";
 import type {
@@ -135,6 +136,7 @@ export function createHttpApp(options: {
   piSessionReader?: PiSessionReader;
   codexThreadDetailReader: CodexThreadDetailReader;
   codexQuota?: CodexQuotaService;
+  threadPreviews?: ThreadPreviewReader;
   getRuntimeStatusReport: () => RuntimeStatusReport;
 }): express.Express {
   const threadReader = createThreadReaders({
@@ -163,6 +165,7 @@ export function createHttpApp(options: {
         "dev-session-identity-v1",
         "provider-thread-lifecycle-v1",
         "thread-detail-v1",
+        "thread-preview-v1",
       ],
     });
   });
@@ -232,6 +235,26 @@ export function createHttpApp(options: {
       latestEventId: options.eventCenter.getLatestId(),
     };
     res.json(response);
+  });
+
+  app.get("/threads/previews", (req, res) => {
+    const parsed = z.array(z.string().trim().min(1).max(200)).max(100)
+      .safeParse(req.query.threadId === undefined ? [] :
+        Array.isArray(req.query.threadId) ? req.query.threadId : [req.query.threadId]);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Invalid thread IDs" });
+      return;
+    }
+    if (!options.threadPreviews) {
+      res.status(503).json({ message: "Thread previews unavailable" });
+      return;
+    }
+    const store = options.eventCenter.getStateStore();
+    const threads = [...new Set(parsed.data)].flatMap((id) => {
+      const thread = store.getThread(id);
+      return thread ? [thread] : [];
+    });
+    res.json({ previews: options.threadPreviews.read(threads) });
   });
 
   app.get("/threads/:threadId", async (req, res, next) => {

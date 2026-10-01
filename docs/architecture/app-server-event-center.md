@@ -216,6 +216,23 @@ GET /api/app-server/threads/:threadId
 代理只在 backend 侧读取 app-server lock/token 并转发轻量 ThreadRef 响应。App Server 未发现、
 不可达或返回非预期状态时，代理返回 503；前端不直接接触 App Server token。
 
+## 首页会话短文本
+
+鉴权 `GET /threads/previews?threadId=<id>` 每批最多 100 个 thread，只返回内存中的最新用户输入和
+本轮最新 Agent 文字（各最多 120 个字素），不调用 detail，也不等待历史读取。首次读取返回
+`available=false`，由[短文本投影](../../app-server/src/agents/thread-previews.ts)后台补齐。
+投影不写入事件日志、状态文件或云同步；进程重启后按需重建。
+
+Codex 与 Pi 的原生 JSONL 使用追加位置增量读取；两个后台任务每次最多读取 256 KiB，块间让出
+事件循环。目录查找合并并限制未命中重扫频率。缓存最多 256 个会话；Pi 每个会话保留最近 2000
+个分支节点，目标分支已超出窗口时返回不可用，不借用其他分支内容。文件更换、截断或身份不符
+时丢弃旧投影。工具调用、工具结果和推理内容不会成为回复文案。
+
+Backend 的 `POST /api/app/home/conversation-previews` 将短文本映射到当前面板的 provider/thread，
+读取期间切换面板或会话则丢弃旧结果。iOS 只在首页前台在线时，每 5 秒请求可见会话；进入终端、
+离开前台或切换连接时停止，响应按连接 generation 和会话身份隔离。冷缓存、来源缺失和读取失败
+均不阻塞首页。首页副标题字段仍保留已缓存的最终回复供兼容消费者使用，列表不再等待完整历史补读。
+
 ## Work History 聚合边界
 
 Activity 页面里的 `Terminal History` 与 `Multi-Agent Runs` 不是新的事件事实源。它们由

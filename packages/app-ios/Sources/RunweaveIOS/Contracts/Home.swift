@@ -27,6 +27,8 @@ struct HomeTerminal: Codable, Identifiable {
   var pinnedAt: String?
   var title: String
   var subtitle: String
+  var conversationKey: String?
+  var conversationPreview: HomeConversationPreview?
   let command: String
   var activeCommand: String?
   var cwd: String
@@ -61,6 +63,24 @@ struct HomeTerminal: Codable, Identifiable {
     if seconds < 86400 { return "\(seconds / 3600)h" }
     return "\(seconds / 86400)d"
   }
+}
+
+struct HomeConversationPreview: Codable {
+  let threadId: String
+  let provider: String
+  let available: Bool
+  let turnId: String?
+  let userText: String?
+  let agentText: String?
+}
+
+struct HomeConversationPreviewsResponse: Decodable {
+  struct Item: Decodable {
+    let terminalSessionId: String
+    let conversationKey: String
+    let conversationPreview: HomeConversationPreview
+  }
+  let sessions: [Item]
 }
 
 struct TerminalDetails: Decodable, Identifiable {
@@ -134,7 +154,8 @@ extension HomeOverview {
       let visible =
         projectMatches
         ? all
-        : all.filter { matches([$0.title, $0.subtitle, $0.command, $0.activeCommand, $0.cwd]) }
+        : all.filter { matches([$0.title, $0.subtitle, $0.conversationPreview?.userText,
+          $0.conversationPreview?.agentText, $0.command, $0.activeCommand, $0.cwd]) }
       guard projectMatches || !visible.isEmpty else { return nil }
       return HomeGroup(project: project, sessions: visible, terminalCount: all.count)
     }

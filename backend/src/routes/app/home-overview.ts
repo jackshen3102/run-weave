@@ -1,12 +1,10 @@
 import type { AppHomeOverviewResponse, AppHomeOverviewSession } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
-import { discoverAppServer } from "@runweave/config-node/app-server/discovery";
 import { Router } from "express";
 import { z } from "zod";
 import { HomeBranchStatusService } from "../../terminal/git/home-branch-status";
 import path from "node:path";
 import { logger } from "../../logging/index";
-import { AppServerClient } from "../../app-server/client";
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
 import {
   readCodexThreadSnapshot,
@@ -21,7 +19,7 @@ import {
   toSessionListItem,
 } from "../../terminal/application/payloads";
 import { resolveEffectiveTerminalState } from "../../terminal/application/terminal-state-projection";
-import { buildTerminalReplySubtitle } from "../../terminal/completion/reply-preview";
+import { homeConversation, readHomeConversationPreviews } from "../../terminal/application/home-conversation";
 
 type TerminalSession = ReturnType<
   TerminalSessionManager["listSessions"]
@@ -227,32 +225,9 @@ async function readAgentThreadOverviewSnapshot(
   ) {
     return null;
   }
-  try {
-    const connection = await discoverAppServer({ env: process.env });
-    if (!connection) {
-      return null;
-    }
-    const response = await new AppServerClient(connection).getThread(
-      identity.id,
-    );
-    if (!response?.detail || response.detail.status === "unknown") {
-      return null;
-    }
-    return {
-      preview: response.detail.preview,
-      statusType:
-        response.detail.status === "running" ? "active" : "idle",
-    };
-  } catch (error) {
-    appHomeLogger.warn("app.home-overview.agent-thread.read-failed", {
-      message: "Failed to read provider thread while building app home overview",
-      provider: identity.provider,
-      terminalSessionId: session.id,
-      threadId: identity.id,
-      error,
-    });
-    return null;
-  }
+  // Hook/runtime state already owns provider liveness. Reading Pi/Trae detail here
+  // would parse full histories on the critical path of every homepage request.
+  return null;
 }
 
 async function updateSessionPreviewFromCodexThread(
@@ -296,12 +271,14 @@ export async function buildAppHomeOverviewPayload(
         codexThreadSnapshot,
       );
 
+      const conversation = homeConversation(terminalSessionManager, session);
       return {
         ...toSessionListItem(session),
         threadId: resolveEffectiveThreadId(session),
         preview: resolveEffectivePreview(session, codexThreadSnapshot),
         title: buildSessionTitle(session),
-        subtitle: await buildTerminalReplySubtitle(terminalSessionManager, session),
+        subtitle: conversation.subtitle,
+        conversationKey: conversation.key,
         ...buildDisplayStatus(
           session,
           resolveEffectiveTerminalState(
@@ -333,6 +310,17 @@ export function createAppHomeOverviewRouter(options: {
     terminalSessionIds: z.array(z.string().min(1).max(200)).max(100),
     refresh: z.boolean().optional(),
   }).strict();
+
+  router.post("/home/conversation-previews", async (req, res) => {
+    const parsed = z.object({ terminalSessionIds: z.array(z.string().min(1).max(200)).max(100) })
+      .strict().safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid conversation preview request" }); return; }
+    try {
+      res.json(await readHomeConversationPreviews(options.terminalSessionManager, [...new Set(parsed.data.terminalSessionIds)]));
+    } catch {
+      res.status(503).json({ message: "Conversation previews unavailable" });
+    }
+  });
 
   router.post("/home/branch-status", async (req, res) => {
     const parsed = branchRequest.safeParse(req.body);

@@ -1,0 +1,105 @@
+version: 1
+name: 用户确认结束资源进程的候选方案验收
+description: >
+  对应 2026-10-01 原型新增的具体进程终止闭环；主体闭环已实现；执行证据与未完成项分开记录。
+  每例独占候选 Backend、profile、合法会话及浏览器，用例只能终止本例创建的低负载进程。
+  采样/信号发送/时钟边界可记录或注入，但目标核对、鉴权、API 和 UI 使用真实实现。
+  正常结束与强制结束案例必须实际确认 fixture 进程退出，不能用模拟响应替代。
+  不终止用户应用或系统服务，不制造 CPU 压力；结束后只清理本例资源。
+cases:
+  - id: PROCSTOP-001
+    name: 确认结束只作用于选中的进程实例
+    required: true
+    description: >
+      同名分组不能整组结束；取消无信号，确认后只终止所选 fixture，并实读确认退出。
+    preconditions:
+      - 本例本机直连候选 Backend，创建两个同名且不同 PID 的低负载用户进程，均支持 SIGTERM 退出。
+      - 本例浏览器已登录，两个进程在真实采样与实例记录中出现，能记录本例信号和退出事件。
+    steps:
+      - 使用 $toolkit:playwright-cli 展开分组，确认组行没有批量结束按钮，两个进程行分别显示结束进程。
+      - 点击 A 的结束进程，核对确认框名称、PID、目标电脑与未保存内容提示；点击取消，确认 A 和 B 都存活且未发送信号。
+      - 再次确认结束 A，确认只有 A 收到 SIGTERM，实读其退出后页面显示已结束，B 仍运行。
+      - 确认页面没有宣称整个应用已关闭或电池已节省固定百分比，电池卡在后续真实采样才更新。
+  - id: PROCSTOP-002
+    name: 不退出的普通进程只在再次确认后强制结束
+    required: true
+    description: >
+      普通终止超时不会自动升级 SIGKILL，强制结束要求用户重新确认同一实例。
+    preconditions:
+      - 本例 Backend 本机直连，已创建一个保持低负载且捕获 SIGTERM 不退出的专用进程。
+      - 本例拥有合法会话和浏览器，能够记录信号与 fixture 实例的实际退出。
+    steps:
+      - 使用 $toolkit:playwright-cli 确认结束本例目标，三秒内仍存活时确认页面显示仍在运行及强制结束入口。
+      - 再等待五秒，确认没有自动发送 SIGKILL；点击强制结束后取消第二次确认，确认目标继续运行。
+      - 再次确认强制结束，确认重新核对同一实例后仅该目标收到 SIGKILL，实读退出才显示已结束。
+  - id: PROCSTOP-003
+    name: 旧进程实例不能用于结束新的目标
+    required: true
+    description: >
+      server-issued 实例绑定的启动身份不匹配时拒绝操作，不根据旧 PID 指向新进程。
+    preconditions:
+      - 本例候选 Backend 可在采样边界建立一个带旧启动身份的实例记录，真实目标身份复核保持启用。
+      - 本例只对自己的 fixture 记录信号，浏览器保存旧实例标识。
+    steps:
+      - 对同一 PID 提供与实例记录不同的实际启动身份，再用旧标识确认结束，确认返回 409 且无信号发送。
+      - 使用 $toolkit:playwright-cli 核对提示目标已变化并要求重新选择，没有自动用新实例重试。
+      - 刷新本例列表，确认新实例不继承旧确认或强制资格，原旧事件不被定位到新进程。
+  - id: PROCSTOP-004
+    name: 终止资格在服务端执行时重新检查
+    required: true
+    description: >
+      只读、其他用户、受保护和资格未知的目标不能靠构造请求体绕过限制。
+    preconditions:
+      - 本例独占候选 Backend，其真实运行 PID 为受保护对象。
+      - 本例采样边界可提供其他用户及资格未知的对象，信号边界仅记录且不向任何非 fixture 发送。
+    steps:
+      - 使用 $toolkit:playwright-cli 核对只读行禁用操作并显示原因。
+      - 用合法会话构造对本例 Backend 自身及其他用户/未知资格对象的终止请求，确认均拒绝且信号记录为空。
+      - 在采样后、发送前改变 fixture 资格，确认服务端重新检查而非只相信前端可点击状态，没有 sudo 或任意 signal 输入。
+  - id: PROCSTOP-005
+    name: 终止接口遵守鉴权和本机直连限制
+    required: true
+    description: >
+      资源可读不等于进程可写；未登录、会话失效或远程请求都不能终止进程。
+    preconditions:
+      - 本例 Backend 开启真实鉴权，本例拥有一个允许终止的低负载 fixture 和可撤销会话。
+      - 本例可分别发送本机直连和真实远程或 tunnel 请求，所有信号只记录本例 fixture。
+    steps:
+      - 不带或带无效凭据请求终止，确认 401 且没有信号；撤销本例会话后重复，确认同样拒绝。
+      - 用另一有效本例会话通过远程或 tunnel 请求，确认 403，资源读取可用时也不改变终止限制。
+      - 确认请求体伪造 PID、signal、所有者或项目路径被严格拒绝，目标始终由服务端实例记录决定。
+  - id: PROCSTOP-006
+    name: 重复请求与未知退出结果不伪造成功
+    required: true
+    description: >
+      同一 requestId 只产生一次信号意图，验证读取失败不能宣称退出或开放强制操作。
+    preconditions:
+      - 本例候选 Backend 本机直连，拥有一个低负载 fixture 和可记录的信号边界。
+      - 本例可在身份验证读取边界制造发送后的读取失败，不替换领域结果判断。
+    steps:
+      - 并发提交同一实例、同一 requestId 的普通结束请求，确认最多一次信号；重复请求复用已知结果。
+      - 复用同一 requestId 但换目标或 force 值，确认 409 而非发送另一信号。
+      - 在本例独立请求中令退出验证读取失败，确认显示无法确认退出结果，不返回 exited，也不自动显示可强制结束。
+  - id: PROCSTOP-007
+    name: 已退出目标不会被替换为另一个进程
+    required: true
+    description: >
+      确认框打开后目标自行退出时，操作幂等返回已退出，不结束同名其它进程。
+    preconditions:
+      - 本例本机直连 Backend，创建两个同名低负载 fixture，浏览器已取得真实实例标识。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开 A 的确认框，由本例 fixture 控制 A 自行退出，再确认操作。
+      - 确认返回 already_exited，页面显示进程已退出，B 仍存活且没有收到信号。
+      - 下一轮采样确认应用组仍反映 B 的存在，没有把 A 的结束当成整组归零。
+  - id: PROCSTOP-008
+    name: 精确匹配的托管服务复用已有停止生命周期
+    required: true
+    description: >
+      只对已有 owned PID 的服务提供停止服务动作，明确进程组范围并走现有 manager 停止能力。
+    preconditions:
+      - 本例拥有隔离候选 Backend 和已配置的 workspace service，服务只启动本例低负载进程及其子进程。
+      - 本例通过真实 manager 启动服务并取得 owned PID，具有本机直连浏览器和合法会话。
+    steps:
+      - 使用 $toolkit:playwright-cli 展开对应进程，确认操作名称为停止服务，确认框明确影响该服务及子进程。
+      - 确认后核对真实 manager.stop 被调用，服务记录更新，本例进程组按已有生命周期退出。
+      - 确认未知 Node 没有被猜测映射为该服务，客户端伪造服务身份不能改变目标或绕过本机限制。

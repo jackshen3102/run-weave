@@ -1,4 +1,6 @@
 import type { PiAgentContext } from "../terminal/pi-agent";
+export { formatThreadPreviewText } from "./thread-preview";
+export type { AppServerThreadPreview, AppServerThreadPreviewsResponse } from "./thread-preview";
 export type AppServerEventSourceApp =
   | "app-server"
   | "backend"

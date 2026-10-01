@@ -7,25 +7,33 @@ export type SystemMonitorMemoryPressure =
   | "unknown";
 
 export interface SystemMonitorProcess {
+  processInstanceId?: string;
+  actionKind?: "terminate" | "stop_service" | "readonly";
+  actionReason?: string;
+  serviceName?: string;
   pid: number;
   ppid: number;
   displayName: string;
   executableName: string;
-  cpuPercent: number;
+  cpuPercent: number | null;
   memoryMb: number;
   appKey: string;
   appName: string;
   isCurrentApp: boolean;
+  energyImpact?: number | null;
+  coverage?: "complete" | "partial";
 }
 
 export interface SystemMonitorAppGroup {
   appKey: string;
   appName: string;
   processCount: number;
-  cpuPercent: number;
+  cpuPercent: number | null;
   memoryMb: number;
   pids: number[];
   isCurrentApp: boolean;
+  energyImpact?: number | null;
+  coverage?: "complete" | "partial";
 }
 
 export interface SystemMonitorSnapshot {
@@ -50,6 +58,8 @@ export interface SystemMonitorSnapshot {
         charging: boolean;
         timeRemainingMin: number | null;
         dischargeRateMa: number | null;
+        powerSource?: "battery" | "ac" | "unknown";
+        dischargePowerW?: number | null;
       };
   apps: SystemMonitorAppGroup[];
   processes: SystemMonitorProcess[];

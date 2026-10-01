@@ -1,3 +1,4 @@
+import { buildResourceSampler } from "../../backend/scripts/build-resource-sampler.mjs";
 import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -88,6 +89,7 @@ function sha256(file) {
 
 rmSync(releaseDir, { recursive: true, force: true });
 mkdirSync(backendDir, { recursive: true });
+buildResourceSampler(backendDir);
 run("pnpm", ["--filter", "./frontend", "build"]);
 cpSync(
   path.join(repoRoot, "frontend", "dist"),

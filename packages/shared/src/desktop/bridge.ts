@@ -102,6 +102,8 @@ export interface RunweaveElectronBridge {
   isElectron: boolean;
   showAttentionNotification: (target: AttentionNotificationTarget) => Promise<boolean>;
   onAttentionNotificationOpen: (listener: (target: AttentionNotificationTarget) => void) => () => void;
+  showResourceNotification: (target: import("../monitoring/resource-monitor").ResourceNotificationTarget) => Promise<"submitted" | "skipped" | "unavailable" | "failed">;
+  onResourceNotificationOpen: (listener: (target: import("../monitoring/resource-monitor").ResourceNotificationTarget) => void) => () => void;
   showScheduledRunNotification: (target: { connectionId: string; runId: string; title: string; body: string }) => Promise<boolean>;
   onScheduledRunNotificationOpen: (listener: (target: { connectionId: string; runId: string }) => void) => () => void;
   listTunnels: () => Promise<TunnelSnapshot>;

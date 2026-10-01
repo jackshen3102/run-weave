@@ -79,7 +79,8 @@
     "./browser-local-tunnel": "./src/browser/local-tunnel.ts",
     "./terminal/file-link": "./src/terminal/file-link.ts",
     "./configuration": "./src/configuration/index.ts",
-    "./task-handoff": "./src/task-handoff.ts"
+    "./task-handoff": "./src/task-handoff.ts",
+    "./resource-monitor": "./src/monitoring/resource-monitor.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

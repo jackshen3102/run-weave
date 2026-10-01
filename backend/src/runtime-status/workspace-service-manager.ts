@@ -8,6 +8,24 @@ export class RuntimeStatusWorkspaceServiceManager extends WorkspaceServiceManage
     super(terminalSessionManager);
   }
 
+  findOwnedProcess(
+    pid: number,
+  ): {
+    parentProjectId: string;
+    projectId: string;
+    serviceName: string;
+  } | null {
+    for (const record of this.records.values()) {
+      if (record.process?.pid === pid)
+        return {
+          parentProjectId: record.parentProjectId,
+          projectId: record.projectId,
+          serviceName: record.definition.name,
+        };
+    }
+    return null;
+  }
+
   async getRuntimeStatusItems(now = Date.now()): Promise<RuntimeStatusItem[]> {
     for (const parent of this.terminalSessionManager.listProjects()) {
       for (const context of this.terminalSessionManager.listProjectContexts(

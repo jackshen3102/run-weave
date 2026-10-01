@@ -97,6 +97,9 @@ export interface AppHomeOverviewSession extends TerminalSessionListItem {
   title: string;
   /** Latest completed reply as a plain-text preview; falls back to cwd. */
   subtitle: string;
+  conversationPreview?: import("../../app-server/thread-preview").AppServerThreadPreview;
+  /** Active panel/provider/thread identity used to reject stale asynchronous previews. */
+  conversationKey?: string | null;
   displayStatus:
     | "running"
     | "agent-starting"
@@ -116,6 +119,14 @@ export interface AppHomeOverviewSession extends TerminalSessionListItem {
 export interface AppHomeOverviewResponse {
   projects: TerminalProjectListItem[];
   sessions: AppHomeOverviewSession[];
+}
+
+export interface AppHomeConversationPreviewsResponse {
+  sessions: Array<{
+    terminalSessionId: string;
+    conversationKey: string;
+    conversationPreview: import("../../app-server/thread-preview").AppServerThreadPreview;
+  }>;
 }
 
 /** Separate from overview: fetching Git must never delay the terminal list. */

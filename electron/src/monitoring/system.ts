@@ -1,4 +1,4 @@
-import { parseMacBattery } from "@runweave/shared/battery";
+import { parseMacBattery, signedBatteryCurrent } from "@runweave/shared/battery";
 import { execFile } from "node:child_process";
 import crypto from "node:crypto";
 import os from "node:os";
@@ -149,7 +149,7 @@ function aggregateByApp(
     if (existing) {
       existing.processCount += 1;
       existing.cpuPercent = roundToOne(
-        existing.cpuPercent + process.cpuPercent,
+        (existing.cpuPercent ?? 0) + (process.cpuPercent ?? 0),
       );
       existing.memoryMb = roundToOne(existing.memoryMb + process.memoryMb);
       existing.pids.push(process.pid);
@@ -170,7 +170,7 @@ function aggregateByApp(
 
   return Array.from(groups.values()).map((group) => ({
     ...group,
-    cpuPercent: roundToOne(group.cpuPercent),
+    cpuPercent: roundToOne(group.cpuPercent ?? 0),
     memoryMb: roundToOne(group.memoryMb),
     pids: group.pids.sort((a, b) => a - b),
   }));
@@ -194,25 +194,25 @@ function takeTopUnion<T>(
 }
 
 function sortAppByCpu(a: SystemMonitorAppGroup, b: SystemMonitorAppGroup) {
-  return b.cpuPercent - a.cpuPercent || b.memoryMb - a.memoryMb;
+  return (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1) || b.memoryMb - a.memoryMb;
 }
 
 function sortAppByMemory(a: SystemMonitorAppGroup, b: SystemMonitorAppGroup) {
-  return b.memoryMb - a.memoryMb || b.cpuPercent - a.cpuPercent;
+  return b.memoryMb - a.memoryMb || (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1);
 }
 
 function sortProcessByCpu(
   a: RawSystemMonitorProcess,
   b: RawSystemMonitorProcess,
 ) {
-  return b.cpuPercent - a.cpuPercent || b.memoryMb - a.memoryMb;
+  return (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1) || b.memoryMb - a.memoryMb;
 }
 
 function sortProcessByMemory(
   a: RawSystemMonitorProcess,
   b: RawSystemMonitorProcess,
 ) {
-  return b.memoryMb - a.memoryMb || b.cpuPercent - a.cpuPercent;
+  return b.memoryMb - a.memoryMb || (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1);
 }
 
 function sampleSystemCpu(): SystemMonitorSnapshot["cpu"] {
@@ -357,7 +357,7 @@ export function parseBattery(
     return { available: true, percent: battery.percent,
       charging: battery.powerSource === "ac" || battery.chargeState === "charging",
       timeRemainingMin: time ? Number(time[1]) * 60 + Number(time[2]) : null,
-      dischargeRateMa: amperage && Number.isFinite(Number(amperage)) ? Number(amperage) : null };
+      dischargeRateMa: signedBatteryCurrent(amperage ?? null) };
   } catch { return { available: false }; }
 }
 

@@ -68,6 +68,12 @@ const electronApi = {
     ipcRenderer.on("attention:notification-open", wrapped);
     return () => ipcRenderer.off("attention:notification-open", wrapped);
   },
+  showResourceNotification: (target: import("@runweave/shared/resource-monitor").ResourceNotificationTarget) => ipcRenderer.invoke("resource:notify", target),
+  onResourceNotificationOpen: (listener: (target: import("@runweave/shared/resource-monitor").ResourceNotificationTarget) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, target: import("@runweave/shared/resource-monitor").ResourceNotificationTarget) => listener(target);
+    ipcRenderer.on("resource:notification-open", wrapped);
+    return () => ipcRenderer.off("resource:notification-open", wrapped);
+  },
   showScheduledRunNotification: (target: { connectionId: string; runId: string; title: string; body: string }) =>
     ipcRenderer.invoke("scheduled-run:notify", target) as Promise<boolean>,
   onScheduledRunNotificationOpen: (listener: (target: { connectionId: string; runId: string }) => void) => {

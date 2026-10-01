@@ -17,6 +17,7 @@ struct HomeView: View {
   @State private var showingDiagnostics = false
   @State private var renaming: HomeTerminal?
   @State private var initializedGeneration: Int?
+  @State private var visibleConversationCounts: [String: Int] = [:]
 
   var groups: [HomeGroup] { session.overview?.groups(matching: query) ?? [] }
 
@@ -57,12 +58,25 @@ struct HomeView: View {
     HomeTerminalRow(session: session, terminal: terminal, projectName: projectName,
       branchStatus: projectName == nil ? nil : branchStatuses.status(for: terminal, generation: session.generation, online: session.health.status == .online),
       rename: { renaming = terminal }, delete: { deleting = terminal })
+      .onAppear { visibleConversationCounts[terminal.id, default: 0] += 1 }
+      .onDisappear {
+        let count = visibleConversationCounts[terminal.id, default: 0] - 1
+        if count > 0 { visibleConversationCounts[terminal.id] = count }
+        else { visibleConversationCounts.removeValue(forKey: terminal.id) }
+      }
   }
 
   private var branchRefreshKey: [String] {
     [String(session.generation), String(session.foreground), String(session.authenticated),
       session.health.status.rawValue, session.terminal?.id ?? ""]
       + attention.map { "\($0.id):\($0.cwd)" }.sorted()
+  }
+
+  private var conversationRefreshKey: [String] {
+    [String(session.generation), String(session.foreground), String(session.authenticated),
+      session.health.status.rawValue, session.terminal?.id ?? ""]
+      + (session.overview?.sessions.map { "\($0.id):\($0.conversationKey ?? "")" }.sorted() ?? [])
+      + visibleConversationCounts.keys.sorted()
   }
 
   private func refreshHome() async {
@@ -134,6 +148,17 @@ struct HomeView: View {
     }
     .searchable(text: $query, prompt: "Search projects and terminals")
     .refreshable { await refreshHome() }
+    .task(id: conversationRefreshKey) {
+      guard session.foreground, session.authenticated, session.health.status == .online,
+        session.terminal == nil else { return }
+      while !Task.isCancelled {
+        await session.refreshHomeConversationPreviews(ids: session.overview?.sessions.compactMap {
+          $0.conversationKey == nil || visibleConversationCounts[$0.id] == nil ? nil : $0.id
+        } ?? [])
+        do { try await Task.sleep(nanoseconds: 5_000_000_000) }
+        catch { return }
+      }
+    }
     .task(id: branchRefreshKey) {
       guard session.foreground, session.authenticated, session.health.status == .online,
         session.terminal == nil else { return }

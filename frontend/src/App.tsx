@@ -1,3 +1,5 @@
+import { ResourceMonitorProvider } from "./features/system-monitor/resource-monitor-provider";
+import { ResourceNotice } from "./features/system-monitor/resource-notice";
 import { OverlayProvider } from "./features/overlay/provider";
 import { CodexQuotaProvider } from "./features/codex-quota/provider";
 import { MobileLoginProvider } from "./features/mobile-login/provider";
@@ -103,6 +105,13 @@ function RunweaveApp() {
     return () => { cancelled = true; };
   }, [activeConnectionId, apiBase, authStatus, setSession, token]);
 
+  useEffect(() => window.electronAPI?.onResourceNotificationOpen?.((target) => {
+    const connection = connections.find(item => item.id === target.connectionId);
+    if (!connection) return;
+    setActive(connection.id);
+    navigate(`/system-monitor?app=${encodeURIComponent(target.appKey)}`);
+  }), [connections, navigate, setActive]);
+
   const needsConnection = resolveNeedsConnection(isElectron, activeConnection);
   const isAuthChecking = !needsConnection && authStatus === "checking";
   const queryScope = buildConnectionQueryScope({
@@ -117,7 +126,7 @@ function RunweaveApp() {
     isElectron && authStatus !== "unauthenticated",
   );
   const requestedReturn: unknown = location.state?.scope === queryScope ? location.state?.returnTo : null;
-  const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|background-runs)(?:\/|\?|$)/u.test(requestedReturn)
+  const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|background-runs|system-monitor)(?:\/|\?|$)/u.test(requestedReturn)
     ? requestedReturn : TERMINAL_LIST_PATH;
 
   const handleSelectConnection = (id: string) => {
@@ -211,6 +220,8 @@ function RunweaveApp() {
       >
         <CodexQuotaProvider key={`${queryScope}:${sessionId ?? ""}:${token ? "authenticated" : "anonymous"}`} apiBase={apiBase} token={token} connectionName={activeConnection?.name ?? "当前连接"} onUnauthorized={clearToken}>
         <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
+        <ResourceMonitorProvider key={`${queryScope}:${sessionId ?? ""}`} apiBase={apiBase} token={token} connectionId={activeConnectionId ?? queryScope}>
+        <ResourceNotice onOpen={(appKey) => navigate(`/system-monitor?app=${encodeURIComponent(appKey)}`)} />
         <Routes>
           <Route
             path="/background-runs/:runId"
@@ -242,11 +253,11 @@ function RunweaveApp() {
           <Route
             path="/system-monitor"
             element={
-              <SystemMonitorPage
+              needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? <SystemMonitorPage
                 onNavigateTerminal={() => {
                   window.location.assign(TERMINAL_LIST_PATH);
                 }}
-              />
+              /> : <Navigate to="/login" replace state={{ returnTo: "/system-monitor", scope: queryScope }} />
             }
           />
           {isElectron && (
@@ -457,6 +468,7 @@ function RunweaveApp() {
             }
           />
         </Routes>
+        </ResourceMonitorProvider>
         </ConnectionQueryProvider>
         </CodexQuotaProvider>
       </RuntimeStatusProvider>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,15 +21,16 @@ import {
   validAgentCompletionEvent,
   validAgentHookEvent,
   waitForMessage,
+  verifyThreadPreviews,
 } from "../../lib/app-server-event-center-client.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../..",
 );
-const verificationRoot = await mkdtemp(
+const verificationRoot = await realpath(await mkdtemp(
   path.join(os.tmpdir(), "runweave-app-server-"),
-);
+));
 const stateDir = path.join(verificationRoot, "state");
 const cloudSyncDir = path.join(verificationRoot, "cloud-sync");
 const fakeCodexBinPath = path.join(verificationRoot, "fake-codex.mjs");
@@ -137,6 +138,7 @@ try {
   await verifyAuthOriginQueryAndPayloadValidation(restartedBaseUrl, token);
   await verifyWebSocketCatchupPagination(restartedBaseUrl, token);
   await verifyConcurrentHttpAppend(restartedBaseUrl, token);
+  await verifyThreadPreviews(restartedBaseUrl, token, stateDir);
 
   console.log("app-server event center verification passed");
 } finally {
@@ -145,6 +147,7 @@ try {
   }
   await rm(verificationRoot, { recursive: true, force: true });
 }
+
 
 function startAppServer() {
   const child = spawn(process.execPath, appServerArguments(), {
