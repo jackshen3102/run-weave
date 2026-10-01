@@ -80,6 +80,7 @@ struct ConnectionManager: View {
               Text(connectionStatus(connection)).font(.caption)
               if session.connection?.scope == connection.scope, session.authenticated {
                 DeviceBatteryView(device: session.deviceStatus)
+                Button("耗电监控") { session.showingEnergyMonitor = true; dismiss() }.buttonStyle(.borderless)
               } else if let device = batteries.devices[connection.scope] {
                 DeviceBatteryView(device: device)
               }

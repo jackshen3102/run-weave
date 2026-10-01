@@ -6,6 +6,10 @@ export interface ResourceMonitorSettings {
   alertsEnabled: boolean;
 }
 export type ResourceRule = "energy" | "memory";
+export interface ResourceRemoteControl {
+  revision: number;
+  enabled: boolean;
+}
 export interface ResourceAlert {
   alertId: string;
   hostId: string;
@@ -30,6 +34,8 @@ export interface ResourceMonitorResponse {
   status: "ok" | "warming-up" | "stale" | "error" | "disabled" | "unsupported";
   snapshot: SystemMonitorSnapshot | null;
   settings: ResourceMonitorSettings;
+  remoteControl: ResourceRemoteControl;
+  canManageRemoteControl: boolean;
   alerts: ResourceAlert[];
   coverage: {
     knownProcesses: number;
