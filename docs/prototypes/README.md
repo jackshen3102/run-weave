@@ -18,3 +18,5 @@
 - `agent-team-finding-disposition/`：Agent Team finding disposition 交互原型。
 - `terminal-browser-adaptive-tabs/`：Terminal Browser 多 tab 自适应体验原型。
 - `terminal-browser-annotations/`：Terminal Browser 页面评论完整流程、失败恢复与交互问题梳理原型。
+
+- `mobile-energy-monitor/`：手机耗电排行、进程操作和电脑端远程授权的待评审原型；不是已实现的产品能力。

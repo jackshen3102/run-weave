@@ -10,7 +10,7 @@ final class AppSession: ObservableObject {
   @Published private(set) var authenticated = false {
     didSet {
       if oldValue != authenticated { knowledgeInbox.reset(api: authenticated ? api : nil) }
-      if !authenticated { showingScheduledTasks = false; scheduledSource = nil }
+      if !authenticated { showingScheduledTasks = false; showingEnergyMonitor = false; scheduledSource = nil }
     }
   }
   @Published private(set) var checking = false
@@ -19,6 +19,7 @@ final class AppSession: ObservableObject {
   @Published private(set) var overview: HomeOverview?
   @Published private(set) var health = DeviceHealthSnapshot()
   @Published var error: String?
+  @Published var showingEnergyMonitor = false
   @Published var showingScheduledTasks = false
   @Published var scheduledSource: ScheduledTaskSource?
   @Published var terminal: TerminalDetails?

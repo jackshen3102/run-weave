@@ -1,0 +1,94 @@
+{
+  "checked": [
+    "首页菜单入口",
+    "未授权可查看，不能操作",
+    "电脑授权，同源模拟同步到手机",
+    "普通确认、取消与结果",
+    "still_running、二次确认、取消和强制结果",
+    "控制进程受保护",
+    "电脑撤销使手机待确认失效",
+    "手机没有自授权开关",
+    "忽略资源提醒",
+    "连接管理入口",
+    "离线、过期、采样中、错误、关闭时禁止操作",
+    "接电不展示能耗规则提醒"
+  ],
+  "layout": [
+    {
+      "view": "home",
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "view": "energy",
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "view": "app",
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "view": "settings",
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "view": "connections",
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "view": "home",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "view": "energy",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "view": "app",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "view": "settings",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "view": "connections",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "view": "home",
+      "width": 430,
+      "overflow": false
+    },
+    {
+      "view": "energy",
+      "width": 430,
+      "overflow": false
+    },
+    {
+      "view": "app",
+      "width": 430,
+      "overflow": false
+    },
+    {
+      "view": "settings",
+      "width": 430,
+      "overflow": false
+    },
+    {
+      "view": "connections",
+      "width": 430,
+      "overflow": false
+    }
+  ],
+  "note": "All results are prototype state transitions; no real API calls or process signals."
+}

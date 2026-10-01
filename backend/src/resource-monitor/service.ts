@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   ResourceMonitorResponse,
   ResourceMonitorSettings,
+  ResourceRemoteControl,
   TerminateProcessRequest,
 } from "@runweave/shared/resource-monitor";
 import type { DeviceMonitorService } from "../device-monitor/service";
@@ -118,6 +119,7 @@ export class ResourceMonitorService {
   }
   snapshot(local: boolean): ResourceMonitorResponse {
     const state = this.store.snapshot();
+    const permitted = local || state.remoteControl.enabled;
     const stale =
       this.observedMonotonic !== null &&
       this.clock() - this.observedMonotonic > 180_000;
@@ -145,10 +147,13 @@ export class ResourceMonitorService {
           (b.energyImpact ?? -1) - (a.energyImpact ?? -1) ||
           (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1),
       );
-      if (!local || status !== "ok")
+      if (!permitted || status !== "ok")
         for (const item of snapshot.processes) {
+          if (item.actionKind === "readonly") continue;
           item.actionKind = "readonly";
-          item.actionReason = !local ? "仅本机直连可结束进程" : "需要新鲜采样";
+          item.actionReason = !permitted
+            ? "电脑尚未授权远程结束进程"
+            : "需要新鲜采样";
         }
     }
     return {
@@ -164,6 +169,8 @@ export class ResourceMonitorService {
       status,
       snapshot,
       settings: state.settings,
+      remoteControl: state.remoteControl,
+      canManageRemoteControl: local,
       alerts:
         status === "ok" && state.settings.alertsEnabled
           ? state.alerts
@@ -183,7 +190,7 @@ export class ResourceMonitorService {
         complete: false,
       },
       cpuSource: "native-minute-delta",
-      canTerminate: local && status === "ok",
+      canTerminate: permitted && status === "ok",
     };
   }
   async settings(
@@ -219,6 +226,23 @@ export class ResourceMonitorService {
       state.snoozes[alert.appKey] = until;
       for (const item of state.alerts)
         if (item.appKey === alert.appKey) item.snoozedUntil = until;
+    });
+  }
+  async remoteControl(
+    input: ResourceRemoteControl,
+  ): Promise<ResourceRemoteControl> {
+    return this.store.update((state) => {
+      if (input.revision !== state.remoteControl.revision)
+        throw new ResourceRequestError(
+          409,
+          "revision_conflict",
+          "权限已由其他页面修改，请刷新后重试",
+        );
+      state.remoteControl = {
+        enabled: input.enabled,
+        revision: input.revision + 1,
+      };
+      return state.remoteControl;
     });
   }
   terminate(

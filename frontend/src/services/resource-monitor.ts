@@ -1,6 +1,7 @@
 import type {
   ResourceMonitorResponse,
   ResourceMonitorSettings,
+  ResourceRemoteControl,
   TerminateProcessResult,
 } from "@runweave/shared/resource-monitor";
 import { requestJson } from "./http";
@@ -21,6 +22,15 @@ export function resourceMonitorApi(apiBase: string, token: string) {
           expectedRevision: settings.revision,
           monitorEnabled: settings.monitorEnabled,
           alertsEnabled: settings.alertsEnabled,
+        }),
+      }),
+    remoteControl: (permission: ResourceRemoteControl) =>
+      requestJson<ResourceRemoteControl>(apiBase, `${root}/remote-control`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          expectedRevision: permission.revision,
+          enabled: permission.enabled,
         }),
       }),
     snooze: (alertId: string) =>

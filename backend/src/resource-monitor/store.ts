@@ -5,6 +5,7 @@ import { z } from "zod";
 import type {
   ResourceAlert,
   ResourceMonitorSettings,
+  ResourceRemoteControl,
 } from "@runweave/shared/resource-monitor";
 
 const alertSchema = z
@@ -25,6 +26,13 @@ const alertSchema = z
   .strict();
 const schema = z
   .object({
+    remoteControl: z
+      .object({
+        revision: z.number().int().nonnegative(),
+        enabled: z.boolean(),
+      })
+      .strict()
+      .default({ revision: 0, enabled: false }),
     settings: z
       .object({
         revision: z.number().int().nonnegative(),
@@ -38,6 +46,7 @@ const schema = z
   })
   .strict();
 export interface ResourceState {
+  remoteControl: ResourceRemoteControl;
   settings: ResourceMonitorSettings;
   alerts: ResourceAlert[];
   cooldowns: Record<string, number>;
@@ -60,6 +69,7 @@ export class ResourceMonitorStore {
       // Preserve damaged state for diagnosis; failure disables only this capability.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       data = {
+        remoteControl: { revision: 0, enabled: false },
         settings: { revision: 0, monitorEnabled: true, alertsEnabled: true },
         alerts: [],
         cooldowns: {},

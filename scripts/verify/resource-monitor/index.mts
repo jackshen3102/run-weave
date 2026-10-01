@@ -252,6 +252,182 @@ await run(
   },
 );
 await run(
+  "remote permission defaults off, local-only grant, revocation invalidates force and persists",
+  async (f) => {
+    const remote = { "X-Forwarded-For": "203.0.113.1" };
+    assert.equal(f.monitor.store.snapshot().remoteControl.enabled, false);
+    assert.equal(
+      (
+        await f.request(
+          "/remote-control",
+          "PUT",
+          { expectedRevision: 0, enabled: true },
+          remote,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await f.request(
+          "/settings",
+          "PUT",
+          {
+            expectedRevision: 0,
+            monitorEnabled: true,
+            alertsEnabled: true,
+            remoteControlEnabled: true,
+          },
+          remote,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await f.request("/remote-control", "PUT", {
+          expectedRevision: 0,
+          enabled: true,
+          extra: true,
+        })
+      ).status,
+      400,
+    );
+    const child = spawn(
+      process.execPath,
+      ["-e", "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],
+      { stdio: "ignore" },
+    );
+    try {
+      await pause(150);
+      const identity = (await readIdentity(
+        child.pid!,
+        AbortSignal.timeout(5000),
+      ))!;
+      identity.actionKind = "terminate";
+      f.next.identities.set(identity.processInstanceId, identity);
+      await f.monitor.sample();
+      const route = `/processes/${identity.processInstanceId}/terminate`;
+      assert.equal(
+        (
+          await f.request(
+            route,
+            "POST",
+            { requestId: randomUUID(), force: false },
+            remote,
+          )
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await f.request("/remote-control", "PUT", {
+            expectedRevision: 0,
+            enabled: true,
+          })
+        ).status,
+        200,
+      );
+      const snapshot = await (
+        await f.request("", "GET", undefined, remote)
+      ).json();
+      assert.equal(snapshot.canTerminate, true);
+      assert.equal(snapshot.canManageRemoteControl, false);
+      assert.equal(
+        (
+          await f.request("/remote-control", "PUT", {
+            expectedRevision: 0,
+            enabled: false,
+          })
+        ).status,
+        409,
+      );
+      const result = await (
+        await f.request(
+          route,
+          "POST",
+          { requestId: randomUUID(), force: false },
+          remote,
+        )
+      ).json();
+      assert.equal(result.state, "still_running");
+      assert.equal(result.forceAllowed, true);
+      assert.equal(
+        (
+          await f.request("/remote-control", "PUT", {
+            expectedRevision: 1,
+            enabled: false,
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await f.request(
+            route,
+            "POST",
+            { requestId: randomUUID(), force: true },
+            remote,
+          )
+        ).status,
+        403,
+      );
+      assert.equal(child.signalCode, null);
+      assert.equal(
+        (
+          await f.request("/remote-control", "PUT", {
+            expectedRevision: 2,
+            enabled: true,
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await f.request(
+            route,
+            "POST",
+            { requestId: randomUUID(), force: true },
+            remote,
+          )
+        ).status,
+        409,
+      );
+      assert.equal(child.signalCode, null);
+      const refreshed = await (
+        await f.request(
+          route,
+          "POST",
+          { requestId: randomUUID(), force: false },
+          remote,
+        )
+      ).json();
+      assert.equal(refreshed.forceAllowed, true);
+      const forced = await (
+        await f.request(
+          route,
+          "POST",
+          { requestId: randomUUID(), force: true },
+          remote,
+        )
+      ).json();
+      assert.equal(forced.state, "exited");
+      await pause(50);
+      assert.equal(child.signalCode, "SIGKILL");
+      const reopened = await ResourceMonitorStore.create(
+        path.join(f.directory, "resources"),
+      );
+      assert.equal(reopened.snapshot().remoteControl.enabled, true);
+      assert.equal(reopened.snapshot().remoteControl.revision, 3);
+      await reopened.close();
+    } finally {
+      if (child.exitCode === null && child.signalCode === null)
+        child.kill("SIGKILL");
+      await pause(100);
+    }
+  },
+);
+await run(
   "real single PID exit, duplicate request, changed identity, explicit force",
   async (f) => {
     const child = spawn(

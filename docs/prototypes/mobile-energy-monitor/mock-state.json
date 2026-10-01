@@ -1,0 +1,10 @@
+{
+  "host": {"name":"MacBook Pro", "connection":"我的 Mac", "battery":36, "powerW":22.9, "updated":"11:42"},
+  "apps": [
+    {"id":"node","name":"node","icon":"N","color":"#387b54","impact":128.6,"cpu":"124%","memory":"1.86 GiB","count":38,"processes":[{"id":"n1","pid":40218,"name":"node","cpu":"78%","memory":"586 MiB"},{"id":"n2","pid":41682,"name":"node","cpu":"32%","memory":"324 MiB","ignoresTerm":true},{"id":"n3","pid":63711,"name":"Runweave Backend","cpu":"3.7%","memory":"279 MiB","protected":true}]},
+    {"id":"doubao","name":"DoubaoWork","icon":"D","color":"#806344","impact":62.4,"cpu":"58%","memory":"5.42 GiB","count":32,"processes":[{"id":"d1","pid":77335,"name":"DoubaoWork Renderer","cpu":"32%","memory":"482 MiB"},{"id":"d2","pid":38448,"name":"DoubaoWork Renderer","cpu":"16%","memory":"428 MiB"}]},
+    {"id":"runweave","name":"Runweave","icon":"R","color":"#337688","impact":41.2,"cpu":"39%","memory":"1.92 GiB","count":13,"processes":[{"id":"r1","pid":63707,"name":"Runweave Renderer","cpu":"23%","memory":"440 MiB","protected":true},{"id":"r2","pid":63711,"name":"Runweave Backend","cpu":"3.7%","memory":"279 MiB","protected":true}]},
+    {"id":"lark","name":"Lark","icon":"L","color":"#4667a9","impact":18.7,"cpu":"16%","memory":"2.64 GiB","count":20,"processes":[{"id":"l1","pid":34279,"name":"Lark Helper (Renderer)","cpu":"8.4%","memory":"481 MiB"}]},
+    {"id":"sim","name":"iOS 26.5 Simulator","icon":"S","color":"#565986","impact":9.1,"cpu":"9.1%","memory":"20.6 GiB","count":238,"processes":[{"id":"s1","pid":87081,"name":"SpringBoard","cpu":"1.5%","memory":"484 MiB"},{"id":"s2","pid":87119,"name":"diagnosticd","cpu":"2.9%","memory":"15 MiB"}]}
+  ]
+}

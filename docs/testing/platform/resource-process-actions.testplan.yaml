@@ -57,16 +57,17 @@ cases:
       - 用合法会话构造对本例 Backend 自身及其他用户/未知资格对象的终止请求，确认均拒绝且信号记录为空。
       - 在采样后、发送前改变 fixture 资格，确认服务端重新检查而非只相信前端可点击状态，没有 sudo 或任意 signal 输入。
   - id: PROCSTOP-005
-    name: 终止接口遵守鉴权和本机直连限制
+    name: 未授权请求不能终止进程
     required: true
     description: >
-      资源可读不等于进程可写；未登录、会话失效或远程请求都不能终止进程。
+      资源可读不等于进程可写；未登录、会话失效或未获电脑授权的远程请求都不能终止进程。
     preconditions:
       - 本例 Backend 开启真实鉴权，本例拥有一个允许终止的低负载 fixture 和可撤销会话。
+      - 本例 Backend 远程操作授权保持默认关闭。
       - 本例可分别发送本机直连和真实远程或 tunnel 请求，所有信号只记录本例 fixture。
     steps:
       - 不带或带无效凭据请求终止，确认 401 且没有信号；撤销本例会话后重复，确认同样拒绝。
-      - 用另一有效本例会话通过远程或 tunnel 请求，确认 403，资源读取可用时也不改变终止限制。
+      - 用另一有效本例会话通过远程或 tunnel 请求，确认 403；资源仍可读取，但授权状态关闭且 canTerminate 为 false。
       - 确认请求体伪造 PID、signal、所有者或项目路径被严格拒绝，目标始终由服务端实例记录决定。
   - id: PROCSTOP-006
     name: 重复请求与未知退出结果不伪造成功
@@ -102,4 +103,30 @@ cases:
     steps:
       - 使用 $toolkit:playwright-cli 展开对应进程，确认操作名称为停止服务，确认框明确影响该服务及子进程。
       - 确认后核对真实 manager.stop 被调用，服务记录更新，本例进程组按已有生命周期退出。
-      - 确认未知 Node 没有被猜测映射为该服务，客户端伪造服务身份不能改变目标或绕过本机限制。
+      - 确认未知 Node 没有被猜测映射为该服务，客户端伪造服务身份不能改变目标或绕过授权限制。
+  - id: PROCSTOP-009
+    name: 远程授权只能由电脑本机管理
+    required: true
+    description: >
+      已登录远程客户端只能读取授权；本机开启后才允许操作，不能通过普通设置或伪造请求自行授权。
+    preconditions:
+      - 本例拥有隔离候选 Backend、本机直连与远程合法会话，以及只向本例低负载 fixture 发信号的边界。
+      - 本例 Backend 远程授权关闭，fixture 已被真实采样观测。
+    steps:
+      - 远程 PUT 授权返回 403；把授权塞进普通 settings PUT 返回 400，状态仍关闭。
+      - 使用 $toolkit:playwright-cli 在本机提醒设置开启允许远程结束进程并保存，确认授权 revision 增加且远程 canTerminate 为 true。
+      - 使用远程合法会话发送普通结束，核对只操作本例 fixture；构造对受保护对象的请求仍拒绝。
+      - 使用旧 revision 修改授权返回 409，不覆盖本机已保存权限；清理本例 fixture 并撤销授权。
+  - id: PROCSTOP-010
+    name: 撤销并重新授权不恢复旧强制资格
+    required: true
+    description: >
+      撤权立即阻止远程信号，再次开启不能复用上一授权周期的强制资格或幂等结果。
+    preconditions:
+      - 本例拥有隔离候选 Backend、本机直连与远程合法会话，授权已开启。
+      - 本例拥有已被采样观测、忽略 SIGTERM 的低负载 fixture，记录真实信号及存活状态。
+    steps:
+      - 远程普通结束返回 still_running 并开放限时强制资格，fixture 仅收到一次 SIGTERM。
+      - 本机撤销授权后，远程强制结束返回 403，fixture 仍存活且没有 SIGKILL。
+      - 本机重新开启授权，使用旧强制资格返回 409；fixture 仍存活。
+      - 用新的 requestId 普通结束，重新取得 still_running 后显式强制结束，核对 fixture 实际退出并完成清理。

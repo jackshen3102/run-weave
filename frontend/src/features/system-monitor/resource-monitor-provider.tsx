@@ -36,6 +36,9 @@ interface ResourceContext {
   notice: ResourceAlert | null;
   dismissNotice: () => void;
   applySettings: (settings: ResourceMonitorResponse["settings"]) => void;
+  applyRemoteControl: (
+    permission: ResourceMonitorResponse["remoteControl"],
+  ) => void;
   snooze: (alertId: string) => Promise<void>;
 }
 const Context = createContext<ResourceContext | null>(null);
@@ -251,6 +254,10 @@ export function ResourceMonitorProvider(props: {
         notice,
         dismissNotice,
         applySettings,
+        applyRemoteControl: (remoteControl) =>
+          setData((current) =>
+            current ? { ...current, remoteControl } : current,
+          ),
         snooze,
       }}
     >

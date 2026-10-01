@@ -18,6 +18,8 @@ export function ResourceSettings({ onSaved }: { onSaved: () => void }) {
   const [alerts, setAlerts] = useState(true);
   const [mac, setMac] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [remote, setRemote] = useState(false);
+  const [remoteRevision, setRemoteRevision] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -32,6 +34,8 @@ export function ResourceSettings({ onSaved }: { onSaved: () => void }) {
           setAlerts(settings.alertsEnabled);
           setRevision(settings.revision);
           setMac(resource.macNotifications);
+          setRemote(resource.data!.remoteControl?.enabled ?? false);
+          setRemoteRevision(resource.data!.remoteControl?.revision ?? 0);
           setError(null);
           setOpen(true);
         }}
@@ -77,6 +81,29 @@ export function ResourceSettings({ onSaved }: { onSaved: () => void }) {
               onChange={(event) => setMac(event.target.checked)}
             />
           </label>
+          {resource.data?.canManageRemoteControl ? (
+            <>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                允许远程结束进程
+                <input
+                  type="checkbox"
+                  checked={remote}
+                  onChange={(event) => setRemote(event.target.checked)}
+                />
+              </label>
+              <p className="text-xs leading-6 text-muted-foreground">
+                允许已登录客户端远程结束这台电脑的普通进程，包括再次确认后的强制结束。
+                系统及 Runweave
+                控制进程仍受保护。关闭后撤销远程操作权限，不影响查看排行。
+              </p>
+            </>
+          ) : resource.data?.remoteControl ? (
+            <p className="text-xs text-muted-foreground">
+              远程结束进程：
+              {resource.data.remoteControl.enabled ? "已授权" : "未授权"}
+              。仅电脑本机可修改授权。
+            </p>
+          ) : null}
           <p className="text-xs leading-6 text-muted-foreground">
             能耗影响 ≥ 100（仅电池供电），或 RSS 合计 ≥ 4
             GiB；至少六次有效采样跨满五分钟。内存占用不代表耗电量。
@@ -113,6 +140,21 @@ export function ResourceSettings({ onSaved }: { onSaved: () => void }) {
                     alertsEnabled: alerts,
                   });
                   resource.applySettings(saved);
+                  setRevision(saved.revision);
+                  if (
+                    resource.data?.canManageRemoteControl &&
+                    remote !== resource.data.remoteControl.enabled
+                  ) {
+                    const permission = await resourceMonitorApi(
+                      resource.apiBase,
+                      resource.token,
+                    ).remoteControl({
+                      revision: remoteRevision,
+                      enabled: remote,
+                    });
+                    resource.applyRemoteControl(permission);
+                    setRemoteRevision(permission.revision);
+                  }
                   resource.setMacNotifications(mac);
                   onSaved();
                   setOpen(false);

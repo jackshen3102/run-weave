@@ -17,6 +17,12 @@ const terminateSchema = z
   .object({ requestId: z.string().uuid(), force: z.boolean() })
   .strict();
 const snoozeSchema = z.object({ durationMinutes: z.literal(60) }).strict();
+const remoteControlSchema = z
+  .object({
+    expectedRevision: z.number().int().nonnegative(),
+    enabled: z.boolean(),
+  })
+  .strict();
 export function createResourceMonitorRouter(
   service: ResourceMonitorService | null,
   auth: AuthService,
@@ -36,6 +42,32 @@ export function createResourceMonitorRouter(
   router.get("/settings", (_req, res) =>
     res.json(service!.store.snapshot().settings),
   );
+  router.put("/remote-control", async (req, res) => {
+    if (!isLocalDirectHttpRequest(req)) {
+      res
+        .status(403)
+        .json({
+          code: "local_request_required",
+          message: "仅电脑本机可授予或撤销远程操作权限",
+        });
+      return;
+    }
+    const parsed = remoteControlSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "无效的远程操作权限" });
+      return;
+    }
+    try {
+      res.json(
+        await service!.remoteControl({
+          revision: parsed.data.expectedRevision,
+          enabled: parsed.data.enabled,
+        }),
+      );
+    } catch (error) {
+      respond(error, res);
+    }
+  });
   router.put("/settings", async (req, res) => {
     const parsed = settingsSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -67,10 +99,12 @@ export function createResourceMonitorRouter(
     }
   });
   router.post("/processes/:processInstanceId/terminate", async (req, res) => {
-    if (!isLocalDirectHttpRequest(req)) {
+    const local = isLocalDirectHttpRequest(req);
+    const permission = service!.store.snapshot().remoteControl;
+    if (!local && !permission.enabled) {
       res.status(403).json({
-        code: "local_request_required",
-        message: "仅本机直连可结束进程",
+        code: "remote_control_required",
+        message: "电脑尚未授权远程结束进程",
       });
       return;
     }
@@ -90,8 +124,19 @@ export function createResourceMonitorRouter(
         await service!.terminate(
           req.params.processInstanceId,
           parsed.data,
-          session,
-          () => !!auth.verifyAccessToken(token),
+          local ? session : `${session}:remote:${permission.revision}`,
+          () => {
+            if (!local) {
+              const current = service!.store.snapshot().remoteControl;
+              if (!current.enabled || current.revision !== permission.revision)
+                throw new ResourceRequestError(
+                  403,
+                  "remote_control_revoked",
+                  "电脑已撤销或更新远程操作权限",
+                );
+            }
+            return !!auth.verifyAccessToken(token);
+          },
         ),
       );
     } catch (error) {
