@@ -87,6 +87,11 @@ Electron 复用主机连接意图，管理本机回环网关、SSH 反向通道�
 入口和本机 Backend 的 serviceInstanceId；SSH 进程运行不等于入口可用，Mac 检查通过
 也不代表手机已接入 VPN。
 
+已验证通道的单次健康探测超时保留 SSH 与现有 socket，并显示探测失败；连续三次超时才关闭并重建。
+新通道尚未验证、SSH 进程退出、探针或 Backend 实例身份不一致时立即关闭，不应用超时容忍。
+通道创建、探测失败/恢复、SSH 退出与 WebSocket 连接/关闭写入 Desktop incident 日志，使用 channelId
+串联，并保留客户端 connectionId/attemptId（不记录 ticket、完整 URL 或消息内容）。
+
 状态进入右上角运行状态和隧道面板，未启用不告警；认证失效需用户恢复凭据并重试。
 开启「启动桌面端时自动连接」只保存连接意图，仍需登录 Mac、启动桌面端和恢复网络。
 本机离线时不能自行发送手机告警。旧私有 POC 的 LaunchAgent 不自动迁移或删除，避免

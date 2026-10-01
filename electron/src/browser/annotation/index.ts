@@ -217,6 +217,10 @@ export async function submitTerminalBrowserAnnotations(
   }
 }
 
+export function hasTerminalBrowserAnnotationSession(key: string): boolean {
+  return sessions.has(key);
+}
+
 export function clearTerminalBrowserAnnotation(key: string): void {
   const session = sessions.get(key);
   sessions.delete(key);

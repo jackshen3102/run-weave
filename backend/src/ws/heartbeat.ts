@@ -8,6 +8,7 @@ export interface HeartbeatState {
 export function createHeartbeatController(
   socket: WebSocket,
   state: HeartbeatState,
+  onTimeout?: () => void,
 ): {
   start: () => void;
   stop: () => void;
@@ -20,6 +21,7 @@ export function createHeartbeatController(
       }
 
       if (!state.isAlive) {
+        onTimeout?.();
         socket.terminate();
         return;
       }

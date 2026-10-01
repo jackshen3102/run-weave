@@ -4,10 +4,23 @@ import { randomUUID } from "node:crypto";
 import type { RemoteAccessConfig } from "@runweave/shared/tunnels";
 import { isBetaChannel } from "../desktop/config.js";
 import { remoteFreePort, startSsh, type SshProcess } from "./ssh-process.js";
+import { logDesktopIncident } from "../desktop/diagnostics.js";
+
+export class RemoteAccessVerificationError extends Error {
+  constructor(
+    readonly code: string,
+    readonly phase: string,
+    readonly transient: boolean,
+    message: string,
+  ) {
+    super(`${code}: ${message}`);
+  }
+}
 
 // Only user-facing Backend routes cross this boundary. Backend authentication is
 // preserved; local internal/test routes must never become remotely accessible.
 export class RemoteAccessChannel {
+  readonly channelId = randomUUID();
   private server: http.Server | null = null;
   private sockets = new Set<Socket>();
   private ssh: SshProcess | null = null;
@@ -24,6 +37,14 @@ export class RemoteAccessChannel {
   }
   private check() {
     if (this.stopped) throw new Error("TUNNEL_CANCELLED");
+  }
+  get alive() {
+    return (
+      !this.stopped &&
+      !!this.ssh &&
+      this.ssh.child.exitCode === null &&
+      this.ssh.child.signalCode === null
+    );
   }
   async start() {
     if (isBetaChannel) {
@@ -147,6 +168,34 @@ export class RemoteAccessChannel {
       }
       const upstream = http.request(options(req, path));
       upstream.on("upgrade", (reply, peer, upstreamHead) => {
+        const connectedAt = Date.now();
+        const id = (name: string) => {
+          const value = req.headers[name];
+          return typeof value === "string" &&
+            /^[a-zA-Z0-9:_-]{1,160}$/.test(value)
+            ? value
+            : undefined;
+        };
+        const details = {
+          channelId: this.channelId,
+          path: path.split("?")[0],
+          connectionId: id("x-connection-id"),
+          attemptId: id("x-connection-attempt-id"),
+        };
+        logDesktopIncident({
+          event: "remote-access.socket.connected",
+          details,
+        });
+        socket.once("close", (hadError: boolean) =>
+          logDesktopIncident({
+            event: "remote-access.socket.closed",
+            details: {
+              ...details,
+              hadError,
+              durationMs: Date.now() - connectedAt,
+            },
+          }),
+        );
         this.sockets.add(peer);
         peer.on("close", () => this.sockets.delete(peer));
         socket.write(
@@ -222,6 +271,21 @@ export class RemoteAccessChannel {
     this.ssh.child.stdin.on("error", () => {});
     await this.ssh.ready;
     this.check();
+    logDesktopIncident({
+      event: "remote-access.channel.started",
+      details: { channelId: this.channelId },
+    });
+    this.ssh.child.once("exit", (code, signal) =>
+      logDesktopIncident({
+        event: "remote-access.ssh.exited",
+        details: {
+          channelId: this.channelId,
+          code,
+          signal,
+          intentional: this.stopped,
+        },
+      }),
+    );
     this.heartbeat = setInterval(
       () => this.ssh?.child.stdin.write("ping\n"),
       10000,
@@ -229,11 +293,7 @@ export class RemoteAccessChannel {
   }
   async verify() {
     this.check();
-    if (
-      !this.ssh ||
-      this.ssh.child.exitCode !== null ||
-      this.ssh.child.signalCode !== null
-    )
+    if (!this.alive)
       throw new Error("RELAY_DISCONNECTED: 中转通道已断开，正在恢复");
     const fetchHealth = async (base: string) => {
       const response = await fetch(`${base}/health`, {
@@ -246,34 +306,64 @@ export class RemoteAccessChannel {
         serviceInstanceId?: string;
       };
     };
-    let local;
+    let phase = "local-health";
     try {
-      local = await fetchHealth(this.backendUrl);
-      if (local.status !== "ok" || !local.serviceInstanceId) throw new Error();
-    } catch {
-      throw new Error(
-        "LOCAL_BACKEND_UNAVAILABLE: 本机服务不可用，请检查运行状态",
-      );
-    }
-    try {
+      const local = await fetchHealth(this.backendUrl);
+      if (local.status !== "ok" || !local.serviceInstanceId)
+        throw new RemoteAccessVerificationError(
+          "LOCAL_BACKEND_UNAVAILABLE",
+          phase,
+          false,
+          "本机服务身份无效",
+        );
+      phase = "relay-probe";
       const probe = await fetch(
         `${this.address}/runweave-relay-probe/${this.probe}`,
         { signal: AbortSignal.timeout(4000), redirect: "error" },
       );
-      if (!probe.ok || (await probe.text()) !== this.probe) throw new Error();
+      if (!probe.ok || (await probe.text()) !== this.probe)
+        throw new RemoteAccessVerificationError(
+          "RELAY_IDENTITY_MISMATCH",
+          phase,
+          false,
+          "中转探针不匹配，已停止通道",
+        );
+      phase = "relay-health";
       const remote = await fetchHealth(this.address);
       if (
         remote.status !== "ok" ||
         remote.serviceInstanceId !== local.serviceInstanceId
       )
-        throw new Error();
-    } catch {
-      throw new Error(
-        "RELAY_UNREACHABLE: 中转入口不可达或指向不符，请检查服务器地址、端口、网络及 VPN",
+        throw new RemoteAccessVerificationError(
+          "RELAY_IDENTITY_MISMATCH",
+          phase,
+          false,
+          "中转服务身份不匹配，已停止通道",
+        );
+      return { serviceInstanceId: local.serviceInstanceId };
+    } catch (error) {
+      if (error instanceof RemoteAccessVerificationError) throw error;
+      const timeout = error instanceof Error && error.name === "TimeoutError";
+      throw new RemoteAccessVerificationError(
+        timeout
+          ? "REMOTE_ACCESS_PROBE_TIMEOUT"
+          : phase === "local-health"
+            ? "LOCAL_BACKEND_UNAVAILABLE"
+            : "RELAY_UNREACHABLE",
+        phase,
+        timeout,
+        timeout
+          ? "健康探测超时，正在重新检查"
+          : "连接探测失败，请检查服务与网络",
       );
     }
   }
   async stop() {
+    if (!this.stopped)
+      logDesktopIncident({
+        event: "remote-access.channel.stopped",
+        details: { channelId: this.channelId, sockets: this.sockets.size },
+      });
     this.stopped = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.ssh?.child.stdin.end();

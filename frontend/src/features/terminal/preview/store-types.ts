@@ -25,6 +25,7 @@ export interface TerminalBrowserTabState {
   addressInput: string;
   title: string;
   loading: boolean;
+  suspended?: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
   error?: string;

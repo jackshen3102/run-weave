@@ -172,8 +172,9 @@ struct ConnectionManager: View {
           checkingIDs.remove(connection.id)
           return
         }
+        let base = try APIClient.normalize(connection.url)
         let snapshot = await DeviceHealthService.check(
-          base: try APIClient.normalize(connection.url))
+          base: base, connectionID: APIClient.diagnosticConnectionID(base: base, id: connection.id))
         if store.connections.contains(where: { $0.scope == connection.scope }) {
           statuses[connection.scope] =
             snapshot.status == .online

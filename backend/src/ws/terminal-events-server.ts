@@ -1,6 +1,7 @@
 import type { DeviceMonitorService } from "../device-monitor/service";
 import type { TerminalEventServerMessage } from "@runweave/shared/terminal/events";
 import { WebSocket, WebSocketServer } from "ws";
+import { randomUUID } from "node:crypto";
 import type { AuthService } from "../auth/service";
 import { logger } from "../logging/index";
 import {
@@ -56,6 +57,20 @@ export function attachTerminalEventsWebSocketServer(
   });
 
   wss.on("connection", (socket, request) => {
+    const connectedAt = Date.now();
+    const clientId = randomUUID();
+    // Correlation headers are untrusted and intentionally limited to identifiers.
+    const identifier = (name: string) => {
+      const value = request.headers[name];
+      return typeof value === "string" && /^[a-zA-Z0-9:_-]{1,160}$/.test(value)
+        ? value
+        : undefined;
+    };
+    const correlation = {
+      clientId,
+      connectionId: identifier("x-connection-id"),
+      attemptId: identifier("x-connection-attempt-id"),
+    };
     const handshake = validateTerminalEventsWebSocketHandshake({
       request,
       authService,
@@ -74,6 +89,7 @@ export function attachTerminalEventsWebSocketServer(
     }
 
     terminalEventsWsLogger.info("terminal-events-ws.connected", {
+      ...correlation,
       message: "Terminal events websocket connected",
       acceptedAfter: handshake.after,
       streamId: terminalEventService.getStreamId(),
@@ -82,7 +98,12 @@ export function attachTerminalEventsWebSocketServer(
       heartbeatTimer: null as NodeJS.Timeout | null,
       isAlive: true,
     };
-    const heartbeat = createHeartbeatController(socket, heartbeatState);
+    const heartbeat = createHeartbeatController(socket, heartbeatState, () => {
+      terminalEventsWsLogger.warn("terminal-events-ws.heartbeat.timeout", {
+        ...correlation,
+        durationMs: Date.now() - connectedAt,
+      });
+    });
     socket.on("pong", () => heartbeat.markAlive());
     heartbeat.start();
 
@@ -107,15 +128,23 @@ export function attachTerminalEventsWebSocketServer(
       events: terminalEventService.listAfter(handshake.after),
     });
 
-    const unsubscribeDevice = handshake.deviceStatus ? options?.deviceMonitor?.subscribe((snapshot) => {
-      if (!authService.getActiveSession(handshake.sessionId)) { socket.close(1008, "Unauthorized"); return; }
-      sendTerminalEvent(socket, { type: "device-status", snapshot });
-    }) : undefined;
-    socket.on("close", () => {
+    const unsubscribeDevice = handshake.deviceStatus
+      ? options?.deviceMonitor?.subscribe((snapshot) => {
+          if (!authService.getActiveSession(handshake.sessionId)) {
+            socket.close(1008, "Unauthorized");
+            return;
+          }
+          sendTerminalEvent(socket, { type: "device-status", snapshot });
+        })
+      : undefined;
+    socket.on("close", (code) => {
       unsubscribeDevice?.();
       heartbeat.stop();
       unsubscribe();
       terminalEventsWsLogger.info("terminal-events-ws.disconnected", {
+        ...correlation,
+        code,
+        durationMs: Date.now() - connectedAt,
         message: "Terminal events websocket disconnected",
         acceptedAfter: handshake.after,
       });

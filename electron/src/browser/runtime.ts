@@ -59,6 +59,9 @@ export interface TerminalBrowserEntry {
   onDeviceDebuggerDetach:
     | ((event: Electron.Event, reason: string) => void)
     | null;
+  activeDownloads: number;
+  popupCount: number;
+  sleepPromise: Promise<boolean> | null;
   lastActiveAt: number;
   lastKnownUrl: string;
   lastSentUpdateKey: string | null;
@@ -88,6 +91,8 @@ export interface TerminalBrowserDormantTab {
   url: string;
   title: string;
   lastActiveAt: number;
+  faviconDataUrl?: string | null;
+  navigationHistory?: { entries: Electron.NavigationEntry[]; index: number };
 }
 
 export interface TerminalBrowserCdpTarget {
@@ -110,6 +115,7 @@ export const terminalBrowserRuntime = {
   entries: new Map<string, TerminalBrowserEntry>(),
   dormantTabs: new Map<string, TerminalBrowserDormantTab>(),
   attachedByWorkspaceKey: new Map<string, string>(),
+  showRequestByWindowId: new Map<number, object>(),
   workspaceByKey: new Map<string, TerminalBrowserWindowWorkspace>(),
   saveTimer: null as NodeJS.Timeout | null,
   persistedStateRestored: false,
@@ -122,12 +128,28 @@ export function createTerminalBrowserGroupId(): string {
   return `browser-group-${randomUUID().slice(0, 8)}`;
 }
 
+const downloadTrackingSessions = new WeakSet<Electron.Session>();
+
 export function getTerminalBrowserSession(
   profileId: TerminalBrowserProfileId,
 ): Electron.Session {
-  return electronSession.fromPartition(
+  const session = electronSession.fromPartition(
     getTerminalBrowserProfileConfig(profileId).partition,
   );
+  if (!downloadTrackingSessions.has(session)) {
+    downloadTrackingSessions.add(session);
+    session.on("will-download", (_event, item, source) => {
+      const entry = [...terminalBrowserRuntime.entries.values()].find(
+        (entry) => entry.view.webContents === source,
+      );
+      if (!entry) return;
+      entry.activeDownloads += 1;
+      item.once("done", () => {
+        entry.activeDownloads -= 1;
+      });
+    });
+  }
+  return session;
 }
 
 export function getTerminalBrowserKey(

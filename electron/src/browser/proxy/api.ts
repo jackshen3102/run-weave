@@ -22,7 +22,7 @@ export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
   const targets: TerminalBrowserCdpTarget[] = [];
   for (const [key, entry] of terminalBrowserRuntime.entries) {
     const wc = entry.view.webContents;
-    if (!wc || wc.isDestroyed()) {
+    if (!wc || wc.isDestroyed() || entry.sleepPromise) {
       continue;
     }
     const tabId = key.slice(`${entry.windowId}:${entry.profileId}:`.length);

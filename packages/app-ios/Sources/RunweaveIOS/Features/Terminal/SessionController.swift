@@ -71,6 +71,8 @@ public final class SessionController: ObservableObject {
   private var size: (Int, Int)?
   private var sentSize: (Int, Int)?
   private static let highWater = 1024 * 1024
+  private var outputLogAt = ProcessInfo.processInfo.systemUptime
+  private var outputLogCounters: [String: Int] = [:]
 
   private func updateCanSend() {
     let next = !readOnly && connected && hasSnapshot && !stopped && !inputBusy && runtimeStatus != "exited"
@@ -131,17 +133,19 @@ public final class SessionController: ObservableObject {
       guard let self else { return }
       var retries = 0
       while !Task.isCancelled && !self.stopped && self.generation == epoch {
+        let attemptID = UUID().uuidString
+        self.record("socket.connecting", extra: ["attemptId": attemptID, "retry": retries])
         do {
           self.connectionStatus = retries == 0 ? "连接中" : "重新连接中"
           let ticket = try await self.api.terminalTicket(id: self.terminalID)
           guard self.generation == epoch, !Task.isCancelled else { return }
           self.record("ticket.acquired")
           let ws = self.networking.webSocketTask(
-            with: try self.api.webSocketURL(
+            with: self.api.connectionSocketRequest(try self.api.webSocketURL(
               terminalID: self.terminalID, ticket: ticket, resumeClientID: self.resumeClientID,
               resumeStreamID: self.committedCursor?.streamId,
               resumeOffset: self.committedCursor?.offset,
-              cols: self.size?.0, rows: self.size?.1))
+              cols: self.size?.0, rows: self.size?.1), attemptID: attemptID))
           ws.maximumMessageSize = 2 * Self.highWater
           self.socket = ws
           self.connected = false
@@ -157,16 +161,21 @@ public final class SessionController: ObservableObject {
             case .data(let data): bytes = data
             @unknown default: throw APIError.invalidResponse
             }
-            do { try self.consume(JSONDecoder().decode(TerminalMessage.self, from: bytes)) } catch {
+            do { try self.consume(JSONDecoder().decode(TerminalMessage.self, from: bytes), attemptID: attemptID) } catch {
               self.halt("终端协议错误，连接已停止")
               return
             }
             if self.stopped { return }
+            if self.connected { retries = 0 }
           }
         } catch {
           guard self.generation == epoch, !Task.isCancelled, !self.stopped else { return }
           self.connected = false
           let closeCode = self.socket?.closeCode.rawValue
+          var details: [String: Any] = DiagnosticRecord.errorFields(error).mapValues { $0 as Any }
+          details["attemptId"] = attemptID
+          details["closeCode"] = closeCode ?? 0
+          self.record("socket.disconnected", extra: details)
           self.socket?.cancel(with: .goingAway, reason: nil)
           self.socket = nil
           self.clearQueue()
@@ -179,15 +188,18 @@ public final class SessionController: ObservableObject {
             return
           }
           self.connectionStatus = "离线"
-          self.record("socket.disconnected")
           retries += 1
-          try? await Task.sleep(nanoseconds: UInt64(min(30, retries * 2)) * 1_000_000_000)
+          let delay = min(30, retries * 2)
+          self.record("socket.retry.scheduled", extra: ["attemptId": attemptID, "retry": retries, "retryDelayMs": delay * 1000])
+          try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
         }
       }
     }
   }
 
   public func disconnect() {
+    flushOutputLog()
+    if !stopped { record("socket.stopped", extra: ["closeCode": 1000]) }
     generation += 1
     stopped = true
     connected = false
@@ -293,7 +305,7 @@ public final class SessionController: ObservableObject {
     networking.invalidateAndCancel()
   }
 
-  private func consume(_ message: TerminalMessage) throws {
+  private func consume(_ message: TerminalMessage, attemptID: String) throws {
     switch message {
     case .connected(let id, let kind, let recovery):
       guard id == terminalID else { throw APIError.invalidResponse }
@@ -314,7 +326,7 @@ public final class SessionController: ObservableObject {
         record("recovery.snapshot")
       }
       connectionStatus = "已连接"
-      record("connected")
+      record("connected", extra: ["attemptId": attemptID])
       sendSize()
     case .snapshot(let text, let bracketed, let cursor, let cols, let rows):
       guard connected else { throw APIError.invalidResponse }
@@ -460,6 +472,13 @@ public final class SessionController: ObservableObject {
   }
 
   private func record(_ event: String, bytes: Int = 0, extra: [String: Any] = [:]) {
+    if event == "output" || event == "consume" {
+      let received = event == "output"
+      outputLogCounters[received ? "receivedBytes" : "consumedBytes", default: 0] += bytes
+      outputLogCounters[received ? "outputFrames" : "consumeFrames", default: 0] += 1
+      if ProcessInfo.processInfo.systemUptime - outputLogAt >= 5 { flushOutputLog() }
+      return
+    }
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     var value: [String: Any] = [
@@ -480,5 +499,13 @@ public final class SessionController: ObservableObject {
     }
     events.append(value)
     if events.count > 2000 { events.removeFirst(events.count - 2000) }
+  }
+
+  private func flushOutputLog() {
+    guard !outputLogCounters.isEmpty else { return }
+    let counters = outputLogCounters
+    outputLogCounters.removeAll(keepingCapacity: true)
+    outputLogAt = ProcessInfo.processInfo.systemUptime
+    record("output.summary", extra: counters.mapValues { $0 as Any })
   }
 }

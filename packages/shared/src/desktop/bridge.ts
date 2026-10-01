@@ -57,6 +57,7 @@ import type {
   TerminalBrowserToolMenuRequest,
 } from "../browser/tool-menu";
 import type {
+  TerminalBrowserSleepResult,
   TerminalBrowserCreateTabRequest,
   TerminalBrowserStateChangedEvent,
   TerminalBrowserSnapshot,
@@ -166,6 +167,9 @@ export interface RunweaveElectronBridge {
   terminalBrowserGetWorkspace: (
     profileId: TerminalBrowserProfileId,
   ) => Promise<TerminalBrowserWorkspaceSnapshot>;
+  terminalBrowserSleepIdleTabs: (
+    profileId: TerminalBrowserProfileId,
+  ) => Promise<TerminalBrowserSleepResult>;
   terminalBrowserCreateTab: (
     request: TerminalBrowserCreateTabRequest,
   ) => Promise<void>;

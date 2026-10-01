@@ -219,7 +219,29 @@ export function attachTerminalWebSocketServer(
       heartbeatTimer: null as NodeJS.Timeout | null,
       isAlive: true,
     };
-    const heartbeat = createHeartbeatController(socket, heartbeatState);
+    const correlationId = (name: string) => {
+      const value = request.headers[name];
+      return typeof value === "string" && /^[a-zA-Z0-9:_-]{1,160}$/.test(value)
+        ? value
+        : undefined;
+    };
+    const correlation = {
+      connectionId: correlationId("x-connection-id"),
+      attemptId: correlationId("x-connection-attempt-id"),
+    };
+    const heartbeat = createHeartbeatController(socket, heartbeatState, () => {
+      terminalWsLogger.warn("terminal-ws.heartbeat.timeout", {
+        ...correlation,
+        clientId,
+        terminalSessionId,
+        durationMs: Date.now() - connectedAt,
+      });
+    });
+    terminalWsLogger.info("terminal-ws.connected", {
+      ...correlation,
+      clientId,
+      terminalSessionId,
+    });
     const inputState: TerminalClientInputState = {
       lastInputAt: null,
       sequence: 0,
@@ -301,6 +323,7 @@ export function attachTerminalWebSocketServer(
     socket.on("error", cleanupConnection);
     socket.on("close", (code, reason) => {
       terminalWsLogger.info("terminal-ws.closed", {
+        ...correlation,
         message: "Terminal websocket closed",
         terminalSessionId,
         clientId,

@@ -96,7 +96,7 @@ export function getTargetInfoForRequest(
 
 export function broadcastTargetCreated(
   connections: Set<CdpProxyConnectionState>,
-  initiator: CdpProxyConnectionState,
+  initiator: CdpProxyConnectionState | null,
   target: {
     targetId: string;
     profileId: TerminalBrowserProfileId;
@@ -138,4 +138,48 @@ export function isSafeNoopCommand(method: string): boolean {
     method === "Network.clearBrowserCookies" ||
     method === "Storage.clearDataForOrigin"
   );
+}
+
+/** Restoring a renderer must satisfy both discovery and auto-attach clients. */
+export function broadcastTargetAwakened(
+  connections: Set<CdpProxyConnectionState>,
+  target: Parameters<typeof broadcastTargetCreated>[2],
+): void {
+  broadcastTargetCreated(connections, null, target);
+  const live = getTerminalBrowserCdpTargets().find(
+    (candidate) => candidate.targetId === target.targetId,
+  );
+  if (!live) return;
+  for (const conn of connections) {
+    if (
+      !conn.autoAttachEnabled ||
+      conn.scopedProfileId !== target.profileId ||
+      (conn.scopedGroupId && conn.scopedGroupId !== target.browserGroupId) ||
+      conn.sessionManager.isTargetAttached(target.targetId)
+    )
+      continue;
+    try {
+      const { proxySessionId } = conn.sessionManager.attachDebugger(
+        target.targetId,
+        live.webContents,
+      );
+      sendJson(conn.ws, {
+        method: "Target.attachedToTarget",
+        params: {
+          sessionId: proxySessionId,
+          targetInfo: buildTargetInfo({
+            ...target,
+            browserContextId: target.browserGroupId,
+            attached: true,
+          }),
+          waitingForDebugger: conn.waitForDebuggerOnStart,
+        },
+      });
+    } catch (error) {
+      console.warn("[cdp-proxy] auto-attach to awakened target failed", {
+        targetId: target.targetId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 }

@@ -1,5 +1,5 @@
 import { useMemoizedFn } from "ahooks";
-import { File, LoaderCircle, Plus, X } from "lucide-react";
+import { File, LoaderCircle, Moon, Plus, X } from "lucide-react";
 import type { TerminalBrowserGroupSnapshot } from "@runweave/shared/terminal-browser-workspace";
 import {
   useEffect,
@@ -14,6 +14,17 @@ import {
   SortableTabs,
   type SortableTabRenderProps,
 } from "../../../ui/sortable-tabs";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "../../../ui/alert-dialog";
+import type { TerminalBrowserSleepResult } from "@runweave/shared/terminal-browser-workspace";
 import { TerminalBrowserTabOverview } from "./overview";
 import {
   TERMINAL_BROWSER_ACTIVE_TAB_MIN_WIDTH,
@@ -30,13 +41,11 @@ interface TerminalBrowserTabsProps {
   tabs: TerminalBrowserTabState[];
   groups: TerminalBrowserGroupSnapshot[];
   activeTabId: string;
+  onSleepIdleTabs?: () => Promise<TerminalBrowserSleepResult>;
   onCreateTab: () => void;
   onCreateGroup: () => void;
   onSelectTab: (tabId: string) => void;
-  onCloseTab: (
-    event: { stopPropagation: () => void },
-    tabId: string,
-  ) => void;
+  onCloseTab: (event: { stopPropagation: () => void }, tabId: string) => void;
   onReorder?: (groupId: string, fromIndex: number, toIndex: number) => void;
   onRenameGroup: (groupId: string, name: string) => Promise<void>;
   onCloseGroup: (groupId: string) => Promise<void>;
@@ -54,6 +63,7 @@ export function TerminalBrowserTabs({
   groups,
   activeTabId,
   onCreateTab,
+  onSleepIdleTabs,
   onCreateGroup,
   onSelectTab,
   onCloseTab,
@@ -61,11 +71,31 @@ export function TerminalBrowserTabs({
   onRenameGroup,
   onCloseGroup,
 }: TerminalBrowserTabsProps) {
+  const [sleepDialogOpen, setSleepDialogOpen] = useState(false);
+  const [sleeping, setSleeping] = useState(false);
+  const [sleepResult, setSleepResult] = useState<string | null>(null);
+  const sleepIdleTabs = useMemoizedFn(async () => {
+    if (!onSleepIdleTabs || sleeping) return;
+    setSleeping(true);
+    try {
+      const result = await onSleepIdleTabs();
+      setSleepResult(
+        `已休眠 ${result.slept} 个标签，保留 ${result.skipped} 个使用中或受保护标签`,
+      );
+    } catch (error) {
+      setSleepResult(
+        error instanceof Error ? error.message : "休眠失败，请重试",
+      );
+    } finally {
+      setSleeping(false);
+    }
+  });
   const [now, setNow] = useState(() => Date.now());
   const [viewportWidth, setViewportWidth] = useState(0);
-  const [frozenWidths, setFrozenWidths] = useState<Record<string, number> | null>(
-    null,
-  );
+  const [frozenWidths, setFrozenWidths] = useState<Record<
+    string,
+    number
+  > | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const slotRefs = useRef(new Map<string, HTMLDivElement>());
   const tabButtonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -109,7 +139,8 @@ export function TerminalBrowserTabs({
     );
   }, [activeTabId, calculatedWidths, frozenWidths, tabs]);
   const hasActiveMcpActivity = tabs.some(
-    (tab) => typeof tab.mcpActivityUntil === "number" && tab.mcpActivityUntil > now,
+    (tab) =>
+      typeof tab.mcpActivityUntil === "number" && tab.mcpActivityUntil > now,
   );
 
   const clearCloseFreeze = useMemoizedFn(() => {
@@ -242,10 +273,7 @@ export function TerminalBrowserTabs({
         closeFreezeTimerRef.current = null;
       }
       if (closePointerTypeRef.current !== "mouse") {
-        closeFreezeTimerRef.current = window.setTimeout(
-          clearCloseFreeze,
-          1800,
-        );
+        closeFreezeTimerRef.current = window.setTimeout(clearCloseFreeze, 1800);
       }
       onCloseTab(event, tabId);
     },
@@ -305,13 +333,14 @@ export function TerminalBrowserTabs({
           sortProps.isDragging
             ? "border-sky-500/60 bg-sky-500/20 text-slate-50 opacity-90 shadow-lg"
             : selected
-                ? "border-sky-500/60 bg-sky-500/15 text-slate-50"
-                : "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-900",
+              ? "border-sky-500/60 bg-sky-500/15 text-slate-50"
+              : "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-900",
         ].join(" ")}
         style={{ width, minWidth: width, maxWidth: width }}
         data-terminal-browser-tab-slot={tab.id}
         data-density={density}
         data-width={width}
+        data-suspended={tab.suspended ? "true" : "false"}
         data-navigation-error={tab.navigationError ? "true" : "false"}
       >
         <button
@@ -329,14 +358,21 @@ export function TerminalBrowserTabs({
           role="tab"
           aria-selected={selected}
           aria-label={tabLabel}
-          title={tabLabel}
+          title={
+            tab.suspended ? `${tabLabel} · 已休眠，点击重新加载` : tabLabel
+          }
           tabIndex={selected ? 0 : -1}
           className="flex min-w-0 flex-1 items-center gap-1 outline-none"
           onClick={() => selectTab(tab.id)}
           onKeyDown={(event) => handleKeyDown(event, tab.id)}
         >
           <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
-            {tab.loading ? (
+            {tab.suspended ? (
+              <Moon
+                className="h-3.5 w-3.5 text-slate-500"
+                aria-label="已休眠"
+              />
+            ) : tab.loading ? (
               <LoaderCircle
                 className="h-3.5 w-3.5 animate-spin"
                 aria-label="Loading"
@@ -499,6 +535,42 @@ export function TerminalBrowserTabs({
         onRenameGroup={onRenameGroup}
         onCloseGroup={onCloseGroup}
       />
+      {onSleepIdleTabs ? (
+        <>
+          <button
+            type="button"
+            disabled={sleeping}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-50"
+            aria-label="休眠闲置标签"
+            title={sleepResult ?? "休眠闲置标签，返回时重新加载"}
+            onClick={() => setSleepDialogOpen(true)}
+          >
+            <Moon className="h-3.5 w-3.5" />
+          </button>
+          <AlertDialog open={sleepDialogOpen} onOpenChange={setSleepDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>休眠闲置标签？</AlertDialogTitle>
+                <AlertDialogDescription>
+                  保留标签，释放闲置页面；再次打开时重新加载。当前标签、Agent
+                  会话和可检测的表单、媒体等活动会保留。网页中无法检测的未保存内容可能丢失，请先保存重要内容。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void sleepIdleTabs()}>
+                  休眠闲置标签
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          {sleepResult ? (
+            <span role="status" className="sr-only">
+              {sleepResult}
+            </span>
+          ) : null}
+        </>
+      ) : null}
       <button
         type="button"
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-100"

@@ -110,6 +110,11 @@ export function TerminalBrowserTool({
         tabs={tabs}
         groups={groups}
         activeTabId={activeTab.id}
+        onSleepIdleTabs={
+          window.electronAPI?.terminalBrowserSleepIdleTabs
+            ? () => window.electronAPI!.terminalBrowserSleepIdleTabs!(profileId)
+            : undefined
+        }
         onCreateTab={() => createBrowserTab()}
         onCreateGroup={createBrowserGroup}
         onSelectTab={setActiveBrowserTab}
@@ -174,7 +179,8 @@ export function TerminalBrowserTool({
       />
       {presentation.error ? (
         <div role="alert" className="p-2 text-sm text-amber-400">
-          {presentation.error} <button onClick={presentation.retry}>重试显示切换</button>
+          {presentation.error}{" "}
+          <button onClick={presentation.retry}>重试显示切换</button>
         </div>
       ) : null}
       <TerminalBrowserErrorBanners

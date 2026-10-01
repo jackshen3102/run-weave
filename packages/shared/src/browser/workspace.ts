@@ -14,6 +14,8 @@ export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
   tabId: string;
   browserGroupId: string;
   loading: boolean;
+  /** Metadata exists, but no page is currently resident. */
+  suspended?: boolean;
   cdpProxyAttached: boolean;
   mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
@@ -46,6 +48,11 @@ export interface TerminalBrowserWorkspaceSnapshot {
   activeTabId: string;
   groups: TerminalBrowserGroupSnapshot[];
   tabs: TerminalBrowserTabSnapshot[];
+}
+
+export interface TerminalBrowserSleepResult {
+  slept: number;
+  skipped: number;
 }
 
 export type TerminalBrowserCreateTabRequest =
