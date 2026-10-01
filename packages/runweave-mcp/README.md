@@ -4,6 +4,8 @@
 
 ## 本地运行
 
+macOS 长期使用优先采用 [常驻安装与恢复](../../docs/deployment/runweave-research-mcp.md#已接入过下次怎么使用)，下面的前台运行保留用于调试。常驻服务由 launchd 管理，独立于桌面和 Backend；右上角运行状态显示服务、隧道和 Activity 查询证据。`GET /runtime-status` 提供本机 owner 报告，不启动或停止服务。
+
 需要 Node.js 22、pnpm，以及目标 Runweave 实例的 rw 登录状态。SQL 便捷入口需要 `python3`，代码身份需要 `git`。命令继承启动进程的 PATH；使用 nvm 等环境时先加载对应 Node/CLI 环境。
 
 在仓库根目录构建并启动，将工作目录替换成实际绝对路径：

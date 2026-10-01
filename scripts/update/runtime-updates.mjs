@@ -1,8 +1,15 @@
-import { explicitConfigurationArguments } from "../lib/configuration.mjs";
+import { explicitConfigurationArguments, configurationLibrary } from "../lib/configuration.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { commandName } from "./core.mjs";
 import { readJsonFile, runChecked, runCaptureChecked } from "./system.mjs";
+
+export async function runResearchMcpUpdate({ sourceRoot }) {
+  const installation = configurationLibrary.readResearchMcpInstallation();
+  if (!installation) return { action: "skip", reason: "not installed" };
+  await runChecked(process.execPath, ["./scripts/install/research-mcp.mjs", ...explicitConfigurationArguments()], { cwd: sourceRoot });
+  return { action: "update", releaseId: configurationLibrary.readResearchMcpInstallation()?.releaseId };
+}
 
 export async function runRuntimeUpdate({
   channel,

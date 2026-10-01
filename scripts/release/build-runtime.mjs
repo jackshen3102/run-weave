@@ -121,6 +121,7 @@ if (isolatedBuildRoot) {
 }
 
 const releaseDir = path.join(artifactsRoot, releaseId);
+run("pnpm", ["--filter", "@runweave/mcp", "build"]);
 const backendEntry = path.join(electronDist, "backend", "index.cjs");
 const cliEntry = path.join(electronDist, "cli", "index.cjs");
 if (!existsSync(path.join(frontendDist, "index.html"))) {
@@ -182,6 +183,7 @@ cpSync(path.dirname(cliEntry), path.join(releaseDir, "cli"), {
   recursive: true,
   dereference: true,
 });
+cpSync(path.join(repoRoot, "packages", "runweave-mcp", "dist"), path.join(releaseDir, "research-mcp"), { recursive: true, dereference: true });
 
 const files = listFiles(releaseDir)
   .filter((filePath) => filePath !== "manifest.json")
@@ -224,6 +226,7 @@ const manifest = {
   cli: {
     entry: "cli/index.cjs",
   },
+  researchMcp: { entry: "research-mcp/index.cjs" },
   files,
   treeSha256,
 };

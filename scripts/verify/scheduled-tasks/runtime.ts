@@ -21,7 +21,7 @@ import {
 import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
 
 import { verifyMigrations } from "./migrations";
-import { verifyConcurrent } from "./concurrent";
+import { verifyArchive, verifyConcurrent } from "./concurrent";
 
 const selected = readSelectedCase(process.argv.slice(2));
 const cases: Record<string, () => Promise<void>> = {
@@ -33,6 +33,7 @@ const cases: Record<string, () => Promise<void>> = {
   catchUpExecution: verifyCatchUpExecution,
   concurrent: () => withStore((store) => verifyConcurrent(store, taskFixture, runFixture)),
   fullAccess: verifyFullAccess,
+  archive: () => withStore((store, directory) => verifyArchive(store, directory, taskFixture, runFixture)),
 };
 
 void main();
@@ -496,7 +497,7 @@ async function verifyCatchUpExecution(): Promise<void> {
 }
 
 async function withStore(
-  run: (store: ScheduledTaskStore) => Promise<void>,
+  run: (store: ScheduledTaskStore, directory: string) => Promise<void>,
 ): Promise<void> {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), "runweave-scheduled-"),
@@ -505,7 +506,7 @@ async function withStore(
     databasePath: path.join(directory, "scheduled-tasks.sqlite"),
   });
   try {
-    await run(store);
+    await run(store, directory);
   } finally {
     await store.dispose();
     await rm(directory, { recursive: true, force: true });

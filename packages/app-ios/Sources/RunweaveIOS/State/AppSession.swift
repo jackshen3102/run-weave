@@ -70,7 +70,7 @@ final class AppSession: ObservableObject {
   @Published private(set) var foreground = true
   private var loadingRequest = 0
   var canWrite: Bool { authenticated && health.status == .online && foreground && !writing }
-  @Published private(set) var reconnectingTerminal = false
+  @Published var reconnectingTerminal = false
   var canReconnect: Bool { authenticated && foreground && !loading && !writing && !reconnectingTerminal }
 
   func discardDraftContents(_ value: BackendConnection) {

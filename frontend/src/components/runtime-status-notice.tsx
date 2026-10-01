@@ -8,6 +8,7 @@ const CAPABILITY_LABELS: Record<RuntimeStatusCapabilityId, string> = {
   node: "节点连接", terminal: "Terminal", feishu: "飞书接入",
   "app-server": "App Server", "workspace-services": "Workspace Services",
   desktop: "Desktop", "background-tasks": "后台任务",
+  "research-mcp": "调查 MCP",
 };
 
 export function RuntimeStatusNotice() {

@@ -396,6 +396,14 @@ export class ScheduledTaskService {
     }
   }
 
+  async archiveQuickInputRun(runId: string): Promise<ScheduledRun> {
+    try {
+      return await this.requireStore().archiveQuickInputRun(runId, new Date().toISOString());
+    } catch (error) {
+      throw scheduledTaskErrorFromStorage(error);
+    }
+  }
+
   async stop(runId: string): Promise<ScheduledRun> {
     const run = await this.getRun(runId);
     if (!["queued", "running", "stopping"].includes(run.status)) return run;

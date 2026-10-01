@@ -132,6 +132,12 @@ export function createScheduledTasksRouter(
   router.get("/runs/:runId", (req, res) =>
     handle(res, () => service.getRun(runParams.parse(req.params).runId)),
   );
+  router.post("/runs/:runId/archive", (req, res) =>
+    handle(res, () => {
+      z.object({}).strict().parse(req.body ?? {});
+      return service.archiveQuickInputRun(runParams.parse(req.params).runId);
+    }),
+  );
   router.post("/runs/:runId/stop", (req, res) =>
     handle(res, () => service.stop(runParams.parse(req.params).runId), 202),
   );

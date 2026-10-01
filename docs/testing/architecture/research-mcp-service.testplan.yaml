@@ -1,0 +1,97 @@
+version: 1
+name: Research MCP 常驻恢复与状态可见验收
+description: >
+  验证用户级常驻服务、故障展示与恢复后的真实数据读取。
+  每条用例独立准备归属明确的实例、端口、作业和凭证；故障注入只操作本用例拥有的资源。
+cases:
+  - id: RMCPS-001
+    name: 用户登录后自动启动 MCP 和隧道
+    required: true
+    description: >
+      机器重启后登录，无手动启动命令即可通过云端工具读取本机来源。
+    preconditions:
+      - 专用验收主机已安装启用 MCP 和测试隧道，账号具备重启和重新登录能力。
+      - 本用例持有该主机的发布 SHA、隧道 profile 和运行状态独立清单。
+    steps:
+      - 重启主机并登录；重新取得当前端点，确认 MCP 与隧道在 60 秒内启动。
+      - 实际调用 runweave-local 的 list_sources；确认返回本用例实例及真实运行发布 SHA，不依赖旧缓存。
+  - id: RMCPS-002
+    name: MCP 异常退出能自动恢复
+    required: true
+    description: >
+      launchd 恢复本用例 MCP，恢复期间故障可见，恢复后实际查询成功。
+    preconditions:
+      - 本用例独立 MCP 作业已启用，Backend 和隧道可用，执行者拥有该作业 PID。
+    steps:
+      - 终止本用例 MCP 进程；使用 $toolkit:playwright-cli 查看真实运行状态面板，确认在 30 秒内出现恢复中或异常，不能保持正常。
+      - 重新取得 PID 和端点；确认 60 秒内出现新 MCP 进程且真实 Activity 查询成功，面板在 30 秒内清除该故障。
+  - id: RMCPS-003
+    name: Backend 重启不结束 MCP
+    required: true
+    description: >
+      Backend 中断只阻断数据读取；MCP 存活并在 Backend 恢复后重新取得数据。
+    preconditions:
+      - 本用例独立 Backend 和 MCP 正常，执行者拥有两个进程及独立查询标记。
+    steps:
+      - 记录 MCP PID 后停止本用例 Backend；确认 MCP health 仍成功，Activity 读取明确失败而非返回空数据。
+      - 启动同一 Backend fixture 并重新取得端点；确认 MCP PID 未变，Activity 查询恢复并取得独立标记。
+  - id: RMCPS-004
+    name: 隧道 ready 不能掩盖 MCP 上游故障
+    required: true
+    description: >
+      本地 MCP 无法连接时，隧道 ready 不能让已启用的调查能力显示正常。
+    preconditions:
+      - 本用例 Backend 和隧道运行，MCP 作业暂时不能启动且启用意图仍为启用。
+    steps:
+      - 核对隧道 ready 和 MCP 连接拒绝；使用 $toolkit:playwright-cli 打开真实面板，确认超过 30 秒宽限后调查 MCP 显示红色异常及上游不可达原因。
+      - 恢复本用例 MCP 后发起云端新查询；确认取得新结果，面板区分本地通过和云端调用成功时间。
+  - id: RMCPS-005
+    name: 隧道中断不会被旧成功状态掩盖
+    required: true
+    description: >
+      MCP 健康时隧道故障独立可见，恢复后使用新云端证据消除故障。
+    preconditions:
+      - 本用例 MCP、Backend 和测试隧道健康，执行者拥有该隧道作业。
+    steps:
+      - 阻断本用例隧道连接并保持 MCP 运行；使用 $toolkit:playwright-cli 查看真实面板，确认超过宽限后隧道异常，旧云端成功时间不能证明当前正常。
+      - 恢复连接并发起云端查询；确认读取本用例独立标记及新的成功时间。
+  - id: RMCPS-006
+    name: 显式停用不会自动复活
+    required: true
+    description: >
+      用户停用意图跨登录保留，状态显示停用且不报异常。
+    preconditions:
+      - 专用验收账号拥有独立已启用的 MCP 和隧道作业，可注销并重新登录。
+    steps:
+      - 执行本用例服务 stop；等待 60 秒，确认未产生新 MCP 或隧道进程。
+      - 注销并重新登录，重新取得页面；使用 $toolkit:playwright-cli 确认面板显示显式停用且不计为异常，作业仍未启动。
+  - id: RMCPS-007
+    name: 重复安装和陌生端口占用不产生误杀
+    required: true
+    description: >
+      安装遵守真实实例身份，重复安装幂等，陌生占用明确报错。
+    preconditions:
+      - 本用例独立配置根、服务作业和空闲端口已准备，另有本用例拥有的陌生 HTTP 服务。
+    steps:
+      - 在同一配置执行安装两次；确认只有一个 MCP 和一个隧道实例。
+      - 停止本用例作业并让陌生服务占用其 MCP 端口，再安装；确认返回占用错误，陌生服务 PID 和响应保持不变，不启动重复服务。
+  - id: RMCPS-008
+    name: 更新后的运行身份和新事件可由 MCP 读回
+    required: true
+    description: >
+      更新闭环同时证明部署目标、实际查询和正常业务新写入一致。
+    preconditions:
+      - 本用例完整实例、云端 MCP 连接和候选 MCP 与 Backend 发布 SHA 清单已准备，执行者可执行正常业务操作。
+    steps:
+      - 更新本用例服务并重新取得端点；通过运行接口核对 MCP 和 Backend 的 SHA 各自匹配候选清单，记录更新完成时间。
+      - 在本用例进行正常业务操作产生 Activity 事件；通过云端 query_data 查询并对照 Backend 原始记录，确认 eventId 和时间一致且晚于更新完成时间，不能直接插库制造通过证据。
+  - id: RMCPS-009
+    name: 更新失败恢复上一可运行版本
+    required: true
+    description: >
+      候选发布不可启动时保留旧版本及配置，失败状态不能伪装更新成功。
+    preconditions:
+      - 本用例独立旧发布已运行，旧 SHA 已记录，另有本用例拥有的不可启动候选发布。
+    steps:
+      - 安装不可启动候选；确认返回明确失败并恢复旧作业，运行 SHA 等于旧 SHA。
+      - 实际查询本用例 Activity 标记；确认仍可读，原凭证、启用意图与数据没有因失败更新被删除。

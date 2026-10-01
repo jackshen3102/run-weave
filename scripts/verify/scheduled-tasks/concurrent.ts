@@ -1,9 +1,12 @@
+import path from "node:path";
+import { ScheduledTaskService } from "../../../backend/src/scheduled-tasks/service";
+import { ScheduledTaskError } from "../../../backend/src/scheduled-tasks/errors";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import type { ScheduledRun, ScheduledTask } from "@runweave/shared/scheduled-tasks";
 import { ScheduledTaskRuntime } from "../../../backend/src/scheduled-tasks/runtime";
-import type { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
+import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
 import type { TerminalSessionManager } from "../../../backend/src/terminal/manager/manager";
 
 export async function verifyConcurrent(
@@ -65,4 +68,55 @@ export async function verifyConcurrent(
     release();
     await runtime.dispose();
   }
+}
+
+export async function verifyArchive(
+  store: ScheduledTaskStore,
+  directory: string,
+  taskFixture: () => ScheduledTask,
+  runFixture: (task: ScheduledTask, trigger: ScheduledRun["trigger"]) => ScheduledRun,
+): Promise<void> {
+  const task = { ...taskFixture(), enabled: false, nextRunAt: null,
+    origin: { kind: "quick-input" as const, quickInputId: crypto.randomUUID(),
+      projectName: "archive fixture", worktreeName: null } };
+  const queued = await store.createQuickInputRun(task, task.projectId, os.tmpdir(), "archive-1", "archive-1");
+  const service = new ScheduledTaskService(store, {} as TerminalSessionManager, { enabled: true, providers: [] });
+  for (const status of ["queued", "running", "stopping", "waiting"] as const) {
+    await store.putRun({ ...queued, status });
+    await assert.rejects(service.archiveQuickInputRun(queued.id),
+      (error: unknown) => error instanceof ScheduledTaskError && error.code === "run_not_finished" && error.statusCode === 409);
+    assert.equal((await store.getRun(queued.id))?.archivedAt, undefined);
+  }
+  const finished = await store.putRun({ ...queued, status: "failed", outcome: "blocked",
+    finishedAt: new Date().toISOString(), summary: "blocked fixture",
+    error: { code: "blocked", message: "fixture cannot finish" } });
+  await store.appendOutput(finished.id, "original output", 1000);
+  const archived = await service.archiveQuickInputRun(finished.id);
+  assert.ok(archived.archivedAt);
+  assert.equal(archived.status, "failed");
+  assert.equal(archived.outcome, "blocked");
+  assert.deepEqual(archived.error, finished.error);
+  assert.equal((await service.archiveQuickInputRun(finished.id)).archivedAt, archived.archivedAt);
+  // A stale execution/attachment snapshot must never unarchive the record.
+  assert.equal((await store.putRun(finished)).archivedAt, archived.archivedAt);
+  await store.putBinding(finished.id, { terminalSessionId: "fixture-terminal", panelId: "fixture-panel", attachmentState: "ready" });
+  assert.equal((await service.listQuickInputRuns({})).items[0]?.archivedAt, archived.archivedAt);
+  const next = await store.createQuickInputRun(task, task.projectId, os.tmpdir(), "archive-2", "archive-2");
+  assert.notEqual(next.id, finished.id);
+  assert.equal(next.archivedAt, undefined);
+  const ordinaryTask = taskFixture();
+  await store.createTask(ordinaryTask, ordinaryTask.projectId, ordinaryTask.id, ordinaryTask.id);
+  const ordinary = await store.createManualRun(runFixture(ordinaryTask, "manual"), "ordinary", "ordinary");
+  await store.putRun({ ...ordinary, status: "completed", finishedAt: new Date().toISOString() });
+  await assert.rejects(service.archiveQuickInputRun(ordinary.id),
+    (error: unknown) => error instanceof ScheduledTaskError && error.code === "not_quick_input_run" && error.statusCode === 400);
+  await assert.rejects(service.archiveQuickInputRun(crypto.randomUUID()),
+    (error: unknown) => error instanceof ScheduledTaskError && error.statusCode === 404);
+  await store.dispose();
+  const reopened = await ScheduledTaskStore.create({ databasePath: path.join(directory, "scheduled-tasks.sqlite") });
+  try {
+    assert.equal((await reopened.getRun(finished.id))?.archivedAt, archived.archivedAt);
+    assert.equal((await reopened.readOutput(finished.id, 0, 1000)).text, "original output");
+    assert.equal((await reopened.getRun(next.id))?.archivedAt, undefined);
+  } finally { await reopened.dispose(); }
 }

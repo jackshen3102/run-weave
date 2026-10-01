@@ -18,6 +18,7 @@ import { runScheduledTaskCommand } from "./commands/scheduled-task.js";
 import { toCliError } from "./errors.js";
 import { readCliVersion } from "./version.js";
 import { runConfigCommand } from "./commands/config.js";
+import { runResearchMcpCommand } from "./commands/research-mcp.js";
 
 export async function runCli(
   argv: string[],
@@ -81,6 +82,10 @@ export async function runCli(
       await runAppServerCommand(subcommand, args, io);
       return 0;
     }
+    if (group === "research-mcp") {
+      await runResearchMcpCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "agent-team") {
       await runAgentTeamCommand(subcommand, args, io);
       return 0;
@@ -118,7 +123,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw <config|activity|agent-team|app|app-server|auth|browser|evolution|experience|knowledge|feishu|project|scheduled-task|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <config|activity|agent-team|app|app-server|research-mcp|auth|browser|evolution|experience|knowledge|feishu|project|scheduled-task|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

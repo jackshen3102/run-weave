@@ -8,6 +8,7 @@ final class BackendQuickInputModel: ObservableObject {
   @Published private(set) var loading = false
   @Published private(set) var saving = false
   @Published private(set) var starting = Set<String>()
+  @Published private(set) var archiving = Set<String>()
   @Published var failure: String?
   @Published var runFailure: String?
   private var orderVersion: String?
@@ -20,7 +21,7 @@ final class BackendQuickInputModel: ObservableObject {
 
   func reset() {
     request += 1
-    items = []; runs = []
+    items = []; runs = []; archiving = []
     orderVersion = nil; scope = nil; generation = -1; loaded = false
     loading = false; saving = false; starting = []; failure = nil; runFailure = nil; runKeys = [:]
     runRequest += 1
@@ -154,7 +155,7 @@ final class BackendQuickInputModel: ObservableObject {
 
   var dashboardRuns: [ScheduledRun] {
     let ranks = ["running": 1, "stopping": 2, "queued": 3]
-    return runs.filter { $0.active || $0.needsAttention }.sorted {
+    return runs.filter { $0.archivedAt == nil && ($0.active || $0.needsAttention) }.sorted {
       let left = $0.needsAttention ? 0 : ranks[$0.status] ?? 4
       let right = $1.needsAttention ? 0 : ranks[$1.status] ?? 4
       if left != right { return left < right }
@@ -163,7 +164,24 @@ final class BackendQuickInputModel: ObservableObject {
     }
   }
 
-  var recentRuns: [ScheduledRun] { runs.filter { !$0.active && !$0.needsAttention } }
+  var recentRuns: [ScheduledRun] { runs.filter { $0.archivedAt != nil || (!$0.active && !$0.needsAttention) } }
+
+  func archive(_ session: AppSession, run: ScheduledRun) async throws {
+    guard current(session), session.canWrite, session.foreground, session.health.status == .online,
+      run.canArchive, !archiving.contains(run.id) else { throw APIError.offline }
+    let expected = generation, expectedScope = scope
+    archiving.insert(run.id)
+    defer { if generation == expected, scope == expectedScope { archiving.remove(run.id) } }
+    let result = try await session.withConnection(reportFailure: false) {
+      try await ScheduledTasksService(api: $0).archive(run.id)
+    }
+    guard current(session), generation == expected, scope == expectedScope else { throw CancellationError() }
+    // Invalidate list reads that started before this mutation completed.
+    runRequest += 1
+    if let index = runs.firstIndex(where: { $0.id == result.id }) { runs[index] = result }
+    else { runs.insert(result, at: 0) }
+    runFailure = nil
+  }
 
   func refreshRuns(_ session: AppSession) async {
     guard current(session), session.authenticated, session.health.status == .online else { return }
@@ -223,7 +241,7 @@ final class BackendQuickInputModel: ObservableObject {
   func run(for id: String, projectId: String?) -> ScheduledRun? {
     guard let projectId else { return nil }
     let matches = runs.filter {
-      $0.executionProjectId == projectId && $0.snapshot.origin?.quickInputId == id
+      $0.archivedAt == nil && $0.executionProjectId == projectId && $0.snapshot.origin?.quickInputId == id
     }
     return matches.first(where: \.active) ?? matches.first
   }

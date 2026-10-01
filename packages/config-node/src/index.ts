@@ -9,4 +9,5 @@ export * from "./owner";
 export * from "./domain";
 export * from "./migration-discovery";
 export * from "./initialization";
+export * from "./research-mcp";
 export { CONFIGURATION_COMPATIBILITY, APP_SERVER_CONFIGURATION_COMPATIBILITY, supportsConfiguration } from "@runweave/shared/configuration";

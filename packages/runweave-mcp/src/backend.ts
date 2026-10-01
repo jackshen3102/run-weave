@@ -6,6 +6,7 @@ export class Backend {
   async get<T = unknown>(
     route: string,
     query: Record<string, unknown> = {},
+    timeoutMs = 15_000,
   ): Promise<T> {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
@@ -20,7 +21,7 @@ export class Backend {
     });
     const auth = await this.auth;
     return auth.requestJson<T>(`${route}${params.size ? `?${params}` : ""}`, {
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   }
 }

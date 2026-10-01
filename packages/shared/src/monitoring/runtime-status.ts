@@ -21,6 +21,7 @@ export const RUNTIME_STATUS_CAPABILITY_IDS = [
   "workspace-services",
   "desktop",
   "background-tasks",
+  "research-mcp",
 ] as const;
 
 export type RuntimeStatusCapabilityId =
@@ -62,7 +63,7 @@ export interface RuntimeStatusItem {
 
 export interface RuntimeStatusSource {
   id: string;
-  runtime: "frontend" | "backend" | "electron" | "app-server" | "feishu-bridge";
+  runtime: "frontend" | "backend" | "electron" | "app-server" | "feishu-bridge" | "research-mcp";
   instanceId: string;
   capabilityId: RuntimeStatusCapabilityId;
 }

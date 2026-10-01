@@ -60,7 +60,7 @@ struct QuickCommandRunsView: View {
         if model.dashboardRuns.isEmpty { Text("暂无后台任务").font(.subheadline).foregroundColor(.secondary) }
         runList(model.dashboardRuns)
         if !model.recentRuns.isEmpty {
-          Text("最近结果").font(.caption).foregroundColor(.secondary).padding(.top, 12)
+          Text("历史记录").font(.caption).foregroundColor(.secondary).padding(.top, 12)
           runList(model.recentRuns)
         }
       }.padding(16)
@@ -71,7 +71,7 @@ struct QuickCommandRunsView: View {
     .refreshable { await model.refreshRuns(session) }
     .sheet(item: $selectedRun) { run in
       NavigationView {
-        QuickCommandRunDetail(session: session, initial: run) {
+        QuickCommandRunDetail(session: session, model: model, initial: run) {
           selectedRun = nil
           onOpenTerminal()
         }
@@ -86,15 +86,39 @@ struct QuickCommandRunsView: View {
       ForEach(Array(runs.enumerated()), id: \.element.id) { index, run in
         if index > 0 { Divider() }
         Button { selectedRun = run } label: { QuickCommandRunRow(run: run) }
+          .modifier(QuickCommandArchiveMenu(session: session, model: model, run: run))
       }
     }.padding(.horizontal, runs.isEmpty ? 0 : 12)
       .background(TerminalAppearance.panel).cornerRadius(14).buttonStyle(.plain)
   }
 }
 
+struct QuickCommandArchiveMenu: ViewModifier {
+  @ObservedObject var session: AppSession
+  @ObservedObject var model: BackendQuickInputModel
+  let run: ScheduledRun
+  @State private var failure: String?
+
+  func body(content: Content) -> some View {
+    content.contextMenu {
+      if run.canArchive {
+        Button { Task {
+          do { try await model.archive(session, run: run) }
+          catch { if !(error is CancellationError) { failure = displayError(error) } }
+        } } label: { Label("移至历史", systemImage: "archivebox") }
+          .disabled(!session.canWrite || session.health.status != .online || model.archiving.contains(run.id))
+      }
+    }
+    .alert("未能移至历史", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+      Button("知道了", role: .cancel) { failure = nil }
+    } message: { Text(failure ?? "") }
+  }
+}
+
 struct QuickCommandRunDetail: View {
   @Environment(\.dismiss) private var dismiss
   @ObservedObject var session: AppSession
+  @ObservedObject var model: BackendQuickInputModel
   @State private var run: ScheduledRun
   @State private var output = ""
   @State private var cursor: String?
@@ -108,8 +132,9 @@ struct QuickCommandRunDetail: View {
   private let onOpenTerminal: () -> Void
   private let generation: Int
 
-  init(session: AppSession, initial: ScheduledRun, onOpenTerminal: @escaping () -> Void) {
+  init(session: AppSession, model: BackendQuickInputModel, initial: ScheduledRun, onOpenTerminal: @escaping () -> Void) {
     self.session = session
+    self.model = model
     self.onOpenTerminal = onOpenTerminal
     generation = session.generation
     _run = State(initialValue: initial)
@@ -146,7 +171,7 @@ struct QuickCommandRunDetail: View {
           Button(opening ? (run.canOpen ? "正在恢复对话…" : "正在新建终端…") : (run.canOpen ? "打开对话并继续追问" : "新建项目终端")) { openTerminal() }
             .frame(maxWidth: .infinity, minHeight: 44)
             .background(TerminalAppearance.accent.opacity(0.08)).cornerRadius(10)
-            .disabled(opening || !polling || !session.canWrite)
+            .disabled(opening || model.archiving.contains(run.id) || !polling || !session.canWrite)
             .accessibilityIdentifier("quick-command-run-open-terminal")
         }
         if let openFailure { Text(openFailure).font(.caption).foregroundColor(.red) }
@@ -171,6 +196,17 @@ struct QuickCommandRunDetail: View {
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.25)))
             .disabled(!session.canWrite || !polling || stopping || run.status == "stopping")
             .accessibilityIdentifier("quick-command-run-stop")
+        }
+        if run.canArchive {
+          Button(model.archiving.contains(run.id) ? "正在移至历史…" : "移至历史") { archive() }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(TerminalAppearance.panel).cornerRadius(10)
+            .disabled(!session.canWrite || !polling || opening || model.archiving.contains(run.id))
+            .accessibilityIdentifier("quick-command-run-archive")
+          Text("从主列表移走，执行结果和输出保留在历史记录中。")
+            .font(.caption).foregroundColor(.secondary)
+        } else if run.archivedAt != nil {
+          Label("已移至历史", systemImage: "archivebox").font(.caption).foregroundColor(.secondary)
         }
         if let failure { Text(failure).font(.caption).foregroundColor(.red) }
       }.padding(20)
@@ -199,8 +235,22 @@ struct QuickCommandRunDetail: View {
     .clarityMask().mobileAnalyticsScreen(.quickReplies)
   }
 
+  private func archive() {
+    guard polling, session.canWrite, run.canArchive, !opening, !model.archiving.contains(run.id) else { return }
+    failure = nil
+    operation = Task {
+      do {
+        try await model.archive(session, run: run)
+        guard polling, !Task.isCancelled else { return }
+        dismiss()
+      } catch {
+        if polling, !Task.isCancelled, !(error is CancellationError) { failure = displayError(error) }
+      }
+    }
+  }
+
   private func openTerminal(replace: Bool = false) {
-    guard polling, session.canWrite, !opening, !run.active, !ownerUnresolved else { return }
+    guard polling, session.canWrite, !opening, !model.archiving.contains(run.id), !run.active, !ownerUnresolved else { return }
     let selected = run
     opening = true; openFailure = nil
     operation = Task {
