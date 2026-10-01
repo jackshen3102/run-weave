@@ -83,17 +83,6 @@ final class AppSession: ObservableObject {
     changingDraftScope = false
   }
 
-  func reconnectTerminal() async {
-    guard canReconnect, let controller = terminalController else { return }
-    let epoch = generation
-    reconnectingTerminal = true
-    defer { if generation == epoch { reconnectingTerminal = false } }
-    await refresh()
-    guard generation == epoch, terminalController === controller,
-      authenticated, foreground, health.status == .online else { return }
-    controller.connect()
-  }
-
   func activate(_ connection: BackendConnection?) async {
     let returnToScheduledTasks = showingScheduledTasks
     generation += 1
