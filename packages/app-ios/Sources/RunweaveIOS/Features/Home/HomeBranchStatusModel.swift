@@ -7,6 +7,7 @@ final class HomeBranchStatusModel: ObservableObject {
   @Published private var values: [String: HomeBranchStatus] = [:]
   private var attempted: [String: Date] = [:]
   private var inFlight = Set<String>()
+  private var rechecks = Set<String>()
   private var generation: Int?
 
   func status(for terminal: HomeTerminal, generation: Int, online: Bool) -> HomeBranchStatus? {
@@ -19,19 +20,25 @@ final class HomeBranchStatusModel: ObservableObject {
     return value
   }
 
-  func refresh(session: AppSession, terminals: [HomeTerminal], force: Bool = false) async {
+  func refresh(session: AppSession, terminals: [HomeTerminal], force: Bool = false,
+    recheck: Bool = false) async {
     let epoch = session.generation
     if generation != epoch {
       generation = epoch
       values = [:]
       attempted = [:]
       inFlight = []
+      rechecks = []
     }
     guard session.authenticated, session.foreground, session.terminal == nil, session.health.status == .online,
       let api = session.api, !Task.isCancelled else { return }
+    if recheck { rechecks.formUnion(terminals.map(\.id)) }
     let candidates = terminals.filter { terminal in
-      !inFlight.contains(terminal.id) && (force || values[terminal.id]?.cwd != terminal.cwd
-        || Date().timeIntervalSince(attempted[terminal.id] ?? .distantPast) >= 600)
+      let state = values[terminal.id]?.state
+      let retryInterval: TimeInterval = state == "stale" || state == "unavailable" ? 30 : 600
+      return !inFlight.contains(terminal.id) && (force || rechecks.contains(terminal.id)
+        || values[terminal.id]?.cwd != terminal.cwd
+        || Date().timeIntervalSince(attempted[terminal.id] ?? .distantPast) >= retryInterval)
     }
     // Bound each HTTP request, including unusually large attention lists.
     for start in stride(from: 0, to: candidates.count, by: 4) {
@@ -73,11 +80,15 @@ final class HomeBranchStatusModel: ObservableObject {
           attempted[terminal.id] = Date()
         }
       }
-      if generation == epoch { inFlight.subtract(ids) }
+      if generation == epoch {
+        inFlight.subtract(ids)
+        rechecks.subtract(ids)
+      }
     }
     let retained = Set(terminals.map(\.id))
     values = values.filter { retained.contains($0.key) }
     attempted = attempted.filter { retained.contains($0.key) }
+    rechecks.formIntersection(retained)
   }
 }
 

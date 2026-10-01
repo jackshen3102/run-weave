@@ -4,9 +4,7 @@ import SwiftUI
 @MainActor
 final class BackendQuickInputModel: ObservableObject {
   @Published private(set) var items: [BackendQuickInput] = []
-  @Published private(set) var searchItems: [BackendQuickInput] = []
-  @Published private(set) var searchQuery = ""
-  @Published private(set) var runs: [String: ScheduledRun] = [:]
+  @Published private(set) var runs: [ScheduledRun] = []
   @Published private(set) var loading = false
   @Published private(set) var saving = false
   @Published private(set) var starting = Set<String>()
@@ -18,15 +16,14 @@ final class BackendQuickInputModel: ObservableObject {
   private var loaded = false
   private var request = 0
   private var runKeys: [String: String] = [:]
-  private var runProjectId: String?
   private var runRequest = 0
 
   func reset() {
     request += 1
-    items = []; searchItems = []; searchQuery = ""; runs = [:]
+    items = []; runs = []
     orderVersion = nil; scope = nil; generation = -1; loaded = false
     loading = false; saving = false; starting = []; failure = nil; runFailure = nil; runKeys = [:]
-    runProjectId = nil; runRequest += 1
+    runRequest += 1
   }
 
   func canEdit(_ session: AppSession) -> Bool {
@@ -37,7 +34,7 @@ final class BackendQuickInputModel: ObservableObject {
     if !current(session) || !loaded { await refresh(session) }
   }
 
-  func refresh(_ session: AppSession, query: String = "") async {
+  func refresh(_ session: AppSession) async {
     guard let connection = session.connection else { reset(); failure = "请先选择电脑。"; return }
     if scope != connection.scope || generation != session.generation { reset() }
     scope = connection.scope; generation = session.generation
@@ -61,7 +58,7 @@ final class BackendQuickInputModel: ObservableObject {
           repeat {
             let next = cursor
             let page = try await session.withConnection(reportFailure: false) {
-              try await QuickInputService(api: $0).list(query: query, cursor: next)
+              try await QuickInputService(api: $0).list(cursor: next)
             }
             guard current(session, scope: expectedScope, generation: expectedGeneration), request == ticket else { return }
             if let version, version != page.orderVersion {
@@ -80,26 +77,16 @@ final class BackendQuickInputModel: ObservableObject {
       let unique = result.reduce(into: [BackendQuickInput]()) { values, item in
         if !values.contains(where: { $0.id == item.id }) { values.append(item) }
       }
-      if query.isEmpty {
-        items = unique; orderVersion = version; loaded = true
-      } else {
-        searchItems = unique; searchQuery = query
-      }
+      items = unique; orderVersion = version; loaded = true
       failure = nil
     } catch {
       guard current(session, scope: expectedScope, generation: expectedGeneration), request == ticket,
         !(error is CancellationError) else { return }
-      if case APIError.http(400) = error { failure = "此电脑尚不支持全局快捷回复，请先更新电脑端。" }
-      else if case APIError.http(404) = error { failure = "此电脑尚不支持全局快捷回复，请先更新电脑端。" }
+      if case APIError.http(400) = error { failure = "此电脑尚不支持全局快捷指令，请先更新电脑端。" }
+      else if case APIError.http(404) = error { failure = "此电脑尚不支持全局快捷指令，请先更新电脑端。" }
       else { failure = displayError(error) }
-      if query.isEmpty { items = []; orderVersion = nil; loaded = false }
-      else { searchItems = []; searchQuery = query }
+      items = []; orderVersion = nil; loaded = false
     }
-  }
-
-  func visible(query: String) -> [BackendQuickInput] {
-    query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? items
-      : (query == searchQuery ? searchItems : [])
   }
 
   func save(_ session: AppSession, item: BackendQuickInput?, title: String, body: String) async throws {
@@ -133,7 +120,7 @@ final class BackendQuickInputModel: ObservableObject {
     defer { if generation == expected { saving = false } }
     try await session.withConnection(reportFailure: false) { try await QuickInputService(api: $0).delete(id) }
     guard current(session), generation == expected else { throw CancellationError() }
-    items.removeAll { $0.id == id }; searchItems.removeAll { $0.id == id }
+    items.removeAll { $0.id == id }
     await refresh(session)
   }
 
@@ -165,40 +152,55 @@ final class BackendQuickInputModel: ObservableObject {
     }
   }
 
-  func refreshRuns(_ session: AppSession, projectId: String) async {
+  var dashboardRuns: [ScheduledRun] {
+    let ranks = ["running": 1, "stopping": 2, "queued": 3]
+    return runs.filter { $0.active || $0.needsAttention }.sorted {
+      let left = $0.needsAttention ? 0 : ranks[$0.status] ?? 4
+      let right = $1.needsAttention ? 0 : ranks[$1.status] ?? 4
+      if left != right { return left < right }
+      if $0.scheduledFor != $1.scheduledFor { return $0.scheduledFor > $1.scheduledFor }
+      return $0.id < $1.id
+    }
+  }
+
+  var recentRuns: [ScheduledRun] { runs.filter { !$0.active && !$0.needsAttention } }
+
+  func refreshRuns(_ session: AppSession) async {
     guard current(session), session.authenticated, session.health.status == .online else { return }
     runRequest += 1
-    let ticket = runRequest
-    if runProjectId != projectId { runs = [:] }
-    runProjectId = projectId
-    let expectedScope = scope, expectedGeneration = generation
+    let ticket = runRequest, expectedScope = scope, expectedGeneration = generation
     do {
       var cursor: String?
-      var latest: [String: ScheduledRun] = [:]
+      var records: [ScheduledRun] = []
       repeat {
         let next = cursor
         let page = try await session.withConnection(reportFailure: false) {
-          try await QuickInputService(api: $0).runs(projectId: projectId, cursor: next)
+          try await QuickInputService(api: $0).runs(cursor: next)
         }
         guard current(session), scope == expectedScope, generation == expectedGeneration,
-          runRequest == ticket else { return }
-        for run in page.items where run.executionProjectId == projectId {
-          if let id = run.snapshot.origin?.quickInputId, latest[id] == nil { latest[id] = run }
-        }
+          runRequest == ticket, !Task.isCancelled else { return }
+        records += page.items
         cursor = page.nextCursor
-      } while cursor != nil && !Task.isCancelled
-      if current(session), scope == expectedScope, generation == expectedGeneration,
-        runRequest == ticket { runs = latest; runFailure = nil }
-    } catch { if current(session) && !(error is CancellationError) { runFailure = displayError(error) } }
+      } while cursor != nil
+      var seen = Set<String>()
+      runs = records.filter { seen.insert($0.id).inserted }
+      runFailure = nil
+    } catch {
+      guard current(session), scope == expectedScope, generation == expectedGeneration,
+        runRequest == ticket, !(error is CancellationError), !Task.isCancelled else { return }
+      runFailure = displayError(error)
+    }
   }
 
   func start(_ session: AppSession, item: BackendQuickInput, projectId: String) async throws -> ScheduledRun {
     guard canEdit(session), !projectId.isEmpty,
       !starting.contains(item.id) else { throw APIError.offline }
+    let expected = generation
+    if let existing = run(for: item.id, projectId: projectId), existing.active { return existing }
     starting.insert(item.id)
-    defer { starting.remove(item.id) }
+    defer { if generation == expected { starting.remove(item.id) } }
     await refresh(session)
-    guard canEdit(session), let currentItem = items.first(where: { $0.id == item.id }) else {
+    guard current(session), generation == expected, canEdit(session), let currentItem = items.first(where: { $0.id == item.id }) else {
       throw APIError.invalidResponse
     }
     guard currentItem.data == item.data, currentItem.mode == item.mode else {
@@ -207,19 +209,23 @@ final class BackendQuickInputModel: ObservableObject {
     let keyID = item.id + "\u{0}" + projectId
     let key = runKeys[keyID] ?? UUID().uuidString
     runKeys[keyID] = key
-    let expected = generation
     let run = try await session.withConnection(reportFailure: false) {
       try await QuickInputService(api: $0).start(currentItem, projectId: projectId, key: key)
     }
     guard current(session), generation == expected else { throw CancellationError() }
     runKeys[keyID] = nil
-    if runProjectId == projectId { runs[item.id] = run }
+    runRequest += 1
+    runs.removeAll { $0.id == run.id }
+    runs.insert(run, at: 0)
     return run
   }
 
   func run(for id: String, projectId: String?) -> ScheduledRun? {
-    guard runProjectId == projectId else { return nil }
-    return runs[id]
+    guard let projectId else { return nil }
+    let matches = runs.filter {
+      $0.executionProjectId == projectId && $0.snapshot.origin?.quickInputId == id
+    }
+    return matches.first(where: \.active) ?? matches.first
   }
 
   private func current(_ session: AppSession) -> Bool {

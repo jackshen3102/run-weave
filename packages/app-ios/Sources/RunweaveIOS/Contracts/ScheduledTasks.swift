@@ -138,6 +138,7 @@ struct ScheduledRun: Decodable, Identifiable {
   let recoverable: Bool
   let terminalBinding: ScheduledTerminalBinding?
   var active: Bool { ["queued", "running", "stopping"].contains(status) }
+  var needsAttention: Bool { outcome == "blocked" || outcome == "failed" || status == "failed" || status == "waiting" }
   var canOpen: Bool { !active && recoverable && threadRef != nil }
   var statusLabel: String {
     if outcome == "blocked" { return "执行受阻" }
@@ -161,6 +162,7 @@ struct ScheduledPreview: Decodable { let now: String; let occurrences: [String] 
 struct ScheduledOutput: Decodable { let text: String; let nextCursor: String; let hasMore: Bool }
 struct ScheduledProjectContext: Decodable, Identifiable {
   let projectId: String; let parentProjectId: String; let name: String; let isPrimary: Bool; let availability: String
+  let path: String?
   var id: String { projectId }
 }
 struct ScheduledModelSettings: Decodable {

@@ -137,8 +137,10 @@ struct HomeView: View {
     .task(id: branchRefreshKey) {
       guard session.foreground, session.authenticated, session.health.status == .online,
         session.terminal == nil else { return }
+      var recheck = true
       while !Task.isCancelled {
-        await branchStatuses.refresh(session: session, terminals: attention)
+        await branchStatuses.refresh(session: session, terminals: attention, recheck: recheck)
+        recheck = false
         do { try await Task.sleep(nanoseconds: 30_000_000_000) }
         catch { return }
       }

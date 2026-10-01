@@ -4,6 +4,7 @@ import SwiftUI
 
 struct TerminalScreen: View {
   @Environment(\.dismiss) private var dismiss
+  @EnvironmentObject private var quickInputs: BackendQuickInputModel
   @ObservedObject var session: AppSession
   @ObservedObject var controller: SessionController
   @ObservedObject private var browser: BrowserSession
@@ -102,6 +103,12 @@ struct TerminalScreen: View {
           session: session, projectID: details.projectId, active: tab == "Files", model: changes
         ).opacity(tab == "Files" ? 1 : 0).allowsHitTesting(tab == "Files").accessibilityHidden(
           tab != "Files")
+        TerminalQuickCommandsView(
+          session: session, controller: controller, projectId: details.projectId,
+          projectLabel: quickCommandProjectLabel, active: tab == "Commands",
+          send: sendQuickCommand, insert: insertQuickCommand, onOpenTerminal: { tab = "Chat" }
+        ).opacity(tab == "Commands" ? 1 : 0).allowsHitTesting(tab == "Commands")
+          .accessibilityHidden(tab != "Commands")
       }
     }
     // A search keyboard inside the composer sheet must not resize the terminal behind it.
@@ -185,7 +192,7 @@ struct TerminalScreen: View {
     } message: {
       Text("删除后将结束该远端终端会话。")
     }
-    .mobileAnalyticsScreen(tab == "Files" ? .terminalFiles : tab == "Changes" ? .terminalChanges : .terminalChat)
+    .mobileAnalyticsScreen(tab == "Commands" ? .quickReplies : tab == "Files" ? .terminalFiles : tab == "Changes" ? .terminalChanges : .terminalChat)
   }
 
   private func connectBrowserIntents() {
@@ -239,8 +246,8 @@ struct TerminalScreen: View {
   }
 
   private var tabs: some View {
-    HStack(spacing: 24) {
-      ForEach(["Chat", "Changes", "Files"], id: \.self) { value in tabButton(value) }
+    HStack(spacing: 20) {
+      ForEach(["Chat", "Changes", "Files", "Commands"], id: \.self) { value in tabButton(value) }
       Spacer(minLength: 0)
     }
     .buttonStyle(.plain).padding(.horizontal, 16)
@@ -255,7 +262,7 @@ struct TerminalScreen: View {
       tab = value
     } label: {
       HStack(spacing: 5) {
-        Text(value == "Chat" ? "终端" : value == "Changes" ? "变更" : "文件")
+        Text(value == "Chat" ? "终端" : value == "Changes" ? "变更" : value == "Files" ? "文件" : "快捷指令")
         if value == "Changes" {
           Text(changes.count.map(String.init) ?? "0").font(.caption2)
             .padding(.horizontal, 5).padding(.vertical, 2)
@@ -273,6 +280,7 @@ struct TerminalScreen: View {
       }
     }
     .accessibilityAddTraits(tab == value ? .isSelected : [])
+    .accessibilityIdentifier("terminal-tab-\(value)")
   }
 
   private var chat: some View {
@@ -349,6 +357,35 @@ struct TerminalScreen: View {
       .accessibilityIdentifier("terminal-composer-open")
       .accessibilityFocused($composerTriggerFocused)
     }
+  }
+
+  private var quickCommandProjectLabel: String {
+    let label = scheduledProjectLabel(details.projectId, session: session)
+    return details.projectId.hasPrefix("wt:") ? label : label + " / 主项目"
+  }
+
+  private func sendQuickCommand(_ item: BackendQuickInput) async throws {
+    guard session.terminal?.id == details.id, session.terminalController === controller else { throw CancellationError() }
+    let epoch = session.generation
+    let agent = currentTerminal?.terminalState.agent
+    let isSlash = item.data.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/")
+    let mode = agent == "codex" && isSlash ? "codex_slash_command" : "line"
+    try await session.sendInstantReply(item.data, terminalID: details.id, controller: controller, mode: mode)
+    guard session.generation == epoch, session.terminal?.id == details.id,
+      session.terminalController === controller else { throw CancellationError() }
+    tab = "Chat"
+  }
+
+  private func insertQuickCommand(_ item: BackendQuickInput) {
+    guard session.canWrite, session.terminal?.id == details.id,
+      session.terminalController === controller else { return }
+    let previous = session.terminalDrafts[details.id] ?? ""
+    session.setDraft(previous + (previous.isEmpty || previous.hasSuffix("\n") ? "" : "\n") + item.data,
+      terminalID: details.id, suppressQuickInputHistory: true)
+    Task { await quickInputs.markUsed(session, id: item.id) }
+    tab = "Chat"
+    composerPreventsDismissal = false
+    showingComposer = true
   }
 
   private func stopActiveCommand() {
