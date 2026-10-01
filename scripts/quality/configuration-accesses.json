@@ -5296,6 +5296,14 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(resolved)"
   },
   {
+    "file": "plugins/toolkit/skills/github-pr/scripts/github-access.mjs",
+    "kind": "environment-forward",
+    "expression": "...env",
+    "count": 1,
+    "category": "tooling",
+    "reason": "GitHub 只读预检继承当前工具进程环境，并仅为获准备用代理覆盖进程级代理变量，不修改业务 settings 或系统网络配置。"
+  },
+  {
     "file": "plugins/toolkit/skills/github-pr/scripts/preflight.mjs",
     "kind": "environment",
     "expression": "env.GH_DEBUG",
@@ -9406,5 +9414,93 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "environment",
+    "expression": "env.GIT_OPTIONAL_LOCKS",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：沿用宿主连接环境并清除跨目录 Git 定位覆盖，不读取业务配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "environment",
+    "expression": "env[key]",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：沿用宿主连接环境并清除跨目录 Git 定位覆盖，不读取业务配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：沿用宿主连接环境并清除跨目录 Git 定位覆盖，不读取业务配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(full)",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：私有恢复快照、范围清单、文件内容及暂存区数据，用于交付核对和失败恢复。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(indexPath)",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：私有恢复快照、范围清单、文件内容及暂存区数据，用于交付核对和失败恢复。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(receiptPath)",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：私有恢复快照、范围清单、文件内容及暂存区数据，用于交付核对和失败恢复。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(scopePath)",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：私有恢复快照、范围清单、文件内容及暂存区数据，用于交付核对和失败恢复。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(snapshot.indexPath)",
+    "count": 2,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：私有恢复快照、范围清单、文件内容及暂存区数据，用于交付核对和失败恢复。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(full)",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：私有恢复快照、范围清单、文件内容及暂存区数据，用于交付核对和失败恢复。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(lock)",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：私有恢复快照、范围清单、文件内容及暂存区数据，用于交付核对和失败恢复。"
+  },
+  {
+    "file": "plugins/toolkit/skills/github-pr/scripts/source-worktree.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(receiptPath)",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Git 来源工作区收尾工具：私有恢复快照、范围清单、文件内容及暂存区数据，用于交付核对和失败恢复。"
   }
 ]

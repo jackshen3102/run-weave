@@ -9,7 +9,7 @@ description: 当用户要求提交代码并合并到 GitHub（提交 PR、走完
 
 这是随插件安装的跨仓库技能，适用于 GitHub 仓库。目标仓库无需包含本技能、预检脚本或插件源码；所有 Git 操作都在用户要提交的目标仓库执行。
 
-技能资源从实际加载的 `SKILL.md` 所在目录解析，使用绝对路径调用；不要到目标仓库寻找 `plugins/toolkit`，也不要硬编码某台机器的路径或缓存版本。辅助脚本仅依赖 Node.js 内置模块、Git 和 `gh`，不需要在目标仓库安装 npm/pnpm 依赖。没有 Node.js 或脚本资源缺失时，按下述规则逐项执行 Git/gh 只读检查，不要求目标项目引入 Node.js。
+技能资源从实际加载的 `SKILL.md` 所在目录解析，使用绝对路径调用；不要到目标仓库寻找 `plugins/toolkit`，也不要硬编码某台机器的路径或缓存版本。辅助脚本依赖 Node.js 内置模块、Git 和 `gh`，有 `curl` 时额外检查无凭证网络连通性；缺少 `curl` 时明确跳过该探测，仍执行 GitHub API 检查。不需要在目标仓库安装 npm/pnpm 依赖。没有 Node.js 或脚本资源缺失时，按下述规则逐项执行 Git/gh 只读检查，不要求目标项目引入 Node.js。
 
 提交格式及 PR 模板以目标仓库的说明和现有配置为准，不沿用技能开发仓库的约定。已有 commit/push hook 和远端 CI 属于本流程；构建、lint、测试、Dev Session、UI/CDP 验收及其他主动验证，只有用户在当前请求中明确要求，或显式调用对应验证技能时才执行。目标仓库列出可用验证命令，不等于纯 Git/PR 请求已经授权执行。Husky 和提交钩子都可选，不存在时记录为缺省，不自动创建或安装。
 
@@ -26,6 +26,10 @@ description: 当用户要求提交代码并合并到 GitHub（提交 PR、走完
 - 检查内容包括当前提交、分支（允许 detached HEAD）、工作区与暂存区、worktree 占用、origin 的读取/推送目标、有效 hook 路径及 Husky 入口、活跃账号和目标仓库访问权限。脏工作区属于待确认范围，不自动判失败；`passed` 只表示预检完成且无失败，不代表已获写权限或可以合并。
 - 认证使用 `gh auth status --active --hostname github.com`，并通过当前账号及目标仓库 API 验证。非活跃账号失效不阻断，不自动登出或切换账号。不要用普通 `gh auth status` 的整体失败判定当前账号失效；也不要用 `gh auth status --json` 的退出码判断认证成功，它可能在认证失败时仍返回 0。
 - 脚本失败时检查 `failedChecks` 和 `hooks`；网络错误、超时、缺少 CLI 与权限不足分别处理。脚本隐藏认证原文，必要时单独重跑失败检查，不使用 `--show-token`。确实缺少当前身份或所需权限时才找用户授权。
+- `checks.credential` 独立探测当前主机凭证是否可读，只记录布尔结果，不打印或保存 Token；`checks.network` 用 `curl` 探测 GitHub API 与 Git HTTPS 主机，仅作为诊断，探测失败记录为 `warning`。凭证可读时始终执行 `gh` 账号及仓库检查，以实际 `gh` 结果决定阻塞和恢复，不因 `curl` 自身的证书或代理问题阻断提交。`gh auth status` 的 `(keyring)` 表示凭证来源，后面的 `Timeout` 不能证明 keyring 读取失败。API 超时不等于凭证失效，后台没有交互式终端也不意味着不能使用当前系统账号已有的合法凭证。
+- 网络失败先读 `diagnosis`、`recovery.attempts` 和网络错误分类，再检查当前进程代理环境、DNS 与电脑已配置的备用路线。已有获准的 HTTP(S) 备用代理时用 `node "<技能安装目录>/scripts/preflight.mjs" "<工作区>" --fallback-proxy "<代理 URL>"` 验证；URL 不允许内嵌密码，脚本不修改系统网络、Git 配置或账号。不要猜代理地址、永久写死 GitHub IP、关闭 TLS 校验或因超时要求换 Token。
+- 预检最多执行三轮（初次加两次网络重试），仅网络或检查超时进入恢复；认证拒绝、仓库无权限和限流直接保留准确原因。验证备用路线成功后，将 `recovery.connectionEnvironment` 中的环境变量应用于后续所有 `git` 和 `gh` 命令，不能只让预检走备用路线。没有可用路线或次数耗尽时返回网络阻塞，并分别说明凭证探测结果与已尝试路线；不要编造成 keyring 权限拒绝。创建 PR、合并等写操作超时仍先查询远端事实，不能照搬只读探测的重试方式。
+- `recovery.gitTransport` 为 `ssh` 时，HTTP 代理仅恢复 GitHub API；Git SSH 还须使用已有的 SSH 代理配置并独立验证 `git ls-remote`。不要因 API 已恢复就声称 SSH 推送可用，也不要自动改 remote 或 SSH 配置。
 - 独立只读检查分别保留结果，不用 `&&` 串联，也不用 `|| true` 吞错。依赖操作仍需前一步成功才能执行；异步命令返回运行中标识时，等待其真正完成。手动回退也遵守这些规则。
 - 辅助脚本自动检查的范围是 `origin` 指向 github.com 且读写目标一致。其他 remote、fork、SSH 主机别名、Enterprise 等配置使用手动预检：独立检查工作区、暂存区、worktree 和实际钩子路径；解析真实主机与仓库后检查 `gh auth status --active --hostname <主机>`、当前身份及仓库权限。脚本不支持某种配置不等于该仓库不能使用本技能；目标能从现有配置确定时无需再次询问。
 
@@ -37,8 +41,9 @@ description: 当用户要求提交代码并合并到 GitHub（提交 PR、走完
 
 ### 1. 提交代码
 
+- 在暂存、提交或复制补丁前，记录改动来源目录与提交目录；使用 [来源工作区脚本](scripts/source-worktree.mjs) 的 `capture <来源目录> <恢复回执.json> <范围.json>` 保存来源 HEAD、完整暂存区和脏文件恢复快照。范围文件是本次已核对的仓库相对路径 JSON 数组；回执放在来源工作区外的私有目录，不上传或打印其内容。在独立 worktree 提交时，来源目录仍属于本次交付的收尾范围，不能只清理提交目录。来源本身直接提交后变干净时，按下文普通干净工作区流程处理，无需复用提交前快照强行同步。
 - 根据用户请求和 diff 确定本次范围，检查已有暂存内容；使用 `git add -- <本次路径>`，同文件混有其他任务改动时按 hunk 暂存。只有用户明确要求全部改动且已核对范围时才用 `git add -A`。已有无关暂存内容也不能夹带提交或擅自取消暂存，必要时使用独立 worktree 承载本次补丁。
-- `git fetch origin` 后核对目标分支与本次提交范围；如改动已合并，验证实际内容后报告，避免重复 PR。新分支不能夹带当前分支上无关的领先提交。脏工作区不要直接 rebase，也不要为方便操作而 stash、reset 或清理他人改动。
+- `git fetch origin` 后核对目标分支与本次提交范围；如改动已合并，核实对应 PR 的合并事实后直接执行第 5 步来源工作区收尾，避免重复 PR，也不能只报告已合并就留下原始改动。新分支不能夹带当前分支上无关的领先提交。脏工作区不要直接 rebase，也不要为方便操作而 stash、reset 或清理他人改动。
 - 读 `git diff --cached` 复核最终范围，按目标仓库惯例生成 commit message；无明确惯例时使用 Conventional Commits，描述意图而非文件列表。
 - 默认基于 commit subject 新建分支：`git checkout -b <type>/<slug>`；用户要求当前分支则跳过。
 - 若用户未显式要求验证或调用验证技能，完成范围复核后直接进入提交；不要插入“运行与改动范围相称的验证”、完整验收或类似计划项。
@@ -87,10 +92,13 @@ gh pr checks <pr> --repo <仓库> --json name,state,bucket,link
 
 ### 5. 合并后清理
 
-- 先确认已合并，再 fetch 并重读 `git status`、分支指向及 `git worktree list`。只处理本次创建的分支/worktree；操作前再次确认没有新增提交或用户修改。
-- 目标分支在其他 worktree 或当前目录变脏时，不自动切换/拉取该分支，不 stash、reset 或删除该 worktree。保留现场并明确报告“远端已合并，本地清理待完成”。干净的当前任务 worktree 可在核对后 detach 到最新目标分支，再安全删除本次本地分支；squash 后 `git branch -d` 拒绝时不直接升级为 `-D`。
+- 先确认已合并，再 fetch 并重读来源目录、提交目录的 `git status`、分支指向及 `git worktree list`。固定最新目标分支的完整 commit SHA，确认包含合并提交；远端成功、本地同步和残留改动分别核对。全流程委托包含本次来源改动的安全收尾；不删除来源目录，也不处理无关 worktree。
+- 来源目录仍脏时，用 `node "<技能安装目录>/scripts/source-worktree.mjs" inspect <恢复回执.json> <目标SHA>` 核对：`covered` 是本次范围内、内容和文件模式（或删除状态）与目标提交一致的路径；`retained` 是未交付或无关的路径。`changed`、`sourceHeadChanged`、`sourceIndexChanged`、`historyUncovered` 或 `indexUncovered` 非空/为 true 时不自动同步；先核对后续改动与归属，不能用旧快照清掉新内容。脚本不会用“新增字段已收录”替代整份文件比较，同文件部分交付时保留该文件。
+- `canFinish=true` 且已确认来源没有其他 Agent、编辑器或自动化正在写入、允许本次工作区切换到目标提交时，执行 `node "<技能安装目录>/scripts/source-worktree.mjs" finish <恢复回执.json> <目标SHA> --source-idle`。它保留恢复回执和来源 HEAD 的 backup 分支，仅暂存已覆盖的本次路径，将已覆盖的未跟踪文件从原目录移开，再用不带 force 的 checkout detach 到目标 SHA；Git 拒绝覆盖剩余改动时恢复原暂存区和移开的文件，保留具体阻塞。`--source-idle` 是调用者已核实独占写入的声明，不是锁。禁止对正在被其他任务写入的来源执行此命令。
+- 来源变干净（例如直接在来源提交）时，确认本次提交已合并、没有未交付的独有提交且不存在其他任务写入后，可 detach 到目标 SHA。用户明确要求保持当前分支、来源有后续改动、源 HEAD 有未交付提交、剩余改动与目标更新冲突，或同文件混有部分交付内容时，保留现场并逐项说明原因和后续处理；不能为了干净使用 reset --hard、clean、整文件恢复或重放旧 stash。目标分支被其他 worktree 占用时不切换或拉取那个目录。
+- 同步后独立回读来源 HEAD、工作区与暂存区：本次已覆盖路径不再显示为脏，保留路径的内容、文件模式、删除状态及暂存语义仍正确。只删除本次创建且干净、无运行会话使用的交付 worktree/分支；恢复快照和 backup 分支保留并报告位置。squash 后 `git branch -d` 拒绝时不直接升级为 `-D`。
 - 远端源分支只在确认属于本次任务、仍指向已合并的 head 时删除。若用 `git push --delete`，须带针对该 ref 和已验证 SHA 的显式 `--force-with-lease`；该操作可能触发 pre-push，不能为省检查禁用 hook。分支已被自动删除则无需再处理。
-- 最终分别报告 PR/合并提交、实际验证结果和清理状态。清理失败不改写已合并事实，也不触发重复合并。
+- 最终分别报告 PR/合并提交、来源工作区同步状态、剩余改动的路径及原因、恢复位置和实际验证结果。清理失败不改写已合并事实，也不触发重复合并；来源本次旧改动仍残留时，不能宣称全流程收尾完成。
 
 ## 安全与边界
 
