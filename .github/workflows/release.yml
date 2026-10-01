@@ -13,7 +13,7 @@ on:
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -21,6 +21,10 @@ concurrency:
 
 jobs:
   build-macos:
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      release_tag: ${{ steps.release.outputs.release_tag }}
+      release_title: ${{ steps.release.outputs.release_title }}
     runs-on: macos-15
     timeout-minutes: 90
 
@@ -43,7 +47,7 @@ jobs:
           else
             test "$DRY_RUN" = "true" || { echo "error: workflow_dispatch is only supported with dry_run enabled" >&2; exit 1; }
             version=$workspace_version
-            release_tag="dry-run-$(date -u +%Y%m%d-%H%M%S)"
+            release_tag="dry-run-$GITHUB_RUN_ID"
             release_title="$release_tag"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -87,20 +91,71 @@ jobs:
           trap 'hdiutil detach "$mount_point"' EXIT
           test -d "$mount_point/Runweave.app"
           codesign --verify --deep --strict --verbose=2 "$mount_point/Runweave.app"
-          shasum -a 256 "$dmg" | tee "$dmg.sha256"
+          (cd electron/release && shasum -a 256 "$(basename "$dmg")") | tee "$dmg.sha256"
 
-      - name: Create draft release and upload installer
+      - name: Upload verified macOS installer and checksum
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-release-${{ github.sha }}
+          path: |
+            electron/release/Runweave-${{ steps.release.outputs.version }}-arm64.dmg
+            electron/release/Runweave-${{ steps.release.outputs.version }}-arm64.dmg.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  build-linux:
+    uses: ./.github/workflows/linux-desktop.yml
+
+  publish-draft:
+    needs: [build-macos, build-linux]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download macOS assets
+        uses: actions/download-artifact@v8
+        with:
+          name: macos-release-${{ github.sha }}
+          path: release-assets
+
+      - name: Download Linux assets
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build-linux.outputs.artifact_name }}
+          path: release-assets
+
+      - name: Verify asset checksums
+        working-directory: release-assets
+        env:
+          VERSION: ${{ needs.build-macos.outputs.version }}
+        run: |
+          test -s "Runweave-$VERSION-arm64.dmg"
+          test -s "Runweave-$VERSION-linux-x64.tar.gz"
+          sha256sum --check "Runweave-$VERSION-arm64.dmg.sha256"
+          sha256sum --check "Runweave-$VERSION-linux-x64.tar.gz.sha256"
+
+      - name: Create draft release and upload both platforms
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
-          RELEASE_TITLE: ${{ steps.release.outputs.release_title }}
-          VERSION: ${{ steps.release.outputs.version }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build-macos.outputs.release_tag }}
+          RELEASE_TITLE: ${{ needs.build-macos.outputs.release_title }}
+          VERSION: ${{ needs.build-macos.outputs.version }}
         run: |
-          notes="Apple Silicon macOS installer for Runweave $VERSION. The app is ad-hoc signed and is not Apple-notarized."
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+          notes="Runweave $VERSION: Apple Silicon macOS installer (ad-hoc signed, not Apple-notarized) and Linux x64 preview (Ubuntu 22.04 / glibc 2.35 build baseline; packaged native checks, not GUI certification)."
+          # A single writer publishes both platform builds. Re-runs may repair a
+          # draft, but must never mutate an already-published release.
+          if gh release view "$RELEASE_TAG" --json isDraft > release-state.json 2> release-error.txt; then
+            test "$(jq -r .isDraft release-state.json)" = "true" || { echo "error: refusing to modify a published release" >&2; exit 1; }
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             gh release create "$RELEASE_TAG" --draft --verify-tag --title "$RELEASE_TITLE" --notes "$notes"
           else
             gh release create "$RELEASE_TAG" --draft --prerelease --target "$GITHUB_SHA" --title "$RELEASE_TITLE" --notes "Dry-run artifacts for commit $GITHUB_SHA. $notes"
           fi
-          dmg="electron/release/Runweave-$VERSION-arm64.dmg"
-          gh release upload "$RELEASE_TAG" "$dmg" "$dmg.sha256" --clobber
+          gh release upload "$RELEASE_TAG" \
+            "release-assets/Runweave-$VERSION-arm64.dmg" \
+            "release-assets/Runweave-$VERSION-arm64.dmg.sha256" \
+            "release-assets/Runweave-$VERSION-linux-x64.tar.gz" \
+            "release-assets/Runweave-$VERSION-linux-x64.tar.gz.sha256" --clobber
