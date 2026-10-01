@@ -8,10 +8,16 @@ public struct BuildIdentityView: View {
   @State private var failure: String?
   public init() {}
 
+  private var versionLabel: String {
+    let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    return version
+  }
+
   public var body: some View {
     NavigationView {
       Form {
         Section {
+          Text("版本 \(versionLabel)")
           Text("导出当前安装包的构建信息，供排查版本问题。无需联网。")
             .foregroundStyle(.secondary)
           Button("导出构建信息") {

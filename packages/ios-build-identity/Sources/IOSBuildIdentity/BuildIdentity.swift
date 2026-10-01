@@ -4,6 +4,8 @@ public struct BuildIdentity: Codable, Sendable {
   public let schemaVersion: Int
   public let fingerprintVersion: Int
   public let buildId: String
+  public let appVersion: String?
+  public let appBuild: String?
   public let appId: String
   public let bundleId: String
   public let sourceRevision: String?
@@ -28,7 +30,7 @@ public enum AppBuildIdentity {
     }
   }
 
-  // Read only on explicit inspection. No startup work, network, events or persistent store.
+  // Read on caller demand. No automatic startup work, network, events or persistent store.
   public static func read() throws -> (identity: BuildIdentity, data: Data) {
     guard let url = Bundle.main.url(forResource: "BuildIdentity", withExtension: "json") else {
       throw ReadError.missing

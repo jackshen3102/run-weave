@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 const [command, ...raw] = process.argv.slice(2);
 const args = raw.filter((arg) => arg !== "--");
 try {
-  if (command === "device") {
+  if (command === "update") {
+    const { updateCLI } = await import("./update/cli.mjs");
+    process.exitCode = await updateCLI(args);
+  } else if (command === "device") {
     const { deviceCLI } = await import("./device/cli.mjs");
     process.exitCode = await deviceCLI(args);
   } else {
