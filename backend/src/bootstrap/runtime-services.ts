@@ -1,3 +1,5 @@
+import { ResourceMonitorService } from "../resource-monitor/service";
+import { ResourceMonitorStore } from "../resource-monitor/store";
 import { TerminalTextAttachmentService } from "../terminal/attachments/text-attachment-service";
 import { TerminalTextAttachmentDelivery } from "../terminal/attachments/text-attachment-delivery";
 import { settingText, configuration } from "@runweave/config-node";
@@ -472,6 +474,19 @@ async function assembleRuntimeServices(
   resources.defer("battery-alerts", () =>
     deviceMonitoring.batteryAlerts?.dispose(),
   );
+  let resourceMonitor: ResourceMonitorService | null = null;
+  if (deviceMonitoring.deviceMonitor) {
+    let resourceStore: ResourceMonitorStore | null = null;
+    try {
+      resourceStore = await ResourceMonitorStore.create(path.join(storagePaths.browserProfileDir, "resource-monitor"));
+      resourceMonitor = new ResourceMonitorService(resourceStore, deviceMonitoring.deviceMonitor, workspaceServiceManager);
+      resources.defer("resource-monitor", () => resourceMonitor?.dispose());
+      resourceMonitor.start();
+    } catch {
+      await resourceStore?.close();
+      logger.warn("resource-monitor.initialize.failed");
+    }
+  }
   const taskAlerts =
     scheduledTasks.store && deviceMonitoring.batteryAlerts
       ? new ScheduledTaskAlerts(
@@ -493,6 +508,7 @@ async function assembleRuntimeServices(
   let disposed = false;
   const services: RuntimeServices = {
     ...deviceMonitoring,
+    resourceMonitor,
     start: (controlPlaneBaseUrl) => {
       if (disposed) return;
       textAttachmentFiles?.start();

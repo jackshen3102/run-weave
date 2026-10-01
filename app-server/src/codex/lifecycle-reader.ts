@@ -33,6 +33,8 @@ export interface CodexRolloutLifecycleReaderLike {
 export class CodexRolloutLifecycleReader implements CodexRolloutLifecycleReaderLike {
   private readonly sessionsRoots: string[];
   private readonly threadPaths = new Map<string, string>();
+  private indexPromise: Promise<void> | null = null;
+  private indexedAt = 0;
 
   constructor(sessionsRoot?: string) {
     const configuredRoot =
@@ -64,32 +66,26 @@ export class CodexRolloutLifecycleReader implements CodexRolloutLifecycleReaderL
     this.threadPaths.clear();
   }
 
-  private async findThreadPath(threadId: string): Promise<string | null> {
+  async findThreadPath(threadId: string): Promise<string | null> {
     const cached = this.threadPaths.get(threadId);
     if (cached) {
       return cached;
     }
-    for (const root of this.sessionsRoots) {
-      for (const candidate of await listJsonlFiles(root)) {
-        const candidateThreadId = readThreadIdFromFilename(candidate);
-        if (candidateThreadId) {
-          this.threadPaths.set(candidateThreadId, candidate);
+    // Coalesce cold/missing lookups: a homepage batch must not rescan the tree per thread.
+    if (!this.indexPromise && Date.now() - this.indexedAt >= 30_000) {
+      this.indexPromise = (async () => {
+        for (const root of this.sessionsRoots) {
+          for (const candidate of await listJsonlFiles(root)) {
+            const id = readThreadIdFromFilename(candidate) ?? path.basename(candidate, ".jsonl");
+            if (!this.threadPaths.has(id)) this.threadPaths.set(id, candidate);
+          }
         }
-        const filename = path.basename(candidate);
-        if (
-          filename === `${threadId}.jsonl` ||
-          filename.endsWith(`-${threadId}.jsonl`)
-        ) {
-          this.threadPaths.set(threadId, candidate);
-          return candidate;
-        }
-      }
-      const match = this.threadPaths.get(threadId);
-      if (match) {
-        return match;
-      }
+        this.indexedAt = Date.now();
+      })().finally(() => { this.indexPromise = null; });
     }
-    return null;
+    await this.indexPromise;
+    return this.threadPaths.get(threadId) ?? [...this.threadPaths]
+      .find(([id]) => id.endsWith(`-${threadId}`))?.[1] ?? null;
   }
 }
 

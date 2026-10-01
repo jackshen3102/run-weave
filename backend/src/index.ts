@@ -1,3 +1,4 @@
+import { createResourceMonitorRouter } from "./routes/resource-monitor";
 import { createTaskHandoffRouter } from "./routes/task-handoff";
 import { initializeBackendConfiguration } from "./bootstrap/configuration";
 import { createConfigurationRouter } from "./routes/configuration";
@@ -253,6 +254,7 @@ function createHttpApp(
     });
   });
   app.use("/api/codex/quota", requireAuth, createCodexQuotaRouter());
+  app.use("/api/device/resources", requireAuth, createResourceMonitorRouter(services.resourceMonitor, services.authService));
   app.use(
     "/api/device",
     requireAuth,

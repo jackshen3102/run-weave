@@ -42,6 +42,7 @@ import type { ScheduledTaskService } from "../scheduled-tasks/service";
 import type { BackendRuntimeStatusService } from "../runtime-status/service";
 
 export interface RuntimeServices extends DeviceMonitoringRuntime {
+  resourceMonitor: import("../resource-monitor/service").ResourceMonitorService | null;
   start(controlPlaneBaseUrl: string): void;
   dispose(): Promise<void>;
   runtimeStatus: BackendRuntimeStatusService;

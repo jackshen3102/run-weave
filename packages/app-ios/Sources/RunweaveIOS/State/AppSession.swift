@@ -204,6 +204,7 @@ final class AppSession: ObservableObject {
       }
       HomeOverviewEventPatcher.patch(pendingOverviewEvents, into: &value)
       pendingOverviewEvents.removeAll(keepingCapacity: true)
+      HomeOverviewEventPatcher.preserveConversationPreviews(from: overview, into: &value)
       overview = value
       health.status = .online
       error = nil
@@ -220,6 +221,16 @@ final class AppSession: ObservableObject {
 
   func canEditTerminal(_ id: String) -> Bool {
     canWrite && !metadataWrites.contains(id)
+  }
+
+  func refreshHomeConversationPreviews(ids: [String]) async {
+    guard authenticated, foreground, health.status == .online, terminal == nil, let api else { return }
+    let epoch = generation
+    let revision = overviewRevision
+    guard let response = try? await api.homeConversationPreviews(ids: ids), generation == epoch,
+      foreground, terminal == nil, revision == overviewRevision, !Task.isCancelled, var value = overview else { return }
+    HomeOverviewEventPatcher.patchConversationPreviews(response, into: &value)
+    overview = value
   }
 
   func mergeCompletionAcknowledgement(_ value: TerminalCompletionAcknowledgement) {

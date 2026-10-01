@@ -1,3 +1,4 @@
+import { buildResourceSampler } from "../../backend/scripts/build-resource-sampler.mjs";
 import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
 import { buildAgentAssets } from "../../scripts/agents/build.mjs";
 import { rmSync, writeFileSync } from "node:fs";
@@ -111,6 +112,8 @@ await build({
   external: ["node-pty", "better-sqlite3", "fs-native-extensions"],
   outExtension: { ".js": ".cjs" },
 });
+
+buildResourceSampler(path.resolve(outputDir, "backend"));
 
 const activityWorkerEntry = path.resolve(
   outputDir,

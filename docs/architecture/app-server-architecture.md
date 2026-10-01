@@ -226,8 +226,8 @@ app-server 的 `thread/read` 与本机 Codex rollout 生命周期：
 
 这不是所有历史 running 状态的最终收敛保证：超过 3 小时或持续排在最近 100 条之外的线程可能
 一直未被补偿。排障时先核对候选覆盖，不能仅凭周期正常就认定旧状态会自愈。
-当前 [rollout reader](../../app-server/src/codex/lifecycle-reader.ts) 缓存命中路径，但没有未命中缓存；
-未命中时会重新递归扫描会话目录，每个命中候选最多读取 1 MiB 文件尾。大量候选或慢盘可能拖长串行轮次。
+当前 [rollout reader](../../app-server/src/codex/lifecycle-reader.ts) 缓存命中路径，合并目录索引读取，
+未命中最多每 30 秒重新扫描一次；每个命中候选最多读取 1 MiB 文件尾。大量候选或慢盘可能拖长串行轮次。
 
 独立 Codex app-server 的 thread load 状态不是其它 TUI 进程的全局 turn 状态。因此
 补偿器不为状态查询调用 `thread/resume`，并且只把 `active` 作为 Codex 正在运行的正向

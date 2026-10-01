@@ -1,3 +1,4 @@
+import { registerResourceNotificationHandlers } from "./monitoring/resource-notifications";
 import "./desktop/config.js";
 import { configuration } from "@runweave/config-node";
 import { app, BrowserWindow, dialog, ipcMain, Menu, net } from "electron";
@@ -351,6 +352,7 @@ if (hasSingleInstanceLock) {
         isCompanionEnabled: () => companionEnabled,
       });
       registerAttentionNotificationHandlers(() => desktopRuntime.mainWindow);
+  registerResourceNotificationHandlers(() => desktopRuntime.mainWindow);
       if (!isBetaChannel) {
         await installHooksIfNeeded({
           resourcesDir: process.env.RUNWEAVE_ELECTRON_RESOURCES_DIR

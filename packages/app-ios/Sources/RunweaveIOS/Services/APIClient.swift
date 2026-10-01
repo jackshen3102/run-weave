@@ -155,6 +155,17 @@ public actor APIClient {
     let _: Verification = try await authorized("/api/auth/verify")
   }
   func overview() async throws -> HomeOverview { try await authorized("/api/app/home/overview") }
+  func homeConversationPreviews(ids: [String]) async throws -> HomeConversationPreviewsResponse {
+    var items: [HomeConversationPreviewsResponse.Item] = []
+    for start in stride(from: 0, to: ids.count, by: 100) {
+      try Task.checkCancellation()
+      let response: HomeConversationPreviewsResponse = try await authorized(
+        "/api/app/home/conversation-previews", method: "POST",
+        body: ["terminalSessionIds": Array(ids[start..<min(start + 100, ids.count)])])
+      items.append(contentsOf: response.sessions)
+    }
+    return HomeConversationPreviewsResponse(sessions: items)
+  }
   func homeBranchStatuses(ids: [String], refresh: Bool) async throws -> HomeBranchStatusResponse {
     try await authorized("/api/app/home/branch-status", method: "POST",
       body: ["terminalSessionIds": ids, "refresh": refresh])

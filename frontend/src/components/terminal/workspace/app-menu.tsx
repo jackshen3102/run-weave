@@ -1,5 +1,12 @@
 import { useMemoizedFn } from "ahooks";
-import { Activity, LockKeyhole, LogOut, Menu, Plus, Sparkles } from "lucide-react";
+import {
+  Activity,
+  LockKeyhole,
+  LogOut,
+  Menu,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ThemeToggle } from "../../theme-toggle";
@@ -52,9 +59,11 @@ export function TerminalAppMenu({
         </SheetTrigger>
         <SheetContent
           side="left"
-          className={isMobileMonitor
-            ? "dark w-full max-w-none overflow-y-auto border-slate-800 bg-slate-950 text-slate-100"
-            : "dark w-80 overflow-y-auto border-slate-800 bg-slate-950 text-slate-100"}
+          className={
+            isMobileMonitor
+              ? "dark w-full max-w-none overflow-y-auto border-slate-800 bg-slate-950 text-slate-100"
+              : "dark w-80 overflow-y-auto border-slate-800 bg-slate-950 text-slate-100"
+          }
         >
           <SheetHeader>
             <SheetTitle>应用菜单</SheetTitle>
@@ -76,20 +85,33 @@ export function TerminalAppMenu({
               </Button>
             ) : null}
             <p className="mt-2 text-xs text-slate-400">导航</p>
-            <Button type="button" variant="ghost" className="justify-start" onClick={() => goTo("/activity")}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="justify-start"
+              onClick={() => goTo("/activity")}
+            >
               <Activity className="mr-2 h-4 w-4" />
               Activity
             </Button>
-            <Button type="button" variant="ghost" className="justify-start" onClick={() => goTo("/evolution")}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="justify-start"
+              onClick={() => goTo("/evolution")}
+            >
               <Sparkles className="mr-2 h-4 w-4" />
               Evolution
             </Button>
-            {window.electronAPI?.isElectron === true ? (
-              <Button type="button" variant="ghost" className="justify-start" onClick={() => goTo("/system-monitor")}>
-                <Activity className="mr-2 h-4 w-4" />
-                System Monitor
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              className="justify-start"
+              onClick={() => goTo("/system-monitor")}
+            >
+              <Activity className="mr-2 h-4 w-4" />
+              System Monitor
+            </Button>
             <div className="my-2 border-t border-slate-800" />
             <p className="text-xs text-slate-400">账户与外观</p>
             <Button
@@ -117,7 +139,9 @@ export function TerminalAppMenu({
           </div>
         </SheetContent>
       </Sheet>
-      {passwordOpen ? <ChangePasswordDialog onClose={() => setPasswordOpen(false)} /> : null}
+      {passwordOpen ? (
+        <ChangePasswordDialog onClose={() => setPasswordOpen(false)} />
+      ) : null}
     </>
   );
 }

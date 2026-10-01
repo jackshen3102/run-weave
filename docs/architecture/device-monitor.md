@@ -10,7 +10,8 @@ Backend 负责所在 Mac 的电量事实，原生 iOS 负责前台展示和用�
 ## 电量事实
 
 [采样服务](../../backend/src/device-monitor/service.ts)在启动时和每 60 秒读取 `pmset -g batt`，
-单次 3 秒、64 KiB 上限，并发读取共享一个采样任务。共享解析器与 Electron 复用，Backend 不执行进程、CPU 或内存采集。
+单次 3 秒、64 KiB 上限，并发读取共享一个采样任务。共享解析器与 Electron 复用，DeviceMonitor 本身不执行进程、CPU 或内存采集。
+独立的 [ResourceMonitor](./system-monitor.md) 负责 Backend 资源采样、排行与用户确认的本机终止，关闭它不会停止本电量链路。
 
 鉴权后的 `GET /api/device/status` 返回 no-store 快照。使用现有 `/ws/terminal-events` 时，只有明确加
 `deviceStatus=1` 的客户端才收到独立 `device-status` 帧；设备帧不进入终端事件日志，也不推进终端 cursor。

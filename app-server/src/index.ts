@@ -1,6 +1,7 @@
 import { configuration, acquireConfigurationOwner } from "@runweave/config-node";
 import { settingText } from "@runweave/config-node";
 import { PiSessionReader } from "./pi/session-reader.js";
+import { ThreadPreviewReader } from "./agents/thread-previews.js";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
@@ -82,6 +83,7 @@ async function main(): Promise<void> {
   const piSessionReader = new PiSessionReader();
   const codexAppServerClient = new CodexAppServerClient();
   const codexRolloutLifecycleReader = new CodexRolloutLifecycleReader();
+  const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader);
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,
@@ -109,6 +111,7 @@ async function main(): Promise<void> {
     piSessionReader,
     codexThreadDetailReader: codexAppServerClient,
     codexQuota: new CodexQuotaService(codexAppServerClient),
+    threadPreviews,
     getRuntimeStatusReport: () =>
       createAppServerRuntimeStatusReport({
         eventCenter,
@@ -165,6 +168,7 @@ async function main(): Promise<void> {
     eventStreamServer,
     config.lockPath,
     agentThreadStatusReconciler,
+    threadPreviews,
   );
 }
 
@@ -213,6 +217,7 @@ function attachShutdownHandlers(
   eventStreamServer: WebSocketServer,
   lockPath: string,
   agentThreadStatusReconciler: AgentThreadStatusReconciler,
+  threadPreviews: ThreadPreviewReader,
 ): void {
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
@@ -221,6 +226,7 @@ function attachShutdownHandlers(
     }
     shuttingDown = true;
     agentThreadStatusReconciler.stop();
+    await threadPreviews.stop();
     await closeEventStreamServer(eventStreamServer);
     await closeServer(server);
     await releaseLock(lockPath);

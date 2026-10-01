@@ -11,6 +11,15 @@ struct HomeTerminalRow: View {
   @State private var showingCopied = false
   private var pinned: Bool { terminal.pinnedAt != nil }
   private var pinLabel: String { pinned ? "取消置顶" : "置顶" }
+  private var hasConversation: Bool { terminal.conversationKey != nil || terminal.terminalState.agent != nil }
+  private var userPreview: String {
+    guard let preview = terminal.conversationPreview, preview.available else { return "输入暂不可用" }
+    return preview.userText ?? "本轮暂无输入"
+  }
+  private var agentPreview: String {
+    guard let preview = terminal.conversationPreview, preview.available else { return "回复暂不可用" }
+    return preview.agentText ?? "本轮暂无回复"
+  }
 
   private func setPinned() {
     Task { try? await session.updateTerminal(terminal.id, change: .pinned(!pinned)) }
@@ -20,9 +29,10 @@ struct HomeTerminalRow: View {
     Button {
       Task { await session.openTerminal(terminal.id) }
     } label: {
-      VStack(alignment: .leading, spacing: 5) {
+      VStack(alignment: .leading, spacing: 4) {
         HStack {
           Text(terminal.title).font(.headline).foregroundColor(.primary).lineLimit(1)
+            .layoutPriority(1)
           TerminalAttentionBadge(
             unread: terminal.hasUnreadCompletion, bell: session.bellMarkers.contains(terminal.id),
             showLabel: false)
@@ -32,7 +42,7 @@ struct HomeTerminalRow: View {
           }
           Spacer()
           if session.metadataWrites.contains(terminal.id) { ProgressView() }
-          TerminalStatusBadge(terminal: terminal)
+          TerminalStatusBadge(terminal: terminal).fixedSize()
         }
         if let projectName {
           HStack(spacing: 5) {
@@ -45,11 +55,14 @@ struct HomeTerminalRow: View {
             }
           }.font(.caption).foregroundColor(.secondary).lineLimit(1)
         }
-        HStack {
-          Text(terminal.subtitle).lineLimit(2)
-          Spacer()
-          Text(terminal.relativeTime)
-        }.font(.caption).foregroundColor(.secondary)
+        if hasConversation {
+          Text("你：\(userPreview)").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+            .font(.caption).foregroundColor(.secondary)
+          Text("Agent：\(agentPreview)").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+            .font(.caption).foregroundColor(.secondary)
+        } else {
+          Text(terminal.subtitle).lineLimit(1).font(.caption).foregroundColor(.secondary)
+        }
       }.padding(.vertical, 4)
     }
     .swipeActions(edge: .leading, allowsFullSwipe: false) {

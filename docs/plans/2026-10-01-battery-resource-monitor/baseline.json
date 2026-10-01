@@ -1,0 +1,178 @@
+{
+  "status": "historical_read_only_measurement_not_idle_benchmark",
+  "batteryWindow": {
+    "samples": 21,
+    "from": "2026-10-01T01:14:18.313352+08:00",
+    "to": "2026-10-01T01:24:18.306952+08:00",
+    "elapsedSec": 600.0,
+    "firstBattery": {
+      "CurrentCapacity": 100,
+      "MaxCapacity": 100,
+      "AppleRawCurrentCapacity": 5088,
+      "AppleRawMaxCapacity": 5158,
+      "Voltage": 12605,
+      "Amperage": -1793,
+      "InstantAmperage": -1793,
+      "IsCharging": false,
+      "ExternalConnected": false,
+      "TimeRemaining": 169,
+      "instantCurrentMaSigned": -1793,
+      "averageCurrentMaSigned": -1793,
+      "estimatedBatteryDischargeW": 22.601
+    },
+    "lastBattery": {
+      "CurrentCapacity": 97,
+      "MaxCapacity": 100,
+      "AppleRawCurrentCapacity": 4741,
+      "AppleRawMaxCapacity": 5140,
+      "Voltage": 12348,
+      "Amperage": -2308,
+      "InstantAmperage": -2308,
+      "IsCharging": false,
+      "ExternalConnected": false,
+      "TimeRemaining": 129,
+      "instantCurrentMaSigned": -2308,
+      "averageCurrentMaSigned": -2308,
+      "estimatedBatteryDischargeW": 28.499
+    },
+    "systemCpuMeanPercent": 68.39,
+    "dischargePowerMeanW": 26.155,
+    "topCpuApps": [
+      {
+        "app": "mdworker_shared",
+        "meanCpuPercent": 97.2,
+        "maxCpuPercent": 217.4,
+        "lastRssMiB": 902
+      },
+      {
+        "app": "mds_stores",
+        "meanCpuPercent": 82.1,
+        "maxCpuPercent": 255.3,
+        "lastRssMiB": 810
+      },
+      {
+        "app": "DoubaoWork",
+        "meanCpuPercent": 73.7,
+        "maxCpuPercent": 96.0,
+        "lastRssMiB": 5093
+      },
+      {
+        "app": "Microsoft Defender",
+        "meanCpuPercent": 53.1,
+        "maxCpuPercent": 99.1,
+        "lastRssMiB": 442
+      },
+      {
+        "app": "node",
+        "meanCpuPercent": 52.9,
+        "maxCpuPercent": 102.7,
+        "lastRssMiB": 1524
+      },
+      {
+        "app": "WindowServer",
+        "meanCpuPercent": 47.7,
+        "maxCpuPercent": 55.8,
+        "lastRssMiB": 99
+      },
+      {
+        "app": "Runweave",
+        "meanCpuPercent": 40.7,
+        "maxCpuPercent": 72.3,
+        "lastRssMiB": 2150
+      },
+      {
+        "app": "mds",
+        "meanCpuPercent": 28.0,
+        "maxCpuPercent": 51.1,
+        "lastRssMiB": 59
+      },
+      {
+        "app": "CorpLink System Extension",
+        "meanCpuPercent": 20.0,
+        "maxCpuPercent": 48.9,
+        "lastRssMiB": 834
+      },
+      {
+        "app": "ChatGPT",
+        "meanCpuPercent": 19.7,
+        "maxCpuPercent": 53.3,
+        "lastRssMiB": 2560
+      },
+      {
+        "app": "epsext",
+        "meanCpuPercent": 14.4,
+        "maxCpuPercent": 42.1,
+        "lastRssMiB": 29
+      },
+      {
+        "app": "ApplicationsStorageExtension",
+        "meanCpuPercent": 13.8,
+        "maxCpuPercent": 67.8,
+        "lastRssMiB": 0
+      }
+    ],
+    "powerMinW": 16.04,
+    "powerMaxW": 35.228,
+    "rawCapacityDropMah": 347,
+    "percentHeld100Sec": 420.01,
+    "swapoutsMiBPerSecMax": 0
+  },
+  "separateNativeProbe": {
+    "method": "ctypes calls proc_pid_rusage RUSAGE_INFO_V6 using the exact installed public SDK struct, normal user, 15-second delta; no product code modified",
+    "structBytes": 464,
+    "from": "2026-10-01T01:36:35.053878+08:00",
+    "to": "2026-10-01T01:36:50.129589+08:00",
+    "durationSec": 15.075577915995382,
+    "readable": 671,
+    "denied": 267,
+    "groups": [
+      {
+        "app": "node",
+        "processes": 44,
+        "energyDeltaNj": 46315750106,
+        "pEnergyDeltaNj": 46110265084,
+        "billedEnergyRawDelta": 0,
+        "physicalFootprintMiB": 3082.6,
+        "residentMiB": 1753.9,
+        "osAttributedAverageW": 3.072237
+      },
+      {
+        "app": "Runweave",
+        "processes": 16,
+        "energyDeltaNj": 13807202515,
+        "pEnergyDeltaNj": 13641956612,
+        "billedEnergyRawDelta": 39097678,
+        "physicalFootprintMiB": 2523.0,
+        "residentMiB": 2037.3,
+        "osAttributedAverageW": 0.915866
+      },
+      {
+        "app": "ChatGPT",
+        "processes": 68,
+        "energyDeltaNj": 12610587651,
+        "pEnergyDeltaNj": 11940483416,
+        "billedEnergyRawDelta": 4426019848,
+        "physicalFootprintMiB": 4549.1,
+        "residentMiB": 3897.2,
+        "osAttributedAverageW": 0.836491
+      },
+      {
+        "app": "DoubaoWork",
+        "processes": 32,
+        "energyDeltaNj": 3255813778,
+        "pEnergyDeltaNj": 2435484011,
+        "billedEnergyRawDelta": 29481061,
+        "physicalFootprintMiB": 13471.4,
+        "residentMiB": 4473.9,
+        "osAttributedAverageW": 0.215966
+      }
+    ]
+  },
+  "limitations": [
+    "两个采样窗口不同，不能互相相减或用于完整电池能耗分摊。",
+    "电池功率由采样电压乘以放电电流估算，不是每应用实测功率。",
+    "CPU 应用值按单核心 100% 计；整机 CPU 值按全核心 100% 计。",
+    "应用 RSS 合计含共享页，不能等同独占物理内存。",
+    "进程能耗只覆盖有读取权限且在窗口内仍存活的进程。"
+  ]
+}

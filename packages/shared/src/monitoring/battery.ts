@@ -41,3 +41,18 @@ export function parseMacBattery(output: string): DeviceBattery {
         : null,
   };
 }
+
+/** ioreg may serialize a negative current as an unsigned 64-bit integer. */
+export function signedBatteryCurrent(value: string | null): number | null {
+  if (!value || !/^-?\d+$/.test(value)) return null;
+  try {
+    const raw = BigInt(value);
+    if (raw < -(1n << 63n) || raw >= 1n << 64n) return null;
+    const current = Number(BigInt.asIntN(64, raw));
+    return Number.isSafeInteger(current) && Math.abs(current) <= 100_000
+      ? current
+      : null;
+  } catch {
+    return null;
+  }
+}

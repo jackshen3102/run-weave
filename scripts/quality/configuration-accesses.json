@@ -9318,5 +9318,93 @@
     "count": 1,
     "category": "test",
     "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
+  },
+  {
+    "file": "scripts/lib/app-server-event-center-client.mjs",
+    "kind": "file-io",
+    "expression": "appendFile(file)",
+    "count": 3,
+    "category": "test",
+    "reason": "隔离 App Server 验证使用的原生会话 JSONL 与追加数据，不作为业务配置来源。"
+  },
+  {
+    "file": "scripts/lib/app-server-event-center-client.mjs",
+    "kind": "file-io",
+    "expression": "appendFile(piFile)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 App Server 验证使用的原生会话 JSONL 与追加数据，不作为业务配置来源。"
+  },
+  {
+    "file": "scripts/lib/app-server-event-center-client.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(file)",
+    "count": 2,
+    "category": "test",
+    "reason": "隔离 App Server 验证使用的原生会话 JSONL 与追加数据，不作为业务配置来源。"
+  },
+  {
+    "file": "scripts/lib/app-server-event-center-client.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(piFile)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 App Server 验证使用的原生会话 JSONL 与追加数据，不作为业务配置来源。"
+  },
+  {
+    "file": "backend/src/resource-monitor/sampler.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "继承系统命令运行环境，固定 LC_ALL；不新增持久业务配置。"
+  },
+  {
+    "file": "backend/src/resource-monitor/store.ts",
+    "kind": "file-io",
+    "expression": "handle.writeFile(JSON.stringify(next))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
+  },
+  {
+    "file": "backend/src/resource-monitor/store.ts",
+    "kind": "file-io",
+    "expression": "readFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
+  },
+  {
+    "file": "frontend/src/features/system-monitor/resource-monitor-provider.tsx",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.getItem(\"runweave:resource-mac-notifications\")",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
+  },
+  {
+    "file": "frontend/src/features/system-monitor/resource-monitor-provider.tsx",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.getItem(key)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
+  },
+  {
+    "file": "frontend/src/features/system-monitor/resource-monitor-provider.tsx",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.setItem( \"runweave:resource-mac-notifications\", String(value), )",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
+  },
+  {
+    "file": "frontend/src/features/system-monitor/resource-monitor-provider.tsx",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.setItem(key, JSON.stringify(seen))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
   }
 ]

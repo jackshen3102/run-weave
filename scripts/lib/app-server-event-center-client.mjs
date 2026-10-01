@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { createRequire } from "node:module";
 
 const requireFromAppServer = createRequire(
@@ -173,4 +175,92 @@ export function waitForMessage(stream, predicate) {
       }
     });
   });
+}
+
+export async function verifyThreadPreviews(baseUrl, token, stateDir) {
+  const codexId = "11111111-1111-4111-8111-111111111111";
+  const sessions = path.join(stateDir, "codex-sessions");
+  await mkdir(sessions, { recursive: true });
+  const file = path.join(sessions, `${codexId}.jsonl`);
+  const line = (value) => `${JSON.stringify(value)}\n`;
+  const message = (role, text) => ({ type: "response_item", payload: {
+    type: "message", role, phase: role === "assistant" ? "commentary" : undefined,
+    content: [{ type: "output_text", text }],
+  } });
+  const hook = async (threadId, source, pi) => {
+    const result = await postEvent(baseUrl, token, {
+      ...validAgentHookEvent(),
+      payload: { source, threadId, stateHookEvent: "UserPromptSubmit", ...(pi ? { pi } : {}) },
+    });
+    assert.equal(result.status, 201);
+  };
+  const read = async (id) => (await getJson(
+    `${baseUrl}/threads/previews?threadId=${id}`, token)).previews[0];
+  const wait = async (id, predicate) => {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const preview = await read(id);
+      if (predicate(preview)) return preview;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.fail(`Preview did not converge: ${JSON.stringify(await read(id))}`);
+  };
+  await writeFile(file, line({ type: "session_meta", payload: { id: codexId } }) +
+    line({ type: "event_msg", payload: { type: "task_started", turn_id: "first-turn" } }) +
+    line(message("user", "**验证首页**")) +
+    line(message("assistant", "正在测量读取开销。")) +
+    line({ type: "response_item", payload: { type: "function_call", name: "raw-tool-name" } }).repeat(4000));
+  await hook(codexId, "codex");
+  assert.equal((await read(codexId)).available, false, "cold HTTP must return before backfill");
+  const preview = await wait(codexId, (value) => value.available);
+  assert.equal(preview.userText, "验证首页");
+  assert.equal(preview.agentText, "正在测量读取开销。", "tool records cannot overwrite actual prose");
+  await appendFile(file, line(message("assistant", "已完成采样。")));
+  await wait(codexId, (value) => value.agentText === "已完成采样。");
+  await hook(codexId, "codex");
+  assert.equal((await read(codexId)).available, false, "new prompt must hide the previous turn immediately");
+  // A hook can precede the native transcript append; an empty read must not reveal stale text.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal((await read(codexId)).available, false);
+  const partial = JSON.stringify(message("user", "新的任务"));
+  await appendFile(file, line({ type: "event_msg", payload: { type: "task_started", turn_id: "second-turn" } }) + partial.slice(0, 30));
+  await appendFile(file, partial.slice(30) + "\n");
+  const second = await wait(codexId, (value) => value.available && value.userText === "新的任务");
+  assert.equal(second.agentText, null, "a new turn without commentary has no borrowed final reply");
+  assert.equal(second.turnId, "second-turn");
+  // A replaced/truncated transcript must discard its old projection and revalidate identity.
+  await writeFile(file, line({ type: "session_meta", payload: { id: "different-thread" } }) + line(message("user", "错误归属")));
+  await hook(codexId, "codex");
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal((await read(codexId)).available, false);
+
+  const piId = "22222222-2222-4222-8222-222222222222";
+  const piFile = path.join(stateDir, "pi-preview.jsonl");
+  const pi = { version: 1, sessionId: piId, sessionFile: piFile, instanceId: "preview-pi",
+    startedAt: new Date().toISOString(), sequence: 1, runId: "pi-run", leafId: "a-reply",
+    event: "user_message", outcome: null };
+  const piMessage = (id, parentId, role, text) => ({ type: "message", id, parentId,
+    message: { role, content: [{ type: "text", text }] } });
+  await writeFile(piFile, [
+    { type: "session", id: piId, version: 3 },
+    piMessage("a-user", null, "user", "分支 A 的任务"),
+    piMessage("a-reply", "a-user", "assistant", "分支 A 的回复"),
+    { type: "custom", id: "anchor-a", parentId: "a-reply", customType: "runweave.lifecycle", data: pi },
+    piMessage("b-user", null, "user", "分支 B 的任务"),
+    piMessage("b-reply", "b-user", "assistant", "分支 B 的回复"),
+  ].map(line).join(""));
+  await hook(piId, "pi", pi);
+  const branchA = await wait(piId, (value) => value.available);
+  assert.equal(branchA.userText, "分支 A 的任务");
+  assert.equal(branchA.agentText, "分支 A 的回复");
+  const nextPi = { ...pi, sequence: 2, leafId: "b-reply", event: "session_tree" };
+  await appendFile(piFile, line({ type: "custom", id: "anchor-b", parentId: "b-reply",
+    customType: "runweave.lifecycle", data: nextPi }) +
+    line(piMessage("tool-result", "anchor-b", "toolResult", "不可读的工具输出")));
+  await hook(piId, "pi", nextPi);
+  const branchB = await wait(piId, (value) => value.available);
+  assert.equal(branchB.userText, "分支 B 的任务");
+  assert.equal(branchB.agentText, "分支 B 的回复");
+  await assertHttpStatus(`${baseUrl}/threads/previews?threadId=${piId}`, { expectedStatus: 401 });
+  console.log("thread previews: incremental append, current turn, identity, Pi branch and auth passed");
 }
