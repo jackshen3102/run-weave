@@ -212,6 +212,8 @@ const electronApi = {
       "terminal-browser:get-workspace",
       profileId,
     ) as Promise<TerminalBrowserWorkspaceSnapshot>,
+  terminalBrowserSleepIdleTabs: (profileId) =>
+    ipcRenderer.invoke("terminal-browser:sleep-idle-tabs", profileId),
   terminalBrowserCreateTab: (request: TerminalBrowserCreateTabRequest) =>
     ipcRenderer.invoke("terminal-browser:create-tab", request) as Promise<void>,
   terminalBrowserRenameGroup: (

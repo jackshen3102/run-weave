@@ -1,6 +1,7 @@
 import RunweaveBrowser
 import Foundation
 import SwiftUI
+import Network
 
 /// One active connection owns its requests, overview, event stream and terminal route.
 @MainActor
@@ -40,7 +41,16 @@ final class AppSession: ObservableObject {
   init() {
     imageDrafts.onChange = { [weak self] in self?.scheduleDraftSave() }
     configureBrowser()
+    startNetworkMonitoring()
   }
+
+  deinit { networkMonitor.cancel() }
+  let networkMonitor = NWPathMonitor()
+  var networkSignature: String?
+  var networkPath: NWPath?
+  var healthRevision = 0
+  private var lastServiceInstanceID: String?
+  private var lastRuntimeReleaseID: String?
 
   private(set) var api: APIClient?
   @Published private(set) var generation = 0
@@ -53,8 +63,8 @@ final class AppSession: ObservableObject {
   private var pendingOverviewEvents: [TerminalEvent] = []
   private var overviewTask: Task<Void, Never>?
   private var overviewReloadRequested = false
-  private var probeTask: Task<Void, Never>?
-  private var resumeTask: Task<Void, Never>?
+  var probeTask: Task<Void, Never>?
+  var resumeTask: Task<Void, Never>?
   private var routeRequest = 0
   private var events: EventStream?
   @Published private(set) var foreground = true
@@ -87,6 +97,9 @@ final class AppSession: ObservableObject {
   func activate(_ connection: BackendConnection?) async {
     let returnToScheduledTasks = showingScheduledTasks
     generation += 1
+    healthRevision += 1
+    lastServiceInstanceID = nil
+    lastRuntimeReleaseID = nil
     let epoch = generation
     let previous = api
     api = nil
@@ -119,6 +132,7 @@ final class AppSession: ObservableObject {
     do {
       let client = try APIClient(base: connection.url, connectionID: connection.id)
       api = client
+      recordConnection("connection.activated", ["path": networkSignature ?? "unknown"])
       authenticated = await client.hasCredentials()
       guard generation == epoch, !Task.isCancelled else { return }
       checking = false
@@ -395,6 +409,7 @@ final class AppSession: ObservableObject {
   }
 
   func setScenePhase(_ phase: ScenePhase) {
+    recordConnection("scene.changed", ["phase": String(describing: phase)])
     terminalController?.recordScenePhase(phase)
     setForeground(phase == .active)
   }
@@ -431,9 +446,11 @@ final class AppSession: ObservableObject {
 
   private func probe(epoch: Int) async {
     guard let api, foreground else { return }
-    let result = await DeviceHealthService.check(base: api.baseURL)
-    guard generation == epoch, foreground, !Task.isCancelled else { return }
-    health = result
+    healthRevision += 1
+    let revision = healthRevision
+    let result = await DeviceHealthService.check(base: api.baseURL, connectionID: api.connectionID)
+    guard generation == epoch, healthRevision == revision, foreground, !Task.isCancelled else { return }
+    applyHealth(result)
     if result.status == .offline {
       deviceStatus.disconnected()
       events?.stop()
@@ -446,27 +463,19 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func scheduleProbe(epoch: Int) {
-    probeTask?.cancel()
-    probeTask = Task { [weak self] in
-      guard let self else { return }
-      let delays = [5, 15, 30, 60, 120]
-      var attempt = 0
-      while !Task.isCancelled {
-        let delay = delays[min(attempt, delays.count - 1)]
-        attempt = min(attempt + 1, delays.count - 1)
-        do { try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000) } catch { return }
-        guard self.generation == epoch, self.foreground, let api = self.api else { return }
-        let result = await DeviceHealthService.check(base: api.baseURL)
-        guard self.generation == epoch, self.foreground, !Task.isCancelled else { return }
-        self.health = result
-        if result.status == .online {
-          await self.reload()
-          self.terminalController?.connect()
-          return
-        }
-      }
+  func applyHealth(_ result: DeviceHealthSnapshot) {
+    if health.status != result.status {
+      recordConnection("health.state.changed", ["previous": health.status.rawValue, "status": result.status.rawValue])
     }
+    if let id = result.serviceInstanceID {
+      if let previous = lastServiceInstanceID, previous != id {
+        recordConnection("backend.instance.changed", ["previousServiceInstanceId": previous, "serviceInstanceId": id,
+          "previousRuntimeReleaseId": lastRuntimeReleaseID ?? "unknown", "runtimeReleaseId": result.runtimeReleaseID ?? "unknown"])
+      }
+      lastServiceInstanceID = id
+      lastRuntimeReleaseID = result.runtimeReleaseID
+    }
+    health = result
   }
 
   private func startEvents() {

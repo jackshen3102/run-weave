@@ -47,12 +47,10 @@ import {
   setTerminalBrowserHeaderRules,
 } from "./security/network.js";
 import {
-  attachTerminalBrowser,
   closeTerminalBrowserEntry,
   detachTerminalBrowser,
   getExistingTerminalBrowserEntry,
   isTerminalBrowserBounds,
-  materializeTerminalBrowserProfile,
   validateTerminalBrowserUrl,
 } from "./view/lifecycle.js";
 import {
@@ -66,6 +64,7 @@ import {
 } from "./view/updates.js";
 import { popupTerminalBrowserToolMenu } from "./tools/menu.js";
 import { registerTerminalBrowserWorkspaceHandlers } from "./workspace/handlers.js";
+import { ensureTerminalBrowserDormantFallback } from "./workspace/index.js";
 import { restoreTerminalBrowserTabsForWindow } from "./restore.js";
 import {
   getTerminalBrowserProfilePreferences,
@@ -172,9 +171,7 @@ export function registerTerminalBrowserHandlers(): void {
       }
       const resolved = await resolveTerminalBrowserProfile(request);
       await restoreTerminalBrowserTabsForWindow(win);
-      materializeTerminalBrowserProfile(win, resolved.profileId, {
-        attach: false,
-      });
+      ensureTerminalBrowserDormantFallback(win.id, resolved.profileId);
       return resolved;
     },
   );
@@ -196,19 +193,6 @@ export function registerTerminalBrowserHandlers(): void {
       }
     },
   );
-
-  ipcMain.handle("terminal-browser:show", (event, tabId: string) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || typeof tabId !== "string") {
-      return;
-    }
-    const entry = findTerminalBrowserEntryForWindow(win, tabId)?.entry;
-    if (!entry) {
-      return;
-    }
-    attachTerminalBrowser(win, tabId, entry.view);
-    sendTerminalBrowserTabUpdate(win, tabId, entry);
-  });
 
   ipcMain.handle("terminal-browser:hide", (event, tabId: string) => {
     const win = BrowserWindow.fromWebContents(event.sender);

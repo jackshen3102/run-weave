@@ -99,7 +99,7 @@ export function useTerminalBrowserViewport({
     observer.observe(element);
     window.addEventListener("resize", handleWindowResize);
     syncBounds(true);
-    void window.electronAPI?.terminalBrowserShow?.(activeTabId);
+    void window.electronAPI?.terminalBrowserShow?.(activeTabId).then(() => syncBounds(true));
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", handleWindowResize);

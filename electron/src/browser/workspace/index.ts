@@ -310,9 +310,14 @@ export function getTerminalBrowserWorkspaceSnapshot(
             browserGroupId: dormant.browserGroupId,
             url: dormant.url,
             title: dormant.title,
-            canGoBack: false,
-            canGoForward: false,
+            canGoBack: (dormant.navigationHistory?.index ?? 0) > 0,
+            canGoForward: Boolean(
+              dormant.navigationHistory &&
+              dormant.navigationHistory.index <
+                dormant.navigationHistory.entries.length - 1,
+            ),
             loading: false,
+            suspended: true,
             active: activeTabId === tabId,
             cdpProxyAttached: false,
             mcpActivityUntil: null,
@@ -320,7 +325,7 @@ export function getTerminalBrowserWorkspaceSnapshot(
             deviceState: createTerminalBrowserDeviceState("desktop"),
             displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
             minimumViewportWidth: null,
-            faviconDataUrl: null,
+            faviconDataUrl: dormant.faviconDataUrl ?? null,
             navigationError: null,
           },
         ];
@@ -337,6 +342,7 @@ export function getTerminalBrowserWorkspaceSnapshot(
           canGoBack: history.canGoBack(),
           canGoForward: history.canGoForward(),
           loading: webContents.isLoading(),
+          suspended: false,
           active: activeTabId === tabId,
           cdpProxyAttached: entry.cdpProxyAttached,
           mcpActivityUntil: entry.mcpActivityUntil,

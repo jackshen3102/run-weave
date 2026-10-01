@@ -23,6 +23,7 @@ import type {
 import {
   getTerminalBrowserOwnerWindowId,
   getScopedTargets,
+  broadcastTargetAwakened,
   sendJson,
 } from "./utils.js";
 import { CDP_PROXY_TRACE_ENABLED } from "./logging.js";
@@ -36,7 +37,15 @@ import {
   toTerminalBrowserErrorPayload,
 } from "../../errors.js";
 import { restoreTerminalBrowserTabsForWindow } from "../../restore.js";
-import { materializeTerminalBrowserProfile } from "../../view/lifecycle.js";
+import { getOrCreateTerminalBrowserView } from "../../view/lifecycle.js";
+import {
+  ensureTerminalBrowserDormantFallback,
+  getTerminalBrowserWorkspaceSnapshot,
+} from "../../workspace/index.js";
+import {
+  getTerminalBrowserKey,
+  terminalBrowserRuntime,
+} from "../../runtime.js";
 import { createTerminalBrowserTabFromProxy } from "../../view/index.js";
 import { acceptAutomationAttribution } from "../../automation/attribution.js";
 import {
@@ -45,10 +54,7 @@ import {
   unregisterTerminalBrowserAutomationConnection,
 } from "../../automation/runtime.js";
 
-export type {
-  CdpProxyOptions,
-  CdpProxyRuntime,
-} from "./types.js";
+export type { CdpProxyOptions, CdpProxyRuntime } from "./types.js";
 
 const BROWSER_ID = "runweave-terminal-browser";
 const MAX_CDP_CONNECTIONS = 8;
@@ -156,9 +162,29 @@ export async function startCdpProxy(
           const win = windowId === null ? null : BrowserWindow.fromId(windowId);
           if (win) {
             await restoreTerminalBrowserTabsForWindow(win);
-            materializeTerminalBrowserProfile(win, resolved.profileId, {
-              attach: false,
-            });
+            ensureTerminalBrowserDormantFallback(win.id, resolved.profileId);
+            const workspace = getTerminalBrowserWorkspaceSnapshot(
+              win.id,
+              resolved.profileId,
+            );
+            const tab =
+              workspace.tabs.find(
+                (tab) =>
+                  tab.tabId === workspace.activeTabId &&
+                  (!resolved.browserGroupId ||
+                    tab.browserGroupId === resolved.browserGroupId),
+              ) ??
+              workspace.tabs.find(
+                (tab) =>
+                  !resolved.browserGroupId ||
+                  tab.browserGroupId === resolved.browserGroupId,
+              );
+            if (tab)
+              getOrCreateTerminalBrowserView(
+                win,
+                resolved.profileId,
+                tab.tabId,
+              );
             if (
               resolved.browserGroupId &&
               !getScopedTargets(
@@ -190,9 +216,15 @@ export async function startCdpProxy(
       // Discovery reports the running host even when profile preferences need
       // repair. The WebSocket upgrade still resolves and validates its scope;
       // a successful identity probe never authorizes browser operations.
-      if (new URL(url, endpoint).pathname === "/json/version" &&
-          !new URL(url, endpoint).search) {
-        sendJsonResponse(res, 200, buildVersionResponse(wsUrl, options.identity));
+      if (
+        new URL(url, endpoint).pathname === "/json/version" &&
+        !new URL(url, endpoint).search
+      ) {
+        sendJsonResponse(
+          res,
+          200,
+          buildVersionResponse(wsUrl, options.identity),
+        );
         return;
       }
 
@@ -205,6 +237,82 @@ export async function startCdpProxy(
             error,
             "INVALID_BROWSER_PROFILE",
           ),
+        });
+        return;
+      }
+
+      const pathname = new URL(url, endpoint).pathname;
+      if (pathname === "/runweave/browser-tabs" && req.method === "GET") {
+        const windowId = getTerminalBrowserOwnerWindowId();
+        const win = windowId === null ? null : BrowserWindow.fromId(windowId);
+        if (!win) throw new Error("No Electron window available");
+        await restoreTerminalBrowserTabsForWindow(win);
+        ensureTerminalBrowserDormantFallback(win.id, scope.profileId);
+        const workspace = getTerminalBrowserWorkspaceSnapshot(
+          win.id,
+          scope.profileId,
+        );
+        sendJsonResponse(res, 200, {
+          profileId: scope.profileId,
+          tabs: workspace.tabs
+            .filter(
+              (tab) => !scope.groupId || tab.browserGroupId === scope.groupId,
+            )
+            .map((tab) => ({
+              ...tab,
+              targetId:
+                terminalBrowserRuntime.entries.get(
+                  getTerminalBrowserKey(win, scope.profileId, tab.tabId),
+                )?.targetId ?? null,
+            })),
+        });
+        return;
+      }
+      if (pathname === "/runweave/browser-tabs/wake" && req.method === "POST") {
+        const request = (await readJsonBody(req)) as { tabId?: unknown };
+        const windowId = getTerminalBrowserOwnerWindowId();
+        const win = windowId === null ? null : BrowserWindow.fromId(windowId);
+        if (!win) throw new Error("No Electron window available");
+        await restoreTerminalBrowserTabsForWindow(win);
+        const tab = getTerminalBrowserWorkspaceSnapshot(
+          win.id,
+          scope.profileId,
+        ).tabs.find(
+          (tab) =>
+            tab.tabId === request?.tabId &&
+            (!scope.groupId || tab.browserGroupId === scope.groupId),
+        );
+        if (!tab) {
+          sendJsonResponse(res, 404, {
+            error: "Unknown browser tab in this scope",
+          });
+          return;
+        }
+        await resolveTerminalBrowserProfile({
+          projectId: null,
+          explicitProfileId: scope.profileId,
+          browserGroupId: tab.browserGroupId,
+        });
+        const key = getTerminalBrowserKey(win, scope.profileId, tab.tabId);
+        await terminalBrowserRuntime.entries.get(key)?.sleepPromise;
+        if (
+          win.isDestroyed() ||
+          !getTerminalBrowserWorkspaceSnapshot(
+            win.id,
+            scope.profileId,
+          ).tabs.some((candidate) => candidate.tabId === tab.tabId)
+        ) {
+          sendJsonResponse(res, 404, { error: "Browser tab was closed" });
+          return;
+        }
+        getOrCreateTerminalBrowserView(win, scope.profileId, tab.tabId);
+        const target = getScopedTargets(scope.profileId, scope.groupId).find(
+          (target) => target.tabId === tab.tabId,
+        );
+        sendJsonResponse(res, 200, {
+          tabId: tab.tabId,
+          targetId: target?.targetId,
+          cdpEndpoint: `${endpoint}?${new URLSearchParams({ profileId: scope.profileId, ...(scope.groupId ? { groupId: scope.groupId } : {}) })}`,
         });
         return;
       }
@@ -421,6 +529,12 @@ export async function startCdpProxy(
     }
   };
   terminalBrowserEvents.on("tab-closed", onTabClosed);
+  const onTabAwakened = (
+    target: Parameters<typeof broadcastTargetAwakened>[1],
+  ): void => {
+    broadcastTargetAwakened(connections, target);
+  };
+  terminalBrowserEvents.on("tab-awakened", onTabAwakened);
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -438,6 +552,7 @@ export async function startCdpProxy(
     stop: async () => {
       clearInterval(heartbeatTimer);
       terminalBrowserEvents.off("tab-closed", onTabClosed);
+      terminalBrowserEvents.off("tab-awakened", onTabAwakened);
       for (const conn of connections) {
         conn.sessionManager.cleanup();
         conn.ws.close();

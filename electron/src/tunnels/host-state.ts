@@ -31,6 +31,7 @@ export function createTunnelHost(config: TunnelHostConfig): Host {
     remoteBusy: false,
     remoteEpoch: 0,
     remoteChecked: 0,
+    remoteTimeouts: 0,
     browserBusy: false,
     browserEpoch: 0,
     endpointPending: new Map(),

@@ -25,7 +25,6 @@ import {
 import { scheduleTerminalBrowserTabsSave } from "../tabs/index.js";
 import {
   clearTerminalBrowserWorkspaces,
-  ensureTerminalBrowserDormantFallback,
   getOrderedTerminalBrowserTabIds,
   maybeAutomaticallyNameTerminalBrowserGroup,
   registerTerminalBrowserTab,
@@ -45,16 +44,10 @@ import {
 } from "./updates.js";
 import { recordBrowserTabEvent } from "../../activity/emitter.js";
 import { attachBrowserNavigationActivity } from "../../activity/browser-navigation.js";
-import {
-  attachTerminalBrowser,
-  detachTerminalBrowser,
-} from "./attachment.js";
+import { attachTerminalBrowser, detachTerminalBrowser } from "./attachment.js";
 import { validateTerminalBrowserUrl } from "./helpers.js";
 
-export {
-  attachTerminalBrowser,
-  detachTerminalBrowser,
-} from "./attachment.js";
+export { attachTerminalBrowser, detachTerminalBrowser } from "./attachment.js";
 export {
   clampTerminalBrowserBounds,
   getExistingTerminalBrowserEntry,
@@ -87,7 +80,9 @@ export function getOrCreateTerminalBrowserView(
       sandbox: true,
       // Opt in only this browser surface; keep the desktop renderer unchanged.
       enableBlinkFeatures:
-        settingText("desktop.browser.webMcpEnabled") === "true" ? "WebMCP" : undefined,
+        settingText("desktop.browser.webMcpEnabled") === "true"
+          ? "WebMCP"
+          : undefined,
     },
   });
   const viewportView = new View();
@@ -130,6 +125,10 @@ export function getOrCreateTerminalBrowserView(
     return { action: "deny" };
   });
   view.webContents.on("did-create-window", (popupWindow) => {
+    entry.popupCount += 1;
+    popupWindow.once("closed", () => {
+      entry.popupCount -= 1;
+    });
     configureTerminalBrowserPopupWindow(win, popupWindow, profileId);
   });
   view.setVisible(true);
@@ -148,7 +147,7 @@ export function getOrCreateTerminalBrowserView(
       options.browserGroupId ??
       dormant?.browserGroupId ??
       createTerminalBrowserGroupId(),
-    faviconDataUrl: null,
+    faviconDataUrl: dormant?.faviconDataUrl ?? null,
     faviconGeneration: 0,
     navigationError: null,
     cdpProxyAttached: false,
@@ -164,6 +163,9 @@ export function getOrCreateTerminalBrowserView(
     defaultUserAgent: view.webContents.getUserAgent(),
     deviceDebuggerAttached: false,
     onDeviceDebuggerDetach: null,
+    activeDownloads: 0,
+    popupCount: 0,
+    sleepPromise: null,
     lastActiveAt: dormant?.lastActiveAt ?? Date.now(),
     lastKnownUrl: dormant?.url ?? "about:blank",
     lastSentUpdateKey: null,
@@ -273,14 +275,18 @@ export function getOrCreateTerminalBrowserView(
       options.openerTabId,
     );
   }
-  recordBrowserTabEvent({
-    eventName: "browser.tab.created",
-    tabId,
-    browserGroupId: entry.browserGroupId,
-    reason: options.openerTabId ? "page_open" : "user_or_restore",
-  });
+  if (!dormant)
+    recordBrowserTabEvent({
+      eventName: "browser.tab.created",
+      tabId,
+      browserGroupId: entry.browserGroupId,
+      reason: options.openerTabId ? "page_open" : "user_or_restore",
+    });
   view.webContents.once("destroyed", () => {
-    if (terminalBrowserRuntime.entries.get(key) !== entry) {
+    if (
+      entry.sleepPromise ||
+      terminalBrowserRuntime.entries.get(key) !== entry
+    ) {
       return;
     }
     recordBrowserTabEvent({
@@ -326,15 +332,15 @@ export function getOrCreateTerminalBrowserView(
       } else if (wasActive) {
         const nextTabId =
           remainingTabIds[Math.min(closingIndex, remainingTabIds.length - 1)]!;
-        const nextEntry = terminalBrowserRuntime.entries.get(
-          getTerminalBrowserKey(win, profileId, nextTabId),
+        const nextView = getOrCreateTerminalBrowserView(
+          win,
+          profileId,
+          nextTabId,
         );
-        if (nextEntry) {
-          attachTerminalBrowser(win, nextTabId, nextEntry.view, {
-            emitWorkspace: false,
-            persist: false,
-          });
-        }
+        attachTerminalBrowser(win, nextTabId, nextView, {
+          emitWorkspace: false,
+          persist: false,
+        });
       }
       sendTerminalBrowserWorkspaceChanged(win, profileId);
     }
@@ -344,7 +350,21 @@ export function getOrCreateTerminalBrowserView(
     sendTerminalBrowserWorkspaceChanged(win, profileId);
     scheduleTerminalBrowserTabsSave();
   }
-  if (!dormant) {
+  if (dormant) {
+    const load = dormant.navigationHistory?.entries.length
+      ? view.webContents.navigationHistory.restore(dormant.navigationHistory)
+      : view.webContents.loadURL(dormant.url);
+    void load.catch(() =>
+      sendTerminalBrowserTabUpdate(win, tabId, entry, false),
+    );
+    terminalBrowserEvents.emit("tab-awakened", {
+      targetId: entry.targetId,
+      profileId,
+      browserGroupId: entry.browserGroupId,
+      url: dormant.url,
+      title: dormant.title,
+    });
+  } else {
     void view.webContents.loadURL("about:blank").catch(() => undefined);
   }
   return view;
@@ -396,50 +416,6 @@ export function ensureTerminalBrowserFallback(
   if (options.emitWorkspace !== false) {
     sendTerminalBrowserWorkspaceChanged(win, profileId);
     scheduleTerminalBrowserTabsSave();
-  }
-  return tabId;
-}
-
-export function materializeTerminalBrowserProfile(
-  win: BrowserWindow,
-  profileId: TerminalBrowserProfileId,
-  options: { attach?: boolean } = {},
-): string {
-  const fallbackTabId = ensureTerminalBrowserDormantFallback(win.id, profileId);
-  const selectedTabId =
-    terminalBrowserRuntime.attachedByWorkspaceKey.get(
-      getTerminalBrowserWorkspaceKey(win.id, profileId),
-    ) ?? getOrderedTerminalBrowserTabIds(win.id, profileId)[0];
-
-  for (const tabId of getOrderedTerminalBrowserTabIds(win.id, profileId)) {
-    const key = getTerminalBrowserKey(win, profileId, tabId);
-    const dormant = terminalBrowserRuntime.dormantTabs.get(key);
-    if (!dormant) {
-      continue;
-    }
-    const view = getOrCreateTerminalBrowserView(win, profileId, tabId, {
-      browserGroupId: dormant.browserGroupId,
-      notifyWorkspace: false,
-    });
-    const entry = terminalBrowserRuntime.entries.get(key);
-    if (!entry) {
-      continue;
-    }
-    entry.lastKnownUrl = dormant.url;
-    void view.webContents.loadURL(dormant.url).catch(() => {
-      sendTerminalBrowserTabUpdate(win, tabId, entry, false);
-    });
-  }
-
-  const tabId = selectedTabId ?? fallbackTabId;
-  const entry = terminalBrowserRuntime.entries.get(
-    getTerminalBrowserKey(win, profileId, tabId),
-  );
-  if (entry && options.attach !== false) {
-    attachTerminalBrowser(win, tabId, entry.view, {
-      emitWorkspace: false,
-      persist: false,
-    });
   }
   return tabId;
 }
@@ -530,15 +506,15 @@ export function closeTerminalBrowserEntry(
     ) {
       const nextTabId =
         remainingTabIds[Math.min(closingIndex, remainingTabIds.length - 1)]!;
-      const nextEntry = terminalBrowserRuntime.entries.get(
-        getTerminalBrowserKey(win, profileId, nextTabId),
+      const nextView = getOrCreateTerminalBrowserView(
+        win,
+        profileId,
+        nextTabId,
       );
-      if (nextEntry) {
-        attachTerminalBrowser(win, nextTabId, nextEntry.view, {
-          emitWorkspace: false,
-          persist: false,
-        });
-      }
+      attachTerminalBrowser(win, nextTabId, nextView, {
+        emitWorkspace: false,
+        persist: false,
+      });
     }
     if (options.emitWorkspace !== false) {
       sendTerminalBrowserWorkspaceChanged(win, profileId);
@@ -550,6 +526,7 @@ export function closeTerminalBrowserEntry(
 }
 
 export function closeTerminalBrowsersForWindow(windowId: number): void {
+  terminalBrowserRuntime.showRequestByWindowId.delete(windowId);
   clearTerminalBrowserWorkspaces(windowId);
   clearTerminalBrowserAnnotationsForWindow(windowId);
   for (const [key, dormant] of terminalBrowserRuntime.dormantTabs) {

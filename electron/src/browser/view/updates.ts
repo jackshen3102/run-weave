@@ -182,6 +182,7 @@ export function sendTerminalBrowserTabUpdate(
     browserGroupId: entry.browserGroupId,
     ...snapshot,
     loading,
+    suspended: false,
     cdpProxyAttached: entry.cdpProxyAttached,
     mcpActivityUntil: entry.mcpActivityUntil,
     devtoolsOpen: entry.devtoolsOpen,

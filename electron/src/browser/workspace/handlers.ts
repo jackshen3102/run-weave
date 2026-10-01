@@ -1,10 +1,15 @@
+import { sleepIdleTerminalBrowserTabs } from "../view/sleep.js";
 import { resolveTerminalBrowserProfile } from "../profile/runtime.js";
 import { BrowserWindow, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
 import type { TerminalBrowserCreateTabRequest } from "@runweave/shared/terminal-browser-workspace";
-import { isTerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
+import {
+  TERMINAL_BROWSER_PROFILE_IDS,
+  isTerminalBrowserProfileId,
+} from "@runweave/shared/terminal-browser-profile";
 import {
   getTerminalBrowserKey,
+  findTerminalBrowserEntryForWindow,
   getTerminalBrowserWorkspaceKey,
   terminalBrowserRuntime,
 } from "../runtime.js";
@@ -21,6 +26,7 @@ import {
 import { sendTerminalBrowserTabUpdate } from "../view/updates.js";
 import {
   getTerminalBrowserGroup,
+  getOrderedTerminalBrowserTabIds,
   getTerminalBrowserWorkspaceSnapshot,
   ensureTerminalBrowserDormantFallback,
   renameTerminalBrowserGroup,
@@ -29,6 +35,33 @@ import {
 } from "./index.js";
 
 export function registerTerminalBrowserWorkspaceHandlers(): void {
+  ipcMain.handle("terminal-browser:show", async (event, tabId: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || typeof tabId !== "string") {
+      return;
+    }
+    const request = {};
+    terminalBrowserRuntime.showRequestByWindowId.set(win.id, request);
+    const previous = findTerminalBrowserEntryForWindow(win, tabId)?.entry;
+    if (previous?.sleepPromise) await previous.sleepPromise;
+    if (
+      win.isDestroyed() ||
+      terminalBrowserRuntime.showRequestByWindowId.get(win.id) !== request
+    )
+      return;
+    const profileId = TERMINAL_BROWSER_PROFILE_IDS.find((profile) =>
+      getOrderedTerminalBrowserTabIds(win.id, profile).includes(tabId),
+    );
+    if (!profileId) return;
+    const view = getOrCreateTerminalBrowserView(win, profileId, tabId);
+    const entry = terminalBrowserRuntime.entries.get(
+      getTerminalBrowserKey(win, profileId, tabId),
+    );
+    if (!entry) return;
+    attachTerminalBrowser(win, tabId, view);
+    sendTerminalBrowserTabUpdate(win, tabId, entry);
+  });
+
   ipcMain.handle("terminal-browser:get-workspace", async (event, profileId) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || !isTerminalBrowserProfileId(profileId)) {
@@ -38,6 +71,21 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
     ensureTerminalBrowserDormantFallback(win.id, profileId);
     return getTerminalBrowserWorkspaceSnapshot(win.id, profileId);
   });
+
+  ipcMain.handle(
+    "terminal-browser:sleep-idle-tabs",
+    async (event, profileId: unknown) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (
+        !win ||
+        event.senderFrame !== event.sender.mainFrame ||
+        !isTerminalBrowserProfileId(profileId)
+      ) {
+        throw new Error("Invalid terminal browser sleep request");
+      }
+      return await sleepIdleTerminalBrowserTabs(win, profileId);
+    },
+  );
 
   ipcMain.handle(
     "terminal-browser:create-tab",
@@ -80,7 +128,14 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
       if (!safeUrl) {
         throw new Error("Invalid terminal browser URL");
       }
-      await resolveTerminalBrowserProfile({projectId:null,explicitProfileId:request.profileId,browserGroupId:browserGroupId??null},{excludedWindowId:win.id});
+      await resolveTerminalBrowserProfile(
+        {
+          projectId: null,
+          explicitProfileId: request.profileId,
+          browserGroupId: browserGroupId ?? null,
+        },
+        { excludedWindowId: win.id },
+      );
       const view = getOrCreateTerminalBrowserView(
         win,
         request.profileId,
@@ -144,21 +199,20 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
       const fallbackTabId = ensureTerminalBrowserFallback(win, profileId, {
         emitWorkspace: false,
       });
-      const fallbackEntry = fallbackTabId
-        ? terminalBrowserRuntime.entries.get(
-            getTerminalBrowserKey(win, profileId, fallbackTabId),
-          )
-        : null;
       if (
-        fallbackEntry &&
         !terminalBrowserRuntime.attachedByWorkspaceKey.get(
           getTerminalBrowserWorkspaceKey(win.id, profileId),
         )
       ) {
-        attachTerminalBrowser(win, fallbackTabId!, fallbackEntry.view, {
-          emitWorkspace: false,
-          persist: false,
-        });
+        attachTerminalBrowser(
+          win,
+          fallbackTabId,
+          getOrCreateTerminalBrowserView(win, profileId, fallbackTabId),
+          {
+            emitWorkspace: false,
+            persist: false,
+          },
+        );
       }
       sendTerminalBrowserWorkspaceChanged(win, profileId);
       scheduleTerminalBrowserTabsSave();

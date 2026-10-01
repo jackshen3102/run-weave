@@ -37,10 +37,7 @@ public actor APIClient {
 
   public init(base: String, connectionID: String) throws {
     baseURL = try Self.normalize(base)
-    account =
-      connectionID + ":"
-      + SHA256.hash(data: Data(baseURL.absoluteString.utf8)).map { String(format: "%02x", $0) }
-      .joined()
+    account = Self.diagnosticConnectionID(base: baseURL, id: connectionID)
     self.connectionID = account
     let config = URLSessionConfiguration.ephemeral
     config.timeoutIntervalForRequest = 20
@@ -53,6 +50,11 @@ public actor APIClient {
   }
 
   deinit { session.invalidateAndCancel() }
+
+  static func diagnosticConnectionID(base: URL, id: String) -> String {
+    id + ":" + SHA256.hash(data: Data(base.absoluteString.utf8))
+      .map { String(format: "%02x", $0) }.joined()
+  }
   func hasCredentials() -> Bool { tokens != nil }
   func close() async {
     _ = await mobileLoginImportTask?.result
@@ -290,6 +292,13 @@ public actor APIClient {
         URLQueryItem(name: "deviceStatus", value: "1"),
       ])
   }
+  nonisolated func connectionSocketRequest(_ url: URL, attemptID: String) -> URLRequest {
+    var request = URLRequest(url: url)
+    request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
+    request.setValue(connectionID, forHTTPHeaderField: "X-Connection-ID")
+    request.setValue(attemptID, forHTTPHeaderField: "X-Connection-Attempt-ID")
+    return request
+  }
   func localBrowserSocketRequest() async throws -> URLRequest {
     guard !importingMobileLogin, var current = tokens else { throw APIError.credentialsUnavailable }
     let epoch = authEpoch
@@ -395,6 +404,7 @@ public actor APIClient {
   ) async throws -> T {
     let started = ProcessInfo.processInfo.systemUptime
     var responseStatus: Int?
+    var failureFields: [String: String] = [:]
     defer {
       var fields = [
         "method": method, "path": String(path.split(separator: "?").first ?? ""),
@@ -402,6 +412,7 @@ public actor APIClient {
         "durationMs": String(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)),
       ]
       if let operationID = body?["operationId"] as? String { fields["operationId"] = operationID }
+      fields.merge(failureFields) { _, next in next }
       let formatter = ISO8601DateFormatter()
       formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
       DiagnosticStore.shared.append(
@@ -410,38 +421,43 @@ public actor APIClient {
           at: formatter.string(from: Date()), source: "native-ios:http",
           message: "api.request.finished", details: fields))
     }
-    guard let url = URL(string: baseURL.absoluteString + path) else { throw APIError.invalidURL }
-    var request = URLRequest(url: url)
-    request.httpMethod = method
-    request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
-    request.setValue(connectionID, forHTTPHeaderField: "X-Connection-ID")
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    if let idempotencyKey { request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key") }
-    if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
-    if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-    responseStatus = http.statusCode
-    if http.statusCode == 401,
-      let failure = try? JSONDecoder().decode(ServerFailure.self, from: data),
-      failure.message == "Tunnel token required"
-    {
-      // This precedes App authentication on the Backend; refreshing or deleting App tokens cannot fix it.
-      throw APIError.tunnelAuthenticationRequired
-    }
-    guard (200..<300).contains(http.statusCode) else {
-      // Authentication errors retain their existing refresh and permission handling.
-      if http.statusCode != 401, http.statusCode != 403,
-        let failure = decodeError?(http.statusCode, data)
-      { throw failure }
-      throw APIError.http(http.statusCode)
-    }
-    if let decode { return try decode(data) }
-    if T.self == EmptyResponse.self {
-      return try JSONDecoder().decode(T.self, from: Data("{}".utf8))
-    }
-    do { return try JSONDecoder().decode(T.self, from: data) } catch {
-      throw APIError.invalidResponse
+    do {
+      guard let url = URL(string: baseURL.absoluteString + path) else { throw APIError.invalidURL }
+      var request = URLRequest(url: url)
+      request.httpMethod = method
+      request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
+      request.setValue(connectionID, forHTTPHeaderField: "X-Connection-ID")
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      if let idempotencyKey { request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key") }
+      if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
+      if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
+      let (data, response) = try await session.data(for: request)
+      guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+      responseStatus = http.statusCode
+      if http.statusCode == 401,
+        let failure = try? JSONDecoder().decode(ServerFailure.self, from: data),
+        failure.message == "Tunnel token required"
+      {
+        // This precedes App authentication on the Backend; refreshing or deleting App tokens cannot fix it.
+        throw APIError.tunnelAuthenticationRequired
+      }
+      guard (200..<300).contains(http.statusCode) else {
+        // Authentication errors retain their existing refresh and permission handling.
+        if http.statusCode != 401, http.statusCode != 403,
+          let failure = decodeError?(http.statusCode, data)
+        { throw failure }
+        throw APIError.http(http.statusCode)
+      }
+      if let decode { return try decode(data) }
+      if T.self == EmptyResponse.self {
+        return try JSONDecoder().decode(T.self, from: Data("{}".utf8))
+      }
+      do { return try JSONDecoder().decode(T.self, from: data) } catch {
+        throw APIError.invalidResponse
+      }
+    } catch {
+      failureFields = DiagnosticRecord.errorFields(error)
+      throw error
     }
   }
 

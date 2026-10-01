@@ -4,7 +4,11 @@ import type {
   TunnelState,
 } from "@runweave/shared/tunnels";
 import { desktopRuntime } from "../desktop/runtime-state.js";
-import { RemoteAccessChannel } from "./remote-access.js";
+import {
+  RemoteAccessChannel,
+  RemoteAccessVerificationError,
+} from "./remote-access.js";
+import { logDesktopIncident } from "../desktop/diagnostics.js";
 export interface RemoteAccessOwner {
   config: TunnelHostConfig;
   runtime: TunnelHostRuntime;
@@ -12,6 +16,7 @@ export interface RemoteAccessOwner {
   remoteBusy: boolean;
   remoteEpoch: number;
   remoteChecked: number;
+  remoteTimeouts: number;
 }
 const state = (
   state: TunnelState["state"],
@@ -30,6 +35,7 @@ export async function stopRemoteAccess(h: RemoteAccessOwner) {
   const channel = h.remote;
   h.remote = null;
   h.remoteChecked = 0;
+  h.remoteTimeouts = 0;
   h.runtime.remoteAccess = {
     ...state(h.config.remoteAccess?.enabled ? "waiting" : "disabled"),
     address: null,
@@ -52,6 +58,7 @@ export async function refreshRemoteAccess(
   const active = () =>
     current() && h.runtime.generation === generation && h.remoteEpoch === epoch;
   let channel = h.remote;
+  const started = Date.now();
   try {
     const base = desktopRuntime.packagedBackendState.backendUrl;
     if (!base)
@@ -62,6 +69,7 @@ export async function refreshRemoteAccess(
       await channel.stop();
       h.remote = null;
       channel = null;
+      h.remoteTimeouts = 0;
     }
     if (!active()) return;
     if (!channel) {
@@ -79,18 +87,62 @@ export async function refreshRemoteAccess(
       await channel.stop();
       return;
     }
-    await channel.verify();
-    if (active())
+    const identity = await channel.verify();
+    if (active()) {
+      if (h.remoteTimeouts || h.runtime.remoteAccess?.state !== "ready")
+        logDesktopIncident({
+          event: "remote-access.ready",
+          details: {
+            hostId: h.config.id,
+            channelId: channel.channelId,
+            ...identity,
+            durationMs: Date.now() - started,
+          },
+        });
+      h.remoteTimeouts = 0;
       h.runtime.remoteAccess = {
         ...state("ready"),
         address: channel.address,
         checkedAt: Date.now(),
       };
+    }
   } catch (error) {
+    const detail = failure(error);
+    const retryTimeout =
+      error instanceof RemoteAccessVerificationError &&
+      error.transient &&
+      channel?.alive &&
+      h.runtime.remoteAccess?.address === channel.address;
+    if (active()) {
+      h.remoteTimeouts = retryTimeout ? h.remoteTimeouts + 1 : 0;
+      logDesktopIncident({
+        event: "remote-access.verify.failed",
+        level: "warn",
+        details: {
+          hostId: h.config.id,
+          channelId: channel?.channelId,
+          code: detail.code,
+          phase:
+            error instanceof RemoteAccessVerificationError
+              ? error.phase
+              : "channel",
+          consecutiveTimeouts: h.remoteTimeouts,
+          retained: !!retryTimeout && h.remoteTimeouts < 3,
+          durationMs: Date.now() - started,
+        },
+      });
+      if (retryTimeout && h.remoteTimeouts < 3) {
+        h.runtime.remoteAccess = {
+          ...state("failed", detail),
+          address: channel!.address,
+          checkedAt: Date.now(),
+        };
+        return;
+      }
+    }
     await channel?.stop();
     if (active()) {
       h.remote = null;
-      const detail = failure(error);
       h.runtime.remoteAccess = {
         ...state(
           detail.code === "SSH_AUTH_FAILED" ? "needs_auth" : "failed",

@@ -121,6 +121,22 @@ final class DiagnosticStore: @unchecked Sendable {
   private func trim() {
     let countLimit = persistenceError == nil ? 2000 : 300
     let byteLimit = persistenceError == nil ? 2 * 1024 * 1024 : 256 * 1024
+    // Reserve half the ring for connection/lifecycle evidence, including while output is busy.
+    let isConnection: (Stored) -> Bool = {
+      $0.record.source == "native-ios:connection"
+        || ($0.record.source == "native-ios:terminal"
+          && ($0.record.message == "connected"
+            || ["socket.", "connection.", "recovery.", "scene."].contains(where: $0.record.message.hasPrefix)))
+    }
+    var regularCount = records.filter { !isConnection($0) }.count
+    var regularBytes = zip(records, sizes).reduce(0) { $0 + (isConnection($1.0) ? 0 : $1.1) }
+    while regularCount > countLimit / 2 || regularBytes > byteLimit / 2 {
+      guard let index = records.firstIndex(where: { !isConnection($0) }) else { break }
+      regularCount -= 1
+      regularBytes -= sizes[index]
+      bytes -= sizes.remove(at: index)
+      records.remove(at: index)
+    }
     while records.count > countLimit || bytes > byteLimit {
       guard !records.isEmpty else { break }
       records.removeFirst()
@@ -154,9 +170,33 @@ extension DiagnosticRecord {
       "terminalSessionId", "generation", "uptime", "queuedBytes", "renderer", "rendererVersion",
       "bytes", "cols", "rows", "mode", "appVersion", "deltaRows", "widthPoints", "heightPoints",
       "client", "connectionId", "backendVersion", "displayScale",
+      "attemptId", "errorDomain", "errorCode", "underlyingDomain", "underlyingCode", "closeCode",
+      "retry", "retryDelayMs", "receivedBytes", "consumedBytes", "outputFrames", "consumeFrames",
+      "committedOffset", "streamId",
     ]
     var details: [String: String] = [:]
     for key in allowed { if let value = event[key] { details[key] = String(describing: value) } }
     return DiagnosticRecord(at: at, source: "native-ios:terminal", message: name, details: details)
+  }
+
+  static func connection(_ message: String, details: [String: String] = [:], error: Error? = nil) -> DiagnosticRecord {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    var fields = details
+    if let error { fields.merge(errorFields(error)) { _, next in next } }
+    fields["uptime"] = String(ProcessInfo.processInfo.systemUptime)
+    fields["appVersion"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    return DiagnosticRecord(at: formatter.string(from: Date()), source: "native-ios:connection", message: message, details: fields)
+  }
+
+  // Domain/code are actionable; localized descriptions and userInfo may contain URLs or secrets.
+  static func errorFields(_ error: Error) -> [String: String] {
+    let value = error as NSError
+    var fields = ["errorDomain": value.domain, "errorCode": String(value.code)]
+    if let underlying = value.userInfo[NSUnderlyingErrorKey] as? NSError {
+      fields["underlyingDomain"] = underlying.domain
+      fields["underlyingCode"] = String(underlying.code)
+    }
+    return fields
   }
 }

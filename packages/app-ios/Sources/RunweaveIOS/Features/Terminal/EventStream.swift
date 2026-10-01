@@ -25,15 +25,21 @@ final class EventStream {
     let epoch = generation
     task = Task { [weak self] in
       guard let self else { return }
+      var retries = 0
       while !Task.isCancelled, self.generation == epoch {
+        let attemptID = UUID().uuidString
+        self.record("events.connecting", ["attemptId": attemptID, "retry": String(retries)])
         do {
           let ticket = try await self.api.eventTicket()
           guard self.generation == epoch, !Task.isCancelled else { return }
-          if let previous = self.streamID, previous != ticket.streamId { self.resetCursor() }
+          if let previous = self.streamID, previous != ticket.streamId {
+            self.record("events.instance.changed", ["previousStreamId": previous, "streamId": ticket.streamId])
+            self.resetCursor()
+          }
           self.streamID = ticket.streamId
           let ws = self.network.webSocketTask(
-            with: try self.api.eventSocketURL(
-              ticket: ticket.ticket, after: self.cursor ?? ticket.baselineEventId))
+            with: self.api.connectionSocketRequest(try self.api.eventSocketURL(
+              ticket: ticket.ticket, after: self.cursor ?? ticket.baselineEventId), attemptID: attemptID))
           ws.maximumMessageSize = 2 * 1024 * 1024
           self.socket = ws
           ws.resume()
@@ -59,6 +65,8 @@ final class EventStream {
                 throw URLError(.networkConnectionLost)
               }
               if message.gap != nil { self.resetCursor() }
+              self.record("events.connected", ["attemptId": attemptID, "streamId": id])
+              retries = 0
               self.onConnected?()
               // Close the overview-read/ticket-baseline race with a fresh authoritative read.
               self.onResync?()
@@ -78,14 +86,19 @@ final class EventStream {
           }
         } catch {
           guard self.generation == epoch, !Task.isCancelled else { return }
+          self.record("events.disconnected", ["attemptId": attemptID,
+            "closeCode": String(self.socket?.closeCode.rawValue ?? 0)], error: error)
           self.socket?.cancel(with: .goingAway, reason: nil)
           self.socket = nil
           let retry = await self.onFailure?(error) ?? false
           guard self.generation == epoch, !Task.isCancelled else { return }
           if !retry {
+            self.record("events.retry.stopped", ["attemptId": attemptID])
             self.task = nil
             return
           }
+          retries += 1
+          self.record("events.retry.scheduled", ["attemptId": attemptID, "retry": String(retries), "retryDelayMs": "1200"])
           try? await Task.sleep(nanoseconds: 1_200_000_000)
         }
       }
@@ -118,11 +131,18 @@ final class EventStream {
   }
 
   func stop() {
+    if task != nil { record("events.stopped", ["closeCode": "1000"]) }
     generation += 1
     task?.cancel()
     task = nil
     socket?.cancel(with: .normalClosure, reason: nil)
     socket = nil
+  }
+
+  private func record(_ message: String, _ details: [String: String] = [:], error: Error? = nil) {
+    var fields = details
+    fields["generation"] = String(generation)
+    DiagnosticStore.shared.append(scope: api.connectionID, .connection(message, details: fields, error: error))
   }
 
   func dispose() {
