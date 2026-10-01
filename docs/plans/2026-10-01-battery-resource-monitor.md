@@ -26,9 +26,9 @@
 
 实施修订：`top` 实测每分钟消耗约 1.7–2.3 秒 CPU，超过 1 核 1% 预算。改为 Backend 自有、公开 libproc 的 RUSAGE_INFO_V0 小程序，分钟差值提供 CPU / package idle wakeups；15 次实读采集约 0.12 秒 CPU / 次。未知覆盖显式返回，分数只是代理指标，不声称完整归因。无客户端采集依赖。
 
-## 2. 现状、范围与边界
+## 2. 实施前现状、范围与边界
 
-当前真实入口：
+实施前入口（历史背景；当前实现以架构文档为准）：
 
 - [Electron 采集器](../../electron/src/monitoring/system.ts)：CPU、RSS、应用聚合、电池、内存；按需执行一组系统命令。
 - [共享监控合同](../../packages/shared/src/monitoring/system.ts)：现有 Desktop IPC payload。
@@ -148,9 +148,9 @@ Mac 系统通知只在 Electron 中可启用；普通 Web 该开关禁用。参�
 
 这里只保证已核实的目标结束结果；采样功率下降需要独立验证，API 不返回承诺的节能百分比。
 
-快照明确包含 `protocolVersion: 1`、`hostId: string|null`、`streamId`、`revision`、`sampleStatus: pending|ok|partial|error|unsupported`、`observedAt`、`sampleAgeMs`、`batteryDischargeW`、系统资源、`apps`、`capabilities`。各应用复用稳定 `appKey`、应用显示名、`cpuPercent`、`memoryMb`、进程数与 PID 列表，增加 `energyImpactScore: number|null`、`coverage`；进程实例增加启动身份、`processInstanceId`、`actionKind: terminate|stop_service|readonly`、只读原因及可选可信托管目标，归属说明仅在有可靠信息时为可选值。既有 `memoryMb` 按 MiB 计算，展示单位修正，不额外再建一份 `rssMiB` 字段。计时与阈值判定使用单调时钟；墙钟只用于展示和持久化事件时间。
+实际合同复用 `SystemMonitorSnapshot`，不复制第二套系统资源 DTO；响应包含 `protocolVersion: 1`、`hostId`、`hostName`、`streamId`、`revision`、`sampleAgeMs`、`status`、`snapshot`、`settings`、`alerts`、`coverage`、`cpuSource`、`canTerminate`。时间来自 `snapshot.sampledAt`，整机功率来自 `snapshot.battery.dischargePowerW`，排行来自 `snapshot.apps`；应用与进程扩展 `energyImpact: number|null`、`coverage`、实例标识和动作资格。既有 `memoryMb` 按 MiB 计算，展示 MiB / GiB。阈值窗口与新鲜度使用单调时钟，墙钟用于展示和跨重启持久化时间。
 
-`hostId` 复用现有电量服务的安装身份；电量服务不可用时允许为 null，保留可采集的资源数据，但暂停依赖稳定身份或供电事实的提醒。Frontend 同时按连接 generation、hostId、streamId、revision 丢弃迟到数据；新流允许 revision 重置。初次 pending 不展示 0 W/0%；错误保留旧数据并显示其真实年龄。
+`hostId` 复用现有电量服务的安装身份；DeviceMonitor 无法初始化时资源能力不可用，不冒用客户端身份。Frontend 按连接 / 会话 generation、单请求与取消标记隔离迟到数据；新 Backend 流可以重置 revision。初次 pending 不展示 0 W/0%；错误保留旧数据并显示其真实年龄。
 
 未登录为 401；旧 Backend 无该路由时 404；服务初始化失败为 503；不支持平台以 200/unsupported 表达。不把 404/503 触发成重登循环。Electron 连接旧 Backend 时可继续原 CPU/内存 IPC 视图，但标记无后台资源提醒；正常新 Backend 只使用一个数据源。
 

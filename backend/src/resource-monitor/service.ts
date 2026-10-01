@@ -152,6 +152,7 @@ export class ResourceMonitorService {
         }
     }
     return {
+      protocolVersion: 1,
       hostId: this.hostId,
       hostName: os.hostname(),
       streamId: this.streamId,

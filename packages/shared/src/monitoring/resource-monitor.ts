@@ -21,6 +21,7 @@ export interface ResourceAlert {
   createdAt: number;
 }
 export interface ResourceMonitorResponse {
+  protocolVersion: 1;
   hostId: string;
   hostName: string;
   streamId: string;

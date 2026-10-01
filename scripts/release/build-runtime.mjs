@@ -129,6 +129,9 @@ if (!existsSync(path.join(frontendDist, "index.html"))) {
 if (!existsSync(backendEntry)) {
   throw new Error("backend bundle is missing electron/dist/backend/index.cjs");
 }
+if (process.platform === "darwin" && !existsSync(path.join(resourcesBackendDir, "resource-sampler"))) {
+  throw new Error("Backend resource sampler is missing from the macOS runtime");
+}
 if (!existsSync(cliEntry)) {
   throw new Error("CLI bundle is missing electron/dist/cli/index.cjs");
 }

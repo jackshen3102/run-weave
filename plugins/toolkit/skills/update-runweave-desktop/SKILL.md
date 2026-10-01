@@ -1,15 +1,15 @@
 ---
 name: update-runweave-desktop
-description: 仅当用户显式指定此 skill 时使用；更新本地 Runweave macOS 桌面客户端及全局 rw CLI，区分 runtime、完整 App 和 App Server 更新，验证实际 rw 命令及桌面终端页面。
+description: 仅当用户显式指定此 skill 时使用；从当前项目更新本地 Stable Runweave macOS 桌面客户端及全局 rw CLI，区分 runtime、完整 App 和 App Server 更新，验证实际 rw 命令及桌面终端页面；不用于 Beta 更新。
 ---
 
 # 更新 Runweave 桌面端
 
 ## 概览
 
-此 skill 只在用户手动指定时执行。默认调用方已经位于当前项目根目录；不要定位 checkout、切换目录、更新源码或要求用户提供项目路径。使用仓库统一的本地更新器判断本地 Runweave 桌面客户端需要 runtime 热更新、完整替换 Electron App，还是安装并重启 App Server；实际更新路径只走 `pnpm runweave:update`，桌面 App UI 通过更新器显式提供的 desktop CDP 使用 Playwright 验证。
+此 skill 只在用户手动指定时执行，且固定更新 Stable 环境。默认调用方已经位于当前项目根目录；不要定位 checkout、切换目录、更新源码或要求用户提供项目路径。使用仓库统一的本地更新器判断本地 Runweave 桌面客户端需要 runtime 热更新、完整替换 Electron App，还是安装并重启 App Server；实际更新路径只走 `pnpm runweave:update`，桌面 App UI 通过更新器显式提供的 desktop CDP 使用 Playwright 验证。
 
-Stable 更新同时同步用户登录 shell 实际执行的全局 `rw`。桌面内置 CLI 更新不等于全局命令更新；两者都必须核对。Beta 更新不覆盖全局 Stable CLI。此流程不安装或更新任何 skill。
+所有统一更新器调用都必须显式传入 `RUNWEAVE_UPDATE_TARGET=stable`、`--instance stable` 和 `--config-dir "$HOME/.runweave"`，并清除可能从 Dev/Beta 终端继承的 `RUNWEAVE_DEV_SESSION_ID` 与 `RUNWEAVE_DESKTOP_INSTANCE_ID`；不要依赖 dry-run 的隐式 Stable 默认值。Stable 更新同时同步用户登录 shell 实际执行的全局 `rw`。桌面内置 CLI 更新不等于全局命令更新；两者都必须核对。此流程不更新 Beta，也不安装或更新任何 skill。
 
 ## 必需技能
 
@@ -25,15 +25,27 @@ Stable 更新同时同步用户登录 shell 实际执行的全局 `rw`。桌面�
    - 在用户登录 shell 中检查 `command -v rw`，记录命令路径；不能用仓库或 runtime 内的绝对 CLI 路径代替全局入口。
 
 2. 先用统一命令规划：
-   - 运行 `pnpm runweave:update --dry-run`。
+   - 运行：
+     ```bash
+     env -u RUNWEAVE_DEV_SESSION_ID -u RUNWEAVE_DESKTOP_INSTANCE_ID \
+       RUNWEAVE_UPDATE_TARGET=stable \
+       pnpm runweave:update --dry-run \
+       --instance stable --config-dir "$HOME/.runweave"
+     ```
    - 从输出中读取 `selected mode`、`reason`、`selected app-server action`、`app-server reason`、`app-server home` 和 `native-sensitive changes`。
-   - 同时读取 `selected cli action`、`cli reason`、`cli command` 和 `cli npm prefix`。Stable 为 `sync`，Beta 为 `skip`；`sync` 在构建后按内容决定是否安装，不依赖版本号或上次桌面更新记录。
+   - 同时读取 `selected cli action`、`cli reason`、`cli command` 和 `cli npm prefix`。Stable 应为 `sync`；`sync` 在构建后按内容决定是否安装，不依赖版本号或上次桌面更新记录。
    - backend、frontend 和 shared runtime 变更通常应选择 `runtime`。
    - Electron shell/native 文件、App resources、builder 配置、本地更新脚本、缺少历史状态，或源码 shell 版本更新时，应选择 `app`。
    - `app-server/`、CLI app-server 命令、shared app-server 协议、app-server 安装或验证脚本变更时，应选择 `selected app-server action: update`。
 
 3. 只通过统一更新器执行：
-   - 使用：`pnpm runweave:update --verify-desktop`。
+   - 使用：
+     ```bash
+     env -u RUNWEAVE_DEV_SESSION_ID -u RUNWEAVE_DESKTOP_INSTANCE_ID \
+       RUNWEAVE_UPDATE_TARGET=stable \
+       pnpm runweave:update --verify-desktop \
+       --instance stable --config-dir "$HOME/.runweave"
+     ```
    - `--verify-desktop` 会让更新器用去除 Electron/runtime 污染变量的环境启动安装态 App，分配独立 desktop CDP endpoint，写入 `RunweaveLocalUpdate/desktop-verification.json`，并等待 App 路径、PID、版本、窗口可见性和主 renderer target 完成身份握手。
    - 只有在用户明确要求，或 dry-run 原因证明 auto 模式错误时，才强制指定模式：`--mode runtime` 或 `--mode app`。
    - 只有在用户明确要求，或 dry-run 的 app-server 判断明显错误时，才强制指定 App Server 动作：`--app-server=update` 或 `--app-server=skip`。
@@ -51,7 +63,7 @@ Stable 更新同时同步用户登录 shell 实际执行的全局 `rw`。桌面�
      `playwright-cli -s="runweave-update-<pid>-desktop" attach --cdp="<endpoint>"`
    - 不得使用 `playwright-cli open`、默认端口、`9224` Terminal Browser proxy、环境变量、最近实例或既有 Playwright session 代替更新器返回的主窗口 endpoint。
 
-5. Stable 验证实际全局 `rw`（Beta 记录全局 CLI 被跳过）：
+5. 验证实际全局 `rw`：
    - 在用户登录 shell 中再次运行 `command -v rw`、`rw --version`，路径须与 `cli verification.commandPath` 一致。
    - 使用实际 `rw` 向本轮目标 Backend 执行只读业务命令；例如从 desktop verification 的 `backend.baseUrl` 取端口，运行 `rw experience status --cwd "$PWD" --backend-port <该端口> --json`，确认 JSON 正常返回。没有指定业务命令时使用 `rw health --backend-port <该端口> --json`。
    - 保留正常认证流程，不输出凭据；调用失败须明确记录，不能改用 runtime 内置 CLI 成功来替代全局入口验收。
