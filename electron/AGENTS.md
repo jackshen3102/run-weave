@@ -1,6 +1,6 @@
 # Electron 桌面端
 
-`electron/` 是 macOS 桌面壳，负责窗口、内嵌 Terminal Browser、IPC/preload、后端进程、
+`electron/` 是默认面向 macOS、可选 Linux x64 预览的桌面壳，负责窗口、内嵌 Terminal Browser、IPC/preload、后端进程、
 更新和桌面级诊断。
 
 ## 先看哪里
@@ -11,7 +11,8 @@
 - 主窗口与自定义协议：`src/desktop/window.ts`
 - 内置 Backend 生命周期：`src/backend/packaged/controller.ts`
 - Terminal Browser：`src/browser/`
-- 打包配置：`electron-builder.yml`、`electron-builder.beta.yml`
+- 打包配置：`electron-builder.yml`、`electron-builder.beta.yml`、`electron-builder.linux.yml`
+- Linux x64 预览的打包、原生验证与限制：[`electron-linux.md`](../docs/deployment/electron-linux.md)
 
 ## 边界
 

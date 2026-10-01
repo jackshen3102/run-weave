@@ -1,0 +1,19 @@
+extends: ./electron-builder.yml
+
+artifactName: Runweave-${version}-linux-${arch}.${ext}
+linux:
+  executableName: runweave
+  icon: resources/icons/icon-preview.png
+  category: Development
+  target:
+    - target: tar.gz
+      arch:
+        - x64
+  extraResources:
+    - from: ../backend/node_modules/node-pty
+      to: backend/node_modules/node-pty
+      filter:
+        - "lib/**/*"
+        - "prebuilds/linux-x64/**/*"
+        - "package.json"
+        - "LICENSE"
