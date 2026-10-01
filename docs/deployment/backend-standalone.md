@@ -47,7 +47,7 @@ Activity、Evolution 和定时任务数据放在发布目录之外，更新时�
 ## 通过 Agent 维护远端环境
 
 SSH 连接使用服务器上已有的 Backend。安装依赖、配置服务和更新版本由 Agent 根据
-实际环境引导或执行，桌面连接管理不承担远端安装和升级，Release CI 不分发 Linux 安装包。
+实际环境引导或执行，桌面连接管理不承担远端安装和升级，Release CI 分发的是 [Linux 桌面预览包](./electron-linux.md)，不替代本文的独立 Backend 部署。
 
 已有仓库的服务器按以下流程维护：
 

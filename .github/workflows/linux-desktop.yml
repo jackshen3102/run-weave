@@ -1,0 +1,114 @@
+name: Linux desktop
+
+on:
+  push:
+    branches: [main]
+  # Packaging infrastructure changes exercise the real build before merge;
+  # ordinary application PRs continue to run only the existing quality CI.
+  pull_request:
+    paths:
+      - .github/workflows/linux-desktop.yml
+      - .github/workflows/release.yml
+      - electron/electron-builder.linux.yml
+      - scripts/electron/dist-linux.mjs
+      - scripts/verify/electron/linux-native.mjs
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      artifact_name:
+        description: Verified Linux x64 archive and checksum artifact
+        value: ${{ jobs.build-linux.outputs.artifact_name }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-linux:
+    # Explicit glibc 2.35 build baseline; never silently track ubuntu-latest.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    outputs:
+      artifact_name: ${{ steps.identity.outputs.artifact_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Compute artifact identity
+        id: identity
+        run: |
+          version=$(node -p "require('./electron/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=Runweave-$version-linux-x64-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Install Linux build and Electron runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential python3 pkg-config libgtk-3-0 libnss3 libasound2 \
+            libgbm1 libxss1 libatk-bridge2.0-0 libx11-xcb1 lsof tmux
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Linux x64 archive
+        env:
+          VITE_CLARITY_ENABLED: "false"
+        run: pnpm dist:electron:linux
+
+      - name: Verify extracted archive with packaged Electron
+        env:
+          VERSION: ${{ steps.identity.outputs.version }}
+        run: |
+          release="$GITHUB_WORKSPACE/electron/.linux-build/release"
+          archive="Runweave-$VERSION-linux-x64.tar.gz"
+          test -x "$release/linux-unpacked/runweave"
+          test -s "$release/$archive"
+          # Test the distributed archive, preserving executable bits and symlinks.
+          extracted=$(mktemp -d "$RUNNER_TEMP/runweave-linux.XXXXXX")
+          tar -xzf "$release/$archive" -C "$extracted"
+          executable=$(find "$extracted" -type f -name runweave -print -quit)
+          test -n "$executable"
+          test -x "$executable"
+          file "$executable" | grep -q 'ELF 64-bit.*x86-64'
+          ELECTRON_RUN_AS_NODE=1 "$executable" \
+            scripts/verify/electron/linux-native.mjs "$(dirname "$executable")/resources"
+          cd "$release"
+          sha256sum "$archive" > "$archive.sha256"
+          sha256sum --check "$archive.sha256"
+
+      - name: Upload verified Linux archive and checksum
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.identity.outputs.artifact_name }}
+          path: |
+            electron/.linux-build/release/Runweave-${{ steps.identity.outputs.version }}-linux-x64.tar.gz
+            electron/.linux-build/release/Runweave-${{ steps.identity.outputs.version }}-linux-x64.tar.gz.sha256
+          # Only the two explicit distributables above, under .linux-build.
+          include-hidden-files: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Write download summary
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          echo "### Linux x64 preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Download archive and SHA-256 checksum]($ARTIFACT_URL) (retained 14 days)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Built on Ubuntu 22.04 (glibc 2.35). Packaged Electron native checks passed; this is not GUI acceptance or universal distro certification." >> "$GITHUB_STEP_SUMMARY"

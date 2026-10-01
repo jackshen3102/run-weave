@@ -17,6 +17,15 @@ teammate/agent needs a stable way to continue from the current terminal context.
 > fallbacks for existing local installations, but new identifiers use the
 > Runweave name.
 
+## Linux desktop preview downloads
+
+For Linux x64, open [Actions → Linux desktop](https://github.com/jackshen3102/run-weave/actions/workflows/linux-desktop.yml),
+select a successful `main` run and download its version/commit-named **Artifact**
+(14-day retention). Version tags attach the Linux tarball and checksum alongside
+the macOS installer to a **draft [Release](https://github.com/jackshen3102/run-weave/releases)**
+for maintainer review before publication. See the [Linux guide](docs/deployment/electron-linux.md)
+for extraction, system requirements, verification and preview limits.
+
 ## What Runweave Does
 
 ### Terminal Workspace
