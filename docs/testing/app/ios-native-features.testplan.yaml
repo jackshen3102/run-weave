@@ -164,3 +164,29 @@ cases:
       - 录音并结束转写，使接口返回 HTTP 503；确认显示服务错误，录音结束且草稿保留，终端无输入请求。
       - 在同一页面恢复转写服务，再录音并结束转写；确认固定文本只追加一次，旧服务错误在媒体区域与页面顶部均消失。
       - 保持页面二十秒不操作，确认草稿与输入请求计数不变；显式点击发送后才出现一次输入请求，草稿清空。
+
+  - id: IOSFEATURE-014
+    name: Files 导航预览分类与可见页面一致
+    required: true
+    description: >
+      Files 打开文件后选择 file_preview，返回后恢复 terminal_files；重复导航不残留预览标记。
+    preconditions:
+      - 原生 Debug App 已登录本例隔离 Backend 并打开专用终端，Files 中存在只读文本文件。
+      - 使用共享模拟器与 toolkit:agent-device；Clarity 关闭，可通过本地调试器观察 reportScreen 的页面分类、深度和时间戳，不向生产项目发送模拟器数据。
+    steps:
+      - 选择文件 Tab，确认实际文件列表可见且本地分类为 terminal_files。
+      - 打开本例文本文件并读取内容，确认实际预览画面与 file_preview 分类一致，标记深度高于根页面。
+      - 返回文件列表，确认分类恢复 terminal_files；在同一终端重复打开返回三次，确认无残留 file_preview 或稳定停留预览时的 home 分类。
+
+  - id: IOSFEATURE-015
+    name: 终端文件链接弹层保持原有预览分类
+    required: true
+    description: >
+      聊天页的终端文件链接打开既有 sheet 时选择 file_preview，关闭后恢复 terminal_chat，不重复注册预览标记。
+    preconditions:
+      - 原生 Debug App 已登录本例隔离 Backend 并打开专用终端，实际终端输出有可点击的文本文件链接及只读解析响应。
+      - 使用共享模拟器与 toolkit:agent-device；Clarity 关闭，可通过本地调试器观察 reportScreen 的页面分类、深度和时间戳，不向生产项目发送模拟器数据。
+    steps:
+      - 选择终端 Tab 并点击实际输出中的本例文件链接，确认既有文件预览弹层打开且本地分类为 file_preview，深度高于 terminal_chat。
+      - 关闭弹层，确认实际返回聊天页且分类恢复 terminal_chat。
+      - 在同一终端重复打开关闭三次，确认每次只有一层预览标记，关闭后无残留且未发送任何终端输入。

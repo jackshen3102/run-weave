@@ -109,7 +109,7 @@ struct FilesView: View {
             relatedChange: change(selected.path).map {
               SelectedFile(path: selected.path, changeKind: $0.0, changeStatus: $0.1)
             }
-          ).id(previewID)
+          ).id(previewID).mobileAnalyticsScreen(.filePreview)
         }
       } label: {
         EmptyView()
