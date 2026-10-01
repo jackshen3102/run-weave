@@ -15,6 +15,8 @@
     "dev:open": "node ./scripts/dev-session/cli.mjs open",
     "dev:stop": "node ./scripts/dev-session/cli.mjs stop",
     "dev:electron": "node ./scripts/dev/electron.mjs",
+    "dist:electron:linux": "node ./scripts/electron/dist-linux.mjs",
+    "pack:electron:linux": "node ./scripts/electron/dist-linux.mjs --dir",
     "dist:electron:mac": "node ./scripts/electron/dist-retry.mjs --mac --arm64",
     "dist:electron:mac:local-updates": "node ./scripts/electron/dist-retry.mjs --config electron-builder.local-updates.yml --mac --arm64",
     "publish:electron:local-updates": "pnpm dist:electron:mac:local-updates && node ./scripts/electron/publish-local-updates.mjs",

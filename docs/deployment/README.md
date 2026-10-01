@@ -8,6 +8,7 @@
 | 虚拟机独立 Backend 发布、安装与回滚      | [backend-standalone.md](./backend-standalone.md)                         |
 | 新服务器初始化 Pi、搜索与子 Agent 扩展   | [pi-agent-setup.md](./pi-agent-setup.md)                                 |
 | Runweave Beta、Dev Session 与固定槽位    | [runweave-beta.md](./runweave-beta.md)                                   |
+| Linux x64 桌面预览与打包                 | [electron-linux.md](./electron-linux.md)                                 |
 | Electron 本地更新                        | [electron-local-updates.md](./electron-local-updates.md)                 |
 | 飞书应用通知与 Terminal 回复             | [feishu-app-integration.md](./feishu-app-integration.md)                 |
 | 推送服务 Lightsail / Docker Compose 部署 | [push-gateway.md](./push-gateway.md)                                     |

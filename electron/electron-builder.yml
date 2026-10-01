@@ -24,10 +24,6 @@ extraResources:
     to: node_modules
     filter:
       - "**/*"
-  - from: dist/companion
-    to: companion
-    filter:
-      - "**/*"
   - from: resources/hooks
     to: runweave-hook-runtime/hooks
     filter:
@@ -36,13 +32,6 @@ extraResources:
     to: frontend/dist
     filter:
       - "**/*"
-  - from: ../backend/node_modules/node-pty
-    to: backend/node_modules/node-pty
-    filter:
-      - "lib/**/*"
-      - "prebuilds/darwin-arm64/**/*"
-      - "package.json"
-      - "LICENSE"
   - from: dist/backend
     to: backend
     filter:
@@ -59,6 +48,18 @@ extraResources:
       - "node_modules/**/*"
       - "package.json"
 mac:
+  extraResources:
+    - from: dist/companion
+      to: companion
+      filter:
+        - "**/*"
+    - from: ../backend/node_modules/node-pty
+      to: backend/node_modules/node-pty
+      filter:
+        - "lib/**/*"
+        - "prebuilds/darwin-arm64/**/*"
+        - "package.json"
+        - "LICENSE"
   icon: resources/icons/icon.icns
   category: public.app-category.developer-tools
   identity: null

@@ -131,6 +131,7 @@ function takeBuilderConfig(builderArgs) {
 }
 
 async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
+  const linux = path.basename(baseBuilderConfig) === "electron-builder.linux.yml";
   const frontendDist = path.join(buildRoot, "frontend", "dist");
   const electronAppDir = path.join(buildRoot, "electron");
   const electronDist = path.join(electronAppDir, "dist");
@@ -214,11 +215,13 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             to: "node_modules",
             filter: ["**/*"],
           },
-          {
-            from: path.join(electronDist, "companion"),
-            to: "companion",
-            filter: ["**/*"],
-          },
+          ...(!linux
+            ? [{
+                from: path.join(electronDist, "companion"),
+                to: "companion",
+                filter: ["**/*"],
+              }]
+            : []),
           {
             from: path.join(ELECTRON_DIR, "resources", "hooks"),
             to: "runweave-hook-runtime/hooks",
@@ -230,7 +233,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             to: "backend/node_modules/node-pty",
             filter: [
               "lib/**/*",
-              "prebuilds/darwin-arm64/**/*",
+              linux ? "prebuilds/linux-x64/**/*" : "prebuilds/darwin-arm64/**/*",
               "package.json",
               "LICENSE",
             ],
@@ -254,6 +257,14 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             filter: ["node_modules/**/*", "package.json"],
           },
         ],
+        ...(linux
+          ? { linux: {
+              executableName: "runweave",
+              icon: path.join(ELECTRON_DIR, "resources", "icons", "icon-preview.png"),
+              category: "Development",
+              target: [{ target: "tar.gz", arch: ["x64"] }],
+            } }
+          : {}),
         mac: {
           icon: path.join(ELECTRON_DIR, "resources", "icons", "icon.icns"),
           category: "public.app-category.developer-tools",
@@ -292,6 +303,13 @@ function isolatedBuilderIdentity(baseBuilderConfig) {
           url: "http://127.0.0.1:5500/updates/mac/",
         },
       ],
+    };
+  }
+  if (configName === "electron-builder.linux.yml") {
+    return {
+      appId: "com.runweave.desktop",
+      productName: "Runweave",
+      artifactName: "Runweave-${version}-linux-${arch}.${ext}",
     };
   }
   if (configName === "electron-builder.yml") {

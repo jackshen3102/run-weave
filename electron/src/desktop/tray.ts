@@ -8,7 +8,11 @@ let tray: Tray | null = null;
 function resolveIcon(): Electron.NativeImage {
   const iconDir = path.join(__dirname, "../resources/icons");
   const iconFile =
-    process.platform === "win32" ? "tray-icon.ico" : "tray-icon.png";
+    process.platform === "linux"
+      ? "icon-preview.png"
+      : process.platform === "win32"
+        ? "tray-icon.ico"
+        : "tray-icon.png";
   const iconPath = path.join(iconDir, iconFile);
 
   try {
@@ -44,12 +48,17 @@ export function createTray(
         mainWindow.focus();
       },
     },
-    {
-      label: "显示桌面宠物",
-      type: "checkbox",
-      checked: options.companionEnabled ?? true,
-      click: (item) => options.onSetCompanionEnabled?.(item.checked),
-    },
+    ...(process.platform === "darwin"
+      ? [
+          {
+            label: "显示桌面宠物",
+            type: "checkbox" as const,
+            checked: options.companionEnabled ?? true,
+            click: (item: Electron.MenuItem) =>
+              options.onSetCompanionEnabled?.(item.checked),
+          },
+        ]
+      : []),
     ...(options.onOpenSystemMonitor
       ? [
           {

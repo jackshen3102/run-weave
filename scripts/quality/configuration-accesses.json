@@ -9582,5 +9582,37 @@
     "count": 1,
     "category": "tooling",
     "reason": "Git 来源工作区收尾工具：私有恢复快照、范围清单、文件内容及暂存区数据，用于交付核对和失败恢复。"
+  },
+  {
+    "file": "scripts/electron/dist-linux.mjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_ELECTRON_BUILD_ROOT",
+    "count": 1,
+    "category": "build",
+    "reason": "Linux 本地打包的显式临时产物目录；仅传给构建脚本，不读取或覆盖用户 settings.yaml。"
+  },
+  {
+    "file": "scripts/electron/dist-linux.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "build",
+    "reason": "向本地 Electron 构建子进程转发工具链与缓存环境；强制禁用版本自增与发布，不作为应用业务配置。"
+  },
+  {
+    "file": "scripts/verify/electron/linux-native.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(path.join(backend, \"activity-sqlite-runtime-manifest.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "原生集成验收只读指定包内 SQLite 产物清单，核对平台和 Electron 版本；不是用户配置来源。"
+  },
+  {
+    "file": "scripts/verify/electron/linux-native.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(path.join(backend, file.path))",
+    "count": 1,
+    "category": "test",
+    "reason": "原生集成验收只读产物清单列出的包内文件，核验大小和 SHA256；不读取用户身份或 settings.yaml。"
   }
 ]

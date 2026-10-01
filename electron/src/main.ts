@@ -436,7 +436,7 @@ if (hasSingleInstanceLock) {
           desktopRuntime.mainWindow.isDestroyed()
         ) {
           desktopRuntime.mainWindow = createWindow({
-            hideOnClose: true,
+            hideOnClose: process.platform === "darwin",
             initialPath: "/system-monitor",
           });
           return;
@@ -460,7 +460,7 @@ if (hasSingleInstanceLock) {
       );
 
       desktopRuntime.mainWindow = createWindow({
-        hideOnClose: true,
+        hideOnClose: process.platform === "darwin",
         onReadyToShow: () => {
           writeBetaDesktopStatus();
           void checkAndNotifyAppServerAvailability(process.env);
@@ -514,7 +514,7 @@ if (hasSingleInstanceLock) {
       );
 
       createTray(desktopRuntime.mainWindow, {
-        enableUpdates: !isBetaChannel,
+        enableUpdates: !isBetaChannel && process.platform === "darwin",
         onOpenSystemMonitor: openSystemMonitor,
         onReloadLocalRuntime: reloadLocalRuntime,
         companionEnabled,
@@ -537,9 +537,9 @@ if (hasSingleInstanceLock) {
           !desktopRuntime.mainWindow ||
           desktopRuntime.mainWindow.isDestroyed()
         ) {
-          desktopRuntime.mainWindow = createWindow({ hideOnClose: true });
+          desktopRuntime.mainWindow = createWindow({ hideOnClose: process.platform === "darwin" });
           createTray(desktopRuntime.mainWindow, {
-            enableUpdates: !isBetaChannel,
+            enableUpdates: !isBetaChannel && process.platform === "darwin",
             onOpenSystemMonitor: openSystemMonitor,
             onReloadLocalRuntime: reloadLocalRuntime,
             companionEnabled,
