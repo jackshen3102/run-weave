@@ -7,7 +7,7 @@ export type SuijiTokens = SuijiIdentity & {
   sessionId: string;
 };
 export type SuijiInfo = SuijiIdentity & {
-  features?: { followups: boolean; correction?: boolean; correctionHistory?: boolean };
+  features?: { followups: boolean; changes?: boolean; correction?: boolean; correctionHistory?: boolean };
   protocolVersion: 1;
   appVersion: string;
   schemaVersion: number;

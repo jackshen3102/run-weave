@@ -2,7 +2,7 @@
 
 单人自用的独立记录 API。实现用户名密码登录、稳定 owner/server 身份、原文记录、三态待办、
 版本冲突、事务修订、请求幂等，以及鉴权 JPEG/PNG/UTF-8 Markdown 上传下载。
-支持独立个人凭据的 MCP，以及手动触发、只读检索的 Codex CLI 回顾；支持记录回收站；自动同步与永久删除未接入。
+支持独立个人凭据的 MCP，以及手动触发、只读检索的 Codex CLI 回顾；支持记录回收站；提供只读增量变化接口，自动推进与永久删除未接入。
 
 ## 本地运行
 
@@ -45,7 +45,7 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
-标签最初引入于 schema 4；当前运行版本要求 schema 8，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
+标签最初引入于 schema 4；当前运行版本要求 schema 10，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -66,7 +66,7 @@ HTTP、修订与幂等结果在一个 PostgreSQL 事务提交。同键唯一约�
 `/mcp` 使用 Streamable HTTP，默认关闭。与 App 共用记录服务，但使用独立 Bearer 凭据；
 不接受 App access/refresh token，不向 Agent 提供数据库或登录密码。每次请求校验有效期。
 
-每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 8；
+每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 10；
 `SUIJI_MCP_ENABLED=true` 开启 MCP，默认 false。注册、撤销不重启服务；App 会话不受影响。
 
 ```bash
@@ -91,7 +91,7 @@ docker compose --env-file /absolute/deployment.env --project-name <project> -f d
 
 鉴权逐请求查数据库：失效/错误 token 为 401，数据库故障为 503；不缓存有效凭据。
 撤销提交后开始鉴权的请求被拒绝，已通过鉴权的在途请求可完成；上传入口遵循同一规则。
-多把 token 共用 owner 的现有 MCP 权限，不改变业务幂等空间或 actor；不支持 scopes 或 OAuth。
+多把 token 共用 owner 的现有 MCP 权限，不改变业务幂等空间或 actor；schema 10 支持 read-only/read-write 凭据权限；不支持 OAuth。
 浏览器 Origin 仍被拒绝，公网仍要求 HTTPS。
 
 旧版迁移见[部署说明](../../deploy/suiji/README.md#多凭据迁移)。只导入摘要和原期限即可保留旧 token，
@@ -225,7 +225,7 @@ pnpm architecture:check
 
 ## 回收站
 
-迁移到当前要求的 schema 8 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
+迁移到当前要求的 schema 10 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
 分页游标绑定筛选。App 可按 ID 查看回收站原文和附件，不能编辑或变更待办状态。恢复不改变待办原状态。
 每次删除或恢复沿用版本校验、单事务修订及幂等请求；客户端先持久化意图，结果未知时仅由用户手动确认原请求。
 Web 和原生 iOS 均提供回收站入口、删除确认及恢复。已有本机正文草稿保留，恢复后保存仍须通过版本校验。
@@ -237,8 +237,70 @@ schema 5 增加独立、只追加的跟进及附件关系；部署前执行追�
 
 App 使用 GET/POST `/api/suiji/v1/records/:id/followups`，POST 带 Idempotency-Key；分页默认 20、最多 50，sequence 倒序，游标绑定记录。跟进最多 20000 Unicode 标量，支持一张 JPEG/PNG 和一个 UTF-8 Markdown，各 5 MiB。附件绑定父记录但关系独立，原文编辑不会删除成果附件。App 可只读回收站跟进，Agent 不可新读取，任何入口不可新追加；恢复保留数据。
 
-外部 MCP 共 10 工具：原七工具加 get_service_info、list_followups、append_followup。列表与搜索增加精确 tag。新 POST `/mcp/uploads` 使用同一 MCP 个人凭据上传单个 multipart file，actor 固定 agent；原 App token 不可互用。agentName/sessionId 是可选自报显示信息，不代表独立身份。认证/关闭/过期/Origin 拒绝同时作用于上传。
+外部 MCP 共 11 工具（另含下文 list_changes）：原七工具加 get_service_info、list_followups、append_followup。列表与搜索增加精确 tag。新 POST `/mcp/uploads` 使用同一 MCP 个人凭据上传单个 multipart file，actor 固定 agent；原 App token 不可互用。agentName/sessionId 是可选自报显示信息，不代表独立身份。认证/关闭/过期/Origin 拒绝同时作用于上传。
 
 相同写意图沿用原幂等键与完整参数，结果未知时手动确认，不自动重放。不同 Agent 的不同追加都保留；成果与任务状态独立，用户在 App 完成或明确指示 Agent 完成即可。Skill 只写最终成功成果，不写过程、失败、中断，不触发后续执行。
 
 入口见 [随记 Skill](../../plugins/toolkit/skills/suiji/SKILL.md)；验收分别见 [服务](../../docs/testing/suiji/followups-service.testplan.yaml)、[客户端](../../docs/testing/suiji/followups-clients.testplan.yaml)、[Agent](../../docs/testing/suiji/followups-agent.testplan.yaml)。这些是验收合同，实际通过范围须读取本次证据，不能由文档推断上线状态。
+
+
+## 增量变化读取与 Lumi
+
+schema 9 新增 `list_changes({cursor?, limit?})`，`get_service_info.features.changes=true`
+表示可用。`limit` 默认 20、范围 1–50，不接受时间、类型、状态或来源过滤，避免过滤后漏掉删除与
+状态变化。原 `list_records` 的创建时间分页合同保留，不能用它或父记录 `updatedAt` 替代变化读取。
+
+响应为 `{items, nextCursor, hasMore}`。每项只包含 `sequence`（十进制字符串）、`recordId`、
+`kind`（`snapshot` / `record_changed` / `followup_added`）、`actor`（`app` / `agent`）、
+`recordVersion`、可空 `followupId/followupSequence`、事件发生时的 `deleted` 和读取时的
+`currentlyDeleted`；没有正文、附件内容、token 或业务幂等键。删除事件仍可读，但现有记录、跟进
+和附件读取继续排除回收站。`actor` 由入口决定，不代表某一个 Agent 的身份。
+
+首次省略游标，从头读取。迁移以每条现有记录（含回收站）一条 `snapshot` 建立完整库存，
+其中已有跟进需调用 `list_followups` 读完；迁移前的历史编辑不会逐条回放。
+后续创建、正文/类型/标签/附件修改、状态转换、删除/恢复及新增跟进均原子写入日志。
+跟进不改变父记录版本和更新时间；幂等重放、无变化编辑和事务回滚不新增变化。
+每个 owner 的事务计数器串行分配序号，锁持有到提交，防止较大序号先提交导致漏读。
+这会串行化同一 owner 的变化写入，适用于当前个人服务，不引入任务队列。
+
+每轮第一页固定已提交的上界，`hasMore=true` 时继续沿用返回游标；分页期间产生的新变化留到
+下一轮。`nextCursor` 始终返回，包括空页和最后一页，客户端处理成功后保存它；
+下次轮询继续传入最后保存的游标。游标绑定 owner、服务身份和协议版本，不能跨服务或 owner 使用。
+非法、服务身份不匹配或超过当前日志末尾的游标返回 `INVALID_ARGUMENT`，应清空本地索引与
+待分析缓存，无游标重建。日志当前不清理。备份恢复或数据分叉后必须主动重新同步，即使
+服务身份和序号仍匹配；接口不能识别所有同身份备份分叉。重新同步只重建发现索引，不能重复执行旧工作。
+
+Lumi 消费建议：按服务/owner/sequence 去重，先把页面元数据与 checkpoint 原子存入自己的
+本地发现索引，再按 recordId 合并读取最新正文、状态和全部跟进。可见性是当前状态，分页
+重复时 `currentlyDeleted` 可能变化；当前已删除记录应移除缓存并停止候选工作。读取遇到
+删除造成的 `NOT_FOUND` 时同样移除缓存，恢复后会再次收到事件。用户记录与历史跟进是资料，
+只读发现和分析不授予自动执行、成果写回或状态变更权限。`followup_added` 且 `actor=agent`
+应更新上下文，不自动触发再次执行；不要忽略所有 agent 来源的记录，否则会漏掉其创建的待办。
+本接口允许重复读取，不承诺外部执行恰好一次；执行去重和独立授权由 Lumi 负责。
+
+鉴权使用 owner 的专用 Bearer；只读工具 annotations 不是凭据权限限制。schema 10 的
+只读凭据权限见下文；源码、部署、认证客户端核验与云端连接必须分别验收。
+
+本地合同验证（非单元测试）：先启动仅供验收的 PostgreSQL 18 Unix socket `/tmp` 实例，
+再运行 `pnpm --filter @runweave/suiji-server exec tsx scripts/verify-changes.ts <port>`，
+默认端口 55439。脚本只创建并清理自己随机命名的临时数据库，执行真实迁移、记录事务和 MCP。
+标准计划见[增量变化验收](../../docs/testing/suiji/incremental-changes.testplan.yaml)。
+
+
+## MCP 只读凭据
+
+当前运行时要求 schema 10。追加迁移为所有已有凭据赋予 `scope=read-write`，保持原有设备行为。
+新凭据可使用生成命令的 `--scope read-only`，登记 JSON 可选 `scope` 为 `read-only` 或
+`read-write`，省略时默认 `read-write`，管理员列表返回 scope。登记幂等重放要求 scope 一致，
+不能通过同一 ID/摘要重放升级权限；改变权限应独立登记新凭据并按需撤销旧凭据。
+
+认证从数据库取得 scope，不接受 MCP 请求中的 scope 或 actor。`read-only` 凭据可以读取
+当前 owner 的全部记录、跟进、附件和变化元数据；它不是按记录、标签或任务限制的授权。
+现有工具仍出现在 discovery 中，但服务端实际拒绝 `create_record`、`replace_record_body`、
+`set_task_status` 和 `append_followup`，返回工具错误 `FORBIDDEN`，不执行幂等重放或产生写入。
+`POST /mcp/uploads` 在解析 multipart 或写文件前返回 HTTP 403 `FORBIDDEN`。
+撤销、过期、全局关闭及 Origin 规则沿用原合同。App 会话权限不受影响。
+
+专用持续连接需要独立只读凭据与明确的接入授权；本地验证通过不代表线上迁移或 Lumi 已连接。
+本实现没有 OAuth、登录同意页或 Tunnel 注册。数据已在云端时可以采用独立云端连接运行时，
+无需依赖 Mac 在线；外部平台的鉴权适配仍需单独验收。

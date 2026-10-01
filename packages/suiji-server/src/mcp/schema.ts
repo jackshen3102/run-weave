@@ -61,3 +61,8 @@ export const followupListInput = z.object({ recordId: uuid,
 export const followupAppendInput = z.object({ recordId: uuid, ...followupFields,
   agentName: sourceLabel(80).optional(), sessionId: sourceLabel(128).optional(), idempotencyKey: keySchema,
 }).strict();
+
+export const changesInput = z.object({
+  cursor: z.string().max(2048).optional(),
+  limit: z.number().int().min(1).max(50).default(20),
+}).strict();

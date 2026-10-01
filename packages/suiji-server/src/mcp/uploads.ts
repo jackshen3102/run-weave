@@ -1,3 +1,4 @@
+import { requireMcpWrite } from "./permissions";
 import { Router } from "express";
 import type { AttachmentService } from "../storage/attachments";
 import type { LocalFileStore } from "../storage/local-files";
@@ -12,6 +13,7 @@ export function mcpUploads(
   const router = Router();
   router.post("/uploads", (req, res, next) => {
     void (async () => {
+      requireMcpWrite(res.locals.mcpScope);
       const key = keySchema.parse(req.get("Idempotency-Key"));
       const upload = await receiveUpload(req, store);
       try {

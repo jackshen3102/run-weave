@@ -10,7 +10,7 @@ flowchart LR
   I[Suiji SwiftUI App] --> H[独立 HTTP API]
   W[Web / Runweave 终端随记抽屉] --> H
   H --> S[记录 / 身份 / 附件业务服务]
-  A[外部 Agent] --> M[独立凭据的十工具 MCP]
+  A[外部 Agent] --> M[独立凭据的十一工具 MCP]
   M --> S
   H --> R[手动创建回顾任务]
   R --> C[本地已登录 Codex CLI]
@@ -97,7 +97,7 @@ flowchart LR
 
 记录通过 `deleted_at` 保留删除标记，删除和恢复使用既有版本与幂等事务，不改变待办状态。
 Web 与原生 iOS 提供回收站列表、删除确认和恢复入口；普通列表与 Agent/AI 检索排除回收站。
-正文、附件和历史修订保留，不提供永久清空或定时清理。回收站最初引入于 schema 3；当前部署需迁移至 schema 6，见[部署入口](../../deploy/suiji/README.md#跟进版本迁移)。
+正文、附件和历史修订保留，不提供永久清空或定时清理。回收站最初引入于 schema 3；当前部署需迁移至 schema 10，见[部署入口](../../deploy/suiji/README.md#跟进版本迁移)。
 
 ## 跟进与外部 Agent 成果
 
@@ -105,7 +105,7 @@ Web 与原生 iOS 提供回收站列表、删除确认和恢复入口；普通�
 
 Web/桌面与 iOS 提供跟进、成果阅读、复制交接；[随记 Skill](../../plugins/toolkit/skills/suiji/SKILL.md) 可在其他电脑读写同一服务，只有最终成功成果回写，用户确认后才由 Agent 完成待办。跟进里的用户补充不会触发 Agent。
 
-服务接口与版本合同以 [服务 README](../../packages/suiji-server/README.md#跟进与最终成果) 为准；当前实现需要 schema 6，线上启用情况及行为通过范围需要独立验证。
+服务接口与版本合同以 [服务 README](../../packages/suiji-server/README.md#跟进与最终成果) 为准；当前实现需要 schema 10，线上启用情况及行为通过范围需要独立验证。
 
 ### 验收入口与保留缺口
 
@@ -123,3 +123,6 @@ Web/桌面与 iOS 提供跟进、成果阅读、复制交接；[随记 Skill](..
 
 MCP 设备凭据存储于 schema 6 的独立凭据表，各设备可单独撤销。注册和撤销无需重启；
 旧 token 通过摘要与原期限导入保留，服务启动不自动恢复旧配置。管理和迁移见[服务入口](../../packages/suiji-server/README.md#外部-agent-mcp)。
+
+增量发现使用 schema 9 的只读 `list_changes`，覆盖记录变化、跟进和回收站可见性；
+游标与 Lumi 消费边界见[服务合同](../../packages/suiji-server/README.md#增量变化读取与-lumi)。

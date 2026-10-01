@@ -1,3 +1,4 @@
+import { listChanges } from "./changes";
 import { followupSummaries } from "../followups/repository";
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
@@ -27,6 +28,9 @@ export type RecordQuery = {
 };
 export class RecordService {
   constructor(private pool: pg.Pool) {}
+  changes(owner: string, input: { cursor?: string; limit: number }) {
+    return listChanges(this.pool, owner, input);
+  }
   async tags(owner: string): Promise<{ items: string[] }> {
     const result = await this.pool.query<{ tag: string }>(
       `SELECT tag FROM records CROSS JOIN LATERAL unnest(tags) AS tag

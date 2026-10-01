@@ -33,6 +33,7 @@ export function createMcpRouter(
     void authenticateMcp(pool, req.headers.authorization).then(context => {
       res.locals.mcpOwner = context.ownerId;
       res.locals.mcpCredentialId = context.credentialId;
+      res.locals.mcpScope = context.scope;
       next();
     }, error => {
       if (error instanceof McpAuthenticationUnavailable) {
@@ -65,8 +66,9 @@ export function createMcpRouter(
           const schema = await pool.query("SELECT count(*)::int AS version FROM suiji_migrations");
           return { ownerId: owner, serverId: identity.rows[0].server_id,
             protocolVersion: SUIJI_PROTOCOL_VERSION, appVersion: config.SUIJI_APP_VERSION,
-            schemaVersion: schema.rows[0].version, limits: SUIJI_LIMITS, features: { followups: true } };
+            schemaVersion: schema.rows[0].version, limits: SUIJI_LIMITS, features: { followups: true, changes: true } };
         },
+        res.locals.mcpScope,
       );
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,

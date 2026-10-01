@@ -7,3 +7,4 @@ export * from "./tags";
 export * from "./followups";
 export * from "./handoff";
 export * from "./corrections";
+export * from "./changes";
