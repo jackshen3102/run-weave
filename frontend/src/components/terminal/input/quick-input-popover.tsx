@@ -428,8 +428,15 @@ export function TerminalQuickInputPopover({
                   className="block w-full rounded-md border border-sky-900/70 bg-sky-950/40 px-2 py-1.5 text-left text-xs text-sky-200"
                   onClick={() => setSelectedRunId((value) => value === run.id ? null : run.id)}
                 >
-                  {run.snapshot.name}
-                  {` · ${run.outcome === "blocked" ? "执行受阻" : statusLabel[run.status]} · 查看运行`}
+                  <span className="block">
+                    {run.snapshot.name}
+                    {` · ${run.outcome === "blocked" ? "执行受阻" : statusLabel[run.status]} · 查看运行`}
+                  </span>
+                  <span className="mt-1 block break-words text-[11px] leading-4 text-slate-400">
+                    {run.snapshot.origin?.kind === "quick-input"
+                      ? `${run.snapshot.origin.projectName} · ${run.snapshot.origin.worktreeName ?? "主工作区"}`
+                      : run.snapshot.projectId}
+                  </span>
                 </button>
               ))}
             </div>
