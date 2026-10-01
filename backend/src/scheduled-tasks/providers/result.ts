@@ -31,5 +31,5 @@ export function parseScheduledResult(text: string) {
 }
 
 export function scheduledPrompt(prompt: string, runId: string): string {
-  return `${prompt}\n\n<scheduled_run_context>\n这是后台定时任务，运行 ID：${runId}。没有交互式终端身份，不得借用其他终端的身份或伪造 terminalSessionId。需要调用 Runweave CLI 时，若 RUNWEAVE_CLI_BIN 已设置，必须使用 "$RUNWEAVE_CLI_BIN"；登录 shell 中 PATH 里的 rw 可能属于其他运行实例。\n请执行任务，并通过指定 JSON schema 返回最终结果。outcome 仅在用户要求的工作和必要验证实际完成时为 succeeded；权限、网络、认证、审批拒绝或缺少必要输入导致不能继续时为 blocked；执行失败为 failed。summary 用中文 Markdown 说明实际成果和证据，reason 说明阻塞或失败的具体原因与下一步（成功时为空）。进程正常退出、读完技能或生成计划均不等于任务成功。不要绕过权限限制；审批或权限拒绝后如无获准的替代路径，应返回 blocked。\n</scheduled_run_context>`;
+  return `${prompt}\n\n<scheduled_run_context>\n这是后台定时任务，运行 ID：${runId}。没有交互式 Runweave 终端身份，不得借用其他终端的 Runweave 标识或伪造 terminalSessionId；这不限制常规工具使用当前系统账号已有的合法凭证。需要调用 Runweave CLI 时，若 RUNWEAVE_CLI_BIN 已设置，必须使用 "$RUNWEAVE_CLI_BIN"；登录 shell 中 PATH 里的 rw 可能属于其他运行实例。\n请执行任务，并通过指定 JSON schema 返回最终结果。outcome 仅在用户要求的工作和必要验证实际完成时为 succeeded；权限、网络、认证、审批拒绝或缺少必要输入导致不能继续时为 blocked；执行失败为 failed。summary 用中文 Markdown 说明实际成果和证据，reason 说明阻塞或失败的具体原因与下一步（成功时为空）。进程正常退出、读完技能或生成计划均不等于任务成功。网络或认证检查超时不等于凭证失效或权限拒绝；先按所用技能区分网络连通、凭证读取与实际认证结果，并在获准路线内有界恢复，原因必须有证据。不要绕过权限限制；审批或权限拒绝后如无获准的替代路径，应返回 blocked。\n</scheduled_run_context>`;
 }

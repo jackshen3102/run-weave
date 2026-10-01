@@ -2,9 +2,21 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { githubAccess } from "./github-access.mjs";
 
 // Read-only collection: one failed probe must not suppress unrelated evidence.
-const cwd = path.resolve(process.argv[2] || process.cwd());
+const args = process.argv.slice(2);
+const fallbackIndex = args.indexOf("--fallback-proxy");
+let fallbackProxy;
+if (fallbackIndex >= 0) {
+  fallbackProxy = args[fallbackIndex + 1];
+  if (!fallbackProxy)
+    throw new Error("--fallback-proxy requires an HTTP(S) proxy URL.");
+  args.splice(fallbackIndex, 2);
+}
+if (args.length > 1 || args[0]?.startsWith("--"))
+  throw new Error("Usage: preflight.mjs [workspace] [--fallback-proxy URL]");
+const cwd = path.resolve(args[0] || process.cwd());
 const env = {
   ...process.env,
   GIT_OPTIONAL_LOCKS: "0",
@@ -13,12 +25,12 @@ const env = {
 };
 delete env.GH_DEBUG;
 
-function run(file, args, accepted = [0]) {
+function run(file, args, accepted = [0], options = {}) {
   return new Promise((resolve) => {
     execFile(
       file,
       args,
-      { cwd, env, timeout: 20_000, maxBuffer: 1024 * 1024 },
+      { cwd, env, timeout: 20_000, maxBuffer: 1024 * 1024, ...options },
       (error, stdout, stderr) =>
         resolve({
           status: !error || accepted.includes(error.code) ? "ok" : "failed",
@@ -90,6 +102,7 @@ const checks = Object.fromEntries(
 
 const repository =
   checks.origin.status === "ok" ? githubRepository(checks.origin.stdout) : null;
+const gitHttps = checks.origin.stdout.startsWith("https://");
 const pushRepositories =
   checks.pushOrigin.status === "ok"
     ? checks.pushOrigin.stdout.split("\n").map(githubRepository)
@@ -139,32 +152,10 @@ if (checks.root.status === "ok") {
 }
 const hooksPromise = Promise.all([...new Set(hookPaths)].map(readHook));
 
+let github;
 if (repository) {
-  const [auth, account, access] = await Promise.all([
-    run("gh", ["auth", "status", "--active", "--hostname", "github.com"]),
-    run("gh", ["api", "--hostname", "github.com", "user", "--jq", ".login"]),
-    run("gh", [
-      "repo",
-      "view",
-      repository,
-      "--json",
-      "nameWithOwner,viewerPermission,defaultBranchRef",
-    ]),
-  ]);
-  checks.auth = privateResult(auth);
-  checks.account = {
-    ...privateResult(account),
-    login: account.status === "ok" ? account.stdout : null,
-  };
-  checks.repositoryAccess = privateResult(access);
-  if (access.status === "ok") {
-    try {
-      checks.repositoryAccess.details = JSON.parse(access.stdout);
-    } catch {
-      checks.repositoryAccess.status = "failed";
-      checks.repositoryAccess.error = "invalid-json";
-    }
-  }
+  github = await githubAccess(run, env, repository, fallbackProxy, gitHttps);
+  Object.assign(checks, github.checks);
 } else {
   for (const name of ["auth", "account", "repositoryAccess"]) {
     checks[name] = {
@@ -187,6 +178,9 @@ console.log(
       passed,
       failedChecks,
       checks,
+      ...(github
+        ? { diagnosis: github.diagnosis, recovery: github.recovery }
+        : {}),
       hooks,
       note: "Read-only snapshot, not permission to stage, push or merge. Recheck state before mutations; repository read access does not prove push permission.",
     },
