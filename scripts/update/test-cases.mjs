@@ -437,7 +437,7 @@ const cases = [
       assert.equal(directInvocation.stdout, "");
       assert.match(
         directInvocation.stderr,
-        /Refusing Beta update: runtime home must be/,
+        /CONFIG_UPDATE_TARGET_MISMATCH/,
       );
     },
   },
