@@ -111,7 +111,7 @@ export class ResourceObservations {
             this.ready.add(key);
             const evidence = {
               firstAt: first.at,
-              lastAt: tick,
+              lastAt: now,
               mean:
                 observation.samples.reduce(
                   (sum, entry) => sum + entry.value,

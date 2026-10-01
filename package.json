@@ -31,6 +31,7 @@
     "runweave:beta:verify": "node ./scripts/beta/index.mjs verify",
     "app-server:dev": "pnpm --filter @runweave/app-server dev",
     "app-server:install": "node ./scripts/install/app-server.mjs",
+    "research-mcp:install": "node ./scripts/install/research-mcp.mjs",
     "app-server:install:test": "node ./scripts/install/app-server.mjs --home=$HOME/.runweave/app-server-test",
     "app-server:start": "pnpm --filter @runweave/cli build && node ./packages/runweave-cli/dist/index.js app-server start",
     "app-server:start:test": "RUNWEAVE_APP_SERVER_HOME=$HOME/.runweave/app-server-test pnpm --filter @runweave/cli build && RUNWEAVE_APP_SERVER_HOME=$HOME/.runweave/app-server-test node ./packages/runweave-cli/dist/index.js app-server start",

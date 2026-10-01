@@ -128,6 +128,7 @@ struct ScheduledRun: Decodable, Identifiable {
   let status: String
   let startedAt: String?
   let finishedAt: String?
+  let archivedAt: String?
   let summary: String?
   let outcome: String?
   let error: Failure?
@@ -139,6 +140,7 @@ struct ScheduledRun: Decodable, Identifiable {
   let terminalBinding: ScheduledTerminalBinding?
   var active: Bool { ["queued", "running", "stopping"].contains(status) }
   var needsAttention: Bool { outcome == "blocked" || outcome == "failed" || status == "failed" || status == "waiting" }
+  var canArchive: Bool { snapshot.origin?.kind == "quick-input" && ["completed", "failed", "cancelled", "skipped"].contains(status) && archivedAt == nil }
   var canOpen: Bool { !active && recoverable && threadRef != nil }
   var statusLabel: String {
     if outcome == "blocked" { return "执行受阻" }

@@ -33,9 +33,10 @@ const referenceSchema = z.object({
   url: z.string(),
 });
 
-async function result(run: () => Promise<object>) {
+async function toolResult(run: () => Promise<object>, onSuccess?: () => void) {
   try {
     const value = await run();
+    onSuccess?.();
     return {
       structuredContent: value as Record<string, unknown>,
       content: [{ type: "text" as const, text: JSON.stringify(value) }],
@@ -76,9 +77,11 @@ export interface ToolsContext {
   commands: Commands;
   evidence: Evidence;
   files: FileSource[];
+  onToolSuccess?: () => void;
 }
 
 export function createMcp(context: ToolsContext) {
+  const result = (run: () => Promise<object>) => toolResult(run, context.onToolSuccess);
   const { backend, activity, commands, evidence, files } = context;
   const server = new McpServer(
     { name: "runweave-research", version: "0.1.0" },

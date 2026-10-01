@@ -16,6 +16,86 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFile(tokenPath)"
   },
   {
+    "file": "packages/config-node/src/research-mcp.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(temporary)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "调查 MCP 安装身份的原子状态文件，不作为 settings.yaml 的业务配置替代"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/research-mcp.ts",
+    "kind": "environment",
+    "expression": "process.env.PATH",
+    "count": 2,
+    "category": "system",
+    "reason": "launchd 作业继承安装时系统 PATH；属于进程启动环境，不写入实例配置"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/research-mcp.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(path.dirname(sourceEntry), \"release.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "安装时读取 MCP 构建发布身份元数据，不作为 settings.yaml 的业务配置替代"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/research-mcp.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(previous.entry)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "校验已安装 MCP 发布包摘要以避免覆盖不匹配的产物"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/research-mcp.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(sourceEntry)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "安装时读取 MCP 构建发布包计算摘要，不作为 settings.yaml 的业务配置替代"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/research-mcp.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(job.file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "为当前实例创建 launchd 服务作业定义，不作为 settings.yaml 的业务配置替代"
+  },
+  {
+    "file": "packages/runweave-mcp/scripts/build.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(`${outputDir}/index.cjs`)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取刚生成的 MCP 发布包计算构建身份摘要"
+  },
+  {
+    "file": "packages/runweave-mcp/scripts/build.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(`${outputDir}/release.json`)",
+    "count": 1,
+    "category": "build",
+    "reason": "写入 MCP 构建发布元数据，不作为 settings.yaml 的业务配置替代"
+  },
+  {
+    "file": "packages/runweave-mcp/src/runtime-status.ts",
+    "kind": "file-io",
+    "expression": "readFile(installation.tunnel.healthFile)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取隧道客户端发布的本地健康地址以检查运行状态"
+  },
+  {
+    "file": "packages/runweave-mcp/src/tunnel-runner.ts",
+    "kind": "file-io",
+    "expression": "appendFileSync(log)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "写入常驻隧道进程日志并轮转，不作为 settings.yaml 的业务配置替代"
+  },
+  {
     "file": "app-server/src/cloud-sync-sim.ts",
     "kind": "file-io",
     "expression": "appendFile(filePath)",

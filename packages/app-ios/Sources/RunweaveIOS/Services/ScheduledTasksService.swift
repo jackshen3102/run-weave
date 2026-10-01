@@ -25,6 +25,7 @@ struct ScheduledTasksService {
   func start(_ id: String, key: String) async throws -> ScheduledRun {
     try await request("/\(APIClient.pathComponent(id))/runs", method: "POST", body: [:], key: key)
   }
+  func archive(_ id: String) async throws -> ScheduledRun { try await request("/runs/\(APIClient.pathComponent(id))/archive", method: "POST", body: [:]) }
   func stop(_ id: String) async throws -> ScheduledRun { try await request("/runs/\(APIClient.pathComponent(id))/stop", method: "POST", body: [:]) }
   func output(_ id: String, cursor: String?) async throws -> ScheduledOutput {
     try await request("/runs/\(APIClient.pathComponent(id))/output" + query(["cursor": cursor]))

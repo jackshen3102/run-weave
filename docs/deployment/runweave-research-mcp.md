@@ -19,6 +19,33 @@ ChatGPT 中的 Runweave 应用
 
 ## 已接入过：下次怎么使用
 
+已安装常驻服务时无需每次手动启动。macOS 用户登录后 launchd 分别启动 MCP 和隧道；MCP 退出后自动恢复，Backend 重启不会结束 MCP。隧道启动器先核对 MCP 发布身份再运行 tunnel-client，避免启动顺序导致上游探测失败。睡眠期间不保证可访问，唤醒后重新检查。
+
+首次从当前仓库安装（已有 runweave-local 隧道且本机 5099 无陌生服务时）：
+
+```bash
+pnpm research-mcp:install --instance stable --config-dir "$HOME/.runweave" \
+  --cwd "$PWD" --tunnel-profile runweave-local \
+  --tunnel-executable "$HOME/.local/bin/tunnel-client" --adopt-tunnel
+rw research-mcp status --instance stable --config-dir "$HOME/.runweave" --json
+```
+
+`--adopt-tunnel` 仅交接目标/profile 均匹配的已有 tunnel-client 后台实例；不会创建新隧道或 Key。其他端口占用拒绝安装，不会杀未知进程。手动前台 MCP 需由原 owner 先停止，再安装常驻服务。
+
+安装产物保存在所选配置根的 `research-mcp/releases/`，原生依赖随 bundle 保存；不依赖仓库 dist 或 pnpm。启动器使用安装时的 Node 22+ 绝对路径和 PATH，该 Node 安装被删除时需重新安装服务。发布身份包含 sourceRevision、releaseId 和 bundle 摘要；未提交构建的 SHA 标明 `+dirty`，不能当作已提交版本。
+
+右上角运行状态新增“调查 MCP”：分别展示本地服务、隧道与真实鉴权 Activity 查询。已启用但接口不可达会先显示恢复中，30 秒后报异常；零条 Activity 记录仍算查询成功。云端调用必须实际验证，客户端 ready 或最近控制面轮询不代表端到端成功。最近工具成功调用标明来源未确认，不冒充云端验证。
+
+```bash
+rw research-mcp stop --instance stable --config-dir "$HOME/.runweave" --json
+rw research-mcp start --instance stable --config-dir "$HOME/.runweave" --json
+rw research-mcp uninstall --instance stable --config-dir "$HOME/.runweave" --json
+```
+
+stop 持久化停用并删除本实例的登录作业，不会被 KeepAlive 或下次登录重新拉起；start 重新启用。uninstall 移除安装身份与作业，保留发布、日志和 tunnel profile/凭证。日志位于配置根 `research-mcp/logs/`，隧道运行日志按 5 MiB 轮转，保留三份备份。已安装服务随 Stable 桌面更新；runtime 包包含独立 MCP 产物，候选本机握手通过后才切换，失败恢复旧 MCP。显式停用意图在更新中保留。
+
+未安装常驻服务的手动调试方式如下；不要同时启动第二个 5099 服务：
+
 1. 在仓库根目录启动 MCP，保持这个终端运行：
 
    ```bash
@@ -41,8 +68,7 @@ ChatGPT 中的 Runweave 应用
 
 3. 在 ChatGPT 聊天中选择已添加的 **Runweave** 应用，直接提出调查问题。
 
-电脑需要联网并保持唤醒，MCP 与 tunnel-client 都必须运行。客户端的后台管理不等于
-开机自启动；本指南没有安装 LaunchAgent，重启电脑后按以上步骤恢复。
+电脑需要联网并保持唤醒，MCP 与 tunnel-client 都必须运行。上述手动调试方式没有登录自启动；长期使用请安装本节的常驻服务。
 
 ## 首次接入
 

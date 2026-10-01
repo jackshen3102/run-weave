@@ -29,6 +29,7 @@ export interface BackendHealthPayload {
   serviceInstanceId?: string;
   devSessionId?: string;
   sourceRevision?: string;
+  sourceDirty?: boolean;
   resourceNamespace?: string;
   protocolVersion?: number;
   capabilities?: string[];

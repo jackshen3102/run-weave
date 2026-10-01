@@ -93,6 +93,7 @@ const runSchema: z.ZodType<ScheduledRun> = z.object({
   ]),
   startedAt: timestamp.nullable(),
   finishedAt: timestamp.nullable(),
+  archivedAt: timestamp.optional(),
   summary: z.string().nullable(),
   outcome: z.enum(["succeeded", "blocked", "failed"]).optional(),
   error: z.object({ code: text, message: z.string() }).nullable(),

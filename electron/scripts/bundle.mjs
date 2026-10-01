@@ -7,6 +7,10 @@ import { build } from "esbuild";
 import path from "node:path";
 import { finalizeActivitySqliteRuntime } from "./finalize-better-sqlite3-runtime.mjs";
 import { buildCompanionAgent } from "./build-companion-agent.mjs";
+import { execFileSync } from "node:child_process";
+
+const backendSourceRevision = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const backendSourceDirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim().length > 0;
 
 await buildAgentAssets();
 
@@ -107,6 +111,7 @@ await build({
   ...shared,
   ...importMetaUrlShim,
   entryPoints: ["../backend/src/index.ts"],
+  define: { ...importMetaUrlShim.define, __RUNWEAVE_BACKEND_SOURCE_REVISION__: JSON.stringify(backendSourceRevision), __RUNWEAVE_BACKEND_SOURCE_DIRTY__: JSON.stringify(backendSourceDirty) },
   outdir: `${outputDir}/backend`,
   format: "cjs",
   external: ["node-pty", "better-sqlite3", "fs-native-extensions"],

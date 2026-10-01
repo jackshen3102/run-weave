@@ -80,7 +80,7 @@ struct TerminalQuickCommandsView: View {
         case .editor(let item): QuickReplyEditorView(session: session, item: item).mobileAnalyticsScreen(.quickReplyEditor)
         case .preview(let item): preview(item)
         case .runs: QuickCommandRunsView(session: session, model: model, onOpenTerminal: openedTerminal)
-        case .run(let run): QuickCommandRunDetail(session: session, initial: run, onOpenTerminal: openedTerminal)
+        case .run(let run): QuickCommandRunDetail(session: session, model: model, initial: run, onOpenTerminal: openedTerminal)
         case .sorting:
           QuickReplyLibraryView(session: session, initiallySorting: true)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("返回") { sheet = nil }.disabled(model.saving) } }
@@ -152,6 +152,7 @@ struct TerminalQuickCommandsView: View {
             if index > 0 { Divider() }
             Button { sheet = .run(run) } label: { QuickCommandRunRow(run: run) }
               .accessibilityIdentifier("quick-command-run-\(run.id)")
+              .modifier(QuickCommandArchiveMenu(session: session, model: model, run: run))
           }
         }.padding(.horizontal, 12).background(TerminalAppearance.panel).cornerRadius(14)
       }

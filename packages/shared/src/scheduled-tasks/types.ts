@@ -81,6 +81,8 @@ export interface ScheduledRun {
   status: ScheduledRunStatus;
   startedAt: string | null;
   finishedAt: string | null;
+  /** User moved this finished quick-input run out of the dashboard; outcome is unchanged. */
+  archivedAt?: string;
   summary: string | null;
   /** Agent-reported business result; absent on legacy runs. */
   outcome?: ScheduledTaskOutcome;

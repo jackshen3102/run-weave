@@ -466,6 +466,7 @@ await run(
       await f.monitor.sample();
     }
     assert.equal(f.monitor.snapshot(true).alerts.length, 1);
+    assert.equal(f.monitor.snapshot(true).alerts[0]!.lastAt, start - 86400000);
     f.tick = 480001;
     assert.equal(f.monitor.snapshot(true).status, "stale");
     assert.equal(f.monitor.snapshot(true).canTerminate, false);

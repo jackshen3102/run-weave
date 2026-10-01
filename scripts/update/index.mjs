@@ -2,6 +2,7 @@ import { configurationLibrary } from "../lib/configuration.mjs";
 import os from "node:os";
 import path from "node:path";
 import { planCliUpdate, runCliUpdate } from "./cli.mjs";
+import { runResearchMcpUpdate } from "./runtime-updates.mjs";
 import {
   parseRunweaveUpdateArgs,
   resolveAppBuildVersion,
@@ -294,6 +295,9 @@ async function main() {
     }
   }
   if (appServerUpdateError) throw appServerUpdateError;
+  const researchMcp = plan.mode === "runtime"
+    ? { action: "runtime-payload", releaseId: configurationLibrary.readResearchMcpInstallation()?.releaseId ?? null }
+    : await runResearchMcpUpdate({ sourceRoot });
   const cli = await runCliUpdate({ sourceRoot, plan: cliPlan });
   console.log(`[runweave-update] cli verification: ${JSON.stringify(cli)}`);
   const nextInstalledVersion = await readInstalledMacAppVersion(appPath);
@@ -304,6 +308,7 @@ async function main() {
         : null,
     channel,
     cli,
+    researchMcp,
     appServer: {
       action: plan.appServer.action,
       changedFiles: plan.appServer.changedFiles,

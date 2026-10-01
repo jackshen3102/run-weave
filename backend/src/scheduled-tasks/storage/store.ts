@@ -187,6 +187,9 @@ export class ScheduledTaskStore {
       now,
     });
   }
+  archiveQuickInputRun(runId: string, now: string) {
+    return this.request<ScheduledRun>({ op: "archive-quick-input-run", runId, now });
+  }
   putRun(run: ScheduledRun) {
     return this.request<ScheduledRun>({ op: "put-run", run });
   }

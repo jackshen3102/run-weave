@@ -16,6 +16,7 @@ import {
 } from "./validation";
 import { migrateScheduledTasks } from "./migrations";
 import { appendScheduledOutput, readScheduledOutput } from "./output";
+import { archiveQuickInputRun } from "./run-archive";
 import { listQuickInputRuns } from "./quick-input-runs";
 import type { ScheduledOutputChunk } from "./worker-protocol";
 
@@ -328,7 +329,14 @@ export class ScheduledTaskDatabase {
     })();
   }
 
+  archiveQuickInputRun(runId: string, now: string): ScheduledRun {
+    return archiveQuickInputRun(this.requireRun(runId), now, (run) => this.putRun(run));
+  }
+
   putRun(run: ScheduledRun): ScheduledRun {
+    // Execution/attachment writers may hold a snapshot from before archiving.
+    const archivedAt = this.requireRun(run.id).archivedAt;
+    if (archivedAt) run = { ...run, archivedAt };
     const terminal = ["completed", "failed", "cancelled", "skipped"].includes(
       run.status,
     );

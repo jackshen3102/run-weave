@@ -8,9 +8,11 @@ import {
   type BackendRuntimeStatusInput,
 } from "./provider";
 import { RuntimeStatusRegistry } from "./registry";
+import { startResearchMcpRuntimeStatusSource } from "../research-mcp/runtime-status-source";
 
 export class BackendRuntimeStatusService {
   readonly registry: RuntimeStatusRegistry;
+  private readonly researchMcpSource: { stop(): Promise<void> };
   listener: { baseUrl: string; host: string; port: number } | null = null;
   appServerIntegrationHandle: { stop(): Promise<void> } | null = null;
   appServerSource: AppServerRuntimeStatusSourceHandle | null = null;
@@ -31,6 +33,7 @@ export class BackendRuntimeStatusService {
     },
   ) {
     this.registry = new RuntimeStatusRegistry(serviceInstanceId);
+    this.researchMcpSource = startResearchMcpRuntimeStatusSource(this.registry);
     this.registry.registerProvider("backend", () => {
       return createBackendRuntimeStatusReport({
         serviceInstanceId: this.registry.serviceInstanceId,
@@ -46,6 +49,7 @@ export class BackendRuntimeStatusService {
   }
 
   async dispose(): Promise<void> {
+    await this.researchMcpSource.stop();
     await this.appServerIntegrationHandle?.stop();
     await this.appServerSource?.stop();
     this.registry.dispose();

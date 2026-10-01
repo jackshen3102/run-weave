@@ -44,6 +44,10 @@ export function scheduledTaskErrorFromStorage(
         409,
         "Idempotency key was reused with different input",
       );
+    case "run_not_finished":
+      return new ScheduledTaskError(code, 409, "运行尚未结束，请停止并等待结束后再移至历史。");
+    case "not_quick_input_run":
+      return new ScheduledTaskError(code, 400, "只有快捷指令运行可以移至历史。");
     case "run_busy":
       return new ScheduledTaskError(
         code,

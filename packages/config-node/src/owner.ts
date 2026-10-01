@@ -43,7 +43,7 @@ export function registerStableConfigurationRoot(context: EnvironmentContext): vo
   } finally { closeSync(registryFd); }
 }
 
-export function acquireConfigurationOwner(context: EnvironmentContext, role: "backend" | "app-server" | "desktop" | "snapshot-host" | "push-gateway" | "suiji-server"): { release(): void } {
+export function acquireConfigurationOwner(context: EnvironmentContext, role: "backend" | "app-server" | "desktop" | "snapshot-host" | "push-gateway" | "suiji-server" | "research-mcp-management"): { release(): void } {
   const directory = ownerDirectory(context);
   const fd = openSync(path.join(directory, `${role}.owner.lock`), constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
   let closed = false;

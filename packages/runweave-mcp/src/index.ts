@@ -12,6 +12,8 @@ import { Evidence } from "./evidence.js";
 import { Commands } from "./commands.js";
 import { fileSources } from "./sources.js";
 import { createMcp } from "./tools.js";
+import { createMcpRuntimeStatus, mcpIdentity } from "./runtime-status.js";
+import { runManagedTunnel } from "./tunnel-runner.js";
 
 const { values } = parseArgs({
   options: {
@@ -22,10 +24,12 @@ const { values } = parseArgs({
     cwd: { type: "string" },
     "data-dir": { type: "string", multiple: true },
     help: { type: "boolean" },
+    "tunnel-run": { type: "boolean" },
   },
 });
 
 async function main() {
+  if (values["tunnel-run"]) { await runManagedTunnel(); return; }
   if (values.help) {
     console.log(
       "Runweave personal MCP: node /absolute/path/dist/index.cjs --instance stable --cwd /workspace [--port 5099] [--profile local] [--data-dir /extra/data]\nHTTP listens only on 127.0.0.1; connect tunnel-client to /mcp. Full host-account access; no additional data permissions.",
@@ -47,6 +51,7 @@ async function main() {
   const evidence = new Evidence(baseUrl);
   const commands = await Commands.create(values.cwd);
   const activity = new Activity(backend, evidence);
+  const runtimeStatus = createMcpRuntimeStatus(backend);
   const app = express();
   app.disable("x-powered-by");
   app.use((req, res, next) => {
@@ -68,8 +73,11 @@ async function main() {
       service: "runweave-research-mcp",
       instance: context.instanceId,
       mcpUrl: `${baseUrl}/mcp`,
+      ...mcpIdentity,
+      pid: process.pid,
     }),
   );
+  app.get("/runtime-status", (_req, res) => res.json(runtimeStatus.report()));
   app.get("/evidence/:id", (req, res) => {
     void evidence.fetch(String(req.params.id)).then(
       (document) => {
@@ -93,6 +101,7 @@ async function main() {
         commands,
         evidence,
         files,
+        onToolSuccess: runtimeStatus.toolSucceeded,
       });
       active.add(server);
       const transport = new StreamableHTTPServerTransport({
@@ -133,6 +142,7 @@ async function main() {
       },
     );
   } catch (error) {
+    await runtimeStatus.stop();
     await commands.close();
     throw error;
   }
@@ -142,6 +152,9 @@ async function main() {
       url: `${baseUrl}/mcp`,
       instance: context.instanceId,
       cwd: values.cwd,
+      ...mcpIdentity,
+      pid: process.pid,
+      time: new Date().toISOString(),
     }),
   );
   let closing = false;
@@ -149,12 +162,14 @@ async function main() {
     if (closing) return;
     closing = true;
     listener.close();
+    await runtimeStatus.stop();
     await Promise.allSettled([...active].map((server) => server.close()));
     listener.closeAllConnections();
     await commands.close();
   };
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {
+      console.log(JSON.stringify({ event: "mcp.stopping", signal, time: new Date().toISOString() }));
       void close();
     });
 }

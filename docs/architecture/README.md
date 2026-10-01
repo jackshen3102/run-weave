@@ -90,7 +90,9 @@ Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.m
 | Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                      |
 
 快捷指令的“后台运行”接入现有定时任务的 task/run 存储与单并发队列。Backend 校验已保存指令、
-实际项目目录和后台默认模型；请求按幂等键去重，运行快照保留项目与 worktree 来源。Web 可查看运行
+实际项目目录和后台默认模型；请求按幂等键去重，运行快照保留项目与 worktree 来源。
+原生 iOS 支持将已结束的快捷指令运行移至历史：Backend 持久化 `archivedAt`，主列表与需处理计数排除归档记录，历史仍保留原始状态、业务结果、输出和恢复入口。
+未结束（含 waiting）的运行不可归档，新执行不继承旧记录的归档标记。Web 可查看运行
 记录并按原有恢复合同打开对话；当前实现不依赖独立 worker 或桌面自更新。通知、恢复及跨端交互仍须按
 [快捷指令验收计划](../testing/background-commands/core.testplan.yaml)取得真实证据，代码接通不等于端到端验收通过。
 

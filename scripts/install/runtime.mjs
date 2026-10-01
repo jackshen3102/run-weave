@@ -377,6 +377,16 @@ const resolvedPackage = resolvePackageRoot(path.resolve(input));
 try {
   const manifest = readManifest(resolvedPackage.packageRoot);
   validateManifest(resolvedPackage.packageRoot, manifest, targetShellVersion);
+  if (manifest.researchMcp && configurationLibrary.readResearchMcpInstallation()) {
+    if (!isSafeRelativePath(manifest.researchMcp.entry) || !manifest.files.some((file) => file.path === manifest.researchMcp.entry)) throw new Error("Invalid research MCP runtime payload");
+    const context = configurationLibrary.resolveConfigurationContext({ requireExplicit: true });
+    const result = spawnSync(process.execPath, [
+      resolveInside(resolvedPackage.packageRoot, manifest.cli.entry), "research-mcp", "install",
+      "--entry", resolveInside(resolvedPackage.packageRoot, manifest.researchMcp.entry),
+      ...configurationLibrary.configurationArguments(context), "--json",
+    ], { stdio: "inherit" });
+    if (result.status !== 0) throw new Error("Research MCP runtime update failed; desktop runtime not activated");
+  }
   installPackage(
     resolvedPackage.packageRoot,
     path.resolve(runtimeHome),

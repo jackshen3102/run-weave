@@ -22,6 +22,8 @@ Evolution maintenance 与 Workspace Services。App Server 报告 process、Event
 Thread reconciler。Feishu Bridge 报告配置、单实例 lease、Lark WebSocket 和 Backend auth。Electron
 报告主进程、packaged Backend、LAN 地址、CDP Proxy、Companion 和各 Browser Profile 的 Whistle。
 
+Research MCP 报告本机进程与发布身份、隧道客户端/控制面状态、真实鉴权 Activity 读取及最近成功工具调用。它由用户级 launchd 独立管理，不属于 Backend/Electron 子进程；Backend 按当前实例安装身份从 loopback 状态接口取得报告。已启用而来源不可达先进入 30 秒恢复窗口，之后作为关键异常；保留最后子项并阻断，未安装和显式停用分别表达。仅同一 Backend 进程实例的 Activity 报告绑定 Backend/Activity store 依赖。隧道 ready 不能代替实际云端工具调用，最近工具调用也不假定来自云端。
+
 ## 过期与恢复
 
 - owner 依据既有重试、宽限和新鲜度窗口产出 `healthy`、`recovering` 或 `unhealthy`。

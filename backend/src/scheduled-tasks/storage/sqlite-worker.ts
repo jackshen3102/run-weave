@@ -76,6 +76,8 @@ function execute(command: ScheduledTaskWorkerCommand) {
       return database.listRecentlyFinishedRuns(command.since);
     case "claim-next-run":
       return database.claimNextRun(command.ownerId, command.now);
+    case "archive-quick-input-run":
+      return database.archiveQuickInputRun(command.runId, command.now);
     case "put-run":
       return database.putRun(command.run);
     case "set-run-owner-pid":
