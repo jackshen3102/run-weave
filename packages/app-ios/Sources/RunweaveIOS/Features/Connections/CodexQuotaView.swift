@@ -66,8 +66,13 @@ struct CodexQuotaView: View {
         if let reset = value.resetsAt {
           Text("下次重置：\(Date(timeIntervalSince1970: reset).formatted(date: .abbreviated, time: .shortened))")
             .font(.caption).foregroundColor(.secondary)
-          if reset <= Date().timeIntervalSince1970 {
-            Text("已到期，请刷新确认").font(.caption).foregroundColor(.orange)
+          TimelineView(.periodic(from: .now, by: 60)) { context in
+            let remaining = reset - context.date.timeIntervalSince1970
+            if remaining <= 0 {
+              Text("已到期，请刷新确认").font(.caption).foregroundColor(.orange)
+            } else {
+              Text(resetCountdown(remaining)).font(.caption).foregroundColor(.secondary)
+            }
           }
         } else {
           Text("下次重置：未知").font(.caption).foregroundColor(.secondary)
@@ -76,5 +81,13 @@ struct CodexQuotaView: View {
         Text("上游未提供此窗口").font(.caption).foregroundColor(.secondary)
       }
     }.padding(.vertical, 4)
+  }
+
+  private func resetCountdown(_ remaining: TimeInterval) -> String {
+    let totalHours = Int(remaining / 3600)
+    if totalHours == 0 { return "距重置还有不到 1 小时" }
+    let days = totalHours / 24
+    let hours = totalHours % 24
+    return days > 0 ? "距重置还有 \(days) 天 \(hours) 小时" : "距重置还有 \(hours) 小时"
   }
 }
