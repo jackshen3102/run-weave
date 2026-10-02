@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct ReviewView: View {
@@ -22,7 +23,7 @@ struct ReviewView: View {
                 Text("当前待办").tag(ReviewScope.open)
                 if model.scope.kind == "record" { Text("这条记录").tag(model.scope) }
               }.disabled(model.running || model.pending)
-              TextField("以前有哪些想做、后来放下的事？", text: $model.question, axis: .vertical).lineLimit(3...8).textFieldStyle(.roundedBorder).accessibilityLabel("向随记提问").disabled(model.running || model.pending)
+              TextField("以前有哪些想做、后来放下的事？", text: $model.question, axis: .vertical).clarityMask().lineLimit(3...8).textFieldStyle(.roundedBorder).accessibilityLabel("向随记提问").disabled(model.running || model.pending)
               if model.running { ProgressView("正在检索与回顾…") }
               if !model.message.isEmpty { Text(model.message).font(.footnote).foregroundStyle(.orange) }
               HStack {
@@ -39,7 +40,7 @@ struct ReviewView: View {
           }.padding(20)
         }.background(SuijiTheme.background)
       }
-    }.navigationTitle("AI 回顾")
+    }.clarityMask().mobileAnalyticsScreen(.aiReview).navigationTitle("AI 回顾")
   }
   private func answerView(_ answer: ReviewAnswer) -> some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -70,7 +71,7 @@ struct ReviewCitationDetail: View {
       if let record { RecordDetail(session: session, original: record, citedVersion: citation.version) }
       else if !error.isEmpty { Text(error).padding() }
       else { ProgressView("正在读取原文") }
-    }.task {
+    }.clarityMask().mobileAnalyticsScreen(.recordDetail).task {
       guard let client = session.client else { return }
       do {
         let result = try await client.request(RecordResponse.self, path: "api/suiji/v1/records/\(citation.recordId)")

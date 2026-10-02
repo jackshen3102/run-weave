@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct CorrectionPanel: View {
@@ -84,8 +85,8 @@ struct CorrectionPanel: View {
       if formVisible {
         VStack(alignment: .leading, spacing: 8) {
           Text("记住这个写法").font(.headline)
-          TextField("正确写法", text: $canonical).textInputAutocapitalization(.never)
-          TextField("误识别写法（可留空）", text: $variant).textInputAutocapitalization(.never)
+          TextField("正确写法", text: $canonical).clarityMask().textInputAutocapitalization(.never)
+          TextField("误识别写法（可留空）", text: $variant).clarityMask().textInputAutocapitalization(.never)
           HStack {
             Button("加入词库") { Task { await remember() } }.disabled(model.lexiconPending || model.lexicon == nil)
             Button("取消") { formVisible = false }
@@ -109,6 +110,7 @@ struct CorrectionPanel: View {
         }
       }
     }
+    .clarityMask().mobileAnalyticsScreen(managing || managingHistory || formVisible || model.correction != nil ? .correction : nil)
     .task { await model.loadLexicon(); await model.loadPreferences() }
   }
   private func remember() async {

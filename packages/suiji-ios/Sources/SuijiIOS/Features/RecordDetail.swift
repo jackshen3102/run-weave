@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 import UIKit
 struct AttachmentReader: View {
@@ -14,7 +15,7 @@ struct AttachmentReader: View {
           if kind == "image", let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFit().accessibilityLabel(title) }
           else { Text(verbatim: String(data: data, encoding: .utf8) ?? "无法读取 UTF-8 内容").textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding() }
         } else if !error.isEmpty { Text(error).padding() } else { ProgressView("正在读取附件") }
-      }.navigationTitle(title).navigationBarTitleDisplayMode(.inline).toolbar { Button("关闭") { dismiss() } }
+      }.clarityMask().mobileAnalyticsScreen(.attachmentPreview).navigationTitle(title).navigationBarTitleDisplayMode(.inline).toolbar { Button("关闭") { dismiss() } }
         .task { do { data = try await load() } catch { self.error = error.localizedDescription } }
     }
   }
@@ -58,6 +59,7 @@ struct RecordDetail: View {
         if !session.message.isEmpty { Text(session.message).font(.footnote).foregroundStyle(.orange) }
       }.padding(.horizontal, 25).padding(.top, 24).padding(.bottom, 32)
     }
+      .clarityMask()
       .background(SuijiTheme.background)
       .navigationTitle(record.kind == .note ? "想法详情" : "待办详情")
       .navigationBarTitleDisplayMode(.inline)
@@ -116,6 +118,7 @@ struct RecordDetail: View {
           if session.isCurrent(client) { refreshed = value }
         } catch { if session.isCurrent(client) { session.message = error.localizedDescription } }
       }
+      .mobileAnalyticsScreen(.recordDetail)
   }
   private var followupRow: some View {
     Button { showingFollowups = true } label: {
@@ -139,10 +142,10 @@ struct RecordDetail: View {
   private var bottomBar: some View {
     bottomLayout {
       if pending {
-        Button("操作结果待确认 · 重试确认") { Task { await session.changeRecord(record, action: .status(.done)) } }
+        Button("操作结果待确认 · 重试确认") { Task { await completeTask() } }
           .buttonStyle(DetailActionStyle(primary: true)).disabled(busy)
       } else if record.taskStatus == .open {
-        Button { Task { await session.changeRecord(record, action: .status(.done)) } } label: {
+        Button { Task { await completeTask() } } label: {
           Label("完成待办", systemImage: "checkmark")
         }.buttonStyle(DetailActionStyle(primary: true)).disabled(busy)
       } else if record.taskStatus == .done {
@@ -158,6 +161,11 @@ struct RecordDetail: View {
     }
     .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
     .background(SuijiTheme.background)
+  }
+  private func completeTask() async {
+    guard let updated = await session.changeRecord(record, action: .status(.done)),
+          updated.taskStatus == .done, updated.deletedAt == nil else { return }
+    session.returnHomeRequest = UUID()
   }
   private var bottomLayout: AnyLayout {
     dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))

@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 import UIKit
 
@@ -25,6 +26,7 @@ struct RecordBody: UIViewRepresentable {
 
   func makeUIView(context: Context) -> RecordBodyTextView {
     let view = RecordBodyTextView()
+    ClaritySDK.maskView(view)
     view.delegate = context.coordinator
     view.isEditable = false
     view.isSelectable = true

@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 public struct SuijiRootView: View {
   @StateObject private var session: SuijiSession
@@ -25,23 +26,27 @@ struct CaptureHome: View {
   private var kind: String? { tab == "tasks" ? "task" : filter.isEmpty ? nil : filter }
   private var status: String? { tab == "tasks" ? taskStatus : nil }
   private var visibleRecords: [SuijiRecord] { session.records.filter { ($0.deletedAt != nil) == (tab == "trash") && (session.selectedTag.isEmpty || ($0.tags ?? []).contains(session.selectedTag)) && (status == nil || $0.taskStatus?.rawValue == status) } }
-  private var loadKey: String { "\(tab)|\(filter)|\(taskStatus)|\(query)|\(session.selectedTag)" }
+  private var loadKey: String { "\(tab)|\(filter)|\(taskStatus)|\(query)|\(session.selectedTag)|\(session.returnHomeRequest)" }
   var body: some View {
     TabView(selection: $tab) {
       NavigationStack {
         feed.navigationTitle("随记").navigationBarTitleDisplayMode(.inline).toolbar {
           ToolbarItem(placement: .topBarTrailing) { Button { settings = true } label: { Image(systemName: "gearshape").accessibilityLabel("连接设置") } }
         }
-      }.tabItem { Label("记录", systemImage: "square.and.pencil") }.tag("records")
-      NavigationStack { feed.navigationTitle("待办") }.tabItem { Label("待办", systemImage: "checklist") }.tag("tasks")
-      NavigationStack { feed.navigationTitle("回收站") }.tabItem { Label("回收站", systemImage: "trash") }.tag("trash")
-      NavigationStack { ReviewView(session: session, model: review) }.tabItem { Label("AI", systemImage: "sparkles") }.tag("ai")
+      }.id(session.returnHomeRequest).tabItem { Label("记录", systemImage: "square.and.pencil") }.tag("records")
+      NavigationStack { feed.navigationTitle("待办") }.id(session.returnHomeRequest).tabItem { Label("待办", systemImage: "checklist") }.tag("tasks")
+      NavigationStack { feed.navigationTitle("回收站") }.id(session.returnHomeRequest).tabItem { Label("回收站", systemImage: "trash") }.tag("trash")
+      NavigationStack { ReviewView(session: session, model: review) }.id(session.returnHomeRequest).tabItem { Label("AI", systemImage: "sparkles") }.tag("ai")
     }.task(id: loadKey) { if tab != "ai" { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }
       .sheet(item: $session.editor, onDismiss: { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }) { RecordEditorSheet(model: $0, availableTags: session.availableTags) }
+      .onChange(of: session.returnHomeRequest) { _, _ in
+        tab = "records"
+      }
       .onReceive(session.$selectedTag.dropFirst()) { _ in if tab == "ai" { tab = "records" } }
       .onDisappear { review.stopWatching() }
       .sheet(isPresented: $settings) { ConnectionSettingsView(session: session) }
       .modifier(SuijiBrowserHost(session: session, settingsPresented: $settings))
+      .mobileAnalyticsScreen(tab == "tasks" ? .tasks : tab == "trash" ? .trash : tab == "ai" ? .aiReview : .records)
   }
   private var feed: some View {
     ScrollView {
@@ -50,7 +55,7 @@ struct CaptureHome: View {
         if tab == "tasks" { FilterBar(values: TaskStatus.allCases.map { ($0.rawValue, $0.label) }, selected: $taskStatus) }
         else { FilterBar(values: [("", "全部"), ("note", "想法"), ("task", "待办")], selected: $filter) }
         TagFilter(available: session.availableTags, selected: $session.selectedTag)
-        if !session.message.isEmpty { Text(session.message).foregroundStyle(.orange); Button("重新读取") { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } } }
+        if !session.message.isEmpty { Text(session.message).clarityMask().foregroundStyle(.orange); Button("重新读取") { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } } }
         if session.loading && visibleRecords.isEmpty { ProgressView("正在读取") }
         else if visibleRecords.isEmpty { EmptyState(title: (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "回收站为空" : "还没有记录") : "没有搜索结果", detail: (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "删除的记录会保留在这里，可随时恢复。" : "点右下角加号，记下此刻的想法。") : "试试其他标签或正文关键词。") }
         ForEach(visibleRecords) { record in
@@ -65,7 +70,7 @@ struct CaptureHome: View {
         if let cursor = session.nextCursor {
           VStack(spacing: 8) {
             if let error = session.loadMoreError {
-              Text(error).font(.footnote).foregroundStyle(.secondary)
+              Text(error).clarityMask().font(.footnote).foregroundStyle(.secondary)
               Button("重试加载") { loadNextPage() }
             } else {
               ProgressView("正在加载更多")
@@ -104,7 +109,7 @@ struct CaptureHome: View {
     HStack(spacing: 12) {
       HStack(spacing: 8) {
         Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
-        TextField("搜索正文关键词", text: $query)
+        TextField("搜索正文关键词", text: $query).clarityMask()
           .textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
           .focused($searchFocused).accessibilityIdentifier("record-search")
         if !query.isEmpty {

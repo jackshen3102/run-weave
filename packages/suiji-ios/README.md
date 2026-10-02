@@ -47,7 +47,7 @@ App 内提供“正式 / 开发”两套连接；首次分别输入云地址、�
 即使两套环境填写相同地址和账号，也分别保存登录与草稿。注销保留本机草稿，验证相同身份后才能恢复。
 收起保留草稿，明确放弃需要确认。保存结果未知时不能改写或放弃，重启后手动重试原请求。
 已经上传的附件复用 ID；已完成待办可在列表撤销完成，或在详情恢复为未完成，保留原记录和附件。
-首页刚完成或标记不再做的记录暂留，刷新后隐藏；历史记录在待办的对应状态筛选查看。
+首页卡片刚完成或标记不再做的记录暂留，刷新后隐藏；详情页完成待办确认成功后返回记录首页并刷新列表，失败或结果待确认时留在详情。历史记录在待办的对应状态筛选查看。
 不再做无法直接恢复为未完成，再建待办只预填正文。
 普通新建默认待办；已有草稿保留原类型，AI 另存笔记仍明确使用想法类型。
 编辑器可将原记录在想法与待办之间切换并保存，保留 ID、正文、附件和创建时间。
@@ -56,6 +56,32 @@ App 内提供“正式 / 开发”两套连接；首次分别输入云地址、�
 图片通过 PhotosPicker 转 JPEG，再按实际上传字节检查限额；Markdown 复制后按纯文本阅读，
 不执行 HTML、不抓取远程图片。图片与 Markdown 都可在本机草稿中预览。
 Swift Package 的 privacy manifest 声明本 App UserDefaults 使用原因；App Store 提交与真机隐私审核未执行。
+
+## 原生使用分析
+
+随记使用固定版本 Microsoft Clarity iOS SDK 4.1.0，由宿主 App 在主线程初始化一次。
+[采集入口](./Sources/SuijiIOS/Services/MobileAnalytics.swift)提供固定页面分类与弹层关闭后的页面恢复；
+[构建标签](./Sources/SuijiIOS/Services/AppBuildMetadata.swift)来自已安装包，包含
+`app_version`、`app_build`、`build_id`、`source_revision`、`source_state`。
+不设置自定义用户身份或业务 ID 标签、不新增按钮业务事件；SDK 自身仍生成会话和用户标识。
+
+项目独立于 Runweave：[正式 Suiji iOS](https://clarity.microsoft.com/projects/view/yr5biwkeyf/settings)
+与 [Suiji iOS QA](https://clarity.microsoft.com/projects/view/yr5czuz2mq/settings)。
+两个项目均配置 Strict masking、关闭 WebView DOM capture，并保留仅 Wi-Fi 上传。
+登录、搜索、正文、标签、编辑器、跟进、AI、纠错、附件与浏览器内容在客户端显式遮盖；
+UIKit 正文 `UITextView` 创建时单独调用 `maskView`。浏览器遮盖属于随记宿主，共享浏览器包不依赖 SDK。
+连接页与连接设置提供“使用分析”说明。
+
+`SUIJI_CLARITY_ENABLED`、`SUIJI_CLARITY_PROJECT_ID` 经 Info.plist 传入。
+Debug/Profile 默认关闭、ID 为空；Release 已配置正式 ID，但在完整遮盖和性能验收完成前保持关闭。
+显式 QA 验收可用本机 xcconfig 覆盖为 `YES` 与 `yr5czuz2mq`，并将其路径通过
+`XCODE_XCCONFIG_FILE` 传给上述 `ios:run` 包入口；不得提交包含签名或凭据的覆盖文件。
+开关不是 `YES`、ID 为空或不是 ASCII 字母数字时不初始化；模拟器拒绝正式项目 ID。
+连接的“正式/开发”环境不决定 SDK 上传项目。关闭或切换项目需重建安装并启动新进程，旧回放不会被删除。
+
+SDK 自带的 privacy manifest 随 framework 打包，声明非关联、非跟踪的 User ID、Product Interaction、
+Other Usage Data，以及文件时间戳和 UserDefaults 的必要 API 原因；App 本身的 manifest 保留自身声明。
+原生交互、SDK 初始化、云端页面分类、回放遮盖和性能必须分别取证，不能互相代替。
 
 ## 映射与原生验证
 

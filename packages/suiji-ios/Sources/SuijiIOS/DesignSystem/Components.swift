@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 import UIKit
 enum SuijiTheme {
@@ -41,7 +42,7 @@ struct RecordCard<Destination: View>: View {
       content.background {
         NavigationLink(destination: destination) {
           RoundedRectangle(cornerRadius: 16).fill(SuijiTheme.surface)
-        }.buttonStyle(.plain).accessibilityLabel("查看记录详情").accessibilityValue(record.body)
+        }.buttonStyle(.plain).accessibilityLabel("查看记录详情").accessibilityValue(record.body).clarityMask()
       }
       if canChangeStatus || busy {
         Button { onStatusChange(reopening ? .open : .done) } label: {
@@ -68,9 +69,9 @@ struct RecordCard<Destination: View>: View {
       }.allowsHitTesting(false)
       if !record.body.isEmpty { RecordBody(text: record.body, lineLimit: 8, linksOnly: true).frame(maxWidth: .infinity, alignment: .leading) }
       ForEach(record.attachments) { attachment in
-        Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text").font(.subheadline).foregroundStyle(SuijiTheme.green).allowsHitTesting(false)
+        Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text").clarityMask().font(.subheadline).foregroundStyle(SuijiTheme.green).allowsHitTesting(false)
       }
-      if let summary = record.followupSummary, let latest = summary.latest { Text("跟进 \(summary.count) 条 · " + latest.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(1).allowsHitTesting(false) }
+      if let summary = record.followupSummary, let latest = summary.latest { Text("跟进 \(summary.count) 条 · " + latest.excerpt).clarityMask().font(.caption).foregroundStyle(.secondary).lineLimit(1).allowsHitTesting(false) }
       if pending && !busy { Label("状态结果待确认", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange).allowsHitTesting(false) }
       ViewThatFits(in: .horizontal) {
         HStack(spacing: 8) {

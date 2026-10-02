@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct TagLabel: View {
@@ -9,7 +10,7 @@ struct TagLabel: View {
     return colors[index]
   }
   var body: some View {
-    Text(verbatim: name).font(.caption).foregroundStyle(SuijiTheme.ink)
+    Text(verbatim: name).clarityMask().font(.caption).foregroundStyle(SuijiTheme.ink)
       .padding(.horizontal, compact ? 7 : 10).padding(.vertical, compact ? 2 : 7).background(color.opacity(0.16), in: Capsule())
   }
 }
@@ -27,7 +28,7 @@ struct RecordTags: View {
   @ViewBuilder private var labels: some View {
     ForEach(tags, id: \.self) { tag in
       if let onSelect {
-        Button { onSelect(tag) } label: { TagLabel(name: tag, compact: compact) }.buttonStyle(.plain).accessibilityLabel("筛选标签：" + tag)
+        Button { onSelect(tag) } label: { TagLabel(name: tag, compact: compact) }.buttonStyle(.plain).accessibilityLabel("筛选标签：" + tag).clarityMask()
       } else { TagLabel(name: tag, compact: compact) }
     }
   }
@@ -54,10 +55,10 @@ struct TagPickerSheet: View {
             HStack { TagLabel(name: tag); Spacer(); if selected.contains(tag) { Image(systemName: "checkmark") } }
           }.disabled(allowsCreate && selected.contains(tag))
         }
-      }.searchable(text: $query, prompt: allowsCreate ? "搜索或创建标签" : "搜索已有标签")
+      }.clarityMask().searchable(text: $query, prompt: allowsCreate ? "搜索或创建标签" : "搜索已有标签")
         .navigationTitle(allowsCreate ? "添加标签" : "筛选标签").navigationBarTitleDisplayMode(.inline)
         .toolbar { Button("关闭") { dismiss() } }
-    }
+    }.clarityMask().mobileAnalyticsScreen(.tagPicker)
   }
   private func choose(_ tag: String) {
     do {
