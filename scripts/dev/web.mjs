@@ -199,14 +199,17 @@ export async function resolvePort(startPort, options = {}) {
   const hosts = options.hosts ?? normalizeProbeHosts(options.host);
   const isPortAvailableFn = options.isPortAvailable ?? isPortAvailable;
   for (let port = startPort; port <= 65_535; port += 1) {
-    if (
-      !reservedPorts.has(port) &&
-      (await Promise.all(hosts.map((host) => isPortAvailableFn(port, host)))).every(
-        Boolean,
-      )
-    ) {
-      return port;
+    if (reservedPorts.has(port)) continue;
+    let available = true;
+    // Wildcard and loopback binds overlap. Close each probe before the next
+    // host checks the same port, so probes cannot conflict with one another.
+    for (const host of hosts) {
+      if (!(await isPortAvailableFn(port, host))) {
+        available = false;
+        break;
+      }
     }
+    if (available) return port;
   }
   throw new Error(`no available port in range ${startPort}-65535`);
 }

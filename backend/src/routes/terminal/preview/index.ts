@@ -89,20 +89,29 @@ function resolveProjectPreviewContext(
         ? "Terminal project context is unavailable"
         : "Terminal project not found",
       context ? 409 : 404,
+      context ? "terminal_preview_project_context_unavailable" : undefined,
     );
   }
   return { project };
 }
 
-function handlePreviewError(res: Response, error: unknown) {
+function handlePreviewError(req: Request, res: Response, error: unknown) {
   if (error instanceof TerminalPreviewError) {
     if (error.statusCode === 409) {
-      terminalPreviewLogger.warn("terminal-preview.file.mutation.conflict", {
-        message: "Terminal preview file mutation conflict",
-        statusCode: error.statusCode,
-      });
+      const mutation = ["PUT", "PATCH", "DELETE"].includes(req.method)
+        || req.route?.path === "/project/:id/preview/git-change/reset";
+      terminalPreviewLogger.warn(
+        mutation ? "terminal-preview.file.mutation.conflict" : "terminal-preview.read.conflict",
+        {
+          message: mutation ? "Terminal preview file mutation conflict" : "Terminal preview read conflict",
+          statusCode: error.statusCode,
+          operation: req.route?.path,
+          method: req.method,
+          reason: error.code ?? "conflict",
+        },
+      );
     }
-    res.status(error.statusCode).json({ message: error.message });
+    res.status(error.statusCode).json({ message: error.message, ...(error.code ? { code: error.code } : {}) });
     return;
   }
   terminalPreviewLogger.error("terminal-preview.request.failed", {
@@ -166,7 +175,7 @@ export function registerTerminalPreviewRoutes(
         context: parsed.data.context,
       }));
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -194,7 +203,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -222,7 +231,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -253,7 +262,7 @@ export function registerTerminalPreviewRoutes(
       );
     } catch (error) {
       if (abortScope.signal.aborted) return;
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     } finally {
       abortScope.dispose();
     }
@@ -268,7 +277,7 @@ export function registerTerminalPreviewRoutes(
       clearPreviewFileSearchCache(project.id);
       res.status(204).send();
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -295,7 +304,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -325,7 +334,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -353,7 +362,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -382,7 +391,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -412,7 +421,7 @@ export function registerTerminalPreviewRoutes(
         .set("Cache-Control", payload.cacheControl)
         .send(payload.content);
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -429,7 +438,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -444,7 +453,7 @@ export function registerTerminalPreviewRoutes(
         requestedPath: parsed.data.path, changeKind: parsed.data.kind,
         side: parsed.data.side, version: parsed.data.version });
       res.type(payload.mimeType).set("Cache-Control", "no-store").send(payload.content);
-    } catch (error) { handlePreviewError(res, error); }
+    } catch (error) { handlePreviewError(req, res, error); }
   });
 
   router.get("/project/:id/preview/file-diff", async (req, res) => {
@@ -471,7 +480,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -499,7 +508,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 
@@ -527,7 +536,7 @@ export function registerTerminalPreviewRoutes(
         }),
       );
     } catch (error) {
-      handlePreviewError(res, error);
+      handlePreviewError(req, res, error);
     }
   });
 }
