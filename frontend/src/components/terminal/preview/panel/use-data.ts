@@ -20,17 +20,15 @@ import {
 import { HttpError } from "../../../../services/http";
 import {
   getTerminalProjectPreviewFile,
-  getTerminalProjectPreviewFileDiff,
-  getTerminalProjectPreviewGitChanges,
 } from "../../../../services/terminal/preview";
 import {
-  resolveSelectedPreviewChange,
   useTerminalPreviewPanelKeyboardEffects,
 } from "./use-keyboard";
 import {
   getSelectedTerminalPreviewPath,
   getTerminalPreviewCopyPath,
 } from "./paths";
+import { useTerminalPreviewChangeRefresh } from "./use-change-refresh";
 import { useTerminalPreviewFileEditor } from "../files/use-editor";
 
 interface PreviewFileMutationTarget {
@@ -72,7 +70,6 @@ export function useTerminalPreviewPanelData({
     setOpenFileQuery,
     openFileInStore,
     selectChange,
-    clearSelectedChange,
     setMarkdownViewModeInStore,
     setMarkdownSplitSourceWidthPct,
     setSvgViewModeInStore,
@@ -90,7 +87,6 @@ export function useTerminalPreviewPanelData({
       setOpenFileQuery: state.setOpenFileQuery,
       openFileInStore: state.openFile,
       selectChange: state.selectChange,
-      clearSelectedChange: state.clearSelectedChange,
       setMarkdownViewModeInStore: state.setMarkdownViewMode,
       setMarkdownSplitSourceWidthPct: state.setMarkdownSplitSourceWidthPct,
       setSvgViewModeInStore: state.setSvgViewMode,
@@ -214,66 +210,15 @@ export function useTerminalPreviewPanelData({
     });
   });
 
-  const loadDiff = useMemoizedFn(
-    async (
-      filePath: string,
-      kind: TerminalPreviewChangeKind,
-    ): Promise<void> => {
-      if (!projectId) {
-        return;
-      }
-      await previewQueries.queryClient.fetchQuery({
-        queryKey: terminalQueryKeys.previewDiff({
-          scope: previewQueries.scope,
-          projectId,
-          path: filePath,
-          kind,
-        }),
-        queryFn: () =>
-          getTerminalProjectPreviewFileDiff(apiBase, token, projectId, {
-            path: filePath,
-            kind,
-          }),
-        staleTime: 0,
-      });
-    },
-  );
-
-  const loadChanges = useMemoizedFn(
-    async (options?: { preserveMode?: boolean }): Promise<void> => {
-      if (!projectId) {
-        return;
-      }
-      const payload = await previewQueries.queryClient.fetchQuery({
-        queryKey: terminalQueryKeys.previewChanges(
-          previewQueries.scope,
-          projectId,
-        ),
-        queryFn: () =>
-          getTerminalProjectPreviewGitChanges(apiBase, token, projectId),
-        staleTime: 0,
-      });
-      const selected = resolveSelectedPreviewChange({
-        changes: payload,
-        selectedChangePath,
-        selectedChangeKind,
-      });
-      if (!selected) {
-        if (!options?.preserveMode) {
-          setProjectPreviewMode(projectId, "changes");
-          clearSelectedChange(projectId);
-        }
-        return;
-      }
-      if (
-        !options?.preserveMode &&
-        (selected.path !== selectedChangePath ||
-          selected.kind !== selectedChangeKind)
-      ) {
-        selectChange(projectId, selected.path, selected.kind);
-      }
-    },
-  );
+  const { loadDiff, loadChanges } = useTerminalPreviewChangeRefresh({
+    apiBase,
+    token,
+    projectId,
+    projectPath: activeProject?.path,
+    scope: previewQueries.scope,
+    queryClient: previewQueries.queryClient,
+    onError: handleRequestError,
+  });
 
   useEffect(() => {
     if (changesRefreshRevision === 0 || mode !== "changes") {

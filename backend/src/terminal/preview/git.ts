@@ -316,7 +316,7 @@ async function readComparison(params: ChangeRequest) {
   // Preserve rename source paths: a destination-only pathspec loses Git's rename pairing.
   const changes = await getPreviewGitChanges(params);
   const change = changes[params.changeKind].find((entry) => entry.path === relativePath);
-  if (!change) throw new TerminalPreviewError("Change no longer exists; refresh the list", 409);
+  if (!change) throw new TerminalPreviewError("Change no longer exists; refresh the list", 409, "terminal_preview_stale_diff");
   if (["renamed", "copied"].includes(change.status) && !change.oldPath) {
     throw new TerminalPreviewError("Original path is outside the project", 403);
   }
@@ -329,10 +329,10 @@ async function readComparison(params: ChangeRequest) {
     read(relativePath, params.changeKind === "staged" ? "index" : "working"),
   ]);
   if (next.side.state === "missing" && change.status !== "deleted") {
-    throw new TerminalPreviewError("Change moved; refresh the list", 409);
+    throw new TerminalPreviewError("Change moved; refresh the list", 409, "terminal_preview_stale_diff");
   }
   if (old.side.state === "missing" && !["added", "untracked"].includes(change.status)) {
-    throw new TerminalPreviewError("Original version moved; refresh the list", 409);
+    throw new TerminalPreviewError("Original version moved; refresh the list", 409, "terminal_preview_stale_diff");
   }
   const preferred = change.status === "deleted" ? old : next;
   const textComparable = [old, next].every(({ side }) => side.state === "missing"

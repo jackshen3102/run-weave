@@ -59,6 +59,7 @@ cases:
     steps:
       - 并发启动、注入冲突、执行 dev:stop 并读取 status 与残留进程。
       - 确认本次启动回滚，stop 只回收 ownerDevSessionId 对应资源，共享和其它 worktree 服务继续可用。
+      - 在 wildcard 与 loopback 探测地址重叠时检查空闲、保留集合与真实 listener 三类端口；确认探测自身不争用端口，保留和真实占用仍跳过；不用启动 hook 完成 start/status/open/stop。
 
   - id: DCP-006
     name: Dev Open 精确解析 Web Desktop 与 Terminal Browser Surface
