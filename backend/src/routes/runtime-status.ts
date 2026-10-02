@@ -1,3 +1,4 @@
+import { serviceManagementSnapshot } from "@runweave/shared/service-management";
 import { Router } from "express";
 import { z } from "zod";
 import {
@@ -107,7 +108,7 @@ export function createRuntimeStatusRouter(
 
   router.get("/", async (_req, res, next) => {
     try {
-      res.json(await registry.getSnapshot());
+      res.json(serviceManagementSnapshot(await registry.getSnapshot()));
     } catch (error) {
       next(error);
     }

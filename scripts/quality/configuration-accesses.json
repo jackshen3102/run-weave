@@ -9614,5 +9614,21 @@
     "count": 1,
     "category": "test",
     "reason": "原生集成验收只读产物清单列出的包内文件，核验大小和 SHA256；不读取用户身份或 settings.yaml。"
+  },
+  {
+    "file": "scripts/configuration-reference.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(target)",
+    "category": "tooling",
+    "reason": "Generate or verify the committed configuration reference from shared metadata; no user configuration is read.",
+    "count": 1
+  },
+  {
+    "file": "scripts/configuration-reference.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(target)",
+    "category": "tooling",
+    "reason": "Generate or verify the committed configuration reference from shared metadata; no user configuration is read.",
+    "count": 1
   }
 ]

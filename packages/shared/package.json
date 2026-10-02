@@ -81,7 +81,8 @@
     "./terminal/file-link": "./src/terminal/file-link.ts",
     "./configuration": "./src/configuration/index.ts",
     "./task-handoff": "./src/task-handoff.ts",
-    "./resource-monitor": "./src/monitoring/resource-monitor.ts"
+    "./resource-monitor": "./src/monitoring/resource-monitor.ts",
+    "./service-management": "./src/monitoring/service-management.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -159,32 +159,19 @@ Use `--json` for machine parsing. Use `--plain` only when the agent needs termin
 
 ## Auth and config
 
-```bash
-export RUNWEAVE_BACKEND_PORT="${RUNWEAVE_BACKEND_PORT:-5001}"
-export RUNWEAVE_CONFIG_FILE="$(mktemp -d)/runweave-config.json"
-```
-
-Use `RUNWEAVE_BACKEND_PORT` to point rw at a local backend port other than the
-default `5001`:
+实例配置与服务 warning/error 查询使用 [runweave-management](../runweave-management/SKILL.md)。
+本机业务配置统一保存于实例 settings.yaml；不要通过旧配置文件或业务环境变量维护第二份配置。
+`--instance stable|<dev-id>` 选择本地实例，`--profile` 选择 Backend 连接；二者含义不同。
 
 ```bash
-export RUNWEAVE_BACKEND_PORT=5111
-"${RW_BIN[@]}" health --json
+"${RW_BIN[@]}" config keys --json
+"${RW_BIN[@]}" config explain backend.server.port --instance stable --json
+"${RW_BIN[@]}" config status --instance stable --profile local --json
+"${RW_BIN[@]}" status --instance stable --profile local --json
 ```
 
-Use `--backend-port` for a single rw invocation:
-
-```bash
-"${RW_BIN[@]}" health --backend-port 5111 --json
-"${RW_BIN[@]}" terminal list --backend-port 5111 --json
-```
-
-Use `RUNWEAVE_BASE_URL` directly when the backend is not on `127.0.0.1` or when
-the URL needs a custom scheme, host, or path. `RUNWEAVE_BASE_URL` takes
-precedence over `RUNWEAVE_BACKEND_PORT`; explicit `--backend-port` takes
-precedence over both environment variables.
-
-Prefer `RUNWEAVE_ACCESS_TOKEN` or an existing profile. In non-interactive environments, do not run bare `rw auth login`; pass credentials via stdin or ask the host to provide a token.
+显式 `--backend-port` 可用于单次连接目标；认证使用已有 profile 或宿主提供的
+`RUNWEAVE_ACCESS_TOKEN`。非交互环境不要执行裸 `rw auth login`。
 
 ## Safety rules
 

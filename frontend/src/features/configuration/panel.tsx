@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import type { ConfigurationValue, PublicConfigurationField, PublicConfigurationStatus } from "@runweave/shared/configuration";
+import { CONFIGURATION_DOMAIN_LABELS } from "@runweave/shared/configuration";
 import { requestConfiguration } from "../../services/configuration";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -49,7 +50,10 @@ export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token:
         <p className="text-xs">{status.environment.kind === "stable" ? "Stable" : "Dev Session"} · {status.environment.instanceId} · 保存版本 {status.savedRevision ?? "不可读取"}</p>
         <p className="text-xs text-muted-foreground">输入框编辑保存值，默认值不会自动写入。应用状态来自当前连接的服务，不代表其他服务或业务连接已验证可用。</p>
         {status.diskError && <p role="alert">磁盘配置无法读取，请在当前电脑运行 rw config doctor。</p>}
-        {status.fields.filter(field => !field.path.includes("<")).map(field => {
+        {[...new Set(status.fields.map(field => field.domain))].map(domain => <details key={domain} className="rounded-lg border border-border p-3">
+          <summary className="cursor-pointer text-sm font-medium">{CONFIGURATION_DOMAIN_LABELS[domain] ?? domain}</summary>
+          <div className="mt-3 space-y-3">
+        {status.fields.filter(field => field.domain === domain && !field.path.includes("<")).map(field => {
           const changed = Object.hasOwn(draft, field.path);
           const value = changed ? draft[field.path] : status.values[field.path];
           const text = value == null ? "" : typeof value === "string" ? value : JSON.stringify(value);
@@ -70,6 +74,8 @@ export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token:
             {!field.sensitive && <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDraft(current => ({ ...current, [field.path]: null }))}>恢复默认</Button>}
           </div>;
         })}
+          </div>
+        </details>)}
         <Button disabled={busy || !Object.keys(draft).length || status.savedRevision == null} onClick={() => void run(true)}>{busy ? "处理中…" : "保存配置"}</Button>
       </>}
     </div>
