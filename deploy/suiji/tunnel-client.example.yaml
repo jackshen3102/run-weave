@@ -19,6 +19,6 @@ mcp:
   # The file contains the COMPLETE header value: Bearer <dedicated application token>.
   # A bare token environment reference does not add the Bearer prefix.
   extra_headers:
-    - "Authorization: file:/etc/suiji-tunnel/secrets/mcp-authorization"
+    Authorization: "file:/etc/suiji-tunnel/secrets/mcp-authorization"
   discovery_extra_headers:
-    - "Authorization: file:/etc/suiji-tunnel/secrets/mcp-authorization"
+    Authorization: "file:/etc/suiji-tunnel/secrets/mcp-authorization"
