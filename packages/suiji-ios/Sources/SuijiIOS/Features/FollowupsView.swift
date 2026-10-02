@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 
 struct FollowupsView: View {
@@ -33,11 +34,13 @@ struct FollowupsView: View {
       if !message.isEmpty { Text(message).font(.footnote).foregroundStyle(.orange) }
       if cursor != nil { Button("加载更早跟进") { Task { await load(more: true) } }.disabled(busy) }
     }
+    .clarityMask()
     .task(id: record.id + ":" + String(record.followupSummary?.latest?.sequence ?? 0)) { await load() }
     .onDisappear { requestID = UUID() }
     .sheet(item: $attachment) { item in
       if let client = session.client { AttachmentReader(title: item.fileName, kind: item.kind) { try await client.bytes(path: "api/suiji/v1/attachments/\(item.id)/content") } }
     }
+    .mobileAnalyticsScreen(.followups)
   }
   private func load(more: Bool = false) async {
     guard let client = session.client else { return }

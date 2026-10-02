@@ -1,3 +1,4 @@
+import Clarity
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
@@ -21,7 +22,7 @@ struct RecordEditorSheet: View {
           if model.draft.recordID != nil {
             Text("切换为待办时设为未完成；切换为想法时清除待办状态。").font(.footnote).foregroundStyle(.secondary)
           }
-          TextEditor(text: $model.draft.body, selection: $textSelection).contentMargins(.bottom, 20, for: .scrollContent)
+          TextEditor(text: $model.draft.body, selection: $textSelection).clarityMask().contentMargins(.bottom, 20, for: .scrollContent)
             .frame(height: 240).focused($focused).disabled(!model.editable)
             .accessibilityLabel(model.draft.followupRecordID == nil ? "正文" : "跟进内容").scrollContentBackground(.hidden).padding(8).foregroundStyle(SuijiTheme.ink).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 12))
           Text("\(model.draft.body.unicodeScalars.count) / \(model.limits.bodyScalars)").font(.caption).foregroundStyle(.secondary)
@@ -59,7 +60,7 @@ struct RecordEditorSheet: View {
           }
           Button("放弃草稿", role: .destructive) { discarding = true }.disabled(!model.editable)
         }.padding(20)
-      }.background(SuijiTheme.background)
+      }.clarityMask().background(SuijiTheme.background)
       .navigationTitle(model.draft.followupRecordID != nil ? "追加跟进" : model.draft.recordID == nil ? "随手记下" : "编辑记录").navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("收起") { focused = false; Task { await model.cancelCorrection() }; dismiss() } }
@@ -84,7 +85,7 @@ struct RecordEditorSheet: View {
           model.draft.tags = (model.draft.tags ?? []) + [tag]
         }
       }
-    }
+    }.clarityMask().mobileAnalyticsScreen(model.draft.followupRecordID == nil ? .recordEditor : .followupEditor)
   }
   private var selectedText: String? {
     guard case .selection(let range) = textSelection?.indices, !range.isEmpty else { return nil }

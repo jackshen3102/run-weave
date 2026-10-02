@@ -1,3 +1,4 @@
+import Clarity
 import RunweaveBrowser
 import SwiftUI
 import UIKit
@@ -41,13 +42,13 @@ struct SuijiBrowserHost: ViewModifier {
                   browser.resume()
                 }
               } label: {
-                Label("继续浏览：\(title)", systemImage: "globe").lineLimit(1)
+                Label("继续浏览：\(title)", systemImage: "globe").clarityMask().lineLimit(1)
               }
               .accessibilityIdentifier("suiji-browser-resume")
               .disabled(browser.clearing)
             }
             if let status = browser.dataStatus {
-              Text(status).font(.footnote).foregroundStyle(.secondary)
+              Text(status).clarityMask().font(.footnote).foregroundStyle(.secondary)
                 .accessibilityIdentifier("suiji-browser-status")
             }
           }
@@ -57,7 +58,7 @@ struct SuijiBrowserHost: ViewModifier {
       .fullScreenCover(isPresented: Binding(
         get: { browser.state == .presented },
         set: { if !$0 { browser.collapse() } }
-      )) { BrowserScreen(browser: browser) }
+      )) { BrowserScreen(browser: browser).clarityMask().mobileAnalyticsScreen(.browser) }
       .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented))
   }
 

@@ -7,6 +7,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
   @Published private(set) var environment: ConnectionEnvironment
   @Published private(set) var connecting = false
   @Published var info: ServiceInfo?
+  @Published var returnHomeRequest = UUID()
   @Published var lastChangedRecord: SuijiRecord?
   @Published var records: [SuijiRecord] = []
   @Published var availableTags: [String] = []
@@ -187,8 +188,9 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       editingModels[key] = model; editor = model; await model.persist()
     } catch { if generation == current { message = error.localizedDescription } }
   }
-  func changeRecord(_ record: SuijiRecord, action: RecordAction) async {
-    guard let client, let store, !statusBusy.contains(record.id) else { return }
+  @discardableResult
+  func changeRecord(_ record: SuijiRecord, action: RecordAction) async -> SuijiRecord? {
+    guard let client, let store, !statusBusy.contains(record.id) else { return nil }
     let current = generation; statusBusy.insert(record.id)
     defer { if current == generation { statusBusy.remove(record.id) } }
     do {
@@ -202,9 +204,9 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
       let path = "api/suiji/v1/records/\(record.id)/" + suffix
       let operation = try previous ?? PendingOperation(path: path, method: "POST", payload: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
       try await store.saveStatus(operation, id: record.id)
-      guard current == generation else { return }; pendingStatuses.insert(record.id)
+      guard current == generation else { return nil }; pendingStatuses.insert(record.id)
       let result = try await client.request(RecordResponse.self, path: operation.path, method: operation.method, data: operation.payload, key: operation.key)
-      guard current == generation else { return }
+      guard current == generation else { return nil }
       try await store.removeStatus(record.id); pendingStatuses.remove(record.id)
       lastChangedRecord = result.record
       if let index = records.firstIndex(where: { $0.id == record.id }) { records[index] = result.record }; message = ""
@@ -216,12 +218,14 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
           if current == generation { message = "记录已更新，标签列表刷新失败，请重新读取" }
         }
       }
+      return current == generation ? result.record : nil
     } catch let error as APIError {
-      guard current == generation else { return }
+      guard current == generation else { return nil }
       if !error.uncertain {
-        do { try await store.removeStatus(record.id); pendingStatuses.remove(record.id) } catch { message = "本机操作状态写入失败"; return }
+        do { try await store.removeStatus(record.id); pendingStatuses.remove(record.id) } catch { message = "本机操作状态写入失败"; return nil }
       }
       message = error.localizedDescription
     } catch { if current == generation { message = "状态结果待确认：" + error.localizedDescription } }
+    return nil
   }
 }

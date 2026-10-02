@@ -34,6 +34,11 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
 - 浏览器页面复现、修改或验收：使用 `$toolkit:playwright-cli`，按其规则附着正确页面。
   承诺的 UI 验收必须实际执行；未执行则记录阻塞，不得用静态检查、代码阅读或普通截图冒充。
 - iOS 日常交互排查与修复验收：使用 `$toolkit:agent-device`；固定 XCTest 套件仍按包入口执行。
+- 截图交付：已有截图能帮助用户判断本次修改效果时，最终回复附上 1–3 张相关截图的
+  可点击路径和简短说明，注明浏览器、模拟器或 DEV 设备等来源。优先复用能反映最终
+  修改效果的已有截图；绝对路径或项目相对路径均可，无需搬到专门目录。无关任务不
+  强制提供截图，不因缺图阻止交付或提交，也不为交图额外启动环境。截图用于查看
+  界面效果，实际执行过的交互验收另行如实说明。
 - 实际执行 `pnpm dev:session`、`dev:status`、`dev:open` 或 `dev:stop`：必须使用
   `$toolkit:runweave-dev-session`；生命周期细则见 `scripts/dev-session/AGENTS.md`。
 - `$toolkit:runweave-change-validation` 只在用户当前请求显式点名时触发；“提交所有代码”、
