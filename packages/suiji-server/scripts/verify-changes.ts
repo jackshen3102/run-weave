@@ -1,24 +1,21 @@
 /** Real PostgreSQL/MCP contract check; creates and drops only its own temporary DB. */
 import assert from "node:assert/strict";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { userInfo } from "node:os";
-import { readdir } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { userInfo, tmpdir } from "node:os";
+import { readdir, mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { Readable } from "node:stream";
 import { createRequire } from "node:module";
 import pg from "pg";
-import express from "express";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { createMcpRouter } from "../src/mcp/router";
-import { registerCredential, listCredentials } from "../src/mcp/credentials";
-import type { Config } from "../src/config";
-import type { LocalFileStore } from "../src/storage/local-files";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { RecordService } from "../src/records/service";
 import { FollowupService } from "../src/followups/service";
 import { mutate } from "../src/records/mutations";
 import { createMcpServer } from "../src/mcp/server";
-import type { AttachmentService } from "../src/storage/attachments";
-import type { SuijiInfo } from "@runweave/shared/suiji";
+import { LocalFileStore } from "../src/storage/local-files";
+import { AttachmentService } from "../src/storage/attachments";
+import type { SuijiInfo, SuijiRecord } from "@runweave/shared/suiji";
 
 const port = Number(process.argv[2] ?? 55439);
 assert(Number.isInteger(port) && port > 0 && port < 65536);
@@ -26,6 +23,7 @@ const settings = { host: "/tmp", port, user: userInfo().username };
 const admin = new pg.Pool({ ...settings, database: "postgres" });
 const database = `suiji_changes_verify_${randomUUID().replaceAll("-", "")}`;
 const require = createRequire(import.meta.url);
+const storageRoot = await mkdtemp(join(tmpdir(), "suiji-changes-attachments-"));
 let pool: pg.Pool | undefined;
 try {
   assert.equal(
@@ -66,8 +64,13 @@ try {
     await records.create(context(), { kind: "task", body: "baseline" })
   ).record;
   await followups.append(context(), seed.id, { body: "baseline followup" });
-  const trashedSeed = (await records.create(context(), { kind: "note", body: "trash baseline" })).record;
-  await records.trash(context(), trashedSeed.id, { trashed: true, expectedVersion: 1 });
+  const trashedSeed = (
+    await records.create(context(), { kind: "note", body: "trash baseline" })
+  ).record;
+  await records.trash(context(), trashedSeed.id, {
+    trashed: true,
+    expectedVersion: 1,
+  });
   const sql: string[] = [];
   require(
     new URL(`../migrations/${migrations[8]}`, import.meta.url).pathname,
@@ -230,9 +233,21 @@ try {
   assert.equal(next.items[0]!.sequence, "8");
   assert.equal(next.items[0]!.recordId, created.id);
   // Exercise actual MCP registration, annotations, schema and serialization.
+  const store = new LocalFileStore(storageRoot);
+  await store.initialize();
+  const attachments = new AttachmentService(pool, store);
+  const file = await store.stage(
+    Readable.from([Buffer.from("attachment fixture")]),
+  );
+  const uploaded = await attachments.upload(
+    context("agent"),
+    file,
+    "fixture.md",
+    "text/markdown",
+  );
   const server = createMcpServer(
     records,
-    {} as AttachmentService,
+    attachments,
     owner,
     randomUUID(),
     "verify",
@@ -265,166 +280,99 @@ try {
         (await client.callTool({ name: "list_changes", arguments: args }))
           .isError,
       );
-  } finally {
-    await client.close();
-    await server.close();
-  }
-  // Real HTTP scope enforcement with synthetic credentials in the temporary DB.
-  const legacyToken = randomBytes(32).toString("base64url");
-  const legacyId = randomUUID();
-  const hash = (token: string) =>
-    createHash("sha256").update(token).digest("hex");
-  await pool.query(
-    "INSERT INTO mcp_credentials(id,owner_id,name,token_sha256,expires_at,source) VALUES($1,$2,'old',$3,clock_timestamp()+interval '1 day','generated')",
-    [legacyId, owner, hash(legacyToken)],
-  );
-  const scopeSql: string[] = [];
-  require(
-    new URL(`../migrations/${migrations[9]}`, import.meta.url).pathname,
-  ).up({ sql: (s: string) => scopeSql.push(s) });
-  await pool.query(scopeSql.join("\n"));
-  assert.equal(
-    (await listCredentials(pool)).find((row) => row.id === legacyId)!.scope,
-    "read-write",
-  );
-  const readToken = randomBytes(32).toString("base64url");
-  const registration = {
-    version: 1,
-    id: randomUUID(),
-    serverId: (await pool.query("SELECT server_id FROM server_identity"))
-      .rows[0].server_id,
-    ownerId: owner,
-    name: "read fixture",
-    tokenSha256: hash(readToken),
-    expiresAt: new Date(Date.now() + 86400000).toISOString(),
-    scope: "read-only",
-  };
-  assert.equal((await registerCredential(pool, registration)).created, true);
-  assert.equal((await registerCredential(pool, registration)).created, false);
-  await assert.rejects(
-    registerCredential(pool, { ...registration, scope: "read-write" }),
-  );
-  await assert.rejects(
-    registerCredential(pool, { ...registration, scope: "unknown" }),
-  );
-  await pool.query("CREATE TABLE suiji_migrations(version integer)");
-  await pool.query("INSERT INTO suiji_migrations SELECT generate_series(1,10)");
-  const app = express();
-  app.use(express.json());
-  app.use((_req, res, next) => {
-    res.locals.requestId = randomUUID();
-    next();
-  });
-  app.use(
-    "/mcp",
-    createMcpRouter(
-      pool,
-      records,
-      {} as AttachmentService,
-      { SUIJI_MCP_ENABLED: true, SUIJI_APP_VERSION: "verify" } as Config,
-      followups,
-      {} as LocalFileStore,
-    ),
-  );
-  app.use(
-    (
-      error: { status?: number; code?: string },
-      _req: express.Request,
-      res: express.Response,
-      _next: express.NextFunction,
-    ) => {
-      void _next;
-      res
-        .status(error.status ?? 500)
-        .json({ error: error.code ?? "unexpected" });
-    },
-  );
-  const http = app.listen(0, "127.0.0.1");
-  await new Promise<void>((resolve) => http.once("listening", resolve));
-  const address = http.address();
-  assert(address && typeof address !== "string");
-  const url = new URL(`http://127.0.0.1:${address.port}/mcp`);
-  const readClient = new Client({ name: "read-scope-verify", version: "1" });
-  const fullClient = new Client({ name: "old-scope-verify", version: "1" });
-  try {
-    await readClient.connect(
-      new StreamableHTTPClientTransport(url, {
-        requestInit: { headers: { Authorization: `Bearer ${readToken}` } },
-      }),
+    const names = (await client.listTools()).tools
+      .map((tool) => tool.name)
+      .sort();
+    assert.deepEqual(
+      names,
+      [
+        "list_changes",
+        "list_records",
+        "search_records",
+        "get_record",
+        "create_record",
+        "replace_record_body",
+        "set_task_status",
+        "read_attachment",
+        "get_service_info",
+        "list_followups",
+        "append_followup",
+      ].sort(),
     );
-    const info = await readClient.callTool({
-      name: "get_service_info",
-      arguments: {},
+    for (const [name, args] of [
+      ["list_records", {}],
+      ["search_records", { query: "edited" }],
+      ["get_record", { recordId: seed.id }],
+      ["list_followups", { recordId: seed.id }],
+      ["get_service_info", {}],
+      ["read_attachment", { attachmentId: uploaded.attachment.id }],
+    ] as const)
+      assert(!(await client.callTool({ name, arguments: args })).isError, name);
+    const key = randomUUID();
+    const input = {
+      kind: "task",
+      body: "MCP application fixture",
+      idempotencyKey: key,
+    };
+    const createdReply = await client.callTool({
+      name: "create_record",
+      arguments: input,
+    });
+    assert(!createdReply.isError);
+    const task = (createdReply.structuredContent as { record: SuijiRecord })
+      .record;
+    const replay = await client.callTool({
+      name: "create_record",
+      arguments: input,
     });
     assert.equal(
-      (info.structuredContent as { features: { changes: boolean } }).features
-        .changes,
-      true,
+      (replay.structuredContent as { record: SuijiRecord }).record.id,
+      task.id,
     );
-    assert(
-      !(await readClient.callTool({ name: "list_changes", arguments: {} }))
-        .isError,
+    const mixed = await client.callTool({
+      name: "replace_record_body",
+      arguments: {
+        recordId: task.id,
+        body: "different tool",
+        expectedVersion: 1,
+        idempotencyKey: key,
+      },
+    });
+    assert.equal(
+      (mixed.structuredContent as { error: { code: string } }).error.code,
+      "IDEMPOTENCY_KEY_REUSED",
     );
-    const before = (await records.changes(owner, { limit: 50 })).items.length;
     for (const [name, args] of [
-      ["create_record", { kind: "note", body: "denied" }],
       [
         "replace_record_body",
-        { recordId: seed.id, body: "denied", expectedVersion: 5 },
+        { recordId: task.id, body: "MCP edited fixture", expectedVersion: 1 },
       ],
       [
         "set_task_status",
-        { recordId: seed.id, targetStatus: "open", expectedVersion: 5 },
+        { recordId: task.id, targetStatus: "done", expectedVersion: 2 },
       ],
-      ["append_followup", { recordId: seed.id, body: "denied" }],
-    ] as const) {
-      const denied = await readClient.callTool({
+      ["append_followup", { recordId: task.id, body: "MCP final fixture" }],
+    ] as const)
+      assert(
+        !(
+          await client.callTool({
+            name,
+            arguments: { ...args, idempotencyKey: randomUUID() },
+          })
+        ).isError,
         name,
-        arguments: { ...args, idempotencyKey: randomUUID() },
-      });
-      assert(denied.isError, name);
-      assert.equal(
-        (denied.structuredContent as { error: { code: string } }).error.code,
-        "FORBIDDEN",
       );
-    }
-    const upload = await fetch(`${url}/uploads`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${readToken}` },
-      body: "crafted upload",
-    });
-    assert.equal(upload.status, 403);
+    const saved = await records.get(owner, task.id);
+    assert.equal(saved.body, "MCP edited fixture");
+    assert.equal(saved.taskStatus, "done");
+    assert.equal(saved.version, 3);
     assert.equal(
-      ((await upload.json()) as { error: string }).error,
-      "FORBIDDEN",
-    );
-    assert.equal(
-      (await records.changes(owner, { limit: 50 })).items.length,
-      before,
-    );
-    await fullClient.connect(
-      new StreamableHTTPClientTransport(url, {
-        requestInit: { headers: { Authorization: `Bearer ${legacyToken}` } },
-      }),
-    );
-    assert(
-      !(
-        await fullClient.callTool({
-          name: "create_record",
-          arguments: {
-            kind: "note",
-            body: "legacy still writes",
-            idempotencyKey: randomUUID(),
-          },
-        })
-      ).isError,
+      (await followups.list(owner, task.id, { limit: 20 })).items.length,
+      1,
     );
   } finally {
-    await readClient.close();
-    await fullClient.close();
-    await new Promise<void>((resolve, reject) =>
-      http.close((error) => (error ? reject(error) : resolve())),
-    );
+    await client.close();
+    await server.close();
   }
   console.log(
     JSON.stringify({
@@ -440,9 +388,8 @@ try {
         "uncommitted counter lock",
         "rollback atomicity",
         "MCP contract and metadata privacy",
-        "schema10 legacy compatibility",
-        "read-only HTTP denies all write tools and uploads",
-        "registration cannot escalate scope",
+        "existing ten MCP tools retain application read/write",
+        "attachment upload/read compatibility",
       ],
     }),
   );
@@ -450,4 +397,5 @@ try {
   await pool?.end();
   await admin.query(`DROP DATABASE IF EXISTS ${database}`);
   await admin.end();
+  await rm(storageRoot, { recursive: true, force: true });
 }

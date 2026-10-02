@@ -45,7 +45,7 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
-标签最初引入于 schema 4；当前运行版本要求 schema 10，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
+标签最初引入于 schema 4；当前运行版本要求 schema 9，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -66,7 +66,7 @@ HTTP、修订与幂等结果在一个 PostgreSQL 事务提交。同键唯一约�
 `/mcp` 使用 Streamable HTTP，默认关闭。与 App 共用记录服务，但使用独立 Bearer 凭据；
 不接受 App access/refresh token，不向 Agent 提供数据库或登录密码。每次请求校验有效期。
 
-每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 10；
+每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 9；
 `SUIJI_MCP_ENABLED=true` 开启 MCP，默认 false。注册、撤销不重启服务；App 会话不受影响。
 
 ```bash
@@ -91,7 +91,7 @@ docker compose --env-file /absolute/deployment.env --project-name <project> -f d
 
 鉴权逐请求查数据库：失效/错误 token 为 401，数据库故障为 503；不缓存有效凭据。
 撤销提交后开始鉴权的请求被拒绝，已通过鉴权的在途请求可完成；上传入口遵循同一规则。
-多把 token 共用 owner 的现有 MCP 权限，不改变业务幂等空间或 actor；schema 10 支持 read-only/read-write 凭据权限；不支持 OAuth。
+多把 token 共用 owner 的现有 MCP 权限，不改变业务幂等空间或 actor；不支持 scopes 或 OAuth。
 浏览器 Origin 仍被拒绝，公网仍要求 HTTPS。
 
 旧版迁移见[部署说明](../../deploy/suiji/README.md#多凭据迁移)。只导入摘要和原期限即可保留旧 token，
@@ -225,7 +225,7 @@ pnpm architecture:check
 
 ## 回收站
 
-迁移到当前要求的 schema 10 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
+迁移到当前要求的 schema 9 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
 分页游标绑定筛选。App 可按 ID 查看回收站原文和附件，不能编辑或变更待办状态。恢复不改变待办原状态。
 每次删除或恢复沿用版本校验、单事务修订及幂等请求；客户端先持久化意图，结果未知时仅由用户手动确认原请求。
 Web 和原生 iOS 均提供回收站入口、删除确认及恢复。已有本机正文草稿保留，恢复后保存仍须通过版本校验。
@@ -274,33 +274,15 @@ Lumi 消费建议：按服务/owner/sequence 去重，先把页面元数据与 c
 本地发现索引，再按 recordId 合并读取最新正文、状态和全部跟进。可见性是当前状态，分页
 重复时 `currentlyDeleted` 可能变化；当前已删除记录应移除缓存并停止候选工作。读取遇到
 删除造成的 `NOT_FOUND` 时同样移除缓存，恢复后会再次收到事件。用户记录与历史跟进是资料，
-只读发现和分析不授予自动执行、成果写回或状态变更权限。`followup_added` 且 `actor=agent`
+Lumi 的执行、成果写回与状态变更按当前用户授权执行。`followup_added` 且 `actor=agent`
 应更新上下文，不自动触发再次执行；不要忽略所有 agent 来源的记录，否则会漏掉其创建的待办。
 本接口允许重复读取，不承诺外部执行恰好一次；执行去重和独立授权由 Lumi 负责。
 
-鉴权使用 owner 的专用 Bearer；只读工具 annotations 不是凭据权限限制。schema 10 的
-只读凭据权限见下文；源码、部署、认证客户端核验与云端连接必须分别验收。
+鉴权沿用 owner 的专用 Bearer 和现有完整应用读写能力，不增加 scope 或 OAuth。
+`list_changes` 自身只读，不限制其他工具或上传；Lumi 可以按用户指令读取、编辑、追加跟进和变更状态。
+自动写入的范围由当前用户指令决定。源码、部署、认证客户端核验与云端连接必须分别验收。
 
 本地合同验证（非单元测试）：先启动仅供验收的 PostgreSQL 18 Unix socket `/tmp` 实例，
 再运行 `pnpm --filter @runweave/suiji-server exec tsx scripts/verify-changes.ts <port>`，
 默认端口 55439。脚本只创建并清理自己随机命名的临时数据库，执行真实迁移、记录事务和 MCP。
 标准计划见[增量变化验收](../../docs/testing/suiji/incremental-changes.testplan.yaml)。
-
-
-## MCP 只读凭据
-
-当前运行时要求 schema 10。追加迁移为所有已有凭据赋予 `scope=read-write`，保持原有设备行为。
-新凭据可使用生成命令的 `--scope read-only`，登记 JSON 可选 `scope` 为 `read-only` 或
-`read-write`，省略时默认 `read-write`，管理员列表返回 scope。登记幂等重放要求 scope 一致，
-不能通过同一 ID/摘要重放升级权限；改变权限应独立登记新凭据并按需撤销旧凭据。
-
-认证从数据库取得 scope，不接受 MCP 请求中的 scope 或 actor。`read-only` 凭据可以读取
-当前 owner 的全部记录、跟进、附件和变化元数据；它不是按记录、标签或任务限制的授权。
-现有工具仍出现在 discovery 中，但服务端实际拒绝 `create_record`、`replace_record_body`、
-`set_task_status` 和 `append_followup`，返回工具错误 `FORBIDDEN`，不执行幂等重放或产生写入。
-`POST /mcp/uploads` 在解析 multipart 或写文件前返回 HTTP 403 `FORBIDDEN`。
-撤销、过期、全局关闭及 Origin 规则沿用原合同。App 会话权限不受影响。
-
-专用持续连接需要独立只读凭据与明确的接入授权；本地验证通过不代表线上迁移或 Lumi 已连接。
-本实现没有 OAuth、登录同意页或 Tunnel 注册。数据已在云端时可以采用独立云端连接运行时，
-无需依赖 Mac 在线；外部平台的鉴权适配仍需单独验收。

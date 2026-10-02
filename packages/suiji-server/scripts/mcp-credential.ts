@@ -9,21 +9,20 @@ try {
     options: {
       "output-dir": { type: "string" }, days: { type: "string", default: "90" },
       name: { type: "string" }, "server-id": { type: "string" }, "owner-id": { type: "string" },
-      scope: { type: "string", default: "read-write" },
       legacy: { type: "boolean", default: false },
     },
   });
   const output = values["output-dir"], days = Number(values.days);
   if (!output || !path.isAbsolute(output) || !Number.isInteger(days) || days < 1 || days > 365)
     throw new Error("INVALID_INPUT");
-  if (values.legacy && (values.scope !== "read-write" || values.name || values["server-id"] || values["owner-id"]))
+  if (values.legacy && (values.name || values["server-id"] || values["owner-id"]))
     throw new Error("INVALID_INPUT");
   const token = randomBytes(32).toString("base64url");
   const tokenSha256 = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
   const registration = values.legacy ? undefined : registrationSchema.parse({
     version: 1, id: randomUUID(), name: values.name, serverId: values["server-id"],
-    ownerId: values["owner-id"], tokenSha256, expiresAt, scope: values.scope,
+    ownerId: values["owner-id"], tokenSha256, expiresAt,
   });
   // Never overwrite an existing device's secret; partial failures retain private files for inspection.
   await mkdir(output, { mode: 0o700 });

@@ -1,5 +1,4 @@
 export type SuijiErrorCode =
-  | "FORBIDDEN"
   | "HISTORY_DISABLED"
   | "FEEDBACK_CONFLICT"
   | "FEEDBACK_UNVERIFIED"
