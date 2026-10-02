@@ -1,7 +1,7 @@
 version: 1
 name: 随记增量发现合同
 description: >
-  在隔离 PostgreSQL 18 验证变化日志、稳定分页及只读 MCP；不连接或修改生产，不验证 Lumi 自动执行。
+  在隔离 PostgreSQL 18 验证变化日志、稳定分页及只读 MCP及既有完整应用读写兼容；不连接或修改生产。
 cases:
   - id: CHANGES-001
     name: 完整库存和记录可见性变化可发现
@@ -39,22 +39,9 @@ cases:
     name: MCP 提供严格只读元数据工具合同
     required: true
     description: >
-      list_changes 已注册且声明只读，输入边界严格，响应不含正文；不将工具标记误认为 token 权限限制。
+      list_changes 已注册且声明只读，输入边界严格，响应不含正文；保留既有十个工具的完整应用读写能力。
     preconditions:
       - 使用隔离 schema 9 数据库及实际 MCP client/server transport。
     steps:
       - 通过 MCP listTools 确认 list_changes 的 readOnlyHint=true，再调用 list_changes；确认响应包含 items、nextCursor、hasMore 且没有正文或凭据。
-      - 传 limit 0、51 或未知筛选字段；确认输入校验拒绝。现有 Bearer 的写工具权限不因新增工具而改变。
-
-  - id: CHANGES-005
-    name: 只读凭据在服务端拒绝实际写调用
-    required: true
-    description: >
-      schema 10 保留旧凭据读写能力，独立只读凭据不能写入或重放写结果，上传在处理文件前拒绝。
-    preconditions:
-      - 使用隔离 PostgreSQL 18、schema 9 旧凭据和实际 HTTP MCP client/server，凭据均为临时合成数据。
-    steps:
-      - 迁移到 schema 10，确认旧凭据为 read-write 且仍可创建记录；登记 read-only 凭据，确认读取变化和服务身份成功。
-      - 使用只读凭据实际调用全部四个写工具及 POST /mcp/uploads；确认均为 FORBIDDEN，记录、跟进、附件及变化没有增加。
-      - 用相同注册 ID/摘要重复登记 read-only，确认幂等；改为 read-write 重放，确认冲突拒绝，实际权限未提升。
-      - 用同一业务幂等键跨工具调用，确认 IDEMPOTENCY_KEY_REUSED 且没有假变化。
+      - 传 limit 0、51 或未知筛选字段；确认输入校验拒绝。通过既有十个工具实际读取、创建、编辑、完成和追加跟进，确认结果成功、原文与状态读回一致；上传附件后确认 read_attachment 成功。
