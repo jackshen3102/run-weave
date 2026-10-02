@@ -58,6 +58,12 @@ Backend 未收到飞书 Bridge 报告时只表达“尚未收到状态、无法�
 
 扩展状态项时，先在真实 owner 中复用已有生命周期证据，再返回共享 DTO；不要在消费者中复制状态机。
 
+## Agent 消费
+
+`GET /api/runtime-status` 在原始快照上附加 management，复用共享能力聚合并提供候选配置关联与只读诊断操作。
+`rw status --json` 与 Research MCP 可消费该接口；来源覆盖、配置生效及业务验证边界见
+[服务管理](../cli/service-management.md)。新增字段为兼容性扩展，不修改 owner 报告或健康判断。
+
 ## 客户端消费与入口
 
 [RuntimeStatusEntry](../../frontend/src/components/runtime-status-entry.tsx) 展示整体状态与异常能力域数量，点击打开状态面板。

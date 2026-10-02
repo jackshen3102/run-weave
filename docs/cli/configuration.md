@@ -7,6 +7,8 @@
 `~/.runweave/dev-sessions/<id>/settings.yaml`。文件为 YAML 1.2 单文档，目录必须为
 0700，配置及备份为 0600。旧 `config.json` 仅作显式迁移来源，不与 YAML 同步。
 
+字段含义与约束见 [配置字段参考](./configuration-reference.md)；Agent 操作闭环见 [服务管理](./service-management.md)。
+
 ## 查询
 
 ```bash
@@ -16,9 +18,10 @@ rw config show --instance stable --json
 rw config explain backend.server.port --instance stable --json
 rw config validate --instance stable --json
 rw config doctor --instance stable --json
+rw config status --instance stable --profile local --json
 ```
 
-`path` 默认只输出文件路径，`--json` 同时返回实例身份与配置根。其他配置命令默认输出可读的结构化结果，脚本可显式使用 `--json`。`show` 只输出脱敏值。`keys` 列出注册字段的类型、敏感标记、远程修改权限和生效方式。
+`path` 默认只输出文件路径，`--json` 同时返回实例身份与配置根。其他配置命令默认输出可读的结构化结果，脚本可显式使用 `--json`。`show` 只输出脱敏值。`keys` 列出注册字段的类型、敏感标记、远程修改权限、生效方式及共享的枚举、范围、路径、origin 与成组凭据约束。特殊与消费者额外约束见字段参考。
 `doctor` 额外列出当前权威 YAML、发现的旧来源文件、父进程里存在的旧环境键名和 cwd 中是否有 `.env`；不读取或输出旧环境值。键名只表明检测到潜在迁移来源，不能据此断定运行时的端口等启动上下文也被忽略。
 无目标只读查询默认定位 Stable；来自 Dev Session 的冲突上下文会被拒绝。
 

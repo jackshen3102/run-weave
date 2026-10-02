@@ -10,7 +10,7 @@ import {
   explainConfigurationValue,
   type MigrationSource,
 } from "@runweave/config-node";
-import { CONFIGURATION_FIELDS, type ConfigurationValue } from "@runweave/shared/configuration";
+import { CONFIGURATION_FIELDS, CONFIGURATION_ENUMS, CONFIGURATION_CREDENTIAL_GROUPS, configurationNumberRange, configurationOwnedPath, configurationServiceOrigin, type ConfigurationValue } from "@runweave/shared/configuration";
 import { parseArgs, getStringOption, resolveOutputMode } from "../args.js";
 import { writeOutput } from "../output/format.js";
 import { CliError } from "../errors.js";
@@ -21,12 +21,28 @@ export async function runConfigCommand(command: string | undefined, args: string
 }): Promise<void> {
   const parsed = parseArgs(args, new Set(["json", "plain", "dry-run", "confirm-new-install"]));
   const mode = resolveOutputMode(parsed.options);
-  const write = !["path", "show", "explain", "validate", "doctor", "keys", "backups"].includes(command ?? "");
+  const write = !["path", "show", "explain", "validate", "doctor", "keys", "backups", "status"].includes(command ?? "");
   const context = resolveConfigurationContext({ args, requireExplicit: write });
   const store = new ConfigurationStore(context);
   const output = (value: unknown) => writeOutput(io.stdout, mode, mode === "plain" && typeof value !== "string" ? JSON.stringify(value, null, 2) : value);
+  if (command === "status") {
+    const auth = await resolveAuthContext({ profileName: getStringOption(parsed.options, "profile"), backendPort: getStringOption(parsed.options, "backend-port"), env: io.env });
+    const status = await auth.requestJson<import("@runweave/shared/configuration").PublicConfigurationStatus>("/api/configuration");
+    if (status.environment.kind !== context.kind || status.environment.instanceId !== context.instanceId) throw new ConfigurationError("CONFIG_TARGET_MISMATCH");
+    output(status);
+    return;
+  }
   if (command === "path") { output(mode === "json" ? { ...context, file: store.file } : store.file); return; }
-  if (command === "keys") { output(CONFIGURATION_FIELDS); return; }
+  if (command === "keys") {
+    output(CONFIGURATION_FIELDS.map(field => ({ ...field, constraints: {
+      enum: CONFIGURATION_ENUMS[field.path] ?? null,
+      range: configurationNumberRange(field.path),
+      instanceOwnedPath: configurationOwnedPath(field.path),
+      httpsOrigin: configurationServiceOrigin(field.path),
+      credentialGroup: CONFIGURATION_CREDENTIAL_GROUPS[field.domain] ?? null,
+    } })));
+    return;
+  }
   if (command === "backups") { output(store.backups()); return; }
   if (command === "explain") {
     const key = parsed.positionals[0];
@@ -121,7 +137,7 @@ export async function runConfigCommand(command: string | undefined, args: string
     output({ environment: context, savedRevision: next.value.revision, digest: next.digest, state: "restartRequired" });
     return;
   }
-  throw new CliError("Usage: rw config <path|show|explain|keys|init|validate|doctor|backups|restore|reload|set|import|import-env|migrate> [--instance <id>] [--config-dir <absolute path>]", 2);
+  throw new CliError("Usage: rw config <path|show|explain|keys|status|init|validate|doctor|backups|restore|reload|set|import|import-env|migrate> [--instance <id>] [--config-dir <absolute path>]", 2);
 }
 
 function parseJsonFile(file: string): unknown {

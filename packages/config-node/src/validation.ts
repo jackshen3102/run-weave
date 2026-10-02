@@ -1,6 +1,6 @@
 import path from "node:path";
 import {
-  CONFIGURATION_FIELDS, isConfigurationObject, readConfigurationPath, configurationPathSegments, configurationPathSegment,
+  CONFIGURATION_FIELDS, CONFIGURATION_ENUMS, CONFIGURATION_CREDENTIAL_GROUPS, configurationNumberRange, configurationOwnedPath, configurationServiceOrigin, isConfigurationObject, readConfigurationPath, configurationPathSegments, configurationPathSegment,
   type ConfigurationFile, type ConfigurationValue, type ConfigurationObject,
   type ConfigurationIssue, type ConfigurationField, type EnvironmentContext,
 } from "@runweave/shared/configuration";
@@ -71,16 +71,8 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
       : field.type === "number" ? typeof entry === "number" && Number.isFinite(entry)
       : typeof entry === field.type;
     if (!valid) { issue(key, "CONFIG_FIELD_TYPE_INVALID"); continue; }
-    const enums: Record<string, string[]> = {
-      "backend.tunnelAuth.scope": ["all", "forwarded"],
-      "appServer.discovery": ["auto", "explicit", "disabled"],
-      "logging.level": ["error", "warn", "info", "http", "verbose", "debug", "silly"],
-      "terminal.tmux.shutdownPolicy": ["preserve", "cleanup"],
-      "services.suiji.ai.provider": ["disabled", "codex-cli"],
-      "services.feishu.legacyWebhook.transport": ["app", "webhook"],
-    };
-    if (enums[key] && !enums[key]!.includes(String(entry))) issue(key, "CONFIG_FIELD_ENUM_INVALID");
-    if (["services.snapshotPublisher.url", "services.pushSender.gatewayURL"].includes(key) && typeof entry === "string") {
+    if (CONFIGURATION_ENUMS[key] && !CONFIGURATION_ENUMS[key]!.includes(String(entry))) issue(key, "CONFIG_FIELD_ENUM_INVALID");
+    if (configurationServiceOrigin(key) && typeof entry === "string") {
       try { const url = new URL(entry); if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error(); }
       catch { issue(key, "CONFIG_SERVICE_ORIGIN_INVALID"); }
     }
@@ -89,18 +81,14 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
       catch { issue(key, "CONFIG_SERVICE_ORIGIN_INVALID"); }
     }
     if (field.sensitive && typeof entry === "string" && ["<redacted>", "********"].includes(entry)) issue(key, "CONFIG_SECRET_VALUE_INVALID");
-    if (typeof entry === "number" && (/port$/i.test(key) && (entry < 1 || entry > 65535) || /(?:TtlSeconds|timeoutMs|maxOutputBytes|maxConcurrentRuns|Seconds|IntervalMs)$/.test(key) && entry <= 0 || /DelayMs$/.test(key) && entry < 0)) issue(key, "CONFIG_FIELD_RANGE_INVALID");
-    const mutablePath = key.startsWith("storage.") || key === "logging.backendDirectory" || ["appServer.stateDirectory", "appServer.cloudSyncDirectory", "services.snapshotHost.directory", "services.pushGateway.directory", "services.suiji.storageDirectory"].includes(key);
+    const range = configurationNumberRange(key);
+    if (typeof entry === "number" && (range.min !== undefined && entry < range.min || range.max !== undefined && entry > range.max || range.exclusiveMin !== undefined && entry <= range.exclusiveMin)) issue(key, "CONFIG_FIELD_RANGE_INVALID");
+    const mutablePath = configurationOwnedPath(key);
     if (typeof entry === "string" && mutablePath) {
       try { if (!path.isAbsolute(entry)) throw new Error(); assertOwnedPath(context, entry); } catch { issue(key, "CONFIG_PATH_OUTSIDE_INSTANCE"); }
     }
   }
-  for (const [domain, keys] of Object.entries({
-    "backend.auth": ["username", "password", "jwtSecret"],
-    "services.snapshotPublisher": ["url", "token"],
-    "services.pushSender": ["gatewayURL", "senderToken", "hostId"],
-    "services.feishu": ["appId", "appSecret"],
-  })) {
+  for (const [domain, keys] of Object.entries(CONFIGURATION_CREDENTIAL_GROUPS)) {
     const fields = keys.map((key) => readConfigurationPath(value, `${domain}.${key}`));
     if (fields.some((entry) => entry !== null && entry !== undefined)) {
       const missing = fields.findIndex((entry) => typeof entry !== "string" || !entry.trim());

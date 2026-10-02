@@ -94,7 +94,9 @@
     "ios:run": "node packages/app-ios/scripts/ios.mjs run",
     "agents:build": "node scripts/agents/build.mjs",
     "pi:install": "node scripts/agents/install-pi.mjs",
-    "configuration:check": "node ./scripts/quality/configuration.mjs"
+    "configuration:check": "node ./scripts/quality/configuration.mjs && pnpm configuration:docs:check",
+    "configuration:docs": "pnpm --dir backend exec tsx ../scripts/configuration-reference.ts",
+    "configuration:docs:check": "pnpm configuration:docs --check"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --fix",
