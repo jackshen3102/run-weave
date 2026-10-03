@@ -1,0 +1,122 @@
+version: 1
+name: Mac 桌面扫码配对
+description: >
+  扫码配对验收约定，合同见 docs/architecture/remote-desktop.md。
+  本文件格式通过不代表真实相机、跨端 UI 或持久化验收通过。
+  iOS 使用 toolkit:agent-device；Mac 使用电脑操作工具操纵真实 Host 窗口。
+  相机扫描必须由真实 iPhone 对准实际二维码完成；运行探针只能验证协议边界。
+  每条使用独立测试配对并记录设备和构建，缺环境记 blocked，测试结束仅撤销本条创建的授权。
+cases:
+  - id: RDQR-001
+    name: 真实扫码零输入完成配对
+    required: true
+    description: >
+      扫码自动获得配对材料，本机确认后才成功保存，正常路径无需填写五个连接字段。
+    preconditions:
+      - 新版 Host 在可达局域网运行，真实 iPhone 安装新版 App，双方未建立本条测试配对。
+      - 手机相机可使用，执行者能操作 Mac 本机确认，双方使用无敏感信息的设备名称。
+    steps:
+      - 在 Mac 点击连接 iPhone；确认显示二维码及倒计时，使用 toolkit:agent-device 打开手机的扫码配对 Mac。
+      - 让手机真实相机扫描 Host 二维码；确认无需填写名称、地址、端口、指纹和配对码，手机显示等待 Mac 确认。
+      - 在 Mac 允许配对并保持默认只读；确认手机显示配对成功、列表新增对应 Mac，Host 尚未因配对自动采集画面。
+  - id: RDQR-002
+    name: 扫码配对在重启后仍可使用
+    required: true
+    description: >
+      重启手机 App 后配对记录和独立凭据仍有效，无需重新扫描即可打开对应 Mac 桌面。
+    preconditions:
+      - 本条已独立建立扫码配对，Host 屏幕录制权限有效且正在运行，手机有该配对记录。
+    steps:
+      - 记录本条配对 Mac 身份与手机列表后终止并重启手机 App，使用 toolkit:agent-device 取得新页面状态。
+      - 从已配对列表打开该 Mac；确认不要求再次扫码或填字段，并出现同一 Mac 的真实首帧。
+  - id: RDQR-003
+    name: Mac 拒绝时手机不能获得配对
+    required: true
+    description: 扫描只发起请求，Mac 拒绝后不签发专属 credential，也不开始屏幕采集。
+    preconditions:
+      - 独立测试手机尚未配对，Host 有新二维码且能查看本条设备授权是否新增。
+    steps:
+      - 用 toolkit:agent-device 进入扫码页并真实扫描，在 Mac 拒绝待确认请求。
+      - 确认手机显示拒绝原因且没有新目标/凭据，Mac 没有新增授权或采集；手机不会自动重试提交。
+  - id: RDQR-004
+    name: 配对窗口到期后旧码失效
+    required: true
+    description: Host 的 120 秒期限决定邀请有效性，到期的二维码不能发起新的授权。
+    preconditions:
+      - 独立测试 Host 已新开配对窗口，执行者能在受控临时环境保留该码供协议探针使用，不写入日志或提交仓库。
+    steps:
+      - 等待本次窗口超过 120 秒；确认 Mac 移除二维码并提供重新生成入口。
+      - 用真实协议探针提交该窗口的邀请；确认 Host 拒绝，没有待确认设备或新 credential，手机对同类失败提示重新扫码。
+  - id: RDQR-005
+    name: 刷新邀请使旧窗口失效
+    required: true
+    description: 新窗口有新 ID，旧二维码及旧待确认请求不能在刷新后获批。
+    preconditions:
+      - 独立测试 Host 已开窗口，测试客户端可保留旧邀请并观察待确认状态。
+    steps:
+      - 用旧邀请发起请求并到达等待确认，在 Mac 取消后重新生成二维码；确认旧请求结束且窗口 ID 改变。
+      - 重放旧邀请；确认明确拒绝且没有授权，使用新邀请可重新进入本机确认流程。
+  - id: RDQR-006
+    name: QR 格式与用途在网络前校验
+    required: true
+    description: >
+      Backend 登录码、未知版本、畸形字段和超过 4096 字节的 QR 文本不能触发远控或登录请求。
+    preconditions:
+      - 新版手机的扫码入口可用，准备不含真实秘密的合成二维码，能观察该次测试的网络请求计数。
+    steps:
+      - 向扫码入口分别提供 Backend 登录码、未知远控版本、无效 UUID、非六位码、错误指纹长度、零端口及超长载荷。
+      - 确认均给出可理解提示且请求计数不增加，Backend 登录态不变；合法远控码仍能被识别。
+  - id: RDQR-007
+    name: 扫码不能绕过 Mac 身份与窗口绑定
+    required: true
+    description: pin、Host ID 或响应窗口 ID 任一不一致时不能保存配对。
+    preconditions:
+      - 独立受控 Host 或协议响应夹具可分别制造 pin、Host ID 和窗口 ID 不匹配，手机无本条有效配对。
+    steps:
+      - 保持其他字段有效，分别制造证书 pin 错误、配对响应 Host ID 错误、配对响应窗口 ID 错误。
+      - 确认每种情况均失败且无新目标及专属凭据，不出现接受新身份或绕过 TLS 的自动降级。
+  - id: RDQR-008
+    name: 取消配对隔离旧异步结果
+    required: true
+    description: 用户离开扫码流程后，旧相机或网络回调不能保存配对或打开桌面。
+    preconditions:
+      - 独立手机和 Host 能进入扫码后等待确认状态，执行者可以在手机退出后再操作 Host。
+    steps:
+      - 发起本条扫码请求，在 toolkit:agent-device 中取消并离开；确认相机关闭，短期邀请与连接释放。
+      - 在 Host 尝试完成之前的批准；确认手机不新增目标、不打开桌面，若 Host 已产生授权则由本条在本机撤销。
+  - id: RDQR-009
+    name: 后台切换终止扫码任务
+    required: true
+    description: 切后台后不持续使用相机或完成旧配对，回前台必须显式重扫。
+    preconditions:
+      - 本条独立手机已进入扫码页，相机运行；Host 可生成有效邀请。
+    steps:
+      - 使用 toolkit:agent-device 将 App 切到后台再回前台；确认后台相机已停止，回前台没有自动提交旧邀请。
+      - 主动重新扫码；确认新操作可以开始且不存在两个并行请求。
+  - id: RDQR-010
+    name: 相机拒绝仍可手动配对
+    required: true
+    description: 相机不可用时能通过备用表单和本机确认完成配对。
+    preconditions:
+      - 本条独立手机未配对且相机权限被拒绝，Host 显示当前手动连接信息并允许本机确认。
+    steps:
+      - 用 toolkit:agent-device 打开扫码配对；确认提示相机权限，并提供系统设置和手动填写入口。
+      - 进入手动填写，按当前 Host 信息提交，在 Mac 确认；确认保存成功且不会强制返回扫码。
+  - id: RDQR-011
+    name: 手机存储失败不能误报配对成功
+    required: true
+    description: 保存失败时清理本次新 credential，保留原有配对数据并显示失败。
+    preconditions:
+      - 独立测试环境能对本次配对注入 Keychain 或元数据保存失败，保留可校验的旧目标快照。
+    steps:
+      - 分别在 Keychain 写入及元数据写入阶段注入失败，发起扫码并在 Mac 批准。
+      - 确认手机不显示成功，不遗留新 credential 引用，旧目标及旧凭据可用；提示 Mac 可能已授权及撤销方式。
+  - id: RDQR-012
+    name: 已有配对重扫后不丢失终端关联
+    required: true
+    description: 同一 Host 重配更新单条记录，保留用户原有 Backend 关联和其他 Host。
+    preconditions:
+      - 本条独立手机已有 Host A 的配对和显式 Backend 关联，并有另一个同名但不同身份的 Host B 记录。
+    steps:
+      - 扫描 A 的新邀请并在 Mac 确认，完成保存。
+      - 确认 A 只有一条记录且原关联保留，B 不变，A 的旧 credential 仅在新记录成功后删除。

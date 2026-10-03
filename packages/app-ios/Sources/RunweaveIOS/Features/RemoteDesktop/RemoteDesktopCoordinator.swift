@@ -40,6 +40,23 @@ final class RemoteDesktopCoordinator: ObservableObject {
     try persist(next)
   }
 
+  /// Shared by scanner and manual entry; publish success only after metadata commits.
+  @discardableResult
+  func savePairing(_ target: RemoteTarget, backendConnectionID: String? = nil) throws -> PairedRemoteHost {
+    let previous = hosts.first { $0.id == target.id }
+    let paired = PairedRemoteHost(target: target,
+      backendConnectionID: backendConnectionID ?? previous?.backendConnectionID)
+    do { try save(paired) }
+    catch {
+      try? RemoteCredentialStore().forget(target: target)
+      throw error
+    }
+    if let previous, previous.target.credentialsReference != target.credentialsReference {
+      try? RemoteCredentialStore().forget(target: previous.target)
+    }
+    return paired
+  }
+
   func removeMetadata(_ id: UUID) throws {
     if presentation?.host.id == id { close(reason: "pairing_removed") }
     if pendingHostID == id { pendingHostID = nil }

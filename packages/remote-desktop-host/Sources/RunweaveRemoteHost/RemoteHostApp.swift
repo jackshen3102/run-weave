@@ -61,20 +61,37 @@ private struct HostView: View {
                         if let display = model.lockedDisplayID { Text("已锁定显示器 ID：\(display)；改变目标必须在本机停止并重新启动。") .font(.caption) }
                         if let id = model.hostID { Text("Host ID：\(id.uuidString)").font(.caption.monospaced()).textSelection(.enabled) }
                         if !model.fingerprint.isEmpty { Text("TLS SHA-256：\(model.fingerprint)").font(.caption.monospaced()).textSelection(.enabled) }
-                        Text("在 iPhone 核对完整指纹后再配对。身份改变时必须重新核对，不能跳过校验。") .font(.caption).foregroundStyle(.secondary)
+                        Text("扫码可自动读取身份；手动配对请核对完整指纹。身份改变时必须重新配对。") .font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }
                 GroupBox("新设备配对") {
                     VStack(alignment: .leading, spacing: 8) {
                         if let code = model.pairingCode {
-                            Text("一次性配对码：\(code)").font(.title.monospaced())
-                            Text("120 秒内有效，最多 3 次尝试；长期令牌只保存在两端 Keychain。") .font(.caption)
                             if let name = model.pendingName {
                                 Text("请求设备：\(name)").bold()
                                 Toggle("允许此设备控制键盘与鼠标", isOn: $model.approveControl)
                                 HStack { Button("确认配对此设备") { model.approvePairing() }.buttonStyle(.borderedProminent); Button("拒绝", role: .destructive) { model.closePairing() } }
-                            } else { Button("取消配对") { model.closePairing() } }
-                        } else { Button("打开 120 秒配对窗口") { model.openPairing() }.disabled(!model.isRunning || model.activeDevice != nil) }
+                            } else {
+                                if let invitation = model.pairingInvitation {
+                                    PairingQRCodeView(invitation: invitation).id(invitation.pairingWindowID)
+                                    Text(invitation.name).bold()
+                                }
+                                Text("在 iPhone 的「Mac 桌面」点击「扫码配对 Mac」。手机需能访问此 Mac。")
+                                HStack {
+                                    Text("剩余 \(model.pairingSeconds) 秒").monospacedDigit()
+                                    Button("重新生成") { model.openPairing() }
+                                    Button("取消配对") { model.closePairing() }
+                                }
+                            }
+                            DisclosureGroup("手动配对信息") {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("地址：\(model.endpointAddress):\(model.port)")
+                                    Text("TLS SHA-256：\(model.fingerprint)").font(.caption.monospaced())
+                                    Text("一次性配对码：\(code)").font(.title.monospaced())
+                                }.textSelection(.enabled)
+                            }
+                            Text("120 秒内有效，最多 3 次尝试；配对仍需在此 Mac 确认。") .font(.caption)
+                        } else { Button("连接 iPhone") { model.openPairing() }.disabled(!model.isRunning || model.activeDevice != nil) }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }
                 GroupBox("已配对设备") {

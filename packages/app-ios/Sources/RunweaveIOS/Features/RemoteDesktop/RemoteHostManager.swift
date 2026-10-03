@@ -43,7 +43,7 @@ struct RemoteHostManager: View {
           }
         }
         Section {
-          Button { pairing = true } label: { Label("配对 Mac", systemImage: "plus") }
+          Button { pairing = true } label: { Label("扫码配对 Mac", systemImage: "qrcode.viewfinder") }
             .accessibilityIdentifier("remote-host-pair")
             .disabled(coordinator.storageError != nil)
         } footer: {
@@ -57,7 +57,7 @@ struct RemoteHostManager: View {
         }
       }
       .sheet(isPresented: $pairing) {
-        RemotePairHostView(coordinator: coordinator, backendConnections: backendConnections)
+        RemotePairHostScanView(coordinator: coordinator, backendConnections: backendConnections)
           .clarityMask().mobileAnalyticsScreen(.remotePairing)
       }
       .sheet(item: $editing) { host in
@@ -86,11 +86,12 @@ struct RemoteHostManager: View {
   }
 }
 
-private struct RemotePairHostView: View {
+struct RemotePairHostView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.scenePhase) private var scenePhase
   @ObservedObject var coordinator: RemoteDesktopCoordinator
   let backendConnections: [BackendConnection]
+  var onPaired: ((PairedRemoteHost) -> Void)? = nil
   @State private var name = ""
   @State private var host = ""
   @State private var port = String(RemoteTarget.computerPort)
@@ -179,16 +180,8 @@ private struct RemotePairHostView: View {
             try? RemoteCredentialStore().forget(target: paired)
             return
           }
-          do {
-            let previous = coordinator.hosts.first { $0.id == paired.id }
-            try coordinator.save(PairedRemoteHost(target: paired, backendConnectionID: association))
-            if let previous, previous.target.credentialsReference != paired.credentialsReference {
-              try? RemoteCredentialStore().forget(target: previous.target)
-            }
-          } catch {
-            try? RemoteCredentialStore().forget(target: paired)
-            throw error
-          }
+          let saved = try coordinator.savePairing(paired, backendConnectionID: association)
+          onPaired?(saved)
           dismiss()
         } catch {
           guard coordinator.generation == epoch, !Task.isCancelled, !(error is CancellationError) else { return }
@@ -262,7 +255,7 @@ private struct RemoteHostEndpointView: View {
   }
 }
 
-private func backendPicker(selection: Binding<String>, connections: [BackendConnection]) -> some View {
+func backendPicker(selection: Binding<String>, connections: [BackendConnection]) -> some View {
   Picker("关联 Backend", selection: selection) {
     Text("不关联").tag("")
     ForEach(connections) { Text($0.name).clarityMask().tag($0.id) }
