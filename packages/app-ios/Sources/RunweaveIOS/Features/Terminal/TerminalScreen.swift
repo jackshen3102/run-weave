@@ -5,6 +5,7 @@ import SwiftUI
 struct TerminalScreen: View {
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var quickInputs: BackendQuickInputModel
+  @EnvironmentObject private var remoteDesktop: RemoteDesktopCoordinator
   @ObservedObject var session: AppSession
   @ObservedObject var controller: SessionController
   @ObservedObject private var browser: BrowserSession
@@ -437,6 +438,11 @@ struct TerminalScreen: View {
       .accessibilityElement(children: .combine)
     }
     ToolbarItemGroup(placement: .navigationBarTrailing) {
+      Button { remoteDesktop.requestOpen(backendConnectionID: session.connection?.id) } label: {
+        Image(systemName: "display")
+      }
+      .accessibilityLabel("打开 Mac 桌面")
+      .accessibilityIdentifier("terminal-remote-desktop-open")
       if let title = browser.pageTitle {
         Button {
           guard let source = session.browserSource,

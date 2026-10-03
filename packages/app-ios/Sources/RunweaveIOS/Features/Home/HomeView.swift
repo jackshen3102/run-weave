@@ -9,6 +9,7 @@ struct HomeView: View {
   }
 
   @ObservedObject var session: AppSession
+  @EnvironmentObject private var remoteDesktop: RemoteDesktopCoordinator
   @StateObject private var branchStatuses = HomeBranchStatusModel()
   @State private var query = ""
   @State private var expanded = Set<String>()
@@ -183,6 +184,8 @@ struct HomeView: View {
     .toolbar {
       ToolbarItem(placement: .navigationBarTrailing) {
         Menu {
+          Button("Mac 桌面") { remoteDesktop.managingHosts = true }
+            .accessibilityIdentifier("remote-desktop-hosts")
           Button("耗电监控") { session.showingEnergyMonitor = true }
           Button("定时任务") { session.showingScheduledTasks = true }
           Button("新增项目") { newProject = true }.disabled(!session.canWrite)

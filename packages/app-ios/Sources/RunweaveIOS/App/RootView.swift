@@ -8,6 +8,7 @@ public struct RootView: View {
   @StateObject private var session = AppSession()
   @StateObject private var quickInputs = BackendQuickInputModel()
   @StateObject private var codexQuota = CodexQuotaStore()
+  @StateObject private var remoteDesktop = RemoteDesktopCoordinator()
   @ObservedObject private var notifications = NotificationCoordinator.shared
   @State private var managingConnections = false
   @State private var mobileLoginRevision = 0
@@ -43,6 +44,13 @@ public struct RootView: View {
       }
       .navigationTitle(session.authenticated ? "Runweave" : "Sign in")
       .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          if session.checking || !session.authenticated {
+            Button { remoteDesktop.managingHosts = true } label: { Image(systemName: "display") }
+              .accessibilityLabel("Mac 桌面")
+              .accessibilityIdentifier("remote-desktop-hosts")
+          }
+        }
         ToolbarItem(placement: .navigationBarLeading) {
           Button {
             managingConnections = true
@@ -64,14 +72,21 @@ public struct RootView: View {
     .id(connections.active?.scope)
     .task(id: "\(connections.active?.scope ?? ""):\(mobileLoginRevision)") { await session.activate(connections.active) }
     .onAppear {
+      remoteDesktop.setScenePhase(scenePhase)
       if connections.active == nil { managingConnections = true }
       notifications.consume(in: connections)
       Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
       notifications.foreground(connections: connections.connections)
     }
-    .onChange(of: session.generation) { _ in codexQuota.reset(); quickInputs.reset() }
+    .onChange(of: session.generation) { _ in
+      codexQuota.reset(); quickInputs.reset()
+      remoteDesktop.invalidate(reason: "backend_session_changed")
+    }
     .onChange(of: session.authenticated) { authenticated in
-      if !authenticated { codexQuota.reset(); quickInputs.reset() }
+      if !authenticated {
+        codexQuota.reset(); quickInputs.reset()
+        remoteDesktop.invalidate(reason: "backend_logged_out")
+      }
       else {
         notifications.refreshAutomaticTasks(connections: connections.connections)
         Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
@@ -85,6 +100,7 @@ public struct RootView: View {
       Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
     }
     .onChange(of: connections.active?.scope) { _ in
+      remoteDesktop.invalidate(reason: "computer_changed")
       Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
     }
     .onChange(of: session.health.status) { _ in
@@ -95,6 +111,7 @@ public struct RootView: View {
     } message: { Text(notifications.message ?? "") }
     .onChange(of: scenePhase) { phase in
       session.setScenePhase(phase)
+      remoteDesktop.setScenePhase(phase)
       if phase == .active { notifications.foreground(connections: connections.connections) }
       else { notifications.suspend() }
     }
@@ -104,8 +121,20 @@ public struct RootView: View {
         mobileLoginRevision += 1
       }.mobileAnalyticsScreen(.connections)
     }
+    .sheet(isPresented: $remoteDesktop.managingHosts, onDismiss: remoteDesktop.managerDismissed) {
+      RemoteHostManager(coordinator: remoteDesktop, backendConnections: connections.connections)
+        .clarityMask().mobileAnalyticsScreen(.remoteHosts)
+    }
+    .fullScreenCover(item: Binding(
+      get: { remoteDesktop.presentation },
+      set: { if $0 == nil { remoteDesktop.close(reason: "hidden") } }
+    )) { presentation in
+      RemoteDesktopCover(coordinator: remoteDesktop, presentation: presentation)
+        .clarityMask().mobileAnalyticsScreen(.remoteDesktop)
+    }
     .mobileAnalyticsScreen(session.checking ? .connecting : session.authenticated ? .home : .login)
     .environmentObject(quickInputs)
+    .environmentObject(remoteDesktop)
   }
 }
 

@@ -1,0 +1,107 @@
+version: 1
+name: 原生 Mac 桌面输入与 H.264 媒体
+description: >
+  覆盖交接 A08-A11、A15，验证实际 Mac 图形会话及原生 H.264 呈现，模拟视频不能形成通过证据。
+  使用 toolkit:agent-device 操作原生界面，输入结果须同时从 Mac 本地观察；测量使用单调时钟或说明误差的外部录像。
+  每条独立建立目标与显示配置，出现错误记 fail；缺真实设备、系统权限或测量手段记 blocked，静态检查不能记 pass。
+cases:
+  - id: RDI-001
+    name: 直接模式的点击拖拽滚动互不冲突
+    required: true
+    description: >
+      A08。直接模式的左击、右击、双击、长按拖拽与滚动触发相应 Mac 行为，右击不残留左键拖拽。
+    preconditions:
+      - 已配对真实 Mac Host可观察和控制，已打开含可点击、可拖拽与可滚动合成内容的测试窗口。
+    steps:
+      - 用 toolkit:agent-device 切直接模式，分别执行左击、右击和 Finder 双击；从 Mac 本地确认目标、菜单及双击行为准确且右击后无按住左键。
+      - 长按拖动合成对象，再滚动测试区域；确认拖动结束释放按钮，滚动没有误发点击或启动拖拽。
+  - id: RDI-002
+    name: 相对触控板模式保持指针与按键语义
+    required: true
+    description: >
+      A08。相对移动与点击、拖拽、滚动遵守同一当前显示身份，切模式先释放输入且不产生跳变后的误击。
+    preconditions:
+      - 真实 Mac Host已配对可控，桌面存在可观察的指针和合成输入区域。
+    steps:
+      - 用 toolkit:agent-device 切相对模式，移动、点击、右击、拖动和滚动；从 Mac 本地确认每次动作与预期相符。
+      - 在拖拽期间切换直接与相对模式；确认旧按键释放，模式变化本身不发送历史点击或错误目标输入。
+  - id: RDI-003
+    name: 文本提交保留中文 emoji 与组合输入
+    required: true
+    description: >
+      A09。软键盘提交文本与物理键码分开，中文、英文、emoji及组合字符完整到达 Mac，不借剪贴板暗中替换。
+    preconditions:
+      - 真实 iPhone 已配对可控 Host，Mac 打开空白文本编辑窗口且剪贴板有可核对的合成标记。
+    steps:
+      - 用 toolkit:agent-device 在远控软键盘分别提交英文、中文、emoji与组合字符，再回车和退格；从 Mac 本地核对实际文本完整且没有重复或丢字。
+      - 核对 Mac 原剪贴板合成标记仍保留，查看脱敏诊断；确认未用改写剪贴板替代文本提交且未记录输入正文。
+  - id: RDI-004
+    name: 快捷键与修饰键拥有成对的按下释放
+    required: true
+    description: >
+      A09。Esc、Tab、方向键及 Cmd/Ctrl/Option/Shift 组合按声明支持的软硬键盘路径生效，结束后无修饰键残留。
+    preconditions:
+      - 已配对可控 Mac Host，Mac 有合成文本和快捷键观察窗口；具备声明支持的手机软键盘及外接硬键盘。
+    steps:
+      - 用 toolkit:agent-device 依次执行 Esc、Tab、方向键和四类修饰键组合；从 Mac 本地核对实际快捷操作与 keyDown/keyUp 计数。
+      - 切换支持的软硬键盘输入来源并关闭键盘；确认按键和修饰键已释放，后续普通文字没有被旧修饰键改变。
+  - id: RDI-005
+    name: Retina 与黑边使用同一显示几何
+    required: true
+    description: >
+      A10。逻辑 point、采集 pixel 和 aspect-fit 内容矩形映射一致，四角可达且黑边点击不发往 Mac 内容区。
+    preconditions:
+      - 真实 Mac Host使用 Retina 显示器，测试窗口在屏幕四角及内容边缘有合成可点击标记，手机 viewport 会形成 letterbox。
+    steps:
+      - 用 toolkit:agent-device 点击远控内容四角与边缘；从 Mac 本地确认命中对应标记，核对显示 ID、逻辑尺寸、像素尺寸和 revision。
+      - 点击上下或左右黑边；确认 Host 输入计数不增加且没有点击落入内容区域。
+  - id: RDI-006
+    name: 旋转缩放后输入只使用最新内容矩形
+    required: true
+    description: >
+      A10。旋转与缩放更新 viewport 后映射仍准确，旧 display revision 不能控制新几何；拖拽越界会正确释放。
+    preconditions:
+      - 真实 iPhone 与已配对 Mac Host处于可控会话，测试窗口有四角合成标记，支持桌面缩放操作。
+    steps:
+      - 用 toolkit:agent-device 在横竖屏及缩放前后点击相同合成标记；从 Mac 本地核对命中位置一致且旧几何输入被拒绝。
+      - 缩放状态下将拖拽移出内容矩形并松开；确认 Host 不残留按钮，返回内容区的点击仍准确。
+  - id: RDI-007
+    name: 选中显示器消失不会切到另一块屏幕
+    required: true
+    description: >
+      A10。移除当前 display 后明确停止该显示流或报错，不能默认展示或控制另一块屏幕。
+    preconditions:
+      - Mac 有可移除的第二块实体显示器，Host 当前明确选择该 display，手机已连接；另一块屏幕使用不同合成标记。
+    steps:
+      - 用 toolkit:agent-device 确认当前 display 身份并由 Mac 本地移除它；确认手机显示明确不可用状态且没有出现另一块屏幕内容。
+      - 继续尝试点击后重新连接该显示器；确认失效 revision 的输入被拒绝，只有显式恢复有效显示状态后才允许控制。
+  - id: RDI-008
+    name: H.264 依赖链和格式变化恢复到有效关键帧
+    required: true
+    description: >
+      A11。中断媒体、丢失关键帧或变更编码尺寸后清除依赖失效队列，重取格式与 IDR，恢复前不显示可控。
+    preconditions:
+      - 已配对真实 Host 的 H.264 会话运行中；具备在媒体通道制造中断及改变声明编码尺寸的非生产测试手段。
+    steps:
+      - 中断媒体或制造依赖链缺失，用 toolkit:agent-device 观察恢复；确认队列有上限、请求关键帧并取得真实新帧，不能无限绿屏、黑屏或呈现旧帧。
+      - 保持同一桌面呈现与同一锁定 display ID，改变该屏幕几何使编码像素尺寸实际变化；确认旧会话失效并释放输入，自动建立新 session ID与更高 display revision，取得新尺寸格式与含 SPS/PPS的 IDR后恢复，首帧前不可控制且不补发旧输入，客户端统计留下恢复与丢帧计数。
+  - id: RDI-009
+    name: 真机持续运行保留有界队列与稳定性数据
+    required: true
+    description: >
+      A15。真实 Mac/iPhone 持续十分钟以上的数据可复查，媒体队列有界、无不可恢复积压。
+    preconditions:
+      - 真实 Mac/iPhone 在明确 LAN 拓扑内运行真实 H.264 会话，系统权限有效；可读取 CPU、内存、温度和队列统计。
+    steps:
+      - 记录设备、芯片、系统、Wi-Fi/AP、路由、codec/profile、分辨率、帧率、码率、版本与测量工具；持续十分钟以上并保存 CPU/内存/温度与队列时间序列。
+      - 复查全过程队列长度、帧年龄、丢帧与恢复记录；确认不存在无限增长、卡住输入或不可恢复积压，保留原始数据与工具误差。
+  - id: RDI-010
+    name: 端到端延迟测量保留方法误差与原始样本
+    required: true
+    description: >
+      A15 的性能基线。分别记录 RTT与端到端可见延迟，不把 sample提交或本地指针反馈当 Mac应用的实际响应。
+    preconditions:
+      - 真实 Mac/iPhone运行已配对可控的H.264会话，预设与LAN拓扑已固定；具备外部高帧率录像或说明误差的测量装置。
+    steps:
+      - 记录本仓库和上游版本、设备系统、codec/profile、预设与测量装置，执行不少于一百次可重复合成输入。
+      - 分别报告LAN RTT、编码和呈现队列、端到端可见延迟的样本量、p50/p95及异常样本；保留原始样本和测量误差，确认没有跨机器不同步时钟直接相减。

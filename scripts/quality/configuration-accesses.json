@@ -4109,7 +4109,7 @@
     "expression": "static let store = UserDefaults.standard",
     "count": 1,
     "category": "device-adapter",
-    "reason": "设备沙箱偏好通过登记的 DevicePreferences/deviceStorage adapter；static let store = UserDefaults.standard"
+    "reason": "设备沙箱偏好通过 DevicePreferences adapter；native.remoteHosts.v1 仅存 Host 身份、独立端点、证书 pin、可选 Backend 关联及 credential 引用，远控 secret 独立存 Keychain，不属于 settings.yaml。"
   },
   {
     "file": "packages/app-ios/ios/Diagnostics/TerminalProbe.swift",

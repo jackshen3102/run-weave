@@ -10,6 +10,7 @@ public enum MobileAnalytics {
     case composer, quickReplies = "quick_replies", quickReplyEditor = "quick_reply_editor"
     case scheduledTasks = "scheduled_tasks", scheduledTaskEditor = "scheduled_task_editor"
     case browser, filePreview = "file_preview", history, terminalInfo = "terminal_info", diagnostics
+    case remoteDesktop = "remote_desktop", remoteHosts = "remote_hosts", remotePairing = "remote_pairing"
     case buildInfo = "build_info", codexQuota = "codex_quota", share, newProject = "new_project", renameTerminal = "rename_terminal"
   }
 

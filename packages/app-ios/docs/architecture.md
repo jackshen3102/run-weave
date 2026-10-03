@@ -3,6 +3,10 @@
 Runweave iOS 是独立的原生客户端。Xcode host 装配 Swift package，Swift package 仅依赖 SwiftTerm，
 业务数据通过 Backend HTTP/WS 获取。构建不读取其他客户端源码；协议兼容以真实接口和 Swift DTO 为准。
 
+Mac 桌面为限定架构例外：宿主通过独立 Swift 远控包直连明确配对的 Mac Host，
+不导入 Backend/Electron 实现或复用 Backend 长期凭据。目标身份、生命周期、来源与验收合同
+见 [Mac 局域网远控](../../../docs/architecture/remote-desktop.md)。
+
 ```text
 ios/RunweaveNative → RootView → AppSession
                                ├─ APIClient → Backend HTTP

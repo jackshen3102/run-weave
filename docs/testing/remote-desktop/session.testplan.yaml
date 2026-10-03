@@ -1,0 +1,110 @@
+version: 1
+name: 原生 Mac 桌面会话与宿主生命周期
+description: >
+  验证现有 Runweave App 的独立 Mac Host 入口与会话资源归属，覆盖交接 A01-A05、A14。
+  使用 toolkit:agent-device 操作真实原生页面并取得 Host 统计，不以截图、mock 视频或构建成功代替行为。
+  每条独立建立设备、目标与终端前提；证据不足记 blocked，出现与预期不符的行为记 fail，只有完整证据记 pass。
+  模拟器只验证对应原生界面和真实 H.264 闭环；真机 Wi-Fi、锁屏、杀进程项必须另行执行。
+cases:
+  - id: RDS-001
+    name: 升级继续使用现有 App 身份与用户数据
+    required: true
+    description: >
+      A01。覆盖安装后 Bundle ID 仍为 com.runweave.app.native，原 Backend 登录、连接与草稿可读取，设备没有第二个远控 App。
+    preconditions:
+      - 设备已安装旧版 Runweave，存在已保存的 Backend 登录、连接和合成草稿，升级前证据已留存。
+      - 当前版本通过项目统一 iOS 构建安装流程覆盖同一设备；执行者可读取实际 Bundle ID 与应用清单。
+    steps:
+      - 记录升级前后 Bundle ID、安装命令及应用清单；确认覆盖原 App 且没有新增移动 App 身份。
+      - 用 toolkit:agent-device 打开原连接及终端；确认原登录和合成草稿仍可读取，既有 Keychain 与 UserDefaults 标识未迁移或清空。
+  - id: RDS-002
+    name: 返回桌面与终端不会丢导航或累积会话
+    required: true
+    description: >
+      A02。每次返回保留同一终端与未发送草稿，连续二十次进入退出后同时至多一个控制会话，旧帧不会重新出现。
+    preconditions:
+      - 当前 App 连接有效 Backend 并打开一个终端，留有合成文字与图片草稿。
+      - 同 LAN Mac Host 已配对并授权观察与控制；Host 能提供活动会话、采集订阅及输入释放统计。
+    steps:
+      - 用 toolkit:agent-device 从终端快捷入口选择已配对 Mac，等待真实 H.264 首帧，再返回；确认终端身份、Tab 与草稿保持原样。
+      - 重复进入退出二十次，每次核对 Host 会话数与客户端队列；确认退出后无订阅、无旧帧、无持续解码，也没有递增的会话或资源残留。
+  - id: RDS-003
+    name: 主动退出立即终止隐藏桌面的媒体与输入
+    required: true
+    description: >
+      A03。桌面消失后停止网络接收、解码、重连与呈现，释放本会话输入；Host 无订阅时停止采集编码。
+    preconditions:
+      - 当前设备正通过已配对 Host 的真实 H.264 会话观看 Mac；执行者可观察两端队列和采集计数。
+    steps:
+      - 在桌面产生一次拖拽和修饰键按下后用原生返回按钮退出；确认输入释放、媒体队列清空，Host 活动订阅归零。
+      - 保持终端页面可见并观察超过控制租约与重连退避周期；确认客户端不再解码、Host 不继续编码且没有自动重连。
+  - id: RDS-004
+    name: 后台与锁屏终止旧呈现并以新会话恢复
+    required: true
+    description: >
+      A03。真实 iPhone 后台和锁屏后没有隐藏串流，恢复只建立当前目标的新代际，不沿用旧输入或旧画面。
+    preconditions:
+      - 真实 iPhone 已配对同 LAN Host，桌面会话可控制；具备锁屏解锁操作和两端非敏感统计读取能力。
+    steps:
+      - 用 toolkit:agent-device 建立桌面会话后切 App 到后台；确认媒体与输入停止、Host 订阅结束，再回前台取得新会话与首帧。
+      - 对同一目标重新建立会话后锁屏并解锁；确认旧会话输入被释放，恢复首帧前不显示可控，历史点击不会补发。
+  - id: RDS-005
+    name: 切换 Mac 拒绝上一目标的帧与输入
+    required: true
+    description: >
+      A04。目标 A 的授权、帧、异步回调和重连不会作用于目标 B；可见机器名称始终与实际控制对象一致。
+    preconditions:
+      - 两个不同身份的 Mac Host A 和 B 已配对，屏幕使用不同合成标记；可分别读取 Host 输入计数。
+    steps:
+      - 用 toolkit:agent-device 连接 A，在其桌面输入合成内容，退出并选择 B；确认 A 会话终止且 B 显示自己的机器名称和真实首帧。
+      - 在 A 的旧连接可能迟到期间对 B 点击和输入；确认只有 B 的输入计数变化，A 的帧与回调不覆盖 B，A 不重新获得控制会话。
+  - id: RDS-006
+    name: Backend 切换与登出失效旧桌面代际
+    required: true
+    description: >
+      A04。Backend 连接切换或登出结束宿主当前桌面，旧回调不能恢复它；之后仍可显式打开已配对的独立 Host。
+    preconditions:
+      - App 有两个可选择的 Backend 连接与一个已配对独立 Mac Host，当前已登录并能建立桌面会话。
+    steps:
+      - 用 toolkit:agent-device 返回终端后切换 Backend，重新显式打开桌面；确认旧桌面任务已结束，新呈现使用新代际且没有根据 Backend URL 推导 Host 地址。
+      - 关闭桌面并登出当前 Backend；确认没有旧重连或输入，登录页仍能进入独立桌面管理并显式选择已配对 Host。
+  - id: RDS-007
+    name: Wi-Fi 断开靠 Host 租约释放输入
+    required: true
+    description: >
+      A05。客户端无法善后时 Host 仍在声明的控制租约期限内释放拖拽和修饰键；恢复不重放历史输入。
+    preconditions:
+      - 真实 iPhone 与已配对 Mac Host 使用同一 LAN；可独立断开手机 Wi-Fi并从 Mac 本地观察输入状态与租约统计。
+    steps:
+      - 用 toolkit:agent-device 在真实桌面按住拖拽与修饰键，然后断开 Wi-Fi；确认 Host 在规定租约期限内释放全部该会话合成输入。
+      - 恢复 Wi-Fi并重新取得有效会话与首帧；确认断线期间输入没有排队补发，队列没有持续增长。
+  - id: RDS-008
+    name: 强制终止 App 后 Host 仍清理控制权
+    required: true
+    description: >
+      A05。没有客户端 releaseAll 的情况下，Host 自动释放失联会话输入；重启 App 不恢复旧授权与输入队列。
+    preconditions:
+      - 真实 iPhone 的当前桌面已连接配对 Host，具备系统强制终止 App 与 Host 本地输入状态观察能力。
+    steps:
+      - 在桌面按住拖拽及修饰键，直接强制终止 App；确认 Host 在规定租约期限内释放输入并结束失联订阅。
+      - 重新启动原 App，重新取得 fresh UI 引用并显式打开目标；确认新会话不会补发旧输入或显示旧帧。
+  - id: RDS-009
+    name: Backend 离线仍可独立打开已配对桌面
+    required: true
+    description: >
+      A14。Backend 离线和 Host 可用是两个状态，登录页及电脑级入口仍可显式控制已配对 Mac。
+    preconditions:
+      - 已保存一个已配对且可达的 Mac Host，并配置一个不可达的 Backend；两者使用明确分开的 endpoint。
+    steps:
+      - 用 toolkit:agent-device 在 Backend 离线时打开电脑级桌面入口；确认显示独立 Host 配置且没有把 Backend 离线提示作为 Host 状态。
+      - 连接已配对 Host并等待真实首帧，完成合成点击；确认桌面可用且没有改写 Backend URL 或复用其长期 token。
+  - id: RDS-010
+    name: Host 不可用不破坏既有终端连接
+    required: true
+    description: >
+      A14。桌面 Host 停止或不可达只影响远控页面，返回后终端、文件及未发送草稿仍使用原 Backend。
+    preconditions:
+      - Backend 在线且终端与文件可访问，终端留有合成未发送草稿；独立 Host endpoint 不可达。
+    steps:
+      - 用 toolkit:agent-device 尝试打开不可达 Host；确认远控显示明确断线或连接错误，不假称 Backend 离线。
+      - 返回同一终端并读取文件、检查草稿及执行一条无副作用命令；确认既有 Backend 连接保持有效，远控错误没有清理原工作台状态。

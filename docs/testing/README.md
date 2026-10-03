@@ -25,6 +25,7 @@
 | [`browser/`](./browser/)                         | 浏览器和原型画廊                                     |
 | [`evolution/`](./evolution/)                     | Agent Self-Evolution                                 |
 | [`platform/`](./platform/)                       | Dev Session、Beta Pool、桌面 companion 与 CLI 控制面 |
+| [`remote-desktop/`](./remote-desktop/)           | Mac LAN 远控会话、输入媒体、安全权限与来源           |
 | [`runbooks/`](./runbooks/)                       | 可重复执行的人工操作流程                             |
 | [`skills/`](./skills/)                           | Toolkit 技能的真实输入、输出与验收边界               |
 | [`scheduled-tasks/`](./scheduled-tasks/)         | 定时任务调度、后台执行、Web 管理与普通终端恢复       |

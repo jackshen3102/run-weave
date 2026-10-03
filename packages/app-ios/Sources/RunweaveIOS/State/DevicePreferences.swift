@@ -8,6 +8,7 @@ enum DevicePreferences {
   static let screenAwakeKey = "native.keepScreenAwake"
   static let instantRepliesVisibleKey = "native.terminal.instantReplies.visible"
   private static let connectionsKey = "native.connections.v1"
+  private static let remoteHostsKey = "native.remoteHosts.v1"
 
   static var theme: String { store.string(forKey: themeKey) ?? "dark" }
   static var connections: Data? {
@@ -15,6 +16,15 @@ enum DevicePreferences {
     set {
       if let newValue { store.set(newValue, forKey: connectionsKey) }
       else { store.removeObject(forKey: connectionsKey) }
+    }
+  }
+
+  // Non-secret Host metadata only; remote credentials have their own Keychain service.
+  static var remoteHosts: Data? {
+    get { store.data(forKey: remoteHostsKey) }
+    set {
+      if let newValue { store.set(newValue, forKey: remoteHostsKey) }
+      else { store.removeObject(forKey: remoteHostsKey) }
     }
   }
 }
