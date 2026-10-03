@@ -47,7 +47,20 @@ service `com.runweave.remote-desktop.credentials.v1`，不沿用 Backend 的凭�
 不会补发历史点击。Host 控制租约负责客户端断网或被杀后释放合成输入；本地停止与撤销
 是 Host 自己的控制权边界，不依赖手机能完成善后。
 
-首次配对要求用户核对 Mac 本地显示的证书指纹、一次性码，并在 Mac 本地确认手机。
+首次配对优先在 Mac Host 点击“连接 iPhone”，手机在“Mac 桌面 → 扫码配对 Mac”扫描
+本机窗口的二维码，自动取得端点、真实 Host ID、证书 pin、窗口 ID 与一次性码；
+二维码只用于发起请求，仍需在 Mac 本地确认手机，默认只读。相机不可用时保留手动填写
+并核对 Mac 本地显示的完整指纹和一次性码。可选终端关联在扫码保存后设置。
+
+二维码类型为 `runweave.remote-desktop-pairing`，版本 1，JSON 最多 4096 字节，
+不包含长期凭据或 Backend 登录态。手机拒绝误扫登录码、未知版本与无效端点。
+扫描自己的 Mac 本地屏幕承担初次 pin 传递，不是网络上的 trust-on-first-use。
+Host 的单调时钟限制 120 秒窗口；刷新、取消、批准、断连、停止、睡眠和到期失效邀请。
+扫码 TLS 消息携带并回显 `pairingWindowID`，手机保存前校验 Host ID、窗口与设备身份。
+缺少窗口 ID 的旧客户端仍可按原六位码流程手动配对；旧 Host 使用手动入口。
+两条路径共用 Keychain → 目标元数据保存逻辑，保存失败清理新 credential，重配保留原有
+终端关联并在成功落盘后删除旧 credential。取消/后台隔离旧异步结果，不自动打开桌面。
+
 系统 TLS 承担传输保护，不默认接受任意自签证书，不把 token 放 URL。控制与视频使用
 分开的连接。手机“忘记本机配对”删除其 credential 引用；彻底撤销设备授权须在 Mac
 Host 本地执行，界面明确区分两种操作。部署不配置公网映射、云中继或复用现有 Tunnel。
@@ -78,6 +91,7 @@ Host 构建、签名、授权、启动、停止和撤销操作见
 - [会话与宿主生命周期](../testing/remote-desktop/session.testplan.yaml)：A01–A05、A14。
 - [输入与媒体](../testing/remote-desktop/input-media.testplan.yaml)：A08–A11、A15。
 - [配对、权限、隐私与来源](../testing/remote-desktop/security-source.testplan.yaml)：A06–A07、A12–A13、A16。
+- [扫码配对](../testing/remote-desktop/qr-pairing.testplan.yaml)：真实相机、邀请失效、身份绑定与手动备用。
 
 每项只能依据完整证据记 pass，行为不符记 fail，缺环境或证据记 blocked。模拟器里的
 真实 Host/H.264 闭环只证明对应原生链路；不能替代真机 Wi-Fi、硬件编码、温度/功耗、

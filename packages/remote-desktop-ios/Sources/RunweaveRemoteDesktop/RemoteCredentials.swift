@@ -64,21 +64,47 @@ public struct RemotePairingClient {
     /// against the Mac's local display. TLS never performs trust-on-first-use.
     public func pair(target: RemoteTarget, code: String, deviceName: String,
                      onWaitingForConfirmation: (@MainActor () -> Void)? = nil) async throws -> RemoteTarget {
+        try await pair(target: target, code: code, windowID: nil, deviceName: deviceName,
+                       onWaitingForConfirmation: onWaitingForConfirmation)
+    }
+
+    /// Scanning the local Host display conveys its pin and exact invitation identity.
+    public func pair(invitation: RemotePairingQR, deviceName: String,
+                     onWaitingForConfirmation: (@MainActor () -> Void)? = nil) async throws -> RemoteTarget {
+        var allowLoopback = false
+        #if DEBUG && targetEnvironment(simulator)
+        allowLoopback = true
+        #endif
+        try invitation.validate(allowSimulatorLoopback: allowLoopback)
+        return try await pair(target: invitation.target, code: invitation.code,
+            windowID: invitation.pairingWindowID, deviceName: deviceName,
+            onWaitingForConfirmation: onWaitingForConfirmation)
+    }
+
+    private func pair(target: RemoteTarget, code: String, windowID: UUID?, deviceName: String,
+                      onWaitingForConfirmation: (@MainActor () -> Void)?) async throws -> RemoteTarget {
         guard code.utf8.count == 6, code.utf8.allSatisfy({ (48...57).contains($0) }),
-              !deviceName.isEmpty, deviceName.count <= 80 else {
+              !deviceName.isEmpty, deviceName.utf8.count <= 80 else {
             throw RemotePairingError.invalidCode
         }
         let connection = try await RemoteTLSConnection.connect(target: target)
         defer { connection.close() }
         let deviceID = try credentials.deviceID()
         try await connection.send(.init(kind: .pair, hostID: target.id, deviceID: deviceID,
-                                        deviceName: deviceName, code: code))
-        let paired = try await withThrowingTaskGroup(of: RemoteControlMessage.self) { group in
+                                        deviceName: deviceName, code: code, pairingWindowID: windowID))
+        let paired = try await withTaskCancellationHandler(operation: {
+          try await withThrowingTaskGroup(of: RemoteControlMessage.self) { group in
             group.addTask {
                 while !Task.isCancelled {
                     let message = try await connection.receiveMessage()
                     switch message.kind {
-                    case .pairingPending: await onWaitingForConfirmation?()
+                    case .pairingPending:
+                        if let windowID {
+                            guard message.hostID == target.id, message.pairingWindowID == windowID else {
+                                throw RemotePairingError.identityChanged
+                            }
+                        }
+                        await onWaitingForConfirmation?()
                     case .paired: return message
                     case .error: throw RemotePairingError.declined(message.reason ?? "Mac 拒绝了配对。")
                     default: throw RemoteTransportError.invalidMessage
@@ -94,15 +120,25 @@ public struct RemotePairingClient {
             defer { group.cancelAll() }
             guard let result = try await group.next() else { throw RemotePairingError.timedOut }
             return result
-        }
+          }
+        }, onCancel: { connection.close() })
         try Task.checkCancellation()
         guard let hostID = paired.hostID, paired.deviceID == deviceID,
               let token = paired.token, token.count == 32 else { throw RemoteTransportError.invalidMessage }
+        if let windowID {
+            guard hostID == target.id, paired.pairingWindowID == windowID else {
+                throw RemotePairingError.identityChanged
+            }
+        }
         let reference = try credentials.save(.init(hostID: hostID, deviceID: deviceID,
             certificateFingerprint: RemoteTLS.normalizedFingerprint(target.certificateFingerprint), token: token))
         var result = target
         result.id = hostID; result.credentialsReference = reference
-        if let name = paired.deviceName, !name.isEmpty { result.name = name }
+        if Task.isCancelled {
+            try? credentials.forget(target: result)
+            throw CancellationError()
+        }
+        if let name = paired.deviceName, !name.isEmpty, name.utf8.count <= 128 { result.name = name }
         return result
     }
 }

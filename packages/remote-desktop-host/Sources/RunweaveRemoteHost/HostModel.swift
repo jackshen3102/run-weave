@@ -18,6 +18,8 @@ final class HostModel: ObservableObject {
     @Published var isRunning = false
     @Published var isReconfiguring = false
     @Published var pairingCode: String?
+    @Published private(set) var pairingInvitation: RemotePairingQR?
+    @Published private(set) var pairingSeconds = 0
     @Published var pendingName: String?
     @Published var approveControl = false
     @Published var devices: [PairedDevice] = []
@@ -155,13 +157,23 @@ final class HostModel: ObservableObject {
         refreshPermissions()
     }
     func openPairing() {
-        guard isRunning, session == nil, devices.count < 32 else { status = "先结束当前会话，再开始配对。"; return }
-        closePairing(); pairingCode = String(format: "%06d", UInt32.random(in: 0...999999))
+        guard isRunning, consoleAvailable, session == nil, devices.count < 32,
+              let hostID, !endpointAddress.isEmpty, !fingerprint.isEmpty else { status = "先启动服务并结束当前会话，再开始配对。"; return }
+        closePairing(reason: "二维码已更新，请重新扫码。")
+        let code = String(format: "%06d", UInt32.random(in: 0...999999))
+        pairingCode = code
+        let name = (Host.current().localizedName ?? "Mac") + (HostRuntime.simulatorLoopback ? "（模拟器验证）" : "")
+        let label = String(bytes: name.utf8.prefix(128), encoding: .utf8) ?? "Mac"
+        pairingInvitation = RemotePairingQR(hostID: hostID, name: label, host: endpointAddress,
+            port: port, certificateFingerprint: fingerprint, pairingWindowID: UUID(), code: code,
+            expiresAt: Date().addingTimeInterval(120))
+        pairingSeconds = 120
         pairingUntil = ProcessInfo.processInfo.systemUptime + 120; pairingAttempts = 0; approveControl = false
     }
-    func closePairing() {
-        pairingCode = nil; pairingUntil = 0; pendingName = nil; pairingRequestID = nil
-        if let pendingPair { self.pendingPair = nil; pendingPair.2.resume(throwing: HostError.rejected("Mac 已取消配对。")) }
+    func closePairing(reason: String = "Mac 已取消配对。") {
+        pairingCode = nil; pairingInvitation = nil; pairingSeconds = 0
+        pairingUntil = 0; pendingName = nil; pairingRequestID = nil
+        if let pendingPair { self.pendingPair = nil; pendingPair.2.resume(throwing: HostError.rejected(reason)) }
     }
     func approvePairing() {
         guard let pending = pendingPair, pairingUntil > ProcessInfo.processInfo.systemUptime else { return }
@@ -171,7 +183,8 @@ final class HostModel: ObservableObject {
             let record = PairedDevice(id: pending.0, name: pending.1, token: token, controlAllowed: approveControl, pairedAt: Date())
             var next = devices.filter { $0.id != record.id }; next.append(record)
             try HostPeerStore.save(next); devices = next
-            pendingPair = nil; pairingCode = nil; pendingName = nil; pairingUntil = 0
+            pendingPair = nil; pairingCode = nil; pairingInvitation = nil; pairingSeconds = 0
+            pendingName = nil; pairingUntil = 0
             pending.2.resume(returning: record)
         } catch { status = error.localizedDescription; closePairing() }
     }
@@ -252,6 +265,12 @@ final class HostModel: ObservableObject {
         guard let code = pairingCode, pairingUntil > ProcessInfo.processInfo.systemUptime, pairingAttempts < 3,
               pendingPair == nil, pairingRequestID == nil, session == nil, let id = message.deviceID, let name = message.deviceName,
               !name.isEmpty, name.utf8.count <= 80, message.code?.count == 6 else { throw HostError.rejected("Mac 未开启有效的配对窗口。") }
+        let windowID = message.pairingWindowID
+        if let windowID {
+            guard windowID == pairingInvitation?.pairingWindowID, message.hostID == identity?.hostID else {
+                throw HostError.rejected("二维码已失效或 Mac 身份不匹配，请重新扫码。")
+            }
+        }
         pairingAttempts += 1
         guard message.code == code else {
             if pairingAttempts >= 3 { closePairing() }
@@ -259,13 +278,29 @@ final class HostModel: ObservableObject {
         }
         let reservation = UUID(); pairingRequestID = reservation
         defer { if pairingRequestID == reservation { pairingRequestID = nil } }
-        try await channel.send(.init(kind: .pairingPending, reason: "请在 Mac 本机确认新设备和控制权限。"))
+        try await channel.send(.init(kind: .pairingPending, hostID: identity?.hostID,
+            pairingWindowID: windowID, reason: "请在 Mac 本机确认新设备和控制权限。"))
         guard pairingRequestID == reservation, pairingUntil > ProcessInfo.processInfo.systemUptime else { throw HostError.rejected("配对窗口已取消或过期。") }
-        let device = try await withCheckedThrowingContinuation { continuation in
-            pendingPair = (id, name, continuation); pendingName = name
+        // A disconnected/cancelled phone must release the pending local approval.
+        let disconnected = Task { [weak self] in
+            do { _ = try await channel.receiveMessage() } catch {}
+            guard !Task.isCancelled, self?.pairingRequestID == reservation else { return }
+            self?.closePairing()
         }
-        let hostName = (Host.current().localizedName ?? "Mac") + (HostRuntime.simulatorLoopback ? "（模拟器验证）" : "")
-        try await channel.send(.init(kind: .paired, hostID: identity!.hostID, deviceID: device.id, deviceName: hostName, token: device.token, controlAllowed: device.controlAllowed))
+        defer { disconnected.cancel() }
+        do {
+            let device = try await withCheckedThrowingContinuation { continuation in
+                pendingPair = (id, name, continuation); pendingName = name
+            }
+            let hostName = (Host.current().localizedName ?? "Mac") + (HostRuntime.simulatorLoopback ? "（模拟器验证）" : "")
+            try await channel.send(.init(kind: .paired, hostID: identity!.hostID, deviceID: device.id,
+                deviceName: hostName, pairingWindowID: windowID, token: device.token, controlAllowed: device.controlAllowed))
+        } catch {
+            // Cancelling the disconnect reader closes TLS. Deliver the rejection first.
+            try? await channel.send(.init(kind: .error,
+                reason: (error as? HostError)?.localizedDescription ?? "配对连接已断开，请重新扫码。",
+                errorCode: .authentication))
+        }
     }
 
     private func runControl(_ active: HostSession) async throws {
@@ -347,7 +382,10 @@ final class HostModel: ObservableObject {
     }
     private func maintain() async {
         refreshPermissions()
-        if pairingUntil > 0, ProcessInfo.processInfo.systemUptime >= pairingUntil { closePairing() }
+        if pairingUntil > 0 { pairingSeconds = max(0, Int(ceil(pairingUntil - ProcessInfo.processInfo.systemUptime))) }
+        if pairingUntil > 0, ProcessInfo.processInfo.systemUptime >= pairingUntil {
+            closePairing(reason: "二维码已过期，请在 Mac 重新生成并扫码。")
+        }
         guard let active = session else { return }
         if ProcessInfo.processInfo.systemUptime - active.lastHeartbeat > 3 { await stopSession(reason: "控制心跳超时，已释放全部输入。"); return }
         if active.wantsViewing && !screenAllowed { await stopSession(reason: "屏幕录制权限已撤销。", errorCode: .permissionScreenRecording); return }

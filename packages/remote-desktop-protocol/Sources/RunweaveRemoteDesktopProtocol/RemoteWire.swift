@@ -85,6 +85,7 @@ public struct RemoteControlMessage: Codable, Sendable {
     public var deviceID: UUID?
     public var deviceName: String?
     public var code: String?
+    public var pairingWindowID: UUID?
     public var token: Data?
     public var channel: String?
     public var sessionID: UUID?
@@ -99,9 +100,10 @@ public struct RemoteControlMessage: Codable, Sendable {
     public var frames: UInt64?
     public var droppedFrames: UInt64?
     public var encodeMilliseconds: Double?
-    public init(kind: Kind, hostID: UUID? = nil, deviceID: UUID? = nil, deviceName: String? = nil, code: String? = nil, token: Data? = nil, channel: String? = nil, sessionID: UUID? = nil, displayID: UInt32? = nil, displayRevision: UInt64? = nil, display: RemoteDisplay? = nil, input: RemoteInput? = nil, controlAllowed: Bool? = nil, reason: String? = nil, errorCode: ErrorCode? = nil, nonce: UInt64? = nil) {
+    public init(kind: Kind, hostID: UUID? = nil, deviceID: UUID? = nil, deviceName: String? = nil, code: String? = nil, pairingWindowID: UUID? = nil, token: Data? = nil, channel: String? = nil, sessionID: UUID? = nil, displayID: UInt32? = nil, displayRevision: UInt64? = nil, display: RemoteDisplay? = nil, input: RemoteInput? = nil, controlAllowed: Bool? = nil, reason: String? = nil, errorCode: ErrorCode? = nil, nonce: UInt64? = nil) {
         self.kind = kind; self.hostID = hostID; self.deviceID = deviceID; self.deviceName = deviceName
         self.code = code; self.token = token; self.channel = channel; self.sessionID = sessionID
+        self.pairingWindowID = pairingWindowID
         self.displayID = displayID; self.displayRevision = displayRevision; self.display = display
         self.input = input; self.controlAllowed = controlAllowed; self.reason = reason; self.errorCode = errorCode; self.nonce = nonce
     }

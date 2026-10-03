@@ -21,10 +21,28 @@
 - [输入、媒体、预览与主题](../../../docs/testing/app/ios-native-features.testplan.yaml)
 - [扫码跨端交互](../../../docs/testing/app/mobile-qr-login.testplan.yaml)
 - [扫码协议与凭据](../../../docs/testing/app/mobile-qr-login-protocol.testplan.yaml)
+- [Mac 桌面扫码配对](../../../docs/testing/remote-desktop/qr-pairing.testplan.yaml)
 
 布局改动若有独立执行计划，以该任务当前计划为准，不继承历史运行结果。
 原生 UI 需要 Simulator / 真机实际操作。Playwright 可用于 Backend 配套的 Web 客户端，不能验证 SwiftUI。
 不新增 XCTest 或单元测试框架来替代真实 UI 取证。
+
+2026-10-04 Mac 桌面已增加扫码配对，手动填写保留为备用；正常扫码无需输入五个字段，
+仍由 Mac 本机确认，默认只读，配对本身不启动采集。Swift 协议、macOS Host Release 与
+当前 iOS Simulator Debug 构建通过；新版 App 已经共享设备池安装、启动。
+隔离 TLS 运行探针验证窗口绑定、竞争请求拒绝、刷新/断连失效、批准后签发、默认只读及
+真实 120 秒过期；Host 实际 QR 渲染函数产物经 Vision 解码。客户端探针使用独立 Keychain
+与 Debug 回环，验证身份匹配后保存，以及错误 Host ID/窗口 ID 拒绝，不代表真机 Keychain 验收。
+原生模拟器已操作管理入口、相机拒绝提示与手动备用，12 条用例仅通过格式检查，未全量执行。
+真实 iPhone 相机 → Mac 确认 → 手机保存/重启 → 桌面首帧，以及隔离 Clarity 回放仍未验收；
+Mac 原生操作工具返回 `Sky Computer Use native pipe closed before response`，重连仍失败。
+随后按用户要求更新两端：Host Release 使用原 Apple Development 团队与相同 designated
+requirement，备份旧包后替换 `/Applications/Runweave Remote Host.app`，已核对安装二进制与
+构建产物一致，并确认该路径的新进程启动。iPhone 17（USB）由 `pnpm ios:update` 从
+`0.1.6 (9)` 更新到 `0.1.7 (10)`，返回 `state=updated`、安装与启动均 `verified`；
+`uiVerified=false`，这些更新不关闭上述真实扫码验收缺口。证据在当前 worktree 的
+`.runweave/mobile-qa/remote-qr-20261004/`、`.runweave/remote-desktop-implementation/qr-probe/`
+及 `.runweave/remote-desktop-implementation/qr-deployment-status.json`。
 
 2026-09-09 将终端常驻 Composer 改为右下角入口和系统 Sheet，大输入区覆盖终端，键盘不再改变
 底层终端视口；同时保留草稿提示和执行中一键停止。10 条布局测试计划通过格式校验，iOS 26.5
