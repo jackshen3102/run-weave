@@ -106,6 +106,8 @@ files:
     local: packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/H264Decoder.swift
   - source: clients/Mirador/Sources/InputCaptureView.swift
     local: packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemoteNativeSurface.swift
+  - source: clients/Mirador/Sources/VideoSurface.swift
+    local: packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemoteNativeSurface.swift
   - source: clients/Mirador/Sources/RemoteSession.swift
     local: packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemoteDesktopSession.swift
 license_file: packages/remote-desktop-ios/ThirdParty/Mirador-LICENSE.txt
@@ -114,14 +116,15 @@ third_party_dependencies:
 local_changes:
   - Keep Annex-B splitting and CoreMedia sample construction; add actual VideoToolbox decoding
   - Add three-frame in-flight bound, decoder epoch, format and IDR recovery
-  - Explicit display geometry/contentRect/revision and view-owned native layer
+  - Adapt VideoSurface UIView.layerClass backing-layer hosting; retain outer gestures/cursor and videoRect mapping
+  - Explicit display geometry/contentRect/revision and native layer ownership
   - Reimplement paired TLS dual-channel session, bounded input and presentation invalidation
 verification_evidence:
   - Fixed upstream checkout and LICENSE read; source headers preserve adaptation attribution
   - Runtime verdicts require the three remote-desktop YAML plans and actual run artifacts
 ```
 
-同版 Mirador 的 `VideoSurface`、`VideoClient`、`InputClient`、`InputState` 也用于源码核对；
+同版 Mirador 的 `VideoClient`、`InputClient`、`InputState` 也用于源码核对；
 读取文件不等于复制文件。MacRemote 的 `RemoteConnection`、`KeyboardInputSession` 与
 `TrackpadSurface` 仅用于输入、IME 和配对设计对照。新增客户端没有外部 Swift 第三方依赖；
 现有 App 的既有依赖仍由 App Package 管理。
