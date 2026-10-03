@@ -1,7 +1,8 @@
 # Runweave iOS
 
 - 本目录是可独立构建的 Swift package 与 Xcode App host；构建只需要 Xcode、Swift 依赖和可选的 Node 命令包装，不依赖 React、Capacitor 或 pnpm workspace。
-- 仅通过 Backend HTTP/WS 协议工作，不导入 Backend、Electron 或 Web 实现。
+- 业务功能通过 Backend HTTP/WS 协议工作，不导入 Backend、Electron 或 Web 实现。
+- 限定架构例外：`Features/RemoteDesktop` 通过独立 `remote-desktop-ios` 包，仅直连用户明确配对的 Mac Host；宿主只持有目标、呈现和生命周期，不导入 Backend/Electron 实现，不复用 Backend 长期凭据或从其 URL 推导远控端口。身份、许可与验收边界见[Mac 局域网远控](../../docs/architecture/remote-desktop.md)。
 - Swift DTO 位于 `Sources/RunweaveIOS/Contracts`；修改协议时核对仓库 `packages/shared` 中的 HTTP/WS 合同及实际 Backend 响应，见 [架构边界](docs/architecture.md)。
 - 保持 Bundle ID `com.runweave.app.native` 及现有 Keychain、UserDefaults 标识，避免升级变成新安装或丢失登录态。
 - `ios/Diagnostics` 仅在 Debug/Profile 启用；Release 不启用实验室或注入入口。

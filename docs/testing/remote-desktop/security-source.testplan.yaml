@@ -1,0 +1,120 @@
+version: 1
+name: Mac 桌面配对权限隐私与来源
+description: >
+  覆盖交接 A06-A07、A12-A13、A16，验证安全 TCP 的对端 pin、独立凭据、Mac 权限与敏感内容边界。
+  每条使用独立合成内容和 fresh 会话；禁止把候选项目声明、源码阅读或构建当运行验收。
+  toolkit:agent-device 用于原生页面；Clarity使用获授权的隔离测试项目，生产采集不能用于本验收。
+  缺系统授权、真机、测试分析项目或可读取回放记 blocked，发现拒绝边界被绕过或内容泄露记 fail，完整证据才记 pass。
+cases:
+  - id: RDP-001
+    name: 未配对客户端不能订阅视频或输入
+    required: true
+    description: >
+      A06。只有 Mac 本地明确确认的设备能获得独立 credential，未确认和错误一次性码不能观察或控制。
+    preconditions:
+      - Mac Host运行且未授权本 case 的手机身份，本地管理员可确认配对，具备授权表和拒绝计数读取能力。
+    steps:
+      - 用 toolkit:agent-device 输入独立 Host endpoint、身份 pin及错误配对信息，尝试观察和输入；确认无法取得视频、控制权或长期 credential。
+      - 发起正确配对但在 Mac 本地拒绝；确认手机给可理解提示，Host授权表没有新增有效设备且不会静默重试。
+  - id: RDP-002
+    name: 地址变化不能绕过既定 Host 身份 pin
+    required: true
+    description: >
+      A06。相同地址出现陌生证书或错误 pin时安全 TCP 拒绝连接，编辑 endpoint不自动接受新的 Host 身份。
+    preconditions:
+      - 手机已配对 Host A，测试环境能把其 endpoint指向使用不同证书的 Host B；两个 Host身份可从本地核对。
+    steps:
+      - 用 toolkit:agent-device 保持 A 的已存 pin，编辑 endpoint指向 B并连接；确认身份错误可解释，B没有视频订阅或输入。
+      - 使用错误 pin重试同一目标；确认没有默认接受任意自签证书，也没有把 Backend credential传给该 endpoint。
+  - id: RDP-003
+    name: 撤销配对立即终止控制并禁止旧凭据重连
+    required: true
+    description: >
+      A06。Mac本地撤销活动设备后现有会话结束，旧 credential不能重新观察或控制；手机忘记配对删除专属 Keychain引用。
+    preconditions:
+      - 手机和真实 Mac Host已配对并处于可控会话；具备 Mac本地撤销及手机配对管理入口。
+    steps:
+      - 在 Mac本地撤销当前设备，用 toolkit:agent-device 观察状态；确认输入释放、视频终止，旧 credential重新连接被拒绝。
+      - 在手机管理页忘记本地配对并再次打开；确认该目标及专属 credential已删除，Backend登录与其他 Host配对不受影响。
+  - id: RDP-004
+    name: 屏幕录制权限缺失不伪造首帧
+    required: true
+    description: >
+      A07。屏幕录制拒绝与撤销显示明确观察权限错误，没有视频时不能报告可控制或切换到其他屏幕。
+    preconditions:
+      - 已配对 Host使用本 case固定签名和可执行路径；具备修改屏幕录制权限并按系统要求重启 Host的能力。
+    steps:
+      - 拒绝屏幕录制后启动 Host，取得 fresh endpoint并用 toolkit:agent-device 连接；确认权限错误明确，没有伪造首帧或可控状态。
+      - 由同一 case恢复权限并建立真实流，再撤销权限按系统要求重启；重新取 fresh会话后确认权限撤销仍被报告，旧帧不保留为在线画面。
+  - id: RDP-005
+    name: 辅助功能权限不足保留明确只读边界
+    required: true
+    description: >
+      A07。可以观察而没有辅助功能授权时界面明确只读，Host拒绝控制；运行中撤销后输入状态被释放。
+    preconditions:
+      - 已配对 Host的屏幕录制授权有效，执行者可单独修改辅助功能授权并观察 Host合成输入状态。
+    steps:
+      - 取消辅助功能授权并用 toolkit:agent-device 连接；确认真实视频可观察而状态明确只读，尝试点击、文本和快捷键均不控制 Mac。
+      - 恢复授权建可控会话后再次撤销；确认旧输入清理，后续输入被拒绝且手机不继续显示已可控。
+  - id: RDP-006
+    name: 异常信令与输入消息按边界拒绝
+    required: true
+    description: >
+      A12。未认证连接、超大消息、非法坐标、键码或尺寸在产生采集或输入前被拒绝，异常断开不会使 Host崩溃或残留按键。
+    preconditions:
+      - 独立测试 Host可读取脱敏拒绝与活动会话统计，具备向真实协议发送未认证、边界及畸形消息的测试工具。
+    steps:
+      - 对未认证连接发送订阅与输入，再对已认证测试会话发送超出声明长度上限的帧；确认明确拒绝、没有资源无限分配且 Host存活。
+      - 发送越界或非有限坐标、未知键码、非法尺寸和过期 display revision，随后异常断开；确认输入计数不增加、合成按钮被释放且下一次正常会话仍可建立。
+  - id: RDP-007
+    name: Clarity回放遮盖视频配对与输入内容
+    required: true
+    description: >
+      A13。隔离测试项目回放不含 Mac视频、配对 secret或键盘合成文本；screen名称固定为业务类型而不带 Hostidentity。
+    preconditions:
+      - 真实原生 App以获授权的隔离 Clarity测试项目运行，执行者可读取该 session的云端回放；禁止使用生产采集。
+      - Mac画面、手机配对表单及键盘分别使用唯一且无真实敏感信息的合成标记。
+    steps:
+      - 用 toolkit:agent-device 完成配对、打开真实视频、提交合成文本并返回；保留设备、build与测试 session身份。
+      - 在云端读取该 session回放；确认 AVSampleBufferDisplayLayer、原生输入和配对表单均遮盖，标记无法从帧或事件中恢复。
+      - 核对 screen分类只包含固定业务名称，没有机器名、HostID、endpoint、输入正文或 secret；回放不可读时记录 blocked，不能以clarityMask源码代替通过。
+  - id: RDP-008
+    name: 日志诊断与普通存储不包含远控秘密
+    required: true
+    description: >
+      A13。长期远控 credential只在独立 Keychain作用域，配对码、credential和输入正文不出现在 URL、日志、诊断或普通目标 DTO。
+    preconditions:
+      - 已配对测试手机和 Host，具备读取本次脱敏日志、诊断与普通目标存储的能力；所有输入为唯一合成标记。
+    steps:
+      - 用 toolkit:agent-device 完成配对、输入、错误认证与断线恢复；收集两端本次日志、诊断和目标配置并搜索合成标记及 credential。
+      - 确认日志仅有非敏感状态、尺寸、时序及计数，URL无秘密，普通目标只保存credential引用；确认远控 Keychain作用域不与 Backend长期 token复用。
+  - id: RDP-009
+    name: 来源账本保留采用范围与上游许可
+    required: true
+    description: >
+      A16。每段实际复制或改造代码能对应固定 upstream SHA、文件、许可证、依赖及本地修改，未测试的候选索引不标成可用依赖。
+    preconditions:
+      - 当前仓库及实际采用上游 checkout可读取，来源账本与 ThirdPartyLicenses可核对。
+    steps:
+      - 核对本仓库 HEAD、每个 upstream完整 SHA及对应来源文件；确认复制范围、保留许可、第三方依赖、本地修改和验证证据都有明确记录。
+      - 核对原始参考索引中的 license_evidence、review_level、observed_revision和 runtime_tested_by_this_handover保持证据边界；确认受限Loupe和身份未定位Sidecar没有被引入。
+  - id: RDP-010
+    name: 实际构建记录与系统边界可复现
+    required: true
+    description: >
+      A16。当前App与Host的真实构建可复现，产物、工具及最低系统边界有证据，编译不能替代安装与运行验收。
+    preconditions:
+      - 执行者可运行仓库现有iOS和Host构建流程，并读取当前工具版本与构建配置。
+    steps:
+      - 按各包README执行实际构建，记录本仓库HEAD、命令、工具版本、产物路径及构建日志；确认App最低系统与BundleID未无声改变。
+      - 核对实际App target与独立package最低系统分别记录，按模拟器与真机分别标明产物；不能以macOS swift build称为iOS App构建通过。
+  - id: RDP-011
+    name: 最终签名路径下的安装启动与权限可复查
+    required: true
+    description: >
+      A16。实际安装启动的App/Host能对应构建产物和签名；最终Host路径下的权限事实与开发目录试验分开记录。
+    preconditions:
+      - 实际Mac与iPhone可用于已签名App/Host部署，具备项目统一设备安装启动与Host权限核对能力。
+    steps:
+      - 记录App和Host的产物hash、签名、BundleID、最终路径、设备系统及安装启动命令；确认安装的是所记录构建。
+      - 取得fresh原生UI与Hostendpoint，记录最终Host路径的屏幕录制及辅助功能状态；把安装、启动、UI、真机Wi-Fi和测量结果分别登记，缺任一对应证据不冒称通过。

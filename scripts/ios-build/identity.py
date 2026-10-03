@@ -36,6 +36,8 @@ def roots(root, app):
         paths += [root / "packages" / name / "Package.swift", root / "packages" / name / "Sources"]
     if app == "runweave":
         paths.append(package / "Vendor")
+        for name in ["remote-desktop-ios", "remote-desktop-protocol"]:
+            paths += [root / "packages" / name / "Package.swift", root / "packages" / name / "Sources"]
     return paths
 
 
