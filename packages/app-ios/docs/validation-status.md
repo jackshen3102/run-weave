@@ -12,6 +12,7 @@
 - [终端悬浮输入布局](../../../docs/testing/app/ios-native-terminal-layout.testplan.yaml)
 - [内置浏览器与终端连续性](../../../docs/testing/app/ios-native-browser.testplan.yaml)
 - [网页身份与导航安全](../../../docs/testing/app/ios-native-browser-safety.testplan.yaml)
+- [现有终端结构化问答](../../../docs/testing/app/ios-terminal-questions.testplan.yaml)
 - [终端与渲染](../../../docs/testing/app/ios-native-terminal.testplan.yaml)
 - [认证、连接与资源生命周期](../../../docs/testing/app/ios-native-session.testplan.yaml)
 - [终端图片附件](../../../docs/testing/app/ios-native-image-attachments.testplan.yaml)
@@ -26,6 +27,17 @@
 布局改动若有独立执行计划，以该任务当前计划为准，不继承历史运行结果。
 原生 UI 需要 Simulator / 真机实际操作。Playwright 可用于 Backend 配套的 Web 客户端，不能验证 SwiftUI。
 不新增 XCTest 或单元测试框架来替代真实 UI 取证。
+
+2026-10-04 原终端的回复辅助接入结构化问答。当前源码 Debug 构建、安装和启动通过；
+共享 iOS 26.5 Simulator 经 agent-device 登录专用 Dev Session Backend，查看原 Codex
+remote Unix 终端的真实问题、选择 Loki、关闭重开恢复问题草稿、明确提交、收到问题已处理，
+原 thread 输出 Loki 方案。终端中文草稿逐字保留，未进入任务历史。真实 gateway 探针还验证
+待答连接关闭后原请求仍可重接、旧 generation/turn/item 拦截、答案集合校验、幂等冲突及
+禁止从历史加载未知 thread。普通 no-daemon 终端的 API 返回 unsupported，原任务仍正常输出；原生界面保留历史核对和返回终端，未提供结构化提交。
+仅此运行方式的闭环已取证；完整 8 条矩阵、双 Backend 迟到响应、双 panel 竞争、图片附件与
+队列共存、真机均未全量验收。不把 Codex 的 resolved 事件解释为手机答案在竞争中获胜。
+本地证据在 `.runweave/experiments/terminal-questions-20261004/` 与
+`.runweave/mobile-qa/terminal-questions-20261004/`；后续构建不能自动继承本次结果。
 
 2026-10-04 Mac 桌面已增加扫码配对，手动填写保留为备用；正常扫码无需输入五个字段，
 仍由 Mac 本机确认，默认只读，配对本身不启动采集。Swift 协议、macOS Host Release 与

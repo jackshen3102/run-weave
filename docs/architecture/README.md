@@ -74,6 +74,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | 任务                                      | 文档                                                                           |
 | ----------------------------------------- | ------------------------------------------------------------------------------ |
 | Terminal 状态来源与消费                   | [terminal-state.md](./terminal-state.md)                                       |
+| 现有终端手机结构化问答                    | [terminal-questions.md](./terminal-questions.md)                               |
 | Worktree Project Context 与 Race 生命周期 | [terminal-worktree-context.md](./terminal-worktree-context.md)                 |
 | 本地开发服务稳定 URL 与生命周期           | [terminal-workspace-services.md](./terminal-workspace-services.md)             |
 | 文件、Diff、Markdown 与 Browser 预览      | [terminal-code-preview.md](./terminal-code-preview.md)                         |

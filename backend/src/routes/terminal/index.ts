@@ -1,3 +1,5 @@
+import { registerTerminalQuestionRoutes } from "./questions";
+import type { TerminalQuestionsService } from "../../terminal/questions/service";
 import type { TerminalTextAttachmentDelivery } from "../../terminal/attachments/text-attachment-delivery";
 import { registerTerminalSessionUpdateRoute } from "./sessions/update";
 import { Router } from "express";
@@ -110,6 +112,7 @@ export function createTerminalRouter(
   terminalSessionManager: TerminalSessionManager,
   options?: {
     textAttachmentDelivery?: TerminalTextAttachmentDelivery;
+    terminalQuestionsService?: TerminalQuestionsService;
     ptyService?: PtyService;
     runtimeRegistry?: TerminalRuntimeRegistry;
     tmuxService?: TmuxService;
@@ -126,6 +129,7 @@ export function createTerminalRouter(
   },
 ): Router {
   const router = Router();
+  registerTerminalQuestionRoutes(router, options?.terminalQuestionsService);
 
   const agentSettingsUpdateSchema = z.object({
     panelId: z.string().min(1).nullable(),

@@ -41,6 +41,8 @@ import type { RaceService } from "../race/race-service";
 import type { ScheduledTaskService } from "../scheduled-tasks/service";
 import type { BackendRuntimeStatusService } from "../runtime-status/service";
 
+import type { TerminalQuestionsService } from "../terminal/questions/service";
+
 export interface RuntimeServices extends DeviceMonitoringRuntime {
   resourceMonitor: import("../resource-monitor/service").ResourceMonitorService | null;
   start(controlPlaneBaseUrl: string): void;
@@ -70,6 +72,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   workHistoryService: WorkHistoryService;
   taskHandoffService: TaskHandoffService;
   textAttachmentDelivery: TerminalTextAttachmentDelivery;
+  terminalQuestionsService: TerminalQuestionsService;
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
   attentionService: AttentionService;

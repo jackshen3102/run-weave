@@ -103,24 +103,27 @@ export function hasLocalCodexBypass(args: readonly string[]): boolean {
   return bypass;
 }
 
-export async function isLocalCodexBypass(pid: number): Promise<boolean> {
+/** Read native argv without parsing the prompt or shell display text. */
+export async function readCodexProcessArguments(pid: number): Promise<string[] | null> {
   try {
     const { stdout } = await exec(helper, ["--process-argv", String(pid)], {
       encoding: "buffer",
       timeout: 3000,
       maxBuffer: 4 * 1024 * 1024,
     });
-    if (stdout.at(-1) !== 0) return false;
+    if (stdout.at(-1) !== 0) return null;
     const [executable, command, ...args] = stdout
       .toString("utf8")
       .split("\0")
       .slice(0, -1);
-    return (
-      path.basename(executable ?? "") === "codex" &&
-      path.basename(command ?? "") === "codex" &&
-      hasLocalCodexBypass(args)
-    );
+    return path.basename(executable ?? "") === "codex" &&
+      path.basename(command ?? "") === "codex" ? args : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function isLocalCodexBypass(pid: number): Promise<boolean> {
+  const args = await readCodexProcessArguments(pid);
+  return args !== null && hasLocalCodexBypass(args);
 }

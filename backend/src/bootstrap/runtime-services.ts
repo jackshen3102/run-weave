@@ -1,3 +1,4 @@
+import { TerminalQuestionsService } from "../terminal/questions/service";
 import { ResourceMonitorService } from "../resource-monitor/service";
 import { ResourceMonitorStore } from "../resource-monitor/store";
 import { TerminalTextAttachmentService } from "../terminal/attachments/text-attachment-service";
@@ -277,6 +278,8 @@ async function assembleRuntimeServices(
   await textAttachmentFiles.initialize();
   const textAttachmentDelivery = new TerminalTextAttachmentDelivery(textAttachmentFiles, terminalSessionManager, tmuxService, terminalRuntimeRegistry, ptyService);
   resources.defer("terminal-text-attachment-delivery", () => textAttachmentDelivery.dispose());
+  const terminalQuestionsService = new TerminalQuestionsService(terminalSessionManager, tmuxService);
+  resources.defer("terminal-questions", () => terminalQuestionsService.dispose());
   const terminalSnapshotShareService = createTerminalSnapshotShares(resources, terminalSessionManager, tmuxService);
   const workspaceServiceManager = new RuntimeStatusWorkspaceServiceManager(
     terminalSessionManager,
@@ -548,6 +551,7 @@ async function assembleRuntimeServices(
     workHistoryService,
     taskHandoffService,
     textAttachmentDelivery,
+    terminalQuestionsService,
     terminalEventService,
     terminalCompletionEventService,
     attentionService,
