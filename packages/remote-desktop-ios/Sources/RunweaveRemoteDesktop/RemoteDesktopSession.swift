@@ -62,16 +62,11 @@ public final class RemoteDesktopSession: ObservableObject {
     private var networkSamples: [Double] = []
     private var decodeSampleCount: UInt64 = 0
     private var networkSampleCount: UInt64 = 0
-    private let observe: (RemoteDesktopObservation) -> Void
-    private var observedAttemptStart: TimeInterval?
-    private var observedFirstFrame: Double?
-    private var observedInputs: UInt64 = 0
-    private var observedReceivedBaseline: UInt64 = 0
-    private var observedDroppedBaseline: UInt64 = 0
+    private let observation: RemoteObservationRecorder
 
     public init(credentials: RemoteCredentialStore = .init(),
                 observe: @escaping (RemoteDesktopObservation) -> Void = { _ in }) {
-        self.credentials = credentials; self.observe = observe
+        self.credentials = credentials; self.observation = RemoteObservationRecorder(observe)
     }
 
     public func connect(target: RemoteTarget, context: RemoteSessionContext) {
@@ -94,7 +89,7 @@ public final class RemoteDesktopSession: ObservableObject {
     public func setPresentationActive(_ value: Bool) { if !value { stop(reason: "presentation inactive") } }
 
     public func stop(reason: String = "closed") {
-        endObservedAttempt(reason: Self.observationStopReason(reason))
+        observation.end(reason: Self.observationStopReason(reason), counters: counters)
         active = false
         reconnectTask?.cancel(); reconnectTask = nil
         let oldControl = control, oldSessionID = wireSessionID
@@ -148,11 +143,7 @@ public final class RemoteDesktopSession: ObservableObject {
         guard active, let target, let context else { return }
         teardown()
         let expected = attempt, sessionID = wireSessionID
-        observedAttemptStart = ProcessInfo.processInfo.systemUptime
-        observedFirstFrame = nil; observedInputs = 0
-        observedReceivedBaseline = counters.receivedFrames
-        observedDroppedBaseline = counters.droppedFrames
-        observe(.attemptStarted)
+        observation.start(counters: counters)
         state = .connecting
         displayMonitorTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -176,7 +167,7 @@ public final class RemoteDesktopSession: ObservableObject {
                     throw RemoteHostFailure(message: ready, fallback: "Mac 拒绝了桌面会话。")
                 }
                 guard let display = ready.display else {
-                    self.endObservedAttempt(reason: "permission_screen_recording")
+                    self.observation.end(reason: "permission_screen_recording", counters: counters)
                     self.state = .permissionDenied(ready.reason ?? "请在 Mac 授予屏幕录制权限。"); self.active = false
                     self.teardown(); return
                 }
@@ -318,7 +309,7 @@ public final class RemoteDesktopSession: ObservableObject {
             }
         case .error:
             if message.errorCode == .permissionAccessibility {
-                if controlAllowed { observe(.controlBecameReadOnly) }
+                if controlAllowed { observation.controlBecameReadOnly() }
                 releaseAllInputs(reason: "accessibility permission revoked")
                 controlAllowed = false
                 state = firstFrame ? .readOnly : .waitingForFirstFrame
@@ -338,15 +329,7 @@ public final class RemoteDesktopSession: ObservableObject {
     }
 
     private func applyDisplay(_ display: RemoteDisplay) throws {
-        let logical = display.logicalBounds, content = display.contentRect
-        let next = RemoteDisplayGeometry(displayID: display.displayID, revision: display.revision,
-            logicalBounds: CGRect(x: logical.x, y: logical.y, width: logical.width, height: logical.height),
-            pixelSize: CGSize(width: display.pixelWidth, height: display.pixelHeight),
-            contentRect: CGRect(x: content.x, y: content.y, width: content.width, height: content.height))
-        guard next.isValid, display.pixelWidth <= 8192, display.pixelHeight <= 8192 else {
-            throw RemoteTransportError.invalidMessage
-        }
-        geometry = next
+        geometry = try display.validatedGeometry()
         cursor = CGPoint(x: 0.5, y: 0.5)
     }
 
@@ -354,9 +337,7 @@ public final class RemoteDesktopSession: ObservableObject {
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastStatisticsPublish >= 0.5 else { return }
         lastStatisticsPublish = now
-        counters.decoderQueueDepth = decoder?.queueDepth ?? 0
-        counters.decodeTiming = .init(samples: decodeSamples, total: decodeSampleCount)
-        counters.networkTiming = .init(samples: networkSamples, total: networkSampleCount)
+        counters.updateTiming(queueDepth: decoder?.queueDepth ?? 0, decode: decodeSamples, decodeTotal: decodeSampleCount, network: networkSamples, networkTotal: networkSampleCount)
         statistics = counters
     }
 
@@ -418,11 +399,7 @@ public final class RemoteDesktopSession: ObservableObject {
                 counters.displayIngressState = displayRecoveryID == nil ? "接受数据" : "已恢复接受数据"
                 displayRecoveryID = nil; displayRecoveryDeadline = nil
                 firstFrame = true; retryDelay = 500_000_000
-                if observedFirstFrame == nil, let start = observedAttemptStart {
-                    let milliseconds = max(0, now - start) * 1_000
-                    observedFirstFrame = milliseconds
-                    observe(.firstVisibleFrame(milliseconds: milliseconds, readOnly: !controlAllowed))
-                }
+                observation.visible(now: now, readOnly: !controlAllowed)
                 state = controlAllowed ? .controllable : .readOnly
             }
         } else if firstFrame {
@@ -491,7 +468,7 @@ public final class RemoteDesktopSession: ObservableObject {
 
     private func failDisplayProgress(_ reason: String) {
         counters.displayIngressState = "显示恢复已停止"
-        endObservedAttempt(reason: "display_stalled")
+        observation.end(reason: "display_stalled", counters: counters)
         stop(reason: reason)
         state = .failed(reason)
     }
@@ -568,21 +545,7 @@ public final class RemoteDesktopSession: ObservableObject {
             return
         }
         let reason = (error as? LocalizedError)?.errorDescription ?? "检查 Mac 和局域网连接。"
-        let observationReason: String
-        if let failure = error as? RemoteHostFailure {
-            observationReason = "host_" + (failure.code?.rawValue ?? "unknown")
-        } else if error is RemotePairingError { observationReason = "credential_error" }
-        else if error is DecodingError { observationReason = "protocol_decode_error" }
-        else if let transport = error as? RemoteTransportError {
-            switch transport {
-            case .closed: observationReason = "connection_lost"
-            case .keychain: observationReason = "credential_storage_error"
-            case .invalidCertificate: observationReason = "certificate_rejected"
-            case .invalidEndpoint: observationReason = "endpoint_invalid"
-            case .invalidMessage, .oversizedMessage: observationReason = "protocol_invalid"
-            }
-        } else { observationReason = "connection_or_stream_error" }
-        endObservedAttempt(reason: observationReason)
+        observation.end(reason: RemoteObservationRecorder.failureReason(error), counters: counters)
         teardown(); geometry = nil
         state = permissionFailure ? .permissionDenied(reason) : (terminal ? .failed(reason) : .disconnected(reason))
         if terminal { active = false; return }
@@ -608,7 +571,7 @@ public final class RemoteDesktopSession: ObservableObject {
             guard inputQueue.count < 64 else {
                 releaseAllInputs(reason: "input queue overflow")
                 let reason = "输入发送积压，已释放按键并停止会话。"
-                endObservedAttempt(reason: "input_backlog")
+                observation.end(reason: "input_backlog", counters: counters)
                 stop(reason: reason); state = .failed(reason); return
             }
             inputQueue.append(message)
@@ -626,8 +589,7 @@ public final class RemoteDesktopSession: ObservableObject {
                     let message = self.inputQueue.removeFirst()
                     try await control.send(message)
                     guard self.active, self.attempt == expected else { return }
-                    self.observedInputs &+= 1
-                    if self.observedInputs == 1 { self.observe(.firstInputSent) }
+                    self.observation.inputSent()
                 }
                 if self.attempt == expected { self.inputTask = nil }
             } catch is CancellationError { }
@@ -635,14 +597,4 @@ public final class RemoteDesktopSession: ObservableObject {
         }
     }
 
-    private func endObservedAttempt(reason: String) {
-        guard let start = observedAttemptStart else { return }
-        observedAttemptStart = nil // Repeated lifecycle stops must not duplicate a summary.
-        observe(.attemptEnded(.init(
-            endedAt: Date(),
-            durationMilliseconds: max(0, ProcessInfo.processInfo.systemUptime - start) * 1_000,
-            firstVisibleFrameMilliseconds: observedFirstFrame, sentInputMessages: observedInputs,
-            receivedFrames: counters.receivedFrames &- observedReceivedBaseline,
-            droppedFrames: counters.droppedFrames &- observedDroppedBaseline, reason: reason)))
-    }
 }
