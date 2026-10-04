@@ -89,7 +89,9 @@ export function scheduledTasksApi(apiBase: string, token: string) {
       for (const [key, value] of Object.entries(filter)) {
         if (value !== undefined) params.set(key, String(value));
       }
-      return request<ScheduledTaskPage<ScheduledRun>>(`/runs?${params}`, { signal });
+      return request<ScheduledTaskPage<ScheduledRun>>(`/runs?${params}`, {
+        signal,
+      });
     },
     output: (runId: string, cursor?: string, signal?: AbortSignal) =>
       request<ScheduledRunOutput>(
@@ -98,6 +100,11 @@ export function scheduledTasksApi(apiBase: string, token: string) {
       ),
     stop: (runId: string) =>
       request<ScheduledRun>(`/runs/${id(runId)}/stop`, { method: "POST" }),
+    archive: (runId: string) =>
+      request<ScheduledRun>(`/runs/${id(runId)}/archive`, {
+        method: "POST",
+        body: {},
+      }),
     open: (runId: string, body?: OpenScheduledRunRequest) =>
       request<OpenScheduledRunResponse>(`/runs/${id(runId)}/open-terminal`, {
         method: "POST",
