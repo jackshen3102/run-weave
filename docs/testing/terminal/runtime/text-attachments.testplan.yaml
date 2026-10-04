@@ -46,10 +46,11 @@ cases:
     required: true
     description: 验证直接 TUI 在原编辑位置插入一次短引用，保留已有草稿且不自动提交。
     preconditions:
-      - 真实 Dev Session 中 Codex 空闲、能力已启用，浮动输入框关闭，TUI 已有可辨识未提交草稿。
+      - 真实 Dev Session 中 Codex 空闲且 panel/thread 已确认，浮动输入框关闭，TUI 已有可辨识未提交草稿。
+      - 分别准备能力已启用与重新打开或切回面板后 capability 响应仍在等待的状态。
       - 已准备含唯一首尾标记的长文本，能够观察原始输入帧和 Agent 工具读取。
     steps:
-      - 使用 $toolkit:playwright-cli 在真实 xterm 粘贴长文本；确认浮动输入框没有打开，独立提示从保存中变成已插入。
+      - 使用 $toolkit:playwright-cli 在两种状态的真实 xterm DOM 入口粘贴带首尾标记的 6000 ASCII 纯文本；放行 capability，确认一个 create 和一个 insert，浮动输入框没有打开，独立提示从保存中变成已插入。
       - 核对 TUI 草稿和输入帧；确认旧草稿保留，只有一次路径粘贴，无全文、Ctrl-U 或提交 Enter，Codex 没有自行开始任务。
       - 用户显式补充读取文件首尾标记的指令并提交；确认 Codex 实际读取目标文件且标记一致。
       - 关闭附件提示；确认已插入路径和真实文件仍存在。
@@ -60,9 +61,9 @@ cases:
     description: 验证提交点之前更换活动 panel 使待插入失效，正文可恢复且两边均无错误输入。
     preconditions:
       - 一个真实测试 Terminal 有两个可辨识 panel，原 panel 为启用能力的空闲 Codex。
-      - 可延迟文件创建响应且观察两个 panel 输入；尚未发起 insert。
+      - 可分别延迟 capability 与文件创建响应且观察两个 panel 输入；尚未发起 insert。
     steps:
-      - 使用 $toolkit:playwright-cli 在原 TUI 粘贴长文本，延迟创建响应，切换至另一 panel 后放行响应。
+      - 使用 $toolkit:playwright-cli 在原 TUI 粘贴长文本，分别延迟 capability 与创建响应，切换至另一 panel 或 thread 后放行响应。
       - 确认未发起 insert，两个 panel 均未收到该路径；回原 panel 后可看到未插入提示并复制完整原文。
 
   - id: TXT-006
@@ -72,7 +73,7 @@ cases:
     preconditions:
       - 真实测试 session 的空闲 Codex TUI 已启用能力，可延迟文件创建响应。
     steps:
-      - 使用 $toolkit:playwright-cli 粘贴长文本并延迟响应；输入一段短文字后放行响应。
+      - 使用 $toolkit:playwright-cli 分别在 capability 等待与创建等待阶段粘贴长文本并延迟响应；输入一段短文字后放行响应。
       - 确认短文字按原生路径完整到达，附件显示未插入，未出现延迟路径且原文仍可复制。
       - 在同一 session 新建独立草稿，重复延迟粘贴并显式提交一条短指令；确认附件不会进入下一轮输入。
 
@@ -133,6 +134,8 @@ cases:
     steps:
       - 使用 $toolkit:playwright-cli 在 shell、Vim、未确认远程上下文及正在运行的 Agent 中粘贴长文本；确认没有附件请求，文本走既有行为。
       - 在空闲 Codex 开始一次延迟保存，退出 Agent 后放行；确认未插入路径，shell 未执行文件引用。
+      - 对比默认管理启动的 -c check_for_update_on_startup=false 后接 --yolo 与受支持的首位 --yolo 自定义命令；核对真实 argv，二者同用户、同归属且空闲时均启用能力。
+      - 在独立测试进程中将 --yolo 仅放入 -c 的单个值、prompt 或 -- 后正文；确认均不启用。未知选项、remote、冲突权限选项和缺失原始 argv 证据也保持拒绝，不放宽用户、tmux、idle、thread 校验。
 
   - id: TXT-012
     name: 创建与插入的幂等键不重复副作用
@@ -196,12 +199,13 @@ cases:
   - id: TXT-017
     name: 不支持附件的旧 Backend 维持原生输入
     required: true
-    description: 验证能力协商失败时不拦截原文。
+    description: 验证已知不支持时维持原生输入，等待中的失败保留可恢复原文。
     preconditions:
       - 已取得隔离的新 renderer 与不提供附件接口的旧 Backend。
       - 测试终端无真实用户工作，可观察网络及原始输入。
     steps:
-      - 使用 $toolkit:playwright-cli 连接旧 Backend 并粘贴长文本；确认按原生文本输入，没有成功附件假象或吞掉正文。
+      - 使用 $toolkit:playwright-cli 连接旧 Backend，能力拒绝已确定后粘贴长文本；确认按原生文本输入，没有成功附件假象。
+      - 在已确认本地空闲 Codex 目标上延迟 capability 后立即粘贴，放行拒绝或网络失败；确认原文完整可复制，无 create、insert、自动正文回放或回车。
 
   - id: TXT-018
     name: 旧客户端输入合同保持兼容
