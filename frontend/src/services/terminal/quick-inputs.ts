@@ -1,5 +1,14 @@
-import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, TerminalQuickInputItem, TerminalQuickInputListKind, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
-import type { ScheduledRun, StartQuickInputRunRequest } from "@runweave/shared/scheduled-tasks";
+import type {
+  CreateTerminalQuickInputRequest,
+  ListTerminalQuickInputsResponse,
+  TerminalQuickInputItem,
+  TerminalQuickInputListKind,
+  UpdateTerminalQuickInputRequest,
+} from "@runweave/shared/terminal/input";
+import type {
+  ScheduledRun,
+  StartQuickInputRunRequest,
+} from "@runweave/shared/scheduled-tasks";
 import { requestJson, requestVoid } from "../http";
 
 export async function listTerminalQuickInputs(
@@ -10,9 +19,16 @@ export async function listTerminalQuickInputs(
     q?: string;
     kind?: TerminalQuickInputListKind;
     limit?: number;
+    scope?: "global";
+    order?: "manual";
+    cursor?: string;
   } = {},
+  signal?: AbortSignal,
 ): Promise<ListTerminalQuickInputsResponse> {
   const query = new URLSearchParams();
+  if (params.scope) query.set("scope", params.scope);
+  if (params.order) query.set("order", params.order);
+  if (params.cursor) query.set("cursor", params.cursor);
   if (params.projectId) {
     query.set("projectId", params.projectId);
   }
@@ -30,9 +46,31 @@ export async function listTerminalQuickInputs(
     apiBase,
     `/api/terminal/quick-inputs${suffix}`,
     {
+      signal,
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function moveTerminalQuickInput(
+  apiBase: string,
+  token: string,
+  id: string,
+  beforeId: string | null,
+  expectedOrderVersion: string,
+): Promise<{ orderVersion: string }> {
+  return requestJson(
+    apiBase,
+    `/api/terminal/quick-inputs/${encodeURIComponent(id)}/move`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ beforeId, expectedOrderVersion }),
     },
   );
 }

@@ -82,7 +82,7 @@ export function TerminalWorkspaceHeader({
   onCreateSession,
   projects: projectCommands,
 }: TerminalWorkspaceHeaderProps) {
-  const { apiBase, token } = useTerminalRuntime();
+  const { apiBase, token, scope } = useTerminalRuntime();
   const enterScheduledTasks = useEnterScheduledTasks();
   const openCodexQuota = useOpenCodexQuota();
   const {
@@ -241,8 +241,10 @@ export function TerminalWorkspaceHeader({
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {!isMobileMonitor ? (
           <TerminalQuickInputPopover
+            key={scope}
             apiBase={apiBase}
             token={token}
+            connectionName={connectionName}
             activeProject={activeProject}
             activeSession={activeSession}
             disabled={loading}

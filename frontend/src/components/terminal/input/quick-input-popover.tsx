@@ -1,593 +1,520 @@
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  TerminalQuickInputItem,
-  TerminalQuickInputListKind,
-  TerminalQuickInputMode,
-} from "@runweave/shared/terminal/input";
+import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
+import type { TerminalQuickInputItem } from "@runweave/shared/terminal/input";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
-import { Check, Plus, Search, Zap } from "lucide-react";
+import { AlertTriangle, ChevronRight, Plus, Search, Zap } from "lucide-react";
 import {
-  createTerminalQuickInput,
   deleteTerminalQuickInput,
   listTerminalQuickInputs,
   startTerminalQuickInputRun,
   markTerminalQuickInputUsed,
   sendTerminalInput,
-  updateTerminalQuickInput,
-} from "../../../services/terminal/index";
+} from "../../../services/terminal";
+import { moveTerminalQuickInput } from "../../../services/terminal/quick-inputs";
 import { scheduledTasksApi } from "../../../services/scheduled-tasks";
 import { HttpError } from "../../../services/http";
-import { useEnterScheduledTasks } from "../../../features/scheduled-tasks/navigation";
-import { RunRecord } from "../../../features/scheduled-tasks/task-detail";
-import { runDetailsPath } from "../../../features/scheduled-tasks/run-details-path";
-import { statusLabel } from "../../../features/scheduled-tasks/presentation";
-import { useQuickInputBackgroundRuns } from "../../../features/scheduled-tasks/use-quick-input-background-runs";
+import {
+  QuickInputRunPanel,
+  QuickInputRunRow,
+} from "../../../features/scheduled-tasks/quick-input-run-panel";
+import {
+  isQuickInputRunActive,
+  quickInputRunNeedsAttention,
+  useQuickInputBackgroundRuns,
+} from "../../../features/scheduled-tasks/use-quick-input-background-runs";
+import { RequestError } from "../../../features/scheduled-tasks/presentation";
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { useRuntimeStatus } from "../../../features/runtime-status/use-runtime-status";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
 import { Tooltip } from "../../ui/tooltip";
-import {
-  buildQuickInputTitle,
-  canInsertRaw,
-  TerminalQuickInputRow,
-} from "./quick-input-row";
+import { canInsertRaw, TerminalQuickInputRow } from "./quick-input-row";
+import { QuickInputEditor } from "./quick-input-editor";
 
 interface TerminalQuickInputPopoverProps {
   apiBase: string;
   token: string;
+  connectionName?: string;
   activeProject: TerminalProjectListItem | null;
   activeSession: TerminalSessionListItem | null;
   disabled?: boolean;
 }
 
-const TABS: Array<{ value: TerminalQuickInputListKind; label: string }> = [
-  { value: "pinned", label: "固定" },
-  { value: "recent", label: "最近" },
-  { value: "all", label: "全部" },
-];
-
-const MODE_OPTIONS: Array<{ value: TerminalQuickInputMode; label: string }> = [
-  { value: "line", label: "line" },
-  { value: "codex_slash_command", label: "codex_slash_command" },
-  { value: "prompt_paste", label: "prompt_paste" },
-];
-
-type ManualQuickInputScope = "project" | "global";
-
 export function TerminalQuickInputPopover({
   apiBase,
   token,
+  connectionName = "当前电脑",
   activeProject,
   activeSession,
   disabled,
 }: TerminalQuickInputPopoverProps) {
+  const { scope } = useTerminalRuntime();
   const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<TerminalQuickInputListKind>("pinned");
+  const [runsOpen, setRunsOpen] = useState(false);
+  const [selectedRun, setSelectedRun] = useState<ScheduledRun | null>(null);
+  const [editor, setEditor] = useState<{
+    item: TerminalQuickInputItem | null;
+  } | null>(null);
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [items, setItems] = useState<TerminalQuickInputItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [sorting, setSorting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
-  const { backgroundRuns, upsertBackgroundRun, backgroundAvailable } =
-    useQuickInputBackgroundRuns(
-      apiBase,
-      token,
-      activeProject?.projectId ?? null,
-      open,
-    );
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const pendingRunKeys = useRef(new Map<string, string>());
-  const enterScheduledTasks = useEnterScheduledTasks();
-  const { setPanelOpen } = useRuntimeStatus();
+  const busy = useRef(false);
   const [needsBackgroundConfig, setNeedsBackgroundConfig] = useState(false);
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualTitle, setManualTitle] = useState("");
-  const [manualData, setManualData] = useState("");
-  const [manualMode, setManualMode] = useState<TerminalQuickInputMode>("line");
-  const [manualScope, setManualScope] =
-    useState<ManualQuickInputScope>("project");
-  const [savingManual, setSavingManual] = useState(false);
-
-  const activeTerminalId = activeSession?.terminalSessionId ?? null;
-  const canTargetTerminal = Boolean(activeTerminalId) && !disabled;
-  const manualIsGlobal = manualScope === "global" || !activeProject;
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setDebouncedQuery(query);
-    }, 250);
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [query]);
-
-  const refresh = useMemoizedFn(async (): Promise<void> => {
-    if (!open) {
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const payload = await listTerminalQuickInputs(apiBase, token, {
-        projectId: activeProject?.projectId ?? null,
-        q: debouncedQuery,
-        kind,
-        limit: 50,
-      });
-      setItems(payload.items);
-    } catch (caught) {
-      setItems([]);
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setLoading(false);
-    }
+  const pendingRunKeys = useRef(new Map<string, string>());
+  const { setPanelOpen } = useRuntimeStatus();
+  const runs = useQuickInputBackgroundRuns(open || runsOpen);
+  const commands = useQuery({
+    queryKey: ["connection", scope, "global-quick-inputs"],
+    enabled: open,
+    queryFn: async ({ signal }) => {
+      const items: TerminalQuickInputItem[] = [];
+      let cursor: string | undefined;
+      let orderVersion: string | undefined;
+      do {
+        const page = await listTerminalQuickInputs(
+          apiBase,
+          token,
+          {
+            scope: "global",
+            order: "manual",
+            kind: "pinned",
+            limit: 100,
+            cursor,
+          },
+          signal,
+        );
+        if (
+          !page.orderVersion ||
+          (orderVersion && page.orderVersion !== orderVersion)
+        )
+          throw new Error("快捷指令列表已变化或电脑版本过旧，请重新读取。");
+        items.push(...page.items);
+        orderVersion = page.orderVersion;
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor);
+      return { items, orderVersion };
+    },
   });
+  const items = commands.data?.items ?? [];
+  const visible = items.filter((item) =>
+    `${item.title}\n${item.data}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
+  );
+  const canTargetTerminal =
+    Boolean(
+      activeSession && activeSession.projectId === activeProject?.projectId,
+    ) && !disabled;
+  const attentionCount = runs.dashboardRuns.filter(
+    quickInputRunNeedsAttention,
+  ).length;
 
-  useEffect(() => {
-    void refresh();
-  }, [activeProject?.projectId, debouncedQuery, kind, open, refresh]);
-
-  useEffect(() => {
-    if (backgroundRuns.length > 0 && backgroundRuns.every((run) =>
-      !["queued", "running", "stopping"].includes(run.status))) {
-      setFeedback((current) => current?.includes("查看运行") ? null : current);
-    }
-  }, [backgroundRuns]);
-
-  const handleSend = useMemoizedFn(
-    async (item: TerminalQuickInputItem): Promise<void> => {
-      if (!activeTerminalId || !canTargetTerminal) {
-        return;
-      }
+  const action = useMemoizedFn(
+    async (item: TerminalQuickInputItem, operation: () => Promise<void>) => {
+      if (busy.current) return;
+      busy.current = true;
       setBusyItemId(item.id);
+      setError(null);
       setFeedback(null);
-      setError(null);
       try {
-        await sendTerminalInput(apiBase, token, activeTerminalId, {
-          data: item.data,
-          mode: item.mode,
-          quickInputSource: "web_terminal_quick_input",
-        });
-        setFeedback("Sent");
-        await refresh();
+        await operation();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught));
       } finally {
+        busy.current = false;
         setBusyItemId(null);
       }
     },
   );
-
-  const handleInsert = useMemoizedFn(
-    async (item: TerminalQuickInputItem): Promise<void> => {
-      if (!activeTerminalId || !canTargetTerminal || !canInsertRaw(item)) {
-        return;
-      }
-      setBusyItemId(item.id);
-      setFeedback(null);
-      setError(null);
-      try {
-        await sendTerminalInput(apiBase, token, activeTerminalId, {
-          data: item.data,
-          mode: "raw",
-          quickInputSource: "web_terminal_quick_input",
-        });
-        await markTerminalQuickInputUsed(apiBase, token, item.id);
-        setFeedback("Inserted");
-        await refresh();
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : String(caught));
-      } finally {
-        setBusyItemId(null);
-      }
-    },
-  );
-
-  const handleCopy = useMemoizedFn(
-    async (item: TerminalQuickInputItem): Promise<void> => {
-      setBusyItemId(item.id);
-      setFeedback(null);
-      setError(null);
-      try {
-        await navigator.clipboard.writeText(item.data);
-        await markTerminalQuickInputUsed(apiBase, token, item.id);
-        setFeedback("Copied");
-        await refresh();
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : String(caught));
-      } finally {
-        setBusyItemId(null);
-      }
-    },
-  );
-
-  const handleTogglePinned = useMemoizedFn(
-    async (item: TerminalQuickInputItem): Promise<void> => {
-      setBusyItemId(item.id);
-      setError(null);
-      try {
-        await updateTerminalQuickInput(apiBase, token, item.id, {
-          pinned: !item.pinned,
-        });
-        await refresh();
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : String(caught));
-      } finally {
-        setBusyItemId(null);
-      }
-    },
-  );
-
-  const handleDelete = useMemoizedFn(
-    async (item: TerminalQuickInputItem): Promise<void> => {
-      setBusyItemId(item.id);
-      setError(null);
-      try {
-        await deleteTerminalQuickInput(apiBase, token, item.id);
-        await refresh();
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : String(caught));
-      } finally {
-        setBusyItemId(null);
-      }
-    },
-  );
-
-  const handleBackgroundRun = useMemoizedFn(
-    async (item: TerminalQuickInputItem): Promise<void> => {
-      const projectId = activeProject?.projectId;
-      if (!projectId || busyItemId) return;
-      const scope = `${apiBase}:${projectId}:${item.id}:${item.updatedAt}`;
-      const storageKey = `runweave:quick-input-run:${scope}`;
+  const send = useMemoizedFn((item: TerminalQuickInputItem, insert = false) => {
+    if (!activeSession || !canTargetTerminal || (insert && !canInsertRaw(item)))
+      return;
+    void action(item, async () => {
+      await sendTerminalInput(apiBase, token, activeSession.terminalSessionId, {
+        data: item.data,
+        mode: insert ? "raw" : item.mode,
+        recordQuickInput: false,
+        quickInputSource: "web_terminal_quick_input",
+      });
+      await markTerminalQuickInputUsed(apiBase, token, item.id);
+      setFeedback(insert ? "已插入终端" : "已发送到终端");
+    });
+  });
+  const showRuns = useMemoizedFn((run: ScheduledRun | null) => {
+    setSelectedRun(run);
+    setOpen(false);
+    setRunsOpen(true);
+  });
+  const start = useMemoizedFn((item: TerminalQuickInputItem) => {
+    const projectId = activeProject?.projectId;
+    if (!projectId || !canTargetTerminal) return;
+    void action(item, async () => {
+      const keyScope = `${scope}:${projectId}:${item.id}:${item.updatedAt}`;
+      const storageKey = `runweave:quick-input-run:${keyScope}`;
       let savedKey: string | null = null;
-      try { savedKey = sessionStorage.getItem(storageKey); } catch { /* unavailable */ }
-      const key = pendingRunKeys.current.get(scope) ?? savedKey ?? crypto.randomUUID();
-      pendingRunKeys.current.set(scope, key);
-      try { sessionStorage.setItem(storageKey, key); } catch { /* unavailable */ }
-      setBusyItemId(item.id);
+      try {
+        savedKey = sessionStorage.getItem(storageKey);
+      } catch {
+        /* unavailable */
+      }
+      const key =
+        pendingRunKeys.current.get(keyScope) ?? savedKey ?? crypto.randomUUID();
+      pendingRunKeys.current.set(keyScope, key);
+      try {
+        sessionStorage.setItem(storageKey, key);
+      } catch {
+        /* unavailable */
+      }
+      const clearKey = () => {
+        pendingRunKeys.current.delete(keyScope);
+        try {
+          sessionStorage.removeItem(storageKey);
+        } catch {
+          /* unavailable */
+        }
+      };
       setFeedback("提交中");
-      setError(null);
       setNeedsBackgroundConfig(false);
       try {
         const run = await startTerminalQuickInputRun(
-          apiBase, token, item.id,
-          { projectId, expectedInputUpdatedAt: item.updatedAt }, key,
+          apiBase,
+          token,
+          item.id,
+          { projectId, expectedInputUpdatedAt: item.updatedAt },
+          key,
         );
-        pendingRunKeys.current.delete(scope);
-        try { sessionStorage.removeItem(storageKey); } catch { /* unavailable */ }
-        upsertBackgroundRun(run);
-        setSelectedRunId(null);
-        setFeedback("排队中 · 查看运行");
+        clearKey();
+        runs.upsertBackgroundRun(run);
+        setFeedback("已提交后台运行");
       } catch (caught) {
-        const runId = caught instanceof HttpError && caught.code === "run_busy"
-          && typeof (caught.details as { runId?: unknown } | undefined)?.runId === "string"
-          ? (caught.details as { runId: string }).runId : null;
-        if (runId) {
-          try {
-            const run = await scheduledTasksApi(apiBase, token).run(runId);
-            pendingRunKeys.current.delete(scope);
-            try { sessionStorage.removeItem(storageKey); } catch { /* unavailable */ }
-            upsertBackgroundRun(run);
-            setSelectedRunId(null);
-            setFeedback("运行中 · 查看运行");
-          } catch (readError) {
-            setError(readError instanceof Error ? readError.message : String(readError));
-          }
+        const details =
+          caught instanceof HttpError
+            ? (caught.details as { runId?: unknown } | undefined)
+            : undefined;
+        if (
+          caught instanceof HttpError &&
+          caught.code === "run_busy" &&
+          typeof details?.runId === "string"
+        ) {
+          const run = await scheduledTasksApi(apiBase, token).run(
+            details.runId,
+          );
+          clearKey();
+          runs.upsertBackgroundRun(run);
+          showRuns(run);
         } else {
-          setNeedsBackgroundConfig(caught instanceof HttpError && caught.code === "config_required");
-          if (caught instanceof HttpError && caught.status < 500) {
-            pendingRunKeys.current.delete(scope);
-            try { sessionStorage.removeItem(storageKey); } catch { /* unavailable */ }
-          }
-          setFeedback(caught instanceof HttpError && caught.status < 500 ? null : "正在确认");
-          setError(caught instanceof Error ? caught.message : String(caught));
+          setNeedsBackgroundConfig(
+            caught instanceof HttpError && caught.code === "config_required",
+          );
+          if (caught instanceof HttpError && caught.status < 500) clearKey();
+          setFeedback(
+            caught instanceof HttpError && caught.status < 500
+              ? null
+              : "提交尚未确认，请重试确认同一次运行",
+          );
+          throw caught;
         }
-      } finally {
-        setBusyItemId(null);
       }
+    });
+  });
+  const edit = useMemoizedFn((item: TerminalQuickInputItem | null) => {
+    setOpen(false);
+    setEditor({ item });
+  });
+  const move = useMemoizedFn(
+    (item: TerminalQuickInputItem, direction: -1 | 1) => {
+      const index = items.findIndex((candidate) => candidate.id === item.id);
+      const version = commands.data?.orderVersion;
+      if (
+        !version ||
+        index + direction < 0 ||
+        index + direction >= items.length
+      )
+        return;
+      void action(item, async () => {
+        try {
+          await moveTerminalQuickInput(
+            apiBase,
+            token,
+            item.id,
+            direction === -1
+              ? items[index - 1]!.id
+              : (items[index + 2]?.id ?? null),
+            version,
+          );
+        } finally {
+          await commands.refetch();
+        }
+      });
     },
   );
 
-  const handleCreateManual = useMemoizedFn(async (): Promise<void> => {
-    if (!manualData.trim() || savingManual) {
-      return;
-    }
-    setSavingManual(true);
-    setFeedback(null);
-    setError(null);
-    try {
-      const item = await createTerminalQuickInput(apiBase, token, {
-        title: manualTitle.trim() || buildQuickInputTitle(manualData),
-        data: manualData,
-        mode: manualMode,
-        projectId: manualIsGlobal ? null : (activeProject?.projectId ?? null),
-        terminalSessionId: manualIsGlobal
-          ? null
-          : (activeSession?.terminalSessionId ?? null),
-        cwd: manualIsGlobal ? null : (activeSession?.cwd ?? null),
-      });
-      setManualTitle("");
-      setManualData("");
-      setManualMode("line");
-      setKind("pinned");
-      setQuery("");
-      setDebouncedQuery("");
-      setItems((currentItems) => [
-        item,
-        ...currentItems.filter((candidate) => candidate.id !== item.id),
-      ]);
-      setFeedback("Saved");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setSavingManual(false);
-    }
-  });
-
-  const emptyMessage = useMemo(() => {
-    if (debouncedQuery.trim()) {
-      return "没有匹配的快捷指令";
-    }
-    if (kind === "pinned") {
-      return "还没有固定快捷指令";
-    }
-    if (kind === "recent") {
-      return "还没有最近输入";
-    }
-    return "还没有快捷指令";
-  }, [debouncedQuery, kind]);
-  const selectedRun = backgroundRuns.find((run) => run.id === selectedRunId) ?? null;
-
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <Tooltip content="快捷指令">
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label="快捷指令"
-            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-          >
-            <Zap className="h-3.5 w-3.5" />
-          </Button>
-        </PopoverTrigger>
-      </Tooltip>
-      <PopoverContent
-        align="end"
-        className="w-[420px] rounded-lg border-slate-800 bg-slate-950 p-3 text-slate-100 shadow-[0_24px_80px_-34px_rgba(2,6,23,0.95)]"
-      >
-        <div
-          className="flex flex-col gap-3"
-          data-testid="terminal-quick-input-popover"
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <Tooltip content="快捷指令">
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="快捷指令"
+              className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800"
+            >
+              <Zap className="h-3.5 w-3.5" />
+            </Button>
+          </PopoverTrigger>
+        </Tooltip>
+        <PopoverContent
+          align="end"
+          className="w-[440px] max-w-[calc(100vw-24px)] border-slate-800 bg-slate-950 p-4 text-slate-100"
         >
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-medium text-slate-100">快捷指令</h2>
-            {feedback ? (
-              <span className="inline-flex items-center gap-1 text-[11px] text-slate-300">
-                <Check className="h-3 w-3 text-emerald-300" />
-                {feedback}
-              </span>
-            ) : null}
-          </div>
-
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
-            <Input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-              }}
-              placeholder="搜索最近输入或模板"
-              className="h-8 border-slate-800 bg-slate-900 pl-7 text-xs text-slate-100 placeholder:text-slate-500"
-            />
-          </label>
-
-          <div className="grid grid-cols-3 rounded-md border border-slate-800 bg-slate-900 p-0.5">
-            {TABS.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                className={[
-                  "h-7 rounded px-2 text-xs transition-colors",
-                  kind === tab.value
-                    ? "bg-slate-700 text-slate-50"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-100",
-                ].join(" ")}
-                onClick={() => {
-                  setKind(tab.value);
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {error ? (
-            <p className="rounded-md border border-rose-900/70 bg-rose-950/40 px-2 py-1.5 text-[11px] leading-4 text-rose-200">
-              {error}
-            </p>
-          ) : null}
-          {needsBackgroundConfig ? (
-            <button type="button" className="text-xs text-sky-300 underline" onClick={() => {
-              setOpen(false); setPanelOpen(true);
-            }}>设置后台模型</button>
-          ) : null}
-
-          {backgroundRuns.length > 0 ? (
-            <div className="max-h-[140px] space-y-1 overflow-y-auto">
-              {backgroundRuns.map((run) => (
+          <div
+            className="max-h-[min(720px,75vh)] space-y-4 overflow-y-auto pr-1"
+            data-testid="terminal-quick-input-popover"
+          >
+            <p className="text-xs text-slate-400">{connectionName} · 全局</p>
+            <section className="space-y-2" aria-label="后台任务">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold">
+                  后台任务{" "}
+                  <span className="font-normal text-slate-400">
+                    · {runs.dashboardRuns.length}
+                  </span>
+                </h2>
                 <button
-                  key={run.id}
                   type="button"
-                  className="block w-full rounded-md border border-sky-900/70 bg-sky-950/40 px-2 py-1.5 text-left text-xs text-sky-200"
-                  onClick={() => setSelectedRunId((value) => value === run.id ? null : run.id)}
+                  className="flex items-center gap-1 text-xs text-sky-300"
+                  onClick={() => showRuns(null)}
                 >
-                  <span className="block">
-                    {run.snapshot.name}
-                    {` · ${run.outcome === "blocked" ? "执行受阻" : statusLabel[run.status]} · 查看运行`}
-                  </span>
-                  <span className="mt-1 block break-words text-[11px] leading-4 text-slate-400">
-                    {run.snapshot.origin?.kind === "quick-input"
-                      ? `${run.snapshot.origin.projectName} · ${run.snapshot.origin.worktreeName ?? "主工作区"}`
-                      : run.snapshot.projectId}
-                  </span>
+                  {runs.dashboardRuns.length > 3
+                    ? `查看全部 ${runs.dashboardRuns.length} 个`
+                    : "全部"}
+                  <ChevronRight className="h-3 w-3" />
                 </button>
+              </div>
+              {attentionCount > 0 ? (
+                <p className="flex items-center gap-1 text-xs text-orange-300">
+                  <AlertTriangle className="h-3 w-3" />
+                  {attentionCount} 项需处理
+                </p>
+              ) : null}
+              <RequestError error={runs.error} />
+              {runs.error ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void runs.refresh()}
+                >
+                  重试读取任务
+                </Button>
+              ) : runs.loading ? (
+                <p className="py-2 text-xs text-slate-400">正在读取任务…</p>
+              ) : !runs.dashboardRuns.length ? (
+                <p className="py-2 text-xs text-slate-400">暂无后台任务</p>
+              ) : null}
+              {runs.dashboardRuns.slice(0, 3).map((run) => (
+                <QuickInputRunRow
+                  key={run.id}
+                  run={run}
+                  onSelect={() => showRuns(run)}
+                />
               ))}
-            </div>
-          ) : null}
-          {selectedRun ? (
-            <div className="max-h-[400px] space-y-2 overflow-y-auto">
-              <RunRecord key={selectedRun.id} run={selectedRun} highlighted={false} />
-              <button type="button" className="text-xs text-sky-300 underline"
-                onClick={() => enterScheduledTasks(runDetailsPath(selectedRun))}>
-                打开完整记录
-              </button>
-            </div>
-          ) : null}
-
-          <div className="max-h-[360px] overflow-auto pr-1">
-            {loading ? (
-              <div className="py-8 text-center text-xs text-slate-400">
-                Loading...
+            </section>
+            <section
+              className="space-y-3 border-t border-slate-800 pt-4"
+              aria-label="快捷指令列表"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold">快捷指令</h2>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-sky-300"
+                    disabled={
+                      Boolean(busyItemId) || commands.isPending || !items.length
+                    }
+                    onClick={() => {
+                      setSorting(!sorting);
+                      setQuery("");
+                    }}
+                  >
+                    {sorting ? "完成排序" : "管理排序"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-sky-300"
+                    aria-label="新增指令"
+                    onClick={() => edit(null)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            ) : items.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">
-                {emptyMessage}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {items.map((item) => (
+              <p className="text-xs text-slate-400">
+                当前执行位置：{activeProject?.name ?? "请先选择项目或工作区"}
+              </p>
+              {!sorting ? (
+                <label className="relative block">
+                  <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-slate-500" />
+                  <Input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="搜索全局快捷指令"
+                    className="h-8 border-slate-800 bg-slate-900 pl-7 text-xs"
+                  />
+                </label>
+              ) : null}
+              {error ? (
+                <p role="alert" className="break-words text-xs text-rose-300">
+                  {error}
+                </p>
+              ) : null}
+              {feedback ? (
+                <p role="status" className="text-xs text-sky-300">
+                  {feedback}
+                </p>
+              ) : null}
+              {needsBackgroundConfig ? (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => {
+                    setOpen(false);
+                    setPanelOpen(true);
+                  }}
+                >
+                  设置后台模型
+                </Button>
+              ) : null}
+              <RequestError error={commands.error} />
+              {commands.error ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void commands.refetch()}
+                >
+                  重试读取指令
+                </Button>
+              ) : commands.isPending ? (
+                <p className="py-4 text-center text-xs text-slate-400">
+                  正在读取…
+                </p>
+              ) : !visible.length ? (
+                <p className="py-4 text-center text-xs text-slate-400">
+                  {query.trim()
+                    ? "没有匹配的快捷指令"
+                    : "还没有快捷指令，点击新增保存常用命令。"}
+                </p>
+              ) : null}
+              {visible.map((item, index) => {
+                const run = runs.backgroundRuns.find(
+                  (candidate) =>
+                    !candidate.archivedAt &&
+                    isQuickInputRunActive(candidate) &&
+                    candidate.executionProjectId === activeProject?.projectId &&
+                    candidate.snapshot.origin?.quickInputId === item.id,
+                );
+                return (
                   <TerminalQuickInputRow
                     key={item.id}
                     item={item}
-                    busy={busyItemId === item.id}
+                    busy={Boolean(busyItemId)}
                     canTargetTerminal={canTargetTerminal}
-                    onSend={handleSend}
-                    onInsert={handleInsert}
-                    onCopy={handleCopy}
-                    onTogglePinned={handleTogglePinned}
-                    onDelete={handleDelete}
-                    onBackgroundRun={handleBackgroundRun}
-                    canBackgroundRun={backgroundAvailable && Boolean(activeProject) && !disabled}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {!activeTerminalId ? (
-            <p className="text-[11px] leading-4 text-amber-300">
-              Active terminal is required for send and insert.
-            </p>
-          ) : null}
-
-          <div className="border-t border-slate-800 pt-3">
-            <button
-              type="button"
-              className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-100"
-              onClick={() => {
-                setManualOpen((value) => !value);
-              }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              保存快捷指令
-            </button>
-
-            {manualOpen ? (
-              <div className="mt-2 space-y-2 rounded-md border border-slate-800 bg-slate-900/70 p-2">
-                <div className="grid grid-cols-[minmax(0,1fr)_110px_150px] gap-2">
-                  <label className="flex flex-col gap-1 text-[11px] text-slate-400">
-                    标题
-                    <Input
-                      value={manualTitle}
-                      onChange={(event) => {
-                        setManualTitle(event.target.value);
-                      }}
-                      placeholder="可选"
-                      className="h-8 border-slate-800 bg-slate-950 text-xs text-slate-100 placeholder:text-slate-500"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 text-[11px] text-slate-400">
-                    范围
-                    <select
-                      value={activeProject ? manualScope : "global"}
-                      className="h-8 rounded-md border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-sky-600"
-                      onChange={(event) => {
-                        setManualScope(
-                          event.target.value as ManualQuickInputScope,
-                        );
-                      }}
-                    >
-                      <option value="project" disabled={!activeProject}>
-                        当前项目
-                      </option>
-                      <option value="global">全局</option>
-                    </select>
-                  </label>
-                  <label className="flex flex-col gap-1 text-[11px] text-slate-400">
-                    Mode
-                    <select
-                      value={manualMode}
-                      className="h-8 rounded-md border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-sky-600"
-                      onChange={(event) => {
-                        setManualMode(
-                          event.target.value as TerminalQuickInputMode,
-                        );
-                      }}
-                    >
-                      {MODE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <label className="flex flex-col gap-1 text-[11px] text-slate-400">
-                  内容
-                  <textarea
-                    value={manualData}
-                    onChange={(event) => {
-                      setManualData(event.target.value);
+                    canBackgroundRun={
+                      runs.backgroundAvailable && canTargetTerminal && !disabled
+                    }
+                    running={Boolean(run)}
+                    sorting={sorting}
+                    first={index === 0}
+                    last={index === visible.length - 1}
+                    onSend={send}
+                    onInsert={(command) => send(command, true)}
+                    onEdit={edit}
+                    onBackgroundRun={start}
+                    onViewRun={() => {
+                      if (run) showRuns(run);
                     }}
-                    placeholder="输入要保存的快捷指令"
-                    className="min-h-20 resize-y rounded-md border border-slate-800 bg-slate-950 px-2 py-1.5 font-mono text-xs leading-4 text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
-                  />
-                </label>
-                <div className="flex items-center justify-end gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 rounded-md px-2 text-xs"
-                    disabled={savingManual}
-                    onClick={() => {
-                      setManualOpen(false);
+                    onMove={(direction) => move(item, direction)}
+                    onCopy={(command) =>
+                      void action(command, async () => {
+                        await navigator.clipboard.writeText(command.data);
+                        await markTerminalQuickInputUsed(
+                          apiBase,
+                          token,
+                          command.id,
+                        );
+                        setFeedback("已复制指令");
+                      })
+                    }
+                    onDelete={(command) => {
+                      if (
+                        window.confirm(
+                          "删除快捷指令？已创建的后台任务及运行记录会保留。",
+                        )
+                      )
+                        void action(command, async () => {
+                          await deleteTerminalQuickInput(
+                            apiBase,
+                            token,
+                            command.id,
+                          );
+                          await commands.refetch();
+                        });
                     }}
-                  >
-                    取消
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 rounded-md px-2 text-xs"
-                    disabled={!manualData.trim() || savingManual}
-                    onClick={() => void handleCreateManual()}
-                  >
-                    保存
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+                  />
+                );
+              })}
+            </section>
           </div>
-        </div>
-      </PopoverContent>
-    </Popover>
+        </PopoverContent>
+      </Popover>
+      <QuickInputRunPanel
+        open={runsOpen}
+        onOpenChange={(value) => {
+          setRunsOpen(value);
+          if (!value) setOpen(true);
+        }}
+        selectedRun={selectedRun}
+        onSelect={setSelectedRun}
+        dashboardRuns={runs.dashboardRuns}
+        historyRuns={runs.historyRuns}
+        loading={runs.loading}
+        error={runs.error}
+        onRefresh={() => void runs.refresh()}
+        onUpdate={runs.upsertBackgroundRun}
+        onOpened={() => {
+          setRunsOpen(false);
+          setOpen(false);
+        }}
+        connectionName={connectionName}
+      />
+      {editor ? (
+        <QuickInputEditor
+          key={editor.item?.id ?? "new"}
+          item={editor.item}
+          apiBase={apiBase}
+          token={token}
+          connectionName={connectionName}
+          onClose={() => {
+            setEditor(null);
+            setOpen(true);
+          }}
+          onSaved={() => {
+            setEditor(null);
+            setOpen(true);
+            void commands.refetch();
+          }}
+        />
+      ) : null}
+    </>
   );
 }

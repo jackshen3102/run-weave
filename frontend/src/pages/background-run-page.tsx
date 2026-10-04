@@ -6,7 +6,8 @@ import { buildConnectionQueryScope } from "../features/query/connection-query-pr
 import { useTaskNavigation } from "../features/scheduled-tasks/navigation";
 import { useRun } from "../features/scheduled-tasks/queries";
 import { RequestError } from "../features/scheduled-tasks/presentation";
-import { RunRecord } from "../features/scheduled-tasks/task-detail";
+import { QuickInputRunDetail } from "../features/scheduled-tasks/quick-input-run-panel";
+import { useQuickInputBackgroundRuns } from "../features/scheduled-tasks/use-quick-input-background-runs";
 import { runDetailsPath } from "../features/scheduled-tasks/run-details-path";
 
 interface Props {
@@ -40,14 +41,18 @@ function BackgroundRunContent({ connectionName }: { connectionName?: string }) {
   const location = useLocation();
   const { back } = useTaskNavigation();
   const run = useRun(runId ?? null);
+  const { upsertBackgroundRun } = useQuickInputBackgroundRuns(false);
   if (run.data && run.data.snapshot.origin?.kind !== "quick-input") {
-    return <Navigate to={runDetailsPath(run.data)} replace state={location.state} />;
+    return (
+      <Navigate to={runDetailsPath(run.data)} replace state={location.state} />
+    );
   }
   return (
     <main className="min-h-dvh bg-background text-foreground">
       <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <Button variant="ghost" size="sm" onClick={back}>
-          <ArrowLeft className="mr-1 h-4 w-4" />返回工作区
+          <ArrowLeft className="mr-1 h-4 w-4" />
+          返回工作区
         </Button>
         <Play className="h-4 w-4" />
         <h1 className="font-semibold">后台运行</h1>
@@ -59,13 +64,17 @@ function BackgroundRunContent({ connectionName }: { connectionName?: string }) {
         <RequestError error={run.error} />
         {run.isPending ? <p>正在加载运行记录…</p> : null}
         {run.isError ? (
-          <Button variant="outline" onClick={() => void run.refetch()}>重试</Button>
+          <Button variant="outline" onClick={() => void run.refetch()}>
+            重试
+          </Button>
         ) : null}
         {run.data ? (
-          <>
-            <h2 className="break-words text-xl font-semibold">{run.data.snapshot.name}</h2>
-            <RunRecord key={run.data.id} run={run.data} highlighted />
-          </>
+          <QuickInputRunDetail
+            key={run.data.id}
+            initial={run.data}
+            onUpdate={upsertBackgroundRun}
+            onOpened={() => {}}
+          />
         ) : null}
       </div>
     </main>
