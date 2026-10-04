@@ -35,6 +35,7 @@ type Scope = {
   panelId: string;
   threadId: string | null;
   idle: boolean;
+  codex: boolean;
   active: boolean;
 };
 const scopeKey = (scope: Scope) =>
@@ -55,14 +56,22 @@ export function useTerminalTextAttachments(
   const scopeId = scopeKey(scope);
   const context = JSON.stringify([
     scopeId,
+    scope.token,
     scope.threadId,
     scope.idle,
     scope.active,
+    scope.codex,
   ]);
   if (lastContext.current !== context) {
     lastContext.current = context;
     generation.current++;
   }
+  useEffect(
+    () => () => {
+      generation.current++;
+    },
+    [],
+  );
   const records = useRef(pageRecords);
   const [, render] = useState(0);
   const [capability, setCapability] = useState<{
@@ -95,10 +104,14 @@ export function useTerminalTextAttachments(
   } catch {
     /* Unknown connection ownership keeps native paste. */
   }
-  const enabled =
+  const candidate =
     localConnection &&
     scope.active &&
     scope.idle &&
+    scope.codex &&
+    Boolean(scope.panelId && resolvedThreadId);
+  const enabled =
+    candidate &&
     capability?.context === context &&
     capability.value.enabled &&
     capability.value.threadId === resolvedThreadId;
@@ -117,7 +130,19 @@ export function useTerminalTextAttachments(
           if (!cancelled) setCapability({ context, scopeId, value });
         })
         .catch(() => {
-          if (!cancelled) setCapability(null);
+          if (!cancelled)
+            setCapability({
+              context,
+              scopeId,
+              value: {
+                enabled: false,
+                provider: null,
+                threadId: null,
+                executionHost: null,
+                reason: "附件能力未确认",
+                limits,
+              },
+            });
         });
     };
     refresh();
@@ -134,6 +159,7 @@ export function useTerminalTextAttachments(
     scope.panelId,
     scope.idle,
     scope.active,
+    scope.codex,
     context,
     scopeId,
   ]);
@@ -181,7 +207,7 @@ export function useTerminalTextAttachments(
     ): boolean => {
       const clipboard = event.clipboardData;
       if (
-        !enabled ||
+        (!enabled && !(candidate && capability?.context !== context)) ||
         !clipboard ||
         Array.from(clipboard.items).some((item) => item.kind === "file")
       )
@@ -231,6 +257,24 @@ export function useTerminalTextAttachments(
         );
       void (async () => {
         try {
+          // During a fresh scope query, retain the body synchronously instead of leaking it
+          // to xterm. Capability denial/failure keeps this recoverable original, never replays it.
+          if (!enabled) {
+            const verified = await request<TerminalTextAttachmentCapability>(
+              bound.apiBase,
+              bound.token,
+              bound.sessionId,
+              `/capability?panelId=${encodeURIComponent(bound.panelId)}`,
+            );
+            if (!verified.enabled || verified.threadId !== bound.threadId)
+              throw new Error(verified.reason ?? "附件能力未确认，原文已保留");
+            if (!present() || !originalTarget()) {
+              item.status = "not-inserted";
+              item.reason = "目标或输入已变化，原文已保留";
+              update();
+              return;
+            }
+          }
           let attachment: TerminalTextAttachment;
           try {
             attachment = await request<TerminalTextAttachment>(

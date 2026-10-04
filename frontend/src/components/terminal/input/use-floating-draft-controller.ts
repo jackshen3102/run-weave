@@ -170,6 +170,7 @@ export function useTerminalFloatingDraftController({
           ? attachmentPanel.lastThreadId
           : null) ??
         null,
+      codex: targetTerminalState?.agent === "codex",
       idle:
         targetTerminalState?.state === "agent_idle" &&
         targetSessionRunning &&

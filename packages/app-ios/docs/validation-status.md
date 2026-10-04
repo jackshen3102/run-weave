@@ -386,3 +386,21 @@ ready 后进入终端对话 Tab，关闭详情和全部任务列表两层弹窗�
 `.runweave/mobile-qa/background-terminal-access-20261001/`；没有安装到手机，真机本轮未验收。
 
 本轮测试连接/凭据、隔离项目/终端及快捷指令已删除，Session 已停止，共享模拟器租约已归还。
+
+## Codex 回复辅助（2026-10-04）
+
+终端中的“回复辅助”只展示 Home conversation preview 的历史 Agent 摘要，明确提示可能过时或不可用；
+它不识别实时问题、问题 ID 或已回答状态，也不把用户排队消息当成问题。返回原终端核对后，由用户手动
+打开现有输入面板回复；不自动插入、发送、编辑队列或消费草稿。原 Codex 启动方式和全局配置保持不变。
+
+当前源码 Debug 模拟器构建 `854ffcf8-c470-4a55-9d28-f2ac224c0c8a`（HEAD `119b6f8` 加本次 iOS diff）
+在共享模拟器 `0986DF97-0644-4138-847E-5BC690CFEF7E`、隔离 Session `dvs-e35256` 上实际验证：
+入口双击只开一层、历史摘要/无摘要降级、辅助与首页往返后中文草稿完整保留、手动回复一次；
+active panel 切换和同面板 thread 更换后旧摘要隐藏且导航禁用。
+真实 Codex 0.160.0 无副作用等待任务期间，普通问题文本与 Queued follow-up inputs 共存；
+辅助页往返未改变队列，任务完成后唯一队列标记只处理一次。
+
+对应 `ios-native-features.testplan.yaml` 的 IOSFEATURE-016、017、019 通过；018 的 panel/thread 分支通过，
+连接代际在辅助页打开期间变化的完整流程未验。未重跑旧 001～015 全矩阵、图片草稿、断网/未知响应、
+结构化问题 ID 或真机流程。类型检查由 iOS Xcode Debug 构建覆盖；架构、文档、YAML 格式与 diff 门禁通过。
+本机证据在 `artifacts/mobile-codex-light-20261004/`；未更新手机安装版或 macOS Stable，不能当作安装态生效。

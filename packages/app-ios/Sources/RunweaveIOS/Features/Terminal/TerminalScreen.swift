@@ -16,6 +16,7 @@ struct TerminalScreen: View {
   @State private var deleting = false
   @State private var showingHistory = false
   @State private var showingInfo = false
+  @State private var replyContext: CodexReplyContext?
   @State private var showingDiagnostics = false
   @State private var snapshotShare: TerminalSnapshotShare?
   @State private var shareOperation: Task<Void, Never>?
@@ -167,6 +168,18 @@ struct TerminalScreen: View {
         .clarityMask().mobileAnalyticsScreen(.filePreview)
     }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
+    .sheet(item: $replyContext) { context in
+      CodexReplyAssistant(session: session, controller: controller, terminalID: details.id,
+        context: context, returnToTerminal: {
+          guard session.generation == context.generation,
+            session.terminal?.id == details.id, session.terminalController === controller,
+            currentTerminal?.conversationKey == context.conversationKey,
+            currentTerminal?.conversationPreview?.turnId == context.turnID else { return }
+          replyContext = nil
+          tab = "Chat"
+          controller.returnToBottom()
+        }).clarityMask()
+    }
     .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id).mobileAnalyticsScreen(.terminalInfo) }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session).mobileAnalyticsScreen(.diagnostics) }
     .sheet(item: $snapshotShare) { TerminalSnapshotShareSheet(url: $0.url).mobileAnalyticsScreen(.share) }
@@ -174,6 +187,7 @@ struct TerminalScreen: View {
       shareOperation?.cancel()
       snapshotShare = nil
       shareFailure = nil
+      replyContext = nil
     }
     .alert("分享失败", isPresented: Binding(
       get: { shareFailure != nil }, set: { if !$0 { shareFailure = nil } }
@@ -202,6 +216,7 @@ struct TerminalScreen: View {
     let composer = $showingComposer
     let history = $showingHistory
     let info = $showingInfo
+    let reply = $replyContext
     let diagnostics = $showingDiagnostics
     let deletion = $deleting
     let share = $snapshotShare
@@ -214,7 +229,7 @@ struct TerminalScreen: View {
         session.terminalController === controller, let window = controller.surface.view.window else { return false }
       let systemBusy = window.rootViewController?.presentedViewController != nil
       return !composer.wrappedValue && !history.wrappedValue && !info.wrappedValue
-        && !diagnostics.wrappedValue && !deletion.wrappedValue && !systemBusy
+        && !diagnostics.wrappedValue && !deletion.wrappedValue && reply.wrappedValue == nil && !systemBusy
         && share.wrappedValue == nil && !sharePending.wrappedValue
         && browser.state != .presented && !browser.hasPrompt
     }
@@ -313,6 +328,20 @@ struct TerminalScreen: View {
 
   private var floatingControls: some View {
     VStack(alignment: .trailing, spacing: 8) {
+      if currentTerminal?.terminalState.agent == "codex" {
+        Button {
+          guard replyContext == nil, session.terminal?.id == details.id,
+            session.terminalController === controller else { return }
+          let preview = currentTerminal?.conversationPreview
+          replyContext = CodexReplyContext(generation: session.generation,
+            conversationKey: currentTerminal?.conversationKey,
+            agentText: preview?.available == true && preview?.provider == "codex" ? preview?.agentText : nil,
+            turnID: preview?.turnId)
+        } label: {
+          Label("回复辅助", systemImage: "questionmark.bubble")
+            .font(.caption).padding(8).background(.regularMaterial).cornerRadius(12)
+        }.accessibilityIdentifier("codex-reply-assistant-open")
+      }
       if controller.scrolledBack {
         Button("回到底部") { controller.returnToBottom() }
           .font(.caption).padding(8).background(.regularMaterial).cornerRadius(12)

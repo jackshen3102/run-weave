@@ -1,7 +1,10 @@
 # Terminal 长文本粘贴
 
 Web 和 Electron renderer 共用这项能力。先通过所属 Backend 的 capability 确認当前
-panel/thread 可用，且 apiBase 为 loopback 地址时才拦截用户 DOM paste。首版只支持已实测
+panel/thread 可用，且 apiBase 为 loopback 地址时拦截用户 DOM paste。
+已确认空闲 Codex 的 panel/thread 在新 scope capability 查询期间也先保留长文本；
+取得同一目标的肯定结果后才创建附件。等待期间目标、输入或 surface 生命周期改变则停止，
+查询失败或拒绝时保留可复制原文，不异步回放正文。已知不支持的上下文仍走原生输入。首版只支持已实测
 macOS Backend 的直接连接；远端、代理、旧 Backend 或未确认上下文保持原生输入。
 Backend 的执行环境、投递与文件生命周期合同见
 [`Terminal 文本附件`](../../backend/docs/terminal-text-attachments.md)。

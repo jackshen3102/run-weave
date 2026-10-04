@@ -1,3 +1,4 @@
+import { isLocalCodexBypass } from "./codex-execution";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type {
@@ -171,13 +172,17 @@ export class TerminalTextAttachmentDelivery {
       for (const entry of processes)
         if (descendants.has(entry.parent)) descendants.add(entry.pid);
     const local = processes.filter((entry) => descendants.has(entry.pid));
-    const nativeCodex = local.filter(
-      (entry) =>
-        // The first option is unambiguous; later text can belong to the prompt.
-        /^(?:\S*\/)?codex\s+(?:--dangerously-bypass-approvals-and-sandbox|--yolo)(?:\s|$)/.test(
-          entry.command,
-        ) && entry.uid === process.getuid?.(),
-    );
+    const nativeCodex = (
+      await Promise.all(
+        local
+          .filter(
+            (entry) =>
+              entry.uid === process.getuid?.() &&
+              /^(?:\S*\/)?codex(?:\s|$)/.test(entry.command),
+          )
+          .map(async (entry) => await isLocalCodexBypass(entry.pid)),
+      )
+    ).filter(Boolean);
     if (!nativeCodex.length)
       throw new TextAttachmentError(
         409,

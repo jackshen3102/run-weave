@@ -9,8 +9,9 @@ Terminal 附件由所属 Backend 保存。身份鉴权沿用 Terminal router，�
 首版只开放浏览器直接访问 loopback 地址的已实测 macOS Backend（无 forwarded 代理头），
 以及已确认的本机、受管理 Codex 空闲 panel：实际 thread 与 pane 一致，Codex
 进程与 Backend 属于同一用户，启动参数显式允许访问 Backend 文件系统，tmux 没有外部
-共享客户端。当前只认可首个参数为 `--dangerously-bypass-approvals-and-sandbox` / `--yolo`
-的执行证据，避免把后续 prompt 中的同名文字当成权限参数；
+共享客户端。通过同用户进程的原始 argv 校验 `--dangerously-bypass-approvals-and-sandbox` / `--yolo`，
+允许其前面的已识别选项及参数值；不把配置值、prompt 或 `--` 后的正文识别为权限标志。
+未知选项、远程连接和冲突的权限选项保持能力关闭；原始参数读取失败时不退回解析 ps 文本。
 不修改 Agent 的权限配置。普通 shell、Vim、其他 Agent、手动 SSH / 容器、无法确认的
 沙箱保持能力关闭。远端能力关闭，扩展前必须另行验证文件读取权限。
 
@@ -38,7 +39,7 @@ session 明确删除后再保留 7 天。损坏或归属不明 metadata 跳过�
 
 TUI 创建在任何异步工作前固定 panel、thread 与输入 revision。保存期间不锁终端；继续
 输入、目标切换或其他客户端输入使旧资格失效。插入在同步复核后取得短时 session 独占权，
-退出 copy mode 后再次检查显式 pane，粘贴 ` 空格 + JSON 字符串路径 + 空格 `，不发送
+退出 copy mode 后再次检查显式 pane，粘贴 `空格 + JSON 字符串路径 + 空格`，不发送
 Ctrl-U 或 Enter。独占期间的正常 HTTP / WS 输入固定原目标并按序等待。
 
 浮动提交携带 `textAttachmentIds`，Backend 按 ID 顺序校验归属及文件可读，追加路径说明，
