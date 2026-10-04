@@ -79,6 +79,39 @@ Agent 控制不属于首版；不降低 SIP/AMFI，不承诺 FileVault、Touch I
 Host target 声明 macOS 15。构建、安装、启动、原生交互、真实硬件编解码、Wi-Fi 与
 Clarity 云端回放分别取证，任何一层成功都不能替代另一层。
 
+## 使用记录与分析口径
+
+“Mac 桌面 → 桌面使用记录”保留最近 100 次打开，每次最多保留最近 20 段已结束连接明细；
+总尝试数、首帧次数与已结束连接的输入/帧计数不随明细裁剪重置。记录独立保存在手机
+Application Support 的 `RemoteDesktopUsage/records.json`，异步原子写入、排除备份，
+可在界面导出 JSON 或清空，不依赖 Backend 在线。异常退出可能丢失尚未落盘的变化；
+下次启动把未关闭记录标为 `interrupted_unknown`，不猜测结束时间与任务结果。
+原文件无法解析时保留它，仅在内存记录新使用并展示警告，直到用户显式清空。
+
+一个 `id` 对应一次远控页面呈现；网络重试、同次呈现的前台恢复只增加 `attemptCount`。
+`visibleAttemptCount` 以显示层就绪且可见为依据；`firstVisibleFrameMilliseconds` 是
+**首次出现画面的那段连接**从开始到显示就绪的单调时钟耗时，不含此前失败尝试，
+也不是端到端输入延迟。`readOnlyAttemptCount` 统计首次显示时只读的连接，
+`controlPermissionLossCount` 统计辅助功能权限撤销后的降级。
+`inputObserved` 表示至少一条客户端输入发送完成，不证明 Host 接受或应用完成操作。
+精确输入计数和连接时长只汇总已结束的连接，不能拿它们当用户点击数、前台活跃时间或任务成功率。
+
+导出顶层 `schemaVersion: 1` 与 `records`；时间使用 ISO 8601。记录包括安装构建身份、
+`environment`（device/simulator）、连接汇总、最近连接结束时间和固定原因分类。
+不包含机器名、地址、Host/Backend 身份、配对码、凭据、按键/文本/坐标或桌面画面。
+`connection_lost` 只代表客户端观察到连接丢失，不能据此断言 Wi-Fi、Mac 睡眠或锁屏。
+
+每条记录允许事后选择 `purpose` 与 `outcome`；默认均为 `unknown`。
+“处理 Agent 卡点”是用户填写的目的，不表示发生了 Agent 自动交接。
+反馈仅随本地记录导出。分析先按 environment、构建和时间区间分组，列出打开次数、
+有画面次数、有输入次数、连接结束原因，以及已填写/未知反馈数量；结果比例必须注明分母。
+优先看反复出现的具体使用目的及未解决情况，再决定是否建设专门的接管 Agent。
+
+Clarity 沿用原有构建开关，只发送固定事件：配对保存、打开、首次画面、首次发送输入、关闭。
+首次画面与输入事件在每次打开内各至多一次；配对事件表示本机凭据及元数据保存成功。
+Clarity 会话与远控打开不是同一单位，固定事件没有本地记录 ID；云端趋势不能代替导出记录
+做精确会话归因，SDK 接受事件也不等于云端入库成功。
+
 ## 运行与验收
 
 Host 构建、签名、授权、启动、停止和撤销操作见
@@ -92,6 +125,7 @@ Host 构建、签名、授权、启动、停止和撤销操作见
 - [输入与媒体](../testing/remote-desktop/input-media.testplan.yaml)：A08–A11、A15。
 - [配对、权限、隐私与来源](../testing/remote-desktop/security-source.testplan.yaml)：A06–A07、A12–A13、A16。
 - [扫码配对](../testing/remote-desktop/qr-pairing.testplan.yaml)：真实相机、邀请失效、身份绑定与手动备用。
+- [使用记录](../testing/remote-desktop/usage.testplan.yaml)：连接归并、未知结果、反馈、导出与云端事件。
 
 每项只能依据完整证据记 pass，行为不符记 fail，缺环境或证据记 blocked。模拟器里的
 真实 Host/H.264 闭环只证明对应原生链路；不能替代真机 Wi-Fi、硬件编码、温度/功耗、

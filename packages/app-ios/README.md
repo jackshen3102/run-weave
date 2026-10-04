@@ -14,7 +14,9 @@ Bundle ID 为 `com.runweave.app.native`，保留已有安装的连接、主题�
 原生 App 包含 Microsoft Clarity iOS SDK `4.1.0`。仅 Release 真机构建默认初始化，生产项目是
 [Runweave iOS](https://clarity.microsoft.com/projects/view/yofefg4fsy/settings)（`yofefg4fsy`）。
 项目设置为 Strict masking，WebView DOM capture 关闭。代码另对登录和配置输入、任务提示词、终端、命令输入、文件预览及内置浏览器遮盖。
-SDK 在主线程启动时初始化一次，不上报自定义用户 ID、事件或 Runweave 连接标识；没有用户操作开关。
+SDK 在主线程启动时初始化一次，不上报自定义用户 ID 或 Runweave 连接标识；没有用户操作开关。
+远控发送固定自定义事件 `remote_paired`、`remote_opened`、`remote_visible`、`remote_input_sent`、
+`remote_closed`，没有事件参数；详细口径见[远控使用记录](../../docs/architecture/remote-desktop.md#使用记录与分析口径)。
 关键页面使用官方 `setCurrentScreenName` 命名：`home`、`login`、`connections`、`terminal_chat`、`terminal_files`、`terminal_changes`、`composer`、`quick_replies`、`quick_reply_editor`、`scheduled_tasks`、`scheduled_task_editor` 等。名称只来自固定分类，不包含项目名、终端 ID、命令或文件路径。
 共用页面标记按可见视图层级选择名称，弹层关闭时恢复底层分类；输入面板的 UIKit host 显式传递层级。SDK 会话开始时重新应用当前分类，未初始化时不调用 SDK 命名接口。系统键盘、系统确认框及未标记的次级内容保留所属业务页面分类；分类不是任务成功率，也不把集中处理或长时间停留视为异常。
 

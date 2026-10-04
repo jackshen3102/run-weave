@@ -23,6 +23,17 @@ public enum MobileAnalytics {
   private static var screens: [VisibleScreen] = []
   private static var reportedScreen: Screen?
 
+  enum RemoteEvent: String {
+    case opened = "remote_opened", visible = "remote_visible", inputSent = "remote_input_sent"
+    case closed = "remote_closed", paired = "remote_paired"
+  }
+
+  /// Coarse event counts only; exact per-use joins live in the local remote usage archive.
+  static func remoteEvent(_ event: RemoteEvent) {
+    guard initialized else { return }
+    _ = ClaritySDK.sendCustomEvent(value: event.rawValue)
+  }
+
   public static func initialize() {
     guard !initialized else { return }
     let settings = Bundle.main.infoDictionary ?? [:]

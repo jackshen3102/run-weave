@@ -49,6 +49,12 @@ struct RemoteHostManager: View {
         } footer: {
           Text("忘记仅移除这部手机的专属凭据。要撤销设备授权，请在 Mac Host 本地撤销；本地停止可立即结束控制。")
         }
+        Section {
+          NavigationLink {
+            RemoteUsageView(store: coordinator.usage)
+          } label: { Label("桌面使用记录", systemImage: "clock.arrow.circlepath") }
+          .accessibilityIdentifier("remote-usage-open")
+        }
       }
       .navigationTitle("Mac 桌面")
       .toolbar {

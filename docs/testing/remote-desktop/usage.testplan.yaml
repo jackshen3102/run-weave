@@ -1,0 +1,60 @@
+version: 1
+name: 远控使用记录与分析口径
+description: >
+  验证原生远控的本地记录、可选反馈及固定 Clarity 事件。构建与格式校验不代替实际采集；
+  模拟器与真机、客户端事件与云端入库分别取证。使用合成桌面内容，不导出真实秘密。
+cases:
+  - id: RDU-001
+    name: 一次打开在多次连接后仍只记一次使用
+    required: true
+    description: 同一次呈现的后台恢复只增加尝试数，退出及后续视图销毁不重复汇总或关闭。
+    preconditions:
+      - 已安装当前源码 App，独立 Mac Host 已配对可达，可取得真实首帧；已记录本地使用记录基线。
+    steps:
+      - 用 toolkit:agent-device 打开已配对桌面，取得真实首帧并发送一条合成输入，再切后台并恢复前台，重新取得首帧后返回。
+      - 打开 Mac 桌面的桌面使用记录并导出 JSON；确认只新增一个 id，attemptCount 为实际连接次数，输入及帧数为各已结束连接之和，recentAttempts 不含重复停止，endReason 为 user_closed。
+  - id: RDU-002
+    name: 未建立画面的连接不产生可见或输入成功记录
+    required: true
+    description: 不可用 Host 的客户端失败分类不被当成任务失败或首帧成功，重试不会制造新使用。
+    preconditions:
+      - 当前 App 有已配对但暂时不可达的测试 Host，记录基线；不修改真实 Host 凭据。
+    steps:
+      - 用 toolkit:agent-device 打开该 Host，观察连接错误与至少一次自动重试，然后主动返回。
+      - 从使用记录导出 JSON；确认只新增一次使用，attemptCount 随真实尝试增长，firstVisibleFrameMilliseconds 缺失，inputObserved 为 false，purpose 与 outcome 均为 unknown；结束原因使用固定分类而非原始错误文本。
+  - id: RDU-003
+    name: 反馈修改与导出不依赖 Backend
+    required: true
+    description: 反馈是用户主动填写的可修改信息，保存后导出保持一致，不从连接状态推断任务结果。
+    preconditions:
+      - 当前 App 至少有一条本轮创建的使用记录，Backend 离线；可使用系统分享保存导出文件。
+    steps:
+      - 用 toolkit:agent-device 打开使用记录详情，确认未填写目的与结果；选择处理 Agent 卡点及仍未解决，返回列表再进入详情，确认选择保留。
+      - 导出 JSON 并核对同一 id 的 purpose 为 agentBlocked、outcome 为 unresolved；把两项改回未填写并再次导出，确认均为 unknown。
+  - id: RDU-004
+    name: 进程中断不伪造正常结束
+    required: true
+    description: 重启把已落盘但未关闭记录标为 interrupted_unknown，不编造结束时间或结果。
+    preconditions:
+      - 当前 App 有测试 Host，执行者能终止并重启同一 App，能读取本轮落盘记录且不清空既有用户数据。
+    steps:
+      - 用 toolkit:agent-device 打开桌面；确认 records.json 已出现本轮新 id 且没有 endReason，然后强制终止 App。
+      - 重新启动同一 App，重新取得 UI 引用，打开使用记录并导出；确认该 id 的 endReason 为 interrupted_unknown，endedAt 缺失，outcome 仍为 unknown，lastObservedAt 保留中断前的已知值。
+  - id: RDU-005
+    name: 导出只含允许的状态与计数
+    required: true
+    description: 真实连接、合成输入与反馈产生的导出不含设备身份、输入内容或原始错误。
+    preconditions:
+      - 可连接已配对的测试 Mac Host，准备唯一的合成文本标记，记录 Host 名称与地址供本地核对。
+    steps:
+      - 用 toolkit:agent-device 在真实远控桌面发送合成标记，退出并导出使用记录。
+      - 解析导出 JSON，确认 schemaVersion 为 1、environment 与设备匹配，存在构建信息、时间及计数；扫描确认无合成文本、Host 名称地址、按键值、坐标、配对码、token、画面与自由文本错误。
+  - id: RDU-006
+    name: 固定事件实际进入独立 Clarity 测试项目
+    required: true
+    description: 云端只出现允许的固定事件，页面重复生命周期回调不重复发送一次打开的可见与输入事件。
+    preconditions:
+      - 当前 App 使用独立移动 Clarity 测试项目并启用采集，执行者能读取该项目本轮新会话，已配对测试 Host 可达。
+    steps:
+      - 用 toolkit:agent-device 打开远控、取得真实画面、发送合成输入、后台恢复并再输入，最后返回；记录准确构建身份与时间区间。
+      - 在 Clarity 读取该构建本轮新会话；确认 remote_opened、remote_visible、remote_input_sent、remote_closed 各一次，事件无目标、输入或本地使用 id 参数。SDK 返回成功但缺云端证据时记 blocked。
