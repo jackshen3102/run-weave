@@ -169,12 +169,14 @@ struct TerminalScreen: View {
     }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
     .sheet(item: $replyContext) { context in
-      CodexReplyAssistant(session: session, controller: controller, terminalID: details.id,
+      CodexReplyAssistant(session: session, controller: controller, questions: session.terminalQuestions,
+        terminalID: details.id,
         context: context, returnToTerminal: {
           guard session.generation == context.generation,
             session.terminal?.id == details.id, session.terminalController === controller,
             currentTerminal?.conversationKey == context.conversationKey,
-            currentTerminal?.conversationPreview?.turnId == context.turnID else { return }
+            (session.terminalQuestions.response?.capability == "available"
+              || currentTerminal?.conversationPreview?.turnId == context.turnID) else { return }
           replyContext = nil
           tab = "Chat"
           controller.returnToBottom()

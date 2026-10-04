@@ -31,6 +31,7 @@ final class AppSession: ObservableObject {
   let browser = BrowserSession(configuration: BrowserPresentationConfiguration(
     applicationName: "Runweave", returnLabel: "回终端",
     clearDataMessage: "清除此 App 全部内置网站的登录与存储数据？网页将关闭，不影响电脑连接或终端草稿。网站登录独立于电脑连接。"))
+  let terminalQuestions = TerminalQuestionsModel()
   let knowledgeInbox = KnowledgeInboxModel()
   let deviceStatus = DeviceStatusStore()
   let imageDrafts = TerminalImageDrafts()
@@ -54,7 +55,7 @@ final class AppSession: ObservableObject {
   private var lastRuntimeReleaseID: String?
 
   private(set) var api: APIClient?
-  @Published private(set) var generation = 0
+  @Published private(set) var generation = 0 { didSet { terminalQuestions.reset() } }
   @Published private(set) var metadataWrites = Set<String>()
   // Mutated by the attention extension; scoped to this connection generation.
   @Published var acknowledgementWrites = Set<String>()
