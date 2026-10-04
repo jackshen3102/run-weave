@@ -24,6 +24,7 @@ final class RemoteDesktopCoordinator: ObservableObject {
   private(set) var generation: UInt64 = 0
   private var pendingHostID: UUID?
   private var sceneActive = true
+  let usage = RemoteUsageStore()
 
   init() {
     guard let data = DevicePreferences.remoteHosts else { return }
@@ -54,6 +55,7 @@ final class RemoteDesktopCoordinator: ObservableObject {
     if let previous, previous.target.credentialsReference != target.credentialsReference {
       try? RemoteCredentialStore().forget(target: previous.target)
     }
+    MobileAnalytics.remoteEvent(.paired)
     return paired
   }
 
@@ -76,7 +78,10 @@ final class RemoteDesktopCoordinator: ObservableObject {
       managingHosts = false
     } else {
       close(reason: "target_changed")
-      presentation = RemoteDesktopPresentation(id: UUID(), host: host, session: RemoteDesktopSession())
+      let id = UUID()
+      usage.start(id)
+      let session = RemoteDesktopSession { [weak usage] event in usage?.observe(event, id: id) }
+      presentation = RemoteDesktopPresentation(id: id, host: host, session: session)
     }
   }
 
@@ -94,8 +99,8 @@ final class RemoteDesktopCoordinator: ObservableObject {
 
   func close(reason: String) {
     generation &+= 1
-    presentation?.session.setPresentationActive(false)
     presentation?.session.stop(reason: reason)
+    if let id = presentation?.id { usage.end(id, reason: reason) }
     presentation = nil
   }
 
@@ -113,7 +118,6 @@ final class RemoteDesktopCoordinator: ObservableObject {
     guard let value = presentation else { return }
     if active { connect(value) }
     else {
-      value.session.setPresentationActive(false)
       value.session.stop(reason: "background")
     }
   }

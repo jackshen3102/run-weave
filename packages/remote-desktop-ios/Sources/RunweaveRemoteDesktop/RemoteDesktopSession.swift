@@ -62,8 +62,17 @@ public final class RemoteDesktopSession: ObservableObject {
     private var networkSamples: [Double] = []
     private var decodeSampleCount: UInt64 = 0
     private var networkSampleCount: UInt64 = 0
+    private let observe: (RemoteDesktopObservation) -> Void
+    private var observedAttemptStart: TimeInterval?
+    private var observedFirstFrame: Double?
+    private var observedInputs: UInt64 = 0
+    private var observedReceivedBaseline: UInt64 = 0
+    private var observedDroppedBaseline: UInt64 = 0
 
-    public init(credentials: RemoteCredentialStore = .init()) { self.credentials = credentials }
+    public init(credentials: RemoteCredentialStore = .init(),
+                observe: @escaping (RemoteDesktopObservation) -> Void = { _ in }) {
+        self.credentials = credentials; self.observe = observe
+    }
 
     public func connect(target: RemoteTarget, context: RemoteSessionContext) {
         stop(reason: "target changed")
@@ -85,6 +94,7 @@ public final class RemoteDesktopSession: ObservableObject {
     public func setPresentationActive(_ value: Bool) { if !value { stop(reason: "presentation inactive") } }
 
     public func stop(reason: String = "closed") {
+        endObservedAttempt(reason: Self.observationStopReason(reason))
         active = false
         reconnectTask?.cancel(); reconnectTask = nil
         let oldControl = control, oldSessionID = wireSessionID
@@ -138,6 +148,11 @@ public final class RemoteDesktopSession: ObservableObject {
         guard active, let target, let context else { return }
         teardown()
         let expected = attempt, sessionID = wireSessionID
+        observedAttemptStart = ProcessInfo.processInfo.systemUptime
+        observedFirstFrame = nil; observedInputs = 0
+        observedReceivedBaseline = counters.receivedFrames
+        observedDroppedBaseline = counters.droppedFrames
+        observe(.attemptStarted)
         state = .connecting
         displayMonitorTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -161,6 +176,7 @@ public final class RemoteDesktopSession: ObservableObject {
                     throw RemoteHostFailure(message: ready, fallback: "Mac 拒绝了桌面会话。")
                 }
                 guard let display = ready.display else {
+                    self.endObservedAttempt(reason: "permission_screen_recording")
                     self.state = .permissionDenied(ready.reason ?? "请在 Mac 授予屏幕录制权限。"); self.active = false
                     self.teardown(); return
                 }
@@ -302,6 +318,7 @@ public final class RemoteDesktopSession: ObservableObject {
             }
         case .error:
             if message.errorCode == .permissionAccessibility {
+                if controlAllowed { observe(.controlBecameReadOnly) }
                 releaseAllInputs(reason: "accessibility permission revoked")
                 controlAllowed = false
                 state = firstFrame ? .readOnly : .waitingForFirstFrame
@@ -401,6 +418,11 @@ public final class RemoteDesktopSession: ObservableObject {
                 counters.displayIngressState = displayRecoveryID == nil ? "接受数据" : "已恢复接受数据"
                 displayRecoveryID = nil; displayRecoveryDeadline = nil
                 firstFrame = true; retryDelay = 500_000_000
+                if observedFirstFrame == nil, let start = observedAttemptStart {
+                    let milliseconds = max(0, now - start) * 1_000
+                    observedFirstFrame = milliseconds
+                    observe(.firstVisibleFrame(milliseconds: milliseconds, readOnly: !controlAllowed))
+                }
                 state = controlAllowed ? .controllable : .readOnly
             }
         } else if firstFrame {
@@ -469,6 +491,7 @@ public final class RemoteDesktopSession: ObservableObject {
 
     private func failDisplayProgress(_ reason: String) {
         counters.displayIngressState = "显示恢复已停止"
+        endObservedAttempt(reason: "display_stalled")
         stop(reason: reason)
         state = .failed(reason)
     }
@@ -545,6 +568,21 @@ public final class RemoteDesktopSession: ObservableObject {
             return
         }
         let reason = (error as? LocalizedError)?.errorDescription ?? "检查 Mac 和局域网连接。"
+        let observationReason: String
+        if let failure = error as? RemoteHostFailure {
+            observationReason = "host_" + (failure.code?.rawValue ?? "unknown")
+        } else if error is RemotePairingError { observationReason = "credential_error" }
+        else if error is DecodingError { observationReason = "protocol_decode_error" }
+        else if let transport = error as? RemoteTransportError {
+            switch transport {
+            case .closed: observationReason = "connection_lost"
+            case .keychain: observationReason = "credential_storage_error"
+            case .invalidCertificate: observationReason = "certificate_rejected"
+            case .invalidEndpoint: observationReason = "endpoint_invalid"
+            case .invalidMessage, .oversizedMessage: observationReason = "protocol_invalid"
+            }
+        } else { observationReason = "connection_or_stream_error" }
+        endObservedAttempt(reason: observationReason)
         teardown(); geometry = nil
         state = permissionFailure ? .permissionDenied(reason) : (terminal ? .failed(reason) : .disconnected(reason))
         if terminal { active = false; return }
@@ -570,6 +608,7 @@ public final class RemoteDesktopSession: ObservableObject {
             guard inputQueue.count < 64 else {
                 releaseAllInputs(reason: "input queue overflow")
                 let reason = "输入发送积压，已释放按键并停止会话。"
+                endObservedAttempt(reason: "input_backlog")
                 stop(reason: reason); state = .failed(reason); return
             }
             inputQueue.append(message)
@@ -586,10 +625,24 @@ public final class RemoteDesktopSession: ObservableObject {
                 while !Task.isCancelled, self.active, self.attempt == expected, !self.inputQueue.isEmpty {
                     let message = self.inputQueue.removeFirst()
                     try await control.send(message)
+                    guard self.active, self.attempt == expected else { return }
+                    self.observedInputs &+= 1
+                    if self.observedInputs == 1 { self.observe(.firstInputSent) }
                 }
                 if self.attempt == expected { self.inputTask = nil }
             } catch is CancellationError { }
             catch { self.handleDrop(error, attempt: expected) }
         }
+    }
+
+    private func endObservedAttempt(reason: String) {
+        guard let start = observedAttemptStart else { return }
+        observedAttemptStart = nil // Repeated lifecycle stops must not duplicate a summary.
+        observe(.attemptEnded(.init(
+            endedAt: Date(),
+            durationMilliseconds: max(0, ProcessInfo.processInfo.systemUptime - start) * 1_000,
+            firstVisibleFrameMilliseconds: observedFirstFrame, sentInputMessages: observedInputs,
+            receivedFrames: counters.receivedFrames &- observedReceivedBaseline,
+            droppedFrames: counters.droppedFrames &- observedDroppedBaseline, reason: reason)))
     }
 }

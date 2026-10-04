@@ -32,7 +32,6 @@ struct RemoteDesktopCover: View {
     .onAppear { coordinator.presentationAppeared(presentation.id) }
     .onDisappear {
       // Stop this exact presentation even if another root identity is now selected.
-      presentation.session.setPresentationActive(false)
       presentation.session.stop(reason: "hidden")
     }
   }
