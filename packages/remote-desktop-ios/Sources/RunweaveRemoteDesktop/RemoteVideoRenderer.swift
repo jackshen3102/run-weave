@@ -60,3 +60,27 @@ extension AVSampleBufferDisplayLayer {
         }
     }
 }
+
+@MainActor
+extension RemoteDesktopStatistics {
+    mutating func updateDisplay(_ layer: AVSampleBufferDisplayLayer) {
+        displayRenderer = layer.remoteRenderingAPI
+        displayAcceptsMediaData = layer.remoteReadyForMoreMediaData
+        switch layer.remoteRenderingStatus {
+        case .unknown: displayStatus = "unknown"
+        case .rendering: displayStatus = "rendering"
+        case .failed: displayStatus = "failed"
+        @unknown default: displayStatus = "unknown"
+        }
+        if #available(iOS 17.4, *) { displayReady = layer.isReadyForDisplay }
+        else { displayReady = nil }
+        videoLayerSize = layer.bounds.size
+        displayRequiresFlush = layer.remoteRequiresFlush
+        preventsCapture = layer.preventsCapture
+        outputObscured = layer.isOutputObscuredDueToInsufficientExternalProtection
+        if let error = layer.remoteRenderingError as NSError? {
+            // Domain/code only: never forward userInfo, media payloads or localized descriptions.
+            displayErrorDomain = error.domain; displayErrorCode = error.code
+        }
+    }
+}

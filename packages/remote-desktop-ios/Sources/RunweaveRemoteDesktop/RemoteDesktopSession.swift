@@ -247,14 +247,13 @@ public final class RemoteDesktopSession: ObservableObject {
                 self.counters.submittedFrames &+= 1
                 self.publishStatistics()
             }
-        }, recovery: { [weak self] in
+        }, recovery: { [weak self] reason in
             Task { @MainActor in
                 guard let self, self.isCurrent(expected, context: context) else { return }
+                self.counters.decoderRecoveries &+= 1
+                if case .backlog = reason { self.counters.decoderOverflows &+= 1 }
                 self.counters.droppedFrames &+= 1
-                self.releaseAllInputs(reason: "decoder recovering")
-                self.decoder?.reset(); self.clearDisplayImage()
-                self.state = .waitingForFirstFrame
-                self.requestKeyframe()
+                self.recoverVideoDependency(reason: "decoder recovering")
             }
         })
     }
@@ -274,10 +273,8 @@ public final class RemoteDesktopSession: ObservableObject {
                     }
                     self.counters.receivedFrames &+= 1
                     if let previous = self.lastVideoSequence, packet.header.sequence != previous &+ 1 {
-                        self.decoder?.reset(); self.state = .waitingForFirstFrame
-                        self.releaseAllInputs(reason: "video dependency gap")
-                        self.clearDisplayImage()
-                        self.requestKeyframe()
+                        self.counters.sequenceGaps &+= 1
+                        self.recoverVideoDependency(reason: "video dependency gap")
                     }
                     self.lastVideoSequence = packet.header.sequence
                     self.decoder?.submit(annexB: packet.annexB, isKeyframe: packet.header.keyframe)
@@ -287,6 +284,17 @@ public final class RemoteDesktopSession: ObservableObject {
             } catch is CancellationError { }
             catch { self.handleDrop(error, attempt: expected) }
         }
+    }
+
+    private func recoverVideoDependency(reason: String) {
+        releaseAllInputs(reason: reason)
+        decoder?.reset()
+        // Compressed-frame loss invalidates the decoder chain, not the already
+        // decoded image in the renderer. Retain it while waiting for an IDR.
+        // Input still requires a fresh decoded submission and display readiness.
+        firstFrame = false; displaySubmittedAttempt = nil
+        state = .waitingForFirstFrame
+        requestKeyframe()
     }
 
     private func handleControl(_ message: RemoteControlMessage) throws {
@@ -343,24 +351,7 @@ public final class RemoteDesktopSession: ObservableObject {
 
     private func inspectDisplayLayer() {
         guard let layer = displayLayer else { return }
-        counters.displayRenderer = layer.remoteRenderingAPI
-        counters.displayAcceptsMediaData = layer.remoteReadyForMoreMediaData
-        switch layer.remoteRenderingStatus {
-        case .unknown: counters.displayStatus = "unknown"
-        case .rendering: counters.displayStatus = "rendering"
-        case .failed: counters.displayStatus = "failed"
-        @unknown default: counters.displayStatus = "unknown"
-        }
-        if #available(iOS 17.4, *) { counters.displayReady = layer.isReadyForDisplay }
-        else { counters.displayReady = nil }
-        counters.videoLayerSize = layer.bounds.size
-        counters.displayRequiresFlush = layer.remoteRequiresFlush
-        counters.preventsCapture = layer.preventsCapture
-        counters.outputObscured = layer.isOutputObscuredDueToInsufficientExternalProtection
-        if let error = layer.remoteRenderingError as NSError? {
-            // Domain/code only: never forward userInfo, media payloads or localized descriptions.
-            counters.displayErrorDomain = error.domain; counters.displayErrorCode = error.code
-        }
+        counters.updateDisplay(layer)
         defer { publishStatistics() }
         guard active else { return }
         let now = ProcessInfo.processInfo.systemUptime
@@ -436,6 +427,7 @@ public final class RemoteDesktopSession: ObservableObject {
         firstFrame = false; displaySubmittedAttempt = nil
         displayBlockedSince = nil; lastDecodedDeliveryAt = nil
         guard let layer = displayLayer else { return }
+        counters.displayImageClears &+= 1
         guard let recoveryID = displayRecoveryID, let context, let ownerID = displayOwnerID else {
             layer.flushRemoteVideo()
             return

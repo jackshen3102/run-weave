@@ -36,6 +36,10 @@ public struct RemoteDesktopStatistics: Equatable {
     public internal(set) var submittedFrames: UInt64 = 0
     public internal(set) var droppedFrames: UInt64 = 0
     public internal(set) var recoveryRequests: UInt64 = 0
+    public internal(set) var sequenceGaps: UInt64 = 0
+    public internal(set) var decoderRecoveries: UInt64 = 0
+    public internal(set) var decoderOverflows: UInt64 = 0
+    public internal(set) var displayImageClears: UInt64 = 0
     public let decoderQueueCapacity: Int = 3
     public internal(set) var decoderQueueDepth: Int = 0
     public internal(set) var maximumDecoderQueueDepth: Int = 0

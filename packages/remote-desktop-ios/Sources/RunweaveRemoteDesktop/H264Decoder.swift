@@ -9,6 +9,7 @@ import VideoToolbox
 /// One decoder per connection generation. Pending work includes delivery to the UI.
 /// Losing a compressed frame invalidates the dependency chain until an SPS/PPS IDR.
 final class H264Decoder {
+    enum RecoveryReason { case backlog, decodeFailure }
     struct Output {
         let sample: CMSampleBuffer
         let size: CGSize
@@ -31,9 +32,9 @@ final class H264Decoder {
     private var hardware: Bool?
     private var lastLuminanceSampleTime: TimeInterval = 0
     private let output: (Output, @escaping () -> Void) -> Void
-    private let recovery: () -> Void
+    private let recovery: (RecoveryReason) -> Void
 
-    init(output: @escaping (Output, @escaping () -> Void) -> Void, recovery: @escaping () -> Void) {
+    init(output: @escaping (Output, @escaping () -> Void) -> Void, recovery: @escaping (RecoveryReason) -> Void) {
         self.output = output
         self.recovery = recovery
     }
@@ -47,7 +48,7 @@ final class H264Decoder {
             let recover = !stopped && !overflowRecoveryPending
             if recover { overflowRecoveryPending = true }
             lock.unlock()
-            if recover { reset(); recovery() }
+            if recover { reset(); recovery(.backlog) }
             return false
         }
         pending += 1
@@ -113,7 +114,7 @@ final class H264Decoder {
             let dimensions = CMVideoFormatDescriptionGetDimensions(newFormat)
             guard dimensions.width > 0, dimensions.height > 0,
                   dimensions.width <= 8192, dimensions.height <= 8192 else {
-                complete(); invalidateDecoder(); recovery(); return
+                complete(); invalidateDecoder(); recovery(.decodeFailure); return
             }
             if format == nil || !CMFormatDescriptionEqual(format, otherFormatDescription: newFormat) {
                 invalidateDecoder()
@@ -122,7 +123,7 @@ final class H264Decoder {
             if decompressor == nil { createDecoder(newFormat) }
             needsIDR = decompressor == nil
         }
-        guard !needsIDR, let format, let decompressor else { complete(); recovery(); return }
+        guard !needsIDR, let format, let decompressor else { complete(); recovery(.decodeFailure); return }
         let payload = nals.filter {
             let type = $0.first.map { $0 & 0x1f } ?? 0
             return type != 7 && type != 8 && type != 9
@@ -134,7 +135,7 @@ final class H264Decoder {
             avcc.append(nal)
         }
         guard !avcc.isEmpty, let sample = Self.makeCompressedSample(avcc: avcc, format: format) else {
-            complete(); invalidateDecoder(); recovery(); return
+            complete(); invalidateDecoder(); recovery(.decodeFailure); return
         }
         let start = ProcessInfo.processInfo.systemUptime
         let status = VTDecompressionSessionDecodeFrame(
@@ -144,7 +145,7 @@ final class H264Decoder {
             guard status == noErr, let image, self.isCurrent(epoch),
                   let rendered = Self.makeImageSample(image, time: presentationTime) else {
                 self.complete()
-                if status != noErr { self.reset(); self.recovery() }
+                if status != noErr { self.reset(); self.recovery(.decodeFailure) }
                 return
             }
             let size = CGSize(width: CVPixelBufferGetWidth(image), height: CVPixelBufferGetHeight(image))
@@ -156,7 +157,7 @@ final class H264Decoder {
             self.output(result) { [weak self] in self?.complete() }
         }
         // Apple guarantees the output handler is not called when DecodeFrame returns an error.
-        if status != noErr { complete(); invalidateDecoder(); recovery() }
+        if status != noErr { complete(); invalidateDecoder(); recovery(.decodeFailure) }
     }
 
     private func sampleLuminance(_ image: CVPixelBuffer, time: TimeInterval, epoch expected: UInt64) -> RemoteLuminanceSummary? {
