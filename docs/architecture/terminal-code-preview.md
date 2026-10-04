@@ -4,16 +4,17 @@
 
 ## 代码入口与职责
 
-| 边界                                     | 入口                                                                                                                             |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 工作台与 active Project                  | [Workspace](../../frontend/src/components/terminal/workspace/workspace.tsx)                                                      |
-| Preview 数据与操作                       | [Panel](../../frontend/src/components/terminal/preview/panel/index.tsx)                                                          |
-| 项目选择、视图与宽度状态                 | [Preview store](../../frontend/src/features/terminal/preview/store.ts)                                                           |
-| 文本、Markdown、SVG、图片与 Diff 渲染    | [Renderers](../../frontend/src/components/terminal/preview/renderers/)                                                           |
-| 文件与搜索 HTTP 路由                     | [Preview routes](../../backend/src/routes/terminal/preview/)                                                                     |
-| 路径权限、文件操作、搜索与 Git           | [Preview service](../../backend/src/terminal/preview/)                                                                           |
-| 跨运行时 DTO 与链接解析                  | [Preview types](../../packages/shared/src/terminal/preview.ts)、[纯函数合同](../../packages/shared/src/terminal/preview-core.ts) |
-| 原生 Browser、Profile、CDP 与 Automation | [Electron Browser](../../electron/src/browser/)                                                                                  |
+| 边界                                     | 入口                                                                                                                                                                                                                  |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 工作台与 active Project                  | [Workspace](../../frontend/src/components/terminal/workspace/workspace.tsx)                                                                                                                                           |
+| Preview 数据与操作                       | [Panel](../../frontend/src/components/terminal/preview/panel/index.tsx)                                                                                                                                               |
+| 项目选择、视图与宽度状态                 | [Preview store](../../frontend/src/features/terminal/preview/store.ts)                                                                                                                                                |
+| 文本、Markdown、SVG、图片与 Diff 渲染    | [Renderers](../../frontend/src/components/terminal/preview/renderers/)                                                                                                                                                |
+| 文件与搜索 HTTP 路由                     | [Preview routes](../../backend/src/routes/terminal/preview/)                                                                                                                                                          |
+| 路径权限、文件操作、搜索与 Git           | [Preview service](../../backend/src/terminal/preview/)                                                                                                                                                                |
+| 跨运行时 DTO 与链接解析                  | [Preview types](../../packages/shared/src/terminal/preview.ts)、[纯函数合同](../../packages/shared/src/terminal/preview-core.ts)                                                                                      |
+| 原生 Browser、Profile、CDP 与 Automation | [Electron Browser](../../electron/src/browser/)                                                                                                                                                                       |
+| Agent 会话正文阅读                       | [Web 阅读页](../../frontend/src/components/terminal/conversation/)、[Backend 归属解析](../../backend/src/terminal/application/conversation.ts)、[App Server 投影](../../app-server/src/agents/conversation-reader.ts) |
 
 Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review changes。它支持受限的文件编辑，
 不承担完整 IDE、LSP、扩展宿主、批量文件管理或 Git 提交。终端输出与恢复仍由
@@ -30,6 +31,36 @@ Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review cha
 - 普通 Sidecar 宽度由 store 限制在 320px 与视口 60% 之间；展开状态独立管理。关闭后释放布局空间。
 - Preview 操作入口、可见工具及桌面/移动布局由 [Workspace Header](../../frontend/src/components/terminal/workspace/header.tsx)
   和 Panel 决定，不在文档中复制按钮位置或像素级布局。
+
+## Agent 会话阅读
+
+终端头部的「阅读会话」打开当前 panel 的连续问答 Sidecar，可展开、收起和关闭。
+原生 iOS 使用全屏阅读页，返回时保留原终端 controller 和草稿。两端仅在打开及手动刷新时
+读取一次，不订阅进度、不轮询、不新增正文缓存或备份；历史范围取决于当前源记录。
+
+链路为客户端 → `GET /api/terminal/session/:id/conversation` → App Server 的
+`GET /threads/:threadId/conversation`。共享合同见
+[Conversation DTO](../../packages/shared/src/terminal/conversation.ts)。Backend 只观察 manager
+的 session/panel 归属，显式 panel 无效时返回 404，不恢复 tmux、不改焦点、不发送输入。
+读取前后核对 thread/provider；刷新携带 `expectedThreadId`，目标变化返回 409，关闭重开后才能
+读取新会话。两端同时隔离连接代际和迟到请求，关闭阅读页即取消并释放正文。
+
+Codex 从受控 rollout 目录定位源文件，只投影 `response_item` 中的 user 和 assistant
+可见 commentary/final 正文；明确的注入环境上下文、analysis、工具和重复事件不进入结果。
+Pi 从已注册文件核对 session header，沿当前 leaf 的祖先链只取 user/assistant text，
+不拼接 sibling branch 或摘要。既有首页短摘要、detail 和终端 History 保持独立语义。
+
+每次读取固定文件起点长度，分块扫描完整 JSONL 行；未完成末行留待下次主动读取。
+损坏完整行标记 `partial`，不存在、身份不匹配或 symlink 源返回 `source_missing`。
+源上限 64MiB、序列化正文上限 8MiB，超限返回 413，不冒充截断后的全文。
+响应 `no-store`，不返回源路径或工具/思考 payload。
+
+刷新成功替换整份结果，用稳定消息 ID 和消息内偏移保持长回答阅读位置；只有「回到最新」
+主动到底部。同目标网络失败保留最后成功正文和时间，不自动重试；`source_missing` 清除旧正文。
+正文共享单一纵向滚动区，表格/代码可横向阅读。Web 复用净化后的 Markdown/Mermaid 渲染，
+无文件上下文时不提供保存、行引用或伪造文件路径；无法解析的相对资源明确不可用。
+iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)。
+验收合同见[会话阅读](../testing/terminal/conversation-reader.testplan.yaml)。
 
 ## 文件查找与读取
 

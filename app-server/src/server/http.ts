@@ -3,6 +3,8 @@ import { emptyCodexQuota } from "@runweave/shared/app-server/codex-quota";
 import { createThreadReaders } from "../agents/thread-readers.js";
 import { PiSessionReader } from "../pi/session-reader.js";
 import type { ThreadPreviewReader } from "../agents/thread-previews.js";
+import type { ConversationReader } from "../agents/conversation-reader.js";
+import { ConversationReadError } from "../agents/conversation-source.js";
 import express from "express";
 import { z } from "zod";
 import type {
@@ -137,6 +139,7 @@ export function createHttpApp(options: {
   codexThreadDetailReader: CodexThreadDetailReader;
   codexQuota?: CodexQuotaService;
   threadPreviews?: ThreadPreviewReader;
+  conversations?: ConversationReader;
   getRuntimeStatusReport: () => RuntimeStatusReport;
 }): express.Express {
   const threadReader = createThreadReaders({
@@ -166,6 +169,7 @@ export function createHttpApp(options: {
         "provider-thread-lifecycle-v1",
         "thread-detail-v1",
         "thread-preview-v1",
+        ...(options.conversations ? ["thread-conversation-v1"] : []),
       ],
     });
   });
@@ -272,6 +276,28 @@ export function createHttpApp(options: {
     } catch (error) {
       next(error);
     }
+  });
+
+  app.get("/threads/:threadId/conversation", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (Object.keys(req.query).length) {
+      res.status(400).json({ code: "INVALID_REQUEST", message: "不支持读取路径参数" }); return;
+    }
+    const thread = options.eventCenter.getStateStore().getThread(req.params.threadId);
+    if (!thread) { res.status(404).json({ code: "THREAD_NOT_FOUND", message: "会话不存在" }); return; }
+    const controller = new AbortController();
+    const cancel = () => { if (!res.writableEnded) controller.abort(); };
+    res.on("close", cancel);
+    try {
+      if (!options.conversations) throw new Error("conversation reader unavailable");
+      const response = await options.conversations.read(thread, controller.signal);
+      if (!controller.signal.aborted) res.json(response);
+    } catch (error) {
+      if (!controller.signal.aborted) res.status(error instanceof ConversationReadError ? error.status : 503).json({
+        code: error instanceof ConversationReadError ? error.code : "CONVERSATION_UNAVAILABLE",
+        message: error instanceof ConversationReadError ? error.message : "会话读取暂不可用",
+      });
+    } finally { res.off("close", cancel); }
   });
 
   app.get("/threads/:threadId/detail", async (req, res, next) => {

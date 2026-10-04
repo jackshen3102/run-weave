@@ -55,6 +55,16 @@ Swift 不直接导入 TypeScript。修改接口时同时核对 Swift `Contracts/
 `app` 是服务端认证与接口命名的一部分，删除旧客户端不重命名这些协议或改变权限。
 Backend、Web/Electron 和 App Server 继续由仓库各自入口维护，iOS 不承担其进程生命周期。
 
+## Agent 会话阅读
+
+终端工具栏进入原生全屏阅读页，复用当前 `SessionController`，返回不重建终端。
+`ConversationReaderModel` 只在打开及手动刷新时调用 `APIClient.terminalConversation`，
+正文仅存于打开页面，关闭即取消请求并释放；不接入 History 或首页摘要缓存。
+`AppSession.generation`、terminal/controller 身份、请求序号与已绑定 target 共同隔离迟到响应。
+单一纵向 ScrollView 使用 MarkdownUI，代码/表格内部横向阅读；长消息刷新锚点保留消息内偏移。
+Mermaid 首期显示代码，链接只允许 HTTP(S)。完整跨端合同见
+[Agent 会话阅读](../../../docs/architecture/terminal-code-preview.md#agent-会话阅读)。
+
 ## 文件变更预览
 
 `FilePreview` 按服务端能力选择图片、文本 Diff 或明确的不可预览说明，仅 Markdown/SVG 保留双模式。

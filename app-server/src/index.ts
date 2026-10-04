@@ -1,3 +1,5 @@
+import { ConversationReader } from "./agents/conversation-reader.js";
+import { CodexConversationReader } from "./codex/conversation-reader.js";
 import { configuration, acquireConfigurationOwner } from "@runweave/config-node";
 import { settingText } from "@runweave/config-node";
 import { PiSessionReader } from "./pi/session-reader.js";
@@ -84,6 +86,7 @@ async function main(): Promise<void> {
   const codexAppServerClient = new CodexAppServerClient();
   const codexRolloutLifecycleReader = new CodexRolloutLifecycleReader();
   const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader);
+  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader);
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,
@@ -112,6 +115,7 @@ async function main(): Promise<void> {
     codexThreadDetailReader: codexAppServerClient,
     codexQuota: new CodexQuotaService(codexAppServerClient),
     threadPreviews,
+    conversations,
     getRuntimeStatusReport: () =>
       createAppServerRuntimeStatusReport({
         eventCenter,

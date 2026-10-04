@@ -7,6 +7,7 @@ import { ScheduledTaskSourceLink } from "../../../features/scheduled-tasks/sourc
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import {
   Activity,
+  BookOpen,
   CalendarClock,
   ClipboardList,
   Copy,
@@ -258,6 +259,13 @@ export function TerminalWorkspaceHeader({
             disabled={loading}
           />
         ) : null}
+        {!isMobileMonitor ? <Tooltip content="阅读会话">
+          <Button variant="ghost" size="sm" aria-label="阅读会话" disabled={!activeSession}
+            className="h-6 shrink-0 gap-1.5 px-2 text-emerald-200"
+            onClick={() => { if (activeSession) useTerminalPreviewStore.getState().openConversation({
+              scope, sessionId: activeSession.terminalSessionId, panelId: activePanelId ?? null,
+            }); }}><BookOpen className="h-3.5 w-3.5" />阅读会话</Button>
+        </Tooltip> : null}
         <Tooltip content="随记">
           <Button
             type="button"

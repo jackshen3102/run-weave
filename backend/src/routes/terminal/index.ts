@@ -1,4 +1,5 @@
 import { registerTerminalQuestionRoutes } from "./questions";
+import { registerTerminalConversationRoutes } from "./conversation";
 import type { TerminalQuestionsService } from "../../terminal/questions/service";
 import type { TerminalTextAttachmentDelivery } from "../../terminal/attachments/text-attachment-delivery";
 import { registerTerminalSessionUpdateRoute } from "./sessions/update";
@@ -183,6 +184,7 @@ export function createTerminalRouter(
     ownerHooks: options?.worktreeDeletionOwnerHooks,
   });
   registerTerminalPreviewRoutes(router, terminalSessionManager);
+  registerTerminalConversationRoutes(router, terminalSessionManager);
 
   const reorderSessionsSchema = z
     .object({

@@ -101,6 +101,8 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
     expanded: false,
     activeTool: "preview",
   },
+  conversationTarget: null,
+  openConversation: (target) => set((state) => ({ conversationTarget: target, ui: { ...state.ui, open: true, activeTool: "conversation" } })),
   projects: {},
   connectionScope: null,
   projectsByConnection: {},
@@ -188,11 +190,13 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
   closePreview: () => {
     set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, open: false, expanded: false },
+      conversationTarget: null,
     }));
   },
   setActiveTool: (tool: TerminalSidecarTool) => {
     set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, activeTool: tool },
+      ...(tool === "conversation" ? {} : { conversationTarget: null }),
     }));
   },
   setWidth: (widthPx: number) => {
