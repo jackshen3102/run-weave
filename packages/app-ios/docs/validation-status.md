@@ -13,6 +13,7 @@
 - [内置浏览器与终端连续性](../../../docs/testing/app/ios-native-browser.testplan.yaml)
 - [网页身份与导航安全](../../../docs/testing/app/ios-native-browser-safety.testplan.yaml)
 - [现有终端结构化问答](../../../docs/testing/app/ios-terminal-questions.testplan.yaml)
+- [终端会话正文阅读](../../../docs/testing/terminal/conversation-reader.testplan.yaml)
 - [终端与渲染](../../../docs/testing/app/ios-native-terminal.testplan.yaml)
 - [认证、连接与资源生命周期](../../../docs/testing/app/ios-native-session.testplan.yaml)
 - [终端图片附件](../../../docs/testing/app/ios-native-image-attachments.testplan.yaml)
@@ -27,6 +28,15 @@
 布局改动若有独立执行计划，以该任务当前计划为准，不继承历史运行结果。
 原生 UI 需要 Simulator / 真机实际操作。Playwright 可用于 Backend 配套的 Web 客户端，不能验证 SwiftUI。
 不新增 XCTest 或单元测试框架来替代真实 UI 取证。
+
+2026-10-05 会话正文阅读已接入 Codex/Pi 原始记录。当前源码 Debug 构建、签名、安装和启动通过，
+共享 iOS 26.5 Simulator 经 agent-device 连接专属 Beta Backend，验证工具栏进入全屏连续问答、
+长回答刷新后可见句子偏移 0px、新轮次出现于末尾、重复刷新无变化、主动回到最新，
+以及真实读取 503 时旧正文和成功时间保留、手动恢复、返回重开后未发送草稿保持。Web/Electron 专项同时验证无轮询、
+新轮次刷新、长回答位置、source_missing、panel 切换迟到响应；服务接口验证正文过滤和归属。
+证据在本 worktree `.runweave/conversation-qa/` 和 `.runweave/mobile-qa/conversation-reader-20261005/`。
+18 条合同尚未作为独立逐条矩阵全量执行；原生双连接迟到响应、逐请求计数、真机、完整文件预览
+兼容矩阵仍未验收，不从构建或静态隔离逻辑推断这些行为通过。
 
 2026-10-04 原终端的回复辅助接入结构化问答。当前源码 Debug 构建、安装和启动通过；
 共享 iOS 26.5 Simulator 经 agent-device 登录专用 Dev Session Backend，查看原 Codex

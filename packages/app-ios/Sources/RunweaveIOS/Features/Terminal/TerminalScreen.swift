@@ -15,6 +15,7 @@ struct TerminalScreen: View {
   @State private var fileTap: TerminalFileTap?
   @State private var deleting = false
   @State private var showingHistory = false
+  @State private var showingConversation = false
   @State private var showingInfo = false
   @State private var replyContext: CodexReplyContext?
   @State private var showingDiagnostics = false
@@ -168,6 +169,9 @@ struct TerminalScreen: View {
         .clarityMask().mobileAnalyticsScreen(.filePreview)
     }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
+    .fullScreenCover(isPresented: $showingConversation) {
+      ConversationReaderView(session: session, controller: controller, terminalID: details.id, title: title)
+    }
     .sheet(item: $replyContext) { context in
       CodexReplyAssistant(session: session, controller: controller, questions: session.terminalQuestions,
         terminalID: details.id,
@@ -190,6 +194,7 @@ struct TerminalScreen: View {
       snapshotShare = nil
       shareFailure = nil
       replyContext = nil
+      showingConversation = false
     }
     .alert("分享失败", isPresented: Binding(
       get: { shareFailure != nil }, set: { if !$0 { shareFailure = nil } }
@@ -217,6 +222,7 @@ struct TerminalScreen: View {
       session.terminalController === controller else { return }
     let composer = $showingComposer
     let history = $showingHistory
+    let conversation = $showingConversation
     let info = $showingInfo
     let reply = $replyContext
     let diagnostics = $showingDiagnostics
@@ -230,7 +236,7 @@ struct TerminalScreen: View {
       guard let session, let controller, let browser, session.browserSource == source,
         session.terminalController === controller, let window = controller.surface.view.window else { return false }
       let systemBusy = window.rootViewController?.presentedViewController != nil
-      return !composer.wrappedValue && !history.wrappedValue && !info.wrappedValue
+      return !composer.wrappedValue && !history.wrappedValue && !conversation.wrappedValue && !info.wrappedValue
         && !diagnostics.wrappedValue && !deletion.wrappedValue && reply.wrappedValue == nil && !systemBusy
         && share.wrappedValue == nil && !sharePending.wrappedValue
         && browser.state != .presented && !browser.hasPrompt
@@ -469,6 +475,8 @@ struct TerminalScreen: View {
       .accessibilityElement(children: .combine)
     }
     ToolbarItemGroup(placement: .navigationBarTrailing) {
+      Button { showingConversation = true } label: { Image(systemName: "book") }
+        .accessibilityLabel("阅读会话").accessibilityIdentifier("terminal-conversation-open")
       Button { remoteDesktop.requestOpen(backendConnectionID: session.connection?.id) } label: {
         Image(systemName: "display")
       }

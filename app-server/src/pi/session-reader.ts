@@ -1,5 +1,8 @@
 import { open, realpath } from "node:fs/promises";
 import path from "node:path";
+import type { ConversationTurn } from "@runweave/shared/terminal/conversation";
+import { asRecord, readString } from "../codex/helpers.js";
+import { conversationText, scanConversationSource } from "../agents/conversation-source.js";
 import type {
   AppServerThreadRef,
   AppServerThreadDetail,
@@ -26,6 +29,66 @@ type Lifecycle = PiAgentContext & {
 
 /** Reads only a session path registered by an authenticated Pi lifecycle event. */
 export class PiSessionReader {
+  async readConversation(thread: AppServerThreadRef, signal?: AbortSignal) {
+    if (thread.agent !== "pi" || !thread.pi?.sessionFile) return null;
+    let valid = false;
+    let first = true;
+    const entries: Entry[] = [];
+    let anchorIndex = -1;
+    let selectedLeaf = thread.pi.leafId;
+    const result = await scanConversationSource(thread.pi.sessionFile, (record) => {
+      if (first) {
+        valid = record.type === "session" && record.version === 3 && record.id === thread.threadId;
+        first = false;
+        return;
+      }
+      const id = readString(record.id);
+      if (!id) return;
+      const entry: Entry = { id, parentId: readString(record.parentId), type: record.type as string };
+      const message = asRecord(record.message);
+      if (record.type === "message" && (message?.role === "user" || message?.role === "assistant")) {
+        entry.message = { role: message.role, text: conversationText(message.content) };
+        entry.timestamp = record.timestamp;
+      }
+      entries.push(entry);
+      if (record.type === "custom" && record.customType === "runweave.lifecycle") {
+        // Match the existing detail reader's authoritative branch anchor, never flatten siblings.
+        if (asRecord(record.data)?.sessionId !== thread.threadId) { valid = false; return; }
+        anchorIndex = entries.length - 1;
+        selectedLeaf = id;
+      }
+    }, signal);
+    if (!result || !valid) return null;
+    for (const entry of entries.slice(anchorIndex < 0 ? entries.length : anchorIndex + 1)) {
+      if (entry.id && entry.parentId === selectedLeaf) selectedLeaf = entry.id;
+    }
+    const byId = new Map(entries.map((entry) => [entry.id!, entry]));
+    const branch: Entry[] = [];
+    const seen = new Set<string>();
+    let cursor = selectedLeaf;
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      const entry = byId.get(cursor);
+      if (!entry) break;
+      branch.push(entry);
+      cursor = entry.parentId ?? null;
+    }
+    const turns: ConversationTurn[] = [];
+    let current: ConversationTurn | undefined;
+    for (const entry of branch.reverse()) {
+      const message = asRecord(entry.message);
+      if (!message || typeof message.text !== "string" || !message.text.trim()) continue;
+      if (message.role === "user") {
+        current = { id: entry.id!, messages: [] };
+        turns.push(current);
+      }
+      if (!current) continue;
+      current.messages.push({ id: entry.id!, role: message.role as "user" | "assistant", text: message.text,
+        ...(typeof entry.timestamp === "string" ? { createdAt: entry.timestamp } : {}) });
+    }
+    return { ...result, turns };
+  }
+
   async read(thread: AppServerThreadRef): Promise<{
     summary: AppServerThreadDetail;
     detail: AppServerPiThreadDetail;

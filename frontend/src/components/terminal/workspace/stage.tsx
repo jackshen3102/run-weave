@@ -81,6 +81,7 @@ export function TerminalWorkspaceStage({
     agentRecoveryRevisionBySessionId,
     terminalStateBySessionId,
     panelWorkspaceBySessionId,
+    activePanelIdBySessionId,
   } = useTerminalWorkspaceStore(
     useShallow((state) => ({
       activeSessionId: state.activeSessionId,
@@ -89,6 +90,7 @@ export function TerminalWorkspaceStage({
       agentRecoveryRevisionBySessionId: state.agentRecoveryRevisionBySessionId,
       terminalStateBySessionId: state.terminalStateBySessionId,
       panelWorkspaceBySessionId: state.panelWorkspaceBySessionId,
+      activePanelIdBySessionId: state.activePanelIdBySessionId,
     })),
   );
   const { previewOpen, previewWidthPx, previewExpanded } =
@@ -165,6 +167,14 @@ export function TerminalWorkspaceStage({
   const activePanelWorkspace = activeSession
     ? (panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null)
     : null;
+  const activePanelId = activeSession
+    ? activePanelIdBySessionId[activeSession.terminalSessionId] ?? activePanelWorkspace?.activePanelId ?? activeSession.activePanelId ?? null
+    : null;
+  useEffect(() => {
+    const store = useTerminalPreviewStore.getState();
+    const target = store.conversationTarget;
+    if (target && (target.scope !== scope || target.sessionId !== activeSessionId || target.panelId !== activePanelId)) store.closePreview();
+  }, [scope, activeSessionId, activePanelId]);
   const previewReservedWidth = previewWidthPx
     ? `${previewWidthPx}px`
     : DEFAULT_TERMINAL_SIDECAR_WIDTH;
@@ -282,62 +292,18 @@ export function TerminalWorkspaceStage({
             )}
           </div>
         </div>
-        {previewOpen && !previewExpanded && !isMobileMonitor ? (
-          <Suspense
-            fallback={
-              <aside
-                className="flex h-full shrink-0 items-center justify-center border-l border-slate-800 bg-slate-950 text-sm text-slate-400"
-                style={{ width: DEFAULT_TERMINAL_SIDECAR_WIDTH }}
-              >
-                Loading preview...
-              </aside>
-            }
-          >
-            <TerminalPreviewPanel
-              fileLinkIntent={pendingFileLink}
-              onFileLinkDone={() => setFileLinkIntent(null)}
-              activeProject={activeProject}
-              activeSession={activeSession}
-              sessions={sessions}
-              showAgentTeamTool={showAgentTeamTool}
-              widthPx={previewWidthPx}
-              onPanelSplitEnabledChange={onPanelSplitEnabledChange}
-              onActiveAgentTeamRunChange={onActiveAgentTeamRunChange}
-              onEditProject={onEditProject}
-            />
-          </Suspense>
-        ) : null}
-        {previewOpen && previewExpanded && !isMobileMonitor ? (
-          <>
-            <div
-              aria-hidden="true"
-              className="min-h-0 shrink-0"
-              style={{ width: previewReservedWidth }}
-            />
-            <div className="absolute inset-0 z-40">
-              <Suspense
-                fallback={
-                  <aside className="flex h-full w-full items-center justify-center bg-slate-950 text-sm text-slate-400">
-                    Loading preview...
-                  </aside>
-                }
-              >
-                <TerminalPreviewPanel
-                  fileLinkIntent={pendingFileLink}
-                  onFileLinkDone={() => setFileLinkIntent(null)}
-                  activeProject={activeProject}
-                  activeSession={activeSession}
-                  sessions={sessions}
-                  showAgentTeamTool={showAgentTeamTool}
-                  widthPx={previewWidthPx}
-                  onPanelSplitEnabledChange={onPanelSplitEnabledChange}
-                  onActiveAgentTeamRunChange={onActiveAgentTeamRunChange}
-                  onEditProject={onEditProject}
-                />
-              </Suspense>
-            </div>
-          </>
-        ) : null}
+        {previewOpen && !isMobileMonitor ? <>
+          {previewExpanded ? <div aria-hidden="true" className="min-h-0 shrink-0" style={{ width: previewReservedWidth }} /> : null}
+          <div className={previewExpanded ? "absolute inset-0 z-40" : "h-full min-h-0 shrink-0"}>
+            <Suspense fallback={<aside className="flex h-full items-center justify-center bg-slate-950 text-sm text-slate-400" style={{ width: previewReservedWidth }}>Loading preview...</aside>}>
+              <TerminalPreviewPanel fileLinkIntent={pendingFileLink} onFileLinkDone={() => setFileLinkIntent(null)}
+                activeProject={activeProject} activeSession={activeSession} activePanelId={activePanelId}
+                sessions={sessions} showAgentTeamTool={showAgentTeamTool} widthPx={previewWidthPx}
+                onPanelSplitEnabledChange={onPanelSplitEnabledChange} onActiveAgentTeamRunChange={onActiveAgentTeamRunChange}
+                onEditProject={onEditProject} />
+            </Suspense>
+          </div>
+        </> : null}
       </div>
     </div>
   );

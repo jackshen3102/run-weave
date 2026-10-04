@@ -94,6 +94,7 @@ interface TerminalPreviewPanelShellProps {
   agentTeamBody?: ReactNode;
   raceBody?: ReactNode;
   handoffBody?: ReactNode;
+  conversationBody?: ReactNode;
   body: ReactNode;
   layout: SidecarLayout;
   navigation: PreviewNavigation;
@@ -129,6 +130,7 @@ export function TerminalPreviewPanelShell({
   agentTeamBody,
   raceBody,
   handoffBody,
+  conversationBody,
   body,
   layout,
   navigation,
@@ -213,6 +215,7 @@ export function TerminalPreviewPanelShell({
       : []),
     { kind: "race", label: "Race" },
     { kind: "handoff", label: "任务交接" },
+    { kind: "conversation", label: "会话阅读" },
   ];
   const saveStatusLabel =
     saveStatus === "conflict"
@@ -544,6 +547,7 @@ export function TerminalPreviewPanelShell({
           >
             {raceBody}
           </div>
+          {activeTool === "conversation" ? <div className="absolute inset-0 min-h-0">{conversationBody}</div> : null}
           {activeTool === "handoff" ? <div className="absolute inset-0 min-h-0">{handoffBody}</div> : null}
         </div>
       </div>

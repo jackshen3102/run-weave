@@ -1,7 +1,7 @@
 import { RunweaveImageLightbox } from "@runweave/common/terminal";
 import "@runweave/common/terminal/image-lightbox.css";
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import anchor from "markdown-it-anchor";
@@ -22,7 +22,8 @@ interface TerminalMarkdownPreviewProps {
   token: string;
   projectId: string;
   content: string;
-  path: string;
+  path?: string;
+  externalScroll?: boolean;
   lineReferencePath?: string;
   canInsertLineReference?: boolean;
   lineReferenceDisabledReason?: string;
@@ -110,6 +111,9 @@ function getMarkdownRenderer(): MarkdownIt {
     const assetPath = renderEnv.currentPath
       ? resolveMarkdownPreviewAssetPath(renderEnv.currentPath, src)
       : null;
+    if (token && !renderEnv.currentPath && !/^https?:\/\//i.test(src)) {
+      return `<span class="text-slate-500">图片不可用：${renderer.utils.escapeHtml(token.content || src)}</span>`;
+    }
     if (!token || !assetPath) {
       return defaultImage(tokens, index, options, env, self);
     }
@@ -148,9 +152,9 @@ function initializeMermaid(): void {
 
 function renderMarkdown(
   content: string,
-  currentPath: string,
+  currentPath: string | undefined,
 ): MarkdownRenderResult {
-  const env: { currentPath: string; mermaidBlocks: string[] } = {
+  const env: { currentPath?: string; mermaidBlocks: string[] } = {
     currentPath,
     mermaidBlocks: [],
   };
@@ -200,6 +204,7 @@ export function TerminalMarkdownPreview({
   projectId,
   content,
   path,
+  externalScroll = false,
   lineReferencePath,
   canInsertLineReference = false,
   lineReferenceDisabledReason,
@@ -211,6 +216,7 @@ export function TerminalMarkdownPreview({
   onInsertLineReference,
   onRevealSourceLine,
 }: TerminalMarkdownPreviewProps) {
+  const instanceId = useId().replace(/:/g, "");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<ZoomedMarkdownImage | null>(
@@ -266,7 +272,7 @@ export function TerminalMarkdownPreview({
             return;
           }
           try {
-            const id = `terminal-mermaid-${hashString(`${path}:${index}:${source}`)}`;
+            const id = `terminal-mermaid-${instanceId}-${hashString(`${path}:${index}:${source}`)}`;
             const result = await mermaid.render(id, source);
             if (!cancelled) {
               target.innerHTML = DOMPurify.sanitize(result.svg);
@@ -286,7 +292,7 @@ export function TerminalMarkdownPreview({
     return () => {
       cancelled = true;
     };
-  }, [path, rendered]);
+  }, [path, rendered, instanceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,6 +361,7 @@ export function TerminalMarkdownPreview({
 
   return (
     <TerminalMarkdownReferenceControls
+      externalScroll={externalScroll}
       containerRef={containerRef}
       lineReferencePath={lineReferencePath}
       canInsertLineReference={canInsertLineReference}
@@ -384,7 +391,10 @@ export function TerminalMarkdownPreview({
         const anchorElement = target.closest("a[href]");
         if (anchorElement instanceof HTMLAnchorElement) {
           const href = anchorElement.getAttribute("href") ?? "";
-          const resolved = resolveMarkdownPreviewHref(path, href);
+          if (!path && !/^https?:\/\//i.test(href) && !href.startsWith("#")) {
+            event.preventDefault(); setLinkError("当前正文没有文件上下文，无法打开相对资源"); return;
+          }
+          const resolved = resolveMarkdownPreviewHref(path ?? "", href);
           if (resolved.kind === "preview-file") {
             event.preventDefault();
             setLinkError(null);

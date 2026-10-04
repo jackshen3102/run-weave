@@ -179,6 +179,17 @@ public actor APIClient {
   func history(id: String) async throws -> TerminalDetails {
     try await authorized("/api/terminal/session/\(Self.pathComponent(id))/history")
   }
+  func terminalConversation(id: String, panelID: String?, expectedThreadID: String?) async throws -> TerminalConversation {
+    var query: [URLQueryItem] = []
+    if let panelID { query.append(URLQueryItem(name: "panelId", value: panelID)) }
+    if let expectedThreadID { query.append(URLQueryItem(name: "expectedThreadId", value: expectedThreadID)) }
+    var components = URLComponents()
+    components.queryItems = query.isEmpty ? nil : query
+    let suffix = components.percentEncodedQuery.map { "?" + $0 } ?? ""
+    return try await authorized("/api/terminal/session/\(Self.pathComponent(id))/conversation" + suffix,
+      retryUnauthorized: false,
+      decodeError: { _, data in try? JSONDecoder().decode(TerminalConversationFailure.self, from: data) })
+  }
   func terminalAgentSettings(id: String) async throws -> TerminalAgentSettingsResponse {
     try await authorized("/api/terminal/session/\(Self.pathComponent(id))/agent-settings",
       decodeError: { _, data in try? JSONDecoder().decode(TerminalAgentSettingsFailure.self, from: data) })

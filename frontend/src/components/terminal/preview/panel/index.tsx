@@ -1,3 +1,4 @@
+import { TerminalConversationSidecar, useConversationTool } from "../../conversation/sidecar";
 import { TerminalHandoffPanel } from "../../handoff/panel";
 import { TerminalPreviewFileLink, type TerminalPreviewFileLinkIntent } from "./file-link";
 import { useMemoizedFn } from "ahooks";
@@ -33,6 +34,7 @@ interface TerminalPreviewPanelProps {
   onFileLinkDone?: () => void;
   activeProject: TerminalProjectListItem | null;
   activeSession: TerminalSessionListItem | null;
+  activePanelId: string | null;
   sessions: TerminalSessionListItem[];
   showAgentTeamTool: boolean;
   widthPx?: number;
@@ -65,6 +67,7 @@ export function TerminalPreviewPanel({
   onFileLinkDone,
   activeProject,
   activeSession,
+  activePanelId,
   sessions,
   showAgentTeamTool,
   widthPx,
@@ -73,6 +76,7 @@ export function TerminalPreviewPanel({
   onActiveAgentTeamRunChange,
 }: TerminalPreviewPanelProps) {
   const { apiBase, onAuthExpired, token } = useTerminalRuntime();
+  const selectTool = useConversationTool(activeSession?.terminalSessionId ?? null, activePanelId);
   const {
     closePreview,
     setWidth,
@@ -455,6 +459,7 @@ export function TerminalPreviewPanel({
   return (
     <>
       <TerminalPreviewPanelShell
+        conversationBody={activeTool === "conversation" ? <TerminalConversationSidecar projectId={activeProject?.projectId ?? ""} title={activeSession?.alias ?? "当前会话"} sessionId={activeSession?.terminalSessionId ?? null} panelId={activePanelId} /> : null}
         layout={{
           expanded,
           panelWidth,
@@ -467,7 +472,7 @@ export function TerminalPreviewPanel({
         tools={{
           activeTool,
           showAgentTeamTool,
-          onSetActiveTool: setActiveTool,
+          onSetActiveTool: selectTool,
         }}
         navigation={{
           activeProject,

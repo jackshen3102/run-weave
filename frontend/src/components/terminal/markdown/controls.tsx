@@ -23,6 +23,7 @@ import {
 } from "./markdown-reference";
 
 interface TerminalMarkdownReferenceControlsProps {
+  externalScroll?: boolean;
   children: ReactNode;
   containerRef: RefObject<HTMLDivElement | null>;
   lineReferencePath?: string;
@@ -37,6 +38,7 @@ interface TerminalMarkdownReferenceControlsProps {
 }
 
 export function TerminalMarkdownReferenceControls({
+  externalScroll = false,
   children,
   containerRef,
   lineReferencePath,
@@ -129,6 +131,7 @@ export function TerminalMarkdownReferenceControls({
   }, [resetKey]);
 
   useEffect(() => {
+    if (externalScroll) return;
     const handleSelectionChange = (): void => {
       const container = containerRef.current;
       const selection = window.getSelection();
@@ -149,7 +152,10 @@ export function TerminalMarkdownReferenceControls({
       document.removeEventListener("selectionchange", handleSelectionChange);
       clearFeedbackTimer();
     };
-  }, [clearFeedbackTimer, containerRef, refreshSelection]);
+  }, [clearFeedbackTimer, containerRef, refreshSelection, externalScroll]);
+
+  if (externalScroll) return <div ref={containerRef} onClick={onClick}
+    className="terminal-markdown-preview min-w-0 break-words text-sm leading-7 text-slate-200 [&_table]:block [&_table]:overflow-x-auto">{children}</div>;
 
   return (
     <ContextMenu>

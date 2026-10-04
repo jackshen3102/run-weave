@@ -1,0 +1,260 @@
+version: 1
+name: 终端会话阅读验收
+description: >
+  验证 Codex/Pi 原始会话正文按当前 terminal/panel/thread 归属只读呈现，
+  Web 与原生 iOS 仅在打开及手动刷新时全量读取，连续保留问答及阅读位置。
+  本文件是新能力的待执行验收合同，不表示能力已经实现。每例使用自有隔离资源，
+  不依赖其他用例，不将原型、格式校验或构建成功当作产品行为证据。
+
+cases:
+  - id: CR-001
+    name: Codex 正文完整过滤且轮次顺序稳定
+    required: true
+    description: >
+      阅读结果只包含真实用户提问及 assistant 可见阶段说明和回答，保持 Markdown、顺序和稳定身份，
+      不混入思考、工具、系统上下文，不将重复事件或摘要当全文。
+    preconditions:
+      - 本例有独立 App Server home、Backend 和专属 Codex terminal，当前 panel 已准确关联 thread。
+      - 本例普通三轮会话的原始记录已核对，含可见 commentary/final、工具结果与 reasoning，正文各有唯一 marker。
+      - 本例源样本包含一条长于首页摘要的 Markdown 回答及两条不同 message ID 但相同文字的用户提问。
+    steps:
+      - 对照原始记录，通过认证 conversation 接口读取本例 thread；确认三轮问答顺序与正文一致，同轮阶段说明与最终回答均保留。
+      - 确认输出中没有 reasoning、analysis、工具 payload、system/developer 或已明确标识的自动注入上下文 marker；Markdown 围栏与链接文字保留。
+      - 再读一次，确认稳定轮次和 message ID 不变化；同一 message 的重复来源不会重复输出，两条不同 ID 的相同提问仍各有一条。
+      - 只关闭和清理本例自有会话、源样本和隔离服务，保留响应与源对照证据。
+
+  - id: CR-002
+    name: Pi 只读取当前分支的用户与助手文本
+    required: true
+    description: >
+      原始 Pi 当前 leaf 分支中的正文可见，其他 sibling branch、thinking、toolCall、toolResult、
+      compaction 和 branch_summary 不进入阅读结果，旧历史接口语义保持不变。
+    preconditions:
+      - 本例有独立 App Server home 和专属 Pi terminal，sessionFile 已由合法 lifecycle 注册。
+      - 本例 session 包含主分支与一个 sibling branch；当前 leaf 和各分支 marker 已记录，当前分支有至少两轮问答。
+      - 当前分支包含工具调用、工具结果、思考及摘要记录，并已记录旧 detail 接口的对应结果。
+    steps:
+      - 读取 conversation 接口；确认只沿当前 leaf 的祖先链输出提问和 assistant text，当前分支多条阶段正文按顺序保留。
+      - 检查响应不存在 sibling branch 和工具、思考、摘要 marker，也没有把工具结果标成 assistant 正文。
+      - 读取旧 detail 接口，确认它原有历史字段和工具呈现语义没有因新投影改变；清理本例自有资源。
+
+  - id: CR-003
+    name: 原始记录只读且持续写入时返回可读快照
+    required: true
+    description: >
+      一次读取只扫描开始时的文件范围，忽略尚未写完的末行，下次手动读取才能看到新增完整记录；
+      读取不改源数据、不发送 Agent 输入、不新增正文持久化文件。
+    preconditions:
+      - 本例有专属已关联 terminal 和受控源文件，可由本例写入器分两次追加一条 JSONL 记录。
+      - 已记录源文件哈希、大小、终端输入计数和本例独立 runtime 目录文件清单，写入器当前暂停。
+    steps:
+      - 读取一次；确认先前正文准确，源哈希和大小不变，终端输入计数不变，目录中没有新增会话正文缓存或备份。
+      - 由本例写入器追加尚未完成的末行，再读取；确认既有正文仍可读，半行不成为正文或另一条损坏提问。
+      - 完成本例末行后再主动读取；确认新正文出现，先前的稳定 ID 保留，读取本身没有触发额外写入；停止写入器并清理本例资源。
+
+  - id: CR-004
+    name: 可读空内容与来源不可用准确区分
+    required: true
+    description: >
+      无 thread、不支持 provider、可读但无正文、source_missing、损坏完整行各有明确结果，
+      不能将失败伪装成 available 的空全文，也不能读出错误 session 的正文。
+    preconditions:
+      - 本例隔离 Backend 中已建立无关联 thread、不支持 provider、只有元数据的可读会话等专属目标。
+      - 本例还有一个可安全移走源文件的专属目标，以及含一条损坏完整行和若干正常正文的源样本。
+    steps:
+      - 分别读取本例目标，确认返回 no_thread、provider_unsupported，以及 available 加空 turns，语义彼此区分。
+      - 移走本例源文件后读取，确认 source_missing；恢复后能够重新读取，不能退回别的 thread。
+      - 读取损坏样本，确认正常正文保留且 partial 为 true；把本例源 header 改成不同 session ID 后读取，确认错误 session 正文不泄露。
+      - 恢复并清理本例所有源文件和隔离目标。
+
+  - id: CR-005
+    name: terminal 与 panel 归属校验防止串会话
+    required: true
+    description: >
+      显式 panel 必须属于所请求 terminal，各 panel 只能得到自己的 thread；无效 panel、旧 expectedThreadId
+      或读取期间目标更换不能静默回退为 main panel 或另一会话。
+    preconditions:
+      - 本例专属 terminal 包含 A、B 两个 panel，各自关联不同 thread，正文有 A_ONLY/B_ONLY marker。
+      - 本例还有另一专属 terminal 的 panel，隔离环境允许延迟源读取及更换本例 panel 的 thread 关联。
+    steps:
+      - 分别请求 A、B，确认 target 与正文准确，A 响应没有 B_ONLY，B 响应没有 A_ONLY。
+      - 请求不属于本 terminal 的 panel 和不存在的 panel，确认 404，不回退 main；以 A 的请求附 B 的 expectedThreadId，确认 409。
+      - 延迟 A 的读取，期间将 A 切到本例新 thread；确认旧读取最终返回 CONVERSATION_TARGET_CHANGED，没有把旧正文标成新目标。
+      - 恢复本例关联并清理专属目标与延迟措施。
+
+  - id: CR-006
+    name: 阅读接口保持现有鉴权与只读访问
+    required: true
+    description: >
+      未认证调用被拒，合法只读访问不需要终端输入权限，响应不暴露原始 sourcePath 或身份凭据。
+    preconditions:
+      - 本例有认证 Backend、合法只读会话身份及受控源文件，已记录有效 conversation 响应。
+    steps:
+      - 使用缺失和错误凭据读取，确认 401 或 403；使用本例合法只读身份读取，确认正文可见且没有发起终端输入。
+      - 检查合法响应没有原始 sourcePath 或身份凭据；清理本例资源。
+
+  - id: CR-007
+    name: Web 仅主动打开与点击刷新触发正文请求
+    required: true
+    description: >
+      没有后台刷新、focus/reconnect 自动重取或隐藏页面预读；每次打开一次读取，点击刷新一次读取，
+      关闭后没有残留正文请求和自动重试。
+    preconditions:
+      - 已部署本功能的专属 Web terminal 可读取普通会话，使用 toolkit:playwright-cli 附着已解析的正确页面。
+      - 已启用本例 conversation URL 的请求计数，不将既有首页、终端 WS 或其他 API 请求算入本能力。
+    steps:
+      - 阅读页关闭时观察 15 秒，确认 conversation 请求为零；打开阅读会话，确认只增加一次请求并显示正文。
+      - 保持阅读页打开 15 秒并切离再聚焦页面，确认没有新增正文请求；点击刷新，确认仅增加一次。
+      - 关闭阅读页再观察 15 秒，确认没有请求；重新打开，确认再读取一次；只清理本例计数与页面资源。
+
+  - id: CR-008
+    name: Web 全量刷新保留历史与阅读锚点且无重复
+    required: true
+    description: >
+      同一目标刷新用新快照替换结果，新增轮次在末尾，旧正文和可见锚点保持；重复点击或再次刷新
+      不产生重复轮次，长回答内的阅读位置不回到该消息开头。
+    preconditions:
+      - 本例 Web terminal 的专属源至少三轮，其中一条回答长于两个阅读视口；当前使用真实产品页面。
+      - 本例可通过无副作用提问让当前 thread 新增一轮，且可延迟一次 conversation 响应。
+    steps:
+      - 使用 toolkit:playwright-cli 打开阅读，滚到长回答中段，记录可见句子、message ID 及相对顶部偏移。
+      - 在同一 thread 增加本例新一轮，点击刷新；确认按钮读取期间禁用、旧正文仍可见，没有并发重复请求。
+      - 确认成功后旧轮次保留、新轮次位于末尾，原可见句子仍在原位置，偏移误差不超过 8px。
+      - 再刷新，确认轮次不重复且显示内容无变化；点击回到最新，确认滚到最后一轮；清理本例专属会话。
+
+  - id: CR-009
+    name: Web 同目标刷新失败保持可读并可手动恢复
+    required: true
+    description: >
+      网络或服务错误不能清空最后成功正文或更新其成功时间；按钮恢复且无自动重试，
+      用户恢复依赖后手动刷新才更新。source_missing 则明确替换为不可用状态。
+    preconditions:
+      - 本例 Web terminal 已成功展示专属源正文，已记录读取时间和内容。
+      - 本例可仅针对 conversation 请求注入一次 503，并可安全移走和恢复自己的源样本。
+    steps:
+      - 使用 toolkit:playwright-cli 注入本例 503 后点击刷新；确认正文、成功时间保留，出现重试反馈，刷新按钮恢复且没有自动请求。
+      - 撤销注入后手动刷新，确认读取成功；随后移走本例源文件并手动刷新，确认显示会话记录不可用，旧正文不再被当作当前结果。
+      - 恢复本例源并手动刷新，确认正文再次可见；清理本例注入、样本与会话。
+
+  - id: CR-010
+    name: Web 切换目标后旧响应不能污染新阅读页
+    required: true
+    description: >
+      连接、terminal 或 panel 变化关闭旧阅读页并取消请求；迟到响应不得进入新 scope。
+      同一 panel 的 thread 更换在下次刷新时提示变化，不自动读取新 thread。
+    preconditions:
+      - 本例 Web 环境有两个归属明确的目标，正文分别有 A_ONLY/B_ONLY，允许只延迟 A 的 conversation 请求。
+      - 本例可更换专属 panel 的关联 thread，已记录本例操作前的原始关联。
+    steps:
+      - 使用 toolkit:playwright-cli 在 A 开始延迟读取，切换到 B；确认旧阅读关闭，主动打开 B 后只显示 B_ONLY。
+      - 释放 A 的迟到响应，确认 B 页面不出现 A_ONLY；重复本例连接或 panel 切换路径，确认请求 scope 正确隔离。
+      - 保持当前页，将同 panel 改为本例新 thread，再点击刷新；确认提示会话变化且不自动显示新正文，重新打开才读取新 thread。
+      - 恢复本例关联、撤销延迟并清理专属目标。
+
+  - id: CR-011
+    name: Web 阅读侧栏导航不改变终端与草稿
+    required: true
+    description: >
+      展开、收起、关闭和重新进入不改变终端身份、输入计数或草稿；重新进入发起一次新读取。
+    preconditions:
+      - 本例 Web terminal 有带唯一 marker 的草稿及专属会话正文，可从真实 UI 查看终端输入计数。
+    steps:
+      - 使用 toolkit:playwright-cli 打开阅读，展开后确认获得完整工作区阅读空间，收起后恢复右侧布局。
+      - 关闭再重新进入；确认仍是同一 terminal，草稿 marker 和输入计数不变，重新进入实际发起读取；清理本例资源。
+
+  - id: CR-012
+    name: 原生 iOS 阅读入口与返回保持原终端
+    required: true
+    description: >
+      用户通过原生工具栏进入全屏问答页，返回后仍是原 terminal/controller 与草稿，
+      不用 HTML 画面代替原生验收。
+    preconditions:
+      - 本例原生 App 已安装包含本功能的构建，连接本例 Backend，并打开专属有三轮对话的 terminal。
+      - 已记录当前 terminal/controller 身份、输入计数及带唯一 marker 的草稿，已建立独立 agent-device 会话。
+    steps:
+      - 使用 toolkit:agent-device 点击阅读会话，确认进入原生全屏页，提问与回答连续显示，顶部可返回和刷新。
+      - 返回终端，确认 terminal/controller 身份与草稿不变，输入计数不增加；再次进入，确认重新读取而非复用旧正文。
+      - 结束本例设备会话并清理专属 terminal。
+
+  - id: CR-013
+    name: 原生 iOS 手动刷新保留长回答中的阅读位置
+    required: true
+    description: >
+      原生页只有打开/手动刷新触发读取，没有自动进度追踪；刷新保持同一长回答的可见位置，
+      新轮次和重复刷新均不造成跳顶、跳底或重复正文。
+    preconditions:
+      - 本例原生设备已打开专属会话阅读页，源有三轮及一条跨至少两个视口的长回答。
+      - 本例可记录 conversation 请求数，并能仅在自己的当前 thread 追加一轮无副作用对话。
+    steps:
+      - 使用 toolkit:agent-device 滚到长回答中段，记录可见句子与屏幕偏移，保持打开 15 秒并返回前台，确认没有自动正文请求。
+      - 追加新一轮后点击刷新；确认读取期间按钮禁用，完成后可见句子仍在原位置，偏移误差不超过 8px，新增轮次在末尾。
+      - 再刷新，确认没有重复内容并反馈无变化；点击回到最新，确认最后一轮可见；结束本例设备会话并清理专属会话。
+
+  - id: CR-014
+    name: 原生 iOS 连接代际变化丢弃旧读取
+    required: true
+    description: >
+      AppSession generation、terminal/controller 或 panel 目标变化后，旧读取不能显示在新连接上；
+      新目标必须由用户重新打开，旧页不自动追读。
+    preconditions:
+      - 本例原生 App 配有两个专属目标，正文分别带 A_ONLY/B_ONLY，可只延迟 A 的 conversation 响应。
+      - 本例可在 App 中切换连接并记录 generation；操作仅涉及本例专属目标。
+    steps:
+      - 使用 toolkit:agent-device 从 A 打开阅读并开始延迟请求，切换到本例 B 连接；确认旧阅读退出或被取消。
+      - 主动打开 B 的阅读，释放 A 的旧响应；确认只显示 B_ONLY，没有旧正文、旧时间或旧 target。
+      - 返回后确认 B 的 terminal/controller 与输入流程可用；撤销本例延迟、结束设备会话并清理专属资源。
+
+  - id: CR-015
+    name: 原生 iOS 刷新失败保持正文且可手动恢复
+    required: true
+    description: >
+      同一目标读取失败保留旧正文和最后成功时间，没有自动重试；用户恢复依赖后手动刷新可以恢复。
+    preconditions:
+      - 本例原生 App 已打开并成功读取专属会话，已记录正文和读取成功时间。
+      - 本例可只对该 conversation 请求注入和撤销一次 503，不影响终端 WS 或其他日常会话。
+    steps:
+      - 使用 toolkit:agent-device 注入本例 503 并点击刷新，确认旧正文/成功时间保留、刷新恢复且没有自动重试。
+      - 撤销后手动刷新，确认正文重新读取且读取时间更新。
+      - 撤销所有本例注入，结束设备会话并清理专属资源。
+
+  - id: CR-016
+    name: Web Markdown 全文在单一纵向阅读区安全呈现
+    required: true
+    description: >
+      问答共用一个纵向滚动区，标题、表格、代码与安全链接可读，正文脚本无法执行，
+      无真实文件的正文不出现保存或伪造文件行引用入口。
+    preconditions:
+      - 本例真实 Web terminal 的专属源含标题、表格、代码、链接及 HTML/script 样例文字，已记录原文。
+      - 本例项目另有普通 Markdown 文件用于复核既有文件预览模式，样本均由本例拥有。
+    steps:
+      - 使用 toolkit:playwright-cli 打开阅读，确认只有一个纵向正文滚动区，表格和长代码可横向阅读，脚本文字未执行。
+      - 确认安全链接按既有规则打开，conversation 正文没有保存或文件行引用入口。
+      - 打开本例原有 Markdown 文件预览，确认它仍保持文件模式的滚动和行引用；清理本例资源。
+
+  - id: CR-017
+    name: 原生 iOS Markdown 适配长正文且不嵌套纵向滚动
+    required: true
+    description: >
+      原生问答使用一个纵向滚动区，表格与长代码只在内部横向滚动，危险链接无法执行；
+      Mermaid 保持首期明确约定的可读代码呈现。
+    preconditions:
+      - 本例原生 App 连接专属源，含标题、列表、粗体、引用、表格、长代码、安全链接、javascript 链接和 Mermaid。
+      - 已建立本例独立 agent-device 会话，准备在支持的手机宽度检查真实原生 UI。
+    steps:
+      - 使用 toolkit:agent-device 阅读各段，确认只有一个纵向正文滚动区，表格与长代码仅内部横向滚动，页面无横向整体溢出。
+      - 检查安全链接按既有规则打开，危险链接无法执行；确认 Mermaid 保留可读代码，没有空白图块。
+      - 结束本例设备会话并清理专属源与 terminal。
+
+  - id: CR-018
+    name: 原始记录读取不能由客户端路径或 symlink 越界
+    required: true
+    description: >
+      客户端只能指定已关联 thread，不能用 sourcePath/cwd 获得任意文件访问，
+      已登记源被替换成 symlink 后也不能泄露外部文件正文。
+    preconditions:
+      - 本例有隔离 App Server home、Backend、合法凭据和专属已登记源样本。
+      - 本例可以只对自己的源样本建立指向专属外部 marker 文件的 symlink，不涉及生产源记录。
+    steps:
+      - 带未知 sourcePath 或 cwd 读取路径参数请求接口，确认 400，响应不含本例外部文件 marker。
+      - 将本例源样本替换为 symlink 后读取，确认拒绝外部文件正文，不回退其他源。
+      - 恢复源文件并清理本例所有专属资源。

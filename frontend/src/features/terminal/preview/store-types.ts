@@ -14,7 +14,8 @@ export type TerminalSidecarTool =
   | "browser"
   | "agent-team"
   | "race"
-  | "handoff";
+  | "handoff"
+  | "conversation";
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 
@@ -63,6 +64,8 @@ export interface TerminalPreviewProjectState {
 
 export interface TerminalPreviewStore {
   ui: TerminalPreviewUiState;
+  conversationTarget: { scope: string; sessionId: string; panelId: string | null } | null;
+  openConversation: (target: { scope: string; sessionId: string; panelId: string | null }) => void;
   projects: Record<string, TerminalPreviewProjectState>;
   connectionScope: string | null;
   projectsByConnection: Record<string, Record<string, TerminalPreviewProjectState>>;
