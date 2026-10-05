@@ -1,6 +1,3 @@
-import { isLocalCodexBypass } from "./codex-execution";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type {
   SendTerminalInputRequest,
   SendTerminalInputResponse,
@@ -20,7 +17,6 @@ import type {
 import type { TerminalRuntimeRegistry } from "../runtime/registry";
 import type { PtyService } from "../runtime/pty-service";
 import type { TmuxPaneTarget, TmuxService } from "../tmux/service";
-import { resolveReplyThread } from "../completion/reply-preview";
 import { resolveTmuxTarget } from "../runtime/launcher";
 import {
   beginTextAttachmentDelivery,
@@ -36,12 +32,11 @@ import {
   TextAttachmentError,
 } from "./text-attachment-service";
 
-const exec = promisify(execFile);
 type Target = {
   session: TerminalSessionRecord;
   panel: TerminalPanelRecord;
   pane: TmuxPaneTarget;
-  threadId: string;
+  threadId: string | null;
 };
 
 export class TerminalTextAttachmentDelivery {
@@ -72,8 +67,6 @@ export class TerminalTextAttachmentDelivery {
   private target(
     sessionId: string,
     panelId: string,
-    threadId?: string,
-    idle = true,
   ): Target {
     const session = this.manager.getSession(sessionId);
     const panel = this.manager.getPanel(panelId);
@@ -87,18 +80,6 @@ export class TerminalTextAttachmentDelivery {
       this.manager.getPanelWorkspace(sessionId)?.activePanelId !== panelId
     )
       throw new TextAttachmentError(409, "终端面板已切换或退出，原文已保留");
-    const identity = resolveReplyThread(panel);
-    if (
-      !identity ||
-      identity.provider !== "codex" ||
-      (threadId && threadId !== identity.id) ||
-      panel.terminalState?.agent !== "codex" ||
-      (idle && panel.terminalState.state !== "agent_idle")
-    )
-      throw new TextAttachmentError(
-        409,
-        "当前面板不是已确认的空闲 Codex，原文已保留",
-      );
     return {
       session,
       panel,
@@ -106,98 +87,22 @@ export class TerminalTextAttachmentDelivery {
         ...resolveTmuxTarget(session, this.tmux),
         paneId: panel.tmuxPaneId,
       },
-      threadId: identity.id,
+      threadId: panel.threadId ?? panel.lastThreadId ?? null,
     };
   }
-  private recheck(target: Target, idle = true, active = true): void {
+  private recheck(target: Target, active = true): void {
     const panel = this.manager.getPanel(target.panel.id);
-    const identity = panel && resolveReplyThread(panel);
     if (
       this.manager.getSession(target.session.id) !== target.session ||
       target.session.status !== "running" ||
       panel !== target.panel ||
       panel.status !== "running" ||
       panel.tmuxPaneId !== target.pane.paneId ||
-      identity?.id !== target.threadId ||
-      identity.provider !== "codex" ||
-      panel.terminalState?.agent !== "codex" ||
-      (idle && panel.terminalState.state !== "agent_idle") ||
       (active &&
         this.manager.getPanelWorkspace(target.session.id)?.activePanelId !==
           panel.id)
     )
       throw new TextAttachmentError(409, "附件目标已变化，未插入路径");
-  }
-  /** Local OS process ancestry + explicit sandbox bypass proves host/read access, rather than provider name. */
-  private async verifyExecution(
-    target: Target,
-    running = false,
-  ): Promise<void> {
-    if (process.platform !== "darwin")
-      throw new TextAttachmentError(409, "当前主机尚未验证附件能力");
-    const identity = await this.tmux.textAttachmentProcessIdentity(target.pane);
-    const runtimePid = this.registry.getRuntime(target.session.id)?.pid;
-    if (
-      !runtimePid ||
-      identity.clientPids.length !== 1 ||
-      identity.clientPids[0] !== runtimePid
-    )
-      throw new TextAttachmentError(
-        409,
-        "存在外部 tmux 编辑器或执行归属未确认",
-      );
-    const { stdout } = await exec(
-      "ps",
-      ["-ww", "-axo", "pid=,ppid=,uid=,command="],
-      {
-        timeout: 3000,
-        maxBuffer: 4 * 1024 * 1024,
-      },
-    );
-    const processes = stdout.split("\n").flatMap((line) => {
-      const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/.exec(line);
-      return match
-        ? [
-            {
-              pid: Number(match[1]),
-              parent: Number(match[2]),
-              uid: Number(match[3]),
-              command: match[4]!,
-            },
-          ]
-        : [];
-    });
-    const descendants = new Set([identity.panePid]);
-    for (let pass = 0; pass < 20; pass++)
-      for (const entry of processes)
-        if (descendants.has(entry.parent)) descendants.add(entry.pid);
-    const local = processes.filter((entry) => descendants.has(entry.pid));
-    const nativeCodex = (
-      await Promise.all(
-        local
-          .filter(
-            (entry) =>
-              entry.uid === process.getuid?.() &&
-              /^(?:\S*\/)?codex(?:\s|$)/.test(entry.command),
-          )
-          .map(async (entry) => await isLocalCodexBypass(entry.pid)),
-      )
-    ).filter(Boolean);
-    if (!nativeCodex.length)
-      throw new TextAttachmentError(
-        409,
-        "未找到同用户、明确关闭沙箱的本机 Codex 进程",
-      );
-    if (
-      local.some((entry) =>
-        /^(?:\S*\/)?(?:ssh|docker|podman|nsenter)(?:\s|$)/.test(entry.command),
-      )
-    )
-      throw new TextAttachmentError(
-        409,
-        "执行树包含远程或容器进程，文件可读性未确认",
-      );
-    this.recheck(target, !running);
   }
   async capability(
     sessionId: string,
@@ -205,10 +110,10 @@ export class TerminalTextAttachmentDelivery {
   ): Promise<TerminalTextAttachmentCapability> {
     try {
       const target = this.target(sessionId, panelId);
-      await this.verifyExecution(target);
+      this.recheck(target);
       return {
         enabled: true,
-        provider: "codex",
+        provider: null,
         threadId: target.threadId,
         executionHost: "backend-local",
         reason: null,
@@ -223,7 +128,7 @@ export class TerminalTextAttachmentDelivery {
         reason:
           error instanceof TextAttachmentError
             ? error.message
-            : "执行环境尚未验证",
+            : "终端当前不可用",
         limits,
       };
     }
@@ -257,7 +162,6 @@ export class TerminalTextAttachmentDelivery {
       target = this.target(
         sessionId,
         request.panelId,
-        request.expectedThreadId,
       );
     } catch (error) {
       targetError = error;
@@ -271,7 +175,7 @@ export class TerminalTextAttachmentDelivery {
       );
       if (previous) return this.files.create(sessionId, request);
       if (!target || !revision) throw targetError;
-      await this.verifyExecution(target);
+      this.recheck(target);
       const attachment = await this.files.create(sessionId, request);
       // Never renew an old create's revision on replay.
       if (!previous && !this.bindings.has(attachment.id))
@@ -297,14 +201,12 @@ export class TerminalTextAttachmentDelivery {
       if (
         attachment.purpose !== "tui" ||
         request.operationId !== attachment.insertOperationId ||
-        attachment.panelId !== request.panelId ||
-        attachment.threadId !== request.expectedThreadId
+        attachment.panelId !== request.panelId
       )
         throw new TextAttachmentError(409, "附件目标或插入操作不匹配");
       const binding = this.bindings.get(id);
       if (!binding)
         throw new TextAttachmentError(409, "Backend 已重启，旧插入资格失效");
-      await this.verifyExecution(binding.target);
       this.recheck(binding.target);
       const release = beginTextAttachmentDelivery(
         binding.target.session,
@@ -322,13 +224,13 @@ export class TerminalTextAttachmentDelivery {
           },
           fingerprint,
         );
-        this.recheck(binding.target, true, false);
+        this.recheck(binding.target, false);
         dispatching = true;
         await pasteTextAttachmentReference(
           this.tmux,
           binding.target.pane,
           attachment.tuiReference,
-          () => this.recheck(binding.target, true, false),
+          () => this.recheck(binding.target, false),
         );
         await this.files.finish(sessionId, request.operationId, "accepted");
       } catch (error) {
@@ -372,14 +274,13 @@ export class TerminalTextAttachmentDelivery {
     if (
       !request.operationId ||
       !request.panelId ||
-      !request.expectedThreadId ||
       request.mode !== "prompt_replace" ||
       !request.submit ||
       !request.textAttachmentIds?.length
     )
       throw new TextAttachmentError(
         400,
-        "附件提交需要操作 ID、明确的 panel/thread 及浮动输入器提交模式",
+        "附件提交需要操作 ID、明确的 panel 及浮动输入器提交模式",
       );
     const operationId = request.operationId;
     const ids = request.textAttachmentIds;
@@ -404,28 +305,20 @@ export class TerminalTextAttachmentDelivery {
       const target = this.target(
         sessionId,
         request.panelId!,
-        request.expectedThreadId!,
-        request.submitKey !== "Tab",
       );
       const revision = terminalInputAdmission(target.session).revision;
-      // Queued attachments created while idle may be submitted to the same running Codex.
-      await this.verifyExecutionForComposer(
-        target,
-        request.submitKey === "Tab",
-      );
       const references: string[] = [];
       for (const id of ids) {
         const file = await this.files.get(sessionId, id);
         await this.files.read(sessionId, id);
         if (
           file.panelId !== target.panel.id ||
-          file.threadId !== target.threadId ||
           file.purpose !== "composer"
         )
           throw new TextAttachmentError(409, "附件不属于当前草稿");
         references.push(JSON.stringify(file.filePath));
       }
-      this.recheck(target, request.submitKey !== "Tab");
+      this.recheck(target);
       const release = beginTextAttachmentDelivery(target.session, revision);
       try {
         await this.files.protect(
@@ -438,7 +331,7 @@ export class TerminalTextAttachmentDelivery {
           },
           fingerprint,
         );
-        this.recheck(target, request.submitKey !== "Tab", false);
+        this.recheck(target, false);
         // Dispatch owns the admission lease; release its returning flag only through a private option.
         const response = await sendInputToSession(
           this.manager,
@@ -448,7 +341,7 @@ export class TerminalTextAttachmentDelivery {
             tmuxService: this.tmux,
             textAttachmentLease: true,
             beforeTextAttachmentWrite: () =>
-              this.recheck(target, request.submitKey !== "Tab", false),
+              this.recheck(target, false),
           },
           target.session,
           `${request.data}\n\n文本附件，请读取文件内容：\n${references.join("\n")}`,
@@ -474,12 +367,5 @@ export class TerminalTextAttachmentDelivery {
         await release();
       }
     });
-  }
-  private async verifyExecutionForComposer(
-    target: Target,
-    running: boolean,
-  ): Promise<void> {
-    // The execution probe is identical; its final state check allows queueing only for this explicit mode.
-    await this.verifyExecution(target, running);
   }
 }

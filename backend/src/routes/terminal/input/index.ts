@@ -1,5 +1,5 @@
 import type { TerminalTextAttachmentDelivery } from "../../../terminal/attachments/text-attachment-delivery";
-import { registerTerminalTextAttachmentRoutes, sendTextAttachmentError, assertLocalTextAttachmentRequest } from "./text-attachment";
+import { registerTerminalTextAttachmentRoutes, sendTextAttachmentError } from "./text-attachment";
 import type { Router } from "express";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type {
@@ -36,6 +36,7 @@ import {
   sendTerminalPanelRouteError,
 } from "../panels/index";
 import { registerTerminalClipboardImageRoutes } from "./clipboard-image";
+import { registerTerminalClipboardFileRoutes } from "./clipboard-file";
 
 const terminalLogger = logger.child({ component: "terminal" });
 const INTERRUPT_AGENT_IDLE_POLL_INTERVAL_MS = 300;
@@ -169,7 +170,7 @@ export function registerTerminalInputRoutes(
 
     if (parsed.data.textAttachmentIds?.length) {
       if (!options.textAttachmentDelivery) { res.status(503).json({ message: "文本附件服务不可用" }); return; }
-      try { assertLocalTextAttachmentRequest(req); res.json(await options.textAttachmentDelivery.composer(session.id, parsed.data)); }
+      try { res.json(await options.textAttachmentDelivery.composer(session.id, parsed.data)); }
       catch (error) { sendTextAttachmentError(res, error); }
       return;
     }
@@ -403,4 +404,5 @@ export function registerTerminalInputRoutes(
   });
 
   registerTerminalClipboardImageRoutes(router, terminalSessionManager);
+  registerTerminalClipboardFileRoutes(router, terminalSessionManager);
 }

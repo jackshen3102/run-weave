@@ -19,7 +19,7 @@ export interface TerminalTextAttachment {
   id: string;
   sessionId: string;
   panelId: string;
-  threadId: string;
+  threadId: string | null;
   operationId: string;
   purpose: "composer" | "tui";
   utf16Length: number;
@@ -36,7 +36,7 @@ export interface TerminalTextAttachment {
 export interface CreateTerminalTextAttachmentRequest {
   operationId: string;
   panelId: string;
-  expectedThreadId: string;
+  expectedThreadId?: string | null;
   purpose: "composer" | "tui";
   text: string;
 }
@@ -44,7 +44,7 @@ export interface CreateTerminalTextAttachmentRequest {
 export interface InsertTerminalTextAttachmentRequest {
   operationId: string;
   panelId: string;
-  expectedThreadId: string;
+  expectedThreadId?: string | null;
 }
 
 export interface TerminalTextAttachmentOperation {

@@ -170,12 +170,7 @@ export function useTerminalFloatingDraftController({
           ? attachmentPanel.lastThreadId
           : null) ??
         null,
-      codex: targetTerminalState?.agent === "codex",
-      idle:
-        targetTerminalState?.state === "agent_idle" &&
-        targetSessionRunning &&
-        !error,
-      active: active && clientMode === "desktop",
+      active,
     },
     () => {
       // Insertion uses the server's single delivery path; cursor position cannot be inferred from xterm output.

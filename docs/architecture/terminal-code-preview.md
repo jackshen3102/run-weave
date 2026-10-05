@@ -47,6 +47,7 @@ Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review cha
 
 Codex 从受控 rollout 目录定位源文件，只投影 `response_item` 中的 user 和 assistant
 可见 commentary/final 正文；明确的注入环境上下文、analysis、工具和重复事件不进入结果。
+独立的 `<skill>…</skill>` 注入消息整条过滤；用户输入的 `$技能名`、普通引用与讨论保持原文。
 Pi 从已注册文件核对 session header，沿当前 leaf 的祖先链只取 user/assistant text，
 不拼接 sibling branch 或摘要。既有首页短摘要、detail 和终端 History 保持独立语义。
 

@@ -116,3 +116,16 @@ export interface CreateTerminalClipboardImageResponse {
   fileName: string;
   filePath: string;
 }
+
+export const TERMINAL_CLIPBOARD_FILE_MAX_BYTES = 100 * 1024 * 1024;
+
+export interface CreateTerminalClipboardFileRequest {
+  fileName: string;
+  dataBase64: string;
+}
+
+export interface CreateTerminalClipboardFileResponse {
+  fileName: string;
+  /** Absolute path on the receiving Backend's execution host. */
+  filePath: string;
+}

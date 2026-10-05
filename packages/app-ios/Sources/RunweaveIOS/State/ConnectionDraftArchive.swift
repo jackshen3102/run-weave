@@ -11,16 +11,17 @@ final class ConnectionDraftArchive {
     let suppressedQuickInputs: Set<String>
   }
   typealias Snapshot = (
-    text: [String: String], images: [String: [TerminalDraftImage]], suppressedQuickInputs: Set<String>
+    text: [String: String], attachments: [String: [TerminalDraftAttachment]], suppressedQuickInputs: Set<String>
   )
-  struct Image: Codable {
-    let preview: Data
+  struct Attachment: Codable {
+    let preview: Data?
+    let fileName: String?
     let mimeType: String
     let data: Data?
     let path: String?
   }
   private var memory: [String: Snapshot] = [:]
-  private var imageSignatures: [String: String] = [:]
+  private var attachmentSignatures: [String: String] = [:]
   private func file(_ scope: String) throws -> URL {
     let root = try FileManager.default.url(
       for: .applicationSupportDirectory, in: .userDomainMask,
@@ -37,12 +38,12 @@ final class ConnectionDraftArchive {
     return root.appendingPathComponent(key + ".json")
   }
   func save(
-    scope: String, text: [String: String], images: [String: [TerminalDraftImage]],
+    scope: String, text: [String: String], attachments: [String: [TerminalDraftAttachment]],
     suppressedQuickInputs: Set<String>
   ) throws {
-    memory[scope] = (text, images, suppressedQuickInputs)
+    memory[scope] = (text, attachments, suppressedQuickInputs)
     let destination = try file(scope)
-    if text.isEmpty && images.isEmpty {
+    if text.isEmpty && attachments.isEmpty {
       try remove(scope)
       return
     }
@@ -53,8 +54,8 @@ final class ConnectionDraftArchive {
       to: destination.appendingPathExtension("text"),
       options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     var parts: [String] = []
-    for terminal in images.keys.sorted() {
-      for image in images[terminal] ?? [] {
+    for terminal in attachments.keys.sorted() {
+      for image in attachments[terminal] ?? [] {
         parts.append(terminal)
         parts.append(image.id.uuidString)
         parts.append(image.path ?? "")
@@ -62,26 +63,28 @@ final class ConnectionDraftArchive {
       }
     }
     let signature = parts.joined(separator: "|")
-    guard imageSignatures[scope] != signature else { return }
-    var attachments: [String: [Image]] = [:]
-    for (terminal, values) in images {
-      attachments[terminal] = try values.map { value in
-        guard let preview = value.preview.jpegData(compressionQuality: 0.7) else {
+    guard attachmentSignatures[scope] != signature else { return }
+    var storedAttachments: [String: [Attachment]] = [:]
+    for (terminal, values) in attachments {
+      storedAttachments[terminal] = try values.map { value in
+        let preview = value.preview?.jpegData(compressionQuality: 0.7)
+        if value.preview != nil && preview == nil {
           throw APIError.invalidResponse
         }
-        return Image(preview: preview, mimeType: value.mimeType, data: value.data, path: value.path)
+        return Attachment(preview: preview, fileName: value.fileName, mimeType: value.mimeType, data: value.data, path: value.path)
       }
     }
-    try JSONEncoder().encode(attachments).write(
+    // Keep the existing archive filename so upgrades retain unsent image drafts.
+    try JSONEncoder().encode(storedAttachments).write(
       to: destination.appendingPathExtension("images"),
       options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-    imageSignatures[scope] = signature
+    attachmentSignatures[scope] = signature
   }
   func read(_ scope: String) throws -> Snapshot {
     if let value = memory[scope] { return value }
     let source = try file(scope)
     let textURL = source.appendingPathExtension("text")
-    let imagesURL = source.appendingPathExtension("images")
+    let attachmentsURL = source.appendingPathExtension("images")
     var text: [String: String] = [:]
     var suppressedQuickInputs = Set<String>()
     if FileManager.default.fileExists(atPath: textURL.path) {
@@ -96,22 +99,23 @@ final class ConnectionDraftArchive {
         suppressedQuickInputs = archive.suppressedQuickInputs.intersection(text.keys)
       }
     }
-    let storedImages =
-      FileManager.default.fileExists(atPath: imagesURL.path)
-      ? try JSONDecoder().decode([String: [Image]].self, from: Data(contentsOf: imagesURL)) : [:]
-    let images = try storedImages.mapValues { values in
+    let storedAttachments =
+      FileManager.default.fileExists(atPath: attachmentsURL.path)
+      ? try JSONDecoder().decode([String: [Attachment]].self, from: Data(contentsOf: attachmentsURL)) : [:]
+    let attachments = try storedAttachments.mapValues { values in
       try values.map { value in
-        guard let preview = UIImage(data: value.preview) else { throw APIError.invalidResponse }
-        return TerminalDraftImage(
-          preview: preview, mimeType: value.mimeType, data: value.data, path: value.path,
+        let preview = value.preview.flatMap { UIImage(data: $0) }
+        if value.preview != nil && preview == nil { throw APIError.invalidResponse }
+        return TerminalDraftAttachment(
+          preview: preview, fileName: value.fileName, mimeType: value.mimeType, data: value.data, path: value.path,
           failure: value.path == nil ? "上传已暂停，请重试" : nil)
       }
     }
-    return (text, images, suppressedQuickInputs)
+    return (text, attachments, suppressedQuickInputs)
   }
   func remove(_ scope: String) throws {
     memory.removeValue(forKey: scope)
-    imageSignatures.removeValue(forKey: scope)
+    attachmentSignatures.removeValue(forKey: scope)
     let base = try file(scope)
     for url in [base.appendingPathExtension("text"), base.appendingPathExtension("images")] {
       if FileManager.default.fileExists(atPath: url.path) {

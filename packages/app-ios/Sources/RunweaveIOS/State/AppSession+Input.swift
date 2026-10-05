@@ -70,11 +70,11 @@ extension AppSession {
     let draftRevision = draftRevisions[terminalID]
     let recordQuickInput: Bool? = suppressedQuickInputDrafts.contains(terminalID) ? false : nil
     let text = queue ? draft : draft.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
-    let images = imageDrafts.images[terminalID] ?? []
-    guard images.allSatisfy({ $0.path != nil }) else {
-      throw AttachmentError("请等待图片上传完成，或重试、移除上传失败的图片")
+    let attachments = attachmentDrafts.attachments[terminalID] ?? []
+    guard attachments.allSatisfy({ $0.path != nil }) else {
+      throw AttachmentError("请等待附件上传完成，或重试、移除上传失败的附件")
     }
-    let paths = images.compactMap(\.path).map {
+    let paths = attachments.compactMap(\.path).map {
       "'" + $0.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
     let payload = ([text].filter { !$0.isEmpty } + paths).joined(separator: " ")
@@ -90,7 +90,7 @@ extension AppSession {
         throw CancellationError()
       }
       if draftRevisions[terminalID] == draftRevision { setDraft("", terminalID: terminalID) }
-      imageDrafts.remove(Set(images.map(\.id)), terminalID: terminalID)
+      attachmentDrafts.remove(Set(attachments.map(\.id)), terminalID: terminalID)
     } catch {
       if generation == epoch, !(error is CancellationError) { await handle(error, epoch: epoch) }
       throw error
