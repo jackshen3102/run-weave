@@ -18,6 +18,7 @@
 | 目录                                             | 范围                                                 |
 | ------------------------------------------------ | ---------------------------------------------------- |
 | [`agent-team/`](./agent-team/)                   | Agent Team 生命周期、执行、恢复、配置与干预          |
+| [`agent-evaluation/`](./agent-evaluation/)       | 个人工作流决策重放与真实动作评测                     |
 | [`app/`](./app/)                                 | 原生 iOS、App Server 与设备连接                      |
 | [`archive/`](./archive/)                         | 已被新版行为取代的历史验收合同                       |
 | [`architecture/`](./architecture/)               | 跨运行时架构与 Activity 数据底座                     |
@@ -44,9 +45,11 @@ pnpm testplan:verify
 执行真实环境验证并保留计划要求的证据。
 
 终端长文本附件以[专项计划](./terminal/runtime/text-attachments.testplan.yaml)和
-[既有输入回归](./terminal/runtime/activity-composer.testplan.yaml)为验收合同。当前本地能力仍未完成
-整体验收：TXT-014 缺完整 runtime 退出/删除证据，TAC-003 缺真实 Run 前提且后续回归未执行；
-`pnpm backend:verify-lifecycle` 在既有 Activity 初始化检查失败。远端能力保持关闭。
+[既有输入回归](./terminal/runtime/activity-composer.testplan.yaml)为验收合同。早期本地整体验收记录的
+缺口包括：TXT-014 缺完整 runtime 退出/删除证据，TAC-003 缺真实 Run 前提且后续回归未执行；
+`pnpm backend:verify-lifecycle` 曾在既有 Activity 初始化检查失败。本轮未重跑这些用例。
+当前长文本附件已不按 Agent、thread 或客户端地址关闭，文件仍保存在终端所属 Backend；
+SSH 或容器内是否能读取该路径需独立确认，现行边界见[文本附件合同](../../backend/docs/terminal-text-attachments.md)。
 这些未闭环项不能由格式校验、构建或原型交互判为通过。
 
 YouTube 阅读稿的[验收计划](./skills/youtube-reading.testplan.yaml)要求区分脚本产物、
