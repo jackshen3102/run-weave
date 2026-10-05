@@ -15,7 +15,7 @@ extension AppSession {
     guard let connection, !unreadableDraftScopes.contains(connection.scope) else { return }
     do {
       try draftArchive.save(
-        scope: connection.scope, text: terminalDrafts, images: imageDrafts.images,
+        scope: connection.scope, text: terminalDrafts, attachments: attachmentDrafts.attachments,
         suppressedQuickInputs: suppressedQuickInputDrafts)
     } catch { self.error = "草稿暂未保存到本机，当前内容仍保留" }
   }

@@ -34,8 +34,6 @@ type Scope = {
   sessionId: string;
   panelId: string;
   threadId: string | null;
-  idle: boolean;
-  codex: boolean;
   active: boolean;
 };
 const scopeKey = (scope: Scope) =>
@@ -57,10 +55,7 @@ export function useTerminalTextAttachments(
   const context = JSON.stringify([
     scopeId,
     scope.token,
-    scope.threadId,
-    scope.idle,
     scope.active,
-    scope.codex,
   ]);
   if (lastContext.current !== context) {
     lastContext.current = context;
@@ -81,44 +76,17 @@ export function useTerminalTextAttachments(
   } | null>(null);
   const update = useMemoizedFn(() => render((value) => value + 1));
   const items = records.current.get(scopeKey(scope)) ?? [];
-  const resolvedThreadId =
-    scope.threadId ??
-    (capability?.scopeId === scopeKey(scope)
-      ? capability.value.threadId
-      : null);
-  const previousThread = useRef(resolvedThreadId);
-  if (previousThread.current !== resolvedThreadId) {
-    previousThread.current = resolvedThreadId;
-    generation.current++;
-  }
+  const resolvedThreadId = scope.threadId;
   current.current = { ...scope, threadId: resolvedThreadId };
-  let localConnection = false;
-  try {
-    const hostname = new URL(
-      scope.apiBase || window.location.origin,
-      window.location.origin,
-    ).hostname;
-    localConnection = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(
-      hostname,
-    );
-  } catch {
-    /* Unknown connection ownership keeps native paste. */
-  }
-  const candidate =
-    localConnection &&
-    scope.active &&
-    scope.idle &&
-    scope.codex &&
-    Boolean(scope.panelId && resolvedThreadId);
+  const candidate = scope.active && Boolean(scope.panelId);
   const enabled =
     candidate &&
     capability?.context === context &&
-    capability.value.enabled &&
-    capability.value.threadId === resolvedThreadId;
+    capability.value.enabled;
 
   useEffect(() => {
     let cancelled = false;
-    if (!scope.panelId || !scope.idle || !scope.active) return;
+    if (!scope.panelId || !scope.active) return;
     const refresh = () => {
       void request<TerminalTextAttachmentCapability>(
         scope.apiBase,
@@ -146,7 +114,7 @@ export function useTerminalTextAttachments(
         });
     };
     refresh();
-    // Runtime attachment and execution evidence can become available after the first render.
+    // The terminal workspace can become available after the first render.
     const timer = window.setInterval(refresh, 5000);
     return () => {
       cancelled = true;
@@ -157,9 +125,7 @@ export function useTerminalTextAttachments(
     scope.token,
     scope.sessionId,
     scope.panelId,
-    scope.idle,
     scope.active,
-    scope.codex,
     context,
     scopeId,
   ]);
@@ -207,7 +173,7 @@ export function useTerminalTextAttachments(
     ): boolean => {
       const clipboard = event.clipboardData;
       if (
-        (!enabled && !(candidate && capability?.context !== context)) ||
+        !candidate ||
         !clipboard ||
         Array.from(clipboard.items).some((item) => item.kind === "file")
       )
@@ -244,8 +210,6 @@ export function useTerminalTextAttachments(
       const present = () => (records.current.get(key) ?? []).includes(item);
       const originalTarget = () =>
         scopeKey(current.current) === key &&
-        current.current.threadId === bound.threadId &&
-        current.current.idle &&
         current.current.active &&
         generation.current === startGeneration;
       const query = async (operationId: string) =>
@@ -266,7 +230,7 @@ export function useTerminalTextAttachments(
               bound.sessionId,
               `/capability?panelId=${encodeURIComponent(bound.panelId)}`,
             );
-            if (!verified.enabled || verified.threadId !== bound.threadId)
+            if (!verified.enabled)
               throw new Error(verified.reason ?? "附件能力未确认，原文已保留");
             if (!present() || !originalTarget()) {
               item.status = "not-inserted";
@@ -445,8 +409,7 @@ export function useTerminalTextAttachments(
     consume,
     blocked: composerItems.some(
       (item) =>
-        item.status !== "saved" ||
-        item.attachment?.threadId !== resolvedThreadId,
+        item.status !== "saved",
     ),
     ids: composerItems.flatMap((item) =>
       item.attachment ? [item.attachment.id] : [],

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MediaControls<Content: View>: View {
   let session: AppSession
@@ -10,6 +11,7 @@ struct MediaControls<Content: View>: View {
   @Environment(\.scenePhase) private var scenePhase
   @StateObject private var recorder = VoiceRecorder()
   @State private var picking = false
+  @State private var pickingFile = false
   @State private var pickerGeneration = 0
   @State private var busy = false
   @State private var failure: String?
@@ -39,12 +41,19 @@ struct MediaControls<Content: View>: View {
         case .success(let value):
           if let (data, type) = value {
             do {
-              try session.imageDrafts.add(
+              try session.attachmentDrafts.add(
                 data: data, mimeType: type, terminalID: terminalID, session: session)
             } catch { failure = displayError(error) }
           }
         case .failure(let error): failure = displayError(error)
         }
+      }
+    }
+    .fileImporter(isPresented: $pickingFile, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
+      guard active, pickerGeneration == session.generation, scope == session.connection?.scope else { return }
+      switch result {
+      case .success(let urls): importFiles(urls)
+      case .failure(let error): failure = displayError(error)
       }
     }
     .onAppear {
@@ -79,14 +88,46 @@ struct MediaControls<Content: View>: View {
   }
 
   private var attachmentButton: some View {
-    Button {
-      failure = nil
-      pickerGeneration = session.generation
-      picking = true
-    } label: {
-      Label("添加图片", systemImage: "photo")
-    }.accessibilityLabel("添加图片")
-      .disabled(busy || recorder.recording || !canWrite)
+    Group {
+      Button {
+        failure = nil
+        pickerGeneration = session.generation
+        picking = true
+      } label: {
+        Label("添加图片", systemImage: "photo")
+      }.accessibilityLabel("添加图片")
+        .disabled(busy || recorder.recording || !canWrite)
+      Button {
+        failure = nil
+        pickerGeneration = session.generation
+        pickingFile = true
+      } label: {
+        Label("添加文件", systemImage: "doc.badge.plus")
+      }.accessibilityLabel("添加文件")
+        .disabled(busy || recorder.recording || !canWrite)
+    }
+  }
+
+  private func importFiles(_ urls: [URL]) {
+    busy = true
+    failure = nil
+    let generation = pickerGeneration
+    operation = Task {
+      defer { busy = false }
+      for url in urls {
+        do {
+          let file = try await Task.detached(priority: .userInitiated) {
+            try ImportedTerminalFile.read(url)
+          }.value
+          guard !Task.isCancelled, active, generation == session.generation,
+            scope == session.connection?.scope else { return }
+          try session.attachmentDrafts.addFile(data: file.data, fileName: file.name, terminalID: terminalID, session: session)
+        } catch {
+          if !Task.isCancelled { failure = displayError(error) }
+          return
+        }
+      }
+    }
   }
 
   private var voiceButtons: some View {

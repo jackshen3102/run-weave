@@ -101,6 +101,8 @@ export interface RunweaveElectronBridge {
   getLocalConfigurationStatus: () => Promise<ConfigurationStatus>;
   platform: string;
   isElectron: boolean;
+  /** Resolve only a user-provided, disk-backed File; synthetic files return an empty path. */
+  getPathForFile: (file: File) => string;
   showAttentionNotification: (target: AttentionNotificationTarget) => Promise<boolean>;
   onAttentionNotificationOpen: (listener: (target: AttentionNotificationTarget) => void) => () => void;
   showResourceNotification: (target: import("../monitoring/resource-monitor").ResourceNotificationTarget) => Promise<"submitted" | "skipped" | "unavailable" | "failed">;

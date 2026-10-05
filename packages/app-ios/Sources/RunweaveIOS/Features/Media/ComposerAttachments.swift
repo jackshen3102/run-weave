@@ -1,42 +1,52 @@
 import Clarity
 import SwiftUI
 
-struct ComposerImageAttachments: View {
-  @ObservedObject var drafts: TerminalImageDrafts
+struct ComposerAttachments: View {
+  @ObservedObject var drafts: TerminalAttachmentDrafts
   @ObservedObject var session: AppSession
   let terminalID: String
-  @State private var preview: TerminalDraftImage?
+  @State private var preview: TerminalDraftAttachment?
 
   var body: some View {
-    let images = drafts.images[terminalID] ?? []
-    if !images.isEmpty {
+    let attachments = drafts.attachments[terminalID] ?? []
+    if !attachments.isEmpty {
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(alignment: .top, spacing: 8) {
-          ForEach(Array(images.enumerated()), id: \.element.id) { index, image in
+          ForEach(Array(attachments.enumerated()), id: \.element.id) { index, image in
             tile(image, number: index + 1).clarityMask()
           }
         }.padding(.vertical, 8).padding(.trailing, 8)
       }
       .sheet(item: $preview) { image in
         NavigationView {
-          ImagePreview(image: image.preview)
-            .navigationTitle("图片预览").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-              ToolbarItem(placement: .confirmationAction) {
-                Button("完成") { preview = nil }
+          if let thumbnail = image.preview {
+            ImagePreview(image: thumbnail)
+              .navigationTitle("图片预览").navigationBarTitleDisplayMode(.inline)
+              .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                  Button("完成") { preview = nil }
+                }
               }
-            }
+          }
         }.navigationViewStyle(.stack)
       }
     }
   }
 
-  private func tile(_ image: TerminalDraftImage, number: Int) -> some View {
+  private func tile(_ image: TerminalDraftAttachment, number: Int) -> some View {
     VStack(spacing: 4) {
       Button {
-        preview = image
+        if image.preview != nil { preview = image }
       } label: {
-        Image(uiImage: image.preview).resizable().scaledToFill()
+        Group {
+          if let thumbnail = image.preview {
+            Image(uiImage: thumbnail).resizable().scaledToFill()
+          } else {
+            Image(systemName: "doc.fill").font(.system(size: 36))
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
+              .background(TerminalAppearance.panel)
+          }
+        }
           .frame(width: 80, height: 80).clipped()
           .overlay(alignment: .bottom) {
             if image.path == nil && image.failure == nil {
@@ -50,7 +60,7 @@ struct ComposerImageAttachments: View {
           .clipShape(RoundedRectangle(cornerRadius: 12))
       }
       .buttonStyle(.plain)
-      .accessibilityLabel("预览图片 \(number)")
+      .accessibilityLabel(image.fileName.map { "文件 \($0)" } ?? "预览图片 \(number)")
       .accessibilityValue(image.path != nil ? "已上传" : (image.failure == nil ? "上传中" : "上传失败"))
       .overlay(alignment: .topTrailing) {
         Button {
@@ -59,7 +69,11 @@ struct ComposerImageAttachments: View {
           Image(systemName: "xmark.circle.fill").font(.system(size: 21))
             .symbolRenderingMode(.palette).foregroundStyle(.white, .black.opacity(0.8))
             .frame(width: 44, height: 44)
-        }.buttonStyle(.plain).offset(x: 8, y: -8).accessibilityLabel("移除图片 \(number)")
+        }.buttonStyle(.plain).offset(x: 8, y: -8)
+          .accessibilityLabel(image.fileName.map { "移除文件 \($0)" } ?? "移除图片 \(number)")
+      }
+      if let fileName = image.fileName {
+        Text(fileName).font(.caption2).lineLimit(2).frame(width: 100)
       }
       if let failure = image.failure {
         Button {
@@ -68,7 +82,7 @@ struct ComposerImageAttachments: View {
           Label("重试", systemImage: "arrow.clockwise").font(.caption).foregroundColor(.red)
             .frame(minHeight: 32)
         }.buttonStyle(.plain).disabled(!session.canWrite)
-          .accessibilityLabel("重试图片 \(number)").accessibilityHint(failure)
+          .accessibilityLabel(image.fileName.map { "重试文件 \($0)" } ?? "重试图片 \(number)").accessibilityHint(failure)
         Text(failure).font(.caption2).foregroundColor(.red).lineLimit(2).frame(width: 80)
       }
     }

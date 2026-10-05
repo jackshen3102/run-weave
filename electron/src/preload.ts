@@ -1,6 +1,6 @@
 import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin } from "@runweave/shared/tunnels";
 import type { ConfigurationStatus } from "@runweave/shared/configuration";
-import { contextBridge, ipcRenderer, shell } from "electron";
+import { contextBridge, ipcRenderer, shell, webUtils } from "electron";
 import type {
   RunweaveElectronBridge,
   TerminalBrowserAnnotationUpdate,
@@ -61,6 +61,7 @@ import type {
 
 const electronApi = {
   platform: process.platform,
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   showAttentionNotification: (target: AttentionNotificationTarget) =>
     ipcRenderer.invoke("attention:notify", target) as Promise<boolean>,
   onAttentionNotificationOpen: (listener: (target: AttentionNotificationTarget) => void) => {

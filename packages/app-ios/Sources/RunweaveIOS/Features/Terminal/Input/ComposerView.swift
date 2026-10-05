@@ -35,7 +35,7 @@ struct ComposerView: View {
   @StateObject private var state: TerminalComposerState
   @StateObject private var modelSettings = TerminalAgentSettingsModel()
   @StateObject private var textEditor = CommandTextEditor()
-  @ObservedObject private var imageDrafts: TerminalImageDrafts
+  @ObservedObject private var attachmentDrafts: TerminalAttachmentDrafts
   let terminalID: String
   var active = true
   let availableHeight: CGFloat
@@ -57,7 +57,7 @@ struct ComposerView: View {
   @ScaledMetric private var minimumVisibleInput: CGFloat = 32
 
   private var hasAccessories: Bool {
-    state.snapshot.inputBusy || showingShortcuts || failure != nil || !images.isEmpty
+    state.snapshot.inputBusy || showingShortcuts || failure != nil || !attachments.isEmpty
   }
   private var visibleAccessoryHeight: CGFloat {
     hasAccessories ? min(accessoryHeight, max(0, availableHeight - chromeHeight - minimumVisibleInput)) : 0
@@ -78,7 +78,7 @@ struct ComposerView: View {
     self.availableHeight = availableHeight
     self.onClose = onClose
     self.closeDisabled = closeDisabled
-    self.imageDrafts = session.imageDrafts
+    self.attachmentDrafts = session.attachmentDrafts
     _state = StateObject(wrappedValue: TerminalComposerState(
       session: session, controller: controller, terminalID: terminalID))
     _preventsDismissal = preventsDismissal
@@ -86,11 +86,11 @@ struct ComposerView: View {
     self.onActionSucceeded = onActionSucceeded
   }
 
-  private var images: [TerminalDraftImage] { imageDrafts.images[terminalID] ?? [] }
-  private var hasContent: Bool { hasText || !images.isEmpty }
+  private var attachments: [TerminalDraftAttachment] { attachmentDrafts.attachments[terminalID] ?? [] }
+  private var hasContent: Bool { hasText || !attachments.isEmpty }
   private var sendDisabled: Bool {
     !state.snapshot.canWrite || !state.snapshot.canSend || stopping || submitting
-      || (!showStop && (!hasContent || images.contains { $0.path == nil }))
+      || (!showStop && (!hasContent || attachments.contains { $0.path == nil }))
   }
   private var hasText: Bool {
     !state.snapshot.draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -134,7 +134,7 @@ struct ComposerView: View {
                 Text(failure).font(.caption).foregroundColor(.red).lineLimit(2)
               }.buttonStyle(.plain).accessibilityHint("查看完整错误")
             }
-            ComposerImageAttachments(drafts: imageDrafts, session: session, terminalID: terminalID)
+            ComposerAttachments(drafts: attachmentDrafts, session: session, terminalID: terminalID)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           .background(composerMeasurement("accessories"))
@@ -329,9 +329,9 @@ struct ComposerView: View {
     // Presentation is a deduplicated snapshot; actions always validate the current source state.
     let draft = session.terminalDrafts[terminalID] ?? ""
     guard !queue || (session.composerQueueKey(terminalID: terminalID) != nil
-      && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty)) else { return }
+      && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty)) else { return }
     let stop = !queue && session.isCommandActive(terminalID)
-      && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty
+      && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty
     if !stop && !queue {
       editing = false
       showingShortcuts = false

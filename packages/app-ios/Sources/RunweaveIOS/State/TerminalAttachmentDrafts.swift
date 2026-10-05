@@ -1,9 +1,12 @@
 import ImageIO
 import SwiftUI
 
-struct TerminalDraftImage: Identifiable {
+enum TerminalAttachmentLimits { static let maxBytes = 100 * 1024 * 1024 }
+
+struct TerminalDraftAttachment: Identifiable {
   let id = UUID()
-  let preview: UIImage
+  let preview: UIImage?
+  var fileName: String? = nil
   let mimeType: String
   var data: Data?
   var path: String?
@@ -12,14 +15,14 @@ struct TerminalDraftImage: Identifiable {
 
 /// Attachments belong to a connection's terminal drafts, not to the lifetime of a picker or screen.
 @MainActor
-final class TerminalImageDrafts: ObservableObject {
+final class TerminalAttachmentDrafts: ObservableObject {
   var onChange: (() -> Void)?
-  @Published private(set) var images: [String: [TerminalDraftImage]] = [:] { didSet { onChange?() } }
+  @Published private(set) var attachments: [String: [TerminalDraftAttachment]] = [:] { didSet { onChange?() } }
   private var uploads: [UUID: Task<Void, Never>] = [:]
 
   func add(data: Data, mimeType: String, terminalID: String, session: AppSession) throws {
     guard session.canWrite else { throw APIError.offline }
-    guard data.count <= 100 * 1024 * 1024 else {
+    guard data.count <= TerminalAttachmentLimits.maxBytes else {
       throw AttachmentError("图片不能超过 100 MB")
     }
     guard let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -31,22 +34,33 @@ final class TerminalImageDrafts: ObservableObject {
           kCGImageSourceThumbnailMaxPixelSize: 1600,
         ] as CFDictionary)
     else { throw AttachmentError("无法读取这张图片，请重新选择") }
-    let image = TerminalDraftImage(
+    let image = TerminalDraftAttachment(
       preview: UIImage(cgImage: thumbnail), mimeType: mimeType, data: data)
-    images[terminalID, default: []].append(image)
+    attachments[terminalID, default: []].append(image)
     upload(image.id, terminalID: terminalID, session: session)
+  }
+
+  func addFile(data: Data, fileName: String, terminalID: String, session: AppSession) throws {
+    guard session.canWrite else { throw APIError.offline }
+    guard data.count <= TerminalAttachmentLimits.maxBytes else { throw AttachmentError("文件不能超过 100 MB") }
+    let file = TerminalDraftAttachment(preview: nil, fileName: fileName, mimeType: "application/octet-stream", data: data)
+    attachments[terminalID, default: []].append(file)
+    upload(file.id, terminalID: terminalID, session: session)
   }
 
   func upload(_ id: UUID, terminalID: String, session: AppSession) {
     guard session.canWrite, uploads[id] == nil,
-      let image = images[terminalID]?.first(where: { $0.id == id }), let data = image.data
+      let image = attachments[terminalID]?.first(where: { $0.id == id }), let data = image.data
     else { return }
     update(id, terminalID: terminalID) { $0.failure = nil }
     uploads[id] = Task { [weak self] in
       defer { self?.uploads.removeValue(forKey: id) }
       do {
         let path = try await session.withConnection(reportFailure: false) {
-          try await $0.uploadImage(terminalID: terminalID, data: data, mimeType: image.mimeType)
+          if let fileName = image.fileName {
+            return try await $0.uploadFile(terminalID: terminalID, data: data, fileName: fileName)
+          }
+          return try await $0.uploadImage(terminalID: terminalID, data: data, mimeType: image.mimeType)
         }
         guard !Task.isCancelled else { return }
         self?.update(id, terminalID: terminalID) {
@@ -62,17 +76,17 @@ final class TerminalImageDrafts: ObservableObject {
 
   func remove(_ ids: Set<UUID>, terminalID: String) {
     for id in ids { uploads.removeValue(forKey: id)?.cancel() }
-    images[terminalID]?.removeAll { ids.contains($0.id) }
-    if images[terminalID]?.isEmpty == true { images.removeValue(forKey: terminalID) }
+    attachments[terminalID]?.removeAll { ids.contains($0.id) }
+    if attachments[terminalID]?.isEmpty == true { attachments.removeValue(forKey: terminalID) }
   }
 
   func clear(terminalID: String) {
-    remove(Set((images[terminalID] ?? []).map(\.id)), terminalID: terminalID)
+    remove(Set((attachments[terminalID] ?? []).map(\.id)), terminalID: terminalID)
   }
 
-  func restore(_ value: [String: [TerminalDraftImage]]) {
+  func restore(_ value: [String: [TerminalDraftAttachment]]) {
     clear()
-    images = value.mapValues { images in
+    attachments = value.mapValues { images in
       images.map { image in
         var restored = image
         if restored.path == nil { restored.failure = restored.failure ?? "上传已暂停，请重试" }
@@ -84,12 +98,12 @@ final class TerminalImageDrafts: ObservableObject {
   func clear() {
     for upload in uploads.values { upload.cancel() }
     uploads.removeAll()
-    images.removeAll()
+    attachments.removeAll()
   }
 
-  private func update(_ id: UUID, terminalID: String, change: (inout TerminalDraftImage) -> Void) {
-    guard let index = images[terminalID]?.firstIndex(where: { $0.id == id }) else { return }
-    change(&images[terminalID]![index])
+  private func update(_ id: UUID, terminalID: String, change: (inout TerminalDraftAttachment) -> Void) {
+    guard let index = attachments[terminalID]?.firstIndex(where: { $0.id == id }) else { return }
+    change(&attachments[terminalID]![index])
   }
 }
 

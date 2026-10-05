@@ -1,15 +1,20 @@
 # Terminal 长文本粘贴
 
-Web 和 Electron renderer 共用这项能力。先通过所属 Backend 的 capability 确認当前
-panel/thread 可用，且 apiBase 为 loopback 地址时拦截用户 DOM paste。
-已确认空闲 Codex 的 panel/thread 在新 scope capability 查询期间也先保留长文本；
-取得同一目标的肯定结果后才创建附件。等待期间目标、输入或 surface 生命周期改变则停止，
-查询失败或拒绝时保留可复制原文，不异步回放正文。已知不支持的上下文仍走原生输入。首版只支持已实测
-macOS Backend 的直接连接；远端、代理、旧 Backend 或未确认上下文保持原生输入。
-Backend 的执行环境、投递与文件生命周期合同见
+Web 和 Electron renderer 共用这项能力。当前活动面板的长文本粘贴先同步保留原文，
+再通过所属 Backend 保存并投递文件路径，不按 Agent 类型、空闲状态、thread、
+桌面/移动布局或 loopback 地址决定是否启用。普通 shell 与尚未创建 thread 的 Agent
+也使用相同入口。旧 Backend、网络或保存失败时显示错误并保留可复制原文，不静默
+退回大段正文粘贴。等待期间目标切换或用户继续输入会取消旧投递，避免覆盖新草稿。
+Backend 的投递与文件生命周期合同见
 [`Terminal 文本附件`](../../backend/docs/terminal-text-attachments.md)。
 
 ## 两个入口
+
+Electron 的直接终端入口先处理系统剪贴板中的磁盘文件：通过 preload 的
+`getPathForFile` 取得真实路径，逐个 shell quote 后用 xterm 的 paste 插入当前草稿。
+支持多文件、空格、中文和单引号，不自动提交、不复制文件内容到 Backend。
+路径属于桌面客户端所在电脑；SSH 等远端终端仍需另外传输文件。
+无磁盘路径的截图继续走图片上传分支；非图片文件无法取得路径时显示错误。
 
 纯文本长度达到 5000 UTF-16 单元时创建 txt，保留 CRLF、空白、制表符和所有字符。
 短文本、含图片或文件的剪贴板、程序化 Preview 注入继续走既有分支。
@@ -20,8 +25,7 @@ Backend 的执行环境、投递与文件生命周期合同见
 请求提交附件 ID，客户端不拼路径。成功响应后只消费这一次提交的草稿；失败保留原文。
 
 直接 TUI 粘贴不打开浮动输入框。独立提示显示保存中、已插入、未插入或结果未确认，支持
-预览、复制原文和关闭。关闭只隐藏提示，不撤回路径或删除文件。继续输入、切换目标或
-thread 变化会取消尚未发出的插入；响应归原 scope。服务端 accepted 后不再调用
+预览、复制原文和关闭。关闭只隐藏提示，不撤回路径或删除文件。继续输入、切换目标会取消尚未发出的插入；响应归原 scope。服务端 accepted 后不再调用
 `terminal.paste()` 或 WebSocket 重发。
 
 发起 TUI 路径投递前就禁用浮动覆盖发送；pending、unknown、切走 scope 或关闭提示都不能

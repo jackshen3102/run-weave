@@ -34,14 +34,14 @@ final class AppSession: ObservableObject {
   let terminalQuestions = TerminalQuestionsModel()
   let knowledgeInbox = KnowledgeInboxModel()
   let deviceStatus = DeviceStatusStore()
-  let imageDrafts = TerminalImageDrafts()
+  let attachmentDrafts = TerminalAttachmentDrafts()
   let draftArchive = ConnectionDraftArchive()
   var draftSaveTask: Task<Void, Never>?
   var changingDraftScope = false
   var unreadableDraftScopes = Set<String>()
 
   init() {
-    imageDrafts.onChange = { [weak self] in self?.scheduleDraftSave() }
+    attachmentDrafts.onChange = { [weak self] in self?.scheduleDraftSave() }
     configureBrowser()
     startNetworkMonitoring()
   }
@@ -81,7 +81,7 @@ final class AppSession: ObservableObject {
     suppressedQuickInputDrafts.removeAll()
     draftRevisions.removeAll()
     terminalDrafts.removeAll()
-    imageDrafts.clear()
+    attachmentDrafts.clear()
     changingDraftScope = false
   }
 
@@ -102,7 +102,7 @@ final class AppSession: ObservableObject {
     terminalDrafts = drafts.text
     suppressedQuickInputDrafts = drafts.suppressedQuickInputs
     draftRevisions.removeAll()
-    imageDrafts.restore(drafts.images)
+    attachmentDrafts.restore(drafts.attachments)
     changingDraftScope = false
     metadataWrites.removeAll()
     deviceStatus.reset()
@@ -161,7 +161,7 @@ final class AppSession: ObservableObject {
     suppressedQuickInputDrafts.removeAll()
     draftRevisions.removeAll()
     terminalDrafts.removeAll()
-    imageDrafts.clear()
+    attachmentDrafts.clear()
     changingDraftScope = false
     authenticated = false
     metadataWrites.removeAll()
@@ -346,7 +346,7 @@ final class AppSession: ObservableObject {
       try await api.deleteTerminal(id: id)
       guard epoch == generation, !Task.isCancelled else { return }
       setDraft("", terminalID: id)
-      imageDrafts.clear(terminalID: id)
+      attachmentDrafts.clear(terminalID: id)
       overviewRevision += 1
       loadingRequest += 1
       loading = false

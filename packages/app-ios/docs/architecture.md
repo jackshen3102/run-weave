@@ -43,14 +43,14 @@ ios/RunweaveNative → RootView → AppSession
 Swift 不直接导入 TypeScript。修改接口时同时核对 Swift `Contracts/`、`Services/`、`Features/Terminal/`
 与仓库的 `packages/shared/src`，并对真实 Backend 取证，不再维护依赖已删除客户端源码的迁移哈希。
 
-| 能力       | Backend 合同                                                             |
-| ---------- | ------------------------------------------------------------------------ |
-| 认证与健康 | `/api/auth/*`、`/health`；`X-Auth-Client: app` 和 Bearer                 |
-| 首页与事件 | `/api/app/home/overview`、`/ws/terminal-events`                          |
-| 终端       | ticket、session metadata、terminal WS、input、interrupt、clipboard-image |
-| 文件与变更 | `/api/terminal/project/:id/preview/*`，项目作用域与后端权限共同约束      |
-| 语音       | `/api/voice/transcribe`，24 kHz WAV                                      |
-| 诊断       | Backend diagnostic logs 的 start/stop/upload 合同                        |
+| 能力       | Backend 合同                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| 认证与健康 | `/api/auth/*`、`/health`；`X-Auth-Client: app` 和 Bearer                                 |
+| 首页与事件 | `/api/app/home/overview`、`/ws/terminal-events`                                          |
+| 终端       | ticket、session metadata、terminal WS、input、interrupt、clipboard-image、clipboard-file |
+| 文件与变更 | `/api/terminal/project/:id/preview/*`，项目作用域与后端权限共同约束                      |
+| 语音       | `/api/voice/transcribe`，24 kHz WAV                                                      |
+| 诊断       | Backend diagnostic logs 的 start/stop/upload 合同                                        |
 
 `app` 是服务端认证与接口命名的一部分，删除旧客户端不重命名这些协议或改变权限。
 Backend、Web/Electron 和 App Server 继续由仓库各自入口维护，iOS 不承担其进程生命周期。
@@ -286,19 +286,22 @@ connection generation、controller 身份和草稿 revision 隔离，同文新�
 [Backend 全局快捷回复](../../../docs/testing/app/ios-backend-quick-inputs.testplan.yaml) 与
 [草稿隐私兼容](../../../docs/testing/app/ios-native-draft-privacy.testplan.yaml)。
 
-## 终端图片草稿
+## 终端附件草稿
 
-`TerminalImageDrafts` 由当前 `AppSession` 持有，按 terminal ID 保存图片、上传状态和远端路径。
-选图后在输入面板顶部显示可预览、移除的缩略图，上传失败可显式重试；多张图片按添加顺序排列。
-上传通过既有 `clipboard-image` 接口完成，不改变文字草稿，也不触发终端输入。文字为空时图片也可发送，
-但任何图片尚未上传成功都会阻止整条草稿发送。图片预览下采样至最长边 1600 像素，上传仍使用原始数据；
-上传成功后释放用于重试的原始数据，100 MiB 单图限制与 Backend 一致。
+`TerminalAttachmentDrafts` 由当前 `AppSession` 持有，按 terminal ID 保存图片、文件、上传状态和远端路径。
+“添加图片”保留照片选择和缩略图预览；“添加文件”打开系统文件选择器，支持多选，显示原始文件名。
+文件读取使用 security-scoped access 和协调读取，复制完成后释放系统授权；单个附件限制为 100 MiB。
+图片通过 `clipboard-image` 上传，文件通过 `clipboard-file` 上传到目标 Backend，保留原始文件名和字节。
+上传只更新草稿，不触发终端输入；失败可显式重试，任意附件尚未上传成功都会阻止整条草稿发送。
+图片预览下采样至最长边 1600 像素，上传仍使用原始数据；成功后释放用于重试的原始数据。
 
-点击发送时捕获文字与附件快照，将每个原始远端路径分别做 shell 单引号转义，再通过既有 `input` 一次提交。
-确认成功只移除该快照中的附件，发送期间新增的图片和修改后的文字保留；失败不清空、不自动重发。
-返回首页保留同一终端的草稿；删除终端、注销或删除连接时清理所属附件并取消上传，迟到响应不能恢复已移除图片。
-切换连接先保存当前 scope，再恢复目标 scope。文字与附件保存在设备受保护、排除备份的本地目录，支持通知冷启动恢复；
-文字变更合并写入，图片内容只在附件变化时写入。未完成上传恢复为可重试状态，不自动发送。移除附件不删除 Backend 临时图片，沿用服务端生命周期。
+点击发送时捕获文字与附件快照，将每个 Backend 路径分别做 shell 单引号转义，再通过既有 `input` 一次提交。
+确认成功只移除该快照中的附件，发送期间新增的附件和修改后的文字保留；失败不清空、不自动重发。
+返回首页保留同一终端草稿；删除终端、注销或删除连接时清理所属附件并取消上传，迟到响应不能恢复已移除附件。
+切换连接先保存当前 scope，再恢复目标 scope。文字与附件保存在设备受保护、排除备份的本地目录，支持冷启动恢复；
+文字变更合并写入，附件内容只在附件变化时写入。沿用原图片存档文件名并兼容旧图片草稿，未完成上传恢复为可重试状态。
+移除附件不删除 Backend 临时文件，沿用服务端临时附件生命周期。Backend 必须先部署文件上传接口，再更新手机。
+手机文件选择器只能选择手机或文件提供方中的文件；电脑 `/var/folders/...` 路径无法直接在手机文件选择器中打开。
 
 ## Mac 电量与推送
 

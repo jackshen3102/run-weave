@@ -33,7 +33,7 @@ struct TerminalScreen: View {
   @State private var actionFailure: String?
   @State private var tab = "Chat"
   @StateObject private var changes: ProjectChangesModel
-  @ObservedObject private var imageDrafts: TerminalImageDrafts
+  @ObservedObject private var attachmentDrafts: TerminalAttachmentDrafts
   @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
 
   init(session: AppSession, controller: SessionController, details: TerminalDetails, sourceIsParent: Bool = false) {
@@ -43,7 +43,7 @@ struct TerminalScreen: View {
     self.details = details
     self.sourceIsParent = sourceIsParent
     _changes = StateObject(wrappedValue: ProjectChangesModel(session: session, terminal: details))
-    self.imageDrafts = session.imageDrafts
+    self.attachmentDrafts = session.attachmentDrafts
   }
 
   private var canReadChanges: Bool {
@@ -331,7 +331,7 @@ struct TerminalScreen: View {
   private var hasComposerDraft: Bool {
     let text = session.terminalDrafts[details.id] ?? ""
     return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      || !(imageDrafts.images[details.id] ?? []).isEmpty
+      || !(attachmentDrafts.attachments[details.id] ?? []).isEmpty
   }
 
   private var floatingControls: some View {

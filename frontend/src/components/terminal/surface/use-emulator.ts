@@ -357,6 +357,28 @@ export function useTerminalEmulator({
     window.addEventListener("focus", refreshTerminalViewport);
 
     const handlePaste = (event: ClipboardEvent) => {
+      const files = Array.from(event.clipboardData?.files ?? []);
+      const getPathForFile = window.electronAPI?.getPathForFile;
+      if (files.length && getPathForFile) {
+        try {
+          const paths = files.map(getPathForFile);
+          if (paths.every(Boolean)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            setPasteError(null);
+            terminal.paste(paths.map(shellQuote).join(" "));
+            return;
+          }
+          if (files.some((file) => !file.type.startsWith("image/"))) {
+            throw new Error("无法取得剪贴板文件的路径，请从 Finder 重新复制文件后粘贴。");
+          }
+        } catch (error) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          setPasteError(String(error));
+          return;
+        }
+      }
       if (onTextPaste(event, "tui")) return;
       const imageItem = Array.from(event.clipboardData?.items ?? []).find(
         (item) => item.kind === "file" && item.type.startsWith("image/"),

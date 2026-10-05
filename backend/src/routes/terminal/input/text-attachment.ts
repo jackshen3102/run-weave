@@ -1,31 +1,8 @@
-import type { Router, Response, Request } from "express";
-import { TERMINAL_TEXT_ATTACHMENT_LIMITS as limits } from "@runweave/shared/terminal/text-attachments";
+import type { Router, Response } from "express";
 import { z } from "zod";
 import type { TerminalSessionManager } from "../../../terminal/manager/manager";
 import type { TerminalTextAttachmentDelivery } from "../../../terminal/attachments/text-attachment-delivery";
 import { TextAttachmentError } from "../../../terminal/attachments/text-attachment-service";
-
-const loopbackAddresses = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
-export function assertLocalTextAttachmentRequest(req: Request): void {
-  let hostname = "";
-  try {
-    hostname = new URL(`http://${req.get("host") ?? ""}`).hostname;
-  } catch {
-    /* Unconfirmed host stays disabled. */
-  }
-  if (
-    !loopbackAddresses.has(req.socket.remoteAddress ?? "") ||
-    !["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname) ||
-    ["forwarded", "x-forwarded-for", "x-forwarded-host"].some((name) =>
-      req.get(name),
-    )
-  ) {
-    throw new TextAttachmentError(
-      409,
-      "远端或代理连接尚未验收文本附件，保留原生粘贴",
-    );
-  }
-}
 
 export function sendTextAttachmentError(res: Response, error: unknown): void {
   if (error instanceof TextAttachmentError) {
@@ -44,7 +21,7 @@ const targetSchema = z
   .object({
     operationId: z.string().min(1).max(180),
     panelId: z.string().min(1).max(200),
-    expectedThreadId: z.string().min(1).max(200),
+    expectedThreadId: z.string().min(1).max(200).nullable().optional(),
   })
   .strict();
 const createSchema = targetSchema
@@ -65,19 +42,6 @@ export function registerTerminalTextAttachmentRoutes(
     next();
   });
   router.get(`${base}/capability`, async (req, res) => {
-    try {
-      assertLocalTextAttachmentRequest(req);
-    } catch (error) {
-      res.json({
-        enabled: false,
-        provider: null,
-        threadId: null,
-        executionHost: null,
-        reason: error instanceof Error ? error.message : "连接尚未验证",
-        limits,
-      });
-      return;
-    }
     res.json(
       await delivery.capability(
         req.params.id,
@@ -92,7 +56,6 @@ export function registerTerminalTextAttachmentRoutes(
       return;
     }
     try {
-      assertLocalTextAttachmentRequest(req);
       res.status(201).json(await delivery.create(req.params.id, parsed.data));
     } catch (error) {
       sendTextAttachmentError(res, error);
@@ -115,7 +78,6 @@ export function registerTerminalTextAttachmentRoutes(
       return;
     }
     try {
-      assertLocalTextAttachmentRequest(req);
       res.json(
         await delivery.insert(
           req.params.id,
