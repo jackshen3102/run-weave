@@ -46,11 +46,12 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 
 ## 范围
 
-- 默认整理范围：`main` 分支从上一天 00:00 到当前的所有 commit。
-- 计算时间窗口前，必须先 `fetch` 并让本地 `main` fast-forward 到最新 `origin/main`；如果无法 fast-forward，先停止并说明分叉状态。
+- 默认整理范围：最新 `origin/main` 从上一天 00:00 到当前的所有 commit。
+- 计算时间窗口前，先 `git fetch origin`，再用 `git rev-parse origin/main` 固定本轮基线 SHA；基于该 SHA 创建本次独立分支和 worktree，并在其中整理文档。调用方已创建本次 worktree 时，先核对它基于该 SHA；不一致时保留现场并报告，不强制重置。
+- 本地 `main` 无需更新。其他 worktree 中的 `main` 落后或有进程占用，不阻塞本轮整理；不要切换、快进或重置其他 worktree，也不要停止其进程。fetch 失败或无法核对本轮远端基线时，停止并说明原因。
 - 范围内的文档变更必须逐一检查：新增文档是否需要沉淀进权威文档，旧文档是否过时，文档入口是否需要调整。
 - 范围内的代码变更只用于判断文档是否需要更新；即使发现代码问题，本 skill 也只记录待处理项，不修改代码。
-- 如果调用方显式提供 Git range，以调用方 range 为准，但仍必须先确认目标 base branch 与远端状态一致。
+- 如果调用方显式提供 Git range，以调用方 range 为准；fetch 后固定目标远端 base branch 的 SHA，基于该 SHA 创建本次 worktree，并确认 range 的引用可解析。仍无需更新本地 base branch。
 - 不管 range 是否覆盖，`docs/plans/**` 和 `docs/review/**` 都是本轮固定清理目标：有效结论先迁移到权威文档，随后删除这些目录下的文件。
 
 ## 默认输入
