@@ -22,6 +22,17 @@ import type {
   UpdateTerminalSessionRequest,
 } from "@runweave/shared/terminal/session";
 import { requestJson, requestVoid } from "../http";
+import type { TerminalCompletionViewedRequest } from "@runweave/shared/terminal/completion";
+
+export async function reportTerminalCompletionViewed(
+  apiBase: string, token: string, terminalSessionId: string, payload: TerminalCompletionViewedRequest,
+): Promise<void> {
+  return requestVoid(apiBase, `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/completion-viewed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
 
 export async function createTerminalSession(
   apiBase: string,

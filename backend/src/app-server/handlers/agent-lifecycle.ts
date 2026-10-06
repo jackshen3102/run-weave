@@ -73,7 +73,7 @@ export async function handleAgentLifecycleEvent(
           panelId: event.scope?.terminalPanelId,
           tmuxPaneId: event.scope?.terminalTmuxPaneId,
         },
-        { currentThreadIdentityMatched },
+        { currentThreadIdentityMatched, lifecycleObservation: true },
       )
     : null;
 

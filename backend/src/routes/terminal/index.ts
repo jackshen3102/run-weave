@@ -133,6 +133,25 @@ export function createTerminalRouter(
   },
 ): Router {
   const router = Router();
+  router.post("/session/:id/completion-viewed", async (req, res) => {
+    const parsed = z.object({
+      completionRevision: z.number().int().nonnegative(),
+      panelIds: z.array(z.string().min(1)).max(100),
+    }).strict().safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid completion view" }); return; }
+    const session = terminalSessionManager.getSession(req.params.id);
+    if (!session) { res.status(404).json({ message: "Terminal session not found" }); return; }
+    if (parsed.data.completionRevision > session.completionRevision) {
+      res.status(409).json({ message: "Completion revision is not available" }); return;
+    }
+    try {
+      await terminalSessionManager.feishuNotifications.viewed(session.id, parsed.data.completionRevision, parsed.data.panelIds);
+      res.status(204).end();
+    } catch (error) {
+      terminalLogger.warn("terminal.completion-viewed.failed", { error });
+      res.status(503).json({ message: "Completion view could not be saved" });
+    }
+  });
   registerTerminalTaskRoutes(router, options?.terminalTaskService);
   registerTerminalQuestionRoutes(router, options?.terminalQuestionsService);
 

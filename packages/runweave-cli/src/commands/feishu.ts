@@ -1,3 +1,4 @@
+import { awaitFeishuNotification } from "../feishu/notification-policy.js";
 import { configuration, settingText } from "@runweave/config-node";
 import { notifyFeishuWebhook } from "../feishu/webhook-notifier.js";
 import { runBridgeConnection } from "../feishu/bridge-runtime.js";
@@ -21,6 +22,7 @@ const FEISHU_REQUEST_TIMEOUT_MS = 10_000;
 interface NotifyPayload {
   terminalSessionId?: unknown;
   notificationText?: unknown;
+  feishuNotificationId?: unknown;
 }
 
 export async function runFeishuCommand(
@@ -36,9 +38,18 @@ export async function runFeishuCommand(
   const parsed = parseArgs(args, new Set(["json", "plain", "stdin"]));
   const mode = resolveOutputMode(parsed.options);
   configuration().requireDomain("services.feishu");
+  let payload: NotifyPayload | undefined;
+  if (subcommand === "notify") {
+    if (parsed.options.stdin !== true) throw new CliError("rw feishu notify requires --stdin", 2);
+    payload = JSON.parse(await readStdin(io.stdin)) as NotifyPayload;
+    if (!await awaitFeishuNotification(payload, io.env)) {
+      writeOutput(io.stdout, mode, { sent: false, reason: "notification_policy" });
+      return;
+    }
+  }
   if (subcommand === "notify" && settingText("services.feishu.legacyWebhook.transport") === "webhook") {
     if (parsed.options.stdin !== true) throw new CliError("rw feishu notify requires --stdin", 2);
-    const payload = JSON.parse(await readStdin(io.stdin)) as NotifyPayload;
+    if (!payload) throw new CliError("Missing notification payload", 2);
     await notifyFeishuWebhook(readRequiredString(payload.notificationText, "notificationText"));
     writeOutput(io.stdout, mode, { sent: true, transport: "webhook" });
     return;
@@ -56,7 +67,7 @@ export async function runFeishuCommand(
     if (!config.targetChatId) {
       throw new CliError("FEISHU_TARGET_CHAT_ID is required", 2);
     }
-    const payload = JSON.parse(await readStdin(io.stdin)) as NotifyPayload;
+    if (!payload) throw new CliError("Missing notification payload", 2);
     const terminalSessionId = readRequiredString(
       payload.terminalSessionId,
       "terminalSessionId",

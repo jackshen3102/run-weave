@@ -1,3 +1,4 @@
+import type { FeishuNotificationState } from "../completion/feishu-state";
 import type {
   PersistedTerminalProjectRecord,
   PersistedTerminalSessionMetadataRecord,
@@ -348,6 +349,17 @@ export class LowDbTerminalSessionStore
       }
 
       session.terminalState = params.terminalState;
+      await database.write();
+    });
+  }
+
+  async updateFeishuNotificationState(id: string, state: FeishuNotificationState): Promise<void> {
+    const snapshot = structuredClone(state);
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find((value) => value.id === id);
+      if (!session) return;
+      session.feishuNotificationState = snapshot;
       await database.write();
     });
   }

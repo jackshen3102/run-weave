@@ -60,6 +60,8 @@ export async function handleAgentHookEvent(
     terminalSessionId,
     agent,
     hookEvent,
+    query: readAppServerPayloadString(event.payload, "query"),
+    activityEventId: readAppServerPayloadString(event.payload, "activityEventId") ?? undefined,
     threadId: event.correlationId,
     panelId,
     tmuxPaneId,

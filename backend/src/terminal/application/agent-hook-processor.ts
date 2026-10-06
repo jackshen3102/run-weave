@@ -40,6 +40,8 @@ export interface ProcessTerminalAgentHookInput {
   operationId?: string | null;
   agent: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
+  query?: string | null;
+  activityEventId?: string;
   threadId?: string | null;
   panelId?: string | null;
   tmuxPaneId?: string | null;
@@ -48,6 +50,7 @@ export interface ProcessTerminalAgentHookInput {
 
 interface ProcessTerminalAgentHookContext {
   currentThreadIdentityMatched?: boolean;
+  lifecycleObservation?: boolean;
 }
 
 export type ProcessTerminalAgentHookResult =
@@ -312,6 +315,13 @@ export async function processTerminalAgentHook(
   if (input.hookEvent === "AgentMetadata") {
     return { status: "recorded", terminalSessionId: session.id, agent: effectiveAgent,
       hookEvent: input.hookEvent, terminalState: currentTargetState, panelId: panel?.id ?? null };
+  }
+
+  if (input.hookEvent === "UserPromptSubmit" && !context.lifecycleObservation) {
+    await options.terminalSessionManager.feishuNotifications.beginTurn(
+      session.id, panel?.id ?? null, hookThreadId, effectiveAgent, input.query,
+      input.pi?.runId ? `${input.pi.instanceId}:${input.pi.runId}` : input.activityEventId,
+    ).catch((error) => { agentHookProcessorLogger.warn("terminal-agent-hook.feishu-policy.failed", { error }); });
   }
 
   let terminalState: TerminalState;

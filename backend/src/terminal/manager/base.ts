@@ -1,3 +1,4 @@
+import { TerminalFeishuPolicy } from "../completion/feishu-policy";
 import type { TerminalSessionMetadataSnapshot } from "@runweave/shared/terminal/events";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
@@ -47,6 +48,7 @@ export type TerminalPanelMutationListener = (
 ) => void;
 
 export abstract class TerminalManagerBase {
+  readonly feishuNotifications: TerminalFeishuPolicy;
   protected readonly projects = new Map<string, TerminalProjectRecord>();
   protected readonly projectContexts = new WorktreeProjectRegistry();
   protected readonly sessions = new Map<string, RuntimeTerminalSessionRecord>();
@@ -87,7 +89,13 @@ export abstract class TerminalManagerBase {
   constructor(
     protected readonly sessionStore: TerminalSessionStore,
     protected readonly observer: TerminalSessionManagerObserver = {},
-  ) {}
+  ) {
+    this.feishuNotifications = new TerminalFeishuPolicy(
+      (id) => this.sessions.get(id),
+      (id, state) => this.sessionStore.updateFeishuNotificationState(id, state),
+      (id) => this.panels.get(id)?.status === "running",
+    );
+  }
 
   async initialize(): Promise<void> {
     await this.sessionStore.initialize();

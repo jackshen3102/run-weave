@@ -9,6 +9,7 @@ export function toMetadataRecord(
 ): PersistedTerminalSessionMetadataRecord {
   return {
     source: session.source,
+    feishuNotificationState: session.feishuNotificationState,
     id: session.id,
     projectId: session.projectId,
     alias: session.alias ?? null,
