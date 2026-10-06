@@ -1,0 +1,13 @@
+diff --git a/out/targets/archive.js b/out/targets/archive.js
+--- a/out/targets/archive.js
++++ b/out/targets/archive.js
+@@ -19,6 +19,9 @@ async function tar(compression, format, outFile, dirToArchive, isMacApp, tempDirMana
+         portable: true,
+         cwd: dirToArchive,
+         prefix: path.basename(outFile, `.${format}`),
++        // tar 6 shares a hardlink cache across async jobs but emits in queue order.
++        // Serialize entries so hardlinks always follow their archived targets.
++        jobs: 1,
+     };
+     let tarDirectory = ".";
+     if (isMacApp) {
