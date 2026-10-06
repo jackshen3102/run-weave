@@ -4064,6 +4064,38 @@
     "reason": "RUNWEAVE_AGENT_BRIDGE_ROOT：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
   {
+    "file": "packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemoteDesktopView.swift",
+    "kind": "native-or-shell",
+    "expression": "@AppStorage(\"remoteDesktop.inputMode\") private var preferredInputMode = RemoteInputMode.trackpad.rawValue",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "独立远控 Swift 包在当前 iOS 设备沙箱记住触控板或直接点击模式；仅影响本机交互，不属于实例 settings.yaml，不含凭证。"
+  },
+  {
+    "file": "packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemoteSessionControls.swift",
+    "kind": "native-or-shell",
+    "expression": "@AppStorage(\"remoteDesktop.controls.leading\") private var onLeadingEdge = false",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "独立远控 Swift 包在当前 iOS 设备沙箱记住悬浮入口左右吸边位置；仅为本机布局偏好，不属于实例 settings.yaml，不含凭证。"
+  },
+  {
+    "file": "packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemoteSessionControls.swift",
+    "kind": "native-or-shell",
+    "expression": "@AppStorage(\"remoteDesktop.controls.verticalFraction\") private var verticalFraction = 1.0",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "独立远控 Swift 包在当前 iOS 设备沙箱记住悬浮入口的归一化高度；仅为本机布局偏好，不属于实例 settings.yaml，不含凭证。"
+  },
+  {
+    "file": "packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemoteSessionControls.swift",
+    "kind": "native-or-shell",
+    "expression": "@AppStorage(\"remoteDesktop.controls.collapsed\") private var collapsed = false",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "独立远控 Swift 包在当前 iOS 设备沙箱记住悬浮入口折叠状态；仅为本机布局偏好，不属于实例 settings.yaml，不含凭证。"
+  },
+  {
     "file": "packages/app-ios/Sources/RunweaveIOS/App/RootView.swift",
     "kind": "native-or-shell",
     "expression": "@AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = \"dark\"",
