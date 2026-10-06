@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RemoteStatisticsView: View {
     let statistics: RemoteDesktopStatistics
+    var maximumHeight: CGFloat = 230
     var body: some View {
         ScrollView {
             VStack(spacing: 6) {
@@ -48,7 +49,7 @@ struct RemoteStatisticsView: View {
                     .font(.caption2).foregroundColor(.secondary)
             }.font(.caption).padding(10)
         }
-        .frame(height: 230)
+        .frame(height: maximumHeight)
         .background(Color.secondary.opacity(0.08))
         .accessibilityIdentifier("remote-desktop-statistics")
     }

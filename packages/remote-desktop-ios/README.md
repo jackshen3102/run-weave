@@ -14,7 +14,10 @@ let session = RemoteDesktopSession(credentials: credentials)
 session.connect(target: paired, context: RemoteSessionContext(
     targetID: paired.id, generation: generation, presentationID: UUID()
 ))
-RemoteDesktopView(session: session, maskTextEntry: { field in
+RemoteDesktopView(session: session, hostName: paired.name, onClose: {
+    session.stop(reason: "user_closed")
+    // Dismiss the host-owned presentation here.
+}, maskTextEntry: { field in
     // Apply the host analytics SDK's masking modifier to this exact input field.
     field
 })
@@ -40,13 +43,15 @@ Touch controls support relative trackpad and direct click, one-finger tap, doubl
 
 The keyboard panel submits complete system-composed text, including Chinese and emoji, with **发送**; it never converts text through a QWERTY table or the clipboard. Esc, Tab, arrows, Return, Backspace and modifier combinations are separate key down/up events. Modifier buttons apply to the next explicit shortcut; A/C/V/X/Z buttons provide common positional shortcuts. Hardware special keys and shortcuts use HID-to-Mac virtual keys, while printable characters use iOS-resolved text. Use the text field for composed IME text; positional shortcuts remain layout-dependent. Opening the text field releases any remote held keys and yields hardware focus to iOS.
 
-The panel overlays the desktop above the system keyboard. Neither keyboard changes the video viewport or resets its zoom. Opening the panel focuses text entry; its close button dismisses both keyboards. Transient keyframe recovery keeps the panel and draft open while remote submission is unavailable; leaving control permission or closing the presentation clears the draft and modifiers.
+The panel overlays the desktop above the system keyboard. It opens as a single text-entry row; the shortcut button expands the modifier and special-key rows on demand. Collapsing shortcuts clears pending modifiers, and reopening the keyboard starts collapsed. Neither keyboard changes the native surface dimensions or resets its zoom: the image keeps its full-surface fit and moves into the unobscured area above the panel, with touch mapping and cursor-follow using that same position. Opening the panel focuses text entry; its close button dismisses both keyboards. Transient keyframe recovery keeps the panel and draft open while remote submission is unavailable; leaving control permission or closing the presentation clears the draft and modifiers.
 
 The video layer enables `preventsCapture`; the host must additionally mask the entire remote presentation, text entry and pairing UI in its analytics SDK. Inject `maskTextEntry` to apply that SDK's modifier to the actual text field, without adding an analytics dependency to this package. This flag does not establish that a third-party analytics replay is correctly masked. No frame or input text is included in the statistics.
 
 Statistics distinguish received, decoded and display-layer-submitted frames, drops, recoveries, VideoToolbox decode callback duration, and local ping/pong network RTT. Display diagnostics expose the selected ingress API, data acceptance, ingress recovery state/count, actual ready/status, last error domain/code only, flush requirement, window attachment, layer/viewport sizes, protection flags, decoded pixel format and IOSurface backing. At most once per second, a fixed 16×16 grid samples the decoded 420v Y plane and retains only its minimum, mean and maximum. These are raw 8-bit values (nominal video luma range 16–235), not normalized brightness or a complete-image measurement. No individual samples, images or media payloads are stored or sent to logs/analytics; diagnostics contain no input, identity or credentials. Decode and RTT percentiles retain the latest 256 samples and expose total/window counts. Published statistics refresh at most twice per second. They do not measure input-to-screen latency. `hardwareDecoder` reads the actual VideoToolbox property on iOS 17+; it is `nil` (unknown) on iOS 15/16, where that public property is unavailable.
 
-The **连接统计** button opens a collapsed-by-default, scrollable inline panel with those actual counters, queue depth/capacity/maximum, hardware result, sample counts and p50/p95 values. Video remains visible while the panel is open. Text entry and the statistics panel are mutually exclusive to preserve the video viewport on a phone.
+The desktop uses the full safe-area viewport without a navigation bar or reserved toolbar rows. A floating capsule opens the keyboard in one tap or the session menu (host/state, input mode, fit, right click, statistics, gesture help, collapse and end session). The host supplies `hostName` and `onClose`; closing still belongs to its presentation lifecycle. Input mode, collapsed state and the capsule's edge/normalized vertical position persist locally. Dragging docks it to the nearest side; the menu opens above or below on narrow screens and beside the capsule on wide screens. Content scrolls within the available space after rotation or text-size changes, while collapse and end-session actions stay pinned at the bottom. Non-controllable states retain a visible status message and a usable close action.
+
+The **连接统计** menu item opens a scrollable overlay with actual counters, queue depth/capacity/maximum, hardware result, sample counts and p50/p95 values. Neither the menu nor its statistics change video bounds. Opening the menu releases held remote inputs, suspends surface gestures and yields hardware keyboard focus; its dismiss tap never reaches the remote desktop. Opening text entry hides the capsule and closes the menu. The keyboard remains an overlay with the existing draft, IME and shortcut behavior.
 
 Build without booting or allocating a simulator:
 

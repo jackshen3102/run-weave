@@ -1,0 +1,28 @@
+{
+  "host": "我的 MacBook Pro",
+  "mode": "trackpad",
+  "zoom": 2,
+  "statistics": {
+    "latency": "18 ms",
+    "fps": "60 fps",
+    "resolution": "1440 × 900",
+    "network": "局域网"
+  },
+  "files": [
+    "src",
+    "components",
+    "RemoteDesktopView.swift",
+    "RemoteNativeSurface.swift",
+    "Package.swift",
+    "README.md"
+  ],
+  "terminal": [
+    "~/Projects/runweave",
+    "$ git status",
+    "On branch main",
+    "Your branch is up to date with 'origin/main'.",
+    "",
+    "nothing to commit, working tree clean"
+  ],
+  "initialDraft": "git status"
+}

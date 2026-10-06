@@ -9,8 +9,13 @@ import GameController
 
 struct RemoteNativeSurface: UIViewRepresentable {
     @ObservedObject var session: RemoteDesktopSession
+    var keyboardTop: CGFloat?
+    var suspendsInput = false
     func makeUIView(context: Context) -> RemoteSurfaceUIView { RemoteSurfaceUIView(session: session) }
-    func updateUIView(_ view: RemoteSurfaceUIView, context: Context) { view.update(session) }
+    func updateUIView(_ view: RemoteSurfaceUIView, context: Context) {
+        view.keyboardTop = keyboardTop
+        view.update(session, suspendsInput: suspendsInput)
+    }
     static func dismantleUIView(_ view: RemoteSurfaceUIView, coordinator: ()) { view.detach() }
 }
 
@@ -34,6 +39,7 @@ final class RemoteSurfaceUIView: UIView, UIGestureRecognizerDelegate {
     private var offset: CGPoint = .zero
     private var cursor = CGPoint(x: 0.5, y: 0.5)
     private var dragging = false
+    private var suspendsInput = false
     private var pinch: UIPinchGestureRecognizer!
     private var pan: UIPanGestureRecognizer!
     private var hold: UILongPressGestureRecognizer!
@@ -44,6 +50,7 @@ final class RemoteSurfaceUIView: UIView, UIGestureRecognizerDelegate {
     private var inputContext: RemoteSessionContext?
     private var heldHardwareKeys: [Int: UInt16] = [:]
     private var displayReadyObserver: NSObjectProtocol?
+    var keyboardTop: CGFloat?
 
     init(session: RemoteDesktopSession) {
         super.init(frame: .zero)
@@ -79,7 +86,15 @@ final class RemoteSurfaceUIView: UIView, UIGestureRecognizerDelegate {
     override var canBecomeFirstResponder: Bool { true }
     override var inputView: UIView? { UIView(frame: .zero) }
 
-    func update(_ newSession: RemoteDesktopSession) {
+    func update(_ newSession: RemoteDesktopSession, suspendsInput: Bool = false) {
+        if self.suspendsInput != suspendsInput {
+            self.suspendsInput = suspendsInput
+            if suspendsInput {
+                cancelDrag(); releaseHardwareKeys()
+                newSession.releaseAllInputs(reason: "session menu opened")
+            }
+            for recognizer in gestureRecognizers ?? [] { recognizer.isEnabled = !suspendsInput }
+        }
         if session !== newSession {
             session?.detachDisplayLayer(ownerID: ownerID)
             session = newSession
@@ -90,7 +105,7 @@ final class RemoteSurfaceUIView: UIView, UIGestureRecognizerDelegate {
             releaseHardwareKeys()
             // Cancel a tap/hold that began on the previous target or geometry;
             // its eventual completion must not become an input for a new Mac.
-            for recognizer in gestureRecognizers ?? [] { recognizer.isEnabled = false; recognizer.isEnabled = true }
+            for recognizer in gestureRecognizers ?? [] { recognizer.isEnabled = false; recognizer.isEnabled = !suspendsInput }
             inputContext = newSession.context
             geometry = newSession.geometry; inputMode = newSession.inputMode
             zoom = 1; offset = .zero; cursor = CGPoint(x: 0.5, y: 0.5)
@@ -98,7 +113,7 @@ final class RemoteSurfaceUIView: UIView, UIGestureRecognizerDelegate {
         if viewportReset != newSession.viewportReset {
             viewportReset = newSession.viewportReset; zoom = 1; offset = .zero
         }
-        if newSession.state != .controllable || newSession.textEntryActive { cancelDrag(); resignFirstResponder() }
+        if newSession.state != .controllable || newSession.textEntryActive || suspendsInput { cancelDrag(); resignFirstResponder() }
         else if GCKeyboard.coalesced != nil, !isFirstResponder { becomeFirstResponder() }
         setNeedsLayout()
     }
@@ -134,13 +149,22 @@ final class RemoteSurfaceUIView: UIView, UIGestureRecognizerDelegate {
         reportSurface()
     }
 
+    private var visibleBounds: CGRect {
+        guard let keyboardTop, let window else { return bounds }
+        let top = convert(CGPoint(x: 0, y: keyboardTop), from: window).y
+        return CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width,
+                      height: min(bounds.height, max(0, top - bounds.minY)))
+    }
+
     private var videoRect: CGRect {
         guard let geometry, geometry.isValid, bounds.width > 0, bounds.height > 0 else { return bounds }
         let fit = AVMakeRect(aspectRatio: geometry.pixelSize, insideRect: bounds)
         let width = fit.width * zoom, height = fit.height * zoom
-        let maxX = max(0, (width - bounds.width) / 2), maxY = max(0, (height - bounds.height) / 2)
+        let visible = visibleBounds
+        let maxX = max(0, (width - bounds.width) / 2), maxY = max(0, (height - visible.height) / 2)
         offset.x = min(max(offset.x, -maxX), maxX); offset.y = min(max(offset.y, -maxY), maxY)
-        return CGRect(x: bounds.midX - width / 2 + offset.x, y: bounds.midY - height / 2 + offset.y,
+        // Keep the full-surface fit and zoom; only move the image above the keyboard panel.
+        return CGRect(x: bounds.midX - width / 2 + offset.x, y: visible.midY - height / 2 + offset.y,
                       width: width, height: height)
     }
 
@@ -244,7 +268,7 @@ final class RemoteSurfaceUIView: UIView, UIGestureRecognizerDelegate {
         if position.x < margin { offset.x += margin - position.x }
         if position.x > bounds.width - margin { offset.x -= position.x - bounds.width + margin }
         if position.y < margin { offset.y += margin - position.y }
-        if position.y > bounds.height - margin { offset.y -= position.y - bounds.height + margin }
+        if position.y > visibleBounds.maxY - margin { offset.y -= position.y - visibleBounds.maxY + margin }
     }
     @objc private func scrollRemote(_ gesture: UIPanGestureRecognizer) {
         defer { gesture.setTranslation(.zero, in: self) }
@@ -286,7 +310,7 @@ final class RemoteSurfaceUIView: UIView, UIGestureRecognizerDelegate {
         session?.releaseAllInputs(reason: "hardware keyboard focus changed")
     }
     private func handle(_ presses: Set<UIPress>, down: Bool) {
-        guard session?.state == .controllable else { releaseHardwareKeys(); return }
+        guard session?.state == .controllable, session?.textEntryActive == false, !suspendsInput else { releaseHardwareKeys(); return }
         for press in presses {
             guard let key = press.key else { continue }
             let flags = key.modifierFlags
