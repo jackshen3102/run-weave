@@ -46,7 +46,7 @@ Do not stop unrelated services if a default port is occupied.
 - **Actions → Linux desktop → Run workflow** builds a selected ref on demand.
   Ordinary PRs run the existing quality checks without packaging. PRs changing
   the Linux workflow, release workflow, Linux builder config/wrapper or packaged
-  native verification also run this build before merge.
+  native verification, archive verification or its dependency patch also run this build before merge.
 - A matching `v<electron/package.json version>` tag runs **Release**, builds
   macOS arm64 and Linux x64, then attaches both archives/installers and checksums
   to one **draft GitHub Release**. Maintainers can review its assets under
@@ -68,10 +68,16 @@ distributions (including builds made locally on newer Debian).
 ```bash
 corepack pnpm --filter @runweave/electron typecheck
 corepack pnpm --filter @runweave/electron lint
+node scripts/verify/electron/linux-archive.mjs
 ELECTRON_RUN_AS_NODE=1 electron/.linux-build/release/linux-unpacked/runweave \
   scripts/verify/electron/linux-native.mjs \
   electron/.linux-build/release/linux-unpacked/resources
 ```
+
+The archive check exercises electron-builder's actual tar/compression path and
+system tar extraction, including hardlink target ordering, file modes, content
+and symlinks. CI runs it before packaging; the pinned app-builder-lib patch keeps
+hardlink targets ahead of aliases. This check does not launch the application.
 
 The native check uses the packaged Electron executable and packaged resources:
 PTY spawn, input/output, resize and exit; SQLite persistence/integrity and runtime
