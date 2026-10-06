@@ -113,7 +113,7 @@ private struct HostView: View {
                             Text("采集：\(model.captureActive ? "运行" : "停止") · 硬件 H.264：\(model.hardwareAccelerated ? "已选中" : "未运行")")
                             Text("帧 \(model.frames) · 丢帧 \(model.droppedFrames) · 编码回调 \(model.encodeMilliseconds, specifier: "%.1f") ms · 按下输入 \(model.pressedInputs)").font(.caption.monospaced())
                             Text("编码样本 \(model.encodeSampleCount)/256 · p50 \(model.encodeP50, specifier: "%.1f") ms · p95 \(model.encodeP95, specifier: "%.1f") ms").font(.caption.monospaced())
-                            Text("编码 in-flight \(model.encoderInFlight) / 最大 \(model.encoderMaximumInFlight)（上限 2）· 编码跳帧 \(model.encoderSkipped) · 发送队列最大 \(model.maximumSendDepth)（上限 1）").font(.caption.monospaced())
+                            Text("编码至发送完成 in-flight \(model.encoderInFlight) / 最大 \(model.encoderMaximumInFlight)（上限 1）· 编码跳帧 \(model.encoderSkipped) · 发送队列最大 \(model.maximumSendDepth)（上限 1）").font(.caption.monospaced())
                             Text("这些是编码提交到回调的本机耗时；不是输入到手机像素上屏的端到端延迟。") .font(.caption).foregroundStyle(.secondary)
                             Text("3 秒控制租约；失联、停止与撤销都会释放全部合成输入。") .font(.caption).foregroundStyle(.secondary)
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(6)

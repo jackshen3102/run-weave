@@ -26,7 +26,7 @@ final class DesktopCapture {
                              contentRect: .init(width: Double(width), height: Double(height)))
     }
 
-    func start(display geometry: RemoteDisplay, onFrame: @escaping (Data, Bool, Double) -> Void, onFailure: @escaping (Error) -> Void) async throws {
+    func start(display geometry: RemoteDisplay, onFrame: @escaping (Data, Bool, Double, @escaping () -> Void) -> Void, onFailure: @escaping (Error) -> Void) async throws {
         guard stream == nil else { return }
         guard CGPreflightScreenCaptureAccess() else { throw HostError.screenPermission }
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
@@ -92,22 +92,23 @@ final class VideoSender: @unchecked Sendable {
         self.channel = channel; self.sessionID = sessionID; self.display = display
         self.requestKeyframe = requestKeyframe; self.onFailure = onFailure
     }
-    func offer(_ data: Data, keyframe: Bool, milliseconds: Double) {
+    func offer(_ data: Data, keyframe: Bool, milliseconds: Double, complete: @escaping () -> Void) {
         lock.lock()
-        guard !stopped else { lock.unlock(); return }
+        guard !stopped else { lock.unlock(); complete(); return }
         sequence += 1
         if milliseconds.isFinite, milliseconds >= 0 {
             encodeSamples.append(milliseconds)
             if encodeSamples.count > 256 { encodeSamples.removeFirst() }
         }
         if busy || (waitingForKeyframe && !keyframe) {
-            dropped += 1; waitingForKeyframe = true; lock.unlock(); requestKeyframe(); return
+            dropped += 1; waitingForKeyframe = true; lock.unlock(); requestKeyframe(); complete(); return
         }
         busy = true; waitingForKeyframe = false; encodeMilliseconds = milliseconds
         maximumSendDepth = max(maximumSendDepth, 1)
         let header = RemoteVideoHeader(sessionID: sessionID, displayID: display.displayID, displayRevision: display.revision, sequence: sequence, keyframe: keyframe, encodeMilliseconds: milliseconds)
         lock.unlock()
         Task {
+            defer { complete() }
             let timeout = Task { try await Task.sleep(nanoseconds: 2_000_000_000); self.channel.close() }
             do {
                 try await channel.sendData(RemoteVideoPacket(header: header, annexB: data).encoded())
