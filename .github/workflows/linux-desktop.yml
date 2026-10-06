@@ -12,6 +12,10 @@ on:
       - electron/electron-builder.linux.yml
       - scripts/electron/dist-linux.mjs
       - scripts/verify/electron/linux-native.mjs
+      - scripts/verify/electron/linux-archive.mjs
+      - patches/app-builder-lib@25.1.8.patch
+      - package.json
+      - pnpm-lock.yaml
   workflow_dispatch:
   workflow_call:
     outputs:
@@ -64,6 +68,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify archive hardlink ordering
+        run: node scripts/verify/electron/linux-archive.mjs
 
       - name: Build Linux x64 archive
         env:

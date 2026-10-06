@@ -9656,6 +9656,70 @@
     "reason": "向本地 Electron 构建子进程转发工具链与缓存环境；强制禁用版本自增与发布，不作为应用业务配置。"
   },
   {
+    "file": "scripts/verify/electron/linux-archive.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(destination)",
+    "count": 1,
+    "category": "test",
+    "reason": "归档集成验收读取独立临时目录中的解压文件，与夹具逐字节比较；不读取用户配置。"
+  },
+  {
+    "file": "scripts/verify/electron/linux-archive.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(source)",
+    "count": 1,
+    "category": "test",
+    "reason": "归档集成验收读取自身创建的临时夹具，核对归档往返内容；不读取用户配置。"
+  },
+  {
+    "file": "scripts/verify/electron/linux-archive.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(first)",
+    "count": 1,
+    "category": "test",
+    "reason": "归档集成验收在临时目录创建共享 inode 的 FUNDING 夹具，复现 pnpm 硬链接顺序。"
+  },
+  {
+    "file": "scripts/verify/electron/linux-archive.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(path.join(input, \"empty\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "归档集成验收在临时目录创建空文件硬链接夹具，验证解包后链接与内容完整性。"
+  },
+  {
+    "file": "scripts/verify/electron/linux-archive.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(path.join(input, \"private-data\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "归档集成验收在临时目录创建权限为 0600 的合成夹具，核对归档往返文件权限。"
+  },
+  {
+    "file": "scripts/verify/electron/linux-archive.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(path.join(input, \"runweave\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "归档集成验收在临时目录创建合成可执行文件，核对归档往返可执行权限与硬链接。"
+  },
+  {
+    "file": "scripts/verify/electron/linux-archive.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(path.join(work, \"entries.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "归档集成验收将归档条目及硬链接目标写入本次临时证据目录，不是应用配置。"
+  },
+  {
+    "file": "scripts/verify/electron/linux-archive.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(path.join(work, \"extract.log\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "归档集成验收将系统 tar 解压诊断写入本次临时证据目录，不修改用户配置。"
+  },
+  {
     "file": "scripts/verify/electron/linux-native.mjs",
     "kind": "file-io",
     "expression": "fs.readFileSync(path.join(backend, \"activity-sqlite-runtime-manifest.json\"))",

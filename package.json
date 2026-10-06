@@ -117,6 +117,9 @@
     "typescript": "^5.8.2"
   },
   "pnpm": {
+    "patchedDependencies": {
+      "app-builder-lib@25.1.8": "patches/app-builder-lib@25.1.8.patch"
+    },
     "onlyBuiltDependencies": [
       "better-sqlite3",
       "electron",
