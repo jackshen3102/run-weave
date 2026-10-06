@@ -34,6 +34,9 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
 - 浏览器页面复现、修改或验收：使用 `$toolkit:playwright-cli`，按其规则附着正确页面。
   承诺的 UI 验收必须实际执行；未执行则记录阻塞，不得用静态检查、代码阅读或普通截图冒充。
 - iOS 日常交互排查与修复验收：使用 `$toolkit:agent-device`；固定 XCTest 套件仍按包入口执行。
+- 更新原生 Mac 远控 Host（RemoteDesk）：读 [Host 规则](packages/remote-desktop-host/AGENTS.md)
+  和 [更新流程](packages/remote-desktop-host/README.md)，统一运行 `pnpm host:update`。
+  “更新 Host”包含启动新版服务及手机连接验收；更新、回退和真机验收分别报告。
 - 截图交付：已有截图能帮助用户判断本次修改效果时，最终回复附上 1–3 张相关截图的
   可点击路径和简短说明，注明浏览器、模拟器或 DEV 设备等来源。优先复用能反映最终
   修改效果的已有截图；绝对路径或项目相对路径均可，无需搬到专门目录。无关任务不

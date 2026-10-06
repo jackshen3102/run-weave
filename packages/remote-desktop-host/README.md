@@ -2,6 +2,33 @@
 
 独立原生 macOS 15+ App，为现有 Runweave iPhone App 提供局域网桌面。它不使用 Backend token、终端 WebSocket 或公网 Tunnel。
 
+日常可以直接让 Agent 执行“更新 Mac Host，并用手机验收”。Agent 从当前工作区更新，包含未提交改动；不自动拉取代码、切换分支或更新 iPhone App。若需要指定提交或更新手机 App，在请求中明确说明。
+
+也可以在仓库根目录执行：
+
+```sh
+# 日常更新：读取已安装 Host 的签名团队，沿用上次成功启动的网卡。
+pnpm host:update
+# 首次安装：指定自己的签名团队和实际 LAN 网卡；en0 仅为示例。
+pnpm host:update --team YOUR_TEAM_ID --interface en0
+# 只查看用法，不构建、不重启。
+pnpm host:update --help
+```
+
+固定流程是：检查安装与签名身份 → 独立构建并验签 → 保留旧包、正常退出旧进程 → 安装并启动新版 → 核对服务回执 → 手机验收。构建期间旧服务继续运行；替换和重启会断开当前桌面会话，服务就绪后在手机重新打开原配对的 Mac。命令负责更新至监听就绪，手机操作由 Agent 按 `toolkit:agent-device` 执行。
+
+验收使用已保存的 iPhone 和现有配对，确认能打开桌面、看到实际画面并完成一次点击或输入；首次配对或系统授权仍需本机确认。分别报告更新、监听、回退、手机实际会话的结果。手机锁屏、离线或自动化受阻时，保留更新结果并明确验收未完成，不将监听就绪视为手机验收通过。
+
+更新入口只部署 Release 到固定 `/Applications/RemoteDesk.app`，所有 checkout 共用同一个安装位置和更新锁。先在独立 DerivedData 构建、校验 Bundle ID 和签名团队、准备候选包，再正常退出旧进程并替换安装包。构建或验签失败不会修改当前安装；旧进程退出失败不强杀。首次可迁移当前 checkout 原构建路径或 `/Applications/Runweave Remote Host.app` 中运行的同团队 Host；其他路径或多个运行实例会在部署前被拒绝。Debug 仍使用 `build-host.sh`，不覆盖正式安装。
+
+成功时 stdout 返回 `state=ready`、`update=succeeded` 的 JSON，包含新进程 PID、Host ID、应用路径、接口、权限、源码 checkout/commit/dirty 状态和候选签名 code hash。回执核对本次请求、PID 与路径。日志、回执在 `~/.runweave/remote-host/updates/`；旧包和失败候选包保留于回执所指的 `/Applications/.RemoteDesk-update-*` 目录，不自动清理。
+
+替换或新版启动失败时自动恢复旧安装；更新前有运行实例则重新启动旧版并验证监听。此时仍返回非零退出码和 `update=failed`，另用 `rollback=service_restored`、`app_restored`、`installation_removed` 或 `failed` 区分恢复结果；回退失败保留路径和原因供排查。回退使用上次成功监听的接口，不沿用本次失败的接口参数。该回退恢复 App，不回滚 Keychain 或数据结构；后续若修改持久化格式，必须单独处理旧版兼容性。
+
+更新锁位于 `~/.runweave/remote-host/update.lock`。异常中断后先检查其中 `owner.json` 的 PID、回执和安装/备份状态，确认没有更新进程后再恢复现场并移除遗留锁；工具不会自行抢占锁或强杀进程。正常更新由 Agent 完成，失败先按回执排查。
+
+仅构建时使用以下入口：
+
 ```sh
 # Xcode 26.6 / xcodegen；默认 ad-hoc 本地签名。
 packages/remote-desktop-host/build-host.sh
@@ -11,6 +38,10 @@ open ".runweave/remote-desktop-implementation/HostDerivedData/Build/Products/Rel
 ```
 
 在固定 `.app` 路径和签名身份下授权并验收，改变签名/路径可能需要重新授权。脚本只构建，不启动服务、不申请权限、不安装启动项。首次点击“启动局域网服务”会创建本机 TLS 身份：系统 `/usr/bin/openssl` 生成 RSA 2048/SHA-256 自签证书，PKCS#12 与随机密码保存在独立 Keychain 中，临时文件随后清理。证书有效期十年，客户端仍检查当前有效期；过期或身份丢失需要本机处理并重新配对。此版本不自动轮换身份。
+
+用户要求“更新 Host”时，交付范围包括构建、部署、启动新版进程和局域网服务，以及验证实际连接。除非明确要求只构建或保持停止，使用上述更新入口完成启动，不再询问是否启动。`state=ready` 只证明新版监听已就绪，`remoteSessionVerified=false` 明确表示还未验证手机实际会话；不能用进程或端口代替真机验收。已有系统权限、Host 身份和设备配对沿用原配置；需要新增系统权限或设备授权时仍按下文处理。
+
+App 接受本机启动参数 `--start-service [--interface INTERFACE]`，异步等待接口发现并调用与 UI 相同的服务生命周期；15 秒内未就绪则停止本次监听并报告失败。接口选择保存于本机，LAN 和模拟器验证使用不同的配置键。`--startup-result PATH --startup-request-id UUID` 用于写入一次性 JSON 启动回执，供更新入口核对。没有 `--start-service` 时仍保持停止；参数只在新进程启动时处理，不通过远程网络提供管理接口。手动停止后不会因窗口再次出现而重启。再次启动已有 App 应使用更新入口或 `tools/start-host.swift` 编译出的本机启动工具，后者参数为 `<RemoteDesk.app> <证据目录> [接口]`，会正常退出旧进程再启动。
 
 同 Mac 的 iOS Simulator 访问本机 LAN 地址会走 `lo0`，不能用来验收 Release 的物理接口策略。仅 Debug 编译接受显式 `--simulator-loopback` 验证入口；无参数 Debug 和所有 Release 构建仍使用原 LAN 策略。构建独立产物并由本机用户启动：
 
