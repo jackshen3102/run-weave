@@ -2,6 +2,16 @@ import CoreGraphics
 import RunweaveRemoteDesktopProtocol
 
 extension RemoteDesktopSession {
+    public func releaseAllInputs(reason: String = "released") {
+        inputQueue.removeAll()
+        guard active, let control else { return }
+        let sessionID = wireSessionID, expected = attempt
+        Task { [weak self] in
+            do { try await control.send(.init(kind: .releaseAll, sessionID: sessionID, reason: reason)) }
+            catch { self?.handleDrop(error, attempt: expected) }
+        }
+    }
+
     public func resetViewport() { viewportReset &+= 1 }
     func setTextEntryActive(_ value: Bool) {
         textEntryActive = value

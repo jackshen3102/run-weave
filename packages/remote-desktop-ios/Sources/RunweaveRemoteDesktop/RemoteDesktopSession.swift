@@ -22,10 +22,10 @@ public final class RemoteDesktopSession: ObservableObject {
     public private(set) var target: RemoteTarget?
     public private(set) var context: RemoteSessionContext?
     private let credentials: RemoteCredentialStore
-    private var active = false
-    private var attempt = UUID()
-    private var wireSessionID = UUID()
-    private var control: RemoteTLSConnection?
+    private(set) var active = false
+    private(set) var attempt = UUID()
+    private(set) var wireSessionID = UUID()
+    private(set) var control: RemoteTLSConnection?
     private var video: RemoteTLSConnection?
     private var decoder: H264Decoder?
     private var connectionTask: Task<Void, Never>?
@@ -36,7 +36,7 @@ public final class RemoteDesktopSession: ObservableObject {
     private var inputTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var retryDelay: UInt64 = 500_000_000
-    private var inputQueue: [RemoteControlMessage] = []
+    var inputQueue: [RemoteControlMessage] = []
     private var lastVideoSequence: UInt64?
     private var firstFrame = false
     private var displaySubmittedAttempt: UUID?
@@ -90,6 +90,13 @@ public final class RemoteDesktopSession: ObservableObject {
 
     public func stop(reason: String = "closed") {
         observation.end(reason: Self.observationStopReason(reason), counters: counters)
+        stopResources(reason: reason)
+        geometry = nil; textEntryActive = false; state = .idle
+        statistics = counters
+    }
+
+    /// Also safe during UIViewRepresentable dismantling: no observable writes or callbacks.
+    private func stopResources(reason: String) {
         active = false
         reconnectTask?.cancel(); reconnectTask = nil
         let oldControl = control, oldSessionID = wireSessionID
@@ -97,19 +104,8 @@ public final class RemoteDesktopSession: ObservableObject {
             try? oldControl.sendBestEffort(.init(kind: .releaseAll, sessionID: oldSessionID, reason: reason))
             try? oldControl.sendBestEffort(.init(kind: .stop, sessionID: oldSessionID, reason: reason))
         }
-        teardown()
-        context = nil; geometry = nil; textEntryActive = false; state = .idle
-        counters.decoderQueueDepth = 0; statistics = counters
-    }
-
-    public func releaseAllInputs(reason: String = "released") {
-        inputQueue.removeAll()
-        guard active, let control else { return }
-        let sessionID = wireSessionID, expected = attempt
-        Task { [weak self] in
-            do { try await control.send(.init(kind: .releaseAll, sessionID: sessionID, reason: reason)) }
-            catch { self?.handleDrop(error, attempt: expected) }
-        }
+        teardown(publishStatistics: false)
+        context = nil
     }
 
     func attachDisplayLayer(_ layer: AVSampleBufferDisplayLayer, ownerID: UUID) {
@@ -134,9 +130,16 @@ public final class RemoteDesktopSession: ObservableObject {
     func detachDisplayLayer(ownerID: UUID) {
         guard displayOwnerID == ownerID else { return }
         displayLayer?.flushRemoteVideo(); displayLayer = nil; displayOwnerID = nil
-        // Dismantling the native surface is a resource-lifetime boundary, even
-        // if a host forgets to report that its SwiftUI page became invisible.
-        stop(reason: "video surface detached")
+        // Surface removal must stop resources even if the host omits stop. Publishing
+        // while SwiftUI destroys its graph traps inside GraphHost.asyncTransaction;
+        // defer notifications only if the host has not already stopped the session.
+        guard active || context != nil else { return }
+        stopResources(reason: "video surface detached")
+        let expected = attempt
+        Task { @MainActor in
+            guard self.attempt == expected, self.displayOwnerID == nil else { return }
+            self.stop(reason: "video surface detached")
+        }
     }
 
     private func beginConnection() {
@@ -504,7 +507,7 @@ public final class RemoteDesktopSession: ObservableObject {
         active && attempt == expected && context == expectedContext && target?.id == expectedContext.targetID
     }
 
-    private func teardown() {
+    private func teardown(publishStatistics: Bool = true) {
         attempt = UUID(); wireSessionID = UUID()
         connectionTask?.cancel(); connectionTask = nil
         controlTask?.cancel(); controlTask = nil
@@ -519,11 +522,11 @@ public final class RemoteDesktopSession: ObservableObject {
         lastVideoSequence = nil; firstFrame = false; displaySubmittedAttempt = nil; controlAllowed = false
         displayRecoveryID = nil; displayRecoveryDeadline = nil; displayFlushPending = false
         counters.decoderQueueDepth = 0
-        statistics = counters
+        if publishStatistics { statistics = counters }
         clearDisplayImage()
     }
 
-    private func handleDrop(_ error: Error, attempt expected: UUID) {
+    func handleDrop(_ error: Error, attempt expected: UUID) {
         guard active, attempt == expected else { return }
         var terminal = error is RemotePairingError || error is DecodingError
         var permissionFailure = false

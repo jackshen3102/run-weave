@@ -4,6 +4,7 @@ import SwiftUI
 struct RemoteSessionControls: View {
     @ObservedObject var session: RemoteDesktopSession
     let hostName: String
+    let returnLabel: String
     @Binding var showsMenu: Bool
     let openKeyboard: () -> Void
     let onClose: () -> Void
@@ -17,7 +18,7 @@ struct RemoteSessionControls: View {
     private enum MenuPage { case session, statistics, gestures }
     private let inset: CGFloat = 12
     private let toolbarHeight: CGFloat = 52
-    private var toolbarWidth: CGFloat { collapsed ? 52 : 104 }
+    private var toolbarWidth: CGFloat { 113 + (collapsed ? 52 : 104) }
 
     var body: some View {
         GeometryReader { geometry in
@@ -56,6 +57,13 @@ struct RemoteSessionControls: View {
 
     private var toolbar: some View {
         HStack(spacing: 0) {
+            Button { showsMenu = false; onClose() } label: {
+                Label(returnLabel, systemImage: "chevron.left")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 112, height: 44)
+            }
+            .accessibilityIdentifier("remote-desktop-return")
+            Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1, height: 22)
             if !collapsed {
                 Button(action: openKeyboard) {
                     Image(systemName: "keyboard").foregroundColor(.blue).frame(width: 50, height: 44)
