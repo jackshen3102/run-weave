@@ -1,0 +1,90 @@
+version: 1
+name: 右侧一级工具 Tab 显隐与排序验收
+description: >
+  验证设备本地工具栏布局与业务状态分离，
+  默认只露出 Browser 1，隐藏项可恢复、可被显式导航唤起，排序与布局可持久化。
+cases:
+  - id: SIDETAB-001
+    name: 默认布局与管理入口可达
+    required: true
+    description: 默认只显示 Browser 1，另外两个 Profile 可从管理菜单打开，窄面板仍可操作菜单。
+    preconditions:
+      - 已通过 runweave-dev-session 取得受管 Electron 会话和 fresh desktop surface。
+      - 使用专属测试 userData，布局恢复默认且没有待保留的用户布局。
+    steps:
+      - 使用 $toolkit:playwright-cli 附着真实 desktop surface；确认只显示 Browser 1，Browser 2/3 在管理标签菜单中未勾选。
+      - 在菜单打开 Browser 2；确认其一级入口出现且激活，设置面板标识为 Profile 2。
+      - 将 Sidecar 缩到支持的最小宽度并滚动工具栏；确认管理按钮始终可见，Browser 3 仍可从菜单打开且标识为 Profile 3。
+  - id: SIDETAB-002
+    name: 隐藏当前项遵守确定回退规则
+    required: true
+    description: 隐藏当前项切换到右侧优先的相邻项，最后一个可用项不可隐藏。
+    preconditions:
+      - 专属受管 Web 会话已就绪；可建立 Preview、Browser 1、Race 的顺序和可见状态。
+    steps:
+      - 使用 $toolkit:playwright-cli 激活 Browser 1，再从管理菜单隐藏它；确认切到 Race。
+      - 隐藏 Race；确认切到 Preview，Preview 的隐藏操作禁用并有说明。
+      - 从菜单显示 Browser 1；确认只增加入口且不抢走 Preview 激活状态，随后打开它可正常激活。
+  - id: SIDETAB-003
+    name: 重排只改变布局
+    required: true
+    description: 拖动和键盘前后移动改变入口顺序，隐藏项保持槽位且拖动不会误触切换。
+    preconditions:
+      - 专属受管 Web 会话已就绪，已恢复默认布局，Preview 为当前项。
+      - 管理菜单中已显示 Browser 2 并隐藏 Browser 1。
+    steps:
+      - 使用 $toolkit:playwright-cli 将 Browser 2 拖到 Preview 前；确认顺序改变但当前内容仍为 Preview。
+      - 显示 Browser 1；确认它仍处于完整顺序中未参与拖动的槽位，没有重复或丢失入口。
+      - 开始拖动并按 Escape 取消；确认顺序不变，再通过键盘操作管理菜单前移或后移，确认每次只移动一格。
+  - id: SIDETAB-004
+    name: 布局跨刷新保持
+    required: true
+    description: 同一设备存储范围刷新后显隐与顺序保持，切换项目不重置布局。
+    preconditions:
+      - 专属受管 Web 会话已就绪，有两个可切换项目，允许刷新本测试页面。
+    steps:
+      - 使用 $toolkit:playwright-cli 隐藏 Race、显示 Browser 2 并移到 Preview 前；记录当前可见顺序。
+      - 刷新页面并重新取得 fresh UI ref；确认顺序及隐藏项与刷新前一致。
+      - 切换到第二个项目；确认布局保持一致，再恢复默认布局，确认 Browser 2/3 默认隐藏且其他可用项回到默认顺序。
+  - id: SIDETAB-005
+    name: 隐藏 Browser 保留 Profile 数据与页面
+    required: true
+    description: 隐藏入口不销毁网页或迁移 Profile 数据，重新打开后页面与登录标识保持。
+    preconditions:
+      - 专属受管 Electron 会话已就绪，并有可显示 Cookie 或登录标识的本地测试网页。
+      - Browser 1 和 Browser 2 已分别打开测试网页并写入不同标识，页面 ID 已记录。
+    steps:
+      - 使用 $toolkit:playwright-cli 激活 Browser 2 后隐藏其入口；确认 Browser 1 的页面和标识未改变。
+      - 从管理菜单重新打开 Browser 2；确认原页面 ID、URL 和 Profile 2 标识保持，没有新增替代页面或读到 Profile 1 标识。
+  - id: SIDETAB-006
+    name: 显式导航恢复目标入口
+    required: true
+    description: 从既有导航入口打开隐藏工具时，入口与实际内容一起恢复；背景计数变化不恢复隐藏项。
+    preconditions:
+      - 专属受管 Electron 会话已就绪，有可预览文件、可读取会话和绑定 Profile 2 的 Worktree。
+    steps:
+      - 使用 $toolkit:playwright-cli 隐藏 Preview 后从终端打开文件预览；确认 Preview 自动显示并激活且文件正确。
+      - 隐藏会话阅读后通过终端会话阅读入口打开；确认 Tab 恢复且展示当前目标会话。
+      - 隐藏 Browser 2 后通过绑定 Profile 2 的 Worktree Browser 打开入口导航；确认 Profile 2 恢复并激活，没有改成 Profile 1。
+      - 再隐藏 Browser 2，等待一次既有后台状态同步；确认它保持隐藏，当前工具未被抢占。
+  - id: SIDETAB-007
+    name: 异常布局恢复到可操作状态
+    required: true
+    description: 布局数据异常不会阻止 Sidecar 打开或产生重复 Tab。
+    preconditions:
+      - 专属受管 Web 会话已就绪，已备份本测试 origin 的布局键且允许仅修改该键。
+    steps:
+      - 使用 $toolkit:playwright-cli 在本测试 origin 将布局键写为非法 JSON 后刷新并重新获取 UI ref；确认默认布局可操作。
+      - 将该键写入带重复 ID、未知 ID 和全部隐藏的 version 1 布局后刷新；确认未知 ID 被忽略、入口无重复且至少 Preview 可达。
+      - 恢复本用例备份的布局键，刷新并重新获取 UI ref；确认测试数据没有遗留到后续验收。
+  - id: SIDETAB-008
+    name: 管理浮层与原生网页互不遮挡
+    required: true
+    description: Electron 原生 Browser 不遮挡管理菜单，菜单关闭后恢复当前网页且不抢回旧目标。
+    preconditions:
+      - 专属受管 Electron 会话已就绪，Browser 1 已打开可见网页。
+      - 可使用 Computer Use 观察真实 Electron 合成窗口和输入命中。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开管理标签菜单；使用 Computer Use 查看合成窗口并点击与网页区域相交的菜单项，确认菜单可见可点击。
+      - 从菜单打开 Browser 2，再关闭菜单；确认恢复的是 Browser 2，未回到 Browser 1。
+      - 在浏览器激活时拖动工具 Tab 并取消；确认拖影不被原生网页盖住，取消后网页显示和输入可用。

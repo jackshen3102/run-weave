@@ -161,12 +161,6 @@ export function TerminalPreviewPanel({
     onRequestError: handleRequestError,
   });
 
-  useEffect(() => {
-    if (activeTool === "agent-team" && !showAgentTeamTool) {
-      setActiveTool("preview");
-    }
-  }, [activeTool, setActiveTool, showAgentTeamTool]);
-
   const {
     copyPath: copySelectedPath,
     openFilePath,

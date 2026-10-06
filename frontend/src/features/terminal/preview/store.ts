@@ -6,6 +6,15 @@ import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/previe
 import { TERMINAL_BROWSER_DEFAULT_PROFILE_ID } from "@runweave/shared/terminal-browser-profile";
 import { LOCAL_DEV_CONNECTION_ID } from "../../connection/system-connection";
 import {
+  createDefaultSidecarLayout,
+  getActiveSidecarTab,
+  getVisibleSidecarTabs,
+  normalizeSidecarLayout,
+  reorderVisibleSidecarTabs,
+  type SidecarTabId,
+  type SidecarTabLayout,
+} from "./sidecar-layout";
+import {
   createInitialTerminalBrowserState,
   createTerminalPreviewBrowserActions,
 } from "./browser-slice";
@@ -31,6 +40,7 @@ export type {
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 const TERMINAL_SIDECAR_WIDTH_STORAGE_KEY = "runweave.terminal.sidecar.width.v1";
+const TERMINAL_SIDECAR_TABS_STORAGE_KEY = "runweave.terminal.sidecar.tabs.v1";
 const TERMINAL_PREVIEW_PROJECTS_STORAGE_KEY =
   "runweave.terminal.preview.projects.v1";
 export const DEFAULT_MARKDOWN_VIEW_MODE: TerminalMarkdownViewMode = "preview";
@@ -92,9 +102,49 @@ function persistSidecarWidth(widthPx: number): void {
   }
 }
 
+function readSidecarLayout(): SidecarTabLayout {
+  try {
+    const raw = deviceStorage.getItem(TERMINAL_SIDECAR_TABS_STORAGE_KEY);
+    return normalizeSidecarLayout(raw ? JSON.parse(raw) : null);
+  } catch {
+    return createDefaultSidecarLayout();
+  }
+}
+
+function saveSidecarLayout(sidecarLayout: SidecarTabLayout) {
+  let sidecarLayoutError: string | null = null;
+  try {
+    deviceStorage.setItem(TERMINAL_SIDECAR_TABS_STORAGE_KEY, JSON.stringify(sidecarLayout));
+  } catch {
+    sidecarLayoutError = "布局未能保存，重启后可能恢复";
+  }
+  return { sidecarLayout, sidecarLayoutError };
+}
+
+function revealSidecarTab(state: TerminalPreviewStore, id: SidecarTabId) {
+  return state.sidecarLayout.hidden.includes(id)
+    ? saveSidecarLayout({ ...state.sidecarLayout, hidden: state.sidecarLayout.hidden.filter((hidden) => hidden !== id) })
+    : {};
+}
+
 const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
   set,
 ) => ({
+  sidecarLayout: readSidecarLayout(),
+  sidecarLayoutError: null,
+  setSidecarTabVisible: (id, visible, available) => set((state) => {
+    if (!available.includes(id) || visible === !state.sidecarLayout.hidden.includes(id)) return state;
+    if (!visible && getVisibleSidecarTabs(state.sidecarLayout, available).length <= 1) return state;
+    return saveSidecarLayout({
+      ...state.sidecarLayout,
+      hidden: visible ? state.sidecarLayout.hidden.filter((hidden) => hidden !== id) : [...state.sidecarLayout.hidden, id],
+    });
+  }),
+  reorderSidecarTabs: (available, from, to) => set((state) => {
+    const next = reorderVisibleSidecarTabs(state.sidecarLayout, getVisibleSidecarTabs(state.sidecarLayout, available), from, to);
+    return next === state.sidecarLayout ? state : saveSidecarLayout(next);
+  }),
+  resetSidecarLayout: () => set(saveSidecarLayout(createDefaultSidecarLayout())),
   ui: {
     open: true,
     widthPx: readStoredSidecarWidth(),
@@ -102,7 +152,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
     activeTool: "preview",
   },
   conversationTarget: null,
-  openConversation: (target) => set((state) => ({ conversationTarget: target, ui: { ...state.ui, open: true, activeTool: "conversation" } })),
+  openConversation: (target) => set((state) => ({ ...revealSidecarTab(state, "conversation"), conversationTarget: target, ui: { ...state.ui, open: true, activeTool: "conversation" } })),
   projects: {},
   connectionScope: null,
   projectsByConnection: {},
@@ -136,6 +186,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
       const currentProject = state.projects[projectId] ?? DEFAULT_PROJECT_STATE;
       const nextMode = mode ?? currentProject.mode;
       return {
+        ...revealSidecarTab(state, "preview"),
         ui: { ...state.ui, open: true, activeTool: "preview" },
         projects: {
           ...state.projects,
@@ -149,6 +200,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
   },
   openBrowser: (projectId) => {
     set((state: TerminalPreviewStore) => ({
+      ...revealSidecarTab(state, state.activeBrowserProfileId),
       ui: { ...state.ui, open: true, activeTool: "browser" },
       browserActivationProjectId:
         projectId === undefined ? state.browserActivationProjectId : projectId,
@@ -157,6 +209,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
   },
   openAutomation: () => {
     set((state: TerminalPreviewStore) => ({
+      ...revealSidecarTab(state, "automation"),
       ui: { ...state.ui, open: true, activeTool: "automation" },
     }));
   },
@@ -167,6 +220,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
         [state.activeBrowserProfileId]: state.browser,
       };
       return {
+        ...revealSidecarTab(state, profileId),
         ui: { ...state.ui, open: true, activeTool: "browser" },
         browserByProfile,
         browser:
@@ -179,11 +233,13 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
   },
   openAgentTeam: () => {
     set((state: TerminalPreviewStore) => ({
+      ...revealSidecarTab(state, "agent-team"),
       ui: { ...state.ui, open: true, activeTool: "agent-team" },
     }));
   },
   openRace: () => {
     set((state: TerminalPreviewStore) => ({
+      ...revealSidecarTab(state, "race"),
       ui: { ...state.ui, open: true, activeTool: "race" },
     }));
   },
@@ -195,6 +251,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
   },
   setActiveTool: (tool: TerminalSidecarTool) => {
     set((state: TerminalPreviewStore) => ({
+      ...revealSidecarTab(state, getActiveSidecarTab(tool, state.activeBrowserProfileId)),
       ui: { ...state.ui, activeTool: tool },
       ...(tool === "conversation" ? {} : { conversationTarget: null }),
     }));
@@ -254,6 +311,8 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
     mode: Extract<TerminalPreviewMode, "file" | "explorer"> = "file",
   ) => {
     set((state: TerminalPreviewStore) => ({
+      ...revealSidecarTab(state, "preview"),
+      ui: { ...state.ui, open: true, activeTool: "preview" },
       projects: {
         ...state.projects,
         [projectId]: {

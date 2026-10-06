@@ -27,8 +27,9 @@ Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review cha
 - Project 没有路径时，搜索、目录和 Git 仍要求设置路径；绝对路径文件可只读预览。终端文件链接可使用来源 session/panel cwd 解析相对路径，但不把 cwd 当作项目根。切换同一 Project 内的 terminal 不重置预览内容；
   切换 Project 后读取目标 Project 的选择与视图状态，不能继续展示旧项目的 diff。
 - store 按 Project 保存文件选择、查询、Changes 选择和 Markdown/SVG 视图，并持久化 `projects`；
-  Sidecar 宽度单独持久化。当前初始化 `ui.open=true`，不能沿用旧方案的“默认关闭”假设。
+  Sidecar 宽度与一级工具 Tab 布局各自持久化。当前初始化 `ui.open=true`，不能沿用旧方案的“默认关闭”假设。
 - 普通 Sidecar 宽度由 store 限制在 320px 与视口 60% 之间；展开状态独立管理。关闭后释放布局空间。
+- 一级工具 Tab 可在“管理标签”中显示/隐藏，也可横向拖拽排序；偏好保存在当前浏览器 origin/Electron userData 的设备存储，跨项目共用。隐藏当前项优先切换到右侧相邻可见项，最后一个可用项不可隐藏；显式导航恢复目标入口，后台状态同步不改变布局。隐藏只收起入口，各工具继续遵守原有非激活生命周期。源码入口为 [Sidecar 布局](../../frontend/src/features/terminal/preview/sidecar-layout.ts)，交互合同见 [验收计划](../testing/terminal/sidecar-tabs.testplan.yaml)。
 - Preview 操作入口、可见工具及桌面/移动布局由 [Workspace Header](../../frontend/src/components/terminal/workspace/header.tsx)
   和 Panel 决定，不在文档中复制按钮位置或像素级布局。
 
@@ -178,7 +179,7 @@ Web 交互边界：
 
 ## Terminal Browser 与 Automation
 
-- Desktop Sidecar 一级工具包含 `Automation`、`Browser 1`、`Browser 2`、`Browser 3`。三个 Browser 入口对应应用进程全局的三个 Profile；Worktree 只提供默认选择和 Dev Server 端口，不拥有或复制 Profile。
+- Desktop Sidecar 支持 `Automation` 与 `Browser 1/2/3`，默认只显示 Browser 1，其余两个从“管理标签”按需打开。三个 Browser 入口对应应用进程全局的三个 Profile；入口显隐不删除网页或更改登录态、代理与 CDP 身份。Worktree 只提供默认选择和 Dev Server 端口，不拥有或复制 Profile。
 - Electron 桌面端用 `WebContentsView` 承载 Browser tab，tab 生命周期和可见区域由主进程管理，前端只同步 tab 状态、地址栏、工具栏和面板布局。Profile 1 沿用 `persist:runweave-terminal-browser`，Profile 2/3 使用独立 partition，因此 Cookie、LocalStorage、IndexedDB、Cache Storage 和登录态天然隔离。
 - Web/PWA 模式不提供本地 Electron Browser、Automation 或 CDP endpoint。
 - Browser tab 只允许 `http:`、`https:` 和 `about:blank` 导航；页面发起的新窗口会被收口成 Browser 工具内的新 tab 或被拒绝。

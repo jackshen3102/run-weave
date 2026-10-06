@@ -3,6 +3,7 @@ import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/previe
 import type { TerminalBrowserGroupSnapshot } from "@runweave/shared/terminal-browser-workspace";
 import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 import type { TerminalBrowserMinimumViewportWidth } from "@runweave/shared/terminal-browser-minimum-width";
+import type { SidecarTabId, SidecarTabLayout } from "./sidecar-layout";
 
 export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
@@ -64,6 +65,11 @@ export interface TerminalPreviewProjectState {
 
 export interface TerminalPreviewStore {
   ui: TerminalPreviewUiState;
+  sidecarLayout: SidecarTabLayout;
+  sidecarLayoutError: string | null;
+  setSidecarTabVisible: (id: SidecarTabId, visible: boolean, available: readonly SidecarTabId[]) => void;
+  reorderSidecarTabs: (available: readonly SidecarTabId[], from: number, to: number) => void;
+  resetSidecarLayout: () => void;
   conversationTarget: { scope: string; sessionId: string; panelId: string | null } | null;
   openConversation: (target: { scope: string; sessionId: string; panelId: string | null }) => void;
   projects: Record<string, TerminalPreviewProjectState>;

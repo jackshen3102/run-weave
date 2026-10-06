@@ -6,6 +6,7 @@ const localKeys = new Set([
   "viewer.connections", "viewer.auth.connection-auth", "viewer.auth.token",
   "viewer.auth.remembered-credentials", "terminal.browser.headerRules",
   "runweave.terminal.sidecar.width.v1", "runweave.terminal.preview.projects.v1",
+  "runweave.terminal.sidecar.tabs.v1",
   "runweave.terminal.preview.drafts.v1", "viewer.desktop-companion.failure-seen.v1",
   "viewer.terminal.perfLogs", "suiji.accounts.v1", "suiji.endpoint.v1",
   "viewer.remote-project-bindings.v1", "theme",
