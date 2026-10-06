@@ -79,10 +79,22 @@ export function findTerminalFileReferences(text: string): Array<{
   const tokens =
     /"[^"\r\n]+"(?::\d+(?::\d+)?)?|'[^'\r\n]+'(?::\d+(?::\d+)?)?|`[^`\r\n]+`(?::\d+(?::\d+)?)?|[^\s<>"'`()[\]{},;]+/gu;
   for (const match of text.matchAll(tokens)) {
-    const raw = match[0].replace(/[.!?:]+$/, "");
+    let raw = match[0].replace(/[.!?:]+$/, "");
     if (/^[a-z][a-z\d+.-]*:\/\//i.test(raw) && !/^file:\/\//i.test(raw))
       continue;
-    const reference = parseTerminalFileReference(raw);
+    let reference = parseTerminalFileReference(raw);
+    // Preserve complete filenames (including punctuation), quoted paths and URIs.
+    // Only recover an otherwise invalid plain token followed by Chinese prose.
+    if (!reference && !/^["'`]|^[a-z][a-z\d+.-]*:\/\//i.test(raw)) {
+      for (const boundary of [...raw.matchAll(/[，。；：！？、（）【】《》「」『』]/gu)].reverse()) {
+        const candidate = raw.slice(0, boundary.index).replace(/[.!?:]+$/, "");
+        reference = parseTerminalFileReference(candidate);
+        if (reference) {
+          raw = candidate;
+          break;
+        }
+      }
+    }
     if (!reference) continue;
     results.push({
       start: match.index,
