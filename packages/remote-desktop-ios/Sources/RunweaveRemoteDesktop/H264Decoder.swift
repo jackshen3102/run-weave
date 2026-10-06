@@ -6,16 +6,18 @@ import CoreMedia
 import CoreVideo
 import VideoToolbox
 
-/// One decoder per connection generation. Pending work includes delivery to the UI.
+/// One decoder per connection generation. Network reception awaits decoding, independently of UI delivery.
 /// Losing a compressed frame invalidates the dependency chain until an SPS/PPS IDR.
 final class H264Decoder {
     enum RecoveryReason { case backlog, decodeFailure }
+    enum Submission { case submitted, stopped, recovery(RecoveryReason) }
     struct Output {
+        var skippedPresentationFrames: UInt64 = 0
         let sample: CMSampleBuffer
         let size: CGSize
         let hardwareAccelerated: Bool?
         let decodeMilliseconds: Double
-        let luminance: RemoteLuminanceSummary?
+        var luminance: RemoteLuminanceSummary?
         let isCurrent: () -> Bool
     }
 
@@ -24,7 +26,8 @@ final class H264Decoder {
     private var epoch: UInt64 = 0
     private var pending = 0
     private var stopped = false
-    private var overflowRecoveryPending = false
+    private var pendingOutput: Output?
+    private var deliveryScheduled = false
     private var resetScheduled = false
     private var needsIDR = true
     private var format: CMVideoFormatDescription?
@@ -32,39 +35,46 @@ final class H264Decoder {
     private var hardware: Bool?
     private var lastLuminanceSampleTime: TimeInterval = 0
     private let output: (Output, @escaping () -> Void) -> Void
-    private let recovery: (RecoveryReason) -> Void
 
-    init(output: @escaping (Output, @escaping () -> Void) -> Void, recovery: @escaping (RecoveryReason) -> Void) {
+    init(output: @escaping (Output, @escaping () -> Void) -> Void) {
         self.output = output
-        self.recovery = recovery
     }
 
     var queueDepth: Int { lock.lock(); defer { lock.unlock() }; return pending }
 
-    @discardableResult
-    func submit(annexB: Data, isKeyframe: Bool) -> Bool {
+    /// Await on the video receive loop so compressed frames are never discarded
+    /// merely because the network delivers a burst faster than decoding.
+    func submit(annexB: Data, isKeyframe: Bool) async -> Submission {
+        await withCheckedContinuation { continuation in
+            enqueue(annexB: annexB, isKeyframe: isKeyframe, continuation: continuation)
+        }
+    }
+
+    private func enqueue(annexB: Data, isKeyframe: Bool, continuation: CheckedContinuation<Submission, Never>) {
         lock.lock()
-        guard !stopped, pending < 3 else {
-            let recover = !stopped && !overflowRecoveryPending
-            if recover { overflowRecoveryPending = true }
+        guard !stopped, pending < 1 else {
+            let result: Submission = stopped ? .stopped : .recovery(.backlog)
             lock.unlock()
-            if recover { reset(); recovery(.backlog) }
-            return false
+            continuation.resume(returning: result)
+            return
         }
         pending += 1
         let capturedEpoch = epoch
         lock.unlock()
-        queue.async { [weak self] in
-            guard let self else { return }
-            guard self.isCurrent(capturedEpoch) else { self.complete(); return }
-            self.decode(annexB, keyframe: isKeyframe, epoch: capturedEpoch)
+        queue.async {
+            var result: Submission = .stopped
+            defer { self.complete(); continuation.resume(returning: result) }
+            guard self.isCurrent(capturedEpoch) else { return }
+            // With flags [], VideoToolbox completes the output callback before
+            // DecodeFrame returns (see VTDecompressionSession.h).
+            result = self.decode(annexB, keyframe: isKeyframe, epoch: capturedEpoch) ? .submitted : .recovery(.decodeFailure)
         }
-        return true
     }
 
     func reset() {
         lock.lock()
         epoch &+= 1
+        pendingOutput = nil
         let schedule = !resetScheduled
         resetScheduled = true
         lock.unlock()
@@ -79,7 +89,7 @@ final class H264Decoder {
     func stop() {
         lock.lock()
         guard !stopped else { lock.unlock(); return }
-        stopped = true; epoch &+= 1
+        stopped = true; epoch &+= 1; pendingOutput = nil
         lock.unlock()
         queue.async { [weak self] in self?.invalidateDecoder() }
     }
@@ -94,7 +104,6 @@ final class H264Decoder {
     private func complete() {
         lock.lock()
         pending = max(0, pending - 1)
-        if pending == 0 { overflowRecoveryPending = false }
         lock.unlock()
     }
 
@@ -103,10 +112,10 @@ final class H264Decoder {
         decompressor = nil; format = nil; needsIDR = true
     }
 
-    private func decode(_ data: Data, keyframe: Bool, epoch: UInt64) {
+    private func decode(_ data: Data, keyframe: Bool, epoch: UInt64) -> Bool {
         let nals = Self.splitAnnexB(data)
         let hasIDR = nals.contains { $0.first.map { $0 & 0x1f == 5 } ?? false }
-        guard !needsIDR || (keyframe && hasIDR) else { complete(); return }
+        guard !needsIDR || (keyframe && hasIDR) else { return true }
         if keyframe, hasIDR,
            let sps = nals.first(where: { $0.first.map { $0 & 0x1f == 7 } ?? false }),
            let pps = nals.first(where: { $0.first.map { $0 & 0x1f == 8 } ?? false }),
@@ -114,7 +123,7 @@ final class H264Decoder {
             let dimensions = CMVideoFormatDescriptionGetDimensions(newFormat)
             guard dimensions.width > 0, dimensions.height > 0,
                   dimensions.width <= 8192, dimensions.height <= 8192 else {
-                complete(); invalidateDecoder(); recovery(.decodeFailure); return
+                return false
             }
             if format == nil || !CMFormatDescriptionEqual(format, otherFormatDescription: newFormat) {
                 invalidateDecoder()
@@ -123,7 +132,7 @@ final class H264Decoder {
             if decompressor == nil { createDecoder(newFormat) }
             needsIDR = decompressor == nil
         }
-        guard !needsIDR, let format, let decompressor else { complete(); recovery(.decodeFailure); return }
+        guard !needsIDR, let format, let decompressor else { return false }
         let payload = nals.filter {
             let type = $0.first.map { $0 & 0x1f } ?? 0
             return type != 7 && type != 8 && type != 9
@@ -135,17 +144,17 @@ final class H264Decoder {
             avcc.append(nal)
         }
         guard !avcc.isEmpty, let sample = Self.makeCompressedSample(avcc: avcc, format: format) else {
-            complete(); invalidateDecoder(); recovery(.decodeFailure); return
+            return false
         }
         let start = ProcessInfo.processInfo.systemUptime
+        var succeeded = true
         let status = VTDecompressionSessionDecodeFrame(
             decompressor, sampleBuffer: sample, flags: [], infoFlagsOut: nil
         ) { [weak self] status, _, image, presentationTime, _ in
             guard let self else { return }
             guard status == noErr, let image, self.isCurrent(epoch),
                   let rendered = Self.makeImageSample(image, time: presentationTime) else {
-                self.complete()
-                if status != noErr { self.reset(); self.recovery(.decodeFailure) }
+                if status != noErr { succeeded = false }
                 return
             }
             let size = CGSize(width: CVPixelBufferGetWidth(image), height: CVPixelBufferGetHeight(image))
@@ -154,10 +163,37 @@ final class H264Decoder {
                                 decodeMilliseconds: (finished - start) * 1000,
                                 luminance: self.sampleLuminance(image, time: finished, epoch: epoch),
                                 isCurrent: { [weak self] in self?.isCurrent(epoch) == true })
-            self.output(result) { [weak self] in self?.complete() }
+            self.offerOutput(result, epoch: epoch)
         }
         // Apple guarantees the output handler is not called when DecodeFrame returns an error.
-        if status != noErr { complete(); invalidateDecoder(); recovery(.decodeFailure) }
+        return status == noErr && succeeded
+    }
+
+    /// One delivery may be on MainActor; retain only its newest successor.
+    /// Skipping decoded images preserves the compressed dependency chain.
+    private func offerOutput(_ result: Output, epoch expected: UInt64) {
+        lock.lock()
+        guard !stopped, epoch == expected else { lock.unlock(); return }
+        var newest = result
+        if let previous = pendingOutput {
+            newest.skippedPresentationFrames = previous.skippedPresentationFrames &+ 1
+            if newest.luminance == nil { newest.luminance = previous.luminance }
+        }
+        pendingOutput = newest
+        let schedule = !deliveryScheduled
+        deliveryScheduled = true
+        lock.unlock()
+        if schedule { deliverNextOutput() }
+    }
+
+    private func deliverNextOutput() {
+        lock.lock()
+        guard let result = pendingOutput else {
+            deliveryScheduled = false; lock.unlock(); return
+        }
+        pendingOutput = nil
+        lock.unlock()
+        output(result) { [weak self] in self?.deliverNextOutput() }
     }
 
     private func sampleLuminance(_ image: CVPixelBuffer, time: TimeInterval, epoch expected: UInt64) -> RemoteLuminanceSummary? {
@@ -209,6 +245,11 @@ final class H264Decoder {
                 hardware = value.pointee as? Bool
             }
         }
+    }
+
+    static func isIndependentKeyframe(_ data: Data) -> Bool {
+        let types = Set(splitAnnexB(data).compactMap { $0.first.map { $0 & 0x1f } })
+        return types.isSuperset(of: [5, 7, 8])
     }
 
     static func splitAnnexB(_ data: Data) -> [Data] {

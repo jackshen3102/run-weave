@@ -42,7 +42,7 @@ public struct RemoteDesktopView: View {
         .onChange(of: session.inputMode) { preferredInputMode = $0.rawValue }
         .onChange(of: session.state) { state in
             // A keyframe recovery temporarily suspends input, not the user's text draft.
-            if state != .controllable && state != .waitingForFirstFrame {
+            if state != .controllable && state != .waitingForFirstFrame && state != .recoveringVideo {
                 modifiers = []; text = ""; showsKeyboard = false
             }
         }

@@ -8,7 +8,7 @@ import VideoToolbox
 #endif
 
 /// Hardware H.264 for the native client. No B-frames; IDR access units include SPS/PPS.
-/// Pending buffers are bounded by two reservations. Session submission/invalidation use
+/// One reservation covers encoding through completion of the network send. Session submission/invalidation use
 /// one serial queue; reservation counters and keyframe requests use `lock`.
 public final class H264Encoder: @unchecked Sendable {
     public struct Configuration: Sendable {
@@ -28,7 +28,7 @@ public final class H264Encoder: @unchecked Sendable {
         }
     }
 
-    private let onAccessUnit: (Data, Bool, Double) -> Void
+    private let onAccessUnit: (Data, Bool, Double, @escaping () -> Void) -> Void
     private let lock = NSLock()
     private let encoderQueue = DispatchQueue(label: "runweave.remote.encoder")
     private let onFailure: (OSStatus) -> Void
@@ -45,7 +45,7 @@ public final class H264Encoder: @unchecked Sendable {
     #endif
 
     /// Returns nil when a hardware VideoToolbox session cannot be created.
-    public init?(configuration: Configuration, onAccessUnit: @escaping (Data, Bool, Double) -> Void, onFailure: @escaping (OSStatus) -> Void = { _ in }) {
+    public init?(configuration: Configuration, onAccessUnit: @escaping (Data, Bool, Double, @escaping () -> Void) -> Void, onFailure: @escaping (OSStatus) -> Void = { _ in }) {
         self.onAccessUnit = onAccessUnit
         self.onFailure = onFailure
         self.timescale = Int32(max(1, configuration.fps))
@@ -104,7 +104,7 @@ public final class H264Encoder: @unchecked Sendable {
     public func encode(_ pixelBuffer: CVPixelBuffer) {
         #if canImport(VideoToolbox)
         lock.lock()
-        guard inFlight < 2 else { skippedFrames += 1; lock.unlock(); return }
+        guard inFlight < 1 else { skippedFrames += 1; lock.unlock(); return }
         inFlight += 1; maximumInFlight = max(maximumInFlight, inFlight)
         let force = forceKeyframe; forceKeyframe = false
         let pts = CMTime(value: frameIndex, timescale: timescale); frameIndex += 1
@@ -121,11 +121,10 @@ public final class H264Encoder: @unchecked Sendable {
             let start = DispatchTime.now()
             let submitted = VTCompressionSessionEncodeFrame(session, imageBuffer: pixelBuffer, presentationTimeStamp: pts,
                                                              duration: .invalid, frameProperties: properties, infoFlagsOut: nil) { [weak self] status, _, sampleBuffer in
-                releaseReservation()
-                guard let self else { return }
-                guard status == noErr, let sampleBuffer else { self.onFailure(status); return }
+                guard let self else { releaseReservation(); return }
+                guard status == noErr, let sampleBuffer else { releaseReservation(); self.onFailure(status); return }
                 let milliseconds = Double(DispatchTime.now().uptimeNanoseconds &- start.uptimeNanoseconds) / 1_000_000
-                self.handleEncoded(sampleBuffer, encodeMillis: milliseconds)
+                self.handleEncoded(sampleBuffer, encodeMillis: milliseconds, complete: releaseReservation)
             }
             if submitted != noErr { releaseReservation(); self.requestKeyframe(); self.onFailure(submitted) }
         }
@@ -148,7 +147,11 @@ public final class H264Encoder: @unchecked Sendable {
     }
 
     #if canImport(VideoToolbox)
-    private func handleEncoded(_ sampleBuffer: CMSampleBuffer, encodeMillis: Double) {
+    private func handleEncoded(_ sampleBuffer: CMSampleBuffer, encodeMillis: Double, complete: @escaping () -> Void) {
+        var handedOff = false
+        defer {
+            if !handedOff { complete(); requestKeyframe(); onFailure(kVTVideoEncoderMalfunctionErr) }
+        }
         guard let dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
         let isKeyframe = Self.isKeyframe(sampleBuffer)
 
@@ -172,7 +175,7 @@ public final class H264Encoder: @unchecked Sendable {
             memcpy(&naluLength, dataPointer + offset, 4)
             naluLength = CFSwapInt32BigToHost(naluLength)
             let nalStart = offset + 4
-            guard naluLength > 0, nalStart + Int(naluLength) <= totalLength else { break }
+            guard naluLength > 0, nalStart + Int(naluLength) <= totalLength else { return }
             annexB.append(contentsOf: startCode)
             dataPointer.withMemoryRebound(to: UInt8.self, capacity: totalLength) { base in
                 annexB.append(base + nalStart, count: Int(naluLength))
@@ -180,8 +183,9 @@ public final class H264Encoder: @unchecked Sendable {
             offset = nalStart + Int(naluLength)
         }
 
-        guard !annexB.isEmpty else { return }
-        onAccessUnit(annexB, isKeyframe, encodeMillis)
+        guard !annexB.isEmpty, offset == totalLength else { return }
+        handedOff = true
+        onAccessUnit(annexB, isKeyframe, encodeMillis, complete)
     }
 
     private static func isKeyframe(_ sampleBuffer: CMSampleBuffer) -> Bool {

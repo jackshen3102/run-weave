@@ -219,7 +219,9 @@ public final class RemoteDesktopSession: ObservableObject {
                 guard output.size == self.geometry?.pixelSize else {
                     self.handleDrop(RemoteTransportError.invalidMessage, attempt: expected); return
                 }
-                self.counters.decodedFrames &+= 1
+                self.counters.decodedFrames &+= 1 &+ output.skippedPresentationFrames
+                self.counters.presentationDrops &+= output.skippedPresentationFrames
+                self.counters.droppedFrames &+= output.skippedPresentationFrames
                 self.counters.decodeMilliseconds = output.decodeMilliseconds
                 self.counters.hardwareDecoder = output.hardwareAccelerated
                 if let luminance = output.luminance { self.counters.decodedLuminance = luminance }
@@ -250,14 +252,6 @@ public final class RemoteDesktopSession: ObservableObject {
                 self.counters.submittedFrames &+= 1
                 self.publishStatistics()
             }
-        }, recovery: { [weak self] reason in
-            Task { @MainActor in
-                guard let self, self.isCurrent(expected, context: context) else { return }
-                self.counters.decoderRecoveries &+= 1
-                if case .backlog = reason { self.counters.decoderOverflows &+= 1 }
-                self.counters.droppedFrames &+= 1
-                self.recoverVideoDependency(reason: "decoder recovering")
-            }
         })
     }
 
@@ -277,12 +271,20 @@ public final class RemoteDesktopSession: ObservableObject {
                     self.counters.receivedFrames &+= 1
                     if let previous = self.lastVideoSequence, packet.header.sequence != previous &+ 1 {
                         self.counters.sequenceGaps &+= 1
-                        self.recoverVideoDependency(reason: "video dependency gap")
+                        if !packet.header.keyframe || !H264Decoder.isIndependentKeyframe(packet.annexB) {
+                            self.recoverVideoDependency(reason: "video dependency gap")
+                        }
                     }
                     self.lastVideoSequence = packet.header.sequence
-                    self.decoder?.submit(annexB: packet.annexB, isKeyframe: packet.header.keyframe)
-                    let depth = self.decoder?.queueDepth ?? 0
-                    self.counters.maximumDecoderQueueDepth = max(self.counters.maximumDecoderQueueDepth, depth)
+                    let result = await self.decoder?.submit(annexB: packet.annexB, isKeyframe: packet.header.keyframe)
+                    guard self.isCurrent(expected, context: context) else { return }
+                    if case .recovery(let reason) = result {
+                        self.counters.decoderRecoveries &+= 1
+                        if case .backlog = reason { self.counters.decoderOverflows &+= 1 }
+                        self.counters.droppedFrames &+= 1
+                        self.recoverVideoDependency(reason: "decoder recovering")
+                    }
+                    self.counters.maximumDecoderQueueDepth = max(self.counters.maximumDecoderQueueDepth, 1)
                 }
             } catch is CancellationError { }
             catch { self.handleDrop(error, attempt: expected) }
@@ -296,7 +298,7 @@ public final class RemoteDesktopSession: ObservableObject {
         // decoded image in the renderer. Retain it while waiting for an IDR.
         // Input still requires a fresh decoded submission and display readiness.
         firstFrame = false; displaySubmittedAttempt = nil
-        state = .waitingForFirstFrame
+        state = .recoveringVideo
         requestKeyframe()
     }
 

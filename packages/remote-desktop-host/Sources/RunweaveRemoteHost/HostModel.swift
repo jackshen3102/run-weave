@@ -412,7 +412,7 @@ final class HostModel: ObservableObject {
                                  requestKeyframe: { [weak active] in Task { @MainActor in active?.capture.requestKeyframe() } },
                                  onFailure: { [weak self, weak active] _ in Task { @MainActor in if let active, self?.session === active { await self?.stopSession(reason: "视频接收过慢或连接已中断。") } } })
         active.sender = sender
-        try await active.capture.start(display: active.display, onFrame: { sender.offer($0, keyframe: $1, milliseconds: $2) },
+        try await active.capture.start(display: active.display, onFrame: { sender.offer($0, keyframe: $1, milliseconds: $2, complete: $3) },
                                 onFailure: { [weak self, weak active] error in Task { @MainActor in if let active, self?.session === active {
                                     await self?.stopSession(reason: (error as? HostError)?.localizedDescription ?? "采集已中断，请在 Mac 检查显示器与权限。", errorCode: (error as? HostError)?.wireCode)
                                 } } })

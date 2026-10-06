@@ -169,7 +169,7 @@ third_party_dependencies:
   - Local RunweaveRemoteDesktopProtocol; Apple system frameworks only
 local_changes:
   - Keep Annex-B splitting and CoreMedia sample construction; add actual VideoToolbox decoding
-  - Add three-frame in-flight bound, decoder epoch, format and IDR recovery
+  - Await one decode per video read; coalesce decoded presentation frames independently; retain decoder epoch, format and IDR recovery
   - Explicit display geometry/contentRect/revision and view-owned native layer
   - Reimplement paired TLS dual-channel session, bounded input and presentation invalidation
 verification_evidence:
@@ -197,7 +197,7 @@ license_file: packages/remote-desktop-host/ThirdPartyLicenses/Mirador-MIT.txt
 third_party_dependencies:
   - Local RunweaveRemoteDesktopProtocol; Apple system frameworks only
 local_changes:
-  - Require hardware H.264 and record selected hardware property; bound encoder in-flight to two
+  - Require hardware H.264 and record selected hardware property; share one in-flight reservation through encode and send completion
   - Fix presentation timestamp timescale; retain format and IDR recovery
   - Adapt ScreenCaptureKit primitives for one explicit display; remove MJPEG and automatic permission requests
   - Reimplement protocol validation, control lease and per-session synthesized input release

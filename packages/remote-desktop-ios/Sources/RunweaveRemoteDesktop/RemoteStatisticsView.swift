@@ -15,6 +15,7 @@ struct RemoteStatisticsView: View {
                 row("视频序号跳变", String(statistics.sequenceGaps))
                 row("解码链恢复", String(statistics.decoderRecoveries))
                 row("其中队列过载", String(statistics.decoderOverflows))
+                row("显示帧合并", String(statistics.presentationDrops))
                 row("会话清屏请求", String(statistics.displayImageClears))
                 row("解码队列", "\(statistics.decoderQueueDepth) / \(statistics.decoderQueueCapacity)")
                 row("最大观察队列", String(statistics.maximumDecoderQueueDepth))
