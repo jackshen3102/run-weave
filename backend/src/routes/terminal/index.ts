@@ -1,4 +1,6 @@
 import { registerTerminalQuestionRoutes } from "./questions";
+import { registerTerminalTaskRoutes } from "./tasks";
+import type { TerminalTaskService } from "../../terminal/tasks/service";
 import { registerTerminalConversationRoutes } from "./conversation";
 import type { TerminalQuestionsService } from "../../terminal/questions/service";
 import type { TerminalTextAttachmentDelivery } from "../../terminal/attachments/text-attachment-delivery";
@@ -112,6 +114,7 @@ async function readTerminalHistory(
 export function createTerminalRouter(
   terminalSessionManager: TerminalSessionManager,
   options?: {
+    terminalTaskService?: TerminalTaskService;
     textAttachmentDelivery?: TerminalTextAttachmentDelivery;
     terminalQuestionsService?: TerminalQuestionsService;
     ptyService?: PtyService;
@@ -130,6 +133,7 @@ export function createTerminalRouter(
   },
 ): Router {
   const router = Router();
+  registerTerminalTaskRoutes(router, options?.terminalTaskService);
   registerTerminalQuestionRoutes(router, options?.terminalQuestionsService);
 
   const agentSettingsUpdateSchema = z.object({

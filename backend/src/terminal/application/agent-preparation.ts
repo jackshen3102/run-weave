@@ -39,6 +39,8 @@ const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
 ] as const;
 
 export interface PrepareTerminalAgentInternalOptions {
+  supervisorInput?: boolean;
+  validateSupervisorTarget?: () => void;
   resetPanelBeforeResume?: boolean;
   skipInitialPrompt?: boolean;
 }
@@ -287,7 +289,7 @@ export async function prepareTerminalAgent(
       );
       await sendInputToSession(
         terminalSessionManager,
-        { ...options, agentLaunch: true },
+        { ...options, agentLaunch: true, supervisorInput: internalOptions?.supervisorInput, validateSupervisorTarget: internalOptions?.validateSupervisorTarget },
         session,
         buildAgentLaunchCommand(
           request,

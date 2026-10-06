@@ -1,6 +1,6 @@
 # Runweave Agent CLI 控制面
 
-`rw` 是 Runweave backend 面向外部 agent 的命令行控制面，用于发现应用状态、管理 terminal project/session、发送输入、读取 terminal 上下文并回收明确指定的 project/session。CLI 不直接操作 tmux，也不接管持续交互式终端。
+`rw` 是 Runweave backend 面向外部 agent 的命令行控制面，用于发现应用状态、管理 terminal project/session、发送输入、读取 terminal 上下文并回收明确指定的 project/session。CLI 通过 Backend 操作终端；主 Agent 可使用 `terminal task` 持续交办和验收，终端运行时由 Backend 管理。
 
 ## 最小接入
 
@@ -35,6 +35,9 @@ RUNWEAVE_ACCESS_TOKEN=<access-token>
 `RUNWEAVE_BASE_URL` > `RUNWEAVE_BACKEND_PORT` > profile baseUrl > 默认端口。
 
 ## Agent 投递闭环
+
+Dots 等主 Agent 按“一任务一终端”持续交办、观察和验收时，使用
+[终端任务控制](./terminal-task-control.md)的 `rw terminal task`。下文普通 send 仍只表达输入投递。
 
 OpenCloud、OpenClaw、Hermes 等外部 agent 的首期推荐流程：
 

@@ -21,6 +21,8 @@
 
 命令、参数、JSON 输出或退出码变化时，同一改动内更新对应文档。
 
+Dots 等主 Agent 的专用终端派发、观察、验收和接手见[终端任务控制](./terminal-task-control.md)。
+
 ## 飞书 Bridge 恢复
 
 `rw feishu bridge --json` 是常驻进程；单实例锁保持至退出，SIGINT/SIGTERM 会关闭连接并

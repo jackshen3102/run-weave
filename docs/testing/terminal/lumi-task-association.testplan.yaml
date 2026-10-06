@@ -1,0 +1,65 @@
+version: 1
+name: Lumi 与现有 rw 终端的任务关联
+description: >
+  研究阶段的后续验收合同；验证派发身份、启动就绪、结果回收及人工接手。
+  本文件不表示相关功能已开发或全部用例已执行，只使用本次验收创建的终端。
+cases:
+  - id: LUMIRW-001
+    name: 新终端就绪后派发并在同一会话回收
+    required: true
+    description: >
+      启动回执和输入 accepted 不算任务成功，只有目标线程的实际回答及对应完成轮次可作为结果证据。
+    preconditions:
+      - 目标 Backend、profile、项目目录和已安装 Codex 已核实，具有现有合法登录态。
+      - 仅在新建专用终端运行只读合成任务，不影响其他任务。
+    steps:
+      - 记录源码与运行版本，创建 tmux 终端，保存 Backend、project、terminal、panel 身份。
+      - 启动 Codex 并等待同一面板实际就绪；就绪前不得把正文交付成功当作已执行。
+      - 发送唯一任务标记，记录输入 operationId 和 provider/threadId，核对原生历史中的回答与完成 turn。
+      - 在空闲同一线程发送补充任务，确认新 turn、相同 thread 和不同派发结果；bootstrap 回答不能归入业务结果。
+  - id: LUMIRW-002
+    name: Web 与手机关联同一任务并手动接手
+    required: true
+    description: >
+      两端在同一 Backend 中找到准确终端和面板，能够查看真实执行并接手；HTTP 列表成功不等于 UI 通过。
+    preconditions:
+      - 已有明确归属的只读测试终端和可用 Web、iOS 登录入口。
+      - 浏览器与手机验证已按对应技能取得独立可用环境。
+    steps:
+      - 在 Web 与 iOS 找到测试终端，核对 Backend、终端、面板和 Codex thread，读取同一回答。
+      - 手机发送补充指令并确认结果在 Web 和 Lumi 关联中一致；切换到其他 Backend 或面板后迟到回执不得污染新目标。
+      - 接手后 Lumi 暂停自动派发并保留跟进，重新交回控制时核对草稿与线程身份。
+  - id: LUMIRW-003
+    name: 投递未知与并发修改不造成重复执行
+    required: true
+    description: >
+      验证未来派发记录与身份门禁；现有普通 terminal input 不承诺持久幂等，未补接口时应明确暴露未知。
+    preconditions:
+      - 使用隔离验证环境和无副作用合成任务，不能中断共享 Stable 网络或进程。
+    steps:
+      - 在写入后回执前模拟连接中断，确认客户端记录 delivery_unknown 并先核对原生轮次，不自动重发正文。
+      - 对同一派发键重试相同内容应返回原回执，冲突内容应拒绝；未实现持久幂等时记录不通过。
+      - 在读取身份后切换线程或产生用户草稿，确认旧派发不能写入新线程或覆盖草稿。
+  - id: LUMIRW-004
+    name: 断线和重启后的关联恢复
+    required: true
+    description: >
+      区分 UI 输出恢复、终端存活和任务结果恢复；游标缺口不能静默跳过。
+    preconditions:
+      - 使用独立 Backend 和 tmux socket，不重启用户共享进程。
+    steps:
+      - 断开观察客户端后重连，确认相同终端与线程继续存在；事件游标缺口或 streamId 变化时重新读取状态与原生历史。
+      - 重启独立 Backend，分别检查 tmux 保活与 pty 不保活；保存的关联不能据旧状态宣称成功。
+      - 模拟 tmux 丢失或历史被裁剪，标记恢复差异与证据不足，不能把 resume 当作原 turn 持续执行。
+  - id: LUMIRW-005
+    name: 问题审批取消与业务成功分别取证
+    required: true
+    description: >
+      区分用户输入问题、执行器审批、请求已解决、轮次结束与任务验收成功。
+    preconditions:
+      - 使用专用线程；结构化问答场景具有明确受支持的原执行服务连接。
+    steps:
+      - 触发合成用户问题，核对 generation、thread、turn、request；电脑先回答或断线后旧手机答案必须拒绝。
+      - 对审批场景显示真实请求并经标准渠道处理，普通问答入口不得冒充通用审批接口。
+      - 取消本次专用任务，等待原生 interrupted 或等价终态；仅 Escape 回执或 agent_idle 不算取消完成。
+      - 分别产生成功、阻塞与失败回答，核对实际证据；process exit、Stop 和 turn completed 不自动映射为业务 succeeded。
