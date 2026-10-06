@@ -7,27 +7,11 @@ struct RemoteDesktopCover: View {
   let presentation: RemoteDesktopPresentation
 
   var body: some View {
-    NavigationView {
-      RemoteDesktopView(session: presentation.session,
-        maskTextEntry: { AnyView($0.clarityMask()) })
-        .clarityMask()
-        // Keep UIKit title metadata static; show the Mac identity in masked SwiftUI text.
-        .navigationTitle("Mac 桌面")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-          ToolbarItem(placement: .principal) {
-            Text("桌面 · \(presentation.host.target.name)")
-              .font(.headline)
-              .lineLimit(1)
-              .clarityMask()
-          }
-          ToolbarItem(placement: .navigationBarLeading) {
-            Button("返回") { coordinator.close(reason: "user_closed") }
-              .accessibilityIdentifier("remote-desktop-close")
-          }
-        }
-    }
-    .navigationViewStyle(.stack)
+    RemoteDesktopView(session: presentation.session,
+      hostName: presentation.host.target.name,
+      onClose: { coordinator.close(reason: "user_closed") },
+      maskTextEntry: { AnyView($0.clarityMask()) })
+    .preferredColorScheme(.dark)
     .clarityMask()
     .onAppear { coordinator.presentationAppeared(presentation.id) }
     .onDisappear {

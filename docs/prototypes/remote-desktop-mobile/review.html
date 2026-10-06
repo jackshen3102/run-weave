@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>远程桌面 · 手机交互原型</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #edeeef;
+        color: #222832;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+      main {
+        max-width: 1300px;
+        margin: auto;
+        padding: 48px 52px 36px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 3px;
+        color: #67717d;
+        font-weight: 600;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        margin: 12px 0 32px;
+      }
+      h1 {
+        font-size: 32px;
+        font-weight: 600;
+        letter-spacing: -1px;
+        margin: 0 0 10px;
+      }
+      header p {
+        color: #737a83;
+        margin: 0;
+        font-size: 14px;
+      }
+      a {
+        color: #396a9e;
+        text-decoration: none;
+        font-size: 13px;
+      }
+      .columns {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 44px;
+      }
+      .label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 16px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .number {
+        color: #8b929b;
+        font:
+          12px ui-monospace,
+          monospace;
+      }
+      .device {
+        width: 331px;
+        height: 710px;
+        border: 6px solid #24272b;
+        border-radius: 43px;
+        background: #08090b;
+        box-shadow:
+          0 16px 25px #14181e14,
+          inset 0 0 0 1px #eee;
+        overflow: hidden;
+        position: relative;
+      }
+      iframe {
+        border: 0;
+        width: 393px;
+        height: 852px;
+        transform: scale(0.812);
+        transform-origin: top left;
+        display: block;
+      }
+      .caption {
+        font-size: 12px;
+        color: #777e88;
+        line-height: 1.8;
+        margin: 16px 0 0;
+        max-width: 320px;
+      }
+      footer {
+        border-top: 1px solid #d5d8dd;
+        margin-top: 29px;
+        padding-top: 18px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #8b9099;
+      }
+      @media (max-width: 1100px) {
+        .columns {
+          grid-template-columns: 1fr;
+          justify-items: center;
+        }
+        main {
+          padding: 32px 20px;
+        }
+        header {
+          display: block;
+        }
+        header a {
+          display: inline-block;
+          margin-top: 18px;
+        }
+        footer {
+          gap: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main data-prototype-helper="true">
+      <div class="eyebrow">RUNWEAVE / REMOTE DESKTOP</div>
+      <header>
+        <div>
+          <h1>把空间还给桌面</h1>
+          <p>全屏画布 · 悬浮操作 · 按需展开</p>
+        </div>
+        <a href="./index.html" target="_blank">打开交互原型 ↗</a>
+      </header>
+      <div class="columns">
+        <section>
+          <div class="label"><span class="number">01</span> 操作桌面</div>
+          <div class="device">
+            <iframe src="./index.html" title="操作桌面"></iframe>
+          </div>
+          <p class="caption">
+            键盘一步可达，菜单随手展开。<br />工具胶囊可以拖动贴边，也可以收起。
+          </p>
+        </section>
+        <section>
+          <div class="label"><span class="number">02</span> 会话菜单</div>
+          <div class="device">
+            <iframe src="./index.html?state=menu" title="会话菜单"></iframe>
+          </div>
+          <p class="caption">
+            模式、缩放、连接状态集中在一处。<br />菜单覆盖画面，不改变桌面尺寸。
+          </p>
+        </section>
+        <section>
+          <div class="label"><span class="number">03</span> 输入文字</div>
+          <div class="device">
+            <iframe src="./index.html?state=keyboard" title="输入文字"></iframe>
+          </div>
+          <p class="caption">
+            输入时隐藏悬浮工具，保留一行输入栏。<br />画面只平移避让，保持原来的缩放。
+          </p>
+        </section>
+      </div>
+      <footer>
+        <span>交互设计草案 · 2026.10.06</span
+        ><span>画板为评审辅助；Mac 内容与系统键盘均为模拟。</span>
+      </footer>
+    </main>
+  </body>
+</html>
