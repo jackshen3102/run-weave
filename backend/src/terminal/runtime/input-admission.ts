@@ -17,6 +17,13 @@ interface InputAdmission {
 // Session records have stable identity. Weak keys release state with the session.
 // WS input targets the selected pane, so the safety boundary is the whole session.
 const admissions = new WeakMap<TerminalSessionRecord, InputAdmission>();
+const inputObservers = new WeakMap<TerminalSessionRecord, () => void>();
+
+/** Ordinary input relinquishes an external supervisor's automatic write control. */
+export function observeTerminalInput(session: TerminalSessionRecord, observer: () => void): () => void {
+  inputObservers.set(session, observer);
+  return () => { if (inputObservers.get(session) === observer) inputObservers.delete(session); };
+}
 
 export function terminalInputAdmission(
   session: TerminalSessionRecord,
@@ -33,6 +40,7 @@ export function terminalInputAdmission(
 export function beginTerminalInput(session: TerminalSessionRecord): () => void {
   const admission = terminalInputAdmission(session);
   if (admission.returning) throw new TerminalInputBusyError();
+  inputObservers.get(session)?.();
   admission.revision = {};
   admission.writers += 1;
   return () => {
@@ -69,6 +77,7 @@ export function queueBehindTextAttachment(
 ): Promise<void> | null {
   const queue = attachmentQueues.get(session);
   if (!queue) return null;
+  inputObservers.get(session)?.();
   // Accepted user input invalidates older saves even while delivery owns the PTY.
   invalidateTerminalInput(session);
   return new Promise<void>((resolve, reject) => {
@@ -87,6 +96,7 @@ export function queueBehindTextAttachment(
 export function beginTextAttachmentDelivery(
   session: TerminalSessionRecord,
   revision: object,
+  supervisor = false,
 ): () => Promise<void> {
   const admission = terminalInputAdmission(session);
   if (
@@ -96,6 +106,7 @@ export function beginTextAttachmentDelivery(
     attachmentQueues.has(session)
   )
     throw new TerminalInputBusyError();
+  if (!supervisor) inputObservers.get(session)?.();
   admission.returning = true;
   admission.revision = {};
   const queue: Array<() => Promise<void>> = [];
@@ -106,4 +117,9 @@ export function beginTextAttachmentDelivery(
     while (queue.length) await queue.shift()!();
     attachmentQueues.delete(session);
   };
+}
+
+/** Queue human keys during the short automatic write, while immediately revoking control. */
+export function beginSupervisorDelivery(session: TerminalSessionRecord): () => Promise<void> {
+  return beginTextAttachmentDelivery(session, terminalInputAdmission(session).revision, true);
 }

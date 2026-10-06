@@ -17,9 +17,24 @@ import type { CreateTerminalPanelRequest, TerminalPanelWorkspace } from "@runwea
 import type { CreateTerminalProjectRequest, TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { CreateTerminalSessionRequest, CreateTerminalSessionResponse, TerminalSessionHistoryResponse, TerminalSessionListItem, TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
 import type { AuthContext } from "./auth-context.js";
+import type { CreateTerminalTaskRequest, StartTerminalTaskRequest, SendTerminalTaskRequest, ControlTerminalTaskRequest, ReviewTerminalTaskRequest, InterruptTerminalTaskRequest, TerminalTask, TerminalTaskObservation } from "@runweave/shared/terminal/task";
 
 export class TerminalHttpClient {
   constructor(private readonly auth: AuthContext) {}
+
+  listTasks(): Promise<{ tasks: TerminalTask[] }> { return this.auth.requestJson("/api/terminal/tasks"); }
+  createTask(payload: CreateTerminalTaskRequest): Promise<TerminalTask> { return this.taskRequest("", payload); }
+  observeTask(id: string, afterTurnId?: string): Promise<TerminalTaskObservation> {
+    return this.auth.requestJson(`/api/terminal/tasks/${encodeURIComponent(id)}${afterTurnId ? `?afterTurnId=${encodeURIComponent(afterTurnId)}` : ""}`);
+  }
+  startTask(id: string, payload: StartTerminalTaskRequest): Promise<TerminalTask> { return this.taskRequest(`/${encodeURIComponent(id)}/start`, payload); }
+  sendTask(id: string, payload: SendTerminalTaskRequest): Promise<TerminalTaskObservation> { return this.taskRequest(`/${encodeURIComponent(id)}/send`, payload); }
+  controlTask(id: string, payload: ControlTerminalTaskRequest): Promise<TerminalTaskObservation> { return this.taskRequest(`/${encodeURIComponent(id)}/control`, payload); }
+  reviewTask(id: string, payload: ReviewTerminalTaskRequest): Promise<TerminalTaskObservation> { return this.taskRequest(`/${encodeURIComponent(id)}/review`, payload); }
+  interruptTask(id: string, payload: InterruptTerminalTaskRequest): Promise<TerminalTaskObservation> { return this.taskRequest(`/${encodeURIComponent(id)}/interrupt`, payload); }
+  private taskRequest<T>(suffix: string, payload: unknown): Promise<T> {
+    return this.auth.requestJson(`/api/terminal/tasks${suffix}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  }
 
   withSignal(signal: AbortSignal): TerminalHttpClient {
     return new TerminalHttpClient({

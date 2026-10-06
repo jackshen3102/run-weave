@@ -1,5 +1,6 @@
 import type { TerminalTextAttachmentDelivery } from "../terminal/attachments/text-attachment-delivery";
 import type { TaskHandoffService } from "../task-handoff/service";
+import type { TerminalTaskService } from "../terminal/tasks/service";
 import type { ExperienceService } from "../experience/service";
 import type { ExperienceLearningRuntime } from "../experience/learning-runtime";
 import type { AuthStore } from "../auth/store";
@@ -73,6 +74,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   taskHandoffService: TaskHandoffService;
   textAttachmentDelivery: TerminalTextAttachmentDelivery;
   terminalQuestionsService: TerminalQuestionsService;
+  terminalTaskService: TerminalTaskService;
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
   attentionService: AttentionService;

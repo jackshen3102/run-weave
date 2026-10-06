@@ -1,4 +1,5 @@
 import { resolveReplyThread } from "../completion/reply-preview";
+import { resolveEffectivePanelActiveCommand } from "./panel-metadata";
 import { getAgentAdapter } from "../runtime/agent-adapters";
 import { getAgentForCommand } from "../state/terminal-state-service";
 import type {
@@ -38,6 +39,9 @@ const BRACKETED_PASTE_END = "\u001b[201~";
 const PROMPT_PASTE_CHUNK_SIZE = 3000;
 
 type TerminalInputDispatchOptions = {
+  /** Internal task service already owns a supervisor delivery lease for the fixed pane. */
+  supervisorInput?: boolean;
+  validateSupervisorTarget?: () => void;
   /** Internal shell launch after a pane respawn, before command observation catches up. */
   agentLaunch?: boolean;
   textAttachmentLease?: boolean;
@@ -216,7 +220,7 @@ export async function sendInputToSession(
     throw new Error("Terminal tmux service unavailable");
   }
 
-  if (!options.textAttachmentLease && !options.textAttachmentQueueDrain) {
+  if (!options.supervisorInput && !options.textAttachmentLease && !options.textAttachmentQueueDrain) {
     const panelId = terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId;
     const panel = panelId ? terminalSessionManager.getPanel(panelId) : undefined;
     const fixedPane = paneTarget ?? (panel && options.tmuxService ? { ...resolveTmuxTarget(session, options.tmuxService), paneId: panel.tmuxPaneId } : undefined);
@@ -228,9 +232,9 @@ export async function sendInputToSession(
     if (queued) { await queued; return result!; }
   }
   const release =
-    mode === "tmux_exit_copy_mode" || options.textAttachmentLease ? () => {} : beginTerminalInput(session);
+    mode === "tmux_exit_copy_mode" || options.textAttachmentLease || options.supervisorInput ? () => {} : beginTerminalInput(session);
   try {
-    const ensured = await ensureTerminalRuntime({
+    const ensured = options.supervisorInput ? null : await ensureTerminalRuntime({
       session,
       terminalSessionManager,
       runtimeRegistry: options.runtimeRegistry,
@@ -280,6 +284,15 @@ export async function sendInputToSession(
               .listPanels(session.id)
               .find((candidate) => candidate.tmuxPaneId === target.paneId)
           : undefined;
+      const panelSubmitKey = (panel?.terminalState ?? currentTerminalState)?.state === "agent_running" ? "Tab" : "Enter";
+      if (options.supervisorInput) {
+        if (!("paneId" in target)) throw new Error("Supervisor input requires a fixed pane");
+        const actual = (await options.tmuxService.listPanes(target)).find((candidate) => candidate.paneId === target.paneId);
+        if (!actual || actual.runweavePanelId !== panel?.id ||
+          (!options.agentLaunch && getAgentForCommand(resolveEffectivePanelActiveCommand(actual)) !== "codex"))
+          throw new Error("Original Codex pane is unavailable; no runtime was restored");
+        options.validateSupervisorTarget?.();
+      }
       if (expectedThreadId) {
         const owner = panel ?? session;
         const identity = resolveReplyThread(owner);
@@ -325,12 +338,12 @@ export async function sendInputToSession(
       } else if (codexSlashCommand) {
         await options.tmuxService.sendKeySequence(
           target,
-          buildCodexSlashCommandSequence(codexSlashCommand, composerSubmitKey),
+          buildCodexSlashCommandSequence(codexSlashCommand, panelSubmitKey),
         );
       } else if (mode === "prompt_paste") {
         await options.tmuxService.sendKeySequence(
           target,
-          buildPromptPasteSequence(data, composerSubmitKey),
+          buildPromptPasteSequence(data, panelSubmitKey),
         );
       } else if (mode === "prompt_replace") {
         // Replace the prompt only after leaving scrollback on the same target pane.
@@ -349,6 +362,7 @@ export async function sendInputToSession(
         await options.tmuxService.sendInput(target, dispatchData ?? "");
       }
     } else {
+      if (!ensured) throw new Error("Supervisor input requires an existing tmux runtime");
       if (expectedThreadId) {
         const identity = resolveReplyThread(session);
         if (identity?.id !== expectedThreadId || identity.provider !== "codex" || session.terminalState?.state !== "agent_idle") throw new Error("会话已切换或 Agent 正在运行，未发送交接内容。");

@@ -51,6 +51,8 @@ import {
 } from "../utils/path";
 import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
 import { TaskHandoffService } from "../task-handoff/service";
+import { TerminalTaskService } from "../terminal/tasks/service";
+import { TerminalTaskStore } from "../terminal/tasks/store";
 import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
 import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
@@ -326,6 +328,15 @@ async function assembleRuntimeServices(
       );
     },
   );
+  const terminalTaskService = new TerminalTaskService(
+    new TerminalTaskStore(path.join(storagePaths.browserProfileDir, "terminal-tasks", "state.json")),
+    terminalSessionManager,
+    { ptyService, runtimeRegistry: terminalRuntimeRegistry, tmuxService, tmuxOutputWatcher,
+      terminalEventService, terminalStateService, activity: terminalActivity },
+    appServerHistoryGateway,
+  );
+  resources.defer("terminal-tasks", () => terminalTaskService.dispose());
+  await terminalTaskService.initialize();
   const scheduledTasks = await createScheduledTasks(resources, {
     browserProfileDir: storagePaths.browserProfileDir,
     terminalSessionManager,
@@ -550,6 +561,7 @@ async function assembleRuntimeServices(
     appServerHistoryGateway,
     workHistoryService,
     taskHandoffService,
+    terminalTaskService,
     textAttachmentDelivery,
     terminalQuestionsService,
     terminalEventService,

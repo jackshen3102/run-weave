@@ -31,6 +31,8 @@ export interface TerminalSessionCreationOptions {
   terminalStateService?: TerminalStateService;
   activity?: TerminalActivityDependencies;
   strictDefaultPanel?: boolean;
+  /** Persist an external task binding before launching the runtime. */
+  onSessionCreated?: (sessionId: string) => Promise<void>;
 }
 
 export async function createTerminalSession(
@@ -42,6 +44,7 @@ export async function createTerminalSession(
   const defaults = resolveTerminalCreateDefaults(request, manager);
   const session = await manager.createSession({ ...defaults, source });
   try {
+    await options.onSessionCreated?.(session.id);
     if (options.ptyService && options.runtimeRegistry) {
       let launchSession = session;
       const preference = request.runtimePreference ?? "auto";
