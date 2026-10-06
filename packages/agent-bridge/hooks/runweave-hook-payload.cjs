@@ -251,7 +251,7 @@ function extractUserPrompt(payload) {
     "message",
   ]) {
     const normalized = normalizeSummaryText(payload?.[key]);
-    if (normalized) return normalized;
+    if (normalized) return normalized.slice(0, 8000);
   }
   return null;
 }
@@ -327,6 +327,14 @@ function readNotificationType(payload) {
   return typeof raw === "string" && raw.trim()
     ? raw.trim().toLowerCase()
     : null;
+}
+
+function isFeishuAttentionHook(payload, source) {
+  const event = normalizeEventName(readHookEvent(payload));
+  return (event === "notification" && ["permission_prompt", "idle_prompt"].includes(readNotificationType(payload))) ||
+    (toAgentHookStateEvent(event) === "ToolRequested" &&
+      ["request_user_input", "functions.request_user_input", "AskUserQuestion"].includes(extractToolHook(payload).toolName)) ||
+    (source === "pi" && payload.pi?.event === "ui_prompt_start");
 }
 
 function readThreadId(payload) {
@@ -428,6 +436,7 @@ function buildCompletionHookBody({
   return {
     terminalSessionId,
     source,
+    ...(payload.feishuNotificationOnly ? { feishuNotificationOnly: true } : {}),
     ...(source === "pi" && payload.pi ? { pi: payload.pi } : {}),
     completionReason,
     commandName: commandName || null,
@@ -487,6 +496,8 @@ function buildAppServerBaseEvent({
       rawHookEvent: String(rawEvent || "Unknown"),
       normalizedEvent,
       stateHookEvent,
+      activityEventId: payload.runweaveHookEventId,
+      ...(stateHookEvent === "UserPromptSubmit" ? { query: extractUserPrompt(payload) } : {}),
       panelId: terminalPanelId,
       tmuxPaneId,
       commandName: commandName || null,
@@ -496,6 +507,7 @@ function buildAppServerBaseEvent({
 }
 
 module.exports = {
+  isFeishuAttentionHook,
   STOP_EVENTS,
   buildAppServerBaseEvent,
   buildCompletionHookBody,

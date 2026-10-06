@@ -26,6 +26,7 @@ const terminalCompletionLogger = logger.child({
 const completionEventSchema = z
   .object({
     pi: z.custom<import("@runweave/shared/terminal/pi-agent").PiAgentContext>(isPiAgentContext).optional(),
+    feishuNotificationOnly: z.boolean().optional(),
     terminalSessionId: z.string().trim().min(1),
     source: z
       .enum(["claude", "codex", "trae", "traecli", "traex", "pi", "unknown"])
@@ -52,6 +53,27 @@ export function createInternalTerminalCompletionRouter(options: {
 }): Router {
   const router = Router();
   const piCompletions = new Set<string>();
+
+  router.post("/feishu", async (req, res) => {
+    if (!options.hookToken || req.header("x-runweave-hook-token") !== options.hookToken) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const parsed = z.object({
+      terminalSessionId: z.string().min(1),
+      notificationId: z.union([z.string().uuid(), z.string().regex(/^[1-9]\d{0,15}$/)]),
+      claim: z.boolean(),
+    }).strict().safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid notification request" }); return; }
+    try {
+      res.json(await options.terminalSessionManager.feishuNotifications.decide(
+        parsed.data.terminalSessionId, parsed.data.notificationId, parsed.data.claim,
+      ));
+    } catch (error) {
+      terminalCompletionLogger.warn("terminal-completion.feishu-policy.failed", { error });
+      res.status(503).json({ message: "Notification policy unavailable" });
+    }
+  });
 
   router.post("/", async (req, res) => {
     const expectedToken = options.hookToken;
@@ -207,6 +229,25 @@ export function createInternalTerminalCompletionRouter(options: {
         rawHookEvent,
       });
       res.status(202).json({ event: null, ignored: true });
+      return;
+    }
+
+    if (parsed.data.feishuNotificationOnly) {
+      if (parsed.data.completionReason !== "notify") {
+        res.status(400).json({ message: "Notification-only requests require notify reason" }); return;
+      }
+      const pi = parsed.data.pi;
+      const owner = targetPanel ?? session;
+      if (effectiveSource === "pi" && (!pi || owner.pi?.instanceId !== pi.instanceId || owner.pi?.sequence !== pi.sequence)) {
+        res.status(202).json({ ignored: true }); return;
+      }
+      try {
+        const notificationId = await options.terminalSessionManager.feishuNotifications.attention(session.id, panelId);
+        res.status(202).json({ notificationId });
+      } catch (error) {
+        terminalCompletionLogger.warn("terminal-completion.feishu-attention.failed", { error });
+        res.status(503).json({ message: "Notification policy unavailable" });
+      }
       return;
     }
 

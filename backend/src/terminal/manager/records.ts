@@ -1,3 +1,4 @@
+import type { FeishuNotificationState } from "../completion/feishu-state";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalReplySnapshot } from "../store/store";
@@ -34,6 +35,7 @@ export interface TerminalProjectContextRecord
     TerminalProjectContextListItem {}
 
 export interface TerminalSessionRecord {
+  feishuNotificationState?: FeishuNotificationState;
   source?: ScheduledTaskSource;
   pinnedAt?: string | null;
   id: string;
@@ -191,6 +193,7 @@ export function buildSessionRecord(
     ...(persisted.terminalState !== undefined
       ? { terminalState: persisted.terminalState }
       : {}),
+    feishuNotificationState: persisted.feishuNotificationState,
     completionRevision: persisted.completionRevision ?? 0,
     acknowledgedCompletionRevision:
       persisted.acknowledgedCompletionRevision ?? 0,
@@ -270,6 +273,7 @@ export function toPersistedSession(
     ...(session.terminalState !== undefined
       ? { terminalState: session.terminalState }
       : {}),
+    feishuNotificationState: session.feishuNotificationState,
     completionRevision: session.completionRevision,
     acknowledgedCompletionRevision: session.acknowledgedCompletionRevision,
     panelSplitEnabled: session.panelSplitEnabled,

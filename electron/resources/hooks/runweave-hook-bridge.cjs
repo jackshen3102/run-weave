@@ -9,6 +9,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const {
   STOP_EVENTS,
+  isFeishuAttentionHook,
   buildAppServerBaseEvent,
   buildCompletionHookBody,
   deriveAgentHookEndpoint,
@@ -315,7 +316,7 @@ async function postCompletionHook({
       body: JSON.stringify(body),
     });
     const result = await response.json().catch(() => null);
-    return { ok: response.ok, status: response.status, accepted: Boolean(result?.event) && !result?.ignored };
+    return { ok: response.ok, status: response.status, accepted: Boolean(result?.event || result?.notificationId) && !result?.ignored, notificationId: result?.notificationId ?? (result?.event?.payload?.completionRevision ? String(result.event.payload.completionRevision) : undefined) };
   } catch (error) {
     return {
       ok: false,
@@ -365,14 +366,8 @@ async function main() {
     return;
   }
   const toolHook = extractToolHook(payload);
-  // traex (normalized to "trae") emits a Notification hook when it needs the
-  // user to come back and act. `permission_prompt` (about to prompt for
-  // approval/selection) and `idle_prompt` (agent idle, waiting for input) are
-  // both "please return to the terminal" signals, so we surface them through
-  // the completion channel to light the green attention dot. Other agents and
-  // other notification types stay untouched. State is intentionally not
-  // updated (stateHookEvent stays null for notification), per the completion-
-  // only design.
+  // Preserve Traex's existing completion/desktop attention behavior. Other
+  // structured attention events below send only Feishu, without a completion.
   const notificationType =
     normalizedEvent === "notification" ? readNotificationType(payload) : null;
   const isTraexAttentionNotification =
@@ -436,6 +431,7 @@ async function main() {
     const summary = extractCompletionSummary(payload);
     if (summary) payload.last_assistant_message = summary;
   }
+  payload.runweaveHookEventId = crypto.randomUUID();
   const appServerClient = await discoverAppServer();
   if (!appServerClient) {
     appendDebugLog("hook bridge app-server unavailable", {
@@ -471,7 +467,7 @@ async function main() {
   }
 
   if (stateHookEvent && stateEndpoint) {
-    const activityEventId = crypto.randomUUID();
+    const activityEventId = payload.runweaveHookEventId;
     const result = await postAgentHook({
       endpoint: stateEndpoint,
       token,
@@ -511,10 +507,18 @@ async function main() {
     });
   }
 
+  if (isFeishuAttentionHook(payload, source) && !shouldRecordCompletion && completionEndpoint) {
+    const attentionPayload = { ...payload, feishuNotificationOnly: true, last_assistant_message: "任务需要你确认或处理，请回到对应终端。" };
+    const result = await postCompletionHook({ endpoint: completionEndpoint, token, terminalSessionId,
+      payload: attentionPayload, source, completionReason: "notify", rawEvent, commandName });
+    if (result.accepted) {
+      notifyFeishu({ ...attentionPayload, hook_event_name: "Stop", feishuNotificationId: result.notificationId }, source, terminalSessionId, terminalPanelId);
+    }
+  }
+
   if (shouldRecordCompletion && completionEndpoint) {
     if (source !== "pi") {
       notifyDesktop(source, { notificationType });
-      notifyFeishu(payload, source, terminalSessionId, terminalPanelId);
     }
     if (appServerClient) {
       const completionBody = buildCompletionHookBody({
@@ -573,7 +577,9 @@ async function main() {
     });
     if (source === "pi" && result.accepted) {
       notifyDesktop(source, { notificationType });
-      notifyFeishu(payload, source, terminalSessionId, terminalPanelId);
+    }
+    if (result.accepted) {
+      notifyFeishu({ ...payload, ...(isTraexAttentionNotification ? { hook_event_name: "Stop", last_assistant_message: "任务需要你确认或处理，请回到对应终端。" } : {}), feishuNotificationId: result.notificationId }, source, terminalSessionId, terminalPanelId);
     }
     appendDebugLog("hook bridge posted completion hook", {
       terminalSessionId,

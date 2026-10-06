@@ -1,5 +1,22 @@
 import type { TerminalAgentKind } from "./state";
 
+/** Applies only to Feishu; completion markers and desktop alerts are independent. */
+export type TerminalFeishuDecision =
+  | { action: "skip"; reason: string }
+  | { action: "wait"; delayMs: number }
+  | { action: "send" };
+
+export interface TerminalFeishuNotificationRequest {
+  terminalSessionId: string;
+  notificationId: string;
+  claim: boolean;
+}
+
+export interface TerminalCompletionViewedRequest {
+  completionRevision: number;
+  panelIds: string[];
+}
+
 export type TerminalCompletionReason =
   | "hook_stop"
   | "notify"

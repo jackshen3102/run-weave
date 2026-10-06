@@ -13,6 +13,30 @@
 
 这两类通知都挂在“任务完成”这个语义上，不针对普通命令结束。
 
+## 飞书通知过滤
+
+普通完成通知要求本轮从 `UserPromptSubmit` 到主 Agent `Stop` 至少 **60 秒**；
+完成后等待 **30 秒**，领取发送资格时再次核对结果是否已查看或已开始下一轮。
+没有可信的本轮开始事件、重复 Stop、子 Agent Stop 不触发普通飞书通知。
+时间按轮次和 Panel 记录，不使用 Terminal 存活时长。
+
+Web/Electron 在对应终端连接正常、页面可见且有焦点、滚动至最新输出时，通过
+`POST /api/terminal/session/:id/completion-viewed` 上报已经显示的完成版本和当前 Panel。
+原生 iOS 仅在前台 Chat 页面、终端已连接、未滚动查看历史且未被弹层遮挡时上报。
+查看信号只影响飞书；不自动清除绿点，不修改桌面系统通知或提示音。
+显式标记已读和继续提交新提示也会取消普通飞书通知。
+
+飞书入站 `feishu:<message_id>` 输入与同一 Panel 的提示词摘要匹配后，本轮回复绕过
+时长、查看状态和缓冲；例外不扩散到后续本地轮次。结构化的权限/空闲提醒、
+`request_user_input` / `AskUserQuestion` 工具请求和 Pi `ui_prompt_start` 立即提醒，
+不从普通回复文本猜测是否需要用户操作。通知例外只覆盖 provider 实际上报的事件。
+
+发送脚本仍由 Hook 在完成请求获准后启动，分离的 `rw feishu notify` 进程负责等待；
+Backend 的 `POST /internal/terminal-completion/feishu` 负责资格判断与单次领取，使用
+原 Hook token 鉴权。计时、查看与领取状态跟随 Terminal 元数据持久化；查询失败不退回
+直接发送，领取后发送结果未知不自动重放。进程退出或电脑重启不会重建已丢失的等待进程。
+策略实现见 [feishu-policy.ts](../../backend/src/terminal/completion/feishu-policy.ts)。
+
 ## 单一实现：全部走 launcher
 
 历史上存在两套实现（codex 走本机 `~/.codex/` 脚本，coco/trae 走 launcher 内联），导致逻辑分裂、重复通知、飞书脚本散落本机不归仓库管。现已统一为**唯一实现**：
@@ -26,8 +50,8 @@ AI CLI 任务完成
       -> 校验 RUNWEAVE_* 身份(endpoint/token/terminalSessionId)
          缺任一 -> 静默退出，不通知、不上报
       -> notifyDesktop(source)              # osascript 通知 + afplay 声音 (macOS)
-      -> notifyFeishu(payload, source)      # 转调 ~/.runweave/hooks/feishu_stop_notify.sh
       -> POST /internal/terminal-completion # 绿点上报
+      -> 接受后 notifyFeishu(...)           # 分离进程执行飞书过滤、等待与发送
 ```
 
 hook 安装进用户全局 Claude/Codex/Trae 配置，会覆盖所有 AI CLI（含 Runweave 之外的终端）。因此通知与上报都以 `RUNWEAVE_*` 身份为门禁：**只有从 Runweave terminal 启动、pane 带有 `RUNWEAVE_HOOK_ENDPOINT` / `RUNWEAVE_HOOK_TOKEN` / `RUNWEAVE_TERMINAL_SESSION_ID` 的完成事件才会触发桌面通知和飞书**；外部终端的 AI CLI stop 事件静默退出，不产生任何通知。这样隐私与噪声边界由已认证的 Runweave session 控制。

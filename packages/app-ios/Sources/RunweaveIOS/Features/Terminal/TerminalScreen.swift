@@ -53,6 +53,17 @@ struct TerminalScreen: View {
   private var currentTerminal: HomeTerminal? {
     session.overview?.sessions.first { $0.id == details.id }
   }
+  private var canReportCompletionViewed: Bool {
+    session.foreground && session.canWrite && session.terminal?.id == details.id
+      && controller.canSend && !controller.scrolledBack && tab == "Chat"
+      && browser.state != .presented && !showingHistory && !showingConversation
+      && !showingInfo && !showingDiagnostics && !showingComposer && fileTap == nil
+      && replyContext == nil && snapshotShare == nil && !deleting
+  }
+  private var completionViewKey: String {
+    "\(details.id):\(currentTerminal?.completionRevision ?? 0):\(canReportCompletionViewed)"
+  }
+
   private var title: String {
     if let currentTerminal { return currentTerminal.title }
     if let alias = details.alias, !alias.isEmpty { return alias }
@@ -126,6 +137,15 @@ struct TerminalScreen: View {
         guard session.terminalController === controller, session.terminal?.id == details.id else { return }
         fileTap = tap
       }
+    }
+    .task(id: completionViewKey) {
+      guard canReportCompletionViewed, let revision = currentTerminal?.completionRevision, revision > 0,
+        let api = session.api else { return }
+      do {
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        try Task.checkCancellation()
+        try await api.reportCompletionViewed(id: details.id, revision: revision)
+      } catch { /* A missing view receipt must not suppress the reminder. */ }
     }
     .onChange(of: theme) { controller.surface.applyTheme(dark: $0 != "light") }
     .task(id: canReadChanges) {

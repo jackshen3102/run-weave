@@ -31,6 +31,7 @@ import { useTerminalFloatingComposerController } from "../input/use-floating-com
 import { useTerminalScrollController } from "../input/use-terminal-scroll-controller";
 import { useTerminalOutputStream } from "./use-output-stream";
 import { useTerminalSnapshotRestore } from "./use-snapshot-restore";
+import { useCompletionViewed } from "./use-completion-viewed";
 import {
   IME_COMMIT_WINDOW_MS,
   recordTerminalPerfProbeEvent,
@@ -204,6 +205,11 @@ export function TerminalSurface({
     onOutput,
   });
   invalidateOutputRecoveryRef.current = invalidateOutputRecovery;
+  useCompletionViewed({
+    apiBase, token, terminalSessionId, panelId: paneWorkspace?.activePanelId,
+    active, atBottom: scroll.terminalAtBottom && !scroll.tmuxScrollbackActive && !scroll.hasNewOutputBelow,
+    connected: connectionStatus === "connected", terminalRef,
+  });
   const runtimeStatusItem = useMemo<RuntimeStatusItem>(() => {
     const observedAt = Date.now();
     const stopped =

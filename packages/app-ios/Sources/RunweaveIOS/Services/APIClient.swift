@@ -225,6 +225,15 @@ public actor APIClient {
     let _: EmptyResponse = try await authorized(
       "/api/terminal/session/\(Self.pathComponent(id))", method: "DELETE", retryUnauthorized: false)
   }
+  func reportCompletionViewed(id: String, revision: Int) async throws {
+    struct Workspace: Decodable { let activePanelId: String }
+    let workspace: Workspace = try await authorized("/api/terminal/session/\(Self.pathComponent(id))/panels")
+    try Task.checkCancellation()
+    let _: EmptyResponse = try await authorized(
+      "/api/terminal/session/\(Self.pathComponent(id))/completion-viewed", method: "POST",
+      body: ["completionRevision": revision, "panelIds": [workspace.activePanelId]], retryUnauthorized: false)
+  }
+
   func acknowledgeTerminal(id: String, revision: Int) async throws
     -> TerminalCompletionAcknowledgement
   {

@@ -146,6 +146,11 @@ completion hook 在 `FEISHU_NOTIFY_TRANSPORT=app` 时通过
 只使用一个长期话题：第一条真实 completion 是 root，后续通知回复该 root 并设置
 `reply_in_thread`。topic 不使用 24 小时 TTL；旧版 message binding 不迁移，升级后的
 第一条新通知建立新 topic。`FEISHU_BINDING_TTL_HOURS` 已废弃且不再读取。
+Hook 调用携带 Backend 返回的 `feishuNotificationId`（普通完成版本号字符串或独立提醒 ID），
+CLI 通过原 Hook endpoint/token 领取飞书发送资格。普通完成要求运行满 60 秒，等待 30 秒后
+再次核对已读和轮次；跳过时返回 `{ "sent": false, "reason": "notification_policy" }`。
+飞书入站回复与结构化需操作提醒绕过过滤；App/Web 的已查看上报不影响桌面提醒和绿点。
+没有 Hook 环境、也没有 `feishuNotificationId` 的显式手工 notify 保持立即发送。
 在通知环境中设置 `FEISHU_NOTIFY_OPEN_IDS=<open-id>[,<open-id>...]`，可让每条完成通知
 （包括首次 root 和后续话题回复）显式 `@` 指定用户。使用发送机器人的应用作用域下的
 `open_id`；重复 ID 自动去重，未配置时不添加 `@`。该配置独立于允许终端投递的

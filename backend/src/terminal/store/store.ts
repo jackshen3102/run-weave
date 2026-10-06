@@ -1,3 +1,4 @@
+import type { FeishuNotificationState } from "../completion/feishu-state";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
@@ -25,6 +26,7 @@ export interface PersistedTerminalProjectRecord {
 }
 
 export interface PersistedTerminalSessionRecord {
+  feishuNotificationState?: FeishuNotificationState;
   source?: ScheduledTaskSource;
   pinnedAt?: string | null;
   id: string;
@@ -329,6 +331,7 @@ export interface TerminalSessionStore {
   updateSessionTerminalState(
     params: UpdateTerminalSessionTerminalStateParams,
   ): Promise<void>;
+  updateFeishuNotificationState(id: string, state: FeishuNotificationState): Promise<void>;
   updateSessionCompletion(
     params: UpdateTerminalSessionCompletionParams,
   ): Promise<void>;

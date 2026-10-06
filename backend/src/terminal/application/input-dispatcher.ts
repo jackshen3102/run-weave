@@ -318,6 +318,9 @@ export async function sendInputToSession(
         promptReplaceSubmit: mode === "prompt_replace" ? submit === true : null,
         exitTmuxCopyMode,
       });
+      if (operationId?.startsWith("feishu:") && mode === "prompt_replace" && submit) {
+        await terminalSessionManager.feishuNotifications.expectReply(session.id, panel?.id ?? null, data, operationId);
+      }
       if (replacePrompt) {
         if (!("paneId" in target) || typeof target.paneId !== "string")
           throw new Error(
@@ -366,6 +369,9 @@ export async function sendInputToSession(
       if (expectedThreadId) {
         const identity = resolveReplyThread(session);
         if (identity?.id !== expectedThreadId || identity.provider !== "codex" || session.terminalState?.state !== "agent_idle") throw new Error("会话已切换或 Agent 正在运行，未发送交接内容。");
+      }
+      if (operationId?.startsWith("feishu:") && mode === "prompt_replace" && submit) {
+        await terminalSessionManager.feishuNotifications.expectReply(session.id, null, data, operationId);
       }
       if (!exitTmuxCopyMode) {
         if (mode === "prompt_replace") {
