@@ -28,38 +28,45 @@ struct SuijiBrowserHost: ViewModifier {
   }
 
   func body(content: Content) -> some View {
-    content
+    // Reserve layout height outside TabView so destinations that hide the tab bar
+    // keep their own bottom actions above the browser controls.
+    VStack(spacing: 0) {
+      content
+      browserControls
+    }
       .environment(\.suijiOpenLink, open)
       .background(SuijiBrowserAnchor(presentation: presentation, browser: browser))
-      .safeAreaInset(edge: .bottom) {
-        if browser.state == .collapsed || browser.dataStatus != nil {
-          VStack(spacing: 4) {
-            if browser.state == .collapsed, let title = browser.pageTitle {
-              Button {
-                guard let source = session.browserSource else { return }
-                register(source)
-                if browser.hostPresentationAvailable(source: source, registrationID: presentation.id) {
-                  browser.resume()
-                }
-              } label: {
-                Label("继续浏览：\(title)", systemImage: "globe").clarityMask().lineLimit(1)
-              }
-              .accessibilityIdentifier("suiji-browser-resume")
-              .disabled(browser.clearing)
-            }
-            if let status = browser.dataStatus {
-              Text(status).clarityMask().font(.footnote).foregroundStyle(.secondary)
-                .accessibilityIdentifier("suiji-browser-status")
-            }
-          }
-          .frame(maxWidth: .infinity).padding(10).background(.regularMaterial)
-        }
-      }
       .fullScreenCover(isPresented: Binding(
         get: { browser.state == .presented },
         set: { if !$0 { browser.collapse() } }
       )) { BrowserScreen(browser: browser).clarityMask().mobileAnalyticsScreen(.browser) }
       .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented))
+  }
+
+  @ViewBuilder
+  private var browserControls: some View {
+    if browser.state == .collapsed || browser.dataStatus != nil {
+      VStack(spacing: 4) {
+        if browser.state == .collapsed, let title = browser.pageTitle {
+          Button {
+            guard let source = session.browserSource else { return }
+            register(source)
+            if browser.hostPresentationAvailable(source: source, registrationID: presentation.id) {
+              browser.resume()
+            }
+          } label: {
+            Label("继续浏览：\(title)", systemImage: "globe").clarityMask().lineLimit(1)
+          }
+          .accessibilityIdentifier("suiji-browser-resume")
+          .disabled(browser.clearing)
+        }
+        if let status = browser.dataStatus {
+          Text(status).clarityMask().font(.footnote).foregroundStyle(.secondary)
+            .accessibilityIdentifier("suiji-browser-status")
+        }
+      }
+      .frame(maxWidth: .infinity).padding(10).background(.regularMaterial)
+    }
   }
 
   private func register(_ source: BrowserContext) {
