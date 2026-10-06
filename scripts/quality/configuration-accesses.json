@@ -1520,6 +1520,22 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(keyPath)"
   },
   {
+    "file": "backend/src/terminal/tasks/store.ts",
+    "kind": "file-io",
+    "expression": "handle.writeFile(body)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "终端任务账本保存执行身份、派发与验收业务状态，不作为 settings.yaml 的业务配置替代。"
+  },
+  {
+    "file": "backend/src/terminal/tasks/store.ts",
+    "kind": "file-io",
+    "expression": "readFile(this.file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "终端任务账本保存执行身份、派发与验收业务状态，不作为 settings.yaml 的业务配置替代。"
+  },
+  {
     "file": "backend/src/terminal/store/lowdb-scrollback-store.ts",
     "kind": "file-io",
     "expression": "appendFile(scrollbackFile)",
