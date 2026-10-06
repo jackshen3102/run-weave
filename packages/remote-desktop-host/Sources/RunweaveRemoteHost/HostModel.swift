@@ -64,6 +64,7 @@ final class HostModel: ObservableObject {
     private var workspaceObservers: [NSObjectProtocol] = []
 
     init() {
+        selectedInterface = UserDefaults.standard.string(forKey: HostRuntime.interfacePreferenceKey) ?? ""
         #if DEBUG
         monitor = HostRuntime.simulatorLoopback ? NWPathMonitor(requiredInterfaceType: .loopback) : NWPathMonitor()
         #else
@@ -150,7 +151,9 @@ final class HostModel: ObservableObject {
             Task { @MainActor in
                 guard let self, let listener, self.listener === listener else { return }
                 switch state {
-                case .ready: self.status = "局域网服务就绪"; self.isRunning = true
+                case .ready:
+                    self.status = "局域网服务就绪"; self.isRunning = true
+                    UserDefaults.standard.set(selected.name, forKey: HostRuntime.interfacePreferenceKey)
                 case .failed(let error):
                     if case .posix(let code) = error, [.EADDRNOTAVAIL, .ENETDOWN, .ENETUNREACH].contains(code) {
                         await self.recoverNetworkIfNeeded(listenerFailed: true)

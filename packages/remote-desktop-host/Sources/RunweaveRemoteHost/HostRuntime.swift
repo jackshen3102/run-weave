@@ -14,4 +14,5 @@ enum HostRuntime {
     static let port: UInt16 = simulatorLoopback ? 48572 : RemoteTarget.computerPort
     static let identityService = simulatorLoopback ? "com.runweave.remote-host.simulator.identity" : "com.runweave.remote-host.identity"
     static let pairedDevicesService = simulatorLoopback ? "com.runweave.remote-host.simulator.paired-devices" : "com.runweave.remote-host.paired-devices"
+    static let interfacePreferenceKey = simulatorLoopback ? "simulatorInterface" : "lanInterface"
 }

@@ -4,21 +4,23 @@ import AppKit
 @main
 struct RemoteHostApp: App {
     @NSApplicationDelegateAdaptor(HostAppDelegate.self) private var delegate
-    @StateObject private var model = HostModel()
     var body: some Scene {
         WindowGroup("RemoteDesk") {
-            HostView(model: model).frame(minWidth: 640, minHeight: 620)
-                .onAppear { delegate.model = model }
+            HostView(model: delegate.model).frame(minWidth: 640, minHeight: 620)
         }
     }
 }
 
 @MainActor
 private final class HostAppDelegate: NSObject, NSApplicationDelegate {
-    weak var model: HostModel?
+    let model = HostModel()
+    private var startupTask: Task<Void, Never>?
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        startupTask = Task { await HostStartup.run(model: model) }
+    }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model else { return .terminateNow }
+        startupTask?.cancel()
         Task { await model.stop(); sender.reply(toApplicationShouldTerminate: true) }
         return .terminateLater
     }
