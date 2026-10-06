@@ -5,11 +5,13 @@ import SwiftUI
 struct RemoteDesktopCover: View {
   @ObservedObject var coordinator: RemoteDesktopCoordinator
   let presentation: RemoteDesktopPresentation
+  let returnLabel: String
 
   var body: some View {
     RemoteDesktopView(session: presentation.session,
       hostName: presentation.host.target.name,
       onClose: { coordinator.close(reason: "user_closed") },
+      returnLabel: returnLabel,
       maskTextEntry: { AnyView($0.clarityMask()) })
     .preferredColorScheme(.dark)
     .clarityMask()

@@ -129,7 +129,8 @@ public struct RootView: View {
       get: { remoteDesktop.presentation },
       set: { if $0 == nil { remoteDesktop.close(reason: "hidden") } }
     )) { presentation in
-      RemoteDesktopCover(coordinator: remoteDesktop, presentation: presentation)
+      RemoteDesktopCover(coordinator: remoteDesktop, presentation: presentation,
+        returnLabel: session.terminal != nil ? "返回终端" : "返回")
         .clarityMask().mobileAnalyticsScreen(.remoteDesktop)
     }
     .mobileAnalyticsScreen(session.checking ? .connecting : session.authenticated ? .home : .login)

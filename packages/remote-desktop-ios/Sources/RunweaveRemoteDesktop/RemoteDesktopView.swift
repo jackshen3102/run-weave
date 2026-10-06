@@ -13,12 +13,15 @@ public struct RemoteDesktopView: View {
     @AppStorage("remoteDesktop.inputMode") private var preferredInputMode = RemoteInputMode.trackpad.rawValue
     @FocusState private var textEntryFocused: Bool
     private let hostName: String
+    private let returnLabel: String
     private let onClose: () -> Void
     private let maskTextEntry: (AnyView) -> AnyView
 
     public init(session: RemoteDesktopSession, hostName: String, onClose: @escaping () -> Void,
+                returnLabel: String = "返回",
                 maskTextEntry: @escaping (AnyView) -> AnyView = { $0 }) {
         self.session = session; self.hostName = hostName; self.onClose = onClose
+        self.returnLabel = returnLabel
         self.maskTextEntry = maskTextEntry
     }
 
@@ -69,7 +72,7 @@ public struct RemoteDesktopView: View {
                 .accessibilityIdentifier("remote-desktop-video")
                 .accessibilityHidden(showsMenu)
             if !showsKeyboard {
-                RemoteSessionControls(session: session, hostName: hostName, showsMenu: $showsMenu,
+                RemoteSessionControls(session: session, hostName: hostName, returnLabel: returnLabel, showsMenu: $showsMenu,
                                       openKeyboard: { showsMenu = false; showsKeyboard = true }, onClose: onClose)
             }
             VStack(spacing: 8) {
@@ -95,6 +98,11 @@ public struct RemoteDesktopView: View {
         VStack(spacing: 8) {
             if showsShortcuts { shortcuts }
             HStack(spacing: 4) {
+                Button(action: onClose) {
+                    Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel(returnLabel)
+                .accessibilityIdentifier("remote-desktop-return")
                 Button {
                     showsShortcuts.toggle()
                     if !showsShortcuts { modifiers = [] }
