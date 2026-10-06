@@ -135,13 +135,14 @@ public final class RemoteTLSConnection: @unchecked Sendable {
     private let lock = NSLock()
     private var pendingBytes = 0
     public init(connection: NWConnection) { self.connection = connection }
-    public static func connect(target: RemoteTarget) async throws -> RemoteTLSConnection {
+    public static func connect(target: RemoteTarget, endpoint: NWEndpoint? = nil) async throws -> RemoteTLSConnection {
         guard !target.host.isEmpty, let port = NWEndpoint.Port(rawValue: target.port) else { throw RemoteTransportError.invalidEndpoint }
         let verification = TLSVerificationState()
         let parameters = try RemoteTLS.clientParameters(fingerprint: target.certificateFingerprint, verificationRejected: { verification.reject() })
         parameters.includePeerToPeer = false
         parameters.prohibitedInterfaceTypes = [.cellular, .other]
-        let channel = RemoteTLSConnection(connection: NWConnection(host: NWEndpoint.Host(target.host), port: port, using: parameters))
+        let destination = endpoint ?? .hostPort(host: NWEndpoint.Host(target.host), port: port)
+        let channel = RemoteTLSConnection(connection: NWConnection(to: destination, using: parameters))
         do { try await channel.start(); return channel }
         catch { channel.close(); if verification.wasRejected { throw RemoteTransportError.invalidCertificate }; throw error }
     }

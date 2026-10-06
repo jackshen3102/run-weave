@@ -16,6 +16,8 @@ final class HostModel: ObservableObject {
     @Published var screenAllowed = false
     @Published var accessibilityAllowed = false
     @Published var isRunning = false
+    @Published private(set) var sharingEnabled = false
+    @Published private(set) var isNetworkRecovering = false
     @Published var isReconfiguring = false
     @Published var pairingCode: String?
     @Published private(set) var pairingInvitation: RemotePairingQR?
@@ -45,6 +47,7 @@ final class HostModel: ObservableObject {
     private let monitor: NWPathMonitor
     private var interfaces: [NWInterface] = []
     private var listener: NWListener?
+    private var sharingGeneration: UInt64 = 0
     private var channels: [UUID: RemoteTLSConnection] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private let input = DesktopInput()
@@ -106,7 +109,7 @@ final class HostModel: ObservableObject {
     deinit { for observer in workspaceObservers { workspaceCenter.removeObserver(observer) } }
 
     func start() {
-        guard !isRunning, listener == nil, !stoppingSession else { return }
+        guard !sharingEnabled, listener == nil, !stoppingSession, !isNetworkRecovering else { return }
         do {
             let identity = try self.identity ?? HostIdentity.loadOrCreate()
             self.identity = identity; fingerprint = identity.fingerprint; hostID = identity.hostID
@@ -121,33 +124,88 @@ final class HostModel: ObservableObject {
             }
             #endif
             lockedDisplayID = CGMainDisplayID() // A local start locks the displayed identity for this listener's lifetime.
-            parameters.requiredInterface = selected
-            parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(address), port: NWEndpoint.Port(rawValue: port)!)
-            let listener = try NWListener(using: parameters)
-            listener.newConnectionHandler = { [weak self] connection in
-                Task { @MainActor in self?.accept(connection) }
+            sharingGeneration &+= 1
+            sharingEnabled = true
+            try listen(identity: identity, selected: selected, address: address, parameters: parameters)
+        } catch { sharingEnabled = false; status = error.localizedDescription }
+    }
+
+    private func listen(identity: HostIdentity, selected: NWInterface, address: String, parameters: NWParameters) throws {
+        parameters.requiredInterface = selected
+        parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(address), port: NWEndpoint.Port(rawValue: port)!)
+        let listener = try NWListener(using: parameters)
+        if !HostRuntime.simulatorLoopback {
+            var service = NWListener.Service(name: RemoteHostDiscovery.serviceName(hostID: identity.hostID),
+                type: RemoteHostDiscovery.serviceType, domain: "local.")
+            service.noAutoRename = true
+            listener.service = service
+        }
+        listener.newConnectionHandler = { [weak self, weak listener] connection in
+            Task { @MainActor in
+                guard let self, let listener, self.listener === listener else { connection.cancel(); return }
+                self.accept(connection)
             }
-            listener.stateUpdateHandler = { [weak self, weak listener] state in
-                Task { @MainActor in
-                    guard let self, let listener, self.listener === listener else { return }
-                    switch state {
-                    case .ready: self.status = "局域网服务就绪"; self.isRunning = true
-                    case .failed: await self.stop(); self.status = "监听失败，请检查接口和端口。"
-                    default: break
+        }
+        listener.stateUpdateHandler = { [weak self, weak listener] state in
+            Task { @MainActor in
+                guard let self, let listener, self.listener === listener else { return }
+                switch state {
+                case .ready: self.status = "局域网服务就绪"; self.isRunning = true
+                case .failed(let error):
+                    if case .posix(let code) = error, [.EADDRNOTAVAIL, .ENETDOWN, .ENETUNREACH].contains(code) {
+                        await self.recoverNetworkIfNeeded(listenerFailed: true)
+                    } else {
+                        await self.stop(); self.status = "监听失败，请检查接口和端口。"
                     }
+                default: break
                 }
             }
-            self.listener = listener; endpointAddress = address
-            listener.start(queue: DispatchQueue(label: "runweave.remote.listener")); status = "启动中"
-        } catch { status = error.localizedDescription }
+        }
+        self.listener = listener; endpointAddress = address
+        listener.start(queue: DispatchQueue(label: "runweave.remote.listener")); status = "启动中"
     }
 
     func stop() async {
+        sharingEnabled = false; sharingGeneration &+= 1
         listener?.cancel(); listener = nil; isRunning = false; closePairing()
         await stopSession(reason: "本机已停止远程桌面服务。", terminal: true)
         for channel in channels.values { channel.close() }
         for task in tasks.values { task.cancel() }
         channels.removeAll(); tasks.removeAll(); lockedDisplayID = nil; status = "已停止"
+    }
+
+    private func recoverNetworkIfNeeded(listenerFailed: Bool = false) async {
+        guard sharingEnabled, !isNetworkRecovering, !stoppingSession else { return }
+        let selected = interfaces.first { $0.name == selectedInterface }
+        let address = selected.flatMap { Self.addressForInterface($0.name) }
+        guard listenerFailed || address != (endpointAddress.isEmpty ? nil : endpointAddress) else { return }
+        let expected = sharingGeneration
+        isNetworkRecovering = true
+        defer { isNetworkRecovering = false }
+        listener?.cancel(); listener = nil; isRunning = false
+        closePairing(reason: "网络地址已变化，请重新生成配对二维码。")
+        await stopSession(reason: "Mac 网络地址已变化，正在重新建立桌面连接。", errorCode: .sessionExpired)
+        for channel in channels.values { channel.close() }
+        for task in tasks.values { task.cancel() }
+        channels.removeAll(); tasks.removeAll()
+        guard sharingEnabled, sharingGeneration == expected else { return }
+        endpointAddress = ""
+        guard !listenerFailed, let selected, let address, let identity else {
+            status = "等待所选网络接口恢复；停止共享可取消自动恢复。"
+            return
+        }
+        do {
+            let parameters = try RemoteTLS.serverParameters(identity: identity.identity)
+            #if DEBUG
+            if HostRuntime.simulatorLoopback { parameters.prohibitedInterfaceTypes = [.wifi, .wiredEthernet, .cellular, .other] }
+            #endif
+            try listen(identity: identity, selected: selected, address: address, parameters: parameters)
+        } catch {
+            if let error = error as? NWError, case .posix(let code) = error,
+               [.EADDRNOTAVAIL, .ENETDOWN, .ENETUNREACH].contains(code) {
+                status = "等待所选网络接口恢复；停止共享可取消自动恢复。"
+            } else { await stop(); status = error.localizedDescription }
+        }
     }
 
     func refreshPermissions() { screenAllowed = CGPreflightScreenCaptureAccess(); accessibilityAllowed = AXIsProcessTrusted() }
@@ -382,6 +440,7 @@ final class HostModel: ObservableObject {
     }
     private func maintain() async {
         refreshPermissions()
+        await recoverNetworkIfNeeded()
         if pairingUntil > 0 { pairingSeconds = max(0, Int(ceil(pairingUntil - ProcessInfo.processInfo.systemUptime))) }
         if pairingUntil > 0, ProcessInfo.processInfo.systemUptime >= pairingUntil {
             closePairing(reason: "二维码已过期，请在 Mac 重新生成并扫码。")
@@ -425,6 +484,8 @@ final class HostModel: ObservableObject {
         while let current = item {
             defer { item = current.pointee.ifa_next }
             guard String(cString: current.pointee.ifa_name) == name, let address = current.pointee.ifa_addr,
+                  current.pointee.ifa_flags & UInt32(IFF_UP) != 0,
+                  current.pointee.ifa_flags & UInt32(IFF_RUNNING) != 0,
                   address.pointee.sa_family == UInt8(AF_INET) else { continue }
             var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             guard getnameinfo(address, socklen_t(address.pointee.sa_len), &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST) == 0 else { continue }

@@ -61,7 +61,7 @@ struct RemotePairHostScanView: View {
             }
             Button("手动填写") { controller.cancel(); manual = true }
               .accessibilityIdentifier("remote-pair-manual")
-            Text("在 Mac 打开 Remote Host，启动局域网服务后点击「连接 iPhone」。配对仍需在 Mac 确认。")
+            Text("在 Mac 打开 RemoteDesk，启动局域网服务后点击「连接 iPhone」。配对仍需在 Mac 确认。")
               .font(.footnote).foregroundColor(.secondary).multilineTextAlignment(.center)
           }
         }.padding()

@@ -173,7 +173,7 @@ Playwright 只用于配套 Web 页面，不能验证 SwiftUI。终端实验室�
 
 ## 连接 Backend
 
-Mac 桌面使用独立配对：在 Mac 的 Runweave Remote Host 启动服务并点击“连接 iPhone”，
+Mac 桌面使用独立配对：在 Mac 的 RemoteDesk 启动服务并点击“连接 iPhone”，
 手机进入“Mac 桌面 → 扫码配对 Mac”，扫描自己 Mac 窗口的二维码后等待 Mac 确认。
 无需填写地址、端口或指纹；Mac 默认只读，控制许可由本机另行决定。保存成功后可选关联
 终端连接，或点击“打开桌面”。相机权限拒绝/不可用时可手动填写；旧 Host 同样使用手动入口。

@@ -1,6 +1,6 @@
-# Mac 局域网远控
+# RemoteDesk（Mac 局域网远控）
 
-远控使用现有 Runweave iPhone App，独立连接用户明确配对的 Mac Host。终端、文件和
+RemoteDesk 是独立的 Mac 原生远控 App；现有 Runweave iPhone App 作为客户端，连接用户明确配对的 Mac Host。终端、文件和
 Commands 继续使用原 Backend；远控视频不经过 Backend、Electron 或现有公网 Tunnel。
 Host 的在线状态与 Backend 健康、登录状态分别判断，Backend 离线时仍可显式选择已配对 Host。
 
@@ -35,6 +35,14 @@ packages/remote-desktop-protocol：两个 Swift 运行时共用的线协议
 Host ID、credential 引用及可选 Backend connection ID。长期远控凭据属于独立 Keychain
 service `com.runweave.remote-desktop.credentials.v1`，不沿用 Backend 的凭据标识。
 编辑 IP/端口保留原 Host 身份与 pin；不通过替换 Backend URL 端口来选择电脑。
+
+已配对会话每次连接与重试先用 Host ID 解析局域网 Bonjour 服务
+`_runweave-rd._tcp`（`local.`），再校验原 TLS pin、Host ID 与专属 credential；
+发现结果不授予信任，也不覆盖配对身份。视频使用本次控制连接的实际端点。
+发现三秒内不可用时回退保存的显式地址，以兼容旧 Host 或不支持 mDNS 的网络；
+证书校验失败直接终止，不回退。Mac 所选接口的 IPv4 变化时结束旧会话、释放输入、
+失效配对邀请并用原身份重新监听；网卡断开则等待同一接口恢复，不切换接口。
+用户停止共享后取消自动恢复。该机制只解决同一局域网内的地址变化，不提供外网连接。
 
 电脑级管理入口在登录与离线界面均可用；终端快捷入口只在恰有一个明确关联的已配对 Host
 时直接打开，否则由用户选择。全屏标题始终显示被控 Mac。返回桌面不改变原终端导航、Tab

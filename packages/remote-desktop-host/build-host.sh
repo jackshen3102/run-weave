@@ -20,4 +20,4 @@ if [ -n "$REMOTE_HOST_TEAM" ]; then REMOTE_HOST_SIGNING=("DEVELOPMENT_TEAM=$REMO
 xcodebuild -project "$REMOTE_HOST_PACKAGE/RunweaveRemoteHost.xcodeproj" \
   -scheme RunweaveRemoteHost -configuration "$REMOTE_HOST_CONFIGURATION" \
   -derivedDataPath "$REMOTE_HOST_OUTPUT" "${REMOTE_HOST_SIGNING[@]}" build
-printf '%s\n' "$REMOTE_HOST_OUTPUT/Build/Products/$REMOTE_HOST_CONFIGURATION/Runweave Remote Host.app"
+printf '%s\n' "$REMOTE_HOST_OUTPUT/Build/Products/$REMOTE_HOST_CONFIGURATION/RemoteDesk.app"
