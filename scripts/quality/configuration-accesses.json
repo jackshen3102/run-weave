@@ -9638,5 +9638,53 @@
     "category": "tooling",
     "reason": "Generate or verify the committed configuration reference from shared metadata; no user configuration is read.",
     "count": 1
+  },
+  {
+    "file": "packages/remote-desktop-host/Sources/RunweaveRemoteHost/HostModel.swift",
+    "kind": "native-or-shell",
+    "expression": "selectedInterface = UserDefaults.standard.string(forKey: HostRuntime.interfacePreferenceKey) ?? \"\"",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "独立 Mac Host 读取本机用户选择的 LAN 接口；设备偏好不属于 Backend 实例配置。"
+  },
+  {
+    "file": "packages/remote-desktop-host/Sources/RunweaveRemoteHost/HostModel.swift",
+    "kind": "native-or-shell",
+    "expression": "UserDefaults.standard.set(selected.name, forKey: HostRuntime.interfacePreferenceKey)",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "仅在 Host 监听成功后保存本机接口，更新失败回退沿用最后成功选择；模拟器配置键独立。"
+  },
+  {
+    "file": "packages/remote-desktop-host/Sources/RunweaveRemoteHost/HostStartup.swift",
+    "kind": "native-or-shell",
+    "expression": "let interface = argument(\"--interface\") ?? UserDefaults.standard.string(forKey: HostRuntime.interfacePreferenceKey)",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "本机显式启动请求在未指定接口时复用 Host 设备偏好，不开放远程配置接口。"
+  },
+  {
+    "file": "packages/remote-desktop-host/tools/update-host.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(path.join(evidencePath, 'result.json'))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Host 更新事务的结果回执，记录更新与回退状态供 Agent 读取，不保存业务配置或配对凭据。"
+  },
+  {
+    "file": "packages/remote-desktop-host/tools/update-host.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(path.join(evidencePath, name))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Host 本机生命周期工具的检查、停止和启动回执，属于单次更新证据而非运行配置。"
+  },
+  {
+    "file": "packages/remote-desktop-host/tools/update-host.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(path.join(lockPath, 'owner.json'))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Host 跨 checkout 更新锁的进程归属记录，用于识别并发更新和遗留锁，不替代实例配置。"
   }
 ]
