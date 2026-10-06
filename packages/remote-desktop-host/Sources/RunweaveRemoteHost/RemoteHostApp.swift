@@ -47,14 +47,14 @@ private struct HostView: View {
                 Text(HostRuntime.simulatorLoopback ? "仅本机模拟器可连接；启动验证服务不会自动采集或控制桌面。" : "只在所选 Wi-Fi / Ethernet 接口监听；启动服务不会自动采集或控制桌面。")
                     .font(.callout).foregroundStyle(.secondary)
                 if !model.consoleAvailable { Text("Mac 图形会话已锁定或切换用户，请在本机恢复。远控已停止。") .foregroundStyle(.orange) }
-                GroupBox("本机权限") {
+                HostSection("本机权限") {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack { Text("屏幕录制：\(model.screenAllowed ? "已允许" : "未允许")"); Spacer(); Button("请求屏幕录制") { model.requestScreenPermission() } }
                         HStack { Text("辅助功能：\(model.accessibilityAllowed ? "已允许" : "未允许，只读")"); Spacer(); Button("请求辅助功能") { model.requestAccessibilityPermission() } }
                         Text("观察与控制分别授权。权限必须由 Mac 本机用户授予。") .font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }
-                GroupBox("局域网端点与身份") {
+                HostSection("局域网端点与身份") {
                     VStack(alignment: .leading, spacing: 8) {
                         Picker(HostRuntime.simulatorLoopback ? "回环接口" : "物理网络接口", selection: $model.selectedInterface) { ForEach(model.interfaceNames, id: \.self) { Text($0).tag($0) } }.disabled(model.sharingEnabled)
                         if !model.endpointAddress.isEmpty { Text("地址：\(model.endpointAddress):\(model.port)").textSelection(.enabled) }
@@ -64,7 +64,7 @@ private struct HostView: View {
                         Text("扫码可自动读取身份；手动配对请核对完整指纹。身份改变时必须重新配对。") .font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }
-                GroupBox("新设备配对") {
+                HostSection("新设备配对") {
                     VStack(alignment: .leading, spacing: 8) {
                         if let code = model.pairingCode {
                             if let name = model.pendingName {
@@ -94,7 +94,7 @@ private struct HostView: View {
                         } else { Button("连接 iPhone") { model.openPairing() }.disabled(!model.isRunning || model.activeDevice != nil) }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }
-                GroupBox("已配对设备") {
+                HostSection("已配对设备") {
                     VStack(alignment: .leading, spacing: 10) {
                         if model.devices.isEmpty { Text("还没有已配对设备").foregroundStyle(.secondary) }
                         ForEach(model.devices) { device in
@@ -103,7 +103,7 @@ private struct HostView: View {
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }
                 if let name = model.activeDevice {
-                    GroupBox("当前会话") {
+                    HostSection("当前会话") {
                         VStack(alignment: .leading, spacing: 8) {
                             let cancelRecovery = model.isReconfiguring
                             HStack { Text(name).bold(); Spacer(); Button(cancelRecovery ? "取消恢复并停止共享" : "结束此会话", role: .destructive) { Task { await model.stopCurrentSession(cancelRecovery: cancelRecovery) } } }
@@ -118,6 +118,26 @@ private struct HostView: View {
                     }
                 }
             }.padding(24)
+        }
+    }
+}
+
+private struct HostSection<Content: View>: View {
+    let title: LocalizedStringKey
+    let content: Content
+
+    init(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        // Labeled GroupBox creates AXTitleUIElement links that crash Sky's tree traversal.
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+                content
+            }.frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
