@@ -33,6 +33,26 @@ Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review cha
 - Preview 操作入口、可见工具及桌面/移动布局由 [Workspace Header](../../frontend/src/components/terminal/workspace/header.tsx)
   和 Panel 决定，不在文档中复制按钮位置或像素级布局。
 
+### Sidecar 布局边界
+
+默认保留原有非 Browser 工具，Browser 1 显示，Browser 2/3 从“管理标签”按需打开。
+菜单勾选只改变显隐，“打开”同时显示并激活；恢复默认布局时尽量保留仍可见的当前项。
+隐藏入口不清页面、Cookie 或代理，也不停止工具任务，因此不承诺减少浏览器进程或内存。
+三个 Browser Profile 仍独立，显式导航继续沿用原有 Profile 解析优先级。
+
+排序只重排可见项，隐藏项保留原槽位；菜单提供前移/后移作为键盘替代。
+Automation 等能力暂不可用时不展示入口，但保留布局偏好。配置无效时恢复默认布局，
+全部隐藏或能力变化导致无可用入口时恢复 Preview。
+
+布局键 `runweave.terminal.sidecar.tabs.v1` 只保存版本、稳定工具 ID、顺序与隐藏项，
+不保存业务状态，不做云同步，也不跨 origin 或 Stable/Beta 共享。
+写入失败时本轮内存操作仍有效，界面提示重启后可能恢复，不清理其他存储。
+
+验收使用[工具栏计划](../testing/terminal/sidecar-tabs.testplan.yaml)和
+[Profile 隔离回归](../testing/terminal/browser/multi-profile-whistle.testplan.yaml)。
+过程计划记录的原生合成窗口浮层验收尚未闭环；本轮文档整理未重跑。
+SIDETAB-008 必须实际检查 Electron 菜单、拖影与原生网页的显示和输入命中，DOM 检查不能代替。
+
 ## Agent 会话阅读
 
 终端头部的「阅读会话」打开当前 panel 的连续问答 Sidecar，可展开、收起和关闭。

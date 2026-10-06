@@ -45,8 +45,12 @@ service `com.runweave.remote-desktop.credentials.v1`，不沿用 Backend 的凭�
 用户停止共享后取消自动恢复。该机制只解决同一局域网内的地址变化，不提供外网连接。
 
 电脑级管理入口在登录与离线界面均可用；终端快捷入口只在恰有一个明确关联的已配对 Host
-时直接打开，否则由用户选择。全屏标题始终显示被控 Mac。返回桌面不改变原终端导航、Tab
-或草稿；隐藏的视频会话停止，重新进入建立新的呈现代际。
+时直接打开，否则由用户选择。远程画布占满可用区域，悬浮工具栏可拖动贴边、收起并记忆位置；
+会话菜单显示被控 Mac、连接状态、输入模式、统计和手势帮助，键盘按需打开。
+“返回终端”或“返回”入口在工具栏收起后仍可见；退出不改变原终端导航、Tab 或草稿。
+隐藏页面或移除原生视频层立即停止旧媒体和输入，重新进入建立新的呈现代际。
+界面合同以[原生控件](../../packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemoteSessionControls.swift)
+为准；[历史原型](../prototypes/remote-desktop-mobile/README.md)不代表当前实现或真机验收。
 
 ## 会话、权限与隐私
 
