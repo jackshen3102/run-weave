@@ -6,6 +6,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
   closestCenter,
+  pointerWithin,
   PointerSensor,
   useSensor,
   useSensors,
@@ -17,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
+import { useOverlayRef } from "../../features/overlay/use-overlay-ref";
 
 const POINTER_SENSOR_OPTIONS = {
   activationConstraint: {
@@ -34,6 +36,7 @@ interface SortableTabsProps<T> {
   onReorder: (fromIndex: number, toIndex: number) => void;
   renderTab: (item: T, props: SortableTabRenderProps) => ReactNode;
   className?: string;
+  cancelOutside?: boolean;
 }
 
 interface SortableTabItemProps {
@@ -52,7 +55,7 @@ function SortableTabItem({ id, children }: SortableTabItemProps) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...listeners}>
+    <div ref={setNodeRef} style={style} className="shrink-0" {...listeners}>
       {children}
     </div>
   );
@@ -64,8 +67,10 @@ export function SortableTabs<T>({
   onReorder,
   renderTab,
   className,
+  cancelOutside = false,
 }: SortableTabsProps<T>) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const overlayRef = useOverlayRef<HTMLDivElement>();
   const ids = useMemo(
     () => items.map((item) => getItemId(item)),
     [items, getItemId],
@@ -107,7 +112,7 @@ export function SortableTabs<T>({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={cancelOutside ? pointerWithin : closestCenter}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
@@ -123,7 +128,7 @@ export function SortableTabs<T>({
         </div>
       </SortableContext>
       <DragOverlay dropAnimation={null}>
-        {activeItem ? renderTab(activeItem, { isDragging: true }) : null}
+        {activeItem ? <div ref={overlayRef}>{renderTab(activeItem, { isDragging: true })}</div> : null}
       </DragOverlay>
     </DndContext>
   );

@@ -8,16 +8,16 @@ description: >
 
 cases:
   - id: TBMP-001
-    name: Sidecar 固定展示三个全局 Browser Profile
+    name: Sidecar 按需展示三个全局 Browser Profile
     required: true
     description: >
-      验证桌面 Sidecar 始终提供 Browser 1、Browser 2、Browser 3 三个一级入口，并准确展示
+      验证桌面 Sidecar 默认展示 Browser 1，Browser 2、Browser 3 可从管理标签按需打开，并准确展示
       Profile 1/2/3 到 P1_PORT/P2_PORT/P3_PORT 的固定映射，切换 Worktree 不会复制或重建 Profile。
     preconditions:
       - 使用 $toolkit:runweave-dev-session 启动一个受管 macOS Electron Dev Session，并取得 fresh desktop surface。
       - 当前 Project 至少发现两个可用 Worktree context。
     steps:
-      - 使用 $toolkit:playwright-cli 附着 desktop surface，打开 Terminal Sidecar；确认一级工具中同时显示 Browser 1、Browser 2、Browser 3，且每项只有一个实例。
+      - 使用 $toolkit:playwright-cli 附着 desktop surface，打开 Terminal Sidecar 并恢复默认布局；确认一级工具中只有 Browser 1，从管理标签依次打开 Browser 2、Browser 3，确认三个入口各只有一个实例。
       - 依次进入三个 Browser 设置面板；确认分别显示固定代理 127.0.0.1:P1_PORT、127.0.0.1:P2_PORT、127.0.0.1:P3_PORT，界面没有修改固定端口或 Profile 数量的入口。
       - 在两个 Worktree 间来回切换；确认三个 Browser 入口数量和 Profile ID 不变，未因 Worktree 切换自动启动代理、修改路由或刷新页面。
 
