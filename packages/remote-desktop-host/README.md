@@ -1,4 +1,4 @@
-# Runweave Remote Host
+# RemoteDesk
 
 独立原生 macOS 15+ App，为现有 Runweave iPhone App 提供局域网桌面。它不使用 Backend token、终端 WebSocket 或公网 Tunnel。
 
@@ -7,7 +7,7 @@
 packages/remote-desktop-host/build-host.sh
 # 使用已有 Apple Development team 进行最终签名：
 packages/remote-desktop-host/build-host.sh --team YOUR_TEAM_ID
-open ".runweave/remote-desktop-implementation/HostDerivedData/Build/Products/Release/Runweave Remote Host.app"
+open ".runweave/remote-desktop-implementation/HostDerivedData/Build/Products/Release/RemoteDesk.app"
 ```
 
 在固定 `.app` 路径和签名身份下授权并验收，改变签名/路径可能需要重新授权。脚本只构建，不启动服务、不申请权限、不安装启动项。首次点击“启动局域网服务”会创建本机 TLS 身份：系统 `/usr/bin/openssl` 生成 RSA 2048/SHA-256 自签证书，PKCS#12 与随机密码保存在独立 Keychain 中，临时文件随后清理。证书有效期十年，客户端仍检查当前有效期；过期或身份丢失需要本机处理并重新配对。此版本不自动轮换身份。
@@ -20,12 +20,12 @@ xcodebuild -project packages/remote-desktop-host/RunweaveRemoteHost.xcodeproj \
   -scheme RunweaveRemoteHost -configuration Debug \
   -derivedDataPath .runweave/remote-desktop-implementation/HostSimulatorDerivedData \
   DEVELOPMENT_TEAM=YOUR_TEAM_ID build
-open ".runweave/remote-desktop-implementation/HostSimulatorDerivedData/Build/Products/Debug/Runweave Remote Host.app" --args --simulator-loopback
+open ".runweave/remote-desktop-implementation/HostSimulatorDerivedData/Build/Products/Debug/RemoteDesk.app" --args --simulator-loopback
 ```
 
 UI 显示橙色模拟器验证标识。点击“启动回环验证服务”后只绑定 `lo0` / `127.0.0.1:48572`，拒绝 Wi-Fi、Ethernet、cellular 和其他接口。模拟器需使用该地址、端口及该窗口的完整 TLS 指纹重新配对；身份和设备授权分别保存在 `com.runweave.remote-host.simulator.identity` 与 `com.runweave.remote-host.simulator.paired-devices`，不读取或更改 Release 配对。TLS/pin/证书有效期/信任锚、H.264、输入租约、Mac 本机确认和停止/撤销均使用同一实现。该入口的闭环证据不能替代真机 LAN 验收；Release 中参数无法启用此模式。
 
-1. 选择实际 Wi-Fi / Ethernet 接口并启动服务。Host 仅绑定该接口的 IPv4 地址与端口 `48571`；没有 Bonjour、公网映射、中继或 Tunnel。启动服务不会采集屏幕。
+1. 选择实际 Wi-Fi / Ethernet 接口并启动服务。Host 仅绑定该接口的 IPv4 地址与端口 `48571`，以稳定 Host ID 发布 Bonjour 服务；没有公网映射、中继或 Tunnel。启动服务不会采集屏幕。所选接口的地址变化时释放旧会话与输入、关闭配对邀请，并用原身份重新监听；接口断开时等待其恢复，不自动切换网卡。等待期间仍可点击“停止全部共享”取消恢复。
 2. 在本机 UI 分别处理屏幕录制与辅助功能权限。拒绝屏幕权限不能观看；拒绝辅助功能只能观看。任何授权按钮都须本机用户主动点击。
 3. 本机点击“连接 iPhone”，在 iPhone 的“Mac 桌面”点击“扫码配对 Mac”，扫描此窗口的二维码。手机自动读取地址、端口、Host 身份和证书 pin，不需手填。手机需能访问此 Mac；相机不可用时展开“手动配对信息”，在手机使用手动填写并核对完整指纹。地址不是身份；身份 pin 不匹配或证书失效必须拒绝连接。
 4. 二维码在当前 120 秒窗口内有效，刷新、取消、断连、停止或到期后失效；六位码最多三次尝试。Host 还要本地确认设备名，默认只读，并单独决定是否允许键盘/鼠标控制。未经确认不会分发令牌、屏幕或输入能力。手机保存成功后可选关联终端连接，点击“打开桌面”才开始观看。二维码不能用于 Backend 登录，不含长期令牌。

@@ -7,7 +7,7 @@ final class RemotePairHostScanController: ObservableObject {
   @Published private(set) var scanning = true
   @Published private(set) var busy = false
   @Published private(set) var paired: PairedRemoteHost?
-  @Published private(set) var message = "将相机对准自己 Mac 的 Remote Host 配对二维码"
+  @Published private(set) var message = "将相机对准自己 Mac 的 RemoteDesk 配对二维码"
   @Published private(set) var failure: String?
   @Published private(set) var cameraUnavailable = false
   private let coordinator: RemoteDesktopCoordinator
@@ -79,7 +79,7 @@ final class RemotePairHostScanController: ObservableObject {
     guard foreground, paired == nil else { return }
     cancel()
     cameraUnavailable = false; failure = nil; scanning = true
-    message = "将相机对准自己 Mac 的 Remote Host 配对二维码"
+    message = "将相机对准自己 Mac 的 RemoteDesk 配对二维码"
   }
 
   func cancel() {

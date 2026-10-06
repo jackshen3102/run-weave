@@ -36,6 +36,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>连接你配置的电脑上的 Runweave 服务，并通过加密连接访问你明确配对的局域网 Mac 桌面，以查看屏幕及发送你主动执行的触控和键盘操作。</string>
+	<key>NSBonjourServices</key>
+	<array><string>_runweave-rd._tcp</string></array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>录制你主动发起的语音，转写为命令草稿。</string>
 	<key>NSCameraUsageDescription</key>

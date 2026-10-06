@@ -6,7 +6,7 @@ struct RemoteHostApp: App {
     @NSApplicationDelegateAdaptor(HostAppDelegate.self) private var delegate
     @StateObject private var model = HostModel()
     var body: some Scene {
-        WindowGroup("Runweave Remote Host") {
+        WindowGroup("RemoteDesk") {
             HostView(model: model).frame(minWidth: 640, minHeight: 620)
                 .onAppear { delegate.model = model }
         }
@@ -31,12 +31,12 @@ private struct HostView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
                     VStack(alignment: .leading) {
-                        Text("Runweave Remote Host").font(.title2.bold())
+                        Text("RemoteDesk").font(.title2.bold())
                         Text(model.status).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if model.isRunning { Button("停止全部共享", role: .destructive) { Task { await model.stop() } } }
-                    else { Button(HostRuntime.simulatorLoopback ? "启动回环验证服务" : "启动局域网服务") { model.start() }.buttonStyle(.borderedProminent).disabled(model.isReconfiguring) }
+                    if model.sharingEnabled { Button("停止全部共享", role: .destructive) { Task { await model.stop() } } }
+                    else { Button(HostRuntime.simulatorLoopback ? "启动回环验证服务" : "启动局域网服务") { model.start() }.buttonStyle(.borderedProminent).disabled(model.isReconfiguring || model.isNetworkRecovering) }
                 }
                 #if DEBUG
                 if HostRuntime.simulatorLoopback {
@@ -56,7 +56,7 @@ private struct HostView: View {
                 }
                 GroupBox("局域网端点与身份") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Picker(HostRuntime.simulatorLoopback ? "回环接口" : "物理网络接口", selection: $model.selectedInterface) { ForEach(model.interfaceNames, id: \.self) { Text($0).tag($0) } }.disabled(model.isRunning)
+                        Picker(HostRuntime.simulatorLoopback ? "回环接口" : "物理网络接口", selection: $model.selectedInterface) { ForEach(model.interfaceNames, id: \.self) { Text($0).tag($0) } }.disabled(model.sharingEnabled)
                         if !model.endpointAddress.isEmpty { Text("地址：\(model.endpointAddress):\(model.port)").textSelection(.enabled) }
                         if let display = model.lockedDisplayID { Text("已锁定显示器 ID：\(display)；改变目标必须在本机停止并重新启动。") .font(.caption) }
                         if let id = model.hostID { Text("Host ID：\(id.uuidString)").font(.caption.monospaced()).textSelection(.enabled) }

@@ -156,7 +156,7 @@ public final class RemoteDesktopSession: ObservableObject {
             guard let self else { return }
             do {
                 let credential = try self.credentials.load(target: target)
-                let control = try await RemoteTLSConnection.connect(target: target)
+                let control = try await RemotePairedConnection.connect(target: target)
                 guard self.isCurrent(expected, context: context) else { control.close(); return }
                 self.control = control
                 try await control.send(.init(kind: .authenticate, hostID: target.id, deviceID: credential.deviceID,
@@ -178,7 +178,10 @@ public final class RemoteDesktopSession: ObservableObject {
                 self.receiveControl(control, attempt: expected, context: context)
                 self.startHeartbeat(control, attempt: expected)
                 try await control.send(.init(kind: .startViewing, sessionID: sessionID, displayID: display.displayID))
-                let video = try await RemoteTLSConnection.connect(target: target)
+                // Both channels use the endpoint of this authenticated control
+                // connection, even when the saved address is no longer current.
+                let video = try await RemoteTLSConnection.connect(target: target,
+                    endpoint: control.connection.currentPath?.remoteEndpoint ?? control.connection.endpoint)
                 guard self.isCurrent(expected, context: context) else { video.close(); return }
                 self.video = video
                 try await video.send(.init(kind: .authenticate, hostID: target.id, deviceID: credential.deviceID,

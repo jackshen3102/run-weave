@@ -1,4 +1,4 @@
-# Mac Remote Host
+# RemoteDesk macOS
 
 - 独立 macOS 15+ 原生 App，采集与输入不进入 Backend / Electron；只依赖 Apple 框架与本地 Swift 协议包。
 - 最终部署与权限验收使用 `build-host.sh` 产出的 `.app`。开发编译、签名、启动、授权、真实会话是不同证据层。

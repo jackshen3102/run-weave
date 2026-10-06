@@ -25,7 +25,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.runweave.remote-host
-        PRODUCT_NAME: Runweave Remote Host
+        PRODUCT_NAME: RemoteDesk
         INFOPLIST_FILE: Info.plist
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_HARDENED_RUNTIME: YES

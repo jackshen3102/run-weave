@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-<key>CFBundleName</key><string>Runweave Remote Host</string>
-<key>CFBundleDisplayName</key><string>Runweave Remote Host</string>
+<key>CFBundleName</key><string>RemoteDesk</string>
+<key>CFBundleDisplayName</key><string>RemoteDesk</string>
 <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
@@ -11,5 +11,6 @@
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSLocalNetworkUsageDescription</key><string>仅向已配对的局域网 iPhone 提供加密桌面连接。</string>
-<key>NSScreenCaptureUsageDescription</key><string>在你批准桌面会话后，将所选 Mac 显示器传输到 Runweave。</string>
+<key>NSBonjourServices</key><array><string>_runweave-rd._tcp</string></array>
+<key>NSScreenCaptureUsageDescription</key><string>在你批准桌面会话后，将所选 Mac 显示器共享给已配对并授权的设备。</string>
 </dict></plist>
