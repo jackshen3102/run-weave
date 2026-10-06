@@ -1,5 +1,12 @@
 import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
-import type { TerminalSidecarTool } from "./store-types";
+export type TerminalSidecarTool =
+  | "preview"
+  | "automation"
+  | "browser"
+  | "agent-team"
+  | "race"
+  | "handoff"
+  | "conversation";
 
 export type SidecarTabId = Exclude<TerminalSidecarTool, "browser"> | TerminalBrowserProfileId;
 
