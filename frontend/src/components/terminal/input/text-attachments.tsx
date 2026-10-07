@@ -68,7 +68,9 @@ export function TerminalTextAttachments({
       if (
         scopeRef.current !== scope ||
         textareaRef?.current !== textarea ||
-        textarea.value !== previous
+        textarea.value !== previous ||
+        textarea.selectionStart !== start ||
+        textarea.selectionEnd !== end
       ) {
         setError("输入已变化，请重新选择恢复位置");
         return;
@@ -76,6 +78,7 @@ export function TerminalTextAttachments({
       onDraftChange(previous.slice(0, start) + text + previous.slice(end));
       controller.remove(item);
       setPreview(null);
+      setError(null);
       requestAnimationFrame(() => {
         textarea.focus();
         textarea.setSelectionRange(start + text.length, start + text.length);

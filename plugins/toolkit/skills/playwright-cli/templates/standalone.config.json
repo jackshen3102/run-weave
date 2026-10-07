@@ -1,0 +1,7 @@
+{
+  "browser": {
+    "cdpEndpoint": null,
+    "remoteEndpoint": null,
+    "isolated": true
+  }
+}
