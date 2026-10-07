@@ -1,0 +1,139 @@
+{
+  "computer": "MacBook Pro",
+  "connection": "本机",
+  "updatedAt": "2026-10-07T09:30:00.000Z",
+  "desktop": [
+    {
+      "id": "pool-01",
+      "label": "Runweave Beta · 01",
+      "secondary": "pool-01",
+      "state": "busy",
+      "task": "终端图片链接验收",
+      "worktree": "browser-viewer / wt-1",
+      "owner": "dvs-91b672",
+      "duration": "18 分钟",
+      "activity": "刚刚",
+      "startedAt": "2026-10-07 17:12:00",
+      "path": "browser-viewer/.worktree/wt-1",
+      "ports": "Backend 5101 · CDP 9225",
+      "processes": [
+        {
+          "name": "Electron",
+          "pid": 82104,
+          "usage": "CPU 3.2% · 486 MB"
+        },
+        {
+          "name": "Backend",
+          "pid": 82089,
+          "usage": "CPU 0.4% · 142 MB"
+        }
+      ]
+    },
+    {
+      "id": "pool-02",
+      "label": "Runweave Beta · 02",
+      "secondary": "pool-02",
+      "state": "busy",
+      "task": "快捷输入面板验收",
+      "worktree": "browser-viewer / agent-team-2",
+      "owner": "dvs-c704e1",
+      "duration": "7 分钟",
+      "activity": "12 秒前",
+      "startedAt": "2026-10-07 17:23:00",
+      "path": "browser-viewer/.worktree/agent-team-2",
+      "ports": "Backend 5102 · CDP 9235",
+      "processes": [
+        {
+          "name": "Electron",
+          "pid": 83841,
+          "usage": "CPU 1.8% · 412 MB"
+        },
+        {
+          "name": "Backend",
+          "pid": 83810,
+          "usage": "CPU 0.2% · 128 MB"
+        }
+      ]
+    },
+    {
+      "id": "pool-03",
+      "label": "Runweave Beta · 03",
+      "secondary": "pool-03",
+      "state": "blocked",
+      "task": "工作树删除验收",
+      "worktree": "browser-viewer / wt-2",
+      "owner": "dvs-a84f09",
+      "duration": "1 小时 24 分",
+      "activity": "46 分钟前",
+      "startedAt": "2026-10-07 16:06:00",
+      "path": "browser-viewer/.worktree/wt-2",
+      "ports": "Backend 5103 · CDP 9245",
+      "reason": "占用记录仍在，桌面进程已退出。资源释放尚未确认。",
+      "processes": []
+    },
+    {
+      "id": "pool-04",
+      "label": "Runweave Beta · 04",
+      "secondary": "pool-04",
+      "state": "free",
+      "task": null,
+      "worktree": null,
+      "duration": "—",
+      "activity": "—",
+      "processes": []
+    },
+    {
+      "id": "pool-05",
+      "label": "Runweave Beta · 05",
+      "secondary": "pool-05",
+      "state": "free",
+      "task": null,
+      "worktree": null,
+      "duration": "—",
+      "activity": "—",
+      "processes": []
+    }
+  ],
+  "simulators": [
+    {
+      "id": "sim-01",
+      "label": "iPhone 17 Pro",
+      "secondary": "iOS 26.5 · 已启动",
+      "state": "busy",
+      "task": "远控返回流程验收",
+      "worktree": "browser-viewer / main",
+      "owner": "remotedesk-return-20261007",
+      "duration": "12 分钟",
+      "activity": "3 秒前",
+      "startedAt": "2026-10-07 17:18:00",
+      "path": "browser-viewer/.runweave/mobile-qa/remotedesk-return-20261007",
+      "ports": "Runner 8100",
+      "udid": "0986DF97-0644-4138-847E-5BC690CFEF7E",
+      "app": "Runweave Native",
+      "processes": [
+        {
+          "name": "Runweave Native",
+          "pid": 87190,
+          "usage": "CPU 0.9% · 116 MB"
+        },
+        {
+          "name": "XCTest Runner",
+          "pid": 87512,
+          "usage": "CPU 0.2% · 74 MB"
+        }
+      ]
+    },
+    {
+      "id": "sim-02",
+      "label": "iPhone 17",
+      "secondary": "iOS 26.5 · 已关机",
+      "state": "free",
+      "task": null,
+      "worktree": null,
+      "duration": "—",
+      "activity": "—",
+      "udid": "8D2275F3-4483-444E-A034-E6D1FBC59B94",
+      "processes": []
+    }
+  ]
+}
