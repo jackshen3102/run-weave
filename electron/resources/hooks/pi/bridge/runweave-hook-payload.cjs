@@ -33,7 +33,6 @@ function getCommandBasename(command) {
 }
 
 function isNestedCodexProcess(spawnSync) {
-  if (!process.env.RUNWEAVE_TERMINAL_SESSION_ID) return false;
   // A nested CLI inherits terminal/pane identity. Its hook still belongs to
   // the child CLI, even when tmux reports the parent as the foreground command.
   const result = spawnSync("ps", ["-ww", "-axo", "pid=,ppid=,comm="], {
