@@ -157,6 +157,9 @@ Application Support 的 `RemoteDesktopUsage/records.json`，异步原子写入�
 `environment`（device/simulator）、连接汇总、最近连接结束时间和固定原因分类。
 不包含机器名、地址、Host/Backend 身份、配对码、凭据、按键/文本/坐标或桌面画面。
 `connection_lost` 只代表客户端观察到连接丢失，不能据此断言 Wi-Fi、Mac 睡眠或锁屏。
+`connection_timeout` 表示 TLS 连接未在 10 秒内建立；超时与建立后断开分别记录。
+旧版本的 `connection_lost` 也可能包含建连超时，不回填原因。手机的记录详情展示最近连接尝试的
+结束原因、时长和是否出现画面，用于定位反复重连；这些明细不改变会话级 Clarity 事件口径。
 
 每条记录允许事后选择 `purpose` 与 `outcome`；默认均为 `unknown`。
 “处理 Agent 卡点”是用户填写的目的，不表示发生了 Agent 自动交接。

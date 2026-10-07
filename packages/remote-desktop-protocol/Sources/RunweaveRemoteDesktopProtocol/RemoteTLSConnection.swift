@@ -4,10 +4,11 @@ import Security
 import CryptoKit
 
 public enum RemoteTransportError: Error, LocalizedError, Equatable {
-    case closed, invalidMessage, oversizedMessage, invalidEndpoint, invalidCertificate, keychain(OSStatus)
+    case closed, connectionTimedOut, invalidMessage, oversizedMessage, invalidEndpoint, invalidCertificate, keychain(OSStatus)
     public var errorDescription: String? {
         switch self {
         case .closed: return "Remote Host connection closed."
+        case .connectionTimedOut: return "Remote Host connection timed out before it was established."
         case .invalidMessage: return "Remote Host sent an invalid message."
         case .oversizedMessage: return "Remote message exceeded its size limit."
         case .invalidEndpoint: return "Remote Host address or certificate fingerprint is invalid."
@@ -165,7 +166,9 @@ public final class RemoteTLSConnection: @unchecked Sendable {
                     }
                 }
                 connection.start(queue: queue)
-                queue.asyncAfter(deadline: .now() + 10) { if !startState.isFinished { self.connection.cancel() } }
+                queue.asyncAfter(deadline: .now() + 10) {
+                    if startState.finish(.failure(RemoteTransportError.connectionTimedOut)) { self.connection.cancel() }
+                }
             }
         }, onCancel: { self.close() })
     }
@@ -229,10 +232,12 @@ private final class StartState: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Error>?
     init(_ continuation: CheckedContinuation<Void, Error>) { self.continuation = continuation }
-    var isFinished: Bool { lock.lock(); defer { lock.unlock() }; return continuation == nil }
-    func finish(_ result: Result<Void, Error>) {
+    @discardableResult
+    func finish(_ result: Result<Void, Error>) -> Bool {
         lock.lock(); let continuation = self.continuation; self.continuation = nil; lock.unlock()
-        continuation?.resume(with: result)
+        guard let continuation else { return false }
+        continuation.resume(with: result)
+        return true
     }
 }
 

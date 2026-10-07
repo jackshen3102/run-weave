@@ -12,6 +12,7 @@ public enum MobileAnalytics {
     case scheduledTasks = "scheduled_tasks", scheduledTaskEditor = "scheduled_task_editor"
     case browser, filePreview = "file_preview", history, terminalInfo = "terminal_info", diagnostics
     case remoteDesktop = "remote_desktop", remoteHosts = "remote_hosts", remotePairing = "remote_pairing"
+    case remoteHostEditor = "remote_host_editor", remoteUsage = "remote_usage", remoteUsageDetail = "remote_usage_detail"
     case buildInfo = "build_info", codexQuota = "codex_quota", share, newProject = "new_project", renameTerminal = "rename_terminal"
   }
 
