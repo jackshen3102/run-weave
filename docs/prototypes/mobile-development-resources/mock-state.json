@@ -1,0 +1,113 @@
+{
+  "host": "本地 Mac",
+  "project": {
+    "name": "Runweave",
+    "branch": "wt-1",
+    "terminal": "终端图片预览验收",
+    "preview": "已完成图片链接的换行处理，正在核对点击结果。"
+  },
+  "menu": [
+    "Mac 桌面",
+    "开发资源",
+    "耗电监控",
+    "定时任务",
+    "新增项目",
+    "刷新",
+    "诊断",
+    "Logout"
+  ],
+  "desktop": [
+    {
+      "id": "desk-01",
+      "label": "Beta 01",
+      "state": "busy",
+      "task": "终端图片预览验收",
+      "worktree": "wt-1",
+      "elapsed": "25 分钟",
+      "activity": "2 分钟前",
+      "action": "stop",
+      "reason": null,
+      "processes": [
+        "Frontend · PID 21840",
+        "Backend · PID 21846",
+        "Beta · PID 22018"
+      ],
+      "path": "/Code/browser-viewer/.worktree/wt-1",
+      "ports": "5001 · 5174"
+    },
+    {
+      "id": "desk-02",
+      "label": "Beta 02",
+      "state": "busy",
+      "task": "当前连接的开发环境",
+      "worktree": "wt-2",
+      "elapsed": "1 小时 12 分钟",
+      "activity": "刚刚",
+      "action": null,
+      "reason": "当前连接依赖此环境，不能在这里停止。",
+      "processes": ["Backend · PID 22511", "Beta · PID 22706"],
+      "path": "/Code/browser-viewer/.worktree/wt-2",
+      "ports": "5002 · 5175"
+    },
+    {
+      "id": "desk-03",
+      "label": "Beta 03",
+      "state": "unknown",
+      "task": null,
+      "worktree": null,
+      "action": null,
+      "reason": "检测到进程，但无法确认占用者。",
+      "processes": ["Beta · PID 23608"],
+      "path": null,
+      "ports": "—"
+    },
+    {
+      "id": "desk-04",
+      "label": "Beta 04",
+      "state": "free",
+      "task": null,
+      "action": null,
+      "processes": []
+    },
+    {
+      "id": "desk-05",
+      "label": "Beta 05",
+      "state": "free",
+      "task": null,
+      "action": null,
+      "processes": []
+    }
+  ],
+  "simulators": [
+    {
+      "id": "sim-01",
+      "label": "iPhone 17 Pro",
+      "state": "busy",
+      "task": "手机终端回归",
+      "worktree": "wt-1",
+      "elapsed": "18 分钟",
+      "activity": "1 分钟前",
+      "action": "stop",
+      "reason": null,
+      "processes": ["XCTest Runner · PID 24182"],
+      "path": "/Code/browser-viewer/.worktree/wt-1/.runweave/mobile-qa/terminal",
+      "deviceState": "Booted",
+      "udid": "0986DF97-0644-4138-847E-5BC690CFEF7E"
+    },
+    {
+      "id": "sim-02",
+      "label": "iPhone 17 Pro Max",
+      "state": "blocked",
+      "task": "远控页面验收",
+      "worktree": "wt-2",
+      "elapsed": "58 分钟",
+      "activity": "45 分钟前",
+      "action": "release",
+      "reason": "任务已停止，占用尚未释放。",
+      "processes": [],
+      "path": "/Code/browser-viewer/.worktree/wt-2/.runweave/mobile-qa/remote",
+      "deviceState": "Booted",
+      "udid": "E47B2C91-AF11-4A5C-B12E-C28A7F116824"
+    }
+  ]
+}

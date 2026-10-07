@@ -55,6 +55,13 @@ Swift 不直接导入 TypeScript。修改接口时同时核对 Swift `Contracts/
 `app` 是服务端认证与接口命名的一部分，删除旧客户端不重命名这些协议或改变权限。
 Backend、Web/Electron 和 App Server 继续由仓库各自入口维护，iOS 不承担其进程生命周期。
 
+## 开发资源
+
+首页「… → 开发资源」进入当前电脑的测试资源页；只在进入、手动刷新及显式释放后读取。
+原生页面使用共享 HTTP 合同的 Swift DTO，详情和确认均留在原生导航内。电脑资源、释放与重启边界
+见 [开发资源合同](../../../docs/architecture/development-resources.md#原生-ios)，验收见
+[原生计划](../../../docs/testing/app/ios-development-resources.testplan.yaml)。
+
 ## Agent 会话阅读
 
 终端工具栏进入原生全屏阅读页，复用当前 `SessionController`，返回不重建终端。

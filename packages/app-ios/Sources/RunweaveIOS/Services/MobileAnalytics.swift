@@ -8,6 +8,7 @@ public enum MobileAnalytics {
     case connecting, login, home, connections, configuration, mobileLogin = "mobile_login"
     case terminalChat = "terminal_chat", terminalFiles = "terminal_files", terminalChanges = "terminal_changes"
     case taskSupervision = "task_supervision"
+    case developmentResources = "development_resources"
     case composer, quickReplies = "quick_replies", quickReplyEditor = "quick_reply_editor"
     case scheduledTasks = "scheduled_tasks", scheduledTaskEditor = "scheduled_task_editor"
     case browser, filePreview = "file_preview", history, terminalInfo = "terminal_info", diagnostics

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>手机开发资源 · 原型预览</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #111216;
+        color: #eee;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+      main {
+        width: 1280px;
+        margin: auto;
+        padding: 30px 23px 26px;
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        gap: 18px;
+        margin-bottom: 25px;
+      }
+      h1 {
+        font-size: 24px;
+        margin: 0;
+      }
+      header span {
+        font-size: 13px;
+        color: #92929b;
+      }
+      .screens {
+        display: grid;
+        grid-template-columns: repeat(3, 402px);
+        gap: 14px;
+      }
+      .label {
+        font-size: 14px;
+        color: #c0c0c9;
+        margin: 0 0 12px;
+      }
+      iframe {
+        display: block;
+        width: 402px;
+        height: 874px;
+        border: 1px solid #33343b;
+        border-radius: 23px;
+        background: #000;
+      }
+      .label span {
+        color: #72727b;
+        margin-right: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header data-prototype-helper="true">
+        <h1>手机开发资源</h1>
+        <span>原型草案 · 入口 / 资源总览 / 释放确认</span>
+      </header>
+      <div class="screens">
+        <section>
+          <p class="label" data-prototype-helper="true">
+            <span>01</span>首页「…」菜单
+          </p>
+          <iframe title="首页入口" src="./?view=entry"></iframe>
+        </section>
+        <section>
+          <p class="label" data-prototype-helper="true">
+            <span>02</span>当前连接的开发资源
+          </p>
+          <iframe title="资源总览" src="./?view=resources"></iframe>
+        </section>
+        <section>
+          <p class="label" data-prototype-helper="true">
+            <span>03</span>停止并释放模拟器
+          </p>
+          <iframe
+            title="释放确认"
+            src="./?view=resources&amp;group=simulators&amp;confirm=sim-01"
+          ></iframe>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

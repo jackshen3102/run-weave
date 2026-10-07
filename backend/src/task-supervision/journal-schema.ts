@@ -8,7 +8,12 @@ const message = z.object({
   rawTurnId: id.optional(),
   phase: z.enum(["commentary", "final"]).optional(),
 });
-const plan = z.object({ path: id, digest: id, text: z.string() });
+const plan = z.object({
+  path: id,
+  digest: id,
+  text: z.string(),
+  availability: z.enum(["current", "snapshot", "missing"]).optional(),
+});
 const outcome = z.enum(["completed", "blocked", "continue"]);
 const scores = z
   .object({

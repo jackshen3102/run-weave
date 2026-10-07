@@ -17,6 +17,8 @@ export interface SupervisionPlan {
   path: string;
   digest: string;
   text: string;
+  /** Absent in older journals. Snapshot content is historical; missing has no readable content. */
+  availability?: "current" | "snapshot" | "missing";
 }
 export interface SupervisionInput {
   task: ConversationMessage;

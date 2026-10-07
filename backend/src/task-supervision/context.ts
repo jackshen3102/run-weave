@@ -35,19 +35,27 @@ export function taskCandidates(content: ConversationContent) {
 export function referencedPlans(messages: ConversationMessage[]): string[] {
   return [
     ...new Set(
-      messages.flatMap((message) =>
-        [
-          ...message.text.matchAll(
-            /(?:^|[\s`(])((?:docs\/plans\/|docs\/testing\/)[^\s`)#]+\.(?:md|testplan\.ya?ml))/g,
-          ),
-        ].map((match) => match[1]!),
-      ),
+      messages
+        .filter(
+          (message) =>
+            message.role === "user" &&
+            !isSupervisionPrompt(message.text) &&
+            !message.text.startsWith("<hook_prompt"),
+        )
+        .flatMap((message) =>
+          [
+            ...message.text.matchAll(
+              /(?:^|[\s`(])((?:docs\/plans\/|docs\/testing\/)[^\s`)#]+\.(?:md|testplan\.ya?ml))/g,
+            ),
+          ].map((match) => match[1]!),
+        ),
     ),
   ];
 }
 export async function readPlans(
   root: string,
   references: string[],
+  snapshots: SupervisionPlan[] = [],
 ): Promise<SupervisionPlan[]> {
   if (references.length > 10)
     throw new Error("计划引用超过 10 个，请明确任务范围。");
@@ -58,18 +66,36 @@ export async function readPlans(
         throw new Error("仅支持 Markdown 计划或 testplan.yaml 测试用例引用。");
       if (path.isAbsolute(reference))
         throw new Error("计划引用必须是当前项目内的相对路径。");
-      const file = await realpath(path.resolve(realRoot, reference));
-      if (!file.startsWith(`${realRoot}${path.sep}`))
+      const candidate = path.resolve(realRoot, reference);
+      if (!candidate.startsWith(`${realRoot}${path.sep}`))
         throw new Error("计划引用不能跨项目。");
-      const info = await stat(file);
-      if (!info.isFile() || info.size > INPUT_BUDGET_BYTES)
-        throw new Error("计划过大或不可读，请明确任务范围。");
-      const text = await readFile(file, "utf8");
-      return {
-        path: path.relative(realRoot, file),
-        digest: digest(text),
-        text,
-      };
+      const planPath = path.relative(realRoot, candidate);
+      try {
+        const file = await realpath(candidate);
+        if (!file.startsWith(`${realRoot}${path.sep}`))
+          throw new Error("计划引用不能跨项目。");
+        const info = await stat(file);
+        if (!info.isFile() || info.size > INPUT_BUDGET_BYTES)
+          throw new Error("计划过大或不可读，请明确任务范围。");
+        const text = await readFile(file, "utf8");
+        return {
+          path: planPath,
+          digest: digest(text),
+          text,
+          availability: "current",
+        };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        const snapshot = snapshots.find((plan) => plan.path === planPath);
+        if (snapshot && snapshot.availability !== "missing")
+          return { ...snapshot, availability: "snapshot" };
+        return {
+          path: planPath,
+          digest: digest(""),
+          text: "",
+          availability: "missing",
+        };
+      }
     }),
   );
 }
@@ -78,15 +104,13 @@ export async function refreshReferencedPlans(
   watch: TaskWatch,
   messages: ConversationMessage[],
 ) {
-  const following = messages.slice(
-    messages.findIndex((m) => m.id === watch.taskStartMessageId),
+  const start = messages.findIndex((m) => m.id === watch.taskStartMessageId);
+  if (start < 0) throw new Error("找不到原始任务起点，请重新核对任务来源。");
+  watch.plans = await readPlans(
+    root,
+    referencedPlans(messages.slice(start)),
+    watch.plans,
   );
-  watch.plans = await readPlans(root, [
-    ...new Set([
-      ...watch.plans.map((p) => p.path),
-      ...referencedPlans(following),
-    ]),
-  ]);
 }
 export function buildSupervisionInput(
   watch: TaskWatch,
