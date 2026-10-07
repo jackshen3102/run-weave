@@ -3,8 +3,8 @@ import RunweaveRemoteDesktopProtocol
 
 enum RemotePairedConnection {
     static func connect(target: RemoteTarget) async throws -> RemoteTLSConnection {
-        if let relay = target.relay {
-            guard relay.isValid else { throw RemoteTransportError.invalidEndpoint }
+        if target.usesRelay {
+            guard let relay = target.relay, relay.isValid else { throw RemoteTransportError.invalidEndpoint }
             return try await RemoteTLSConnection.connect(target: target,
                 endpoint: .hostPort(host: .init(relay.host), port: .init(rawValue: relay.port)!))
         }
