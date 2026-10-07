@@ -36,6 +36,19 @@ struct TerminalFileReference {
       isSupportedTerminalFileLinkPath(path) else { return nil }
     return Self(path: path, line: line, column: column)
   }
+
+  /// Match the Web fallback: keep valid filenames, quoted paths and URIs intact.
+  static func previewableToken(_ value: String) -> String? {
+    if parse(value) != nil { return value }
+    guard let first = value.first, !"\"'`".contains(first),
+      value.range(of: #"^[A-Za-z][A-Za-z0-9+.-]*://"#, options: .regularExpression) == nil else { return nil }
+    // Try the longest prefix first so punctuation within a filename is preserved.
+    for index in value.indices.reversed() where "，。；：！？、（）【】《》「」『』".contains(value[index]) {
+      let candidate = String(value[..<index]).replacingOccurrences(of: #"[.!?:]+$"#, with: "", options: .regularExpression)
+      if parse(candidate) != nil { return candidate }
+    }
+    return nil
+  }
 }
 
 /// Immutable text/cell snapshot captured at the native hit; resolution never reads a later frame.
@@ -104,7 +117,11 @@ public struct TerminalFileTap: Identifiable {
     for match in regex.matches(in: text, range: NSRange(location: 0, length: string.length)) {
       guard NSLocationInRange(offset, match.range) else { continue }
       var raw = string.substring(with: match.range).replacingOccurrences(of: #"[.!?:]+$"#, with: "", options: .regularExpression)
-      if TerminalFileReference.parse(raw) == nil,
+      if let candidate = TerminalFileReference.previewableToken(raw) {
+        // The trailing explanation is not part of the tappable file reference.
+        guard offset - match.range.location < candidate.utf16.count else { return nil }
+        raw = candidate
+      } else if
         string.substring(from: NSMaxRange(match.range)).trimmingCharacters(in: .whitespaces).isEmpty,
         let continued = continuedPath(raw, after: lastRow, left: left, right: right, geometry: geometry) {
         raw = continued
@@ -153,7 +170,7 @@ public struct TerminalFileTap: Identifiable {
       guard token != "-", token != "•", !token.contains("://") else { return nil }
       path += token
       let candidate = path.replacingOccurrences(of: #"[.!?:]+$"#, with: "", options: .regularExpression)
-      if TerminalFileReference.parse(candidate) != nil { return candidate }
+      if let recovered = TerminalFileReference.previewableToken(candidate) { return recovered }
       guard range.upperBound == trimmed.endIndex else { return nil }
     }
     return nil
