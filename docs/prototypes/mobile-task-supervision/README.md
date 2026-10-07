@@ -38,13 +38,13 @@ python3 -m http.server 6198 --bind 127.0.0.1 --directory docs/prototypes/mobile-
 6. 离线显示上次同步状态并禁用写操作，不排队开关或消息。正常开启、关闭等待响应后再更新状态，不把请求中的状态当成功。
 7. 本轮尚无有效判断时不显示旧结果为最新。生产实现如有历史判断，应标明“上次判断”并可查阅。
 
-## 当前代码事实与拟议落点
+## 当前实现与历史原型
 
 - 当前语义：[终端任务监控架构](../../architecture/terminal-task-supervision.md)。
 - Web 实现：[监控面板](../../../frontend/src/components/terminal/task-supervision/panel.tsx) 与 [判断详情](../../../frontend/src/components/terminal/task-supervision/decision-details.tsx)。
 - HTTP 合同：[共享 DTO](../../../packages/shared/src/task-supervision.ts)，已有发现、开启与 pause/resume API。
 - 原生入口：[TerminalScreen](../../../packages/app-ios/Sources/RunweaveIOS/Features/Terminal/TerminalScreen.swift)、[终端操作菜单](../../../packages/app-ios/Sources/RunweaveIOS/Features/Terminal/TerminalActionsMenu.swift)。原型制作时尚未发现 iOS 监控 DTO、服务或视图接线；现有实现以以上当前架构入口为准。
-- 未来实现复用已有后端接口，补 Swift DTO、HTTP 服务与界面；前台同步及连接/终端切换隔离需在实施阶段核对。手机与 Web 不各自计算监控结果或续接额度。
+- 原生实现已提供 Swift DTO、HTTP 服务与界面；前台同步与连接/终端切换隔离见上述 iOS 架构。手机与 Web 不各自计算监控结果或续接额度。
 - 原型仅用 JSON 表达样例，没有连接 API，不证明跨端同步已实现。
 
 ## 功能分类账

@@ -51,7 +51,13 @@ activeProjectId: string | null; // 唯一 effectiveProjectId
 activeSessionId: string | null;
 ```
 
-desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久第一且不可取消固定，其他节点只显示名称和实际分支。子 Worktree 行的右键菜单提供删除入口；主节点不提供 Git 写操作。contexts 每 3 秒刷新并在窗口重新聚焦时刷新。
+desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久第一且不可取消固定，其他节点显示名称、实际分支和相对远端默认分支的落后提交数。子 Worktree 行的右键菜单提供删除入口；主节点不提供 Git 写操作。contexts 每 3 秒刷新并在窗口重新聚焦时刷新。
+
+分支比较不要求该 Worktree 有运行中的 Terminal。Backend 读取远端默认分支并 fetch 对应引用，
+比较当前 HEAD；不会自动 rebase、合并或修改工作区。远端快照最多复用 10 分钟，Web 重新聚焦时查询；
+失败或快照过期显示“待更新”，已有计数保留但标记过期。非 Git 目录不显示比较，浅克隆、
+无可用远端或无共同历史时不推断为零。零落后仅表示远端默认分支没有当前 HEAD 缺少的提交，
+不表示分支完全相同、工作区干净或改动已经合并。
 
 删除只移除当前父 Project 的 `.worktree/<name>` 直接子 Worktree，保留分支、Activity 和 Work History。最终确认时 Backend 重新校验 Git 登记、路径边界、工作区干净状态、detached HEAD 引用和运行中 Agent；失败不使用 `--force`。通过检查后，对 source.root 匹配目标的全部未释放 Dev Session 使用其源码 CLI 尽力停止，全部清理共享 30 秒期限；普通停止发现身份漂移后仅重试一次 stale cleanup。清理失败、超时或身份信息缺失不阻止删除，也不把未释放的 Session 标为 stopped。当前处理删除请求的 Session 不会停止自身 Backend。普通 Terminal 会在删除前停止，当前 Context 删除成功后 Web 切回父 Project 主节点；存在清理警告时，rail 显示可关闭的“Worktree 已删除，部分服务未清理”提示。
 
