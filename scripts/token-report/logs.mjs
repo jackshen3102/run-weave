@@ -61,7 +61,7 @@ function counter(value) {
   );
 }
 
-function inside(root, directory) {
+export function inside(root, directory) {
   const relative = path.relative(root, directory);
   return (
     relative === "" ||
@@ -69,6 +69,15 @@ function inside(root, directory) {
       relative !== ".." &&
       !path.isAbsolute(relative))
   );
+}
+
+export function recordTurnId(record, line) {
+  if (
+    record.type === "turn_context" ||
+    (record.type === "event_msg" && record.payload?.type === "task_started")
+  )
+    return record.payload.turn_id ?? `unknown-${line}`;
+  return null;
 }
 
 export async function projectScope(cwd) {
@@ -177,16 +186,8 @@ export async function readSession(candidate, scope, since) {
         if (!scope.worktrees.some((root) => inside(root, directory)))
           return { excluded: "其他项目" };
       }
-      if (record.type === "turn_context")
-        current = getTurn(
-          payload.turn_id ?? `unknown-${line}`,
-          record.timestamp,
-        );
-      if (record.type === "event_msg" && payload.type === "task_started")
-        current = getTurn(
-          payload.turn_id ?? `unknown-${line}`,
-          record.timestamp,
-        );
+      const turnId = recordTurnId(record, line);
+      if (turnId !== null) current = getTurn(turnId, record.timestamp);
       const inWindow =
         Number.isFinite(Date.parse(record.timestamp)) &&
         Date.parse(record.timestamp) >= since;

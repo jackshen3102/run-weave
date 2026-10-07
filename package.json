@@ -87,6 +87,7 @@
     "toolkit:verify-hooks": "pnpm --filter ./electron exec tsx ../scripts/toolkit/verify/index.mjs",
     "perf:terminal": "node ./scripts/performance/terminal.mjs",
     "token:report": "node ./scripts/token-report/cli.mjs",
+    "skill:report": "node ./scripts/skill-report/cli.mjs",
     "quality:gate": "node ./scripts/quality/gate.mjs",
     "prepare": "husky",
     "ios:doctor": "node packages/app-ios/scripts/ios.mjs doctor",
