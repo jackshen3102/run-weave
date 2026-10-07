@@ -1,6 +1,10 @@
 import type { Router } from "express";
-import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
+import type {
+  TerminalProjectContextBranchStatus,
+  TerminalProjectContextListItem,
+} from "@runweave/shared/terminal/project-context";
 import { z } from "zod";
+import { HomeBranchStatusService } from "../../../terminal/git/home-branch-status";
 import type {
   TerminalProjectContextRecord,
   TerminalSessionManager,
@@ -56,6 +60,7 @@ export function registerTerminalProjectContextRoutes(
     ownerHooks?: TerminalWorktreeDeletionOwnerHooks;
   },
 ): void {
+  const branchStatusService = new HomeBranchStatusService();
   const deletionService = new TerminalWorktreeDeletionService({
     terminalSessionManager,
     runtimeRegistry: options?.runtimeRegistry,
@@ -76,6 +81,34 @@ export function registerTerminalProjectContextRoutes(
       return;
     }
     res.json(contexts.map(toProjectContextPayload));
+  });
+
+  // Git network work is separate from the frequently refreshed context list.
+  router.post("/project/:parentProjectId/contexts/branch-status", async (req, res) => {
+    const parsed = z.object({
+      projectIds: z.array(z.string().min(1).max(2_000)).max(100),
+    }).strict().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Invalid branch status request" });
+      return;
+    }
+    const contexts = await terminalSessionManager.refreshProjectContexts(req.params.parentProjectId);
+    if (!contexts) {
+      res.status(404).json({ message: "Terminal project not found" });
+      return;
+    }
+    const ids = new Set(parsed.data.projectIds);
+    const statuses = await Promise.all(contexts.filter((context) => ids.has(context.projectId))
+      .map(async (context): Promise<TerminalProjectContextBranchStatus> => {
+        const identity = { projectId: context.projectId, path: context.path, head: context.head };
+        if (!context.path || context.availability !== "available") {
+          return { ...identity, state: "unavailable" };
+        }
+        const { state, baseBranch, behind, checkedAt } =
+          await branchStatusService.status(context.projectId, context.path);
+        return { ...identity, state, baseBranch, behind, checkedAt };
+      }));
+    res.json({ statuses });
   });
 
   router.patch(

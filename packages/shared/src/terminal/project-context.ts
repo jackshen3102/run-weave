@@ -1,4 +1,21 @@
+import type { AppHomeBranchStatus } from "./runtime/session";
+
 const CHILD_PROJECT_ID_PREFIX = "wt";
+
+export interface TerminalProjectContextBranchStatus
+  extends Omit<AppHomeBranchStatus, "terminalSessionId" | "cwd"> {
+  projectId: string;
+  path: string | null;
+  head: string | null;
+}
+
+export interface TerminalProjectContextBranchStatusRequest {
+  projectIds: string[];
+}
+
+export interface TerminalProjectContextBranchStatusResponse {
+  statuses: TerminalProjectContextBranchStatus[];
+}
 
 export type TerminalProjectContextAvailability =
   | "available"

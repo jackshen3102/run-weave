@@ -10,6 +10,8 @@ export const terminalQueryKeys = {
       "project-contexts",
       parentProjectId,
     ] as const,
+  projectContextBranchStatuses: (scope: string, parentProjectId: string) =>
+    [...terminalQueryKeys.all(scope), "project-context-branch-statuses", parentProjectId] as const,
   workspaceServices: (
     scope: string,
     parentProjectId: string,

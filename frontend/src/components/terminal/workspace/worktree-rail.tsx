@@ -22,6 +22,7 @@ import {
   useTerminalWorkspaceQueryClient,
 } from "../../../features/terminal/queries/workspace";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { useTerminalProjectContextBranchStatuses } from "../../../features/terminal/queries/branch-status";
 import { useTerminalAggregateStatus } from "../../../features/terminal/status/use-aggregate-status";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
@@ -46,6 +47,7 @@ import {
   ContextMenuTrigger,
 } from "../../ui/context-menu";
 import { TerminalAggregateStatus } from "./aggregate-status";
+import { WorktreeBranchStatus } from "./worktree-branch-status";
 import type { TerminalBrowserProfilePreferences } from "@runweave/shared/terminal-browser-profile";
 
 interface TerminalWorktreeRailProps {
@@ -116,6 +118,9 @@ export function TerminalWorktreeRail({
     () => deviceStorage.getItem(railCollapsedStorageKey(scope)) === "true",
   );
   const [width, setWidth] = useState(() => readRailWidth(scope));
+  const branchStatuses = useTerminalProjectContextBranchStatuses(
+    parentProjectId, contexts, !collapsed && contexts.length > 1,
+  );
   const [resizing, setResizing] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [profilePreferences, setProfilePreferences] =
@@ -419,13 +424,24 @@ export function TerminalWorktreeRail({
                           className="flex w-full"
                           labelClassName="min-w-0 flex-1 truncate text-xs font-semibold"
                         />
-                        <span
-                          className={[
-                            "block truncate text-[10px]",
-                            unavailable ? "text-amber-400" : "text-slate-500",
-                          ].join(" ")}
-                        >
-                          {getContextDetail(context)}
+                        <span className="flex items-center justify-between gap-2">
+                          <span
+                            title={getContextDetail(context)}
+                            className={[
+                              "min-w-0 truncate text-[10px]",
+                              unavailable ? "text-amber-400" : "text-slate-500",
+                            ].join(" ")}
+                          >
+                            {getContextDetail(context)}
+                          </span>
+                          {!unavailable ? (
+                            <WorktreeBranchStatus
+                              status={branchStatuses.data?.find((status) =>
+                                status.projectId === context.projectId
+                                && status.path === context.path && status.head === context.head)}
+                              failed={branchStatuses.isError}
+                            />
+                          ) : null}
                         </span>
                         {browserSummary ? (
                           <span

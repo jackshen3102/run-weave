@@ -3,7 +3,11 @@ import type {
   TerminalProjectListItem,
   UpdateTerminalProjectRequest,
 } from "@runweave/shared/terminal/project";
-import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
+import type {
+  TerminalProjectContextBranchStatusRequest,
+  TerminalProjectContextBranchStatusResponse,
+  TerminalProjectContextListItem,
+} from "@runweave/shared/terminal/project-context";
 import { requestJson, requestVoid } from "../http";
 
 export async function createTerminalProject(
@@ -73,6 +77,21 @@ export async function updateTerminalProjectContext(
       body: JSON.stringify({ pinned }),
     },
   );
+}
+
+export async function getTerminalProjectContextBranchStatuses(
+  apiBase: string,
+  token: string,
+  parentProjectId: string,
+  payload: TerminalProjectContextBranchStatusRequest,
+): Promise<TerminalProjectContextBranchStatusResponse> {
+  return requestJson(apiBase,
+    `/api/terminal/project/${encodeURIComponent(parentProjectId)}/contexts/branch-status`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
 }
 
 export async function deleteTerminalWorktree(
