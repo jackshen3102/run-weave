@@ -9,17 +9,13 @@ import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
   EMPTY_TERMINAL_SESSIONS,
-  updateTerminalSessions,
   useTerminalProjectsQuery,
   useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
-  useTerminalWorkspaceQueryClient,
 } from "../../../features/terminal/queries/workspace";
 import { loadRecentTerminalSelection } from "../../../features/terminal/input/recent-selection";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { resolveCachedTerminalSurfaceIds } from "../../../features/terminal/state/surface-cache";
-import { HttpError } from "../../../services/http";
-import { updateTerminalSession } from "../../../services/terminal/index";
 import {
   applyPendingTerminalNavigation,
   hasValidProjectSessionSelection,
@@ -34,6 +30,7 @@ import {
 import { useTerminalWorkspaceActions } from "./actions";
 import { useTerminalWorkspaceEvents } from "./events";
 import { TerminalWorkspaceShell } from "./shell";
+import { useTerminalCompletionRead } from "./use-terminal-completion-read";
 import type { TerminalWorkspaceProps } from "./types";
 
 const SESSION_RETRY_DELAY_MS = 2_000;
@@ -61,7 +58,6 @@ export function TerminalWorkspaceContent({
   const { scope } = useTerminalRuntime();
   const projectsQuery = useTerminalProjectsQuery();
   const sessionsQuery = useTerminalSessionsQuery();
-  const { queryClient } = useTerminalWorkspaceQueryClient();
   const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
   const sessions = sessionsQuery.data ?? EMPTY_TERMINAL_SESSIONS;
   const hasLoadedSessions = projectsQuery.isFetched && sessionsQuery.isFetched;
@@ -402,47 +398,16 @@ export function TerminalWorkspaceContent({
     !requestError &&
     activeProjectLoaded &&
     (visibleSessions.length === 0 || activeSession !== null);
+  const acknowledgeCompletion = useTerminalCompletionRead({
+    apiBase, token, scope, initialTerminalSessionId, activeSession,
+    ready: hasLoadedSessions && activeProjectLoaded && !requestError,
+    onAuthExpired,
+  });
   const handleSelectSessionTab = useMemoizedFn((terminalSessionId: string) => {
     const completionRevision =
-      useTerminalWorkspaceStore.getState().completionMarkers[
-        terminalSessionId
-      ];
+      useTerminalWorkspaceStore.getState().completionMarkers[terminalSessionId];
     selectActiveSession(terminalSessionId);
-    if (!completionRevision) {
-      return;
-    }
-    setCompletionMarkers((current) => {
-      if (current[terminalSessionId] !== completionRevision) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[terminalSessionId];
-      return next;
-    });
-    void updateTerminalSession(apiBase, token, terminalSessionId, {
-      acknowledgedCompletionRevision: completionRevision,
-    })
-      .then((updatedSession) => {
-        updateTerminalSessions(queryClient, scope, (currentSessions) =>
-          currentSessions.map((session) =>
-            session.terminalSessionId === terminalSessionId
-              ? updatedSession
-              : session,
-          ),
-        );
-      })
-      .catch((error) => {
-        setCompletionMarkers((current) => ({
-          ...current,
-          [terminalSessionId]: Math.max(
-            current[terminalSessionId] ?? 0,
-            completionRevision,
-          ),
-        }));
-        if (error instanceof HttpError && error.status === 401) {
-          onAuthExpired?.();
-        }
-      });
+    acknowledgeCompletion(terminalSessionId, completionRevision ?? 0);
   });
   usePersistRecentSelection({
     apiBase: scope,

@@ -21,6 +21,18 @@ def inspect(app):
     if info["CFBundleIdentifier"] != value["bundleId"] or value["bundleId"] != APPS[value["appId"]][1]:
         raise ValueError("Bundle identity mismatch")
     subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True, capture_output=True)
+    apns_environment = None
+    if value["appId"] == "runweave" and value.get("platform") == "iphoneos":
+        signed = subprocess.run(
+            ["codesign", "-d", "--entitlements", ":-", str(app)],
+            check=True, capture_output=True,
+        )
+        entitlements = plistlib.loads(signed.stdout)
+        apns_environment = {"development": "sandbox", "production": "production"}.get(
+            entitlements.get("aps-environment")
+        )
+        if (info.get("RunweaveAPNsEnvironment") or None) != apns_environment:
+            raise ValueError("APNs environment in Info.plist differs from signed aps-environment")
     digest = hashlib.sha256()
     for path in sorted(app.rglob("*")):
         if path.is_file():
@@ -31,6 +43,8 @@ def inspect(app):
             or (value.get("appBuild") is not None and value["appBuild"] != build)):
         raise ValueError("Build identity version differs from signed Info.plist")
     result = dict(identity=value, appPath=str(app), version=version, buildNumber=build, productSHA256=digest.hexdigest(), observedAt=now(), stage="signedProductObserved")
+    if value["appId"] == "runweave" and value.get("platform") == "iphoneos":
+        result["apnsEnvironment"] = apns_environment
     write(directory(ROOT, value) / ("inspection-" + str(uuid.uuid4()) + ".json"), result)
     return result
 

@@ -43,8 +43,10 @@ Mode、Xcode 签名登录和 Swift package 插件审批仍需按正常系统流�
 最多等待 120 秒，解锁后自动继续；超时非零退出，重新执行可复用已验证的产物。
 保持 Bundle ID、Keychain 和应用数据，不卸载旧 App。
 
-默认 Release，沿用生产 Clarity 和 APNs production；可传入 `--configuration Debug` 或
-`Profile`（默认关闭分析、APNs sandbox）。签名必须支持现有 entitlement，不自动删减推送能力。
+默认 Release，沿用生产 Clarity；可传入 `--configuration Debug` 或 `Profile`（默认关闭分析）。
+直接安装到手机统一使用 Apple Development 签名及 APNs sandbox；Release 优化配置不代表
+生产推送签名。安装前核对已签名的 `aps-environment` 与 App 声明的推送环境，不一致即拒绝安装。
+工程的分发配置不受此命令覆盖影响。签名必须支持现有 entitlement，不自动删减推送能力。
 `--dry-run` 只读预览，不消耗构建号、不保存目标、不安装；`--json` 将最终结果输出为 JSON，
 进度输出到 stderr。另一个显式目标不自动覆盖已保存手机，须添加 `--save-target` 才保存。
 脚本消费 stdout 时使用 `pnpm --silent ios:update --json` 或独立 Node 入口，避免 pnpm 的命令提示混入 JSON。
