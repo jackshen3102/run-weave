@@ -26,6 +26,7 @@ struct SupervisionPlan: Codable {
   let path: String
   let digest: String
   let text: String
+  let availability: String?
 }
 
 struct SupervisionInput: Codable {

@@ -344,7 +344,8 @@ public actor APIClient {
 
   func authorized<T: Decodable>(
     _ path: String, method: String = "GET", body: [String: Any]? = nil,
-    retryUnauthorized: Bool = true, idempotencyKey: String? = nil, decodeError: ((Int, Data) -> Error?)? = nil,
+    retryUnauthorized: Bool = true, idempotencyKey: String? = nil, requestTimeout: TimeInterval? = nil,
+    decodeError: ((Int, Data) -> Error?)? = nil,
     decode: ((Data) throws -> T)? = nil
   ) async throws -> T {
     guard !importingMobileLogin else { throw CancellationError() }
@@ -357,7 +358,7 @@ public actor APIClient {
     do {
       let value: T = try await request(
         path, method: method, body: body, bearer: current.accessToken,
-        idempotencyKey: idempotencyKey, decodeError: decodeError, decode: decode)
+        idempotencyKey: idempotencyKey, requestTimeout: requestTimeout, decodeError: decodeError, decode: decode)
       guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
       return value
     } catch APIError.http(401) {
@@ -375,7 +376,7 @@ public actor APIClient {
       do {
         let value: T = try await request(
           path, method: method, body: body, bearer: renewed.accessToken,
-          idempotencyKey: idempotencyKey, decodeError: decodeError, decode: decode)
+          idempotencyKey: idempotencyKey, requestTimeout: requestTimeout, decodeError: decodeError, decode: decode)
         guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
         return value
       } catch APIError.http(401) {
@@ -418,7 +419,7 @@ public actor APIClient {
 
   private func request<T: Decodable>(
     _ path: String, method: String, body: [String: Any]? = nil, bearer: String? = nil,
-    idempotencyKey: String? = nil,
+    idempotencyKey: String? = nil, requestTimeout: TimeInterval? = nil,
     decodeError: ((Int, Data) -> Error?)? = nil,
     decode: ((Data) throws -> T)? = nil
   ) async throws -> T {
@@ -451,7 +452,20 @@ public actor APIClient {
       if let idempotencyKey { request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key") }
       if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
       if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
-      let (data, response) = try await session.data(for: request)
+      // Resource inspection/cleanup can outlast the ordinary 20s/30s budget.
+      // Keep those calls isolated without changing other endpoints or sharing cookies.
+      var extendedSession: URLSession?
+      if let timeout = requestTimeout {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieStorage = nil
+        config.timeoutIntervalForRequest = timeout
+        config.timeoutIntervalForResource = timeout
+        extendedSession = URLSession(configuration: config)
+        request.timeoutInterval = timeout
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+      }
+      defer { extendedSession?.invalidateAndCancel() }
+      let (data, response) = try await (extendedSession ?? session).data(for: request)
       guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
       responseStatus = http.statusCode
       if http.statusCode == 401,

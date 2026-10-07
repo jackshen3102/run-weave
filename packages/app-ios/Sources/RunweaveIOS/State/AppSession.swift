@@ -10,7 +10,7 @@ final class AppSession: ObservableObject {
   @Published private(set) var authenticated = false {
     didSet {
       if oldValue != authenticated { knowledgeInbox.reset(api: authenticated ? api : nil) }
-      if !authenticated { showingScheduledTasks = false; showingEnergyMonitor = false; scheduledSource = nil }
+      if !authenticated { showingScheduledTasks = false; showingEnergyMonitor = false; showingDevelopmentResources = false; scheduledSource = nil }
     }
   }
   @Published private(set) var checking = false
@@ -23,6 +23,7 @@ final class AppSession: ObservableObject {
   @Published private(set) var health = DeviceHealthSnapshot()
   @Published var error: String?
   @Published var showingEnergyMonitor = false
+  @Published var showingDevelopmentResources = false
   @Published var showingScheduledTasks = false
   @Published var scheduledSource: ScheduledTaskSource?
   @Published var terminal: TerminalDetails?
@@ -580,8 +581,7 @@ final class AppSession: ObservableObject {
 
   private func stopResources() {
     attentionRetention.setForeground(false)
-    showingScheduledTasks = false
-    scheduledSource = nil
+    showingDevelopmentResources = false; showingScheduledTasks = false; scheduledSource = nil
     deviceStatus.suspend()
     clearBellMarkers()
     acknowledgementWrites.removeAll()

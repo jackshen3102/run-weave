@@ -29,10 +29,12 @@ public struct RootView: View {
       }
       .background {
         NavigationLink(isActive: Binding(
-          get: { session.showingScheduledTasks || session.showingEnergyMonitor || session.terminal != nil },
-          set: { if !$0 { session.closeTerminal(); session.showingScheduledTasks = false; session.showingEnergyMonitor = false } }
+          get: { session.showingScheduledTasks || session.showingEnergyMonitor || session.showingDevelopmentResources || session.terminal != nil },
+          set: { if !$0 { session.closeTerminal(); session.showingScheduledTasks = false; session.showingEnergyMonitor = false; session.showingDevelopmentResources = false } }
         )) {
-          if session.showingScheduledTasks {
+          if session.showingDevelopmentResources {
+            DevelopmentResourcesView(session: session).id(session.generation)
+          } else if session.showingScheduledTasks {
             ScheduledTasksView(session: session, manageConnections: { managingConnections = true }).id(session.generation)
           } else if session.showingEnergyMonitor {
             ResourceMonitorView(session: session).id(session.generation)
