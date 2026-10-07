@@ -10,7 +10,7 @@ import {
   createBackendEnv,
   createFrontendEnv,
   resolveElectronBin,
-} from "../../dev/web.mjs";
+} from "../../dev/runtime.mjs";
 import { DevSessionError } from "../contracts.mjs";
 import { listManifestsForSource } from "../registry.mjs";
 import {

@@ -129,6 +129,7 @@ function classifyChangedFile(file) {
   }
   if (
     file === "scripts/dev/web.mjs" ||
+    file === "scripts/dev/runtime.mjs" ||
     file === "scripts/dev/electron.mjs" ||
     file.startsWith("scripts/dev-session/") ||
     file === "scripts/dev-session/verify/index.mjs" ||

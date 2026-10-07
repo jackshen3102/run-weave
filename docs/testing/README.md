@@ -34,6 +34,9 @@
 | [`suiji/`](./suiji/)                             | 随记服务、MCP、Web 录入、AI 回顾、原生体验与部署恢复 |
 | [`terminal/`](./terminal/)                       | Terminal、Browser、tmux、MCP 与 Worktree Context     |
 
+开发资源的当前快照、认证与手动释放使用[专项验收计划](./platform/development-resources.testplan.yaml)，
+产品边界见[开发资源合同](../architecture/development-resources.md)。
+
 ## 验证
 
 ```bash

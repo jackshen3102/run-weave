@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { promisify } from "node:util";
 
-import { resolvePort } from "../../dev/web.mjs";
+import { resolvePort } from "../../dev/runtime.mjs";
 import { DevSessionError, assertLoopbackUrl } from "../contracts.mjs";
 import { acquireServicePortLease, releaseSessionPortLeases } from "../registry.mjs";
 import {
@@ -361,7 +361,7 @@ export async function assertSessionServicesStoppable(services) {
 
 export async function stopSessionServices(
   services,
-  { identityVerified = false } = {},
+  { identityVerified = false, stopBetaControl = null } = {},
 ) {
   if (!identityVerified) {
     await assertSessionServicesStoppable(services);
@@ -375,7 +375,8 @@ export async function stopSessionServices(
   for (const service of ordered) {
     if (service?.ownership === "dedicated") {
       if (service.betaControl) {
-        await execFileAsync(service.betaControl.command, service.betaControl.args, {
+        if (stopBetaControl) await stopBetaControl(service);
+        else await execFileAsync(service.betaControl.command, service.betaControl.args, {
           cwd: service.betaControl.cwd,
           encoding: "utf8",
         });
@@ -389,7 +390,7 @@ export async function stopSessionServices(
 
 export async function cleanupStaleSessionServices(
   services,
-  { serviceNames = null } = {},
+  { serviceNames = null, stopBetaControl = null } = {},
 ) {
   const inspection = await inspectSessionServices(services);
   const cleanedServices = structuredClone(
@@ -447,7 +448,8 @@ export async function cleanupStaleSessionServices(
       continue;
     }
     if (originalService.betaControl) {
-      await execFileAsync(
+      if (stopBetaControl) await stopBetaControl(originalService);
+      else await execFileAsync(
         originalService.betaControl.command,
         originalService.betaControl.args,
         {

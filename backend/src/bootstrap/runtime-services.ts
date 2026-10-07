@@ -1,3 +1,4 @@
+import { DevResourcesService } from "../dev-resources/service";
 import { createTerminalTaskMonitoring, createTerminalTaskServices } from "./terminal-task-monitoring";
 import { TerminalBadges } from "../device-monitor/terminal-badges";
 import { TerminalQuestionsService } from "../terminal/questions/service";
@@ -466,6 +467,8 @@ async function assembleRuntimeServices(
     terminalStateService,
   );
 
+  const devResources = new DevResourcesService();
+  resources.defer("dev-resources", () => devResources.dispose());
   const runtimeStatus = new BackendRuntimeStatusService(
     serviceInstanceId ?? activityInstanceId,
     {
@@ -543,6 +546,7 @@ async function assembleRuntimeServices(
       return resources.dispose();
     },
     runtimeStatus,
+    devResources,
     activityStore,
     activityRecorder,
     activityQueryService,

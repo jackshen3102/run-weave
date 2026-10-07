@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { deviceStorage } from "../../../features/device-storage";
 import {
   Fragment,
@@ -10,7 +11,7 @@ import {
 import { useMemoizedFn } from "ahooks";
 import { useShallow } from "zustand/react/shallow";
 import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
-import { ChevronLeft, ChevronRight, Pin, Trash2 } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Pin, Trash2 } from "lucide-react";
 import { removeRecentTerminalProjectContext } from "../../../features/terminal/input/recent-selection";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { terminalQueryKeys } from "../../../features/terminal/queries/keys";
@@ -45,6 +46,7 @@ import type { TerminalBrowserProfilePreferences } from "@runweave/shared/termina
 interface TerminalWorktreeRailProps {
   parentProjectId: string | null;
   onSelectContext: (projectId: string) => void;
+  resourcesActive?: boolean;
 }
 
 const DEFAULT_RAIL_WIDTH_PX = 236;
@@ -88,7 +90,9 @@ function getContextDetail(context: TerminalProjectContextListItem): string {
 export function TerminalWorktreeRail({
   parentProjectId,
   onSelectContext,
+  resourcesActive = false,
 }: TerminalWorktreeRailProps) {
+  const navigate = useNavigate();
   const { apiBase, onAuthExpired, scope, token } = useTerminalRuntime();
   const { queryClient } = useTerminalWorkspaceQueryClient();
   const contextsQuery = useTerminalProjectContextsQuery(parentProjectId);
@@ -350,13 +354,9 @@ export function TerminalWorktreeRail({
     }
   });
 
-  if (contexts.length <= 1 && !pendingDeletion && !cleanupNotice) {
-    return null;
-  }
-
   return (
     <>
-      {contexts.length > 1 || cleanupNotice ? (
+      {(
         <aside
           data-testid="terminal-worktree-rail"
           data-collapsed={collapsed ? "true" : "false"}
@@ -540,8 +540,15 @@ export function TerminalWorktreeRail({
               onKeyDown={resizeWithKeyboard}
             />
           ) : null}
+          <div className="mt-auto shrink-0 border-t border-slate-800 p-1.5">
+            <button type="button" aria-label="开发资源" title="开发资源" aria-current={resourcesActive ? "page" : undefined}
+              className={`flex w-full items-center gap-2 rounded px-2 py-2 text-xs ${resourcesActive ? "bg-sky-950/50 text-sky-300" : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"} ${collapsed ? "justify-center px-0" : ""}`}
+              onClick={() => { if (!resourcesActive) navigate("/dev-resources"); }}>
+              <Activity className="h-4 w-4 shrink-0" />{!collapsed && <span>开发资源</span>}
+            </button>
+          </div>
         </aside>
-      ) : null}
+      )}
       <WorktreeDeleteDialog
         pendingDeletion={pendingDeletion}
         sessionCount={sessions.filter((session) => session.projectId === pendingDeletion?.projectId).length}
