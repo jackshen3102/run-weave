@@ -22,7 +22,7 @@ struct DiagnosticsView: View {
     NavigationView {
       Form {
         Section(header: Text("诊断记录")) {
-          Text("当前连接本地记录：\(recordCount) 条")
+          Text("本地记录（当前连接及 Clarity）：\(recordCount) 条")
           Text(status?.status == "recording" ? "记录中" : status?.status == "ended" ? "已结束" : "可记录")
           if let started = status?.startedAt { Text(started).font(.caption) }
           Button("开始记录") {
@@ -70,12 +70,16 @@ struct DiagnosticsView: View {
         }
       }
       .onDisappear { operation?.cancel() }
-      .confirmationDialog("清空当前连接的本地诊断记录？", isPresented: $confirmClear) {
+      .confirmationDialog("清空当前连接和 Clarity 的本地诊断记录？", isPresented: $confirmClear) {
         Button("清空", role: .destructive) {
           run {
             let api = session.api
             let controller = session.terminalController
-            try await api?.clearDiagnosticRecords()
+            if let api {
+              try await api.clearDiagnosticRecords()
+            } else {
+              try await DiagnosticStore.shared.clear(scope: nil)
+            }
             controller?.clearDiagnosticEvents()
             recordCount = 0
             storageWarning = nil
@@ -98,8 +102,12 @@ struct DiagnosticsView: View {
     }
   }
   private func collect() async -> [DiagnosticRecord] {
-    guard let api = session.api else { return [] }
-    let snapshot = await api.diagnosticSnapshot()
+    let snapshot: DiagnosticStore.Snapshot
+    if let api = session.api {
+      snapshot = await api.diagnosticSnapshot()
+    } else {
+      snapshot = await DiagnosticStore.shared.snapshot(scope: nil)
+    }
     storageWarning = snapshot.persistenceError
     recordCount = snapshot.records.count
     return snapshot.records.sorted { $0.at < $1.at }

@@ -24,6 +24,9 @@ public enum MobileAnalytics {
   private static var initialized = false
   private static var screens: [VisibleScreen] = []
   private static var reportedScreen: Screen?
+  private static var sessionID: String?
+  // Keep aligned with the exact clarity-apps dependency in Package.swift.
+  private static let sdkVersion = "4.1.0"
 
   enum RemoteEvent: String {
     case opened = "remote_opened", visible = "remote_visible", inputSent = "remote_input_sent"
@@ -33,33 +36,52 @@ public enum MobileAnalytics {
   /// Coarse event counts only; exact per-use joins live in the local remote usage archive.
   static func remoteEvent(_ event: RemoteEvent) {
     guard initialized else { return }
-    _ = ClaritySDK.sendCustomEvent(value: event.rawValue)
+    let accepted = ClaritySDK.sendCustomEvent(value: event.rawValue)
+    diagnostic("clarity.event", ["event": event.rawValue, "accepted": String(accepted)])
   }
 
   public static func initialize() {
     guard !initialized else { return }
     let settings = Bundle.main.infoDictionary ?? [:]
-    guard (settings["RunweaveClarityEnabled"] as? String) == "YES",
-      let projectID = settings["RunweaveClarityProjectID"] as? String,
+    guard (settings["RunweaveClarityEnabled"] as? String) == "YES" else {
+      diagnostic("clarity.initialize.skipped", ["reason": "disabled"])
+      return
+    }
+    guard let projectID = settings["RunweaveClarityProjectID"] as? String,
       !projectID.isEmpty,
       projectID.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) && $0.isASCII })
-    else { return }
+    else {
+      diagnostic("clarity.initialize.skipped", ["reason": "invalid_project"])
+      return
+    }
 
     // Simulator acceptance must use a separate mobile project, even for Release builds.
     #if targetEnvironment(simulator)
-      guard projectID != "yofefg4fsy" else { return }
+      guard projectID != "yofefg4fsy" else {
+        diagnostic("clarity.initialize.skipped", ["reason": "production_project_on_simulator"])
+        return
+      }
     #endif
     initialized = ClaritySDK.initialize(config: ClarityConfig(projectId: projectID))
+    diagnostic("clarity.initialize", ["projectId": projectID, "accepted": String(initialized)])
     guard initialized else { return }
-    _ = ClaritySDK.setOnSessionStartedCallback { _ in
+    let registered = ClaritySDK.setOnSessionStartedCallback { id in
       Task { @MainActor in
+        // Retain the opaque SDK identifier for replay correlation, never its token-bearing URL.
+        sessionID = id.count <= 128 && !id.isEmpty && id.unicodeScalars.allSatisfy {
+          $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "-_.".unicodeScalars.contains($0))
+        } ? id : nil
+        var failedTags: [String] = []
         for (key, value) in AppBuildMetadata.fields {
-          _ = ClaritySDK.setCustomTag(key: key, value: value)
+          if !ClaritySDK.setCustomTag(key: key, value: value) { failedTags.append(key) }
         }
+        diagnostic("clarity.session.started", ["projectId": projectID,
+          "failedBuildTags": failedTags.sorted().joined(separator: ",")])
         reportedScreen = nil
         reportScreen()
       }
     }
+    diagnostic("clarity.session.callback", ["registered": String(registered)])
   }
 
   static func appear(id: UUID, screen: Screen, depth: Int) {
@@ -83,7 +105,19 @@ public enum MobileAnalytics {
     let depth = screens.map(\.depth).max()
     let screen = screens.last { $0.depth == depth }?.screen
     guard initialized, screen != reportedScreen else { return }
-    if ClaritySDK.setCurrentScreenName(screen?.rawValue) { reportedScreen = screen }
+    let accepted = ClaritySDK.setCurrentScreenName(screen?.rawValue)
+    diagnostic("clarity.screen", ["previousScreen": reportedScreen?.rawValue ?? "none",
+      "screen": screen?.rawValue ?? "none", "depth": depth.map(String.init) ?? "none",
+      "visibleScreenCount": String(screens.count), "accepted": String(accepted)])
+    if accepted { reportedScreen = screen }
+  }
+
+  private static func diagnostic(_ message: String, _ details: [String: String]) {
+    var fields = details
+    fields["sdkVersion"] = sdkVersion
+    fields["sessionId"] = sessionID ?? "not_started"
+    fields["sdkPaused"] = initialized ? String(ClaritySDK.isPaused()) : "not_initialized"
+    DiagnosticStore.shared.append(scope: DiagnosticStore.analyticsScope, .analytics(message, details: fields))
   }
 }
 
