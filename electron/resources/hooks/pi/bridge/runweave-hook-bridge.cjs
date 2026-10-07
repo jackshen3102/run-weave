@@ -9,6 +9,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const {
   STOP_EVENTS,
+  isNestedCodexProcess,
   isFeishuAttentionHook,
   buildAppServerBaseEvent,
   buildCompletionHookBody,
@@ -353,15 +354,15 @@ async function main() {
     source === "pi" || source === "codex" || source === "trae"
       ? toAgentHookStateEvent(normalizedEvent)
       : null;
-  // Codex emits SessionStart after compaction while the same turn continues.
-  // Do not reset either Backend state or App Server projection for that event.
+  // Compaction continues the turn; child CLIs do not own the parent terminal.
   if (
     source === "codex" &&
-    stateHookEvent === "SessionStart" &&
-    payload.source === "compact"
+    ((stateHookEvent === "SessionStart" && payload.source === "compact") ||
+      isNestedCodexProcess(spawnSync))
   ) {
-    appendDebugLog("hook bridge skipped codex compaction session start", {
+    appendDebugLog("hook bridge skipped codex hook", {
       threadId,
+      reason: payload.source === "compact" ? "compaction" : "nested_codex",
     });
     return;
   }

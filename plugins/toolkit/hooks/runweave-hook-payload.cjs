@@ -32,6 +32,40 @@ function getCommandBasename(command) {
   return basename || null;
 }
 
+function isNestedCodexProcess(spawnSync) {
+  if (!process.env.RUNWEAVE_TERMINAL_SESSION_ID) return false;
+  // A nested CLI inherits terminal/pane identity. Its hook still belongs to
+  // the child CLI, even when tmux reports the parent as the foreground command.
+  const result = spawnSync("ps", ["-ww", "-axo", "pid=,ppid=,comm="], {
+    encoding: "utf8",
+    timeout: 1000,
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  // Reject only proven nesting; an unavailable process snapshot must not
+  // disable normal hooks or shared-daemon hooks with a different ancestry.
+  if (result.error || result.status !== 0) return false;
+  const processes = new Map();
+  for (const line of String(result.stdout || "").split(/\r?\n/)) {
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/);
+    if (match) {
+      processes.set(Number(match[1]), {
+        parent: Number(match[2]),
+        command: getCommandBasename(match[3]),
+      });
+    }
+  }
+  let codexCount = 0;
+  const visited = new Set();
+  for (let pid = process.ppid; pid > 1 && !visited.has(pid); ) {
+    visited.add(pid);
+    const entry = processes.get(pid);
+    if (!entry) break;
+    if (entry.command === "codex" && ++codexCount > 1) return true;
+    pid = entry.parent;
+  }
+  return false;
+}
+
 function readTmuxPaneContext(spawnSync) {
   const socketPath = parseTmuxSocketPath(process.env.TMUX);
   const tmuxPaneId = process.env.TMUX_PANE;
@@ -507,6 +541,7 @@ function buildAppServerBaseEvent({
 }
 
 module.exports = {
+  isNestedCodexProcess,
   isFeishuAttentionHook,
   STOP_EVENTS,
   buildAppServerBaseEvent,
