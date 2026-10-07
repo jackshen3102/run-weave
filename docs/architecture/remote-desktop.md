@@ -1,7 +1,7 @@
 # RemoteDesk（Mac 局域网远控）
 
 RemoteDesk 是独立的 Mac 原生远控 App；现有 Runweave iPhone App 作为客户端，连接用户明确配对的 Mac Host。终端、文件和
-Commands 继续使用原 Backend；远控视频不经过 Backend、Electron 或现有公网 Tunnel。
+Commands 继续使用原 Backend；远控视频不经过 Backend 或 Electron 的 HTTP 网关。已配对 Host 可选用 Runweave 管理的 Devbox 内网/VPN TCP 中转，TLS 始终在手机和 Mac Host 之间终止。
 Host 的在线状态与 Backend 健康、登录状态分别判断，Backend 离线时仍可显式选择已配对 Host。
 
 ```text
@@ -42,7 +42,7 @@ service `com.runweave.remote-desktop.credentials.v1`，不沿用 Backend 的凭�
 发现三秒内不可用时回退保存的显式地址，以兼容旧 Host 或不支持 mDNS 的网络；
 证书校验失败直接终止，不回退。Mac 所选接口的 IPv4 变化时结束旧会话、释放输入、
 失效配对邀请并用原身份重新监听；网卡断开则等待同一接口恢复，不切换接口。
-用户停止共享后取消自动恢复。该机制只解决同一局域网内的地址变化，不提供外网连接。
+用户停止共享后取消自动恢复。该发现机制只解决同一局域网内的地址变化；显式启用隧道时使用下述独立入口。
 
 电脑级管理入口在登录与离线界面均可用；终端快捷入口只在恰有一个明确关联的已配对 Host
 时直接打开，否则由用户选择。远程画布占满可用区域，悬浮工具栏可拖动贴边、收起并记忆位置；
@@ -51,6 +51,38 @@ service `com.runweave.remote-desktop.credentials.v1`，不沿用 Backend 的凭�
 隐藏页面或移除原生视频层立即停止旧媒体和输入，重新进入建立新的呈现代际。
 界面合同以[原生控件](../../packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemoteSessionControls.swift)
 为准；[历史原型](../prototypes/remote-desktop-mobile/README.md)不代表当前实现或真机验收。
+
+## Devbox 内网/VPN 隧道
+
+Runweave「端口与隧道 → 编辑 SSH 主机 → RemoteDesk」独立启用远控中转。复用该主机的
+系统 SSH 配置、连接意图、重连与退出清理；不要求启用 Backend 的「远程访问本机」。
+关闭 Runweave、断开 SSH 主机或关闭此开关会停止自有隧道。Host 仍需由本机用户启动共享，
+配对、控制授权、撤销与输入 lease 均由原 Host 处理。
+
+```text
+手机（LAN/蜂窝 + 所需 VPN） → Devbox 内网 TCP 入口
+  → SSH -R 回环监听 → 当前 Mac 的 LAN 地址:RemoteDesk端口 → 原 Host
+```
+
+配置记录独立的中转 IPv4/端口、本机 Host IPv4/端口和完整 SHA-256 证书指纹。
+中转地址限定 RFC1918；本机地址还必须属于当前 Mac 的非回环 IPv4 接口。
+RemoteDesk 与 Backend 入口不能共用相同地址/端口。Mac IP 变化时明确报告需更新 Host 地址，
+不猜测另一台电脑、不跳过证书检查。Devbox 需能通过 SSH 执行 Node.js 并允许反向转发；
+Mac 和手机均需可达入口。中转只透传字节，控制和视频保持独立 TLS 连接、共用同一个入口。
+
+手机先按原流程在局域网配对，再在「Mac 桌面 → 编辑地址」开启「通过 Runweave 隧道连接」，
+填写中转 IPv4/端口。普通偏好中的可选 `RemoteTarget.relay` 保留原 LAN 地址、Host ID、pin
+和 credential 引用；旧数据无此字段时保持局域网行为。显式开启隧道会跳过 Bonjour 并允许
+蜂窝/VPN 路由；关闭后恢复原 LAN 发现。视频使用本次控制连接实际端点；身份校验失败不换地址重试。
+
+每 15 秒的连通检查仅建立 TLS、核对固定证书、有效期与自签名，不携带设备 token，不开始采集。
+“中转入口与 Host 证书已验证”不等于手机已连接或已取得画面/控制。一次超时保留已验证通道，
+连续三次超时或明确断开/身份错误才重建；执行器状态过期时清空远控入口的可用状态。
+远端 TCP 中转最多接纳 8 对连接；应用心跳停止超过 45 秒后在下一次 5 秒检查退出。
+
+实现入口：[远控通道](../../electron/src/tunnels/remote-desktop-channel.ts)、
+[生命周期](../../electron/src/tunnels/remote-desktop-owner.ts)、
+[手机路由](../../packages/remote-desktop-ios/Sources/RunweaveRemoteDesktop/RemotePairedConnection.swift)。
 
 ## 会话、权限与隐私
 
@@ -75,10 +107,10 @@ Host 的单调时钟限制 120 秒窗口；刷新、取消、批准、断连、�
 
 系统 TLS 承担传输保护，不默认接受任意自签证书，不把 token 放 URL。控制与视频使用
 分开的连接。手机“忘记本机配对”删除其 credential 引用；彻底撤销设备授权须在 Mac
-Host 本地执行，界面明确区分两种操作。部署不配置公网映射、云中继或复用现有 Tunnel。
+Host 本地执行，界面明确区分两种操作。Host 不创建隧道；可选的 TCP 转发由 Runweave 桌面端管理，不自动开启 Host 共享。
 
 屏幕录制决定能否观察，辅助功能决定能否输入；没有首帧不能报告可控。首版只使用当前
-已存在的一个显示器、H.264、已登录的 Mac 图形会话。音频、虚拟屏、公网、浏览器与
+已存在的一个显示器、H.264、已登录的 Mac 图形会话。音频、虚拟屏、公共互联网入口、浏览器与
 Agent 控制不属于首版；不降低 SIP/AMFI，不承诺 FileVault、Touch ID 或系统安全弹窗
 都可远控。
 

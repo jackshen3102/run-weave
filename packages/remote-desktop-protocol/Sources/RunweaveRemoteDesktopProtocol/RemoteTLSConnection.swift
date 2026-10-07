@@ -140,7 +140,13 @@ public final class RemoteTLSConnection: @unchecked Sendable {
         let verification = TLSVerificationState()
         let parameters = try RemoteTLS.clientParameters(fingerprint: target.certificateFingerprint, verificationRejected: { verification.reject() })
         parameters.includePeerToPeer = false
-        parameters.prohibitedInterfaceTypes = [.cellular, .other]
+        // Only an explicitly configured relay permits cellular/VPN routing.
+        // TLS pinning and device authentication are identical on both routes.
+        if let relay = target.relay {
+            guard relay.isValid else { throw RemoteTransportError.invalidEndpoint }
+        } else {
+            parameters.prohibitedInterfaceTypes = [.cellular, .other]
+        }
         let destination = endpoint ?? .hostPort(host: NWEndpoint.Host(target.host), port: port)
         let channel = RemoteTLSConnection(connection: NWConnection(to: destination, using: parameters))
         do { try await channel.start(); return channel }

@@ -98,6 +98,7 @@ export function readDesktopNetwork(): DesktopNetworkSnapshot {
                 ]),
               ),
               browser: { state: "waiting", error: null },
+              remoteDesktop: { state: "waiting", error: null, address: null, checkedAt: null },
             }
           : h,
       ),

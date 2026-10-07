@@ -1,3 +1,4 @@
+import { RemoteDesktopForm } from "./remote-desktop";
 import type { RunweaveElectronBridge } from "@runweave/shared/desktop-bridge";
 import { useState } from "react";
 import { useMemoizedFn } from "ahooks";
@@ -111,6 +112,7 @@ export function HostForm({
         value={draft.remoteAccess}
         onChange={(remoteAccess) => patch({ remoteAccess })}
       />
+      <RemoteDesktopForm value={draft.remoteDesktop} relayAddress={draft.remoteAccess?.listenAddress} onChange={(remoteDesktop) => patch({ remoteDesktop })} />
       <h4 className="border-t border-border pt-3 font-medium">开发服务端口</h4>
       {draft.forwards.map((f, index) => (
         <fieldset key={f.id} className="space-y-2 rounded-lg bg-muted/30 p-3">

@@ -1,3 +1,4 @@
+import { RemoteDesktopStatus } from "./remote-desktop";
 import type { RunweaveElectronBridge } from "@runweave/shared/desktop-bridge";
 import { useEffect, useState } from "react";
 import { useMemoizedFn } from "ahooks";
@@ -338,6 +339,7 @@ export function TunnelDrawer() {
                   run={run}
                   busy={busy}
                 />
+                <RemoteDesktopStatus host={host} runtime={runtime} busy={busy} run={run} />
                 <BrowserStatus
                   host={host}
                   runtime={runtime}

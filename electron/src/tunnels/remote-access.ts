@@ -1,3 +1,4 @@
+import { reverseRelayCommand } from "./reverse-relay-command.js";
 import http from "node:http";
 import type { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
@@ -232,37 +233,7 @@ export class RemoteAccessChannel {
     this.check();
     // The remote process owns only its listener. An application heartbeat bounds
     // cleanup after hard network loss, without modifying the server's sshd.
-    const program = `
-      const net = require("node:net");
-      let last = Date.now();
-      const sockets = new Set();
-      const server = net.createServer(client => {
-        const upstream = net.connect(${remotePort}, "127.0.0.1");
-        for (const socket of [client, upstream]) {
-          sockets.add(socket);
-          socket.on("close", () => sockets.delete(socket));
-        }
-        client.on("error", () => upstream.destroy());
-        upstream.on("error", () => client.destroy());
-        client.on("close", () => upstream.destroy());
-        upstream.on("close", () => client.destroy());
-        client.pipe(upstream).pipe(client);
-      });
-      const stop = () => {
-        for (const socket of sockets) socket.destroy();
-        server.close();
-        process.exit(0);
-      };
-      process.stdin.on("data", () => last = Date.now());
-      process.stdin.on("end", stop);
-      process.on("SIGTERM", stop);
-      process.on("SIGHUP", stop);
-      setInterval(() => { if (Date.now() - last > 45000) stop(); }, 5000);
-      server.on("error", error => { console.error(error.code); process.exit(1); });
-      server.listen(${this.config.port}, ${JSON.stringify(this.config.listenAddress)},
-        () => console.log("runweave-tunnel-ready"));
-    `;
-    const command = `node -e '${program.replace(/'/g, "'\\''")}'`;
+    const command = reverseRelayCommand(this.config, remotePort);
     this.ssh = startSsh(
       this.host,
       ["-R", `127.0.0.1:${remotePort}:127.0.0.1:${local.port}`],

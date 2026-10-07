@@ -1884,6 +1884,90 @@ CLI 连接配置及会话；敏感字段仅本机可读写
 | 约束              | ≥ 1；≤ 65535                                  |
 | 显式迁移来源      | tunnels/config.json.hosts[].remoteAccess.port |
 
+### desktop.tunnels.hosts[].remoteDesktop.enabled
+
+是否启用由 Runweave 管理的 RemoteDesk 隧道
+
+| 属性              | 合同                                              |
+| ----------------- | ------------------------------------------------- |
+| 类型              | boolean；允许 null 恢复默认                       |
+| 默认              | null                                              |
+| 所属模块          | electron/tunnels                                  |
+| 生效              | 所属消费者重载                                    |
+| 敏感 / 远端可修改 | 否 / 否                                           |
+| 约束              | 按字段类型校验                                    |
+| 显式迁移来源      | tunnels/config.json.hosts[].remoteDesktop.enabled |
+
+### desktop.tunnels.hosts[].remoteDesktop.listenAddress
+
+Devbox 内网或 VPN 入口 IPv4
+
+| 属性              | 合同                                                    |
+| ----------------- | ------------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                              |
+| 默认              | null                                                    |
+| 所属模块          | electron/tunnels                                        |
+| 生效              | 所属消费者重载                                          |
+| 敏感 / 远端可修改 | 否 / 否                                                 |
+| 约束              | 按字段类型校验                                          |
+| 显式迁移来源      | tunnels/config.json.hosts[].remoteDesktop.listenAddress |
+
+### desktop.tunnels.hosts[].remoteDesktop.port
+
+RemoteDesk 独立中转端口
+
+| 属性              | 合同                                           |
+| ----------------- | ---------------------------------------------- |
+| 类型              | integer；允许 null 恢复默认                    |
+| 默认              | null                                           |
+| 所属模块          | electron/tunnels                               |
+| 生效              | 所属消费者重载                                 |
+| 敏感 / 远端可修改 | 否 / 否                                        |
+| 约束              | ≥ 1；≤ 65535                                   |
+| 显式迁移来源      | tunnels/config.json.hosts[].remoteDesktop.port |
+
+### desktop.tunnels.hosts[].remoteDesktop.localAddress
+
+本机 RemoteDesk 所监听的 LAN IPv4
+
+| 属性              | 合同                                                   |
+| ----------------- | ------------------------------------------------------ |
+| 类型              | string；允许 null 恢复默认                             |
+| 默认              | null                                                   |
+| 所属模块          | electron/tunnels                                       |
+| 生效              | 所属消费者重载                                         |
+| 敏感 / 远端可修改 | 否 / 否                                                |
+| 约束              | 按字段类型校验                                         |
+| 显式迁移来源      | tunnels/config.json.hosts[].remoteDesktop.localAddress |
+
+### desktop.tunnels.hosts[].remoteDesktop.localPort
+
+本机 RemoteDesk TLS 监听端口
+
+| 属性              | 合同                                                |
+| ----------------- | --------------------------------------------------- |
+| 类型              | integer；允许 null 恢复默认                         |
+| 默认              | null                                                |
+| 所属模块          | electron/tunnels                                    |
+| 生效              | 所属消费者重载                                      |
+| 敏感 / 远端可修改 | 否 / 否                                             |
+| 约束              | ≥ 1；≤ 65535                                        |
+| 显式迁移来源      | tunnels/config.json.hosts[].remoteDesktop.localPort |
+
+### desktop.tunnels.hosts[].remoteDesktop.certificateFingerprint
+
+本机 RemoteDesk 完整 SHA-256 证书指纹
+
+| 属性              | 合同                                                             |
+| ----------------- | ---------------------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                                       |
+| 默认              | null                                                             |
+| 所属模块          | electron/tunnels                                                 |
+| 生效              | 所属消费者重载                                                   |
+| 敏感 / 远端可修改 | 否 / 否                                                          |
+| 约束              | 按字段类型校验                                                   |
+| 显式迁移来源      | tunnels/config.json.hosts[].remoteDesktop.certificateFingerprint |
+
 ### desktop.tunnels.hosts[].forwards[].id
 
 隧道配置；desktopId/host ID 迁移时必须保持
