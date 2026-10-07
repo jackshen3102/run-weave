@@ -80,7 +80,10 @@ http://127.0.0.1:5500/updates/mac/latest-mac.yml
 - App Server：`app-server/`、`packages/shared` 中的 app-server 协议、CLI app-server
   命令、app-server 安装/验证脚本变化时，单独执行 app-server runtime 安装和重启。
 - 全局 CLI：Stable 更新构建当前 `rw`，登录 shell 中的全局 npm 安装与构建内容不一致时
-  自动更新；未安装时补装，内容一致则跳过安装。Beta 不覆盖全局 Stable CLI。
+  自动生成递增版本并更新；未安装时补装，内容一致且已有追溯信息则保留版本。
+  `rw version --json` 提供源码提交、构建时间和内容哈希；发行包保存在 npm prefix 的
+  `lib/runweave-cli-releases/`。规则与 `pnpm cli:publish:local` 一致，详见
+  [CLI 版本与构建追溯](../cli/terminal-cli.md#版本与构建追溯)。Beta 不覆盖全局 Stable CLI。
 
 dry-run 会同时输出桌面更新模式和 app-server 动作：
 
