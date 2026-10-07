@@ -84,11 +84,11 @@ export function createTerminalInputHandler({
             if (terminalSessionManager.getPanel(panel!.id) !== panel || panel!.status !== "running") throw new Error("Terminal panel exited; queued input was not written");
             await tmuxService.sendKeySequence(pane, [{ type: "literal", value: parsed.data }]);
           } else runtime.write(parsed.data);
-        });
+        }, panel?.tmuxPaneId ?? null);
         if (queued) {
           void queued.catch((error) => handleRuntimeActionError(socket, terminalSessionId, "input", error));
         } else {
-          const release = beginTerminalInput(session);
+          const release = beginTerminalInput(session, panel?.tmuxPaneId ?? null);
           try { runtime.write(parsed.data); } finally { release(); }
         }
         if (/[\r\n]/.test(parsed.data)) {
@@ -120,7 +120,8 @@ export function createTerminalInputHandler({
       try {
         const session = terminalSessionManager.getSession(terminalSessionId);
         if (!session) throw new Error("Terminal session is unavailable");
-        const release = beginTerminalInput(session);
+        const activeId = terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId;
+        const release = beginTerminalInput(session, activeId ? terminalSessionManager.getPanel(activeId)?.tmuxPaneId ?? null : null);
         try {
           runtime.signal(parsed.signal);
         } finally {

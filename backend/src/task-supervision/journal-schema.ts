@@ -27,6 +27,7 @@ const input = z.object({
 });
 const decision = z.object({
   decisionId: z.string().uuid(),
+  threadId: id.optional(),
   rawTurnId: id,
   replyDigest: id,
   contextRevision: z.number().int().positive(),
@@ -45,41 +46,55 @@ const decision = z.object({
 export const journalSchema = z.object({
   version: z.literal(1),
   watches: z.array(
-    z.object({
-      watchId: z.string().uuid(),
-      target: z.object({
-        terminalSessionId: id,
-        panelId: id,
-        threadId: id,
-        executorGeneration: id,
-      }),
-      taskStartMessageId: id,
-      task: message,
-      goal: id,
-      plans: z.array(plan),
-      revision: z.number().int().positive(),
-      contextRevision: z.number().int().positive(),
-      status: z.enum(["watching", "classifying", "paused", "error", "ended"]),
-      outcome: outcome.nullable(),
-      continuationLimit: z.literal(3),
-      continuationCount: z.number().int().min(0).max(3),
-      pauseReason: z
-        .enum([
-          "user_paused",
-          "interrupted",
-          "continuation_limit",
-          "delivery_unknown",
-          "target_changed",
-          "replaced",
-        ])
-        .optional(),
-      error: z.string().optional(),
-      waitingFor: z.enum(["permission", "question"]).optional(),
-      lastFinalMessageId: id.optional(),
-      createdAt: id,
-      updatedAt: id,
-      decisions: z.array(decision),
-    }),
+    z
+      .object({
+        watchId: z.string().uuid(),
+        enabled: z.boolean().optional(),
+        enabledAt: z.string().optional(),
+        target: z.object({
+          terminalSessionId: id,
+          panelId: id,
+          threadId: z.string(),
+          executorGeneration: id,
+        }),
+        taskStartMessageId: id,
+        task: message,
+        goal: id,
+        plans: z.array(plan),
+        revision: z.number().int().positive(),
+        contextRevision: z.number().int().positive(),
+        status: z.enum(["watching", "classifying", "paused", "error", "ended"]),
+        outcome: outcome.nullable(),
+        continuationLimit: z.literal(3),
+        continuationCount: z.number().int().min(0).max(3),
+        pauseReason: z
+          .enum([
+            "user_paused",
+            "interrupted",
+            "continuation_limit",
+            "delivery_unknown",
+            "target_changed",
+            "replaced",
+          ])
+          .optional(),
+        error: z.string().optional(),
+        waitingFor: z.enum(["permission", "question"]).optional(),
+        lastFinalMessageId: id.optional(),
+        createdAt: id,
+        updatedAt: id,
+        decisions: z.array(decision),
+      })
+      .transform((watch) => ({
+        ...watch,
+        enabled:
+          watch.enabled ??
+          ["watching", "classifying", "error"].includes(watch.status),
+        enabledAt: watch.enabledAt ?? watch.createdAt,
+        decisions: watch.decisions.map((decision) => ({
+          ...decision,
+          threadId: decision.threadId ?? watch.target.threadId,
+        })),
+      })),
   ),
   requests: z.record(z.object({ digest: id, watchId: z.string().uuid() })),
 });

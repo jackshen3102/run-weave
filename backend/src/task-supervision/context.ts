@@ -9,9 +9,7 @@ import type {
   SupervisionInput,
   SupervisionPlan,
   TaskWatch,
-  StartSupervisionRequest,
 } from "@runweave/shared/task-supervision";
-import { SupervisionError } from "./errors";
 
 // Conservative bound for the default Codex model. Required material is never truncated.
 export const INPUT_BUDGET_BYTES = 180_000;
@@ -19,21 +17,6 @@ export const digest = (text: string) =>
   createHash("sha256").update(text).digest("hex");
 export const isSupervisionPrompt = (text: string) =>
   text.includes("[runweave-task-supervision:");
-export function findFinalReply(
-  messages: ConversationMessage[],
-  rawTurnId: string,
-  text: string,
-) {
-  return [...messages]
-    .reverse()
-    .find(
-      (message) =>
-        message.role === "assistant" &&
-        message.phase === "final" &&
-        message.rawTurnId === rawTurnId &&
-        message.text === text,
-    );
-}
 export function messagesFrom(
   content: ConversationContent,
 ): ConversationMessage[] {
@@ -89,37 +72,6 @@ export async function readPlans(
       };
     }),
   );
-}
-export async function initialSupervisionContext(
-  root: string,
-  source: ConversationContent,
-  request: StartSupervisionRequest,
-) {
-  try {
-    const task = taskCandidates(source).find(
-      (message) => message.id === request.taskStartMessageId,
-    );
-    if (!task) throw new Error("请选择真实用户任务起点。");
-    const messages = messagesFrom(source);
-    const index = messages.findIndex((message) => message.id === task.id);
-    const plans = await readPlans(
-      root,
-      request.planPaths.length
-        ? request.planPaths
-        : referencedPlans(messages.slice(Math.max(0, index - 1))),
-    );
-    if (
-      Buffer.byteLength(JSON.stringify({ task, plans, goal: request.goal })) >
-      INPUT_BUDGET_BYTES
-    )
-      throw new Error("任务及计划超出上下文预算。");
-    return { task, plans };
-  } catch (error) {
-    throw new SupervisionError(
-      error instanceof Error ? error.message : "原始上下文不可用。",
-      422,
-    );
-  }
 }
 export async function refreshReferencedPlans(
   root: string,

@@ -412,7 +412,8 @@ export async function verifyPreToolHook(params) {
 // traex emits a Notification hook when it needs the user to choose/confirm
 // (permission_prompt) or is idle waiting for input (idle_prompt). Both surface
 // through the completion channel to light the green attention dot, without
-// touching agent state. Other notification types and other agents must not.
+// touching agent state. Codex attention uses the notification-only branch of
+// the same HTTP endpoint, without publishing a completion event.
 export async function verifyTraexNotificationCompletion(params) {
   const baseEnv = {
     HOME: params.homeDir,
@@ -458,6 +459,7 @@ export async function verifyTraexNotificationCompletion(params) {
   );
   assert.equal(permissionCompletion.body.rawHookEvent, "Notification");
   assert.equal(permissionCompletion.body.completionReason, "notify");
+  assert.equal(permissionCompletion.body.feishuNotificationOnly, undefined);
   const permissionAppServer = params.appServerRequests
     .slice(appServerBefore)
     .find((event) => event.kind === "agent.completion");
@@ -520,8 +522,9 @@ export async function verifyTraexNotificationCompletion(params) {
     "traex non-attention notification must not record a completion",
   );
 
-  // 4. codex permission_prompt → must NOT record (feature is traex-only).
+  // 4. codex permission_prompt → Feishu attention only, no completion or state.
   requestsBefore = params.requests.length;
+  appServerBefore = params.appServerRequests.length;
   await runToolkitHookCommand(
     params.command,
     "codex",
@@ -538,13 +541,19 @@ export async function verifyTraexNotificationCompletion(params) {
     },
     { replacePluginDirPlaceholder: false },
   );
-  assert.equal(
-    params.requests
-      .slice(requestsBefore)
-      .some((request) => request.url === "/internal/terminal-completion"),
-    false,
-    "codex permission_prompt must not record a completion",
-  );
+  const codexRequests = params.requests.slice(requestsBefore);
+  assert.equal(codexRequests.length, 1, "codex Notification must not post an agent state event");
+  assert.equal(codexRequests[0].url, "/internal/terminal-completion");
+  assert.equal(codexRequests[0].body.feishuNotificationOnly, true,
+    "codex permission_prompt must use notification-only policy, not record a completion");
+  assert.equal(codexRequests[0].body.completionReason, "notify");
+  assert.equal(codexRequests[0].body.rawHookEvent, "Notification");
+  const codexEvents = params.appServerRequests.slice(appServerBefore);
+  assert.equal(codexEvents.some((event) => event.kind === "agent.completion"), false,
+    "codex permission_prompt must not publish an app-server completion");
+  assert.ok(codexEvents.some((event) => event.kind === "agent.hook" &&
+    event.scope.terminalSessionId === "terminal-codex-permission"),
+    "codex permission_prompt must preserve the original hook event");
 }
 
 export function respondToToolHook(body, response) {

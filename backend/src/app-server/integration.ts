@@ -1,6 +1,9 @@
 import { settingText } from "@runweave/config-node";
 import path from "node:path";
-import { discoverAppServer, getAppServerStatus } from "@runweave/config-node/app-server/discovery";
+import {
+  discoverAppServer,
+  getAppServerStatus,
+} from "@runweave/config-node/app-server/discovery";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 import { logger } from "../logging/index";
 import { resolveStoragePaths } from "../utils/path";
@@ -62,7 +65,11 @@ export async function initializeAppServerEventIntegration(
     // A connected stream needs no discovery polling. A disconnected stream
     // retains its cursor while we look for a replacement singleton address.
     if (runtime.eventConsumer?.getStatusSnapshot().state === "connected") {
-      if (connection) await panelReconciler.poll(new AppServerClient(connection), abort.signal);
+      if (connection)
+        await panelReconciler.poll(
+          new AppServerClient(connection),
+          abort.signal,
+        );
       return;
     }
     try {
@@ -78,7 +85,8 @@ export async function initializeAppServerEventIntegration(
       if (
         connection?.baseUrl === next.baseUrl &&
         connection.token === next.token
-      ) return;
+      )
+        return;
       await stopConsumers();
       if (stopped) return;
       await connectAppServerEventIntegration(
@@ -93,7 +101,8 @@ export async function initializeAppServerEventIntegration(
       if (stopped) return;
       unavailable({
         state: "unhealthy",
-        summary: "App Server 事件集成初始化失败，正在自动重试；终端状态同步和完成事件补偿暂不可用",
+        summary:
+          "App Server 事件集成初始化失败，正在自动重试；终端状态同步和完成事件补偿暂不可用",
         observedAt: Date.now(),
       });
       logger.warn("backend.app-server.integration.failed", {
@@ -139,19 +148,23 @@ async function connectAppServerEventIntegration(
   const client = new AppServerClient(connection);
   const storagePaths = resolveStoragePaths();
   const backendInstanceId = `backend:${process.pid}:${backendBaseUrl}`;
-  const startedEvent = await client.postEvent({
-    kind: "backend.started",
-    source: {
-      app: "backend",
-      instanceId: backendInstanceId,
-      pid: process.pid,
+  const startedEvent = await client.postEvent(
+    {
+      kind: "backend.started",
+      source: {
+        app: "backend",
+        instanceId: backendInstanceId,
+        pid: process.pid,
+      },
+      dedupeKey: `backend.started:${backendInstanceId}`,
+      payload: {
+        baseUrl: backendBaseUrl,
+      },
     },
-    dedupeKey: `backend.started:${backendInstanceId}`,
-    payload: {
-      baseUrl: backendBaseUrl,
-    },
-  }, signal);
-  if (!startedEvent) throw new Error("App Server rejected backend registration");
+    signal,
+  );
+  if (!startedEvent)
+    throw new Error("App Server rejected backend registration");
 
   const cursorStore = new AppServerEventCursorStore(
     path.join(
@@ -173,6 +186,7 @@ async function connectAppServerEventIntegration(
           terminalSessionManager: services.terminalSessionManager,
           terminalStateService: services.terminalStateService,
         });
+        services.taskSupervisionService.observeEvent(event);
         return;
       }
       if (event.kind === "agent.lifecycle.observed") {
@@ -181,6 +195,7 @@ async function connectAppServerEventIntegration(
           terminalStateService: services.terminalStateService,
           activity: services.terminalActivity,
         });
+        services.taskSupervisionService.observeEvent(event);
         return;
       }
       if (event.kind === "agent.completion") {
@@ -188,6 +203,7 @@ async function connectAppServerEventIntegration(
           terminalSessionManager: services.terminalSessionManager,
           terminalStateService: services.terminalStateService,
         });
+        services.taskSupervisionService.observeEvent(event);
         if (completion) {
           const reconciled =
             await services.agentTeamService.reconcileCompletionSignal({
@@ -222,11 +238,14 @@ async function connectAppServerEventIntegration(
 async function describeUnavailableAppServer(): Promise<AppServerIntegrationStatus> {
   const env = process.env;
   let configured = Boolean(
-    env.RUNWEAVE_APP_SERVER_URL?.trim() || env.RUNWEAVE_APP_SERVER_TOKEN?.trim(),
+    env.RUNWEAVE_APP_SERVER_URL?.trim() ||
+    env.RUNWEAVE_APP_SERVER_TOKEN?.trim(),
   );
   if (settingText("appServer.discovery")?.trim() !== "explicit") {
     const status = await getAppServerStatus({ env });
-    configured ||= Boolean(status.lock || status.hasToken || status.currentRuntime);
+    configured ||= Boolean(
+      status.lock || status.hasToken || status.currentRuntime,
+    );
   }
   return {
     state: configured ? "unhealthy" : "unconfigured",

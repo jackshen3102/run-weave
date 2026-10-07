@@ -23,6 +23,8 @@ import {
   type TerminalStateService,
 } from "../state/terminal-state-service";
 import { readCodexThreadSnapshot } from "../runtime/codex-thread-snapshot";
+import { acknowledgeTerminalPrompt } from "../runtime/input-admission";
+import { persistNodeWrapperAgentIdentity } from "./node-wrapper-agent-identity";
 
 const agentHookProcessorLogger = logger.child({
   component: "terminal-agent-hook",
@@ -324,6 +326,13 @@ export async function processTerminalAgentHook(
     ).catch((error) => { agentHookProcessorLogger.warn("terminal-agent-hook.feishu-policy.failed", { error }); });
   }
 
+  if (input.hookEvent === "SessionStart") {
+    await persistNodeWrapperAgentIdentity(
+      options.terminalSessionManager, session, panel, effectiveAgent,
+      targetActiveCommand, input.commandName ?? null,
+    );
+  }
+
   let terminalState: TerminalState;
   if (panel) {
     if (input.hookEvent === "SessionStart" && operationIdentityMatched) {
@@ -376,10 +385,9 @@ export async function processTerminalAgentHook(
         operationId: input.operationId,
       })) ?? session;
   }
-  // The user submitting a new prompt means they are back at this terminal, so
-  // retire any pending "completion" attention (the green dot) for this session.
-  // acknowledgeSessionCompletion is idempotent when already caught up.
+  // A submitted prompt retires pending completion attention and draft protection.
   if (input.hookEvent === "UserPromptSubmit") {
+    if (!context.lifecycleObservation && !input.query?.includes("[runweave-task-supervision:")) acknowledgeTerminalPrompt(session, panel?.tmuxPaneId ?? input.tmuxPaneId ?? null);
     await options.terminalSessionManager.acknowledgeSessionCompletion(
       session.id,
       session.completionRevision,

@@ -10,15 +10,15 @@ const target = z
   .object({
     terminalSessionId: id,
     panelId: id,
-    threadId: id,
+    threadId: z.string().max(200),
     executorGeneration: id,
   })
   .strict();
 const start = z
   .object({
     target,
-    taskStartMessageId: id,
-    goal: z.string().trim().min(1).max(8000),
+    taskStartMessageId: z.string().max(200),
+    goal: z.string().trim().max(8000),
     planPaths: z.array(z.string().min(1).max(1000)).max(10),
     requestId: z.string().uuid(),
     replacesWatchId: z.string().uuid().optional(),

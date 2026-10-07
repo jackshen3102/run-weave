@@ -37,6 +37,10 @@ Web/Electron 在对应终端连接正常、页面可见且有焦点、滚动至�
 `request_user_input` / `AskUserQuestion` 工具请求和 Pi `ui_prompt_start` 立即提醒，
 不从普通回复文本猜测是否需要用户操作。通知例外只覆盖 provider 实际上报的事件。
 
+Codex 结构化权限/空闲提醒携带 `feishuNotificationOnly`，复用完成 HTTP 入口领取
+飞书提醒资格，但不记录终端 completion，也不发布 App Server `agent.completion`。
+Traex 的权限/空闲提醒保留既有 completion 和桌面绿点行为。
+
 发送脚本仍由 Hook 在完成请求获准后启动，分离的 `rw feishu notify` 进程负责等待；
 Backend 的 `POST /internal/terminal-completion/feishu` 负责资格判断与单次领取，使用
 原 Hook token 鉴权。计时、查看与领取状态跟随 Terminal 元数据持久化；查询失败不退回

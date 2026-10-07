@@ -1,80 +1,73 @@
 version: 1
 name: 当前终端长任务监听与原任务续接验收
 description: >
-  长任务监控的行为验收合同。验证用户手动开启、三分类终止或续接、目标绑定、并发与重启恢复。
+  长任务监控的行为验收合同。验证用户手动开启、三分类结果与续接、终端开关和回复身份、并发与重启恢复。
   每例创建并清理自有隔离 Backend、Codex 会话和分类替身，不使用用户工作终端。
   涉及浏览器时通过 toolkit:playwright-cli 附着正确页面；启动环境遵循 toolkit:runweave-dev-session。
   分类替身用于稳定触发状态分支，不能替代另一份分类计划中的真实 Codex 语义验证。
 cases:
   - id: TSR-001
-    name: 仅手动开启当前任务且关闭页面继续监听
+    name: 开关只控制处理且关闭页面不停止监听
     required: true
-    description: 监听由 Backend 持有，打开面板不会自动启动，浏览器关闭不会关闭已经授权的监听。
+    description: 打开面板不自动开启；所有终端始终采集事件，关闭页面不影响 Backend 监听。
     preconditions:
-      - 本例独立 Codex 终端支持监督 Hook，已有明确原任务起点；分类替身固定返回 completed。
-      - 已通过正确浏览器入口打开本例终端，其他终端不属于本例。
+      - 本例有自有 Agent 终端和独立 Dev Session，事件中心、监控记录与分类调用可观察。
     steps:
-      - 打开任务面板但不点击开启，令原 Agent 完成一轮，确认没有 Codex 分类请求和自动追问。
-      - 手动开启并确认任务起点，关闭本例页面，再令本例原 Agent 完成下一轮，确认 Backend 得到 completed 并结束监听。
-      - 重新打开页面确认最终状态，清理本例监听、终端和隔离服务。
+      - 使用 toolkit:playwright-cli 打开监控面板但不开启，完成一轮；确认普通完成事件存在，但没有分类或续接。
+      - 点击终端监控开关，关闭本例页面，再完成一轮；确认 Backend 处理最终回复且 enabled 仍为 true。
+      - 重新打开页面并关闭开关，再完成一轮；确认事件仍采集，监控判断与续接计数不增加，清理自有资源。
 
   - id: TSR-002
-    name: completed 结束监听且不独立执行验收
+    name: completed 保持终端监听且不执行替代验收
     required: true
-    description: 有效 completed 只记录结果并允许原 Agent 停止。
+    description: 已完成只终止当前轮自动续接，终端开关保持开启。
     preconditions:
-      - 本例有独立已开启监听的 Codex 任务，分类替身返回 completed。
-      - 本例已记录 Agent 进程、测试执行计数、会话输入计数与当前轮次。
+      - 本例自有终端监控已开启，分类结果固定为 completed，原任务输入计数可观察。
     steps:
-      - 触发本轮 Stop，确认监听 ended 且 outcome 为 completed，原任务没有收到监督追问。
-      - 确认没有新增验收 Agent、测试命令或替代会话，结果可追溯到本轮原回答。
-      - 清理本例终端、监听和分类替身。
+      - 完成本轮最终回复；确认 outcome 为 completed、status 为 watching、enabled 为 true，没有监督追问。
+      - 确认没有新增执行或验收任务；提交独立新任务并完成，确认继续分类，清理本例资源。
 
   - id: TSR-003
-    name: blocked 结束监听且不会代审批
+    name: blocked 保持监听且不会代审批
     required: true
-    description: 真实依赖用户的阻塞停止续接，权限边界保持原状。
+    description: 依赖用户的阻塞不自动续接或批准，但不关闭终端开关。
     preconditions:
-      - 本例独立 Codex 任务包含需要用户批准的操作，分类替身对最终阻塞报告返回 blocked。
-      - 本例可以观察待审批请求和原终端输入计数。
+      - 本例自有任务包含待用户批准的操作，最终阻塞报告可使分类结果为 blocked。
     steps:
-      - 在真实审批仍待处理且没有 final 时，确认面板展示等待，没有伪造 final 或自动批准。
-      - 令原 Agent 输出阻塞报告并触发 Stop，确认 outcome 为 blocked、监听 ended，既无追问也无批准请求。
-      - 清理本例待审批任务与分类替身，不操作用户真实审批。
+      - 真实审批待处理且无 final 时，确认等待提示，没有伪造 final 或自动批准。
+      - 输出最终阻塞报告；确认 outcome 为 blocked、enabled 为 true、status 为 watching，没有追问或代审批，清理本例资源。
 
   - id: TSR-004
     name: continue 能在同一原任务连续推进三轮
     required: true
-    description: 多轮续接不因 stop_hook_active 提前退出，最终 completed 才停止。
+    description: 多轮续接复用原终端输入，completed 停止当前任务续接但保留监听。
     preconditions:
-      - 本例独立原 Codex 已加载新 Hook，thread、执行器 generation 和进程身份可核对。
+      - 本例独立原 Agent 能上报最终回复，thread、面板和现有执行器身份可核对。
       - 本例分类替身依次返回 continue、continue、continue、completed，原任务有可逐轮推进的四步工作。
     steps:
       - 手动启动监听，观察四轮 Stop，确认前三轮各有一个带 decisionId 的监督追问，第四轮正常停止。
-      - 确认四轮执行均属于同一原 thread 和执行器，允许独立监听 Codex 分类进程，但没有创建替代执行任务；后三轮没有因 stop_hook_active 被跳过，续接次数依次为 1/3、2/3、3/3。
+      - 确认四轮执行均属于同一原 thread 和执行器，允许独立监听 Codex 分类进程，但没有创建替代执行任务；后三轮没有被重复事件跳过，续接次数依次为 1/3、2/3、3/3。
       - 保存原始轮次、Hook 往返与追问计数，清理本例资源。
 
   - id: TSR-005
-    name: 自动续接不覆盖终端中尚未提交的草稿
+    name: 未提交草稿阻止自动投递且不关闭监控
     required: true
-    description: Hook 续接保持用户编辑区，不通过 C-u 或粘贴替换原草稿。
+    description: 已存在或分类期间新输入的草稿都不能被监督追问提交、覆盖或清除。
     preconditions:
-      - 本例独立 Codex 终端已开启监听，分类替身返回 continue 且可以延迟响应。
-      - 本例原任务正在执行，用户可在 TUI 编辑区输入带唯一标记的未提交草稿。
+      - 本例自有终端含 A、B 两个 Agent 面板，监控已开启，A 的任务可产生 continue 最终回复。
     steps:
-      - 在本轮执行期间输入草稿但不提交，让 Stop 分类和续接发生，确认草稿全文仍在且未被自动发送。
-      - 核对本轮仅新增监督追问，不含草稿文本；通过实际 TUI 交互确认，而非仅检查 dispatcher 未调用。
-      - 清理本例草稿、任务、监听和替身。
+      - 在 A 执行时向 A 输入唯一草稿但不提交，再在 B 提交并完成普通任务；随后让 A 产生最终回复，确认 A 的 continue 被记录但没有投递，续接额度未增加，enabled 仍为 true。
+      - 通过 toolkit:playwright-cli 检查实际 TUI 草稿全文仍在且原会话没有该草稿；清除自有草稿后提交新的普通任务，确认监控继续处理，清理资源。
 
   - id: TSR-006
     name: 重复 Hook 与完成事件不会重复分类或续接
     required: true
     description: 同一轮次回答与上下文版本最多对应一个判定和一次续接。
     preconditions:
-      - 本例独立已绑定任务正在 Stop 请求中，分类替身固定返回 continue。
+      - 本例独立终端正在处理最终回复，分类替身固定返回 continue。
       - 本例可在隔离事件入口重复投递同一 Hook、普通 completion 和 SubagentStop，均保留原始身份。
     steps:
-      - 在首个 Hook 未结束及结束后分别投递重复事件，确认该轮只调用一次 Codex 分类且只出现一条监督追问。
+      - 在首个分类未结束及结束后分别投递重复 Hook、completion 和原生生命周期完成事件，确认该轮只调用一次 Codex 分类且只出现一条监督追问。
       - 投递其他子任务的 SubagentStop，确认不会替代主任务回答或触发主任务续接。
       - 清理本例事件注入器、任务与服务，保存请求及输入计数。
 
@@ -96,23 +89,21 @@ cases:
     description: 显式停止监听或中断原任务之后，不允许迟到结果自动重启执行。
     preconditions:
       - 本例两个独立任务分别用于面板暂停和原生中断，均在等待可控的 continue 分类结果。
-      - 本例能力组合已声明支持中断失效，Hook 输出与实际轮次可观察。
+      - 本例现有事件链路能观察原生中断，实际轮次与终端输入可核对。
     steps:
       - 对第一个任务点击暂停，对第二个任务执行原生中断，再分别释放分类响应，确认二者均无后续自动轮次。
       - 核对暂停状态保留，原任务不被监听器重启；重复进行响应与中断接近同时发生的交互并保留实际输入顺序。
       - 清理本例两个任务与分类替身。
 
   - id: TSR-009
-    name: 同 pane 更换 thread 或执行器后旧结果不能串任务
+    name: 同终端切换 thread 后开关保持且旧决定失效
     required: true
-    description: 目标绑定包含线程与执行器代次，显示位置相同不代表同一任务。
+    description: 终端拥有开关；线程和执行器身份仅用于当前回复与投递隔离。
     preconditions:
-      - 本例独立 pane 中任务 A 正在等待 continue 分类结果，已记录 A 的 thread 与 generation。
-      - 本例可安全关闭 A 并在同 pane 启动独立任务 B，B 有自己的输入计数。
+      - 本例自有终端的任务 A 正在等待 continue 分类结果，A 的 thread、generation 与 watchId 已记录。
     steps:
-      - 将 pane 绑定到 B 后释放 A 的分类结果，确认 B 未收到任何监督输入且未被赋予 A 的判定。
-      - 核对 A 的旧绑定进入失效或暂停，并且只能为 B 手动建立新绑定。
-      - 清理本例 A、B 及分类替身。
+      - 在同 pane 启动任务 B，再释放 A 的分类结果；确认 B 没有收到 A 的监督输入。
+      - 不操作开关，让 B 产生最终回复；确认 watchId 和 enabled 保持，判定上下文来自 B，决策分别记录原 thread，清理本例资源。
 
   - id: TSR-010
     name: 不确定投递在重启后不会自动重放
@@ -123,32 +114,29 @@ cases:
       - 本例服务数据目录独立，能够重启 Backend 并对照原会话输入和 decisionId。
     steps:
       - 在确认消费前中断链路并重启 Backend，确认服务以原会话核对投递，无法确认时保留 unknown 和暂停。
-      - 确认恢复过程不重放追问；若原会话已含该 decisionId，只标记 observed，输入计数不增加。
+      - 确认恢复过程不重放追问；原会话迟到出现该 decisionId 后只标记 observed，delivery_unknown 自动解除，输入计数不增加。
+      - 在同一 thread 提交新的普通任务，再核对旧 unknown 记录，确认旧轮次不会暂停新任务；手动关闭后迟到确认不能重新开启开关。
       - 清理本例服务、持久化目录和原任务。
 
   - id: TSR-011
-    name: 重启仅恢复身份一致的等待监听
+    name: Backend 重启恢复终端开关但不重放旧事件
     required: true
-    description: listening 生命周期恢复不能复活已暂停或已结束的任务。
+    description: 持久化开关不依赖当前 thread；恢复只等待新的最终回复。
     preconditions:
-      - 本例隔离服务持有三个自有任务，分别 watching 且无待投递、paused、ended，身份、状态及续接次数（分别为 1、2、3）已持久化。
-      - 三个原 Codex 会话在 Backend 重启期间保持原 thread 和执行器身份。
+      - 本例有自有隔离 Backend，分别保存开启且已 completed 的终端，以及手动关闭的终端；没有待投递决定。
     steps:
-      - 重启 Backend，确认 watching 绑定核对身份后等待新事件，paused 与 ended 保持原状态，三任务续接计数分别仍为 1、2、3。
-      - 分别令三任务产生新 Stop，确认只有 watching 任务触发分类，其他任务无监督输入。
-      - 清理本例三个任务、分类替身与服务目录。
+      - 通过 runweave-dev-session 规则重启本例 Backend，重新取得 fresh endpoint 并附着页面；确认两个终端的 enabled、watchId 和历史判断保留。
+      - 分别提交新任务并产生最终回复；确认只有开启终端新增判定，没有重放重启前事件，清理资源。
 
   - id: TSR-012
-    name: 未加载能力或存在续接冲突时拒绝启动
+    name: 当前有 Agent 即可开启且无需已有任务
     required: true
-    description: 启动前确认原执行器能力，不能静默迁移任务或叠加自动续接来源。
+    description: 启动方式、provider、版本、专用监督 Hook 和历史读取不限制开启。
     preconditions:
-      - 本例有独立旧 Hook Codex 终端、不支持的 provider 终端，以及启用其他自动续接来源的 Codex 终端。
-      - 三个终端的会话身份和原配置均已记录，本例不会操作用户真实任务。
+      - 本例自有隔离环境可运行普通手工启动的 Codex 和 Pi；当前 Agent 身份可通过实际 TUI 核对。
     steps:
-      - 分别尝试开启监听，确认给出具体能力缺口或冲突原因，不创建替代会话，也不自动关闭原有续接来源。
-      - 核对其他非 Codex 和非 Stop Hook 上报保持原行为，未输出监督 JSON 或新增自动输入。
-      - 清理本例终端和隔离配置。
+      - 分别在首次用户任务之前打开监控并点击开关；确认两种终端均 enabled 为 true，不要求已有 thread、任务起点或目标填写。
+      - 暂时令本例历史不可读再读取开关；确认仍可开启，处理异常仅发生在最终回复后，不建立替代执行任务，清理资源。
 
   - id: TSR-013
     name: 有标记时也只监听最终回复
@@ -176,30 +164,25 @@ cases:
       - 清理本例任务、监控和替身，保留三个 decisionId 与最终状态。
 
   - id: TSR-015
-    name: 原型开启弹窗将编辑目标绑定到当前真实任务
+    name: 实际页面的开关只绑定终端且开启请求幂等
     required: true
-    description: 取消没有副作用，确认只创建一个绑定正确目标的 watch，界面在服务端成功后进入监听。
+    description: 点击直接开启，无任务选择弹窗；重复同一 requestId 不产生第二个 watch。
     preconditions:
-      - 本例有独立 Dev Session 和支持监督 Hook 的 Codex 终端，任务起点和计划均可读取，尚未开启监控。
-      - 本例已取得实际 Web 或 Electron 页面入口、对应 CDP 和认证请求观察能力，不使用静态原型页面。
+      - 本例有自有 Dev Session 和正在运行 Agent 的终端，尚未开启监控，真实页面和 API 响应可观察。
     steps:
-      - 使用 toolkit:playwright-cli 打开当前终端右侧任务监控，点击开启，确认弹窗包含可编辑目标、仅最终回复和 3 次上限；编辑目标后取消，确认 Backend 没有创建 watch。
-      - 再次开启，编辑为本例唯一目标并确认，观察提交期间按钮禁用；重放相同 requestId 的本例请求，确认只有一个 watch、同一响应身份和 0/3 计数。
-      - 核对持久记录与 UI 中目标、terminal、panel、thread、任务起点一致；刷新页面仍显示该绑定，普通读取没有再次创建或分类。
-      - 保存实际页面与 API 对照，清理本例 watch、终端和 Dev Session。
+      - 通过 toolkit:playwright-cli 打开任务监控，点击开关；确认没有任务选择弹窗，服务成功后开关 checked，任务尚未产生时仍可成功。
+      - 重放相同 requestId 的开启请求；确认只有一个 watch，绑定当前 terminalSessionId。
+      - 刷新页面，确认开关保持，读取不再次创建或分类；保存 UI 与 API 对照并清理资源。
 
   - id: TSR-016
-    name: 达到上限后只有明确重新开启才能得到新额度
+    name: 新用户任务或新会话重置本轮额度但复用开关
     required: true
-    description: 新一轮确认原子替换旧 watch，取消不改次数，旧决定不能作用于新一轮。
+    description: 自动续接上限属于当前处理轮次，不需要新建终端开关。
     preconditions:
-      - 本例独立原任务已经通过三次真实续接达到上限，当前 outcome 为 continue 且 watch 暂停，旧 watch 身份和计数已记录。
-      - 本例有实际 Web 或 Electron 页面及正确 CDP，可对本例请求响应进行读取和重复投递。
+      - 本例自有终端监控已启用且当前任务达到三次续接上限，watchId 和决策历史已记录。
     steps:
-      - 使用 toolkit:playwright-cli 查看上限状态，确认橙色提示、3/3 和任务未完成；点击重新开启后取消，确认 watch 身份与次数不变。
-      - 再次点击并确认，核对新 watch 为 0/3、原任务 thread 不变、旧 watch 已失效；以相同 requestId 重复本次请求仍返回同一个新 watch。
-      - 投递旧 watch 的迟到继续决定，确认不会发给原任务，也不会占用新一轮额度；新 watch 只等待其有效的新 final。
-      - 保存替换前后记录和截图，清理本例任务、监听与隔离服务。
+      - 通过 toolkit:playwright-cli 核对 3/3 与任务未完成，确认开关仍 checked；关闭再恢复，确认旧任务额度不增加。
+      - 提交新的普通用户任务并完成回复；确认沿用同一 watchId，新轮额度重新计数，旧决策保留且不会重放，清理资源。
 
   - id: TSR-017
     name: 判定详情和活动展示真实快照且不会重新分类

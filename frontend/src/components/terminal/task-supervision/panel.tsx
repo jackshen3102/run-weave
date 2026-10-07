@@ -7,7 +7,6 @@ import type {
   TaskOutcome,
 } from "@runweave/shared/task-supervision";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   fetchTaskSupervision,
   startTaskSupervision,
@@ -16,7 +15,6 @@ import {
 } from "../../../services/task-supervision";
 import { HttpError } from "../../../services/http";
 import { Button } from "../../ui/button";
-import { SupervisionStartDialog } from "./start-dialog";
 import { SupervisionDecisionDetails } from "./decision-details";
 const labels: Record<TaskOutcome, string> = {
   completed: "任务已完成",
@@ -34,6 +32,10 @@ function status(watch: TaskWatch) {
   if (watch.status === "error") return "监听异常 / 上下文待补充";
   if (watch.status === "paused") return "监控已暂停";
   if (watch.status === "classifying") return "正在判断任务状态";
+  if (watch.status === "watching" && watch.outcome === "completed")
+    return "本轮任务已完成 · 继续监听此终端";
+  if (watch.status === "watching" && watch.outcome === "blocked")
+    return "本轮需要你处理 · 继续监听此终端";
   if (watch.status === "ended")
     return watch.outcome === "completed" ? "目标已达成" : "需要你处理";
   return "正在监听最终回复";
@@ -44,21 +46,6 @@ export function TerminalTaskSupervisionPanel({
   sessionId: string | null;
 }) {
   const { scope, token } = useTerminalRuntime();
-  const panelId = useTerminalWorkspaceStore((state) =>
-    sessionId
-      ? (state.activePanelIdBySessionId[sessionId] ??
-        state.panelWorkspaceBySessionId[sessionId]?.activePanelId ??
-        null)
-      : null,
-  );
-  const executorKey = useTerminalWorkspaceStore((state) => {
-    const panel = sessionId
-      ? state.panelWorkspaceBySessionId[sessionId]?.panels.find(
-          (p) => p.panelId === panelId,
-        )
-      : null;
-    return `${panel?.threadId ?? panel?.lastThreadId ?? ""}:${sessionId ? (state.agentRecoveryRevisionBySessionId[sessionId] ?? 0) : 0}`;
-  });
   if (!sessionId)
     return (
       <p className="p-4 text-xs text-slate-400">
@@ -67,32 +54,21 @@ export function TerminalTaskSupervisionPanel({
     );
   return (
     <SupervisionContent
-      key={`${scope}:${token}:${sessionId}:${panelId}:${executorKey}`}
-      executorKey={executorKey}
+      key={`${scope}:${token}:${sessionId}`}
       sessionId={sessionId}
-      panelId={panelId}
     />
   );
 }
-function SupervisionContent({
-  sessionId,
-  panelId,
-  executorKey,
-}: {
-  sessionId: string;
-  panelId: string | null;
-  executorKey: string;
-}) {
+function SupervisionContent({ sessionId }: { sessionId: string }) {
   const { apiBase, token, scope, onAuthExpired } = useTerminalRuntime();
-  const [starting, setStarting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const mounted = useRef(true);
   const submitting = useRef(false);
   const query = useQuery({
-    queryKey: ["task-supervision", scope, sessionId, panelId, executorKey],
+    queryKey: ["task-supervision", scope, sessionId],
     queryFn: ({ signal }) =>
-      fetchTaskSupervision(apiBase, token, sessionId, panelId, signal),
+      fetchTaskSupervision(apiBase, token, sessionId, null, signal),
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
     retry: false,
@@ -107,7 +83,6 @@ function SupervisionContent({
     };
   }, []);
   useEffect(() => {
-    setStarting(false);
     setNotice(null);
   }, [discovery?.target?.threadId, discovery?.target?.executorGeneration]);
   useEffect(() => {
@@ -127,7 +102,6 @@ function SupervisionContent({
     try {
       await startTaskSupervision(apiBase, token, request);
       if (mounted.current) {
-        setStarting(false);
         await query.refetch();
       }
     } catch (error) {
@@ -179,7 +153,7 @@ function SupervisionContent({
       <header className="border-b border-slate-800 p-4">
         <h2 className="text-sm font-semibold">长任务监控</h2>
         <p className="mt-1 text-[11px] text-slate-400">
-          独立 Codex 监听 Agent · 仅最终回复
+          监听此终端的 Agent 事件 · 处理最终回复
         </p>
       </header>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
@@ -192,7 +166,7 @@ function SupervisionContent({
           <p className="text-xs leading-6 text-slate-400">
             {query.isPending
               ? "正在读取当前任务…"
-              : "为当前任务手动开启监控。原 Agent 负责执行与验收，监听 Agent 判断是否还需要继续。"}
+              : "开启后持续监听此终端的 Agent 最终回复，切换会话无需重新开启。"}
           </p>
         )}
         {!discovery?.capability.supported && (
@@ -226,7 +200,7 @@ function SupervisionContent({
                 ))}
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
-                暂停、恢复和服务重启均保留次数。
+                当前任务最多续接三次；新会话或新的用户输入开始新一轮。
               </p>
               {watch.decisions.some((d) =>
                 ["offered", "unknown"].includes(d.delivery),
@@ -283,56 +257,33 @@ function SupervisionContent({
           </>
         )}
       </div>
-      <footer className="flex flex-wrap gap-2 border-t border-slate-800 p-4">
-        {watch && ["watching", "classifying"].includes(watch.status) ? (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() => void change("pause")}
-          >
-            暂停监控
-          </Button>
-        ) : watch &&
-          watch.continuationCount < 3 &&
-          watch.outcome !== "completed" ? (
-          <Button
-            size="sm"
-            disabled={
-              busy ||
-              !discovery?.capability.supported ||
-              watch.decisions.some((d) =>
-                ["offered", "unknown"].includes(d.delivery),
-              )
-            }
-            onClick={() => void change("resume")}
-          >
-            恢复监控
-          </Button>
-        ) : null}
-        {(!watch || ["paused", "ended", "error"].includes(watch.status)) && (
-          <Button
-            size="sm"
-            disabled={
-              busy ||
-              !discovery?.capability.supported ||
-              !discovery.taskCandidates.length
-            }
-            onClick={() => setStarting(true)}
-          >
-            {watch ? "重新开启一轮监控" : "开启长任务监控"}
-          </Button>
-        )}
+      <footer className="flex items-center justify-between gap-3 border-t border-slate-800 p-4">
+        <span className="text-xs text-slate-400">
+          终端监控 · 切换会话后保持开启
+        </span>
+        <Button
+          size="sm"
+          role="switch"
+          aria-label="终端任务监控"
+          aria-checked={watch?.enabled ?? false}
+          disabled={
+            busy || (!watch?.enabled && !discovery?.capability.supported)
+          }
+          onClick={() => {
+            if (watch) void change(watch.enabled ? "pause" : "resume");
+            else if (discovery?.target)
+              void start({
+                target: discovery.target,
+                taskStartMessageId: "",
+                goal: "",
+                planPaths: [],
+                requestId: crypto.randomUUID(),
+              });
+          }}
+        >
+          {busy ? "处理中…" : watch?.enabled ? "已开启" : "开启监控"}
+        </Button>
       </footer>
-      {starting && discovery && (
-        <SupervisionStartDialog
-          discovery={discovery}
-          busy={busy}
-          error={notice}
-          onClose={() => setStarting(false)}
-          onStart={start}
-        />
-      )}
     </section>
   );
 }

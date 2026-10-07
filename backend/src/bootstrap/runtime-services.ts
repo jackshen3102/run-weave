@@ -1,4 +1,4 @@
-import { createTerminalTaskMonitoring } from "./terminal-task-monitoring";
+import { createTerminalTaskMonitoring, createTerminalTaskServices } from "./terminal-task-monitoring";
 import { TerminalBadges } from "../device-monitor/terminal-badges";
 import { TerminalQuestionsService } from "../terminal/questions/service";
 import { ResourceMonitorService } from "../resource-monitor/service";
@@ -51,8 +51,6 @@ import {
   resolveEvolutionStoragePaths,
   resolveStoragePaths,
 } from "../utils/path";
-import { TerminalTaskService } from "../terminal/tasks/service";
-import { TerminalTaskStore } from "../terminal/tasks/store";
 import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
 import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
@@ -332,15 +330,12 @@ async function assembleRuntimeServices(
       );
     },
   );
-  const terminalTaskService = new TerminalTaskService(
-    new TerminalTaskStore(path.join(storagePaths.browserProfileDir, "terminal-tasks", "state.json")),
-    terminalSessionManager,
+  const terminalTaskService = await createTerminalTaskServices(
+    storagePaths.browserProfileDir, terminalSessionManager,
     { ptyService, runtimeRegistry: terminalRuntimeRegistry, tmuxService, tmuxOutputWatcher,
       terminalEventService, terminalStateService, activity: terminalActivity },
-    appServerHistoryGateway,
+    appServerHistoryGateway, resources, taskSupervisionService,
   );
-  resources.defer("terminal-tasks", () => terminalTaskService.dispose());
-  await terminalTaskService.initialize();
   const scheduledTasks = await createScheduledTasks(resources, {
     browserProfileDir: storagePaths.browserProfileDir,
     terminalSessionManager,

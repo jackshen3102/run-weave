@@ -28,6 +28,7 @@ export interface SupervisionInput {
 }
 export interface SupervisionDecision {
   decisionId: string;
+  threadId?: string;
   rawTurnId: string;
   replyDigest: string;
   contextRevision: number;
@@ -45,6 +46,9 @@ export interface SupervisionDecision {
 }
 export interface TaskWatch {
   watchId: string;
+  /** Persistent terminal switch; target is only the most recent reply's identity. */
+  enabled: boolean;
+  enabledAt: string;
   target: SupervisionTarget;
   taskStartMessageId: string;
   task: ConversationMessage;
