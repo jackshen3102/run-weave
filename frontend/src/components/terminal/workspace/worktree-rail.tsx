@@ -48,6 +48,7 @@ import {
 } from "../../ui/context-menu";
 import { TerminalAggregateStatus } from "./aggregate-status";
 import { WorktreeBranchStatus } from "./worktree-branch-status";
+import { WorktreeCleanupNotice } from "./worktree-cleanup-notice";
 import type { TerminalBrowserProfilePreferences } from "@runweave/shared/terminal-browser-profile";
 
 interface TerminalWorktreeRailProps {
@@ -129,6 +130,10 @@ export function TerminalWorktreeRail({
     useState<TerminalProjectContextListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [cleanupNotice, setCleanupNotice] = useState<string | null>(null);
+  useEffect(() => {
+    setCleanupNotice(null);
+  }, [scope, parentProjectId]);
   const resizeStateRef = useRef<{
     railLeft: number;
     width: number;
@@ -290,7 +295,7 @@ export function TerminalWorktreeRail({
     setDeleting(true);
     setDeleteError(null);
     try {
-      await deleteTerminalWorktree(
+      const result = await deleteTerminalWorktree(
         apiBase,
         token,
         target.parentProjectId,
@@ -330,6 +335,19 @@ export function TerminalWorktreeRail({
       });
       setRequestError(null);
       setPendingDeletion(null);
+      if (result.cleanupWarnings.length > 0) {
+        setCleanupNotice(
+          `Worktree 已删除，部分服务未清理：${result.cleanupWarnings
+            .map(
+              (warning) =>
+                `${warning.devSessionId ?? "Dev Session"}（${warning.message}）`,
+            )
+            .join("；")}`,
+        );
+        setCollapsed(false);
+      } else {
+        setCleanupNotice(null);
+      }
     } catch (error) {
       if (error instanceof HttpError && error.status === 401) {
         onAuthExpired?.();
@@ -341,13 +359,13 @@ export function TerminalWorktreeRail({
     }
   });
 
-  if (contexts.length <= 1 && !pendingDeletion) {
+  if (contexts.length <= 1 && !pendingDeletion && !cleanupNotice) {
     return null;
   }
 
   return (
     <>
-      {contexts.length > 1 ? (
+      {contexts.length > 1 || cleanupNotice ? (
         <aside
           data-testid="terminal-worktree-rail"
           data-collapsed={collapsed ? "true" : "false"}
@@ -383,6 +401,12 @@ export function TerminalWorktreeRail({
               )}
             </button>
           </div>
+          {cleanupNotice && !collapsed ? (
+            <WorktreeCleanupNotice
+              message={cleanupNotice}
+              onDismiss={() => setCleanupNotice(null)}
+            />
+          ) : null}
           {!collapsed ? (
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3">
               {contexts.map((context) => {
@@ -552,6 +576,9 @@ export function TerminalWorktreeRail({
               </span>
               <span className="mt-2 block">
                 分支 {pendingDeletion?.branch ?? "detached HEAD"} 会被保留。
+              </span>
+              <span className="mt-2 block">
+                会尝试停止关联的 Dev Session；清理失败仍会继续删除。
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -1,5 +1,13 @@
 [
   {
+    "file": "electron/src/tunnels/local-remote-desktop.ts",
+    "kind": "file-io",
+    "expression": "file.readFile(\"utf8\")",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取同用户 RemoteDesk 原子发布的当前监听元数据；不包含私钥或设备令牌，不作为 settings.yaml 配置来源"
+  },
+  {
     "file": "app-server/src/auth.ts",
     "kind": "file-io",
     "expression": "readFile(tokenPath)",

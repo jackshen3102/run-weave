@@ -1,15 +1,52 @@
 import type { RemoteDesktopRelayConfig, TunnelHostConfig, TunnelHostRuntime } from "@runweave/shared/tunnels";
 import type { RunweaveElectronBridge } from "@runweave/shared/desktop-bridge";
+import { useEffect, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
 import { Button } from "../../components/ui/button";
-import { inputClass, labels } from "./presentation";
+import { inputClass, labels, remoteDesktopErrorMessage } from "./presentation";
 
-export function RemoteDesktopForm({ value, relayAddress, onChange }: {
+export function RemoteDesktopForm({ value, relayAddress, onChange, onReadyChange }: {
   value?: RemoteDesktopRelayConfig;
   relayAddress?: string;
   onChange: (value: RemoteDesktopRelayConfig) => void;
+  onReadyChange: (ready: boolean) => void;
 }) {
   const config = value ?? { enabled: false, listenAddress: relayAddress ?? "", port: 15446,
     localAddress: "", localPort: 48571, certificateFingerprint: "" };
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [detected, setDetected] = useState(false);
+  const request = useRef(0);
+  const currentConfig = useMemoizedFn(() => config);
+  const invalidate = useMemoizedFn(() => { ++request.current; });
+  const detect = useMemoizedFn(async () => {
+    const id = ++request.current;
+    setLoading(true);
+    setDetected(false);
+    setError(null);
+    onReadyChange(false);
+    try {
+      const bridge = window.electronAPI as RunweaveElectronBridge;
+      if (!bridge?.getLocalRemoteDesktopInfo) throw new Error("请更新 Runweave 桌面端以自动获取 RemoteDesk 信息。");
+      const local = await bridge.getLocalRemoteDesktopInfo();
+      const latest = currentConfig();
+      if (request.current !== id || !latest.enabled) return;
+      if (latest.certificateFingerprint && latest.certificateFingerprint.toLowerCase() !== local.certificateFingerprint)
+        throw new Error("本机 RemoteDesk 身份与原配置不符。请核对 Mac 并重新配对，不会自动替换原证书指纹。");
+      onChange({ ...latest, ...local, autoDetectLocalHost: true });
+      setDetected(true);
+      onReadyChange(true);
+    } catch (e) {
+      if (request.current === id) setError(remoteDesktopErrorMessage(e));
+    } finally {
+      if (request.current === id) setLoading(false);
+    }
+  });
+  useEffect(() => {
+    if (config.enabled) void detect();
+    else { setDetected(false); onReadyChange(false); }
+    return invalidate;
+  }, [config.enabled, detect, invalidate, onReadyChange]);
   return <fieldset className="space-y-3 border-t border-border pt-3">
     <legend className="font-medium">RemoteDesk · 可选</legend>
     <label className="flex items-center gap-2">
@@ -25,16 +62,20 @@ export function RemoteDesktopForm({ value, relayAddress, onChange }: {
         <input required type="number" min={1024} max={65535} className={inputClass} value={config.port || ""} onChange={(e) => onChange({ ...config, port: Number(e.target.value) })} />
       </label>
       <p className="text-xs text-muted-foreground">使用独立端口，不与 Runweave 远程访问共用。服务器需可通过 SSH 执行 Node.js 并允许端口转发。</p>
-      <label className="block">本机 RemoteDesk 地址
-        <input required className={inputClass} placeholder="RemoteDesk 窗口中的局域网 IPv4" value={config.localAddress} onChange={(e) => onChange({ ...config, localAddress: e.target.value.trim() })} />
-      </label>
-      <label className="block">本机 RemoteDesk 端口
-        <input required type="number" min={1} max={65535} className={inputClass} value={config.localPort || ""} onChange={(e) => onChange({ ...config, localPort: Number(e.target.value) })} />
-      </label>
-      <label className="block">RemoteDesk 证书 SHA-256 指纹
-        <input required className={inputClass} placeholder="复制 Mac 显示的完整指纹" value={config.certificateFingerprint}
-          onChange={(e) => onChange({ ...config, certificateFingerprint: e.target.value.replace(/[:\s]/g, "").toLowerCase() })} />
-      </label>
+      <div className="space-y-2 rounded-lg bg-muted/30 p-3" aria-live="polite">
+        <p className="font-medium">本机 RemoteDesk · 自动获取</p>
+        {loading && <p className="text-muted-foreground">正在读取本机共享服务…</p>}
+        {detected && <>
+          <p>已自动获取：{config.localAddress}:{config.localPort}</p>
+          <details><summary className="cursor-pointer text-muted-foreground">查看证书指纹</summary>
+            <p className="break-all text-xs">{config.certificateFingerprint}</p>
+          </details>
+        </>}
+        {error && <p role="alert" className="text-amber-600">{error}</p>}
+        <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void detect()}>
+          {loading ? "获取中…" : "重新获取"}
+        </Button>
+      </div>
     </>}
   </fieldset>;
 }

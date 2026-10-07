@@ -1,8 +1,11 @@
 import { execFile } from "node:child_process";
-import { lstat, readFile, readdir, realpath } from "node:fs/promises";
-import os from "node:os";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
-import { parseTerminalChildProjectId } from "@runweave/shared/terminal/project-context";
+import {
+  parseTerminalChildProjectId,
+  type TerminalWorktreeDeletionResult,
+} from "@runweave/shared/terminal/project-context";
+import { cleanupWorktreeDevSessions } from "./dev-session-cleanup";
 import { logger } from "../../logging/index";
 import {
   recordTerminalSessionDeleted,
@@ -181,71 +184,15 @@ async function findRegisteredWorktree(
   return null;
 }
 
-async function findBlockingDevSession(
-  sourceRoot: string,
-  env: NodeJS.ProcessEnv,
-): Promise<{ devSessionId: string; state: string } | null> {
-  const registryRoot = path.resolve(
-    env.RUNWEAVE_DEV_SESSION_HOME?.trim() ||
-      path.join(os.homedir(), ".runweave", "dev-sessions"),
-  );
-  const entries = await readdir(registryRoot, { withFileTypes: true }).catch(
-    () => [],
-  );
-  for (const entry of entries.sort((left, right) =>
-    left.name.localeCompare(right.name),
-  )) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    const manifestPath = path.join(registryRoot, entry.name, "manifest.json");
-    try {
-      const stats = await lstat(manifestPath);
-      if (!stats.isFile() || stats.isSymbolicLink()) {
-        continue;
-      }
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
-        devSessionId?: unknown;
-        state?: unknown;
-        source?: { root?: unknown };
-        failure?: { leaseRetained?: unknown };
-      };
-      if (
-        typeof manifest.source?.root !== "string" ||
-        typeof manifest.state !== "string" ||
-        manifest.state === "stopped" ||
-        // Failed starts keep their outcome after identity-safe resource cleanup.
-        (manifest.state === "failed" &&
-          manifest.failure?.leaseRetained === false)
-      ) {
-        continue;
-      }
-      const manifestSourceRoot =
-        (await realpath(manifest.source.root).catch(() => null)) ??
-        path.resolve(manifest.source.root);
-      if (manifestSourceRoot !== sourceRoot) {
-        continue;
-      }
-      return {
-        devSessionId:
-          typeof manifest.devSessionId === "string"
-            ? manifest.devSessionId
-            : entry.name,
-        state: manifest.state,
-      };
-    } catch {
-      // Invalid or newer manifests do not establish ownership.
-    }
-  }
-  return null;
-}
-
 export class TerminalWorktreeDeletionService {
   private readonly deletingProjectIds = new Set<string>();
 
   constructor(private readonly options: TerminalWorktreeDeletionOptions) {}
 
-  async delete(parentProjectId: string, childProjectId: string): Promise<void> {
+  async delete(
+    parentProjectId: string,
+    childProjectId: string,
+  ): Promise<TerminalWorktreeDeletionResult> {
     if (this.deletingProjectIds.has(childProjectId)) {
       throw new TerminalWorktreeDeletionError(
         "Worktree deletion is already in progress",
@@ -270,6 +217,10 @@ export class TerminalWorktreeDeletionService {
       );
       const sessions = this.listTargetSessions(childProjectId);
       this.assertNoRunningAgent(sessions);
+      const cleanupWarnings = await cleanupWorktreeDevSessions(
+        target.worktreePath,
+        this.options.env ?? process.env,
+      );
       await this.closeSessions(sessions);
 
       const finalTarget = await this.resolveSafeTarget(
@@ -329,6 +280,17 @@ export class TerminalWorktreeDeletionService {
           error,
         });
       }
+      if (cleanupWarnings.length > 0) {
+        terminalWorktreeLogger.warn(
+          "terminal.worktree.dev-session-cleanup.incomplete",
+          {
+            message: "Worktree deleted with incomplete Dev Session cleanup",
+            childProjectId,
+            cleanupWarnings,
+          },
+        );
+      }
+      return { cleanupWarnings };
     } finally {
       await releaseOwnerGuard?.();
       this.deletingProjectIds.delete(childProjectId);
@@ -518,18 +480,6 @@ export class TerminalWorktreeDeletionService {
           "detached_head_unreferenced",
         );
       }
-    }
-
-    const blockingDevSession = await findBlockingDevSession(
-      worktreePath,
-      this.options.env ?? process.env,
-    );
-    if (blockingDevSession) {
-      throw new TerminalWorktreeDeletionError(
-        `Dev Session ${blockingDevSession.devSessionId}（${blockingDevSession.state}）尚未确认释放该 Worktree。请先检查该 Session 的状态并完成停止或清理，再重试删除。`,
-        409,
-        "dev_session_active",
-      );
     }
 
     return {

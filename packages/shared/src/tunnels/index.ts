@@ -16,10 +16,14 @@ export interface RemoteAccessConfig {
   listenAddress: string;
   port: number;
 }
-export interface RemoteDesktopRelayConfig extends RemoteAccessConfig {
+export interface LocalRemoteDesktopInfo {
   localAddress: string;
   localPort: number;
   certificateFingerprint: string;
+}
+export interface RemoteDesktopRelayConfig extends RemoteAccessConfig, LocalRemoteDesktopInfo {
+  /** Absent on existing manually configured hosts. Identity remains pinned on refresh. */
+  autoDetectLocalHost?: boolean;
 }
 export interface RemoteAccessRuntime extends TunnelState {
   address: string | null;
@@ -202,6 +206,7 @@ export function validateTunnelUpdate(value: unknown): TunnelConfigUpdate {
       );
     const desktop = h.remoteDesktop;
     if (desktop && (typeof desktop.enabled !== "boolean" ||
+      (desktop.autoDetectLocalHost !== undefined && typeof desktop.autoDetectLocalHost !== "boolean") ||
       typeof desktop.listenAddress !== "string" || !port(desktop.port) || desktop.port < 1024 ||
       typeof desktop.localAddress !== "string" || !port(desktop.localPort) ||
       typeof desktop.certificateFingerprint !== "string" ||
@@ -244,6 +249,7 @@ export function validateTunnelUpdate(value: unknown): TunnelConfigUpdate {
         enabled: desktop.enabled, listenAddress: desktop.listenAddress, port: desktop.port,
         localAddress: desktop.localAddress, localPort: desktop.localPort,
         certificateFingerprint: desktop.certificateFingerprint.toLowerCase(),
+        ...(desktop.autoDetectLocalHost !== undefined ? { autoDetectLocalHost: desktop.autoDetectLocalHost } : {}),
       } } : {}),
       autoConnect: h.autoConnect,
       forwards,

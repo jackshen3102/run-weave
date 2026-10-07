@@ -1,5 +1,10 @@
 export const inputClass =
   "mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm";
+export function remoteDesktopErrorMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error))
+    .replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "")
+    .replace(/^REMOTE_DESKTOP_[A-Z_]+:\s*/, "");
+}
 export const labels: Record<string, string> = {
   disconnected: "未连接",
   connecting: "连接中",

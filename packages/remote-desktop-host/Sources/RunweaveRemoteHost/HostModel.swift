@@ -15,7 +15,16 @@ final class HostModel: ObservableObject {
     @Published var endpointAddress = ""
     @Published var screenAllowed = false
     @Published var accessibilityAllowed = false
-    @Published var isRunning = false
+    @Published var isRunning = false {
+        didSet {
+            do {
+                try HostLocalDiscovery.publish(running: isRunning, address: endpointAddress,
+                    port: port, fingerprint: fingerprint)
+            } catch {
+                status = "本机连接信息发布失败：\(error.localizedDescription)"
+            }
+        }
+    }
     @Published private(set) var sharingEnabled = false
     @Published private(set) var isNetworkRecovering = false
     @Published var isReconfiguring = false

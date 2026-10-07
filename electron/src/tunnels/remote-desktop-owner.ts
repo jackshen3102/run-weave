@@ -1,5 +1,6 @@
 import type { TunnelHostConfig, TunnelHostRuntime } from "@runweave/shared/tunnels";
 import { RemoteDesktopChannel } from "./remote-desktop-channel.js";
+import { getLocalRemoteDesktopInfo } from "./local-remote-desktop.js";
 import { childState, failure } from "./runtime-state.js";
 
 export interface RemoteDesktopOwner {
@@ -26,7 +27,7 @@ export async function stopRemoteDesktop(h: RemoteDesktopOwner) {
 }
 
 export async function refreshRemoteDesktop(h: RemoteDesktopOwner, current: () => boolean, publish: () => void) {
-  const config = h.config.remoteDesktop;
+  let config = h.config.remoteDesktop;
   if (!config?.enabled || h.remoteDesktopBusy || Date.now() - h.remoteDesktopChecked < 15_000) return;
   h.remoteDesktopBusy = true;
   h.remoteDesktopChecked = Date.now();
@@ -35,6 +36,19 @@ export async function refreshRemoteDesktop(h: RemoteDesktopOwner, current: () =>
   const active = () => current() && h.remoteDesktopEpoch === epoch && h.runtime.generation === generation;
   let channel = h.remoteDesktop;
   try {
+    if (config.autoDetectLocalHost) {
+      const local = await getLocalRemoteDesktopInfo();
+      if (!active()) return;
+      if (local.certificateFingerprint !== config.certificateFingerprint)
+        throw new Error("REMOTE_DESKTOP_IDENTITY_MISMATCH: 本机 RemoteDesk 身份已改变，请核对并重新配对；不会自动替换原证书指纹。");
+      config = { ...config, ...local };
+      if (channel && !channel.usesLocalHost(local)) {
+        await channel.stop();
+        if (!active()) return;
+        channel = null;
+        h.remoteDesktop = null;
+      }
+    }
     if (!channel) {
       h.runtime.remoteDesktop = { ...childState("starting"), address: null, checkedAt: null };
       publish();

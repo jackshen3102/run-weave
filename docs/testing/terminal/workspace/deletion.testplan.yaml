@@ -1,7 +1,7 @@
 version: 1
 name: Worktree 删除端到端验收
 description: >
-  验证 Terminal Worktree rail 的右键删除能够安全移除准确的 Git Worktree、关闭关联运行资源并保留分支与历史，同时对可能丢失数据或仍被管理运行时占用的目标明确拒绝。
+  验证 Terminal Worktree rail 的右键删除能够移除准确的 Git Worktree、尽力关闭 Dev Session 并保留分支与历史；清理失败不阻塞删除，可能丢失数据或被运行中 Agent 占用的目标仍明确拒绝。
 
 cases:
   - id: WTD-001
@@ -42,15 +42,17 @@ cases:
       - 检查 Agent、Terminal 和 Git Worktree；确认它们仍在运行或登记，文件系统未被删除。
 
   - id: WTD-004
-    name: Dev Session 占用阻止删除
-    required: false
+    name: 删除前清理全部关联 Dev Session
+    required: true
     description: >
-      任一未停止 Dev Session 的 source.root 指向目标 Worktree 时，最终删除必须报告 Session ID 和状态，且不改变 Session 或 Worktree。
+      删除一个被多个身份完整的 Dev Session 占用的干净 Worktree 时，全部关联 Session 被停止，目标被删除且分支保留，兄弟 Worktree 的 Session 不受影响。
     preconditions:
-      - 测试 Worktree 是一个未停止 Dev Session 的准确 source.root。
+      - 干净的测试 Worktree 是至少两个身份完整、可安全停止的 Dev Session 的准确 source.root，且其中没有运行中 Agent。
+      - 兄弟 Worktree 有另一个身份完整的 Dev Session，各 Session 与进程均归本 case 所有。
     steps:
-      - 使用 `$toolkit:playwright-cli` 发起并确认删除；确认弹窗显示占用目标的 Dev Session ID 和状态。
-      - 查询该 Dev Session 与 Git Worktree；确认 Session 未被静默停止，Worktree 未被删除。
+      - 使用 `$toolkit:playwright-cli` 发起并确认删除；确认只需一次删除确认，完成后弹窗关闭、目标行消失。
+      - 查询全部关联 Session、进程及 Git；确认目标的 Session 均为 stopped 且自有进程组已退出，目标目录与 Git 登记消失，原分支仍存在。
+      - 查询兄弟 Worktree 的 Session 与进程；确认其状态与运行没有改变，最后清理本 case 自有资源。
 
   - id: WTD-005
     name: 无引用 detached HEAD 阻止删除
@@ -84,3 +86,29 @@ cases:
     steps:
       - 使用 `$toolkit:playwright-cli` 从 Worktree rail 删除该 Worker Worktree；确认目标行消失且分支仍存在。
       - 打开 Race 面板并读取 Race API；确认对应 Worker 的 Terminal 为空、状态明确标记 Worktree 已删除。
+
+  - id: WTD-008
+    name: stale 清理失败仍完成删除
+    required: true
+    description: >
+      缺少进程身份的 stale Session 清理失败时，干净 Worktree 仍被删除，页面报告成功及清理警告，Session 保留真实未释放状态。
+    preconditions:
+      - 干净测试 Worktree 有一个 source.root 精确匹配但缺少进程身份的 stale Session，且没有运行中 Agent。
+      - 该 Session 记录及任何进程均归本 case 所有，其他 Worktree 不被用作 fixture。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 发起并确认删除；确认目标行与删除弹窗消失，页面切回父 Project。
+      - 确认页面显示“Worktree 已删除，部分服务未清理”及准确 Session ID；确认不显示删除失败，点击“关闭提示”后提示消失。
+      - 检查 Git、目录与 manifest；确认目标目录及登记已删除、分支保留，manifest 未被删除也未被伪造为 stopped；清理本 case 自有记录与残留进程。
+
+  - id: WTD-009
+    name: 清理超时不无限等待或阻止删除
+    required: true
+    description: >
+      关联 Session 的停止操作超过清理期限时，整体等待受 30 秒预算限制，随后删除 Worktree 并报告超时警告。
+    preconditions:
+      - 干净测试 Worktree 有一个归本 case 所有的未释放 Session，其停止 CLI 可控地等待超过 30 秒且不启动其他服务。
+      - 测试 Worktree 中没有运行中 Agent，测试 CLI、Session 及进程可在 case 结束时独立回收。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 确认删除并记录耗时；确认停止命令在 30 秒预算耗尽后结束，后续 Git 删除继续执行，页面没有无限停在删除中。
+      - 确认目标行消失且页面报告清理超时；读取目录、Git 与 manifest，确认目标已删除、分支保留，未清理的 Session 未被标为 stopped。
+      - 确认没有启动第二个无期限停止命令；清理本 case 自有 Session 记录及 fixture 进程。

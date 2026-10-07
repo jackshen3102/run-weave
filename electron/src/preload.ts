@@ -1,4 +1,4 @@
-import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin } from "@runweave/shared/tunnels";
+import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin, LocalRemoteDesktopInfo } from "@runweave/shared/tunnels";
 import type { ConfigurationStatus } from "@runweave/shared/configuration";
 import { contextBridge, ipcRenderer, shell, webUtils } from "electron";
 import type {
@@ -84,6 +84,7 @@ const electronApi = {
   },
   listTunnels: () => ipcRenderer.invoke("tunnels:list") as Promise<TunnelSnapshot>,
   saveTunnels: (input: TunnelConfigUpdate) => ipcRenderer.invoke("tunnels:save-config", input) as Promise<TunnelSnapshot>,
+  getLocalRemoteDesktopInfo: () => ipcRenderer.invoke("tunnels:local-remote-desktop") as Promise<LocalRemoteDesktopInfo>,
   connectTunnel: (id: string) => ipcRenderer.invoke("tunnels:connect", id) as Promise<void>,
   disconnectTunnel: (id: string) => ipcRenderer.invoke("tunnels:disconnect", id) as Promise<void>,
   retryTunnel: (id: string, forwardId?: string) => ipcRenderer.invoke("tunnels:retry", id, forwardId) as Promise<void>,

@@ -1944,6 +1944,20 @@ CLI 连接配置及会话；敏感字段仅本机可读写
 | 约束              | 按字段类型校验                                    |
 | 显式迁移来源      | tunnels/config.json.hosts[].remoteDesktop.enabled |
 
+### desktop.tunnels.hosts[].remoteDesktop.autoDetectLocalHost
+
+自动读取本机 RemoteDesk 地址与端口，保持已保存的证书指纹；旧配置未设置时沿用手动地址
+
+| 属性              | 合同                                                          |
+| ----------------- | ------------------------------------------------------------- |
+| 类型              | boolean；允许 null 恢复默认                                   |
+| 默认              | false                                                         |
+| 所属模块          | electron/tunnels                                              |
+| 生效              | 所属消费者重载                                                |
+| 敏感 / 远端可修改 | 否 / 否                                                       |
+| 约束              | 按字段类型校验                                                |
+| 显式迁移来源      | tunnels/config.json.hosts[].remoteDesktop.autoDetectLocalHost |
+
 ### desktop.tunnels.hosts[].remoteDesktop.listenAddress
 
 Devbox 内网或 VPN 入口 IPv4

@@ -1,5 +1,5 @@
 import type { TerminalBadgeConnection } from "../terminal/unread";
-import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin } from "../tunnels/index";
+import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin, LocalRemoteDesktopInfo } from "../tunnels/index";
 import type { LoginResponse } from "../protocol";
 import type { ConfigurationStatus } from "../configuration";
 import type { SuijiDesktopState, SuijiEnvironment, SuijiProfile } from "../suiji/desktop";
@@ -111,6 +111,7 @@ export interface RunweaveElectronBridge {
   showScheduledRunNotification: (target: { connectionId: string; runId: string; title: string; body: string }) => Promise<boolean>;
   onScheduledRunNotificationOpen: (listener: (target: { connectionId: string; runId: string }) => void) => () => void;
   listTunnels: () => Promise<TunnelSnapshot>;
+  getLocalRemoteDesktopInfo: () => Promise<LocalRemoteDesktopInfo>;
   saveTunnels: (input: TunnelConfigUpdate) => Promise<TunnelSnapshot>;
   connectTunnel: (hostId: string) => Promise<void>;
   disconnectTunnel: (hostId: string) => Promise<void>;

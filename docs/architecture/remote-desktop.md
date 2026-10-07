@@ -65,10 +65,21 @@ Runweave「端口与隧道 → 编辑 SSH 主机 → RemoteDesk」独立启用�
 ```
 
 配置记录独立的中转 IPv4/端口、本机 Host IPv4/端口和完整 SHA-256 证书指纹。
+开启 RemoteDesk 后，表单自动读取本机 Host 地址、端口和证书指纹，无需手填这三项；
+服务未启动或 Host 版本不支持时提示启动或更新，可点击“重新获取”。保存前再次读取并核对原指纹。
+自动配置设置 `autoDetectLocalHost=true`，每次连通检查读取当前本机地址；地址变化时重建隧道，
+证书指纹变化则拒绝连接，不自动替换原身份。旧配置未设置此字段时保留手动地址行为。
 中转地址限定 RFC1918；本机地址还必须属于当前 Mac 的非回环 IPv4 接口。
-RemoteDesk 与 Backend 入口不能共用相同地址/端口。Mac IP 变化时明确报告需更新 Host 地址，
-不猜测另一台电脑、不跳过证书检查。Devbox 需能通过 SSH 执行 Node.js 并允许反向转发；
+RemoteDesk 与 Backend 入口不能共用相同地址/端口。旧手动配置在 Mac IP 变化时报告需更新 Host 地址，
+自动配置只跟随同一证书身份的本机 Host，不猜测另一台电脑、不跳过证书检查。Devbox 需能通过 SSH 执行 Node.js 并允许反向转发；
 Mac 和手机均需可达入口。中转只透传字节，控制和视频保持独立 TLS 连接、共用同一个入口。
+
+本机发现合同为 `~/Library/Application Support/RemoteDesk/local-host.json`（schemaVersion 1）：
+Host 在监听就绪、停止和网络恢复时原子发布 `pid`、`running`、`localAddress`、`localPort`、
+`certificateFingerprint`，目录/文件权限分别为 0700/0600；模拟器专用 Host 不发布此文件。
+Electron 只读取当前用户的固定路径，检查权限、进程存活和本机网卡地址，不通过网络首次获取 pin。
+本机读取不发起 TLS；实际隧道仍以保存的 pin 验证 TLS、证书有效期与自签名。
+文件不包含私钥、设备凭据或配对邀请，不授予观察/控制权限。
 
 手机先按原流程在局域网配对，再在「Mac 桌面 → 编辑地址」开启「通过 Runweave 隧道连接」，
 填写中转 IPv4/端口。普通偏好中的可选 `RemoteTarget.relay` 保留原 LAN 地址、Host ID、pin
