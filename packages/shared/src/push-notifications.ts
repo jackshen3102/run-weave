@@ -29,3 +29,9 @@ export interface PushNotificationRequest {
 export interface PushNotificationResult extends PushDeliveryResult {
   notificationId: string;
 }
+
+/** PUT /v1/badges/:subscriptionId; absolute per-host contribution, monotonically versioned. */
+export interface PushBadgeSnapshot {
+  revision: number;
+  count: number;
+}

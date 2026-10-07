@@ -92,6 +92,7 @@ export function register(
       displayName: String(body.displayName),
       version: Number(body.version),
       categories: normalizedCategories,
+      registeredAt: Date.now(),
       revoked: false,
       revokeToken:
         previous?.revokeToken ?? randomBytes(32).toString("base64url"),

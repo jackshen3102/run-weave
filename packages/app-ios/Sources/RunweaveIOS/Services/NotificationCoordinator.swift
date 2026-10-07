@@ -24,6 +24,8 @@ public final class NotificationCoordinator: ObservableObject {
   private var refreshing = false
   private var refreshAgain = false
   private var tokenConfirmed = false
+  private var badgeTask: Task<Void, Never>?
+  private var badgeRevisions: [String: Int] = [:]
   private var resumeTask: Task<Void, Never>?
   private var automaticConnections: [BackendConnection] = []
   func binding(_ connection: BackendConnection, kind: NotificationKind) -> NotificationBinding? {
@@ -117,8 +119,8 @@ public final class NotificationCoordinator: ObservableObject {
     defer { Task { await api.close() } }
     let availability = try await api.notificationStatus()
     guard availability.available else { throw AttachmentError(availability.reason ?? "推送暂不可用") }
-    if kind == .scheduledTask, availability.supportedKinds?.contains(.scheduledTask) != true {
-      throw AttachmentError("此电脑版本尚不支持定时任务提醒，请先更新 Backend")
+    if kind != .battery, availability.supportedKinds?.contains(kind) != true {
+      throw AttachmentError("此电脑版本尚不支持该提醒，请先更新 Backend")
     }
     let settings = await UNUserNotificationCenter.current().notificationSettings()
     if settings.authorizationStatus == .notDetermined {
@@ -280,11 +282,20 @@ public final class NotificationCoordinator: ObservableObject {
     }
   }
   func suspend() {
+    badgeTask?.cancel()
+    badgeTask = nil
     resumeTask?.cancel()
     resumeTask = nil
   }
   func foreground(connections: [BackendConnection]) {
     automaticConnections = connections
+    badgeTask?.cancel()
+    badgeTask = Task { [weak self] in
+      while !Task.isCancelled {
+        await self?.refreshBadge()
+        do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }
+      }
+    }
     tokenConfirmed = false
     if bindings.values.contains(where: { $0.enabled }), environment != nil {
       UIApplication.shared.registerForRemoteNotifications()
@@ -358,24 +369,86 @@ public final class NotificationCoordinator: ObservableObject {
         await api.close()
       }
     }
-    for connection in automaticConnections {
+    for (connection, kind) in automaticConnections.flatMap({ connection in
+      [NotificationKind.scheduledTask, .terminalUnread].map { (connection, $0) }
+    }) {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
-      let scope = key(connection, .scheduledTask)
+      let scope = key(connection, kind)
       if bindings[scope]?.enabled == true || bindings[scope]?.pendingRevoke == true { continue }
       guard let api = try? APIClient(base: connection.url, connectionID: connection.id) else { continue }
       let authenticated = await api.hasCredentials()
       await api.close()
       guard authenticated else { continue }
       do {
-        try await enable(connection, kind: .scheduledTask)
+        try await enable(connection, kind: kind)
         refreshFailures[scope] = nil
       } catch {
         if !Task.isCancelled, UIApplication.shared.applicationState != .background {
-          refreshFailures[scope] = "定时任务提醒注册待更新：\(displayError(error))"
+          refreshFailures[scope] = "提醒注册待更新：\(displayError(error))"
         }
       }
     }
   }
+  private func setBadge(_ count: Int) async throws {
+    if #available(iOS 16.0, *) {
+      try await UNUserNotificationCenter.current().setBadgeCount(count)
+    } else {
+      UIApplication.shared.applicationIconBadgeNumber = count
+    }
+  }
+
+  private struct BadgeSnapshot: Decodable { let revision: Int; let count: Int }
+
+  private func refreshBadge() async {
+    let candidates = bindings.values.filter { $0.kind == .terminalUnread && $0.enabled && !$0.pendingRevoke }
+    if candidates.isEmpty, bindings.values.contains(where: { $0.kind == .terminalUnread }),
+      !bindings.values.contains(where: { $0.kind == .terminalUnread && $0.pendingRevoke }) {
+      try? await setBadge(0)
+      return
+    }
+    let gateways = Set(candidates.compactMap { $0.subscription?.gatewayURL })
+    // The system has one badge per installation. Independent gateways cannot each own its total.
+    guard gateways.count == 1 else { return }
+    for binding in candidates {
+      guard !Task.isCancelled, UIApplication.shared.applicationState != .background,
+        let subscription = binding.subscription, subscription.state == "enabled",
+        let raw = subscription.gatewayURL, let token = subscription.revokeToken,
+        var url = URLComponents(string: raw), url.scheme == "https",
+        url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+        url.path.isEmpty || url.path == "/" else { continue }
+      url.path = "/v1/badges/\(subscription.subscriptionId)"
+      guard let endpoint = url.url else { continue }
+      var request = URLRequest(url: endpoint)
+      request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+      request.timeoutInterval = 5
+      let network = URLSession(configuration: .ephemeral, delegate: NoPushRedirect(), delegateQueue: nil)
+      defer { network.invalidateAndCancel() }
+      do {
+        let (data, response) = try await network.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { continue }
+        let value = try JSONDecoder().decode(BadgeSnapshot.self, from: data)
+        guard !Task.isCancelled, UIApplication.shared.applicationState != .background,
+          bindings[key(binding.connection, .terminalUnread)]?.subscription?.subscriptionId == subscription.subscriptionId,
+          bindings[key(binding.connection, .terminalUnread)]?.enabled == true,
+          value.count >= 0, value.revision >= (badgeRevisions[raw] ?? 0) else { return }
+        badgeRevisions[raw] = value.revision
+        try await setBadge(value.count)
+        return
+      } catch { /* Keep the last count while offline. */ }
+    }
+  }
+
+  public func acceptsBadge(_ info: [AnyHashable: Any]) -> Bool {
+    guard info["category"] as? String == "terminal.unread",
+      let host = info["hostId"] as? String, let revision = info["badgeRevision"] as? Int,
+      let binding = bindings.values.first(where: {
+        $0.kind == .terminalUnread && $0.enabled && !$0.pendingRevoke && $0.subscription?.hostId == host
+      }), let gateway = binding.subscription?.gatewayURL,
+      revision >= (badgeRevisions[gateway] ?? 0) else { return false }
+    badgeRevisions[gateway] = revision
+    return true
+  }
+
   public func received(_ info: [AnyHashable: Any], tapped: Bool) -> Bool {
     guard let push = BatteryPush(info) else { return false }
     if tapped {

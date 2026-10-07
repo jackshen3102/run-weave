@@ -16,6 +16,7 @@ struct TerminalEvent: Decodable {
     let next: Change?
     let previous: Change?
     let completionRevision: Int?
+    let acknowledgedCompletionRevision: Int?
   }
 }
 

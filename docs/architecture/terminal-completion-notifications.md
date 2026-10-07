@@ -4,6 +4,12 @@
 
 本文是 [terminal-completion-hooks.md](./terminal-completion-hooks.md) 的 **channel 细节补充**。canonical 的 hook 架构与 launcher 职责（含身份门禁、launcher 是否允许做通知副作用）以那篇为准；本文只展开通知 channel（桌面/声音/飞书）的实现、脚本与配置。两者共用同一条 hook 链路与同一个 launcher。
 
+## 应用图标角标
+
+iPhone 图标与 Mac Dock 使用 Backend 的未读终端绝对计数，不统计消息条数或待处理任务。
+计数、跨端已读同步、多电脑汇总、APNs 投递与部署边界见
+[应用未读角标](../../packages/push-gateway/README.md#应用未读角标)。角标投影独立于下述 launcher 通知。
+
 ## 背景
 
 绿点（completion marker）只在 Runweave 前端打开时可见。用户经常切走窗口、锁屏或在手机上等结果，此时需要更主动的提醒：

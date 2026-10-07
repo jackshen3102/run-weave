@@ -29,6 +29,7 @@ function isTerminalListInvalidationEvent(
   event: TerminalEventEnvelope,
 ): boolean {
   return (
+    event.kind === "completion_acknowledged" ||
     event.kind === "project_created" ||
     event.kind === "project_deleted" ||
     event.kind === "terminal_session_created" ||
@@ -310,9 +311,22 @@ export function useTerminalWorkspaceEvents({
           }
         }
       }
+      const acknowledgements = events.filter((event) => event.kind === "completion_acknowledged");
+      if (acknowledgements.length) {
+        setCompletionMarkers((current) => {
+          const next = { ...current };
+          for (const event of acknowledgements) {
+            if ((next[event.terminalSessionId] ?? 0) <= event.payload.acknowledgedCompletionRevision) {
+              delete next[event.terminalSessionId];
+            }
+          }
+          return next;
+        });
+      }
       const markerSessionIds = events
         .filter((event) => event.kind === "completion")
-        .filter((event) => knownSessionIds.has(event.terminalSessionId));
+        .filter((event) => knownSessionIds.has(event.terminalSessionId))
+        .filter((event) => !acknowledgements.some((ack) => ack.terminalSessionId === event.terminalSessionId && ack.payload.acknowledgedCompletionRevision >= event.payload.completionRevision));
       if (markerSessionIds.length === 0) {
         return;
       }

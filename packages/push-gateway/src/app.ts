@@ -1,3 +1,4 @@
+import { BadgeDelivery, updateBadge, readBadge, reconcileBadges } from "./badges";
 import {
   createServer,
   type IncomingMessage,
@@ -46,6 +47,7 @@ export function createGateway(
   transport: APNsTransport,
   adminToken?: string,
 ) {
+  const badges = new BadgeDelivery(store, transport);
   const server = createServer((req, res) => {
     void (async () => {
       const path = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -83,10 +85,23 @@ export function createGateway(
       )?.[1];
       if (subscription && req.method === "DELETE") {
         revoke(store, sender, subscription, token);
+        reconcileBadges(store, subscription);
+        badges.pump();
         reply(res, 204);
         return;
       }
+      const badge = /^\/v1\/badges\/([a-zA-Z0-9_-]{8,128})$/.exec(path)?.[1];
+      if (badge && req.method === "GET") {
+        reply(res, 200, readBadge(store, sender, badge, token));
+        return;
+      }
       requireValue(sender, 401, "Unauthorized");
+      if (badge && req.method === "PUT") {
+        updateBadge(store, sender, badge, await readBody(req));
+        badges.pump();
+        reply(res, 204);
+        return;
+      }
       if (subscription && req.method === "PUT") {
         reply(
           res,
@@ -120,7 +135,9 @@ export function createGateway(
       else res.destroy();
     });
   });
+  server.once("listening", () => badges.start());
+  server.once("close", () => badges.stop());
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
-  return server;
+  return Object.assign(server, { disposeBadges: () => badges.dispose() });
 }

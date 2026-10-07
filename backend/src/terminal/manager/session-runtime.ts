@@ -470,6 +470,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
       completionRevision: session.completionRevision,
       acknowledgedCompletionRevision,
     });
+    this.observer.onCompletionAcknowledged?.(session);
     return session;
   }
 

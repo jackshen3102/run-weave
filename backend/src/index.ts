@@ -331,6 +331,7 @@ function createHttpApp(
     "/api/terminal",
     requireAuth,
     createTerminalRouter(services.terminalSessionManager, {
+      terminalBadges: services.terminalBadges,
       terminalTaskService: services.terminalTaskService,
       textAttachmentDelivery: services.textAttachmentDelivery,
       terminalQuestionsService: services.terminalQuestionsService,

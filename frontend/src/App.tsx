@@ -1,3 +1,4 @@
+import { useDesktopBadge } from "./features/attention/use-desktop-badge";
 import { ResourceMonitorProvider } from "./features/system-monitor/resource-monitor-provider";
 import { ResourceNotice } from "./features/system-monitor/resource-notice";
 import { OverlayProvider } from "./features/overlay/provider";
@@ -72,6 +73,8 @@ function RunweaveApp() {
     setActive,
     reconnectSystemConnection,
   } = useConnections(CONNECTIONS_STORAGE_KEY);
+
+  useDesktopBadge(connections);
 
   const apiBase = isElectron ? (activeConnection?.url ?? "") : WEB_API_BASE;
   const activeConnectionId = isElectron ? (activeConnection?.id ?? null) : null;

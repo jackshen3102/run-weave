@@ -1,3 +1,4 @@
+import { registerTerminalBadge } from "./monitoring/terminal-badge";
 import { registerResourceNotificationHandlers } from "./monitoring/resource-notifications";
 import "./desktop/config.js";
 import { configuration } from "@runweave/config-node";
@@ -351,6 +352,8 @@ if (hasSingleInstanceLock) {
         getCompanion: () => companionAgent,
         isCompanionEnabled: () => companionEnabled,
       });
+      const stopBadge = registerTerminalBadge(() => desktopRuntime.mainWindow);
+      app.once("before-quit", stopBadge);
       registerAttentionNotificationHandlers(() => desktopRuntime.mainWindow);
   registerResourceNotificationHandlers(() => desktopRuntime.mainWindow);
       if (!isBetaChannel) {

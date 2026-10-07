@@ -102,6 +102,7 @@ export type TerminalEventKind =
   | "terminal_session_deleted"
   | "terminal_state_changed"
   | "terminal_bell"
+  | "completion_acknowledged"
   | "terminal_session_metadata_changed"
   | "terminal_notification"
   | "terminal_panel_created"
@@ -118,6 +119,11 @@ interface TerminalEventEnvelopeBase {
 }
 
 export type TerminalEventEnvelope =
+  | (TerminalEventEnvelopeBase & {
+      kind: "completion_acknowledged";
+      terminalSessionId: string;
+      payload: { completionRevision: number; acknowledgedCompletionRevision: number };
+    })
   | (TerminalEventEnvelopeBase & {
       kind: "completion";
       terminalSessionId: string;

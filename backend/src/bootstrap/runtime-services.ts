@@ -1,3 +1,4 @@
+import { TerminalBadges } from "../device-monitor/terminal-badges";
 import { TerminalQuestionsService } from "../terminal/questions/service";
 import { ResourceMonitorService } from "../resource-monitor/service";
 import { ResourceMonitorStore } from "../resource-monitor/store";
@@ -184,6 +185,10 @@ async function assembleRuntimeServices(
   const terminalSessionManager = new TerminalSessionManager(
     terminalSessionStore,
     {
+      onCompletionAcknowledged: (session) => terminalEventService.record({
+        kind: "completion_acknowledged", terminalSessionId: session.id, projectId: session.projectId,
+        payload: { completionRevision: session.completionRevision, acknowledgedCompletionRevision: session.acknowledgedCompletionRevision },
+      }),
       onSessionDeleted: async (id) => { await textAttachmentFiles?.deleted(id); },
       onBell: ({ terminalSessionId, projectId, count }) => {
         terminalEventService.record({
@@ -501,6 +506,10 @@ async function assembleRuntimeServices(
       logger.warn("resource-monitor.initialize.failed");
     }
   }
+  const terminalBadges = deviceMonitoring.batteryAlerts
+    ? new TerminalBadges(terminalSessionManager, terminalEventService, deviceMonitoring.batteryAlerts.subscriptions)
+    : null;
+  resources.defer("terminal-badges", () => terminalBadges?.dispose());
   const taskAlerts =
     scheduledTasks.store && deviceMonitoring.batteryAlerts
       ? new ScheduledTaskAlerts(
@@ -522,6 +531,7 @@ async function assembleRuntimeServices(
   let disposed = false;
   const services: RuntimeServices = {
     ...deviceMonitoring,
+    terminalBadges,
     resourceMonitor,
     start: (controlPlaneBaseUrl) => {
       if (disposed) return;
@@ -532,6 +542,7 @@ async function assembleRuntimeServices(
       experienceLearning.start();
       scheduledTasks.runtime?.start();
       taskAlerts?.start();
+      terminalBadges?.start();
     },
     dispose: () => {
       disposed = true;

@@ -28,6 +28,14 @@ enum HomeOverviewEventPatcher {
           overview.sessions[index].completionRevision ?? 0, revision)
         continue
       }
+      if event.kind == "completion_acknowledged", let revision = event.payload.acknowledgedCompletionRevision {
+        overview.sessions[index].acknowledgedCompletionRevision = max(
+          overview.sessions[index].acknowledgedCompletionRevision ?? 0, revision)
+        if let completion = event.payload.completionRevision {
+          overview.sessions[index].completionRevision = max(overview.sessions[index].completionRevision ?? 0, completion)
+        }
+        continue
+      }
       guard let next = event.payload.next else { continue }
       if event.kind == "terminal_state_changed", let state = next.state {
         if state == "agent_running", overview.sessions[index].terminalState.state != "agent_running" {

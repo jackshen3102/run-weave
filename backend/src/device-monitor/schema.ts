@@ -10,7 +10,7 @@ const subscription = z
     username: z.string(),
     sessionId: z.string(),
     environment,
-    kind: z.enum(["battery", "scheduled-task"]).optional(),
+    kind: z.enum(["battery", "scheduled-task", "terminal-unread"]).optional(),
     confirmedAt: z.string().datetime().optional(),
     deviceToken: z.string(),
     displayName: z.string(),
@@ -24,6 +24,7 @@ const subscription = z
   .passthrough();
 export const deviceMonitorSchema = z
   .object({
+    unread: z.object({ revision: z.number().int().positive(), count: z.number().int().nonnegative() }).optional(),
     schemaVersion: z.literal(1),
     hostId: z.string().uuid(),
     cycle: z

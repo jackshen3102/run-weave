@@ -18,7 +18,8 @@ let stopping = false;
 function stop() {
   if (stopping) return;
   stopping = true;
-  server.close(() => {
+  server.close(async () => {
+    await server.disposeBadges();
     store.close();
     owner.release();
     process.exit(0);
