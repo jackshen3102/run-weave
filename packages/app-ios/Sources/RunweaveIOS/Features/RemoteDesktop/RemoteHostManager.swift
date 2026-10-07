@@ -68,7 +68,7 @@ struct RemoteHostManager: View {
       }
       .sheet(item: $editing) { host in
         RemoteHostEndpointView(coordinator: coordinator, host: host, backendConnections: backendConnections)
-          .clarityMask().mobileAnalyticsScreen(.remoteHosts)
+          .clarityMask().mobileAnalyticsScreen(.remoteHostEditor)
       }
       .confirmationDialog("忘记这部手机的 Mac 配对？", isPresented: Binding(
         get: { forgetting != nil }, set: { if !$0 { forgetting = nil } }

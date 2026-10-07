@@ -45,6 +45,7 @@ struct RemoteUsageView: View {
     .navigationTitle("桌面使用记录")
     .navigationBarTitleDisplayMode(.inline)
     .clarityMask()
+    .mobileAnalyticsScreen(.remoteUsage)
     .confirmationDialog("清空全部本地桌面使用记录？", isPresented: $confirmClear, titleVisibility: .visible) {
       Button("清空", role: .destructive) { store.clear() }
     }
@@ -83,7 +84,7 @@ private struct RemoteUsageDetail: View {
           Text("出现画面：\(record.visibleAttemptCount) 次；首次显示只读：\(record.readOnlyAttemptCount) 次")
           if let ms = record.firstVisibleFrameMilliseconds {
             Text("首次出现画面的连接耗时：\(Int(ms)) ms")
-          }
+          } else { Text("未观察到画面") }
           Text(record.inputObserved ? "曾发送输入" : "未观察到发送输入")
           Text("已结束连接的输入消息：\(record.sentInputMessages)")
           Text("已结束连接累计时长：\(Int(record.completedAttemptMilliseconds / 1_000)) 秒")
@@ -92,10 +93,36 @@ private struct RemoteUsageDetail: View {
           Text("输入消息包含鼠标移动，仅表示客户端已发送。异常退出时，最后一段连接的计数可能不完整。")
             .font(.footnote).foregroundColor(.secondary)
         }
+        if !record.recentAttempts.isEmpty {
+          Section(header: Text("最近连接尝试")) {
+            ForEach(Array(record.recentAttempts.enumerated()), id: \.offset) { _, attempt in
+              VStack(alignment: .leading, spacing: 4) {
+                Text(attempt.endedAt, style: .time)
+                Text(attemptReason(attempt.reason))
+                Text("持续 \(Int(attempt.durationMilliseconds / 1_000)) 秒 · \(attempt.firstVisibleFrameMilliseconds == nil ? "未出现画面" : "曾出现画面")")
+                  .font(.caption).foregroundColor(.secondary)
+              }
+            }
+            Text("保留最近 20 次已结束尝试。原因来自客户端观察，不能据此确定网络或 Mac 状态；旧记录的连接中断可能包含建连超时。")
+              .font(.footnote).foregroundColor(.secondary)
+          }
+        }
       }
     }
     .navigationTitle("本次使用")
     .clarityMask()
+    .mobileAnalyticsScreen(.remoteUsageDetail)
+  }
+
+  private func attemptReason(_ reason: String) -> String {
+    switch reason {
+    case "connection_timeout": return "建立连接超时"
+    case "connection_lost": return "连接中断（原因未确定）"
+    case "connection_or_stream_error": return "连接或数据流异常"
+    case "user_closed": return "用户关闭"
+    case "background": return "App 进入后台"
+    default: return "连接结束：\(reason)"
+    }
   }
 }
 

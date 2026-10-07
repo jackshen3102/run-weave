@@ -86,6 +86,7 @@ final class RemoteObservationRecorder {
         else if let transport = error as? RemoteTransportError {
             switch transport {
             case .closed: return "connection_lost"
+            case .connectionTimedOut: return "connection_timeout"
             case .keychain: return "credential_storage_error"
             case .invalidCertificate: return "certificate_rejected"
             case .invalidEndpoint: return "endpoint_invalid"
