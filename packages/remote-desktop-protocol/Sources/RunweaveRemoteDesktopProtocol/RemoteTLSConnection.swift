@@ -142,8 +142,8 @@ public final class RemoteTLSConnection: @unchecked Sendable {
         parameters.includePeerToPeer = false
         // Only an explicitly configured relay permits cellular/VPN routing.
         // TLS pinning and device authentication are identical on both routes.
-        if let relay = target.relay {
-            guard relay.isValid else { throw RemoteTransportError.invalidEndpoint }
+        if target.usesRelay {
+            guard let relay = target.relay, relay.isValid else { throw RemoteTransportError.invalidEndpoint }
         } else {
             parameters.prohibitedInterfaceTypes = [.cellular, .other]
         }

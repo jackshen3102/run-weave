@@ -219,7 +219,7 @@ private struct RemoteHostEndpointView: View {
     _name = State(initialValue: host.target.name)
     _address = State(initialValue: host.target.host)
     _port = State(initialValue: String(host.target.port))
-    _useRelay = State(initialValue: host.target.relay != nil)
+    _useRelay = State(initialValue: host.target.usesRelay)
     _relayAddress = State(initialValue: host.target.relay?.host ?? "")
     _relayPort = State(initialValue: String(host.target.relay?.port ?? 15446))
     _backendConnectionID = State(initialValue: host.backendConnectionID ?? "")
@@ -250,7 +250,7 @@ private struct RemoteHostEndpointView: View {
             TextField("远控端口", text: $relayPort).keyboardType(.numberPad).clarityMask()
           }
         } header: { Text("远程访问") } footer: {
-          Text("填写 Runweave「端口与隧道」中的 RemoteDesk 地址和端口。Mac 上需保持 Runweave 与 RemoteDesk 共享运行，手机需接入对应网络或 VPN。使用原配对身份；关闭此项恢复局域网连接。")
+          Text("填写 Runweave「端口与隧道」中的 RemoteDesk 地址和端口。Mac 上需保持 Runweave 与 RemoteDesk 共享运行，手机需接入对应网络或 VPN。使用原配对身份；关闭此项恢复局域网连接，保留已保存的中转配置。")
         }
         Section(header: Text("终端快捷入口（可选）")) {
           backendPicker(selection: $backendConnectionID, connections: backendConnections)
@@ -263,8 +263,13 @@ private struct RemoteHostEndpointView: View {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button("保存") {
             do {
-              var target = try configuredTarget(id: host.id, name: name, host: address, port: port,
+              let configured = try configuredTarget(id: host.id, name: name, host: address, port: port,
                 fingerprint: host.target.certificateFingerprint, credentialsReference: host.target.credentialsReference)
+              var target = host.target
+              target.name = configured.name
+              target.host = configured.host
+              target.port = configured.port
+              target.relayEnabled = useRelay
               if useRelay {
                 guard let relayPort = UInt16(relayPort.trimmingCharacters(in: .whitespacesAndNewlines)) else {
                   throw MobileLoginFailure(message: "请输入有效的中转端口。")
