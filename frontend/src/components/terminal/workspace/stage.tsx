@@ -19,6 +19,7 @@ import {
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { TerminalPanelTargetBar } from "../input/panel-target-bar";
 import { TerminalSurface } from "../surface/surface";
+import { TerminalTaskSupervisionStatusStrip } from "../task-supervision/status-strip";
 import { TerminalBrowserAssistance } from "../browser/assistance";
 import { Button } from "../../ui/button";
 
@@ -202,6 +203,7 @@ export function TerminalWorkspaceStage({
       ) : null}
       <div className="relative flex h-full min-h-0">
         <div className="flex min-h-0 flex-1 flex-col">
+          {!isMobileMonitor ? <TerminalTaskSupervisionStatusStrip sessionId={activeSession?.terminalSessionId ?? null} /> : null}
           {!isMobileMonitor ? <TerminalBrowserAssistance sessionId={activeSessionId} /> : null}
           {activeSession && !isMobileMonitor && panelSplitEnabled ? (
             <TerminalPanelTargetBar

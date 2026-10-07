@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
-import { useQuery } from "@tanstack/react-query";
 import type {
   StartSupervisionRequest,
-  TaskWatch,
   TaskOutcome,
 } from "@runweave/shared/task-supervision";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import {
-  fetchTaskSupervision,
   startTaskSupervision,
   changeTaskSupervision,
   getTaskWatch,
@@ -16,30 +13,13 @@ import {
 import { HttpError } from "../../../services/http";
 import { Button } from "../../ui/button";
 import { SupervisionDecisionDetails } from "./decision-details";
+import { useTaskSupervisionQuery } from "../../../features/terminal/queries/task-supervision";
+import { taskSupervisionStatus } from "./status";
 const labels: Record<TaskOutcome, string> = {
   completed: "任务已完成",
   blocked: "需要你处理",
   continue: "任务可以继续",
 };
-function status(watch: TaskWatch) {
-  if (watch.status === "watching" && watch.waitingFor)
-    return watch.waitingFor === "permission"
-      ? "等待你在原终端批准权限"
-      : "等待你在原终端回答问题";
-  if (watch.pauseReason === "continuation_limit")
-    return "已达续接上限 · 任务仍未完成";
-  if (watch.pauseReason === "delivery_unknown") return "续接待确认";
-  if (watch.status === "error") return "监听异常 / 上下文待补充";
-  if (watch.status === "paused") return "监控已暂停";
-  if (watch.status === "classifying") return "正在判断任务状态";
-  if (watch.status === "watching" && watch.outcome === "completed")
-    return "本轮任务已完成 · 继续监听此终端";
-  if (watch.status === "watching" && watch.outcome === "blocked")
-    return "本轮需要你处理 · 继续监听此终端";
-  if (watch.status === "ended")
-    return watch.outcome === "completed" ? "目标已达成" : "需要你处理";
-  return "正在监听最终回复";
-}
 export function TerminalTaskSupervisionPanel({
   sessionId,
 }: {
@@ -60,19 +40,12 @@ export function TerminalTaskSupervisionPanel({
   );
 }
 function SupervisionContent({ sessionId }: { sessionId: string }) {
-  const { apiBase, token, scope, onAuthExpired } = useTerminalRuntime();
+  const { apiBase, token, onAuthExpired } = useTerminalRuntime();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const mounted = useRef(true);
   const submitting = useRef(false);
-  const query = useQuery({
-    queryKey: ["task-supervision", scope, sessionId],
-    queryFn: ({ signal }) =>
-      fetchTaskSupervision(apiBase, token, sessionId, null, signal),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
-    retry: false,
-  });
+  const query = useTaskSupervisionQuery(sessionId);
   const discovery = query.data;
   const watch = discovery?.watch;
   const decision = watch?.decisions.at(-1);
@@ -85,10 +58,6 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     setNotice(null);
   }, [discovery?.target?.threadId, discovery?.target?.executorGeneration]);
-  useEffect(() => {
-    if (query.error instanceof HttpError && query.error.status === 401)
-      onAuthExpired?.();
-  }, [query.error, onAuthExpired]);
   const fail = useMemoizedFn((error: unknown) => {
     if (!mounted.current) return;
     if (error instanceof HttpError && error.status === 401) onAuthExpired?.();
@@ -179,7 +148,7 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
             <p
               className={`text-sm font-medium ${watch.pauseReason === "continuation_limit" || watch.status === "error" ? "text-amber-300" : "text-sky-300"}`}
             >
-              {status(watch)}
+              {taskSupervisionStatus(watch)}
             </p>
             <div>
               <h3 className="mb-2 text-[11px] text-slate-400">当前目标</h3>

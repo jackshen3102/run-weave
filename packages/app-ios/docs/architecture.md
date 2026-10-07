@@ -65,6 +65,21 @@ Backend、Web/Electron 和 App Server 继续由仓库各自入口维护，iOS �
 Mermaid 首期显示代码，链接只允许 HTTP(S)。完整跨端合同见
 [Agent 会话阅读](../../../docs/architecture/terminal-code-preview.md#agent-会话阅读)。
 
+## 终端长任务监控
+
+终端「… → 长任务监控」打开原生底部面板；已开启时标签下显示状态条，点击进入同一面板。
+手机复用 Web 的 `/api/task-supervision` 发现、开启与 pause/resume 接口，开关绑定 terminal ID，
+目标、分类、续接额度和投递确认均取 Backend，不创建手机任务或在客户端计算结果。
+Swift DTO 对照 `packages/shared/src/task-supervision.ts`，入口为 `Contracts/TaskSupervision.swift`、
+`Services/TaskSupervisionService.swift` 和 `Features/Terminal/TaskSupervision/`。
+
+终端页面在前台在线时每五秒读取，后台、离开终端或打开全屏浏览器停止读取；连接 generation、
+terminal/controller 身份与请求序号丢弃迟到响应。离线保留本终端最近状态并标记过期，禁用开关写入；
+关闭面板或退出 App 不关闭服务端监控。开关等待服务响应后更新，冲突或结果不确定只重新读取，不自动重发。
+分类、阻塞、任务完成、达到续接上限和终端开关分别呈现；判断详情保留完整回复、输入快照及来源，
+活动页保留各次判断和监听身份。需要处理时返回原终端，沿用既有输入和权限处理入口。
+当前合同见[任务监控架构](../../../docs/architecture/terminal-task-supervision.md)。
+
 ## 文件变更预览
 
 `FilePreview` 按服务端能力选择图片、文本 Diff 或明确的不可预览说明，仅 Markdown/SVG 保留双模式。

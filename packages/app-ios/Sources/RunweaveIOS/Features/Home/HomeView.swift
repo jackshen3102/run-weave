@@ -6,9 +6,11 @@ struct HomeView: View {
     case unread
     case active
     case pinned
+    case recentlyRead
   }
 
   @ObservedObject var session: AppSession
+  @ObservedObject private var attentionRetention: AttentionRetentionStore
   @EnvironmentObject private var remoteDesktop: RemoteDesktopCoordinator
   @StateObject private var branchStatuses = HomeBranchStatusModel()
   @State private var query = ""
@@ -20,6 +22,11 @@ struct HomeView: View {
   @State private var initializedGeneration: Int?
   @State private var visibleConversationCounts: [String: Int] = [:]
 
+  init(session: AppSession) {
+    self.session = session
+    self.attentionRetention = session.attentionRetention
+  }
+
   var groups: [HomeGroup] { session.overview?.groups(matching: query) ?? [] }
 
   private var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -27,12 +34,18 @@ struct HomeView: View {
     let online = session.health.status == .online
     return groups.flatMap(\.sessions).filter {
       $0.hasUnreadCompletion || (online && $0.isAgentActive) || $0.pinnedAt != nil
+        || (attentionRetention.retainedUntil[$0.id].map { $0 > Date() } ?? false)
     }.sorted { left, right in
       let leftPriority = attentionPriority(left, online: online)
       let rightPriority = attentionPriority(right, online: online)
       if leftPriority != rightPriority { return leftPriority.rawValue < rightPriority.rawValue }
       if leftPriority == .pinned, left.pinnedAt != right.pinnedAt {
         return (left.pinnedAt ?? "") > (right.pinnedAt ?? "")
+      }
+      if leftPriority == .recentlyRead,
+        attentionRetention.retainedUntil[left.id] != attentionRetention.retainedUntil[right.id] {
+        return (attentionRetention.retainedUntil[left.id] ?? .distantPast)
+          > (attentionRetention.retainedUntil[right.id] ?? .distantPast)
       }
       if left.lastActivityAt != right.lastActivityAt {
         return left.lastActivityAt > right.lastActivityAt
@@ -46,7 +59,8 @@ struct HomeView: View {
   ) -> AttentionPriority {
     if terminal.hasUnreadCompletion { return .unread }
     if online && terminal.isAgentActive { return .active }
-    return .pinned
+    if terminal.pinnedAt != nil { return .pinned }
+    return .recentlyRead
   }
 
   private func initializeExpansion() {

@@ -16,7 +16,10 @@ final class AppSession: ObservableObject {
   @Published private(set) var checking = false
   @Published private(set) var loading = false
   @Published private(set) var writing = false
-  @Published private(set) var overview: HomeOverview?
+  @Published private(set) var overview: HomeOverview? {
+    didSet { attentionRetention.observe(from: oldValue, to: overview) }
+  }
+  let attentionRetention = AttentionRetentionStore()
   @Published private(set) var health = DeviceHealthSnapshot()
   @Published var error: String?
   @Published var showingEnergyMonitor = false
@@ -110,6 +113,8 @@ final class AppSession: ObservableObject {
     reconnectingTerminal = false
     authenticated = false
     overview = nil
+    attentionRetention.activate(scope: connection?.scope)
+    attentionRetention.setForeground(foreground)
     checking = true
     loading = false
     writing = false
@@ -147,6 +152,7 @@ final class AppSession: ObservableObject {
       username: username.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
     guard epoch == generation, !Task.isCancelled else { throw CancellationError() }
     authenticated = true
+    attentionRetention.setForeground(foreground)
     health.status = .online
     error = nil
     await reload()
@@ -157,6 +163,7 @@ final class AppSession: ObservableObject {
     generation += 1
     stopResources()
     forgetDrafts(connection)
+    attentionRetention.forget()
     changingDraftScope = true
     suppressedQuickInputDrafts.removeAll()
     draftRevisions.removeAll()
@@ -408,6 +415,7 @@ final class AppSession: ObservableObject {
   private func setForeground(_ value: Bool) {
     guard foreground != value else { return }
     foreground = value
+    attentionRetention.setForeground(value)
     if !value { knowledgeInbox.suspend() }
     if !value {
       saveDraftsNow()
@@ -513,16 +521,11 @@ final class AppSession: ObservableObject {
       batch.contains(where: { $0.kind == "terminal_session_deleted" && $0.terminalSessionId == id }) {
       closeTerminal()
     }
-    let structural = Set([
-      "project_created", "project_deleted", "terminal_session_created", "terminal_session_deleted",
-    ])
+    let structural = TerminalOverviewEvents.structural
     if batch.contains(where: { structural.contains($0.kind) }) {
       overviewRevision += 1
     }
-    let refresh = structural.union([
-      "completion", "completion_acknowledged", "terminal_state_changed", "terminal_session_metadata_changed",
-      "terminal_panel_created", "terminal_panel_updated", "terminal_panel_deleted", "terminal_panel_focused",
-    ])
+    let refresh = TerminalOverviewEvents.refresh
     if batch.contains(where: { refresh.contains($0.kind) }) {
       scheduleReload()
     }
@@ -576,6 +579,7 @@ final class AppSession: ObservableObject {
   }
 
   private func stopResources() {
+    attentionRetention.setForeground(false)
     showingScheduledTasks = false
     scheduledSource = nil
     deviceStatus.suspend()

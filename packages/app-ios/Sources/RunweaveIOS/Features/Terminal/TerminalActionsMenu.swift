@@ -12,6 +12,8 @@ struct TerminalActionsMenu: View, Equatable {
   let canShare: Bool
   let sharing: Bool
   let share: () -> Void
+  let supervisionEnabled: Bool
+  @Binding var showingSupervision: Bool
   @Binding var deleting: Bool
   @Binding var showingHistory: Bool
   @Binding var showingInfo: Bool
@@ -24,11 +26,15 @@ struct TerminalActionsMenu: View, Equatable {
       && lhs.canReturnToBottom == rhs.canReturnToBottom
       && lhs.canReconnect == rhs.canReconnect && lhs.canDelete == rhs.canDelete
       && lhs.canShare == rhs.canShare && lhs.sharing == rhs.sharing
+      && lhs.supervisionEnabled == rhs.supervisionEnabled
   }
 
   var body: some View {
     Menu {
       Text(cwd)
+      Button { showingSupervision = true } label: {
+        Label(supervisionEnabled ? "长任务监控 · 已开启" : "长任务监控", systemImage: "eye")
+      }.accessibilityIdentifier("terminal-menu-task-supervision")
       Button { showingInfo = true } label: {
         Label("终端信息", systemImage: "info.circle")
       }
