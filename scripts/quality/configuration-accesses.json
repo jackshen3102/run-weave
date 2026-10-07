@@ -10164,5 +10164,61 @@
     "count": 2,
     "category": "runtime-state",
     "reason": "读取 Dev Session 运行态身份与资源释放回执，用于归属确认和清理；不替代 settings.yaml。"
+  },
+  {
+    "file": "packages/runweave-cli/scripts/bundle.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(path.join(path.dirname(outfile), \"build-info.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "构建时记录源码提交、脏状态与时间，用于发行追溯；不是实例业务配置"
+  },
+  {
+    "file": "packages/runweave-cli/src/version.ts",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(path.join(__dirname, name))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取随 CLI 安装包分发的发行或构建身份，供版本查询输出；不是实例业务配置"
+  },
+  {
+    "file": "scripts/release/cli-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFile(file)",
+    "count": 2,
+    "category": "distribution",
+    "reason": "读取和写入本地 CLI 发行元数据、包版本及成功安装回执，用于内容去重和构建追溯；不是实例业务配置"
+  },
+  {
+    "file": "scripts/release/cli-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(path.join(candidate, \"dist\", \"release.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取和写入本地 CLI 发行元数据、包版本及成功安装回执，用于内容去重和构建追溯；不是实例业务配置"
+  },
+  {
+    "file": "scripts/release/cli-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(path.join(candidate, \"package.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取和写入本地 CLI 发行元数据、包版本及成功安装回执，用于内容去重和构建追溯；不是实例业务配置"
+  },
+  {
+    "file": "scripts/release/cli-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(path.join(releasePath, \"installed.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取和写入本地 CLI 发行元数据、包版本及成功安装回执，用于内容去重和构建追溯；不是实例业务配置"
+  },
+  {
+    "file": "scripts/release/cli-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(path.join(releasePath, \"release.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取和写入本地 CLI 发行元数据、包版本及成功安装回执，用于内容去重和构建追溯；不是实例业务配置"
   }
 ]
