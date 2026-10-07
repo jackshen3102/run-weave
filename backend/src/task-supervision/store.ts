@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { journalSchema } from "./journal-schema";
 import type { TaskWatch } from "@runweave/shared/task-supervision";
 import { currentSupervisionDecisions } from "@runweave/shared/task-supervision";
+import { supervisionLogger, watchFields } from "./diagnostics";
 
 export interface SupervisionJournal {
   version: 1;
@@ -32,6 +33,9 @@ export class TaskSupervisionStore {
       const saved = journalSchema.parse(raw);
       for (const watch of saved.watches) {
         if (watch.status === "classifying") {
+          supervisionLogger.info("task-supervision.restart.recovered", {
+            ...watchFields(watch), reason: "classification_canceled",
+          });
           watch.status = "error";
           watch.error = "监听服务已重启，旧分类已取消；恢复后等待新回复。";
         }
@@ -41,6 +45,10 @@ export class TaskSupervisionStore {
             (d) => d.delivery === "offered",
           )
         ) {
+          supervisionLogger.info("task-supervision.restart.recovered", {
+            ...watchFields(watch), reason: "delivery_unconfirmed",
+            decisionIds: watch.decisions.filter((decision) => decision.delivery === "offered").map((decision) => decision.decisionId),
+          });
           for (const d of watch.decisions)
             if (d.delivery === "offered") d.delivery = "unknown";
           watch.status = "paused";

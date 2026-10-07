@@ -14,7 +14,7 @@ import {
   processIdentityMatches,
   isProcessLive,
 } from "../dev-session/services/runtime.mjs";
-import { readOwnedProcessGroup } from "../dev-session/services/process-stop.mjs";
+import { readProcessGroupSnapshot } from "../dev-session/services/process-stop.mjs";
 import {
   ownershipVersion,
   sessionIdentity,
@@ -141,6 +141,9 @@ async function inspectSessions(generation, backendPid) {
     return { resources: [], reason: "Session registry 无法读取" };
   }
   const resources = [];
+  // Share one process-table observation, including failures, only within this read.
+  // Hundreds of stopped manifests otherwise each trigger several full-machine ps calls.
+  let processGroupsRead;
   let reason =
     entries.length > 2048
       ? "Session registry 超过扫描上限，部分状态未知"
@@ -164,12 +167,17 @@ async function inspectSessions(generation, backendPid) {
         manifest.state === "stopped" ||
         (manifest.state === "failed" &&
           manifest.failure?.leaseRetained === false);
+      const processGroups = await (processGroupsRead ??= Promise.resolve().then(
+        readProcessGroupSnapshot,
+      ));
       const hasResidual = Object.values(manifest.services).some((service) => {
         if (service?.ownership !== "dedicated" || !service.process?.pid)
           return false;
+        if (!Number.isInteger(service.process.pid) || service.process.pid <= 1)
+          throw new Error("不安全的进程组 ID");
         return (
           isProcessLive(service.process.pid) ||
-          readOwnedProcessGroup(service.process.pid).length > 0
+          (processGroups.get(service.process.pid)?.length ?? 0) > 0
         );
       });
       if (released && !hasResidual) continue;
