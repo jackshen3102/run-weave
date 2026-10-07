@@ -7,6 +7,7 @@ import RunweaveRemoteDesktopProtocol
 @MainActor
 public final class RemoteDesktopSession: ObservableObject {
     @Published public private(set) var state: RemoteDesktopState = .idle
+    @Published public private(set) var connectionRoute: RemoteConnectionRoute?
     @Published public private(set) var geometry: RemoteDisplayGeometry?
     @Published public private(set) var statistics = RemoteDesktopStatistics()
     @Published public var inputMode: RemoteInputMode = .trackpad {
@@ -91,7 +92,7 @@ public final class RemoteDesktopSession: ObservableObject {
     public func stop(reason: String = "closed") {
         observation.end(reason: Self.observationStopReason(reason), counters: counters)
         stopResources(reason: reason)
-        geometry = nil; textEntryActive = false; state = .idle
+        geometry = nil; textEntryActive = false; connectionRoute = nil; state = .idle
         statistics = counters
     }
 
@@ -169,6 +170,7 @@ public final class RemoteDesktopSession: ObservableObject {
                 guard ready.kind == .ready, ready.hostID == target.id, ready.sessionID == sessionID else {
                     throw RemoteHostFailure(message: ready, fallback: "Mac 拒绝了桌面会话。")
                 }
+                self.connectionRoute = control.route
                 guard let display = ready.display else {
                     self.observation.end(reason: "permission_screen_recording", counters: counters)
                     self.state = .permissionDenied(ready.reason ?? "请在 Mac 授予屏幕录制权限。"); self.active = false
@@ -184,7 +186,8 @@ public final class RemoteDesktopSession: ObservableObject {
                 // Both channels use the endpoint of this authenticated control
                 // connection, even when the saved address is no longer current.
                 let video = try await RemoteTLSConnection.connect(target: target,
-                    endpoint: control.connection.currentPath?.remoteEndpoint ?? control.connection.endpoint)
+                    endpoint: control.connection.currentPath?.remoteEndpoint ?? control.connection.endpoint,
+                    route: control.route)
                 guard self.isCurrent(expected, context: context) else { video.close(); return }
                 self.video = video
                 try await video.send(.init(kind: .authenticate, hostID: target.id, deviceID: credential.deviceID,
@@ -522,7 +525,7 @@ public final class RemoteDesktopSession: ObservableObject {
         lastVideoSequence = nil; firstFrame = false; displaySubmittedAttempt = nil; controlAllowed = false
         displayRecoveryID = nil; displayRecoveryDeadline = nil; displayFlushPending = false
         counters.decoderQueueDepth = 0
-        if publishStatistics { statistics = counters }
+        if publishStatistics { statistics = counters; connectionRoute = nil }
         clearDisplayImage()
     }
 
@@ -535,10 +538,7 @@ public final class RemoteDesktopSession: ObservableObject {
             permissionFailure = failure.code == .permissionScreenRecording || failure.code == .permissionAccessibility
         }
         if let transport = error as? RemoteTransportError {
-            switch transport {
-            case .invalidCertificate, .invalidMessage, .invalidEndpoint, .oversizedMessage: terminal = true
-            default: break
-            }
+            terminal = transport != .closed && transport != .connectionTimedOut
         }
         if displayRecoveryID != nil, !terminal {
             failDisplayProgress("桌面显示恢复中断，已释放输入并停止会话。")

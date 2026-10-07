@@ -24,11 +24,11 @@ public struct RemoteTarget: Codable, Hashable, Sendable, Identifiable {
     public var port: UInt16
     public var certificateFingerprint: String
     public var credentialsReference: String?
-    /// Saved relay endpoint, retained while LAN is selected.
+    /// Saved fallback endpoint, retained while fallback is disabled.
     public var relay: RemoteRelayEndpoint?
-    /// Missing in legacy metadata: a saved relay selected relay, otherwise LAN.
+    /// Enables relay fallback after LAN fails. Legacy saved relays enable fallback.
     public var relayEnabled: Bool?
-    public var usesRelay: Bool { relayEnabled ?? (relay != nil) }
+    public var allowsRelayFallback: Bool { relayEnabled ?? (relay != nil) }
 
     public init(id: UUID, name: String, host: String, port: UInt16 = RemoteTarget.computerPort, certificateFingerprint: String, credentialsReference: String? = nil) {
         self.id = id; self.name = name; self.host = host; self.port = port

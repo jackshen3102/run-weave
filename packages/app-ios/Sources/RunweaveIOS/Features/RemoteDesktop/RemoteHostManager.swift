@@ -219,7 +219,7 @@ private struct RemoteHostEndpointView: View {
     _name = State(initialValue: host.target.name)
     _address = State(initialValue: host.target.host)
     _port = State(initialValue: String(host.target.port))
-    _useRelay = State(initialValue: host.target.usesRelay)
+    _useRelay = State(initialValue: host.target.allowsRelayFallback)
     _relayAddress = State(initialValue: host.target.relay?.host ?? "")
     _relayPort = State(initialValue: String(host.target.relay?.port ?? 15446))
     _backendConnectionID = State(initialValue: host.backendConnectionID ?? "")
@@ -242,7 +242,7 @@ private struct RemoteHostEndpointView: View {
           Text("修改地址保留原 Host 身份与指纹。若 Mac 身份改变，必须重新配对。")
         }
         Section {
-          Toggle("通过 Runweave 隧道连接", isOn: $useRelay)
+          Toggle("允许隧道备用连接", isOn: $useRelay)
             .accessibilityIdentifier("remote-host-use-relay")
           if useRelay {
             TextField("中转服务器内网 IPv4", text: $relayAddress).textInputAutocapitalization(.never)
@@ -250,7 +250,7 @@ private struct RemoteHostEndpointView: View {
             TextField("远控端口", text: $relayPort).keyboardType(.numberPad).clarityMask()
           }
         } header: { Text("远程访问") } footer: {
-          Text("填写 Runweave「端口与隧道」中的 RemoteDesk 地址和端口。Mac 上需保持 Runweave 与 RemoteDesk 共享运行，手机需接入对应网络或 VPN。使用原配对身份；关闭此项恢复局域网连接，保留已保存的中转配置。")
+          Text("优先连接局域网，连接超时或不可达时尝试隧道。填写 Runweave「端口与隧道」中的 RemoteDesk 地址和端口，Mac 上需保持 Runweave 与 RemoteDesk 共享运行，手机需接入对应网络或 VPN。关闭此项仅使用局域网，保留已保存的隧道配置。")
         }
         Section(header: Text("终端快捷入口（可选）")) {
           backendPicker(selection: $backendConnectionID, connections: backendConnections)

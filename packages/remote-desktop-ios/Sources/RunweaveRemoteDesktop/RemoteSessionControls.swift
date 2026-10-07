@@ -153,6 +153,12 @@ struct RemoteSessionControls: View {
                     Label(session.state.label, systemImage: session.state == .controllable ? "checkmark.circle.fill" : "exclamationmark.circle")
                         .font(.caption).foregroundColor(.secondary)
                         .accessibilityIdentifier("remote-desktop-state")
+                    if let route = session.connectionRoute {
+                        Label(route == .local ? "局域网连接" : "隧道连接",
+                              systemImage: route == .local ? "wifi" : "network")
+                            .font(.caption).foregroundColor(.secondary)
+                            .accessibilityIdentifier("remote-desktop-route")
+                    }
                 }
                 Spacer(minLength: 0)
             }.padding(8)
