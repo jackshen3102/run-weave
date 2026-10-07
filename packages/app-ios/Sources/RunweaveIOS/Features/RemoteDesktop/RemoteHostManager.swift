@@ -32,14 +32,22 @@ struct RemoteHostManager: View {
                     .clarityMask()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
               }
               .accessibilityIdentifier("remote-host-open")
               Menu {
                 Button("编辑地址与关联") { editing = host }
                 Button("忘记本机配对", role: .destructive) { forgetting = host }
-              } label: { Image(systemName: "ellipsis.circle") }
+              } label: {
+                Image(systemName: "ellipsis.circle")
+                  .frame(width: 44, height: 44)
+                  .contentShape(Rectangle())
+              }
               .accessibilityLabel("管理桌面配对")
+              .accessibilityIdentifier("remote-host-manage")
             }
+            // Keep List from promoting the open button to a row-wide action.
+            .buttonStyle(.borderless)
           }
         }
         Section {
