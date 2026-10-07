@@ -521,16 +521,11 @@ final class AppSession: ObservableObject {
       batch.contains(where: { $0.kind == "terminal_session_deleted" && $0.terminalSessionId == id }) {
       closeTerminal()
     }
-    let structural = Set([
-      "project_created", "project_deleted", "terminal_session_created", "terminal_session_deleted",
-    ])
+    let structural = TerminalOverviewEvents.structural
     if batch.contains(where: { structural.contains($0.kind) }) {
       overviewRevision += 1
     }
-    let refresh = structural.union([
-      "completion", "completion_acknowledged", "terminal_state_changed", "terminal_session_metadata_changed",
-      "terminal_panel_created", "terminal_panel_updated", "terminal_panel_deleted", "terminal_panel_focused",
-    ])
+    let refresh = TerminalOverviewEvents.refresh
     if batch.contains(where: { refresh.contains($0.kind) }) {
       scheduleReload()
     }
