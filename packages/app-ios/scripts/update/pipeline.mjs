@@ -192,6 +192,11 @@ export async function update(options) {
       "-derivedDataPath",
       buildRoot,
       `DEVELOPMENT_TEAM=${options.team}`,
+      // Direct device installs use development signing, even for optimized Release builds.
+      "CODE_SIGN_STYLE=Automatic",
+      "CODE_SIGN_IDENTITY=Apple Development",
+      "APS_ENVIRONMENT=development",
+      "RUNWEAVE_APNS_ENVIRONMENT=sandbox",
     ];
     // Preview does not resolve packages or create DerivedData; read configured defaults directly.
     if (dryRun) {
@@ -241,7 +246,7 @@ export async function update(options) {
           options.configuration === "Release"
             ? "production"
             : "disabled by project default",
-        apns: options.configuration === "Release" ? "production" : "sandbox",
+        apns: "sandbox",
         steps: [
           "verify inputs",
           "build or reuse signed product",
@@ -423,6 +428,7 @@ export async function update(options) {
     if (JSON.stringify(snapshot) !== JSON.stringify(afterSource))
       fail("source_changed", "Retry with stable sources", 4);
     Object.assign(result, {
+      apns: product.apnsEnvironment,
       version,
       appPath,
       buildNumber: product.buildNumber,

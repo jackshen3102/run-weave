@@ -9,6 +9,14 @@ import {
 import { useTerminalPreviewStore } from "../terminal/preview/store";
 import { useTerminalWorkspaceStore } from "../terminal/state/workspace-store";
 
+// Route selection must leave notification acknowledgements to their authorized revision.
+const openingTerminals = new Map<string, { apiBase: string; terminalSessionId: string }>();
+export function isAttentionTerminalOpening(apiBase: string, terminalSessionId: string): boolean {
+  return [...openingTerminals.values()].some(
+    (target) => target.apiBase === apiBase && target.terminalSessionId === terminalSessionId,
+  );
+}
+
 interface UseAttentionOpenIntentsOptions {
   activeConnectionId: string | null;
   apiBase: string;
@@ -72,6 +80,7 @@ export function useAttentionOpenIntents({
         const controller = new AbortController();
         const signal = controller.signal;
         inFlight.set(intent.requestId, controller);
+        openingTerminals.set(intent.requestId, { apiBase, terminalSessionId: intent.terminalSessionId });
         const deadlineTimer = window.setTimeout(
           () => controller.abort(),
           Math.max(0, intent.deadlineAt - Date.now()),
@@ -216,6 +225,7 @@ export function useAttentionOpenIntents({
             window.clearTimeout(deadlineTimer);
             if (inFlight.get(intent.requestId) === controller) {
               inFlight.delete(intent.requestId);
+              openingTerminals.delete(intent.requestId);
             }
           });
       },
@@ -223,7 +233,10 @@ export function useAttentionOpenIntents({
     return () => {
       unsubscribeIntent?.();
       unsubscribeCancelled?.();
-      for (const controller of inFlight.values()) controller.abort();
+      for (const [requestId, controller] of inFlight) {
+        controller.abort();
+        openingTerminals.delete(requestId);
+      }
       inFlight.clear();
     };
   }, [activeConnectionId, apiBase, enabled, token]);
