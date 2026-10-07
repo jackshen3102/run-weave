@@ -3,6 +3,7 @@ import Foundation
 /// A single serial writer owns the bounded on-disk ring. Callers never perform file I/O on MainActor.
 final class DiagnosticStore: @unchecked Sendable {
   static let shared = DiagnosticStore()
+  static let analyticsScope = "app:clarity"
   struct Snapshot {
     let records: [DiagnosticRecord]
     let persistenceError: String?
@@ -47,16 +48,21 @@ final class DiagnosticStore: @unchecked Sendable {
     }
   }
 
-  func snapshot(scope: String) async -> Snapshot {
+  /// App analytics spans connections; a nil scope exports only those app-wide records.
+  func snapshot(scope: String?) async -> Snapshot {
     await withCheckedContinuation { continuation in
       queue.async {
         self.load()
         self.save()
         continuation.resume(
           returning: Snapshot(
-            records: self.records.filter { $0.scope == scope }.map { stored in
+            records: self.records.filter { $0.scope == scope || $0.scope == Self.analyticsScope }.map { stored in
               var details = stored.record.details
-              details["connectionId"] = stored.scope
+              if stored.scope == Self.analyticsScope {
+                details["scope"] = "app"
+              } else {
+                details["connectionId"] = stored.scope
+              }
               details["client"] = "native-ios"
               return DiagnosticRecord(
                 at: stored.record.at, source: stored.record.source,
@@ -67,7 +73,7 @@ final class DiagnosticStore: @unchecked Sendable {
     }
   }
 
-  func clear(scope: String) async throws {
+  func clear(scope: String?) async throws {
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       queue.async {
         self.load()
@@ -76,7 +82,7 @@ final class DiagnosticStore: @unchecked Sendable {
           continuation.resume(throwing: APIError.diagnosticStorageUnavailable)
           return
         }
-        self.records.removeAll { $0.scope == scope }
+        self.records.removeAll { $0.scope == scope || $0.scope == Self.analyticsScope }
         self.recount()
         self.save()
         if self.persistenceError != nil {
@@ -181,6 +187,14 @@ extension DiagnosticRecord {
   }
 
   static func connection(_ message: String, details: [String: String] = [:], error: Error? = nil) -> DiagnosticRecord {
+    native(source: "native-ios:connection", message: message, details: details, error: error)
+  }
+
+  static func analytics(_ message: String, details: [String: String]) -> DiagnosticRecord {
+    native(source: "native-ios:clarity", message: message, details: details)
+  }
+
+  private static func native(source: String, message: String, details: [String: String], error: Error? = nil) -> DiagnosticRecord {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     var fields = details
@@ -188,7 +202,7 @@ extension DiagnosticRecord {
     fields["uptime"] = String(ProcessInfo.processInfo.systemUptime)
     fields["appVersion"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
     fields.merge(AppBuildMetadata.fields) { _, next in next }
-    return DiagnosticRecord(at: formatter.string(from: Date()), source: "native-ios:connection", message: message, details: fields)
+    return DiagnosticRecord(at: formatter.string(from: Date()), source: source, message: message, details: fields)
   }
 
   // Domain/code are actionable; localized descriptions and userInfo may contain URLs or secrets.
