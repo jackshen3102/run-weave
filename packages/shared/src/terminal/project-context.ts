@@ -35,6 +35,15 @@ export interface TerminalProjectContextListItem {
   availability: TerminalProjectContextAvailability;
 }
 
+export interface TerminalWorktreeCleanupWarning {
+  devSessionId: string | null;
+  message: string;
+}
+
+export interface TerminalWorktreeDeletionResult {
+  cleanupWarnings: TerminalWorktreeCleanupWarning[];
+}
+
 export interface ParsedTerminalChildProjectId {
   parentProjectId: string;
   worktreeName: string;

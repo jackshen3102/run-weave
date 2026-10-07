@@ -9,7 +9,7 @@ import type {
 import { validateTunnelUpdate } from "@runweave/shared/tunnels";
 import { Button } from "../../components/ui/button";
 import { RemoteAccessForm } from "./remote-access";
-import { inputClass } from "./presentation";
+import { inputClass, remoteDesktopErrorMessage } from "./presentation";
 export function HostForm({
   host,
   snapshot,
@@ -29,12 +29,21 @@ export function HostForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [remoteDesktopReady, setRemoteDesktopReady] = useState(false);
   const patch = (value: Partial<TunnelHostConfig>) =>
     setDraft({ ...draft, ...value });
   const save = useMemoizedFn(async () => {
     setError(null);
     setSaving(true);
     try {
+      let nextDraft = draft;
+      if (draft.remoteDesktop?.enabled) {
+        if (!remoteDesktopReady) throw new Error("请先启动本机 RemoteDesk 并完成自动获取。");
+        const local = await (window.electronAPI as RunweaveElectronBridge).getLocalRemoteDesktopInfo();
+        if (local.certificateFingerprint !== draft.remoteDesktop.certificateFingerprint)
+          throw new Error("本机 RemoteDesk 身份已改变，请核对并重新配对。");
+        nextDraft = { ...draft, remoteDesktop: { ...draft.remoteDesktop, ...local, autoDetectLocalHost: true } };
+      }
       const currentHost = snapshot.config.hosts.find((h) => h.id === host.id) ?? null;
       const currentEndpoints = snapshot.config.backendEndpoints.filter((e) => e.hostId === host.id);
       if (JSON.stringify(currentHost) !== JSON.stringify(originalHost) || JSON.stringify(currentEndpoints) !== JSON.stringify(originalEndpoints)) {
@@ -44,7 +53,7 @@ export function HostForm({
         expectedRevision: snapshot.config.revision,
         hosts: [
           ...snapshot.config.hosts.filter((h) => h.id !== host.id),
-          draft,
+          nextDraft,
         ],
         backendEndpoints: [
           ...snapshot.config.backendEndpoints.filter(
@@ -59,7 +68,7 @@ export function HostForm({
         ),
       );
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = remoteDesktopErrorMessage(e);
       setError(message.includes("CONFIG_REVISION_CONFLICT") ? "配置刚被其他操作修改，当前输入已保留，请重试保存。" : message);
     } finally {
       setSaving(false);
@@ -112,7 +121,7 @@ export function HostForm({
         value={draft.remoteAccess}
         onChange={(remoteAccess) => patch({ remoteAccess })}
       />
-      <RemoteDesktopForm value={draft.remoteDesktop} relayAddress={draft.remoteAccess?.listenAddress} onChange={(remoteDesktop) => patch({ remoteDesktop })} />
+      <RemoteDesktopForm value={draft.remoteDesktop} relayAddress={draft.remoteAccess?.listenAddress} onChange={(remoteDesktop) => patch({ remoteDesktop })} onReadyChange={setRemoteDesktopReady} />
       <h4 className="border-t border-border pt-3 font-medium">开发服务端口</h4>
       {draft.forwards.map((f, index) => (
         <fieldset key={f.id} className="space-y-2 rounded-lg bg-muted/30 p-3">
@@ -357,7 +366,7 @@ export function HostForm({
         >
           取消
         </Button>
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || (draft.remoteDesktop?.enabled && !remoteDesktopReady)}>
           {saving ? "保存中…" : "保存配置"}
         </Button>
       </div>

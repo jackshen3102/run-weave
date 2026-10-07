@@ -53,7 +53,7 @@ activeSessionId: string | null;
 
 desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久第一且不可取消固定，其他节点只显示名称和实际分支。子 Worktree 行的右键菜单提供删除入口；主节点不提供 Git 写操作。contexts 每 3 秒刷新并在窗口重新聚焦时刷新。
 
-删除只移除当前父 Project 的 `.worktree/<name>` 直接子 Worktree，保留分支、Activity 和 Work History。最终确认时 Backend 重新校验 Git 登记、路径边界、工作区干净状态、detached HEAD 引用、运行中 Agent 和 Dev Session 占用；失败不使用 `--force`。普通 Terminal 会在删除前停止，当前 Context 删除成功后 Web 切回父 Project 主节点。
+删除只移除当前父 Project 的 `.worktree/<name>` 直接子 Worktree，保留分支、Activity 和 Work History。最终确认时 Backend 重新校验 Git 登记、路径边界、工作区干净状态、detached HEAD 引用和运行中 Agent；失败不使用 `--force`。通过检查后，对 source.root 匹配目标的全部未释放 Dev Session 使用其源码 CLI 尽力停止，全部清理共享 30 秒期限；普通停止发现身份漂移后仅重试一次 stale cleanup。清理失败、超时或身份信息缺失不阻止删除，也不把未释放的 Session 标为 stopped。当前处理删除请求的 Session 不会停止自身 Backend。普通 Terminal 会在删除前停止，当前 Context 删除成功后 Web 切回父 Project 主节点；存在清理警告时，rail 显示可关闭的“Worktree 已删除，部分服务未清理”提示。
 
 `contextProjectIdByParentProjectId` 恢复每个父 Project 上次选中的 context，`projectSessionIds` 继续按生效 Project ID 恢复 Terminal。Preview store 原本已按 `projectId` 分桶，不增加复合 key。
 
@@ -81,7 +81,7 @@ Content-Type: application/json
 { "pinned": true }
 ```
 
-`DELETE` 无请求体，成功返回 204；安全校验失败返回包含具体原因的 4xx。删除成功后清理该子 Context 的 Session、Preview cache 与固定元数据，但不删除 Git branch 或历史记录。
+`DELETE` 无请求体，成功且无清理警告时返回 204；删除成功但 Dev Session 清理未完成时返回 200 与 `{ "cleanupWarnings": [{ "devSessionId": "dvs-...", "message": "具体原因" }] }`，无法读取 registry 的警告使用 null Session ID。旧客户端仍可按成功状态处理，新 Web 同时兼容旧 Backend 的 204。安全校验失败返回包含具体原因的 4xx。删除成功后清理该子 Context 的 Session、Preview cache 与固定元数据，但不删除 Git branch 或历史记录。
 
 Preview 仍使用 `/api/terminal/project/:effectiveProjectId/preview/*`，Session create 仍使用现有 `projectId` 字段。Activity 与 Project-scoped Quick Input 继续精确匹配该 ID，父 Project 不隐式汇总子 Project 数据。
 

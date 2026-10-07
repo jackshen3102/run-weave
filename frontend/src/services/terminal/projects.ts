@@ -7,8 +7,9 @@ import type {
   TerminalProjectContextBranchStatusRequest,
   TerminalProjectContextBranchStatusResponse,
   TerminalProjectContextListItem,
+  TerminalWorktreeDeletionResult,
 } from "@runweave/shared/terminal/project-context";
-import { requestJson, requestVoid } from "../http";
+import { requestJson, requestText, requestVoid } from "../http";
 
 export async function createTerminalProject(
   apiBase: string,
@@ -99,8 +100,8 @@ export async function deleteTerminalWorktree(
   token: string,
   parentProjectId: string,
   childProjectId: string,
-): Promise<void> {
-  return requestVoid(
+): Promise<TerminalWorktreeDeletionResult> {
+  const body = await requestText(
     apiBase,
     `/api/terminal/project/${encodeURIComponent(parentProjectId)}/contexts/${encodeURIComponent(childProjectId)}`,
     {
@@ -108,6 +109,10 @@ export async function deleteTerminalWorktree(
       headers: { Authorization: `Bearer ${token}` },
     },
   );
+  // Older Backends and successful cleanup return 204 with no body.
+  return body.trim()
+    ? JSON.parse(body) as TerminalWorktreeDeletionResult
+    : { cleanupWarnings: [] };
 }
 
 export async function deleteTerminalProject(

@@ -1,7 +1,7 @@
 import tls from "node:tls";
 import { networkInterfaces } from "node:os";
 import { X509Certificate } from "node:crypto";
-import type { RemoteDesktopRelayConfig } from "@runweave/shared/tunnels";
+import type { RemoteDesktopRelayConfig, LocalRemoteDesktopInfo } from "@runweave/shared/tunnels";
 import { remoteFreePort, startSsh, type SshProcess } from "./ssh-process.js";
 import { reverseRelayCommand } from "./reverse-relay-command.js";
 
@@ -17,6 +17,9 @@ export class RemoteDesktopChannel {
   }
   get alive() {
     return !this.stopped && !!this.ssh && this.ssh.child.exitCode === null && this.ssh.child.signalCode === null;
+  }
+  usesLocalHost(info: LocalRemoteDesktopInfo) {
+    return this.config.localAddress === info.localAddress && this.config.localPort === info.localPort;
   }
   private check() { if (this.stopped) throw new Error("TUNNEL_CANCELLED"); }
   private checkLocalAddress() {

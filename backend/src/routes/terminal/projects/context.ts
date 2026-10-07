@@ -139,11 +139,15 @@ export function registerTerminalProjectContextRoutes(
     "/project/:parentProjectId/contexts/:childProjectId",
     async (req, res) => {
       try {
-        await deletionService.delete(
+        const result = await deletionService.delete(
           req.params.parentProjectId,
           req.params.childProjectId,
         );
-        res.status(204).send();
+        if (result.cleanupWarnings.length > 0) {
+          res.status(200).json(result);
+        } else {
+          res.status(204).send();
+        }
       } catch (error) {
         if (error instanceof TerminalWorktreeDeletionError) {
           res.status(error.statusCode).json({

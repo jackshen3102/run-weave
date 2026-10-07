@@ -11,6 +11,7 @@ import {
 } from "@runweave/shared/tunnels";
 import { desktopRuntime } from "../desktop/runtime-state.js";
 import { TunnelManager } from "./manager.js";
+import { getLocalRemoteDesktopInfo } from "./local-remote-desktop.js";
 let manager: TunnelManager | null = null;
 let startupError: string | null = null;
 export function registerTunnelHandlers(): void {
@@ -28,6 +29,10 @@ export function registerTunnelHandlers(): void {
     return manager;
   };
   ipcMain.handle("tunnels:list", (event) => get(event.sender.id).snapshot());
+  ipcMain.handle("tunnels:local-remote-desktop", (event) => {
+    get(event.sender.id);
+    return getLocalRemoteDesktopInfo();
+  });
   ipcMain.handle("tunnels:save-config", (event, input: unknown) =>
     get(event.sender.id).save(validateTunnelUpdate(input)),
   );
