@@ -326,6 +326,16 @@ export async function processTerminalAgentHook(
 
   let terminalState: TerminalState;
   if (panel) {
+    if (input.hookEvent === "SessionStart" && operationIdentityMatched) {
+      // Bind the verified launch before a Node wrapper or synchronous hook is
+      // observed as the foreground process. Panel reconciliation can then retain
+      // the Agent identity until its process exits or another command replaces it.
+      await options.terminalSessionManager.observePanelActiveCommand(
+        session.id, panel.id, panel.activeCommand, effectiveAgent,
+      );
+      panel.activeCommand = effectiveAgent;
+      await options.terminalSessionManager.upsertPanel(panel);
+    }
     const panelTerminalState = resolveAgentHookTerminalState(
       effectiveAgent,
       input.hookEvent,
