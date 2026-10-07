@@ -6,7 +6,9 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    tmpfs: ["/tmp:mode=1777,size=64m"]
+    tmpfs:
+      - "/tmp:mode=1777,size=64m"
+      - "/app/.runweave:uid=1000,gid=1000,mode=0700,size=1m"
     secrets: [apns_key]
     ports: ["127.0.0.1:${PUSH_GATEWAY_HOST_PORT:-8092}:8092"]
     volumes:

@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 make g+
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable && corepack prepare pnpm@10.6.2 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY patches patches
 COPY packages/shared packages/shared
 COPY packages/config-node packages/config-node
 COPY packages/push-gateway packages/push-gateway
@@ -14,10 +15,12 @@ RUN pnpm install --frozen-lockfile --filter @runweave/push-gateway... --ignore-s
 
 FROM node:22.22.2-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && usermod --home /app node
 WORKDIR /app
 COPY --from=build --chown=node:node /output /app
 ENV NODE_ENV=production
+ENV HOME=/app
 USER node
 EXPOSE 8092
 ENTRYPOINT ["node", "--import", "tsx"]
