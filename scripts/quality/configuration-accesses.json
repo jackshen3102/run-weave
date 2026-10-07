@@ -6920,7 +6920,7 @@
     "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
   },
   {
-    "file": "scripts/dev/web.mjs",
+    "file": "scripts/dev/runtime.mjs",
     "kind": "environment",
     "expression": "env.DEV_BACKEND_HEALTHCHECK_TIMEOUT_MS",
     "count": 1,
@@ -6928,7 +6928,7 @@
     "reason": "DEV_BACKEND_HEALTHCHECK_TIMEOUT_MS：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
   {
-    "file": "scripts/dev/web.mjs",
+    "file": "scripts/dev/runtime.mjs",
     "kind": "environment",
     "expression": "env[key]",
     "count": 1,
@@ -6944,7 +6944,7 @@
     "reason": "DEV_HOST：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
   {
-    "file": "scripts/dev/web.mjs",
+    "file": "scripts/dev/runtime.mjs",
     "kind": "environment-forward",
     "expression": "...env",
     "count": 2,
@@ -10220,5 +10220,53 @@
     "count": 1,
     "category": "distribution",
     "reason": "读取和写入本地 CLI 发行元数据、包版本及成功安装回执，用于内容去重和构建追溯；不是实例业务配置"
+  },
+  {
+    "file": "backend/src/dev-resources/control.ts",
+    "kind": "environment",
+    "expression": "environment.RUNWEAVE_DEV_SESSION_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "固定资源 helper 检查多个 Session，删除调用方 Session 拒绝标记；当前 Backend 的身份保护由认证入口传入的 PID 约束。"
+  },
+  {
+    "file": "backend/src/dev-resources/control.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "启动同用户的固定 Node 控制 helper，继承工具 PATH 等进程上下文；不从环境变量推导资源 owner 或释放权限。"
+  },
+  {
+    "file": "backend/src/dev-resources/service.ts",
+    "kind": "file-io",
+    "expression": "fs.writeFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "私有释放操作凭据按幂等键独占创建，保存副作用操作身份；不属于用户可配置的持久设置。"
+  },
+  {
+    "file": "backend/src/dev-resources/service.ts",
+    "kind": "file-io",
+    "expression": "fs.writeFile(temporary)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "私有释放操作凭据通过同目录临时文件与 rename 原子发布运行状态和最终结果，避免重复清理。"
+  },
+  {
+    "file": "backend/src/dev-resources/service.ts",
+    "kind": "file-io",
+    "expression": "handle.readFile(\"utf8\")",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "只读检查经过 O_NOFOLLOW 和大小上限验证的释放操作凭据，恢复操作身份；不读取或修改用户设置。"
+  },
+  {
+    "file": "backend/src/dev-resources/service.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "读取控制 helper 的 ps 身份时继承系统进程上下文，并固定 locale 与 timezone，确保跨 Backend 重启能比较同一进程的签名。"
   }
 ]

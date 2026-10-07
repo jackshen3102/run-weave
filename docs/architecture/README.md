@@ -60,6 +60,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | --------------------------------------- | ---------------------------------------------------------- |
 | 网络拓扑、Backend 与 Electron 连接      | [network-topology.md](./network-topology.md)               |
 | SSH 远程项目、多连接归属和 Browser 通道 | [ssh-remote-projects.md](./ssh-remote-projects.md)         |
+| 开发测试资源占用与手动释放              | [development-resources.md](./development-resources.md)     |
 | 跨运行时状态来源、聚合与安全边界        | [runtime-status.md](./runtime-status.md)                   |
 | App 移动端连接、页面和安全边界          | [app-mobile.md](./app-mobile.md)                           |
 | Mac 局域网远控、独立 Host 与来源边界    | [remote-desktop.md](./remote-desktop.md)                   |

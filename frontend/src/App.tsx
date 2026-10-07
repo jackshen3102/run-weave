@@ -1,3 +1,4 @@
+import { DevResourcesPage } from "./pages/dev-resources-page";
 import { useDesktopBadge } from "./features/attention/use-desktop-badge";
 import { ResourceMonitorProvider } from "./features/system-monitor/resource-monitor-provider";
 import { ResourceNotice } from "./features/system-monitor/resource-notice";
@@ -129,7 +130,7 @@ function RunweaveApp() {
     isElectron && authStatus !== "unauthenticated",
   );
   const requestedReturn: unknown = location.state?.scope === queryScope ? location.state?.returnTo : null;
-  const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|background-runs|system-monitor)(?:\/|\?|$)/u.test(requestedReturn)
+  const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|background-runs|system-monitor|dev-resources)(?:\/|\?|$)/u.test(requestedReturn)
     ? requestedReturn : TERMINAL_LIST_PATH;
 
   const handleSelectConnection = (id: string) => {
@@ -252,6 +253,14 @@ function RunweaveApp() {
                 onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
               />
             ) : <Navigate to="/login" replace state={{ returnTo: location.pathname + location.search, scope: queryScope }} />}
+          />
+          <Route
+            path="/dev-resources"
+            element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
+              <DevResourcesPage apiBase={apiBase} token={token} activeConnectionId={activeConnectionId}
+                connectionGeneration={activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined}
+                connectionName={activeConnection?.name} onAuthExpired={clearToken} />
+            ) : <Navigate to="/login" replace state={{ returnTo: "/dev-resources", scope: queryScope }} />}
           />
           <Route
             path="/system-monitor"

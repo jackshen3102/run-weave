@@ -31,6 +31,7 @@
     "./diagnostic-logs": "./src/monitoring/diagnostic-logs.ts",
     "./evolution": "./src/evolution/index.ts",
     "./protocol": "./src/protocol.ts",
+    "./dev-resources": "./src/monitoring/dev-resources.ts",
     "./runtime-monitor": "./src/monitoring/runtime.ts",
     "./runtime-status": "./src/monitoring/runtime-status.ts",
     "./research-mcp": "./src/monitoring/research-mcp.ts",

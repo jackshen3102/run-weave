@@ -58,6 +58,7 @@ export async function runStop(options, sourceRoot, helpers) {
   }
   await withSessionLock(candidate.devSessionId, async (paths) => {
     let manifest = await readManifest(candidate.devSessionId);
+    const verification = await options.verifyOwnership?.(manifest);
     const betaSlot = retainsBetaSlotLease(manifest)
       ? manifest.targetEnvironment.betaSlot
       : null;
@@ -174,7 +175,7 @@ export async function runStop(options, sourceRoot, helpers) {
       return;
     }
     if (options.cleanupStale) {
-      if (manifest.state !== "stale" && !retryingPartialCleanup) {
+      if (manifest.state !== "stale" && !retryingPartialCleanup && !verification?.observedStale) {
         throw new DevSessionError(
           `--cleanup-stale requires a stale Session: ${manifest.devSessionId} (${manifest.state})`,
           5,
@@ -218,7 +219,7 @@ export async function runStop(options, sourceRoot, helpers) {
         }
         let cleanup = await cleanupStaleSessionServices(
           manifest.services,
-          retryingPartialCleanup ? { serviceNames: retryServiceNames } : {},
+          { serviceNames: retryingPartialCleanup ? retryServiceNames : null, stopBetaControl: helpers.stopBetaControl },
         );
         if (
           betaSlot &&
@@ -334,6 +335,7 @@ export async function runStop(options, sourceRoot, helpers) {
     try {
       await stopSessionServices(manifest.services, {
         identityVerified: true,
+        stopBetaControl: helpers.stopBetaControl,
       });
       await finalizeBetaSlot();
     } catch (error) {

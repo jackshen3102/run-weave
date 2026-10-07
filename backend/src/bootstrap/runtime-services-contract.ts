@@ -51,6 +51,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   start(controlPlaneBaseUrl: string): void;
   dispose(): Promise<void>;
   runtimeStatus: BackendRuntimeStatusService;
+  devResources: import("../dev-resources/service").DevResourcesService;
   activityStore: ActivityStore | null;
   activityRecorder: ActivityRecorder;
   activityQueryService: ActivityQueryService;

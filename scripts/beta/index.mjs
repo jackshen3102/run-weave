@@ -1,3 +1,4 @@
+import { stopManagedBeta } from "./stop-control.mjs";
 import { commitHealthyBetaUpdate } from "./restore-state.mjs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -12,7 +13,6 @@ import {
   resolveBetaPaths,
   writeJson,
   getPathIdentity,
-  isPidLive,
   readReleaseId,
 } from "./state.mjs";
 import { createWorktreeSnapshot, fingerprintFrontendBuildEnv } from "../update/system.mjs";
@@ -22,7 +22,6 @@ import {
   collectBaseline,
   formatBetaUpdateFailure,
   openBeta,
-  quitBeta,
   recordFailure,
   restoreBaseline,
   runUpdateProcess,
@@ -528,31 +527,7 @@ async function main() {
     return;
   }
   if (command === "stop") {
-    await withBetaLock(paths, async () => {
-      await quitBeta(paths);
-      if (!options.sharedAppServerLockPath) {
-        const controlCliExists = await fs.access(paths.controlCliPath).then(
-          () => true,
-          (error) => {
-            if (error.code === "ENOENT") return false;
-            throw error;
-          },
-        );
-        if (!controlCliExists) {
-          const lock = await readJson(paths.appServerLockPath);
-          if (lock?.pid && isPidLive(lock.pid)) {
-            throw new Error("cannot stop a live Beta App Server without its CLI");
-          }
-        } else {
-          const appServerStop = await runAppServerCli(paths, "stop");
-          if (!appServerStop.ok && !/not running/i.test(appServerStop.stderr)) {
-            throw new Error(
-              `failed to stop Beta App Server: ${appServerStop.stderr}`,
-            );
-          }
-        }
-      }
-    });
+    await stopManagedBeta(paths, { sharedAppServer: Boolean(options.sharedAppServerLockPath) });
     console.log(JSON.stringify(await buildBetaStatus(paths), null, 2));
     return;
   }

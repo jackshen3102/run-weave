@@ -244,6 +244,8 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             filter: [
               "index.cjs",
               "resource-sampler",
+              "dev-resources/**/*",
+              "ios-simulators/**/*",
               "activity-sqlite-worker.cjs",
               "evolution-sqlite-worker.cjs",
               "scheduled-tasks-sqlite-worker.cjs",

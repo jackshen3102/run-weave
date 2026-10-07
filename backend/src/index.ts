@@ -51,7 +51,7 @@ import { createHtmlPreviewRouter } from "./routes/prototype/html-preview";
 import { createVoiceRouter } from "./routes/voice";
 import { createWorkHistoryRouter } from "./routes/work-history";
 import { createAttentionRouter } from "./routes/attention";
-import { registerRuntimeStatusRoutes } from "./routes/registration/runtime-status";
+import { registerMonitoringRoutes } from "./routes/registration/monitoring";
 import { createEvolutionActivationRouter } from "./routes/evolution/activation";
 import { createEvolutionFoundationRouter } from "./routes/evolution/foundation";
 import { createEvolutionMcpRouter } from "./routes/evolution/mcp";
@@ -237,7 +237,7 @@ function createHttpApp(
     requireAuth,
     createDiagnosticLogsRouter(diagnosticLogRecorder),
   );
-  registerRuntimeStatusRoutes(app, requireAuth, services.runtimeStatus);
+  registerMonitoringRoutes(app, requireAuth, services);
   app.get("/api/browser/local/capabilities", requireAuth, (req, res) => {
     if (!localBrowserAuth(req, services.authService)) {
       res.sendStatus(401);

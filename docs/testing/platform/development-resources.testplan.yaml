@@ -1,0 +1,253 @@
+version: 1
+name: 开发资源页面与手动释放验收
+description: >
+  对开发资源页面执行逐条验收。只查看当前资源，进入时读取一次并支持手动刷新；
+  释放必须经过确认、锁内身份复核和清理后置核查，失败不得伪装空闲。
+  格式校验不代表产品行为已通过。每条释放用例独立准备归属明确的 fixture，不使用用户正在测试的资源。
+
+cases:
+  - id: DRES-001
+    name: 左侧一行入口在少量工作树和折叠状态仍可进入
+    required: true
+    description: >
+      同一页面生命周期内，侧边栏布局变化不导致开发资源入口消失；导航不创建新终端或更改原终端选择。
+    preconditions:
+      - 已通过 toolkit:runweave-dev-session 建立本次环境并取得正确 desktop surface，当前账号已认证。
+      - 本次项目可分别呈现零个、一个和多个工作树，已经记录原终端选择及会话数量。
+    steps:
+      - 使用 toolkit:playwright-cli 附着正确 surface，在不同工作树数量下检查侧栏只有一行开发资源入口。
+      - 在展开和折叠状态通过鼠标及键盘进入开发资源；确认折叠图标有可访问名称，页面保留侧栏且高亮对应入口。
+      - 返回终端；确认原选择与会话数量不变，没有创建第二份终端工作区。
+
+  - id: DRES-002
+    name: 页面只在进入与手动刷新时获取当前快照
+    required: true
+    description: >
+      同一挂载生命周期内没有定时、聚焦、重连或筛选触发的读取；一次手动刷新只产生一次请求。
+    preconditions:
+      - 本次已认证浏览器连接到资源接口可用的隔离 Backend，已从页面导航离开开发资源。
+      - 可用 toolkit:playwright-cli 记录该页面的 dev-resources 请求数量及返回内容。
+    steps:
+      - 使用 toolkit:playwright-cli 进入开发资源；确认加载一次快照并显示其观察时间。
+      - 等待超过 5 秒，切换筛选、展开详情、切出并恢复浏览器焦点；确认请求数仍为一次。
+      - 模拟网络恢复但不点击刷新；确认没有自动重试或请求；点击刷新，确认只新增一次请求并保留筛选及展开状态。
+      - 检查请求与响应；确认没有历史查询参数、历史数组、曲线或已结束任务列表。
+
+  - id: DRES-003
+    name: 桌面物理槽位与 Session 不重复计数
+    required: true
+    description: >
+      当前占用按五个 Beta 槽位计算，关联 Session 不增加容量；已释放 Session 不成为当前占用。
+    preconditions:
+      - 本次隔离 registry 包含两个不同 worktree 的有效 Beta 占用和一个已释放的历史 Session，资料与真实 fixture 进程一致。
+      - 本次已认证浏览器可访问该 registry 的只读投影，已有执行前的 registry 与进程证据。
+    steps:
+      - 使用 toolkit:playwright-cli 进入页面并读取 GET 响应；确认桌面总容量为五个槽位，两个 worktree 的占用均显示正确 owner。
+      - 对照 manifest 与 lease；确认同一 Session 和槽位只占一个容量，已释放历史 Session 不列为当前资源。
+
+  - id: DRES-004
+    name: 采集失败不会把未知资源显示为空闲
+    required: true
+    description: >
+      一个资源源不可读取时，页面展示该组未知及原因，另一组独立有效数据仍可使用。
+    preconditions:
+      - 本次隔离环境内桌面投影可用，模拟器 registry 已配置但可通过本次私有 fixture 暂时制造读取错误。
+      - 已记录该 registry 的原始权限和内容，可在本 case 结束时恢复。
+    steps:
+      - 在本次 fixture 制造模拟器读取错误，使用 toolkit:playwright-cli 进入页面；确认模拟器组显示无法读取及未知数值，不能显示零占用或全部空闲。
+      - 确认桌面组仍显示本次可核实的当前数据，失败组不展示旧快照为最新；恢复 fixture 后手动刷新，确认错误消失。
+
+  - id: DRES-005
+    name: GET 资源投影不修改资源
+    required: true
+    description: >
+      查看页面和重复 GET 不协调或写回 manifest，不创建 claim、lease、迁移和清理凭据，也不改变进程或设备状态。
+    preconditions:
+      - 本次私有 registry 含有效及残留记录，已记录全部相关文件内容、权限、修改时间和自有进程签名。
+      - 本次 Backend 已认证且提供资源接口，没有并行写入该 fixture 的任务。
+    steps:
+      - 多次请求 GET /api/dev-resources，使用 toolkit:playwright-cli 打开页面和点击刷新。
+      - 比较前后相关文件、目录、进程和设备状态；确认除正常读取外无资源副作用，没有调用会写回状态的 dev:status。
+
+  - id: DRES-006
+    name: 资源读取和释放都要求认证
+    required: true
+    description: >
+      未授权请求在触达资源文件或控制 helper 前被拒绝，不暴露路径、owner、PID 或执行结果。
+    preconditions:
+      - 本次隔离 Backend 有受管理资源且可记录控制 helper 调用，已经保存 fixture 的状态基线。
+      - 已取得合法请求形式，但本 case 的请求不携带有效认证凭据。
+    steps:
+      - 对 GET 和 POST release 分别发送匿名及失效认证请求；确认返回 401 且不包含资源快照。
+      - 对启用 tunnel 保护的连接省略对应凭据；确认既有保护仍生效。
+      - 检查 fixture 和调用记录；确认没有读取资源投影或执行清理，状态保持基线。
+
+  - id: DRES-007
+    name: 切换连接后不接受旧连接数据和确认
+    required: true
+    description: >
+      浏览器切换 Backend 时立即清空原快照和弹窗，迟到响应无法覆盖新主机数据或发起旧目标释放。
+    preconditions:
+      - 本次浏览器有两个可控且已认证的隔离 Backend，主机及 owner 信息可明确区分。
+      - 可延迟第一个 Backend 的快照响应，不对任一资源执行实际清理。
+    steps:
+      - 使用 toolkit:playwright-cli 在第一个 Backend 打开释放确认，再切换到第二个 Backend；确认旧弹窗关闭，旧资源立即清空。
+      - 放行第一个 Backend 的迟到响应；确认页面仍显示第二个主机的数据，不能提交旧确认。
+
+  - id: DRES-008
+    name: 取消释放不提交副作用
+    required: true
+    description: >
+      同一确认状态内，取消和 Esc 只关闭弹窗，不提交 release 或改变占用。
+    preconditions:
+      - 本次已认证浏览器展示一个归属明确的忙碌桌面 fixture，已记录 owner、lease 与进程证据。
+    steps:
+      - 使用 toolkit:playwright-cli 打开停止并释放确认；确认显示中断说明、资源、任务与工作树，初始焦点在取消。
+      - 点击取消，再次打开后按 Esc；确认没有 POST release，资源仍被原 owner 占用。
+
+  - id: DRES-009
+    name: 停止并释放桌面测试只清理自有资源
+    required: true
+    description: >
+      用户确认后，目标 Session 服务和槽位完成清理，共享服务及其他 owner 不受影响。
+    preconditions:
+      - 已通过 toolkit:runweave-dev-session 建立本次可停止的独占 Beta fixture，并记录 Session、槽位、lease nonce、专属进程组和共享服务基线。
+      - 另有不属于该 fixture 的服务作为保护对象；提供页面的 Backend 不属于被停止的 Session。
+    steps:
+      - 使用 toolkit:playwright-cli 点击停止并释放并确认；确认运行中禁用重复提交，记录 operation 身份。
+      - 等待操作结果或手动刷新；确认专属服务及其进程组退出，fixture 清理完成，槽位 reset 与 lease release 均有后置证据。
+      - 确认页面据真实快照显示空闲并更新计数；对照基线确认共享服务与其他 owner 保持可用。
+
+  - id: DRES-010
+    name: 桌面残留释放以清理后置证据判定
+    required: true
+    description: >
+      可确认 owner 的残留占用经现有 stale cleanup 或定向 recover 完成后才显示空闲。
+    preconditions:
+      - 本次独立 Beta fixture 已按既有回归入口形成可归属的残留 lease，无外来进程，能够通过正常恢复路径清理。
+      - 已记录 owner manifest、lease、残留目录及归属证据，控制 Backend 不属于该 fixture。
+    steps:
+      - 使用 toolkit:playwright-cli 确认该项为待检查并点击释放占用；确认动作指向原 owner。
+      - 完成恢复后核对进程、reset、lease 和 recovery receipt；确认都符合释放条件，页面才显示空闲。
+
+  - id: DRES-011
+    name: 模拟器停止释放包含 Runner 清理和关机
+    required: true
+    description: >
+      同一模拟器任务停止后，自动化 Runner、自有子进程和设备状态核查完成，最后释放该 lease。
+    preconditions:
+      - 已按 toolkit:agent-device 准备本次独立受管理模拟器任务，具有可验证 taskDir、repository、worktree、UDID 和 lease。
+      - agent-device 为现有清理合同要求的版本，已记录该任务 Runner 与设备状态。
+    steps:
+      - 使用 toolkit:playwright-cli 在资源页确认停止并释放该模拟器任务。
+      - 核查该 taskDir 的 daemon / runner 清理报告、自有进程组和 simctl 设备状态；确认没有 pending 或 orphaned Runner，设备为 Shutdown。
+      - 确认原 owner lock 最后才移除，页面手动或操作结束刷新显示空闲，未停止其他设备任务。
+
+  - id: DRES-012
+    name: 模拟器残留按指定 lease 恢复
+    required: true
+    description: >
+      可确认归属的模拟器残留使用原 UDID 与 lease 恢复，不按设备名称或工作目录猜测目标。
+    preconditions:
+      - 本次独立模拟器 fixture 保留合法任务 lease 和 owner，原测试已经结束且没有未知 children 或外来 Runner。
+      - 已记录 taskDir 与固定 pool 的对应关系，工具和设备可执行正常 finish / recover。
+    steps:
+      - 使用 toolkit:playwright-cli 点击释放占用并确认；核查控制请求和 helper 实际定位的是原 UDID、lease 与 taskDir。
+      - 核对正常清理后 owner lock、Runner 和设备状态；确认页面显示空闲，没有释放另一 lease。
+
+  - id: DRES-013
+    name: 确认后 owner 变化时拒绝停止新测试
+    required: true
+    description: >
+      页面保留旧确认时槽位交给新 owner，锁内复核拒绝请求，新 owner 的服务和 lease 保持不变。
+    preconditions:
+      - 本次独立桌面 fixture 可通过正常释放和重新分配形成不同 lease 的新 owner，旧确认仍停留在浏览器中。
+      - 已记录新 owner 的进程签名与 lease，控制 Backend 在 fixture 外。
+    steps:
+      - 使用 toolkit:playwright-cli 提交旧确认；确认返回 409 并说明占用者变化，未执行旧目标清理。
+      - 核对新 owner 与其服务未被停止；手动刷新显示新 owner，必须重新确认才可操作。
+
+  - id: DRES-014
+    name: PID 身份不匹配时保留占用
+    required: true
+    description: >
+      即使数字 PID 看似存活，启动身份或命令签名不匹配也不能停止该进程或释放资源。
+    preconditions:
+      - 既有真实进程 fixture 已在私有 registry 中形成 PID 相同但签名不匹配的桌面残留，不涉及用户进程。
+      - 已记录保护进程签名与 lease，页面可展示该 fixture。
+    steps:
+      - 使用 toolkit:playwright-cli 刷新详情；确认显示身份不一致及待检查，释放能力禁用或在锁内拒绝。
+      - 发送持有旧版本的释放请求；确认保护进程仍存活、lease 保留，页面不显示空闲。
+
+  - id: DRES-015
+    name: 模拟器清理受阻时保留 owner lock
+    required: true
+    description: >
+      Runner 或自有子进程无法确认退出时，清理返回 blocked，不能仅凭 shutdown 或子命令退出码解锁。
+    preconditions:
+      - 本次独立模拟器 fixture 按现有恢复回归入口准备未完成 children 或 pending Runner 的状态，已记录原 owner lock。
+      - 已保存该 fixture 的最小恢复方式，不操作其他设备或任务。
+    steps:
+      - 使用 toolkit:playwright-cli 确认释放，读取返回结果及 taskDir 清理报告；确认说明具体阻塞原因。
+      - 核查 owner lock 仍属原 lease，页面保持占用 / 待检查并更新原因，没有显示已释放。
+
+  - id: DRES-016
+    name: 重复确认只执行一个释放操作
+    required: true
+    description: >
+      同一幂等键及 payload 返回同一 operation，并发按钮或请求不能重复执行清理。
+    preconditions:
+      - 本次独立桌面 fixture 可正常释放，能记录 helper 调用次数和 operation 状态。
+      - 已取得合法认证、资源 ID、owner version 和本次唯一幂等键。
+    steps:
+      - 并发提交相同释放请求；确认只启动一次清理，响应指向同一 operation。
+      - 在同一键下更换 payload；确认返回 409 且不发起第二个动作；核对最终结果和真实占用一致。
+
+  - id: DRES-017
+    name: 网络中断不会自动重发释放
+    required: true
+    description: >
+      确认已经到达服务端后断开响应，页面不猜成功或自动重试，手动刷新后与实际结果收敛。
+    preconditions:
+      - 本次独立桌面 fixture 可正常释放，控制 Backend 可记录操作身份并在浏览器掉线后继续清理。
+      - 可仅中断本次响应通道，不停止 Backend 或破坏 fixture 身份资料。
+    steps:
+      - 使用 toolkit:playwright-cli 确认释放，在服务端接收后中断响应；确认页面提示结果待核查，无新的 POST 重放。
+      - 恢复网络并手动刷新；确认根据真实 operation / lease 显示运行中、受阻或已释放，不出现前端虚构的空闲。
+
+  - id: DRES-018
+    name: 安装产物脱离源码 checkout 仍能管理完整资料的资源
+    required: true
+    description: >
+      本次构建的安装版使用自带固定 helper，读取与释放不执行 owner worktree 内的控制脚本。
+    preconditions:
+      - 本次隔离打包产物已包含 dev-resources helper，运行时不可读取原构建 checkout，未覆盖 Stable 安装。
+      - 本 case 自行准备资料完整的桌面 fixture，运行用户、registry 和进程身份均可核查。
+    steps:
+      - 从隔离产物启动控制 Backend，使用 toolkit:playwright-cli 检查当前资源并释放本 case fixture。
+      - 核查启动的 helper 路径均来自本次产物，没有调用任意 sourceRoot 脚本；确认释放后置证据与源码版合同一致。
+      - 结束本次隔离产物并检查基线；确认没有修改 Stable 安装或其他资源。
+
+  - id: DRES-019
+    name: 当前控制 Backend 不能从自身页面被停止
+    required: true
+    description: >
+      目标 Session 拥有当前提供接口的 Backend 时拒绝该释放，控制连接持续可用。
+    preconditions:
+      - 本次独立 Dev Session 的 Backend 提供开发资源页，已记录当前 PID、进程签名、Session 和 lease。
+      - 页面明确显示该 Session 的占用，其他资源无需参与该 case。
+    steps:
+      - 使用 toolkit:playwright-cli 检查该目标；确认停止能力禁用并解释需要另一个控制连接。
+      - 对同一目标直接提交合法格式的释放请求；确认被拒绝且当前 Backend 的健康、进程和 lease 不变。
+
+  - id: DRES-020
+    name: 未知归属与冲突登记不开放释放
+    required: true
+    description: >
+      当前资源无法确认唯一 owner 时保守呈现，不从进程名、路径或槽位名称推断释放权限。
+    preconditions:
+      - 本 case 私有模拟器 registry 中存在一个物理 UDID 的冲突登记或缺失 owner 身份，已记录文件及设备状态。
+      - 本次浏览器已认证，fixture 不存在其他并行写入。
+    steps:
+      - 使用 toolkit:playwright-cli 查看当前资源；确认该 UDID 只计一次，呈现待检查 / 未知及具体原因，释放按钮禁用。
+      - 尝试提交猜测 owner 的请求；确认拒绝且文件和设备状态保持原样，没有以零占用或空闲掩盖未知状态。

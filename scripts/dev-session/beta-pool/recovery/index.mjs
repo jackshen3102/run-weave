@@ -78,7 +78,7 @@ async function readOwnerManifest(lease) {
   }
 }
 
-async function stopRecordedDedicatedServices(manifest, lease, homeDir) {
+async function stopRecordedDedicatedServices(manifest, lease, homeDir, stopBetaControl = null) {
   const stoppedServices = [];
   const dedicatedServices = Object.entries(manifest.services ?? {}).filter(
     ([name, service]) => name !== "cdp" && service?.ownership === "dedicated",
@@ -116,7 +116,9 @@ async function stopRecordedDedicatedServices(manifest, lease, homeDir) {
     "beta",
     "index.mjs",
   );
-  if (await fs.lstat(controlScript).catch(() => null)) {
+  if (stopBetaControl) {
+    await stopBetaControl(manifest);
+  } else if (await fs.lstat(controlScript).catch(() => null)) {
     try {
       await execFileAsync(
         process.execPath,
@@ -324,6 +326,8 @@ async function recoverValidLease({
   homeDir,
   applicationsDir,
   paths,
+  verifyOwnership,
+  stopBetaControl,
 }) {
   const verified = await readLease(slot.slotId, paths, homeDir);
   const lease = verified.lease;
@@ -339,6 +343,7 @@ async function recoverValidLease({
     let current = (
       await inspectBetaPool({ homeDir, applicationsDir })
     ).slots.find((entry) => entry.slotId === slot.slotId);
+    await verifyOwnership?.(current, await readOwnerManifest(lease));
     const base = createBetaPoolRecoveryReceipt({
       trigger,
       initiatingSessionId,
@@ -375,6 +380,7 @@ async function recoverValidLease({
       current = (
         await inspectBetaPool({ homeDir, applicationsDir })
       ).slots.find((entry) => entry.slotId === slot.slotId);
+      await verifyOwnership?.(current, await readOwnerManifest(lease));
       if (current.derivedState !== "partial" || !current.recovery.eligible) {
         return await persistNonMutatingReceipt(
           {
@@ -390,7 +396,7 @@ async function recoverValidLease({
     }
     const manifest = await readOwnerManifest(lease);
     const stoppedServices = manifest
-      ? await stopRecordedDedicatedServices(manifest, lease, homeDir)
+      ? await stopRecordedDedicatedServices(manifest, lease, homeDir, stopBetaControl)
       : [];
     return (
       await finalizeBetaSlotRelease({
@@ -466,6 +472,8 @@ export async function recoverBetaPoolSlot({
   secondCheckDelayMs = 5_000,
   homeDir = os.homedir(),
   applicationsDir = "/Applications",
+  verifyOwnership = null,
+  stopBetaControl = null,
 } = {}) {
   await assertBetaPoolStorageReadyForExistingLease({ homeDir });
   assertBetaSlotId(slotId);
@@ -534,6 +542,8 @@ export async function recoverBetaPoolSlot({
       homeDir,
       applicationsDir,
       paths,
+      verifyOwnership,
+      stopBetaControl,
     });
   } finally {
     await releaseBetaSlotRecoveryClaim(claim, paths);

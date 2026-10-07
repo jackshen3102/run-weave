@@ -450,13 +450,15 @@ def drain_runner(root, owner, env):
         write(root / "runner-shutdown.json", report)
 
 
-def finish(root, recovering=False, idle_lease=None, keep_booted=False):
+def finish(root, recovering=False, idle_lease=None, keep_booted=False, verify_owner=None):
     initial = task(root, allow_finished=True)
     with guard(initial["udid"]):
         current = owner_at(initial["udid"])
         if initial.get("finishedAt") and (not current or current.get("lease") != initial["lease"]):
             return {"code": "already_finished", "lease": initial["lease"]}
         owner = task(root, allow_finished=True)
+        if verify_owner:
+            verify_owner(owner)
         if idle_lease and (owner["lease"] != idle_lease or active_operation(owner)
                            or (idle_seconds(owner) or 0) < IDLE_SECONDS):
             fail("device_busy", "Lease is active or changed before idle recovery", 3)
