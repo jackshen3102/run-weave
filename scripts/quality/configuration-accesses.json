@@ -10132,5 +10132,37 @@
     "count": 1,
     "category": "test",
     "reason": "隔离 Hook 集成夹具的本地假服务入口，必须携带匹配的运行时身份"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/dev-session-cleanup.ts",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_DEV_SESSION_HOME",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "沿用实例启动上下文定位 Dev Session 注册目录；不作为持久业务配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/dev-session-cleanup.ts",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_DEV_SESSION_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "确认当前 Backend 所属 Session，避免删除请求停止自身；不作为持久业务配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/dev-session-cleanup.ts",
+    "kind": "environment-forward",
+    "expression": "...env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "向既有身份安全的 Dev Session stop CLI 传递调用实例环境，不新增持久配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/dev-session-cleanup.ts",
+    "kind": "file-io",
+    "expression": "readFile(manifestPath)",
+    "count": 2,
+    "category": "runtime-state",
+    "reason": "读取 Dev Session 运行态身份与资源释放回执，用于归属确认和清理；不替代 settings.yaml。"
   }
 ]
