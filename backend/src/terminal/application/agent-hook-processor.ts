@@ -13,6 +13,7 @@ import { logger } from "../../logging/index";
 import {
   AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
   getCompletionSourceForCommand,
+  getExecutableCommandName,
   isCompletionSourceAllowedForCommand,
 } from "../completion/source-gate";
 import type { TerminalSessionManager } from "../manager/manager";
@@ -23,6 +24,7 @@ import {
   type TerminalStateService,
 } from "../state/terminal-state-service";
 import { readCodexThreadSnapshot } from "../runtime/codex-thread-snapshot";
+import { acknowledgeTerminalPrompt } from "../runtime/input-admission";
 
 const agentHookProcessorLogger = logger.child({
   component: "terminal-agent-hook",
@@ -324,6 +326,25 @@ export async function processTerminalAgentHook(
     ).catch((error) => { agentHookProcessorLogger.warn("terminal-agent-hook.feishu-policy.failed", { error }); });
   }
 
+  // Node wrappers otherwise erase the Agent identity on the next pane poll.
+  // A verified startup hook identifies the running wrapper before its first reply.
+  if (
+    input.hookEvent === "SessionStart" &&
+    getExecutableCommandName(targetActiveCommand) === "node" &&
+    getExecutableCommandName(input.commandName ?? null) === "node"
+  ) {
+    if (panel) {
+      await options.terminalSessionManager.upsertPanel({
+        ...panel,
+        activeCommand: effectiveAgent,
+      });
+    }
+    await options.terminalSessionManager.updateSessionMetadata(session.id, {
+      cwd: session.cwd,
+      activeCommand: effectiveAgent,
+    });
+  }
+
   let terminalState: TerminalState;
   if (panel) {
     if (input.hookEvent === "SessionStart" && operationIdentityMatched) {
@@ -376,10 +397,9 @@ export async function processTerminalAgentHook(
         operationId: input.operationId,
       })) ?? session;
   }
-  // The user submitting a new prompt means they are back at this terminal, so
-  // retire any pending "completion" attention (the green dot) for this session.
-  // acknowledgeSessionCompletion is idempotent when already caught up.
+  // A submitted prompt retires pending completion attention and draft protection.
   if (input.hookEvent === "UserPromptSubmit") {
+    if (!context.lifecycleObservation && !input.query?.includes("[runweave-task-supervision:")) acknowledgeTerminalPrompt(session, panel?.tmuxPaneId ?? input.tmuxPaneId ?? null);
     await options.terminalSessionManager.acknowledgeSessionCompletion(
       session.id,
       session.completionRevision,

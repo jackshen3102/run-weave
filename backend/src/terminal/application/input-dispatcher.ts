@@ -220,6 +220,8 @@ export async function sendInputToSession(
     throw new Error("Terminal tmux service unavailable");
   }
 
+  const inputPanelId = terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId;
+  const inputPaneId = paneTarget?.paneId ?? (inputPanelId ? terminalSessionManager.getPanel(inputPanelId)?.tmuxPaneId : null) ?? null;
   if (!options.supervisorInput && !options.textAttachmentLease && !options.textAttachmentQueueDrain) {
     const panelId = terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId;
     const panel = panelId ? terminalSessionManager.getPanel(panelId) : undefined;
@@ -228,11 +230,11 @@ export async function sendInputToSession(
     const queued = queueBehindTextAttachment(session, async () => {
       if (terminalSessionManager.getSession(session.id) !== session || session.status !== "running") throw new Error("Terminal target exited; input was not written");
       result = await sendInputToSession(terminalSessionManager, { ...options, textAttachmentQueueDrain: true }, session, data, mode, operationId, fixedPane, submit, submitKey, expectedThreadId);
-    });
+    }, inputPaneId);
     if (queued) { await queued; return result!; }
   }
   const release =
-    mode === "tmux_exit_copy_mode" || options.textAttachmentLease || options.supervisorInput ? () => {} : beginTerminalInput(session);
+    mode === "tmux_exit_copy_mode" || options.textAttachmentLease || options.supervisorInput ? () => {} : beginTerminalInput(session, inputPaneId);
   try {
     const ensured = options.supervisorInput ? null : await ensureTerminalRuntime({
       session,
@@ -289,8 +291,8 @@ export async function sendInputToSession(
         if (!("paneId" in target)) throw new Error("Supervisor input requires a fixed pane");
         const actual = (await options.tmuxService.listPanes(target)).find((candidate) => candidate.paneId === target.paneId);
         if (!actual || actual.runweavePanelId !== panel?.id ||
-          (!options.agentLaunch && getAgentForCommand(resolveEffectivePanelActiveCommand(actual)) !== "codex"))
-          throw new Error("Original Codex pane is unavailable; no runtime was restored");
+          (!options.agentLaunch && (!panel || getAgentForCommand(resolveEffectivePanelActiveCommand(actual, panel.activeCommand)) !== getAgentForCommand(panel.activeCommand))))
+          throw new Error("Original Agent pane is unavailable; no runtime was restored");
         options.validateSupervisorTarget?.();
       }
       if (expectedThreadId) {

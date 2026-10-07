@@ -1,6 +1,8 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { setting, settingText } from "@runweave/config-node";
+import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
+import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type {
   ChangeSupervisionRequest,
   StartSupervisionRequest,
@@ -11,32 +13,33 @@ import type {
   TaskWatch,
 } from "@runweave/shared/task-supervision";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
-import { resolveSupervisionTarget, acceptsStartingHook } from "./target";
+import type { TerminalEventService } from "../terminal/state/terminal-event-service";
 import type { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
-import { checkSupervisionConflicts, supervisionCapability } from "./capability";
+import { completionReply, supervisionEvent, type ReplyEvent } from "./events";
+import { updateWaitingState } from "./waiting";
+import { hasPendingTerminalInput, terminalInputAdmission } from "../terminal/runtime/input-admission";
+import { resolveSupervisionTarget } from "./target";
 import { SupervisionError } from "./errors";
 export { SupervisionError } from "./errors";
 import {
   buildSupervisionInput,
   digest,
-  findFinalReply,
-  isSupervisionPrompt,
   messagesFrom,
-  initialSupervisionContext,
   refreshReferencedPlans,
   taskCandidates,
 } from "./context";
 import { TaskSupervisionClassifier } from "./classifier";
-import { reconcileDelivery } from "./delivery";
+import { reconcileDelivery, readPendingDeliveries } from "./delivery";
 import { applyVerdict } from "./verdict";
-import { updateWaitingState } from "./waiting";
-import { registerSupervisionConfiguration } from "./configuration";
 import { SupervisionJobs } from "./jobs";
-import { claimFinal } from "./final-cursor";
-import { changeWatch } from "./control";
 import { TaskSupervisionStore, type SupervisionJournal } from "./store";
 
 const ALLOW: SupervisionHookResponse = { action: "allow-stop" };
+type ContinueOffer = Extract<
+  SupervisionHookResponse,
+  { action: "request-continuation" }
+>;
+
 export class TaskSupervisionService {
   private readonly store: TaskSupervisionStore;
   private readonly ready: Promise<void>;
@@ -47,28 +50,24 @@ export class TaskSupervisionService {
   };
   private queue: Promise<unknown> = Promise.resolve();
   private readonly jobs = new SupervisionJobs();
-  private readonly capabilities = new Map<
-    string,
-    Pick<
-      SupervisionHookRequest,
-      "target" | "codexVersion" | "hookVersion" | "executionConfig"
-    >
-  >();
+  private readonly eventQueues = new Map<string, Promise<void>>();
   private closed = false;
+  private unsubscribe?: () => void;
+  private deliver?: (
+    target: SupervisionTarget,
+    offer: ContinueOffer,
+    valid: () => void,
+  ) => Promise<void>;
   private maintenance: Promise<void> | null = null;
   private readonly timer: ReturnType<typeof setInterval>;
   private readonly classifier: TaskSupervisionClassifier;
-  private readonly checkConflicts = checkSupervisionConflicts;
-  private readonly unregisterConfiguration: () => void;
+
   constructor(
     directory: string,
     private readonly manager: TerminalSessionManager,
     private readonly history: AppServerHistoryGateway,
     classifier?: TaskSupervisionClassifier,
   ) {
-    this.unregisterConfiguration = registerSupervisionConfiguration(() => {
-      this.jobs.cancelAll();
-    });
     this.store = new TaskSupervisionStore(directory);
     this.classifier =
       classifier ??
@@ -77,21 +76,32 @@ export class TaskSupervisionService {
       this.journal = saved;
     });
     this.timer = setInterval(() => {
-      if (!this.maintenance && !this.closed) {
+      if (!this.maintenance && !this.closed)
         this.maintenance = this.reconcile()
           .catch(() => undefined)
           .finally(() => {
             this.maintenance = null;
           });
-      }
     }, 5000);
     this.timer.unref();
   }
   initialize() {
     return this.ready;
   }
-  private cancelJob(id: string) {
-    this.jobs.cancel(id);
+
+  /** Subscribe once to the same completion stream used by notifications, regardless of switches. */
+  attach(
+    events: TerminalEventService,
+    deliver: NonNullable<TaskSupervisionService["deliver"]>,
+  ) {
+    this.deliver = deliver;
+    this.unsubscribe = events.subscribe((event) => {
+      if (event.kind === "completion") this.completed(event);
+      else if (event.kind === "terminal_session_deleted") {
+        const watch = this.forTerminal(event.terminalSessionId);
+        if (watch) this.jobs.cancel(watch.watchId);
+      }
+    });
   }
   private async transaction<T>(operation: () => T | Promise<T>): Promise<T> {
     const next = this.queue.then(async () => {
@@ -126,148 +136,103 @@ export class TaskSupervisionService {
       return false;
     }
   }
-  private capability(target: SupervisionTarget) {
-    return supervisionCapability(
-      target,
-      this.capabilities.get(target.executorGeneration),
-    );
-  }
-  async discover(
-    terminalSessionId: string,
-    panelId?: string | null,
-    expectedThreadId?: string,
-  ): Promise<SupervisionDiscovery> {
-    await this.ready;
-    await this.queue;
-    let resolved: ReturnType<TaskSupervisionService["resolve"]>;
-    try {
-      resolved = this.resolve(terminalSessionId, panelId);
-    } catch (error) {
-      return {
-        target: null,
-        watch: null,
-        capability: { supported: false, reason: (error as Error).message },
-        taskCandidates: [],
-      };
-    }
-    if (expectedThreadId && resolved.target.threadId !== expectedThreadId)
-      throw new SupervisionError("会话已切换，请刷新。");
-    const watch =
-      [...this.journal.watches]
-        .reverse()
-        .find(
-          (w) =>
-            this.matches(w.target, resolved.target) &&
-            w.pauseReason !== "replaced",
-        ) ?? null;
-    let candidates: SupervisionDiscovery["taskCandidates"] = [];
-    let capability = this.capability(resolved.target);
-    try {
-      candidates = taskCandidates(
-        await this.history.getConversation(resolved.target.threadId),
+  private forTerminal(id: string) {
+    return [...this.journal.watches]
+      .reverse()
+      .find(
+        (w) =>
+          w.target.terminalSessionId === id && w.pauseReason !== "replaced",
       );
-    } catch (error) {
-      capability = {
-        ...capability,
-        supported: false,
-        reason: (error as Error).message,
-      };
-    }
-    return structuredClone({
-      target: resolved.target,
-      watch,
-      capability,
-      taskCandidates: candidates,
-    });
   }
-  async get(watchId: string) {
-    await this.ready;
-    await this.queue;
-    return structuredClone(this.find(watchId));
-  }
-  private find(id: string): TaskWatch {
+  private find(id: string) {
     const watch = this.journal.watches.find((w) => w.watchId === id);
     if (!watch) throw new SupervisionError("监控不存在。", 404);
     return watch;
   }
+  async discover(
+    terminalSessionId: string,
+    panelId?: string | null,
+    _expectedThreadId?: string,
+  ): Promise<SupervisionDiscovery> {
+    void _expectedThreadId;
+    await this.ready;
+    await this.queue;
+    const watch = this.forTerminal(terminalSessionId) ?? null;
+    let target: SupervisionTarget;
+    try {
+      target = this.resolve(terminalSessionId, panelId).target;
+    } catch (error) {
+      return structuredClone({
+        target: null,
+        watch,
+        capability: { supported: false, reason: (error as Error).message },
+        taskCandidates: [],
+      });
+    }
+    // History is context for processing a reply, never eligibility for enabling a terminal.
+    const candidates = target.threadId
+      ? await this.history
+          .getConversation(target.threadId)
+          .then(taskCandidates)
+          .catch(() => [])
+      : [];
+    return structuredClone({
+      target,
+      watch,
+      capability: { supported: true },
+      taskCandidates: candidates,
+    });
+  }
+  async get(id: string) {
+    await this.ready;
+    await this.queue;
+    return structuredClone(this.find(id));
+  }
+
   async start(request: StartSupervisionRequest): Promise<TaskWatch> {
     return this.transaction(async () => {
       const requestDigest = digest(JSON.stringify(request));
-      const previousRequest = this.journal.requests[request.requestId];
-      if (previousRequest) {
-        if (previousRequest.digest !== requestDigest)
+      const previous = this.journal.requests[request.requestId];
+      if (previous) {
+        if (previous.digest !== requestDigest)
           throw new SupervisionError("requestId 已用于不同请求。");
-        return this.find(previousRequest.watchId);
+        return this.find(previous.watchId);
       }
-      const resolved = this.resolve(
-        request.target.terminalSessionId,
-        request.target.panelId,
-      );
-      if (!this.matches(resolved.target, request.target))
-        throw new SupervisionError("任务或执行器已切换。");
-      const capability = this.capability(request.target);
-      if (!capability.supported)
-        throw new SupervisionError(capability.reason!, 422);
-      await this.checkConflicts(
-        request.target,
-        resolved.root,
-        this.capabilities.get(request.target.executorGeneration)
-          ?.executionConfig,
-      );
-      const existing = [...this.journal.watches]
-        .reverse()
-        .find(
-          (w) =>
-            this.matches(w.target, request.target) &&
-            w.pauseReason !== "replaced",
-        );
-      if (
-        existing &&
-        (request.replacesWatchId !== existing.watchId ||
-          request.expectedRevision !== existing.revision)
-      )
-        throw new SupervisionError("当前任务已有监控，请确认重新开启一轮。");
-      if (!existing && request.replacesWatchId)
-        throw new SupervisionError("旧监控已变化，请刷新。");
-      const source = await this.history.getConversation(
-        request.target.threadId,
-      );
-      const { task, plans } = await initialSupervisionContext(
-        resolved.root,
-        source,
-        request,
-      );
-      if (
-        !this.current(request.target) ||
-        !this.capability(request.target).supported
-      )
-        throw new SupervisionError("任务、执行器或监控能力已变化，请刷新。");
-      const now = new Date().toISOString();
-      if (existing) {
-        this.cancelJob(existing.watchId);
-        existing.status = "paused";
-        existing.pauseReason = "replaced";
-        existing.revision++;
-        existing.updatedAt = now;
+      const { target } = this.resolve(request.target.terminalSessionId);
+      let watch = this.forTerminal(target.terminalSessionId);
+      if (!watch) {
+        const now = new Date().toISOString();
+        const pendingId = `pending:${randomUUID()}`;
+        watch = {
+          watchId: randomUUID(),
+          enabled: true,
+          enabledAt: now,
+          target,
+          taskStartMessageId: pendingId,
+          task: { id: pendingId, role: "user", text: "", createdAt: now },
+          goal: "当前终端任务",
+          plans: [],
+          revision: 1,
+          contextRevision: 1,
+          status: "watching",
+          outcome: null,
+          continuationLimit: 3,
+          continuationCount: 0,
+          decisions: [],
+          createdAt: now,
+          updatedAt: now,
+        };
+        this.journal.watches.push(watch);
+      } else {
+        this.jobs.cancel(watch.watchId);
+        watch.enabled = true;
+        watch.enabledAt = new Date().toISOString();
+        watch.status = "watching";
+        delete watch.pauseReason;
+        delete watch.error;
+        watch.revision++;
+        watch.updatedAt = new Date().toISOString();
       }
-      const watch: TaskWatch = {
-        watchId: randomUUID(),
-        target: request.target,
-        taskStartMessageId: task.id,
-        task,
-        goal: request.goal,
-        plans,
-        revision: 1,
-        contextRevision: 1,
-        status: "watching",
-        outcome: null,
-        continuationLimit: 3,
-        continuationCount: 0,
-        decisions: [],
-        createdAt: now,
-        updatedAt: now,
-      };
-      this.journal.watches.push(watch);
       this.journal.requests[request.requestId] = {
         digest: requestDigest,
         watchId: watch.watchId,
@@ -276,305 +241,357 @@ export class TaskSupervisionService {
     });
   }
   async change(id: string, request: ChangeSupervisionRequest) {
-    return this.transaction(async () => {
+    return this.transaction(() => {
       const watch = this.find(id);
-      await changeWatch(
-        watch,
-        request,
-        () => this.current(watch.target),
-        () => this.history.getConversation(watch.target.threadId),
-      );
-      this.cancelJob(id);
+      if (watch.revision !== request.expectedRevision)
+        throw new SupervisionError("监控状态已更新，请刷新。");
+      this.jobs.cancel(id);
+      if (request.action === "pause") {
+        watch.enabled = false;
+        watch.status = "paused";
+        watch.pauseReason = "user_paused";
+      } else if (request.action === "resume") {
+        this.resolve(watch.target.terminalSessionId);
+        watch.enabled = true;
+        watch.enabledAt = new Date().toISOString();
+        watch.status = "watching";
+        delete watch.pauseReason;
+      } else {
+        if (!request.goal?.trim())
+          throw new SupervisionError("目标不能为空。", 422);
+        watch.goal = request.goal;
+        watch.contextRevision++;
+        if (watch.status === "classifying") watch.status = "watching";
+      }
+      watch.revision++;
+      watch.updatedAt = new Date().toISOString();
+      delete watch.error;
       return watch;
     });
   }
+  /** Old installations may still invoke the separate Hook endpoint. It never classifies or delivers. */
   async hook(
-    request: SupervisionHookRequest,
+    _request: SupervisionHookRequest,
   ): Promise<SupervisionHookResponse> {
+    void _request;
+    return ALLOW;
+  }
+  async validOffer(_id: string, _decisionId: string, _revision: number) {
+    void _id;
+    void _decisionId;
+    void _revision;
+    return false;
+  }
+
+  completed(event: TerminalEventEnvelope) {
+    const reply = completionReply(event);
+    if (reply) this.enqueueReply(reply);
+  }
+  /** The existing App Server consumer supplies all native hook and completion events. */
+  observeEvent(event: AppServerEventEnvelope) {
+    const observed = supervisionEvent(event);
+    if (!observed) return;
+    if (observed.kind === "reply") {
+      this.enqueueReply(observed);
+      return;
+    }
+    const watch = this.forTerminal(observed.terminalSessionId);
+    if (
+      !watch?.enabled ||
+      Date.parse(observed.createdAt) < Date.parse(watch.enabledAt)
+    )
+      return;
+    if (observed.threadId && observed.panelId) {
+      try {
+        if (
+          this.resolve(observed.terminalSessionId, observed.panelId).target
+            .threadId !== observed.threadId
+        )
+          return;
+      } catch {
+        return;
+      }
+    }
+    if (
+      ["sessionstart", "userpromptsubmit", "interrupt"].includes(observed.raw)
+    )
+      this.jobs.cancel(watch.watchId);
+    void this.transaction(() => {
+      const current = this.find(watch.watchId);
+      if (current.enabled)
+        updateWaitingState(current, observed.raw, observed.toolName);
+    }).catch(() => undefined);
+  }
+  private enqueueReply(event: ReplyEvent) {
+    if (this.closed) return;
+    if (!this.forTerminal(event.terminalSessionId)?.enabled) return;
+    const pending = (
+      this.eventQueues.get(event.terminalSessionId) ?? Promise.resolve()
+    )
+      .catch(() => undefined)
+      .then(() => this.consumeReply(event));
+    this.eventQueues.set(event.terminalSessionId, pending);
+    void pending
+      .finally(() => {
+        if (this.eventQueues.get(event.terminalSessionId) === pending)
+          this.eventQueues.delete(event.terminalSessionId);
+      })
+      .catch(() => undefined);
+  }
+  private async consumeReply(event: ReplyEvent) {
     await this.ready;
-    if (this.closed) return ALLOW;
+    await this.queue;
+    const watch = this.forTerminal(event.terminalSessionId);
     if (
-      !this.current(request.target) &&
-      !(
-        request.event === "SessionStart" &&
-        acceptsStartingHook(this.manager, request.target)
-      )
+      this.closed ||
+      !watch?.enabled ||
+      Date.parse(event.createdAt) < Date.parse(watch.enabledAt)
     )
-      return ALLOW;
-    if (request.codexVersion)
-      this.capabilities.set(request.target.executorGeneration, {
-        target: request.target,
-        codexVersion: request.codexVersion,
-        hookVersion: request.hookVersion,
-        executionConfig: request.executionConfig,
-      });
-    if (!this.current(request.target)) return ALLOW;
-    const watch = [...this.journal.watches]
-      .reverse()
-      .find(
-        (w) =>
-          this.matches(w.target, request.target) &&
-          w.pauseReason !== "replaced",
-      );
-    if (!watch) return ALLOW;
-    if (
-      ["PermissionRequest", "PreToolUse", "PostToolUse"].includes(request.event)
-    ) {
-      await this.transaction(() =>
-        updateWaitingState(this.find(watch.watchId), request),
-      );
-      return ALLOW;
-    }
-    if (request.event === "Interrupt" || request.event === "UserPromptSubmit") {
-      if (
-        request.event === "UserPromptSubmit" &&
-        isSupervisionPrompt(request.prompt ?? "")
-      )
-        return ALLOW;
-      this.cancelJob(watch.watchId);
-      await this.transaction(() => {
-        const current = this.find(watch.watchId);
-        current.revision++;
-        current.contextRevision++;
-        if (request.event === "Interrupt") {
-          current.status = "paused";
-          current.pauseReason = "interrupted";
-        } else if (current.status === "classifying")
-          current.status = "watching";
-        current.updatedAt = new Date().toISOString();
-      });
-      return ALLOW;
-    }
-    if (
-      request.event !== "Stop" ||
-      !request.rawTurnId ||
-      !request.reply?.trim() ||
-      request.deadline <= Date.now() + 2000 ||
-      !this.capability(request.target).supported
-    )
-      return ALLOW;
-    const key = `${request.rawTurnId}:${digest(request.reply)}:${request.deadline}`;
-    const job = this.jobs.get(watch.watchId);
-    // An in-flight duplicate must not return the same continuation twice.
-    if (job) return ALLOW;
-    const controller = new AbortController();
-    const promise = this.processStop(watch.watchId, request, controller, key);
-    const pending = { controller, promise };
-    this.jobs.add(watch.watchId, pending);
+      return;
+    let target: SupervisionTarget;
     try {
-      return await promise;
+      target = this.resolve(event.terminalSessionId, event.panelId).target;
+    } catch {
+      return;
+    }
+    // Thread is an event/delivery fence, not the owner of the terminal switch.
+    if (
+      !target.threadId ||
+      (event.threadId && event.threadId !== target.threadId)
+    )
+      return;
+    const session = this.manager.getSession(target.terminalSessionId)!;
+    const inputRevision = terminalInputAdmission(session).revision;
+    const controller = new AbortController();
+    const promise = this.processReply(
+      watch.watchId,
+      target,
+      event,
+      controller,
+      inputRevision,
+    );
+    const job = { controller, promise };
+    this.jobs.add(watch.watchId, job);
+    try {
+      await promise;
     } finally {
-      this.jobs.finish(watch.watchId, pending);
+      this.jobs.finish(watch.watchId, job);
     }
   }
-  private async processStop(
+  private async processReply(
     id: string,
-    request: SupervisionHookRequest,
+    target: SupervisionTarget,
+    event: ReplyEvent,
     controller: AbortController,
-    key: string,
+    inputRevision: object,
   ): Promise<SupervisionHookResponse> {
     let revision: number | undefined;
     try {
-      const source = await this.history.getConversation(
-        request.target.threadId,
-      );
-      const sourceMessages = messagesFrom(source);
-      const native = findFinalReply(
-        sourceMessages,
-        request.rawTurnId!,
-        request.reply!,
-      );
+      let source = await this.history.getConversation(target.threadId);
+      let messages = messagesFrom(source);
+      const locate = () =>
+        [...messages]
+          .reverse()
+          .find(
+            (m) =>
+              m.role === "assistant" &&
+              m.phase !== "commentary" &&
+              (!event.turnId || m.rawTurnId === event.turnId) &&
+              (!event.summary ||
+                m.text === event.summary ||
+                m.text.startsWith(
+                  event.summary.replace(/\n\.\.\.\[truncated\]$/, ""),
+                )),
+          );
+      let native = locate();
+      for (
+        let attempt = 0;
+        !native && attempt < 3 && !controller.signal.aborted;
+        attempt++
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        source = await this.history.getConversation(target.threadId);
+        messages = messagesFrom(source);
+        native = locate();
+      }
       if (!native)
-        throw new Error("无法定位本轮最终回复来源；等待会话写入后恢复监听。");
-      const snapshot = await this.transaction(() => {
-        const watch = this.find(id);
-        if (controller.signal.aborted) return null;
-        if (!this.current(watch.target)) {
-          watch.status = "paused";
-          watch.pauseReason = "target_changed";
-          watch.revision++;
+        throw new Error(
+          "最终回复事件已收到，但完整会话尚不可读；等待下一条回复。",
+        );
+      const finalKey = `${target.threadId}:${native.id}`;
+      const snapshot = await this.transaction(async () => {
+        const w = this.find(id);
+        if (!w.enabled || controller.signal.aborted || !this.current(target))
           return null;
-        }
-        reconcileDelivery(watch, sourceMessages, 0);
         if (
-          watch.decisions.some(
+          w.lastFinalMessageId === finalKey ||
+          w.decisions.some(
             (d) =>
-              `${d.rawTurnId}:${d.replyDigest}:${d.deliveryDeadline}` === key ||
-              (native && d.input.currentReply.id === native.id),
-          ) ||
-          !claimFinal(watch, sourceMessages, native)
+              d.input.currentReply.id === native!.id &&
+              d.input.currentReply.rawTurnId ===
+                (native!.rawTurnId ?? native!.id),
+          )
         )
           return null;
-        watch.revision++;
-        watch.updatedAt = new Date().toISOString();
-        if (watch.status !== "watching") return null;
-        delete watch.waitingFor;
-        watch.status = "classifying";
-        delete watch.error;
-        return watch;
+        if (
+          w.target.threadId !== target.threadId ||
+          w.target.panelId !== target.panelId ||
+          w.taskStartMessageId.startsWith("pending:")
+        ) {
+          const task = taskCandidates(source)[0];
+          if (!task)
+            throw new Error("监控已开启，但当前会话还没有可读的用户任务。");
+          w.task = task;
+          w.taskStartMessageId = task.id;
+          w.goal = task.text;
+          w.plans = [];
+          w.continuationCount = 0;
+          delete w.pauseReason;
+          w.contextRevision++;
+        }
+        w.target = target;
+        w.lastFinalMessageId = finalKey;
+        reconcileDelivery(w, messages);
+        if (w.pauseReason === "delivery_unknown")
+          throw new Error("上次续接尚未确认接收，请检查原终端。");
+        w.revision++;
+        w.status = "classifying";
+        delete w.error;
+        delete w.waitingFor;
+        w.updatedAt = new Date().toISOString();
+        return w;
       });
       if (!snapshot) return ALLOW;
       revision = snapshot.revision;
       await refreshReferencedPlans(
-        this.resolve(request.target.terminalSessionId, request.target.panelId)
-          .root,
+        this.resolve(target.terminalSessionId, target.panelId).root,
         snapshot,
-        sourceMessages,
+        messages,
       );
-      if (request.executionConfig)
-        await this.checkConflicts(
-          request.target,
-          request.executionConfig.cwd,
-          request.executionConfig,
-        );
-      const input = buildSupervisionInput(snapshot, source, {
-        id: native.id,
-        role: "assistant",
-        text: request.reply!,
-        rawTurnId: request.rawTurnId!,
-        phase: "final",
-        createdAt: native.createdAt ?? new Date().toISOString(),
-      });
-      const timeoutMs = Math.min(
-        Number(
+      const reply = {
+        ...native,
+        rawTurnId: native.rawTurnId ?? native.id,
+        phase: "final" as const,
+      };
+      const input = buildSupervisionInput(snapshot, source, reply);
+      const result = await this.classifier.run(input, {
+        model: settingText("backend.taskSupervision.model"),
+        timeoutMs: Number(
           setting("backend.taskSupervision.classificationTimeoutMs", 90_000),
         ),
-        request.deadline - Date.now() - 5000,
-        90_000,
-      );
-      if (
-        timeoutMs <= 0 ||
-        controller.signal.aborted ||
-        !this.current(request.target)
-      )
-        throw new Error("分类截止时间已过或已取消。");
-      const result = await this.classifier.run(input, {
-        model:
-          settingText("backend.taskSupervision.model") ??
-          request.executionModel,
-        timeoutMs,
         signal: controller.signal,
       });
-      return await this.transaction((): SupervisionHookResponse => {
-        const watch = this.find(id);
-        if (watch.revision !== revision || watch.status !== "classifying")
-          return ALLOW;
-        if (!this.current(watch.target)) {
-          watch.status = "paused";
-          watch.pauseReason = "target_changed";
-          watch.revision++;
-          return ALLOW;
-        }
+      const offer = await this.transaction(() => {
+        const w = this.find(id);
         if (
+          !w.enabled ||
+          w.revision !== revision ||
           controller.signal.aborted ||
-          !this.capability(watch.target).supported ||
-          Date.now() >= request.deadline - 2000
+          !this.current(target)
         )
-          throw new Error("分类已取消、监控配置已关闭或结果已过期。");
+          return ALLOW;
+        w.plans = snapshot.plans;
         const decision = {
           ...result,
-          codexVersion: request.codexVersion,
           decisionId: randomUUID(),
-          rawTurnId: request.rawTurnId!,
-          replyDigest: digest(request.reply!),
-          contextRevision: watch.contextRevision,
+          threadId: target.threadId,
+          rawTurnId: reply.rawTurnId,
+          replyDigest: digest(reply.text),
+          contextRevision: w.contextRevision,
           createdAt: new Date().toISOString(),
           input,
           delivery: "not_requested" as "not_requested" | "offered",
-          deliveryDeadline: request.deadline,
+          deliveryDeadline: Date.now() + 30_000,
         };
-        return applyVerdict(watch, decision);
+        const session = this.manager.getSession(target.terminalSessionId)!;
+        const paneId = this.manager.getPanel(target.panelId)?.tmuxPaneId ?? null;
+        return applyVerdict(w, decision, !hasPendingTerminalInput(session, paneId));
       });
+      if (offer.action !== "request-continuation") return ALLOW;
+      const valid = () => {
+        const w = this.find(id);
+        if (
+          this.closed ||
+          !w.enabled ||
+          w.revision !== offer.revision ||
+          controller.signal.aborted ||
+          !this.current(target) ||
+          !this.manager.getSession(target.terminalSessionId)
+        )
+          throw new Error("原任务已变化，未发送旧续接。");
+      };
+      try {
+        valid();
+        if (
+          terminalInputAdmission(
+            this.manager.getSession(target.terminalSessionId)!,
+          ).revision !== inputRevision
+        )
+          throw new Error("用户输入已变化，未发送旧续接。");
+        if (!this.deliver) throw new Error("终端输入服务不可用。");
+        await this.deliver(target, offer, valid);
+      } catch (error) {
+        await this.transaction(() => {
+          const w = this.find(id);
+          const decision = w.decisions.find(
+            (d) => d.decisionId === offer.decisionId,
+          )!;
+          decision.delivery = "unknown";
+          w.status = w.enabled ? "error" : "paused";
+          w.revision++;
+          w.error =
+            error instanceof Error
+              ? error.message
+              : "续接投递失败，请检查原终端。";
+        });
+      }
+      return ALLOW;
     } catch (error) {
       await this.transaction(() => {
-        const watch = this.find(id);
+        const w = this.find(id);
         if (
-          revision === undefined
-            ? watch.status !== "watching" || controller.signal.aborted
-            : watch.revision !== revision || watch.status !== "classifying"
+          !w.enabled ||
+          controller.signal.aborted ||
+          (revision !== undefined && w.revision !== revision)
         )
           return;
-        watch.status = this.current(watch.target) ? "error" : "paused";
-        if (watch.status === "paused") watch.pauseReason = "target_changed";
-        watch.revision++;
-        watch.error = controller.signal.aborted
-          ? "分类已取消；恢复后等待新的最终回复。"
-          : (error instanceof Error ? error.message : "分类失败").slice(0, 500);
-        watch.updatedAt = new Date().toISOString();
+        w.status = "error";
+        w.revision++;
+        w.error = (
+          error instanceof Error ? error.message : "回复处理失败"
+        ).slice(0, 500);
+        w.updatedAt = new Date().toISOString();
       }).catch(() => undefined);
       return ALLOW;
     }
   }
-  async validOffer(
-    id: string,
-    decisionId: string,
-    revision: number,
-  ): Promise<boolean> {
+  private async reconcile() {
     await this.ready;
-    await this.queue;
-    const watch = this.find(id);
-    return (
-      !this.closed &&
-      watch.status === "watching" &&
-      watch.revision === revision &&
-      this.current(watch.target) &&
-      this.capability(watch.target).supported &&
-      watch.decisions.some(
-        (d) =>
-          d.decisionId === decisionId &&
-          d.delivery === "offered" &&
-          Date.now() < d.deliveryDeadline - 500,
-      )
-    );
+    for (const saved of this.journal.watches) {
+      if (this.closed) return;
+      await readPendingDeliveries(
+        saved,
+        (threadId) => this.history.getConversation(threadId),
+        (messages, threadId) =>
+          this.transaction(() => {
+            reconcileDelivery(
+              this.find(saved.watchId),
+              messages,
+              Date.now(),
+              threadId,
+            );
+          }),
+      );
+    }
   }
   async dispose() {
     this.closed = true;
-    this.unregisterConfiguration();
+    this.unsubscribe?.();
     clearInterval(this.timer);
     this.jobs.cancelAll();
     await this.jobs.drain();
+    await Promise.allSettled(this.eventQueues.values());
     await this.queue;
     await this.maintenance;
-  }
-  private async reconcile() {
-    await this.ready;
-    const candidates = this.journal.watches.filter(
-      (w) =>
-        w.status === "watching" ||
-        w.decisions.some((d) => ["offered", "unknown"].includes(d.delivery)),
-    );
-    for (const saved of candidates) {
-      if (this.closed) return;
-      if (!this.current(saved.target)) {
-        this.cancelJob(saved.watchId);
-        await this.transaction(() => {
-          const w = this.find(saved.watchId);
-          if (["watching", "classifying"].includes(w.status)) {
-            w.status = "paused";
-            w.pauseReason = "target_changed";
-            w.revision++;
-            w.updatedAt = new Date().toISOString();
-          }
-        });
-        continue;
-      }
-      if (
-        !saved.decisions.some((d) =>
-          ["offered", "unknown"].includes(d.delivery),
-        )
-      )
-        continue;
-      const source = await this.history
-        .getConversation(saved.target.threadId)
-        .catch(() => null);
-      const messages =
-        source && source.availability === "available"
-          ? source.turns.flatMap((t) => t.messages)
-          : [];
-      await this.transaction(() => {
-        const w = this.find(saved.watchId);
-        reconcileDelivery(w, messages);
-      });
-    }
   }
 }

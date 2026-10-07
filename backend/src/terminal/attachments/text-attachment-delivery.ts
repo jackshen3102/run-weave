@@ -211,6 +211,8 @@ export class TerminalTextAttachmentDelivery {
       const release = beginTextAttachmentDelivery(
         binding.target.session,
         binding.revision,
+        false,
+        binding.target.panel.tmuxPaneId,
       );
       let dispatching = false;
       try {
@@ -319,7 +321,7 @@ export class TerminalTextAttachmentDelivery {
         references.push(JSON.stringify(file.filePath));
       }
       this.recheck(target);
-      const release = beginTextAttachmentDelivery(target.session, revision);
+      const release = beginTextAttachmentDelivery(target.session, revision, false, target.panel.tmuxPaneId);
       try {
         await this.files.protect(
           sessionId,

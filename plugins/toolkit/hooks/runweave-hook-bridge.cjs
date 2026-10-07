@@ -8,7 +8,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { postCompletionHook } = require("./runweave-hook-completion.cjs");
-const { requestSupervision, writeContinuation } = require("./runweave-task-supervision.cjs");
 const {
   STOP_EVENTS,
   isNestedCodexProcess,
@@ -292,7 +291,6 @@ async function postAgentHook({
 }
 
 async function main() {
-  const hookStartedAt = Date.now();
   const args = parseArgs(process.argv.slice(2));
   const payload = parsePayload(await readStdin());
   const rawEvent = readHookEvent(payload);
@@ -394,10 +392,6 @@ async function main() {
     return;
   }
 
-  let supervision;
-  const supervise = () => requestSupervision({ source, stateEndpoint, threadId, terminalPanelId, terminalSessionId, normalizedEvent, token, payload, hookStartedAt, debug: appendDebugLog });
-  if (normalizedEvent !== "sessionstart") supervision = await supervise();
-  if (source === "codex" && normalizedEvent === "interrupt") return;
   if (normalizedEvent === "stop") {
     const summary = extractCompletionSummary(payload);
     if (summary) payload.last_assistant_message = summary;
@@ -487,7 +481,6 @@ async function main() {
     }
   }
 
-  if (normalizedEvent === "sessionstart") await supervise();
   if (shouldRecordCompletion && completionEndpoint) {
     if (source !== "pi") {
       notifyDesktop(source, { notificationType });
@@ -560,7 +553,6 @@ async function main() {
       ...result,
     });
   }
-  if (normalizedEvent === "stop") await writeContinuation(supervision, token);
 }
 
 main().catch((error) => {
