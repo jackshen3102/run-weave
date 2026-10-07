@@ -45,6 +45,7 @@ import type { BackendRuntimeStatusService } from "../runtime-status/service";
 import type { TerminalQuestionsService } from "../terminal/questions/service";
 
 export interface RuntimeServices extends DeviceMonitoringRuntime {
+  terminalBadges: import("../device-monitor/terminal-badges").TerminalBadges | null;
   resourceMonitor: import("../resource-monitor/service").ResourceMonitorService | null;
   start(controlPlaneBaseUrl: string): void;
   dispose(): Promise<void>;

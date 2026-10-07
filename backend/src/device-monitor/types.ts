@@ -8,7 +8,7 @@ export interface DeviceSubscription {
   sessionId: string;
   environment: PushEnvironment;
   /** Missing on older battery subscriptions. */
-  kind?: "battery" | "scheduled-task";
+  kind?: "battery" | "scheduled-task" | "terminal-unread";
   confirmedAt?: string;
   deviceToken: string;
   displayName: string;
@@ -63,6 +63,7 @@ export interface DeviceDelivery {
 }
 
 export interface DeviceMonitorData {
+  unread?: { revision: number; count: number };
   schemaVersion: 1;
   hostId: string;
   cycle: { id: string; highest: 10 | 20; startedAt: number } | null;

@@ -61,6 +61,36 @@
 通知 payload 包含 protocolVersion=1、hostId、notificationId、category 和 occurredAt。
 点击仍只定位已保存的电脑连接。业务 category 是应用自定义字段，不是 `aps.category` 的交互按钮配置。
 
+## 应用未读角标
+
+Runweave 的角标只统计 `completionRevision > acknowledgedCompletionRevision` 的终端，每终端计 1。
+Backend 提供 `GET /api/terminal/unread` 的 `{ hostId, revision, count }` 持久化绝对快照；
+打开终端或标记已读只确认当时的完成版本，打开首页不清零。已读确认广播
+`completion_acknowledged`，删除与重连也重新计算。离线保留最近值。
+
+iPhone 使用独立 `terminal-unread` 绑定，类别为 `terminal.unread`，不覆盖电量/任务通知。
+新客户端通过 `/api/device/notifications/status?unread=1` 协商该能力，旧请求仍只返回旧类别。
+所有需要汇总到同一手机图标的电脑必须使用同一个推送网关。
+
+- `PUT /v1/badges/:subscriptionId` 使用该 host 的发送凭据，提交 `{ revision, count }`。
+  revision 为正整数、count 为 0–1000000；同版本内容不同返回 409，旧版本忽略。
+  只有活跃且订阅 `terminal.unread` 的绑定可更新。
+- 网关按 installationId/environment 汇总各 host，地址别名不重复计数；每个 host
+  只能更新自己的贡献。数值、总版本和待发送状态持久化；撤销绑定重新计算，最后一个撤销发送 0。
+- `GET /v1/badges/:subscriptionId` 可用该绑定 revokeToken 或所属 host 发送凭据读取
+  `{ revision, count }` 总快照；这是 iOS 前台校准入口，已撤销绑定不能读取。
+- 角标更新只含 `aps.badge`，不弹横幅或响铃。使用 alert push type、priority 5、
+  24 小时 expiration 和每安装固定 collapse-id；同目标串行投递，过时待发送版本合并。
+  不复用普通通知的事件幂等/每分钟 4 次额度；结果未知时可重发当前绝对状态，最少间隔 30 秒。
+  APNs 接受不等于手机已显示，系统权限、设备离线与 Apple 投递仍影响实际到达。
+
+Mac Dock 由 Electron 主进程轮询各已登录连接的未读快照并按 host 去重；窗口隐藏后继续，
+完全退出后下次启动校准。手机与桌面汇总各自已配置/授权的电脑，范围不同时数字可以不同。
+主进程仅在内存持有 renderer 提供的连接令牌；注销/删除连接移除其贡献。
+
+部署顺序为网关、Backend、客户端。仅更新 iOS 或桌面不能补齐云端角标链路。
+新增状态以可选字段保留在现有 store；旧 Backend 不认识 `terminal-unread` 绑定，不能直接用旧 Backend 打开包含新绑定的状态，回退须使用匹配版本的状态备份。
+
 ## 部署
 
 AWS Lightsail Docker Compose 部署、Caddy 配置及本机调试见[部署操作指南](../../docs/deployment/push-gateway.md)。

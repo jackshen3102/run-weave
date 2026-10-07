@@ -26,6 +26,10 @@ public final class NotificationAppDelegate: NSObject, UIApplicationDelegate,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
     Task { @MainActor in
+      if notification.request.content.userInfo["category"] as? String == "terminal.unread" {
+        completionHandler(NotificationCoordinator.shared.acceptsBadge(notification.request.content.userInfo) ? [.badge] : [])
+        return
+      }
       let show = NotificationCoordinator.shared.received(
         notification.request.content.userInfo, tapped: false)
       completionHandler(show ? [.banner, .sound, .list] : [])

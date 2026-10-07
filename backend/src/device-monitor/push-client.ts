@@ -1,6 +1,7 @@
 import { readConfigurationPath } from "@runweave/shared/configuration";
 import { settingText, configuration, type ConfigurationSnapshot } from "@runweave/config-node";
 import type {
+  PushBadgeSnapshot,
   PushNotificationRequest,
   PushDeliveryResult,
 } from "@runweave/shared/push-notifications";
@@ -113,10 +114,15 @@ export class PushClient {
       displayName: value.displayName,
       version: value.version,
       categories:
-        value.kind === "scheduled-task"
+        value.kind === "terminal-unread"
+          ? ["terminal.unread"]
+          : value.kind === "scheduled-task"
           ? ["task.completed", "task.failed"]
           : ["battery.low"],
     });
+  }
+  updateBadge(id: string, snapshot: PushBadgeSnapshot): Promise<void> {
+    return this.request(`/v1/badges/${id}`, "PUT", snapshot);
   }
   async revoke(id: string): Promise<void> {
     try {

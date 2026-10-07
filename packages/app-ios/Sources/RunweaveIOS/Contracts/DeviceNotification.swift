@@ -3,6 +3,7 @@ import Foundation
 enum NotificationKind: String, Codable, CaseIterable {
   case battery
   case scheduledTask = "scheduled-task"
+  case terminalUnread = "terminal-unread"
 }
 
 struct DeviceNotificationSubscription: Codable {
@@ -52,7 +53,7 @@ struct BatteryPush {
 }
 extension APIClient {
   func notificationStatus() async throws -> DeviceNotificationStatus {
-    try await authorized("/api/device/notifications/status")
+    try await authorized("/api/device/notifications/status?unread=1")
   }
   func registerNotifications(
     installation: String, token: String, environment: String,

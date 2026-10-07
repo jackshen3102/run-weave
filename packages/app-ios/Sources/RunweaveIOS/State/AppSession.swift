@@ -520,7 +520,7 @@ final class AppSession: ObservableObject {
       overviewRevision += 1
     }
     let refresh = structural.union([
-      "completion", "terminal_state_changed", "terminal_session_metadata_changed",
+      "completion", "completion_acknowledged", "terminal_state_changed", "terminal_session_metadata_changed",
       "terminal_panel_created", "terminal_panel_updated", "terminal_panel_deleted", "terminal_panel_focused",
     ])
     if batch.contains(where: { refresh.contains($0.kind) }) {
@@ -528,7 +528,7 @@ final class AppSession: ObservableObject {
     }
     let updates = batch.filter {
       $0.kind == "terminal_state_changed" || $0.kind == "terminal_session_metadata_changed"
-        || $0.kind == "completion"
+        || $0.kind == "completion" || $0.kind == "completion_acknowledged"
     }
     if loading {
       if pendingOverviewEvents.count + updates.count > 10000 {

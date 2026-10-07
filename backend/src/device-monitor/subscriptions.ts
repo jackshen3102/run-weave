@@ -76,14 +76,15 @@ export class DeviceSubscriptions {
           : null,
     };
   }
-  status(sessionId: string) {
+  status(sessionId: string, includeUnread = false) {
+    const supportedKinds = includeUnread ? ["battery", "scheduled-task", "terminal-unread"] : ["battery", "scheduled-task"];
     const owner = this.auth.getActiveAppSession(sessionId);
     if (!owner)
       return {
         available: false,
         reason: "请重新登录此电脑以开启提醒",
         subscriptions: [],
-        supportedKinds: ["battery", "scheduled-task"],
+        supportedKinds,
       };
     const latest = new Map<string, DeviceSubscription>();
     for (const value of Object.values(this.store.snapshot().subscriptions)) {
@@ -111,11 +112,11 @@ export class DeviceSubscriptions {
           : null;
     return {
       available: !!this.push,
-      supportedKinds: ["battery", "scheduled-task"],
+      supportedKinds,
       reason: this.push
         ? (this.failure ?? deliveryFailure)
         : "此电脑尚未配置推送服务",
-      subscriptions: [...latest.values()].map((value) => this.dto(value)),
+      subscriptions: [...latest.values()].filter((value) => includeUnread || value.kind !== "terminal-unread").map((value) => this.dto(value)),
     };
   }
 
@@ -300,7 +301,7 @@ export class DeviceSubscriptions {
   async revoke(
     sessionId: string,
     installationId: string,
-    kind: "battery" | "scheduled-task" = "battery",
+    kind: "battery" | "scheduled-task" | "terminal-unread" = "battery",
   ): Promise<boolean> {
     const owner = this.owner(sessionId);
     const values = Object.values(this.store.snapshot().subscriptions).filter(

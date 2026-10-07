@@ -19,9 +19,13 @@ export interface Subscription {
   revokeToken: string;
   invalidToken?: string;
   categories: string[];
+  registeredAt?: number;
 }
 /** Provider envelope prepared by the delivery engine, never accepted as raw HTTP input. */
 export interface ProviderNotification {
+  badge?: number;
+  badgeRevision?: number;
+  collapseId?: string;
   notificationId: string;
   category: string;
   title: string;
@@ -41,8 +45,21 @@ export interface Delivery {
   retryAfterMs?: number;
 }
 export interface GatewayData {
+  badgeContributions?: Record<string, { revision: number; count: number }>;
+  badgeTargets?: Record<string, BadgeTarget>;
   schemaVersion: 2;
   senders: Record<string, Sender>;
   subscriptions: Record<string, Subscription>;
   deliveries: Record<string, Delivery>;
+}
+
+export interface BadgeTarget {
+  installationId: string;
+  environment: PushEnvironment;
+  subscriptionId: string;
+  deviceToken: string;
+  count: number;
+  revision: number;
+  deliveredRevision: number;
+  nextAttemptAt: number;
 }

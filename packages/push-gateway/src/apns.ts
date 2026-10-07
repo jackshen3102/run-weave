@@ -16,14 +16,16 @@ export function encodePayload(
 ): string {
   const payload = JSON.stringify({
     aps: {
-      alert: { title: notification.title, body: notification.body },
-      sound: "default",
+      ...(notification.badge === undefined
+        ? { alert: { title: notification.title, body: notification.body }, sound: "default" }
+        : { badge: notification.badge }),
     },
     protocolVersion: 1,
     hostId: subscription.hostId,
     notificationId: notification.notificationId,
     category: notification.category,
     occurredAt: notification.occurredAt,
+    ...(notification.badgeRevision === undefined ? {} : { badgeRevision: notification.badgeRevision }),
     ...(notification.target ? { target: notification.target } : {}),
   });
   requireValue(
@@ -77,9 +79,9 @@ export function createAPNsTransport(
           authorization: `bearer ${token}`,
           "apns-topic": config.topic,
           "apns-push-type": "alert",
-          "apns-priority": "10",
-          "apns-expiration": "0",
-          "apns-collapse-id": alert.notificationId,
+          "apns-priority": alert.badge === undefined ? "10" : "5",
+          "apns-expiration": alert.badge === undefined ? "0" : String(Math.floor(Date.now() / 1000) + 86400),
+          "apns-collapse-id": alert.collapseId ?? alert.notificationId,
         });
         let status = 0;
         let retryAfterMs = 0;
