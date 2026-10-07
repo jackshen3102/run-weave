@@ -24,7 +24,7 @@ Stable Runweave 中修改代码
 
 ## 开发资源页面
 
-终端左侧的「开发资源」显示当前连接电脑的桌面测试槽位和受管理模拟器。进入时读取一次，
+终端「应用菜单 → 开发资源」显示当前连接电脑的桌面测试槽位和受管理模拟器。进入时读取一次，
 其后手动刷新；归属明确时可确认停止测试或释放残留占用。当前控制 Backend 所属 Session
 需从另一个控制连接停止。页面行为和安全边界见[开发资源合同](../architecture/development-resources.md)，
 发布验收使用[专项计划](../testing/platform/development-resources.testplan.yaml)。

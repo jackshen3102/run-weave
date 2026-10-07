@@ -256,7 +256,6 @@ function PageContent({ apiBase, token, connectionName, onAuthExpired }: Props) {
         <TerminalWorktreeRail
           parentProjectId={parentProjectId}
           onSelectContext={selectContext}
-          resourcesActive
         />
         <div className="min-w-0 flex-1 overflow-y-auto p-5 md:p-9">
           <div className="mx-auto max-w-[1280px] space-y-6">

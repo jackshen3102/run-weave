@@ -5,6 +5,7 @@ import {
   LogOut,
   Menu,
   Plus,
+  Server,
   Sparkles,
 } from "lucide-react";
 import { useState } from "react";
@@ -111,6 +112,15 @@ export function TerminalAppMenu({
             >
               <Activity className="mr-2 h-4 w-4" />
               System Monitor
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="justify-start"
+              onClick={() => goTo("/dev-resources")}
+            >
+              <Server className="mr-2 h-4 w-4" />
+              开发资源
             </Button>
             <div className="my-2 border-t border-slate-800" />
             <p className="text-xs text-slate-400">账户与外观</p>

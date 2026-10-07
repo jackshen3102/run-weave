@@ -7,16 +7,16 @@ description: >
 
 cases:
   - id: DRES-001
-    name: 左侧一行入口在少量工作树和折叠状态仍可进入
+    name: 应用菜单入口不受工作树数量和侧栏折叠状态影响
     required: true
     description: >
-      同一页面生命周期内，侧边栏布局变化不导致开发资源入口消失；导航不创建新终端或更改原终端选择。
+      开发资源只在应用菜单导航分组提供一行入口，位于 System Monitor 下方，Worktrees 底部不再提供入口；导航不创建新终端或更改原终端选择。
     preconditions:
       - 已通过 toolkit:runweave-dev-session 建立本次环境并取得正确 desktop surface，当前账号已认证。
       - 本次项目可分别呈现零个、一个和多个工作树，已经记录原终端选择及会话数量。
     steps:
-      - 使用 toolkit:playwright-cli 附着正确 surface，在不同工作树数量下检查侧栏只有一行开发资源入口。
-      - 在展开和折叠状态通过鼠标及键盘进入开发资源；确认折叠图标有可访问名称，页面保留侧栏且高亮对应入口。
+      - 使用 toolkit:playwright-cli 附着正确 surface，在不同工作树数量及侧栏展开和折叠状态下打开应用菜单；确认导航分组在 System Monitor 下方只有一行开发资源，Worktrees 底部没有该入口。
+      - 分别通过鼠标及键盘选择菜单中的开发资源；确认菜单关闭并进入开发资源页面，页面保留工作树侧栏。
       - 返回终端；确认原选择与会话数量不变，没有创建第二份终端工作区。
 
   - id: DRES-002
