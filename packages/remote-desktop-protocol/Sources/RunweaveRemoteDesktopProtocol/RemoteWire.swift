@@ -1,5 +1,22 @@
 import Foundation
 
+public struct RemoteRelayEndpoint: Codable, Hashable, Sendable {
+    public var host: String
+    public var port: UInt16
+    public init(host: String, port: UInt16) { self.host = host; self.port = port }
+    public var isValid: Bool {
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard port >= 1024, parts.count == 4 else { return false }
+        let numbers = parts.compactMap { part -> Int? in
+            guard let value = Int(part), (0...255).contains(value), String(value) == part else { return nil }
+            return value
+        }
+        guard numbers.count == 4 else { return false }
+        return numbers[0] == 10 || (numbers[0] == 172 && (16...31).contains(numbers[1])) ||
+            (numbers[0] == 192 && numbers[1] == 168)
+    }
+}
+
 public struct RemoteTarget: Codable, Hashable, Sendable, Identifiable {
     public var id: UUID
     public var name: String
@@ -7,6 +24,8 @@ public struct RemoteTarget: Codable, Hashable, Sendable, Identifiable {
     public var port: UInt16
     public var certificateFingerprint: String
     public var credentialsReference: String?
+    /// Explicit relay route for an already paired Host. A missing value preserves LAN discovery.
+    public var relay: RemoteRelayEndpoint?
 
     public init(id: UUID, name: String, host: String, port: UInt16 = RemoteTarget.computerPort, certificateFingerprint: String, credentialsReference: String? = nil) {
         self.id = id; self.name = name; self.host = host; self.port = port

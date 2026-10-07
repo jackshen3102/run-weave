@@ -16,6 +16,11 @@ export interface RemoteAccessConfig {
   listenAddress: string;
   port: number;
 }
+export interface RemoteDesktopRelayConfig extends RemoteAccessConfig {
+  localAddress: string;
+  localPort: number;
+  certificateFingerprint: string;
+}
 export interface RemoteAccessRuntime extends TunnelState {
   address: string | null;
   checkedAt: number | null;
@@ -34,6 +39,7 @@ export function isPrivateRelayAddress(value: string): boolean {
 }
 export interface TunnelHostConfig {
   remoteAccess?: RemoteAccessConfig;
+  remoteDesktop?: RemoteDesktopRelayConfig;
   id: string;
   name: string;
   sshTarget: string;
@@ -76,6 +82,7 @@ export interface TunnelState {
 }
 export interface TunnelHostRuntime {
   remoteAccess?: RemoteAccessRuntime;
+  remoteDesktop?: RemoteAccessRuntime;
   hostId: string;
   generation: number;
   state: "disconnected" | "connecting" | "ready" | "reconnecting" | "failed";
@@ -193,6 +200,19 @@ export function validateTunnelUpdate(value: unknown): TunnelConfigUpdate {
       throw new Error(
         "远程访问需要有效的服务器内网 IPv4 地址及 1024–65535 端口",
       );
+    const desktop = h.remoteDesktop;
+    if (desktop && (typeof desktop.enabled !== "boolean" ||
+      typeof desktop.listenAddress !== "string" || !port(desktop.port) || desktop.port < 1024 ||
+      typeof desktop.localAddress !== "string" || !port(desktop.localPort) ||
+      typeof desktop.certificateFingerprint !== "string" ||
+      (desktop.enabled ? !isPrivateRelayAddress(desktop.listenAddress) ||
+        !isPrivateRelayAddress(desktop.localAddress) || !/^[a-fA-F0-9]{64}$/.test(desktop.certificateFingerprint)
+        : (desktop.listenAddress !== "" && !isPrivateRelayAddress(desktop.listenAddress)) ||
+          (desktop.localAddress !== "" && !isPrivateRelayAddress(desktop.localAddress)) ||
+          (desktop.certificateFingerprint !== "" && !/^[a-fA-F0-9]{64}$/.test(desktop.certificateFingerprint)))))
+      throw new Error("RemoteDesk 需要有效的内网地址、端口和 Mac 的完整 SHA-256 证书指纹");
+    if (desktop?.enabled && r?.enabled && desktop.listenAddress === r.listenAddress && desktop.port === r.port)
+      throw new Error("RemoteDesk 与 Runweave 远程访问需要不同的中转端口");
     const b = h.browser;
     if (
       !b ||
@@ -220,6 +240,11 @@ export function validateTunnelUpdate(value: unknown): TunnelConfigUpdate {
             },
           }
         : {}),
+      ...(desktop ? { remoteDesktop: {
+        enabled: desktop.enabled, listenAddress: desktop.listenAddress, port: desktop.port,
+        localAddress: desktop.localAddress, localPort: desktop.localPort,
+        certificateFingerprint: desktop.certificateFingerprint.toLowerCase(),
+      } } : {}),
       autoConnect: h.autoConnect,
       forwards,
       browser: {

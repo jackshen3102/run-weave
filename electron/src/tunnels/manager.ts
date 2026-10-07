@@ -1,3 +1,4 @@
+import { refreshRemoteDesktop, stopRemoteDesktop } from "./remote-desktop-owner.js";
 import { BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -115,6 +116,7 @@ export class TunnelManager {
             () => this.current(h, h.runtime.generation),
             () => this.publish(),
           );
+          void refreshRemoteDesktop(h, () => this.current(h, h.runtime.generation), () => this.publish());
           void this.browser(h);
           void this.restoreEndpoints(h);
         }
@@ -230,6 +232,7 @@ export class TunnelManager {
       ...jobs.map((p) => p.stop()),
       this.stopBrowser(h),
       stopRemoteAccess(h),
+      stopRemoteDesktop(h),
     ]);
   }
   async disconnect(id: string) {
@@ -426,6 +429,7 @@ export class TunnelManager {
       }
     }
     void this.browser(h);
+    void refreshRemoteDesktop(h, () => this.current(h, h.runtime.generation), () => this.publish());
     void refreshRemoteAccess(
       h,
       () => this.current(h, h.runtime.generation),
@@ -502,7 +506,9 @@ export class TunnelManager {
         const remoteChanged =
           JSON.stringify(h.config.remoteAccess) !==
           JSON.stringify(next.remoteAccess);
+        const remoteDesktopChanged = JSON.stringify(h.config.remoteDesktop) !== JSON.stringify(next.remoteDesktop);
         h.config = next;
+        if (remoteDesktopChanged) await stopRemoteDesktop(h);
         if (remoteChanged) await stopRemoteAccess(h);
         if (browserChanged) await this.stopBrowser(h);
         const required = new Set(
@@ -568,7 +574,10 @@ export class TunnelManager {
     const h = this.hosts.get(id);
     if (!h) throw new Error("TUNNEL_NOT_FOUND");
     if (h.runtime.state !== "ready") return this.connect(id);
-    if (forwardId === "remote-access") {
+    if (forwardId === "remote-desktop") {
+      await stopRemoteDesktop(h);
+      await refreshRemoteDesktop(h, () => this.current(h, h.runtime.generation), () => this.publish());
+    } else if (forwardId === "remote-access") {
       await stopRemoteAccess(h);
       await refreshRemoteAccess(
         h,

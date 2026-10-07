@@ -3,6 +3,11 @@ import RunweaveRemoteDesktopProtocol
 
 enum RemotePairedConnection {
     static func connect(target: RemoteTarget) async throws -> RemoteTLSConnection {
+        if let relay = target.relay {
+            guard relay.isValid else { throw RemoteTransportError.invalidEndpoint }
+            return try await RemoteTLSConnection.connect(target: target,
+                endpoint: .hostPort(host: .init(relay.host), port: .init(rawValue: relay.port)!))
+        }
         // Simulator-only loopback Hosts do not advertise a LAN service.
         #if DEBUG && targetEnvironment(simulator)
         if target.host == "127.0.0.1" || target.host == "localhost" {

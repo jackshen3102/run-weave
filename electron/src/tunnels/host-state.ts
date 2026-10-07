@@ -1,9 +1,10 @@
+import type { RemoteDesktopOwner } from "./remote-desktop-owner.js";
 import type { TunnelHostConfig } from "@runweave/shared/tunnels";
 import type { RemoteAccessOwner } from "./remote-access-owner.js";
 import type { SshProcess } from "./ssh-process.js";
 import type { BrowserChannel } from "./browser-channel.js";
 import { childState } from "./runtime-state.js";
-export interface Host extends RemoteAccessOwner {
+export interface Host extends RemoteAccessOwner, RemoteDesktopOwner {
   desired: boolean;
   control: SshProcess | null;
   forwards: Map<string, SshProcess>;
@@ -27,6 +28,11 @@ export function createTunnelHost(config: TunnelHostConfig): Host {
     forwardRetries: new Map(),
     backends: new Map(),
     channel: null,
+    remoteDesktop: null,
+    remoteDesktopBusy: false,
+    remoteDesktopEpoch: 0,
+    remoteDesktopChecked: 0,
+    remoteDesktopTimeouts: 0,
     remote: null,
     remoteBusy: false,
     remoteEpoch: 0,
@@ -51,6 +57,10 @@ export function createTunnelHost(config: TunnelHostConfig): Host {
         ]),
       ),
       browser: childState(config.browser.enabled ? "waiting" : "disabled"),
+      remoteDesktop: {
+        ...childState(config.remoteDesktop?.enabled ? "waiting" : "disabled"),
+        address: null, checkedAt: null,
+      },
       remoteAccess: {
         ...childState(config.remoteAccess?.enabled ? "waiting" : "disabled"),
         address: null,

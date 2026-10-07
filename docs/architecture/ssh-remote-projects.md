@@ -117,3 +117,10 @@ Backend 启动的 Workspace Service 生命周期不同，不能按 tmux 的保�
 [Electron 执行器](../../electron/src/tunnels/manager.ts)、
 [Backend Browser 绑定](../../backend/src/remote/browser-bindings.ts)、
 [本机只读模型](../../backend/src/tunnels/read-model.ts)。
+
+### RemoteDesk 独立中转
+
+同一 SSH 主机可单独启用 RemoteDesk；它使用另一个内网 TCP 入口，将原始 TLS 转发到当前
+Mac 的 Host，不经过上述 Backend HTTP 白名单网关，也不要求 Backend 在线。隧道随 Runweave
+桌面执行器与该 SSH 主机退出，不能自动启动 Host 共享或授予远控权限。配置、手机连接方式与
+证据边界见 [RemoteDesk](remote-desktop.md#devbox-内网vpn-隧道)。

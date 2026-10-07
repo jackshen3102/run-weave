@@ -206,6 +206,9 @@ private struct RemoteHostEndpointView: View {
   @State private var name: String
   @State private var address: String
   @State private var port: String
+  @State private var useRelay: Bool
+  @State private var relayAddress: String
+  @State private var relayPort: String
   @State private var backendConnectionID: String
   @State private var failure: String?
 
@@ -216,6 +219,9 @@ private struct RemoteHostEndpointView: View {
     _name = State(initialValue: host.target.name)
     _address = State(initialValue: host.target.host)
     _port = State(initialValue: String(host.target.port))
+    _useRelay = State(initialValue: host.target.relay != nil)
+    _relayAddress = State(initialValue: host.target.relay?.host ?? "")
+    _relayPort = State(initialValue: String(host.target.relay?.port ?? 15446))
     _backendConnectionID = State(initialValue: host.backendConnectionID ?? "")
   }
 
@@ -235,6 +241,17 @@ private struct RemoteHostEndpointView: View {
         } footer: {
           Text("修改地址保留原 Host 身份与指纹。若 Mac 身份改变，必须重新配对。")
         }
+        Section {
+          Toggle("通过 Runweave 隧道连接", isOn: $useRelay)
+            .accessibilityIdentifier("remote-host-use-relay")
+          if useRelay {
+            TextField("中转服务器内网 IPv4", text: $relayAddress).textInputAutocapitalization(.never)
+              .disableAutocorrection(true).keyboardType(.decimalPad).clarityMask()
+            TextField("远控端口", text: $relayPort).keyboardType(.numberPad).clarityMask()
+          }
+        } header: { Text("远程访问") } footer: {
+          Text("填写 Runweave「端口与隧道」中的 RemoteDesk 地址和端口。Mac 上需保持 Runweave 与 RemoteDesk 共享运行，手机需接入对应网络或 VPN。使用原配对身份；关闭此项恢复局域网连接。")
+        }
         Section(header: Text("终端快捷入口（可选）")) {
           backendPicker(selection: $backendConnectionID, connections: backendConnections)
         }
@@ -246,8 +263,16 @@ private struct RemoteHostEndpointView: View {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button("保存") {
             do {
-              let target = try configuredTarget(id: host.id, name: name, host: address, port: port,
+              var target = try configuredTarget(id: host.id, name: name, host: address, port: port,
                 fingerprint: host.target.certificateFingerprint, credentialsReference: host.target.credentialsReference)
+              if useRelay {
+                guard let relayPort = UInt16(relayPort.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                  throw MobileLoginFailure(message: "请输入有效的中转端口。")
+                }
+                let relay = RemoteRelayEndpoint(host: relayAddress.trimmingCharacters(in: .whitespacesAndNewlines), port: relayPort)
+                guard relay.isValid else { throw MobileLoginFailure(message: "请输入中转服务器的内网 IPv4 和 1024–65535 端口。") }
+                target.relay = relay
+              }
               try coordinator.save(PairedRemoteHost(target: target,
                 backendConnectionID: backendConnectionID.isEmpty ? nil : backendConnectionID))
               dismiss()

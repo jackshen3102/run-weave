@@ -145,6 +145,7 @@ export function buildElectronRuntimeStatusReport(options: {
     },
     buildCompanionItem(options.companionEnabled, companion, now),
     ...remoteAccessItems(now),
+    ...remoteDesktopItems(now),
     ...getTerminalBrowserProfileRuntimeStates().map((profile) => {
       const expected =
         profile.proxyMode === "whistle" &&
@@ -385,4 +386,23 @@ function remoteAccessItems(now: number): RuntimeStatusItem[] {
         ],
       };
     });
+}
+
+function remoteDesktopItems(now: number): RuntimeStatusItem[] {
+  const snapshot = getTunnelRuntimeSnapshot();
+  return (snapshot?.config.hosts ?? []).filter((h) => h.remoteDesktop?.enabled).map((host) => {
+    const runtime = snapshot?.hosts.find((h) => h.hostId === host.id);
+    const remote = runtime?.remoteDesktop;
+    const failed = runtime?.state === "failed" || remote?.state === "failed" || remote?.state === "needs_auth";
+    const healthy = runtime?.state === "ready" && remote?.state === "ready" && now - (remote.checkedAt ?? 0) < 30_000;
+    const disconnected = runtime?.state === "disconnected";
+    return {
+      ...item(`electron.remote-desktop:${host.id}`, `RemoteDesk 中转 · ${host.name}`,
+        healthy ? "healthy" : failed ? "unhealthy" : disconnected ? "disabled" : "recovering",
+        healthy ? "TLS 中转与 Host 证书已验证，画面和控制需在手机确认" :
+          (runtime?.error?.message ?? remote?.error?.message ?? (disconnected ? "主机已断开" : "正在检查 RemoteDesk 中转")), now),
+      facts: [{ id: `remote-desktop.address:${host.id}`, label: "远控地址",
+        value: `${host.remoteDesktop!.listenAddress}:${host.remoteDesktop!.port}`, kind: "address" as const, copyable: true }],
+    };
+  });
 }
