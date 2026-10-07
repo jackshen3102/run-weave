@@ -87,6 +87,7 @@ final class RemoteObservationRecorder {
             switch transport {
             case .closed: return "connection_lost"
             case .connectionTimedOut: return "connection_timeout"
+            case .unsupportedVersion: return "protocol_incompatible"
             case .keychain: return "credential_storage_error"
             case .invalidCertificate: return "certificate_rejected"
             case .invalidEndpoint: return "endpoint_invalid"

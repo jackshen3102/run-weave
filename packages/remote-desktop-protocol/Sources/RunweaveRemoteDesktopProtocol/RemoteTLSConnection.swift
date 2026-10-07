@@ -5,10 +5,12 @@ import CryptoKit
 
 public enum RemoteTransportError: Error, LocalizedError, Equatable {
     case closed, connectionTimedOut, invalidMessage, oversizedMessage, invalidEndpoint, invalidCertificate, keychain(OSStatus)
+    case unsupportedVersion(Int)
     public var errorDescription: String? {
         switch self {
         case .closed: return "Remote Host connection closed."
-        case .connectionTimedOut: return "Remote Host connection timed out before it was established."
+        case .connectionTimedOut: return "连接 Mac 超时。"
+        case .unsupportedVersion(let version): return "远控协议版本不兼容（收到版本 \(version)，支持版本 1），请更新手机 App 和 Mac Host。"
         case .invalidMessage: return "Remote Host sent an invalid message."
         case .oversizedMessage: return "Remote message exceeded its size limit."
         case .invalidEndpoint: return "Remote Host address or certificate fingerprint is invalid."
@@ -16,6 +18,10 @@ public enum RemoteTransportError: Error, LocalizedError, Equatable {
         case .keychain(let status): return "Remote credential storage failed (\(status))."
         }
     }
+}
+
+public enum RemoteConnectionRoute: Sendable {
+    case local, relay
 }
 
 public struct RemoteKeychainStore {
@@ -132,28 +138,33 @@ public enum RemoteTLS {
 public final class RemoteTLSConnection: @unchecked Sendable {
     public static let maximumMessageSize = 4 * 1024 * 1024 + 4096
     public let connection: NWConnection
+    public let route: RemoteConnectionRoute
     private let queue = DispatchQueue(label: "runweave.remote.tcp")
     private let lock = NSLock()
     private var pendingBytes = 0
-    public init(connection: NWConnection) { self.connection = connection }
-    public static func connect(target: RemoteTarget, endpoint: NWEndpoint? = nil) async throws -> RemoteTLSConnection {
+    public init(connection: NWConnection, route: RemoteConnectionRoute = .local) {
+        self.connection = connection; self.route = route
+    }
+    public static func connect(target: RemoteTarget, endpoint: NWEndpoint? = nil,
+                               route: RemoteConnectionRoute = .local, timeout: TimeInterval = 10) async throws -> RemoteTLSConnection {
+        try Task.checkCancellation()
         guard !target.host.isEmpty, let port = NWEndpoint.Port(rawValue: target.port) else { throw RemoteTransportError.invalidEndpoint }
         let verification = TLSVerificationState()
         let parameters = try RemoteTLS.clientParameters(fingerprint: target.certificateFingerprint, verificationRejected: { verification.reject() })
         parameters.includePeerToPeer = false
         // Only an explicitly configured relay permits cellular/VPN routing.
         // TLS pinning and device authentication are identical on both routes.
-        if target.usesRelay {
-            guard let relay = target.relay, relay.isValid else { throw RemoteTransportError.invalidEndpoint }
+        if route == .relay {
+            guard target.allowsRelayFallback, let relay = target.relay, relay.isValid else { throw RemoteTransportError.invalidEndpoint }
         } else {
             parameters.prohibitedInterfaceTypes = [.cellular, .other]
         }
         let destination = endpoint ?? .hostPort(host: NWEndpoint.Host(target.host), port: port)
-        let channel = RemoteTLSConnection(connection: NWConnection(to: destination, using: parameters))
-        do { try await channel.start(); return channel }
+        let channel = RemoteTLSConnection(connection: NWConnection(to: destination, using: parameters), route: route)
+        do { try await channel.start(timeout: timeout); try Task.checkCancellation(); return channel }
         catch { channel.close(); if verification.wasRejected { throw RemoteTransportError.invalidCertificate }; throw error }
     }
-    public func start() async throws {
+    public func start(timeout: TimeInterval = 10) async throws {
         try await withTaskCancellationHandler(operation: {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 let startState = StartState(continuation)
@@ -166,7 +177,7 @@ public final class RemoteTLSConnection: @unchecked Sendable {
                     }
                 }
                 connection.start(queue: queue)
-                queue.asyncAfter(deadline: .now() + 10) {
+                queue.asyncAfter(deadline: .now() + timeout) {
                     if startState.finish(.failure(RemoteTransportError.connectionTimedOut)) { self.connection.cancel() }
                 }
             }
@@ -181,8 +192,11 @@ public final class RemoteTLSConnection: @unchecked Sendable {
     }
     public func receiveMessage() async throws -> RemoteControlMessage {
         let data = try await receiveData(maximumSize: 64 * 1024)
-        let message = try JSONDecoder().decode(RemoteControlMessage.self, from: data)
-        guard message.version == 1 else { throw RemoteTransportError.invalidMessage }; return message
+        // Read the version before decoding fields that a newer protocol may have changed.
+        struct Header: Decodable { let version: Int }
+        let version = try JSONDecoder().decode(Header.self, from: data).version
+        guard version == 1 else { throw RemoteTransportError.unsupportedVersion(version) }
+        return try JSONDecoder().decode(RemoteControlMessage.self, from: data)
     }
     public func sendData(_ data: Data) async throws {
         let framed = try reserveAndFrame(data)
