@@ -4,15 +4,16 @@ export function updateWaitingState(
   raw: string,
   toolName: string | null,
 ) {
-  if (["sessionstart", "userpromptsubmit", "interrupt"].includes(raw)) {
+  if (["userpromptsubmit", "interrupt"].includes(raw)) {
     watch.revision++;
     watch.contextRevision++;
-    watch.status = "watching";
+    watch.status = raw === "interrupt" ? "paused" : "watching";
     delete watch.waitingFor;
     delete watch.error;
-    if (raw !== "interrupt") {
+    watch.outcome = null;
+    if (raw === "interrupt") watch.pauseReason = "interrupted";
+    else {
       watch.continuationCount = 0;
-      watch.outcome = null;
       delete watch.pauseReason;
     }
   } else if (raw === "permissionrequest") watch.waitingFor = "permission";

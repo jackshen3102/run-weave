@@ -70,9 +70,24 @@ export interface TaskWatch {
   error?: string;
   waitingFor?: "permission" | "question";
   lastFinalMessageId?: string;
+  /** Last ordinary user message observed; supervision prompts never advance it. */
+  lastUserMessageId?: string;
   createdAt: string;
   updatedAt: string;
   decisions: SupervisionDecision[];
+}
+export function currentSupervisionDecisions(watch: TaskWatch) {
+  return watch.decisions.filter(
+    (decision) =>
+      decision.contextRevision === watch.contextRevision &&
+      (!decision.threadId || decision.threadId === watch.target.threadId),
+  );
+}
+/** Display-only excerpt; classification and source views retain the complete goal. */
+export function supervisionGoalPreview(goal: string) {
+  const prose = goal.split(/\r?\n\s*(?:\{|```)/, 1)[0]!.trim();
+  const preview = [...(prose || goal.trim())].slice(0, 240).join("");
+  return preview.length < goal.trim().length ? `${preview}…` : preview;
 }
 export interface SupervisionDiscovery {
   target: SupervisionTarget | null;

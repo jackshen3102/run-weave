@@ -12,6 +12,8 @@ export function taskSupervisionStatus(watch: TaskWatch) {
   if (watch.status === "error") return "监听异常 / 上下文待补充";
   if (watch.status === "paused") return "监控已暂停";
   if (watch.status === "classifying") return "正在判断任务状态";
+  if (watch.taskStartMessageId.startsWith("pending:"))
+    return "等待新任务 · 终端监听已开启";
   if (watch.status === "watching" && watch.outcome === "completed")
     return "本轮任务已完成 · 继续监听此终端";
   if (watch.status === "watching" && watch.outcome === "blocked")
@@ -22,7 +24,12 @@ export function taskSupervisionStatus(watch: TaskWatch) {
 }
 
 export function taskSupervisionNeedsAttention(watch: TaskWatch) {
-  return watch.waitingFor != null || watch.status === "error" || watch.status === "paused"
-    || watch.pauseReason === "continuation_limit" || watch.pauseReason === "delivery_unknown"
-    || watch.outcome === "blocked";
+  return (
+    watch.waitingFor != null ||
+    watch.status === "error" ||
+    watch.status === "paused" ||
+    watch.pauseReason === "continuation_limit" ||
+    watch.pauseReason === "delivery_unknown" ||
+    watch.outcome === "blocked"
+  );
 }

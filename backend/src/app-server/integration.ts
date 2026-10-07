@@ -186,7 +186,7 @@ async function connectAppServerEventIntegration(
           terminalSessionManager: services.terminalSessionManager,
           terminalStateService: services.terminalStateService,
         });
-        services.taskSupervisionService.observeEvent(event);
+        await services.taskSupervisionService.observeEvent(event);
         return;
       }
       if (event.kind === "agent.lifecycle.observed") {
@@ -195,7 +195,7 @@ async function connectAppServerEventIntegration(
           terminalStateService: services.terminalStateService,
           activity: services.terminalActivity,
         });
-        services.taskSupervisionService.observeEvent(event);
+        await services.taskSupervisionService.observeEvent(event);
         return;
       }
       if (event.kind === "agent.completion") {
@@ -203,7 +203,7 @@ async function connectAppServerEventIntegration(
           terminalSessionManager: services.terminalSessionManager,
           terminalStateService: services.terminalStateService,
         });
-        services.taskSupervisionService.observeEvent(event);
+        await services.taskSupervisionService.observeEvent(event);
         if (completion) {
           const reconciled =
             await services.agentTeamService.reconcileCompletionSignal({

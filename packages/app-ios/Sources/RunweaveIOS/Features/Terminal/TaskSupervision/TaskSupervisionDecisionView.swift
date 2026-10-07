@@ -1,6 +1,15 @@
 import Clarity
 import SwiftUI
 
+struct TaskSupervisionGoalView: View {
+  let goal: String
+  var body: some View {
+    ScrollView { sourceText(goal).padding(20) }
+      .background(TerminalAppearance.panel.ignoresSafeArea())
+      .navigationTitle("原始任务").navigationBarTitleDisplayMode(.inline).clarityMask()
+  }
+}
+
 struct TaskSupervisionDecisionView: View {
   let decision: SupervisionDecision
 
@@ -124,6 +133,9 @@ struct TaskSupervisionActivityView: View {
                 Image(systemName: "chevron.right").font(.caption)
               }
               Text(decision.deliveryLabel).font(.caption).foregroundColor(.secondary)
+              Text(supervisionGoalPreview(decision.input.goal)).font(.caption).foregroundColor(.secondary).lineLimit(2)
+              Text(decision.contextRevision == watch.contextRevision && decision.threadId == watch.target.threadId ? "当前轮" : "历史轮次")
+                .font(.caption2).foregroundColor(.secondary)
               Text(decision.createdAt).font(.caption2).foregroundColor(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(14)
               .background(Color.secondary.opacity(0.06)).cornerRadius(10)

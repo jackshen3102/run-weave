@@ -29,6 +29,27 @@ export class SupervisionJobs {
     for (const job of this.pending) job.controller.abort();
     this.active.clear();
   }
+  async runUntilCanceled(id: string, job: Job) {
+    this.add(id, job);
+    // Free the reply queue on cancellation; retain the actual work until shutdown.
+    void job.promise.finally(() => this.finish(id, job)).catch(() => undefined);
+    let aborted: (() => void) | undefined;
+    try {
+      await Promise.race([
+        job.promise,
+        new Promise<void>((resolve) => {
+          aborted = () => resolve();
+          if (job.controller.signal.aborted) resolve();
+          else
+            job.controller.signal.addEventListener("abort", aborted, {
+              once: true,
+            });
+        }),
+      ]);
+    } finally {
+      if (aborted) job.controller.signal.removeEventListener("abort", aborted);
+    }
+  }
   async drain() {
     await Promise.allSettled([...this.pending].map((job) => job.promise));
   }

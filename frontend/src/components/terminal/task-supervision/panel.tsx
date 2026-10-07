@@ -4,6 +4,10 @@ import type {
   StartSupervisionRequest,
   TaskOutcome,
 } from "@runweave/shared/task-supervision";
+import {
+  currentSupervisionDecisions,
+  supervisionGoalPreview,
+} from "@runweave/shared/task-supervision";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import {
   startTaskSupervision,
@@ -48,7 +52,8 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
   const query = useTaskSupervisionQuery(sessionId);
   const discovery = query.data;
   const watch = discovery?.watch;
-  const decision = watch?.decisions.at(-1);
+  const decisions = watch ? currentSupervisionDecisions(watch) : [];
+  const decision = decisions.at(-1);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -153,8 +158,18 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
             <div>
               <h3 className="mb-2 text-[11px] text-slate-400">当前目标</h3>
               <p className="whitespace-pre-wrap break-words text-sm leading-6">
-                {watch.goal}
+                {watch.goal
+                  ? supervisionGoalPreview(watch.goal)
+                  : "等待新会话的用户任务，目标将自动读取。"}
               </p>
+              {watch.goal && (
+                <details className="mt-2 text-xs text-slate-400">
+                  <summary>查看原始任务</summary>
+                  <p className="mt-2 whitespace-pre-wrap break-words leading-6">
+                    {watch.goal}
+                  </p>
+                </details>
+              )}
             </div>
             <div className="rounded border border-slate-800 bg-slate-900 p-3">
               <p className="text-xs">
@@ -169,9 +184,9 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
                 ))}
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
-                当前任务最多续接三次；新会话或新的用户输入开始新一轮。
+                新会话重置任务；同会话的新用户输入更新要求并重置本轮额度。
               </p>
-              {watch.decisions.some((d) =>
+              {decisions.some((d) =>
                 ["offered", "unknown"].includes(d.delivery),
               ) && (
                 <p className="mt-2 text-[11px] text-amber-300">
@@ -218,6 +233,11 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
               </p>
               {watch.decisions.map((d) => (
                 <p key={d.decisionId}>
+                  {d.contextRevision === watch.contextRevision &&
+                  d.threadId === watch.target.threadId
+                    ? "当前轮"
+                    : "历史轮次"}{" "}
+                  · {supervisionGoalPreview(d.input.goal)} ·
                   {new Date(d.createdAt).toLocaleTimeString()} ·{" "}
                   {labels[d.outcome]} · {d.delivery}
                 </p>
