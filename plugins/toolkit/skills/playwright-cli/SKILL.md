@@ -36,7 +36,7 @@ rules.
   `pnpm dev:open` and attach to the returned endpoint. Do not substitute the
   ambient `PLAYWRIGHT_MCP_CDP_ENDPOINT`.
 - For a standalone browser that is not an existing Runweave surface, use
-  `playwright-cli open`.
+  the isolated configuration and environment shown in the standalone quick start.
 
 Attach to the current Runweave Terminal Browser only after resolving its
 Profile. Reuse that Profile-scoped session for later commands, preserve
@@ -91,21 +91,30 @@ and actual UI acceptance, even when a WebMCP tool reports success.
 ## Standalone browser quick start
 
 The examples below that use `open` apply to standalone browsers, not existing
-Runweave surfaces.
+Runweave surfaces. CLI configuration merges with the global configuration;
+omitting `cdpEndpoint` does not clear an inherited endpoint. Use the tracked
+`templates/standalone.config.json`, which explicitly clears both remote
+endpoints, and unset endpoint/config environment overrides when opening.
+Do not edit the user's global configuration. Use a named session owned by the
+current task and close only that session when finished.
 
 ```bash
-# open new browser
-playwright-cli open
+RW_STANDALONE_SESSION="standalone-<task-id>"
+RW_STANDALONE_CONFIG="/absolute/path/to/this/skill/templates/standalone.config.json"
+# open an isolated browser; configuration paths must be absolute
+env -u PLAYWRIGHT_MCP_CDP_ENDPOINT -u PLAYWRIGHT_MCP_CONFIG \
+  pnpm exec playwright cli -s="$RW_STANDALONE_SESSION" open \
+  --browser=chrome --config="$RW_STANDALONE_CONFIG"
 # navigate to a page
-playwright-cli goto https://playwright.dev
+pnpm exec playwright cli -s="$RW_STANDALONE_SESSION" goto https://playwright.dev
 # interact with the page using refs from the snapshot
-playwright-cli click e15
-playwright-cli type "page.click"
-playwright-cli press Enter
+pnpm exec playwright cli -s="$RW_STANDALONE_SESSION" click e15
+pnpm exec playwright cli -s="$RW_STANDALONE_SESSION" type "page.click"
+pnpm exec playwright cli -s="$RW_STANDALONE_SESSION" press Enter
 # take a screenshot (rarely used, as snapshot is more common)
-playwright-cli screenshot
+pnpm exec playwright cli -s="$RW_STANDALONE_SESSION" screenshot
 # close the browser
-playwright-cli close
+pnpm exec playwright cli -s="$RW_STANDALONE_SESSION" close
 ```
 
 ## Commands

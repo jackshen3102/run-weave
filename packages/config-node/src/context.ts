@@ -6,7 +6,12 @@ import type { EnvironmentContext } from "@runweave/shared/configuration";
 import { ConfigurationError } from "./errors";
 import { assertPrivateDirectory, readPrivateFile } from "./private-file";
 
-const invocationArguments = new AsyncLocalStorage<string[]>();
+// ESM and CommonJS entry points must share the same invocation scope.
+const invocationArgumentsKey = Symbol.for("runweave.configuration.invocationArguments");
+const invocationGlobals = globalThis as typeof globalThis & {
+  [invocationArgumentsKey]?: AsyncLocalStorage<string[]>;
+};
+const invocationArguments = invocationGlobals[invocationArgumentsKey] ??= new AsyncLocalStorage<string[]>();
 export function withConfigurationArguments<T>(args: string[], run: () => T): T {
   return invocationArguments.run(args, run);
 }

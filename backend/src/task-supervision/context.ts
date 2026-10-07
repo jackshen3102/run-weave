@@ -86,6 +86,23 @@ export async function readPlans(
         };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        // A missing child must not turn a symlink outside the project into an allowed path.
+        let parent = path.dirname(candidate);
+        while (true) {
+          try {
+            const resolvedParent = await realpath(parent);
+            if (
+              resolvedParent !== realRoot &&
+              !resolvedParent.startsWith(`${realRoot}${path.sep}`)
+            )
+              throw new Error("计划引用不能跨项目。");
+            break;
+          } catch (parentError) {
+            if ((parentError as NodeJS.ErrnoException).code !== "ENOENT")
+              throw parentError;
+            parent = path.dirname(parent);
+          }
+        }
         const snapshot = snapshots.find((plan) => plan.path === planPath);
         if (snapshot && snapshot.availability !== "missing")
           return { ...snapshot, availability: "snapshot" };
@@ -104,7 +121,9 @@ export async function refreshReferencedPlans(
   watch: TaskWatch,
   messages: ConversationMessage[],
 ) {
-  const start = messages.findIndex((m) => m.id === watch.taskStartMessageId);
+  const start = messages.findIndex(
+    (m) => m.id === watch.taskStartMessageId && m.role === "user",
+  );
   if (start < 0) throw new Error("找不到原始任务起点，请重新核对任务来源。");
   watch.plans = await readPlans(
     root,
