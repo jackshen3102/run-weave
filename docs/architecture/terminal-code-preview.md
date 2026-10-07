@@ -50,8 +50,8 @@ Automation 等能力暂不可用时不展示入口，但保留布局偏好。配
 
 验收使用[工具栏计划](../testing/terminal/sidecar-tabs.testplan.yaml)和
 [Profile 隔离回归](../testing/terminal/browser/multi-profile-whistle.testplan.yaml)。
-过程计划记录的原生合成窗口浮层验收尚未闭环；本轮文档整理未重跑。
-SIDETAB-008 必须实际检查 Electron 菜单、拖影与原生网页的显示和输入命中，DOM 检查不能代替。
+SIDETAB-008 必须实际检查 Electron 菜单、拖影与原生网页的显示和输入命中；
+DOM 检查与静态截图不能替代该交互验收。
 
 ## Agent 会话阅读
 

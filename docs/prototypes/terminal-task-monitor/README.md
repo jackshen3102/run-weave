@@ -34,7 +34,7 @@ python3 -m http.server 6197 --bind 127.0.0.1 --directory docs/prototypes/termina
 
 `index.html` 放挂载点，`style.css` 放布局样式，`app.js` 放交互，`mock-state.json` 放样例目标、评分与事件。不导入生产源码，不发送真实消息，不启动 Agent。
 
-当前采用终端主体加右侧监控面板。展示三项评分但不将它们叫作统计正确率。上限状态与业务“完成/阻塞”分开；原型没有自动识别任务、第二套验收 Agent、Jev 凭据配置或产品内模拟按钮。
+此历史原型采用终端主体加右侧监控面板。展示三项评分但不将它们叫作统计正确率。上限状态与业务“完成/阻塞”分开；原型没有自动识别任务、第二套验收 Agent、Jev 凭据配置或产品内模拟按钮。
 
 ## 演示辅助（不进入产品）
 
@@ -54,4 +54,4 @@ python3 -m http.server 6197 --bind 127.0.0.1 --directory docs/prototypes/termina
 - [开启监控截图](prototype-preview-start.png)
 - [达到上限截图](prototype-preview-limit.png)
 
-关联 [当前架构](../../architecture/terminal-task-supervision.md)。已采用的交互为右侧独立监控面板、目标确认弹窗、三分类和三次续接上限；正式实现复用现有终端与 UI 组件。未采用原型演示定时器、整套终端外壳重写和生产环境样例数据；业务状态及边界以当前架构和源码为准。
+关联 [当前架构](../../architecture/terminal-task-supervision.md)。正式实现保留右侧监控面板、三分类和三次续接上限，复用现有终端与 UI 组件；开启时自动取得用户任务，不沿用原型中的目标确认和手动归零流程。未采用原型演示定时器、整套终端外壳重写和生产环境样例数据；业务状态及边界以当前架构和源码为准。
