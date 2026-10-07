@@ -1,4 +1,3 @@
-import { createTerminalUnreadRouter } from "./routes/terminal/unread";
 import { createResourceMonitorRouter } from "./routes/resource-monitor";
 import { createTaskHandoffRouter } from "./routes/task-handoff";
 import { initializeBackendConfiguration } from "./bootstrap/configuration";
@@ -254,7 +253,6 @@ function createHttpApp(
       maxFrameBytes: LOCAL_BROWSER_MAX_FRAME,
     });
   });
-  app.use("/api/terminal/unread", requireAuth, createTerminalUnreadRouter(services.terminalBadges));
   app.use("/api/codex/quota", requireAuth, createCodexQuotaRouter());
   app.use("/api/device/resources", requireAuth, createResourceMonitorRouter(services.resourceMonitor, services.authService));
   app.use(
@@ -333,6 +331,7 @@ function createHttpApp(
     "/api/terminal",
     requireAuth,
     createTerminalRouter(services.terminalSessionManager, {
+      terminalBadges: services.terminalBadges,
       terminalTaskService: services.terminalTaskService,
       textAttachmentDelivery: services.textAttachmentDelivery,
       terminalQuestionsService: services.terminalQuestionsService,

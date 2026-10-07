@@ -1,3 +1,5 @@
+import { createTerminalUnreadRouter } from "./unread";
+import type { TerminalBadges } from "../../device-monitor/terminal-badges";
 import { registerTerminalQuestionRoutes } from "./questions";
 import { registerTerminalTaskRoutes } from "./tasks";
 import type { TerminalTaskService } from "../../terminal/tasks/service";
@@ -114,6 +116,7 @@ async function readTerminalHistory(
 export function createTerminalRouter(
   terminalSessionManager: TerminalSessionManager,
   options?: {
+    terminalBadges?: TerminalBadges | null;
     terminalTaskService?: TerminalTaskService;
     textAttachmentDelivery?: TerminalTextAttachmentDelivery;
     terminalQuestionsService?: TerminalQuestionsService;
@@ -133,6 +136,7 @@ export function createTerminalRouter(
   },
 ): Router {
   const router = Router();
+  router.use("/unread", createTerminalUnreadRouter(options?.terminalBadges ?? null));
   router.post("/session/:id/completion-viewed", async (req, res) => {
     const parsed = z.object({
       completionRevision: z.number().int().nonnegative(),
