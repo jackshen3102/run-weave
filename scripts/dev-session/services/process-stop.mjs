@@ -6,12 +6,9 @@ const GRACE_MS = 5_000;
 const FORCE_WAIT_MS = 2_000;
 const POLL_MS = 100;
 
-// spawnDetached creates a fresh session/process group whose ID is the launcher
-// PID. Do not infer ownership from a port, command basename or an arbitrary tree.
-export function readOwnedProcessGroup(pid) {
-  if (!Number.isInteger(pid) || pid <= 1) {
-    throw new DevSessionError("invalid owned process group", 5, { pid });
-  }
+// A read-only projection can reuse this observation within one snapshot.
+// Stop/exit checks must take a fresh observation through readOwnedProcessGroup.
+export function readProcessGroupSnapshot() {
   let output;
   try {
     output = execFileSync("ps", ["-axo", "pid=,pgid=,stat="], {
@@ -19,14 +16,31 @@ export function readOwnedProcessGroup(pid) {
       timeout: 2_000,
     });
   } catch {
+    throw new DevSessionError("cannot inspect process groups", 5);
+  }
+  const groups = new Map();
+  for (const line of output.split(/\r?\n/)) {
+    const [memberPid, groupPid, state] = line.trim().split(/\s+/);
+    if (!state || state.startsWith("Z")) continue;
+    const id = Number(groupPid);
+    const members = groups.get(id) ?? [];
+    members.push(Number(memberPid));
+    groups.set(id, members);
+  }
+  return groups;
+}
+
+// spawnDetached creates a fresh session/process group whose ID is the launcher
+// PID. Do not infer ownership from a port, command basename or an arbitrary tree.
+export function readOwnedProcessGroup(pid) {
+  if (!Number.isInteger(pid) || pid <= 1) {
+    throw new DevSessionError("invalid owned process group", 5, { pid });
+  }
+  try {
+    return readProcessGroupSnapshot().get(pid) ?? [];
+  } catch {
     throw new DevSessionError("cannot inspect owned process group", 5, { pid });
   }
-  return output.split(/\r?\n/).flatMap((line) => {
-    const [memberPid, groupPid, state] = line.trim().split(/\s+/);
-    return Number(groupPid) === pid && state && !state.startsWith("Z")
-      ? [Number(memberPid)]
-      : [];
-  });
 }
 
 function assertLauncherIdentity(processInfo) {

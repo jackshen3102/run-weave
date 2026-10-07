@@ -5,6 +5,8 @@ import { isSupervisionPrompt } from "./context";
 
 export interface ReplyEvent {
   kind: "reply";
+  eventId: string;
+  source: "terminal" | "app-server";
   terminalSessionId: string;
   panelId: string | null;
   threadId: string | null;
@@ -23,6 +25,8 @@ export function completionReply(
     return null;
   return {
     kind: "reply",
+    eventId: event.id,
+    source: "terminal",
     terminalSessionId: event.terminalSessionId,
     panelId: event.payload.panelId ?? null,
     threadId: event.payload.threadId ?? null,
@@ -43,6 +47,8 @@ export function supervisionEvent(event: AppServerEventEnvelope) {
     .replaceAll("_", "")
     .toLowerCase();
   const scope = {
+    eventId: event.id,
+    source: "app-server" as const,
     terminalSessionId,
     panelId: event.scope?.terminalPanelId ?? read("panelId"),
     threadId: event.correlationId ?? read("threadId"),

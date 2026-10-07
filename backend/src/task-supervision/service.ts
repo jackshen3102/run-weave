@@ -20,7 +20,6 @@ import { updateWaitingState } from "./waiting";
 import {
   sameTarget,
   synchronizeWatch,
-  synchronizeTarget,
   synchronizeContext,
 } from "./synchronization";
 import { readFinalReply, alreadyProcessedReply } from "./reply";
@@ -45,6 +44,14 @@ import {
 } from "./delivery";
 import { applyVerdict } from "./verdict";
 import { SupervisionJobs } from "./jobs";
+import { startWatch, changeWatch } from "./controls";
+import {
+  logInitialization,
+  logWatchChanges,
+  replyFields,
+  supervisionLogger,
+  watchFields,
+} from "./diagnostics";
 import {
   TaskSupervisionStore,
   findTerminalWatch,
@@ -91,11 +98,14 @@ export class TaskSupervisionService {
       new TaskSupervisionClassifier(path.join(directory, "classification"));
     this.ready = this.store.load().then((saved) => {
       this.journal = saved;
+      logInitialization(saved.watches);
     });
     this.timer = setInterval(() => {
       if (!this.maintenance && !this.closed)
         this.maintenance = this.reconcile()
-          .catch(() => undefined)
+          .catch((error) =>
+            supervisionLogger.error("task-supervision.maintenance.failed", { error }),
+          )
           .finally(() => {
             this.maintenance = null;
           });
@@ -125,14 +135,20 @@ export class TaskSupervisionService {
       await this.ready;
       if (this.closed) throw new SupervisionError("监听服务已关闭。", 503);
       const before = structuredClone(this.journal);
+      let result: T;
       try {
-        const result = await operation();
+        result = await operation();
         await this.store.save(this.journal);
-        return structuredClone(result);
       } catch (error) {
         this.journal = before;
         throw error;
       }
+      try {
+        logWatchChanges(before.watches, this.journal.watches);
+      } catch {
+        // Diagnostics must not roll back or reject a successful state commit.
+      }
+      return structuredClone(result);
     });
     this.queue = next.catch(() => undefined);
     return next;
@@ -209,89 +225,18 @@ export class TaskSupervisionService {
     return structuredClone(this.find(id));
   }
 
+  private watchControls() {
+    return {
+      find: (id: string) => this.find(id),
+      resolve: (terminalSessionId: string) => this.resolve(terminalSessionId),
+      cancel: (id: string) => this.jobs.cancel(id),
+    };
+  }
   async start(request: StartSupervisionRequest): Promise<TaskWatch> {
-    return this.transaction(async () => {
-      const requestDigest = digest(JSON.stringify(request));
-      const previous = this.journal.requests[request.requestId];
-      if (previous) {
-        if (previous.digest !== requestDigest)
-          throw new SupervisionError("requestId 已用于不同请求。");
-        return this.find(previous.watchId);
-      }
-      const { target } = this.resolve(request.target.terminalSessionId);
-      let watch = this.forTerminal(target.terminalSessionId);
-      if (!watch) {
-        const now = new Date().toISOString();
-        const pendingId = `pending:${randomUUID()}`;
-        watch = {
-          watchId: randomUUID(),
-          enabled: true,
-          enabledAt: now,
-          target,
-          taskStartMessageId: pendingId,
-          task: { id: pendingId, role: "user", text: "", createdAt: now },
-          goal: "",
-          plans: [],
-          revision: 1,
-          contextRevision: 1,
-          status: "watching",
-          outcome: null,
-          continuationLimit: 3,
-          continuationCount: 0,
-          decisions: [],
-          createdAt: now,
-          updatedAt: now,
-        };
-        this.journal.watches.push(watch);
-      } else {
-        this.jobs.cancel(watch.watchId);
-        synchronizeTarget(watch, target);
-        watch.enabled = true;
-        watch.enabledAt = new Date().toISOString();
-        watch.status = "watching";
-        delete watch.pauseReason;
-        delete watch.error;
-        watch.revision++;
-        watch.updatedAt = new Date().toISOString();
-      }
-      this.journal.requests[request.requestId] = {
-        digest: requestDigest,
-        watchId: watch.watchId,
-      };
-      return watch;
-    });
+    return this.transaction(() => startWatch(this.journal, request, this.watchControls()));
   }
   async change(id: string, request: ChangeSupervisionRequest) {
-    return this.transaction(() => {
-      const watch = this.find(id);
-      if (watch.revision !== request.expectedRevision)
-        throw new SupervisionError("监控状态已更新，请刷新。");
-      this.jobs.cancel(id);
-      if (request.action === "pause") {
-        watch.enabled = false;
-        watch.status = "paused";
-        watch.pauseReason = "user_paused";
-      } else if (request.action === "resume") {
-        synchronizeTarget(
-          watch,
-          this.resolve(watch.target.terminalSessionId).target,
-        );
-        watch.enabled = true;
-        watch.enabledAt = new Date().toISOString();
-        watch.status = "watching";
-        delete watch.pauseReason;
-      } else {
-        if (!request.goal?.trim())
-          throw new SupervisionError("目标不能为空。", 422);
-        watch.goal = request.goal;
-        watch.contextRevision++;
-        if (watch.status === "classifying") watch.status = "watching";
-      }
-      watch.revision++;
-      watch.updatedAt = new Date().toISOString();
-      delete watch.error;
-      return watch;
-    });
+    return this.transaction(() => changeWatch(id, request, this.watchControls()));
   }
   /** Old installations may still invoke the separate Hook endpoint. It never classifies or delivers. */
   async hook(
@@ -359,6 +304,7 @@ export class TaskSupervisionService {
   private enqueueReply(event: ReplyEvent) {
     if (this.closed) return;
     if (!this.forTerminal(event.terminalSessionId)?.enabled) return;
+    supervisionLogger.info("task-supervision.reply.received", replyFields(event));
     const pending = (
       this.eventQueues.get(event.terminalSessionId) ?? Promise.resolve()
     )
@@ -370,7 +316,9 @@ export class TaskSupervisionService {
         if (this.eventQueues.get(event.terminalSessionId) === pending)
           this.eventQueues.delete(event.terminalSessionId);
       })
-      .catch(() => undefined);
+      .catch((error) => supervisionLogger.error("task-supervision.reply.queue.failed", {
+        ...replyFields(event), error,
+      }));
   }
   private async consumeReply(event: ReplyEvent) {
     await this.ready;
@@ -380,20 +328,32 @@ export class TaskSupervisionService {
       this.closed ||
       !watch?.enabled ||
       Date.parse(event.createdAt) < Date.parse(watch.enabledAt)
-    )
+    ) {
+      supervisionLogger.info("task-supervision.reply.skipped", {
+        ...replyFields(event),
+        reason: this.closed ? "service_closed" : !watch?.enabled ? "disabled" : "before_enabled",
+      });
       return;
+    }
     let target: SupervisionTarget;
     try {
       target = this.resolve(event.terminalSessionId, event.panelId).target;
-    } catch {
+    } catch (error) {
+      supervisionLogger.info("task-supervision.reply.skipped", {
+        ...replyFields(event), reason: "target_unavailable", error,
+      });
       return;
     }
     // Thread is an event/delivery fence, not the owner of the terminal switch.
     if (
       !target.threadId ||
       (event.threadId && event.threadId !== target.threadId)
-    )
+    ) {
+      supervisionLogger.info("task-supervision.reply.skipped", {
+        ...replyFields(event), reason: "thread_mismatch", currentThreadId: target.threadId,
+      });
       return;
+    }
     await this.synchronize(watch.watchId, target);
     const session = this.manager.getSession(target.terminalSessionId)!;
     const inputRevision = terminalInputAdmission(session).revision;
@@ -415,6 +375,14 @@ export class TaskSupervisionService {
     inputRevision: object,
   ): Promise<SupervisionHookResponse> {
     let revision: number | undefined;
+    const startedAt = Date.now();
+    let stage = "read_final_reply";
+    const trace = {
+      ...replyFields(event), ...target, watchId: id, attemptId: randomUUID(),
+    };
+    const skip = (reason: string) =>
+      supervisionLogger.info("task-supervision.reply.skipped", { ...trace, reason });
+    supervisionLogger.info("task-supervision.reply.started", trace);
     try {
       const { source, messages, native } = await readFinalReply(
         () => this.history.getConversation(target.threadId),
@@ -422,20 +390,31 @@ export class TaskSupervisionService {
         controller.signal,
       );
       const finalKey = `${target.threadId}:${native.id}`;
+      stage = "prepare_context";
       const snapshot = await this.transaction(async () => {
         const w = this.find(id);
-        if (!w.enabled || controller.signal.aborted || !this.current(target))
+        if (!w.enabled || controller.signal.aborted || !this.current(target)) {
+          skip("target_changed_or_canceled");
           return null;
-        if (!sameTarget(w.target, target)) return null;
+        }
+        if (!sameTarget(w.target, target)) {
+          skip("target_changed");
+          return null;
+        }
         synchronizeContext(w, taskCandidates(source));
         const latestUser = taskCandidates(source).at(-1);
         if (
           w.pauseReason === "interrupted" ||
           (latestUser &&
             messages.indexOf(latestUser) > messages.indexOf(native!))
-        )
+        ) {
+          skip("interrupted_or_new_user_input");
           return null;
-        if (alreadyProcessedReply(w, target.threadId, native)) return null;
+        }
+        if (alreadyProcessedReply(w, target.threadId, native)) {
+          skip("duplicate_reply");
+          return null;
+        }
         if (w.taskStartMessageId.startsWith("pending:"))
           throw new Error("监控已开启，但当前会话还没有可读的用户任务。");
         w.lastFinalMessageId = finalKey;
@@ -451,6 +430,7 @@ export class TaskSupervisionService {
       });
       if (!snapshot) return ALLOW;
       revision = snapshot.revision;
+      stage = "build_input";
       await refreshReferencedPlans(
         this.resolve(target.terminalSessionId, target.panelId).root,
         snapshot,
@@ -462,6 +442,13 @@ export class TaskSupervisionService {
         phase: "final" as const,
       };
       const input = buildSupervisionInput(snapshot, source, reply);
+      stage = "classify";
+      supervisionLogger.info("task-supervision.classification.started", {
+        ...trace, ...watchFields(snapshot), replyMessageId: reply.id,
+        inputBytes: Buffer.byteLength(JSON.stringify(input)),
+        configuredModel: settingText("backend.taskSupervision.model") ?? null,
+        timeoutMs: Number(setting("backend.taskSupervision.classificationTimeoutMs", 90_000)),
+      });
       const result = await this.classifier.run(input, {
         model: settingText("backend.taskSupervision.model"),
         timeoutMs: Number(
@@ -469,6 +456,11 @@ export class TaskSupervisionService {
         ),
         signal: controller.signal,
       });
+      supervisionLogger.info("task-supervision.classification.finished", {
+        ...trace, replyMessageId: reply.id, outcome: result.outcome,
+        scores: result.scores, model: result.model, durationMs: result.durationMs,
+      });
+      stage = "commit_decision";
       const offer = await this.transaction(() => {
         const w = this.find(id);
         if (
@@ -476,8 +468,10 @@ export class TaskSupervisionService {
           w.revision !== revision ||
           controller.signal.aborted ||
           !this.current(target)
-        )
+        ) {
+          skip("classification_superseded");
           return ALLOW;
+        }
         w.plans = snapshot.plans;
         const decision = {
           ...result,
@@ -501,6 +495,7 @@ export class TaskSupervisionService {
         );
       });
       if (offer.action !== "request-continuation") return ALLOW;
+      stage = "deliver";
       const valid = () => {
         const w = this.find(id);
         if (
@@ -523,7 +518,9 @@ export class TaskSupervisionService {
           throw new Error("用户输入已变化，未发送旧续接。");
         if (!this.deliver) throw new Error("终端输入服务不可用。");
         await this.deliver(target, offer, valid);
+        supervisionLogger.info("task-supervision.delivery.sent", { ...trace, decisionId: offer.decisionId });
       } catch (error) {
+        supervisionLogger.warn("task-supervision.delivery.failed", { ...trace, decisionId: offer.decisionId, error });
         await this.transaction(() => {
           recordDeliveryFailure(
             this.find(id),
@@ -535,6 +532,10 @@ export class TaskSupervisionService {
       }
       return ALLOW;
     } catch (error) {
+      if (controller.signal.aborted)
+        supervisionLogger.info("task-supervision.reply.canceled", { ...trace, stage, durationMs: Date.now() - startedAt });
+      else
+        supervisionLogger.warn("task-supervision.reply.failed", { ...trace, stage, durationMs: Date.now() - startedAt, error });
       await this.transaction(() => {
         const w = this.find(id);
         if (
@@ -550,8 +551,12 @@ export class TaskSupervisionService {
           error instanceof Error ? error.message : "回复处理失败"
         ).slice(0, 500);
         w.updatedAt = new Date().toISOString();
-      }).catch(() => undefined);
+      }).catch((saveError) => supervisionLogger.error("task-supervision.error_state.failed", {
+        ...trace, error: saveError,
+      }));
       return ALLOW;
+    } finally {
+      supervisionLogger.info("task-supervision.reply.finished", { ...trace, stage, durationMs: Date.now() - startedAt });
     }
   }
   private async reconcile() {

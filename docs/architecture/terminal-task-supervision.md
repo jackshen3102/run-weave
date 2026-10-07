@@ -43,6 +43,16 @@ Web 与 iOS 的当前判断、续接待确认提示按 thread 和 contextRevisio
 
 Codex 自动注入的 `AGENTS.md` 指令和环境上下文不作为用户任务。完整会话来源确认旧任务起点已被过滤时，重新绑定首条真实用户任务，并清空该错误起点的当前轮状态。
 
+## 诊断日志
+
+Backend 结构化日志中的 `task-supervision.*` 事件记录回复接收、处理与过滤原因、分类开始和结束、已提交的状态与判定、续接发送、投递状态变化及重启恢复。入口为 [diagnostics.ts](../../backend/src/task-supervision/diagnostics.ts)；状态和判定日志仅在 journal 保存成功后生成，无变化的后台同步不重复记录。
+
+用 `eventSource + eventId` 关联原始事件，`attemptId` 关联一次回复处理，`watchId`、terminal / panel / thread / executorGeneration 与 `contextRevision` 区分终端和处理轮次，`decisionId` 关联判定、投递与原会话确认。`delivery.sent` 仅表示终端输入调用返回；`delivery.changed` 的 `observed` 才表示原会话出现了对应监督输入。`reply.finished` 表示处理结束，任务完成应查 `decision.recorded.outcome`。
+
+日志保留评分、模型可用信息、耗时、输入字节数、消息 ID 和计划摘要；完整任务、对话、计划正文及分类理由仍从 journal 查看，不复制到诊断日志。模型为“Codex 默认模型”时，实际模型未知，不能据此比较模型质量。分类评分不是正确率，需人工复核判定才能评估误判。
+
+日志复用 `logging.backendDirectory`、`logging.level` 和 `logging.toFile`，默认记录 info 及以上，按日和 50 MiB 轮转、保留 3 天。需要跨版本分析时，应在轮转前留存相关日志及 journal 快照；journal 含完整任务正文，应按私人资料保存。当前开关、错误和投递字段是可更新的状态，历史时间线应结合日志读取。
+
 ## 入口与配置
 
 - 共享协议：[task-supervision.ts](../../packages/shared/src/task-supervision.ts)
