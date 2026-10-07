@@ -7,6 +7,7 @@ const { setTimeout } = require("node:timers");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { postCompletionHook } = require("./runweave-hook-completion.cjs");
 const { requestSupervision, writeContinuation } = require("./runweave-task-supervision.cjs");
 const {
   STOP_EVENTS,
@@ -288,43 +289,6 @@ async function postAgentHook({
     ok: false,
     error: lastError instanceof Error ? lastError.message : String(lastError),
   };
-}
-
-async function postCompletionHook({
-  endpoint,
-  token,
-  terminalSessionId,
-  payload,
-  source,
-  completionReason,
-  rawEvent,
-  commandName,
-}) {
-  const body = buildCompletionHookBody({
-    terminalSessionId,
-    payload,
-    source,
-    completionReason,
-    rawEvent,
-    commandName,
-  });
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Runweave-Hook-Token": token,
-      },
-      body: JSON.stringify(body),
-    });
-    const result = await response.json().catch(() => null);
-    return { ok: response.ok, status: response.status, accepted: Boolean(result?.event || result?.notificationId) && !result?.ignored, notificationId: result?.notificationId ?? (result?.event?.payload?.completionRevision ? String(result.event.payload.completionRevision) : undefined) };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
 }
 
 async function main() {

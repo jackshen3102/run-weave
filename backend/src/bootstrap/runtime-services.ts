@@ -1,3 +1,4 @@
+import { createTerminalTaskMonitoring } from "./terminal-task-monitoring";
 import { TerminalBadges } from "../device-monitor/terminal-badges";
 import { TerminalQuestionsService } from "../terminal/questions/service";
 import { ResourceMonitorService } from "../resource-monitor/service";
@@ -50,11 +51,8 @@ import {
   resolveEvolutionStoragePaths,
   resolveStoragePaths,
 } from "../utils/path";
-import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
-import { TaskHandoffService } from "../task-handoff/service";
 import { TerminalTaskService } from "../terminal/tasks/service";
 import { TerminalTaskStore } from "../terminal/tasks/store";
-import { TaskSupervisionService } from "../task-supervision/service";
 import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
 import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
@@ -226,12 +224,9 @@ async function assembleRuntimeServices(
   resources.defer("terminal-session-manager", () =>
     terminalSessionManager.dispose(),
   );
-  const appServerHistoryGateway = new AppServerHistoryGateway();
-  const taskHandoffService = new TaskHandoffService(path.join(storagePaths.browserProfileDir, "task-handoff"), terminalSessionManager, appServerHistoryGateway, activityStore);
-  resources.defer("task-handoff", () => taskHandoffService.dispose());
-  const taskSupervisionService = new TaskSupervisionService(path.join(storagePaths.browserProfileDir, "task-supervision"), terminalSessionManager, appServerHistoryGateway);
-  resources.defer("task-supervision", () => taskSupervisionService.dispose());
-  await taskSupervisionService.initialize();
+  const { appServerHistoryGateway, taskHandoffService, taskSupervisionService } = await createTerminalTaskMonitoring(
+    storagePaths.browserProfileDir, terminalSessionManager, activityStore, resources,
+  );
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalEventService,
     terminalSessionManager,
