@@ -123,6 +123,7 @@ function normalizeMessage(
       id: readString(item.id) ?? fallbackId,
       role: normalizedRole,
       text,
+      ...(normalizedRole === "assistant" && item.phase != null ? { phase: item.phase === "commentary" ? "commentary" as const : "final" as const } : {}),
     },
   ];
 }

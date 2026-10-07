@@ -1,5 +1,6 @@
 /** Service names shared by the field reference and service-based editors. */
 export const CONFIGURATION_DOMAIN_LABELS: Readonly<Record<string, string>> = {
+  "backend.taskSupervision": "长任务监控",
   "backend.server": "Backend 服务", "backend.auth": "登录认证", "backend.tunnelAuth": "隧道认证",
   "services.snapshotPublisher": "终端分享", "services.snapshotHost": "分享托管服务",
   "services.pushSender": "设备通知", "services.pushGateway": "推送网关", "services.feishu": "飞书",

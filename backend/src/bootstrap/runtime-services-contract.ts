@@ -1,6 +1,7 @@
 import type { TerminalTextAttachmentDelivery } from "../terminal/attachments/text-attachment-delivery";
 import type { TaskHandoffService } from "../task-handoff/service";
 import type { TerminalTaskService } from "../terminal/tasks/service";
+import type { TaskSupervisionService } from "../task-supervision/service";
 import type { ExperienceService } from "../experience/service";
 import type { ExperienceLearningRuntime } from "../experience/learning-runtime";
 import type { AuthStore } from "../auth/store";
@@ -73,6 +74,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   appServerHistoryGateway: AppServerHistoryGateway;
   workHistoryService: WorkHistoryService;
   taskHandoffService: TaskHandoffService;
+  taskSupervisionService: TaskSupervisionService;
   textAttachmentDelivery: TerminalTextAttachmentDelivery;
   terminalQuestionsService: TerminalQuestionsService;
   terminalTaskService: TerminalTaskService;

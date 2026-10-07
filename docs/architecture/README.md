@@ -71,6 +71,8 @@ scripts/dev-session    开发会话与 Beta 生命周期
 
 ### Terminal
 
+长任务监控、三分类与原终端续接读 [terminal-task-supervision.md](./terminal-task-supervision.md)。
+
 | 任务                                          | 文档                                                                           |
 | --------------------------------------------- | ------------------------------------------------------------------------------ |
 | Terminal 状态来源与消费                       | [terminal-state.md](./terminal-state.md)                                       |

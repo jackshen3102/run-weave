@@ -7,6 +7,8 @@ const { setTimeout } = require("node:timers");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { postCompletionHook } = require("./runweave-hook-completion.cjs");
+const { requestSupervision, writeContinuation } = require("./runweave-task-supervision.cjs");
 const {
   STOP_EVENTS,
   isNestedCodexProcess,
@@ -289,50 +291,14 @@ async function postAgentHook({
   };
 }
 
-async function postCompletionHook({
-  endpoint,
-  token,
-  terminalSessionId,
-  payload,
-  source,
-  completionReason,
-  rawEvent,
-  commandName,
-}) {
-  const body = buildCompletionHookBody({
-    terminalSessionId,
-    payload,
-    source,
-    completionReason,
-    rawEvent,
-    commandName,
-  });
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Runweave-Hook-Token": token,
-      },
-      body: JSON.stringify(body),
-    });
-    const result = await response.json().catch(() => null);
-    return { ok: response.ok, status: response.status, accepted: Boolean(result?.event || result?.notificationId) && !result?.ignored, notificationId: result?.notificationId ?? (result?.event?.payload?.completionRevision ? String(result.event.payload.completionRevision) : undefined) };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
 async function main() {
-  const tmuxEnvRefresh = readTmuxSessionEnv();
+  const hookStartedAt = Date.now();
   const args = parseArgs(process.argv.slice(2));
   const payload = parsePayload(await readStdin());
   const rawEvent = readHookEvent(payload);
   const normalizedEvent = normalizeEventName(rawEvent);
-  const tmuxPaneContext = readTmuxPaneContext(spawnSync);
+  const tmuxEnvRefresh = normalizedEvent === "interrupt" ? { refreshed: false } : readTmuxSessionEnv();
+  const tmuxPaneContext = normalizedEvent === "interrupt" ? { panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID } : readTmuxPaneContext(spawnSync);
   if (tmuxPaneContext.panelId) {
     process.env.RUNWEAVE_TERMINAL_PANEL_ID = tmuxPaneContext.panelId;
   } else if (parseTmuxSocketPath(process.env.TMUX) && process.env.TMUX_PANE) {
@@ -428,6 +394,10 @@ async function main() {
     return;
   }
 
+  let supervision;
+  const supervise = () => requestSupervision({ source, stateEndpoint, threadId, terminalPanelId, terminalSessionId, normalizedEvent, token, payload, hookStartedAt, debug: appendDebugLog });
+  if (normalizedEvent !== "sessionstart") supervision = await supervise();
+  if (source === "codex" && normalizedEvent === "interrupt") return;
   if (normalizedEvent === "stop") {
     const summary = extractCompletionSummary(payload);
     if (summary) payload.last_assistant_message = summary;
@@ -517,6 +487,7 @@ async function main() {
     }
   }
 
+  if (normalizedEvent === "sessionstart") await supervise();
   if (shouldRecordCompletion && completionEndpoint) {
     if (source !== "pi") {
       notifyDesktop(source, { notificationType });
@@ -589,6 +560,7 @@ async function main() {
       ...result,
     });
   }
+  if (normalizedEvent === "stop") await writeContinuation(supervision, token);
 }
 
 main().catch((error) => {

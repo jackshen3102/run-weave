@@ -149,6 +149,10 @@ export async function writeLauncherScript(
       path.join(launcherDir, HOOK_PAYLOAD_BASENAME),
     );
   }
+  for (const asset of ["runweave-hook-completion.cjs", "runweave-task-supervision.cjs"]) {
+    const source = await resolveHookAssetPath(context, asset);
+    if (await fileExists(source)) await copyFile(source, path.join(launcherDir, asset));
+  }
 }
 
 export async function installClaudeHooks(

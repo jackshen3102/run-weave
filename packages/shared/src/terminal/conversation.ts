@@ -5,15 +5,21 @@ export interface ConversationMessage {
   role: "user" | "assistant";
   text: string;
   createdAt?: string;
+  rawTurnId?: string;
+  phase?: "commentary" | "final";
 }
 
 export interface ConversationTurn {
   id: string;
   messages: ConversationMessage[];
+  rawTurnId?: string;
 }
 
 export type ConversationAvailability =
-  | "available" | "no_thread" | "provider_unsupported" | "source_missing";
+  | "available"
+  | "no_thread"
+  | "provider_unsupported"
+  | "source_missing";
 
 export interface ConversationContent {
   availability: ConversationAvailability;

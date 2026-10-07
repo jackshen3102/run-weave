@@ -183,6 +183,7 @@ export interface AppServerThreadMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
+  phase?: "commentary" | "final";
 }
 
 export interface AppServerThreadDetailTurn {

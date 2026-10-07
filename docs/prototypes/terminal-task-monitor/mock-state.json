@@ -1,0 +1,92 @@
+{
+  "project": "Runweave",
+  "terminal": "终端 03",
+  "branch": "feat/task-monitor",
+  "goal": "实现终端长任务监控，并完成计划中的验收用例。",
+  "plan": "terminal-task-supervision.md",
+  "limit": 3,
+  "followup": "请继续完成剩余验收，修复发现的问题。结束时说明已完成项、剩余项，以及是否需要我提供信息或权限。",
+  "scenarios": {
+    "off": {
+      "count": 0,
+      "status": "off",
+      "title": "尚未开启监控",
+      "subtitle": "",
+      "choice": null,
+      "reply": "核心功能已实现，类型检查通过。",
+      "remaining": "还有两条交互用例尚未验收。"
+    },
+    "watching": {
+      "count": 1,
+      "status": "watching",
+      "title": "正在监听最终回复",
+      "subtitle": "原 Agent 正在执行，等待本轮结束。",
+      "choice": "continue",
+      "scores": [0.06, 0.03, 0.91],
+      "reason": "还有两条验收用例未完成，原 Agent 可以继续执行。",
+      "reply": "核心功能已实现，类型检查通过。",
+      "remaining": "还有两条交互用例尚未验收。"
+    },
+    "reviewing": {
+      "count": 1,
+      "status": "reviewing",
+      "title": "正在判断任务状态",
+      "subtitle": "已收到最终回复，监听 Agent 正在判断。",
+      "choice": null,
+      "reply": "主要功能和基础检查已完成。",
+      "remaining": "需要核对剩余验收项。"
+    },
+    "paused": {
+      "count": 1,
+      "status": "paused",
+      "title": "监控已暂停",
+      "subtitle": "原 Agent 继续执行，监控不再自动续接。",
+      "choice": "continue",
+      "scores": [0.06, 0.03, 0.91],
+      "reason": "还有两条验收用例未完成，原 Agent 可以继续执行。",
+      "reply": "核心功能已实现，类型检查通过。",
+      "remaining": "还有两条交互用例尚未验收。"
+    },
+    "completed": {
+      "count": 2,
+      "status": "completed",
+      "title": "目标已达成",
+      "subtitle": "原 Agent 报告任务及验收均已完成，监控已结束。",
+      "choice": "completed",
+      "scores": [0.96, 0.01, 0.03],
+      "reason": "原 Agent 报告所有计划内交付和验收均已完成。",
+      "reply": "功能实现与计划中的验收用例均已完成。",
+      "remaining": "没有剩余事项。"
+    },
+    "blocked": {
+      "count": 2,
+      "status": "blocked",
+      "title": "需要你处理",
+      "subtitle": "任务受阻，已停止自动续接。",
+      "choice": "blocked",
+      "scores": [0.02, 0.94, 0.04],
+      "reason": "最后一条用例需要设备解锁，原 Agent 无法自行完成。",
+      "reply": "已完成其余验收，最后一条用例需要连接测试设备。",
+      "remaining": "请先解锁测试设备，当前无法继续。"
+    },
+    "limit": {
+      "count": 3,
+      "status": "limit",
+      "title": "已达续接上限",
+      "subtitle": "任务仍未完成，已停止自动续接。",
+      "choice": "continue",
+      "scores": [0.04, 0.08, 0.88],
+      "reason": "还有一条回归用例可以继续，本轮已自动续接 3 次。",
+      "reply": "已补齐两条交互验收，修复了暂停后继续的问题。",
+      "remaining": "还有一条重启恢复用例需要补跑。"
+    }
+  },
+  "events": [
+    { "phase": "commentary", "text": "正在执行交互验收。" },
+    {
+      "phase": "final",
+      "text": "验收尚有未完成项，可以继续。",
+      "scores": [0.05, 0.05, 0.9]
+    }
+  ]
+}
