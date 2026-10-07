@@ -75,7 +75,7 @@ export function isInjectedCodexContext(text: string): boolean {
   const value = text.trim();
   return /^<environment_context>[\s\S]*<\/environment_context>$/.test(value) ||
     /^<skill>\s*<name>[\w.:-]+<\/name>\s*<path>[^<>\r\n]+[/\\]SKILL\.md<\/path>(?:(?!<\/?skill>)[\s\S])*<\/skill>$/.test(value) ||
-    (value.startsWith("# AGENTS.md instructions for ") &&
+    (/^# AGENTS\.md instructions(?: for [^\r\n]+)?\r?\n/.test(value) &&
       value.includes("<INSTRUCTIONS>") && value.includes("</INSTRUCTIONS>") &&
       /<environment_context>[\s\S]*<\/environment_context>$/.test(value));
 }

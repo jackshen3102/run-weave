@@ -48,17 +48,31 @@ export function supervisionEvent(event: AppServerEventEnvelope) {
     threadId: event.correlationId ?? read("threadId"),
     createdAt: event.createdAt,
   };
-  if (
-    event.kind === "agent.lifecycle.observed" &&
-    read("source") === "codex" &&
-    read("observedLifecycle") === "rollout:task_complete"
-  )
-    return {
-      ...scope,
-      kind: "reply" as const,
-      summary: null,
-      turnId: read("turnId"),
-    };
+  if (event.kind === "agent.lifecycle.observed" && read("source") === "codex") {
+    const lifecycle = read("observedLifecycle");
+    if (lifecycle === "rollout:task_complete")
+      return {
+        ...scope,
+        kind: "reply" as const,
+        summary: null,
+        turnId: read("turnId"),
+      };
+    if (
+      lifecycle === "rollout:turn_aborted" ||
+      read("observedStatus") === "running"
+    )
+      return {
+        ...scope,
+        kind: "hook" as const,
+        raw:
+          lifecycle === "rollout:turn_aborted"
+            ? "interrupt"
+            : "userpromptsubmit",
+        toolName: null,
+        native: true,
+      };
+    return null;
+  }
   if (
     event.kind === "agent.completion" &&
     read("completionReason") === "hook_stop" &&
@@ -70,5 +84,11 @@ export function supervisionEvent(event: AppServerEventEnvelope) {
     (raw === "userpromptsubmit" && isSupervisionPrompt(read("query") ?? ""))
   )
     return null;
-  return { ...scope, kind: "hook" as const, raw, toolName: read("toolName") };
+  return {
+    ...scope,
+    kind: "hook" as const,
+    raw,
+    toolName: read("toolName"),
+    native: false,
+  };
 }

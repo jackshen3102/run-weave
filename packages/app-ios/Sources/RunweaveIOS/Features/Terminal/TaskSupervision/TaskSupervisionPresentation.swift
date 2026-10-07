@@ -1,6 +1,11 @@
 import SwiftUI
 
 extension TaskWatch {
+  var currentDecisions: [SupervisionDecision] {
+    decisions.filter { $0.contextRevision == contextRevision && ($0.threadId == nil || $0.threadId == target.threadId) }
+  }
+  var awaitingTask: Bool { taskStartMessageId.hasPrefix("pending:") }
+  var goalPreview: String { supervisionGoalPreview(goal) }
   var statusTitle: String {
     if !enabled { return "监控已关闭" }
     if status == "watching", let waitingFor {
@@ -11,6 +16,7 @@ extension TaskWatch {
     if status == "error" { return "监听异常 / 上下文待补充" }
     if status == "paused" { return "监控已暂停" }
     if status == "classifying" { return "正在判断任务状态" }
+    if awaitingTask { return "等待新任务" }
     if outcome == .completed { return "本轮任务已完成" }
     if outcome == .blocked { return "需要你处理" }
     return "正在监听"
@@ -23,6 +29,7 @@ extension TaskWatch {
     if status == "error" { return "当前轮没有有效判断，监控开关保持开启。" }
     if status == "paused" { return "本轮自动处理已暂停，终端监控开关仍保持开启。" }
     if status == "classifying" { return "已收到最终回复，正在核对任务与计划。" }
+    if awaitingTask { return "终端监听已开启，收到新会话的用户任务后自动读取目标。" }
     if outcome == .completed { return "继续监听此终端，下一次任务无需重新开启。" }
     if outcome == .blocked { return "本轮任务有阻塞，监控仍保持开启。" }
     return "等待 Agent 的最终回复，需要继续时自动问询进展。"
@@ -44,6 +51,7 @@ extension TaskWatch {
     if status == "error" { return "监听异常" }
     if status == "paused" { return "监控已暂停" }
     if status == "classifying" { return "判断中" }
+    if awaitingTask { return "等待新任务" }
     if outcome == .completed { return "本轮已完成" }
     if outcome == .blocked { return "需要处理" }
     return "监控中"
@@ -53,6 +61,14 @@ extension TaskWatch {
     if pauseReason == "continuation_limit" { return "回到终端继续" }
     return "回到终端"
   }
+}
+
+func supervisionGoalPreview(_ goal: String) -> String {
+  let prose = goal.components(separatedBy: .newlines)
+    .prefix { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("{") && !$0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
+    .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+  let preview = String((prose.isEmpty ? goal.trimmingCharacters(in: .whitespacesAndNewlines) : prose).prefix(240))
+  return preview.count < goal.trimmingCharacters(in: .whitespacesAndNewlines).count ? preview + "…" : preview
 }
 
 func supervisionTime(_ value: String) -> String {

@@ -3,11 +3,24 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { journalSchema } from "./journal-schema";
 import type { TaskWatch } from "@runweave/shared/task-supervision";
+import { currentSupervisionDecisions } from "@runweave/shared/task-supervision";
 
 export interface SupervisionJournal {
   version: 1;
   watches: TaskWatch[];
   requests: Record<string, { digest: string; watchId: string }>;
+}
+export function findTerminalWatch(
+  journal: SupervisionJournal,
+  terminalSessionId: string,
+) {
+  return [...journal.watches]
+    .reverse()
+    .find(
+      (watch) =>
+        watch.target.terminalSessionId === terminalSessionId &&
+        watch.pauseReason !== "replaced",
+    );
 }
 export class TaskSupervisionStore {
   constructor(private readonly directory: string) {}
@@ -24,7 +37,9 @@ export class TaskSupervisionStore {
         }
         if (
           watch.status === "watching" &&
-          watch.decisions.some((d) => d.delivery === "offered")
+          currentSupervisionDecisions(watch).some(
+            (d) => d.delivery === "offered",
+          )
         ) {
           for (const d of watch.decisions)
             if (d.delivery === "offered") d.delivery = "unknown";

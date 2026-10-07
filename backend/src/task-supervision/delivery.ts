@@ -2,6 +2,21 @@ import type { ConversationMessage } from "@runweave/shared/terminal/conversation
 import type { ConversationContent } from "@runweave/shared/terminal/conversation";
 import type { TaskWatch } from "@runweave/shared/task-supervision";
 
+export function recordDeliveryFailure(
+  watch: TaskWatch,
+  decisionId: string,
+  error: unknown,
+  current: boolean,
+) {
+  const decision = watch.decisions.find((d) => d.decisionId === decisionId)!;
+  decision.delivery = "unknown";
+  if (watch.contextRevision !== decision.contextRevision || !current) return;
+  watch.status = watch.enabled ? "error" : "paused";
+  watch.revision++;
+  watch.error =
+    error instanceof Error ? error.message : "续接投递失败，请检查原终端。";
+}
+
 export function reconcileDelivery(
   watch: TaskWatch,
   messages: ConversationMessage[],
@@ -13,7 +28,8 @@ export function reconcileDelivery(
   for (const decision of watch.decisions) {
     if (!["offered", "unknown"].includes(decision.delivery)) continue;
     if ((decision.threadId ?? watch.target.threadId) !== threadId) continue;
-    const current = watch.target.threadId === threadId &&
+    const current =
+      watch.target.threadId === threadId &&
       decision.contextRevision === watch.contextRevision;
     if (
       messages.some(
@@ -39,7 +55,12 @@ export function reconcileDelivery(
     watch.pauseReason = "delivery_unknown";
     watch.revision++;
     watch.updatedAt = new Date(now).toISOString();
-  } else if (watch.enabled && watch.target.threadId === threadId && watch.pauseReason === "delivery_unknown" && !pendingCurrent) {
+  } else if (
+    watch.enabled &&
+    watch.target.threadId === threadId &&
+    watch.pauseReason === "delivery_unknown" &&
+    !pendingCurrent
+  ) {
     watch.status = "watching";
     delete watch.pauseReason;
     delete watch.error;

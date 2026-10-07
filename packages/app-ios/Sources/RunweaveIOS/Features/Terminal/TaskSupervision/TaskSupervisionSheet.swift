@@ -16,7 +16,7 @@ struct TaskSupervisionSheet: View {
             Toggle(isOn: Binding(get: { model.watch?.enabled ?? false }, set: model.setEnabled)) {
               VStack(alignment: .leading, spacing: 5) {
                 Text("监听此终端").font(.subheadline.weight(.medium))
-                Text("切换会话后保持开启").font(.caption2).foregroundColor(.secondary)
+                Text("切换会话保留监听，重置当前任务").font(.caption2).foregroundColor(.secondary)
               }
             }.tint(TerminalAppearance.accent).disabled(!model.canToggle)
               .accessibilityIdentifier("terminal-task-supervision-switch")
@@ -76,7 +76,7 @@ struct TaskSupervisionSheet: View {
       Text("让任务持续推进").font(.headline)
       Text("最终回复到达后判断任务状态，\n需要继续时，自动向原会话问询进展。")
         .font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(.center)
-      Text("收到最终回复后，从原会话自动读取目标，无需手工填写。")
+      Text("从原会话自动读取用户任务，无需手工填写目标。")
         .font(.caption).foregroundColor(.secondary).multilineTextAlignment(.center)
     }.frame(maxWidth: .infinity).padding(.vertical, 24)
   }
@@ -94,9 +94,13 @@ struct TaskSupervisionSheet: View {
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(watch.statusColor.opacity(0.15)))
 
     section("当前目标") {
-      Text(watch.goal.isEmpty ? "收到最终回复后，从原会话自动读取。" : watch.goal)
+      Text(watch.goal.isEmpty ? "等待新会话的用户任务，目标将自动读取。" : watch.goalPreview)
         .font(.subheadline).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("task-supervision-goal")
+      if !watch.goal.isEmpty {
+        NavigationLink("查看原始任务") { TaskSupervisionGoalView(goal: watch.goal) }.font(.caption)
+          .accessibilityIdentifier("task-supervision-original-task-open")
+      }
     }
     VStack(alignment: .leading, spacing: 9) {
       HStack {
@@ -110,12 +114,12 @@ struct TaskSupervisionSheet: View {
           Capsule().fill(index < watch.continuationCount ? watch.statusColor : Color.secondary.opacity(0.15)).frame(height: 4)
         }
       }.accessibilityHidden(true)
-      Text("新会话或新的用户输入开始新一轮。").font(.caption2).foregroundColor(.secondary)
-      if watch.decisions.contains(where: { ["offered", "unknown"].contains($0.delivery) }) {
+      Text("新会话重置任务；同会话的新输入更新要求并重置本轮额度。").font(.caption2).foregroundColor(.secondary)
+      if watch.currentDecisions.contains(where: { ["offered", "unknown"].contains($0.delivery) }) {
         Text("有续接尚未确认接收，已保留额度，不会重复发送。").font(.caption2).foregroundColor(.orange)
       }
     }
-    if let decision = watch.decisions.last {
+    if let decision = watch.currentDecisions.last {
       section(watch.status == "error" || watch.status == "classifying" ? "上次判断（当前轮尚无有效结果）" : "最新判断") {
         HStack {
           Text(decision.outcome.label).font(.subheadline.weight(.semibold))
@@ -135,7 +139,7 @@ struct TaskSupervisionSheet: View {
         NavigationLink("全部") { TaskSupervisionActivityView(watch: watch) }.font(.caption)
           .accessibilityIdentifier("task-supervision-activity-open")
       }
-      if let decision = watch.decisions.last {
+      if let decision = watch.currentDecisions.last {
         activity(decision.deliveryLabel, time: decision.createdAt)
       }
       activity(watch.enabled ? "已开启终端监控" : "监控已关闭", time: watch.enabled ? watch.enabledAt : watch.updatedAt)
