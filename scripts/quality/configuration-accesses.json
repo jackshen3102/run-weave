@@ -9200,6 +9200,14 @@
     "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \"README.md\"))"
   },
   {
+    "file": "scripts/skill-report/cli.mjs",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "CODEX_HOME 属于外部 Codex 日志位置，仅供离线只读 Skill 报告工具使用。"
+  },
+  {
     "file": "scripts/token-report/cli.mjs",
     "kind": "environment",
     "expression": "process.env.CODEX_HOME",
