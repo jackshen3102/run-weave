@@ -2,6 +2,8 @@
 
 独立原生 macOS 15+ App，为现有 Runweave iPhone App 提供局域网桌面。它不使用 Backend token、终端 WebSocket 或公网 Tunnel。
 
+应用图标原稿保存在 `Resources/icons/raw/icon.png`。替换原稿后，从仓库根目录运行 `swift packages/remote-desktop-host/generate-app-icon.swift`，重新生成带 macOS 边距和圆角的预览与 `AppIcon.icns`；构建会将 `.icns` 打包进 App。
+
 日常可以直接让 Agent 执行“更新 Mac Host，并用手机验收”。Agent 从当前工作区更新，包含未提交改动；不自动拉取代码、切换分支或更新 iPhone App。若需要指定提交或更新手机 App，在请求中明确说明。
 
 也可以在仓库根目录执行：

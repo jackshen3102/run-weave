@@ -4,6 +4,7 @@
 <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 <key>CFBundleName</key><string>RemoteDesk</string>
 <key>CFBundleDisplayName</key><string>RemoteDesk</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>

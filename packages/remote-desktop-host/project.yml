@@ -17,6 +17,8 @@ targets:
     platform: macOS
     sources:
       - path: Sources/RunweaveRemoteHost
+      - path: Resources/icons/AppIcon.icns
+        buildPhase: resources
       - path: ThirdPartyLicenses
         type: folder
         buildPhase: resources
