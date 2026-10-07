@@ -13,7 +13,6 @@ import { logger } from "../../logging/index";
 import {
   AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
   getCompletionSourceForCommand,
-  getExecutableCommandName,
   isCompletionSourceAllowedForCommand,
 } from "../completion/source-gate";
 import type { TerminalSessionManager } from "../manager/manager";
@@ -25,6 +24,7 @@ import {
 } from "../state/terminal-state-service";
 import { readCodexThreadSnapshot } from "../runtime/codex-thread-snapshot";
 import { acknowledgeTerminalPrompt } from "../runtime/input-admission";
+import { persistNodeWrapperAgentIdentity } from "./node-wrapper-agent-identity";
 
 const agentHookProcessorLogger = logger.child({
   component: "terminal-agent-hook",
@@ -326,23 +326,11 @@ export async function processTerminalAgentHook(
     ).catch((error) => { agentHookProcessorLogger.warn("terminal-agent-hook.feishu-policy.failed", { error }); });
   }
 
-  // Node wrappers otherwise erase the Agent identity on the next pane poll.
-  // A verified startup hook identifies the running wrapper before its first reply.
-  if (
-    input.hookEvent === "SessionStart" &&
-    getExecutableCommandName(targetActiveCommand) === "node" &&
-    getExecutableCommandName(input.commandName ?? null) === "node"
-  ) {
-    if (panel) {
-      await options.terminalSessionManager.upsertPanel({
-        ...panel,
-        activeCommand: effectiveAgent,
-      });
-    }
-    await options.terminalSessionManager.updateSessionMetadata(session.id, {
-      cwd: session.cwd,
-      activeCommand: effectiveAgent,
-    });
+  if (input.hookEvent === "SessionStart") {
+    await persistNodeWrapperAgentIdentity(
+      options.terminalSessionManager, session, panel, effectiveAgent,
+      targetActiveCommand, input.commandName ?? null,
+    );
   }
 
   let terminalState: TerminalState;
