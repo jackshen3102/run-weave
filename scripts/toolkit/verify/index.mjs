@@ -63,6 +63,7 @@ try {
             protocolVersion: 1,
             pid: process.pid,
             version: "0.1.0",
+            environment: { kind: "dev", instanceId: "hook-fixture", configRoot: homeDir },
           }),
         );
         return;
@@ -142,8 +143,8 @@ try {
     });
     assert.equal(
       appServerRequests.length - homeDiscoveryStart,
-      2,
-      "RUNWEAVE_APP_SERVER_HOME must target the isolated App Server",
+      0,
+      "a discovery directory without verified runtime identity must not select an App Server",
     );
 
     const globalAppServerHome = path.join(homeDir, ".runweave", "app-server");
@@ -378,7 +379,7 @@ try {
         RUNWEAVE_PROJECT_ID: "project-3",
         RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
         TMUX: "/tmp/runweave-verify.sock,1,0",
-        TMUX_BINARY: fakeTmuxPath,
+        RUNWEAVE_RUNTIME_TMUX_BINARY: fakeTmuxPath,
       },
       {},
       {
@@ -467,7 +468,7 @@ try {
         RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
         RUNWEAVE_VERIFY_PANE_COMMAND: "claude",
         TMUX: "/tmp/runweave-verify.sock,1,0",
-        TMUX_BINARY: fakeTmuxPath,
+        RUNWEAVE_RUNTIME_TMUX_BINARY: fakeTmuxPath,
       },
       {},
       {
@@ -504,7 +505,7 @@ try {
         RUNWEAVE_PROJECT_ID: "project-trae-query",
         RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
         TMUX: "/tmp/runweave-verify.sock,1,0",
-        TMUX_BINARY: fakeTmuxPath,
+        RUNWEAVE_RUNTIME_TMUX_BINARY: fakeTmuxPath,
       },
       {
         hook_event_name: "UserPromptSubmit",

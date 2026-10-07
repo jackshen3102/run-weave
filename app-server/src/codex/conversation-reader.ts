@@ -41,12 +41,15 @@ export class CodexConversationReader {
       if (item.role === "user") {
         // Several steered user messages can belong to one running turn.
         if (!current || current.messages.some((message) => message.role === "assistant")) {
-          current = { id: turnId ? `${turnId}:${id}` : id, messages: [] };
+          current = { id: turnId ? `${turnId}:${id}` : id, messages: [], ...(turnId ? { rawTurnId: turnId } : {}) };
           turns.push(current);
         }
       }
       if (!current) return;
       current.messages.push({ id, role: item.role, text,
+        ...(turnId ? { rawTurnId: turnId } : {}),
+        ...(item.role === "assistant" && (item.phase ?? item.channel) != null
+          ? { phase: (item.phase ?? item.channel) === "commentary" ? "commentary" as const : "final" as const } : {}),
         ...(typeof record.timestamp === "string" ? { createdAt: record.timestamp } : {}) });
     }, signal);
     return result && valid && !identityMismatch ? { ...result, turns } : null;

@@ -1,5 +1,5 @@
 import { createResourceMonitorRouter } from "./routes/resource-monitor";
-import { createTaskHandoffRouter } from "./routes/task-handoff";
+import { registerTerminalTaskRoutes } from "./routes/registration/task-routes";
 import { initializeBackendConfiguration } from "./bootstrap/configuration";
 import { createConfigurationRouter } from "./routes/configuration";
 import { settingText } from "@runweave/config-node";
@@ -281,7 +281,7 @@ function createHttpApp(
     requireAuth,
     createAppServerStateRouter(services.appServerHistoryGateway),
   );
-  app.use("/api/task-handoff", requireAuth, createTaskHandoffRouter(services.taskHandoffService));
+  registerTerminalTaskRoutes(app, services, requireAuth, requireTunnelAuth);
   app.use(
     "/api/work-history",
     requireAuth,

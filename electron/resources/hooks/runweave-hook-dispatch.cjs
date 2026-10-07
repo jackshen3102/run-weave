@@ -52,14 +52,16 @@ function hasPathSequence(parts, sequence) {
 }
 
 function inferSource() {
+  const sourceIndex = process.argv.indexOf("--source");
+  const argumentSource =
+    sourceIndex >= 0 ? normalizeSource(process.argv[sourceIndex + 1]) : null;
+  if (argumentSource) return argumentSource;
   const explicit = normalizeSource(process.env.RUNWEAVE_HOOK_SOURCE);
   if (explicit) {
     return explicit;
   }
 
-  const pluginRootSource = inferPluginRootSource(
-    path.resolve(__dirname, ".."),
-  );
+  const pluginRootSource = inferPluginRootSource(path.resolve(__dirname, ".."));
   if (pluginRootSource) {
     return pluginRootSource;
   }
@@ -84,15 +86,36 @@ function main() {
     process.execPath,
     [bridgePath, "--source", source, ...process.argv.slice(2)],
     {
-      stdio: ["pipe", "ignore", "ignore"],
+      stdio: ["pipe", "pipe", "ignore"],
     },
   );
 
   process.stdin.pipe(child.stdin);
+  // Only Codex Stop may return a native continuation. Validate before passing
+  // stdout through so diagnostics can never become hook instructions.
+  let output = "";
+  child.stdout.on("data", (chunk) => {
+    if (output.length < 16000) output += chunk;
+  });
   child.on("error", () => {
     process.exitCode = 0;
   });
   child.on("close", () => {
+    if (source === "codex") {
+      try {
+        const result = JSON.parse(output);
+        if (
+          result.decision === "block" &&
+          typeof result.reason === "string" &&
+          result.reason.startsWith("[runweave-task-supervision:")
+        )
+          process.stdout.write(
+            JSON.stringify({ decision: "block", reason: result.reason }),
+          );
+      } catch {
+        /* Empty output is the normal allow-stop path. */
+      }
+    }
     process.exitCode = 0;
   });
 }

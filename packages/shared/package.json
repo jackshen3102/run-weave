@@ -17,6 +17,7 @@
     "./agent-team": "./src/agent-team/index.ts",
     "./agent-team-model-config": "./src/agent-team/model-config.ts",
     "./terminal-unread": "./src/terminal/unread.ts",
+    "./task-supervision": "./src/task-supervision.ts",
     "./attention": "./src/attention.ts",
     "./app-server/codex-quota": "./src/app-server/codex-quota.ts",
     "./app-server-events": "./src/app-server/events.ts",

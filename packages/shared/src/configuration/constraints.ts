@@ -14,6 +14,7 @@ export const CONFIGURATION_CREDENTIAL_GROUPS: Readonly<Record<string, readonly s
   "services.feishu": ["appId", "appSecret"],
 };
 export function configurationNumberRange(key: string): { min?: number; max?: number; exclusiveMin?: number } {
+  if (key === "backend.taskSupervision.classificationTimeoutMs") return { min: 1000, max: 90000 };
   if (/port$/i.test(key)) return { min: 1, max: 65535 };
   if (/(?:TtlSeconds|timeoutMs|maxOutputBytes|maxConcurrentRuns|Seconds|IntervalMs)$/.test(key)) return { exclusiveMin: 0 };
   if (/DelayMs$/.test(key)) return { min: 0 };

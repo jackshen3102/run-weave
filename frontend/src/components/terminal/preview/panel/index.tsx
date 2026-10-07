@@ -1,5 +1,6 @@
 import { TerminalConversationSidecar, useConversationTool } from "../../conversation/sidecar";
 import { TerminalHandoffPanel } from "../../handoff/panel";
+import { TerminalTaskSupervisionPanel } from "../../task-supervision/panel";
 import { TerminalPreviewFileLink, type TerminalPreviewFileLinkIntent } from "./file-link";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, type ReactNode } from "react";
@@ -541,6 +542,7 @@ export function TerminalPreviewPanel({
         agentTeamBody={agentTeamBody}
         raceBody={raceBody}
         handoffBody={<TerminalHandoffPanel sessionId={activeSession?.terminalSessionId ?? null} />}
+        supervisionBody={activeTool === "task-supervision" ? <TerminalTaskSupervisionPanel sessionId={activeSession?.terminalSessionId ?? null} /> : null}
       />
 
       <TerminalPreviewQuickSearch

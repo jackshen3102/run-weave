@@ -54,6 +54,7 @@ import { AppServerHistoryGateway } from "../work-history/app-server-history-gate
 import { TaskHandoffService } from "../task-handoff/service";
 import { TerminalTaskService } from "../terminal/tasks/service";
 import { TerminalTaskStore } from "../terminal/tasks/store";
+import { TaskSupervisionService } from "../task-supervision/service";
 import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
 import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
@@ -228,6 +229,9 @@ async function assembleRuntimeServices(
   const appServerHistoryGateway = new AppServerHistoryGateway();
   const taskHandoffService = new TaskHandoffService(path.join(storagePaths.browserProfileDir, "task-handoff"), terminalSessionManager, appServerHistoryGateway, activityStore);
   resources.defer("task-handoff", () => taskHandoffService.dispose());
+  const taskSupervisionService = new TaskSupervisionService(path.join(storagePaths.browserProfileDir, "task-supervision"), terminalSessionManager, appServerHistoryGateway);
+  resources.defer("task-supervision", () => taskSupervisionService.dispose());
+  await taskSupervisionService.initialize();
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalEventService,
     terminalSessionManager,
@@ -573,6 +577,7 @@ async function assembleRuntimeServices(
     workHistoryService,
     taskHandoffService,
     terminalTaskService,
+    taskSupervisionService,
     textAttachmentDelivery,
     terminalQuestionsService,
     terminalEventService,

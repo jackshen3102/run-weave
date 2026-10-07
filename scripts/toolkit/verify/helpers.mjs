@@ -10,6 +10,13 @@ const repoRoot = path.resolve(
 );
 const toolkitDir = path.join(repoRoot, "plugins", "toolkit");
 
+function withRuntimeIdentity(env) {
+  return env.RUNWEAVE_APP_SERVER_URL && env.RUNWEAVE_APP_SERVER_DISCOVERY !== "disabled"
+    ? { RUNWEAVE_RUNTIME_KIND: "dev", RUNWEAVE_RUNTIME_INSTANCE_ID: "hook-fixture",
+        RUNWEAVE_RUNTIME_CONFIG_ROOT: env.HOME, ...env }
+    : env;
+}
+
 export function findRunweaveHooks(entries) {
   return (Array.isArray(entries) ? entries : [])
     .flatMap((entry) => (Array.isArray(entry?.hooks) ? entry.hooks : []))
@@ -62,7 +69,7 @@ export function runLauncher(launcherPath, extraEnv) {
       env: {
         ...env,
         TMUX_PANE: "%13",
-        ...extraEnv,
+        ...withRuntimeIdentity(extraEnv),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -129,7 +136,7 @@ export function runToolkitHookCommand(
       env: {
         ...env,
         ...(options.omitTmuxPane ? {} : { TMUX_PANE: "%13" }),
-        ...extraEnv,
+        ...withRuntimeIdentity(extraEnv),
         ...(options.setHookSource === false
           ? {}
           : { RUNWEAVE_HOOK_SOURCE: source }),
@@ -170,7 +177,7 @@ export async function verifyTmuxPaneContextFailure(params) {
     RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
     RUNWEAVE_VERIFY_TMUX_FAIL: "1",
     TMUX: "/tmp/runweave-verify.sock,1,0",
-    TMUX_BINARY: params.fakeTmuxPath,
+    RUNWEAVE_RUNTIME_TMUX_BINARY: params.fakeTmuxPath,
   });
 
   const appServerHook =

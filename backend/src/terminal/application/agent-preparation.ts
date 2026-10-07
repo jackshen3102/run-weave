@@ -479,7 +479,9 @@ function buildAgentLaunchCommand(
       ]
         .filter(Boolean)
         .join(" ");
-  return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${invocation}; __runweave_agent_exit=$?; tmux set-option -p -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_EXIT_OPTION} "exit:${operationId}:$__runweave_agent_exit"; tmux set-option -p -u -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_COMMAND_OPTION}`;
+  const codexContext = request.agent === "codex" && !request.commandLine?.trim()
+    ? `RUNWEAVE_CODEX_CONFIG_ARGS=${shellQuote(JSON.stringify(args))} RUNWEAVE_CODEX_EXECUTABLE=${shellQuote(command)} ` : "";
+  return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${codexContext}${invocation}; __runweave_agent_exit=$?; tmux set-option -p -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_EXIT_OPTION} "exit:${operationId}:$__runweave_agent_exit"; tmux set-option -p -u -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_COMMAND_OPTION}`;
 }
 
 function withCodexSkipUpdateOnStartupArgs(

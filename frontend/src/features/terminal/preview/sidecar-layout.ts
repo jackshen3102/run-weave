@@ -6,6 +6,7 @@ export type TerminalSidecarTool =
   | "agent-team"
   | "race"
   | "handoff"
+  | "task-supervision"
   | "conversation";
 
 export type SidecarTabId = Exclude<TerminalSidecarTool, "browser"> | TerminalBrowserProfileId;
@@ -25,6 +26,7 @@ export const SIDECAR_TABS: ReadonlyArray<{ id: SidecarTabId; label: string }> = 
   { id: "agent-team", label: "Agent Team" },
   { id: "race", label: "Race" },
   { id: "handoff", label: "任务交接" },
+  { id: "task-supervision", label: "任务监控" },
   { id: "conversation", label: "会话阅读" },
 ];
 

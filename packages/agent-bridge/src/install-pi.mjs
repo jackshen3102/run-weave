@@ -15,6 +15,7 @@ export const bridgeAssets = [
   "app-server-client.cjs",
   "runweave-hook-bridge.cjs",
   "runweave-hook-payload.cjs",
+  "runweave-task-supervision.cjs",
   "feishu_stop_notify.sh",
 ];
 const exists = async (file) => {

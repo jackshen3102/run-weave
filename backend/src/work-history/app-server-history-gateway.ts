@@ -17,6 +17,10 @@ export class AppServerHistoryGatewayError extends Error {
 export class AppServerHistoryGateway {
   constructor(private readonly timeoutMs = DEFAULT_TIMEOUT_MS) {}
 
+  async getConversation(threadId: string) {
+    return (await this.createClient()).getConversation(threadId, AbortSignal.timeout(this.timeoutMs));
+  }
+
   async listThreads(options: {
     projectId?: string;
     terminalSessionId?: string;

@@ -20,6 +20,52 @@
 - services.feishu.legacyWebhook.url：HTTPS，无用户信息和 fragment。
 - 敏感字段拒绝把脱敏占位符当成实际凭据。初始化、迁移和消费者检查见 [配置 CLI](./configuration.md)。
 
+## 长任务监控
+
+配置域：`backend.taskSupervision`。
+
+### backend.taskSupervision.enabled
+
+启用当前 Codex 终端长任务监控（仍需逐任务手动开启）
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | boolean；允许 null 恢复默认 |
+| 默认              | false                       |
+| 所属模块          | backend/task-supervision    |
+| 生效              | 所属消费者重载              |
+| 敏感 / 远端可修改 | 否 / 否                     |
+| 约束              | 按字段类型校验              |
+| 显式迁移来源      | new-field:no-legacy-source  |
+
+### backend.taskSupervision.model
+
+独立三分类 Codex 模型；未设置使用原执行器的可用模型
+
+| 属性              | 合同                       |
+| ----------------- | -------------------------- |
+| 类型              | string；允许 null 恢复默认 |
+| 默认              | null                       |
+| 所属模块          | backend/task-supervision   |
+| 生效              | 所属消费者重载             |
+| 敏感 / 远端可修改 | 否 / 否                    |
+| 约束              | 按字段类型校验             |
+| 显式迁移来源      | new-field:no-legacy-source |
+
+### backend.taskSupervision.classificationTimeoutMs
+
+三分类最长等待毫秒，需小于原生 Hook 等待预算
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | integer；允许 null 恢复默认 |
+| 默认              | 90000                       |
+| 所属模块          | backend/task-supervision    |
+| 生效              | 所属消费者重载              |
+| 敏感 / 远端可修改 | 否 / 否                     |
+| 约束              | ≥ 1000；≤ 90000             |
+| 显式迁移来源      | new-field:no-legacy-source  |
+
 ## Backend 服务
 
 配置域：`backend.server`。

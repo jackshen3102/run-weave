@@ -149,6 +149,9 @@ export async function writeLauncherScript(
       path.join(launcherDir, HOOK_PAYLOAD_BASENAME),
     );
   }
+  const supervisionAsset = "runweave-task-supervision.cjs";
+  const supervisionSource = await resolveHookAssetPath(context, supervisionAsset);
+  if (await fileExists(supervisionSource)) await copyFile(supervisionSource, path.join(launcherDir, supervisionAsset));
 }
 
 export async function installClaudeHooks(

@@ -851,7 +851,7 @@
     "file": "backend/src/index.ts",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
-    "count": 3,
+    "count": 4,
     "category": "runtime-context",
     "reason": "RUNWEAVE_HOOK_TOKEN：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -2107,7 +2107,7 @@
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
-    "count": 1,
+    "count": 3,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -2115,7 +2115,7 @@
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_PANEL_ID",
-    "count": 3,
+    "count": 4,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TERMINAL_PANEL_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -2387,7 +2387,7 @@
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
-    "count": 1,
+    "count": 3,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -2395,7 +2395,7 @@
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_PANEL_ID",
-    "count": 3,
+    "count": 4,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TERMINAL_PANEL_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -3891,7 +3891,7 @@
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
-    "count": 1,
+    "count": 3,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -3899,7 +3899,7 @@
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_PANEL_ID",
-    "count": 3,
+    "count": 4,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TERMINAL_PANEL_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -5283,7 +5283,7 @@
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
-    "count": 1,
+    "count": 3,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -5291,7 +5291,7 @@
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_PANEL_ID",
-    "count": 3,
+    "count": 4,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TERMINAL_PANEL_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -8011,7 +8011,7 @@
     "file": "scripts/toolkit/verify/helpers.mjs",
     "kind": "environment-forward",
     "expression": "...env",
-    "count": 2,
+    "count": 3,
     "category": "test",
     "reason": "隔离验证 fixture 的进程参数或证据文件；...env"
   },
@@ -9830,5 +9830,299 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "Host 跨 checkout 更新锁的进程归属记录，用于识别并发更新和遗留锁，不替代实例配置。"
+  },
+  {
+    "file": "backend/src/task-supervision/classifier.ts",
+    "kind": "file-io",
+    "expression": "writeFile(outputSchemaPath)",
+    "count": 1,
+    "line": 49,
+    "category": "runtime-state",
+    "reason": "任务监督监听状态或临时 JSON 输出合同，由服务持久化或清理，不是用户业务配置文件。"
+  },
+  {
+    "file": "backend/src/task-supervision/context.ts",
+    "kind": "file-io",
+    "expression": "readFile(file)",
+    "count": 1,
+    "line": 50,
+    "category": "project",
+    "reason": "读取用户明确引用且已核对项目边界的计划原文，不读取应用配置。"
+  },
+  {
+    "file": "backend/src/task-supervision/store.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(this.directory, \"watches.json\"))",
+    "count": 1,
+    "line": 55,
+    "category": "runtime-state",
+    "reason": "任务监督监听状态或临时 JSON 输出合同，由服务持久化或清理，不是用户业务配置文件。"
+  },
+  {
+    "file": "backend/src/task-supervision/store.ts",
+    "kind": "file-io",
+    "expression": "writeFile(temporary)",
+    "count": 1,
+    "line": 84,
+    "category": "runtime-state",
+    "reason": "任务监督监听状态或临时 JSON 输出合同，由服务持久化或清理，不是用户业务配置文件。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_BINARY",
+    "count": 1,
+    "line": 463,
+    "category": "runtime-context",
+    "reason": "监督 Hook 沿用所属 Backend 注入的执行器身份和本机二进制上下文，不维护第二份业务配置。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_BINARY",
+    "count": 1,
+    "line": 463,
+    "category": "runtime-context",
+    "reason": "监督 Hook 沿用所属 Backend 注入的执行器身份和本机二进制上下文，不维护第二份业务配置。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_BINARY",
+    "count": 1,
+    "line": 463,
+    "category": "runtime-context",
+    "reason": "监督 Hook 沿用所属 Backend 注入的执行器身份和本机二进制上下文，不维护第二份业务配置。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_BINARY",
+    "count": 1,
+    "line": 463,
+    "category": "runtime-context",
+    "reason": "监督 Hook 沿用所属 Backend 注入的执行器身份和本机二进制上下文，不维护第二份业务配置。"
+  },
+  {
+    "file": "backend/src/routes/task-supervision.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
+    "count": 1,
+    "line": 187,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "backend/src/task-supervision/probe.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "line": 68,
+    "category": "runtime-context",
+    "reason": "核对原执行器配置的只读子进程继承运行环境，不创建执行任务或新业务配置"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "line": 81,
+    "category": "runtime-context",
+    "reason": "Codex 原执行器继承的用户配置根，仅用于原配置探测"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_BINARY",
+    "count": 2,
+    "line": 36,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONFIG_ARGS",
+    "count": 2,
+    "line": 73,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_EXECUTABLE",
+    "count": 2,
+    "line": 77,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
+    "count": 2,
+    "line": 23,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "line": 81,
+    "category": "runtime-context",
+    "reason": "Codex 原执行器继承的用户配置根，仅用于原配置探测"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_BINARY",
+    "count": 2,
+    "line": 36,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONFIG_ARGS",
+    "count": 2,
+    "line": 73,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_EXECUTABLE",
+    "count": 2,
+    "line": 77,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
+    "count": 2,
+    "line": 23,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "line": 81,
+    "category": "runtime-context",
+    "reason": "Codex 原执行器继承的用户配置根，仅用于原配置探测"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_BINARY",
+    "count": 2,
+    "line": 36,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONFIG_ARGS",
+    "count": 2,
+    "line": 73,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_EXECUTABLE",
+    "count": 2,
+    "line": 77,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
+    "count": 2,
+    "line": 23,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "line": 81,
+    "category": "runtime-context",
+    "reason": "Codex 原执行器继承的用户配置根，仅用于原配置探测"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_BINARY",
+    "count": 2,
+    "line": 36,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONFIG_ARGS",
+    "count": 2,
+    "line": 73,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_EXECUTABLE",
+    "count": 2,
+    "line": 77,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-task-supervision.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
+    "count": 2,
+    "line": 23,
+    "category": "runtime-context",
+    "reason": "原执行器和所属实例的启动身份上下文，不代替 settings.yaml 业务配置"
+  },
+  {
+    "file": "scripts/toolkit/verify/helpers.mjs",
+    "kind": "environment",
+    "expression": "env.HOME",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 Hook 集成夹具的临时 HOME，作为假服务的配置根身份核对，不读取用户实例"
+  },
+  {
+    "file": "scripts/toolkit/verify/helpers.mjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_APP_SERVER_DISCOVERY",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 Hook 集成夹具的 App Server 发现开关，保留禁用发现的专属场景"
+  },
+  {
+    "file": "scripts/toolkit/verify/helpers.mjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_APP_SERVER_URL",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 Hook 集成夹具的本地假服务入口，必须携带匹配的运行时身份"
   }
 ]

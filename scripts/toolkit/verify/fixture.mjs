@@ -12,10 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installAllHooks } from "../../../electron/src/hooks/hook-installer.ts";
-import {
-  findRunweaveHooks,
-  verifyToolkitHookCommands,
-} from "./helpers.mjs";
+import { findRunweaveHooks, verifyToolkitHookCommands } from "./helpers.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -31,6 +28,7 @@ const hookAssets = [
   "runweave-hook-bridge.cjs",
   "runweave-hook-dispatch.cjs",
   "runweave-hook-payload.cjs",
+  "runweave-task-supervision.cjs",
   "feishu_stop_notify.sh",
 ];
 const toolkitHookEvents = [
@@ -40,6 +38,8 @@ const toolkitHookEvents = [
   "Stop",
   "SubagentStop",
   "UserPromptSubmit",
+  "Interrupt",
+  "PermissionRequest",
 ];
 const toolkitHookCommand =
   'sh -c \'for root in "${RUNWEAVE_TOOLKIT_PLUGIN_ROOT:-}" "__PLUGIN_DIR__" . "${CODEX_PLUGIN_ROOT:-}" "$HOME/.codex/plugins/cache/runweave/toolkit/latest" "$HOME/.codex/plugins/cache/runweave/toolkit"/* "${CLAUDE_PLUGIN_ROOT:-}"; do if [ -n "$root" ] && [ -f "$root/hooks/runweave-hook-dispatch.cjs" ]; then exec node "$root/hooks/runweave-hook-dispatch.cjs"; fi; done; exit 0\'';
