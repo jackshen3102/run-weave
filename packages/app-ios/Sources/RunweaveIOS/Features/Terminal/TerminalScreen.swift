@@ -17,6 +17,8 @@ struct TerminalScreen: View {
   @State private var showingHistory = false
   @State private var showingConversation = false
   @State private var showingInfo = false
+  @State private var showingSupervision = false
+  @StateObject private var supervision: TaskSupervisionModel
   @State private var replyContext: CodexReplyContext?
   @State private var showingDiagnostics = false
   @State private var snapshotShare: TerminalSnapshotShare?
@@ -41,6 +43,7 @@ struct TerminalScreen: View {
     self.controller = controller
     self.browser = session.browser
     self.details = details
+    _supervision = StateObject(wrappedValue: TaskSupervisionModel(session: session, controller: controller, terminalID: details.id))
     self.sourceIsParent = sourceIsParent
     _changes = StateObject(wrappedValue: ProjectChangesModel(session: session, terminal: details))
     self.attachmentDrafts = session.attachmentDrafts
@@ -57,7 +60,7 @@ struct TerminalScreen: View {
     session.foreground && session.canWrite && session.terminal?.id == details.id
       && controller.canSend && !controller.scrolledBack && tab == "Chat"
       && browser.state != .presented && !showingHistory && !showingConversation
-      && !showingInfo && !showingDiagnostics && !showingComposer && fileTap == nil
+      && !showingInfo && !showingSupervision && !showingDiagnostics && !showingComposer && fileTap == nil
       && replyContext == nil && snapshotShare == nil && !deleting
   }
   private var completionViewKey: String {
@@ -104,6 +107,12 @@ struct TerminalScreen: View {
         }.padding(.vertical, 5).accessibilityIdentifier("scheduled-task-source")
       }
       tabs
+      if let watch = supervision.watch, watch.enabled {
+        TaskSupervisionStrip(watch: watch, stale: !supervision.canRead || supervision.failure != nil) {
+          controller.surface.view.window?.endEditing(true)
+          showingSupervision = true
+        }
+      }
       ZStack {
         chat.opacity(tab == "Chat" ? 1 : 0).allowsHitTesting(tab == "Chat").accessibilityHidden(
           tab != "Chat")
@@ -156,6 +165,7 @@ struct TerminalScreen: View {
       if status == "已连接" { Task { await changes.refresh() } }
     }
     .onDisappear {
+      supervision.suspend()
       shareOperation?.cancel()
       controller.openFileRequested = nil
       changes.cancel()
@@ -168,6 +178,10 @@ struct TerminalScreen: View {
         try Task.checkCancellation()
         scheduledSourceName = task.config.name
       } catch {}
+    }
+    .task(id: "\(session.generation):\(session.foreground):\(session.authenticated):\(session.health.status):\(browser.state == .presented)") {
+      if supervision.canRead && browser.state != .presented { await supervision.poll() }
+      else { supervision.suspend() }
     }
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
@@ -205,6 +219,9 @@ struct TerminalScreen: View {
           tab = "Chat"
           controller.returnToBottom()
         }).clarityMask()
+    }
+    .sheet(isPresented: $showingSupervision) {
+      TaskSupervisionSheet(session: session, model: supervision, terminalTitle: title)
     }
     .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id).mobileAnalyticsScreen(.terminalInfo) }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session).mobileAnalyticsScreen(.diagnostics) }
@@ -527,6 +544,7 @@ struct TerminalScreen: View {
         cwd: cwd, canReturnToBottom: session.canWrite && controller.canSend,
         canReconnect: session.canReconnect, canDelete: session.canWrite,
         canShare: session.canWrite, sharing: sharing, share: shareSnapshot,
+        supervisionEnabled: supervision.watch?.enabled == true, showingSupervision: $showingSupervision,
         deleting: $deleting, showingHistory: $showingHistory,
         showingInfo: $showingInfo, showingDiagnostics: $showingDiagnostics
       ).equatable()

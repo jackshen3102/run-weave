@@ -1,0 +1,135 @@
+{
+  "terminal": "功能开发",
+  "project": "browser-viewer",
+  "computer": "MacBook Pro",
+  "goal": "实现终端附件发送，支持图片与文件，并完成手机端交互验收。",
+  "followup": "请报告已完成项、剩余项、复现与验收情况，以及是否存在需要我处理的阻塞。",
+  "states": {
+    "watching": {
+      "enabled": true,
+      "title": "正在监听",
+      "strip": "监控中",
+      "subtitle": "等待 Agent 的最终回复，需要继续时自动问询进展。",
+      "count": 1,
+      "tone": "mint",
+      "outcome": "任务可以继续",
+      "reason": "附件上传与发送已完成，手机端交互验收仍有下一步。",
+      "delivery": "原会话已接收",
+      "reply": "图片与文件的上传、发送链路已完成。接下来会核对手机端的附件预览、取消上传和发送后的状态反馈。"
+    },
+    "classifying": {
+      "enabled": true,
+      "title": "正在判断任务状态",
+      "strip": "判断中",
+      "subtitle": "已收到最终回复，正在核对任务与计划。",
+      "count": 1,
+      "tone": "mint",
+      "outcome": null
+    },
+    "blocked": {
+      "enabled": true,
+      "title": "需要你处理",
+      "strip": "需要处理",
+      "subtitle": "本轮任务有阻塞，监控仍保持开启。",
+      "count": 1,
+      "tone": "warn",
+      "outcome": "需要你处理",
+      "reason": "测试 iPhone 处于锁定状态，Agent 无法继续真机交互验收。需要你先解锁设备。",
+      "delivery": "本次未续接",
+      "reply": "图片与文件发送已完成。模拟器上的预览、取消和发送反馈均已核对。保存的 iPhone 当前处于锁定状态，真机交互验收尚未执行，请先解锁设备。"
+    },
+    "limit": {
+      "enabled": true,
+      "title": "已达续接上限",
+      "strip": "续接已暂停",
+      "subtitle": "任务仍未完成。本任务已续接 3 次，监控保持开启。",
+      "count": 3,
+      "tone": "warn",
+      "outcome": "任务可以继续",
+      "reason": "附件发送已完成，但真机上的断网恢复反馈仍未验证。已用完本任务的自动续接额度。",
+      "delivery": "原会话已接收",
+      "reply": "基本发送流程已完成，真机断网恢复反馈尚待验证。任务还有剩余验收项。"
+    },
+    "completed": {
+      "enabled": true,
+      "title": "本轮任务已完成",
+      "strip": "本轮已完成",
+      "subtitle": "继续监听此终端，下一次任务无需重新开启。",
+      "count": 2,
+      "tone": "mint",
+      "outcome": "任务已完成",
+      "reason": "当前任务的附件发送和计划内交互验收均已完成。",
+      "delivery": "本次未续接",
+      "reply": "图片与文件发送已完成，手机端附件预览、取消上传和发送反馈已验收，结果与计划一致。"
+    },
+    "unknown": {
+      "enabled": true,
+      "title": "续接待确认",
+      "strip": "续接待确认",
+      "subtitle": "已保留本次额度，尚未确认原会话接收，不会重复发送。",
+      "count": 2,
+      "tone": "warn",
+      "outcome": "任务可以继续",
+      "reason": "仍有验收项可继续；本次进展问询尚未确认被原会话接收。",
+      "delivery": "接收待确认",
+      "reply": "附件发送链路已完成，仍需核对手机端的取消上传和错误反馈。"
+    },
+    "error": {
+      "enabled": true,
+      "title": "监听异常",
+      "strip": "监听异常",
+      "subtitle": "暂时无法读取完整会话。监控保持开启，当前轮没有有效判断。",
+      "count": 1,
+      "tone": "warn",
+      "outcome": null
+    },
+    "off": {
+      "enabled": false,
+      "title": "监控未开启",
+      "strip": "长任务监控",
+      "subtitle": "监听此终端的最终回复，必要时自动问询进展。",
+      "count": 0,
+      "tone": "neutral",
+      "outcome": null
+    },
+    "noagent": {
+      "enabled": false,
+      "title": "当前终端没有 Agent",
+      "strip": "长任务监控",
+      "subtitle": "启动 Agent 后即可开启监控。",
+      "count": 0,
+      "tone": "neutral",
+      "outcome": null
+    },
+    "waiting": {
+      "enabled": true,
+      "title": "等待最终回复",
+      "strip": "监控中",
+      "subtitle": "已开启终端监控，收到最终回复后自动读取任务上下文。",
+      "count": 0,
+      "tone": "mint",
+      "outcome": null
+    }
+  },
+  "scores": {
+    "watching": [8, 12, 80],
+    "blocked": [5, 91, 4],
+    "limit": [7, 9, 84],
+    "completed": [94, 2, 4],
+    "unknown": [8, 12, 80]
+  },
+  "activities": [
+    {
+      "label": "原会话已接收进展问询",
+      "time": "14:32"
+    },
+    {
+      "label": "判断：任务可以继续",
+      "time": "14:32"
+    },
+    {
+      "label": "已开启终端监控",
+      "time": "14:26"
+    }
+  ]
+}

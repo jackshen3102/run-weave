@@ -243,6 +243,13 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
       ui: { ...state.ui, open: true, activeTool: "race" },
     }));
   },
+  openTaskSupervision: () => {
+    set((state: TerminalPreviewStore) => ({
+      ...revealSidecarTab(state, "task-supervision"),
+      conversationTarget: null,
+      ui: { ...state.ui, open: true, activeTool: "task-supervision" },
+    }));
+  },
   closePreview: () => {
     set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, open: false, expanded: false },

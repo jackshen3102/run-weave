@@ -93,6 +93,7 @@ export interface TerminalPreviewStore {
   openAgentTeam: () => void;
   openRace: () => void;
   closePreview: () => void;
+  openTaskSupervision: () => void;
   setActiveTool: (tool: TerminalSidecarTool) => void;
   setWidth: (widthPx: number) => void;
   setExpanded: (expanded: boolean) => void;
