@@ -80,7 +80,7 @@
     "cli:build": "pnpm --filter ./packages/runweave-cli build",
     "cli:shim:local": "pnpm --filter @runweave/cli build && node ./scripts/install/cli-shim.mjs --home=$HOME/.runweave/app-server-test --cli-entry=./packages/runweave-cli/dist/index.js",
     "cli:version:bump": "node ./scripts/release/version/cli.mjs",
-    "cli:publish:local": "pnpm cli:version:bump && pnpm cli:build && node ./scripts/release/publish-cli-local.mjs",
+    "cli:publish:local": "node ./scripts/release/publish-cli-local.mjs",
     "toolkit:sync": "node ./scripts/toolkit/sync.mjs",
     "toolkit:sync:staged": "node ./scripts/toolkit/sync.mjs --if-staged",
     "toolkit:validate": "node ./scripts/toolkit/validate.mjs",

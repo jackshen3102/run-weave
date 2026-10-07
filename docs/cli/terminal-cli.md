@@ -2,6 +2,23 @@
 
 `rw` 是 Runweave backend 面向外部 agent 的命令行控制面，用于发现应用状态、管理 terminal project/session、发送输入、读取 terminal 上下文并回收明确指定的 project/session。CLI 通过 Backend 操作终端；主 Agent 可使用 `terminal task` 持续交办和验收，终端运行时由 Backend 管理。
 
+## 版本与构建追溯
+
+`rw --version` 返回已安装 CLI 的发行版本；`rw version --json` 同时返回
+`build.sourceRevision`、`build.sourceDirty`、`build.builtAt` 和 `build.contentSha256`。
+源码直接构建时返回源码包版本与构建信息，尚未分配发行内容哈希。
+
+Stable 桌面更新与 `pnpm cli:publish:local` 使用同一发布流程。包内容变化时按本机该 npm
+prefix 的已安装版本与发行历史递增 minor，例如 `0.10.0 → 0.11.0`；相同内容重复更新
+保留原版本和原构建信息。Git HEAD 或构建时间单独变化不触发新版本。
+首次迁移缺少追溯信息的旧安装也会生成新版本。切换旧 worktree 或恢复旧代码后再次发布，
+仍从发行历史递增；安装失败已预留的版本号不会重用。
+
+发行版本只写入安装包，不改源码 `package.json`。每个 npm prefix 下的
+`lib/runweave-cli-releases/<version>/` 保留 `release.json`、安装包和成功安装回执
+`installed.json`，用于定位当时的确切构建；本机同一 prefix 的发布由进程锁串行保护。
+不同机器的本地版本号不构成全局唯一标识，跨机器追溯请同时提供内容哈希。
+
 ## 最小接入
 
 源码仓库内使用：
