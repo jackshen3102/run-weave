@@ -226,6 +226,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
   );
 
   const removeConnection = useMemoizedFn((id: string) => {
+    void window.electronAPI?.terminalBrowserInvalidateSource?.(id);
     if (id === LOCAL_DEV_CONNECTION_ID) {
       return;
     }
@@ -238,6 +239,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
 
   const updateConnection = useMemoizedFn(
     (id: string, patch: { name?: string; url?: string }) => {
+      if (patch.url !== undefined) void window.electronAPI?.terminalBrowserInvalidateSource?.(id);
       if (id === LOCAL_DEV_CONNECTION_ID) {
         return;
       }

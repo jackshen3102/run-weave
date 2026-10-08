@@ -520,7 +520,7 @@ async function assembleRuntimeServices(
   resources.defer("mobile-login", () => mobileLoginService.dispose());
   const localBrowserService = new LocalBrowserService((authId, terminalId) =>
     Boolean(
-      authService.getActiveAppSession(authId) &&
+      (authService.getActiveAppSession(authId) || authService.getActiveDesktopSession(authId)) &&
       terminalSessionManager.getSession(terminalId),
     ),
   );

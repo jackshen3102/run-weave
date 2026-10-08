@@ -203,6 +203,11 @@ export async function reloadTerminalBrowserProfileAfterProxyChange(
     if (entry.profileId !== profileId || entry.view.webContents.isDestroyed()) {
       continue;
     }
+    if (entry.localPreview) {
+      await entry.localPreview.syncProxy();
+      // Do not replay a remote form submission because a Profile setting changed.
+      continue;
+    }
     const url = entry.view.webContents.getURL();
     if (url && url !== "about:blank") {
       entry.view.webContents.reload();

@@ -56,6 +56,7 @@ const CAN_SLEEP_DOCUMENT = `(() => {
 function isProtected(key: string, entry: TerminalBrowserEntry): boolean {
   const wc = entry.view.webContents;
   return (
+    Boolean(entry.localPreview) ||
     wc.isDestroyed() ||
     wc.isLoading() ||
     wc.isBeingCaptured() ||

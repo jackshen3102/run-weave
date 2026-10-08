@@ -1,4 +1,5 @@
 import { useBrowserPresentation } from "../../../../features/terminal/browser-presentation/coordinator";
+import { openTerminalBrowserUrl } from "../../../../features/terminal/navigation/open-browser";
 import { useEffect, useState } from "react";
 import { useTerminalBrowserController } from "./use-controller";
 import { TerminalBrowserErrorBanners } from "../header/errors";
@@ -123,6 +124,17 @@ export function TerminalBrowserTool({
         onRenameGroup={renameGroup}
         onCloseGroup={closeGroup}
       />
+      {activeTab.localPreview ? (
+        <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-1 text-xs text-slate-300">
+          <span className="truncate" title="临时网站数据；相对资源通过所连接电脑加载。关闭后不保留登录态。">
+            {activeTab.localPreview.connectionName} · 电脑本地预览 · 临时会话
+          </span>
+          <button className="ml-auto shrink-0 text-sky-300 hover:underline" onClick={() => {
+            void openTerminalBrowserUrl({ url: activeTab.url, profileId, placement: { kind: "new-group" } })
+              .catch((error: Error) => updateBrowserTab(activeTab.id, { error: error.message }));
+          }}>在本机打开</button>
+        </div>
+      ) : null}
       <TerminalBrowserNavigationBar
         activeTab={activeTab}
         address={{
@@ -167,7 +179,9 @@ export function TerminalBrowserTool({
               activeTab.id,
             );
           },
-          onOpenExternal: () => openUrlExternally(activeTab.url),
+          onOpenExternal: () => activeTab.localPreview
+            ? updateBrowserTab(activeTab.id, { error: "此页面需要 Runweave 连接原电脑；如需访问桌面本机，请选择「在本机打开」。" })
+            : openUrlExternally(activeTab.url),
           onSetDisplayScale: (factor) => void setDisplayScale(factor),
           onSetMinimumViewportWidth: (width) =>
             void setMinimumViewportWidth(width),

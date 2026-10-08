@@ -5,6 +5,7 @@ import {
   type View,
 } from "electron";
 import { randomUUID } from "node:crypto";
+import type { DesktopLocalPreview } from "./local-preview/session.js";
 import { EventEmitter } from "node:events";
 import type {
   TerminalBrowserBounds,
@@ -31,6 +32,8 @@ export interface PendingTerminalBrowserUpdate {
 }
 
 export interface TerminalBrowserEntry {
+  localPreview?: DesktopLocalPreview;
+  navigationGeneration?: number;
   windowId: number;
   profileId: TerminalBrowserProfileId;
   view: WebContentsView;

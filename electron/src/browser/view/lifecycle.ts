@@ -1,4 +1,5 @@
 import { settingText } from "@runweave/config-node";
+import type { DesktopLocalPreview } from "../local-preview/session.js";
 import { BrowserWindow, View, WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
 import { createTerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
@@ -63,6 +64,7 @@ export function getOrCreateTerminalBrowserView(
     browserGroupId?: string;
     openerTabId?: string;
     notifyWorkspace?: boolean;
+    localPreview?: DesktopLocalPreview;
   } = {},
 ): WebContentsView {
   const key = getTerminalBrowserKey(win, profileId, tabId);
@@ -76,7 +78,7 @@ export function getOrCreateTerminalBrowserView(
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      partition: getTerminalBrowserProfileConfig(profileId).partition,
+      ...(options.localPreview ? { session: options.localPreview.session } : { partition: getTerminalBrowserProfileConfig(profileId).partition }),
       sandbox: true,
       // Opt in only this browser surface; keep the desktop renderer unchanged.
       enableBlinkFeatures:
@@ -89,6 +91,11 @@ export function getOrCreateTerminalBrowserView(
   viewportView.addChildView(view);
   viewportView.setVisible(false);
   view.webContents.setWindowOpenHandler(({ url, disposition }) => {
+    if (options.localPreview) {
+      if (options.localPreview.owns(url)) void view.webContents.loadURL(url).catch(() => undefined);
+      else options.localPreview.onFailure?.("本地预览仅允许在当前页打开同源链接；其他地址请从终端或普通 Browser 打开。");
+      return { action: "deny" };
+    }
     const safeUrl = validateTerminalBrowserUrl(url);
     if (!safeUrl) {
       openTerminalBrowserExternalUrl(url);
@@ -134,6 +141,7 @@ export function getOrCreateTerminalBrowserView(
   view.setVisible(true);
 
   const entry: TerminalBrowserEntry = {
+    localPreview: options.localPreview,
     windowId: win.id,
     profileId,
     view,
@@ -173,6 +181,14 @@ export function getOrCreateTerminalBrowserView(
     pendingUpdate: null,
     pendingUpdateTimer: null,
   };
+
+  if (entry.localPreview) {
+    entry.localPreview.onFailure = (message) => {
+      entry.navigationError = message;
+      sendTerminalBrowserTabUpdate(win, tabId, entry, false);
+    };
+    view.webContents.once("destroyed", () => entry.localPreview?.close());
+  }
 
   attachBrowserNavigationActivity(view.webContents, () => ({
     tabId,

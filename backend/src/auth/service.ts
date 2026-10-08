@@ -103,6 +103,12 @@ export class AuthService {
       ? { sessionId: record.id, username: record.username, connectionId: record.connectionId } : null;
   }
 
+  getActiveDesktopSession(sessionId: string): AccessTokenSession | null {
+    const record = this.refreshSessions.get(sessionId);
+    return record?.clientType === "electron" && isRefreshSessionActive(record)
+      ? { sessionId: record.id, username: record.username } : null;
+  }
+
   async loginFromOwnerSession(ownerSessionId: string, connectionId: string): Promise<LoginResult | null> {
     const owner = this.getActiveSession(ownerSessionId);
     if (!owner) return null;

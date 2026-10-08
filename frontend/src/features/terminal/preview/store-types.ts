@@ -1,3 +1,4 @@
+import type { DesktopLocalBrowserInfo } from "@runweave/shared/browser-local-tunnel";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
 import type { TerminalBrowserGroupSnapshot } from "@runweave/shared/terminal-browser-workspace";
@@ -14,6 +15,7 @@ export type { TerminalSidecarTool } from "./sidecar-layout";
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 
 export interface TerminalBrowserTabState {
+  localPreview?: DesktopLocalBrowserInfo;
   id: string;
   browserGroupId: string;
   url: string;

@@ -1,4 +1,5 @@
 import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin, LocalRemoteDesktopInfo } from "@runweave/shared/tunnels";
+import type { DesktopLocalBrowserSource } from "@runweave/shared/browser-local-tunnel";
 import type { ConfigurationStatus } from "@runweave/shared/configuration";
 import { contextBridge, ipcRenderer, shell, webUtils } from "electron";
 import type {
@@ -208,8 +209,10 @@ const electronApi = {
     title: string;
     body: string;
   }) => ipcRenderer.invoke("runtime-status:notify", input) as Promise<boolean>,
-  terminalBrowserNavigate: (tabId: string, url: string) =>
-    ipcRenderer.invoke("terminal-browser:navigate", tabId, url),
+  terminalBrowserNavigate: (tabId: string, url: string, source?: DesktopLocalBrowserSource) =>
+    ipcRenderer.invoke("terminal-browser:navigate", tabId, url, source),
+  terminalBrowserInvalidateSource: (connectionId: string) => ipcRenderer.invoke("terminal-browser:invalidate-source", connectionId),
+  terminalBrowserSyncSource: (source) => ipcRenderer.invoke("terminal-browser:sync-source", source),
   terminalBrowserGetWorkspace: (profileId: TerminalBrowserProfileId) =>
     ipcRenderer.invoke(
       "terminal-browser:get-workspace",

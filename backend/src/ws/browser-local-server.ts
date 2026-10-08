@@ -47,8 +47,12 @@ export function attachLocalBrowserWebSocketServer(
     )
       return false;
     const authId = localBrowserAuth(request, auth);
+    const bearer = /^Bearer (\S+)$/.exec(request.headers.authorization ?? "")?.[1];
+    const grant = !authId && bearer && !request.headers.origin &&
+      !new URL(request.url ?? "/", "http://localhost").search
+      ? service.consumeGrant(bearer) : null;
     if (
-      !authId ||
+      (!authId && !grant) ||
       !isTunnelRequestAuthorized(request, tunnelAuthConfig) ||
       !service.enabled
     ) {
@@ -56,7 +60,7 @@ export function attachLocalBrowserWebSocketServer(
       return true;
     }
     wss.handleUpgrade(request, socket, head, (ws) =>
-      service.accept(ws, authId),
+      service.accept(ws, authId ?? grant!.authId, grant?.open),
     );
     return true;
   });

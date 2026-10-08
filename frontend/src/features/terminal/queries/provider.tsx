@@ -4,6 +4,7 @@ import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser
 
 interface TerminalRuntimeContextValue {
   activeConnectionId: string | null;
+  connectionName: string;
   apiBase: string;
   onAuthExpired?: () => void;
   scope: string;
@@ -16,6 +17,7 @@ const TerminalRuntimeContext =
 
 export function TerminalRuntimeProvider({
   activeConnectionId,
+  connectionName = "当前电脑",
   apiBase,
   children,
   onAuthExpired,
@@ -24,6 +26,7 @@ export function TerminalRuntimeProvider({
   connectionGeneration,
 }: {
   activeConnectionId?: string | null;
+  connectionName?: string;
   apiBase: string;
   children: ReactNode;
   onAuthExpired?: () => void;
@@ -39,13 +42,14 @@ export function TerminalRuntimeProvider({
   const value = useMemo<TerminalRuntimeContextValue>(
     () => ({
       activeConnectionId: activeConnectionId ?? null,
+      connectionName,
       apiBase,
       onAuthExpired,
       scope,
       token,
       remote,
     }),
-    [activeConnectionId, apiBase, onAuthExpired, remote, scope, token],
+    [activeConnectionId, connectionName, apiBase, onAuthExpired, remote, scope, token],
   );
   return (
     <TerminalRuntimeContext.Provider value={value}>

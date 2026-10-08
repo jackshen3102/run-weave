@@ -2,6 +2,7 @@ import { useMemoizedFn } from "ahooks";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { TerminalBrowserWorkspaceSnapshot } from "@runweave/shared/terminal-browser-workspace";
 import { normalizeTerminalBrowserUrl } from "../../../../features/terminal/navigation/browser-url";
+import { useLocalBrowserSource } from "../../../../features/terminal/navigation/local-preview";
 import { useTerminalPreviewStore } from "../../../../features/terminal/preview/store";
 import { useTerminalBrowserDeviceSelection } from "../device/use-selection";
 import { useTerminalBrowserHeaderRules } from "../header/use-headers";
@@ -31,6 +32,7 @@ export function useTerminalBrowserController({
   token,
   terminalSessionId,
 }: TerminalBrowserControllerOptions) {
+  const localBrowserSource = useLocalBrowserSource(terminalSessionId);
   const {
     activeTabId,
     applyBrowserWorkspace,
@@ -238,6 +240,7 @@ export function useTerminalBrowserController({
         const snapshot = await window.electronAPI.terminalBrowserNavigate(
           tabId,
           nextUrl.url,
+          localBrowserSource,
         );
         if (!isCurrentNavigation()) {
           return;

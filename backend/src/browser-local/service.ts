@@ -1,5 +1,6 @@
 import { settingText } from "@runweave/config-node";
 import net from "node:net";
+import { randomBytes } from "node:crypto";
 import tls from "node:tls";
 import { WebSocket } from "ws";
 import {
@@ -31,6 +32,7 @@ export class LocalBrowserService {
     { authId: string; close: () => void }
   >();
   private disposed = false;
+  private readonly grants = new Map<string, { authId: string; open: LocalBrowserOpen; expiresAt: number }>();
 
   constructor(
     private readonly sourceAvailable: (
@@ -39,7 +41,23 @@ export class LocalBrowserService {
     ) => boolean,
   ) {}
 
-  accept(ws: WebSocket, authId: string): void {
+  issueGrant(authId: string, open: LocalBrowserOpen): string | null {
+    for (const [key, grant] of this.grants) if (grant.expiresAt <= Date.now()) this.grants.delete(key);
+    if (this.disposed || !this.enabled || !this.sourceAvailable(authId, open.terminalSessionId) ||
+      !loopback(open.host) || !Number.isInteger(open.port) || open.port < 1 || open.port > 65535 ||
+      this.grants.size >= 1024) return null;
+    const token = randomBytes(32).toString("base64url");
+    this.grants.set(token, { authId, open, expiresAt: Date.now() + 60_000 });
+    return token;
+  }
+
+  consumeGrant(token: string) {
+    const grant = this.grants.get(token);
+    this.grants.delete(token);
+    return grant && grant.expiresAt > Date.now() && this.sourceAvailable(grant.authId, grant.open.terminalSessionId) ? grant : null;
+  }
+
+  accept(ws: WebSocket, authId: string, allowedOpen?: LocalBrowserOpen): void {
     const send = (value: LocalBrowserControl) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value));
     };
@@ -147,6 +165,9 @@ export class LocalBrowserService {
       )
         return fail("protocol_error");
       terminalId = message.terminalSessionId;
+      if (allowedOpen && ["terminalSessionId", "browserSessionId", "host", "port", "secure"].some(
+        (key) => message[key as keyof typeof message] !== allowedOpen[key as keyof LocalBrowserOpen],
+      )) return fail("invalid_target");
       if (!this.sourceAvailable(authId, terminalId))
         return fail("source_unavailable");
       opened = true;
@@ -197,6 +218,7 @@ export class LocalBrowserService {
 
   dispose(): void {
     this.disposed = true;
+    this.grants.clear();
     for (const stream of [...this.streams.values()]) stream.close();
   }
 }

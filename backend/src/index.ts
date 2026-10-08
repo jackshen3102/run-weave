@@ -1,4 +1,5 @@
 import { createResourceMonitorRouter } from "./routes/resource-monitor";
+import { createDesktopLocalBrowserRouter, createLocalBrowserCapabilitiesRouter } from "./routes/browser-local";
 import { registerTerminalTaskRoutes } from "./routes/registration/task-routes";
 import { initializeBackendConfiguration } from "./bootstrap/configuration";
 import { createConfigurationRouter } from "./routes/configuration";
@@ -6,12 +7,7 @@ import { settingText } from "@runweave/config-node";
 import { createKnowledgeInboxRouter } from "./routes/knowledge-inbox";
 import {
   attachLocalBrowserWebSocketServer,
-  localBrowserAuth,
 } from "./ws/browser-local-server";
-import {
-  LOCAL_BROWSER_MAX_CONNECTIONS,
-  LOCAL_BROWSER_MAX_FRAME,
-} from "@runweave/shared/browser-local-tunnel";
 import { createExperienceRouter } from "./routes/experience";
 import { createTerminalSnapshotShareRouter } from "./routes/terminal/snapshot-share";
 import { createCodexQuotaRouter } from "./routes/codex-quota";
@@ -238,21 +234,8 @@ function createHttpApp(
     createDiagnosticLogsRouter(diagnosticLogRecorder),
   );
   registerMonitoringRoutes(app, requireAuth, services);
-  app.get("/api/browser/local/capabilities", requireAuth, (req, res) => {
-    if (!localBrowserAuth(req, services.authService)) {
-      res.sendStatus(401);
-      return;
-    }
-    if (!services.localBrowserService.enabled) {
-      res.status(503).json({ code: "disabled" });
-      return;
-    }
-    res.json({
-      protocolVersion: 1,
-      maxConnections: LOCAL_BROWSER_MAX_CONNECTIONS,
-      maxFrameBytes: LOCAL_BROWSER_MAX_FRAME,
-    });
-  });
+  app.use("/api/browser/local", requireAuth, createLocalBrowserCapabilitiesRouter(services.authService, services.localBrowserService));
+  app.use("/api/browser/local/desktop", requireAuth, createDesktopLocalBrowserRouter(services.authService, services.localBrowserService));
   app.use("/api/codex/quota", requireAuth, createCodexQuotaRouter());
   app.use("/api/device/resources", requireAuth, createResourceMonitorRouter(services.resourceMonitor, services.authService));
   app.use(
