@@ -45,6 +45,8 @@ export interface SupervisionDecision {
   input: SupervisionInput;
   delivery: "not_requested" | "offered" | "observed" | "unknown";
   deliveryDeadline: number;
+  /** Classification succeeded, but no continuation was offered because the editor state is unknown. */
+  deliveryBlock?: "draft_unconfirmed";
 }
 export interface TaskWatch {
   watchId: string;
@@ -92,6 +94,8 @@ export function supervisionGoalPreview(goal: string) {
   return preview.length < goal.trim().length ? `${preview}…` : preview;
 }
 export interface SupervisionDiscovery {
+  /** Opaque live input fence for explicit draft confirmation. Never persisted across restarts. */
+  inputVersion?: string;
   target: SupervisionTarget | null;
   watch: TaskWatch | null;
   capability: {
@@ -112,9 +116,11 @@ export interface StartSupervisionRequest {
   expectedRevision?: number;
 }
 export interface ChangeSupervisionRequest {
-  action: "pause" | "resume" | "update-context";
+  action: "pause" | "resume" | "update-context" | "retry-continuation";
   expectedRevision: number;
   goal?: string;
+  decisionId?: string;
+  expectedInputVersion?: string;
 }
 export interface SupervisionHookRequest {
   target: SupervisionTarget;

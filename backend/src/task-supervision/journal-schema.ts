@@ -47,6 +47,7 @@ const decision = z.object({
   input,
   delivery: z.enum(["not_requested", "offered", "observed", "unknown"]),
   deliveryDeadline: z.number().int().positive(),
+  deliveryBlock: z.literal("draft_unconfirmed").optional(),
 });
 export const journalSchema = z.object({
   version: z.literal(1),
@@ -92,12 +93,20 @@ export const journalSchema = z.object({
       })
       .transform((watch) => ({
         ...watch,
+        error: watch.error === "终端有用户输入尚未提交；保留草稿，等待下一轮回复。"
+          ? "无法确认原终端输入框是否为空，自动续接未发送。请检查原终端；确认没有草稿后可重试。" : watch.error,
         enabled:
           watch.enabled ??
           ["watching", "classifying", "error"].includes(watch.status),
         enabledAt: watch.enabledAt ?? watch.createdAt,
         decisions: watch.decisions.map((decision) => ({
           ...decision,
+          deliveryBlock: decision.deliveryBlock ?? (
+            watch.status === "error" && watch.error === "终端有用户输入尚未提交；保留草稿，等待下一轮回复。" &&
+            decision === watch.decisions.at(-1) && decision.contextRevision === watch.contextRevision &&
+            (!decision.threadId || decision.threadId === watch.target.threadId) &&
+            decision.outcome === "continue" && decision.delivery === "not_requested"
+              ? "draft_unconfirmed" as const : undefined),
           threadId: decision.threadId ?? watch.target.threadId,
         })),
       })),

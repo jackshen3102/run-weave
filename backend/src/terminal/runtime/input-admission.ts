@@ -1,4 +1,7 @@
 import type { TerminalSessionRecord } from "../manager/records";
+import { randomUUID } from "node:crypto";
+import { logger } from "../../logging/index";
+import type { TerminalInputIntent } from "./input-intent";
 
 export class TerminalInputBusyError extends Error {
   constructor() {
@@ -11,6 +14,9 @@ export class TerminalInputBusyError extends Error {
 interface InputAdmission {
   revision: object;
   pendingUserInput: Set<string | null>;
+  inputVersion: string;
+  edits: Map<string | null, object>;
+  submissions: Map<string | null, object>;
   writers: number;
   returning: boolean;
 }
@@ -31,19 +37,17 @@ export function terminalInputAdmission(
 ): InputAdmission {
   let admission = admissions.get(session);
   if (!admission) {
-    admission = { revision: {}, pendingUserInput: new Set(), writers: 0, returning: false };
+    admission = { revision: {}, inputVersion: randomUUID(), pendingUserInput: new Set(), edits: new Map(), submissions: new Map(), writers: 0, returning: false };
     admissions.set(session, admission);
   }
   return admission;
 }
 
 /** Admit before I/O, not after an asynchronous Agent-state hook catches up. */
-export function beginTerminalInput(session: TerminalSessionRecord, paneId: string | null = null): () => void {
+export function beginTerminalInput(session: TerminalSessionRecord, paneId: string | null = null, intent: TerminalInputIntent = { kind: "edit", source: "internal" }): () => void {
   const admission = terminalInputAdmission(session);
   if (admission.returning) throw new TerminalInputBusyError();
-  inputObservers.get(session)?.();
-  admission.pendingUserInput.add(paneId);
-  admission.revision = {};
+  recordInputIntent(session, paneId, intent);
   admission.writers += 1;
   return () => {
     admission.writers -= 1;
@@ -52,7 +56,39 @@ export function beginTerminalInput(session: TerminalSessionRecord, paneId: strin
 
 /** A submit acknowledges only its own pane; other panes retain their drafts. */
 export function acknowledgeTerminalPrompt(session: TerminalSessionRecord, paneId: string | null): void {
-  terminalInputAdmission(session).pendingUserInput.delete(paneId);
+  const admission = terminalInputAdmission(session);
+  const submitted = admission.submissions.get(paneId);
+  admission.submissions.delete(paneId);
+  // A delayed submit must never acknowledge edits made after that submit.
+  if (submitted && submitted === admission.edits.get(paneId)) clearTerminalDraft(session, paneId, "prompt-submitted");
+  else if (admission.pendingUserInput.has(paneId)) logger.info("terminal.input.draft-preserved", {
+    terminalSessionId: session.id, paneId, reason: submitted ? "edit-after-submit" : "submit-not-correlated",
+  });
+}
+
+function recordInputIntent(session: TerminalSessionRecord, paneId: string | null, intent: TerminalInputIntent) {
+  if (intent.kind === "browse") return;
+  const admission = terminalInputAdmission(session);
+  inputObservers.get(session)?.();
+  invalidateTerminalInput(session);
+  if (intent.kind === "interrupt") return;
+  const alreadyPending = admission.pendingUserInput.has(paneId);
+  admission.pendingUserInput.add(paneId);
+  admission.edits.set(paneId, admission.revision);
+  if (intent.submit) admission.submissions.set(paneId, admission.revision);
+  if (!alreadyPending || intent.submit) logger.info("terminal.input.draft-uncertain", {
+    terminalSessionId: session.id, paneId, source: intent.source,
+    inputVersion: admission.inputVersion, submit: intent.submit === true,
+  });
+}
+
+/** Explicit user confirmation or a matching submit; never inferred from silence or Esc. */
+export function clearTerminalDraft(session: TerminalSessionRecord, paneId: string | null, source: string): void {
+  const admission = terminalInputAdmission(session);
+  if (!admission.pendingUserInput.delete(paneId)) return;
+  admission.edits.delete(paneId);
+  admission.submissions.delete(paneId);
+  logger.info("terminal.input.draft-cleared", { terminalSessionId: session.id, paneId, source, inputVersion: admission.inputVersion });
 }
 
 export function hasPendingTerminalInput(session: TerminalSessionRecord, paneId: string | null): boolean {
@@ -74,7 +110,9 @@ export function beginTerminalReturn(
 }
 
 export function invalidateTerminalInput(session: TerminalSessionRecord): void {
-  terminalInputAdmission(session).revision = {};
+  const admission = terminalInputAdmission(session);
+  admission.revision = {};
+  admission.inputVersion = randomUUID();
 }
 
 const attachmentQueues = new WeakMap<
@@ -87,13 +125,12 @@ export function queueBehindTextAttachment(
   session: TerminalSessionRecord,
   write: () => Promise<void>,
   paneId: string | null = null,
+  intent: TerminalInputIntent = { kind: "edit", source: "queued-input" },
 ): Promise<void> | null {
   const queue = attachmentQueues.get(session);
   if (!queue) return null;
-  inputObservers.get(session)?.();
-  terminalInputAdmission(session).pendingUserInput.add(paneId);
   // Accepted user input invalidates older saves even while delivery owns the PTY.
-  invalidateTerminalInput(session);
+  recordInputIntent(session, paneId, intent);
   return new Promise<void>((resolve, reject) => {
     queue.push(async () => {
       try {
@@ -112,6 +149,7 @@ export function beginTextAttachmentDelivery(
   revision: object,
   supervisor = false,
   paneId: string | null = null,
+  submit = false,
 ): () => Promise<void> {
   const admission = terminalInputAdmission(session);
   if (
@@ -122,11 +160,10 @@ export function beginTextAttachmentDelivery(
   )
     throw new TerminalInputBusyError();
   if (!supervisor) {
-    inputObservers.get(session)?.();
-    admission.pendingUserInput.add(paneId);
+    recordInputIntent(session, paneId, { kind: "edit", source: "text-attachment", submit });
   }
   admission.returning = true;
-  admission.revision = {};
+  invalidateTerminalInput(session);
   const queue: Array<() => Promise<void>> = [];
   attachmentQueues.set(session, queue);
   return async () => {

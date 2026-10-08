@@ -62,8 +62,11 @@ final class TaskSupervisionModel: ObservableObject {
     }
   }
 
-  func setEnabled(_ enabled: Bool) {
-    guard canToggle, watch?.enabled != enabled, let session, let discovery else { return }
+  func setEnabled(_ enabled: Bool) { change(enabled: enabled, retry: false) }
+  func retryContinuation() { change(enabled: true, retry: true) }
+
+  private func change(enabled: Bool, retry: Bool) {
+    guard canToggle, retry || watch?.enabled != enabled, let session, let discovery else { return }
     // Supersede an in-flight read so its snapshot cannot overwrite the write result.
     sequence += 1; loading = false
     let request = sequence
@@ -75,6 +78,11 @@ final class TaskSupervisionModel: ObservableObject {
       do {
         let updated = try await session.withConnection(reportFailure: false) { api in
           let service = TaskSupervisionService(api: api)
+          if retry {
+            guard let watch = discovery.watch, let decision = watch.currentDecisions.last,
+              let inputVersion = discovery.inputVersion else { throw APIError.invalidResponse }
+            return try await service.retry(watch: watch, decisionID: decision.decisionId, inputVersion: inputVersion)
+          }
           if let watch = discovery.watch { return try await service.change(watch: watch, enabled: enabled) }
           guard enabled, let target = discovery.target else { throw APIError.invalidResponse }
           return try await service.start(target: target, requestID: requestID)

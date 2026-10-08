@@ -118,6 +118,22 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
       if (mounted.current) setBusy(false);
     }
   });
+  const retry = useMemoizedFn(async () => {
+    if (submitting.current || !watch || !decision || !discovery?.inputVersion) return;
+    submitting.current = true;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await changeTaskSupervision(apiBase, token, watch.watchId, {
+        action: "retry-continuation", expectedRevision: watch.revision,
+        decisionId: decision.decisionId, expectedInputVersion: discovery.inputVersion,
+      });
+    } catch (error) { fail(error); }
+    finally {
+      if (mounted.current) { await query.refetch(); setBusy(false); }
+      submitting.current = false;
+    }
+  });
   return (
     <section
       aria-label="长任务监控"
@@ -197,11 +213,21 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
             {decision && (
               <div className="space-y-3">
                 <h3 className="text-[11px] text-slate-400">
-                  {watch.status === "error" || watch.status === "classifying"
-                    ? "上次判断（当前轮尚无有效结果）"
+                  {watch.status === "classifying"
+                    ? "上次判断（正在重新判断）"
                     : "最新判断"}
                 </h3>
                 <p className="text-sm">{labels[decision.outcome]}</p>
+                {decision.outcome === "continue" && (
+                  <div className="space-y-2 text-xs text-amber-300">
+                    <p>{decision.delivery === "not_requested" ? "自动续接未发送" : decision.delivery === "observed" ? "原会话已接收续接" : "续接已尝试发送，等待原会话确认"}</p>
+                    {watch.enabled && watch.status === "error" && decision.deliveryBlock === "draft_unconfirmed" && decision.delivery === "not_requested" && (
+                      <Button size="sm" variant="outline" disabled={busy || !discovery?.inputVersion} onClick={() => void retry()}>
+                        确认输入框为空并重试
+                      </Button>
+                    )}
+                  </div>
+                )}
                 <p className="text-xs leading-6 text-slate-400">
                   {decision.reason}
                 </p>

@@ -19,9 +19,14 @@ export function applyVerdict(
     watch.status = "watching";
     return { action: "allow-stop" };
   }
+  return reserveContinuation(watch, decision, canDeliver);
+}
+
+export function reserveContinuation(watch: TaskWatch, decision: SupervisionDecision, canDeliver = true): SupervisionHookResponse {
   if (!canDeliver) {
     watch.status = "error";
-    watch.error = "终端有用户输入尚未提交；保留草稿，等待下一轮回复。";
+    decision.deliveryBlock = "draft_unconfirmed";
+    watch.error = "无法确认原终端输入框是否为空，自动续接未发送。请检查原终端；确认没有草稿后可重试。";
     return { action: "allow-stop" };
   }
   if (watch.continuationCount === 3) {
@@ -30,6 +35,10 @@ export function applyVerdict(
     return { action: "allow-stop" };
   }
   watch.continuationCount++;
+  delete decision.deliveryBlock;
+  delete watch.error;
+  delete watch.pauseReason;
+  decision.deliveryDeadline = Date.now() + 30_000;
   decision.delivery = "offered";
   watch.status = "watching";
   return {

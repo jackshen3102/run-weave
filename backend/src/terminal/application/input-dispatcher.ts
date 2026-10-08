@@ -27,6 +27,7 @@ import type {
 import type { TmuxOutputWatcher } from "../tmux/output-watcher";
 import type { TerminalStateService } from "../state/terminal-state-service";
 import { beginTerminalInput, queueBehindTextAttachment } from "../runtime/input-admission";
+import { rawTerminalInputIntent, type TerminalInputIntent } from "../runtime/input-intent";
 import {
   buildTerminalInputOperationId,
   TERMINAL_INTERRUPT_ESCAPE_INPUT,
@@ -222,6 +223,9 @@ export async function sendInputToSession(
 
   const inputPanelId = terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId;
   const inputPaneId = paneTarget?.paneId ?? (inputPanelId ? terminalSessionManager.getPanel(inputPanelId)?.tmuxPaneId : null) ?? null;
+  const intent: TerminalInputIntent = !mode || mode === "raw" ? rawTerminalInputIntent(data)
+    : mode === "tmux_exit_copy_mode" ? { kind: "browse", source: mode }
+    : { kind: "edit", source: mode, submit: mode !== "prompt_replace" || submit === true };
   if (!options.supervisorInput && !options.textAttachmentLease && !options.textAttachmentQueueDrain) {
     const panelId = terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId;
     const panel = panelId ? terminalSessionManager.getPanel(panelId) : undefined;
@@ -230,11 +234,11 @@ export async function sendInputToSession(
     const queued = queueBehindTextAttachment(session, async () => {
       if (terminalSessionManager.getSession(session.id) !== session || session.status !== "running") throw new Error("Terminal target exited; input was not written");
       result = await sendInputToSession(terminalSessionManager, { ...options, textAttachmentQueueDrain: true }, session, data, mode, operationId, fixedPane, submit, submitKey, expectedThreadId);
-    }, inputPaneId);
+    }, inputPaneId, intent);
     if (queued) { await queued; return result!; }
   }
   const release =
-    mode === "tmux_exit_copy_mode" || options.textAttachmentLease || options.supervisorInput ? () => {} : beginTerminalInput(session, inputPaneId);
+    mode === "tmux_exit_copy_mode" || options.textAttachmentLease || options.supervisorInput || options.textAttachmentQueueDrain ? () => {} : beginTerminalInput(session, inputPaneId, intent);
   try {
     const ensured = options.supervisorInput ? null : await ensureTerminalRuntime({
       session,
@@ -346,6 +350,10 @@ export async function sendInputToSession(
           buildCodexSlashCommandSequence(codexSlashCommand, panelSubmitKey),
         );
       } else if (mode === "prompt_paste") {
+        // Copy mode consumes pasted bytes as navigation commands, truncating the
+        // supervision marker. Leave it on the fixed pane before writing any text.
+        await options.tmuxService.cancelCopyMode(target, { strict: true });
+        options.validateSupervisorTarget?.();
         await options.tmuxService.sendKeySequence(
           target,
           buildPromptPasteSequence(data, panelSubmitKey),

@@ -5,6 +5,10 @@ extension TaskWatch {
     decisions.filter { $0.contextRevision == contextRevision && ($0.threadId == nil || $0.threadId == target.threadId) }
   }
   var awaitingTask: Bool { taskStartMessageId.hasPrefix("pending:") }
+  var draftUnconfirmed: Bool {
+    status == "error" && currentDecisions.last?.deliveryBlock == "draft_unconfirmed"
+      && currentDecisions.last?.delivery == "not_requested"
+  }
   var goalPreview: String { supervisionGoalPreview(goal) }
   var statusTitle: String {
     if !enabled { return "监控已关闭" }
@@ -13,6 +17,7 @@ extension TaskWatch {
     }
     if pauseReason == "continuation_limit" { return "已达续接上限" }
     if pauseReason == "delivery_unknown" { return "续接待确认" }
+    if draftUnconfirmed { return "任务可以继续 · 自动续接未发送" }
     if status == "error" { return "监听异常 / 上下文待补充" }
     if status == "paused" { return "监控已暂停" }
     if status == "classifying" { return "正在判断任务状态" }
@@ -26,7 +31,8 @@ extension TaskWatch {
     if status == "watching", waitingFor != nil { return "请回到原终端处理，监控仍保持开启。" }
     if pauseReason == "continuation_limit" { return "任务仍未完成。本任务已续接 \(continuationLimit) 次，监控保持开启。" }
     if pauseReason == "delivery_unknown" { return "已保留本次额度，尚未确认原会话接收，不会重复发送。" }
-    if status == "error" { return "当前轮没有有效判断，监控开关保持开启。" }
+    if draftUnconfirmed { return "无法确认原终端输入框是否为空；检查草稿后可重试，尚未扣除续接额度。" }
+    if status == "error" { return "监听处理遇到异常，已有判断保留，监控开关保持开启。" }
     if status == "paused" { return "本轮自动处理已暂停，终端监控开关仍保持开启。" }
     if status == "classifying" { return "已收到最终回复，正在核对任务与计划。" }
     if awaitingTask { return "终端监听已开启，收到新会话的用户任务后自动读取目标。" }
@@ -48,6 +54,7 @@ extension TaskWatch {
     if waitingFor != nil { return "等待你处理" }
     if pauseReason == "continuation_limit" { return "续接已暂停" }
     if pauseReason == "delivery_unknown" { return "续接待确认" }
+    if draftUnconfirmed { return "续接未发送" }
     if status == "error" { return "监听异常" }
     if status == "paused" { return "监控已暂停" }
     if status == "classifying" { return "判断中" }

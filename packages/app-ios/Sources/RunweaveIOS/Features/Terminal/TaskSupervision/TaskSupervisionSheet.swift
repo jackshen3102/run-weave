@@ -120,13 +120,19 @@ struct TaskSupervisionSheet: View {
       }
     }
     if let decision = watch.currentDecisions.last {
-      section(watch.status == "error" || watch.status == "classifying" ? "上次判断（当前轮尚无有效结果）" : "最新判断") {
+      section(watch.status == "classifying" ? "上次判断（正在重新判断）" : "最新判断") {
         HStack {
           Text(decision.outcome.label).font(.subheadline.weight(.semibold))
           Spacer()
           Text(supervisionTime(decision.createdAt)).font(.caption2).foregroundColor(.secondary)
         }
         Text(decision.reason).font(.subheadline).foregroundColor(.secondary).textSelection(.enabled)
+        if decision.outcome == .continue { Text(decision.deliveryLabel).font(.caption).foregroundColor(.secondary) }
+        if watch.enabled && watch.draftUnconfirmed {
+          Button("确认输入框为空并重试") { model.retryContinuation() }
+            .font(.caption).disabled(!model.canRead || model.writing || model.discovery?.inputVersion == nil)
+            .accessibilityIdentifier("task-supervision-retry")
+        }
         NavigationLink { TaskSupervisionDecisionView(decision: decision) } label: {
           Label("查看判断依据", systemImage: "chevron.right").font(.caption)
         }.accessibilityIdentifier("task-supervision-decision-open")

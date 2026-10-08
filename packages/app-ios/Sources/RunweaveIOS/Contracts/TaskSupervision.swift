@@ -85,6 +85,7 @@ struct SupervisionDecision: Decodable, Identifiable {
   let input: SupervisionInput
   let delivery: String
   let deliveryDeadline: Double
+  let deliveryBlock: String?
   var id: String { decisionId }
   var deliveryLabel: String {
     switch delivery {
@@ -122,6 +123,7 @@ struct TaskWatch: Decodable {
 }
 
 struct SupervisionDiscovery: Decodable {
+  let inputVersion: String?
   struct Capability: Decodable {
     let supported: Bool
     let reason: String?

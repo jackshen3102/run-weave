@@ -1,4 +1,5 @@
 import type { TaskWatch } from "@runweave/shared/task-supervision";
+import { currentSupervisionDecisions } from "@runweave/shared/task-supervision";
 
 export function taskSupervisionStatus(watch: TaskWatch) {
   if (!watch.enabled) return "监控已关闭";
@@ -9,7 +10,8 @@ export function taskSupervisionStatus(watch: TaskWatch) {
   if (watch.pauseReason === "continuation_limit")
     return "已达续接上限 · 任务仍未完成";
   if (watch.pauseReason === "delivery_unknown") return "续接待确认";
-  if (watch.status === "error") return "监听异常 / 上下文待补充";
+  if (watch.status === "error") return currentSupervisionDecisions(watch).at(-1)?.deliveryBlock === "draft_unconfirmed"
+    ? "任务可以继续 · 自动续接未发送" : "监听异常 / 上下文待补充";
   if (watch.status === "paused") return "监控已暂停";
   if (watch.status === "classifying") return "正在判断任务状态";
   if (watch.taskStartMessageId.startsWith("pending:"))

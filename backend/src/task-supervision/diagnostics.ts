@@ -86,7 +86,7 @@ export function logWatchChanges(before: TaskWatch[], after: TaskWatch[]) {
               ? "reserved"
               : watch.pauseReason === "continuation_limit"
                 ? "continuation_limit"
-                : "user_draft_pending",
+                : decision.deliveryBlock ?? "not_requested",
           deliveryDeadline: decision.deliveryDeadline,
         });
       if (old && old.delivery !== decision.delivery)

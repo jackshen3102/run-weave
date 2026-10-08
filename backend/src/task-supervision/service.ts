@@ -40,9 +40,9 @@ import { TaskSupervisionClassifier } from "./classifier";
 import {
   reconcileDelivery,
   readPendingDeliveries,
-  recordDeliveryFailure,
 } from "./delivery";
 import { applyVerdict } from "./verdict";
+import { retryContinuation, sendSupervisionOffer } from "./continuation";
 import { SupervisionJobs } from "./jobs";
 import { startWatch, changeWatch } from "./controls";
 import {
@@ -215,6 +215,7 @@ export class TaskSupervisionService {
     return structuredClone({
       target,
       watch,
+      inputVersion: terminalInputAdmission(this.manager.getSession(terminalSessionId)!).inputVersion,
       capability: { supported: true },
       taskCandidates: candidates,
     });
@@ -236,7 +237,19 @@ export class TaskSupervisionService {
     return this.transaction(() => startWatch(this.journal, request, this.watchControls()));
   }
   async change(id: string, request: ChangeSupervisionRequest) {
+    if (request.action === "retry-continuation") return retryContinuation(request, this.continuationOperations(id));
     return this.transaction(() => changeWatch(id, request, this.watchControls()));
+  }
+
+  private continuationOperations(id: string) {
+    return {
+      get: () => this.get(id), watch: () => this.find(id), manager: this.manager,
+      read: (thread: string) => this.history.getConversation(thread),
+      current: (target: SupervisionTarget) => this.current(target),
+      transaction: <T>(operation: () => T | Promise<T>) => this.transaction(operation),
+      cancel: () => this.jobs.cancel(id), closed: () => this.closed,
+      deliver: this.deliver,
+    };
   }
   /** Old installations may still invoke the separate Hook endpoint. It never classifies or delivers. */
   async hook(
@@ -496,40 +509,9 @@ export class TaskSupervisionService {
       });
       if (offer.action !== "request-continuation") return ALLOW;
       stage = "deliver";
-      const valid = () => {
-        const w = this.find(id);
-        if (
-          this.closed ||
-          !w.enabled ||
-          w.revision !== offer.revision ||
-          controller.signal.aborted ||
-          !this.current(target) ||
-          !this.manager.getSession(target.terminalSessionId)
-        )
-          throw new Error("原任务已变化，未发送旧续接。");
-      };
-      try {
-        valid();
-        if (
-          terminalInputAdmission(
-            this.manager.getSession(target.terminalSessionId)!,
-          ).revision !== inputRevision
-        )
-          throw new Error("用户输入已变化，未发送旧续接。");
-        if (!this.deliver) throw new Error("终端输入服务不可用。");
-        await this.deliver(target, offer, valid);
-        supervisionLogger.info("task-supervision.delivery.sent", { ...trace, decisionId: offer.decisionId });
-      } catch (error) {
-        supervisionLogger.warn("task-supervision.delivery.failed", { ...trace, decisionId: offer.decisionId, error });
-        await this.transaction(() => {
-          recordDeliveryFailure(
-            this.find(id),
-            offer.decisionId,
-            error,
-            this.current(target),
-          );
-        });
-      }
+      await sendSupervisionOffer(target, offer, inputRevision, this.continuationOperations(id), {
+        signal: controller.signal, trace,
+      });
       return ALLOW;
     } catch (error) {
       if (controller.signal.aborted)

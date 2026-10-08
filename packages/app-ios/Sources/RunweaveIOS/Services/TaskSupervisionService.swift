@@ -23,6 +23,13 @@ struct TaskSupervisionService {
       retryUnauthorized: false, decodeError: Self.failure)
   }
 
+  func retry(watch: TaskWatch, decisionID: String, inputVersion: String) async throws -> TaskWatch {
+    try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watch.watchId))",
+      method: "PATCH", body: ["action": "retry-continuation", "expectedRevision": watch.revision,
+        "decisionId": decisionID, "expectedInputVersion": inputVersion],
+      retryUnauthorized: false, decodeError: Self.failure)
+  }
+
   private static func failure(_ status: Int, _ data: Data) -> Error? {
     // Preserve HTTP identity for authentication and revision-conflict handling.
     guard status != 401, status != 409, status != 404 else { return nil }
