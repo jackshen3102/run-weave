@@ -6,6 +6,8 @@ import UserNotifications
 public final class NotificationCoordinator: ObservableObject {
   public static let shared = NotificationCoordinator()
   @Published private(set) var bindings: [String: NotificationBinding] = [:]
+  // Retain old-scope records without letting them renew, revoke, or poll a new subscription.
+  private var legacyBindings: [String: NotificationBinding] = [:]
   @Published private(set) var refreshFailures: [String: String] = [:]
   @Published var message: String?
   @Published var pendingHostID: String?
@@ -50,7 +52,10 @@ public final class NotificationCoordinator: ObservableObject {
         let value = try JSONDecoder().decode(Stored.self, from: data)
         installation = value.installation
         deviceToken = value.deviceToken
-        bindings = value.bindings
+        bindings = value.bindings.filter { storedKey, binding in
+          storedKey == key(binding.connection, binding.kind ?? .battery)
+        }
+        legacyBindings = value.bindings.filter { bindings[$0.key] == nil }
         knownHosts = value.knownHosts
         successfulAt = value.successfulAt
 
@@ -66,7 +71,8 @@ public final class NotificationCoordinator: ObservableObject {
       JSONEncoder().encode(
         Stored(
           installation: installation, deviceToken: deviceToken,
-          bindings: bindings, knownHosts: knownHosts, successfulAt: successfulAt)), account: account
+          bindings: legacyBindings.merging(bindings) { _, current in current },
+          knownHosts: knownHosts, successfulAt: successfulAt)), account: account
     )
   }
   func note(_ snapshot: DeviceStatusSnapshot, connection: BackendConnection) {
