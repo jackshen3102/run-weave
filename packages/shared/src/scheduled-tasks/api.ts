@@ -16,6 +16,7 @@ export interface ScheduledTaskCapabilities {
     models?: string[];
     efforts?: string[];
     executionPolicies?: ScheduledExecutionPolicy[];
+    continuation?: boolean;
   }>;
   limits: {
     maxConcurrentRuns: number;

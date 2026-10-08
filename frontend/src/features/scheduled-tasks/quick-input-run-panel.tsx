@@ -1,3 +1,4 @@
+import { RunContinuation } from "./run-continuation";
 import { useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -217,7 +218,12 @@ export function QuickInputRunDetail({
   const active = isQuickInputRunActive(run);
   const ownerUnresolved =
     run.status === "waiting" && run.error?.code === "owner_unresolved";
-  const canOpen = !active && run.recoverable && Boolean(run.threadRef);
+  const waitingContinuation =
+    run.status === "waiting" && Boolean(run.continuation?.nextAt);
+  const canOpen =
+    (!active || waitingContinuation) &&
+    run.recoverable &&
+    Boolean(run.threadRef);
   const create = useMutation({
     mutationFn: async () => {
       const parentProjectId = resolveTerminalParentProjectId(
@@ -291,7 +297,8 @@ export function QuickInputRunDetail({
           {run.error.message}
         </p>
       ) : null}
-      {active || ownerUnresolved ? (
+      <RunContinuation run={run} />
+      {(active && !waitingContinuation) || ownerUnresolved ? (
         <p className="text-xs text-muted-foreground">
           {ownerUnresolved
             ? "原执行进程尚未确认退出，暂时不能恢复对话。"
@@ -315,7 +322,9 @@ export function QuickInputRunDetail({
             {opening
               ? "正在打开…"
               : canOpen
-                ? "打开对话并继续追问"
+                ? waitingContinuation
+                  ? "停止自动继续并接管到终端"
+                  : "打开对话并继续追问"
                 : "新建项目终端"}
           </Button>
         </div>

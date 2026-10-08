@@ -113,7 +113,7 @@ export async function verifyArchive(
   await assert.rejects(service.archiveQuickInputRun(crypto.randomUUID()),
     (error: unknown) => error instanceof ScheduledTaskError && error.statusCode === 404);
   await store.dispose();
-  const reopened = await ScheduledTaskStore.create({ databasePath: path.join(directory, "scheduled-tasks.sqlite") });
+  const reopened = await ScheduledTaskStore.create({ databasePath: path.join(directory, "scheduled-tasks.sqlite"), env: { RUNWEAVE_SCHEDULED_TASKS_WORKER_ENTRY: undefined } });
   try {
     assert.equal((await reopened.getRun(finished.id))?.archivedAt, archived.archivedAt);
     assert.equal((await reopened.readOutput(finished.id, 0, 1000)).text, "original output");

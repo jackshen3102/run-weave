@@ -98,6 +98,12 @@ export function scheduledTasksApi(apiBase: string, token: string) {
         `/runs/${id(runId)}/output${cursor ? `?cursor=${id(cursor)}` : ""}`,
         { signal },
       ),
+    continue: (runId: string, expectedRevision: number, key: string) =>
+      request<ScheduledRun>(`/runs/${id(runId)}/continue`, {
+        method: "POST",
+        body: { expectedRevision },
+        key,
+      }),
     stop: (runId: string) =>
       request<ScheduledRun>(`/runs/${id(runId)}/stop`, { method: "POST" }),
     archive: (runId: string) =>

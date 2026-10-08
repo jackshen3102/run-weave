@@ -1,3 +1,5 @@
+import { RunContinuation } from "./run-continuation";
+import { quickInputRunLabel } from "./use-quick-input-background-runs";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import { useSearchParams } from "react-router-dom";
@@ -16,7 +18,6 @@ import {
   RequestError,
   safeArtifactUrl,
   scheduleLabel,
-  statusLabel,
 } from "./presentation";
 import { RunProgress } from "./run-progress";
 import { useOpenRun } from "./open-run";
@@ -59,11 +60,7 @@ export function RunRecord({
             {displayTime(run.startedAt ?? run.scheduledFor)}
           </span>
           <span className="rounded-md bg-muted px-2 py-1 text-xs">
-            {run.outcome === "blocked"
-              ? "执行受阻"
-              : run.status === "completed" && !run.outcome
-                ? "运行已结束"
-                : statusLabel[run.status]}
+            {quickInputRunLabel(run)}
           </span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
@@ -139,7 +136,9 @@ export function RunRecord({
             ? "正在恢复对话…"
             : "正在打开…"
           : canOpen
-            ? "打开对话并继续追问 →"
+            ? run.continuation?.nextAt
+              ? "停止自动继续并接管到终端 →"
+              : "打开对话并继续追问 →"
             : running
               ? "查看运行进度"
               : "查看记录"}
@@ -186,8 +185,12 @@ export function RunRecord({
             {run.snapshot.projectId}
           </p>
           {run.snapshot.origin?.kind === "quick-input" ? null : (
-            <><p className="mt-1">{scheduleLabel(run.snapshot.schedule)}</p>
-            <p className="mt-1">{misfirePolicyLabel(run.snapshot.misfirePolicy)}</p></>
+            <>
+              <p className="mt-1">{scheduleLabel(run.snapshot.schedule)}</p>
+              <p className="mt-1">
+                {misfirePolicyLabel(run.snapshot.misfirePolicy)}
+              </p>
+            </>
           )}
           <p className="mt-1">
             模型：{run.snapshot.model || "默认"} · 推理：
@@ -207,6 +210,7 @@ export function RunRecord({
           {expanded ? "收起输出" : "查看输出"}
         </button>
       </div>
+      <RunContinuation run={run} />
       {expanded ? <RunProgress key={run.id} run={run} /> : null}
     </article>
   );
@@ -243,8 +247,13 @@ export function TaskDetail({
             <h2 className="min-w-0 break-words text-xl font-semibold">
               {task.data.name}
             </h2>
-            {task.data.origin?.kind === "quick-input" ? null :
-              <TaskActions task={task.data} onEdit={onEdit} readOnly={readOnly} />}
+            {task.data.origin?.kind === "quick-input" ? null : (
+              <TaskActions
+                task={task.data}
+                onEdit={onEdit}
+                readOnly={readOnly}
+              />
+            )}
           </div>
           {task.data.deletedAt ? (
             <p className="mt-3 text-sm text-muted-foreground">
@@ -254,17 +263,20 @@ export function TaskDetail({
           <p className="mt-3 break-words text-sm text-muted-foreground">
             {task.data.projectId} · {task.data.provider}
           </p>
-          {task.data.origin?.kind === "quick-input" ? null :
-            <p className="mt-2 text-sm">{scheduleLabel(task.data.schedule)}</p>}
+          {task.data.origin?.kind === "quick-input" ? null : (
+            <p className="mt-2 text-sm">{scheduleLabel(task.data.schedule)}</p>
+          )}
           <p className="mt-2 text-sm text-muted-foreground">
             执行权限：
             {executionPolicyLabel(task.data.executionPolicy)}
           </p>
-          {task.data.origin?.kind === "quick-input" ? null : <p className="mt-2 text-sm text-muted-foreground">
-            {task.data.enabled
-              ? `下次运行：${displayTime(task.data.nextRunAt, task.data.schedule.timezone)}`
-              : "已暂停后续安排"}
-          </p>}
+          {task.data.origin?.kind === "quick-input" ? null : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {task.data.enabled
+                ? `下次运行：${displayTime(task.data.nextRunAt, task.data.schedule.timezone)}`
+                : "已暂停后续安排"}
+            </p>
+          )}
           <details className="mt-4 text-sm">
             <summary className="cursor-pointer">任务提示词</summary>
             <p className="mt-2 whitespace-pre-wrap break-words">

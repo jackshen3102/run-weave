@@ -1,3 +1,9 @@
+import type {
+  ScheduledContinuationPolicy,
+  ScheduledContinuation,
+  ScheduledRunAttempt,
+} from "./continuation";
+
 export type ScheduledTaskProvider = "codex" | "trae" | "pi";
 export type ScheduledExecutionPolicy =
   | "sandbox"
@@ -31,6 +37,8 @@ export interface ScheduledTaskConfig {
   effort?: string;
   /** Absent on older tasks: preserve sandbox-only execution. */
   executionPolicy?: ScheduledExecutionPolicy;
+  /** Missing on older configurations: automatic continuation is off. */
+  continuationPolicy?: ScheduledContinuationPolicy;
   schedule: TaskSchedule;
   misfirePolicy: ScheduledMisfirePolicy;
   /** Present only for an internal task created from a saved quick input. */
@@ -66,6 +74,13 @@ export interface ScheduledTerminalBinding {
 
 export interface ScheduledRun {
   id: string;
+  revision?: number;
+  resultRevision?: number;
+  activeAttemptId?: string | null;
+  executionBudget?: { timeoutMs: number; maxOutputBytes: number };
+  continuation?: ScheduledContinuation;
+  /** Included on detail responses; older runs have no attempt history. */
+  attempts?: ScheduledRunAttempt[];
   taskId: string;
   taskRevision: number;
   snapshot: ScheduledTaskConfig;

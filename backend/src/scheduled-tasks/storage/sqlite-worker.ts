@@ -13,6 +13,29 @@ const database = new ScheduledTaskDatabase(
 
 function execute(command: ScheduledTaskWorkerCommand) {
   switch (command.op) {
+    case "list-attempts":
+      return database.listAttempts(command.runId);
+    case "set-run-thread":
+      return database.setRunThread(
+        command.runId,
+        command.ownerId,
+        command.threadId,
+      );
+    case "finish-execution":
+      return database.finishExecution(
+        command.runId,
+        command.ownerId,
+        command.result,
+      );
+    case "advance-continuations":
+      return database.advanceContinuations(command.now);
+    case "continue-run":
+      return database.continueRun(
+        command.runId,
+        command.revision,
+        command.key,
+        command.now,
+      );
     case "integrity":
       return database.integrity();
     case "close":
@@ -71,11 +94,18 @@ function execute(command: ScheduledTaskWorkerCommand) {
     case "list-runs":
       return database.listRuns(command.taskId);
     case "list-quick-input-runs":
-      return database.listQuickInputRuns(command.projectId, command.finishedSince);
+      return database.listQuickInputRuns(
+        command.projectId,
+        command.finishedSince,
+      );
     case "list-recently-finished-runs":
       return database.listRecentlyFinishedRuns(command.since);
     case "claim-next-run":
-      return database.claimNextRun(command.ownerId, command.now);
+      return database.claimNextRun(
+        command.ownerId,
+        command.now,
+        command.budget,
+      );
     case "archive-quick-input-run":
       return database.archiveQuickInputRun(command.runId, command.now);
     case "put-run":

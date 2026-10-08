@@ -1,3 +1,4 @@
+import { checkpointCodexResume } from "./codex-resume";
 import { settingText } from "@runweave/config-node";
 import { codexScheduledArgs } from "./codex-options";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -22,7 +23,8 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
   readonly provider = "codex" as const;
 
   constructor(
-    private readonly binary = settingText("agents.codex.binary")?.trim() || "codex",
+    private readonly binary = settingText("agents.codex.binary")?.trim() ||
+      "codex",
     private readonly autoReviewSupported = false,
     private readonly fullAccessSupported = false,
   ) {}
@@ -54,6 +56,11 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
     schemaPath: string,
   ): Promise<ScheduledProviderResult> {
     if (request.signal.aborted) throw new Error("provider_cancelled");
+    if (request.resumeThreadId)
+      await checkpointCodexResume(
+        request.resumeThreadId,
+        request.workingDirectory,
+      );
     const args = [
       "exec",
       "--output-schema",
@@ -65,6 +72,7 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
       "--cd",
       request.workingDirectory,
       ...codexScheduledArgs(request),
+      ...(request.resumeThreadId ? ["resume", request.resumeThreadId] : []),
       "-",
     ];
     const child = spawn(this.binary, args, {
@@ -150,6 +158,13 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
             event.type === "thread.started" &&
             typeof event.thread_id === "string"
           ) {
+            if (
+              request.resumeThreadId &&
+              event.thread_id !== request.resumeThreadId
+            ) {
+              terminate("provider_thread_mismatch");
+              continue;
+            }
             threadId = event.thread_id;
             const startedThreadId = threadId;
             enqueue(async () => {
@@ -174,6 +189,11 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
           event?.type === "thread.started" &&
           typeof event.thread_id === "string"
         ) {
+          if (
+            request.resumeThreadId &&
+            event.thread_id !== request.resumeThreadId
+          )
+            throw new Error("provider_thread_mismatch");
           threadId = event.thread_id;
           await request.onThread(threadId);
         }

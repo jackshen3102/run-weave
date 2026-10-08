@@ -1,6 +1,6 @@
 # 定时任务数据库升级
 
-定时任务使用独立 SQLite。当前数据库版本为 **2**，由 `PRAGMA user_version` 保存；
+定时任务使用独立 SQLite。当前数据库版本为 **3**，由 `PRAGMA user_version` 保存；
 `scheduled_schema_migrations` 记录每步的版本、名称、SQL SHA-256 和执行时间。
 迁移入口是 [migrations.ts](./migrations.ts)，由 `ScheduledTaskDatabase` 构造时调用，
 成功后才交付 store、恢复运行并启动调度。
@@ -12,6 +12,8 @@
 | 0    | 历史未编号数据库，或新建空库                                                                                |
 | 1    | 建立表与索引；已有库必须匹配已知的初始表、列、索引和外键结构才能纳入版本管理                                |
 | 2    | 为缺失字段的任务及历史配置快照写入 `misfirePolicy: { mode: "skip" }`；历史运行缺失的 `dispatch` 写为 `null` |
+
+| 3 | 新增 scheduled_run_attempts，保存每轮执行所有权、输出范围与结果；旧任务与运行不添加自动续接策略 |
 
 已有明确补跑策略或调度时间的记录原样保留。迁移不改任务 revision、下次安排、运行状态、
 输出、幂等键或历史错误，不触发任务，也不伪造旧运行的调度时间。

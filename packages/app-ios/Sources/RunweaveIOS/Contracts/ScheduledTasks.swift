@@ -37,6 +37,7 @@ struct ScheduledMisfirePolicy: Codable, Equatable {
   }
   var label: String { mode == "skip" ? "错过就跳过" : "恢复后补最近一次（\((maxDelaySeconds ?? 86400) / 3600) 小时内）" }
 }
+struct ScheduledContinuationPolicy: Codable, Equatable { var mode: String }
 struct ScheduledTaskConfig: Codable, Equatable {
   struct QuickInputOrigin: Codable, Equatable {
     let kind: String
@@ -52,6 +53,7 @@ struct ScheduledTaskConfig: Codable, Equatable {
   var model: String?
   var effort: String?
   var executionPolicy: String?
+  var continuationPolicy: ScheduledContinuationPolicy?
   var origin: QuickInputOrigin?
   var schedule = ScheduledTaskSchedule()
   var misfirePolicy = ScheduledMisfirePolicy()
@@ -69,6 +71,7 @@ struct ScheduledTaskConfig: Codable, Equatable {
     var value: [String: Any] = ["name": name.trimmingCharacters(in: .whitespacesAndNewlines),
       "projectId": projectId, "provider": provider, "prompt": prompt.trimmingCharacters(in: .whitespacesAndNewlines),
       "schedule": schedule.body, "misfirePolicy": misfirePolicy.body]
+    if let continuationPolicy { value["continuationPolicy"] = ["mode": continuationPolicy.mode] }
     if let executionPolicy { value["executionPolicy"] = executionPolicy }
     for (key, field) in [("model", model), ("effort", effort)] {
       if let field, !field.isEmpty { value[key] = field }
@@ -114,6 +117,16 @@ struct ScheduledOpenResponse: Decodable {
   let error: String?
 }
 struct ScheduledRun: Decodable, Identifiable {
+  struct Recovery: Decodable { let action: String; let category: String; let evidence: String; let nextStep: String; let notBefore: String? }
+  struct Continuation: Decodable { let count: Int; let maxAttempts: Int; let nextAt: String?; let deadline: String?; let recovery: Recovery?; let stopReason: String? }
+  struct Attempt: Decodable, Identifiable {
+    let id: String; let sequence: Int; let startedAt: String; let finishedAt: String?
+    let summary: String?; let outcome: String?; let error: Failure?
+  }
+  let revision: Int?
+  let resultRevision: Int?
+  let continuation: Continuation?
+  let attempts: [Attempt]?
   struct Dispatch: Decodable { let evaluatedAt: String; let latenessMs: Double; let catchUp: Bool; let coalescedFrom: String? }
   struct Failure: Decodable { let code: String; let message: String }
   struct Artifact: Decodable { let label: String; let kind: String; let url: String?; let text: String?; let fileRef: String? }
@@ -138,11 +151,14 @@ struct ScheduledRun: Decodable, Identifiable {
   let threadRef: Thread?
   let recoverable: Bool
   let terminalBinding: ScheduledTerminalBinding?
-  var active: Bool { ["queued", "running", "stopping"].contains(status) }
-  var needsAttention: Bool { outcome == "blocked" || outcome == "failed" || status == "failed" || status == "waiting" }
+  var waitingContinuation: Bool { status == "waiting" && continuation?.nextAt != nil }
+  var active: Bool { ["queued", "running", "stopping"].contains(status) || waitingContinuation }
+  var needsAttention: Bool { !active && (outcome == "blocked" || outcome == "failed" || status == "failed" || status == "waiting") }
   var canArchive: Bool { snapshot.origin?.kind == "quick-input" && ["completed", "failed", "cancelled", "skipped"].contains(status) && archivedAt == nil }
-  var canOpen: Bool { !active && recoverable && threadRef != nil }
+  var canOpen: Bool { (!active || waitingContinuation) && recoverable && threadRef != nil }
   var statusLabel: String {
+    if waitingContinuation { return "等待自动继续" }
+    if status == "running", (continuation?.count ?? 0) > 0 { return "继续处理中" }
     if outcome == "blocked" { return "执行受阻" }
     if outcome == "failed" { return "执行失败" }
     if status == "completed" { return outcome == "succeeded" ? "已完成" : "运行已结束" }
@@ -153,7 +169,7 @@ struct ScheduledRun: Decodable, Identifiable {
 struct ScheduledPage<T: Decodable>: Decodable { let items: [T]; let nextCursor: String? }
 struct ScheduledCapabilities: Decodable {
   struct Provider: Decodable, Identifiable {
-    let provider: String; let available: Bool; let reason: String?; let executionPolicies: [String]?
+    let provider: String; let available: Bool; let reason: String?; let executionPolicies: [String]?; let continuation: Bool?
     var id: String { provider }
   }
   let enabled: Bool

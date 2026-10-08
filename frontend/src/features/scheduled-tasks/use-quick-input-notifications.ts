@@ -60,8 +60,9 @@ export function useQuickInputNotifications(
           if (stopped) return;
           for (const run of page.items) {
             if (run.finishedAt && run.finishedAt > latest) latest = run.finishedAt;
-            if (!seen.has(run.id) && ["completed", "failed"].includes(run.status)) {
-              seen.add(run.id);
+            const resultKey = run.resultRevision ? `${run.id}:${run.resultRevision}` : run.id;
+            if (!seen.has(resultKey) && ["completed", "failed"].includes(run.status)) {
+              seen.add(resultKey);
               fresh.push(run);
             }
           }

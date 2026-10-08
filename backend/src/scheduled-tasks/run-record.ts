@@ -1,3 +1,4 @@
+import { initialContinuation } from "./continuation";
 import { randomUUID } from "node:crypto";
 import type {
   ScheduledRun,
@@ -12,6 +13,12 @@ export function createScheduledRunRecord(
 ): ScheduledRun {
   return {
     id: randomUUID(),
+    revision: 1,
+    resultRevision: 0,
+    activeAttemptId: null,
+    ...(task.continuationPolicy?.mode === "bounded"
+      ? { continuation: initialContinuation() }
+      : {}),
     taskId: task.id,
     taskRevision: task.revision,
     snapshot: {
@@ -20,6 +27,9 @@ export function createScheduledRunRecord(
       provider: task.provider,
       prompt: task.prompt,
       executionPolicy: task.executionPolicy ?? "sandbox",
+      ...(task.continuationPolicy
+        ? { continuationPolicy: task.continuationPolicy }
+        : {}),
       ...(task.model ? { model: task.model } : {}),
       ...(task.effort ? { effort: task.effort } : {}),
       schedule: task.schedule,

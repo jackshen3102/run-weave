@@ -7,9 +7,13 @@ import { useTerminalRuntime } from "../terminal/queries/provider";
 import { scheduledKeys } from "./queries";
 
 export function isQuickInputRunActive(run: ScheduledRun) {
-  return ["queued", "running", "stopping"].includes(run.status);
+  return (
+    ["queued", "running", "stopping"].includes(run.status) ||
+    (run.status === "waiting" && Boolean(run.continuation?.nextAt))
+  );
 }
 export function quickInputRunNeedsAttention(run: ScheduledRun) {
+  if (isQuickInputRunActive(run)) return false;
   return (
     run.outcome === "blocked" ||
     run.outcome === "failed" ||
@@ -25,6 +29,9 @@ export function canArchiveQuickInputRun(run: ScheduledRun) {
   );
 }
 export function quickInputRunLabel(run: ScheduledRun) {
+  if (run.status === "waiting" && run.continuation?.nextAt)
+    return "等待自动继续";
+  if (run.status === "running" && run.continuation?.count) return "继续处理中";
   if (run.outcome === "blocked") return "执行受阻";
   if (run.outcome === "failed") return "执行失败";
   if (run.status === "completed")

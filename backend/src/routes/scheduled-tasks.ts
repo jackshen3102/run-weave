@@ -25,31 +25,32 @@ const scheduleSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 const provider = z.enum(["codex", "trae", "pi"]);
+const continuationPolicy = z
+  .object({ mode: z.enum(["off", "bounded"]) })
+  .strict();
 const configShape = {
+  continuationPolicy: continuationPolicy.optional(),
   name: z.string().trim().min(1).max(80),
   projectId: z.string().trim().min(1).max(500),
   provider,
   prompt: z.string().trim().min(1).max(12_000),
   model: z.string().trim().min(1).max(200).optional(),
   effort: z.string().trim().min(1).max(100).optional(),
-  executionPolicy: z
-    .enum(["sandbox", "auto-review", "full-access"])
-    .optional(),
-  misfirePolicy: z
-    .discriminatedUnion("mode", [
-      z.object({ mode: z.literal("skip") }).strict(),
-      z
-        .object({
-          mode: z.literal("catch-up-latest"),
-          maxDelaySeconds: z
-            .number()
-            .int()
-            .min(3600)
-            .max(604800)
-            .multipleOf(3600),
-        })
-        .strict(),
-    ]),
+  executionPolicy: z.enum(["sandbox", "auto-review", "full-access"]).optional(),
+  misfirePolicy: z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("skip") }).strict(),
+    z
+      .object({
+        mode: z.literal("catch-up-latest"),
+        maxDelaySeconds: z
+          .number()
+          .int()
+          .min(3600)
+          .max(604800)
+          .multipleOf(3600),
+      })
+      .strict(),
+  ]),
   schedule: scheduleSchema,
 };
 const createTaskSchema = z
@@ -57,6 +58,7 @@ const createTaskSchema = z
   .strict();
 const updateTaskSchema = z
   .object({
+    continuationPolicy: configShape.continuationPolicy,
     name: configShape.name.optional(),
     projectId: configShape.projectId.optional(),
     provider: provider.optional(),
@@ -98,13 +100,15 @@ const paginationSchema = z
   .strict();
 const taskParams = z.object({ taskId: z.string().uuid() }).strict();
 const runParams = z.object({ runId: z.string().uuid() }).strict();
-const quickInputRunsSchema = z.object({
-  source: z.literal("quick-input"),
-  projectId: z.string().trim().min(1).optional(),
-  finishedSince: z.string().datetime().optional(),
-  cursor: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-}).strict();
+const quickInputRunsSchema = z
+  .object({
+    source: z.literal("quick-input"),
+    projectId: z.string().trim().min(1).optional(),
+    finishedSince: z.string().datetime().optional(),
+    cursor: z.string().optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+  })
+  .strict();
 
 export function createScheduledTasksRouter(
   service: ScheduledTaskService,
@@ -120,7 +124,9 @@ export function createScheduledTasksRouter(
     handle(res, () => service.validateCreate(createTaskSchema.parse(req.body))),
   );
   router.get("/runs", (req, res) =>
-    handle(res, () => service.listQuickInputRuns(quickInputRunsSchema.parse(req.query))),
+    handle(res, () =>
+      service.listQuickInputRuns(quickInputRunsSchema.parse(req.query)),
+    ),
   );
   router.get("/runs/:runId/output", (req, res) =>
     handle(res, async () => {
@@ -134,9 +140,28 @@ export function createScheduledTasksRouter(
   );
   router.post("/runs/:runId/archive", (req, res) =>
     handle(res, () => {
-      z.object({}).strict().parse(req.body ?? {});
+      z.object({})
+        .strict()
+        .parse(req.body ?? {});
       return service.archiveQuickInputRun(runParams.parse(req.params).runId);
     }),
+  );
+  router.post("/runs/:runId/continue", (req, res) =>
+    handle(
+      res,
+      () => {
+        const input = z
+          .object({ expectedRevision: z.number().int().positive() })
+          .strict()
+          .parse(req.body);
+        return service.continueRun(
+          runParams.parse(req.params).runId,
+          input.expectedRevision,
+          requireIdempotencyKey(req.headers["idempotency-key"]),
+        );
+      },
+      202,
+    ),
   );
   router.post("/runs/:runId/stop", (req, res) =>
     handle(res, () => service.stop(runParams.parse(req.params).runId), 202),
@@ -228,31 +253,25 @@ async function handle(
     res.status(status).json(await action());
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res
-        .status(400)
-        .json({
-          code: "invalid_input",
-          message: "Invalid scheduled task request",
-          details: error.flatten(),
-        });
+      res.status(400).json({
+        code: "invalid_input",
+        message: "Invalid scheduled task request",
+        details: error.flatten(),
+      });
       return;
     }
     if (error instanceof ScheduledTaskError) {
-      res
-        .status(error.statusCode)
-        .json({
-          code: error.code,
-          message: error.message,
-          ...(error.details === undefined ? {} : { details: error.details }),
-        });
+      res.status(error.statusCode).json({
+        code: error.code,
+        message: error.message,
+        ...(error.details === undefined ? {} : { details: error.details }),
+      });
       return;
     }
-    res
-      .status(500)
-      .json({
-        code: "scheduled_task_request_failed",
-        message: "Scheduled task request failed",
-      });
+    res.status(500).json({
+      code: "scheduled_task_request_failed",
+      message: "Scheduled task request failed",
+    });
   }
 }
 

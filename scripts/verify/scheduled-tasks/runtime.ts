@@ -20,20 +20,29 @@ import {
 } from "../../../backend/src/scheduled-tasks/schedule";
 import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
 
+import { verifyContinuation } from "./continuation";
 import { verifyMigrations } from "./migrations";
 import { verifyArchive, verifyConcurrent } from "./concurrent";
 
 const selected = readSelectedCase(process.argv.slice(2));
 const cases: Record<string, () => Promise<void>> = {
+  continuation: () =>
+    withStore((store, directory) =>
+      verifyContinuation(store, directory, taskFixture),
+    ),
   migrations: verifyMigrations,
   time: verifyTime,
   dedupe: verifyDedupe,
   restart: verifyRestart,
   catchUp: verifyCatchUp,
   catchUpExecution: verifyCatchUpExecution,
-  concurrent: () => withStore((store) => verifyConcurrent(store, taskFixture, runFixture)),
+  concurrent: () =>
+    withStore((store) => verifyConcurrent(store, taskFixture, runFixture)),
   fullAccess: verifyFullAccess,
-  archive: () => withStore((store, directory) => verifyArchive(store, directory, taskFixture, runFixture)),
+  archive: () =>
+    withStore((store, directory) =>
+      verifyArchive(store, directory, taskFixture, runFixture),
+    ),
 };
 
 void main();
@@ -84,10 +93,9 @@ async function verifyFullAccess(): Promise<void> {
     ),
     ["sandbox", "auto-review", "full-access"],
   );
-  assert.deepEqual(
-    codexScheduledExecutionPolicies("--output-schema <FILE>"),
-    ["sandbox"],
-  );
+  assert.deepEqual(codexScheduledExecutionPolicies("--output-schema <FILE>"), [
+    "sandbox",
+  ]);
 
   const source: NodeJS.ProcessEnv = {
     KEEP_ME: "yes",
@@ -504,6 +512,7 @@ async function withStore(
   );
   const store = await ScheduledTaskStore.create({
     databasePath: path.join(directory, "scheduled-tasks.sqlite"),
+    env: { RUNWEAVE_SCHEDULED_TASKS_WORKER_ENTRY: undefined },
   });
   try {
     await run(store, directory);

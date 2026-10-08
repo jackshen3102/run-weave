@@ -1,3 +1,4 @@
+import { recoverySchema } from "../providers/result";
 import { z } from "zod";
 import type {
   ScheduledRun,
@@ -37,9 +38,8 @@ const config = z.object({
   prompt: text,
   model: text.optional(),
   effort: text.optional(),
-  executionPolicy: z
-    .enum(["sandbox", "auto-review", "full-access"])
-    .optional(),
+  continuationPolicy: z.object({ mode: z.enum(["off", "bounded"]) }).optional(),
+  executionPolicy: z.enum(["sandbox", "auto-review", "full-access"]).optional(),
   schedule,
   misfirePolicy: z.discriminatedUnion("mode", [
     z.object({ mode: z.literal("skip") }),
@@ -67,6 +67,32 @@ const taskSchema: z.ZodType<ScheduledTask> = config.extend({
   deletedAt: timestamp.nullable(),
 });
 const runSchema: z.ZodType<ScheduledRun> = z.object({
+  revision: z.number().int().positive().optional(),
+  resultRevision: z.number().int().nonnegative().optional(),
+  activeAttemptId: text.nullable().optional(),
+  executionBudget: z
+    .object({
+      timeoutMs: z.number().positive(),
+      maxOutputBytes: z.number().int().positive(),
+    })
+    .optional(),
+  continuation: z
+    .object({
+      count: z.number().int().min(0).max(3),
+      maxAttempts: z.literal(3),
+      delaysMs: z.tuple([
+        z.literal(60000),
+        z.literal(300000),
+        z.literal(900000),
+      ]),
+      windowMs: z.literal(3600000),
+      activeMs: z.number().nonnegative(),
+      deadline: timestamp.nullable(),
+      nextAt: timestamp.nullable(),
+      recovery: recoverySchema.nullable(),
+      stopReason: z.string().nullable(),
+    })
+    .optional(),
   id: text,
   taskId: text,
   taskRevision: z.number().int().positive(),

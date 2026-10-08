@@ -2,12 +2,14 @@ import { createHash } from "node:crypto";
 import Database from "better-sqlite3";
 import { initialSchemaSql } from "./migrations/001-initial-schema";
 import { catchUpDataSql } from "./migrations/002-catch-up-data";
+import { continuationSql } from "./migrations/003-continuation";
 
 const migrations = [
   { version: 1, name: "initial-schema", sql: initialSchemaSql },
   { version: 2, name: "catch-up-data", sql: catchUpDataSql },
+  { version: 3, name: "continuation", sql: continuationSql },
 ] as const;
-export const SCHEDULED_TASK_SCHEMA_VERSION = 2;
+export const SCHEDULED_TASK_SCHEMA_VERSION = 3;
 
 /** The entire upgrade is atomic, including adoption of the unversioned legacy database. */
 export function migrateScheduledTasks(database: Database.Database): void {

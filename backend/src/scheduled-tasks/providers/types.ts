@@ -2,6 +2,7 @@ import type {
   ScheduledTaskProvider,
   ScheduledExecutionPolicy,
   ScheduledTaskOutcome,
+  ScheduledRecovery,
 } from "@runweave/shared/scheduled-tasks";
 
 export interface ScheduledProviderRequest {
@@ -12,6 +13,7 @@ export interface ScheduledProviderRequest {
   model?: string;
   effort?: string;
   executionPolicy?: ScheduledExecutionPolicy;
+  resumeThreadId?: string;
   maxOutputBytes: number;
   maxWallTimeMs: number;
   signal: AbortSignal;
@@ -26,6 +28,7 @@ export interface ScheduledProviderResult {
   summary: string;
   outcome: ScheduledTaskOutcome;
   reason: string;
+  recovery?: ScheduledRecovery | null;
 }
 
 export interface ScheduledProviderAdapter {

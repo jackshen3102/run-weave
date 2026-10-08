@@ -158,9 +158,10 @@ struct QuickCommandRunDetail: View {
             Text(start, style: .relative).foregroundColor(.secondary)
           }
         }.font(.caption).padding(14).background(TerminalAppearance.panel).cornerRadius(12)
+        ScheduledContinuationView(session: session, run: run) { await refresh() }
         if let summary = run.summary { Markdown(summary).markdownTheme(.gitHub).textSelection(.enabled) }
         if let error = run.error { Text(error.message).font(.caption).foregroundColor(.orange) }
-        if run.active || ownerUnresolved {
+        if (run.active && !run.waitingContinuation) || ownerUnresolved {
           Text(ownerUnresolved ? "原执行进程尚未确认退出，暂时不能恢复对话。" : "运行结束后可打开对话；运行期间可在下方查看输出。")
             .font(.caption).foregroundColor(.secondary)
         } else {
@@ -168,7 +169,7 @@ struct QuickCommandRunDetail: View {
             Text("本次运行没有可恢复的对话。可在相同项目和工作区新建终端查看问题，运行输出仍保留在此处。")
               .font(.caption).foregroundColor(.secondary)
           }
-          Button(opening ? (run.canOpen ? "正在恢复对话…" : "正在新建终端…") : (run.canOpen ? "打开对话并继续追问" : "新建项目终端")) { openTerminal() }
+          Button(opening ? (run.canOpen ? "正在恢复对话…" : "正在新建终端…") : (run.canOpen ? (run.waitingContinuation ? "停止自动继续并接管到终端" : "打开对话并继续追问") : "新建项目终端")) { openTerminal() }
             .frame(maxWidth: .infinity, minHeight: 44)
             .background(TerminalAppearance.accent.opacity(0.08)).cornerRadius(10)
             .disabled(opening || model.archiving.contains(run.id) || !polling || !session.canWrite)
@@ -250,7 +251,7 @@ struct QuickCommandRunDetail: View {
   }
 
   private func openTerminal(replace: Bool = false) {
-    guard polling, session.canWrite, !opening, !model.archiving.contains(run.id), !run.active, !ownerUnresolved else { return }
+    guard polling, session.canWrite, !opening, !model.archiving.contains(run.id), (!run.active || run.waitingContinuation), !ownerUnresolved else { return }
     let selected = run
     opening = true; openFailure = nil
     operation = Task {
