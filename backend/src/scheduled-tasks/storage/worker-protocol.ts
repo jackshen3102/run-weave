@@ -26,6 +26,7 @@ export type ScheduledTaskWorkerCommand =
   | {
       id: number;
       op: "continue-run";
+      reply?: string;
       runId: string;
       revision: number;
       key: string;

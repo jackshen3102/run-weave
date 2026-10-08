@@ -6,7 +6,8 @@ import type {
   ScheduledRun,
   ScheduledRunAttempt,
 } from "@runweave/shared/scheduled-tasks";
-import { scheduleContinuation } from "../continuation";
+import { scheduledReplyUnavailable } from "@runweave/shared/scheduled-tasks";
+import { initialContinuation, scheduleContinuation } from "../continuation";
 
 export interface ScheduledExecutionResult {
   finishedAt: string;
@@ -46,6 +47,7 @@ export class ScheduledExecutions {
       id: randomUUID(),
       runId: run.id,
       sequence: this.attempts(run.id).length + 1,
+      ...(run.continuationInput ? { userReply: run.continuationInput } : {}),
       threadId: run.threadRef?.threadId ?? null,
       startedAt: now,
       finishedAt: null,
@@ -60,7 +62,8 @@ export class ScheduledExecutions {
     if (
       continuing &&
       (run.terminalBinding ||
-        run.continuation!.count >= run.continuation!.maxAttempts)
+        (!run.continuationInput &&
+          run.continuation!.count >= run.continuation!.maxAttempts))
     )
       throw new Error("thread_busy");
     this.db
@@ -83,7 +86,9 @@ export class ScheduledExecutions {
         ? {
             continuation: {
               ...run.continuation,
-              count: run.continuation.count + (continuing ? 1 : 0),
+              count:
+                run.continuation.count +
+                (continuing && !run.continuationInput ? 1 : 0),
               nextAt: null,
             },
           }
@@ -129,6 +134,7 @@ export class ScheduledExecutions {
       const updated: ScheduledRun = {
         ...run,
         activeAttemptId: null,
+        continuationInput: undefined,
         status: cancelled
           ? "cancelled"
           : result.outcome === "succeeded"
@@ -240,10 +246,14 @@ export class ScheduledExecutions {
     revision: number,
     key: string,
     now: string,
+    reply?: string,
   ): ScheduledRun {
     return this.db.transaction(() => {
       const scope = `continue-run:${runId}`;
-      const hash = String(revision);
+      const hash =
+        reply === undefined
+          ? String(revision)
+          : JSON.stringify([revision, reply]);
       const prior = this.db
         .prepare(
           "SELECT request_hash FROM scheduled_idempotency WHERE scope = ? AND idempotency_key = ?",
@@ -257,6 +267,40 @@ export class ScheduledExecutions {
       const run = this.get(runId);
       if ((run.revision ?? 0) !== revision)
         throw new Error("revision_conflict");
+      if (reply !== undefined) {
+        if (!reply.trim() || reply.length > 8000)
+          throw new Error("reply_invalid");
+        if (scheduledReplyUnavailable(run)) throw new Error("thread_busy");
+        const busy = this.db
+          .prepare(
+            "SELECT id FROM scheduled_runs WHERE task_id = ? AND id <> ? AND status IN ('queued', 'running', 'stopping', 'waiting')",
+          )
+          .get(run.taskId, run.id);
+        if (busy) throw new Error("run_busy");
+        if (
+          run.continuation?.recovery?.notBefore &&
+          Date.parse(now) < Date.parse(run.continuation.recovery.notBefore)
+        )
+          throw new Error("continuation_not_before");
+        const updated = this.put({
+          ...run,
+          status: "queued",
+          finishedAt: null,
+          outcome: undefined,
+          error: null,
+          recoverable: false,
+          continuationInput: reply.trim(),
+          continuation: {
+            ...(run.continuation ?? initialContinuation()),
+            nextAt: null,
+            stopReason: null,
+          },
+        });
+        this.db
+          .prepare("INSERT INTO scheduled_idempotency VALUES (?, ?, ?, ?, ?)")
+          .run(scope, key, hash, runId, now);
+        return updated;
+      }
       if (
         run.status !== "waiting" ||
         !run.continuation?.nextAt ||

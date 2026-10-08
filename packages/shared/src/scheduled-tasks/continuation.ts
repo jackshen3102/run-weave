@@ -15,6 +15,8 @@ export interface ScheduledRecovery {
   evidence: string;
   nextStep: string;
   notBefore: string | null;
+  /** Concrete facts or action the user would confirm; absent for open questions. */
+  confirmation?: string | null;
 }
 
 export interface ScheduledContinuation {
@@ -33,6 +35,8 @@ export interface ScheduledRunAttempt {
   id: string;
   runId: string;
   sequence: number;
+  /** Actual user reply, never synthesized by automatic continuation. */
+  userReply?: string;
   threadId: string | null;
   startedAt: string;
   finishedAt: string | null;

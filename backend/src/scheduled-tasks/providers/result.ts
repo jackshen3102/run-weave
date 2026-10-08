@@ -16,6 +16,7 @@ const recoveryProperties = {
   evidence: { type: "string" },
   nextStep: { type: "string" },
   notBefore: { type: ["string", "null"] },
+  confirmation: { type: ["string", "null"] },
 };
 export const recoverySchema = z
   .object({
@@ -31,6 +32,7 @@ export const recoverySchema = z
     evidence: z.string().trim().min(1).max(8_000),
     nextStep: z.string().trim().min(1).max(8_000),
     notBefore: z.string().datetime().nullable(),
+    confirmation: z.string().trim().min(1).max(4000).nullable().optional(),
   })
   .strict();
 
@@ -77,5 +79,5 @@ export function parseScheduledResult(text: string) {
 }
 
 export function scheduledPrompt(prompt: string, runId: string): string {
-  return `${prompt}\n\n<scheduled_run_context>\n这是后台定时任务，运行 ID：${runId}。没有交互式 Runweave 终端身份，不得借用其他终端的 Runweave 标识或伪造 terminalSessionId；这不限制常规工具使用当前系统账号已有的合法凭证。需要调用 Runweave CLI 时，若 RUNWEAVE_CLI_BIN 已设置，必须使用 "$RUNWEAVE_CLI_BIN"；登录 shell 中 PATH 里的 rw 可能属于其他运行实例。\n请执行任务，并通过指定 JSON schema 返回最终结果。outcome 仅在用户要求的工作和必要验证实际完成时为 succeeded；权限、网络、认证、审批拒绝或缺少必要输入导致不能继续时为 blocked；执行失败为 failed。summary 用中文 Markdown 说明实际成果和证据，reason 说明阻塞或失败的具体原因与下一步（成功时为空）。进程正常退出、读完技能或生成计划均不等于任务成功。未完成时必须提供 recovery 建议：原授权内仍有具体下一步用 continue/remaining-work；有证据的临时服务故障用 wait/transient；等待 CI 或可验证的外部条件用 wait/external-wait；缺少用户输入用 needs-input/input，权限或审批拒绝用 needs-input/permission；未知结果或不可恢复用 stop/unknown。evidence 写事实依据，nextStep 写核对条件及剩余工作，notBefore 仅在有明确最早恢复时间时写 UTC ISO 时间，否则为 null。成功时 recovery 为 null。继续建议不代表扩展授权，范围不明或并发写入归属不明不能只靠等待自动解决。网络或认证检查超时不等于凭证失效或权限拒绝；先按所用技能区分网络连通、凭证读取与实际认证结果，并在获准路线内有界恢复，原因必须有证据。不要绕过权限限制；审批或权限拒绝后如无获准的替代路径，应返回 blocked。\n</scheduled_run_context>`;
+  return `${prompt}\n\n<scheduled_run_context>\n这是后台定时任务，运行 ID：${runId}。没有交互式 Runweave 终端身份，不得借用其他终端的 Runweave 标识或伪造 terminalSessionId；这不限制常规工具使用当前系统账号已有的合法凭证。需要调用 Runweave CLI 时，若 RUNWEAVE_CLI_BIN 已设置，必须使用 "$RUNWEAVE_CLI_BIN"；登录 shell 中 PATH 里的 rw 可能属于其他运行实例。\n请执行任务，并通过指定 JSON schema 返回最终结果。outcome 仅在用户要求的工作和必要验证实际完成时为 succeeded；权限、网络、认证、审批拒绝或缺少必要输入导致不能继续时为 blocked；执行失败为 failed。summary 用中文 Markdown 说明实际成果和证据，reason 说明阻塞或失败的具体原因与下一步（成功时为空）。进程正常退出、读完技能或生成计划均不等于任务成功。未完成时必须提供 recovery 建议：原授权内仍有具体下一步用 continue/remaining-work；有证据的临时服务故障用 wait/transient；等待 CI 或可验证的外部条件用 wait/external-wait；缺少用户输入用 needs-input/input，权限或审批拒绝用 needs-input/permission；未知结果或不可恢复用 stop/unknown。evidence 写事实依据，nextStep 写核对条件及剩余工作，notBefore 仅在有明确最早恢复时间时写 UTC ISO 时间，否则为 null。若只差用户明确同意，在 confirmation 中写清点击允许将确认的具体动作、范围及必要条件；不要只写“继续”，也不要把开放性问题伪装成授权，其他情况 confirmation 为 null。用户已明确回答的问题无需重复询问；仅有进程存在不能证明仍有并发写入，应先核对实际变化。成功时 recovery 为 null。继续建议不代表扩展授权，范围不明或并发写入归属不明不能只靠等待自动解决。网络或认证检查超时不等于凭证失效或权限拒绝；先按所用技能区分网络连通、凭证读取与实际认证结果，并在获准路线内有界恢复，原因必须有证据。不要绕过权限限制；审批或权限拒绝后如无获准的替代路径，应返回 blocked。\n</scheduled_run_context>`;
 }

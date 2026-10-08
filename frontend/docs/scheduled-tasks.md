@@ -69,7 +69,7 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
   恢复父项目、实际项目、session 和 panel；不向 Backend 发送停止或删除。
 - 运行中只查看只读输出。可打开性由 Backend 的 `recoverable` 和真实 thread 决定；
   打开接口返回普通终端标识；Web 等待 Backend attachment 明确 ready 后，经现有路由进入终端，
-  不将 command_submitted 当作恢复成功。恢复失败/超时留在记录页供重试，不创建专用输入区。
+  不将 command_submitted 当作恢复成功。恢复失败/超时留在记录页供重试；后台受阻任务可直接在详情回复，无需先恢复终端。
   原执行目录或 thread 历史缺失时拒绝恢复；ready 要求本次恢复的 thread 与 cwd 证据。
   恢复命令显式传入该次运行快照的模型、推理强度和执行权限，不读取任务的新配置，也不继承
   本机全局权限覆盖。模型与推理强度通过本次 Codex 设置事件确认后才标记 ready。
@@ -124,6 +124,8 @@ Backend 额外探测 `codex exec resume` 能力；不可用时明确拒绝，不
 开始/结束时间、输出游标、摘要和结果。详情提供「每轮进展」「立即继续」「停止自动继续」；
 立即继续只提前已有等待，不增加次数，不复活历史失败，服务明确指定的最早恢复时间仍生效。
 接口为 `POST /runs/:runId/continue`，要求 `expectedRevision` 与 `Idempotency-Key`。
+带 `reply` 时表示真实用户回复：允许未归档、未被终端接管且有原会话的 failed/cancelled 运行重入队列，沿用 run/thread、执行权限及累计预算；用户回复不消耗自动续接次数，也不重置其上限或恢复窗口。回复和自动提示分开构造，回复保存在对应 attempt，重复请求不重复执行，旧 revision 或同 key 不同回复拒绝。
+`needs-input` 明确显示等待回复原因，详情提供直接回复框。Agent 可在 recovery.confirmation 中返回具体待确认事项；Web/iOS 展示完整事项后提供“允许并继续”，发送该事项的明确确认，不能仅发送泛泛的“继续”，也不能自动把等待变成授权。已被用户明确回答的问题不重复询问，开放性问题仍需要具体回答。其他可恢复的失败提供主动“重试”；无法安全自动重试、额度耗尽和终端接管均显示原因。
 停止与领取串行；等待时接管到终端先持久取消自动继续。已有终端绑定不自动拉回后台。
 
 等待期间不发送终态通知；最终结果按 run ID、resultRevision 和订阅去重。

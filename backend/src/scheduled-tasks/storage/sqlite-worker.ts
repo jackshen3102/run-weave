@@ -35,6 +35,7 @@ function execute(command: ScheduledTaskWorkerCommand) {
         command.revision,
         command.key,
         command.now,
+        command.reply,
       );
     case "integrity":
       return database.integrity();

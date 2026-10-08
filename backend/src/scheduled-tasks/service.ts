@@ -446,13 +446,14 @@ export class ScheduledTaskService {
     runId: string,
     revision: number,
     key: string,
+    reply?: string,
   ): Promise<ScheduledRun> {
     this.requireEnabled();
     const run = await this.getRun(runId);
     this.requireProvider(run.snapshot.provider);
     this.requireContinuation(
       run.snapshot.provider,
-      run.snapshot.continuationPolicy,
+      reply ? { mode: "bounded" } : run.snapshot.continuationPolicy,
     );
     const project = this.requireProject(run.executionProjectId);
     if (project.path !== run.cwd)
@@ -467,6 +468,7 @@ export class ScheduledTaskService {
         revision,
         key,
         new Date().toISOString(),
+        reply,
       );
       this.runtime?.wake();
       return updated;
