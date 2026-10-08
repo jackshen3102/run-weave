@@ -1,9 +1,33 @@
 import { Braces, Check, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { TERMINAL_BROWSER_DEFAULT_HEADER_URL_PATTERN, TERMINAL_BROWSER_HEADER_RULE_LIMIT, type TerminalBrowserHeaderRule, type TerminalBrowserHeaderRuleField, validateTerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
+import {
+  TERMINAL_BROWSER_DEFAULT_HEADER_URL_PATTERN,
+  TERMINAL_BROWSER_HEADER_RULE_LIMIT,
+  type TerminalBrowserHeaderRule,
+  type TerminalBrowserHeaderRuleField,
+  validateTerminalBrowserHeaderRule,
+} from "@runweave/shared/terminal-browser-headers";
 import { Button } from "../../../ui/button";
 
 type HeaderRuleErrors = Partial<Record<TerminalBrowserHeaderRuleField, string>>;
+
+const EXACT_DOMAIN_URL_PATTERN = /^\*:\/\/([a-z0-9.-]+)\/\*$/i;
+
+function domainFromRules(rules: TerminalBrowserHeaderRule[]): string {
+  const patterns = new Set(rules.map((rule) => rule.urlPattern));
+  if (patterns.size !== 1) return "";
+  const [pattern] = patterns;
+  return pattern?.match(EXACT_DOMAIN_URL_PATTERN)?.[1] ?? "";
+}
+
+function isValidDomain(domain: string): boolean {
+  return (
+    domain.length <= 253 &&
+    domain
+      .split(".")
+      .every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
+  );
+}
 
 interface TerminalBrowserHeadersButtonProps {
   open: boolean;
@@ -48,12 +72,16 @@ function validateRules(
   return errors;
 }
 
-function withDefaultUrlPatterns(
+function withDomainUrlPatterns(
   rules: TerminalBrowserHeaderRule[],
+  domain: string,
 ): TerminalBrowserHeaderRule[] {
+  const urlPattern = domain
+    ? `*://${domain}/*`
+    : TERMINAL_BROWSER_DEFAULT_HEADER_URL_PATTERN;
   return rules.map((rule) => ({
     ...rule,
-    urlPattern: TERMINAL_BROWSER_DEFAULT_HEADER_URL_PATTERN,
+    urlPattern,
   }));
 }
 
@@ -110,6 +138,8 @@ export function TerminalBrowserHeadersPanel({
 }: TerminalBrowserHeadersPanelProps) {
   const [draftRules, setDraftRules] =
     useState<TerminalBrowserHeaderRule[]>(rules);
+  const [domain, setDomain] = useState(() => domainFromRules(rules));
+  const [domainError, setDomainError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
     Record<string, HeaderRuleErrors>
   >({});
@@ -117,6 +147,8 @@ export function TerminalBrowserHeadersPanel({
   useEffect(() => {
     if (!open) {
       setDraftRules(rules);
+      setDomain(domainFromRules(rules));
+      setDomainError(null);
       setFieldErrors({});
     }
   }, [open, rules]);
@@ -148,7 +180,13 @@ export function TerminalBrowserHeadersPanel({
   };
 
   const saveRules = async (): Promise<void> => {
-    const nextRules = withDefaultUrlPatterns(draftRules);
+    const normalizedDomain = domain.trim().toLowerCase();
+    if (normalizedDomain && !isValidDomain(normalizedDomain)) {
+      setDomainError("Enter a domain such as www.doubao.com");
+      return;
+    }
+    setDomainError(null);
+    const nextRules = withDomainUrlPatterns(draftRules, normalizedDomain);
     const nextErrors = validateRules(nextRules);
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
@@ -193,6 +231,34 @@ export function TerminalBrowserHeadersPanel({
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
+      </div>
+
+      <div className="shrink-0 space-y-1 border-b border-slate-800 p-3">
+        <label
+          htmlFor="terminal-browser-header-domain"
+          className="text-xs font-medium text-slate-300"
+        >
+          Domain
+        </label>
+        <input
+          id="terminal-browser-header-domain"
+          className={[
+            "h-8 w-full rounded-md border bg-slate-900 px-2 text-xs text-slate-100 outline-none focus:border-sky-500",
+            domainError ? "border-rose-700" : "border-slate-800",
+          ].join(" ")}
+          placeholder="www.doubao.com"
+          value={domain}
+          onChange={(event) => {
+            setDomain(event.target.value);
+            setDomainError(null);
+          }}
+        />
+        <p className="text-[10px] text-slate-500">
+          Exact host only. Leave blank to apply to all websites.
+        </p>
+        {domainError ? (
+          <p className="text-xs text-rose-400">{domainError}</p>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
@@ -288,7 +354,12 @@ export function TerminalBrowserHeadersPanel({
             size="sm"
             variant="ghost"
             className="h-8 rounded-md px-3 text-xs"
-            onClick={() => setDraftRules(rules)}
+            onClick={() => {
+              setDraftRules(rules);
+              setDomain(domainFromRules(rules));
+              setDomainError(null);
+              setFieldErrors({});
+            }}
           >
             Reset
           </Button>
