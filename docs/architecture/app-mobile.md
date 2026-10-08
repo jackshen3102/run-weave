@@ -52,6 +52,15 @@ identityId 是原始公钥的 SHA-256。只有版本、身份、公钥、nonce �
 复制整个 profile 也会复制身份，不能视为硬件唯一标识。身份重置必须由用户重新登录确认，
 不能因重试或新增地址自动接受新公钥。发布顺序为 Backend 后 iOS；旧客户端接口保持兼容。
 
+签名证明不替代 TLS，也不能防止明文 HTTP 的主动转发攻击；客户端拒绝自动重定向。
+同电脑换线路等待已发 refresh 收敛，响应丢失时要求重新登录，不重放 token 或业务写入。
+旧配置不迁移，由用户重新录入；旧数据保留，回滚不合并 v2 新数据。
+
+线路与持续会话验收见 [线路选择](../testing/app/ios-connection-routes.testplan.yaml)，
+目标校验、凭据和重新录入见 [身份协议](../testing/app/ios-connection-identity.testplan.yaml)。
+原型浏览器检查、源码构建与真机跨网络验收分别取证，实际完成范围见
+[iOS 验收状态](../../packages/app-ios/docs/validation-status.md)。
+
 ## 首页自进化成果
 
 首页「自进化」位于关注区下、项目列表前，最多显示四条待处理成果，不依赖关注终端存在。

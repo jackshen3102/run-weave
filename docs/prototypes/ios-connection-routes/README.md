@@ -1,6 +1,6 @@
 # iPhone 多线路连接原型
 
-2026-10-08 的交互设计快照，已作为[多线路实施计划](../../plans/2026-10-08-ios-connection-routes.md)的界面基准。仅表达产品意图，不代表当前 Runweave 已实现；后续核心调整同步更新原型和计划，不作为当前生产协议或架构依据。
+2026-10-08 的历史交互设计快照，保存当时的产品意图与模拟交互。核心原生实现已落地，当前合同见 [iOS 架构](../../../packages/app-ios/docs/architecture.md#同一电脑的多线路连接)；本原型不作为当前生产协议、实现状态或真机验收证据。
 
 ## 打开
 
@@ -53,9 +53,9 @@ python3 -m http.server 6197 --bind 127.0.0.1 --directory docs/prototypes/ios-con
 
 ## 与当前产品的关系
 
-现有 [ConnectionStore](../../../packages/app-ios/Sources/RunweaveIOS/State/ConnectionStore.swift) 每条连接保存一个 URL；[ConnectionManager](../../../packages/app-ios/Sources/RunweaveIOS/Features/Connections/ConnectionManager.swift) 提供新增、编辑、删除及手动选择。[APIClient](../../../packages/app-ios/Sources/RunweaveIOS/Services/APIClient.swift) 的凭据按连接 ID 和 URL 隔离。
+正式实现由 [ConnectionStore](../../../packages/app-ios/Sources/RunweaveIOS/State/ConnectionStore.swift) 保存电脑与有序线路，[ConnectionRouteResolver](../../../packages/app-ios/Sources/RunweaveIOS/State/ConnectionRouteResolver.swift) 选择可信地址，[ComputerCredentialSession](../../../packages/app-ios/Sources/RunweaveIOS/State/ComputerCredentialSession.swift) 按电脑共享凭据和一次在途刷新。同电脑换线路保留终端和未发送草稿；身份协议见 [移动端架构](../../architecture/app-mobile.md#电脑身份协议)。
 
-正式实现还需要把电脑身份与线路地址分开，迁移已有配置与凭据，处理线路切换后的 HTTP/WebSocket 生命周期、终端和草稿保留，并定义可信的目标身份校验。原型没有证明这些能力已存在，也没有执行 iOS 或真机验收。
+新配置使用 `native.connections.v2`，由用户重新录入，不导入或删除旧配置、凭据、草稿与通知绑定。完整验收矩阵及真机跨网络验证仍以 [验收状态](../../../packages/app-ios/docs/validation-status.md) 为准，不继承下面的浏览器原型检查结果。
 
 ## 验证
 
