@@ -94,7 +94,7 @@ Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.m
 
 | 任务                       | 文档                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[运行配置](../deployment/overview.md#定时任务运行)     |
+| 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[后台续接与回复](../cli/scheduled-task-cli.md#后台续接与人工回复)、[运行配置](../deployment/overview.md#定时任务运行)     |
 | 快捷指令后台运行           | [定时任务接入边界](../../frontend/docs/scheduled-tasks.md)、[验收计划](../testing/background-commands/core.testplan.yaml) |
 | Agent Team / Loop Engine   | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md)                                                              |
 | 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                                |

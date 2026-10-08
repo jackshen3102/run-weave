@@ -42,6 +42,10 @@ flowchart LR
 页面不注入随记凭据，网站身份沿用所选 Browser Profile。失败显示主动重试/外部打开入口，
 迟到结果不抢占已切换的账户或界面。纯 Web 保留原生新标签行为；缺少创建标签能力的旧桌面壳走外部打开。
 
+Web/桌面编辑正文时可从剪贴板粘贴图片，复用现有附件上传与草稿状态；忙碌或草稿冻结时不添加。
+文字粘贴保留原行为，图片添加不自动保存记录。入口为 [编辑器](../../frontend/src/features/suiji/editor.tsx)
+与 [共享正文面板](../../frontend/src/features/suiji/panel.tsx)。
+
 账户固定为正式和开发两套，切换不注销另一环境。桌面通过窄 IPC 访问
 [主进程安全存储](../../electron/src/desktop/suiji-storage.ts)：账号、密码和会话一起由 Electron
 异步 safeStorage 加密，密文以原子替换方式写入稳定 userData 目录，不依赖 renderer origin 或构建目录。
