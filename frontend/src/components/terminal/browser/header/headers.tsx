@@ -11,19 +11,20 @@ import { Button } from "../../../ui/button";
 
 type HeaderRuleErrors = Partial<Record<TerminalBrowserHeaderRuleField, string>>;
 
-const EXACT_DOMAIN_URL_PATTERN = /^\*:\/\/([a-z0-9.-]+)\/\*$/i;
+const DOMAIN_URL_PATTERN = /^\*:\/\/((?:\*\.)?[a-z0-9.-]+)\/\*$/i;
 
 function domainFromRules(rules: TerminalBrowserHeaderRule[]): string {
   const patterns = new Set(rules.map((rule) => rule.urlPattern));
   if (patterns.size !== 1) return "";
   const [pattern] = patterns;
-  return pattern?.match(EXACT_DOMAIN_URL_PATTERN)?.[1] ?? "";
+  return pattern?.match(DOMAIN_URL_PATTERN)?.[1] ?? "";
 }
 
 function isValidDomain(domain: string): boolean {
+  const hostname = domain.startsWith("*.") ? domain.slice(2) : domain;
   return (
-    domain.length <= 253 &&
-    domain
+    hostname.length <= 253 &&
+    hostname
       .split(".")
       .every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
   );
@@ -182,7 +183,7 @@ export function TerminalBrowserHeadersPanel({
   const saveRules = async (): Promise<void> => {
     const normalizedDomain = domain.trim().toLowerCase();
     if (normalizedDomain && !isValidDomain(normalizedDomain)) {
-      setDomainError("Enter a domain such as www.doubao.com");
+      setDomainError("Enter a domain such as www.example.com or *.example.com");
       return;
     }
     setDomainError(null);
@@ -246,7 +247,7 @@ export function TerminalBrowserHeadersPanel({
             "h-8 w-full rounded-md border bg-slate-900 px-2 text-xs text-slate-100 outline-none focus:border-sky-500",
             domainError ? "border-rose-700" : "border-slate-800",
           ].join(" ")}
-          placeholder="www.doubao.com"
+          placeholder="www.example.com or *.example.com"
           value={domain}
           onChange={(event) => {
             setDomain(event.target.value);
@@ -254,7 +255,7 @@ export function TerminalBrowserHeadersPanel({
           }}
         />
         <p className="text-[10px] text-slate-500">
-          Exact host only. Leave blank to apply to all websites.
+          Use *.domain.com for subdomains only. Leave blank for all websites.
         </p>
         {domainError ? (
           <p className="text-xs text-rose-400">{domainError}</p>
