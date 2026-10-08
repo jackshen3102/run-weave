@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <link rel="icon" href="data:," />
+    <title>@@TITLE@@</title>
+    <link rel="stylesheet" href="reader.css" />
+    <script id="gallery-data" type="application/json">
+      @@DATA@@
+    </script>
+    <script src="reader.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#pages">跳到本页内容</a>
+    <header class="masthead">
+      <div class="brand">
+        图文验收 <span aria-hidden="true">/</span>
+        <span id="material-kind"></span>
+      </div>
+      <div class="task-line">
+        <h1 id="task-title"></h1>
+        <button id="expand" type="button" aria-pressed="false">展开全部</button>
+      </div>
+      <p id="task-scope"></p>
+      <details id="task-limits" hidden>
+        <summary>本次材料的范围</summary>
+        <ul></ul>
+      </details>
+    </header>
+    <div class="workspace">
+      <aside class="directory">
+        <details id="directory-details" open>
+          <summary>阅读目录</summary>
+          <nav aria-label="页面目录" id="directory"></nav>
+        </details>
+        <p class="directory-note">每页一个问题<br />图片与说明一起看</p>
+      </aside>
+      <main id="pages" tabindex="-1"></main>
+    </div>
+    <footer id="navigation" class="navigation" aria-label="翻页">
+      <button id="previous" type="button">← 上一页</button>
+      <div class="position">
+        <span id="page-count"></span><span id="page-name"></span>
+      </div>
+      <button id="next" type="button">下一页 →</button>
+    </footer>
+    <p id="notice" role="status" aria-live="polite" class="notice" hidden></p>
+    <div
+      id="announcement"
+      class="sr-only"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+    <noscript
+      ><p class="fatal">
+        请启用 JavaScript 查看图文。原始材料仍位于同目录的 assets 文件夹。
+      </p></noscript
+    >
+  </body>
+</html>
