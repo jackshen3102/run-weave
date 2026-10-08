@@ -1,13 +1,13 @@
 import { X509Certificate } from "node:crypto";
 import { isIP } from "node:net";
-import type { Certificate } from "electron";
+import type { Certificate, Session } from "electron";
 import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 import { TerminalBrowserError } from "../errors.js";
 import { getTerminalBrowserSession } from "../runtime.js";
 import { getWhistleRootCa } from "../whistle/client.js";
 import { getTerminalBrowserWhistleState } from "../whistle/runtime.js";
 
-const installedFingerprints = new Map<TerminalBrowserProfileId, string>();
+const installedFingerprints = new WeakMap<Session, string>();
 
 function normalizeFingerprint(value: string): string {
   return value.replaceAll(":", "").toUpperCase();
@@ -85,6 +85,7 @@ function chainIsSignedByRoot(
 
 export async function ensureTerminalBrowserCertificateTrust(
   profileId: TerminalBrowserProfileId,
+  browserSession: Session = getTerminalBrowserSession(profileId),
 ): Promise<void> {
   try {
     const whistle = getTerminalBrowserWhistleState(profileId);
@@ -94,10 +95,10 @@ export async function ensureTerminalBrowserCertificateTrust(
     const pem = await getWhistleRootCa(whistle.port);
     const root = new X509Certificate(pem);
     const fingerprint = normalizeFingerprint(root.fingerprint256);
-    if (installedFingerprints.get(profileId) === fingerprint) {
+    if (installedFingerprints.get(browserSession) === fingerprint) {
       return;
     }
-    getTerminalBrowserSession(profileId).setCertificateVerifyProc(
+    browserSession.setCertificateVerifyProc(
       (request, callback) => {
         let leaf: X509Certificate | null = null;
         try {
@@ -127,7 +128,7 @@ export async function ensureTerminalBrowserCertificateTrust(
         callback(-3);
       },
     );
-    installedFingerprints.set(profileId, fingerprint);
+    installedFingerprints.set(browserSession, fingerprint);
   } catch (error) {
     throw new TerminalBrowserError(
       "WHISTLE_CA_UNAVAILABLE",

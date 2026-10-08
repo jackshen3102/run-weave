@@ -1,6 +1,7 @@
 import type { TerminalBadgeConnection } from "../terminal/unread";
 import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin, LocalRemoteDesktopInfo } from "../tunnels/index";
 import type { LoginResponse } from "../protocol";
+import type { DesktopLocalBrowserSource } from "../browser/local-tunnel";
 import type { ConfigurationStatus } from "../configuration";
 import type { SuijiDesktopState, SuijiEnvironment, SuijiProfile } from "../suiji/desktop";
 import type { RemoteServiceRef, ResolvedServiceAccess } from "../remote/index";
@@ -168,7 +169,10 @@ export interface RunweaveElectronBridge {
   terminalBrowserNavigate: (
     tabId: string,
     url: string,
+    source?: DesktopLocalBrowserSource,
   ) => Promise<TerminalBrowserSnapshot>;
+  terminalBrowserInvalidateSource: (connectionId: string) => Promise<void>;
+  terminalBrowserSyncSource: (source: DesktopLocalBrowserSource) => Promise<void>;
   terminalBrowserGetWorkspace: (
     profileId: TerminalBrowserProfileId,
   ) => Promise<TerminalBrowserWorkspaceSnapshot>;

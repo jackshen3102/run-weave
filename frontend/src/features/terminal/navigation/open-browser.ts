@@ -3,6 +3,7 @@ import {
   type TerminalBrowserProfileId,
 } from "@runweave/shared/terminal-browser-profile";
 import { normalizeTerminalBrowserUrl } from "./browser-url";
+import type { DesktopLocalBrowserSource } from "@runweave/shared/browser-local-tunnel";
 
 type TerminalBrowserPlacement =
   | { kind: "new-group" }
@@ -10,6 +11,7 @@ type TerminalBrowserPlacement =
 
 export async function openTerminalBrowserUrl(input: {
   url: string;
+  source?: DesktopLocalBrowserSource;
   projectId?: string | null;
   profileId?: TerminalBrowserProfileId;
   placement: TerminalBrowserPlacement;
@@ -44,8 +46,9 @@ export async function openTerminalBrowserUrl(input: {
           groupId: input.placement.groupId,
           openerTabId: input.placement.openerTabId,
           url: normalized.url,
+          source: input.source,
         }
-      : { profileId, placement: "new-group", url: normalized.url },
+      : { profileId, placement: "new-group", url: normalized.url, source: input.source },
   );
   return profileId;
 }

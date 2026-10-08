@@ -1,4 +1,5 @@
 import { sleepIdleTerminalBrowserTabs } from "../view/sleep.js";
+import { prepareLocalPreview, validatePreviewSource } from "../local-preview/navigation.js";
 import { resolveTerminalBrowserProfile } from "../profile/runtime.js";
 import { BrowserWindow, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
@@ -35,6 +36,27 @@ import {
 } from "./index.js";
 
 export function registerTerminalBrowserWorkspaceHandlers(): void {
+  ipcMain.handle("terminal-browser:sync-source", (event, raw: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || event.senderFrame !== event.sender.mainFrame) return;
+    const source = validatePreviewSource(raw);
+    for (const entry of terminalBrowserRuntime.entries.values()) {
+      const preview = entry.localPreview;
+      if (entry.windowId !== win.id || preview?.source.connectionId !== source.connectionId) continue;
+      preview.updateSource(source);
+    }
+  });
+  ipcMain.handle("terminal-browser:invalidate-source", (event, connectionId: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || event.senderFrame !== event.sender.mainFrame || typeof connectionId !== "string") return;
+    for (const [key, entry] of terminalBrowserRuntime.entries) {
+      if (entry.windowId !== win.id || entry.localPreview?.source.connectionId !== connectionId) continue;
+      entry.localPreview.invalidate("原电脑连接已移除或更改，请从终端重新打开。");
+      entry.navigationError = "原电脑连接已移除或更改，请从终端重新打开。";
+      entry.view.webContents.stop();
+      sendTerminalBrowserTabUpdate(win, key.split(":").at(-1)!, entry, false);
+    }
+  });
   ipcMain.handle("terminal-browser:show", async (event, tabId: string) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || typeof tabId !== "string") {
@@ -136,6 +158,8 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
         },
         { excludedWindowId: win.id },
       );
+      const preview = await prepareLocalPreview(request.profileId, safeUrl, request.source);
+      if (win.isDestroyed()) { preview?.close(); return; }
       const view = getOrCreateTerminalBrowserView(
         win,
         request.profileId,
@@ -143,13 +167,14 @@ export function registerTerminalBrowserWorkspaceHandlers(): void {
         {
           browserGroupId,
           openerTabId,
+          localPreview: preview,
         },
       );
       const entry = getExistingTerminalBrowserEntry(win, tabId, "create");
       attachTerminalBrowser(win, tabId, view);
       entry.lastKnownUrl = safeUrl;
       if (safeUrl !== "about:blank") {
-        void view.webContents.loadURL(safeUrl).catch(() => {
+        void view.webContents.loadURL(preview?.navigationURL(safeUrl) ?? safeUrl).catch(() => {
           sendTerminalBrowserTabUpdate(win, tabId, entry, false);
         });
       }

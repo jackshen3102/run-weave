@@ -7,6 +7,7 @@ import {
   findTerminalBrowserEntryForWindow,
   getTerminalBrowserKey,
   terminalBrowserEvents,
+  terminalBrowserRuntime,
   type TerminalBrowserEntry,
   type TerminalBrowserSnapshot,
   type TerminalBrowserUpdate,
@@ -21,8 +22,11 @@ export function getTerminalBrowserSnapshot(
   fallbackUrl = "",
 ): TerminalBrowserSnapshot {
   const history = view.webContents.navigationHistory;
+  const preview = [...terminalBrowserRuntime.entries.values()].find((entry) => entry.view === view)?.localPreview;
+  const rawUrl = view.webContents.getURL() || fallbackUrl;
   return {
-    url: view.webContents.getURL() || fallbackUrl,
+    url: preview?.displayURL(rawUrl) ?? rawUrl,
+    ...(preview ? { localPreview: preview.info } : {}),
     title: view.webContents.getTitle(),
     canGoBack: history.canGoBack(),
     canGoForward: history.canGoForward(),
@@ -58,6 +62,8 @@ export function getTerminalBrowserUpdateKey(
     update.tabId,
     update.browserGroupId,
     update.url,
+    update.localPreview?.connectionId ?? "",
+    update.localPreview?.connectionName ?? "",
     update.title,
     update.canGoBack ? "1" : "0",
     update.canGoForward ? "1" : "0",

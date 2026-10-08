@@ -40,6 +40,7 @@ export function buildTabUpdateFromElectronSnapshot(
   const url = normalizeElectronBrowserUrl(snapshot.url);
   return {
     url,
+    localPreview: snapshot.localPreview,
     addressInput: url,
     title: getElectronBrowserTitle(snapshot.title, url),
     loading: false,
@@ -58,6 +59,7 @@ export function buildTabUpdateFromElectronUpdate(
     addressInput: url,
     title: getElectronBrowserTitle(update.title, url),
     loading: update.loading,
+    localPreview: update.localPreview,
     suspended: update.suspended === true,
     canGoBack: update.canGoBack,
     canGoForward: update.canGoForward,
@@ -87,6 +89,7 @@ export function buildTabStateFromElectronSnapshot(
     addressInput: url,
     title: getElectronBrowserTitle(snapshot.title, url),
     loading: snapshot.loading,
+    localPreview: snapshot.localPreview,
     suspended: snapshot.suspended === true,
     canGoBack: snapshot.canGoBack,
     canGoForward: snapshot.canGoForward,

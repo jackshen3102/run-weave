@@ -13,6 +13,7 @@ import {
 } from "../../../features/terminal/output/performance";
 import { normalizeTerminalBrowserUrl } from "../../../features/terminal/navigation/browser-url";
 import { openTerminalBrowserUrl } from "../../../features/terminal/navigation/open-browser";
+import { useLocalBrowserSource } from "../../../features/terminal/navigation/local-preview";
 import { isSupportedFloatingComposerAgent } from "../../../features/terminal/input/floating-composer";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useTerminalPromptInsertionStore } from "../../../features/terminal/input/prompt-store";
@@ -72,6 +73,7 @@ export function TerminalSurface({
   onOpenFileLink,
 }: TerminalSurfaceProps) {
   const { apiBase, onAuthExpired, token } = useTerminalRuntime();
+  const localBrowserSource = useLocalBrowserSource(terminalSessionId);
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const createBrowserTab = useTerminalPreviewStore(
@@ -357,6 +359,7 @@ export function TerminalSurface({
             );
             return openTerminalBrowserUrl({
               url: uri,
+              source: localBrowserSource,
               profileId: activeBrowserProfileId,
               placement: opener
                 ? {
@@ -386,7 +389,7 @@ export function TerminalSurface({
       }
       openBrowser();
     };
-  }, [activeBrowserProfileId, createBrowserTab, openBrowser]);
+  }, [activeBrowserProfileId, createBrowserTab, openBrowser, localBrowserSource]);
 
   useEffect(() => {
     tokenRef.current = token;

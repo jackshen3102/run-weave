@@ -44,6 +44,36 @@ Stable 沿用原用户目录，Beta/Dev Session 使用独立 userData、认证�
 
 ## Browser 通道和并发
 
+### 桌面打开远端本地页面
+
+从远端连接的终端点击 HTTP(S) 本地链接，或在该终端的 Browser 地址栏输入本地地址时，
+桌面通过所属 Backend 的认证 WebSocket 访问其回环端口；不将 URL 主机简单替换为 Backend IP。
+内置本地 Backend、SSH 面板已转发端口和 Workspace Service 专用入口继续使用原路径。
+页面显示连接名称和“电脑本地预览”，保留原链接用于地址显示与复制，提供显式“在本机打开”。
+已打开的预览绑定原连接与终端，切换当前连接不会改变目标；新目标需重新获得授权。
+
+Backend 对 Electron 登录签发绑定终端、预览身份、目标地址/端口的一次性 60 秒凭证，
+只由 Electron main 在 WebSocket Authorization header 使用。普通 Web 会话、带 Origin 的请求、
+重复凭证和其他目标被拒绝；原生 iOS 通道保持原 App 会话校验。活跃流持续验证会话与终端存活。
+桌面只在内存保留凭据，同一来源的登录续期会更新凭据；后台来源凭据到期后可能需要回原终端重新打开。
+
+每个预览使用独立临时 Electron Session 和动态回环 HTTP 入口。预览入口直接访问；公网资源
+使用选定 Profile 的 Direct/Whistle 出口，Whistle CA 校验也只安装到相应 Session。
+创建、关闭预览不修改 Profile 的代理模式、规则、Values 或已有同号 SSH 转发；切换代理模式
+会同步临时 Session 的出口，但不自动刷新预览或重放表单。转发只接受该 Session 注入的临时入口凭据，
+凭据不会转发到开发服务。
+
+支持相对资源、接口、上传和按页面地址连接的 WebSocket/HMR。页面使用临时预览 origin；
+写死 localhost 的绝对资源、其他本地端口和绝对本地重定向被阻止，不能据此证明原 origin、
+OAuth 或 Secure Cookie 等价。HTTPS 上游由 Backend 正常校验证书。预览不共享 Profile 登录态，
+不参与闲置休眠或重启恢复；关闭页面释放自有资源与临时数据。删除/修改连接会停止对应预览。
+
+入口：[桌面预览](../../electron/src/browser/local-preview/session.ts)、
+[Backend 授权路由](../../backend/src/routes/browser-local.ts)、
+[共享合同](../../packages/shared/src/browser/local-tunnel.ts)。
+
+### Agent Browser 回连
+
 Browser 回连链路是远端 Backend → SSH `-R` → 本机认证网关 → 获准 Profile/Group。
 Browser 单独登录、刷新认证；失败只影响此子通道，不影响普通端口转发。
 桌面、远端 Backend 与 CLI 需支持协议 2。身份由 desktopId、hostId、generation 和登录会话共同约束，

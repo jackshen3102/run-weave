@@ -33,6 +33,7 @@ function validateHttpUrl(input: string): TerminalBrowserUrlResult {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return { ok: false, error: "Only http and https URLs are supported" };
     }
+    if (parsed.port === "0") return { ok: false, error: "Port must be between 1 and 65535" };
     return { ok: true, url: parsed.toString() };
   } catch {
     return { ok: false, error: "Enter a valid http or https URL" };

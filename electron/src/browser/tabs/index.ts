@@ -88,6 +88,8 @@ function buildPersistedProfileState(
         const key = getTerminalBrowserKey(windowId, profileId, tabId);
         const entry = terminalBrowserRuntime.entries.get(key);
         const dormant = terminalBrowserRuntime.dormantTabs.get(key);
+        // Remote previews are temporary sessions. Never restore them as local URLs.
+        if (entry?.localPreview) continue;
         const webContents = entry?.view.webContents;
         const url = normalizeTerminalBrowserUrlForStorage(
           entry && webContents && !webContents.isDestroyed()

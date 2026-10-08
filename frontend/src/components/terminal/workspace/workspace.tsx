@@ -13,6 +13,7 @@ export function TerminalWorkspace(props: TerminalWorkspaceProps) {
   return (
     <TerminalRuntimeProvider
       activeConnectionId={props.connection?.activeConnectionId}
+      connectionName={props.connection?.connectionName}
       apiBase={props.apiBase}
       onAuthExpired={props.onAuthExpired}
       token={props.token}

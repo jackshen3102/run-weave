@@ -1,3 +1,5 @@
+import type { DesktopLocalBrowserSource } from "@runweave/shared/browser-local-tunnel";
+import { navigateWithLocalPreview } from "./local-preview/navigation.js";
 import { registerTerminalBrowserPresentationHandler } from "./view/presentation.js";
 import { BrowserWindow, ipcMain } from "electron";
 import type { BrowserAssistanceTarget } from "@runweave/shared/terminal-browser-assistance";
@@ -274,6 +276,7 @@ export function registerTerminalBrowserHandlers(): void {
       event,
       tabId: string,
       url: string,
+      source?: DesktopLocalBrowserSource,
     ): Promise<TerminalBrowserSnapshot> => {
       const win = BrowserWindow.fromWebContents(event.sender);
       const safeUrl = validateTerminalBrowserUrl(url);
@@ -283,20 +286,21 @@ export function registerTerminalBrowserHandlers(): void {
 
       const entry = getExistingTerminalBrowserEntry(win, tabId, "navigate");
       await resolveTerminalBrowserProfile({projectId:null,explicitProfileId:entry.profileId,browserGroupId:entry.browserGroupId??null},{excludedWindowId:win.id});
-      const { view } = entry;
       entry.lastKnownUrl = safeUrl;
       try {
-        await view.webContents.loadURL(safeUrl);
+        await navigateWithLocalPreview(win, tabId, safeUrl, source);
       } catch (error) {
         if (!isNavigationAbortError(error)) {
-          entry.navigationError = (
-            entry.navigationError ||
+          const current = getExistingTerminalBrowserEntry(win, tabId, "navigate");
+          current.navigationError = (
+            current.navigationError ||
             (error instanceof Error ? error.message : "Navigation failed")
           ).slice(0, 240);
-          sendTerminalBrowserTabUpdate(win, tabId, entry, false);
+          sendTerminalBrowserTabUpdate(win, tabId, current, false);
         }
       }
-      return getTerminalBrowserSnapshot(view, entry.lastKnownUrl);
+      const current = getExistingTerminalBrowserEntry(win, tabId, "navigate");
+      return getTerminalBrowserSnapshot(current.view, current.lastKnownUrl);
     },
   );
 

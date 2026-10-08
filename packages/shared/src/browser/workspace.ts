@@ -1,8 +1,10 @@
 import type { TerminalBrowserDeviceState } from "./device";
+import type { DesktopLocalBrowserSource, DesktopLocalBrowserInfo } from "./local-tunnel";
 import type { TerminalBrowserProfileId } from "./profile";
 import type { TerminalBrowserMinimumViewportWidth } from "./minimum-width";
 
 export interface TerminalBrowserSnapshot {
+  localPreview?: DesktopLocalBrowserInfo;
   url: string;
   title: string;
   canGoBack: boolean;
@@ -55,7 +57,7 @@ export interface TerminalBrowserSleepResult {
   skipped: number;
 }
 
-export type TerminalBrowserCreateTabRequest =
+export type TerminalBrowserCreateTabRequest = { source?: DesktopLocalBrowserSource } & (
   | {
       profileId: TerminalBrowserProfileId;
       placement: "current-group";
@@ -67,7 +69,7 @@ export type TerminalBrowserCreateTabRequest =
       profileId: TerminalBrowserProfileId;
       placement: "new-group";
       url?: string;
-    };
+    });
 
 export type TerminalBrowserStateChangedEvent =
   | {
