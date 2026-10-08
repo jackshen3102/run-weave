@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, type ClipboardEvent } from "react";
 import { useMemoizedFn } from "ahooks";
 import type { SuijiRecord, FollowupResponse } from "@runweave/shared/suiji";
 import { Button } from "../../components/ui/button";
@@ -28,6 +28,15 @@ export function SuijiEditor({
     { draft, busy } = state;
   const saved = useMemoizedFn(onSaved);
   const [selectedText, setSelectedText] = useState("");
+  const pasteImage = useMemoizedFn((event: ClipboardEvent<HTMLElement>) => {
+    const file = Array.from(event.clipboardData.files).find((item) =>
+      item.type.startsWith("image/"),
+    );
+    if (!file) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!busy && !draft.frozen) void model.addFile(file);
+  });
   const followed = useMemoizedFn((result: FollowupResponse) => onFollowupSaved?.(result));
   useEffect(() => { if (state.savedFollowup) followed(state.savedFollowup); }, [state.savedFollowup, followed]);
   const discarded = useMemoizedFn(onDiscard);
@@ -42,6 +51,7 @@ export function SuijiEditor({
       title={model.followupRecordId ? "追加跟进" : draft.id === "new" ? "记下一点什么" : "编辑记录"}
       onBack={onClose}
       busy={busy}
+      onPaste={pasteImage}
       description={
         draft.frozen
           ? "保存结果待确认，请手动重试"
@@ -102,6 +112,9 @@ export function SuijiEditor({
         </span>
         <label className="flex flex-col gap-2 text-sm">
           添加图片或 Markdown
+          <span className="text-xs text-muted-foreground">
+            可在编辑区按 ⌘V / Ctrl+V 粘贴图片。
+          </span>
           <input
             aria-label="添加附件"
             type="file"
