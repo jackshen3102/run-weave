@@ -11,6 +11,7 @@ import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser
 import { getTerminalBrowserSession } from "../runtime.js";
 import { openPreviewStream } from "./stream.js";
 import { ensureTerminalBrowserCertificateTrust } from "../security/certificate.js";
+import { applyTerminalBrowserHeaderRules } from "../security/network.js";
 
 function authSessionId(token: string): string {
   // Change detection only; the Backend authenticates every grant.
@@ -78,7 +79,9 @@ export class DesktopLocalPreview {
       callback({ cancel: this.abort.signal.aborted || Boolean(local && !allowed) });
     });
     this.session.webRequest.onBeforeSendHeaders((details, callback) => {
-      const headers = { ...details.requestHeaders };
+      // Match the original target URL, not the private gateway's temporary origin.
+      const headers = applyTerminalBrowserHeaderRules(this.profileId, this.displayURL(details.url), details.requestHeaders)
+        ?? { ...details.requestHeaders };
       for (const key of Object.keys(headers)) if (key.toLowerCase() === "x-runweave-preview") delete headers[key];
       if (this.owns(details.url)) headers["X-Runweave-Preview"] = this.secret;
       callback({ requestHeaders: headers });
