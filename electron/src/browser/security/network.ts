@@ -84,6 +84,23 @@ export function wildcardUrlPatternMatches(
   pattern: string,
   url: string,
 ): boolean {
+  const domainPattern = pattern.match(/^\*:\/\/((?:\*\.)?[a-z0-9.-]+)\/\*$/i);
+  if (domainPattern) {
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        return false;
+      }
+      const domain = domainPattern[1]?.toLowerCase();
+      if (!domain) return false;
+      const hostname = parsedUrl.hostname.toLowerCase();
+      return domain.startsWith("*.")
+        ? hostname.endsWith(domain.slice(1))
+        : hostname === domain;
+    } catch {
+      return false;
+    }
+  }
   const escapedPattern = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
   const regexPattern = `^${escapedPattern.replace(/\*/g, ".*")}$`;
   return new RegExp(regexPattern).test(url);
