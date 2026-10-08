@@ -59,6 +59,7 @@ Backend 对 Electron 登录签发绑定终端、预览身份、目标地址/端�
 
 每个预览使用独立临时 Electron Session 和动态回环 HTTP 入口。预览入口直接访问；公网资源
 使用选定 Profile 的 Direct/Whistle 出口，Whistle CA 校验也只安装到相应 Session。
+Profile 自定义请求头按原始目标 URL 匹配；外部资源按其自身 URL 匹配，内部入口凭据不允许被规则覆盖。
 创建、关闭预览不修改 Profile 的代理模式、规则、Values 或已有同号 SSH 转发；切换代理模式
 会同步临时 Session 的出口，但不自动刷新预览或重放表单。转发只接受该 Session 注入的临时入口凭据，
 凭据不会转发到开发服务。

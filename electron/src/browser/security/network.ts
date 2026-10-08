@@ -123,6 +123,27 @@ export function setRequestHeader(
   requestHeaders[name] = value;
 }
 
+export function applyTerminalBrowserHeaderRules(
+  profileId: TerminalBrowserProfileId,
+  url: string,
+  originalHeaders: Record<string, string>,
+): Record<string, string> | null {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") return null;
+  let requestHeaders: Record<string, string> | null = null;
+  for (const rule of getTerminalBrowserHeaderState(profileId).rules) {
+    if (!rule.enabled || !wildcardUrlPatternMatches(rule.urlPattern, parsedUrl.toString())) continue;
+    requestHeaders ??= { ...originalHeaders };
+    setRequestHeader(requestHeaders, rule.name, rule.value);
+  }
+  return requestHeaders;
+}
+
 export function ensureTerminalBrowserHeaderDispatcher(
   profileId: TerminalBrowserProfileId,
 ): void {
@@ -134,28 +155,7 @@ export function ensureTerminalBrowserHeaderDispatcher(
   browserSession.webRequest.onBeforeSendHeaders(
     { urls: ["<all_urls>"] },
     (details, callback) => {
-      let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(details.url);
-      } catch {
-        callback({});
-        return;
-      }
-      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-        callback({});
-        return;
-      }
-      let requestHeaders: Record<string, string> | null = null;
-      for (const rule of headerRulesByProfile.get(profileId) ?? []) {
-        if (
-          !rule.enabled ||
-          !wildcardUrlPatternMatches(rule.urlPattern, parsedUrl.toString())
-        ) {
-          continue;
-        }
-        requestHeaders ??= { ...details.requestHeaders };
-        setRequestHeader(requestHeaders, rule.name, rule.value);
-      }
+      const requestHeaders = applyTerminalBrowserHeaderRules(profileId, details.url, details.requestHeaders);
       callback(requestHeaders ? { requestHeaders } : {});
     },
   );
