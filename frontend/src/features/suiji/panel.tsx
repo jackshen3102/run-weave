@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ClipboardEventHandler, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "../../components/ui/button";
 
@@ -10,6 +10,7 @@ export function SuijiPanel({
   busy = false,
   actions,
   feedback,
+  onPaste,
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -18,6 +19,7 @@ export function SuijiPanel({
   busy?: boolean;
   actions?: ReactNode;
   feedback?: ReactNode;
+  onPaste?: ClipboardEventHandler<HTMLElement>;
 }) {
   const id = useId();
   const panel = useRef<HTMLElement>(null);
@@ -29,6 +31,7 @@ export function SuijiPanel({
       ref={panel}
       tabIndex={-1}
       aria-labelledby={id}
+      onPaste={onPaste}
       className="absolute inset-0 z-20 flex min-h-0 flex-col bg-background outline-none"
     >
       <header className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
