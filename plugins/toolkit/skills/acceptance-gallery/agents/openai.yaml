@@ -1,0 +1,4 @@
+interface:
+  display_name: "图文验收材料"
+  short_description: "把真实截图与说明生成带页码的本地阅读器，支持对照和原图追溯"
+  default_prompt: "使用 $acceptance-gallery 将当前任务的截图与记录整理为本地图文验收材料。"
