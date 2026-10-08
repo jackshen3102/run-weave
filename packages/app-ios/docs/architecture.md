@@ -38,6 +38,31 @@ ios/RunweaveNative → RootView → AppSession
 仅重同步窗口尺寸。输入结果未确认仍显示提示，不自动重发输入。
 设备 online/offline 与后端 TerminalState 分开管理；socket open 不等于业务已连接。
 
+## 同一电脑的多线路连接
+
+电脑的本地 ID 和草稿 scope 保持稳定；线路数组保存地址及优先级。自动模式逐条尝试，
+当前线路可用时不抢切；固定模式只重试指定线路，删除固定项后等待用户选择。
+`ConnectionRouteResolver` 统一处理前台、通知与电量请求的 endpoint，
+`ComputerCredentialSession` 按 Keychain account 共享凭据和一次在途 refresh。
+每条身份探测预算 2.5 秒，认证检查单次 5 秒；失败按 5/15/30 秒退避，后台取消。
+刷新响应丢失时保留草稿并要求重新登录，不在其他线路重放可能已被消费的 refresh token。
+
+新线路先使用随机 nonce 验证已绑定的 Ed25519 公钥，再发送已有认证。
+首次绑定只来自用户原先登录的地址；其他地址不能反向覆盖信任。
+旧 Backend 保留原单线路能力；身份变化需要显式重新登录或扫码确认。
+所有 HTTP 传输拒绝自动重定向；签名不能替代 HTTPS，也不能防止明文 HTTP 的主动转发攻击。
+Backend 协议及持久身份边界见 [移动端架构](../../../docs/architecture/app-mobile.md#电脑身份协议)。
+
+同电脑切路关闭旧 APIClient，使旧业务响应失效，等待已发 refresh 收敛后替换传输；
+保留终端 controller、SwiftTerm surface、terminal ID 和未发送草稿，不重放写入。
+原生终端页面按电脑和终端身份保持，不因 transport generation 重建。
+跨电脑切换仍清理原会话状态。RemoteDesk 使用独立 Host 连接，不参与 Backend 选路。
+
+配置独立保存在 `native.connections.v2`。首次使用由用户重新录入电脑与登录，
+不导入旧配置、凭据、草稿或通知绑定；旧数据保留。v2 损坏时显示错误，不能静默退回 v1。
+新电脑的凭据、草稿和通知绑定使用稳定电脑 scope。旧通知归档仅保留读取兼容，不发布为新电脑。
+旧版回滚只能看到保留的 v1 配置和原账户，不能合并 v2 新增线路及新草稿。
+
 ## 协议来源
 
 Swift 不直接导入 TypeScript。修改接口时同时核对 Swift `Contracts/`、`Services/`、`Features/Terminal/`

@@ -44,7 +44,7 @@ public final class SessionController: ObservableObject {
     @unknown default: record("scene.unknown")
     }
   }
-  private let api: APIClient
+  private var api: APIClient
   private let terminalID: String
   private let readOnly: Bool
   private var generation = 0
@@ -120,6 +120,11 @@ public final class SessionController: ObservableObject {
   private func updateScrollState() {
     let next = !localAtBottom || tmuxScrollRows >= 4
     if scrolledBack != next { scrolledBack = next }
+  }
+
+  func replaceTransport(_ next: APIClient) {
+    disconnect()
+    api = next
   }
 
   public func connect() {

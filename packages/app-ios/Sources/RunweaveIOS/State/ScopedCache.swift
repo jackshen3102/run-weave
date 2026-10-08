@@ -53,7 +53,7 @@ extension APIClient {
   func cachedPreview<T: Decodable>(
     _ path: String, force: Bool = false, decode: ((Data) throws -> T)? = nil
   ) async throws -> T {
-    guard hasCredentials() else { throw APIError.credentialsUnavailable }
+    guard await hasCredentials() else { throw APIError.credentialsUnavailable }
     let parse: (Data) throws -> T = decode ?? { try JSONDecoder().decode(T.self, from: $0) }
     if !force, let data = previewCache.value(path, freshOnly: true) { return try parse(data) }
     let flight: ScopedCache.Flight

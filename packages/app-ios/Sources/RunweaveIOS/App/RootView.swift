@@ -40,7 +40,7 @@ public struct RootView: View {
             ResourceMonitorView(session: session).id(session.generation)
           } else if let details = session.terminal, let controller = session.terminalController {
             TerminalScreen(session: session, controller: controller, details: details)
-              .id("\(session.generation):\(details.id):\(details.projectId)")
+              .id("\(session.connection?.scope ?? ""):\(details.id):\(details.projectId)")
           }
         } label: { EmptyView() }.hidden()
       }
@@ -73,6 +73,9 @@ public struct RootView: View {
     .preferredColorScheme(theme == "light" ? .light : .dark)
     .id(connections.active?.scope)
     .task(id: "\(connections.active?.scope ?? ""):\(mobileLoginRevision)") { await session.activate(connections.active) }
+    .onChange(of: connections.active) { value in
+      Task { await session.updateConnection(value) }
+    }
     .onAppear {
       remoteDesktop.setScenePhase(scenePhase)
       if connections.active == nil { managingConnections = true }
@@ -82,7 +85,6 @@ public struct RootView: View {
     }
     .onChange(of: session.generation) { _ in
       codexQuota.reset(); quickInputs.reset()
-      remoteDesktop.invalidate(reason: "backend_session_changed")
     }
     .onChange(of: session.authenticated) { authenticated in
       if !authenticated {

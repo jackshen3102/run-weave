@@ -21,7 +21,7 @@ runtime。迁移对照中的模块覆盖不能代替对应运行时的输入、�
 ## 连接恢复与诊断
 
 前台离线探测间隔为 5、15、30 秒，之后保持 30 秒；系统网络路径恢复或切换时提前探测。
-NWPathMonitor 只提供触发线索，必须通过 Backend `/health` 再确认可达性；后台不发起恢复。
+NWPathMonitor 只提供触发线索；已绑定电脑用无凭据签名探测确认当前线路，旧单线路使用 `/health`。后台不发起恢复。
 请求序号和连接 generation 拒绝迟到探测，恢复不补发任何终端输入。
 
 本机诊断自动记录 HTTP 错误 domain/code、健康探测耗时和 Backend serviceInstanceId/runtimeReleaseId、
@@ -31,6 +31,26 @@ WebSocket 使用 connectionId 与每次新生成的 attemptId 与 Backend/中继
 终端输出按 5 秒汇总计数；最多 2000 条、2 MiB 的全局本机日志为连接事件保留一半容量，
 其余日志共享另一半。多连接仍共享总上限，不承诺固定保留时长。
 首页「… → 诊断 → 导出本地诊断」可在断网时使用，无需预先开始 Backend 日志记录。
+
+## 电脑身份协议
+
+同一 Backend profile 的多个 URL 可以作为 iOS 同一电脑的候选线路。选路、配置持久化和终端连续性
+见 [iOS 多线路连接](../../packages/app-ios/docs/architecture.md#同一电脑的多线路连接)。
+该能力不创建 SSH 隧道、不自动发现地址，也不合并不同电脑记录。
+
+合同入口为 [connection-identity](../../packages/shared/src/auth/connection-identity.ts)：
+已登录的原线路通过 `GET /api/connection/identity` 绑定公钥；新线路先调用
+`POST /api/connection/probe`，携带随机 32 字节 base64url nonce，不带 app Bearer 或 Cookie。
+响应包含 version、identityId、公钥、nonce 和 Ed25519 签名。
+签名字节为 UTF-8 `runweave-connection-probe-v1\n<identityId>\n<nonce>`；
+identityId 是原始公钥的 SHA-256。只有版本、身份、公钥、nonce 和签名全部验证后才能发送已有凭据。
+两条接口沿用隧道鉴权；bootstrap 另外要求现有 Bearer 认证。
+探测请求上限 1 KiB、客户端响应上限 4 KiB、按 socket IP 每分钟 120 次，返回 no-store。
+
+每个 `browserProfileDir` 在 `connection-identity.json` 原子保存独立 Ed25519 密钥，文件权限 0600。
+重启保持身份；损坏、权限或密钥不匹配时身份能力返回 503，保留文件，不影响旧服务启动。
+复制整个 profile 也会复制身份，不能视为硬件唯一标识。身份重置必须由用户重新登录确认，
+不能因重试或新增地址自动接受新公钥。发布顺序为 Backend 后 iOS；旧客户端接口保持兼容。
 
 ## 首页自进化成果
 

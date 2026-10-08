@@ -1,16 +1,16 @@
 import CryptoKit
 import Foundation
 
-/// Immutable endpoint and credential owner. No cookies or shared authentication state.
+/// Immutable transport; all clients of a computer share one credential owner.
 public actor APIClient {
   public nonisolated let baseURL: URL
   public nonisolated let connectionID: String
-  private let account: String
-  private let vault = CredentialStore()
+  let credentials: ComputerCredentialSession
   private let session: URLSession
-  private var tokens: AuthTokens?
-  private var refreshTask: Task<AuthTokens, Error>?
-  private var authEpoch = 0
+  private var closed = false
+  private nonisolated let transportAccess = ConnectionTransportAccess()
+  nonisolated func suspendTransport() { transportAccess.set(false) }
+  nonisolated func resumeTransport() { transportAccess.set(true) }
   private var importingMobileLogin = false
   private var mobileLoginImportTask: Task<Void, Error>?
   var previewCache = ScopedCache()
@@ -35,18 +35,15 @@ public actor APIClient {
     return url
   }
 
-  public init(base: String, connectionID: String) throws {
+  public init(base: String, connectionID: String, credentialAccount: String? = nil) throws {
     baseURL = try Self.normalize(base)
-    account = Self.diagnosticConnectionID(base: baseURL, id: connectionID)
-    self.connectionID = account
+    self.connectionID = Self.diagnosticConnectionID(base: baseURL, id: connectionID)
+    credentials = try ComputerCredentialSession.shared(account: credentialAccount ?? self.connectionID)
     let config = URLSessionConfiguration.ephemeral
     config.timeoutIntervalForRequest = 20
     config.timeoutIntervalForResource = 30
     config.httpCookieStorage = nil
-    session = URLSession(configuration: config)
-    if let data = try vault.read(account) {
-      tokens = try JSONDecoder().decode(AuthTokens.self, from: data)
-    }
+    session = URLSession(configuration: config, delegate: ConnectionRedirectGuard(), delegateQueue: nil)
   }
 
   deinit { session.invalidateAndCancel() }
@@ -55,87 +52,70 @@ public actor APIClient {
     id + ":" + SHA256.hash(data: Data(base.absoluteString.utf8))
       .map { String(format: "%02x", $0) }.joined()
   }
-  func hasCredentials() -> Bool { tokens != nil }
+  func hasCredentials() async -> Bool {
+    if closed { return false }
+    return await credentials.hasCredentials()
+  }
+  func isClosed() -> Bool { closed }
   func close() async {
+    closed = true
     _ = await mobileLoginImportTask?.result
+    await credentials.settle()
     previewCache.clear()
-    authEpoch += 1
-    refreshTask?.cancel()
-    refreshTask = nil
     session.invalidateAndCancel()
     await DiagnosticStore.shared.flush()
   }
 
   public func login(username: String, password: String) async throws {
+    guard !closed else { throw CancellationError() }
+    await credentials.settle()
     previewCache.clear()
-    authEpoch += 1
-    let epoch = authEpoch
-    refreshTask?.cancel()
-    refreshTask = nil
     do {
       var next: AuthTokens = try await request(
         "/api/auth/login", method: "POST", body: ["username": username, "password": password])
-      guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
+      guard !closed, !Task.isCancelled else { throw CancellationError() }
       next.expiresAt = Date().addingTimeInterval(next.expiresIn)
-      try store(next)
+      try await credentials.replace(next)
+      try await bootstrapIdentity(replacing: true)
     } catch APIError.http(401) { throw APIError.loginRejected }
   }
 
-  /// Called only for this endpoint's approved mobile result. Connection persistence is one
-  /// synchronous MainActor step with Keychain compensation, not a cross-store transaction.
+  func bootstrapIdentity(replacing: Bool = false) async throws {
+    do {
+      let identity: ConnectionIdentity = try await authorized("/api/connection/identity", requestTimeout: 5)
+      try await credentials.bind(identity, replacing: replacing)
+    } catch APIError.http(503) {
+      // Identity failure does not revoke an explicitly approved single-route login.
+    } catch APIError.http(404) {
+      // Old Backends retain their explicitly configured single route.
+    }
+  }
+
   func importMobileLogin(_ result: MobileLoginResult,
     commitConnection: @escaping @MainActor () throws -> Void) async throws {
     try result.validate()
-    guard !importingMobileLogin else { throw CancellationError() }
+    guard !closed, transportAccess.enabled, !importingMobileLogin else { throw CancellationError() }
     importingMobileLogin = true
     defer { importingMobileLogin = false }
-    authEpoch += 1
-    refreshTask?.cancel()
-    refreshTask = nil
     let next = AuthTokens(accessToken: result.accessToken, refreshToken: result.refreshToken,
       expiresIn: result.expiresIn, sessionId: result.sessionId,
       expiresAt: Date().addingTimeInterval(result.expiresIn))
-    let encoded = try JSONEncoder().encode(next)
-    let vault = self.vault
-    let account = self.account
-    let task = Task {
-      try await MainActor.run {
-        try Task.checkCancellation()
-        let previous = try vault.read(account)
-        try vault.write(encoded, account: account)
-        do { try commitConnection() }
-        catch {
-          do {
-            if let previous { try vault.write(previous, account: account) }
-            else { try vault.delete(account) }
-          } catch {
-            throw MobileLoginFailure(message: "保存连接失败，恢复原凭据也失败。请检查本地存储后重新登录。")
-          }
-          throw error
-        }
-      }
-      // Once both stores succeeded, cancellation must not discard the persisted login.
-      tokens = next
-      previewCache.clear()
-    }
+    let task = Task { try await credentials.importLogin(next, commit: commitConnection) }
     mobileLoginImportTask = task
     defer { mobileLoginImportTask = nil }
     try await task.value
+    previewCache.clear()
   }
 
   func clearCredentials() async throws {
     _ = await mobileLoginImportTask?.result
     previewCache.clear()
-    authEpoch += 1
-    refreshTask?.cancel()
-    refreshTask = nil
-    try vault.delete(account)
-    tokens = nil
+    try await credentials.clear()
   }
 
   func logout() async throws {
     _ = await mobileLoginImportTask?.result
-    let token = tokens?.accessToken
+    let token = try? await credentials.snapshot().tokens?.accessToken
     try await clearCredentials()
     if let token {
       let _: EmptyResponse? = try? await request("/api/auth/logout", method: "POST", bearer: token)
@@ -154,7 +134,7 @@ public actor APIClient {
   #endif
 
   func verify() async throws {
-    let _: Verification = try await authorized("/api/auth/verify")
+    let _: Verification = try await authorized("/api/auth/verify", requestTimeout: 5)
   }
   func overview() async throws -> HomeOverview { try await authorized("/api/app/home/overview") }
   func homeConversationPreviews(ids: [String]) async throws -> HomeConversationPreviewsResponse {
@@ -320,10 +300,11 @@ public actor APIClient {
     return request
   }
   func localBrowserSocketRequest() async throws -> URLRequest {
-    guard !importingMobileLogin, var current = tokens else { throw APIError.credentialsUnavailable }
-    let epoch = authEpoch
-    if let expiry = current.expiresAt, expiry.timeIntervalSinceNow < 15 { current = try await refresh() }
-    guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
+    guard !closed, transportAccess.enabled, !importingMobileLogin else { throw CancellationError() }
+    let initial = try await credentials.snapshot()
+    guard var current = initial.tokens else { throw APIError.credentialsUnavailable }
+    if let expiry = current.expiresAt, expiry.timeIntervalSinceNow < 15 { current = try await refresh(expected: current.refreshToken) }
+    guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
     var request = URLRequest(url: try socketURL(path: "/ws/browser-local", query: []))
     request.setValue("Bearer \(current.accessToken)", forHTTPHeaderField: "Authorization")
     request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
@@ -348,73 +329,49 @@ public actor APIClient {
     decodeError: ((Int, Data) -> Error?)? = nil,
     decode: ((Data) throws -> T)? = nil
   ) async throws -> T {
-    guard !importingMobileLogin else { throw CancellationError() }
-    guard var current = tokens else { throw APIError.credentialsUnavailable }
-    let epoch = authEpoch
-    if let expiry = current.expiresAt, expiry.timeIntervalSinceNow < 15 {
-      current = try await refresh()
+    let deadline = requestTimeout.map { Date().addingTimeInterval($0) }
+    func remainingTimeout() throws -> TimeInterval? {
+      guard let deadline else { return nil }
+      let remaining = deadline.timeIntervalSinceNow
+      guard remaining > 0 else { throw URLError(.timedOut) }
+      return remaining
     }
-    guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
+    guard !closed, transportAccess.enabled, !importingMobileLogin else { throw CancellationError() }
+    let initial = try await credentials.snapshot()
+    guard var current = initial.tokens else { throw APIError.credentialsUnavailable }
+    if let expiry = current.expiresAt, expiry.timeIntervalSinceNow < 15 { current = try await refresh(expected: current.refreshToken, timeout: try remainingTimeout() ?? 5) }
+    guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
     do {
-      let value: T = try await request(
-        path, method: method, body: body, bearer: current.accessToken,
-        idempotencyKey: idempotencyKey, requestTimeout: requestTimeout, decodeError: decodeError, decode: decode)
-      guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
+      let value: T = try await request(path, method: method, body: body, bearer: current.accessToken,
+        idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), decodeError: decodeError, decode: decode)
+      guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
       return value
     } catch APIError.http(401) {
-      guard epoch == authEpoch else { throw CancellationError() }
-      // Another request may already have refreshed while this response was in flight.
-      let renewed: AuthTokens?
-      if tokens?.accessToken != current.accessToken {
-        renewed = tokens
-      } else {
-        renewed = try await refresh()
-      }
-      guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
-      guard let renewed else { throw APIError.credentialsUnavailable }
+      guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision else { throw CancellationError() }
+      let latest = try await credentials.snapshot().tokens
+      let renewed: AuthTokens
+      if let latest, latest.accessToken != current.accessToken { renewed = latest }
+      else { renewed = try await refresh(expected: current.refreshToken, timeout: try remainingTimeout() ?? 5) }
+      guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
       guard retryUnauthorized else { throw APIError.writeRequiresRetry }
       do {
-        let value: T = try await request(
-          path, method: method, body: body, bearer: renewed.accessToken,
-          idempotencyKey: idempotencyKey, requestTimeout: requestTimeout, decodeError: decodeError, decode: decode)
-        guard epoch == authEpoch, !Task.isCancelled else { throw CancellationError() }
+        let value: T = try await request(path, method: method, body: body, bearer: renewed.accessToken,
+          idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), decodeError: decodeError, decode: decode)
+        guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
         return value
       } catch APIError.http(401) {
-        if epoch == authEpoch { try await clearCredentials() }
+        if !closed, initial.revision == (try await credentials.snapshot()).revision { try await clearCredentials() }
         throw APIError.credentialsUnavailable
       }
     }
   }
 
-  private func refresh() async throws -> AuthTokens {
-    if let task = refreshTask { return try await task.value }
-    guard let current = tokens else { throw APIError.credentialsUnavailable }
-    let epoch = authEpoch
-    let task = Task<AuthTokens, Error> {
-      do {
-        var renewed: AuthTokens = try await self.request(
-          "/api/auth/refresh", method: "POST", body: ["refreshToken": current.refreshToken])
-        guard epoch == self.authEpoch, !Task.isCancelled else { throw CancellationError() }
-        renewed.expiresAt = Date().addingTimeInterval(renewed.expiresIn)
-        try self.store(renewed)
-        return renewed
-      } catch APIError.http(401) {
-        guard epoch == self.authEpoch else { throw CancellationError() }
-        try await self.clearCredentials()
-        throw APIError.credentialsUnavailable
-      }
+  private func refresh(expected: String, timeout: TimeInterval = 5) async throws -> AuthTokens {
+    guard !closed, transportAccess.enabled else { throw CancellationError() }
+    return try await credentials.refresh(expected: expected) { token in
+      guard self.transportAccess.enabled else { throw CancellationError() }
+      return try await self.request("/api/auth/refresh", method: "POST", body: ["refreshToken": token], requestTimeout: timeout)
     }
-    refreshTask = task
-    defer { if epoch == authEpoch { refreshTask = nil } }
-    return try await task.value
-  }
-
-  private func store(_ value: AuthTokens) throws {
-    guard !value.accessToken.isEmpty, !value.refreshToken.isEmpty else {
-      throw APIError.invalidResponse
-    }
-    try vault.write(JSONEncoder().encode(value), account: account)
-    tokens = value
   }
 
   private func request<T: Decodable>(
@@ -460,7 +417,7 @@ public actor APIClient {
         config.httpCookieStorage = nil
         config.timeoutIntervalForRequest = timeout
         config.timeoutIntervalForResource = timeout
-        extendedSession = URLSession(configuration: config)
+        extendedSession = URLSession(configuration: config, delegate: ConnectionRedirectGuard(), delegateQueue: nil)
         request.timeoutInterval = timeout
         request.cachePolicy = .reloadIgnoringLocalCacheData
       }
@@ -468,6 +425,7 @@ public actor APIClient {
       let (data, response) = try await (extendedSession ?? session).data(for: request)
       guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
       responseStatus = http.statusCode
+      if (300..<400).contains(http.statusCode) { throw ConnectionIdentityFailure.redirectRejected }
       if http.statusCode == 401,
         let failure = try? JSONDecoder().decode(ServerFailure.self, from: data),
         failure.message == "Tunnel token required"
@@ -500,13 +458,6 @@ public actor APIClient {
   }
 }
 
-private struct AuthTokens: Codable {
-  let accessToken: String
-  let refreshToken: String
-  let expiresIn: Double
-  let sessionId: String
-  var expiresAt: Date?
-}
 private struct Ticket: Decodable {
   let ticket: String
   let expiresIn: Double

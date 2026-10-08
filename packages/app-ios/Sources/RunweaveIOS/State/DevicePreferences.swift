@@ -10,6 +10,14 @@ enum DevicePreferences {
   private static let connectionsKey = "native.connections.v1"
   private static let remoteHostsKey = "native.remoteHosts.v1"
 
+  static var connectionsV2: Data? {
+    get { store.data(forKey: "native.connections.v2") }
+    set {
+      if let newValue { store.set(newValue, forKey: "native.connections.v2") }
+      else { store.removeObject(forKey: "native.connections.v2") }
+    }
+  }
+
   static var theme: String { store.string(forKey: themeKey) ?? "dark" }
   static var connections: Data? {
     get { store.data(forKey: connectionsKey) }

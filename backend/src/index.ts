@@ -1,3 +1,4 @@
+import { registerConnectionRoutes } from "./routes/connection-identity";
 import { createResourceMonitorRouter } from "./routes/resource-monitor";
 import { registerTerminalTaskRoutes } from "./routes/registration/task-routes";
 import { initializeBackendConfiguration } from "./bootstrap/configuration";
@@ -62,7 +63,6 @@ import {
   isLocalDirectRequest,
   isValidLocalCdpEndpoint,
 } from "./server/local-cdp-endpoint";
-import { buildHealthPayload } from "./server/health";
 import {
   createTunnelAuthMiddleware,
   createTunnelTokenBootstrapMiddleware,
@@ -133,6 +133,7 @@ function createHttpApp(
   app.use(createRequestContextMiddleware());
   app.use(createWorkspaceServiceHttpProxy(services.workspaceServiceManager));
   app.use("/api/device/notifications", express.json({ limit: "8kb" }));
+  app.use("/api/connection", express.json({ limit: "1kb" }));
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
     createCorsMiddleware(parseConfiguredOrigins(settingText("backend.server.frontendOrigin"))),
@@ -146,9 +147,7 @@ function createHttpApp(
   ));
   app.use("/html-preview", requireTunnelAuth, createHtmlPreviewRouter(services.terminalSessionManager, services.authService));
 
-  app.get("/health", requireTunnelAuth, (_req, res) => {
-    res.json(buildHealthPayload(process.env, backendIdentity));
-  });
+  registerConnectionRoutes(app, services.connectionIdentity, services.authService, requireTunnelAuth, backendIdentity);
   // Internal endpoint for Electron to propagate CDP proxy endpoint in dev mode.
   // In production, the env is inherited via child process spawn.
   app.put("/internal/cdp-endpoint", requireTunnelAuth, (req, res) => {

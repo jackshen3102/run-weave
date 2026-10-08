@@ -18,8 +18,8 @@ extension APIClient {
   func previewSnapshot<T: Decodable>(
     projectID: String, resource: String, query: [String: String] = [:],
     decode: ((Data) throws -> T)? = nil
-  ) -> T? {
-    guard hasCredentials(),
+  ) async -> T? {
+    guard await hasCredentials(),
       let data = previewCache.value(previewPath(projectID, resource, query), freshOnly: false)
     else { return nil }
     return try? (decode ?? { try JSONDecoder().decode(T.self, from: $0) })(data)
