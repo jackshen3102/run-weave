@@ -78,6 +78,11 @@ struct ConnectionManager: View {
                 }
               }
               Text(connectionStatus(connection)).font(.caption)
+              NavigationLink {
+                ConnectionRoutesView(store: store, session: session, resolver: ConnectionRouteResolver.forComputer(connection))
+              } label: {
+                Label("连接线路 · \(connection.routes.count)", systemImage: "network")
+              }.accessibilityIdentifier("connection-routes-" + connection.id)
               if session.connection?.scope == connection.scope, session.authenticated {
                 DeviceBatteryView(device: session.deviceStatus)
                 Button("耗电监控") { session.showingEnergyMonitor = true; dismiss() }.buttonStyle(.borderless)
@@ -106,8 +111,10 @@ struct ConnectionManager: View {
         }
         Section(header: Text(editingID == nil ? "新增连接" : "编辑连接")) {
           TextField("名称", text: $name).clarityMask()
-          TextField("URL", text: $url).keyboardType(.URL).autocapitalization(.none)
-            .disableAutocorrection(true).clarityMask()
+          if editingID == nil {
+            TextField("URL", text: $url).keyboardType(.URL).autocapitalization(.none)
+              .disableAutocorrection(true).clarityMask()
+          }
           if let failure { Text(failure).foregroundColor(.red) }
           Button(editingID == nil ? "添加并切换" : "保存") { save() }.disabled(
             url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.storageError != nil
@@ -187,15 +194,10 @@ struct ConnectionManager: View {
   }
 
   private func clear(_ connection: BackendConnection) async throws {
-    let client: APIClient
-    if session.connection?.scope == connection.scope, let active = session.api {
-      client = active
-    } else {
-      client = try APIClient(base: connection.url, connectionID: connection.id)
-    }
     session.forgetDrafts(connection)
-    await NotificationCoordinator.shared.disable(connection, client: client)
-    try await client.clearCredentials()
+    await NotificationCoordinator.shared.disable(connection)
+    let credentials = try ComputerCredentialSession.shared(account: connection.credentialAccount)
+    try await credentials.clear()
   }
 
   private func save() {
@@ -203,13 +205,7 @@ struct ConnectionManager: View {
     failure = nil
     Task {
       do {
-        let normalized = try APIClient.normalize(url).absoluteString
-        if let id = editingID, let old = store.connections.first(where: { $0.id == id }),
-          old.url != normalized
-        {
-          try await clear(old)
-        }
-        try store.save(id: editingID, name: name, url: normalized)
+        try store.save(id: editingID, name: name, url: url)
         reset()
       } catch { failure = displayError(error) }
       busy = false

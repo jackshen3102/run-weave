@@ -35,7 +35,11 @@ struct ScheduledContinuationView: View {
             Button("允许并继续") { change(stop: false, reply: "确认：\(confirmation)。允许按上述事项继续。") }
               .disabled(busy || !active || !session.canWrite)
           }
-          TextField("直接回复 Agent，补充范围、条件及说明", text: $reply, axis: .vertical).lineLimit(2...5).textFieldStyle(.roundedBorder)
+          if #available(iOS 16.0, *) {
+            TextField("直接回复 Agent，补充范围、条件及说明", text: $reply, axis: .vertical).lineLimit(2...5).textFieldStyle(.roundedBorder)
+          } else {
+            TextField("直接回复 Agent，补充范围、条件及说明", text: $reply).textFieldStyle(.roundedBorder)
+          }
           HStack {
             Button("发送并继续") { change(stop: false, reply: reply.trimmingCharacters(in: .whitespacesAndNewlines)) }
               .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || reply.count > 8000)

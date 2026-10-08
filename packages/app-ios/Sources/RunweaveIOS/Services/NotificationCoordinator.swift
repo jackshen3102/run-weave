@@ -53,6 +53,7 @@ public final class NotificationCoordinator: ObservableObject {
         bindings = value.bindings
         knownHosts = value.knownHosts
         successfulAt = value.successfulAt
+
       }
     } catch {
       validStorage = false
@@ -115,8 +116,7 @@ public final class NotificationCoordinator: ObservableObject {
     let scope = key(connection, kind)
     refreshFailures[scope] = nil
     guard validStorage else { throw AttachmentError("提醒设置无法读取") }
-    let api = try APIClient(base: connection.url, connectionID: connection.id)
-    defer { Task { await api.close() } }
+    let api = try await connection.client()
     let availability = try await api.notificationStatus()
     guard availability.available else { throw AttachmentError(availability.reason ?? "推送暂不可用") }
     if kind != .battery, availability.supportedKinds?.contains(kind) != true {
@@ -237,12 +237,12 @@ public final class NotificationCoordinator: ObservableObject {
       return
     }
     var revoked = false
-    if let api = supplied ?? (try? APIClient(base: connection.url, connectionID: connection.id)) {
+    let resolved = supplied != nil ? supplied : (try? await connection.client())
+    if let api = resolved {
       do {
         try await api.revokeNotifications(installation: installation, kind: kind)
         revoked = true
       } catch {}
-      if supplied == nil { await api.close() }
     }
     // Backend returns 204 only after gateway revocation is confirmed; use the saved gateway
     // as a fallback when the Backend cannot confirm, not as a second required success.
@@ -332,7 +332,7 @@ public final class NotificationCoordinator: ObservableObject {
         let scope = key(binding.connection, kind)
         let version = versions[scope] ?? 0
         guard
-          let api = try? APIClient(base: binding.connection.url, connectionID: binding.connection.id)
+          let api = try? await binding.connection.client()
         else { continue }
         do {
           let result = try await api.registerNotifications(
@@ -366,7 +366,6 @@ public final class NotificationCoordinator: ObservableObject {
             refreshFailures[scope] = "提醒注册待更新：\(displayError(error))"
           }
         }
-        await api.close()
       }
     }
     for (connection, kind) in automaticConnections.flatMap({ connection in
@@ -375,9 +374,8 @@ public final class NotificationCoordinator: ObservableObject {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
       let scope = key(connection, kind)
       if bindings[scope]?.enabled == true || bindings[scope]?.pendingRevoke == true { continue }
-      guard let api = try? APIClient(base: connection.url, connectionID: connection.id) else { continue }
+      guard let api = try? await connection.client() else { continue }
       let authenticated = await api.hasCredentials()
-      await api.close()
       guard authenticated else { continue }
       do {
         try await enable(connection, kind: kind)

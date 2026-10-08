@@ -1,0 +1,96 @@
+version: 1
+name: iPhone 多线路目标身份验收
+description: >
+  验证多线路计划新增的可信目标协议、认证所有权和重新录入。
+  这些是验收合同，执行结果见 iOS 验收状态。每例独立建立专用 profile、App 数据和故障控制，
+  不读取或损坏用户真实凭据；只记录认证头是否存在、脱敏 ID 和计数。
+  原生操作使用 toolkit:agent-device，协议响应和持久化行为需真实执行后取证。
+cases:
+  - id: IOSIDENTITY-001
+    name: 未持有匹配私钥的候选不得收到凭据
+    required: true
+    description: 验证候选证明失败时在发送 Bearer 或 refresh token 之前拒绝目标。
+    preconditions:
+      - 本例独占 Backend A 已经经原线路登录并建立信任，另有完全独立的测试 Backend B。
+      - B 可返回自己的合法签名，或复制 A 的公钥和 identityId 但提供错误签名；可检查收到的认证头布尔值。
+    steps:
+      - 把指向 B 的地址添加为 A 的高优先级候选并重新选择；确认原生页显示电脑身份不匹配，后续继续选择 A 的有效线路。
+      - 在同一 B fixture 内返回复制字段及错误签名再尝试；确认仍拒绝，B 没收到 Bearer、refresh token、Cookie 或业务请求，A 的 trust 不变。
+  - id: IOSIDENTITY-002
+    name: 身份证明严格绑定当前随机挑战
+    required: true
+    description: 验证旧响应重放、非法协议和重定向不能通过证明或转发认证。
+    preconditions:
+      - 本例专用 Backend 能生成正确 Ed25519 证明；客户端已固定其公钥。
+      - 本例持有可回放旧证明、修改 version/nonce/长度和返回 302 的独占协议代理。
+    steps:
+      - 使用新 nonce 请求证明；确认有效签名可以通过，响应 no-store，受保护请求只在证明后发送。
+      - 分别返回旧 nonce 的真实签名、错误 version、超限响应和跨 origin 302；确认均拒绝且重定向目标无认证请求，不以 health 200 绕过验证。
+  - id: IOSIDENTITY-003
+    name: Backend 重启保持身份与已有会话
+    required: true
+    description: 验证持久身份不随 serviceInstanceId 或进程生命周期变化。
+    preconditions:
+      - 本例独占可重启的 Backend profile，iOS 已登录并固定该身份，有稳定持久化的测试终端。
+    steps:
+      - 记录身份公钥摘要、运行实例和终端 ID，重启本例 Backend，再取得 fresh endpoint 与 UI 引用。
+      - 触发 iOS 重连；确认运行实例可以改变而身份不变，原登录及终端继续可用，新事件流重新同步。
+  - id: IOSIDENTITY-004
+    name: 身份文件损坏不会静默更换信任
+    required: true
+    description: 验证损坏仅使身份能力不可用，原文件保留且客户端不接受新身份。
+    preconditions:
+      - 本例独占可重启 Backend profile，已备份专用身份文件并绑定测试 iOS；允许只损坏本例文件。
+    steps:
+      - 停止本例 Backend、破坏该身份文件，再启动并取得 fresh endpoint；确认身份接口返回不可用、没有生成替代密钥且坏文件保留。
+      - 确认已有单线路服务仍可按兼容策略访问，但 iOS 多线路不将未知目标标为可信；恢复本例备份后仅重启本例服务。
+  - id: IOSIDENTITY-005
+    name: 旧 Backend 保持单线路兼容
+    required: true
+    description: 验证缺少新协议时不影响既有登录，也不允许无身份的跨线路凭据共享。
+    preconditions:
+      - 本例专用旧 Backend 不实现 connection identity 接口，新 iOS 已有该 Backend 的单线路登录。
+      - 另有请求可观测的备用地址，可判定是否收到凭据。
+    steps:
+      - 打开原连接并读取项目；确认旧单线路登录可用，界面提示升级电脑端后启用多线路。
+      - 尝试添加并连接备用地址；确认不会因 health 成功就向该地址发送旧凭据，原登录不被清空。
+  - id: IOSIDENTITY-006
+    name: 重新录入电脑并持久保存
+    required: true
+    description: 新版独立保存电脑配置，不导入旧连接、凭据或草稿。
+    preconditions:
+      - 本例独占 App 数据只有 v1 连接配置和原草稿，没有 v2 配置；已保存旧数据摘要。
+      - 本例有可登录的专用 Backend。
+    steps:
+      - 安装并启动新版，确认电脑列表为空且可新增；旧配置及草稿摘要保持不变。
+      - 重新添加并登录专用电脑、添加备用线路；重启 App 后确认名称、线路、模式和登录保持。
+  - id: IOSIDENTITY-007
+    name: 同电脑并发请求共享一次有效刷新
+    required: true
+    description: 验证主界面和旁路读取没有独立 refresh owner，切路不会丢弃已经成功的轮换结果。
+    preconditions:
+      - 本例电脑两条可信线路，access token 已过期且 refresh 有效；服务端可延迟一次 refresh 成功响应并计数。
+      - 可同时触发主界面与电量或额度只读请求，原生 App 当前无业务写入。
+    steps:
+      - 同时触发两个读取并扣住 refresh 响应，随后请求换线路；确认仅一个在途 refresh，没有在新线路重发相同 refresh。
+      - 释放成功响应；确认新 token 写入共享 Keychain，换路后的两类请求恢复，旧业务响应不覆盖新传输状态。
+  - id: IOSIDENTITY-008
+    name: 已接受但丢失响应的刷新不会跨线路重放
+    required: true
+    description: 验证 refresh 结果未知时不以重试误伤会话或丢失草稿。
+    preconditions:
+      - 本例电脑两条可信线路，服务端可以接受一次 refresh 并提交轮换，再由本例代理丢弃该响应。
+      - 原生 App 有本例未发送草稿，另一电脑连接已独立登录。
+    steps:
+      - 触发该 refresh 并丢弃成功响应，再切线路；确认服务端只处理一次旧 refresh，客户端提示重新登录恢复，没有自动跨线路重放。
+      - 确认当前草稿和旧凭据记录保留，另一电脑登录不变；通过显式登录恢复当前电脑后才能继续写入。
+  - id: IOSIDENTITY-009
+    name: 换线路不重复注册同电脑通知
+    required: true
+    description: 验证稳定电脑归属用于通知订阅，通知 hostId 不被新身份字段替换。
+    preconditions:
+      - 本例原生 App 已为专用电脑启用一个真实可观察的测试通知订阅，该电脑有两条可信线路。
+      - 可查询本例订阅 ID 和 hostId，并发送仅面向本例设备的测试通知。
+    steps:
+      - 从第一条线路切到第二条并刷新订阅；确认复用原电脑归属，不因 URL 变化创建重复订阅或更换 hostId 语义。
+      - 发送本例通知并从通知打开；确认只收到一次，前台按电脑解析可用线路并进入对应项目或终端，不使用失效的旧 URL。

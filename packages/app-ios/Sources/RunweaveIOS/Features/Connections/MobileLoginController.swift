@@ -43,8 +43,8 @@ final class MobileLoginController: ObservableObject {
     do {
       let qr = try MobileLoginQR.parse(text)
       let prepared = try store.prepareMobileLogin(base: qr.baseUrl, name: qr.connectionName)
-      let active = session.connection?.scope == prepared.connection.scope ? session.api : nil
-      let credentials = try active ?? APIClient(base: prepared.connection.url, connectionID: prepared.connection.id)
+      let active = session.connection?.scope == prepared.connection.scope && session.api?.baseURL.absoluteString == qr.baseUrl ? session.api : nil
+      let credentials = try active ?? prepared.connection.loginClient(url: qr.baseUrl)
       attempt = Attempt(qr: qr, claimantToken: try MobileLoginClient.claimantToken(), prepared: prepared,
         client: MobileLoginClient(base: try MobileLoginQR.validatedBase(qr.baseUrl)),
         credentialClient: credentials, ownsCredentialClient: active == nil)
@@ -119,6 +119,7 @@ final class MobileLoginController: ObservableObject {
     message = "登录已保存，正在通知电脑…"
     try await value.client.complete(value.qr.requestId, claimantToken: value.claimantToken, accessToken: result.accessToken)
     try check(epoch)
+    try await value.credentialClient.bootstrapIdentity(replacing: true)
     enterHome()
   }
 

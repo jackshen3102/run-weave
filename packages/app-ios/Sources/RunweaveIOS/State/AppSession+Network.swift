@@ -63,6 +63,8 @@ extension AppSession {
   }
 
   func scheduleProbe(epoch: Int) {
+    guard !routeLoginRequired, let computer = connection,
+      !computer.routes.isEmpty, computer.automatic || computer.fixedRouteID != nil else { return }
     probeTask?.cancel()
     probeTask = Task { [weak self] in
       guard let self else { return }
@@ -75,24 +77,13 @@ extension AppSession {
           ["retry": String(attempt + 1), "retryDelayMs": String(delay * 1000)])
         attempt = min(attempt + 1, delays.count - 1)
         do { try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000) } catch { return }
-        guard self.generation == epoch, self.foreground, let api = self.api else { return }
-        self.healthRevision += 1
-        let revision = self.healthRevision
-        let result = await DeviceHealthService.check(
-          base: api.baseURL, connectionID: api.connectionID)
-        guard self.generation == epoch, self.healthRevision == revision, self.foreground,
-          !Task.isCancelled
-        else { return }
-        self.applyHealth(result)
-        if result.status == .online {
+        guard self.foreground, self.connection != nil else { return }
+        await self.reconnectRoutes()
+        if self.health.status == .online {
           self.probeTask = nil
-          await self.reload()
-          guard self.generation == epoch, self.foreground, self.authenticated,
-            self.health.status == .online, !Task.isCancelled
-          else { return }
-          self.terminalController?.connect()
           return
         }
+
       }
     }
   }

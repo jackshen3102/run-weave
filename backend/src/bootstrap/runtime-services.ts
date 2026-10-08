@@ -1,3 +1,4 @@
+import { createAuthRuntime } from "./auth-runtime";
 import { DevResourcesService } from "../dev-resources/service";
 import { createTerminalTaskMonitoring, createTerminalTaskServices } from "./terminal-task-monitoring";
 import { TerminalBadges } from "../device-monitor/terminal-badges";
@@ -21,9 +22,6 @@ import { MobileLoginService } from "../auth/mobile-login";
 import path from "node:path";
 import { createExperienceLearning } from "../experience/bootstrap";
 import crypto from "node:crypto";
-import { LowDbAuthStore } from "../auth/lowdb-store";
-import { loadAuthConfig } from "../auth/config";
-import { AuthService } from "../auth/service";
 import { AgentTeamService } from "../agent-team/service";
 import { AgentTeamModelConfigStore } from "../agent-team/runtime/model-config-store";
 import { AgentTeamModelSettingsService } from "../agent-team/model-catalog/service";
@@ -133,26 +131,7 @@ async function assembleRuntimeServices(
     recorder: activityRecorder,
     eventFactory: activityEventFactory,
   };
-  const authConfig = loadAuthConfig();
-  const authStore = new LowDbAuthStore(storagePaths.authStoreFile);
-  resources.defer("auth-store", () => authStore.dispose());
-  const persistedAuth = await authStore.initialize({
-    username: authConfig.username,
-    password: authConfig.password,
-    jwtSecret: authConfig.jwtSecret,
-    updatedAt: new Date().toISOString(),
-    refreshSessions: [],
-  });
-  const authService = new AuthService(
-    {
-      ...authConfig,
-      username: persistedAuth.username,
-      password: persistedAuth.password,
-      jwtSecret: persistedAuth.jwtSecret,
-      initialRefreshSessions: persistedAuth.refreshSessions,
-    },
-    authStore,
-  );
+  const { connectionIdentity, authConfig, authStore, authService } = await createAuthRuntime(storagePaths, resources);
   const terminalSessionStore = new LowDbTerminalSessionStore(
     storagePaths.terminalSessionStoreFile,
   );
@@ -554,6 +533,7 @@ async function assembleRuntimeServices(
     terminalActivity,
     authStore,
     authService,
+    connectionIdentity,
     mobileLoginService,
     localBrowserService,
     authCookieName: authConfig.refreshCookieName,

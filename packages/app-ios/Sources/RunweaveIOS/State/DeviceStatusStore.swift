@@ -85,10 +85,9 @@ final class ConnectionBatteryStore: ObservableObject {
           let device = devices[connection.scope] ?? DeviceStatusStore()
           devices[connection.scope] = device
           group.addTask { @MainActor in
-            guard let api = try? APIClient(base: connection.url, connectionID: connection.id) else {
+            guard let api = try? await connection.client() else {
               return
             }
-            defer { Task { await api.close() } }
             guard await api.hasCredentials(), !Task.isCancelled else {
               device.unavailable("登录后查看电量")
               return

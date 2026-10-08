@@ -1,0 +1,57 @@
+{
+  "device": { "id": "computer-1", "name": "MacBook Pro", "owner": "我的电脑" },
+  "mode": "auto",
+  "activeId": "office",
+  "pinnedId": null,
+  "routes": [
+    {
+      "id": "home",
+      "name": "家里 Wi-Fi",
+      "url": "http://192.168.31.88:3000",
+      "kind": "wifi",
+      "reachable": false,
+      "verified": true,
+      "latency": 8,
+      "result": "unreachable"
+    },
+    {
+      "id": "office",
+      "name": "公司 Wi-Fi",
+      "url": "http://10.24.8.16:3000",
+      "kind": "wifi",
+      "reachable": true,
+      "verified": true,
+      "latency": 12,
+      "result": "connected"
+    },
+    {
+      "id": "devbox",
+      "name": "Devbox 隧道",
+      "url": "https://devbox.example.com/runweave",
+      "kind": "tunnel",
+      "reachable": true,
+      "verified": true,
+      "latency": 86,
+      "result": "idle"
+    }
+  ],
+  "scenarios": {
+    "offline": { "unreachable": ["home", "office", "devbox"] },
+    "tunnel": { "unreachable": ["home", "office"], "activeId": "devbox" },
+    "home": { "reachable": ["home", "office", "devbox"], "activeId": "home" },
+    "identity": {
+      "unreachable": ["home", "office"],
+      "unverified": ["devbox"],
+      "activeId": null
+    },
+    "manual-failure": {
+      "mode": "manual",
+      "pinnedId": "home",
+      "activeId": null
+    },
+    "recover": {
+      "reachable": ["home", "office", "devbox"],
+      "activeId": "office"
+    }
+  }
+}

@@ -7,6 +7,7 @@ public enum APIError: Error, LocalizedError {
   case credentialsUnavailable
   case offline
   case writeRequiresRetry
+  case refreshResultUnknown
   case loginRejected
   case tunnelAuthenticationRequired
   case diagnosticStorageUnavailable
@@ -23,6 +24,7 @@ public enum APIError: Error, LocalizedError {
     case .credentialsUnavailable: return "请先登录此连接"
     case .offline: return "本地电脑暂时不可用，恢复连接后请重新操作"
     case .writeRequiresRetry: return "登录已刷新，本次操作未重发，请重新操作"
+    case .refreshResultUnknown: return "登录刷新结果未确认，请重新登录恢复。草稿已保留。"
     case .loginRejected: return "用户名或密码不正确"
     case .tunnelAuthenticationRequired: return "连接入口需要隧道认证，请检查接入配置"
     case .diagnosticStorageUnavailable: return "持久日志不可用，未完成清理；请先导出当前可读记录"

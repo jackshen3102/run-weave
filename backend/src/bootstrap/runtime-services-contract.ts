@@ -59,6 +59,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   terminalActivity: TerminalActivityDependencies;
   authStore: AuthStore;
   authService: AuthService;
+  connectionIdentity: import("../auth/connection-identity").ConnectionIdentityService;
   mobileLoginService: MobileLoginService;
   localBrowserService: LocalBrowserService;
   authCookieName: string;

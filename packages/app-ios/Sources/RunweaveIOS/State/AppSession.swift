@@ -6,21 +6,21 @@ import Network
 /// One active connection owns its requests, overview, event stream and terminal route.
 @MainActor
 final class AppSession: ObservableObject {
-  @Published private(set) var connection: BackendConnection?
-  @Published private(set) var authenticated = false {
+  @Published var connection: BackendConnection?
+  @Published var authenticated = false {
     didSet {
       if oldValue != authenticated { knowledgeInbox.reset(api: authenticated ? api : nil) }
       if !authenticated { showingScheduledTasks = false; showingEnergyMonitor = false; showingDevelopmentResources = false; scheduledSource = nil }
     }
   }
-  @Published private(set) var checking = false
-  @Published private(set) var loading = false
-  @Published private(set) var writing = false
-  @Published private(set) var overview: HomeOverview? {
+  @Published var checking = false
+  @Published var loading = false
+  @Published var writing = false
+  @Published var overview: HomeOverview? {
     didSet { attentionRetention.observe(from: oldValue, to: overview) }
   }
   let attentionRetention = AttentionRetentionStore()
-  @Published private(set) var health = DeviceHealthSnapshot()
+  @Published var health = DeviceHealthSnapshot()
   @Published var error: String?
   @Published var showingEnergyMonitor = false
   @Published var showingDevelopmentResources = false
@@ -55,27 +55,31 @@ final class AppSession: ObservableObject {
   var networkSignature: String?
   var networkPath: NWPath?
   var healthRevision = 0
-  private var lastServiceInstanceID: String?
-  private var lastRuntimeReleaseID: String?
+  var lastServiceInstanceID: String?
+  var lastRuntimeReleaseID: String?
 
-  private(set) var api: APIClient?
-  @Published private(set) var generation = 0 { didSet { terminalQuestions.reset() } }
-  @Published private(set) var metadataWrites = Set<String>()
+  var api: APIClient?
+  var reconnectRequest = 0
+  @Published var replacingTransport = false
+  var routeLoginRequired = false
+  var routeResolver: ConnectionRouteResolver? { connection.map { ConnectionRouteResolver.forComputer($0) } }
+  @Published var generation = 0 { didSet { terminalQuestions.reset() } }
+  @Published var metadataWrites = Set<String>()
   // Mutated by the attention extension; scoped to this connection generation.
   @Published var acknowledgementWrites = Set<String>()
   @Published var bellMarkers = Set<String>()
   var bellTasks: [String: Task<Void, Never>] = [:]
   private var overviewRevision = 0
-  private var pendingOverviewEvents: [TerminalEvent] = []
-  private var overviewTask: Task<Void, Never>?
-  private var overviewReloadRequested = false
+  var pendingOverviewEvents: [TerminalEvent] = []
+  var overviewTask: Task<Void, Never>?
+  var overviewReloadRequested = false
   var probeTask: Task<Void, Never>?
   var resumeTask: Task<Void, Never>?
   private var routeRequest = 0
-  private var events: EventStream?
+  var events: EventStream?
   @Published private(set) var foreground = true
   private var loadingRequest = 0
-  var canWrite: Bool { authenticated && health.status == .online && foreground && !writing }
+  var canWrite: Bool { !replacingTransport && authenticated && health.status == .online && foreground && !writing }
   @Published var reconnectingTerminal = false
   var canReconnect: Bool { authenticated && foreground && !loading && !writing && !reconnectingTerminal }
 
@@ -90,6 +94,10 @@ final class AppSession: ObservableObject {
   }
 
   func activate(_ connection: BackendConnection?) async {
+    routeResolver?.onInvalidated = nil
+    routeResolver?.cancel()
+    reconnectRequest += 1
+    routeLoginRequired = false
     let returnToScheduledTasks = showingScheduledTasks
     generation += 1
     healthRevision += 1
@@ -126,15 +134,21 @@ final class AppSession: ObservableObject {
       checking = false
       return
     }
+    if let credentials = try? ComputerCredentialSession.shared(account: connection.credentialAccount) {
+      authenticated = await credentials.hasCredentials()
+    }
     do {
-      let client = try APIClient(base: connection.url, connectionID: connection.id)
+      let resolver = ConnectionRouteResolver.forComputer(connection)
+      resolver.onInvalidated = { [weak self] in
+        Task { await self?.reconnectRoutes() }
+      }
+      let client = try await resolver.resolve(force: true)
       api = client
       recordConnection("connection.activated", ["path": networkSignature ?? "unknown"])
       authenticated = await client.hasCredentials()
       guard generation == epoch, !Task.isCancelled else { return }
       checking = false
-      await probe(epoch: epoch)
-      guard generation == epoch, !Task.isCancelled else { return }
+      health.status = .online
       if authenticated { await reload() }
       if generation == epoch, authenticated, returnToScheduledTasks {
         showingScheduledTasks = true
@@ -143,6 +157,11 @@ final class AppSession: ObservableObject {
       guard generation == epoch else { return }
       checking = false
       self.error = displayError(error)
+      health.status = .offline
+      health.message = displayError(error)
+      if case APIError.refreshResultUnknown = error { await prepareRelogin() }
+      else if case APIError.credentialsUnavailable = error { await prepareRelogin() }
+      else { scheduleProbe(epoch: epoch) }
     }
   }
 
@@ -153,15 +172,18 @@ final class AppSession: ObservableObject {
       username: username.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
     guard epoch == generation, !Task.isCancelled else { throw CancellationError() }
     authenticated = true
+    routeLoginRequired = false
     attentionRetention.setForeground(foreground)
     health.status = .online
     error = nil
-    await reload()
+    await reconnectRoutes()
   }
 
   func logout() async {
     guard let api else { return }
     generation += 1
+    reconnectRequest += 1
+    routeResolver?.cancel()
     stopResources()
     forgetDrafts(connection)
     attentionRetention.forget()
@@ -388,7 +410,7 @@ final class AppSession: ObservableObject {
     reportFailure: Bool = true, _ operation: (APIClient) async throws -> T
   ) async throws -> T {
     guard authenticated, let api else { throw APIError.credentialsUnavailable }
-    guard foreground, health.status == .online else { throw APIError.offline }
+    guard foreground, !replacingTransport, health.status == .online else { throw APIError.offline }
     let epoch = generation
     do {
       let value = try await operation(api)
@@ -416,6 +438,7 @@ final class AppSession: ObservableObject {
   private func setForeground(_ value: Bool) {
     guard foreground != value else { return }
     foreground = value
+    ConnectionRouteResolver.setForeground(value)
     attentionRetention.setForeground(value)
     if !value { knowledgeInbox.suspend() }
     if !value {
@@ -433,6 +456,7 @@ final class AppSession: ObservableObject {
       overviewReloadRequested = false
       terminalController?.disconnect()
     } else {
+      health.status = .checking
       let epoch = generation
       resumeTask?.cancel()
       resumeTask = Task { [weak self] in
@@ -444,41 +468,7 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func probe(epoch: Int) async {
-    guard let api, foreground else { return }
-    healthRevision += 1
-    let revision = healthRevision
-    let result = await DeviceHealthService.check(base: api.baseURL, connectionID: api.connectionID)
-    guard generation == epoch, healthRevision == revision, foreground, !Task.isCancelled else { return }
-    applyHealth(result)
-    if result.status == .offline {
-      deviceStatus.disconnected()
-      events?.stop()
-      terminalController?.disconnect()
-      scheduleProbe(epoch: epoch)
-    } else {
-      probeTask?.cancel()
-      probeTask = nil
-      startEvents()
-    }
-  }
-
-  func applyHealth(_ result: DeviceHealthSnapshot) {
-    if health.status != result.status {
-      recordConnection("health.state.changed", ["previous": health.status.rawValue, "status": result.status.rawValue])
-    }
-    if let id = result.serviceInstanceID {
-      if let previous = lastServiceInstanceID, previous != id {
-        recordConnection("backend.instance.changed", ["previousServiceInstanceId": previous, "serviceInstanceId": id,
-          "previousRuntimeReleaseId": lastRuntimeReleaseID ?? "unknown", "runtimeReleaseId": result.runtimeReleaseID ?? "unknown"])
-      }
-      lastServiceInstanceID = id
-      lastRuntimeReleaseID = result.runtimeReleaseID
-    }
-    health = result
-  }
-
-  private func startEvents() {
+  func startEvents() {
     guard authenticated, foreground, health.status == .online, let api else { return }
     if events == nil {
       let epoch = generation
@@ -574,6 +564,8 @@ final class AppSession: ObservableObject {
       overview = nil
       events?.stop()
       closeTerminal()
+    } else if case APIError.refreshResultUnknown = failure {
+      await prepareRelogin()
     } else if failure is URLError {
       await probe(epoch: epoch)
     }

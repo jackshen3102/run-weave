@@ -1,5 +1,21 @@
 [
   {
+    "file": "backend/src/auth/connection-identity.ts",
+    "kind": "file-io",
+    "expression": "handle.writeFile(data)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "原子写入当前 Backend profile 的 Ed25519 私钥身份；属于认证运行状态，不作为 settings.yaml 业务配置来源。"
+  },
+  {
+    "file": "backend/src/auth/connection-identity.ts",
+    "kind": "file-io",
+    "expression": "readFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取并校验当前 Backend profile 已持久化的 Ed25519 身份；属于认证运行状态，不作为 settings.yaml 业务配置来源。"
+  },
+  {
     "file": "electron/src/tunnels/local-remote-desktop.ts",
     "kind": "file-io",
     "expression": "file.readFile(\"utf8\")",
