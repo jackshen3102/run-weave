@@ -150,7 +150,8 @@ export function buildSupervisionInput(
   );
   let recent = following
     .filter(
-      (m) => m.id !== reply.id && (m.role === "user" || m.phase === "final"),
+      (m) => m.id !== reply.id && !isSupervisionPrompt(m.text) &&
+        !m.text.startsWith("<hook_prompt") && (m.role === "user" || m.phase === "final"),
     )
     .slice(-4);
   const input: SupervisionInput = {

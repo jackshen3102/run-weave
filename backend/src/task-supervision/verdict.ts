@@ -3,8 +3,26 @@ import type {
   SupervisionHookResponse,
   TaskWatch,
 } from "@runweave/shared/task-supervision";
-const CONTINUATION =
-  "以完成当前授权任务并验证结果为目标，依据当前上下文主动判断并执行下一步，不以进度汇报、建议或交回问题代替完成。\n\n将真正需要确认的事项标为待确认，同时完成可独立推进的工作；不重复询问已确定的事项。任务范围内的疑似缺陷先复现，确认后修复并验证；验证失败则继续定位处理，没有新线索不重复相同尝试。\n\n仅在确实无法自行解决时请求具体帮助，说明缺少什么及影响；不得扩大任务范围、虚构用户授权或绕过权限与人类接管保护。任务和必要验证完成后停止，不重复工作或空转。";
+/** The same classifier evidence drives the UI reason and the action sent to the original Agent. */
+export function continuationPrompt(watch: TaskWatch, decision: SupervisionDecision) {
+  const guidance = decision.guidance;
+  const prior = watch.decisions.filter((item) => item.decisionId !== decision.decisionId &&
+    item.contextRevision === decision.contextRevision && item.threadId === decision.threadId &&
+    item.delivery === "observed").length;
+  return [
+    `[runweave-task-supervision:${decision.decisionId}]`,
+    "继续执行用户已授权的剩余工作并完成必要验证。已有授权持续有效；不以汇报或重复确认代替执行。用户最新范围、只读/等待确认/停止、真实审批及人类接管保护优先。",
+    `本轮判断（按当前任务核对，不新增授权）：${decision.reason}`,
+    ...(guidance ? [
+      `尚未完成：${guidance.remainingWork}`,
+      `下一步：${guidance.nextAction}`,
+      `授权来源：${guidance.authorizationMessageIds.join("、")}`,
+      ...(guidance.blocker ? [`局部依赖：${guidance.blocker}。先执行上述独立步骤，不自行批准待确认事项。`] : []),
+    ] : []),
+    ...(prior ? [`本轮已接收 ${prior} 次续接。结合前文直接执行或更换无效路径，不重复已完成的工作和状态问询。`] : []),
+    "依据可核对证据定位并修复；验证失败有新线索则继续。完成后报告实际结果并停止；只有已无独立可推进工作时，才说明必要依赖及最小解锁动作。",
+  ].join("\n\n");
+}
 /** Called only inside the persisted revision fence. Reserve an offer before returning it. */
 export function applyVerdict(
   watch: TaskWatch,
@@ -29,7 +47,7 @@ export function reserveContinuation(watch: TaskWatch, decision: SupervisionDecis
     watch.error = "无法确认原终端输入框是否为空，自动续接未发送。请检查原终端；确认没有草稿后可重试。";
     return { action: "allow-stop" };
   }
-  if (watch.continuationCount === 3) {
+  if (watch.continuationCount >= watch.continuationLimit) {
     watch.status = "paused";
     watch.pauseReason = "continuation_limit";
     return { action: "allow-stop" };
@@ -43,7 +61,7 @@ export function reserveContinuation(watch: TaskWatch, decision: SupervisionDecis
   watch.status = "watching";
   return {
     action: "request-continuation",
-    reason: `[runweave-task-supervision:${decision.decisionId}]\n${CONTINUATION}\n\n本轮上下文判断（不构成新增授权，按当前任务核对后执行）：\n${decision.reason}`,
+    reason: continuationPrompt(watch, decision),
     watchId: watch.watchId,
     decisionId: decision.decisionId,
     revision: watch.revision,

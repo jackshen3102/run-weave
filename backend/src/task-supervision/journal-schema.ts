@@ -42,12 +42,20 @@ const decision = z.object({
   scores,
   outcome,
   reason: id,
+  guidance: z.object({
+    remainingWork: z.string(),
+    nextAction: z.string(),
+    authorizationMessageIds: z.array(id),
+    blocker: z.string(),
+    requiredUserAction: z.string(),
+  }).optional(),
+  policyVersion: id.optional(),
   sourceMessageIds: z.array(id).min(1),
   createdAt: id,
   input,
   delivery: z.enum(["not_requested", "offered", "observed", "unknown"]),
   deliveryDeadline: z.number().int().positive(),
-  deliveryBlock: z.literal("draft_unconfirmed").optional(),
+  deliveryBlock: z.enum(["draft_unconfirmed", "not_sent"]).optional(),
 });
 export const journalSchema = z.object({
   version: z.literal(1),

@@ -40,13 +40,22 @@ export interface SupervisionDecision {
   scores: Record<TaskOutcome, number>;
   outcome: TaskOutcome;
   reason: string;
+  /** Absent in historical decisions; never infer authorization from a model score. */
+  guidance?: {
+    remainingWork: string;
+    nextAction: string;
+    authorizationMessageIds: string[];
+    blocker: string;
+    requiredUserAction: string;
+  };
+  policyVersion?: string;
   sourceMessageIds: string[];
   createdAt: string;
   input: SupervisionInput;
   delivery: "not_requested" | "offered" | "observed" | "unknown";
   deliveryDeadline: number;
   /** Classification succeeded, but no continuation was offered because the editor state is unknown. */
-  deliveryBlock?: "draft_unconfirmed";
+  deliveryBlock?: "draft_unconfirmed" | "not_sent";
 }
 export interface TaskWatch {
   watchId: string;

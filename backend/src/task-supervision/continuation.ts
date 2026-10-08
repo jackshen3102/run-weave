@@ -32,17 +32,19 @@ export async function sendSupervisionOffer(target: SupervisionTarget, offer: Off
       !operations.current(target) || !operations.manager.getSession(target.terminalSessionId))
       throw new Error("原任务已变化，未发送旧续接。");
   };
+  let deliveryStarted = false;
   try {
     valid();
     const session = operations.manager.getSession(target.terminalSessionId)!;
     if (terminalInputAdmission(session).revision !== inputRevision) throw new Error("用户输入已变化，未发送旧续接。");
     if (!operations.deliver) throw new Error("终端输入服务不可用。");
     if (options.confirmedEmpty) clearTerminalDraft(session, operations.manager.getPanel(target.panelId)?.tmuxPaneId ?? null, "user-confirmed-empty");
+    deliveryStarted = true;
     await operations.deliver(target, offer, valid);
     supervisionLogger.info("task-supervision.delivery.sent", { ...options.trace, ...target, decisionId: offer.decisionId });
   } catch (error) {
     supervisionLogger.warn("task-supervision.delivery.failed", { ...options.trace, ...target, decisionId: offer.decisionId, error });
-    await operations.transaction(() => recordDeliveryFailure(operations.watch(), offer.decisionId, error, operations.current(target)));
+    await operations.transaction(() => recordDeliveryFailure(operations.watch(), offer.decisionId, error, operations.current(target), deliveryStarted));
   }
 }
 
