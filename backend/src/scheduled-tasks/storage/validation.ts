@@ -70,6 +70,7 @@ const runSchema: z.ZodType<ScheduledRun> = z.object({
   revision: z.number().int().positive().optional(),
   resultRevision: z.number().int().nonnegative().optional(),
   activeAttemptId: text.nullable().optional(),
+  continuationInput: z.string().trim().min(1).max(8000).optional(),
   executionBudget: z
     .object({
       timeoutMs: z.number().positive(),

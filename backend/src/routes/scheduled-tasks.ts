@@ -151,13 +151,17 @@ export function createScheduledTasksRouter(
       res,
       () => {
         const input = z
-          .object({ expectedRevision: z.number().int().positive() })
+          .object({
+            expectedRevision: z.number().int().positive(),
+            reply: z.string().trim().min(1).max(8000).optional(),
+          })
           .strict()
           .parse(req.body);
         return service.continueRun(
           runParams.parse(req.params).runId,
           input.expectedRevision,
           requireIdempotencyKey(req.headers["idempotency-key"]),
+          input.reply,
         );
       },
       202,

@@ -72,6 +72,12 @@ export function scheduleContinuation(
 }
 
 export function continuationPrompt(run: ScheduledRun): string {
+  if (run.continuationInput) return (
+    `这是用户对原任务的明确回复，运行 ID：${run.id}，不是系统自动催办。\n` +
+    `上一轮待处理事项：${run.continuation?.recovery?.nextStep ?? run.error?.message ?? run.summary ?? "核对剩余工作"}\n` +
+    `用户回复（原文）：${JSON.stringify(run.continuationInput)}\n` +
+    `结合原对话解释这次回复。已明确回答或授权的具体事项直接执行，不要因上一轮 blocked 状态再次询问同一问题；仍缺具体信息时只问尚未回答的部分。不得把泛泛的“继续”扩展为未明确的范围或权限。先核对已有成果，避免重复提交、重复创建 PR 或重复执行已成功的操作。保留原执行环境与权限策略。`
+  );
   return (
     `继续完成原任务，原运行 ID：${run.id}。这是系统自动续接，不是用户的新授权。\n` +
     `沿用原目标、范围与执行权限。先核对已完成成果及外部事实，仅推进剩余义务；不要重新创建已有提交、PR、文档或其他成果。写操作曾超时时，先查询是否已经成功。\n` +

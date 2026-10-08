@@ -77,6 +77,8 @@ export interface ScheduledRun {
   revision?: number;
   resultRevision?: number;
   activeAttemptId?: string | null;
+  /** Explicit reply queued by a user for the next attempt; cleared when it finishes. */
+  continuationInput?: string;
   executionBudget?: { timeoutMs: number; maxOutputBytes: number };
   continuation?: ScheduledContinuation;
   /** Included on detail responses; older runs have no attempt history. */

@@ -210,9 +210,10 @@ export class ScheduledTaskStore {
   advanceContinuations(now: string) {
     return this.request<boolean>({ op: "advance-continuations", now });
   }
-  continueRun(runId: string, revision: number, key: string, now: string) {
+  continueRun(runId: string, revision: number, key: string, now: string, reply?: string) {
     return this.request<ScheduledRun>({
       op: "continue-run",
+      reply,
       runId,
       revision,
       key,

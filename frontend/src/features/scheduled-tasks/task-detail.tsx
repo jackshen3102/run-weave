@@ -124,6 +124,7 @@ export function RunRecord({
           ({run.error.code})
         </p>
       ) : null}
+      <RunContinuation run={run} />
       <button
         type="button"
         className="mt-3 text-left text-xs text-primary"
@@ -210,7 +211,6 @@ export function RunRecord({
           {expanded ? "收起输出" : "查看输出"}
         </button>
       </div>
-      <RunContinuation run={run} />
       {expanded ? <RunProgress key={run.id} run={run} /> : null}
     </article>
   );

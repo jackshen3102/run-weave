@@ -117,15 +117,19 @@ struct ScheduledOpenResponse: Decodable {
   let error: String?
 }
 struct ScheduledRun: Decodable, Identifiable {
-  struct Recovery: Decodable { let action: String; let category: String; let evidence: String; let nextStep: String; let notBefore: String? }
-  struct Continuation: Decodable { let count: Int; let maxAttempts: Int; let nextAt: String?; let deadline: String?; let recovery: Recovery?; let stopReason: String? }
+  struct Recovery: Decodable { let action: String; let category: String; let evidence: String; let nextStep: String; let notBefore: String?; let confirmation: String? }
+  struct Continuation: Decodable { let count: Int; let maxAttempts: Int; let nextAt: String?; let deadline: String?; let activeMs: Double; let recovery: Recovery?; let stopReason: String? }
   struct Attempt: Decodable, Identifiable {
     let id: String; let sequence: Int; let startedAt: String; let finishedAt: String?
-    let summary: String?; let outcome: String?; let error: Failure?
+    let summary: String?; let outcome: String?; let error: Failure?; let userReply: String?
   }
   let revision: Int?
   let resultRevision: Int?
+  let outputCursor: String?
+  struct ExecutionBudget: Decodable { let timeoutMs: Double; let maxOutputBytes: Double }
+  let executionBudget: ExecutionBudget?
   let continuation: Continuation?
+  let continuationInput: String?
   let attempts: [Attempt]?
   struct Dispatch: Decodable { let evaluatedAt: String; let latenessMs: Double; let catchUp: Bool; let coalescedFrom: String? }
   struct Failure: Decodable { let code: String; let message: String }
@@ -151,6 +155,14 @@ struct ScheduledRun: Decodable, Identifiable {
   let threadRef: Thread?
   let recoverable: Bool
   let terminalBinding: ScheduledTerminalBinding?
+  var replyUnavailable: String? {
+    if archivedAt != nil { return "本次运行已移至历史。" }
+    if terminalBinding != nil { return "原会话已由终端接管，后台不会同时启动第二个执行器。" }
+    if threadRef == nil { return "没有可恢复的原会话，无法在后台继续。" }
+    if !["failed", "cancelled"].contains(status) { return "本次运行不在等待回复或重试的状态。" }
+    if let budget = executionBudget, (continuation?.activeMs ?? 0) >= budget.timeoutMs || (Double(outputCursor ?? "0") ?? 0) >= budget.maxOutputBytes { return "本次运行的累计执行或输出额度已用完。" }
+    return nil
+  }
   var waitingContinuation: Bool { status == "waiting" && continuation?.nextAt != nil }
   var active: Bool { ["queued", "running", "stopping"].contains(status) || waitingContinuation }
   var needsAttention: Bool { !active && (outcome == "blocked" || outcome == "failed" || status == "failed" || status == "waiting") }

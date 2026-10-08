@@ -357,8 +357,8 @@ export class ScheduledTaskDatabase {
     this.executions.advance(now);
     return true;
   }
-  continueRun(runId: string, revision: number, key: string, now: string) {
-    return this.executions.continueNow(runId, revision, key, now);
+  continueRun(runId: string, revision: number, key: string, now: string, reply?: string) {
+    return this.executions.continueNow(runId, revision, key, now, reply);
   }
 
   archiveQuickInputRun(runId: string, now: string): ScheduledRun {
