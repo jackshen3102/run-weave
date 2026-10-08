@@ -1,0 +1,157 @@
+{
+  "policyVersion": "2026-10-08-action-v2",
+  "historicalReplay": {
+    "initial": {
+      "matched": 6,
+      "total": 10
+    },
+    "second": {
+      "matched": 8,
+      "total": 10
+    },
+    "final": {
+      "matched": 10,
+      "total": 10
+    },
+    "expectationsUnchanged": true,
+    "independentEvaluation": false
+  },
+  "runtimeReplay": {
+    "historicalJournals": 16,
+    "historicalDecisions": 193,
+    "cursor": {
+      "classificationCalls": 2,
+      "decisions": 1,
+      "recovered": true
+    },
+    "deliveryResults": [
+      {
+        "mode": "before",
+        "writes": 0,
+        "delivery": "not_requested",
+        "count": 0
+      },
+      {
+        "mode": "after",
+        "writes": 1,
+        "delivery": "unknown",
+        "count": 1
+      },
+      {
+        "mode": "new-round",
+        "writes": 0,
+        "delivery": "not_requested",
+        "count": 2
+      }
+    ]
+  },
+  "browser": {
+    "engine": "standalone Chrome via repository Playwright CLI",
+    "viewports": [
+      [1440, 1000],
+      [390, 844]
+    ],
+    "optimizationCount": 10,
+    "recordCount": 193,
+    "blockedFilterCount": 13,
+    "searchCount": 1,
+    "scenarios": 4,
+    "originalReplyExpanded": true,
+    "consoleErrors": 0,
+    "mobileOverflow": false
+  },
+  "deployment": {
+    "stableUpdated": false,
+    "iphoneUpdated": false,
+    "productionTaskReplayed": false
+  },
+  "focusedImplementation": {
+    "baseline": "16f2c232",
+    "policyVersion": "2026-10-08-action-v4",
+    "scopeCount": 4,
+    "classifierInstructionCharacters": {
+      "before": 2280,
+      "after": 1428,
+      "reductionPercent": 37.4
+    },
+    "fixedReplay": {
+      "historicalMatched": 10,
+      "historicalTotal": 10,
+      "matched": 17,
+      "total": 18,
+      "expectationsUnchanged": true,
+      "independentEvaluation": false,
+      "disagreements": [
+        {
+          "id": "new-approval",
+          "expected": "blocked",
+          "outcome": "completed",
+          "reason": "补丁及本地验证已完成，当前准备补丁的交付已满足；生产部署明确须等待用户确认，不属于当前可执行义务。"
+        }
+      ]
+    },
+    "runtime": {
+      "context": {
+        "realMessages": 4,
+        "injectedAuthorization": false
+      },
+      "flow": {
+        "classifications": 1,
+        "delivery": "observed",
+        "sameTarget": true,
+        "persistedBeforeDelivery": true,
+        "transport": "isolated controlled adapter"
+      },
+      "historicalJournals": 16,
+      "historicalDecisions": 193,
+      "cursor": {
+        "classificationCalls": 2,
+        "decisions": 1,
+        "recovered": true
+      },
+      "deliveryResults": [
+        {
+          "mode": "before",
+          "writes": 0,
+          "delivery": "not_requested",
+          "count": 0
+        },
+        {
+          "mode": "after",
+          "writes": 1,
+          "delivery": "unknown",
+          "count": 1
+        },
+        {
+          "mode": "new-round",
+          "writes": 0,
+          "delivery": "not_requested",
+          "count": 2
+        }
+      ]
+    },
+    "browser": {
+      "viewports": [
+        [1440, 1000],
+        [390, 844]
+      ],
+      "scopeCards": 4,
+      "blockedFilterCount": 13,
+      "searchCount": 1,
+      "sceneSwitch": true,
+      "mobileOverflow": false,
+      "consoleErrors": 0
+    },
+    "deployment": {
+      "stableUpdated": false,
+      "iphoneUpdated": false
+    },
+    "explicitDeploymentApproval": {
+      "id": "new-explicit-deployment",
+      "expected": "blocked",
+      "outcome": "blocked",
+      "pass": true,
+      "reason": "补丁和本地验证已完成；用户明确要求生产部署前等待确认，当前唯一剩余义务依赖该审批。"
+    }
+  }
+}

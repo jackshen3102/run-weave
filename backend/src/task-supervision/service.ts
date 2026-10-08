@@ -430,7 +430,6 @@ export class TaskSupervisionService {
         }
         if (w.taskStartMessageId.startsWith("pending:"))
           throw new Error("监控已开启，但当前会话还没有可读的用户任务。");
-        w.lastFinalMessageId = finalKey;
         reconcileDelivery(w, messages);
         if (w.pauseReason === "delivery_unknown")
           throw new Error("上次续接尚未确认接收，请检查原终端。");
@@ -486,6 +485,8 @@ export class TaskSupervisionService {
           return ALLOW;
         }
         w.plans = snapshot.plans;
+        // A failed classification is not a processed reply. Commit the cursor with the decision.
+        w.lastFinalMessageId = finalKey;
         const decision = {
           ...result,
           decisionId: randomUUID(),

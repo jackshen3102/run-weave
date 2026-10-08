@@ -7,9 +7,16 @@ export function recordDeliveryFailure(
   decisionId: string,
   error: unknown,
   current: boolean,
+  deliveryStarted = true,
 ) {
   const decision = watch.decisions.find((d) => d.decisionId === decisionId)!;
-  decision.delivery = "unknown";
+  const reserved = decision.delivery === "offered";
+  decision.delivery = deliveryStarted ? "unknown" : "not_requested";
+  if (!deliveryStarted) {
+    decision.deliveryBlock = "not_sent";
+    if (reserved && watch.contextRevision === decision.contextRevision)
+      watch.continuationCount = Math.max(0, watch.continuationCount - 1);
+  }
   if (watch.contextRevision !== decision.contextRevision || !current) return;
   watch.status = watch.enabled ? "error" : "paused";
   watch.revision++;
