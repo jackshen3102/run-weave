@@ -27,9 +27,11 @@ const start = z
   .strict();
 const change = z
   .object({
-    action: z.enum(["pause", "resume", "update-context"]),
+    action: z.enum(["pause", "resume", "update-context", "retry-continuation"]),
     expectedRevision: z.number().int().positive(),
     goal: z.string().trim().min(1).max(8000).optional(),
+    decisionId: z.string().uuid().optional(),
+    expectedInputVersion: z.string().uuid().optional(),
   })
   .strict();
 const hook = z

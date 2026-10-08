@@ -248,7 +248,7 @@ export class TmuxOutputWatcher {
     );
     const markerId = randomUUID();
     const marker = `\u001b]777;runweave-pane-boundary=${markerId}\u0007`;
-    const release = beginTerminalInput(session, target.paneId);
+    const release = beginTerminalInput(session, target.paneId, { kind: "edit", source: "pane-command", submit: true });
     try {
       await this.tmuxService.writePaneOutput(target, marker);
       await this.tmuxService.sendInput(target, `${input}\r`);

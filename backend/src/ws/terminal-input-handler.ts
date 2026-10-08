@@ -4,6 +4,7 @@ import type { WebSocket } from "ws";
 import type { PtyRuntime } from "../terminal/runtime/pty-service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { beginTerminalInput, queueBehindTextAttachment } from "../terminal/runtime/input-admission";
+import { rawTerminalInputIntent } from "../terminal/runtime/input-intent";
 import type { TerminalOutputBatcher } from "../terminal/runtime/output-batcher";
 import {
   logTerminalPerf,
@@ -63,6 +64,7 @@ export function createTerminalInputHandler({
     }
     if (parsed.type === "input") {
       try {
+        const intent = rawTerminalInputIntent(parsed.data);
         inputState.sequence += 1;
         inputState.lastInputAt = Date.now();
         logTerminalPerf("terminal.ws.input.received", {
@@ -84,11 +86,11 @@ export function createTerminalInputHandler({
             if (terminalSessionManager.getPanel(panel!.id) !== panel || panel!.status !== "running") throw new Error("Terminal panel exited; queued input was not written");
             await tmuxService.sendKeySequence(pane, [{ type: "literal", value: parsed.data }]);
           } else runtime.write(parsed.data);
-        }, panel?.tmuxPaneId ?? null);
+        }, panel?.tmuxPaneId ?? null, intent);
         if (queued) {
           void queued.catch((error) => handleRuntimeActionError(socket, terminalSessionId, "input", error));
         } else {
-          const release = beginTerminalInput(session, panel?.tmuxPaneId ?? null);
+          const release = beginTerminalInput(session, panel?.tmuxPaneId ?? null, intent);
           try { runtime.write(parsed.data); } finally { release(); }
         }
         if (/[\r\n]/.test(parsed.data)) {
@@ -121,7 +123,7 @@ export function createTerminalInputHandler({
         const session = terminalSessionManager.getSession(terminalSessionId);
         if (!session) throw new Error("Terminal session is unavailable");
         const activeId = terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId;
-        const release = beginTerminalInput(session, activeId ? terminalSessionManager.getPanel(activeId)?.tmuxPaneId ?? null : null);
+        const release = beginTerminalInput(session, activeId ? terminalSessionManager.getPanel(activeId)?.tmuxPaneId ?? null : null, { kind: "interrupt", source: "signal" });
         try {
           runtime.signal(parsed.signal);
         } finally {
