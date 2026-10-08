@@ -1,3 +1,7 @@
+import {
+  ScheduledExecutions,
+  type ScheduledExecutionResult,
+} from "./execution";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -24,11 +28,18 @@ const UNFINISHED = ["queued", "running", "stopping", "waiting"] as const;
 
 export class ScheduledTaskDatabase {
   private readonly database: Database.Database;
+  private readonly executions: ScheduledExecutions;
   private readonly invalidRecords = new Set<string>();
 
   constructor(databasePath: string) {
     mkdirSync(path.dirname(databasePath), { recursive: true, mode: 0o700 });
     this.database = new Database(databasePath);
+    this.executions = new ScheduledExecutions(
+      this.database,
+      (id) => this.requireRun(id),
+      (run) => this.putRun(run),
+      (row) => this.readBackground(row, parseRun),
+    );
     this.database.pragma("busy_timeout = 5000");
     this.database.pragma("foreign_keys = ON");
     try {
@@ -283,9 +294,13 @@ export class ScheduledTaskDatabase {
     ).map((row) => parseRun(row));
   }
 
-  listQuickInputRuns(projectId?: string, finishedSince?: string): ScheduledRun[] {
-    return listQuickInputRuns(this.database, projectId, finishedSince,
-      (row) => this.readBackground(row, parseRun));
+  listQuickInputRuns(
+    projectId?: string,
+    finishedSince?: string,
+  ): ScheduledRun[] {
+    return listQuickInputRuns(this.database, projectId, finishedSince, (row) =>
+      this.readBackground(row, parseRun),
+    );
   }
 
   listRecentlyFinishedRuns(since: string): ScheduledRun[] {
@@ -301,8 +316,13 @@ export class ScheduledTaskDatabase {
     });
   }
 
-  claimNextRun(ownerId: string, now: string): ScheduledRun | null {
+  claimNextRun(
+    ownerId: string,
+    now: string,
+    budget?: ScheduledRun["executionBudget"],
+  ): ScheduledRun | null {
     return this.database.transaction(() => {
+      this.executions.advance(now);
       const rows = this.database
         .prepare(
           "SELECT * FROM scheduled_runs WHERE status = 'queued' ORDER BY created_at, id",
@@ -315,31 +335,48 @@ export class ScheduledTaskDatabase {
       }
       // Close the iterator before writing or committing this transaction.
       if (!run) return null;
-      const claimed: ScheduledRun = {
-        ...run,
-        status: "running",
-        startedAt: now,
-      };
-      const changed = this.database
-        .prepare(
-          "UPDATE scheduled_runs SET status = 'running', owner_id = ?, owner_pid = NULL, payload_json = ? WHERE id = ? AND status = 'queued'",
-        )
-        .run(ownerId, JSON.stringify(claimed), run.id);
-      return changed.changes === 1 ? claimed : null;
+      return this.executions.claim(run, ownerId, now, budget);
     })();
   }
 
+  listAttempts(runId: string) {
+    this.requireRun(runId);
+    return this.executions.attempts(runId);
+  }
+  setRunThread(runId: string, ownerId: string, threadId: string) {
+    return this.executions.thread(runId, ownerId, threadId);
+  }
+  finishExecution(
+    runId: string,
+    ownerId: string,
+    result: ScheduledExecutionResult,
+  ) {
+    return this.executions.finish(runId, ownerId, result);
+  }
+  advanceContinuations(now: string) {
+    this.executions.advance(now);
+    return true;
+  }
+  continueRun(runId: string, revision: number, key: string, now: string) {
+    return this.executions.continueNow(runId, revision, key, now);
+  }
+
   archiveQuickInputRun(runId: string, now: string): ScheduledRun {
-    return archiveQuickInputRun(this.requireRun(runId), now, (run) => this.putRun(run));
+    return archiveQuickInputRun(this.requireRun(runId), now, (run) =>
+      this.putRun(run),
+    );
   }
 
   putRun(run: ScheduledRun): ScheduledRun {
     // Execution/attachment writers may hold a snapshot from before archiving.
-    const archivedAt = this.requireRun(run.id).archivedAt;
+    const stored = this.requireRun(run.id);
+    const archivedAt = stored.archivedAt;
+    run = { ...run, revision: (stored.revision ?? 0) + 1 };
+    delete run.attempts;
     if (archivedAt) run = { ...run, archivedAt };
-    const terminal = ["completed", "failed", "cancelled", "skipped"].includes(
-      run.status,
-    );
+    const terminal =
+      ["completed", "failed", "cancelled", "skipped"].includes(run.status) ||
+      (run.status === "waiting" && Boolean(run.continuation?.nextAt));
     const result = terminal
       ? this.database
           .prepare(
@@ -365,59 +402,29 @@ export class ScheduledTaskDatabase {
     return true;
   }
 
-  recoverInterruptedRuns(now: string, currentOwnerId: string): ScheduledRun[] {
-    return this.database.transaction(() => {
-      const rows = this.database
-        .prepare(
-          "SELECT * FROM scheduled_runs WHERE status IN ('running', 'stopping', 'waiting')",
-        )
-        .all() as Array<
-        StoredRow & {
-          owner_id: string | null;
-          owner_pid: number | null;
-        }
-      >;
-      return rows.flatMap((row) => {
-        if (row.owner_id === currentOwnerId) return [];
-        const run = this.readBackground(row, parseRun);
-        if (!run) return [];
-        if (row.owner_pid && processIsAlive(row.owner_pid)) {
-          const unresolved: ScheduledRun = {
-            ...run,
-            status: "waiting",
-            error: {
-              code: "owner_unresolved",
-              message:
-                "The previous execution process is still alive; this task will not be replayed",
-            },
-          };
-          this.putRun(unresolved);
-          return [unresolved];
-        }
-        const recovered: ScheduledRun = {
-          ...run,
-          status: "failed",
-          finishedAt: now,
-          recoverable: Boolean(run.threadRef),
-          error: {
-            code: "interrupted",
-            message:
-              "Backend stopped before execution completion could be confirmed; the prompt was not replayed",
-          },
-        };
-        this.putRun(recovered);
-        return [recovered];
-      });
-    })();
+  recoverInterruptedRuns(now: string, ownerId: string): ScheduledRun[] {
+    return this.executions.recover(now, ownerId);
   }
 
   requestRunStop(runId: string, now: string): ScheduledRun {
     return this.database.transaction(() => {
       const run = this.requireRun(runId);
-      if (run.status === "queued") {
+      if (
+        run.status === "queued" ||
+        (run.status === "waiting" && run.continuation?.nextAt)
+      ) {
         return this.putRun({
           ...run,
           status: "cancelled",
+          ...(run.continuation
+            ? {
+                continuation: {
+                  ...run.continuation,
+                  nextAt: null,
+                  stopReason: "已停止自动继续。",
+                },
+              }
+            : {}),
           finishedAt: now,
           error: { code: "cancelled", message: "Cancelled before execution" },
         });
@@ -586,14 +593,5 @@ export class ScheduledTaskDatabase {
         "INSERT INTO scheduled_idempotency(scope, idempotency_key, request_hash, resource_id, created_at) VALUES (?, ?, ?, ?, ?)",
       )
       .run(scope, key, requestHash, resourceId, now);
-  }
-}
-
-function processIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }

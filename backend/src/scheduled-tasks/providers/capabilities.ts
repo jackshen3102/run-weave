@@ -40,6 +40,7 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
   let codexReason: string | undefined;
   let autoReviewSupported = false;
   let fullAccessSupported = false;
+  let continuationSupported = false;
   let executionPolicies: ScheduledExecutionPolicy[] = ["sandbox"];
   try {
     await execFileAsync(codexBinary, ["--version"], { timeout: 10_000, env });
@@ -58,6 +59,18 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
     fullAccessSupported = features.fullAccess;
     executionPolicies = codexScheduledExecutionPolicies(stdout);
     codexAvailable = true;
+    try {
+      const resume = await execFileAsync(
+        codexBinary,
+        ["exec", "resume", "--help"],
+        { timeout: 10_000, env },
+      );
+      continuationSupported =
+        resume.stdout.includes("--output-schema") &&
+        resume.stdout.includes("--json");
+    } catch {
+      /* Initial execution remains available on older CLIs. */
+    }
   } catch {
     codexReason =
       "Codex CLI is unavailable, unauthenticated, or missing structured result support";
@@ -79,6 +92,7 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
         provider: "codex",
         available: codexAvailable,
         executionPolicies,
+        continuation: continuationSupported,
         ...(codexReason ? { reason: codexReason } : {}),
       },
       {

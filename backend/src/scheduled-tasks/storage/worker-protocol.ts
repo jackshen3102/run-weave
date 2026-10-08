@@ -1,10 +1,36 @@
+import type { ScheduledExecutionResult } from "./execution";
 import type {
   ScheduledRun,
+  ScheduledRunAttempt,
   ScheduledTask,
   ScheduledTerminalBinding,
 } from "@runweave/shared/scheduled-tasks";
 
 export type ScheduledTaskWorkerCommand =
+  | { id: number; op: "list-attempts"; runId: string }
+  | {
+      id: number;
+      op: "set-run-thread";
+      runId: string;
+      ownerId: string;
+      threadId: string;
+    }
+  | {
+      id: number;
+      op: "finish-execution";
+      runId: string;
+      ownerId: string;
+      result: ScheduledExecutionResult;
+    }
+  | { id: number; op: "advance-continuations"; now: string }
+  | {
+      id: number;
+      op: "continue-run";
+      runId: string;
+      revision: number;
+      key: string;
+      now: string;
+    }
   | { id: number; op: "integrity" }
   | { id: number; op: "close" }
   | {
@@ -60,9 +86,20 @@ export type ScheduledTaskWorkerCommand =
     }
   | { id: number; op: "get-run"; runId: string }
   | { id: number; op: "list-runs"; taskId: string }
-  | { id: number; op: "list-quick-input-runs"; projectId?: string; finishedSince?: string }
+  | {
+      id: number;
+      op: "list-quick-input-runs";
+      projectId?: string;
+      finishedSince?: string;
+    }
   | { id: number; op: "list-recently-finished-runs"; since: string }
-  | { id: number; op: "claim-next-run"; ownerId: string; now: string }
+  | {
+      id: number;
+      op: "claim-next-run";
+      ownerId: string;
+      now: string;
+      budget?: ScheduledRun["executionBudget"];
+    }
   | { id: number; op: "archive-quick-input-run"; runId: string; now: string }
   | { id: number; op: "put-run"; run: ScheduledRun }
   | {
@@ -118,6 +155,7 @@ export type ScheduledTaskWorkerResult =
   | ScheduledTask[]
   | ScheduledRun
   | ScheduledRun[]
+  | ScheduledRunAttempt[]
   | ScheduledOutputChunk
   | boolean
   | null;

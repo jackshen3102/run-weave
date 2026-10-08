@@ -32,7 +32,10 @@ struct ScheduledTaskEditorView: View {
   @State private var saveOperation: Task<Void, Never>?
   init(session: AppSession, model: ScheduledTasksModel, task: ScheduledTaskRecord?, saved: @escaping (ScheduledTaskRecord) -> Void) {
     self.session = session; self.model = model; self.task = task; self.saved = saved
-    let config = task?.config ?? ScheduledTaskConfig()
+    var config = task?.config ?? ScheduledTaskConfig()
+    if task == nil, model.capabilities?.providers.first(where: { $0.provider == "codex" })?.continuation == true {
+      config.continuationPolicy = ScheduledContinuationPolicy(mode: "bounded")
+    }
     _draft = State(initialValue: config); _baseline = State(initialValue: config)
     _enabled = State(initialValue: task?.enabled ?? true); _baselineEnabled = State(initialValue: task?.enabled ?? true)
     _revision = State(initialValue: task?.revision)
@@ -160,7 +163,7 @@ struct ScheduledTaskEditorView: View {
         ForEach(model.capabilities?.providers ?? []) { item in
           Text(item.provider + (item.available ? "" : "（不可用）")).tag(item.provider).disabled(!item.available)
         }
-      }.disabled(uncertain).onChange(of: draft.provider) { _ in draft.model = nil; draft.effort = nil; draft.executionPolicy = "sandbox" }
+      }.disabled(uncertain).onChange(of: draft.provider) { _ in draft.model = nil; draft.effort = nil; draft.executionPolicy = "sandbox"; draft.continuationPolicy = ScheduledContinuationPolicy(mode: "off") }
       Toggle("启用任务", isOn: $enabled).disabled(uncertain)
     }
   }
@@ -215,6 +218,10 @@ struct ScheduledTaskEditorView: View {
         ForEach(selectedModel?.reasoningEfforts ?? [], id: \.self) { Text($0).tag($0) }
       }
       if let modelFailure { Text(modelFailure).font(.caption).foregroundColor(.orange); Button("重试加载模型") { Task { await loadModels() } } }
+      if provider?.continuation == true {
+        Toggle("自动继续（最多 3 次）", isOn: Binding(get: { draft.continuationPolicy?.mode == "bounded" },
+          set: { draft.continuationPolicy = ScheduledContinuationPolicy(mode: $0 ? "bounded" : "off") }))
+      }
       Picker("执行权限", selection: Binding(get: { draft.resolvedExecutionPolicy }, set: { draft.executionPolicy = $0 })) {
         if !draft.executionPolicyKnown { Text("未知权限").tag(draft.resolvedExecutionPolicy).disabled(true) }
         Text("仅沙箱").tag("sandbox")

@@ -91,8 +91,8 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
   所有模式都不修改用户全局 Codex 配置。
 - 权限只有上述单一档位。Browser、模拟器、Git 或其它工具是否执行由任务提示词、仓库规则和已安装
   Skill 决定，不存在独立能力开关，Backend 也不解析提示词来预先申请资源。
-- Codex 使用 JSON Schema 返回 `outcome`、`summary`、`reason`。只有完整退出并返回有效的
-  `succeeded` 才记录 completed；blocked / failed 记录 failed 并保留 Agent 的具体原因。
+- Codex 使用 JSON Schema 返回 `outcome`、`summary`、`reason` 和可空的 `recovery`。只有完整退出并返回有效的
+  `succeeded` 才记录 completed；blocked / failed 按下方自动继续策略进入 waiting 或 failed，保留具体原因。
   缺失或非法结果不能降级为成功。结果是 Agent 对业务执行的报告，不是独立验收证明。
 - 旧 completed 记录没有业务结果，界面显示“运行已结束”并提示检查摘要，不反向猜测历史状态。
   受阻记录仍可恢复对话，修正配置后需新建一次运行，旧快照不变。
@@ -104,6 +104,31 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
   操作和证据核对；Browser、模拟器池、登录或系统权限不可用时报告 blocked，不用代码阅读、构建或
   HTTP 探测冒充 UI 成功。模拟器 lease 由任务按共享池 Skill 申请和释放，Backend 不代为持有。
 - 点击立即运行成功后进入本次记录，直接查看进度、错误和权限快照。
+
+## 后台自动继续
+
+新建任务的 Web/iOS 表单在 provider 支持原对话恢复时默认开启「自动继续」；旧任务缺省关闭。
+策略 `continuationPolicy.mode` 随运行快照冻结，改任务配置不改变已开始的运行。
+新快捷运行默认 `bounded`，可通过 `scheduledTasks.quickInputDefaults.continuationMode` 改为 `off`。
+Backend 额外探测 `codex exec resume` 能力；不可用时明确拒绝，不能改成新对话重跑。
+
+自动继续只接受完整业务结果中的结构化建议：`continue/remaining-work` 立即推进剩余步骤，
+`wait/transient` 或 `wait/external-wait` 等待后推进。需要真实用户输入、权限或未知原因时结束并保留人工入口；
+进程超时、异常退出和结果缺失不自动重放。模型建议不能改变权限或替代用户授权。
+
+每次运行最多自动续接 3 次，等待依次为 1、5、15 分钟，恢复窗口为首次可恢复结果后的 60 分钟；
+相同剩余工作建议反复出现时也使用退避。执行时长和输出大小累计共用首次领取时的额度。
+等待释放全局执行槽，但同任务仍视为未结束；重启只恢复已经持久化的待续接，无法确认的在途执行保留 interrupted/owner_unresolved。
+
+每轮沿用同一 run ID、thread ID、原目录和模型/权限快照。SQLite 原子领取并记录独立 attempt、
+开始/结束时间、输出游标、摘要和结果。详情提供「每轮进展」「立即继续」「停止自动继续」；
+立即继续只提前已有等待，不增加次数，不复活历史失败，服务明确指定的最早恢复时间仍生效。
+接口为 `POST /runs/:runId/continue`，要求 `expectedRevision` 与 `Idempotency-Key`。
+停止与领取串行；等待时接管到终端先持久取消自动继续。已有终端绑定不自动拉回后台。
+
+等待期间不发送终态通知；最终结果按 run ID、resultRevision 和订阅去重。
+本阶段不支持在详情回答问题，也不把终端中的任意后续回答回写为任务结果。
+验收合同见 [续接计划](../../docs/testing/scheduled-tasks/continuation.testplan.yaml)，其中人工回答与终端结果归因属于后续阶段。
 
 ## 验证
 

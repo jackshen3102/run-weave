@@ -52,6 +52,9 @@ export class ScheduledTerminalAttachment {
     run: ScheduledRun,
     replaceRepurposedBinding: boolean,
   ): Promise<OpenScheduledRunResponse> {
+    // Atomically cancel the pending continuation before releasing this thread to a terminal.
+    if (run.continuation?.nextAt && ["waiting", "queued"].includes(run.status))
+      run = await this.store.requestRunStop(run.id, new Date().toISOString());
     if (["queued", "running", "stopping"].includes(run.status))
       throw new ScheduledTaskError(
         "thread_busy",

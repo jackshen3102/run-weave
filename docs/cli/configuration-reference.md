@@ -860,6 +860,20 @@ tmux 可执行文件
 | 约束              | 按字段类型校验             |
 | 显式迁移来源      | new-field:no-legacy-source |
 
+### scheduledTasks.quickInputDefaults.continuationMode
+
+新快捷运行自动继续策略：bounded 或 off
+
+| 属性              | 合同                       |
+| ----------------- | -------------------------- |
+| 类型              | string；允许 null 恢复默认 |
+| 默认              | "bounded"                  |
+| 所属模块          | backend/scheduled-tasks    |
+| 生效              | 所属进程重启               |
+| 敏感 / 远端可修改 | 否 / 是                    |
+| 约束              | 按字段类型校验             |
+| 显式迁移来源      | new-field:no-legacy-source |
+
 ### scheduledTasks.quickInputDefaults.executionPolicy
 
 快捷指令后台运行的执行权限

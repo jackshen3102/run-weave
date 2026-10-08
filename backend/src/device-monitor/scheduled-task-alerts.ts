@@ -74,7 +74,9 @@ export class ScheduledTaskAlerts {
           )
             return false;
           const id = createHash("sha256")
-            .update(`${run.id}:${subscription.id}`)
+            .update(run.resultRevision
+              ? `${run.id}:${run.resultRevision}:${subscription.id}`
+              : `${run.id}:${subscription.id}`)
             .digest("hex");
           return !deliveries[id];
         }),
@@ -93,7 +95,9 @@ export class ScheduledTaskAlerts {
           )
             continue;
           const id = createHash("sha256")
-            .update(`${run.id}:${subscription.id}`)
+            .update(run.resultRevision
+              ? `${run.id}:${run.resultRevision}:${subscription.id}`
+              : `${run.id}:${subscription.id}`)
             .digest("hex");
           deliveries[id] ??= createDelivery(id, run, subscription.id);
         }
@@ -154,7 +158,7 @@ export class ScheduledTaskAlerts {
         result = await this.subscriptions.push!.send(
           {
             ...claim.notification,
-            eventId: item.runId,
+            eventId: item.id,
             subscriptionId: claim.subscriptionId,
           },
           canSend,

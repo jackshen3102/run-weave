@@ -1,3 +1,5 @@
+import { stat } from "node:fs/promises";
+import { continuationPrompt } from "./continuation";
 import { randomUUID } from "node:crypto";
 import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
@@ -79,16 +81,31 @@ export class ScheduledTaskRuntime {
   private async runPass(): Promise<void> {
     if (!this.enabled) return;
     await this.recoverAbandonedRuns();
+    // A competing Backend or terminal takeover can persist a stop request.
+    for (const [runId, controller] of this.active) {
+      if ((await this.store.getRun(runId))?.status === "stopping")
+        controller.abort();
+    }
+    await this.store.advanceContinuations(new Date().toISOString());
     await this.materializeDue(new Date());
     const limit = this.limits.maxConcurrentRuns ?? 4;
     while (!this.disposed && this.executions.size < limit) {
       const run = await this.store.claimNextRun(
         this.ownerId,
         new Date().toISOString(),
+        {
+          timeoutMs: this.limits.timeoutMs,
+          maxOutputBytes: this.limits.maxOutputBytes,
+        },
       );
       if (!run) return;
       if (this.disposed) {
-        await this.store.putRun({ ...run, status: "queued", startedAt: null });
+        await this.store.finishExecution(run.id, this.ownerId, {
+          finishedAt: new Date().toISOString(),
+          activeMs: 0,
+          summary: null,
+          error: { code: "cancelled", message: "Backend 已停止" },
+        });
         return;
       }
       const execution = this.execute(run)
@@ -218,55 +235,62 @@ export class ScheduledTaskRuntime {
   private async execute(initial: ScheduledRun): Promise<void> {
     const controller = new AbortController();
     this.active.set(initial.id, controller);
-    let current = initial;
+    const executionStarted = Date.now();
     try {
       const project = this.terminalSessionManager.getProject(
         initial.snapshot.projectId,
       );
-      if (!project?.path || project.path !== initial.cwd)
+      if (
+        !project?.path ||
+        project.path !== initial.cwd ||
+        !(await stat(initial.cwd).catch(() => null))?.isDirectory()
+      )
         throw new Error("context_unavailable");
       const provider = this.providers.get(initial.snapshot.provider);
       if (!provider) throw new Error("provider_unavailable");
+      const budget = initial.executionBudget ?? this.limits;
+      const remainingMs =
+        budget.timeoutMs - (initial.continuation?.activeMs ?? 0);
+      const remainingBytes =
+        budget.maxOutputBytes - Number(initial.outputCursor ?? 0);
+      if (remainingMs <= 0) throw new Error("provider_timeout");
+      if (remainingBytes <= 0)
+        throw new Error("provider_output_limit_exceeded");
+      const resuming = Boolean(initial.threadRef && initial.continuation);
       const result = await provider.run({
         runId: initial.id,
         projectId: initial.snapshot.projectId,
-        prompt: initial.snapshot.prompt,
+        prompt: resuming
+          ? continuationPrompt(initial)
+          : initial.snapshot.prompt,
+        ...(resuming ? { resumeThreadId: initial.threadRef!.threadId } : {}),
         workingDirectory: project.path,
         model: initial.snapshot.model,
         effort: initial.snapshot.effort,
         executionPolicy: initial.snapshot.executionPolicy,
-        maxOutputBytes: this.limits.maxOutputBytes,
-        maxWallTimeMs: this.limits.timeoutMs,
+        maxOutputBytes: remainingBytes,
+        maxWallTimeMs: remainingMs,
         signal: controller.signal,
         onSpawn: async (pid) => {
           await this.store.setRunOwnerPid(initial.id, this.ownerId, pid);
         },
         onOutput: (text) =>
-          this.store.appendOutput(initial.id, text, this.limits.maxOutputBytes),
+          this.store.appendOutput(initial.id, text, budget.maxOutputBytes),
         onThread: async (threadId) => {
-          const persisted = await this.store.getRun(initial.id);
-          current = await this.store.putRun({
-            ...(persisted ?? current),
-            threadRef: { provider: initial.snapshot.provider, threadId },
-          });
+          await this.store.setRunThread(initial.id, this.ownerId, threadId);
         },
       });
-      const finishedAt = new Date().toISOString();
-      const persisted = (await this.store.getRun(initial.id)) ?? current;
-      const cancelled =
-        controller.signal.aborted || persisted.status === "stopping";
-      current = await this.store.putRun({
-        ...persisted,
-        status: cancelled
-          ? "cancelled"
-          : result.outcome === "succeeded"
-            ? "completed"
-            : "failed",
-        ...(cancelled ? {} : { outcome: result.outcome }),
-        finishedAt,
-        summary: cancelled ? persisted.summary : result.summary || null,
-        error: cancelled
-          ? { code: "cancelled", message: "The scheduled run was cancelled" }
+      if (resuming && result.threadId !== initial.threadRef!.threadId)
+        throw new Error("provider_thread_mismatch");
+      await this.store.setRunThread(initial.id, this.ownerId, result.threadId);
+      await this.store.finishExecution(initial.id, this.ownerId, {
+        finishedAt: new Date().toISOString(),
+        activeMs: Date.now() - executionStarted,
+        outcome: result.outcome,
+        summary: result.summary || null,
+        recovery: result.recovery,
+        error: controller.signal.aborted
+          ? { code: "cancelled", message: "运行已停止" }
           : result.outcome === "succeeded"
             ? null
             : {
@@ -274,21 +298,19 @@ export class ScheduledTaskRuntime {
                   result.outcome === "blocked" ? "task_blocked" : "task_failed",
                 message: result.reason || result.summary,
               },
-        threadRef: { provider: result.provider, threadId: result.threadId },
-        recoverable: true,
       });
     } catch (error) {
-      const code = error instanceof Error ? error.message : "provider_failed";
-      const cancelled =
-        controller.signal.aborted || code === "provider_cancelled";
-      const persisted = (await this.store.getRun(initial.id)) ?? current;
-      current = await this.store.putRun({
-        ...persisted,
-        status: cancelled ? "cancelled" : "failed",
+      const code = controller.signal.aborted
+        ? "cancelled"
+        : error instanceof Error
+          ? error.message
+          : "provider_failed";
+      await this.store.finishExecution(initial.id, this.ownerId, {
         finishedAt: new Date().toISOString(),
-        recoverable: Boolean(current.threadRef),
+        activeMs: Date.now() - executionStarted,
+        summary: null,
         error: {
-          code: cancelled ? "cancelled" : code,
+          code: code === "provider_cancelled" ? "cancelled" : code,
           message: providerErrorMessage(code),
         },
       });
@@ -308,6 +330,8 @@ function providerErrorMessage(code: string): string {
       return "The scheduled project directory is unavailable";
     case "provider_unavailable":
       return "The requested provider is unavailable";
+    case "provider_thread_mismatch":
+      return "恢复的对话身份不匹配，已停止自动继续。";
     case "provider_thread_missing":
       return "The provider did not return a persistent thread identity";
     case "provider_completion_missing":

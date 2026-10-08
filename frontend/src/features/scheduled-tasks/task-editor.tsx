@@ -56,6 +56,14 @@ export function TaskEditor({
     model: task?.model ?? "",
     effort: task?.effort ?? "",
     executionPolicy: task?.executionPolicy,
+    continuationPolicy: task?.continuationPolicy ?? {
+      mode:
+        !task &&
+        capabilities.providers.find((item) => item.provider === "codex")
+          ?.continuation
+          ? "bounded"
+          : "off",
+    },
     misfirePolicy: task
       ? task.misfirePolicy
       : { mode: "catch-up-latest", maxDelaySeconds: 86400 },
@@ -188,6 +196,20 @@ export function TaskEditor({
               onChange={(e) => change("name", e.target.value)}
             />
           </label>
+          {provider?.continuation ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.continuationPolicy?.mode === "bounded"}
+                onChange={(event) =>
+                  change("continuationPolicy", {
+                    mode: event.target.checked ? "bounded" : "off",
+                  })
+                }
+              />
+              自动继续（最多 3 次，保留原对话和进度）
+            </label>
+          ) : null}
           <TaskProjectSelect
             value={draft.projectId}
             onChange={(value) => change("projectId", value)}
@@ -205,6 +227,7 @@ export function TaskEditor({
                   model: "",
                   effort: "",
                   executionPolicy: "sandbox",
+                  continuationPolicy: { mode: "off" },
                 }))
               }
             >
@@ -291,10 +314,10 @@ export function TaskEditor({
               {selectedExecutionPolicy === "full-access"
                 ? "无沙箱且不等待交互审批，可联网、操作 Browser、模拟器及本机文件；仅用于可信任务与提示词。"
                 : selectedExecutionPolicy === "auto-review"
-                ? "保留沙箱，Git 写入、联网等越界操作由 Codex 自动审查；拒绝或无法审批时记录为受阻。"
-                : selectedExecutionPolicy === "sandbox"
-                  ? "可修改工作区普通文件；Git 元数据写入和命令联网受限。需要创建 Worktree、提交或拉取时，可选择自动审批。"
-                  : `${executionPolicyLabel(selectedExecutionPolicy)}：请选择受支持的权限后再保存。`}
+                  ? "保留沙箱，Git 写入、联网等越界操作由 Codex 自动审查；拒绝或无法审批时记录为受阻。"
+                  : selectedExecutionPolicy === "sandbox"
+                    ? "可修改工作区普通文件；Git 元数据写入和命令联网受限。需要创建 Worktree、提交或拉取时，可选择自动审批。"
+                    : `${executionPolicyLabel(selectedExecutionPolicy)}：请选择受支持的权限后再保存。`}
             </p>
           </section>
           <section className="grid gap-3 rounded-lg border p-3">

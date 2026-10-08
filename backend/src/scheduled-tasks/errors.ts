@@ -32,6 +32,20 @@ export function scheduledTaskErrorFromStorage(
         404,
         "Scheduled task resource not found",
       );
+    case "thread_busy":
+      return new ScheduledTaskError(
+        code,
+        409,
+        "本次运行不在可续接状态，请刷新后查看。",
+      );
+    case "continuation_expired":
+      return new ScheduledTaskError(code, 409, "自动继续已超过恢复窗口。");
+    case "continuation_not_before":
+      return new ScheduledTaskError(
+        code,
+        409,
+        "尚未到外部服务允许恢复的时间。",
+      );
     case "revision_conflict":
       return new ScheduledTaskError(
         code,
@@ -45,9 +59,17 @@ export function scheduledTaskErrorFromStorage(
         "Idempotency key was reused with different input",
       );
     case "run_not_finished":
-      return new ScheduledTaskError(code, 409, "运行尚未结束，请停止并等待结束后再移至历史。");
+      return new ScheduledTaskError(
+        code,
+        409,
+        "运行尚未结束，请停止并等待结束后再移至历史。",
+      );
     case "not_quick_input_run":
-      return new ScheduledTaskError(code, 400, "只有快捷指令运行可以移至历史。");
+      return new ScheduledTaskError(
+        code,
+        400,
+        "只有快捷指令运行可以移至历史。",
+      );
     case "run_busy":
       return new ScheduledTaskError(
         code,

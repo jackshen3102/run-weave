@@ -1,0 +1,119 @@
+version: 1
+name: 后台任务保留原对话并继续验收
+description: >
+  2026-10-07 待实现方案的验收合同，当前未执行。
+  每例自行建立独立 fixture；后台恢复、所有权、持久化和两端入口分别取证，不使用生产任务造故障。
+cases:
+  - id: CONT-001
+    name: 临时故障恢复原任务且保留已有成果
+    required: true
+    description: 同一 run 和真实 thread 继续剩余工作，不重复已完成的外部写入。
+    preconditions:
+      - 隔离 Backend 已实现续接并配置真实 Codex；本例临时项目及受控 HTTP 服务可记录持久写入次数，首次后续步骤返回 500，再恢复成功。
+    steps:
+      - 启动自动继续任务，使第一步写入唯一成果，第二步遇到服务故障；记录 runId、threadId、cwd、权限快照、首轮结果和外部写入计数。
+      - 等待 Backend 续接，核对同一 thread 读取原成果、只完成剩余步骤，原成果写入次数仍为一；全程没有自动创建交互终端。
+      - 核对同一 run 最终成功、首轮受阻结果仍保留、每轮输出可读；仅有进程正常退出或 thread 身份不一致时不得判成功。
+  - id: CONT-002
+    name: 自动等待和继续均受总额度限制
+    required: true
+    description: 无进展的任务按持久化间隔等待，最多自动继续三次，不重置累计执行和输出预算。
+    preconditions:
+      - 本例独立集成 fixture 可控制时钟、provider 完成结果、执行耗时和输出，使用生产调度与数据库。
+    steps:
+      - 连续返回明确临时阻塞，推进时钟；核对默认 1、5、15 分钟间隔和三次上限，等待时不占 provider 槽。
+      - 以明确最早恢复时间再次执行独立 run，确认不提前领取；推进至 60 分钟窗口结束，确认不再续接并保存停止原因。
+      - 以接近累计时间及输出上限的 run 返回 continue；核对剩余额度按前轮消耗计算，耗尽后不启动新轮且不因变化的 reason 重置预算。
+  - id: CONT-003
+    name: 缺输入和权限拒绝不会被自动继续转成授权
+    required: true
+    description: 模型提出继续也不能突破原执行策略，真正缺信息时保持可见的人工处理状态。
+    preconditions:
+      - 本例隔离项目提供范围不明、审批拒绝和缺失结构化建议的独立输入，能够观察 provider 启动参数与自动消息。
+    steps:
+      - 分别产生上述阻塞，确认需要输入或停止，不自动提交所有改动、不重复申请被拒权限、不根据 reason 关键词判可恢复。
+      - 发送真实用户补充后确认以追加消息存档，仍使用原权限快照；仅点击继续不得被扩写为全部改动或审批通过。
+  - id: CONT-004
+    name: 重复继续请求和终端接管只能产生一个执行者
+    required: true
+    description: 续接、人工接管与停止竞争同一个持久化执行权，不能同时写入原 thread。
+    preconditions:
+      - 本例隔离任务已处于待续接，真实 tmux 可用，服务端可延迟响应并记录 attempt、owner 和 provider 进程。
+    steps:
+      - 对同一 run 并发发送相同幂等键的 continue，丢失首个响应后重发；确认同一 attempt 且一次领取，同键不同内容拒绝。
+      - 在下一次可恢复等待中同时请求接管与自动领取，确认只有一个获得执行权，失败方返回明确冲突且没有第二个写入者。
+      - 请求停止，确认持久化撤销 nextAt；若 provider 已启动则等待其退出，之后调度 tick 不再启动新轮。
+  - id: CONT-005
+    name: Backend 重启仅恢复确认待执行的续接
+    required: true
+    description: 同一 fixture 的重启保留 nextAt 和额度，不重放已领取但无法确认的执行。
+    preconditions:
+      - 本例独立数据根内分别有待续接和启动确认未知的任务，能够记录 provider 进程和外部副作用次数。
+    steps:
+      - 保存重启前的 run、attempt、owner 和时间后停止 Backend，再启动同一数据根并重新解析 fresh endpoint。
+      - 核对确认待执行的任务保留 nextAt 和原 thread，最多领取一次；未知执行先核对原进程与持久证据，无法确认时保持 interrupted 或 owner_unresolved，不重复发送。
+      - 核对普通 owner_unresolved 与自动延迟等待互不混淆，累计额度不会重置。
+  - id: CONT-006
+    name: 等待任务保持调度去重且不占执行槽
+    required: true
+    description: 等待续接仍是同任务的未完成运行，其他任务可以利用已释放的全局执行槽。
+    preconditions:
+      - 本例独立数据库有周期任务、快捷任务及另一个可执行任务，并发上限为一，可控制调度时钟。
+    steps:
+      - 让一个任务进入自动等待，确认另一任务可以执行；等待任务不得持有 provider 槽。
+      - 周期任务等待期间推进到下一周期，确认记录 busy 跳过；快捷任务等待期间再次点击同一指令，确认返回原活跃 run。
+  - id: CONT-007
+    name: 续接身份失效时不能降级成新任务
+    required: true
+    description: 目录、thread 和冻结配置是恢复边界，不用最新任务配置或父目录替代。
+    preconditions:
+      - 本例隔离项目的任务已保存待续接，能单独控制目录映射、会话历史及 provider 身份响应。
+    steps:
+      - 分别让原 cwd 不可用、thread 历史缺失、provider 返回错误 thread，确认明确拒绝且没有回退父目录或新建 thread。
+      - 修改任务当前模型和权限配置，再续接另一条有效 run，确认其执行参数仍来自原快照；权限不会自动升级。
+  - id: CONT-008
+    name: 完成结果和通知按任务结果版本更新
+    required: true
+    description: 中间受阻只进入历史，完成后主状态与通知反映最终结果，刷新不重复提醒。
+    preconditions:
+      - 本例隔离通知链路可捕获发送 payload，拥有有效订阅；本例任务先等待恢复再成功，并有另一条等待用户输入后成功的 run。
+    steps:
+      - 核对自动等待期间不产生终态失败通知，最终成功写入同一 run，原 attempt 的受阻报告保持可查。
+      - 对等待用户输入的 run 先发一次需要处理通知，回复后完成，再发一次新的结果版本通知；通知和网关 eventId 对应同一 run 的不同结果版本。
+      - 重复轮询并刷新详情，确认每个结果版本最多生成一个订阅投递记录，不能因旧 runId 去重吞掉完成通知。
+  - id: CONT-009
+    name: Web 详情直接继续且无需打开终端
+    required: true
+    description: 真实 Web 的等待、继续和输入控件调用同一运行，并在切换连接时隔离响应。
+    preconditions:
+      - 使用 toolkit:runweave-dev-session 的隔离源码实例，真实 Web 已接入新 capability，拥有独立等待 run 和需要输入 run。
+    steps:
+      - 使用 toolkit:playwright-cli 打开详情，确认原因、下一次时间、额度及完成项可见；点击立即继续，核对原 runId 和终端数量未增加。
+      - 在另一条需要输入的 run 详情回答具体问题，确认真实输入留档、后台继续及最终状态更新；切换连接后旧响应不得导航或覆盖新连接内容。
+  - id: CONT-010
+    name: iOS 运行详情直接继续原任务
+    required: true
+    description: 原生截图对应入口能显示恢复进展并操作同一 run，原生 DTO 与 Backend 一致。
+    preconditions:
+      - 使用 toolkit:agent-device 的已登记模拟器或获准设备已安装实现版本；连接本例独立 Backend，具有等待及需要输入的运行。
+    steps:
+      - 使用 toolkit:agent-device 打开快捷指令运行详情，核对原项目、恢复原因、次数、下一次时间；点击立即继续，确认未进入终端且 runId 不变。
+      - 在需要输入的运行中回复，返回列表再打开详情，核对后台进度与最终结果一致，首轮报告仍可查看。
+  - id: CONT-011
+    name: 终端任务接管只回写指定的继续轮次
+    required: true
+    description: 第二步显式接管 operation 的完成能更新任务，自由追问不能覆盖已完成记录。
+    preconditions:
+      - 第二步接管 operation 已实现；本例真实终端与独立 run 可保存原 thread、任务版本及指定轮次的完成证据。
+    steps:
+      - 选择接管并继续此任务，完成指定 operation；确认只有匹配身份和版本的有效结果更新原 run，受阻 attempt 仍保留。
+      - 随后自由追问无关任务，确认该 final 不覆盖原结果；历史普通打开对话没有关联 operation 时也不自动回写。
+  - id: CONT-012
+    name: 旧记录与无权限请求不能启动续接
+    required: true
+    description: 增量迁移不唤醒历史失败，新增 API 沿用认证和 revision 边界。
+    preconditions:
+      - 本例隔离数据根有旧配置及历史 failed 记录，提供有效和无效认证客户端，能够观察 provider 启动次数。
+    steps:
+      - 执行升级并启动，确认旧配置缺省关闭、历史 run 及原结果可读且没有自动执行。
+      - 用无效认证调用 continue，确认拒绝且无新增 attempt；使用旧 revision 或不同连接的 run 身份，确认冲突或不存在，不产生跨连接执行。

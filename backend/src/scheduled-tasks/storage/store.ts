@@ -1,9 +1,11 @@
+import type { ScheduledExecutionResult } from "./execution";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import type {
   ScheduledRun,
+  ScheduledRunAttempt,
   ScheduledTask,
   ScheduledTerminalBinding,
 } from "@runweave/shared/scheduled-tasks";
@@ -171,7 +173,9 @@ export class ScheduledTaskStore {
   }
   listQuickInputRuns(projectId?: string, finishedSince?: string) {
     return this.request<ScheduledRun[]>({
-      op: "list-quick-input-runs", projectId, finishedSince,
+      op: "list-quick-input-runs",
+      projectId,
+      finishedSince,
     });
   }
   listRecentlyFinishedRuns(since: string) {
@@ -180,15 +184,60 @@ export class ScheduledTaskStore {
       since,
     });
   }
-  claimNextRun(ownerId: string, now: string) {
+  listAttempts(runId: string) {
+    return this.request<ScheduledRunAttempt[]>({ op: "list-attempts", runId });
+  }
+  setRunThread(runId: string, ownerId: string, threadId: string) {
+    return this.request<ScheduledRun>({
+      op: "set-run-thread",
+      runId,
+      ownerId,
+      threadId,
+    });
+  }
+  finishExecution(
+    runId: string,
+    ownerId: string,
+    result: ScheduledExecutionResult,
+  ) {
+    return this.request<ScheduledRun>({
+      op: "finish-execution",
+      runId,
+      ownerId,
+      result,
+    });
+  }
+  advanceContinuations(now: string) {
+    return this.request<boolean>({ op: "advance-continuations", now });
+  }
+  continueRun(runId: string, revision: number, key: string, now: string) {
+    return this.request<ScheduledRun>({
+      op: "continue-run",
+      runId,
+      revision,
+      key,
+      now,
+    });
+  }
+
+  claimNextRun(
+    ownerId: string,
+    now: string,
+    budget?: ScheduledRun["executionBudget"],
+  ) {
     return this.request<ScheduledRun | null>({
       op: "claim-next-run",
+      budget,
       ownerId,
       now,
     });
   }
   archiveQuickInputRun(runId: string, now: string) {
-    return this.request<ScheduledRun>({ op: "archive-quick-input-run", runId, now });
+    return this.request<ScheduledRun>({
+      op: "archive-quick-input-run",
+      runId,
+      now,
+    });
   }
   putRun(run: ScheduledRun) {
     return this.request<ScheduledRun>({ op: "put-run", run });

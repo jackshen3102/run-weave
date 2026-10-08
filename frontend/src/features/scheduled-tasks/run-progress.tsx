@@ -1,3 +1,4 @@
+import { isQuickInputRunActive } from "./use-quick-input-background-runs";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
@@ -15,7 +16,7 @@ export function RunProgress({ run }: { run: ScheduledRun }) {
   const [cursor, setCursor] = useState<string | undefined>();
   const [text, setText] = useState("");
   const consumed = useRef<unknown>(null);
-  const active = ["queued", "running", "stopping"].includes(run.status);
+  const active = isQuickInputRunActive(run);
   const refresh = useRefreshTasks();
   const output = useQuery({
     queryKey: [
@@ -52,7 +53,7 @@ export function RunProgress({ run }: { run: ScheduledRun }) {
         {text || (output.isPending ? "正在读取进度…" : "暂无输出")}
       </pre>
       <RequestError error={output.error ?? stop.error} />
-      {["queued", "running", "stopping"].includes(run.status) ? (
+      {isQuickInputRunActive(run) ? (
         <Button
           variant="outline"
           size="sm"

@@ -1,5 +1,11 @@
+import { paginate, decodeOffset } from "./pagination";
+import {
+  normalizeConfig,
+  validationResult,
+  isDirectory,
+  scheduleError,
+} from "./task-config";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, statSync } from "node:fs";
 import type {
   CreateScheduledTaskRequest,
   ScheduledRun,
@@ -110,6 +116,7 @@ export class ScheduledTaskService {
     this.requireEnabled();
     this.requireProvider(input.provider);
     this.requireExecutionPolicy(input.provider, input.executionPolicy);
+    this.requireContinuation(input.provider, input.continuationPolicy);
     try {
       validateSchedule(input.schedule);
       if (
@@ -239,6 +246,10 @@ export class ScheduledTaskService {
     } catch (error) {
       throw scheduleError(error);
     }
+    this.requireContinuation(
+      input.provider ?? current.provider,
+      input.continuationPolicy ?? current.continuationPolicy,
+    );
     const enabled = input.enabled ?? current.enabled;
     const nextRunAt = enabled
       ? this.requireNextOccurrence(schedule, now)
@@ -319,6 +330,7 @@ export class ScheduledTaskService {
       );
     this.requireProvider(task.provider);
     this.requireExecutionPolicy(task.provider, task.executionPolicy);
+    this.requireContinuation(task.provider, task.continuationPolicy);
     const project = this.requireProject(task.projectId);
     const now = new Date().toISOString();
     const run = createScheduledRunRecord(task, "manual", now, project.path!);
@@ -344,11 +356,19 @@ export class ScheduledTaskService {
   ): Promise<ScheduledRun> {
     this.requireEnabled();
     return startQuickInputRun({
-      quickInputId, projectId, expectedInputUpdatedAt, idempotencyKey,
-      quickInputs, store: this.requireStore(), manager: this.terminalSessionManager,
+      quickInputId,
+      projectId,
+      expectedInputUpdatedAt,
+      idempotencyKey,
+      quickInputs,
+      store: this.requireStore(),
+      manager: this.terminalSessionManager,
       requireProject: (id) => this.requireProject(id),
       requireProvider: (provider) => this.requireProvider(provider),
-      requireExecutionPolicy: (provider, policy) => this.requireExecutionPolicy(provider, policy),
+      requireContinuation: (provider, policy) =>
+        this.requireContinuation(provider, policy),
+      requireExecutionPolicy: (provider, policy) =>
+        this.requireExecutionPolicy(provider, policy),
       wake: () => this.runtime?.wake(),
     });
   }
@@ -362,8 +382,13 @@ export class ScheduledTaskService {
     return paginate(await this.requireStore().listRuns(taskId), cursor, limit);
   }
 
-  async listQuickInputRuns(filter: QuickInputRunFilter): Promise<ScheduledTaskPage<ScheduledRun>> {
-    const runs = await this.requireStore().listQuickInputRuns(filter.projectId, filter.finishedSince);
+  async listQuickInputRuns(
+    filter: QuickInputRunFilter,
+  ): Promise<ScheduledTaskPage<ScheduledRun>> {
+    const runs = await this.requireStore().listQuickInputRuns(
+      filter.projectId,
+      filter.finishedSince,
+    );
     return paginate(runs, filter.cursor, filter.limit);
   }
 
@@ -375,7 +400,7 @@ export class ScheduledTaskService {
         404,
         "Scheduled run not found",
       );
-    return run;
+    return { ...run, attempts: await this.requireStore().listAttempts(runId) };
   }
 
   async output(runId: string, cursor?: string): Promise<ScheduledRunOutput> {
@@ -398,7 +423,10 @@ export class ScheduledTaskService {
 
   async archiveQuickInputRun(runId: string): Promise<ScheduledRun> {
     try {
-      return await this.requireStore().archiveQuickInputRun(runId, new Date().toISOString());
+      return await this.requireStore().archiveQuickInputRun(
+        runId,
+        new Date().toISOString(),
+      );
     } catch (error) {
       throw scheduledTaskErrorFromStorage(error);
     }
@@ -406,8 +434,45 @@ export class ScheduledTaskService {
 
   async stop(runId: string): Promise<ScheduledRun> {
     const run = await this.getRun(runId);
-    if (!["queued", "running", "stopping"].includes(run.status)) return run;
+    if (
+      !["queued", "running", "stopping"].includes(run.status) &&
+      !run.continuation?.nextAt
+    )
+      return run;
     return this.runtime?.stop(runId) ?? run;
+  }
+
+  async continueRun(
+    runId: string,
+    revision: number,
+    key: string,
+  ): Promise<ScheduledRun> {
+    this.requireEnabled();
+    const run = await this.getRun(runId);
+    this.requireProvider(run.snapshot.provider);
+    this.requireContinuation(
+      run.snapshot.provider,
+      run.snapshot.continuationPolicy,
+    );
+    const project = this.requireProject(run.executionProjectId);
+    if (project.path !== run.cwd)
+      throw new ScheduledTaskError(
+        "context_unavailable",
+        409,
+        "原执行目录已变化。",
+      );
+    try {
+      const updated = await this.requireStore().continueRun(
+        runId,
+        revision,
+        key,
+        new Date().toISOString(),
+      );
+      this.runtime?.wake();
+      return updated;
+    } catch (error) {
+      throw scheduledTaskErrorFromStorage(error);
+    }
   }
 
   async openTerminal(
@@ -467,6 +532,23 @@ export class ScheduledTaskService {
       );
   }
 
+  private requireContinuation(
+    provider: string,
+    policy?: ScheduledTask["continuationPolicy"],
+  ): void {
+    if (
+      policy?.mode === "bounded" &&
+      !this.capabilitiesValue.providers.find(
+        (item) => item.provider === provider,
+      )?.continuation
+    )
+      throw new ScheduledTaskError(
+        "continuation_unavailable",
+        409,
+        "当前 Agent 不支持后台原对话续接，请更新 Codex 或关闭自动继续。",
+      );
+  }
+
   private requireExecutionPolicy(
     provider: string,
     policy?: ScheduledTask["executionPolicy"],
@@ -506,74 +588,6 @@ export class ScheduledTaskService {
   }
 }
 
-function validationResult(
-  input: CreateScheduledTaskRequest | ScheduledTask,
-  project: { id: string; name: string; path: string | null },
-  nextRunAt: string | null,
-  now: Date,
-  currentRevision: number | null,
-): ScheduledTaskValidation {
-  return {
-    config: { ...normalizeConfig(input), enabled: input.enabled },
-    project: { id: project.id, name: project.name, path: project.path! },
-    provider: input.provider,
-    enabled: input.enabled,
-    nextRunAt,
-    occurrences: nextOccurrences(input.schedule, now, 3),
-    currentRevision,
-  };
-}
-
-function normalizeConfig(input: CreateScheduledTaskRequest | ScheduledTask) {
-  return {
-    name: input.name.trim(),
-    projectId: input.projectId,
-    provider: input.provider,
-    prompt: input.prompt.trim(),
-    ...(input.executionPolicy
-      ? { executionPolicy: input.executionPolicy }
-      : {}),
-    ...(input.model?.trim() ? { model: input.model.trim() } : {}),
-    ...(input.effort?.trim() ? { effort: input.effort.trim() } : {}),
-    schedule: input.schedule,
-    misfirePolicy: input.misfirePolicy,
-  };
-}
-function paginate<T>(
-  items: T[],
-  cursor?: string,
-  requestedLimit?: number,
-): ScheduledTaskPage<T> {
-  const offset = decodeOffset(cursor);
-  const limit = Math.min(100, Math.max(1, requestedLimit ?? 50));
-  const page = items.slice(offset, offset + limit);
-  return {
-    items: page,
-    nextCursor:
-      offset + page.length < items.length ? String(offset + page.length) : null,
-  };
-}
-function decodeOffset(cursor?: string): number {
-  if (!cursor) return 0;
-  const value = Number(cursor);
-  if (!Number.isSafeInteger(value) || value < 0)
-    throw new ScheduledTaskError("invalid_input", 400, "Invalid cursor");
-  return value;
-}
 function hash(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-function isDirectory(value: string): boolean {
-  try {
-    return existsSync(value) && statSync(value).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function scheduleError(error: unknown): ScheduledTaskError {
-  return new ScheduledTaskError(
-    "invalid_schedule",
-    400,
-    error instanceof Error ? error.message : "Invalid schedule",
-  );
 }
