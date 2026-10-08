@@ -4,7 +4,7 @@ import type {
   TaskWatch,
 } from "@runweave/shared/task-supervision";
 const CONTINUATION =
-  "请对照当前任务、计划和用户最新要求，说明已完成项、剩余项、复现与验收情况及阻塞。\n\n对于疑似问题，遵循先复现、再解决；未复现不得修改代码，应说明尝试条件、结果和缺少的信息。没有新线索时，不重复相同尝试。本提醒仅用于问询进展，不构成新增任务或修复授权，不得扩大范围或重复已完成工作。\n\n结束本轮时说明需要用户补充的信息或权限。";
+  "以完成当前授权任务并验证结果为目标，依据当前上下文主动判断并执行下一步，不以进度汇报、建议或交回问题代替完成。\n\n将真正需要确认的事项标为待确认，同时完成可独立推进的工作；不重复询问已确定的事项。任务范围内的疑似缺陷先复现，确认后修复并验证；验证失败则继续定位处理，没有新线索不重复相同尝试。\n\n仅在确实无法自行解决时请求具体帮助，说明缺少什么及影响；不得扩大任务范围、虚构用户授权或绕过权限与人类接管保护。任务和必要验证完成后停止，不重复工作或空转。";
 /** Called only inside the persisted revision fence. Reserve an offer before returning it. */
 export function applyVerdict(
   watch: TaskWatch,
@@ -43,7 +43,7 @@ export function reserveContinuation(watch: TaskWatch, decision: SupervisionDecis
   watch.status = "watching";
   return {
     action: "request-continuation",
-    reason: `[runweave-task-supervision:${decision.decisionId}]\n${CONTINUATION}`,
+    reason: `[runweave-task-supervision:${decision.decisionId}]\n${CONTINUATION}\n\n本轮上下文判断（不构成新增授权，按当前任务核对后执行）：\n${decision.reason}`,
     watchId: watch.watchId,
     decisionId: decision.decisionId,
     revision: watch.revision,
