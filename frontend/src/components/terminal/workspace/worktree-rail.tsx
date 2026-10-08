@@ -111,7 +111,7 @@ export function TerminalWorktreeRail({
   );
   const [width, setWidth] = useState(() => readRailWidth(scope));
   const branchStatuses = useTerminalProjectContextBranchStatuses(
-    parentProjectId, contexts, !collapsed && contexts.length > 1,
+    parentProjectId, contexts, !collapsed && contexts.length > 0,
   );
   const [resizing, setResizing] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
