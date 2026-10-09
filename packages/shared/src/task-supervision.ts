@@ -103,6 +103,8 @@ export function supervisionGoalPreview(goal: string) {
   return preview.length < goal.trim().length ? `${preview}…` : preview;
 }
 export interface SupervisionDiscovery {
+  /** Current Codex thread.name, never the user's prompt or monitoring goal. */
+  threadTitle?: string | null;
   /** Opaque live input fence for explicit draft confirmation. Never persisted across restarts. */
   inputVersion?: string;
   target: SupervisionTarget | null;

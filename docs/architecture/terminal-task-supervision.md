@@ -73,7 +73,7 @@ Backend 结构化日志中的 `task-supervision.*` 事件记录回复接收、�
 - 现有事件消费：[integration.ts](../../backend/src/app-server/integration.ts)
 - 原终端投递：[terminal-task-monitoring.ts](../../backend/src/bootstrap/terminal-task-monitoring.ts)
 - 原生 iOS：[TaskSupervisionSheet.swift](../../packages/app-ios/Sources/RunweaveIOS/Features/Terminal/TaskSupervision/TaskSupervisionSheet.swift)，终端菜单与已开启状态条进入，详情内容复用同一 API；生命周期见 [iOS 架构](../../packages/app-ios/docs/architecture.md#终端长任务监控)。
-- Web / Electron：[status-strip.tsx](../../frontend/src/components/terminal/task-supervision/status-strip.tsx) 在已开启终端的顶部显示状态与续接额度，点击打开 [panel.tsx](../../frontend/src/components/terminal/task-supervision/panel.tsx)。状态条与详情共享按连接和终端隔离的查询缓存；前台每 5 秒同步，关闭详情仍同步，关闭监控后隐藏状态条。
+- Web / Electron：[status-strip.tsx](../../frontend/src/components/terminal/task-supervision/status-strip.tsx) 在已开启终端的顶部显示状态与续接额度，点击打开 [panel.tsx](../../frontend/src/components/terminal/task-supervision/panel.tsx)。Codex 会话还显示 `thread/read` 的 `thread.name`，不使用用户输入、`preview` 或监控目标代替标题；无标题或读取失败时只显示状态。标题随发现查询刷新并核对当前 panel / thread / 执行器身份，不持久化到监听记录；长标题截断，悬停可查看全文。状态条与详情共享按连接和终端隔离的查询缓存；前台每 5 秒同步，关闭详情仍同步，关闭监控后隐藏状态条。
 
 `backend.taskSupervision.model` 和 `classificationTimeoutMs` 配置分类模型及时间预算。历史 `backend.taskSupervision.enabled` 字段不再作为开启条件；实际开关由终端监听记录保存。旧 `/internal/task-supervision` 请求兼容返回 allow-stop，不再承担分类或续接，避免重复处理。
 

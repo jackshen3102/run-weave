@@ -195,14 +195,14 @@ export function TerminalWorkspaceStage({
     onResizePanel,
   } = panels;
   return (
-    <div className="min-h-0 flex-1">
+    <div className="min-h-0 min-w-0 flex-1">
       {effectiveRequestError ? (
         <p className="border-b border-rose-900/60 bg-rose-950/30 px-3 py-1.5 text-xs text-rose-300">
           {effectiveRequestError}
         </p>
       ) : null}
       <div className="relative flex h-full min-h-0">
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {!isMobileMonitor ? <TerminalTaskSupervisionStatusStrip sessionId={activeSession?.terminalSessionId ?? null} /> : null}
           {!isMobileMonitor ? <TerminalBrowserAssistance sessionId={activeSessionId} /> : null}
           {activeSession && !isMobileMonitor && panelSplitEnabled ? (
