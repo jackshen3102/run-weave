@@ -38,7 +38,6 @@ import {
   recordTerminalPerfProbeEvent,
   TERMINAL_RESIZE_DEBOUNCE_MS,
   type TerminalImeCommit,
-  type PastedImageReference,
 } from "./surface-utils";
 
 interface TerminalSurfaceProps {
@@ -150,7 +149,6 @@ export function TerminalSurface({
   const floatingComposerOutputReceivedRef = useRef<() => void>(() => undefined);
   const invalidateOutputRecoveryRef = useRef<() => void>(() => undefined);
   const [pasteError, setPasteError] = useState<string | null>(null);
-  const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
   const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
   const search = useTerminalSearch({ active, clientMode, terminalRef });
   const scroll = useTerminalScrollController({
@@ -400,17 +398,16 @@ export function TerminalSurface({
 
   useTerminalEmulator({
     activeRef,
-    apiBase,
     clientMode,
     imeCommitRef,
     imeCompositionEndedAtRef,
     lastResizedAtRef,
     lastSentResizeRef,
-    onAuthExpired,
     onBufferTypeChange: floatingComposer.setBufferType,
     onViewportResizeRef,
     onUserInputData: floatingComposer.handleUserInputData,
     onTextPaste: floatingComposer.textAttachments.capture,
+    onRichPaste: floatingComposer.richPaste.capture,
     openTerminalLinkRef,
     openTerminalFileLinkRef,
     paneWorkspaceRef,
@@ -420,12 +417,10 @@ export function TerminalSurface({
     sendResize,
     sendTerminalInput,
     setPasteError,
-    setPastedImages,
     setSearchResults: search.setResults,
     terminalContainerRef,
     terminalRef,
     terminalSessionId,
-    tokenRef,
     xtermUserInputSequenceRef,
     onBottomStateChange: floatingComposer.handleBottomStateChange,
     onTmuxScrollbackActiveChange: floatingComposer.setTmuxScrollbackActive,
@@ -516,7 +511,6 @@ export function TerminalSurface({
       active={active}
       error={error ?? pasteError}
       notice={notice}
-      pastedImages={pastedImages}
       paneWorkspace={showPaneResizeHandle ? paneWorkspace : null}
       toolbar={
         showTerminalToolbar ? (
@@ -549,6 +543,7 @@ export function TerminalSurface({
         <TerminalFloatingComposer
           diagnostics={floatingComposer.diagnostics}
           textAttachments={floatingComposer.textAttachments}
+          richPaste={floatingComposer.richPaste}
           draft={floatingComposer.draft}
           sending={floatingComposer.sending}
           sendError={floatingComposer.sendError}

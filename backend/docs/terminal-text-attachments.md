@@ -45,6 +45,13 @@ session + operationId + 同一 payload 复用持久化结果；改变 payload �
 投递先写 dispatching，确认完成后 accepted。重启将残留 dispatching 转为 unknown；
 只读查询回执，不自动重放。PTY 与磁盘没有跨进程事务，不承诺 exactly-once。
 
+富文本 TUI 在下载图片前调用 `POST text-attachments/prepare`，固定 session、panel、thread 和
+输入 revision，取得 120 秒有效的 preparationId。create 携带该 ID 时可保存短正文，沿用原有
+原子文件、哈希与操作回执；insert 的 `inline=true` 仅允许有准备资格且少于 5000 UTF-16 单元的
+正文，使用 bracketed paste 插入完整内容，不发送 Enter。长正文仍插入文件引用。
+保存期间其他客户端输入、目标变化、资格过期或 Backend 重启都会使旧投递失效；客户端保留内容。
+新增字段不改变旧客户端纯文本合同或 metadata schema，回滚保留现有文件。
+
 HTTP 路由见 [`text-attachment.ts`](../src/routes/terminal/input/text-attachment.ts)。400 表示
 无效参数，409 表示资格/输入冲突，410 表示附件失效，413 表示大小超限，507 表示磁盘不足。
 升级或回滚时保留这个数据目录；旧版本停止创建新附件，但不能删除已有 TUI 引用文件。

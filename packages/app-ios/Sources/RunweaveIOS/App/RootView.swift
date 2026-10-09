@@ -11,6 +11,7 @@ public struct RootView: View {
   @StateObject private var remoteDesktop = RemoteDesktopCoordinator()
   @ObservedObject private var notifications = NotificationCoordinator.shared
   @State private var managingConnections = false
+  @State private var showingSettings = false
   @State private var mobileLoginRevision = 0
   @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
 
@@ -46,7 +47,10 @@ public struct RootView: View {
       }
       .navigationTitle(session.authenticated ? "Runweave" : "Sign in")
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+          Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+            .accessibilityLabel("设置")
+            .accessibilityIdentifier("connection-settings")
           if session.checking || !session.authenticated {
             Button { remoteDesktop.managingHosts = true } label: { Image(systemName: "display") }
               .accessibilityLabel("Mac 桌面")
@@ -63,9 +67,12 @@ public struct RootView: View {
                   ? Color.green : session.health.status == .offline ? Color.red : Color.orange
               ).frame(width: 7, height: 7)
               Text(connections.active?.name ?? "选择电脑").lineLimit(1)
+                .frame(maxWidth: session.authenticated ? 100 : 140, alignment: .leading)
               if session.authenticated { DeviceBatteryView(device: session.deviceStatus, compact: true) }
+              Image(systemName: "chevron.down").font(.caption2)
             }
-          }.accessibilityLabel("连接管理")
+          }.accessibilityLabel("切换连接")
+            .accessibilityIdentifier("connection-switcher")
         }
       }
     }
@@ -128,6 +135,10 @@ public struct RootView: View {
     .sheet(isPresented: $remoteDesktop.managingHosts, onDismiss: remoteDesktop.managerDismissed) {
       RemoteHostManager(coordinator: remoteDesktop, backendConnections: connections.connections)
         .clarityMask().mobileAnalyticsScreen(.remoteHosts)
+    }
+    .sheet(isPresented: $showingSettings) {
+      ConnectionSettingsView(store: connections, session: session, codexQuota: codexQuota)
+        .mobileAnalyticsScreen(.settings)
     }
     .fullScreenCover(item: Binding(
       get: { remoteDesktop.presentation },

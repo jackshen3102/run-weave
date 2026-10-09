@@ -295,7 +295,7 @@ fragment 或认证错误详情。安全验收入口为
 
 ## Backend 全局快捷指令
 
-`RootView` 持有连接级 `BackendQuickInputModel`。终端文件 Tab 后的快捷指令页面和连接管理页
+`RootView` 持有连接级 `BackendQuickInputModel`。终端文件 Tab 后的快捷指令页面和设置页
 读取当前已登录 Backend 的全局 pinned 快捷输入（`projectId:null`）；切换项目或终端保持同一份列表，
 切换电脑即丢弃旧结果。项目绑定项和自动记录的 recent 输入不进入手机列表。指令支持新增、
 全文编辑、删除确认和手动排序，不提供搜索；新增固定为全局 `line` 项。正文最多 64 KiB UTF-8，

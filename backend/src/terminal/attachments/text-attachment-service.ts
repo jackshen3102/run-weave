@@ -247,7 +247,7 @@ export class TerminalTextAttachmentService {
           400,
           "文本包含无法无损保存的 UTF-16 字符",
         );
-      if (request.text.length < limits.threshold)
+      if (request.text.length < limits.threshold && !request.preparationId)
         throw new TextAttachmentError(400, "文本未达到附件阈值");
       if (bytes.length > limits.maxBytes)
         throw new TextAttachmentError(

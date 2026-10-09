@@ -62,6 +62,7 @@ import type {
 
 const electronApi = {
   platform: process.platform,
+  downloadClipboardImage: (url: string) => ipcRenderer.invoke("clipboard:download-image", url),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   showAttentionNotification: (target: AttentionNotificationTarget) =>
     ipcRenderer.invoke("attention:notify", target) as Promise<boolean>,

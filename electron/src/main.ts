@@ -1,3 +1,4 @@
+import { registerClipboardImageHandlers } from "./desktop/clipboard-images";
 import { registerTerminalBadge } from "./monitoring/terminal-badge";
 import { registerResourceNotificationHandlers } from "./monitoring/resource-notifications";
 import "./desktop/config.js";
@@ -344,6 +345,7 @@ if (hasSingleInstanceLock) {
       registerTunnelHandlers();
       registerRuntimeStatsHandler(() => desktopRuntime.packagedBackend);
       registerSystemMonitorHandler(() => desktopRuntime.packagedBackend);
+      registerClipboardImageHandlers(() => desktopRuntime.mainWindow);
       registerTerminalBrowserHandlers();
       registerTerminalBrowserAutomationHandlers();
       registerCdpProxyHandlers();

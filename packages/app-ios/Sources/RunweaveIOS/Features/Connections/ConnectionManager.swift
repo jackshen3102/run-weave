@@ -1,233 +1,122 @@
-import IOSBuildIdentity
-import Clarity
 import SwiftUI
 
+/// The frequent action is selecting a computer. Management stays in its detail page.
 struct ConnectionManager: View {
   @Environment(\.dismiss) private var dismiss
-  @EnvironmentObject private var quickInputs: BackendQuickInputModel
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
   let codexQuota: CodexQuotaStore
   var onMobileLogin: () -> Void = {}
-  @StateObject private var batteries = ConnectionBatteryStore()
-  @State private var scanning = false
-  @State private var showingBuildIdentity = false
-  @State private var showingCodexQuota = false
-  @State private var showingConfiguration = false
-  @State private var editingID: String?
-  @State private var name = ""
-  @State private var url = ""
+  @State private var detailID: String?
+  @State private var adding = false
   @State private var failure: String?
-  @State private var busy = false
-  @State private var deleting: BackendConnection?
-  @State private var checkingIDs = Set<String>()
-  @State private var statuses: [String: String] = [:]
-  @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
-  @AppStorage(DevicePreferences.screenAwakeKey, store: DevicePreferences.store) private var keepScreenAwake = true
+
+  private var orderedConnections: [BackendConnection] {
+    store.connections.filter { $0.id == store.activeID } + store.connections.filter { $0.id != store.activeID }
+  }
 
   var body: some View {
     NavigationView {
-      Form {
-        Section {
-          Button { scanning = true } label: {
-            Label("扫码连接电脑", systemImage: "qrcode.viewfinder").font(.headline)
-          }.disabled(store.storageError != nil)
+      List {
+        if let error = store.storageError {
+          Section { Text(error).foregroundColor(.red) }
         }
-        Section {
-          NavigationLink {
-            QuickReplyLibraryView(session: session)
-          } label: {
-            Label("快捷指令", systemImage: "text.badge.plus")
-          }.accessibilityIdentifier("connection-quick-replies")
-        }
-        if session.authenticated {
-          Section(header: Text(session.connection?.name ?? "当前电脑")) {
-            Button("电脑配置") { showingConfiguration = true }
-            Button("Codex 额度") { showingCodexQuota = true }
+        if let failure { Section { Text(failure).foregroundColor(.red) } }
+        if store.connections.isEmpty {
+          ConnectionAddActions(disabled: store.storageError != nil, store: store, session: session,
+            onMobileLogin: onMobileLogin, onConnected: { dismiss() })
+        } else {
+          Section {
+            ForEach(orderedConnections) { connection in
+              connectionRow(connection)
+            }
           }
-        }
-        Section { Button("构建信息") { showingBuildIdentity = true } }
-        Section(header: Text("本手机 · 外观")) {
-          Picker("主题", selection: $theme) {
-            Text("深色").tag("dark")
-            Text("浅色").tag("light")
-          }.pickerStyle(.segmented)
-        }
-        Section(
-          header: Text("本手机 · 屏幕"),
-          footer: Text("在 Runweave 前台使用期间防止自动息屏。离开应用后恢复系统设置，开启会增加耗电。")
-        ) {
-          Toggle("保持屏幕常亮", isOn: $keepScreenAwake)
-            .accessibilityIdentifier("keep-screen-awake")
-        }
-        if let error = store.storageError { Section { Text(error).foregroundColor(.red) } }
-        Section(header: Text("Backend")) {
-          if store.connections.isEmpty { Text("先添加一个 Runweave 后端连接。") }
-          ForEach(store.connections) { connection in
-            VStack(alignment: .leading, spacing: 10) {
-              Button {
-                do { try store.select(connection.id) } catch { failure = displayError(error) }
-              } label: {
-                HStack {
-                  VStack(alignment: .leading) {
-                    Text(connection.name).font(.headline)
-                    Text(connection.url).font(.caption).foregroundColor(.secondary)
-                  }
-                  Spacer()
-                  if connection.id == store.activeID { Image(systemName: "checkmark.circle.fill") }
+          Section {
+            Button { adding = true } label: {
+              Label {
+                VStack(alignment: .leading, spacing: 4) {
+                  Text("添加连接")
+                  Text("扫码连接电脑或手动添加").font(.caption).foregroundColor(.secondary)
                 }
-              }
-              Text(connectionStatus(connection)).font(.caption)
-              NavigationLink {
-                ConnectionRoutesView(store: store, session: session, resolver: ConnectionRouteResolver.forComputer(connection))
-              } label: {
-                Label("连接线路 · \(connection.routes.count)", systemImage: "network")
-              }.accessibilityIdentifier("connection-routes-" + connection.id)
-              if session.connection?.scope == connection.scope, session.authenticated {
-                DeviceBatteryView(device: session.deviceStatus)
-                Button("耗电监控") { session.showingEnergyMonitor = true; dismiss() }.buttonStyle(.borderless)
-              } else if let device = batteries.devices[connection.scope] {
-                DeviceBatteryView(device: device)
-              }
-              if session.connection?.scope == connection.scope, !session.checking,
-                !session.authenticated
-              {
-                Button("前往登录，加载项目和终端") { dismiss() }.buttonStyle(.borderless)
-              }
-              DeviceNotificationSettings(connection: connection, availability: batteries.notificationAvailability[connection.scope])
-              HStack {
-                Button(checkingIDs.contains(connection.id) ? "检测中" : "检测") { check(connection) }
-                  .disabled(checkingIDs.contains(connection.id))
-                Button("编辑") {
-                  editingID = connection.id
-                  name = connection.name
-                  url = connection.url
-                  failure = nil
-                }
-                Button("删除", role: .destructive) { deleting = connection }
-              }.buttonStyle(.borderless)
-            }.padding(.vertical, 4)
+              } icon: { Image(systemName: "plus.circle") }
+            }.disabled(store.storageError != nil).accessibilityIdentifier("connection-add")
           }
-        }
-        Section(header: Text(editingID == nil ? "新增连接" : "编辑连接")) {
-          TextField("名称", text: $name).clarityMask()
-          if editingID == nil {
-            TextField("URL", text: $url).keyboardType(.URL).autocapitalization(.none)
-              .disableAutocorrection(true).clarityMask()
-          }
-          if let failure { Text(failure).foregroundColor(.red) }
-          Button(editingID == nil ? "添加并切换" : "保存") { save() }.disabled(
-            url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.storageError != nil
-          )
-          if editingID != nil { Button("取消编辑") { reset() } }
         }
       }
-      .disabled(busy)
-      .navigationTitle("连接管理")
+      .listStyle(.insetGrouped)
+      .navigationTitle("切换连接")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar { Button("关闭") { dismiss() }.disabled(busy || quickInputs.saving) }
-      .confirmationDialog(
-        "删除本地连接？",
-        isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-        titleVisibility: .visible
-      ) {
-        if let connection = deleting {
-          Button("删除 \(connection.name)", role: .destructive) { remove(connection) }
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          if detailID == nil { Button("关闭") { dismiss() } }
         }
-        Button("取消", role: .cancel) { deleting = nil }
-      } message: {
-        Text("将移除此连接和它的本地登录凭据，远端项目和终端会保留。")
-      }
-    }.navigationViewStyle(.stack).interactiveDismissDisabled(busy || quickInputs.saving)
-      .task(id: store.connections.map(\.scope).joined(separator: "|") + "|" + (store.activeID ?? "")) {
-        let ordered = store.connections.filter { $0.id == store.activeID }
-          + store.connections.filter { $0.id != store.activeID }
-        await batteries.refresh(ordered)
-      }
-      .preferredColorScheme(theme == "light" ? .light : .dark)
-      .sheet(isPresented: $showingConfiguration) { ConfigurationView(session: session).mobileAnalyticsScreen(.configuration) }
-      .sheet(isPresented: $showingCodexQuota) {
-        CodexQuotaView(session: session, quota: codexQuota).mobileAnalyticsScreen(.codexQuota)
-      }
-      .sheet(isPresented: $showingBuildIdentity) { BuildIdentityView().mobileAnalyticsScreen(.buildInfo) }
-      .sheet(isPresented: $scanning) {
-        MobileLoginView(store: store, session: session) {
-          scanning = false
-          onMobileLogin()
-          dismiss()
-        }.mobileAnalyticsScreen(.mobileLogin)
-      }
-  }
-
-  private func connectionStatus(_ connection: BackendConnection) -> String {
-    if session.connection?.scope == connection.scope {
-      switch session.health.status {
-      case .checking: return "正在检测电脑…"
-      case .offline: return session.health.message
-      case .online:
-        return session.authenticated ? "电脑在线 · 已登录" : "电脑在线 · 尚未登录"
       }
     }
-    return statuses[connection.scope] ?? "尚未检测"
-  }
-
-  private func check(_ connection: BackendConnection) {
-    checkingIDs.insert(connection.id)
-    Task {
-      do {
-        if session.connection?.scope == connection.scope {
-          await session.refresh()
-          checkingIDs.remove(connection.id)
-          return
-        }
-        let base = try APIClient.normalize(connection.url)
-        let snapshot = await DeviceHealthService.check(
-          base: base, connectionID: APIClient.diagnosticConnectionID(base: base, id: connection.id))
-        if store.connections.contains(where: { $0.scope == connection.scope }) {
-          statuses[connection.scope] =
-            snapshot.status == .online
-            ? "Online · \(snapshot.latencyMilliseconds ?? 0)ms" : snapshot.message
-        }
-      } catch { failure = displayError(error) }
-      checkingIDs.remove(connection.id)
+    .navigationViewStyle(.stack)
+    .onChange(of: store.connections.map(\.id)) { ids in
+      if let detailID, !ids.contains(detailID) { self.detailID = nil }
+    }
+    .modifier(ConnectionPickerPresentation(expanded: detailID != nil || store.connections.isEmpty))
+    .sheet(isPresented: $adding) {
+      ConnectionAddView(store: store, session: session, onMobileLogin: onMobileLogin,
+        onConnected: { adding = false; dismiss() })
     }
   }
 
-  private func clear(_ connection: BackendConnection) async throws {
-    session.forgetDrafts(connection)
-    await NotificationCoordinator.shared.disable(connection)
-    let credentials = try ComputerCredentialSession.shared(account: connection.credentialAccount)
-    try await credentials.clear()
-  }
-
-  private func save() {
-    busy = true
-    failure = nil
-    Task {
-      do {
-        try store.save(id: editingID, name: name, url: url)
-        reset()
-      } catch { failure = displayError(error) }
-      busy = false
+  private func connectionRow(_ connection: BackendConnection) -> some View {
+    HStack(spacing: 4) {
+      Button { select(connection) } label: {
+        HStack(spacing: 12) {
+          Image(systemName: "desktopcomputer").font(.title3).foregroundColor(.secondary)
+          VStack(alignment: .leading, spacing: 4) {
+            Text(connection.name).font(.headline).foregroundColor(.primary)
+            Text(status(connection)).font(.caption).foregroundColor(.secondary)
+          }
+          Spacer(minLength: 8)
+          if connection.id == store.activeID {
+            Image(systemName: "checkmark.circle.fill").foregroundColor(.accentColor)
+          }
+        }.frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("connection-select-" + connection.id)
+      .accessibilityHint("切换到这台电脑并关闭列表")
+      Button { detailID = connection.id } label: {
+        Image(systemName: "info.circle").font(.title3).frame(width: 44, height: 44)
+      }
+      .buttonStyle(.borderless)
+      .accessibilityLabel("查看 \(connection.name) 连接详情")
+      .accessibilityIdentifier("connection-detail-" + connection.id)
+    }
+    .background {
+      NavigationLink(tag: connection.id, selection: $detailID) {
+        ConnectionDetailView(store: store, session: session, codexQuota: codexQuota,
+          connectionID: connection.id, onFinish: { dismiss() })
+      } label: { EmptyView() }.hidden()
     }
   }
 
-  private func remove(_ connection: BackendConnection) {
-    busy = true
-    Task {
-      do {
-        try await clear(connection)
-        try store.remove(connection.id)
-        if editingID == connection.id { reset() }
-      } catch { failure = displayError(error) }
-      deleting = nil
-      busy = false
+  private func select(_ connection: BackendConnection) {
+    do { try store.select(connection.id); dismiss() }
+    catch { failure = displayError(error) }
+  }
+
+  private func status(_ connection: BackendConnection) -> String {
+    guard session.connection?.scope == connection.scope else { return "尚未检测" }
+    switch session.health.status {
+    case .checking: return "正在连接…"
+    case .offline: return session.health.message
+    case .online: return session.authenticated ? "当前 · 已登录" : "需登录"
     }
   }
-  private func reset() {
-    editingID = nil
-    name = ""
-    url = ""
-    failure = nil
+}
+
+private struct ConnectionPickerPresentation: ViewModifier {
+  let expanded: Bool
+  func body(content: Content) -> some View {
+    if #available(iOS 16.0, *) {
+      content.presentationDetents(expanded ? [.large] : [.medium, .large])
+        .presentationDragIndicator(.visible)
+    } else { content }
   }
 }

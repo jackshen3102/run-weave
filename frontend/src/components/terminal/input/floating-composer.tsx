@@ -1,3 +1,5 @@
+import type { RichPasteController } from "../../../features/terminal/input/use-rich-paste";
+import { RichPasteStatus } from "./rich-paste-status";
 import type { TerminalTextAttachmentsController } from "../../../features/terminal/input/text-attachments";
 import { TerminalTextAttachments } from "./text-attachments";
 import {
@@ -33,6 +35,7 @@ export interface TerminalFloatingComposerDiagnostics {
 }
 
 interface TerminalFloatingComposerProps {
+  richPaste: RichPasteController;
   textAttachments: TerminalTextAttachmentsController;
   diagnostics: TerminalFloatingComposerDiagnostics;
   draft: string;
@@ -69,6 +72,7 @@ function resizeTextarea(textarea: HTMLTextAreaElement | null): void {
 }
 
 export function TerminalFloatingComposer({
+  richPaste,
   textAttachments,
   diagnostics,
   draft,
@@ -120,12 +124,12 @@ export function TerminalFloatingComposer({
         (queueKey === "M-Enter" && event.key === "Enter" && event.altKey));
     if (queueShortcut && (draft.length > 0 || textAttachments.ids.length > 0)) {
       event.preventDefault();
-      if (!sending && !textAttachments.blocked && diagnostics.draftMirrorSupported) onQueue();
+      if (!sending && !textAttachments.blocked && !richPaste.blocked && diagnostics.draftMirrorSupported) onQueue();
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      if (!sending && !textAttachments.blocked && diagnostics.draftMirrorSupported) {
+      if (!sending && !textAttachments.blocked && !richPaste.blocked && diagnostics.draftMirrorSupported) {
         onSend();
       }
       return;
@@ -168,6 +172,7 @@ export function TerminalFloatingComposer({
       {...diagnosticsAttributes}
     >
       <div className="absolute top-2 right-2 left-2">
+        <RichPasteStatus controller={richPaste} purpose="tui" />
         <TerminalTextAttachments controller={textAttachments} purpose="tui" />
       </div>
       <TerminalInstantReplyRail
@@ -208,6 +213,7 @@ export function TerminalFloatingComposer({
           {scrollButtonMode === "floating" ? (
             <ScrollButton onClick={onScrollToBottom} />
           ) : null}
+          <RichPasteStatus controller={richPaste} purpose="composer" textareaRef={textareaRef} />
           <TerminalTextAttachments controller={textAttachments} purpose="composer" textareaRef={textareaRef} onDraftChange={onDraftChange} />
           <section
             aria-label="Floating terminal composer"
@@ -236,7 +242,8 @@ export function TerminalFloatingComposer({
                 resizeTextarea(event.currentTarget);
                 onDraftChange(event.currentTarget.value);
               }}
-              onPaste={(event) => textAttachments.capture(event, "composer")}
+              onPaste={(event) => { if (!richPaste.capture(event, "composer")) textAttachments.capture(event, "composer"); }}
+              onSelect={() => richPaste.markInput()}
               onKeyDown={handleKeyDown}
             />
             <div className="flex items-center gap-2">
@@ -246,7 +253,7 @@ export function TerminalFloatingComposer({
                   aria-label="排队"
                   title={`排队 (${queueKey === "Tab" ? "Tab" : "Alt+Enter"}) · 使用 Agent 原生行为`}
                   className="h-7 rounded-full border border-slate-600 bg-slate-900/70 px-2 text-xs text-slate-200 transition hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-500"
-                  disabled={sending || textAttachments.blocked || !diagnostics.draftMirrorSupported || (draft.length === 0 && textAttachments.ids.length === 0)}
+                  disabled={sending || textAttachments.blocked || richPaste.blocked || !diagnostics.draftMirrorSupported || (draft.length === 0 && textAttachments.ids.length === 0)}
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => {
                     onQueue();
@@ -264,7 +271,7 @@ export function TerminalFloatingComposer({
                 aria-label="Send"
                 title="Send"
                 className="grid h-7 w-7 place-items-center rounded-full border border-cyan-400/40 bg-cyan-400/18 text-cyan-50 transition hover:border-cyan-300/60 hover:bg-cyan-400/28 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:bg-cyan-400/35 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800/70 disabled:text-slate-500"
-                disabled={sending || textAttachments.blocked || !diagnostics.draftMirrorSupported || (draft.length === 0 && textAttachments.ids.length === 0)}
+                disabled={sending || textAttachments.blocked || richPaste.blocked || !diagnostics.draftMirrorSupported || (draft.length === 0 && textAttachments.ids.length === 0)}
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={onSend}
               >

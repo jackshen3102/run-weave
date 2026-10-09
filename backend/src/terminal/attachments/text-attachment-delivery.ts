@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   SendTerminalInputRequest,
   SendTerminalInputResponse,
@@ -47,10 +48,34 @@ export class TerminalTextAttachmentDelivery {
       [...this.inflight.values()].map((entry) => entry.result),
     );
     this.bindings.clear();
+    this.preparations.clear();
   }
+  private readonly preparations = new Map<
+    string,
+    { revision: object; target: Target; expiresAt: number }
+  >();
+
+  prepare(sessionId: string, panelId: string) {
+    if (this.closed) throw new TextAttachmentError(503, "附件服务已关闭");
+    for (const [id, entry] of this.preparations) {
+      if (entry.expiresAt <= Date.now()) this.preparations.delete(id);
+    }
+    if (this.preparations.size >= 1000)
+      throw new TextAttachmentError(429, "待处理粘贴过多");
+    const target = this.target(sessionId, panelId);
+    const preparationId = randomUUID();
+    const expiresAt = Date.now() + 120_000;
+    this.preparations.set(preparationId, {
+      target,
+      expiresAt,
+      revision: terminalInputAdmission(target.session).revision,
+    });
+    return { preparationId, expiresAt };
+  }
+
   private readonly bindings = new Map<
     string,
-    { revision: object; target: Target }
+    { revision: object; target: Target; expiresAt?: number }
   >();
   private readonly inflight = new Map<
     string,
@@ -64,10 +89,7 @@ export class TerminalTextAttachmentDelivery {
     private readonly pty: PtyService,
   ) {}
 
-  private target(
-    sessionId: string,
-    panelId: string,
-  ): Target {
+  private target(sessionId: string, panelId: string): Target {
     const session = this.manager.getSession(sessionId);
     const panel = this.manager.getPanel(panelId);
     if (
@@ -159,14 +181,30 @@ export class TerminalTextAttachmentDelivery {
       | undefined;
     let targetError: unknown;
     try {
-      target = this.target(
-        sessionId,
-        request.panelId,
-      );
+      target = this.target(sessionId, request.panelId);
     } catch (error) {
       targetError = error;
     }
-    const revision = target && terminalInputAdmission(target.session).revision;
+    const prepared = request.preparationId
+      ? this.preparations.get(request.preparationId)
+      : undefined;
+    if (request.preparationId) {
+      if (
+        !prepared ||
+        prepared.expiresAt <= Date.now() ||
+        prepared.target.session.id !== sessionId ||
+        prepared.target.panel.id !== request.panelId
+      ) {
+        target = undefined;
+        targetError = new TextAttachmentError(
+          409,
+          "粘贴资格已失效，内容已保留",
+        );
+      } else target = prepared.target;
+    }
+    const revision =
+      prepared?.revision ??
+      (target && terminalInputAdmission(target.session).revision);
     return this.once(sessionId, request.operationId, request, async () => {
       const previous = await this.previous(
         sessionId,
@@ -179,7 +217,11 @@ export class TerminalTextAttachmentDelivery {
       const attachment = await this.files.create(sessionId, request);
       // Never renew an old create's revision on replay.
       if (!previous && !this.bindings.has(attachment.id))
-        this.bindings.set(attachment.id, { revision, target });
+        this.bindings.set(attachment.id, {
+          revision,
+          target,
+          expiresAt: prepared?.expiresAt,
+        });
       return attachment;
     });
   }
@@ -207,7 +249,31 @@ export class TerminalTextAttachmentDelivery {
       const binding = this.bindings.get(id);
       if (!binding)
         throw new TextAttachmentError(409, "Backend 已重启，旧插入资格失效");
-      this.recheck(binding.target);
+      const recheck = (active = true) => {
+        this.recheck(binding.target, active);
+        if (
+          binding.expiresAt !== undefined &&
+          (binding.expiresAt <= Date.now() ||
+            (binding.target.panel.threadId ??
+              binding.target.panel.lastThreadId ??
+              null) !== binding.target.threadId)
+        )
+          throw new TextAttachmentError(
+            409,
+            "粘贴目标或资格已变化，内容已保留",
+          );
+      };
+      recheck();
+      const content = request.inline
+        ? await this.files.read(sessionId, id)
+        : attachment.tuiReference;
+      if (
+        request.inline &&
+        (attachment.utf16Length >= limits.threshold ||
+          binding.expiresAt === undefined)
+      )
+        throw new TextAttachmentError(400, "仅短富文本允许直接插入");
+      recheck();
       const release = beginTextAttachmentDelivery(
         binding.target.session,
         binding.revision,
@@ -226,13 +292,13 @@ export class TerminalTextAttachmentDelivery {
           },
           fingerprint,
         );
-        this.recheck(binding.target, false);
+        recheck(false);
         dispatching = true;
         await pasteTextAttachmentReference(
           this.tmux,
           binding.target.pane,
-          attachment.tuiReference,
-          () => this.recheck(binding.target, false),
+          content,
+          () => recheck(false),
         );
         await this.files.finish(sessionId, request.operationId, "accepted");
       } catch (error) {
@@ -304,24 +370,24 @@ export class TerminalTextAttachmentDelivery {
           acceptedAt: new Date().toISOString(),
         };
       }
-      const target = this.target(
-        sessionId,
-        request.panelId!,
-      );
+      const target = this.target(sessionId, request.panelId!);
       const revision = terminalInputAdmission(target.session).revision;
       const references: string[] = [];
       for (const id of ids) {
         const file = await this.files.get(sessionId, id);
         await this.files.read(sessionId, id);
-        if (
-          file.panelId !== target.panel.id ||
-          file.purpose !== "composer"
-        )
+        if (file.panelId !== target.panel.id || file.purpose !== "composer")
           throw new TextAttachmentError(409, "附件不属于当前草稿");
         references.push(JSON.stringify(file.filePath));
       }
       this.recheck(target);
-      const release = beginTextAttachmentDelivery(target.session, revision, false, target.panel.tmuxPaneId, true);
+      const release = beginTextAttachmentDelivery(
+        target.session,
+        revision,
+        false,
+        target.panel.tmuxPaneId,
+        true,
+      );
       try {
         await this.files.protect(
           sessionId,
@@ -342,8 +408,7 @@ export class TerminalTextAttachmentDelivery {
             ptyService: this.pty,
             tmuxService: this.tmux,
             textAttachmentLease: true,
-            beforeTextAttachmentWrite: () =>
-              this.recheck(target, false),
+            beforeTextAttachmentWrite: () => this.recheck(target, false),
           },
           target.session,
           `${request.data}\n\n文本附件，请读取文件内容：\n${references.join("\n")}`,

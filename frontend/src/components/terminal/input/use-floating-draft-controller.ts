@@ -1,3 +1,4 @@
+import { useRichPaste } from "../../../features/terminal/input/use-rich-paste";
 import {
   useTerminalTextAttachments,
   useTextAttachmentWorkspace,
@@ -183,6 +184,11 @@ export function useTerminalFloatingDraftController({
       );
     },
   );
+  const richPaste = useRichPaste({
+    apiBase, token, sessionId: terminalSessionId, panelId: textAttachments.panelId, threadId: textAttachments.threadId, active, sending,
+    captureText: textAttachments.captureText,
+    onDraftChange: (value) => handleDraftChange(value),
+  });
   const draftMirrorSupported =
     nativeDraftMirrorSupported && !textAttachments.mirrorUnreliable;
   const queueKey = getFloatingComposerQueueKey({
@@ -203,6 +209,7 @@ export function useTerminalFloatingDraftController({
   });
 
   const handleUserInputData = useMemoizedFn((data: string) => {
+    richPaste.markInput();
     textAttachments.markInput(data === "\r" || data === "\u0015");
     if (
       attachmentMirrorUnreliable.current ||
@@ -262,6 +269,7 @@ export function useTerminalFloatingDraftController({
   });
 
   const handleDraftChange = useMemoizedFn((value: string) => {
+    richPaste.markInput();
     textAttachments.markInput();
     floatingDraftRef.current = value;
     setFloatingDraft(value);
@@ -275,6 +283,7 @@ export function useTerminalFloatingDraftController({
       if (
         floatingDraftSyncPendingRef.current ||
         textAttachments.blocked ||
+        richPaste.blocked ||
         attachmentMirrorUnreliable.current ||
         textAttachments.mirrorUnreliable
       ) {
@@ -421,7 +430,7 @@ export function useTerminalFloatingDraftController({
   });
   const instantReply = useTerminalInstantReplyController({
     apiBase,
-    available: eligible && draftMirrorSupported,
+    available: eligible && draftMirrorSupported && !richPaste.blocked,
     error,
     onSent: handleInstantReplySent,
     panelId: paneWorkspace?.activePanelId,
@@ -527,6 +536,7 @@ export function useTerminalFloatingDraftController({
     )
       return;
     if (
+      richPaste.blocked ||
       !eligible ||
       !draftMirrorSupported ||
       error ||
@@ -556,12 +566,13 @@ export function useTerminalFloatingDraftController({
   }, [guardHandoffInput]);
 
   const handleClose = useMemoizedFn(() => {
+    richPaste.markInput();
     clearInputLagFallbackTimer();
     setInputLagFallbackActive(false);
     setFloatingComposerOpen(false);
   });
-
   return {
+    richPaste,
     textAttachments,
     draft: floatingDraft,
     sending,

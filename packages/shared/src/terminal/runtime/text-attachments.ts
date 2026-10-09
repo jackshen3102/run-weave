@@ -39,9 +39,18 @@ export interface CreateTerminalTextAttachmentRequest {
   expectedThreadId?: string | null;
   purpose: "composer" | "tui";
   text: string;
+  /** Qualification captured before rich-paste resource preparation. */
+  preparationId?: string;
+}
+
+export interface TerminalPastePreparation {
+  preparationId: string;
+  expiresAt: number;
 }
 
 export interface InsertTerminalTextAttachmentRequest {
+  /** Paste short rich content inline rather than the managed file reference. */
+  inline?: boolean;
   operationId: string;
   panelId: string;
   expectedThreadId?: string | null;
