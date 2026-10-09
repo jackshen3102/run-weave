@@ -7,12 +7,14 @@ export type CodexThreadStatusType =
   | "active";
 
 export interface CodexThreadSnapshot {
+  name: string | null;
   preview: string | null;
   statusType: CodexThreadStatusType | null;
 }
 
 interface CodexThreadReadResponse {
   thread?: {
+    name?: unknown;
     preview?: unknown;
     status?: {
       type?: unknown;
@@ -36,6 +38,7 @@ export async function readCodexThreadSnapshot(
   })) as CodexThreadReadResponse | null;
 
   return {
+    name: normalizePreview(response?.thread?.name),
     preview: normalizePreview(response?.thread?.preview),
     statusType: normalizeStatusType(response?.thread?.status?.type),
   };

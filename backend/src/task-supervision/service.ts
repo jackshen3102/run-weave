@@ -28,6 +28,8 @@ import {
   terminalInputAdmission,
 } from "../terminal/runtime/input-admission";
 import { resolveSupervisionTarget } from "./target";
+import { readCodexThreadSnapshot } from "../terminal/runtime/codex-thread-snapshot";
+import { getTerminalSessionAgent } from "../terminal/state/terminal-state-service";
 import { SupervisionError } from "./errors";
 export { SupervisionError } from "./errors";
 import {
@@ -203,6 +205,11 @@ export class TaskSupervisionService {
         taskCandidates: [],
       });
     }
+    const panel = this.manager.getPanel(target.panelId);
+    const titlePromise = watch?.enabled && target.threadId && panel &&
+      getTerminalSessionAgent(panel) === "codex"
+      ? readCodexThreadSnapshot(target.threadId).then((snapshot) => snapshot.name).catch(() => null)
+      : Promise.resolve(null);
     const candidates = watch
       ? await this.synchronize(watch.watchId, target)
       : target.threadId
@@ -211,10 +218,13 @@ export class TaskSupervisionService {
             .then(taskCandidates)
             .catch(() => [])
         : [];
+    const threadTitle = await titlePromise;
     watch = this.forTerminal(terminalSessionId) ?? null;
     return structuredClone({
       target,
       watch,
+      threadTitle: watch?.enabled && sameTarget(watch.target, target) && this.current(target)
+        ? threadTitle : null,
       inputVersion: terminalInputAdmission(this.manager.getSession(terminalSessionId)!).inputVersion,
       capability: { supported: true },
       taskCandidates: candidates,
