@@ -544,7 +544,10 @@ struct TerminalScreen: View {
         cwd: cwd, canReturnToBottom: session.canWrite && controller.canSend,
         canReconnect: session.canReconnect, canDelete: session.canWrite,
         canShare: session.canWrite, sharing: sharing, share: shareSnapshot,
-        supervisionEnabled: supervision.watch?.enabled == true, showingSupervision: $showingSupervision,
+        supervisionEnabled: supervision.watch?.enabled == true,
+        canFork: session.canWrite && currentTerminal?.terminalState.agent == "codex"
+          && currentTerminal?.terminalState.state == "agent_idle",
+        showingSupervision: $showingSupervision,
         deleting: $deleting, showingHistory: $showingHistory,
         showingInfo: $showingInfo, showingDiagnostics: $showingDiagnostics
       ).equatable()

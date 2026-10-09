@@ -39,6 +39,7 @@ const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
 ] as const;
 
 export interface PrepareTerminalAgentInternalOptions {
+  validateLaunchTarget?: () => void | Promise<void>;
   supervisorInput?: boolean;
   validateSupervisorTarget?: () => void;
   resetPanelBeforeResume?: boolean;
@@ -277,6 +278,7 @@ export async function prepareTerminalAgent(
         operationId,
         provider: request.agent,
       });
+      await internalOptions?.validateLaunchTarget?.();
       await options.tmuxService.setPaneOption(
         paneTarget,
         TMUX_AGENT_PREPARE_COMMAND_OPTION,

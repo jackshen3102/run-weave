@@ -40,6 +40,16 @@ Terminal session 与 panel metadata 中的 current/last thread 必须同时携�
 
 现有 TUI 持有 thread writer，另一个 app-server 无法对这个已加载 thread 执行 `thread/settings/update`。手机提交时，Backend 在终端输入锁下检查 revision，通过该 pane 的 `/model` 原生菜单按键完成选择，再从相同 provider 的 `thread/list` 回读确认。这个路径同时适用于新旧 TUI 会话，无需改变 CLI 启动方式，也不触及 Agent Team、定时任务或语音的启动路径。菜单形态、账号目录或 thread 身份不匹配时返回错误，不宣称成功；不根据终端 placeholder 文案或 Agent 忙闲投影预先拒绝切换；直接尝试原生菜单，并以菜单响应和设置回读判断结果。TraeX 的 Max 模式保持原值，目标模型不支持时拒绝。独立 app-server 的读回可能有短暂延迟，因此确认超时后客户端需重新读取。旧客户端不调用新端点，原有终端输入协议不变。
 
+## Codex 会话分叉
+
+桌面终端标签右键菜单、iOS 首页终端长按菜单和终端操作菜单提供「Fork Codex 到新终端」。入口面向当前空闲的 Codex tmux Panel；Backend 按实际选中的 Pane 解析 provider-aware thread，不从终端标题或 cwd 猜测会话。
+
+客户端先读取 `GET /api/terminal/session/:id/agent/fork-target`，再向 `POST /api/terminal/session/:id/agent/fork` 提交唯一 `operationId`、`panelId`、`expectedThreadId` 和 `expectedRevision`。合同位于 `packages/shared/src/terminal/agent-fork.ts`，iOS 使用对应 Swift DTO。Backend 在创建前及发送启动命令前重新核对来源的选中 Panel、thread、空闲状态和启动轮次；同一个操作 ID 在当前 Backend 进程内保留一小时并复用结果，同一 Panel 不并发分叉。
+
+新终端继承来源的项目和 cwd，通过 Codex 原生 `thread/fork` 创建新的 thread 并核对 `forkedFromId`，再执行 `codex resume <新 threadId>`。新身份来自原生响应，不等待首次任务才触发的 SessionStart hook；原生分叉身份确认且 resume 命令提交后返回 `status: starting` 并打开新终端；不把命令提交冒充 CLI 就绪。Codex 在首个用户 turn 才触发生命周期 hook，因此继续沿用 hook 推进状态，新终端允许用户输入。复制的是会话历史；文件、工作目录和已有后台进程不会被复制，两个 thread 使用同一个目录。新终端等待用户输入，不自动执行一轮任务，也不向来源 Panel 发送命令。Agent Team Panel 不使用这个入口。
+
+已经发送原生启动命令但未确认结果时，Backend 保留新终端并在错误详情返回它的 ID；客户端刷新列表供用户检查。超时、断线或 App 进入后台均不自动重放分叉请求。用户在等待期间切换连接、项目或终端时，迟到结果不得抢占新的界面上下文。
+
 ## 状态来源
 
 Terminal 列表、状态 API、App Home 与 Attention 的 working 判断共用
