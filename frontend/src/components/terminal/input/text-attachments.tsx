@@ -105,7 +105,7 @@ export function TerminalTextAttachments({
                 onClick={() => void open(item)}
                 className="rounded px-2 py-1 hover:bg-slate-800"
               >
-                粘贴的文本{index ? ` (${index + 1})` : ""}.txt ·{" "}
+                {item.richPaste ? "粘贴的图文" : "粘贴的文本.txt"}{index ? ` (${index + 1})` : ""} ·{" "}
                 {item.text.length} 字符
               </button>
               <span role="status">{labels[item.status]}</span>
@@ -162,7 +162,7 @@ export function TerminalTextAttachments({
         }}
       >
         <DialogContent className="max-w-3xl bg-slate-950 text-slate-200">
-          <DialogTitle>粘贴的文本.txt</DialogTitle>
+          <DialogTitle>{preview?.item.richPaste ? "粘贴的图文" : "粘贴的文本.txt"}</DialogTitle>
           <DialogDescription>{preview?.text.length} 字符</DialogDescription>
           <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words text-xs">
             {preview?.text}

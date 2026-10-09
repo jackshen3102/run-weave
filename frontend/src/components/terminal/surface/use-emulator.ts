@@ -4,7 +4,6 @@ import { createTerminalFileLinkProvider } from "../emulator/file-links";
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import {
   createTmuxScrollInput,
-  fileToBase64,
   type TerminalBottomState,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
@@ -20,13 +19,10 @@ import type { ClientMode } from "../../../features/client-mode";
 import { DEFAULT_TERMINAL_PREFERENCES } from "../../../features/terminal/state/preferences";
 import { createResizeScheduler } from "../../../features/terminal/viewport/resize-scheduler";
 import { shouldSuppressWheelInput } from "../../../features/terminal/viewport/wheel-input";
-import { HttpError } from "../../../services/http";
-import { createTerminalSessionClipboardImage } from "../../../services/terminal/index";
 import {
   IME_COMMIT_WINDOW_MS,
   TERMINAL_RESIZE_DEBOUNCE_MS,
   resolveMobileBeforeInputData,
-  type PastedImageReference,
   type TerminalImeCommit,
   type TerminalSearchResults,
 } from "./surface-utils";
@@ -37,18 +33,17 @@ type MutableRef<T> = { current: T };
 
 interface UseTerminalEmulatorArgs {
   activeRef: MutableRef<boolean>;
-  apiBase: string;
   clientMode: ClientMode;
   imeCommitRef: MutableRef<TerminalImeCommit | null>;
   imeCompositionEndedAtRef: MutableRef<number | null>;
   lastResizedAtRef: MutableRef<number | null>;
   lastSentResizeRef: MutableRef<{ cols: number; rows: number } | null>;
-  onAuthExpired?: () => void;
   onBottomStateChange: (state: TerminalBottomState) => void;
   onBufferTypeChange: (type: "normal" | "alternate" | undefined) => void;
   onTmuxExitCopyModeRequest: () => void;
   onTmuxScrollbackActiveChange: (active: boolean) => void;
   onUserInputData?: (data: string) => void;
+  onRichPaste: (event: ClipboardEvent, purpose: "tui") => boolean;
   onTextPaste: (event: ClipboardEvent, purpose: "tui") => boolean;
   onViewportResizeRef: MutableRef<(() => void) | undefined>;
   paneWorkspaceRef: MutableRef<TerminalPanelWorkspace | null>;
@@ -60,30 +55,27 @@ interface UseTerminalEmulatorArgs {
   sendResize: (cols: number, rows: number) => void;
   sendTerminalInput: (data: string) => void;
   setPasteError: Dispatch<SetStateAction<string | null>>;
-  setPastedImages: Dispatch<SetStateAction<PastedImageReference[]>>;
   setSearchResults: Dispatch<SetStateAction<TerminalSearchResults | null>>;
   terminalContainerRef: MutableRef<HTMLDivElement | null>;
   terminalRef: MutableRef<Terminal | null>;
   terminalSessionId: string;
-  tokenRef: MutableRef<string>;
   xtermUserInputSequenceRef: MutableRef<number>;
 }
 
 export function useTerminalEmulator({
   activeRef,
-  apiBase,
   clientMode,
   imeCommitRef,
   imeCompositionEndedAtRef,
   lastResizedAtRef,
   lastSentResizeRef,
-  onAuthExpired,
   onBottomStateChange,
   onBufferTypeChange,
   onTmuxExitCopyModeRequest,
   onTmuxScrollbackActiveChange,
   onUserInputData,
   onTextPaste,
+  onRichPaste,
   onViewportResizeRef,
   openTerminalLinkRef,
   openTerminalFileLinkRef,
@@ -94,12 +86,10 @@ export function useTerminalEmulator({
   sendResize,
   sendTerminalInput,
   setPasteError,
-  setPastedImages,
   setSearchResults,
   terminalContainerRef,
   terminalRef,
   terminalSessionId,
-  tokenRef,
   xtermUserInputSequenceRef,
 }: UseTerminalEmulatorArgs): void {
   useEffect(() => {
@@ -357,6 +347,7 @@ export function useTerminalEmulator({
     window.addEventListener("focus", refreshTerminalViewport);
 
     const handlePaste = (event: ClipboardEvent) => {
+      if (onRichPaste(event, "tui")) return;
       const files = Array.from(event.clipboardData?.files ?? []);
       const getPathForFile = window.electronAPI?.getPathForFile;
       if (files.length && getPathForFile) {
@@ -380,48 +371,7 @@ export function useTerminalEmulator({
         }
       }
       if (onTextPaste(event, "tui")) return;
-      const imageItem = Array.from(event.clipboardData?.items ?? []).find(
-        (item) => item.kind === "file" && item.type.startsWith("image/"),
-      );
-      const file = imageItem?.getAsFile();
-      if (!file) {
-        return;
-      }
 
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      setPasteError(null);
-
-      void fileToBase64(file)
-        .then((dataBase64) =>
-          createTerminalSessionClipboardImage(
-            apiBase,
-            tokenRef.current,
-            terminalSessionId,
-            {
-              mimeType: file.type,
-              dataBase64,
-            },
-          ),
-        )
-        .then((payload) => {
-          setPastedImages((current) => [
-            ...current,
-            {
-              id: payload.filePath,
-              label: `[Image #${current.length + 1}]`,
-              filePath: payload.filePath,
-            },
-          ]);
-          sendTerminalInput(shellQuote(payload.filePath));
-        })
-        .catch((nextError: unknown) => {
-          if (nextError instanceof HttpError && nextError.status === 401) {
-            onAuthExpired?.();
-            return;
-          }
-          setPasteError(String(nextError));
-        });
     };
     const helperTextarea = container.querySelector<HTMLTextAreaElement>(
       ".xterm-helper-textarea",
@@ -564,19 +514,18 @@ export function useTerminalEmulator({
     };
   }, [
     activeRef,
-    apiBase,
-    clientMode,
+      clientMode,
     imeCommitRef,
     imeCompositionEndedAtRef,
     lastResizedAtRef,
     lastSentResizeRef,
-    onAuthExpired,
-    onBottomStateChange,
+      onBottomStateChange,
     onBufferTypeChange,
     onTmuxExitCopyModeRequest,
     onTmuxScrollbackActiveChange,
     onUserInputData,
   onTextPaste,
+  onRichPaste,
     onViewportResizeRef,
     openTerminalLinkRef,
     openTerminalFileLinkRef,
@@ -587,12 +536,10 @@ export function useTerminalEmulator({
     sendResize,
     sendTerminalInput,
     setPasteError,
-    setPastedImages,
-    setSearchResults,
+      setSearchResults,
     terminalContainerRef,
     terminalRef,
     terminalSessionId,
-    tokenRef,
-    xtermUserInputSequenceRef,
+      xtermUserInputSequenceRef,
   ]);
 }

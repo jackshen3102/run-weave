@@ -4,8 +4,11 @@ struct MobileLoginView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.scenePhase) private var phase
   @StateObject private var controller: MobileLoginController
+  private let onManualConnection: (() -> Void)?
 
-  init(store: ConnectionStore, session: AppSession, onConnected: @escaping () -> Void) {
+  init(store: ConnectionStore, session: AppSession, onManualConnection: (() -> Void)? = nil,
+    onConnected: @escaping () -> Void) {
+    self.onManualConnection = onManualConnection
     _controller = StateObject(wrappedValue: MobileLoginController(store: store, session: session, onConnected: onConnected))
   }
 
@@ -34,7 +37,11 @@ struct MobileLoginView: View {
           } else if !controller.scanning {
             Button("重新扫码") { controller.scanAgain() }
           }
-          Button("返回手动连接") { controller.cancel(); dismiss() }
+          Button("返回手动连接") {
+            controller.cancel()
+            onManualConnection?()
+            dismiss()
+          }
         }.padding()
       }
       .navigationTitle("扫码连接电脑").navigationBarTitleDisplayMode(.inline)

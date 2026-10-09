@@ -32,6 +32,25 @@ Electron 的直接终端入口先处理系统剪贴板中的磁盘文件：通�
 解除保护。TUI 光标镜像无法可靠合并附件路径，明确提示核对真实 TUI 后在其中提交。
 原生 Enter 或 Ctrl-U 建立新的空草稿后恢复镜像。这个状态随目标隔离。
 
+## 桌面图文粘贴
+
+TUI 与 Input 共用 [富文本解析](../src/features/terminal/input/rich-paste.ts) 与
+[准备控制器](../src/features/terminal/input/use-rich-paste.ts)。paste 时同步读取 HTML、纯文本和
+图片文件；HTML 经 DOMPurify 清洗、Turndown 转 Markdown，保留文字与图片引用的顺序。
+HTML、纯文本、位图是同一剪贴板内容的不同表示，不重复拼接。纯截图与多张图片也使用此链路；
+Finder 磁盘文件继续使用原有路径插入。
+
+支持 PNG/JPEG/GIF/WebP 字节、data URL、文件名可唯一对应的 cid、公开 HTTP(S) 图片。
+网络图片由桌面主进程下载，不使用浏览器 Cookie；逐跳检查公开地址并固定 DNS 结果。
+跨源 blob、无对应资源的 cid、登录态图片、相对 URL 无法获取时显示失败，保留原内容。
+每次最多 20 张，单张 20 MiB，总计 100 MiB，并发 3；已成功图片在本次重试中复用。
+重复图片保留每个引用位置，内容相同只上传一次。
+
+全部图片准备好后，TUI 使用所属 Backend 的短内容插入或长文本附件投递，不自动 Enter；
+Input 在原选区插入 Markdown，长内容复用文本附件。准备期间输入或目标改变则保留结果，
+由用户选择重新插入、仅粘贴文字或关闭。未处理的 Input 图文阻止发送与排队。
+该输入框继续使用 textarea，不提供富文本排版编辑。图片使用现有临时文件接口，不承诺永久保存。
+
 ## 草稿与恢复边界
 
 附件集合按 apiBase / session / panel 隔离，在同一页面生命周期中保留原文，包括终端

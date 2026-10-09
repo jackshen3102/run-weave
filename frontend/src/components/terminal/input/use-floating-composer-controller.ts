@@ -96,6 +96,7 @@ export function useTerminalFloatingComposerController({
   return {
     diagnostics,
     textAttachments: draft.textAttachments,
+    richPaste: draft.richPaste,
     draft: draft.draft,
     sending: draft.sending,
     sendError: draft.sendError,

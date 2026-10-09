@@ -25,7 +25,11 @@ const targetSchema = z
   })
   .strict();
 const createSchema = targetSchema
-  .extend({ purpose: z.enum(["composer", "tui"]), text: z.string() })
+  .extend({
+    purpose: z.enum(["composer", "tui"]),
+    text: z.string(),
+    preparationId: z.string().uuid().optional(),
+  })
   .strict();
 
 export function registerTerminalTextAttachmentRoutes(
@@ -48,6 +52,21 @@ export function registerTerminalTextAttachmentRoutes(
         typeof req.query.panelId === "string" ? req.query.panelId : "",
       ),
     );
+  });
+  router.post(`${base}/prepare`, (req, res) => {
+    const parsed = z
+      .object({ panelId: z.string().min(1).max(200) })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "无效粘贴目标" });
+      return;
+    }
+    try {
+      res.json(delivery.prepare(req.params.id, parsed.data.panelId));
+    } catch (error) {
+      sendTextAttachmentError(res, error);
+    }
   });
   router.post(base, async (req, res) => {
     const parsed = createSchema.safeParse(req.body);
@@ -72,7 +91,9 @@ export function registerTerminalTextAttachmentRoutes(
     }
   });
   router.post(`${base}/:attachmentId/insert`, async (req, res) => {
-    const parsed = targetSchema.safeParse(req.body);
+    const parsed = targetSchema
+      .extend({ inline: z.boolean().optional() })
+      .safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ message: "无效插入参数" });
       return;

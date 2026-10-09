@@ -8,11 +8,7 @@ export interface TerminalImeCommit {
   forwarded: boolean;
 }
 
-export interface PastedImageReference {
-  id: string;
-  label: string;
-  filePath: string;
-}
+
 
 export interface TerminalSearchResults {
   resultCount: number;

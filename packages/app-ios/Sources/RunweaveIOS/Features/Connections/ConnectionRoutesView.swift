@@ -6,6 +6,7 @@ struct ConnectionRoutesView: View {
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
   @ObservedObject var resolver: ConnectionRouteResolver
+  var onLoginRequired: (() -> Void)? = nil
   @State private var editMode = EditMode.inactive
   @State private var editor: RouteEditorSelection?
   @State private var deleting: ConnectionRoute?
@@ -80,7 +81,10 @@ struct ConnectionRoutesView: View {
     .confirmationDialog("重新确认这台电脑？", isPresented: Binding(get: { reauthenticating != nil }, set: { if !$0 { reauthenticating = nil } }), titleVisibility: .visible) {
       if let route = reauthenticating {
         Button("前往重新登录") {
-          Task { await session.prepareRelogin(url: route.url); dismiss() }
+          Task {
+            await session.prepareRelogin(url: route.url)
+            if let onLoginRequired { onLoginRequired() } else { dismiss() }
+          }
         }
       }
       Button("取消", role: .cancel) { reauthenticating = nil }

@@ -14,6 +14,7 @@ import {
 } from "../../../services/terminal/sessions";
 
 export interface TextAttachmentItem {
+  richPaste?: boolean;
   key: string;
   purpose: "tui" | "composer";
   text: string;
@@ -166,20 +167,9 @@ export function useTerminalTextAttachments(
       item.attachment,
     );
   });
-  const capture = useMemoizedFn(
-    (
-      event: ClipboardEvent | React.ClipboardEvent<HTMLTextAreaElement>,
-      purpose: "tui" | "composer",
-    ): boolean => {
-      const clipboard = event.clipboardData;
-      if (
-        !candidate ||
-        !clipboard ||
-        Array.from(clipboard.items).some((item) => item.kind === "file")
-      )
-        return false;
-      const text = clipboard.getData("text/plain");
-      if (text.length < limits.threshold) return false;
+  const captureText = useMemoizedFn(
+    (text: string, purpose: "tui" | "composer", preparationId?: string): boolean => {
+      if (!candidate || (!preparationId && text.length < limits.threshold)) return false;
       const bound = { ...current.current };
       const key = scopeKey(bound);
       const startGeneration = generation.current;
@@ -187,16 +177,13 @@ export function useTerminalTextAttachments(
       const item: TextAttachmentItem = {
         key: crypto.randomUUID(),
         operationId: crypto.randomUUID(),
+        richPaste: Boolean(preparationId),
         text,
         purpose,
         status: "pending",
       };
       records.current.set(key, [...list, item]);
       update();
-      event.preventDefault();
-      if ("nativeEvent" in event) event.nativeEvent.stopImmediatePropagation();
-      else event.stopImmediatePropagation();
-      event.stopPropagation();
       if (
         list.filter(
           (entry) => entry.status === "pending" || entry.status === "saved",
@@ -253,6 +240,7 @@ export function useTerminalTextAttachments(
                 expectedThreadId: bound.threadId,
                 purpose,
                 text,
+                ...(preparationId ? { preparationId } : {}),
               },
             );
           } catch (error) {
@@ -300,6 +288,7 @@ export function useTerminalTextAttachments(
               "POST",
               {
                 operationId: attachment.insertOperationId,
+                ...(preparationId && text.length < limits.threshold ? { inline: true } : {}),
                 panelId: bound.panelId,
                 expectedThreadId: bound.threadId,
               },
@@ -353,6 +342,17 @@ export function useTerminalTextAttachments(
     },
   );
 
+  const capture = useMemoizedFn((event: ClipboardEvent | React.ClipboardEvent<HTMLTextAreaElement>, purpose: "tui" | "composer") => {
+    const clipboard = event.clipboardData;
+    if (!clipboard || Array.from(clipboard.items).some((item) => item.kind === "file")) return false;
+    if (!captureText(clipboard.getData("text/plain"), purpose)) return false;
+    event.preventDefault();
+    if ("nativeEvent" in event) event.nativeEvent.stopImmediatePropagation();
+    else event.stopImmediatePropagation();
+    event.stopPropagation();
+    return true;
+  });
+
   useEffect(() => {
     const renew = () => {
       for (const item of records.current.get(scopeKey(current.current)) ?? []) {
@@ -403,6 +403,7 @@ export function useTerminalTextAttachments(
     mirrorUnreliable: unreliableMirrors.has(scopeKey(scope)),
     composerItems,
     capture,
+    captureText,
     markInput,
     remove,
     read,

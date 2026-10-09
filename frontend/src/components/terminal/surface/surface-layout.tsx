@@ -1,7 +1,6 @@
 import type { ReactNode, RefObject } from "react";
 import type { Terminal } from "@xterm/xterm";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
-import type { PastedImageReference } from "./surface-utils";
 import { TerminalPaneResizeOverlay } from "../input/pane-resize-overlay";
 
 interface TerminalSurfaceLayoutProps {
@@ -11,7 +10,6 @@ interface TerminalSurfaceLayoutProps {
   notice: string | null;
   mobileControls: ReactNode;
   paneWorkspace: TerminalPanelWorkspace | null;
-  pastedImages: PastedImageReference[];
   terminalContainerRef: RefObject<HTMLDivElement | null>;
   terminalRef: RefObject<Terminal | null>;
   toolbar: ReactNode;
@@ -29,7 +27,6 @@ export function TerminalSurfaceLayout({
   notice,
   mobileControls,
   paneWorkspace,
-  pastedImages,
   terminalContainerRef,
   terminalRef,
   toolbar,
@@ -44,19 +41,6 @@ export function TerminalSurfaceLayout({
         <p role="status" className="px-3 py-2 text-xs text-amber-300">
           {notice}
         </p>
-      ) : null}
-      {pastedImages.length > 0 ? (
-        <div className="flex flex-wrap gap-2 px-3 pb-2">
-          {pastedImages.map((image) => (
-            <span
-              className="rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 font-mono text-xs text-slate-200"
-              key={image.id}
-              title={image.filePath}
-            >
-              {image.label}
-            </span>
-          ))}
-        </div>
       ) : null}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {toolbar}

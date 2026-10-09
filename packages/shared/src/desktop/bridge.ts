@@ -99,7 +99,13 @@ export interface RunweaveCompanionBridge {
   openSlot: (intent: AttentionOpenIntent) => Promise<AttentionOpenResult>;
 }
 
+export interface ClipboardImageDownload {
+  mimeType: string;
+  dataBase64: string;
+}
+
 export interface RunweaveElectronBridge {
+  downloadClipboardImage: (url: string) => Promise<ClipboardImageDownload>;
   getLocalConfigurationStatus: () => Promise<ConfigurationStatus>;
   platform: string;
   isElectron: boolean;

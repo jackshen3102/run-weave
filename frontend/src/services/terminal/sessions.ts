@@ -256,11 +256,13 @@ export async function createTerminalSessionClipboardImage(
   token: string,
   terminalSessionId: string,
   payload: CreateTerminalClipboardImageRequest,
+  signal?: AbortSignal,
 ): Promise<CreateTerminalClipboardImageResponse> {
   return requestJson<CreateTerminalClipboardImageResponse>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/clipboard-image`,
     {
+      signal,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
