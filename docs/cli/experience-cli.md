@@ -128,6 +128,12 @@ Stable 默认启用后台学习；`RUNWEAVE_EXPERIENCE_LEARNING=false` 可关闭
 
 `status` 返回本仓库最近五十个任务（queued/running/completed/skipped/failed）、失败或跳过原因、
 候选和复核理由。`completed` 表示分析结束，不等于候选已晋级；查看 candidate.status。
+任务的可选 `failureReceipts` 保留最近八次失败的 Provider 调用，包括第二次调用修复成功前的失败。
+回执随队列持久化，不随临时分析目录删除；记录任务尝试编号、提炼/复核/分段阶段、调用尝试、
+Provider、请求模型（默认模型为 null，不代表已核实实际模型）、耗时、预算以及提示词/schema 哈希。
+失败区分输出读取失败、空输出、非法 JSON、输出超限、schema 不符及其他 Provider 错误；
+每条输出摘录在脱敏后最多 2 KiB，不保存输入提示词、环境变量或完整异常文本。
+旧任务没有回执，不补造历史原因；处理尝试数不是模型调用数或费用。此记录不改变重试、晋级和用户任务状态。
 pending 项可由后续普通 Agent 阅读原始证据/脱敏摘录，在实际验证后通过正常 `save` 修正；
 不能只修改状态或延长有效期。已有 Evolution 候选不直接导入，因为其范围及验证合同不同。
 

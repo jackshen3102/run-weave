@@ -69,7 +69,26 @@ previous=${JSON.stringify(
                 goal: previous.goal,
                 goalEdited: previous.goalEdited,
                 goalEditedAt: previous.goalEditedAt,
-                results: previous.results,
+                // Pair companions are restored by the service, not additional
+                // model citations (which are bounded to three per result).
+                results: previous.results.map((item) => ({
+                  ...item,
+                  evidenceIds: item.evidenceIds.filter((id) => {
+                    const request = previous.evidence.find(
+                      (entry) => entry.id === id,
+                    );
+                    return (
+                      request?.kind !== "agent.tool.requested" ||
+                      !previous.evidence.some(
+                        (entry) =>
+                          item.evidenceIds.includes(entry.id) &&
+                          entry.kind === "agent.tool.completed" &&
+                          entry.toolUseId &&
+                          entry.toolUseId === request.toolUseId,
+                      )
+                    );
+                  }),
+                })),
                 pending: previous.pending,
                 nextStep: previous.nextStep,
               }

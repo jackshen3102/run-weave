@@ -129,6 +129,37 @@ export interface ExperienceLearningJob {
   attempts: number;
   reason: string | null;
   candidateId: string | null;
+  /** Latest 8 failed provider calls, including calls repaired on the second attempt. */
+  failureReceipts?: ExperienceLearningFailureReceipt[];
+}
+
+export interface ExperienceLearningFailureReceipt {
+  receiptId: string;
+  at: string;
+  attempt: number;
+  phase: "extraction" | "review" | "segment";
+  callAttempt: number;
+  provider: string;
+  /** null means provider default; it is not a verified actual model identity. */
+  requestedModel: string | null;
+  durationMs: number;
+  maxWallTimeMs: number;
+  maxOutputBytes: number;
+  promptSha256: string;
+  schemaSha256: string;
+  kind:
+    | "read_failed"
+    | "empty"
+    | "invalid_json"
+    | "too_large"
+    | "schema"
+    | "provider";
+  code: string;
+  outputBytes: number | null;
+  /** At most 2 KiB after redaction; never includes the input prompt or environment. */
+  outputExcerpt: string;
+  excerptTruncated: boolean;
+  schemaIssueCodes?: string[];
 }
 
 export interface ExperienceLearningStatus {
