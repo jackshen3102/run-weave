@@ -5,6 +5,8 @@ import type { TerminalSessionManager } from "../../terminal/manager/manager";
 import { resolveHtmlChangePreview, resolveHtmlPreviewEntry, resolveHtmlPreviewResource } from "../../terminal/preview/html-preview";
 import { TerminalPreviewError } from "../../terminal/preview/paths";
 
+const HTML_PREVIEW_CSP = "sandbox allow-scripts; default-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'";
+
 export function createHtmlPreviewRouter(manager: TerminalSessionManager, authService: AuthService): Router {
   const router = Router();
   const handle = async (req: Request, res: Response, change?: { kind: "staged" | "working"; version: string }): Promise<void> => {
@@ -28,7 +30,7 @@ export function createHtmlPreviewRouter(manager: TerminalSessionManager, authSer
         if ((req.params[0] ?? "") === path.basename(htmlPath)) {
           res.status(200).type("html").set({
             "Cache-Control": "no-store",
-            "Content-Security-Policy": "sandbox allow-scripts",
+            "Content-Security-Policy": HTML_PREVIEW_CSP,
             "Referrer-Policy": "no-referrer",
             "X-Content-Type-Options": "nosniff",
           });
@@ -42,10 +44,9 @@ export function createHtmlPreviewRouter(manager: TerminalSessionManager, authSer
       }
       const resource = await resolveHtmlPreviewResource(htmlPath, req.params[0] ?? "");
       res.status(200).type(path.extname(resource.filePath)).set({
-        "Access-Control-Allow-Origin": "*",
         "Cache-Control": "no-store",
         "Content-Length": String(resource.size),
-        "Content-Security-Policy": "sandbox allow-scripts",
+        "Content-Security-Policy": HTML_PREVIEW_CSP,
         "Referrer-Policy": "no-referrer",
         "X-Content-Type-Options": "nosniff",
       });
