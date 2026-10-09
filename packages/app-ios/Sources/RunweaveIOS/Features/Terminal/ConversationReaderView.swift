@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ConversationReaderView: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.scenePhase) private var scenePhase
   @ObservedObject var session: AppSession
   let controller: SessionController
   let terminalID: String
@@ -79,8 +80,12 @@ struct ConversationReaderView: View {
         }
       }
     }.navigationViewStyle(.stack).tint(TerminalAppearance.accent).clarityMask()
-      .onAppear { model.open() }.onDisappear { model.cancel() }
-      .onChange(of: model.data?.readAt) { _ in anchor.commit() }
+      .onAppear { model.open() }.onDisappear { anchor.persist(); model.cancel() }
+      .onChange(of: model.data?.readAt) { _ in
+        anchor.bind(model.readingPositionKey)
+        anchor.commit()
+      }
+      .onChange(of: scenePhase) { phase in if phase != .active { anchor.persist() } }
       .onChange(of: session.generation) { _ in model.cancel(); dismiss() }
       .onChange(of: session.terminal?.id) { id in if id != terminalID { model.cancel(); dismiss() } }
       .onChange(of: session.terminalController.map(ObjectIdentifier.init)) { identity in

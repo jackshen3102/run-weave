@@ -81,10 +81,15 @@ Pi 从已注册文件核对 session header，沿当前 leaf 的祖先链只取 u
 
 刷新成功替换整份结果，用稳定消息 ID 和消息内偏移保持长回答阅读位置；只有「回到最新」
 主动到底部。同目标网络失败保留最后成功正文和时间，不自动重试；`source_missing` 清除旧正文。
+Web/Electron 与 iOS 在本机持久保存最近 100 个会话的阅读锚点，按连接、provider 和 thread 隔离；
+Web 远程项目另含 endpoint 身份。关闭重开、切换会话或客户端重新加载后，在正文读取成功后恢复。
+保存内容仅包含消息 ID、偏移和时间，不保存正文，也不跨设备同步。原消息消失时优先使用已保存的
+附近消息，均不存在时回退到滚动偏移；布局或源内容变化时尽量接近上次位置，不保证逐像素一致。
 正文共享单一纵向滚动区，表格/代码可横向阅读。Web 复用净化后的 Markdown/Mermaid 渲染，
 无文件上下文时不提供保存、行引用或伪造文件路径；无法解析的相对资源明确不可用。
 iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)。
 验收合同见[会话阅读](../testing/terminal/conversation-reader.testplan.yaml)。
+跨阅读页生命周期的恢复见[阅读位置](../testing/terminal/conversation-reading-position.testplan.yaml)。
 
 ## 文件查找与读取
 

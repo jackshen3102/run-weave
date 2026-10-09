@@ -9,6 +9,12 @@ import SwiftUI
   private weak var controller: SessionController?
   private let terminalID: String
   private let generation: Int
+  private let connectionID: String?
+  var readingPositionKey: String? {
+    guard let connectionID, let target = data?.target,
+      let encoded = try? JSONEncoder().encode([connectionID, target.provider, target.threadId]) else { return nil }
+    return String(data: encoded, encoding: .utf8)
+  }
   private var sequence = 0
   private var operation: Task<Void, Never>?
   private var started = false
@@ -17,6 +23,7 @@ import SwiftUI
   init(session: AppSession, controller: SessionController, terminalID: String) {
     self.session = session; self.controller = controller
     self.terminalID = terminalID; generation = session.generation
+    connectionID = session.connection?.id
   }
   private var current: Bool {
     guard let session, let controller else { return false }
