@@ -4152,7 +4152,7 @@
     "reason": "设备沙箱偏好通过登记的 DevicePreferences/deviceStorage adapter；@AppStorage(DevicePreferences.screenAwakeKey, store: DevicePreferences.store) private var keepScreenAwake = true"
   },
   {
-    "file": "packages/app-ios/Sources/RunweaveIOS/Features/Connections/ConnectionManager.swift",
+    "file": "packages/app-ios/Sources/RunweaveIOS/Features/Connections/ConnectionSettingsView.swift",
     "kind": "native-or-shell",
     "expression": "@AppStorage(DevicePreferences.screenAwakeKey, store: DevicePreferences.store) private var keepScreenAwake = true",
     "count": 1,
@@ -4160,7 +4160,7 @@
     "reason": "设备沙箱偏好通过登记的 DevicePreferences/deviceStorage adapter；@AppStorage(DevicePreferences.screenAwakeKey, store: DevicePreferences.store) private var keepScreenAwake = true"
   },
   {
-    "file": "packages/app-ios/Sources/RunweaveIOS/Features/Connections/ConnectionManager.swift",
+    "file": "packages/app-ios/Sources/RunweaveIOS/Features/Connections/ConnectionSettingsView.swift",
     "kind": "native-or-shell",
     "expression": "@AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = \"dark\"",
     "count": 1,
