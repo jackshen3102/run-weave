@@ -284,14 +284,21 @@ export function createHttpApp(options: {
       res.status(400).json({ code: "INVALID_REQUEST", message: "不支持读取路径参数" }); return;
     }
     const thread = options.eventCenter.getStateStore().getThread(req.params.threadId);
-    if (!thread) { res.status(404).json({ code: "THREAD_NOT_FOUND", message: "会话不存在" }); return; }
     const controller = new AbortController();
     const cancel = () => { if (!res.writableEnded) controller.abort(); };
     res.on("close", cancel);
     try {
       if (!options.conversations) throw new Error("conversation reader unavailable");
-      const response = await options.conversations.read(thread, controller.signal);
-      if (!controller.signal.aborted) res.json(response);
+      // Historical Codex rollouts may outlive event retention or predate hook registration.
+      // Reading their verified source must not create lifecycle events or ThreadRef state.
+      const response = await options.conversations.read(
+        thread ?? { agent: "codex", threadId: req.params.threadId }, controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      if (!thread && response.availability === "source_missing") {
+        res.status(404).json({ code: "THREAD_NOT_FOUND", message: "会话不存在" }); return;
+      }
+      res.json(response);
     } catch (error) {
       if (!controller.signal.aborted) res.status(error instanceof ConversationReadError ? error.status : 503).json({
         code: error instanceof ConversationReadError ? error.code : "CONVERSATION_UNAVAILABLE",

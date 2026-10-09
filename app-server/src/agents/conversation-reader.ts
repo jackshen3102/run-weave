@@ -7,7 +7,8 @@ import { ConversationReadError } from "./conversation-source.js";
 export class ConversationReader {
   constructor(private readonly codex: CodexConversationReader, private readonly pi: PiSessionReader) {}
 
-  async read(thread: AppServerThreadRef, signal?: AbortSignal): Promise<AppServerConversationResponse> {
+  // Codex verifies identity from its controlled rollout source; Pi needs its registered context.
+  async read(thread: AppServerThreadRef | { agent: "codex"; threadId: string }, signal?: AbortSignal): Promise<AppServerConversationResponse> {
     const supported = thread.agent === "codex" || thread.agent === "pi";
     const content = thread.agent === "codex" ? await this.codex.read(thread.threadId, signal)
       : thread.agent === "pi" ? await this.pi.readConversation(thread, signal) : null;
