@@ -9,7 +9,7 @@ import { DeviceMonitorService } from "../../../backend/src/device-monitor/servic
 import { DeviceMonitorStore } from "../../../backend/src/device-monitor/store";
 import { GatewayStore } from "../../../packages/push-gateway/src/store";
 import { deliverNotification } from "../../../packages/push-gateway/src/notifications";
-import { verifyNotifications } from "./notifications";
+import { verifyNotifications, verifyScheduledNotifications } from "./notifications";
 import type { APNsResult } from "../../../packages/push-gateway/src/apns";
 import type { ProviderNotification } from "../../../packages/push-gateway/src/types";
 import { fixture, eventually, pause } from "./fixture";
@@ -578,6 +578,8 @@ async function main() {
     await verifyCadence();
     return;
   }
+  if (process.argv.includes("--scheduled")) return verifyScheduledNotifications();
+  await verifyScheduledNotifications();
   await verifyProvider();
   await verifyNotifications();
   await physicalSample();
