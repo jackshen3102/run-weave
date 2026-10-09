@@ -68,6 +68,8 @@ DOM 检查与静态截图不能替代该交互验收。
 
 Codex 从受控 rollout 目录定位源文件，只投影 `response_item` 中的 user 和 assistant
 可见 commentary/final 正文；明确的注入环境上下文、analysis、工具和重复事件不进入结果。
+旧会话缺少 App Server 的 ThreadRef 时仍可按 thread ID 读取并核对 Codex 源身份；
+读取不补写事件或登记状态，源不存在或身份不匹配时仍返回 404。
 独立的 `<skill>…</skill>` 注入消息整条过滤；用户输入的 `$技能名`、普通引用与讨论保持原文。
 Pi 从已注册文件核对 session header，沿当前 leaf 的祖先链只取 user/assistant text，
 不拼接 sibling branch 或摘要。既有首页短摘要、detail 和终端 History 保持独立语义。
