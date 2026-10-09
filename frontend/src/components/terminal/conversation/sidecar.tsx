@@ -9,7 +9,7 @@ export function TerminalConversationSidecar({ projectId, title, sessionId, panel
   const target = useTerminalPreviewStore((state) => state.conversationTarget);
   const { scope } = useTerminalRuntime();
   return target && target.scope === scope && target.sessionId === sessionId && target.panelId === panelId
-    ? <TerminalConversationPanel sessionId={target.sessionId} panelId={target.panelId}
+    ? <TerminalConversationPanel key={JSON.stringify([scope, target.sessionId, target.panelId])} sessionId={target.sessionId} panelId={target.panelId}
     projectId={projectId} title={title} /> : null;
 }
 

@@ -1,0 +1,52 @@
+version: 1
+name: 会话阅读位置持久恢复
+description: >
+  Web/Electron 与原生 iOS 在本机按连接和具体会话记住阅读位置。
+  验证关闭重开、客户端重载与会话隔离；合成正文可作为独立 fixture，但必须使用真实阅读组件。
+cases:
+  - id: CRP-001
+    name: Web 关闭重开恢复长回答中的位置
+    required: true
+    description: 关闭阅读页后重新进入同一会话，原消息及消息内偏移保持，误差不超过 8px。
+    preconditions:
+      - 专属 Dev Session 已运行当前源码，存在包含至少三轮及跨两个视口长回答的专属会话。
+    steps:
+      - 使用 toolkit:playwright-cli 打开真实会话阅读，滚到长回答中段，记录 message ID、可见句子及顶部偏移。
+      - 关闭阅读侧栏后重新打开；等待正文渲染完成，确认原消息及偏移恢复，误差不超过 8px。
+      - 点击回到最新后关闭重开；确认恢复到点击后的最新阅读位置；仅清理本例 fixture。
+  - id: CRP-002
+    name: Web 整页重新加载后保留阅读位置
+    required: true
+    description: 页面重载销毁内存状态后，同一会话从本机持久存储恢复位置。
+    preconditions:
+      - 专属 Dev Session 的真实阅读页可读取长会话，测试保持浏览器 origin 和连接身份不变。
+    steps:
+      - 使用 toolkit:playwright-cli 打开会话，滚到长回答中段，记录可见消息和相对偏移。
+      - 重新加载整页，取得新的页面快照并重新打开同一会话；确认消息与相对偏移恢复，误差不超过 8px；清理本例 fixture。
+  - id: CRP-003
+    name: Web 不同会话的位置独立保存
+    required: true
+    description: 相同消息 ID 出现在不同 thread 时不会串位，切回已读会话恢复各自的位置。
+    preconditions:
+      - 专属 Dev Session 有两个独立 thread 的长会话 A 和 B，合成消息允许使用相同 message ID。
+    steps:
+      - 使用 toolkit:playwright-cli 在 A 滚至中段并记录位置；切换到首次打开的 B，确认从顶部开始。
+      - 将 B 滚至不同位置；在 A 和 B 之间切换并重新打开阅读，确认分别恢复各自的消息与偏移；清理本例 fixture。
+  - id: CRP-004
+    name: iOS 返回终端后重开恢复长回答中的位置
+    required: true
+    description: 原生阅读页销毁重建后，同一长回答的可见句子与顶部偏移恢复，误差不超过 8pt。
+    preconditions:
+      - 本例已在有归属的设备安装当前源码构建，专属连接可读取长会话。
+    steps:
+      - 使用 toolkit:agent-device 打开阅读会话，滚到长回答中段，记录可见句子及屏幕偏移。
+      - 返回终端再打开阅读会话；等待布局稳定，确认同一句子的位置误差不超过 8pt，保存前后证据；清理本例资源。
+  - id: CRP-005
+    name: iOS 进程重启后恢复阅读位置
+    required: true
+    description: App 进程重启后，在原连接重新进入同一会话时恢复持久保存的阅读位置。
+    preconditions:
+      - 本例已安装当前源码构建，专属连接登录已保存且有可读取的长会话。
+    steps:
+      - 使用 toolkit:agent-device 打开会话并滚到长回答中段，记录句子和偏移，等待位置保存。
+      - 使用 open --relaunch 重启 App，重新读取控件树；进入原连接的同一会话并打开阅读，确认句子及偏移恢复，误差不超过 8pt；清理本例资源。

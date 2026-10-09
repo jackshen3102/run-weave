@@ -1,49 +1,20 @@
-import { useLayoutEffect, useRef } from "react";
-import { useMemoizedFn } from "ahooks";
 import { ArrowDown, BookOpen, RefreshCw } from "lucide-react";
+import { useConversationReadingPosition } from "../../../features/terminal/conversation/reading-position";
 import { useConversation } from "../../../features/terminal/conversation/use-conversation";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { TerminalMarkdownPreview } from "../preview/renderers/markdown";
 import { Button } from "../../ui/button";
 
-type Anchor = { candidates: Array<{ id: string; offset: number }>; top: number };
-
 export function TerminalConversationPanel({ sessionId, panelId, projectId, title }: {
   sessionId: string; panelId: string | null; projectId: string; title: string;
 }) {
   const { data, loading, error, unchanged, load } = useConversation(sessionId, panelId);
-  const { apiBase, token } = useTerminalRuntime();
-  const scroll = useRef<HTMLDivElement>(null);
-  const anchor = useRef<Anchor | null>(null);
-  const capture = useMemoizedFn(() => {
-    const element = scroll.current;
-    if (!element) return;
-    const top = element.getBoundingClientRect().top;
-    const messages = Array.from(element.querySelectorAll<HTMLElement>("[data-conversation-message]"));
-    const first = messages.findIndex((message) => message.getBoundingClientRect().bottom > top);
-    anchor.current = { top: element.scrollTop, candidates: messages.slice(0, first + 1).reverse().map((message) => ({
-      id: message.dataset.conversationMessage!, offset: message.getBoundingClientRect().top - top,
-    })) };
-  });
-  const restore = useMemoizedFn(() => {
-    const element = scroll.current;
-    const saved = anchor.current;
-    if (!element || !saved) return;
-    const messages = Array.from(element.querySelectorAll<HTMLElement>("[data-conversation-message]"));
-    const candidate = saved.candidates.find((item) => messages.some((message) => message.dataset.conversationMessage === item.id));
-    const message = candidate && messages.find((item) => item.dataset.conversationMessage === candidate.id);
-    element.scrollTop = message && candidate
-      ? element.scrollTop + message.getBoundingClientRect().top - element.getBoundingClientRect().top - candidate.offset
-      : saved.top;
-  });
-  useLayoutEffect(() => {
-    restore();
-    const body = scroll.current?.firstElementChild;
-    if (!body) return;
-    const observer = new ResizeObserver(() => restore());
-    observer.observe(body);
-    return () => observer.disconnect();
-  }, [data, restore]);
+  const { apiBase, token, activeConnectionId, remote } = useTerminalRuntime();
+  const positionKey = data?.target ? JSON.stringify([
+    activeConnectionId ?? (apiBase.trim().replace(/\/+$/, "") || "same-origin"),
+    remote?.endpointId ?? null, data.target.provider, data.target.threadId,
+  ]) : null;
+  const { scroll, capture, latest } = useConversationReadingPosition(positionKey, data?.readAt);
   const availability = data?.availability;
   const empty = availability === "no_thread" ? "当前终端暂无关联会话"
     : availability === "provider_unsupported" ? "当前 Agent 暂不支持会话阅读"
@@ -78,10 +49,7 @@ export function TerminalConversationPanel({ sessionId, panelId, projectId, title
     </div>
     <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-800 px-5 py-3 text-xs text-slate-500" aria-live="polite">
       <span>{data ? `读取于 ${new Date(data.readAt).toLocaleTimeString()}` : "尚未读取"}{data?.partial ? " · 部分内容不可读" : unchanged ? " · 内容无变化" : ""}</span>
-      <button className="flex items-center gap-1 text-emerald-200" onClick={() => {
-        anchor.current = null; const element = scroll.current;
-        if (element) element.scrollTop = element.scrollHeight;
-      }}>回到最新<ArrowDown className="h-3 w-3" /></button>
+      <button className="flex items-center gap-1 text-emerald-200" onClick={latest}>回到最新<ArrowDown className="h-3 w-3" /></button>
     </footer>
   </section>;
 }

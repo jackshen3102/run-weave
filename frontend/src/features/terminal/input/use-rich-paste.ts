@@ -23,8 +23,10 @@ export interface RichPasteItem {
   message: string;
   cache: Map<string, { path: string; bytes: number }>;
   attempt: number;
+  autoCloseAt?: number;
 }
 const records = new Map<string, RichPasteItem[]>();
+const EMPTY_ITEMS: RichPasteItem[] = [];
 
 export function useRichPaste(options: {
   apiBase: string;
@@ -224,6 +226,7 @@ export function useRichPaste(options: {
         message: "",
         cache: new Map(),
         attempt: 0,
+        autoCloseAt: purpose === "tui" ? Date.now() + 60_000 : undefined,
       };
       const list = records.get(key) ?? [];
       // Successful notices need not retain clipboard bytes indefinitely.
@@ -253,7 +256,20 @@ export function useRichPaste(options: {
     );
     update();
   });
-  const items = records.get(key) ?? [];
+  const items = records.get(key) ?? EMPTY_ITEMS;
+  useEffect(() => {
+    const timers = items.flatMap((item) =>
+      item.autoCloseAt === undefined
+        ? []
+        : [
+            window.setTimeout(
+              () => remove(item),
+              Math.max(0, item.autoCloseAt - Date.now()),
+            ),
+          ],
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [items, remove]);
   return {
     items,
     capture,
