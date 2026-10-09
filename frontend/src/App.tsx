@@ -125,7 +125,7 @@ function RunweaveApp() {
   });
   const [pendingScheduledRunOpen, setPendingScheduledRunOpen] = useState<{ connectionId: string; runId: string } | null>(null);
   const [scheduledRunOpenError, setScheduledRunOpenError] = useState<string | null>(null);
-  const quickInputNotice = useQuickInputNotifications(
+  const { notice: quickInputNotice, dismissNotice: dismissQuickInputNotice } = useQuickInputNotifications(
     apiBase, token, activeConnectionId,
     isElectron && authStatus !== "unauthenticated",
   );
@@ -494,7 +494,10 @@ function RunweaveApp() {
       onClick={() => setScheduledRunOpenError(null)}>{scheduledRunOpenError} · 点击关闭</button> : null}
     {quickInputNotice ? <button type="button" role="status"
       className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border bg-card p-3 text-left shadow-lg"
-      onClick={() => navigate(backgroundRunPath(quickInputNotice.runId))}>
+      onClick={() => {
+        dismissQuickInputNotice();
+        navigate(backgroundRunPath(quickInputNotice.runId));
+      }}>
       <strong className="block text-sm">{quickInputNotice.title}</strong>
       <span className="text-xs">{quickInputNotice.body}</span>
     </button> : null}
