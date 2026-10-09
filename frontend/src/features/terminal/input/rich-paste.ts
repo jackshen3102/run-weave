@@ -118,17 +118,21 @@ export function parseRichPaste(snapshot: RichPasteSnapshot): RichPasteDocument {
         return `![${label}](<${image.path.replace(/</g, "%3C").replace(/>/g, "%3E")}>)`;
       },
     });
-    if (!snapshot.html) {
-      return [
-        snapshot.plainText,
-        ...Array.from(root.querySelectorAll("img")).map((node) =>
-          converter.turndown(node.outerHTML),
-        ),
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-    }
-    return converter.turndown(root);
+    const content = !snapshot.html
+      ? [
+          snapshot.plainText,
+          ...Array.from(root.querySelectorAll("img")).map((node) =>
+            converter.turndown(node.outerHTML),
+          ),
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+      : converter.turndown(root);
+    // Codex interprets a leading ! as a shell command, even in bracketed paste.
+    // Keep valid image Markdown while making image-first prompts ordinary text.
+    return images.length && /^\s*!\[/.test(content)
+      ? `图片：\n\n${content}`
+      : content;
   };
   return { images, markdown };
 }
