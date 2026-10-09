@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
-import type { ExperienceLearningJob } from "@runweave/shared/experience";
+import type {
+  ExperienceLearningJob,
+  ExperienceLearningFailureReceipt,
+} from "@runweave/shared/experience";
 import { withExperienceStore, type ExperienceStorage } from "./storage";
 import type { LearningSource } from "./learning-source";
 
@@ -112,6 +115,28 @@ export class ExperienceLearningQueue {
       );
       return saved && saved.expiresAt > Date.now() ? saved.value : undefined;
     });
+  }
+  recordFailure(
+    job: LearningJob,
+    receipt: ExperienceLearningFailureReceipt,
+  ): void {
+    withExperienceStore(this.directory, (store) =>
+      store.transaction(() => {
+        const current = store.get<LearningJob>("jobs", job.jobId);
+        if (
+          current?.claim !== job.claim ||
+          current?.status !== "running" ||
+          current.leaseUntil <= Date.now()
+        )
+          throw new Error("experience_learning_claim_lost");
+        store.put("jobs", job.jobId, {
+          ...current,
+          failureReceipts: [...(current.failureReceipts ?? []), receipt].slice(
+            -8,
+          ),
+        });
+      }),
+    );
   }
   saveCheckpoint(job: LearningJob, key: string, value: unknown): void {
     withExperienceStore(this.directory, (store) =>

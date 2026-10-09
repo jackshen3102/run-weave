@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { readProviderOutput } from "./output";
 import type {
   EvolutionProviderName,
   EvolutionProviderRequest,
@@ -73,13 +73,10 @@ export async function runProviderProcess(params: {
             : "provider_exit_nonzero"),
       );
     }
-    const rawResult = await readFile(outputFile, "utf8").catch(() => "");
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawResult);
-    } catch {
-      throw new Error("provider_output_invalid_json");
-    }
+    const parsed = await readProviderOutput(
+      outputFile,
+      params.request.maxOutputBytes,
+    );
     return {
       provider: params.provider,
       durationMs: Date.now() - startedAt,

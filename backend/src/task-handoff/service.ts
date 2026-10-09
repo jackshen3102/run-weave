@@ -12,6 +12,7 @@ import { resolveReplyThread } from "../terminal/completion/reply-preview";
 import type { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
 import { TaskHandoffAnalysis } from "./analysis";
 import { readHandoffSource } from "./source";
+import { preserveHandoffPairs, recoverHandoffRequests } from "./evidence";
 
 type Entry = {
   card: TaskHandoffCard | null;
@@ -154,7 +155,7 @@ export class TaskHandoffService {
       entry.requestedRevision = revision;
       entry.error = undefined;
       // A single queue bounds provider concurrency across terminals.
-      const job = this.queue.then(() => this.update(target, entry));
+      const job = this.queue.then(() => this.update(target, entry, refresh));
       entry.job = job.finally(() => {
         entry.analyzing = false;
         entry.job = undefined;
@@ -206,7 +207,11 @@ export class TaskHandoffService {
     await rename(temporary, filename);
   }
 
-  private async update(target: TaskHandoffTarget, entry: Entry): Promise<void> {
+  private async update(
+    target: TaskHandoffTarget,
+    entry: Entry,
+    repair = false,
+  ): Promise<void> {
     try {
       for (
         let batch = 0;
@@ -237,7 +242,46 @@ export class TaskHandoffService {
           previous,
           this.activity,
         );
-        if (!source.changed) return;
+        if (repair && previous && batch === 0) {
+          source.evidence = await recoverHandoffRequests(
+            target,
+            source.evidence,
+            this.activity,
+          );
+        }
+        if (!source.changed) {
+          if (previous && repair && batch === 0) {
+            const paired = preserveHandoffPairs(
+              previous.results,
+              source.evidence,
+            );
+            const latest = this.resolve(
+              target.terminalSessionId,
+              target.panelId,
+            );
+            if (
+              this.controller.signal.aborted ||
+              latest.running ||
+              latest.target?.threadId !== target.threadId ||
+              latest.revision !== current.revision
+            )
+              return;
+            if (
+              JSON.stringify(paired.results) !==
+              JSON.stringify(previous.results)
+            ) {
+              const card = {
+                ...previous,
+                ...paired,
+                revision: previous.revision + 1,
+                updatedAt: new Date().toISOString(),
+              };
+              await this.save(card);
+              entry.card = card;
+            }
+          }
+          return;
+        }
         entry.analyzing = true;
         const summary = await this.analysis.run(
           previous,
@@ -252,9 +296,7 @@ export class TaskHandoffService {
           latest.revision !== current.revision
         )
           return;
-        const evidenceIds = new Set(
-          summary.results.flatMap((item) => item.evidenceIds),
-        );
+        const paired = preserveHandoffPairs(summary.results, source.evidence);
         const keepManualGoal = Boolean(
           previous?.goalEdited &&
           (summary.goal === previous.goal ||
@@ -275,7 +317,7 @@ export class TaskHandoffService {
           ...(previous?.goalEditedAt
             ? { goalEditedAt: previous.goalEditedAt }
             : {}),
-          evidence: source.evidence.filter((item) => evidenceIds.has(item.id)),
+          ...paired,
           limitations: [
             ...new Set([
               ...(previous?.limitations ?? []),
