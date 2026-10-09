@@ -13,6 +13,7 @@ struct TerminalActionsMenu: View, Equatable {
   let sharing: Bool
   let share: () -> Void
   let supervisionEnabled: Bool
+  let canFork: Bool
   @Binding var showingSupervision: Bool
   @Binding var deleting: Bool
   @Binding var showingHistory: Bool
@@ -27,11 +28,19 @@ struct TerminalActionsMenu: View, Equatable {
       && lhs.canReconnect == rhs.canReconnect && lhs.canDelete == rhs.canDelete
       && lhs.canShare == rhs.canShare && lhs.sharing == rhs.sharing
       && lhs.supervisionEnabled == rhs.supervisionEnabled
+      && lhs.canFork == rhs.canFork
   }
 
   var body: some View {
     Menu {
       Text(cwd)
+      Button {
+        Task {
+          do { try await session.forkTerminal(terminalID) }
+          catch { if !(error is CancellationError) { session.error = displayError(error) } }
+        }
+      } label: { Label("Fork Codex 到新终端", systemImage: "arrow.triangle.branch") }
+        .disabled(!canFork).accessibilityIdentifier("terminal-menu-fork-codex")
       Button { showingSupervision = true } label: {
         Label(supervisionEnabled ? "长任务监控 · 已开启" : "长任务监控", systemImage: "eye")
       }.accessibilityIdentifier("terminal-menu-task-supervision")

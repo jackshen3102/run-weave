@@ -22,7 +22,21 @@ import type {
   UpdateTerminalSessionRequest,
 } from "@runweave/shared/terminal/session";
 import { requestJson, requestVoid } from "../http";
+import type { ForkTerminalAgentRequest, ForkTerminalAgentResponse, TerminalAgentForkTarget } from "@runweave/shared/terminal/agent-fork";
 import type { TerminalCompletionViewedRequest } from "@runweave/shared/terminal/completion";
+
+export async function getTerminalAgentForkTarget(apiBase: string, token: string, id: string): Promise<TerminalAgentForkTarget> {
+  return requestJson(apiBase, `/api/terminal/session/${encodeURIComponent(id)}/agent/fork-target`, {
+    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000),
+  });
+}
+
+export async function forkTerminalAgent(apiBase: string, token: string, id: string, payload: ForkTerminalAgentRequest): Promise<ForkTerminalAgentResponse> {
+  return requestJson(apiBase, `/api/terminal/session/${encodeURIComponent(id)}/agent/fork`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload), signal: AbortSignal.timeout(75_000),
+  });
+}
 
 export async function reportTerminalCompletionViewed(
   apiBase: string, token: string, terminalSessionId: string, payload: TerminalCompletionViewedRequest,

@@ -1,6 +1,8 @@
 import { createTerminalUnreadRouter } from "./unread";
 import type { TerminalBadges } from "../../device-monitor/terminal-badges";
 import { registerTerminalQuestionRoutes } from "./questions";
+import { registerTerminalAgentForkRoutes } from "./agent-fork";
+import { TerminalAgentForkService } from "../../terminal/application/agent-fork";
 import { registerTerminalTaskRoutes } from "./tasks";
 import type { TerminalTaskService } from "../../terminal/tasks/service";
 import { registerTerminalConversationRoutes } from "./conversation";
@@ -158,6 +160,7 @@ export function createTerminalRouter(
   });
   registerTerminalTaskRoutes(router, options?.terminalTaskService);
   registerTerminalQuestionRoutes(router, options?.terminalQuestionsService);
+  registerTerminalAgentForkRoutes(router, new TerminalAgentForkService(terminalSessionManager, options ?? {}));
 
   const agentSettingsUpdateSchema = z.object({
     panelId: z.string().min(1).nullable(),

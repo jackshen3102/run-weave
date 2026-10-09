@@ -9,6 +9,7 @@ struct HomeTerminalRow: View {
   let rename: () -> Void
   let delete: () -> Void
   @State private var showingCopied = false
+  @State private var forkFailure: String?
   private var pinned: Bool { terminal.pinnedAt != nil }
   private var pinLabel: String { pinned ? "取消置顶" : "置顶" }
   private var hasConversation: Bool { terminal.conversationKey != nil || terminal.terminalState.agent != nil }
@@ -71,6 +72,15 @@ struct HomeTerminalRow: View {
     }
     .contextMenu {
       Button {
+        Task {
+          do { try await session.forkTerminal(terminal.id) }
+          catch { if !(error is CancellationError) { forkFailure = displayError(error) } }
+        }
+      } label: { Label("Fork Codex 到新终端", systemImage: "arrow.triangle.branch") }
+        .disabled(!session.canEditTerminal(terminal.id) || terminal.status != "running"
+          || terminal.terminalState.agent != "codex" || terminal.terminalState.state != "agent_idle")
+        .accessibilityIdentifier("terminal-fork-codex")
+      Button {
         UIPasteboard.general.string = terminal.id
         showingCopied = true
       } label: {
@@ -91,5 +101,8 @@ struct HomeTerminalRow: View {
     } message: {
       Text(terminal.id)
     }
+    .alert("Fork 未确认", isPresented: Binding(get: { forkFailure != nil }, set: { if !$0 { forkFailure = nil } })) {
+      Button("好", role: .cancel) { forkFailure = nil }
+    } message: { Text(forkFailure ?? "") }
   }
 }

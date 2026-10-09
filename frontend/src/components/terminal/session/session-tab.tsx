@@ -9,7 +9,8 @@ import {
 import { createPortal } from "react-dom";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
-import { PanelsTopLeft, Pencil, Workflow, X } from "lucide-react";
+import { GitFork, PanelsTopLeft, Pencil, Workflow, X } from "lucide-react";
+import { useForkTerminalAgent } from "../../../features/terminal/use-fork-agent";
 import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { Button } from "../../ui/button";
@@ -230,6 +231,12 @@ export function TerminalSessionTab({
   const activeSessionId = useTerminalWorkspaceStore(
     (state) => state.activeSessionId,
   );
+  const { fork, pending: forking } = useForkTerminalAgent(session.terminalSessionId);
+  const mutationLoading = useTerminalWorkspaceStore((state) => state.loading);
+  const activePanel = useTerminalWorkspaceStore((state) => {
+    const workspace = state.panelWorkspaceBySessionId[session.terminalSessionId];
+    return workspace?.panels.find((panel) => panel.panelId === workspace.activePanelId);
+  });
   const hasBellMarker = useTerminalWorkspaceStore(
     (state) => state.bellMarkers[session.terminalSessionId],
   );
@@ -239,6 +246,11 @@ export function TerminalSessionTab({
   const terminalState = useTerminalWorkspaceStore(
     (state) => state.terminalStateBySessionId[session.terminalSessionId],
   );
+  const forkState = panelCount <= 1
+    ? terminalState ?? activePanel?.terminalState ?? session.terminalState
+    : activePanel?.terminalState;
+  const canFork = session.status === "running" && Boolean(session.tmuxSessionName) &&
+    forkState?.agent === "codex" && forkState.state === "agent_idle";
   const isActive = session.terminalSessionId === activeSessionId;
   const hasBell = !isActive && Boolean(hasBellMarker);
   const panelSplitEnabled = session.panelSplitEnabled;
@@ -395,7 +407,13 @@ export function TerminalSessionTab({
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
-        <ContextMenuContent className="w-48">
+        <ContextMenuContent className="w-56">
+          <ContextMenuItem className="gap-2" disabled={!canFork || forking || mutationLoading}
+            title={canFork ? undefined : "请等待当前 Codex 会话空闲后再 Fork"}
+            onSelect={() => { void fork(); }}>
+            <GitFork className="h-4 w-4" />
+            {forking ? "正在 Fork Codex…" : "Fork Codex 到新终端"}
+          </ContextMenuItem>
           <ContextMenuItem
             className="gap-2"
             onSelect={() => {

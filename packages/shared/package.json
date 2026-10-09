@@ -43,6 +43,7 @@
     "./terminal/conversation": "./src/terminal/conversation.ts",
     "./terminal/pi-agent": "./src/terminal/pi-agent.ts",
     "./terminal/agent-preparation": "./src/terminal/runtime/agent-preparation.ts",
+    "./terminal/agent-fork": "./src/terminal/agent-fork.ts",
     "./terminal/questions": "./src/terminal/questions.ts",
     "./terminal/agent-settings": "./src/terminal/agent-settings.ts",
     "./terminal/completion": "./src/terminal/runtime/completion.ts",
