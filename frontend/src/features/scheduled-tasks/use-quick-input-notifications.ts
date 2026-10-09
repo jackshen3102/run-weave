@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useMemoizedFn } from "ahooks";
 import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
 import { scheduledTasksApi } from "../../services/scheduled-tasks";
 
@@ -26,8 +27,9 @@ export function useQuickInputNotifications(
   token: string | null,
   connectionId: string | null,
   enabled: boolean,
-): QuickInputNotice | null {
+): { notice: QuickInputNotice | null; dismissNotice: () => void } {
   const [notice, setNotice] = useState<{ connectionId: string; value: QuickInputNotice } | null>(null);
+  const dismissNotice = useMemoizedFn(() => setNotice(null));
   useEffect(() => {
     if (!enabled || !token || !connectionId) return;
     const storageKey = `runweave:quick-input-notices:${connectionId}`;
@@ -89,5 +91,8 @@ export function useQuickInputNotifications(
     const timer = window.setInterval(() => void poll(), 5_000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [apiBase, token, connectionId, enabled]);
-  return notice?.connectionId === connectionId ? notice.value : null;
+  return {
+    notice: notice?.connectionId === connectionId ? notice.value : null,
+    dismissNotice,
+  };
 }
