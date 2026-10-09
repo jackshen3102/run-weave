@@ -73,11 +73,10 @@ UIKit 正文 `UITextView` 创建时单独调用 `maskView`。浏览器遮盖属�
 连接页与连接设置提供“使用分析”说明。
 
 `SUIJI_CLARITY_ENABLED`、`SUIJI_CLARITY_PROJECT_ID` 经 Info.plist 传入。
-Debug/Profile 默认关闭、ID 为空；Release 已配置正式 ID，但在完整遮盖和性能验收完成前保持关闭。
+Debug、Profile、Release 真机构建均默认启用正式项目 `yr5biwkeyf`。
 显式 QA 验收可用本机 xcconfig 覆盖为 `YES` 与 `yr5czuz2mq`，并将其路径通过
 `XCODE_XCCONFIG_FILE` 传给上述 `ios:run` 包入口；不得提交包含签名或凭据的覆盖文件。
-开关不是 `YES`、ID 为空或不是 ASCII 字母数字时不初始化；模拟器拒绝正式项目 ID。
-连接的“正式/开发”环境不决定 SDK 上传项目。关闭或切换项目需重建安装并启动新进程，旧回放不会被删除。
+连接的“正式/开发”环境不决定 SDK 上传项目；项目由安装包配置决定。
 
 SDK 自带的 privacy manifest 随 framework 打包，声明非关联、非跟踪的 User ID、Product Interaction、
 Other Usage Data，以及文件时间戳和 UserDefaults 的必要 API 原因；App 本身的 manifest 保留自身声明。
