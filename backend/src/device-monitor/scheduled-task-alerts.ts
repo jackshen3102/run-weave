@@ -4,7 +4,8 @@ import type { ScheduledTaskStore } from "../scheduled-tasks/storage/store";
 import { logger } from "../logging/index";
 import { DeviceSubscriptions } from "./subscriptions";
 import { PushClientError } from "./push-client";
-import type { ScheduledTaskDelivery } from "./types";
+import type { DeviceMonitorData, DeviceSubscription, ScheduledTaskDelivery } from "./types";
+import { targetFor } from "./alerts";
 
 const INTERVAL_MS = 5_000;
 const DELIVERY_WINDOW_MS = 300_000;
@@ -65,41 +66,20 @@ export class ScheduledTaskAlerts {
     const recent = recipients.length
       ? await this.runs.listRecentlyFinishedRuns(since)
       : [];
-    const fresh = recent.some(
-      (run) =>
-        !!run.finishedAt &&
-        recipients.some((subscription) => {
-          if (
-            Date.parse(subscription.confirmedAt!) > Date.parse(run.finishedAt!)
-          )
-            return false;
-          const id = createHash("sha256")
-            .update(run.resultRevision
-              ? `${run.id}:${run.resultRevision}:${subscription.id}`
-              : `${run.id}:${subscription.id}`)
-            .digest("hex");
-          return !deliveries[id];
-        }),
-    );
+    const plans = deliveryPlans(snapshot, recent, recipients);
+    const fresh = plans.some((plan) => !deliveries[plan.id] ||
+      plan.duplicates.some((id) => deliveries[id]?.state === "pending"));
     if (!fresh && !pending && !expired) return;
     await this.subscriptions.store.update((data) => {
       const deliveries = (data.taskDeliveries ??= {});
       for (const delivery of Object.values(deliveries)) {
         if (delivery.state === "sending") delivery.state = "unknown";
       }
-      for (const run of recent) {
-        if (!run.finishedAt) continue;
-        for (const subscription of recipients) {
-          if (
-            Date.parse(subscription.confirmedAt!) > Date.parse(run.finishedAt)
-          )
-            continue;
-          const id = createHash("sha256")
-            .update(run.resultRevision
-              ? `${run.id}:${run.resultRevision}:${subscription.id}`
-              : `${run.id}:${subscription.id}`)
-            .digest("hex");
-          deliveries[id] ??= createDelivery(id, run, subscription.id);
+      for (const plan of deliveryPlans(data, recent, recipients)) {
+        deliveries[plan.id] ??= createDelivery(plan.id, plan.run, plan.subscription.id);
+        // Preserve the original event ID for retries and upgrade-time recovery.
+        for (const id of plan.duplicates) {
+          if (deliveries[id]?.state === "pending") deliveries[id]!.state = "cancelled";
         }
       }
       for (const [id, delivery] of Object.entries(deliveries)) {
@@ -118,8 +98,15 @@ export class ScheduledTaskAlerts {
         continue;
       const claim = await this.subscriptions.store.update((data) => {
         const delivery = data.taskDeliveries?.[item.id];
-        const subscription = data.subscriptions[item.subscriptionId];
         if (!delivery || delivery.state !== "pending") return null;
+        const original = data.subscriptions[delivery.subscriptionId];
+        // Connections are aliases of a phone, not independent notification targets.
+        const subscription = original && Object.values(data.subscriptions).find(
+          (s) => targetFor(s) === targetFor(original) &&
+            s.kind === "scheduled-task" && this.subscriptions.valid(s) &&
+            this.subscriptions.isSynced(s) && s.confirmed && s.confirmedAt &&
+            Date.parse(s.confirmedAt) <= Date.parse(delivery.notification.occurredAt),
+        );
         if (
           !subscription ||
           subscription.kind !== "scheduled-task" ||
@@ -131,6 +118,7 @@ export class ScheduledTaskAlerts {
           delivery.state = "cancelled";
           return null;
         }
+        delivery.subscriptionId = subscription.id;
         delivery.state = "sending";
         delivery.attempts += 1;
         return {
@@ -195,6 +183,46 @@ export class ScheduledTaskAlerts {
     if (this.timer) clearInterval(this.timer);
     await this.flight;
   }
+}
+
+function deliveryId(run: ScheduledRun, recipient: string): string {
+  return createHash("sha256")
+    .update(run.resultRevision
+      ? `${run.id}:${run.resultRevision}:${recipient}`
+      : `${run.id}:${recipient}`)
+    .digest("hex");
+}
+
+function deliveryPlans(
+  data: DeviceMonitorData,
+  runs: ScheduledRun[],
+  recipients: DeviceSubscription[],
+) {
+  const deliveries = data.taskDeliveries ?? {};
+  return runs.flatMap((run) => {
+    if (!run.finishedAt) return [];
+    const targets = new Map<string, DeviceSubscription>();
+    for (const subscription of recipients) {
+      if (Date.parse(subscription.confirmedAt!) <= Date.parse(run.finishedAt))
+        targets.set(targetFor(subscription), subscription);
+    }
+    return [...targets].map(([target, subscription]) => {
+      const canonical = deliveryId(run, target);
+      // Older releases keyed deliveries by connection subscription. Include disabled
+      // aliases: an accepted/unknown delivery must not replay after reconnecting.
+      const ids = [canonical, ...Object.values(data.subscriptions)
+        .filter((s) => s.kind === "scheduled-task" && targetFor(s) === target)
+        .map((s) => deliveryId(run, s.id))];
+      const existing = ids.map((id) => deliveries[id]).filter(
+        (d): d is ScheduledTaskDelivery => !!d,
+      );
+      const selected = existing.find((d) => d.state !== "pending" && d.state !== "cancelled" && d.attempts > 0) ??
+        existing.find((d) => d.state === "pending" && d.attempts > 0) ??
+        existing.find((d) => d.state === "pending") ?? existing[0];
+      return { id: selected?.id ?? canonical, run, subscription,
+        duplicates: existing.filter((d) => d.id !== selected?.id).map((d) => d.id) };
+    });
+  });
 }
 
 function createDelivery(

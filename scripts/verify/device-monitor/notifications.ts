@@ -1,5 +1,9 @@
+import type { ScheduledTask } from "../../../packages/shared/src/scheduled-tasks";
+import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
+import { createScheduledRunRecord } from "../../../backend/src/scheduled-tasks/run-record";
+import { ScheduledTaskAlerts } from "../../../backend/src/device-monitor/scheduled-task-alerts";
 import { strict as assert } from "node:assert";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import type { APNsResult } from "../../../packages/push-gateway/src/apns";
 import { hash } from "../../../packages/push-gateway/src/auth";
@@ -251,6 +255,114 @@ export async function verifyNotifications() {
     );
   } finally {
     release?.();
+    await f.dispose();
+  }
+}
+
+/** Real subscription registration, scheduled SQLite, HTTPS relay and durable claims. */
+export async function verifyScheduledNotifications() {
+  let calls = 0;
+  let outcome: APNsResult = { state: "accepted" };
+  const f = await fixture(async () => null, async () => { calls++; return outcome; });
+  let runs: ScheduledTaskStore | undefined;
+  let alerts: ScheduledTaskAlerts | undefined;
+  try {
+    runs = await ScheduledTaskStore.create({ databasePath: path.join(f.directory, "runs.sqlite"), env: {} });
+    const installation = randomUUID();
+    const register = async (target = installation) => {
+      const owner = await f.login();
+      const value = await f.subscriptions.register(owner.sessionId, target, {
+        connectionId: owner.connectionId, kind: "scheduled-task", enabled: true,
+        environment: "sandbox", deviceToken: "ab".repeat(48), displayName: "Fixture",
+      });
+      await f.subscriptions.confirm(owner.sessionId, target, value!.subscriptionId, value!.version);
+      return value!.subscriptionId;
+    };
+    const aliases = await Promise.all([register(), register(), register()]);
+    const otherPhone = await register(randomUUID());
+    const now = new Date().toISOString();
+    const task: ScheduledTask = {
+      id: randomUUID(), revision: 1, name: "background fixture", projectId: "fixture",
+      provider: "codex", prompt: "fixture", enabled: false, nextRunAt: null,
+      schedule: { kind: "daily", timezone: "UTC", localTime: "09:00" },
+      misfirePolicy: { mode: "skip" }, createdAt: now, updatedAt: now, deletedAt: null,
+    };
+    await runs.createTask(task, task.projectId, task.id, task.id);
+    const finish = async (quick = false) => {
+      const run = createScheduledRunRecord({ ...task, ...(quick ? { origin: {
+        kind: "quick-input" as const, quickInputId: "fixture", projectName: "Fixture", worktreeName: null,
+      } } : {}) }, "manual", new Date().toISOString(), f.directory);
+      run.status = quick ? "failed" : "completed";
+      run.outcome = quick ? "blocked" : "succeeded";
+      run.threadRef = { provider: "codex", threadId: randomUUID() };
+      run.resultRevision = 1;
+      run.finishedAt = new Date().toISOString();
+      await runs!.createManualRun(run, run.id, run.id);
+      return run;
+    };
+    const pass = async () => {
+      alerts = new ScheduledTaskAlerts(runs!, f.subscriptions);
+      alerts.start();
+      // Observe the real pass without adding a testing API to the production service.
+      await (alerts as unknown as { flight: Promise<void> }).flight;
+      await alerts.dispose();
+      alerts = undefined;
+    };
+    const run = await finish(true);
+    await pass();
+    assert.equal(calls, 2, "three aliases send once; another phone still receives its own alert");
+    assert.equal(Object.keys(f.monitorStore.snapshot().taskDeliveries!).length, 2);
+    await register();
+    await pass();
+    assert.equal(calls, 2, "restart and a new connection cannot replay an accepted result");
+
+    // Recreate an old release's subscription-keyed records for this result.
+    await f.monitorStore.update((data) => {
+      const deliveries = data.taskDeliveries!;
+      const original = Object.values(deliveries).find((d) => d.subscriptionId !== otherPhone)!;
+      delete deliveries[original.id];
+      aliases.forEach((subscriptionId, index) => {
+        const id = createHash("sha256").update(`${run.id}:1:${subscriptionId}`).digest("hex");
+        deliveries[id] = { ...original, id, subscriptionId,
+          state: index === 0 ? "unknown" : "pending", attempts: index === 0 ? 1 : 0 };
+      });
+      data.subscriptions[aliases[0]!]!.enabled = false;
+    });
+    await pass();
+    assert.equal(calls, 2, "legacy unknown delivery suppresses pending aliases even after logout");
+    assert.equal(Object.values(f.monitorStore.snapshot().taskDeliveries!).filter((d) => d.state === "pending").length, 0);
+
+    // A new finished result of the same run must remain independently notifyable.
+    await runs.continueRun(run.id, run.revision!, "fixture-continue", new Date().toISOString(), "continue fixture");
+    await runs.claimNextRun("fixture-owner", new Date().toISOString());
+    await runs.finishExecution(run.id, "fixture-owner", {
+      finishedAt: new Date().toISOString(), activeMs: 1, outcome: "succeeded", summary: "second result", error: null,
+    });
+    await pass();
+    assert.equal(calls, 4, "next result revision sends once per phone");
+
+    // Use a new target to keep this independent of the relay's four-per-minute limit.
+    for (const s of Object.values(f.monitorStore.snapshot().subscriptions)) await f.subscriptions.disable(s.id);
+    await register(randomUUID());
+    const retryRun = await finish();
+    outcome = { state: "retry", retryAfterMs: 1 };
+    await pass();
+    const retry = Object.values(f.monitorStore.snapshot().taskDeliveries!).find((d) => d.runId === retryRun.id)!;
+    assert.equal(retry.state, "pending");
+    const beforeRetry = calls;
+    await pass();
+    assert.equal(calls, beforeRetry, "retry delay is respected");
+    await pause(5050);
+    outcome = { state: "accepted" };
+    await pass();
+    assert.equal(calls, beforeRetry + 1);
+    assert.equal(f.monitorStore.snapshot().taskDeliveries![retry.id]!.state, "accepted");
+    await pass();
+    assert.equal(calls, beforeRetry + 1);
+    process.stdout.write("PASS scheduled notifications: three connections/one phone, separate phone, reconnect, restart, legacy unknown/pending migration, result revision, scheduled and quick-input runs, bounded retry\n");
+  } finally {
+    await alerts?.dispose();
+    await runs?.dispose();
     await f.dispose();
   }
 }
