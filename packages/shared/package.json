@@ -90,7 +90,8 @@
     "./configuration": "./src/configuration/index.ts",
     "./task-handoff": "./src/task-handoff.ts",
     "./resource-monitor": "./src/monitoring/resource-monitor.ts",
-    "./service-management": "./src/monitoring/service-management.ts"
+    "./service-management": "./src/monitoring/service-management.ts",
+    "./feishu/bridge": "./src/feishu/bridge.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

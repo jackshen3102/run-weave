@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>一个入口，三台机器 · 飞书集中 Bridge</title>
+  <style>
+    :root { color-scheme:light; --ink:#172938; --muted:#647786; --line:#dbe4eb; --blue:#246bea; --green:#15846d; --amber:#bb6b1b; --paper:#f3f6f9 }
+    * { box-sizing:border-box } body { margin:0; background:var(--paper); color:var(--ink); font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif }
+    button,select { font:inherit } button { cursor:pointer } button:focus-visible,select:focus-visible,input:focus-visible { outline:3px solid #8db9ff; outline-offset:3px }
+    .page { max-width:1440px; margin:auto; padding:28px 40px 40px } .eyebrow { color:var(--blue); font-size:11px; letter-spacing:2px; font-weight:700 }
+    header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px } h1 { margin:7px 0 6px; font-size:32px; line-height:1.3; letter-spacing:-1px } p { margin:0 } .subtitle { color:var(--muted) }
+    .proposal { background:#fff4df; color:#885b12; border:1px solid #efdeb6; border-radius:24px; padding:6px 13px; font-size:12px; white-space:nowrap }
+    .toolbar { margin:24px 0 18px; display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap }
+    .tabs { display:flex; background:#e8eef4; border-radius:10px; padding:4px; gap:4px } .tabs button { background:transparent; border:0; border-radius:7px; padding:9px 16px; color:var(--muted) } .tabs button[aria-pressed=true] { background:white; box-shadow:0 2px 7px #14263812; color:var(--ink); font-weight:650 }
+    .controls { display:flex; gap:16px; align-items:center; color:var(--muted); font-size:12px } .controls label { display:flex; align-items:center; gap:6px } select { border:1px solid var(--line); padding:6px 9px; border-radius:6px; background:white; color:var(--ink); font-size:12px }
+    .architecture { background:white; border:1px solid var(--line); border-radius:16px; padding:20px 26px 24px; box-shadow:0 4px 18px #17293804 }
+    .diagram-top { display:flex; align-items:center; justify-content:space-between; gap:14px; font-size:12px; color:var(--muted) } .diagram-top strong { color:var(--ink); font-size:14px }
+    .legend { display:flex; align-items:center; flex-wrap:wrap; gap:14px } .legend span { display:flex; align-items:center; gap:6px } .sample { width:24px; border-top:2px solid var(--blue) } .sample.green { border-color:var(--green) } .sample.dashed { border-color:#b6c4d0; border-top-style:dashed }
+    .canvas { position:relative; margin-top:20px; min-height:416px; display:grid; grid-template-columns:230px minmax(285px,365px) 280px; justify-content:space-between; gap:36px; align-items:center }
+    .wires { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; z-index:1 }
+    .column { position:relative; z-index:2 } .column-title { color:#81919d; font-size:11px; letter-spacing:1.6px; margin-bottom:12px; text-transform:uppercase }
+    .node { border:1px solid var(--line); background:white; border-radius:12px; padding:18px; transition:box-shadow .2s,border-color .2s } .node.lit { border-color:var(--blue); box-shadow:0 0 0 3px #246bea12 } .node.result { border-color:var(--green); box-shadow:0 0 0 3px #15846d12 }
+    .node-head { display:flex; align-items:center; gap:11px; margin-bottom:10px } .icon { width:35px; height:35px; flex-shrink:0; display:grid; place-items:center; background:#edf3fd; color:var(--blue); border-radius:9px; font-size:16px; font-weight:700 }
+    .node h2,.node h3 { font-size:16px; margin:0; line-height:1.4 } .node small { display:block; color:var(--muted); font-size:11px } .node p { font-size:12px; color:var(--muted) }
+    .feishu .chat { background:#f4f7fb; border-radius:8px; padding:12px; margin:13px 0; font-size:12px } .chat strong { display:block; font-size:11px; margin-bottom:5px; color:var(--blue) } .mini-pill { display:inline-block; background:#edf3fd; color:#4875a7; padding:2px 7px; border-radius:5px; font-size:10px }
+    .bridge { border-color:#adc5e3; background:#fbfdff; padding:20px } .bridge .icon { background:var(--blue); color:white } .bridge-block { border-top:1px solid var(--line); padding-top:12px; margin-top:12px } .bridge-block strong { display:block; font-size:12px; margin-bottom:4px } .binding { background:#eaf1fc; border:1px solid #d8e5fb; border-radius:7px; padding:10px 11px; font-size:11px; line-height:1.8; margin-top:8px; color:#345782 } .binding b { color:#174a96 } .code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace }
+    .machines { display:flex; flex-direction:column; gap:12px } .machine { padding:13px 15px; text-align:left; width:100%; color:var(--ink); } .machine .node-head { margin-bottom:7px } .machine h3 { font-size:14px } .machine .icon { width:30px; height:30px; font-size:12px; background:#eef3f7; color:#587184 } .machine .terminal { background:#f3f6f8; padding:6px 9px; border-radius:5px; font-size:11px; display:flex; justify-content:space-between; color:#586c7c }
+    .machine .status { margin-left:auto; color:var(--green); font-size:10px; white-space:nowrap } .machine.offline .status { color:var(--amber) } .machine.offline { border-style:dashed } .machine.selected .icon { background:#eaf1ff; color:var(--blue) }
+    .transport-note { margin-top:14px; display:flex; gap:14px; border-top:1px solid #edf1f5; padding-top:13px; color:var(--muted); font-size:11px } .transport-note b { color:var(--ink) }
+    .flow { margin-top:18px; border:1px solid var(--line); background:white; border-radius:14px; padding:20px 24px } .flow-head { display:flex; justify-content:space-between; align-items:center; gap:15px } .flow-head h2 { font-size:16px; margin:0 } .step-controls { display:flex; gap:8px } .step-controls button { border:1px solid var(--line); background:white; color:var(--muted); border-radius:6px; padding:5px 12px; font-size:12px } .step-controls button.primary { background:var(--blue); border-color:var(--blue); color:white } button:disabled { opacity:.4; cursor:default }
+    .steps { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-top:18px } .step { text-align:left; border:1px solid transparent; background:#f5f7fa; border-radius:8px; padding:12px; color:var(--muted) } .step .num { display:block; font-size:11px; color:#8e9eac; margin-bottom:5px } .step strong { display:block; color:#496071; font-size:12px } .step.active { background:#eef4ff; border-color:#bcd2fa; } .step.active strong,.step.active .num { color:var(--blue) } .step.done .num { color:var(--green) }
+    .explanation { margin-top:14px; display:flex; gap:12px; align-items:flex-start; background:#f8fafc; padding:13px 15px; border-radius:7px; min-height:65px; font-size:13px } .explanation b { color:var(--blue); white-space:nowrap } .explanation.warn { background:#fff6e8 } .explanation.warn b { color:var(--amber) }
+    .footer { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; margin:20px 4px 0 } .footer strong { font-size:12px } .footer p { margin-top:5px; font-size:12px; color:var(--muted) } .fine { margin-top:20px; color:#80909c; font-size:11px }
+    @media(max-width:1150px) { .page { padding:24px } .canvas { grid-template-columns:200px minmax(255px,320px) 245px; gap:24px } .architecture { padding:18px } .controls { gap:10px } }
+    @media(max-width:880px) { h1{font-size:26px} header{flex-wrap:wrap} .page{padding:18px} .architecture{overflow-x:auto} .canvas{min-width:870px;grid-template-columns:210px 300px 250px;gap:40px} .diagram-top{min-width:870px} .steps{grid-template-columns:repeat(2,1fr)} .footer{grid-template-columns:1fr;gap:12px} .transport-note{min-width:870px} .tabs button{padding:8px 10px} .explanation{flex-direction:column;gap:5px} }
+    @media(prefers-reduced-motion:reduce) { *{transition:none!important} .packet{display:none} }
+  </style>
+</head>
+<body>
+<main class="page">
+  <header><div><div class="eyebrow">RUNWEAVE / ARCHITECTURE EXPLORATION</div><h1>一个飞书入口，连接三台机器</h1><p class="subtitle">只在已有话题内回复；通知自动建话题，每台机器继续执行自己的任务。</p></div><span class="proposal">V1 方案演示 · 尚未接通</span></header>
+  <div class="toolbar">
+    <div class="tabs" aria-label="流程场景"><button data-scenario="reply" aria-pressed="true">① 话题里回复</button><button data-scenario="notify" aria-pressed="false">② 后端发通知</button></div>
+    <div class="controls"><label>演示话题 <select id="target"><option value="a">MacBook</option><option value="b" selected>Linux 服务器</option><option value="c">Mac mini</option></select></label><label><input id="offline" type="checkbox">目标机器离线</label></div>
+  </div>
+  <section class="architecture" aria-label="集中 Bridge 与三台机器架构">
+    <div class="diagram-top"><strong>连接关系与本次消息路径</strong><div class="legend"><span><i class="sample"></i>指令 / 事件</span><span><i class="sample green"></i>回执 / 结果</span><span><i class="sample dashed"></i>连接关系</span></div></div>
+    <div class="canvas" id="canvas">
+      <svg class="wires" id="wires" aria-label="消息路由连线"></svg>
+      <div class="column"><div class="column-title">飞书平台 · 一个应用</div><div class="node feishu" id="feishu"><div class="node-head"><div class="icon">飞</div><div><h2>一个飞书机器人</h2><small>所有机器共用一个入口</small></div></div><p>接收消息事件，展示通知与回答。</p><div class="chat"><strong id="chat-topic">Linux · runweave / T-202</strong><span id="chat-text">用户在这个话题回复：「继续完成任务」</span></div><span class="mini-pill">话题回复自带 root_id</span></div></div>
+      <div class="column"><div class="column-title">常在线服务 · 只部署一份</div><div class="node bridge" id="bridge"><div class="node-head"><div class="icon">⇄</div><div><h2>集中 Bridge</h2><small>飞书凭据、话题、路由统一管理</small></div></div><div class="bridge-block"><strong>1 / 收发飞书消息</strong><p>WebSocket 收事件 · HTTPS 发消息</p></div><div class="bridge-block"><strong>2 / 查找话题绑定</strong><div class="binding" id="binding"></div></div><div class="bridge-block"><strong>3 / 找到目标在线连接</strong><p id="connection-text">Linux 已连接 → 投递到它的 Terminal</p></div></div></div>
+      <div class="column"><div class="column-title">执行机器 · 三个独立 Backend</div><div class="machines">
+        <button class="node machine" data-machine="a" id="machine-a" aria-label="选择 MacBook 的已有话题"><div class="node-head"><div class="icon">A</div><div><h3>MacBook</h3><small>Backend A · 持久身份</small></div><span class="status">● 在线</span></div><div class="terminal"><span>Terminal T-101</span><span>当前活动 Panel</span></div></button>
+        <button class="node machine" data-machine="b" id="machine-b" aria-label="选择 Linux 服务器的已有话题"><div class="node-head"><div class="icon">B</div><div><h3>Linux 服务器</h3><small>Backend B · 持久身份</small></div><span class="status">● 在线</span></div><div class="terminal"><span>Terminal T-202</span><span>当前活动 Panel</span></div></button>
+        <button class="node machine" data-machine="c" id="machine-c" aria-label="选择 Mac mini 的已有话题"><div class="node-head"><div class="icon">C</div><div><h3>Mac mini</h3><small>Backend C · 持久身份</small></div><span class="status">● 在线</span></div><div class="terminal"><span>Terminal T-303</span><span>当前活动 Panel</span></div></button>
+      </div></div>
+    </div>
+    <div class="transport-note"><span><b>左侧：</b>Bridge 主动连接飞书，接收消息事件。</span><span><b>右侧：</b>各 Backend 主动连入 Bridge，双向传递指令与结果；中心无需访问机器 IP。</span></div>
+  </section>
+  <section class="flow" aria-label="逐步流程演示"><div class="flow-head"><h2 id="flow-title">话题回复如何回到原机器？</h2><div class="step-controls"><button id="reset">重置</button><button id="previous">上一步</button><button class="primary" id="next">下一步 →</button></div></div><div class="steps" id="steps"></div><div class="explanation" id="explanation" aria-live="polite"></div></section>
+  <div class="footer"><div><strong>第一版保留 Terminal 级绑定</strong><p>路由键包含 现有持久 Backend 身份 + Terminal ID。进入终端后使用当前活动 Panel，暂不绑定固定 Agent 会话。</p></div><div><strong>本机负责执行，中心负责转发</strong><p>通知过滤继续由各 Backend 判断。Bridge 统一发往飞书并维护话题，不运行用户的代码。</p></div><div><strong>离线与回执都有明确边界</strong><p>未发送的输入最多等待 120 秒；结果未知不自动重投。✅ 仅表示输入已接收，任务结果随后单独回传。</p></div></div>
+  <p class="fine">设计快照 · 2026-10-10 · 所有机器、终端、连接状态均为演示数据。当前代码仍是单 Backend Bridge，集中路由与 Backend 主动连接属于待实现能力。</p>
+</main>
+<script>
+  const machines = { a:{name:'MacBook',id:'backend-a',terminal:'T-101'}, b:{name:'Linux 服务器',id:'backend-b',terminal:'T-202'}, c:{name:'Mac mini',id:'backend-c',terminal:'T-303'} };
+  let scenario='reply', target='b', step=0;
+  const $ = id => document.getElementById(id);
+  function flow() {
+    const m=machines[target];
+    if(scenario==='reply') return { title:'话题回复如何回到原机器？', steps:[
+      ['收到话题回复',`用户在 ${m.name} 的话题回复。飞书通过长连接把消息事件交给 Bridge，事件包含话题 root_id。`,'in'],
+      ['查话题绑定',`Bridge 检查发送者权限并查询持久绑定：话题 root_${target} → ${m.id} → ${m.terminal}。路由由绑定确定。`,'lookup'],
+      ['送往目标终端',`Bridge 找到 ${m.id} 的已认证在线连接，将指令送给 ${m.terminal}。Backend 写入当前活动 Panel。`,'command'],
+      ['确认输入接收',`${m.name} 确认输入已接收，Bridge 在飞书用户消息上添加 ✅。此时尚未确认任务完成。`,'receipt'],
+      ['回答回到话题',`Agent 产生最终回答，本机识别该轮飞书输入并上报回复。Bridge 把回答发送到同一个话题 root_${target}。`,'result'] ]};
+    if(scenario==='notify') return { title:'后端通知如何建立可回复的话题？', steps:[
+      ['本机筛选通知',`${m.name} 上的 Agent 结束本轮。本机 Backend 按运行时长、已查看状态和提醒类型判断是否需要通知。`,'local'],
+      ['上报中心',`符合通知条件后，${m.id} 通过主动建立的连接上报 Backend ID、Terminal ID 与回答内容。`,'report'],
+      ['查找 / 建立话题',`Bridge 查找 (${m.id}, ${m.terminal}) 对应的话题；首次通知创建机器人话题，并持久保存它的 root_id。`,'lookup'],
+      ['发送通知',`Bridge 统一调用飞书 HTTPS API 发送通知。通知标明来源机器 ${m.name} 和终端 ${m.terminal}。`,'out'],
+      ['后续回复可路由',`用户以后在该话题回复，Bridge 都能沿保存的绑定找到 ${m.id} 和 ${m.terminal}。`,'lookup'] ]};
+  }
+  function route(phase,offline) {
+    if(offline && (phase==='command'||phase==='report'||phase==='local'||phase==='receipt'||phase==='result')) return 'none';
+    if(phase==='in') return 'in'; if(phase==='command') return 'command'; if(phase==='report') return 'report'; if(phase==='out'||phase==='receipt'||phase==='result') return phase==='out'?'out':'result'; return 'none';
+  }
+  function render() {
+    const m=machines[target], f=flow(), offline=$('offline').checked, phase=f.steps[step][2];
+    document.querySelectorAll('[data-scenario]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.scenario===scenario)));
+    $('target').value=target;
+    document.querySelectorAll('[data-machine]').forEach(b=> { const selected=b.dataset.machine===target; b.classList.toggle('selected',selected); b.classList.toggle('offline',selected&&offline); b.classList.remove('lit','result'); b.setAttribute('aria-pressed',String(selected)); b.querySelector('.status').textContent=selected&&offline?'○ 离线':'● 在线'; });
+    $('chat-topic').textContent=`${m.name} · runweave / ${m.terminal}`;
+    $('chat-text').textContent=scenario==='notify'?'机器人通知：「本轮回答已返回」':'用户在这个话题回复：「继续完成任务」';
+    $('binding').innerHTML=`话题 <span class="code">root_${target}</span><br>→ <b>${m.name}</b> / <span class="code">${m.id}</span><br>→ Terminal <span class="code">${m.terminal}</span>`;
+    $('connection-text').textContent=offline?`${m.name} 离线 → 无可用连接`:`${m.name} 已连接 → 投递到 ${m.terminal}`;
+    $('flow-title').textContent=f.title;
+    $('steps').replaceChildren(...f.steps.map((s,i)=> { const b=document.createElement('button'); b.className='step'+(i===step?' active':i<step?' done':''); b.setAttribute('aria-current',i===step?'step':'false'); b.innerHTML=`<span class="num">${String(i+1).padStart(2,'0')} ${i<step?'✓':''}</span><strong>${s[0]}</strong>`; b.addEventListener('click',()=>{step=i;render()}); return b; }));
+    let text=f.steps[step][1], blocked=false;
+    if(offline && scenario==='reply' && step>=2) { text=`目标 ${m.name} 离线。尚未发送的输入沿用现有规则：从消息创建起最多等待 120 秒，仅等待原机器；过期在原话题提示失败。已发送但结果未知时不自动重投。`; blocked=true; }
+    if(offline && scenario==='notify') { text=`${m.name} 与中心断连时，通知转发返回失败；不新增通知缓存或自动补发。通知过滤与领取规则仍在本机。`; blocked=true; }
+    $('explanation').classList.toggle('warn',blocked); $('explanation').innerHTML=`<b>${blocked?'离线边界':`步骤 ${step+1}`}</b><span>${text}</span>`;
+    $('previous').disabled=step===0; $('next').disabled=step===4;
+    const activeRoute=route(phase,offline && blocked);
+    $('feishu').classList.toggle('lit',activeRoute==='in'); $('feishu').classList.toggle('result',activeRoute==='out'||activeRoute==='result');
+    $('bridge').classList.toggle('lit',phase==='lookup'||activeRoute==='in'||activeRoute==='command'); $('bridge').classList.toggle('result',activeRoute==='report'||activeRoute==='result'||activeRoute==='out');
+    $('machine-'+target).classList.toggle('lit',activeRoute==='command'||phase==='local'&&!offline); $('machine-'+target).classList.toggle('result',activeRoute==='report'||activeRoute==='result');
+    requestAnimationFrame(()=>draw(activeRoute));
+  }
+  function draw(activeRoute) {
+    const canvas=$('canvas'), c=canvas.getBoundingClientRect();
+    const point=(id,side,shift=0)=>{const r=$(id).getBoundingClientRect();return{x:(side==='left'?r.left:r.right)-c.left,y:r.top-c.top+r.height/2+shift}};
+    const curve=(a,b)=>`M ${a.x} ${a.y} C ${(a.x+b.x)/2} ${a.y}, ${(a.x+b.x)/2} ${b.y}, ${b.x} ${b.y}`;
+    let svg='<defs><marker id="blue-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#246bea"/></marker><marker id="green-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#15846d"/></marker><marker id="gray-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="#b6c4d0"/></marker></defs>';
+    const base=(a,b)=>{svg+=`<path d="${curve(a,b)}" fill="none" stroke="#c5d1dc" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#gray-arrow)"/>`};
+    base(point('bridge','left',-15),point('feishu','right',-15));
+    ['a','b','c'].forEach((id,i)=>base(point('machine-'+id,'left'),point('bridge','right',(i-1)*80)));
+    const label=(a,b,text,color)=>{const x=(a.x+b.x)/2,y=(a.y+b.y)/2-9;svg+=`<rect x="${x-37}" y="${y-13}" width="74" height="20" rx="5" fill="white"/><text x="${x}" y="${y+1}" text-anchor="middle" fill="${color}" font-size="10" font-family="sans-serif">${text}</text>`};
+    const active=(a,b,text,green=false)=>{const d=curve(a,b),color=green?'#15846d':'#246bea';svg+=`<path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" marker-end="url(#${green?'green':'blue'}-arrow)"/><circle class="packet" r="3.5" fill="${color}"><animateMotion dur="2.4s" repeatCount="indefinite" path="${d}"/></circle>`;label(a,b,text,color)};
+    if(activeRoute==='in') active(point('feishu','right',15),point('bridge','left',15),'消息事件');
+    if(activeRoute==='command') active(point('bridge','right',0),point('machine-'+target,'left'),'投递指令');
+    if(activeRoute==='report'||activeRoute==='result') active(point('machine-'+target,'left'),point('bridge','right',0),activeRoute==='report'?'通知上报':'回执 / 回答',true);
+    if(activeRoute==='out'||activeRoute==='result') active(point('bridge','left',15),point('feishu','right',15),'发回话题',true);
+    $('wires').setAttribute('viewBox',`0 0 ${c.width} ${c.height}`); $('wires').innerHTML=svg;
+  }
+  document.querySelectorAll('[data-scenario]').forEach(b=>b.addEventListener('click',()=>{scenario=b.dataset.scenario;step=0;render()}));
+  document.querySelectorAll('[data-machine]').forEach(b=>b.addEventListener('click',()=>{target=b.dataset.machine;step=0;render()}));
+  $('target').addEventListener('change',e=>{target=e.target.value;step=0;render()}); $('offline').addEventListener('change',render);
+  $('next').addEventListener('click',()=>{step=Math.min(4,step+1);render()}); $('previous').addEventListener('click',()=>{step=Math.max(0,step-1);render()}); $('reset').addEventListener('click',()=>{step=0;render()});
+  window.addEventListener('resize',render); render();
+</script>
+</body>
+</html>

@@ -144,22 +144,25 @@ completion event 依赖 Runweave tmux-backed terminal 内启动的 AI CLI 继承
 
 ## 飞书 Terminal 话题会话
 
-飞书企业自建应用可以在一台机器上运行一个长连接 Bridge：
+飞书支持 `services.feishu.role` 三种角色，业务配置读取实例 `settings.yaml`：
+默认 `standalone` 保持一个 Bridge 对应一个 Backend；`hub` 集中持有一个飞书应用；
+`node` 由 Backend 内置连接模块主动连 hub，无需单独运行 Bridge 或配置飞书密钥。
+完整配置、TLS 和状态迁移见 [飞书部署](../deployment/feishu-app-integration.md)。
 
 ```bash
-export FEISHU_APP_ID=<app-id>
-export FEISHU_APP_SECRET=<app-secret>
-export FEISHU_TARGET_CHAT_ID=<chat-id>
-export FEISHU_ALLOWED_OPEN_IDS=<open-id>[,<open-id>...]
-rw feishu bridge --json
+rw config validate --instance stable --json
+rw feishu bridge --instance stable --json
 ```
+
+中心启动不读取本地 Backend 登录；node 角色的 bridge/discover 命令被拒绝。
+node 的 notify 保留本机通知政策，通过本机 Backend 转发到 hub；hub 不接受缺少机器归属的手动 notify。
 
 不知道本人 `open_id` 时，可先在 Bridge 未运行的机器上执行
 `rw feishu discover --json`，再向应用机器人发送一条消息。命令只输出首个用户消息
 的 `openId` 和 `chatId` 后退出，不进行 Terminal 投递。
 
-completion hook 在 `FEISHU_NOTIFY_TRANSPORT=app` 时通过
-`rw feishu notify --stdin --json` 发送应用机器人通知。同一目标群中的同一 Terminal ID
+completion hook 在应用模式（默认，未启用 `services.feishu.legacyWebhook.transport=webhook`）时通过
+`rw feishu notify --stdin --json` 发送应用机器人通知。同一目标群中的同一机器、同一 Terminal ID
 只使用一个长期话题：第一条真实 completion 是 root，后续通知回复该 root 并设置
 `reply_in_thread`。topic 不使用 24 小时 TTL；旧版 message binding 不迁移，升级后的
 第一条新通知建立新 topic。`FEISHU_BINDING_TTL_HOURS` 已废弃且不再读取。
@@ -168,10 +171,10 @@ CLI 通过原 Hook endpoint/token 领取飞书发送资格。普通完成要求�
 再次核对已读和轮次；跳过时返回 `{ "sent": false, "reason": "notification_policy" }`。
 飞书入站回复与结构化需操作提醒绕过过滤；App/Web 的已查看上报不影响桌面提醒和绿点。
 没有 Hook 环境、也没有 `feishuNotificationId` 的显式手工 notify 保持立即发送。
-在通知环境中设置 `FEISHU_NOTIFY_OPEN_IDS=<open-id>[,<open-id>...]`，可让每条完成通知
+在飞书发送端配置 `services.feishu.notifyOpenIds` 数组，可让每条完成通知
 （包括首次 root 和后续话题回复）显式 `@` 指定用户。使用发送机器人的应用作用域下的
 `open_id`；重复 ID 自动去重，未配置时不添加 `@`。该配置独立于允许终端投递的
-`FEISHU_ALLOWED_OPEN_IDS`，不改变入站权限，也不使用 `@所有人`。
+`services.feishu.allowedOpenIds`，不改变入站权限，也不使用 `@所有人`。
 首次建 root 的 timeout、reset、HTTP 5xx 等不确定传输失败会在 claim lease 内复用同一飞书
 UUID 有界重试；后续恢复也沿用该 UUID，不以新的顶层消息猜测结果。
 

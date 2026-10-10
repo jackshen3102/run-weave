@@ -504,6 +504,90 @@ APNs 私钥文件引用
 
 配置域：`services.feishu`。
 
+### services.feishu.role
+
+飞书运行角色
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | string；允许 null 恢复默认  |
+| 默认              | "standalone"                |
+| 所属模块          | cli/feishu                  |
+| 生效              | 所属进程重启                |
+| 敏感 / 远端可修改 | 否 / 是                     |
+| 约束              | 枚举：standalone、hub、node |
+| 显式迁移来源      | new field; no legacy source |
+
+### services.feishu.hub.host
+
+集中 Bridge 监听地址
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | string；允许 null 恢复默认  |
+| 默认              | "127.0.0.1"                 |
+| 所属模块          | cli/feishu                  |
+| 生效              | 所属进程重启                |
+| 敏感 / 远端可修改 | 否 / 是                     |
+| 约束              | 按字段类型校验              |
+| 显式迁移来源      | new field; no legacy source |
+
+### services.feishu.hub.port
+
+集中 Bridge 监听端口
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | integer；允许 null 恢复默认 |
+| 默认              | null                        |
+| 所属模块          | cli/feishu                  |
+| 生效              | 所属进程重启                |
+| 敏感 / 远端可修改 | 否 / 是                     |
+| 约束              | ≥ 1；≤ 65535                |
+| 显式迁移来源      | new field; no legacy source |
+
+### services.feishu.hub.backends.<backendId>.token
+
+节点独立接入凭据
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | string；允许 null 恢复默认  |
+| 默认              | null                        |
+| 所属模块          | cli/feishu                  |
+| 生效              | 所属进程重启                |
+| 敏感 / 远端可修改 | 是 / 是                     |
+| 约束              | 按字段类型校验              |
+| 显式迁移来源      | new field; no legacy source |
+
+### services.feishu.node.url
+
+集中 Bridge HTTPS origin
+
+| 属性              | 合同                                                    |
+| ----------------- | ------------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                              |
+| 默认              | null                                                    |
+| 所属模块          | cli/feishu                                              |
+| 生效              | 所属进程重启                                            |
+| 敏感 / 远端可修改 | 否 / 是                                                 |
+| 约束              | HTTPS origin；无用户信息、query、fragment，路径只能是 / |
+| 显式迁移来源      | new field; no legacy source                             |
+
+### services.feishu.node.token
+
+本节点接入凭据
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | string；允许 null 恢复默认  |
+| 默认              | null                        |
+| 所属模块          | cli/feishu                  |
+| 生效              | 所属进程重启                |
+| 敏感 / 远端可修改 | 是 / 是                     |
+| 约束              | 按字段类型校验              |
+| 显式迁移来源      | new field; no legacy source |
+
 ### services.feishu.appId
 
 飞书应用 ID

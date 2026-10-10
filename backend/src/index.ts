@@ -1,3 +1,4 @@
+import { createFeishuRouter } from "./routes/feishu";
 import { registerConnectionRoutes } from "./routes/connection-identity";
 import { createResourceMonitorRouter } from "./routes/resource-monitor";
 import { createDesktopLocalBrowserRouter, createLocalBrowserCapabilitiesRouter } from "./routes/browser-local";
@@ -181,6 +182,7 @@ function createHttpApp(
     "/internal/terminal-completion",
     requireTunnelAuth,
     createInternalTerminalCompletionRouter({
+      feishuConnector: services.feishuConnector,
       completionEventService: services.terminalCompletionEventService,
       terminalSessionManager: services.terminalSessionManager,
       hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
@@ -211,6 +213,7 @@ function createHttpApp(
     res.status(404).json({ message: "Not found" });
   });
   app.use("/api", requireTunnelAuth);
+  app.use("/api/feishu", requireAuth, createFeishuRouter(services.feishuConnector, services.terminalSessionManager));
   registerRemoteBrowserRoutes(app, services.authService, services.terminalSessionManager, requireTunnelAuth, resolveStoragePaths().browserProfileDir, backendIdentity?.backendId ?? String(process.pid));
   app.use(
     "/api/auth",

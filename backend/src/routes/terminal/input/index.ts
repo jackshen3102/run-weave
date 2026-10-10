@@ -1,12 +1,18 @@
+import {
+  submitTerminalInput,
+  TerminalInputSubmissionError,
+} from "../../../terminal/application/submit-input";
 import type { TerminalTextAttachmentDelivery } from "../../../terminal/attachments/text-attachment-delivery";
-import { registerTerminalTextAttachmentRoutes, sendTextAttachmentError } from "./text-attachment";
+import {
+  registerTerminalTextAttachmentRoutes,
+  sendTextAttachmentError,
+} from "./text-attachment";
 import type { Router } from "express";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type {
   SendTerminalInterruptRequest,
   SendTerminalInterruptResponse,
   SendTerminalInputRequest,
-  TerminalInputMode,
 } from "@runweave/shared/terminal/input";
 import { aiDiagnosticLog } from "../../../diagnostic-logs/recorder";
 import { logger } from "../../../logging/index";
@@ -78,7 +84,7 @@ async function reconcileInterruptAgentState(params: {
       return;
     }
     const panel = params.panel
-      ? params.terminalSessionManager.getPanel(params.panel.id) ?? null
+      ? (params.terminalSessionManager.getPanel(params.panel.id) ?? null)
       : null;
     const target = panel ?? session;
     if (target.activeCommand === null) {
@@ -121,7 +127,12 @@ export function registerTerminalInputRoutes(
   terminalSessionManager: TerminalSessionManager,
   options?: TerminalInputRouteOptions,
 ): void {
-  if (options?.textAttachmentDelivery) registerTerminalTextAttachmentRoutes(router, terminalSessionManager, options.textAttachmentDelivery);
+  if (options?.textAttachmentDelivery)
+    registerTerminalTextAttachmentRoutes(
+      router,
+      terminalSessionManager,
+      options.textAttachmentDelivery,
+    );
   router.post("/session/:id/input", async (req, res) => {
     const parsed = sendTerminalInputSchema.safeParse(
       req.body as SendTerminalInputRequest,
@@ -169,78 +180,35 @@ export function registerTerminalInputRoutes(
     }
 
     if (parsed.data.textAttachmentIds?.length) {
-      if (!options.textAttachmentDelivery) { res.status(503).json({ message: "文本附件服务不可用" }); return; }
-      try { res.json(await options.textAttachmentDelivery.composer(session.id, parsed.data)); }
-      catch (error) { sendTextAttachmentError(res, error); }
+      if (!options.textAttachmentDelivery) {
+        res.status(503).json({ message: "文本附件服务不可用" });
+        return;
+      }
+      try {
+        res.json(
+          await options.textAttachmentDelivery.composer(
+            session.id,
+            parsed.data,
+          ),
+        );
+      } catch (error) {
+        sendTextAttachmentError(res, error);
+      }
       return;
     }
     try {
-      const inputMode = parsed.data.mode as TerminalInputMode | undefined;
-      const panelTarget =
-        isTmuxBackedSession(session) && options.tmuxService
-          ? await resolvePanelTarget(
-              terminalSessionManager,
-              session,
-              {
-                tmuxService: options.tmuxService,
-                terminalEventService: options.terminalEventService,
-              },
-              {
-                panelId: parsed.data.panelId,
-                panelAlias: parsed.data.panelAlias,
-                role: parsed.data.role,
-              },
-              "explicit-or-active",
-            )
-          : undefined;
-      if (
-        parsed.data.quickInputSource === "web_browser_annotation" &&
-        !getTerminalSessionAgent(panelTarget?.panel ?? session)
-      ) {
-        res.status(409).json({
-          message: "Browser comments require an active Agent terminal",
-        });
-        return;
-      }
-      const payload = await sendInputToSession(
+      const payload = await submitTerminalInput(
         terminalSessionManager,
-        options,
+        options ?? {},
         session,
-        parsed.data.data,
-        inputMode,
-        parsed.data.operationId,
-        panelTarget?.paneTarget,
-        parsed.data.submit,
-        parsed.data.submitKey,
-        parsed.data.expectedThreadId,
+        parsed.data,
       );
-      if (
-        options?.quickInputService &&
-        payload.inputAccepted &&
-        parsed.data.recordQuickInput !== false
-      ) {
-        try {
-          await options.quickInputService.recordRecentInput({
-            data: parsed.data.data,
-            mode: inputMode,
-            projectId: session.projectId,
-            terminalSessionId: session.id,
-            cwd: session.cwd,
-            source: parsed.data.quickInputSource ?? "api_terminal_input",
-            acceptedAt: payload.acceptedAt,
-          });
-        } catch (error) {
-          terminalLogger.warn("terminal.quick-input.record.failed", {
-            message: "Terminal quick input record failed",
-            terminalSessionId: session.id,
-            projectId: session.projectId,
-            inputMode: inputMode ?? "raw",
-            error,
-          });
-        }
-      }
       res.status(200).json(payload);
     } catch (error) {
+      if (error instanceof TerminalInputSubmissionError) {
+        res.status(error.status).json({ message: error.message });
+        return;
+      }
       if (sendTerminalPanelRouteError(res, error)) {
         return;
       }

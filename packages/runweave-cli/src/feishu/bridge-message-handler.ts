@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type * as Lark from "@larksuiteoapi/node-sdk";
-import type { TerminalHttpClient } from "../client/terminal-http-client.js";
+import type { SendTerminalInputRequest } from "@runweave/shared/terminal/input";
 import { HttpError } from "../errors.js";
 import type { FeishuConfig } from "./config.js";
 import type { FeishuStateStore, FeishuTopicActive } from "./state-store.js";
@@ -27,6 +27,15 @@ export interface FeishuInboundMessageEvent {
   };
 }
 
+export interface FeishuTerminalClient {
+  withSignal(signal: AbortSignal): FeishuTerminalClient;
+  getSession(id: string): Promise<unknown>;
+  sendInput(
+    id: string,
+    input: SendTerminalInputRequest,
+  ): Promise<{ inputAccepted?: boolean; inputEnqueued?: boolean }>;
+}
+
 export class FeishuBridgeMessageHandler {
   private readonly topicTails = new Map<string, Promise<void>>();
 
@@ -35,7 +44,11 @@ export class FeishuBridgeMessageHandler {
       config: FeishuConfig;
       store: FeishuStateStore;
       client: Lark.Client;
-      terminalClient: TerminalHttpClient;
+      terminalClient?: FeishuTerminalClient;
+      clientForTopic?: (
+        topic: FeishuTopicActive,
+        expiresAt: number,
+      ) => FeishuTerminalClient;
       stderr: Pick<NodeJS.WriteStream, "write">;
       signal: AbortSignal;
     },
@@ -61,6 +74,7 @@ export class FeishuBridgeMessageHandler {
         (await this.params.store.beginDelivery(
           event.message.message_id,
           topic.terminalSessionId,
+          topic.backendId,
         )) === "started"
       ) {
         await this.params.store.finishDelivery(
@@ -75,7 +89,13 @@ export class FeishuBridgeMessageHandler {
       }
       return;
     }
-    if (!(await this.params.store.queueEvent(event, topic.terminalSessionId)))
+    if (
+      !(await this.params.store.queueEvent(
+        event,
+        topic.terminalSessionId,
+        topic.backendId,
+      ))
+    )
       return;
     this.schedule(event);
   }
@@ -140,6 +160,7 @@ export class FeishuBridgeMessageHandler {
     const deliveryState = await this.params.store.beginDelivery(
       event.message.message_id,
       topic.terminalSessionId,
+      topic.backendId,
     );
     if (deliveryState !== "started") return;
 
@@ -157,6 +178,17 @@ export class FeishuBridgeMessageHandler {
     }
 
     const entry = await this.params.store.delivery(event.message.message_id);
+    if (
+      entry &&
+      (entry.backendId !== topic.backendId ||
+        entry.terminalSessionId !== topic.terminalSessionId)
+    ) {
+      await this.params.store.finishDelivery(
+        event.message.message_id,
+        "failed",
+      );
+      return;
+    }
     const deadline = Date.parse(entry?.expiresAt ?? new Date().toISOString());
     let inputAttempted = false;
     let lastError: unknown = new Error("Delivery expired before sending");
@@ -172,7 +204,8 @@ export class FeishuBridgeMessageHandler {
         ),
       ]);
       try {
-        const client = this.params.terminalClient.withSignal(signal);
+        const client = (this.params.clientForTopic?.(topic, deadline) ??
+          this.params.terminalClient)!.withSignal(signal);
         // Read-only preflight can be retried across backend downtime.
         await client.getSession(topic.terminalSessionId);
         signal.throwIfAborted();
@@ -259,6 +292,7 @@ export class FeishuBridgeMessageHandler {
       await this.params.store.clearTopic({
         chatId: topic.chatId,
         terminalSessionId: topic.terminalSessionId,
+        backendId: topic.backendId,
         expectedRootMessageId: topic.rootMessageId,
       });
     }

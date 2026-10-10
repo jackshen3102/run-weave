@@ -1,3 +1,4 @@
+import { createFeishuNode } from "../feishu/runtime";
 import { createAuthRuntime } from "./auth-runtime";
 import { DevResourcesService } from "../dev-resources/service";
 import { createTerminalTaskMonitoring, createTerminalTaskServices } from "./terminal-task-monitoring";
@@ -458,6 +459,10 @@ async function assembleRuntimeServices(
     },
   );
   resources.defer("runtime-status", () => runtimeStatus.dispose());
+  const feishuConnector = createFeishuNode(connectionIdentity, terminalSessionManager, {
+    ptyService, runtimeRegistry: terminalRuntimeRegistry, tmuxService, tmuxOutputWatcher, terminalEventService, terminalStateService, quickInputService: terminalQuickInputService,
+  }, runtimeStatus.registry);
+  resources.defer("feishu-node", () => feishuConnector?.close());
   const deviceMonitoring = await createDeviceMonitor(
     storagePaths.browserProfileDir,
     authService,
@@ -511,6 +516,7 @@ async function assembleRuntimeServices(
     resourceMonitor,
     start: (controlPlaneBaseUrl) => {
       if (disposed) return;
+      feishuConnector?.start();
       textAttachmentFiles?.start();
       activity.start();
       agentTeamService.initialize();
@@ -525,6 +531,7 @@ async function assembleRuntimeServices(
       return resources.dispose();
     },
     runtimeStatus,
+    feishuConnector,
     devResources,
     activityStore,
     activityRecorder,

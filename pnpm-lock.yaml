@@ -454,7 +454,13 @@ importers:
       "@larksuiteoapi/node-sdk":
         specifier: ^1.70.0
         version: 1.70.0
+      ws:
+        specifier: ^8.18.1
+        version: 8.19.0
     devDependencies:
+      "@types/ws":
+        specifier: ^8.5.14
+        version: 8.18.1
       "@runweave/config-node":
         specifier: workspace:*
         version: link:../config-node

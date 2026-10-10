@@ -95,6 +95,24 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
       if (missing >= 0) issue(`${domain}.${keys[missing]}`, "CONFIG_CREDENTIAL_GROUP_INCOMPLETE");
     }
   }
+  const feishuRole = readConfigurationPath(value, "services.feishu.role") ?? "standalone";
+  const feishu = (key: string) => readConfigurationPath(value, `services.feishu.${key}`);
+  const tokenValid = (token: unknown) => typeof token === "string" && /^[A-Za-z0-9_-]{43,256}$/.test(token);
+  if (feishuRole === "node") {
+    if (!feishu("node.url") || !tokenValid(feishu("node.token"))) issue("services.feishu.node", "CONFIG_FEISHU_NODE_INVALID");
+    if (feishu("legacyWebhook.transport") === "webhook") issue("services.feishu.role", "CONFIG_FEISHU_ROLE_CONFLICT");
+  }
+  if (feishuRole === "hub") {
+    for (const key of ["appId", "appSecret", "targetChatId", "hub.port"]) if (!feishu(key)) issue(`services.feishu.${key}`, "CONFIG_FEISHU_HUB_INCOMPLETE");
+    const backends = feishu("hub.backends");
+    const tokens = new Set<string>();
+    if (!isConfigurationObject(backends) || !Object.keys(backends).length) issue("services.feishu.hub.backends", "CONFIG_FEISHU_HUB_INCOMPLETE");
+    else for (const [backendId, node] of Object.entries(backends)) {
+      if (!/^[a-f0-9]{64}$/.test(backendId) || !isConfigurationObject(node) || !tokenValid(node.token) || tokens.has(String(node.token))) issue("services.feishu.hub.backends", "CONFIG_FEISHU_NODE_INVALID");
+      else tokens.add(String(node.token));
+    }
+    if (feishu("legacyWebhook.transport") === "webhook") issue("services.feishu.role", "CONFIG_FEISHU_ROLE_CONFLICT");
+  }
   const roles = readConfigurationPath(value, "agents.team.roles");
   if (isConfigurationObject(roles)) for (const [role, selection] of Object.entries(roles)) {
     const key = `agents.team.roles.${configurationPathSegment(role)}`;

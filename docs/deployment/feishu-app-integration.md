@@ -1,305 +1,149 @@
 # 飞书应用通知与 Terminal 话题会话
 
-本文说明如何配置飞书企业自建应用，使一个目标群中的一个 Runweave Terminal ID 对应一个
-长期飞书话题。第一条真实 completion 通知是话题 root，后续 completion 都回复同一 root；
-白名单用户在该话题内发送纯文本时无需 `@bot`，Bridge 会把输入投递回对应 Terminal。
+一个机器人服务一个目标群。机器人首次完成通知自动建立话题；用户只在已有绑定话题内回复，
+输入进入原机器的原 Terminal 当前活动 Panel。DONE（✅）表示输入被 Backend 接收并入队，
+后续回答由原 Hook 通知链返回，不表示 AI 已完成。
 
-Bridge 只确认 Backend 是否接受并入队输入，不等待 AI CLI 执行完成。成功时只在用户消息上
-添加 `DONE`（✅）reaction；失败时在原话题回复原因。后续 AI completion 由现有 Hook 自然
-回到同一话题。
+## 运行角色
 
-## 工作方式
+| `services.feishu.role` | 运行方式                                                         | 凭据                                   |
+| ---------------------- | ---------------------------------------------------------------- | -------------------------------------- |
+| `standalone`（默认）   | 一份 `rw feishu bridge` 对应一个 Backend，继续使用原 HTTP 登录态 | 本机保存飞书应用凭据                   |
+| `hub`                  | 一份集中 `rw feishu bridge` 收发飞书消息，维护话题与投递记录     | 仅中心保存飞书应用凭据和每机独立 token |
+| `node`                 | Backend 内置连接模块主动连中心，随 Backend 启停                  | 仅中心 HTTPS origin 和本机 token       |
 
-```text
-AI CLI Stop Hook
-  → runweave-hook-bridge
-  → rw feishu notify
-  → 无 topic：发送真实 completion 作为顶层 root
-     有 topic：reply root + reply_in_thread
-  → v2 state 保存 chat + Terminal → root
+集中模式无需访问远端 Backend IP、开放远端入站端口或逐机部署 Bridge。只有中心需要被三台机器访问。
+不接受群顶层任务、私聊、未授权用户、未知 root、错误 thread 或非文本消息；没有选机器、新建终端、
+手动认领话题、离线通知补发、负载均衡或 HA。
 
-目标话题中的用户纯文本
-  → 飞书长连接推送 im.message.receive_v1
-  → 校验 user + allowlist + group + chat + text + root + thread
-  → root 定位 Terminal，Backend 选择当前活动 Panel
-  → Terminal Input API（prompt_replace + enter + confirm short）
-  → 成功：DONE reaction；失败：原话题文字回执
+## 飞书应用准备
+
+使用一个已有企业自建应用，开启机器人并加入目标群。所需权限为
+`im:message:send_as_bot`、`im:message.group_msg`、`im:message.reactions:write_only`。
+事件订阅选择长连接，订阅 `im.message.receive_v1`，修改权限后发布应用版本。
+允许群内未 @ 机器人消息后，Bridge 仍执行自己的群、用户、root/thread 白名单校验。
+
+同一应用的多个长连接客户端会竞争事件，而不是广播。切换 hub 前停止该应用的旧 Bridge。
+可以在 Bridge 未运行时使用 `rw feishu discover --instance stable --json` 获取首次消息的 openId/chatId；
+发现命令不投递终端。[飞书 SDK 说明](https://github.com/larksuite/node-sdk#subscribing-to-events-using-long-connection-mode)
+
+## 配置与启动
+
+业务配置以实例 `settings.yaml` 为准，不再 source 飞书 env 文件。按
+[配置 CLI](../cli/configuration.md) 合并以下字段到正确实例，保留原配置其他域；不要把 token 写入命令行。
+配置改变后重启对应 Backend/Bridge，保存成功不等于运行进程已采用。
+
+中心配置片段（backendId 替换为真实 64 位十六进制身份，三台机器各配置一个条目）：
+
+```yaml
+services:
+  feishu:
+    role: hub
+    appId: cli_xxx
+    appSecret: <应用密钥>
+    targetChatId: oc_xxx
+    allowedOpenIds: [ou_xxx]
+    notifyOpenIds: []
+    hub:
+      host: 127.0.0.1
+      port: 7892
+      backends:
+        <backendId>:
+          token: <该机器独立的32字节随机值的base64url编码>
 ```
 
-飞书自定义机器人 Webhook 只能保留单向通知，不能参与话题会话或入站投递。
+backendId 使用各 Backend 已登录的 `GET /api/connection/identity` 返回的 `identityId`。
+它来自本机持久 ConnectionIdentityService，不使用 IP、机器名或通用 stable 实例名。
+克隆状态目录会复制身份，不能将同一身份用于两台机器；身份损坏时先修复原身份，不自动换 ID。
+每机 token 必须不同，长度为 43–256 个 base64url 字符；可在私有文件中生成 32 字节随机 token。
 
-## 一、创建和授权飞书应用
+每台机器配置片段：
 
-在飞书开放平台创建企业自建应用，开启“机器人”能力并将机器人加入目标群。妥善保存 App ID
-和 App Secret，不要写入仓库或日志。
+```yaml
+services:
+  feishu:
+    role: node
+    node:
+      url: https://bridge.example.com
+      token: <仅该机器的token>
+```
 
-应用至少需要以下权限：
+node 不需要 appId/appSecret，不启动 `rw feishu bridge`，也不能同时启用 legacyWebhook。
+生产 origin 必须是 HTTPS，无用户信息、路径、query 或 fragment；Backend 转为 WSS 后通过
+`/feishu/backends/<backendId>` 连接。TLS 由中心反向代理终止，代理需转发 WebSocket Upgrade、
+Authorization，读超时至少 60 秒；Bridge 默认只监听 loopback。节点不跟随重定向。
 
-| 用途                                           | 权限                                        |
-| ---------------------------------------------- | ------------------------------------------- |
-| 发送 completion、话题回复和失败回执            | `im:message:send_as_bot`                    |
-| 接收目标群中未 `@bot` 的普通消息并读取消息关系 | “获取群组中所有消息” `im:message.group_msg` |
-| 添加成功 reaction                              | `im:message.reactions:write_only`           |
-
-在“事件与回调”中选择“使用长连接接收事件”，订阅“接收消息 v2.0”
-`im.message.receive_v1`。权限或事件发生变化后必须重新发布应用版本；仅修改开发后台但未发布，
-Bridge 不会收到无 `@bot` 的群消息。
-
-群消息读取范围扩大后，安全边界由 Bridge 收紧：只有目标群、白名单用户、已绑定 Runweave
-topic 内的纯文本才可能进入 Terminal。群外、非白名单、未知 root、群顶层、私聊和非文本消息
-静默忽略，不写 processed、不查询 Terminal，也不回复权限信息。
-
-## 二、准备 CLI 和 Hook
-
-源码仓库先构建 CLI：
+构建并在中心绑定实例启动（中心不要求运行 Backend 或登录三个 Backend）：
 
 ```bash
-pnpm --filter @runweave/cli build
-node packages/runweave-cli/dist/index.js --version
+pnpm cli:build
+rw config validate --instance stable --json
+rw feishu bridge --instance stable --json
 ```
 
-Bridge 使用正常 Runweave 登录态调用 Terminal Input API，不直接操作 tmux：
+Standalone 保持原 app 配置与 Backend 登录，使用相同启动命令，省略 role 或配置 standalone。
+Hook 安装与绑定 runtime CLI 见 [完成 Hook](../architecture/terminal-completion-hooks.md)。三台 node 的
+Backend 和 Hook 使用的 `rw` 都需更新到支持 node 的同一版本。
+
+## 收发、状态与故障
+
+- 本机仍负责 60 秒时长、30 秒宽限、已查看状态及飞书回复例外。Hook 的 `rw feishu notify`
+  领取一次发送资格后，通过 Hook token 调用本机 `POST /internal/terminal-completion/feishu/notify`。
+  显式手动 notify 使用 CLI 登录态访问 `POST /api/feishu/notify`，不会绕过认证。
+- 中心按认证连接取得 backendId，统一添加通知 @ 用户与机器身份前 12 位。话题键为
+  `(chatId, backendId, terminalSessionId)`；回复按 chat + root 查绑定，同话题串行。
+- 连接内仅允许 terminal.get、terminal.input、notify、结果与运行状态报告，不代理任意 HTTP 或 shell。
+  输入最多 256 KiB，帧最多 512 KiB，每连接最多 64 个在途请求；同身份存活连接不允许被另一连接抢占。
+- WS 每 15 秒心跳，45 秒未回应清除；节点按 1–30 秒退避并加抖动重连。中心每 5 秒提供原有飞书状态报告，
+  断连后 Backend 沿用来源 TTL 显示不可用。本地终端不依赖中心存活。
+- 未尝试输入从飞书消息创建起最多等待 120 秒，只等原机器；过期提示失败。输入尝试后断连、超时或
+  结果丢失转 unknown，提示检查终端，不自动重投。中心重启仅续投未尝试且未过期项。
+- 通知转发最多等待 40 秒，不持久排队、不自动补发。原有 claim 后发送失败可能丢一次通知的限制保留。
+  输入去重仍保留 24 小时，不承诺 exactly-once；话题绑定不因时间自动过期。
+- 状态目录仍为 `storage.feishuDirectory`。Standalone 使用 v2，hub 使用 v3；版本不匹配拒绝启动，
+  不把错误文件当空状态覆盖。文件权限 0600，包含待投递事件正文，应按凭据级别保护。
+
+## 离线迁移与回滚
+
+先备份各实例配置及 `bridge-state.json`，暂停 Hook 通知发送并停旧 Bridge，确认没有在途创建。
+中心使用独立目录。只导入所选应用、目标群的旧话题；其他应用的话题不接管，其下一次正常通知
+会由统一机器人自动建立话题，用户无需手工创建。
+
+提供私有 JSON 清单后，从仓库执行 `pnpm --dir backend exec tsx ../scripts/feishu/migrate-state.ts /absolute/manifest.json`：
+
+```json
+{
+  "mode": "import",
+  "appId": "cli_xxx",
+  "chatId": "oc_xxx",
+  "sources": [
+    {
+      "appId": "cli_xxx",
+      "backendId": "<真实64位身份>",
+      "file": "/backup/node-a/bridge-state.json"
+    }
+  ],
+  "output": "/new/hub/bridge-state.json"
+}
+```
+
+清单需列齐同应用来源。脚本验证完再写新文件，拒绝覆盖已存在输出、重复 root、重复消息 ID、
+未完成 creating 或不匹配群；不会修改源文件。切换窗口遗留 waiting 转 failed、processing 转 unknown，
+不在迁移后意外执行旧输入。迁移完成后启 hub、再启三台 node。
+
+回滚先停 hub/node、暂停通知，保存中心状态。清单改为 `mode: "rollback"`，增加
+`hubFile: "/backup/hub/bridge-state.json"`，output 改为不存在的输出文件所在目录；sources 保留原 v2 备份。
+脚本输出每机 `<backendId>.json`，将新绑定和去重记录合入各自旧格式，attempted/in-flight 保守转 unknown。
+核对后恢复配置与这些合并后的状态，再启 standalone；不能直接恢复旧备份丢掉切换期间的去重记录。
+不同应用的老实例按自己的备份恢复，不导入统一机器人消息。
+
+## 验证
 
 ```bash
-rw auth login \
-  --base-url http://127.0.0.1:5001 \
-  --username <Runweave 用户名>
-rw auth status --json
+pnpm --dir backend exec tsx ../scripts/verify/feishu/central-bridge.ts
+pnpm testplan:validate docs/testing/terminal/feishu-central-bridge.testplan.yaml
 ```
 
-Electron 会安装 completion launcher 与飞书脚本。CLI-only 环境可安装仓库运行副本：
-
-```bash
-install -d -m 0755 ~/.runweave/bin ~/.runweave/hooks
-install -m 0755 electron/resources/hooks/runweave-hook-bridge.cjs \
-  ~/.runweave/bin/runweave-hook-bridge
-install -m 0755 electron/resources/hooks/feishu_stop_notify.sh \
-  ~/.runweave/hooks/feishu_stop_notify.sh
-```
-
-仅复制脚本不够；AI CLI 还必须加载 Runweave Stop Hook。完整安装与身份门禁见
-[`terminal-completion-hooks.md`](../architecture/terminal-completion-hooks.md)。
-
-## 三、配置
-
-```bash
-FEISHU_NOTIFY_TRANSPORT=app
-FEISHU_APP_ID=<飞书应用 App ID>
-FEISHU_APP_SECRET=<飞书应用 App Secret>
-FEISHU_TARGET_CHAT_ID=<唯一目标群 chat_id>
-FEISHU_ALLOWED_OPEN_IDS=<允许投递的用户 open_id，多个用逗号分隔>
-RUNWEAVE_BASE_URL=http://127.0.0.1:5001
-RUNWEAVE_FEISHU_STATE_DIR=<topic 与幂等状态目录>
-RUNWEAVE_CLI_BIN=<rw 可执行文件或 dist/index.js 的绝对路径>
-```
-
-| 字段                                  | 说明                                                                 |
-| ------------------------------------- | -------------------------------------------------------------------- |
-| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 企业自建应用凭据，必须保密                                           |
-| `FEISHU_TARGET_CHAT_ID`               | completion 和入站会话唯一允许的目标群；`notify`、`bridge` 都要求配置 |
-| `FEISHU_ALLOWED_OPEN_IDS`             | Bridge 允许远程输入的非空用户白名单；不支持“允许所有人”              |
-| `RUNWEAVE_BASE_URL`                   | Bridge 访问的 Backend；本机通常为 `http://127.0.0.1:5001`            |
-| `RUNWEAVE_FEISHU_STATE_DIR`           | `bridge-state.json`、跨进程锁和 Bridge PID lease 所在目录            |
-| `RUNWEAVE_CLI_BIN`                    | Hook 调用 `rw feishu notify` 使用的 CLI 路径                         |
-
-配置文件和 `bridge-state.json` 权限应为 `0600`。state 只保存 topic 标识、Terminal ID 和
-processed 状态，不保存 completion 或用户输入正文。`FEISHU_BINDING_TTL_HOURS` 已废弃且
-CLI/Hook 均不再读取；active topic 跟随 Terminal 生命周期，processed 记录仍在 24 小时后清理。
-
-不知道 chat ID 或 open ID 时，在 Bridge 未运行的机器上执行：
-
-```bash
-export FEISHU_APP_ID=<app-id>
-export FEISHU_APP_SECRET=<app-secret>
-rw feishu discover --json
-```
-
-随后让目标用户向机器人发送一条消息。`discover` 只输出首个用户消息的 `openId` 和 `chatId`
-后退出，不创建 topic 或投递 Terminal。
-
-## 四、启动唯一 Bridge
-
-同一 App ID 只能运行一个 `rw feishu bridge` 消费者。飞书长连接是集群消费，不会把同一事件
-广播给每台机器；第二个 Bridge 可能拿走事件，却没有第一台机器的本地 Terminal 和 state。
-
-### Linux systemd
-
-将配置保存为权限 `0600` 的 `/etc/runweave/feishu.env`，再创建：
-
-```ini
-[Unit]
-Description=Runweave Feishu Bridge
-After=network-online.target
-
-[Service]
-Type=simple
-EnvironmentFile=/etc/runweave/feishu.env
-ExecStart=/absolute/path/to/rw feishu bridge --json
-Restart=always
-RestartSec=3
-UMask=0077
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now runweave-feishu-bridge.service
-sudo systemctl status runweave-feishu-bridge.service
-```
-
-### macOS LaunchAgent
-
-将配置保存为 `~/.runweave/feishu_notify.env` 并执行 `chmod 600`。wrapper 加载配置，
-在 Bridge 运行期间阻止系统因空闲自动休眠，再 `exec` Bridge：
-
-```bash
-#!/usr/bin/env bash
-set -a
-source "$HOME/.runweave/feishu_notify.env"
-set +a
-/usr/bin/caffeinate -i -w "$$" &
-exec /absolute/path/to/rw feishu bridge --json
-```
-
-`exec` 保留 wrapper 的 PID；`caffeinate -w` 跟随该 PID，Bridge 退出后自动释放
-防休眠断言。`-i` 允许锁屏和显示器熄屏，但会在接电和电池供电时阻止空闲系统休眠；
-它不保证合盖或主动选择睡眠后仍可远程使用。需要恢复自动休眠时停止 Bridge。
-手机可以使用移动网络，无需与 Mac 在同一局域网；Mac 必须联网并持续运行。
-
-Bridge、飞书状态写入和 CLI 凭证刷新使用操作系统文件描述符锁。锁文件以 `.native`
-结尾并永久保留；锁的占用由内核决定，进程正常退出、崩溃或机器重启会释放，休眠不会
-使仍在运行的 Bridge 丢失锁。不要删除或替换 `.native` 文件，否则可能产生两个不同
-inode 的锁，破坏单实例约束。旧版 `bridge.pid` 的内容不再参与锁判断。
-
-从 PID 锁版本升级时，先停止旧 Bridge 和正在写入同一配置/状态目录的旧 CLI，再安装
-新 CLI 并启动 Bridge；不要让新旧锁协议的进程并行写同一目录。CLI 的 npm 包、桌面包
-和独立 runtime 都必须携带 `fs-native-extensions` 原生依赖，不能只复制一个 JS 入口。
-
-LaunchAgent 使用 `~/Library/LaunchAgents/com.runweave.feishu-bridge.plist`，设置
-`RunAtLoad=true` 和 `KeepAlive=true`。`KeepAlive` 只负责重启退出的进程，不阻止系统
-休眠。重启命令：
-
-```bash
-launchctl kickstart -k gui/$(id -u)/com.runweave.feishu-bridge
-launchctl print gui/$(id -u)/com.runweave.feishu-bridge
-```
-
-用 `pmset -g assertions` 确认 `caffeinate` 持有 `PreventUserIdleSystemSleep`，再检查
-Bridge 日志中的 `websocket_ready` 和 `backend_ready`。这些检查证明防休眠断言和连接
-已生效；锁屏后的真实投递仍需按下方真实验收步骤核对 DONE 和 Terminal history。
-
-## 五、话题与路由合同
-
-### completion 通知
-
-- `(chatId, terminalSessionId)` 没有 topic 时，第一条真实 completion 直接成为顶层 root；
-  不发送占位、标题卡片或模拟消息。
-- 后续 completion 回复 root，并设置 `reply_in_thread: true`。
-- 同一 Terminal 的不同 Panel 共用 topic；不同 Terminal 或不同 chat 使用不同 topic。
-- root 只绑定 Terminal；state 不保存或累计 notification 到 Panel 的映射。
-- 多个独立 notify 进程并发首次通知时，以持久化 claim、30 秒 lease、飞书 UUID 幂等和 owner
-  CAS 收敛到一个 root。SDK HTTP 请求超时为 10 秒；首次 create 遇到 timeout、reset、HTTP
-  5xx 等传输结果未知错误时，在 lease 内用相同 UUID 最多重试一次，仍无法确认则保留
-  creating，后续通知继续沿用原 UUID 恢复。等待者不会无限轮询，也不会用新 UUID 猜测创建结果。
-
-### 用户输入
-
-- 白名单用户在有效话题内发送纯文本即可，无需 `@bot`；显式 mention 会被删除。
-- Terminal 只能由事件 `root_id` 对应的 active topic 决定。
-- Topic 内所有文本都不指定 Panel，由 Backend 在投递时选择当前活动 Panel；回复非根
-  completion 与直接在话题输入遵守相同规则。
-- 输入上限为 256 KiB。空文本或超长文本在合法话题中记录 failed 并回复原因。
-- 同 topic 按 SDK 回调顺序串行，不同 topic 可并行。每个入站 `message_id` 独立持久化去重；
-  Bridge 重启时遗留 `processing` 转为 `unknown`，不会自动重投。
-- Terminal API 的单条投递截止时间为 15 秒，并覆盖 401 后的 token refresh 和请求重试。send
-  前超时落为 failed；send 已开始但响应未知时落为 unknown。两者都释放当前 topic 队列并
-  保留 topic，相同 `message_id` 不自动重投。
-
-### 生命周期和故障
-
-- Bridge 启动后仅在完整 `listSessions()` 成功时清理已不存在 Terminal 的 active topics。
-- Terminal 404 时先完成失败回执尝试，再清除该 topic；Terminal 只是 exited 时保留。
-- 复用 root 前以及回复失败后，只有消息详情查询明确证明 root 已删除或不存在，才以
-  expected-root CAS 清除并让当前真实 completion 建立新 root。网络、限流、权限和无法确认
-  的错误保留旧 root。
-- reaction 或失败回执异常不改变已落盘的 Terminal 投递结果，也不重投输入。
-
-飞书 Topic 事件只提供 root/thread 关系，无法可靠给出用户正在回复的非根消息 ID，因此
-Topic 路由只绑定 Terminal，不把通知消息当作 Panel 地址。
-
-## 六、升级与回滚
-
-升级前停止旧 Bridge，并备份现有 state，且不输出文件内容：
-
-```bash
-install -m 0600 "$RUNWEAVE_FEISHU_STATE_DIR/bridge-state.json" \
-  "$RUNWEAVE_FEISHU_STATE_DIR/bridge-state.pre-topic-v2.bak"
-```
-
-无 `version` 的 v1 state 可读取其 processed 状态，但旧 `bindings` 不迁移为 topic。第一次 v2
-mutation 写入 `version: 2`；升级后的第一条新 completion 才建立 root，不扫描、编辑或删除
-历史飞书消息。
-
-回滚时：先停止新 Bridge，恢复旧 CLI/runtime；另存当前 v2 state 后恢复升级前 v1 备份，再
-启动旧 Bridge。升级期间产生的话题保留在飞书中。若撤销“获取群组中所有消息”权限，也必须
-重新发布应用版本。
-
-## 七、真实验收
-
-唯一当前测试合同是
-[`feishu-terminal-topic-conversations.testplan.yaml`](../testing/terminal/integrations/feishu-topic-conversations.testplan.yaml)。
-真实验收至少准备两个 Terminal 和一个双 Panel Terminal，并逐 case 隔离 fixture：
-
-1. 核对同 Terminal 只有一个顶层 root，后续 completion 的 `root_id` 相同。
-2. 在真实飞书客户端的话题输入框发送一个不含 `@bot` 的唯一文本。
-3. 核对用户消息的 DONE、`bridge-state.json` v2 topic/processed 和精确 Terminal/Panel history。
-4. 覆盖并发首次通知、快速连续输入、Bridge 重启、活动 Panel 切换、root 删除和拒绝路径。
-
-浏览器 API、静态代码或机器人自发消息不能证明飞书客户端的话题层级和无 `@bot` 用户事件。
-飞书 UI 验收需使用 `$computer-use`；若权限、客户端或测试应用不可用，应把对应 case 标为
-blocked，不得用 typecheck 代替动态通过。
-
-## 八、排障
-
-### 能通知，但无 `@bot` 消息没有事件
-
-- 确认已申请“获取群组中所有消息”并发布新版本。
-- 确认仍订阅 `im.message.receive_v1`，Bridge 长连接 ready。
-- 确认消息位于目标群的 active Runweave topic，而不是群顶层或旧 v1 通知。
-- 确认同一 App ID 没有第二个 Bridge 消费者。
-
-### 有事件，但没有 Terminal 输入
-
-- 核对 sender open ID、目标 chat、`root_id`、`thread_id` 和纯文本类型是否满足门禁。
-- 检查 `rw auth status --json`、Backend 可达性和 Terminal running 状态。
-- 确认目标 Terminal 存在、至少一个 Panel 仍运行，且预期 Panel 已设为当前活动 Panel。
-- 查看脱敏 Bridge 日志中的 message ID、Terminal ID、活动 Panel 路由和错误分类；日志不应有正文或 token。
-
-### 输入成功但没有 DONE
-
-检查 `im:message.reactions:write_only` 及机器人是否仍在群内。reaction 失败不会导致输入重投。
-
-### Hook 没有通知
-
-检查 `FEISHU_NOTIFY_TRANSPORT=app`、`RUNWEAVE_CLI_BIN`、
-`~/.runweave/feishu_notify.log`，以及 AI CLI pane 是否具有 Runweave Terminal/Hook 身份变量。
-
-## 九、Webhook 兼容模式
-
-```bash
-FEISHU_NOTIFY_TRANSPORT=webhook
-FEISHU_WEBHOOK_URL=<自定义机器人 webhook>
-FEISHU_WEBHOOK_SECRET=<可选签名密钥>
-```
-
-Webhook 只发送单向通知，不创建 topic state、不接收入站消息。`app` 与 `webhook` 两种 transport
-互斥，不支持双发；新接入使用 `app`。
-
-## 参考
-
-- [飞书接收消息事件](https://open.feishu.cn/document/server-docs/im-v1/message/events/receive)
-- [飞书回复消息](https://open.feishu.cn/document/server-docs/im-v1/message/reply)
-- [飞书获取指定消息](https://open.feishu.cn/document/server-docs/im-v1/message/get)
-- [飞书添加消息表情回复](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message-reaction/create)
+集成脚本使用三个真实节点进程、真实 WS/存储/消息处理器和 CLI→本机 Hook 鉴权通知入口，飞书服务与
+终端执行适配器受控。真实部署还需按 [验收计划](../testing/terminal/feishu-central-bridge.testplan.yaml)
+验证三台机器的实际网络/TLS、原话题输入、原终端执行和回答回传；脚本通过不能替代该闭环。

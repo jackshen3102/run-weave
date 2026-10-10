@@ -5,6 +5,7 @@ export const CONFIGURATION_ENUMS: Readonly<Record<string, readonly string[]>> = 
   "logging.level": ["error", "warn", "info", "http", "verbose", "debug", "silly"],
   "terminal.tmux.shutdownPolicy": ["preserve", "cleanup"],
   "services.suiji.ai.provider": ["disabled", "codex-cli"],
+  "services.feishu.role": ["standalone", "hub", "node"],
   "services.feishu.legacyWebhook.transport": ["app", "webhook"],
 };
 export const CONFIGURATION_CREDENTIAL_GROUPS: Readonly<Record<string, readonly string[]>> = {
@@ -24,5 +25,5 @@ export function configurationOwnedPath(key: string): boolean {
   return key.startsWith("storage.") || key === "logging.backendDirectory" || ["appServer.stateDirectory", "appServer.cloudSyncDirectory", "services.snapshotHost.directory", "services.pushGateway.directory", "services.suiji.storageDirectory"].includes(key);
 }
 export function configurationServiceOrigin(key: string): boolean {
-  return ["services.snapshotPublisher.url", "services.pushSender.gatewayURL"].includes(key);
+  return ["services.snapshotPublisher.url", "services.pushSender.gatewayURL", "services.feishu.node.url"].includes(key);
 }

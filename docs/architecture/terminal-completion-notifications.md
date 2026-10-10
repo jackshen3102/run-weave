@@ -75,9 +75,23 @@ hook 安装进用户全局 Claude/Codex/Trae 配置，会覆盖所有 AI CLI（�
 - **安装拷贝**：Electron 启动时 `installNotifyAssets()` 把它 `copyFile` 到 `~/.runweave/hooks/feishu_stop_notify.sh` 并 `chmod 0755`。
 - **launcher 调用**：`notifyFeishu` 调 `~/.runweave/hooks/feishu_stop_notify.sh`，存在才执行，stdin 传入原始 payload（注入正确 `source`、`terminalSessionId` 和 panel 上下文）。
 
+### 集中 Bridge
+
+`services.feishu.role` 默认为 standalone；hub 把一个飞书应用的收发和 v3 话题状态集中到
+一份 `rw feishu bridge`。各 Backend 在 node 角色使用现有持久 identityId 与独立 token
+主动连入中心，Hook 仍先按本机政策领取发送资格，再通过本机认证入口和 WSS 转发通知。
+机器不保存飞书密钥，中心不按 IP 调用远端 rw。
+
+中心 `(chatId, rootMessageId)` 查出 `(backendId, terminalSessionId)`，使用该认证连接提交
+固定 prompt_replace + submit；Backend 与原 HTTP 输入入口共用 `submitTerminalInput`，
+继续选择当前活动 Panel。只处理已有绑定话题回复，没有新增任务或手动选机器入口。
+未尝试输入保留 120 秒等待，已尝试未知结果不重投；通知无离线补发。
+实现入口为 CLI `feishu/hub-runtime.ts` 与 Backend `feishu/runtime.ts`；协议在 shared。
+配置、切换与状态版本合同见 [飞书部署](../deployment/feishu-app-integration.md)。
+
 ### 应用机器人 Terminal 话题会话
 
-默认 `FEISHU_NOTIFY_TRANSPORT=app` 时，脚本把完成通知 payload 和已生成文案交给
+应用模式（默认，未启用 `services.feishu.legacyWebhook.transport=webhook`）时，脚本把完成通知 payload 和已生成文案交给
 `rw feishu notify --stdin --json`。目标群中的 `(chatId, terminalSessionId)` 长期映射到
 一个飞书话题：第一条真实 completion 通知就是顶层 root，后续通知通过
 `reply_in_thread` 回复同一 root。v2 state 只保存 topic 和 24 小时 processed 幂等记录；
@@ -119,7 +133,7 @@ Terminal 被确认删除时清除本地 topic，exited 状态保留。复用 top
 ### 飞书脚本核心流程
 
 1. 从 stdin 读 payload JSON，只处理 `Stop` / `SubagentStop` 事件，其它直接 `return 0`。
-2. `source ~/.runweave/feishu_notify.env` 加载敏感配置（见下）；env 缺失则静默 `return 0`。
+2. 检查绑定的 runtime config root/instance；业务配置由绑定的 `rw` 从实例 `settings.yaml` 读取。
 3. 从 payload 取 `cwd` 和 `session_id`。
 4. 通过 `runweave-hook-payload.cjs` 与 Backend 完成 Hook 共用回复提取：优先明确的最终回复字段（包括 `last_assistant_message`），否则读取 transcript 数组或文件末尾最多 1 MiB，兼容 Codex、Claude 和 Coco 的文本记录，排除带 commentary phase 的中间消息；Coco 文件路径仍支持按 session ID 兜底。飞书正文截断 2500 字。
 5. 解析终端 ID：payload 的 `terminalId`/`terminalSessionId` 优先，否则 fallback 到 `RUNWEAVE_TERMINAL_SESSION_ID`/`RUNWEAVE_TMUX_SESSION_NAME`，再 fallback 到 `tmux display-message`。
@@ -129,27 +143,9 @@ Terminal 被确认删除时清除本地 topic，exited 状态保留。复用 top
 ### 敏感配置（env 控制、默认静默）
 
 应用凭据或兼容 Webhook 地址与密钥**不进仓库**。脚本优先读取
-`FEISHU_NOTIFY_ENV` 或 `~/.runweave/feishu_notify.env`；Linux 服务端在用户级文件
-不存在时回退到 `/etc/runweave/feishu.env`，从而与常驻 Bridge 共用同一份 `0600`
-配置：
-
-```bash
-FEISHU_NOTIFY_TRANSPORT=app
-FEISHU_APP_ID=<企业自建应用 App ID>
-FEISHU_APP_SECRET=<企业自建应用 App Secret>
-FEISHU_TARGET_CHAT_ID=<通知群 chat_id>
-FEISHU_ALLOWED_OPEN_IDS=<允许投递的用户 open_id，逗号分隔>
-FEISHU_NOTIFY_OPEN_IDS=<完成通知需要 @ 的用户 open_id，逗号分隔，可选>
-RUNWEAVE_FEISHU_STATE_DIR=<topic 与幂等状态目录>
-RUNWEAVE_CLI_BIN=<rw 可执行文件绝对路径>
-
-# 仅 FEISHU_NOTIFY_TRANSPORT=webhook 时使用：
-FEISHU_WEBHOOK_URL=<飞书群机器人 webhook 地址>
-FEISHU_WEBHOOK_SECRET=<加签密钥，可选>
-FEISHU_NOTIFY_DEBUG_PAYLOAD="0"
-```
-
-配置缺失时飞书记录脱敏错误并静默跳过；桌面通知与绿点不受影响。
+飞书业务配置使用实例 `settings.yaml` 的 `services.feishu` 域，旧 env 仅可通过显式配置迁移导入。
+角色、凭据和配置样例见 [飞书部署](../deployment/feishu-app-integration.md)。脚本依赖 jq，
+错误写入绑定实例的 `runtime/feishu-notify.log`，不会阻塞 Agent Stop Hook。
 
 ### 运行依赖
 
@@ -188,7 +184,7 @@ launcher 源码放在 `plugins/toolkit/hooks/runweave-hook-bridge.cjs`，运行�
 
 静态检查：`pnpm --filter ./electron typecheck && pnpm --filter ./electron lint`
 
-端到端（macOS，需 `~/.runweave/feishu_notify.env` 配好飞书应用）：
+端到端（macOS，需实例 `settings.yaml` 配好飞书角色）：
 
 1. `pnpm dev:electron` 启动，使 launcher 与脚本被重写/拷贝为最新。
 2. 确认拷贝：`ls -l ~/.runweave/hooks/feishu_stop_notify.sh`（存在且可执行）。
