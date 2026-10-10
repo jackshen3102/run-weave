@@ -1,3 +1,5 @@
+import { feishuNotifyHandler } from "../feishu";
+import type { FeishuBridgeConnector } from "../../feishu/bridge-connector";
 import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import { Router } from "express";
 import { z } from "zod";
@@ -50,9 +52,14 @@ export function createInternalTerminalCompletionRouter(options: {
   completionEventService: TerminalCompletionEventService;
   terminalSessionManager: TerminalSessionManager;
   hookToken: string | undefined;
+  feishuConnector?: FeishuBridgeConnector;
 }): Router {
   const router = Router();
   const piCompletions = new Set<string>();
+  router.post("/feishu/notify", (req, res, next) => {
+    if (!options.hookToken || req.header("x-runweave-hook-token") !== options.hookToken) { res.status(401).json({ message: "Unauthorized" }); return; }
+    next();
+  }, feishuNotifyHandler(options.feishuConnector, options.terminalSessionManager));
 
   router.post("/feishu", async (req, res) => {
     if (!options.hookToken || req.header("x-runweave-hook-token") !== options.hookToken) {

@@ -36,7 +36,11 @@ export class FeishuRuntimeStatusReporter {
   private timer: ReturnType<typeof setInterval> | null = null;
   private inFlight: Promise<void> | null = null;
 
-  constructor(private readonly auth: AuthContext) {}
+  constructor(
+    private readonly auth:
+      | AuthContext
+      | ((report: RuntimeStatusReport) => Promise<void>),
+  ) {}
 
   start(): void {
     if (this.timer) return;
@@ -73,16 +77,18 @@ export class FeishuRuntimeStatusReporter {
   }
 
   publish(): Promise<void> {
-    this.inFlight ??= this.auth
-      .requestVoid("/api/runtime-status/reports/feishu-bridge", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(this.buildReport()),
-        signal: AbortSignal.timeout(5_000),
-      })
-      .finally(() => {
-        this.inFlight = null;
-      });
+    const send = () =>
+      typeof this.auth === "function"
+        ? this.auth(this.buildReport())
+        : this.auth.requestVoid("/api/runtime-status/reports/feishu-bridge", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(this.buildReport()),
+            signal: AbortSignal.timeout(5_000),
+          });
+    this.inFlight ??= send().finally(() => {
+      this.inFlight = null;
+    });
     return this.inFlight;
   }
 
@@ -129,7 +135,10 @@ export class FeishuRuntimeStatusReporter {
           now,
           ["feishu.configuration", "feishu.bridge-lease"],
         ),
-      ],
+      ].filter(
+        (item) =>
+          typeof this.auth !== "function" || item.id !== "feishu.backend-auth",
+      ),
     };
   }
 }

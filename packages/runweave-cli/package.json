@@ -22,10 +22,12 @@
     "@runweave/config-node": "workspace:*",
     "@runweave/shared": "workspace:*",
     "@types/node": "^22.13.10",
+    "@types/ws": "^8.5.14",
     "esbuild": "^0.25.0"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.70.0",
-    "fs-native-extensions": "1.5.1"
+    "fs-native-extensions": "1.5.1",
+    "ws": "^8.18.1"
   }
 }

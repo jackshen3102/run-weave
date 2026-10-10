@@ -1,3 +1,6 @@
+import { runFeishuHub } from "../feishu/hub-runtime.js";
+import { notifyFeishuNode } from "../feishu/node-notifier.js";
+import { isFeishuNotifyPayload } from "@runweave/shared/feishu/bridge";
 import { awaitFeishuNotification } from "../feishu/notification-policy.js";
 import { configuration, settingText } from "@runweave/config-node";
 import { notifyFeishuWebhook } from "../feishu/webhook-notifier.js";
@@ -40,24 +43,65 @@ export async function runFeishuCommand(
   configuration().requireDomain("services.feishu");
   let payload: NotifyPayload | undefined;
   if (subcommand === "notify") {
-    if (parsed.options.stdin !== true) throw new CliError("rw feishu notify requires --stdin", 2);
+    if (parsed.options.stdin !== true)
+      throw new CliError("rw feishu notify requires --stdin", 2);
     payload = JSON.parse(await readStdin(io.stdin)) as NotifyPayload;
-    if (!await awaitFeishuNotification(payload, io.env)) {
-      writeOutput(io.stdout, mode, { sent: false, reason: "notification_policy" });
+    if (!(await awaitFeishuNotification(payload, io.env))) {
+      writeOutput(io.stdout, mode, {
+        sent: false,
+        reason: "notification_policy",
+      });
       return;
     }
   }
-  if (subcommand === "notify" && settingText("services.feishu.legacyWebhook.transport") === "webhook") {
-    if (parsed.options.stdin !== true) throw new CliError("rw feishu notify requires --stdin", 2);
+  const role = settingText("services.feishu.role") ?? "standalone";
+  if (role === "node") {
+    if (subcommand !== "notify")
+      throw new CliError(
+        "Node role is managed by Backend; only rw feishu notify is available",
+        2,
+      );
+    const outgoing = {
+      terminalSessionId: payload?.terminalSessionId,
+      notificationText: payload?.notificationText,
+    };
+    if (!isFeishuNotifyPayload(outgoing))
+      throw new CliError("Invalid notification payload", 2);
+    const result = await notifyFeishuNode(
+      outgoing,
+      io.env,
+      getStringOption(parsed.options, "profile"),
+      getStringOption(parsed.options, "backend-port"),
+    );
+    writeOutput(io.stdout, mode, {
+      sent: true,
+      terminalSessionId: outgoing.terminalSessionId,
+      ...result,
+    });
+    return;
+  }
+  if (role === "hub" && subcommand === "notify")
+    throw new CliError(
+      "Hub notifications must originate from an authenticated Backend",
+      2,
+    );
+  if (
+    subcommand === "notify" &&
+    settingText("services.feishu.legacyWebhook.transport") === "webhook"
+  ) {
+    if (parsed.options.stdin !== true)
+      throw new CliError("rw feishu notify requires --stdin", 2);
     if (!payload) throw new CliError("Missing notification payload", 2);
-    await notifyFeishuWebhook(readRequiredString(payload.notificationText, "notificationText"));
+    await notifyFeishuWebhook(
+      readRequiredString(payload.notificationText, "notificationText"),
+    );
     writeOutput(io.stdout, mode, { sent: true, transport: "webhook" });
     return;
   }
   const config = resolveFeishuConfig(io.env, {
     requireTargetChatId: subcommand === "notify" || subcommand === "bridge",
   });
-  const store = new FeishuStateStore();
+  const store = new FeishuStateStore({ hub: role === "hub" });
   const client = createFeishuClient(config.appId, config.appSecret);
 
   if (subcommand === "notify") {
@@ -148,6 +192,17 @@ export async function runFeishuCommand(
     return;
   }
 
+  if (subcommand === "bridge" && role === "hub") {
+    await runFeishuHub(config, store, client, io.stderr, (port) =>
+      writeOutput(io.stdout, mode, {
+        started: true,
+        transport: "feishu_websocket",
+        role: "hub",
+        port,
+      }),
+    );
+    return;
+  }
   if (subcommand === "bridge") {
     if (!config.targetChatId) {
       throw new CliError("FEISHU_TARGET_CHAT_ID is required", 2);

@@ -5,7 +5,7 @@ import type { FeishuRuntimeStatusReporter } from "./runtime-status.js";
 
 export async function runBridgeConnection(params: {
   config: FeishuConfig;
-  auth: AuthContext;
+  auth?: AuthContext;
   dispatcher: Lark.EventDispatcher;
   stderr: Pick<NodeJS.WriteStream, "write">;
   signal: AbortSignal;
@@ -63,18 +63,22 @@ export async function runBridgeConnection(params: {
         client.close({ force: true });
         await client.start({ eventDispatcher: params.dispatcher });
       }
-      try {
-        await params.auth.requestJson("/api/auth/verify", {
-          signal: AbortSignal.any([params.signal, AbortSignal.timeout(10_000)]),
-        });
-        if (lastBackendState !== "ready") log("backend_ready");
-        params.statusReporter.markBackendConnected();
-        lastBackendState = "ready";
-      } catch {
-        if (lastBackendState !== "unavailable") log("backend_unavailable");
-        params.statusReporter.markBackendDisconnected();
-        lastBackendState = "unavailable";
-      }
+      if (params.auth)
+        try {
+          await params.auth.requestJson("/api/auth/verify", {
+            signal: AbortSignal.any([
+              params.signal,
+              AbortSignal.timeout(10_000),
+            ]),
+          });
+          if (lastBackendState !== "ready") log("backend_ready");
+          params.statusReporter.markBackendConnected();
+          lastBackendState = "ready";
+        } catch {
+          if (lastBackendState !== "unavailable") log("backend_unavailable");
+          params.statusReporter.markBackendDisconnected();
+          lastBackendState = "unavailable";
+        }
       void params.statusReporter.publish().catch(() => undefined);
     } finally {
       checking = false;

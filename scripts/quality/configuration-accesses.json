@@ -10292,5 +10292,101 @@
     "count": 1,
     "category": "runtime-context",
     "reason": "读取控制 helper 的 ps 身份时继承系统进程上下文，并固定 locale 与 timezone，确保跨 Backend 重启能比较同一进程的签名。"
+  },
+  {
+    "file": "packages/runweave-cli/src/feishu/node-notifier.ts",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Hook 注入的当前 Backend 地址与凭据，仅用于本轮通知的本机转发，不作为持久配置来源。"
+  },
+  {
+    "file": "packages/runweave-cli/src/feishu/node-notifier.ts",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_HOOK_ENDPOINT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Hook 注入的当前 Backend 地址与凭据，仅用于本轮通知的本机转发，不作为持久配置来源。"
+  },
+  {
+    "file": "packages/runweave-cli/src/feishu/node-notifier.ts",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_HOOK_TOKEN",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "Hook 注入的当前 Backend 地址与凭据，仅用于本轮通知的本机转发，不作为持久配置来源。"
+  },
+  {
+    "file": "scripts/feishu/migrate-state.ts",
+    "kind": "file-io",
+    "expression": "readFile(file)",
+    "count": 1,
+    "category": "migration",
+    "reason": "操作者明确给出的离线状态迁移清单与业务状态副本，输出使用 wx 保证不覆盖源文件或现有文件。"
+  },
+  {
+    "file": "scripts/feishu/migrate-state.ts",
+    "kind": "file-io",
+    "expression": "readFile(manifest.hubFile)",
+    "count": 1,
+    "category": "migration",
+    "reason": "操作者明确给出的离线状态迁移清单与业务状态副本，输出使用 wx 保证不覆盖源文件或现有文件。"
+  },
+  {
+    "file": "scripts/feishu/migrate-state.ts",
+    "kind": "file-io",
+    "expression": "readFile(source.file)",
+    "count": 1,
+    "category": "migration",
+    "reason": "操作者明确给出的离线状态迁移清单与业务状态副本，输出使用 wx 保证不覆盖源文件或现有文件。"
+  },
+  {
+    "file": "scripts/feishu/migrate-state.ts",
+    "kind": "file-io",
+    "expression": "writeFile(output.file)",
+    "count": 1,
+    "category": "migration",
+    "reason": "操作者明确给出的离线状态迁移清单与业务状态副本，输出使用 wx 保证不覆盖源文件或现有文件。"
+  },
+  {
+    "file": "scripts/verify/feishu/central-bridge.ts",
+    "kind": "file-io",
+    "expression": "readFile(legacyFile)",
+    "count": 2,
+    "category": "test",
+    "reason": "隔离集成验证的临时状态与迁移副本，验证后删除，不读取或改写用户运行配置。"
+  },
+  {
+    "file": "scripts/verify/feishu/central-bridge.ts",
+    "kind": "file-io",
+    "expression": "readFile(migrated)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离集成验证的临时状态与迁移副本，验证后删除，不读取或改写用户运行配置。"
+  },
+  {
+    "file": "scripts/verify/feishu/central-bridge.ts",
+    "kind": "file-io",
+    "expression": "readFile(rollback[0]!)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离集成验证的临时状态与迁移副本，验证后删除，不读取或改写用户运行配置。"
+  },
+  {
+    "file": "scripts/verify/feishu/central-bridge.ts",
+    "kind": "file-io",
+    "expression": "writeFile(migrated)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离集成验证的临时状态与迁移副本，验证后删除，不读取或改写用户运行配置。"
+  },
+  {
+    "file": "scripts/verify/feishu/node-fixture.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(configRoot, \"settings.yaml\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离节点进程的测试配置及状态副本，固定在临时目录，不读取用户凭据或修改用户配置。"
   }
 ]

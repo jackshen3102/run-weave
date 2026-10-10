@@ -23,6 +23,7 @@ export async function notifyFeishuTopic(params: {
   store: FeishuStateStore;
   chatId: string;
   terminalSessionId: string;
+  backendId?: string;
   notificationText: string;
 }): Promise<TopicNotificationResult> {
   const requestId = randomUUID();
@@ -32,6 +33,7 @@ export async function notifyFeishuTopic(params: {
     const claim = await params.store.claimTopicCreation({
       chatId: params.chatId,
       terminalSessionId: params.terminalSessionId,
+      backendId: params.backendId,
       requestId,
     });
     if (claim.kind === "active") {
@@ -63,6 +65,7 @@ async function createTopic(params: {
   store: FeishuStateStore;
   chatId: string;
   terminalSessionId: string;
+  backendId?: string;
   notificationText: string;
   requestId: string;
   claim: FeishuTopicCreating;
@@ -91,6 +94,7 @@ async function createTopic(params: {
         await params.store.releaseTopicCreation({
           chatId: params.chatId,
           terminalSessionId: params.terminalSessionId,
+          backendId: params.backendId,
           ownerToken: params.claim.ownerToken,
         });
         throw error;
@@ -112,6 +116,7 @@ async function createTopic(params: {
   let topic = await params.store.activateTopic({
     chatId: params.chatId,
     terminalSessionId: params.terminalSessionId,
+    backendId: params.backendId,
     ownerToken: params.claim.ownerToken,
     rootMessageId,
     threadId: response.data?.thread_id ?? null,
@@ -119,6 +124,7 @@ async function createTopic(params: {
   topic ??= await params.store.getActiveTopic(
     params.chatId,
     params.terminalSessionId,
+    params.backendId,
   );
   if (!topic) {
     throw new Error("Feishu topic activation lost its creation claim");
@@ -145,6 +151,7 @@ async function replyToTopic(params: {
   store: FeishuStateStore;
   chatId: string;
   terminalSessionId: string;
+  backendId?: string;
   notificationText: string;
   requestId: string;
   topic: FeishuTopicActive;
@@ -169,6 +176,7 @@ async function clearDeletedTopic(params: {
   store: FeishuStateStore;
   chatId: string;
   terminalSessionId: string;
+  backendId?: string;
   notificationText: string;
   requestId: string;
   topic: FeishuTopicActive;
@@ -176,12 +184,14 @@ async function clearDeletedTopic(params: {
   const cleared = await params.store.clearTopic({
     chatId: params.chatId,
     terminalSessionId: params.terminalSessionId,
+    backendId: params.backendId,
     expectedRootMessageId: params.topic.rootMessageId,
   });
   if (!cleared) {
     const current = await params.store.getActiveTopic(
       params.chatId,
       params.terminalSessionId,
+      params.backendId,
     );
     if (current) {
       return await replyToActiveTopic({ ...params, topic: current });
@@ -195,6 +205,7 @@ async function replyToActiveTopic(params: {
   store: FeishuStateStore;
   chatId: string;
   terminalSessionId: string;
+  backendId?: string;
   notificationText: string;
   requestId: string;
   topic: FeishuTopicActive;
@@ -222,6 +233,7 @@ async function replyToActiveTopic(params: {
     !(await params.store.recordTopicThread({
       chatId: params.chatId,
       terminalSessionId: params.terminalSessionId,
+      backendId: params.backendId,
       rootMessageId: params.topic.rootMessageId,
       threadId,
     }))
