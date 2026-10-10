@@ -29,6 +29,7 @@ export function createFeishuNode(
     const connector = new FeishuBridgeConnector({
       url: settingText("services.feishu.node.url")!,
       token: settingText("services.feishu.node.token")!,
+      caCertificate: settingText("services.feishu.node.caCertificate") ?? undefined,
       backendId,
       getTerminal: async (id) => {
         const session = sessions.getSession(id);

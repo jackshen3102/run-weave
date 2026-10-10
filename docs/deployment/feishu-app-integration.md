@@ -73,6 +73,11 @@ node 不需要 appId/appSecret，不启动 `rw feishu bridge`，也不能同时�
 `/feishu/backends/<backendId>` 连接。TLS 由中心反向代理终止，代理需转发 WebSocket Upgrade、
 Authorization，读超时至少 60 秒；Bridge 默认只监听 loopback。节点不跟随重定向。
 
+内网私有 CA 可通过 `services.feishu.node.caCertificate` 保存 PEM 公共证书（不含私钥）。
+该信任仅作用于飞书 WSS，仍校验证书有效期及 origin 主机名/IP SAN；未配置时使用系统默认信任。
+不要关闭 TLS 校验或替换整台机器的证书信任。中心同时运行 Backend node 时，hub 使用独立服务用户
+和配置目录，避免同一份配置承担两种角色。
+
 构建并在中心绑定实例启动（中心不要求运行 Backend 或登录三个 Backend）：
 
 ```bash
