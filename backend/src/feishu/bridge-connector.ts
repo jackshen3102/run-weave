@@ -34,6 +34,7 @@ export class FeishuBridgeConnector {
       url: string;
       backendId: string;
       token: string;
+      caCertificate?: string;
       getTerminal: (id: string) => Promise<{ status: "running" | "exited" }>;
       input: (
         input: Input,
@@ -54,6 +55,7 @@ export class FeishuBridgeConnector {
     url.pathname = `/feishu/backends/${this.options.backendId}`;
     const socket = new WebSocket(url, {
       headers: { Authorization: `Bearer ${this.options.token}` },
+      ca: this.options.caCertificate,
       handshakeTimeout: 5000,
       maxPayload: FEISHU_MAX_FRAME_BYTES,
       followRedirects: false,

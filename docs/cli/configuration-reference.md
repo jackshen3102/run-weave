@@ -574,6 +574,20 @@ APNs 私钥文件引用
 | 约束              | HTTPS origin；无用户信息、query、fragment，路径只能是 / |
 | 显式迁移来源      | new field; no legacy source                             |
 
+### services.feishu.node.caCertificate
+
+仅用于飞书 WSS 的可选 PEM CA 公共证书，仍校验主机名及有效期
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | string；允许 null 恢复默认  |
+| 默认              | null                        |
+| 所属模块          | backend/feishu              |
+| 生效              | 所属进程重启                |
+| 敏感 / 远端可修改 | 否 / 否                     |
+| 约束              | 按字段类型校验              |
+| 显式迁移来源      | new field; no legacy source |
+
 ### services.feishu.node.token
 
 本节点接入凭据
