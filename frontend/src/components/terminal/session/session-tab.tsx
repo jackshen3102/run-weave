@@ -412,7 +412,7 @@ export function TerminalSessionTab({
             title={canFork ? undefined : "请等待当前 Codex 会话空闲后再 Fork"}
             onSelect={() => { void fork(); }}>
             <GitFork className="h-4 w-4" />
-            {forking ? "正在 Fork Codex…" : "Fork Codex 到新终端"}
+            {forking ? "正在 Fork Codex…" : "Fork Thread"}
           </ContextMenuItem>
           <ContextMenuItem
             className="gap-2"

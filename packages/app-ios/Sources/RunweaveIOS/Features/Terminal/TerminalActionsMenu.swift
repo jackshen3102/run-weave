@@ -39,7 +39,7 @@ struct TerminalActionsMenu: View, Equatable {
           do { try await session.forkTerminal(terminalID) }
           catch { if !(error is CancellationError) { session.error = displayError(error) } }
         }
-      } label: { Label("Fork Codex 到新终端", systemImage: "arrow.triangle.branch") }
+      } label: { Label("Fork Thread", systemImage: "arrow.triangle.branch") }
         .disabled(!canFork).accessibilityIdentifier("terminal-menu-fork-codex")
       Button { showingSupervision = true } label: {
         Label(supervisionEnabled ? "长任务监控 · 已开启" : "长任务监控", systemImage: "eye")
