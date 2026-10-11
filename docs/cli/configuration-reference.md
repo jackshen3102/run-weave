@@ -560,6 +560,20 @@ APNs 私钥文件引用
 | 约束              | 按字段类型校验              |
 | 显式迁移来源      | new field; no legacy source |
 
+### services.feishu.hub.backends.<backendId>.displayName
+
+通知中的机器显示名（可选，不参与路由）
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | string；允许 null 恢复默认  |
+| 默认              | null                        |
+| 所属模块          | cli/feishu                  |
+| 生效              | 所属进程重启                |
+| 敏感 / 远端可修改 | 否 / 是                     |
+| 约束              | 按字段类型校验              |
+| 显式迁移来源      | new field; no legacy source |
+
 ### services.feishu.node.url
 
 集中 Bridge HTTPS origin
