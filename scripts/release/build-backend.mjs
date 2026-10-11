@@ -16,7 +16,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildInfoDefine } from "../lib/build-info.mjs";
+import { publishComponentArtifact } from "./component-artifact.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -107,7 +107,7 @@ const shared = {
   target: "node22",
   format: "cjs",
   external: ["better-sqlite3", "node-pty", "fs-native-extensions"],
-  define: { "import.meta.url": "__IMPORT_META_URL__", ...buildInfoDefine(path.join(repoRoot, "backend")) },
+  define: { "import.meta.url": "__IMPORT_META_URL__" },
   banner: {
     js: "const __IMPORT_META_URL__ = require('url').pathToFileURL(__filename).href;",
   },
@@ -166,6 +166,14 @@ cpSync(
   path.join(releaseDir, "install.mjs"),
 );
 copyNativeLockRuntime(backendDir);
+
+await publishComponentArtifact({
+  component: "backend-node",
+  packageDirectory: path.join(repoRoot, "backend"),
+  roots: [{ name: "backend", directory: backendDir }],
+  metadataFile: path.join(backendDir, "build-info.json"),
+  entries: [path.join(backendDir, "index.cjs")],
+});
 
 const files = listFiles(releaseDir).map((file) => ({
   path: file,

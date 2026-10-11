@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { publishComponentArtifact } from "../release/component-artifact.mjs";
 
 const ROOT = process.cwd();
 const ELECTRON_DIR = path.join(ROOT, "electron");
@@ -328,12 +329,6 @@ function isolatedBuilderIdentity(baseBuilderConfig) {
 async function main() {
   const parsedBuilder = takeBuilderConfig(process.argv.slice(2));
   const builderArgs = parsedBuilder.remaining;
-  if (process.env.RUNWEAVE_ELECTRON_BUILD_VERSION) {
-    builderArgs.push(
-      `--config.extraMetadata.version=${process.env.RUNWEAVE_ELECTRON_BUILD_VERSION}`,
-      `--config.extraMetadata.buildVersion=${process.env.RUNWEAVE_ELECTRON_BUILD_VERSION}`,
-    );
-  }
   if (process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME) {
     builderArgs.push(
       `--config.productName=${process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME}`,
@@ -365,9 +360,6 @@ async function main() {
     );
   }
 
-  if (process.env.RUNWEAVE_SKIP_ELECTRON_VERSION_BUMP !== "true") {
-    await runCheckedCommand("node", ["./scripts/release/version/electron.mjs"]);
-  }
   if (isolatedBuildRoot) {
     const isolated = await prepareIsolatedBuild(
       path.resolve(isolatedBuildRoot),
@@ -381,6 +373,80 @@ async function main() {
     await runCheckedCommand(commandName("pnpm"), ["build"]);
     builderArgs.unshift("--config", parsedBuilder.config);
   }
+  const electronDist = isolatedBuildRoot
+    ? path.join(path.resolve(isolatedBuildRoot), "electron", "dist")
+    : path.join(ELECTRON_DIR, "dist");
+  const frontendDist = isolatedBuildRoot
+    ? path.join(path.resolve(isolatedBuildRoot), "frontend", "dist")
+    : path.join(ROOT, "frontend", "dist");
+  const packageInfo = JSON.parse(
+    await readFile(path.join(ELECTRON_DIR, "package.json"), "utf8"),
+  );
+  const electronVersion = packageInfo.devDependencies.electron;
+  delete packageInfo.version;
+  delete packageInfo.scripts;
+  delete packageInfo.devDependencies;
+  const info = await publishComponentArtifact({
+    component: `desktop-app-${process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta" ? "beta" : "stable"}`,
+    packageDirectory: ELECTRON_DIR,
+    roots: [
+      { name: "desktop", directory: electronDist, exclude: ["backend", "cli"] },
+      { name: "backend", directory: path.join(electronDist, "backend") },
+      { name: "cli", directory: path.join(electronDist, "cli") },
+      {
+        name: "node-pty",
+        directory: path.join(ROOT, "backend/node_modules/node-pty/lib"),
+      },
+      {
+        name: "node-pty-native",
+        directory: path.join(
+          ROOT,
+          `backend/node_modules/node-pty/prebuilds/${process.platform}-${process.arch}`,
+        ),
+      },
+      { name: "web", directory: frontendDist },
+      {
+        name: "resources",
+        directory: path.join(ELECTRON_DIR, "resources"),
+        exclude: ["icons/raw"],
+      },
+      {
+        name: "whistle",
+        directory: isolatedBuildRoot
+          ? path.join(
+              path.resolve(isolatedBuildRoot),
+              "whistle-runtime/node_modules",
+            )
+          : path.join(ELECTRON_DIR, ".whistle-runtime/node_modules"),
+        exclude: [
+          ".modules.yaml",
+          ".pnpm/lock.yaml",
+          ".pnpm-workspace-state-v1.json",
+        ],
+      },
+    ],
+    descriptor: {
+      packageInfo,
+      electronVersion,
+      nodePty: await readFile(
+        path.join(ROOT, "backend/node_modules/node-pty/package.json"),
+        "utf8",
+      ),
+      builder: await readFile(
+        path.resolve(ELECTRON_DIR, parsedBuilder.config),
+        "utf8",
+      ),
+      platform: process.platform,
+      arch: process.arch,
+    },
+    minimumVersion: process.env.RUNWEAVE_ELECTRON_MINIMUM_VERSION,
+    metadataFile: path.join(electronDist, "build-info.json"),
+    entries: [path.join(electronDist, "main.cjs")],
+  });
+  builderArgs.push(
+    `--config.extraMetadata.version=${info.version}`,
+    `--config.extraMetadata.buildVersion=${info.version}`,
+  );
   const distArgs = ["dist", ...builderArgs];
 
   const result = await runWithRetries({

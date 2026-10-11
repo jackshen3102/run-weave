@@ -7067,7 +7067,7 @@
     "file": "scripts/electron/dist-retry.mjs",
     "kind": "file-io",
     "expression": "readFile(path.join(ELECTRON_DIR, \"package.json\"))",
-    "count": 1,
+    "count": 2,
     "category": "runtime-state",
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(path.join(ELECTRON_DIR, \"package.json\"))"
   },
@@ -8267,7 +8267,7 @@
     "file": "scripts/update/operations.mjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_ELECTRON_BUILD_ROOT",
-    "count": 1,
+    "count": 2,
     "category": "build",
     "reason": "RUNWEAVE_ELECTRON_BUILD_ROOT：构建/部署参数，不自动迁为用户设置；作用仅限此调用点。"
   },
@@ -10444,5 +10444,131 @@
     "count": 1,
     "category": "test",
     "reason": "在隔离兼容性 fixture 临时目录声明历史源码的 ESM 模块类型，不读取或修改实例业务配置。"
+  },
+  {
+    "file": "electron/src/desktop/config.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_DESKTOP_SOURCE_REVISION",
+    "count": 1,
+    "line": 47,
+    "category": "build",
+    "reason": "构建身份的源码提交 fallback；仅标识当前运行产物，不读取用户设置。"
+  },
+  {
+    "file": "frontend/vite.config.ts",
+    "kind": "environment",
+    "expression": "process.env.VITE_RUNWEAVE_CHANNEL",
+    "count": 1,
+    "line": 53,
+    "category": "build",
+    "reason": "构建渠道决定 Web 产物版本账本；仅在 Vite 构建阶段读取。"
+  },
+  {
+    "file": "scripts/electron/dist-retry.mjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_DESKTOP_CHANNEL",
+    "count": 1,
+    "line": 402,
+    "category": "build",
+    "reason": "读取打包依赖、渠道、配置和安装版本下限，用于按真实产物分配 Desktop 版本。"
+  },
+  {
+    "file": "scripts/electron/dist-retry.mjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_ELECTRON_MINIMUM_VERSION",
+    "count": 1,
+    "line": 454,
+    "category": "build",
+    "reason": "读取打包依赖、渠道、配置和安装版本下限，用于按真实产物分配 Desktop 版本。"
+  },
+  {
+    "file": "scripts/electron/dist-retry.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(ROOT, \"backend/node_modules/node-pty/package.json\"))",
+    "count": 1,
+    "line": 443,
+    "category": "build",
+    "reason": "读取打包依赖、渠道、配置和安装版本下限，用于按真实产物分配 Desktop 版本。"
+  },
+  {
+    "file": "scripts/electron/dist-retry.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.resolve(ELECTRON_DIR, parsedBuilder.config))",
+    "count": 1,
+    "line": 447,
+    "category": "build",
+    "reason": "读取打包依赖、渠道、配置和安装版本下限，用于按真实产物分配 Desktop 版本。"
+  },
+  {
+    "file": "scripts/release/component-artifact.mjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_COMPONENT_RELEASE_REGISTRY",
+    "count": 1,
+    "line": 164,
+    "category": "build",
+    "reason": "构建产物及版本账本读写；发布目录可隔离，不属于运行时用户设置。"
+  },
+  {
+    "file": "scripts/release/component-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFile(file)",
+    "count": 2,
+    "line": 37,
+    "category": "build",
+    "reason": "构建产物及版本账本读写；发布目录可隔离，不属于运行时用户设置。"
+  },
+  {
+    "file": "scripts/release/component-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFile(path.join(root.directory, name))",
+    "count": 1,
+    "line": 108,
+    "category": "build",
+    "reason": "构建产物及版本账本读写；发布目录可隔离，不属于运行时用户设置。"
+  },
+  {
+    "file": "scripts/release/component-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(`${file}.map`)",
+    "count": 1,
+    "line": 147,
+    "category": "build",
+    "reason": "构建产物及版本账本读写；发布目录可隔离，不属于运行时用户设置。"
+  },
+  {
+    "file": "scripts/release/component-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(file)",
+    "count": 2,
+    "line": 131,
+    "category": "build",
+    "reason": "构建产物及版本账本读写；发布目录可隔离，不属于运行时用户设置。"
+  },
+  {
+    "file": "scripts/release/component-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(metadataFile)",
+    "count": 1,
+    "line": 218,
+    "category": "build",
+    "reason": "构建产物及版本账本读写；发布目录可隔离，不属于运行时用户设置。"
+  },
+  {
+    "file": "scripts/release/component-artifact.mjs",
+    "kind": "file-io",
+    "expression": "fs.writeFile(temporary)",
+    "count": 1,
+    "line": 222,
+    "category": "build",
+    "reason": "构建产物及版本账本读写；发布目录可隔离，不属于运行时用户设置。"
+  },
+  {
+    "file": "electron/scripts/bundle.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.resolve(\"../backend/node_modules/node-pty/package.json\"))",
+    "count": 1,
+    "line": 213,
+    "category": "build",
+    "reason": "读取随 Electron Backend 打包的 node-pty 依赖清单，原生依赖变化纳入组件版本计算。"
   }
 ]

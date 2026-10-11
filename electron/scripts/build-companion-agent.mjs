@@ -40,8 +40,7 @@ export async function buildCompanionAgent(outputDir) {
   const packageJson = JSON.parse(
     await readFile(path.join(ELECTRON_DIR, "package.json"), "utf8"),
   );
-  const version =
-    process.env.RUNWEAVE_ELECTRON_BUILD_VERSION ?? packageJson.version;
+  const version = packageJson.version;
   const appRoot = path.join(destination, APP_NAME);
   const contents = path.join(appRoot, "Contents");
   const macOSDir = path.join(contents, "MacOS");

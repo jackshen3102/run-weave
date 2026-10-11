@@ -5,7 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 
-import { buildInfoDefine } from "../lib/build-info.mjs";
+import { publishComponentArtifact } from "../release/component-artifact.mjs";
 
 const repoRoot = process.cwd();
 const requireFromCli = createRequire(
@@ -30,7 +30,6 @@ await build({
   bundle: true,
   external: ["fs-native-extensions"],
   define: {
-    ...buildInfoDefine(path.join(repoRoot, "app-server")),
     "import.meta.url": "__IMPORT_META_URL__",
   },
   banner: {
@@ -46,6 +45,14 @@ await build({
 
 copyNativeLockRuntime(artifactDir);
 writeFileSync(path.join(artifactDir, "configuration-compatibility.json"), JSON.stringify(configurationLibrary.APP_SERVER_CONFIGURATION_COMPATIBILITY));
+
+await publishComponentArtifact({
+  component: "app-server",
+  packageDirectory: path.join(repoRoot, "app-server"),
+  roots: [{ name: "app-server", directory: artifactDir }],
+  metadataFile: path.join(artifactDir, "build-info.json"),
+  entries: [entry],
+});
 
 const isolatedCliEntry = process.env.RUNWEAVE_CLI_BUNDLE_OUTFILE?.trim();
 const cliEntry = isolatedCliEntry

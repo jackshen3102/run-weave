@@ -1,11 +1,11 @@
 import { initializeConfiguration, configurationArguments, acquireConfigurationOwner, assertOwnedPath } from "@runweave/config-node";
 import { app, protocol } from "electron";
+import { runtimeBuildInfo } from "@runweave/shared/runtime-version";
 import path from "node:path";
 import { resolveDesktopConfigurationContext } from "./configuration-context.js";
 
 declare const __RUNWEAVE_WHISTLE_PORTS__: string | null;
 declare const __RUNWEAVE_DESKTOP_CHANNEL__: "stable" | "beta";
-declare const __RUNWEAVE_DESKTOP_SOURCE_REVISION__: string;
 declare const __RUNWEAVE_DESKTOP_INSTANCE_ID__: string | null;
 declare const __RUNWEAVE_DEV_SESSION_ID__: string | null;
 declare const __RUNWEAVE_DESKTOP_USER_DATA_DIR__: string | null;
@@ -26,7 +26,10 @@ if (!process.env.RUNWEAVE_WHISTLE_PORTS && __RUNWEAVE_WHISTLE_PORTS__)
   process.env.RUNWEAVE_WHISTLE_PORTS = __RUNWEAVE_WHISTLE_PORTS__;
 
 export const desktopChannel = __RUNWEAVE_DESKTOP_CHANNEL__;
-export const desktopSourceRevision = __RUNWEAVE_DESKTOP_SOURCE_REVISION__;
+export const desktopSourceRevision =
+  runtimeBuildInfo().sourceRevision ??
+  process.env.RUNWEAVE_DESKTOP_SOURCE_REVISION ??
+  "unknown";
 export const isBetaChannel = desktopChannel === "beta";
 export const BETA_DESKTOP_CDP_PORT = 9335;
 const desktopInstanceId =

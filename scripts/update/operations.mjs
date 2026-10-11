@@ -420,7 +420,7 @@ export async function installBuiltApp({
 
 export async function runAppUpdate({
   appBackupPath,
-  appBuildVersion,
+  installedAppVersion,
   appPath,
   channel,
   codesignIdentity,
@@ -453,10 +453,9 @@ export async function runAppUpdate({
           ...process.env,
           RUNWEAVE_DESKTOP_CHANNEL: channel,
           RUNWEAVE_DESKTOP_SOURCE_REVISION: gitHead ?? "unknown",
-          RUNWEAVE_ELECTRON_BUILD_VERSION: appBuildVersion,
+          RUNWEAVE_ELECTRON_MINIMUM_VERSION: installedAppVersion ?? undefined,
           VITE_RUNWEAVE_CHANNEL: channel,
           VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
-          VITE_RUNWEAVE_VERSION: appBuildVersion,
           ...(codesignIdentity
             ? { RUNWEAVE_CODESIGN_IDENTITY: codesignIdentity }
             : {}),
@@ -467,6 +466,19 @@ export async function runAppUpdate({
   } catch (error) {
     throw new AppBuildError(error);
   }
+  const buildRoot = process.env.RUNWEAVE_ELECTRON_BUILD_ROOT;
+  const info = readJsonFile(
+    path.join(
+      buildRoot
+        ? path.join(buildRoot, "electron")
+        : path.join(sourceRoot, "electron"),
+      "dist",
+      "build-info.json",
+    ),
+  );
+  if (!info?.version) throw new Error("Desktop artifact version is missing");
+  if (desktopVerification)
+    desktopVerification.expectedAppVersion = info.version;
   const capability = readJsonFile(path.join(releaseAppPath, "Contents", "Resources", "configuration-compatibility.json"));
   if (!configurationLibrary.supportsConfiguration(capability, configurationLibrary.configuration().store.read().value)) throw new Error("CONFIG_RELEASE_INCOMPATIBLE");
   await quitApp();

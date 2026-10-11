@@ -2,18 +2,14 @@ import { buildDevResources } from "../../scripts/dev-resources/build.mjs";
 import { buildResourceSampler } from "../../backend/scripts/build-resource-sampler.mjs";
 import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
 import { buildAgentAssets } from "../../scripts/agents/build.mjs";
-import { rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { configurationLibrary } from "../../scripts/lib/configuration.mjs";
 import { build } from "esbuild";
 import path from "node:path";
 import { finalizeActivitySqliteRuntime } from "./finalize-better-sqlite3-runtime.mjs";
 import { buildCompanionAgent } from "./build-companion-agent.mjs";
-import { execFileSync } from "node:child_process";
 
-import { buildInfoDefine, createBuildInfo } from "../../scripts/lib/build-info.mjs";
-
-const backendSourceRevision = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-const backendSourceDirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim().length > 0;
+import { publishComponentArtifact } from "../../scripts/release/component-artifact.mjs";
 
 await buildAgentAssets();
 
@@ -31,9 +27,6 @@ const desktopBuildDefines = {
   __RUNWEAVE_WHISTLE_PORTS__: JSON.stringify(process.env.RUNWEAVE_WHISTLE_PORTS ?? null),
   __RUNWEAVE_DESKTOP_CHANNEL__: JSON.stringify(
     process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta" ? "beta" : "stable",
-  ),
-  __RUNWEAVE_DESKTOP_SOURCE_REVISION__: JSON.stringify(
-    process.env.RUNWEAVE_DESKTOP_SOURCE_REVISION ?? "unknown",
   ),
   __RUNWEAVE_DESKTOP_INSTANCE_ID__: JSON.stringify(
     process.env.RUNWEAVE_DESKTOP_INSTANCE_ID ?? null,
@@ -77,7 +70,6 @@ await build({
   define: {
     ...importMetaUrlShim.define,
     ...desktopBuildDefines,
-    ...buildInfoDefine(path.resolve(".")),
   },
   entryPoints: [{ in: "src/bootstrap.ts", out: "main" }],
   outdir: outputDir,
@@ -115,7 +107,7 @@ await build({
   ...shared,
   ...importMetaUrlShim,
   entryPoints: ["../backend/src/index.ts"],
-  define: { ...importMetaUrlShim.define, ...buildInfoDefine(path.resolve("../backend")), __RUNWEAVE_BACKEND_SOURCE_REVISION__: JSON.stringify(backendSourceRevision), __RUNWEAVE_BACKEND_SOURCE_DIRTY__: JSON.stringify(backendSourceDirty) },
+  define: importMetaUrlShim.define,
   outdir: `${outputDir}/backend`,
   format: "cjs",
   external: ["node-pty", "better-sqlite3", "fs-native-extensions"],
@@ -177,7 +169,6 @@ await build({
   outExtension: { ".js": ".cjs" },
 });
 
-writeFileSync(path.join(outputDir, "cli", "build-info.json"), JSON.stringify(createBuildInfo(path.resolve("../packages/runweave-cli"))));
 copyNativeLockRuntime(path.join(outputDir, "cli"));
 
 await buildCompanionAgent(outputDir);
@@ -187,3 +178,41 @@ console.log(
 );
 
 copyNativeLockRuntime(outputDir);
+
+for (const [component, packageDirectory, directory, entry] of [
+  [
+    "backend-electron",
+    path.resolve("../backend"),
+    path.join(outputDir, "backend"),
+    "index.cjs",
+  ],
+  [
+    "cli-electron",
+    path.resolve("../packages/runweave-cli"),
+    path.join(outputDir, "cli"),
+    null,
+  ],
+  ["desktop-shell", path.resolve("."), outputDir, "main.cjs"],
+]) {
+  await publishComponentArtifact({
+    component,
+    packageDirectory,
+    roots: [
+      {
+        name: component,
+        directory,
+        exclude:
+          component === "desktop-shell" ? ["backend", "cli", "companion"] : [],
+      },
+      ...(component === "backend-electron" ? [
+        { name: "node-pty", directory: path.resolve("../backend/node_modules/node-pty/lib") },
+        { name: "node-pty-native", directory: path.resolve(`../backend/node_modules/node-pty/prebuilds/${process.platform}-${process.arch}`) },
+      ] : []),
+    ],
+    descriptor: component === "backend-electron" ? {
+      nodePty: readFileSync(path.resolve("../backend/node_modules/node-pty/package.json"), "utf8"),
+    } : {},
+    metadataFile: path.join(directory, "build-info.json"),
+    entries: entry ? [path.join(directory, entry)] : [],
+  });
+}

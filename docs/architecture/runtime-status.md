@@ -80,6 +80,25 @@ Backend 未收到飞书 Bridge 报告时只表达“尚未收到状态、无法�
 最多缓存 60 秒；该结果属于 Backend 所在节点，不是远程客户端的 CLI。
 版本读取失败不影响服务健康计数；本能力不比较源码差异、不判断是否最新，也不自动更新组件。
 
+### 版本递增规则
+
+Backend、App Server、Web、Desktop 和随包 CLI、Research MCP 的构建入口使用
+[产物版本工具](../../scripts/release/component-artifact.mjs)：成功构建后按组件和产物内容分配版本。
+相同产物重建复用原版本，运行代码、资源或依赖变化时递增次版本（例如 `0.1.0 → 0.2.0`）；
+回退到曾发布的相同产物时恢复其原版本。只改构建时间、源码提交或调试 sourcemap 不递增。
+构建标识仍记录本次构建，版本号不代表是否包含最新源码；未发布的源码编辑、进程重启不会分配版本。
+运行中显示的版本来自已安装并启动的产物，构建完成不等于服务已更新。
+
+分配记录保存在构建机器的 `~/.runweave/component-releases/`，跨 worktree 共用文件锁和追加历史；
+Stable/Beta Web、完整 Desktop App、Electron/Node 运行时分别记账。
+`RUNWEAVE_COMPONENT_RELEASE_REGISTRY` 可指定持久化发布目录，用于隔离验证或固定发布机。
+发布记录必须随构建环境保留；不同机器的独立目录不提供全局唯一版本保证。
+源码 `package.json` 是初始版本下限，不在每次构建时修改或自动提交。后续安装失败可能留下版本间隔。
+
+全局 CLI 沿用 npm prefix 下已有的不可变发布目录和安装锁；飞书 Bridge 随所属 CLI 发布。
+完整 Desktop App 的版本覆盖随包运行时，runtime 热更新只改变对应组件版本，不改变已安装 App 版本。
+iOS 沿用独立更新入口的产品版本和构建号递增规则。
+
 - 本机与当前连接用相同的节点/能力域模型；同节点身份优先按 `serviceInstanceId` 合并，URL 仅作缺失身份时的回退。
 - Frontend 自己的 HTTP、Terminal WS 与事件连接状态也是报告来源；当前报告及面板状态见
   [Frontend registry](../../frontend/src/features/runtime-status/registry.ts) 和 [Provider](../../frontend/src/features/runtime-status/provider.tsx)。

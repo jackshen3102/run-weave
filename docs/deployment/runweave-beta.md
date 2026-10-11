@@ -280,7 +280,7 @@ pnpm dev:session --json
 Beta 页面顶部会显示以下构建标识，窗口标题也包含源码 revision：
 
 ```text
-BETA · <version> · <source revision>
+BETA · Web <version> · <source revision>
 ```
 
 在 Beta 中打开项目并创建 terminal 后，terminal 会自动获得 Beta backend 地址、独立 CLI profile 和 Beta App Server 环境。可以用只读命令确认连接目标：

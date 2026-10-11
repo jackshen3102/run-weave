@@ -36,7 +36,11 @@ export function readCliVersion(): CliVersionInfo {
 
   return {
     name: typeof pkg.name === "string" ? pkg.name : "@runweave/cli",
-    version: typeof pkg.version === "string" ? pkg.version : build?.version ?? build?.packageVersion ?? "0.0.0",
+    version:
+      build?.version ??
+      (typeof pkg.version === "string"
+        ? pkg.version
+        : (build?.packageVersion ?? "0.0.0")),
     ...(build ? { build } : {}),
   };
 }

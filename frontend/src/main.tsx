@@ -1,3 +1,4 @@
+import { runtimeBuildInfo } from "@runweave/shared/runtime-version";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
@@ -7,9 +8,8 @@ import "./index.css";
 import "./pwa";
 
 const buildChannel = import.meta.env.VITE_RUNWEAVE_CHANNEL ?? "stable";
-const buildRevision =
-  import.meta.env.VITE_RUNWEAVE_SOURCE_REVISION ?? "unknown";
-const buildVersion = import.meta.env.VITE_RUNWEAVE_VERSION ?? "unknown";
+const buildRevision = runtimeBuildInfo().sourceRevision ?? "unknown";
+const buildVersion = runtimeBuildInfo().version;
 
 if (buildChannel === "beta") {
   const shortRevision = buildRevision.slice(0, 12);
@@ -19,7 +19,7 @@ if (buildChannel === "beta") {
 
   const badge = document.createElement("div");
   badge.dataset.runweaveBetaBadge = "true";
-  badge.textContent = `BETA · ${buildVersion} · ${shortRevision}`;
+  badge.textContent = `BETA · Web ${buildVersion} · ${shortRevision}`;
   badge.setAttribute("aria-label", "Runweave Beta build identity");
   badge.style.cssText = [
     "position:fixed",

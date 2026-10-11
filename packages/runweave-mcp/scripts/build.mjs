@@ -1,15 +1,9 @@
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { copyNativeLockRuntime } from "../../config-node/scripts/native-runtime.mjs";
-import { buildInfoDefine } from "../../../scripts/lib/build-info.mjs";
-const root = fileURLToPath(new URL("../../..", import.meta.url));
-const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim().length > 0;
-const releaseId = `local-${Date.now()}`;
-const sourceRevision = `${sha}${dirty ? "+dirty" : ""}`;
+import { publishComponentArtifact } from "../../../scripts/release/component-artifact.mjs";
 await build({
   absWorkingDir: fileURLToPath(new URL("..", import.meta.url)),
   entryPoints: ["src/index.ts"],
@@ -20,8 +14,27 @@ await build({
   target: "node22",
   external: ["fs-native-extensions"],
   sourcemap: true,
-  define: { ...buildInfoDefine(fileURLToPath(new URL("..", import.meta.url))), __MCP_SOURCE_REVISION__: JSON.stringify(sourceRevision), __MCP_RELEASE_ID__: JSON.stringify(releaseId) },
 });
 const outputDir = fileURLToPath(new URL("../dist", import.meta.url));
 copyNativeLockRuntime(outputDir);
-writeFileSync(`${outputDir}/release.json`, JSON.stringify({ sourceRevision, releaseId, bundleSha256: createHash("sha256").update(readFileSync(`${outputDir}/index.cjs`)).digest("hex") }, null, 2));
+const info = await publishComponentArtifact({
+  component: "research-mcp",
+  packageDirectory: fileURLToPath(new URL("..", import.meta.url)),
+  roots: [{ name: "research-mcp", directory: outputDir }],
+  metadataFile: `${outputDir}/build-info.json`,
+  entries: [`${outputDir}/index.cjs`],
+});
+writeFileSync(
+  `${outputDir}/release.json`,
+  JSON.stringify(
+    {
+      sourceRevision: info.sourceRevision,
+      releaseId: info.buildId,
+      bundleSha256: createHash("sha256")
+        .update(readFileSync(`${outputDir}/index.cjs`))
+        .digest("hex"),
+    },
+    null,
+    2,
+  ),
+);
