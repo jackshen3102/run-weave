@@ -5,7 +5,6 @@ import { planCliUpdate, runCliUpdate } from "./cli.mjs";
 import { runResearchMcpUpdate } from "./runtime-updates.mjs";
 import {
   parseRunweaveUpdateArgs,
-  resolveAppBuildVersion,
   resolveDefaultRuntimeHome,
   resolveDefaultUpdateStatePath,
   resolveUpdatePlan,
@@ -137,15 +136,11 @@ async function main() {
   let codesignIdentity = await resolveCodesignIdentity(sourceRoot, {
     persistConfig: !args.dryRun,
   });
-  const appBuildVersion = resolveAppBuildVersion({
-    installedAppVersion,
-    sourceShellVersion,
-  });
   const desktopVerification = args.verifyDesktop
     ? {
         appServerHome,
         expectedAppVersion:
-          plan.mode === "app" ? appBuildVersion : installedAppVersion,
+          plan.mode === "app" ? null : installedAppVersion,
         runtimeHome,
         statusPath: path.join(
           path.dirname(statePath),
@@ -230,7 +225,7 @@ async function main() {
     try {
       desktopVerificationResult = await runAppUpdate({
         appBackupPath,
-        appBuildVersion,
+        installedAppVersion,
         appPath,
         channel,
         codesignIdentity: codesignIdentity.identity,
@@ -254,7 +249,7 @@ async function main() {
       }
       desktopVerificationResult = await runAppUpdate({
         appBackupPath,
-        appBuildVersion,
+        installedAppVersion,
         appPath,
         channel,
         codesignIdentity: codesignIdentity.identity,
@@ -330,7 +325,7 @@ async function main() {
             ...process.env,
             VITE_RUNWEAVE_CHANNEL: channel,
             VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
-            VITE_RUNWEAVE_VERSION: appBuildVersion,
+            VITE_RUNWEAVE_VERSION: nextInstalledVersion ?? installedAppVersion,
           })
         : (state?.frontendBuildEnvFingerprint ?? null),
     appVersion: nextInstalledVersion ?? installedAppVersion,

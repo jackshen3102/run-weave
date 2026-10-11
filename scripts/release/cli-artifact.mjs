@@ -142,7 +142,7 @@ export async function installCliArtifact({ sourceRoot, plan }) {
         "CLI build is missing provenance; rebuild before publishing.",
       );
     }
-    const release = { schemaVersion: 1, version, ...build, contentSha256 };
+    const release = { schemaVersion: 1, ...build, version, contentSha256 };
     const releasePath = path.join(home, version);
     // Reserve before packing/installing. Failed releases never reuse a version.
     await fs.mkdir(releasePath);

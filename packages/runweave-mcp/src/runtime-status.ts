@@ -5,11 +5,10 @@ import { readResearchMcpInstallation, resolveConfigurationContext } from "@runwe
 import type { RuntimeStatusFact, RuntimeStatusItem, RuntimeStatusReport } from "@runweave/shared/runtime-status";
 import type { Backend } from "./backend.js";
 
-declare const __MCP_SOURCE_REVISION__: string;
-declare const __MCP_RELEASE_ID__: string;
+const buildInfo = runtimeBuildInfo();
 export const mcpIdentity = {
-  sourceRevision: typeof __MCP_SOURCE_REVISION__ === "string" ? __MCP_SOURCE_REVISION__ : "unknown",
-  releaseId: typeof __MCP_RELEASE_ID__ === "string" ? __MCP_RELEASE_ID__ : "unbundled",
+  sourceRevision: buildInfo.sourceRevision ?? "unknown",
+  releaseId: buildInfo.buildId ?? "unbundled",
 };
 
 function text(id: string, label: string, value: string): RuntimeStatusFact {

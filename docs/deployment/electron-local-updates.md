@@ -85,6 +85,11 @@ http://127.0.0.1:5500/updates/mac/latest-mac.yml
   `lib/runweave-cli-releases/`。规则与 `pnpm cli:publish:local` 一致，详见
   [CLI 版本与构建追溯](../cli/terminal-cli.md#版本与构建追溯)。Beta 不覆盖全局 Stable CLI。
 
+完整 App 在产物构建后确定版本：内容变化才递增，相同产物保留版本，不再每次打包修改
+`electron/package.json` 或自动创建版本提交。Backend、Web、App Server 等组件也独立分配产物版本；
+规则和发布记录持久化要求见 [版本递增规则](../architecture/runtime-status.md#版本递增规则)。
+dry-run 尚未构建产物，因此不承诺新 App 版本；安装后的桌面验证使用实际打包版本。
+
 dry-run 会同时输出桌面更新模式和 app-server 动作：
 
 ```bash
