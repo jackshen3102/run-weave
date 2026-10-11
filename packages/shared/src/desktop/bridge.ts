@@ -1,4 +1,4 @@
-import type { TerminalBadgeConnection } from "../terminal/unread";
+import type { TerminalBadgeConnection, TerminalBadgeStatus } from "../terminal/unread";
 import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin, LocalRemoteDesktopInfo } from "../tunnels/index";
 import type { LoginResponse } from "../protocol";
 import type { DesktopLocalBrowserSource } from "../browser/local-tunnel";
@@ -144,6 +144,7 @@ export interface RunweaveElectronBridge {
   ) => Promise<boolean>;
   reportAttentionOpenResult: (result: AttentionOpenResult) => Promise<void>;
   setTerminalBadgeConnections: (connections: TerminalBadgeConnection[]) => Promise<void>;
+  getTerminalBadgeStatus: () => Promise<TerminalBadgeStatus>;
   getCompanionEnabled: () => Promise<boolean>;
   onCompanionEnabledChanged: (
     listener: (enabled: boolean) => void,

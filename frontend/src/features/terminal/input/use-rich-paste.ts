@@ -40,6 +40,7 @@ export function useRichPaste(options: {
     text: string,
     purpose: Purpose,
     preparationId?: string,
+    onSettled?: (success: boolean) => void,
   ) => boolean;
   onDraftChange: (text: string) => void;
 }) {
@@ -122,7 +123,18 @@ export function useRichPaste(options: {
           ));
       item.status = "pending";
       item.message = "正在准备图文…";
+      item.autoCloseAt = undefined;
       update();
+      const settled = (success: boolean) => {
+        if (!present()) return;
+        const cleanSuccess = success && !item.document?.images.some((image) => image.error);
+        item.autoCloseAt = cleanSuccess
+          ? Date.now() + 3000
+          : item.purpose === "tui" ? Date.now() + 60_000 : undefined;
+        if (cleanSuccess)
+          item.message = item.purpose === "tui" ? "图文已插入" : "图文已添加";
+        update();
+      };
       try {
         if (item.purpose === "composer" && !textarea)
           throw new Error("请打开 Input 后重新插入");
@@ -164,6 +176,7 @@ export function useRichPaste(options: {
         if (!inputCurrent()) {
           item.status = "ready";
           item.message = "目标或输入已变化，内容已保留；可重新插入";
+          settled(false);
           update();
           return;
         }
@@ -173,11 +186,12 @@ export function useRichPaste(options: {
               text,
               "tui",
               preparation!.preparationId,
+              settled,
             )
           )
             throw new Error("终端目标不可用，内容已保留");
           item.message = "图文已准备，投递结果见终端附件提示";
-        } else if (current.current.captureText(text, "composer")) {
+        } else if (current.current.captureText(text, "composer", undefined, settled)) {
           item.message = "已添加为长文本附件";
         } else if (textarea && selection) {
           const draft =
@@ -193,6 +207,7 @@ export function useRichPaste(options: {
             }
           });
           item.message = `已插入图文${item.document?.images.length ? `（${item.document.images.length} 张图片）` : ""}`;
+          settled(true);
         }
         item.status = "inserted";
         update();
@@ -201,6 +216,7 @@ export function useRichPaste(options: {
         item.status = "error";
         item.message =
           error instanceof Error ? error.message : "图文准备失败，内容已保留";
+        settled(false);
         update();
       }
     },
@@ -226,7 +242,6 @@ export function useRichPaste(options: {
         message: "",
         cache: new Map(),
         attempt: 0,
-        autoCloseAt: purpose === "tui" ? Date.now() + 60_000 : undefined,
       };
       const list = records.get(key) ?? [];
       // Successful notices need not retain clipboard bytes indefinitely.
@@ -237,6 +252,7 @@ export function useRichPaste(options: {
       if (current.current.sending) {
         item.status = "error";
         item.message = "正在发送，图文已保留";
+        item.autoCloseAt = purpose === "tui" ? Date.now() + 60_000 : undefined;
         update();
         return true;
       }
@@ -269,7 +285,7 @@ export function useRichPaste(options: {
           ],
     );
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [items, remove]);
+  });
   return {
     items,
     capture,

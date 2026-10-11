@@ -47,6 +47,7 @@ import type { TerminalQuestionsService } from "../terminal/questions/service";
 
 export interface RuntimeServices extends DeviceMonitoringRuntime {
   terminalBadges: import("../device-monitor/terminal-badges").TerminalBadges | null;
+  desktopBadgeAccess: import("../device-monitor/desktop-badge-access").DesktopBadgeAccess | null;
   resourceMonitor: import("../resource-monitor/service").ResourceMonitorService | null;
   start(controlPlaneBaseUrl: string): void;
   dispose(): Promise<void>;

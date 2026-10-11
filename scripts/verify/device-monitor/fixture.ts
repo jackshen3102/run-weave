@@ -19,6 +19,8 @@ import { BatteryAlerts } from "../../../backend/src/device-monitor/delivery";
 import { PushClient } from "../../../backend/src/device-monitor/push-client";
 import { createDeviceStatusRouter } from "../../../backend/src/routes/device-status";
 import { createDeviceNotificationsRouter } from "../../../backend/src/routes/device-notifications";
+import { createTerminalUnreadRouter } from "../../../backend/src/routes/terminal/unread";
+import { DesktopBadgeAccess } from "../../../backend/src/device-monitor/desktop-badge-access";
 import { attachTerminalEventsWebSocketServer } from "../../../backend/src/ws/terminal-events-server";
 import { createHttpUpgradeRouter } from "../../../backend/src/server/http-upgrade-router";
 import { TerminalEventService } from "../../../backend/src/terminal/state/terminal-event-service";
@@ -51,6 +53,7 @@ export async function eventually(
 export async function fixture(
   sampler: BatterySampler,
   transport: APNsTransport,
+  now: () => number = Date.now,
 ) {
   const directory = await mkdtemp(path.join(tmpdir(), "runweave-battery-"));
   const monitorStore = await DeviceMonitorStore.create(
@@ -65,7 +68,7 @@ export async function fixture(
       environments: ["sandbox"],
     };
   });
-  const unboundGateway = createGateway(gatewayStore, transport);
+  const unboundGateway = createGateway(gatewayStore, transport, undefined, now);
   const gateway = httpsServer(
     {
       cert: await readFile(process.env.BATTERY_FIXTURE_CERT!),
@@ -94,6 +97,8 @@ export async function fixture(
   const app = express();
   app.use(express.json({ limit: "8kb" }));
   app.use("/api/auth", createAuthRouter(auth));
+  app.use("/api/terminal/unread", createRequireAuth(auth),
+    createTerminalUnreadRouter(null, new DesktopBadgeAccess(auth, subscriptions), auth));
   app.use(
     "/api/device",
     createRequireAuth(auth),
@@ -128,12 +133,12 @@ export async function fixture(
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   }
-  async function login(connectionId = randomUUID()) {
+  async function login(connectionId = randomUUID(), clientType: "app" | "electron" | "web" = "app") {
     const response = await fetch(baseURL + "/api/auth/login", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Auth-Client": "app",
+        "X-Auth-Client": clientType,
         "X-Connection-ID": connectionId,
       },
       body: JSON.stringify({ username: "battery-fixture", password }),
@@ -223,11 +228,14 @@ export async function fixture(
     await new Promise<void>((resolve) => sockets.close(() => resolve()));
     await close(server);
     await close(gateway);
+    await unboundGateway.disposeBadges();
     await monitor.dispose();
     gatewayStore.close();
     await rm(directory, { recursive: true, force: true });
   }
   return {
+    baseURL,
+    gatewayURL,
     directory,
     monitor,
     monitorStore,

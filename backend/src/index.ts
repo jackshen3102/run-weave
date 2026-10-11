@@ -317,6 +317,7 @@ function createHttpApp(
     requireAuth,
     createTerminalRouter(services.terminalSessionManager, {
       terminalBadges: services.terminalBadges,
+      desktopBadgeAccess: services.desktopBadgeAccess,
       terminalTaskService: services.terminalTaskService,
       textAttachmentDelivery: services.textAttachmentDelivery,
       terminalQuestionsService: services.terminalQuestionsService,

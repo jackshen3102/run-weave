@@ -84,9 +84,28 @@ iPhone 使用独立 `terminal-unread` 绑定，类别为 `terminal.unread`，不
   不复用普通通知的事件幂等/每分钟 4 次额度；结果未知时可重发当前绝对状态，最少间隔 30 秒。
   APNs 接受不等于手机已显示，系统权限、设备离线与 Apple 投递仍影响实际到达。
 
-Mac Dock 由 Electron 主进程轮询各已登录连接的未读快照并按 host 去重；窗口隐藏后继续，
-完全退出后下次启动校准。手机与桌面汇总各自已配置/授权的电脑，范围不同时数字可以不同。
-主进程仅在内存持有 renderer 提供的连接令牌；注销/删除连接移除其贡献。
+Mac Dock 由 Electron 主进程读取与手机相同的网关总快照，每 2 秒一次，不再逐 Backend 查询计数。
+首次连接通过各已登录 Backend 的 `/api/terminal/unread/gateway-targets` 发现有效手机未读目标，
+以 gateway origin/targetId 去重，唯一目标自动绑定；多个目标显示来源冲突，不猜选或累加手机安装。
+`POST /api/terminal/unread/gateway-access` 仅接受当前有效 Electron 登录及该用户自己的有效手机订阅，
+返回短期只读授权。手机订阅范围即全局计数范围；Backend 仍是具体终端已读状态的唯一权威。
+
+- `PUT /v1/badge-readers/:readerId` 要求来源 host 的 sender 凭据和 `{ subscriptionId }`，
+  签发 `{ targetId, readerId, readToken, expiresAt }`。5 分钟有效，同 ID 续期轮换 token；
+  reader 的来源 host、订阅与 target 不可被其他 host 抢占。每 host 最多 100 个未过期 reader。
+- `GET /v1/badge-readers/:readerId` 仅接受该 reader 的 readToken，返回 `{ targetId, revision, count }`。
+  只读 token 不能发通知、注册/撤销订阅、写计数或读取其他 reader；来源订阅或 sender 撤销后立即拒绝。
+- targetId 按 shared/push-notifications 的规范编码生成 SHA-256；不同推送环境隔离。
+  reader 存储为 schema 2 的可选字段，只保存 token 摘要与过期时间，不迁移已有计数数据。
+- 所有已注册活跃 host 必须至少有一份合法贡献，新旧总数 GET 才成功；首次贡献不齐返回 409，
+  APNs 不发送部分总数。已收到但离线的 host 保留最后贡献，不能按 0 处理。
+
+Mac 在到期前 1 分钟向一个可用 Backend 续期，可切换到同目标的其他已登录 Backend。
+续期失败独立退避，未过期的凭据仍可读取网关；到期后必须重新授权。
+readToken 仅存主进程内存；senderToken/revokeToken 不下发 renderer，bridge 只返回脱敏同步状态。
+断线保留最后成功值并退避重试，连接页显示同步状态；注销最后一个连接时清除本机展示并忽略迟到响应，
+不会确认任何终端已读。已泄漏的 reader 在桌面注销后最多仍有 5 分钟有效期。
+窗口隐藏后继续更新，完全退出后重新发现和授权。旧服务不支持新接口时显示不可用，不静默切回逐 Backend 计数。
 
 部署顺序为网关、Backend、客户端。仅更新 iOS 或桌面不能补齐云端角标链路。
 新增状态以可选字段保留在现有 store；旧 Backend 不认识 `terminal-unread` 绑定，不能直接用旧 Backend 打开包含新绑定的状态，回退须使用匹配版本的状态备份。
@@ -177,6 +196,8 @@ Backend 注册成功后，手机先将撤销凭据写入 Keychain，再确认订
 通用接口验收合同见[通用推送计划](../../docs/testing/app/push-notifications.testplan.yaml)。
 在仓库根执行 `node scripts/verify/device-monitor/run.mjs`。驱动创建自己的 HTTPS 证书、Backend/网关状态和登录，
 验证真实 HTTP/WS、SQLite、阈值、撤销、并发与恢复，以及通用接口的类别授权、内容冲突、超限、别名限流与重试。
+其中 `--unread` 可单独运行三 Backend 汇总、桌面只读授权、SQLite 恢复与 60 秒单网关请求计数检查；
+该驱动中的桌面消费者是实际主进程同步模块，不等同于真实 Electron Dock 或 iPhone 角标验收。
 provider 检查使用本地 HTTP/2 TLS 服务核对 ES256、两种 payload、headers 和响应处理；
 不会向 Apple 发通知，也不更改系统证书信任。
 `node scripts/verify/device-monitor/run.mjs --cadence` 单独执行 130 秒、3 个客户端的采样频率检查。

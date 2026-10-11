@@ -15,6 +15,7 @@ import type { ProviderNotification } from "../../../packages/push-gateway/src/ty
 import { fixture, eventually, pause } from "./fixture";
 import { verifyProvider } from "./provider";
 import { verifyCadence } from "./cadence";
+import { verifyUnread } from "./unread";
 
 const battery = (percent: number, ac = false) =>
   parseMacBattery(
@@ -572,13 +573,14 @@ async function confirmationBoundary() {
     await f.dispose();
   }
 }
-
 async function main() {
+  if (process.argv.includes("--unread")) return verifyUnread();
   if (process.argv.includes("--cadence")) {
     await verifyCadence();
     return;
   }
   if (process.argv.includes("--scheduled")) return verifyScheduledNotifications();
+  await verifyUnread();
   await verifyScheduledNotifications();
   await verifyProvider();
   await verifyNotifications();

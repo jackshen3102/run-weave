@@ -1,45 +1,17 @@
 import { app, ipcMain, net, type BrowserWindow } from "electron";
-import type { TerminalBadgeConnection, TerminalUnreadSnapshot } from "@runweave/shared/terminal-unread";
+import type { TerminalBadgeConnection } from "@runweave/shared/terminal-unread";
+import { TerminalBadgeClient } from "./terminal-badge-client";
 
 export function registerTerminalBadge(getWindow: () => BrowserWindow | null): () => void {
-  const connections = new Map<string, TerminalBadgeConnection>();
-  const snapshots = new Map<string, TerminalUnreadSnapshot>();
-  let stopped = false;
-  let flight: Promise<void> | null = null;
-  const controller = new AbortController();
-  const render = () => {
-    const hosts = new Map<string, TerminalUnreadSnapshot>();
-    for (const snapshot of snapshots.values()) {
-      if ((hosts.get(snapshot.hostId)?.revision ?? -1) < snapshot.revision) hosts.set(snapshot.hostId, snapshot);
-    }
-    const count = [...hosts.values()].reduce((sum, value) => sum + value.count, 0);
-    app.dock?.setBadge(count ? String(count) : "");
-  };
-  const poll = () => {
-    if (stopped || flight) return;
-    flight = Promise.allSettled([...connections.values()].map(async (connection) => {
-      if (!connection.token || !connection.url) return;
-      try {
-        const response = await net.fetch(`${connection.url}/api/terminal/unread`, {
-          headers: { Authorization: `Bearer ${connection.token}` },
-          redirect: "error",
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8_000)]),
-        });
-        if (!response.ok) return;
-        const value = await response.json() as TerminalUnreadSnapshot;
-        if (stopped || connections.get(connection.id) !== connection ||
-            typeof value.hostId !== "string" || !value.hostId ||
-            !Number.isSafeInteger(value.count) || value.count < 0 ||
-            !Number.isSafeInteger(value.revision) || value.revision < 1) return;
-        const previous = snapshots.get(connection.id);
-        if (previous?.hostId === value.hostId && previous.revision > value.revision) return;
-        snapshots.set(connection.id, value);
-        render();
-      } catch { /* Offline is not zero; retain the last successful snapshot. */ }
-    })).then(() => undefined).finally(() => { flight = null; });
+  const client = new TerminalBadgeClient(
+    (url, init) => net.fetch(url, init),
+    (count) => app.dock?.setBadge(count ? String(count) : ""),
+  );
+  const requireMainWindow = (senderId: number) => {
+    if (getWindow()?.webContents.id !== senderId) throw new Error("Main window sender required");
   };
   ipcMain.handle("terminal:badge-connections", (event, input: unknown) => {
-    if (getWindow()?.webContents.id !== event.sender.id) throw new Error("Main window sender required");
+    requireMainWindow(event.sender.id);
     if (!Array.isArray(input) || input.length > 100) throw new Error("Invalid badge connections");
     const values = input.map((value: unknown): TerminalBadgeConnection => {
       if (!value || typeof value !== "object") throw new Error("Invalid badge connection");
@@ -52,17 +24,16 @@ export function registerTerminalBadge(getWindow: () => BrowserWindow | null): ()
       }
       return { id: c.id, url: c.url.replace(/\/+$/, ""), token: c.token };
     });
-    const ids = new Set(values.map((c) => c.id));
-    for (const id of connections.keys()) if (!ids.has(id)) { connections.delete(id); snapshots.delete(id); }
-    for (const value of values) {
-      const old = connections.get(value.id);
-      if (!value.token) snapshots.delete(value.id);
-      if (!old || old.token !== value.token || old.url !== value.url) connections.set(value.id, value);
-    }
-    render();
-    poll();
+    if (new Set(values.map((c) => c.id)).size !== values.length) throw new Error("Duplicate badge connections");
+    client.setConnections(values);
   });
-  const timer = setInterval(poll, 2_000);
-  timer.unref();
-  return () => { stopped = true; clearInterval(timer); controller.abort(); connections.clear(); snapshots.clear(); };
+  ipcMain.handle("terminal:badge-status", (event) => {
+    requireMainWindow(event.sender.id);
+    return client.getStatus();
+  });
+  return () => {
+    client.dispose();
+    ipcMain.removeHandler("terminal:badge-connections");
+    ipcMain.removeHandler("terminal:badge-status");
+  };
 }

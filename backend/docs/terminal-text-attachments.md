@@ -48,7 +48,9 @@ session + operationId + 同一 payload 复用持久化结果；改变 payload �
 富文本 TUI 在下载图片前调用 `POST text-attachments/prepare`，固定 session、panel、thread 和
 输入 revision，取得 120 秒有效的 preparationId。create 携带该 ID 时可保存短正文，沿用原有
 原子文件、哈希与操作回执；insert 的 `inline=true` 仅允许有准备资格且少于 5000 UTF-16 单元的
-正文，使用 bracketed paste 插入完整内容，不发送 Enter。长正文仍插入文件引用。
+正文，使用 bracketed paste 插入完整内容，不发送 Enter。Codex 的上传图片引用使用独立
+paste 事件，前后文字保持原顺序；仅识别当前 Backend 临时目录下的上传图片路径格式，
+投递仍在同一次输入保护与操作回执内完成。长正文仍插入文件引用。
 保存期间其他客户端输入、目标变化、资格过期或 Backend 重启都会使旧投递失效；客户端保留内容。
 新增字段不改变旧客户端纯文本合同或 metadata schema，回滚保留现有文件。
 

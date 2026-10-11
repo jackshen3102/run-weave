@@ -28,6 +28,7 @@ export interface TextAttachmentItem {
   reason?: string;
   attachment?: TerminalTextAttachment;
   operationId: string;
+  autoCloseAt?: number;
 }
 type Scope = {
   apiBase: string;
@@ -168,7 +169,7 @@ export function useTerminalTextAttachments(
     );
   });
   const captureText = useMemoizedFn(
-    (text: string, purpose: "tui" | "composer", preparationId?: string): boolean => {
+    (text: string, purpose: "tui" | "composer", preparationId?: string, onSettled?: (success: boolean) => void): boolean => {
       if (!candidate || (!preparationId && text.length < limits.threshold)) return false;
       const bound = { ...current.current };
       const key = scopeKey(bound);
@@ -192,6 +193,7 @@ export function useTerminalTextAttachments(
         item.status = "error";
         item.reason = "草稿最多保存 20 份附件，原文已保留";
         update();
+        onSettled?.(false);
         return true;
       }
       const present = () => (records.current.get(key) ?? []).includes(item);
@@ -321,6 +323,8 @@ export function useTerminalTextAttachments(
                 ? "not-inserted"
                 : "unknown";
           item.reason = operation.reason;
+          if (item.richPaste && item.status === "inserted" && !item.reason)
+            item.autoCloseAt = Date.now() + 3000;
           if (operation.status !== "rejected") attachment.state = "referenced";
           if (
             operation.status === "accepted" &&
@@ -336,11 +340,28 @@ export function useTerminalTextAttachments(
               error instanceof Error ? error.message : "保存失败，原文已保留";
             update();
           }
+        } finally {
+          onSettled?.(
+            present() &&
+              (item.status === "inserted" || (purpose === "composer" && item.status === "saved")) &&
+              !item.reason,
+          );
         }
       })();
       return true;
     },
   );
+
+  // Items are updated in place as delivery progresses. Reconcile deadlines on
+  // every render; an unrelated render must not restart the three-second clock.
+  useEffect(() => {
+    const timers = items.flatMap((item) =>
+      item.autoCloseAt === undefined ? [] : [window.setTimeout(
+        () => remove(item), Math.max(0, item.autoCloseAt - Date.now()),
+      )],
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  });
 
   const capture = useMemoizedFn((event: ClipboardEvent | React.ClipboardEvent<HTMLTextAreaElement>, purpose: "tui" | "composer") => {
     const clipboard = event.clipboardData;
