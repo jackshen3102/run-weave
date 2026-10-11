@@ -11,6 +11,7 @@ import { FeishuRuntimeStatusReporter } from "./runtime-status.js";
 import { runBridgeConnection } from "./bridge-runtime.js";
 import type { FeishuConfig } from "./config.js";
 import type { FeishuStateStore } from "./state-store.js";
+import { formatFeishuNotification } from "./notification-display.js";
 export async function runFeishuHub(
   config: FeishuConfig,
   store: FeishuStateStore,
@@ -22,7 +23,7 @@ export async function runFeishuHub(
     throw new Error("Hub requires target chat and allowed users");
   const backends = configuration().get(
     "services.feishu.hub.backends",
-  ) as Record<string, { token: string }>;
+  ) as Record<string, { token: string; displayName?: string }>;
   const tokens = new Map(
     Object.entries(backends).map(([id, entry]) => [id, entry.token]),
   );
@@ -40,7 +41,7 @@ export async function runFeishuHub(
         chatId: config.targetChatId!,
         backendId,
         ...payload,
-        notificationText: `${mentions ? `${mentions}\n` : ""}机器: ${backendId.slice(0, 12)}\n${payload.notificationText}`,
+        notificationText: `${mentions ? `${mentions}\n` : ""}${formatFeishuNotification(payload.notificationText, payload.terminalSessionId, backends[backendId]?.displayName)}`,
       });
     },
   });

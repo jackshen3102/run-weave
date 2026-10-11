@@ -50,6 +50,7 @@ services:
       backends:
         <backendId>:
           token: <该机器独立的32字节随机值的base64url编码>
+          displayName: 本机
 ```
 
 backendId 使用各 Backend 已登录的 `GET /api/connection/identity` 返回的 `identityId`。
@@ -95,7 +96,10 @@ Backend 和 Hook 使用的 `rw` 都需更新到支持 node 的同一版本。
 - 本机仍负责 60 秒时长、30 秒宽限、已查看状态及飞书回复例外。Hook 的 `rw feishu notify`
   领取一次发送资格后，通过 Hook token 调用本机 `POST /internal/terminal-completion/feishu/notify`。
   显式手动 notify 使用 CLI 登录态访问 `POST /api/feishu/notify`，不会绕过认证。
-- 中心按认证连接取得 backendId，统一添加通知 @ 用户与机器身份前 12 位。话题键为
+- 中心按认证连接取得 backendId，统一添加通知 @ 用户。完成通知头显示为 `机器显示名 · 项目名`，
+  例如 `本机 · browser-viewer`；项目名取 Hook 工作目录的末级名称，worktree 显示其目录名。
+  机器显示名由 `hub.backends.<backendId>.displayName` 配置，未配置时省略；不显示机器哈希、
+  完整路径或 Terminal ID。只压缩 Hook 生成的通知头，回答正文保持原样。话题键为
   `(chatId, backendId, terminalSessionId)`；回复按 chat + root 查绑定，同话题串行。
 - 连接内仅允许 terminal.get、terminal.input、notify、结果与运行状态报告，不代理任意 HTTP 或 shell。
   输入最多 256 KiB，帧最多 512 KiB，每连接最多 64 个在途请求；同身份存活连接不允许被另一连接抢占。
