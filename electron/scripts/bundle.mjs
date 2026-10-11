@@ -10,6 +10,8 @@ import { finalizeActivitySqliteRuntime } from "./finalize-better-sqlite3-runtime
 import { buildCompanionAgent } from "./build-companion-agent.mjs";
 import { execFileSync } from "node:child_process";
 
+import { buildInfoDefine, createBuildInfo } from "../../scripts/lib/build-info.mjs";
+
 const backendSourceRevision = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const backendSourceDirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim().length > 0;
 
@@ -75,6 +77,7 @@ await build({
   define: {
     ...importMetaUrlShim.define,
     ...desktopBuildDefines,
+    ...buildInfoDefine(path.resolve(".")),
   },
   entryPoints: [{ in: "src/bootstrap.ts", out: "main" }],
   outdir: outputDir,
@@ -112,7 +115,7 @@ await build({
   ...shared,
   ...importMetaUrlShim,
   entryPoints: ["../backend/src/index.ts"],
-  define: { ...importMetaUrlShim.define, __RUNWEAVE_BACKEND_SOURCE_REVISION__: JSON.stringify(backendSourceRevision), __RUNWEAVE_BACKEND_SOURCE_DIRTY__: JSON.stringify(backendSourceDirty) },
+  define: { ...importMetaUrlShim.define, ...buildInfoDefine(path.resolve("../backend")), __RUNWEAVE_BACKEND_SOURCE_REVISION__: JSON.stringify(backendSourceRevision), __RUNWEAVE_BACKEND_SOURCE_DIRTY__: JSON.stringify(backendSourceDirty) },
   outdir: `${outputDir}/backend`,
   format: "cjs",
   external: ["node-pty", "better-sqlite3", "fs-native-extensions"],
@@ -174,6 +177,7 @@ await build({
   outExtension: { ".js": ".cjs" },
 });
 
+writeFileSync(path.join(outputDir, "cli", "build-info.json"), JSON.stringify(createBuildInfo(path.resolve("../packages/runweave-cli"))));
 copyNativeLockRuntime(path.join(outputDir, "cli"));
 
 await buildCompanionAgent(outputDir);

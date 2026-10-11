@@ -1,3 +1,5 @@
+import { runtimeBuildInfo, runtimeVersionFacts } from "@runweave/shared/runtime-version";
+import backendPackage from "../../package.json" with { type: "json" };
 import type {
   RuntimeStatusItem,
   RuntimeStatusReport,
@@ -7,6 +9,10 @@ import type { AgentTeamRecheckWatchdogStatus } from "../agent-team/service/reche
 import type { AppServerEventConsumerStatusSnapshot } from "../app-server/event-consumer";
 import type { EvolutionRuntime } from "../evolution/runtime";
 import type { RuntimeStatusWorkspaceServiceManager } from "./workspace-service-manager";
+
+import { readNodeCliVersion } from "./cli-version";
+
+const backendBuild = runtimeBuildInfo({ version: `${backendPackage.version}-dev`, sourceRevision: process.env.RUNWEAVE_SOURCE_REVISION });
 
 const BACKEND_REPORT_VALID_FOR_MS = 15_000;
 
@@ -32,6 +38,7 @@ export async function createBackendRuntimeStatusReport(
   now = Date.now(),
 ): Promise<RuntimeStatusReport> {
   const listener = services.listener;
+  const cliVersion = await readNodeCliVersion();
   const items: RuntimeStatusItem[] = [
     {
       id: "backend.process",
@@ -42,8 +49,9 @@ export async function createBackendRuntimeStatusReport(
       observedAt: now,
       dependsOn: [],
       recovery: null,
-      facts: listener
-        ? [
+      facts: [
+        ...runtimeVersionFacts(backendBuild),
+        ...(listener ? [
             {
               id: "backend.address",
               label: "地址",
@@ -58,8 +66,8 @@ export async function createBackendRuntimeStatusReport(
               kind: "port",
               copyable: true,
             },
-          ]
-        : [],
+          ] as const : []),
+      ],
       navigation: null,
     },
     {
@@ -81,6 +89,15 @@ export async function createBackendRuntimeStatusReport(
     buildEvolutionItem(services.evolution, now),
     ...(await services.workspaceServiceManager.getRuntimeStatusItems(now)),
   ];
+
+  if (cliVersion) {
+    items.push({
+      id: "backend.cli-version", capabilityId: "node", label: "CLI（节点 rw）",
+      state: "healthy", summary: "已读取此节点 PATH 中的 rw 版本（最多缓存 60 秒）",
+      observedAt: now, dependsOn: [], recovery: null,
+      facts: runtimeVersionFacts(cliVersion), navigation: null,
+    });
+  }
 
   return {
     protocolVersion: 1,

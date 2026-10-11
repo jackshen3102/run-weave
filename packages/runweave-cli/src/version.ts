@@ -9,16 +9,13 @@ export interface CliVersionInfo {
     sourceDirty: boolean;
     builtAt: string;
     contentSha256?: string;
+    buildId?: string;
+    version?: string;
+    packageVersion?: string;
   };
 }
 
 export function readCliVersion(): CliVersionInfo {
-  const packageJsonPath = path.resolve(__dirname, "..", "package.json");
-  const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
-    name?: unknown;
-    version?: unknown;
-  };
-
   let build: CliVersionInfo["build"];
   for (const name of ["release.json", "build-info.json"]) {
     try {
@@ -29,9 +26,17 @@ export function readCliVersion(): CliVersionInfo {
     }
   }
 
+  const packageJsonPath = path.resolve(__dirname, "..", "package.json");
+  let pkg: { name?: unknown; version?: unknown } = {};
+  try {
+    pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
   return {
     name: typeof pkg.name === "string" ? pkg.name : "@runweave/cli",
-    version: typeof pkg.version === "string" ? pkg.version : "0.0.0",
+    version: typeof pkg.version === "string" ? pkg.version : build?.version ?? build?.packageVersion ?? "0.0.0",
     ...(build ? { build } : {}),
   };
 }

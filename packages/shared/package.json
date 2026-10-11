@@ -34,6 +34,7 @@
     "./protocol": "./src/protocol.ts",
     "./dev-resources": "./src/monitoring/dev-resources.ts",
     "./runtime-monitor": "./src/monitoring/runtime.ts",
+    "./runtime-version": "./src/monitoring/runtime-version.ts",
     "./runtime-status": "./src/monitoring/runtime-status.ts",
     "./research-mcp": "./src/monitoring/research-mcp.ts",
     "./race": "./src/race/index.ts",

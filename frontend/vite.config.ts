@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath, URL } from "node:url";
 
+import { buildInfoDefine } from "../scripts/lib/build-info.mjs";
+
 const frontendPort = Number(process.env.VITE_DEV_PORT ?? 5173);
 const frontendHost = process.env.VITE_DEV_HOST?.trim() || "0.0.0.0";
 const backendTarget = process.env.VITE_PROXY_TARGET ?? "http://localhost:5000";
@@ -10,6 +12,7 @@ const expectedBackendId =
   process.env.VITE_RUNWEAVE_EXPECTED_BACKEND_ID?.trim() || null;
 
 export default defineConfig({
+  define: buildInfoDefine(fileURLToPath(new URL(".", import.meta.url))),
   plugins: [
     react(),
     VitePWA({

@@ -1,3 +1,4 @@
+import { runtimeBuildInfo } from "@runweave/shared/runtime-version";
 import { configuration } from "@runweave/config-node";
 import type { BackendHealthPayload } from "@runweave/shared/runtime-monitor";
 
@@ -10,8 +11,10 @@ export function buildHealthPayload(
 ): BackendHealthPayload {
   const runtimeReleaseId = env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim();
   // An external runtime can be newer than the Electron shell supplying its env.
-  const sourceRevision = typeof __RUNWEAVE_BACKEND_SOURCE_REVISION__ === "string"
-    ? __RUNWEAVE_BACKEND_SOURCE_REVISION__ : env.RUNWEAVE_SOURCE_REVISION?.trim();
+  const buildInfo = runtimeBuildInfo();
+  const sourceRevision = buildInfo.sourceRevision ?? (typeof __RUNWEAVE_BACKEND_SOURCE_REVISION__ === "string"
+    ? __RUNWEAVE_BACKEND_SOURCE_REVISION__ : env.RUNWEAVE_SOURCE_REVISION?.trim());
+  const sourceDirty = buildInfo.sourceDirty ?? (typeof __RUNWEAVE_BACKEND_SOURCE_DIRTY__ === "boolean" ? __RUNWEAVE_BACKEND_SOURCE_DIRTY__ : undefined);
   return {
     status: "ok",
     environment: configuration().context,
@@ -29,7 +32,7 @@ export function buildHealthPayload(
     ...(sourceRevision
       ? { sourceRevision }
       : {}),
-    ...(typeof __RUNWEAVE_BACKEND_SOURCE_DIRTY__ === "boolean" ? { sourceDirty: __RUNWEAVE_BACKEND_SOURCE_DIRTY__ } : {}),
+    ...(sourceDirty === undefined ? {} : { sourceDirty }),
     ...(env.RUNWEAVE_RESOURCE_NAMESPACE?.trim()
       ? { resourceNamespace: env.RUNWEAVE_RESOURCE_NAMESPACE.trim() }
       : {}),

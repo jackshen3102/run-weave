@@ -16,6 +16,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildInfoDefine } from "../lib/build-info.mjs";
+
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
@@ -105,7 +107,7 @@ const shared = {
   target: "node22",
   format: "cjs",
   external: ["better-sqlite3", "node-pty", "fs-native-extensions"],
-  define: { "import.meta.url": "__IMPORT_META_URL__" },
+  define: { "import.meta.url": "__IMPORT_META_URL__", ...buildInfoDefine(path.join(repoRoot, "backend")) },
   banner: {
     js: "const __IMPORT_META_URL__ = require('url').pathToFileURL(__filename).href;",
   },

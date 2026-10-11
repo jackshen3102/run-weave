@@ -5,6 +5,8 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 
+import { buildInfoDefine } from "../lib/build-info.mjs";
+
 const repoRoot = process.cwd();
 const requireFromCli = createRequire(
   path.join(repoRoot, "packages", "runweave-cli", "package.json"),
@@ -28,6 +30,7 @@ await build({
   bundle: true,
   external: ["fs-native-extensions"],
   define: {
+    ...buildInfoDefine(path.join(repoRoot, "app-server")),
     "import.meta.url": "__IMPORT_META_URL__",
   },
   banner: {

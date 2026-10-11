@@ -20,11 +20,18 @@ export function installBoundCli(context: EnvironmentContext): void {
   const bin = path.join(context.configRoot, "runtime", "bin");
   mkdirSync(bin, { recursive: true, mode: 0o700 });
   const digest = createHash("sha256").update(readFileSync(entry)).digest("hex");
-  const release = path.join(context.configRoot, "runtime", "cli", `${digest}-cjs`);
+  const versionFile = ["release.json", "build-info.json"]
+    .map((name) => path.join(path.dirname(entry), name)).find(existsSync);
+  const versionBytes = versionFile ? readFileSync(versionFile) : null;
+  // Keep provenance with the executable. A rebuild may have identical code but
+  // distinct provenance; never overwrite metadata used by a running Bridge.
+  const versionDigest = versionBytes ? createHash("sha256").update(versionBytes).digest("hex").slice(0, 16) : "unknown";
+  const release = path.join(context.configRoot, "runtime", "cli", `${digest}-${versionDigest}-cjs`);
   if (!existsSync(path.join(release, "index.cjs"))) {
     const temporary = `${release}.${randomUUID()}.tmp`;
     mkdirSync(temporary, { recursive: true, mode: 0o700 });
     cpSync(entry, path.join(temporary, "index.cjs"));
+    if (versionBytes && versionFile) writeFileSync(path.join(temporary, path.basename(versionFile)), versionBytes);
     cpSync(modules, path.join(temporary, "node_modules"), { recursive: true, dereference: true });
     renameSync(temporary, release);
   }

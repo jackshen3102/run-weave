@@ -1,3 +1,4 @@
+import { runtimeBuildInfo, runtimeVersionFacts } from "@runweave/shared/runtime-version";
 import type { RuntimeStatusReport } from "@runweave/shared/runtime-status";
 import type { AppServerEventCenter } from "./events/center.js";
 import type { AgentThreadStatusReconciler } from "./state/reconciler.js";
@@ -7,6 +8,8 @@ export function createAppServerRuntimeStatusReport(options: {
   reconciler: AgentThreadStatusReconciler;
   serviceInstanceId: string;
   version: string;
+  sourceRevision?: string | null;
+  releaseId?: string | null;
   now?: number;
 }): RuntimeStatusReport {
   const now = options.now ?? Date.now();
@@ -46,15 +49,11 @@ export function createAppServerRuntimeStatusReport(options: {
         observedAt: now,
         dependsOn: [],
         recovery: null,
-        facts: [
-          {
-            id: "app-server.version",
-            label: "版本",
-            value: options.version,
-            kind: "text",
-            copyable: true,
-          },
-        ],
+        facts: runtimeVersionFacts(runtimeBuildInfo({
+          version: options.version,
+          ...(options.sourceRevision ? { sourceRevision: options.sourceRevision } : {}),
+          ...(options.releaseId ? { buildId: options.releaseId } : {}),
+        })),
         navigation: null,
       },
       {
