@@ -1,3 +1,5 @@
+import { runtimeVersionFacts } from "@runweave/shared/runtime-version";
+import { readCliVersion } from "../version.js";
 import { randomUUID } from "node:crypto";
 import type {
   RuntimeStatusItem,
@@ -20,6 +22,7 @@ interface ConnectionObservation {
 export class FeishuRuntimeStatusReporter {
   private readonly instanceId = `feishu-bridge:${process.pid}:${randomUUID()}`;
   private readonly startedAt = Date.now();
+  private readonly cliVersion = readCliVersion();
   private leaseHeld = true;
   private lark: ConnectionObservation = {
     connected: false,
@@ -112,13 +115,13 @@ export class FeishuRuntimeStatusReporter {
           "飞书 Bridge 配置有效",
           now,
         ),
-        baseItem(
+        { ...baseItem(
           "feishu.bridge-lease",
           "Bridge lease",
           this.leaseHeld ? "healthy" : "disabled",
           this.leaseHeld ? "已取得单实例 lease" : "Bridge 正在停止",
           now,
-        ),
+        ), facts: runtimeVersionFacts({ version: this.cliVersion.version, ...this.cliVersion.build }) },
         connectionItem(
           "feishu.lark-websocket",
           "Lark WebSocket",

@@ -8,9 +8,13 @@ Agent 使用 [runweave-management Skill](../../plugins/toolkit/skills/runweave-m
 ```bash
 rw status --instance stable --profile local --json
 rw config status --instance stable --profile local --json
+rw version --json
 ```
 
 `rw status` 通过认证 profile 读取 `GET /api/runtime-status`，返回原有 node、reports 和 management。
+`reports[].items[].facts` 中的 `runtime-version.*` 字段承载组件版本与构建信息。
+其中节点 CLI 来自 Backend 所在机器可调用的 `rw`，最多缓存 60 秒；当前执行命令的 CLI
+版本使用 `rw version --json`，其 `build.buildId` 标识具体构建。两者可以属于不同机器。
 management.capabilities 复用共享聚合规则：生命周期 state 和 attention（none/warning/error）独立；
 上游故障导致的 blocked 不重复计入能力异常数量。diagnostics 列出状态项、来源、依赖、候选配置域与字段模式，
 以及只读操作标识。关联是排查线索，不是根因判定或自动修改授权。

@@ -10388,5 +10388,45 @@
     "count": 1,
     "category": "test",
     "reason": "隔离节点进程的测试配置及状态副本，固定在临时目录，不读取用户凭据或修改用户配置。"
+  },
+  {
+    "file": "backend/src/bootstrap/bound-cli.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(versionFile)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取随节点 CLI 发布的 release.json 或 build-info.json，绑定可执行文件的构建来源，不读取用户设置。"
+  },
+  {
+    "file": "backend/src/bootstrap/bound-cli.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(temporary, path.basename(versionFile)))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "将 CLI 构建元数据复制到相同不可变发布目录，保证运行进程与版本来源一致，不写入用户配置。"
+  },
+  {
+    "file": "backend/src/runtime-status/provider.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_SOURCE_REVISION",
+    "count": 1,
+    "category": "build",
+    "reason": "源码开发模式下补充部署传入的提交标识；打包产物优先使用固化构建信息，不作为用户设置。"
+  },
+  {
+    "file": "electron/scripts/bundle.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(outputDir, \"cli\", \"build-info.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "为 Electron 内置 CLI 写入构建来源旁文件，供运行版本展示与不可变发布目录复制，不存储业务配置。"
+  },
+  {
+    "file": "scripts/lib/build-info.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(packageDirectory, \"package.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "构建期间从目标包清单读取产品版本并固化到产物，不在运行时读取工作区或用户设置。"
   }
 ]

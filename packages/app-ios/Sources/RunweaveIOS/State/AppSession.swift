@@ -156,6 +156,7 @@ final class AppSession: ObservableObject {
     } catch {
       guard generation == epoch else { return }
       checking = false
+      guard !Task.isCancelled, !isRequestCancellation(error) else { return }
       self.error = displayError(error)
       health.status = .offline
       health.message = displayError(error)
@@ -557,7 +558,7 @@ final class AppSession: ObservableObject {
   }
 
   func handle(_ failure: Error, epoch: Int, reportFailure: Bool = true) async {
-    guard generation == epoch else { return }
+    guard generation == epoch, !Task.isCancelled, !isRequestCancellation(failure) else { return }
     if reportFailure { error = displayError(failure) }
     if case APIError.credentialsUnavailable = failure {
       authenticated = false

@@ -69,6 +69,17 @@ Backend 未收到飞书 Bridge 报告时只表达“尚未收到状态、无法�
 [RuntimeStatusEntry](../../frontend/src/components/runtime-status-entry.tsx) 展示整体状态与异常能力域数量，点击打开状态面板。
 当前入口不直接显示连接 URL；地址从面板的节点信息查看和复制。组件布局不放入领域词汇表。
 
+面板的「组件版本」集中展示 Backend、App Server、Desktop、CLI、飞书 Bridge 和调查 MCP；
+当前 Web 页面版本单独展示，避免与远端节点混淆。版本信息通过既有 fact 合同的
+`runtime-version.*` 标识上报，包含产品版本、构建标识、源码提交、未提交改动标记和构建时间。
+旧服务没有上报时显示「未上报」；过期来源保留的版本只代表最近上报，不证明进程仍在运行。
+源码直接运行的服务可显示 `-dev` 版本，缺失的构建信息不从当前 checkout 推测。
+
+构建入口通过 [构建身份工具](../../scripts/lib/build-info.mjs) 固化版本信息；CLI 沿用不可变发布目录内的
+元数据，避免构建时间改变可执行内容哈希。Backend 查询本机 PATH 中 `rw version --json` 的版本，
+最多缓存 60 秒；该结果属于 Backend 所在节点，不是远程客户端的 CLI。
+版本读取失败不影响服务健康计数；本能力不比较源码差异、不判断是否最新，也不自动更新组件。
+
 - 本机与当前连接用相同的节点/能力域模型；同节点身份优先按 `serviceInstanceId` 合并，URL 仅作缺失身份时的回退。
 - Frontend 自己的 HTTP、Terminal WS 与事件连接状态也是报告来源；当前报告及面板状态见
   [Frontend registry](../../frontend/src/features/runtime-status/registry.ts) 和 [Provider](../../frontend/src/features/runtime-status/provider.tsx)。

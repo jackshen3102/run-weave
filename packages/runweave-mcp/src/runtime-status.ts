@@ -1,3 +1,4 @@
+import { runtimeBuildInfo, runtimeVersionFacts } from "@runweave/shared/runtime-version";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { readResearchMcpInstallation, resolveConfigurationContext } from "@runweave/config-node";
@@ -94,6 +95,7 @@ export function createMcpRuntimeStatus(backend: Backend) {
       const now = Date.now();
       return { protocolVersion: 1, target: { kind: "local-host" }, source: { id: "research-mcp", runtime: "research-mcp", instanceId, capabilityId: "research-mcp" }, observedAt: now, validForMs: 20_000,
         items: [{ ...item("research-mcp.process", "本地服务", null, [
+          ...runtimeVersionFacts(runtimeBuildInfo()),
           text("mcp-sha", "MCP 发布 SHA", mcpIdentity.sourceRevision), text("release", "MCP 发布", mcpIdentity.releaseId),
           text("instance", "配置实例", context.instanceId), time("started", "启动时间", startedAt),
           ...(lastToolSuccess ? [time("tool-success", "最近工具成功调用（来源未确认）", lastToolSuccess)] : []),

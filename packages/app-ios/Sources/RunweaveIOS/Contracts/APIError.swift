@@ -33,6 +33,11 @@ public enum APIError: Error, LocalizedError {
   }
 }
 
+// A suspended/replaced transport can cancel a request without cancelling its caller task.
+func isRequestCancellation(_ error: Error) -> Bool {
+  error is CancellationError || (error as? URLError)?.code == .cancelled
+}
+
 func displayError(_ error: Error) -> String {
   if let api = error as? APIError { return api.localizedDescription }
   if let url = error as? URLError {

@@ -1,4 +1,5 @@
-import { BrowserWindow, Notification, clipboard, ipcMain } from "electron";
+import { runtimeBuildInfo, runtimeVersionFacts } from "@runweave/shared/runtime-version";
+import { app, BrowserWindow, Notification, clipboard, ipcMain } from "electron";
 import { configuration } from "@runweave/config-node";
 import { randomUUID } from "node:crypto";
 import {
@@ -70,6 +71,7 @@ export function buildElectronRuntimeStatusReport(options: {
         now,
       ),
       dependsOn: [],
+      facts: runtimeVersionFacts({ ...runtimeBuildInfo(), version: app.getVersion() }),
     },
     {
       ...item(

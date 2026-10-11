@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { copyNativeLockRuntime } from "../../config-node/scripts/native-runtime.mjs";
+import { buildInfoDefine } from "../../../scripts/lib/build-info.mjs";
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
 const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim().length > 0;
@@ -19,7 +20,7 @@ await build({
   target: "node22",
   external: ["fs-native-extensions"],
   sourcemap: true,
-  define: { __MCP_SOURCE_REVISION__: JSON.stringify(sourceRevision), __MCP_RELEASE_ID__: JSON.stringify(releaseId) },
+  define: { ...buildInfoDefine(fileURLToPath(new URL("..", import.meta.url))), __MCP_SOURCE_REVISION__: JSON.stringify(sourceRevision), __MCP_RELEASE_ID__: JSON.stringify(releaseId) },
 });
 const outputDir = fileURLToPath(new URL("../dist", import.meta.url));
 copyNativeLockRuntime(outputDir);

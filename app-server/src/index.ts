@@ -122,6 +122,8 @@ async function main(): Promise<void> {
         reconciler: agentThreadStatusReconciler,
         serviceInstanceId,
         version: config.version,
+        sourceRevision: config.sourceRevision,
+        releaseId: config.releaseId,
       }),
   });
   const server = http.createServer(app);

@@ -44,14 +44,15 @@ extension AppSession {
             self.terminal = fresh
             terminalController?.connect()
           } catch {
-            guard generation == epoch else { return }
+            guard generation == epoch, !Task.isCancelled, !isRequestCancellation(error) else { return }
             self.error = displayError(error)
             // A missing terminal cannot be replaced with a newly created session.
           }
         }
       }
     } catch {
-      guard reconnectRequest == request, generation == epoch, foreground, !(error is CancellationError) else { return }
+      guard reconnectRequest == request, generation == epoch, foreground,
+        !Task.isCancelled, !isRequestCancellation(error) else { return }
       health = DeviceHealthSnapshot(status: .offline, message: displayError(error))
       self.error = displayError(error)
       if case APIError.credentialsUnavailable = error { await prepareRelogin() }
@@ -79,7 +80,10 @@ extension AppSession {
     let revision = healthRevision
     let result: DeviceHealthSnapshot
     do { result = try await resolver.validateCurrent() }
-    catch { result = DeviceHealthSnapshot(status: .offline, message: displayError(error)) }
+    catch {
+      guard !Task.isCancelled, !isRequestCancellation(error) else { return }
+      result = DeviceHealthSnapshot(status: .offline, message: displayError(error))
+    }
     guard generation == epoch, healthRevision == revision, foreground, !Task.isCancelled else { return }
     applyHealth(result)
     if result.status == .offline {

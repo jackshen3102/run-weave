@@ -1,3 +1,5 @@
+import appServerPackage from "../package.json" with { type: "json" };
+import { runtimeBuildInfo } from "@runweave/shared/runtime-version";
 import { configurationPath, configuration, configurationOption } from "@runweave/config-node";
 import path from "node:path";
 
@@ -34,14 +36,14 @@ export function resolveAppServerConfig(
     eventLogPath: path.join(stateDir, "app-server-events.jsonl"),
     threadStatePath: path.join(stateDir, "app-server-thread-state.json"),
     cloudSyncDir: configurationPath("appServer.cloudSyncDirectory", "app-server/cloud-sync"),
-    version: "0.1.0",
+    version: runtimeBuildInfo({ version: `${appServerPackage.version}-dev` }).version,
     source: parseSource(env.RUNWEAVE_APP_SERVER_SOURCE),
     releaseId: env.RUNWEAVE_APP_SERVER_RELEASE_ID?.trim() || null,
     entry: env.RUNWEAVE_APP_SERVER_ENTRY?.trim() || process.argv[1] || "",
     runtimeRoot: env.RUNWEAVE_APP_SERVER_RUNTIME_ROOT?.trim() || null,
     serviceInstanceId: env.RUNWEAVE_SERVICE_INSTANCE_ID?.trim() || null,
     devSessionId: configuration().context.kind === "dev" ? configuration().context.instanceId : null,
-    sourceRevision: env.RUNWEAVE_SOURCE_REVISION?.trim() || null,
+    sourceRevision: runtimeBuildInfo().sourceRevision ?? (env.RUNWEAVE_SOURCE_REVISION?.trim() || null),
   };
 }
 
