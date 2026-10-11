@@ -76,7 +76,7 @@ struct HomeTerminalRow: View {
           do { try await session.forkTerminal(terminal.id) }
           catch { if !(error is CancellationError) { forkFailure = displayError(error) } }
         }
-      } label: { Label("Fork Codex 到新终端", systemImage: "arrow.triangle.branch") }
+      } label: { Label("Fork Thread", systemImage: "arrow.triangle.branch") }
         .disabled(!session.canEditTerminal(terminal.id) || terminal.status != "running"
           || terminal.terminalState.agent != "codex" || terminal.terminalState.state != "agent_idle")
         .accessibilityIdentifier("terminal-fork-codex")
