@@ -17,7 +17,7 @@ python3 -m http.server 6199 --bind 127.0.0.1 --directory docs/architecture-flows
 - 机器人首次通知按现有规则自动建话题；用户只回复已绑定话题。路由依据为持久 Backend 身份和 Terminal ID，执行仍使用当前活动 Panel。
 - 未发送输入沿用现有 120 秒等待规则，结果未知不自动重投；不新增通知离线队列。
 
-详细合同、代码入口、迁移边界及验证结果见 [实施计划](../../plans/2026-10-10-feishu-central-bridge.md)。当前实现事实以 [通知架构](../../architecture/terminal-completion-notifications.md) 和 [消息处理器](../../../packages/runweave-cli/src/feishu/bridge-message-handler.ts) 为准。
+配置、迁移边界与验证入口见 [飞书部署](../../deployment/feishu-app-integration.md)。当前实现事实以 [通知架构](../../architecture/terminal-completion-notifications.md) 和 [消息处理器](../../../packages/runweave-cli/src/feishu/bridge-message-handler.ts) 为准。
 
 本图不连接真实飞书或 Backend，不能作为集中链路业务验收证据。
 

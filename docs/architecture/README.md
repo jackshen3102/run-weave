@@ -66,7 +66,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | Mac 局域网远控、独立 Host 与来源边界    | [remote-desktop.md](./remote-desktop.md)                   |
 | App Server 总体架构                     | [app-server-architecture.md](./app-server-architecture.md) |
 | App Server Event Center 与 Work History | [app-server-event-center.md](./app-server-event-center.md) |
-| Mac 电量与手机提醒                      | [device-monitor.md](./device-monitor.md)                   |
+| Mac 电量、手机提醒与统一未读总数        | [device-monitor.md](./device-monitor.md)                   |
 | 通用 APNs 通知接口、订阅与投递          | [推送服务](../../packages/push-gateway/README.md)          |
 | 本机系统资源监控                        | [system-monitor.md](./system-monitor.md)                   |
 
@@ -92,13 +92,13 @@ Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.m
 外部主 Agent 持续控制专用终端、核对原生轮次并记录验收，见
 [终端任务控制](../cli/terminal-task-control.md)。任务决策由主 Agent 负责，Backend 保存执行关联和回执。
 
-| 任务                       | 文档                                                                                                                      |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[后台续接与回复](../cli/scheduled-task-cli.md#后台续接与人工回复)、[运行配置](../deployment/overview.md#定时任务运行)     |
-| 快捷指令后台运行           | [定时任务接入边界](../../frontend/docs/scheduled-tasks.md)、[验收计划](../testing/background-commands/core.testplan.yaml) |
-| Agent Team / Loop Engine   | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md)                                                              |
-| 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                                |
-| Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                      |
+| 任务                       | 文档                                                                                                                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[后台续接与回复](../cli/scheduled-task-cli.md#后台续接与人工回复)、[运行配置](../deployment/overview.md#定时任务运行) |
+| 快捷指令后台运行           | [定时任务接入边界](../../frontend/docs/scheduled-tasks.md)、[验收计划](../testing/background-commands/core.testplan.yaml)                                                                |
+| Agent Team / Loop Engine   | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md)                                                                                                                             |
+| 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                                                                                               |
+| Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                                                                                     |
 
 快捷指令的“后台运行”接入现有定时任务的 task/run 存储与单并发队列。Backend 校验已保存指令、
 实际项目目录和后台默认模型；请求按幂等键去重，运行快照保留项目与 worktree 来源。

@@ -93,11 +93,23 @@ Backend 从本 profile 的 `device-monitor/push.json` 读取持久推送配置�
 目标冲突不自动合并，断线保留最近值，注销取消在途结果；完整接口和权限见
 [网关合同](../../packages/push-gateway/README.md#应用未读角标)。
 
+手机订阅范围决定全局计数范围，订阅完整性由用户保证；项目与终端列表仍显示自己的局部计数。
+首次发现没有唯一目标、旧服务缺少新接口或首次快照未齐时，连接页显示未就绪、来源冲突或未支持，
+没有可信快照时不伪造 0，也不回退到逐 Backend 计数。已绑定后发现来源冲突保留最后成功值，不静默切换目标。
+授权来源离线时，未过期读凭据仍可访问网关；续期可使用已发现的同目标其他 Backend。
+旧 revision 或已注销连接的迟到响应不能覆盖当前展示。完全退出 Mac 后停止更新，重启重新发现与授权。
+
 ## 验证边界
 
 协议驱动为 `node scripts/verify/device-monitor/run.mjs`，验收合同为
 [电量展示](../testing/app/mac-battery-monitor.testplan.yaml)、[低电量推送](../testing/app/mac-battery-alerts.testplan.yaml)与[通用推送类别](../testing/app/push-notifications.testplan.yaml)。
 统一总数另见[跨端未读验收](../testing/app/unified-unread-gateway.testplan.yaml)。`--unread` 集成驱动验证真实协议与存储，
-真实桌面与手机行为必须分别取证。
+真实桌面与手机行为必须分别取证。局域网用例要求已读成功后 10 秒内同步 Mac Dock 和手机前台角标；
+后台 APNs 用例观察 60 秒并记录实际到达，观察窗不是 Apple 投递保证。
+
+2026-10-11 的历史交付记录覆盖线上网关、本机 Backend、Mac Stable 0.264.0 与真实 iPhone：
+两条专用终端的受控完成事件产生未读，手机与桌面读操作分别推动扣减，手机前台和后台图标均验证归零。
+三个不同 Backend 的汇总证据来自隔离集成，三个实际 Backend 的整套 UI 用例和全部 20 条用例未整体通过。
+这些记录不代表当前安装态；本轮文档整理未重跑业务验收。
 本地记录器不等于真实 APNs 接受，APNs 接受也不等于手机展示；当前原生运行证据与未完成项见
 [iOS 验收状态](../../packages/app-ios/docs/validation-status.md)。
