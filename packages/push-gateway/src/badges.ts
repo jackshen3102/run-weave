@@ -6,14 +6,27 @@ import type { GatewayData, Sender, Subscription } from "./types";
 const category = "terminal.unread";
 const targetKey = (s: Subscription) => `${s.environment}:${s.installationId}`;
 const contributionKey = (s: Subscription) => `${targetKey(s)}:${s.hostId}`;
-const active = (data: GatewayData, s: Subscription) => !s.revoked && s.categories.includes(category) &&
+export const activeBadgeSubscription = (data: GatewayData, s: Subscription) => !s.revoked && s.categories.includes(category) &&
   Object.values(data.senders).some((sender) => sender.hostId === s.hostId && !sender.revoked && sender.environments.includes(s.environment));
+
+export function badgeSnapshotReady(data: GatewayData, source: Pick<Subscription, "environment" | "installationId">): boolean {
+  const key = `${source.environment}:${source.installationId}`;
+  return Object.values(data.subscriptions).filter((s) => targetKey(s) === key && activeBadgeSubscription(data, s))
+    .every((s) => data.badgeContributions?.[`${key}:${s.hostId}`] !== undefined);
+}
+
+export function readBadgeSnapshot(data: GatewayData, source: Subscription) {
+  const target = data.badgeTargets?.[targetKey(source)];
+  requireValue(target && badgeSnapshotReady(data, source), 409, "Badge snapshot pending");
+  return { revision: target.revision, count: target.count };
+}
 
 /** Recompute from authorized subscriptions, deduplicating aliases of the same host. */
 function reconcile(data: GatewayData, source: Subscription): void {
+  if (!badgeSnapshotReady(data, source)) return;
   const key = targetKey(source);
   const subscriptions = Object.values(data.subscriptions).filter((s) =>
-    targetKey(s) === key && active(data, s),
+    targetKey(s) === key && activeBadgeSubscription(data, s),
   );
   const hosts = new Set(subscriptions.map((s) => s.hostId));
   const count = [...hosts].reduce((sum, host) =>
@@ -45,7 +58,7 @@ export function updateBadge(store: GatewayStore, sender: Sender, id: string, bod
   store.update((data) => {
     const s = data.subscriptions[id];
     requireValue(s && s.hostId === sender.hostId && sender.environments.includes(s.environment), 403);
-    requireValue(active(data, s), 410);
+    requireValue(activeBadgeSubscription(data, s), 410);
     const key = contributionKey(s);
     const previous = data.badgeContributions?.[key];
     if (!previous || Number(body.revision) > previous.revision) {
@@ -63,10 +76,8 @@ export function readBadge(store: GatewayStore, sender: Sender | null, id: string
   const s = data.subscriptions[id];
   requireValue(s, 404);
   requireValue(sender?.hostId === s.hostId || equalSecret(token, s.revokeToken), 403);
-  requireValue(active(data, s), 410);
-  const target = data.badgeTargets?.[targetKey(s)];
-  requireValue(target, 409, "Badge snapshot pending");
-  return { revision: target.revision, count: target.count };
+  requireValue(activeBadgeSubscription(data, s), 410);
+  return readBadgeSnapshot(data, s);
 }
 
 export function reconcileBadges(store: GatewayStore, id: string): void {
@@ -94,7 +105,9 @@ export class BadgeDelivery {
   }
   pump(): void {
     if (this.stopped) return;
-    for (const [key, target] of Object.entries(this.store.snapshot().badgeTargets ?? {})) {
+    const data = this.store.snapshot();
+    for (const [key, target] of Object.entries(data.badgeTargets ?? {})) {
+      if (!badgeSnapshotReady(data, target)) continue;
       if (this.flights.has(key) || target.revision <= target.deliveredRevision || target.nextAttemptAt > Date.now()) continue;
       const flight = this.send(key).catch(() => undefined).finally(() => {
         this.flights.delete(key);

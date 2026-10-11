@@ -3,6 +3,7 @@ import { createAuthRuntime } from "./auth-runtime";
 import { DevResourcesService } from "../dev-resources/service";
 import { createTerminalTaskMonitoring, createTerminalTaskServices } from "./terminal-task-monitoring";
 import { TerminalBadges } from "../device-monitor/terminal-badges";
+import { DesktopBadgeAccess } from "../device-monitor/desktop-badge-access";
 import { TerminalQuestionsService } from "../terminal/questions/service";
 import { ResourceMonitorService } from "../resource-monitor/service";
 import { ResourceMonitorStore } from "../resource-monitor/store";
@@ -491,6 +492,9 @@ async function assembleRuntimeServices(
     ? new TerminalBadges(terminalSessionManager, terminalEventService, deviceMonitoring.batteryAlerts.subscriptions)
     : null;
   resources.defer("terminal-badges", () => terminalBadges?.dispose());
+  const desktopBadgeAccess = deviceMonitoring.batteryAlerts
+    ? new DesktopBadgeAccess(authService, deviceMonitoring.batteryAlerts.subscriptions)
+    : null;
   const taskAlerts =
     scheduledTasks.store && deviceMonitoring.batteryAlerts
       ? new ScheduledTaskAlerts(
@@ -513,6 +517,7 @@ async function assembleRuntimeServices(
   const services: RuntimeServices = {
     ...deviceMonitoring,
     terminalBadges,
+    desktopBadgeAccess,
     resourceMonitor,
     start: (controlPlaneBaseUrl) => {
       if (disposed) return;

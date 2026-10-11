@@ -80,9 +80,24 @@ Backend 从本 profile 的 `device-monitor/push.json` 读取持久推送配置�
 重新读取当前状态；连接已删除则提示，认证失效则进入该连接登录页。旧通知百分比不写入当前电量快照。
 原生草稿按连接 scope 保存在设备受保护、排除备份的本地目录，连接切换或冷启动可恢复；注销、删除连接或终端清理所属草稿。
 
+## 统一未读总数
+
+终端已读版本保存在各 Backend；[未读上报](../../backend/src/device-monitor/terminal-badges.ts)发送带版本的绝对数量，
+[推送网关](../../packages/push-gateway/src/badges.ts)按手机安装/环境汇总、按 hostId 去重。
+手机现有前台查询和 APNs 与 Mac Dock 使用同一份网关总数。已注册 host 首次快照未齐时等待，
+不能将未知贡献当成 0。已读请求仍发到具体终端所属 Backend，不在网关保存第二套已读状态。
+
+[桌面授权](../../backend/src/device-monitor/desktop-badge-access.ts)以有效 Electron 会话和同用户的手机订阅为边界，
+换取 5 分钟只读 reader；[Mac 消费者](../../electron/src/monitoring/terminal-badge-client.ts)自动绑定唯一目标，
+每 2 秒查询一次网关，提前 1 分钟续期。凭据仅在主进程内存，renderer 只消费无秘密的同步状态。
+目标冲突不自动合并，断线保留最近值，注销取消在途结果；完整接口和权限见
+[网关合同](../../packages/push-gateway/README.md#应用未读角标)。
+
 ## 验证边界
 
 协议驱动为 `node scripts/verify/device-monitor/run.mjs`，验收合同为
 [电量展示](../testing/app/mac-battery-monitor.testplan.yaml)、[低电量推送](../testing/app/mac-battery-alerts.testplan.yaml)与[通用推送类别](../testing/app/push-notifications.testplan.yaml)。
+统一总数另见[跨端未读验收](../testing/app/unified-unread-gateway.testplan.yaml)。`--unread` 集成驱动验证真实协议与存储，
+真实桌面与手机行为必须分别取证。
 本地记录器不等于真实 APNs 接受，APNs 接受也不等于手机展示；当前原生运行证据与未完成项见
 [iOS 验收状态](../../packages/app-ios/docs/validation-status.md)。

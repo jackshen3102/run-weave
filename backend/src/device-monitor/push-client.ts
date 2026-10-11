@@ -1,6 +1,7 @@
 import { readConfigurationPath } from "@runweave/shared/configuration";
 import { settingText, configuration, type ConfigurationSnapshot } from "@runweave/config-node";
 import type {
+  PushBadgeReaderAccess,
   PushBadgeSnapshot,
   PushNotificationRequest,
   PushDeliveryResult,
@@ -123,6 +124,9 @@ export class PushClient {
   }
   updateBadge(id: string, snapshot: PushBadgeSnapshot): Promise<void> {
     return this.request(`/v1/badges/${id}`, "PUT", snapshot);
+  }
+  issueBadgeReader(readerId: string, subscriptionId: string): Promise<PushBadgeReaderAccess> {
+    return this.request(`/v1/badge-readers/${readerId}`, "PUT", { subscriptionId });
   }
   async revoke(id: string): Promise<void> {
     try {

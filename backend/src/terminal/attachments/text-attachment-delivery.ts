@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getAgentForCommand } from "../state/terminal-state-service";
 import type {
   SendTerminalInputRequest,
   SendTerminalInputResponse,
@@ -299,6 +300,7 @@ export class TerminalTextAttachmentDelivery {
           binding.target.pane,
           content,
           () => recheck(false),
+          getAgentForCommand(binding.target.panel.activeCommand ?? binding.target.session.activeCommand) === "codex",
         );
         await this.files.finish(sessionId, request.operationId, "accepted");
       } catch (error) {

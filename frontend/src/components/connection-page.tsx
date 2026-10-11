@@ -4,6 +4,7 @@ import { Button } from "./ui/button";
 import type { ConnectionConfig } from "../features/connection/types";
 import { shouldShowReconnectAction } from "../features/connection/system-connection";
 import { RuntimeStatusEntry } from "./runtime-status-entry";
+import { DesktopBadgeStatus } from "../features/attention/desktop-badge-status";
 
 interface ConnectionPageProps {
   connections: ConnectionConfig[];
@@ -128,6 +129,7 @@ export function ConnectionPage({
           )}
         </div>
         <RuntimeStatusEntry className="mt-4 max-w-full" />
+        <DesktopBadgeStatus />
 
         {showForm && (
           <div className="mt-6 space-y-4">

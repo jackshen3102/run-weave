@@ -1,0 +1,199 @@
+version: 1
+name: 统一推送网关未读总数
+description: >
+  跨端未读合同的验收计划。唯一 Mac 桌面客户端和手机订阅同一组 Backend，读取同一份网关总数。
+  各例独立建立并清理自己拥有的 fixture，不依赖前例遗留状态。
+  协议例使用真实 HTTP、SQLite 和隔离 APNs 记录器；真实设备例单独取证，格式校验不代表行为通过。
+cases:
+  - id: GUNREAD-001
+    name: 同一手机范围按 Backend 身份去重求和
+    required: true
+    description: 三个 host 的贡献只各计一次，同 host 的多个订阅地址不重复累加。
+    preconditions:
+      - 本例独占隔离网关，具有三个不同 hostId 的合法 sender、同一安装和环境的未读订阅，以及其中一个 host 的别名订阅。
+      - 本例已取得该汇总的有效只读 reader，APNs 使用隔离记录器。
+    steps:
+      - 三个 host 分别上报带版本的绝对数量 2、3、1，别名订阅上报同一 host 的相同快照；确认 reader 查询与原手机查询都返回 6。
+      - 依次将各 host 数量更新为 0；确认最终两个查询入口均返回真实的 0，订阅本身未被删除。
+  - id: GUNREAD-002
+    name: 重复与乱序上报不能回退总数
+    required: true
+    description: 最新版本决定同一 host 的贡献，重放不得重复扣减或覆盖新值。
+    preconditions:
+      - 本例独占网关与有效 host 订阅，已有版本 5、数量 3 的快照和可读总数。
+    steps:
+      - 上报版本 6、数量 2，再重发完全相同快照；确认总数均为 2，没有再次减一。
+      - 上报版本 5、数量 3；确认总数仍为 2。
+      - 上报版本 6、数量 1；确认返回 409，原总数仍为 2。
+  - id: GUNREAD-003
+    name: 桌面授权只接受有效桌面身份及自有订阅
+    required: true
+    description: 发现和换取凭据均执行 desktop 身份与订阅所有权校验，不将手机专用身份检查直接套给桌面。
+    preconditions:
+      - 本例独占 Backend、网关与认证存储，具有有效 Electron、Web、手机会话，以及属于有效手机会话的已确认未读订阅。
+      - 本例隔离存储另有非该桌面 owner 的订阅作为越权输入，且可以记录网关签发次数而不记录密钥。
+    steps:
+      - 用有效 Electron accessToken 发现目标并请求自有订阅的读授权；确认成功且返回目标准确。
+      - 分别用 Web、手机身份调用桌面发现及授权接口；确认返回 403 且未签发新 reader。
+      - 用失效 Electron token 调用接口，确认 401；用有效身份指定非自有订阅，确认 403 且不泄露目标信息。
+  - id: GUNREAD-004
+    name: 只读凭据不能越权读取或修改
+    required: true
+    description: reader token 只能读取绑定目标，不能变为 sender 或手机撤销凭据。
+    preconditions:
+      - 本例独占网关，存在两个独立安装范围及各自 reader，已记录计数、订阅和通知投递基线。
+    steps:
+      - 用第一个 reader 的 token 读取本 reader，确认成功；读取另一个 reader，确认拒绝且无计数泄露。
+      - 用该 token 更新 badge、注册或删除订阅、签发 reader、发送通知；确认均拒绝且计数、订阅与 APNs 投递基线未改变。
+      - 用另一个合法 sender 指定第一个 readerId 并提供自己的订阅发起签发；确认不能抢占既有 reader 或改变其目标，原 token 仍能读取原范围。
+  - id: GUNREAD-005
+    name: 读凭据按期过期并在轮换后淘汰旧凭据
+    required: true
+    description: 五分钟授权不能无限有效，同 readerId 续期不会积累新授权记录。
+    preconditions:
+      - 本例独占网关和合法 sender，具有可控制授权时钟的隔离集成驱动，不改变系统时间。
+    steps:
+      - 签发读授权，确认 expiresAt 为签发后 300 秒；推进本 fixture 时钟越过期限，确认读取返回 401。
+      - 用同 readerId 再次签发，确认新 token 可读、旧 token 不可读，存储中该 readerId 仅有一条当前记录。
+  - id: GUNREAD-006
+    name: 来源授权撤销后 reader 立即不可用
+    required: true
+    description: reader 的能力不能在其来源订阅或 sender 已撤销后继续存活到自然过期。
+    preconditions:
+      - 本例独占网关，分别为两个来源建立有效 reader 和非零总数，用于同一撤销权限不变量的两个等价输入。
+    steps:
+      - 撤销第一个 reader 的来源未读订阅；在 token 尚未过期时读取，确认返回 410。
+      - 撤销第二个 reader 的 sender；在 token 尚未过期时读取，确认返回 410，不能取得原目标总数。
+  - id: GUNREAD-007
+    name: 旧完成版本的已读确认不能清掉新结果
+    required: true
+    description: 全局汇总保持原 Backend 的版本语义，确认旧结果不会使新完成变成已读。
+    preconditions:
+      - 本例独占真实 Backend 会话与网关上报链路，终端完成版本为 7、已读版本为 6，其他终端无未读。
+    steps:
+      - 保留客户端读到版本 7 的操作，先使终端产生版本 8 的完成，再提交确认版本 7；确认 Backend 已读版本为 7，网关总数仍为 1。
+      - 确认版本 8；确认 Backend 和网关总数最终为 0。
+  - id: GUNREAD-008
+    name: Mac 稳态只查询一个网关计数入口
+    required: true
+    description: Backend 数量增加不再增加每轮桌面计数请求数，初始化发现与续期明确单独计量。
+    preconditions:
+      - 本例具有独立 Dev Session、一个真实 Electron 客户端、三个不同 hostId 的隔离 Backend 及同一手机范围的网关快照。
+      - 使用 toolkit:runweave-dev-session 获取本例地址，toolkit:playwright-cli 附着正确 renderer；可以记录路径和时间且对凭据脱敏。
+    steps:
+      - 登录三个连接，等待唯一目标发现和首个网关快照成功；确认 Dock 显示预置总数。
+      - 在无网络故障且未到续期窗口时记录 60 秒请求；确认约 30 次网关总数 GET，允许定时边界 29 至 31 次，原 Backend 的 /api/terminal/unread 计数 GET 为 0。
+      - 确认发现和授权请求被单独标识，不能用隐藏这些请求宣称桌面从不访问 Backend。
+  - id: GUNREAD-009
+    name: 手机已读后 Mac 同步扣减
+    required: true
+    description: 从真实手机确认已读，到 Backend、网关及 Mac 展示形成单向完整闭环。
+    preconditions:
+      - 本例拥有一个真实桌面客户端和一台已租用的 iPhone，订阅同一组至少三个 Backend，三个 Backend 的独立未读数为 2、3、1。
+      - 手机和桌面当前显示总数 6；真实环境可达，测试终端均为本例专用，不操作用户其他未读内容。
+    steps:
+      - 使用 toolkit:agent-device 在手机打开第二个 Backend 的一个未读终端，确认其已读请求成功。
+      - 确认网关总数变为 5；从确认成功起 10 秒内，通过原生 computer-use 查看真实 Mac Dock 为 5，记录同一操作的时间和截图。
+  - id: GUNREAD-010
+    name: Mac 已读后手机前台同步扣减
+    required: true
+    description: 桌面读操作推动手机前台校准，不依赖手机再次打开同一终端。
+    preconditions:
+      - 本例拥有一个真实 Electron 客户端和一台已租用的 iPhone，订阅同一组 Backend，专用测试终端形成总数 2。
+      - 手机 App 在前台，网关、手机与 Mac 当前数值均为 2。
+    steps:
+      - 用 toolkit:playwright-cli 在正确桌面 renderer 打开一个未读终端；确认 Backend 已读成功。
+      - 确认网关变为 1；保持手机前台至少一个 3 秒校准周期，在确认成功起 10 秒内用 toolkit:agent-device 返回系统主屏并确认实际图标角标为 1。
+  - id: GUNREAD-011
+    name: 手机后台通过 APNs 更新角标
+    required: true
+    description: 后台角标必须用真机显示证明，Apple accepted 或记录器结果不能替代。
+    preconditions:
+      - 本例拥有已授权真实推送的 iPhone 和测试订阅，手机主屏图标初始为 1，App 已退到后台。
+      - 一个真实 Mac 客户端连接同组 Backend，唯一未读来自本例专用终端，网关具备正确 APNs 环境。
+    steps:
+      - 用 toolkit:playwright-cli 在桌面读掉本例最后一个未读，确认网关总数为 0。
+      - 使用 toolkit:agent-device 观察主屏 60 秒窗口，确认图标角标消失并记录到达时间；未显示则该用例不通过，不能用 accepted 代替通过。
+  - id: GUNREAD-012
+    name: 网关断线保留数值并在恢复后校准
+    required: true
+    description: 网关不可达不等于没有未读，同一桌面进程在恢复连接后收敛到新总数。
+    preconditions:
+      - 本例拥有真实 Electron 客户端和独立可控网关网络边界，已绑定目标且成功显示总数 4，读授权覆盖本例时长。
+    steps:
+      - 仅切断 Mac 到网关的网络；通过原生 computer-use 确认 Dock 保留 4，通过 toolkit:playwright-cli 确认连接页提示同步暂不可用，不显示已清零。
+      - 在 Mac 断线期间由 Backend 上报最新总数 2，再恢复网络；确认退避恢复后同一进程显示 2，未发起逐 Backend 的计数轮询。
+  - id: GUNREAD-013
+    name: Mac 重启后重新授权和校准
+    required: true
+    description: 读 token 不持久化，重启后的新进程以新授权获取真实总数。
+    preconditions:
+      - 本例拥有独立 Dev Session 的 Electron 客户端、网关和 Backend，原 Dock 为 3，且可安全重启本例 App。
+    steps:
+      - 退出本例 Electron，使用专用终端将网关总数变为 1；确认本例应用存储没有新增明文 readToken。
+      - 重启本例 App，重新取得 Dev Session 端点和 fresh renderer 引用；确认重新发现、签发授权并显示 1，没有沿用旧进程的 token 或复用旧 UI 引用。
+  - id: GUNREAD-014
+    name: 已注册 host 的首次快照未齐时不发布部分总数
+    required: true
+    description: 缺失数量快照不能等价于零，新旧查询和 APNs 对就绪状态保持一致。
+    preconditions:
+      - 本例独占隔离网关，三个合法 host 已注册到同一手机范围，但均未上报数量；已有有效 reader 和隔离 APNs 记录器。
+    steps:
+      - 仅让两个 host 分别上报 0、0；确认 reader GET 与原手机 GET 均返回 409，APNs 没有发布把第三个 host 当零的总数。
+      - 让第三个 host 上报 3；确认两个 GET 都返回 3，APNs 待发送总数也是 3。
+  - id: GUNREAD-015
+    name: 多个不同汇总目标不能被静默相加
+    required: true
+    description: 无已绑定目标的首次发现存在歧义时，客户端不猜选手机或把多个手机的相同业务数累加。
+    preconditions:
+      - 本例拥有无历史绑定的真实 Electron fixture，两个已登录 Backend 分别返回不同 targetId，且均有非零快照。
+    steps:
+      - 等待本例全部发现请求结束；通过 toolkit:playwright-cli 确认连接页显示存在多个未读汇总来源。
+      - 确认没有 reader 被自动选中、没有查询两个目标再相加、没有把未知状态显示成未读 0。
+  - id: GUNREAD-016
+    name: 授权来源离线时从同目标其他 Backend 续期
+    required: true
+    description: 汇总读取不持续依赖首次签发授权的那台 Backend，可用来源切换不改变统计范围。
+    preconditions:
+      - 本例拥有真实 Electron fixture、两个有效桌面 Backend 登录及同一网关目标，当前读授权由第一个 Backend 签发，两个来源均已发现。
+    steps:
+      - 断开第一个 Backend，保持网关和第二个 Backend 可用；确认当前授权有效期内仍可读取网关总数。
+      - 到达本例授权续期时间；确认通过第二个 Backend 取得新授权，targetId 不变，总数不中途清零，读循环仍只有一个。
+  - id: GUNREAD-017
+    name: 桌面注销后迟到响应不能恢复旧角标
+    required: true
+    description: 连接 generation 隔离已注销范围，旧授权或快照响应不能重新进入当前展示。
+    preconditions:
+      - 本例拥有真实 Electron fixture 和可延迟返回的隔离网关，已显示本例总数 3，唯一桌面连接具备有效授权。
+    steps:
+      - 延迟一个快照响应，用 toolkit:playwright-cli 注销最后一个桌面连接；确认读循环取消、内存授权丢弃，Dock 清除该登录范围展示。
+      - 释放旧响应；确认没有重新显示 3，Backend 中的未读状态没有因注销被修改。
+  - id: GUNREAD-018
+    name: 新接口未支持或快照未就绪时不伪造零值
+    required: true
+    description: 不可取得可信快照的等价输入均保持明确不可用状态，不切换到旧的多 Backend 计数路径。
+    preconditions:
+      - 本例拥有真实 Electron fixture，可独立控制同一网络边界返回新接口 404、405 或快照 409，客户端没有成功快照。
+    steps:
+      - 分别提供未支持和未就绪响应；通过 toolkit:playwright-cli 确认显示对应不可用原因，不将空响应转换为 count=0。
+      - 确认没有回退到逐 Backend 的 /api/terminal/unread 计数轮询。
+  - id: GUNREAD-019
+    name: 网关重启保存汇总和未到期读授权
+    required: true
+    description: 网关进程重启不丢失 SQLite 中的总数、版本和短期授权有效期。
+    preconditions:
+      - 本例独占真实 SQLite 网关进程、有效订阅和读授权，总数为 4；本例可在授权到期前完成重启。
+    steps:
+      - 记录总数、版本及 expiresAt，正常停止并用同一目录重启网关，重新取得 fresh endpoint。
+      - 在原 expiresAt 前使用原 reader 读取；确认数值与版本不回退，过期时间没有因重启延长，原手机查询仍返回相同总数。
+  - id: GUNREAD-020
+    name: 新旧网关数据与手机接口保持兼容
+    required: true
+    description: 增加可选 reader 存储不破坏既有订阅、贡献、普通通知或旧版数据读取，版本往返属于本例唯一迁移生命周期。
+    preconditions:
+      - 本例持有旧版本网关的独立 schemaVersion 2 数据库副本和旧版可执行入口，禁止使用生产数据目录。
+      - 副本具有已知订阅、贡献、版本和隔离 APNs 记录器，所有进程按独占 SQLite owner 规则顺序运行。
+    steps:
+      - 用新版本打开旧副本，确认原手机 GET、host PUT 和普通通知接口仍按原合同工作，再签发一个 reader。
+      - 停止新进程，用旧版本重新打开该副本，取得 fresh endpoint；确认订阅、贡献和总数未被清空，旧手机接口仍可读写。
+      - 确认未通过恢复更旧数据库来掩盖不兼容，也未将旧版没有 reader 接口误判为数据迁移失败。

@@ -35,3 +35,19 @@ export interface PushBadgeSnapshot {
   revision: number;
   count: number;
 }
+
+/** Hash this canonical input with SHA-256 in the owning Node runtime. */
+export function pushBadgeTargetIdentity(environment: PushEnvironment, installationId: string): string {
+  return JSON.stringify(["badge-target-v1", environment, installationId]);
+}
+
+export interface PushBadgeReaderAccess {
+  targetId: string;
+  readerId: string;
+  readToken: string;
+  expiresAt: string;
+}
+
+export interface PushBadgeTotal extends PushBadgeSnapshot {
+  targetId: string;
+}

@@ -10428,5 +10428,21 @@
     "count": 1,
     "category": "build",
     "reason": "构建期间从目标包清单读取产品版本并固化到产物，不在运行时读取工作区或用户设置。"
+  },
+  {
+    "file": "scripts/verify/device-monitor/unread-compatibility.ts",
+    "kind": "file-io",
+    "expression": "writeFile(destination)",
+    "count": 1,
+    "category": "test",
+    "reason": "在隔离兼容性 fixture 临时目录写入 Git 历史网关源码副本，不读取或修改实例业务配置。"
+  },
+  {
+    "file": "scripts/verify/device-monitor/unread-compatibility.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(previous, \"package.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "在隔离兼容性 fixture 临时目录声明历史源码的 ESM 模块类型，不读取或修改实例业务配置。"
   }
 ]

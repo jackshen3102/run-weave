@@ -1,4 +1,5 @@
 import { BadgeDelivery, updateBadge, readBadge, reconcileBadges } from "./badges";
+import { issueBadgeReader, readBadgeReader } from "./badge-readers";
 import {
   createServer,
   type IncomingMessage,
@@ -46,6 +47,7 @@ export function createGateway(
   store: GatewayStore,
   transport: APNsTransport,
   adminToken?: string,
+  now: () => number = Date.now,
 ) {
   const badges = new BadgeDelivery(store, transport);
   const server = createServer((req, res) => {
@@ -72,6 +74,16 @@ export function createGateway(
         return;
       }
       const sender = senderFor(store, token);
+      const reader = /^\/v1\/badge-readers\/([a-zA-Z0-9_-]{8,128})$/.exec(path)?.[1];
+      if (reader && req.method === "GET") {
+        reply(res, 200, readBadgeReader(store, reader, token, now()));
+        return;
+      }
+      if (reader && req.method === "PUT") {
+        requireValue(sender, 401, "Unauthorized");
+        reply(res, 200, issueBadgeReader(store, sender, reader, await readBody(req), now()));
+        return;
+      }
       if (path === "/v1/sender" && req.method === "GET") {
         requireValue(sender, 401);
         reply(res, 200, {
@@ -103,11 +115,10 @@ export function createGateway(
         return;
       }
       if (subscription && req.method === "PUT") {
-        reply(
-          res,
-          200,
-          register(store, sender, subscription, await readBody(req)),
-        );
+        const result = register(store, sender, subscription, await readBody(req));
+        reconcileBadges(store, subscription);
+        badges.pump();
+        reply(res, 200, result);
         return;
       }
       if (path === "/v1/notifications" && req.method === "POST") {

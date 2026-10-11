@@ -45,12 +45,21 @@ export interface Delivery {
   retryAfterMs?: number;
 }
 export interface GatewayData {
+  badgeReaders?: Record<string, BadgeReader>;
   badgeContributions?: Record<string, { revision: number; count: number }>;
   badgeTargets?: Record<string, BadgeTarget>;
   schemaVersion: 2;
   senders: Record<string, Sender>;
   subscriptions: Record<string, Subscription>;
   deliveries: Record<string, Delivery>;
+}
+
+export interface BadgeReader {
+  issuerHostId: string;
+  sourceSubscriptionId: string;
+  targetId: string;
+  tokenHash: string;
+  expiresAt: string;
 }
 
 export interface BadgeTarget {

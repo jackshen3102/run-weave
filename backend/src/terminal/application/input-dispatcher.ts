@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 import { resolveReplyThread } from "../completion/reply-preview";
 import { resolveEffectivePanelActiveCommand } from "./panel-metadata";
 import { getAgentAdapter } from "../runtime/agent-adapters";
@@ -111,15 +113,36 @@ function buildCodexSlashCommandPtyInput(
   return `\x15${command}${submitKey === "Tab" ? "\t" : "\r"}`;
 }
 
-function buildPromptPasteInput(text: string): string {
-  return `${BRACKETED_PASTE_START}${text}${BRACKETED_PASTE_END}`;
+function buildPromptPasteInput(text: string, attachClipboardImages = false): string {
+  return (attachClipboardImages ? buildClipboardImagePaste(text) : null)
+    ?? `${BRACKETED_PASTE_START}${text}${BRACKETED_PASTE_END}`;
+}
+
+function buildClipboardImagePaste(text: string): string | null {
+  const wrap = (value: string) => `${BRACKETED_PASTE_START}${value}${BRACKETED_PASTE_END}`;
+  // Codex recognizes an image only when its path is a standalone paste event.
+  // Match only our uploaded-image path format, preserving all intervening text.
+  const directory = `${path.join(os.tmpdir(), "runweave-terminal-images")}/`
+    .replaceAll("'", "'\"'\"'").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const references = new RegExp(`'${directory}runweave-terminal-image-\\d{8}-\\d{6}-[a-f0-9]{6}\\.(?:png|jpg|webp|gif)'`, "g");
+  const parts: string[] = [];
+  let offset = 0;
+  for (const match of text.matchAll(references)) {
+    if (match.index > offset) parts.push(wrap(text.slice(offset, match.index)));
+    parts.push(wrap(match[0]));
+    offset = match.index + match[0].length;
+  }
+  if (!parts.length) return null;
+  if (offset < text.length) parts.push(wrap(text.slice(offset)));
+  return parts.join("");
 }
 
 function buildPromptPastePtyInput(
   text: string,
   submitKey: "Enter" | "Tab",
+  attachClipboardImages = false,
 ): string {
-  return `${buildPromptPasteInput(text)}${submitKey === "Tab" ? "\t" : "\r"}`;
+  return `${buildPromptPasteInput(text, attachClipboardImages)}${submitKey === "Tab" ? "\t" : "\r"}`;
 }
 
 function splitPromptPaste(value: string): string[] {
@@ -133,9 +156,10 @@ function splitPromptPaste(value: string): string[] {
 function buildPromptPasteSequence(
   text: string,
   submitKey: "Enter" | "Tab",
+  attachClipboardImages = false,
 ): TmuxKeySequenceItem[] {
   return [
-    ...splitPromptPaste(buildPromptPasteInput(text)).map((value) => ({
+    ...splitPromptPaste(buildPromptPasteInput(text, attachClipboardImages)).map((value) => ({
       type: "literal" as const,
       value,
     })),
@@ -147,12 +171,14 @@ function buildPromptReplaceSequence(
   text: string,
   submit: boolean,
   submitKey: TerminalPromptSubmitKey,
+  attachClipboardImages = false,
 ): TmuxKeySequenceItem[] {
   return [
     { type: "key", key: "C-u" },
     {
       type: "literal",
-      value: submitKey === "Enter" ? text : buildPromptPasteInput(text),
+      value: (attachClipboardImages ? buildClipboardImagePaste(text) : null)
+        ?? (submitKey === "Enter" ? text : buildPromptPasteInput(text)),
       delayAfterMs: submit ? CODEX_COMPOSER_SUBMIT_DELAY_MS : undefined,
     },
     ...(submit ? [{ type: "key" as const, key: submitKey }] : []),
@@ -164,6 +190,7 @@ async function writePromptReplacePtyInput(
   text: string,
   submit: boolean,
   submitKey: TerminalPromptSubmitKey,
+  attachClipboardImages = false,
 ): Promise<void> {
   runtime.write("\x15");
   await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
@@ -172,7 +199,8 @@ async function writePromptReplacePtyInput(
   runtime.write("\x0b");
   await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
   if (text) {
-    runtime.write(submitKey === "Enter" ? text : buildPromptPasteInput(text));
+    runtime.write((attachClipboardImages ? buildClipboardImagePaste(text) : null)
+      ?? (submitKey === "Enter" ? text : buildPromptPasteInput(text)));
   }
   if (submit) {
     await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
@@ -291,6 +319,7 @@ export async function sendInputToSession(
               .find((candidate) => candidate.tmuxPaneId === target.paneId)
           : undefined;
       const panelSubmitKey = (panel?.terminalState ?? currentTerminalState)?.state === "agent_running" ? "Tab" : "Enter";
+      const attachClipboardImages = getAgentForCommand(panel?.activeCommand ?? session.activeCommand) === "codex";
       if (options.supervisorInput) {
         if (!("paneId" in target)) throw new Error("Supervisor input requires a fixed pane");
         const actual = (await options.tmuxService.listPanes(target)).find((candidate) => candidate.paneId === target.paneId);
@@ -356,7 +385,7 @@ export async function sendInputToSession(
         options.validateSupervisorTarget?.();
         await options.tmuxService.sendKeySequence(
           target,
-          buildPromptPasteSequence(data, panelSubmitKey),
+          buildPromptPasteSequence(data, panelSubmitKey, attachClipboardImages),
         );
       } else if (mode === "prompt_replace") {
         // Replace the prompt only after leaving scrollback on the same target pane.
@@ -364,7 +393,7 @@ export async function sendInputToSession(
         options.beforeTextAttachmentWrite?.();
         await options.tmuxService.sendKeySequence(
           target,
-          buildPromptReplaceSequence(data, submit === true, submitKey),
+          buildPromptReplaceSequence(data, submit === true, submitKey, attachClipboardImages),
         );
       } else if (mode === "line") {
         await options.tmuxService.sendKeySequence(
@@ -384,12 +413,14 @@ export async function sendInputToSession(
         await terminalSessionManager.feishuNotifications.expectReply(session.id, null, data, operationId);
       }
       if (!exitTmuxCopyMode) {
+        const attachClipboardImages = getAgentForCommand(session.activeCommand) === "codex";
         if (mode === "prompt_replace") {
           await writePromptReplacePtyInput(
             ensured.runtime,
             data,
             submit === true,
             submitKey,
+            attachClipboardImages,
           );
         } else {
           ensured.runtime.write(
@@ -399,7 +430,7 @@ export async function sendInputToSession(
                   composerSubmitKey,
                 )
               : mode === "prompt_paste"
-                ? buildPromptPastePtyInput(data, composerSubmitKey)
+                ? buildPromptPastePtyInput(data, composerSubmitKey, attachClipboardImages)
                 : (dispatchData ?? ""),
           );
         }
@@ -425,8 +456,9 @@ export async function pasteTextAttachmentReference(
   target: TmuxPaneTarget,
   reference: string,
   recheck: () => void,
+  attachClipboardImages = false,
 ): Promise<void> {
   await tmux.cancelCopyMode(target, { strict: true });
   recheck();
-  await tmux.sendKeySequence(target, [{ type: "literal", value: buildPromptPasteInput(reference) }]);
+  await tmux.sendKeySequence(target, [{ type: "literal", value: buildPromptPasteInput(reference, attachClipboardImages) }]);
 }

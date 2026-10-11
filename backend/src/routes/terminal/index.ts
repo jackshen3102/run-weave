@@ -1,4 +1,5 @@
 import { createTerminalUnreadRouter } from "./unread";
+import type { DesktopBadgeAccess } from "../../device-monitor/desktop-badge-access";
 import type { TerminalBadges } from "../../device-monitor/terminal-badges";
 import { registerTerminalQuestionRoutes } from "./questions";
 import { registerTerminalAgentForkRoutes } from "./agent-fork";
@@ -119,6 +120,7 @@ export function createTerminalRouter(
   terminalSessionManager: TerminalSessionManager,
   options?: {
     terminalBadges?: TerminalBadges | null;
+    desktopBadgeAccess?: DesktopBadgeAccess | null;
     terminalTaskService?: TerminalTaskService;
     textAttachmentDelivery?: TerminalTextAttachmentDelivery;
     terminalQuestionsService?: TerminalQuestionsService;
@@ -138,7 +140,9 @@ export function createTerminalRouter(
   },
 ): Router {
   const router = Router();
-  router.use("/unread", createTerminalUnreadRouter(options?.terminalBadges ?? null));
+  router.use("/unread", createTerminalUnreadRouter(
+    options?.terminalBadges ?? null, options?.desktopBadgeAccess ?? null, options?.authService,
+  ));
   router.post("/session/:id/completion-viewed", async (req, res) => {
     const parsed = z.object({
       completionRevision: z.number().int().nonnegative(),

@@ -1,7 +1,7 @@
 import DOMPurify from "dompurify";
 import TurndownService from "turndown";
 import { tables } from "turndown-plugin-gfm";
-import { fileToBase64 } from "@runweave/common/terminal";
+import { fileToBase64, shellQuote } from "@runweave/common/terminal";
 
 export interface RichPasteSnapshot {
   html: string;
@@ -114,8 +114,8 @@ export function parseRichPaste(snapshot: RichPasteSnapshot): RichPasteDocument {
         const image = images[index];
         if (textOnly) return "";
         if (!image?.path) return `[图片 ${index + 1} 未准备好]`;
-        const label = image.label.replace(/[\\[\]\r\n]/g, " ");
-        return `![${label}](<${image.path.replace(/</g, "%3C").replace(/>/g, "%3E")}>)`;
+        // Keep each path separate so the terminal agent can recognize images.
+        return ` ${shellQuote(image.path)} `;
       },
     });
     const content = !snapshot.html
@@ -128,11 +128,7 @@ export function parseRichPaste(snapshot: RichPasteSnapshot): RichPasteDocument {
           .filter(Boolean)
           .join("\n\n")
       : converter.turndown(root);
-    // Codex interprets a leading ! as a shell command, even in bracketed paste.
-    // Keep valid image Markdown while making image-first prompts ordinary text.
-    return images.length && /^\s*!\[/.test(content)
-      ? `图片：\n\n${content}`
-      : content;
+    return content;
   };
   return { images, markdown };
 }

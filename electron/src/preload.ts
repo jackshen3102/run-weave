@@ -129,6 +129,7 @@ const electronApi = {
   reportAttentionOpenResult: (result: AttentionOpenResult) =>
     ipcRenderer.invoke("attention:open-result", result) as Promise<void>,
   setTerminalBadgeConnections: (connections) => ipcRenderer.invoke("terminal:badge-connections", connections),
+  getTerminalBadgeStatus: () => ipcRenderer.invoke("terminal:badge-status"),
   getCompanionEnabled: () =>
     ipcRenderer.invoke("attention:get-companion-enabled") as Promise<boolean>,
   onCompanionEnabledChanged: (listener: (enabled: boolean) => void) => {
