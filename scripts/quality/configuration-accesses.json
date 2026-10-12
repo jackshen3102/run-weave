@@ -296,7 +296,7 @@
     "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
   },
   {
-    "file": "backend/src/activity/recording/store.ts",
+    "file": "backend/src/activity/recording/worker.ts",
     "kind": "environment",
     "expression": "env.RUNWEAVE_ACTIVITY_WORKER_ENTRY",
     "count": 1,
@@ -9363,7 +9363,7 @@
     "file": "scripts/verify/recovery/activity-probe.mjs",
     "kind": "file-io",
     "expression": "writeFile(entry)",
-    "count": 1,
+    "count": 2,
     "category": "test",
     "reason": "恢复故障验证专用：仅初始化私有临时 settings、读取合成状态和保存验证证据；进程环境拷贝与清除安装态 worker 路径用于隔离源码验证。"
   },
@@ -10570,5 +10570,21 @@
     "line": 213,
     "category": "build",
     "reason": "读取随 Electron Backend 打包的 node-pty 依赖清单，原生依赖变化纳入组件版本计算。"
+  },
+  {
+    "file": "scripts/verify/recovery/activity-probe.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 SQLite worker 验证继承 Node 启动环境；测试密钥和 worker 入口由专属 fixture 覆盖。"
+  },
+  {
+    "file": "scripts/verify/recovery/activity-probe.mjs",
+    "kind": "file-io",
+    "expression": "readFile(starts)",
+    "count": 4,
+    "category": "test",
+    "reason": "仅读取本次临时 fixture 的 worker 启动记录，用于验证退避和关闭竞争，不访问产品配置。"
   }
 ]

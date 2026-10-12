@@ -58,8 +58,16 @@ function launch(script, argumentsList) {
   );
   let stdout = "";
   let stderr = "";
+  let resumeTimer;
   child.stdout.on("data", (chunk) => {
     stdout += chunk;
+    if (
+      argumentsList[0] === "recover-stop" &&
+      !resumeTimer &&
+      stdout.includes('"label":"suspend-ready"')
+    ) {
+      resumeTimer = setTimeout(() => child.kill("SIGCONT"), 12_000);
+    }
   });
   child.stderr.on("data", (chunk) => {
     stderr += chunk;
@@ -69,6 +77,7 @@ function launch(script, argumentsList) {
     child.once("error", reject);
     child.once("close", (code, signal) => {
       clearTimeout(timer);
+      clearTimeout(resumeTimer);
       resolve({ code, signal, stdout, stderr });
     });
   });
@@ -93,6 +102,18 @@ async function verifyActivity(mode) {
   assert.equal(probe.code, 0, probe.stderr);
   const values = observations(probe.stdout);
   const byLabel = (label) => values.find((value) => value.label === label);
+  if (mode.startsWith("recover-")) {
+    const outcome = byLabel(
+      mode.startsWith("recover-close") ? "recovery-closed" : "recovered",
+    );
+    return {
+      area: "activity",
+      mode,
+      passed: probe.code === 0 && outcome?.passed === true,
+      exitCode: probe.code,
+      observations: values,
+    };
+  }
   const cause = {
     zero: /^rejected:activity_sqlite_worker_exited:0$/,
     nonzero: /^rejected:activity_sqlite_worker_exited:17$/,
@@ -270,6 +291,13 @@ try {
     "silent",
     "silent-close",
     "startup-silent",
+    "recover-zero",
+    "recover-error",
+    "recover-queue",
+    "recover-stop",
+    "recover-backoff",
+    "recover-close",
+    "recover-close-startup",
   ]) {
     const result = await verifyActivity(mode);
     results.push(result);
