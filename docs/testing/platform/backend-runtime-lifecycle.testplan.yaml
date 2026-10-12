@@ -95,3 +95,41 @@ cases:
     steps:
       - 运行 Backend typecheck、lint、architecture:check 与本计划 testplan:validate，确认全部通过。
       - 运行 backend:verify-lifecycle 的真实 SQLite、tmux 和运行时回收验证；执行 activity:verify 与 work-history:verify，确认真实存储与聚合结果保持兼容。
+  - id: BRL-009
+    name: Activity worker 失败后原消费者恢复历史查询与新事件读回
+    required: true
+    description: >
+      已成功初始化的 store 在 worker 退出、报错、排队超时或进程停顿后重建内部 worker，
+      recorder 和查询服务仍持有原 store；历史事实保留，新事件提交可读，失败当轮的事件不自动重放。
+    preconditions:
+      - 使用 recovery:verify 的专属临时目录、测试密钥及真实 SQLite worker，不操作 Stable 数据或进程。
+      - 每个等价故障场景独立创建 store、recorder 和查询服务，并通过 recorder 提交一条历史事实。
+    steps:
+      - 分别运行 recover-zero、recover-error、recover-queue 与 recover-stop 隔离场景；确认故障当轮拒绝，store 状态变为不可用。
+      - 对排队样本让前一请求耗时约 9 秒；对停顿样本只暂停验证脚本直接创建的子进程 12 秒，并由父进程恢复该 PID。
+      - 等待内部 worker ready，再使用原 recorder 提交新事件、原查询服务读取历史与新事件；确认二者存在而恢复前被拒绝的事件不存在。
+      - 关闭该场景的 store，确认 worker 退出并清理同一归属的临时数据库。
+  - id: BRL-010
+    name: Activity 重建失败按退避串行重试
+    required: true
+    description: >
+      旧 worker 已退出后才启动下一代，重建连续失败不会紧密循环；失败期间不可用，后续成功后原消费者恢复。
+    preconditions:
+      - 使用 recovery:verify 的 recover-backoff 临时 fixture，能够记录每代 worker 的启动时间。
+      - 第一代完成真实 SQLite 初始化并提交历史事实，第二、第三代只在本 fixture 内注入启动失败。
+    steps:
+      - 使第一代 worker 退出，记录后续各代启动时间；确认连续重建间隔至少约为 1、2、4 秒，不存在同时存活的两代 worker。
+      - 第四代取消故障并等待 ready；确认原 recorder 可提交新事件，原查询服务仍可读历史和新事件。
+      - 关闭 store 并清理 fixture，确认未残留 worker 或重建任务。
+  - id: BRL-011
+    name: Activity 关闭取消待执行和进行中的重建
+    required: true
+    description: >
+      close 与退避或新 worker 的 ready 竞争时，关闭调用幂等且有界；关闭后不生成下一代、不接受查询或写入。
+    preconditions:
+      - 使用 recovery:verify 的 recover-close 与 recover-close-startup 独立 fixture，记录 worker 代数。
+      - 故障只作用于本次 worker；启动竞争样本的第二代保持 ready 未响应，关闭仍可强制终止它。
+    steps:
+      - 分别在首次故障的退避窗口、第二代启动但 ready 未完成时并发调用 close；确认共享同一 Promise 且在既有关闭期限内结束。
+      - 等待超过首次退避时长，确认 worker 代数不再增加，store 保持不可用且后续请求返回已关闭错误。
+      - 清理各自 fixture，确认没有存活 worker、未处理 rejection 或延迟重建。
