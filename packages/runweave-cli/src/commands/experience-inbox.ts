@@ -14,6 +14,8 @@ export async function runExperienceInbox(
 ): Promise<unknown> {
   const allowed = new Set([
     "cwd",
+    "instance",
+    "config-dir",
     "profile",
     "backend-port",
     "json",

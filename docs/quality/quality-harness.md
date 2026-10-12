@@ -17,7 +17,7 @@
 
 ## 分层思路（概念级）
 
-- **文档层**：`pnpm docs:check` 检查 L1/L2 必需入口和受治理 Markdown 的本地相对链接。
+- **文档层**：`pnpm docs:check` 检查 L1/L2 必需入口和受治理 Markdown 中实际链接、图片的本地相对路径，跳过行内代码和代码块中的语法示例。
 - **架构层**：`pnpm architecture:check` 检查 600 行 ratchet、循环依赖、反向依赖和共享根导入债务。
 - **E2E 层**：只允许 `frontend/tests/*.spec.ts` 的 Playwright 自动化；当前没有受 Git 管理的 spec，
   因此该层会以 `No tests found` 阻塞。终端、App、Electron 行为按测试计划用

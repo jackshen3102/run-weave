@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>全局设置 · Runweave</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="titlebar">
+      <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+      <span>Runweave</span><span class="title-detail">Settings</span>
+    </div>
+    <main id="settings">
+      <aside id="sidebar" aria-label="全局设置导航"></aside>
+      <section id="content" aria-label="设置内容"></section>
+    </main>
+    <main id="workspace" hidden aria-label="项目与终端工作区"></main>
+    <dialog id="confirm" aria-labelledby="dialog-title"></dialog>
+    <div id="toast" role="status" hidden></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

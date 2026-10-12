@@ -21,7 +21,7 @@ import { CliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
 
 const usage =
-  "Usage: rw experience <list [--limit N|--all]|process id [--expected-content-version hash]|search --query text|show id|save --file record.json|feedback --file receipt.json|history|status|diagnose [--query text]|retry jobId> [--cwd path] [--json]";
+  "Usage: rw experience <list [--limit N|--all]|process id [--expected-content-version hash]|search --query text|show id|save --file record.json|feedback --file receipt.json|history|status|diagnose [--query text]|retry jobId> [--cwd path] [--instance id] [--config-dir path] [--json]";
 export async function runExperienceCommand(
   command: string | undefined,
   args: string[],

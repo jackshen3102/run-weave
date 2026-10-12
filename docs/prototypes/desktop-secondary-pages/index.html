@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>桌面菜单与二级页面 · Runweave</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="windowbar">
+      <div class="window-controls" aria-hidden="true">
+        <i></i><i></i><i></i>
+      </div>
+      <span>Runweave</span><span class="window-meta">browser-viewer</span>
+    </div>
+    <main id="workspace" aria-label="项目与终端工作区"></main>
+    <main id="secondary" aria-label="功能页面" hidden></main>
+    <div id="popover" hidden></div>
+    <dialog id="confirmation" aria-labelledby="confirmation-title"></dialog>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

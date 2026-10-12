@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-12",
+  "sourceHead": "5cd1e0ae0c75fb48aa53ab6c9716952a2d6ef6f4",
+  "layer": "standalone Chrome prototype; no Backend/Electron/SSH/iPhone acceptance",
+  "assertions": 135,
+  "suites": [
+    {
+      "name": "connections",
+      "file": "connections-verification.json",
+      "assertions": 44,
+      "errors": []
+    },
+    {
+      "name": "details",
+      "file": "details-verification.json",
+      "assertions": 63,
+      "errors": []
+    },
+    {
+      "name": "final",
+      "file": "final-verification.json",
+      "assertions": 22,
+      "errors": []
+    },
+    {
+      "name": "keyboard",
+      "file": "keyboard-verification.json",
+      "assertions": 4,
+      "errors": []
+    },
+    {
+      "name": "browser-route",
+      "file": "browser-route-verification.json",
+      "assertions": 2,
+      "errors": []
+    }
+  ],
+  "codeDigests": {
+    "mobile.js": "389cfbef3abf6271592a0cda4b7e51c5fde6c076ddc3c469ad556111dfd0fe2b",
+    "connections.js": "87da4132c2bbd5e9ae408f34fae87407033a8716eabcd726e4040bddeaa082fb",
+    "diagnostics.js": "a8f7f3dac0c11884883f8b4eefd1a9f6f755089a49a68177a3ffd52cde6ce408",
+    "settings-behavior.js": "7f5feb3088e5b1b3e06564edd81af158525370a81a30748c6d5b30ccfdbedf68",
+    "app.js": "61b37a6a6c50a61378f8ad56addaca388ca5a82909c51b7e814595f33c46a36c"
+  },
+  "baselineNote": "135 assertions and codeDigests describe version 4; not rerun after sidebar/icon change.",
+  "latestChangeVerification": {
+    "file": "no-search-verification.json",
+    "assertions": 19,
+    "errors": [],
+    "codeDigests": {
+      "app.js": "381bc42b19a38e066c75695ad04a647994fadfbe8191936c5c5de61fcd14463d",
+      "connections.js": "87da4132c2bbd5e9ae408f34fae87407033a8716eabcd726e4040bddeaa082fb",
+      "diagnostics.js": "a8f7f3dac0c11884883f8b4eefd1a9f6f755089a49a68177a3ffd52cde6ce408",
+      "mobile.js": "389cfbef3abf6271592a0cda4b7e51c5fde6c076ddc3c469ad556111dfd0fe2b",
+      "settings-behavior.js": "7f5feb3088e5b1b3e06564edd81af158525370a81a30748c6d5b30ccfdbedf68"
+    },
+    "stylesDigest": "b0ad1f2733f675f49577d8ff6a6851a3d061a4f8b92bcd3db0b9d36373a0cb39"
+  }
+}

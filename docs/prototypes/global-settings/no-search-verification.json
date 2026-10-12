@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-12",
+  "layer": "standalone Chrome prototype; scoped change verification",
+  "passed": [
+    "设置侧栏没有搜索框",
+    "保留全部10个页面入口",
+    "appearance页面可达且分类始终完整",
+    "notifications页面可达且分类始终完整",
+    "shortcuts页面可达且分类始终完整",
+    "connections页面可达且分类始终完整",
+    "suiji页面可达且分类始终完整",
+    "access页面可达且分类始终完整",
+    "monitoring页面可达且分类始终完整",
+    "advanced页面可达且分类始终完整",
+    "status页面可达且分类始终完整",
+    "desktop页面可达且分类始终完整",
+    "模型目录搜索仍可筛选",
+    "清空模型搜索恢复目录",
+    "设置目标可切换",
+    "右上角保留紧凑图标入口",
+    "快捷图标无可见文字且有可访问名称与提示",
+    "往返设置保留终端输入",
+    "浏览器无运行错误"
+  ],
+  "errors": []
+}

@@ -17,6 +17,7 @@ struct ConnectionDetailView: View {
   @State private var failure: String?
   @State private var showingConfiguration = false
   @State private var showingCodexQuota = false
+  @State private var showingVersions = false
 
   private var connection: BackendConnection? { store.connections.first { $0.id == connectionID } }
   private var isCurrent: Bool { store.activeID == connectionID && session.connection?.id == connectionID }
@@ -55,6 +56,7 @@ struct ConnectionDetailView: View {
         }
         if isCurrent, session.authenticated {
           Section("这台电脑") {
+            Button { showingVersions = true } label: { Label("组件版本", systemImage: "number") }
             Button { showingConfiguration = true } label: { Label("电脑配置", systemImage: "gearshape") }
             Button { showingCodexQuota = true } label: { Label("Codex 额度", systemImage: "chart.bar") }
             Button {
@@ -93,6 +95,7 @@ struct ConnectionDetailView: View {
     .sheet(isPresented: $showingCodexQuota) {
       CodexQuotaView(session: session, quota: codexQuota).mobileAnalyticsScreen(.codexQuota)
     }
+    .sheet(isPresented: $showingVersions) { RuntimeVersionsView(session: session) }
     .confirmationDialog("删除本地连接？", isPresented: $deleting, titleVisibility: .visible) {
       if let connection {
         Button("删除 \(connection.name)", role: .destructive) { remove(connection) }

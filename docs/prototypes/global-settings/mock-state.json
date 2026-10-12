@@ -1,0 +1,1150 @@
+{
+  "pages": [
+    {
+      "id": "appearance",
+      "title": "外观",
+      "group": "本台应用",
+      "icon": "sun",
+      "scope": "local"
+    },
+    {
+      "id": "notifications",
+      "title": "桌面通知",
+      "group": "本台应用",
+      "icon": "bell",
+      "scope": "local"
+    },
+    {
+      "id": "shortcuts",
+      "title": "快捷键",
+      "group": "本台应用",
+      "icon": "keyboard",
+      "scope": "local"
+    },
+    {
+      "id": "connections",
+      "title": "连接管理",
+      "group": "连接与服务",
+      "icon": "link",
+      "scope": "local"
+    },
+    {
+      "id": "suiji",
+      "title": "随记账户",
+      "group": "连接与服务",
+      "icon": "user",
+      "scope": "account"
+    },
+    {
+      "id": "access",
+      "title": "登录与手机接入",
+      "group": "所选电脑",
+      "icon": "lock",
+      "scope": "computer"
+    },
+    {
+      "id": "monitoring",
+      "title": "资源监控与提醒",
+      "group": "所选电脑",
+      "icon": "activity",
+      "scope": "computer"
+    },
+    {
+      "id": "advanced",
+      "title": "高级配置",
+      "group": "所选电脑",
+      "icon": "sliders",
+      "scope": "computer"
+    },
+    {
+      "id": "status",
+      "title": "电脑状态",
+      "group": "状态与诊断",
+      "icon": "activity",
+      "scope": "computer"
+    },
+    {
+      "id": "desktop",
+      "title": "本台桌面诊断",
+      "group": "状态与诊断",
+      "icon": "monitor",
+      "scope": "local"
+    }
+  ],
+  "theme": "dark",
+  "tools": [
+    "Preview",
+    "Automation",
+    "Browser 1",
+    "Browser 2",
+    "Browser 3",
+    "Agent Team",
+    "Race",
+    "任务交接",
+    "任务监控",
+    "会话阅读"
+  ],
+  "visibleTools": ["Preview", "Automation", "Browser 1", "Agent Team"],
+  "connections": [
+    {
+      "id": "local",
+      "name": "本机 Mac",
+      "endpoint": "http://127.0.0.1:5001",
+      "kind": "本机",
+      "host": "",
+      "port": "22",
+      "username": "",
+      "online": true
+    },
+    {
+      "id": "dev",
+      "name": "开发机",
+      "endpoint": "http://devbox.local:5001",
+      "kind": "SSH",
+      "host": "devbox.local",
+      "port": "22",
+      "username": "developer",
+      "online": true
+    }
+  ],
+  "computer": {
+    "local": {
+      "monitor": true,
+      "alerts": true,
+      "remoteControl": false,
+      "roles": {
+        "主 Agent": {
+          "provider": "Codex",
+          "model": "gpt-6-sol",
+          "effort": "high",
+          "fast": false,
+          "max": false
+        },
+        "实现": {
+          "provider": "Codex",
+          "model": "gpt-6-sol",
+          "effort": "high",
+          "fast": false,
+          "max": false
+        },
+        "代码评审": {
+          "provider": "Codex",
+          "model": "gpt-6-sol",
+          "effort": "high",
+          "fast": false,
+          "max": false
+        },
+        "行为验收": {
+          "provider": "Codex",
+          "model": "gpt-6-sol",
+          "effort": "high",
+          "fast": false,
+          "max": false
+        }
+      },
+      "fields": {
+        "services.snapshotPublisher.url": null,
+        "services.pushSender.gatewayURL": null,
+        "services.feishu.role": null,
+        "services.feishu.hub.host": null,
+        "services.feishu.hub.port": null,
+        "services.feishu.node.url": null,
+        "services.feishu.appId": null,
+        "services.feishu.targetChatId": null,
+        "services.feishu.allowedOpenIds": null,
+        "services.feishu.notifyOpenIds": null,
+        "services.feishu.legacyWebhook.transport": null,
+        "scheduledTasks.enabled": true,
+        "scheduledTasks.timeoutMs": 7200000,
+        "scheduledTasks.maxOutputBytes": 16777216,
+        "scheduledTasks.maxConcurrentRuns": 4,
+        "scheduledTasks.quickInputDefaults.model": "gpt-6-sol",
+        "scheduledTasks.quickInputDefaults.effort": "high",
+        "scheduledTasks.quickInputDefaults.continuationMode": null,
+        "scheduledTasks.quickInputDefaults.executionPolicy": null,
+        "voice.transcription.language": null,
+        "voice.transcription.acceptLanguage": null,
+        "voice.transcription.prompt": null
+      },
+      "secrets": {
+        "services.snapshotPublisher.token": false,
+        "services.pushSender.senderToken": false,
+        "services.feishu.node.token": false,
+        "services.feishu.appSecret": false,
+        "services.feishu.legacyWebhook.url": false,
+        "services.feishu.legacyWebhook.secret": false
+      }
+    },
+    "dev": {
+      "monitor": false,
+      "alerts": false,
+      "remoteControl": false,
+      "roles": {
+        "主 Agent": {
+          "provider": "Codex",
+          "model": "gpt-6-sol",
+          "effort": "high",
+          "fast": false,
+          "max": false
+        },
+        "实现": {
+          "provider": "Codex",
+          "model": "gpt-6-sol",
+          "effort": "high",
+          "fast": false,
+          "max": false
+        },
+        "代码评审": {
+          "provider": "Codex",
+          "model": "gpt-6-sol",
+          "effort": "high",
+          "fast": false,
+          "max": false
+        },
+        "行为验收": {
+          "provider": "Codex",
+          "model": "gpt-6-sol",
+          "effort": "high",
+          "fast": false,
+          "max": false
+        }
+      },
+      "fields": {
+        "services.snapshotPublisher.url": null,
+        "services.pushSender.gatewayURL": null,
+        "services.feishu.role": null,
+        "services.feishu.hub.host": null,
+        "services.feishu.hub.port": null,
+        "services.feishu.node.url": null,
+        "services.feishu.appId": null,
+        "services.feishu.targetChatId": null,
+        "services.feishu.allowedOpenIds": null,
+        "services.feishu.notifyOpenIds": null,
+        "services.feishu.legacyWebhook.transport": null,
+        "scheduledTasks.enabled": true,
+        "scheduledTasks.timeoutMs": 7200000,
+        "scheduledTasks.maxOutputBytes": 16777216,
+        "scheduledTasks.maxConcurrentRuns": 4,
+        "scheduledTasks.quickInputDefaults.model": "gpt-6-sol",
+        "scheduledTasks.quickInputDefaults.effort": "high",
+        "scheduledTasks.quickInputDefaults.continuationMode": null,
+        "scheduledTasks.quickInputDefaults.executionPolicy": null,
+        "voice.transcription.language": null,
+        "voice.transcription.acceptLanguage": null,
+        "voice.transcription.prompt": null
+      },
+      "secrets": {
+        "services.snapshotPublisher.token": false,
+        "services.pushSender.senderToken": false,
+        "services.feishu.node.token": false,
+        "services.feishu.appSecret": false,
+        "services.feishu.legacyWebhook.url": false,
+        "services.feishu.legacyWebhook.secret": false
+      }
+    }
+  },
+  "fields": [
+    {
+      "path": "services.snapshotPublisher.url",
+      "type": "string",
+      "domain": "services.snapshotPublisher",
+      "sensitive": false,
+      "remote": true,
+      "apply": "reload",
+      "description": "分享发布服务地址",
+      "environmentKeys": ["RUNWEAVE_SNAPSHOT_PUBLISH_URL"],
+      "owner": "backend/terminal/snapshot-share",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["RUNWEAVE_SNAPSHOT_PUBLISH_URL"]
+    },
+    {
+      "path": "services.snapshotPublisher.token",
+      "type": "string",
+      "domain": "services.snapshotPublisher",
+      "sensitive": true,
+      "remote": true,
+      "apply": "reload",
+      "description": "分享发布凭据",
+      "environmentKeys": ["RUNWEAVE_SNAPSHOT_PUBLISH_TOKEN"],
+      "owner": "backend/terminal/snapshot-share",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["RUNWEAVE_SNAPSHOT_PUBLISH_TOKEN"]
+    },
+    {
+      "path": "services.pushSender.gatewayURL",
+      "type": "string",
+      "domain": "services.pushSender",
+      "sensitive": false,
+      "remote": true,
+      "apply": "reload",
+      "description": "推送网关地址",
+      "environmentKeys": ["RUNWEAVE_PUSH_GATEWAY_URL"],
+      "owner": "backend/device-monitor",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["device-monitor/push.json.gatewayURL"]
+    },
+    {
+      "path": "services.pushSender.senderToken",
+      "type": "string",
+      "domain": "services.pushSender",
+      "sensitive": true,
+      "remote": true,
+      "apply": "reload",
+      "description": "推送发送凭据",
+      "environmentKeys": ["RUNWEAVE_PUSH_SENDER_TOKEN"],
+      "owner": "backend/device-monitor",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["device-monitor/push.json.senderToken"]
+    },
+    {
+      "path": "services.feishu.role",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "飞书运行角色",
+      "environmentKeys": [],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": "standalone"
+      },
+      "migrationSources": ["new field; no legacy source"]
+    },
+    {
+      "path": "services.feishu.hub.host",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "集中 Bridge 监听地址",
+      "environmentKeys": [],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": "127.0.0.1"
+      },
+      "migrationSources": ["new field; no legacy source"]
+    },
+    {
+      "path": "services.feishu.hub.port",
+      "type": "integer",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "集中 Bridge 监听端口",
+      "environmentKeys": [],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["new field; no legacy source"]
+    },
+    {
+      "path": "services.feishu.node.url",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "集中 Bridge HTTPS origin",
+      "environmentKeys": [],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["new field; no legacy source"]
+    },
+    {
+      "path": "services.feishu.node.token",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": true,
+      "remote": true,
+      "apply": "restart",
+      "description": "本节点接入凭据",
+      "environmentKeys": [],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["new field; no legacy source"]
+    },
+    {
+      "path": "services.feishu.appId",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "飞书应用 ID",
+      "environmentKeys": ["FEISHU_APP_ID"],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["FEISHU_APP_ID"]
+    },
+    {
+      "path": "services.feishu.appSecret",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": true,
+      "remote": true,
+      "apply": "restart",
+      "description": "飞书应用密钥",
+      "environmentKeys": ["FEISHU_APP_SECRET"],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["FEISHU_APP_SECRET"]
+    },
+    {
+      "path": "services.feishu.targetChatId",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "飞书目标群聊",
+      "environmentKeys": ["FEISHU_TARGET_CHAT_ID"],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["FEISHU_TARGET_CHAT_ID"]
+    },
+    {
+      "path": "services.feishu.allowedOpenIds",
+      "type": "array<string>",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "允许调用的用户 ID",
+      "environmentKeys": ["FEISHU_ALLOWED_OPEN_IDS"],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": []
+      },
+      "migrationSources": ["FEISHU_ALLOWED_OPEN_IDS"]
+    },
+    {
+      "path": "services.feishu.notifyOpenIds",
+      "type": "array<string>",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "接收通知的用户 ID",
+      "environmentKeys": ["FEISHU_NOTIFY_OPEN_IDS"],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": []
+      },
+      "migrationSources": ["FEISHU_NOTIFY_OPEN_IDS"]
+    },
+    {
+      "path": "services.feishu.legacyWebhook.url",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": true,
+      "remote": true,
+      "apply": "restart",
+      "description": "旧通知 hook webhook；迁移前核对使用者",
+      "environmentKeys": ["FEISHU_WEBHOOK_URL"],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["FEISHU_WEBHOOK_URL"]
+    },
+    {
+      "path": "services.feishu.legacyWebhook.secret",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": true,
+      "remote": true,
+      "apply": "restart",
+      "description": "旧通知 hook webhook 签名密钥",
+      "environmentKeys": ["FEISHU_WEBHOOK_SECRET"],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["FEISHU_WEBHOOK_SECRET"]
+    },
+    {
+      "path": "services.feishu.legacyWebhook.transport",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "旧通知 hook 发送方式",
+      "environmentKeys": ["FEISHU_NOTIFY_TRANSPORT"],
+      "owner": "cli/feishu",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["FEISHU_NOTIFY_TRANSPORT"]
+    },
+    {
+      "path": "scheduledTasks.enabled",
+      "type": "boolean",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "定时任务开关",
+      "environmentKeys": ["RUNWEAVE_SCHEDULED_TASKS_ENABLED"],
+      "owner": "backend/scheduled-tasks",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": true
+      },
+      "migrationSources": ["RUNWEAVE_SCHEDULED_TASKS_ENABLED"]
+    },
+    {
+      "path": "scheduledTasks.timeoutMs",
+      "type": "number",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "任务超时毫秒数",
+      "environmentKeys": ["RUNWEAVE_SCHEDULED_TASK_TIMEOUT_MS"],
+      "owner": "backend/scheduled-tasks",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": 7200000
+      },
+      "migrationSources": ["RUNWEAVE_SCHEDULED_TASK_TIMEOUT_MS"]
+    },
+    {
+      "path": "scheduledTasks.maxOutputBytes",
+      "type": "integer",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "任务输出上限字节数",
+      "environmentKeys": ["RUNWEAVE_SCHEDULED_TASK_MAX_OUTPUT_BYTES"],
+      "owner": "backend/scheduled-tasks",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": 16777216
+      },
+      "migrationSources": ["RUNWEAVE_SCHEDULED_TASK_MAX_OUTPUT_BYTES"]
+    },
+    {
+      "path": "scheduledTasks.maxConcurrentRuns",
+      "type": "integer",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "同时执行的后台任务数",
+      "environmentKeys": [],
+      "owner": "backend/scheduled-tasks",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": 4
+      },
+      "migrationSources": ["new-field:no-legacy-source"]
+    },
+    {
+      "path": "scheduledTasks.quickInputDefaults.model",
+      "type": "string",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "快捷指令后台运行的 Codex 模型；必须显式选择",
+      "environmentKeys": [],
+      "owner": "backend/scheduled-tasks",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["new-field:no-legacy-source"]
+    },
+    {
+      "path": "scheduledTasks.quickInputDefaults.effort",
+      "type": "string",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "快捷指令后台运行的推理强度",
+      "environmentKeys": [],
+      "owner": "backend/scheduled-tasks",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": null
+      },
+      "migrationSources": ["new-field:no-legacy-source"]
+    },
+    {
+      "path": "scheduledTasks.quickInputDefaults.continuationMode",
+      "type": "string",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "新快捷运行自动继续策略：bounded 或 off",
+      "environmentKeys": [],
+      "owner": "backend/scheduled-tasks",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": "bounded"
+      },
+      "migrationSources": ["new-field:no-legacy-source"]
+    },
+    {
+      "path": "scheduledTasks.quickInputDefaults.executionPolicy",
+      "type": "string",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "remote": true,
+      "apply": "restart",
+      "description": "快捷指令后台运行的执行权限",
+      "environmentKeys": [],
+      "owner": "backend/scheduled-tasks",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": "full-access"
+      },
+      "migrationSources": ["new-field:no-legacy-source"]
+    },
+    {
+      "path": "voice.transcription.language",
+      "type": "string",
+      "domain": "voice",
+      "sensitive": false,
+      "remote": true,
+      "apply": "reload",
+      "description": "转写语言",
+      "environmentKeys": ["RUNWEAVE_VOICE_TRANSCRIPTION_LANGUAGE"],
+      "owner": "backend/voice",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": "zh"
+      },
+      "migrationSources": ["RUNWEAVE_VOICE_TRANSCRIPTION_LANGUAGE"]
+    },
+    {
+      "path": "voice.transcription.acceptLanguage",
+      "type": "string",
+      "domain": "voice",
+      "sensitive": false,
+      "remote": true,
+      "apply": "reload",
+      "description": "转写请求 Accept-Language",
+      "environmentKeys": ["RUNWEAVE_VOICE_TRANSCRIPTION_ACCEPT_LANGUAGE"],
+      "owner": "backend/voice",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": "zh-CN,zh;q=0.9,en;q=0.8"
+      },
+      "migrationSources": ["RUNWEAVE_VOICE_TRANSCRIPTION_ACCEPT_LANGUAGE"]
+    },
+    {
+      "path": "voice.transcription.prompt",
+      "type": "string",
+      "domain": "voice",
+      "sensitive": false,
+      "remote": true,
+      "apply": "reload",
+      "description": "转写提示词",
+      "environmentKeys": ["RUNWEAVE_VOICE_TRANSCRIPTION_PROMPT"],
+      "owner": "backend/voice",
+      "scope": "instance",
+      "storage": "settings.yaml",
+      "default": {
+        "value": "请使用简体中文输出转写文本。"
+      },
+      "migrationSources": ["RUNWEAVE_VOICE_TRANSCRIPTION_PROMPT"]
+    }
+  ],
+  "accounts": {
+    "production": {
+      "endpoint": "https://suiji.example.com",
+      "username": "designer",
+      "loggedIn": true
+    },
+    "development": {
+      "endpoint": "http://127.0.0.1:4783",
+      "username": "",
+      "loggedIn": false
+    }
+  },
+  "shortcuts": [
+    ["新建窗口", "⌘ ⇧ N"],
+    ["系统资源监控", "⌘ ⇧ M"],
+    ["关闭窗口", "⌘ W"],
+    ["退出应用", "⌘ Q"],
+    ["撤销", "⌘ Z"],
+    ["重做", "⌘ ⇧ Z"],
+    ["剪切", "⌘ X"],
+    ["复制", "⌘ C"],
+    ["粘贴", "⌘ V"],
+    ["全选", "⌘ A"],
+    ["重新加载页面", "⌘ R"],
+    ["强制重新加载页面", "⌘ ⇧ R"],
+    ["开发者工具", "⌘ ⌥ I"],
+    ["实际大小", "⌘ 0"],
+    ["放大", "⌘ +"],
+    ["缩小", "⌘ −"],
+    ["切换全屏", "⌃ ⌘ F"],
+    ["最小化", "⌘ M"]
+  ],
+  "resources": [
+    ["Runweave", "8.2%", "1.2 GB"],
+    ["Code", "5.1%", "830 MB"],
+    ["Chrome", "3.8%", "1.7 GB"]
+  ],
+  "runtime": [
+    ["Backend", "已连接", "提供当前电脑的服务与配置"],
+    ["App Server", "正常", "事件与 Thread 状态服务"],
+    ["Terminal", "正常", "终端服务可用"],
+    ["Activity", "正常", "活动存储可用"]
+  ],
+  "quota": {
+    "session": 82,
+    "weekly": 64
+  },
+  "domains": {
+    "services.snapshotPublisher": "终端分享",
+    "services.pushSender": "设备通知",
+    "services.feishu": "飞书",
+    "scheduledTasks": "后台任务",
+    "voice": "语音"
+  },
+  "sshHosts": [
+    {
+      "id": "host-dev",
+      "name": "开发机",
+      "sshTarget": "devbox",
+      "autoConnect": true,
+      "status": "ready",
+      "forwards": [
+        {
+          "id": "web",
+          "name": "开发网页",
+          "port": 3000,
+          "path": "/",
+          "enabled": true,
+          "status": "ready"
+        },
+        {
+          "id": "api",
+          "name": "API",
+          "port": 3001,
+          "path": "/health",
+          "enabled": true,
+          "status": "failed"
+        }
+      ],
+      "endpoints": [
+        {
+          "id": "endpoint-dev",
+          "remotePort": 5001
+        }
+      ],
+      "remoteAccess": {
+        "enabled": true,
+        "listenAddress": "192.168.1.10",
+        "port": 15443
+      },
+      "remoteDesktop": {
+        "enabled": false,
+        "listenAddress": "192.168.1.10",
+        "port": 15446,
+        "localAddress": "192.168.1.20",
+        "localPort": 48571,
+        "certificateFingerprint": "abababababababababababababababababababababababababababababababab"
+      },
+      "browser": {
+        "enabled": true,
+        "profileId": "profile-2",
+        "backendPort": 5001,
+        "approvedBrowserGroupId": "existing-group"
+      }
+    }
+  ],
+  "remoteDesktopIdentity": {
+    "localAddress": "192.168.1.20",
+    "localPort": 48571,
+    "certificateFingerprint": "abababababababababababababababababababababababababababababababab",
+    "autoDetectLocalHost": true
+  },
+  "mobileAddresses": ["http://192.168.1.20:5001", "http://10.10.0.20:5001"],
+  "mobileScanDelayMs": 5500,
+  "capabilities": [
+    {
+      "id": "terminal",
+      "label": "终端",
+      "state": "正常",
+      "summary": "终端进程与事件流可用"
+    },
+    {
+      "id": "browser",
+      "label": "Browser",
+      "state": "正常",
+      "summary": "按现有 Profile 与通道上报状态"
+    },
+    {
+      "id": "app-server",
+      "label": "App Server",
+      "state": "正常",
+      "summary": "连接节点的 App Server 已响应"
+    },
+    {
+      "id": "workspace-services",
+      "label": "Workspace Services",
+      "state": "正常",
+      "summary": "工作区服务可用"
+    },
+    {
+      "id": "desktop",
+      "label": "Desktop",
+      "state": "正常",
+      "summary": "本台桌面与远程访问服务"
+    },
+    {
+      "id": "background-tasks",
+      "label": "后台任务",
+      "state": "正常",
+      "summary": "队列与执行服务可用"
+    },
+    {
+      "id": "research-mcp",
+      "label": "调查 MCP",
+      "state": "正常",
+      "summary": "调查 MCP 服务可用"
+    }
+  ],
+  "versions": [
+    {
+      "name": "Backend",
+      "version": "2026.10.11",
+      "build": "20261011.143500",
+      "source": "local-build"
+    },
+    {
+      "name": "CLI（节点 rw）",
+      "version": "2026.10.11",
+      "build": "20261011.143500",
+      "source": "local-build"
+    },
+    {
+      "name": "App Server",
+      "version": "2026.10.11",
+      "build": "20261011.143500",
+      "source": "local-build"
+    },
+    {
+      "name": "Desktop",
+      "version": "2026.10.11",
+      "build": "20261011.143500",
+      "source": "local-build"
+    },
+    {
+      "name": "飞书 Bridge",
+      "version": "2026.10.11",
+      "build": "20261011.143500",
+      "source": "local-build"
+    },
+    {
+      "name": "调查 MCP",
+      "version": "2026.10.11",
+      "build": "20261011.143500",
+      "source": "local-build"
+    }
+  ],
+  "desktopConsumers": [
+    {
+      "domain": "desktop.browser",
+      "state": "已生效",
+      "revision": 4
+    },
+    {
+      "domain": "desktop.tunnels",
+      "state": "已生效",
+      "revision": 4
+    },
+    {
+      "domain": "agents.companion",
+      "state": "未配置",
+      "revision": null
+    },
+    {
+      "domain": "desktop.preferences",
+      "state": "等待所属功能重新加载或重启",
+      "revision": 3
+    }
+  ],
+  "modelCatalog": {
+    "Codex": {
+      "available": true,
+      "command": "codex",
+      "models": [
+        {
+          "id": "gpt-6-sol",
+          "efforts": ["low", "medium", "high", "xhigh"],
+          "supportsFast": true
+        },
+        {
+          "id": "gpt-6.1-sol",
+          "efforts": ["low", "medium", "high", "xhigh"],
+          "supportsFast": true
+        },
+        {
+          "id": "gpt-6-astra",
+          "efforts": ["medium", "high"],
+          "supportsFast": false
+        }
+      ]
+    },
+    "Traex": {
+      "available": true,
+      "command": "traex",
+      "models": [
+        {
+          "id": "traex-model-a",
+          "efforts": [],
+          "supportsMax": true
+        },
+        {
+          "id": "traex-model-b",
+          "efforts": ["high"],
+          "supportsMax": false
+        }
+      ]
+    }
+  },
+  "diagnostics": {
+    "observedAt": "14:35:20",
+    "notice": true,
+    "apps": [
+      {
+        "id": "runweave",
+        "name": "Runweave",
+        "cpu": 8.2,
+        "memory": 1200,
+        "energy": 22,
+        "processes": [
+          {
+            "instanceId": "process-rw-101",
+            "pid": 101,
+            "name": "Runweave control",
+            "cpu": 3.2,
+            "memory": 320,
+            "kind": "readonly",
+            "reason": "Runweave 控制进程受保护"
+          }
+        ]
+      },
+      {
+        "id": "code",
+        "name": "Code",
+        "cpu": 5.1,
+        "memory": 4300,
+        "energy": 130,
+        "processes": [
+          {
+            "instanceId": "process-code-202",
+            "pid": 202,
+            "name": "Code Renderer",
+            "cpu": 5.1,
+            "memory": 4300,
+            "kind": "terminate",
+            "normalResult": "still_running"
+          }
+        ]
+      },
+      {
+        "id": "devservice",
+        "name": "开发服务",
+        "cpu": 2.1,
+        "memory": 500,
+        "energy": 12,
+        "processes": [
+          {
+            "instanceId": "process-service-303",
+            "pid": 303,
+            "name": "Workspace Service",
+            "cpu": 2.1,
+            "memory": 500,
+            "kind": "stop_service",
+            "normalResult": "terminated"
+          }
+        ]
+      }
+    ],
+    "dev": [
+      {
+        "id": "desktop-1",
+        "name": "Beta 测试槽位 1",
+        "group": "桌面测试",
+        "state": "busy",
+        "action": "stop-and-release",
+        "owner": {
+          "id": "agent-a",
+          "task": "页面交互验证",
+          "worktree": "wt-2",
+          "startedAt": "2026-10-12 14:20",
+          "lastActivity": "2026-10-12 14:35"
+        },
+        "path": "~/browser-viewer/.worktree/wt-2",
+        "ports": [45100, 45101],
+        "processes": ["Runner 3180"],
+        "udid": null,
+        "ownershipVersion": 7,
+        "reason": ""
+      },
+      {
+        "id": "session-1",
+        "name": "非池 Session",
+        "group": "桌面测试",
+        "state": "blocked",
+        "action": "release",
+        "owner": {
+          "id": "agent-a",
+          "task": "页面交互验证",
+          "worktree": "wt-2",
+          "startedAt": "2026-10-12 14:20",
+          "lastActivity": "2026-10-12 14:35"
+        },
+        "path": "~/browser-viewer/.worktree/wt-2",
+        "ports": [45100, 45101],
+        "processes": [],
+        "udid": null,
+        "ownershipVersion": 7,
+        "reason": ""
+      },
+      {
+        "id": "sim-1",
+        "name": "iPhone 17 模拟器",
+        "group": "模拟器测试",
+        "state": "busy",
+        "action": "stop-and-release",
+        "owner": {
+          "id": "agent-a",
+          "task": "页面交互验证",
+          "worktree": "wt-2",
+          "startedAt": "2026-10-12 14:20",
+          "lastActivity": "2026-10-12 14:35"
+        },
+        "path": "~/browser-viewer/.worktree/wt-2",
+        "ports": [],
+        "processes": ["Runner 3180"],
+        "udid": "SIMULATOR-FIXTURE-ID",
+        "ownershipVersion": 7,
+        "reason": ""
+      },
+      {
+        "id": "sim-2",
+        "name": "iPad 模拟器",
+        "group": "模拟器测试",
+        "state": "unknown",
+        "action": null,
+        "owner": {
+          "id": "agent-a",
+          "task": "页面交互验证",
+          "worktree": "wt-2",
+          "startedAt": "2026-10-12 14:20",
+          "lastActivity": "2026-10-12 14:35"
+        },
+        "path": "~/browser-viewer/.worktree/wt-2",
+        "ports": [],
+        "processes": [],
+        "udid": "SIMULATOR-FIXTURE-ID",
+        "ownershipVersion": 7,
+        "reason": "来源暂不可用，不能确认资源归属"
+      },
+      {
+        "id": "desktop-2",
+        "name": "Beta 测试槽位 2",
+        "group": "桌面测试",
+        "state": "free",
+        "action": null,
+        "owner": null,
+        "path": "~/browser-viewer/.worktree/wt-2",
+        "ports": [45100, 45101],
+        "processes": [],
+        "udid": null,
+        "ownershipVersion": 7,
+        "reason": ""
+      }
+    ],
+    "quota": {
+      "weekly": 64,
+      "shortWindow": 82,
+      "resetsAt": "2026-10-15 14:00",
+      "observedAt": "2026-10-12 14:35",
+      "stale": false,
+      "error": ""
+    },
+    "logs": {
+      "recording": false,
+      "startedAt": null,
+      "result": null
+    }
+  }
+}

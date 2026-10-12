@@ -1,0 +1,81 @@
+version: 1
+name: 桌面全局设置导航与作用域隔离
+description: >
+  待实现的重构验收合同。验证无搜索的全屏设置、原快捷图标、工作区保留和设置目标隔离。
+  本计划不证明 SSH、配置持久化或手机签发业务通过；这些使用已有领域用例。
+cases:
+  - id: DGS-001
+    name: 全屏分类导航无需搜索即可到达全部页面
+    required: true
+    description: 全局设置占满应用内容区域，10 页均可达且不存在全局搜索控件。
+    preconditions:
+      - 候选实现已接入全部 10 页，执行者拥有独立 Electron Dev Session、测试账户和连接。
+      - 已按 toolkit:runweave-dev-session 取得该 Session 的 fresh desktop surface。
+    steps:
+      - 使用 toolkit:playwright-cli 附着该页面，从应用菜单进入全局设置；确认全窗内容布局、左上角返回、左侧分类和右侧内容区，侧栏没有搜索框或搜索空态。
+      - 依次打开外观、桌面通知、快捷键、连接管理、随记账户、登录与手机接入、资源监控与提醒、高级配置、电脑状态、本台桌面诊断；确认标题和选中分类一致，全部分类可到达，长内容可以滚动。
+      - 调整同一窗口到 1000×720；确认仍能访问全部分类及页面操作，没有横向溢出遮挡保存按钮；恢复原窗口尺寸。
+  - id: DGS-002
+    name: 右上角快捷入口保留既有交互
+    required: true
+    description: 快捷入口继续使用图标及原弹层或业务导航，不被改成文字按钮或统一导向设置。
+    preconditions:
+      - 独立 Electron Dev Session 已有执行者自建的项目与终端，记录重构前快捷入口的图标、提示、顺序和打开位置。
+      - 候选实现已接入设置入口，测试会话不运行用户任务。
+    steps:
+      - 使用 toolkit:playwright-cli 附着该 Session desktop surface，逐一检查快捷指令、Services、随记、定时任务、运行状态和更多操作；确认仍为图标，有可访问名称，提示、顺序、角标和禁用条件与原入口一致。
+      - 依次点击并关闭各入口；确认打开原对应弹层或业务页面，未被统一跳转全局设置；不执行指令、不启动服务或任务。
+      - 返回工作区并进入/退出一次全局设置；重复检查快捷入口，确认形式及行为仍一致。
+  - id: DGS-003
+    name: 设置往返不重建工作区会话
+    required: true
+    description: 同一窗口内进入、切设置页和返回保持当前项目、Worktree、终端、草稿与工具布局。
+    preconditions:
+      - 独立 Electron Dev Session 有执行者自建的两个 Worktree、一个终端和持续输出测试标记的无副作用命令。
+      - 已在终端输入尚未发送的唯一文本并记录 session ID、选中 Worktree、工具布局和输出序号。
+    steps:
+      - 使用 toolkit:playwright-cli 从工作区进入设置，切换三次分类后用左上角返回；确认 session ID、Worktree、未发送文本和工具布局不变。
+      - 确认输出序号持续推进、未新增终端或重连到其他会话；再次进入设置并通过浏览器后退返回，核对同一状态不变。
+      - 停止本例标记命令并只清理本例创建的资源。
+  - id: DGS-004
+    name: 设置目标与工作区连接隔离
+    required: true
+    description: 设置页使用所选电脑的身份，迟到响应不能覆盖新目标，工作区活动连接保持不变。
+    preconditions:
+      - 独立 Dev Session 具备两个执行者所有的 Backend A/B 和凭据，两者可返回不同的可识别配置值。
+      - 工作区连接 A，测试代理可以仅延迟本例 A 的配置读取响应，不修改用户服务。
+    steps:
+      - 使用 toolkit:playwright-cli 进入高级配置，延迟 A 的读取后切设置目标为 B；确认 B 的标题和读取内容匹配其真实响应。
+      - 释放 A 的迟到响应；确认页面仍显示 B，后续读取/保存请求身份仍指向 B，不使用 A 的凭据或配置草稿。
+      - 打开本台桌面诊断，确认 owner 仍为当前 Electron；返回工作区确认活动连接仍为 A；移除本例延迟设置。
+  - id: DGS-005
+    name: 未保存草稿在离开时受到保护
+    required: true
+    description: 分类、目标及返回导航使用同一离开保护，取消保留输入，放弃不写入配置。
+    preconditions:
+      - 独立 Dev Session 有两个执行者所有的 Backend，当前高级配置页已读到真实配置并记录版本和值。
+      - 本例使用非敏感且可恢复的配置字段，不涉及重启或外部通知。
+    steps:
+      - 使用 toolkit:playwright-cli 修改字段但不保存，依次尝试切分类、切电脑和返回工作区，每次选择取消；确认仍停留原编辑目标且输入不变。
+      - 再次返回并确认放弃，重新进入原页并读取；确认服务端版本和值未改变，表单恢复已保存值，不发生空草稿崩溃。
+  - id: DGS-006
+    name: 设置路由刷新和回退均有确定结果
+    required: true
+    description: 直接进入、刷新、未知分类和历史导航不出现空白或无效返回地址。
+    preconditions:
+      - 独立 Dev Session 已有候选设置路由，测试账户登录有效；本例浏览器标签没有用户未保存内容。
+    steps:
+      - 使用 toolkit:playwright-cli 在该标签直接打开 /settings/advanced，刷新；确认高级配置加载，目标名称与请求身份一致，返回按钮可进入 /terminal。
+      - 直接打开未知 settings 分类；确认回退外观页，不进入空白或循环重定向。
+      - 从工作区进入外观页再切高级配置，通过后退/前进验证选中分类、标题和 URL 一致；返回工作区后不再次弹出已关闭设置。
+  - id: DGS-007
+    name: 全屏设置使原生 Browser 正确让位并恢复
+    required: true
+    description: 全屏设置不被原生 Browser 遮挡，关闭后恢复当前 Profile、Tab 和输入命中。
+    preconditions:
+      - 独立 Electron Dev Session 已在本例专用 Browser Profile/Tab 打开带可点击计数器的测试网页，记录 Profile、Tab 和 URL。
+      - 执行者能够观察 Electron 合成窗口及原生输入命中；DOM 截图不能作为本例唯一证据。
+    steps:
+      - 使用 toolkit:playwright-cli 附着 desktop surface 打开设置；观察真实 Electron 窗口确认 Browser 不覆盖设置，点击设置内容区操作，测试网页计数器不增加。
+      - 返回工作区，确认原 Profile、Tab、URL 保留且网页重新可见；点击网页计数器确认正常收到一次输入。
+      - 确认只发生视图呈现切换，没有关闭或新建 Browser WebContents；清理本例网页。

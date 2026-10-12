@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-12",
+  "layer": "standalone Chrome prototype",
+  "passed": [
+    "SSH打开网页沿用已有Profile和新分组意图",
+    "打开服务回到工作区Browser 2，不新增全局Browser配置"
+  ],
+  "errors": []
+}

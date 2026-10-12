@@ -1,0 +1,2455 @@
+{
+  "title": "Runweave",
+  "pages": [
+    {
+      "id": "history",
+      "title": "终端历史",
+      "group": "工作记录",
+      "icon": "history",
+      "kind": "list",
+      "scope": "connection",
+      "description": "",
+      "items": [
+        {
+          "id": "desktop",
+          "title": "桌面菜单与二级页面重构",
+          "subtitle": "browser-viewer · wt-1 · Codex",
+          "status": "进行中",
+          "meta": "14:32",
+          "body": "已梳理菜单、设置和二级页面入口。保留项目、终端与右侧工具区，统一功能归属与导航。"
+        },
+        {
+          "id": "browser",
+          "title": "Browser 浮层协调",
+          "subtitle": "browser-viewer · main · Codex",
+          "status": "已完成",
+          "meta": "昨天",
+          "body": "完成浏览器原生视图与页面浮层的呈现协调。"
+        },
+        {
+          "id": "ios",
+          "title": "iOS 连接体验",
+          "subtitle": "browser-viewer · wt-2 · Pi",
+          "status": "已完成",
+          "meta": "昨天",
+          "body": "整理连接切换和管理流程。"
+        }
+      ]
+    },
+    {
+      "id": "team-history",
+      "title": "多 Agent 运行",
+      "group": "工作记录",
+      "icon": "layers",
+      "kind": "list",
+      "scope": "connection",
+      "description": "",
+      "items": [
+        {
+          "id": "team-1",
+          "title": "终端阅读位置恢复",
+          "subtitle": "browser-viewer · 3 workers",
+          "status": "已完成",
+          "meta": "昨天",
+          "body": "实现、代码评审和行为验收已结束。",
+          "facts": [
+            ["运行", "run-1024"],
+            ["范围", "browser-viewer / wt-1"],
+            ["角色", "主 Agent、实现、代码评审、行为验收"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commands",
+      "title": "快捷指令",
+      "group": "自动化",
+      "icon": "zap",
+      "kind": "list",
+      "scope": "connection",
+      "description": "管理常用指令，在当前项目执行。",
+      "items": [
+        {
+          "id": "review",
+          "title": "检查当前改动",
+          "subtitle": "检查工作区 diff，分析行为与回归风险。",
+          "status": "可执行",
+          "meta": "全局",
+          "body": "请审查当前工作区的改动，重点关注行为正确性和兼容性。",
+          "project": "browser-viewer"
+        },
+        {
+          "id": "summary",
+          "title": "整理本轮成果",
+          "subtitle": "汇总变更、验证结果和待处理事项。",
+          "status": "可执行",
+          "meta": "全局",
+          "body": "根据本轮实际修改和验证结果，整理一份交接摘要。"
+        },
+        {
+          "id": "docs",
+          "title": "检查文档链接",
+          "subtitle": "检查仓库文档引用与入口。",
+          "status": "可执行",
+          "meta": "全局",
+          "body": "检查项目文档链接，报告失效引用。"
+        }
+      ],
+      "create": "新建指令"
+    },
+    {
+      "id": "schedules",
+      "title": "定时任务",
+      "group": "自动化",
+      "icon": "calendar",
+      "kind": "list",
+      "scope": "connection",
+      "description": "按计划在指定项目运行任务。",
+      "items": [
+        {
+          "id": "daily",
+          "title": "每日工作摘要",
+          "subtitle": "browser-viewer · 每天 18:00",
+          "status": "已启用",
+          "meta": "今天 18:00",
+          "body": "整理今天的项目改动与未完成事项。",
+          "schedule": "每天 18:00",
+          "project": "browser-viewer",
+          "model": "gpt-6-sol"
+        },
+        {
+          "id": "health",
+          "title": "服务状态巡检",
+          "subtitle": "browser-viewer · 每小时",
+          "status": "已启用",
+          "meta": "15:00",
+          "body": "检查当前项目服务运行状态，记录异常。",
+          "schedule": "每小时",
+          "project": "browser-viewer",
+          "model": "gpt-6-sol"
+        },
+        {
+          "id": "links",
+          "title": "文档链接检查",
+          "subtitle": "browser-viewer · 每周一 09:00",
+          "status": "已暂停",
+          "meta": "周一 09:00",
+          "body": "检查文档引用与链接。",
+          "schedule": "每周一 09:00",
+          "project": "browser-viewer",
+          "model": "gpt-6-sol"
+        }
+      ],
+      "create": "新建任务"
+    },
+    {
+      "id": "runs",
+      "title": "后台运行",
+      "group": "自动化",
+      "icon": "play",
+      "kind": "list",
+      "scope": "connection",
+      "description": "查看执行进度、处理请求与历史结果。",
+      "items": [
+        {
+          "id": "review-run",
+          "title": "检查当前改动",
+          "subtitle": "快捷指令 · browser-viewer / wt-1",
+          "status": "待处理",
+          "meta": "14:20",
+          "body": "发现两个可选的兼容方案，需要补充本轮改动范围。",
+          "output": "已读取 8 个变更文件\n已完成导航与状态隔离检查\n等待回复：是否保留旧菜单入口？"
+        },
+        {
+          "id": "summary-run",
+          "title": "每日工作摘要",
+          "subtitle": "定时任务 · browser-viewer / main",
+          "status": "已完成",
+          "meta": "昨天 18:00",
+          "body": "已整理 5 项修改和 2 项待处理事项。",
+          "output": "工作摘要已生成。\n5 项修改已汇总，2 项待处理事项已保留。"
+        }
+      ]
+    },
+    {
+      "id": "notes",
+      "title": "记录",
+      "group": "随记",
+      "icon": "notebook",
+      "kind": "notes",
+      "scope": "suiji",
+      "description": "",
+      "items": [
+        {
+          "id": "navigation",
+          "title": "关于桌面导航的一点想法",
+          "subtitle": "产品设计 · 界面",
+          "status": "记录",
+          "meta": "今天 11:40",
+          "body": "设置和管理功能可以进入独立页面。常用动作保留在工作区，返回时接着原来的上下文继续。",
+          "tag": "产品设计"
+        },
+        {
+          "id": "flow",
+          "title": "把功能入口放在合适的位置",
+          "subtitle": "Runweave · 交互",
+          "status": "待办",
+          "meta": "昨天",
+          "body": "全局配置、当前连接和项目配置需要明确区分。",
+          "tag": "Runweave"
+        }
+      ],
+      "create": "新增记录"
+    },
+    {
+      "id": "todos",
+      "title": "待办",
+      "group": "随记",
+      "icon": "check",
+      "kind": "notes",
+      "scope": "suiji",
+      "description": "",
+      "items": [
+        {
+          "id": "todo",
+          "title": "统一设置页的保存反馈",
+          "subtitle": "产品设计",
+          "status": "未完成",
+          "meta": "今天",
+          "body": "明确即时生效与显式保存的区别。",
+          "tag": "产品设计"
+        }
+      ]
+    },
+    {
+      "id": "review",
+      "title": "AI 回顾",
+      "group": "随记",
+      "icon": "sparkles",
+      "kind": "notes",
+      "scope": "suiji",
+      "description": "",
+      "items": [
+        {
+          "id": "week",
+          "title": "本周的产品思考",
+          "subtitle": "2026.10.05 — 2026.10.11",
+          "status": "已生成",
+          "meta": "本周",
+          "body": "本周记录集中在导航归类与任务恢复。让入口可发现，同时保留工作上下文，是几个想法共同的方向。",
+          "tag": "每周回顾"
+        }
+      ]
+    },
+    {
+      "id": "trash",
+      "title": "回收站",
+      "group": "随记",
+      "icon": "trash",
+      "kind": "notes",
+      "scope": "suiji",
+      "description": "",
+      "items": [
+        {
+          "id": "old",
+          "title": "旧版菜单整理",
+          "subtitle": "产品设计",
+          "status": "已删除",
+          "meta": "3 天前",
+          "body": "旧版入口归类记录。",
+          "tag": "记录"
+        }
+      ]
+    },
+    {
+      "id": "suiji-account",
+      "title": "随记账户设置",
+      "group": "随记",
+      "icon": "user",
+      "kind": "form",
+      "scope": "suiji",
+      "description": "独立管理随记服务与账户。",
+      "items": []
+    },
+    {
+      "id": "knowledge",
+      "title": "成果",
+      "group": "自进化",
+      "icon": "sparkles",
+      "kind": "notes",
+      "scope": "connection",
+      "description": "",
+      "items": [
+        {
+          "id": "context",
+          "title": "导航状态应归属于连接",
+          "subtitle": "browser-viewer · 项目经验",
+          "status": "待处理",
+          "meta": "今天",
+          "body": "切换连接后，不应把上一台电脑的项目选择和表单草稿应用到当前连接。",
+          "tag": "经验"
+        },
+        {
+          "id": "browser-layer",
+          "title": "原生 Browser 与浮层统一协调",
+          "subtitle": "browser-viewer · 洞察",
+          "status": "已处理",
+          "meta": "昨天",
+          "body": "原生视图需要根据页面活动状态和遮挡状态共同决定可见性。",
+          "tag": "洞察"
+        }
+      ]
+    },
+    {
+      "id": "evolution",
+      "title": "分析管理",
+      "group": "自进化",
+      "icon": "layers",
+      "kind": "list",
+      "scope": "connection",
+      "description": "",
+      "items": [
+        {
+          "id": "analysis",
+          "title": "工作区导航与恢复分析",
+          "subtitle": "browser-viewer · 全项目",
+          "status": "已完成",
+          "meta": "今天 10:00",
+          "body": "检查工作区选择、返回路径和异步恢复过程。"
+        }
+      ]
+    },
+    {
+      "id": "insights",
+      "title": "洞察",
+      "group": "自进化",
+      "icon": "sparkles",
+      "kind": "notes",
+      "scope": "connection",
+      "description": "",
+      "items": [
+        {
+          "id": "insight",
+          "title": "跨页面的返回状态可以统一",
+          "subtitle": "来源：3 条活动记录",
+          "status": "已验证",
+          "meta": "今天",
+          "body": "页面可共享导航合同，同时由各功能保留自己的筛选和草稿。",
+          "tag": "导航"
+        }
+      ]
+    },
+    {
+      "id": "candidates",
+      "title": "候选资产",
+      "group": "自进化",
+      "icon": "layers",
+      "kind": "list",
+      "scope": "connection",
+      "description": "",
+      "items": [
+        {
+          "id": "memory",
+          "title": "连接作用域检查清单",
+          "subtitle": "Memory · browser-viewer",
+          "status": "待授权",
+          "meta": "今天",
+          "body": "在读取和提交表单时，核对目标连接与实例。"
+        }
+      ]
+    },
+    {
+      "id": "evolution-schedules",
+      "title": "运行计划",
+      "group": "自进化",
+      "icon": "calendar",
+      "kind": "list",
+      "scope": "connection",
+      "description": "",
+      "items": [
+        {
+          "id": "weekly",
+          "title": "每周项目回顾",
+          "subtitle": "browser-viewer · 每周日 20:00",
+          "status": "已启用",
+          "meta": "周日 20:00",
+          "body": "从本周真实工作记录中分析可复用经验。"
+        }
+      ],
+      "create": "新建运行计划"
+    },
+    {
+      "id": "evolution-policy",
+      "title": "Memory Canary 策略",
+      "group": "自进化",
+      "icon": "shield",
+      "kind": "form",
+      "scope": "project",
+      "description": "browser-viewer 的候选资产与真实注入策略。",
+      "items": []
+    },
+    {
+      "id": "prototypes",
+      "title": "原型库",
+      "group": "原型库",
+      "icon": "grid",
+      "kind": "notes",
+      "scope": "project",
+      "description": "",
+      "items": [
+        {
+          "id": "secondary",
+          "title": "桌面菜单与二级页面",
+          "subtitle": "browser-viewer · docs/prototypes",
+          "status": "可打开",
+          "meta": "今天",
+          "body": "完整菜单、设置页面、任务管理和工作区返回。",
+          "tag": "交互原型"
+        },
+        {
+          "id": "models",
+          "title": "Agent Team 角色模型",
+          "subtitle": "browser-viewer · docs/prototypes",
+          "status": "可打开",
+          "meta": "历史版本",
+          "body": "四个角色的独立 CLI、模型与能力配置。",
+          "tag": "交互原型"
+        }
+      ]
+    },
+    {
+      "id": "connections",
+      "title": "连接管理",
+      "group": "设备与连接",
+      "icon": "monitor",
+      "kind": "list",
+      "scope": "local",
+      "description": "管理这台桌面可以访问的电脑。",
+      "items": [
+        {
+          "id": "local",
+          "title": "本机 Mac",
+          "subtitle": "http://127.0.0.1:5001",
+          "status": "当前连接",
+          "meta": "本机",
+          "body": "当前桌面使用的本机 Backend。",
+          "url": "http://127.0.0.1:5001"
+        },
+        {
+          "id": "devbox",
+          "title": "开发机",
+          "subtitle": "通过 SSH · devbox",
+          "status": "可连接",
+          "meta": "远程",
+          "body": "通过已保存的 SSH 通道访问开发机。",
+          "url": "http://192.0.2.20:5001"
+        }
+      ],
+      "create": "添加连接"
+    },
+    {
+      "id": "mobile",
+      "title": "连接手机",
+      "group": "设备与连接",
+      "icon": "phone",
+      "kind": "mobile",
+      "scope": "connection",
+      "description": "手机扫码后，在这台电脑确认登录。",
+      "items": []
+    },
+    {
+      "id": "tunnels",
+      "title": "端口与隧道",
+      "group": "设备与连接",
+      "icon": "network",
+      "kind": "list",
+      "scope": "local",
+      "description": "管理本台桌面的 SSH 主机与访问通道。",
+      "items": [
+        {
+          "id": "devbox",
+          "title": "开发机",
+          "subtitle": "developer@devbox · 自动连接",
+          "status": "已连接",
+          "meta": "3 条通道",
+          "body": "端口转发、远程访问与 Browser 通道。",
+          "ssh": "developer@devbox"
+        },
+        {
+          "id": "relay",
+          "title": "中转服务器",
+          "subtitle": "developer@relay",
+          "status": "未连接",
+          "meta": "2 条通道",
+          "body": "手机远程访问与 RemoteDesk 中转。",
+          "ssh": "developer@relay"
+        }
+      ],
+      "create": "添加 SSH 主机"
+    },
+    {
+      "id": "runtime",
+      "title": "运行状态",
+      "group": "状态与诊断",
+      "icon": "activity",
+      "kind": "runtime",
+      "scope": "connection",
+      "description": "当前连接和本台桌面的依赖、版本与恢复状态。",
+      "items": []
+    },
+    {
+      "id": "resources",
+      "title": "系统资源",
+      "group": "状态与诊断",
+      "icon": "activity",
+      "kind": "resources",
+      "scope": "connection",
+      "description": "当前电脑的资源使用与进程。",
+      "items": []
+    },
+    {
+      "id": "dev-resources",
+      "title": "开发资源",
+      "group": "状态与诊断",
+      "icon": "server",
+      "kind": "list",
+      "scope": "connection",
+      "description": "测试环境与资源占用。",
+      "items": [
+        {
+          "id": "pool",
+          "title": "Desktop · pool-05",
+          "subtitle": "browser-viewer / wt-2",
+          "status": "使用中",
+          "meta": "Beta",
+          "body": "桌面会话归属 wt-2，释放前会重新核对占用。"
+        },
+        {
+          "id": "sim",
+          "title": "iPhone 模拟器",
+          "subtitle": "iOS 验收资源",
+          "status": "空闲",
+          "meta": "iPhone 17",
+          "body": "当前没有运行中的验收任务。"
+        }
+      ]
+    },
+    {
+      "id": "quota",
+      "title": "Codex 额度",
+      "group": "状态与诊断",
+      "icon": "gauge",
+      "kind": "quota",
+      "scope": "connection",
+      "description": "当前连接 App Server 的订阅用量。",
+      "items": []
+    },
+    {
+      "id": "logs",
+      "title": "日志记录",
+      "group": "状态与诊断",
+      "icon": "file",
+      "kind": "logs",
+      "scope": "connection",
+      "description": "记录问题发生时的 Web 与服务端诊断信息。",
+      "items": []
+    },
+    {
+      "id": "desktop-diagnostics",
+      "title": "桌面诊断",
+      "group": "状态与诊断",
+      "icon": "monitor",
+      "kind": "diagnostics",
+      "scope": "local",
+      "description": "本机桌面运行时与诊断文件。",
+      "items": []
+    },
+    {
+      "id": "lookup",
+      "title": "状态查询",
+      "group": "高级诊断",
+      "icon": "search",
+      "kind": "lookup",
+      "scope": "connection",
+      "description": "按 Thread ID 或 Terminal ID 查询状态。",
+      "items": []
+    },
+    {
+      "id": "events",
+      "title": "活动数据",
+      "group": "高级诊断",
+      "icon": "layers",
+      "kind": "list",
+      "scope": "connection",
+      "description": "",
+      "items": [
+        {
+          "id": "event",
+          "title": "thread.turn.completed",
+          "subtitle": "Codex · terminal-01 · thread-01",
+          "status": "已记录",
+          "meta": "14:32",
+          "body": "本轮执行完成，已生成会话状态投影。"
+        },
+        {
+          "id": "event2",
+          "title": "terminal.session.created",
+          "subtitle": "Backend · browser-viewer / wt-1",
+          "status": "已记录",
+          "meta": "14:10",
+          "body": "创建终端并关联当前项目。"
+        }
+      ]
+    },
+    {
+      "id": "settings/account",
+      "title": "账户与登录",
+      "group": "设置",
+      "icon": "user",
+      "kind": "settings",
+      "scope": "connection",
+      "description": "管理当前连接的登录信息。",
+      "items": []
+    },
+    {
+      "id": "settings/appearance",
+      "title": "外观",
+      "group": "设置",
+      "icon": "sun",
+      "kind": "settings",
+      "scope": "local",
+      "description": "选择应用外观与右侧工具标签。",
+      "items": []
+    },
+    {
+      "id": "settings/browser",
+      "title": "浏览器",
+      "group": "设置",
+      "icon": "globe",
+      "kind": "settings",
+      "scope": "local",
+      "description": "管理 Browser Profile、默认选择和开发目标。",
+      "items": []
+    },
+    {
+      "id": "settings/models",
+      "title": "Agent Team 模型",
+      "group": "设置",
+      "icon": "layers",
+      "kind": "settings",
+      "scope": "connection",
+      "description": "为四个角色分别选择 CLI、模型和能力参数。",
+      "items": []
+    },
+    {
+      "id": "settings/notifications",
+      "title": "资源监控与提醒",
+      "group": "设置",
+      "icon": "bell",
+      "kind": "settings",
+      "scope": "connection",
+      "description": "管理后台资源监控和通知。",
+      "items": []
+    },
+    {
+      "id": "settings/data",
+      "title": "数据管理",
+      "group": "设置",
+      "icon": "database",
+      "kind": "settings",
+      "scope": "connection",
+      "description": "管理活动数据策略、导出与删除范围。",
+      "items": []
+    },
+    {
+      "id": "settings/advanced",
+      "title": "高级实例配置",
+      "group": "设置",
+      "icon": "sliders",
+      "kind": "settings",
+      "scope": "connection",
+      "description": "查看配置来源、保存值与实际生效状态。",
+      "items": []
+    },
+    {
+      "id": "settings/shortcuts",
+      "title": "快捷键",
+      "group": "设置",
+      "icon": "keyboard",
+      "kind": "settings",
+      "scope": "local",
+      "description": "查看工作区与桌面已有的快捷操作。",
+      "items": []
+    }
+  ],
+  "menu": [
+    {
+      "title": "工作记录",
+      "icon": "history",
+      "entries": ["history", "team-history"]
+    },
+    {
+      "title": "设备与连接",
+      "icon": "monitor",
+      "entries": ["connections", "mobile", "tunnels"]
+    },
+    {
+      "title": "自动化",
+      "icon": "zap",
+      "entries": ["commands", "schedules", "runs"]
+    },
+    {
+      "title": "状态与诊断",
+      "icon": "activity",
+      "entries": [
+        "runtime",
+        "resources",
+        "dev-resources",
+        "quota",
+        "logs",
+        "desktop-diagnostics",
+        "lookup",
+        "events"
+      ]
+    },
+    {
+      "title": "随记",
+      "icon": "notebook",
+      "entries": ["notes", "todos", "review", "trash", "suiji-account"]
+    },
+    {
+      "title": "设置",
+      "icon": "sliders",
+      "entries": [
+        "settings/appearance",
+        "settings/account",
+        "settings/browser",
+        "settings/models",
+        "settings/notifications",
+        "settings/data",
+        "settings/advanced",
+        "settings/shortcuts"
+      ]
+    },
+    {
+      "title": "自进化",
+      "icon": "sparkles",
+      "entries": ["knowledge", "evolution"]
+    },
+    {
+      "title": "原型库",
+      "icon": "grid",
+      "entries": ["prototypes"]
+    }
+  ],
+  "workspace": {
+    "project": "browser-viewer",
+    "worktree": "wt-1",
+    "session": "桌面页面重构",
+    "sessions": ["桌面页面重构", "开发服务"],
+    "tools": [
+      "Preview",
+      "Automation",
+      "Browser 1",
+      "Browser 2",
+      "Browser 3",
+      "Agent Team",
+      "Race",
+      "任务交接",
+      "任务监控",
+      "会话阅读"
+    ],
+    "visibleTools": ["Preview", "Automation", "Browser 1", "Agent Team"],
+    "code": [
+      "import { useNavigate } from \"react-router-dom\";",
+      "import { TerminalWorkspace } from \"../components/terminal/workspace/workspace\";",
+      "",
+      "export function TerminalRoutePage({",
+      "  apiBase,",
+      "  token,",
+      "  clientMode,",
+      "  connections,",
+      "  activeConnectionId,",
+      "  connectionName,",
+      "  onAuthExpired,",
+      "}) {",
+      "  const navigate = useNavigate();",
+      "",
+      "  return (",
+      "    <main className=\"h-dvh overflow-hidden bg-slate-950\">",
+      "      <TerminalWorkspace",
+      "        apiBase={apiBase}",
+      "        token={token}",
+      "        clientMode={clientMode}",
+      "        connection={{",
+      "          activeConnectionId,",
+      "          connectionName,",
+      "          connections,",
+      "        }}",
+      "        onAuthExpired={onAuthExpired}",
+      "      />",
+      "    </main>",
+      "  );",
+      "}"
+    ]
+  },
+  "settings": {
+    "theme": "dark",
+    "globalBrowser": "Browser 1",
+    "worktreeBrowser": "跟随全局默认",
+    "browserPort": "5173",
+    "proxy": true,
+    "monitor": true,
+    "alerts": true,
+    "macNotify": true,
+    "remoteTerminate": false,
+    "cli": "Codex",
+    "model": "gpt-6-sol",
+    "effort": "high",
+    "canary": false,
+    "ratio": "10",
+    "retention": "90",
+    "suijiEnvironment": "生产环境",
+    "suijiEndpoint": "https://notes.example.com",
+    "suijiUser": "workspace-user",
+    "apiPort": "5001"
+  },
+  "roles": ["主 Agent", "实现", "代码评审", "行为验收"],
+  "configDomains": [
+    ["Backend 服务", "backend.server"],
+    ["登录与隧道认证", "backend.auth / backend.tunnelAuth"],
+    ["长任务监控", "backend.taskSupervision"],
+    [
+      "终端与分享",
+      "terminal / services.snapshotPublisher / services.snapshotHost"
+    ],
+    ["设备通知与推送", "services.pushSender / services.pushGateway"],
+    ["飞书", "services.feishu"],
+    ["随记", "services.suiji"],
+    ["Codex / Traex", "agents.codex / agents.traex"],
+    ["Agent Team", "agents.team"],
+    ["伴随窗口", "agents.companion"],
+    ["桌面浏览器", "desktop.browser"],
+    ["桌面偏好与远程访问", "desktop.preferences / desktop.tunnels"],
+    ["CLI 连接", "cli"],
+    ["开发与签名", "developer"],
+    ["知识库", "knowledge"],
+    ["日志", "logging"],
+    ["后台任务", "scheduledTasks"],
+    ["数据存储", "storage"],
+    ["更新", "updates"],
+    ["语音", "voice"],
+    ["App Server", "appServer"]
+  ],
+  "processes": [
+    ["Runweave", "12.4%", "842 MB", "8"],
+    ["Codex", "8.2%", "316 MB", "3"],
+    ["Google Chrome", "5.6%", "1.2 GB", "14"],
+    ["WindowServer", "3.1%", "284 MB", "1"]
+  ],
+  "runtime": [
+    ["Backend", "http://127.0.0.1:5001", "正常"],
+    ["App Server", "本机 · 已认证", "正常"],
+    ["Codex CLI", "模型目录可用", "正常"],
+    ["Terminal Browser", "Browser 1 · 2 个标签", "正常"],
+    ["SSH 隧道", "开发机 · 3 条通道", "正常"]
+  ],
+  "shortcuts": [
+    ["应用", "新建窗口", "⌘ ⇧ N"],
+    ["应用", "系统资源", "⌘ ⇧ M"],
+    ["工作区", "上一个 / 下一个项目", "⌥ [ / ]"],
+    ["工作区", "上一个 / 下一个终端", "⌥ ⇧ [ / ]"],
+    ["终端", "搜索输出", "⌘ F"]
+  ],
+  "timeline": [
+    ["14:10", "开始执行", "已读取项目与工作区上下文。"],
+    ["14:15", "完成检查", "已生成变更摘要与检查结果。"],
+    ["14:20", "等待回复", "需要确认旧入口的兼容范围。"]
+  ],
+  "configFields": [
+    {
+      "path": "backend.taskSupervision.enabled",
+      "type": "boolean",
+      "domain": "backend.taskSupervision",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "启用当前 Codex 终端长任务监控（仍需逐任务手动开启）",
+      "default": {
+        "value": false
+      }
+    },
+    {
+      "path": "backend.taskSupervision.model",
+      "type": "string",
+      "domain": "backend.taskSupervision",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "独立三分类 Codex 模型；未设置使用原执行器的可用模型",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "backend.taskSupervision.classificationTimeoutMs",
+      "type": "integer",
+      "domain": "backend.taskSupervision",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "三分类最长等待毫秒，需小于原生 Hook 等待预算",
+      "default": {
+        "value": 90000
+      }
+    },
+    {
+      "path": "backend.server.port",
+      "type": "integer",
+      "domain": "backend.server",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Backend 监听端口",
+      "default": {
+        "value": 5001
+      }
+    },
+    {
+      "path": "backend.server.host",
+      "type": "string",
+      "domain": "backend.server",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Backend 监听地址",
+      "default": {
+        "rule": "独立 Backend 默认 127.0.0.1；桌面托管 Backend 默认 0.0.0.0，由启动入口传入；显式配置优先。"
+      }
+    },
+    {
+      "path": "backend.server.strictPort",
+      "type": "boolean",
+      "domain": "backend.server",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "端口占用时拒绝换端口",
+      "default": {
+        "rule": "Stable 恒为 true；Dev Session 按分配端口启动且不得占用其他实例。"
+      }
+    },
+    {
+      "path": "backend.server.frontendOrigin",
+      "type": "string",
+      "domain": "backend.server",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "前端允许来源",
+      "default": {
+        "rule": "未指定时仅允许现有同源、本机和受控桌面来源；不自动允许任意网站。"
+      }
+    },
+    {
+      "path": "backend.auth.username",
+      "type": "string",
+      "domain": "backend.auth",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "登录用户名",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "backend.auth.password",
+      "type": "string",
+      "domain": "backend.auth",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "登录密码",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "backend.auth.jwtSecret",
+      "type": "string",
+      "domain": "backend.auth",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "JWT 签名密钥",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "backend.auth.accessTokenTtlSeconds",
+      "type": "number",
+      "domain": "backend.auth",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "访问凭据有效秒数",
+      "default": {
+        "value": 86400
+      }
+    },
+    {
+      "path": "backend.auth.refreshTokenTtlSeconds",
+      "type": "number",
+      "domain": "backend.auth",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "刷新凭据有效秒数",
+      "default": {
+        "value": 2592000
+      }
+    },
+    {
+      "path": "backend.auth.refreshCookieName",
+      "type": "string",
+      "domain": "backend.auth",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "刷新 Cookie 名称",
+      "default": {
+        "value": "viewer_refresh"
+      }
+    },
+    {
+      "path": "backend.auth.secureCookies",
+      "type": "boolean",
+      "domain": "backend.auth",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Cookie 安全标志",
+      "default": {
+        "value": true
+      }
+    },
+    {
+      "path": "backend.tunnelAuth.scope",
+      "type": "string",
+      "domain": "backend.tunnelAuth",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "隧道认证作用域",
+      "default": {
+        "value": "forwarded"
+      }
+    },
+    {
+      "path": "backend.tunnelAuth.cookieName",
+      "type": "string",
+      "domain": "backend.tunnelAuth",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "隧道 Cookie 名称",
+      "default": {
+        "value": "runweave_tunnel"
+      }
+    },
+    {
+      "path": "backend.tunnelAuth.token",
+      "type": "string",
+      "domain": "backend.tunnelAuth",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "隧道认证凭据",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.snapshotPublisher.url",
+      "type": "string",
+      "domain": "services.snapshotPublisher",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "分享发布服务地址",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.snapshotPublisher.token",
+      "type": "string",
+      "domain": "services.snapshotPublisher",
+      "sensitive": true,
+      "apply": "reload",
+      "description": "分享发布凭据",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.snapshotHost.directory",
+      "type": "string",
+      "domain": "services.snapshotHost",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "独立分享 Host 存储目录",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.snapshotHost.port",
+      "type": "integer",
+      "domain": "services.snapshotHost",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "独立分享 Host 监听端口",
+      "default": {
+        "value": 8093
+      }
+    },
+    {
+      "path": "services.snapshotHost.uploadToken",
+      "type": "string",
+      "domain": "services.snapshotHost",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "独立分享 Host 上传凭据",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.pushSender.gatewayURL",
+      "type": "string",
+      "domain": "services.pushSender",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "推送网关地址",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.pushSender.senderToken",
+      "type": "string",
+      "domain": "services.pushSender",
+      "sensitive": true,
+      "apply": "reload",
+      "description": "推送发送凭据",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.pushGateway.keyId",
+      "type": "string",
+      "domain": "services.pushGateway",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "APNs key ID",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.pushGateway.teamId",
+      "type": "string",
+      "domain": "services.pushGateway",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "APNs team ID",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.pushGateway.privateKeyFile",
+      "type": "string",
+      "domain": "services.pushGateway",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "APNs 私钥文件引用",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.pushGateway.directory",
+      "type": "string",
+      "domain": "services.pushGateway",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "独立推送网关数据目录",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.pushGateway.port",
+      "type": "integer",
+      "domain": "services.pushGateway",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "独立推送网关端口",
+      "default": {
+        "value": 8092
+      }
+    },
+    {
+      "path": "services.pushGateway.bind",
+      "type": "string",
+      "domain": "services.pushGateway",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "独立推送网关监听地址",
+      "default": {
+        "value": "127.0.0.1"
+      }
+    },
+    {
+      "path": "services.pushGateway.adminToken",
+      "type": "string",
+      "domain": "services.pushGateway",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "独立推送网关管理凭据",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.role",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "飞书运行角色",
+      "default": {
+        "value": "standalone"
+      }
+    },
+    {
+      "path": "services.feishu.hub.host",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "集中 Bridge 监听地址",
+      "default": {
+        "value": "127.0.0.1"
+      }
+    },
+    {
+      "path": "services.feishu.hub.port",
+      "type": "integer",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "集中 Bridge 监听端口",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.node.url",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "集中 Bridge HTTPS origin",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.node.caCertificate",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "仅用于飞书 WSS 的可选 PEM CA 公共证书，仍校验主机名及有效期",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.node.token",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "本节点接入凭据",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.appId",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "飞书应用 ID",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.appSecret",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "飞书应用密钥",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.targetChatId",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "飞书目标群聊",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.allowedOpenIds",
+      "type": "array<string>",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "允许调用的用户 ID",
+      "default": {
+        "value": []
+      }
+    },
+    {
+      "path": "services.feishu.notifyOpenIds",
+      "type": "array<string>",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "接收通知的用户 ID",
+      "default": {
+        "value": []
+      }
+    },
+    {
+      "path": "services.feishu.legacyWebhook.url",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "旧通知 hook webhook；迁移前核对使用者",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.legacyWebhook.secret",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "旧通知 hook webhook 签名密钥",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.feishu.legacyWebhook.transport",
+      "type": "string",
+      "domain": "services.feishu",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "旧通知 hook 发送方式",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "agents.codex.binary",
+      "type": "string",
+      "domain": "agents.codex",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Codex 可执行文件",
+      "default": {
+        "rule": "未指定时通过 PATH / 平台安装位置查找 codex；显式配置指向同一可执行程序。"
+      }
+    },
+    {
+      "path": "agents.traex.binary",
+      "type": "string",
+      "domain": "agents.traex",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Trae 可执行文件；多个入口统一",
+      "default": {
+        "rule": "未指定时通过 PATH / 平台安装位置查找 traex；显式配置指向同一可执行程序。"
+      }
+    },
+    {
+      "path": "agents.companion.binary",
+      "type": "string",
+      "domain": "agents.companion",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "伴随窗口 Agent 可执行文件",
+      "default": {
+        "rule": "使用已安装 Codex App 自带执行入口；显式值必须可执行。"
+      }
+    },
+    {
+      "path": "agents.codex.sessionsDirectory",
+      "type": "string",
+      "domain": "agents.codex",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "外部 Codex 会话目录引用",
+      "default": {
+        "rule": "外部工具拥有的 CODEX_HOME/sessions 或操作系统用户目录下 .codex/sessions，仅引用。"
+      }
+    },
+    {
+      "path": "agents.traex.sessionsDirectory",
+      "type": "string",
+      "domain": "agents.traex",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "外部 Trae 会话目录引用",
+      "default": {
+        "rule": "操作系统用户目录下 .trae/cli/sessions，仅引用。"
+      }
+    },
+    {
+      "path": "terminal.tmux.enabled",
+      "type": "boolean",
+      "domain": "terminal",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "tmux 持久终端开关",
+      "default": {
+        "value": true
+      }
+    },
+    {
+      "path": "terminal.tmux.binary",
+      "type": "string",
+      "domain": "terminal",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "tmux 可执行文件",
+      "default": {
+        "value": "tmux"
+      }
+    },
+    {
+      "path": "terminal.tmux.shutdownPolicy",
+      "type": "string",
+      "domain": "terminal",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "退出时 tmux 保留策略",
+      "default": {
+        "rule": "Stable 为 preserve，Dev 为 cleanup。"
+      }
+    },
+    {
+      "path": "terminal.tmux.scanOrphansOnStart",
+      "type": "boolean",
+      "domain": "terminal",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "启动时检查孤儿终端",
+      "default": {
+        "value": false
+      }
+    },
+    {
+      "path": "terminal.tmux.cleanupOrphans",
+      "type": "boolean",
+      "domain": "terminal",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "孤儿终端清理策略",
+      "default": {
+        "value": false
+      }
+    },
+    {
+      "path": "scheduledTasks.enabled",
+      "type": "boolean",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "定时任务开关",
+      "default": {
+        "value": true
+      }
+    },
+    {
+      "path": "scheduledTasks.timeoutMs",
+      "type": "number",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "任务超时毫秒数",
+      "default": {
+        "value": 7200000
+      }
+    },
+    {
+      "path": "scheduledTasks.maxOutputBytes",
+      "type": "integer",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "任务输出上限字节数",
+      "default": {
+        "value": 16777216
+      }
+    },
+    {
+      "path": "scheduledTasks.maxConcurrentRuns",
+      "type": "integer",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "同时执行的后台任务数",
+      "default": {
+        "value": 4
+      }
+    },
+    {
+      "path": "scheduledTasks.quickInputDefaults.model",
+      "type": "string",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "快捷指令后台运行的 Codex 模型；必须显式选择",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "scheduledTasks.quickInputDefaults.effort",
+      "type": "string",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "快捷指令后台运行的推理强度",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "scheduledTasks.quickInputDefaults.continuationMode",
+      "type": "string",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "新快捷运行自动继续策略：bounded 或 off",
+      "default": {
+        "value": "bounded"
+      }
+    },
+    {
+      "path": "scheduledTasks.quickInputDefaults.executionPolicy",
+      "type": "string",
+      "domain": "scheduledTasks",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "快捷指令后台运行的执行权限",
+      "default": {
+        "value": "full-access"
+      }
+    },
+    {
+      "path": "voice.transcription.language",
+      "type": "string",
+      "domain": "voice",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "转写语言",
+      "default": {
+        "value": "zh"
+      }
+    },
+    {
+      "path": "voice.transcription.acceptLanguage",
+      "type": "string",
+      "domain": "voice",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "转写请求 Accept-Language",
+      "default": {
+        "value": "zh-CN,zh;q=0.9,en;q=0.8"
+      }
+    },
+    {
+      "path": "voice.transcription.prompt",
+      "type": "string",
+      "domain": "voice",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "转写提示词",
+      "default": {
+        "value": "请使用简体中文输出转写文本。"
+      }
+    },
+    {
+      "path": "knowledge.experience.learning",
+      "type": "boolean",
+      "domain": "knowledge",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "经验学习开关",
+      "default": {
+        "rule": "Stable 默认启用，Dev 默认关闭；明确配置覆盖默认。"
+      }
+    },
+    {
+      "path": "storage.browserProfileDirectory",
+      "type": "string",
+      "domain": "storage",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "原 Backend profile 的显式目录",
+      "default": {
+        "rule": "<configRoot>/data/backend；已有 Stable 必须显式保留旧路径"
+      }
+    },
+    {
+      "path": "storage.authStoreFile",
+      "type": "string",
+      "domain": "storage",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "认证数据库路径",
+      "default": {
+        "rule": "<browserProfileDirectory>/auth-store.json"
+      }
+    },
+    {
+      "path": "storage.terminalSessionStoreFile",
+      "type": "string",
+      "domain": "storage",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "终端存储路径",
+      "default": {
+        "rule": "<browserProfileDirectory>/terminal-session-store.json"
+      }
+    },
+    {
+      "path": "storage.activityDirectory",
+      "type": "string",
+      "domain": "storage",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Activity 存储根；旧环境仅测试使用",
+      "default": {
+        "rule": "<configRoot>/data/activity"
+      }
+    },
+    {
+      "path": "storage.evolutionDirectory",
+      "type": "string",
+      "domain": "storage",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Evolution 存储根；旧环境仅测试使用",
+      "default": {
+        "rule": "<configRoot>/data/evolution"
+      }
+    },
+    {
+      "path": "storage.experienceDirectory",
+      "type": "string",
+      "domain": "storage",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Experience 存储根",
+      "default": {
+        "rule": "<configRoot>/data/experience"
+      }
+    },
+    {
+      "path": "storage.scheduledTasksDirectory",
+      "type": "string",
+      "domain": "storage",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "定时任务存储根",
+      "default": {
+        "rule": "<configRoot>/data/scheduled-tasks"
+      }
+    },
+    {
+      "path": "storage.feishuDirectory",
+      "type": "string",
+      "domain": "storage",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "飞书状态目录",
+      "default": {
+        "rule": "<configRoot>/data/feishu"
+      }
+    },
+    {
+      "path": "logging.level",
+      "type": "string",
+      "domain": "logging",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "日志级别",
+      "default": {
+        "value": "info"
+      }
+    },
+    {
+      "path": "logging.toFile",
+      "type": "boolean",
+      "domain": "logging",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "日志落盘开关",
+      "default": {
+        "value": true
+      }
+    },
+    {
+      "path": "logging.backendDirectory",
+      "type": "string",
+      "domain": "logging",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Backend 日志目录",
+      "default": {
+        "rule": "<browserProfileDirectory>/logs/backend"
+      }
+    },
+    {
+      "path": "appServer.discovery",
+      "type": "string",
+      "domain": "appServer",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "App Server 发现策略",
+      "default": {
+        "value": "auto"
+      }
+    },
+    {
+      "path": "appServer.stateDirectory",
+      "type": "string",
+      "domain": "appServer",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "App Server 状态目录",
+      "default": {
+        "rule": "<configRoot>/data/app-server"
+      }
+    },
+    {
+      "path": "appServer.cloudSyncDirectory",
+      "type": "string",
+      "domain": "appServer",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "App Server 云同步模拟目录",
+      "default": {
+        "rule": "<configRoot>/data/app-server/cloud-sync"
+      }
+    },
+    {
+      "path": "appServer.codexStatusIntervalMs",
+      "type": "number",
+      "domain": "appServer",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Codex 状态轮询间隔",
+      "default": {
+        "value": 30000
+      }
+    },
+    {
+      "path": "appServer.codexStatusStartDelayMs",
+      "type": "number",
+      "domain": "appServer",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "Codex 状态启动延迟",
+      "default": {
+        "value": 10000
+      }
+    },
+    {
+      "path": "appServer.threadStatusIntervalMs",
+      "type": "number",
+      "domain": "appServer",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "线程状态轮询间隔",
+      "default": {
+        "rule": "缺省依次采用 appServer.codexStatusIntervalMs 和 30000 ms。"
+      }
+    },
+    {
+      "path": "appServer.threadStatusStartDelayMs",
+      "type": "number",
+      "domain": "appServer",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "线程状态启动延迟",
+      "default": {
+        "rule": "缺省依次采用 appServer.codexStatusStartDelayMs 和 10000 ms。"
+      }
+    },
+    {
+      "path": "updates.url",
+      "type": "string",
+      "domain": "updates",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "更新源地址；旧别名合并",
+      "default": {
+        "rule": "安装包内 app-update.yml 的只读发行默认值；用户值唯一来自本文件。"
+      }
+    },
+    {
+      "path": "updates.autoInstallLocal",
+      "type": "boolean",
+      "domain": "updates",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "本地更新自动安装策略",
+      "default": {
+        "rule": "未指定时仅本机更新源自动安装。"
+      }
+    },
+    {
+      "path": "updates.serverHost",
+      "type": "string",
+      "domain": "updates",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "本机更新服务监听地址",
+      "default": {
+        "value": "127.0.0.1"
+      }
+    },
+    {
+      "path": "updates.serverPort",
+      "type": "integer",
+      "domain": "updates",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "本机更新服务监听端口",
+      "default": {
+        "value": 5500
+      }
+    },
+    {
+      "path": "developer.codesignIdentity",
+      "type": "string",
+      "domain": "developer",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "本机签名身份选择",
+      "default": {
+        "rule": "从系统钥匙串可用签名身份中选择；显式更新可将选择写入当前实例。"
+      }
+    },
+    {
+      "path": "developer.minimumFreeBytes",
+      "type": "integer",
+      "domain": "developer",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "测试安装资源池剩余磁盘门槛",
+      "default": {
+        "rule": "使用 Beta Pool 存储模块的 4 GiB 默认下限。"
+      }
+    },
+    {
+      "path": "desktop.browser.localEnabled",
+      "type": "boolean",
+      "domain": "desktop.browser",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "本机浏览器能力开关",
+      "default": {
+        "value": true
+      }
+    },
+    {
+      "path": "desktop.browser.webMcpEnabled",
+      "type": "boolean",
+      "domain": "desktop.browser",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "WebMCP 能力开关",
+      "default": {
+        "value": false
+      }
+    },
+    {
+      "path": "services.suiji.databaseURL",
+      "type": "string",
+      "domain": "services.suiji",
+      "sensitive": true,
+      "apply": "restart",
+      "description": "独立随记服务数据库连接",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.suiji.storageDirectory",
+      "type": "string",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记附件存储目录",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.suiji.host",
+      "type": "string",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记监听地址",
+      "default": {
+        "value": "127.0.0.1"
+      }
+    },
+    {
+      "path": "services.suiji.port",
+      "type": "integer",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记监听端口",
+      "default": {
+        "value": 4783
+      }
+    },
+    {
+      "path": "services.suiji.accessSeconds",
+      "type": "integer",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记访问凭据有效期",
+      "default": {
+        "value": 86400
+      }
+    },
+    {
+      "path": "services.suiji.refreshSeconds",
+      "type": "integer",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记刷新凭据有效期",
+      "default": {
+        "value": 2592000
+      }
+    },
+    {
+      "path": "services.suiji.loginAttempts",
+      "type": "integer",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记登录尝试次数限制",
+      "default": {
+        "value": 8
+      }
+    },
+    {
+      "path": "services.suiji.loginWindowSeconds",
+      "type": "integer",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记登录限制窗口",
+      "default": {
+        "value": 900
+      }
+    },
+    {
+      "path": "services.suiji.webOrigins",
+      "type": "array<string>",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记允许的 Web 来源",
+      "default": {
+        "value": []
+      }
+    },
+    {
+      "path": "services.suiji.ai.provider",
+      "type": "string",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记 AI provider",
+      "default": {
+        "value": "disabled"
+      }
+    },
+    {
+      "path": "services.suiji.ai.codexBinary",
+      "type": "string",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记 Codex 可执行文件",
+      "default": {
+        "value": "codex"
+      }
+    },
+    {
+      "path": "services.suiji.ai.codexHome",
+      "type": "string",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记外部 Codex 登录目录引用",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.suiji.ai.timeoutSeconds",
+      "type": "integer",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记 AI 超时",
+      "default": {
+        "value": 180
+      }
+    },
+    {
+      "path": "services.suiji.mcpEnabled",
+      "type": "boolean",
+      "domain": "services.suiji",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "随记 MCP 开关",
+      "default": {
+        "value": false
+      }
+    },
+    {
+      "path": "cli.activeProfile",
+      "type": "string",
+      "domain": "cli",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "CLI 连接配置及会话；敏感字段仅本机可读写",
+      "default": {
+        "value": "local"
+      }
+    },
+    {
+      "path": "desktop.preferences.companion.enabled",
+      "type": "boolean",
+      "domain": "desktop.preferences",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "持久配置字段",
+      "default": {
+        "rule": "缺省时 Stable 启用、Dev 关闭；全新安装初始化会显式写入 false，优先于此规则。"
+      }
+    },
+    {
+      "path": "desktop.browser.proxy.enabled",
+      "type": "boolean",
+      "domain": "desktop.browser",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "持久配置字段",
+      "default": {
+        "value": false
+      }
+    },
+    {
+      "path": "desktop.browser.proxy.port",
+      "type": "integer",
+      "domain": "desktop.browser",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "持久配置字段",
+      "default": {
+        "value": 8899
+      }
+    },
+    {
+      "path": "desktop.browser.defaultProfileId",
+      "type": "string",
+      "domain": "desktop.browser",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "持久配置字段",
+      "default": {
+        "value": "profile-1"
+      }
+    },
+    {
+      "path": "desktop.tunnels.desktopId",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "rule": "仅全新实例首次初始化生成 UUID；存在旧文件必须先显式迁移。"
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].id",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].name",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].sshTarget",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].autoConnect",
+      "type": "boolean",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteAccess.enabled",
+      "type": "boolean",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteAccess.listenAddress",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteAccess.port",
+      "type": "integer",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteDesktop.enabled",
+      "type": "boolean",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "是否启用由 Runweave 管理的 RemoteDesk 隧道",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteDesktop.autoDetectLocalHost",
+      "type": "boolean",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "自动读取本机 RemoteDesk 地址与端口，保持已保存的证书指纹；旧配置未设置时沿用手动地址",
+      "default": {
+        "value": false
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteDesktop.listenAddress",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "Devbox 内网或 VPN 入口 IPv4",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteDesktop.port",
+      "type": "integer",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "RemoteDesk 独立中转端口",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteDesktop.localAddress",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "本机 RemoteDesk 所监听的 LAN IPv4",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteDesktop.localPort",
+      "type": "integer",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "本机 RemoteDesk TLS 监听端口",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].remoteDesktop.certificateFingerprint",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "本机 RemoteDesk 完整 SHA-256 证书指纹",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].forwards[].id",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].forwards[].name",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].forwards[].port",
+      "type": "integer",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].forwards[].path",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].forwards[].enabled",
+      "type": "boolean",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].browser.enabled",
+      "type": "boolean",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].browser.backendPort",
+      "type": "integer",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].browser.profileId",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.hosts[].browser.approvedBrowserGroupId",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.backendEndpoints[].id",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.backendEndpoints[].hostId",
+      "type": "string",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "desktop.tunnels.backendEndpoints[].remotePort",
+      "type": "integer",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "隧道配置；desktopId/host ID 迁移时必须保持",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "services.pushSender.hostId",
+      "type": "string",
+      "domain": "services.pushSender",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "推送主机身份，迁移保留，不自动生成替代身份",
+      "default": {
+        "value": null
+      }
+    },
+    {
+      "path": "storage.terminalQuickInputStoreFile",
+      "type": "string",
+      "domain": "storage",
+      "sensitive": false,
+      "apply": "restart",
+      "description": "旧配置/内容文件定位；模型迁移后其旧路径仅作来源记录",
+      "default": {
+        "rule": "<terminalSessionStoreFile 所在目录>/terminal-quick-inputs.json"
+      }
+    },
+    {
+      "path": "desktop.tunnels.revision",
+      "type": "integer",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "迁移保留的域版本及偏好状态",
+      "default": {
+        "value": 0
+      }
+    },
+    {
+      "path": "desktop.tunnels.completedImports",
+      "type": "array<string>",
+      "domain": "desktop.tunnels",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "迁移保留的域版本及偏好状态",
+      "default": {
+        "value": []
+      }
+    },
+    {
+      "path": "agents.team.updatedAt",
+      "type": "string",
+      "domain": "agents.team",
+      "sensitive": false,
+      "apply": "reload",
+      "description": "角色模型设置更新时间",
+      "default": {
+        "rule": "用户保存角色配置时记录 ISO 时间。"
+      }
+    }
+  ]
+}

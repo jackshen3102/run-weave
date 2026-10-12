@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import MarkdownIt from "markdown-it";
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -55,22 +56,21 @@ function isDocumentationFile(filePath) {
   );
 }
 
-function stripFencedCode(content) {
-  return content.replace(
-    /^[ \t]*(```|~~~)[^\n]*\n[\s\S]*?^[ \t]*\1[ \t]*$/gm,
-    "",
-  );
-}
+const markdown = new MarkdownIt({ html: true });
 
-function extractLinkTarget(rawDestination) {
-  const destination = rawDestination.trim();
-  if (destination.startsWith("<")) {
-    const closingBracket = destination.indexOf(">");
-    return closingBracket === -1
-      ? destination
-      : destination.slice(1, closingBracket);
-  }
-  return destination.split(/\s+/)[0] ?? "";
+function linkTargets(content) {
+  return markdown.parse(content, {}).flatMap((token) =>
+    (token.children ?? []).flatMap((child) => {
+      const attribute =
+        child.type === "link_open"
+          ? "href"
+          : child.type === "image"
+            ? "src"
+            : null;
+      const target = attribute ? child.attrGet(attribute) : null;
+      return target === null ? [] : [target];
+    }),
+  );
 }
 
 function isLocalRelativeLink(target) {
@@ -99,12 +99,9 @@ function resolveLink(filePath, target) {
 }
 
 async function findBrokenLinks(filePath) {
-  const content = stripFencedCode(
-    await readFile(path.join(REPO_ROOT, filePath), "utf8"),
-  );
+  const content = await readFile(path.join(REPO_ROOT, filePath), "utf8");
   const failures = [];
-  for (const match of content.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g)) {
-    const target = extractLinkTarget(match[1]);
+  for (const target of linkTargets(content)) {
     if (!isLocalRelativeLink(target)) {
       continue;
     }

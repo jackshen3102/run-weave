@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-12",
+  "layer": "standalone Chrome prototype",
+  "passed": [
+    "新增主机按钮与页面语义一致",
+    "SSH表单支持Enter提交",
+    "当前密码沿用当前凭据自动填充语义",
+    "密码表单Enter提交后重新登录"
+  ],
+  "errors": []
+}
