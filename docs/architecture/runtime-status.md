@@ -26,6 +26,13 @@ Research MCP 报告本机进程与发布身份、隧道客户端/控制面状态
 
 ## 过期与恢复
 
+Activity worker 在首次初始化成功后发生退出、错误或请求超时，Backend 会拒绝该轮请求，
+等待旧 worker 退出后在同一 store 上重建；失败按 1–30 秒指数退避，稳定运行 30 秒后重置。
+恢复期间 Activity 状态为 `unhealthy`，ready 成功后恢复 `healthy`；结果不确定的请求不自动重放。
+首次初始化失败不启动后台重建，关闭会取消重建。生命周期细则见
+[Backend 规则](../../backend/AGENTS.md#验证)，故障验证见
+[恢复验证入口](../../scripts/verify/recovery/README.md)。
+
 - owner 依据既有重试、宽限和新鲜度窗口产出 `healthy`、`recovering` 或 `unhealthy`。
 - Backend 启动时未能连接 App Server，若存在连接配置、安装记录或发现记录，事件消费者必须报告
   `unhealthy`；只有没有配置时才报告 `unconfigured`，显式禁用报告 `disabled`。不能用消费者实例

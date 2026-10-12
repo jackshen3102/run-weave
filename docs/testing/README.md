@@ -38,6 +38,24 @@
 原生 iOS 使用[手机专项计划](./app/ios-development-resources.testplan.yaml)，
 产品边界见[开发资源合同](../architecture/development-resources.md)。
 
+## 桌面全局设置的待实现合同
+
+[桌面全局设置计划](./platform/desktop-global-settings.testplan.yaml)是待实现的验收合同，
+不是已上线功能或通过记录。其边界为无搜索的全屏 10 页、原快捷图标、工作区保活、
+独立设置目标、迟到响应隔离、草稿离开保护、路由回退及原生 Browser 让位与恢复。
+设计对照见[第五版原型](../prototypes/global-settings/README.md)与
+[18 个功能分区清单](../prototypes/global-settings/feature-preservation.md)；原型数据和模拟成功不能替代真实服务证据。
+
+生产实现须复用既有领域服务、配置存储与权限，不复制原型模拟逻辑。设置目标与工作区连接分离；
+本台、账户和所选电脑分别保有归属。不得借此重构扩大配置 HTTP 允许列表、修改认证协议、
+迁移 Browser 配置或调整原生 iOS 导航。保存、进程采用和跨端结果分别取证，未知结果先核对原请求。
+
+SSH、手机登录、配置、模型、资源及运行状态还须执行各领域既有计划，不能用导航用例替代业务验收。
+18 分区逐字段、操作、权限和异常状态有真实证据前，不移除旧功能入口；回滚不重置用户配置。
+代码阶段拆分与原文件建议仅保留在
+[历史实施计划](https://github.com/jackshen3102/run-weave/blob/aa0d9b7cc0e0cc5aa3cf04f27976c052a931d4f4/docs/plans/2026-10-12-desktop-global-settings.md)，
+不作为当前实现事实。文档整理只维护上述边界，未执行生产用例。
+
 ## 验证
 
 ```bash
