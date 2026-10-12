@@ -4,20 +4,22 @@
 它读取人工或 Agent 核实后保存的记录，不自动消费 Evolution 的分析候选。
 
 ```bash
-rw experience search --cwd "$PWD" --query 'Pi fetch failed 的传输问题' --json
+rw experience search --instance stable --cwd "$PWD" --query 'Pi fetch failed 的传输问题' --json
 rw experience show pi-transport-recovery --cwd "$PWD" --json
-rw experience save --cwd "$PWD" --file experience.json --json
-rw experience save --cwd "$PWD" --file revised.json --expected-revision UUID --json
-rw experience feedback --cwd "$PWD" --file receipt.json --json
+rw experience save --instance stable --cwd "$PWD" --file experience.json --json
+rw experience save --instance stable --cwd "$PWD" --file revised.json --expected-revision UUID --json
+rw experience feedback --instance stable --cwd "$PWD" --file receipt.json --json
 rw experience history --cwd "$PWD" --json
 rw experience status --cwd "$PWD" --json
 rw experience diagnose --cwd "$PWD" --json
 rw experience diagnose --cwd "$PWD" --query '全局 rw 更新后怎么确认实际版本' --json
-rw experience retry JOB_ID --cwd "$PWD" --json
+rw experience retry --instance stable JOB_ID --cwd "$PWD" --json
 ```
 
-所有命令支持 `--profile`、`--backend-port`，默认 cwd 为调用目录。需要本机直连已认证的
-Backend。仓库身份为 `SHA-256(realpath(git --git-common-dir))`，返回 `repositoryId` 和
+所有命令支持 `--instance`、`--config-dir`、`--profile`、`--backend-port`，默认 cwd 为调用目录。
+`--instance` 和 `--config-dir` 可放在命令前后；写入命令（包括保存检索记录的 `search`）
+须显式指定目标实例，发送前仍校验 Backend 环境。示例使用 `stable`，开发实例改用对应实例 ID。
+需要本机直连已认证的 Backend。仓库身份为 `SHA-256(realpath(git --git-common-dir))`，返回 `repositoryId` 和
 `namespace`。主目录、子目录、符号链接与所有 worktree 共用仓库身份，不依赖 Project 注册、
 项目 UUID、Backend profile 或端口；没有注册或重复注册均不影响检索。
 同名独立仓库、独立 clone 不共享，即使 remote URL 相同；submodule 按独立 Git 仓库处理。
@@ -211,7 +213,7 @@ id 与 revision。其他项目、未召回的记录或伪造版本不能冒充�
 ```bash
 rw experience list --limit 10 --json  # 默认 10 条，只返回未处理经验
 rw experience list --all --json       # 自动翻页，返回当前仓库全部未处理经验
-rw experience process <experience-id> --expected-content-version <contentVersion> --json
+rw experience process --instance stable <experience-id> --expected-content-version <contentVersion> --json
 ```
 
 `list` 先按当前认证用户、当前仓库、experience 来源和 pending 状态过滤，再按内容更新时间

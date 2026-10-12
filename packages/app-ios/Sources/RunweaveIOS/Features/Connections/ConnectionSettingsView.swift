@@ -8,6 +8,7 @@ struct ConnectionSettingsView: View {
   @ObservedObject var session: AppSession
   let codexQuota: CodexQuotaStore
   @State private var showingBuildIdentity = false
+  @State private var showingVersions = false
   @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
   @AppStorage(DevicePreferences.screenAwakeKey, store: DevicePreferences.store) private var keepScreenAwake = true
 
@@ -36,6 +37,7 @@ struct ConnectionSettingsView: View {
             .accessibilityIdentifier("connection-quick-replies")
         }
         Section {
+          Button { showingVersions = true } label: { Label("组件版本", systemImage: "number") }
           Button { showingBuildIdentity = true } label: { Label("关于 Runweave", systemImage: "info.circle") }
             .accessibilityHint("查看版本与构建信息")
         }
@@ -51,5 +53,6 @@ struct ConnectionSettingsView: View {
     .interactiveDismissDisabled(quickInputs.saving)
     .preferredColorScheme(theme == "light" ? .light : .dark)
     .sheet(isPresented: $showingBuildIdentity) { BuildIdentityView().mobileAnalyticsScreen(.buildInfo) }
+    .sheet(isPresented: $showingVersions) { RuntimeVersionsView(session: session) }
   }
 }

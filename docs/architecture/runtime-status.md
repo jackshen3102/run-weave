@@ -82,6 +82,10 @@ Backend 未收到飞书 Bridge 报告时只表达“尚未收到状态、无法�
 该结果属于 Backend 所在节点，不是远程客户端的 CLI。
 版本读取失败不影响服务健康计数；本能力不比较源码差异、不判断是否最新，也不自动更新组件。
 
+原生 iOS 从“设置 → 组件版本”或当前电脑的连接详情进入，使用同一受认证接口读取当前节点版本，
+手机 App 的安装版本单独从本机 Bundle 与 `BuildIdentity.json` 展示，不推测远端 Web/Desktop 版本。
+仅打开页面、回到前台或手动刷新时查询；切换连接或退出登录清除原节点快照，旧 Backend 不支持时明确提示。
+
 ### 版本递增规则
 
 Backend、App Server、Web、Desktop 和随包 CLI、Research MCP 的构建入口使用

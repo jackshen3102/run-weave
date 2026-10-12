@@ -1,0 +1,331 @@
+{
+  "date": "2026-10-11",
+  "kind": "design-review-not-production-contract",
+  "coverage": 36,
+  "pages": [
+    {
+      "id": "history",
+      "previousTitle": "终端历史",
+      "decision": "移出",
+      "scope": "终端 / 面板；另有跨终端档案查询",
+      "destination": "终端菜单 → 输出与历史；跨终端归档留在独立工作记录页",
+      "source": "frontend/src/components/terminal/workspace/overlays.tsx",
+      "evidence": "history drawer 的 source 含 sessionId、panelId、threadId；跨终端列表不改变记录对象的终端归属。"
+    },
+    {
+      "id": "team-history",
+      "previousTitle": "多 Agent 运行",
+      "decision": "移出",
+      "scope": "项目 / terminalSessionId / runId",
+      "destination": "右侧 Agent Team → 当前运行与历史；跨运行档案仍属业务页",
+      "source": "frontend/src/components/terminal/agent-team/panel.tsx",
+      "evidence": "启动 Team 必须传 projectId 和 terminalSessionId，操作以 runId 为目标。"
+    },
+    {
+      "id": "commands",
+      "previousTitle": "快捷指令",
+      "decision": "移出业务、保留默认配置",
+      "scope": "指令库为连接级；发送动作依赖终端",
+      "destination": "快捷指令面板 / 独立指令库；后台默认模型进所选电脑高级配置",
+      "source": "frontend/src/components/terminal/input/quick-input-popover.tsx",
+      "evidence": "列表 scope=global，发送却需要 activeSession；列表全局不等于业务执行应进入设置。"
+    },
+    {
+      "id": "schedules",
+      "previousTitle": "定时任务",
+      "decision": "移出",
+      "scope": "连接级任务列表；每项绑定执行项目",
+      "destination": "保留顶栏定时任务及独立业务页",
+      "source": "frontend/src/pages/scheduled-tasks-page.tsx",
+      "evidence": "列表按连接查询，任务编辑选择项目；返回携带终端仅为恢复上下文，不等于任务绑定发起终端。"
+    },
+    {
+      "id": "runs",
+      "previousTitle": "后台运行",
+      "decision": "移出",
+      "scope": "连接级后台运行聚合；对象为 task/run",
+      "destination": "快捷指令后台运行面板 / 定时任务详情",
+      "source": "frontend/src/features/scheduled-tasks/use-quick-input-background-runs.ts",
+      "evidence": "查询当前电脑全部后台运行；继续、回复、恢复是业务动作而非全局设置。"
+    },
+    {
+      "id": "notes",
+      "previousTitle": "记录",
+      "decision": "移出",
+      "scope": "随记账户业务数据",
+      "destination": "随记抽屉 / 独立随记页面",
+      "source": "frontend/src/features/suiji/workspace.tsx",
+      "evidence": "随记客户端与账户独立于终端；不是全局设置内容。"
+    },
+    {
+      "id": "todos",
+      "previousTitle": "待办",
+      "decision": "移出",
+      "scope": "随记账户业务数据",
+      "destination": "随记 → 待办",
+      "source": "frontend/src/features/suiji/workspace.tsx",
+      "evidence": "业务对象，不因与终端无关就进入设置。"
+    },
+    {
+      "id": "review",
+      "previousTitle": "AI 回顾",
+      "decision": "移出",
+      "scope": "随记账户业务数据",
+      "destination": "随记 → AI 回顾",
+      "source": "frontend/src/features/suiji/review.tsx",
+      "evidence": "回顾内容是业务页面。"
+    },
+    {
+      "id": "trash",
+      "previousTitle": "回收站",
+      "decision": "移出",
+      "scope": "随记账户业务数据",
+      "destination": "随记 → 回收站",
+      "source": "frontend/src/features/suiji/workspace.tsx",
+      "evidence": "记录恢复属于随记业务流程。"
+    },
+    {
+      "id": "suiji-account",
+      "previousTitle": "随记账户设置",
+      "decision": "保留配置",
+      "scope": "随记账户 / 环境",
+      "destination": "全局设置 → 外部服务 → 随记账户",
+      "source": "frontend/src/features/suiji/accounts.ts",
+      "evidence": "环境、登录与服务地址是配置；不能把随记账户当作 Backend 登录。"
+    },
+    {
+      "id": "knowledge",
+      "previousTitle": "成果",
+      "decision": "移出",
+      "scope": "连接 / 账户下的成果对象",
+      "destination": "独立自进化成果页",
+      "source": "frontend/src/pages/evolution-page.tsx",
+      "evidence": "KnowledgeInbox 是成果阅读与处理。"
+    },
+    {
+      "id": "evolution",
+      "previousTitle": "分析管理",
+      "decision": "移出",
+      "scope": "学习范围 / 分析运行",
+      "destination": "独立自进化管理页",
+      "source": "frontend/src/pages/evolution-page.tsx",
+      "evidence": "按 scope 过滤 run、schedule、candidate、insight；不是应用偏好。"
+    },
+    {
+      "id": "insights",
+      "previousTitle": "洞察",
+      "decision": "移出",
+      "scope": "学习范围 / 洞察对象",
+      "destination": "自进化 → 洞察",
+      "source": "frontend/src/pages/evolution-page.tsx",
+      "evidence": "保留业务模块内归属。"
+    },
+    {
+      "id": "candidates",
+      "previousTitle": "候选资产",
+      "decision": "移出",
+      "scope": "学习范围 / 候选资产",
+      "destination": "自进化 → 候选资产",
+      "source": "frontend/src/pages/evolution-page.tsx",
+      "evidence": "授权与退休针对候选对象。"
+    },
+    {
+      "id": "evolution-schedules",
+      "previousTitle": "运行计划",
+      "decision": "移出",
+      "scope": "学习范围 / 运行计划",
+      "destination": "自进化 → 计划",
+      "source": "frontend/src/pages/evolution-page.tsx",
+      "evidence": "计划带 learningScopeId，不提升为应用级配置。"
+    },
+    {
+      "id": "evolution-policy",
+      "previousTitle": "Memory Canary 策略",
+      "decision": "移出",
+      "scope": "明确学习范围：global 或 repository",
+      "destination": "自进化 → 所选学习范围策略",
+      "source": "frontend/src/pages/evolution-page.tsx",
+      "evidence": "旧稿标为 project 过于简化；global 学习范围也不等于应用全局设置。"
+    },
+    {
+      "id": "prototypes",
+      "previousTitle": "原型库",
+      "decision": "移出",
+      "scope": "项目资源；列表可跨项目",
+      "destination": "项目菜单 → 原型库 / 独立原型页",
+      "source": "frontend/src/services/terminal/prototype-gallery.ts",
+      "evidence": "预览 ticket 路由需要 projectId、source、slug。"
+    },
+    {
+      "id": "connections",
+      "previousTitle": "连接管理",
+      "decision": "保留",
+      "scope": "本台应用保存的连接",
+      "destination": "全局设置 → 连接管理",
+      "source": "frontend/src/features/connection/use-connections.ts",
+      "evidence": "连接定义管理不依赖当前终端；工作区保留快速切换入口。"
+    },
+    {
+      "id": "mobile",
+      "previousTitle": "连接手机",
+      "decision": "保留",
+      "scope": "所选 Backend 登录授权",
+      "destination": "所选电脑 → 登录与手机接入",
+      "source": "frontend/src/components/connection-switcher.tsx",
+      "evidence": "授权连接到所选电脑，页面必须展示目标电脑。"
+    },
+    {
+      "id": "tunnels",
+      "previousTitle": "端口与隧道",
+      "decision": "拆分",
+      "scope": "SSH 主机定义 / 某终端的 Browser 通道绑定",
+      "destination": "SSH 主机与通道配置进连接管理；终端选通道留在终端",
+      "source": "frontend/src/features/tunnels/terminal-binding.tsx",
+      "evidence": "selectTunnelBrowser(hostId, terminalId) 是终端操作，不能搬进全局主机配置页。"
+    },
+    {
+      "id": "runtime",
+      "previousTitle": "运行状态",
+      "decision": "保留辅助信息",
+      "scope": "所选电脑及明确标注的本台组件",
+      "destination": "全局设置 → 状态与诊断 → 运行状态",
+      "source": "frontend/src/services/runtime-status.ts",
+      "evidence": "按 apiBase 查询；本机 Electron 信息必须另行标注，不能跟随远端标签伪装。"
+    },
+    {
+      "id": "resources",
+      "previousTitle": "系统资源",
+      "decision": "保留辅助管理",
+      "scope": "所选电脑进程与资源",
+      "destination": "状态与诊断 → 系统资源",
+      "source": "frontend/src/services/resource-monitor.ts",
+      "evidence": "进程控制目标是电脑上的进程，不是当前终端；权限与危险确认保留。"
+    },
+    {
+      "id": "dev-resources",
+      "previousTitle": "开发资源",
+      "decision": "保留辅助管理",
+      "scope": "所选 Backend 管理的开发资源",
+      "destination": "状态与诊断 → 开发资源",
+      "source": "frontend/src/pages/dev-resources-page.tsx",
+      "evidence": "资源详情显示实际设备、会话或工作区归属，不默认释放当前终端。"
+    },
+    {
+      "id": "quota",
+      "previousTitle": "Codex 额度",
+      "decision": "保留辅助信息",
+      "scope": "所选 Backend 对应的 Codex 额度",
+      "destination": "状态与诊断 → Codex 额度",
+      "source": "frontend/src/services/codex-quota.ts",
+      "evidence": "/api/codex/quota 无 terminalSessionId；额度不表示当前终端的专属配额。"
+    },
+    {
+      "id": "logs",
+      "previousTitle": "日志记录",
+      "decision": "保留、显式标来源",
+      "scope": "所选 Backend + 本台前端记录器",
+      "destination": "状态与诊断 → 日志记录",
+      "source": "frontend/src/components/diagnostic-log-entry.tsx",
+      "evidence": "Backend 记录与 frontendDiagnosticLogRecorder 配合；终端内容复制不合并进这里。"
+    },
+    {
+      "id": "desktop-diagnostics",
+      "previousTitle": "桌面诊断",
+      "decision": "保留",
+      "scope": "本台 Electron",
+      "destination": "状态与诊断 → 本台桌面诊断",
+      "source": "frontend/src/components/runtime-status-panel.tsx",
+      "evidence": "Electron 宿主操作保持本台作用域，不能随所选远端连接而变。"
+    },
+    {
+      "id": "lookup",
+      "previousTitle": "状态查询",
+      "decision": "移出",
+      "scope": "terminalSessionId / threadId / panel",
+      "destination": "终端菜单 → 状态查询",
+      "source": "frontend/src/components/terminal/workspace/status-lookup-dialog.tsx",
+      "evidence": "打开时默认 activeSessionId，可查询 ThreadRef；属于上下文排障。"
+    },
+    {
+      "id": "events",
+      "previousTitle": "活动数据",
+      "decision": "拆分",
+      "scope": "活动事实 / 时间线 / 数据策略",
+      "destination": "事件与终端归档留 Activity；实例数据保留策略归高级配置",
+      "source": "frontend/src/pages/activity-page.tsx",
+      "evidence": "API 能聚合查询不意味着终端、Team 历史成为设置项。"
+    },
+    {
+      "id": "settings/account",
+      "previousTitle": "账户与登录",
+      "decision": "保留、改名",
+      "scope": "所选 Backend 的认证",
+      "destination": "所选电脑 → 登录与手机接入",
+      "source": "frontend/src/services/auth.ts",
+      "evidence": "changePassword(apiBase, token) 修改目标 Backend 的登录凭据；不存在已证实的统一云账户。"
+    },
+    {
+      "id": "settings/appearance",
+      "previousTitle": "外观",
+      "decision": "保留",
+      "scope": "本台客户端主题及工具布局偏好",
+      "destination": "本台应用 → 外观",
+      "source": "frontend/src/features/terminal/preview/store.ts",
+      "evidence": "工具显隐/排序存 deviceStorage；只调整通用布局，不把工具内部业务搬来。"
+    },
+    {
+      "id": "settings/browser",
+      "previousTitle": "浏览器",
+      "decision": "保持现状，不纳入本次重构",
+      "scope": "本台全局默认 / 本台 Profile / Worktree 绑定",
+      "destination": "全部保留在现有 Browser / Worktree 入口；全局设置不新增浏览器页面或重复入口",
+      "source": "frontend/src/components/terminal/browser/header/profile-settings.tsx",
+      "evidence": "用户明确要求保持不变；global/profile/worktree 的作用范围区分不构成迁移入口的理由。现有默认 Profile、固定端口、代理与 Worktree 首选均保留原交互。"
+    },
+    {
+      "id": "settings/models",
+      "previousTitle": "Agent Team 模型",
+      "decision": "拆分、降为高级配置",
+      "scope": "所选 Backend 默认角色模型 / 运行快照",
+      "destination": "全局默认值归所选电脑高级配置；运行、角色任务与人工裁决留 Team 面板",
+      "source": "backend/src/agent-team/runtime/model-config-store.ts",
+      "evidence": "ConfigurationDomain(\"agents.team\") 是实例级，非单终端；不保留顶级“多 Agent 设置”入口。"
+    },
+    {
+      "id": "settings/notifications",
+      "previousTitle": "资源监控与提醒",
+      "decision": "拆分",
+      "scope": "本台系统通知 / 所选电脑采样与提醒",
+      "destination": "本台应用 → 桌面通知；所选电脑 → 资源监控与提醒",
+      "source": "frontend/src/features/system-monitor/resource-settings.tsx",
+      "evidence": "macNotifications 与 Backend settings/remoteControl 分属不同 owner；单次任务处理不归这里。"
+    },
+    {
+      "id": "settings/data",
+      "previousTitle": "数据管理",
+      "decision": "收缩、移出业务操作",
+      "scope": "实例保留策略 / 所选数据对象",
+      "destination": "保留策略归高级配置；按项目导出删除留 Activity 对象操作",
+      "source": "frontend/src/services/activity.ts",
+      "evidence": "撤回旧图泛化的“一键导出/删除全部项目”合同；必须沿用实际 operation 与权限。"
+    },
+    {
+      "id": "settings/advanced",
+      "previousTitle": "高级实例配置",
+      "decision": "保留",
+      "scope": "所选实例；部分字段仅本地可管",
+      "destination": "所选电脑 → 高级配置",
+      "source": "packages/shared/src/configuration/fields.ts",
+      "evidence": "遵循 scope、owner、remote、apply；保存与重新加载/重启分别反馈，不暗示跨电脑同步。"
+    },
+    {
+      "id": "settings/shortcuts",
+      "previousTitle": "快捷键",
+      "decision": "保留只读",
+      "scope": "客户端快捷行为说明",
+      "destination": "本台应用 → 快捷键",
+      "source": "electron/src/desktop/menu.ts",
+      "evidence": "仅查阅已有快捷行为，不新增未实现的自定义绑定能力。"
+    }
+  ]
+}
