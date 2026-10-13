@@ -11,10 +11,6 @@ struct ConnectionManager: View {
   @State private var adding = false
   @State private var failure: String?
 
-  private var orderedConnections: [BackendConnection] {
-    store.connections.filter { $0.id == store.activeID } + store.connections.filter { $0.id != store.activeID }
-  }
-
   var body: some View {
     NavigationView {
       List {
@@ -27,7 +23,7 @@ struct ConnectionManager: View {
             onMobileLogin: onMobileLogin, onConnected: { dismiss() })
         } else {
           Section {
-            ForEach(orderedConnections) { connection in
+            ForEach(store.connections) { connection in
               connectionRow(connection)
             }
           }
