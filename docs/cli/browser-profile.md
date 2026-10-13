@@ -7,6 +7,9 @@ CDP Group scope：
 rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json]
 ```
 
+全局 `--instance`、`--config-dir` 由 CLI 入口解析，适用于全部 `browser` 子命令。
+在 Runweave 中优先使用 `$RUNWEAVE_CLI_BIN` 指向的实例绑定命令。
+
 SSH 远端终端也使用同一命令。未设置 `PLAYWRIGHT_MCP_CDP_ENDPOINT`、但存在 Runweave
 终端或项目身份时，CLI 自动通过远端 Backend 申请访问凭证并解析桌面 Browser；需要
 `RUNWEAVE_TERMINAL_SESSION_ID`、`RUNWEAVE_PROJECT_ID`、`RUNWEAVE_HOOK_TOKEN`，以及
@@ -22,8 +25,8 @@ Backend 协议 2 的响应包含 `binding`（desktopId、hostId、generation、i
 - `--profile` 只覆盖本次解析，不修改偏好。
 - 当前 Terminal 有 `RUNWEAVE_TERMINAL_SESSION_ID` 且未传 `--group-id` 时，resolver 为该 Terminal
   派生稳定的专属 Group，并返回一次性内存 attribution token；原始 Terminal ID 不进入 Group id。
-- 显式 `--group-id` 继续优先；没有 Terminal 身份时保留 ambient endpoint 中已有的 `groupId`，连接在
-  Automation 中显示为“未归属自动化”。
+- Group 顺序是显式 `--group-id`、运行时 `RUNWEAVE_BROWSER_GROUP_ID`、ambient endpoint 中的
+  `groupId`，最后才从 Terminal 身份派生。没有 Terminal 身份的连接在 Automation 中显示为“未归属自动化”。
 - 同一 Terminal 的活跃连接只能使用一个 Profile；尝试连接第二个 Profile 返回
   `AUTOMATION_PROFILE_CONFLICT`，全部连接断开后才释放绑定。
 - resolver 只接受 loopback CDP endpoint。冲突返回退出码 `4`，参数错误返回 `2`，实例不可用返回
@@ -95,7 +98,7 @@ rw browser assist cancel <request-id> --json
 Profile/Group CDP `/json/list` 中原页面的 `id`，不是页面 URL、tab 序号或桌面主窗口 target。
 请求只保存绑定与协助原因，不保存 CDP token、页面截图、密码或 Cookie。
 
-所有命令要求当前 Terminal 注入的 `RUNWEAVE_TERMINAL_SESSION_ID`。有 `TMUX_PANE` 时通过
+普通终端模式要求当前 Terminal 注入的 `RUNWEAVE_TERMINAL_SESSION_ID`。有 `TMUX_PANE` 时通过
 Backend 的 Panel workspace 精确匹配调用者 pane（不使用 UI activePanel），否则使用
 `RUNWEAVE_TERMINAL_PANEL_ID`；无法唯一解析则拒绝。使用现有 CLI 认证；`--profile` 是认证配置名，与
 `--browser-profile` 不同。JSON 响应包含 requestId、terminalSessionId、panelId、threadId、
@@ -130,3 +133,22 @@ Agent 收到恢复提示后先 `acknowledge`，失败则停止。成功后按响
 
 实现入口：[Backend coordinator](../../backend/src/terminal/browser-assistance/service.ts)。
 验收：[browser-assistance.testplan.yaml](../testing/browser-assistance.testplan.yaml)。
+
+### 后台定时任务
+
+后台任务先调用 `rw browser profile resolve --json`，再附着返回的 CDP 地址。
+直接连接指定分组的 CDP 地址时，桌面也会创建或唤醒该分组的页面，不导航其他标签。
+`iab` 不是 Runweave 右侧浏览器入口。恢复终端保留原运行的 Browser Group；权限策略仍沿用运行快照。
+
+没有终端身份但存在 `RUNWEAVE_SCHEDULED_TASK_RUN_ID` 时，`rw browser assist request`
+校验 group 属于本次运行，并通过 CDP 确认 target 存在，然后返回带 `recovery.browser`
+的完整 blocked 结果草稿。此命令本身不保存请求；Agent 必须将该 JSON 作为最终结果返回，
+结束当前轮次，由 scheduler 与运行结果一起持久化。此模式不支持 status/acknowledge/cancel，
+也不伪造终端、启动第二个执行器或绕过任务审批策略。
+
+用户在运行记录中准备原会话时，Web 在 Backend 确认 ready 后，调用
+`POST /api/terminal/session/:id/browser-assistance/from-scheduled-run`，正文为 `{ runId }`。
+Backend 从保存的结果读取目标，校验 source、终端绑定、panel 和 thread 后转为现有协助卡；
+同一结果在同一 Backend 运行期重复导入返回同一请求。全屏管理页仍从左上角进入已准备会话。
+用户打开原页面、完成操作并交还后，Agent 重新观察再继续；这不会将原后台 blocked 结果改为 succeeded。
+旧结果没有 browser 字段时按原恢复流程处理。页面关闭、终端改作其他会话时不能冒认恢复成功。

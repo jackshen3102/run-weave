@@ -1,3 +1,4 @@
+import type { ScheduledTaskSource } from "@runweave/shared/scheduled-tasks";
 import type { TerminalSessionManager } from "../manager/manager";
 import { buildTmuxSessionRuntimeEnvironment } from "../runtime/environment";
 import {
@@ -21,6 +22,7 @@ export async function syncExistingTmuxSessionEnvironments(
     Array<{
       terminalSessionId: string;
       projectId: string;
+      source?: ScheduledTaskSource;
       target: TmuxTarget;
     }>
   >();
@@ -36,6 +38,7 @@ export async function syncExistingTmuxSessionEnvironments(
     socketSessions.push({
       terminalSessionId: session.id,
       projectId: session.projectId,
+      source: session.source,
       target,
     });
     sessionsBySocket.set(target.socketPath, socketSessions);
@@ -78,6 +81,7 @@ export async function syncExistingTmuxSessionEnvironments(
                     {
                       terminalSessionId: session.terminalSessionId,
                       projectId: session.projectId,
+                      source: session.source,
                       tmuxSessionName: session.target.sessionName,
                     },
                     env,

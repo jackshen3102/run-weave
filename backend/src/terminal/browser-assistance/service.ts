@@ -1,3 +1,8 @@
+import {
+  scheduledBrowserGroupId,
+  scheduledRunRecovery,
+  type ScheduledRun,
+} from "@runweave/shared/scheduled-tasks";
 import { randomUUID } from "node:crypto";
 import type {
   BrowserAssistanceRequest,
@@ -5,6 +10,7 @@ import type {
 } from "@runweave/shared/terminal-browser-assistance";
 import type { TerminalSessionManager } from "../manager/manager";
 import type { TmuxService } from "../tmux/service";
+import { resolveEffectivePanelActiveCommand } from "../application/panel-metadata";
 import { resolveTmuxTarget } from "../runtime/launcher";
 import {
   beginTerminalReturn,
@@ -25,6 +31,7 @@ interface Entry {
   paneId: string;
   panelCreatedAt: number;
   inputRevision: object;
+  agentOperationId: string | null;
 }
 
 export class BrowserAssistanceError extends Error {
@@ -93,7 +100,10 @@ export class BrowserAssistanceService {
         request.panelId,
       );
       if (
-        terminalInputAdmission(session).revision !== entry.inputRevision ||
+        terminalInputAdmission(session).inputWriteRevision !==
+          entry.inputRevision ||
+        (this.manager.getPanelAgentOperationGeneration(session.id, panel.id)
+          ?.operationId ?? null) !== entry.agentOperationId ||
         threadId !== request.threadId ||
         panel.tmuxPaneId !== entry.paneId ||
         panel.createdAt.getTime() !== entry.panelCreatedAt
@@ -123,9 +133,52 @@ export class BrowserAssistanceService {
       .map((entry) => ({ ...entry.request }));
   }
 
+  /** Explicit user takeover imports the persisted request once per result. */
+  fromScheduledRun(
+    sessionId: string,
+    run: ScheduledRun,
+  ): BrowserAssistanceRequest | null {
+    const recovery = scheduledRunRecovery(run);
+    if (recovery?.action !== "needs-input" || !recovery.browser) return null;
+    const binding = run.terminalBinding;
+    const session = this.manager.getSession(sessionId);
+    if (
+      !binding ||
+      binding.terminalSessionId !== sessionId ||
+      binding.attachmentState !== "ready" ||
+      session?.source?.runId !== run.id ||
+      run.activeAttemptId ||
+      !run.threadRef ||
+      recovery.browser.browserGroupId !== scheduledBrowserGroupId(run.id)
+    )
+      throw new BrowserAssistanceError(
+        409,
+        "Scheduled browser assistance is not bound to this recovered conversation",
+      );
+    const { threadId } = this.panel(sessionId, binding.panelId);
+    if (threadId !== run.threadRef.threadId)
+      throw new BrowserAssistanceError(409, "Scheduled conversation changed");
+    const requestId = `scheduled-${run.id}-${run.resultRevision ?? 0}-${sessionId}-${binding.panelId}`;
+    if (this.entries.has(requestId)) return this.get(sessionId, requestId);
+    return this.create(
+      sessionId,
+      {
+        ...recovery.browser,
+        panelId: binding.panelId,
+        reason:
+          `${run.error?.message ?? run.summary ?? "需要浏览器协助"}\n${recovery.nextStep}`.slice(
+            0,
+            2000,
+          ),
+      },
+      requestId,
+    );
+  }
+
   create(
     sessionId: string,
     input: CreateBrowserAssistanceRequest,
+    requestId: string = randomUUID(),
   ): BrowserAssistanceRequest {
     const { session, panel, threadId } = this.panel(sessionId, input.panelId);
     const admission = terminalInputAdmission(session);
@@ -148,7 +201,7 @@ export class BrowserAssistanceService {
     const request: BrowserAssistanceRequest = {
       ...input,
       terminalSessionId: sessionId,
-      requestId: randomUUID(),
+      requestId,
       threadId,
       state: "requesting",
       createdAt: new Date().toISOString(),
@@ -159,7 +212,10 @@ export class BrowserAssistanceService {
       request,
       paneId: panel.tmuxPaneId!,
       panelCreatedAt: panel.createdAt.getTime(),
-      inputRevision: admission.revision,
+      inputRevision: admission.inputWriteRevision,
+      agentOperationId:
+        this.manager.getPanelAgentOperationGeneration(sessionId, input.panelId)
+          ?.operationId ?? null,
     });
     return { ...request };
   }
@@ -255,7 +311,8 @@ export class BrowserAssistanceService {
         !panes.some(
           (pane) =>
             pane.paneId === entry.paneId &&
-            pane.activeCommand?.includes("codex"),
+            resolveEffectivePanelActiveCommand(pane, panel.activeCommand) ===
+              "codex",
         )
       ) {
         entry.request.state = "invalidated";
@@ -277,7 +334,7 @@ export class BrowserAssistanceService {
         );
       }
       // Never ensure/recreate a runtime, prepare a new Agent, or replay user text.
-      const prompt = `Browser assistance ${requestId} has been returned by the user. First run: rw browser assist acknowledge ${requestId} --json . If acknowledgement fails, stop. Read the returned target binding, attach to that exact Profile/Group/target and take a fresh snapshot. Do not replay previous clicks. If the task is already complete, do not submit again. If still blocked, detach, request assistance again and end your turn. Otherwise continue the original task, then detach.`;
+      const prompt = `Browser assistance ${requestId} has been returned by the user. First run: "\${RUNWEAVE_CLI_BIN:-rw}" browser assist acknowledge ${requestId} --json . If acknowledgement fails, stop. Read the returned target binding, attach to that exact Profile/Group/target and take a fresh snapshot. Do not replay previous clicks. If the task is already complete, do not submit again. If still blocked, detach, request assistance again and end your turn. Otherwise continue the original task, then detach.`;
       await this.tmux.sendKeySequence({ ...target, paneId: entry.paneId }, [
         { type: "literal", value: prompt, delayAfterMs: 200 },
         { type: "key", key: "C-m" },

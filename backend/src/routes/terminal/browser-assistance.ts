@@ -1,3 +1,4 @@
+import type { ScheduledTaskService } from "../../scheduled-tasks/service";
 import type { Router, Response } from "express";
 import { z } from "zod";
 import {
@@ -31,7 +32,10 @@ function fail(res: Response, error: unknown) {
 export function registerBrowserAssistanceRoutes(
   router: Router,
   manager: TerminalSessionManager,
-  options?: { tmuxService?: TmuxService },
+  options?: {
+    tmuxService?: TmuxService;
+    scheduledTaskService?: ScheduledTaskService;
+  },
 ) {
   const service = new BrowserAssistanceService(manager, options?.tmuxService);
   const path = "/session/:id/browser-assistance";
@@ -44,6 +48,24 @@ export function registerBrowserAssistanceRoutes(
     }
     try {
       res.status(201).json(service.create(req.params.id, input.data));
+    } catch (error) {
+      fail(res, error);
+    }
+  });
+  router.post(`${path}/from-scheduled-run`, async (req, res) => {
+    try {
+      const input = z
+        .object({ runId: z.string().uuid() })
+        .strict()
+        .safeParse(req.body);
+      if (!input.success) {
+        res.status(400).json({ message: "Invalid scheduled run" });
+        return;
+      }
+      if (!options?.scheduledTaskService)
+        throw new BrowserAssistanceError(503, "Scheduled tasks unavailable");
+      const run = await options.scheduledTaskService.getRun(input.data.runId);
+      res.json(service.fromScheduledRun(req.params.id, run));
     } catch (error) {
       fail(res, error);
     }

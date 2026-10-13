@@ -1,3 +1,6 @@
+import { scheduledBrowserGroupId } from "@runweave/shared/scheduled-tasks";
+import { BrowserCdpClient } from "../client/browser-cdp.js";
+import { resolveBrowserProfile, type BrowserCommandIo } from "./browser-profile.js";
 import type {
   BrowserAssistanceRequest,
   CreateBrowserAssistanceRequest,
@@ -16,7 +19,7 @@ import { writeOutput } from "../output/format.js";
 
 export async function runBrowserAssistCommand(
   args: string[],
-  io: { stdout: Pick<NodeJS.WriteStream, "write">; env: NodeJS.ProcessEnv },
+  io: BrowserCommandIo,
 ) {
   const [action, ...rest] = args;
   if (
@@ -43,8 +46,69 @@ export async function runBrowserAssistCommand(
     if (!allowed.has(key)) throw new CliError(`Unknown option --${key}`, 2);
   }
   const sessionId = io.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim();
-  if (!sessionId)
-    throw new CliError("Run inside the requesting Runweave Terminal panel", 2);
+  if (!sessionId) {
+    const runId = io.env.RUNWEAVE_SCHEDULED_TASK_RUN_ID?.trim();
+    if (!runId)
+      throw new CliError(
+        "Run inside a Runweave Terminal panel or scheduled task",
+        2,
+      );
+    if (action !== "request" || parsed.positionals.length)
+      throw new CliError(
+        "Background assistance is returned in the final task result; use the run record to take over the conversation",
+        2,
+      );
+    const groupId = requireStringOption(parsed.options, "group-id");
+    if (groupId !== scheduledBrowserGroupId(runId))
+      throw new CliError(
+        "Browser group does not belong to this scheduled run",
+        2,
+      );
+    const profile = requireStringOption(parsed.options, "browser-profile");
+    const targetId = requireStringOption(parsed.options, "target-id");
+    const reason = requireStringOption(parsed.options, "reason").trim();
+    if (!reason || reason.length > 2000)
+      throw new CliError("Reason must contain 1-2000 characters", 2);
+    const resolved = await resolveBrowserProfile(
+      ["--profile", profile, "--group-id", groupId],
+      io,
+    );
+    const cdp = await BrowserCdpClient.connect(resolved.cdpEndpoint);
+    try {
+      const { targetInfos } = await cdp.send<{
+        targetInfos: Array<{ targetId: string }>;
+      }>("Target.getTargets");
+      if (!targetInfos.some((target) => target.targetId === targetId))
+        throw new CliError(
+          "Assistance target is closed or outside this Profile/Group",
+          4,
+        );
+    } finally {
+      cdp.close();
+    }
+    // No terminal impersonation or second executor. The provider persists this
+    // request atomically with the result when the Agent returns it and exits.
+    writeOutput(io.stdout, resolveOutputMode(parsed.options), {
+      outcome: "blocked",
+      summary: `等待浏览器协助：${reason}`,
+      reason,
+      recovery: {
+        action: "needs-input",
+        category: "input",
+        evidence: "已核对协助页面属于本次运行的浏览器分组。",
+        nextStep:
+          "在运行记录中准备并进入原会话，打开协助页面。完成页面操作后交还 Agent，由 Agent 重新观察并继续。",
+        notBefore: null,
+        confirmation: null,
+        browser: {
+          profileId: resolved.profileId,
+          browserGroupId: groupId,
+          targetId,
+        },
+      },
+    });
+    return;
+  }
   const auth = await resolveAuthContext({
     env: io.env,
     profileName: getStringOption(parsed.options, "profile"),

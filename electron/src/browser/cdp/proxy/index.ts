@@ -46,7 +46,7 @@ import {
   getTerminalBrowserKey,
   terminalBrowserRuntime,
 } from "../../runtime.js";
-import { createTerminalBrowserTabFromProxy } from "../../view/index.js";
+import { createScopeTargetInitializer } from "./scope-target.js";
 import { acceptAutomationAttribution } from "../../automation/attribution.js";
 import {
   recordTerminalBrowserAutomationCommand,
@@ -77,10 +77,12 @@ function resolveScope(rawUrl: string, endpoint: string): Scope {
       { profileId: rawProfileId },
     );
   }
+  const preferences = getTerminalBrowserProfilePreferences();
+  const projectId = parsed.searchParams.get("projectId");
   const profileId =
-    rawProfileId === null
-      ? getTerminalBrowserProfilePreferences().defaultProfileId
-      : rawProfileId;
+    rawProfileId ??
+    (projectId ? preferences.worktrees[projectId]?.preferredProfileId : null) ??
+    preferences.defaultProfileId;
   return {
     profileId,
     groupId: parsed.searchParams.get("groupId")?.trim() || null,
@@ -146,6 +148,10 @@ export async function startCdpProxy(
     return `${wsUrl}?${params}`;
   };
 
+  let stopping = false;
+  const ensureScopeTarget = createScopeTargetInitializer(() => stopping);
+  let pendingUpgrades = 0;
+
   const server = http.createServer((req, res) => {
     void (async () => {
       const url = req.url ?? "";
@@ -158,49 +164,10 @@ export async function startCdpProxy(
             req,
           )) as ResolveTerminalBrowserProfileRequest;
           const resolved = await resolveTerminalBrowserProfile(request);
-          const windowId = getTerminalBrowserOwnerWindowId();
-          const win = windowId === null ? null : BrowserWindow.fromId(windowId);
-          if (win) {
-            await restoreTerminalBrowserTabsForWindow(win);
-            ensureTerminalBrowserDormantFallback(win.id, resolved.profileId);
-            const workspace = getTerminalBrowserWorkspaceSnapshot(
-              win.id,
-              resolved.profileId,
-            );
-            const tab =
-              workspace.tabs.find(
-                (tab) =>
-                  tab.tabId === workspace.activeTabId &&
-                  (!resolved.browserGroupId ||
-                    tab.browserGroupId === resolved.browserGroupId),
-              ) ??
-              workspace.tabs.find(
-                (tab) =>
-                  !resolved.browserGroupId ||
-                  tab.browserGroupId === resolved.browserGroupId,
-              );
-            if (tab)
-              getOrCreateTerminalBrowserView(
-                win,
-                resolved.profileId,
-                tab.tabId,
-              );
-            if (
-              resolved.browserGroupId &&
-              !getScopedTargets(
-                resolved.profileId,
-                resolved.browserGroupId,
-              ).some((target) => target.windowId === win.id)
-            ) {
-              await createTerminalBrowserTabFromProxy(
-                win.id,
-                resolved.profileId,
-                "about:blank",
-                resolved.browserGroupId,
-                { attach: false },
-              );
-            }
-          }
+          await ensureScopeTarget(
+            resolved.profileId,
+            resolved.browserGroupId ?? null,
+          );
           sendJsonResponse(res, 200, resolved);
         } catch (error) {
           sendJsonResponse(res, statusForError(error), {
@@ -358,29 +325,57 @@ export async function startCdpProxy(
       socket.destroy();
       return;
     }
-    try {
-      resolveScope(pathname, endpoint);
-    } catch {
-      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
-      return;
-    }
-    if (isCdpConnectionLimitReached(connections.size, MAX_CDP_CONNECTIONS)) {
-      const body = `Maximum CDP connection limit (${MAX_CDP_CONNECTIONS}) reached`;
+    const fail = (status: number, message: string) => {
+      const body = JSON.stringify({ message });
       socket.end(
-        [
-          "HTTP/1.1 503 Service Unavailable",
-          "Connection: close",
-          "Content-Type: text/plain; charset=utf-8",
-          `Content-Length: ${Buffer.byteLength(body)}`,
-          "",
-          body,
-        ].join("\r\n"),
+        `HTTP/1.1 ${status} Error\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+      );
+    };
+    if (
+      stopping ||
+      isCdpConnectionLimitReached(
+        connections.size + pendingUpgrades,
+        MAX_CDP_CONNECTIONS,
+      )
+    ) {
+      fail(
+        503,
+        `Maximum CDP connection limit (${MAX_CDP_CONNECTIONS}) reached or proxy stopping`,
       );
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit("connection", ws, req);
-    });
+    pendingUpgrades++;
+    void (async () => {
+      const scope = resolveScope(pathname, endpoint);
+      // An unscoped discovery connection must never acquire someone else's
+      // page. Only initialize the explicitly selected automation group.
+      if (scope.groupId) {
+        await resolveTerminalBrowserProfile({
+          projectId: null,
+          explicitProfileId: scope.profileId,
+          browserGroupId: scope.groupId,
+        });
+        if (socket.destroyed || stopping) return;
+        await ensureScopeTarget(scope.profileId, scope.groupId);
+      }
+      if (socket.destroyed || stopping) return;
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit("connection", ws, req);
+      });
+    })()
+      .catch((error) => {
+        if (!socket.destroyed)
+          fail(
+            statusForError(error),
+            error instanceof Error
+              ? error.message
+              : "Browser initialization failed",
+          );
+      })
+      .finally(() => {
+        pendingUpgrades--;
+        if (stopping && !socket.destroyed) socket.destroy();
+      });
   });
 
   wss.on("connection", (ws: WebSocket, req) => {
@@ -550,6 +545,7 @@ export async function startCdpProxy(
     port,
     host,
     stop: async () => {
+      stopping = true;
       clearInterval(heartbeatTimer);
       terminalBrowserEvents.off("tab-closed", onTabClosed);
       terminalBrowserEvents.off("tab-awakened", onTabAwakened);
