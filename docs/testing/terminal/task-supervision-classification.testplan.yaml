@@ -6,7 +6,7 @@ description: >
   格式校验不代表行为已通过。不创建单元测试文件。
 cases:
   - id: TSC-001
-    name: 中途开启仍保留任务起点和完整当前回答
+    name: 中途开启保留当前任务必要来源和完整回答
     required: true
     description: 输入必须包含开启前的任务定义与当前 final 中间的未完事项。
     preconditions:
@@ -14,7 +14,7 @@ cases:
       - 本例当前 final 超过 4000 字符，中部包含唯一未验收标记；同轮 commentary 和上一轮 final 有不同标记。
       - 本例分类接收器可在隔离环境保存实际收到的 state，不调用真实第三方。
     steps:
-      - 触发本轮 Stop 并读取捕获的 state，确认 taskStartMessageId 指向原始任务，当前 final 全文及中部标记均保留。
+      - 触发本轮 Stop 并读取捕获的 state，确认 taskStartMessageId 指向最新真实用户请求，判断当前义务所需的先前来源原文、当前 final 全文及中部标记均保留。
       - 对照原始轮次，确认 currentReply 没有误用 commentary 或上一轮 final，且包含原始 turn 身份。
       - 清理本例会话、监听、接收器和临时文件，保留脱敏对照证据。
 

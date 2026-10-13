@@ -82,7 +82,9 @@ struct SupervisionDecision: Decodable, Identifiable {
   let reason: String
   let sourceMessageIds: [String]
   let createdAt: String
-  let input: SupervisionInput
+  let input: SupervisionInput?
+  let currentReplyId: String
+  let goalPreview: String
   let delivery: String
   let deliveryDeadline: Double
   let deliveryBlock: String?
@@ -139,4 +141,9 @@ struct SupervisionDiscovery: Decodable {
 struct SupervisionFailure: Decodable, LocalizedError {
   let message: String
   var errorDescription: String? { message }
+}
+
+struct SupervisionDecisionPage: Decodable {
+  let decisions: [SupervisionDecision]
+  let nextCursor: String?
 }

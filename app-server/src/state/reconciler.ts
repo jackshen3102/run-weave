@@ -31,6 +31,7 @@ interface ObservedThreadState {
   detailStatus: AppServerThreadDetail["status"] | null;
   preview: string | null;
   turnId: string | null;
+  error?: { code: string; message: string };
 }
 
 export interface AgentThreadStatusReconcilerOptions {
@@ -240,6 +241,7 @@ export class AgentThreadStatusReconciler {
             detailStatus: null,
             preview: null,
             turnId: lifecycle.turnId,
+            error: lifecycle.error,
           };
         }
       }
@@ -346,6 +348,7 @@ export class AgentThreadStatusReconciler {
         detailStatus: observed.detailStatus,
         preview: observed.preview,
         turnId: observed.turnId,
+        ...(observed.error ? { errorCode: observed.error.code, errorMessage: observed.error.message } : {}),
         compensation,
         compensationReason: compensation
           ? `${thread.agent}_thread_status_mismatch`

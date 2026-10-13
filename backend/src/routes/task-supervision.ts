@@ -109,6 +109,16 @@ export function createTaskSupervisionRouter(service: TaskSupervisionService) {
       report(error, res);
     }
   });
+  router.get("/:id/decisions", async (req, res) => {
+    const parsed = z.object({ cursor: z.string().regex(/^[1-9]\d*$/).optional(), limit: z.coerce.number().int().min(1).max(50).default(20) }).strict().safeParse(req.query);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid history query" }); return; }
+    try { res.json(await service.decisions(req.params.id, parsed.data.cursor, parsed.data.limit)); }
+    catch (error) { report(error, res); }
+  });
+  router.get("/:id/decisions/:decisionId", async (req, res) => {
+    try { res.json(await service.decision(req.params.id, req.params.decisionId)); }
+    catch (error) { report(error, res); }
+  });
   router.get("/:id", async (req, res) => {
     try {
       res.json(await service.get(req.params.id));

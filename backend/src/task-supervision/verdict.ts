@@ -1,14 +1,14 @@
+import { supervisionDecisionSummary } from "@runweave/shared/task-supervision";
 import type {
   SupervisionDecision,
+  SupervisionDecisionSummary,
   SupervisionHookResponse,
   TaskWatch,
 } from "@runweave/shared/task-supervision";
 /** The same classifier evidence drives the UI reason and the action sent to the original Agent. */
-export function continuationPrompt(watch: TaskWatch, decision: SupervisionDecision) {
+export function continuationPrompt(watch: TaskWatch, decision: SupervisionDecisionSummary) {
   const guidance = decision.guidance;
-  const prior = watch.decisions.filter((item) => item.decisionId !== decision.decisionId &&
-    item.contextRevision === decision.contextRevision && item.threadId === decision.threadId &&
-    item.delivery === "observed").length;
+  const prior = watch.observedContinuationCount ?? 0;
   return [
     `[runweave-task-supervision:${decision.decisionId}]`,
     "继续执行用户已授权的剩余工作并完成必要验证。已有授权持续有效；不以汇报或重复确认代替执行。用户最新范围、只读/等待确认/停止、真实审批及人类接管保护优先。",
@@ -29,7 +29,8 @@ export function applyVerdict(
   decision: SupervisionDecision,
   canDeliver = true,
 ): SupervisionHookResponse {
-  watch.decisions.push(decision);
+  const summary = supervisionDecisionSummary(decision);
+  watch.decisions = [summary];
   watch.outcome = decision.outcome;
   watch.revision++;
   watch.updatedAt = decision.createdAt;
@@ -37,10 +38,12 @@ export function applyVerdict(
     watch.status = "watching";
     return { action: "allow-stop" };
   }
-  return reserveContinuation(watch, decision, canDeliver);
+  const offer = reserveContinuation(watch, summary, canDeliver);
+  Object.assign(decision, summary);
+  return offer;
 }
 
-export function reserveContinuation(watch: TaskWatch, decision: SupervisionDecision, canDeliver = true): SupervisionHookResponse {
+export function reserveContinuation(watch: TaskWatch, decision: SupervisionDecisionSummary, canDeliver = true): SupervisionHookResponse {
   if (!canDeliver) {
     watch.status = "error";
     decision.deliveryBlock = "draft_unconfirmed";

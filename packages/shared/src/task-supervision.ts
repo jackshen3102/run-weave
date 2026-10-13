@@ -57,6 +57,20 @@ export interface SupervisionDecision {
   /** Classification succeeded, but no continuation was offered because the editor state is unknown. */
   deliveryBlock?: "draft_unconfirmed" | "not_sent";
 }
+/** Current state and history pages never carry a model input snapshot. */
+export type SupervisionDecisionSummary = Omit<SupervisionDecision, "input"> & {
+  currentReplyId: string;
+  goalPreview: string;
+};
+export type SupervisionDecisionDetail = SupervisionDecisionSummary & Pick<SupervisionDecision, "input">;
+export interface SupervisionDecisionPage {
+  decisions: SupervisionDecisionSummary[];
+  nextCursor: string | null;
+}
+export function supervisionDecisionSummary(decision: SupervisionDecision): SupervisionDecisionSummary {
+  const { input, ...summary } = decision;
+  return { ...summary, currentReplyId: input.currentReply.id, goalPreview: supervisionGoalPreview(input.goal) };
+}
 export interface TaskWatch {
   watchId: string;
   /** Persistent terminal switch; target is only the most recent reply's identity. */
@@ -64,6 +78,8 @@ export interface TaskWatch {
   enabledAt: string;
   target: SupervisionTarget;
   taskStartMessageId: string;
+  /** Identity of the native source; offsets must never be reused across replacements. */
+  sourceVersion?: string;
   task: ConversationMessage;
   goal: string;
   plans: SupervisionPlan[];
@@ -87,7 +103,17 @@ export interface TaskWatch {
   lastUserMessageId?: string;
   createdAt: string;
   updatedAt: string;
-  decisions: SupervisionDecision[];
+  /** At most the latest decision in this thread. Full history has a separate paged API. */
+  decisions: SupervisionDecisionSummary[];
+  evidenceMessageIds?: string[];
+  completedReplyIds?: string[];
+  pendingReply?: {
+    kind: "reply"; eventId: string; source: "terminal" | "app-server";
+    terminalSessionId: string; panelId: string | null; threadId: string | null;
+    summary: null; createdAt: string; turnId?: string | null;
+  };
+  goalOverride?: string;
+  observedContinuationCount?: number;
 }
 export function currentSupervisionDecisions(watch: TaskWatch) {
   return watch.decisions.filter(

@@ -23,9 +23,16 @@ export function synchronizeTarget(
   ) {
     const pendingId = `pending:${randomUUID()}`;
     watch.taskStartMessageId = pendingId;
+    delete watch.sourceVersion;
     watch.task = { id: pendingId, role: "user", text: "" };
     watch.goal = "";
     watch.plans = [];
+    watch.decisions = [];
+    watch.evidenceMessageIds = [];
+    watch.completedReplyIds = [];
+    delete watch.pendingReply;
+    watch.observedContinuationCount = 0;
+    delete watch.goalOverride;
     watch.continuationCount = 0;
     watch.outcome = null;
     watch.contextRevision++;
@@ -47,7 +54,7 @@ export function synchronizeContext(
   candidates: ReturnType<typeof taskCandidates>,
   cancel?: () => void,
 ) {
-  const task = candidates[0];
+  const task = candidates.at(-1);
   const latest = candidates.at(-1);
   if (!task || !latest) return;
   const pending = watch.taskStartMessageId.startsWith("pending:");
@@ -78,19 +85,16 @@ export function synchronizeContext(
     watch.updatedAt = new Date().toISOString();
     return;
   }
-  // Older journals already contain the last observed user input in their decision snapshots.
-  const previous = [...watch.decisions]
-    .reverse()
-    .find((decision) => decision.threadId === watch.target.threadId);
-  const lastId =
-    watch.lastUserMessageId ??
-    previous?.input.userUpdates.at(-1)?.id ??
-    watch.taskStartMessageId;
+  const lastId = watch.lastUserMessageId ?? watch.taskStartMessageId;
   if (lastId === latest.id) {
     watch.lastUserMessageId = latest.id;
     return;
   }
   cancel?.();
+  watch.evidenceMessageIds = [...new Set([...(watch.evidenceMessageIds ?? []), watch.taskStartMessageId])];
+  watch.taskStartMessageId = latest.id;
+  watch.task = latest;
+  if (!watch.goalOverride) watch.goal = latest.text;
   watch.lastUserMessageId = latest.id;
   // Same-thread user input changes scope and renews the processing round, never the original task.
   updateWaitingState(watch, "userpromptsubmit", null);

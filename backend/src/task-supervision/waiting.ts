@@ -14,6 +14,7 @@ export function updateWaitingState(
     if (raw === "interrupt") watch.pauseReason = "interrupted";
     else {
       watch.continuationCount = 0;
+      watch.observedContinuationCount = 0;
       delete watch.pauseReason;
     }
   } else if (raw === "permissionrequest") watch.waitingFor = "permission";

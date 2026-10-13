@@ -7,7 +7,6 @@ import { sameTarget, synchronizeContext } from "./synchronization";
 import { taskCandidates } from "./context";
 import { SupervisionError } from "./errors";
 import { reserveContinuation } from "./verdict";
-import { recordDeliveryFailure } from "./delivery";
 import { supervisionLogger } from "./diagnostics";
 
 type Offer = Extract<SupervisionHookResponse, { action: "request-continuation" }>;
@@ -20,6 +19,7 @@ interface ContinuationOperations {
   transaction: <T>(operation: () => T | Promise<T>) => Promise<T>;
   cancel: () => void;
   closed: () => boolean;
+  failure: (decisionId: string, error: unknown, current: boolean, started: boolean) => void;
   deliver?: (target: SupervisionTarget, offer: Offer, valid: () => void) => Promise<void>;
 }
 
@@ -44,7 +44,7 @@ export async function sendSupervisionOffer(target: SupervisionTarget, offer: Off
     supervisionLogger.info("task-supervision.delivery.sent", { ...options.trace, ...target, decisionId: offer.decisionId });
   } catch (error) {
     supervisionLogger.warn("task-supervision.delivery.failed", { ...options.trace, ...target, decisionId: offer.decisionId, error });
-    await operations.transaction(() => recordDeliveryFailure(operations.watch(), offer.decisionId, error, operations.current(target), deliveryStarted));
+    await operations.transaction(() => operations.failure(offer.decisionId, error, operations.current(target), deliveryStarted));
   }
 }
 
@@ -72,7 +72,7 @@ export async function retryContinuation(request: ChangeSupervisionRequest, opera
       !request.expectedInputVersion || terminalInputAdmission(session).inputVersion !== request.expectedInputVersion ||
       !decision || decision.decisionId !== request.decisionId || decision.outcome !== "continue" ||
       decision.delivery !== "not_requested" || decision.deliveryBlock !== "draft_unconfirmed" || watch.status !== "error" ||
-      latestReply?.id !== decision.input.currentReply.id || panel.terminalState?.state !== "agent_idle")
+      latestReply?.id !== decision.currentReplyId || panel.terminalState?.state !== "agent_idle")
       throw new SupervisionError("任务或输入已变化，请重新读取并核对后重试。");
     if (terminalInputAdmission(session).pendingUserInput.has(null) && panel.tmuxPaneId != null)
       throw new SupervisionError("存在无法定位面板的输入，请在原终端提交后继续。", 422);

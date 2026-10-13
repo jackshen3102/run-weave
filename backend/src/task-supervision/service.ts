@@ -1,3 +1,4 @@
+import { discoverSupervision } from "./discovery";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { setting, settingText } from "@runweave/config-node";
@@ -19,17 +20,17 @@ import { completionReply, supervisionEvent, type ReplyEvent } from "./events";
 import { updateWaitingState } from "./waiting";
 import {
   sameTarget,
-  synchronizeWatch,
+  synchronizeTarget,
   synchronizeContext,
+  synchronizeWatch,
 } from "./synchronization";
+import { AppServerConversationError } from "../app-server/client";
 import { readFinalReply, alreadyProcessedReply } from "./reply";
 import {
   hasPendingTerminalInput,
   terminalInputAdmission,
 } from "../terminal/runtime/input-admission";
 import { resolveSupervisionTarget } from "./target";
-import { readCodexThreadSnapshot } from "../terminal/runtime/codex-thread-snapshot";
-import { getTerminalSessionAgent } from "../terminal/state/terminal-state-service";
 import { SupervisionError } from "./errors";
 export { SupervisionError } from "./errors";
 import {
@@ -37,10 +38,12 @@ import {
   digest,
   refreshReferencedPlans,
   taskCandidates,
+  readWatchContext,
 } from "./context";
 import { TaskSupervisionClassifier } from "./classifier";
 import {
   reconcileDelivery,
+  recordArchivedDeliveryFailure,
   readPendingDeliveries,
 } from "./delivery";
 import { applyVerdict } from "./verdict";
@@ -58,6 +61,7 @@ import {
   TaskSupervisionStore,
   findTerminalWatch,
   type SupervisionJournal,
+  type ArchiveChange,
 } from "./store";
 
 const ALLOW: SupervisionHookResponse = { action: "allow-stop" };
@@ -74,6 +78,7 @@ export class TaskSupervisionService {
     watches: [],
     requests: {},
   };
+  private additions: ArchiveChange[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private readonly jobs = new SupervisionJobs();
   private readonly eventQueues = new Map<string, Promise<void>>();
@@ -139,9 +144,12 @@ export class TaskSupervisionService {
       const before = structuredClone(this.journal);
       let result: T;
       try {
+        this.additions = [];
         result = await operation();
-        await this.store.save(this.journal);
+        await this.store.save(this.journal, this.additions);
+        this.additions = [];
       } catch (error) {
+        this.additions = [];
         this.journal = before;
         throw error;
       }
@@ -176,59 +184,22 @@ export class TaskSupervisionService {
     if (!watch) throw new SupervisionError("监控不存在。", 404);
     return watch;
   }
-  private synchronize(id: string, target: SupervisionTarget) {
-    return synchronizeWatch(target, {
-      watch: () => this.find(id),
-      current: () => this.current(target),
-      update: (change) => this.transaction(() => change(this.find(id))),
-      cancel: () => this.jobs.cancel(id),
-      read: (thread) => this.history.getConversation(thread),
-    });
-  }
-  async discover(
-    terminalSessionId: string,
-    panelId?: string | null,
-    _expectedThreadId?: string,
-  ): Promise<SupervisionDiscovery> {
-    void _expectedThreadId;
-    await this.ready;
-    await this.queue;
-    let watch = this.forTerminal(terminalSessionId) ?? null;
-    let target: SupervisionTarget;
-    try {
-      target = this.resolve(terminalSessionId, panelId).target;
-    } catch (error) {
-      return structuredClone({
-        target: null,
-        watch,
-        capability: { supported: false, reason: (error as Error).message },
-        taskCandidates: [],
+  private async synchronize(id: string, target: SupervisionTarget) {
+    if (!sameTarget(this.find(id).target, target))
+      await this.transaction(() => {
+        if (this.current(target)) synchronizeTarget(this.find(id), target, () => this.jobs.cancel(id));
       });
-    }
-    const panel = this.manager.getPanel(target.panelId);
-    const titlePromise = watch?.enabled && target.threadId && panel &&
-      getTerminalSessionAgent(panel) === "codex"
-      ? readCodexThreadSnapshot(target.threadId).then((snapshot) => snapshot.name).catch(() => null)
-      : Promise.resolve(null);
-    const candidates = watch
-      ? await this.synchronize(watch.watchId, target)
-      : target.threadId
-        ? await this.history
-            .getConversation(target.threadId)
-            .then(taskCandidates)
-            .catch(() => [])
-        : [];
-    const threadTitle = await titlePromise;
-    watch = this.forTerminal(terminalSessionId) ?? null;
-    return structuredClone({
-      target,
-      watch,
-      threadTitle: watch?.enabled && sameTarget(watch.target, target) && this.current(target)
-        ? threadTitle : null,
-      inputVersion: terminalInputAdmission(this.manager.getSession(terminalSessionId)!).inputVersion,
-      capability: { supported: true },
-      taskCandidates: candidates,
-    });
+    return [];
+  }
+  private readContext(id: string, threadId: string) {
+    return readWatchContext(this.find(id), threadId, (thread, ids) => this.history.getSupervisionContext(thread, ids));
+  }
+  async discover(terminalSessionId: string, panelId?: string | null, _expectedThreadId?: string): Promise<SupervisionDiscovery> {
+    void _expectedThreadId;
+    await this.ready; await this.queue;
+    return discoverSupervision(this.manager, terminalSessionId, panelId,
+      () => this.forTerminal(terminalSessionId) ?? null,
+      (id, target) => this.synchronize(id, target));
   }
   async get(id: string) {
     await this.ready;
@@ -236,11 +207,23 @@ export class TaskSupervisionService {
     return structuredClone(this.find(id));
   }
 
+  async decisions(id: string, cursor?: string, limit = 20) {
+    await this.get(id);
+    return this.store.page(id, cursor, limit);
+  }
+  async decision(id: string, decisionId: string) {
+    await this.get(id);
+    const decision = this.store.detail(id, decisionId);
+    if (!decision) throw new SupervisionError("判断记录不存在。", 404);
+    return decision;
+  }
+
   private watchControls() {
     return {
       find: (id: string) => this.find(id),
       resolve: (terminalSessionId: string) => this.resolve(terminalSessionId),
       cancel: (id: string) => this.jobs.cancel(id),
+      receipt: (id: string) => this.store.receipt(id),
     };
   }
   async start(request: StartSupervisionRequest): Promise<TaskWatch> {
@@ -254,24 +237,21 @@ export class TaskSupervisionService {
   private continuationOperations(id: string) {
     return {
       get: () => this.get(id), watch: () => this.find(id), manager: this.manager,
-      read: (thread: string) => this.history.getConversation(thread),
+      read: (thread: string) => this.readContext(id, thread),
       current: (target: SupervisionTarget) => this.current(target),
       transaction: <T>(operation: () => T | Promise<T>) => this.transaction(operation),
       cancel: () => this.jobs.cancel(id), closed: () => this.closed,
+      failure: (decisionId: string, error: unknown, current: boolean, started: boolean) => recordArchivedDeliveryFailure(this.find(id), this.store, this.additions, decisionId, error, current, started),
       deliver: this.deliver,
     };
   }
   /** Old installations may still invoke the separate Hook endpoint. It never classifies or delivers. */
-  async hook(
-    _request: SupervisionHookRequest,
-  ): Promise<SupervisionHookResponse> {
+  async hook(_request: SupervisionHookRequest): Promise<SupervisionHookResponse> {
     void _request;
     return ALLOW;
   }
   async validOffer(_id: string, _decisionId: string, _revision: number) {
-    void _id;
-    void _decisionId;
-    void _revision;
+    void [_id, _decisionId, _revision];
     return false;
   }
 
@@ -305,7 +285,7 @@ export class TaskSupervisionService {
     } catch {
       return;
     }
-    if (observed.raw === "interrupt") this.jobs.cancel(watch.watchId);
+    if (observed.raw === "interrupt" || (observed.raw === "userpromptsubmit" && !observed.native)) this.jobs.cancel(watch.watchId);
     if (
       ["sessionstart", "userpromptsubmit"].includes(observed.raw) ||
       !sameTarget(watch.target, target)
@@ -313,7 +293,15 @@ export class TaskSupervisionService {
       await this.synchronize(watch.watchId, target);
     // Native running observations also cover automatic supervision turns. Only a new
     // ordinary user message (above) advances the round; duplicate Hook/native events do not.
-    if (["sessionstart", "userpromptsubmit"].includes(observed.raw)) return;
+    if (["sessionstart", "userpromptsubmit"].includes(observed.raw)) {
+      if (!observed.native) await this.transaction(() => { delete this.find(watch.watchId).pendingReply; });
+      await synchronizeWatch(target, {
+        watch: () => this.find(watch.watchId), current: () => this.current(target),
+        update: (change) => this.transaction(() => change(this.find(watch.watchId))),
+        cancel: () => this.jobs.cancel(watch.watchId), read: (thread) => this.readContext(watch.watchId, thread),
+      });
+      return;
+    }
     await this.transaction(() => {
       const current = this.find(watch.watchId);
       if (
@@ -378,6 +366,9 @@ export class TaskSupervisionService {
       return;
     }
     await this.synchronize(watch.watchId, target);
+    await this.transaction(() => {
+      if (this.current(target)) this.find(watch.watchId).pendingReply = { ...event, summary: null };
+    });
     const session = this.manager.getSession(target.terminalSessionId)!;
     const inputRevision = terminalInputAdmission(session).revision;
     const controller = new AbortController();
@@ -407,8 +398,9 @@ export class TaskSupervisionService {
       supervisionLogger.info("task-supervision.reply.skipped", { ...trace, reason });
     supervisionLogger.info("task-supervision.reply.started", trace);
     try {
+      if (event.error) throw new Error(`${event.error.code}: ${event.error.message}`);
       const { source, messages, native } = await readFinalReply(
-        () => this.history.getConversation(target.threadId),
+        () => this.readContext(id, target.threadId),
         event,
         controller.signal,
       );
@@ -425,16 +417,19 @@ export class TaskSupervisionService {
           return null;
         }
         synchronizeContext(w, taskCandidates(source));
+        w.sourceVersion = source.sourceVersion;
         const latestUser = taskCandidates(source).at(-1);
         if (
           w.pauseReason === "interrupted" ||
           (latestUser &&
             messages.indexOf(latestUser) > messages.indexOf(native!))
         ) {
+          delete w.pendingReply;
           skip("interrupted_or_new_user_input");
           return null;
         }
-        if (alreadyProcessedReply(w, target.threadId, native)) {
+        if (alreadyProcessedReply(w, target.threadId, native) || this.store.processed(id, target.threadId, native.id, native.rawTurnId ?? native.id)) {
+          delete w.pendingReply;
           skip("duplicate_reply");
           return null;
         }
@@ -489,12 +484,20 @@ export class TaskSupervisionService {
           !w.enabled ||
           w.revision !== revision ||
           controller.signal.aborted ||
-          !this.current(target)
+          !this.current(target) ||
+          terminalInputAdmission(this.manager.getSession(target.terminalSessionId)!).revision !== inputRevision
         ) {
+          if (w.pendingReply?.eventId === event.eventId) delete w.pendingReply;
+          if (w.revision === revision && w.status === "classifying") w.status = "watching";
           skip("classification_superseded");
           return ALLOW;
         }
         w.plans = snapshot.plans;
+        delete w.pendingReply;
+        w.evidenceMessageIds = [...new Set([input.task.id, ...result.sourceMessageIds, ...result.guidance.authorizationMessageIds])];
+        if (result.outcome === "completed") w.completedReplyIds = [...new Set([...(w.completedReplyIds ?? []), reply.id])];
+        if (new Set([...(w.evidenceMessageIds ?? []), ...(w.completedReplyIds ?? [])]).size > 63)
+          throw new Error("当前会话必要证据引用超过预算；本次未自动继续，监听保持开启。");
         // A failed classification is not a processed reply. Commit the cursor with the decision.
         w.lastFinalMessageId = finalKey;
         const decision = {
@@ -512,6 +515,7 @@ export class TaskSupervisionService {
         const session = this.manager.getSession(target.terminalSessionId)!;
         const paneId =
           this.manager.getPanel(target.panelId)?.tmuxPaneId ?? null;
+        this.additions.push({ watchId: id, decision });
         return applyVerdict(
           w,
           decision,
@@ -538,6 +542,7 @@ export class TaskSupervisionService {
           (revision !== undefined && w.revision !== revision)
         )
           return;
+        if (!(error instanceof AppServerConversationError && error.code === "CONTEXT_INDEXING")) delete w.pendingReply;
         w.status = "error";
         w.revision++;
         w.error = (
@@ -565,9 +570,10 @@ export class TaskSupervisionService {
       } catch {
         // An unavailable/exited Agent does not turn off the terminal switch.
       }
+      if (saved.pendingReply && saved.enabled && !this.eventQueues.has(saved.target.terminalSessionId)) this.enqueueReply(saved.pendingReply);
       await readPendingDeliveries(
         saved,
-        (threadId) => this.history.getConversation(threadId),
+        (threadId) => this.readContext(saved.watchId, threadId),
         (messages, threadId) =>
           this.transaction(() => {
             reconcileDelivery(
@@ -589,5 +595,6 @@ export class TaskSupervisionService {
     await Promise.allSettled(this.eventQueues.values());
     await this.queue;
     await this.maintenance;
+    this.store.close();
   }
 }

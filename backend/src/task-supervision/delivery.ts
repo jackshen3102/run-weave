@@ -1,6 +1,14 @@
 import type { ConversationMessage } from "@runweave/shared/terminal/conversation";
 import type { ConversationContent } from "@runweave/shared/terminal/conversation";
-import type { TaskWatch } from "@runweave/shared/task-supervision";
+import type { TaskWatch, SupervisionDecisionSummary } from "@runweave/shared/task-supervision";
+import type { TaskSupervisionStore, ArchiveChange } from "./store";
+
+export function recordArchivedDeliveryFailure(watch: TaskWatch, store: TaskSupervisionStore, additions: ArchiveChange[],
+  decisionId: string, error: unknown, current: boolean, started: boolean) {
+  const archived = store.summary(watch.watchId, decisionId);
+  recordDeliveryFailure(watch, decisionId, error, current, started, archived);
+  if (archived) additions.push({ watchId: watch.watchId, decision: archived });
+}
 
 export function recordDeliveryFailure(
   watch: TaskWatch,
@@ -8,8 +16,10 @@ export function recordDeliveryFailure(
   error: unknown,
   current: boolean,
   deliveryStarted = true,
+  archived?: SupervisionDecisionSummary,
 ) {
-  const decision = watch.decisions.find((d) => d.decisionId === decisionId)!;
+  const decision = watch.decisions.find((d) => d.decisionId === decisionId) ?? archived;
+  if (!decision) return;
   const reserved = decision.delivery === "offered";
   decision.delivery = deliveryStarted ? "unknown" : "not_requested";
   if (!deliveryStarted) {
@@ -48,6 +58,7 @@ export function reconcileDelivery(
       )
     ) {
       decision.delivery = "observed";
+      if (current) watch.observedContinuationCount = (watch.observedContinuationCount ?? 0) + 1;
     } else {
       if (now > decision.deliveryDeadline) decision.delivery = "unknown";
       if (current) {
@@ -86,7 +97,7 @@ export async function readPendingDeliveries(
 ) {
   const threads = new Set(
     watch.decisions
-      .filter((d) => ["offered", "unknown"].includes(d.delivery))
+      .filter((d) => d.threadId === watch.target.threadId && d.contextRevision === watch.contextRevision && ["offered", "unknown"].includes(d.delivery))
       .map((d) => d.threadId ?? watch.target.threadId),
   );
   for (const threadId of threads) {

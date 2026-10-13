@@ -1,3 +1,4 @@
+import { SupervisionHistory } from "./history";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import type {
@@ -178,14 +179,6 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
                   ? supervisionGoalPreview(watch.goal)
                   : "等待新会话的用户任务，目标将自动读取。"}
               </p>
-              {watch.goal && (
-                <details className="mt-2 text-xs text-slate-400">
-                  <summary>查看原始任务</summary>
-                  <p className="mt-2 whitespace-pre-wrap break-words leading-6">
-                    {watch.goal}
-                  </p>
-                </details>
-              )}
             </div>
             <div className="rounded border border-slate-800 bg-slate-900 p-3">
               <p className="text-xs">
@@ -245,7 +238,7 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
                     </div>
                   ),
                 )}
-                <SupervisionDecisionDetails decision={decision} />
+                <SupervisionDecisionDetails key={decision.decisionId} watchId={watch.watchId} decision={decision} />
               </div>
             )}
             <details className="text-[11px] leading-6 text-slate-500">
@@ -257,18 +250,8 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
                 <br />
                 更新于 {new Date(watch.updatedAt).toLocaleString()}
               </p>
-              {watch.decisions.map((d) => (
-                <p key={d.decisionId}>
-                  {d.contextRevision === watch.contextRevision &&
-                  d.threadId === watch.target.threadId
-                    ? "当前轮"
-                    : "历史轮次"}{" "}
-                  · {supervisionGoalPreview(d.input.goal)} ·
-                  {new Date(d.createdAt).toLocaleTimeString()} ·{" "}
-                  {labels[d.outcome]} · {d.delivery}
-                </p>
-              ))}
             </details>
+            <SupervisionHistory key={watch.watchId} watchId={watch.watchId} />
           </>
         )}
       </div>

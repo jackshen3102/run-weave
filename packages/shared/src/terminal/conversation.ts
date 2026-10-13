@@ -43,3 +43,12 @@ export interface ConversationTarget {
 export interface TerminalConversationResponse extends ConversationContent {
   target: ConversationTarget | null;
 }
+
+/** Bounded semantic projection for monitoring; never a replacement for the full conversation UI. */
+export interface SupervisionConversationResponse extends AppServerConversationResponse {
+  indexing: boolean;
+  sourceVersion?: string;
+  scannedBytes?: number;
+  sourceBytes?: number;
+  runtimeError?: { turnId?: string; code: string; message: string };
+}

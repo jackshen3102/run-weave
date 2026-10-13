@@ -1,3 +1,4 @@
+import type { SupervisionConversationReader } from "./supervision-reader.js";
 import type { AppServerThreadRef } from "@runweave/shared/app-server-events";
 import type { AppServerConversationResponse } from "@runweave/shared/terminal/conversation";
 import type { CodexConversationReader } from "../codex/conversation-reader.js";
@@ -5,7 +6,13 @@ import type { PiSessionReader } from "../pi/session-reader.js";
 import { ConversationReadError } from "./conversation-source.js";
 
 export class ConversationReader {
-  constructor(private readonly codex: CodexConversationReader, private readonly pi: PiSessionReader) {}
+  constructor(private readonly codex: CodexConversationReader, private readonly pi: PiSessionReader, private readonly supervision?: SupervisionConversationReader) {}
+
+  async readSupervision(thread: AppServerThreadRef | { agent: "codex"; threadId: string }, requiredIds: string[]) {
+    if (thread.agent !== "codex") return { ...await this.read(thread), indexing: false };
+    if (!this.supervision) throw new ConversationReadError(503, "SUPERVISION_READER_UNAVAILABLE", "监控读取服务尚未初始化");
+    return this.supervision.read(thread.threadId, requiredIds);
+  }
 
   // Codex verifies identity from its controlled rollout source; Pi needs its registered context.
   async read(thread: AppServerThreadRef | { agent: "codex"; threadId: string }, signal?: AbortSignal): Promise<AppServerConversationResponse> {
