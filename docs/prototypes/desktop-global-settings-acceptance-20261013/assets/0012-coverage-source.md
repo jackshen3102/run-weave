@@ -1,6 +1,6 @@
 # 桌面全局设置实现核对
 
-2026-10-12，wt-1 的实际实现与临时验收记录；这不是独立原型的模拟结果，也不表示所有领域用例都已通过。长期边界见[全局设置](../../../frontend/docs/global-settings.md)，原型历史清单见[逐页功能保留清单](../../prototypes/global-settings/feature-preservation.md)。
+2026-10-12，wt-1 的实际实现与临时验收记录；这不是独立原型的模拟结果，也不表示所有领域用例都已通过。长期边界见[全局设置](../../../../frontend/docs/global-settings.md)，原型历史清单见[逐页功能保留清单](../../global-settings/feature-preservation.md)。
 
 ## 本次实现
 
@@ -35,16 +35,16 @@
 
 ## 验证证据
 
-[verification.json](verification.json) 包含结果和边界。新增 DGS-001 至 DGS-007 的 7 项 required 均已在 Electron 候选构建 `dvs-79dc43`（Beta pool-04）执行通过：全窗 20 次页面／尺寸检查、原快捷交互、工作区保活、A/B 隔离、草稿保护、路由恢复和原生 Browser 输入命中。A/B 使用另一个自有 `dvs-691339`（Beta pool-03）；手机 UI 和随记草稿的先前证据来自同一实现过程中的 `dvs-5ba2e1`。没有将旧原型断言算入这些结果。最后补充了「终端条件工具不能计入最后一项保障」的保护，重新构建并在 `dvs-46bbe7`（pool-04）确认实际加载的 bundle 含该条件，重跑 20 次布局检查和该保护／偏好恢复。
+[verification.json](../../../review/desktop-global-settings/verification.json) 包含结果和边界。新增 DGS-001 至 DGS-007 的 7 项 required 均已在 Electron 候选构建 `dvs-79dc43`（Beta pool-04）执行通过：全窗 20 次页面／尺寸检查、原快捷交互、工作区保活、A/B 隔离、草稿保护、路由恢复和原生 Browser 输入命中。A/B 使用另一个自有 `dvs-691339`（Beta pool-03）；手机 UI 和随记草稿的先前证据来自同一实现过程中的 `dvs-5ba2e1`。没有将旧原型断言算入这些结果。最后补充了「终端条件工具不能计入最后一项保障」的保护，重新构建并在 `dvs-46bbe7`（pool-04）确认实际加载的 bundle 含该条件，重跑 20 次布局检查和该保护／偏好恢复。
 
-Browser 原生合成窗口观察：设置中的原生点击不会命中测试网页（计数 0）；返回后原 Profile、Tab、URL、偏好和驻留 Tab 数保持，原生点击计数变为 1。见[协议与原生记录](native-browser.json)。
+Browser 原生合成窗口观察：设置中的原生点击不会命中测试网页（计数 0）；返回后原 Profile、Tab、URL、偏好和驻留 Tab 数保持，原生点击计数变为 1。见[协议与原生记录](../../../review/desktop-global-settings/native-browser.json)。
 
 前端构建与 lint、Shared/Electron 类型检查、Electron lint、架构检查通过；循环依赖、违规跨层依赖和超过 600 行文件均为 0。两个 YAML 格式、文档检查、diff 空白检查另在收尾记录。未新增单元测试。
 
-真实 Electron DEV 截图：[最终全屏设置](native-final-settings.png)、[Browser 避让过程](native-settings.png)、[默认模型](final-models.png)、[恢复工作区](native-browser-restored.png)、[浅色主题](final-light.png)、[SSH 冲突](ssh-conflict.png)、[日志保存](final-logs.png)、[开发资源](final-dev-resources.png)。截图不是对应领域全部状态通过的替代证明。
+真实 Electron DEV 截图：[最终全屏设置](../../../review/desktop-global-settings/native-final-settings.png)、[Browser 避让过程](../../../review/desktop-global-settings/native-settings.png)、[默认模型](../../../review/desktop-global-settings/final-models.png)、[恢复工作区](../../../review/desktop-global-settings/native-browser-restored.png)、[浅色主题](../../../review/desktop-global-settings/final-light.png)、[SSH 冲突](../../../review/desktop-global-settings/ssh-conflict.png)、[日志保存](../../../review/desktop-global-settings/final-logs.png)、[开发资源](../../../review/desktop-global-settings/final-dev-resources.png)。截图不是对应领域全部状态通过的替代证明。
 
 ## 尚未执行的领域验收
 
 实际 SSH／中转／RemoteDesk 链路、真实 iPhone 扫码、随记真实账户恢复／登录／退出、密码修改提交、真实进程结束与资源释放，以及已有各领域测试计划的全部 required 矩阵仍未执行。最小依赖分别是执行者可用的 SSH 目标与端口、可用且解锁的 iPhone、测试账户，以及明确属于验收的可处置资源。这些缺口不以保留旧入口或源码复用冒充通过。
 
-未更新 Stable、安装 iOS、创建提交或 PR。已停止成功启动的自有 Session；启动失败的 `dvs-400807` 仍为 stale，CLI 因 Beta 所有权信息不完整拒绝 stop／cleanup-stale。其原自有 App Server PID 已不在运行；没有强制停止恢复后的 pool-02 窗口、删除 lease 或处理其他任务资源。本轮 Dev Session 生命周期清理见[verification.json](verification.json)中的 cleanup。
+未更新 Stable、安装 iOS、创建提交或 PR。已停止成功启动的自有 Session；启动失败的 `dvs-400807` 仍为 stale，CLI 因 Beta 所有权信息不完整拒绝 stop／cleanup-stale。其原自有 App Server PID 已不在运行；没有强制停止恢复后的 pool-02 窗口、删除 lease 或处理其他任务资源。本轮 Dev Session 生命周期清理见[verification.json](../../../review/desktop-global-settings/verification.json)中的 cleanup。
