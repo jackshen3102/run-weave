@@ -1,6 +1,6 @@
 # 逐页功能保留清单
 
-历史原型记录。生产设置已另行接入，当前边界见[全局设置](../../../frontend/docs/global-settings.md)，本次实施证据见[实现核对](../../review/desktop-global-settings/README.md)。下述数据仍是原型阶段的证据。
+历史原型记录。生产设置已另行接入，当前边界见[全局设置](../../../frontend/docs/global-settings.md)，本次实施证据见[实现核对](../desktop-global-settings-acceptance-20261013/assets/0012-coverage-source.md)。下述数据仍是原型阶段的证据。
 
 2026-10-12 原型审查结果。已完成下列 **10 个页面、18 个功能分区**的源码核对，并补齐清单中发现的原型交互缺项。**这代表原型的控件与状态覆盖，不代表生产功能等价验收通过。** 没有修改生产页面，也没有接入真实服务。
 

@@ -38,15 +38,18 @@
 原生 iOS 使用[手机专项计划](./app/ios-development-resources.testplan.yaml)，
 产品边界见[开发资源合同](../architecture/development-resources.md)。
 
-## 桌面全局设置的待实现合同
+## 桌面全局设置与管理导航合同
 
-[桌面全局设置计划](./platform/desktop-global-settings.testplan.yaml)是待实现的验收合同，
-不是已上线功能或通过记录。其边界为无搜索的全屏 10 页、原快捷图标、工作区保活、
+桌面全局设置已接入现有领域组件，当前导航与作用域见
+[全局设置](../../frontend/docs/global-settings.md)。
+[桌面全局设置计划](./platform/desktop-global-settings.testplan.yaml)覆盖无搜索的全屏 10 页、原快捷图标、工作区保活、
 独立设置目标、迟到响应隔离、草稿离开保护、路由回退及原生 Browser 让位与恢复。
+[管理外壳计划](./platform/management-shell.testplan.yaml)另覆盖全部管理页面及深层详情的统一侧栏、
+左上角唯一出口、会话目标准备和紧凑窗口；页面可达不等于业务验收通过。
 设计对照见[第五版原型](../prototypes/global-settings/README.md)与
 [18 个功能分区清单](../prototypes/global-settings/feature-preservation.md)；原型数据和模拟成功不能替代真实服务证据。
 
-生产实现须复用既有领域服务、配置存储与权限，不复制原型模拟逻辑。设置目标与工作区连接分离；
+生产实现复用既有领域服务、配置存储与权限，不复制原型模拟逻辑。设置目标与工作区连接分离；
 本台、账户和所选电脑分别保有归属。不得借此重构扩大配置 HTTP 允许列表、修改认证协议、
 迁移 Browser 配置或调整原生 iOS 导航。保存、进程采用和跨端结果分别取证，未知结果先核对原请求。
 
@@ -54,7 +57,17 @@ SSH、手机登录、配置、模型、资源及运行状态还须执行各领�
 18 分区逐字段、操作、权限和异常状态有真实证据前，不移除旧功能入口；回滚不重置用户配置。
 代码阶段拆分与原文件建议仅保留在
 [历史实施计划](https://github.com/jackshen3102/run-weave/blob/aa0d9b7cc0e0cc5aa3cf04f27976c052a931d4f4/docs/plans/2026-10-12-desktop-global-settings.md)，
-不作为当前实现事实。文档整理只维护上述边界，未执行生产用例。
+不作为当前实现事实。历史设置导航证据见[验收画廊](../prototypes/desktop-global-settings-acceptance-20261013/index.html)，
+其中 DGS-001 至 DGS-007 的通过记录不代表 SSH、真机扫码、账户、密码修改、进程操作
+或资源释放的完整领域矩阵已通过。本轮文档整理未重跑产品验收。
+
+## 长任务监控有界上下文
+
+[有界上下文计划](./terminal/task-supervision-bounded-context.testplan.yaml)覆盖热状态与历史档案分离、
+原始来源回读、冷索引分片、预算限制、迁移及跨端按需读取；当前实现与升级边界见
+[任务监控架构](../architecture/terminal-task-supervision.md)。全部用例的端到端记录、
+进程终止故障注入、跨端真实业务流和旧分类策略逐项对照仍需独立取证。
+历史合成数据、受控接口和部分分类语料的验证不能替代这些结果；本轮未重跑。
 
 ## 验证
 
