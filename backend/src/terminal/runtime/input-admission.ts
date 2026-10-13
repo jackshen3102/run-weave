@@ -13,6 +13,8 @@ export class TerminalInputBusyError extends Error {
 
 interface InputAdmission {
   revision: object;
+  /** Actual input changes, excluding Agent state/thread metadata refreshes. */
+  inputWriteRevision: object;
   pendingUserInput: Set<string | null>;
   inputVersion: string;
   edits: Map<string | null, object>;
@@ -37,7 +39,7 @@ export function terminalInputAdmission(
 ): InputAdmission {
   let admission = admissions.get(session);
   if (!admission) {
-    admission = { revision: {}, inputVersion: randomUUID(), pendingUserInput: new Set(), edits: new Map(), submissions: new Map(), writers: 0, returning: false };
+    admission = { revision: {}, inputWriteRevision: {}, inputVersion: randomUUID(), pendingUserInput: new Set(), edits: new Map(), submissions: new Map(), writers: 0, returning: false };
     admissions.set(session, admission);
   }
   return admission;
@@ -70,6 +72,7 @@ function recordInputIntent(session: TerminalSessionRecord, paneId: string | null
   if (intent.kind === "browse") return;
   const admission = terminalInputAdmission(session);
   inputObservers.get(session)?.();
+  admission.inputWriteRevision = {};
   invalidateTerminalInput(session);
   if (intent.kind === "interrupt") return;
   const alreadyPending = admission.pendingUserInput.has(paneId);
@@ -161,7 +164,7 @@ export function beginTextAttachmentDelivery(
     throw new TerminalInputBusyError();
   if (!supervisor) {
     recordInputIntent(session, paneId, { kind: "edit", source: "text-attachment", submit });
-  }
+  } else admission.inputWriteRevision = {};
   admission.returning = true;
   invalidateTerminalInput(session);
   const queue: Array<() => Promise<void>> = [];

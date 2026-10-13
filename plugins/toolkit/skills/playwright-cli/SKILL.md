@@ -29,7 +29,8 @@ rules.
 ## Choose the browser target first
 
 - For the current Runweave Terminal Browser, when
-  `PLAYWRIGHT_MCP_CDP_ENDPOINT` is non-empty, attach to that endpoint. Do not
+  `PLAYWRIGHT_MCP_CDP_ENDPOINT` is non-empty, resolve the Profile first and attach
+  to the resolver-returned endpoint (not the raw environment value). Do not
   run `playwright-cli open`; `open` navigates the active page and can replace a
   user's current URL with `about:blank`.
 - For a Runweave Dev Session, resolve the requested surface through
@@ -45,7 +46,7 @@ existing tabs, and detach instead of closing the browser when finished. Pass
 otherwise the resolver applies Worktree binding and then the global default.
 
 ```bash
-RW_BROWSER_RESOLUTION="$(rw browser profile resolve --json)"
+RW_BROWSER_RESOLUTION="$("${RUNWEAVE_CLI_BIN:-rw}" browser profile resolve --json)"
 RW_BROWSER_PROFILE="$(printf '%s' "$RW_BROWSER_RESOLUTION" | jq -r .profileId)"
 RW_BROWSER_CDP_ENDPOINT="$(printf '%s' "$RW_BROWSER_RESOLUTION" | jq -r .cdpEndpoint)"
 RW_PLAYWRIGHT_SESSION="runweave-${RUNWEAVE_TERMINAL_SESSION_ID:-terminal-browser}-${RW_BROWSER_PROFILE}"
@@ -66,6 +67,28 @@ defaults to the user's default context. This does not remove the lower-fidelity
 CDP boundary or browser-version skew. Prove Trace, HAR, screencast, downloads,
 and other advanced capabilities on the exact Runweave surface before claiming
 support; a successful attach or snapshot proves only that exercised path.
+
+## Scheduled tasks and browser assistance
+
+Runweave's right-side Browser is its Terminal Browser CDP surface, not Computer
+Use's `iab`. `Browser is not available: iab` says nothing about the Runweave
+surface. Do not switch to standalone Chrome because a group has no target;
+resolve the Profile first to create/wake that group's page. A scoped CDP
+connection also initializes an empty group without navigating existing tabs.
+
+A background run has `RUNWEAVE_SCHEDULED_TASK_RUN_ID` but no terminal identity.
+Keep its resolved `browser-group-scheduled-<runId>`; never borrow another
+terminal ID. If user login/input is needed, identify the actual target in that
+Profile/Group, detach, and run `${RUNWEAVE_CLI_BIN:-rw} browser assist request
+--browser-profile <resolved 1|2|3> --group-id <resolved-group>
+--target-id <actual-target-id> --reason "<specific user action>" --json`.
+In background mode this command validates the target and returns a **draft final
+blocked result**, not a persisted request. Return that JSON as the task's final
+result and stop browser interaction; the scheduler persists `recovery.browser`.
+The user can prepare/open the original conversation from the run record, then
+use the Terminal's existing assistance card to open the page and return control.
+Restored terminals retain the scheduled browser group. Use the returned Profile
+and target on resume; do not replay old clicks or assume login succeeded.
 
 ## Runweave page-provided tools
 

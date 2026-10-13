@@ -124,7 +124,9 @@ export async function runCli(
       return 0;
     }
     if (group === "browser") {
-      await runBrowserCommand(subcommand, args, io);
+      // Global instance arguments are already bound by withConfigurationArguments.
+      // Browser commands validate their own options strictly.
+      await runBrowserCommand(subcommand, tail, io);
       return 0;
     }
     io.stderr.write(

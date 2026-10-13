@@ -1,3 +1,4 @@
+import { scheduledBrowserGroupId } from "@runweave/shared/scheduled-tasks";
 import { checkpointCodexResume } from "./codex-resume";
 import { settingText } from "@runweave/config-node";
 import { codexScheduledArgs } from "./codex-options";
@@ -230,6 +231,7 @@ export function codexScheduledEnvironment(
     ...source,
     RUNWEAVE_SCHEDULED_TASK_RUN_ID: runId,
     RUNWEAVE_PROJECT_ID: projectId,
+    RUNWEAVE_BROWSER_GROUP_ID: scheduledBrowserGroupId(runId),
   };
   for (const key of [
     "AUTH_USERNAME",
@@ -254,6 +256,7 @@ export function codexScheduledEnvironment(
   const endpoint = scopedBrowserEndpoint(
     source.PLAYWRIGHT_MCP_CDP_ENDPOINT,
     runId,
+    projectId,
   );
   if (endpoint) env.PLAYWRIGHT_MCP_CDP_ENDPOINT = endpoint;
   else delete env.PLAYWRIGHT_MCP_CDP_ENDPOINT;
@@ -263,6 +266,7 @@ export function codexScheduledEnvironment(
 function scopedBrowserEndpoint(
   raw: string | undefined,
   runId: string,
+  projectId: string,
 ): string | null {
   if (!raw?.trim()) return null;
   try {
@@ -274,7 +278,8 @@ function scopedBrowserEndpoint(
       !endpoint.port
     )
       return null;
-    endpoint.searchParams.set("groupId", `browser-group-scheduled-${runId}`);
+    endpoint.searchParams.set("groupId", scheduledBrowserGroupId(runId));
+    endpoint.searchParams.set("projectId", projectId);
     return endpoint.toString();
   } catch {
     return null;

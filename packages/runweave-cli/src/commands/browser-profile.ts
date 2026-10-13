@@ -168,7 +168,7 @@ export async function resolveBrowserProfile(
   }
   const ambient = parseAmbientEndpoint(io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT);
   const projectId = io.env.RUNWEAVE_PROJECT_ID?.trim() || null;
-  const groupId = options.groupId ?? ambient.ambientGroupId;
+  const groupId = options.groupId ?? (io.env.RUNWEAVE_BROWSER_GROUP_ID?.trim() || null) ?? ambient.ambientGroupId;
   let response: Response;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5_000);

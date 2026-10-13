@@ -1,5 +1,10 @@
 import type { ScheduledRun } from "./types";
 
+/** Tasks with automatic continuation disabled still persist each attempt's recovery. */
+export function scheduledRunRecovery(run: ScheduledRun) {
+  return run.continuation?.recovery ?? run.attempts?.at(-1)?.recovery ?? null;
+}
+
 /** Shared UI/server eligibility; terminal ownership and execution budgets remain authoritative. */
 export function scheduledReplyUnavailable(run: ScheduledRun): string | null {
   if (run.archivedAt) return "本次运行已移至历史。";
@@ -31,4 +36,9 @@ export function scheduledRecoveryNotice(run: ScheduledRun): string | null {
       ? "自动重试未开启，可在此回复后继续原会话。"
       : "没有可安全自动重试的条件，可在此回复或主动重试。";
   return null;
+}
+
+/** Stable across background attempts and terminal takeover. */
+export function scheduledBrowserGroupId(runId: string): string {
+  return `browser-group-scheduled-${runId}`;
 }

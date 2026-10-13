@@ -1,7 +1,10 @@
+import { importScheduledBrowserAssistance } from "../../services/terminal/browser-assistance";
+import { useTerminalRuntime } from "../terminal/queries/provider";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
+import { scheduledRunRecovery } from "@runweave/shared/scheduled-tasks";
 import type {
   AttachmentState,
   OpenScheduledRunResponse,
@@ -14,10 +17,12 @@ import { useManagementExit } from "../settings/edit-session";
 
 export function useOpenRun() {
   const { api, scope } = useScheduledApi();
+  const { apiBase, token } = useTerminalRuntime();
   const client = useQueryClient();
   const navigate = useNavigate();
   const managementExit = useManagementExit();
   const [prepared, setPrepared] = useState(false);
+  const [assistanceError, setAssistanceError] = useState<Error | null>(null);
   const mounted = useRef(true);
   const [attachmentState, setAttachmentState] =
     useState<AttachmentState | null>(null);
@@ -34,6 +39,7 @@ export function useOpenRun() {
       cancellation.current = new AbortController();
       const signal = cancellation.current.signal;
       setAttachmentState(null);
+      setAssistanceError(null);
       let result: OpenScheduledRunResponse;
       try {
         result = await api.open(runId);
@@ -83,6 +89,29 @@ export function useOpenRun() {
         result = { ...result, ...binding };
         setAttachmentState(binding.attachmentState);
       }
+      // Takeover is explicit. The Backend validates the saved browser binding
+      // against the recovered thread; it never trusts a client-supplied target.
+      const run = await api.run(runId, signal);
+      if (scheduledRunRecovery(run)?.browser) {
+        try {
+          await importScheduledBrowserAssistance(
+            apiBase,
+            token,
+            result.terminalSessionId,
+            runId,
+            signal,
+          );
+        } catch (error) {
+          signal.throwIfAborted();
+          // Assistance can expire independently of the original conversation.
+          // Keep the recovered Terminal reachable so the Agent can re-observe.
+          setAssistanceError(
+            new Error(
+              `会话已恢复，但浏览器协助暂不可用。请进入原会话，让 Agent 重新观察并请求协助。${error instanceof Error ? ` ${error.message}` : ""}`,
+            ),
+          );
+        }
+      }
       return result;
     },
     onSuccess: async (result) => {
@@ -107,13 +136,13 @@ export function useOpenRun() {
         throw new Error(result.error ?? "对话恢复失败，请重试。");
       const enterTerminal = () => {
         setTerminalNavigation(scope, {
-        parentProjectId: resolveTerminalParentProjectId(result.projectId),
-        projectId: result.projectId,
-        terminalSessionId: result.terminalSessionId,
-        panelId: result.panelId,
-      });
-      // Build the existing internal route from the returned identity; never follow an arbitrary URL.
-      navigate(`/terminal/${encodeURIComponent(result.terminalSessionId)}`);
+          parentProjectId: resolveTerminalParentProjectId(result.projectId),
+          projectId: result.projectId,
+          terminalSessionId: result.terminalSessionId,
+          panelId: result.panelId,
+        });
+        // Build the existing internal route from the returned identity; never follow an arbitrary URL.
+        navigate(`/terminal/${encodeURIComponent(result.terminalSessionId)}`);
       };
       if (managementExit?.active) {
         managementExit.prepare(enterTerminal, "进入已准备的运行会话");
@@ -124,5 +153,11 @@ export function useOpenRun() {
       void client.invalidateQueries({ queryKey: scheduledKeys.all(scope) });
     },
   });
-  return { ...mutation, attachmentState, prepared, fullscreen: managementExit?.active === true };
+  return {
+    ...mutation,
+    error: mutation.error ?? assistanceError,
+    attachmentState,
+    prepared,
+    fullscreen: managementExit?.active === true,
+  };
 }

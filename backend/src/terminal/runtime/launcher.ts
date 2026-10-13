@@ -237,6 +237,7 @@ export async function ensureTerminalRuntime(
         const terminalEnvironment = buildTerminalRuntimeEnvironment({
           terminalSessionId: currentSession.id,
           projectId: currentSession.projectId,
+          source: currentSession.source,
           tmuxSessionName: target.sessionName,
         });
         await options.tmuxService!.createDetachedSession(
@@ -279,6 +280,7 @@ export async function ensureTerminalRuntime(
         buildTmuxSessionRuntimeEnvironment({
           terminalSessionId: currentSession.id,
           projectId: currentSession.projectId,
+          source: currentSession.source,
           tmuxSessionName: target.sessionName,
         }),
       );
@@ -326,6 +328,7 @@ export async function ensureTerminalRuntime(
     env: buildTerminalRuntimeEnvironment({
       terminalSessionId: options.session.id,
       projectId: options.session.projectId,
+      source: options.session.source,
     }),
     fallback: resolveTerminalFallbackLaunchConfig({
       command: options.session.command,

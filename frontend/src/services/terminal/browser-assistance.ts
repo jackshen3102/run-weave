@@ -32,3 +32,25 @@ export function updateBrowserAssistance(
     },
   );
 }
+
+export function importScheduledBrowserAssistance(
+  apiBase: string,
+  token: string,
+  sessionId: string,
+  runId: string,
+  signal: AbortSignal,
+) {
+  return requestJson<BrowserAssistanceRequest | null>(
+    apiBase,
+    `${path(sessionId)}/from-scheduled-run`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ runId }),
+      signal,
+    },
+  );
+}

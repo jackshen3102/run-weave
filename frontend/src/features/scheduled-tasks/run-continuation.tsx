@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   scheduledReplyUnavailable,
   scheduledRecoveryNotice,
+  scheduledRunRecovery,
 } from "@runweave/shared/scheduled-tasks";
 import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
 import { Button } from "../../components/ui/button";
@@ -49,6 +50,7 @@ export function RunContinuation({ run }: { run: ScheduledRun }) {
     },
   });
   const state = run.continuation;
+  const recovery = scheduledRunRecovery(run);
   const unavailable = scheduledReplyUnavailable(run);
   const notice = scheduledRecoveryNotice(run);
   const confirmation = state?.recovery?.confirmation;
@@ -66,7 +68,8 @@ export function RunContinuation({ run }: { run: ScheduledRun }) {
         <p>等待恢复 · 下次继续：{displayTime(state?.nextAt)}</p>
       ) : null}
       {notice ? <p className="text-orange-400">{notice}</p> : null}
-      {state?.recovery && !["queued", "running", "stopping"].includes(run.status) ? (
+      {state?.recovery &&
+      !["queued", "running", "stopping"].includes(run.status) ? (
         <p className="whitespace-pre-wrap break-words">
           {state?.recovery.nextStep}
         </p>
@@ -89,6 +92,14 @@ export function RunContinuation({ run }: { run: ScheduledRun }) {
             停止自动继续
           </Button>
         </div>
+      ) : null}
+      {recovery?.browser &&
+      recovery.action === "needs-input" &&
+      !["queued", "running", "stopping"].includes(run.status) ? (
+        <p className="text-sm text-orange-400">
+          需要你操作浏览器。请准备并进入本次运行会话，再点击“打开协助页面”；完成后交还
+          Agent。
+        </p>
       ) : null}
       {!unavailable ? (
         <div className="space-y-2">

@@ -2,13 +2,6 @@ import Clarity
 import SwiftUI
 
 struct HomeView: View {
-  private enum AttentionPriority: Int {
-    case unread
-    case active
-    case pinned
-    case recentlyRead
-  }
-
   @ObservedObject var session: AppSession
   @ObservedObject private var attentionRetention: AttentionRetentionStore
   @EnvironmentObject private var remoteDesktop: RemoteDesktopCoordinator
@@ -32,35 +25,12 @@ struct HomeView: View {
   private var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
   private var attention: [HomeTerminal] {
     let online = session.health.status == .online
-    return groups.flatMap(\.sessions).filter {
+    let visible = groups.flatMap(\.sessions).filter {
       $0.hasUnreadCompletion || (online && $0.isAgentActive) || $0.pinnedAt != nil
         || (attentionRetention.retainedUntil[$0.id].map { $0 > Date() } ?? false)
-    }.sorted { left, right in
-      let leftPriority = attentionPriority(left, online: online)
-      let rightPriority = attentionPriority(right, online: online)
-      if leftPriority != rightPriority { return leftPriority.rawValue < rightPriority.rawValue }
-      if leftPriority == .pinned, left.pinnedAt != right.pinnedAt {
-        return (left.pinnedAt ?? "") > (right.pinnedAt ?? "")
-      }
-      if leftPriority == .recentlyRead,
-        attentionRetention.retainedUntil[left.id] != attentionRetention.retainedUntil[right.id] {
-        return (attentionRetention.retainedUntil[left.id] ?? .distantPast)
-          > (attentionRetention.retainedUntil[right.id] ?? .distantPast)
-      }
-      if left.lastActivityAt != right.lastActivityAt {
-        return left.lastActivityAt > right.lastActivityAt
-      }
-      return left.id < right.id
     }
-  }
-
-  private func attentionPriority(
-    _ terminal: HomeTerminal, online: Bool
-  ) -> AttentionPriority {
-    if terminal.hasUnreadCompletion { return .unread }
-    if online && terminal.isAgentActive { return .active }
-    if terminal.pinnedAt != nil { return .pinned }
-    return .recentlyRead
+    let byID = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, $0) })
+    return attentionRetention.orderedIDs.compactMap { byID[$0] }
   }
 
   private func initializeExpansion() {

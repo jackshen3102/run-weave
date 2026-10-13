@@ -1,3 +1,5 @@
+import type { BrowserAssistanceTarget } from "../browser/assistance";
+
 export interface ScheduledContinuationPolicy {
   mode: "off" | "bounded";
 }
@@ -17,6 +19,8 @@ export interface ScheduledRecovery {
   notBefore: string | null;
   /** Concrete facts or action the user would confirm; absent for open questions. */
   confirmation?: string | null;
+  /** Exact page awaiting user input; persisted with the result, not an execution lease. */
+  browser?: BrowserAssistanceTarget | null;
 }
 
 export interface ScheduledContinuation {

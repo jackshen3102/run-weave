@@ -1,3 +1,7 @@
+import {
+  scheduledBrowserGroupId,
+  type ScheduledTaskSource,
+} from "@runweave/shared/scheduled-tasks";
 import { configuration, settingText } from "@runweave/config-node";
 export const TERMINAL_APP_SERVER_ENV_KEYS = [
   "RUNWEAVE_APP_SERVER_TOKEN",
@@ -13,6 +17,7 @@ export const TERMINAL_RUNTIME_ENV_KEYS = [
   "RUNWEAVE_TERMINAL_SESSION_ID",
   "RUNWEAVE_TERMINAL_PANEL_ID",
   "RUNWEAVE_PROJECT_ID",
+  "RUNWEAVE_BROWSER_GROUP_ID",
   "RUNWEAVE_AGENT_TEAM_RUN_ID",
   "RUNWEAVE_TMUX_SESSION_NAME",
   "RUNWEAVE_TOOLKIT_PLUGIN_ROOT",
@@ -31,6 +36,7 @@ export function buildTerminalRuntimeEnvironment(
   identity: {
     terminalSessionId: string;
     projectId: string;
+    source?: ScheduledTaskSource;
     terminalPanelId?: string;
     tmuxSessionName?: string;
     agentTeamRunId?: string | null;
@@ -48,6 +54,9 @@ export function buildTerminalRuntimeEnvironment(
     RUNWEAVE_TERMINAL_SESSION_ID: identity.terminalSessionId,
     RUNWEAVE_TERMINAL_PANEL_ID: identity.terminalPanelId,
     RUNWEAVE_PROJECT_ID: identity.projectId,
+    RUNWEAVE_BROWSER_GROUP_ID: identity.source
+      ? scheduledBrowserGroupId(identity.source.runId)
+      : undefined,
     RUNWEAVE_AGENT_TEAM_RUN_ID: identity.agentTeamRunId ?? undefined,
     RUNWEAVE_TMUX_SESSION_NAME: identity.tmuxSessionName,
     RUNWEAVE_TOOLKIT_PLUGIN_ROOT: env.RUNWEAVE_TOOLKIT_PLUGIN_ROOT,
@@ -69,6 +78,7 @@ export function buildTmuxSessionRuntimeEnvironment(
   identity: {
     terminalSessionId: string;
     projectId: string;
+    source?: ScheduledTaskSource;
     tmuxSessionName: string;
   },
   env: NodeJS.ProcessEnv = process.env,
