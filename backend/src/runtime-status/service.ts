@@ -1,6 +1,5 @@
 import type { AppServerRuntimeStatusSourceHandle } from "../app-server/runtime-status-source";
 import type { AppServerEventConsumerHandle } from "../app-server/event-consumer";
-import type { AgentTeamService } from "../agent-team/service";
 import type { EvolutionRuntime } from "../evolution/runtime";
 import {
   createBackendRuntimeStatusReport,
@@ -27,7 +26,6 @@ export class BackendRuntimeStatusService {
     serviceInstanceId: string,
     private readonly dependencies: {
       activityStoreAvailable: () => boolean;
-      agentTeamService: AgentTeamService;
       evolutionRuntime: EvolutionRuntime;
       workspaceServiceManager: BackendRuntimeStatusInput["workspaceServiceManager"];
     },
@@ -41,7 +39,6 @@ export class BackendRuntimeStatusService {
         activityStoreAvailable: this.dependencies.activityStoreAvailable(),
         eventConsumer: this.eventConsumer?.getStatusSnapshot() ?? null,
         appServerIntegration: this.appServerIntegration,
-        watchdog: this.dependencies.agentTeamService.getRecheckWatchdogStatus(),
         evolution: this.dependencies.evolutionRuntime.getStatusSnapshot(),
         workspaceServiceManager: this.dependencies.workspaceServiceManager,
       });

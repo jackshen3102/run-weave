@@ -15,8 +15,6 @@
     "./activity": "./src/activity/index.ts",
     "./activity/api": "./src/activity/api.ts",
     "./activity/events": "./src/activity/events.ts",
-    "./agent-team": "./src/agent-team/index.ts",
-    "./agent-team-model-config": "./src/agent-team/model-config.ts",
     "./terminal-unread": "./src/terminal/unread.ts",
     "./task-supervision": "./src/task-supervision.ts",
     "./attention": "./src/attention.ts",
@@ -92,7 +90,8 @@
     "./task-handoff": "./src/task-handoff.ts",
     "./resource-monitor": "./src/monitoring/resource-monitor.ts",
     "./service-management": "./src/monitoring/service-management.ts",
-    "./feishu/bridge": "./src/feishu/bridge.ts"
+    "./feishu/bridge": "./src/feishu/bridge.ts",
+    "./agent-model-catalog": "./src/agent-model-catalog.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

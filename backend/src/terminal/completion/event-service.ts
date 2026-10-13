@@ -70,7 +70,6 @@ export class TerminalCompletionEventService {
         rawHookEvent: input.rawHookEvent,
         hookEvent: input.rawHookEvent ?? input.completionReason,
         cwd: input.cwd,
-        outboxPath: input.outboxPath ?? null,
         summary: input.summary ?? null,
         threadId: input.threadId ?? null,
         operationId: input.operationId ?? null,
@@ -80,10 +79,8 @@ export class TerminalCompletionEventService {
     });
     // Persist background work before acknowledging the completion hook. Learning failure
     // never blocks or rewrites the user's original task result.
-    if (!input.panelId || !this.terminalSessionManager.getPanel(input.panelId)?.agentTeamRunId) {
       try { await this.onCompleted?.(event); }
       catch (error) { logger.warn("experience.completion.enqueue.failed", { error }); }
-    }
     return event;
   }
 

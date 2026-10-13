@@ -2,8 +2,8 @@
 
 ## 结论
 
-Runweave 的新测试计划统一使用 `docs/testing/**/*.testplan.yaml`。Agent Team 只解析该格式，
-不解析 Markdown 测试案例。已有 Markdown 用例可以继续作为历史或人工参考，但进入 Agent Team
+Runweave 的新测试计划统一使用 `docs/testing/**/*.testplan.yaml`。校验器只解析该格式，
+不解析 Markdown 测试案例。已有 Markdown 用例可以继续作为历史或人工参考，但交给自动执行前
 前必须迁移为新格式。
 
 规范目标是让 Agent 直接读自然语言，同时让程序可以稳定解析、校验和可视化。不要把步骤拆成
@@ -55,7 +55,7 @@ cases:
 
 ## 组织原则
 
-- 一份计划只覆盖一个系统能力或一个可独立验收的跨端闭环，例如 Terminal Runtime、Agent Team、
+- 一份计划只覆盖一个系统能力或一个可独立验收的跨端闭环，例如 Terminal Runtime、
   Worktree Context；不要为单个按钮、样式、历史缺陷或静态检查单独建计划。
 - 相同前置、相同状态机分支或相同安全边界的细节应合并为一条以不变量描述的 case；保留正常主链、
   身份隔离、恢复/幂等、鉴权和关键降级，不保留不改变系统正确性的视觉微调与穷举边界。

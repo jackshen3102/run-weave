@@ -162,7 +162,7 @@ function isRuntimeGuidanceCandidate(claim: EvolutionClaim): boolean {
 }
 
 function isBehaviorallyReadable(evidence: ContextPackEvidenceRef): boolean {
-  if (evidence.source === "agent_team" || evidence.source === "app_server") {
+  if (evidence.source === "app_server") {
     return true;
   }
   if (evidence.source !== "activity") return false;
@@ -173,7 +173,6 @@ function isBehaviorallyReadable(evidence: ContextPackEvidenceRef): boolean {
   }
   const eventName = evidence.activity?.eventName ?? "";
   return (
-    eventName.startsWith("agent_team.") ||
     eventName === "agent.lifecycle.observed" ||
     eventName === "browser.navigation.failed"
   );

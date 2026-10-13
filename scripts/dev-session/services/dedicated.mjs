@@ -24,7 +24,6 @@ import {
   waitForJson,
   waitForPage,
 } from "./runtime.mjs";
-import { buildAgentTeamFixtureEnvironment } from "../fixtures/scope.mjs";
 
 export async function startDedicatedAppServer({
   sourceRoot,
@@ -104,7 +103,6 @@ export async function startDedicatedBackend({
   paths,
   port,
   appServer,
-  fixtureScope = null,
   onSpawn,
 }) {
   const profileDir = path.join(paths.sessionDir, "browser-profile");
@@ -169,9 +167,6 @@ export async function startDedicatedBackend({
       RUNWEAVE_DEV_SESSION_ID: sessionId,
       RUNWEAVE_SOURCE_REVISION: revision,
       RUNWEAVE_RESOURCE_NAMESPACE: namespace,
-      ...buildAgentTeamFixtureEnvironment(fixtureScope, {
-        ownsTerminalSession: true,
-      }),
       RUNWEAVE_APP_SERVER_DISCOVERY: appServer?.url ? "explicit" : "disabled",
       ...(appServer?.url
         ? {

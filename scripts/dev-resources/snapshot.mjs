@@ -122,7 +122,7 @@ function manifestDetails(manifest) {
 function manifestOwner(manifest) {
   return {
     id: manifest.devSessionId,
-    task: manifest.controlPlane?.agentTeamRunId ?? manifest.profile,
+    task: manifest.profile,
     worktree: path.basename(manifest.source.root),
     startedAt: manifest.createdAt ?? null,
     lastActivityAt: null,

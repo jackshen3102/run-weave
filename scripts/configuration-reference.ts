@@ -14,7 +14,6 @@ const lines = [
   "下列约束反映配置文件校验；业务消费者可能有额外检查，配置校验通过不能代替真实功能验收。", "",
   "## 跨字段与特殊约束", "",
   ...Object.entries(CONFIGURATION_CREDENTIAL_GROUPS).map(([domain, keys]) => `- ${domain}：${keys.join("、")} 任一已设置时，所有成员都必须是非空字符串。`),
-  "- agents.team.roles：provider 为 codex 或 traex，model 非空；codex 要求 fast 为布尔值且不能设置 max，traex 要求 max 为布尔值且不能设置 fast。",
   "- services.feishu.legacyWebhook.url：HTTPS，无用户信息和 fragment。",
   "- 敏感字段拒绝把脱敏占位符当成实际凭据。初始化、迁移和消费者检查见 [配置 CLI](./configuration.md)。", "",
 ];

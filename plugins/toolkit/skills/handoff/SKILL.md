@@ -1,11 +1,11 @@
 ---
 name: handoff
-description: 当用户明确要求“交接”“handoff”“把当前任务交给另一个 Agent”时使用；把当前任务写成自包含的 Markdown 交接文档，再让一个零对话上下文的新 Agent 在当前工作区按文档执行。不要用于普通任务拆分、并行调研或 Agent Team 编排。
+description: 当用户明确要求“交接”“handoff”“把当前任务交给另一个 Agent”时使用；把当前任务写成自包含的 Markdown 交接文档，再让一个零对话上下文的新 Agent 在当前工作区按文档执行。不要用于普通任务拆分、并行调研或任务编排。
 ---
 
 # Handoff
 
-把当前任务交给一个全新的执行 Agent。交接以磁盘上的 Markdown 文档为唯一任务合同，不复制当前对话，也不引入 Runweave 后端、Agent Team、专属 UI 或通知协议。
+把当前任务交给一个全新的执行 Agent。交接以磁盘上的 Markdown 文档为唯一任务合同，不复制当前对话，也不引入 Runweave 后端、专属 UI 或通知协议。
 
 ## 边界
 

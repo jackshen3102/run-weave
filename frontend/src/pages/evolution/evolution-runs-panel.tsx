@@ -285,15 +285,14 @@ export function EvolutionRunsPanel({
           </>
         ) : (
           <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
-            该学习范围暂无分析 Run；下方仍会展示 Agent Team
-            已真实记录的激活轨迹。
+            该学习范围暂无分析 Run；下方展示已记录的激活轨迹。
           </div>
         )}
 
         <div className={selectedRun ? "mt-6" : "mt-3"}>
           <h3 className="font-semibold">RuntimeTrace</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            按当前学习范围展示真实 Agent Team 激活、门禁与完成事件
+            按当前学习范围展示已记录的运行轨迹
           </p>
         </div>
         <div className="mt-3 space-y-2">

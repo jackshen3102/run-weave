@@ -18,7 +18,6 @@ export const TERMINAL_RUNTIME_ENV_KEYS = [
   "RUNWEAVE_TERMINAL_PANEL_ID",
   "RUNWEAVE_PROJECT_ID",
   "RUNWEAVE_BROWSER_GROUP_ID",
-  "RUNWEAVE_AGENT_TEAM_RUN_ID",
   "RUNWEAVE_TMUX_SESSION_NAME",
   "RUNWEAVE_TOOLKIT_PLUGIN_ROOT",
   "RUNWEAVE_HOOK_ENDPOINT",
@@ -39,7 +38,6 @@ export function buildTerminalRuntimeEnvironment(
     source?: ScheduledTaskSource;
     terminalPanelId?: string;
     tmuxSessionName?: string;
-    agentTeamRunId?: string | null;
   },
   env: NodeJS.ProcessEnv = process.env,
 ): Record<string, string | undefined> {
@@ -57,7 +55,6 @@ export function buildTerminalRuntimeEnvironment(
     RUNWEAVE_BROWSER_GROUP_ID: identity.source
       ? scheduledBrowserGroupId(identity.source.runId)
       : undefined,
-    RUNWEAVE_AGENT_TEAM_RUN_ID: identity.agentTeamRunId ?? undefined,
     RUNWEAVE_TMUX_SESSION_NAME: identity.tmuxSessionName,
     RUNWEAVE_TOOLKIT_PLUGIN_ROOT: env.RUNWEAVE_TOOLKIT_PLUGIN_ROOT,
     RUNWEAVE_HOOK_ENDPOINT: env.RUNWEAVE_HOOK_ENDPOINT,

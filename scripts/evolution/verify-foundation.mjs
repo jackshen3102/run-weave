@@ -314,7 +314,7 @@ async function verifyFoundation() {
     );
     const childProjectId = buildTerminalChildProjectId(
       parentProjectId,
-      "agent-team-2",
+      "terminal-2",
     );
 
     await stores[0].createRun(

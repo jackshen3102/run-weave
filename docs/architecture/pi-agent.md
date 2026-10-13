@@ -1,7 +1,7 @@
 # Pi Agent 接入
 
 Pi 是独立的 CLI provider `pi`，模型 provider 可以是 `openai-codex`。首发支持
-Pi 0.85.1 起的兼容 0.x 原生 TUI、日常输入、历史与精确恢复。Agent Team、Race、
+Pi 0.85.1 起的兼容 0.x 原生 TUI、日常输入、历史与精确恢复。Race、
 模型目录 UI 和自定义 provider 的自动恢复不在此版本范围内。
 
 ## 插件与公共桥接边界

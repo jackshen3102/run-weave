@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import type { RaceRecord } from "@runweave/shared/race";
-import { readJsonFile, writeJsonFile } from "../agent-team/storage/json-file";
+import { readJsonFile, writeJsonFile } from "../utils/json-file";
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";

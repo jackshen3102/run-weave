@@ -9,7 +9,7 @@ import {
 import { createPortal } from "react-dom";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
-import { GitFork, PanelsTopLeft, Pencil, Workflow, X } from "lucide-react";
+import { GitFork, PanelsTopLeft, Pencil, X } from "lucide-react";
 import { useForkTerminalAgent } from "../../../features/terminal/use-fork-agent";
 import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
@@ -52,18 +52,6 @@ function getTerminalStateLabel(
     return "Agent idle";
   }
   return "Shell idle";
-}
-
-export function canOpenAgentTeamForSession(
-  session: TerminalSessionListItem | null,
-): boolean {
-  return Boolean(
-    session &&
-    session.status === "running" &&
-    (session.tmuxSessionName ||
-      session.activePanelId ||
-      (session.panelCount ?? 0) > 0),
-  );
 }
 
 function getTerminalStateDetail(
@@ -216,7 +204,6 @@ export function TerminalSessionTab({
   onRequestCloseSession,
   onRequestEditAlias,
   onPanelSplitEnabledChange,
-  onRequestAgentTeam,
 }: {
   session: TerminalSessionListItem;
   isDragging: boolean;
@@ -226,7 +213,6 @@ export function TerminalSessionTab({
   onRequestCloseSession: (terminalSessionId: string) => void;
   onRequestEditAlias: (session: TerminalSessionListItem) => void;
   onPanelSplitEnabledChange: (enabled: boolean) => void;
-  onRequestAgentTeam: (terminalSessionId: string) => void;
 }) {
   const activeSessionId = useTerminalWorkspaceStore(
     (state) => state.activeSessionId,
@@ -254,7 +240,6 @@ export function TerminalSessionTab({
   const isActive = session.terminalSessionId === activeSessionId;
   const hasBell = !isActive && Boolean(hasBellMarker);
   const panelSplitEnabled = session.panelSplitEnabled;
-  const agentTeamAvailable = canOpenAgentTeamForSession(session);
   const tabRef = useRef<HTMLDivElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsPosition, setDetailsPosition] = useState<{
@@ -447,17 +432,6 @@ export function TerminalSessionTab({
             <PanelsTopLeft className="h-4 w-4" />
             {panelSplitEnabled ? "Disable Panel Split" : "Enable Panel Split"}
           </ContextMenuItem>
-          {agentTeamAvailable ? (
-            <ContextMenuItem
-              className="gap-2"
-              onSelect={() => {
-                onRequestAgentTeam(session.terminalSessionId);
-              }}
-            >
-              <Workflow className="h-4 w-4" />
-              Agent Team
-            </ContextMenuItem>
-          ) : null}
         </ContextMenuContent>
       </ContextMenu>
       {detailsCard}

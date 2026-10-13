@@ -39,7 +39,6 @@ const completionEventSchema = z
     // deprecated: accepted for backward compat, mapped to rawHookEvent
     hookEvent: z.string().trim().min(1).optional(),
     cwd: z.string().trim().min(1).nullable().optional(),
-    outboxPath: z.string().trim().min(1).nullable().optional(),
     summary: z.string().trim().min(1).nullable().optional(),
     threadId: z.string().trim().min(1).nullable().optional(),
     operationId: z.string().trim().min(1).max(256).nullable().optional(),
@@ -285,7 +284,6 @@ export function createInternalTerminalCompletionRouter(options: {
           commandName: parsed.data.commandName ?? null,
           rawHookEvent,
           cwd: parsed.data.cwd ?? null,
-          outboxPath: parsed.data.outboxPath ?? null,
           summary: parsed.data.summary ?? null,
           threadId: parsed.data.threadId ?? null,
           operationId: parsed.data.operationId ?? null,

@@ -19,7 +19,6 @@ import {
   writeManifest,
 } from "./registry.mjs";
 import {
-  applyAgentTeamFixtureBackendIsolation,
   inspectSessionServices,
   resolveOpenTarget,
   resolveSourceRevision,
@@ -36,7 +35,6 @@ import {
 import { acquireStartBetaSlotLease } from "./beta-pool/allocation/startup.mjs";
 import { runStop } from "./commands/stop.mjs";
 import { inspectMissingBetaLease } from "./commands/missing-beta-lease.mjs";
-import { resolveAgentTeamFixtureScope } from "./fixtures/scope.mjs";
 import {
   readOptionalManifest,
   retainsBetaSlotLease,
@@ -121,7 +119,6 @@ function createManifest({
   revision,
   state,
   services,
-  fixtureScope,
   failure = null,
 }) {
   const now = new Date().toISOString();
@@ -136,10 +133,6 @@ function createManifest({
       sourceRoot: plan.sourceRoot,
       originTerminalSessionId:
         process.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim() || null,
-      agentTeamRunId: fixtureScope?.ownerRunId ?? null,
-      agentTeamDispatchId: fixtureScope?.ownerDispatchId ?? null,
-      agentTeamCaseIds: fixtureScope?.ownerCaseIds ?? [],
-      fixtureNamespace: fixtureScope?.fixtureNamespace ?? null,
     },
     targetEnvironment: plan.targetEnvironment,
     source: {
@@ -225,11 +218,6 @@ async function runStart(options, sourceRoot) {
       : options.serviceOverrides,
   });
   if (options.dryRun) {
-    const fixtureScope = await resolveAgentTeamFixtureScope({
-      sourceRoot: plan.sourceRoot,
-      sessionId: "dry-run",
-    });
-    plan = applyAgentTeamFixtureBackendIsolation(plan, fixtureScope);
     const dryRunPlan =
       plan.profile === "beta"
         ? {
@@ -263,11 +251,6 @@ async function runStart(options, sourceRoot) {
   const sessionId = assertDevSessionId(
     options.sessionId ?? createReadableSessionId(),
   );
-  const fixtureScope = await resolveAgentTeamFixtureScope({
-    sourceRoot: plan.sourceRoot,
-    sessionId,
-  });
-  plan = applyAgentTeamFixtureBackendIsolation(plan, fixtureScope);
   const revision = await resolveSourceRevision(sourceRoot);
   const poolRecovery = {
     trigger: "startup",
@@ -324,7 +307,6 @@ async function runStart(options, sourceRoot) {
         revision,
         state: "planned",
         services: plan.services,
-        fixtureScope,
       });
       await writeManifest(manifest);
       manifestCreated = true;
@@ -377,7 +359,6 @@ async function runStart(options, sourceRoot) {
         sessionId,
         revision,
         paths,
-        fixtureScope,
         onBetaStarting: async (responsibility) => {
           manifest = updateManifest(manifest, {
             services: {

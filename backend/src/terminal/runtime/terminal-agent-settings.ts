@@ -11,8 +11,8 @@ import type { TmuxPaneTarget, TmuxService } from "../tmux/service";
 import { resolvePanelTarget } from "../application/panel-targets";
 import { beginTerminalReturn, TerminalInputBusyError } from "./input-admission";
 import { codexAppServerClient, traexAppServerClient } from "../../voice/codex-app-server-client";
-import { probeCodexCatalog } from "../../agent-team/model-catalog/codex";
-import { probeTraexCatalog } from "../../agent-team/model-catalog/traex";
+import { probeCodexCatalog } from "../../agent-model-catalog/codex";
+import { probeTraexCatalog } from "../../agent-model-catalog/traex";
 
 const catalogCache = new Map<TerminalAgentSettingsProvider, {
   expires: number;

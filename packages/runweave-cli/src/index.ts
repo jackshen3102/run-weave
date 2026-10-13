@@ -3,7 +3,6 @@ import { withConfigurationArguments } from "@runweave/config-node";
 import { stdin, stdout, stderr } from "node:process";
 import { runAppServerCommand } from "./commands/app-server.js";
 import { runAppCommand } from "./commands/app.js";
-import { runAgentTeamCommand } from "./commands/agent-team.js";
 import { runActivityCommand } from "./commands/activity.js";
 import { runAuthCommand } from "./commands/auth.js";
 import { runExperienceCommand } from "./commands/experience.js";
@@ -91,10 +90,6 @@ export async function runCli(
       await runResearchMcpCommand(subcommand, args, io);
       return 0;
     }
-    if (group === "agent-team") {
-      await runAgentTeamCommand(subcommand, args, io);
-      return 0;
-    }
     if (group === "activity") {
       await runActivityCommand(subcommand, args, io);
       return 0;
@@ -130,7 +125,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw status [options] | rw <config|activity|agent-team|app|app-server|research-mcp|auth|browser|evolution|experience|knowledge|feishu|project|scheduled-task|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw status [options] | rw <config|activity|app|app-server|research-mcp|auth|browser|evolution|experience|knowledge|feishu|project|scheduled-task|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

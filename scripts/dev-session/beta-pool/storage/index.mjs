@@ -25,7 +25,7 @@ const execFileAsync = promisify(execFile);
 const MAX_UPDATE_LOGS = 5;
 const MAX_UPDATE_LOG_BYTES = 64 * 1024 * 1024;
 const MIN_PLANNED_WRITE_BYTES = 512 * 1024 * 1024;
-const BACKEND_CONNECTION_SETTINGS_FILES = ["agent-team-model-settings.json"];
+const BACKEND_CONNECTION_SETTINGS_FILES = ["agent-provider-catalogs.json"];
 const LAUNCH_SERVICES_REGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 

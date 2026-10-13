@@ -17,7 +17,6 @@ import {
   readJson,
   readProcessSignature,
 } from "./runtime.mjs";
-import { buildAgentTeamFixtureEnvironment } from "../fixtures/scope.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -56,7 +55,6 @@ export async function startDedicatedBeta({
   sharedAppServer,
   requestedSharedBackend,
   requestedSharedAppServer,
-  fixtureScope = null,
   onSpawn,
   onStarting,
 }) {
@@ -90,12 +88,6 @@ export async function startDedicatedBeta({
     );
   }
   const launchEnv = { ...process.env, RUNWEAVE_WHISTLE_PORTS: whistlePorts.join(",") };
-  Object.assign(
-    launchEnv,
-    buildAgentTeamFixtureEnvironment(fixtureScope, {
-      ownsTerminalSession: !sharedBackend,
-    }),
-  );
   launchEnv.RUNWEAVE_MANAGES_PACKAGED_BACKEND = sharedBackend
     ? "false"
     : "true";
@@ -376,10 +368,7 @@ export async function startDedicatedBeta({
       appServer: appServerInspection.reason,
     });
   }
-  if (fixtureScope && !sharedBackend) {
-    backend.ownershipUpgradeReason =
-      "Agent Team fixture scope requires a dedicated Beta Backend";
-  } else if (!sharedBackend && requestedSharedBackend) {
+  if (!sharedBackend && requestedSharedBackend) {
     backend.ownershipUpgradeReason =
       "Default Backend was unavailable; upgraded to dedicated Beta Backend";
   }

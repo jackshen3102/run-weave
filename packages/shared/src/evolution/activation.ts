@@ -96,19 +96,6 @@ export interface EvolutionScopePolicy {
   updatedBy: string;
 }
 
-export interface EvolutionMemoryQuery {
-  learningScopeId: string;
-  runId: string;
-  dispatchId: string;
-  workerRole: string;
-  task: string;
-  intent: string;
-  paths: string[];
-  commands: string[];
-  failureSignatures: string[];
-  dependencies: EvolutionDependencyFingerprint;
-}
-
 export interface EvolutionSelectionDecision {
   assetId: string;
   revisionId: string;
@@ -174,11 +161,6 @@ export interface RuntimeTraceSummary {
   failOpenReason: string | null;
   createdAt: string;
   events: RuntimeTraceEvent[];
-}
-
-export interface EvolutionContextResult {
-  context: string | null;
-  trace: RuntimeTraceSummary;
 }
 
 export interface CandidatePromotionEvidence {

@@ -1,12 +1,9 @@
 version: 1
 name: Desktop Slot Companion macOS 首期验收
 description: >
-  验证 Runweave Desktop Slot Companion 在当前激活 Connection 内，以结构化
-  Terminal Session、Completion 和 Agent Team 事实完成跨 Slot 聚合、高优先级提醒、
-  精确跳转、提醒退役、断连降级、跨 Space 与全屏可见性、固定主屏定位和持久化开关。验收以真实 macOS Electron
-  桌面窗口为主，页面 DOM 与 console 证据通过附着 desktop CDP 的 Playwright 获取；
-  不用静态原型、普通浏览器或 Terminal 输出推断代替真实行为。
-
+  验证 Runweave Desktop Slot Companion 在当前激活 Connection 内，以结构化 Terminal Session 和 Completion 事实完成跨
+  Slot 聚合、高优先级提醒、 精确跳转、提醒退役、断连降级、跨 Space 与全屏可见性、固定主屏定位和持久化开关。验收以真实 macOS Electron 桌面窗口为主，页面 DOM 与
+  console 证据通过附着 desktop CDP 的 Playwright 获取； 不用静态原型、普通浏览器或 Terminal 输出推断代替真实行为。
 cases:
   - id: DSC-001
     name: 宠物固定在主屏右下角并在所有 Space 和全屏窗口可见
@@ -29,35 +26,28 @@ cases:
   - id: DSC-002
     name: 当前 Connection 的结构化事实聚合成稳定 Slot 托盘
     required: true
-    description: >
-      验证多个 Terminal Session 和 Agent Team run 被投影为每 Session 最多一个 Slot，
-      按固定优先级与更新时间排序，并显示真实可用身份；页面不恢复指标总览行或跨 Connection 数据。
+    description: 验证多个 Terminal Session 被投影为每 Session 最多一个 Slot，按优先级和更新时间排序，并显示真实身份。
     preconditions:
-      - 当前 Connection 中准备至少五个 Session，分别具有 working、未确认 completed、Terminal failed、Agent Team running 和 Agent Team failed 的结构化状态。
+      - 当前 Connection 中准备 working、未确认 completed、非零退出 failed、Pi 问答和 Pi 本轮失败五个 Session。
       - 另一个 Connection 中存在可区分的 Session，但当前未激活。
       - Companion 处于新进程首次加载状态且桌面宠物已启用。
     steps:
-      - 等待首次 snapshot 成功，确认托盘自动展开且只列出当前 Connection 的 Slot，没有另一个 Connection 的 Session。
-      - 通过 toolkit:playwright-cli 检查每个 Session 最多一行；同一 Session 同时具有相关 Agent Team run 和 Terminal 事实时，只显示优先级更高的 Agent Team 事实。
-      - 确认顺序遵循 needs_action、blocked、failed、completed、working；同状态按更新时间倒序且刷新后稳定。
-      - 确认 Slot 可见文案与身份来自 Project、Worktree、Session、Run 或 Completion 结构化字段，页面没有待决定、阻塞、待 Review、执行中等数量总览行。
-      - 缩小可见高度并滚动托盘，确认所有 Slot 可访问，窗口仍贴右下角且不会把内容扩出 workArea。
-
+      - 使用 `$toolkit:playwright-cli` 等待 snapshot 成功，确认每 Session 最多一行，只包含当前 Connection。
+      - 确认 Pi 问答优先于普通完成和运行中状态，失败、完成、运行中按优先级和更新时间稳定排序。
+      - 检查 Project、Worktree、Session 身份与 Backend 一致，滚动后所有 Slot 可访问。
   - id: DSC-003
     name: 多个高优先级事实按单卡和批量暂时收起规则提醒
     required: true
-    description: >
-      验证多个 Human Gate 或明确验收阻塞同时存在时只显示最高优先级单卡；
-      收起会在当前进程批量抑制已有高优先级 attentionId，新事实和应用重启会重新提醒。
+    description: |
+      验证多个 Pi 问答或 Trae 通知同时存在时只显示最高优先级单卡； 收起会在当前进程批量抑制已有高优先级 attentionId，新事实和应用重启会重新提醒。
     preconditions:
-      - 当前 Connection 中至少有两个不同 attentionId 的 needs_action 或 blocked Agent Team 事实。
+      - 当前 Connection 中至少有两个不同 attentionId 的 needs_action Terminal 事实。
       - Companion 尚未在本进程收起这些事实。
     steps:
-      - 等待 snapshot，确认只显示一个最高优先级单卡，卡片身份和内容对应真实 pendingFindingDecision、frameworkRepair 或 skipped acceptance 事实。
+      - 等待 snapshot，确认只显示一个最高优先级单卡，卡片身份和内容对应真实 Pi ui_prompt_start 或 Trae notification 事实。
       - 点击收起，确认界面回到 Slot 托盘；继续轮询且两个 attentionId 不变时，单卡不再次自动弹出。
       - 在 Backend 产生第三个新的高优先级 attentionId，确认 Companion 自动从托盘或收起状态升级为只显示新一轮最高优先级单卡。
       - 再次批量收起后重启 Runweave，保持结构化高优先级事实未解决，确认进程内抑制集合已清空并重新显示单卡。
-
   - id: DSC-004
     name: 用户收起普通托盘后非关键更新不自动展开
     required: true
@@ -93,33 +83,27 @@ cases:
     name: 失败提醒成功跳转后只在 Companion 中持久化为已查看
     required: true
     description: >
-      验证 Terminal 和 Agent Team failed Slot 成功打开后从 Companion 退役并跨应用重启保持，
-      但真实失败状态不变；跳转失败不退役，新失败事实使用新 attentionId 再次出现。
+      验证 Terminal failed Slot 成功打开后从 Companion 退役并跨应用重启保持， 但真实失败状态不变；跳转失败不退役，新失败事实使用新 attentionId
+      再次出现。
     preconditions:
-      - 当前 Connection 中分别存在一个 Terminal 非零退出和一个 Agent Team failed Slot。
-      - 能读取对应 Terminal Session 与 Agent Team run 的真实失败状态。
+      - 当前 Connection 存在一个 Terminal 非零退出 Slot，可读取 Session status 和 exitCode。
     steps:
-      - 点击 Terminal failed Slot，确认正确 Session 成功打开后该提醒从 Companion 退役，而 Session status 和 exitCode 保持失败事实。
-      - 点击 Agent Team failed Slot，确认正确 Session 与 Agent Team 二路窗打开后提醒退役，而 Run status 仍为 failed。
-      - 重启 Runweave，确认两个旧 attentionId 仍不出现在 Companion；检查 failure seen 存储按当前 connectionId 隔离。
-      - 让同一 Session 产生新的失败事实或启动新的 failed run，确认新 attentionId 再次出现。
-      - 为另一个 failed Slot 制造 Connection 或 Session 跳转失败，确认没有写 failure seen，提醒保持可见。
-
+      - 使用 `$toolkit:playwright-cli` 点击 failed Slot，确认正确 Session 成功打开后提醒退役，而 Session status 和
+        exitCode 保持不变。
+      - 重启 Runweave，确认旧 attentionId 不再出现，且已查看记录按 connectionId 隔离。
+      - 让同一 Session 产生新的失败事实，确认新的 attentionId 再次出现。
+      - 制造另一条失败提醒的 Session 跳转失败，确认提醒没有退役。
   - id: DSC-007
-    name: Terminal 与 Agent Team Slot 跳到正确目标表面
+    name: Terminal Slot 跳到正确目标表面
     required: true
-    description: >
-      验证普通 Terminal Slot 只打开 Terminal，Agent Team Slot 继续打开二路窗；
-      只有可靠 panelId 才聚焦 Panel，缺失身份时不使用当前 activePanelId 猜测。
+    description: 验证 Terminal Slot 聚焦正确 Session 与可靠 Panel；Panel 不可用时明确降级且不误开其他 Panel。
     preconditions:
-      - 当前 Connection 中存在一个普通 Terminal working Slot、一个带有效 worker 或 dispatch panelId 的 Agent Team Slot，以及一个没有可靠 panelId 的 Slot。
-      - 主窗口当前打开另一个 Session 和另一个 activePanelId。
+      - 当前 Connection 存在一个普通 working Slot、一个具有有效 panelId 的 Pi 问答 Slot，以及一个 panelId 已失效的 Completion
+        Slot。
     steps:
-      - 点击普通 Terminal Slot，确认主窗口切到对应 Session，但不主动打开 Agent Team 二路窗。
-      - 点击带有效 panelId 的 Agent Team Slot，确认切到对应 Session、聚焦该 Panel并打开 Agent Team 二路窗。
-      - 点击没有可靠 panelId 的 Slot，确认只打开对应 Session；当前 activePanelId 没有被当作事件来源，界面不声称已经精确定位 Panel。
-      - 检查所有跳转都停留在当前 Connection，且不存在任意 URL、路径或命令从 Slot payload 进入导航。
-
+      - 使用 `$toolkit:playwright-cli` 点击普通 Slot，确认主窗口打开对应 Session。
+      - 点击 Pi 问答 Slot，确认聚焦目标 Panel。
+      - 点击失效 panelId 的 Slot，确认打开对应 Session 并返回 opened_with_panel_fallback，不切换到其他 Panel。
   - id: DSC-008
     name: 断连、未认证、检查中和全部安静具有不同可见语义
     required: true
@@ -157,19 +141,18 @@ cases:
     name: Attention 只使用允许的结构化事实和当前 Connection
     required: true
     description: >
-      验证 Attention API 与 Companion 不从 Terminal 输出、日志关键字、Browser、CDP、
-      Runtime 或 App Server 状态推断 Slot，不泄露敏感内容，也不跨 Connection 聚合。
+      验证 Attention API 与 Companion 不从 Terminal 输出、日志关键字、Browser、CDP、 Runtime 或 App Server 状态推断
+      Slot，不泄露敏感内容，也不跨 Connection 聚合。
     preconditions:
       - 当前 Connection 中有一个 shell_idle Session，Terminal 输出包含 error、failed、blocked 等文本，但没有对应结构化失败或阻塞事实。
       - 当前 Connection 的 Browser 或 CDP 可被人为断开，另一个 Connection 中存在高优先级事实。
       - 能以已认证和未认证方式请求 /api/attention/slots。
     steps:
       - 写入包含 error、failed、blocked 的普通 Terminal 输出，确认没有因此生成 failed 或 blocked Slot。
-      - 断开 Browser、CDP、Runtime 或 App Server，确认在没有结构化 Terminal 或 Agent Team 事实时不会生成对应健康告警。
+      - 断开 Browser、CDP、Runtime 或 App Server，确认在没有结构化 Terminal 事实时不会生成对应健康告警。
       - 切换并保持当前 Connection 不变，确认另一个 Connection 的高优先级事实不进入 snapshot 或 Companion。
       - 检查 Attention 响应与 UI，不包含 token、完整 scrollback、原始日志或不必要的完整 cwd。
       - 未认证请求 /api/attention/slots，确认返回现有 401 语义；认证请求只返回当前 Backend 可见的结构化投影。
-
   - id: DSC-011
     name: Companion IPC 对非法来源和陈旧身份 fail closed
     required: true
@@ -190,39 +173,45 @@ cases:
   - id: DSC-012
     name: macOS 打包态完成端到端生命周期验收
     required: true
-    description: >
-      验证 macOS 安装或打包产物中 Companion 路由、透明窗口、认证共享、Slot 打开、
-      关闭与重启均能工作；Web 原型或开发浏览器通过不能替代此结果。
+    description: |
+      验证 macOS 安装或打包产物中 Companion 路由、透明窗口、认证共享、Slot 打开、 关闭与重启均能工作；Web 原型或开发浏览器通过不能替代此结果。
     preconditions:
       - pnpm typecheck、pnpm lint 和 pnpm dist:electron:mac 已成功完成。
       - 已安装或启动本次 macOS 打包产物，并准备可产生 quiet、working、completed、failed 和 need_human 的真实 Backend。
       - 已使用 computer-use 打开目标桌面实例，并用 toolkit:playwright-cli attach 到该实例 desktop CDP。
     steps:
-      - 从全新启动验证 Companion 读取与主窗口相同的当前 Connection 和认证，依次观察 checking 后的 quiet、tray 与 card，不出现登录页被渲染进小窗口或 Beta badge。
-      - 从真实 working、completed、failed 和 need_human Slot 分别执行打开，确认主窗口、Session、Panel 或 Agent Team 目标和退役语义符合前述用例。
+      - 从全新启动验证 Companion 读取与主窗口相同的当前 Connection 和认证，依次观察 checking 后的 quiet、tray 与
+        card，不出现登录页被渲染进小窗口或 Beta badge。
+      - 从真实 working、completed、failed 和 need_human Slot 分别执行打开，确认主窗口、Session 或 Panel 目标和退役语义符合前述用例。
       - 关闭主窗口但保持应用运行，确认 Companion 仍存在；点击 Slot 后主窗口被恢复并定位，自动状态刷新本身不聚焦主窗口。
       - 退出整个应用并重新启动，确认 enabled 偏好和 failure seen 持久化，高优先级进程内 suppression 不持久化。
-      - 通过 toolkit:playwright-cli 检查 Companion 与主窗口 console 均为 0 error、0 warning，并关闭本次新建 tab、detach；通过 computer-use 确认应用退出后没有遗留 Companion 窗口。
-
+      - 通过 toolkit:playwright-cli 检查 Companion 与主窗口 console 均为 0 error、0 warning，并关闭本次新建
+        tab、detach；通过 computer-use 确认应用退出后没有遗留 Companion 窗口。
   - id: DSC-013
     name: Terminal Slot 与 Terminal 页面共用有效状态投影
     required: true
     description: >
-      验证 Attention、Companion 与 Terminal 页面共用同一有效状态投影；存在
-      running Panel 时使用 Panel 聚合，没有 running Panel 时使用进程内
-      TerminalStateService，既不产生 working 假阳性，也不漏报真实 running。
+      验证 Attention、Companion 与 Terminal 页面共用同一有效状态投影；存在 running Panel 时使用 Panel 聚合，没有 running Panel
+      时使用进程内 TerminalStateService，既不产生 working 假阳性，也不漏报真实 running。
     preconditions:
-      - 当前 Connection 中准备三个仍为 running 的 Terminal Session，且都没有未确认 Completion、非零退出或更高优先级 Agent Team run。
-      - 第一个 Session 的持久 terminalState 为 agent_starting 或 agent_running，但它的全部 running Panel 均为 agent_idle。
-      - 第二个 Session 的持久 terminalState 为 agent_idle，但它至少有一个 running Panel 为 agent_running，其他 running Panel 可为 agent_idle。
-      - 第三个 Session 没有 running Panel，进程内 TerminalStateService 为 agent_running，而持久 terminalState 为 agent_idle。
+      - 当前 Connection 中准备三个仍为 running 的 Terminal Session，且都没有未确认 Completion、非零退出或 Pi 问答。
+      - 第一个 Session 的持久 terminalState 为 agent_starting 或 agent_running，但它的全部 running Panel 均为
+        agent_idle。
+      - 第二个 Session 的持久 terminalState 为 agent_idle，但它至少有一个 running Panel 为 agent_running，其他 running
+        Panel 可为 agent_idle。
+      - 第三个 Session 没有 running Panel，进程内 TerminalStateService 为 agent_running，而持久 terminalState 为
+        agent_idle。
       - 已使用 computer-use 打开目标 macOS 桌面实例，并用 toolkit:playwright-cli 附着该实例 desktop CDP。
     steps:
-      - 分别读取三个 Session 的 `/api/terminal/session/:id/state` 和 `/api/attention/slots`；确认第一个 Session 为 agent_idle 且没有 working Slot，第二个 Session 为 agent_running 且存在唯一 working Slot，第三个 Session 按 TerminalStateService 显示 agent_running 且存在唯一 working Slot。
-      - 等待至少两次 Companion 轮询；通过 toolkit:playwright-cli 确认第一个 Session 始终不显示“执行中”，第二个和第三个 Session 各显示一个“执行中”条目，刷新不会恢复任一陈旧持久状态。
-      - 将第二个 Session 的最后一个 agent_running Panel 通过可信 Stop 收敛为 agent_idle；确认 Terminal 状态接口变为 agent_idle，下一次 Attention snapshot 移除 working Slot，Companion 随后不再显示该条目。
-      - 检查 Attention Slot 的 source evidence；确认 working 证据与实际用于判断的有效状态一致，无 Panel 分支也没有回退到陈旧持久状态，响应中不新增 token、scrollback、命令文本或其他敏感字段。
-
+      - 分别读取三个 Session 的 `/api/terminal/session/:id/state` 和 `/api/attention/slots`；确认第一个 Session 为
+        agent_idle 且没有 working Slot，第二个 Session 为 agent_running 且存在唯一 working Slot，第三个 Session 按
+        TerminalStateService 显示 agent_running 且存在唯一 working Slot。
+      - 等待至少两次 Companion 轮询；通过 toolkit:playwright-cli 确认第一个 Session 始终不显示“执行中”，第二个和第三个 Session
+        各显示一个“执行中”条目，刷新不会恢复任一陈旧持久状态。
+      - 将第二个 Session 的最后一个 agent_running Panel 通过可信 Stop 收敛为 agent_idle；确认 Terminal 状态接口变为
+        agent_idle，下一次 Attention snapshot 移除 working Slot，Companion 随后不再显示该条目。
+      - 检查 Attention Slot 的 source evidence；确认 working 证据与实际用于判断的有效状态一致，无 Panel
+        分支也没有回退到陈旧持久状态，响应中不新增 token、scrollback、命令文本或其他敏感字段。
   - id: DSC-014
     name: 宠物点击只切换本地状态面板且与主窗口完全隔离
     required: true

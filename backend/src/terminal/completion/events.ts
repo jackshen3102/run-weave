@@ -10,7 +10,6 @@ export interface RecordTerminalCompletionEventInput {
   commandName: string | null;
   rawHookEvent: string | null;
   cwd: string | null;
-  outboxPath?: string | null;
   summary?: string | null;
   threadId?: string | null;
   operationId?: string | null;
@@ -36,7 +35,6 @@ export class TerminalCompletionEventStore {
       rawHookEvent: input.rawHookEvent,
       hookEvent: input.rawHookEvent ?? input.completionReason,
       cwd: input.cwd,
-      outboxPath: input.outboxPath ?? null,
       summary: input.summary ?? null,
       threadId: input.threadId ?? null,
       operationId: input.operationId ?? null,

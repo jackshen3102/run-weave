@@ -9,7 +9,6 @@
 | 实例配置查询、迁移和显式加载                 | [configuration.md](./configuration.md)                                        |
 | Terminal、Project、输入投递与 Agent 控制     | [terminal-cli.md](./terminal-cli.md)                                          |
 | Terminal 快照分享、匿名读取与有效期          | [terminal-snapshot-share.md](./terminal-snapshot-share.md)                    |
-| Agent Team 创建、执行、观察和介入            | [agent-team-cli.md](./agent-team-cli.md)                                      |
 | iOS 两台模拟器跨 worktree 复用               | [ios-simulators.md](./ios-simulators.md)                                      |
 | 普通会话经验检索与结果回执                   | [experience-cli.md](./experience-cli.md)                                      |
 | 本机 Codex 历史用量与执行疑点报告            | [token-report.md](./token-report.md)                                          |

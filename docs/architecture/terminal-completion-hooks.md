@@ -75,13 +75,12 @@ Codex 的 `notify` 命令也可以在系统通知后调用同一个 launcher。�
 
 完成提醒和 `TerminalState` 是两条链路：完成提醒点亮非当前终端的小绿点，`TerminalState` 只表达当前终端是否处在 `shell_idle`、`agent_idle` 或 `agent_running`。`/internal/terminal-completion` 和普通 completion feed 不能写入或修正 `TerminalState`。唯一受限例外是 hook bridge 双写到 app-server 的 `agent.completion`：当 payload 明确表示 `completionReason="hook_stop"` 且原始 hook event 是 `Stop` / `SubagentStop` 时，backend consumer 可以把它作为丢失直连 agent hook 时的 Stop fallback，并交给 agent hook processor 复用既有状态门禁；notify、manual completion、AI process exit 或其他 completion reason 不能写状态。
 
-当前完成提醒和 Agent Team loop 的 canonical 输入仍是 backend 直连
+当前完成提醒的 canonical 输入仍是 backend 直连
 `/internal/terminal-completion` 写出的 `kind="completion"` terminal event。hook bridge
 双写到 app-server 的 `agent.completion` 会进入 Event Center、ThreadRef 投影和上面的
 TerminalState Stop fallback，但 backend consumer 不会把它再次写入
-`TerminalCompletionEventService`。因此不能把 app-server `agent.completion` 当作小绿点或
-Agent Team loop 的 completion feed 来源；如果后续要收敛到 app-server 驱动，需要先设计
-跨 app-server / backend 直连的 completion 去重。
+`TerminalCompletionEventService`。因此不能把 app-server `agent.completion` 当作小绿点的
+completion feed 来源；如果后续要收敛到 app-server 驱动，需要先设计跨链路的 completion 去重。
 
 上报 payload 示例：
 

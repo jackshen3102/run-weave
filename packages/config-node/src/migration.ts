@@ -88,15 +88,6 @@ export function prepareMigration(context: EnvironmentContext, sources: Migration
           }
         }
         setConfigurationValue(draft, source.domain, { defaultProfileId: parsed.defaultProfileId, proxyModes: parsed.proxyModes ?? {}, profilePorts: {}, worktrees, pendingPortMigration: pending });
-      } else if (source.domain === "agents.team") {
-        // A populated catalog cache can exist before any role settings are saved.
-        if (parsed.config === null) {
-          value.migrations[source.domain] = { id: `${source.domain}:${digest}`, sourceDigest: digest };
-          result.sources.push({ file: source.file, digest, domain: source.domain });
-          continue;
-        }
-        if (!isConfigurationObject(parsed.config) || !isConfigurationObject(parsed.config.roles)) throw new ConfigurationError("CONFIG_LEGACY_MODELS_INVALID");
-        setConfigurationValue(draft, source.domain, { roles: parsed.config.roles, updatedAt: parsed.config.updatedAt ?? null });
       } else {
         const fields = Object.fromEntries(Object.entries(parsed).filter(([key]) => !(source.domain === "desktop.tunnels" ? ["schemaVersion"] : ["version", "schemaVersion", "revision", "createdAt", "updatedAt"]).includes(key)));
         setConfigurationValue(draft, source.domain, fields);

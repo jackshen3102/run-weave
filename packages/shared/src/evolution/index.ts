@@ -59,7 +59,6 @@ export type ContextPackSourceKind =
   | "activity"
   | "work_history"
   | "app_server"
-  | "agent_team"
   | "knowledge_baseline"
   | "repository";
 
@@ -151,7 +150,6 @@ export interface TraceSegment {
   learningScopeId: string;
   sequence: number;
   relationKind:
-    | "agent_team_run"
     | "thread"
     | "terminal"
     | "interaction"

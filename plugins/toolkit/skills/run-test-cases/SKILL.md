@@ -8,15 +8,6 @@ description: 当需要执行或验收 docs/testing/**/*.testplan.yaml 测试计�
 把测试计划视为不可偷改的验收合同。只执行 `.testplan.yaml`；收到 Markdown 测试案例时停止，
 要求先用 `write-test-cases` 迁移，不自行兼容解析。
 
-## 先判定执行模式
-
-- **Agent Team behavior dispatch**：prompt 已包含 `Run`、`Role: behavior_verify` 和本轮结构化
-  Case 时，Backend 已校验输入测试计划（如有）、固化 Case 并记录来源摘要。直接执行 prompt
-  分配的 Case；不重新解析原始 YAML，不探测或运行目标仓库的测试计划格式校验命令。目标
-  仓库没有 `pnpm testplan:validate` 或其他 validator 不属于 environment blocker。
-- **独立执行**：用户直接给出测试计划、没有 Agent Team behavior dispatch 时，由本 skill
-  完成下面的格式校验，再开始执行。
-
 ## 独立执行校验
 
 1. 读取完整 YAML，确认：
@@ -65,8 +56,7 @@ description: 当需要执行或验收 docs/testing/**/*.testplan.yaml 测试计�
 
 使用中文报告：
 
-- 执行模式、测试计划路径、格式校验依据与结果。Agent Team 模式注明“使用 Backend 固化的
-  acceptance，不重复校验”。
+- 测试计划路径、格式校验依据与结果。
 - 每条 case ID、通过/失败/未执行、操作或命令、关键证据。
 - 未执行的 `required: false` case。
 - 首个失败点、实际结果、期望结果和建议下一步。

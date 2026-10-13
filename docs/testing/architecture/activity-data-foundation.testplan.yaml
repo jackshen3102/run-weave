@@ -19,14 +19,13 @@ cases:
   - id: ADF-002
     name: Event Schema 和 Producer 边界封闭
     required: true
-    description: >
+    description: |
       仅 allowlist 业务边界可以产生 P0 事件，字段来源、User Query emitter 和外部 TTY 覆盖边界必须可验证且不可伪造。
     preconditions:
-      - 可触发合法 Hook、terminal command、Agent Team 事件和未注册 producer。
+      - 可触发合法 Hook、terminal command 事件和未注册 producer。
     steps:
       - 分别提交合法、未知、重复和字段冲突事件，读取存储与拒绝信息。
       - 确认合法来源按 schema 入库；未知/伪造来源拒绝，重复不覆盖，User Query 仅有约定权威 emitter。
-
   - id: ADF-003
     name: Fact、Content 和 Sequence 在事务内一致提交
     required: true
@@ -86,7 +85,8 @@ cases:
     name: Activity 故障不会反向破坏主业务
     required: true
     description: >
-      SQLite、worker、查询或 App Server 不可用时，Terminal、Thread、Agent Team 和核心导航保留可用，并将 Activity/source 明确标记为 unavailable。
+      SQLite、worker、查询或 App Server 不可用时，Terminal、Thread 和核心导航保留可用，并将 Activity/source 明确标记为
+      unavailable。
     preconditions:
       - 可分别停止 Activity worker、使 SQLite 不可写、断开 App Server 与造成查询错误。
     steps:

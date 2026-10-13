@@ -269,8 +269,6 @@ export async function ensureTmuxPanelWorkspace(
             panelId: randomUUID(),
             alias: null,
             role: null,
-            agentTeamRunId: null,
-            agentTeamWorkerId: null,
             cwd: pane.cwd || session.cwd,
             activeCommand: resolveEffectivePanelActiveCommand(
               pane,

@@ -1,7 +1,4 @@
 import type { EvolutionRuntimeUnavailableReason } from "@runweave/shared/evolution";
-import { DefaultEvolutionMemoryProvider } from "../evolution/injection/memory-provider";
-import { StructuredEvolutionMemorySelector } from "../evolution/knowledge/retrieval";
-import { EvolutionOutcomeObserver } from "../evolution/injection/outcome-observer";
 import { EvolutionToolTokenRegistry } from "../evolution/tools/token-registry";
 import { EvolutionRepositoryScopes } from "../evolution/repository-scope";
 import type { EvolutionRepositoryStore } from "../evolution/repository-store";
@@ -97,13 +94,6 @@ export async function createEvolutionStorage(
   resources.defer("evolution-tool-tokens", () =>
     evolutionToolTokenRegistry.clear(),
   );
-  const evolutionMemoryProvider = new DefaultEvolutionMemoryProvider(
-    evolutionActivationStore,
-    new StructuredEvolutionMemorySelector(),
-  );
-  const evolutionOutcomeObserver = new EvolutionOutcomeObserver(
-    evolutionActivationStore,
-  );
   return {
     evolutionActivationStore,
     evolutionAnalysisStore,
@@ -112,7 +102,5 @@ export async function createEvolutionStorage(
     evolutionProviderAvailability,
     evolutionService,
     evolutionToolTokenRegistry,
-    evolutionMemoryProvider,
-    evolutionOutcomeObserver,
   };
 }

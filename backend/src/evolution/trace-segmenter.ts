@@ -51,9 +51,6 @@ function strongestRelation(evidence: ContextPackEvidenceRef): {
   kind: TraceSegment["relationKind"];
   id: string;
 } {
-  if (evidence.relationships.runId) {
-    return { kind: "agent_team_run", id: evidence.relationships.runId };
-  }
   if (evidence.relationships.threadId) {
     return { kind: "thread", id: evidence.relationships.threadId };
   }

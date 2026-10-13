@@ -1,4 +1,3 @@
-import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import {
   resolveRepositoryIdentity,
   readRepositoryRevision,
@@ -35,9 +34,6 @@ export class DefaultEvolutionSupplementalSourceReader implements EvolutionSupple
     private readonly appServer: {
       getThreadDetail(threadId: string): Promise<unknown>;
     },
-    private readonly agentTeam: {
-      getRun(runId: string): Promise<unknown | null>;
-    },
     private readonly resolveProjectRoot: (
       learningScopeId: string,
     ) => string | null,
@@ -54,30 +50,21 @@ export class DefaultEvolutionSupplementalSourceReader implements EvolutionSupple
         item.relationships.threadId ? [item.relationships.threadId] : [],
       ),
     );
-    const runIds = unique(
-      input.activityEvidence.flatMap((item) =>
-        item.relationships.runId ? [item.relationships.runId] : [],
-      ),
-    );
-    const [appServer, agentTeam, repository] = await Promise.all([
+    const [appServer, repository] = await Promise.all([
       this.collectAppServer(threadIds, input),
-      this.collectAgentTeam(runIds, input),
       this.collectRepository(input),
     ]);
     return {
       sources: [
         ...appServer.sources,
-        ...agentTeam.sources,
         ...repository.sources,
       ],
       evidence: [
         ...appServer.evidence,
-        ...agentTeam.evidence,
         ...repository.evidence,
       ],
       dataQualityIssues: [
         ...appServer.dataQualityIssues,
-        ...agentTeam.dataQualityIssues,
         ...repository.dataQualityIssues,
       ],
     };
@@ -117,74 +104,6 @@ export class DefaultEvolutionSupplementalSourceReader implements EvolutionSupple
     );
     return collectedSource(
       "app_server",
-      input,
-      results.flatMap((result) => (result.evidence ? [result.evidence] : [])),
-      results.flatMap((result) => (result.issue ? [result.issue] : [])),
-    );
-  }
-
-  private async collectAgentTeam(
-    runIds: string[],
-    input: {
-      learningScope: LearningScopeRef;
-      afterWatermark: string | null;
-      snapshotBoundary: string;
-    },
-  ): Promise<EvolutionSupplementalSources> {
-    const results = await Promise.all(
-      runIds.map(async (runId) => {
-        try {
-          const run = await this.agentTeam.getRun(runId);
-          if (!run) throw new Error("agent_team_run_not_found");
-          if (input.learningScope.scopeType === "repository") {
-            const record = run as Partial<AgentTeamRun>;
-            const cwds = [
-              record.terminal?.cwd,
-              ...Object.values(record.roleRuntimes?.roles ?? {}).map(
-                (role) => role.terminal?.cwd ?? record.terminal?.cwd,
-              ),
-            ];
-            const ids = await Promise.all(
-              cwds.map((cwd) =>
-                cwd
-                  ? resolveRepositoryIdentity(cwd)
-                      .then((value) => value.repositoryId)
-                      .catch(() => null)
-                  : null,
-              ),
-            );
-            if (ids.some((id) => id !== input.learningScope.learningScopeId))
-              return {
-                issue: qualityIssue(
-                  "agent_team",
-                  "agent_team_repository_unresolved_or_mixed",
-                  runId,
-                ),
-              };
-          }
-          const digest = sha256(canonicalJson(run));
-          return {
-            evidence: sourceEvidence({
-              evidenceId: `agent-team:${runId}:${digest.slice(0, 16)}`,
-              source: "agent_team",
-              sourceRecordId: runId,
-              digest,
-              relationships: { runId },
-            }),
-          };
-        } catch {
-          return {
-            issue: qualityIssue(
-              "agent_team",
-              "agent_team_run_unavailable",
-              runId,
-            ),
-          };
-        }
-      }),
-    );
-    return collectedSource(
-      "agent_team",
       input,
       results.flatMap((result) => (result.evidence ? [result.evidence] : [])),
       results.flatMap((result) => (result.issue ? [result.issue] : [])),

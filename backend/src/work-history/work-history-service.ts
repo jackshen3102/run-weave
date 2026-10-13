@@ -4,16 +4,12 @@ import type {
   AppServerThreadRef,
 } from "@runweave/shared/app-server-events";
 import type {
-  AgentTeamArchiveDetail,
-  AgentTeamArchivePage,
-  AgentTeamArchiveSummary,
   TerminalArchiveDetail,
   TerminalArchivePage,
   TerminalArchiveSummary,
   WorkHistorySourceStatus,
 } from "@runweave/shared/work-history";
 import type { ActivityQueryService } from "../activity/database/service";
-import type { AgentTeamService } from "../agent-team/service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { toSessionListItem } from "../terminal/application/payloads";
 import {
@@ -37,17 +33,11 @@ export interface TerminalDetailOptions {
   includeThreadDetails?: boolean;
 }
 
-export interface RunDetailOptions {
-  activityCursor?: string;
-  asOfActivityOffset?: number;
-}
-
 export class WorkHistoryService {
   constructor(
     private readonly terminalSessionManager: TerminalSessionManager,
     private readonly activityQueryService: ActivityQueryService,
     private readonly appServerGateway: AppServerHistoryGateway,
-    private readonly agentTeamService: AgentTeamService,
   ) {}
 
   async listTerminals(options: ListOptions): Promise<TerminalArchivePage> {
@@ -241,104 +231,6 @@ export class WorkHistoryService {
     };
   }
 
-  async listRuns(options: ListOptions): Promise<AgentTeamArchivePage> {
-    const projectIds = this.terminalSessionManager
-      .listAllProjectContexts()
-      .map((project) => project.id);
-    const runs = (
-      await Promise.all(
-        projectIds.map((projectId) => this.agentTeamService.listRuns(projectId)),
-      )
-    ).flat();
-    const search = options.search?.trim().toLowerCase() ?? "";
-    const summaries = runs
-      .map<AgentTeamArchiveSummary>((run) => ({
-        runId: run.runId,
-        projectId: run.projectId,
-        terminalSessionId: run.terminalSessionId,
-        runKind: run.runKind ?? "primary",
-        ownerRunId: run.lineage?.ownerRunId ?? null,
-        ownerDispatchId: run.lineage?.ownerDispatchId ?? null,
-        status: run.status,
-        mode: run.options.autoApproveSplit ? "automatic" : "manual",
-        createdAt: run.createdAt,
-        updatedAt: run.updatedAt,
-        workerCount: run.workers.length,
-        nextRoundIndex: run.loop.round,
-      }))
-      .filter((summary) =>
-        !search
-          ? true
-          : [
-              summary.runId,
-              summary.projectId,
-              summary.terminalSessionId,
-              summary.runKind,
-              summary.ownerRunId ?? "",
-              summary.ownerDispatchId ?? "",
-              summary.status,
-            ].some((value) => value.toLowerCase().includes(search)),
-      )
-      .sort(compareRunSummaries);
-    const cursor = decodeCursor(options.cursor, "runs");
-    const cursorWithGroup =
-      cursor && !cursor.group
-        ? {
-            ...cursor,
-            group: summaries.find(
-              (summary) =>
-                summary.runId === cursor.id && summary.updatedAt === cursor.at,
-            )?.runKind,
-          }
-        : cursor;
-    const remaining = cursorWithGroup
-      ? summaries.filter(
-          (summary) => compareRunCursor(summary, cursorWithGroup) > 0,
-        )
-      : summaries;
-    const pageRuns = remaining.slice(0, options.limit);
-    const last = pageRuns.at(-1);
-    return {
-      runs: pageRuns,
-      ...(remaining.length > pageRuns.length && last
-        ? {
-            nextCursor: encodeCursor({
-              kind: "runs",
-              group: last.runKind,
-              at: last.updatedAt,
-              id: last.runId,
-            }),
-          }
-        : {}),
-      sourceStatus: { run: { status: "available" } },
-    };
-  }
-
-  async getRun(
-    runId: string,
-    options: RunDetailOptions = {},
-  ): Promise<AgentTeamArchiveDetail | null> {
-    const run = await this.agentTeamService.getRun(runId);
-    if (!run) {
-      return null;
-    }
-    const activity = await this.readFacts({
-      runId,
-      cursor: options.activityCursor,
-      asOfActivityOffset: options.asOfActivityOffset,
-      limit: DEFAULT_FACTS_LIMIT,
-    });
-    return {
-      run,
-      facts: activity.page,
-      asOfActivityOffset: activity.page.asOfActivityOffset,
-      sourceStatus: {
-        run: { status: "available" },
-        activity: activity.status,
-      },
-    };
-  }
-
   private async listAllThreads(
     filters: { terminalSessionId?: string } = {},
   ): Promise<AppServerThreadRef[]> {
@@ -413,38 +305,6 @@ function compareTerminalTuple(
     left.terminalSessionId.localeCompare(rightId);
 }
 
-function compareRunSummaries(
-  left: AgentTeamArchiveSummary,
-  right: AgentTeamArchiveSummary,
-): number {
-  return (
-    runKindRank(left.runKind) - runKindRank(right.runKind) ||
-    compareRunTuple(left, right.updatedAt, right.runId)
-  );
-}
-
-function compareRunCursor(
-  left: AgentTeamArchiveSummary,
-  cursor: { at: string; id: string; group?: string },
-): number {
-  return cursor.group === "primary" || cursor.group === "verification_fixture"
-    ? runKindRank(left.runKind) - runKindRank(cursor.group) ||
-        compareRunTuple(left, cursor.at, cursor.id)
-    : compareRunTuple(left, cursor.at, cursor.id);
-}
-
-function runKindRank(kind: AgentTeamArchiveSummary["runKind"]): number {
-  return kind === "verification_fixture" ? 1 : 0;
-}
-
-function compareRunTuple(
-  left: AgentTeamArchiveSummary,
-  rightAt: string,
-  rightId: string,
-): number {
-  return rightAt.localeCompare(left.updatedAt) || left.runId.localeCompare(rightId);
-}
-
 function compareThreadRefs(left: AppServerThreadRef, right: AppServerThreadRef) {
   return left.lastActivityAt.localeCompare(right.lastActivityAt) ||
     left.threadId.localeCompare(right.threadId);
@@ -456,8 +316,8 @@ function encodeCursor(value: Record<string, string | number>): string {
 
 function decodeCursor(
   value: string | undefined,
-  kind: "terminals" | "runs",
-): { at: string; id: string; group?: string } | null {
+  kind: "terminals",
+): { at: string; id: string } | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(
@@ -469,7 +329,6 @@ function decodeCursor(
       ? {
           at: parsed.at,
           id: parsed.id,
-          ...(typeof parsed.group === "string" ? { group: parsed.group } : {}),
         }
       : null;
   } catch {

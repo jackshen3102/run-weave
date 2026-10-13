@@ -90,8 +90,6 @@ async function verify(
         terminalSessionId: session.id,
         alias: null,
         role: null,
-        agentTeamRunId: null,
-        agentTeamWorkerId: null,
         cwd: workerCwd,
         activeCommand: "pi",
         status: "running",

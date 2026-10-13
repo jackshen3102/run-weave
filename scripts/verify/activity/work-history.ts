@@ -2,16 +2,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import type {
   AppServerThreadDetailResponse,
   AppServerThreadRef,
 } from "@runweave/shared/app-server-events";
-import { resolveAgentTeamRoundAttribution } from "@runweave/shared/work-history";
 import { ActivityEventFactory } from "../../../backend/src/activity/recording/event-factory";
 import { ActivityQueryService } from "../../../backend/src/activity/database/service";
 import { ActivityStore } from "../../../backend/src/activity/recording/store";
-import type { AgentTeamService } from "../../../backend/src/agent-team/service";
 import { LowDbTerminalSessionStore } from "../../../backend/src/terminal/store/lowdb-store";
 import { TerminalSessionManager } from "../../../backend/src/terminal/manager/manager";
 import type { AppServerHistoryGateway } from "../../../backend/src/work-history/app-server-history-gateway";
@@ -138,36 +135,11 @@ async function main(): Promise<void> {
       threadRef("thread-a", "1", project.id, terminal.id, baseTime),
       threadRef("thread-b", "2", project.id, terminal.id, baseTime),
     ];
-    const run = fixtureRun(project.id, terminal.id);
-    const fixture = {
-      ...structuredClone(run),
-      runId: "work-history-fixture-run",
-      runKind: "verification_fixture" as const,
-      lineage: {
-        ownerRunId: run.runId,
-        ownerDispatchId: "dispatch-work-history",
-        ownerCaseIds: ["AGT-WH-001"],
-        ownerDevSessionId: "dvs-work-history",
-        fixtureNamespace:
-          "agent-team:work-history-run:dispatch-work-history:dvs-work-history",
-        ownsTerminalSession: true,
-        cleanupPolicy: "on_owner_dispatch_complete" as const,
-      },
-      status: "cancelled" as const,
-      updatedAt: new Date(Date.now() + 60_000).toISOString(),
-    };
-    const agentTeamService = {
-      listRuns: async (projectId: string) =>
-        projectId === project.id ? [fixture, run] : [],
-      getRun: async (runId: string) =>
-        runId === run.runId ? run : runId === fixture.runId ? fixture : null,
-    } as unknown as AgentTeamService;
     const gateway = new FixtureGateway(twoThreads);
     const service = new WorkHistoryService(
       terminalManager,
       new ActivityQueryService(activityStore),
       gateway as unknown as AppServerHistoryGateway,
-      agentTeamService,
     );
 
     const terminalPage = await service.listTerminals({ limit: 100 });
@@ -206,7 +178,6 @@ async function main(): Promise<void> {
       terminalManager,
       new ActivityQueryService(activityStore),
       new FixtureGateway([], true) as unknown as AppServerHistoryGateway,
-      agentTeamService,
     );
     const degraded = await unavailableService.getTerminal(terminal.id);
     assert(degraded);
@@ -227,7 +198,6 @@ async function main(): Promise<void> {
       terminalManager,
       new ActivityQueryService(activityStore),
       boundedGateway as unknown as AppServerHistoryGateway,
-      agentTeamService,
     );
     const bounded = await boundedService.getTerminal(terminal.id, {
       includeActivity: false,
@@ -244,33 +214,6 @@ async function main(): Promise<void> {
     assert.equal(remaining?.threadDetails.length, 5);
     assert.equal(remaining?.nextThreadCursor, undefined);
 
-    const runPage = await service.listRuns({ limit: 1 });
-    assert.equal(runPage.runs[0]?.nextRoundIndex, 3);
-    assert.equal(runPage.runs[0]?.runKind, "primary");
-    assert(runPage.nextCursor);
-    const fixturePage = await service.listRuns({
-      limit: 1,
-      cursor: runPage.nextCursor,
-    });
-    assert.equal(fixturePage.runs[0]?.runId, fixture.runId);
-    assert.equal(fixturePage.runs[0]?.ownerRunId, run.runId);
-    assert.deepEqual(
-      resolveAgentTeamRoundAttribution({ activityRound: 2, dispatchRound: 1 }),
-      { round: 2, source: "activity_payload" },
-    );
-    assert.deepEqual(
-      resolveAgentTeamRoundAttribution({ dispatchRound: 2 }),
-      { round: 2, source: "dispatch_snapshot" },
-    );
-    assert.deepEqual(
-      resolveAgentTeamRoundAttribution({ runLogRounds: [2, 2] }),
-      { round: 2, source: "run_log_single_round" },
-    );
-    assert.deepEqual(
-      resolveAgentTeamRoundAttribution({ runLogRounds: [1, 2] }),
-      { round: null, source: "unavailable" },
-    );
-
     console.log(
       JSON.stringify(
         {
@@ -279,15 +222,12 @@ async function main(): Promise<void> {
           knownThreadCount: 2,
           frozenOffset,
           maxThreadDetailConcurrency: boundedGateway.maxActiveReads,
-          nextRoundIndex: run.loop.round,
           checks: [
             "terminal_archive_identity",
             "explicit_thread_ref_association",
             "activity_snapshot_pagination",
             "provider_unavailable_degradation",
             "thread_detail_limit_and_concurrency",
-            "round_attribution_precedence",
-            "primary_run_before_fixture_pagination",
           ],
         },
         null,
@@ -326,42 +266,6 @@ function threadRef(
     lastCompletionReason: "hook_stop",
     lastActivityAt: timestamp,
     updatedAt: timestamp,
-  };
-}
-
-function fixtureRun(projectId: string, terminalSessionId: string): AgentTeamRun {
-  const now = new Date().toISOString();
-  return {
-    runId: "work-history-run",
-    projectId,
-    terminalSessionId,
-    phase: "executing",
-    status: "running",
-    options: { autoApproveSplit: true, notifyMainOnHumanGate: true },
-    terminal: { command: "/bin/zsh", cwd: process.cwd() },
-    task: "verify Work History",
-    activeWorkerRole: null,
-    activeWorkerDispatch: null,
-    clarify: [],
-    proposal: null,
-    workers: [],
-    acceptance: [],
-    loop: {
-      round: 3,
-      noProgressCount: 0,
-      maxNoProgress: 3,
-      escalated: false,
-      lastReason: null,
-      stableFailThreshold: 2,
-      errorFingerprints: [],
-      bestPassCount: 0,
-      repairCycles: [],
-      maxRepairAttempts: 3,
-    },
-    humanNotes: [],
-    logs: ["Round 1 dispatched", "Round 2 dispatched"],
-    createdAt: now,
-    updatedAt: now,
   };
 }
 

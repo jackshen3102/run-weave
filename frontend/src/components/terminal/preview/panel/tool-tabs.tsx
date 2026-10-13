@@ -20,11 +20,9 @@ const getTabId = (id: SidecarTabId) => id;
 
 export function TerminalSidecarTabs({
   projectId,
-  showAgentTeamTool,
   onSetActiveTool,
 }: {
   projectId: string | null;
-  showAgentTeamTool: boolean;
   onSetActiveTool: (tool: TerminalSidecarTool) => void;
 }) {
   const {
@@ -42,8 +40,8 @@ export function TerminalSidecarTabs({
   })));
   const isElectron = window.electronAPI?.isElectron === true;
   const available = useMemo(() => SIDECAR_TABS
-    .filter((tab) => (tab.id !== "automation" || isElectron) && (tab.id !== "agent-team" || showAgentTeamTool))
-    .map((tab) => tab.id), [isElectron, showAgentTeamTool]);
+    .filter((tab) => (tab.id !== "automation" || isElectron))
+    .map((tab) => tab.id), [isElectron]);
   const visible = getVisibleSidecarTabs(layout, available);
   const active = getActiveSidecarTab(activeTool, profileId);
   const [open, setOpen] = useState(false);

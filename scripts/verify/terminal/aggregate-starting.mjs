@@ -1,10 +1,10 @@
 // 行为核对:终端聚合状态被僵尸 agent_starting 污染的收敛修复
 //
-// 复现的真实现场来自终端 dd8353fe(worktree agent-team-2 的 Agent Team 会话):
+// 复现的真实现场来自终端 dd8353fe(一个包含多个 pane 的会话):
 //   main            cmd=codex  agent_idle      有活跃 turn 时由 hook 驱动
 //   code-1          cmd=codex  agent_starting  turn 早已结束、无活跃 operation generation ← 僵尸
-//   code_review-2   cmd=codex  agent_idle
-//   behavior_verify cmd=null   shell_idle
+//   panel-idle   cmd=codex  agent_idle
+//   panel-shell cmd=null   shell_idle
 // 修复前:aggregatePanelTerminalState 把整体折叠成 agent_starting(僵尸 code-1 拖住)。
 // 修复后:reconcile 用 convergeStaleStartingWithoutLease 把无租约的 code-1 收敛为
 //         agent_idle,整体折叠回 agent_idle。
@@ -96,8 +96,8 @@ const runningPanel = (id, terminalState) => ({
   const rawPanels = [
     runningPanel("main", state("agent_idle")),
     runningPanel("code-1", state("agent_starting")), // 僵尸
-    runningPanel("code_review-2", state("agent_idle")),
-    { id: "behavior_verify", status: "running", activeCommand: null, terminalState: state("shell_idle", null) },
+    runningPanel("panel-idle", state("agent_idle")),
+    { id: "panel-shell", status: "running", activeCommand: null, terminalState: state("shell_idle", null) },
   ];
   const beforeFix = aggregatePanelTerminalState(rawPanels);
   const convergedPanels = rawPanels.map((p) => ({

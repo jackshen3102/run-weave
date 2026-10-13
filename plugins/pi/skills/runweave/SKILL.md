@@ -19,4 +19,4 @@ recent unrelated session. Preserve the user's other terminals and sessions.
 Only send messages, dispatch work to other agents, or close terminals when the
 user has authorized that action. Do not print auth tokens or environment secrets.
 Pi's native tools, skills and extensions remain available; this integration does
-not provide Codex plugin MCP tools or Agent Team/Race worker support.
+not provide Codex plugin MCP tools or Race worker support.

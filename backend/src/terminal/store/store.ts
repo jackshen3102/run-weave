@@ -77,8 +77,6 @@ export interface PersistedTerminalPanelRecord {
   lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
   lastThreadUpdatedAt?: string;
-  agentTeamRunId?: string | null;
-  agentTeamWorkerId?: string | null;
   cwd: string;
   activeCommand: string | null;
   terminalState?: TerminalState;

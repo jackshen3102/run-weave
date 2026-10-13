@@ -7,22 +7,6 @@ export {
   updateTerminalQuickInput,
 } from "./quick-inputs";
 export {
-  completeAgentTeamRun,
-  continueAgentTeamFrameworkRepair,
-  decideAgentTeamAcceptance,
-  decideAgentTeamFinding,
-  focusAgentTeamPane,
-  getAgentTeamModelSettings,
-  getAgentTeamFrameworkRepair,
-  getAgentTeamRunForTerminal,
-  proposeAgentTeamSplit,
-  rerunAgentTeamFrameworkRepair,
-  saveAgentTeamModelSettings,
-  resumeAgentTeamRun,
-  startAgentTeamRun,
-  submitAgentTeamSplitGate,
-} from "./agent-team";
-export {
   deleteTerminalProjectPreviewFile,
   getTerminalProjectPreviewAsset,
   getTerminalProjectPreviewFile,

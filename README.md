@@ -38,25 +38,6 @@ for extraction, system requirements, verification and preview limits.
 - Keep terminal work separate from the built-in Browser tool, so agent work can be
   managed as its own workflow.
 
-### Loop Engineering Engine
-
-Runweave is not just another AI terminal — it is a Loop engine with a built-in
-Verifier and circuit breaker. The `agent-team` module implements the full loop:
-Goal / Planner / Actor / Observer / Verifier / State / Exit Condition.
-
-- **Verifier** is a `behavior_verify` worker that runs Playwright against the
-  drafted acceptance cases and writes pass/fail + evidence back to its outbox
-  (roles are defined in `packages/shared/src/agent-team/index.ts`; prompts in
-  `backend/src/agent-team/prompt-builders.ts`).
-- **State + Exit Condition** live in `backend/src/agent-team/loop.ts`:
-  `errorFingerprints` (dedup repeated failures), `bestPassCount` (objective
-  progress signal), and `shouldEscalate()` — which auto-trips the circuit
-  breaker and escalates to a human once `noProgressCount` reaches
-  `maxNoProgress` (default 3).
-- **The verify↔code sub-loop**: `buildBounceBackPrompt` bounces stable-failing
-  cases back to the code pane. After a fix, the backend re-triggers
-  `behavior_verify` automatically — you don't re-run acceptance yourself.
-
 ### Long-Running Task Continuity
 
 Runweave is designed for long-running terminal tasks. When the local environment

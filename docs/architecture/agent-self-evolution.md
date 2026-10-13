@@ -1,9 +1,8 @@
 # Agent Self-Evolution V1
 
-Runweave Evolution 把本机 Activity、Work History、Agent Team 与仓库基线冻结成可审计证据，
+Runweave Evolution 把本机 Activity、Work History 与仓库基线冻结成可审计证据，
 由隔离的 Codex/Trae Analyst 形成 Claim、Insight revision 和 Candidate。它不是日报生成器：
-只有通过证据、隔离、Novelty 和治理门禁的 Memory Candidate，才可能在 scope owner 显式授权后
-以 advisory context 进入后续 Agent Team `code` worker。
+通过证据、隔离、Novelty 和治理门禁后生成 Candidate，供用户审阅和维护。运行时 worker 注入已移除，历史 RuntimeTrace 保留读取。
 
 产品入口是 `/evolution`，持久化状态位于用户级 Evolution SQLite。Web、CLI 和 Agent 都通过
 Backend API 访问，不直接打开数据库。
@@ -60,10 +59,7 @@ manual / schedule
   -> Novelty Gate
   -> append-only InsightRevision + ContributionEdge
   -> Candidate (draft/shadow)
-  -> explicit scope policy + per-Memory authorization
-  -> control/canary assignment
-  -> Agent Team code worker advisory injection
-  -> RuntimeTrace + objective outcome
+  -> explicit candidate governance
   -> revalidation / retirement / rollback
 ```
 
@@ -102,8 +98,7 @@ Context Pack 保存：
 
 Activity 以事件仓库归属索引的单调 `binding_offset` 冻结，原始事实保留 `activityOffset`。
 新事件使用可信 cwd；旧事件须有可核验的会话或已有仓库绑定，不按 Project 前缀归属。
-工具回调优先使用经过会话归属校验的面板 cwd，Worker 分发使用对应角色的 cwd。
-完整 Agent Team Run 的仓库入口不明确或跨仓库时，不把它作为单仓库补充证据。
+工具回调优先使用经过会话归属校验的面板 cwd。
 晚到的归属补录取得新 cursor，因此不会漏在旧 watermark 之前；冻结中途补录不改变当前 Pack。
 未归属统计进入 DataQuality，不能声称覆盖全部历史。一次手动或定时反思先读取该范围上次成功
 watermark，再固定 `snapshotBoundary`，并自动分页读取到该边界；Context Pack 只有在全部分页
@@ -124,7 +119,6 @@ MCP bearer token。Prompt 通过 stdin 传递。允许工具限定为冻结证�
 - `activity.get_content`
 - `evidence.batch_get_metadata`
 - `history.get_thread`
-- `history.get_agent_team_run`
 - `source.search`
 - `source.read`
 
@@ -164,29 +158,6 @@ Insight、InsightRevision、ContributionEdge 和 RuntimeTraceEvent 是 append-on
 `learning.sqlite` 不保存 Activity 正文、用户 prompt、代码片段、完整工具输出或 Provider
 stdout。它只保存去敏 statement、结构化 outcome、Evidence ID/hash、revision 与不可逆统计。
 
-## Candidate 与真实注入
-
-Candidate 类型为 Memory、Prompt、Skill、Routing、Product 和 Code。V1 只有 Memory
-存在自动运行时入口；其他类型始终是结构化提案，不安装、不改仓库、不改产品。
-
-Memory 的激活需要两层显式授权：
-
-1. scope owner 把 `memoryCanaryEnabled` 打开并把 `canaryRate` 从 0 调高；
-2. scope owner 对一条 `low` risk、`shadow` Memory 执行“授权进入 Canary”。
-
-检索在 Selector 前硬过滤 scope、worker role、lifecycle、有效期、依赖和排除条件。
-最终最多注入 3 条、6000 bytes，并以独立的
-`<evolution-context status="canary" advisory="true">` 块追加到原 startup prompt。
-原任务、系统 prompt、AGENTS.md 和验收合同保持原样。服务失败时 fail-open，不阻塞 worker。
-
-control/canary 由 scope、run、asset 和 policy revision 确定性分配。每次 eligible task 都写
-RuntimeTrace，记录召回、过滤、选择、分桶、实际暴露 revision 和后续客观结果。关闭 policy
-会立即停止新注入；“退休 / 回滚”生成新的 Candidate revision，历史 trace 继续保留。
-
-分桶使用稳定 `assetId`，更新 revision 或新增候选不能改变同一 run/asset 的实验身份。
-客观结果与 Agent feedback 按 dispatch 精确归因；feedback 缺失或引用未暴露 revision 时记录
-`missing`，不静默丢失观察。feedback 始终是 `advisoryOnly`，不能直接作为 promotion 依据。
-
 ## 运行时与故障边界
 
 - 全机 lease key 固定为 `global-evolution-runner-v1`，所有 Backend 合计最多一个活动 Run。
@@ -194,8 +165,7 @@ RuntimeTrace，记录召回、过滤、选择、分桶、实际暴露 revision �
 - manual 排在 event、schedule 之前；已运行任务不被抢占。
 - 同一 Schedule 错过多个窗口只 materialize 一个最新 catch-up Run。
 - Evolution 初始化失败时 Backend 其他能力继续运行，Evolution API 返回 degraded/unavailable。
-- Provider、MCP、注入或 outcome observer 失败都不得修改用户 workspace 或阻塞原 Agent Team
-  主流程。
+- Provider 或 MCP 失败不得修改用户 workspace 或阻塞普通终端任务。
 
 ## API 与代码入口
 
@@ -210,8 +180,7 @@ RuntimeTrace，记录召回、过滤、选择、分桶、实际暴露 revision �
   `POST /candidates/:id/canary|retire`
 - Policy：`GET/PUT /scopes/:learningScopeId/policy`
 - RuntimeTrace：`GET /runtime-traces`，可按 `runId` 精确查询，或按
-  `learningScopeId`/`limit` 查看近期真实激活轨迹；`/evolution` 使用 scope 查询，不把分析
-  Run ID 与 Agent Team Run ID 混用
+  `learningScopeId`/`limit` 查看历史激活轨迹；`/evolution` 使用 scope 查询
 
 主要实现位于：
 

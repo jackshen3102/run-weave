@@ -32,7 +32,6 @@ interface TerminalWorkspaceState {
   aliasTargetSessionId: string | null;
   diagnosticLogOpen: boolean;
   statusLookupOpen: boolean;
-  agentTeamModelConfigOpen: boolean;
 }
 
 interface TerminalWorkspaceActions {
@@ -74,7 +73,6 @@ interface TerminalWorkspaceActions {
   closeSessionAlias: () => void;
   setDiagnosticLogOpen: (next: StateUpdater<boolean>) => void;
   setStatusLookupOpen: (next: StateUpdater<boolean>) => void;
-  setAgentTeamModelConfigOpen: (next: StateUpdater<boolean>) => void;
   selectActiveSession: (terminalSessionId: string | null) => void;
   resetForConnection: (initialTerminalSessionId?: string) => void;
 }
@@ -157,7 +155,6 @@ const initialState: TerminalWorkspaceState = {
   aliasTargetSessionId: null,
   diagnosticLogOpen: false,
   statusLookupOpen: false,
-  agentTeamModelConfigOpen: false,
 };
 
 export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
@@ -277,13 +274,6 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
     setStatusLookupOpen: (next) =>
       set((state) => ({
         statusLookupOpen: resolveNext(next, state.statusLookupOpen),
-      })),
-    setAgentTeamModelConfigOpen: (next) =>
-      set((state) => ({
-        agentTeamModelConfigOpen: resolveNext(
-          next,
-          state.agentTeamModelConfigOpen,
-        ),
       })),
     selectActiveSession: (terminalSessionId) =>
       set({ activeSessionId: terminalSessionId }),

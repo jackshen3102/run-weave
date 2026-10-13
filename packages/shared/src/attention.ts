@@ -5,7 +5,7 @@ export type AttentionState =
   | "completed"
   | "working";
 
-export type AttentionTargetSurface = "terminal" | "agent-team";
+export type AttentionTargetSurface = "terminal";
 
 export interface AttentionSlot {
   attentionId: string;
@@ -18,13 +18,12 @@ export interface AttentionSlot {
   sessionLabel: string;
   panelId: string | null;
   panelLabel: string | null;
-  runId: string | null;
   state: AttentionState;
   title: string;
   detail: string;
   updatedAt: string;
   source: {
-    kind: "terminal_session" | "agent_team_run";
+    kind: "terminal_session";
     evidence: string;
   };
   targetSurface: AttentionTargetSurface;
@@ -70,7 +69,6 @@ export interface AttentionOpenIntent {
   projectId: string;
   terminalSessionId: string;
   panelId: string | null;
-  runId: string | null;
   targetSurface: AttentionTargetSurface;
   completionRevision: number | null;
 }

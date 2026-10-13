@@ -8,16 +8,14 @@ cases:
   - id: TAC-001
     name: Activity 默认进入 Terminal History
     required: true
-    description: >
-      验证已登录用户访问 `/activity` 时默认进入 Terminal History，并保留 Multi-Agent Runs、
-      Events、Timeline、Sources 与 Data Policy 等既有入口。
+    description: |
+      验证已登录用户访问 `/activity` 时默认进入 Terminal History，并保留  Events、Timeline、Sources 与 Data Policy 等既有入口。
     preconditions:
       - 用户已登录 Runweave。
       - 至少存在一个可展示的 Terminal Session。
     steps:
       - 使用 `$toolkit:playwright-cli` 打开不带 query 参数的 `/activity`；确认 Terminal History 为默认选中项。
-      - 检查导航中的 Multi-Agent Runs、Events、Timeline、Sources、Data Policy，并刷新页面；确认入口、选中状态和页面壳层稳定，没有白屏、未捕获异常或无限加载。
-
+      - 检查导航中的 Events、Timeline、Sources、Data Policy，并刷新页面；确认入口、选中状态和页面壳层稳定，没有白屏、未捕获异常或无限加载。
   - id: TAC-002
     name: 同一 Terminal 按 Thread 分段归档
     required: true
@@ -32,19 +30,6 @@ cases:
       - 确认仅存在一条 T1 档案、创建时间未变且最后活动时间更新，两个 Thread 以独立时间段显示；确认列表和详情不通过命令名、Thread ID 或时间接近度错误关联对象。
 
   - id: TAC-003
-    name: Acceptance Evidence 只展示真实字段
-    required: true
-    description: >
-      验证有 Evidence 的 Acceptance 事件可下钻真实 type、label、summary、ref 与可选 detail，
-      无 Evidence 或缺失事实字段时不会伪造检查数量、测试路径或成功结论。
-    preconditions:
-      - 一个 Run 包含 `AgentTeamAcceptanceEvidence`，另一个 Run 没有 Evidence。
-      - 被测 Terminal 或 Run 的部分可选事实字段缺失。
-    steps:
-      - 在 Activity Inspector 中分别选择有 Evidence 的 Acceptance 事件和无 Evidence 的 Run。
-      - 确认 Inspector 只显示 DTO 中实际存在的字段，ref 按安全规则显示或跳转；无 Evidence 或缺失字段显示“未记录/不可用”或省略，不生成占位指标、mock 文本或推导结论。
-
-  - id: TAC-004
     name: Activity 与 Thread detail 鉴权不泄露数据
     required: true
     description: >
@@ -57,7 +42,7 @@ cases:
       - 在无登录态访问 Work History 与 Thread detail，再以有效登录态重复操作。
       - 确认匿名请求返回 401 且响应和日志不包含消息正文、Terminal 或 Evidence；登录后页面和接口返回对应数据。
 
-  - id: TAC-005
+  - id: TAC-004
     name: Activity 分页与快速切换不会串数据
     required: true
     description: >
@@ -69,7 +54,7 @@ cases:
       - 记录首屏 `asOfActivityOffset` 和 `nextCursor`，新增 Fact 后用同一快照读取下一页；确认无重复或跳项，刷新 archive 后可见新数据。
       - 使用 `$toolkit:playwright-cli` 先选择 T1、在其响应返回前立即选择 T2；等待请求结束后确认 URL、选中项、Journal 与 Inspector 都属于 T2，没有混合内容或永久 loading。
 
-  - id: TAC-006
+  - id: TAC-005
     name: 删除或不存在对象后可恢复
     required: true
     description: >
@@ -82,7 +67,7 @@ cases:
       - 删除对象后刷新详情，或直接打开带失效选中 ID 的 Activity URL。
       - 确认后端明确返回对象不存在，UI 保留列表、清除失效选中并提示用户；选择其他对象后页面恢复，且不会删除 Activity Facts 或其他档案。
 
-  - id: TAC-007
+  - id: TAC-006
     name: 支持 TUI 离底显示并回底隐藏 Composer
     required: true
     description: >
@@ -96,7 +81,7 @@ cases:
       - 在 supported TUI 离底后点击 `Open floating composer`；确认出现 textarea、图标发送按钮和 Composer 上方的回底按钮。
       - 分别点击回底按钮、使用滚轮或触控板回到底部；确认 terminal 到底，Composer、打开入口与回底按钮同步隐藏，TUI 原输入区重新成为主输入入口。
 
-  - id: TAC-008
+  - id: TAC-007
     name: Composer 与 Native TUI draft 双向同步
     required: true
     description: >
@@ -108,7 +93,7 @@ cases:
       - 在 Native TUI 输入未发送 draft，离底并打开 Composer；确认 textarea 显示完全相同的文本。
       - 修改 Composer draft 后分别通过回底按钮和滚轮回底；确认 Native TUI 显示最新 draft、焦点回到 terminal，且没有自动发送、旧新文本拼接或 Composer 残留。
 
-  - id: TAC-009
+  - id: TAC-008
     name: Composer 一次发送与换行语义正确
     required: true
     description: >
@@ -119,7 +104,7 @@ cases:
       - 输入唯一单行 draft 并点击发送图标；确认 terminal 回底、输出中仅出现一次该 draft，Composer draft 被清空并隐藏。
       - 再次打开 Composer，输入两行文本并用 Shift+Enter 换行后按 Enter；确认换行前未发送，Enter 后完整两行 draft 被发送且 terminal 回底。
 
-  - id: TAC-010
+  - id: TAC-009
     name: 搜索与 Composer 互斥且 scrollback 可恢复
     required: true
     description: >

@@ -1,6 +1,6 @@
 # Backend
 
-`backend/` 是 Runweave 的本机控制面：提供 HTTP/WebSocket API，管理 Terminal、Agent Team、
+`backend/` 是 Runweave 的本机控制面：提供 HTTP/WebSocket API，管理 Terminal、
 Activity、Evolution、认证与工作历史等运行时能力。
 
 ## 先看哪里
@@ -13,7 +13,6 @@ Activity、Evolution、认证与工作历史等运行时能力。
 - WebSocket 边界：`src/ws/`
 - Terminal 运行时：`src/terminal/`
 - Terminal 长文本文件、执行资格与交付恢复：[文本附件合同](docs/terminal-text-attachments.md)
-- Agent Team / Loop Engine：`src/agent-team/`
 - 定时任务：`src/scheduled-tasks/`；独立 SQLite、调度、provider 执行与普通终端恢复
 - 跨运行时合同：`../packages/shared/`
 
@@ -23,7 +22,7 @@ Activity、Evolution、认证与工作历史等运行时能力。
 
 - `src/routes/` 和 `src/ws/` 只做传输层装配、鉴权、输入校验和响应映射；领域状态与生命周期留在
   对应能力目录。
-- `src/agent-team`、`src/app-server`、`src/auth`、`src/terminal`、`src/voice` 不反向依赖
+- `src/app-server`、`src/auth`、`src/terminal`、`src/voice` 不反向依赖
   `src/routes` 或 `src/ws`。
 - 前后端或跨进程共享的 DTO、事件和协议修改必须落在 `packages/shared`，并同步检查所有真实消费者。
 - 不把 Backend-only 存储模型或服务实现迁入 `packages/common`。

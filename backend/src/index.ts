@@ -34,7 +34,7 @@ import { createAuthRouter } from "./routes/auth";
 import { createAppHomeOverviewRouter } from "./routes/app/home-overview";
 import { createAppServerStateRouter } from "./routes/app-server/state";
 import { createDiagnosticLogsRouter } from "./routes/diagnostics/logs";
-import { createAgentTeamRouter } from "./routes/agent-team/index";
+import { createAgentModelCatalogRouter } from "./routes/agent-model-catalog";
 import { createRaceRouter } from "./routes/race";
 import { registerActivityRoutes } from "./routes/activity/registration";
 import {
@@ -199,7 +199,6 @@ function createHttpApp(
     "/internal/evolution/mcp",
     createEvolutionMcpRouter({
       activityStore: services.activityStore,
-      agentTeamService: services.agentTeamService,
       appServerHistoryGateway: services.appServerHistoryGateway,
       contextPackStore: services.evolutionContextPackStore,
       tokenRegistry: services.evolutionToolTokenRegistry,
@@ -278,9 +277,9 @@ function createHttpApp(
     createAttentionRouter(services.attentionService),
   );
   app.use(
-    "/api/agent-team",
+    "/api/agent-model-catalogs",
     requireAuth,
-    createAgentTeamRouter(services.agentTeamService),
+    createAgentModelCatalogRouter(services.agentModelCatalogService),
   );
   app.use("/api/race", requireAuth, createRaceRouter(services.raceService));
   app.use("/api/scheduled-tasks", requireAuth, createScheduledTasksRouter(services.scheduledTaskService));
@@ -479,7 +478,6 @@ async function startRuntime(): Promise<void> {
       try { config.requireDomain(domain); config.markApplied(domain); } catch { config.reportError(domain); }
     }
     resources.defer("voice-configuration", config.register("voice", () => {}));
-    resources.defer("model-configuration", config.register("agents.team", () => {}));
     stage = "http-app";
     const app = createHttpApp(
       services,

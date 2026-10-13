@@ -13,7 +13,6 @@ import { TerminalHistoryDrawer } from "../session/history-drawer";
 import { TerminalProjectDialog } from "../session/project-dialog";
 import { TerminalSessionAliasDialog } from "../session/session-tab";
 import { TerminalStatusLookupDialog } from "./status-lookup-dialog";
-import { TerminalAgentTeamModelConfigDialog } from "../agent-team/model-config-dialog";
 import { useShallow } from "zustand/react/shallow";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
@@ -67,7 +66,6 @@ export function TerminalWorkspaceOverlays({
     aliasTargetSessionId,
     diagnosticLogOpen,
     statusLookupOpen,
-    agentTeamModelConfigOpen,
     panelWorkspaceBySessionId,
     activePanelIdBySessionId,
     setProjectPendingDeletion,
@@ -77,7 +75,6 @@ export function TerminalWorkspaceOverlays({
     closeSessionAlias,
     setDiagnosticLogOpen,
     setStatusLookupOpen,
-    setAgentTeamModelConfigOpen,
   } = useTerminalWorkspaceStore(
     useShallow((state) => ({
       activeProjectId: state.activeProjectId,
@@ -93,7 +90,6 @@ export function TerminalWorkspaceOverlays({
       aliasTargetSessionId: state.aliasTargetSessionId,
       diagnosticLogOpen: state.diagnosticLogOpen,
       statusLookupOpen: state.statusLookupOpen,
-      agentTeamModelConfigOpen: state.agentTeamModelConfigOpen,
       panelWorkspaceBySessionId: state.panelWorkspaceBySessionId,
       activePanelIdBySessionId: state.activePanelIdBySessionId,
       setProjectPendingDeletion: state.setProjectPendingDeletion,
@@ -103,7 +99,6 @@ export function TerminalWorkspaceOverlays({
       closeSessionAlias: state.closeSessionAlias,
       setDiagnosticLogOpen: state.setDiagnosticLogOpen,
       setStatusLookupOpen: state.setStatusLookupOpen,
-      setAgentTeamModelConfigOpen: state.setAgentTeamModelConfigOpen,
     })),
   );
   const loading =
@@ -228,14 +223,6 @@ export function TerminalWorkspaceOverlays({
           activeProjectId={activeProjectId}
           activeSessionId={activeSession?.terminalSessionId ?? null}
           activePanelId={activeStatusLookupPanelId}
-        />
-      ) : null}
-      {!isMobileMonitor ? (
-        <TerminalAgentTeamModelConfigDialog
-          apiBase={apiBase}
-          token={token}
-          open={agentTeamModelConfigOpen}
-          onOpenChange={setAgentTeamModelConfigOpen}
         />
       ) : null}
       <AlertDialog

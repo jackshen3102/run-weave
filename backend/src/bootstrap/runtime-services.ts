@@ -23,10 +23,8 @@ import {
 import { MobileLoginService } from "../auth/mobile-login";
 import path from "node:path";
 import { createExperienceLearning } from "../experience/bootstrap";
-import crypto from "node:crypto";
-import { AgentTeamService } from "../agent-team/service";
-import { AgentTeamModelConfigStore } from "../agent-team/runtime/model-config-store";
-import { AgentTeamModelSettingsService } from "../agent-team/model-catalog/service";
+import { AgentModelCatalogStore } from "../agent-model-catalog/store";
+import { AgentModelCatalogService } from "../agent-model-catalog/service";
 import { ActivityRuntime } from "../activity/runtime";
 import { ResourceScope } from "./resource-scope";
 import { logger } from "../logging/index";
@@ -144,15 +142,15 @@ async function assembleRuntimeServices(
     terminalQuickInputStore.dispose(),
   );
   await terminalQuickInputStore.initialize();
-  const agentTeamModelConfigStore = new AgentTeamModelConfigStore(
-    storagePaths.agentTeamModelStoreFile,
+  const agentModelCatalogStore = new AgentModelCatalogStore(
+    storagePaths.agentModelCatalogStoreFile,
   );
-  resources.defer("agent-team-model-config", () =>
-    agentTeamModelConfigStore.dispose(),
+  resources.defer("agent-model-catalog", () =>
+    agentModelCatalogStore.dispose(),
   );
-  await agentTeamModelConfigStore.initialize();
-  const agentTeamModelSettingsService = new AgentTeamModelSettingsService(
-    agentTeamModelConfigStore,
+  await agentModelCatalogStore.initialize();
+  const agentModelCatalogService = new AgentModelCatalogService(
+    agentModelCatalogStore,
     process.env,
   );
   const terminalQuickInputService = new TerminalQuickInputService(
@@ -349,8 +347,6 @@ async function assembleRuntimeServices(
     evolutionProviderAvailability,
     evolutionService,
     evolutionToolTokenRegistry,
-    evolutionMemoryProvider,
-    evolutionOutcomeObserver,
   } = await createEvolutionStorage(
     evolutionPaths,
     resources,
@@ -361,21 +357,6 @@ async function assembleRuntimeServices(
     evolutionService, evolutionAnalysisStore, evolutionFoundationStore,
     activityQueryService, experienceService, terminalSessionManager,
   });
-  const agentTeamService = new AgentTeamService({
-    terminalSessionManager,
-    terminalEventService,
-    ptyService,
-    runtimeRegistry: terminalRuntimeRegistry,
-    terminalStateService,
-    tmuxService,
-    tmuxOutputWatcher,
-    activity: terminalActivity,
-    backendInstanceId: crypto.randomUUID(),
-    evolutionMemoryProvider,
-    evolutionOutcomeObserver,
-    modelSettingsService: agentTeamModelSettingsService,
-  });
-  resources.defer("agent-team", () => agentTeamService.dispose());
   const raceService = new RaceService({
     terminalSessionManager,
     terminalEventService,
@@ -393,7 +374,6 @@ async function assembleRuntimeServices(
     terminalSessionManager,
     activityQueryService,
     appServerHistoryGateway,
-    agentTeamService,
   );
   const evolutionOrchestrator =
     evolutionFoundationStore &&
@@ -409,7 +389,6 @@ async function assembleRuntimeServices(
             undefined,
             new DefaultEvolutionSupplementalSourceReader(
               appServerHistoryGateway,
-              agentTeamService,
               (learningScopeId) =>
                 terminalSessionManager.getProjectContext(learningScopeId)
                   ?.path ??
@@ -444,7 +423,6 @@ async function assembleRuntimeServices(
   const attentionService = new AttentionService(
     terminalSessionManager,
     terminalCompletionEventService,
-    agentTeamService,
     terminalStateService,
   );
 
@@ -454,7 +432,6 @@ async function assembleRuntimeServices(
     serviceInstanceId ?? activityInstanceId,
     {
       activityStoreAvailable: () => activityStore?.isAvailable() ?? false,
-      agentTeamService,
       evolutionRuntime,
       workspaceServiceManager,
     },
@@ -524,7 +501,6 @@ async function assembleRuntimeServices(
       feishuConnector?.start();
       textAttachmentFiles?.start();
       activity.start();
-      agentTeamService.initialize();
       evolutionRuntime.start(controlPlaneBaseUrl);
       experienceLearning.start();
       scheduledTasks.runtime?.start();
@@ -556,8 +532,8 @@ async function assembleRuntimeServices(
     terminalQuickInputStore,
     terminalQuickInputService,
     terminalStateService,
-    agentTeamService,
-    agentTeamModelConfigStore,
+    agentModelCatalogStore,
+    agentModelCatalogService,
     raceService,
     appServerHistoryGateway,
     workHistoryService,

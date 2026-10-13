@@ -56,10 +56,10 @@ async function verifyAnalysisFoundation() {
   });
   try {
     const parentProjectId = "project:browser-viewer";
-    const childA = buildTerminalChildProjectId(parentProjectId, "agent-team-1");
+    const childA = buildTerminalChildProjectId(parentProjectId, "terminal-1");
     const childB = buildTerminalChildProjectId(
       parentProjectId,
-      "removed-agent-team-2",
+      "removed-terminal-2",
     );
     const unrelatedProjectId = "project:unrelated";
     const factory = createFactory("scope-fixture");
@@ -67,7 +67,7 @@ async function verifyAnalysisFoundation() {
       factory,
       childB,
       "child-b-deleted-path",
-      "/deleted/browser-viewer/.worktree/agent-team-2",
+      "/deleted/browser-viewer/.worktree/terminal-2",
     );
     expiringFact.occurredAt = "2026-07-18T01:30:00.000Z";
     expiringFact.contents.push({
@@ -82,7 +82,7 @@ async function verifyAnalysisFoundation() {
         factory,
         childA,
         "child-a",
-        "/repo/browser-viewer/.worktree/agent-team-1",
+        "/repo/browser-viewer/.worktree/terminal-1",
       ),
       expiringFact,
       createFact(factory, unrelatedProjectId, "unrelated", "/repo/unrelated"),
@@ -125,7 +125,7 @@ async function verifyAnalysisFoundation() {
         (evidence) =>
           evidence.origin.projectId === childB &&
           evidence.origin.path ===
-            "/deleted/browser-viewer/.worktree/agent-team-2",
+            "/deleted/browser-viewer/.worktree/terminal-2",
       ),
       "historical child identity must not depend on its path still existing",
     );
@@ -144,7 +144,7 @@ async function verifyAnalysisFoundation() {
       factory,
       childA,
       "after-snapshot",
-      "/repo/browser-viewer/.worktree/agent-team-1",
+      "/repo/browser-viewer/.worktree/terminal-1",
     );
     await activityStore.record([lateFact], Date.parse(capturedAt) + 1);
 
@@ -394,7 +394,7 @@ async function verifyAnalysisFoundation() {
       factory,
       childA,
       "reinforcement",
-      "/repo/browser-viewer/.worktree/agent-team-1",
+      "/repo/browser-viewer/.worktree/terminal-1",
     );
     await activityStore.record([reinforcementFact], Date.parse(capturedAt) + 2);
     analysisFixtureState.currentEvidenceEventId = reinforcementFact.eventId;

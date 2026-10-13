@@ -36,17 +36,15 @@ cases:
   - id: CAR-003
     name: shared 子路径合约在所有运行时兼容
     required: true
-    description: >
-      验证 shared 子路径迁移不改变 Terminal、Agent Team 和 App Server 的既有 payload，
-      并且所有真实消费者都可解析该合约。
+    description: |
+      验证 shared 子路径迁移不改变 Terminal 和 App Server 的既有 payload， 并且所有真实消费者都可解析该合约。
     preconditions:
-      - 已保留重构前的 project、session、panel、input、state、event、WebSocket、Agent Team 与 App Server payload 样本。
+      - 已保留重构前的 project、session、panel、input、state、event、WebSocket、 App Server payload 样本。
       - shared、frontend、app、backend、electron、app-server 和 CLI 均可执行构建或类型检查。
     steps:
       - 对各运行时执行现有 typecheck 或 build，并分别用重构前后入口序列化同一批协议样本。
       - 搜索产品源码对 `@runweave/shared` 根导入的使用，并检查所有消费者使用明确子路径。
       - 确认 JSON 字段、可选性与 discriminator 一致，所有消费者通过，产品源码新增根导入为零。
-
   - id: CAR-004
     name: 质量门禁与声明的执行范围一致
     required: true
@@ -105,11 +103,11 @@ cases:
   - id: CAR-008
     name: 旧数据格式和独立 PR 回滚保持可读
     required: true
-    description: >
-      验证新旧代码都能读取冻结的 LowDB、scrollback、Agent Team、App Server、App 认证
-      与 Browser tabs 数据格式，并支持按 PR 独立回滚。
+    description: |
+      验证新旧代码都能读取冻结的 LowDB、scrollback、App Server、App 认证 与 Browser tabs 数据格式，并支持按 PR 独立回滚。
     preconditions:
-      - 已保存重构前 LowDB、scrollback、Agent Team run/outbox、App Server event/state/lock、App connection/auth index、Browser tabs 与 HTTP/WS/IPC/CLI 样本。
+      - 已保存重构前 LowDB、scrollback run/outbox、App Server event/state/lock、App connection/auth
+        index、Browser tabs 与 HTTP/WS/IPC/CLI 样本。
       - 可切换到当前 workstream 各 PR 的前一版本。
     steps:
       - 使用新代码读取并操作旧 fixture，再按模块回滚一个 workstream PR 后用回滚代码读取未改变格式的数据。

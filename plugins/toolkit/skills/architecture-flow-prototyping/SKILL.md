@@ -26,7 +26,6 @@ description: 面向技术说明、非产品 UI：用可运行 HTML 讲清系统�
 
 下面两个案例代表不同方向，不是模板：
 
-- `docs/architecture-flows/agent-team-loop-flow/`：用静态单页聚焦生命周期、核心 loop 和闭环出口。
 - `docs/architecture-flows/app-server-event-architecture-flow/`：用交互场景、因果和证据解释事件架构并发现问题。
 
 学习它们如何围绕目标组织信息，不复制页面结构、问题编号、视觉风格或文件数量。

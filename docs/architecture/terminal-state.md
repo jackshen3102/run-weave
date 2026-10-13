@@ -38,7 +38,7 @@ Terminal session 与 panel metadata 中的 current/last thread 必须同时携�
 
 `GET/PUT /api/terminal/session/:id/agent-settings` 只面向运行中的 tmux Codex / TraeX 面板。Backend 从当前 panel metadata 核对 provider、threadId 与 pane；一次 turn 完成后，仍在前台的空闲 TUI 可使用同一 panel 的 `lastThreadId/lastThreadProvider`（状态为 idle）。Pi 和普通 shell 不展示入口。模型目录按 provider 从本机 CLI 动态读取，手机只显示当前 thread 的结构化设置。独立 app-server 的 `thread/list` 能读取 TUI 会话写入的 model/reasoningEffort；全局 CLI 配置和终端文本都不是当前设置的权威值。
 
-现有 TUI 持有 thread writer，另一个 app-server 无法对这个已加载 thread 执行 `thread/settings/update`。手机提交时，Backend 在终端输入锁下检查 revision，通过该 pane 的 `/model` 原生菜单按键完成选择，再从相同 provider 的 `thread/list` 回读确认。这个路径同时适用于新旧 TUI 会话，无需改变 CLI 启动方式，也不触及 Agent Team、定时任务或语音的启动路径。菜单形态、账号目录或 thread 身份不匹配时返回错误，不宣称成功；不根据终端 placeholder 文案或 Agent 忙闲投影预先拒绝切换；直接尝试原生菜单，并以菜单响应和设置回读判断结果。TraeX 的 Max 模式保持原值，目标模型不支持时拒绝。独立 app-server 的读回可能有短暂延迟，因此确认超时后客户端需重新读取。旧客户端不调用新端点，原有终端输入协议不变。
+现有 TUI 持有 thread writer，另一个 app-server 无法对这个已加载 thread 执行 `thread/settings/update`。手机提交时，Backend 在终端输入锁下检查 revision，通过该 pane 的 `/model` 原生菜单按键完成选择，再从相同 provider 的 `thread/list` 回读确认。这个路径同时适用于新旧 TUI 会话，无需改变 CLI 启动方式，也不触及定时任务或语音的启动路径。菜单形态、账号目录或 thread 身份不匹配时返回错误，不宣称成功；不根据终端 placeholder 文案或 Agent 忙闲投影预先拒绝切换；直接尝试原生菜单，并以菜单响应和设置回读判断结果。TraeX 的 Max 模式保持原值，目标模型不支持时拒绝。独立 app-server 的读回可能有短暂延迟，因此确认超时后客户端需重新读取。旧客户端不调用新端点，原有终端输入协议不变。
 
 ## Codex 会话分叉
 
@@ -46,7 +46,7 @@ Terminal session 与 panel metadata 中的 current/last thread 必须同时携�
 
 客户端先读取 `GET /api/terminal/session/:id/agent/fork-target`，再向 `POST /api/terminal/session/:id/agent/fork` 提交唯一 `operationId`、`panelId`、`expectedThreadId` 和 `expectedRevision`。合同位于 `packages/shared/src/terminal/agent-fork.ts`，iOS 使用对应 Swift DTO。Backend 在创建前及发送启动命令前重新核对来源的选中 Panel、thread、空闲状态和启动轮次；同一个操作 ID 在当前 Backend 进程内保留一小时并复用结果，同一 Panel 不并发分叉。
 
-新终端继承来源的项目和 cwd，通过 Codex 原生 `thread/fork` 创建新的 thread 并核对 `forkedFromId`，再执行 `codex resume <新 threadId>`。新身份来自原生响应，不等待首次任务才触发的 SessionStart hook；原生分叉身份确认且 resume 命令提交后返回 `status: starting` 并打开新终端；不把命令提交冒充 CLI 就绪。Codex 在首个用户 turn 才触发生命周期 hook，因此继续沿用 hook 推进状态，新终端允许用户输入。复制的是会话历史；文件、工作目录和已有后台进程不会被复制，两个 thread 使用同一个目录。新终端等待用户输入，不自动执行一轮任务，也不向来源 Panel 发送命令。Agent Team Panel 不使用这个入口。
+新终端继承来源的项目和 cwd，通过 Codex 原生 `thread/fork` 创建新的 thread 并核对 `forkedFromId`，再执行 `codex resume <新 threadId>`。新身份来自原生响应，不等待首次任务才触发的 SessionStart hook；原生分叉身份确认且 resume 命令提交后返回 `status: starting` 并打开新终端；不把命令提交冒充 CLI 就绪。Codex 在首个用户 turn 才触发生命周期 hook，因此继续沿用 hook 推进状态，新终端允许用户输入。复制的是会话历史；文件、工作目录和已有后台进程不会被复制，两个 thread 使用同一个目录。新终端等待用户输入，不自动执行一轮任务，也不向来源 Panel 发送命令。
 
 已经发送原生启动命令但未确认结果时，Backend 保留新终端并在错误详情返回它的 ID；客户端刷新列表供用户检查。超时、断线或 App 进入后台均不自动重放分叉请求。用户在等待期间切换连接、项目或终端时，迟到结果不得抢占新的界面上下文。
 
@@ -71,8 +71,6 @@ Companion 不单独维护运行状态；Completion 的来源是历史事件，�
 Agent hook 的接收身份以 Panel 为最小作用域。Backend 为每个 Agent Panel 维护 `starting -> active -> grace` 活动租约，记录 provider、launch `operationId`、当前命令和原始时间戳。多 Pane hook 必须解析到唯一 Panel；存在 operation generation 时必须匹配同一次 launch。`Stop` 只有在目标 Panel 当前仍属于该 Agent，或同一活动租约刚进入 30 秒 grace 时才能写状态，不能消费其它 Pane 或旧 operation 的历史。
 
 活动租约同时写入当前 Profile 的 `terminal-session-store.json`。Backend 重启时只恢复仍存在的 Session/Panel：`starting/active` 必须与当前 Panel 事实兼容，`grace` 必须保持原 `clearedAt` 且仍未超过 30 秒；不匹配、过期或孤立记录会被删除。恢复不得刷新 grace 时间，也不得从 Session 聚合状态推测某个多 Pane Agent 的归属。
-
-Trae family 的 ready 判定必须来自当前启动轮次的真实输出。Agent Team 在 tmux-backed pane 中启动 TraeX worker 时，会先建立 pane-local startup output boundary，再发送启动命令；ready detector 必须同时看到 active command owner 仍属于 Trae family，并在该 boundary 之后看到新的 ready prompt。旧 ready 画面、其他 pane 输出、启动失败后的残留 prompt 或仅有 owner 切换都不能把状态推进为可派发任务。
 
 另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 的独立 Codex app-server 进程也可以用 `thread/read=active` 写入 `payload.compensation=true` 的 lifecycle observation，把陈旧 projection 恢复为 `agent_running`。独立进程返回的 `idle`、`notLoaded`、`systemError` 和读取失败都不是其它 TUI 进程已停止的证据；`agent_running -> agent_idle` 只接受同一 thread rollout 中不早于当前 projection 的 `task_complete` 或 `turn_aborted`。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
 

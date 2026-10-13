@@ -38,15 +38,12 @@ interface StagePanelCommands {
     cells: number,
   ) => void;
   onRefreshPanelWorkspace: (terminalSessionId: string) => void;
-  onPanelSplitEnabledChange: (enabled: boolean) => void;
-  onActiveAgentTeamRunChange: (active: boolean) => void;
 }
 
 interface TerminalWorkspaceStageProps {
   clientMode: ClientMode;
   loading: boolean;
   panels: StagePanelCommands;
-  showAgentTeamTool: boolean;
   onEditProject: () => void;
   onCreateSession: () => void;
 }
@@ -55,7 +52,6 @@ export function TerminalWorkspaceStage({
   clientMode,
   loading,
   panels,
-  showAgentTeamTool,
   onEditProject,
   onCreateSession,
 }: TerminalWorkspaceStageProps) {
@@ -188,8 +184,6 @@ export function TerminalWorkspaceStage({
       ? String(projectsQuery.error ?? sessionsQuery.error)
       : null);
   const {
-    onActiveAgentTeamRunChange,
-    onPanelSplitEnabledChange,
     onPanelWorkspaceChange,
     onRefreshPanelWorkspace,
     onResizePanel,
@@ -300,8 +294,7 @@ export function TerminalWorkspaceStage({
             <Suspense fallback={<aside className="flex h-full items-center justify-center bg-slate-950 text-sm text-slate-400" style={{ width: previewReservedWidth }}>Loading preview...</aside>}>
               <TerminalPreviewPanel fileLinkIntent={pendingFileLink} onFileLinkDone={() => setFileLinkIntent(null)}
                 activeProject={activeProject} activeSession={activeSession} activePanelId={activePanelId}
-                sessions={sessions} showAgentTeamTool={showAgentTeamTool} widthPx={previewWidthPx}
-                onPanelSplitEnabledChange={onPanelSplitEnabledChange} onActiveAgentTeamRunChange={onActiveAgentTeamRunChange}
+                sessions={sessions} widthPx={previewWidthPx}
                 onEditProject={onEditProject} />
             </Suspense>
           </div>

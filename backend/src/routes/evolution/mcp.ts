@@ -7,7 +7,6 @@ import { z } from "zod";
 import { readBearerToken } from "../../auth/middleware";
 import type { ActivityStore } from "../../activity/recording/store";
 import { canonicalJson, sha256 } from "../../activity/security/canonical";
-import type { AgentTeamService } from "../../agent-team/service";
 import type { AppServerHistoryGateway } from "../../work-history/app-server-history-gateway";
 import type { EvolutionContextPackStore } from "../../evolution/context-pack-store";
 import {
@@ -27,14 +26,12 @@ const ACTIVITY_SEARCH_TOOL = "activity.search_facts";
 const ACTIVITY_CONTENT_TOOL = "activity.get_content";
 const EVIDENCE_METADATA_TOOL = "evidence.batch_get_metadata";
 const HISTORY_THREAD_TOOL = "history.get_thread";
-const HISTORY_RUN_TOOL = "history.get_agent_team_run";
 const SOURCE_READ_TOOL = "source.read";
 const SOURCE_SEARCH_TOOL = "source.search";
 const MAX_SOURCE_BYTES = 256_000;
 
 export function createEvolutionMcpRouter(options: {
   activityStore: ActivityStore | null;
-  agentTeamService: AgentTeamService;
   appServerHistoryGateway: AppServerHistoryGateway;
   contextPackStore: EvolutionContextPackStore | null;
   tokenRegistry: EvolutionToolTokenRegistry;
@@ -295,36 +292,6 @@ export function createEvolutionMcpRouter(options: {
           }
           const text = JSON.stringify(detail);
           logToolCall(authorized, HISTORY_THREAD_TOOL, text.length, startedAt);
-          return { content: [{ type: "text" as const, text }] };
-        },
-      );
-    }
-    if (grant.allowedTools.includes(HISTORY_RUN_TOOL)) {
-      server.registerTool(
-        HISTORY_RUN_TOOL,
-        {
-          description:
-            "Read one Agent Team run that is frozen into this Context Pack.",
-          inputSchema: z.object({ runId: z.string().min(1) }).strict(),
-          annotations: readOnlyAnnotations(),
-        },
-        async ({ runId }) => {
-          const authorized = options.tokenRegistry.consume(
-            token,
-            HISTORY_RUN_TOOL,
-          );
-          const startedAt = performance.now();
-          const evidence = manifest.evidence.find(
-            (item) =>
-              item.source === "agent_team" && item.sourceRecordId === runId,
-          );
-          if (!evidence) throw new Error("evolution_evidence_forbidden");
-          const run = await options.agentTeamService.getRun(runId);
-          if (!run || sha256(canonicalJson(run)) !== evidence.digest) {
-            throw new Error("evolution_source_revision_changed");
-          }
-          const text = JSON.stringify(run);
-          logToolCall(authorized, HISTORY_RUN_TOOL, text.length, startedAt);
           return { content: [{ type: "text" as const, text }] };
         },
       );

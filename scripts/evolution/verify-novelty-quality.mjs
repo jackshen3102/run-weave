@@ -24,7 +24,7 @@ export async function verifyNoveltyQualityGates() {
   });
   const structured = evidence("activity:acceptance", "activity", {
     path: "/repo",
-    eventName: "agent_team.case.result_recorded",
+    eventName: "agent.lifecycle.observed",
   });
   const secondReadable = evidence("activity:readable-2", "activity", {
     path: "/repo",

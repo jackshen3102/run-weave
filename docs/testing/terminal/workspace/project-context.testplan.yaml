@@ -1,9 +1,7 @@
 version: 1
 name: Worktree Project Context 核心验收
-description: >
-  验证父 Project 与 .worktree 直接子 Project 在发现、选择、Terminal、Preview、Agent Team、
-  Activity 与删除恢复中的唯一生效 projectId 语义。
-
+description: |
+  验证父 Project 与 .worktree 直接子 Project 在发现、选择、Terminal、Preview、 Activity 与删除恢复中的唯一生效 projectId 语义。
 cases:
   - id: WTC-001
     name: Context 只发现合法直接子 Worktree 并生成稳定 ID
@@ -63,47 +61,43 @@ cases:
   - id: WTC-006
     name: Project-scoped 能力全部沿用生效 Project ID
     required: true
-    description: >
-      Preview 读写、Agent Team、Activity、Quick Input、Prototype Gallery 与 preview ticket 必须使用相同子根，不能按父项目或时间猜测。
+    description: |
+      Preview 读写、Activity、Quick Input、Prototype Gallery 与 preview ticket 必须使用相同子根，不能按父项目或时间猜测。
     preconditions:
-      - 父与子 Context 含可区分文件、活动、Agent Team run 和 prototype。
+      - 父与子 Context 含可区分文件、活动 run 和 prototype。
     steps:
       - 在子 Context 依次调用上述能力并检查 API、文件、run/outbox 与页面结果。
       - 确认所有结果只属于当前子 ID，父与兄弟子 Context 均不显示或访问其数据。
-
   - id: WTC-007
     name: 外部新增移除和缺失 Context 安全收敛
     required: true
-    description: >
+    description: |
       外部新增/移除 Worktree 自动发现；仍有 Session 的移除项以 missing Context 保留安全入口，目录依赖操作一律拒绝。
     preconditions:
       - 页面停留在父 Project，目标子 Worktree 初始有或无存活 Terminal。
     steps:
       - 在页面外新增、移除子 Worktree，分别保留和删除其最后一个 Terminal 后刷新 contexts。
-      - 确认新增自动出现；有 Session 时保留 missing 节点且可打开原 Terminal，无 Session 时移除；新建、Preview、Agent Team 等目录操作返回 409。
-
+      - 确认新增自动出现；有 Session 时保留 missing 节点且可打开原 Terminal，无 Session 时移除；新建、Preview 等目录操作返回 409。
   - id: WTC-008
     name: Context API 鉴权和路径边界 fail closed
     required: true
-    description: >
+    description: |
       伪造子 ID、路径逃逸、未认证固定操作和跨父 Project 请求不得读取或修改 Context 状态。
     preconditions:
       - 已准备未认证 token、其它父 Project ID、伪造的 wt ID 和 escape path。
     steps:
       - 分别调用 contexts、pin 和 project-scoped API，检查响应、文件系统与持久化状态。
-      - 确认所有非法请求被明确拒绝，不泄露路径、没有 pin/Session/Preview/Agent Team 副作用。
-
+      - 确认所有非法请求被明确拒绝，不泄露路径、没有 pin/Session/Preview 副作用。
   - id: WTC-009
     name: 父 Project 删除级联停止全部子运行资源
     required: true
-    description: >
-      删除父 Project 必须停止和清理其所有子 Context Session、Agent Team run 与选择状态，而不能遗留可访问资源。
+    description: |
+      删除父 Project 必须停止和清理其所有子 Context Session run 与选择状态，而不能遗留可访问资源。
     preconditions:
-      - 父 Project 与两个子 Context 均有存活 Terminal，至少一个子 Context 有 Agent Team run。
+      - 父 Project 与两个子 Context 均有存活 Terminal。
     steps:
       - 删除父 Project，随后尝试读取、发送输入、恢复 run 和访问 Preview。
       - 确认全部子资源被停止或不可访问，关联选择被清理，其他父 Project 与其资源保持不变。
-
   - id: WTC-010
     name: Worktree rail 只存在 Desktop Web 且不破坏布局
     required: true

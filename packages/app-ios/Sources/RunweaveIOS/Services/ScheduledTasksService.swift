@@ -63,7 +63,7 @@ struct ScheduledTasksService {
   func contexts(_ id: String) async throws -> [ScheduledProjectContext] {
     try await api.authorized("/api/terminal/project/\(APIClient.pathComponent(id))/contexts")
   }
-  func models() async throws -> ScheduledModelSettings { try await api.authorized("/api/agent-team/model-settings") }
+  func models() async throws -> ScheduledModelSettings { try await api.authorized("/api/agent-model-catalogs") }
   private func query(_ values: [String: String?]) -> String {
     var parts = URLComponents()
     parts.queryItems = values.sorted { $0.key < $1.key }.compactMap { key, value in

@@ -27,7 +27,7 @@ export class TerminalAgentForkService {
     const { panel } = await resolvePanelTarget(this.manager, session, this.options, {}, "explicit-or-active");
     const thread = resolveReplyThread(panel);
     if (panel.status !== "running" || panel.terminalState?.state !== "agent_idle" ||
-      panel.terminalState.agent !== "codex" || thread?.provider !== "codex" || panel.agentTeamRunId) {
+      panel.terminalState.agent !== "codex" || thread?.provider !== "codex") {
       throw new TerminalPanelError(409, "请等待当前 Codex 会话空闲后再 Fork");
     }
     return { panelId: panel.id, threadId: thread.id, cwd: panel.cwd,
@@ -67,7 +67,7 @@ export class TerminalAgentForkService {
     const panel = this.manager.getPanel(request.panelId);
     const thread = panel && resolveReplyThread(panel);
     if (session?.status !== "running" || panel?.terminalSessionId !== terminalId || panel.status !== "running" ||
-      panel.terminalState?.state !== "agent_idle" || panel.terminalState.agent !== "codex" || panel.agentTeamRunId ||
+      panel.terminalState?.state !== "agent_idle" || panel.terminalState.agent !== "codex" ||
       this.manager.getPanelWorkspace(terminalId)?.activePanelId !== request.panelId ||
       thread?.provider !== "codex" || thread.id !== request.expectedThreadId ||
       this.revision(terminalId, panel.id, thread.id) !== request.expectedRevision) {

@@ -8,7 +8,7 @@ import type {
 } from "@runweave/shared/scheduled-tasks";
 import type { TerminalQuickInputService } from "../terminal/quick-input/service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
-import { probeCodexCatalog } from "../agent-team/model-catalog/codex";
+import { probeCodexCatalog } from "../agent-model-catalog/codex";
 import { ScheduledTaskError, scheduledTaskErrorFromStorage } from "./errors";
 import type { ScheduledTaskStore } from "./storage/store";
 

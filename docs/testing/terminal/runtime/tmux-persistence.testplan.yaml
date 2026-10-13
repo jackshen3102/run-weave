@@ -330,11 +330,11 @@ cases:
         的隔离 profile。
 
   - id: TTP-014
-    name: tmux 生命周期改动通过仓库门禁与真实 checkpoint
+    name: tmux 生命周期改动通过仓库门禁
     required: true
     description: >
-      验证相关 TypeScript、Lint、架构边界和现有真实 tmux App Server 环境刷新 checkpoint 全部通过；
-      这些命令只作为代码与集成门禁，不能替代本计划其它 Stable、Beta 和故障行为 Case 的真实证据。
+      验证相关 TypeScript、Lint、架构边界和现有真实 tmux App Server 环境刷新 checkpoint 全部通过； 这些命令只作为代码与集成门禁，不能替代本计划其它
+      Stable、Beta 和故障行为 Case 的真实证据。
     preconditions:
       - 当前工作区依赖已安装，macOS 可执行 tmux，且没有其它进程占用 checkpoint fixture 的临时资源。
       - 已记录本次 patch 边界，命令输出可以与当前 revision 绑定。
@@ -343,8 +343,5 @@ cases:
         运行 `pnpm typecheck`、`pnpm lint`、`pnpm architecture:check` 和 `git diff --check`；确认全部退出码为 0，
         架构报告没有新增 forbidden import、runtime cycle 或超出 ratchet 的债务。
       - >
-        运行 `pnpm agent-team:verify-review-checkpoints`；确认命令退出码为 0，并且检查清单明确包含
-        `bootstrap-tmux-app-server-environment-refreshes-with-backend`。
-      - >
-        确认 checkpoint 创建的临时 tmux server、Socket、Backend 和目录全部在命令结束后清理；若只
-        有静态命令通过而任一真实行为 Case 未执行，不得据此宣称整份计划通过。
+        确认 checkpoint 创建的临时 tmux server、Socket、Backend 和目录全部在命令结束后清理；若只 有静态命令通过而任一真实行为 Case
+        未执行，不得据此宣称整份计划通过。
