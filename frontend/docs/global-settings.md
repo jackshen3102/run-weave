@@ -1,6 +1,8 @@
 # 桌面全局设置
 
-桌面应用菜单的「全局设置」进入 `/settings/:pageId`。设置覆盖应用内容区域，保留原生标题栏；左上角返回工作区，分类不提供搜索。分类与作用域的唯一登记是 [registry.ts](../src/features/settings/registry.ts)。模型目录搜索和业务页面筛选继续存在。
+桌面左上角菜单图标直接进入 `/settings/:pageId` 全局设置，不再打开中间抽屉。设置覆盖应用内容区域，保留原生标题栏；左上角返回工作区，分类不提供搜索。侧栏承接 Activity、Evolution、System Monitor、开发资源、定时任务、原型库和退出登录；退出登录始终作用于工作区当前连接，有未保存修改或操作进行中时禁用。移动监控布局继续使用原应用菜单。分类、作用域和应用导航登记在 [registry.ts](../src/features/settings/registry.ts)。模型目录搜索和业务页面筛选继续存在。
+
+桌面布局以终端的信息密度为基准：侧栏宽 208px、导航行高 28px；内容区边距 20×24px，标题 20px，取消内容最大宽度限制。外观主题使用单行选项，工具标签约 33px 一行；设置内嵌表单采用紧凑间距，独立弹层沿用原布局。
 
 ## 作用域
 
@@ -13,15 +15,17 @@
 
 ## 导航与生命周期
 
-[navigation.ts](../src/features/settings/navigation.ts) 校验返回地址，并保留工作区 background location。分类和页内分区使用 URL，未知分类回退外观页，无来源时返回 `/terminal`。URL 不承载凭据或二维码载荷。
+[navigation.ts](../src/features/settings/navigation.ts) 校验返回地址，并保留工作区 background location。设置、Activity、Evolution、System Monitor、开发资源、定时任务及运行详情、原型库、连接和登录路由共用同一个外壳，页面仅替换右侧内容，侧栏不卸载。分类和页内分区使用 URL，未知分类回退外观页，无来源时左上角返回 `/terminal`。URL 不承载凭据或二维码载荷。
 
 [settings-page.tsx](../src/pages/settings-page.tsx) 使用现有 Dialog 焦点管理及 `useOverlayRef(..., "window")`。背景工作区保持挂载，退出设置恢复原生 Browser 呈现；业务代码不能直接调用 Browser hide/show，遵循[浮层协调](overlay-coordination.md)。
 
 [target-context.tsx](../src/features/settings/target-context.tsx) 复用现有连接认证，以连接身份、地址、代次和认证会话隔离电脑页。领域组件继续调用原 service/store；不要在设置组合页复制协议、账户存储或业务状态机。配置 HTTP 允许列表及本机权限限制保持原合同。
 
-[edit-session.tsx](../src/features/settings/edit-session.tsx) 统一保护分类、目标、返回及历史导航。继续编辑保留草稿，放弃不提交；保存中的操作锁定输入和导航。敏感草稿只存组件内存。手机审批及签发使用原状态机，结果未知时核实同一请求。
+[edit-session.tsx](../src/features/settings/edit-session.tsx) 只授权左上角退出管理区域；Esc、点击外部和历史后退到终端不会关闭外壳。运行详情中的会话入口只准备目标，左上角返回时才执行终端导航。连接切换与登录也保留外壳。统一保护分类、目标、返回及历史导航。继续编辑保留草稿，放弃不提交；保存中的操作锁定输入和导航。敏感草稿只存组件内存。手机审批及签发使用原状态机，结果未知时核实同一请求。
 
 ## 验证入口
+
+[全屏管理导航测试计划](../../docs/testing/platform/management-shell.testplan.yaml) 覆盖所有管理页面共享侧栏、唯一出口、运行会话准备和紧凑窗口。
 
 [全局设置测试计划](../../docs/testing/platform/desktop-global-settings.testplan.yaml) 验证容器、图标、工作区保活、目标隔离、草稿和原生 Browser 恢复。SSH、手机签发、账户登录、进程操作和服务生命周期仍按各领域测试计划验收，不能用页面可达或原型成功替代端到端结果。
 

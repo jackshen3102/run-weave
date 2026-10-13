@@ -10,7 +10,6 @@ import type {
 import {
   CalendarClock,
   History,
-  ArrowLeft,
   Lightbulb,
   Play,
   RefreshCw,
@@ -145,7 +144,7 @@ export function EvolutionPanel({
 }) {
   return (
     <section
-      className={`rounded-xl border border-border/70 bg-card/80 shadow-[0_20px_80px_-64px_rgba(17,24,39,0.8)] ${className}`}
+      className={`rounded-md border border-border/70 bg-card/80 shadow-[0_20px_80px_-64px_rgba(17,24,39,0.8)] ${className}`}
     >
       {children}
     </section>
@@ -160,7 +159,7 @@ export function EvolutionSidebar({
   providers,
   onSelectView,
   onSelectScope,
-  onNavigateTerminal,
+  embedded = false,
 }: {
   view: EvolutionView;
   scopes: EvolutionScopeOption[];
@@ -169,12 +168,24 @@ export function EvolutionSidebar({
   providers: EvolutionProviderAvailability[];
   onSelectView: (view: EvolutionView) => void;
   onSelectScope: (scopeId: string) => void;
-  onNavigateTerminal: () => void;
+  embedded?: boolean;
 }) {
   const selectedScope = scopes.find((scope) => scope.id === selectedScopeId);
   const globalScope = scopes.find((scope) => scope.kind === "global");
   const projectScopes = scopes.filter((scope) => scope.kind === "repository");
 
+  if (embedded) return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b py-2">
+      <nav aria-label="Evolution 导航" className="settings-tabs !mb-0">
+        {VIEW_ITEMS.map(item => <button key={item.id} aria-current={view === item.id ? "page" : undefined} onClick={() => onSelectView(item.id)}>{item.label}{counts[item.id] !== undefined && <span className="ml-1 text-xs text-muted-foreground">{counts[item.id]}</span>}</button>)}
+      </nav>
+      <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">复盘范围
+        <select aria-label="复盘范围" className="h-7 max-w-48 rounded border bg-background px-2" value={selectedScopeId} onChange={event => onSelectScope(event.target.value)}>
+          {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.label}</option>)}
+        </select>
+      </label>
+    </div>
+  );
   return (
     <aside className="flex min-h-0 flex-col border-r border-border/70 bg-card/55 p-3 max-md:border-b max-md:border-r-0">
       <div className="flex items-center justify-between gap-3 px-2 py-3">
@@ -184,10 +195,7 @@ export function EvolutionSidebar({
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Evolution</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={onNavigateTerminal}>
-          <ArrowLeft className="h-4 w-4" />
-          <span className="sr-only">返回终端</span>
-        </Button>
+
       </div>
 
       <div className="mt-2 rounded-lg border border-border/70 bg-background/55 p-3">
@@ -279,6 +287,7 @@ export function EvolutionSidebar({
 }
 
 export function EvolutionHeader({
+  embedded = false,
   view,
   scopeLabel,
   reflectionPending,
@@ -286,6 +295,7 @@ export function EvolutionHeader({
   onStartReflection,
   onOpenSchedule,
 }: {
+  embedded?: boolean;
   view: EvolutionView;
   scopeLabel: string;
   reflectionPending: boolean;
@@ -301,9 +311,9 @@ export function EvolutionHeader({
     schedules: ["运行计划", "管理持久化的 cron、时区和数据窗口"],
   };
   return (
-    <header className="flex items-center justify-between gap-4 border-b border-border/70 px-6 py-4 max-sm:items-start max-sm:px-4">
+    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 py-2">
       <div>
-        <h1 className="text-lg font-semibold">{copy[view][0]}</h1>
+        {!embedded && <h1 className="text-lg font-semibold">{copy[view][0]}</h1>}
         <p className="mt-1 text-xs text-muted-foreground">{copy[view][1]}</p>
       </div>
       <div className="flex shrink-0 gap-2">
@@ -406,17 +416,17 @@ export function EvolutionOverview({
             `${schedules.length} 条已配置`,
           ],
         ].map(([label, value, detail]) => (
-          <EvolutionPanel key={label as string} className="p-4">
+          <EvolutionPanel key={label as string} className="px-3 py-2">
             <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="mt-3 text-3xl font-semibold tabular-nums">{value}</p>
-            <p className="mt-2 text-xs text-muted-foreground">{detail}</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
           </EvolutionPanel>
         ))}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.7fr)]">
         <EvolutionPanel>
-          <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
+          <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
             <div>
               <h2 className="font-semibold">最近一次反思</h2>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -434,7 +444,7 @@ export function EvolutionOverview({
           {latestRun ? (
             <button
               type="button"
-              className="w-full p-5 text-left hover:bg-muted/30"
+              className="w-full p-3 text-left hover:bg-muted/30"
               onClick={() => onSelectRun(latestRun.runId)}
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -478,7 +488,7 @@ export function EvolutionOverview({
           )}
         </EvolutionPanel>
 
-        <EvolutionPanel className="p-5">
+        <EvolutionPanel className="p-3">
           <div className="flex items-center gap-2">
             <Lightbulb className="h-4 w-4 text-amber-500" />
             <h2 className="font-semibold">洞察链路</h2>
@@ -488,7 +498,7 @@ export function EvolutionOverview({
               <p className="mt-4 text-sm font-medium leading-6">
                 {currentInsightRevision(insights[0])?.statement}
               </p>
-              <p className="mt-2 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {insights[0].topicKey} · {insights[0].revisions.length} 个
                 revision
               </p>

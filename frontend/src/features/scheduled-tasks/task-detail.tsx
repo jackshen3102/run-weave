@@ -36,7 +36,7 @@ export function RunRecord({
   const running = ["queued", "running", "stopping"].includes(run.status);
   const canOpen = !running && run.recoverable && Boolean(run.threadRef);
   const openRecord = useMemoizedFn(() => {
-    if (canOpen) open.mutate(run.id);
+    if (canOpen && !open.fullscreen) open.mutate(run.id);
     else setExpanded((value) => !value);
   });
   useEffect(() => {
@@ -128,16 +128,16 @@ export function RunRecord({
       <button
         type="button"
         className="mt-3 text-left text-xs text-primary"
-        disabled={open.isPending}
-        onClick={openRecord}
+        disabled={open.isPending || (open.fullscreen && open.prepared)}
+        onClick={() => canOpen ? open.mutate(run.id) : openRecord()}
       >
         {open.isPending
           ? open.attachmentState === "starting" ||
             open.attachmentState === "creating"
             ? "正在恢复对话…"
             : "正在打开…"
-          : canOpen
-            ? run.continuation?.nextAt
+          : open.prepared ? "会话已准备，请从左上角返回终端" : canOpen
+            ? open.fullscreen ? "准备运行会话" : run.continuation?.nextAt
               ? "停止自动继续并接管到终端 →"
               : "打开对话并继续追问 →"
             : running

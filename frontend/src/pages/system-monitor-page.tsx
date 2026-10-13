@@ -229,15 +229,11 @@ export function SystemMonitorPage({
 
   return (
     <main className={embedded ? "text-foreground" : "min-h-screen bg-background px-4 py-5 text-foreground md:px-6 lg:px-8"}>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
+      <div className="flex w-full flex-col gap-3">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
           <div className="min-w-0">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-              Runweave
-            </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-normal">
-              系统监控
-            </h1>
+            {!embedded && <p className="text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-muted-foreground">Runweave</p>}
+            {!embedded && <h1 className="mt-1 text-3xl font-semibold tracking-normal">系统监控</h1>}
             <p className="mt-2 text-xs text-muted-foreground">
               {data?.hostName ?? "当前连接的电脑"} ·{" "}
               {data?.status === "ok"

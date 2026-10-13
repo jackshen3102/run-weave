@@ -51,7 +51,7 @@ export function EvolutionRunsPanel({
               <button
                 key={run.runId}
                 type="button"
-                className={`block w-full border-b border-border/60 p-4 text-left last:border-b-0 ${
+                className={`block w-full border-b border-border/60 p-3 text-left last:border-b-0 ${
                   selectedRun?.runId === run.runId
                     ? "bg-primary/8"
                     : "hover:bg-muted/35"
@@ -81,7 +81,7 @@ export function EvolutionRunsPanel({
         </div>
       </EvolutionPanel>
 
-      <EvolutionPanel className="min-w-0 p-5">
+      <EvolutionPanel className="min-w-0 p-3">
         {selectedRun ? (
           <>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -89,7 +89,7 @@ export function EvolutionRunsPanel({
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                   Run detail
                 </p>
-                <h2 className="mt-2 truncate text-xl font-semibold">
+                <h2 className="mt-2 truncate text-base font-semibold">
                   {selectedRun.runId}
                 </h2>
                 <p className="mt-2 text-sm text-muted-foreground">
@@ -129,7 +129,7 @@ export function EvolutionRunsPanel({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg bg-muted/45 p-3">
                 <p className="text-xs text-muted-foreground">Profile</p>
                 <p className="mt-1 text-sm capitalize">{selectedRun.profile}</p>
@@ -284,13 +284,13 @@ export function EvolutionRunsPanel({
             )}
           </>
         ) : (
-          <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
             该学习范围暂无分析 Run；下方仍会展示 Agent Team
             已真实记录的激活轨迹。
           </div>
         )}
 
-        <div className={selectedRun ? "mt-6" : "mt-5"}>
+        <div className={selectedRun ? "mt-6" : "mt-3"}>
           <h3 className="font-semibold">RuntimeTrace</h3>
           <p className="mt-1 text-xs text-muted-foreground">
             按当前学习范围展示真实 Agent Team 激活、门禁与完成事件
@@ -346,7 +346,7 @@ export function EvolutionRunsPanel({
               </div>
             ))
           ) : (
-            <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
               该学习范围暂无 RuntimeTrace。纯分析不会自动生成模拟激活轨迹。
             </div>
           )}

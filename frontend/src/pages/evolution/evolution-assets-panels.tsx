@@ -72,7 +72,7 @@ export function EvolutionCandidatesPanel({
             {candidates.map((candidate) => (
               <article
                 key={candidate.revisionId}
-                className="[content-visibility:auto] p-5"
+                className="[content-visibility:auto] p-3"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -158,14 +158,14 @@ export function EvolutionCandidatesPanel({
         )}
       </EvolutionPanel>
 
-      <EvolutionPanel className="h-fit p-5">
+      <EvolutionPanel className="h-fit p-3">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4" />
           <h2 className="font-semibold">Memory Canary Policy</h2>
         </div>
         {policy ? (
           <>
-            <div className="mt-5 space-y-3 text-sm">
+            <div className="mt-3 space-y-3 text-sm">
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">真实注入</span>
                 <EvolutionStatusPill
@@ -209,7 +209,7 @@ export function EvolutionCandidatesPanel({
               </div>
             </div>
             <Button
-              className="mt-5 w-full"
+              className="mt-3 w-full"
               variant="default"
               disabled={policyPending}
               onClick={applyCanary}
@@ -265,7 +265,7 @@ export function EvolutionSchedulesPanel({
           {schedules.map((schedule) => (
             <article
               key={schedule.scheduleId}
-              className="flex flex-wrap items-center justify-between gap-4 p-5"
+              className="flex flex-wrap items-center justify-between gap-4 p-3"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">

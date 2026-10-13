@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { FrontendVersion, RuntimeVersions } from "../features/runtime-status/versions";
 import { ConfigurationPanel } from "../features/configuration/panel";
 import { DesktopConfigurationStatus } from "../features/configuration/desktop-status";
@@ -60,6 +61,7 @@ function isAwaitingLogin(items: RuntimeStatusItem[]): boolean {
 }
 
 function RuntimeStatusItemRow({ item }: { item: RuntimeStatusItem }) {
+  const navigate = useNavigate();
   const attention = runtimeStatusItemAttention(item.capabilityId, item.state);
   const copy = useMemoizedFn(async (value: string) => {
     await copyRuntimeStatusText(value);
@@ -113,7 +115,7 @@ function RuntimeStatusItemRow({ item }: { item: RuntimeStatusItem }) {
         <span>更新于 {formatObservedAt(item.observedAt)}</span>
         {item.id.includes("electron.remote-access:") ? <button type="button" className="text-xs underline" onClick={() => useTunnelStore.getState().setOpen(true)}>管理远程访问</button> : null}
         {item.navigation ? (
-          <button type="button" className="inline-flex items-center gap-0.5 hover:text-foreground" onClick={() => window.location.assign(item.navigation!.route)}>
+          <button type="button" className="inline-flex items-center gap-0.5 hover:text-foreground" onClick={() => navigate(item.navigation!.route)}>
             {item.navigation.label}<ChevronRight className="h-3 w-3" />
           </button>
         ) : null}
@@ -146,6 +148,7 @@ function CapabilitySection({ capability }: { capability: RuntimeStatusCapability
 }
 
 function RuntimeResources() {
+  const navigate = useNavigate();
   const { snapshot, error } = useElectronRuntimeStats();
   if (window.electronAPI?.isElectron !== true) return null;
   const cpu = snapshot ? snapshot.electron.totalCpuPercent + (snapshot.backend.cpuPercent ?? 0) : null;
@@ -154,7 +157,7 @@ function RuntimeResources() {
     <div className="rounded-xl border border-border/70 p-4">
       <div className="flex items-center justify-between gap-3">
         <div><p className="text-sm font-medium">资源摘要</p><p className="mt-1 text-xs text-muted-foreground">CPU {cpu === null ? "--" : `${cpu.toFixed(1)}%`} · RAM {memory ?? "--"} MB</p></div>
-        <Button variant="ghost" size="sm" onClick={() => window.location.assign("/system-monitor")}>System Monitor</Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate("/system-monitor")}>System Monitor</Button>
       </div>
       {error ? <p className="mt-2 text-xs text-amber-600">{error}</p> : null}
     </div>
@@ -170,7 +173,7 @@ export function RuntimeStatusPanel({ apiBase, token, embedded = false }: { apiBa
   const Title = embedded ? "h2" : SheetTitle;
   const Description = embedded ? "p" : SheetDescription;
   const content = <>
-        <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
+        <SheetHeader className={embedded ? "border-b border-border/70 px-3 py-2" : "border-b border-border/70 px-6 py-5 pr-14"}>
           <div className="flex items-center justify-between gap-4">
             <div><Title>运行状态</Title><Description>当前依赖、恢复状态与最近证据</Description></div>
             <Button variant="secondary" size="sm" disabled={refreshing} onClick={() => void refresh()}>
@@ -178,7 +181,7 @@ export function RuntimeStatusPanel({ apiBase, token, embedded = false }: { apiBa
             </Button>
           </div>
         </SheetHeader>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
+        <div className={embedded ? "min-h-0 flex-1 space-y-3 overflow-y-auto py-3" : "min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6"}>
           {!embedded && <ConfigurationPanel key={`${apiBase}:${token ?? ""}`} apiBase={apiBase} token={token} />}
           {!embedded && <DesktopConfigurationStatus />}
           <FrontendVersion />

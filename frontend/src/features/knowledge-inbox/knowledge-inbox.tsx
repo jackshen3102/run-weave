@@ -118,11 +118,11 @@ export function KnowledgeInbox({
     });
   });
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5 p-5 md:p-8">
+    <div className="w-full space-y-3 py-3">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold">
-            <Sparkles className="h-6 w-6" />
+          <h1 className="flex items-center gap-2 text-base font-semibold">
+            <Sparkles className="h-4 w-4" />
             自进化
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -187,7 +187,7 @@ export function KnowledgeInbox({
           {message(error)}
         </p>
       ) : null}
-      <div className={`grid gap-5 ${selected ? "lg:grid-cols-2" : ""}`}>
+      <div className={`grid gap-3 ${selected ? "lg:grid-cols-2" : ""}`}>
         <div className="space-y-3">
           {query.isPending ? (
             <p className="py-12 text-center text-muted-foreground">
@@ -204,7 +204,7 @@ export function KnowledgeInbox({
               key={item.itemId}
               type="button"
               onClick={() => choose(item)}
-              className="w-full space-y-3 rounded-2xl border border-border bg-card p-5 text-left transition-colors hover:bg-muted/50"
+              className="w-full space-y-2 rounded-md border border-border bg-card p-3 text-left transition-colors hover:bg-muted/50"
             >
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>
@@ -220,7 +220,7 @@ export function KnowledgeInbox({
                 )}
               </div>
               <h2 className="font-medium">{item.title}</h2>
-              <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+              <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-5 text-muted-foreground">
                 {item.statement || item.actions?.[0] || item.applicability}
               </p>
               <p className="text-xs text-muted-foreground">

@@ -108,7 +108,7 @@ export function TunnelDrawer({ embedded = false }: { embedded?: boolean }) {
   const Title = embedded ? "h2" : SheetTitle;
   const Description = embedded ? "p" : SheetDescription;
   const content = (
-        <Surface className={embedded ? "space-y-5" : "w-full overflow-y-auto sm:w-[560px]"}>
+        <Surface className={embedded ? "space-y-3" : "w-full overflow-y-auto sm:w-[560px]"}>
           <Title>端口与隧道</Title>
           <Description>
             管理这台电脑的 SSH

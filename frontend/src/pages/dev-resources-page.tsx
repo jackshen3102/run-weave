@@ -260,21 +260,21 @@ function PageContent({
           onSelectContext={selectContext}
         />}
         <div className={embedded ? "min-w-0 flex-1" : "min-w-0 flex-1 overflow-y-auto p-5 md:p-9"}>
-          <div className="mx-auto max-w-[1280px] space-y-6">
+          <div className="w-full space-y-3">
             <header className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs text-slate-500">当前连接电脑</p>
-                <h1 className="mt-2 text-2xl font-semibold">开发资源</h1>
+                {!embedded && <h1 className="mt-2 text-2xl font-semibold">开发资源</h1>}
                 <p className="mt-2 text-sm text-slate-400">
                   {snapshot?.hostName ?? connectionName ?? "当前连接"} /
                   测试环境
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <Button variant="ghost" size="sm" onClick={back}>
+                {!embedded && <Button variant="ghost" size="sm" onClick={back}>
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   返回终端
-                </Button>
+                </Button>}
                 <span
                   className="text-xs text-slate-500"
                   data-testid="dev-resources-updated-at"

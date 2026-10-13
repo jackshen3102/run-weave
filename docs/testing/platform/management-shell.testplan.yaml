@@ -1,0 +1,45 @@
+version: 1
+name: 全屏管理页面固定侧栏与唯一出口
+description: 验证页面容器与导航合同；不把详情可见等同于任务执行、账户登录或远控业务通过。
+cases:
+  - id: MSH-001
+    name: 全部管理页共享固定侧栏
+    required: true
+    description: 六个应用页面、十个设置页面及其页内分区切换时保留同一个侧栏节点。
+    preconditions:
+      - 执行者已通过统一更新器或 Dev Session resolver 取得当前源码 Electron desktop surface。
+      - 当前连接已登录，页面可以读取该连接的数据。
+    steps:
+      - 使用 toolkit:playwright-cli 从终端左上角打开全局设置，记录侧栏节点和当前终端 URL。
+      - 依次点击六个应用入口、十个设置入口及每页实际提供的二级分区；确认同一侧栏节点仍连接在 DOM，标题与当前页面一致，每个状态保存截图。
+      - 打开当前数据中的列表详情、筛选器与可取消的编辑弹窗；确认关闭详情仍保留侧栏，并保存每个细节状态截图，不提交破坏性操作。
+  - id: MSH-002
+    name: 全屏只允许左上角退出
+    required: true
+    description: Esc 和浏览器后退不能从管理页退出到终端，页内也没有其他终端出口。
+    preconditions:
+      - 执行者已附着当前源码 Electron desktop surface，工作区已登录。
+      - 测试标签无未保存草稿。
+    steps:
+      - 使用 toolkit:playwright-cli 从终端进入全局设置，按 Esc 并执行浏览器后退；确认仍为管理页且侧栏可见。
+      - 遍历应用与设置入口，确认可见的返回终端按钮只有左上角一个；页内返回列表只更换右侧内容。
+      - 点击左上角返回终端，确认恢复进入前的终端 URL 与工作区；再次进入设置确认可用。
+  - id: MSH-003
+    name: 准备运行会话不退出全屏
+    required: true
+    description: 有终端附件的运行记录可准备目标，但只由左上角执行进入终端的导航。
+    preconditions:
+      - 执行者已附着当前源码 Electron desktop surface，当前连接有可打开终端附件的已完成运行记录。
+      - 已记录原始工作区状态，目标会话没有正在编辑的用户草稿。
+    steps:
+      - 使用 toolkit:playwright-cli 打开运行记录的详情，点击准备运行会话；确认 URL 仍在管理路由，侧栏保留，显示已准备提示并保存截图。
+      - 点击左上角返回终端，确认进入该运行记录的终端；不向会话发送输入。
+  - id: MSH-004
+    name: 紧凑窗口仍可完整访问导航和内容
+    required: true
+    description: 同一管理外壳在 1000×720 窗口中保留侧栏且内容可独立滚动。
+    preconditions:
+      - 执行者已附着当前源码 Electron desktop surface，当前管理页没有未保存草稿。
+    steps:
+      - 使用 toolkit:playwright-cli 记录尺寸并调整为 1000×720，依次打开 Evolution 分析管理、Activity、服务配置和电脑状态，保存截图。
+      - 确认侧栏存在、左上角始终可见，长内容可滚动到底且操作没有被水平裁切；恢复原窗口尺寸。

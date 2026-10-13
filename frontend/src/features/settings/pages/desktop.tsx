@@ -22,10 +22,10 @@ export default function Desktop() {
   if (!window.electronAPI?.getLocalConfigurationStatus)
     return <p>当前宿主不提供桌面诊断。</p>;
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <FrontendVersion />
       <DesktopConfigurationStatus embedded />
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2">
         <Button
           disabled={busy || !window.electronAPI.exportDesktopDiagnostics}
           onClick={() =>

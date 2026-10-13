@@ -1,3 +1,4 @@
+import { useManagementExit } from "../features/settings/edit-session";
 import { useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import type { ConnectionConfig } from "../features/connection/types";
@@ -30,6 +31,7 @@ export function LoginPage({
   onOpenConnectionManager,
   onSuccess,
 }: LoginPageProps) {
+  const embedded = useManagementExit()?.active;
   cleanupLegacyAuthStorage();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
@@ -79,9 +81,9 @@ export function LoginPage({
   });
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 sm:px-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(70,130,145,0.18),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(195,172,135,0.16),transparent_35%)]" />
-      <section className="animate-fade-rise relative w-full max-w-md rounded-[2rem] border border-border/60 bg-card/82 p-7 shadow-[0_34px_120px_-72px_rgba(17,24,39,0.82)] backdrop-blur-xl sm:p-9">
+    <main className={embedded ? "relative max-w-lg py-2" : "relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 sm:px-6"}>
+      {!embedded && <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(70,130,145,0.18),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(195,172,135,0.16),transparent_35%)]" />}
+      <section className={embedded ? "relative w-full rounded-md border bg-card p-4" : "animate-fade-rise relative w-full max-w-md rounded-[2rem] border border-border/60 bg-card/82 p-7 shadow-[0_34px_120px_-72px_rgba(17,24,39,0.82)] backdrop-blur-xl sm:p-9"}>
         <div className="flex items-center justify-between gap-3">
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.38em] text-muted-foreground/70">
             Runweave
@@ -100,7 +102,7 @@ export function LoginPage({
         </div>
 
         <form
-          className="mt-8 space-y-4"
+          className={embedded ? "mt-4 space-y-3" : "mt-8 space-y-4"}
           noValidate
           onSubmit={(event) => {
             event.preventDefault();
@@ -126,7 +128,7 @@ export function LoginPage({
                 setUsername(event.target.value);
                 setError(null);
               }}
-              className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"
+              className={embedded ? "h-8 w-full rounded-md border bg-background px-3 text-sm" : "h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"}
             />
             {usernameError ? (
               <p id="username-error" className="text-sm text-red-500" role="alert">
@@ -155,7 +157,7 @@ export function LoginPage({
                 setPassword(event.target.value);
                 setError(null);
               }}
-              className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"
+              className={embedded ? "h-8 w-full rounded-md border bg-background px-3 text-sm" : "h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"}
             />
             {passwordError ? (
               <p id="password-error" className="text-sm text-red-500" role="alert">
@@ -172,7 +174,7 @@ export function LoginPage({
 
           <Button
             type="submit"
-            className="mt-2 h-12 w-full rounded-full text-sm"
+            className={embedded ? "mt-2 h-8 text-sm" : "mt-2 h-12 w-full rounded-full text-sm"}
             disabled={loading}
           >
             {loading ? "Entering..." : "Continue"}

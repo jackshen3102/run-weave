@@ -1,17 +1,19 @@
 import { useMemoizedFn } from "ahooks";
 import type { TerminalPrototypeGallerySource } from "@runweave/shared/terminal/preview";
-import { ArrowLeft, PanelsTopLeft } from "lucide-react";
+import { PanelsTopLeft } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { PrototypeGallery } from "../components/prototypes/prototype-gallery";
 import { RuntimeStatusEntry } from "../components/runtime-status-entry";
 
 interface PrototypesPageProps {
+  embedded?: boolean;
   apiBase: string;
   token: string;
   onAuthExpired: () => void;
 }
 
 export function PrototypesPage({
+  embedded = false,
   apiBase,
   token,
   onAuthExpired,
@@ -48,26 +50,17 @@ export function PrototypesPage({
   );
 
   return (
-    <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-slate-950 text-slate-100 dark">
+    <main className={embedded ? "flex h-full min-h-0 flex-col overflow-hidden" : "flex h-dvh min-h-0 flex-col overflow-hidden bg-slate-950 text-slate-100 dark"}>
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-800 px-4">
-        <button
-          type="button"
-          aria-label="Back to terminal"
-          title="Back to terminal"
-          className="grid h-8 w-8 place-items-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
-          onClick={() => navigate("/terminal")}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
         <PanelsTopLeft className="h-4 w-4 text-slate-400" />
-        <div className="min-w-0">
+        {!embedded && <div className="min-w-0">
           <h1 className="truncate text-sm font-medium text-slate-100">
             Prototypes
           </h1>
           <p className="truncate text-[10px] text-slate-500">
             Project prototype library
           </p>
-        </div>
+        </div>}
         <RuntimeStatusEntry className="ml-auto h-7 max-w-[18rem] border-slate-700 bg-slate-900 text-slate-300" />
       </header>
       <div className="min-h-0 flex-1">

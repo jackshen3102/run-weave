@@ -1,6 +1,6 @@
-import { SettingsEditProvider } from "./features/settings/edit-session";
+import { SettingsEditProvider, useManagementExit } from "./features/settings/edit-session";
 import { SettingsPage } from "./pages/settings-page";
-import { settingsBackground, useSettingsNavigation } from "./features/settings/navigation";
+import { isManagementPath, settingsBackground, useSettingsNavigation } from "./features/settings/navigation";
 import { DevResourcesPage } from "./pages/dev-resources-page";
 import { useDesktopBadge } from "./features/attention/use-desktop-badge";
 import { ResourceMonitorProvider } from "./features/system-monitor/resource-monitor-provider";
@@ -68,8 +68,13 @@ function RunweaveApp() {
   const location = useLocation();
   const navigate = useNavigate();
   const openSettings = useSettingsNavigation();
-  const settingsOpen = location.pathname.startsWith("/settings");
-  const background = settingsOpen ? settingsBackground(location) : null;
+  const settingsOpen = isManagementPath(location.pathname);
+  const managementExit = useManagementExit();
+  const workspaceLocation = useRef(settingsBackground(location));
+  useEffect(() => {
+    if (/^\/terminal(?:\/|$)/u.test(location.pathname)) workspaceLocation.current = location;
+  }, [location]);
+  const background = settingsOpen ? workspaceLocation.current ?? settingsBackground(location) : null;
   const clientMode = useClientMode(isElectron);
   const {
     connections,
@@ -137,7 +142,7 @@ function RunweaveApp() {
   );
   const requestedReturn: unknown = location.state?.scope === queryScope ? location.state?.returnTo : null;
   const loginReturnPath = typeof requestedReturn === "string" && /^\/(?:scheduled-tasks|background-runs|system-monitor|dev-resources)(?:\/|\?|$)/u.test(requestedReturn)
-    ? requestedReturn : TERMINAL_LIST_PATH;
+    ? requestedReturn : settingsOpen ? "/settings/appearance" : TERMINAL_LIST_PATH;
 
   const handleSelectConnection = (id: string) => {
     setActive(id);
@@ -148,6 +153,7 @@ function RunweaveApp() {
     return window.electronAPI?.onAttentionNotificationOpen?.((target) => {
       const connection = connections.find((item) => item.id === target.connectionId);
       if (!connection || connection.available === false) return;
+      const enter = () => {
       setTerminalNavigation(buildConnectionQueryScope({ apiBase: connection.url, connectionId: connection.id, generation: connection.tunnelEndpointId ? connection.generation : undefined }), {
         parentProjectId: target.parentProjectId,
         projectId: target.projectId,
@@ -156,8 +162,11 @@ function RunweaveApp() {
       });
       setActive(connection.id);
       navigate(`/terminal/${encodeURIComponent(target.terminalSessionId)}`);
+      };
+      if (managementExit?.active) managementExit.prepare(enter, "进入通知对应的会话");
+      else enter();
     });
-  }, [connections, navigate, setActive]);
+  }, [connections, managementExit, navigate, setActive]);
   useEffect(() => {
     if (!isElectron) return;
     return window.electronAPI?.onScheduledRunNotificationOpen?.((target) => {
@@ -220,24 +229,12 @@ function RunweaveApp() {
     enabled: isElectron,
   });
 
-  const content = (
-    <DevSessionBackendGuard>
-      <RuntimeStatusProvider
-        apiBase={apiBase}
-        token={token}
-        connections={connections}
-        isElectron={isElectron}
-      >
-        <CodexQuotaProvider key={`${queryScope}:${sessionId ?? ""}:${token ? "authenticated" : "anonymous"}`} apiBase={apiBase} token={token} connectionName={activeConnection?.name ?? "当前连接"} onUnauthorized={clearToken}>
-        <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
-        <ResourceMonitorProvider key={`${queryScope}:${sessionId ?? ""}`} apiBase={apiBase} token={token} connectionId={activeConnectionId ?? queryScope}>
-        <ResourceNotice onOpen={(appKey) => navigate(`/system-monitor?app=${encodeURIComponent(appKey)}`)} />
-        <div inert={settingsOpen && !!background ? true : undefined} aria-hidden={settingsOpen && !!background ? true : undefined}>
-        <Routes location={background ?? location}>
+  const renderRoutes = (routeLocation = location) => (
+        <Routes location={routeLocation}>
           <Route
             path="/background-runs/:runId"
             element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
-              <BackgroundRunPage
+              <BackgroundRunPage embedded
                 apiBase={apiBase}
                 token={token}
                 activeConnectionId={activeConnectionId}
@@ -249,7 +246,7 @@ function RunweaveApp() {
           <Route
             path="/scheduled-tasks/:taskId?"
             element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
-              <ScheduledTasksPage
+              <ScheduledTasksPage embedded
                 apiBase={apiBase}
                 token={token}
                 activeConnectionId={activeConnectionId}
@@ -264,7 +261,7 @@ function RunweaveApp() {
           <Route
             path="/dev-resources"
             element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
-              <DevResourcesPage apiBase={apiBase} token={token} activeConnectionId={activeConnectionId}
+              <DevResourcesPage embedded apiBase={apiBase} token={token} activeConnectionId={activeConnectionId}
                 connectionGeneration={activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined}
                 connectionName={activeConnection?.name} onAuthExpired={clearToken} />
             ) : <Navigate to="/login" replace state={{ returnTo: "/dev-resources", scope: queryScope }} />}
@@ -273,9 +270,7 @@ function RunweaveApp() {
             path="/system-monitor"
             element={
               needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? <SystemMonitorPage
-                onNavigateTerminal={() => {
-                  window.location.assign(TERMINAL_LIST_PATH);
-                }}
+                embedded
               /> : <Navigate to="/login" replace state={{ returnTo: "/system-monitor", scope: queryScope }} />
             }
           />
@@ -283,7 +278,7 @@ function RunweaveApp() {
             <Route
               path="/connections"
               element={
-                <ConnectionsPage
+                <ConnectionsPage embedded
                   connections={connections}
                   activeId={activeConnection?.id ?? null}
                   onAdd={handleAddConnection}
@@ -348,7 +343,7 @@ function RunweaveApp() {
                 <ActivityPage
                   apiBase={apiBase}
                   token={token}
-                  onNavigateTerminal={() => window.location.assign(TERMINAL_LIST_PATH)}
+                  embedded
                 />
               ) : (
                 <Navigate to="/login" replace />
@@ -366,7 +361,7 @@ function RunweaveApp() {
                 <EvolutionPage
                   apiBase={apiBase}
                   token={token}
-                  onNavigateTerminal={() => window.location.assign(TERMINAL_LIST_PATH)}
+                  embedded
                 />
               ) : (
                 <Navigate to="/login" replace />
@@ -443,7 +438,7 @@ function RunweaveApp() {
               ) : isAuthChecking ? (
                 authPendingView
               ) : token ? (
-                <PrototypesPage
+                <PrototypesPage embedded
                   apiBase={apiBase}
                   token={token}
                   onAuthExpired={clearToken}
@@ -461,7 +456,7 @@ function RunweaveApp() {
               ) : isAuthChecking ? (
                 authPendingView
               ) : token ? (
-                <PrototypesPage
+                <PrototypesPage embedded
                   apiBase={apiBase}
                   token={token}
                   onAuthExpired={clearToken}
@@ -480,7 +475,7 @@ function RunweaveApp() {
                   needsConnection
                     ? "/connections"
                     : token
-                      ? TERMINAL_LIST_PATH
+                      ? settingsOpen ? "/settings/appearance" : TERMINAL_LIST_PATH
                       : "/login"
                 }
                 replace
@@ -488,8 +483,24 @@ function RunweaveApp() {
             }
           />
         </Routes>
+  );
+
+  const content = (
+    <DevSessionBackendGuard>
+      <RuntimeStatusProvider
+        apiBase={apiBase}
+        token={token}
+        connections={connections}
+        isElectron={isElectron}
+      >
+        <CodexQuotaProvider key={`${queryScope}:${sessionId ?? ""}:${token ? "authenticated" : "anonymous"}`} apiBase={apiBase} token={token} connectionName={activeConnection?.name ?? "当前连接"} onUnauthorized={clearToken}>
+        <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
+        <ResourceMonitorProvider key={`${queryScope}:${sessionId ?? ""}`} apiBase={apiBase} token={token} connectionId={activeConnectionId ?? queryScope}>
+        <ResourceNotice onOpen={(appKey) => navigate(`/system-monitor?app=${encodeURIComponent(appKey)}`)} />
+        <div inert={settingsOpen && !!background ? true : undefined} aria-hidden={settingsOpen && !!background ? true : undefined}>
+        {(!settingsOpen || (background && token && !needsConnection)) && renderRoutes(background ?? location)}
         </div>
-        {settingsOpen && <SettingsPage connections={connections} activeConnection={activeConnection ?? undefined} workspaceAuth={{ token, sessionId, status: authStatus, setSession, clearToken }} webApiBase={WEB_API_BASE} onAdd={(name, url, endpointId) => { addConnection(name, url, endpointId, false); }} onRemove={removeConnection} onEdit={updateConnection} onReconnect={reconnectSystemConnection} />}
+        {settingsOpen && <SettingsPage background={background} pageContent={location.pathname.startsWith("/settings") ? undefined : renderRoutes()} connections={connections} activeConnection={activeConnection ?? undefined} workspaceAuth={{ token, sessionId, status: authStatus, setSession, clearToken }} webApiBase={WEB_API_BASE} onAdd={(name, url, endpointId) => { addConnection(name, url, endpointId, false); }} onRemove={removeConnection} onEdit={updateConnection} onReconnect={reconnectSystemConnection} />}
         </ResourceMonitorProvider>
         </ConnectionQueryProvider>
         </CodexQuotaProvider>

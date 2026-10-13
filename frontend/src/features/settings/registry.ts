@@ -5,10 +5,22 @@ import {
   Link,
   LockKeyhole,
   Monitor,
+  Server,
+  Sparkles,
   SlidersHorizontal,
   Sun,
   User,
+  CalendarClock,
+  PanelsTopLeft,
 } from "lucide-react";
+export const appNavigationItems = [
+  { path: "/activity", title: "Activity", icon: Activity },
+  { path: "/evolution", title: "Evolution", icon: Sparkles },
+  { path: "/system-monitor", title: "System Monitor", icon: Activity },
+  { path: "/dev-resources", title: "开发资源", icon: Server },
+  { path: "/scheduled-tasks", title: "定时任务", icon: CalendarClock },
+  { path: "/prototypes", title: "原型库", icon: PanelsTopLeft },
+] as const;
 export const settingsPages = [
   {
     id: "appearance",

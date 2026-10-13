@@ -44,7 +44,7 @@ export function ConfigurationPanel({ apiBase, token, embedded = false, onAuthExp
   });
   useSettingsDraft(embedded && Object.keys(draft).length > 0, embedded && busy && Object.keys(draft).length > 0);
   useEffect(() => { if (embedded) void run(); }, [embedded, run]);
-  return <details open={embedded ? true : undefined} className="rounded-xl border border-border p-4">
+  return <details open={embedded ? true : undefined} className={embedded ? "rounded-md border border-border p-3" : "rounded-xl border border-border p-4"}>
     <summary className="cursor-pointer font-medium">当前连接电脑的配置</summary>
     <div className="mt-3 space-y-4">
       <p className="break-all text-xs text-muted-foreground">{apiBase || window.location.origin}</p>

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, ChevronRight, FileClock, Search } from "lucide-react";
+import { ChevronRight, FileClock, Search } from "lucide-react";
 import type {
   ActivityDataPolicyDto,
   ActivityFactDto,
@@ -102,16 +102,24 @@ function EmptyPanel({ message }: { message: string }) {
 }
 
 export function ActivitySidebar({
+  embedded = false,
   view,
   onSelectView,
   currentSourceCount,
   sourceCount,
 }: {
+  embedded?: boolean;
   view: ActivityView;
   onSelectView: (view: ActivityView) => void;
   currentSourceCount: number;
   sourceCount: number;
 }) {
+  if (embedded) return (
+    <nav aria-label="Activity views" className="settings-tabs shrink-0 border-b pb-2">
+      {ACTIVITY_NAVIGATION.map(item => <button key={item.id} aria-current={view === item.id ? "page" : undefined} onClick={() => onSelectView(item.id)}>{item.label}</button>)}
+      <span className="ml-auto self-center text-xs text-muted-foreground">{currentSourceCount}/{sourceCount} sources current</span>
+    </nav>
+  );
   return (
     <aside className="min-h-0 overflow-y-auto border-r border-border/70 bg-card/55 p-4 max-md:overflow-hidden max-md:border-b max-md:border-r-0 max-md:px-3 max-md:py-2">
       <div className="flex items-center gap-3 px-2 py-3 max-md:hidden">
@@ -166,36 +174,16 @@ export function ActivitySidebar({
 export function ActivityHeader({
   search,
   runtimeChannel,
-  onNavigateTerminal,
   onSearchChange,
   onRuntimeChannelChange,
 }: {
   search: string;
   runtimeChannel: ActivityRuntimeChannel | "";
-  onNavigateTerminal: () => void;
   onSearchChange: (value: string) => void;
   onRuntimeChannelChange: (value: ActivityRuntimeChannel | "") => void;
 }) {
   return (
-    <header className="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-border/70 px-7 py-3 max-lg:flex-col max-lg:items-stretch max-md:gap-2 max-md:px-4 max-md:py-2">
-      <div className="flex min-w-0 items-center gap-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="max-md:h-10 max-md:w-10 max-md:shrink-0 max-md:p-0"
-          onClick={onNavigateTerminal}
-          aria-label="Back to terminals"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          <span className="max-md:sr-only">Terminals</span>
-        </Button>
-        <div className="min-w-0">
-          <h1 className="font-semibold">Activity</h1>
-          <p className="text-xs text-muted-foreground max-md:hidden">
-            Terminal sessions, questions, and outcomes
-          </p>
-        </div>
-      </div>
+    <header className="flex shrink-0 items-center gap-2 border-b border-border/70 pb-2">
       <div className="flex gap-2">
         <RuntimeStatusEntry className="max-md:max-w-40" />
         <label className="flex h-9 min-w-72 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm max-lg:min-w-0 max-lg:flex-1">

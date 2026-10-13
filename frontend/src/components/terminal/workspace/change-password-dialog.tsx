@@ -52,7 +52,7 @@ export function ChangePasswordForm({ apiBase, token, onAuthExpired, onClose = ()
   const Title = embedded ? "h2" : DialogTitle;
   const Description = embedded ? "p" : DialogDescription;
   const content = (
-      <Surface className={embedded ? "space-y-5 rounded-xl border p-5" : "dark w-[calc(100vw-2rem)] border-slate-800 bg-slate-950 text-slate-100"}>
+      <Surface className={embedded ? "space-y-3 rounded-md border p-3" : "dark w-[calc(100vw-2rem)] border-slate-800 bg-slate-950 text-slate-100"}>
         <DialogHeader>
           <Title>修改密码</Title>
           <Description>修改成功后需要重新登录。</Description>

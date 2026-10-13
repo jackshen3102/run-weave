@@ -95,9 +95,9 @@ export function ResourceSettings({
     }
   });
   const content = (
-    <div className="space-y-5" aria-busy={saving}>
+    <div className={embedded ? "space-y-3" : "space-y-5"} aria-busy={saving}>
       {draft ? (
-        <fieldset disabled={saving} className="space-y-5">
+        <fieldset disabled={saving} className={embedded ? "space-y-3" : "space-y-5"}>
           {(
             [
               ["monitor", "后台资源监控"],
