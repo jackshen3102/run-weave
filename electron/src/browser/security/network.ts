@@ -1,4 +1,5 @@
-import { ConfigurationDomain } from "@runweave/config-node";
+import { isDeepStrictEqual } from "node:util";
+import { ConfigurationDomain, ConfigurationError } from "@runweave/config-node";
 import { getRuntimeBrowserProfileConfig } from "../profile/endpoints.js";
 import {
   normalizeTerminalBrowserHeaderRules,
@@ -168,8 +169,25 @@ export function setTerminalBrowserHeaderRules(
   rules: unknown,
 ): TerminalBrowserHeaderState {
   const normalized = normalizeTerminalBrowserHeaderRules(rules);
+  const current = getTerminalBrowserHeaderState(profileId);
   const store = headerStore(profileId);
-  store.write(normalized);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    // The CAS stamp covers all settings. Rebase only when this Profile's
+    // rules still match the adopted state, including absent versus empty.
+    const saved = store.read();
+    if (
+      (saved !== undefined) !== current.configured ||
+      !isDeepStrictEqual(normalizeTerminalBrowserHeaderRules(saved ?? []), current.rules)
+    ) {
+      throw new ConfigurationError("CONFIG_REVISION_CONFLICT");
+    }
+    try {
+      store.write(normalized);
+      break;
+    } catch (error) {
+      if (!(error instanceof ConfigurationError) || error.code !== "CONFIG_REVISION_CONFLICT" || attempt === 2) throw error;
+    }
+  }
   headerRulesByProfile.set(profileId, normalized);
   configuredHeaderProfiles.add(profileId);
   ensureTerminalBrowserHeaderDispatcher(profileId);
