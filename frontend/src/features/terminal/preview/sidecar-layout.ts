@@ -3,7 +3,6 @@ export type TerminalSidecarTool =
   | "preview"
   | "automation"
   | "browser"
-  | "agent-team"
   | "race"
   | "handoff"
   | "task-supervision"
@@ -23,7 +22,6 @@ export const SIDECAR_TABS: ReadonlyArray<{ id: SidecarTabId; label: string }> = 
   { id: "profile-1", label: "Browser 1" },
   { id: "profile-2", label: "Browser 2" },
   { id: "profile-3", label: "Browser 3" },
-  { id: "agent-team", label: "Agent Team" },
   { id: "race", label: "Race" },
   { id: "handoff", label: "任务交接" },
   { id: "task-supervision", label: "任务监控" },

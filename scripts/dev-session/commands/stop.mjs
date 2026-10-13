@@ -23,11 +23,6 @@ import {
   releaseBetaSlotRecoveryClaim,
   resolveBetaPoolPaths,
 } from "../beta-pool/index.mjs";
-import {
-  backfillOwnedAgentTeamFixturesForStoppedSession,
-  cleanupOwnedAgentTeamFixtures,
-  completeOwnedAgentTeamFixturesAfterBetaSlotReset,
-} from "../fixtures/cleanup.mjs";
 
 export async function runStop(options, sourceRoot, helpers) {
   const {
@@ -105,28 +100,6 @@ export async function runStop(options, sourceRoot, helpers) {
       });
       return finalized.cleanupSummary;
     };
-    const ensureFixtureCleanup = async () => {
-      if (
-        manifest.fixtureCleanup?.status === "completed" ||
-        manifest.fixtureCleanup?.status === "not_required_shared_backend"
-      ) {
-        return manifest.fixtureCleanup;
-      }
-      const fixtureCleanup = await cleanupOwnedAgentTeamFixtures(manifest);
-      if (!fixtureCleanup) {
-        return null;
-      }
-      manifest = updateManifest(manifest, { fixtureCleanup });
-      await writeManifest(manifest);
-      if (fixtureCleanup.status === "failed") {
-        throw new DevSessionError(
-          "owned Agent Team fixture cleanup did not complete; refusing to stop services",
-          5,
-          { fixtureCleanup },
-        );
-      }
-      return fixtureCleanup;
-    };
     const retryServiceNames =
       options.cleanupStale && manifest.state === "stopped"
         ? Object.entries(manifest.services)
@@ -139,24 +112,6 @@ export async function runStop(options, sourceRoot, helpers) {
         : [];
     const retryingPartialCleanup = retryServiceNames.length > 0;
     if (manifest.state === "stopped" && !retryingPartialCleanup) {
-      if (
-        manifest.controlPlane?.agentTeamRunId &&
-        manifest.controlPlane?.agentTeamDispatchId
-      ) {
-        const fixtureCleanup =
-          backfillOwnedAgentTeamFixturesForStoppedSession(manifest);
-        if (!manifest.fixtureCleanup && !fixtureCleanup) {
-          throw new DevSessionError(
-            "stopped Agent Team Session lacks an auditable fixture cleanup receipt",
-            5,
-            { devSessionId: manifest.devSessionId },
-          );
-        }
-        if (fixtureCleanup) {
-          manifest = updateManifest(manifest, { fixtureCleanup });
-          await writeManifest(manifest);
-        }
-      }
       printResult(publicManifest(manifest), options.json);
       return;
     }
@@ -165,7 +120,6 @@ export async function runStop(options, sourceRoot, helpers) {
       manifest.state === "failed" &&
       manifest.failure?.leaseRetained === false
     ) {
-      await ensureFixtureCleanup();
       manifest = updateManifest(manifest, {
         state: "stopped",
         failure: null,
@@ -259,13 +213,9 @@ export async function runStop(options, sourceRoot, helpers) {
         }
         manifest = updateManifest(manifest, { services: cleanup.services });
         const betaCleanup = await finalizeBetaSlot();
-        const fixtureCleanup =
-          manifest.fixtureCleanup ??
-          completeOwnedAgentTeamFixturesAfterBetaSlotReset(manifest);
         manifest = updateManifest(manifest, {
           state: "stopped",
           services: cleanup.services,
-          ...(fixtureCleanup ? { fixtureCleanup } : {}),
           failure: null,
         });
         await writeManifest(manifest);
@@ -329,7 +279,6 @@ export async function runStop(options, sourceRoot, helpers) {
         throw enrichedError;
       }
     }
-    await ensureFixtureCleanup();
     manifest = updateManifest(manifest, { state: "stopping" });
     await writeManifest(manifest);
     try {

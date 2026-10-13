@@ -18,7 +18,6 @@ export const ANALYSIS_TOOLS = [
   "activity.search_facts",
   "activity.get_content",
   "history.get_thread",
-  "history.get_agent_team_run",
   "source.search",
   "source.read",
   "evidence.batch_get_metadata",

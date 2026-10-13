@@ -92,7 +92,6 @@ export interface TerminalPreviewStore {
     profileId: TerminalBrowserProfileId,
     projectId: string | null,
   ) => void;
-  openAgentTeam: () => void;
   openRace: () => void;
   closePreview: () => void;
   openTaskSupervision: () => void;

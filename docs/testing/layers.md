@@ -5,7 +5,7 @@
 - 本仓库只允许 Playwright E2E 作为正式自动化测试；当前 `frontend/tests/` 没有受 Git 管理的
   `*.spec.ts`，因此 `pnpm test:e2e` 会以 `No tests found` 非零退出，不能作为通过证据。
 - 新增或重写的测试计划使用 `docs/testing/**/*.testplan.yaml`，格式见 `test-plan-format.md`；
-  Agent Team 只解析该 YAML，不解析 Markdown 测试案例；单个计划最多 20 条 case。
+  校验器只解析该 YAML，不解析 Markdown 测试案例；单个计划最多 20 条 case。
 - 后续若恢复 E2E，只能放在 `frontend/tests/*.spec.ts`，并同步更新本文件和命令矩阵。
 - 架构约束由 `pnpm architecture:check` 的集成检查负责，不属于单元测试。
 - 不维护 backend、Electron、CLI、`packages/shared` 的单元测试、Vitest 测试、Node test 测试、live test 或 coverage 门槛。
@@ -13,7 +13,7 @@
 - YAML 测试计划是可追溯的验收合同，不是自动化测试替代品。涉及浏览器页面的计划，仍须使用
   `$toolkit:playwright-cli` 在真实目标页面取证；涉及桌面端时先用 `$computer-use` 准备环境。
 
-Terminal、Agent Team、Browser、Activity、App、Electron、CLI 和平台路径，按
+Terminal、Browser、Activity、App、Electron、CLI 和平台路径，按
 `docs/testing/**/*.testplan.yaml` 中对应计划在真实服务上验收；不要引用或补造不存在的 spec。
 
 探索性 Agent 或模型可以选择下一步操作，但必须保留原案例的输入、必需步骤和通过条件。

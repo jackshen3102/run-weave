@@ -20,11 +20,6 @@ const terminalDetailQuerySchema = z
   })
   .strict();
 
-const runDetailQuerySchema = terminalDetailQuerySchema.pick({
-  activityCursor: true,
-  asOfActivityOffset: true,
-});
-
 export function createWorkHistoryRouter(service: WorkHistoryService): Router {
   const router = Router();
 
@@ -57,37 +52,6 @@ export function createWorkHistoryRouter(service: WorkHistoryService): Router {
       });
       if (!detail) {
         response.status(404).json({ message: "Terminal archive not found" });
-        return;
-      }
-      response.json(detail);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get("/runs", async (request, response, next) => {
-    const parsed = listQuerySchema.safeParse(request.query);
-    if (!parsed.success) {
-      response.status(400).json({ message: "Invalid request query" });
-      return;
-    }
-    try {
-      response.json(await service.listRuns(parsed.data));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get("/runs/:runId", async (request, response, next) => {
-    const parsed = runDetailQuerySchema.safeParse(request.query);
-    if (!parsed.success) {
-      response.status(400).json({ message: "Invalid request query" });
-      return;
-    }
-    try {
-      const detail = await service.getRun(request.params.runId, parsed.data);
-      if (!detail) {
-        response.status(404).json({ message: "Agent Team archive not found" });
         return;
       }
       response.json(detail);

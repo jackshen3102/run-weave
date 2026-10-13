@@ -6,12 +6,9 @@ import type { ConnectionConfig } from "../../../features/connection/types";
 import { useShallow } from "zustand/react/shallow";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
-  EMPTY_TERMINAL_PROJECTS,
-  EMPTY_TERMINAL_PROJECT_CONTEXTS,
   EMPTY_TERMINAL_SESSIONS,
   updateTerminalSessions,
   useTerminalProjectsQuery,
-  useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
   useTerminalWorkspaceQueryClient,
 } from "../../../features/terminal/queries/workspace";
@@ -27,7 +24,6 @@ import { TerminalWorkspaceHeader } from "./header";
 import { TerminalSessionTabStrip } from "../session/session-tab-strip";
 import { TerminalWorkspaceStage } from "./stage";
 import { TerminalWorkspaceOverlays } from "./overlays";
-import { useTerminalWorkspaceAgentTeam } from "../agent-team/use-agent-team";
 import { TerminalWorktreeRail } from "./worktree-rail";
 
 interface WorkspaceConnectionNavigation {
@@ -96,7 +92,6 @@ export function TerminalWorkspaceShell({
   const isMobileMonitor = clientMode === "mobile";
   const projectsQuery = useTerminalProjectsQuery();
   const sessionsQuery = useTerminalSessionsQuery();
-  const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
   const sessions = sessionsQuery.data ?? EMPTY_TERMINAL_SESSIONS;
   const { queryClient, scope } = useTerminalWorkspaceQueryClient();
   const { activeProjectId, activeParentProjectId } = useTerminalWorkspaceStore(
@@ -105,9 +100,6 @@ export function TerminalWorkspaceShell({
       activeParentProjectId: state.activeParentProjectId,
     })),
   );
-  const contextsQuery = useTerminalProjectContextsQuery(activeParentProjectId);
-  const contexts =
-    contextsQuery.data ?? EMPTY_TERMINAL_PROJECT_CONTEXTS;
   const {
     activeSessionId,
     mutationLoading,
@@ -139,23 +131,6 @@ export function TerminalWorkspaceShell({
     }
     return sessions.filter((session) => session.projectId === activeProjectId);
   }, [activeProjectId, sessions]);
-  const activeParentProject =
-    projects.find(
-      (project) => project.projectId === activeParentProjectId,
-    ) ?? null;
-  const activeContext =
-    contexts.find((context) => context.projectId === activeProjectId) ?? null;
-  const activeProject =
-    activeParentProject && activeContext
-      ? {
-          ...activeParentProject,
-          projectId: activeContext.projectId,
-          name: activeContext.name,
-          path: activeContext.path,
-        }
-      : activeParentProject?.projectId === activeProjectId
-        ? activeParentProject
-        : null;
   const activeSession = activeSessionId
     ? (visibleSessions.find(
         (session) => session.terminalSessionId === activeSessionId,
@@ -272,20 +247,6 @@ export function TerminalWorkspaceShell({
       }
     },
   );
-  const {
-    requestAgentTeam,
-    showAgentTeamTool,
-    syncActiveAgentTeamRunForActiveSession,
-  } = useTerminalWorkspaceAgentTeam({
-    apiBase,
-    token,
-    activeProject,
-    activeSession,
-    panelSplitEnabled,
-    onSelectSession,
-    setPanelSplitEnabled,
-  });
-
   useEffect(() => {
     if (
       !activeSession?.terminalSessionId ||
@@ -377,25 +338,14 @@ export function TerminalWorkspaceShell({
             onPanelSplitEnabledChange={(terminalSessionId, enabled) => {
               void setPanelSplitEnabled(terminalSessionId, enabled);
             }}
-            onRequestAgentTeam={requestAgentTeam}
             onRequestCreateSession={onRequestCreateSession}
           />
           <TerminalWorkspaceStage
             clientMode={clientMode}
             loading={loading}
             onCreateSession={onRequestCreateSession}
-            showAgentTeamTool={showAgentTeamTool}
             onEditProject={() => requestEditProject()}
             panels={{
-          onActiveAgentTeamRunChange: syncActiveAgentTeamRunForActiveSession,
-          onPanelSplitEnabledChange: (enabled) => {
-            if (activeSession) {
-              void setPanelSplitEnabled(
-                activeSession.terminalSessionId,
-                enabled,
-              );
-            }
-          },
           onPanelWorkspaceChange: (workspace) => {
             setPanelWorkspaceBySessionId((current) => ({
               ...current,

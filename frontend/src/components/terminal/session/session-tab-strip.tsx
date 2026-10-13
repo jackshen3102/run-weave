@@ -22,7 +22,6 @@ interface TerminalSessionTabStripProps {
     terminalSessionId: string,
     enabled: boolean,
   ) => void;
-  onRequestAgentTeam: (terminalSessionId: string) => void;
   onRequestCreateSession: () => void;
 }
 
@@ -35,7 +34,6 @@ export function TerminalSessionTabStrip({
   onRequestCloseSession,
   onRequestEditAlias,
   onPanelSplitEnabledChange,
-  onRequestAgentTeam,
   onRequestCreateSession,
 }: TerminalSessionTabStripProps) {
   const panelWorkspaceBySessionId = useTerminalWorkspaceStore(
@@ -71,7 +69,6 @@ export function TerminalSessionTabStrip({
                 onPanelSplitEnabledChange={(enabled) => {
                   onPanelSplitEnabledChange(session.terminalSessionId, enabled);
                 }}
-                onRequestAgentTeam={onRequestAgentTeam}
               />
             );
           }}

@@ -57,7 +57,6 @@ export function createManifest({ sourceRoot, sessionId }) {
       appChannel: "stable",
       sourceRoot,
       originTerminalSessionId: null,
-      agentTeamRunId: null,
     },
     targetEnvironment: { kind: "fullstack", acceptanceSurfaces: ["web"] },
     source: { root: sourceRoot, revision: "verify", dirty: true },

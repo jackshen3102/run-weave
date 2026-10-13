@@ -231,12 +231,6 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
       };
     });
   },
-  openAgentTeam: () => {
-    set((state: TerminalPreviewStore) => ({
-      ...revealSidecarTab(state, "agent-team"),
-      ui: { ...state.ui, open: true, activeTool: "agent-team" },
-    }));
-  },
   openRace: () => {
     set((state: TerminalPreviewStore) => ({
       ...revealSidecarTab(state, "race"),

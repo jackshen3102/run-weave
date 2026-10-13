@@ -55,8 +55,6 @@ export interface CreateTerminalPanelSplitParams {
   direction: "right" | "down";
   alias?: string | null;
   role?: string | null;
-  agentTeamRunId?: string | null;
-  agentTeamWorkerId?: string | null;
   command?: string;
   args?: string[];
   cwd?: string;
@@ -66,7 +64,7 @@ export interface CreateTerminalPanelSplitParams {
 
 /**
  * Split a new tmux pane inside a terminal session and register it as a panel.
- * Shared by the panel HTTP route and the agent-team run service (worker panes).
+ * Creates a pane for the panel HTTP route.
  */
 export async function createTerminalPanelSplit(
   terminalSessionManager: TerminalSessionManager,
@@ -95,8 +93,6 @@ export async function createTerminalPanelSplit(
   const panels = terminalSessionManager.listPanels(session.id);
   const alias = params.alias?.trim() || null;
   const role = params.role?.trim() || null;
-  const agentTeamRunId = params.agentTeamRunId?.trim() || null;
-  const agentTeamWorkerId = params.agentTeamWorkerId?.trim() || null;
   assertUniqueAlias(panels, alias);
   assertUniqueRole(panels, role);
   const sourcePanel =
@@ -138,7 +134,6 @@ export async function createTerminalPanelSplit(
         terminalPanelId: panelId,
         projectId: session.projectId,
         source: session.source,
-        agentTeamRunId,
         tmuxSessionName:
           session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
       }),
@@ -152,8 +147,6 @@ export async function createTerminalPanelSplit(
         panelId,
         alias,
         role,
-        agentTeamRunId,
-        agentTeamWorkerId,
         cwd,
         activeCommand: null,
       }),

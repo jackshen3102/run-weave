@@ -47,13 +47,13 @@ function statusLabel(slot: AttentionSlot): string {
   if (slot.state === "blocked") return "验收受阻";
   if (slot.state === "completed") return "完成待查看";
   if (slot.state === "failed") {
-    return slot.source.kind === "agent_team_run" ? "执行失败" : "异常退出";
+    return "异常退出";
   }
-  return slot.source.kind === "agent_team_run" ? "Agent Team 执行中" : "执行中";
+  return "执行中";
 }
 
-function targetLabel(slot: AttentionSlot): string {
-  return slot.targetSurface === "agent-team" ? "Agent Team" : "Terminal";
+function targetLabel(): string {
+  return "Terminal";
 }
 
 function slotPath(slot: AttentionSlot): string {
@@ -301,7 +301,6 @@ export function DesktopCompanion(props: {
       projectId: slot.projectId,
       terminalSessionId: slot.terminalSessionId,
       panelId: slot.panelId,
-      runId: slot.runId,
       targetSurface: slot.targetSurface,
       completionRevision: slot.completionRevision,
     };
@@ -386,7 +385,7 @@ export function DesktopCompanion(props: {
               type="button"
               onClick={() => void openSlot(escalated)}
             >
-              打开 {targetLabel(escalated)} →
+              打开 {targetLabel()} →
             </button>
           </div>
         </div>
@@ -450,7 +449,7 @@ export function DesktopCompanion(props: {
                 </span>
               </span>
               <span className="companion-slot-target">
-                ↗ {targetLabel(slot)}
+                ↗ {targetLabel()}
               </span>
             </button>
           ))}

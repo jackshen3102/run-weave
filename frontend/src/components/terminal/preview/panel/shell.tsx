@@ -34,7 +34,6 @@ interface SidecarLayout {
 
 interface SidecarToolNavigation {
   activeTool: TerminalSidecarTool;
-  showAgentTeamTool: boolean;
   onSetActiveTool: (tool: TerminalSidecarTool) => void;
 }
 
@@ -86,7 +85,6 @@ interface TerminalPreviewPanelShellProps {
   actions: PreviewActions;
   activeTerminalSessionId: string | null;
   automationBody?: ReactNode;
-  agentTeamBody?: ReactNode;
   raceBody?: ReactNode;
   handoffBody?: ReactNode;
   supervisionBody?: ReactNode;
@@ -123,7 +121,6 @@ export function TerminalPreviewPanelShell({
   actions,
   activeTerminalSessionId,
   automationBody,
-  agentTeamBody,
   raceBody,
   handoffBody,
   supervisionBody,
@@ -144,7 +141,7 @@ export function TerminalPreviewPanelShell({
   const browserActivationProjectId = useTerminalPreviewStore(
     (state) => state.browserActivationProjectId,
   );
-  const { activeTool, onSetActiveTool, showAgentTeamTool } = tools;
+  const { activeTool, onSetActiveTool } = tools;
   const { expanded, onClose, onStartResize, onToggleExpanded, panelWidth } =
     layout;
   const { activeProject, mode, onSetMode } = navigation;
@@ -200,7 +197,6 @@ export function TerminalPreviewPanelShell({
           <div className="flex min-h-[34px] items-center gap-2">
             <TerminalSidecarTabs
               projectId={activeProject?.projectId ?? null}
-              showAgentTeamTool={showAgentTeamTool}
               onSetActiveTool={onSetActiveTool}
             />
             <div className="flex shrink-0 items-center gap-1">
@@ -429,18 +425,6 @@ export function TerminalPreviewPanelShell({
               token={token}
               terminalSessionId={activeTerminalSessionId}
             />
-          </div>
-          <div
-            className={[
-              "absolute inset-0 min-h-0",
-              showAgentTeamTool && activeTool === "agent-team"
-                ? ""
-                : "pointer-events-none hidden",
-            ].join(" ")}
-          >
-            {showAgentTeamTool && activeTool === "agent-team"
-              ? agentTeamBody
-              : null}
           </div>
           <div
             className={[

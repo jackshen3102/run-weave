@@ -77,7 +77,7 @@ export class TaskHandoffService {
         ? { id: owner.lastThreadId, provider: "codex" }
         : null);
     const target =
-      identity?.provider === "codex" && !panel?.agentTeamRunId
+      identity?.provider === "codex"
         ? { terminalSessionId, panelId: resolvedPanelId, threadId: identity.id }
         : null;
     return {

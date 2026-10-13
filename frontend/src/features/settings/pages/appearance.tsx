@@ -14,9 +14,7 @@ export default function Appearance() {
     (tab) => tab.id !== "automation" || window.electronAPI?.isElectron,
   ).map((tab) => tab.id);
   const visible = getVisibleSidecarTabs(layout, available);
-  // Agent Team only appears for eligible terminals; it cannot guarantee a
-  // visible tool when this device preference is reused by another terminal.
-  const alwaysVisible = visible.filter((id) => id !== "agent-team");
+  const alwaysVisible = visible;
   const store = useTerminalPreviewStore.getState();
   return (
     <div className="space-y-4">
@@ -90,7 +88,7 @@ export default function Appearance() {
                   checked={!layout.hidden.includes(id)}
                   disabled={
                     !supported ||
-                    (shown && id !== "agent-team" && alwaysVisible.length <= 1)
+                    (shown && alwaysVisible.length <= 1)
                   }
                   onChange={(event) =>
                     store.setSidecarTabVisible(

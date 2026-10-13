@@ -112,16 +112,15 @@ cases:
   - id: RSP-009
     name: 关键周期任务按自身新鲜度判断
     required: true
-    description: >
-      验证 Agent Team watchdog、Evolution maintenance 或 lease heartbeat、App Server reconciler 使用各自周期判断，不把正常长任务误判为停止。
+    description: |
+      验证 Evolution maintenance 或 lease heartbeat、App Server reconciler 使用各自周期判断，不把正常长任务误判为停止。
     preconditions:
-      - Backend 和 App Server 已启动，Agent Team watchdog 与 reconciler 可以完成至少三轮。
+      - Backend 和 App Server 已启动，Evolution maintenance 与 reconciler 可以完成至少三轮。
       - 已准备一个持续时间超过普通 maintenance 周期、但 lease heartbeat 正常的独立 Evolution run。
     steps:
       - 跨三个周期读取状态；确认 watchdog 和 reconciler 的 observedAt 持续更新，状态保持 healthy。
       - 启动长 Evolution run；确认 maintenance 尚未完成时由新鲜 lease heartbeat 保持 healthy，而不是因上次完成时间变旧进入异常。
       - 结束该 run；确认状态重新依据 maintenance 新鲜度判断，状态报告不包含 run 输入或输出内容。
-
   - id: RSP-010
     name: Electron 报告真实本地设施和连接地址
     required: true

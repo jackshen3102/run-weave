@@ -8,7 +8,6 @@ import {
   listTerminalSessions,
   updateTerminalSession,
 } from "../../services/terminal/index";
-import { useTerminalPreviewStore } from "../terminal/preview/store";
 import { useTerminalWorkspaceStore } from "../terminal/state/workspace-store";
 
 // Route selection must leave notification acknowledgements to their authorized revision.
@@ -163,17 +162,6 @@ export function useAttentionOpenIntents({
               });
           }
           signal.throwIfAborted();
-          if (intent.targetSurface === "agent-team") {
-            await updateTerminalSession(
-              apiBase,
-              token,
-              intent.terminalSessionId,
-              { panelSplitEnabled: true },
-              signal,
-            );
-            signal.throwIfAborted();
-            useTerminalPreviewStore.getState().openAgentTeam();
-          }
           signal.throwIfAborted();
           const openedResult: AttentionOpenResult = panelFallback
             ? {

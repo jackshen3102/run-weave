@@ -45,13 +45,7 @@ export async function inspectMissingBetaLease(manifest) {
       }
     }
   }
-  const fixtureCleanupConfirmed =
-    !manifest.controlPlane?.agentTeamRunId ||
-    !manifest.controlPlane?.agentTeamDispatchId ||
-    ["completed", "not_required_shared_backend"].includes(
-      manifest.fixtureCleanup?.status,
-    );
-  if (!safety.safeToReset || blockedServices.length || !fixtureCleanupConfirmed) {
+  if (!safety.safeToReset || blockedServices.length) {
     throw new DevSessionError(
       "Beta lease is absent but Session release cannot be confirmed",
       5,
@@ -61,7 +55,6 @@ export async function inspectMissingBetaLease(manifest) {
         devSessionId: manifest.devSessionId,
         safety,
         blockedServices,
-        fixtureCleanupConfirmed,
       },
     );
   }
@@ -69,7 +62,6 @@ export async function inspectMissingBetaLease(manifest) {
     leaseAbsent: true,
     slotProcessesAbsent: true,
     recordedDedicatedProcessesAbsent: true,
-    fixtureCleanupConfirmed,
     observedAt: new Date().toISOString(),
   };
 }

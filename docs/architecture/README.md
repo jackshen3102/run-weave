@@ -25,7 +25,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | 目录                     | 当前职责                                                         | 首要入口                                                    |
 | ------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------- |
 | `frontend/`              | Web UI 与 Electron renderer                                      | `frontend/src/App.tsx`                                      |
-| `backend/`               | 本机 HTTP/WebSocket、Terminal、Agent Team、Activity、Evolution   | `backend/src/index.ts`                                      |
+| `backend/`               | 本机 HTTP/WebSocket、Terminal、Activity、Evolution               | `backend/src/index.ts`                                      |
 | `electron/`              | macOS 窗口、IPC、内嵌 Browser、Backend 进程与更新                | `electron/src/main.ts`                                      |
 | `packages/app-ios/`      | 独立 Swift iOS 应用，通过 Backend HTTP/WS 工作                   | [原生包入口](../../packages/app-ios/README.md)              |
 | `app-server/`            | 独立事件中心、Thread 状态投影和实时消费                          | `app-server/src/index.ts`                                   |
@@ -96,7 +96,6 @@ Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.m
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[后台续接与回复](../cli/scheduled-task-cli.md#后台续接与人工回复)、[运行配置](../deployment/overview.md#定时任务运行) |
 | 快捷指令后台运行           | [定时任务接入边界](../../frontend/docs/scheduled-tasks.md)、[验收计划](../testing/background-commands/core.testplan.yaml)                                                                |
-| Agent Team / Loop Engine   | [multi-agent-orchestrator.md](./multi-agent-orchestrator.md)                                                                                                                             |
 | 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                                                                                               |
 | Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                                                                                     |
 

@@ -56,6 +56,8 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
   for (const [key, entry] of flattenConfiguration(value)) {
     if (["schemaVersion", "revision", "kind", "instanceId", "domainVersions", "migrations"].includes(key.split(".")[0]!)) continue;
     const domain = domainForPath(key);
+    // Retired settings may remain in existing files but have no runtime consumer.
+    if (domain === "agents.team") continue;
     if (value.domainVersions[domain] !== undefined && value.domainVersions[domain] !== 1) { issue(key, "CONFIG_DOMAIN_VERSION_UNSUPPORTED"); continue; }
     const field = fieldForPath(key);
     if (!field) {
@@ -113,12 +115,8 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
     }
     if (feishu("legacyWebhook.transport") === "webhook") issue("services.feishu.role", "CONFIG_FEISHU_ROLE_CONFLICT");
   }
-  const roles = readConfigurationPath(value, "agents.team.roles");
-  if (isConfigurationObject(roles)) for (const [role, selection] of Object.entries(roles)) {
-    const key = `agents.team.roles.${configurationPathSegment(role)}`;
-    if (!isConfigurationObject(selection) || !["codex", "traex"].includes(String(selection.provider)) || typeof selection.model !== "string" || !selection.model.trim() || selection.provider === "codex" && (typeof selection.fast !== "boolean" || selection.max !== undefined) || selection.provider === "traex" && (typeof selection.max !== "boolean" || selection.fast !== undefined)) issue(key, "CONFIG_MODEL_SELECTION_INVALID");
-  }
   for (const [domain, version] of Object.entries(value.domainVersions)) {
+    if (domain === "agents.team") continue;
     if (version !== 1 && !result[domain]) result[domain] = [{ path: domain, code: "CONFIG_DOMAIN_VERSION_UNSUPPORTED" }];
   }
   return result;

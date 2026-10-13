@@ -160,7 +160,7 @@ const activityEventSchema = z.object({
       z.object({
         refId: z.string().uuid(),
         role: z.enum(["thread", "scrollback", "run", "outbox", "evidence", "artifact"]),
-        authority: z.enum(["codex_thread", "terminal_scrollback", "agent_team_run", "browser_artifact", "verification_evidence"]),
+        authority: z.enum(["codex_thread", "terminal_scrollback", "browser_artifact", "verification_evidence"]),
         locator: z.string().min(1).max(16_384),
         versionOrDigest: z.string().min(1).max(512),
         capturedAt: z.string().datetime(),

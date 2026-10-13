@@ -1,8 +1,8 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadAcceptanceCasesFromTestPlan } from "../../backend/src/agent-team/acceptance/case-loader";
-import { AGENT_TEAM_TEST_PLAN_SUFFIX } from "../../backend/src/agent-team/acceptance/test-plan";
+import { loadAcceptanceCasesFromTestPlan } from "../../backend/src/testing/case-loader";
+import { TEST_PLAN_SUFFIX } from "../../backend/src/testing/test-plan";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -41,7 +41,7 @@ async function collectTestPlanPaths(directoryPath: string): Promise<string[]> {
       paths.push(...(await collectTestPlanPaths(entryPath)));
     } else if (
       entry.isFile() &&
-      entry.name.endsWith(AGENT_TEAM_TEST_PLAN_SUFFIX)
+      entry.name.endsWith(TEST_PLAN_SUFFIX)
     ) {
       paths.push(path.relative(repoRoot, entryPath).split(path.sep).join("/"));
     }

@@ -20,15 +20,18 @@ cases:
   - id: SFA-002
     name: Full Access 启动参数与身份边界正确
     required: true
-    description: >
+    description: |
       full-access 子进程无 workspace-write 和命令联网限制，取得本次项目及 Browser scope，但不继承交互式终端或敏感服务身份。
     preconditions:
       - 隔离 Backend 配置可记录本例 provider 的真实 argv、环境变量名称和脱敏 Browser endpoint，不记录凭据值。
       - 本例项目、run ID 和 ambient Browser endpoint 均带可区分标识，另有独立 sandbox Run 作为对照。
     steps:
-      - 启动 full-access Run；确认 argv 包含 danger-full-access 与 never approval，不包含 workspace-write 或 sandbox_workspace_write.network_access=false，也没有待人工响应的审批请求。
-      - 检查子进程环境；确认 RUNWEAVE_SCHEDULED_TASK_RUN_ID 和 RUNWEAVE_PROJECT_ID 分别等于本次 Run 与项目，Browser endpoint 的 groupId 只属于本次 Run。
-      - 确认环境不含 Terminal/Panel、tmux、Hook token、App Server token、Agent Team worker 或旧 Codex thread/session 身份；对照 sandbox Run 仍保留原沙箱和禁网参数。
+      - 启动 full-access Run；确认 argv 包含 danger-full-access 与 never approval，不包含 workspace-write 或
+        sandbox_workspace_write.network_access=false，也没有待人工响应的审批请求。
+      - 检查子进程环境；确认 RUNWEAVE_SCHEDULED_TASK_RUN_ID 和 RUNWEAVE_PROJECT_ID 分别等于本次 Run 与项目，Browser
+        endpoint 的 groupId 只属于本次 Run。
+      - 确认环境不含 Terminal/Panel、tmux、Hook token、App Server token、旧 Codex thread/session 身份；对照 sandbox
+        Run 仍保留原沙箱和禁网参数。
   - id: SFA-003
     name: Web 只提供一个完全访问权限选项
     required: true

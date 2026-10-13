@@ -102,7 +102,7 @@ codeHashes 在读取时忽略，不自动重写历史数据。保存与检索仅
 ## 正式环境的持续更新
 
 Stable 默认启用后台学习；`RUNWEAVE_EXPERIENCE_LEARNING=false` 可关闭。Beta/dev 默认关闭，
-验收时显式设为 `true`。需安装并登录本机 Codex CLI；复用现有只读 Provider，不使用 Agent Team。
+验收时显式设为 `true`。需安装并登录本机 Codex CLI；复用现有只读 Provider，通过普通终端执行。
 更新客户端后这条链路生效；旧版本不支持。本机终端之外的会话没有完成事件，不会自动纳入。
 
 1. 已通过身份门禁的普通 Codex/Pi `Stop` 完成事件，在回复 hook 前写入命名空间内持久队列。

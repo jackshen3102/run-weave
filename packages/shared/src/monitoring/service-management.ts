@@ -14,7 +14,7 @@ const domains: Readonly<Record<RuntimeStatusCapabilityId, readonly string[]>> = 
   "app-server": ["appServer"],
   "workspace-services": [],
   desktop: ["desktop.browser", "desktop.tunnels", "agents.companion"],
-  "background-tasks": ["scheduledTasks", "agents.team", "knowledge"],
+  "background-tasks": ["scheduledTasks", "knowledge"],
   "research-mcp": ["backend.tunnelAuth", "desktop.tunnels"],
 };
 

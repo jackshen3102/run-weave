@@ -207,15 +207,3 @@ cases:
     steps:
       - 使用 toolkit:playwright-cli 点击全部仓库复盘，并重发相同 idempotency key 的请求；确认同一个 batch 每仓库只有一个 Run，重复 Project 不增加子 Run。
       - 观察执行和结果；确认仍至多一个活动 runner，两个仓库的 Pack 与知识分别保存，部分失败可独立显示而不重跑成功子 Run。
-
-  - id: ERIM-018
-    name: 实际 worker 按 cwd 仓库获得知识
-    required: true
-    description: >
-      验证注入消费者也完成仓库身份迁移，不能只凭列表归并或 prepare 返回成功声称实际注入正确。
-    preconditions:
-      - 独占 Agent Team 环境中同 Project 可调度两个不同仓库 cwd 的 code worker。
-      - 两仓库各有仅在本 fixture 授权的可区分 Memory，另有一个非 Git cwd 场景。
-    steps:
-      - 分别实际调度各 worker，读取真实 startup prompt 与对应 dispatch 的 RuntimeTrace；确认只暴露实际 cwd 仓库中被授权的 revision，没有另一仓库内容。
-      - 调度非 Git cwd worker；确认原任务仍启动，Evolution 明确记录身份解析失败并跳过注入，没有退回父 Project 或全局知识。

@@ -34,8 +34,6 @@ export function buildDefaultPanel(
     alias: "main",
     role: "main",
     ...sessionMetadata,
-    agentTeamRunId: null,
-    agentTeamWorkerId: null,
     cwd: pane.cwd || session.cwd,
     activeCommand,
     terminalState: sessionMetadata.terminalState ?? terminalState,
@@ -54,8 +52,6 @@ export function buildSplitPanel(
     panelId: string;
     alias: string | null;
     role: string | null;
-    agentTeamRunId: string | null;
-    agentTeamWorkerId: string | null;
     cwd: string;
     activeCommand: string | null;
   },
@@ -66,8 +62,6 @@ export function buildSplitPanel(
     terminalSessionId: session.id,
     alias: params.alias,
     role: params.role,
-    agentTeamRunId: params.agentTeamRunId,
-    agentTeamWorkerId: params.agentTeamWorkerId,
     cwd: params.cwd,
     activeCommand: params.activeCommand,
     terminalState: getPanelTerminalStateForActiveCommand(params.activeCommand),

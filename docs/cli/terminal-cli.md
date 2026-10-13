@@ -225,7 +225,7 @@ Pi 的 `line`、`prompt_paste`、`prompt_replace` 输入先通过当前 Pane 的
 连接完整替换文本，再由原生 Enter 提交；运行中提交遵循 Pi 的 steering 语义。
 `prompt_replace` 默认只替换草稿，显式 `submit` 才发送。扩展不可用或输入正被占用
 时返回失败，调用方保留草稿；不使用 Ctrl+U 猜测多行编辑器的清空行为。
-默认 Escape 停止当前请求，`/quit` 退出。Pi 尚不支持 Agent Team/Race worker 配置。
+默认 Escape 停止当前请求，`/quit` 退出。Pi 尚不支持 Race worker 配置。
 
 历史只读取扩展登记的 Pi v3 JSONL 会话文件，并按当前分支展示消息、工具和压缩摘要。
 恢复使用已校验的 `--session <精确文件>`，文件缺失或 header ID 不匹配时失败，

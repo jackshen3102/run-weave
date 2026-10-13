@@ -97,9 +97,7 @@ function toEpisode(
       role: evidenceRole(evidenceById.get(evidenceId)),
     })),
   );
-  const anchor = ordered.find(
-    (segment) => segment.relationKind === "agent_team_run",
-  ) ?? first;
+  const anchor = first;
   const segmentIds = ordered.map((segment) => segment.segmentId);
   return {
     episodeId: stableId("episode", [manifest.runId, ...segmentIds]),

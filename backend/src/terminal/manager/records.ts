@@ -86,8 +86,6 @@ export interface TerminalPanelRecord {
   lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
   lastThreadUpdatedAt?: Date;
-  agentTeamRunId: string | null;
-  agentTeamWorkerId: string | null;
   cwd: string;
   activeCommand: string | null;
   terminalState?: TerminalState;
@@ -303,8 +301,6 @@ export function buildPanelRecord(
     ...(persisted.lastThreadUpdatedAt
       ? { lastThreadUpdatedAt: new Date(persisted.lastThreadUpdatedAt) }
       : {}),
-    agentTeamRunId: persisted.agentTeamRunId ?? null,
-    agentTeamWorkerId: persisted.agentTeamWorkerId ?? null,
     cwd: persisted.cwd,
     activeCommand: persisted.activeCommand ?? null,
     ...(persisted.terminalState !== undefined
@@ -339,8 +335,6 @@ export function toPersistedPanel(
     ...(panel.lastThreadUpdatedAt
       ? { lastThreadUpdatedAt: panel.lastThreadUpdatedAt.toISOString() }
       : {}),
-    agentTeamRunId: panel.agentTeamRunId,
-    agentTeamWorkerId: panel.agentTeamWorkerId,
     cwd: panel.cwd,
     activeCommand: panel.activeCommand,
     ...(panel.terminalState !== undefined

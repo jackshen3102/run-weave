@@ -153,16 +153,17 @@ cases:
     name: 工作组属于桌面窗口且不随项目或终端切换
     required: true
     description: >
-      验证同一 Electron 窗口内切换 project、terminal session 或 sidecar tool 不替换 Browser workspace，
-      另一个 Electron 窗口不会直接复用当前窗口的 live group registry。
+      验证同一 Electron 窗口内切换 project、terminal session 或 sidecar tool 不替换 Browser workspace， 另一个
+      Electron 窗口不会直接复用当前窗口的 live group registry。
     preconditions:
       - 真实 Electron 主窗口 A 已创建两个有可识别名称和页面的工作组，并准备两个 project 和两个 terminal session。
-      - 可通过 `$computer-use` 打开第二个 Runweave 窗口 B，并用 `$toolkit:playwright-cli` 分别识别 A、B 的 desktop surface。
+      - 可通过 `$computer-use` 打开第二个 Runweave 窗口 B，并用 `$toolkit:playwright-cli` 分别识别 A、B 的 desktop
+        surface。
     steps:
-      - 在窗口 A 切换 project、terminal session、Preview 和 Agent Team，再回到 Browser；确认原工作组、active Tab 和页面不变。
-      - 打开窗口 B 的 Browser；确认 B 使用独立 live workspace，不能直接看到或重排 A 的工作组，A 的 scoped endpoint 仍只控制 A 的 targets。
+      - 在窗口 A 切换 project、terminal session、Preview 和 Race，再回到 Browser；确认原工作组、active Tab 和页面不变。
+      - 打开窗口 B 的 Browser；确认 B 使用独立 live workspace，不能直接看到或重排 A 的工作组，A 的 scoped endpoint 仍只控制 A 的
+        targets。
       - 关闭窗口 B；确认窗口 A 的工作组、页面和 Agent 连接不被清理。
-
   - id: TBWG-012
     name: 不同工作组继续共享 Browser Profile 和网络环境
     required: true

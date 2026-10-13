@@ -24,15 +24,6 @@ export function WorkHistoryInspector({
   if (selection.type === "fact") {
     return (
       <div className="p-4">
-        {selection.attributionSource ? (
-          <div className="mb-3 rounded-lg border border-border/70 p-3 text-sm">
-            <p className="text-xs text-muted-foreground">Round attribution</p>
-            <p className="mt-1">
-              attributionSource={selection.attributionSource}
-              {selection.round != null ? ` · Round ${selection.round}` : ""}
-            </p>
-          </div>
-        ) : null}
         <ActivityFactDetail
           apiBase={apiBase}
           token={token}
@@ -66,14 +57,6 @@ function selectionTitle(selection: Exclude<WorkHistorySelection, { type: "fact" 
       return selection.terminal.alias || selection.terminal.terminalSessionId;
     case "thread":
       return selection.thread.thread.threadId;
-    case "run":
-      return selection.run.runId;
-    case "worker":
-      return selection.worker.role;
-    case "case":
-      return selection.acceptanceCase.caseId;
-    case "evidence":
-      return selection.evidence.label;
   }
 }
 
@@ -155,55 +138,6 @@ function selectionBody(selection: Exclude<WorkHistorySelection, { type: "fact" }
         </div>
       );
     }
-    case "run":
-      return (
-        <DefinitionList
-          values={{
-            Project: selection.run.projectId,
-            Terminal: selection.run.terminalSessionId,
-            Phase: selection.run.phase,
-            Status: selection.run.status,
-            "Next round index": selection.run.loop.round,
-            Created: selection.run.createdAt,
-            Updated: selection.run.updatedAt,
-          }}
-        />
-      );
-    case "worker":
-      return (
-        <DefinitionList
-          values={{
-            ID: selection.worker.id,
-            Role: selection.worker.role,
-            Intent: selection.worker.intent,
-            Panel: selection.worker.panelId,
-            "tmux pane": selection.worker.tmuxPaneId,
-          }}
-        />
-      );
-    case "case":
-      return (
-        <DefinitionList
-          values={{
-            Status: selection.acceptanceCase.status,
-            Conclusion: selection.acceptanceCase.resultSummary ?? "未记录",
-            Source: selection.acceptanceCase.sourceFilePath,
-            Evidence: selection.acceptanceCase.evidence.length,
-          }}
-        />
-      );
-    case "evidence":
-      return (
-        <DefinitionList
-          values={{
-            Case: selection.caseId,
-            Type: selection.evidence.type,
-            Summary: selection.evidence.summary,
-            Reference: selection.evidence.ref,
-            Detail: selection.evidence.detail,
-          }}
-        />
-      );
   }
 }
 

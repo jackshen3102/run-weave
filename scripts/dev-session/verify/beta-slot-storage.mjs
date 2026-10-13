@@ -377,7 +377,7 @@ export async function verifyBetaSlotStorage(
     "runtime",
   ]);
 
-  const modelSettings = '{"config":{"schemaVersion":1}}\n';
+  const modelSettings = '{"catalogs":{}}\n';
   await fs.mkdir(path.join(targets.userData, "browser-profile"), {
     recursive: true,
   });
@@ -386,7 +386,7 @@ export async function verifyBetaSlotStorage(
     path.join(
       targets.userData,
       "browser-profile",
-      "agent-team-model-settings.json",
+      "agent-provider-catalogs.json",
     ),
     modelSettings,
   );
@@ -398,21 +398,21 @@ export async function verifyBetaSlotStorage(
   assert.deepEqual(await fs.readdir(targets.userData), ["browser-profile"]);
   assert.deepEqual(
     await fs.readdir(path.join(targets.userData, "browser-profile")),
-    ["agent-team-model-settings.json"],
+    ["agent-provider-catalogs.json"],
   );
   assert.equal(
     await fs.readFile(
       path.join(
         targets.userData,
         "browser-profile",
-        "agent-team-model-settings.json",
+        "agent-provider-catalogs.json",
       ),
       "utf8",
     ),
     modelSettings,
   );
   assert.deepEqual(preservedReset.preservedBackendConnectionSettings, [
-    "agent-team-model-settings.json",
+    "agent-provider-catalogs.json",
   ]);
 
   if (!includeLegacy) {

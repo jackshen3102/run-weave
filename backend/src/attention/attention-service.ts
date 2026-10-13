@@ -1,13 +1,10 @@
-import { createHash } from "node:crypto";
 import type {
   AttentionSlot,
   AttentionSnapshot,
   AttentionState,
 } from "@runweave/shared/attention";
-import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import type { TerminalCompletionEventService } from "../terminal/completion/event-service";
-import type { AgentTeamService } from "../agent-team/service";
 import type { TerminalProjectContextRecord } from "../terminal/manager/records";
 import type { TerminalStateService } from "../terminal/state/terminal-state-service";
 import { resolveEffectiveTerminalState } from "../terminal/application/terminal-state-projection";
@@ -33,98 +30,10 @@ function sessionLabel(alias: string | null | undefined, contextName: string, act
   return command === "codex" ? `${base}(codex)` : base;
 }
 
-function stableHash(values: Array<string | number | null>): string {
-  return createHash("sha256").update(values.join("\n")).digest("hex").slice(0, 16);
-}
-
-function selectRun(runs: AgentTeamRun[]): AgentTeamRun | null {
-  return [...runs].sort((left, right) => {
-    const leftActive = left.status !== "done" && left.status !== "failed";
-    const rightActive = right.status !== "done" && right.status !== "failed";
-    if (leftActive !== rightActive) return leftActive ? -1 : 1;
-    return right.updatedAt.localeCompare(left.updatedAt);
-  })[0] ?? null;
-}
-
-function skippedAcceptance(run: AgentTeamRun): string[] {
-  return run.acceptance
-    .filter((item) => item.lastRunStatus === "skipped" || item.skip != null)
-    .map((item) => item.caseId)
-    .sort();
-}
-
-function projectRunSlot(
-  run: AgentTeamRun,
-  base: Omit<AttentionSlot, "attentionId" | "state" | "title" | "detail" | "updatedAt" | "source" | "targetSurface" | "completionRevision">,
-): AttentionSlot | null {
-  const pending = run.pendingFindingDecision;
-  const skipped = skippedAcceptance(run);
-  const skippedCase = run.acceptance.find(
-    (item) => item.lastRunStatus === "skipped" || item.skip != null,
-  );
-  let state: AttentionState | null = null;
-  let attentionId = "";
-  let detail = "";
-  if (pending) {
-    state = "needs_action";
-    attentionId = `agent-team:${run.runId}:finding:${pending.id}`;
-    detail = pending.reason;
-  } else if (run.frameworkRepair?.result === "blocked") {
-    state = "blocked";
-    attentionId = `agent-team:${run.runId}:framework-repair:${run.frameworkRepair.repairId}`;
-    detail = run.frameworkRepair.reason;
-  } else if (run.status === "need_human" && skipped.length > 0) {
-    state = "blocked";
-    attentionId = `agent-team:${run.runId}:acceptance:${stableHash([
-      ...skipped,
-      run.loop.round,
-    ])}`;
-    detail = `验收阻塞：${skipped.join("、")}`;
-  } else if (run.status === "need_human") {
-    state = "needs_action";
-    attentionId = `agent-team:${run.runId}:human:${stableHash([
-      run.loop.round,
-      run.loop.lastReason,
-    ])}`;
-    detail = run.loop.lastReason ?? "需要人工介入";
-  } else if (run.status === "failed") {
-    state = "failed";
-    attentionId = `agent-team:${run.runId}:failed`;
-    detail = run.loop.lastReason ?? "Agent Team 执行失败";
-  } else if (run.status === "running") {
-    state = "working";
-    attentionId = `agent-team:${run.runId}:working`;
-    detail = run.task;
-  }
-  if (!state) return null;
-  const reliablePanelId =
-    run.activeWorkerDispatch?.panelId ?? run.mainPanelId ?? null;
-  return {
-    ...base,
-    attentionId,
-    panelId: reliablePanelId,
-    panelLabel: run.activeWorkerRole ?? null,
-    runId: run.runId,
-    state,
-    title: clip(
-      pending?.finding.title ||
-        (skippedCase ? `${skippedCase.caseId} · ${skippedCase.text}` : run.task) ||
-        `Agent Team ${run.runId}`,
-      100,
-    ),
-    detail: clip(detail, 180),
-    updatedAt: run.updatedAt,
-    source: { kind: "agent_team_run", evidence: `status=${run.status}` },
-    targetSurface: "agent-team",
-    completionRevision: null,
-  };
-}
-
 export class AttentionService {
   constructor(
     private readonly terminalSessionManager: TerminalSessionManager,
     private readonly completionEventService: TerminalCompletionEventService,
-    private readonly agentTeamService: AgentTeamService,
     private readonly terminalStateService: TerminalStateService,
   ) {}
 
@@ -133,14 +42,6 @@ export class AttentionService {
     // intentionally broader for existing consumers.
     const contexts = this.terminalSessionManager.listAllProjectContexts() as TerminalProjectContextRecord[];
     const contextById = new Map(contexts.map((context) => [context.id, context]));
-    const runsByProject = new Map(
-      await Promise.all(
-        contexts.map(async (context) => [
-          context.id,
-          await this.agentTeamService.listRuns(context.id),
-        ] as const),
-      ),
-    );
     const completions = this.completionEventService
       .listAfter(null)
       .filter((event) => event.kind === "completion");
@@ -160,18 +61,7 @@ export class AttentionService {
         sessionLabel: sessionLabel(session.alias, context.name, session.activeCommand),
         panelId: null,
         panelLabel: null,
-        runId: null,
       };
-      const run = selectRun(
-        (runsByProject.get(session.projectId) ?? []).filter(
-          (candidate) => candidate.terminalSessionId === session.id,
-        ),
-      );
-      const runSlot = run ? projectRunSlot(run, base) : null;
-      if (runSlot) {
-        slots.push(runSlot);
-        continue;
-      }
       const piPanel = this.terminalSessionManager.listPanels(session.id).find((panel) =>
         panel.status === "running" && panel.terminalState?.agent === "pi" &&
         (panel.pi?.event === "ui_prompt_start" || panel.pi?.outcome === "failed"));

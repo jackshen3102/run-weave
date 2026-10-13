@@ -1,6 +1,6 @@
 ---
 name: write-test-cases
-description: 当需要为需求或改动编写、补全、迁移或规范化测试用例时使用。把真实代码行为写成 docs/testing/**/*.testplan.yaml 的最小标准结构，并在生成时按行为不变量、fixture 与资源生命周期边界拆分不可独立取证的组合 Case，供 Agent、Agent Team 和可视化程序直接读取；不执行用例。
+description: 当需要为需求或改动编写、补全、迁移或规范化测试用例时使用。把真实代码行为写成 docs/testing/**/*.testplan.yaml 的最小标准结构，并在生成时按行为不变量、fixture 与资源生命周期边界拆分不可独立取证的组合 Case，供 Agent 和可视化程序直接读取；不执行用例。
 ---
 
 # 编写测试用例

@@ -103,7 +103,7 @@ class FakeAnalysisProvider {
               request.prompt.includes('role="analyst_b"')
                 ? `${analysisFixtureState.currentStatement} Alternative cause remains plausible.`
                 : analysisFixtureState.currentStatement,
-            scope: "Agent Team code work in the learning scope",
+            scope: "Terminal code work in the learning scope",
             supportingEvidenceIds: [evidenceId],
             counterEvidenceIds: [],
             candidateType: "memory",
@@ -137,7 +137,7 @@ export function createFact(factory, projectId, label, cwd) {
       projectId,
       cwd: fixtureRepositoryRoot ? repositoryPath(projectId) : cwd,
       threadId: `thread:${label}`,
-      runId: `agent-team:${label}`,
+      runId: `terminal:${label}`,
     },
     payload: { label },
   });

@@ -400,7 +400,7 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFileSync(keyPath)"
   },
   {
-    "file": "backend/src/agent-team/acceptance/case-loader.ts",
+    "file": "backend/src/testing/case-loader.ts",
     "kind": "file-io",
     "expression": "readFile(resolved.absolutePath)",
     "count": 1,
@@ -408,103 +408,7 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(resolved.absolutePath)"
   },
   {
-    "file": "backend/src/agent-team/fixtures/dev-session-registry.ts",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_DEV_SESSION_HOME",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_DEV_SESSION_HOME：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "backend/src/agent-team/fixtures/dev-session-registry.ts",
-    "kind": "file-io",
-    "expression": "readFile(manifestPath)",
-    "count": 1,
-    "category": "runtime-state",
-    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(manifestPath)"
-  },
-  {
-    "file": "backend/src/agent-team/fixtures/scope.ts",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_FIXTURE_NAMESPACE",
-    "count": 1,
-    "category": "test",
-    "reason": "RUNWEAVE_AGENT_TEAM_FIXTURE_NAMESPACE：独立测试上下文，不进入 Stable 配置；作用仅限此调用点。"
-  },
-  {
-    "file": "backend/src/agent-team/fixtures/scope.ts",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_FIXTURE_OWNS_TERMINAL_SESSION",
-    "count": 1,
-    "category": "test",
-    "reason": "RUNWEAVE_AGENT_TEAM_FIXTURE_OWNS_TERMINAL_SESSION：独立测试上下文，不进入 Stable 配置；作用仅限此调用点。"
-  },
-  {
-    "file": "backend/src/agent-team/fixtures/scope.ts",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_OWNER_CASE_IDS",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_AGENT_TEAM_OWNER_CASE_IDS：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "backend/src/agent-team/fixtures/scope.ts",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_OWNER_DEV_SESSION_ID",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_AGENT_TEAM_OWNER_DEV_SESSION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "backend/src/agent-team/fixtures/scope.ts",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_OWNER_DISPATCH_ID",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_AGENT_TEAM_OWNER_DISPATCH_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "backend/src/agent-team/fixtures/scope.ts",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_OWNER_RUN_ID",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_AGENT_TEAM_OWNER_RUN_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "backend/src/agent-team/outbox/resolver.ts",
-    "kind": "file-io",
-    "expression": "handle.readFile({ encoding: \"utf8\" })",
-    "count": 1,
-    "category": "runtime-state",
-    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；handle.readFile({ encoding: \"utf8\" })"
-  },
-  {
-    "file": "backend/src/agent-team/repair/source-fingerprint.ts",
-    "kind": "file-io",
-    "expression": "readFile(absolutePath)",
-    "count": 1,
-    "category": "runtime-state",
-    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(absolutePath)"
-  },
-  {
-    "file": "backend/src/agent-team/service/export/index.ts",
-    "kind": "file-io",
-    "expression": "readFile(candidate.path)",
-    "count": 1,
-    "category": "runtime-state",
-    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(candidate.path)"
-  },
-  {
-    "file": "backend/src/agent-team/service/support.ts",
-    "kind": "file-io",
-    "expression": "readFile(resolved.absolutePath)",
-    "count": 1,
-    "category": "runtime-state",
-    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(resolved.absolutePath)"
-  },
-  {
-    "file": "backend/src/agent-team/storage/json-file.ts",
+    "file": "backend/src/utils/json-file.ts",
     "kind": "file-io",
     "expression": "readFile(filePath)",
     "count": 1,
@@ -512,23 +416,7 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(filePath)"
   },
   {
-    "file": "backend/src/agent-team/storage/json-file.ts",
-    "kind": "file-io",
-    "expression": "writeFile(temporaryPath)",
-    "count": 1,
-    "category": "runtime-state",
-    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFile(temporaryPath)"
-  },
-  {
-    "file": "backend/src/agent-team/storage/outbox-history-store.ts",
-    "kind": "file-io",
-    "expression": "readFile(archivePath)",
-    "count": 2,
-    "category": "runtime-state",
-    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(archivePath)"
-  },
-  {
-    "file": "backend/src/agent-team/storage/outbox-history-store.ts",
+    "file": "backend/src/utils/json-file.ts",
     "kind": "file-io",
     "expression": "writeFile(temporaryPath)",
     "count": 1,
@@ -5952,38 +5840,6 @@
     "reason": "RUNWEAVE_TERMINAL_SESSION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
   {
-    "file": "scripts/dev-session/fixtures/scope.mjs",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_RUN_ID",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_AGENT_TEAM_RUN_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "scripts/dev-session/fixtures/scope.mjs",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_TERMINAL_PANEL_ID",
-    "count": 3,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_TERMINAL_PANEL_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "scripts/dev-session/fixtures/scope.mjs",
-    "kind": "environment",
-    "expression": "env.TMUX_PANE",
-    "count": 3,
-    "category": "system",
-    "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "scripts/dev-session/fixtures/scope.mjs",
-    "kind": "file-io",
-    "expression": "readFile(runPath)",
-    "count": 2,
-    "category": "runtime-state",
-    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(runPath)"
-  },
-  {
     "file": "scripts/dev-session/ready-project.mjs",
     "kind": "environment",
     "expression": "env[name]",
@@ -6586,10 +6442,10 @@
   {
     "file": "scripts/dev-session/verify/beta-slot-storage.mjs",
     "kind": "file-io",
-    "expression": "fs.readFile(path.join( targets.userData, \"browser-profile\", \"agent-team-model-settings.json\", ))",
+    "expression": "fs.readFile(path.join( targets.userData, \"browser-profile\", \"agent-provider-catalogs.json\", ))",
     "count": 1,
     "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；fs.readFile(path.join( targets.userData, \"browser-profile\", \"agent-team-model-settings.json\", ))"
+    "reason": "隔离验证 fixture 的进程参数或证据文件；fs.readFile(path.join( targets.userData, \"browser-profile\", \"agent-provider-catalogs.json\", ))"
   },
   {
     "file": "scripts/dev-session/verify/beta-slot-storage.mjs",
@@ -6650,10 +6506,10 @@
   {
     "file": "scripts/dev-session/verify/beta-slot-storage.mjs",
     "kind": "file-io",
-    "expression": "fs.writeFile(path.join( targets.userData, \"browser-profile\", \"agent-team-model-settings.json\", ))",
+    "expression": "fs.writeFile(path.join( targets.userData, \"browser-profile\", \"agent-provider-catalogs.json\", ))",
     "count": 1,
     "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；fs.writeFile(path.join( targets.userData, \"browser-profile\", \"agent-team-model-settings.json\", ))"
+    "reason": "隔离验证 fixture 的进程参数或证据文件；fs.writeFile(path.join( targets.userData, \"browser-profile\", \"agent-provider-catalogs.json\", ))"
   },
   {
     "file": "scripts/dev-session/verify/beta-slot-storage.mjs",
@@ -7120,14 +6976,6 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；fs.readFile(filePath)"
   },
   {
-    "file": "scripts/evolution/verify-activation.mjs",
-    "kind": "file-io",
-    "expression": "readFile(path.join(root, \".runweave/agent-team/atr_dd8353fe_20260719020754.json\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFile(path.join(root, \".runweave/agent-team/atr_dd8353fe_20260719020754.json\"))"
-  },
-  {
     "file": "scripts/evolution/verify-analysis.mjs",
     "kind": "environment-forward",
     "expression": "...process.env",
@@ -7262,22 +7110,6 @@
     "count": 1,
     "category": "test",
     "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(child)"
-  },
-  {
-    "file": "scripts/evolution/verify-repository-worker.mjs",
-    "kind": "file-io",
-    "expression": "readFile(path.join(locations[i], \"worker-observed.json\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFile(path.join(locations[i], \"worker-observed.json\"))"
-  },
-  {
-    "file": "scripts/evolution/verify-repository-worker.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(binary)",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(binary)"
   },
   {
     "file": "scripts/install/app-server.mjs",
@@ -8462,358 +8294,6 @@
     "count": 1,
     "category": "test",
     "reason": "隔离验证 fixture 的进程参数或证据文件；...process.env"
-  },
-  {
-    "file": "scripts/verify/agent-team/completion-outcome.mjs",
-    "kind": "file-io",
-    "expression": "readFile(new URL(path, import.meta.url))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFile(new URL(path, import.meta.url))"
-  },
-  {
-    "file": "scripts/verify/agent-team/control-plane/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(outboxPath)",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(outboxPath)"
-  },
-  {
-    "file": "scripts/verify/agent-team/control-plane/review-skip-pause.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(outboxPath)",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(outboxPath)"
-  },
-  {
-    "file": "scripts/verify/agent-team/fixture-lifecycle/index.mjs",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_OWNER_DEV_SESSION_ID",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；env.RUNWEAVE_AGENT_TEAM_OWNER_DEV_SESSION_ID"
-  },
-  {
-    "file": "scripts/verify/agent-team/fixture-lifecycle/index.mjs",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_OWNER_DISPATCH_ID",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；env.RUNWEAVE_AGENT_TEAM_OWNER_DISPATCH_ID"
-  },
-  {
-    "file": "scripts/verify/agent-team/fixture-lifecycle/index.mjs",
-    "kind": "environment",
-    "expression": "env.RUNWEAVE_AGENT_TEAM_OWNER_RUN_ID",
-    "count": 2,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；env.RUNWEAVE_AGENT_TEAM_OWNER_RUN_ID"
-  },
-  {
-    "file": "scripts/verify/agent-team/fixture-lifecycle/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(manifestPath)",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(manifestPath)"
-  },
-  {
-    "file": "scripts/verify/agent-team/fixture-lifecycle/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(runDir, `${owner.runId}.json`))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(runDir, `${owner.runId}.json`))"
-  },
-  {
-    "file": "scripts/verify/agent-team/fixture-lifecycle/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(runDir, `${repairOwner.runId}.json`))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(runDir, `${repairOwner.runId}.json`))"
-  },
-  {
-    "file": "scripts/verify/agent-team/model-config.mjs",
-    "kind": "environment",
-    "expression": "env.MODEL_FIXTURE_MODE",
-    "count": 3,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；env.MODEL_FIXTURE_MODE"
-  },
-  {
-    "file": "scripts/verify/agent-team/model-config.mjs",
-    "kind": "environment",
-    "expression": "process.env.PATH",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；process.env.PATH"
-  },
-  {
-    "file": "scripts/verify/agent-team/model-config.mjs",
-    "kind": "environment-forward",
-    "expression": "...env",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；...env"
-  },
-  {
-    "file": "scripts/verify/agent-team/model-config.mjs",
-    "kind": "environment-forward",
-    "expression": "...process.env",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；...process.env"
-  },
-  {
-    "file": "scripts/verify/agent-team/model-config.mjs",
-    "kind": "file-io",
-    "expression": "readFile(storeFile)",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFile(storeFile)"
-  },
-  {
-    "file": "scripts/verify/agent-team/model-config.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(codexPath)",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(codexPath)"
-  },
-  {
-    "file": "scripts/verify/agent-team/model-config.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(traexPath)",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(traexPath)"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/bootstrap/authority.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL( \"../../../../../backend/src/terminal/application/agent-preparation.ts\", import.meta.url, ))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL( \"../../../../../backend/src/terminal/application/agent-preparation.ts\", import.meta.url, ))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/bootstrap/authority.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL( \"../../../../../backend/src/terminal/application/panel-workspace.ts\", import.meta.url, ))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL( \"../../../../../backend/src/terminal/application/panel-workspace.ts\", import.meta.url, ))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/bootstrap/authority.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL( \"../../../../../backend/src/terminal/state/terminal-state-service.ts\", import.meta.url, ))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL( \"../../../../../backend/src/terminal/state/terminal-state-service.ts\", import.meta.url, ))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/bootstrap/authority.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL(\"../../../../../backend/src/agent-team/service/recheck.ts\", import.meta.url))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL(\"../../../../../backend/src/agent-team/service/recheck.ts\", import.meta.url))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/bootstrap/authority.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL(\"../../../../../packages/shared/package.json\", import.meta.url))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL(\"../../../../../packages/shared/package.json\", import.meta.url))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/bootstrap/reconciliation.mjs",
-    "kind": "environment",
-    "expression": "environment.RUNWEAVE_APP_SERVER_TOKEN",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；environment.RUNWEAVE_APP_SERVER_TOKEN"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/bootstrap/reconciliation.mjs",
-    "kind": "environment-forward",
-    "expression": "...environment",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；...environment"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(dirtyRoot, \"dirty.txt\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(dirtyRoot, \"dirty.txt\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(root, \".runweave\", \"outbox\", \"runtime.json\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \".runweave\", \"outbox\", \"runtime.json\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(root, \"app.txt\"))",
-    "count": 5,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \"app.txt\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(root, \"control-plane.txt\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \"control-plane.txt\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(root, \"docs\", \"review\", \"round.md\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \"docs\", \"review\", \"round.md\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(root, \"new.txt\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \"new.txt\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/index.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(secretRoot, \".env.local\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(secretRoot, \".env.local\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/integration.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(root, \".runweave\", \"protocol.json\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \".runweave\", \"protocol.json\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/integration.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(root, \"app.txt\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \"app.txt\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/integration.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(root, \"new-source.txt\"))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(root, \"new-source.txt\"))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/loop.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL( \"../../../../../backend/src/agent-team/service/completion/index.ts\", import.meta.url, ))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL( \"../../../../../backend/src/agent-team/service/completion/index.ts\", import.meta.url, ))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/loop.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL( \"../../../../../backend/src/agent-team/service/execution/index.ts\", import.meta.url, ))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL( \"../../../../../backend/src/agent-team/service/execution/index.ts\", import.meta.url, ))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/loop.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL( \"../../../../../backend/src/agent-team/service/execution/worker-dispatch.ts\", import.meta.url, ))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL( \"../../../../../backend/src/agent-team/service/execution/worker-dispatch.ts\", import.meta.url, ))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/loop.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL( \"../../../../../backend/src/agent-team/service/intervention.ts\", import.meta.url, ))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL( \"../../../../../backend/src/agent-team/service/intervention.ts\", import.meta.url, ))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/loop.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL( \"../../../../../backend/src/agent-team/service/lifecycle.ts\", import.meta.url, ))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL( \"../../../../../backend/src/agent-team/service/lifecycle.ts\", import.meta.url, ))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/loop.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL( \"../../../../../backend/src/agent-team/service/repair/protocol.ts\", import.meta.url, ))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL( \"../../../../../backend/src/agent-team/service/repair/protocol.ts\", import.meta.url, ))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/repair/loop.mjs",
-    "kind": "file-io",
-    "expression": "readFileSync(new URL(\"../../../../../backend/src/agent-team/service/support.ts\", import.meta.url))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；readFileSync(new URL(\"../../../../../backend/src/agent-team/service/support.ts\", import.meta.url))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/tmux-pane-output.mjs",
-    "kind": "file-io",
-    "expression": "appendFile(watchedWorker.filePath)",
-    "count": 2,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；appendFile(watchedWorker.filePath)"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/tmux-pane-output.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(watchedWorker.filePath)",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(watchedWorker.filePath)"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/verify-first-flow.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(harness.session.cwd, invalidSourceFilePath))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(harness.session.cwd, invalidSourceFilePath))"
-  },
-  {
-    "file": "scripts/verify/agent-team/review-checkpoints/verify-first-flow.mjs",
-    "kind": "file-io",
-    "expression": "writeFile(path.join(harness.session.cwd, sourceFilePath))",
-    "count": 1,
-    "category": "test",
-    "reason": "隔离验证 fixture 的进程参数或证据文件；writeFile(path.join(harness.session.cwd, sourceFilePath))"
   },
   {
     "file": "scripts/verify/app-server/cli-start.mjs",

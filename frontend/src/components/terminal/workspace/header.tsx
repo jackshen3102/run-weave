@@ -1,4 +1,3 @@
-import { useSettingsNavigation } from "../../../features/settings/navigation";
 import { useTerminalBrowserTunnelBinding } from "../../../features/tunnels/terminal-binding";
 import { useTunnelStore } from "../../../features/tunnels/store";
 import { useOpenCodexQuota } from "../../../features/codex-quota/context";
@@ -17,7 +16,6 @@ import {
   MoreHorizontal,
   NotebookPen,
   RefreshCw,
-  Settings2,
   Share2,
 } from "lucide-react";
 import { useMemoizedFn } from "ahooks";
@@ -43,7 +41,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../ui/dropdown-menu";
 import { TerminalProjectTabBar } from "../session/project-tab-bar";
@@ -85,7 +82,6 @@ export function TerminalWorkspaceHeader({
   projects: projectCommands,
 }: TerminalWorkspaceHeaderProps) {
   const { apiBase, token, scope } = useTerminalRuntime();
-  const openSettings = useSettingsNavigation();
   const enterScheduledTasks = useEnterScheduledTasks();
   const openCodexQuota = useOpenCodexQuota();
   const {
@@ -114,7 +110,6 @@ export function TerminalWorkspaceHeader({
     setHistoryTerminalPanelId,
     setDiagnosticLogOpen,
     setStatusLookupOpen,
-    setAgentTeamModelConfigOpen,
     setRequestError,
     bumpAgentRecoveryRevision,
   } = useTerminalWorkspaceStore(
@@ -128,7 +123,6 @@ export function TerminalWorkspaceHeader({
       setHistoryTerminalPanelId: state.setHistoryTerminalPanelId,
       setDiagnosticLogOpen: state.setDiagnosticLogOpen,
       setStatusLookupOpen: state.setStatusLookupOpen,
-      setAgentTeamModelConfigOpen: state.setAgentTeamModelConfigOpen,
       setRequestError: state.setRequestError,
       bumpAgentRecoveryRevision: state.bumpAgentRecoveryRevision,
     })),
@@ -406,18 +400,6 @@ export function TerminalWorkspaceHeader({
               >
                 <Activity className="h-4 w-4" />
                 状态查询
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => {
-                  if (isMobileMonitor) setAgentTeamModelConfigOpen(true); else openSettings("advanced");
-                }}
-              >
-                <Settings2 className="h-4 w-4" />
-                <span>Agent Team 模型配置</span>
-                <span className="ml-auto rounded border border-indigo-400/30 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300">
-                  全局
-                </span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

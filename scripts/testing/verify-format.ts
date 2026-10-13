@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { loadAcceptanceCasesFromTestPlan } from "../../backend/src/agent-team/acceptance/case-loader";
-import { AgentTeamError } from "../../backend/src/agent-team/errors";
+import { loadAcceptanceCasesFromTestPlan } from "../../backend/src/testing/case-loader";
+import { TestPlanError } from "../../backend/src/testing/errors";
 
 let projectRoot = "";
 let testingDirectory = "";
@@ -19,7 +19,7 @@ async function main(): Promise<void> {
       "valid.testplan.yaml",
       `version: 1
 name: 测试计划格式验证
-description: 验证 required case 会进入 Agent Team，optional case 只保留在源文件中。
+description: 验证 required case 会被解析器返回，optional case 只保留在源文件中。
 cases:
   - id: TPF-001
     name: 必选用例
@@ -44,7 +44,7 @@ cases:
       requestedPath: "docs/testing/valid.testplan.yaml",
     });
     assert.equal(loaded.cases.length, 1);
-    assert.equal(loaded.cases[0]?.caseId, "TPF-001");
+    assert.equal(loaded.cases[0]?.id, "TPF-001");
 
     await writeFixture(
       "legacy-test-cases.md",
@@ -154,8 +154,8 @@ async function expectRejected(
     assert.fail(`${label} 应被拒绝`);
   } catch (error) {
     assert.ok(
-      error instanceof AgentTeamError,
-      `${label} 应返回 AgentTeamError`,
+      error instanceof TestPlanError,
+      `${label} 应返回 TestPlanError`,
     );
     assert.match(error.message, new RegExp(escapeRegExp(expectedMessage)));
   }

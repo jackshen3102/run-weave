@@ -5,7 +5,6 @@ import type {
   RuntimeStatusReport,
   RuntimeStatusState,
 } from "@runweave/shared/runtime-status";
-import type { AgentTeamRecheckWatchdogStatus } from "../agent-team/service/recheck";
 import type { AppServerEventConsumerStatusSnapshot } from "../app-server/event-consumer";
 import type { EvolutionRuntime } from "../evolution/runtime";
 import type { RuntimeStatusWorkspaceServiceManager } from "./workspace-service-manager";
@@ -28,7 +27,6 @@ export interface BackendRuntimeStatusInput {
   activityStoreAvailable: boolean;
   eventConsumer: AppServerEventConsumerStatusSnapshot | null;
   appServerIntegration: AppServerIntegrationStatus;
-  watchdog: AgentTeamRecheckWatchdogStatus;
   evolution: ReturnType<EvolutionRuntime["getStatusSnapshot"]>;
   workspaceServiceManager: RuntimeStatusWorkspaceServiceManager;
 }
@@ -85,7 +83,6 @@ export async function createBackendRuntimeStatusReport(
       navigation: { label: "Activity", route: "/activity" },
     },
     buildEventConsumerItem(services.eventConsumer, services.appServerIntegration, now),
-    buildWatchdogItem(services.watchdog, now),
     buildEvolutionItem(services.evolution, now),
     ...(await services.workspaceServiceManager.getRuntimeStatusItems(now)),
   ];
@@ -166,39 +163,6 @@ function buildEventConsumerItem(
           }
         : null,
   };
-}
-
-function buildWatchdogItem(
-  snapshot: AgentTeamRecheckWatchdogStatus,
-  now: number,
-): RuntimeStatusItem {
-  const fresh =
-    snapshot.lastCompletedAt !== null &&
-    now - snapshot.lastCompletedAt <= 30_000;
-  const withinStartup = now - snapshot.startedAt <= 30_000;
-  const state: RuntimeStatusState =
-    snapshot.consecutiveFailures >= 3
-      ? "unhealthy"
-      : (snapshot.running &&
-            snapshot.lastStartedAt !== null &&
-            now - snapshot.lastStartedAt <= 30_000) ||
-          fresh
-        ? "healthy"
-        : snapshot.lastCompletedAt === null && withinStartup
-          ? "recovering"
-          : "unhealthy";
-  return statusItem(
-    "backend.agent-team-recheck-watchdog",
-    "background-tasks",
-    "Agent Team watchdog",
-    state,
-    state === "healthy"
-      ? "Watchdog 周期正常"
-      : state === "recovering"
-        ? "等待首轮 Watchdog 完成"
-        : "Watchdog 已超过三个周期未完成",
-    snapshot.lastCompletedAt ?? snapshot.lastStartedAt ?? snapshot.startedAt,
-  );
 }
 
 function buildEvolutionItem(

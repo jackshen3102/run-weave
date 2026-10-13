@@ -264,14 +264,6 @@ async function main() {
   const statusService = new BackendRuntimeStatusService("recovery-probe", {
     activityStoreAvailable: () =>
       typeof store.isAvailable === "function" ? store.isAvailable() : true,
-    agentTeamService: {
-      getRecheckWatchdogStatus: () => ({
-        startedAt: Date.now(),
-        lastCompletedAt: null,
-        lastStartedAt: null,
-        consecutiveFailures: 0,
-      }),
-    },
     evolutionRuntime: { getStatusSnapshot: () => ({ enabled: false }) },
     workspaceServiceManager: { getRuntimeStatusItems: async () => [] },
   });

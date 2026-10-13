@@ -199,25 +199,11 @@ async function connectAppServerEventIntegration(
         return;
       }
       if (event.kind === "agent.completion") {
-        const completion = await handleAgentCompletionEvent(event, {
+        await handleAgentCompletionEvent(event, {
           terminalSessionManager: services.terminalSessionManager,
           terminalStateService: services.terminalStateService,
         });
         await services.taskSupervisionService.observeEvent(event);
-        if (completion) {
-          const reconciled =
-            await services.agentTeamService.reconcileCompletionSignal({
-              ...completion,
-              source: "app_server",
-            });
-          logger.info("backend.app-server.agent-team_completion", {
-            component: "app-server",
-            message: "App-server completion checked Agent Team outbox",
-            terminalSessionId: completion.terminalSessionId,
-            panelId: completion.panelId,
-            reconciled,
-          });
-        }
       }
     },
   });

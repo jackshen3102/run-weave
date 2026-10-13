@@ -141,3 +141,6 @@ docs:check，以及 [Web YAML](../../docs/testing/scheduled-tasks/web.testplan.y
 [Backend 运行合同](../../docs/testing/scheduled-tasks/runtime.testplan.yaml)，再在隔离 Dev Session
 用 Playwright CLI 执行 Web YAML。API 404 的降级检查只证明旧 Backend 兼容提示，不替代
 任务管理、调度、恢复或跨连接验收。
+
+模型目录通过 `GET /api/agent-model-catalogs` 读取，Web 与原生 iOS 共用该接口；
+Backend 实现位于 `backend/src/agent-model-catalog/`，复用 CLI 探测与持久化缓存。

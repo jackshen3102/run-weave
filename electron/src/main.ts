@@ -84,7 +84,6 @@ function isAttentionIntent(value: unknown): value is AttentionOpenIntent {
     "projectId",
     "terminalSessionId",
     "panelId",
-    "runId",
     "targetSurface",
     "completionRevision",
   ]);
@@ -98,9 +97,7 @@ function isAttentionIntent(value: unknown): value is AttentionOpenIntent {
       "terminalSessionId",
     ].every((key) => isId(candidate[key])) &&
     (candidate.panelId === null || isId(candidate.panelId)) &&
-    (candidate.runId === null || isId(candidate.runId)) &&
-    (candidate.targetSurface === "terminal" ||
-      candidate.targetSurface === "agent-team") &&
+    candidate.targetSurface === "terminal" &&
     (candidate.completionRevision === null ||
       (Number.isInteger(candidate.completionRevision) &&
         Number(candidate.completionRevision) >= 0))

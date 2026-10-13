@@ -24,12 +24,10 @@ import {
   TimelinePanel,
   type ActivityView,
 } from "./activity/activity-page-panels";
-import { MultiAgentHistoryView } from "./activity/multi-agent-history-view";
 import { TerminalHistoryView } from "./activity/terminal-history-view";
 
 const ACTIVITY_VIEWS = new Set<ActivityView>([
   "terminals",
-  "runs",
   "facts",
   "timeline",
   "sources",
@@ -163,18 +161,12 @@ export function ActivityPage({
   const selectTerminal = useMemoizedFn((terminalSessionId: string | null) =>
     updateParams({ terminal: terminalSessionId, run: null, event: null }),
   );
-  const selectRun = useMemoizedFn((runId: string | null) =>
-    updateParams({ run: runId, terminal: null, event: null }),
-  );
   const selectEvent = useMemoizedFn((eventKey: string | null) =>
     updateParams({ event: eventKey }),
   );
   const selectTerminalEvent = useMemoizedFn(
     (terminalSessionId: string, eventKey: string) =>
       updateParams({ terminal: terminalSessionId, run: null, event: eventKey }),
-  );
-  const selectRunEvent = useMemoizedFn((runId: string, eventKey: string) =>
-    updateParams({ run: runId, terminal: null, event: eventKey }),
   );
 
   const currentSources = sourcesQuery.data ?? [];
@@ -207,7 +199,7 @@ export function ActivityPage({
           />
           <div
             className={
-              view === "terminals" || view === "runs"
+              view === "terminals"
                 ? "min-h-0 flex-1 overflow-hidden pt-2"
                 : "min-h-0 flex-1 overflow-auto pt-2"
             }
@@ -222,18 +214,6 @@ export function ActivityPage({
                 onSelectTerminal={selectTerminal}
                 onSelectEvent={selectEvent}
                 onSelectEntry={selectTerminalEvent}
-              />
-            ) : null}
-            {view === "runs" ? (
-              <MultiAgentHistoryView
-                apiBase={apiBase}
-                token={token}
-                search={deferredSearch}
-                selectedRunId={searchParams.get("run")}
-                selectedEventKey={searchParams.get("event")}
-                onSelectRun={selectRun}
-                onSelectEvent={selectEvent}
-                onSelectEntry={selectRunEvent}
               />
             ) : null}
             {view === "facts" ? (

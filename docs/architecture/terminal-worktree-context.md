@@ -11,7 +11,7 @@ effectiveProjectId = childProjectId ?? parentProjectId
 - 顶部 Project tab、Project CRUD、默认 Project 和 Worktree 发现只使用父 Project ID。
 - Worktree rail 第一项是父 Project 根目录，`projectId === parentProjectId`。
 - `.worktree/<name>` 下被 Git 登记的直接子 Worktree 使用稳定子 ID：`wt:<base64url(parentProjectId)>:<base64url(NFC name)>`。
-- Session、Preview、Agent Team、Activity、Quick Input 和 Prototype 继续只保存或传递一个 `projectId`，不新增 `worktreeId` 或 `worktreePath`。
+- Session、Preview、Activity、Quick Input 和 Prototype 继续只保存或传递一个 `projectId`，不新增 `worktreeId` 或 `worktreePath`。
 
 shared 的 `buildTerminalChildProjectId`、`parseTerminalChildProjectId` 和 `resolveTerminalParentProjectId` 是跨 backend、Web 与 App 的唯一 ID helper。解析后必须重新构建得到完全相同的字符串，非规范编码、空名称和额外分隔段都不是合法子 ID。
 
@@ -22,7 +22,7 @@ shared 的 `buildTerminalChildProjectId`、`parseTerminalChildProjectId` 和 `re
 - `getProject(projectId)`：父 Project 或 `available` 子 Project；现有业务链路用它解析唯一 root。
 - `getProjectContext(projectId)`：包含 `available`、`path_unavailable` 和 `missing`，用于 UI 与错误分类。
 - `listProjectContexts(parentProjectId)`：一个父 Project 的主节点与子节点。
-- `listAllProjectContexts()`：全部父节点与 `available` 子节点，供 Agent Team 恢复、Work History 和 Prototype Gallery 枚举。
+- `listAllProjectContexts()`：全部父节点与 `available` 子节点，供 Work History 和 Prototype Gallery 枚举。
 
 发现使用 `git -C <parent.path> worktree list --porcelain -z`。只有同时满足以下条件的记录才能进入 registry：
 
@@ -37,7 +37,7 @@ shared 的 `buildTerminalChildProjectId`、`parseTerminalChildProjectId` 和 `re
 
 父 Project record 仅增加可选 `pinnedChildProjectIds`。旧 Projects、旧 Sessions 和旧 API 请求无需迁移：旧 Session 的父 `projectId` 自然归入主节点。
 
-外部移除 Worktree 后，如果仍有 Session 引用其规范子 ID，contexts API 合成 `missing` 节点。已有 Terminal 仍可打开；新建 Terminal、Preview、Agent Team 与 Prototype 等需要目录的操作返回 409。最后一个 Session 删除后，下一次发现会移除该节点。
+外部移除 Worktree 后，如果仍有 Session 引用其规范子 ID，contexts API 合成 `missing` 节点。已有 Terminal 仍可打开；新建 Terminal、Preview 与 Prototype 等需要目录的操作返回 409。最后一个 Session 删除后，下一次发现会移除该节点。
 
 父 Project 删除按 `resolveTerminalParentProjectId(session.projectId)` 级联父、子全部 Session/runtime/panel，并清理各 context 的 Preview cache。父 path 修改会清空旧 registry/cache 后重新发现。
 
@@ -74,7 +74,7 @@ Race 记录，但保留 Worktree 与分支供人工比较。实现见 [RaceServi
 普通 Worktree 删除会先等待 Race 创建结束。专用的
 `DELETE /api/race/:raceId/worktree/:workerId` 仍未等待同一创建屏障，创建期间并发调用可能留下
 指向已删除路径的 worker Session。这是代码侧待处理的生命周期风险；结束 Race 可清理已登记的 Session。
-验收入口是 [Race](../testing/terminal/agent-team/race.testplan.yaml)。
+验收入口是 [Race](../testing/terminal/race.testplan.yaml)。
 
 ## API
 

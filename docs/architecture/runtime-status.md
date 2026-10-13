@@ -17,7 +17,7 @@ Feishu Bridge authenticated PUT┘
 Electron lifecycle ─ narrow preload IPC ─ renderer
 ```
 
-Backend 自身报告 process、Activity store、App Server event consumer、Agent Team watchdog、
+Backend 自身报告 process、Activity store、App Server event consumer、
 Evolution maintenance 与 Workspace Services。App Server 报告 process、Event Center、Cloud Sync 和
 Thread reconciler。Feishu Bridge 报告配置、单实例 lease、Lark WebSocket 和 Backend auth。Electron
 报告主进程、packaged Backend、LAN 地址、CDP Proxy、Companion 和各 Browser Profile 的 Whistle。

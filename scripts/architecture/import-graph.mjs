@@ -307,7 +307,7 @@ function isForbiddenEdge(edge) {
     return true;
   }
   return (
-    /^(?:backend\/src\/(?:agent-team|app-server|auth|terminal|voice))\//.test(
+    /^(?:backend\/src\/(?:app-server|auth|terminal|voice))\//.test(
       edge.source,
     ) && /^(?:backend\/src\/(?:routes|ws))\//.test(edge.target)
   );

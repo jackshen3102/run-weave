@@ -24,7 +24,6 @@ export function discoverMigrationSources(context: EnvironmentContext, selected: 
     const root = selectedDirectory(context, selected.backendProfile);
     add(root, "auth-store.json", "backend.auth");
     add(root, "device-monitor/push.json", "services.pushSender");
-    add(root, "agent-team-model-settings.json", "agents.team");
   }
   if (selected.desktopData) {
     const root = selectedDirectory(context, selected.desktopData);

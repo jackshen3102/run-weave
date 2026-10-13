@@ -24,7 +24,6 @@ import { TerminalPreviewPanelShell } from "./shell";
 import { TerminalPreviewQuickSearch } from "../search/quick-search";
 import { useTerminalPreviewQuickSearch } from "../search/use-quick-search";
 import { renderPreviewEmpty, TerminalPreviewFileView } from "../files/view";
-import { TerminalAgentTeamPanel } from "../../agent-team/panel";
 import { TerminalRacePanel } from "../../race/race-panel";
 import { useTerminalFileTree } from "../files/use-tree";
 import { useTerminalMarkdownReferenceActions } from "../../markdown/use-actions";
@@ -37,11 +36,8 @@ interface TerminalPreviewPanelProps {
   activeSession: TerminalSessionListItem | null;
   activePanelId: string | null;
   sessions: TerminalSessionListItem[];
-  showAgentTeamTool: boolean;
   widthPx?: number;
   onEditProject: () => void;
-  onPanelSplitEnabledChange?: (enabled: boolean) => void;
-  onActiveAgentTeamRunChange?: (active: boolean) => void;
 }
 function getPreviewParentDirectory(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/g, "");
@@ -70,11 +66,8 @@ export function TerminalPreviewPanel({
   activeSession,
   activePanelId,
   sessions,
-  showAgentTeamTool,
   widthPx,
   onEditProject,
-  onPanelSplitEnabledChange,
-  onActiveAgentTeamRunChange,
 }: TerminalPreviewPanelProps) {
   const { apiBase, onAuthExpired, token } = useTerminalRuntime();
   const selectTool = useConversationTool(activeSession?.terminalSessionId ?? null, activePanelId);
@@ -433,17 +426,6 @@ export function TerminalPreviewPanel({
   } else {
     previewBody = renderPreviewEmpty("Loading preview...");
   }
-  const agentTeamBody = (
-    <TerminalAgentTeamPanel
-      apiBase={apiBase}
-      token={token}
-      activeProject={activeProject}
-      activeSession={activeSession}
-      onPanelSplitEnabledChange={onPanelSplitEnabledChange}
-      onActiveRunChange={onActiveAgentTeamRunChange}
-      onAuthExpired={onAuthExpired}
-    />
-  );
   const raceBody = <TerminalRacePanel />;
   const automationBody = (
     <TerminalBrowserAutomationTool
@@ -466,7 +448,6 @@ export function TerminalPreviewPanel({
         }}
         tools={{
           activeTool,
-          showAgentTeamTool,
           onSetActiveTool: selectTool,
         }}
         navigation={{
@@ -539,7 +520,6 @@ export function TerminalPreviewPanel({
         activeTerminalSessionId={activeSession?.terminalSessionId ?? null}
         automationBody={automationBody}
         body={previewBody}
-        agentTeamBody={agentTeamBody}
         raceBody={raceBody}
         handoffBody={<TerminalHandoffPanel sessionId={activeSession?.terminalSessionId ?? null} />}
         supervisionBody={activeTool === "task-supervision" ? <TerminalTaskSupervisionPanel sessionId={activeSession?.terminalSessionId ?? null} /> : null}

@@ -1,10 +1,5 @@
 import type { ActivityFactsPage } from "./activity/contracts";
 import type {
-  AgentTeamRun,
-  AgentTeamRunKind,
-  AgentTeamStatus,
-} from "./agent-team/index";
-import type {
   AppServerThreadDetailResponse,
   AppServerThreadRef,
 } from "./app-server/events";
@@ -57,83 +52,4 @@ export interface TerminalArchiveDetail {
     appServer: WorkHistorySourceStatus;
     scrollback: WorkHistorySourceStatus;
   };
-}
-
-export type AgentTeamArchiveMode = "automatic" | "manual";
-
-export interface AgentTeamArchiveSummary {
-  runId: string;
-  projectId: string;
-  terminalSessionId: string;
-  runKind: AgentTeamRunKind;
-  ownerRunId: string | null;
-  ownerDispatchId: string | null;
-  status: AgentTeamStatus;
-  mode: AgentTeamArchiveMode;
-  createdAt: string;
-  updatedAt: string;
-  workerCount: number;
-  nextRoundIndex: number;
-}
-
-export interface AgentTeamArchivePage {
-  runs: AgentTeamArchiveSummary[];
-  nextCursor?: string;
-  sourceStatus: {
-    run: WorkHistorySourceStatus;
-  };
-}
-
-export interface AgentTeamArchiveDetail {
-  run: AgentTeamRun;
-  facts: ActivityFactsPage;
-  asOfActivityOffset: number;
-  sourceStatus: {
-    run: WorkHistorySourceStatus;
-    activity: WorkHistorySourceStatus;
-  };
-}
-
-export type AgentTeamRoundAttributionSource =
-  | "activity_payload"
-  | "dispatch_snapshot"
-  | "run_log_single_round"
-  | "unavailable";
-
-export interface AgentTeamRoundAttribution {
-  round: number | null;
-  source: AgentTeamRoundAttributionSource;
-}
-
-export function resolveAgentTeamRoundAttribution(input: {
-  activityRound?: unknown;
-  dispatchRound?: unknown;
-  runLogRounds?: Iterable<number>;
-}): AgentTeamRoundAttribution {
-  const activityRound = readPositiveInteger(input.activityRound);
-  if (activityRound !== null) {
-    return { round: activityRound, source: "activity_payload" };
-  }
-  const dispatchRound = readPositiveInteger(input.dispatchRound);
-  if (dispatchRound !== null) {
-    return { round: dispatchRound, source: "dispatch_snapshot" };
-  }
-  const runLogRounds = new Set(
-    [...(input.runLogRounds ?? [])].filter(
-      (value) => Number.isInteger(value) && value > 0,
-    ),
-  );
-  if (runLogRounds.size === 1) {
-    return {
-      round: runLogRounds.values().next().value ?? null,
-      source: "run_log_single_round",
-    };
-  }
-  return { round: null, source: "unavailable" };
-}
-
-function readPositiveInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) && value > 0
-    ? value
-    : null;
 }

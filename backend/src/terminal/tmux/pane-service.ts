@@ -276,7 +276,7 @@ export class TmuxPaneService extends TmuxSessionService {
   /**
    * Normalize a window into a main-vertical layout: the main pane (index 0)
    * on the left at `mainPaneWidthPercent`, remaining panes stacked evenly on
-   * the right. Used after agent-team worker splits so the main terminal keeps
+   * the right. Used after pane splits so the main terminal keeps
    * a stable 50% width instead of the uneven residue left by sequential splits.
    */
   async applyMainVerticalLayout(

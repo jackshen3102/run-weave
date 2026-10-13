@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { buildWorkerStartupPrompt } from "../../backend/src/agent-team/prompt/builders.ts";
-import { InMemoryEvolutionActivationStore } from "../../backend/src/evolution/activation-store.ts";
 import { createCandidateAssets } from "../../backend/src/evolution/knowledge/candidate-factory.ts";
 import {
   applyManualPromotionOverride,
@@ -15,23 +12,14 @@ import {
   retireCandidate,
   validateEvolutionScopePolicy,
 } from "../../backend/src/evolution/knowledge/lifecycle.ts";
-import { StructuredEvolutionMemorySelector } from "../../backend/src/evolution/knowledge/retrieval.ts";
-import { DefaultEvolutionMemoryProvider } from "../../backend/src/evolution/injection/memory-provider.ts";
 import { SqliteEvolutionActivationStore } from "../../backend/src/evolution/storage/store.ts";
 import {
   draft,
   enabledPolicy,
   now,
-  prepareActivationFixture,
-  query,
   scope,
 } from "./activation-fixture.mjs";
-import { verifyAssignmentAndOutcomes } from "./verify-activation-outcomes.mjs";
 
-const root = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../..",
-);
 async function verifyCandidateGovernance() {
   const types = ["memory", "prompt", "skill", "routing", "product", "code"];
   const candidates = createCandidateAssets(
@@ -51,105 +39,6 @@ async function verifyCandidateGovernance() {
     const decision = authorizeMemoryCanary(candidate, enabledPolicy(), now);
     assert.equal(decision.changed, candidate.type === "memory");
   }
-}
-
-async function verifyRetrievalAndInjection() {
-  const { store, canaries } = await prepareActivationFixture();
-  const seenBySelector = [];
-  const baseSelector = new StructuredEvolutionMemorySelector();
-  const selector = {
-    version: baseSelector.version,
-    async select(input, candidates) {
-      seenBySelector.push(
-        ...candidates.map((candidate) => candidate.revisionId),
-      );
-      return baseSelector.select(input, candidates);
-    },
-  };
-  const provider = new DefaultEvolutionMemoryProvider(store, selector);
-  const result = await provider.prepare(query());
-  assert.equal(result.trace.assignmentBucket, "canary");
-  assert.ok(
-    result.context?.startsWith(
-      '<evolution-context status="canary" advisory="true">',
-    ),
-  );
-  assert.ok(result.context?.includes("assetId:"));
-  assert.ok(result.context?.includes("evidenceGrade:"));
-  assert.ok(result.context?.includes("guidance:"));
-  assert.ok(result.trace.exposedRevisionIds.length <= 3);
-  assert.ok(new TextEncoder().encode(result.context).byteLength <= 6_000);
-  assert.deepEqual(
-    new Set(seenBySelector),
-    new Set(canaries.map((item) => item.revisionId)),
-  );
-  assert.ok(
-    result.trace.filtered.some(
-      (item) => item.reason === "learning_scope_mismatch",
-    ),
-  );
-  assert.ok(
-    result.trace.filtered.some(
-      (item) => item.reason === "worker_role_mismatch",
-    ),
-  );
-  assert.ok(
-    result.trace.filtered.some(
-      (item) => item.reason === "lifecycle_not_injectable",
-    ),
-  );
-  assert.ok(result.trace.filtered.some((item) => item.reason === "expired"));
-  assert.ok(
-    result.trace.filtered.some((item) => item.reason === "task_exclusion"),
-  );
-  assert.ok(result.trace.decisions.every((decision) => decision.reason));
-
-  const run = JSON.parse(
-    await readFile(
-      path.join(root, ".runweave/agent-team/atr_dd8353fe_20260719020754.json"),
-      "utf8",
-    ),
-  );
-  const worker = run.workers.find((item) => item.role === "code");
-  const baseline = buildWorkerStartupPrompt({
-    run,
-    worker,
-    acceptance: run.acceptance,
-    outboxPath: ".runweave/outbox/verifier.json",
-  });
-  const injected = buildWorkerStartupPrompt({
-    run,
-    worker,
-    acceptance: run.acceptance,
-    outboxPath: ".runweave/outbox/verifier.json",
-    evolutionContext: result.context,
-  });
-  assert.equal(
-    injected.replace(
-      `\n\n${result.context}\n\n- 若使用了 Evolution Context，outbox 顶层必须填写 evolutionFeedback: { disposition: "adopted"|"ignored"|"conflicted", assetRevisionIds: string[], summary: string }；只填写实际暴露的 revision，反馈仅作观察，不单独决定效果。`,
-      "",
-    ),
-    baseline,
-    "Evolution context and its feedback contract must be append-only prompt blocks",
-  );
-
-  const nonCode = await provider.prepare(query({ workerRole: "code_review" }));
-  assert.equal(nonCode.context, null);
-  assert.equal(nonCode.trace.assignmentBucket, "not_eligible");
-
-  const failingStore = {
-    ...store,
-    getPolicy: async () => {
-      throw new Error("learning_db_unavailable");
-    },
-    putRuntimeTrace: async () => {},
-  };
-  const failed = await new DefaultEvolutionMemoryProvider(
-    failingStore,
-    baseSelector,
-  ).prepare(query());
-  assert.equal(failed.context, null);
-  assert.equal(failed.trace.failOpenReason, "learning_db_unavailable");
 }
 
 async function verifyPromotionPolicy() {
@@ -217,16 +106,6 @@ async function verifyPromotionPolicy() {
 }
 
 async function verifyDefaultAndScopePolicy() {
-  const store = new InMemoryEvolutionActivationStore();
-  const memory = createCandidateAssets([draft("memory", 50)], now)[0];
-  await store.putCandidate(memory);
-  const provider = new DefaultEvolutionMemoryProvider(
-    store,
-    new StructuredEvolutionMemorySelector(),
-  );
-  const disabled = await provider.prepare(query());
-  assert.equal(disabled.trace.assignmentBucket, "disabled");
-  assert.equal(disabled.context, null);
   assert.throws(() =>
     validateEvolutionScopePolicy({
       ...enabledPolicy(),
@@ -260,19 +139,6 @@ async function verifyDriftAndRollback() {
     protocolRevision: "v2",
   });
   assert.equal(drifted.candidate.lifecycle, "needs_revalidation");
-  const store = new InMemoryEvolutionActivationStore();
-  await store.putPolicy(enabledPolicy());
-  await store.putCandidate(drifted.candidate);
-  const noInjection = await new DefaultEvolutionMemoryProvider(
-    store,
-    new StructuredEvolutionMemorySelector(),
-  ).prepare(query({ dependencies: { protocolRevision: "v2" } }));
-  assert.equal(noInjection.context, null);
-  assert.ok(
-    noInjection.trace.filtered.some(
-      (item) => item.reason === "lifecycle_not_injectable",
-    ),
-  );
   const retired = retireCandidate(drifted.candidate, "owner rollback");
   assert.equal(retired.candidate.lifecycle, "retired");
   assert.notEqual(retired.candidate.revisionId, drifted.candidate.revisionId);
@@ -292,11 +158,6 @@ async function verifyPersistentAuditStore() {
     await store.putCandidate(memory);
     await store.putCandidate(canary);
     await store.putPolicy(enabledPolicy());
-    const provider = new DefaultEvolutionMemoryProvider(
-      store,
-      new StructuredEvolutionMemorySelector(),
-    );
-    const result = await provider.prepare(query({ runId: "atr_persistent" }));
     await store.close();
 
     store = await SqliteEvolutionActivationStore.create({ databasePath });
@@ -304,10 +165,6 @@ async function verifyPersistentAuditStore() {
     assert.equal(candidates.length, 1);
     assert.equal(candidates[0].revisionId, canary.revisionId);
     assert.equal((await store.getPolicy(scope)).revision, 1);
-    assert.equal(
-      (await store.getRuntimeTrace(result.trace.traceId)).assignmentBucket,
-      "canary",
-    );
     await store.close();
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
@@ -315,24 +172,9 @@ async function verifyPersistentAuditStore() {
 }
 
 await verifyCandidateGovernance();
-await verifyRetrievalAndInjection();
-await verifyAssignmentAndOutcomes();
 await verifyPromotionPolicy();
 await verifyDefaultAndScopePolicy();
 await verifyDriftAndRollback();
 await verifyPersistentAuditStore();
 
-process.stdout.write(
-  `${JSON.stringify({
-    ok: true,
-    cases: [
-      "ASEA-001",
-      "ASEA-002",
-      "ASEA-003",
-      "ASEA-004",
-      "ASEA-005",
-      "ASEA-006",
-      "ASEA-007",
-    ],
-  })}\n`,
-);
+process.stdout.write(`${JSON.stringify({ ok: true, checks: ["candidate_governance", "promotion_policy", "scope_policy", "drift_and_rollback", "persistent_audit_store"] })}\n`);

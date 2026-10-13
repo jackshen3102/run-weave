@@ -8,27 +8,29 @@ cases:
   - id: ASEC-001
     name: 同一 Git 仓库的动态 workspace 归入同一学习范围
     required: true
-    description: >
+    description: |
       验证主项目、多个子 worktree 以及路径已删除但身份仍可解析的历史 workspace 使用同一 learningScopeId，且不同 Git 仓库的数据不会混入。
     preconditions:
       - 已准备一个主项目、两个由该项目派生的 worktree workspace、一个已删除路径但有可靠历史仓库绑定的子 workspace，以及另一个独立 Git 仓库。
-      - 每个 workspace 都存在可区分的 Activity Fact 或 Agent Team Run。
+      - 每个 workspace 都存在可区分的 Activity Fact 或 Thread。
     steps:
-      - 从任一现存子 workspace 创建指定窗口的手动 Evolution Run；确认 Run 返回的 learningScopeId 等于Git common directory 的 SHA-256 身份。
-      - 读取该 Run 的 Context Pack 清单；确认主项目及其三个子 workspace 的事实均可追溯，独立仓库事实不存在，原始 projectId、路径、分支和 revision 仍分别保留。
-
+      - 从任一现存子 workspace 创建指定窗口的手动 Evolution Run；确认 Run 返回的 learningScopeId 等于Git common directory 的
+        SHA-256 身份。
+      - 读取该 Run 的 Context Pack 清单；确认主项目及其三个子 workspace 的事实均可追溯，独立仓库事实不存在，原始 projectId、路径、分支和
+        revision 仍分别保留。
   - id: ASEC-002
     name: 手动触发通过统一状态机完成一次真实分析
     required: true
-    description: >
+    description: |
       验证 UI、CLI 或 API 发起的 manual trigger 只创建一个 Evolution Run，并按持久状态机完成快照、分析、交叉质疑、综合和验证。
     preconditions:
-      - 当前 learning scope 存在可分析的真实 Activity、Thread 或 Agent Team 数据。
+      - 当前 learning scope 存在可分析的真实 Activity、Thread 数据。
       - 至少一个配置允许的本地 Provider 已登录且可用。
     steps:
-      - 使用 CLI 或 UI 发起 standard profile 的手动 Run；确认返回唯一 runId、trigger=manual、预算、Provider Policy 和选定数据范围。
-      - 轮询 Run 详情；确认状态只沿合法阶段前进，完成后可查看 Context Pack、Agent attempts、Claims、DataQuality 和最终 outcome，且没有创建 Agent Team Run 或用户 Terminal session。
-
+      - 使用 CLI 或 UI 发起 standard profile 的手动 Run；确认返回唯一 runId、trigger=manual、预算、Provider Policy
+        和选定数据范围。
+      - 轮询 Run 详情；确认状态只沿合法阶段前进，完成后可查看 Context Pack、Agent attempts、Claims、DataQuality 和最终
+        outcome，且没有创建用户 Terminal session。
   - id: ASEC-003
     name: 定时触发合并错过窗口并按 watermark 增量执行
     required: true
@@ -57,14 +59,15 @@ cases:
     name: Context Pack 对所有 Analyst 提供同一冻结视图
     required: true
     description: >
-      验证 Evolution Run 固定 Activity offset、App Server cursor、Run revision 和内容可用性边界；运行期间的新事件不会让不同 Analyst 看到不同样本。
+      验证 Evolution Run 固定 Activity offset、App Server cursor、Run revision 和内容可用性边界；运行期间的新事件不会让不同
+      Analyst 看到不同样本。
     preconditions:
-      - 已准备包含关联 Activity、Thread 与 Agent Team Run 的数据，并可在分析阶段继续写入新事件。
+      - 已准备包含关联 Activity、Thread 的数据，并可在分析阶段继续写入新事件。
       - Run 预算给出了明确 maxWallTime。
     steps:
       - 启动 standard Run，在 Analyst A 完成首轮查询后写入新的关联事件；分别读取 A、B 的工具查询审计和 Context Pack manifest。
-      - 确认 A、B 使用相同 as-of offsets、source digests 和内容集合，新事件只进入后续 Run；在 Run deadline 前会过期的正文被预先标记 unavailable，而不是分析中途随机消失。
-
+      - 确认 A、B 使用相同 as-of offsets、source digests 和内容集合，新事件只进入后续 Run；在 Run deadline 前会过期的正文被预先标记
+        unavailable，而不是分析中途随机消失。
   - id: ASEC-006
     name: Evolution Agent 只能通过运行级只读工具访问证据
     required: true
@@ -104,15 +107,16 @@ cases:
   - id: ASEC-009
     name: Trace Segment 与语义 Episode 保留多轮任务因果关系
     required: true
-    description: >
+    description: |
       验证确定性分段不按时间猜测已有身份关系，Episode Builder 能把同一目标下的首次行为、用户纠偏、修复与最终结果合并，并把独立目标拆开。
     preconditions:
       - 已准备一个包含原始需求、首次错误行为、用户纠偏、修正和最终验收的多轮 Thread。
-      - 同一 Terminal 还包含另一个无关任务，另有一个 Agent Team primary Run 及其 verification fixture。
+      - 同一 Terminal 还包含另一个无关任务，另有一个独立 Thread。
     steps:
-      - 创建 Context Pack 并查看 Trace Segments；确认 threadId、runId、interactionId、causationId 等权威关系优先，未知关系明确标记而不按相邻时间强连。
-      - 完成 Episode Builder；确认纠偏链形成一个 Episode、无关任务独立，primary Run 作为 Episode 锚点、worker dispatch 为 Attempt、verification fixture 只作为关联证据且不会独立进入学习样本。
-
+      - 创建 Context Pack 并查看 Trace Segments；确认 threadId、runId、interactionId、causationId
+        等权威关系优先，未知关系明确标记而不按相邻时间强连。
+      - 完成 Episode Builder；确认纠偏链形成一个 Episode、无关任务独立，Episode 使用该组首个 Segment 作为锚点，各
+        Segment 形成可追溯的 Attempt，独立 Thread 不被误合并。
   - id: ASEC-010
     name: Standard Profile 的 Analyst 首轮相互隔离后再交叉质疑
     required: true
@@ -230,13 +234,17 @@ cases:
     name: 低质量证据与跨 topicKey 重复不能生成长期资产
     required: true
     description: >
-      验证 Repository baseline 只用于比较和约束，dogfood、临时目录与验证 fixture 只用于评测；只有至少包含一条可读行为证据或结构化运行结果的结论，才可生成会影响后续执行的 Memory、Prompt、Skill 或 Routing Candidate。
-      同一 Run 内仅因 topicKey 或措辞变化产生的同义 Claim 也不能重复创建资产。
+      验证 Repository baseline 只用于比较和约束，dogfood、临时目录与验证 fixture
+      只用于评测；只有至少包含一条可读行为证据或结构化运行结果的结论，才可生成会影响后续执行的 Memory、Prompt、Skill 或 Routing Candidate。 同一 Run
+      内仅因 topicKey 或措辞变化产生的同义 Claim 也不能重复创建资产。
     preconditions:
-      - 已准备仅引用 AGENTS.md/架构文档的 Claim、仅引用 /tmp 或 .runweave/evidence fixture 的 Claim、正文不可读的运行时建议，以及包含可读 Agent response 或 Agent Team acceptance result 的对照 Claim。
-      - 已准备两个 candidateType 相同、语义高度相似且支持证据重叠的 Claim，其中一条具有更多支持证据；另有一个仅 topicKey 不同但与既有 Insight 语义相同的新 Claim。
+      - 已准备仅引用 AGENTS.md/架构文档的 Claim、仅引用 /tmp 或 .runweave/evidence fixture 的
+        Claim、正文不可读的运行时建议，以及包含可读 Agent response 或 Agent lifecycle event 的对照 Claim。
+      - 已准备两个 candidateType 相同、语义高度相似且支持证据重叠的 Claim，其中一条具有更多支持证据；另有一个仅 topicKey 不同但与既有 Insight
+        语义相同的新 Claim。
     steps:
       - 运行 Novelty Gate；确认 repository-only、synthetic-only 和缺少可读行为证据的运行时建议被标为已知或仅留审计，不生成 Candidate。
       - 检查 Product/Code 类数据质量问题与包含可读行为证据的运行时建议；确认前者仍可作为待治理问题，后者按正常 Novelty 规则产生 Insight/Candidate。
       - 对同一 Run 执行 Novelty Gate；确认较弱 Claim 只留审计并标记同轮语义重复，较强 Claim 成为唯一可生成资产的代表。
-      - 对跨 Run 的语义匹配 Claim 执行比较；确认它复用既有 Insight identity，并按是否增加新证据标记 known 或 reinforced，不因 topicKey 改名重新判 novel。
+      - 对跨 Run 的语义匹配 Claim 执行比较；确认它复用既有 Insight identity，并按是否增加新证据标记 known 或 reinforced，不因 topicKey
+        改名重新判 novel。
