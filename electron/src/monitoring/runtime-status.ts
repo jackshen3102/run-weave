@@ -1,3 +1,4 @@
+import { exportDesktopDiagnostics } from "../desktop/diagnostics.js";
 import { runtimeBuildInfo, runtimeVersionFacts } from "@runweave/shared/runtime-version";
 import { app, BrowserWindow, Notification, clipboard, ipcMain } from "electron";
 import { configuration } from "@runweave/config-node";
@@ -226,6 +227,10 @@ export function registerRuntimeStatusHandlers(options: {
       managesPackagedBackend:
         process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND?.trim() !== "false",
     });
+  });
+  ipcMain.handle("runtime-status:export-diagnostics", event => {
+    requireMainRenderer(event.sender.id);
+    exportDesktopDiagnostics();
   });
   ipcMain.handle("runtime-status:configuration", (event) => {
     requireMainRenderer(event.sender.id);

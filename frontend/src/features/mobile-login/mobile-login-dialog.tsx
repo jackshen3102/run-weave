@@ -28,14 +28,16 @@ const labels = {
   failed: "登录凭据签发失败，请重新扫码",
 };
 
-export function MobileLoginDialog({ controller: c, connectionName }: {
-  controller: ReturnType<typeof useMobileLogin>; connectionName: string;
+export function MobileLoginDialog({ controller: c, connectionName, embedded = false }: {
+  controller: ReturnType<typeof useMobileLogin>; connectionName: string; embedded?: boolean;
 }) {
   const locked = c.status && ["approved", "issuing", "issued"].includes(c.status.state);
-  return <Dialog open={c.opened} onOpenChange={(open) => { if (!open) c.close(); }}>
-    <DialogContent className="sm:max-w-[460px]">
-      <DialogHeader><DialogTitle>连接手机 · {connectionName}</DialogTitle>
-        <DialogDescription>手机需能访问此电脑。扫码后，由你在这里确认登录。</DialogDescription>
+  const Surface = embedded ? "section" : DialogContent;
+  const Title = embedded ? "h2" : DialogTitle;
+  const Description = embedded ? "p" : DialogDescription;
+  const content = <Surface className={embedded ? "space-y-5 rounded-xl border p-5" : "sm:max-w-[460px]"}>
+      <DialogHeader><Title>连接手机 · {connectionName}</Title>
+        <Description>手机需能访问此电脑。扫码后，由你在这里确认登录。</Description>
       </DialogHeader>
       {c.addresses.length > 0 ? <label className="grid gap-2 text-sm">连接地址
         <select className="w-full rounded-md border bg-background p-2" value={c.address} disabled={c.busy || !!locked}
@@ -61,6 +63,6 @@ export function MobileLoginDialog({ controller: c, connectionName }: {
       {!locked && c.status?.state !== "completed" ? <Button variant="outline" disabled={c.busy}
         onClick={() => c.address ? c.generate(c.address) : void c.open()}>重新生成二维码</Button> : null}
       <p className="text-xs text-muted-foreground">也可以在手机连接管理中手动填写地址，使用原有账号密码登录。</p>
-    </DialogContent>
-  </Dialog>;
+    </Surface>;
+  return embedded ? content : <Dialog open={c.opened} onOpenChange={(open) => { if (!open) c.close(); }}>{content}</Dialog>;
 }

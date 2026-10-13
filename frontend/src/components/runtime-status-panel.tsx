@@ -161,41 +161,26 @@ function RuntimeResources() {
   );
 }
 
-export function RuntimeStatusPanel({ apiBase, token }: { apiBase: string; token: string | null }) {
+export function RuntimeStatusPanel({ apiBase, token, embedded = false }: { apiBase: string; token: string | null; embedded?: boolean }) {
   const { nodes, panelOpen, setPanelOpen, refresh, refreshing } = useRuntimeStatus();
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const copyAddress = useMemoizedFn(async (value: string) => {
     await copyRuntimeStatusText(value);
   });
-  return (
-    <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
-      <SheetContent
-        className="w-[min(92vw,42rem)] overflow-hidden p-0 sm:max-w-[42rem]"
-        onOpenAutoFocus={() => {
-          returnFocusRef.current = document.activeElement instanceof HTMLElement
-            ? document.activeElement
-            : null;
-        }}
-        onCloseAutoFocus={(event) => {
-          const returnFocus = returnFocusRef.current;
-          returnFocusRef.current = null;
-          if (returnFocus?.isConnected) {
-            event.preventDefault();
-            returnFocus.focus({ preventScroll: true });
-          }
-        }}
-      >
+  const Title = embedded ? "h2" : SheetTitle;
+  const Description = embedded ? "p" : SheetDescription;
+  const content = <>
         <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
           <div className="flex items-center justify-between gap-4">
-            <div><SheetTitle>运行状态</SheetTitle><SheetDescription>当前依赖、恢复状态与最近证据</SheetDescription></div>
+            <div><Title>运行状态</Title><Description>当前依赖、恢复状态与最近证据</Description></div>
             <Button variant="secondary" size="sm" disabled={refreshing} onClick={() => void refresh()}>
               <RefreshCw className={refreshing ? "animate-spin" : ""} />{refreshing ? "检查中" : "重新检查"}
             </Button>
           </div>
         </SheetHeader>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
-          <ConfigurationPanel key={`${apiBase}:${token ?? ""}`} apiBase={apiBase} token={token} />
-          <DesktopConfigurationStatus />
+          {!embedded && <ConfigurationPanel key={`${apiBase}:${token ?? ""}`} apiBase={apiBase} token={token} />}
+          {!embedded && <DesktopConfigurationStatus />}
           <FrontendVersion />
           {nodes.map((node) => {
             const awaitingLogin = node.capabilities.some((capability) => isAwaitingLogin(capability.items));
@@ -214,6 +199,27 @@ export function RuntimeStatusPanel({ apiBase, token }: { apiBase: string; token:
           })}
           {nodes.length === 0 ? <p className="py-12 text-center text-sm text-muted-foreground">正在检查运行状态…</p> : null}
         </div>
+  </>;
+  if (embedded) return <section className="space-y-4">{content}</section>;
+  return (
+    <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
+      <SheetContent
+        className="w-[min(92vw,42rem)] overflow-hidden p-0 sm:max-w-[42rem]"
+        onOpenAutoFocus={() => {
+          returnFocusRef.current = document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          const returnFocus = returnFocusRef.current;
+          returnFocusRef.current = null;
+          if (returnFocus?.isConnected) {
+            event.preventDefault();
+            returnFocus.focus({ preventScroll: true });
+          }
+        }}
+      >
+        {content}
       </SheetContent>
     </Sheet>
   );

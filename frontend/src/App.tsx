@@ -1,3 +1,6 @@
+import { SettingsEditProvider } from "./features/settings/edit-session";
+import { SettingsPage } from "./pages/settings-page";
+import { settingsBackground, useSettingsNavigation } from "./features/settings/navigation";
 import { DevResourcesPage } from "./pages/dev-resources-page";
 import { useDesktopBadge } from "./features/attention/use-desktop-badge";
 import { ResourceMonitorProvider } from "./features/system-monitor/resource-monitor-provider";
@@ -52,7 +55,7 @@ const isElectron = window.electronAPI?.isElectron === true;
 export default function App() {
   return (
     <OverlayProvider>
-      <RunweaveApp />
+      <SettingsEditProvider><RunweaveApp /></SettingsEditProvider>
       <ClarityDrawerObserver />
       <SuijiDrawer />
       <TunnelDrawer />
@@ -64,6 +67,9 @@ export default function App() {
 function RunweaveApp() {
   const location = useLocation();
   const navigate = useNavigate();
+  const openSettings = useSettingsNavigation();
+  const settingsOpen = location.pathname.startsWith("/settings");
+  const background = settingsOpen ? settingsBackground(location) : null;
   const clientMode = useClientMode(isElectron);
   const {
     connections,
@@ -196,7 +202,7 @@ function RunweaveApp() {
   };
 
   const openConnectionManager = () => {
-    window.location.assign("/connections");
+    openSettings("connections");
   };
 
   const authPendingView = <main className="min-h-screen bg-background" />;
@@ -226,7 +232,8 @@ function RunweaveApp() {
         <ConnectionQueryProvider scope={queryScope} onUnauthorized={clearToken}>
         <ResourceMonitorProvider key={`${queryScope}:${sessionId ?? ""}`} apiBase={apiBase} token={token} connectionId={activeConnectionId ?? queryScope}>
         <ResourceNotice onOpen={(appKey) => navigate(`/system-monitor?app=${encodeURIComponent(appKey)}`)} />
-        <Routes>
+        <div inert={settingsOpen && !!background ? true : undefined} aria-hidden={settingsOpen && !!background ? true : undefined}>
+        <Routes location={background ?? location}>
           <Route
             path="/background-runs/:runId"
             element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
@@ -464,6 +471,7 @@ function RunweaveApp() {
               )
             }
           />
+          <Route path="/settings/:pageId?" element={null} />
           <Route
             path="*"
             element={
@@ -480,6 +488,8 @@ function RunweaveApp() {
             }
           />
         </Routes>
+        </div>
+        {settingsOpen && <SettingsPage connections={connections} activeConnection={activeConnection ?? undefined} workspaceAuth={{ token, sessionId, status: authStatus, setSession, clearToken }} webApiBase={WEB_API_BASE} onAdd={(name, url, endpointId) => { addConnection(name, url, endpointId, false); }} onRemove={removeConnection} onEdit={updateConnection} onReconnect={reconnectSystemConnection} />}
         </ResourceMonitorProvider>
         </ConnectionQueryProvider>
         </CodexQuotaProvider>

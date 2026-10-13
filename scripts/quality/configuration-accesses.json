@@ -9584,9 +9584,9 @@
     "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
   },
   {
-    "file": "frontend/src/features/system-monitor/resource-monitor-provider.tsx",
+    "file": "frontend/src/features/system-monitor/notification-preference.ts",
     "kind": "device-or-env-loader",
-    "expression": "localStorage.getItem(\"runweave:resource-mac-notifications\")",
+    "expression": "localStorage.getItem(key)",
     "count": 1,
     "category": "runtime-state",
     "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
@@ -9600,9 +9600,9 @@
     "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"
   },
   {
-    "file": "frontend/src/features/system-monitor/resource-monitor-provider.tsx",
+    "file": "frontend/src/features/system-monitor/notification-preference.ts",
     "kind": "device-or-env-loader",
-    "expression": "localStorage.setItem( \"runweave:resource-mac-notifications\", String(value), )",
+    "expression": "localStorage.setItem(key, String(value))",
     "count": 1,
     "category": "runtime-state",
     "reason": "资源监控独立状态与本机通知偏好，不替代 settings.yaml 中现有业务配置。"

@@ -1,3 +1,4 @@
+import { useSettingsDraft } from "../settings/edit-session";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import { ArrowLeft, Settings, X } from "lucide-react";
@@ -26,10 +27,12 @@ import {
 
 export default function SuijiPage({
   active = true,
+  accountOnly = false,
   onClose,
   onOpenLink,
 }: {
   active?: boolean;
+  accountOnly?: boolean;
   onClose?: () => void;
   onOpenLink?: SuijiOpenLink;
 }) {
@@ -39,7 +42,7 @@ export default function SuijiPage({
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(true),
     [message, setMessage] = useState("");
-  const [settings, setSettings] = useState(false);
+  const [settings, setSettings] = useState(accountOnly);
   const [needsLogin, setNeedsLogin] = useState(true);
   const [connection, setConnection] = useState<SuijiConnection>();
   const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(
@@ -124,7 +127,7 @@ export default function SuijiPage({
           info,
           store: new SuijiDraftStore(client.endpoint, info, environment),
         });
-        setSettings(false);
+        setSettings(accountOnly);
         fill(profile);
       } catch (error) {
         if (alive.current && sequence === generation.current) {
@@ -168,6 +171,7 @@ export default function SuijiPage({
   const switchEnvironment = useMemoizedFn(
     async (environment: SuijiEnvironment) => {
       if (!accounts || busy || environment === accounts.active) return;
+      if (dirty && !window.confirm("放弃当前环境未保存的账户修改？")) return;
       setBusy(true);
       setMessage("");
       try {
@@ -204,13 +208,16 @@ export default function SuijiPage({
       setBusy(false);
     }
   });
+  const profile = accounts?.profiles[accounts.active];
+  const dirty = accountOnly && !!profile && !connection && (endpoint !== profile.endpoint || username !== profile.username || password !== (profile.password ?? ""));
+  useSettingsDraft(dirty, accountOnly && busy && dirty);
   return (
     <section
       className="suiji-theme flex h-full min-h-0 flex-col bg-background text-foreground"
       aria-label="随记内容"
     >
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-        {settings && connection ? (
+        {settings && connection && !accountOnly ? (
           <Button
             variant="ghost"
             size="icon"
@@ -248,7 +255,7 @@ export default function SuijiPage({
           ) : null}
         </div>
       </header>
-      {connection ? (
+      {connection && !accountOnly ? (
         <div hidden={settings} className="min-h-0 flex-1">
           <SuijiWorkspace
             key={connection.store.scope}
@@ -259,7 +266,7 @@ export default function SuijiPage({
           />
         </div>
       ) : null}
-      {settings || !connection ? (
+      {accountOnly || settings || !connection ? (
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {accounts ? (
             <>

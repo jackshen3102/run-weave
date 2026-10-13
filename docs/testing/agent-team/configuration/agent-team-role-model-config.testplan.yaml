@@ -6,17 +6,18 @@ description: >
 
 cases:
   - id: AGT-MC-001
-    name: 全局配置只能从 Workspace 更多菜单进入
+    name: 桌面入口汇合到高级配置页
     required: true
     description: >
-      验证 Web 和 Electron 共用的 Workspace 右上角更多菜单能够打开全局模型配置弹窗，
+      验证桌面 Workspace 右上角更多菜单和全局设置侧栏能够打开同一个默认模型配置页，
       且 Agent Team 右侧面板不出现配置控件或运行时摘要。
     preconditions:
       - 已使用 $toolkit:runweave-dev-session 启动包含本次实现的真实 Dev Session。
       - 已从 dev:open 解析 desktop surface，并使用 $toolkit:playwright-cli 附着该实例。
     steps:
-      - 在 Terminal Workspace 打开右上角 More actions；确认菜单新增“Agent Team 模型配置”并带“全局”标识。
-      - 点击该菜单项；确认居中弹窗标题为“Agent Team 模型配置”，不显示连接地址、Project 范围或 Run 范围说明。
+      - 在 Terminal Workspace 打开右上角 More actions；确认菜单保留“Agent Team 模型配置”并带“全局”标识。
+      - 点击该菜单项；确认进入全屏“高级配置”的默认角色模型分区，页面明确所选电脑，仍显示四角色配置，且没有 Project 或 Run 范围编辑。
+      - 从全局设置分类切换后重新打开高级配置；确认使用同一份角色配置，不出现第二份模型存储。
       - 查看 Agent Team 右侧面板；确认其中没有模型配置入口、配置控件或角色运行时摘要。
 
   - id: AGT-MC-002
@@ -27,12 +28,12 @@ cases:
       取消不落盘，只有完整草稿保存后才更新全局配置。
     preconditions:
       - 当前连接至少有一个可用 CLI catalog。
-      - 已使用 $toolkit:playwright-cli 打开全局模型配置弹窗。
+      - 已使用 $toolkit:playwright-cli 打开高级配置页的默认角色模型分区。
     steps:
       - 依次查看 main、code、code_review、behavior_verify；确认每个角色拥有独立的 CLI、模型和参数草稿。
       - 将一个角色切换到另一个可用 CLI；确认模型变为“请选择模型”、不兼容参数被清理且保存按钮禁用。
       - 搜索并显式选择一个模型；确认只展示该模型支持的 reasoning 档位，Codex 只显示 Fast，TraeX 只显示 Max。
-      - 修改草稿后点击取消并重新打开；确认仍显示取消前的已保存值。
+      - 修改草稿后点击取消修改（模型页“取消”）并重新打开；确认仍显示取消前的已保存值。
       - 再次完成四角色配置并保存后重新打开；确认所有角色显示刚保存的值。
 
   - id: AGT-MC-003

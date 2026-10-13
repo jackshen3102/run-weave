@@ -43,6 +43,7 @@ import {
 } from "../components/ui/alert-dialog";
 
 interface Props {
+  embedded?: boolean;
   apiBase: string;
   token: string;
   activeConnectionId: string | null;
@@ -95,7 +96,8 @@ function Overview({
   );
 }
 
-function PageContent({ apiBase, token, connectionName, onAuthExpired }: Props) {
+function PageContent({
+  embedded = false, apiBase, token, connectionName, onAuthExpired }: Props) {
   const navigate = useNavigate();
   const { scope } = useTerminalRuntime();
   const sessions = useTerminalSessionsQuery().data ?? EMPTY_TERMINAL_SESSIONS;
@@ -243,21 +245,21 @@ function PageContent({ apiBase, token, connectionName, onAuthExpired }: Props) {
       ).length
     : null;
   return (
-    <main className="flex h-dvh flex-col overflow-hidden bg-slate-950 text-slate-200">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-800 px-4">
+    <main className={embedded ? "flex flex-col" : "flex h-dvh flex-col overflow-hidden bg-slate-950 text-slate-200"}>
+      {!embedded && <header className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-800 px-4">
         <Activity className="h-4 w-4 text-sky-300" />
         <span className="text-sm font-semibold">Runweave</span>
         <span className="ml-auto text-xs text-slate-400">
           {connectionName ?? "当前连接"} ·{" "}
           {snapshot?.hostName ?? "资源状态读取中"}
         </span>
-      </header>
+      </header>}
       <div className="flex min-h-0 flex-1">
-        <TerminalWorktreeRail
+        {!embedded && <TerminalWorktreeRail
           parentProjectId={parentProjectId}
           onSelectContext={selectContext}
-        />
-        <div className="min-w-0 flex-1 overflow-y-auto p-5 md:p-9">
+        />}
+        <div className={embedded ? "min-w-0 flex-1" : "min-w-0 flex-1 overflow-y-auto p-5 md:p-9"}>
           <div className="mx-auto max-w-[1280px] space-y-6">
             <header className="flex flex-wrap items-center justify-between gap-4">
               <div>

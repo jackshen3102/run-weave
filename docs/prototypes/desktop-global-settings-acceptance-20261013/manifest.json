@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "templateVersion": "1.0.0",
+  "inputSha256": "3261de5d8940e94644a6db4aebd08dfd18e514fbbfaf05b387a0be3bba4f9988",
+  "assets": [
+    {
+      "id": "full-window",
+      "path": "assets/0001-full-window.jpg",
+      "sha256": "d955f5860d5691d04d9ee027d365ff6ab898c0b22aa88d13bfb9693b332b3d1d"
+    },
+    {
+      "id": "workspace",
+      "path": "assets/0002-workspace.jpg",
+      "sha256": "7f3d84d8bfc708a1c816a133c667de0db08f9fd779a764d5f909cecdc439d452"
+    },
+    {
+      "id": "browser-hidden",
+      "path": "assets/0003-browser-hidden.jpg",
+      "sha256": "530921ed915ebf1f5047e006774c34f62d669e8ec11eb69522f0ffbf297987fd"
+    },
+    {
+      "id": "dark",
+      "path": "assets/0004-dark.png",
+      "sha256": "291d7b94e533096a56d537a59d4be8bfdcf1bf0585047654bd85713d6920185e"
+    },
+    {
+      "id": "light",
+      "path": "assets/0005-light.png",
+      "sha256": "dc21d2049d7032702aeb5b06e0db964583952dec9647132c8318ada1e73b4d9a"
+    },
+    {
+      "id": "ssh",
+      "path": "assets/0006-ssh.png",
+      "sha256": "1860afececb9896c966c31b1ca7d15b89ea9625f05b0b69ae218e9d9f8901f2e"
+    },
+    {
+      "id": "models",
+      "path": "assets/0007-models.png",
+      "sha256": "21b4d7fc27856dd71ce88ff98fd63db3cc604f3432ff48d8ae4c4faa2693ca1c"
+    },
+    {
+      "id": "logs",
+      "path": "assets/0008-logs.png",
+      "sha256": "cc9ca1e062a281afe8a8db24cd59d99f38a49c92860c2fef91d88fdc692e1de7"
+    },
+    {
+      "id": "verification",
+      "path": "assets/0009-verification.json",
+      "sha256": "2d42d6f6724c09c0eafcaa90ab695e43b35b583765a008a9342144f8ce7b1474"
+    },
+    {
+      "id": "browser-record",
+      "path": "assets/0010-browser-record.json",
+      "sha256": "6c7c8a533f89f7e0b961ee8aa3fe7f18d4c80226f6128d960f149665583eb078"
+    },
+    {
+      "id": "phone-record",
+      "path": "assets/0011-phone-record.json",
+      "sha256": "ea3ba31ff6a8e3ff0e8e1b547fbec3d809efc6327e5cb56178437312e63f9564"
+    },
+    {
+      "id": "coverage-source",
+      "path": "assets/0012-coverage-source.md",
+      "sha256": "df0619c1d17cc0f148d89bec08898a7ffebc7bf83f522a166c77ad64a1256c28"
+    },
+    {
+      "id": "configuration-summary",
+      "path": "assets/0013-configuration-summary.txt",
+      "sha256": "e493f0b5397a2f8463f676883db25a79ed59a3017f20ce9a77d36ea37f359029"
+    },
+    {
+      "id": "phone-summary",
+      "path": "assets/0014-phone-summary.txt",
+      "sha256": "b50b1c5e0176df4829842fb10a1867ab24ac45f6c6eb3152fd93ad5ca8a16e5f"
+    },
+    {
+      "id": "coverage-summary",
+      "path": "assets/0015-coverage-summary.txt",
+      "sha256": "c072dd9f5b7e5d1aa01651b81c285fe41b082fbe0e257c3092472056b92752bf"
+    },
+    {
+      "id": "result-summary",
+      "path": "assets/0016-result-summary.txt",
+      "sha256": "f664910a0b47fae5d1adf24b35ed01fb13a15614fc4dc0daaf915b97892dc736"
+    }
+  ]
+}

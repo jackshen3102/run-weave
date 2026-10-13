@@ -1,3 +1,4 @@
+import { useSettingsNavigation } from "../../../features/settings/navigation";
 import { useTerminalBrowserTunnelBinding } from "../../../features/tunnels/terminal-binding";
 import { useTunnelStore } from "../../../features/tunnels/store";
 import { useOpenCodexQuota } from "../../../features/codex-quota/context";
@@ -84,6 +85,7 @@ export function TerminalWorkspaceHeader({
   projects: projectCommands,
 }: TerminalWorkspaceHeaderProps) {
   const { apiBase, token, scope } = useTerminalRuntime();
+  const openSettings = useSettingsNavigation();
   const enterScheduledTasks = useEnterScheduledTasks();
   const openCodexQuota = useOpenCodexQuota();
   const {
@@ -408,7 +410,7 @@ export function TerminalWorkspaceHeader({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
-                  setAgentTeamModelConfigOpen(true);
+                  if (isMobileMonitor) setAgentTeamModelConfigOpen(true); else openSettings("advanced");
                 }}
               >
                 <Settings2 className="h-4 w-4" />

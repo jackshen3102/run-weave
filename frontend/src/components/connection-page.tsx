@@ -1,3 +1,4 @@
+import { useSettingsDraft } from "../features/settings/edit-session";
 import { useTunnelStore } from "../features/tunnels/store";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -7,6 +8,8 @@ import { RuntimeStatusEntry } from "./runtime-status-entry";
 import { DesktopBadgeStatus } from "../features/attention/desktop-badge-status";
 
 interface ConnectionPageProps {
+  embedded?: boolean;
+  onManageTunnels?: () => void;
   connections: ConnectionConfig[];
   activeId: string | null;
   onAdd: (name: string, url: string, tunnelEndpointId?: string) => void;
@@ -17,6 +20,8 @@ interface ConnectionPageProps {
 }
 
 export function ConnectionPage({
+  embedded = false,
+  onManageTunnels,
   connections,
   activeId,
   onAdd,
@@ -106,10 +111,11 @@ export function ConnectionPage({
     setEditingId(null);
   };
 
+  useSettingsDraft(embedded && (Boolean(editingId) || showForm && Boolean(name || url || endpointId)), embedded && testing);
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 sm:px-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(70,130,145,0.18),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(195,172,135,0.16),transparent_35%)]" />
-      <section className="animate-fade-rise relative w-full max-w-lg rounded-[2rem] border border-border/60 bg-card/82 p-7 shadow-[0_34px_120px_-72px_rgba(17,24,39,0.82)] backdrop-blur-xl sm:p-9">
+    <main className={embedded ? "space-y-5" : "relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 sm:px-6"}>
+      {!embedded && <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(70,130,145,0.18),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(195,172,135,0.16),transparent_35%)]" />}
+      <section className={embedded ? "w-full space-y-4 rounded-xl border bg-card p-5" : "animate-fade-rise relative w-full max-w-lg rounded-[2rem] border border-border/60 bg-card/82 p-7 shadow-[0_34px_120px_-72px_rgba(17,24,39,0.82)] backdrop-blur-xl sm:p-9"}>
         <div className="flex items-center justify-between">
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.38em] text-muted-foreground/70">
             连接管理
@@ -134,7 +140,7 @@ export function ConnectionPage({
         {showForm && (
           <div className="mt-6 space-y-4">
             {window.electronAPI?.isElectron && (
-              <Button type="button" variant="outline" onClick={() => openTunnels(true)}>
+              <Button type="button" variant="outline" onClick={() => onManageTunnels ? onManageTunnels() : openTunnels(true)}>
                 配置 SSH 主机与 Backend 入口
               </Button>
             )}
@@ -311,7 +317,7 @@ export function ConnectionPage({
                             className="rounded-full px-3 text-xs text-red-500 hover:text-red-600"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onRemove(conn.id);
+                              if (!embedded || window.confirm(`删除 ${conn.name} 的连接配置？远端数据不会删除。`)) onRemove(conn.id);
                             }}
                           >
                             删除

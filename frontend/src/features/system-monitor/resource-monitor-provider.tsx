@@ -1,3 +1,4 @@
+import { useNotificationPreference } from "./notification-preference";
 import {
   createContext,
   useContext,
@@ -14,15 +15,6 @@ import type {
 import { resourceMonitorApi } from "../../services/resource-monitor";
 import { HttpError } from "../../services/http";
 
-function savedNotificationPreference(): boolean {
-  try {
-    return (
-      localStorage.getItem("runweave:resource-mac-notifications") === "true"
-    );
-  } catch {
-    return false;
-  }
-}
 interface ResourceContext {
   data: ResourceMonitorResponse | null;
   error: string | null;
@@ -52,11 +44,13 @@ export function ResourceMonitorProvider(props: {
   token: string | null;
   connectionId: string;
   children: ReactNode;
+  notifications?: boolean;
 }) {
   const [data, setData] = useState<ResourceMonitorResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [unsupportedBackend, setUnsupportedBackend] = useState(false);
-  const [macNotifications, setMac] = useState(savedNotificationPreference);
+  const macNotifications = useNotificationPreference(state => state.enabled);
+  const setMac = useNotificationPreference(state => state.setEnabled);
   const [notificationError, setNotificationError] = useState<string | null>(
     null,
   );
@@ -66,14 +60,10 @@ export function ResourceMonitorProvider(props: {
   const pollRef = useRef<() => void>(() => {});
   const setMacNotifications = useMemoizedFn((value: boolean) => {
     try {
-      localStorage.setItem(
-        "runweave:resource-mac-notifications",
-        String(value),
-      );
+      setMac(value);
     } catch {
       throw new Error("无法保存此设备的通知偏好");
     }
-    setMac(value);
     setNotificationError(null);
   });
   const refresh = useMemoizedFn(() => pollRef.current());
@@ -158,7 +148,7 @@ export function ResourceMonitorProvider(props: {
         } catch {
           /* session fallback */
         }
-        for (const alert of next.alerts) {
+        for (const alert of props.notifications === false ? [] : next.alerts) {
           if (
             seen.includes(alert.alertId) ||
             sessionSeen.current.has(`${next.hostId}:${alert.alertId}`)
@@ -238,7 +228,7 @@ export function ResourceMonitorProvider(props: {
       document.removeEventListener("visibilitychange", onVisible);
       pollRef.current = () => {};
     };
-  }, [props.apiBase, props.token, props.connectionId, macNotifications]);
+  }, [props.apiBase, props.token, props.connectionId, props.notifications, macNotifications]);
   return (
     <Context.Provider
       value={{
