@@ -1,4 +1,5 @@
 import { RunContinuation } from "./run-continuation";
+import { useManagementExit } from "../settings/edit-session";
 import { useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -201,6 +202,7 @@ export function QuickInputRunDetail({
   onUpdate: (run: ScheduledRun) => void;
   onOpened: () => void;
 }) {
+  const managementExit = useManagementExit();
   const current = useRun(initial.id);
   const run = current.data ?? initial;
   const open = useOpenRun();
@@ -261,13 +263,17 @@ export function QuickInputRunDetail({
         queryKey: terminalQueryKeys.all(scope),
       });
       if (!mounted.current) return;
-      setTerminalNavigation(scope, {
+      const enterTerminal = () => {
+        setTerminalNavigation(scope, {
         parentProjectId,
         projectId: run.executionProjectId,
         terminalSessionId: created.terminalSessionId,
       });
       onOpened();
       navigate(`/terminal/${encodeURIComponent(created.terminalSessionId)}`);
+      };
+      if (managementExit?.active) managementExit.prepare(enterTerminal, "进入已准备的项目终端");
+      else enterTerminal();
     },
   });
   const archive = useMutation({
@@ -313,7 +319,7 @@ export function QuickInputRunDetail({
           ) : null}
           <Button
             className="w-full"
-            disabled={opening || archive.isPending}
+            disabled={opening || archive.isPending || (managementExit?.active && (open.prepared || create.isSuccess))}
             onClick={() => {
               if (canOpen) open.mutate(run.id, { onSuccess: onOpened });
               else create.mutate();
@@ -321,6 +327,8 @@ export function QuickInputRunDetail({
           >
             {opening
               ? "正在打开…"
+              : managementExit?.active && (open.prepared || create.isSuccess) ? "已准备，请从左上角返回终端"
+              : managementExit?.active ? canOpen ? "准备运行会话" : "准备项目终端"
               : canOpen
                 ? waitingContinuation
                   ? "停止自动继续并接管到终端"

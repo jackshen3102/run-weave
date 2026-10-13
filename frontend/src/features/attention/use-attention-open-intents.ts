@@ -1,3 +1,5 @@
+import { useNavigate } from "react-router-dom";
+import { isManagementPath } from "../settings/navigation";
 import { useEffect } from "react";
 import type { AttentionOpenResult } from "@runweave/shared/attention";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
@@ -69,6 +71,7 @@ export function useAttentionOpenIntents({
   enabled,
   token,
 }: UseAttentionOpenIntentsOptions): void {
+  const navigate = useNavigate();
   useEffect(() => {
     if (!enabled) return;
     const inFlight = new Map<string, AbortController>();
@@ -122,6 +125,10 @@ export function useAttentionOpenIntents({
             });
             return;
           }
+          if (isManagementPath(window.location.pathname)) {
+            await report({ requestId: intent.requestId, status: "connection_unavailable", message: "请从管理页面左上角返回终端后再打开会话" });
+            return;
+          }
           useTerminalWorkspaceStore
             .getState()
             .selectProjectContext(
@@ -129,12 +136,7 @@ export function useAttentionOpenIntents({
               targetSession.projectId,
               intent.terminalSessionId,
             );
-          window.history.pushState(
-            null,
-            "",
-            `/terminal/${encodeURIComponent(intent.terminalSessionId)}`,
-          );
-          window.dispatchEvent(new PopStateEvent("popstate"));
+          navigate(`/terminal/${encodeURIComponent(intent.terminalSessionId)}`);
           if (
             !(await waitForTerminalSessionSelection(
               intent.terminalSessionId,
@@ -239,5 +241,5 @@ export function useAttentionOpenIntents({
       }
       inFlight.clear();
     };
-  }, [activeConnectionId, apiBase, enabled, token]);
+  }, [activeConnectionId, apiBase, enabled, navigate, token]);
 }

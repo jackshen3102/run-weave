@@ -65,14 +65,13 @@ import {
   EvolutionSchedulesPanel,
 } from "./evolution/evolution-assets-panels";
 
-export function EvolutionPage(props: { apiBase: string; token: string; onNavigateTerminal: () => void }) {
+export function EvolutionPage(props: { apiBase: string; token: string; embedded?: boolean }) {
   const [params, setParams] = useSearchParams();
   const management = EVOLUTION_VIEWS.has(params.get("view") as EvolutionView);
   return <div className="flex h-full min-h-0 flex-col overflow-auto bg-background">
-    <nav className="flex shrink-0 gap-2 border-b border-border px-4 py-2" aria-label="自进化视图">
-      <Button variant={management ? "ghost" : "secondary"} onClick={() => setParams({})}>成果</Button>
-      <Button variant={management ? "secondary" : "ghost"} onClick={() => setParams({view: "overview"})}>分析管理</Button>
-      {!management ? <Button variant="ghost" className="ml-auto" onClick={props.onNavigateTerminal}>返回终端</Button> : null}
+    <nav className="flex shrink-0 gap-1 border-b border-border pb-2" aria-label="自进化视图">
+      <Button size="sm" variant={management ? "ghost" : "secondary"} onClick={() => setParams({})}>成果</Button>
+      <Button size="sm" variant={management ? "secondary" : "ghost"} onClick={() => setParams({view: "overview"})}>分析管理</Button>
     </nav>
     {management ? <EvolutionManagementPage {...props} /> : <KnowledgeInbox key={`${props.apiBase}:${inboxAccount(props.token)}`} apiBase={props.apiBase} token={props.token} />}
   </div>;
@@ -81,11 +80,11 @@ export function EvolutionPage(props: { apiBase: string; token: string; onNavigat
 function EvolutionManagementPage({
   apiBase,
   token,
-  onNavigateTerminal,
+  embedded = false,
 }: {
   apiBase: string;
   token: string;
-  onNavigateTerminal: () => void;
+  embedded?: boolean;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -456,8 +455,8 @@ function EvolutionManagementPage({
     authorizeCandidateMutation.isPending || retireCandidateMutation.isPending;
 
   return (
-    <main className="h-dvh overflow-hidden bg-background text-foreground">
-      <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]">
+    <main className={embedded ? "min-h-0 flex-1 overflow-hidden text-foreground" : "h-dvh overflow-hidden bg-background text-foreground"}>
+      <div className={embedded ? "flex h-full min-h-0 flex-col" : "grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]"}>
         <EvolutionSidebar
           view={view}
           scopes={scopeOptions}
@@ -471,10 +470,10 @@ function EvolutionManagementPage({
           providers={providers}
           onSelectView={selectView}
           onSelectScope={selectScope}
-          onNavigateTerminal={onNavigateTerminal}
+          embedded={embedded}
         />
-        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-          <EvolutionHeader
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <EvolutionHeader embedded={embedded}
             view={view}
             scopeLabel={selectedScope.label}
             reflectionPending={
@@ -487,7 +486,7 @@ function EvolutionManagementPage({
             onStartReflection={startReflection}
             onOpenSchedule={openScheduleDialog}
           />
-          <div className="min-h-0 flex-1 overflow-auto p-5 max-sm:p-3">
+          <div className="min-h-0 flex-1 overflow-auto pt-2">
             <p className="mb-3 text-sm text-muted-foreground">
               {selectedScope.description}
             </p>

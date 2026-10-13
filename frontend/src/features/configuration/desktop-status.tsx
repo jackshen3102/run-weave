@@ -19,7 +19,7 @@ export function DesktopConfigurationStatus({ embedded = false }: { embedded?: bo
   });
   useEffect(() => { if (embedded) void load(); }, [embedded, load]);
   if (!window.electronAPI?.getLocalConfigurationStatus) return null;
-  return <details open={embedded ? true : undefined} className="rounded-xl border border-border p-4">
+  return <details open={embedded ? true : undefined} className={embedded ? "rounded-md border border-border p-3" : "rounded-xl border border-border p-4"}>
     <summary className="cursor-pointer font-medium">本台桌面的配置状态</summary>
     <div className="mt-3 space-y-2 text-xs">
       <p>浏览器、远程访问和伴随窗口由本台桌面管理。</p>

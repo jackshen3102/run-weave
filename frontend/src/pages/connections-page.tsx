@@ -3,6 +3,7 @@ import { ConnectionPage as ConnectionScreen } from "../components/connection-pag
 import type { ConnectionConfig } from "../features/connection/types";
 
 interface ConnectionsPageProps {
+  embedded?: boolean;
   connections: ConnectionConfig[];
   activeId: string | null;
   onAdd: (name: string, url: string, tunnelEndpointId?: string) => void;
@@ -13,6 +14,7 @@ interface ConnectionsPageProps {
 }
 
 export function ConnectionsPage({
+  embedded = false,
   connections,
   activeId,
   onAdd,
@@ -25,24 +27,24 @@ export function ConnectionsPage({
 
   return (
     <>
-    <ConnectionScreen
+    <ConnectionScreen embedded={embedded}
       connections={connections}
       activeId={activeId}
       onAdd={(name, url, endpointId) => {
         onAdd(name, url, endpointId);
-        navigate("/terminal", { replace: true });
+        if (!embedded) navigate("/terminal", { replace: true });
       }}
       onRemove={onRemove}
       onSelect={(id) => {
         onSelect(id);
-        navigate("/terminal", { replace: true });
+        if (!embedded) navigate("/terminal", { replace: true });
       }}
       onEdit={onEdit}
       onReconnect={async (id) => {
         const reconnected = await onReconnect?.(id);
         if (reconnected) {
           onSelect(id);
-          navigate("/terminal", { replace: true });
+          if (!embedded) navigate("/terminal", { replace: true });
           return true;
         }
 

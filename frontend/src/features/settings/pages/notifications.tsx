@@ -8,11 +8,11 @@ export default function Notifications() {
   const [error, setError] = useState("");
   const supported = !!window.electronAPI?.showResourceNotification;
   return (
-    <section className="rounded-xl border p-5">
+    <section className="rounded-md border p-3">
       <label className="flex items-center justify-between gap-4">
         <div>
           <h2 className="font-medium">Mac 系统通知</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-1 text-xs text-muted-foreground">
             系统通知需要在 macOS 中允许 Runweave
             发送通知。应用内资源提醒仍保留。
           </p>

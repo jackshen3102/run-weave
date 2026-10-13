@@ -256,8 +256,8 @@ export function TerminalAgentTeamModelConfigDialog({
   const Title = embedded ? "h2" : DialogTitle;
   const Description = embedded ? "p" : DialogDescription;
   const content = (
-      <Surface className={embedded ? "settings-models flex min-h-[600px] flex-col rounded-xl border bg-background" : "flex h-[min(760px,88vh)] max-w-5xl flex-col gap-0 overflow-hidden border-slate-700 bg-slate-950 p-0 text-slate-100"}>
-        <DialogHeader className="border-b border-slate-800 px-6 py-5">
+      <Surface className={embedded ? "settings-models flex min-h-[420px] flex-col rounded-md border bg-background" : "flex h-[min(760px,88vh)] max-w-5xl flex-col gap-0 overflow-hidden border-slate-700 bg-slate-950 p-0 text-slate-100"}>
+        <DialogHeader className={embedded ? "border-b border-slate-800 px-3 py-2" : "border-b border-slate-800 px-6 py-5"}>
           <div className="flex items-center gap-3">
             <Title>Agent Team 模型配置</Title>
             <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-300">
@@ -322,7 +322,7 @@ export function TerminalAgentTeamModelConfigDialog({
               </p>
             </aside>
 
-            <section className="min-h-0 overflow-y-auto p-6">
+            <section className={embedded ? "min-h-0 overflow-y-auto p-3" : "min-h-0 overflow-y-auto p-6"}>
               <div>
                 <h2 className="text-lg font-semibold">
                   {ROLE_META[selectedRole].label}
@@ -332,7 +332,7 @@ export function TerminalAgentTeamModelConfigDialog({
                 </p>
               </div>
 
-              <div className="mt-6 space-y-6">
+              <div className={embedded ? "mt-3 space-y-3" : "mt-6 space-y-6"}>
                 <Field label="CLI" hint="运行时会把下列配置编译为 CLI 参数">
                   <div className="grid grid-cols-2 rounded-lg bg-slate-900 p-1">
                     {(["codex", "traex"] as const).map((provider) => {
@@ -501,7 +501,7 @@ export function TerminalAgentTeamModelConfigDialog({
           </div>
         ) : null}
         <Button variant="ghost" disabled={loading || saving} onClick={() => { if (!draftRoles || JSON.stringify(draftRoles) === JSON.stringify(settings?.config?.roles) || window.confirm("放弃当前修改并重新读取模型目录？")) setReload(value => value + 1); }}>重新读取模型目录</Button>
-        <DialogFooter className="border-t border-slate-800 px-6 py-4">
+        <DialogFooter className={embedded ? "border-t border-slate-800 px-3 py-2" : "border-t border-slate-800 px-6 py-4"}>
           <Button
             type="button"
             variant="ghost"

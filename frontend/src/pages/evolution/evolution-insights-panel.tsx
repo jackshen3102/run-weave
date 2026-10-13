@@ -20,7 +20,7 @@ export function EvolutionInsightsPanel({ insights }: { insights: Insight[] }) {
             return (
               <article
                 key={insight.insightId}
-                className="[content-visibility:auto] p-5 [contain-intrinsic-size:auto_180px]"
+                className="[content-visibility:auto] p-3 [contain-intrinsic-size:auto_180px]"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -96,7 +96,7 @@ export function EvolutionInsightsPanel({ insights }: { insights: Insight[] }) {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
               <Lightbulb className="h-5 w-5 text-muted-foreground" />
             </div>
-            <h2 className="mt-5 text-xl font-semibold">尚无实质新知识</h2>
+            <h2 className="mt-3 text-base font-semibold">尚无实质新知识</h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               只有通过证据和 Novelty Gate 的结论才会出现在这里；页面不使用
               Candidate 或 mock 数据补空状态。

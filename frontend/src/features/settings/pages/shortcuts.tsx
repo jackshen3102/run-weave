@@ -20,15 +20,15 @@ const keys = [
 ];
 export default function Shortcuts() {
   return (
-    <div className="space-y-5">
-      <section className="divide-y rounded-xl border">
+    <div className="space-y-3">
+      <section className="divide-y rounded-md border">
         {keys.map(([name, key]) => (
           <div
             key={name}
-            className="flex items-center justify-between gap-4 p-4 text-sm"
+            className="flex items-center justify-between gap-3 px-3 py-1 text-xs"
           >
             <span>{name}</span>
-            <kbd className="rounded border bg-muted px-2 py-1">{key}</kbd>
+            <kbd className="rounded border bg-muted px-1.5 py-0.5">{key}</kbd>
           </div>
         ))}
       </section>

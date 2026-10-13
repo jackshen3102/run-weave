@@ -19,10 +19,10 @@ export default function Appearance() {
   const alwaysVisible = visible.filter((id) => id !== "agent-team");
   const store = useTerminalPreviewStore.getState();
   return (
-    <div className="space-y-9">
+    <div className="space-y-4">
       <section>
-        <h2 className="mb-4 font-medium">主题</h2>
-        <div className="grid grid-cols-3 gap-3">
+        <h2 className="mb-2 font-medium">主题</h2>
+        <div className="grid grid-cols-3 gap-2">
           {(
             [
               ["light", "浅色"],
@@ -34,10 +34,10 @@ export default function Appearance() {
               key={id}
               aria-pressed={theme === id}
               onClick={() => setTheme(id)}
-              className={`rounded-xl border p-5 text-left ${theme === id ? "border-primary ring-1 ring-primary" : ""}`}
+              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left ${theme === id ? "border-primary ring-1 ring-primary" : ""}`}
             >
               <div
-                className={`mb-4 h-20 rounded-lg border ${id === "light" ? "bg-stone-100" : id === "dark" ? "bg-neutral-900" : "bg-gradient-to-r from-stone-100 to-neutral-900"}`}
+                className={`h-5 w-8 shrink-0 rounded border ${id === "light" ? "bg-stone-100" : id === "dark" ? "bg-neutral-900" : "bg-gradient-to-r from-stone-100 to-neutral-900"}`}
               />
               {label}
             </button>
@@ -45,24 +45,25 @@ export default function Appearance() {
         </div>
       </section>
       <section>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between">
           <h2 className="font-medium">右侧工具标签</h2>
-          <Button variant="ghost" size="sm" onClick={store.resetSidecarLayout}>
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={store.resetSidecarLayout}>
             恢复默认
           </Button>
         </div>
-        <div className="divide-y rounded-xl border">
+        <div className="divide-y rounded-md border">
           {layout.order.map((id) => {
             const tab = SIDECAR_TABS.find((item) => item.id === id)!;
             const shown = visible.includes(id),
               index = visible.indexOf(id),
               supported = available.includes(id);
             return (
-              <div key={id} className="flex items-center gap-3 p-4">
-                <span className="flex-1 text-sm">{tab.label}</span>
+              <div key={id} className="flex items-center gap-2 px-3 py-1">
+                <span className="flex-1">{tab.label}</span>
                 <Button
                   size="sm"
                   variant="ghost"
+                  className="h-6 w-6 p-0"
                   aria-label={`上移 ${tab.label}`}
                   disabled={!shown || index <= 0}
                   onClick={() =>
@@ -74,6 +75,7 @@ export default function Appearance() {
                 <Button
                   size="sm"
                   variant="ghost"
+                  className="h-6 w-6 p-0"
                   aria-label={`下移 ${tab.label}`}
                   disabled={!shown || index === visible.length - 1}
                   onClick={() =>

@@ -1,6 +1,9 @@
 import { useLocation, useNavigate, type Location } from "react-router-dom";
 import { useMemoizedFn } from "ahooks";
 import type { SettingsPageId } from "./registry";
+export function isManagementPath(pathname: string) {
+  return /^\/(?:settings|activity|evolution|system-monitor|dev-resources|scheduled-tasks|background-runs|prototypes|connections|login)(?:\/|$)/u.test(pathname);
+}
 export function settingsBackground(location: Location): Location | null {
   const value: unknown = location.state?.settingsBackground;
   if (
@@ -8,7 +11,7 @@ export function settingsBackground(location: Location): Location | null {
     typeof value !== "object" ||
     !("pathname" in value) ||
     typeof value.pathname !== "string" ||
-    !/^\/(?:terminal|scheduled-tasks|background-runs|system-monitor|dev-resources|activity|evolution|prototypes|connections)(?:\/|$)/u.test(
+    !/^\/terminal(?:\/|$)/u.test(
       value.pathname,
     )
   )
@@ -27,7 +30,7 @@ export function useSettingsNavigation() {
       if (section) params.set("section", section);
       navigate(`/settings/${page}${params.size ? `?${params}` : ""}`, {
         state: {
-          settingsBackground: location.pathname.startsWith("/settings")
+          settingsBackground: isManagementPath(location.pathname)
             ? settingsBackground(location)
             : location,
         },

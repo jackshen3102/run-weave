@@ -39,11 +39,11 @@ const ACTIVITY_VIEWS = new Set<ActivityView>([
 export function ActivityPage({
   apiBase,
   token,
-  onNavigateTerminal,
+  embedded = false,
 }: {
   apiBase: string;
   token: string;
-  onNavigateTerminal: () => void;
+  embedded?: boolean;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
@@ -190,27 +190,26 @@ export function ActivityPage({
   const timelineComputed = timelineQuery.data?.pages[0]?.computed;
 
   return (
-    <main className="h-dvh overflow-hidden bg-background text-foreground">
-      <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]">
-        <ActivitySidebar
+    <main className={embedded ? "h-full min-h-0 overflow-hidden text-foreground" : "h-dvh overflow-hidden bg-background text-foreground"}>
+      <div className={embedded ? "flex h-full min-h-0 flex-col" : "grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]"}>
+        <ActivitySidebar embedded={embedded}
           view={view}
           onSelectView={selectView}
           currentSourceCount={currentSourceCount}
           sourceCount={currentSources.length}
         />
-        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <ActivityHeader
             search={search}
             runtimeChannel={runtimeChannel}
-            onNavigateTerminal={onNavigateTerminal}
             onSearchChange={updateSearch}
             onRuntimeChannelChange={updateRuntimeChannel}
           />
           <div
             className={
               view === "terminals" || view === "runs"
-                ? "min-h-0 flex-1 overflow-hidden p-4 max-md:p-2"
-                : "min-h-0 flex-1 overflow-auto p-7 max-md:p-3"
+                ? "min-h-0 flex-1 overflow-hidden pt-2"
+                : "min-h-0 flex-1 overflow-auto pt-2"
             }
           >
             {view === "terminals" ? (

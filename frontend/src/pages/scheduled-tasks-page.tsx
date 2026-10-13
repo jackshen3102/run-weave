@@ -29,6 +29,7 @@ import { TaskDetail } from "../features/scheduled-tasks/task-detail";
 import { TaskEditor } from "../features/scheduled-tasks/task-editor";
 
 interface Props {
+  embedded?: boolean;
   apiBase: string;
   token: string;
   activeConnectionId: string | null;
@@ -64,7 +65,7 @@ function ScheduledTasksContent(props: Props) {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const linkedRun = useRun(taskId ? searchParams.get("run") : null, false);
-  const { workspace, go, back } = useTaskNavigation();
+  const { workspace, go } = useTaskNavigation();
   const [parentId, setParentId] = useState(workspace.parentProjectId ?? "");
   const [archived, setArchived] = useState(false);
   const [search, setSearch] = useState("");
@@ -82,14 +83,10 @@ function ScheduledTasksContent(props: Props) {
     return <Navigate to={runDetailsPath(linkedRun.data)} replace state={location.state} />;
   }
   return (
-    <main className="min-h-dvh bg-background text-foreground">
-      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <Button variant="ghost" size="sm" onClick={back}>
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          返回工作区
-        </Button>
+    <main className="min-h-0 bg-background text-foreground">
+      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-background/95 px-2 py-2 backdrop-blur">
         <CalendarClock className="h-4 w-4" />
-        <h1 className="font-semibold">定时任务</h1>
+        <span className="text-xs text-muted-foreground">任务与运行</span>
         <div className="ml-auto">
           {props.activeConnectionId &&
           props.onSelectConnection &&
@@ -111,7 +108,7 @@ function ScheduledTasksContent(props: Props) {
           )}
         </div>
       </header>
-      <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
+      <div className="mx-auto w-full space-y-3 py-3">
         {!online ? (
           <p role="alert" className="text-sm text-destructive">
             网络已断开，等待连接恢复。未提交的草稿会保留。

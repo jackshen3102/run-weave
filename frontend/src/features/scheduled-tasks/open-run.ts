@@ -10,11 +10,14 @@ import { HttpError } from "../../services/http";
 import { terminalQueryKeys } from "../terminal/queries/keys";
 import { setTerminalNavigation } from "../terminal/state/navigation";
 import { useScheduledApi, scheduledKeys } from "./queries";
+import { useManagementExit } from "../settings/edit-session";
 
 export function useOpenRun() {
   const { api, scope } = useScheduledApi();
   const client = useQueryClient();
   const navigate = useNavigate();
+  const managementExit = useManagementExit();
+  const [prepared, setPrepared] = useState(false);
   const mounted = useRef(true);
   const [attachmentState, setAttachmentState] =
     useState<AttachmentState | null>(null);
@@ -102,7 +105,8 @@ export function useOpenRun() {
       if (!mounted.current) return;
       if (result.attachmentState === "failed")
         throw new Error(result.error ?? "对话恢复失败，请重试。");
-      setTerminalNavigation(scope, {
+      const enterTerminal = () => {
+        setTerminalNavigation(scope, {
         parentProjectId: resolveTerminalParentProjectId(result.projectId),
         projectId: result.projectId,
         terminalSessionId: result.terminalSessionId,
@@ -110,10 +114,15 @@ export function useOpenRun() {
       });
       // Build the existing internal route from the returned identity; never follow an arbitrary URL.
       navigate(`/terminal/${encodeURIComponent(result.terminalSessionId)}`);
+      };
+      if (managementExit?.active) {
+        managementExit.prepare(enterTerminal, "进入已准备的运行会话");
+        setPrepared(true);
+      } else enterTerminal();
     },
     onError: () => {
       void client.invalidateQueries({ queryKey: scheduledKeys.all(scope) });
     },
   });
-  return { ...mutation, attachmentState };
+  return { ...mutation, attachmentState, prepared, fullscreen: managementExit?.active === true };
 }
