@@ -1,0 +1,11 @@
+服务配置：28 个可编辑字段、6 个敏感字段。
+配置领域：services.snapshotPublisher, services.pushSender, services.feishu, scheduledTasks, voice。
+真实保存：revision 11 → 12；消费者 appliedRevision = 12。
+并发修改：UI 冲突提示保留草稿；重读后恢复默认，revision = 14。
+
+目标隔离（DGS-004）：A 的延迟响应不替换 B，重载仅请求 B；工作区和本台诊断仍属于 A。
+草稿保护（DGS-005）：切页面、切电脑、返回均有继续/放弃选择；放弃后 Backend revision 与 digest 不变。
+保存中：模型控件禁用，离开导航被拦截。
+认证：服务配置请求 401 时，所选电脑显示登录入口；工作区 A 不受影响。
+
+范围：没有逐个写入全部 28 字段；没有提交密码修改。

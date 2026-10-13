@@ -44,6 +44,7 @@ const VISIBLE_APP_COUNT = 50;
 
 interface SystemMonitorPageProps {
   onNavigateTerminal?: () => void;
+  embedded?: boolean;
 }
 
 function MetricBar(params: { value: number | null; tone?: "ok" | "warn" }) {
@@ -148,6 +149,7 @@ function sortApps(apps: SystemMonitorAppGroup[], sortKey: SortKey) {
 
 export function SystemMonitorPage({
   onNavigateTerminal,
+  embedded = false,
 }: SystemMonitorPageProps) {
   const [paused, setPaused] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("energy");
@@ -226,7 +228,7 @@ export function SystemMonitorPage({
   }
 
   return (
-    <main className="min-h-screen bg-background px-4 py-5 text-foreground md:px-6 lg:px-8">
+    <main className={embedded ? "text-foreground" : "min-h-screen bg-background px-4 py-5 text-foreground md:px-6 lg:px-8"}>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
           <div className="min-w-0">
@@ -250,7 +252,7 @@ export function SystemMonitorPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <RuntimeStatusEntry />
+            {!embedded && <RuntimeStatusEntry />}
             {onNavigateTerminal ? (
               <Button variant="ghost" size="sm" onClick={onNavigateTerminal}>
                 <ArrowLeft className="mr-2 h-4 w-4" />

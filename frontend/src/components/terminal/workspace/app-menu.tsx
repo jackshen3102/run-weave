@@ -1,3 +1,4 @@
+import { useSettingsNavigation } from "../../../features/settings/navigation";
 import { useMemoizedFn } from "ahooks";
 import {
   Activity,
@@ -35,6 +36,7 @@ export function TerminalAppMenu({
   onCreateSession,
 }: TerminalAppMenuProps) {
   const navigate = useNavigate();
+  const openSettings = useSettingsNavigation();
   const { onAuthExpired } = useTerminalRuntime();
   const [open, setOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -85,6 +87,7 @@ export function TerminalAppMenu({
                 新建终端
               </Button>
             ) : null}
+            {!isMobileMonitor && <Button variant="ghost" className="justify-start" onClick={() => { setOpen(false); openSettings(); }}>全局设置</Button>}
             <p className="mt-2 text-xs text-slate-400">导航</p>
             <Button
               type="button"
@@ -130,13 +133,13 @@ export function TerminalAppMenu({
               className="justify-start"
               onClick={() => {
                 setOpen(false);
-                setPasswordOpen(true);
+                if (isMobileMonitor) setPasswordOpen(true); else openSettings("access");
               }}
             >
               <LockKeyhole className="mr-2 h-4 w-4" />
               修改密码
             </Button>
-            <ThemeToggle />
+            {isMobileMonitor ? <ThemeToggle /> : <Button variant="ghost" className="justify-start" onClick={() => { setOpen(false); openSettings("appearance"); }}>外观</Button>}
             <Button
               type="button"
               variant="ghost"

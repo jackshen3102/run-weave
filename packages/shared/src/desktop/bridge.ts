@@ -106,6 +106,7 @@ export interface ClipboardImageDownload {
 
 export interface RunweaveElectronBridge {
   downloadClipboardImage: (url: string) => Promise<ClipboardImageDownload>;
+  exportDesktopDiagnostics?: () => Promise<void>;
   getLocalConfigurationStatus: () => Promise<ConfigurationStatus>;
   platform: string;
   isElectron: boolean;

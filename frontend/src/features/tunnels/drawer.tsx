@@ -31,7 +31,7 @@ const freshHost = (): TunnelHostConfig => ({
   },
 });
 
-export function TunnelDrawer() {
+export function TunnelDrawer({ embedded = false }: { embedded?: boolean }) {
   const {
     snapshot,
     open,
@@ -51,7 +51,7 @@ export function TunnelDrawer() {
   }, [notice, setNotice]);
   useEffect(() => {
     const api = window.electronAPI as RunweaveElectronBridge | undefined;
-    if (!api?.isElectron) return;
+    if (!api?.isElectron || embedded) return;
     let disposed = false;
     const subscriptions = [
       api.onTunnelsChanged(setSnapshot),
@@ -70,7 +70,7 @@ export function TunnelDrawer() {
       disposed = true;
       subscriptions.forEach((unsubscribe) => unsubscribe());
     };
-  }, [setSnapshot, setError, setNotice, setOpen]);
+  }, [embedded, setSnapshot, setError, setNotice, setOpen]);
   const run = useMemoizedFn(async (action: () => Promise<unknown>) => {
     if (busy) return;
     setBusy(true);
@@ -104,36 +104,16 @@ export function TunnelDrawer() {
     );
   });
   if (!window.electronAPI?.isElectron) return null;
-  return (
-    <>
-      {notice && !open && (
-        <div
-          role="status"
-          className="fixed bottom-5 right-5 z-50 max-w-sm rounded-lg border border-border bg-background p-3 text-sm shadow-lg"
-        >
-          <p>{notice}</p>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setOpen(true);
-              setNotice(null);
-            }}
-          >
-            查看端口与隧道
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setNotice(null)}>
-            关闭
-          </Button>
-        </div>
-      )}
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent className="w-full overflow-y-auto sm:w-[560px]">
-          <SheetTitle>端口与隧道</SheetTitle>
-          <SheetDescription>
+  const Surface = embedded ? "section" : SheetContent;
+  const Title = embedded ? "h2" : SheetTitle;
+  const Description = embedded ? "p" : SheetDescription;
+  const content = (
+        <Surface className={embedded ? "space-y-5" : "w-full overflow-y-auto sm:w-[560px]"}>
+          <Title>端口与隧道</Title>
+          <Description>
             管理这台电脑的 SSH
             通道。切换连接或关闭面板不影响运行；退出桌面端后停止。
-          </SheetDescription>
+          </Description>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
               {snapshot?.owner.devSessionId
@@ -180,6 +160,7 @@ export function TunnelDrawer() {
             <HostForm
               key={editing.id}
               host={editing}
+              embedded={embedded}
               snapshot={snapshot}
               onCancel={() => setEditing(null)}
               onSaved={(next) => {
@@ -192,9 +173,7 @@ export function TunnelDrawer() {
           {!snapshot && !error && <p>读取配置中…</p>}
           {snapshot?.config.hosts.length === 0 && !editing && (
             <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-              添加 SSH
-              主机后，可配置手机远程访问本机、转发开发服务端口，或允许远端 Agent
-              使用本机 Browser。
+              {embedded ? "添加 SSH 主机后，可配置开发服务端口、Backend 入口和手机远程接入。" : "添加 SSH 主机后，可配置手机远程访问本机、转发开发服务端口，或允许远端 Agent 使用本机 Browser。"}
             </div>
           )}
           {snapshot?.config.hosts.map((host) => {
@@ -340,16 +319,43 @@ export function TunnelDrawer() {
                   busy={busy}
                 />
                 <RemoteDesktopStatus host={host} runtime={runtime} busy={busy} run={run} />
-                <BrowserStatus
+                {!embedded && <BrowserStatus
                   host={host}
                   runtime={runtime}
                   run={run}
                   busy={busy}
-                />
+                />}
               </section>
             );
           })}
-        </SheetContent>
+        </Surface>
+  );
+  if (embedded) return content;
+  return (
+    <>
+      {notice && !open && (
+        <div
+          role="status"
+          className="fixed bottom-5 right-5 z-50 max-w-sm rounded-lg border border-border bg-background p-3 text-sm shadow-lg"
+        >
+          <p>{notice}</p>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setOpen(true);
+              setNotice(null);
+            }}
+          >
+            查看端口与隧道
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setNotice(null)}>
+            关闭
+          </Button>
+        </div>
+      )}
+      <Sheet open={open} onOpenChange={setOpen}>
+        {content}
       </Sheet>
     </>
   );

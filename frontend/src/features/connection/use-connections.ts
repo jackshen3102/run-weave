@@ -76,7 +76,7 @@ type StoreUpdater = (prev: ConnectionStore) => ConnectionStore;
 export interface UseConnectionsResult {
   connections: ConnectionConfig[];
   activeConnection: ConnectionConfig | null;
-  addConnection: (name: string, url: string, tunnelEndpointId?: string) => ConnectionConfig;
+  addConnection: (name: string, url: string, tunnelEndpointId?: string, activate?: boolean) => ConnectionConfig;
   removeConnection: (id: string) => void;
   updateConnection: (
     id: string,
@@ -209,7 +209,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
   }, [connections, localDevelopmentConnection, store.activeId]);
 
   const addConnection = useMemoizedFn(
-    (name: string, url: string, tunnelEndpointId?: string): ConnectionConfig => {
+    (name: string, url: string, tunnelEndpointId?: string, activate = true): ConnectionConfig => {
       const conn: ConnectionConfig = {
         id: crypto.randomUUID(),
         name: name.trim(),
@@ -219,7 +219,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
       };
       persist((prev) => ({
         connections: [...prev.connections, conn],
-        activeId: conn.id,
+        activeId: activate ? conn.id : prev.activeId,
       }));
       return conn;
     },

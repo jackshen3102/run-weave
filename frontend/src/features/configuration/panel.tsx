@@ -1,3 +1,5 @@
+import { useSettingsDraft } from "../settings/edit-session";
+import { HttpError } from "../../services/http";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import type { ConfigurationValue, PublicConfigurationField, PublicConfigurationStatus } from "@runweave/shared/configuration";
@@ -8,7 +10,7 @@ import { Input } from "../../components/ui/input";
 import { ConfigurationFieldDetails } from "./field-status";
 
 const states = { applied: "已生效", restartRequired: "等待所属服务重启", error: "配置错误", unconfigured: "未配置" };
-export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token: string | null }) {
+export function ConfigurationPanel({ apiBase, token, embedded = false, onAuthExpired }: { apiBase: string; token: string | null; embedded?: boolean; onAuthExpired?: () => void }) {
   // The parent keys this component by connection and token: drafts never cross connections.
   const [status, setStatus] = useState<PublicConfigurationStatus | null>(null);
   const [draft, setDraft] = useState<Record<string, string | null>>({});
@@ -17,7 +19,8 @@ export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token:
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
   const run = useMemoizedFn(async (save = false) => {
-    if (!token) return;
+    if (!token || busy) return;
+    if (!save && Object.keys(draft).length && !window.confirm("放弃未保存的修改并重新读取？")) return;
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setFailure(null);
@@ -36,10 +39,12 @@ export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token:
       if (controller.signal.aborted) return;
       if (status && (next.environment.kind !== status.environment.kind || next.environment.instanceId !== status.environment.instanceId)) throw new Error("连接实例已变化，请关闭并重新打开配置。");
       setStatus(next); setDraft({});
-    } catch (error) { if (!controller.signal.aborted) setFailure(error instanceof Error ? error.message : "配置操作失败"); }
+    } catch (error) { if (!controller.signal.aborted) { if (error instanceof HttpError && error.status === 401) onAuthExpired?.(); setFailure(error instanceof Error ? error.message : "配置操作失败"); } }
     finally { if (!controller.signal.aborted) setBusy(false); }
   });
-  return <details className="rounded-xl border border-border p-4">
+  useSettingsDraft(embedded && Object.keys(draft).length > 0, embedded && busy && Object.keys(draft).length > 0);
+  useEffect(() => { if (embedded) void run(); }, [embedded, run]);
+  return <details open={embedded ? true : undefined} className="rounded-xl border border-border p-4">
     <summary className="cursor-pointer font-medium">当前连接电脑的配置</summary>
     <div className="mt-3 space-y-4">
       <p className="break-all text-xs text-muted-foreground">{apiBase || window.location.origin}</p>
@@ -50,7 +55,7 @@ export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token:
         <p className="text-xs">{status.environment.kind === "stable" ? "Stable" : "Dev Session"} · {status.environment.instanceId} · 保存版本 {status.savedRevision ?? "不可读取"}</p>
         <p className="text-xs text-muted-foreground">输入框编辑保存值，默认值不会自动写入。应用状态来自当前连接的服务，不代表其他服务或业务连接已验证可用。</p>
         {status.diskError && <p role="alert">磁盘配置无法读取，请在当前电脑运行 rw config doctor。</p>}
-        {[...new Set(status.fields.map(field => field.domain))].map(domain => <details key={domain} className="rounded-lg border border-border p-3">
+        {[...new Set(status.fields.filter(field => !field.path.includes("<")).map(field => field.domain))].map(domain => <details key={domain} className="rounded-lg border border-border p-3">
           <summary className="cursor-pointer text-sm font-medium">{CONFIGURATION_DOMAIN_LABELS[domain] ?? domain}</summary>
           <div className="mt-3 space-y-3">
         {status.fields.filter(field => field.domain === domain && !field.path.includes("<")).map(field => {
@@ -76,7 +81,8 @@ export function ConfigurationPanel({ apiBase, token }: { apiBase: string; token:
         })}
           </div>
         </details>)}
-        <Button disabled={busy || !Object.keys(draft).length || status.savedRevision == null} onClick={() => void run(true)}>{busy ? "处理中…" : "保存配置"}</Button>
+        <Button variant="ghost" disabled={busy || !Object.keys(draft).length} onClick={() => setDraft({})}>取消修改</Button>
+        <Button disabled={busy || !Object.keys(draft).length || status.savedRevision == null || !!status.diskError} onClick={() => void run(true)}>{busy ? "处理中…" : "保存配置"}</Button>
       </>}
     </div>
   </details>;

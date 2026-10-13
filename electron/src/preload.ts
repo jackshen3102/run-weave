@@ -203,6 +203,7 @@ const electronApi = {
     ipcRenderer.invoke(
       "runtime-status:get-report",
     ) as Promise<RuntimeStatusReport>,
+  exportDesktopDiagnostics: () => ipcRenderer.invoke("runtime-status:export-diagnostics") as Promise<void>,
   getLocalConfigurationStatus: () => ipcRenderer.invoke("runtime-status:configuration") as Promise<ConfigurationStatus>,
   copyRuntimeStatusText: (value: string) =>
     ipcRenderer.invoke("runtime-status:copy-text", value) as Promise<boolean>,

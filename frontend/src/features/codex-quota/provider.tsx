@@ -17,10 +17,10 @@ function QuotaWindow({ title, value }: { title: string; value: CodexQuotaWindow 
 }
 
 /** Mounted per authenticated connection. Closing cancels reads; no polling or persisted cache. */
-export function CodexQuotaProvider({ children, apiBase, token, connectionName, onUnauthorized }: {
-  children: ReactNode; apiBase: string; token: string | null; connectionName: string; onUnauthorized: () => void;
+export function CodexQuotaProvider({ children, apiBase, token, connectionName, onUnauthorized, embedded = false }: {
+  embedded?: boolean; children: ReactNode; apiBase: string; token: string | null; connectionName: string; onUnauthorized: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
   const [snapshot, setSnapshot] = useState<CodexQuotaSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -62,11 +62,7 @@ export function CodexQuotaProvider({ children, apiBase, token, connectionName, o
   }, [open, refresh]);
   const age = snapshot?.sampleAgeMs == null ? null : snapshot.sampleAgeMs + performance.now() - receivedAt.current;
   const message = failure ?? (snapshot ? CODEX_QUOTA_STATUS_LABELS[snapshot.status] : null);
-  return <CodexQuotaContext.Provider value={token ? () => setOpen(true) : null}>
-    {children}
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent className="w-full sm:max-w-sm">
-        <SheetHeader><SheetTitle>Codex 额度</SheetTitle><SheetDescription>{connectionName} · App Server 的 ChatGPT 订阅</SheetDescription></SheetHeader>
+  const content = (
         <div className="space-y-4" aria-busy={loading}>
           <QuotaWindow title="每周剩余" value={snapshot?.weekly ?? null} />
           {snapshot?.shortWindow ? <QuotaWindow title="短周期剩余" value={snapshot.shortWindow} /> : null}
@@ -75,6 +71,14 @@ export function CodexQuotaProvider({ children, apiBase, token, connectionName, o
           <Button onClick={() => void refresh(true)} disabled={loading}>{loading ? "正在更新…" : "刷新"}</Button>
           <p className="text-xs text-muted-foreground">仅打开或手动刷新时查询，不会持续监控。</p>
         </div>
+  );
+  if (embedded) return content;
+  return <CodexQuotaContext.Provider value={token ? () => setOpen(true) : null}>
+    {children}
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetContent className="w-full sm:max-w-sm">
+        <SheetHeader><SheetTitle>Codex 额度</SheetTitle><SheetDescription>{connectionName} · App Server 的 ChatGPT 订阅</SheetDescription></SheetHeader>
+        {content}
       </SheetContent>
     </Sheet>
   </CodexQuotaContext.Provider>;

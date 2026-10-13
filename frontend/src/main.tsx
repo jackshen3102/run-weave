@@ -1,6 +1,6 @@
 import { runtimeBuildInfo } from "@runweave/shared/runtime-version";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import App from "./App";
 import { ThemeProvider } from "./components/theme-provider";
 import { initializeClarity } from "./features/analytics/clarity";
@@ -47,9 +47,7 @@ if ((import.meta.env.DEV || buildChannel === "beta") && new URLSearchParams(loca
   initializeClarity();
   createRoot(document.getElementById("root")!).render(
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <RouterProvider router={createBrowserRouter([{ path: "*", element: <App /> }])} />
     </ThemeProvider>,
   );
 }

@@ -1,0 +1,14 @@
+真实手机接入 UI（dvs-79dc43）：
+创建二维码 → HTTP claim 200 → 显示测试设备名 → 拒绝 → exchange 409。
+重新生成后离开页面，请求状态为 cancelled。
+
+自有 Backend 协议（dvs-691339）：
+批准前 exchange 202，不返回凭据。
+其他 owner 查询 404。
+批准后并发 exchange 获得同一 session。
+完成后状态 completed，再次 exchange 202，不再返回凭据。
+取消后 exchange 409。
+正常等待 180 秒后，过期 claim 410。
+
+这些是桌面 UI 与 HTTP 协议证据。
+尚无 iPhone 真机扫码、手机 UI 登录及跨端网络证据。

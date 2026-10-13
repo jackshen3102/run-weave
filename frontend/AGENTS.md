@@ -12,6 +12,7 @@
 - 长文本粘贴、双入口与草稿恢复：[terminal-text-attachments.md](docs/terminal-text-attachments.md)
 - Web 自动采集配置、部署与验收：[clarity-autocapture.md](docs/clarity-autocapture.md)
 - 按能力聚合的状态与 UI：`src/features/`
+- 桌面全局设置与工作区、电脑目标、Browser 的边界：[global-settings.md](docs/global-settings.md)
 - 后端 HTTP 调用：`src/services/`
 - 端到端测试允许位置：`tests/`（当前无 tracked spec，实际清单以 Git 为准）
 - 终端显示：`src/components/terminal/surface/`；终端与图片基础能力：`@runweave/common/terminal`

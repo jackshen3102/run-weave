@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "id": "desktop-global-settings-acceptance-20261013",
+    "title": "桌面全局设置 · 图文验收报告",
+    "scope": "2026-10-12 本次任务验收快照，2026-10-13 整理。wt-1 / 5cd1e0ae dirty；本地 Electron Beta。主流程 dvs-79dc43，最终外观补验 dvs-46bbe7，独立目标 B dvs-691339。截图不是实时状态，精确采集时间未逐图记录。",
+    "materialKind": "current",
+    "limitations": [
+      "图文报告使用本次任务已有截图和真实记录；不代表连续录像。",
+      "7 项新增导航通过；SSH、iPhone 等外部领域及完整旧用例矩阵仍未全部验收。"
+    ]
+  },
+  "assets": [
+    {
+      "id": "full-window",
+      "kind": "image",
+      "path": "assets/0001-full-window.jpg",
+      "label": "最终原生窗口：全屏外观页",
+      "origin": {
+        "surface": "Electron Beta 原生窗口 · dvs-46bbe7",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/native-final-settings.png"
+      }
+    },
+    {
+      "id": "workspace",
+      "kind": "image",
+      "path": "assets/0002-workspace.jpg",
+      "label": "返回后的原工作区与 Browser",
+      "origin": {
+        "surface": "Electron Beta 原生窗口 · dvs-79dc43",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/native-browser-restored.png"
+      }
+    },
+    {
+      "id": "browser-hidden",
+      "kind": "image",
+      "path": "assets/0003-browser-hidden.jpg",
+      "label": "设置页覆盖 Browser 时的原生窗口",
+      "origin": {
+        "surface": "Electron Beta 原生窗口 · dvs-79dc43",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/native-settings.png"
+      }
+    },
+    {
+      "id": "dark",
+      "kind": "image",
+      "path": "assets/0004-dark.png",
+      "label": "跟随系统时的深色界面",
+      "origin": {
+        "surface": "Electron Beta 页面视口 · dvs-46bbe7",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/final-appearance.png"
+      }
+    },
+    {
+      "id": "light",
+      "kind": "image",
+      "path": "assets/0005-light.png",
+      "label": "临时切换浅色后的界面",
+      "origin": {
+        "surface": "Electron Beta 页面视口 · dvs-79dc43",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/final-light.png"
+      }
+    },
+    {
+      "id": "ssh",
+      "kind": "image",
+      "path": "assets/0006-ssh.png",
+      "label": "SSH 主机表单的版本冲突",
+      "origin": {
+        "surface": "Electron Beta 页面视口 · dvs-79dc43",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/ssh-conflict.png"
+      }
+    },
+    {
+      "id": "models",
+      "kind": "image",
+      "path": "assets/0007-models.png",
+      "label": "四角色默认模型配置",
+      "origin": {
+        "surface": "Electron Beta 页面视口 · dvs-79dc43",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/final-models.png"
+      }
+    },
+    {
+      "id": "logs",
+      "kind": "image",
+      "path": "assets/0008-logs.png",
+      "label": "真实日志记录结束后的结果",
+      "origin": {
+        "surface": "Electron Beta 页面视口 · dvs-79dc43",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/final-logs.png"
+      }
+    },
+    {
+      "id": "verification",
+      "kind": "text",
+      "path": "assets/0009-verification.json",
+      "label": "原始验收记录与边界",
+      "origin": {
+        "surface": "实际操作汇总记录",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/verification.json"
+      }
+    },
+    {
+      "id": "browser-record",
+      "kind": "text",
+      "path": "assets/0010-browser-record.json",
+      "label": "原生 Browser 点击与状态记录",
+      "origin": {
+        "surface": "Electron Beta 原生操作记录 · dvs-79dc43",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/native-browser.json"
+      }
+    },
+    {
+      "id": "phone-record",
+      "kind": "text",
+      "path": "assets/0011-phone-record.json",
+      "label": "手机接入协议记录（无真机）",
+      "origin": {
+        "surface": "自有 Backend HTTP 协议验证 · dvs-691339",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/mobile-protocol.json"
+      }
+    },
+    {
+      "id": "coverage-source",
+      "kind": "text",
+      "path": "assets/0012-coverage-source.md",
+      "label": "逐分区功能保留与覆盖原文",
+      "origin": {
+        "surface": "源码核对及实际操作记录",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/README.md"
+      }
+    },
+    {
+      "id": "configuration-summary",
+      "kind": "text",
+      "path": "assets/0013-configuration-summary.txt",
+      "label": "配置、隔离和草稿保护摘要",
+      "origin": {
+        "surface": "原始记录摘要；本次整理未重新执行产品验收",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/verification.json targetedDomainVerification.configuration / saveAndAuthGuards / requiredNavigationCases DGS-004, DGS-005"
+      }
+    },
+    {
+      "id": "phone-summary",
+      "kind": "text",
+      "path": "assets/0014-phone-summary.txt",
+      "label": "手机接入 UI 与协议摘要",
+      "origin": {
+        "surface": "原始记录摘要；本次整理未重新执行产品验收",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/verification.json targetedDomainVerification.mobileUI / mobileProtocol"
+      }
+    },
+    {
+      "id": "coverage-summary",
+      "kind": "text",
+      "path": "assets/0015-coverage-summary.txt",
+      "label": "全部 18 分区的保留与验证范围",
+      "origin": {
+        "surface": "原始记录摘要；本次整理未重新执行产品验收",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/verification.json README.md 逐分区保留结果"
+      }
+    },
+    {
+      "id": "result-summary",
+      "kind": "text",
+      "path": "assets/0016-result-summary.txt",
+      "label": "通过项、缺口与环境边界",
+      "origin": {
+        "surface": "原始记录摘要；本次整理未重新执行产品验收",
+        "capturedAt": null,
+        "sourceRef": "docs/review/desktop-global-settings/verification.json requiredNavigationCases / checks / notExecuted / cleanup / appearanceFollowupLayout"
+      }
+    }
+  ],
+  "pages": [
+    {
+      "id": "full-screen",
+      "type": "single",
+      "title": "设置页已占满应用内容区",
+      "description": "最终候选构建显示左侧分类、左上返回工作区和右侧独立内容。10 页在两种尺寸下均检查全窗覆盖，侧栏没有搜索框。原生标题栏保留。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "full-window",
+          "label": "最终原生窗口 · Beta 0.241.0",
+          "alt": "最终原生窗口 · Beta 0.241.0"
+        }
+      ],
+      "sourceIds": ["verification"],
+      "lookAt": "左上返回、左侧 10 个分类，以及内容区边缘。"
+    },
+    {
+      "id": "workspace-icons",
+      "type": "single",
+      "title": "返回工作区后仍保留原布局与图标",
+      "description": "返回后仍是项目、终端和右侧工具区。记录核对了 6 个 24×24 快捷图标及原交互；同一终端 DOM、会话和未发送输入保留，后台输出持续。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "workspace",
+          "label": "原生工作区 · Beta 0.240.0",
+          "alt": "原生工作区 · Beta 0.240.0"
+        }
+      ],
+      "sourceIds": ["verification"],
+      "lookAt": "顶部快捷图标、左侧 Worktree、中央终端和右侧 Browser。"
+    },
+    {
+      "id": "native-browser",
+      "type": "sequence",
+      "title": "设置页的点击不会穿透到原生 Browser",
+      "description": "同一自有测试网页在设置页覆盖时，原生点击计数为 0；返回工作区后点击计数为 1。Profile、Tab、URL 与偏好核对保持一致。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "browser-hidden",
+          "label": "设置中：原生点击计数 0",
+          "alt": "设置中：原生点击计数 0"
+        },
+        {
+          "assetId": "workspace",
+          "label": "返回后：原生点击计数 1",
+          "alt": "返回后：原生点击计数 1"
+        }
+      ],
+      "sourceIds": ["browser-record"],
+      "limitations": ["两张是同一验收流程的离散状态截图，不是连续视频。"]
+    },
+    {
+      "id": "themes",
+      "type": "compare",
+      "title": "浅色与跟随系统主题都已有真实界面",
+      "description": "两图来自本次实现过程中的不同自有 Beta Session：分别显示跟随系统的深色状态与临时切换的浅色状态。主题、显隐和排序修改后已恢复原偏好。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "dark",
+          "label": "跟随系统 · dvs-46bbe7",
+          "alt": "跟随系统 · dvs-46bbe7"
+        },
+        {
+          "assetId": "light",
+          "label": "浅色 · dvs-79dc43",
+          "alt": "浅色 · dvs-79dc43"
+        }
+      ],
+      "sourceIds": ["verification"],
+      "limitations": ["这是不同主题状态的展示，不是同一版本的修复前后对照。"]
+    },
+    {
+      "id": "ssh-conflict",
+      "type": "single",
+      "title": "SSH 表单冲突时保留当前输入",
+      "description": "自有测试主机已实际保存端口、访问路径和 Backend 入口。并发修改后显示版本冲突，输入继续保留；隐藏的 Browser 配置对象核对未被覆盖。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "ssh",
+          "label": "版本冲突与保留的表单",
+          "alt": "版本冲突与保留的表单"
+        }
+      ],
+      "sourceIds": ["verification"],
+      "lookAt": "红色冲突提示，以及仍可见的端口 57119、路径 /chat/。",
+      "limitations": [
+        "实际 SSH 连接、转发、中转和 RemoteDesk 链路尚未执行；测试主机已清理。"
+      ]
+    },
+    {
+      "id": "default-models",
+      "type": "single",
+      "title": "四角色默认模型沿用原目录与保存合同",
+      "description": "四角色整组保存并读回，取消未产生写入；保存时全部控件和离开导航受保护。图中搜索是原模型目录筛选，属于该功能内部。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "models",
+          "label": "四角色配置与模型目录",
+          "alt": "四角色配置与模型目录"
+        }
+      ],
+      "sourceIds": ["verification"],
+      "lookAt": "左侧四角色和右侧模型、推理档位、参数。",
+      "limitations": ["未启动付费 Agent Run；没有增加全局设置搜索。"]
+    },
+    {
+      "id": "configuration-guards",
+      "type": "text",
+      "title": "配置保存、目标隔离与草稿保护有记录",
+      "description": "服务配置元数据、实际写入和消费者采用状态已有记录。切换所选电脑不会切换原工作区；迟到响应、未保存草稿、提交中和认证失效分别做了核对。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "configuration-summary",
+          "label": "实际记录摘要"
+        }
+      ],
+      "sourceIds": ["verification"]
+    },
+    {
+      "id": "phone-access",
+      "type": "text",
+      "title": "手机接入已核对 UI 与协议，真机仍待验证",
+      "description": "本轮分别执行桌面二维码创建、测试设备请求、拒绝与离开取消，以及 Backend 批准、并发、完成、取消和自然过期。没有将 HTTP 测试写成手机扫码成功。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "phone-summary",
+          "label": "桌面 UI / Backend 协议的证据范围"
+        }
+      ],
+      "sourceIds": ["phone-record", "verification"],
+      "limitations": ["缺少实际 iPhone 扫码及手机 UI 登录证据。"]
+    },
+    {
+      "id": "diagnostic-logs",
+      "type": "single",
+      "title": "日志开始与结束已产生真实结果",
+      "description": "实际开始、结束日志记录后，界面显示已结束、服务端路径、正文与下载控件。记录属于自有 Backend；没有向第三方上传日志。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "logs",
+          "label": "记录结束后的日志页",
+          "alt": "记录结束后的日志页"
+        }
+      ],
+      "sourceIds": ["verification"],
+      "lookAt": "“已结束”、日志路径、正文和下载控件。"
+    },
+    {
+      "id": "function-coverage",
+      "type": "text",
+      "title": "全部 18 个分区都有功能去向与覆盖说明",
+      "description": "清单逐项列出真实 owner、复用内容和本轮执行范围。保留原组件不等于全部状态已通过；未执行的真实账户、外部链路和处置动作分别注明。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "coverage-summary",
+          "label": "10 页 / 18 分区逐项核对"
+        }
+      ],
+      "sourceIds": ["coverage-source"]
+    },
+    {
+      "id": "acceptance-boundary",
+      "type": "text",
+      "title": "七项导航已通过，完整领域矩阵仍有缺口",
+      "description": "这页汇总已执行的导航检查、代码检查与未执行项，方便判断交付边界。新增导航全部通过；完整外部领域验收尚未完成，报告不会自动判定整体通过。",
+      "evidenceState": "insufficient",
+      "items": [
+        {
+          "assetId": "result-summary",
+          "label": "结果与边界摘要"
+        }
+      ],
+      "sourceIds": ["verification"],
+      "limitations": ["整体功能的完整真实环境验收尚未完成。"]
+    }
+  ]
+}

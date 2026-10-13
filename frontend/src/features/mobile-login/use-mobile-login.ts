@@ -9,7 +9,7 @@ const terminalStates = ["completed", "cancelled", "rejected", "expired", "unconf
 const message = (error: unknown) => error instanceof MobileLoginHttpError ? error.message : "连接暂时失败，请重试。";
 interface Attempt { qr: MobileLoginQrV1; generation: number }
 
-export function useMobileLogin(connection: ConnectionConfig, token: string) {
+export function useMobileLogin(connection: ConnectionConfig, token: string, onUnauthorized?: () => void) {
   const [opened, setOpened] = useState(false);
   const [connectionName, setConnectionName] = useState(connection.name);
   const openedConnection = useRef(connection);
@@ -26,6 +26,9 @@ export function useMobileLogin(connection: ConnectionConfig, token: string) {
   tokenRef.current = token;
   const createQueue = useRef(Promise.resolve());
   const deciding = useRef(false);
+  const unauthorized = useMemoizedFn((failure: unknown) => {
+    if (failure instanceof MobileLoginHttpError && failure.status === 401) onUnauthorized?.();
+  });
   const cancel = useMemoizedFn((value: Attempt | null) => {
     if (value) void cancelMobileLogin(connection.url, tokenRef.current, value.qr.requestId).catch(() => undefined);
   });
@@ -50,7 +53,7 @@ export function useMobileLogin(connection: ConnectionConfig, token: string) {
         if (epoch !== generation.current) { cancel(next); return; }
         attempt.current = next;
         setQr(value); setStatus({ requestId: value.requestId, state: "waiting_scan", expiresAt: value.expiresAt });
-      } catch (failure) { if (epoch === generation.current) setError(message(failure)); }
+      } catch (failure) { if (epoch === generation.current) { setError(message(failure)); unauthorized(failure); } }
       finally { if (epoch === generation.current) setBusy(false); }
     });
   });
@@ -78,6 +81,7 @@ export function useMobileLogin(connection: ConnectionConfig, token: string) {
       if (current.generation === generation.current) setStatus(value);
     } catch (failure) {
       if (current.generation === generation.current) {
+        unauthorized(failure);
         setError(`${message(failure)} 正在核对电脑端状态。`);
         // Polling resolves an uncertain decision; never silently create a replacement request.
       }
@@ -107,6 +111,7 @@ export function useMobileLogin(connection: ConnectionConfig, token: string) {
       } catch (failure) {
         if (!stopped && epoch === generation.current) {
           setError(message(failure));
+          unauthorized(failure);
           if (failure instanceof MobileLoginHttpError) {
             delay = Math.max(1000, failure.retryAfter * 1000);
             done = [401, 404, 410].includes(failure.status);
@@ -122,7 +127,7 @@ export function useMobileLogin(connection: ConnectionConfig, token: string) {
     document.addEventListener("visibilitychange", visibility);
     void poll();
     return () => { stopped = true; clearTimeout(timer); clearInterval(tick); document.removeEventListener("visibilitychange", visibility); };
-  }, [opened, qr, connection.url]);
+  }, [opened, qr, connection.url, unauthorized]);
 
   useEffect(() => {
     const leaving = () => { generation.current += 1; cancel(attempt.current); attempt.current = null; };

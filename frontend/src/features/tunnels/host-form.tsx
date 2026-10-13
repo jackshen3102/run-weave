@@ -1,3 +1,4 @@
+import { useSettingsDraft } from "../settings/edit-session";
 import { RemoteDesktopForm } from "./remote-desktop";
 import type { RunweaveElectronBridge } from "@runweave/shared/desktop-bridge";
 import { useState } from "react";
@@ -15,7 +16,9 @@ export function HostForm({
   snapshot,
   onCancel,
   onSaved,
+  embedded = false,
 }: {
+  embedded?: boolean;
   host: TunnelHostConfig;
   snapshot: TunnelSnapshot;
   onCancel: () => void;
@@ -30,9 +33,11 @@ export function HostForm({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [remoteDesktopReady, setRemoteDesktopReady] = useState(false);
+  useSettingsDraft(embedded && (JSON.stringify(draft) !== JSON.stringify(host) || JSON.stringify(endpoints) !== JSON.stringify(originalEndpoints)), embedded && saving);
   const patch = (value: Partial<TunnelHostConfig>) =>
     setDraft({ ...draft, ...value });
   const save = useMemoizedFn(async () => {
+    if (saving) return;
     setError(null);
     setSaving(true);
     try {
@@ -82,6 +87,7 @@ export function HostForm({
         void save();
       }}
     >
+      <fieldset disabled={saving} className="space-y-3">
       <h3 className="font-medium">
         {snapshot.config.hosts.some((h) => h.id === host.id)
           ? "编辑主机"
@@ -225,6 +231,7 @@ export function HostForm({
       >
         添加端口
       </Button>
+      {!embedded && <>
       <label className="flex items-center gap-2 border-t border-border pt-3">
         <input
           type="checkbox"
@@ -295,6 +302,7 @@ export function HostForm({
           </label>
         </>
       )}
+      </>}
       <details>
         <summary className="cursor-pointer text-muted-foreground">
           高级 · Backend 访问入口
@@ -370,6 +378,7 @@ export function HostForm({
           {saving ? "保存中…" : "保存配置"}
         </Button>
       </div>
+      </fieldset>
     </form>
   );
 }

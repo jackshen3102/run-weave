@@ -3,7 +3,7 @@ import { useMemoizedFn } from "ahooks";
 import type { ConfigurationStatus } from "@runweave/shared/configuration";
 import { Button } from "../../components/ui/button";
 
-export function DesktopConfigurationStatus() {
+export function DesktopConfigurationStatus({ embedded = false }: { embedded?: boolean }) {
   const [status, setStatus] = useState<ConfigurationStatus | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -17,8 +17,9 @@ export function DesktopConfigurationStatus() {
     } catch { if (mounted.current) setFailure("无法读取本台桌面的配置状态。"); }
     finally { if (mounted.current) setBusy(false); }
   });
+  useEffect(() => { if (embedded) void load(); }, [embedded, load]);
   if (!window.electronAPI?.getLocalConfigurationStatus) return null;
-  return <details className="rounded-xl border border-border p-4">
+  return <details open={embedded ? true : undefined} className="rounded-xl border border-border p-4">
     <summary className="cursor-pointer font-medium">本台桌面的配置状态</summary>
     <div className="mt-3 space-y-2 text-xs">
       <p>浏览器、远程访问和伴随窗口由本台桌面管理。</p>

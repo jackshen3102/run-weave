@@ -1,8 +1,10 @@
+import { createEmptyRoleMap, createEmptyRole, isValidRole, formatRoleSummary } from "./model-config";
+import { HttpError } from "../../../services/http";
+import { useSettingsDraft } from "../../../features/settings/edit-session";
 import type {
   AgentTeamCatalogModel,
   AgentTeamModelProvider,
   AgentTeamModelSettingsResponse,
-  AgentTeamProviderCatalog,
   AgentTeamRole,
   AgentTeamRoleModelConfig,
   AgentTeamRoleModelConfigMap,
@@ -62,6 +64,8 @@ interface TerminalAgentTeamModelConfigDialogProps {
   token: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  embedded?: boolean;
+  onAuthExpired?: () => void;
 }
 
 export function TerminalAgentTeamModelConfigDialog({
@@ -69,6 +73,8 @@ export function TerminalAgentTeamModelConfigDialog({
   token,
   open,
   onOpenChange,
+  embedded = false,
+  onAuthExpired,
 }: TerminalAgentTeamModelConfigDialogProps) {
   const [settings, setSettings] =
     useState<AgentTeamModelSettingsResponse | null>(null);
@@ -87,6 +93,7 @@ export function TerminalAgentTeamModelConfigDialog({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     if (!open) {
@@ -111,6 +118,7 @@ export function TerminalAgentTeamModelConfigDialog({
       })
       .catch((caught) => {
         if (!cancelled) {
+          if (caught instanceof HttpError && caught.status === 401) onAuthExpired?.();
           setError(caught instanceof Error ? caught.message : String(caught));
         }
       })
@@ -120,8 +128,9 @@ export function TerminalAgentTeamModelConfigDialog({
     return () => {
       cancelled = true;
     };
-  }, [apiBase, open, token]);
+  }, [apiBase, open, token, reload, onAuthExpired]);
 
+  useSettingsDraft(embedded && !!draftRoles && JSON.stringify(draftRoles) !== JSON.stringify(settings ? settings.config?.roles ?? createEmptyRoleMap(settings.catalogs) : null), embedded && saving);
   const role = draftRoles?.[selectedRole] ?? null;
   const catalog = role ? (settings?.catalogs[role.provider] ?? null) : null;
   const selectedModel =
@@ -216,6 +225,7 @@ export function TerminalAgentTeamModelConfigDialog({
   });
 
   const close = useMemoizedFn((): void => {
+    if (embedded && settings) { setDraftRoles(settings.config ? structuredClone(settings.config.roles) : createEmptyRoleMap(settings.catalogs)); return; }
     onOpenChange(false);
   });
 
@@ -229,8 +239,9 @@ export function TerminalAgentTeamModelConfigDialog({
       });
       setSettings(response);
       setDraftRoles(structuredClone(response.config?.roles ?? draftRoles));
-      onOpenChange(false);
+      if (!embedded) onOpenChange(false);
     } catch (caught) {
+      if (caught instanceof HttpError && caught.status === 401) onAuthExpired?.();
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setSaving(false);
@@ -241,21 +252,24 @@ export function TerminalAgentTeamModelConfigDialog({
     onOpenChange(nextOpen);
   });
 
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex h-[min(760px,88vh)] max-w-5xl flex-col gap-0 overflow-hidden border-slate-700 bg-slate-950 p-0 text-slate-100">
+  const Surface = embedded ? "section" : DialogContent;
+  const Title = embedded ? "h2" : DialogTitle;
+  const Description = embedded ? "p" : DialogDescription;
+  const content = (
+      <Surface className={embedded ? "settings-models flex min-h-[600px] flex-col rounded-xl border bg-background" : "flex h-[min(760px,88vh)] max-w-5xl flex-col gap-0 overflow-hidden border-slate-700 bg-slate-950 p-0 text-slate-100"}>
         <DialogHeader className="border-b border-slate-800 px-6 py-5">
           <div className="flex items-center gap-3">
-            <DialogTitle>Agent Team 模型配置</DialogTitle>
+            <Title>Agent Team 模型配置</Title>
             <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-300">
               全局
             </span>
           </div>
-          <DialogDescription className="sr-only">
+          <Description className="sr-only">
             配置 Agent Team 四个角色的 CLI、模型和能力参数。
-          </DialogDescription>
+          </Description>
         </DialogHeader>
 
+        <fieldset disabled={saving} className="contents">
         {loading ? (
           <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -304,8 +318,7 @@ export function TerminalAgentTeamModelConfigDialog({
                 })}
               </div>
               <p className="mt-5 text-xs leading-5 text-slate-500">
-                每个角色独立保存
-                CLI、模型和能力参数。模型列表来自当前连接上已安装的 CLI。
+                每个角色分别配置 CLI、模型和能力参数，保存时整组提交。模型列表来自当前连接上已安装的 CLI。
               </p>
             </aside>
 
@@ -487,6 +500,7 @@ export function TerminalAgentTeamModelConfigDialog({
             {error}
           </div>
         ) : null}
+        <Button variant="ghost" disabled={loading || saving} onClick={() => { if (!draftRoles || JSON.stringify(draftRoles) === JSON.stringify(settings?.config?.roles) || window.confirm("放弃当前修改并重新读取模型目录？")) setReload(value => value + 1); }}>重新读取模型目录</Button>
         <DialogFooter className="border-t border-slate-800 px-6 py-4">
           <Button
             type="button"
@@ -506,9 +520,10 @@ export function TerminalAgentTeamModelConfigDialog({
             {saving ? "保存中…" : "保存全局配置"}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </fieldset>
+      </Surface>
   );
+  return embedded ? content : <Dialog open={open} onOpenChange={handleOpenChange}>{content}</Dialog>;
 }
 
 function Field({
@@ -529,67 +544,4 @@ function Field({
       {children}
     </div>
   );
-}
-
-function createEmptyRoleMap(
-  catalogs: Record<AgentTeamModelProvider, AgentTeamProviderCatalog>,
-): AgentTeamRoleModelConfigMap {
-  const provider: AgentTeamModelProvider =
-    catalogs.codex.availability === "available"
-      ? "codex"
-      : catalogs.traex.availability === "available"
-        ? "traex"
-        : "codex";
-  return Object.fromEntries(
-    ROLES.map((role) => [role, createEmptyRole(provider)]),
-  ) as AgentTeamRoleModelConfigMap;
-}
-
-function createEmptyRole(
-  provider: AgentTeamModelProvider,
-): AgentTeamRoleModelConfig {
-  return provider === "codex"
-    ? {
-        provider,
-        model: "",
-        reasoningEffort: null,
-        fast: false,
-      }
-    : {
-        provider,
-        model: "",
-        reasoningEffort: null,
-        max: false,
-      };
-}
-
-function isValidRole(
-  role: AgentTeamRoleModelConfig,
-  catalog: AgentTeamProviderCatalog,
-): boolean {
-  if (catalog.availability !== "available") return false;
-  const model = catalog.models.find((candidate) => candidate.id === role.model);
-  if (!model) return false;
-  if (
-    role.reasoningEffort !== null &&
-    !model.reasoningEfforts.includes(role.reasoningEffort)
-  ) {
-    return false;
-  }
-  return role.provider === "codex"
-    ? !role.fast || model.supportsFast
-    : !role.max || model.supportsMax;
-}
-
-function formatRoleSummary(
-  role: AgentTeamRoleModelConfig,
-  catalog: AgentTeamProviderCatalog,
-  model: AgentTeamCatalogModel | undefined,
-): string {
-  const provider = role.provider === "codex" ? "Codex" : "TraeX";
-  if (catalog.availability !== "available") return `${provider} · 当前不可用`;
-  if (!model) return `${provider} · 请选择模型`;
-  return [provider, model.label, role.reasoningEffort]
-    .filter(Boolean)
-    .join(" · ");
 }
