@@ -10586,5 +10586,41 @@
     "count": 4,
     "category": "test",
     "reason": "仅读取本次临时 fixture 的 worker 启动记录，用于验证退避和关闭竞争，不访问产品配置。"
+  },
+  {
+    "file": "app-server/src/agents/supervision-reader.ts",
+    "kind": "file-io",
+    "expression": "readFile(metaPath)",
+    "count": 1,
+    "line": 130,
+    "category": "runtime-state",
+    "reason": "读取当前 App Server profile 的可重建语义缓存索引，属于运行状态，不作为业务配置来源。"
+  },
+  {
+    "file": "app-server/src/agents/supervision-reader.ts",
+    "kind": "file-io",
+    "expression": "writeFile(`${metaPath}.tmp`)",
+    "count": 1,
+    "line": 335,
+    "category": "runtime-state",
+    "reason": "原子发布当前 App Server profile 的语义缓存索引，属于可重建运行状态，不写入业务配置。"
+  },
+  {
+    "file": "backend/src/task-supervision/store.ts",
+    "kind": "file-io",
+    "expression": "readFile(backup)",
+    "count": 1,
+    "line": 105,
+    "category": "migration",
+    "reason": "迁移时校验已有原始监听档案备份与来源一致，属于一次性存储迁移，不读取业务配置。"
+  },
+  {
+    "file": "backend/src/task-supervision/store.ts",
+    "kind": "file-io",
+    "expression": "writeFile(backup)",
+    "count": 1,
+    "line": 101,
+    "category": "migration",
+    "reason": "首次 SQLite 迁移前保留带哈希的原始监听档案备份，属于一次性存储迁移，不写入业务配置。"
   }
 ]
