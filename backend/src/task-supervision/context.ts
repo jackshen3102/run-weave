@@ -4,12 +4,14 @@ import path from "node:path";
 import type {
   ConversationContent,
   ConversationMessage,
+  SupervisionConversationResponse,
 } from "@runweave/shared/terminal/conversation";
 import type {
   SupervisionInput,
   SupervisionPlan,
   TaskWatch,
 } from "@runweave/shared/task-supervision";
+import { supervisionGoalPreview } from "@runweave/shared/task-supervision";
 
 // Conservative bound for the default Codex model. Required material is never truncated.
 export const INPUT_BUDGET_BYTES = 180_000;
@@ -17,6 +19,40 @@ export const digest = (text: string) =>
   createHash("sha256").update(text).digest("hex");
 export const isSupervisionPrompt = (text: string) =>
   text.includes("[runweave-task-supervision:");
+export async function readWatchContext(
+  watch: TaskWatch,
+  threadId: string,
+  read: (
+    threadId: string,
+    ids: string[],
+  ) => Promise<SupervisionConversationResponse>,
+) {
+  const current = watch.target.threadId === threadId;
+  const ids = current
+    ? [
+        ...new Set([
+          watch.taskStartMessageId,
+          ...(watch.evidenceMessageIds ?? []),
+          ...(watch.completedReplyIds ?? []),
+        ]),
+      ].filter((id) => !id.startsWith("pending:"))
+    : [];
+  if (ids.length > 63)
+    throw new Error(
+      "当前会话必要证据引用超过预算；本次未自动继续，监听保持开启。",
+    );
+  const source = await read(threadId, ids);
+  if (
+    current &&
+    watch.sourceVersion &&
+    source.sourceVersion &&
+    watch.sourceVersion !== source.sourceVersion
+  )
+    throw new Error(
+      "CONTEXT_SOURCE_CHANGED: 原始会话已替换，旧来源不可复用；请在新会话继续任务。",
+    );
+  return source;
+}
 export function messagesFrom(
   content: ConversationContent,
 ): ConversationMessage[] {
@@ -104,7 +140,7 @@ export async function readPlans(
           }
         }
         const snapshot = snapshots.find((plan) => plan.path === planPath);
-        if (snapshot && snapshot.availability !== "missing")
+        if (snapshot?.text && snapshot.availability !== "missing")
           return { ...snapshot, availability: "snapshot" };
         return {
           path: planPath,
@@ -125,11 +161,7 @@ export async function refreshReferencedPlans(
     (m) => m.id === watch.taskStartMessageId && m.role === "user",
   );
   if (start < 0) throw new Error("找不到原始任务起点，请重新核对任务来源。");
-  watch.plans = await readPlans(
-    root,
-    referencedPlans(messages.slice(start)),
-    watch.plans,
-  );
+  watch.plans = await readPlans(root, referencedPlans(messages), watch.plans);
 }
 export function buildSupervisionInput(
   watch: TaskWatch,
@@ -141,35 +173,30 @@ export function buildSupervisionInput(
     (m) => m.id === watch.taskStartMessageId && m.role === "user",
   );
   if (start < 0) throw new Error("找不到原始任务起点，请重新核对任务来源。");
-  const following = messages.slice(start + 1);
-  const updates = following.filter(
+  const task = messages[start]!;
+  const updates = messages.filter(
     (m) =>
+      m.id !== task.id &&
       m.role === "user" &&
       !isSupervisionPrompt(m.text) &&
       !m.text.startsWith("<hook_prompt"),
   );
-  let recent = following
-    .filter(
-      (m) => m.id !== reply.id && !isSupervisionPrompt(m.text) &&
-        !m.text.startsWith("<hook_prompt") && (m.role === "user" || m.phase === "final"),
-    )
-    .slice(-4);
+  const recent = messages.filter(
+    (m) =>
+      m.id !== reply.id && m.role === "assistant" && m.phase !== "commentary",
+  );
   const input: SupervisionInput = {
-    task: watch.task,
-    goal: watch.goal,
+    task,
+    goal: watch.goalOverride ?? supervisionGoalPreview(task.text),
     plan: watch.plans,
     userUpdates: updates,
     recentExchanges: recent,
     currentReply: reply,
   };
   const size = () => Buffer.byteLength(JSON.stringify(input));
-  while (size() > INPUT_BUDGET_BYTES && recent.length) {
-    recent = recent.slice(1);
-    input.recentExchanges = recent;
-  }
   if (size() > INPUT_BUDGET_BYTES)
     throw new Error(
-      "上下文超出输入预算；原目标、计划和完整回答已保留，等待你补充范围。",
+      "必要上下文超过 180000 字节硬上限；本次未自动继续，监听保持开启。",
     );
   return input;
 }

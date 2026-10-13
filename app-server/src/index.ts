@@ -1,3 +1,5 @@
+import path from "node:path";
+import { SupervisionConversationReader } from "./agents/supervision-reader.js";
 import { ConversationReader } from "./agents/conversation-reader.js";
 import { CodexConversationReader } from "./codex/conversation-reader.js";
 import { configuration, acquireConfigurationOwner } from "@runweave/config-node";
@@ -86,7 +88,7 @@ async function main(): Promise<void> {
   const codexAppServerClient = new CodexAppServerClient();
   const codexRolloutLifecycleReader = new CodexRolloutLifecycleReader();
   const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader);
-  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader);
+  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")));
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,

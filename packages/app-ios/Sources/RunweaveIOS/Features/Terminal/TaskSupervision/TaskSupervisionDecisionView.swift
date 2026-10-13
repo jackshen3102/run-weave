@@ -1,17 +1,12 @@
 import Clarity
 import SwiftUI
 
-struct TaskSupervisionGoalView: View {
-  let goal: String
-  var body: some View {
-    ScrollView { sourceText(goal).padding(20) }
-      .background(TerminalAppearance.panel.ignoresSafeArea())
-      .navigationTitle("原始任务").navigationBarTitleDisplayMode(.inline).clarityMask()
-  }
-}
-
 struct TaskSupervisionDecisionView: View {
   let decision: SupervisionDecision
+  let watchID: String
+  @ObservedObject var model: TaskSupervisionModel
+  @State private var detail: SupervisionDecision?
+  @State private var failure: String?
 
   var body: some View {
     ScrollView {
@@ -29,17 +24,22 @@ struct TaskSupervisionDecisionView: View {
           Text("评分表示选项的相对倾向，不代表正确率。").font(.caption2).foregroundColor(.secondary)
         }
         section("判断理由") { Text(decision.reason).font(.subheadline).textSelection(.enabled) }
-        section("完整最终回复") { sourceText(decision.input.currentReply.text) }
+        if let input = detail?.input {
+          section("完整最终回复") { sourceText(input.currentReply.text) }
+          section("本次输入与来源") {
+            NavigationLink("查看任务、范围修改与计划") { TaskSupervisionSourceView(input: input) }
+              .font(.subheadline).accessibilityIdentifier("task-supervision-source-open")
+          }
+        } else if let failure {
+          Text(failure).foregroundColor(.orange)
+          Button("重试读取") { Task { await loadDetail() } }
+        } else { ProgressView("正在读取判断依据…") }
         section("续接状态") {
           Text(decision.deliveryLabel).font(.subheadline)
           if ["offered", "unknown"].contains(decision.delivery) {
             Text("已保留额度，不会重复发送。原会话确认接收后状态将更新。")
               .font(.caption).foregroundColor(.orange)
           }
-        }
-        section("本次输入与来源") {
-          NavigationLink("查看任务、范围修改与计划") { TaskSupervisionSourceView(input: decision.input) }
-            .font(.subheadline).accessibilityIdentifier("task-supervision-source-open")
         }
         DisclosureGroup("监听身份与判定信息") {
           VStack(alignment: .leading, spacing: 10) {
@@ -59,6 +59,13 @@ struct TaskSupervisionDecisionView: View {
       }.padding(20)
     }.background(TerminalAppearance.panel.ignoresSafeArea())
       .navigationTitle("判断依据").navigationBarTitleDisplayMode(.inline).clarityMask()
+      .task(id: decision.decisionId) { await loadDetail() }
+  }
+
+  private func loadDetail() async {
+    failure = nil
+    do { detail = try await model.detail(watchID: watchID, decisionID: decision.decisionId) }
+    catch { if !Task.isCancelled { failure = error.localizedDescription } }
   }
 
   private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -120,12 +127,18 @@ struct TaskSupervisionSourceView: View {
 
 struct TaskSupervisionActivityView: View {
   let watch: TaskWatch
+  @ObservedObject var model: TaskSupervisionModel
+  @State private var records: [SupervisionDecision] = []
+  @State private var cursor: String?
+  @State private var loaded = false
+  @State private var loading = false
+  @State private var failure: String?
 
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 20) {
-        ForEach(watch.decisions.reversed()) { decision in
-          NavigationLink { TaskSupervisionDecisionView(decision: decision) } label: {
+        ForEach(records) { decision in
+          NavigationLink { TaskSupervisionDecisionView(decision: decision, watchID: watch.watchId, model: model) } label: {
             VStack(alignment: .leading, spacing: 7) {
               HStack {
                 Text(decision.outcome.label).font(.subheadline.weight(.medium))
@@ -133,14 +146,22 @@ struct TaskSupervisionActivityView: View {
                 Image(systemName: "chevron.right").font(.caption)
               }
               Text(decision.deliveryLabel).font(.caption).foregroundColor(.secondary)
-              Text(supervisionGoalPreview(decision.input.goal)).font(.caption).foregroundColor(.secondary).lineLimit(2)
+              Text(decision.goalPreview).font(.caption).foregroundColor(.secondary).lineLimit(2)
               Text(decision.contextRevision == watch.contextRevision && decision.threadId == watch.target.threadId ? "当前轮" : "历史轮次")
                 .font(.caption2).foregroundColor(.secondary)
               Text(decision.createdAt).font(.caption2).foregroundColor(.secondary)
+              if let thread = decision.threadId {
+                Text("thread \(thread)").font(.caption2).foregroundColor(.secondary).textSelection(.enabled)
+              }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(14)
               .background(Color.secondary.opacity(0.06)).cornerRadius(10)
           }.buttonStyle(.plain)
         }
+        if let failure { Text(failure).font(.caption).foregroundColor(.orange) }
+        if !loaded || cursor != nil {
+          Button(loading ? "正在读取…" : failure != nil ? "重试" : "加载更多") { Task { await loadPage() } }.disabled(loading)
+        }
+        if loaded && records.isEmpty { Text("暂无历史判断").foregroundColor(.secondary) }
         Text("终端开关：\(watch.enabled ? "已开启" : "已关闭")").font(.subheadline)
         Text("开启于 \(watch.enabledAt)\n更新于 \(watch.updatedAt)").font(.caption).foregroundColor(.secondary)
         DisclosureGroup("监听身份") {
@@ -149,6 +170,16 @@ struct TaskSupervisionActivityView: View {
       }.padding(20)
     }.background(TerminalAppearance.panel.ignoresSafeArea())
       .navigationTitle("监控活动").navigationBarTitleDisplayMode(.inline).clarityMask()
+      .task { if !loaded { await loadPage() } }
+  }
+  private func loadPage() async {
+    guard !loading, !loaded || cursor != nil else { return }
+    loading = true; failure = nil
+    defer { loading = false }
+    do {
+      let page = try await model.history(watchID: watch.watchId, cursor: cursor)
+      records.append(contentsOf: page.decisions); cursor = page.nextCursor; loaded = true
+    } catch { if !Task.isCancelled { failure = error.localizedDescription } }
   }
 }
 

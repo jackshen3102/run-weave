@@ -104,6 +104,25 @@ final class TaskSupervisionModel: ObservableObject {
     }
   }
 
+  func history(watchID: String, cursor: String?) async throws -> SupervisionDecisionPage {
+    guard canRead, let session, watch?.watchId == watchID else { throw APIError.invalidResponse }
+    let result = try await session.withConnection(reportFailure: false) {
+      try await TaskSupervisionService(api: $0).decisions(watchID: watchID, cursor: cursor)
+    }
+    guard current, !Task.isCancelled, watch?.watchId == watchID else { throw CancellationError() }
+    return result
+  }
+
+  func detail(watchID: String, decisionID: String) async throws -> SupervisionDecision {
+    guard canRead, let session, watch?.watchId == watchID else { throw APIError.invalidResponse }
+    let result = try await session.withConnection(reportFailure: false) {
+      try await TaskSupervisionService(api: $0).decision(watchID: watchID, decisionID: decisionID)
+    }
+    guard current, !Task.isCancelled, watch?.watchId == watchID else { throw CancellationError() }
+    guard result.decisionId == decisionID, result.input != nil else { throw APIError.invalidResponse }
+    return result
+  }
+
   func suspend() {
     sequence += 1; operation?.cancel(); operation = nil
     loading = false; writing = false

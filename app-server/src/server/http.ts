@@ -169,7 +169,7 @@ export function createHttpApp(options: {
         "provider-thread-lifecycle-v1",
         "thread-detail-v1",
         "thread-preview-v1",
-        ...(options.conversations ? ["thread-conversation-v1"] : []),
+        ...(options.conversations ? ["thread-conversation-v1", "thread-supervision-context-v1"] : []),
       ],
     });
   });
@@ -275,6 +275,24 @@ export function createHttpApp(options: {
       res.json(response);
     } catch (error) {
       next(error);
+    }
+  });
+
+  app.get("/threads/:threadId/supervision-context", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const ids = req.query.messageId == null ? [] : Array.isArray(req.query.messageId) ? req.query.messageId : [req.query.messageId];
+    if (Object.keys(req.query).some((key) => key !== "messageId") || ids.length > 64 || ids.some((id) => typeof id !== "string" || id.length > 200)) {
+      res.status(400).json({ code: "INVALID_REQUEST", message: "无效监控来源引用" }); return;
+    }
+    try {
+      if (!options.conversations) throw new Error("reader unavailable");
+      const thread = options.eventCenter.getStateStore().getThread(req.params.threadId);
+      res.json(await options.conversations.readSupervision(thread ?? { agent: "codex", threadId: req.params.threadId }, ids as string[]));
+    } catch (error) {
+      res.status(error instanceof ConversationReadError ? error.status : 503).json({
+        code: error instanceof ConversationReadError ? error.code : "CONTEXT_UNAVAILABLE",
+        message: error instanceof ConversationReadError ? error.message : "监控上下文暂不可读",
+      });
     }
   });
 

@@ -1,5 +1,5 @@
 import { WebSocket } from "ws";
-import type { AppServerConversationResponse } from "@runweave/shared/terminal/conversation";
+import type { AppServerConversationResponse, SupervisionConversationResponse } from "@runweave/shared/terminal/conversation";
 import type { AppServerEventEnvelope, AppServerEventListResponse, AppServerEventStreamMessage, AppServerSyncStatusResponse, AppServerThreadDetailResponse, AppServerThreadListResponse, AppServerThreadResponse, CreateAppServerEventRequest } from "@runweave/shared/app-server-events";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 import type { RuntimeStatusReport } from "@runweave/shared/runtime-status";
@@ -14,6 +14,19 @@ export class AppServerClient {
     });
     if (!response.ok) throw new AppServerConversationError(response.status);
     return await response.json() as AppServerConversationResponse;
+  }
+
+  async getSupervisionContext(threadId: string, requiredIds: string[], signal?: AbortSignal): Promise<SupervisionConversationResponse> {
+    const url = new URL(`${this.connection.baseUrl}/threads/${encodeURIComponent(threadId)}/supervision-context`);
+    for (const id of requiredIds) url.searchParams.append("messageId", id);
+    const response = await fetch(url, { headers: this.headers(), signal, cache: "no-store" });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { code?: string; message?: string };
+      throw new AppServerConversationError(response.status, body.message, body.code);
+    }
+    const body = await response.json() as SupervisionConversationResponse;
+    if (body.indexing) throw new AppServerConversationError(503, `正在读取当前会话：${body.scannedBytes ?? 0}/${body.sourceBytes ?? 0} 字节`, "CONTEXT_INDEXING");
+    return body;
   }
 
   async getThreadPreviews(threadIds: string[], signal?: AbortSignal): Promise<AppServerThreadPreviewsResponse | null> {
@@ -210,5 +223,5 @@ export class AppServerClient {
 }
 
 export class AppServerConversationError extends Error {
-  constructor(readonly status: number) { super("App Server conversation unavailable"); }
+  constructor(readonly status: number, message = "App Server conversation unavailable", readonly code?: string) { super(message); }
 }

@@ -23,6 +23,7 @@ export interface CodexRolloutLifecycle {
   cursor: string;
   timestamp: string;
   turnId: string | null;
+  error?: { code: string; message: string };
 }
 
 export interface CodexRolloutLifecycleReaderLike {
@@ -144,6 +145,7 @@ function parseLatestLifecycle(value: string): CodexRolloutLifecycle | null {
       cursor: `rollout:${ordinal}`,
       timestamp,
       turnId: readString(payload.turn_id) ?? readString(payload.turnId),
+      ...(payload.error && typeof payload.error === "object" ? { error: { code: readString(readRecord(payload.error).codex_error_info) ?? "agent_error", message: readString(readRecord(payload.error).message) ?? "Agent 任务因错误结束" } } : {}),
     };
   }
   return latest;

@@ -1,6 +1,6 @@
 import type {
-  ConversationContent,
   ConversationMessage,
+  SupervisionConversationResponse,
 } from "@runweave/shared/terminal/conversation";
 import type { TaskWatch } from "@runweave/shared/task-supervision";
 import type { ReplyEvent } from "./events";
@@ -16,18 +16,20 @@ export function alreadyProcessedReply(
     watch.decisions.some(
       (decision) =>
         decision.threadId === threadId &&
-        decision.input.currentReply.id === reply.id &&
-        decision.input.currentReply.rawTurnId === (reply.rawTurnId ?? reply.id),
+        decision.currentReplyId === reply.id &&
+        decision.rawTurnId === (reply.rawTurnId ?? reply.id),
     )
   );
 }
 
 export async function readFinalReply(
-  read: () => Promise<ConversationContent>,
+  read: () => Promise<SupervisionConversationResponse>,
   event: ReplyEvent,
   signal: AbortSignal,
 ) {
   let source = await read();
+  const runtimeError = source.runtimeError;
+  if (runtimeError && (!event.turnId || event.turnId === runtimeError.turnId)) throw new Error(`${runtimeError.code}: ${runtimeError.message}`);
   let messages = messagesFrom(source);
   const locate = () =>
     [...messages]

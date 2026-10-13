@@ -30,6 +30,16 @@ struct TaskSupervisionService {
       retryUnauthorized: false, decodeError: Self.failure)
   }
 
+  func decisions(watchID: String, cursor: String?) async throws -> SupervisionDecisionPage {
+    var query = URLComponents()
+    if let cursor { query.queryItems = [URLQueryItem(name: "cursor", value: cursor)] }
+    return try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watchID))/decisions?\(query.percentEncodedQuery ?? "")", decodeError: Self.failure)
+  }
+
+  func decision(watchID: String, decisionID: String) async throws -> SupervisionDecision {
+    try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watchID))/decisions/\(APIClient.pathComponent(decisionID))", decodeError: Self.failure)
+  }
+
   private static func failure(_ status: Int, _ data: Data) -> Error? {
     // Preserve HTTP identity for authentication and revision-conflict handling.
     guard status != 401, status != 409, status != 404 else { return nil }

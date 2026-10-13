@@ -13,6 +13,7 @@ export interface ReplyEvent {
   summary: string | null;
   createdAt: string;
   turnId?: string | null;
+  error?: { code: string; message: string };
 }
 export function completionReply(
   event: TerminalEventEnvelope,
@@ -62,6 +63,7 @@ export function supervisionEvent(event: AppServerEventEnvelope) {
         kind: "reply" as const,
         summary: null,
         turnId: read("turnId"),
+        ...(read("errorCode") ? { error: { code: read("errorCode")!, message: read("errorMessage") ?? "Agent 任务因错误结束" } } : {}),
       };
     if (
       lifecycle === "rollout:turn_aborted" ||

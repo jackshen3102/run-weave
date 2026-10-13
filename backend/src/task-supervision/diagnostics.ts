@@ -68,7 +68,7 @@ export function logWatchChanges(before: TaskWatch[], after: TaskWatch[]) {
       if (!old)
         supervisionLogger.info("task-supervision.decision.recorded", {
           ...identity,
-          replyMessageId: decision.input.currentReply.id,
+          replyMessageId: decision.currentReplyId,
           replyDigest: decision.replyDigest,
           outcome: decision.outcome,
           scores: decision.scores,
@@ -79,10 +79,6 @@ export function logWatchChanges(before: TaskWatch[], after: TaskWatch[]) {
           authorizationSourceCount: decision.guidance?.authorizationMessageIds.length ?? 0,
           durationMs: decision.durationMs,
           sourceMessageIds: decision.sourceMessageIds,
-          inputBytes: Buffer.byteLength(JSON.stringify(decision.input)),
-          userUpdateCount: decision.input.userUpdates.length,
-          recentExchangeCount: decision.input.recentExchanges.length,
-          plans: decision.input.plan.map(({ digest, availability }) => ({ digest, availability: availability ?? null })),
           delivery: decision.delivery,
           deliveryReason: decision.outcome !== "continue"
             ? "outcome_does_not_request"

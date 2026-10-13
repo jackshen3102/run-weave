@@ -97,10 +97,6 @@ struct TaskSupervisionSheet: View {
       Text(watch.goal.isEmpty ? "等待新会话的用户任务，目标将自动读取。" : watch.goalPreview)
         .font(.subheadline).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("task-supervision-goal")
-      if !watch.goal.isEmpty {
-        NavigationLink("查看原始任务") { TaskSupervisionGoalView(goal: watch.goal) }.font(.caption)
-          .accessibilityIdentifier("task-supervision-original-task-open")
-      }
     }
     VStack(alignment: .leading, spacing: 9) {
       HStack {
@@ -133,7 +129,7 @@ struct TaskSupervisionSheet: View {
             .font(.caption).disabled(!model.canRead || model.writing || model.discovery?.inputVersion == nil)
             .accessibilityIdentifier("task-supervision-retry")
         }
-        NavigationLink { TaskSupervisionDecisionView(decision: decision) } label: {
+        NavigationLink { TaskSupervisionDecisionView(decision: decision, watchID: watch.watchId, model: model) } label: {
           Label("查看判断依据", systemImage: "chevron.right").font(.caption)
         }.accessibilityIdentifier("task-supervision-decision-open")
       }
@@ -142,7 +138,7 @@ struct TaskSupervisionSheet: View {
       HStack {
         Text("最近活动").font(.caption).foregroundColor(.secondary)
         Spacer()
-        NavigationLink("全部") { TaskSupervisionActivityView(watch: watch) }.font(.caption)
+        NavigationLink("全部") { TaskSupervisionActivityView(watch: watch, model: model) }.font(.caption)
           .accessibilityIdentifier("task-supervision-activity-open")
       }
       if let decision = watch.currentDecisions.last {

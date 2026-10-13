@@ -21,6 +21,10 @@ export class AppServerHistoryGateway {
     return (await this.createClient()).getConversation(threadId, AbortSignal.timeout(this.timeoutMs));
   }
 
+  async getSupervisionContext(threadId: string, requiredIds: string[] = []) {
+    return (await this.createClient()).getSupervisionContext(threadId, requiredIds, AbortSignal.timeout(this.timeoutMs));
+  }
+
   async listThreads(options: {
     projectId?: string;
     terminalSessionId?: string;
