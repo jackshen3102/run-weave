@@ -18,6 +18,8 @@ export function initializeRepositoryIndex(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS activity_repository_scope_idx
       ON activity_repository_bindings(repository_id, binding_offset);
+    CREATE INDEX IF NOT EXISTS activity_repository_pending_idx
+      ON activity_repository_bindings(binding_offset) WHERE reason = 'pending';
     CREATE TRIGGER IF NOT EXISTS activity_repository_pending
       AFTER INSERT ON behavior_facts BEGIN
         INSERT OR IGNORE INTO activity_repository_bindings(event_id, reason)

@@ -48,6 +48,10 @@ export function withExperienceStore<T>(
       bucket TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL,
       PRIMARY KEY (bucket, id)
     )`);
+    // Existing stores gain the index on first open; idle polls need not parse checkpoint bodies.
+    database.exec(`CREATE INDEX IF NOT EXISTS experience_checkpoint_expiry_idx
+      ON documents(bucket, json_extract(value, '$.expiresAt'))
+      WHERE bucket = 'learning-checkpoints'`);
     return operation(new ExperienceStore(database));
   } finally {
     database.close();
