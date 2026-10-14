@@ -35,7 +35,7 @@ function getCommandBasename(command) {
 function isNestedCodexProcess(spawnSync) {
   // A nested CLI inherits terminal/pane identity. Its hook still belongs to
   // the child CLI, even when tmux reports the parent as the foreground command.
-  const result = spawnSync("ps", ["-ww", "-axo", "pid=,ppid=,comm="], {
+  const result = spawnSync("ps", ["-ww", "-axo", "pid=,ppid=,args="], {
     encoding: "utf8",
     timeout: 1000,
     maxBuffer: 2 * 1024 * 1024,
@@ -45,11 +45,14 @@ function isNestedCodexProcess(spawnSync) {
   if (result.error || result.status !== 0) return false;
   const processes = new Map();
   for (const line of String(result.stdout || "").split(/\r?\n/)) {
-    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/);
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)(?:\s+(.*?))?\s*$/);
     if (match) {
       processes.set(Number(match[1]), {
         parent: Number(match[2]),
         command: getCommandBasename(match[3]),
+        // Shared app-server and its daemon supervisor both use the codex
+        // executable. Neither is a parent CLI that owns this terminal.
+        appServer: /^app-server(?:\s|$)/.test(match[4] || ""),
       });
     }
   }
@@ -59,7 +62,7 @@ function isNestedCodexProcess(spawnSync) {
     visited.add(pid);
     const entry = processes.get(pid);
     if (!entry) break;
-    if (entry.command === "codex" && ++codexCount > 1) return true;
+    if (entry.command === "codex" && !entry.appServer && ++codexCount > 1) return true;
     pid = entry.parent;
   }
   return false;
