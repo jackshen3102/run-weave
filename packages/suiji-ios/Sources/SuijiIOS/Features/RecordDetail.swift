@@ -28,6 +28,7 @@ struct RecordDetail: View {
   @State private var refreshed: SuijiRecord?
   @State private var confirmingTrash = false
   @State private var showingFollowups = false
+  @State private var addingFollowupAfterDismiss = false
   @State private var copyFeedback = ""
   @Environment(\.dismiss) private var dismiss
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -102,10 +103,30 @@ struct RecordDetail: View {
       .sheet(item: $attachment) { item in
         if let client = session.client { AttachmentReader(title: item.fileName, kind: item.kind) { try await client.bytes(path: "api/suiji/v1/attachments/\(item.id)/content") } }
       }
-      .sheet(isPresented: $showingFollowups) {
+      .sheet(isPresented: $showingFollowups, onDismiss: {
+        guard addingFollowupAfterDismiss else { return }
+        addingFollowupAfterDismiss = false
+        guard hasFollowups, record.deletedAt == nil, !pending, !busy else { return }
+        Task { await session.openFollowup(record) }
+      }) {
         NavigationStack {
           ScrollView { FollowupsView(session: session, record: record).padding(20) }
             .background(SuijiTheme.background)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+              if hasFollowups, record.deletedAt == nil {
+                Button {
+                  addingFollowupAfterDismiss = true
+                  showingFollowups = false
+                } label: {
+                  Label("新增跟进", systemImage: "plus")
+                }
+                .buttonStyle(DetailActionStyle(primary: true))
+                .disabled(pending || busy)
+                .accessibilityIdentifier("add-followup")
+                .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
+                .background(SuijiTheme.background)
+              }
+            }
             .navigationTitle("跟进")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("关闭") { showingFollowups = false } } }

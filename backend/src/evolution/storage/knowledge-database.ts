@@ -3,6 +3,7 @@ import type {
   CandidateAsset,
   ContributionEdge,
   EvolutionRun,
+  EvolutionRepositoryAttribution,
   Insight,
   InsightRevision,
 } from "@runweave/shared/evolution";
@@ -45,13 +46,26 @@ export class EvolutionKnowledgeDatabase {
          WHERE current_revision = 1`,
       )
       .all() as Array<{ payload_json: string }>;
-    return rows.map((row) => {
-      const candidate = JSON.parse(row.payload_json) as CandidateAsset;
-      const attribution = readRepositoryAttribution(
-        this.database,
-        "candidate",
-        candidate.assetId,
-      );
+    const candidates = rows.map(
+      (row) => JSON.parse(row.payload_json) as CandidateAsset,
+    );
+    if (candidates.length === 0) return [];
+    const bindings = this.database
+      .prepare(
+        `SELECT id, payload_json FROM evolution_repository_bindings
+       WHERE kind = 'candidate' AND id IN (SELECT value FROM json_each(?))`,
+      )
+      .all(
+        JSON.stringify(candidates.map((candidate) => candidate.assetId)),
+      ) as Array<{ id: string; payload_json: string }>;
+    const attributions = new Map(
+      bindings.map((row) => [
+        row.id,
+        JSON.parse(row.payload_json) as EvolutionRepositoryAttribution,
+      ]),
+    );
+    return candidates.map((candidate) => {
+      const attribution = attributions.get(candidate.assetId);
       return attribution ? { ...candidate, attribution } : candidate;
     });
   }
@@ -210,36 +224,80 @@ export class EvolutionKnowledgeDatabase {
 
   listEvidenceDependencies(): EvolutionEvidenceDependency[] {
     const candidates = this.listCandidates();
-    const referenced = new Set(
-      candidates.map((candidate) => candidate.insightRevisionId),
-    );
-    return this.listInsights().flatMap((insight) =>
-      insight.revisions
+    const candidatesByRevision = new Map<string, CandidateAsset[]>();
+    for (const candidate of candidates) {
+      const group = candidatesByRevision.get(candidate.insightRevisionId) ?? [];
+      group.push(candidate);
+      candidatesByRevision.set(candidate.insightRevisionId, group);
+    }
+    const insights = this.database
+      .prepare("SELECT * FROM insights ORDER BY updated_at DESC")
+      .all() as InsightRow[];
+    if (insights.length === 0) return [];
+    const revisionIds = [
+      ...new Set([
+        ...insights.map((insight) => insight.current_revision_id),
+        ...candidatesByRevision.keys(),
+      ]),
+    ];
+    // One JSON parameter keeps large histories below SQLite's bind-variable limit.
+    const rows = this.database
+      .prepare(
+        `SELECT insight_id, payload_json FROM insight_revisions
+       WHERE revision_id IN (SELECT value FROM json_each(?))
+       ORDER BY created_at, revision_id`,
+      )
+      .all(JSON.stringify(revisionIds)) as Array<{
+      insight_id: string;
+      payload_json: string;
+    }>;
+    const revisionsByInsight = new Map<string, InsightRevision[]>();
+    for (const row of rows) {
+      const group = revisionsByInsight.get(row.insight_id) ?? [];
+      group.push(JSON.parse(row.payload_json) as InsightRevision);
+      revisionsByInsight.set(row.insight_id, group);
+    }
+    const dependencies = insights.flatMap((insight) =>
+      (revisionsByInsight.get(insight.insight_id) ?? [])
         .filter(
           (revision) =>
-            revision.insightId === insight.insightId &&
-            (revision.revisionId === insight.currentRevisionId ||
-              referenced.has(revision.revisionId)),
+            revision.insightId === insight.insight_id &&
+            (revision.revisionId === insight.current_revision_id ||
+              candidatesByRevision.has(revision.revisionId)),
         )
         .map((revision) => ({
           insight: {
-            insightId: insight.insightId,
-            learningScopeId: insight.learningScopeId,
-            topicKey: insight.topicKey,
-            currentRevisionId: insight.currentRevisionId,
-            createdAt: insight.createdAt,
-            updatedAt: insight.updatedAt,
+            insightId: insight.insight_id,
+            learningScopeId: insight.learning_scope_id,
+            topicKey: insight.topic_key,
+            currentRevisionId: insight.current_revision_id,
+            createdAt: insight.created_at,
+            updatedAt: insight.updated_at,
           },
           revision,
-          contributionEdges: this.readPayloadRows<ContributionEdge>(
-            "SELECT payload_json FROM contribution_edges WHERE insight_revision_id=? ORDER BY edge_id",
-            revision.revisionId,
-          ),
-          candidates: candidates.filter(
-            (candidate) => candidate.insightRevisionId === revision.revisionId,
-          ),
+          candidates: candidatesByRevision.get(revision.revisionId) ?? [],
         })),
     );
+    if (dependencies.length === 0) return [];
+    const edges = this.database
+      .prepare(
+        `SELECT insight_revision_id, payload_json FROM contribution_edges
+       WHERE insight_revision_id IN (SELECT value FROM json_each(?)) ORDER BY edge_id`,
+      )
+      .all(
+        JSON.stringify(dependencies.map((item) => item.revision.revisionId)),
+      ) as Array<{ insight_revision_id: string; payload_json: string }>;
+    const edgesByRevision = new Map<string, ContributionEdge[]>();
+    for (const row of edges) {
+      const group = edgesByRevision.get(row.insight_revision_id) ?? [];
+      group.push(JSON.parse(row.payload_json) as ContributionEdge);
+      edgesByRevision.set(row.insight_revision_id, group);
+    }
+    return dependencies.map((dependency) => ({
+      ...dependency,
+      contributionEdges:
+        edgesByRevision.get(dependency.revision.revisionId) ?? [],
+    }));
   }
 
   applyEvidenceReconciliation(
