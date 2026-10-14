@@ -101,15 +101,22 @@ export function readMembershipSnapshot(
   const members: Array<Record<string, string | number>> = [];
   let contentCount = 0;
   let externalRefCount = 0;
+  const contentsStatement = database.prepare(
+    `SELECT link.role, link.ordinal, link.content_id, link.sha256_snapshot,
+      content.current_availability
+     FROM fact_content_links link JOIN activity_contents content
+       ON content.content_id = link.content_id
+     WHERE link.event_id = ? ORDER BY link.role, link.ordinal, link.content_id`,
+  );
+  const refsStatement = database.prepare(
+    `SELECT link.role, link.ordinal, link.ref_id, ref.version_or_digest,
+      ref.current_availability
+     FROM fact_external_ref_links link JOIN external_refs ref ON ref.ref_id = link.ref_id
+     WHERE link.event_id = ? ORDER BY link.role, link.ordinal, link.ref_id`,
+  );
   for (const fact of facts) {
     members.push({ kind: "fact", objectId: fact.event_id, fingerprint: fact.ingest_fingerprint_sha256 });
-    const contents = database.prepare(
-      `SELECT link.role, link.ordinal, link.content_id, link.sha256_snapshot,
-        content.current_availability
-       FROM fact_content_links link JOIN activity_contents content
-         ON content.content_id = link.content_id
-       WHERE link.event_id = ? ORDER BY link.role, link.ordinal, link.content_id`,
-    ).all(fact.event_id) as Array<{
+    const contents = contentsStatement.all(fact.event_id) as Array<{
       role: string;
       ordinal: number;
       content_id: string;
@@ -122,12 +129,7 @@ export function readMembershipSnapshot(
       objectId: entry.content_id, digest: entry.sha256_snapshot,
       availability: entry.current_availability,
     })));
-    const refs = database.prepare(
-      `SELECT link.role, link.ordinal, link.ref_id, ref.version_or_digest,
-        ref.current_availability
-       FROM fact_external_ref_links link JOIN external_refs ref ON ref.ref_id = link.ref_id
-       WHERE link.event_id = ? ORDER BY link.role, link.ordinal, link.ref_id`,
-    ).all(fact.event_id) as Array<{
+    const refs = refsStatement.all(fact.event_id) as Array<{
       role: string;
       ordinal: number;
       ref_id: string;
