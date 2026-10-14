@@ -229,10 +229,11 @@ function RunweaveApp() {
     enabled: isElectron,
   });
 
-  const renderRoutes = (routeLocation = location) => (
-        <Routes location={routeLocation}>
+  const routeElements = (
+        <>
           <Route
             path="/background-runs/:runId"
+            handle={{ analyticsScreen: "background_run" }}
             element={needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
               <BackgroundRunPage embedded
                 apiBase={apiBase}
@@ -370,6 +371,7 @@ function RunweaveApp() {
           />
           <Route
             path="/terminal"
+            handle={{ analyticsScreen: "terminal_list" }}
             element={
               needsConnection ? (
                 activeConnection?.tunnelEndpointId ? <RemoteConnectionInterrupted connection={activeConnection} connections={connections} onSelectConnection={handleSelectConnection} onOpenConnectionManager={openConnectionManager} onReconnect={() => useTunnelStore.getState().setOpen(true)} /> : <Navigate to="/connections" replace />
@@ -401,6 +403,7 @@ function RunweaveApp() {
           />
           <Route
             path="/terminal/:terminalSessionId"
+            handle={{ analyticsScreen: "terminal_workspace" }}
             element={
               needsConnection ? (
                 activeConnection?.tunnelEndpointId ? <RemoteConnectionInterrupted connection={activeConnection} connections={connections} onSelectConnection={handleSelectConnection} onOpenConnectionManager={openConnectionManager} onReconnect={() => useTunnelStore.getState().setOpen(true)} /> : <Navigate to="/connections" replace />
@@ -466,7 +469,7 @@ function RunweaveApp() {
               )
             }
           />
-          <Route path="/settings/:pageId?" element={null} />
+          <Route path="/settings/:pageId?" handle={{ analyticsScreen: "settings" }} element={null} />
           <Route
             path="*"
             element={
@@ -482,7 +485,10 @@ function RunweaveApp() {
               />
             }
           />
-        </Routes>
+        </>
+  );
+  const renderRoutes = (routeLocation = location) => (
+    <Routes location={routeLocation}>{routeElements}</Routes>
   );
 
   const content = (
@@ -508,8 +514,7 @@ function RunweaveApp() {
     </DevSessionBackendGuard>
   );
   return <>
-    <ClarityNavigationObserver isDesktop={isElectron} needsConnection={needsConnection}
-      isAuthChecking={isAuthChecking} authenticated={Boolean(token)} />
+    <ClarityNavigationObserver routes={routeElements} pendingElement={authPendingView} />
     {scheduledRunOpenError ? <button type="button" role="alert"
       className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-rose-700 bg-card p-3 text-left text-sm shadow-lg"
       onClick={() => setScheduledRunOpenError(null)}>{scheduledRunOpenError} · 点击关闭</button> : null}

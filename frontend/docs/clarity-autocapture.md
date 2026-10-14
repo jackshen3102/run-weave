@@ -4,7 +4,11 @@
 
 ## 页面分类
 
-[ClarityNavigationObserver](../src/features/analytics/clarity-navigation-observer.tsx) 在应用装配层统一识别实际显示的路由，通过官方 Identify API 设置固定 Custom Page ID。映射见 [screen-classification.ts](../src/features/analytics/screen-classification.ts)：终端列表为 `terminal_list`，终端工作区为 `terminal_workspace`，定时任务为 `scheduled_tasks`，其他页面同样使用固定枚举。动态 ID、查询参数和 hash 不进入新增分类数据；认证检查占位、重定向目标与未知路由不算已访问页面。
+[ClarityNavigationObserver](../src/features/analytics/clarity-navigation-observer.tsx) 直接读取 [App.tsx](../src/App.tsx) 交给 `<Routes>` 的同一份路由声明，按实际 location 匹配，通过官方 Identify API 设置 Custom Page ID。不再维护独立的路由白名单，新增普通页面路由即可自动分类。默认名称来自路由模板的静态段，连字符转为下划线：`/dev-resources` → `dev_resources`，`/scheduled-tasks/:taskId?` → `scheduled_tasks`。动态参数值、查询参数和 hash 不进入新增分类数据。
+
+只有需要保留历史名称或标识外部渲染的页面容器时，在原路由的 `handle.analyticsScreen` 中指定名称：终端列表仍为 `terminal_list`，终端工作区仍为 `terminal_workspace`，后台运行仍为 `background_run`；由管理容器渲染的 `/settings/:pageId?` 统一为 `settings`，不把设置分类拆成独立统计页面。未来如需分类维度，应复用 settings 注册表，不新增手写分类清单。
+
+重定向、认证检查占位、无内容路由及通配回退不报告分类。可见性依据路由当前实际选择的 element，不另行复制认证规则。管理页面保留的后台终端不会覆盖前台分类；分类机制不修改 SDK 自动采集，也不创建额外 pageview。
 
 Identify API 要求 Custom User ID；应用只生成当前 Document 内存中的随机 UUID，刷新或新窗口后重新生成，不保存到 storage/cookie，不使用真实用户、设备、连接或终端身份，也不设置 Custom Session ID。SDK 异步加载或 SPA 重启时只保留并重新应用最新分类，不补发历史页面事件，失败不阻塞导航。
 

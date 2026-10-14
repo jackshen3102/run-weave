@@ -1,26 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { updateClarityScreen } from "./clarity";
 import { classifyAnalyticsScreen } from "./screen-classification";
 
-export function ClarityNavigationObserver({
-  isDesktop,
-  needsConnection,
-  isAuthChecking,
-  authenticated,
-}: {
-  isDesktop: boolean;
-  needsConnection: boolean;
-  isAuthChecking: boolean;
-  authenticated: boolean;
+export function ClarityNavigationObserver({ routes, pendingElement }: {
+  routes: ReactNode;
+  pendingElement?: ReactNode;
 }) {
   const { pathname } = useLocation();
-  const candidate = classifyAnalyticsScreen(pathname);
-  const visible = candidate === "system_monitor" ||
-    (candidate === "connections" ? isDesktop :
-      !needsConnection && !isAuthChecking &&
-      (candidate === "login" ? !authenticated : authenticated));
-  const screen = visible ? candidate : null;
+  const screen = classifyAnalyticsScreen(routes, pathname, pendingElement);
 
   useEffect(() => {
     updateClarityScreen(screen);

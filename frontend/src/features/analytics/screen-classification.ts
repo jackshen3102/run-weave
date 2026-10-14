@@ -1,22 +1,27 @@
-import { matchPath } from "react-router-dom";
+import { isValidElement, type ReactNode } from "react";
+import { createRoutesFromChildren, matchRoutes, Navigate } from "react-router-dom";
 
-const screens = [
-  ["/connections", "connections"],
-  ["/login", "login"],
-  ["/terminal", "terminal_list"],
-  ["/terminal/:terminalSessionId", "terminal_workspace"],
-  ["/scheduled-tasks/:taskId?", "scheduled_tasks"],
-  ["/background-runs/:runId", "background_run"],
-  ["/execution-efficiency/:findingId?", "execution_efficiency"],
-  ["/activity", "activity"],
-  ["/evolution", "evolution"],
-  ["/system-monitor", "system_monitor"],
-  ["/prototypes", "prototypes"],
-  ["/prototypes/:projectId/:prototypeSource/:prototypeSlug", "prototypes"],
-] as const;
+export type AnalyticsScreen = string;
 
-export type AnalyticsScreen = (typeof screens)[number][1];
+// Read the same declarations as <Routes>; never classify URL parameter values.
+export function classifyAnalyticsScreen(
+  routes: ReactNode,
+  pathname: string,
+  pendingElement?: ReactNode,
+): AnalyticsScreen | null {
+  const matches = matchRoutes(createRoutesFromChildren(routes), pathname);
+  const route = matches?.at(-1)?.route;
+  if (!route || route.path?.includes("*")) return null;
+  const element = route.element;
+  if (element === pendingElement || (isValidElement(element) && element.type === Navigate)) return null;
 
-export function classifyAnalyticsScreen(pathname: string): AnalyticsScreen | null {
-  return screens.find(([pattern]) => matchPath(pattern, pathname))?.[1] ?? null;
+  // Explicit names preserve historical labels and identify externally rendered shells.
+  const screen: unknown = route.handle?.analyticsScreen;
+  if (typeof screen === "string") return screen;
+  if (element == null) return null;
+
+  return matches?.flatMap(({ route: match }) => (match.path ?? "").split("/"))
+    .filter((segment) => segment && !segment.startsWith(":"))
+    .map((segment) => segment.replace(/\?$/u, "").replace(/-/gu, "_"))
+    .join("_") || null;
 }
