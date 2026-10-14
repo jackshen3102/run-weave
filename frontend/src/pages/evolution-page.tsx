@@ -25,7 +25,7 @@ import {
   fetchEvolutionCandidates,
   fetchEvolutionInsights,
   fetchEvolutionProviders,
-  fetchEvolutionRunArtifacts,
+  fetchEvolutionRunArtifactsSummary,
   fetchEvolutionRuns,
   fetchEvolutionRuntimeTraces,
   fetchEvolutionSchedules,
@@ -155,9 +155,9 @@ function EvolutionManagementPage({
     null;
 
   const artifactsQuery = useQuery({
-    queryKey: ["evolution", "artifacts", apiBase, selectedRunId],
+    queryKey: ["evolution", "artifacts-summary", apiBase, selectedRunId],
     queryFn: () =>
-      fetchEvolutionRunArtifacts(apiBase, token, selectedRunId ?? ""),
+      fetchEvolutionRunArtifactsSummary(apiBase, token, selectedRunId ?? ""),
     enabled: view === "runs" && selectedRunId !== null,
     refetchInterval: scopedRuns.some(
       (run) => run.runId === selectedRunId && !TERMINAL_STAGES.has(run.stage),
@@ -178,7 +178,7 @@ function EvolutionManagementPage({
       return;
     }
     void queryClient.invalidateQueries({
-      queryKey: ["evolution", "artifacts", apiBase, selectedRunId],
+      queryKey: ["evolution", "artifacts-summary", apiBase, selectedRunId],
     });
   }, [apiBase, queryClient, selectedRunId, selectedRunStage, view]);
   const policyQuery = useQuery({
@@ -515,6 +515,8 @@ function EvolutionManagementPage({
               ) : null}
               {!initialLoading && view === "runs" ? (
                 <EvolutionRunsPanel
+                  apiBase={apiBase}
+                  token={token}
                   runs={scopedRuns}
                   selectedRunId={selectedRunId}
                   traces={scopedTraces}

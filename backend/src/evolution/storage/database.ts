@@ -1,3 +1,4 @@
+import { EvolutionArtifactReads } from "./artifact-reads";
 import { executeRepositoryCommand } from "./repository-database";
 import type { RepositoryCommand } from "../repository-store";
 import { mkdirSync } from "node:fs";
@@ -7,6 +8,9 @@ import type {
   CandidateAsset,
   ContributionEdge,
   ContextPackManifest,
+  EvolutionArtifactOverview,
+  EvolutionArtifactPage,
+  EvolutionArtifactPageQuery,
   Episode,
   EvolutionAnalysisReport,
   EvolutionClaim,
@@ -41,6 +45,7 @@ import { migrateEvolutionDatabase } from "./migrations";
 export class EvolutionActivationDatabase {
   private readonly database: Database.Database;
   private readonly foundation: EvolutionFoundationDatabase;
+  private readonly artifactReads: EvolutionArtifactReads;
   private readonly artifacts: EvolutionArtifactDatabase;
   private readonly knowledge: EvolutionKnowledgeDatabase;
 
@@ -58,6 +63,7 @@ export class EvolutionActivationDatabase {
     }
     this.foundation = new EvolutionFoundationDatabase(this.database);
     this.artifacts = new EvolutionArtifactDatabase(this.database);
+    this.artifactReads = new EvolutionArtifactReads(this.database);
     this.knowledge = new EvolutionKnowledgeDatabase(
       this.database,
       this.foundation,
@@ -122,6 +128,14 @@ export class EvolutionActivationDatabase {
     limit: number,
   ): RuntimeTraceSummary[] {
     return this.artifacts.listRecentRuntimeTraces(learningScopeId, limit);
+  }
+
+  getArtifactOverview(runId: string): EvolutionArtifactOverview {
+    return this.artifactReads.overview(runId);
+  }
+
+  getArtifactPage(runId: string, query: EvolutionArtifactPageQuery): EvolutionArtifactPage {
+    return this.artifactReads.page(runId, query);
   }
 
   putContextPack(manifest: ContextPackManifest): void {

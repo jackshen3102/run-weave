@@ -231,6 +231,27 @@ export function createEvolutionFoundationRouter(
     }
   });
 
+  router.get("/runs/:runId/artifacts/summary", async (request, response) => {
+    try {
+      const { runId } = runParamsSchema.parse(request.params);
+      response.setHeader("Cache-Control", "no-store");
+      response.json(await service.getRunArtifactsSummary(runId));
+    } catch (error) { sendEvolutionError(response, error); }
+  });
+
+  router.get("/runs/:runId/artifacts/page", async (request, response) => {
+    try {
+      const { runId } = runParamsSchema.parse(request.params);
+      const query = z.object({
+        collection: z.enum(["evidence", "data-quality", "segments", "episodes"]),
+        cursor: z.string().min(1).max(2048).optional(),
+        limit: z.coerce.number().int().min(1).max(100).optional(),
+      }).strict().parse(request.query);
+      response.setHeader("Cache-Control", "no-store");
+      response.json(await service.getRunArtifactPage(runId, query));
+    } catch (error) { sendEvolutionError(response, error); }
+  });
+
   router.get("/runs/:runId/artifacts", async (request, response) => {
     try {
       const { runId } = runParamsSchema.parse(request.params);
@@ -378,6 +399,14 @@ function sendEvolutionError(
     message === "evolution_insight_not_found"
   ) {
     response.status(404).json({ error: message });
+    return;
+  }
+  if (message === "evolution_artifact_query_invalid") {
+    response.status(400).json({ error: message });
+    return;
+  }
+  if (message === "evolution_artifact_cursor_stale") {
+    response.status(409).json({ error: message });
     return;
   }
   if (message === "evolution_run_not_retryable") {

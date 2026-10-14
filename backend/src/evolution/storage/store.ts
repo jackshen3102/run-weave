@@ -7,6 +7,9 @@ import type {
   CandidateAsset,
   ContributionEdge,
   ContextPackManifest,
+  EvolutionArtifactOverview,
+  EvolutionArtifactPage,
+  EvolutionArtifactPageQuery,
   Episode,
   EvolutionAnalysisReport,
   EvolutionClaim,
@@ -199,6 +202,14 @@ export class SqliteEvolutionActivationStore
       learningScopeId,
       limit,
     });
+  }
+
+  getArtifactOverview(runId: string): Promise<EvolutionArtifactOverview> {
+    return this.request({ op: "artifact-overview", runId });
+  }
+
+  getArtifactPage(runId: string, query: EvolutionArtifactPageQuery): Promise<EvolutionArtifactPage> {
+    return this.request({ op: "artifact-page", runId, query });
   }
 
   async putContextPack(manifest: ContextPackManifest): Promise<void> {

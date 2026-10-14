@@ -530,3 +530,46 @@ export interface EvolutionProvidersResponse {
   runtimeUnavailableReason?: EvolutionRuntimeUnavailableReason | null;
   providers: EvolutionProviderAvailability[];
 }
+
+export type ContextPackSummary = Omit<
+  ContextPackManifest,
+  "evidence" | "dataQualityIssues"
+> & {
+  evidenceCount: number;
+  workspaceCount: number;
+  dataQualityIssueCount: number;
+  dataQualitySummary: Array<{ code: string; count: number; detail: string }>;
+};
+
+export interface EvolutionArtifactOverview {
+  contextPack: ContextPackSummary | null;
+  segmentCount: number;
+  episodeCount: number;
+}
+
+export type EvolutionRunArtifactsSummary = Omit<
+  EvolutionRunArtifacts,
+  "contextPack" | "segments" | "episodes"
+> &
+  EvolutionArtifactOverview;
+
+export type EvolutionArtifactCollection =
+  | "evidence"
+  | "data-quality"
+  | "segments"
+  | "episodes";
+
+export interface EvolutionArtifactPageQuery {
+  collection: EvolutionArtifactCollection;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface EvolutionArtifactPage {
+  collection: EvolutionArtifactCollection;
+  items: Array<
+    ContextPackEvidenceRef | DataQualityIssue | TraceSegment | Episode
+  >;
+  total: number;
+  nextCursor: string | null;
+}

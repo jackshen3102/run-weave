@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 
 export const ACTIVITY_COMPATIBILITY_MAJOR = 1;
-export const ACTIVITY_ADDITIVE_MINOR = 0;
+export const ACTIVITY_ADDITIVE_MINOR = 1;
 export const ACTIVITY_USER_VERSION =
   ACTIVITY_COMPATIBILITY_MAJOR * 1000 + ACTIVITY_ADDITIVE_MINOR;
 
@@ -394,6 +394,11 @@ export function migrateActivityDatabase(database: Database.Database): void {
     }
     if (lockedVersion === 0) {
       database.exec(SCHEMA_SQL);
+    }
+    if (lockedVersion < 1001) {
+      database.exec(`CREATE INDEX facts_operation_idx
+        ON behavior_facts (operation_id, occurred_at_ms, activity_offset)
+        WHERE operation_id IS NOT NULL`);
     }
     database.pragma(`user_version = ${ACTIVITY_USER_VERSION}`);
     database.exec("COMMIT");

@@ -1,3 +1,4 @@
+import { readRunConclusions } from "./artifact-service";
 import type { EvolutionRepositoryScopes } from "./repository-scope";
 import type {
   EvolutionReflectionBatch,
@@ -14,6 +15,9 @@ import {
   type EvolutionProviderAvailability,
   type EvolutionRun,
   type EvolutionRunArtifacts,
+  type EvolutionRunArtifactsSummary,
+  type EvolutionArtifactPage,
+  type EvolutionArtifactPageQuery,
   type EvolutionRunStage,
   type EvolutionSchedule,
   type Insight,
@@ -155,56 +159,29 @@ export class EvolutionService {
 
   async getRunArtifacts(runId: string): Promise<EvolutionRunArtifacts> {
     await this.requireRun(runId);
-    if (!this.analysisStore) {
-      return {
-        contextPack: null,
-        segments: [],
-        episodes: [],
-        attempts: [],
-        reports: [],
-        claims: [],
-        novelty: [],
-        insightRevisions: [],
-        candidateIds: [],
-      };
-    }
-    const [
-      contextPack,
-      segments,
-      episodes,
-      attempts,
-      reports,
-      claims,
-      novelty,
-      insightRevisions,
-      candidates,
-    ] = await Promise.all([
-      this.contextPackStore?.getContextPackByRun(runId) ?? null,
-      this.analysisStore.listTraceSegments(runId),
-      this.analysisStore.listEpisodes(runId),
-      this.analysisStore.listRunAttempts(runId),
-      this.analysisStore.listAnalysisReports(runId),
-      this.analysisStore.listClaims(runId),
-      this.analysisStore.listClaimNovelty(runId),
-      this.analysisStore.listInsightRevisionsByRun(runId),
-      this.activationStore?.listCandidates() ?? [],
+    const [conclusions, contextPack, segments, episodes] = await Promise.all([
+      readRunConclusions(runId, this.analysisStore, this.activationStore),
+      this.analysisStore ? this.contextPackStore?.getContextPackByRun(runId) ?? null : null,
+      this.analysisStore?.listTraceSegments(runId) ?? [],
+      this.analysisStore?.listEpisodes(runId) ?? [],
     ]);
-    const revisionIds = new Set(
-      insightRevisions.map((revision) => revision.revisionId),
-    );
-    return {
-      contextPack,
-      segments,
-      episodes,
-      attempts,
-      reports,
-      claims,
-      novelty,
-      insightRevisions,
-      candidateIds: candidates
-        .filter((candidate) => revisionIds.has(candidate.insightRevisionId))
-        .map((candidate) => candidate.assetId),
-    };
+    return { ...conclusions, contextPack, segments, episodes };
+  }
+
+  async getRunArtifactsSummary(runId: string): Promise<EvolutionRunArtifactsSummary> {
+    await this.requireRun(runId);
+    const [conclusions, overview] = await Promise.all([
+      readRunConclusions(runId, this.analysisStore, this.activationStore),
+      this.contextPackStore?.getArtifactOverview(runId) ??
+        { contextPack: null, segmentCount: 0, episodeCount: 0 },
+    ]);
+    return { ...conclusions, ...overview };
+  }
+
+  async getRunArtifactPage(runId: string, query: EvolutionArtifactPageQuery): Promise<EvolutionArtifactPage> {
+    await this.requireRun(runId);
+    if (!this.contextPackStore) throw new Error("evolution_unavailable");
+    return this.contextPackStore.getArtifactPage(runId, query);
   }
 
   listInsights(learningScopeId?: string): Promise<Insight[]> {
