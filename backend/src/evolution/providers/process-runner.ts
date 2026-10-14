@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
-import { readProviderOutput } from "./output";
+import { ProviderProcessError, readProviderOutput } from "./output";
 import type {
   EvolutionProviderName,
   EvolutionProviderRequest,
@@ -66,11 +66,12 @@ export async function runProviderProcess(params: {
     const [exit, captured] = await Promise.all([waitForExit(child), output]);
     if (exit.error) throw exit.error;
     if (exit.code !== 0) {
-      throw new Error(
+      throw new ProviderProcessError(
         exit.terminationReason ??
           (captured.stderr.includes("schema")
             ? "provider_output_schema_rejected"
             : "provider_exit_nonzero"),
+        captured.stderr,
       );
     }
     const parsed = await readProviderOutput(

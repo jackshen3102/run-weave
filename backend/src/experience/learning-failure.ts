@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { ExperienceLearningFailureReceipt } from "@runweave/shared/experience";
 import type { EvolutionProviderRequest } from "../evolution/providers/types";
-import { ProviderOutputError } from "../evolution/providers/output";
+import {
+  ProviderOutputError,
+  ProviderProcessError,
+} from "../evolution/providers/output";
 import { redactExcerpt } from "./evidence";
 import { digest } from "./learning-queue";
 
@@ -20,7 +23,7 @@ export function learningFailureReceipt(
   },
 ): ExperienceLearningFailureReceipt {
   const raw =
-    error instanceof ProviderOutputError
+    error instanceof ProviderOutputError || error instanceof ProviderProcessError
       ? error.raw
       : input.output === undefined
         ? ""
@@ -88,7 +91,9 @@ export function learningFailureReceipt(
       error instanceof ProviderOutputError &&
       ["read_failed", "too_large"].includes(error.kind)
         ? null
-        : input.output === undefined && !(error instanceof ProviderOutputError)
+        : input.output === undefined &&
+            !(error instanceof ProviderOutputError) &&
+            !(error instanceof ProviderProcessError)
           ? null
           : Buffer.byteLength(raw),
     outputExcerpt: excerpt,
