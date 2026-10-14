@@ -42,6 +42,10 @@ function execute(command: EvolutionWorkerCommand): EvolutionWorkerResult {
         command.learningScopeId,
         command.limit,
       );
+    case "artifact-overview":
+      return database.getArtifactOverview(command.runId);
+    case "artifact-page":
+      return database.getArtifactPage(command.runId, command.query);
     case "put-context-pack":
       database.putContextPack(command.manifest);
       return true;

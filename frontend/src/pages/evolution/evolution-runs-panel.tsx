@@ -1,12 +1,13 @@
 import { evolutionRunLabel } from "./evolution-run-label";
 import type {
   EvolutionRun,
-  EvolutionRunArtifacts,
+  EvolutionRunArtifactsSummary,
   RuntimeTraceSummary,
 } from "@runweave/shared/evolution";
 import { Activity, Lightbulb, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/button";
+import { EvolutionArtifactPages } from "./evolution-artifact-pages";
 import {
   formatEvolutionDate,
   EvolutionPanel,
@@ -16,6 +17,8 @@ import {
 } from "./evolution-page-panels";
 
 export function EvolutionRunsPanel({
+  apiBase,
+  token,
   runs,
   selectedRunId,
   traces,
@@ -25,10 +28,12 @@ export function EvolutionRunsPanel({
   onCancelRun,
   onRetryRun,
 }: {
+  apiBase: string;
+  token: string;
   runs: EvolutionRun[];
   selectedRunId: string | null;
   traces: RuntimeTraceSummary[];
-  artifacts: EvolutionRunArtifacts | undefined;
+  artifacts: EvolutionRunArtifactsSummary | undefined;
   actionPending: boolean;
   onSelectRun: (runId: string) => void;
   onCancelRun: (runId: string) => void;
@@ -166,15 +171,13 @@ export function EvolutionRunsPanel({
             </div>
             {artifacts ? (
               <div className="mt-3 space-y-3">
-                {artifacts.contextPack?.dataQualityIssues.length ? (
+                {artifacts.contextPack?.dataQualityIssueCount ? (
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
                     <p className="text-xs font-medium text-amber-700 dark:text-amber-200">
                       DataQuality ·{" "}
-                      {artifacts.contextPack.dataQualityIssues.length} 项
+                      {artifacts.contextPack.dataQualityIssueCount} 项
                     </p>
-                    {summarizeDataQuality(
-                      artifacts.contextPack.dataQualityIssues,
-                    ).map((issue) => (
+                    {artifacts.contextPack.dataQualitySummary.map((issue) => (
                       <p
                         key={issue.code}
                         className="mt-1 text-xs text-muted-foreground"
@@ -184,6 +187,12 @@ export function EvolutionRunsPanel({
                     ))}
                   </div>
                 ) : null}
+                <EvolutionArtifactPages
+                  key={selectedRun.runId}
+                  apiBase={apiBase}
+                  token={token}
+                  runId={selectedRun.runId}
+                />
                 <div className="grid gap-3 lg:grid-cols-3">
                   <div className="rounded-lg border border-border/70 p-3">
                     <p className="text-xs font-medium">
@@ -355,17 +364,11 @@ export function EvolutionRunsPanel({
   );
 }
 
-function ReflectionResult({ artifacts }: { artifacts: EvolutionRunArtifacts }) {
+function ReflectionResult({ artifacts }: { artifacts: EvolutionRunArtifactsSummary }) {
   const activitySource = artifacts.contextPack?.sources.find(
     (source) => source.source === "activity",
   );
-  const workspaceCount = new Set(
-    artifacts.contextPack?.evidence.flatMap((evidence) =>
-      evidence.source === "activity" && evidence.origin.projectId
-        ? [evidence.origin.projectId]
-        : [],
-    ) ?? [],
-  ).size;
+  const workspaceCount = artifacts.contextPack?.workspaceCount ?? 0;
   const recommendations = artifacts.claims.filter(
     (claim) => claim.status === "corroborated" && claim.guidance,
   );
@@ -436,32 +439,5 @@ function ReflectionResult({ artifacts }: { artifacts: EvolutionRunArtifacts }) {
         </p>
       ) : null}
     </section>
-  );
-}
-
-function summarizeDataQuality(
-  issues: NonNullable<
-    EvolutionRunArtifacts["contextPack"]
-  >["dataQualityIssues"],
-): Array<{ code: string; count: number; detail: string }> {
-  const summaries = new Map<
-    string,
-    { code: string; count: number; detail: string }
-  >();
-  for (const issue of issues) {
-    const existing = summaries.get(issue.code);
-    if (existing) {
-      existing.count += 1;
-    } else {
-      summaries.set(issue.code, {
-        code: issue.code,
-        count: 1,
-        detail: issue.detail,
-      });
-    }
-  }
-  return Array.from(summaries.values()).sort(
-    (left, right) =>
-      right.count - left.count || left.code.localeCompare(right.code),
   );
 }

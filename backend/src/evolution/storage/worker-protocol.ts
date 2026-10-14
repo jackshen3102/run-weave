@@ -3,6 +3,9 @@ import type {
   CandidateAsset,
   ContributionEdge,
   ContextPackManifest,
+  EvolutionArtifactOverview,
+  EvolutionArtifactPage,
+  EvolutionArtifactPageQuery,
   Episode,
   EvolutionAnalysisReport,
   EvolutionClaim,
@@ -46,6 +49,8 @@ export type EvolutionWorkerCommand =
       learningScopeId?: string;
       limit: number;
     }
+  | { id: number; op: "artifact-overview"; runId: string }
+  | { id: number; op: "artifact-page"; runId: string; query: EvolutionArtifactPageQuery }
   | { id: number; op: "put-context-pack"; manifest: ContextPackManifest }
   | { id: number; op: "get-context-pack"; contextPackId: string }
   | { id: number; op: "get-context-pack-by-run"; runId: string }
@@ -141,6 +146,8 @@ export type EvolutionWorkerResult =
   | CandidateAsset[]
   | ContributionEdge[]
   | ContextPackManifest
+  | EvolutionArtifactOverview
+  | EvolutionArtifactPage
   | Episode[]
   | EvolutionAnalysisReport
   | EvolutionAnalysisReport[]

@@ -39,21 +39,36 @@ export function readScheduledOutput(
   offset: number,
   maxBytes: number,
 ): ScheduledOutputChunk {
-  requireRun(database, runId);
-  const row = database
-    .prepare("SELECT content FROM scheduled_run_output WHERE run_id = ?")
-    .get(runId) as { content: string } | undefined;
-  const buffer = Buffer.from(row?.content ?? "", "utf8");
-  const safeOffset = Math.min(Math.max(0, offset), buffer.byteLength);
-  const end = safeUtf8End(
-    buffer,
-    Math.min(buffer.byteLength, safeOffset + maxBytes),
-  );
-  return {
-    text: buffer.subarray(safeOffset, end).toString("utf8"),
-    nextOffset: end,
-    totalBytes: buffer.byteLength,
-  };
+  // Length and range must come from the same snapshot if another connection appends.
+  return database.transaction(() => {
+    requireRun(database, runId);
+    const row = database
+      .prepare(
+        "SELECT length(CAST(content AS BLOB)) AS bytes FROM scheduled_run_output WHERE run_id = ?",
+      )
+      .get(runId) as { bytes: number } | undefined;
+    const totalBytes = row?.bytes ?? 0;
+    const safeOffset = Math.min(Math.max(0, offset), totalBytes);
+    if (safeOffset === totalBytes)
+      return { text: "", nextOffset: safeOffset, totalBytes };
+    // Keep a UTF-8 character's leading bytes even for a caller-supplied mid-character cursor.
+    const start = Math.max(0, safeOffset - 3);
+    const prefix = safeOffset - start;
+    const chunk = database
+      .prepare(
+        "SELECT substr(CAST(content AS BLOB), ?, ?) AS bytes FROM scheduled_run_output WHERE run_id = ?",
+      )
+      .get(start + 1, prefix + maxBytes + 4, runId) as { bytes: Buffer };
+    const end = safeUtf8End(
+      chunk.bytes,
+      Math.min(chunk.bytes.byteLength, prefix + maxBytes),
+    );
+    return {
+      text: chunk.bytes.subarray(prefix, end).toString("utf8"),
+      nextOffset: start + end,
+      totalBytes,
+    };
+  })();
 }
 
 function requireRun(database: Database.Database, runId: string) {

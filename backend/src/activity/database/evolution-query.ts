@@ -14,6 +14,17 @@ import {
 } from "@runweave/shared/terminal/project-context";
 import { activeDeleteTombstoneSql, type FactRow, rowToFact } from "./query";
 
+interface RepositoryCountSnapshot {
+  dataVersion: number;
+  totalChanges: number;
+  count: number;
+}
+
+const repositoryCountSnapshots = new WeakMap<
+  Database.Database,
+  RepositoryCountSnapshot
+>();
+
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/gu, "\\$&");
 }
@@ -120,7 +131,10 @@ function queryRepositorySnapshot(
 ): ActivityEvolutionSnapshotPage {
   // Bindings are append-only once resolved. Their cursor includes later backfills of
   // old Activity offsets, while the evidence retains its original activityOffset.
-  return database.transaction(() => {
+  // Never reuse or publish a count from a caller-owned transaction: it may roll back.
+  const cacheable = !database.inTransaction;
+  let countSnapshot: RepositoryCountSnapshot | undefined;
+  const result = database.transaction(() => {
     const maximum = (
       database
         .prepare(
@@ -132,6 +146,13 @@ function queryRepositorySnapshot(
       query.atOrBeforeSnapshotBoundary ?? maximum,
       maximum,
     );
+    // The maximum query above establishes the read snapshot before these markers.
+    // data_version observes other connections; total_changes observes this one.
+    const dataVersion = database.pragma("data_version", { simple: true }) as number;
+    const totalChanges = (
+      database.prepare("SELECT total_changes() AS n").get() as { n: number }
+    ).n;
+    const cachedCount = cacheable ? repositoryCountSnapshots.get(database) : undefined;
     const rows = database
       .prepare(
         `SELECT fact.*, binding.binding_offset AS repository_offset
@@ -149,15 +170,20 @@ function queryRepositorySnapshot(
         query.limit + 1,
       ) as Array<FactRow & { repository_offset: number }>;
     const page = rows.slice(0, query.limit);
-    const unresolved = (
-      database
-        .prepare(
-          `SELECT COUNT(*) AS n FROM behavior_facts fact
+    const unresolved =
+      cachedCount?.dataVersion === dataVersion &&
+      cachedCount.totalChanges === totalChanges
+        ? cachedCount.count
+        : (
+            database
+              .prepare(
+                `SELECT COUNT(*) AS n FROM behavior_facts fact
       LEFT JOIN activity_repository_bindings binding ON binding.event_id = fact.event_id
       WHERE binding.repository_id IS NULL AND ${activeDeleteTombstoneSql()}`,
-        )
-        .get() as { n: number }
-    ).n;
+              )
+              .get() as { n: number }
+          ).n;
+    countSnapshot = { dataVersion, totalChanges, count: unresolved };
     return {
       learningScopeId: query.learningScopeId,
       afterWatermark: query.afterWatermark,
@@ -168,6 +194,10 @@ function queryRepositorySnapshot(
       ...(page.length ? { nextWatermark: page.at(-1)!.repository_offset } : {}),
     };
   })();
+  if (cacheable && countSnapshot) {
+    repositoryCountSnapshots.set(database, countSnapshot);
+  }
+  return result;
 }
 
 export function queryActivityEvolutionEvidenceAvailability(

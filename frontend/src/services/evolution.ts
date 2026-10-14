@@ -9,6 +9,9 @@ import type {
   EvolutionProvidersResponse,
   EvolutionRun,
   EvolutionRunArtifacts,
+  EvolutionRunArtifactsSummary,
+  EvolutionArtifactPage,
+  EvolutionArtifactPageQuery,
   EvolutionRunStage,
   EvolutionSchedule,
   EvolutionScopePolicy,
@@ -74,6 +77,31 @@ export function fetchEvolutionRunArtifacts(
   return requestJson(
     apiBase,
     `/api/evolution/runs/${encodeURIComponent(runId)}/artifacts`,
+    { headers: authHeaders(token) },
+  );
+}
+
+export function fetchEvolutionRunArtifactsSummary(
+  apiBase: string,
+  token: string,
+  runId: string,
+): Promise<EvolutionRunArtifactsSummary> {
+  return requestJson(
+    apiBase,
+    `/api/evolution/runs/${encodeURIComponent(runId)}/artifacts/summary`,
+    { headers: authHeaders(token) },
+  );
+}
+
+export function fetchEvolutionArtifactPage(
+  apiBase: string,
+  token: string,
+  runId: string,
+  query: EvolutionArtifactPageQuery,
+): Promise<EvolutionArtifactPage> {
+  return requestJson(
+    apiBase,
+    `/api/evolution/runs/${encodeURIComponent(runId)}/artifacts/page${queryString({ ...query })}`,
     { headers: authHeaders(token) },
   );
 }
