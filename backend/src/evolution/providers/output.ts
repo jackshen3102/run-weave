@@ -1,5 +1,13 @@
 import { open } from "node:fs/promises";
 
+export class ProviderProcessError extends Error {
+  constructor(code: string, readonly raw: string) {
+    super(code);
+    // Only the receipt builder may expose a redacted, bounded stderr excerpt.
+    Object.defineProperty(this, "raw", { enumerable: false });
+  }
+}
+
 export class ProviderOutputError extends Error {
   constructor(
     readonly kind: "read_failed" | "empty" | "invalid_json" | "too_large",
