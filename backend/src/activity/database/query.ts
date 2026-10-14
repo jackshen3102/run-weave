@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { readContentDescriptors, readRefDescriptors } from "./descriptors";
 import type Database from "better-sqlite3";
 import type {
   ActivityContentDescriptorDto,
@@ -180,14 +181,22 @@ function buildQueryParts(query: ActivityFactsQuery, asOf: number): QueryParts {
       params[key] = value;
     }
   }
-  for (const [key, operator] of [["from", ">="], ["to", "<"]] as const) {
+  for (const [key, operator] of [
+    ["from", ">="],
+    ["to", "<"],
+  ] as const) {
     if (!query[key]) continue;
     const timestamp = Date.parse(query[key]);
-    if (!Number.isFinite(timestamp)) throw new Error("activity_time_range_invalid");
+    if (!Number.isFinite(timestamp))
+      throw new Error("activity_time_range_invalid");
     where.push(`fact.occurred_at_ms ${operator} @${key}`);
     params[key] = timestamp;
   }
-  if (query.from && query.to && Date.parse(query.from) >= Date.parse(query.to)) {
+  if (
+    query.from &&
+    query.to &&
+    Date.parse(query.from) >= Date.parse(query.to)
+  ) {
     throw new Error("activity_time_range_invalid");
   }
   if (query.search) {
@@ -207,69 +216,26 @@ function buildQueryParts(query: ActivityFactsQuery, asOf: number): QueryParts {
   return { where, params };
 }
 
-function readContentDescriptors(
+export function rowsToFacts(
   database: Database.Database,
-  eventId: string,
-): ActivityContentDescriptorDto[] {
-  const rows = database
-    .prepare(
-      `SELECT content.content_id, link.role, content.media_type, content.byte_length,
-      content.sha256, content.current_availability, link.expected_expires_at_ms
-     FROM fact_content_links link
-     JOIN activity_contents content ON content.content_id = link.content_id
-     WHERE link.event_id = ? ORDER BY link.ordinal`,
-    )
-    .all(eventId) as Array<{
-    content_id: string;
-    role: ActivityContentDescriptorDto["role"];
-    media_type: string;
-    byte_length: number;
-    sha256: string;
-    current_availability: ActivityContentDescriptorDto["availability"];
-    expected_expires_at_ms: number;
-  }>;
-  return rows.map((row) => ({
-    contentId: row.content_id,
-    role: row.role,
-    mediaType: row.media_type,
-    byteLength: row.byte_length,
-    sha256: row.sha256,
-    availability: row.current_availability,
-    expectedExpiresAt: new Date(row.expected_expires_at_ms).toISOString(),
-  }));
+  rows: FactRow[],
+): ActivityFactDto[] {
+  const ids = rows.map((row) => row.event_id);
+  const contents = readContentDescriptors(database, ids);
+  const refs = readRefDescriptors(database, ids);
+  return rows.map((row) =>
+    rowToFact(
+      row,
+      contents.get(row.event_id) ?? [],
+      refs.get(row.event_id) ?? [],
+    ),
+  );
 }
 
-function readRefDescriptors(
-  database: Database.Database,
-  eventId: string,
-): ActivityExternalRefDescriptorDto[] {
-  const rows = database
-    .prepare(
-      `SELECT ref.ref_id, link.role, ref.authority, ref.version_or_digest,
-      ref.current_availability
-     FROM fact_external_ref_links link
-     JOIN external_refs ref ON ref.ref_id = link.ref_id
-     WHERE link.event_id = ? ORDER BY link.ordinal`,
-    )
-    .all(eventId) as Array<{
-    ref_id: string;
-    role: ActivityExternalRefDescriptorDto["role"];
-    authority: ActivityExternalRefDescriptorDto["authority"];
-    version_or_digest: string;
-    current_availability: ActivityExternalRefDescriptorDto["availability"];
-  }>;
-  return rows.map((row) => ({
-    refId: row.ref_id,
-    role: row.role,
-    authority: row.authority,
-    versionOrDigest: row.version_or_digest,
-    availability: row.current_availability,
-  }));
-}
-
-export function rowToFact(
-  database: Database.Database,
+function rowToFact(
   row: FactRow,
+  contents: ActivityContentDescriptorDto[],
+  refs: ActivityExternalRefDescriptorDto[],
 ): ActivityFactDto {
   return {
     activityOffset: row.activity_offset,
@@ -329,8 +295,8 @@ export function rowToFact(
     privacyClassification: row.privacy_classification,
     retentionClass: row.retention_class,
     expiresAt: new Date(row.expires_at_ms).toISOString(),
-    contentDescriptors: readContentDescriptors(database, row.event_id),
-    externalRefDescriptors: readRefDescriptors(database, row.event_id),
+    contentDescriptors: contents,
+    externalRefDescriptors: refs,
   };
 }
 
@@ -362,7 +328,7 @@ export function queryActivityFacts(
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
   const last = pageRows.at(-1);
   return {
-    facts: pageRows.map((row) => rowToFact(database, row)),
+    facts: rowsToFacts(database, pageRows),
     asOfActivityOffset: asOf,
     ...(hasMore && last
       ? { nextCursor: encodeCursor(last.occurred_at_ms, last.activity_offset) }
@@ -437,7 +403,7 @@ export function queryActivityTimeline(
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
   const last = pageRows.at(-1);
   return {
-    facts: pageRows.map((row) => rowToFact(database, row)),
+    facts: rowsToFacts(database, pageRows),
     asOfActivityOffset: asOf,
     computed: {
       eventCount: summary.event_count,

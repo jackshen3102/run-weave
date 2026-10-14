@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { finishWorkerShutdown } from "../../utils/worker-shutdown";
 import type {
   CandidateAsset,
   ContributionEdge,
@@ -89,6 +90,8 @@ export class SqliteEvolutionActivationStore
   private readonly workerExit: Promise<void>;
   private nextRequestId = 1;
   private closed = false;
+  private failure: Error | null = null;
+  private disposal: Promise<void> | null = null;
 
   private constructor(databasePath: string, env: NodeJS.ProcessEnv) {
     this.worker = createWorker(resolveWorkerEntry(env), databasePath);
@@ -103,12 +106,16 @@ export class SqliteEvolutionActivationStore
       if (response.ok) pending.resolve(response.result);
       else pending.reject(new Error(response.error));
     });
-    this.worker.on("error", (error) => this.rejectAll(error));
+    this.worker.on("error", (error) => this.fail(error));
     this.worker.on("exit", (code) => {
       resolveWorkerExit?.();
-      if (!this.closed && code !== 0) {
-        this.rejectAll(new Error(`evolution_sqlite_worker_exited:${code}`));
-      }
+      this.fail(
+        new Error(
+          this.closed
+            ? "evolution_store_closed"
+            : `evolution_sqlite_worker_exited:${code}`,
+        ),
+      );
     });
   }
 
@@ -138,17 +145,28 @@ export class SqliteEvolutionActivationStore
     this.pending.clear();
   }
 
+  private fail(error: Error): void {
+    this.failure ??= error;
+    this.rejectAll(this.failure);
+  }
+
   private request<T extends EvolutionWorkerResult>(
     command: EvolutionWorkerRequest,
   ): Promise<T> {
     if (this.closed) return Promise.reject(new Error("evolution_store_closed"));
+    if (this.failure) return Promise.reject(this.failure);
     const id = this.nextRequestId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,
       });
-      this.worker.postMessage({ ...command, id });
+      try {
+        this.worker.postMessage({ ...command, id });
+      } catch (error) {
+        this.pending.delete(id);
+        reject(error);
+      }
     });
   }
 
@@ -208,7 +226,10 @@ export class SqliteEvolutionActivationStore
     return this.request({ op: "artifact-overview", runId });
   }
 
-  getArtifactPage(runId: string, query: EvolutionArtifactPageQuery): Promise<EvolutionArtifactPage> {
+  getArtifactPage(
+    runId: string,
+    query: EvolutionArtifactPageQuery,
+  ): Promise<EvolutionArtifactPage> {
     return this.request({ op: "artifact-page", runId, query });
   }
 
@@ -387,19 +408,24 @@ export class SqliteEvolutionActivationStore
     await this.request({ op: "put-watermark", ...params });
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
+    this.disposal ??= this.closeWorker();
+    return this.disposal;
+  }
+
+  private async closeWorker(): Promise<void> {
     if (this.closed) return;
-    void this.request({ op: "close" }).catch(() => undefined);
+    if (!this.failure)
+      void this.request({ op: "close" }).catch(() => undefined);
     this.closed = true;
-    let timeout: NodeJS.Timeout | undefined;
-    const exited = await Promise.race([
-      this.workerExit.then(() => true),
-      new Promise<boolean>((resolve) => {
-        timeout = setTimeout(() => resolve(false), 2_000);
-      }),
-    ]);
-    if (timeout) clearTimeout(timeout);
-    if (!exited) await this.worker.terminate();
-    this.rejectAll(new Error("evolution_store_closed"));
+    try {
+      await finishWorkerShutdown(
+        this.worker,
+        this.workerExit,
+        "evolution_worker_close_timeout",
+      );
+    } finally {
+      this.rejectAll(new Error("evolution_store_closed"));
+    }
   }
 }

@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { finishWorkerShutdown } from "../../utils/worker-shutdown";
 import type {
   ScheduledRun,
   ScheduledRunAttempt,
@@ -29,6 +30,7 @@ export class ScheduledTaskStore {
   private readonly workerExit: Promise<void>;
   private nextRequestId = 1;
   private closed = false;
+  private failure: Error | null = null;
   private disposePromise: Promise<void> | null = null;
 
   private constructor(databasePath: string, env: NodeJS.ProcessEnv) {
@@ -45,11 +47,16 @@ export class ScheduledTaskStore {
       if (response.ok) pending.resolve(response.result);
       else pending.reject(new Error(response.error));
     });
-    this.worker.on("error", (error) => this.rejectAll(error));
+    this.worker.on("error", (error) => this.fail(error));
     this.worker.on("exit", (code) => {
       resolveExit?.();
-      if (!this.closed && code !== 0)
-        this.rejectAll(new Error(`scheduled_tasks_worker_exited:${code}`));
+      this.fail(
+        new Error(
+          this.closed
+            ? "scheduled_tasks_store_closed"
+            : `scheduled_tasks_worker_exited:${code}`,
+        ),
+      );
     });
   }
 
@@ -210,7 +217,13 @@ export class ScheduledTaskStore {
   advanceContinuations(now: string) {
     return this.request<boolean>({ op: "advance-continuations", now });
   }
-  continueRun(runId: string, revision: number, key: string, now: string, reply?: string) {
+  continueRun(
+    runId: string,
+    revision: number,
+    key: string,
+    now: string,
+    reply?: string,
+  ) {
     return this.request<ScheduledRun>({
       op: "continue-run",
       reply,
@@ -288,10 +301,18 @@ export class ScheduledTaskStore {
 
   private async closeWorker(): Promise<void> {
     if (this.closed) return;
-    await this.request<boolean>({ op: "close" });
+    if (!this.failure)
+      void this.request<boolean>({ op: "close" }).catch(() => undefined);
     this.closed = true;
-    await this.workerExit;
-    this.rejectAll(new Error("scheduled_tasks_store_closed"));
+    try {
+      await finishWorkerShutdown(
+        this.worker,
+        this.workerExit,
+        "scheduled_tasks_worker_close_timeout",
+      );
+    } finally {
+      this.rejectAll(new Error("scheduled_tasks_store_closed"));
+    }
   }
 
   private request<T extends ScheduledTaskWorkerResult>(
@@ -299,11 +320,22 @@ export class ScheduledTaskStore {
   ): Promise<T> {
     if (this.closed || (this.disposePromise && command.op !== "close"))
       return Promise.reject(new Error("scheduled_tasks_store_closed"));
+    if (this.failure) return Promise.reject(this.failure);
     const id = this.nextRequestId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: (value) => resolve(value as T), reject });
-      this.worker.postMessage({ ...command, id });
+      try {
+        this.worker.postMessage({ ...command, id });
+      } catch (error) {
+        this.pending.delete(id);
+        reject(error);
+      }
     });
+  }
+
+  private fail(error: Error): void {
+    this.failure ??= error;
+    this.rejectAll(this.failure);
   }
 
   private rejectAll(error: Error): void {
