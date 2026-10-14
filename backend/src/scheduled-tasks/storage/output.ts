@@ -9,28 +9,26 @@ export function appendScheduledOutput(
   text: string,
   maxBytes: number,
 ): boolean {
-  const existing = database
-    .prepare("SELECT content FROM scheduled_run_output WHERE run_id = ?")
-    .get(runId) as { content: string } | undefined;
-  requireRun(database, runId);
-  const content = `${existing?.content ?? ""}${text}`;
-  if (Buffer.byteLength(content) > maxBytes) return false;
-  database.transaction(() => {
-    database
-      .prepare(
-        `INSERT INTO scheduled_run_output(run_id, content) VALUES (?, ?) ON CONFLICT(run_id) DO UPDATE SET content = excluded.content`,
-      )
-      .run(runId, content);
-    const run = requireRun(database, runId);
-    const next = {
-      ...run,
-      outputCursor: String(Buffer.byteLength(content)),
-    };
-    database
-      .prepare("UPDATE scheduled_runs SET payload_json = ? WHERE id = ?")
-      .run(JSON.stringify(next), runId);
-  })();
-  return true;
+  const content = Buffer.from(text, "utf8");
+  // Serialize the size check and append across worker connections; never read old bodies.
+  return database
+    .transaction(() => {
+      const run = requireRun(database, runId);
+      const end = outputBytes(database, runId) + content.byteLength;
+      if (end > maxBytes) return false;
+      if (content.byteLength) {
+        database
+          .prepare(
+            "INSERT INTO scheduled_run_output_chunks(run_id, end_byte, content) VALUES (?, ?, ?)",
+          )
+          .run(runId, end, content);
+      }
+      database
+        .prepare("UPDATE scheduled_runs SET payload_json = ? WHERE id = ?")
+        .run(JSON.stringify({ ...run, outputCursor: String(end) }), runId);
+      return true;
+    })
+    .immediate();
 }
 
 export function readScheduledOutput(
@@ -42,33 +40,53 @@ export function readScheduledOutput(
   // Length and range must come from the same snapshot if another connection appends.
   return database.transaction(() => {
     requireRun(database, runId);
-    const row = database
-      .prepare(
-        "SELECT length(CAST(content AS BLOB)) AS bytes FROM scheduled_run_output WHERE run_id = ?",
-      )
-      .get(runId) as { bytes: number } | undefined;
-    const totalBytes = row?.bytes ?? 0;
+    const totalBytes = outputBytes(database, runId);
     const safeOffset = Math.min(Math.max(0, offset), totalBytes);
     if (safeOffset === totalBytes)
       return { text: "", nextOffset: safeOffset, totalBytes };
     // Keep a UTF-8 character's leading bytes even for a caller-supplied mid-character cursor.
     const start = Math.max(0, safeOffset - 3);
     const prefix = safeOffset - start;
-    const chunk = database
+    const rangeEnd = Math.min(totalBytes, safeOffset + maxBytes + 4);
+    const rows = database
       .prepare(
-        "SELECT substr(CAST(content AS BLOB), ?, ?) AS bytes FROM scheduled_run_output WHERE run_id = ?",
+        `SELECT substr(content,
+          max(1, @start - end_byte + length(content) + 1),
+          min(end_byte, @end) - max(end_byte - length(content), @start)) AS bytes
+         FROM scheduled_run_output_chunks
+         WHERE run_id = @runId AND end_byte > @start ORDER BY end_byte`,
       )
-      .get(start + 1, prefix + maxBytes + 4, runId) as { bytes: Buffer };
+      .iterate({ runId, start, end: rangeEnd }) as IterableIterator<{
+      bytes: Buffer;
+    }>;
+    const chunks: Buffer[] = [];
+    let length = 0;
+    for (const row of rows) {
+      chunks.push(row.bytes);
+      length += row.bytes.byteLength;
+      // Stop the indexed scan as soon as the requested range is complete.
+      if (length >= rangeEnd - start) break;
+    }
+    const bytes = Buffer.concat(chunks, length);
     const end = safeUtf8End(
-      chunk.bytes,
-      Math.min(chunk.bytes.byteLength, prefix + maxBytes),
+      bytes,
+      Math.min(bytes.byteLength, prefix + maxBytes),
     );
     return {
-      text: chunk.bytes.subarray(prefix, end).toString("utf8"),
+      text: bytes.subarray(prefix, end).toString("utf8"),
       nextOffset: start + end,
       totalBytes,
     };
   })();
+}
+
+function outputBytes(database: Database.Database, runId: string): number {
+  const row = database
+    .prepare(
+      "SELECT end_byte FROM scheduled_run_output_chunks WHERE run_id = ? ORDER BY end_byte DESC LIMIT 1",
+    )
+    .get(runId) as { end_byte: number } | undefined;
+  return row?.end_byte ?? 0;
 }
 
 function requireRun(database: Database.Database, runId: string) {

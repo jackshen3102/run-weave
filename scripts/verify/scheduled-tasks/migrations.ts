@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { initialSchemaSql } from "../../../backend/src/scheduled-tasks/storage/migrations/001-initial-schema";
+import { SCHEDULED_TASK_SCHEMA_VERSION } from "../../../backend/src/scheduled-tasks/storage/migrations";
 import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
 
 const requireBackend = createRequire(
@@ -30,12 +31,15 @@ export async function verifyMigrations(): Promise<void> {
     const concurrent = await Promise.all([open(freshPath), open(freshPath)]);
     await Promise.all(concurrent.map((store) => store.dispose()));
     const fresh = new Database(freshPath);
-    assert.equal(fresh.pragma("user_version", { simple: true }), 2);
+    assert.equal(
+      fresh.pragma("user_version", { simple: true }),
+      SCHEDULED_TASK_SCHEMA_VERSION,
+    );
     assert.equal(
       fresh
         .prepare("SELECT count(*) AS n FROM scheduled_schema_migrations")
         .get().n,
-      2,
+      SCHEDULED_TASK_SCHEMA_VERSION,
     );
     fresh.close();
 
@@ -72,7 +76,7 @@ export async function verifyMigrations(): Promise<void> {
     const history = upgraded
       .prepare("SELECT * FROM scheduled_schema_migrations ORDER BY version")
       .all();
-    assert.equal(history.length, 2);
+    assert.equal(history.length, SCHEDULED_TASK_SCHEMA_VERSION);
     assert.equal(
       upgraded.prepare("SELECT request_hash FROM scheduled_idempotency").get()
         .request_hash,
@@ -123,7 +127,10 @@ export async function verifyMigrations(): Promise<void> {
     });
     await v1Store.dispose();
     const v2 = new Database(v1Path);
-    assert.equal(v2.pragma("user_version", { simple: true }), 2);
+    assert.equal(
+      v2.pragma("user_version", { simple: true }),
+      SCHEDULED_TASK_SCHEMA_VERSION,
+    );
     assert.equal(
       v2
         .prepare(
@@ -181,14 +188,17 @@ export async function verifyMigrations(): Promise<void> {
 
     const futurePath = path.join(directory, "future.sqlite");
     const future = seedLegacy(futurePath);
-    future.pragma("user_version = 3");
+    future.pragma(`user_version = ${SCHEDULED_TASK_SCHEMA_VERSION + 1}`);
     future.close();
     await assert.rejects(
       () => open(futurePath),
       /scheduled_tasks_schema_too_new/,
     );
     const untouched = new Database(futurePath);
-    assert.equal(untouched.pragma("user_version", { simple: true }), 3);
+    assert.equal(
+      untouched.pragma("user_version", { simple: true }),
+      SCHEDULED_TASK_SCHEMA_VERSION + 1,
+    );
     assert.equal(
       untouched.prepare("SELECT payload_json FROM scheduled_tasks").get()
         .payload_json,

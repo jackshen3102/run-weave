@@ -99,35 +99,51 @@ export class InboxDatabase {
     return this.db
       .transaction(() => {
         if (this.revision() !== expectedRevision) return false;
+        const incomingIds = JSON.stringify(items.map((item) => item.itemId));
+        const markMissing = this.db.prepare(
+          `UPDATE catalog SET available=0 WHERE source=? AND available=1
+           AND item_id NOT IN (SELECT value FROM json_each(?))`,
+        );
         for (const source of successfulSources) {
-          this.db
-            .prepare("UPDATE catalog SET available=0 WHERE source=?")
-            .run(source);
+          markMissing.run(source, incomingIds);
         }
+        const previousItem = this.db.prepare(
+          "SELECT 1 FROM catalog WHERE item_id=?",
+        );
+        const archivedVersion = this.db.prepare(
+          "SELECT payload FROM content_versions WHERE item_id=? AND version=?",
+        );
+        const insertVersion = this.db.prepare(
+          "INSERT INTO content_versions VALUES(?,?,?)",
+        );
+        const upsertItem = this.db.prepare(
+          `INSERT INTO catalog VALUES(?,?,?,?,1)
+           ON CONFLICT(item_id) DO UPDATE SET source=excluded.source,
+             repository_id=excluded.repository_id, payload=excluded.payload, available=1
+           WHERE catalog.source != excluded.source
+             OR catalog.repository_id != excluded.repository_id
+             OR catalog.payload != excluded.payload OR catalog.available != 1`,
+        );
         for (const incoming of items) {
-          const previous = this.catalogItem(incoming.itemId)?.item;
-          const archived = this.version(
+          const row = archivedVersion.get(
             incoming.itemId,
             incoming.contentVersion,
-          );
+          ) as { payload: string } | undefined;
+          const archived = row && (JSON.parse(row.payload) as PublishedItem);
           const item = {
             ...incoming,
             contentUpdatedAt:
               archived?.contentUpdatedAt ??
-              (previous ? new Date().toISOString() : incoming.contentUpdatedAt),
+              (previousItem.get(incoming.itemId)
+                ? new Date().toISOString()
+                : incoming.contentUpdatedAt),
           };
-          this.db
-            .prepare("INSERT OR IGNORE INTO content_versions VALUES(?,?,?)")
-            .run(item.itemId, item.contentVersion, JSON.stringify(item));
-          this.db
-            .prepare("INSERT OR REPLACE INTO catalog VALUES(?,?,?,?,1)")
-            .run(
-              item.itemId,
-              item.source,
-              item.repositoryId,
-              JSON.stringify(item),
-            );
+          const payload = JSON.stringify(item);
+          if (!archived)
+            insertVersion.run(item.itemId, item.contentVersion, payload);
+          upsertItem.run(item.itemId, item.source, item.repositoryId, payload);
         }
+        // Even unchanged projections advance the CAS barrier for concurrent source reads.
         this.db
           .prepare("UPDATE projection_clock SET revision=revision+1 WHERE id=1")
           .run();

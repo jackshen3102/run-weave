@@ -528,11 +528,6 @@ export class ScheduledTaskDatabase {
         run.scheduledFor,
         JSON.stringify(run),
       );
-    this.database
-      .prepare(
-        "INSERT INTO scheduled_run_output(run_id, content) VALUES (?, '')",
-      )
-      .run(run.id);
   }
 
   private findUnfinished(taskId: string): ScheduledRun | null {

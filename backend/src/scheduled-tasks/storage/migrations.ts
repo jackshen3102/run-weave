@@ -3,13 +3,15 @@ import Database from "better-sqlite3";
 import { initialSchemaSql } from "./migrations/001-initial-schema";
 import { catchUpDataSql } from "./migrations/002-catch-up-data";
 import { continuationSql } from "./migrations/003-continuation";
+import { outputChunksSql } from "./migrations/004-output-chunks";
 
 const migrations = [
   { version: 1, name: "initial-schema", sql: initialSchemaSql },
   { version: 2, name: "catch-up-data", sql: catchUpDataSql },
   { version: 3, name: "continuation", sql: continuationSql },
+  { version: 4, name: "output-chunks", sql: outputChunksSql },
 ] as const;
-export const SCHEDULED_TASK_SCHEMA_VERSION = 3;
+export const SCHEDULED_TASK_SCHEMA_VERSION = 4;
 
 /** The entire upgrade is atomic, including adoption of the unversioned legacy database. */
 export function migrateScheduledTasks(database: Database.Database): void {
