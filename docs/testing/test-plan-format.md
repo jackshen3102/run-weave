@@ -4,7 +4,7 @@
 
 Runweave 的新测试计划统一使用 `docs/testing/**/*.testplan.yaml`。校验器只解析该格式，
 不解析 Markdown 测试案例。已有 Markdown 用例可以继续作为历史或人工参考，但交给自动执行前
-前必须迁移为新格式。
+必须迁移为新格式。
 
 规范目标是让 Agent 直接读自然语言，同时让程序可以稳定解析、校验和可视化。不要把步骤拆成
 变量、selector、assertion、evidence、executor 等细粒度字段。

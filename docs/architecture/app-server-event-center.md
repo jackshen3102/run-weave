@@ -235,7 +235,7 @@ Backend 的 `POST /api/app/home/conversation-previews` 将短文本映射到当�
 
 ## Work History 聚合边界
 
-Activity 页面里的 `Terminal History` 不是新的事件事实源。它们由
+Activity 页面里的 `Terminal History` 不是新的事件事实源。它由
 backend 的 `/api/work-history/*` 路由在读取时聚合现有来源：
 
 - `/api/work-history/terminals`：列出 backend 当前已知 terminal session，并用 App Server
@@ -243,9 +243,9 @@ backend 的 `/api/work-history/*` 路由在读取时聚合现有来源：
 - `/api/work-history/terminals/:terminalSessionId`：返回 terminal session 详情、该 session
   关联的 ThreadRef/Thread detail、Activity Facts 和 source status。
 
-聚合层只保存分页 cursor 和降级状态，不复制 Thread 正文、Activity Fact 。
+聚合层只保存分页 cursor 和降级状态，不复制 Thread 正文或 Activity Fact。
 App Server 不可达时，Terminal History 仍可展示 terminal session 与 Activity Facts，并把
-`appServer` source 标为 unavailable；Activity 查询失败时保留 terminal/thread/run 视图，
+`appServer` source 标为 unavailable；Activity 查询失败时保留 terminal/thread 视图，
 把 `activity` source 标为 unavailable。Thread detail 分页超过当前批次或 provider reader
 不可用时标为 partial，不把缺失详情解释成 thread 不存在。
 

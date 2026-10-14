@@ -172,7 +172,8 @@ stdout。它只保存去敏 statement、结构化 outcome、Evidence ID/hash、r
 用户 API 位于 `/api/evolution`：
 
 - Run：`POST/GET /runs`、`GET /runs/:id`、`POST /runs/:id/cancel|retry`
-- artifact：`GET /runs/:id/artifacts`
+- artifact：`GET /runs/:id/artifacts/summary`、`GET /runs/:id/artifacts/page`；
+  `GET /runs/:id/artifacts` 保留完整读取兼容入口
 - Provider：`GET /providers`
 - Schedule：`GET/POST /schedules`、`PATCH/DELETE /schedules/:id`
 - Insight：`GET /insights`、`GET /insights/:id`
@@ -182,11 +183,21 @@ stdout。它只保存去敏 statement、结构化 outcome、Evidence ID/hash、r
 - RuntimeTrace：`GET /runtime-traces`，可按 `runId` 精确查询，或按
   `learningScopeId`/`limit` 查看历史激活轨迹；`/evolution` 使用 scope 查询
 
+运行详情先读取摘要与分析结论，只有展开“查看详细记录”才按集合读取冻结证据、质量记录、
+轨迹片段或任务片段。分页参数 `collection` 为 `evidence`、`data-quality`、`segments` 或
+`episodes`，`limit` 默认 25、范围 1–100；响应包含 `items`、`total` 和 `nextCursor`。
+每页以 512 KiB 为读取预算，单条超限记录仍完整返回，不截断内容。
+
+游标绑定 Run、集合及读取边界：冻结证据与质量记录绑定 Context Pack 身份和 digest，
+片段绑定首次读取时的行上界，后续新增片段不混入该轮分页。非法或跨 Run/集合游标返回 400，
+冻结包改变使旧游标失效时返回 409；客户端可重新从首页读取。摘要与分页不重写冻结 manifest，
+不改变 Evidence ID 或分析输入；完整读取接口不具有分页接口的载荷边界。
+
 主要实现位于：
 
 - `packages/shared/src/evolution/index.ts`
 - `backend/src/evolution/`
-- `backend/src/routes/evolution-*.ts`
+- [`backend/src/routes/evolution/`](../../backend/src/routes/evolution/)
 - `frontend/src/pages/evolution-page.tsx`
 - `packages/runweave-cli/src/commands/evolution.ts`
 
