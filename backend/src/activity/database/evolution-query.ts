@@ -12,7 +12,7 @@ import {
   buildTerminalChildProjectIdPrefix,
   resolveTerminalParentProjectId,
 } from "@runweave/shared/terminal/project-context";
-import { activeDeleteTombstoneSql, type FactRow, rowToFact } from "./query";
+import { activeDeleteTombstoneSql, type FactRow, rowsToFacts } from "./query";
 
 interface RepositoryCountSnapshot {
   dataVersion: number;
@@ -119,7 +119,7 @@ export function queryActivityEvolutionSnapshot(
     learningScopeId,
     afterWatermark: query.afterWatermark,
     snapshotBoundary,
-    facts: pageRows.map((row) => rowToFact(database, row)),
+    facts: rowsToFacts(database, pageRows),
     hasMore,
     ...(last ? { nextWatermark: last.activity_offset } : {}),
   };
@@ -188,7 +188,7 @@ function queryRepositorySnapshot(
       learningScopeId: query.learningScopeId,
       afterWatermark: query.afterWatermark,
       snapshotBoundary: boundary,
-      facts: page.map((row) => rowToFact(database, row)),
+      facts: rowsToFacts(database, page),
       hasMore: rows.length > query.limit,
       unresolvedRepositoryCount: unresolved,
       ...(page.length ? { nextWatermark: page.at(-1)!.repository_offset } : {}),
