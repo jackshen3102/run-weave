@@ -147,6 +147,8 @@ final class AppSession: ObservableObject {
       recordConnection("connection.activated", ["path": networkSignature ?? "unknown"])
       authenticated = await client.hasCredentials()
       guard generation == epoch, !Task.isCancelled else { return }
+      // Restored credentials may have set authenticated before the API was available.
+      knowledgeInbox.reset(api: authenticated ? client : nil)
       checking = false
       health.status = .online
       if authenticated { await reload() }
