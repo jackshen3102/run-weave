@@ -288,7 +288,8 @@ Automation 的关键桌面路径已有实现与阶段性验证，全量
 [观察用例](../testing/terminal/browser/automation-observability.testplan.yaml)、当前 `capturePage`
 产品路径的独立进程性能对照和 macOS 打包复验仍需完成，不能用旧 screencast 实验替代发布验收。
 性能取证应保持十 Tab 元数据、单 selected 画面、最长边上限 1280px、目标 5 FPS、静止页降频与 renderer 解码 ACK 的实际资源模型。
-具体阈值、三轮性能与三组独立进程 RSS 配对合同以该测试计划为准；同进程前后 RSS 增长相减
+该计划的 640px 尺寸步骤仍待与当前实现对齐，不能据此声明当前尺寸已完成验收。
+其余性能阈值、三轮性能与三组独立进程 RSS 配对合同见该测试计划；同进程前后 RSS 增长相减
 不能代替独立进程对照。性能驱动使用正式 snapshot/view/frame/ACK 接口，不增加专用生产捕获 API。
 
 - 文件、目录、搜索和项目隔离：[Project Context](../testing/terminal/workspace/project-context.testplan.yaml)、
