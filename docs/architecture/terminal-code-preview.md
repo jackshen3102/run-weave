@@ -221,8 +221,8 @@ Web 交互边界：
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
 - 多个 CDP 客户端可以同时连接并操作不同 Browser tab。Proxy 对同一 target 复用同一个 Electron `webContents.debugger` attachment，但每个客户端仍使用自己的 proxy session id；任一客户端断开不应清理其他 target 的有效 session。
 - CDP resolver、无 target 连接和 `Target.createTarget` 的窗口 fallback 只使用 `desktopRuntime.mainWindow`；Desktop Companion、临时捕获宿主和其它辅助窗口不能拥有 Browser workspace、Automation registry 或 target。
-- Automation 按 Terminal/unattributed connection 聚合当前窗口内的受控 Group，所有 Tab 只展示元数据，始终最多一个 selected target 生产实时画面。默认跟随最近的点击、输入、滚动、导航或刷新；手动选择后固定，显式恢复后才继续跟随。观察面只读，“在 Browser 中打开”只 reveal 同一 tab。
-- Automation 画面使用目标 `webContents.capturePage()`，最长边 640px、目标 5 FPS、单 in-flight，并由 renderer `<img>` load/error ACK 控制下一帧。fresh 未挂载或 0×0 的嵌套 View 只在 Automation 可见时进入临时 `BaseWindow` 合成宿主；必须先挂载后设置 bounds。产品 producer 不向外部 CDP 连接发送 screenshot/screencast 命令。
+- Automation 按 Terminal/unattributed connection 聚合当前窗口内的受控 Group，所有 Tab 只展示元数据，始终最多一个 selected target 生产实时画面。默认跟随最近的点击、输入、滚动、导航或刷新；跨 Tab 的连续动作合并后再切换，每次自动选中的页面至少停留一秒。手动选择立即生效并固定，显式恢复后才继续跟随。观察面只读，“在 Browser 中打开”只 reveal 同一 tab。
+- Automation 画面使用目标 `webContents.capturePage()`，按显示区域与设备像素比选择尺寸，最长边上限 1280px、目标 5 FPS、单 in-flight。renderer 完成解码、丢弃或处理失败后均确认对应帧，再允许下一帧；新帧解码完成前保留当前画面，切换目标或隐藏后拒绝迟到解码。静止页面跳过重复帧并降至每秒采样，每五秒重发以恢复画面；操作到来时恢复活跃采样。采集或解码中断显示错误并保留最后画面。fresh 未挂载或 0×0 的嵌套 View 只在 Automation 可见时进入临时 `BaseWindow` 合成宿主；必须先挂载后设置 bounds。产品 producer 不向外部 CDP 连接发送 screenshot/screencast 命令。
 - 切出 Automation、收起 Sidecar、窗口隐藏/销毁、target 销毁或 connection 断开都会停止 producer、释放临时宿主和 frame bytes。连接、actor、动作、选择、指针和画面都不持久化。
 - Group 细线上的连接点表示组内至少一个 target 已有 CDP client 附着；Tab favicon 附近的短暂操作点表示近期有 MCP/CDP session 命中该 target 的用户可感知操作。两者都不表示 Agent 身份、所有权或永久接管，也不改变 active Tab 选中背景。
 - `Page.enable`、`Runtime.enable`、`Target.setAutoAttach`、`Target.getTargetInfo`、`Page.getFrameTree`、`Network.enable` 等初始化、发现或静默同步命令不触发操作点；导航、点击、输入、evaluate、截图等真实操作才让对应 Tab 短暂显示 4.5 秒活动状态。
@@ -287,8 +287,9 @@ Electron 桌面端的 Browser 工具支持 Browser comments 注释模式。它�
 Automation 的关键桌面路径已有实现与阶段性验证，全量
 [观察用例](../testing/terminal/browser/automation-observability.testplan.yaml)、当前 `capturePage`
 产品路径的独立进程性能对照和 macOS 打包复验仍需完成，不能用旧 screencast 实验替代发布验收。
-性能取证应保持十 Tab 元数据、单 selected 画面、640px/5 FPS 与 renderer ACK 的实际资源模型。
-具体阈值、三轮性能与三组独立进程 RSS 配对合同以该测试计划为准；同进程前后 RSS 增长相减
+性能取证应保持十 Tab 元数据、单 selected 画面、最长边上限 1280px、目标 5 FPS、静止页降频与 renderer 解码 ACK 的实际资源模型。
+该计划的 640px 尺寸步骤仍待与当前实现对齐，不能据此声明当前尺寸已完成验收。
+其余性能阈值、三轮性能与三组独立进程 RSS 配对合同见该测试计划；同进程前后 RSS 增长相减
 不能代替独立进程对照。性能驱动使用正式 snapshot/view/frame/ACK 接口，不增加专用生产捕获 API。
 
 - 文件、目录、搜索和项目隔离：[Project Context](../testing/terminal/workspace/project-context.testplan.yaml)、
