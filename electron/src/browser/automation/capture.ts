@@ -51,14 +51,21 @@ interface EncodedFrame {
 interface ActiveCapture extends TerminalBrowserAutomationCaptureSource {
   maxEdge: number;
   intervalMs: number;
-  sequence: number;
+  lastEncoded: Buffer | null;
+  lastEmittedAt: number;
+  unchangedFrames: number;
   inFlight: boolean;
   awaitingFrameSequence: number | null;
   captureTimer: NodeJS.Timeout | null;
 }
 
 const DEFAULT_FPS = 5;
-const JPEG_QUALITY = 60;
+const JPEG_QUALITY = 75;
+const IDLE_CAPTURE_INTERVAL_MS = 1_000;
+const FRAME_REFRESH_INTERVAL_MS = 5_000;
+// Capture restarts must not reuse a sequence: decoding the old stream may
+// finish after a resize or a hide/show round trip.
+let nextFrameSequence = 0;
 // Never let an over-budget capture immediately start another synchronous
 // resize/JPEG cycle on Electron's main thread.
 const MIN_CAPTURE_COOLDOWN_MS = 50;
@@ -90,6 +97,7 @@ export class TerminalBrowserAutomationCapture {
   private generation = 0;
   private captureCount = 0;
   private emittedFrameCount = 0;
+  private duplicateFrameCount = 0;
   private failureCount = 0;
   private inFlightCount = 0;
   private lastFrameAt: number | null = null;
@@ -108,7 +116,9 @@ export class TerminalBrowserAutomationCapture {
       ...request.source,
       maxEdge: clampMaxEdge(request.maxEdge),
       intervalMs: Math.round(1000 / fps),
-      sequence: 0,
+      lastEncoded: null,
+      lastEmittedAt: 0,
+      unchangedFrames: 0,
       inFlight: false,
       awaitingFrameSequence: null,
       captureTimer: null,
@@ -190,6 +200,18 @@ export class TerminalBrowserAutomationCapture {
         return;
       }
       this.captureCount += 1;
+      if (active.lastEncoded?.equals(encoded)) {
+        active.unchangedFrames += 1;
+        // Occasionally resend a still frame so a discarded/failed decode
+        // can recover without requiring a change in the underlying page.
+        if (Date.now() - active.lastEmittedAt < FRAME_REFRESH_INTERVAL_MS) {
+          this.duplicateFrameCount += 1;
+          return;
+        }
+      } else {
+        active.unchangedFrames = 0;
+      }
+      active.lastEncoded = encoded;
       this.emitFrame(active, { captureStartedAt, encoded, ...size });
     } catch (error) {
       if (generation === this.generation && this.active === active) {
@@ -203,7 +225,12 @@ export class TerminalBrowserAutomationCapture {
         this.scheduleCapturePage(
           active,
           generation,
-          Math.max(MIN_CAPTURE_COOLDOWN_MS, active.intervalMs - elapsed),
+          Math.max(
+            MIN_CAPTURE_COOLDOWN_MS,
+            (active.unchangedFrames >= 5
+              ? IDLE_CAPTURE_INTERVAL_MS
+              : active.intervalMs) - elapsed,
+          ),
         );
       }
     }
@@ -213,7 +240,7 @@ export class TerminalBrowserAutomationCapture {
     return {
       captureCount: this.captureCount,
       emittedFrameCount: this.emittedFrameCount,
-      duplicateFrameCount: 0,
+      duplicateFrameCount: this.duplicateFrameCount,
       failureCount: this.failureCount,
       inFlightCount: this.inFlightCount,
       bufferCount:
@@ -232,17 +259,30 @@ export class TerminalBrowserAutomationCapture {
     active.awaitingFrameSequence = null;
   }
 
+  markActivity(): void {
+    const active = this.active;
+    if (!active) {
+      return;
+    }
+    active.unchangedFrames = 0;
+    if (!active.inFlight && active.awaitingFrameSequence === null) {
+      if (active.captureTimer) clearTimeout(active.captureTimer);
+      this.scheduleCapturePage(active, this.generation, 0);
+    }
+  }
+
   private emitFrame(active: ActiveCapture, frame: EncodedFrame): void {
     const capturedAt = Date.now();
+    active.lastEmittedAt = capturedAt;
     const bytes = Uint8Array.from(frame.encoded);
-    active.sequence += 1;
-    active.awaitingFrameSequence = active.sequence;
+    const sequence = ++nextFrameSequence;
+    active.awaitingFrameSequence = sequence;
     this.emittedFrameCount += 1;
     this.emittedByteCount += bytes.byteLength;
     this.lastFrameAt = capturedAt;
     this.callbacks.onFrame({
       targetId: active.targetId,
-      sequence: active.sequence,
+      sequence,
       captureStartedAt: frame.captureStartedAt,
       capturedAt,
       width: frame.width,
@@ -254,6 +294,10 @@ export class TerminalBrowserAutomationCapture {
   }
 
   private recordFailure(active: ActiveCapture, error: unknown): void {
+    // A successful capture after an error must reach the viewer even when
+    // its pixels match the last good frame, so its error state can recover.
+    active.lastEncoded = null;
+    active.unchangedFrames = 0;
     this.failureCount += 1;
     this.callbacks.onError?.(
       active.targetId,
