@@ -21,7 +21,7 @@ import {
 const STATE_CHANNEL = "terminal-browser:automation-state-changed";
 const FRAME_CHANNEL = "terminal-browser:automation-frame";
 const ACTION_DURATION_MS = 4_500;
-const MAX_PREVIEW_EDGE = 640;
+const MAX_PREVIEW_EDGE = 1280;
 
 interface AutomationConnection {
   connectionId: string;
@@ -471,6 +471,11 @@ export function recordTerminalBrowserAutomationCommand(
   }
   if (existing) {
     clearTimeout(existing.timer);
+  }
+  for (const viewer of viewers.values()) {
+    if (viewer.windowId === connection.windowId && viewer.captureTargetId === targetId) {
+      viewer.capture?.markActivity();
+    }
   }
   const duration = classified.tool?.status === "running" ? 17_000 : ACTION_DURATION_MS;
   const actionUntil = Date.now() + duration;
