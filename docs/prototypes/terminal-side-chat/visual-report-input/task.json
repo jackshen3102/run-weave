@@ -6,7 +6,8 @@
     "scope": "2026-10-16 · Runweave 隔离 Electron Beta / pool-04 · 受管 Codex 0.160.1 · 真实截图与事件证据",
     "materialKind": "current",
     "limitations": [
-      "Stable 未更新，全局 CLI 未替换。此报告复用本次验收材料；图片未记录精确采集时间，不用文件时间推断。"
+      "Stable 未更新，全局 CLI 未替换。此报告复用本次验收材料；图片未记录精确采集时间，不用文件时间推断。",
+      "提交版文字证据已将本机用户目录替换为 <USER_HOME>；事件、会话 ID、结果和原始截图保持不变。"
     ]
   },
   "assets": [

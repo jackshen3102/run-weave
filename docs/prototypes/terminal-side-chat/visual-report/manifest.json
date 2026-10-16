@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "templateVersion": "1.0.0",
-  "inputSha256": "940728cdea5a5784062767358648e899ce472786c6ab4b72e76b6938c0c672d4",
+  "inputSha256": "4a6ad707f58c351a734a52e3cea9480b33d0df04e4a96a0361ca3edee4d9801d",
   "assets": [
     {
       "id": "side",
@@ -31,12 +31,12 @@
     {
       "id": "completed",
       "path": "assets/0006-completed.json",
-      "sha256": "916908edc18601d6dda430ea763bc7e78e7116b33d9602eff9912b2e1861fa8d"
+      "sha256": "8c1b893dd511f132ff2c06fd67371f198aaba7b439653af992141a23493270b2"
     },
     {
       "id": "permissions",
       "path": "assets/0007-permissions.json",
-      "sha256": "e64399feda788dce269e5b011d7e0d5901695a85ddd14609e861857c1c157c92"
+      "sha256": "bc2fb8ae129f933e3455983481a2dc78fdb3df48923a93d74dec720de4773975"
     },
     {
       "id": "race",
@@ -46,12 +46,12 @@
     {
       "id": "parentinput",
       "path": "assets/0009-parentinput.json",
-      "sha256": "d4d1f971bacdc5f5753d13cb145dedc48e7eea98baf3f59206b1253099b28ae0"
+      "sha256": "ff3e6a77e8c9b98f1e9068673ba50a0aab8f1bf54b1b02355b5b68e883cc3d52"
     },
     {
       "id": "sideinput",
       "path": "assets/0010-sideinput.json",
-      "sha256": "922f8a3b221c54189f4a987c34284e205bcb1baf72687479a2c7acc1ecc26bad"
+      "sha256": "a28a42d09f45d0937feccfaa234a88ca8ade8e2fba4916db5ad76f892e080465"
     },
     {
       "id": "watchbefore",
@@ -81,7 +81,7 @@
     {
       "id": "fork",
       "path": "assets/0016-fork.json",
-      "sha256": "90e8410ff3764546acb1ec02d058bdb74fd2629be403c502e4bbbb269d65f7db"
+      "sha256": "1b3b9692d25ef748e2ffebc9044c3894b5357e235d8696cbfd15ede8833cf701"
     },
     {
       "id": "unknown",
