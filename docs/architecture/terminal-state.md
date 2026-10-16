@@ -86,6 +86,14 @@ starting 改为 idle/running。每 30 秒最多检查 8 个候选，单轮 2 秒
 
 终端 session 生命周期是最高优先级 guard。只要 session 已退出，读取当前状态时必须返回 `shell_idle`，即使内存里残留了 agent 状态或 active command。
 
+## 受管 Codex 的原生旁聊
+
+选择 [受管 Codex](../../packages/agent-bridge/codex/README.md) 后，同一 pane 的主会话与原生旁聊共享终端和 CLI 进程。panel 的可选 `codexContext` 来自该 TUI 的原子快照；`primaryThreadId` 是持久主身份，`displayedThreadId` 是当前输入和显示目标，`generation/revision` 用于拒绝旧输入。字段缺省表示未启用受管观测，`null` 表示受管身份尚不可确认。
+
+主任务的 hook 状态、完成 revision、监督与持久恢复只接受主会话；旁聊事件在 Hook bridge 和 Backend 两处过滤。原生 `/new`、`/resume` 会更新主身份，不能将首次 thread 永久锁定。受管启动器的前台进程可能是 Node；只有本次 operation 的存活 TUI 快照可以将其识别为 Codex。浮动输入消费 `displayedRunning`，不能使用主任务状态判断旁聊应发送还是排队。
+
+浮动草稿和附件按显示会话及代际隔离，发送由原生 TUI 同时检查目标、版本和草稿；切换竞态拒绝发送并保留草稿，不自动重试。浏览器重连保持原进程中的旁聊；CLI 丢失后，既有恢复流程使用配置的 Codex 可执行文件恢复主会话，不恢复临时旁聊。普通 Fork 仍创建独立的持久终端与 thread。
+
 ## API
 
 登录态读取当前状态：

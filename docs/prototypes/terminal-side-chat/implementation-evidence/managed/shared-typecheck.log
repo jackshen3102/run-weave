@@ -1,0 +1,4 @@
+
+> @runweave/shared@0.1.0 typecheck <USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1/packages/shared
+> tsc -p tsconfig.json --noEmit
+

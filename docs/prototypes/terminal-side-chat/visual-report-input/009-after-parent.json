@@ -1,0 +1,78 @@
+{
+  "status": 200,
+  "body": {
+    "watchId": "f327a265-e6e5-4ff4-9271-03631ef1c204",
+    "enabled": true,
+    "enabledAt": "2026-10-15T16:44:16.150Z",
+    "target": {
+      "terminalSessionId": "c1277223",
+      "panelId": "df45fda6-d8df-4266-b0b3-aa084fe0885c",
+      "threadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+      "executorGeneration": "codex:df45fda6-d8df-4266-b0b3-aa084fe0885c"
+    },
+    "taskStartMessageId": "msg_01a14073-893a-7a60-896e-542f14309c2b",
+    "task": {
+      "id": "msg_01a14073-893a-7a60-896e-542f14309c2b",
+      "role": "user",
+      "text": "SIDE009 supervision acceptance: execute exactly `sleep 40; printf PARENT009_COMPLETE` then reply PARENT009_COMPLETE. This is the entire authorized task; no follow-up work or file changes.",
+      "rawTurnId": "01a14073-87f6-7422-ae91-e550088598fb",
+      "createdAt": "2026-10-15T16:44:36.026Z"
+    },
+    "goal": "SIDE009 supervision acceptance: execute exactly `sleep 40; printf PARENT009_COMPLETE` then reply PARENT009_COMPLETE. This is the entire authorized task; no follow-up work or file changes.",
+    "plans": [],
+    "revision": 6,
+    "contextRevision": 2,
+    "status": "watching",
+    "outcome": "completed",
+    "continuationLimit": 3,
+    "continuationCount": 0,
+    "decisions": [
+      {
+        "scores": {
+          "completed": 1,
+          "blocked": 0,
+          "continue": 0
+        },
+        "reason": "当前授权仅为执行指定命令并回复完成标记；当前回复已报告 PARENT009_COMPLETE，无失败或纠正证据，且用户明确禁止后续工作。",
+        "sourceMessageIds": [
+          "msg_01a14073-893a-7a60-896e-542f14309c2b",
+          "msg_0e6d34c7356e37f0016ad103213af4819194d8356304cc2342"
+        ],
+        "guidance": {
+          "remainingWork": "",
+          "nextAction": "",
+          "authorizationMessageIds": [],
+          "blocker": "",
+          "requiredUserAction": ""
+        },
+        "outcome": "completed",
+        "policyVersion": "2026-10-13-bounded-evidence-v5",
+        "durationMs": 10656,
+        "model": "Codex 默认模型",
+        "decisionId": "de4de521-59a6-402d-8105-3a0da66b7477",
+        "threadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+        "rawTurnId": "01a14073-87f6-7422-ae91-e550088598fb",
+        "replyDigest": "9dd41f651340932bfc8cd4e95c4df2c21be3958a6ad4bfab1881cc3efacac3e6",
+        "contextRevision": 2,
+        "createdAt": "2026-10-15T16:45:43.302Z",
+        "delivery": "not_requested",
+        "deliveryDeadline": 1792082773302,
+        "currentReplyId": "msg_0e6d34c7356e37f0016ad103213af4819194d8356304cc2342",
+        "goalPreview": "SIDE009 supervision acceptance: execute exactly `sleep 40; printf PARENT009_COMPLETE` then reply PARENT009_COMPLETE. This is the entire authorized task; no follow-up work or file changes."
+      }
+    ],
+    "createdAt": "2026-10-15T16:44:16.150Z",
+    "updatedAt": "2026-10-15T16:45:43.302Z",
+    "lastUserMessageId": "msg_01a14073-893a-7a60-896e-542f14309c2b",
+    "evidenceMessageIds": [
+      "msg_01a14073-893a-7a60-896e-542f14309c2b",
+      "msg_0e6d34c7356e37f0016ad103213af4819194d8356304cc2342"
+    ],
+    "observedContinuationCount": 0,
+    "sourceVersion": "16777234:604936651:1792081901085.9307:aa1bb5ffb6ad15daab031a98caa08a4a81d4860708878f7008163924f4d41c38",
+    "completedReplyIds": [
+      "msg_0e6d34c7356e37f0016ad103213af4819194d8356304cc2342"
+    ],
+    "lastFinalMessageId": "01a14067-b220-71f3-9f72-e3841f6862ef:msg_0e6d34c7356e37f0016ad103213af4819194d8356304cc2342"
+  }
+}

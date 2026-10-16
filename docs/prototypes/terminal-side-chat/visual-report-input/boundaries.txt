@@ -1,0 +1,22 @@
+交付状态
+  已实现并在隔离 Electron Beta 验证。
+  Stable 尚未更新；全局 Codex CLI 未替换。
+
+启用路径
+  1. 仓库根目录运行 pnpm codex:build。
+  2. 通过现有配置合同设置 agents.codex.binary。
+  3. 重启对应实例，再新建或恢复终端。
+  具体 revision/digest 与回退要求见受管 Codex README。
+
+适用范围
+  固定受管 Codex 0.160.1，本机 macOS。
+  使用 --no-daemon；不支持共享 daemon 的 agents 总览和 --remote。
+  未扩展 iOS、远程执行器、Diff 或持久旁聊。
+
+SIDE-014 的证据边界
+  原生未开始会话、审查模式：真实 UI 拒绝并保留草稿。
+  未知观测协议：故障注入后宿主发送被拒绝。
+  本版本无关闭 Side 的开关；未实测其他旧版二进制。
+
+测试资源
+  7 个自有终端、测试项目已清理；隔离 Dev Session 已停止。

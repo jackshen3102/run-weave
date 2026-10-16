@@ -1,0 +1,18 @@
+主身份 primaryThreadId
+  ├─ 持久恢复目标
+  ├─ 主任务完成记录
+  └─ 主任务监督
+
+显示身份 displayedThreadId
+  ├─ 当前原生界面
+  ├─ 浮动草稿与附件归属
+  └─ 发送目标与运行状态
+
+实际观察
+• 子完成：主 completion revision 7 → 7，未新增主完成事件。
+• 父完成：主 completion revision 7 → 8。
+• 子完成：监督 watch 未变。
+• 父完成：一次 completed 决策，续接投递为 0。
+
+旁聊事件先在 Hook bridge 过滤，Backend 再核对主身份。
+无需用终端标题、最近一次 hook 或屏幕文字猜测归属。

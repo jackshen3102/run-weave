@@ -1,0 +1,403 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "id": "codex-side-20261016",
+    "title": "Codex 旁聊 · 实施与验收报告",
+    "scope": "2026-10-16 · Runweave 隔离 Electron Beta / pool-04 · 受管 Codex 0.160.1 · 真实截图与事件证据",
+    "materialKind": "current",
+    "limitations": [
+      "Stable 未更新，全局 CLI 未替换。此报告复用本次验收材料；图片未记录精确采集时间，不用文件时间推断。"
+    ]
+  },
+  "assets": [
+    {
+      "id": "side",
+      "kind": "image",
+      "path": "assets/0001-side.png",
+      "label": "Beta 原生旁聊截图",
+      "origin": {
+        "surface": "Electron Beta / pool-04",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/001-side.png"
+      }
+    },
+    {
+      "id": "approval",
+      "kind": "image",
+      "path": "assets/0002-approval.png",
+      "label": "Beta 原生审批截图",
+      "origin": {
+        "surface": "Electron Beta / pool-04",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/003-native-approval.png"
+      }
+    },
+    {
+      "id": "draft",
+      "kind": "image",
+      "path": "assets/0003-draft.png",
+      "label": "Beta 保留草稿截图",
+      "origin": {
+        "surface": "Electron Beta / pool-04",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/010-retained-draft.png"
+      }
+    },
+    {
+      "id": "results",
+      "kind": "text",
+      "path": "assets/0004-results.json",
+      "label": "15 项逐例结果与文件索引",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/acceptance-results.json"
+      }
+    },
+    {
+      "id": "created",
+      "kind": "text",
+      "path": "assets/0005-created.json",
+      "label": "运行中创建的原生身份",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/001-side-created.json"
+      }
+    },
+    {
+      "id": "completed",
+      "kind": "text",
+      "path": "assets/0006-completed.json",
+      "label": "主任务最终完成",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/001-final.json"
+      }
+    },
+    {
+      "id": "permissions",
+      "kind": "text",
+      "path": "assets/0007-permissions.json",
+      "label": "权限和审批事件",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/003-permission-events.json"
+      }
+    },
+    {
+      "id": "race",
+      "kind": "text",
+      "path": "assets/0008-race.txt",
+      "label": "切换竞态的拒绝结果",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/010-race-result.txt"
+      }
+    },
+    {
+      "id": "parentinput",
+      "kind": "text",
+      "path": "assets/0009-parentinput.json",
+      "label": "父附件读取结果",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/010-parent-result.json"
+      }
+    },
+    {
+      "id": "sideinput",
+      "kind": "text",
+      "path": "assets/0010-sideinput.json",
+      "label": "子附件读取结果",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/010-side-sent.json"
+      }
+    },
+    {
+      "id": "watchbefore",
+      "kind": "text",
+      "path": "assets/0011-watchbefore.json",
+      "label": "监督初始记录",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/009-before-side.json"
+      }
+    },
+    {
+      "id": "watchchild",
+      "kind": "text",
+      "path": "assets/0012-watchchild.json",
+      "label": "子完成后的监督记录",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/009-after-child.json"
+      }
+    },
+    {
+      "id": "watchparent",
+      "kind": "text",
+      "path": "assets/0013-watchparent.json",
+      "label": "父完成后的监督决策",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/009-after-parent.json"
+      }
+    },
+    {
+      "id": "reload",
+      "kind": "text",
+      "path": "assets/0014-reload.json",
+      "label": "浏览器重连后的身份",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/011-after.json"
+      }
+    },
+    {
+      "id": "restart",
+      "kind": "text",
+      "path": "assets/0015-restart.json",
+      "label": "重启后只恢复主会话",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/012-restored.json"
+      }
+    },
+    {
+      "id": "fork",
+      "kind": "text",
+      "path": "assets/0016-fork.json",
+      "label": "普通 Fork 恢复身份",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/015-fork-restored.json"
+      }
+    },
+    {
+      "id": "unknown",
+      "kind": "text",
+      "path": "assets/0017-unknown.json",
+      "label": "未知观测协议拒绝结果",
+      "origin": {
+        "surface": "Beta API / 原生事件记录",
+        "capturedAt": null,
+        "sourceRef": "implementation-evidence/managed/014-unavailable-response.json"
+      }
+    },
+    {
+      "id": "operations",
+      "kind": "text",
+      "path": "assets/0018-operations.txt",
+      "label": "事实摘要 · operations",
+      "origin": {
+        "surface": "本次实施与验收记录整理",
+        "capturedAt": null,
+        "sourceRef": "managed-acceptance.md / SIDE-001—006"
+      }
+    },
+    {
+      "id": "isolation",
+      "kind": "text",
+      "path": "assets/0019-isolation.txt",
+      "label": "事实摘要 · isolation",
+      "origin": {
+        "surface": "本次实施与验收记录整理",
+        "capturedAt": null,
+        "sourceRef": "managed-acceptance.md / SIDE-007—009"
+      }
+    },
+    {
+      "id": "recovery",
+      "kind": "text",
+      "path": "assets/0020-recovery.txt",
+      "label": "事实摘要 · recovery",
+      "origin": {
+        "surface": "本次实施与验收记录整理",
+        "capturedAt": null,
+        "sourceRef": "managed-acceptance.md / SIDE-011—013、015"
+      }
+    },
+    {
+      "id": "checks",
+      "kind": "text",
+      "path": "assets/0021-checks.txt",
+      "label": "事实摘要 · checks",
+      "origin": {
+        "surface": "本次实施与验收记录整理",
+        "capturedAt": null,
+        "sourceRef": "managed/acceptance-results.json / 构建与验证日志"
+      }
+    },
+    {
+      "id": "boundaries",
+      "kind": "text",
+      "path": "assets/0022-boundaries.txt",
+      "label": "事实摘要 · boundaries",
+      "origin": {
+        "surface": "本次实施与验收记录整理",
+        "capturedAt": null,
+        "sourceRef": "packages/agent-bridge/codex/README.md / managed-acceptance.md"
+      }
+    }
+  ],
+  "pages": [
+    {
+      "id": "native",
+      "type": "single",
+      "title": "原生旁聊已经在真实终端运行",
+      "description": "主任务执行期间创建旁聊并获得回答；随后切换、关闭，主任务仍正常完成。画面来自实际 Beta 验收，不是原型。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "side",
+          "label": "原生旁聊已经在真实终端运行",
+          "alt": "原生旁聊已经在真实终端运行",
+          "crop": {
+            "x": 235,
+            "y": 0,
+            "width": 1205,
+            "height": 315
+          }
+        }
+      ],
+      "sourceIds": ["created", "completed"],
+      "lookAt": "底部 Side thread from main thread，以及 ctrl+/ 切换、ctrl+c 关闭提示。",
+      "limitations": [
+        "单张截图展示旁聊画面；运行时长及父任务继续执行由关联记录支持。"
+      ]
+    },
+    {
+      "id": "operations",
+      "type": "text",
+      "title": "使用四个原生命令与按键",
+      "description": "复用现有终端管理，主会话和旁聊由同一个 Codex 原生运行时拥有。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "operations",
+          "label": "使用四个原生命令与按键"
+        }
+      ],
+      "sourceIds": ["results"]
+    },
+    {
+      "id": "permission",
+      "type": "single",
+      "title": "旁聊修改文件仍走原生审批",
+      "description": "在 read-only / on-request 条件下，主、子写入分别触发原生审批。测试中均选择拒绝，文件保持不变。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "approval",
+          "label": "旁聊修改文件仍走原生审批",
+          "alt": "旁聊修改文件仍走原生审批",
+          "crop": {
+            "x": 240,
+            "y": 340,
+            "width": 1200,
+            "height": 445
+          }
+        }
+      ],
+      "sourceIds": ["permissions"],
+      "lookAt": "要执行的命令、审批原因和 No / esc 拒绝入口。"
+    },
+    {
+      "id": "input",
+      "type": "single",
+      "title": "切换期间拒绝误发并保留草稿",
+      "description": "先拦住旁聊的在途发送，再切回主会话；旧目标请求被拒绝。回到旁聊后，未发送草稿仍在。父、子附件分别实际读取。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "draft",
+          "label": "切换期间拒绝误发并保留草稿",
+          "alt": "切换期间拒绝误发并保留草稿",
+          "crop": {
+            "x": 240,
+            "y": 650,
+            "width": 1200,
+            "height": 350
+          }
+        }
+      ],
+      "sourceIds": ["race", "parentinput", "sideinput"],
+      "lookAt": "输入框仍有 STALE_SIDE_010_DO_NOT_SEND；上方提示先核查终端再决定重发。",
+      "limitations": [
+        "画面提示是通用未确认提示；实际拒绝原因以关联请求记录为准。"
+      ]
+    },
+    {
+      "id": "isolation",
+      "type": "text",
+      "title": "子完成不会触发主任务监督",
+      "description": "持久主身份和当前显示身份分开处理；用完成 revision 和真实 watch 记录核对隔离结果。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "isolation",
+          "label": "子完成不会触发主任务监督"
+        }
+      ],
+      "sourceIds": ["watchbefore", "watchchild", "watchparent", "results"]
+    },
+    {
+      "id": "recovery",
+      "type": "text",
+      "title": "重连、重启与普通 Fork 分别处理",
+      "description": "页面重连保留活着的旁聊；运行时重启只恢复主会话。普通 Fork 继续是独立、持久、可恢复的终端。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "recovery",
+          "label": "重连、重启与普通 Fork 分别处理"
+        }
+      ],
+      "sourceIds": ["reload", "restart", "fork"]
+    },
+    {
+      "id": "verification",
+      "type": "text",
+      "title": "逐项验证与修复结果可追溯",
+      "description": "15 项结果和证据文件对应保存。类型、静态与运行时检查单独列出，不代替真实 UI 操作。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "checks",
+          "label": "逐项验证与修复结果可追溯"
+        }
+      ],
+      "sourceIds": ["results"]
+    },
+    {
+      "id": "boundaries",
+      "type": "text",
+      "title": "启用条件与未验证范围",
+      "description": "受管产物和源码已完成，Stable 未更新。能力缺失的故障注入与旧版 CLI 兼容性是不同证据范围。",
+      "evidenceState": "observed",
+      "items": [
+        {
+          "assetId": "boundaries",
+          "label": "启用条件与未验证范围"
+        }
+      ],
+      "sourceIds": ["unknown"],
+      "limitations": [
+        "没有声称复刻 Codex 桌面端内部实现。当前对齐的是已核对的 Codex CLI 原生旁聊。"
+      ]
+    }
+  ]
+}

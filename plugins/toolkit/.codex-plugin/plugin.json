@@ -1,6 +1,6 @@
 {
   "name": "toolkit",
-  "version": "0.1.0+codex.20261014173732",
+  "version": "0.1.0+codex.20261016094039",
   "description": "Runweave Toolkit plugin for project-specific skills and automation extensions.",
   "author": {
     "name": "Runweave"

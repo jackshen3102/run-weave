@@ -1,0 +1,6 @@
+### Result
+{"disabled":"true","html":"<div role=\"menuitem\" aria-disabled=\"true\" data-disabled=\"\" class=\"relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 gap-2\" title=\"请等待当前 Codex 会话空闲后再 Fork\" tabindex=\"-1\" data-orientation=\"vertical\" data-radix-collection-item=\"\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-git-fork h-4 w-4\"><circle cx=\"12\" cy=\"18\" r=\"3\"></circle><circle cx=\"6\" cy=\"6\" r=\"3\"></circle><circle cx=\"18\" cy=\"6\" r=\"3\"></circle><path d=\"M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9\"></path><path d=\"M12 12v3\"></path></svg>Fork Thread</div>"}
+### Ran Playwright code
+```js
+await (async page => { const m=page.getByRole("menuitem",{name:"Fork Thread"}); return {disabled:await m.getAttribute("aria-disabled"),html:await m.evaluate(e=>e.outerHTML)}; })(page);
+```

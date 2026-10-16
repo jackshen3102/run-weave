@@ -1,0 +1,49 @@
+{
+  "status": 200,
+  "body": {
+    "events": [
+      {
+        "kind": "completion",
+        "terminalSessionId": "c1277223",
+        "projectId": "d6a9da4f-8bde-4205-8247-e9cc0a86bba4",
+        "payload": {
+          "source": "codex",
+          "completionReason": "hook_stop",
+          "completionRevision": 7,
+          "commandName": "node",
+          "rawHookEvent": "Stop",
+          "hookEvent": "Stop",
+          "cwd": "/private/tmp/runweave-managed-side-fixture",
+          "summary": "PARENT005_DONE",
+          "threadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+          "operationId": "terminal_agent_prepare_56b4677c-6f81-4755-a7a7-56be197aa0f7",
+          "panelId": "df45fda6-d8df-4266-b0b3-aa084fe0885c",
+          "tmuxPaneId": "%1"
+        },
+        "id": "845",
+        "createdAt": "2026-10-15T16:41:30.713Z"
+      },
+      {
+        "kind": "completion",
+        "terminalSessionId": "c1277223",
+        "projectId": "d6a9da4f-8bde-4205-8247-e9cc0a86bba4",
+        "payload": {
+          "source": "codex",
+          "completionReason": "hook_stop",
+          "completionRevision": 8,
+          "commandName": "node",
+          "rawHookEvent": "Stop",
+          "hookEvent": "Stop",
+          "cwd": "/private/tmp/runweave-managed-side-fixture",
+          "summary": "PARENT008_DONE",
+          "threadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+          "operationId": "terminal_agent_prepare_56b4677c-6f81-4755-a7a7-56be197aa0f7",
+          "panelId": "df45fda6-d8df-4266-b0b3-aa084fe0885c",
+          "tmuxPaneId": "%1"
+        },
+        "id": "1011",
+        "createdAt": "2026-10-15T16:43:52.622Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+### Result
+{"request":{"data":"STALE_SIDE_010_DO_NOT_SEND","mode":"prompt_replace","codexInputContext":{"generation":"21fff7bd-35cb-4815-a13a-dbe9bb0ca73b","revision":90,"threadId":"01a14086-e90e-79e2-8112-a4d7f9ff1b3d"},"submit":true,"panelId":"bd30f0b8-84cc-4d51-8713-edf11a5c16b2"},"status":500,"body":{"message":"Terminal input failed","error":"Error: Codex 会话或原生草稿已变化，未发送，草稿已保留。"}}
+### Ran Playwright code
+```js
+await (async(page)=>{let held;let ready;const requested=new Promise(r=>ready=r);const pattern="**/api/terminal/session/c1277223/input";await page.route(pattern,route=>{held=route;ready();});try{await page.getByRole("region",{name:"Floating terminal composer"}).getByRole("button",{name:"Send",exact:true}).click();await requested;const sent=held.request().postDataJSON();await page.getByRole("application",{name:"Terminal emulator"}).getByRole("textbox").press("Control+/");await page.waitForTimeout(900);const result=page.waitForResponse(r=>r.url().endsWith("/api/terminal/session/c1277223/input"));await held.continue();const response=await result;return {request:sent,status:response.status(),body:await response.json()};}finally{await page.unroute(pattern);}})(page);
+```
+### Page
+- Page URL: runweave://app/terminal/c1277223
+- Page Title: Runweave Beta · 81e6c04f594c
+- Console: 1 errors, 0 warnings
+### Events
+- New console entries: .playwright-cli/console-2026-10-15T17-02-14-077Z.log#L1

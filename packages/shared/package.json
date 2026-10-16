@@ -40,6 +40,7 @@
     "./terminal": "./src/terminal/index.ts",
     "./terminal/task": "./src/terminal/task.ts",
     "./terminal/conversation": "./src/terminal/conversation.ts",
+    "./terminal/codex-context": "./src/terminal/codex-context.ts",
     "./terminal/pi-agent": "./src/terminal/pi-agent.ts",
     "./terminal/agent-preparation": "./src/terminal/runtime/agent-preparation.ts",
     "./terminal/agent-fork": "./src/terminal/agent-fork.ts",

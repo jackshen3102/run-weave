@@ -1,3 +1,5 @@
+import { resolveHookPanel } from "./resolve-hook-panel";
+import { codexHookBelongsToPrimary } from "../runtime/codex-context";
 import { isPiAgentContext, isNewerPiContext, type PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import { isDeepStrictEqual } from "node:util";
 import type {
@@ -136,6 +138,16 @@ export async function processTerminalAgentHook(
     };
   }
   const panel = panelResolution.panel;
+  if (panel && input.agent === "codex" &&
+      !codexHookBelongsToPrimary(panel, input.threadId, input.hookEvent === "SessionStart")) {
+    return {
+      status: "ignored", terminalSessionId: session.id, agent: input.agent,
+      hookEvent: input.hookEvent, activeCommand: panel.activeCommand,
+      terminalState: options.terminalStateService.getCurrent(session.id, session),
+      panelId: panel.id, ignoreReason: "codex_context_mismatch",
+    };
+  }
+
   const hookThreadId = input.threadId?.trim() || null;
   const currentThreadOwner = panel ?? session;
   const lastThreadOwner =
@@ -550,49 +562,4 @@ function updateCodexThreadPreviewInBackground(
         error,
       });
     });
-}
-
-function resolveHookPanel(
-  terminalSessionManager: TerminalSessionManager,
-  terminalSessionId: string,
-  panelId: string | null,
-  tmuxPaneId: string | null,
-):
-  | {
-      ok: true;
-      panel: ReturnType<TerminalSessionManager["getPanel"]> | null;
-    }
-  | { ok: false } {
-  const byId = panelId
-    ? (terminalSessionManager.getPanel(panelId) ?? null)
-    : null;
-  const panels = tmuxPaneId
-    ? terminalSessionManager.listPanels(terminalSessionId)
-    : [];
-  const paneMatches = tmuxPaneId
-    ? panels.filter((panel) => panel.tmuxPaneId === tmuxPaneId)
-    : [];
-  const byPane = paneMatches.length === 1 ? paneMatches[0] : null;
-
-  if (panelId) {
-    if (
-      byId?.terminalSessionId === terminalSessionId &&
-      (!tmuxPaneId || byId.tmuxPaneId === tmuxPaneId)
-    ) {
-      return { ok: true, panel: byId };
-    }
-    return tmuxPaneId && byPane ? { ok: true, panel: byPane } : { ok: false };
-  }
-  if (tmuxPaneId) {
-    return byPane ? { ok: true, panel: byPane } : { ok: false };
-  }
-  const runningPanels = terminalSessionManager
-    .listPanels(terminalSessionId)
-    .filter((panel) => panel.status === "running");
-  if (runningPanels.length === 1) {
-    return { ok: true, panel: runningPanels[0]! };
-  }
-  return runningPanels.length === 0
-    ? { ok: true, panel: null }
-    : { ok: false };
 }

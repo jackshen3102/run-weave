@@ -1,0 +1,4 @@
+
+> @runweave/frontend@0.1.0 typecheck <USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1/frontend
+> tsc -p tsconfig.app.json --noEmit
+

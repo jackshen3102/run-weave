@@ -1,3 +1,4 @@
+import type { CodexInputContext } from "../codex-context";
 import type { TerminalPanelRole } from "../panel";
 
 export type TerminalInputMode =
@@ -69,6 +70,7 @@ export interface UpdateTerminalQuickInputRequest {
 }
 
 export interface SendTerminalInputRequest {
+  codexInputContext?: CodexInputContext;
   textAttachmentIds?: string[];
   data: string;
   /** Reject handoff input when the Codex thread is no longer idle or has changed. */

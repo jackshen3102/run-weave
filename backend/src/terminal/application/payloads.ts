@@ -123,6 +123,7 @@ export function toPanelListItem(
   activePanelId: string | null,
 ): TerminalPanelListItem {
   return {
+    codexContext: panel.codexContext,
     panelId: panel.id,
     terminalSessionId: panel.terminalSessionId,
     alias: panel.alias,

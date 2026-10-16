@@ -1,0 +1,1 @@
+38435 <USER_HOME>/.cache/runweave/codex/0.160.1-cf00bc5adcc2/bin/native/codex --no-daemon -c check_for_update_on_startup=false resume 01a14067-b220-71f3-9f72-e3841f6862ef

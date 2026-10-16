@@ -1,0 +1,168 @@
+- generic [ref=e1]:
+    - main [ref=e4]:
+        - generic [ref=e5]:
+            - generic [ref=e6]:
+                - button "全局设置" [ref=e7] [cursor=pointer]
+                - button "当前连接 内置本地后端" [ref=e8] [cursor=pointer]:
+                    - generic [ref=e9]: 当前连接
+                    - generic [ref=e10]: 内置本地后端
+                - generic [ref=e11]:
+                    - generic [ref=e12]:
+                        - button "Default Project" [ref=e14] [cursor=pointer]
+                        - button "runweave-managed-side-fixture" [pressed] [ref=e19] [cursor=pointer]
+                    - status [ref=e23]
+                    - button "New Project" [ref=e24] [cursor=pointer]
+                - generic [ref=e25]:
+                    - button "快捷指令" [ref=e27] [cursor=pointer]
+                    - button "Services · 0/0 ready" [ref=e29] [cursor=pointer]
+                    - button "阅读会话" [ref=e31] [cursor=pointer]
+                    - button "随记" [ref=e33] [cursor=pointer]
+                    - button "定时任务" [ref=e35] [cursor=pointer]
+                    - button "运行状态 · 2 个服务需关注，点击查看详情" [ref=e37] [cursor=pointer]:
+                        - generic "2 个服务需关注" [ref=e40]: "2"
+                    - button "More actions" [ref=e42] [cursor=pointer]
+            - generic [ref=e43]:
+                - complementary [ref=e44]:
+                    - generic [ref=e45]:
+                        - generic [ref=e46]: Worktrees 1
+                        - button "Collapse Worktrees" [ref=e47] [cursor=pointer]
+                    - generic [ref=e51]:
+                        - button "runweave-managed-side-fixture, detached" [ref=e52] [cursor=pointer]:
+                            - generic [ref=e53]:
+                                - generic [ref=e54]: runweave-managed-side-fixture
+                                - generic "detached" [ref=e58]
+                                - generic [ref=e59]: P1 · global
+                        - generic "Permanently pinned" [ref=e60]
+                    - separator "Resize Worktrees panel" [ref=e63]
+                - generic [ref=e64]:
+                    - generic [ref=e66]:
+                        - generic [ref=e67]:
+                            - generic [ref=e69]:
+                                - button "runweave-managed-side-fixture(codex)" [ref=e200] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture(codex)" [ref=e201] [cursor=pointer]
+                            - generic [ref=e78]:
+                                - button "runweave-managed-side-fixture" [ref=e79] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture" [ref=e82] [cursor=pointer]
+                            - generic [ref=e87]:
+                                - button "runweave-managed-side-fixture" [ref=e88] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture" [ref=e91] [cursor=pointer]
+                            - generic [ref=e96]:
+                                - button "runweave-managed-side-fixture" [ref=e97] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture" [ref=e100] [cursor=pointer]
+                            - generic [ref=e105]:
+                                - button "runweave-managed-side-fixture" [ref=e106] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture" [ref=e109] [cursor=pointer]
+                        - status [ref=e113]
+                        - button "New Terminal" [ref=e114] [cursor=pointer]
+                    - generic [ref=e122]:
+                        - button "Find" [ref=e123] [cursor=pointer]
+                        - application "Terminal emulator" [ref=e124]:
+                            - generic [ref=e127]:
+                                - textbox "Terminal input" [active] [ref=e128]
+                                - generic:
+                                    - generic:
+                                        - generic: ›
+                                        - generic: "SIDE005 parent: run sleep 65 then printf PARENT005_DONE; wait and reply PARENT005_DONE. No file changes."
+                                    - generic:
+                                        - generic: •
+                                        - generic: I’ll run the command and wait for it to finish.
+                                    - generic:
+                                        - generic: •
+                                        - generic: Ran
+                                        - generic: sleep
+                                        - generic: 65 then printf PARENT005_DONE
+                                    - generic: "└ sleep: invalid time interval: then"
+                                    - generic: "sleep: invalid time interval: printf"
+                                    - generic: "sleep: invalid time interval: PARENT005_DONE"
+                                    - generic: +2 lines (ctrl+t to view transcript)
+                                    - generic:
+                                        - generic: •
+                                        - generic: The shell treated “then” as a sleep argument. I’ll use a semicolon to run the intended sequence.
+                                    - generic:
+                                        - generic: •
+                                        - generic: Ran
+                                        - generic: sleep
+                                        - generic: "65"
+                                        - generic: ;
+                                        - generic: printf
+                                        - generic: PARENT005_DONE
+                                    - generic: └ PARENT005_DONE
+                                    - generic:
+                                        - generic: •
+                                        - generic: PARENT005_DONE
+                                    - generic: Worked for 1m 14s • 12:41 AM
+                                    - generic:
+                                        - generic: ›
+                                        - generic: "SIDE008: execute exactly shell command `sleep 50; printf PARENT008_DONE`. Wait until it exits, then reply PARENT008_DONE. No other tasks."
+                                    - generic:
+                                        - generic: •
+                                        - generic: I’ll run the command and wait until it exits.
+                                    - generic:
+                                        - generic: •
+                                        - generic: Ran
+                                        - generic: sleep
+                                        - generic: "50"
+                                        - generic: ;
+                                        - generic: printf
+                                        - generic: PARENT008_DONE
+                                    - generic: └ PARENT008_DONE
+                                    - generic:
+                                        - generic: •
+                                        - generic: PARENT008_DONE
+                                    - generic: Worked for 55s • 12:43 AM
+                                    - generic:
+                                        - generic: ›
+                                        - generic: "SIDE009 supervision acceptance: execute exactly `sleep 40; printf PARENT009_COMPLETE` then reply PARENT009_COMPLETE. This is the entire authorized"
+                                    - generic: task; no follow-up work or file changes.
+                                    - generic:
+                                        - generic: •
+                                        - generic: I’ll run the command and wait until it exits.
+                                    - generic:
+                                        - generic: •
+                                        - generic: Ran
+                                        - generic: sleep
+                                        - generic: "40"
+                                        - generic: ;
+                                        - generic: printf
+                                        - generic: PARENT009_COMPLETE
+                                    - generic: └ PARENT009_COMPLETE
+                                    - generic:
+                                        - generic: •
+                                        - generic: PARENT009_COMPLETE
+                                    - generic: Worked for 45s • 12:45 AM
+                                    - generic:
+                                        - generic: ›
+                                        - generic: PARENT_NATIVE_010
+                                    - generic:
+                                        - generic: GPT-6.1-Sol low
+                                        - generic: ·
+                                        - generic: /private/tmp/runweave-managed-side-fixture
+                                        - generic: ·
+                                        - generic: 报告当前工作目录绝对路径
+                                        - generic: · Main [default]
+                                        - generic: ctrl+/
+                                        - generic: for side
+                                    - generic:
+                                        - generic: '[runweave-0:node* "'
+                                        - generic: 报告当前工作目录绝对
+                                        - generic: '" 01:07 16-Oct-26'
+                        - generic:
+                            - generic:
+                                - generic "图文粘贴状态"
+                            - button "展开一键回复" [ref=e207] [cursor=pointer]
+                            - generic:
+                                - generic "图文粘贴状态"
+                                - generic "文本附件" [ref=e250]:
+                                    - generic [ref=e268]:
+                                        - button "粘贴的文本.txt · 5622 字符" [ref=e269] [cursor=pointer]
+                                        - status [ref=e270]: 已保存
+                                        - button "复制原文" [ref=e271] [cursor=pointer]
+                                        - button "放回输入框" [ref=e272] [cursor=pointer]
+                                        - button "移除附件" [ref=e273] [cursor=pointer]: 移除
+                                - region "Floating terminal composer" [ref=e257]:
+                                    - button "Close floating composer" [ref=e258] [cursor=pointer]
+                                    - textbox "Terminal input" [ref=e262]: Read the attached text file and reply its first line only.
+                                    - generic [ref=e263]:
+                                        - button "排队" [ref=e264] [cursor=pointer]: 排队 ⇥
+                                        - button "Send" [ref=e265] [cursor=pointer]
+    - generic "Runweave Beta build identity": BETA · Web 0.15.0 · 81e6c04f594c

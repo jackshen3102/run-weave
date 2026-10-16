@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0c1220" />
+    <title>终端旁聊 · Runweave 原型</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <header class="brandbar">
+        <strong><span class="logo">◈</span> Runweave</strong
+        ><span class="connection">● 本地</span>
+      </header>
+      <div class="projectbar">
+        <strong id="project"></strong><span>/</span><span id="worktree"></span
+        ><span class="muted">终端</span>
+      </div>
+      <div class="workspace">
+        <aside class="rail">
+          <div class="section-label">工作区</div>
+          <div class="worktree" id="workspace-name"></div>
+          <div class="branch">browser-viewer</div>
+        </aside>
+        <section class="work">
+          <nav class="sessionbar" aria-label="终端列表" id="sessions"></nav>
+          <section class="terminal" aria-label="Codex 终端" id="terminal">
+            <div
+              class="terminal-scroll"
+              id="transcript"
+              aria-live="polite"
+            ></div>
+            <div class="terminal-status" id="activity" role="status"></div>
+            <div class="terminal-error" id="error" role="alert" hidden></div>
+            <div class="terminal-input">
+              <span aria-hidden="true">›</span
+              ><textarea
+                id="draft"
+                rows="1"
+                aria-label="终端输入"
+                spellcheck="false"
+                autocapitalize="off"
+              ></textarea>
+            </div>
+            <div class="terminal-footer" id="context"></div>
+          </section>
+        </section>
+      </div>
+      <footer class="statusbar">
+        <span id="workspace-path"></span><span>tmux</span>
+      </footer>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

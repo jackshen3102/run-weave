@@ -1,0 +1,34 @@
+{
+  "status": 200,
+  "body": {
+    "watchId": "f327a265-e6e5-4ff4-9271-03631ef1c204",
+    "enabled": true,
+    "enabledAt": "2026-10-15T16:44:16.150Z",
+    "target": {
+      "terminalSessionId": "c1277223",
+      "panelId": "df45fda6-d8df-4266-b0b3-aa084fe0885c",
+      "threadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+      "executorGeneration": "codex:df45fda6-d8df-4266-b0b3-aa084fe0885c"
+    },
+    "taskStartMessageId": "msg_01a14072-0902-7491-bf1b-0daf787a31b8",
+    "task": {
+      "id": "msg_01a14072-0902-7491-bf1b-0daf787a31b8",
+      "role": "user",
+      "text": "SIDE008: execute exactly shell command `sleep 50; printf PARENT008_DONE`. Wait until it exits, then reply PARENT008_DONE. No other tasks.",
+      "rawTurnId": "01a14072-07be-7232-9391-84e0e871df65",
+      "createdAt": "2026-10-15T16:42:57.666Z"
+    },
+    "goal": "SIDE008: execute exactly shell command `sleep 50; printf PARENT008_DONE`. Wait until it exits, then reply PARENT008_DONE. No other tasks.",
+    "plans": [],
+    "revision": 2,
+    "contextRevision": 1,
+    "status": "watching",
+    "outcome": null,
+    "continuationLimit": 3,
+    "continuationCount": 0,
+    "decisions": [],
+    "createdAt": "2026-10-15T16:44:16.150Z",
+    "updatedAt": "2026-10-15T16:44:38.783Z",
+    "lastUserMessageId": "msg_01a14072-0902-7491-bf1b-0daf787a31b8"
+  }
+}

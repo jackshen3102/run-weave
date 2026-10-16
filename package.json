@@ -5,6 +5,7 @@
   "license": "MIT",
   "packageManager": "pnpm@10.6.2",
   "scripts": {
+    "codex:build": "node ./scripts/codex/build-managed.mjs",
     "dev": "node ./scripts/dev/web.mjs",
     "dev:legacy": "node ./scripts/dev/web.mjs",
     "dev:session": "node ./scripts/dev-session/cli.mjs start",

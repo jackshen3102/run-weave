@@ -1,0 +1,21 @@
+{
+  "terminalSessionId": "c1277223",
+  "projectId": "d6a9da4f-8bde-4205-8247-e9cc0a86bba4",
+  "alias": null,
+  "lastThreadId": "01a1408f-7428-7872-90cd-61d235e98469",
+  "lastThreadProvider": "codex",
+  "lastThreadStatus": "idle",
+  "lastThreadUpdatedAt": "2026-10-15T17:16:55.750Z",
+  "command": "/bin/zsh",
+  "args": ["-l"],
+  "cwd": "/private/tmp/runweave-managed-side-fixture",
+  "activeCommand": "codex",
+  "tmuxSessionName": "runweave-c1277223",
+  "tmuxSocketPath": "/var/folders/hp/bk0rp6xn3t5fsr5sf7n256rr0000gn/T/rw-tmux-a2de6cdea1f5/tmux.sock",
+  "scrollback": "\n\n  >_ OpenAI Codex (v0.160.1)\n     /private/tmp/runweave-managed-side-fixture\n  permissions: YOLO mode\n\n  What are we cooking up?\n\n  Tip: Use the desktop app. Run codex app to open it. It installs automatically if needed.\n\n\n› Reply NEW_PRIMARY_013. No tools.\n\n\n• NEW_PRIMARY_013\n\n  Worked for 5s • 1:16 AM\n \n \n› Ask Codex to do anything\n \n  GPT-6-Astra high · /private/tmp/runweave-managed-side-fixture · Reply NEW_PRIMARY_013                                        ⚠ 1 warning · f2 to view\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+  "status": "running",
+  "createdAt": "2026-10-15T16:31:08.577Z",
+  "lastActivityAt": "2026-10-15T17:16:57.394Z",
+  "scrollbackSourceCols": 152,
+  "tail": "\n\n  >_ OpenAI Codex (v0.160.1)\n     /private/tmp/runweave-managed-side-fixture\n  permissions: YOLO mode\n\n  What are we cooking up?\n\n  Tip: Use the desktop app. Run codex app to open it. It installs automatically if needed.\n\n\n› Reply NEW_PRIMARY_013. No tools.\n\n\n• NEW_PRIMARY_013\n\n  Worked for 5s • 1:16 AM\n \n \n› Ask Codex to do anything\n \n  GPT-6-Astra high · /private/tmp/runweave-managed-side-fixture · Reply NEW_PRIMARY_013                                        ⚠ 1 warning · f2 to view"
+}

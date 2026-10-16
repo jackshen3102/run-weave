@@ -1,0 +1,1021 @@
+[
+  {
+    "label": "baseline",
+    "at": "2026-10-15T09:54:22.491815+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13efa-814b-7ff0-8e40-26a109ac47ef",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13efa-814b-7ff0-8e40-26a109ac47ef",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:53:36.526Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只读回答当前工作目录的绝对路径，不运行后台任务、不修改任何文件；完成后等待下\n  一条输入。\n\n\n• /private/tmp/runweave-side-native-20261015\n\n  Worked for 6s • 5:52 PM\n\n\n› 这是独立终端的旁聊功能验收。不要调用工具、不要修改文件、不要启动子 Agent。记\n  住本次主会话标记 NATIVE_SIDE_PARENT_1015。只回复 NATIVE_PARENT_READY，然后结\n  束本轮。\n\n\n• NATIVE_PARENT_READY\n\n  Worked for 3s • 5:53 PM\n\n\n› Ask Codex to do anything\n\n  GPT-6-Astra high · /private/tmp/runweave-side-native-20261015 · 输出当前目录…\n"
+  },
+  {
+    "label": "side-created",
+    "at": "2026-10-15T09:54:27.484222+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "threadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadStatus": "running",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_running",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "threadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+          "threadProvider": "codex",
+          "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "running",
+          "lastThreadUpdatedAt": "2026-10-15T09:54:26.601Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_running",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只回答主会话标记是什么；不要调用工具或修改文件。\n\n\n• Working (3s • esc to interrupt)\n\n\n› Ask a follow-up question\n\n  GPT-6-Astra high… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "side-answer",
+    "at": "2026-10-15T09:54:37.787888+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:54:29.472Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只回答主会话标记是什么；不要调用工具或修改文件。\n\n\n• NATIVE_SIDE_PARENT_1015\n\n  Worked for 5s • 5:54 PM\n\n\n› Ask a follow-up question\n\n  GPT-6-Astra high… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "toggled-parent",
+    "at": "2026-10-15T09:54:38.531073+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:54:29.472Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只回答主会话标记是什么；不要调用工具或修改文件。\n\n\n• NATIVE_SIDE_PARENT_1015\n\n  Worked for 5s • 5:54 PM\n\n\n› Ask a follow-up question\n\n  GPT-6-Astra high… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "parent-after-redraw",
+    "at": "2026-10-15T09:54:45.299951+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:54:29.472Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只回答主会话标记是什么；不要调用工具或修改文件。\n\n\n• NATIVE_SIDE_PARENT_1015\n\n  Worked for 5s • 5:54 PM\n\n\n› Ask a follow-up question\n\n  GPT-6-Astra high… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "toggle-csi-u",
+    "at": "2026-10-15T09:55:05.310796+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:54:29.472Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只读回答当前工作目录的绝对路径，不运行后台任务、不修改任何文件；完成后等待下\n  一条输入。\n\n\n• /private/tmp/runweave-side-native-20261015\n\n  Worked for 6s • 5:52 PM\n\n\n› 这是独立终端的旁聊功能验收。不要调用工具、不要修改文件、不要启动子 Agent。记\n  住本次主会话标记 NATIVE_SIDE_PARENT_1015。只回复 NATIVE_PARENT_READY，然后结\n  束本轮。\n\n\n• NATIVE_PARENT_READY\n\n  Worked for 3s • 5:53 PM\n\n\n› Ask Codex to do anything\n\n  GPT-6-Astra high · /private/tmp/runweave-side-native-202610… ctrl+/ for side\n"
+  },
+  {
+    "label": "returned-side",
+    "at": "2026-10-15T09:55:40.954684+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:54:29.472Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只回答主会话标记是什么；不要调用工具或修改文件。\n\n\n• NATIVE_SIDE_PARENT_1015\n\n  Worked for 5s • 5:54 PM\n\n\n› Ask a follow-up question\n\n  GPT-6-Astra high… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "closed-side",
+    "at": "2026-10-15T09:55:48.137215+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:54:29.472Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只回答主会话标记是什么；不要调用工具或修改文件。\n\n\n• NATIVE_SIDE_PARENT_1015\n\n  Worked for 5s • 5:54 PM\n\n\n› Ask a follow-up question\n\n  GPT-6-Astra high… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "closed-csi-u",
+    "at": "2026-10-15T09:56:28.721273+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:54:29.472Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只读回答当前工作目录的绝对路径，不运行后台任务、不修改任何文件；完成后等待下\n  一条输入。\n\n\n• /private/tmp/runweave-side-native-20261015\n\n  Worked for 6s • 5:52 PM\n\n\n› 这是独立终端的旁聊功能验收。不要调用工具、不要修改文件、不要启动子 Agent。记\n  住本次主会话标记 NATIVE_SIDE_PARENT_1015。只回复 NATIVE_PARENT_READY，然后结\n  束本轮。\n\n\n• NATIVE_PARENT_READY\n\n  Worked for 3s • 5:53 PM\n\n\n› Ask Codex to do anything\n\n  GPT-6-Astra high · /private/tmp/runweave-side-native-20261015 · 输出当前目录…\n"
+  },
+  {
+    "label": "parent-running",
+    "at": "2026-10-15T09:58:13.574256+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13efb-f88c-76d2-8a6d-94f082499283",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_running",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "threadId": "01a13efa-814b-7ff0-8e40-26a109ac47ef",
+          "threadProvider": "codex",
+          "lastThreadId": "01a13efa-814b-7ff0-8e40-26a109ac47ef",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "running",
+          "lastThreadUpdatedAt": "2026-10-15T09:58:13.364Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_running",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "  Worked for 6s • 5:52 PM\n\n\n› 这是独立终端的旁聊功能验收。不要调用工具、不要修改文件、不要启动子 Agent。记\n  住本次主会话标记 NATIVE_SIDE_PARENT_1015。只回复 NATIVE_PARENT_READY，然后结\n  束本轮。\n\n\n• NATIVE_PARENT_READY\n\n  Worked for 3s • 5:53 PM\n\n\n› 这是并行旁聊验收，请只输出从 1 到 180 的数字，每行一个数字，不调用工具、不修\n  改文件、不启动子 Agent。\n\n\n• Working (0s • esc to interrupt)\n\n\n› Ask Codex to do anything\n\n  GPT-6-Astra high · /private/tmp/runweave-side-native-20261015 · 输出当前目录…\n"
+  },
+  {
+    "label": "concurrent-side-start",
+    "at": "2026-10-15T09:58:20.049379+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "threadId": "01a13efa-814b-7ff0-8e40-26a109ac47ef",
+      "lastThreadId": "01a13efa-814b-7ff0-8e40-26a109ac47ef",
+      "lastThreadStatus": "running",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_running",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "threadId": "01a13efa-814b-7ff0-8e40-26a109ac47ef",
+          "threadProvider": "codex",
+          "lastThreadId": "01a13efa-814b-7ff0-8e40-26a109ac47ef",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "running",
+          "lastThreadUpdatedAt": "2026-10-15T09:58:13.364Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_running",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只回复 NATIVE_PARALLEL_SIDE，不要调用工具。\n\n\n\n› Ask a follow-up question\n\n  GPT-6-Astra high… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "concurrent-side-answer",
+    "at": "2026-10-15T09:58:26.090725+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "threadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+      "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+      "lastThreadStatus": "running",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_running",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "threadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+          "threadProvider": "codex",
+          "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "running",
+          "lastThreadUpdatedAt": "2026-10-15T09:58:23.294Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_running",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只回复 NATIVE_PARALLEL_SIDE，不要调用工具。\n\n\n• Working (6s • esc to interrupt)\n\n\n› Ask a follow-up question\n\n  GPT-6-Astra high… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "concurrent-parent-progress",
+    "at": "2026-10-15T09:58:31.297334+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:58:27.678Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "  165\n  166\n  167\n  168\n  169\n  170\n  171\n  172\n  173\n  174\n  175\n  176\n  177\n  178\n  179\n  180\n\n  Worked for 13s • 5:58 PM\n\n\n› Ask Codex to do anything\n\n  GPT-6-Astra high · /private/tmp/runweave-side-native-202610… ctrl+/ for side\n"
+  },
+  {
+    "label": "concurrent-side-result",
+    "at": "2026-10-15T10:01:07.185189+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:58:27.678Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n› 只回复 NATIVE_PARALLEL_SIDE，不要调用工具。\n\n\n• NATIVE_PARALLEL_SIDE\n\n  Worked for 7s • 5:58 PM\n\n\n› Ask a follow-up question\n\n  … Side from main thread · main finished · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "concurrent-side-closed",
+    "at": "2026-10-15T10:01:21.465625+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:58:27.678Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "  165\n  166\n  167\n  168\n  169\n  170\n  171\n  172\n  173\n  174\n  175\n  176\n  177\n  178\n  179\n  180\n\n  Worked for 13s • 5:58 PM\n\n\n› Ask Codex to do anything\n\n  GPT-6-Astra high · /private/tmp/runweave-side-native-20261015 · 输出当前目录…\n"
+  },
+  {
+    "label": "recreated-empty-side",
+    "at": "2026-10-15T10:01:38.044188+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:58:27.678Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "  166\n  167\n  168\n  169\n  170\n  171\n  172\n  173\n  174\n  175\n  176\n  177\n  178\n  179\n  180\n\n  Worked for 13s • 5:58 PM\n\n\n› Ask Codex to do anything\n\n  GPT-6-Astra high · /private/tmp/runweave-side-native-20261… Side starting...\n\n"
+  },
+  {
+    "label": "recreated-empty-ready",
+    "at": "2026-10-15T10:01:55.389333+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:58:27.678Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "\n\n› Ask a follow-up question\n\n  GPT-6-Astra high… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "label": "recreated-side-closed",
+    "at": "2026-10-15T10:01:57.629825+00:00",
+    "terminal": {
+      "terminalSessionId": "21dd17ed",
+      "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+      "lastThreadStatus": "idle",
+      "activeCommand": "codex",
+      "status": "running"
+    },
+    "state": {
+      "terminalSessionId": "21dd17ed",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      }
+    },
+    "panels": {
+      "terminalSessionId": "21dd17ed",
+      "activePanelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+      "panels": [
+        {
+          "panelId": "8b0b661e-cc69-44b3-b826-e54aaa2e8402",
+          "terminalSessionId": "21dd17ed",
+          "alias": "main",
+          "role": "main",
+          "lastThreadId": "01a13eff-9453-7222-a131-fdc209d36a93",
+          "lastThreadProvider": "codex",
+          "lastThreadStatus": "idle",
+          "lastThreadUpdatedAt": "2026-10-15T09:58:27.678Z",
+          "cwd": "/private/tmp/runweave-side-native-20261015",
+          "activeCommand": "codex",
+          "terminalState": {
+            "state": "agent_idle",
+            "agent": "codex"
+          },
+          "status": "running",
+          "createdAt": "2026-10-15T09:52:21.076Z",
+          "lastActivityAt": "2026-10-15T09:52:50.857Z",
+          "focused": true,
+          "tmuxPaneId": "%197",
+          "geometry": {
+            "paneLeft": 0,
+            "paneTop": 0,
+            "paneWidth": 80,
+            "paneHeight": 23,
+            "windowWidth": 80,
+            "windowHeight": 23
+          }
+        }
+      ],
+      "renderMode": "tmux-native"
+    },
+    "paneFacts": "%197|53633|node",
+    "screen": "  165\n  166\n  167\n  168\n  169\n  170\n  171\n  172\n  173\n  174\n  175\n  176\n  177\n  178\n  179\n  180\n\n  Worked for 13s • 5:58 PM\n\n\n› Ask Codex to do anything\n\n  GPT-6-Astra high · /private/tmp/runweave-side-native-20261015 · 输出当前目录…\n"
+  }
+]

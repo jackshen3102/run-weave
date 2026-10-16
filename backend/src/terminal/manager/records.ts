@@ -1,3 +1,4 @@
+import type { CodexConversationContext } from "@runweave/shared/terminal/codex-context";
 import type { FeishuNotificationState } from "../completion/feishu-state";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
@@ -72,6 +73,8 @@ export interface TerminalSessionRecord {
 }
 
 export interface TerminalPanelRecord {
+  /** undefined: official CLI; null: managed CLI context not yet available. */
+  codexContext?: CodexConversationContext | null;
   id: string;
   terminalSessionId: string;
   alias: string | null;

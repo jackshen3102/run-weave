@@ -1,0 +1,21 @@
+{
+  "terminalSessionId": "c1277223",
+  "projectId": "d6a9da4f-8bde-4205-8247-e9cc0a86bba4",
+  "alias": null,
+  "lastThreadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+  "lastThreadProvider": "codex",
+  "lastThreadStatus": "idle",
+  "lastThreadUpdatedAt": "2026-10-15T16:41:30.700Z",
+  "command": "/bin/zsh",
+  "args": ["-l"],
+  "cwd": "/private/tmp/runweave-managed-side-fixture",
+  "activeCommand": "codex",
+  "tmuxSessionName": "runweave-c1277223",
+  "tmuxSocketPath": "/var/folders/hp/bk0rp6xn3t5fsr5sf7n256rr0000gn/T/rw-tmux-a2de6cdea1f5/tmux.sock",
+  "scrollback": "\n\n› Reply SIDE006_A. No tools.\n\n\n• SIDE006_A\n\n  Worked for 6s • 12:41 AM\n\n■ '/side' is unavailable in side conversations. Press Ctrl+C to return to the main thread first.\n \n \n› /side nested attempt\n \n  GPT-6.1-Sol low · /private/tmp/runweave-managed-side-fixture · 报告当前工作目录绝对路径 … Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+  "status": "running",
+  "createdAt": "2026-10-15T16:31:08.577Z",
+  "lastActivityAt": "2026-10-15T16:42:03.792Z",
+  "scrollbackSourceCols": 152,
+  "tail": "\n\n› Reply SIDE006_A. No tools.\n\n\n• SIDE006_A\n\n  Worked for 6s • 12:41 AM\n\n■ '/side' is unavailable in side conversations. Press Ctrl+C to return to the main thread first.\n \n \n› /side nested attempt\n \n  GPT-6.1-Sol low · /private/tmp/runweave-managed-side-fixture · 报告当前工作目录绝对路径 … Side from main thread · ctrl+/ to switch · ctrl+c to close"
+}

@@ -1,3 +1,6 @@
+import type { CodexInputContext } from "@runweave/shared/terminal/codex-context";
+import { replaceManagedCodexPrompt } from "../runtime/codex-input";
+import { readCodexContext } from "../runtime/codex-context";
 import { randomUUID } from "node:crypto";
 import { getAgentForCommand } from "../state/terminal-state-service";
 import type {
@@ -39,6 +42,7 @@ type Target = {
   panel: TerminalPanelRecord;
   pane: TmuxPaneTarget;
   threadId: string | null;
+  codexInputContext?: CodexInputContext;
 };
 
 export class TerminalTextAttachmentDelivery {
@@ -103,17 +107,24 @@ export class TerminalTextAttachmentDelivery {
       this.manager.getPanelWorkspace(sessionId)?.activePanelId !== panelId
     )
       throw new TextAttachmentError(409, "终端面板已切换或退出，原文已保留");
+    const observed = readCodexContext(panel);
+    if (observed.managed && (!observed.context?.displayedThreadId || !observed.context.inputReady))
+      throw new TextAttachmentError(409, "Codex 会话身份尚未就绪，原文已保留");
     return {
+      ...(observed.context?.displayedThreadId ? { codexInputContext: { generation: observed.context.generation, revision: observed.context.revision, threadId: observed.context.displayedThreadId } } : {}),
       session,
       panel,
       pane: {
         ...resolveTmuxTarget(session, this.tmux),
         paneId: panel.tmuxPaneId,
       },
-      threadId: panel.threadId ?? panel.lastThreadId ?? null,
+      threadId: observed.managed ? observed.context!.displayedThreadId : panel.threadId ?? panel.lastThreadId ?? null,
     };
   }
   private recheck(target: Target, active = true): void {
+    const context = readCodexContext(target.panel);
+    if (context.managed && (!context.context?.inputReady || context.context.displayedThreadId !== target.threadId))
+      throw new TextAttachmentError(409, "Codex 会话已切换，附件已保留，未插入路径");
     const panel = this.manager.getPanel(target.panel.id);
     if (
       this.manager.getSession(target.session.id) !== target.session ||
@@ -255,9 +266,7 @@ export class TerminalTextAttachmentDelivery {
         if (
           binding.expiresAt !== undefined &&
           (binding.expiresAt <= Date.now() ||
-            (binding.target.panel.threadId ??
-              binding.target.panel.lastThreadId ??
-              null) !== binding.target.threadId)
+            (readCodexContext(binding.target.panel).context?.displayedThreadId ?? binding.target.panel.threadId ?? binding.target.panel.lastThreadId ?? null) !== binding.target.threadId)
         )
           throw new TextAttachmentError(
             409,
@@ -295,7 +304,9 @@ export class TerminalTextAttachmentDelivery {
         );
         recheck(false);
         dispatching = true;
-        await pasteTextAttachmentReference(
+        if (binding.target.codexInputContext) {
+          await replaceManagedCodexPrompt({ panel: binding.target.panel, target: binding.target.pane, tmux: this.tmux, expected: binding.target.codexInputContext, supervisor: false, text: content, append: true, submit: false, submitKey: "Enter" });
+        } else await pasteTextAttachmentReference(
           this.tmux,
           binding.target.pane,
           content,
@@ -378,7 +389,8 @@ export class TerminalTextAttachmentDelivery {
       for (const id of ids) {
         const file = await this.files.get(sessionId, id);
         await this.files.read(sessionId, id);
-        if (file.panelId !== target.panel.id || file.purpose !== "composer")
+        if (file.panelId !== target.panel.id || file.purpose !== "composer" ||
+          (readCodexContext(target.panel).managed && file.threadId !== target.threadId))
           throw new TextAttachmentError(409, "附件不属于当前草稿");
         references.push(JSON.stringify(file.filePath));
       }
@@ -410,6 +422,7 @@ export class TerminalTextAttachmentDelivery {
             ptyService: this.pty,
             tmuxService: this.tmux,
             textAttachmentLease: true,
+            codexInputContext: request.codexInputContext,
             beforeTextAttachmentWrite: () => this.recheck(target, false),
           },
           target.session,

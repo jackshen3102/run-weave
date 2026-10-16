@@ -1,0 +1,6 @@
+
+> runweave-workspace@0.1.0 toolkit:verify-hooks <USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1
+> pnpm --filter ./electron exec tsx ../scripts/toolkit/verify/index.mjs
+
+Tool outcome Hook transport PASS: explicit signals preserved, unknown omitted
+toolkit hook verification passed

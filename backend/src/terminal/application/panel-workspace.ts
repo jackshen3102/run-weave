@@ -1,3 +1,4 @@
+import { syncCodexContext } from "./codex-context-sync";
 import { invalidateTerminalInput } from "../runtime/input-admission";
 import { randomUUID } from "node:crypto";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal-protocol";
@@ -285,6 +286,10 @@ export async function ensureTmuxPanelWorkspace(
     await syncTmuxPanePanelId(tmuxService, target, pane, panel.id);
     livePanelIds.push(panel.id);
     changed = true;
+  }
+
+  for (const panel of terminalSessionManager.listPanels(session.id)) {
+    changed = (await syncCodexContext(terminalSessionManager, panel)) || changed;
   }
 
   const runningPanels = terminalSessionManager

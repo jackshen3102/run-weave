@@ -1,0 +1,271 @@
+:root {
+  color-scheme: dark;
+  font:
+    13px -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    sans-serif;
+  color: #d9e1ea;
+  background: #0c1119;
+  --line: #283240;
+  --muted: #8491a2;
+  --accent: #91c8e5;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+#app {
+  height: 100dvh;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.brandbar {
+  height: 47px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: #101722;
+  border-bottom: 1px solid var(--line);
+}
+.logo {
+  color: var(--accent);
+  margin-right: 10px;
+}
+.connection {
+  font-size: 11px;
+  color: #91b7a7;
+}
+.projectbar {
+  height: 43px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+.muted {
+  color: var(--muted);
+}
+.workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.rail {
+  width: 174px;
+  flex-shrink: 0;
+  background: #101722;
+  border-right: 1px solid var(--line);
+  padding: 18px 10px;
+}
+.section-label {
+  color: #718197;
+  font-size: 10px;
+  padding: 0 9px 13px;
+}
+.worktree {
+  background: #1b293b;
+  padding: 10px;
+  border: 1px solid #34455a;
+  border-radius: 5px;
+}
+.branch {
+  padding: 12px 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.work {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+.sessionbar {
+  height: 43px;
+  flex-shrink: 0;
+  display: flex;
+  gap: 3px;
+  border-bottom: 1px solid var(--line);
+  padding: 0 10px;
+  overflow: auto;
+}
+.session-tab {
+  background: none;
+  border: 0;
+  white-space: nowrap;
+  padding: 0 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.session-tab.active {
+  color: #e6edf5;
+  background: #192536;
+  box-shadow: inset 0 -2px var(--accent);
+}
+.terminal {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  padding: 24px 28px 14px;
+  font-family: "SFMono-Regular", Menlo, Consolas, "PingFang SC", monospace;
+  font-size: 13px;
+  line-height: 1.85;
+  background: #0c1119;
+  overflow: auto;
+}
+.terminal > * {
+  flex-shrink: 0;
+}
+.terminal-scroll {
+  overflow-wrap: anywhere;
+  padding-right: 12px;
+}
+.cli-header {
+  border: 1px solid #626b78;
+  border-radius: 6px;
+  padding: 11px 17px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 27px;
+}
+.cli-header strong {
+  font-weight: 500;
+}
+.cli-header span,
+.cli-header div {
+  color: var(--muted);
+}
+.cli-header div {
+  margin-top: 5px;
+}
+.terminal-line {
+  display: flex;
+  gap: 12px;
+  margin: 21px 0;
+  white-space: pre-wrap;
+}
+.marker {
+  flex-shrink: 0;
+  width: 10px;
+}
+.line-body {
+  min-width: 0;
+  max-width: 110ch;
+}
+.terminal-line.user {
+  color: #f2f4f7;
+}
+.terminal-line.user .marker {
+  color: #d0e5f1;
+}
+.terminal-line.tool {
+  color: #8894a4;
+  margin: 9px 0;
+}
+.terminal-line.assistant .marker {
+  color: #c9cfd9;
+}
+.terminal-status {
+  color: #b4bdc9;
+  min-height: 28px;
+  padding: 5px 0;
+}
+.terminal-status:not(:empty)::before {
+  content: "• ";
+  color: var(--accent);
+}
+.terminal-error {
+  color: #e9a594;
+  white-space: pre-wrap;
+  padding: 5px 0 12px;
+}
+.terminal-input {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 0;
+}
+.terminal-input > span {
+  font-size: 17px;
+  line-height: 24px;
+}
+.terminal-input textarea {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  resize: none;
+  border: 0;
+  background: none;
+  outline: none;
+  line-height: 1.85;
+  padding: 0;
+  caret-color: #d8e9f9;
+  min-height: 24px;
+}
+.terminal-input textarea:focus-visible {
+  outline: none;
+}
+.terminal-input textarea::placeholder {
+  color: var(--muted);
+}
+.terminal-footer {
+  min-height: 25px;
+  padding-top: 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8b96a6;
+  overflow-wrap: anywhere;
+}
+.statusbar {
+  height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 17px;
+  border-top: 1px solid var(--line);
+  background: #101722;
+  color: #77869a;
+  font-size: 10px;
+}
+@media (max-width: 760px) {
+  .rail {
+    display: none;
+  }
+  .terminal {
+    padding: 18px 15px 12px;
+    font-size: 12px;
+  }
+  .projectbar {
+    height: 38px;
+  }
+  .session-tab {
+    padding: 0 10px;
+  }
+  .terminal-footer {
+    font-size: 10px;
+  }
+  .terminal-line {
+    gap: 8px;
+  }
+}

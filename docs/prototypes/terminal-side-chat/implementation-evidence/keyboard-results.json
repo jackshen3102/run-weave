@@ -1,0 +1,17 @@
+{
+  "source": "Playwright Desktop CDP with Network.webSocketFrameSent observations and terminal snapshots",
+  "before": {
+    "devSessionId": "dvs-f761b8",
+    "ctrlSlashInputFrames": [],
+    "ctrl7Toggled": true,
+    "ctrlCClosed": true
+  },
+  "after": {
+    "devSessionId": "dvs-256702",
+    "ctrlSlashToParentInputFrames": [[31]],
+    "ctrlSlashToSideInputFrames": [[31]],
+    "outsideTerminalInputCount": 0,
+    "sideReplyRetained": "KEY_FIXED_1015",
+    "ctrlCClosed": true
+  }
+}

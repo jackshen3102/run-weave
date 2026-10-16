@@ -1,0 +1,73 @@
+{
+  "runtimeVersion": "codex-cli 0.160.1",
+  "newerSourceOnly": "0.162.1",
+  "nativeUiPreserved": true,
+  "productionIntegration": false,
+  "parentThreadId": "01a13fa2-ee23-7050-a798-677865787434",
+  "sideThreadId": "01a13fa3-a7bb-7ae1-ba1d-5740acc78a1c",
+  "closeToThreadClosedMs": 60007,
+  "forkResponseHasParent": true,
+  "readWhileSideAliveHasParent": false,
+  "rpcDisplaySelectionEventObserved": false,
+  "rpcSideSpecificTypeObserved": false,
+  "titleIsTruncated": true,
+  "cleanup": {
+    "pid": "stopped",
+    "serverPid": "stopped",
+    "tmux": true
+  },
+  "sourceFiles": {
+    "0.160.1": [
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.160.1/codex-rs/tui/src/chatwidget/status_surfaces.rs",
+        "sha256": "e96ac7db77866266a5b146b885f03487bf801511295bd35474877783537e6200"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.160.1/codex-rs/tui/src/app/side.rs",
+        "sha256": "33e5c521acce6991b098ff1f11618fded0b504c0ea53b87e8bf174a1ec2184dd"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.160.1/codex-rs/tui/src/app/session_lifecycle.rs",
+        "sha256": "c74cc51b560fe3aef2dbca9bca37187fcacae61ec3843c5b282cb20493de1d56"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.160.1/codex-rs/hooks/src/schema.rs",
+        "sha256": "162735b4d0c021c911cb3939b6130d2aad90cf5f865069a17b97c0cf02c53e14"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.160.1/codex-rs/app-server-protocol/src/protocol/common.rs",
+        "sha256": "d0cca691d21ffe282d3ca3d8ca9eaee8afe9aab058b04a3d4ef579f72a6918c7"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.160.1/codex-rs/app-server/src/request_processors/thread_processor.rs",
+        "sha256": "786c0549e5c1b57421e03472f3b8c3519090849fb8401163f3da5cc2c55b66be"
+      }
+    ],
+    "0.162.1": [
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/tui/src/chatwidget/status_surfaces.rs",
+        "sha256": "97b1698b8cd73c5cc9b4ee2cbf1d99183c6cdfd8561571cc23dcc6f6c22f0321"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/tui/src/app/side.rs",
+        "sha256": "aeee035b71a25213174bdb5c619001eb4120ca172846f1d62bdf91bd2bcc2cfa"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/tui/src/app/session_lifecycle.rs",
+        "sha256": "b3e1bff32bdd0b97f216677ef4a02e0ddbb0b25bfa4e2a3310f0e0be7472e4a7"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/hooks/src/schema.rs",
+        "sha256": "162735b4d0c021c911cb3939b6130d2aad90cf5f865069a17b97c0cf02c53e14"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/app-server-protocol/src/protocol/common.rs",
+        "sha256": "e25ebb90bf79be79def79ebf2dd704057577fa9806710fbea0ee240a909d0dc1"
+      },
+      {
+        "url": "https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/app-server/src/request_processors/thread_processor.rs",
+        "sha256": "2c40a6db590c9823a6775b28c2e125544583246318ce038166d28fb57a10ab29"
+      }
+    ]
+  }
+}

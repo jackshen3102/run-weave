@@ -1,0 +1,7 @@
+{
+  "status": 500,
+  "body": {
+    "message": "Terminal input failed",
+    "error": "Error: Codex 输入上下文尚未就绪，草稿已保留。"
+  }
+}

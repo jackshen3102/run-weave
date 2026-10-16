@@ -1,3 +1,4 @@
+import type { CodexInputContext } from "@runweave/shared/terminal/codex-context";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useState, type RefObject } from "react";
 import { logTerminalPerf } from "../../../features/terminal/output/performance";
@@ -13,6 +14,7 @@ interface UseTerminalInstantReplyControllerOptions {
   error: string | null;
   onSent: () => void;
   panelId?: string;
+  codexInputContext?: CodexInputContext;
   requestScopeRef: RefObject<object | null>;
   sendPendingRef: RefObject<boolean>;
   setSending: (sending: boolean) => void;
@@ -26,6 +28,7 @@ export function useTerminalInstantReplyController({
   error,
   onSent,
   panelId,
+  codexInputContext,
   requestScopeRef,
   sendPendingRef,
   setSending,
@@ -90,6 +93,7 @@ export function useTerminalInstantReplyController({
             mode: "prompt_replace",
             submit: true,
             recordQuickInput: false,
+            codexInputContext,
             ...(panelId ? { panelId } : {}),
           },
           AbortSignal.timeout(20_000),

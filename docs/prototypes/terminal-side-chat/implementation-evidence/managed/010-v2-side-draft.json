@@ -1,0 +1,23 @@
+{
+  "terminalSessionId": "c1277223",
+  "projectId": "d6a9da4f-8bde-4205-8247-e9cc0a86bba4",
+  "alias": null,
+  "threadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+  "threadProvider": "codex",
+  "lastThreadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+  "lastThreadProvider": "codex",
+  "lastThreadStatus": "idle",
+  "lastThreadUpdatedAt": "2026-10-15T17:00:32.396Z",
+  "command": "/bin/zsh",
+  "args": ["-l"],
+  "cwd": "/private/tmp/runweave-managed-side-fixture",
+  "activeCommand": "codex",
+  "tmuxSessionName": "runweave-c1277223",
+  "tmuxSocketPath": "/var/folders/hp/bk0rp6xn3t5fsr5sf7n256rr0000gn/T/rw-tmux-a2de6cdea1f5/tmux.sock",
+  "scrollback": "\n\n› Print numbers 1 through 70, one per line. No tools.\n\n\n• 1\n  2\n  3\n  4\n  5\n  6\n  7\n  8\n  9\n  10\n  11\n  12\n  13\n  14\n  15\n  16\n  17\n  18\n  19\n  20\n  21\n  22\n  23\n  24\n  25\n  26\n  27\n  28\n  29\n  30\n  31\n  32\n  33\n  34\n  35\n  36\n  37\n  38\n  39\n  40\n  41\n  42\n  43\n  44\n  45\n  46\n  47\n  48\n  49\n  50\n  51\n  52\n  53\n  54\n  55\n  56\n  57\n  58\n  59\n  60\n  61\n  62\n  63\n  64\n  65\n  66\n  67\n  68\n  69\n  70\n\n  Worked for 7s • 1:05 AM\n \n \n› SIDE_NATIVE_010\n \n  GPT-6.1-Sol low · /private/tmp/runweave-managed-side-fixture · 报告当前工作目录绝对路径 … Side from main thread · ctrl+/ to switch · ctrl+c to close\n",
+  "status": "running",
+  "createdAt": "2026-10-15T16:31:08.577Z",
+  "lastActivityAt": "2026-10-15T17:06:04.445Z",
+  "scrollbackSourceCols": 152,
+  "tail": "\n\n› Print numbers 1 through 70, one per line. No tools.\n\n\n• 1\n  2\n  3\n  4\n  5\n  6\n  7\n  8\n  9\n  10\n  11\n  12\n  13\n  14\n  15\n  16\n  17\n  18\n  19\n  20\n  21\n  22\n  23\n  24\n  25\n  26\n  27\n  28\n  29\n  30\n  31\n  32\n  33\n  34\n  35\n  36\n  37\n  38\n  39\n  40\n  41\n  42\n  43\n  44\n  45\n  46\n  47\n  48\n  49\n  50\n  51\n  52\n  53\n  54\n  55\n  56\n  57\n  58\n  59\n  60\n  61\n  62\n  63\n  64\n  65\n  66\n  67\n  68\n  69\n  70\n\n  Worked for 7s • 1:05 AM\n \n \n› SIDE_NATIVE_010\n \n  GPT-6.1-Sol low · /private/tmp/runweave-managed-side-fixture · 报告当前工作目录绝对路径 … Side from main thread · ctrl+/ to switch · ctrl+c to close"
+}

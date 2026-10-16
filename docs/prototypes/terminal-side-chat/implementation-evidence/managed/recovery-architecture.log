@@ -1,0 +1,8 @@
+
+> runweave-workspace@0.1.0 architecture:check <USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1
+> node ./scripts/architecture/check.mjs --output=artifacts/architecture-report.json
+
+architecture: files=1817 lines=289105 over600=0 nearLimit=114
+architecture: runtimeCycles=0 typeOnlyCycles=0 forbiddenImports=0 sharedRootImports=0
+architecture: props>=10=16 componentCalls>=10=30 functions>=200=59
+architecture: pass (legacy debt matches the ratcheted baseline)
