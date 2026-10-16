@@ -127,7 +127,7 @@ public struct RootView: View {
       else { notifications.suspend() }
     }
     .sheet(isPresented: $managingConnections) {
-      ConnectionManager(store: connections, session: session, codexQuota: codexQuota) {
+      ConnectionManager(store: connections, session: session) {
         managingConnections = false
         mobileLoginRevision += 1
       }.mobileAnalyticsScreen(.connections)
