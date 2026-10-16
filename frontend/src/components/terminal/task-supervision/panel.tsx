@@ -1,3 +1,5 @@
+import { SupervisionGoalHistory } from "./goal-history";
+import { SupervisionGoalCard, SupervisionGoalPanel, type GoalView } from "./goal-panel";
 import { SupervisionHistory } from "./history";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
@@ -7,7 +9,6 @@ import type {
 } from "@runweave/shared/task-supervision";
 import {
   currentSupervisionDecisions,
-  supervisionGoalPreview,
 } from "@runweave/shared/task-supervision";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import {
@@ -46,6 +47,7 @@ export function TerminalTaskSupervisionPanel({
 }
 function SupervisionContent({ sessionId }: { sessionId: string }) {
   const { apiBase, token, onAuthExpired } = useTerminalRuntime();
+  const [goalView, setGoalView] = useState<GoalView | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -54,7 +56,8 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
   const discovery = query.data;
   const watch = discovery?.watch;
   const decisions = watch ? currentSupervisionDecisions(watch) : [];
-  const decision = decisions.at(-1);
+  const decision = decisions.at(-1) ?? watch?.decisions.at(-1);
+  const previousDecision = !!decision && (decision.contextRevision !== watch?.contextRevision || decision.goalVersion !== watch?.goalDefinition?.version);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -63,7 +66,8 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
   }, []);
   useEffect(() => {
     setNotice(null);
-  }, [discovery?.target?.threadId, discovery?.target?.executorGeneration]);
+    setGoalView(null);
+  }, [discovery?.target?.threadId, discovery?.target?.panelId, discovery?.target?.executorGeneration]);
   const fail = useMemoizedFn((error: unknown) => {
     if (!mounted.current) return;
     if (error instanceof HttpError && error.status === 401) onAuthExpired?.();
@@ -135,6 +139,7 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
       submitting.current = false;
     }
   });
+  if (watch && goalView) return <SupervisionGoalPanel key={`${watch.watchId}:${goalView}`} watch={watch} initialView={goalView} offline={query.isError} close={() => setGoalView(null)} refresh={() => query.refetch()} applied={() => { setGoalView(null); setNotice("目标已采用。监控开启且存在有效最终回复时会重新判断。"); }} />;
   return (
     <section
       aria-label="长任务监控"
@@ -172,14 +177,7 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
             >
               {taskSupervisionStatus(watch)}
             </p>
-            <div>
-              <h3 className="mb-2 text-[11px] text-slate-400">当前目标</h3>
-              <p className="whitespace-pre-wrap break-words text-sm leading-6">
-                {watch.goal
-                  ? supervisionGoalPreview(watch.goal)
-                  : "等待新会话的用户任务，目标将自动读取。"}
-              </p>
-            </div>
+            <SupervisionGoalCard watch={watch} disabled={busy || query.isError || watch.taskStartMessageId.startsWith("pending:")} open={setGoalView} />
             <div className="rounded border border-slate-800 bg-slate-900 p-3">
               <p className="text-xs">
                 已使用续接额度 <strong>{watch.continuationCount}/3</strong>
@@ -206,15 +204,15 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
             {decision && (
               <div className="space-y-3">
                 <h3 className="text-[11px] text-slate-400">
-                  {watch.status === "classifying"
-                    ? "上次判断（正在重新判断）"
+                  {previousDecision || watch.status === "classifying"
+                    ? `上次判断${decision.goalVersion ? ` · 目标 v${decision.goalVersion}` : " · 旧版目标"}`
                     : "最新判断"}
                 </h3>
                 <p className="text-sm">{labels[decision.outcome]}</p>
                 {decision.outcome === "continue" && (
                   <div className="space-y-2 text-xs text-amber-300">
                     <p>{decision.delivery === "not_requested" ? "自动续接未发送" : decision.delivery === "observed" ? "原会话已接收续接" : "续接已尝试发送，等待原会话确认"}</p>
-                    {watch.enabled && watch.status === "error" && decision.deliveryBlock === "draft_unconfirmed" && decision.delivery === "not_requested" && (
+                    {!previousDecision && watch.enabled && watch.status === "error" && decision.deliveryBlock === "draft_unconfirmed" && decision.delivery === "not_requested" && (
                       <Button size="sm" variant="outline" disabled={busy || !discovery?.inputVersion} onClick={() => void retry()}>
                         确认输入框为空并重试
                       </Button>
@@ -251,7 +249,8 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
                 更新于 {new Date(watch.updatedAt).toLocaleString()}
               </p>
             </details>
-            <SupervisionHistory key={watch.watchId} watchId={watch.watchId} />
+            <SupervisionGoalHistory key={`goals:${watch.watchId}:${watch.goalDefinition?.revisionId ?? "empty"}`} watchId={watch.watchId} />
+            <SupervisionHistory key={`decisions:${watch.watchId}:${watch.decisions.at(-1)?.decisionId ?? "empty"}`} watchId={watch.watchId} />
           </>
         )}
       </div>

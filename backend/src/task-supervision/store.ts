@@ -11,12 +11,14 @@ import {
   type SupervisionDecisionDetail,
   type SupervisionDecisionPage,
   type TaskWatch,
+  type SupervisionGoalDetail,
+  type SupervisionGoalPage,
 } from "@runweave/shared/task-supervision";
 
 export type ArchiveChange = {
   watchId: string;
   decision: SupervisionDecision | SupervisionDecisionSummary;
-};
+} | { watchId: string; goal: SupervisionGoalDetail } | { watchId: string; goalApplicationId: string };
 
 export interface SupervisionJournal {
   version: 1;
@@ -76,6 +78,9 @@ export class TaskSupervisionStore {
         CREATE INDEX IF NOT EXISTS decisions_thread_page ON decisions(watch_id, thread_id, seq DESC);
         CREATE INDEX IF NOT EXISTS decisions_reply ON decisions(watch_id, thread_id, reply_id, turn_id);
         CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, digest TEXT NOT NULL, watch_id TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS goal_revisions (id TEXT PRIMARY KEY, watch_id TEXT NOT NULL, body TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS goal_revisions_watch ON goal_revisions(watch_id);
+        CREATE TABLE IF NOT EXISTS goal_applications (id TEXT PRIMARY KEY, watch_id TEXT NOT NULL);
       `);
       if (
         !db
@@ -230,7 +235,13 @@ export class TaskSupervisionStore {
   async save(journal: SupervisionJournal, additions: ArchiveChange[] = []) {
     const db = this.database();
     db.transaction(() => {
-      for (const { watchId, decision } of additions) {
+      for (const change of additions) {
+        if ("goalApplicationId" in change) { db.prepare("INSERT INTO goal_applications(id, watch_id) VALUES (?, ?)").run(change.goalApplicationId, change.watchId); continue; }
+        if ("goal" in change) {
+          db.prepare("INSERT INTO goal_revisions(id, watch_id, body) VALUES (?, ?, ?)").run(change.goal.goal.revisionId, change.watchId, JSON.stringify(change.goal));
+          continue;
+        }
+        const { watchId, decision } = change;
         if ("input" in decision) this.insertDecision(watchId, decision);
         else
           db.prepare(
@@ -273,14 +284,25 @@ export class TaskSupervisionStore {
     threadId: string,
     replyId: string,
     turnId: string,
+    goalVersion?: number,
+    contextRevision?: number,
   ) {
     return Boolean(
       this.database()
         .prepare(
-          "SELECT 1 FROM decisions WHERE watch_id=? AND thread_id=? AND reply_id=? AND turn_id=? LIMIT 1",
+          "SELECT 1 FROM decisions WHERE watch_id=? AND thread_id=? AND reply_id=? AND turn_id=? AND (? IS NULL OR json_extract(summary, '$.goalVersion')=?) AND (? IS NULL OR json_extract(summary, '$.contextRevision')=?) LIMIT 1",
         )
-        .get(watchId, threadId, replyId, turnId),
+        .get(watchId, threadId, replyId, turnId, goalVersion ?? null, goalVersion ?? null, contextRevision ?? null, contextRevision ?? null),
     );
+  }
+  goalApplied(watchId: string, previewId: string) { return !!this.database().prepare("SELECT 1 FROM goal_applications WHERE id=? AND watch_id=?").get(previewId, watchId); }
+  goals(watchId: string, cursor?: string): SupervisionGoalPage {
+    const rows = this.database().prepare("SELECT rowid AS seq, json_extract(body, '$.goal') AS goal, json_extract(body, '$.reason') AS reason FROM goal_revisions WHERE watch_id=? AND rowid < ? ORDER BY rowid DESC LIMIT 11").all(watchId, cursor ? Number(cursor) : Number.MAX_SAFE_INTEGER) as Array<{ seq: number; goal: string; reason: string }>;
+    return { goals: rows.slice(0, 10).map((row) => ({ goal: JSON.parse(row.goal), reason: row.reason })), nextCursor: rows.length > 10 ? String(rows[9]!.seq) : null };
+  }
+  goalDetail(watchId: string, revisionId: string): SupervisionGoalDetail | null {
+    const row = this.database().prepare("SELECT body FROM goal_revisions WHERE watch_id=? AND id=?").get(watchId, revisionId) as { body: string } | undefined;
+    return row ? JSON.parse(row.body) : null;
   }
   detail(watchId: string, id: string): SupervisionDecisionDetail | null {
     const row = this.database()

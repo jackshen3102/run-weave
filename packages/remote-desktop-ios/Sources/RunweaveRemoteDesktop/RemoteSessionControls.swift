@@ -8,6 +8,9 @@ struct RemoteSessionControls: View {
     @Binding var showsMenu: Bool
     let openKeyboard: () -> Void
     let onClose: () -> Void
+    let orientationActionTitle: String
+    let isChangingOrientation: Bool
+    let onRotate: (() -> Void)?
     @AppStorage("remoteDesktop.controls.leading") private var onLeadingEdge = false
     @AppStorage("remoteDesktop.controls.verticalFraction") private var verticalFraction = 1.0
     @AppStorage("remoteDesktop.controls.collapsed") private var collapsed = false
@@ -18,7 +21,7 @@ struct RemoteSessionControls: View {
     private enum MenuPage { case session, statistics, gestures }
     private let inset: CGFloat = 12
     private let toolbarHeight: CGFloat = 52
-    private var toolbarWidth: CGFloat { 113 + (collapsed ? 52 : 104) }
+    private var toolbarWidth: CGFloat { 113 + (collapsed ? 52 : 104 + (onRotate == nil ? 0 : 51)) }
 
     var body: some View {
         GeometryReader { geometry in
@@ -65,10 +68,19 @@ struct RemoteSessionControls: View {
             .accessibilityIdentifier("remote-desktop-return")
             Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1, height: 22)
             if !collapsed {
+                if let onRotate {
+                    Button(action: onRotate) {
+                        Image(systemName: "rotate.right").frame(width: 50, height: 44)
+                    }
+                    .disabled(isChangingOrientation)
+                    .accessibilityLabel(orientationActionTitle)
+                    .accessibilityIdentifier("remote-desktop-orientation-toggle")
+                    Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1, height: 22)
+                }
                 Button(action: openKeyboard) {
                     Image(systemName: "keyboard").foregroundColor(.blue).frame(width: 50, height: 44)
                 }
-                .disabled(session.state != .controllable)
+                .disabled(session.state != .controllable || isChangingOrientation)
                 .accessibilityLabel("远程键盘")
                 .accessibilityIdentifier("remote-desktop-keyboard-toggle")
                 Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1, height: 22)
@@ -166,13 +178,19 @@ struct RemoteSessionControls: View {
                 ForEach(RemoteInputMode.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
+            .disabled(isChangingOrientation)
             .padding(.vertical, 8)
+            if let onRotate {
+                menuButton(orientationActionTitle, symbol: "rotate.right", identifier: "remote-desktop-orientation-menu",
+                           action: onRotate)
+                    .disabled(isChangingOrientation)
+            }
             menuButton("适应屏幕", symbol: "arrow.up.left.and.arrow.down.right", identifier: "remote-desktop-fit") {
                 session.resetViewport(); showsMenu = false
             }
             menuButton("右击", symbol: "computermouse", identifier: "remote-desktop-right-click") {
                 session.click(button: 2); showsMenu = false
-            }.disabled(session.state != .controllable)
+            }.disabled(session.state != .controllable || isChangingOrientation)
             menuButton("连接统计", symbol: "waveform.path.ecg", identifier: "remote-desktop-statistics-toggle") {
                 page = .statistics
             }

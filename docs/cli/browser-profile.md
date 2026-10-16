@@ -40,6 +40,21 @@ Backend 协议 2 的响应包含 `binding`（desktopId、hostId、generation、i
 不单独证明某次请求命中规则。缺失状态或旧桌面没有 resolver 时明确失败，不伪造 `stopped`，
 也不回退到未经解析的 Browser。桌面、远端 Backend 和 CLI 需一起更新。
 
+## CDP Cookie 读写
+
+`Storage.getCookies` 和 `Storage.setCookies` 使用连接所选 Profile 的真实 Cookie 存储，
+支持根连接、Browser session 和当前 scope 内的 page session。`browserContextId` 是代理暴露的
+Browser Group ID；传入其他 scope 的 ID 会报错，不能用它切换 Profile。同一 Profile 内各 Group
+共享 Cookie；Group 隔离标签页，不隔离登录态。
+
+请求需要 scope 内仍存活的普通 Browser 标签页。本地预览使用独立 partition，不能代替 Profile
+存储；没有可用目标、参数错误或原生读写失败时返回协议错误，不返回空成功。Cookie 字段沿用原生
+CDP，包括持久 Cookie 的分区键。现有 Profile 会自动持久化普通会话 Cookie；其 Electron API
+无法保留分区键，因此包含分区会话 Cookie（带 `partitionKey` 且无到期时间或到期时间为负数）的
+写入请求在执行前整体拒绝，避免生成无分区副本。写入成功只证明 Cookie 操作完成，不证明网站
+登录态完整或服务器会话可用。
+实现入口：[Cookie 代理](../../electron/src/browser/cdp/proxy/cookies.ts)。
+
 ## WebMCP 网页工具（实验能力）
 
 在启动 Electron 前设置 `RUNWEAVE_BROWSER_WEBMCP=1`，仅为新建的 Terminal Browser

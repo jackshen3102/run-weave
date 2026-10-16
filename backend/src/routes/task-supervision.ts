@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { goalContentSchema } from "../task-supervision/goals";
 import {
   SupervisionError,
   type TaskSupervisionService,
@@ -113,6 +114,32 @@ export function createTaskSupervisionRouter(service: TaskSupervisionService) {
     const parsed = z.object({ cursor: z.string().regex(/^[1-9]\d*$/).optional(), limit: z.coerce.number().int().min(1).max(50).default(20) }).strict().safeParse(req.query);
     if (!parsed.success) { res.status(400).json({ message: "Invalid history query" }); return; }
     try { res.json(await service.decisions(req.params.id, parsed.data.cursor, parsed.data.limit)); }
+    catch (error) { report(error, res); }
+  });
+  router.post("/:id/goal-preview", async (req, res) => {
+    const parsed = z.object({ expectedRevision: z.number().int().positive(), content: goalContentSchema.optional() }).strict().safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid goal request" }); return; }
+    const controller = new AbortController();
+    const abort = () => { if (!res.writableEnded) controller.abort(); };
+    res.on("close", abort);
+    try { res.json(await service.previewGoal(req.params.id, parsed.data, controller.signal)); }
+    catch (error) { if (!controller.signal.aborted) report(error, res); }
+    finally { res.off("close", abort); }
+  });
+  router.post("/:id/goal-apply", async (req, res) => {
+    const parsed = z.object({ previewId: z.string().uuid() }).strict().safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid goal preview" }); return; }
+    try { res.json(await service.applyGoal(req.params.id, parsed.data.previewId)); }
+    catch (error) { report(error, res); }
+  });
+  router.get("/:id/goals", async (req, res) => {
+    const parsed = z.object({ cursor: z.string().regex(/^[1-9]\d*$/).refine((value) => Number.isSafeInteger(Number(value))).optional() }).strict().safeParse(req.query);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid goal history query" }); return; }
+    try { res.json(await service.goals(req.params.id, parsed.data.cursor)); }
+    catch (error) { report(error, res); }
+  });
+  router.get("/:id/goals/:revisionId", async (req, res) => {
+    try { res.json(await service.goalDetail(req.params.id, req.params.revisionId)); }
     catch (error) { report(error, res); }
   });
   router.get("/:id/decisions/:decisionId", async (req, res) => {

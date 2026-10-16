@@ -91,6 +91,9 @@ export function changeWatch(id: string, request: ChangeSupervisionRequest, opera
       throw new SupervisionError("目标不能为空。", 422);
     watch.goal = request.goal;
     watch.goalOverride = request.goal;
+    delete watch.goalCheckedMessageId;
+    watch.goalState = "needs_review";
+    watch.goalReason = "目标已修改，需重新整理完成条件和范围。";
     watch.contextRevision++;
     if (watch.status === "classifying") watch.status = "watching";
   }

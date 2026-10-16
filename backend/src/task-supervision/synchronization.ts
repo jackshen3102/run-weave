@@ -33,6 +33,10 @@ export function synchronizeTarget(
     delete watch.pendingReply;
     watch.observedContinuationCount = 0;
     delete watch.goalOverride;
+    delete watch.goalDefinition;
+    delete watch.goalCheckedMessageId;
+    delete watch.goalReason;
+    watch.goalState = "checking";
     watch.continuationCount = 0;
     watch.outcome = null;
     watch.contextRevision++;
@@ -79,7 +83,8 @@ export function synchronizeContext(
     }
     watch.task = task;
     watch.taskStartMessageId = task.id;
-    watch.goal = task.text;
+    if (!watch.goalDefinition) watch.goal = task.text;
+    watch.goalState = "checking";
     watch.lastUserMessageId = latest.id;
     watch.revision++;
     watch.updatedAt = new Date().toISOString();
@@ -94,7 +99,8 @@ export function synchronizeContext(
   watch.evidenceMessageIds = [...new Set([...(watch.evidenceMessageIds ?? []), watch.taskStartMessageId])];
   watch.taskStartMessageId = latest.id;
   watch.task = latest;
-  if (!watch.goalOverride) watch.goal = latest.text;
+  if (!watch.goalDefinition && !watch.goalOverride) watch.goal = latest.text;
+  watch.goalState = "checking";
   watch.lastUserMessageId = latest.id;
   // Same-thread user input changes scope and renews the processing round, never the original task.
   updateWaitingState(watch, "userpromptsubmit", null);

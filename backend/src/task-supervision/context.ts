@@ -11,7 +11,6 @@ import type {
   SupervisionPlan,
   TaskWatch,
 } from "@runweave/shared/task-supervision";
-import { supervisionGoalPreview } from "@runweave/shared/task-supervision";
 
 // Conservative bound for the default Codex model. Required material is never truncated.
 export const INPUT_BUDGET_BYTES = 180_000;
@@ -34,8 +33,10 @@ export async function readWatchContext(
           watch.taskStartMessageId,
           ...(watch.evidenceMessageIds ?? []),
           ...(watch.completedReplyIds ?? []),
+          ...(watch.goalDefinition?.sourceMessageIds ?? []),
+          ...(watch.goalDefinition?.plans.flatMap((p) => [p.sourceMessageId, p.authorizationMessageId]) ?? []),
         ]),
-      ].filter((id) => !id.startsWith("pending:"))
+      ].filter((id) => !id.startsWith("pending:") && !id.startsWith("goal-manual:"))
     : [];
   if (ids.length > 63)
     throw new Error(
@@ -161,7 +162,7 @@ export async function refreshReferencedPlans(
     (m) => m.id === watch.taskStartMessageId && m.role === "user",
   );
   if (start < 0) throw new Error("找不到原始任务起点，请重新核对任务来源。");
-  watch.plans = await readPlans(root, referencedPlans(messages), watch.plans);
+  watch.plans = await readPlans(root, watch.goalDefinition ? watch.goalDefinition.plans.map((p) => p.path) : referencedPlans(messages), watch.plans);
 }
 export function buildSupervisionInput(
   watch: TaskWatch,
@@ -181,13 +182,16 @@ export function buildSupervisionInput(
       !isSupervisionPrompt(m.text) &&
       !m.text.startsWith("<hook_prompt"),
   );
+  if (watch.goalDefinition?.manualInstruction) updates.push(watch.goalDefinition.manualInstruction);
+  updates.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
   const recent = messages.filter(
     (m) =>
       m.id !== reply.id && m.role === "assistant" && m.phase !== "commentary",
   );
   const input: SupervisionInput = {
     task,
-    goal: watch.goalOverride ?? supervisionGoalPreview(task.text),
+    goal: watch.goalDefinition?.objective ?? watch.goalOverride ?? task.text,
+    goalDefinition: watch.goalDefinition,
     plan: watch.plans,
     userUpdates: updates,
     recentExchanges: recent,

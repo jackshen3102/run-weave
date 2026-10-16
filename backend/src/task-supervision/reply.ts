@@ -16,6 +16,8 @@ export function alreadyProcessedReply(
     watch.decisions.some(
       (decision) =>
         decision.threadId === threadId &&
+        decision.contextRevision === watch.contextRevision &&
+        decision.goalVersion === watch.goalDefinition?.version &&
         decision.currentReplyId === reply.id &&
         decision.rawTurnId === (reply.rawTurnId ?? reply.id),
     )
