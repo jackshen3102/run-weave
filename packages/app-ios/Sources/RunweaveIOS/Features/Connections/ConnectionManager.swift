@@ -5,7 +5,6 @@ struct ConnectionManager: View {
   @Environment(\.dismiss) private var dismiss
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
-  let codexQuota: CodexQuotaStore
   var onMobileLogin: () -> Void = {}
   @State private var detailID: String?
   @State private var adding = false
@@ -86,7 +85,7 @@ struct ConnectionManager: View {
     }
     .background {
       NavigationLink(tag: connection.id, selection: $detailID) {
-        ConnectionDetailView(store: store, session: session, codexQuota: codexQuota,
+        ConnectionDetailView(store: store, session: session,
           connectionID: connection.id, onFinish: { dismiss() })
       } label: { EmptyView() }.hidden()
     }

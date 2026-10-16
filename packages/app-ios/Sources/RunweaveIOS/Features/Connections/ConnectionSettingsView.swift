@@ -8,6 +8,7 @@ struct ConnectionSettingsView: View {
   @ObservedObject var session: AppSession
   let codexQuota: CodexQuotaStore
   @State private var showingBuildIdentity = false
+  @State private var showingCodexQuota = false
   @State private var showingVersions = false
   @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
   @AppStorage(DevicePreferences.screenAwakeKey, store: DevicePreferences.store) private var keepScreenAwake = true
@@ -27,10 +28,14 @@ struct ConnectionSettingsView: View {
         Section(header: Text(store.active.map { "当前电脑 · " + $0.name } ?? "电脑")) {
           if let connection = store.active {
             NavigationLink {
-              ConnectionDetailView(store: store, session: session, codexQuota: codexQuota,
+              ConnectionDetailView(store: store, session: session,
                 connectionID: connection.id, onFinish: { dismiss() })
             } label: { Label("电脑设置", systemImage: "desktopcomputer") }
           }
+          Button { showingCodexQuota = true } label: {
+            Label("Codex 额度", systemImage: "chart.bar")
+          }.disabled(!session.authenticated)
+            .accessibilityIdentifier("codex-quota-open")
           NavigationLink {
             QuickReplyLibraryView(session: session)
           } label: { Label("快捷指令", systemImage: "text.badge.plus") }
@@ -53,6 +58,9 @@ struct ConnectionSettingsView: View {
     .interactiveDismissDisabled(quickInputs.saving)
     .preferredColorScheme(theme == "light" ? .light : .dark)
     .sheet(isPresented: $showingBuildIdentity) { BuildIdentityView().mobileAnalyticsScreen(.buildInfo) }
+    .sheet(isPresented: $showingCodexQuota) {
+      CodexQuotaView(session: session, quota: codexQuota).mobileAnalyticsScreen(.codexQuota)
+    }
     .sheet(isPresented: $showingVersions) { RuntimeVersionsView(session: session) }
   }
 }

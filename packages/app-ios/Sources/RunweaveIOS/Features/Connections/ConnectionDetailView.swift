@@ -5,7 +5,6 @@ struct ConnectionDetailView: View {
   @EnvironmentObject private var quickInputs: BackendQuickInputModel
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
-  let codexQuota: CodexQuotaStore
   let connectionID: String
   let onFinish: () -> Void
   @StateObject private var batteries = ConnectionBatteryStore()
@@ -16,7 +15,6 @@ struct ConnectionDetailView: View {
   @State private var checkedStatus: String?
   @State private var failure: String?
   @State private var showingConfiguration = false
-  @State private var showingCodexQuota = false
   @State private var showingVersions = false
 
   private var connection: BackendConnection? { store.connections.first { $0.id == connectionID } }
@@ -58,7 +56,6 @@ struct ConnectionDetailView: View {
           Section("这台电脑") {
             Button { showingVersions = true } label: { Label("组件版本", systemImage: "number") }
             Button { showingConfiguration = true } label: { Label("电脑配置", systemImage: "gearshape") }
-            Button { showingCodexQuota = true } label: { Label("Codex 额度", systemImage: "chart.bar") }
             Button {
               session.showingEnergyMonitor = true
               onFinish()
@@ -91,9 +88,6 @@ struct ConnectionDetailView: View {
     .sheet(isPresented: $editing) { ConnectionEditorView(store: store, connectionID: connectionID) }
     .sheet(isPresented: $showingConfiguration) {
       ConfigurationView(session: session).mobileAnalyticsScreen(.configuration)
-    }
-    .sheet(isPresented: $showingCodexQuota) {
-      CodexQuotaView(session: session, quota: codexQuota).mobileAnalyticsScreen(.codexQuota)
     }
     .sheet(isPresented: $showingVersions) { RuntimeVersionsView(session: session) }
     .confirmationDialog("删除本地连接？", isPresented: $deleting, titleVisibility: .visible) {
