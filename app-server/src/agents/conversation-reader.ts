@@ -1,6 +1,6 @@
 import type { SupervisionConversationReader } from "./supervision-reader.js";
 import type { AppServerThreadRef } from "@runweave/shared/app-server-events";
-import type { AppServerConversationResponse } from "@runweave/shared/terminal/conversation";
+import type { AppServerConversationResponse, ConversationTurn } from "@runweave/shared/terminal/conversation";
 import type { CodexConversationReader } from "../codex/conversation-reader.js";
 import type { PiSessionReader } from "../pi/session-reader.js";
 import { ConversationReadError } from "./conversation-source.js";
@@ -24,8 +24,53 @@ export class ConversationReader {
       availability: !supported ? "provider_unsupported" : content ? "available" : "source_missing",
       readAt: new Date().toISOString(), partial: content?.partial ?? false, turns: content?.turns ?? [],
     };
-    if (Buffer.byteLength(JSON.stringify(response)) > 8 * 1024 * 1024)
-      throw new ConversationReadError(413, "CONVERSATION_TOO_LARGE", "会话正文超过读取上限");
-    return response;
+    return recentConversation(response);
   }
+}
+
+/** Keep recent messages within the transport budget, including JSON escaping and metadata. */
+function recentConversation(response: AppServerConversationResponse): AppServerConversationResponse {
+  // Leave room for the Backend's terminal/panel target envelope.
+  const limit = 8 * 1024 * 1024 - 2048;
+  const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
+  let remaining = limit - size({ ...response, partial: true, turns: [] });
+  const sizes = response.turns.map((turn) => size(turn) + 1);
+  if (sizes.reduce((sum, bytes) => sum + bytes, 0) <= remaining) return response;
+  const turns: ConversationTurn[] = [];
+  for (let index = response.turns.length - 1; index >= 0; index--) {
+    const turn = response.turns[index]!;
+    if (sizes[index]! <= remaining) {
+      turns.push(turn);
+      remaining -= sizes[index]!;
+      continue;
+    }
+    remaining -= size({ ...turn, messages: [] }) + 1;
+    const messages: ConversationTurn["messages"] = [];
+    for (let m = turn.messages.length - 1; m >= 0; m--) {
+      const message = turn.messages[m]!;
+      const bytes = size(message) + 1;
+      if (bytes <= remaining) {
+        messages.push(message);
+        remaining -= bytes;
+        continue;
+      }
+      // A single oversized answer must not hide all of the latest conversation.
+      let low = 0;
+      let high = message.text.length;
+      while (low < high) {
+        const length = Math.ceil((low + high) / 2);
+        if (size({ ...message, text: message.text.slice(-length) }) + 1 <= remaining) low = length;
+        else high = length - 1;
+      }
+      if (low) {
+        let text = message.text.slice(-low);
+        if (/^[\uDC00-\uDFFF]/u.test(text)) text = text.slice(1);
+        if (text) messages.push({ ...message, text });
+      }
+      break;
+    }
+    if (messages.length) turns.push({ ...turn, messages: messages.reverse() });
+    break;
+  }
+  return { ...response, partial: true, turns: turns.reverse() };
 }

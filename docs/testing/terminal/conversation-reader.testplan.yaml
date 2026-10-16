@@ -258,3 +258,31 @@ cases:
       - 带未知 sourcePath 或 cwd 读取路径参数请求接口，确认 400，响应不含本例外部文件 marker。
       - 将本例源样本替换为 symlink 后读取，确认拒绝外部文件正文，不回退其他源。
       - 恢复源文件并清理本例所有专属资源。
+
+  - id: CR-019
+    name: 超大源文件保留身份校验并返回最新完整记录
+    required: true
+    description: >
+      源文件超过 64MiB 后只扫描身份头与末尾有界窗口，最新完整正文仍可读取，
+      截断记录不误作损坏正文，Pi 仍沿已选分支读取，源文件保持不变。
+    preconditions:
+      - 本例有隔离 App Server 与合法凭据，专属 Codex 和 Pi 源文件均超过 64MiB，已记录源哈希及大小。
+      - Codex 截断边界落在工具记录内部，窗口末尾包含助手正文及未完成末行；Pi 窗口包含合法生命周期锚点、当前分支正文和 sibling marker。
+    steps:
+      - 读取 Codex conversation 接口，确认成功返回 available 和 partial=true，最新助手正文可见，未完成末行和工具 payload 不进入结果。
+      - 读取 Pi conversation 接口，确认最新当前分支正文可见、partial=true，sibling marker 不出现。
+      - 重复读取确认保留消息的 ID 稳定、源哈希及大小不变；将本例身份头替换为错误 session ID 后读取，确认不泄露正文；恢复并清理本例资源。
+
+  - id: CR-020
+    name: 正文超限时优先保留最新消息并控制响应大小
+    required: true
+    description: >
+      序列化正文超过传输预算后从旧消息开始裁剪；单条超长消息保留末尾，
+      中文、转义字符和多字节文本不使响应超过 8MiB，结果明确标记 partial。
+    preconditions:
+      - 本例隔离环境有专属会话，正文含多轮消息和单条超过 8MiB 的助手文本，末尾包含唯一 marker 及中文、emoji、引号与换行。
+      - 本例可以在自己的源文件中分别写入多轮累计超限和单条消息超限的完整 JSONL 快照。
+    steps:
+      - 读取多轮超限快照，确认成功返回 partial=true、最新轮次和末尾 marker 保留，消息按源顺序排列且响应小于 8MiB。
+      - 读取单条超长消息快照，确认保留文本末尾及 marker，不产生孤立代理字符，序列化响应仍小于 8MiB；重复读取内容与 ID 稳定。
+      - 核对读取不改变本例源文件，不新增正文缓存；清理本例快照与隔离服务。

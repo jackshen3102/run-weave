@@ -12,9 +12,9 @@ export class ConversationReadError extends Error {
 /** Scan only complete records in the length captured at open; never retain a source cache. */
 export async function scanConversationSource(
   file: string,
-  consume: (record: Record<string, unknown>, offset: number) => void,
+  consume: (record: Record<string, unknown>, offset: number, truncated: boolean) => void,
   signal?: AbortSignal,
-): Promise<{ partial: boolean } | null> {
+): Promise<{ partial: boolean; truncated: boolean } | null> {
   if (!path.isAbsolute(file) || path.extname(file) !== ".jsonl") return null;
   let handle;
   try {
@@ -22,38 +22,54 @@ export async function scanConversationSource(
     handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
     const stat = await handle.stat();
     if (!stat.isFile()) return null;
-    if (stat.size > 64 * 1024 * 1024)
-      throw new ConversationReadError(413, "CONVERSATION_TOO_LARGE", "会话记录超过读取上限");
-    let position = 0;
-    let lineOffset = 0;
-    let pending = Buffer.alloc(0);
-    let partial = false;
+    const windowBytes = 64 * 1024 * 1024;
+    const truncated = stat.size > windowBytes;
+    let partial = truncated;
     const chunk = Buffer.alloc(256 * 1024);
-    while (position < stat.size) {
-      signal?.throwIfAborted();
-      const { bytesRead } = await handle.read(chunk, 0, Math.min(chunk.length, stat.size - position), position);
-      if (!bytesRead) { partial = true; break; }
-      position += bytesRead;
-      const bytes = Buffer.concat([pending, chunk.subarray(0, bytesRead)]);
-      let start = 0;
-      let end: number;
-      while ((end = bytes.indexOf(10, start)) !== -1) {
-        const line = bytes.subarray(start, end).toString("utf8");
-        let record: Record<string, unknown> | null = null;
-        if (line.trim()) {
-          try { record = asRecord(JSON.parse(line)); }
-          catch { partial = true; }
-          if (!record) partial = true;
+    // Keep the authoritative header even when older records are outside the window.
+    const ranges = truncated
+      ? [{ start: 0, end: Math.min(chunk.length, stat.size), header: true },
+        { start: stat.size - windowBytes, end: stat.size, header: false }]
+      : [{ start: 0, end: stat.size, header: false }];
+    for (const range of ranges) {
+      let position = range.start;
+      let lineOffset = position;
+      let pending = Buffer.alloc(0);
+      let skipBoundary = range.start > 0;
+      while (position < range.end) {
+        signal?.throwIfAborted();
+        const { bytesRead } = await handle.read(chunk, 0, Math.min(chunk.length, range.end - position), position);
+        if (!bytesRead) { partial = true; break; }
+        position += bytesRead;
+        const bytes = Buffer.concat([pending, chunk.subarray(0, bytesRead)]);
+        let start = 0;
+        let end: number;
+        let headerRead = false;
+        while ((end = bytes.indexOf(10, start)) !== -1) {
+          if (!skipBoundary) {
+            const line = bytes.subarray(start, end).toString("utf8");
+            let record: Record<string, unknown> | null = null;
+            if (line.trim()) {
+              try { record = asRecord(JSON.parse(line)); }
+              catch { partial = true; }
+              if (!record) partial = true;
+            }
+            // Consumer errors must not be mistaken for corrupt JSON.
+            if (record) consume(record, lineOffset, truncated);
+          }
+          skipBoundary = false;
+          lineOffset += end - start + 1;
+          start = end + 1;
+          if (range.header) { headerRead = true; break; }
         }
-        // Consumer errors (identity, limits) must not be mistaken for corrupt JSON.
-        if (record) consume(record, lineOffset);
-        lineOffset += end - start + 1;
-        start = end + 1;
+        if (headerRead) break;
+        // Discard the cut record without retaining a potentially huge tool/image payload.
+        if (skipBoundary) { lineOffset += bytes.length - start; pending = Buffer.alloc(0); }
+        else pending = Buffer.from(bytes.subarray(start));
       }
-      pending = Buffer.from(bytes.subarray(start));
     }
     signal?.throwIfAborted();
-    return { partial };
+    return { partial, truncated };
   } catch (error) {
     if (["ENOENT", "ELOOP", "ENOTDIR"].includes(String((error as NodeJS.ErrnoException).code))) return null;
     throw error;
