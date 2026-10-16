@@ -1,5 +1,4 @@
 import Clarity
-import MarkdownUI
 import SwiftUI
 
 struct ConversationReaderView: View {
@@ -37,10 +36,7 @@ struct ConversationReaderView: View {
                   VStack(alignment: .leading, spacing: 12) {
                     Text(message.role == "user" ? "你 · 第 \(index + 1) 轮" : model.data?.target?.provider ?? "Agent")
                       .font(.caption).foregroundColor(TerminalAppearance.accent)
-                    Markdown(message.text).markdownTheme(.gitHub).textSelection(.enabled)
-                      .markdownBlockStyle(\.table) { configuration in
-                        ScrollView(.horizontal) { configuration.label }
-                      }
+                    MarkdownContent(content: message.text)
                       .environment(\.openURL, OpenURLAction { url in
                         ["http", "https"].contains(url.scheme?.lowercased() ?? "") ? .systemAction : .discarded
                       })
