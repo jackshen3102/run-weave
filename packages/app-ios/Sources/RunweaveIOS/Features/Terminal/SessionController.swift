@@ -51,6 +51,7 @@ public final class SessionController: ObservableObject {
   private var task: Task<Void, Never>?
   private var inputTask: Task<Void, Never>?
   private var commandTask: Task<Void, Error>?
+  private var noticeTask: Task<Void, Never>?
   private var socket: URLSessionWebSocketTask?
   private let networking = URLSession(configuration: .ephemeral)
   private var connected = false { didSet { updateCanSend() } }
@@ -132,7 +133,6 @@ public final class SessionController: ObservableObject {
     stopped = false
     surface.setActive(true)
     failure = nil
-    notice = nil
     let epoch = generation
     task = Task { [weak self] in
       guard let self else { return }
@@ -214,6 +214,7 @@ public final class SessionController: ObservableObject {
     inputTask = nil
     commandTask?.cancel()
     commandTask = nil
+    clearNotice()
     inputBusy = false
     socket?.cancel(with: .normalClosure, reason: nil)
     socket = nil
@@ -323,7 +324,7 @@ public final class SessionController: ObservableObject {
         record("recovery.resume")
       } else {
         if committedCursor != nil {
-          notice = "断线较久或输出已超出恢复窗口，已同步当前屏幕；未回放旧输出"
+          showNotice("断线较久或输出已超出恢复窗口，已同步当前屏幕；未回放旧输出")
         }
         committedCursor = nil
         receivedCursor = nil
@@ -381,11 +382,29 @@ public final class SessionController: ObservableObject {
       if metadata != next { metadata = next }
       record("metadata")
     case .notice(let message):
-      notice = message
+      showNotice(message)
       record("runtime.notice")
     case .error: halt("终端服务返回错误，请查看后端诊断")
     case .unknown: record("protocol.unknown")
     }
+  }
+
+  private func showNotice(_ message: String) {
+    noticeTask?.cancel()
+    notice = message
+    let epoch = generation
+    noticeTask = Task { [weak self] in
+      do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
+      guard let self, self.generation == epoch else { return }
+      self.notice = nil
+      self.noticeTask = nil
+    }
+  }
+
+  private func clearNotice() {
+    noticeTask?.cancel()
+    noticeTask = nil
+    notice = nil
   }
 
   private func enqueue(

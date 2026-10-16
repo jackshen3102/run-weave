@@ -47,7 +47,8 @@ struct TaskSupervisionDecisionView: View {
             metadata("模型", decision.model)
             if let version = decision.codexVersion { metadata("Codex 版本", version) }
             metadata("耗时", "\(decision.durationMs)ms")
-            metadata("目标版本", String(decision.contextRevision))
+            metadata("目标版本", decision.goalVersion.map { "v\($0)" } ?? "历史记录未保存")
+            metadata("处理轮次", String(decision.contextRevision))
             metadata("判断 ID", decision.decisionId)
             if let thread = decision.threadId { metadata("会话", thread) }
             metadata("轮次", decision.rawTurnId)
