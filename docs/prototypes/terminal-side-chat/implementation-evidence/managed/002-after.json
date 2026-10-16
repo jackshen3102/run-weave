@@ -1,0 +1,21 @@
+{
+  "terminalSessionId": "c1277223",
+  "projectId": "d6a9da4f-8bde-4205-8247-e9cc0a86bba4",
+  "alias": null,
+  "lastThreadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+  "lastThreadProvider": "codex",
+  "lastThreadStatus": "idle",
+  "lastThreadUpdatedAt": "2026-10-15T16:35:49.652Z",
+  "command": "/bin/zsh",
+  "args": ["-l"],
+  "cwd": "/private/tmp/runweave-managed-side-fixture",
+  "activeCommand": "codex",
+  "tmuxSessionName": "runweave-c1277223",
+  "tmuxSocketPath": "/var/folders/hp/bk0rp6xn3t5fsr5sf7n256rr0000gn/T/rw-tmux-a2de6cdea1f5/tmux.sock",
+  "scrollback": "\n\n› What BEFORE_SIDE marker is in inherited history? Answer only that marker; no tools.\n\n\n• BEFORE_SIDE_7219\n\n  Worked for 5s • 12:35 AM\n\n\n› What is the exact NEW_AFTER_SIDE marker? If absent say UNKNOWN. No tools.\n\n\n• UNKNOWN\n\n  Worked for 2s • 12:36 AM\n \n \n› Ask a follow-up question\n \n  GPT-6.1-Sol low · /private/tmp/runweave-managed-side-fixture · 报告当前…  Side from main thread · main finished · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+  "status": "running",
+  "createdAt": "2026-10-15T16:31:08.577Z",
+  "lastActivityAt": "2026-10-15T16:36:08.232Z",
+  "scrollbackSourceCols": 152,
+  "tail": "\n\n› What BEFORE_SIDE marker is in inherited history? Answer only that marker; no tools.\n\n\n• BEFORE_SIDE_7219\n\n  Worked for 5s • 12:35 AM\n\n\n› What is the exact NEW_AFTER_SIDE marker? If absent say UNKNOWN. No tools.\n\n\n• UNKNOWN\n\n  Worked for 2s • 12:36 AM\n \n \n› Ask a follow-up question\n \n  GPT-6.1-Sol low · /private/tmp/runweave-managed-side-fixture · 报告当前…  Side from main thread · main finished · ctrl+/ to switch · ctrl+c to close"
+}

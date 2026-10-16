@@ -259,6 +259,9 @@ export async function ensureTerminalRuntime(
             target,
             buildAgentResumeCommand({
               ...agentThreadToResume,
+              executable: agentThreadToResume.provider === "codex"
+                ? terminalEnvironment.RUNWEAVE_CODEX_BINARY
+                : undefined,
               sessionFile: await getAgentAdapter(
                 agentThreadToResume.provider,
               ).resolveResumeTarget(

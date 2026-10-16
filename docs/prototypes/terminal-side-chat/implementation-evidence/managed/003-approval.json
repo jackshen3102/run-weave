@@ -1,0 +1,21 @@
+{
+  "terminalSessionId": "86165967",
+  "projectId": "d6a9da4f-8bde-4205-8247-e9cc0a86bba4",
+  "alias": null,
+  "lastThreadId": "01a1406c-618b-77b1-a404-76cb0f7510e7",
+  "lastThreadProvider": "codex",
+  "lastThreadStatus": "idle",
+  "lastThreadUpdatedAt": "2026-10-15T16:37:07.439Z",
+  "command": "/bin/zsh",
+  "args": ["-l"],
+  "cwd": "/private/tmp/runweave-managed-side-fixture",
+  "activeCommand": "codex",
+  "tmuxSessionName": "runweave-86165967",
+  "tmuxSocketPath": "/var/folders/hp/bk0rp6xn3t5fsr5sf7n256rr0000gn/T/rw-tmux-a2de6cdea1f5/tmux.sock",
+  "scrollback": "\n\n› Read permission-source.txt and explain its content briefly. Do not change files.\n\n\n• I’ll read permission-source.txt and briefly explain its contents.\n\n• Explored\n  └ Read permission-source.txt\n\n• permission-source.txt contains: permission fixture data.\n\n  It appears to be placeholder data for a permissions test. No files were changed.\n\n  Worked for 8s • 12:37 AM\n\n\n› Append SIDE_PERMISSION_OK to permission-source.txt using shell. This is a read-only permission acceptance check: request native approval for the\n  write. Do not bypass sandbox or use alternate tools.\n\n\n• I’ll request native approval for the shell append, as you asked.\n \n• Running printf '%s\\n' 'SIDE_PERMISSION_OK' >> permission-source.txt\n \n \n  Would you like to run the following command?\n \n  Environment: local\n \n  Reason: Allow appending SIDE_PERMISSION_OK to permission-source.txt for this permission acceptance check?\n \n  $ printf '%s\\n' 'SIDE_PERMISSION_OK' >> permission-source.txt\n \n \n› 1. Yes, proceed (y)                                                                                                                                   \n  2. Yes, and don't ask again for commands that start with `printf '%s\\n' 'SIDE_PERMISSION_OK' >> permission-source.txt` (p)\n  3. No, and tell Codex what to do differently (esc)\n \n  Press enter to confirm or esc to cancel                                                                                                               \n\n\n\n\n\n\n\n\n\n\n\n\n",
+  "status": "running",
+  "createdAt": "2026-10-15T16:36:16.185Z",
+  "lastActivityAt": "2026-10-15T16:37:58.050Z",
+  "scrollbackSourceCols": 152,
+  "tail": "\n\n› Read permission-source.txt and explain its content briefly. Do not change files.\n\n\n• I’ll read permission-source.txt and briefly explain its contents.\n\n• Explored\n  └ Read permission-source.txt\n\n• permission-source.txt contains: permission fixture data.\n\n  It appears to be placeholder data for a permissions test. No files were changed.\n\n  Worked for 8s • 12:37 AM\n\n\n› Append SIDE_PERMISSION_OK to permission-source.txt using shell. This is a read-only permission acceptance check: request native approval for the\n  write. Do not bypass sandbox or use alternate tools.\n\n\n• I’ll request native approval for the shell append, as you asked.\n \n• Running printf '%s\\n' 'SIDE_PERMISSION_OK' >> permission-source.txt\n \n \n  Would you like to run the following command?\n \n  Environment: local\n \n  Reason: Allow appending SIDE_PERMISSION_OK to permission-source.txt for this permission acceptance check?\n \n  $ printf '%s\\n' 'SIDE_PERMISSION_OK' >> permission-source.txt\n \n \n› 1. Yes, proceed (y)                                                                                                                                   \n  2. Yes, and don't ask again for commands that start with `printf '%s\\n' 'SIDE_PERMISSION_OK' >> permission-source.txt` (p)\n  3. No, and tell Codex what to do differently (esc)\n \n  Press enter to confirm or esc to cancel                                                                                                               "
+}

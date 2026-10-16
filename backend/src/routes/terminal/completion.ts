@@ -1,3 +1,4 @@
+import { codexHookBelongsToPrimary } from "../../terminal/runtime/codex-context";
 import { feishuNotifyHandler } from "../feishu";
 import type { FeishuBridgeConnector } from "../../feishu/bridge-connector";
 import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
@@ -151,6 +152,11 @@ export function createInternalTerminalCompletionRouter(options: {
     const targetPanel = panelId
       ? (options.terminalSessionManager.getPanel(panelId) ?? null)
       : null;
+    if (parsed.data.source === "codex" && targetPanel &&
+        !codexHookBelongsToPrimary(targetPanel, parsed.data.threadId)) {
+      res.status(202).json({ event: null, ignored: true, reason: "codex_context_mismatch" });
+      return;
+    }
     const paneActiveCommand = targetPanel?.activeCommand ?? null;
     const targetActiveCommand = panelId
       ? paneActiveCommand

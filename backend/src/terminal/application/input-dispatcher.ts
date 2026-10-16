@@ -1,5 +1,7 @@
-import os from "node:os";
-import path from "node:path";
+import { splitClipboardImagePaste } from "../runtime/clipboard-image-paste";
+import type { CodexInputContext } from "@runweave/shared/terminal/codex-context";
+import { readCodexContext } from "../runtime/codex-context";
+import { replaceManagedCodexPrompt } from "../runtime/codex-input";
 import { resolveReplyThread } from "../completion/reply-preview";
 import { resolveEffectivePanelActiveCommand } from "./panel-metadata";
 import { getAgentAdapter } from "../runtime/agent-adapters";
@@ -42,6 +44,7 @@ const BRACKETED_PASTE_END = "\u001b[201~";
 const PROMPT_PASTE_CHUNK_SIZE = 3000;
 
 type TerminalInputDispatchOptions = {
+  codexInputContext?: CodexInputContext;
   /** Internal task service already owns a supervisor delivery lease for the fixed pane. */
   supervisorInput?: boolean;
   validateSupervisorTarget?: () => void;
@@ -119,22 +122,8 @@ function buildPromptPasteInput(text: string, attachClipboardImages = false): str
 }
 
 function buildClipboardImagePaste(text: string): string | null {
-  const wrap = (value: string) => `${BRACKETED_PASTE_START}${value}${BRACKETED_PASTE_END}`;
-  // Codex recognizes an image only when its path is a standalone paste event.
-  // Match only our uploaded-image path format, preserving all intervening text.
-  const directory = `${path.join(os.tmpdir(), "runweave-terminal-images")}/`
-    .replaceAll("'", "'\"'\"'").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const references = new RegExp(`'${directory}runweave-terminal-image-\\d{8}-\\d{6}-[a-f0-9]{6}\\.(?:png|jpg|webp|gif)'`, "g");
-  const parts: string[] = [];
-  let offset = 0;
-  for (const match of text.matchAll(references)) {
-    if (match.index > offset) parts.push(wrap(text.slice(offset, match.index)));
-    parts.push(wrap(match[0]));
-    offset = match.index + match[0].length;
-  }
-  if (!parts.length) return null;
-  if (offset < text.length) parts.push(wrap(text.slice(offset)));
-  return parts.join("");
+  const parts = splitClipboardImagePaste(text);
+  return parts.length > 1 || parts[0] !== text ? parts.map((value) => `${BRACKETED_PASTE_START}${value}${BRACKETED_PASTE_END}`).join("") : null;
 }
 
 function buildPromptPastePtyInput(
@@ -328,10 +317,12 @@ export async function sendInputToSession(
           throw new Error("Original Agent pane is unavailable; no runtime was restored");
         options.validateSupervisorTarget?.();
       }
+      const codexObservation = panel ? readCodexContext(panel) : null;
       if (expectedThreadId) {
         const owner = panel ?? session;
-        const identity = resolveReplyThread(owner);
-        if (identity?.id !== expectedThreadId || identity.provider !== "codex" || owner.terminalState?.state !== "agent_idle") throw new Error("会话已切换或 Agent 正在运行，未发送交接内容。");
+        const identity = codexObservation?.context?.displayedThreadId
+          ? { id: codexObservation.context.displayedThreadId, provider: "codex" } : resolveReplyThread(owner);
+        if (identity?.id !== expectedThreadId || identity.provider !== "codex" || (codexObservation?.managed ? codexObservation.context?.displayedRunning !== false : owner.terminalState?.state !== "agent_idle")) throw new Error("会话已切换或 Agent 正在运行，未发送交接内容。");
       }
       const adapter = getAgentAdapter(
         getAgentForCommand(panel?.activeCommand ?? session.activeCommand),
@@ -356,7 +347,14 @@ export async function sendInputToSession(
       if (operationId?.startsWith("feishu:") && mode === "prompt_replace" && submit) {
         await terminalSessionManager.feishuNotifications.expectReply(session.id, panel?.id ?? null, data, operationId);
       }
-      if (replacePrompt) {
+      if (!options.agentLaunch && structuredInput && panel && codexObservation?.managed && "paneId" in target) {
+        options.beforeTextAttachmentWrite?.();
+        options.validateSupervisorTarget?.();
+        await replaceManagedCodexPrompt({ panel, target, tmux: options.tmuxService,
+          expected: options.codexInputContext, supervisor: options.supervisorInput === true,
+          text: data, submit: mode !== "prompt_replace" || submit === true,
+          submitKey: mode === "prompt_replace" ? submitKey : "auto" });
+      } else if (replacePrompt) {
         if (!("paneId" in target) || typeof target.paneId !== "string")
           throw new Error(
             "Agent pane identity unavailable; draft was retained",

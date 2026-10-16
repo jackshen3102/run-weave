@@ -1,0 +1,21 @@
+{
+  "terminalSessionId": "2ec4a621",
+  "projectId": "e5d5e01d-0bff-40e1-a58f-61720bedb293",
+  "alias": null,
+  "lastThreadId": "01a13f21-1f8d-7c33-a773-cf8b6baaa237",
+  "lastThreadProvider": "codex",
+  "lastThreadStatus": "idle",
+  "lastThreadUpdatedAt": "2026-10-15T10:35:06.012Z",
+  "command": "/bin/zsh",
+  "args": ["-l"],
+  "cwd": "/private/tmp/runweave-side-implementation-20261015",
+  "activeCommand": "codex",
+  "tmuxSessionName": "runweave-2ec4a621",
+  "tmuxSocketPath": "/var/folders/hp/bk0rp6xn3t5fsr5sf7n256rr0000gn/T/rw-tmux-14c8fc54098b/tmux.sock",
+  "scrollback": "\n\n› 只回答主标记，不调用工具。\n\n\n• KEY_FIXED_1015\n\n  Worked for 7s • 6:35 PM\n \n \n› Ask a follow-up question\n \n  GPT-6-Astra high · /private/tmp/runweave-side-implementation-20261015 · 显示当前工作目录… Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+  "status": "running",
+  "createdAt": "2026-10-15T10:30:48.661Z",
+  "lastActivityAt": "2026-10-15T10:35:39.181Z",
+  "scrollbackSourceCols": 152,
+  "tail": "\n\n› 只回答主标记，不调用工具。\n\n\n• KEY_FIXED_1015\n\n  Worked for 7s • 6:35 PM\n \n \n› Ask a follow-up question\n \n  GPT-6-Astra high · /private/tmp/runweave-side-implementation-20261015 · 显示当前工作目录… Side from main thread · ctrl+/ to switch · ctrl+c to close"
+}

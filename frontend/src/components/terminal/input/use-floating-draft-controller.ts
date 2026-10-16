@@ -1,3 +1,4 @@
+import type { FloatingDraftState, UseTerminalFloatingDraftControllerOptions } from "./floating-draft-types";
 import { useRichPaste } from "../../../features/terminal/input/use-rich-paste";
 import {
   useTerminalTextAttachments,
@@ -11,10 +12,7 @@ import {
 } from "../../../features/terminal/input/handoff-guard";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
-import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
-import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalPromptSubmitKey } from "@runweave/shared/terminal/input";
-import type { ClientMode } from "../../../features/client-mode";
 import {
   applyTerminalDraftInput,
   getFloatingComposerQueueKey,
@@ -25,24 +23,6 @@ import { sendTerminalInput as sendTerminalInputRequest } from "../../../services
 import { useTerminalInstantReplyController } from "./use-terminal-instant-reply-controller";
 
 const INPUT_LAG_FALLBACK_DELAY_MS = 150;
-
-interface UseTerminalFloatingDraftControllerOptions {
-  active: boolean;
-  activeCommand: string | null;
-  apiBase: string;
-  bufferType: "normal" | "alternate" | undefined;
-  clientMode: ClientMode;
-  error: string | null;
-  paneWorkspace: TerminalPanelWorkspace | null;
-  searchOpen: boolean;
-  scrollToBottom: () => void;
-  sessionStatus: "running" | "exited";
-  showScrollToBottomControl: boolean;
-  terminalAtBottom: boolean;
-  terminalSessionId: string;
-  terminalState?: TerminalState;
-  token: string;
-}
 
 export function useTerminalFloatingDraftController({
   active,
@@ -77,18 +57,14 @@ export function useTerminalFloatingDraftController({
   const requestScopeRef = useRef<object | null>(null);
   const sendErrorRef = useRef(sendError);
   sendErrorRef.current = sendError;
-  const draftsByTargetRef = useRef(
-    new Map<
-      string,
-      {
-        draft: string;
-        synced: string;
-        dirty: boolean;
-        error: string | null;
-        mirrorUnreliable: boolean;
-      }
-    >(),
+  const draftsByTargetRef = useRef(new Map<string, FloatingDraftState>());
+
+  const activePanel = paneWorkspace?.panels.find(
+    (panel) => panel.panelId === paneWorkspace.activePanelId,
   );
+  const codexContext = activePanel?.codexContext;
+  const codexDraftKey = codexContext === undefined ? "legacy" :
+    `${codexContext?.generation ?? "unknown"}:${codexContext?.displayedThreadId ?? "unknown"}`;
 
   useEffect(() => {
     if (inputLagFallbackTimerRef.current !== null) {
@@ -99,6 +75,7 @@ export function useTerminalFloatingDraftController({
       apiBase,
       terminalSessionId,
       paneWorkspace?.activePanelId,
+      codexDraftKey,
     ]);
     const draftsByTarget = draftsByTargetRef.current;
     const saved = draftsByTarget.get(target);
@@ -127,21 +104,20 @@ export function useTerminalFloatingDraftController({
       });
       requestScopeRef.current = null;
     };
-  }, [apiBase, terminalSessionId, paneWorkspace?.activePanelId]);
+  }, [apiBase, terminalSessionId, paneWorkspace?.activePanelId, codexDraftKey]);
 
-  const activePanel = paneWorkspace?.panels.find(
-    (panel) => panel.panelId === paneWorkspace.activePanelId,
-  );
+
   const targetActiveCommand = paneWorkspace
     ? (activePanel?.activeCommand ?? null)
     : activeCommand;
-  const targetTerminalState = paneWorkspace
+  const primaryTerminalState = paneWorkspace
     ? activePanel?.terminalState
     : terminalState;
+  const targetTerminalState = codexContext && primaryTerminalState ? { ...primaryTerminalState, state: codexContext.displayedRunning ? "agent_running" as const : "agent_idle" as const } : primaryTerminalState;
   const targetSessionRunning = paneWorkspace
     ? activePanel?.status === "running"
     : sessionStatus === "running";
-  const eligible = shouldEnableFloatingComposer({
+  const eligible = (codexContext === undefined || Boolean(codexContext?.inputReady && codexContext.displayedThreadId)) && shouldEnableFloatingComposer({
     activeCommand: targetActiveCommand,
     bufferType,
     clientMode,
@@ -165,7 +141,8 @@ export function useTerminalFloatingDraftController({
       token,
       sessionId: terminalSessionId,
       panelId: attachmentWorkspace?.activePanelId ?? "",
-      threadId:
+      inputContextKey: codexDraftKey,
+      threadId: codexContext !== undefined ? codexContext?.displayedThreadId ?? null :
         attachmentPanel?.threadId ??
         (attachmentPanel?.lastThreadStatus === "idle"
           ? attachmentPanel.lastThreadId
@@ -209,6 +186,8 @@ export function useTerminalFloatingDraftController({
   });
 
   const handleUserInputData = useMemoizedFn((data: string) => {
+    // Native side navigation is observed separately; it does not edit this draft.
+    if (codexContext !== undefined && data === "\u001f") return;
     richPaste.markInput();
     textAttachments.markInput(data === "\r" || data === "\u0015");
     if (
@@ -246,6 +225,9 @@ export function useTerminalFloatingDraftController({
     floatingDraftRef.current = next.draft;
     setFloatingDraft(next.draft);
 
+    // Managed TUI state arrives independently of output. A quiet output stream
+    // must not steal native keyboard focus while a slash-command popup changes.
+    if (codexContext !== undefined) return;
     if (!next.draft) {
       clearInputLagFallbackTimer();
       setInputLagFallbackActive(false);
@@ -304,6 +286,10 @@ export function useTerminalFloatingDraftController({
         return false;
       }
 
+      if (codexContext !== undefined && (!codexContext?.inputReady || !codexContext.displayedThreadId)) {
+        setSendError("Codex 会话身份尚未就绪，草稿已保留，请在原终端继续。");
+        return false;
+      }
       const draftToReplay = floatingDraftRef.current;
       const scope = requestScopeRef.current;
       const panelId = attachmentIds.length
@@ -325,6 +311,10 @@ export function useTerminalFloatingDraftController({
           {
             data: draftToReplay,
             mode: "prompt_replace",
+            ...(codexContext?.displayedThreadId ? { codexInputContext: {
+              generation: codexContext.generation, revision: codexContext.revision,
+              threadId: codexContext.displayedThreadId,
+            } } : {}),
             ...(attachmentIds.length
               ? {
                   operationId,
@@ -429,6 +419,7 @@ export function useTerminalFloatingDraftController({
     }
   });
   const instantReply = useTerminalInstantReplyController({
+    codexInputContext: codexContext?.displayedThreadId ? { generation: codexContext.generation, revision: codexContext.revision, threadId: codexContext.displayedThreadId } : undefined,
     apiBase,
     available: eligible && draftMirrorSupported && !richPaste.blocked,
     error,
@@ -485,13 +476,14 @@ export function useTerminalFloatingDraftController({
     if (
       wasVisible &&
       !visible &&
+      codexContext === undefined &&
       floatingDraftDirtyRef.current &&
       !floatingDraftSyncPendingRef.current &&
       !sendError
     ) {
       void sendDraftToTui();
     }
-  }, [sendDraftToTui, sendError, visible]);
+  }, [sendDraftToTui, sendError, visible, codexContext]);
 
   useEffect(() => {
     if (terminalAtBottom && !attachmentMirrorUnreliable.current) {

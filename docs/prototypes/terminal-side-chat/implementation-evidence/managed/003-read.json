@@ -1,0 +1,21 @@
+{
+  "terminalSessionId": "86165967",
+  "projectId": "d6a9da4f-8bde-4205-8247-e9cc0a86bba4",
+  "alias": null,
+  "lastThreadId": "01a1406c-618b-77b1-a404-76cb0f7510e7",
+  "lastThreadProvider": "codex",
+  "lastThreadStatus": "idle",
+  "lastThreadUpdatedAt": "2026-10-15T16:37:07.439Z",
+  "command": "/bin/zsh",
+  "args": ["-l"],
+  "cwd": "/private/tmp/runweave-managed-side-fixture",
+  "activeCommand": "codex",
+  "tmuxSessionName": "runweave-86165967",
+  "tmuxSocketPath": "/var/folders/hp/bk0rp6xn3t5fsr5sf7n256rr0000gn/T/rw-tmux-a2de6cdea1f5/tmux.sock",
+  "scrollback": "\n\n› Read permission-source.txt and explain its content briefly. Do not change files.\n\n\n• I’ll read permission-source.txt and briefly explain its contents.\n\n• Explored\n  └ Read permission-source.txt\n\n• permission-source.txt contains: permission fixture data.\n\n  It appears to be placeholder data for a permissions test. No files were changed.\n\n  Worked for 8s • 12:37 AM\n \n \n› Ask a follow-up question\n \n  GPT-6.1-Sol low · /private/tmp/runweave-managed-side-fixture · 读取当前工作目录绝对路径 … Side from main thread · ctrl+/ to switch · ctrl+c to close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+  "status": "running",
+  "createdAt": "2026-10-15T16:36:16.185Z",
+  "lastActivityAt": "2026-10-15T16:37:30.469Z",
+  "scrollbackSourceCols": 152,
+  "tail": "\n\n› Read permission-source.txt and explain its content briefly. Do not change files.\n\n\n• I’ll read permission-source.txt and briefly explain its contents.\n\n• Explored\n  └ Read permission-source.txt\n\n• permission-source.txt contains: permission fixture data.\n\n  It appears to be placeholder data for a permissions test. No files were changed.\n\n  Worked for 8s • 12:37 AM\n \n \n› Ask a follow-up question\n \n  GPT-6.1-Sol low · /private/tmp/runweave-managed-side-fixture · 读取当前工作目录绝对路径 … Side from main thread · ctrl+/ to switch · ctrl+c to close"
+}

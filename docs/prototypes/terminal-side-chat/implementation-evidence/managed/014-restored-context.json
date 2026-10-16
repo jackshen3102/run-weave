@@ -1,0 +1,55 @@
+{
+  "status": 200,
+  "body": {
+    "terminalSessionId": "c1277223",
+    "activePanelId": "4e05d41e-a15c-475a-8edd-72d9ee2349d9",
+    "panels": [
+      {
+        "codexContext": {
+          "draftFingerprint": "e6aecd8f99622fd9",
+          "protocolVersion": 1,
+          "generation": "f49e73f0-acfc-4676-a800-22380e66ec89",
+          "operationId": "codex_launch_199a41a5-5f2a-49fb-8377-8425f7e62999",
+          "pid": 38435,
+          "closed": false,
+          "primaryThreadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+          "displayedThreadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+          "sides": [],
+          "displayedRunning": false,
+          "inputReady": true,
+          "revision": 442
+        },
+        "panelId": "4e05d41e-a15c-475a-8edd-72d9ee2349d9",
+        "terminalSessionId": "c1277223",
+        "alias": "main",
+        "role": "main",
+        "threadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+        "threadProvider": "codex",
+        "lastThreadId": "01a14067-b220-71f3-9f72-e3841f6862ef",
+        "lastThreadProvider": "codex",
+        "lastThreadStatus": "idle",
+        "lastThreadUpdatedAt": "2026-10-15T17:22:12.904Z",
+        "cwd": "/private/tmp/runweave-managed-side-fixture",
+        "activeCommand": "codex",
+        "terminalState": {
+          "state": "agent_running",
+          "agent": "codex"
+        },
+        "status": "running",
+        "createdAt": "2026-10-15T17:13:20.234Z",
+        "lastActivityAt": "2026-10-15T17:14:24.400Z",
+        "focused": true,
+        "tmuxPaneId": "%0",
+        "geometry": {
+          "paneLeft": 0,
+          "paneTop": 0,
+          "paneWidth": 152,
+          "paneHeight": 51,
+          "windowWidth": 152,
+          "windowHeight": 51
+        }
+      }
+    ],
+    "renderMode": "tmux-native"
+  }
+}

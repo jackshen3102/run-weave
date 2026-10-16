@@ -1,0 +1,147 @@
+- generic [ref=e1]:
+    - main [ref=e4]:
+        - generic [ref=e5]:
+            - generic [ref=e6]:
+                - button "全局设置" [ref=e7] [cursor=pointer]
+                - button "当前连接 内置本地后端" [ref=e8] [cursor=pointer]:
+                    - generic [ref=e9]: 当前连接
+                    - generic [ref=e10]: 内置本地后端
+                - generic [ref=e11]:
+                    - generic [ref=e12]:
+                        - button "Default Project" [ref=e14] [cursor=pointer]
+                        - button "runweave-managed-side-fixture" [pressed] [ref=e19] [cursor=pointer]
+                    - status [ref=e23]
+                    - button "New Project" [ref=e24] [cursor=pointer]
+                - generic [ref=e25]:
+                    - button "快捷指令" [ref=e27] [cursor=pointer]
+                    - button "Services · 0/0 ready" [ref=e29] [cursor=pointer]
+                    - button "阅读会话" [ref=e31] [cursor=pointer]
+                    - button "随记" [ref=e33] [cursor=pointer]
+                    - button "定时任务" [ref=e35] [cursor=pointer]
+                    - button "运行状态 · 2 个服务需关注，点击查看详情" [ref=e37] [cursor=pointer]:
+                        - generic "2 个服务需关注" [ref=e40]: "2"
+                    - button "More actions" [ref=e42] [cursor=pointer]
+            - generic [ref=e43]:
+                - complementary [ref=e44]:
+                    - generic [ref=e45]:
+                        - generic [ref=e46]: Worktrees 1
+                        - button "Collapse Worktrees" [ref=e47] [cursor=pointer]
+                    - generic [ref=e51]:
+                        - button "runweave-managed-side-fixture, detached" [ref=e52] [cursor=pointer]:
+                            - generic [ref=e53]:
+                                - generic [ref=e54]: runweave-managed-side-fixture
+                                - generic "detached" [ref=e58]
+                                - generic [ref=e59]: P1 · global
+                        - generic "Permanently pinned" [ref=e60]
+                    - separator "Resize Worktrees panel" [ref=e63]
+                - generic [ref=e64]:
+                    - generic [ref=e66]:
+                        - generic [ref=e67]:
+                            - generic [ref=e69]:
+                                - button "runweave-managed-side-fixture(codex)" [ref=e200] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture(codex)" [ref=e201] [cursor=pointer]
+                            - generic [ref=e78]:
+                                - button "runweave-managed-side-fixture" [ref=e79] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture" [ref=e82] [cursor=pointer]
+                            - generic [ref=e87]:
+                                - button "runweave-managed-side-fixture" [ref=e88] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture" [ref=e91] [cursor=pointer]
+                            - generic [ref=e96]:
+                                - button "runweave-managed-side-fixture" [ref=e97] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture" [ref=e100] [cursor=pointer]
+                            - generic [ref=e105]:
+                                - button "runweave-managed-side-fixture" [ref=e106] [cursor=pointer]
+                                - button "Close terminal runweave-managed-side-fixture" [ref=e109] [cursor=pointer]
+                        - status [ref=e113]
+                        - button "New Terminal" [ref=e114] [cursor=pointer]
+                    - generic [ref=e122]:
+                        - button "Find" [ref=e123] [cursor=pointer]
+                        - application "Terminal emulator" [ref=e124]:
+                            - generic [ref=e127]:
+                                - textbox "Terminal input" [ref=e128]
+                                - generic:
+                                    - generic: "42"
+                                    - generic: "43"
+                                    - generic: "44"
+                                    - generic: "45"
+                                    - generic: "46"
+                                    - generic: "47"
+                                    - generic: "48"
+                                    - generic: "49"
+                                    - generic: "50"
+                                    - generic: "51"
+                                    - generic: "52"
+                                    - generic: "53"
+                                    - generic: "54"
+                                    - generic: "55"
+                                    - generic: "56"
+                                    - generic: "57"
+                                    - generic: "58"
+                                    - generic: "59"
+                                    - generic: "60"
+                                    - generic: "61"
+                                    - generic: "62"
+                                    - generic: "63"
+                                    - generic: "64"
+                                    - generic: "65"
+                                    - generic: "66"
+                                    - generic: "67"
+                                    - generic: "68"
+                                    - generic: "69"
+                                    - generic: "70"
+                                    - generic: Worked for 7s • 1:05 AM
+                                    - generic:
+                                        - generic: ›
+                                        - generic: Read attached text and reply only its first line.
+                                    - generic: 文本附件，请读取文件内容：
+                                    - generic: '"<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/browser-profile/terminal-text-attachments/c1277223/57d7c8a0-5b7e-4361-acce-d74a9dcfed88/pasted-'
+                                    - generic: text.txt"
+                                    - generic:
+                                        - generic: •
+                                        - generic: Explored
+                                    - generic:
+                                        - generic: └
+                                        - generic: Read
+                                        - generic: pasted-text.txt
+                                    - generic:
+                                        - generic: •
+                                        - generic: SIDE_ATTACHMENT_010
+                                    - generic: Worked for 5s • 1:08 AM
+                                    - generic:
+                                        - generic: ›
+                                        - generic: A
+                                        - generic: sk a follow-up question
+                                    - generic:
+                                        - generic: GPT-6.1-Sol low
+                                        - generic: ·
+                                        - generic: /private/tmp/runweave-managed-side-fixture
+                                        - generic: ·
+                                        - generic: 报告当前
+                                        - generic: …
+                                        - generic: Side
+                                        - generic: from main thread
+                                        - generic: ·
+                                        - generic: main finished
+                                        - generic: ·
+                                        - generic: ctrl+/
+                                        - generic: to switch ·
+                                        - generic: ctrl+c
+                                        - generic: to close
+                                    - generic:
+                                        - generic: '[runweave-0:node* "'
+                                        - generic: 报告当前工作目录绝对
+                                        - generic: '" 01:09 16-Oct-26'
+                        - generic:
+                            - generic:
+                                - generic "图文粘贴状态"
+                            - button "展开一键回复" [ref=e207] [cursor=pointer]
+                            - generic:
+                                - alert: 发送结果未确认，草稿已保留。请先检查终端，再决定是否重新发送。
+                                - generic "图文粘贴状态"
+                                - region "Floating terminal composer" [ref=e316]:
+                                    - button "Close floating composer" [ref=e317] [cursor=pointer]
+                                    - textbox "Terminal input" [active] [ref=e321]: STALE_SIDE_010_DO_NOT_SEND
+                                    - generic [ref=e322]:
+                                        - button "排队" [ref=e323] [cursor=pointer]: 排队 ⇥
+                                        - button "Send" [ref=e324] [cursor=pointer]
+    - generic "Runweave Beta build identity": BETA · Web 0.15.0 · 81e6c04f594c

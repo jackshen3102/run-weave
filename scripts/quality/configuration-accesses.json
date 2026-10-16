@@ -10111,5 +10111,341 @@
     "line": 101,
     "category": "migration",
     "reason": "首次 SQLite 迁移前保留带哈希的原始监听档案备份，属于一次性存储迁移，不写入业务配置。"
+  },
+  {
+    "file": "backend/src/terminal/runtime/codex-context.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取本 panel 原生 TUI 的私有原子身份快照，校验协议和进程存活；不是 settings.yaml 配置。"
+  },
+  {
+    "file": "backend/src/terminal/runtime/codex-input.ts",
+    "kind": "file-io",
+    "expression": "readFile(responsePath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取短期原生输入回执，只接受请求 ID 与代际匹配的结果，结束后清理。"
+  },
+  {
+    "file": "backend/src/terminal/runtime/codex-input.ts",
+    "kind": "file-io",
+    "expression": "writeFile(requestPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "以排他创建的私有文件交付限时输入请求，原生 TUI 验证目标后消费，结束后清理。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "核对受管启动器注入的代际，防止子会话或旧进程 Hook 污染主任务状态。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_PATH",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "读取受管启动器注入的本 panel 快照定位信息，仅用于 Hook 归属判断。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(process.env.RUNWEAVE_CODEX_CONTEXT_PATH)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取原生 TUI 快照并在通知、完成及监督前过滤非主会话；该文件是运行状态。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "核对受管启动器注入的代际，防止子会话或旧进程 Hook 污染主任务状态。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_PATH",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "读取受管启动器注入的本 panel 快照定位信息，仅用于 Hook 归属判断。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(process.env.RUNWEAVE_CODEX_CONTEXT_PATH)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取原生 TUI 快照并在通知、完成及监督前过滤非主会话；该文件是运行状态。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_CODEX_CONTEXT_GENERATION",
+    "count": 6,
+    "category": "runtime-context",
+    "reason": "受管 TUI 启动代际，同时防止嵌套 CLI 覆盖父观测；由启动器注入，不是用户配置。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_CODEX_CONTEXT_PATH",
+    "count": 10,
+    "category": "runtime-context",
+    "reason": "当前终端 panel 的短期身份快照路径，由实例根目录和终端标识派生，不是配置文件。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_HOOK_SOURCE",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "将受管子进程 Hook 来源标为 Codex，沿用桥接器运行时协议。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_RUNTIME_CONFIG_ROOT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "继承配置领域已解析的实例根目录，仅定位本次 TUI 状态，不另行读取业务配置。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_RUNTIME_TMUX_BINARY",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "继承宿主选定的 tmux 可执行文件，查询当前 pane 的显式 panel 绑定。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "本次 Agent 启动操作身份，供原生快照与 Hook 归属核对，不是持久配置。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_TERMINAL_PANEL_ID",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "读取或注入实际 tmux pane 对应的 panel 身份，属于终端启动上下文。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_TERMINAL_SESSION_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "继承 Runweave 终端身份，用于派生当前 panel 的观测文件名称。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_TOOLKIT_PLUGIN_ROOT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "把受管 CLI 的现有 Hook 路径指向本版本携带的资产，不修改全局插件配置。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.TMUX",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "读取 tmux 注入的 socket 身份，查询当前 pane；属于外部终端运行时协议。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment",
+    "expression": "env.TMUX_PANE",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "读取 tmux 注入的当前 pane ID，用于核对该 pane 的 panel 绑定。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "向原生 CLI 继承父进程环境并追加受管启动身份；不把环境转为用户设置。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(env.RUNWEAVE_CODEX_CONTEXT_PATH)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "CLI 退出时读取本代 TUI 快照，只有代际匹配才发布关闭状态。"
+  },
+  {
+    "file": "packages/agent-bridge/codex/launcher.cjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(temporary)",
+    "count": 2,
+    "category": "runtime-state",
+    "reason": "以私有临时文件原子发布启动或关闭快照，属于终端运行状态，不保存用户设置。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "核对受管启动器注入的代际，防止子会话或旧进程 Hook 污染主任务状态。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_PATH",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "读取受管启动器注入的本 panel 快照定位信息，仅用于 Hook 归属判断。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(process.env.RUNWEAVE_CODEX_CONTEXT_PATH)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取原生 TUI 快照并在通知、完成及监督前过滤非主会话；该文件是运行状态。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "核对受管启动器注入的代际，防止子会话或旧进程 Hook 污染主任务状态。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_PATH",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "读取受管启动器注入的本 panel 快照定位信息，仅用于 Hook 归属判断。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(process.env.RUNWEAVE_CODEX_CONTEXT_PATH)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取原生 TUI 快照并在通知、完成及监督前过滤非主会话；该文件是运行状态。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "build",
+    "reason": "Rust 构建继承系统工具链环境并固定本次编译选项，不写实例配置。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(archive)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取缓存的固定上游源码归档并核对预置 SHA-256 后才解包构建。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(dispatch)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取仓库 Hook dispatcher 资产并纳入受管版本摘要。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(hostArchive)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取同版本官方 code-mode-host 归档并核对预置 SHA-256。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(launcher)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取本仓库受管启动器源码以计算构建内容摘要。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(lockPath)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取解包源码的 Cargo.lock，仅归一无远端来源的工作区包版本。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(patch)",
+    "count": 2,
+    "category": "build",
+    "reason": "读取固定 TUI 适配补丁并纳入构建摘要，不读取用户配置。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(hooks, name))",
+    "count": 1,
+    "category": "build",
+    "reason": "读取仓库公共 Hook 源码并逐个纳入受管产物摘要。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(archive)",
+    "count": 1,
+    "category": "build",
+    "reason": "保存已下载的固定源码归档到受管构建缓存，随后校验摘要。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(hostArchive)",
+    "count": 1,
+    "category": "build",
+    "reason": "保存已下载的固定官方 companion 归档到构建缓存，随后校验摘要。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(lockPath)",
+    "count": 1,
+    "category": "build",
+    "reason": "只在解包的构建源码中归一工作区包锁版本，保留远端依赖版本与校验和。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(root, \"build.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "记录受管构建版本、补丁摘要及可执行路径；不是实例业务配置。"
+  },
+  {
+    "file": "scripts/codex/build-managed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(root, \"patched\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "记录构建缓存内已应用的固定补丁摘要，避免对同一源码重复应用。"
   }
 ]

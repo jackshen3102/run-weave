@@ -1,3 +1,4 @@
+import type { CodexConversationContext } from "./codex-context";
 import type { PiAgentContext } from "./pi-agent";
 import type { TerminalLastThreadStatus } from "./runtime/session";
 import type { TerminalAgentKind, TerminalState } from "./runtime/state";
@@ -25,6 +26,8 @@ export interface TerminalPanelGeometry {
 }
 
 export interface TerminalPanelListItem {
+  /** undefined: official CLI; null: managed CLI context not yet available. */
+  codexContext?: CodexConversationContext | null;
   pi?: PiAgentContext;
   panelId: string;
   terminalSessionId: string;

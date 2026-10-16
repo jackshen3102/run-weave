@@ -1,0 +1,37 @@
+[
+  {
+    "terminal": "c1277223",
+    "exitCode": 0,
+    "result": "{\n  \"terminalSessionId\": \"c1277223\",\n  \"deleted\": true\n}\n"
+  },
+  {
+    "terminal": "62bb62dc",
+    "exitCode": 0,
+    "result": "{\n  \"terminalSessionId\": \"62bb62dc\",\n  \"deleted\": true\n}\n"
+  },
+  {
+    "terminal": "23b7c4c8",
+    "exitCode": 0,
+    "result": "{\n  \"terminalSessionId\": \"23b7c4c8\",\n  \"deleted\": true\n}\n"
+  },
+  {
+    "terminal": "b79161d3",
+    "exitCode": 0,
+    "result": "{\n  \"terminalSessionId\": \"b79161d3\",\n  \"deleted\": true\n}\n"
+  },
+  {
+    "terminal": "6bc41d76",
+    "exitCode": 0,
+    "result": "{\n  \"terminalSessionId\": \"6bc41d76\",\n  \"deleted\": true\n}\n"
+  },
+  {
+    "terminal": "fbff68f4",
+    "exitCode": 0,
+    "result": "{\n  \"terminalSessionId\": \"fbff68f4\",\n  \"deleted\": true\n}\n"
+  },
+  {
+    "terminal": "8a08e9ab",
+    "exitCode": 0,
+    "result": "{\n  \"terminalSessionId\": \"8a08e9ab\",\n  \"deleted\": true\n}\n"
+  }
+]

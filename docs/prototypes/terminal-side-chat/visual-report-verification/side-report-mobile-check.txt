@@ -1,0 +1,9 @@
+### Result
+{"rows":[{"id":"native","horizontalOverflow":false,"visible":true},{"id":"operations","horizontalOverflow":false,"visible":true},{"id":"permission","horizontalOverflow":false,"visible":true},{"id":"input","horizontalOverflow":false,"visible":true},{"id":"isolation","horizontalOverflow":false,"visible":true},{"id":"recovery","horizontalOverflow":false,"visible":true},{"id":"verification","horizontalOverflow":false,"visible":true},{"id":"boundaries","horizontalOverflow":false,"visible":true}],"reload":"boundaries","expanded":8,"paged":1}
+### Ran Playwright code
+```js
+await (async page => { await page.setViewportSize({width:390,height:844}); const rows=[]; for(let i=0;i<8;i++){ const a=page.locator("article.page:visible"); rows.push({id:await a.getAttribute("data-page-id"),horizontalOverflow:await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),visible:await a.locator("h2").isVisible()}); if(i<7)await page.getByRole("button",{name:"下一页"}).click(); } await page.reload(); const reload=await page.locator("article.page:visible").getAttribute("data-page-id"); await page.getByRole("button",{name:"展开全部"}).click(); const expanded=await page.locator("article.page:visible").count(); await page.getByRole("button",{name:"返回分页"}).click(); const paged=await page.locator("article.page:visible").count(); await page.screenshot({path:"/tmp/side-report-mobile.png",fullPage:true}); return {rows,reload,expanded,paged}; })(page);
+```
+### Page
+- Page URL: http://127.0.0.1:55909/#page=boundaries
+- Page Title: Codex 旁聊 · 实施与验收报告

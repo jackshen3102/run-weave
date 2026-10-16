@@ -65,7 +65,7 @@ export async function submitTerminalInput(
   beforeDispatch?.();
   const payload = await sendInputToSession(
     terminalSessionManager,
-    options,
+    { ...options, codexInputContext: input.codexInputContext },
     session,
     input.data,
     inputMode,

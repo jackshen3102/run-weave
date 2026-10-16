@@ -1,0 +1,4 @@
+
+> @runweave/backend@0.1.0 typecheck <USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1/backend
+> tsc -p tsconfig.json --noEmit
+

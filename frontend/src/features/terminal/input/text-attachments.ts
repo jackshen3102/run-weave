@@ -36,10 +36,11 @@ type Scope = {
   sessionId: string;
   panelId: string;
   threadId: string | null;
+  inputContextKey?: string;
   active: boolean;
 };
 const scopeKey = (scope: Scope) =>
-  JSON.stringify([scope.apiBase, scope.sessionId, scope.panelId]);
+  JSON.stringify([scope.apiBase, scope.sessionId, scope.panelId, scope.inputContextKey ?? "legacy"]);
 // Keep unsent originals while cached terminal surfaces unmount within this page.
 const pageRecords = new Map<string, TextAttachmentItem[]>();
 // A possible PTY write invalidates the mirror even if its card is dismissed or the scope unmounts.

@@ -31,6 +31,7 @@ import { TmuxOutputPoller } from "./output-poller";
 import { beginTerminalInput } from "../runtime/input-admission";
 
 interface TmuxOutputWatcherOptions {
+  onPaneObservation?: (sessionId: string, paneId: string) => Promise<void>;
   outputDir: string;
   terminalSessionManager: TerminalSessionManager;
   tmuxService: TmuxService;
@@ -103,6 +104,7 @@ export class TmuxOutputWatcher {
       (terminalSessionId) => this.unwatchSession(terminalSessionId),
       (watched) => this.invalidatePaneCursor(watched),
       () => this.disposed,
+      options.onPaneObservation,
     );
   }
 

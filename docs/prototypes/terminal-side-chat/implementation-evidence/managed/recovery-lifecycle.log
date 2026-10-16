@@ -1,0 +1,27 @@
+
+> runweave-workspace@0.1.0 backend:verify-lifecycle <USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1
+> pnpm --dir backend exec tsx ../scripts/verify/backend/runtime-lifecycle.ts
+
+{
+  "ok": true,
+  "checks": [
+    "BRL-002: real maintenance drained before close; deletion durable; dispose idempotent",
+    "BRL-007: stable/default owned tmux preservation=true; original PID and output checked",
+    "BRL-007: stable/preserve owned tmux preservation=true; original PID and output checked",
+    "BRL-007: stable/cleanup owned tmux preservation=false; original PID and output checked",
+    "BRL-007: dev/default owned tmux preservation=false; original PID and output checked",
+    "BRL-007: dev/preserve owned tmux preservation=true; original PID and output checked",
+    "BRL-007: dev/cleanup owned tmux preservation=false; original PID and output checked",
+    "BRL-007: beta/default owned tmux preservation=false; original PID and output checked",
+    "BRL-007: beta/preserve owned tmux preservation=true; original PID and output checked",
+    "BRL-007: beta/cleanup owned tmux preservation=false; original PID and output checked",
+    "default socket identity is independent of shutdown policy for every channel",
+    "default socket identity is independent of shutdown policy for every channel",
+    "default socket identity is independent of shutdown policy for every channel",
+    "invalid tmux policy rejected before Activity resource creation",
+    "preserve survives failed assembly and successful subsequent assembly",
+    "BRL-005: real Evolution maintenance drained before storage close; no restart after dispose",
+    "BRL-005: real cleanup continues after failure; concurrent dispose shares completion",
+    "IPS-003: pre-cancelled request does not spawn; running real Provider exits on abort"
+  ]
+}

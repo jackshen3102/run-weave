@@ -1,3 +1,4 @@
+import { clearCodexContext } from "../runtime/codex-context";
 import { TerminalFeishuPolicy } from "../completion/feishu-policy";
 import type { TerminalSessionMetadataSnapshot } from "@runweave/shared/terminal/events";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
@@ -329,6 +330,7 @@ export abstract class TerminalManagerBase {
     if (this.panelAgentPreparations.has(key)) {
       return false;
     }
+    clearCodexContext(terminalSessionId, panelId);
     const identity = { operationId, provider };
     const previousGeneration = this.panelAgentOperationGenerations.get(key);
     const activityKey = buildRecentAgentActivityKey(

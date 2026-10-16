@@ -1,0 +1,440 @@
+{
+  "schemaVersion": 1,
+  "devSessionId": "dvs-6f13b6",
+  "state": "stopped",
+  "profile": "beta",
+  "selectedBy": "explicit-profile",
+  "controlPlane": {
+    "appChannel": "stable",
+    "sourceRoot": "<USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1",
+    "originTerminalSessionId": "26dc452f"
+  },
+  "targetEnvironment": {
+    "kind": "beta",
+    "acceptanceSurfaces": ["desktop"],
+    "instanceId": "pool-04",
+    "betaSlot": {
+      "policy": "fixed-pool-v1",
+      "capacity": 5,
+      "requestedSlotId": null,
+      "assignedSlotId": "pool-04",
+      "leaseNonce": "02817ea4-5e78-4867-bace-15acdb2c500b"
+    }
+  },
+  "source": {
+    "root": "<USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1",
+    "revision": "81e6c04f594ce8c831ee5cea4a614e300c802495",
+    "dirty": true
+  },
+  "services": {
+    "frontend": {
+      "ownership": "dedicated",
+      "serviceInstanceId": "beta-renderer:pool-04:6790",
+      "ownerDevSessionId": "dvs-6f13b6",
+      "slotId": "pool-04",
+      "leaseNonce": "02817ea4-5e78-4867-bace-15acdb2c500b",
+      "pid": 6790,
+      "url": "runweave://app/index.html",
+      "sourceRevision": "81e6c04f594ce8c831ee5cea4a614e300c802495",
+      "expectedBackendServiceInstanceId": "backend:809bbc44-32f0-4c94-8593-36e8d86ef459",
+      "process": {
+        "pid": 6790,
+        "command": "open -n /Applications/Runweave Beta pool-04.app",
+        "cwd": "<USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1",
+        "startedAt": "2026-10-15T17:00:30.483Z",
+        "processSignature": "Fri Oct 16 01:00:22 2026     /Applications/Runweave Beta pool-04.app/Contents/MacOS/Runweave Beta pool-04",
+        "logPath": "<USER_HOME>/Library/Application Support/Runweave Beta/instances/pool-04/diagnostics/logs/update-2026-10-15T16-59-44-608Z.log"
+      },
+      "stopResult": {
+        "outcome": "already-stopped"
+      }
+    },
+    "backend": {
+      "ownership": "dedicated",
+      "serviceInstanceId": "backend:809bbc44-32f0-4c94-8593-36e8d86ef459",
+      "ownerDevSessionId": "dvs-6f13b6",
+      "slotId": "pool-04",
+      "leaseNonce": "02817ea4-5e78-4867-bace-15acdb2c500b",
+      "pid": 6938,
+      "url": "http://127.0.0.1:5002",
+      "protocolVersion": 1,
+      "capabilities": ["dev-session-identity-v1"],
+      "sourceRevision": "81e6c04f594ce8c831ee5cea4a614e300c802495",
+      "profileDir": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/browser-profile",
+      "lockPath": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/browser-profile/backend.lock.json",
+      "lockStartedAt": "2026-10-15T17:00:28.131Z",
+      "lockCwd": "/Applications/Runweave Beta pool-04.app",
+      "process": {
+        "pid": 6938,
+        "command": "Runweave Beta packaged backend",
+        "cwd": "/Applications/Runweave Beta pool-04.app",
+        "startedAt": "2026-10-15T17:00:28.131Z",
+        "processSignature": "Fri Oct 16 01:00:27 2026     /Applications/Runweave Beta pool-04.app/Contents/MacOS/Runweave Beta pool-04 /Applications/Runweave Beta pool-04.app/Contents/Resources/backend/index.cjs --instance dvs-6f13b6 --config-dir <USER_HOME>/.runweave/dev-sessions/dvs-6f13b6 --port 5002 --host 0.0.0.0",
+        "logPath": "<USER_HOME>/Library/Application Support/Runweave Beta/instances/pool-04/diagnostics/logs/update-2026-10-15T16-59-44-608Z.log"
+      },
+      "stopResult": {
+        "outcome": "already-stopped"
+      }
+    },
+    "appServer": {
+      "ownership": "dedicated",
+      "serviceInstanceId": "app-server:e469f0de-1f9f-463e-b7c5-6e3cfc1c5486",
+      "ownerDevSessionId": "dvs-6f13b6",
+      "slotId": "pool-04",
+      "leaseNonce": "02817ea4-5e78-4867-bace-15acdb2c500b",
+      "pid": 6788,
+      "url": "http://127.0.0.1:63444",
+      "protocolVersion": 1,
+      "capabilities": [
+        "event-center-v1",
+        "dev-session-identity-v1",
+        "provider-thread-lifecycle-v1",
+        "thread-detail-v1",
+        "thread-preview-v1",
+        "thread-conversation-v1",
+        "thread-supervision-context-v1"
+      ],
+      "sourceRevision": "81e6c04f594ce8c831ee5cea4a614e300c802495",
+      "homeDir": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/app-server",
+      "lockPath": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/app-server/app-server.lock.json",
+      "lockStartedAt": "2026-10-15T17:00:22.401Z",
+      "lockIdentity": {
+        "entry": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/app-server/runtime/releases/local-app-server-app-server-1792083620239/app-server/index.cjs",
+        "releaseId": "local-app-server-app-server-1792083620239",
+        "runtimeRoot": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/app-server/runtime"
+      },
+      "tokenPath": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/app-server/app-server-token",
+      "process": {
+        "pid": 6788,
+        "command": "Runweave Beta App Server",
+        "cwd": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/app-server/runtime",
+        "startedAt": "2026-10-15T17:00:22.401Z",
+        "processSignature": "Fri Oct 16 01:00:22 2026     <USER_HOME>/.nvm/versions/node/v22.22.2/bin/node <USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/app-server/runtime/releases/local-app-server-app-server-1792083620239/app-server/index.cjs --instance dvs-6f13b6 --config-dir <USER_HOME>/.runweave/dev-sessions/dvs-6f13b6",
+        "logPath": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/app-server/app-server.log"
+      },
+      "stopResult": {
+        "outcome": "already-stopped"
+      }
+    },
+    "electron": {
+      "ownership": "dedicated",
+      "serviceInstanceId": "beta:pool-04:6790",
+      "ownerDevSessionId": "dvs-6f13b6",
+      "instanceId": "pool-04",
+      "slotId": "pool-04",
+      "leaseNonce": "02817ea4-5e78-4867-bace-15acdb2c500b",
+      "channel": "beta",
+      "pid": 6790,
+      "sourceRevision": "81e6c04f594ce8c831ee5cea4a614e300c802495",
+      "userDataDir": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/electron/user-data",
+      "whistlePorts": [18140, 18141, 18142],
+      "portLeaseRoot": "<USER_HOME>/.runweave/dev-sessions",
+      "statusPath": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/electron/user-data/beta-desktop-status.json",
+      "desktopCdpEndpoint": "http://127.0.0.1:9335",
+      "terminalBrowserCdpEndpoint": "http://127.0.0.1:9336",
+      "frontendUrl": "runweave://app",
+      "appPath": "/Applications/Runweave Beta pool-04.app",
+      "betaControl": {
+        "command": "<USER_HOME>/.nvm/versions/node/v22.22.2/bin/node",
+        "args": [
+          "<USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1/scripts/beta/index.mjs",
+          "stop",
+          "--instance",
+          "pool-04",
+          "--dev-session",
+          "dvs-6f13b6"
+        ],
+        "cwd": "<USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1"
+      },
+      "process": {
+        "pid": 6790,
+        "command": "open -n /Applications/Runweave Beta pool-04.app",
+        "cwd": "<USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1",
+        "startedAt": "2026-10-15T17:00:30.483Z",
+        "processSignature": "Fri Oct 16 01:00:22 2026     /Applications/Runweave Beta pool-04.app/Contents/MacOS/Runweave Beta pool-04",
+        "logPath": "<USER_HOME>/Library/Application Support/Runweave Beta/instances/pool-04/diagnostics/logs/update-2026-10-15T16-59-44-608Z.log"
+      }
+    },
+    "beta": {
+      "ownership": "dedicated",
+      "serviceInstanceId": "beta-control:pool-04",
+      "ownerDevSessionId": "dvs-6f13b6",
+      "instanceId": "pool-04",
+      "slotId": "pool-04",
+      "leaseNonce": "02817ea4-5e78-4867-bace-15acdb2c500b",
+      "channel": "beta",
+      "pid": 6790,
+      "sourceRevision": "81e6c04f594ce8c831ee5cea4a614e300c802495",
+      "userDataDir": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/electron/user-data",
+      "whistlePorts": [18140, 18141, 18142],
+      "portLeaseRoot": "<USER_HOME>/.runweave/dev-sessions",
+      "statusPath": "<USER_HOME>/.runweave/dev-sessions/dvs-6f13b6/electron/user-data/beta-desktop-status.json",
+      "desktopCdpEndpoint": "http://127.0.0.1:9335",
+      "terminalBrowserCdpEndpoint": "http://127.0.0.1:9336",
+      "frontendUrl": "runweave://app",
+      "appPath": "/Applications/Runweave Beta pool-04.app",
+      "betaControl": {
+        "command": "<USER_HOME>/.nvm/versions/node/v22.22.2/bin/node",
+        "args": [
+          "<USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1/scripts/beta/index.mjs",
+          "stop",
+          "--instance",
+          "pool-04",
+          "--dev-session",
+          "dvs-6f13b6"
+        ],
+        "cwd": "<USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1"
+      },
+      "process": {
+        "pid": 6790,
+        "command": "open -n /Applications/Runweave Beta pool-04.app",
+        "cwd": "<USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1",
+        "startedAt": "2026-10-15T17:00:30.483Z",
+        "processSignature": "Fri Oct 16 01:00:22 2026     /Applications/Runweave Beta pool-04.app/Contents/MacOS/Runweave Beta pool-04",
+        "logPath": "<USER_HOME>/Library/Application Support/Runweave Beta/instances/pool-04/diagnostics/logs/update-2026-10-15T16-59-44-608Z.log"
+      }
+    },
+    "cdp": {
+      "desktop": {
+        "ownership": "dedicated",
+        "serviceInstanceId": "cdp:pool-04:desktop",
+        "ownerDevSessionId": "dvs-6f13b6",
+        "slotId": "pool-04",
+        "leaseNonce": "02817ea4-5e78-4867-bace-15acdb2c500b",
+        "instanceId": "pool-04",
+        "pid": 6790,
+        "endpoint": "http://127.0.0.1:9335",
+        "sourceRevision": "81e6c04f594ce8c831ee5cea4a614e300c802495"
+      },
+      "terminalBrowser": {
+        "ownership": "dedicated",
+        "serviceInstanceId": "cdp:pool-04:terminal-browser",
+        "ownerDevSessionId": "dvs-6f13b6",
+        "slotId": "pool-04",
+        "leaseNonce": "02817ea4-5e78-4867-bace-15acdb2c500b",
+        "instanceId": "pool-04",
+        "pid": 6790,
+        "endpoint": "http://127.0.0.1:9336",
+        "sourceRevision": "81e6c04f594ce8c831ee5cea4a614e300c802495"
+      }
+    }
+  },
+  "impacts": [
+    {
+      "file": "backend/src/bootstrap/runtime-services.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/routes/terminal/completion.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/routes/terminal/sessions/helpers.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/routes/terminal/state.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/task-supervision/target.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/application/agent-hook-processor.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/application/codex-context-sync.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/application/input-dispatcher.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/application/panel-workspace.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/application/payloads.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/application/resolve-hook-panel.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/application/submit-input.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/attachments/text-attachment-delivery.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/manager/base.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/manager/records.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/runtime/clipboard-image-paste.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/runtime/codex-context.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/runtime/codex-input.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/tmux/output-poller.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "backend/src/terminal/tmux/output-watcher.ts",
+      "profile": "fullstack",
+      "reason": "Backend behavior or contract changed"
+    },
+    {
+      "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
+      "profile": "beta",
+      "reason": "Installed runtime or updater changed"
+    },
+    {
+      "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
+      "profile": "beta",
+      "reason": "Installed runtime or updater changed"
+    },
+    {
+      "file": "frontend/src/components/terminal/input/floating-draft-types.ts",
+      "profile": "frontend",
+      "reason": "Web frontend changed"
+    },
+    {
+      "file": "frontend/src/components/terminal/input/use-floating-draft-controller.ts",
+      "profile": "frontend",
+      "reason": "Web frontend changed"
+    },
+    {
+      "file": "frontend/src/components/terminal/input/use-terminal-instant-reply-controller.ts",
+      "profile": "frontend",
+      "reason": "Web frontend changed"
+    },
+    {
+      "file": "frontend/src/components/terminal/surface/use-emulator.ts",
+      "profile": "frontend",
+      "reason": "Web frontend changed"
+    },
+    {
+      "file": "frontend/src/components/terminal/workspace/events.ts",
+      "profile": "frontend",
+      "reason": "Web frontend changed"
+    },
+    {
+      "file": "frontend/src/features/terminal/input/text-attachments.ts",
+      "profile": "frontend",
+      "reason": "Web frontend changed"
+    },
+    {
+      "file": "package.json",
+      "profile": "fullstack",
+      "reason": "Development control layer changed"
+    },
+    {
+      "file": "packages/agent-bridge/codex/README.md",
+      "profile": "beta",
+      "reason": "Installed runtime or updater changed"
+    },
+    {
+      "file": "packages/agent-bridge/codex/context.patch",
+      "profile": "beta",
+      "reason": "Installed runtime or updater changed"
+    },
+    {
+      "file": "packages/agent-bridge/codex/launcher.cjs",
+      "profile": "beta",
+      "reason": "Installed runtime or updater changed"
+    },
+    {
+      "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
+      "profile": "beta",
+      "reason": "Installed runtime or updater changed"
+    },
+    {
+      "file": "packages/shared/package.json",
+      "profile": "beta",
+      "reason": "Shared contract consumers are not narrow enough to exclude installed desktop surfaces"
+    },
+    {
+      "file": "packages/shared/src/terminal/codex-context.ts",
+      "profile": "beta",
+      "reason": "Shared contract consumers are not narrow enough to exclude installed desktop surfaces"
+    },
+    {
+      "file": "packages/shared/src/terminal/panel.ts",
+      "profile": "beta",
+      "reason": "Shared contract consumers are not narrow enough to exclude installed desktop surfaces"
+    },
+    {
+      "file": "packages/shared/src/terminal/runtime/events.ts",
+      "profile": "beta",
+      "reason": "Shared contract consumers are not narrow enough to exclude installed desktop surfaces"
+    },
+    {
+      "file": "packages/shared/src/terminal/runtime/input.ts",
+      "profile": "beta",
+      "reason": "Shared contract consumers are not narrow enough to exclude installed desktop surfaces"
+    }
+  ],
+  "poolRecovery": {
+    "schemaVersion": 1,
+    "attemptId": "55bd6115-93d0-4cf0-b06d-21add9e6091e",
+    "attemptedAt": "2026-10-15T17:12:28.021Z",
+    "completedAt": "2026-10-15T17:12:29.131Z",
+    "trigger": "normal_stop",
+    "initiatingSessionId": "dvs-6f13b6",
+    "slotId": "pool-04",
+    "ownerSessionId": "dvs-6f13b6",
+    "leaseNonce": "02817ea4-5e78-4867-bace-15acdb2c500b",
+    "previousManifestState": "stopping",
+    "previousDerivedState": "owned-stop",
+    "result": "recovered",
+    "phase": "completed",
+    "checks": {
+      "slotProcessesAbsent": true
+    },
+    "stoppedServices": [],
+    "blockedBy": [],
+    "releasedLease": true,
+    "quarantinedLeasePath": null,
+    "failureReason": null
+  },
+  "createdAt": "2026-10-15T16:59:43.864Z",
+  "updatedAt": "2026-10-15T17:12:29.159Z",
+  "failure": null
+}

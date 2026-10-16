@@ -269,6 +269,24 @@ export function useTerminalEmulator({
         return false;
       }
 
+      // xterm's legacy keyboard encoder handles Ctrl+7 but omits Ctrl+/.
+      // Both encode US (0x1f); leave its meaning to the foreground application.
+      if (
+        event.type === "keydown" &&
+        !event.isComposing &&
+        event.keyCode !== 229 &&
+        event.key === "/" &&
+        event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault();
+        onUserInputData?.("\u001f");
+        sendTerminalInput("\u001f");
+        return false;
+      }
+
       return true;
     });
     const dataDisposable = terminal.onData((data) => {

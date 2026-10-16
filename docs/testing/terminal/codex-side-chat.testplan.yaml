@@ -1,0 +1,189 @@
+version: 1
+name: Codex 原生旁聊终端接入验收
+description: >
+  待执行合同，验证在 Runweave 已有终端中使用 Codex 原生旁聊，不新建独立聊天运行时。
+  以 rust-v0.160.1 源码语义为基线，先核对实际 CLI 能力和机器可读身份来源。
+  每例使用自有隔离 Backend、Codex 终端与临时目录；不能操作用户正在工作的终端。
+  用例格式通过、源码检查、HTML 原型或构建成功均不等于产品验收通过。
+  UI 操作使用 toolkit:playwright-cli；Dev Session 管理使用 toolkit:runweave-dev-session。
+  不发送真实外部通知、不执行生产文件修改；清理只作用于本例所有的资源。
+cases:
+  - id: SIDE-001
+    name: 主任务运行期间原生旁聊可用且不另建终端
+    required: true
+    description: 主任务与旁聊在同一原生 Codex 终端内工作，旁聊不是普通 Fork 新终端或新 Codex CLI。
+    preconditions:
+      - 本例独立终端使用支持 side 的真实 Codex，已记录 terminal、panel、pane、CLI PID、启动代际和主 thread。
+      - 本例主任务仅在临时目录执行可观测的有限时长读取操作，已开始且可确认仍在运行。
+    steps:
+      - 使用 toolkit:playwright-cli 在真实终端输入 /side 并提交内联问题，确认进入旁聊并产生真实回复。
+      - 核对终端列表、panel、pane 和 CLI PID 未增加或替换，主任务继续出现进展，不因创建旁聊而收到中断。
+      - 保存原生画面与父子事件时间线；通过原生操作关闭旁聊，再结束和清理本例主任务及资源。
+
+  - id: SIDE-002
+    name: 继承历史只作为旁聊参考
+    required: true
+    description: 子会话能引用创建前的主上下文，但不自动继续旧任务，也不自动同步后续主消息。
+    preconditions:
+      - 本例独立主会话含唯一标记 BEFORE_SIDE，主任务有只在父会话授权的待执行临时文件操作。
+      - 本例可在创建旁聊后向父会话追加唯一标记 AFTER_SIDE，已记录初始临时目录内容。
+    steps:
+      - 使用 toolkit:playwright-cli 创建旁聊，询问创建前的标记；确认回答能引用 BEFORE_SIDE，界面未重复铺开父历史。
+      - 检查子会话的工具事件，确认它没有仅因继承历史就继续父任务的待执行操作。
+      - 切回父会话追加 AFTER_SIDE，再专用切换到原旁聊询问标记；对照原生上下文事件确认没有同步父新增消息，不能仅凭模型自述判定。
+      - 保存父子记录及临时目录差异，关闭本例旁聊并清理资源。
+
+  - id: SIDE-003
+    name: 权限与审批继承原生配置
+    required: true
+    description: 旁聊默认讨论不擅自修改，明确修改请求遵守原生已有权限，不被替换成自定义只读或自动审批策略。
+    preconditions:
+      - 本例独立 Codex 使用可核对的受限权限配置与需要人工确认的测试操作，所有操作只作用于自有临时文件。
+      - 已记录父会话模型、推理强度、权限与审批配置的非敏感值。
+    steps:
+      - 使用 toolkit:playwright-cli 创建旁聊并要求解释临时文件内容；核对工具事件及文件状态，确认没有未要求的写入。
+      - 在旁聊明确要求本例测试修改，确认原生权限结果与同配置父会话一致；需要审批时显示原生审批，不自动放行。
+      - 核对子会话模型与权限配置来源，确认没有独立更宽权限、强制只读覆盖或子 Agent 调用；保存证据后清理资源。
+
+  - id: SIDE-004
+    name: 专用切换保留同一临时旁聊
+    required: true
+    description: 切回主会话不会销毁旁聊或中断旁聊当前回答。
+    preconditions:
+      - 本例独立主会话已经创建一个旁聊，已记录父子 thread 身份，旁聊正在执行有限时长的无副作用回答。
+      - 本例实际 Codex 切换按键已经核实，没有与浏览器或 tmux 配置冲突。
+    steps:
+      - 使用 toolkit:playwright-cli 专用按键切回主会话，再切回旁聊；确认仍是同一子 thread，已收到的正文保留。
+      - 在主会话显示期间等到子任务完成，再切回旁聊；确认原生回复完成，没有重发问题或再次 fork。
+      - 保存线程事件和画面，关闭本例旁聊并清理资源。
+
+  - id: SIDE-005
+    name: 关闭只清理子任务
+    required: true
+    description: 空输入下关闭正在运行的旁聊，主任务继续，已关闭子会话不能被迟到事件重新打开。
+    preconditions:
+      - 本例独立父任务和旁聊均在执行有限时长的可观测操作，已记录父子 thread 与运行状态。
+      - 旁聊输入为空，没有弹层或选中文本，按键配置已经核对。
+    steps:
+      - 使用 toolkit:playwright-cli 在旁聊输入焦点按原生关闭键，确认返回主会话。
+      - 核对子任务中断及取消订阅事件，确认父任务没有收到中断且继续进展。
+      - 等待子事件排空，确认关闭的旁聊不再出现；再次创建旁聊时是新 thread，不恢复旧记录；清理本例资源。
+
+  - id: SIDE-006
+    name: 单个旁聊约束保持原生语义
+    required: true
+    description: 不允许旁聊嵌套；从父会话再次创建时替换旧旁聊，不产生可选历史列表。
+    preconditions:
+      - 本例独立终端已有一个空闲旁聊并记录其 thread ID。
+    steps:
+      - 使用 toolkit:playwright-cli 在旁聊执行 /side，确认原生拒绝嵌套且没有新子 thread。
+      - 专用切回父会话，再执行 /side；确认旧子被清理，新子身份不同，只有一个有效旁聊。
+      - 确认没有持久旁聊列表或历史恢复入口；保存证据并清理本例资源。
+
+  - id: SIDE-007
+    name: 子 hook 不覆盖持久主线程身份
+    required: true
+    description: 主子共享 pane 和启动代际时，真实子 hook 仍不能将持久主身份与恢复目标改成临时子 thread。
+    preconditions:
+      - 本例独立终端安装真实 Runweave hooks，可采集脱敏原始载荷、状态 API 和持久 session/panel 元数据。
+      - 本例主会话身份已知，已保存 current、last 与恢复目标的基线。
+    steps:
+      - 使用 toolkit:playwright-cli 创建旁聊、提交问题、完成一轮并切回；逐事件记录主子身份和 current/last 的变化。
+      - 核对持久恢复目标始终指向合法主会话，不能因子 SessionStart、UserPromptSubmit 或 Stop 变为临时 thread。
+      - 如实现使用新增观测，核对其父子字段来自真实可信载荷而非时间近似、屏幕文字或第一个未知 thread；缺少来源时判定阻塞，不伪造通过。
+      - 保存载荷与元数据对照，清理本例资源。
+
+  - id: SIDE-008
+    name: 并发完成不错误推进主任务完成状态
+    required: true
+    description: 父任务仍运行时子任务完成，不产生主任务完成 revision、主回复覆盖或主任务完成通知。
+    preconditions:
+      - 本例独立父任务仍运行，子任务可较早完成；已记录父状态、completionRevision 和 latestReply。
+      - 通知出口使用本例隔离收件端，可记录发送，不会向真实用户或外部联系人发送消息。
+    steps:
+      - 使用 toolkit:playwright-cli 提交旁聊问题并等待子完成；确认父运行状态保持，父 completionRevision 和 latestReply 不被子回复推进。
+      - 检查隔离通知记录，确认没有把子完成标为父任务完成。
+      - 让父任务自然完成，确认父完成只处理一次且对应父 thread；保存时间线并清理本例资源。
+
+  - id: SIDE-009
+    name: 主任务监督不被旁聊消费或续接
+    required: true
+    description: 旁聊提问与 Stop 不创建、改写或触发主任务的监督续接，也不将旁聊认作新的受监督任务。
+    preconditions:
+      - 本例独立主会话有可观测的监督 watch，使用临时任务且无需外部通信。
+      - 已记录 watch 的原始目标 thread、启动代际、决策和投递次数。
+    steps:
+      - 使用 toolkit:playwright-cli 创建旁聊并完成一轮，采集真实监督 hook 输入及 watch 的变化。
+      - 确认目标保持主 thread，子 prompt/Stop 不导致主 watch 重绑或续接投递，子会话没有收到监督注入文本。
+      - 在本例主任务正常停止时核对监督仍按原有合同处理主任务；保存证据并清理本例 watch 与资源。
+
+  - id: SIDE-010
+    name: 原生与浮动输入草稿不跨会话发送
+    required: true
+    description: 主旁聊在同一 panel 内切换时，草稿和附件必须属于正确输入上下文，未知归属时不自动发送或清空。
+    preconditions:
+      - 本例独立终端使用真实浮动输入和附件能力，已有旁聊；主与子分别准备唯一草稿标记和自有测试附件。
+      - 本例可记录真实终端输入交付和父子收到的消息，不依赖 HTML 原型。
+    steps:
+      - 使用 toolkit:playwright-cli 在主会话留下未发送草稿，切到旁聊编辑不同草稿，再往返切换；确认各自文本未覆盖或自动提交。
+      - 从浮动输入与原生输入各发送本例标记，核对只进入当前确定的 thread，附件交付身份一致，没有误发主草稿到旁聊。
+      - 输入身份不能确认时检查 UI 保留草稿且没有自动清空或重放；保存投递证据并清理本例附件和资源。
+
+  - id: SIDE-011
+    name: 浏览器重连复用仍存活的原生旁聊
+    required: true
+    description: 浏览器或 WS 重连不重建 Codex、旁聊或用户问题，恢复原终端的现有显示。
+    preconditions:
+      - 本例独立 Codex 进程与 tmux 始终存活，旁聊已有一轮真实对话，已记录父子身份与请求计数。
+      - 本例可以只断开自己的浏览器连接，不停止 Backend 或 CLI。
+    steps:
+      - 使用 toolkit:playwright-cli 记录旁聊画面，断开并恢复本例连接，重新取得正确页面引用。
+      - 确认 terminal、pane、CLI PID 和子 thread 未改变，历史来自原进程，创建与问题提交计数没有增加。
+      - 在恢复后的原生旁聊继续提问并关闭，确认交互可用；保存重连证据并清理本例资源。
+
+  - id: SIDE-012
+    name: 原进程丢失后只恢复持久主会话
+    required: true
+    description: tmux 或 CLI 原进程丢失后，恢复不能尝试 resume 临时旁聊，也不能伪造旁聊历史已恢复。
+    preconditions:
+      - 本例使用可安全销毁的独立 tmux/Backend fixture，有已持久化主 thread 和一个临时旁聊。
+      - 已记录本例恢复策略、主 thread 和子 thread，测试操作不会触及用户 tmux。
+    steps:
+      - 记录持久恢复元数据后，仅终止本例原进程或销毁本例 tmux，触发既有终端恢复流程。
+      - 重新取得新连接和页面引用，核对恢复命令仅以主 thread 为目标，新的 CLI 不使用临时子 ID。
+      - 确认不展示“旁聊已恢复”的虚假状态，主会话可继续；保存恢复命令与真实画面，清理本例资源。
+
+  - id: SIDE-013
+    name: 真正主会话变更仍能更新身份
+    required: true
+    description: 旁聊隔离不能退化为锁死首次 thread，原生新会话和恢复另一主会话仍可正常改变持久主身份。
+    preconditions:
+      - 本例独立终端含已知主会话，另有本例拥有的可恢复普通 thread，旁聊已关闭。
+    steps:
+      - 使用 toolkit:playwright-cli 通过原生新会话操作建立新主会话并提交一条消息，确认身份更新为新主 thread。
+      - 通过原生恢复选择本例另一普通 thread，核对新的持久恢复目标与可见主会话一致，不被旁聊隔离逻辑误拒。
+      - 核对旧代旁聊事件不能污染新主会话；保存证据并清理本例资源。
+
+  - id: SIDE-014
+    name: 不支持或不允许旁聊时保持原生反馈
+    required: true
+    description: 会话未开始、审查模式或能力不可用时，不伪造创建成功，不以新终端或另一模型代替。
+    preconditions:
+      - 本例隔离 fixture 可分别建立尚未开始及审查模式的原生 Codex 会话，实际限制已对照安装版本核实。
+      - 本例可使用独立配置关闭或模拟缺失原生能力，但不修改用户全局 CLI。
+    steps:
+      - 使用 toolkit:playwright-cli 在各自条件下尝试原生 /side，确认显示原生不可用反馈，没有增加子 thread、终端或后台服务。
+      - 核对原有终端输入仍可使用，用户已有草稿未被清空；没有自动升级二进制或重放创建。
+      - 恢复本例配置，保存每个条件的证据并清理资源。
+
+  - id: SIDE-015
+    name: 普通 Fork 仍是独立持久新终端
+    required: true
+    description: 原生旁聊接入不改变已有普通 Fork 的空闲保护、新终端和持久历史语义。
+    preconditions:
+      - 本例独立主终端为已开始的 Codex tmux 会话，可控制其运行与空闲状态。
+      - 本例可使用现有 Fork 入口并记录新终端、thread 与来源身份。
+    steps:
+      - 在主任务运行时尝试既有普通 Fork，确认仍按原有合同拒绝，不因旁聊支持运行中而解除保护。
+      - 在主任务空闲时通过真实 UI 执行普通 Fork，确认创建独立终端与新持久 thread，不是 ephemeral 旁聊。
+      - 核对源终端未收到额外命令，正常恢复新终端会话；保存证据并只清理本例创建的终端与资源。

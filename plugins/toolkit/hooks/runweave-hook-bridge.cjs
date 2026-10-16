@@ -347,6 +347,18 @@ async function main() {
     effectiveCompletionReason !== "hook_stop" ||
     STOP_EVENTS.has(normalizedEvent));
 
+  // The managed TUI owns the primary/side relationship. Never let child or
+  // unclassified events enter completion, Activity, notification or supervision paths.
+  if (source === "codex" && process.env.RUNWEAVE_CODEX_CONTEXT_PATH) {
+    let context;
+    try { context = JSON.parse(fs.readFileSync(process.env.RUNWEAVE_CODEX_CONTEXT_PATH, "utf8")); }
+    catch { return; }
+    const sameLaunch = context.generation === process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION &&
+      context.operationId === process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID;
+    const initialPrimary = normalizedEvent === "sessionstart" && payload.source === "startup" && context.revision === 0;
+    if (!sameLaunch || context.closed || (!initialPrimary && context.primaryThreadId !== threadId)) return;
+  }
+
   const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;
   const stateEndpoint = deriveAgentHookEndpoint(endpoint);
   const completionEndpoint =

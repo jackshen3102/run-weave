@@ -1,0 +1,178 @@
+{
+  "devSession": "dvs-6f13b6",
+  "cases": {
+    "SIDE-001": {
+      "status": "pass",
+      "terminal": "c1277223",
+      "pid": 3615,
+      "evidence": [
+        "001-side-created.json",
+        "001-side-view.json",
+        "001-main-return.json",
+        "001-closed-context.json",
+        "001-final.json",
+        "001-main-events.json"
+      ]
+    },
+    "SIDE-002": {
+      "status": "pass",
+      "evidence": [
+        "002-before.json",
+        "002-after.json",
+        "002-native-events.json"
+      ],
+      "inheritanceItems": 98,
+      "newParentMessageOrdinal": 101,
+      "pendingFileCreated": false
+    },
+    "SIDE-003": {
+      "status": "pass",
+      "evidence": [
+        "003-read.json",
+        "003-approval.json",
+        "003-parent-approval.json",
+        "003-permission-events.json"
+      ],
+      "approvals": "both denied",
+      "fileUnchanged": true
+    },
+    "SIDE-004": {
+      "status": "pass",
+      "evidence": [
+        "004-start.json",
+        "004-parent.json",
+        "004-return-context.json",
+        "004-completed.json",
+        "004-completed-context.json"
+      ]
+    },
+    "SIDE-005": {
+      "status": "pass",
+      "evidence": [
+        "005-running.json",
+        "005-closed.json",
+        "005-parent.json",
+        "005-new-side.json",
+        "005-cancellation-events.json",
+        "005-final.json"
+      ],
+      "note": "Parent corrected an invalid generated shell command and completed naturally; side cancellation targeted only child."
+    },
+    "SIDE-006": {
+      "status": "pass",
+      "evidence": [
+        "006-first.json",
+        "006-nested.json",
+        "006-second.json",
+        "006-second-view.json"
+      ]
+    },
+    "SIDE-007": {
+      "status": "pass",
+      "evidence": [
+        "006-first.json",
+        "006-second.json",
+        "007-session-list.json",
+        "007-after-close.json",
+        "final-hooks.jsonl"
+      ],
+      "note": "Native snapshot identifies child; accepted bridge events and persistent recovery remain primary."
+    },
+    "SIDE-008": {
+      "status": "pass",
+      "revisionBefore": 7,
+      "revisionAfterChild": 7,
+      "revisionAfterParent": 8,
+      "completionEventsUnchangedAfterChild": true,
+      "evidence": [
+        "008-before.json",
+        "008-after-child.json",
+        "008-child-done.json",
+        "008-completions-before.json",
+        "008-completions-child.json",
+        "008-completions-final.json"
+      ]
+    },
+    "SIDE-009": {
+      "status": "pass",
+      "evidence": [
+        "009-before-side.json",
+        "009-after-child.json",
+        "009-child-done.json",
+        "009-after-parent.json",
+        "009-paused.json"
+      ],
+      "note": "Child leaves watch unchanged; parent Stop yields one completed decision and zero delivery; fixture watch paused."
+    },
+    "SIDE-010": {
+      "status": "pass",
+      "evidence": [
+        "010-v2-parent-draft.json",
+        "010-v2-side-draft.json",
+        "010-parent-restored.yaml",
+        "010-side-restored.yaml",
+        "010-parent-result.json",
+        "010-side-sent.json",
+        "010-race-result.txt",
+        "010-race-retained.yaml"
+      ],
+      "note": "Stale request rejected before native write, UI retained draft. Parent and side attachments dispatched through actual native input guard."
+    },
+    "SIDE-011": {
+      "status": "pass",
+      "evidence": [
+        "011-before.json",
+        "011-after.json",
+        "011-continued.json",
+        "011-native-submissions.json"
+      ],
+      "note": "Reloaded page and WebSocket; same native PID, generation, panel, side; each prompt submitted once."
+    },
+    "SIDE-012": {
+      "status": "pass",
+      "evidence": [
+        "012-before.json",
+        "012-dev-stop.json",
+        "012-restored.json",
+        "012-resume-command.txt",
+        "012-continued.json"
+      ],
+      "note": "Owned fixture runtime stopped and rebuilt; different PID and generation; configured managed binary resumes original primary only; no side restoration."
+    },
+    "SIDE-013": {
+      "status": "pass",
+      "evidence": [
+        "013-new.json",
+        "013-new-reply.json",
+        "013-new-persisted.json",
+        "013-resumed.json"
+      ],
+      "note": "Native /new updates persistent primary; native /resume restores another owned primary. Native operation identity gates obsolete hooks."
+    },
+    "SIDE-014": {
+      "status": "pass",
+      "evidence": [
+        "014-unstarted.json",
+        "014-unstarted-context.json",
+        "014-review-running.json",
+        "014-review-rejected.json",
+        "014-review-context.json",
+        "014-unavailable-response.json",
+        "014-restored-context.json"
+      ],
+      "note": "Pinned native baseline rejects unstarted and review mode, retaining drafts. Unsupported observation protocol was injected into owned paused fixture; structured input rejected and original snapshot restored. No upstream feature-disable switch exists in this baseline; older CLI binaries are outside managed support and were not tested."
+    },
+    "SIDE-015": {
+      "status": "pass",
+      "evidence": [
+        "015-running-menu.txt",
+        "015-running.json",
+        "015-fork-context.json",
+        "015-fork-reply.json",
+        "015-fork-restored.json",
+        "015-source-after.json"
+      ],
+      "note": "UI disabled Fork while running. Idle Fork creates new persistent terminal/thread; owned tmux loss recovers same fork thread in a new process. Source received no fork prompt."
+    }
+  }
+}

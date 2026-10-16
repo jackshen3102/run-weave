@@ -1,0 +1,9 @@
+### Result
+[{"page":1,"title":"原生旁聊已经在真实终端运行","image":[{"decoded":true,"width":1440,"height":1000}],"textLength":246},{"page":2,"title":"使用四个原生命令与按键","image":[],"textLength":379},{"page":3,"title":"旁聊修改文件仍走原生审批","image":[{"decoded":true,"width":1440,"height":1000}],"textLength":187},{"page":4,"title":"切换期间拒绝误发并保留草稿","image":[{"decoded":true,"width":1440,"height":1000}],"textLength":234},{"page":5,"title":"子完成不会触发主任务监督","image":[],"textLength":428},{"page":6,"title":"重连、重启与普通 Fork 分别处理","image":[],"textLength":423},{"page":7,"title":"逐项验证与修复结果可追溯","image":[],"textLength":623},{"page":8,"title":"启用条件与未验证范围","image":[],"textLength":614}]
+### Ran Playwright code
+```js
+await (async page => { await page.setViewportSize({width:1440,height:1000}); const rows=[]; for(let i=0;i<8;i++){ const a=page.locator("article.page:visible"); rows.push({page:i+1,title:await a.locator("h2").innerText(),image:await a.locator("img").evaluateAll(imgs=>imgs.map(x=>({decoded:x.complete&&x.naturalWidth>0,width:x.naturalWidth,height:x.naturalHeight}))),textLength:(await a.innerText()).length}); if(i<7) await page.getByRole("button",{name:"下一页"}).click(); } return rows; })(page);
+```
+### Page
+- Page URL: http://127.0.0.1:55909/#page=boundaries
+- Page Title: Codex 旁聊 · 实施与验收报告

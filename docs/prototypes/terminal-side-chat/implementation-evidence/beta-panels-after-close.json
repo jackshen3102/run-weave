@@ -1,0 +1,36 @@
+{
+  "terminalSessionId": "f7e2e530",
+  "activePanelId": "c1d4d75e-e369-48e5-bc88-551aa236da0c",
+  "panels": [
+    {
+      "panelId": "c1d4d75e-e369-48e5-bc88-551aa236da0c",
+      "terminalSessionId": "f7e2e530",
+      "alias": "main",
+      "role": "main",
+      "lastThreadId": "01a13f18-2f88-7051-aa49-4cf1351bdd37",
+      "lastThreadProvider": "codex",
+      "lastThreadStatus": "idle",
+      "lastThreadUpdatedAt": "2026-10-15T10:25:19.398Z",
+      "cwd": "/private/tmp/runweave-side-implementation-20261015",
+      "activeCommand": "codex",
+      "terminalState": {
+        "state": "agent_idle",
+        "agent": "codex"
+      },
+      "status": "running",
+      "createdAt": "2026-10-15T10:20:47.517Z",
+      "lastActivityAt": "2026-10-15T10:24:28.704Z",
+      "focused": true,
+      "tmuxPaneId": "%0",
+      "geometry": {
+        "paneLeft": 0,
+        "paneTop": 0,
+        "paneWidth": 152,
+        "paneHeight": 51,
+        "windowWidth": 152,
+        "windowHeight": 51
+      }
+    }
+  ],
+  "renderMode": "tmux-native"
+}

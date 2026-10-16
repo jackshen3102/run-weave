@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "templateVersion": "1.0.0",
+  "inputSha256": "4a6ad707f58c351a734a52e3cea9480b33d0df04e4a96a0361ca3edee4d9801d",
+  "assets": [
+    {
+      "id": "side",
+      "path": "assets/0001-side.png",
+      "sha256": "f3e5895bf63f331f42229d0cf15c406a83f71500b4b0f2b258a1e1320e02aa83"
+    },
+    {
+      "id": "approval",
+      "path": "assets/0002-approval.png",
+      "sha256": "5020e641aeae061ca9e16f14483d209ae76337dfbdcea41f0ac657bff1064f40"
+    },
+    {
+      "id": "draft",
+      "path": "assets/0003-draft.png",
+      "sha256": "67d781921217fba17c76f2ff9908324d1edec11f76a17c7bbdac1015df3a300b"
+    },
+    {
+      "id": "results",
+      "path": "assets/0004-results.json",
+      "sha256": "81e55634b220b753bc7de2da065c2dffedc5f523e5e50ce3a4af5c9b0afdd244"
+    },
+    {
+      "id": "created",
+      "path": "assets/0005-created.json",
+      "sha256": "db5a0a3e6671fb34ac2ee4b113cad6a19c3e00e4c1be62246b2d7feb66b409d6"
+    },
+    {
+      "id": "completed",
+      "path": "assets/0006-completed.json",
+      "sha256": "8c1b893dd511f132ff2c06fd67371f198aaba7b439653af992141a23493270b2"
+    },
+    {
+      "id": "permissions",
+      "path": "assets/0007-permissions.json",
+      "sha256": "bc2fb8ae129f933e3455983481a2dc78fdb3df48923a93d74dec720de4773975"
+    },
+    {
+      "id": "race",
+      "path": "assets/0008-race.txt",
+      "sha256": "a930ae7c2dc10b5ab38e85310bb525aa49dc950ef434b7a98528c71caa37fa89"
+    },
+    {
+      "id": "parentinput",
+      "path": "assets/0009-parentinput.json",
+      "sha256": "ff3e6a77e8c9b98f1e9068673ba50a0aab8f1bf54b1b02355b5b68e883cc3d52"
+    },
+    {
+      "id": "sideinput",
+      "path": "assets/0010-sideinput.json",
+      "sha256": "a28a42d09f45d0937feccfaa234a88ca8ade8e2fba4916db5ad76f892e080465"
+    },
+    {
+      "id": "watchbefore",
+      "path": "assets/0011-watchbefore.json",
+      "sha256": "692fe72fc209f0ea9bb36b4ff29918d6d4d1dd4f5fe3c7760b982cf2bfc97403"
+    },
+    {
+      "id": "watchchild",
+      "path": "assets/0012-watchchild.json",
+      "sha256": "692fe72fc209f0ea9bb36b4ff29918d6d4d1dd4f5fe3c7760b982cf2bfc97403"
+    },
+    {
+      "id": "watchparent",
+      "path": "assets/0013-watchparent.json",
+      "sha256": "fdb27e39fb593eb4c11cd78f6abc24714785c60843170c9d1adaf0a5a2daa0b1"
+    },
+    {
+      "id": "reload",
+      "path": "assets/0014-reload.json",
+      "sha256": "a2ec516e4ca8d6a6bdcd929ceba4f8600d125fde36fc772b95096cda6cfb879f"
+    },
+    {
+      "id": "restart",
+      "path": "assets/0015-restart.json",
+      "sha256": "d55f0745ce0dc066f108925eb2cc2056ebfed180387df72b35790b57dfb6fdd0"
+    },
+    {
+      "id": "fork",
+      "path": "assets/0016-fork.json",
+      "sha256": "1b3b9692d25ef748e2ffebc9044c3894b5357e235d8696cbfd15ede8833cf701"
+    },
+    {
+      "id": "unknown",
+      "path": "assets/0017-unknown.json",
+      "sha256": "7cd7fce574feadd76f288ff4a955fc8c9544f0408a949db4b7e2bd3563a41192"
+    },
+    {
+      "id": "operations",
+      "path": "assets/0018-operations.txt",
+      "sha256": "47595b7731d5c9891c7f36165c4e878da1070c5e0c66ce017cd523825b457622"
+    },
+    {
+      "id": "isolation",
+      "path": "assets/0019-isolation.txt",
+      "sha256": "7d2ef51d3f8c6a76dd606d407310ee1d93d40041b0d415412981933f09ac0edf"
+    },
+    {
+      "id": "recovery",
+      "path": "assets/0020-recovery.txt",
+      "sha256": "681eaa7177145e561b40fac86f39f1d7cef5cd171742e6f971330b2f8906d0fe"
+    },
+    {
+      "id": "checks",
+      "path": "assets/0021-checks.txt",
+      "sha256": "be2b3690d1c468b8e605e93384d426411194746c730279c633098c2855acb5f9"
+    },
+    {
+      "id": "boundaries",
+      "path": "assets/0022-boundaries.txt",
+      "sha256": "dddb57b641a3ce0cbd8809d92961059a9a38a369282724fefb5ac91f6f1a2f81"
+    }
+  ]
+}

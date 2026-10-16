@@ -1,3 +1,4 @@
+import { observeCodexPane } from "../terminal/application/codex-context-sync";
 import { createFeishuNode } from "../feishu/runtime";
 import { createAuthRuntime } from "./auth-runtime";
 import { DevResourcesService } from "../dev-resources/service";
@@ -247,6 +248,7 @@ async function assembleRuntimeServices(
     terminalRuntimeRegistry.disposeAll(),
   );
   const tmuxOutputWatcher = new TmuxOutputWatcher({
+    onPaneObservation: (sessionId, paneId) => observeCodexPane(terminalSessionManager, terminalEventService, sessionId, paneId),
     outputDir: path.join(
       path.dirname(storagePaths.terminalSessionStoreFile),
       "tmux-output",

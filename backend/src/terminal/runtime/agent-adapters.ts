@@ -89,6 +89,7 @@ export function buildAgentResumeCommand(thread: {
   provider: TerminalAgentKind;
   threadId: string;
   sessionFile?: string;
+  executable?: string;
 }): string {
   const args = [
     ...(thread.provider === "codex" ? CODEX_SKIP_UPDATE_ON_STARTUP_ARGS : []),
@@ -97,7 +98,7 @@ export function buildAgentResumeCommand(thread: {
       thread.sessionFile ?? thread.threadId,
     ),
   ];
-  return `${thread.provider} ${args.map(shellQuote).join(" ")}\n`;
+  return `${shellQuote(thread.executable ?? thread.provider)} ${args.map(shellQuote).join(" ")}\n`;
 }
 
 function shellQuote(value: string): string {

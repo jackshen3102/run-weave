@@ -1,0 +1,5 @@
+
+> runweave-workspace@0.1.0 testplan:validate <USER_HOME>/Code/browser-hub/browser-viewer/.worktree/wt-1
+> pnpm --dir backend exec tsx ../scripts/testing/validate-plan.ts docs/testing/terminal/codex-side-chat.testplan.yaml
+
+validated docs/testing/terminal/codex-side-chat.testplan.yaml: 15 required case(s)

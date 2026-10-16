@@ -1,0 +1,210 @@
+--- a/codex-rs/tui/src/app.rs
++++ b/codex-rs/tui/src/app.rs
+@@ -257,6 +257,7 @@
+ mod session_lifecycle;
+ mod session_picker;
+ mod side;
++mod runweave_context;
+ mod startup;
+ mod startup_prompts;
+ mod startup_warnings;
+@@ -834,6 +835,11 @@
+         app_server: &mut AppServerSession,
+         event: TuiEvent,
+     ) -> Result<AppRunControl> {
++        if let TuiEvent::Paste(text) = &event {
++            if self.handle_runweave_input(text, tui, app_server).await {
++                return Ok(AppRunControl::Continue);
++            }
++        }
+         tui.link_hover.observe(&event);
+         self.refresh_link_hover(tui)?;
+         self.invalidate_right_click_paste(&event);
+--- a/codex-rs/tui/src/app/startup.rs
++++ b/codex-rs/tui/src/app/startup.rs
+@@ -1039,6 +1039,7 @@
+             );
+         }
+ 
++        let mut runweave_context = super::runweave_context::Publisher::new();
+         let mut listen_for_app_server_events = true;
+         let mut reconnect = None;
+         let mut waiting_for_initial_session_configured = wait_for_initial_session_configured;
+@@ -1069,6 +1070,7 @@
+             Ok(exit_reason)
+         } else {
+             loop {
++                runweave_context.publish(&app, false);
+                 // Reconnect can dismiss an overlay from the server-event path.
+                 if app.overlay.is_none() {
+                     if !tui.is_owned_screen() && tui.is_alt_screen_active() {
+@@ -1332,6 +1334,7 @@
+                 }
+             }
+         };
++        runweave_context.publish(&app, true);
+         if let Err(err) = app_server.shutdown().await {
+             tracing::warn!(error = %err, "failed to shut down embedded app server");
+         }
+--- a/codex-rs/tui/src/chatwidget/interaction.rs
++++ b/codex-rs/tui/src/chatwidget/interaction.rs
+@@ -469,6 +469,26 @@
+         }
+     }
+ 
++    pub(crate) fn runweave_task_running(&self) -> bool {
++        self.bottom_pane.is_task_running()
++    }
++
++    pub(crate) fn runweave_draft_fingerprint(&self) -> String {
++        use std::hash::{Hash, Hasher};
++        let draft = self.bottom_pane.composer_draft_snapshot();
++        let mut hash = std::collections::hash_map::DefaultHasher::new();
++        format!("{:?}", (draft.text, draft.text_elements, draft.local_images, draft.remote_image_urls, draft.mention_bindings, draft.pending_pastes)).hash(&mut hash);
++        format!("{:016x}", hash.finish())
++    }
++
++    pub(crate) fn runweave_replace_prompt(&mut self, text: String) {
++        let draft = self.bottom_pane.composer_draft_snapshot();
++        let images = draft.local_images.into_iter().map(|image| image.path).collect();
++        self.bottom_pane.set_composer_text(String::new(), Vec::new(), images);
++        self.bottom_pane.set_composer_pending_pastes(Vec::new());
++        self.handle_paste(text);
++    }
++
+     pub(crate) fn handle_paste(&mut self, text: String) {
+         if self.external_writer_view && !self.bottom_pane.has_active_view() {
+             return;
+--- /dev/null
++++ b/codex-rs/tui/src/app/runweave_context.rs
+@@ -0,0 +1,130 @@
++//! Optional host observation. It never changes native side-chat ownership or behavior.
++use super::App;
++use serde_json::{Value, json};
++use std::io::Write;
++use std::path::PathBuf;
++
++pub(super) struct Publisher {
++    path: Option<PathBuf>,
++    generation: String,
++    operation: String,
++    previous: Option<Value>,
++    revision: u64,
++}
++
++impl Publisher {
++    pub(super) fn new() -> Self {
++        Self {
++            path: std::env::var_os("RUNWEAVE_CODEX_CONTEXT_PATH").map(PathBuf::from),
++            generation: std::env::var("RUNWEAVE_CODEX_CONTEXT_GENERATION").unwrap_or_default(),
++            operation: std::env::var("RUNWEAVE_TERMINAL_AGENT_OPERATION_ID").unwrap_or_default(),
++            previous: None,
++            revision: 0,
++        }
++    }
++
++    pub(super) fn publish(&mut self, app: &App, closed: bool) {
++        let Some(path) = &self.path else { return };
++        if self.generation.is_empty() || self.operation.is_empty() { return; }
++        let mut sides: Vec<_> = app.side_threads.iter().map(|(id, state)| {
++            json!({"threadId": id.to_string(), "parentThreadId": state.parent_thread_id.to_string()})
++        }).collect();
++        sides.sort_by_key(|side| side["threadId"].as_str().unwrap_or_default().to_owned());
++        let state = json!({
++            "draftFingerprint": app.chat_widget.runweave_draft_fingerprint(),
++            "protocolVersion": 1,
++            "generation": self.generation,
++            "operationId": self.operation,
++            "pid": std::process::id(),
++            "closed": closed,
++            "primaryThreadId": app.primary_thread_id.map(|id| id.to_string()),
++            "displayedThreadId": if closed || app.reconnect.offline { None } else { app.current_displayed_thread_id().map(|id| id.to_string()) },
++            "sides": sides,
++            "displayedRunning": app.chat_widget.runweave_task_running(),
++            "inputReady": !closed && !app.reconnect.offline && app.overlay.is_none() && app.chat_widget.no_modal_or_popup_active() && !app.chat_widget.fork_in_progress && !app.chat_widget.is_external_writer_view(),
++        });
++        if self.previous.as_ref() == Some(&state) { return; }
++        let mut payload = state.clone();
++        payload["revision"] = json!(self.revision + 1);
++        let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
++        let result = (|| -> std::io::Result<()> {
++            let mut options = std::fs::OpenOptions::new();
++            options.write(true).create(true).truncate(true);
++            #[cfg(unix)] {
++                use std::os::unix::fs::OpenOptionsExt;
++                options.mode(0o600);
++            }
++            let mut file = options.open(&temporary)?;
++            file.write_all(serde_json::to_string(&payload)?.as_bytes())?;
++            std::fs::rename(&temporary, path)
++        })();
++        if result.is_ok() {
++            self.revision += 1;
++            self.previous = Some(state);
++        } else {
++            let _ = std::fs::remove_file(temporary);
++        }
++    }
++}
++
++impl App {
++    /// Guarded input still arrives through the owning PTY. Validation and native
++    /// composer editing happen in one TUI event, so a switch cannot split them.
++    pub(super) async fn handle_runweave_input(&mut self, text: &str, tui: &mut crate::tui::Tui, server: &mut crate::app_server_session::AppServerSession) -> bool {
++        let Ok(generation) = std::env::var("RUNWEAVE_CODEX_CONTEXT_GENERATION") else { return false };
++        let prefix = format!("RUNWEAVE_CODEX_INPUT:{generation}:");
++        let Some(id) = text.strip_prefix(&prefix) else { return text.starts_with("RUNWEAVE_CODEX_INPUT:"); };
++        if uuid::Uuid::parse_str(id).is_err() { return true; }
++        let Some(context_path) = std::env::var_os("RUNWEAVE_CODEX_CONTEXT_PATH").map(PathBuf::from) else { return true };
++        let Some(directory) = context_path.parent() else { return true };
++        let request_path = directory.join(format!("input-{id}.json"));
++        let response_path = directory.join(format!("input-{id}.result.json"));
++        if response_path.exists() { return true; }
++        let request: Option<Value> = std::fs::read(&request_path).ok().filter(|bytes| bytes.len() <= 16 * 1024 * 1024).and_then(|bytes| serde_json::from_slice(&bytes).ok());
++        let _ = std::fs::remove_file(request_path);
++        let context: Option<Value> = std::fs::read(&context_path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok());
++        let valid = request.as_ref().zip(context.as_ref()).is_some_and(|(request, context)| {
++            request["generation"] == generation && request["revision"] == context["revision"] &&
++            request["threadId"].as_str() == self.current_displayed_thread_id().map(|id| id.to_string()).as_deref() &&
++            context["draftFingerprint"] == self.chat_widget.runweave_draft_fingerprint() &&
++            request["text"].is_string() && request["submit"].is_boolean() &&
++            request["segments"].as_array().is_some_and(|parts| parts.iter().all(Value::is_string)) &&
++            request["expiresAt"].as_u64().is_some_and(|expiry| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).is_ok_and(|now| now.as_millis() < u128::from(expiry))) &&
++            !self.reconnect.offline && self.overlay.is_none() && self.chat_widget.no_modal_or_popup_active() &&
++            !self.chat_widget.fork_in_progress && !self.chat_widget.is_external_writer_view()
++        });
++        if valid {
++            let request = request.as_ref().expect("validated request");
++            if request["append"] != true {
++                self.chat_widget.runweave_replace_prompt(String::new());
++            }
++            for part in request["segments"].as_array().expect("validated segments") {
++                let text = part.as_str().unwrap_or_default().replace("\r\n", "\n").replace('\r', "\n");
++                self.chat_widget.handle_paste(text);
++            }
++            if request["submit"] == true {
++                use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
++                let (code, modifiers) = match request["submitKey"].as_str() {
++                    Some("auto") if self.chat_widget.runweave_task_running() => (KeyCode::Tab, KeyModifiers::NONE),
++                    Some("Tab") => (KeyCode::Tab, KeyModifiers::NONE),
++                    Some("M-Enter") => (KeyCode::Enter, KeyModifiers::ALT),
++                    _ => (KeyCode::Enter, KeyModifiers::NONE),
++                };
++                self.handle_key_event(tui, server, KeyEvent::new(code, modifiers)).await;
++            }
++            tui.frame_requester().schedule_frame();
++        }
++        let response = json!({"requestId": id, "generation": generation, "accepted": valid});
++        let temporary = response_path.with_extension("tmp");
++        let result = (|| -> std::io::Result<()> {
++            let mut options = std::fs::OpenOptions::new();
++            options.write(true).create_new(true);
++            #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
++            let mut file = options.open(&temporary)?;
++            file.write_all(serde_json::to_string(&response)?.as_bytes())?;
++            std::fs::rename(&temporary, response_path)
++        })();
++        if result.is_err() { let _ = std::fs::remove_file(temporary); }
++        true
++    }
++}

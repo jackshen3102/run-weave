@@ -190,26 +190,22 @@ export function useTerminalWorkspaceEvents({
           const next = { ...current };
           for (const event of panelEvents) {
             const workspace = event.payload.workspace;
-            if (
-              next[event.terminalSessionId]?.activePanelId ===
-                workspace.activePanelId &&
-              (next[event.terminalSessionId]?.panels?.length ?? 0) ===
-                (workspace.panels?.length ?? 0)
-            ) {
-              continue;
-            }
             const previous = next[event.terminalSessionId];
             const samePanels = previous?.panels.length === workspace.panels.length &&
               workspace.panels.every((panel) => previous.panels.some((item) => item.panelId === panel.panelId));
             // Focus events carry no tmux geometry. Retain the last measured layout
             // only while panel membership is unchanged; structural changes refetch it.
-            next[event.terminalSessionId] = samePanels ? {
+            const updated = samePanels ? {
               ...workspace,
               panels: workspace.panels.map((panel) => ({
                 ...panel,
                 geometry: panel.geometry ?? previous.panels.find((item) => item.panelId === panel.panelId)?.geometry,
               })),
             } : workspace;
+            // Membership can stay fixed while the native displayed thread or
+            // input revision changes. Consumers must receive that metadata too.
+            if (JSON.stringify(previous) === JSON.stringify(updated)) continue;
+            next[event.terminalSessionId] = updated;
             changed = true;
           }
           return changed ? next : current;

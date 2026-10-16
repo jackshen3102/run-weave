@@ -210,6 +210,7 @@ export interface TerminalStateResponse {
 }
 
 export type AgentHookIgnoreReason =
+  | "codex_context_mismatch"
   | "panel_identity_mismatch"
   | "operation_identity_mismatch"
   | "agent_identity_mismatch"

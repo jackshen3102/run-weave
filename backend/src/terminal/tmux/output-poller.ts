@@ -30,6 +30,7 @@ export class TmuxOutputPoller {
     ) => Promise<void>,
     private readonly invalidatePaneCursor: (watched: WatchedTmuxPane) => void,
     private readonly isDisposed: () => boolean,
+    private readonly onPaneObservation?: (sessionId: string, paneId: string) => Promise<void>,
   ) {}
 
   async pollPane(watched: WatchedTmuxPane): Promise<boolean> {
@@ -55,6 +56,8 @@ export class TmuxOutputPoller {
     }
 
     try {
+      await this.onPaneObservation?.(terminalSessionId, watched.target.paneId);
+      if (!isCurrent() || this.isDisposed()) return false;
       const fileStat = await stat(watched.filePath);
       if (!isCurrent()) return false;
       if (fileStat.size < watched.offset) {

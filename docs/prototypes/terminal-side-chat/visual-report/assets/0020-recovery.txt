@@ -1,0 +1,17 @@
+浏览器页面重连
+  原 Codex 进程仍在 → 同一 PID / generation / 旁聊 ID
+  已有旁聊保留；不自动重放问题。
+
+Codex 进程或终端运行时重启
+  新 PID / generation → 配置的受管 CLI resume 主 thread
+  只恢复主会话；临时旁聊列表为空。
+
+普通 Fork
+  主任务运行中 → 原有菜单禁用
+  主任务空闲时 → 新终端 + 新持久 thread
+  新终端运行时丢失 → 恢复同一 fork thread
+
+真正的主身份变更
+  /new → 新主身份与持久目标
+  /resume → 更新为所选主身份
+  不会锁死首次 thread。
