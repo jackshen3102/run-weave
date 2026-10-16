@@ -82,6 +82,10 @@ export class PiSessionReader {
         current = { id: entry.id!, messages: [] };
         turns.push(current);
       }
+      if (!current && result.truncated) {
+        current = { id: entry.id!, messages: [] };
+        turns.push(current);
+      }
       if (!current) continue;
       current.messages.push({ id: entry.id!, role: message.role as "user" | "assistant", text: message.text,
         ...(typeof entry.timestamp === "string" ? { createdAt: entry.timestamp } : {}) });

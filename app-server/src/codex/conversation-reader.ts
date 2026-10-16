@@ -15,7 +15,7 @@ export class CodexConversationReader {
     let current: ConversationTurn | undefined;
     const turns: ConversationTurn[] = [];
     const seen = new Set<string>();
-    const result = await scanConversationSource(file, (record, offset) => {
+    const result = await scanConversationSource(file, (record, offset, truncated) => {
       const item = asRecord(record.payload);
       if (!item) return;
       if (record.type === "session_meta") {
@@ -44,6 +44,10 @@ export class CodexConversationReader {
           current = { id: turnId ? `${turnId}:${id}` : id, messages: [], ...(turnId ? { rawTurnId: turnId } : {}) };
           turns.push(current);
         }
+      }
+      if (!current && truncated) {
+        current = { id: turnId ? `${turnId}:${id}` : id, messages: [], ...(turnId ? { rawTurnId: turnId } : {}) };
+        turns.push(current);
       }
       if (!current) return;
       current.messages.push({ id, role: item.role, text,
