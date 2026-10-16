@@ -120,6 +120,7 @@ export async function synchronizeWatch(
     read: (threadId: string) => Promise<ConversationContent>;
   },
 ) {
+  if (!operations.current()) return [];
   if (!sameTarget(operations.watch().target, target))
     await operations.update((watch) => {
       if (operations.current())

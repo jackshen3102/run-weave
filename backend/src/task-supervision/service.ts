@@ -3,6 +3,7 @@ import { discoverSupervision } from "./discovery";
 import { SupervisionGoalEditor } from "./goal-editor";
 import type { SupervisionConversationResponse } from "@runweave/shared/terminal/conversation";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { setting, settingText } from "@runweave/config-node";
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
@@ -325,8 +326,13 @@ export class TaskSupervisionService {
     // ordinary user message (above) advances the round; duplicate Hook/native events do not.
     if (["sessionstart", "userpromptsubmit"].includes(observed.raw)) {
       if (!observed.native) await this.transaction(() => { delete this.find(watch.watchId).pendingReply; });
+      const enabledAt = watch.enabledAt;
+      // Input hooks can arrive before the native user message is flushed to disk.
+      await delay(500);
       await synchronizeWatch(target, {
-        watch: () => this.find(watch.watchId), current: () => this.current(target),
+        watch: () => this.find(watch.watchId),
+        current: () => !this.closed && this.find(watch.watchId).enabled
+          && this.find(watch.watchId).enabledAt === enabledAt && this.current(target),
         update: (change) => this.transaction(() => change(this.find(watch.watchId))),
         cancel: () => this.jobs.cancel(watch.watchId), read: (thread) => this.readContext(watch.watchId, thread),
       });
