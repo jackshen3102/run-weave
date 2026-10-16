@@ -20,6 +20,51 @@ export interface SupervisionPlan {
   /** Absent in older journals. Snapshot content is historical; missing has no readable content. */
   availability?: "current" | "snapshot" | "missing";
 }
+export interface SupervisionGoalContent {
+  objective: string;
+  completionCriteria: string;
+  constraints: string;
+}
+export interface SupervisionGoalPlan {
+  path: string;
+  sourceMessageId: string;
+  authorizationMessageId: string;
+}
+export interface SupervisionGoal extends SupervisionGoalContent {
+  threadId: string;
+  revisionId: string;
+  version: number;
+  origin: "conversation" | "manual";
+  createdAt: string;
+  sourceMessageIds: string[];
+  plans: SupervisionGoalPlan[];
+  /** Explicit user correction from the monitor, not a native conversation message. */
+  manualInstruction?: ConversationMessage;
+}
+export interface SupervisionGoalDetail {
+  goal: SupervisionGoal;
+  messages: ConversationMessage[];
+  plans: SupervisionPlan[];
+  reason: string;
+}
+export interface SupervisionGoalPage {
+  goals: Array<Pick<SupervisionGoalDetail, "goal" | "reason">>;
+  nextCursor: string | null;
+}
+export interface SupervisionGoalPreview extends SupervisionGoalDetail {
+  previewId: string;
+  expectedRevision: number;
+  target: SupervisionTarget;
+  expiresAt: string;
+  changed: boolean;
+  needsClarification: boolean;
+  requiresAdoption: boolean;
+}
+export interface PreviewSupervisionGoalRequest {
+  expectedRevision: number;
+  /** Omitted to regenerate from the conversation. */
+  content?: SupervisionGoalContent;
+}
 export interface SupervisionInput {
   task: ConversationMessage;
   goal: string;
@@ -27,6 +72,7 @@ export interface SupervisionInput {
   userUpdates: ConversationMessage[];
   recentExchanges: ConversationMessage[];
   currentReply: ConversationMessage & { rawTurnId: string };
+  goalDefinition?: SupervisionGoal;
 }
 export interface SupervisionDecision {
   decisionId: string;
@@ -34,6 +80,7 @@ export interface SupervisionDecision {
   rawTurnId: string;
   replyDigest: string;
   contextRevision: number;
+  goalVersion?: number;
   model: string;
   codexVersion?: string;
   durationMs: number;
@@ -113,6 +160,10 @@ export interface TaskWatch {
     summary: null; createdAt: string; turnId?: string | null;
   };
   goalOverride?: string;
+  goalDefinition?: SupervisionGoal;
+  goalState?: "checking" | "ready" | "needs_review";
+  goalReason?: string;
+  goalCheckedMessageId?: string;
   observedContinuationCount?: number;
 }
 export function currentSupervisionDecisions(watch: TaskWatch) {

@@ -53,6 +53,7 @@ export function SupervisionHistory({ watchId }: { watchId: string }) {
           className="space-y-2 rounded border border-slate-800 p-3"
         >
           <p>{decision.goalPreview}</p>
+          <p>{decision.goalVersion ? `目标 v${decision.goalVersion}` : "旧版目标"}</p>
           <p>
             {new Date(decision.createdAt).toLocaleString()} ·{" "}
             {decision.outcome === "completed"

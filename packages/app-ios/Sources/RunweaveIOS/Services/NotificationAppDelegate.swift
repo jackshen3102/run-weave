@@ -12,6 +12,13 @@ public final class NotificationAppDelegate: NSObject, UIApplicationDelegate,
     return true
   }
   public func application(
+    _ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?
+  ) -> UIInterfaceOrientationMask {
+    // Match the existing Info.plist policy outside the remote presentation.
+    RemoteDesktopOrientationController.visibleController(in: window?.rootViewController)?
+      .supportedInterfaceOrientations ?? .allButUpsideDown
+  }
+  public func application(
     _ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
   ) {
     Task { @MainActor in NotificationCoordinator.shared.registered(deviceToken) }

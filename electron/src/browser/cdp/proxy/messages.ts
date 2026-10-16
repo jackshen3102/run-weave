@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { handleCookieCommand } from "./cookies.js";
 import {
   buildCdpError,
   buildCdpResult,
@@ -43,6 +44,11 @@ export async function handleMessage(
   sessionId: string | undefined,
 ): Promise<void> {
   const { ws, sessionManager } = conn;
+
+  if (method === "Storage.getCookies" || method === "Storage.setCookies") {
+    await handleCookieCommand(conn, id, method, params, sessionId);
+    return;
+  }
 
   if (sessionId) {
     if (conn.browserSessionIds.has(sessionId)) {
@@ -382,14 +388,6 @@ export async function handleMessage(
         sendJson(ws, buildCdpResult(id, { success }));
         return;
       }
-
-      case "Storage.getCookies":
-        sendJson(ws, buildCdpResult(id, { cookies: [] }));
-        return;
-
-      case "Storage.setCookies":
-        sendJson(ws, buildCdpResult(id, {}));
-        return;
 
       default:
         if (cls === "session") {

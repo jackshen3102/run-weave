@@ -47,7 +47,7 @@ export function SupervisionDecisionDetails({
       <summary className="cursor-pointer text-sky-400">判定详情</summary>
       <p className="break-all">
         {decision.createdAt} · {decision.model} · {decision.codexVersion} ·{" "}
-        {decision.durationMs}ms · 目标版本 {decision.contextRevision}
+        {decision.durationMs}ms · {decision.goalVersion ? `目标 v${decision.goalVersion}` : "旧版目标"} · 上下文 {decision.contextRevision}
         <br />
         decision {decision.decisionId} · 投递 {decision.delivery}
       </p>
@@ -55,6 +55,7 @@ export function SupervisionDecisionDetails({
       {!detail && !error && <p>正在读取判断依据…</p>}
       {detail && (
         <>
+          {detail.input.goalDefinition && <section className="space-y-2 rounded border border-slate-800 p-3"><h3>当时采用的目标 · v{detail.input.goalDefinition.version}</h3><p className="whitespace-pre-wrap break-words text-slate-200">{detail.input.goalDefinition.objective}</p><h4>完成条件</h4><p className="whitespace-pre-wrap break-words">{detail.input.goalDefinition.completionCriteria}</p>{detail.input.goalDefinition.constraints && <><h4>范围与约束</h4><p className="whitespace-pre-wrap break-words">{detail.input.goalDefinition.constraints}</p></>}</section>}
           <h3>本轮完整最终回复</h3>
           <pre className="whitespace-pre-wrap break-words rounded border border-slate-800 bg-slate-900 p-3 text-slate-200">
             {detail.input.currentReply.text}

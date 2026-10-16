@@ -10,18 +10,28 @@ public struct RemoteDesktopView: View {
     @State private var text = ""
     @State private var modifiers: RemoteModifiers = []
     @State private var showsMenu = false
+    @State private var preservesKeyboardState = false
     @AppStorage("remoteDesktop.inputMode") private var preferredInputMode = RemoteInputMode.trackpad.rawValue
     @FocusState private var textEntryFocused: Bool
     private let hostName: String
     private let returnLabel: String
+    private let orientationActionTitle: String
+    private let isChangingOrientation: Bool
+    private let onRotate: (() -> Void)?
     private let onClose: () -> Void
     private let maskTextEntry: (AnyView) -> AnyView
 
     public init(session: RemoteDesktopSession, hostName: String, onClose: @escaping () -> Void,
                 returnLabel: String = "返回",
+                orientationActionTitle: String = "切换横屏",
+                isChangingOrientation: Bool = false,
+                onRotate: (() -> Void)? = nil,
                 maskTextEntry: @escaping (AnyView) -> AnyView = { $0 }) {
         self.session = session; self.hostName = hostName; self.onClose = onClose
         self.returnLabel = returnLabel
+        self.orientationActionTitle = orientationActionTitle
+        self.isChangingOrientation = isChangingOrientation
+        self.onRotate = onRotate
         self.maskTextEntry = maskTextEntry
     }
 
@@ -52,7 +62,9 @@ public struct RemoteDesktopView: View {
         .onChange(of: showsKeyboard) { value in
             session.setTextEntryActive(value)
             if !value {
-                textEntryFocused = false; showsShortcuts = false; modifiers = []; keyboardTop = nil
+                textEntryFocused = false; keyboardTop = nil
+                if !preservesKeyboardState { showsShortcuts = false; modifiers = [] }
+                preservesKeyboardState = false
             }
         }
         .onDisappear {
@@ -65,7 +77,7 @@ public struct RemoteDesktopView: View {
     private var desktop: some View {
         ZStack(alignment: .top) {
             RemoteNativeSurface(session: session, keyboardTop: showsKeyboard ? keyboardTop : nil,
-                                suspendsInput: showsMenu)
+                                suspendsInput: showsMenu || isChangingOrientation)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
                 .accessibilityLabel("Mac 远程桌面")
@@ -73,7 +85,10 @@ public struct RemoteDesktopView: View {
                 .accessibilityHidden(showsMenu)
             if !showsKeyboard {
                 RemoteSessionControls(session: session, hostName: hostName, returnLabel: returnLabel, showsMenu: $showsMenu,
-                                      openKeyboard: { showsMenu = false; showsKeyboard = true }, onClose: onClose)
+                                      openKeyboard: { showsMenu = false; showsKeyboard = true }, onClose: onClose,
+                                      orientationActionTitle: orientationActionTitle,
+                                      isChangingOrientation: isChangingOrientation,
+                                      onRotate: onRotate == nil ? nil : rotate)
             }
             VStack(spacing: 8) {
                 if RemoteVideoRendererMode.legacyProbeEnabled {
@@ -103,6 +118,14 @@ public struct RemoteDesktopView: View {
                 }
                 .accessibilityLabel(returnLabel)
                 .accessibilityIdentifier("remote-desktop-return")
+                if onRotate != nil {
+                    Button(action: rotate) {
+                        Image(systemName: "rotate.right").frame(minWidth: 44, minHeight: 44)
+                    }
+                    .disabled(isChangingOrientation)
+                    .accessibilityLabel(orientationActionTitle)
+                    .accessibilityIdentifier("remote-desktop-orientation-toggle")
+                }
                 Button {
                     showsShortcuts.toggle()
                     if !showsShortcuts { modifiers = [] }
@@ -175,6 +198,17 @@ public struct RemoteDesktopView: View {
         guard !text.isEmpty, session.state == .controllable else { return }
         session.sendText(text)
         text = ""
+    }
+
+    private func rotate() {
+        guard !isChangingOrientation, let onRotate else { return }
+        session.releaseAllInputs(reason: "screen orientation changing")
+        showsMenu = false
+        preservesKeyboardState = showsKeyboard
+        showsKeyboard = false
+        textEntryFocused = false
+        keyboardTop = nil
+        onRotate()
     }
 }
 

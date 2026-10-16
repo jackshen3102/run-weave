@@ -1,6 +1,8 @@
+import { processSupervisionReply } from "./reply-processing";
 import { discoverSupervision } from "./discovery";
+import { SupervisionGoalEditor } from "./goal-editor";
+import type { SupervisionConversationResponse } from "@runweave/shared/terminal/conversation";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { setting, settingText } from "@runweave/config-node";
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
@@ -12,6 +14,7 @@ import type {
   SupervisionHookResponse,
   SupervisionTarget,
   TaskWatch,
+  PreviewSupervisionGoalRequest,
 } from "@runweave/shared/task-supervision";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import type { TerminalEventService } from "../terminal/state/terminal-event-service";
@@ -21,24 +24,18 @@ import { updateWaitingState } from "./waiting";
 import {
   sameTarget,
   synchronizeTarget,
-  synchronizeContext,
   synchronizeWatch,
 } from "./synchronization";
-import { AppServerConversationError } from "../app-server/client";
-import { readFinalReply, alreadyProcessedReply } from "./reply";
 import {
-  hasPendingTerminalInput,
   terminalInputAdmission,
 } from "../terminal/runtime/input-admission";
 import { resolveSupervisionTarget } from "./target";
 import { SupervisionError } from "./errors";
 export { SupervisionError } from "./errors";
 import {
-  buildSupervisionInput,
-  digest,
-  refreshReferencedPlans,
   taskCandidates,
   readWatchContext,
+  messagesFrom,
 } from "./context";
 import { TaskSupervisionClassifier } from "./classifier";
 import {
@@ -46,8 +43,7 @@ import {
   recordArchivedDeliveryFailure,
   readPendingDeliveries,
 } from "./delivery";
-import { applyVerdict } from "./verdict";
-import { retryContinuation, sendSupervisionOffer } from "./continuation";
+import { retryContinuation } from "./continuation";
 import { SupervisionJobs } from "./jobs";
 import { startWatch, changeWatch } from "./controls";
 import {
@@ -55,7 +51,6 @@ import {
   logWatchChanges,
   replyFields,
   supervisionLogger,
-  watchFields,
 } from "./diagnostics";
 import {
   TaskSupervisionStore,
@@ -92,6 +87,7 @@ export class TaskSupervisionService {
   private maintenance: Promise<void> | null = null;
   private readonly timer: ReturnType<typeof setInterval>;
   private readonly classifier: TaskSupervisionClassifier;
+  private readonly goalEditor: SupervisionGoalEditor;
 
   constructor(
     directory: string,
@@ -103,6 +99,19 @@ export class TaskSupervisionService {
     this.classifier =
       classifier ??
       new TaskSupervisionClassifier(path.join(directory, "classification"));
+    this.goalEditor = new SupervisionGoalEditor({
+      get: (id) => this.get(id), find: (id) => this.find(id),
+      read: (id, thread) => this.readContext(id, thread), current: (target) => this.current(target),
+      root: (target) => this.resolve(target.terminalSessionId, target.panelId).root,
+      inputRevision: (target) => terminalInputAdmission(this.manager.getSession(target.terminalSessionId)!).revision,
+      generate: (watch, evidence, signal) => this.classifier.generateGoal(watch, evidence, { ...this.modelOptions(), signal }),
+      transaction: (operation) => this.transaction(operation),
+      archive: (id, goal) => { this.additions.push({ watchId: id, goal }); },
+      archived: (id, revisionId) => this.store.goalDetail(id, revisionId),
+      applied: (id, previewId) => this.store.goalApplied(id, previewId),
+      recordApplication: (id, goalApplicationId) => { this.additions.push({ watchId: id, goalApplicationId }); },
+      cancel: (id) => this.jobs.cancel(id), replay: (watch, source) => this.replayForGoal(watch, source),
+    });
     this.ready = this.store.load().then((saved) => {
       this.journal = saved;
       logInitialization(saved.watches);
@@ -218,11 +227,32 @@ export class TaskSupervisionService {
     return decision;
   }
 
+  private modelOptions() {
+    return { model: settingText("backend.taskSupervision.model"), timeoutMs: Number(setting("backend.taskSupervision.classificationTimeoutMs", 90_000)) };
+  }
+  previewGoal(id: string, request: PreviewSupervisionGoalRequest, signal?: AbortSignal) {
+    return this.goalEditor.preview(id, request, signal);
+  }
+  applyGoal(id: string, previewId: string) { return this.goalEditor.apply(id, previewId); }
+  async goals(id: string, cursor?: string) { await this.get(id); return this.store.goals(id, cursor); }
+  async goalDetail(id: string, revisionId: string) {
+    await this.get(id);
+    const detail = this.store.goalDetail(id, revisionId);
+    if (!detail) throw new SupervisionError("目标来源不存在。", 404);
+    return detail;
+  }
+  private replayForGoal(watch: TaskWatch, source: SupervisionConversationResponse) {
+    const messages = messagesFrom(source);
+    const reply = messages.filter((m) => m.role === "assistant" && m.phase !== "commentary").at(-1);
+    const user = taskCandidates(source).at(-1);
+    if (!watch.enabled || watch.pauseReason === "interrupted" || !reply || !user || messages.indexOf(reply) < messages.indexOf(user)) return;
+    this.enqueueReply({ kind: "reply", source: "terminal", eventId: `goal:${watch.goalDefinition!.revisionId}`, ...watch.target, summary: null, turnId: reply.rawTurnId, createdAt: new Date().toISOString() });
+  }
   private watchControls() {
     return {
       find: (id: string) => this.find(id),
       resolve: (terminalSessionId: string) => this.resolve(terminalSessionId),
-      cancel: (id: string) => this.jobs.cancel(id),
+      cancel: (id: string) => { this.jobs.cancel(id); this.goalEditor.cancel(id); },
       receipt: (id: string) => this.store.receipt(id),
     };
   }
@@ -381,181 +411,15 @@ export class TaskSupervisionService {
     );
     await this.jobs.runUntilCanceled(watch.watchId, { controller, promise });
   }
-  private async processReply(
-    id: string,
-    target: SupervisionTarget,
-    event: ReplyEvent,
-    controller: AbortController,
-    inputRevision: object,
-  ): Promise<SupervisionHookResponse> {
-    let revision: number | undefined;
-    const startedAt = Date.now();
-    let stage = "read_final_reply";
-    const trace = {
-      ...replyFields(event), ...target, watchId: id, attemptId: randomUUID(),
-    };
-    const skip = (reason: string) =>
-      supervisionLogger.info("task-supervision.reply.skipped", { ...trace, reason });
-    supervisionLogger.info("task-supervision.reply.started", trace);
-    try {
-      if (event.error) throw new Error(`${event.error.code}: ${event.error.message}`);
-      const { source, messages, native } = await readFinalReply(
-        () => this.readContext(id, target.threadId),
-        event,
-        controller.signal,
-      );
-      const finalKey = `${target.threadId}:${native.id}`;
-      stage = "prepare_context";
-      const snapshot = await this.transaction(async () => {
-        const w = this.find(id);
-        if (!w.enabled || controller.signal.aborted || !this.current(target)) {
-          skip("target_changed_or_canceled");
-          return null;
-        }
-        if (!sameTarget(w.target, target)) {
-          skip("target_changed");
-          return null;
-        }
-        synchronizeContext(w, taskCandidates(source));
-        w.sourceVersion = source.sourceVersion;
-        const latestUser = taskCandidates(source).at(-1);
-        if (
-          w.pauseReason === "interrupted" ||
-          (latestUser &&
-            messages.indexOf(latestUser) > messages.indexOf(native!))
-        ) {
-          delete w.pendingReply;
-          skip("interrupted_or_new_user_input");
-          return null;
-        }
-        if (alreadyProcessedReply(w, target.threadId, native) || this.store.processed(id, target.threadId, native.id, native.rawTurnId ?? native.id)) {
-          delete w.pendingReply;
-          skip("duplicate_reply");
-          return null;
-        }
-        if (w.taskStartMessageId.startsWith("pending:"))
-          throw new Error("监控已开启，但当前会话还没有可读的用户任务。");
-        reconcileDelivery(w, messages);
-        if (w.pauseReason === "delivery_unknown")
-          throw new Error("上次续接尚未确认接收，请检查原终端。");
-        w.revision++;
-        w.status = "classifying";
-        delete w.error;
-        delete w.waitingFor;
-        w.updatedAt = new Date().toISOString();
-        return w;
-      });
-      if (!snapshot) return ALLOW;
-      revision = snapshot.revision;
-      stage = "build_input";
-      await refreshReferencedPlans(
-        this.resolve(target.terminalSessionId, target.panelId).root,
-        snapshot,
-        messages,
-      );
-      const reply = {
-        ...native,
-        rawTurnId: native.rawTurnId ?? native.id,
-        phase: "final" as const,
-      };
-      const input = buildSupervisionInput(snapshot, source, reply);
-      stage = "classify";
-      supervisionLogger.info("task-supervision.classification.started", {
-        ...trace, ...watchFields(snapshot), replyMessageId: reply.id,
-        inputBytes: Buffer.byteLength(JSON.stringify(input)),
-        configuredModel: settingText("backend.taskSupervision.model") ?? null,
-        timeoutMs: Number(setting("backend.taskSupervision.classificationTimeoutMs", 90_000)),
-      });
-      const result = await this.classifier.run(input, {
-        model: settingText("backend.taskSupervision.model"),
-        timeoutMs: Number(
-          setting("backend.taskSupervision.classificationTimeoutMs", 90_000),
-        ),
-        signal: controller.signal,
-      });
-      supervisionLogger.info("task-supervision.classification.finished", {
-        ...trace, replyMessageId: reply.id, outcome: result.outcome,
-        scores: result.scores, model: result.model, durationMs: result.durationMs,
-      });
-      stage = "commit_decision";
-      const offer = await this.transaction(() => {
-        const w = this.find(id);
-        if (
-          !w.enabled ||
-          w.revision !== revision ||
-          controller.signal.aborted ||
-          !this.current(target) ||
-          terminalInputAdmission(this.manager.getSession(target.terminalSessionId)!).revision !== inputRevision
-        ) {
-          if (w.pendingReply?.eventId === event.eventId) delete w.pendingReply;
-          if (w.revision === revision && w.status === "classifying") w.status = "watching";
-          skip("classification_superseded");
-          return ALLOW;
-        }
-        w.plans = snapshot.plans;
-        delete w.pendingReply;
-        w.evidenceMessageIds = [...new Set([input.task.id, ...result.sourceMessageIds, ...result.guidance.authorizationMessageIds])];
-        if (result.outcome === "completed") w.completedReplyIds = [...new Set([...(w.completedReplyIds ?? []), reply.id])];
-        if (new Set([...(w.evidenceMessageIds ?? []), ...(w.completedReplyIds ?? [])]).size > 63)
-          throw new Error("当前会话必要证据引用超过预算；本次未自动继续，监听保持开启。");
-        // A failed classification is not a processed reply. Commit the cursor with the decision.
-        w.lastFinalMessageId = finalKey;
-        const decision = {
-          ...result,
-          decisionId: randomUUID(),
-          threadId: target.threadId,
-          rawTurnId: reply.rawTurnId,
-          replyDigest: digest(reply.text),
-          contextRevision: w.contextRevision,
-          createdAt: new Date().toISOString(),
-          input,
-          delivery: "not_requested" as "not_requested" | "offered",
-          deliveryDeadline: Date.now() + 30_000,
-        };
-        const session = this.manager.getSession(target.terminalSessionId)!;
-        const paneId =
-          this.manager.getPanel(target.panelId)?.tmuxPaneId ?? null;
-        this.additions.push({ watchId: id, decision });
-        return applyVerdict(
-          w,
-          decision,
-          !hasPendingTerminalInput(session, paneId),
-        );
-      });
-      if (offer.action !== "request-continuation") return ALLOW;
-      stage = "deliver";
-      await sendSupervisionOffer(target, offer, inputRevision, this.continuationOperations(id), {
-        signal: controller.signal, trace,
-      });
-      return ALLOW;
-    } catch (error) {
-      if (controller.signal.aborted)
-        supervisionLogger.info("task-supervision.reply.canceled", { ...trace, stage, durationMs: Date.now() - startedAt });
-      else
-        supervisionLogger.warn("task-supervision.reply.failed", { ...trace, stage, durationMs: Date.now() - startedAt, error });
-      await this.transaction(() => {
-        const w = this.find(id);
-        if (
-          !w.enabled ||
-          controller.signal.aborted ||
-          !this.current(target) ||
-          (revision !== undefined && w.revision !== revision)
-        )
-          return;
-        if (!(error instanceof AppServerConversationError && error.code === "CONTEXT_INDEXING")) delete w.pendingReply;
-        w.status = "error";
-        w.revision++;
-        w.error = (
-          error instanceof Error ? error.message : "回复处理失败"
-        ).slice(0, 500);
-        w.updatedAt = new Date().toISOString();
-      }).catch((saveError) => supervisionLogger.error("task-supervision.error_state.failed", {
-        ...trace, error: saveError,
-      }));
-      return ALLOW;
-    } finally {
-      supervisionLogger.info("task-supervision.reply.finished", { ...trace, stage, durationMs: Date.now() - startedAt });
-    }
+  private processReply(id: string, target: SupervisionTarget, event: ReplyEvent, controller: AbortController, inputRevision: object) {
+    return processSupervisionReply({
+      readContext: (watchId, thread) => this.readContext(watchId, thread),
+      transaction: (operation) => this.transaction(operation), find: (watchId) => this.find(watchId),
+      current: (candidate) => this.current(candidate), resolve: (terminal, panel) => this.resolve(terminal, panel),
+      manager: this.manager, classifier: this.classifier, store: this.store,
+      modelOptions: () => this.modelOptions(), archive: (change) => { this.additions.push(change); },
+      continuationOperations: (watchId) => this.continuationOperations(watchId),
+    }, id, target, event, controller, inputRevision);
   }
   private async reconcile() {
     await this.ready;
@@ -591,6 +455,7 @@ export class TaskSupervisionService {
     this.unsubscribe?.();
     clearInterval(this.timer);
     this.jobs.cancelAll();
+    await this.goalEditor.dispose();
     await this.jobs.drain();
     await Promise.allSettled(this.eventQueues.values());
     await this.queue;

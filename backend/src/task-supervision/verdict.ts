@@ -44,6 +44,10 @@ export function applyVerdict(
 }
 
 export function reserveContinuation(watch: TaskWatch, decision: SupervisionDecisionSummary, canDeliver = true): SupervisionHookResponse {
+  if (!watch.goalDefinition || watch.goalState !== "ready" || decision.goalVersion !== watch.goalDefinition.version) {
+    watch.goalState = "needs_review";
+    return { action: "allow-stop" };
+  }
   if (!canDeliver) {
     watch.status = "error";
     decision.deliveryBlock = "draft_unconfirmed";

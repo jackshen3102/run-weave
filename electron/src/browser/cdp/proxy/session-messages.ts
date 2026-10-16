@@ -94,16 +94,6 @@ export async function handleBrowserSessionMessage(
     return;
   }
 
-  if (method === "Storage.getCookies") {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, { cookies: [] }));
-    return;
-  }
-
-  if (method === "Storage.setCookies") {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
   if (isBlockedCommand(method)) {
     sendJson(
       ws,

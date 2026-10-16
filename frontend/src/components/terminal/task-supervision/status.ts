@@ -13,6 +13,8 @@ export function taskSupervisionStatus(watch: TaskWatch) {
   if (watch.status === "error") return currentSupervisionDecisions(watch).at(-1)?.deliveryBlock === "draft_unconfirmed"
     ? "任务可以继续 · 自动续接未发送" : "监听异常 / 上下文待补充";
   if (watch.status === "paused") return "监控已暂停";
+  if (watch.goalState === "needs_review") return "目标待核对 · 暂不自动续接";
+  if (watch.goalState === "checking" && !watch.taskStartMessageId.startsWith("pending:")) return "正在核对任务目标";
   if (watch.status === "classifying") return "正在判断任务状态";
   if (watch.taskStartMessageId.startsWith("pending:"))
     return "等待新任务 · 终端监听已开启";
@@ -27,6 +29,7 @@ export function taskSupervisionStatus(watch: TaskWatch) {
 
 export function taskSupervisionNeedsAttention(watch: TaskWatch) {
   return (
+    watch.goalState === "needs_review" ||
     watch.waitingFor != null ||
     watch.status === "error" ||
     watch.status === "paused" ||
