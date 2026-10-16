@@ -93,11 +93,7 @@ struct TaskSupervisionSheet: View {
       .padding(14).background(watch.statusColor.opacity(0.06)).cornerRadius(13)
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(watch.statusColor.opacity(0.15)))
 
-    section("当前目标") {
-      Text(watch.goal.isEmpty ? "等待新会话的用户任务，目标将自动读取。" : watch.goalPreview)
-        .font(.subheadline).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-        .accessibilityIdentifier("task-supervision-goal")
-    }
+    SupervisionGoalCard(watch: watch, model: model)
     VStack(alignment: .leading, spacing: 9) {
       HStack {
         Text("本任务自动续接").font(.caption).foregroundColor(.secondary)
@@ -116,7 +112,8 @@ struct TaskSupervisionSheet: View {
       }
     }
     if let decision = watch.currentDecisions.last {
-      section(watch.status == "classifying" ? "上次判断（正在重新判断）" : "最新判断") {
+      section(watch.status == "classifying" || (decision.goalVersion ?? 0) < (watch.goalDefinition?.version ?? 0)
+        ? "上次判断（正在重新判断）" : "最新判断") {
         HStack {
           Text(decision.outcome.label).font(.subheadline.weight(.semibold))
           Spacer()

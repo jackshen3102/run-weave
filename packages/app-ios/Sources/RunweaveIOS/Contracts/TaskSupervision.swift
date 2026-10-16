@@ -36,6 +36,7 @@ struct SupervisionInput: Codable {
   let userUpdates: [SupervisionMessage]
   let recentExchanges: [SupervisionMessage]
   let currentReply: SupervisionMessage
+  let goalDefinition: SupervisionGoal?
 
   var snapshot: String {
     let encoder = JSONEncoder()
@@ -74,6 +75,7 @@ struct SupervisionDecision: Decodable, Identifiable {
   let rawTurnId: String
   let replyDigest: String
   let contextRevision: Int
+  let goalVersion: Int?
   let model: String
   let codexVersion: String?
   let durationMs: Int
@@ -108,6 +110,10 @@ struct TaskWatch: Decodable {
   let taskStartMessageId: String
   let task: SupervisionMessage
   let goal: String
+  let goalOverride: String?
+  let goalDefinition: SupervisionGoal?
+  let goalState: String?
+  let goalReason: String?
   let plans: [SupervisionPlan]
   let revision: Int
   let contextRevision: Int

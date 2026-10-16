@@ -40,6 +40,30 @@ struct TaskSupervisionService {
     try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watchID))/decisions/\(APIClient.pathComponent(decisionID))", decodeError: Self.failure)
   }
 
+  func previewGoal(watch: TaskWatch, content: SupervisionGoalContent?) async throws -> SupervisionGoalPreview {
+    var body: [String: Any] = ["expectedRevision": watch.revision]
+    if let content { body["content"] = content.body }
+    return try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watch.watchId))/goal-preview",
+      method: "POST", body: body, retryUnauthorized: false, requestTimeout: 120, decodeError: Self.failure)
+  }
+
+  func applyGoal(watchID: String, previewID: String) async throws -> TaskWatch {
+    try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watchID))/goal-apply",
+      method: "POST", body: ["previewId": previewID], retryUnauthorized: false, decodeError: Self.failure)
+  }
+
+  func goals(watchID: String, cursor: String?) async throws -> SupervisionGoalPage {
+    var query = URLComponents()
+    if let cursor { query.queryItems = [URLQueryItem(name: "cursor", value: cursor)] }
+    return try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watchID))/goals?\(query.percentEncodedQuery ?? "")",
+      decodeError: Self.failure)
+  }
+
+  func goal(watchID: String, revisionID: String) async throws -> SupervisionGoalDetail {
+    try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watchID))/goals/\(APIClient.pathComponent(revisionID))",
+      decodeError: Self.failure)
+  }
+
   private static func failure(_ status: Int, _ data: Data) -> Error? {
     // Preserve HTTP identity for authentication and revision-conflict handling.
     guard status != 401, status != 409, status != 404 else { return nil }

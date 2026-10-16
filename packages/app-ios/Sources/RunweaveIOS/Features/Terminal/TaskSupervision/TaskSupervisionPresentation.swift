@@ -20,6 +20,8 @@ extension TaskWatch {
     if draftUnconfirmed { return "任务可以继续 · 自动续接未发送" }
     if status == "error" { return "监听异常 / 上下文待补充" }
     if status == "paused" { return "监控已暂停" }
+    if goalState == "needs_review" { return "目标待核对 · 暂不自动续接" }
+    if goalState == "checking" && !awaitingTask { return "正在核对任务目标" }
     if status == "classifying" { return "正在判断任务状态" }
     if awaitingTask { return "等待新任务" }
     if outcome == .completed { return "本轮任务已完成" }
@@ -34,6 +36,8 @@ extension TaskWatch {
     if draftUnconfirmed { return "无法确认原终端输入框是否为空；检查草稿后可重试，尚未扣除续接额度。" }
     if status == "error" { return "监听处理遇到异常，已有判断保留，监控开关保持开启。" }
     if status == "paused" { return "本轮自动处理已暂停，终端监控开关仍保持开启。" }
+    if goalState == "needs_review" { return goalReason ?? "请核对任务目标、完成条件与范围后再自动续接。" }
+    if goalState == "checking" && !awaitingTask { return "收到新要求，将在最终回复时核对目标；核对前不自动续接。" }
     if status == "classifying" { return "已收到最终回复，正在核对任务与计划。" }
     if awaitingTask { return "终端监听已开启，收到新会话的用户任务后自动读取目标。" }
     if outcome == .completed { return "继续监听此终端，下一次任务无需重新开启。" }
@@ -41,7 +45,7 @@ extension TaskWatch {
     return "等待 Agent 的最终回复，需要继续时自动问询进展。"
   }
   var needsAttention: Bool {
-    enabled && (waitingFor != nil || pauseReason == "continuation_limit"
+    enabled && (goalState == "needs_review" || waitingFor != nil || pauseReason == "continuation_limit"
       || pauseReason == "delivery_unknown" || status == "error" || status == "paused" || outcome == .blocked)
   }
   var statusColor: Color { !enabled ? .secondary : needsAttention ? .orange : TerminalAppearance.accent }
@@ -57,6 +61,8 @@ extension TaskWatch {
     if draftUnconfirmed { return "续接未发送" }
     if status == "error" { return "监听异常" }
     if status == "paused" { return "监控已暂停" }
+    if goalState == "needs_review" { return "目标待核对" }
+    if goalState == "checking" && !awaitingTask { return "核对目标中" }
     if status == "classifying" { return "判断中" }
     if awaitingTask { return "等待新任务" }
     if outcome == .completed { return "本轮已完成" }

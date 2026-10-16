@@ -128,4 +128,52 @@ final class TaskSupervisionModel: ObservableObject {
     loading = false; writing = false
     // Keep this terminal's last snapshot for offline display. Closing never sends pause.
   }
+
+  func previewGoal(base: TaskWatch, content: SupervisionGoalContent?) async throws -> SupervisionGoalPreview {
+    guard canRead, !writing, let session, watch?.watchId == base.watchId,
+      watch?.target == base.target else { throw CancellationError() }
+    let result = try await session.withConnection(reportFailure: false) {
+      try await TaskSupervisionService(api: $0).previewGoal(watch: base, content: content)
+    }
+    guard canRead, !Task.isCancelled, watch?.watchId == base.watchId,
+      watch?.target == base.target, result.target == base.target else { throw CancellationError() }
+    return result
+  }
+
+  func applyGoal(watchID: String, preview: SupervisionGoalPreview) async throws {
+    guard canRead, !writing, let session, watch?.watchId == watchID,
+      watch?.target == preview.target, watch?.revision == preview.expectedRevision,
+      preview.expiration > Date(), preview.requiresAdoption, !preview.needsClarification else {
+      throw SupervisionFailure(message: "任务状态或预览已变化，请重新核对。")
+    }
+    sequence += 1; loading = false
+    let request = sequence
+    writing = true
+    defer { if sequence == request { writing = false } }
+    let updated = try await session.withConnection(reportFailure: false) {
+      try await TaskSupervisionService(api: $0).applyGoal(watchID: watchID, previewID: preview.previewId)
+    }
+    guard current, sequence == request, !Task.isCancelled, updated.watchId == watchID,
+      updated.target == preview.target else { throw CancellationError() }
+    discovery?.watch = updated
+  }
+
+  func goals(watchID: String, cursor: String?) async throws -> SupervisionGoalPage {
+    guard canRead, let session, watch?.watchId == watchID else { throw CancellationError() }
+    let result = try await session.withConnection(reportFailure: false) {
+      try await TaskSupervisionService(api: $0).goals(watchID: watchID, cursor: cursor)
+    }
+    guard canRead, !Task.isCancelled, watch?.watchId == watchID else { throw CancellationError() }
+    return result
+  }
+
+  func goalDetail(watchID: String, revisionID: String) async throws -> SupervisionGoalDetail {
+    guard canRead, let session, watch?.watchId == watchID else { throw CancellationError() }
+    let result = try await session.withConnection(reportFailure: false) {
+      try await TaskSupervisionService(api: $0).goal(watchID: watchID, revisionID: revisionID)
+    }
+    guard canRead, !Task.isCancelled, watch?.watchId == watchID,
+      result.goal.revisionId == revisionID else { throw CancellationError() }
+    return result
+  }
 }
