@@ -46,5 +46,8 @@ function buildArgs(request: EvolutionProviderRequest): string[] {
     "--output-schema",
     request.outputSchemaPath,
     ...(request.model ? ["--model", request.model] : []),
+    ...(request.effort
+      ? ["--config", `model_reasoning_effort=${JSON.stringify(request.effort)}`]
+      : []),
   ];
 }

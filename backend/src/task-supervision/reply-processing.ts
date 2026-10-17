@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { configuration, setting, settingText } from "@runweave/config-node";
+import { configuration } from "@runweave/config-node";
 import type {
   SupervisionHookResponse,
   SupervisionTarget,
@@ -42,7 +42,7 @@ interface ReplyOperations {
   manager: TerminalSessionManager;
   classifier: TaskSupervisionClassifier;
   store: Pick<TaskSupervisionStore, "processed" | "goalDetail" | "summary">;
-  modelOptions: () => { model?: string; timeoutMs: number };
+  modelOptions: () => { model?: string; effort?: string; timeoutMs: number };
   archive: (change: ArchiveChange) => void;
   continuationOperations: (
     id: string,
@@ -140,6 +140,8 @@ export async function processSupervisionReply(
     });
     if (!snapshot) return ALLOW;
     revision = snapshot.revision;
+    const configurationGeneration = configuration().domainGeneration("backend.taskSupervision");
+    const modelOptions = operations.modelOptions();
     if (snapshot.goalDefinition)
       snapshot.plans =
         operations.store.goalDetail(id, snapshot.goalDefinition.revisionId)
@@ -171,12 +173,13 @@ export async function processSupervisionReply(
       const resolved = await operations.classifier.generateGoal(
         snapshot,
         evidence,
-        { ...operations.modelOptions(), signal: controller.signal },
+        { ...modelOptions, signal: controller.signal },
       );
       snapshot = await operations.transaction(() => {
         const w = operations.find(id);
         if (
           controller.signal.aborted ||
+          configuration().domainGeneration("backend.taskSupervision") !== configurationGeneration ||
           !operations.current(target) ||
           w.revision !== revision ||
           terminalInputAdmission(
@@ -227,7 +230,6 @@ export async function processSupervisionReply(
       rawTurnId: native.rawTurnId ?? native.id,
       phase: "final" as const,
     };
-    const configurationGeneration = configuration().domainGeneration("backend.taskSupervision");
     const previous = previousContinuation(snapshot,
       snapshot.lastObservedContinuationId ? operations.store.summary(id, snapshot.lastObservedContinuationId) : undefined);
     const input = buildSupervisionInput(snapshot, source, reply, previous);
@@ -237,16 +239,12 @@ export async function processSupervisionReply(
       ...watchFields(snapshot),
       replyMessageId: reply.id,
       inputBytes: Buffer.byteLength(JSON.stringify(input)),
-      configuredModel: settingText("backend.taskSupervision.model") ?? null,
-      timeoutMs: Number(
-        setting("backend.taskSupervision.classificationTimeoutMs", 90_000),
-      ),
+      configuredModel: modelOptions.model ?? null,
+      configuredEffort: modelOptions.effort ?? null,
+      timeoutMs: modelOptions.timeoutMs,
     });
     const result = await operations.classifier.run(input, {
-      model: settingText("backend.taskSupervision.model"),
-      timeoutMs: Number(
-        setting("backend.taskSupervision.classificationTimeoutMs", 90_000),
-      ),
+      ...modelOptions,
       signal: controller.signal,
     });
     supervisionLogger.info("task-supervision.classification.finished", {

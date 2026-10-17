@@ -142,6 +142,11 @@ Backend 结构化日志中的 `task-supervision.*` 事件记录回复接收、�
 - 原生 iOS：[TaskSupervisionSheet.swift](../../packages/app-ios/Sources/RunweaveIOS/Features/Terminal/TaskSupervision/TaskSupervisionSheet.swift)，终端菜单与已开启状态条进入，详情内容复用同一 API；生命周期见 [iOS 架构](../../packages/app-ios/docs/architecture.md#终端长任务监控)。
 - Web / Electron：[status-strip.tsx](../../frontend/src/components/terminal/task-supervision/status-strip.tsx) 在已开启终端的顶部显示状态与续接额度，点击打开 [panel.tsx](../../frontend/src/components/terminal/task-supervision/panel.tsx)。Codex 会话还显示 `thread/read` 的 `thread.name`，不使用用户输入、`preview` 或监控目标代替标题；无标题或读取失败时只显示状态。标题随发现查询刷新并核对当前 panel / thread / 执行器身份，不持久化到监听记录；长标题截断，悬停可查看全文。状态条与详情共享按连接和终端隔离的查询缓存；前台每 5 秒同步，关闭详情仍同步，关闭监控后隐藏状态条。
 
-`backend.taskSupervision.model` 和 `classificationTimeoutMs` 配置分类模型及时间预算。历史 `backend.taskSupervision.enabled` 字段不再作为开启条件；实际开关由终端监听记录保存。旧 `/internal/task-supervision` 请求兼容返回 allow-stop，不再承担分类或续接，避免重复处理。
+`backend.taskSupervision.model` 默认 `gpt-6-astra`，`backend.taskSupervision.effort` 默认 `high`；
+目标整理和最终判断使用同一组模型与推理强度，分别显式传入 Codex 的 `--model` 和
+`--config model_reasoning_effort`，不依赖终端当前选择或用户 CLI 配置。模型和强度在“当前连接
+电脑的配置 → 长任务监控”中编辑，也可通过 `rw config set` 管理；保存后 reload 生效，
+留空或 null 恢复上述默认值，已保存的模型选择保留。配置代次变化使在途目标整理或判断结果失效，
+后续判断使用新值。`classificationTimeoutMs` 继续配置时间预算。历史 `backend.taskSupervision.enabled` 字段不再作为开启条件；实际开关由终端监听记录保存。旧 `/internal/task-supervision` 请求兼容返回 allow-stop，不再承担分类或续接，避免重复处理。
 
 受现有认证保护的 `/api/task-supervision` 提供终端发现、开启、查询和 pause / resume / update-context。发现时返回当前终端的开关和当前可见会话身份；没有 Agent 时仍返回已有监听状态，允许关闭。开启不要求手工选择任务起点或填目标，从原会话自动取得用户任务；最终回复触发必要的目标核对与分类。

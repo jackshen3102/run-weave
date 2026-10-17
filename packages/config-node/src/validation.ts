@@ -73,6 +73,7 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
       : field.type === "number" ? typeof entry === "number" && Number.isFinite(entry)
       : typeof entry === field.type;
     if (!valid) { issue(key, "CONFIG_FIELD_TYPE_INVALID"); continue; }
+    if (key === "backend.taskSupervision.model" && typeof entry === "string" && !entry.trim()) issue(key, "CONFIG_FIELD_VALUE_INVALID");
     if (CONFIGURATION_ENUMS[key] && !CONFIGURATION_ENUMS[key]!.includes(String(entry))) issue(key, "CONFIG_FIELD_ENUM_INVALID");
     if (configurationServiceOrigin(key) && typeof entry === "string") {
       try { const url = new URL(entry); if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error(); }
