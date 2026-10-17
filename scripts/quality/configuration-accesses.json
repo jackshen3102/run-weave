@@ -1170,6 +1170,14 @@
   {
     "file": "backend/src/terminal/runtime/env.ts",
     "kind": "environment",
+    "expression": "process.env[key]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Backend 启动时删除继承的终端、tmux 和受管 Codex 身份，防止服务探测覆盖调用方上下文；不读取持久业务配置。"
+  },
+  {
+    "file": "backend/src/terminal/runtime/env.ts",
+    "kind": "environment",
     "expression": "process.env.CLICOLOR",
     "count": 2,
     "category": "system",
