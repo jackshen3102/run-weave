@@ -9,7 +9,7 @@ import type { SuijiRecord } from "@runweave/shared/suiji";
 import { Button } from "../../components/ui/button";
 import { SuijiPanel } from "./panel";
 import type { SuijiClient } from "../../services/suiji";
-import { RecordTags } from "./tags";
+import { RecordTags, TagEditor } from "./tags";
 
 export const statusText = (record: Pick<SuijiRecord, "kind" | "taskStatus">) =>
   record.kind === "note"
@@ -22,6 +22,9 @@ export function SuijiRecordDetail({
   onOpenLink,
   client,
   onTag,
+  availableTags,
+  onTagsChange,
+  message,
   onClose,
   onEdit,
   onStatus,
@@ -38,6 +41,9 @@ export function SuijiRecordDetail({
   onOpenLink?: (url: string) => void;
   client: SuijiClient;
   onTag: (tag: string) => void;
+  availableTags: string[];
+  onTagsChange: (tags: string[]) => void;
+  message: string;
   onClose: () => void;
   onEdit: () => void;
   onStatus: (status: "open" | "done" | "archived") => void;
@@ -51,6 +57,7 @@ export function SuijiRecordDetail({
   citedVersion?: number;
 }) {
   const [confirmTrash, setConfirmTrash] = useState(false);
+  const [editingTags, setEditingTags] = useState(false);
   const [copying, setCopying] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState("");
   useEffect(() => {
@@ -120,7 +127,33 @@ export function SuijiRecordDetail({
         </p>
       ) : null}
       <RecordBody body={record.body} onOpenLink={onOpenLink} />
-      <RecordTags tags={record.tags} onSelect={onTag} />
+      <div className="flex flex-wrap items-center gap-2">
+        <RecordTags tags={record.tags} onSelect={onTag} />
+        {!record.deletedAt ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!writable || pending || busy}
+            aria-expanded={editingTags}
+            onClick={() => setEditingTags(!editingTags)}
+          >
+            {editingTags ? "收起标签" : (record.tags?.length ?? 0) >= 2 ? "管理标签" : "添加标签"}
+          </Button>
+        ) : null}
+      </div>
+      {editingTags && !record.deletedAt ? (
+        <fieldset
+          disabled={!writable || pending || busy}
+          aria-label="快速编辑标签"
+          className="min-w-0 space-y-2 rounded-xl border p-3 disabled:opacity-60"
+        >
+          <TagEditor selected={record.tags} available={availableTags} onChange={onTagsChange} />
+          <p role="status" className="text-xs text-muted-foreground">
+            {busy ? "正在保存标签…" : pending ? "保存结果待确认，请手动确认" : "选择或移除后自动保存，最多 2 个标签"}
+          </p>
+        </fieldset>
+      ) : null}
+      {message ? <p role="alert" className="text-sm text-destructive">{message}</p> : null}
       <div className="flex flex-wrap gap-2">
         {record.attachments.map((a) => (
           <SuijiAttachmentView key={a.id} attachment={a} client={client} />
@@ -156,7 +189,7 @@ export function SuijiRecordDetail({
               disabled={!writable || busy}
               onClick={() => onStatus("done")}
             >
-              {pending ? "手动确认状态" : "标记完成"}
+              {pending ? "手动确认操作" : "标记完成"}
             </Button>
             {!pending ? (
               <Button

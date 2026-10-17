@@ -19,9 +19,9 @@ import type {
 } from "@runweave/shared/suiji";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { SuijiHttpError } from "../../services/suiji";
+import { useRecordActions } from "./record-actions";
 import type { SuijiConnection } from "./connection-model";
-import type { PendingRequest, SuijiDraft } from "./drafts";
+import type { SuijiDraft } from "./drafts";
 import { SuijiEditorModel } from "./editor-model";
 import { SuijiEditor } from "./editor";
 import { SuijiRecordCard, SuijiRecordDetail } from "./record";
@@ -222,7 +222,7 @@ export function SuijiWorkspace({
       if (!writable || record?.deletedAt) return;
       try {
         if (record && (await store.get("status:" + record.id)))
-          throw new Error("状态操作待确认，请先手动确认");
+          throw new Error("记录操作待确认，请先手动确认");
         const id = record?.id ?? "new";
         let model = models.current.get(id);
         if (model && body)
@@ -259,74 +259,10 @@ export function SuijiWorkspace({
     },
   );
   const { acceptRecord, editFollowup } = useFollowupActions({ client, store, writable, alive, models, setEditor, setItems, setDetail, setMessage });
-  const changeRecord = useMemoizedFn(
-    async (
-      record: SuijiRecord,
-      action:
-        | { targetStatus: "open" | "done" | "archived" }
-        | { trashed: boolean },
-    ) => {
-      if (!writable || statusBusy) return;
-      setStatusBusy(true);
-      setMessage("");
-      try {
-        const previous = await store.get<PendingRequest>("status:" + record.id);
-        if (
-          !previous &&
-          (await store.get<SuijiDraft>("draft:" + record.id))?.frozen
-        )
-          throw new Error("正文保存结果待确认，请先在编辑器确认");
-        const operation = previous ?? {
-          path: `/api/suiji/v1/records/${record.id}/${"trashed" in action ? "trash" : "task-status"}`,
-          method: "POST",
-          key: crypto.randomUUID(),
-          data: { expectedVersion: record.version, ...action },
-        };
-        await store.set("status:" + record.id, operation);
-        if (!alive.current) return;
-        setPending((old) => new Set([...old, record.id]));
-        const result = await client.request<RecordResponse>(
-          operation.path,
-          operation.method,
-          operation.data,
-          operation.key,
-        );
-        if (!alive.current) return;
-        await store.remove("status:" + record.id);
-        setPending((old) => {
-          const next = new Set(old);
-          next.delete(record.id);
-          return next;
-        });
-        setDetail((current) => {
-          if (current?.record.id !== record.id) return current;
-          return operation.path.endsWith("/trash") ||
-            result.record.taskStatus === "done"
-            ? undefined
-            : { record: result.record };
-        });
-        await load();
-      } catch (error) {
-        if (!alive.current) return;
-        if (error instanceof SuijiHttpError && !error.uncertain) {
-          try {
-            await store.remove("status:" + record.id);
-            setPending((old) => {
-              const next = new Set(old);
-              next.delete(record.id);
-              return next;
-            });
-          } catch {
-            setMessage("本机状态确认写入失败，请手动重试");
-            return;
-          }
-        }
-        setMessage(error instanceof Error ? error.message : "状态结果待确认");
-      } finally {
-        if (alive.current) setStatusBusy(false);
-      }
-    },
-  );
+  const changeRecord = useRecordActions({
+    client, store, writable, statusBusy, alive, setStatusBusy, setMessage,
+    setPending, acceptRecord, setDetail, load,
+  });
   const visibleItems = items.filter(
     (record) =>
       Boolean(record.deletedAt) === (tab === "trash") &&
@@ -544,6 +480,7 @@ export function SuijiWorkspace({
       </div>
       {detail && !editor ? (
         <SuijiRecordDetail
+          key={detail.record.id}
           onOpenLink={onOpenLink}
           {...detail}
           client={client}
@@ -551,6 +488,9 @@ export function SuijiWorkspace({
           onFollowup={() => void editFollowup(detail.record)}
           onRecord={acceptRecord}
           onTag={selectTag}
+          availableTags={availableTags}
+          onTagsChange={(tags) => void changeRecord(detail.record, { tags })}
+          message={message}
           onClose={() => setDetail(undefined)}
           onEdit={() => void edit(detail.record)}
           onStatus={(target) =>
