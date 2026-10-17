@@ -13,13 +13,17 @@ struct HomeTerminalRow: View {
   private var pinned: Bool { terminal.pinnedAt != nil }
   private var pinLabel: String { pinned ? "取消置顶" : "置顶" }
   private var hasConversation: Bool { terminal.conversationKey != nil || terminal.terminalState.agent != nil }
-  private var userPreview: String {
-    guard let preview = terminal.conversationPreview, preview.available else { return "输入暂不可用" }
-    return preview.userText ?? "本轮暂无输入"
-  }
-  private var agentPreview: String {
-    guard let preview = terminal.conversationPreview, preview.available else { return "回复暂不可用" }
-    return preview.agentText ?? "本轮暂无回复"
+  private var previewStatus: String {
+    guard session.health.status == .online else { return "离线，预览暂停更新" }
+    guard terminal.conversationKey != nil else { return "尚未关联会话记录" }
+    guard let preview = terminal.conversationPreview else { return "正在加载对话预览…" }
+    switch preview.availability {
+    case "source_missing": return "未找到会话记录"
+    case "provider_unsupported": return "此 Agent 暂不支持对话预览"
+    case "read_failed": return "对话预览加载失败，稍后自动重试"
+    case "loading": return "正在加载对话预览…"
+    default: return "对话预览暂不可用"
+    }
   }
 
   private func setPinned() {
@@ -57,10 +61,14 @@ struct HomeTerminalRow: View {
           }.font(.caption).foregroundColor(.secondary).lineLimit(1)
         }
         if hasConversation {
-          Text("你：\(userPreview)").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-            .font(.caption).foregroundColor(.secondary)
-          Text("Agent：\(agentPreview)").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-            .font(.caption).foregroundColor(.secondary)
+          if let preview = terminal.conversationPreview, preview.available {
+            Text("最近输入：\(preview.userText ?? "暂无输入记录")").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+              .font(.caption).foregroundColor(.secondary)
+            Text("最近回复：\(preview.agentText ?? "尚无回复")").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+              .font(.caption).foregroundColor(.secondary)
+          } else {
+            Text(previewStatus).lineLimit(1).font(.caption).foregroundColor(.secondary)
+          }
         } else {
           Text(terminal.subtitle).lineLimit(1).font(.caption).foregroundColor(.secondary)
         }

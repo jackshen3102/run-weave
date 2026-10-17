@@ -1,11 +1,23 @@
+import Foundation
+
 enum HomeOverviewEventPatcher {
+  static func failedConversationPreviews(for targets: [HomeTerminal]) -> HomeConversationPreviewsResponse {
+    HomeConversationPreviewsResponse(sessions: targets.compactMap {
+      guard let key = $0.conversationKey else { return nil }
+      return .init(terminalSessionId: $0.id, conversationKey: key,
+        conversationPreview: HomeConversationPreview(threadId: "", provider: "", available: false,
+          availability: "read_failed", turnId: nil, userText: nil, agentText: nil))
+    })
+  }
+
   static func preserveConversationPreviews(from previous: HomeOverview?, into value: inout HomeOverview) {
     for index in value.sessions.indices {
       let item = value.sessions[index]
       if let old = previous?.sessions.first(where: { $0.id == item.id }),
-        item.conversationKey != nil, old.conversationKey == item.conversationKey,
-        !(old.terminalState.state != "agent_running" && item.terminalState.state == "agent_running") {
+        item.conversationKey != nil, old.conversationKey == item.conversationKey {
         value.sessions[index].conversationPreview = old.conversationPreview
+        value.sessions[index].conversationRevision = old.terminalState.state != "agent_running"
+          && item.terminalState.state == "agent_running" ? UUID().uuidString : old.conversationRevision
       }
     }
   }
@@ -39,7 +51,7 @@ enum HomeOverviewEventPatcher {
       guard let next = event.payload.next else { continue }
       if event.kind == "terminal_state_changed", let state = next.state {
         if state == "agent_running", overview.sessions[index].terminalState.state != "agent_running" {
-          overview.sessions[index].conversationPreview = nil
+          overview.sessions[index].conversationRevision = UUID().uuidString
         }
         overview.sessions[index].terminalState = TerminalState(state: state, agent: next.agent)
         let exited = overview.sessions[index].status == "exited"

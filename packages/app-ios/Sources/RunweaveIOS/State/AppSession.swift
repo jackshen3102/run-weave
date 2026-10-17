@@ -69,7 +69,7 @@ final class AppSession: ObservableObject {
   @Published var acknowledgementWrites = Set<String>()
   @Published var bellMarkers = Set<String>()
   var bellTasks: [String: Task<Void, Never>] = [:]
-  private var overviewRevision = 0
+  private(set) var overviewRevision = 0
   var pendingOverviewEvents: [TerminalEvent] = []
   var overviewTask: Task<Void, Never>?
   var overviewReloadRequested = false
@@ -259,16 +259,6 @@ final class AppSession: ObservableObject {
 
   func canEditTerminal(_ id: String) -> Bool {
     canWrite && !metadataWrites.contains(id)
-  }
-
-  func refreshHomeConversationPreviews(ids: [String]) async {
-    guard authenticated, foreground, health.status == .online, terminal == nil, let api else { return }
-    let epoch = generation
-    let revision = overviewRevision
-    guard let response = try? await api.homeConversationPreviews(ids: ids), generation == epoch,
-      foreground, terminal == nil, revision == overviewRevision, !Task.isCancelled, var value = overview else { return }
-    HomeOverviewEventPatcher.patchConversationPreviews(response, into: &value)
-    overview = value
   }
 
   func mergeCompletionAcknowledgement(_ value: TerminalCompletionAcknowledgement) {

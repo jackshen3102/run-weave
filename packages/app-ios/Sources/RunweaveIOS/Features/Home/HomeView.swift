@@ -60,7 +60,7 @@ struct HomeView: View {
   private var conversationRefreshKey: [String] {
     [String(session.generation), String(session.foreground), String(session.authenticated),
       session.health.status.rawValue, session.terminal?.id ?? ""]
-      + (session.overview?.sessions.map { "\($0.id):\($0.conversationKey ?? "")" }.sorted() ?? [])
+      + (session.overview?.sessions.map { "\($0.id):\($0.conversationKey ?? ""):\($0.terminalState.state)" }.sorted() ?? [])
       + visibleConversationCounts.keys.sorted()
   }
 

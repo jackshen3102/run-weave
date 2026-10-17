@@ -66,6 +66,20 @@ identityId 是原始公钥的 SHA-256。只有版本、身份、公钥、nonce �
 原型浏览器检查、源码构建与真机跨网络验收分别取证，实际完成范围见
 [iOS 验收状态](../../packages/app-ios/docs/validation-status.md)。
 
+## 首页对话预览
+
+可见终端每 5 秒批量读取最近的真实输入和回复；终端状态变化触发提前刷新，同一
+conversationKey 保留已有预览，切换会话不借用旧内容。执行状态和 Hook 仅触发刷新，
+消息归属及轮次以会话源为准；界面使用“最近输入 / 最近回复”，不把状态变化当作新消息。
+
+App Server 在有界后台队列中增量读取 Codex、Trae 系列和 Pi 的消息；HTTP 只返回内存投影。
+未注册状态的 Codex 可通过受控目录查找并核验 session_meta，读取不补造事件或状态。
+Trae 读取 response_item 与 history_mutation 消息；Pi 继续按注册的会话文件和分支锚点读取。
+响应保留 available，并通过可选 availability 区分加载、源缺失、不支持和读取失败；
+Backend 对缺项返回明确状态，iOS 的请求错误也显示预览失败并自动重试，不再称为“输入不可用”。
+源码入口为 [预览读取器](../../app-server/src/agents/thread-previews.ts) 和
+[Backend 映射](../../backend/src/terminal/application/home-conversation.ts)。
+
 ## 首页自进化成果
 
 首页「自进化」位于关注区下、项目列表前，最多显示四条待处理成果，不依赖关注终端存在。

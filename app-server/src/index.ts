@@ -87,7 +87,7 @@ async function main(): Promise<void> {
   const piSessionReader = new PiSessionReader();
   const codexAppServerClient = new CodexAppServerClient();
   const codexRolloutLifecycleReader = new CodexRolloutLifecycleReader();
-  const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader);
+  const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader, traeLifecycleReader);
   const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")));
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,

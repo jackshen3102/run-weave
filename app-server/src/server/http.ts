@@ -256,7 +256,9 @@ export function createHttpApp(options: {
     const store = options.eventCenter.getStateStore();
     const threads = [...new Set(parsed.data)].flatMap((id) => {
       const thread = store.getThread(id);
-      return thread ? [thread] : [];
+      // Codex can verify its own transcript identity even before a hook registers it.
+      // This read-only fallback never fabricates lifecycle events or state records.
+      return [thread ?? { threadId: id, agent: "codex" as const }];
     });
     res.json({ previews: options.threadPreviews.read(threads) });
   });
