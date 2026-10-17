@@ -1,4 +1,4 @@
-import { readConfig, acquireServerOwner } from "./config";
+import { readConfig, acquireServerOwner, startServerStatusReporter } from "./config";
 import { createPool } from "./db/pool";
 import { LocalFileStore } from "./storage/local-files";
 import { createApp } from "./http/app";
@@ -32,6 +32,12 @@ const server = app.listen(
     ),
 );
 server.requestTimeout = 60000;
+const stopReporting = startServerStatusReporter(config.SUIJI_PORT, async () => {
+  if (!server.listening) return false;
+  const query = { text: "SELECT 1", query_timeout: 1000 };
+  await pool.query(query);
+  return true;
+});
 pool.on("error", () =>
   console.error(JSON.stringify({ event: "database_connection_error" })),
 );
@@ -60,7 +66,7 @@ const stop = () => {
   clearInterval(metrics);
   app.closeReviews();
   server.close(() => {
-    void pool.end().finally(() => owner.release());
+    void stopReporting().then(() => pool.end()).finally(() => owner.release());
   });
 };
 process.on("SIGINT", stop);

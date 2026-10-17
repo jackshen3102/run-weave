@@ -63,7 +63,7 @@ export interface RuntimeStatusItem {
 
 export interface RuntimeStatusSource {
   id: string;
-  runtime: "frontend" | "backend" | "electron" | "app-server" | "feishu-bridge" | "research-mcp";
+  runtime: "frontend" | "backend" | "electron" | "app-server" | "feishu-bridge" | "research-mcp" | "snapshot-host" | "push-gateway" | "suiji-server" | "remote-desktop-host";
   instanceId: string;
   capabilityId: RuntimeStatusCapabilityId;
 }
@@ -215,7 +215,8 @@ export function expireRuntimeStatusReport(
   receivedAt: number,
   now = Date.now(),
 ): RuntimeStatusReport {
-  if (!isRuntimeStatusReportExpired(receivedAt, report.validForMs, now)) {
+  if (!isRuntimeStatusReportExpired(receivedAt, report.validForMs, now) ||
+      (report.items.length > 0 && report.items.every(item => item.state === "disabled"))) {
     return {
       ...report,
       source: { ...report.source },
@@ -241,7 +242,7 @@ export function expireRuntimeStatusReport(
     source: { ...report.source },
     items: [
       sourceItem,
-      ...report.items.map((item) => ({
+      ...report.items.map((item) => item.state === "disabled" ? cloneRuntimeStatusItem(item) : ({
         ...cloneRuntimeStatusItem(item),
         state: "blocked" as const,
         summary: "状态来源不可用，保留最后已知结果",
@@ -252,6 +253,13 @@ export function expireRuntimeStatusReport(
   };
 }
 
+/** An owner's explicit disabled intent takes precedence over historical health. */
+export function disableRuntimeStatusReport(report: RuntimeStatusReport, summary = "未启用，不检查健康状态"): RuntimeStatusReport {
+  return { ...report, source: { ...report.source }, items: report.items.map(item => ({
+    ...cloneRuntimeStatusItem(item), state: "disabled", summary, recovery: null,
+  })) };
+}
+
 export function suppressRuntimeStatusDependencies(
   items: readonly RuntimeStatusItem[],
 ): RuntimeStatusItem[] {
@@ -260,7 +268,7 @@ export function suppressRuntimeStatusDependencies(
   for (let pass = 0; pass < result.length; pass += 1) {
     let changed = false;
     for (const item of result) {
-      if (item.dependsOn.length === 0) continue;
+      if (item.state === "disabled" || item.dependsOn.length === 0) continue;
       const unavailable = item.dependsOn.some((dependencyId) => {
         const dependency = byId.get(dependencyId);
         return (
@@ -285,7 +293,11 @@ export function aggregateRuntimeStatusCapabilities(
   reports: readonly RuntimeStatusReport[],
 ): RuntimeStatusCapabilitySnapshot[] {
   const items = suppressRuntimeStatusDependencies(
-    reports.flatMap((report) => report.items),
+    reports.flatMap((report) => report.items.flatMap(item => {
+      if (item.state !== "healthy" || !item.facts.some(fact => fact.id === "runtime-installation.state" && fact.value === "restart-required")) return [item];
+      return [item, { ...item, id: `${item.id}.installation`, label: `${item.label} · 安装生效`, state: "blocked" as const,
+        summary: "已安装产物与运行产物不同，需要通过该服务的更新或重启入口使其生效", dependsOn: [item.id], recovery: null, facts: [] }];
+    })),
   );
   return RUNTIME_STATUS_CAPABILITY_ORDER.flatMap((capabilityId) => {
     const capabilityItems = items.filter(

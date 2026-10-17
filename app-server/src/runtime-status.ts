@@ -1,4 +1,5 @@
-import { runtimeBuildInfo, runtimeVersionFacts } from "@runweave/shared/runtime-version";
+import { runtimeBuildInfo, runtimeVersionFacts, runtimeInstallationFacts } from "@runweave/shared/runtime-version";
+import { readInstalledRuntimeBuild } from "@runweave/config-node";
 import type { RuntimeStatusReport } from "@runweave/shared/runtime-status";
 import type { AppServerEventCenter } from "./events/center.js";
 import type { AgentThreadStatusReconciler } from "./state/reconciler.js";
@@ -49,11 +50,11 @@ export function createAppServerRuntimeStatusReport(options: {
         observedAt: now,
         dependsOn: [],
         recovery: null,
-        facts: runtimeVersionFacts(runtimeBuildInfo({
+        facts: [...runtimeVersionFacts(runtimeBuildInfo({
           version: options.version,
           ...(options.sourceRevision ? { sourceRevision: options.sourceRevision } : {}),
           ...(options.releaseId ? { buildId: options.releaseId } : {}),
-        })),
+        })), ...runtimeInstallationFacts(runtimeBuildInfo(), readInstalledRuntimeBuild(process.argv[1]))],
         navigation: null,
       },
       {

@@ -18,6 +18,10 @@ const COMPONENTS = [
   ["electron.process", "Desktop"],
   ["feishu.bridge-lease", "飞书 Bridge"],
   ["research-mcp.process", "调查 MCP"],
+  ["snapshot-host.process", "快照分享 Host"],
+  ["push-gateway.process", "推送网关"],
+  ["suiji-server.process", "随记服务"],
+  ["remote-desktop-host.process", "RemoteDesk Host"],
 ] as const;
 
 function VersionRow({

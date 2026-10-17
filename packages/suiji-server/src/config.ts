@@ -1,4 +1,4 @@
-import { settingText, configuration, acquireConfigurationOwner } from "@runweave/config-node";
+import { settingText, configuration, acquireConfigurationOwner, startLocalServiceProcessReporter } from "@runweave/config-node";
 import path from "node:path";
 import { z } from "zod";
 const env = z.object({
@@ -70,4 +70,11 @@ export type Config = ReturnType<typeof readConfig>;
 
 export function acquireServerOwner() {
   return acquireConfigurationOwner(configuration().context, "suiji-server");
+}
+
+export function startServerStatusReporter(port: number, check: () => Promise<boolean>) {
+  return startLocalServiceProcessReporter("suiji-server", "随记服务", async () => {
+    const ready = await check().catch(() => false);
+    return { ready, port, summary: ready ? "HTTP 监听与 PostgreSQL 查询可用；外网访问需单独验证" : "HTTP 监听或 PostgreSQL 查询不可用" };
+  });
 }

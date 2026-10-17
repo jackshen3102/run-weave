@@ -13,5 +13,7 @@ export async function runStatusCommand(args: string[], io: {
   const auth = await resolveAuthContext({ profileName: getStringOption(parsed.options, "profile"), backendPort: getStringOption(parsed.options, "backend-port"), env: io.env });
   const snapshot = await auth.requestJson<RuntimeNodeStatusSnapshot>("/api/runtime-status");
   if (snapshot.protocolVersion !== 1 || !Array.isArray(snapshot.reports)) throw new CliError("Unsupported runtime status protocol", 3);
-  writeOutput(io.stdout, resolveOutputMode(parsed.options), { profile: auth.profileName, baseUrl: auth.baseUrl, ...serviceManagementSnapshot(snapshot) });
+  const result = { profile: auth.profileName, baseUrl: auth.baseUrl, ...serviceManagementSnapshot(snapshot) };
+  const mode = resolveOutputMode(parsed.options);
+  writeOutput(io.stdout, mode, mode === "json" ? result : result.management.services.map(service => `${service.label}: ${service.state}${service.installation === "restart-required" ? " · 需要重启" : ""}\n  ${service.summary}\n  版本: ${service.version ?? "未上报"} · 安装对照: ${service.installation}`).join("\n"));
 }

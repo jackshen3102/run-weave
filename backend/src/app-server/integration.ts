@@ -234,10 +234,10 @@ async function describeUnavailableAppServer(): Promise<AppServerIntegrationStatu
     );
   }
   return {
-    state: configured ? "unhealthy" : "unconfigured",
+    state: configured ? "unhealthy" : "disabled",
     summary: configured
       ? "App Server 暂时无法连接，正在自动重试；终端状态同步和完成事件补偿暂不可用"
-      : "App Server 未配置",
+      : "App Server 集成未启用，不检查健康状态",
     observedAt: Date.now(),
   };
 }

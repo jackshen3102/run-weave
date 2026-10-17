@@ -1,4 +1,5 @@
-import { runtimeBuildInfo, runtimeVersionFacts } from "@runweave/shared/runtime-version";
+import { runtimeBuildInfo, runtimeVersionFacts, runtimeInstallationFacts } from "@runweave/shared/runtime-version";
+import { readInstalledRuntimeBuild } from "@runweave/config-node";
 import backendPackage from "../../package.json" with { type: "json" };
 import type {
   RuntimeStatusItem,
@@ -49,6 +50,7 @@ export async function createBackendRuntimeStatusReport(
       recovery: null,
       facts: [
         ...runtimeVersionFacts(backendBuild),
+        ...runtimeInstallationFacts(backendBuild, readInstalledRuntimeBuild(process.argv[1])),
         ...(listener ? [
             {
               id: "backend.address",

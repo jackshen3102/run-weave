@@ -1,4 +1,5 @@
-import { runtimeVersionFacts } from "@runweave/shared/runtime-version";
+import { runtimeVersionFacts, runtimeInstallationFacts } from "@runweave/shared/runtime-version";
+import { readInstalledRuntimeBuild } from "@runweave/config-node";
 import { readCliVersion } from "../version.js";
 import { randomUUID } from "node:crypto";
 import type {
@@ -121,7 +122,7 @@ export class FeishuRuntimeStatusReporter {
           this.leaseHeld ? "healthy" : "disabled",
           this.leaseHeld ? "已取得单实例 lease" : "Bridge 正在停止",
           now,
-        ), facts: runtimeVersionFacts({ version: this.cliVersion.version, ...this.cliVersion.build }) },
+        ), facts: [...runtimeVersionFacts({ version: this.cliVersion.version, ...this.cliVersion.build }), ...runtimeInstallationFacts({ version: this.cliVersion.version, ...this.cliVersion.build }, readInstalledRuntimeBuild(process.argv[1]))] },
         connectionItem(
           "feishu.lark-websocket",
           "Lark WebSocket",

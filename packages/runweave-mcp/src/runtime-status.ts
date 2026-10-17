@@ -1,4 +1,5 @@
-import { runtimeBuildInfo, runtimeVersionFacts } from "@runweave/shared/runtime-version";
+import { runtimeBuildInfo, runtimeVersionFacts, runtimeInstallationFacts } from "@runweave/shared/runtime-version";
+import { readInstalledRuntimeBuild } from "@runweave/config-node";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { readResearchMcpInstallation, resolveConfigurationContext } from "@runweave/config-node";
@@ -63,7 +64,7 @@ export function createMcpRuntimeStatus(backend: Backend) {
   const checkTunnel = async (): Promise<RuntimeStatusItem> => {
     try {
       const installation = readResearchMcpInstallation();
-      if (!installation?.tunnel) return { ...item("research-mcp.tunnel", "隧道转发", null), state: "unconfigured", summary: "尚未配置调查隧道；本地可用不代表云端可用" };
+      if (!installation?.tunnel) return { ...item("research-mcp.tunnel", "隧道转发", null), state: "disabled", summary: "调查隧道未启用，不检查健康状态；本地可用不代表云端可用" };
       const address = (await readFile(installation.tunnel.healthFile, "utf8")).trim();
       if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(address)) throw new Error("invalid_tunnel_health_address");
       const response = await fetch(`${address}/health?details=true`, { signal: AbortSignal.timeout(3000), redirect: "error" });
@@ -95,11 +96,12 @@ export function createMcpRuntimeStatus(backend: Backend) {
       return { protocolVersion: 1, target: { kind: "local-host" }, source: { id: "research-mcp", runtime: "research-mcp", instanceId, capabilityId: "research-mcp" }, observedAt: now, validForMs: 20_000,
         items: [{ ...item("research-mcp.process", "本地服务", null, [
           ...runtimeVersionFacts(runtimeBuildInfo()),
+          ...runtimeInstallationFacts(buildInfo, readInstalledRuntimeBuild(readResearchMcpInstallation()?.entry)),
           text("mcp-sha", "MCP 发布 SHA", mcpIdentity.sourceRevision), text("release", "MCP 发布", mcpIdentity.releaseId),
           text("instance", "配置实例", context.instanceId), time("started", "启动时间", startedAt),
           ...(lastToolSuccess ? [time("tool-success", "最近工具成功调用（来源未确认）", lastToolSuccess)] : []),
         ]), summary: "MCP 状态接口可读；云端端到端调用须单独核对" },
-        ...(items.length ? items.map((entry) => now - entry.observedAt > 20_000 ? { ...entry, state: "unhealthy" as const, summary: "只读检查已过期，不能据历史成功判断当前正常", recovery: null } : entry) : [{ ...item("research-mcp.activity-read", "Activity 读取", null), state: "checking" as const, summary: "正在执行首次只读检查" }])] };
+        ...(items.length ? items.map((entry) => entry.state !== "disabled" && now - entry.observedAt > 20_000 ? { ...entry, state: "unhealthy" as const, summary: "只读检查已过期，不能据历史成功判断当前正常", recovery: null } : entry) : [{ ...item("research-mcp.activity-read", "Activity 读取", null), state: "checking" as const, summary: "正在执行首次只读检查" }])] };
     },
     async stop() { stopped = true; clearInterval(timer); await inFlight; },
   };

@@ -3299,9 +3299,9 @@
     "file": "electron/src/monitoring/runtime-status.ts",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_MANAGES_PACKAGED_BACKEND：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "读取桌面启动时已绑定的 Backend 管理模式，构造 owner 状态报告，不修改持久配置。"
   },
   {
     "file": "electron/src/preload.ts",
@@ -10615,5 +10615,37 @@
     "count": 1,
     "category": "test",
     "reason": "独立临时目录中的收藏存储完整性验证，读取提交字节并注入损坏数据和写入故障；不访问生产配置。"
+  },
+  {
+    "file": "backend/src/runtime-status/local-services.ts",
+    "kind": "environment",
+    "expression": "process.env.ELECTRON_RUN_AS_NODE",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "读取 Electron 启动的 Node 进程标识，判断本节点 Desktop 上报预期，不作为持久配置。"
+  },
+  {
+    "file": "packages/config-node/src/runtime-status.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(existsSync(metadata) ? metadata : path.join(path.dirname(entry), \"build-info.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "只读已安装 owner 的发布选择指针或构建身份元数据，用于对照运行产物，不读取源码配置。"
+  },
+  {
+    "file": "packages/config-node/src/runtime-status.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(pointer)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "只读已安装 owner 的发布选择指针或构建身份元数据，用于对照运行产物，不读取源码配置。"
+  },
+  {
+    "file": "packages/config-node/src/runtime-status.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(temporary)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "原子发布当前实例 owner 的私有健康报告临时文件，不保存用户配置或服务凭据。"
   }
 ]
