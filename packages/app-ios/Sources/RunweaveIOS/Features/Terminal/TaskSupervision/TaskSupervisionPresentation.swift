@@ -4,9 +4,10 @@ extension TaskWatch {
   var currentDecisions: [SupervisionDecision] {
     decisions.filter { $0.contextRevision == contextRevision && ($0.threadId == nil || $0.threadId == target.threadId) }
   }
+  var assessmentHeld: Bool { currentDecisions.last.map { $0.goalVersion == goalDefinition?.version && $0.isHeld } ?? false }
   var awaitingTask: Bool { taskStartMessageId.hasPrefix("pending:") }
   var draftUnconfirmed: Bool {
-    status == "error" && currentDecisions.last?.deliveryBlock == "draft_unconfirmed"
+    !assessmentHeld && status == "error" && currentDecisions.last?.deliveryBlock == "draft_unconfirmed"
       && currentDecisions.last?.delivery == "not_requested"
   }
   var goalPreview: String { supervisionGoalPreview(goal) }
@@ -24,7 +25,8 @@ extension TaskWatch {
     if goalState == "checking" && !awaitingTask { return "正在核对任务目标" }
     if status == "classifying" { return "正在判断任务状态" }
     if awaitingTask { return "等待新任务" }
-    if outcome == .completed { return "本轮任务已完成" }
+    if assessmentHeld { return "判断待核对" }
+    if outcome == .completed { return currentDecisions.last?.assessment == nil ? "本轮任务已完成" : "本轮据报告完成" }
     if outcome == .blocked { return "需要你处理" }
     return "正在监听"
   }
@@ -40,12 +42,13 @@ extension TaskWatch {
     if goalState == "checking" && !awaitingTask { return "收到新要求，将在最终回复时核对目标；核对前不自动续接。" }
     if status == "classifying" { return "已收到最终回复，正在核对任务与计划。" }
     if awaitingTask { return "终端监听已开启，收到新会话的用户任务后自动读取目标。" }
+    if assessmentHeld { return currentDecisions.last?.assessment?.note ?? "当前资料不足，暂不自动续接；监控保持开启。" }
     if outcome == .completed { return "继续监听此终端，下一次任务无需重新开启。" }
     if outcome == .blocked { return "本轮任务有阻塞，监控仍保持开启。" }
     return "等待 Agent 的最终回复，需要继续时自动问询进展。"
   }
   var needsAttention: Bool {
-    enabled && (goalState == "needs_review" || waitingFor != nil || pauseReason == "continuation_limit"
+    enabled && (assessmentHeld || goalState == "needs_review" || waitingFor != nil || pauseReason == "continuation_limit"
       || pauseReason == "delivery_unknown" || status == "error" || status == "paused" || outcome == .blocked)
   }
   var statusColor: Color { !enabled ? .secondary : needsAttention ? .orange : TerminalAppearance.accent }
@@ -65,7 +68,8 @@ extension TaskWatch {
     if goalState == "checking" && !awaitingTask { return "核对目标中" }
     if status == "classifying" { return "判断中" }
     if awaitingTask { return "等待新任务" }
-    if outcome == .completed { return "本轮已完成" }
+    if assessmentHeld { return "判断待核对" }
+    if outcome == .completed { return currentDecisions.last?.assessment == nil ? "本轮已完成" : "据报告完成" }
     if outcome == .blocked { return "需要处理" }
     return "监控中"
   }

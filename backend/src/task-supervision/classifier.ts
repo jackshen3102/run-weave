@@ -9,9 +9,8 @@ import type {
 } from "@runweave/shared/task-supervision";
 import { CodexEvolutionProvider } from "../evolution/providers/codex";
 import type { EvolutionProviderAdapter } from "../evolution/providers/types";
+import { assessmentSchema, assessmentInstructions, assessClassification, ASSESSMENT_POLICY_VERSION } from "./assessment";
 import { generateGoal, type GoalEvidence, type GoalModelOptions } from "./goals";
-
-export const SUPERVISION_POLICY_VERSION = "2026-10-16-versioned-goals-v6";
 
 export const classificationSchema = z
   .object({
@@ -63,7 +62,7 @@ export class TaskSupervisionClassifier {
       await writeFile(
         outputSchemaPath,
         JSON.stringify(
-          zodToJsonSchema(classificationSchema, { $refStrategy: "none" }),
+          zodToJsonSchema(classificationSchema.extend({ assessment: assessmentSchema }), { $refStrategy: "none" }),
         ),
         { mode: 0o600 },
       );
@@ -86,6 +85,7 @@ task 是当前用户请求，userUpdates 是按时间排列的其他用户原文
 guidance 五字段全部输出，无对应内容用空字符串或空数组。continue 必须包含 remainingWork、可直接执行且有预期结果的 nextAction、仅引用 task/userUpdates 真实消息 ID 的 authorizationMessageIds；blocked 必须包含 remainingWork、写明依赖与依据的 blocker、最小解锁动作 requiredUserAction。局部等待时也可填写 blocker 和 requiredUserAction，但 nextAction 先推进独立工作。禁止把“请汇报进展”当作具体下一步。
 plan 来自用户直接引用或明确承接的计划，承接关系在 goalDefinition.plans 中。availability=current 是当前文件，snapshot 是历史快照，missing 是从未取得内容；旧资料无该字段按普通计划理解。缺失不自动表示阻塞、义务消失或必须恢复文件，由当前范围与剩余工作决定是否需要核对。
 reason 用简短中文解释本轮依据，会随下一步发给原会话核对执行，不构成新增授权。sourceMessageIds 仅引用所给真实消息 ID，至少包含 currentReply.id。评分表示相对倾向，不是正确率。
+${assessmentInstructions}
 input=${JSON.stringify(input)}`,
       });
       if (
@@ -98,7 +98,7 @@ input=${JSON.stringify(input)}`,
         })
       )
         throw new Error("分类进程出现非判断行为，已拒绝结果。");
-      const output = classificationSchema.parse(result.output);
+      const { assessment, ...output } = classificationSchema.extend({ assessment: assessmentSchema }).parse(result.output);
       const ids = new Set(
         [
           input.task,
@@ -127,7 +127,8 @@ input=${JSON.stringify(input)}`,
       return {
         ...output,
         outcome,
-        policyVersion: SUPERVISION_POLICY_VERSION,
+        assessment: assessClassification(input, { ...output, outcome, assessment }),
+        policyVersion: ASSESSMENT_POLICY_VERSION,
         durationMs: result.durationMs,
         model: modelEvent?.model ?? options.model ?? "Codex 默认模型",
       };

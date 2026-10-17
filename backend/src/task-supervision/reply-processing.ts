@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { setting, settingText } from "@runweave/config-node";
+import { configuration, setting, settingText } from "@runweave/config-node";
 import type {
   SupervisionHookResponse,
   SupervisionTarget,
@@ -12,6 +12,7 @@ import {
   hasPendingTerminalInput,
   terminalInputAdmission,
 } from "../terminal/runtime/input-admission";
+import { previousContinuation } from "./assessment";
 import { prepareGoalEvidence } from "./goals";
 import { sameTarget, synchronizeContext } from "./synchronization";
 import { readFinalReply, alreadyProcessedReply } from "./reply";
@@ -40,7 +41,7 @@ interface ReplyOperations {
   resolve: (terminal: string, panel: string) => { root: string };
   manager: TerminalSessionManager;
   classifier: TaskSupervisionClassifier;
-  store: Pick<TaskSupervisionStore, "processed" | "goalDetail">;
+  store: Pick<TaskSupervisionStore, "processed" | "goalDetail" | "summary">;
   modelOptions: () => { model?: string; timeoutMs: number };
   archive: (change: ArchiveChange) => void;
   continuationOperations: (
@@ -226,7 +227,10 @@ export async function processSupervisionReply(
       rawTurnId: native.rawTurnId ?? native.id,
       phase: "final" as const,
     };
-    const input = buildSupervisionInput(snapshot, source, reply);
+    const configurationGeneration = configuration().domainGeneration("backend.taskSupervision");
+    const previous = previousContinuation(snapshot,
+      snapshot.lastObservedContinuationId ? operations.store.summary(id, snapshot.lastObservedContinuationId) : undefined);
+    const input = buildSupervisionInput(snapshot, source, reply, previous);
     stage = "classify";
     supervisionLogger.info("task-supervision.classification.started", {
       ...trace,
@@ -258,6 +262,7 @@ export async function processSupervisionReply(
       const w = operations.find(id);
       if (
         !w.enabled ||
+        configuration().domainGeneration("backend.taskSupervision") !== configurationGeneration ||
         w.revision !== revision ||
         controller.signal.aborted ||
         !operations.current(target) ||
@@ -277,10 +282,13 @@ export async function processSupervisionReply(
         ...new Set([
           input.task.id,
           ...result.sourceMessageIds,
+          ...(result.assessment?.criteria.flatMap((row) => row.sourceMessageIds) ?? []),
+          ...(result.assessment?.progress?.sourceMessageIds ?? []),
           ...result.guidance.authorizationMessageIds,
+          ...(previous ? [previous.reportMessageId] : []),
         ]),
       ].filter((messageId) => !messageId.startsWith("goal-manual:"));
-      if (result.outcome === "completed")
+      if (result.outcome === "completed" && result.assessment?.disposition !== "hold")
         w.completedReplyIds = [
           ...new Set([...(w.completedReplyIds ?? []), reply.id]),
         ];
@@ -303,6 +311,7 @@ export async function processSupervisionReply(
         replyDigest: digest(reply.text),
         contextRevision: w.contextRevision,
         goalVersion: w.goalDefinition?.version,
+        sourceVersion: w.sourceVersion,
         createdAt: new Date().toISOString(),
         input,
         delivery: "not_requested" as "not_requested" | "offered",
@@ -328,6 +337,7 @@ export async function processSupervisionReply(
       {
         signal: controller.signal,
         trace,
+        configurationIsCurrent: () => configuration().domainGeneration("backend.taskSupervision") === configurationGeneration,
       },
     );
     return ALLOW;

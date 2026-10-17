@@ -31,19 +31,29 @@ export function applyVerdict(
 ): SupervisionHookResponse {
   const summary = supervisionDecisionSummary(decision);
   watch.decisions = [summary];
-  watch.outcome = decision.outcome;
+  watch.outcome = decision.assessment?.disposition === "hold" ? null : decision.outcome;
+  if (!decision.input.previousContinuation) watch.noProgressCount = 0;
+  if (decision.input.previousContinuation) {
+    watch.lastComparedContinuationId = decision.input.previousContinuation.decisionId;
+    watch.noProgressCount = decision.assessment?.progress?.state === "no_new_evidence"
+      ? (decision.input.previousContinuation.noProgressCount + 1) : 0;
+  }
   watch.revision++;
   watch.updatedAt = decision.createdAt;
-  if (decision.outcome !== "continue") {
+  if (decision.assessment?.disposition === "hold" || decision.outcome !== "continue") {
     watch.status = "watching";
+    if (decision.assessment?.disposition === "hold") delete watch.pauseReason;
     return { action: "allow-stop" };
   }
   const offer = reserveContinuation(watch, summary, canDeliver);
-  Object.assign(decision, summary);
+  decision.delivery = summary.delivery;
+  decision.deliveryDeadline = summary.deliveryDeadline;
+  decision.deliveryBlock = summary.deliveryBlock;
   return offer;
 }
 
 export function reserveContinuation(watch: TaskWatch, decision: SupervisionDecisionSummary, canDeliver = true): SupervisionHookResponse {
+  if (decision.assessment?.disposition === "hold") return { action: "allow-stop" };
   if (!watch.goalDefinition || watch.goalState !== "ready" || decision.goalVersion !== watch.goalDefinition.version) {
     watch.goalState = "needs_review";
     return { action: "allow-stop" };

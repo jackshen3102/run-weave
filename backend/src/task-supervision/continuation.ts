@@ -25,10 +25,11 @@ interface ContinuationOperations {
 
 /** Both automatic and explicit retries use the same persisted offer and delivery fences. */
 export async function sendSupervisionOffer(target: SupervisionTarget, offer: Offer, inputRevision: object,
-  operations: ContinuationOperations, options: { signal?: AbortSignal; trace?: Record<string, unknown>; confirmedEmpty?: boolean } = {}) {
+  operations: ContinuationOperations, options: { signal?: AbortSignal; trace?: Record<string, unknown>; confirmedEmpty?: boolean; configurationIsCurrent?: () => boolean } = {}) {
   const valid = () => {
     const watch = operations.watch();
     if (operations.closed() || !watch.enabled || watch.revision !== offer.revision || options.signal?.aborted ||
+      (options.configurationIsCurrent && !options.configurationIsCurrent()) ||
       !operations.current(target) || !operations.manager.getSession(target.terminalSessionId))
       throw new Error("原任务已变化，未发送旧续接。");
   };
@@ -70,7 +71,7 @@ export async function retryContinuation(request: ChangeSupervisionRequest, opera
       .filter((message) => message.role === "assistant" && message.phase !== "commentary").at(-1);
     if (!operations.current(target) || !sameTarget(watch.target, target) || !watch.enabled || watch.waitingFor || watch.revision !== request.expectedRevision ||
       !request.expectedInputVersion || terminalInputAdmission(session).inputVersion !== request.expectedInputVersion ||
-      !decision || decision.decisionId !== request.decisionId || decision.outcome !== "continue" ||
+      !decision || decision.decisionId !== request.decisionId || decision.outcome !== "continue" || decision.assessment?.disposition === "hold" ||
       decision.delivery !== "not_requested" || decision.deliveryBlock !== "draft_unconfirmed" || watch.status !== "error" ||
       latestReply?.id !== decision.currentReplyId || panel.terminalState?.state !== "agent_idle")
       throw new SupervisionError("任务或输入已变化，请重新读取并核对后重试。");

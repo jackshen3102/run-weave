@@ -14,6 +14,7 @@ export class ConfigurationRuntime {
   private readonly applied = new Map<string, number>();
   private readonly snapshots = new Map<string, ConfigurationSnapshot>();
   private readonly applyErrors = new Map<string, string>();
+  private readonly domainGenerations = new Map<string, { fingerprint: string; generation: number }>();
   private reloadQueue: Promise<unknown> = Promise.resolve();
   private observed: ConfigurationSnapshot;
   constructor(readonly context: EnvironmentContext) {
@@ -32,8 +33,20 @@ export class ConfigurationRuntime {
     const snapshot = this.snapshots.get(domain) ?? this.snapshot;
     if (snapshot.issues[domain]?.length) throw new ConfigurationError("CONFIG_DOMAIN_INVALID", snapshot.issues[domain]!.map((item) => item.path));
   }
+  /** Adopted-value changes, including A -> B -> A, invalidate asynchronous domain work. */
+  domainGeneration(domain: string): number {
+    return this.observeDomainGeneration(domain, this.snapshots.get(domain) ?? this.snapshot);
+  }
+  private observeDomainGeneration(domain: string, snapshot: ConfigurationSnapshot): number {
+    const fingerprint = JSON.stringify(readConfigurationPath(snapshot.value, domain)) ?? "undefined";
+    const previous = this.domainGenerations.get(domain);
+    const generation = previous ? previous.generation + Number(previous.fingerprint !== fingerprint) : 0;
+    this.domainGenerations.set(domain, { fingerprint, generation });
+    return generation;
+  }
   register(domain: string, apply: (snapshot: ConfigurationSnapshot) => Promise<void> | void): () => void {
     this.consumers.set(domain, apply);
+    this.observeDomainGeneration(domain, this.snapshot);
     this.snapshots.set(domain, this.snapshot);
     if (!this.snapshot.issues[domain]?.length && !this.applyErrors.has(domain)) this.applied.set(domain, this.snapshot.value.revision);
     return () => { this.consumers.delete(domain); this.applied.delete(domain); this.snapshots.delete(domain); };
@@ -44,6 +57,7 @@ export class ConfigurationRuntime {
   markSnapshotApplied(saved: ConfigurationSnapshot, ...domains: string[]): void {
     for (const domain of domains) {
       if (saved.issues[domainForPath(domain)]?.length) throw new ConfigurationError("CONFIG_DOMAIN_INVALID", [domain]);
+      this.observeDomainGeneration(domain, saved);
       this.snapshots.set(domain, saved);
       this.applied.set(domain, saved.value.revision);
       this.applyErrors.delete(domain);
@@ -67,6 +81,7 @@ export class ConfigurationRuntime {
       if (this.snapshots.get(domain)?.digest === candidate.digest && !this.applyErrors.has(domain)) continue;
       try {
         await apply(candidate);
+        this.observeDomainGeneration(domain, candidate);
         this.snapshots.set(domain, candidate);
         this.applied.set(domain, candidate.value.revision);
         this.applyErrors.delete(domain);

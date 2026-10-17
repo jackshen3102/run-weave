@@ -10,6 +10,7 @@ import type {
   SupervisionInput,
   SupervisionPlan,
   TaskWatch,
+  PreviousSupervisionContinuation,
 } from "@runweave/shared/task-supervision";
 
 // Conservative bound for the default Codex model. Required material is never truncated.
@@ -168,6 +169,7 @@ export function buildSupervisionInput(
   watch: TaskWatch,
   content: ConversationContent,
   reply: SupervisionInput["currentReply"],
+  previousContinuation?: PreviousSupervisionContinuation,
 ): SupervisionInput {
   const messages = messagesFrom(content);
   const start = messages.findIndex(
@@ -196,6 +198,7 @@ export function buildSupervisionInput(
     userUpdates: updates,
     recentExchanges: recent,
     currentReply: reply,
+    ...(previousContinuation ? { previousContinuation } : {}),
   };
   const size = () => Buffer.byteLength(JSON.stringify(input));
   if (size() > INPUT_BUDGET_BYTES)

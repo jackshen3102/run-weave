@@ -1,9 +1,10 @@
+import { SupervisionAssessmentDetails } from "./assessment";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { getSupervisionDecision } from "../../../services/task-supervision";
 import type {
-  SupervisionDecision,
+  SupervisionDecisionDetail,
   SupervisionDecisionSummary,
 } from "@runweave/shared/task-supervision";
 export function SupervisionDecisionDetails({
@@ -14,7 +15,7 @@ export function SupervisionDecisionDetails({
   watchId: string;
 }) {
   const { apiBase, token } = useTerminalRuntime();
-  const [detail, setDetail] = useState<SupervisionDecision | null>(null);
+  const [detail, setDetail] = useState<SupervisionDecisionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
@@ -55,6 +56,7 @@ export function SupervisionDecisionDetails({
       {!detail && !error && <p>正在读取判断依据…</p>}
       {detail && (
         <>
+          <SupervisionAssessmentDetails assessment={detail.assessment} />
           {detail.input.goalDefinition && <section className="space-y-2 rounded border border-slate-800 p-3"><h3>当时采用的目标 · v{detail.input.goalDefinition.version}</h3><p className="whitespace-pre-wrap break-words text-slate-200">{detail.input.goalDefinition.objective}</p><h4>完成条件</h4><p className="whitespace-pre-wrap break-words">{detail.input.goalDefinition.completionCriteria}</p>{detail.input.goalDefinition.constraints && <><h4>范围与约束</h4><p className="whitespace-pre-wrap break-words">{detail.input.goalDefinition.constraints}</p></>}</section>}
           <h3>本轮完整最终回复</h3>
           <pre className="whitespace-pre-wrap break-words rounded border border-slate-800 bg-slate-900 p-3 text-slate-200">

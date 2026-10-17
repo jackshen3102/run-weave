@@ -24,6 +24,25 @@ struct TaskSupervisionDecisionView: View {
           Text("评分表示选项的相对倾向，不代表正确率。").font(.caption2).foregroundColor(.secondary)
         }
         section("判断理由") { Text(decision.reason).font(.subheadline).textSelection(.enabled) }
+        if let detail {
+          section("完成条件核对") {
+            if let assessment = detail.assessment {
+              Text("依据原会话报告核对，不构成独立验收。").font(.caption).foregroundColor(.secondary)
+              Text(detail.outcomeLabel).font(.subheadline)
+              ForEach(Array((assessment.criteria ?? []).enumerated()), id: \.offset) { _, row in
+                VStack(alignment: .leading, spacing: 6) {
+                  Text("\(row.stateLabel) · \(row.text)").font(.subheadline)
+                  Text(row.note).font(.caption).foregroundColor(.secondary)
+                  Text("来源：\(row.sourceMessageIds.joined(separator: "、"))").font(.caption2).textSelection(.enabled)
+                }
+              }
+              ForEach(Array((assessment.missingEvidence ?? []).enumerated()), id: \.offset) { _, text in
+                Text("待核对：\(text)").font(.caption).foregroundColor(.orange)
+              }
+              if let progress = assessment.progress { Text("续接后报告：\(progress.note)").font(.caption) }
+            } else { Text("旧策略，未逐项核对。").font(.caption).foregroundColor(.secondary) }
+          }
+        }
         if let input = detail?.input {
           section("完整最终回复") { sourceText(input.currentReply.text) }
           section("本次输入与来源") {
@@ -142,7 +161,7 @@ struct TaskSupervisionActivityView: View {
           NavigationLink { TaskSupervisionDecisionView(decision: decision, watchID: watch.watchId, model: model) } label: {
             VStack(alignment: .leading, spacing: 7) {
               HStack {
-                Text(decision.outcome.label).font(.subheadline.weight(.medium))
+                Text(decision.outcomeLabel).font(.subheadline.weight(.medium))
                 Spacer()
                 Image(systemName: "chevron.right").font(.caption)
               }

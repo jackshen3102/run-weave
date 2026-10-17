@@ -18,8 +18,10 @@ export function taskSupervisionStatus(watch: TaskWatch) {
   if (watch.status === "classifying") return "正在判断任务状态";
   if (watch.taskStartMessageId.startsWith("pending:"))
     return "等待新任务 · 终端监听已开启";
+  const decision = currentSupervisionDecisions(watch).at(-1);
+  if (decision?.goalVersion === watch.goalDefinition?.version && decision?.assessment?.disposition === "hold") return "判断待核对 · 暂不自动续接";
   if (watch.status === "watching" && watch.outcome === "completed")
-    return "本轮任务已完成 · 继续监听此终端";
+    return decision?.assessment ? "本轮据报告完成 · 继续监听此终端" : "本轮任务已完成 · 继续监听此终端";
   if (watch.status === "watching" && watch.outcome === "blocked")
     return "本轮需要你处理 · 继续监听此终端";
   if (watch.status === "ended")
@@ -29,6 +31,7 @@ export function taskSupervisionStatus(watch: TaskWatch) {
 
 export function taskSupervisionNeedsAttention(watch: TaskWatch) {
   return (
+    currentSupervisionDecisions(watch).some((d) => d.goalVersion === watch.goalDefinition?.version && d.assessment?.disposition === "hold") ||
     watch.goalState === "needs_review" ||
     watch.waitingFor != null ||
     watch.status === "error" ||

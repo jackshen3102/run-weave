@@ -82,6 +82,11 @@ export class TaskSupervisionStore {
         CREATE INDEX IF NOT EXISTS goal_revisions_watch ON goal_revisions(watch_id);
         CREATE TABLE IF NOT EXISTS goal_applications (id TEXT PRIMARY KEY, watch_id TEXT NOT NULL);
       `);
+      db.transaction(() => {
+        const columns = db.pragma("table_info(decisions)") as Array<{ name: string }>;
+        if (!columns.some((column) => column.name === "assessment"))
+          db.exec("ALTER TABLE decisions ADD COLUMN assessment TEXT");
+      })();
       if (
         !db
           .prepare("SELECT value FROM metadata WHERE key = 'initialized'")
@@ -219,8 +224,8 @@ export class TaskSupervisionStore {
   private insertDecision(watchId: string, decision: SupervisionDecision) {
     this.database()
       .prepare(
-        `INSERT INTO decisions(id, watch_id, thread_id, reply_id, turn_id, summary, input)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO decisions(id, watch_id, thread_id, reply_id, turn_id, summary, input, assessment)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         decision.decisionId,
@@ -230,6 +235,7 @@ export class TaskSupervisionStore {
         decision.rawTurnId,
         JSON.stringify(supervisionDecisionSummary(decision)),
         JSON.stringify(decision.input),
+        decision.assessment ? JSON.stringify(decision.assessment) : null,
       );
   }
   async save(journal: SupervisionJournal, additions: ArchiveChange[] = []) {
@@ -306,10 +312,10 @@ export class TaskSupervisionStore {
   }
   detail(watchId: string, id: string): SupervisionDecisionDetail | null {
     const row = this.database()
-      .prepare("SELECT summary, input FROM decisions WHERE watch_id=? AND id=?")
-      .get(watchId, id) as { summary: string; input: string } | undefined;
+      .prepare("SELECT summary, input, assessment FROM decisions WHERE watch_id=? AND id=?")
+      .get(watchId, id) as { summary: string; input: string; assessment: string | null } | undefined;
     return row
-      ? { ...JSON.parse(row.summary), input: JSON.parse(row.input) }
+      ? { ...JSON.parse(row.summary), input: JSON.parse(row.input), ...(row.assessment ? { assessment: JSON.parse(row.assessment) } : {}) }
       : null;
   }
   summary(watchId: string, id: string): SupervisionDecisionSummary | undefined {
