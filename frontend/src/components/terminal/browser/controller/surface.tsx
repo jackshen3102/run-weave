@@ -1,3 +1,5 @@
+import { BookmarkPanel } from "../bookmarks/panel";
+import type { BookmarkControls } from "../bookmarks/use-bookmarks";
 import { Globe2 } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import {
@@ -66,6 +68,7 @@ interface BrowserSurfaceEnvironment {
 }
 
 interface TerminalBrowserSurfaceProps {
+  bookmarks: BookmarkControls;
   suppressed: boolean;
   annotations: BrowserAnnotationPanel;
   device: BrowserDevicePanel;
@@ -78,6 +81,7 @@ interface TerminalBrowserSurfaceProps {
 }
 
 export function TerminalBrowserSurface({
+  bookmarks,
   suppressed,
   annotations,
   device,
@@ -107,7 +111,7 @@ export function TerminalBrowserSurface({
   const [mobileDisplaySize, setMobileDisplaySize] =
     useState<MobileDisplaySize | null>(null);
   const sidePanelOpen =
-    annotations.open || headerRulesPanelOpen || devicePanelOpen;
+    annotations.open || bookmarks.panelOpen || headerRulesPanelOpen || devicePanelOpen;
   const lastMobileMeasureKeyRef = useRef<string | null>(null);
   const horizontalTrackRef = useRef<HTMLDivElement | null>(null);
 
@@ -249,6 +253,7 @@ export function TerminalBrowserSurface({
           />
         </div>
       ) : null}
+      {isElectron && bookmarks.supported ? <BookmarkPanel bookmarks={bookmarks} /> : null}
       {isElectron ? <TerminalBrowserAnnotationsPanel {...annotations} /> : null}
       {isElectron ? (
         <TerminalBrowserHeadersPanel

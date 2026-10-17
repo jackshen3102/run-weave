@@ -1,3 +1,6 @@
+import { BookmarkFeedback } from "../bookmarks/star";
+import { BookmarkBar } from "../bookmarks/bar";
+import { BookmarkEditors } from "../bookmarks/editor";
 import { useBrowserPresentation } from "../../../../features/terminal/browser-presentation/coordinator";
 import { openTerminalBrowserUrl } from "../../../../features/terminal/navigation/open-browser";
 import { useEffect, useState } from "react";
@@ -53,6 +56,7 @@ export function TerminalBrowserTool({
   }
 
   const {
+    bookmarks,
     activeTab,
     annotationPanelOpen,
     annotationError,
@@ -136,6 +140,7 @@ export function TerminalBrowserTool({
         </div>
       ) : null}
       <TerminalBrowserNavigationBar
+        bookmarks={bookmarks}
         activeTab={activeTab}
         address={{
           onBlur: handleAddressBlur,
@@ -187,6 +192,9 @@ export function TerminalBrowserTool({
             void setMinimumViewportWidth(width),
         }}
       />
+      <BookmarkBar bookmarks={bookmarks} />
+      {bookmarks.supported ? <BookmarkEditors bookmarks={bookmarks} /> : null}
+      <BookmarkFeedback bookmarks={bookmarks} />
       <TerminalBrowserAnnotationModeBar
         selecting={annotationState.selecting}
         onDone={() => void setAnnotationSelecting(false)}
@@ -207,6 +215,7 @@ export function TerminalBrowserTool({
         ]}
       />
       <TerminalBrowserSurface
+        bookmarks={bookmarks}
         suppressed={presentation.suppressed}
         annotations={{
           error: annotationError,

@@ -1,0 +1,108 @@
+version: 1
+name: 桌面收藏数据完整性与恢复
+description: >
+  验证计划中的真实收藏存储与 IPC，不执行原型 localStorage 验收。
+  每例使用自己创建的临时数据根或 toolkit:runweave-dev-session，禁止接触 Stable 用户数据。
+  集成检查使用 scripts/verify/electron/browser-bookmarks.mjs 调用实际 store 与文件系统，
+  权限和窗口广播必须在真实候选 Electron 中取证。执行结果单独记录，格式校验不能替代行为验证。
+cases:
+  - id: BKI-001
+    name: 已确认保存的收藏与偏好跨桌面重启保留
+    required: true
+    description: 同一隔离 userData 重启后恢复已提交内容和顺序，不导入原型样例数据。
+    preconditions:
+      - 独立候选 Dev Session 的收藏文件不存在，生命周期由本例执行者拥有，支持在保留 userData 的前提下重启。
+    steps:
+      - 使用 $toolkit:playwright-cli 确认空收藏，创建两个链接和一个文件夹，改变顺序并隐藏收藏栏；记录成功响应和文件内容。
+      - 通过所属生命周期入口重启同一会话，保留原 userData；重新解析 fresh renderer 和 terminal-browser endpoint，不复用旧引用。
+      - 确认名称、URL、文件夹、顺序、隐藏偏好和 revision 均恢复，未生成原型示例；清理本例会话。
+  - id: BKI-002
+    name: 同一 revision 的并发修改不会互相覆盖
+    required: true
+    description: 两个调用方基于同一快照提交时仅先提交者成功，另一方拿到冲突和最新快照。
+    preconditions:
+      - 本例独立临时目录已有实际 store 写入的两个收藏，两个调用方持有相同 revision。
+    steps:
+      - 运行实际 store 集成场景，从两个调用方并发提交不同有效修改；确认只有一次提交成功，另一请求返回 REVISION_CONFLICT。
+      - 读回文件和内存快照；确认 revision 只增加一次，失败请求未覆盖任何值。
+      - 让失败方重新读取后显式提交；确认第二次修改成功且保留第一份修改。
+  - id: BKI-003
+    name: 文件写入失败不产生虚假提交
+    required: true
+    description: 原子写入遇到实际文件系统失败时保持原文件、内存和 revision，恢复后可主动提交。
+    preconditions:
+      - 本例临时目录已保存实际 store 快照，可通过目录权限或受控文件系统路径引起真实写入失败。
+    steps:
+      - 在实际 store 集成场景中记录文件哈希，制造写入失败并提交有效修改；确认返回 STORE_UNAVAILABLE，没有成功广播。
+      - 比较文件哈希、内存和 revision；确认保持原值而非空列表或半次排序。
+      - 恢复写入条件后以当前 revision 主动提交；确认成功读回新内容，删除本例目录。
+  - id: BKI-004
+    name: 损坏文件与未知版本不会被当空收藏覆盖
+    required: true
+    description: 同一读取保护规则覆盖无效 JSON、无效引用及未来 schema，拒绝修改并保留字节。
+    preconditions:
+      - 本例集成场景为无效 JSON、重复或孤儿顺序引用、未来 schema 分别创建独立文件 fixture。
+    steps:
+      - 逐个用实际 store 加载 fixture；确认无效内容返回 STORE_UNAVAILABLE，未来 schema 返回 UNSUPPORTED_SCHEMA，均不能得到可写空集合。
+      - 尝试提交新增后逐个比较原文件哈希；确认所有文件未被替换或截断。
+      - 在同一 fixture 修复文件后主动重新读取；确认只有有效版本恢复可写，不自动重放先前请求。
+  - id: BKI-005
+    name: URL 与组织结构验证拒绝非法状态
+    required: true
+    description: 非法输入不产生数据变更，合法 URL 的 query 和 hash 均被保留。
+    preconditions:
+      - 本例实际 store 临时 fixture 含两个文件夹和已知合法链接，保存当前 revision 和文件哈希。
+    steps:
+      - 提交带账号密码、非 HTTP(S)、空或超长名称、超长 URL、文件夹嵌套、错误 parent 和跨容器 beforeId；确认 INVALID_INPUT 且原哈希和 revision 不变。
+      - 添加包含 query 和 hash 的合法链接；确认序列化结果保留两者，再次新增同 URL 返回原条目且不重复。
+      - 把另一链接改成已存在 URL；确认 DUPLICATE_URL，不覆盖原条目；不合规图标被拒绝或替换为通用图标，不能执行 SVG。
+  - id: BKI-006
+    name: 容量上限拒绝整次提交且不截断原数据
+    required: true
+    description: 条目数和文件体积边界在写入前检查，超限时保留原数据。
+    preconditions:
+      - 本例集成场景分别准备接近 5000 条目和接近 16MiB 序列化体积的独立合法 fixture，数据均由实际 store 读取。
+    steps:
+      - 对每个 fixture 提交将超过对应上限的变更；确认 LIMIT_EXCEEDED，原文件哈希和 revision 保持。
+      - 在边界内执行删除或缩短内容的操作；确认可以正常提交，已有条目未被系统自动裁剪。
+  - id: BKI-007
+    name: 同实例广播与新旧快照乱序不会回退状态
+    required: true
+    description: 同一 Electron 实例可信窗口或客户端共享最新数据，晚到的旧快照不覆盖新版本。
+    preconditions:
+      - 隔离候选 Electron 的开发验收 fixture 使用真实应用 origin 的两个可信 renderer 消费实际 bridge。
+      - fixture 能延迟只读 get 的响应交付而不修改生产存储逻辑，两个客户端已经订阅变更。
+    steps:
+      - 使用 $toolkit:playwright-cli 从客户端 A 提交收藏修改；确认 B 经真实 IPC 广播看到同 revision 的快照。
+      - 再完成一次修改后释放此前延迟的旧 get 响应；确认两端仍显示新 revision 和内容，未回退。
+      - 卸载其中一个客户端再提交；确认注销后的回调不再触发，清理本例 fixture。
+  - id: BKI-008
+    name: 非应用主 frame 无权调用收藏 IPC
+    required: true
+    description: 收藏读取、写入仅允许可信应用主窗口，不向网页和其他 frame 泄漏收藏。
+    preconditions:
+      - 隔离候选 Electron 的开发验收 fixture 可在应用主 frame、应用 iframe 与内嵌网页对应真实 WebContents 发起受控 IPC 调用。
+      - 本例收藏中有可识别的私有标记，只存在于测试数据。
+    steps:
+      - 从可信应用主 frame 调用真实读取与写入；确认按协议成功。
+      - 从 iframe 和内嵌网页 WebContents 尝试同一调用；确认 FORBIDDEN、没有读取到私有标记、文件和 revision 不变。
+      - 记录 sender 身份和错误码，不记录完整 URL 或凭据；清理本例 fixture。
+  - id: BKI-009
+    name: 不同 Desktop userData 的收藏相互隔离
+    required: true
+    description: 实例 A 的收藏和显示偏好不会出现在实例 B，未共享用户数据根。
+    preconditions:
+      - 本例拥有两个独立 Dev Session，二者使用不同 userData，均为候选代码，原始收藏为空。
+    steps:
+      - 使用 $toolkit:playwright-cli 在 A 新增唯一标记收藏并隐藏收藏栏，在 B 读取；确认 B 仍为空且显示偏好为默认值。
+      - 在 B 创建另一个唯一标记；确认 A 不出现 B 数据，两个实际存储路径和文件内容分别正确。
+      - 仅关闭和清理本例两个 Dev Session，不操作 Stable 或 Beta 用户目录。
+  - id: BKI-010
+    name: 旧宿主缺少收藏 bridge 时不提供虚假入口
+    required: true
+    description: 能力缺失只影响新功能，不回退为 renderer localStorage 保存，也不破坏原导航。
+    preconditions:
+      - 候选 renderer 在本例兼容性 fixture 下使用旧宿主合同，收藏读取、目标读取、变更和订阅四项 bridge 能力均不可用，原浏览器导航仍可用。
+    steps:
+      - 使用 $toolkit:playwright-cli 查看地址栏和更多菜单；确认收藏入口隐藏，没有报错循环或创建本地收藏存储。
+      - 在受控网页间进行原导航和标签切换；确认既有行为保持。

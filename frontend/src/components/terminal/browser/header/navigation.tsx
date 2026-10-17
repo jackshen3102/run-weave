@@ -1,3 +1,5 @@
+import { BookmarkStar } from "../bookmarks/star";
+import type { BookmarkControls } from "../bookmarks/use-bookmarks";
 import { useMemoizedFn } from "ahooks";
 import {
   ArrowLeft,
@@ -74,6 +76,7 @@ interface BrowserUtilityControls {
 }
 
 interface TerminalBrowserNavigationBarProps {
+  bookmarks: BookmarkControls;
   activeTab: TerminalBrowserTabState;
   address: BrowserAddressControls;
   annotation: BrowserAnnotationControls;
@@ -84,6 +87,7 @@ interface TerminalBrowserNavigationBarProps {
 }
 
 export function TerminalBrowserNavigationBar({
+  bookmarks,
   activeTab,
   address,
   annotation,
@@ -139,6 +143,15 @@ export function TerminalBrowserNavigationBar({
   const handleMoreTool = useMemoizedFn(
     (action: TerminalBrowserToolMenuAction | null | undefined) => {
       switch (action) {
+        case "open-bookmarks":
+          bookmarks.setPanelOpen(true);
+          break;
+        case "toggle-bookmark-bar":
+          bookmarks.toggleBar();
+          break;
+        case "new-bookmark-folder":
+          bookmarks.newFolder();
+          break;
         case "toggle-annotation":
           onToggleAnnotation();
           break;
@@ -201,6 +214,7 @@ export function TerminalBrowserNavigationBar({
     setMoreToolsOpen(true);
     try {
       const action = await openToolMenu({
+        ...(bookmarks.supported ? { bookmarkBarVisible: bookmarks.snapshot?.barVisible ?? true } : {}),
         x: rect.left,
         y: rect.bottom,
         showAnnotation: !hasAnnotations,
@@ -308,6 +322,7 @@ export function TerminalBrowserNavigationBar({
           onFocus={onAddressFocus}
           onBlur={onAddressBlur}
         />
+        <BookmarkStar bookmarks={bookmarks} />
         <Button
           type="button"
           size="sm"

@@ -54,6 +54,12 @@ export async function popupTerminalBrowserToolMenu(
       resolve(action);
     };
     const template: MenuItemConstructorOptions[] = [];
+    if (typeof value.bookmarkBarVisible === "boolean") {
+      template.push({ label: "收藏夹", click: () => select("open-bookmarks") },
+        { label: "显示收藏栏", type: "checkbox", checked: value.bookmarkBarVisible, click: () => select("toggle-bookmark-bar") },
+        { label: "新建文件夹", click: () => select("new-bookmark-folder") },
+        { type: "separator" });
+    }
 
     if (value.showAnnotation) {
       template.push({

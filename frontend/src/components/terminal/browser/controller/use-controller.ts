@@ -1,3 +1,4 @@
+import { useControllerBookmarks } from "./bookmarks";
 import { useMemoizedFn } from "ahooks";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { TerminalBrowserWorkspaceSnapshot } from "@runweave/shared/terminal-browser-workspace";
@@ -57,6 +58,7 @@ export function useTerminalBrowserController({
   const [electronTabsSynced, setElectronTabsSynced] = useState(!isElectron);
   const [headerRulesPanelOpen, setHeaderRulesPanelOpen] = useState(false);
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
+  const [bookmarkPanelOpen, setBookmarkPanelOpen] = useState(false);
   const editingAddressTabIdRef = useRef<string | null>(null);
   const { headerError, headerRules, headerSaving, saveHeaderRules } =
     useTerminalBrowserHeaderRules(isElectron, profileId);
@@ -107,6 +109,7 @@ export function useTerminalBrowserController({
     active,
     activeTab,
     annotationPanelOpen,
+    bookmarkPanelOpen,
     browserViewRef,
     devicePanelOpen,
     electronTabsSynced,
@@ -200,7 +203,7 @@ export function useTerminalBrowserController({
     });
 
   const navigateTab = useMemoizedFn(
-    async (tabId: string, rawInput: string): Promise<void> => {
+    async (tabId: string, rawInput: string, source: "address" | "bookmark" = "address"): Promise<void> => {
       if (!tabId) {
         return;
       }
@@ -240,7 +243,7 @@ export function useTerminalBrowserController({
         const snapshot = await window.electronAPI.terminalBrowserNavigate(
           tabId,
           nextUrl.url,
-          localBrowserSource,
+          source === "address" ? localBrowserSource : undefined,
         );
         if (!isCurrentNavigation()) {
           return;
@@ -292,7 +295,7 @@ export function useTerminalBrowserController({
 
   useEffect(() => {
     syncBounds(true);
-  }, [annotationPanelOpen, devicePanelOpen, headerRulesPanelOpen, syncBounds]);
+  }, [annotationPanelOpen, bookmarkPanelOpen, devicePanelOpen, headerRulesPanelOpen, syncBounds]);
 
   useEffect(() => {
     if (!isElectron || !active || !activeTabId) {
@@ -403,12 +406,14 @@ export function useTerminalBrowserController({
   );
 
   const toggleAnnotation = useMemoizedFn(async (): Promise<void> => {
+    setBookmarkPanelOpen(false);
     setHeaderRulesPanelOpen(false);
     setDevicePanelOpen(false);
     await toggleAnnotations();
   });
 
   const openAnnotationPanel = useMemoizedFn((): void => {
+    setBookmarkPanelOpen(false);
     setHeaderRulesPanelOpen(false);
     setDevicePanelOpen(false);
     openAnnotationPanelState();
@@ -423,6 +428,16 @@ export function useTerminalBrowserController({
       closeLocalTab: closeBrowserTab,
       updateTab: updateBrowserTab,
     });
+
+  const bookmarks = useControllerBookmarks({
+    active, tab: activeTab, profileId, panelOpen: bookmarkPanelOpen,
+    setPanelOpen: setBookmarkPanelOpen, navigateTab,
+    onOpen: () => {
+      setHeaderRulesPanelOpen(false);
+      setDevicePanelOpen(false);
+      void closeAnnotationPanel();
+    },
+  });
 
   if (!activeTab) {
     return null;
@@ -489,6 +504,7 @@ export function useTerminalBrowserController({
   const setHeaderPanelOpen = (open: boolean): void => {
     setHeaderRulesPanelOpen(open);
     if (open) {
+      setBookmarkPanelOpen(false);
       setDevicePanelOpen(false);
       void closeAnnotationPanel();
     }
@@ -497,6 +513,7 @@ export function useTerminalBrowserController({
   const setDevicePanelOpenState = (open: boolean): void => {
     setDevicePanelOpen(open);
     if (open) {
+      setBookmarkPanelOpen(false);
       setHeaderRulesPanelOpen(false);
       void closeAnnotationPanel();
     }
@@ -517,6 +534,7 @@ export function useTerminalBrowserController({
   };
 
   return {
+    bookmarks,
     activeTab,
     annotationPanelOpen,
     annotationError,

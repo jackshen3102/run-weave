@@ -1,6 +1,9 @@
 import type { TerminalBrowserMinimumViewportWidth } from "./minimum-width";
 
 export type TerminalBrowserToolMenuAction =
+  | "open-bookmarks"
+  | "toggle-bookmark-bar"
+  | "new-bookmark-folder"
   | "toggle-annotation"
   | "open-headers"
   | "open-device"
@@ -15,6 +18,7 @@ export type TerminalBrowserToolMenuAction =
   | "minimum-width-1440";
 
 export interface TerminalBrowserToolMenuRequest {
+  bookmarkBarVisible?: boolean;
   x: number;
   y: number;
   showAnnotation: boolean;
