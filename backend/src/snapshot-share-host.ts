@@ -1,4 +1,4 @@
-import { settingText, configuration, acquireConfigurationOwner } from "@runweave/config-node";
+import { settingText, configuration, acquireConfigurationOwner, startLocalServiceProcessReporter } from "@runweave/config-node";
 import express from "express";
 import path from "node:path";
 import { createServer } from "node:http";
@@ -48,11 +48,13 @@ async function main(): Promise<void> {
     throw error;
   }
   console.log(`Snapshot host listening on 127.0.0.1:${port}`);
+  const stopReporting = startLocalServiceProcessReporter("snapshot-host", "快照分享 Host", () => ({ ready: ready && server.listening, port, summary: "本机 HTTP 监听与分享存储已初始化；外网分享需单独验证" }));
   let stopping = false;
   const stop = async () => {
     if (stopping) return;
     stopping = true;
     ready = false;
+    await stopReporting();
     const drained = new Promise<void>((resolve) => { server.close(() => resolve()); });
     const deadline = setTimeout(() => server.closeAllConnections(), 35_000);
     deadline.unref();

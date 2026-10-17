@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { FrontendVersion, RuntimeVersions } from "../features/runtime-status/versions";
+import { RuntimeServices } from "../features/runtime-status/services";
 import { ConfigurationPanel } from "../features/configuration/panel";
 import { DesktopConfigurationStatus } from "../features/configuration/desktop-status";
 import { useTunnelStore } from "../features/tunnels/store";
@@ -194,6 +195,7 @@ export function RuntimeStatusPanel({ apiBase, token, embedded = false }: { apiBa
                   <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"><span className={`h-2 w-2 rounded-full ${node.unhealthyCapabilityCount > 0 ? "bg-red-500" : node.warningCapabilityCount > 0 ? "bg-amber-500" : STATE_DOT[node.state]}`} />{node.unhealthyCapabilityCount > 0 ? "异常" : node.warningCapabilityCount > 0 ? "Warning" : node.state === "blocked" && awaitingLogin ? "待登录" : STATE_LABELS[node.state]}</span>
                 </div>
                 {awaitingLogin ? <p className="text-sm text-muted-foreground">服务可连接，登录后查看详细状态。</p> : null}
+                <RuntimeServices reports={node.reports} />
                 <RuntimeVersions items={node.capabilities.flatMap((capability) => capability.items)} />
                 <div className="space-y-2">{node.capabilities.map((capability) => <CapabilitySection key={capability.capabilityId} capability={capability} />)}</div>
                 {node.roles.includes("local") ? <RuntimeResources /> : null}

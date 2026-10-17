@@ -6,6 +6,7 @@ export interface RuntimeBuildInfo {
   sourceRevision?: string;
   sourceDirty?: boolean;
   builtAt?: string;
+  contentSha256?: string;
 }
 
 declare const __RUNWEAVE_BUILD_INFO__: RuntimeBuildInfo;
@@ -37,6 +38,7 @@ export function runtimeVersionFacts(
           : "否",
     ],
     ["built-at", "构建时间", info.builtAt],
+    ["content", "产物摘要", info.contentSha256],
   ];
   return values.flatMap(([id, label, value]) =>
     value
@@ -51,4 +53,15 @@ export function runtimeVersionFacts(
         ]
       : [],
   );
+}
+
+/** Compare the owner's running artifact with its selected installation, never a checkout. */
+export function runtimeInstallationFacts(running: RuntimeBuildInfo, installed: RuntimeBuildInfo | null): RuntimeStatusFact[] {
+  const comparable = installed && ((running.contentSha256 && installed.contentSha256) || (running.buildId && installed.buildId));
+  const matches = installed && (running.contentSha256 && installed.contentSha256
+    ? running.contentSha256 === installed.contentSha256 : running.buildId === installed.buildId);
+  return [
+    { id: "runtime-installation.state", label: "安装对照", value: comparable ? matches ? "current" : "restart-required" : "unknown", kind: "text", copyable: false },
+    ...(installed ? runtimeVersionFacts(installed).map(fact => ({ ...fact, id: fact.id.replace(RUNTIME_VERSION_FACT_PREFIX, "runtime-installation."), label: `已安装${fact.label}` })) : []),
+  ];
 }

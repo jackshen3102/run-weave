@@ -1,4 +1,4 @@
-import { acquireConfigurationOwner, configuration as runtimeConfiguration, settingText } from "@runweave/config-node";
+import { acquireConfigurationOwner, configuration as runtimeConfiguration, settingText, startLocalServiceProcessReporter } from "@runweave/config-node";
 import { configuration } from "./config";
 import { GatewayStore } from "./store";
 import { createGateway } from "./app";
@@ -15,10 +15,16 @@ server.listen(config.port, config.bind, () =>
   process.stdout.write("Push gateway ready\n"),
 );
 let stopping = false;
+const stopReporting = startLocalServiceProcessReporter("push-gateway", "推送网关", () => {
+  let ready = false;
+  try { store.snapshot(); ready = server.listening && !stopping; } catch { /* Owner reports storage failure without leaking credentials. */ }
+  return { ready, port: config.port, summary: ready ? "HTTP 监听与本地存储可用；APNs 投递及手机收取需单独验证" : "监听或本地存储不可用" };
+});
 function stop() {
   if (stopping) return;
   stopping = true;
   server.close(async () => {
+    await stopReporting();
     await server.disposeBadges();
     store.close();
     owner.release();

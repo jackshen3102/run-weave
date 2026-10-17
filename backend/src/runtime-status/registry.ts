@@ -1,9 +1,12 @@
 import {
   bindRuntimeStatusReportToNode,
   expireRuntimeStatusReport,
+  disableRuntimeStatusReport,
   type RuntimeNodeStatusSnapshot,
   type RuntimeStatusReport,
 } from "@runweave/shared/runtime-status";
+import { readLocalServiceReports } from "./local-services";
+import { configuration } from "@runweave/config-node";
 
 export type RuntimeStatusProvider = () =>
   | RuntimeStatusReport
@@ -57,9 +60,15 @@ export class RuntimeStatusRegistry {
         }
       }),
     );
-    const externalReports = [...this.externalReports.values()].map((stored) =>
-      expireRuntimeStatusReport(stored.report, stored.receivedAt, now),
-    );
+    const feishu = configuration();
+    const feishuEnabled = ["node", "hub"].includes(String(feishu.get("services.feishu.role"))) ||
+      ["appId", "appSecret", "node.url", "node.token"].some(field => Boolean(feishu.get(`services.feishu.${field}`)));
+    const appServerDisabled = configuration().get("appServer.discovery") === "disabled" || ownedReports.some(report =>
+      report?.source.id === "backend" && report.items.some(item => item.id === "backend.app-server-event-consumer" && item.state === "disabled"));
+    const externalReports = [...this.externalReports.values()].map((stored) => {
+      if ((stored.report.source.id === "feishu-bridge" && !feishuEnabled) || (stored.report.source.id === "app-server" && appServerDisabled)) return disableRuntimeStatusReport(stored.report);
+      return expireRuntimeStatusReport(stored.report, stored.receivedAt, now);
+    });
     if (!this.externalReports.has("feishu-bridge")) {
       externalReports.push({
         protocolVersion: 1,
@@ -77,8 +86,8 @@ export class RuntimeStatusRegistry {
             id: "feishu.bridge-report",
             capabilityId: "feishu",
             label: "飞书 Bridge",
-            state: "blocked",
-            summary: "尚未收到飞书 Bridge 状态，请检查配置及服务是否已启动",
+            state: feishuEnabled ? "blocked" : "disabled",
+            summary: feishuEnabled ? "飞书已启用，但尚未收到 Bridge 状态，请检查配置及服务是否已启动" : "飞书未启用，不检查健康状态",
             observedAt: now,
             dependsOn: ["backend.process"],
             recovery: null,
@@ -87,6 +96,12 @@ export class RuntimeStatusRegistry {
           },
         ],
       });
+    }
+    if (appServerDisabled && !this.externalReports.has("app-server")) {
+      externalReports.push({ protocolVersion: 1, target: { kind: "node", nodeId: this.serviceInstanceId },
+        source: { id: "app-server", runtime: "app-server", instanceId: "app-server:disabled", capabilityId: "app-server" },
+        observedAt: now, validForMs: 15_000, items: [{ id: "app-server.source", capabilityId: "app-server", label: "App Server", state: "disabled",
+          summary: "App Server 集成未启用，不检查健康状态", observedAt: now, dependsOn: [], recovery: null, facts: [], navigation: null }] });
     }
     return {
       protocolVersion: 1,
@@ -98,6 +113,7 @@ export class RuntimeStatusRegistry {
       reports: [
         ...ownedReports.filter((report) => report !== null),
         ...externalReports,
+        ...readLocalServiceReports(now),
       ].map((report) =>
         bindRuntimeStatusReportToNode(report, this.serviceInstanceId),
       ),

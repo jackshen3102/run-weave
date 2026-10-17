@@ -27,6 +27,7 @@ export async function readNodeCliVersion(): Promise<RuntimeBuildInfo | null> {
         value = {
           version,
           buildId: text(info.build?.buildId),
+          contentSha256: text(info.build?.contentSha256),
           sourceRevision: text(info.build?.sourceRevision),
           builtAt: text(info.build?.builtAt),
           sourceDirty:

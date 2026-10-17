@@ -27,6 +27,7 @@ final class HostModel: ObservableObject {
     }
     @Published private(set) var sharingEnabled = false
     @Published private(set) var isNetworkRecovering = false
+    private(set) var listenerFailed = false
     @Published var isReconfiguring = false
     @Published var pairingCode: String?
     @Published private(set) var pairingInvitation: RemotePairingQR?
@@ -73,6 +74,7 @@ final class HostModel: ObservableObject {
     private var workspaceObservers: [NSObjectProtocol] = []
 
     init() {
+        HostRuntimeStatus.initialize()
         selectedInterface = UserDefaults.standard.string(forKey: HostRuntime.interfacePreferenceKey) ?? ""
         #if DEBUG
         monitor = HostRuntime.simulatorLoopback ? NWPathMonitor(requiredInterfaceType: .loopback) : NWPathMonitor()
@@ -120,6 +122,7 @@ final class HostModel: ObservableObject {
 
     func start() {
         guard !sharingEnabled, listener == nil, !stoppingSession, !isNetworkRecovering else { return }
+        listenerFailed = false
         do {
             let identity = try self.identity ?? HostIdentity.loadOrCreate()
             self.identity = identity; fingerprint = identity.fingerprint; hostID = identity.hostID
@@ -137,7 +140,7 @@ final class HostModel: ObservableObject {
             sharingGeneration &+= 1
             sharingEnabled = true
             try listen(identity: identity, selected: selected, address: address, parameters: parameters)
-        } catch { sharingEnabled = false; status = error.localizedDescription }
+        } catch { sharingEnabled = false; listenerFailed = true; status = error.localizedDescription }
     }
 
     private func listen(identity: HostIdentity, selected: NWInterface, address: String, parameters: NWParameters) throws {
@@ -167,7 +170,7 @@ final class HostModel: ObservableObject {
                     if case .posix(let code) = error, [.EADDRNOTAVAIL, .ENETDOWN, .ENETUNREACH].contains(code) {
                         await self.recoverNetworkIfNeeded(listenerFailed: true)
                     } else {
-                        await self.stop(); self.status = "监听失败，请检查接口和端口。"
+                        await self.stop(); self.listenerFailed = true; self.status = "监听失败，请检查接口和端口。"
                     }
                 default: break
                 }
@@ -178,6 +181,7 @@ final class HostModel: ObservableObject {
     }
 
     func stop() async {
+        listenerFailed = false
         sharingEnabled = false; sharingGeneration &+= 1
         listener?.cancel(); listener = nil; isRunning = false; closePairing()
         await stopSession(reason: "本机已停止远程桌面服务。", terminal: true)
@@ -216,7 +220,7 @@ final class HostModel: ObservableObject {
             if let error = error as? NWError, case .posix(let code) = error,
                [.EADDRNOTAVAIL, .ENETDOWN, .ENETUNREACH].contains(code) {
                 status = "等待所选网络接口恢复；停止共享可取消自动恢复。"
-            } else { await stop(); status = error.localizedDescription }
+            } else { await stop(); self.listenerFailed = true; status = error.localizedDescription }
         }
     }
 
@@ -452,6 +456,7 @@ final class HostModel: ObservableObject {
     }
     private func maintain() async {
         refreshPermissions()
+        HostRuntimeStatus.publish(self)
         await recoverNetworkIfNeeded()
         if pairingUntil > 0 { pairingSeconds = max(0, Int(ceil(pairingUntil - ProcessInfo.processInfo.systemUptime))) }
         if pairingUntil > 0, ProcessInfo.processInfo.systemUptime >= pairingUntil {

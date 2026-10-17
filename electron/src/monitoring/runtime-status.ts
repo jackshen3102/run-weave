@@ -1,7 +1,8 @@
 import { exportDesktopDiagnostics } from "../desktop/diagnostics.js";
-import { runtimeBuildInfo, runtimeVersionFacts } from "@runweave/shared/runtime-version";
+import { runtimeBuildInfo, runtimeVersionFacts, runtimeInstallationFacts } from "@runweave/shared/runtime-version";
 import { app, BrowserWindow, Notification, clipboard, ipcMain } from "electron";
-import { configuration } from "@runweave/config-node";
+import { configuration, startLocalRuntimeStatusReporter, readInstalledRuntimeBuild } from "@runweave/config-node";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   isRuntimeStatusCapabilityId,
@@ -28,6 +29,7 @@ export function buildElectronRuntimeStatusReport(options: {
   now?: number;
 }): RuntimeStatusReport {
   const now = options.now ?? Date.now();
+  const browserEnabled = configuration().get<boolean>("desktop.browser.localEnabled", true) !== false;
   const backend = desktopRuntime.packagedBackendState;
   const backendAvailable =
     options.managesPackagedBackend === false || backend.available;
@@ -72,7 +74,8 @@ export function buildElectronRuntimeStatusReport(options: {
         now,
       ),
       dependsOn: [],
-      facts: runtimeVersionFacts({ ...runtimeBuildInfo(), version: app.getVersion() }),
+      facts: [...runtimeVersionFacts({ ...runtimeBuildInfo(), version: app.getVersion() }),
+        ...runtimeInstallationFacts(runtimeBuildInfo(), readInstalledRuntimeBuild(path.join(app.getAppPath(), "dist", "main.cjs")))],
     },
     {
       ...item(
@@ -130,8 +133,8 @@ export function buildElectronRuntimeStatusReport(options: {
       ...item(
         "electron.cdp-proxy",
         "CDP Proxy",
-        desktopRuntime.cdpProxy ? "healthy" : "unhealthy",
-        desktopRuntime.cdpProxy ? "CDP Proxy 已监听" : "CDP Proxy 不可用",
+        !browserEnabled ? "disabled" : desktopRuntime.cdpProxy ? "healthy" : "unhealthy",
+        !browserEnabled ? "本机 Browser 未启用，不检查 CDP Proxy" : desktopRuntime.cdpProxy ? "CDP Proxy 已监听" : "CDP Proxy 不可用",
         now,
       ),
       facts: desktopRuntime.cdpProxy
@@ -151,7 +154,7 @@ export function buildElectronRuntimeStatusReport(options: {
     ...remoteDesktopItems(now),
     ...getTerminalBrowserProfileRuntimeStates().map((profile) => {
       const expected =
-        profile.proxyMode === "whistle" &&
+        browserEnabled && profile.proxyMode === "whistle" &&
         (profile.visibleViewCount > 0 || profile.cdpConnectionCount > 0);
       const state = !expected
         ? "disabled"
@@ -208,6 +211,11 @@ export function registerRuntimeStatusHandlers(options: {
   getCompanion: () => DesktopCompanionAgent | null;
   isCompanionEnabled: () => boolean;
 }): void {
+  const stopReporting = startLocalRuntimeStatusReporter("electron", () => buildElectronRuntimeStatusReport({
+    companion: options.getCompanion(), companionEnabled: options.isCompanionEnabled(),
+    managesPackagedBackend: process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND?.trim() !== "false",
+  }));
+  app.once("will-quit", () => { void stopReporting(); });
   const requireMainRenderer = (senderId: number): BrowserWindow => {
     const mainWindow = desktopRuntime.mainWindow;
     if (
