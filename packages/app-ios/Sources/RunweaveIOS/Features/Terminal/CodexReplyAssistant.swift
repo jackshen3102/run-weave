@@ -5,6 +5,7 @@ struct CodexReplyContext: Identifiable {
   let id = UUID()
   let generation: Int
   let conversationKey: String?
+  let conversationRevision: String?
   let agentText: String?
   let turnID: String?
 }
@@ -25,7 +26,9 @@ struct CodexReplyAssistant: View {
     session.generation == context.generation && session.terminal?.id == terminalID
       && session.terminalController === controller && terminal?.status != "exited"
       && context.conversationKey != nil && terminal?.conversationKey == context.conversationKey
-      && (questions.response?.capability == "available" || terminal?.conversationPreview?.turnId == context.turnID)
+      && (questions.response?.capability == "available"
+        || (terminal?.conversationRevision == context.conversationRevision
+          && terminal?.conversationPreview?.turnId == context.turnID))
       && terminal?.terminalState.agent == "codex"
   }
 

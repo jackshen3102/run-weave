@@ -46,6 +46,7 @@ try {
     "appServer.cloudSyncDirectory": cloudSyncDir,
     "agents.codex.binary": fakeCodexBinPath,
     "agents.codex.sessionsDirectory": path.join(stateDir, "codex-sessions"),
+    "agents.traex.sessionsDirectory": path.join(stateDir, "trae-sessions"),
   });
   appServer = await startAppServer();
   const lock = await readLock();

@@ -214,7 +214,8 @@ struct TerminalScreen: View {
             session.terminal?.id == details.id, session.terminalController === controller,
             currentTerminal?.conversationKey == context.conversationKey,
             (session.terminalQuestions.response?.capability == "available"
-              || currentTerminal?.conversationPreview?.turnId == context.turnID) else { return }
+              || (currentTerminal?.conversationRevision == context.conversationRevision
+                && currentTerminal?.conversationPreview?.turnId == context.turnID)) else { return }
           replyContext = nil
           tab = "Chat"
           controller.returnToBottom()
@@ -380,6 +381,7 @@ struct TerminalScreen: View {
           let preview = currentTerminal?.conversationPreview
           replyContext = CodexReplyContext(generation: session.generation,
             conversationKey: currentTerminal?.conversationKey,
+            conversationRevision: currentTerminal?.conversationRevision,
             agentText: preview?.available == true && preview?.provider == "codex" ? preview?.agentText : nil,
             turnID: preview?.turnId)
         } label: {

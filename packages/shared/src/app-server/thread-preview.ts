@@ -2,6 +2,8 @@ export interface AppServerThreadPreview {
   threadId: string;
   provider: string;
   available: boolean;
+  /** Optional for compatibility with older App Servers. */
+  availability?: "available" | "loading" | "source_missing" | "provider_unsupported" | "read_failed";
   turnId: string | null;
   userText: string | null;
   agentText: string | null;

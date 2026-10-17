@@ -29,6 +29,8 @@ struct HomeTerminal: Codable, Identifiable {
   var subtitle: String
   var conversationKey: String?
   var conversationPreview: HomeConversationPreview?
+  // Local invalidation for an open reply assistant; cached Home text is historical.
+  var conversationRevision: String?
   let command: String
   var activeCommand: String?
   var cwd: String
@@ -69,6 +71,7 @@ struct HomeConversationPreview: Codable {
   let threadId: String
   let provider: String
   let available: Bool
+  var availability: String? = nil
   let turnId: String?
   let userText: String?
   let agentText: String?

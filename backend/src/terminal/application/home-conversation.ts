@@ -28,16 +28,18 @@ export async function readHomeConversationPreviews(
   });
   if (!targets.length) return { sessions: [] };
   const connection = await discoverAppServer();
-  if (!connection) return { sessions: [] };
-  const result = await new AppServerClient(connection).getThreadPreviews(
+  const result = connection ? await new AppServerClient(connection).getThreadPreviews(
     [...new Set(targets.map((target) => target.identity!.id))], AbortSignal.timeout(1500),
-  );
-  if (!result) return { sessions: [] };
+  ) : null;
   return { sessions: targets.flatMap((target) => {
     const current = manager.getSession(target.session.id);
     if (!current || homeConversation(manager, current).key !== target.key) return [];
-    const preview = result.previews.find((value) => value.threadId === target.identity!.id &&
-      value.provider === target.identity!.provider);
-    return preview ? [{ terminalSessionId: current.id, conversationKey: target.key!, conversationPreview: preview }] : [];
+    const preview = result?.previews.find((value) => value.threadId === target.identity!.id &&
+      value.provider === target.identity!.provider) ?? {
+      threadId: target.identity!.id, provider: target.identity!.provider, available: false,
+      availability: result ? "source_missing" as const : "read_failed" as const,
+      turnId: null, userText: null, agentText: null,
+    };
+    return [{ terminalSessionId: current.id, conversationKey: target.key!, conversationPreview: preview }];
   }) };
 }

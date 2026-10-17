@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 
@@ -210,6 +210,10 @@ export async function verifyThreadPreviews(baseUrl, token, stateDir) {
     line(message("user", "**验证首页**")) +
     line(message("assistant", "正在测量读取开销。")) +
     line({ type: "response_item", payload: { type: "function_call", name: "raw-tool-name" } }).repeat(4000));
+  const unregisteredId = "33333333-3333-4333-8333-333333333333";
+  await writeFile(path.join(sessions, `${unregisteredId}.jsonl`),
+    line({ type: "session_meta", payload: { id: unregisteredId } }) +
+    line(message("user", "没有 Hook 的真实输入")) + line(message("assistant", "可核验的真实回复")));
   await hook(codexId, "codex");
   assert.equal((await read(codexId)).available, false, "cold HTTP must return before backfill");
   const preview = await wait(codexId, (value) => value.available);
@@ -218,21 +222,65 @@ export async function verifyThreadPreviews(baseUrl, token, stateDir) {
   await appendFile(file, line(message("assistant", "已完成采样。")));
   await wait(codexId, (value) => value.agentText === "已完成采样。");
   await hook(codexId, "codex");
-  assert.equal((await read(codexId)).available, false, "new prompt must hide the previous turn immediately");
-  // A hook can precede the native transcript append; an empty read must not reveal stale text.
+  assert.equal((await read(codexId)).available, true, "a late hook must not hide already-read latest messages");
+  // A hook can precede or follow the native append. The transcript remains the text authority.
   await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.equal((await read(codexId)).available, false);
+  assert.equal((await read(codexId)).agentText, "已完成采样。");
   const partial = JSON.stringify(message("user", "新的任务"));
   await appendFile(file, line({ type: "event_msg", payload: { type: "task_started", turn_id: "second-turn" } }) + partial.slice(0, 30));
   await appendFile(file, partial.slice(30) + "\n");
   const second = await wait(codexId, (value) => value.available && value.userText === "新的任务");
   assert.equal(second.agentText, null, "a new turn without commentary has no borrowed final reply");
   assert.equal(second.turnId, "second-turn");
+  await hook(codexId, "codex");
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal((await read(codexId)).userText, "新的任务", "a late submit must not hide the new turn");
+  const recoverySource = await readFile(file);
+  await unlink(file);
+  await hook(codexId, "codex");
+  await wait(codexId, (value) => value.availability === "source_missing");
+  await writeFile(file, recoverySource);
+  await hook(codexId, "codex");
+  await wait(codexId, (value) => value.available && value.userText === "新的任务");
   // A replaced/truncated transcript must discard its old projection and revalidate identity.
   await writeFile(file, line({ type: "session_meta", payload: { id: "different-thread" } }) + line(message("user", "错误归属")));
   await hook(codexId, "codex");
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.equal((await read(codexId)).available, false);
+  const invalid = await wait(codexId, (value) => value.availability === "source_missing");
+  assert.equal(invalid.available, false);
+
+  const unregistered = await wait(unregisteredId, (value) => value.available);
+  assert.equal(unregistered.userText, "没有 Hook 的真实输入");
+  assert.equal(unregistered.agentText, "可核验的真实回复");
+  await appendFile(path.join(sessions, `${unregisteredId}.jsonl`),
+    line(message("user", "未注册会话继续")) + line(message("assistant", "预览继续刷新")));
+  await wait(unregisteredId, (value) => value.userText === "未注册会话继续" && value.agentText === "预览继续刷新");
+  await assertHttpStatus(`${baseUrl}/threads/${unregisteredId}`, { expectedStatus: 404, token });
+  const missing = await wait("44444444-4444-4444-8444-444444444444", (value) => value.availability === "source_missing");
+  assert.equal(missing.available, false);
+
+  const traeId = "55555555-5555-4555-8555-555555555555";
+  const traeRoot = path.join(stateDir, "trae-sessions");
+  await mkdir(traeRoot, { recursive: true });
+  const traeFile = path.join(traeRoot, `${traeId}.jsonl`);
+  const mutation = (items) => ({ type: "history_mutation", payload: { version: 1, operation: "append", items } });
+  await writeFile(traeFile, [
+    { type: "session_meta", payload: { id: traeId } },
+    { type: "event_msg", payload: { type: "task_started", turn_id: "trae-turn" } },
+    mutation([message("user", "Trae 真实任务").payload, message("assistant", "Trae 真实回复").payload]),
+    mutation([{ type: "function_call_output", output: "不展示工具输出" }]),
+  ].map(line).join(""));
+  await hook(traeId, "traex");
+  const trae = await wait(traeId, (value) => value.available);
+  assert.equal(trae.userText, "Trae 真实任务");
+  assert.equal(trae.agentText, "Trae 真实回复");
+  await appendFile(traeFile, line(mutation([message("user", "Trae 下一轮").payload])));
+  await hook(traeId, "traex");
+  const traeNext = await wait(traeId, (value) => value.userText === "Trae 下一轮");
+  assert.equal(traeNext.agentText, null);
+
+  await hook("unsupported-provider", "claude");
+  const unsupported = await wait("unsupported-provider", (value) => value.availability === "provider_unsupported");
+  assert.equal(unsupported.available, false);
 
   const piId = "22222222-2222-4222-8222-222222222222";
   const piFile = path.join(stateDir, "pi-preview.jsonl");
@@ -262,5 +310,5 @@ export async function verifyThreadPreviews(baseUrl, token, stateDir) {
   assert.equal(branchB.userText, "分支 B 的任务");
   assert.equal(branchB.agentText, "分支 B 的回复");
   await assertHttpStatus(`${baseUrl}/threads/previews?threadId=${piId}`, { expectedStatus: 401 });
-  console.log("thread previews: incremental append, current turn, identity, Pi branch and auth passed");
+  console.log("thread previews: late hooks, unregistered Codex, Trae messages, incremental append, identity, Pi branch and auth passed");
 }

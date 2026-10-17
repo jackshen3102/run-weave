@@ -60,7 +60,7 @@ export class TraeThreadLifecycleReader {
     this.threadPaths.clear();
   }
 
-  private async findThreadPath(threadId: string): Promise<string | null> {
+  async findThreadPath(threadId: string): Promise<string | null> {
     const cached = this.threadPaths.get(threadId);
     if (cached) {
       return cached;
