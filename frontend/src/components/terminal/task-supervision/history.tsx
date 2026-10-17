@@ -1,3 +1,4 @@
+import { supervisionDecisionLabel } from "@runweave/shared/task-supervision";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import type { SupervisionDecisionSummary } from "@runweave/shared/task-supervision";
@@ -56,11 +57,7 @@ export function SupervisionHistory({ watchId }: { watchId: string }) {
           <p>{decision.goalVersion ? `目标 v${decision.goalVersion}` : "旧版目标"}</p>
           <p>
             {new Date(decision.createdAt).toLocaleString()} ·{" "}
-            {decision.outcome === "completed"
-              ? "任务已完成"
-              : decision.outcome === "blocked"
-                ? "需要你处理"
-                : "任务可以继续"}
+            {supervisionDecisionLabel(decision)}
           </p>
           <p className="break-all">thread {decision.threadId}</p>
           <SupervisionDecisionDetails watchId={watchId} decision={decision} />

@@ -9,6 +9,7 @@ import type {
 } from "@runweave/shared/task-supervision";
 import {
   currentSupervisionDecisions,
+  supervisionDecisionLabel,
 } from "@runweave/shared/task-supervision";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import {
@@ -208,8 +209,8 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
                     ? `上次判断${decision.goalVersion ? ` · 目标 v${decision.goalVersion}` : " · 旧版目标"}`
                     : "最新判断"}
                 </h3>
-                <p className="text-sm">{labels[decision.outcome]}</p>
-                {decision.outcome === "continue" && (
+                <p className="text-sm">{supervisionDecisionLabel(decision)}</p>
+                {decision.outcome === "continue" && decision.assessment?.disposition !== "hold" && (
                   <div className="space-y-2 text-xs text-amber-300">
                     <p>{decision.delivery === "not_requested" ? "自动续接未发送" : decision.delivery === "observed" ? "原会话已接收续接" : "续接已尝试发送，等待原会话确认"}</p>
                     {!previousDecision && watch.enabled && watch.status === "error" && decision.deliveryBlock === "draft_unconfirmed" && decision.delivery === "not_requested" && (
@@ -220,7 +221,7 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
                   </div>
                 )}
                 <p className="text-xs leading-6 text-slate-400">
-                  {decision.reason}
+                  {decision.assessment?.disposition === "hold" ? `${decision.assessment.note} · 候选结果未采用，不会自动续接。` : decision.reason}
                 </p>
                 <p className="text-[11px] text-slate-500">
                   选项评分 · Codex 相对评分

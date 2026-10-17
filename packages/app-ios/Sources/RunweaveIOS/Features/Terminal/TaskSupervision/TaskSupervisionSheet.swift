@@ -115,12 +115,12 @@ struct TaskSupervisionSheet: View {
       section(watch.status == "classifying" || (decision.goalVersion ?? 0) < (watch.goalDefinition?.version ?? 0)
         ? "上次判断（正在重新判断）" : "最新判断") {
         HStack {
-          Text(decision.outcome.label).font(.subheadline.weight(.semibold))
+          Text(decision.outcomeLabel).font(.subheadline.weight(.semibold))
           Spacer()
           Text(supervisionTime(decision.createdAt)).font(.caption2).foregroundColor(.secondary)
         }
-        Text(decision.reason).font(.subheadline).foregroundColor(.secondary).textSelection(.enabled)
-        if decision.outcome == .continue { Text(decision.deliveryLabel).font(.caption).foregroundColor(.secondary) }
+        Text(decision.isHeld ? (decision.assessment?.note ?? "候选判断未采用，暂不自动续接。") : decision.reason).font(.subheadline).foregroundColor(.secondary).textSelection(.enabled)
+        if decision.outcome == .continue && !decision.isHeld { Text(decision.deliveryLabel).font(.caption).foregroundColor(.secondary) }
         if watch.enabled && watch.draftUnconfirmed {
           Button("确认输入框为空并重试") { model.retryContinuation() }
             .font(.caption).disabled(!model.canRead || model.writing || model.discovery?.inputVersion == nil)

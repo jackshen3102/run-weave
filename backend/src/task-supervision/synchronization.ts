@@ -40,6 +40,9 @@ export function synchronizeTarget(
     watch.continuationCount = 0;
     watch.outcome = null;
     watch.contextRevision++;
+    delete watch.lastObservedContinuationId;
+    delete watch.lastComparedContinuationId;
+    watch.noProgressCount = 0;
     delete watch.lastFinalMessageId;
     delete watch.lastUserMessageId;
     delete watch.waitingFor;
@@ -73,6 +76,9 @@ export function synchronizeContext(
       watch.continuationCount = 0;
       watch.outcome = null;
       watch.contextRevision++;
+    delete watch.lastObservedContinuationId;
+    delete watch.lastComparedContinuationId;
+    watch.noProgressCount = 0;
       delete watch.lastFinalMessageId;
       delete watch.waitingFor;
       delete watch.error;

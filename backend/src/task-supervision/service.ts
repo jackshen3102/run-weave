@@ -4,7 +4,7 @@ import { SupervisionGoalEditor } from "./goal-editor";
 import type { SupervisionConversationResponse } from "@runweave/shared/terminal/conversation";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { setting, settingText } from "@runweave/config-node";
+import { configuration, setting, settingText } from "@runweave/config-node";
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type {
@@ -89,6 +89,7 @@ export class TaskSupervisionService {
   private readonly timer: ReturnType<typeof setInterval>;
   private readonly classifier: TaskSupervisionClassifier;
   private readonly goalEditor: SupervisionGoalEditor;
+  private unregisterConfiguration?: () => void;
 
   constructor(
     directory: string,
@@ -115,6 +116,7 @@ export class TaskSupervisionService {
     });
     this.ready = this.store.load().then((saved) => {
       this.journal = saved;
+      if (!this.closed) this.unregisterConfiguration = configuration().register("backend.taskSupervision", () => {});
       logInitialization(saved.watches);
     });
     this.timer = setInterval(() => {
@@ -458,6 +460,7 @@ export class TaskSupervisionService {
   }
   async dispose() {
     this.closed = true;
+    this.unregisterConfiguration?.();
     this.unsubscribe?.();
     clearInterval(this.timer);
     this.jobs.cancelAll();

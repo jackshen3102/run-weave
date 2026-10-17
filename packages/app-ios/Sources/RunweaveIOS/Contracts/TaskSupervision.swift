@@ -37,6 +37,7 @@ struct SupervisionInput: Codable {
   let recentExchanges: [SupervisionMessage]
   let currentReply: SupervisionMessage
   let goalDefinition: SupervisionGoal?
+  let previousContinuation: PreviousSupervisionContinuation?
 
   var snapshot: String {
     let encoder = JSONEncoder()
@@ -44,6 +45,47 @@ struct SupervisionInput: Codable {
     guard let data = try? encoder.encode(self) else { return "输入快照无法显示" }
     return String(decoding: data, as: UTF8.self)
   }
+}
+
+struct PreviousSupervisionContinuation: Codable {
+  let decisionId: String
+  let reportMessageId: String
+  let remainingWork: String
+  let nextAction: String
+  let authorizationMessageIds: [String]
+  let noProgressCount: Int
+}
+
+struct SupervisionAssessment: Decodable {
+  struct Criterion: Decodable {
+    let text: String
+    let state: String
+    let sourceMessageIds: [String]
+    let note: String
+    var stateLabel: String {
+      switch state {
+      case "reported_done": return "据报告完成"
+      case "pending": return "尚未完成"
+      case "contradicted": return "存在矛盾"
+      case "waived": return "用户已取消"
+      default: return "资料不足"
+      }
+    }
+  }
+  struct Progress: Decodable {
+    let state: String
+    let note: String
+    let previousDecisionId: String
+    let sourceMessageIds: [String]
+  }
+  let version: Int
+  let disposition: String
+  let holdReason: String?
+  let coverage: String
+  let criteria: [Criterion]?
+  let missingEvidence: [String]?
+  let progress: Progress?
+  let note: String?
 }
 
 enum TaskOutcome: String, Codable, CaseIterable {
@@ -80,6 +122,7 @@ struct SupervisionDecision: Decodable, Identifiable {
   let codexVersion: String?
   let durationMs: Int
   let scores: Scores
+  let assessment: SupervisionAssessment?
   let outcome: TaskOutcome
   let reason: String
   let sourceMessageIds: [String]
@@ -91,6 +134,12 @@ struct SupervisionDecision: Decodable, Identifiable {
   let deliveryDeadline: Double
   let deliveryBlock: String?
   var id: String { decisionId }
+  var isHeld: Bool { assessment?.disposition == "hold" }
+  var outcomeLabel: String {
+    if isHeld { return "判断待核对 · 候选：\(outcome.label)（未采用）" }
+    if assessment != nil && outcome == .completed { return "据报告完成" }
+    return outcome.label
+  }
   var deliveryLabel: String {
     switch delivery {
     case "not_requested": return "本次未续接"

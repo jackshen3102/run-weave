@@ -7,6 +7,9 @@ export function updateWaitingState(
   if (["userpromptsubmit", "interrupt"].includes(raw)) {
     watch.revision++;
     watch.contextRevision++;
+    delete watch.lastObservedContinuationId;
+    delete watch.lastComparedContinuationId;
+    watch.noProgressCount = 0;
     watch.status = raw === "interrupt" ? "paused" : "watching";
     delete watch.waitingFor;
     delete watch.error;

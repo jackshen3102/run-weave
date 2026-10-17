@@ -58,7 +58,10 @@ export function reconcileDelivery(
       )
     ) {
       decision.delivery = "observed";
-      if (current) watch.observedContinuationCount = (watch.observedContinuationCount ?? 0) + 1;
+      if (current) {
+        watch.observedContinuationCount = (watch.observedContinuationCount ?? 0) + 1;
+        watch.lastObservedContinuationId = decision.decisionId;
+      }
     } else {
       if (now > decision.deliveryDeadline) decision.delivery = "unknown";
       if (current) {
