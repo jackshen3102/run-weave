@@ -7,6 +7,7 @@ import {
 } from "@runweave/shared/browser-profile-node";
 import type { PackagedBackendRuntimeIncidentEvent } from "../backend/runtime.js";
 import { DesktopIncidentLogger } from "./incident-logger.js";
+import { startDesktopResponsivenessMonitor } from "./responsiveness.js";
 import {
   resolveActiveRuntimeRelease,
   resolveRuntimeRoot,
@@ -90,6 +91,7 @@ export function initializeDesktopIncidentLogger(): void {
       resourcesPath: process.resourcesPath,
     });
     desktopRuntime.incidentLogger.recordLaunch();
+    startDesktopResponsivenessMonitor(desktopRuntime.incidentLogger.logsDir, desktopRuntime.incidentLogger.launchId);
     desktopRuntime.incidentLogger.recordNewCrashReports();
   } catch (error) {
     desktopRuntime.incidentLogger = null;
@@ -100,7 +102,7 @@ export function initializeDesktopIncidentLogger(): void {
   }
 }
 
-export function exportDesktopDiagnostics(): void {
+export async function exportDesktopDiagnostics(): Promise<void> {
   if (!desktopRuntime.incidentLogger) {
     dialog.showErrorBox(
       "Export Desktop Diagnostics Failed",
@@ -110,7 +112,7 @@ export function exportDesktopDiagnostics(): void {
   }
 
   try {
-    const result = desktopRuntime.incidentLogger.exportDiagnosticPackage({
+    const result = await desktopRuntime.incidentLogger.exportDiagnosticPackage({
       snapshot: buildDesktopDiagnosticSnapshot(),
     });
     shell.showItemInFolder(result.summaryFile);

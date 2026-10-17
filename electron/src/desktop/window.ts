@@ -9,6 +9,7 @@ import {
   shell,
 } from "electron";
 import pidusage from "pidusage";
+import { watchDesktopWindow } from "./responsiveness.js";
 import type { RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
 import type { SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
 import type { PackagedBackendRuntime } from "../backend/runtime.js";
@@ -201,6 +202,7 @@ export function createWindow(options?: {
     title: isBetaChannel ? "Runweave Beta" : "Runweave",
   });
 
+  watchDesktopWindow(win);
   win.once("ready-to-show", () => {
     win.show();
     options?.onReadyToShow?.(win);

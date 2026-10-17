@@ -3090,10 +3090,10 @@
   {
     "file": "electron/src/desktop/incident-logger.ts",
     "kind": "file-io",
-    "expression": "writeFileSync(summaryFile)",
+    "expression": "fs.writeFile(summaryFile)",
     "count": 1,
     "category": "runtime-state",
-    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFileSync(summaryFile)"
+    "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；fs.writeFile(summaryFile)"
   },
   {
     "file": "electron/src/desktop/incident-logger.ts",
@@ -3102,6 +3102,14 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFileSync(this.seenCrashReportsPath)"
+  },
+  {
+    "file": "electron/src/desktop/responsiveness-worker.ts",
+    "kind": "file-io",
+    "expression": "appendFile(logFile)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "桌面无响应观察器的本机轮转诊断事件日志，不读取或替代 settings.yaml 业务配置。"
   },
   {
     "file": "electron/src/desktop/local-state.ts",
