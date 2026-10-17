@@ -1,0 +1,176 @@
+{
+  "profiles": ["Browser 1", "Browser 2", "Browser 3"],
+  "servers": [
+    {
+      "id": "dev",
+      "name": "开发服务器",
+      "host": "dev-singapore",
+      "online": true
+    },
+    {
+      "id": "runner",
+      "name": "任务服务器",
+      "host": "runner-shanghai",
+      "online": true
+    },
+    {
+      "id": "archive",
+      "name": "归档服务器",
+      "host": "archive",
+      "online": false
+    }
+  ],
+  "sites": [
+    {
+      "domain": "github.com",
+      "count": 8,
+      "selected": true,
+      "label": "当前网站"
+    },
+    {
+      "domain": "gist.github.com",
+      "count": 2,
+      "selected": false,
+      "label": "关联网站"
+    }
+  ],
+  "identities": [
+    {
+      "id": "github-work",
+      "site": "GitHub",
+      "domain": "github.com",
+      "name": "GitHub 工作账号",
+      "server": "开发服务器",
+      "account": "@alex-work",
+      "status": "verified",
+      "count": 8
+    },
+    {
+      "id": "notion-team",
+      "site": "Notion",
+      "domain": "notion.so",
+      "name": "团队知识库",
+      "server": "任务服务器",
+      "account": "未确认",
+      "status": "expired",
+      "count": 5
+    },
+    {
+      "id": "gitlab-ci",
+      "site": "GitLab",
+      "domain": "gitlab.com",
+      "name": "发布账号",
+      "server": "任务服务器",
+      "account": "未确认",
+      "status": "unverified",
+      "count": 6
+    }
+  ],
+  "cookies": [
+    {
+      "name": "prototype_cookie_1",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "github.com",
+      "path": "/",
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    },
+    {
+      "name": "prototype_cookie_2",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "github.com",
+      "path": "/",
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    },
+    {
+      "name": "prototype_cookie_3",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "github.com",
+      "path": "/",
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    },
+    {
+      "name": "prototype_cookie_4",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "github.com",
+      "path": "/",
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    },
+    {
+      "name": "prototype_cookie_5",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "github.com",
+      "path": "/",
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    },
+    {
+      "name": "prototype_cookie_6",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "github.com",
+      "path": "/",
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    },
+    {
+      "name": "prototype_cookie_7",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "github.com",
+      "path": "/",
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    },
+    {
+      "name": "prototype_cookie_8",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "github.com",
+      "path": "/",
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    },
+    {
+      "name": "prototype_cookie_1",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "gist.github.com",
+      "path": "/",
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    },
+    {
+      "name": "prototype_cookie_2",
+      "value": "fictional-cookie-not-a-credential",
+      "domain": "gist.github.com",
+      "path": "/",
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax",
+      "expires": -1
+    }
+  ],
+  "verification": {
+    "default": "verified",
+    "mfa": "expired",
+    "unknown": "unverified"
+  }
+}
