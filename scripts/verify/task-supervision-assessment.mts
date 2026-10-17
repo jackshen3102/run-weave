@@ -47,8 +47,6 @@ if (samples.filter((s) => s.repeat).length !== 16) throw new Error("必须预先
 const concurrency = Number(option("--concurrency") ?? 2);
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error("并发只能为1到4。");
 const model = option("--model") ?? settingText("backend.taskSupervision.model");
-const temporary = await mkdtemp(path.join(os.tmpdir(), "supervision-replay-"));
-const classifier = new TaskSupervisionClassifier(temporary);
 const records = (await readFile(path.join(baselinePath, "results.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as RecordRow).filter((row) => row.strategy === "baseline");
 const baselineKeys = new Set(records.map((row) => `${row.id}:${row.repeat}`));
 if (records.length !== 152 || baselineKeys.size !== 152 || records.some((row) => !samples.some((s) => s.id === row.id && (row.repeat === 0 || s.repeat && [1, 2].includes(row.repeat))))) throw new Error("历史基线必须恰好包含120条原始判断及16条样本的两次重复，不允许重号或缺失。");
@@ -86,6 +84,8 @@ function prediction(row: RecordRow, thresholds?: { minimumScore: number; minimum
   return recalculated.disposition === "hold" ? "hold" : row.result.outcome;
 }
 const errors = (rows: RecordRow[], thresholds?: { minimumScore: number; minimumMargin: number }) => rows.filter((r) => prediction(r, thresholds) !== samples.find((s) => s.id === r.id)!.expected).length;
+const temporary = await mkdtemp(path.join(os.tmpdir(), "supervision-replay-"));
+const classifier = new TaskSupervisionClassifier(temporary);
 try {
   await run(jobs(samples.filter((s) => s.split === "calibration")));
   const selected = { thresholds: ASSESSMENT_THRESHOLDS, errors: errors(records.filter((r) => r.strategy === "assessment")) };
