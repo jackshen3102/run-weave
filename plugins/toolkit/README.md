@@ -16,6 +16,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 
 - [`agent-device`](./skills/agent-device/SKILL.md)：iOS 模拟器和真机上的 Agent 交互验收，包含设备预检、独立会话及证据记录。
 - [`update-runweave-ios`](./skills/update-runweave-ios/SKILL.md)：通过统一 CLI 更新 Runweave 到 iPhone，自动递增产品版本和构建号并核对安装和启动；也可脱离 Agent 直接执行命令。
+- [`update-runweave-backend`](./skills/update-runweave-backend/SKILL.md)：完整更新 Linux 后台及已部署配套服务，检查并补齐 systemd 托管与开机自启，区分运行验证和整机重启验证。
 - `brainstorming`
 - [`ask-first`](./skills/ask-first/SKILL.md)：复杂任务执行前先探索项目，只对齐高返工成本的关键取舍；源自 ByteTech 的 Ask First，支持按需并行探索，沿用已有授权，不强制文档流程。
 - `code-grounded-requirements`
