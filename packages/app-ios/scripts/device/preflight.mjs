@@ -9,6 +9,10 @@ import {
   writeJSON,
 } from "./support.mjs";
 import { inspectLock } from "./lock.mjs";
+import {
+  connectionRecoveryAction,
+  describeConnectionFailure,
+} from "./connection-recovery.mjs";
 
 export async function preflight(options, dir, ownRunId) {
   const observedAt = timestamp();
@@ -48,13 +52,12 @@ export async function preflight(options, dir, ownRunId) {
     xcode.evidencePath,
   );
   const device = details.ok ? details.value : null;
-  const canonicalUDID = device?.hardwareProperties?.udid;
-  const sameDevice = canonicalUDID === options.device;
-  const live =
-    sameDevice &&
-    device?.connectionProperties?.tunnelState === "connected" &&
-    lock.ok &&
-    lock.value?.deviceIdentifier === device.identifier;
+  const connectionFailure = describeConnectionFailure(
+    options.device,
+    details,
+    lock,
+  );
+  const live = connectionFailure === null;
   add(
     "transport",
     live ? "pass" : "blocked",
@@ -181,16 +184,19 @@ export async function preflight(options, dir, ownRunId) {
       transport: device?.connectionProperties?.transportType ?? null,
     },
     checks,
+    ...(connectionFailure && { connectionFailure }),
     team,
     toolchain: { xcode: xcode.output?.trim(), sdk: sdk.output?.trim() },
     nextAction:
-      reason === "device_locked"
-        ? "Unlock the target device, then run doctor again"
-        : reason === "signing_unavailable"
-          ? "Configure Xcode signing or provide --team"
-          : blocked.length
-            ? "Resolve blocked checks and run doctor again"
-            : "run_explicit_suite",
+      reason === "device_unavailable"
+        ? connectionRecoveryAction(options.device)
+        : reason === "device_locked"
+          ? "Unlock the target device, then run doctor again"
+          : reason === "signing_unavailable"
+            ? "Configure Xcode signing or provide --team"
+            : blocked.length
+              ? "Resolve blocked checks and run doctor again"
+              : "run_explicit_suite",
     ...(blocked.length && {
       error: { phase: "checking", reason, evidencePath: dir },
     }),

@@ -60,6 +60,9 @@ Mode、Xcode 签名登录和 Swift package 插件审批仍需按正常系统流�
 最多等待 120 秒，解锁后自动继续；超时非零退出，重新执行可复用已验证的产物。
 保持 Bundle ID、Keychain 和应用数据，不卸载旧 App。
 
+无线不可达、查询超时或构建后断线时，按[无线连接恢复](../../plugins/toolkit/skills/update-runweave-ios/references/ios-wireless-recovery.md)
+检查 Xcode 的原设备状态并恢复后重试；Agent 有 CUA 时主动执行该流程。Wi-Fi 更新不以 USB 为前提。
+
 默认 Release，沿用生产 Clarity；可传入 `--configuration Debug` 或 `Profile`（默认关闭分析）。
 直接安装到手机统一使用 Apple Development 签名及 APNs sandbox；Release 优化配置不代表
 生产推送签名。安装前核对已签名的 `aps-environment` 与 App 声明的推送环境，不一致即拒绝安装。

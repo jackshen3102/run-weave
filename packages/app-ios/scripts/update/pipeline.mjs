@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { acquireLock } from "../device/lock.mjs";
-import { preflight } from "../device/preflight.mjs";
+import { preflight as devicePreflight } from "../device/preflight.mjs";
 import { installAndLaunch } from "./install.mjs";
 import {
   bundleID,
@@ -53,6 +53,21 @@ export async function update(options) {
     build: "not_started",
     install: "not_started",
     launch: "not_started",
+  };
+  const preflight = async (...args) => {
+    const report = await devicePreflight(...args);
+    result.preflight = report.checks
+      .filter((check) => check.status === "blocked")
+      .map(({ id, reason }) => ({ id, reason }));
+    if (report.connectionFailure) {
+      result.connectionFailure = {
+        ...report.connectionFailure,
+        evidencePath: dryRun ? null : report.connectionFailure.evidencePath,
+      };
+    } else {
+      delete result.connectionFailure;
+    }
+    return report;
   };
   let phase = "checking",
     deviceLock,
@@ -153,9 +168,6 @@ export async function update(options) {
       await preflight(options, dir),
       "initial",
     );
-    result.preflight = report.checks
-      .filter((check) => check.status === "blocked")
-      .map(({ id, reason }) => ({ id, reason }));
     if (report.state === "blocked")
       fail(report.error.reason, report.nextAction, 3);
     options.team = report.team;
@@ -451,7 +463,9 @@ export async function update(options) {
       preflight,
       checked,
       fail,
-      setPhase: (value) => { phase = value; },
+      setPhase: (value) => {
+        phase = value;
+      },
       inspect,
       source,
       sourceSnapshot: snapshot,
@@ -475,6 +489,15 @@ export async function update(options) {
     result.nextAction =
       error.nextAction ||
       `Inspect ${dryRun ? "the preflight result" : dir} and retry after resolving the error`;
+    if (
+      error.reason === "device_unavailable" &&
+      result.appPath &&
+      ["built", "reused"].includes(result.build)
+    ) {
+      result.artifactRetained = true;
+      result.nextAction +=
+        " Keep the built artifact and rerun the same update command; matching source and artifact identities allow reuse without a new version or build number.";
+    }
   } finally {
     process.removeListener("SIGINT", abort);
     process.removeListener("SIGTERM", abort);
