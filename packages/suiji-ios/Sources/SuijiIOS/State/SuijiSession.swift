@@ -1,6 +1,6 @@
 import SwiftUI
 import RunweaveBrowser
-enum RecordAction { case status(TaskStatus), trash(Bool) }
+enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
 @MainActor final class SuijiSession: ObservableObject {
   @Published var endpoint: String
   @Published var username: String
@@ -151,7 +151,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     guard let client, let store, let info else { return }; let current = generation
     guard record?.deletedAt == nil else { return }
     do {
-      if let record, try await store.status(record.id) != nil { message = "此记录有状态操作待确认，请先手动重试确认"; return }
+      if let record, try await store.status(record.id) != nil { message = "此记录有操作待确认，请先手动重试确认"; return }
       if let cached = editingModels[record?.id ?? "new"], cached.canReopen {
         await cached.prepareForCapture(kind: kind, body: body)
         guard generation == current else { return }
@@ -189,28 +189,28 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
     } catch { if generation == current { message = error.localizedDescription } }
   }
   @discardableResult
-  func changeRecord(_ record: SuijiRecord, action: RecordAction) async -> SuijiRecord? {
+  func changeRecord(_ record: SuijiRecord, action: RecordAction, returnHomeAfterCompletion: Bool = false) async -> SuijiRecord? {
     guard let client, let store, !statusBusy.contains(record.id) else { return nil }
-    let current = generation; statusBusy.insert(record.id)
+    let current = generation; statusBusy.insert(record.id); message = ""
     defer { if current == generation { statusBusy.remove(record.id) } }
     do {
       let previous = try await store.status(record.id)
       if previous == nil, let draft = try await store.load(record.id), draft.frozen { throw MessageError(message: "正文保存结果待确认，请先在编辑器确认") }
-      let payload: [String: Any], suffix: String
+      let payload: [String: Any], suffix: String, method: String
       switch action {
-      case .status(let target): payload = ["expectedVersion": record.version, "targetStatus": target.rawValue]; suffix = "task-status"
-      case .trash(let trashed): payload = ["expectedVersion": record.version, "trashed": trashed]; suffix = "trash"
+      case .status(let target): payload = ["expectedVersion": record.version, "targetStatus": target.rawValue]; suffix = "/task-status"; method = "POST"
+      case .trash(let trashed): payload = ["expectedVersion": record.version, "trashed": trashed]; suffix = "/trash"; method = "POST"
+      case .tags(let tags): payload = ["expectedVersion": record.version, "tags": try SuijiTags.normalize(tags)]; suffix = ""; method = "PATCH"
       }
-      let path = "api/suiji/v1/records/\(record.id)/" + suffix
-      let operation = try previous ?? PendingOperation(path: path, method: "POST", payload: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
+      let path = "api/suiji/v1/records/\(record.id)" + suffix
+      let operation = try previous ?? PendingOperation(path: path, method: method, payload: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
       try await store.saveStatus(operation, id: record.id)
       guard current == generation else { return nil }; pendingStatuses.insert(record.id)
       let result = try await client.request(RecordResponse.self, path: operation.path, method: operation.method, data: operation.payload, key: operation.key)
       guard current == generation else { return nil }
       try await store.removeStatus(record.id); pendingStatuses.remove(record.id)
-      lastChangedRecord = result.record
-      if let index = records.firstIndex(where: { $0.id == record.id }) { records[index] = result.record }; message = ""
-      if case .trash = action {
+      acceptFollowupRecord(result.record); message = ""
+      if operation.method == "PATCH" || operation.path.hasSuffix("/trash") {
         do {
           let directory = try await client.request(TagDirectory.self, path: "api/suiji/v1/tags")
           if current == generation { availableTags = directory.items }
@@ -218,14 +218,26 @@ enum RecordAction { case status(TaskStatus), trash(Bool) }
           if current == generation { message = "记录已更新，标签列表刷新失败，请重新读取" }
         }
       }
+      if current == generation, returnHomeAfterCompletion, operation.path.hasSuffix("/task-status"), result.record.taskStatus == .done, result.record.deletedAt == nil {
+        returnHomeRequest = UUID()
+      }
       return current == generation ? result.record : nil
     } catch let error as APIError {
       guard current == generation else { return nil }
       if !error.uncertain {
         do { try await store.removeStatus(record.id); pendingStatuses.remove(record.id) } catch { message = "本机操作状态写入失败"; return nil }
       }
+      if error.error.code == "VERSION_CONFLICT" {
+        do {
+          let latest = try await client.request(RecordResponse.self, path: "api/suiji/v1/records/\(record.id)")
+          guard current == generation else { return nil }
+          acceptFollowupRecord(latest.record)
+          message = "记录已在其他地方更新，已显示最新内容，请重新选择标签或操作"
+        } catch { if current == generation { message = "记录已有新版本，读取失败，请返回列表重新打开后再操作" } }
+        return nil
+      }
       message = error.localizedDescription
-    } catch { if current == generation { message = "状态结果待确认：" + error.localizedDescription } }
+    } catch { if current == generation { message = "操作结果待确认：" + error.localizedDescription } }
     return nil
   }
 }

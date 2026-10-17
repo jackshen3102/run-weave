@@ -222,7 +222,7 @@ export function SuijiWorkspace({
       if (!writable || record?.deletedAt) return;
       try {
         if (record && (await store.get("status:" + record.id)))
-          throw new Error("状态操作待确认，请先手动确认");
+          throw new Error("记录操作待确认，请先手动确认");
         const id = record?.id ?? "new";
         let model = models.current.get(id);
         if (model && body)
@@ -264,7 +264,8 @@ export function SuijiWorkspace({
       record: SuijiRecord,
       action:
         | { targetStatus: "open" | "done" | "archived" }
-        | { trashed: boolean },
+        | { trashed: boolean }
+        | { tags: string[] },
     ) => {
       if (!writable || statusBusy) return;
       setStatusBusy(true);
@@ -277,8 +278,8 @@ export function SuijiWorkspace({
         )
           throw new Error("正文保存结果待确认，请先在编辑器确认");
         const operation = previous ?? {
-          path: `/api/suiji/v1/records/${record.id}/${"trashed" in action ? "trash" : "task-status"}`,
-          method: "POST",
+          path: `/api/suiji/v1/records/${record.id}${"tags" in action ? "" : "trashed" in action ? "/trash" : "/task-status"}`,
+          method: "tags" in action ? "PATCH" : "POST",
           key: crypto.randomUUID(),
           data: { expectedVersion: record.version, ...action },
         };
@@ -298,12 +299,13 @@ export function SuijiWorkspace({
           next.delete(record.id);
           return next;
         });
+        acceptRecord(result.record);
         setDetail((current) => {
           if (current?.record.id !== record.id) return current;
           return operation.path.endsWith("/trash") ||
-            result.record.taskStatus === "done"
+            (operation.path.endsWith("/task-status") && result.record.taskStatus === "done")
             ? undefined
-            : { record: result.record };
+            : current;
         });
         await load();
       } catch (error) {
@@ -321,7 +323,17 @@ export function SuijiWorkspace({
             return;
           }
         }
-        setMessage(error instanceof Error ? error.message : "状态结果待确认");
+        if (error instanceof SuijiHttpError && error.detail.error.code === "VERSION_CONFLICT") {
+          try {
+            const latest = await client.request<RecordResponse>(`/api/suiji/v1/records/${record.id}`);
+            acceptRecord(latest.record);
+            setMessage("记录已在其他地方更新，已显示最新内容，请重新选择标签或操作");
+          } catch {
+            setMessage("记录已有新版本，读取失败，请返回列表重新打开后再操作");
+          }
+          return;
+        }
+        setMessage(error instanceof Error ? error.message : "操作结果待确认");
       } finally {
         if (alive.current) setStatusBusy(false);
       }
@@ -544,6 +556,7 @@ export function SuijiWorkspace({
       </div>
       {detail && !editor ? (
         <SuijiRecordDetail
+          key={detail.record.id}
           onOpenLink={onOpenLink}
           {...detail}
           client={client}
@@ -551,6 +564,9 @@ export function SuijiWorkspace({
           onFollowup={() => void editFollowup(detail.record)}
           onRecord={acceptRecord}
           onTag={selectTag}
+          availableTags={availableTags}
+          onTagsChange={(tags) => void changeRecord(detail.record, { tags })}
+          message={message}
           onClose={() => setDetail(undefined)}
           onEdit={() => void edit(detail.record)}
           onStatus={(target) =>

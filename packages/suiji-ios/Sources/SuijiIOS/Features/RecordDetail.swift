@@ -30,6 +30,8 @@ struct RecordDetail: View {
   @State private var showingFollowups = false
   @State private var addingFollowupAfterDismiss = false
   @State private var copyFeedback = ""
+  @State private var editingTags = false
+  @State private var choosingTag = false
   @Environment(\.dismiss) private var dismiss
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var attachment: Attachment?
@@ -50,9 +52,7 @@ struct RecordDetail: View {
         if let status = record.taskStatus { TaskStatusBadge(status: status) }
         RecordBody(text: record.body)
           .frame(maxWidth: .infinity, alignment: .leading)
-        if let tags = record.tags, !tags.isEmpty {
-          RecordTags(tags: tags) { session.selectedTag = $0; dismiss() }
-        }
+        tagSection
         ForEach(record.attachments) { item in Button { attachment = item } label: { Label(item.fileName, systemImage: item.kind == "image" ? "photo" : "doc.text") } }
         Text(displayDate(record.createdAt)).font(.caption).foregroundStyle(.secondary)
         if record.deletedAt != nil { Text("已在回收站，恢复后可继续编辑。").foregroundStyle(.secondary) }
@@ -103,6 +103,11 @@ struct RecordDetail: View {
       .sheet(item: $attachment) { item in
         if let client = session.client { AttachmentReader(title: item.fileName, kind: item.kind) { try await client.bytes(path: "api/suiji/v1/attachments/\(item.id)/content") } }
       }
+      .sheet(isPresented: $choosingTag) {
+        TagPickerSheet(available: session.availableTags, selected: record.tags ?? [], allowsCreate: true) { tag in
+          saveTags((record.tags ?? []) + [tag])
+        }
+      }
       .sheet(isPresented: $showingFollowups, onDismiss: {
         guard addingFollowupAfterDismiss else { return }
         addingFollowupAfterDismiss = false
@@ -112,24 +117,25 @@ struct RecordDetail: View {
         NavigationStack {
           ScrollView { FollowupsView(session: session, record: record).padding(20) }
             .background(SuijiTheme.background)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-              if hasFollowups, record.deletedAt == nil {
-                Button {
-                  addingFollowupAfterDismiss = true
-                  showingFollowups = false
-                } label: {
-                  Label("新增跟进", systemImage: "plus")
-                }
-                .buttonStyle(DetailActionStyle(primary: true))
-                .disabled(pending || busy)
-                .accessibilityIdentifier("add-followup")
-                .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
-                .background(SuijiTheme.background)
-              }
-            }
             .navigationTitle("跟进")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("关闭") { showingFollowups = false } } }
+            .toolbar {
+              ToolbarItem(placement: .cancellationAction) {
+                Button("关闭") { showingFollowups = false }
+              }
+              ToolbarItem(placement: .primaryAction) {
+                if hasFollowups, record.deletedAt == nil {
+                  Button {
+                    addingFollowupAfterDismiss = true
+                    showingFollowups = false
+                  } label: {
+                    Label("新增跟进", systemImage: "plus")
+                  }
+                  .disabled(pending || busy)
+                  .accessibilityIdentifier("add-followup")
+                }
+              }
+            }
         }.presentationDetents([.medium, .large])
       }
       .task {
@@ -140,6 +146,44 @@ struct RecordDetail: View {
         } catch { if session.isCurrent(client) { session.message = error.localizedDescription } }
       }
       .mobileAnalyticsScreen(.recordDetail)
+  }
+  private var tagSection: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      if let tags = record.tags, !tags.isEmpty {
+        RecordTags(tags: tags) { session.selectedTag = $0; dismiss() }
+      }
+      if record.deletedAt == nil {
+        Button { editingTags.toggle() } label: {
+          Label(editingTags ? "收起标签" : (record.tags ?? []).count >= 2 ? "管理标签" : "添加标签", systemImage: "tag")
+        }.disabled(pending || busy).accessibilityIdentifier("record-edit-tags")
+        if editingTags {
+          VStack(alignment: .leading, spacing: 12) {
+            ForEach(record.tags ?? [], id: \.self) { tag in
+              Button { saveTags((record.tags ?? []).filter { $0 != tag }) } label: {
+                HStack { TagLabel(name: tag); Image(systemName: "xmark.circle") }
+              }.accessibilityLabel("移除标签：" + tag)
+            }
+            Button("＋标签") { choosingTag = true }.disabled((record.tags ?? []).count >= 2)
+            let recent = Array(session.availableTags.prefix(6)).filter { !(record.tags ?? []).contains($0) }
+            if !recent.isEmpty {
+              Text("最近使用").font(.caption).foregroundStyle(.secondary)
+              LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), alignment: .leading)], alignment: .leading) {
+                ForEach(recent, id: \.self) { tag in
+                  Button { saveTags((record.tags ?? []) + [tag]) } label: { TagLabel(name: tag) }
+                    .disabled((record.tags ?? []).count >= 2).accessibilityLabel("添加标签：" + tag)
+                }
+              }
+            }
+            Text(busy ? "正在保存标签…" : pending ? "保存结果待确认，请手动确认" : "选择或移除后自动保存，最多 2 个标签")
+              .font(.caption).foregroundStyle(.secondary)
+          }.padding(14).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 12)).disabled(pending || busy)
+        }
+      }
+    }
+  }
+  private func saveTags(_ tags: [String]) {
+    guard record.deletedAt == nil, !pending, !busy else { return }
+    Task { await session.changeRecord(record, action: .tags(tags)) }
   }
   private var followupRow: some View {
     Button { showingFollowups = true } label: {
@@ -184,9 +228,7 @@ struct RecordDetail: View {
     .background(SuijiTheme.background)
   }
   private func completeTask() async {
-    guard let updated = await session.changeRecord(record, action: .status(.done)),
-          updated.taskStatus == .done, updated.deletedAt == nil else { return }
-    session.returnHomeRequest = UUID()
+    await session.changeRecord(record, action: .status(.done), returnHomeAfterCompletion: true)
   }
   private var bottomLayout: AnyLayout {
     dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
