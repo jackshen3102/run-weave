@@ -6,7 +6,7 @@ import type {
   TerminalPreviewGitChangesResponse,
 } from "@runweave/shared/terminal/preview";
 import { useDebouncedValue } from "../../query/use-debounced-value";
-import { isSupportedTerminalImagePreviewPath } from "../preview/file-types";
+import { isSupportedTerminalImagePreviewPath, isSupportedTerminalVideoPreviewPath } from "../preview/file-types";
 import {
   getTerminalProjectPreviewFile,
   getTerminalProjectPreviewFileDiff,
@@ -50,7 +50,8 @@ export function useTerminalPreviewQueries(input: {
   const fileEnabled =
     Boolean(projectId && selectedFilePath) &&
     (input.mode === "file" || input.mode === "explorer") &&
-    !isSupportedTerminalImagePreviewPath(selectedFilePath);
+    !isSupportedTerminalImagePreviewPath(selectedFilePath) &&
+    !isSupportedTerminalVideoPreviewPath(selectedFilePath);
   const changesEnabled =
     Boolean(projectId && input.hasProjectPath) &&
     (input.mode === null || input.mode === "changes");

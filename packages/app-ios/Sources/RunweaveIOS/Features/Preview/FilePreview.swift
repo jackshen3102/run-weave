@@ -17,6 +17,7 @@ struct FilePreview: View {
   @State private var lines: [DiffLine] = []
   @State private var image: UIImage?
   @State private var htmlURL: URL?
+  @State private var videoURL: URL?
   @State private var failure: String?
   @State private var loading = true
   @State private var mode = "preview"
@@ -49,6 +50,7 @@ struct FilePreview: View {
   private var isImage: Bool {
     diff?.contentKind == "image" || (diff?.contentKind == nil && isPreviewImage(file.path))
   }
+  private var isVideo: Bool { file.changeKind == nil && isPreviewVideo(file.path) }
   private var canSwitch: Bool {
     ["md", "markdown", "svg", "html", "htm"].contains(suffix) && !isImage && diff?.problem == nil
   }
@@ -74,7 +76,7 @@ struct FilePreview: View {
       if loading { ProgressView() }
       if let failure {
         Text(failure).foregroundColor(.red)
-        Button("重新加载") { loadedMode = nil; loadRevision += 1 }
+        Button(isVideo ? "重试" : "重新加载") { loadedMode = nil; loadRevision += 1 }
       }
       if !loading, failure == nil {
         if let problem = diff?.problem {
@@ -91,6 +93,8 @@ struct FilePreview: View {
         } else if let image {
           ImagePreview(image: image).onTapGesture { fullImage = true }
           Button("全屏查看") { fullImage = true }
+        } else if isVideo, let videoURL {
+          VideoPreview(url: videoURL, reload: { loadedMode = nil; loadRevision += 1 })
         } else if content.isEmpty {
           Text("文件为空").foregroundColor(.secondary).padding()
         } else if mode == "preview", suffix == "svg" {
@@ -146,6 +150,9 @@ struct FilePreview: View {
         .accessibilityLabel("预览操作")
       }
     }
+    .onChange(of: session.api?.connectionID) { _ in
+      if isVideo { videoURL = nil; loadedMode = nil; loadRevision += 1 }
+    }
     .modifier(PreviewMutationConfirmation(model: model, target: $mutation))
     // Each presented level dismisses through its own native navigation binding.
     // Clearing only the root link does not pop a nested preview on iOS.
@@ -181,6 +188,7 @@ struct FilePreview: View {
     failure = nil
     image = nil
     htmlURL = nil
+    videoURL = nil
     diff = nil
     lines = []
     if file.changeKind == nil, let api = session.api {
@@ -193,7 +201,7 @@ struct FilePreview: View {
           image = decoded
           loading = false
         }
-      } else if file.changeKind == nil {
+      } else if !isVideo {
         let saved: PreviewFile? = await api.previewSnapshot(
           projectID: projectID, resource: "file",
           query: ["path": file.path])
@@ -258,6 +266,16 @@ struct FilePreview: View {
           guard !Task.isCancelled else { return }
           if failure == nil { didLoad?() }
         }
+      } else if isVideo {
+        let ticket = try await session.withConnection {
+          try await $0.videoPreviewTicket(projectID: projectID, path: file.path)
+        }
+        guard !Task.isCancelled else { return }
+        guard let api = session.api, let url = URL(string: api.baseURL.absoluteString + ticket.path) else {
+          throw APIError.invalidURL
+        }
+        videoURL = url
+        didLoad?()
       } else if isPreviewImage(file.path) {
         await loadImage()
       } else {
@@ -281,6 +299,10 @@ struct FilePreview: View {
       if !Task.isCancelled {
         if file.changeKind != nil, case APIError.http(409) = error {
           failure = "文件或变更版本已变化，请重新加载；若变更已消失，请返回刷新列表。"
+        } else if isVideo, case APIError.http(415) = error {
+          failure = "此文件不是受支持的视频格式"
+        } else if isVideo, case APIError.http(404) = error {
+          failure = "视频文件不存在，或电脑版本尚不支持视频预览"
         } else { failure = previewError(error) }
       }
     }

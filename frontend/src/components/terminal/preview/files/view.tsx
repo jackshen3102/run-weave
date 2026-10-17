@@ -1,3 +1,4 @@
+import { TerminalVideoPreview } from "../renderers/video";
 import {
   lazy,
   Suspense,
@@ -84,6 +85,7 @@ interface PreviewFileNavigation {
 }
 
 interface PreviewFileResource {
+  active: boolean;
   data: TerminalPreviewFileResponse | null;
   kind: string;
   loading: boolean;
@@ -244,6 +246,17 @@ export function TerminalPreviewFileView({
         />
       </Suspense>
     );
+  } else if (fileKind === "video" && selectedFilePath && projectId) {
+    fileContent = file.active ? (
+      <TerminalVideoPreview
+        key={`${apiBase}:${projectId}:${selectedFilePath}:${token}:${assetRefreshKey}`}
+        apiBase={apiBase}
+        token={token}
+        projectId={projectId}
+        path={selectedFilePath}
+        onAuthExpired={onAuthExpired}
+      />
+    ) : null;
   } else if (fileLoading) {
     fileContent = renderPreviewEmpty("Loading preview...");
   } else if (fileError) {

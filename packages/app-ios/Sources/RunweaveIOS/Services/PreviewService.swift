@@ -42,6 +42,9 @@ extension APIClient {
   func file(projectID: String, path: String) async throws -> PreviewFile {
     try await cachedPreview(previewPath(projectID, "file", ["path": path]))
   }
+  func videoPreviewTicket(projectID: String, path: String) async throws -> VideoPreviewTicket {
+    try await authorized(previewPath(projectID, "video-ticket"), method: "POST", body: ["path": path])
+  }
   func htmlPreviewTicket(projectID: String, path: String, changeKind: String? = nil,
                          version: String? = nil) async throws -> HtmlPreviewTicket {
     var body = ["path": path]

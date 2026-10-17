@@ -1,3 +1,4 @@
+import type { CreateTerminalVideoPreviewTicketResponse } from "@runweave/shared/terminal/preview";
 import type { TerminalFileLinkRequest, TerminalFileLinkResponse } from "@runweave/shared/terminal/file-link";
 import type { TerminalPreviewChangeKind, TerminalPreviewDeleteFileRequest, TerminalPreviewDeleteFileResponse, TerminalPreviewDirectoryResponse, TerminalPreviewContentSearchResponse, TerminalPreviewFileDiffResponse, TerminalPreviewFileResponse, TerminalPreviewFileSearchResponse, TerminalPreviewFolderSearchResponse, TerminalPreviewGitChangesResponse, TerminalPreviewRenameFileRequest, TerminalPreviewResetChangeRequest, TerminalPreviewResetChangeResponse, TerminalPreviewSaveFileRequest, TerminalPreviewSaveFileResponse } from "@runweave/shared/terminal/preview";
 import { requestBlob, requestJson, requestVoid } from "../http";
@@ -281,4 +282,10 @@ export function resolveTerminalPreviewFileLink(
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(request), signal,
     });
+}
+
+export function getTerminalVideoPreviewTicket(apiBase: string, token: string, projectId: string, path: string, signal?: AbortSignal): Promise<CreateTerminalVideoPreviewTicketResponse> {
+  return requestJson(apiBase, `/api/terminal/project/${encodeURIComponent(projectId)}/preview/video-ticket`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ path }), signal,
+  });
 }

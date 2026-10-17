@@ -9,6 +9,7 @@ import type { TerminalSessionListItem } from "@runweave/shared/terminal/session"
 import {
   getTerminalPreviewFileKind,
   isSupportedTerminalImagePreviewPath,
+  isSupportedTerminalVideoPreviewPath,
 } from "../../../../features/terminal/preview/file-types";
 import { useTerminalRuntime } from "../../../../features/terminal/queries/provider";
 import { Button } from "../../../ui/button";
@@ -172,7 +173,10 @@ export function TerminalPreviewPanel({
     selectedFilePath,
     copyPath,
     loadFile: async (filePath) => {
-      if (isSupportedTerminalImagePreviewPath(filePath)) {
+      if (
+        isSupportedTerminalImagePreviewPath(filePath) ||
+        isSupportedTerminalVideoPreviewPath(filePath)
+      ) {
         setAssetRefreshKey((current) => current + 1);
         return;
       }
@@ -353,6 +357,7 @@ export function TerminalPreviewPanel({
           onRequestRenameFile: mutations.requestRename,
         }}
         file={{
+          active: activeTool === "preview",
           assetRefreshKey,
           data: filePreview,
           error: fileError,
