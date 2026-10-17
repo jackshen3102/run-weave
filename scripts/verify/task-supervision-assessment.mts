@@ -47,10 +47,11 @@ if (samples.filter((s) => s.repeat).length !== 16) throw new Error("必须预先
 const concurrency = Number(option("--concurrency") ?? 2);
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error("并发只能为1到4。");
 const model = option("--model") ?? settingText("backend.taskSupervision.model");
+const effort = settingText("backend.taskSupervision.effort");
 const records = (await readFile(path.join(baselinePath, "results.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as RecordRow).filter((row) => row.strategy === "baseline");
 const baselineKeys = new Set(records.map((row) => `${row.id}:${row.repeat}`));
 if (records.length !== 152 || baselineKeys.size !== 152 || records.some((row) => !samples.some((s) => s.id === row.id && (row.repeat === 0 || s.repeat && [1, 2].includes(row.repeat))))) throw new Error("历史基线必须恰好包含120条原始判断及16条样本的两次重复，不允许重号或缺失。");
-const manifest = { startedAt: new Date().toISOString(), inputSha256: createHash("sha256").update(bytes).digest("hex"), model: model ?? "Codex default (immutable revision unavailable)", concurrency, count: samples.length, expectedCalls: 152, historicalBaseline: baselineManifest };
+const manifest = { startedAt: new Date().toISOString(), inputSha256: createHash("sha256").update(bytes).digest("hex"), model: model ?? "Codex default (immutable revision unavailable)", effort, concurrency, count: samples.length, expectedCalls: 152, historicalBaseline: baselineManifest };
 // Exclusive creation prevents accidental overwrite or selecting a favorable previous run.
 await writeFile(path.join(outputPath, "manifest.json"), JSON.stringify(manifest, null, 2), { flag: "wx", mode: 0o600 });
 await writeFile(path.join(outputPath, "results.jsonl"), records.map((row) => JSON.stringify(row)).join("\n") + "\n", { flag: "wx", mode: 0o600 });
@@ -63,7 +64,7 @@ async function run(batch: ReturnType<typeof jobs>) {
       const row: RecordRow = { id: job.sample.id, strategy: job.strategy, repeat: job.repeat };
       try {
         row.result = await classifier.run(job.sample.input,
-          { model, timeoutMs: 90_000, signal: new AbortController().signal });
+          { model, effort, timeoutMs: 90_000, signal: new AbortController().signal });
       } catch (error) { row.error = error instanceof Error ? error.message : String(error); }
       records.push(row);
       await appendFile(path.join(outputPath, "results.jsonl"), JSON.stringify(row) + "\n", { mode: 0o600 });

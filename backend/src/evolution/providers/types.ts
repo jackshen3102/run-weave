@@ -11,6 +11,7 @@ export interface EvolutionProviderRequest {
     bearerToken: string;
   };
   model?: string;
+  effort?: string;
   signal?: AbortSignal;
 }
 

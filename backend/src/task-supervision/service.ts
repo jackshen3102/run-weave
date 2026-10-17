@@ -231,7 +231,7 @@ export class TaskSupervisionService {
   }
 
   private modelOptions() {
-    return { model: settingText("backend.taskSupervision.model"), timeoutMs: Number(setting("backend.taskSupervision.classificationTimeoutMs", 90_000)) };
+    return { model: settingText("backend.taskSupervision.model"), effort: settingText("backend.taskSupervision.effort"), timeoutMs: Number(setting("backend.taskSupervision.classificationTimeoutMs", 90_000)) };
   }
   previewGoal(id: string, request: PreviewSupervisionGoalRequest, signal?: AbortSignal) {
     return this.goalEditor.preview(id, request, signal);

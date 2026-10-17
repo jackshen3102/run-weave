@@ -1,5 +1,6 @@
 /** Shared validation metadata used by the validator and generated reference. */
 export const CONFIGURATION_ENUMS: Readonly<Record<string, readonly string[]>> = {
+  "backend.taskSupervision.effort": ["low", "medium", "high", "xhigh", "max", "ultra"],
   "backend.tunnelAuth.scope": ["all", "forwarded"],
   "appServer.discovery": ["auto", "explicit", "disabled"],
   "logging.level": ["error", "warn", "info", "http", "verbose", "debug", "silly"],

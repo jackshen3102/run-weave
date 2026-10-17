@@ -39,17 +39,31 @@
 
 ### backend.taskSupervision.model
 
-独立三分类 Codex 模型；未设置使用原执行器的可用模型
+长任务监控模型，供目标整理和最终判断使用
 
 | 属性              | 合同                       |
 | ----------------- | -------------------------- |
 | 类型              | string；允许 null 恢复默认 |
-| 默认              | null                       |
+| 默认              | "gpt-6-astra"              |
 | 所属模块          | backend/task-supervision   |
 | 生效              | 所属消费者重载             |
-| 敏感 / 远端可修改 | 否 / 否                    |
+| 敏感 / 远端可修改 | 否 / 是                    |
 | 约束              | 按字段类型校验             |
 | 显式迁移来源      | new-field:no-legacy-source |
+
+### backend.taskSupervision.effort
+
+长任务监控推理强度：low、medium、high、xhigh、max 或 ultra
+
+| 属性              | 合同                                       |
+| ----------------- | ------------------------------------------ |
+| 类型              | string；允许 null 恢复默认                 |
+| 默认              | "high"                                     |
+| 所属模块          | backend/task-supervision                   |
+| 生效              | 所属消费者重载                             |
+| 敏感 / 远端可修改 | 否 / 是                                    |
+| 约束              | 枚举：low、medium、high、xhigh、max、ultra |
+| 显式迁移来源      | new-field:no-legacy-source                 |
 
 ### backend.taskSupervision.classificationTimeoutMs
 
