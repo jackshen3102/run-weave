@@ -23,20 +23,6 @@
 
 配置域：`backend.taskSupervision`。
 
-### backend.taskSupervision.assessmentEnabled
-
-按完成条件核对报告并暂缓不确定判断；不改变分类模型
-
-| 属性              | 合同                        |
-| ----------------- | --------------------------- |
-| 类型              | boolean；允许 null 恢复默认 |
-| 默认              | false                       |
-| 所属模块          | backend/task-supervision    |
-| 生效              | 所属消费者重载              |
-| 敏感 / 远端可修改 | 否 / 否                     |
-| 约束              | 按字段类型校验              |
-| 显式迁移来源      | new-field:no-legacy-source  |
-
 ### backend.taskSupervision.enabled
 
 启用当前 Codex 终端长任务监控（仍需逐任务手动开启）

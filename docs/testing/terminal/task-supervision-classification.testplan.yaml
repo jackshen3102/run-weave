@@ -43,14 +43,14 @@ cases:
       - 清理本例资源，保留脱敏请求证据。
 
   - id: TSC-004
-    name: 评分最高项决定结果且没有置信度门槛
+    name: 评分最高项形成候选且近分并列暂缓
     required: true
-    description: 程序从 Codex 输出的三个评分取最大项，接近的评分不触发额外阈值，并列按固定顺序处理。
+    description: 程序从三个评分形成候选，再应用证据及分差门禁；接近和并列不得触发明确业务结论。
     preconditions:
-      - 本例有独立监听服务和可控 Codex 分类响应，每组响应绑定独立有效轮次；assessmentEnabled 关闭，验证旧策略回归，新策略门禁见 task-supervision-assessment.testplan.yaml。
+      - 本例有独立监听服务和可控 Codex 分类响应，每组响应绑定独立有效轮次，包含有效完成条件核对表。
       - 已准备 continue 为 0.34、其余各 0.33 的响应，以及 continue 与 completed 并列最大且合计为 1 的响应；输出均含有效 reason 和来源 ID。
     steps:
-      - 分别提交两组合法响应，确认程序计算 choice 为 continue；并列使用 continue、blocked、completed 的固定优先顺序，没有新增 uncertain 类别或低分门槛。
+      - 分别提交两组合法响应，确认候选 outcome 为 continue，assessment.disposition 为 hold、原因 ambiguous_scores；watch.outcome 为空且不扣额度、不投递，三种 TaskOutcome 不变。
       - 核对每轮只启动一次 Codex 分类，UI 展示三项评分并注明其为模型评分，解释和来源与该次结构化输出一致。
       - 清理本例监听、会话和响应替身。
 
