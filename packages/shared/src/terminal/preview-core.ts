@@ -1,4 +1,4 @@
-export type TerminalPreviewFileKind = "markdown" | "svg" | "html" | "image" | "text";
+export type TerminalPreviewFileKind = "markdown" | "svg" | "html" | "image" | "video" | "text";
 
 export type MarkdownPreviewHrefResolution =
   | { kind: "preview-file"; path: string; hash?: string }
@@ -13,6 +13,8 @@ export interface TerminalPreviewRequestSequencer {
   isCurrent(requestId: number): boolean;
   next(): number;
 }
+
+const VIDEO_PREVIEW_EXTENSIONS = new Set([".mp4", ".m4v", ".mov", ".webm"]);
 
 const IMAGE_PREVIEW_EXTENSIONS = new Set([
   ".png",
@@ -85,6 +87,7 @@ export function isSupportedTerminalFileLinkPath(filePath: string): boolean {
   const extension = terminalPreviewExtensionOf(basename);
   return (
     IMAGE_PREVIEW_EXTENSIONS.has(extension) ||
+    VIDEO_PREVIEW_EXTENSIONS.has(extension) ||
     Object.hasOwn(EXTENSION_LANGUAGE_MAP, extension) ||
     TEXT_PREVIEW_LINK_EXTENSIONS.has(extension)
   );
@@ -138,10 +141,15 @@ export function isSupportedTerminalImagePreviewPath(filePath: string): boolean {
   return IMAGE_PREVIEW_EXTENSIONS.has(terminalPreviewExtensionOf(filePath));
 }
 
+export function isSupportedTerminalVideoPreviewPath(filePath: string): boolean {
+  return VIDEO_PREVIEW_EXTENSIONS.has(terminalPreviewExtensionOf(filePath));
+}
+
 export function getTerminalPreviewFileKind(
   filePath: string,
   language: string | null | undefined,
 ): TerminalPreviewFileKind {
+  if (isSupportedTerminalVideoPreviewPath(filePath)) return "video";
   const normalizedLanguage = language?.toLowerCase();
   const extension = terminalPreviewExtensionOf(filePath);
   if (

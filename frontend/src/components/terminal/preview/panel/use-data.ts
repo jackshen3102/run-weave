@@ -16,6 +16,7 @@ import { terminalQueryKeys } from "../../../../features/terminal/queries/keys";
 import {
   getTerminalPreviewFileKind,
   isSupportedTerminalImagePreviewPath,
+  isSupportedTerminalVideoPreviewPath,
 } from "../../../../features/terminal/preview/file-types";
 import { HttpError } from "../../../../services/http";
 import {
@@ -143,7 +144,7 @@ export function useTerminalPreviewPanelData({
     (mode === "file" || mode === "explorer") &&
     Boolean(filePreview) &&
     filePreview?.readonly === false &&
-    fileKind !== "image";
+    fileKind !== "image" && fileKind !== "video";
 
   const setCachedFile = useMemoizedFn(
     (file: TerminalPreviewFileResponse | null) => {
@@ -195,7 +196,7 @@ export function useTerminalPreviewPanelData({
   });
 
   const loadFile = useMemoizedFn(async (filePath: string): Promise<void> => {
-    if (!projectId || isSupportedTerminalImagePreviewPath(filePath)) {
+    if (!projectId || (isSupportedTerminalImagePreviewPath(filePath) || isSupportedTerminalVideoPreviewPath(filePath))) {
       return;
     }
     await previewQueries.queryClient.fetchQuery({

@@ -4,17 +4,17 @@
 
 ## 代码入口与职责
 
-| 边界                                     | 入口                                                                                                                                                                                                                  |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 工作台与 active Project                  | [Workspace](../../frontend/src/components/terminal/workspace/workspace.tsx)                                                                                                                                           |
-| Preview 数据与操作                       | [Panel](../../frontend/src/components/terminal/preview/panel/index.tsx)                                                                                                                                               |
-| 项目选择、视图与宽度状态                 | [Preview store](../../frontend/src/features/terminal/preview/store.ts)                                                                                                                                                |
-| 文本、Markdown、SVG、图片与 Diff 渲染    | [Renderers](../../frontend/src/components/terminal/preview/renderers/)                                                                                                                                                |
-| 文件与搜索 HTTP 路由                     | [Preview routes](../../backend/src/routes/terminal/preview/)                                                                                                                                                          |
-| 路径权限、文件操作、搜索与 Git           | [Preview service](../../backend/src/terminal/preview/)                                                                                                                                                                |
-| 跨运行时 DTO 与链接解析                  | [Preview types](../../packages/shared/src/terminal/preview.ts)、[纯函数合同](../../packages/shared/src/terminal/preview-core.ts)                                                                                      |
-| 原生 Browser、Profile、CDP 与 Automation | [Electron Browser](../../electron/src/browser/)                                                                                                                                                                       |
-| Agent 会话正文阅读                       | [Web 阅读页](../../frontend/src/components/terminal/conversation/)、[Backend 归属解析](../../backend/src/terminal/application/conversation.ts)、[App Server 投影](../../app-server/src/agents/conversation-reader.ts) |
+| 边界                                        | 入口                                                                                                                                                                                                                  |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 工作台与 active Project                     | [Workspace](../../frontend/src/components/terminal/workspace/workspace.tsx)                                                                                                                                           |
+| Preview 数据与操作                          | [Panel](../../frontend/src/components/terminal/preview/panel/index.tsx)                                                                                                                                               |
+| 项目选择、视图与宽度状态                    | [Preview store](../../frontend/src/features/terminal/preview/store.ts)                                                                                                                                                |
+| 文本、Markdown、SVG、图片、视频与 Diff 渲染 | [Renderers](../../frontend/src/components/terminal/preview/renderers/)                                                                                                                                                |
+| 文件与搜索 HTTP 路由                        | [Preview routes](../../backend/src/routes/terminal/preview/)                                                                                                                                                          |
+| 路径权限、文件操作、搜索与 Git              | [Preview service](../../backend/src/terminal/preview/)                                                                                                                                                                |
+| 跨运行时 DTO 与链接解析                     | [Preview types](../../packages/shared/src/terminal/preview.ts)、[纯函数合同](../../packages/shared/src/terminal/preview-core.ts)                                                                                      |
+| 原生 Browser、Profile、CDP 与 Automation    | [Electron Browser](../../electron/src/browser/)                                                                                                                                                                       |
+| Agent 会话正文阅读                          | [Web 阅读页](../../frontend/src/components/terminal/conversation/)、[Backend 归属解析](../../backend/src/terminal/application/conversation.ts)、[App Server 投影](../../app-server/src/agents/conversation-reader.ts) |
 
 Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review changes。它支持受限的文件编辑，
 不承担完整 IDE、LSP、扩展宿主、批量文件管理或 Git 提交。终端输出与恢复仍由
@@ -103,6 +103,7 @@ iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)�
   `~` 不展开。规则见 [路径解析](../../backend/src/terminal/preview/paths.ts)。
 - 文本读取只接受普通文件，当前上限 1 MiB，二进制、目录和特殊文件拒绝。
   图片走独立 asset 响应，当前上限 5 MiB，检查内容与 MIME，并使用 `no-store`。
+  视频使用独立流接口，不沿用文本/图片大小上限，不在客户端或 Backend 整体缓冲。
   限制与支持格式以 [文件服务](../../backend/src/terminal/preview/preview.ts) 为准。
 - 读取失败保留可恢复的选择与输入，不能把失败响应当作空文件。Refresh 重读当前对象；Copy path 复制可定位路径，
   优先使用后端绝对路径，缺失时由 Project path 补齐；行引用通过渲染器选择范围产生，不复制整份正文作为路径。
@@ -110,7 +111,7 @@ iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)�
 ## 从终端打开文件
 
 - Desktop 与 Web 的终端文件路径使用 xterm link provider；HTTP(S) 仍由 WebLinksAddon 处理，OSC 8 的 `file://` 链接进入同一文件入口。
-- 文件入口只支持预览已识别的代码/文档扩展名、TXT/LOG/CSV/TSV/INI/CONF 和 PNG/JPEG/GIF/WebP/AVIF 图片；SVG 沿用预览定义。不自动识别目录、无扩展名文件、压缩包、PDF 或未知格式。Web 和 Backend 复用 `preview-core.ts` 的 `isSupportedTerminalFileLinkPath`，iOS 对照同一列表；后端仍需验证实际目标为普通文件，内容与大小限制由预览读取接口校验。文件树的通用文本读取不受此入口策略限制。
+- 文件入口只支持预览已识别的代码/文档扩展名、TXT/LOG/CSV/TSV/INI/CONF 、PNG/JPEG/GIF/WebP/AVIF 图片和 MP4/M4V/MOV/WebM 视频；SVG 沿用预览定义。不自动识别目录、无扩展名文件、压缩包、PDF 或未知格式。Web 和 Backend 复用 `preview-core.ts` 的 `isSupportedTerminalFileLinkPath`，iOS 对照同一列表；后端仍需验证实际目标为普通文件，内容与大小限制由预览读取接口校验。文件树的通用文本读取不受此入口策略限制。
 - 支持上述文件的绝对路径、`./`、`../`、普通相对路径，以及 `:line:column`；空格路径需引号包围，扩展名不区分大小写。渲染时按 buffer cell 映射中文与软换行；tmux 分屏只识别 pane 内当前行，不跨 pane 合并文字。
 - 点击普通文件候选时，Web 重新核对命中内容，iOS 保存不可变缓冲区快照；两端携带路径起点之前的行内文字和同 pane 内最多四行上文。只有路径起点前是空白时，Backend 才逐行提取行尾路径片段并拼接，遇到空行、闭合分隔符、完整文件名、URI/提示符或超过 4096 字符时停止；提取到带说明文字或开括号的起始行后停止继续上溯。显式 OSC 8 与引号包围的路径不进行回溯。
 - 原始路径和所有拼接候选一起按来源 cwd/项目根校验，并按真实文件路径去重；不能因后半截碰巧存在就提前打开。唯一有效候选自动打开，多个有效候选由用户选择。这是点击时的有界候选恢复，不改变渲染链接范围，也不保证恢复任意排版、跨行引号空格路径或超过四行上文的路径。
@@ -118,12 +119,12 @@ iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)�
 - 当前 cwd 不代表历史输出产生时的 cwd；不猜测历史目录，也不递归扫描全盘寻找同名文件。找不到时显示错误，用户可使用绝对路径。
 - 配置项目根时，相对路径仍遵守 realpath 包含检查；项目外文件需显式绝对路径并保持只读。无项目根时，使用 cwd 解析的文件同样只读，文件响应的 `projectPath` 为 null。
 - 解析请求随连接、项目、terminal 或新点击切换取消。打开复用 Preview 的草稿确认、文件选择和行列定位；错误或取消不会替换正在编辑的内容。
-- 原生 iOS 使用 SwiftTerm 同一个单击命中与显示缓冲区快照，调用上述解析接口，复用 FilePreview 展示文本、Markdown 和图片；同名候选由用户选择，行列引用定位到原生文本选区。分屏按点击位置匹配实时 pane 几何；布局尺寸不符时提示重新点击。
+- 原生 iOS 使用 SwiftTerm 同一个单击命中与显示缓冲区快照，调用上述解析接口，复用 FilePreview 展示文本、Markdown、图片和视频；同名候选由用户选择，行列引用定位到原生文本选区。分屏按点击位置匹配实时 pane 几何；布局尺寸不符时提示重新点击。
 
 ## 编辑、冲突与 Git
 
 - 项目内已有普通文本/代码文件可在 Files 或 Explorer 显式编辑；响应的 `base`、`readonly` 和 `mtimeMs` 是判断依据。
-  项目外 `base=filesystem`、Changes/Diff、图片、目录和不支持的文件保持只读。
+  项目外 `base=filesystem`、Changes/Diff、图片、视频、目录和不支持的文件保持只读。
 - Save 或 `Cmd/Ctrl+S` 才写盘，不自动保存。提交 `expectedMtimeMs`；磁盘已变化时返回冲突，
   Reload 重新读取，Overwrite 显式覆盖。失败保留草稿。相关实现见 [文件编辑](../../frontend/src/components/terminal/preview/files/use-editor.ts)。
 - 切换文件、刷新、关闭或改变任务时，涉及丢弃未保存草稿的动作须走现有确认流程。
@@ -149,6 +150,7 @@ iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)�
 | 独立 SVG      | 默认 Preview，可切 Source；XML 经净化后在无权限 sandbox iframe 中预览 |
 | 本地 HTML     | 默认 Preview，可切 Source；短期票据提供同目录静态资源，隔离执行脚本   |
 | 图片          | 独立 asset 读取；Web 使用公共图片预览与 lightbox，支持缩放和平移      |
+| 视频          | MP4/M4V/MOV/WebM；Web 使用原生 video，iOS 使用 AVPlayer 系统控制条    |
 
 Markdown 默认值以 store 为准，不能沿用旧草图中的 Split 默认值。Split 的滚动同步、行引用与选区行为见
 [Markdown renderer](../../frontend/src/components/terminal/preview/renderers/markdown.tsx)。
@@ -159,6 +161,10 @@ Markdown 默认值以 store 为准，不能沿用旧草图中的 Split 默认值
 - 独立 SVG 使用 [SVG renderer](../../frontend/src/components/terminal/preview/renderers/svg.tsx) 的净化与 sandbox，
   不把原始 XML 直接注入工作台 DOM。
 - `.html`/`.htm` 在 Files/Explorer 中可渲染完整页面。Backend 票据绑定 Project 和 HTML 绝对路径，静态资源只读且限制在文件所在目录内；桌面端使用无 `allow-same-origin` 的 iframe，原生 iOS 使用非持久化 WKWebView。两端 Source 均可查看，桌面端继续使用现有编辑/保存能力，iOS 保持只读。
+- 视频只预览当前磁盘普通文件，文件扩展名与容器头均校验；实际编码支持取决于浏览器或 iOS 系统，不做转码。Git Changes 的二进制降级规则保持独立，不以工作区视频冒充暂存版本。
+- 客户端经鉴权 `POST /api/terminal/project/:id/preview/video-ticket` 获取一小时票据，再通过 `/video-preview` 读取。票据独立于 access token，绑定会话、项目、真实绝对路径和文件版本；不授予同目录其他文件权限，登出或会话失效后拒绝后续请求。日志隐藏该 URL 的票据和路径。
+- 视频 GET/HEAD 响应使用 `no-store`、正确 MIME 和 `Accept-Ranges: bytes`；单段范围支持闭区间、开放结尾和后缀，返回 206，非法或多段范围返回 416。Backend 持有验证后的同一文件描述符，使用带背压的流读取；请求中断后释放句柄。每次读取核对 inode、大小和修改时间，文件变化拒绝旧票据，用户显式重新加载后获取新票据。
+- 两端默认不自动播放，提供播放、暂停、进度和全屏系统控制。关闭预览、切换文件/连接时释放播放器；桌面切换到其他工具也释放，iOS 进入后台暂停。正常时只显示播放器，加载时显示进度；仅失败时显示原因和“重试”入口，恢复后移除，不自动循环请求。
 - Monaco 与富内容渲染按需加载；只读能力不能仅靠隐藏按钮，后端写接口仍执行路径和文件类型校验。
 - Web 图片基础能力属于 `packages/common`；原生 Swift 实现独立维护，不能由 Web 实现推断 iOS 已具备相同行为。
 
@@ -294,6 +300,7 @@ Automation 的关键桌面路径已有实现与阶段性验证，全量
 
 - 文件、目录、搜索和项目隔离：[Project Context](../testing/terminal/workspace/project-context.testplan.yaml)、
   [Explorer Quick Search](../testing/runbooks/explorer-quick-search.testplan.yaml)。
+- 视频预览：[跨端验收](../testing/terminal/video-preview.testplan.yaml)；HTTP 集成入口为 `pnpm --dir backend exec tsx ../scripts/verify/preview-video.mts <有效MP4绝对路径>`。
 - 原型发现与预览：[Prototype Gallery](../testing/browser/prototype-gallery-preview.testplan.yaml)。
 - Browser 基础与专题：[Browser 用例目录](../testing/terminal/browser/)、[Browser Profile CLI](../cli/browser-profile.md)。
 - 验证方式按 [命令矩阵](../testing/command-matrix.md) 选择；静态文档或类型检查不代表真实页面验收。

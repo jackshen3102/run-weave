@@ -9,6 +9,7 @@ export type SignedTokenType =
   | "devtools"
   | "prototype-preview"
   | "html-preview"
+  | "video-preview"
   | "legacy-temp";
 
 export interface TokenResource {
@@ -20,6 +21,8 @@ export interface TokenResource {
   prototypeSlug?: string;
   htmlPath?: string;
   htmlChange?: string;
+  mediaPath?: string;
+  mediaVersion?: string;
 }
 
 interface BaseTokenPayload {
@@ -86,6 +89,14 @@ function decodePayload(encodedPayload: string): BaseTokenPayload | null {
               prototypeSlug:
                 typeof parsed.resource.prototypeSlug === "string"
                   ? parsed.resource.prototypeSlug
+                  : undefined,
+              mediaPath:
+                typeof parsed.resource.mediaPath === "string"
+                  ? parsed.resource.mediaPath
+                  : undefined,
+              mediaVersion:
+                typeof parsed.resource.mediaVersion === "string"
+                  ? parsed.resource.mediaVersion
                   : undefined,
               htmlPath:
                 typeof parsed.resource.htmlPath === "string"

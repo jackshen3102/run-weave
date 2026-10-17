@@ -241,3 +241,11 @@ export interface TerminalPreviewFileDiffResponse {
   newSide?: TerminalPreviewContentSide;
   readonly: true;
 }
+
+/** A short-lived, session-bound URL for one current filesystem video. Never persist it. */
+export interface CreateTerminalVideoPreviewTicketResponse {
+  path: string;
+  expiresIn: number;
+  mimeType: string;
+  sizeBytes: number;
+}

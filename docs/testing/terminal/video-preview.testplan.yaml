@@ -1,0 +1,98 @@
+version: 1
+name: 终端文件视频预览
+description: 验证普通文件视频在桌面和原生 iOS 可控播放、按需读取、释放与显式恢复；不覆盖 Git 视频快照或所有系统编码。
+cases:
+  - id: VIDEO-001
+    name: 桌面系统播放器控制
+    required: true
+    description: 普通 MP4 文件由真实播放器显示，默认暂停，播放、暂停、跳转和全屏操作生效。
+    preconditions:
+      - 当前源码的隔离 Desktop 与 Backend 已启动，存在归属明确的 QA 项目。
+      - 有一段可解码且时长超过 30 秒的 MP4 文件。
+    steps:
+      - 使用 $toolkit:playwright-cli 在 Preview 的 Open 输入文件路径并打开；确认播放器加载实际画面、时长正确、默认暂停且没有媒体错误，不显示重试或重新加载按钮。
+      - 播放后确认时间推进和实际解码帧增加，暂停后确认时间停止，跳到 30 秒后确认当前位置更新。
+      - 进入全屏，用原生桌面控制操作播放、暂停和退出全屏；确认返回原文件预览。
+  - id: VIDEO-002
+    name: 桌面隐藏或切换时释放视频
+    required: true
+    description: 旧播放器在文件或工具离开时停止，返回时重新加载而不继续后台播放。
+    preconditions:
+      - 当前源码的隔离 Desktop 已打开 QA 项目中的可播放 MP4 文件。
+    steps:
+      - 使用 $toolkit:playwright-cli 播放视频并保留旧媒体节点引用；切换到 Browser 工具，确认旧节点已断开、暂停且移除 src。
+      - 返回 Preview，确认出现新的默认暂停播放器；再次播放后打开项目内普通文本，确认旧播放器停止并释放且文本可见。
+  - id: VIDEO-003
+    name: iOS 终端链接与系统播放控制
+    required: true
+    description: 原生手机界面从终端文件链接打开实际视频，系统播放、暂停、跳转和全屏可用。
+    preconditions:
+      - 已按共享设备池规则安装当前源码的原生 Runweave，记录精确设备与产物身份。
+      - 已连接隔离 Backend，QA 终端输出可播放 MP4 的文件路径。
+    steps:
+      - 使用 $toolkit:agent-device 点击终端文件链接；确认进入对应文件预览并加载实际首帧，默认不自动播放，不显示重试或重新加载按钮。
+      - 显示系统控制条，播放并确认画面和时间推进，暂停并确认时间停止，拖动进度确认目标画面变化。
+      - 进入系统全屏播放器再退出；确认返回同一文件预览、播放位置保留且控制仍可用。
+  - id: VIDEO-004
+    name: iOS 关闭后重新打开
+    required: true
+    description: 关闭文件预览终止旧播放，重新打开从默认暂停状态加载。
+    preconditions:
+      - 当前源码的原生 Runweave 已连接 QA 终端，可从文件链接打开可播放 MP4。
+    steps:
+      - 使用 $toolkit:agent-device 打开并播放视频，关闭预览；确认返回原终端。
+      - 再次点击同一文件链接；确认重新显示首帧、默认暂停，手动播放后仍能推进。
+  - id: VIDEO-005
+    name: 桌面非法视频显式恢复
+    required: true
+    description: 伪造 MP4 明确报错且不自动重试，恢复合法文件后重试成功。
+    preconditions:
+      - 隔离 Desktop 和 Backend 已启动，QA 临时目录可写，另有合法 MP4 原件。
+    steps:
+      - 在 QA 临时目录写入非视频内容的 .mp4 文件，使用 $toolkit:playwright-cli 打开；确认明确错误与重试入口，没有持续请求循环。
+      - 将此 QA 文件替换为合法 MP4，点击重试；确认实际视频恢复且默认暂停、重试按钮消失，结束后删除 QA 文件。
+  - id: VIDEO-006
+    name: iOS 非法视频显式恢复
+    required: true
+    description: 手机端伪造 MP4 显示明确错误，用户重试可恢复。
+    preconditions:
+      - 当前源码的原生 Runweave 已连接隔离 Backend，QA 临时目录可写且另有合法 MP4。
+    steps:
+      - 写入非视频内容的 QA .mp4 文件，在 QA 终端输出路径，用 $toolkit:agent-device 点击链接；确认错误及重试入口。
+      - 将 QA 文件替换为合法 MP4，点击重试；确认实际首帧显示、重试按钮消失且手动播放可推进，关闭后删除 QA 文件。
+  - id: VIDEO-007
+    name: HTTP 字节范围响应
+    required: true
+    description: 流响应与原文件字节一致，支持 HEAD 和单段 Range，并拒绝非法或多段范围。
+    preconditions:
+      - 已准备合法 MP4 文件，HTTP 集成 fixture 可创建并清理临时服务和目录。
+    steps:
+      - 运行 pnpm --dir backend exec tsx ../scripts/verify/preview-video.mts 并传入 MP4 绝对路径；确认完整读取、HEAD、闭区间、开放结尾和后缀范围断言通过。
+      - 核对同次输出与断言，确认非法范围返回 416、携带总长度，非 GET/HEAD 返回 405，响应 no-store。
+  - id: VIDEO-008
+    name: 票据仅授权当前文件和会话
+    required: true
+    description: access token、其他文件、过期或已登出会话不能替代有效的视频票据。
+    preconditions:
+      - 合法 MP4 和独立 HTTP 集成 fixture 可用，不使用正式账号或正式数据。
+    steps:
+      - 运行视频 HTTP 集成入口；核对未鉴权、以 access token 读取视频、篡改文件路径、过期票据均返回 401。
+      - 核对登录会话注销后已有视频票据返回 401，fixture 清理自身会话、服务与目录。
+  - id: VIDEO-009
+    name: 文件校验与版本绑定
+    required: true
+    description: 错误容器、缺失或越界相对路径不能签发有效票据，文件变化不能复用旧票据。
+    preconditions:
+      - 合法 MP4 和独立 HTTP 集成 fixture 可用，fixture 只修改自己的文件副本。
+    steps:
+      - 运行视频 HTTP 集成入口；确认伪 MP4 为 415、缺失文件为 404、越界相对路径为 403。
+      - 确认修改自己的文件副本后旧票据为 409；无项目根时绝对文件仍可读，相对路径明确拒绝。
+  - id: VIDEO-010
+    name: 大文件分段读取不沿用图片限制
+    required: true
+    description: 大文件只读取请求范围，不能因既有文本或图片大小限制被拒绝。
+    preconditions:
+      - 视频 HTTP 集成 fixture 可以创建自己的 512 MiB 稀疏容器文件；此 fixture 不用于证明完整视频可解码。
+    steps:
+      - 运行视频 HTTP 集成入口；确认 512 MiB 文件签发票据并报告正确大小。
+      - 核对后缀 16 字节请求返回 206 且正文只有 16 字节，fixture 退出后删除大文件和临时目录。

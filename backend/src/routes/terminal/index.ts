@@ -1,3 +1,4 @@
+import { registerTerminalVideoPreviewRoutes } from "./preview/video";
 import { createTerminalUnreadRouter } from "./unread";
 import type { DesktopBadgeAccess } from "../../device-monitor/desktop-badge-access";
 import type { TerminalBadges } from "../../device-monitor/terminal-badges";
@@ -294,6 +295,7 @@ export function createTerminalRouter(
     options?.authService,
   );
   registerTerminalHtmlPreviewRoutes(router, terminalSessionManager, options?.authService);
+  registerTerminalVideoPreviewRoutes(router, terminalSessionManager, options?.authService);
   if (options?.quickInputService) {
     registerTerminalQuickInputRoutes(router, options.quickInputService, options.scheduledTaskService);
   }

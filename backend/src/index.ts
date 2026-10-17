@@ -1,3 +1,4 @@
+import { createVideoPreviewRouter } from "./routes/terminal/preview/video";
 import { createFeishuRouter } from "./routes/feishu";
 import { registerConnectionRoutes } from "./routes/connection-identity";
 import { createResourceMonitorRouter } from "./routes/resource-monitor";
@@ -143,6 +144,7 @@ function createHttpApp(
     services.authService,
   ));
   app.use("/html-preview", requireTunnelAuth, createHtmlPreviewRouter(services.terminalSessionManager, services.authService));
+  app.use("/video-preview", requireTunnelAuth, createVideoPreviewRouter(services.terminalSessionManager, services.authService));
 
   registerConnectionRoutes(app, services.connectionIdentity, services.authService, requireTunnelAuth, backendIdentity);
   // Internal endpoint for Electron to propagate CDP proxy endpoint in dev mode.

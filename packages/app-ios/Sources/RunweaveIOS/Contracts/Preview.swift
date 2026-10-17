@@ -35,6 +35,13 @@ struct PreviewFile: Decodable {
   let mtimeMs: Double?
 }
 
+struct VideoPreviewTicket: Decodable {
+  let path: String
+  let expiresIn: Int
+  let mimeType: String
+  let sizeBytes: Int64
+}
+
 struct HtmlPreviewTicket: Decodable {
   let path: String
   let expiresIn: Int
@@ -146,10 +153,14 @@ func isPreviewImage(_ path: String) -> Bool {
     (path as NSString).pathExtension.lowercased())
 }
 
+func isPreviewVideo(_ path: String) -> Bool {
+  ["mp4", "m4v", "mov", "webm"].contains((path as NSString).pathExtension.lowercased())
+}
+
 // Mirrors shared/terminal/preview-core.ts isSupportedTerminalFileLinkPath.
 // The Files browser still supports generic text; terminal detection is conservative.
 private let terminalFileLinkExtensions: Set<String> = [
-  "png", "jpg", "jpeg", "gif", "webp", "avif",
+  "png", "jpg", "jpeg", "gif", "webp", "avif", "mp4", "m4v", "mov", "webm",
   "ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "md", "mdx",
   "css", "scss", "less", "html", "htm", "xml", "svg", "yaml", "yml",
   "py", "go", "rs", "rb", "java", "kt", "swift", "c", "cpp", "h", "hpp",

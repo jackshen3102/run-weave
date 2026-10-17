@@ -27,6 +27,7 @@ export function redactString(value: string): string {
   return value
     .replace(/("(?:qrSecret|claimantToken|accessToken|refreshToken)"\s*:\s*)"(?:\\.|[^"\\])*"/gi, '$1"[redacted]"')
     .replace(URL_SECRET_PARAM_PATTERN, "$1[redacted]")
+    .replace(/\/video-preview\/[^\s?#]*/g, "/video-preview/[redacted]")
     .replace(HEADER_SECRET_PATTERN, "$1: [redacted]")
     .replace(ENV_SECRET_PATTERN, "$1=[redacted]");
 }
