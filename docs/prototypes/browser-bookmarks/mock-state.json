@@ -1,0 +1,95 @@
+{
+  "activeTab": "tab-docs",
+  "tabs": [
+    {
+      "id": "tab-docs",
+      "title": "Runweave 文档",
+      "url": "https://docs.runweave.dev/getting-started"
+    }
+  ],
+  "showBar": true,
+  "items": [
+    {
+      "id": "github",
+      "title": "GitHub",
+      "url": "https://github.com/",
+      "parent": null,
+      "icon": "G",
+      "color": "#b9c3d2"
+    },
+    {
+      "id": "feishu",
+      "title": "飞书",
+      "url": "https://www.feishu.cn/",
+      "parent": null,
+      "icon": "F",
+      "color": "#60a5fa"
+    },
+    { "id": "work", "title": "工作", "type": "folder", "parent": null },
+    { "id": "design", "title": "设计参考", "type": "folder", "parent": null },
+    {
+      "id": "linear",
+      "title": "Linear",
+      "url": "https://linear.app/",
+      "parent": null,
+      "icon": "L",
+      "color": "#a5a0ff"
+    },
+    {
+      "id": "vercel",
+      "title": "Vercel",
+      "url": "https://vercel.com/",
+      "parent": null,
+      "icon": "▲",
+      "color": "#cbd5e1"
+    },
+    {
+      "id": "mdn",
+      "title": "MDN Web Docs",
+      "url": "https://developer.mozilla.org/",
+      "parent": null,
+      "icon": "M",
+      "color": "#7dd3fc"
+    },
+    {
+      "id": "cloud",
+      "title": "Cloudflare",
+      "url": "https://dash.cloudflare.com/",
+      "parent": null,
+      "icon": "C",
+      "color": "#fb923c"
+    },
+    {
+      "id": "repo",
+      "title": "Runweave 仓库",
+      "url": "https://github.com/runweave/runweave",
+      "parent": "work",
+      "icon": "G",
+      "color": "#b9c3d2"
+    },
+    {
+      "id": "issues",
+      "title": "Issues · Runweave",
+      "url": "https://github.com/runweave/runweave/issues",
+      "parent": "work",
+      "icon": "G",
+      "color": "#b9c3d2"
+    },
+    {
+      "id": "figma",
+      "title": "Figma",
+      "url": "https://www.figma.com/",
+      "parent": "design",
+      "icon": "F",
+      "color": "#c084fc"
+    },
+    {
+      "id": "shadcn",
+      "title": "shadcn/ui",
+      "url": "https://ui.shadcn.com/",
+      "parent": "design",
+      "icon": "S",
+      "color": "#cbd5e1"
+    }
+  ]
+}

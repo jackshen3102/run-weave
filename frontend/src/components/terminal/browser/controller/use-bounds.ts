@@ -39,6 +39,7 @@ interface UseTerminalBrowserBoundsParams {
   active: boolean;
   activeTabId: string | null | undefined;
   annotationPanelOpen: boolean;
+  bookmarkPanelOpen: boolean;
   browserViewRef: RefObject<HTMLDivElement | null>;
   devicePanelOpen: boolean;
   headerRulesPanelOpen: boolean;
@@ -55,6 +56,7 @@ export function useTerminalBrowserBounds({
   active,
   activeTabId,
   annotationPanelOpen,
+  bookmarkPanelOpen,
   browserViewRef,
   devicePanelOpen,
   headerRulesPanelOpen,
@@ -183,7 +185,7 @@ export function useTerminalBrowserBounds({
       const containerRect =
         surfaceContainerRef.current?.getBoundingClientRect();
       const sidePanelOpen =
-        annotationPanelOpen || headerRulesPanelOpen || devicePanelOpen;
+        annotationPanelOpen || bookmarkPanelOpen || headerRulesPanelOpen || devicePanelOpen;
       const rawBounds = {
         x: Math.round(rect.left),
         y: Math.round(rect.top),

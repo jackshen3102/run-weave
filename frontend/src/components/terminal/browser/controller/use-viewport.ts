@@ -11,6 +11,7 @@ interface UseTerminalBrowserViewportOptions {
   active: boolean;
   activeTab: TerminalBrowserTabState | undefined;
   annotationPanelOpen: boolean;
+  bookmarkPanelOpen: boolean;
   browserViewRef: RefObject<HTMLDivElement | null>;
   devicePanelOpen: boolean;
   electronTabsSynced: boolean;
@@ -25,6 +26,7 @@ export function useTerminalBrowserViewport({
   active,
   activeTab,
   annotationPanelOpen,
+  bookmarkPanelOpen,
   browserViewRef,
   devicePanelOpen,
   electronTabsSynced,
@@ -47,6 +49,7 @@ export function useTerminalBrowserViewport({
     active,
     activeTabId,
     annotationPanelOpen,
+    bookmarkPanelOpen,
     browserViewRef,
     devicePanelOpen,
     headerRulesPanelOpen,

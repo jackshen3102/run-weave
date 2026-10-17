@@ -1,0 +1,138 @@
+version: 1
+name: 桌面浏览器收藏夹交互
+description: >
+  面向 Chrome 简化版收藏夹的行为合同；执行结果单独记录，格式校验不能替代行为验证。
+  每例自行建立 toolkit:runweave-dev-session 隔离桌面、独立测试收藏和受控网页，
+  使用 toolkit:playwright-cli 附着该会话的 renderer 与 terminal-browser surface。
+  原生层级通过 computer-use 检查真实合成窗口。不得修改安装态用户收藏。
+cases:
+  - id: BKM-001
+    name: 收藏来源是已提交页面且相同网址不重复创建
+    required: true
+    description: 地址栏草稿不影响收藏目标，重复收藏只编辑已有条目。
+    preconditions:
+      - 隔离候选桌面已打开受控页面 A，其标题和 URL 已提交，测试存储没有 A。
+      - 本例 renderer 和 terminal-browser endpoint 均由所属 Dev Session 解析。
+    steps:
+      - 使用 $toolkit:playwright-cli 将地址栏改成 B 但不提交，再点击星标；确认新增内容为 A 的标题和 URL，成功后星标点亮。
+      - 关闭弹窗后再次点击星标；确认进入同一收藏编辑，侧栏中 A 只有一项。
+      - 清理本例收藏和标签，不修改其他实例。
+  - id: BKM-002
+    name: 编辑草稿在嵌套新建文件夹期间保留
+    required: true
+    description: 名称、网址、位置在完成时一起提交，新建文件夹不能丢失尚未提交的输入。
+    preconditions:
+      - 隔离候选桌面有本例收藏 A，位于根级，具备不同的有效 URL B。
+    steps:
+      - 使用 $toolkit:playwright-cli 编辑 A 的名称和 URL，再从编辑框创建文件夹；确认回到编辑框时输入仍为修改后的值并已选中新文件夹。
+      - 点击完成；确认 A 移入该文件夹，名称和 URL 均为新值，旧 URL 不再点亮星标。
+      - 再改名称但按 Esc 关闭，重新编辑；确认未完成的修改没有保存。
+  - id: BKM-003
+    name: 非空文件夹删除必须确认且整体提交
+    required: true
+    description: 取消不会删除内容，确认后文件夹与子项一起消失，不留下孤儿项。
+    preconditions:
+      - 隔离候选桌面有本例文件夹 F，含两个收藏，以及一个无关根级收藏 R。
+    steps:
+      - 使用 $toolkit:playwright-cli 删除 F；确认提示包含两项收藏并提供取消，取消后 F 和子项均保留。
+      - 再次删除并确认；确认 F 及两个子项从完整列表和搜索中消失，R 保留。
+      - 读回本例收藏快照，确认没有指向已删除 ID 的顺序引用。
+  - id: BKM-004
+    name: 同层拖动和跨文件夹移动保持完整唯一顺序
+    required: true
+    description: 每次移动只改变指定位置，每个收藏仍只属于一个容器。
+    preconditions:
+      - 隔离候选桌面有顺序为 A、B、F 的根级条目，F 是含 C 的一级文件夹。
+    steps:
+      - 使用 $toolkit:playwright-cli 拖动 B 到 A 前方；确认根级顺序为 B、A、F。
+      - 拖动 A 到 F 内部；确认 F 中为 C、A，根级无 A，收藏总数不变。
+      - 从编辑位置选择器把 A 移回收藏栏；确认根级末尾出现 A，F 只含 C；清理本例条目。
+  - id: BKM-005
+    name: 收藏栏溢出不改变持久化顺序
+    required: true
+    description: 窄宽度只改变展示位置，隐藏条目仍可通过溢出菜单打开。
+    preconditions:
+      - 隔离候选桌面的收藏栏有足够填满 Browser 宽度的本例条目，已记录初始顺序。
+    steps:
+      - 使用 $toolkit:playwright-cli 调窄 Browser 区域；确认末尾条目进入溢出菜单、收藏夹入口仍可见。
+      - 从溢出菜单打开一个受控收藏；确认目标 URL 正确。
+      - 恢复原宽度；确认条目恢复原显示顺序，持久化快照中的顺序未改变。
+  - id: BKM-006
+    name: 搜索按标题和网址筛选且不影响收藏组织
+    required: true
+    description: 搜索正确展示所属文件夹和空结果，搜索结果不接受拖动重排。
+    preconditions:
+      - 隔离候选桌面有本例根级收藏、文件夹内收藏，二者标题和 URL 不同且可独立识别。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开收藏侧栏，分别按名称、URL、大写等价关键字和两侧空格搜索；确认结果准确并显示所属位置。
+      - 输入不存在的关键字；确认空状态，清空后恢复全部条目及原顺序。
+      - 输入有效查询尝试拖动结果；确认不能重排，清空查询后快照顺序保持。
+  - id: BKM-007
+    name: 隐藏收藏栏后仍可管理收藏
+    required: true
+    description: 显示开关不删除收藏，隐藏状态可通过原生更多菜单访问同一收藏侧栏。
+    preconditions:
+      - 隔离候选桌面已有本例收藏，收藏栏当前显示。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开更多菜单，通过 computer-use 点击显示收藏栏选项；确认收藏栏隐藏并归还网页高度。
+      - 从同一原生菜单打开收藏夹；确认能找到并打开原收藏。
+      - 再显示收藏栏；确认内容、顺序和当前网页保持，不发生多余页面重载。
+  - id: BKM-008
+    name: 打开收藏遵守点击时的 Profile 和标签组
+    required: true
+    description: 收藏跨 Profile 可见，但导航和新标签使用当前身份及当前组，不复用保存时的登录态。
+    preconditions:
+      - 隔离候选桌面有两个 Profile 和本例独占标签组，受控站点通过 Cookie 显示 Profile 身份。
+      - 收藏在 Profile 1 中建立，当前已切换到 Profile 2 的测试组。
+    steps:
+      - 使用 $toolkit:playwright-cli 单击该收藏；确认当前标签导航至收藏 URL，页面显示 Profile 2 身份。
+      - 右键选择在新标签页打开；确认标签数加一，新标签属于 Profile 2 当前组，Profile 1 的标签数与 Cookie 不变。
+  - id: BKM-009
+    name: 收藏浮层不会被原生网页覆盖或误点击
+    required: true
+    description: 编辑、嵌套选择器、文件夹和右键菜单均遵守公共浮层呈现；关闭后恢复原网页。
+    preconditions:
+      - 隔离候选桌面真实 Browser 受控网页含点击计数、加载计数和未提交表单，测试收藏已有文件夹。
+    steps:
+      - 使用 $toolkit:playwright-cli 填写未提交表单并依次打开收藏编辑、文件夹选择器、文件夹菜单及右键菜单；computer-use 检查原生合成窗口完整呈现并实际输入或点击。
+      - 确认交互落在收藏控件，底层网页点击计数不增加。
+      - 关闭最后一层；确认原页面表单、滚动和加载计数保持，网页恢复输入；不能仅凭 DOM 可见判定通过。
+  - id: BKM-010
+    name: 收藏侧栏预留空间并与现有侧栏互斥
+    required: true
+    description: 侧栏显示时网页仍可交互，不与批注、请求头或设备面板叠加占位。
+    preconditions:
+      - 隔离候选桌面真实 Browser 打开有输入框和页面边缘标记的受控网页，批注、请求头、设备面板可用。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开收藏侧栏；computer-use 确认网页缩至剩余空间，右侧边缘不被挡且能操作网页输入框。
+      - 依次切到批注、请求头、设备面板再回收藏；确认任何时刻只占用一份侧栏宽度。
+      - 关闭侧栏；确认网页恢复完整区域，输入内容保持，最小宽度水平滚动没有出现错误边界。
+  - id: BKM-011
+    name: 临时预览不能被收藏且回环收藏不会落到旧远端
+    required: true
+    description: 临时来源不持久化，打开本机回环收藏不会沿用当前 Tab 绑定的远端预览。
+    preconditions:
+      - 隔离候选桌面连接本例远端测试 Backend，远端和 Desktop 同端口受控站点分别显示 REMOTE 和 DESKTOP。
+      - 当前 Tab 已通过真实远端来源打开并显示临时预览标识，存储已有普通本机回环收藏指向相同端口。
+    steps:
+      - 使用 $toolkit:playwright-cli 检查临时预览星标；确认禁用且解释暂不支持，文件没有隧道地址或连接凭据。
+      - 点击已有回环收藏；确认在当前 Profile 当前组新建普通标签并显示 DESKTOP，而非 REMOTE，界面解释在本机新标签打开。
+      - 确认原远端预览仍属于原标签且没有被替换，清理本例连接和标签。
+  - id: BKM-012
+    name: 标签切换不会把编辑草稿写到另一页面
+    required: true
+    description: 编辑绑定稳定 bookmarkId，切换页面身份时关闭编辑而不误写新目标。
+    preconditions:
+      - 隔离候选桌面有本例 A、B 两个已收藏页面与对应标签，当前为 A。
+    steps:
+      - 使用 $toolkit:playwright-cli 编辑 A 名称但不提交，再切换到 B；确认编辑弹窗关闭，B 名称和 URL 未变化。
+      - 回到 A 重新编辑；确认原值仍在，未提交草稿没有写入任何条目。
+  - id: BKM-013
+    name: 浏览器导航失败不会破坏收藏
+    required: true
+    description: 目标不可访问时显示现有导航错误，收藏内容和身份选择仍保持。
+    preconditions:
+      - 隔离候选桌面有本例收藏，指向本例已停止的本机受控 HTTP 服务，已记录收藏快照。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开该收藏；确认显示导航失败且没有偷偷改用其他 Profile 或系统浏览器。
+      - 打开收藏侧栏；确认该条 URL、位置和全部数据仍与打开前一致，恢复测试服务后可再次主动打开。

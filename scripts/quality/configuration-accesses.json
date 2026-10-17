@@ -10495,5 +10495,125 @@
     "count": 1,
     "category": "build",
     "reason": "记录构建缓存内已应用的固定补丁摘要，避免对同一源码重复应用。"
+  },
+  {
+    "file": "electron/src/browser/bookmarks/store.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(this.file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取 Desktop 独立收藏用户内容文件并校验 schema、容量和 revision；不作为 settings.yaml 配置来源。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks-fixture.mjs",
+    "kind": "environment",
+    "expression": "process.env.RW_BOOKMARK_FIXTURE_RENDERER",
+    "count": 1,
+    "category": "test",
+    "reason": "一次性 Electron IPC fixture 在临时 userData 中读写测试数据、preload 和 renderer bundle；不读取生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks-fixture.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file + \".saved\")",
+    "count": 1,
+    "category": "test",
+    "reason": "一次性 Electron IPC fixture 在临时 userData 中读写测试数据、preload 和 renderer bundle；不读取生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks-fixture.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 2,
+    "category": "test",
+    "reason": "一次性 Electron IPC fixture 在临时 userData 中读写测试数据、preload 和 renderer bundle；不读取生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks-fixture.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(root, \"terminal-browser-bookmarks.v1.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "一次性 Electron IPC fixture 在临时 userData 中读写测试数据、preload 和 renderer bundle；不读取生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks-fixture.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(process.env.RW_BOOKMARK_FIXTURE_RENDERER)",
+    "count": 1,
+    "category": "test",
+    "reason": "一次性 Electron IPC fixture 在临时 userData 中读写测试数据、preload 和 renderer bundle；不读取生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks-fixture.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(preload)",
+    "count": 1,
+    "category": "test",
+    "reason": "一次性 Electron IPC fixture 在临时 userData 中读写测试数据、preload 和 renderer bundle；不读取生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks-ipc.mjs",
+    "kind": "environment",
+    "expression": "env.ELECTRON_RUN_AS_NODE",
+    "count": 1,
+    "category": "test",
+    "reason": "一次性 Electron 验证进程继承当前环境并移除 ELECTRON_RUN_AS_NODE；renderer 路径仅用于 fixture，不作为产品配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks-ipc.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "一次性 Electron 验证进程继承当前环境并移除 ELECTRON_RUN_AS_NODE；renderer 路径仅用于 fixture，不作为产品配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(boundary.file)",
+    "count": 1,
+    "category": "test",
+    "reason": "独立临时目录中的收藏存储完整性验证，读取提交字节并注入损坏数据和写入故障；不访问生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(f.file)",
+    "count": 1,
+    "category": "test",
+    "reason": "独立临时目录中的收藏存储完整性验证，读取提交字节并注入损坏数据和写入故障；不访问生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(fail.file)",
+    "count": 1,
+    "category": "test",
+    "reason": "独立临时目录中的收藏存储完整性验证，读取提交字节并注入损坏数据和写入故障；不访问生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "test",
+    "reason": "独立临时目录中的收藏存储完整性验证，读取提交字节并注入损坏数据和写入故障；不访问生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(bad.file)",
+    "count": 1,
+    "category": "test",
+    "reason": "独立临时目录中的收藏存储完整性验证，读取提交字节并注入损坏数据和写入故障；不访问生产配置。"
+  },
+  {
+    "file": "scripts/verify/electron/browser-bookmarks.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(file + \".tmp\")",
+    "count": 1,
+    "category": "test",
+    "reason": "独立临时目录中的收藏存储完整性验证，读取提交字节并注入损坏数据和写入故障；不访问生产配置。"
   }
 ]

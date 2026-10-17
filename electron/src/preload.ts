@@ -1,3 +1,4 @@
+import type { BookmarkMutation, BookmarkSnapshot } from "@runweave/shared/terminal-browser-bookmarks";
 import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin, LocalRemoteDesktopInfo } from "@runweave/shared/tunnels";
 import type { DesktopLocalBrowserSource } from "@runweave/shared/browser-local-tunnel";
 import type { ConfigurationStatus } from "@runweave/shared/configuration";
@@ -212,6 +213,14 @@ const electronApi = {
     title: string;
     body: string;
   }) => ipcRenderer.invoke("runtime-status:notify", input) as Promise<boolean>,
+  terminalBrowserGetBookmarks: () => ipcRenderer.invoke("terminal-browser:bookmarks-get"),
+  terminalBrowserMutateBookmarks: (request: BookmarkMutation) => ipcRenderer.invoke("terminal-browser:bookmarks-mutate", request),
+  terminalBrowserGetBookmarkTarget: (tabId: string) => ipcRenderer.invoke("terminal-browser:bookmark-target", tabId),
+  onTerminalBrowserBookmarksChanged: (listener: (snapshot: BookmarkSnapshot) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, snapshot: BookmarkSnapshot) => listener(snapshot);
+    ipcRenderer.on("terminal-browser:bookmarks-changed", wrapped);
+    return () => { ipcRenderer.off("terminal-browser:bookmarks-changed", wrapped); };
+  },
   terminalBrowserNavigate: (tabId: string, url: string, source?: DesktopLocalBrowserSource) =>
     ipcRenderer.invoke("terminal-browser:navigate", tabId, url, source),
   terminalBrowserInvalidateSource: (connectionId: string) => ipcRenderer.invoke("terminal-browser:invalidate-source", connectionId),

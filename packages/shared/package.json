@@ -59,6 +59,7 @@
     "./terminal/state": "./src/terminal/runtime/state.ts",
     "./terminal/workspace-service": "./src/terminal/workspace-service.ts",
     "./terminal/websocket": "./src/terminal/runtime/websocket.ts",
+    "./terminal-browser-bookmarks": "./src/browser/bookmarks.ts",
     "./terminal-browser-annotation": "./src/browser/annotation.ts",
     "./terminal-browser-automation": "./src/browser/automation.ts",
     "./terminal-browser-cdp-proxy": "./src/browser/cdp-proxy.ts",
