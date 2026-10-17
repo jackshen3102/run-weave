@@ -39,9 +39,9 @@ rw status --instance <id> --profile <name> --json
 ```
 
 null 恢复默认。关联凭据需成组变更时使用配置文档的 import 流程，先 dry-run，不通过多次单键保存制造无效中间态。版本冲突重新读取并核对用户意图，不能去掉预期版本强行覆盖。
-保存成功只表示持久化。检查目标字段 fieldStates 的 state、saved、applied 与 appliedRevision；pending/error/notObserved 不能报告为生效，重载失败保留旧采用值。重启字段通过目标服务既有生命周期入口处理，禁止按端口杀进程或重启无关服务。Dev Session 操作使用 runweave-dev-session；用户显式要求 Stable 更新时使用 update-runweave-desktop。
+保存成功只表示持久化。检查目标字段 fieldStates 的 state、saved、applied 与 appliedRevision；pending/error/notObserved 不能报告为生效，重载失败保留旧采用值。重启字段通过目标服务既有生命周期入口处理，禁止按端口杀进程或重启无关服务。Dev Session 操作使用 runweave-dev-session；macOS Stable 桌面更新在用户显式指定时使用 update-runweave-desktop。
 最后执行该服务真实功能验证，例如读取数据、连接或用户授权的业务操作；healthy 与 applied 本身不能替代业务成功。只读诊断不发送消息或写入终端。
 
-恢复备份、迁移、初始化和软件更新不是普通配置写入；按配置文档/专属技能执行精确目标、预览和兼容检查。初始化只用于确认全新安装；不覆盖已有身份。写入响应不确定先核对，不自动重放有副作用的操作。
+Linux 整套后台更新与 systemd 开机自启使用 [update-runweave-backend](../update-runweave-backend/SKILL.md)。恢复备份、迁移、初始化和软件更新不是普通配置写入；按配置文档/专属技能执行精确目标、预览和兼容检查。初始化只用于确认全新安装；不覆盖已有身份。写入响应不确定先核对，不自动重放有副作用的操作。
 
 交付区分保存、应用、服务状态及业务验证四种证据，明确来源和未验证范围。

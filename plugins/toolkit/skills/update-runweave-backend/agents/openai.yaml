@@ -1,0 +1,4 @@
+interface:
+  display_name: "更新 Linux 后台"
+  short_description: "完整更新 Linux 上的 Runweave 后台，并核对服务托管与开机自启"
+  default_prompt: "使用 $update-runweave-backend 更新目标 Linux 机器的整套 Runweave 后台，检查 systemd 托管、开机自启和实际运行结果。"
