@@ -12,6 +12,8 @@
 
 入口是 [launcher.cjs](launcher.cjs)。仅在 Runweave 终端的交互启动中启用观测。准备入口提供 panel 和 operation；自动恢复或手动启动时，启动器从当前 tmux pane 的实际绑定取得 panel，并为本次启动生成 operation。等待绑定最多 5 秒，仍不可确认则报错退出，不静默降级。普通命令和嵌套 CLI 不接管父进程的观测。需已安装 Runweave Toolkit 的 Codex hooks；受管启动将其既有 `RUNWEAVE_TOOLKIT_PLUGIN_ROOT` 路由指向本版本打包的 Hook 资产，不更新用户全局插件。受管交互使用上游 `--no-daemon`，使原生 hooks 的环境属于该终端；因此不支持要求共享 daemon 的 `codex agents` 总览及 `--remote`。原生旁聊、审批、模型和权限配置保持上游行为。
 
+观测要求标准输入和输出均连接 TTY；登录检查、模型查询等非交互子命令不创建或覆盖上下文文件。子命令识别跳过选项值并遵守 `--` 分隔符；进入 resume/fork 后，会话名和提示词不参与子命令判断。Backend 启动时清除调用方的终端、tmux 和受管 Codex 身份，服务内的 provider 探测不继承原终端的所有权；新终端身份仍由 Backend 按所属实例显式注入。
+
 ## 身份与输入合同
 
 - 原生 TUI 在事件循环边界原子发布 `primaryThreadId`、`displayedThreadId`、旁聊父子关系、输入就绪和当前显示会话的运行状态。数据位于实例配置目录 `codex-context/`，文件为 0600，目录为 0700。

@@ -13,7 +13,45 @@ const terminalId = env.RUNWEAVE_TERMINAL_SESSION_ID;
 let panelId = env.RUNWEAVE_TERMINAL_PANEL_ID;
 let operationId = env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID;
 // Child CLIs and noninteractive tools must not overwrite the owning TUI's observation.
-const interactive = !args.some((arg) => ["exec", "review", "app-server", "--version", "-V", "--help", "-h"].includes(arg));
+// Pipes and service probes never own the pane, even if they inherit its IDs.
+// Keep the command exclusions aligned with the pinned native CLI; only its
+// default TUI, resume and fork may publish a conversation context.
+const nonInteractiveCommands = new Set([
+  "agents", "tcp-tunnel", "exec", "e", "review", "login", "logout", "mcp",
+  "plugin", "app-server", "remote-control", "app", "completion", "update",
+  "doctor", "sandbox", "debug", "execpolicy", "apply", "a", "queue",
+  "archive", "delete", "migrate-rollouts", "unarchive", "cloud", "cloud-tasks",
+  "responses-api-proxy", "stdio-to-uds", "exec-server", "features", "help",
+]);
+const valueOptions = new Set([
+  "-c", "--config", "--enable", "--disable", "--remote", "--remote-auth-token-env",
+  "-i", "--image", "-m", "--model", "--local-provider", "-p", "--profile",
+  "-s", "--sandbox", "-C", "--cd", "--add-dir", "-a", "--ask-for-approval",
+]);
+function isInteractiveCommand(argv) {
+  let sessionCommand = false;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--") break;
+    const option = arg.startsWith("--") ? arg.split("=")[0] : arg.slice(0, 2);
+    if (["--version", "-V", "--help", "-h"].includes(option)) return false;
+    if (valueOptions.has(option)) {
+      if (arg === option) {
+        i++;
+        // Separate image values extend to the next option; attached values do not.
+        if (option === "-i" || option === "--image")
+          while (i + 1 < argv.length && !argv[i + 1].startsWith("-")) i++;
+      }
+    } else if (!arg.startsWith("-") && !sessionCommand) {
+      if (nonInteractiveCommands.has(arg)) return false;
+      // Session names and prompts after these commands are operands, not commands.
+      sessionCommand = arg === "resume" || arg === "fork";
+    }
+  }
+  return true;
+}
+const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY) &&
+  isInteractiveCommand(args);
 if (root && terminalId && interactive && !env.RUNWEAVE_CODEX_CONTEXT_GENERATION) {
   // Automatic tmux recovery starts the shell before the workspace is reconciled.
   // Resolve its actual pane binding, never infer a panel from the last thread.

@@ -34,6 +34,28 @@ export function sanitizeTerminalProcessEnv(
 }
 
 export function sanitizeCurrentTerminalProcessEnv(): void {
+  // A Backend started from an Agent terminal is a service, not that terminal's
+  // Agent. Its provider probes must never inherit ownership of the caller's TUI.
+  for (const key of [
+    "RUNWEAVE_TERMINAL_SESSION_ID",
+    "RUNWEAVE_TERMINAL_PANEL_ID",
+    "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
+    "RUNWEAVE_TMUX_SESSION_NAME",
+    "RUNWEAVE_CODEX_CONTEXT_PATH",
+    "RUNWEAVE_CODEX_CONTEXT_GENERATION",
+    "RUNWEAVE_RUNTIME_KIND",
+    "RUNWEAVE_RUNTIME_INSTANCE_ID",
+    "RUNWEAVE_RUNTIME_CONFIG_ROOT",
+    "RUNWEAVE_RUNTIME_TMUX_BINARY",
+    "RUNWEAVE_CODEX_BINARY",
+    "RUNWEAVE_PROJECT_ID",
+    "RUNWEAVE_BROWSER_GROUP_ID",
+    "RUNWEAVE_SCHEDULED_TASK_RUN_ID",
+    "CODEX_THREAD_ID",
+    "CODEX_SESSION_ID",
+    "TMUX",
+    "TMUX_PANE",
+  ]) delete process.env[key];
   removeNpmProcessEnv(process.env);
   delete process.env.NO_COLOR;
   delete process.env.ELECTRON_RUN_AS_NODE;
