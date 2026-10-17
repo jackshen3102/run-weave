@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import * as fs from "node:fs/promises";
 
 type IncidentLevel = "info" | "warn" | "error";
 
@@ -220,32 +221,42 @@ export class DesktopIncidentLogger {
     return copied;
   }
 
-  exportDiagnosticPackage(
+  async exportDiagnosticPackage(
     options: DiagnosticPackageOptions = {},
-  ): DiagnosticPackageResult {
+  ): Promise<DiagnosticPackageResult> {
     const directory = path.join(
       this.packagesDir,
       `desktop-diagnostics-${timestampForFile()}`,
     );
-    mkdirSync(directory, { recursive: true });
+    await fs.mkdir(directory, { recursive: true });
 
     if (existsSync(this.mainLogPath)) {
-      copyFileSync(this.mainLogPath, path.join(directory, "main.jsonl"));
+      await fs.copyFile(this.mainLogPath, path.join(directory, "main.jsonl"));
     }
 
     const crashReportsTarget = path.join(directory, "crash-reports");
-    mkdirSync(crashReportsTarget, { recursive: true });
+    await fs.mkdir(crashReportsTarget, { recursive: true });
     if (existsSync(this.crashReportsDir)) {
-      for (const fileName of readdirSync(this.crashReportsDir)) {
+      for (const fileName of await fs.readdir(this.crashReportsDir)) {
         const source = path.join(this.crashReportsDir, fileName);
-        if (statSync(source).isFile()) {
-          copyFileSync(source, path.join(crashReportsTarget, fileName));
+        if ((await fs.stat(source)).isFile()) {
+          await fs.copyFile(source, path.join(crashReportsTarget, fileName));
         }
       }
     }
 
     const summaryFile = path.join(directory, "summary.json");
-    writeFileSync(
+    const responsivenessDir = path.join(this.logsDir, "responsiveness");
+    if (existsSync(responsivenessDir)) {
+      const target = path.join(directory, "responsiveness");
+      await fs.mkdir(target, { recursive: true });
+      for (const name of await fs.readdir(responsivenessDir)) {
+        if (!/^(events\.jsonl(\.1)?|sample-[0-4]\.txt)$/.test(name)) continue;
+        try { await fs.copyFile(path.join(responsivenessDir, name), path.join(target, name)); }
+        catch { /* Observer may rotate a file during export. */ }
+      }
+    }
+    await fs.writeFile(
       summaryFile,
       `${JSON.stringify(
         {

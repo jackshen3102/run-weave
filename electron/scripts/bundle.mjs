@@ -71,7 +71,10 @@ await build({
     ...importMetaUrlShim.define,
     ...desktopBuildDefines,
   },
-  entryPoints: [{ in: "src/bootstrap.ts", out: "main" }],
+  entryPoints: [
+    { in: "src/bootstrap.ts", out: "main" },
+    { in: "src/desktop/responsiveness-worker.ts", out: "responsiveness-worker" },
+  ],
   outdir: outputDir,
   format: "cjs",
   outExtension: { ".js": ".cjs" },
