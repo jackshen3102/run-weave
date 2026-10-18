@@ -8,18 +8,54 @@ extension AppSession {
 
   /// A transport change retains the terminal surface/navigation and the computer's draft scope.
   func reconnectRoutes() async {
-    guard foreground, let resolver = routeResolver else { return }
+    guard foreground, connection != nil, !routeLoginRequired else { return }
+    // Recovery belongs to the session, not to a network callback, view task or event
+    // stream (which recovery itself disposes). Cancelling a waiter must not strand
+    // the page on the old, closed APIClient after the resolver selects a new one.
+    routeRecoveryRequested = true
+    if let task = routeRecoveryTask {
+      await task.value
+      return
+    }
     reconnectRequest += 1
     let request = reconnectRequest
+    replacingTransport = true
+    let task = Task { [weak self] in
+      guard let self else { return }
+      defer {
+        if self.reconnectRequest == request {
+          self.routeRecoveryTask = nil
+          self.replacingTransport = false
+          self.checking = false
+        }
+      }
+      while self.routeRecoveryRequested, self.foreground,
+        self.reconnectRequest == request, !Task.isCancelled {
+        self.routeRecoveryRequested = false
+        await self.replaceRouteTransport(request: request)
+      }
+    }
+    routeRecoveryTask = task
+    await task.value
+  }
+
+  func cancelRouteRecovery() {
+    reconnectRequest += 1
+    routeRecoveryTask?.cancel()
+    routeRecoveryTask = nil
+    routeRecoveryRequested = false
+    replacingTransport = false
+  }
+
+  private func replaceRouteTransport(request: Int) async {
+    guard let resolver = routeResolver else { return }
     generation += 1
     let epoch = generation
-    replacingTransport = true
-    defer { if reconnectRequest == request { replacingTransport = false; checking = false } }
     saveDraftsNow()
     connection = resolver.computer
     health.status = .checking
     healthRevision += 1
-    loading = false; writing = false
+    loading = false; writing = false; reconnectingTerminal = false
     metadataWrites.removeAll(); pendingOverviewEvents.removeAll()
     overviewTask?.cancel(); overviewTask = nil; overviewReloadRequested = false
     events?.dispose(); events = nil
@@ -28,8 +64,10 @@ extension AppSession {
     do {
       let next = try await resolver.resolve(force: true)
       guard foreground, reconnectRequest == request, generation == epoch, !Task.isCancelled else { return }
+      let hasCredentials = await next.hasCredentials()
+      guard foreground, reconnectRequest == request, generation == epoch, !Task.isCancelled else { return }
       api = next
-      authenticated = await next.hasCredentials()
+      authenticated = hasCredentials
       health = DeviceHealthSnapshot(status: .online, latencyMilliseconds: resolver.latency, message: "电脑在线")
       error = nil
       knowledgeInbox.reset(api: authenticated ? next : nil)
@@ -64,6 +102,7 @@ extension AppSession {
   func prepareRelogin(url: String? = nil) async {
     guard let connection else { return }
     routeLoginRequired = true
+    cancelRouteRecovery()
     probeTask?.cancel(); probeTask = nil
     routeResolver?.cancel()
     events?.stop(); terminalController?.disconnect(); deviceStatus.suspend()
@@ -76,6 +115,12 @@ extension AppSession {
 
   func probe(epoch: Int) async {
     guard foreground, !replacingTransport, let resolver = routeResolver else { return }
+    // A resolver can finish after its previous caller was invalidated. Proving
+    // that client is reachable is insufficient if the page still owns another one.
+    guard api === resolver.client else {
+      await reconnectRoutes()
+      return
+    }
     healthRevision += 1
     let revision = healthRevision
     let result: DeviceHealthSnapshot

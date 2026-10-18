@@ -128,6 +128,23 @@ public final class SessionController: ObservableObject {
     api = next
   }
 
+  func recoverAfterNetworkChange() async {
+    // Protocol/authentication failures still require their existing explicit retry.
+    guard !(stopped && failure != nil) else { return }
+    let epoch = generation
+    if let socket {
+      let responsive = await WebSocketLiveness.check(socket)
+      guard generation == epoch, self.socket === socket, !Task.isCancelled else { return }
+      if responsive { return }
+      // Wake the existing receive/retry loop. connect() would also cancel an
+      // independent HTTP input whose acknowledgement may still be in flight.
+      socket.cancel(with: .goingAway, reason: nil)
+      return
+    }
+    guard task == nil, !Task.isCancelled else { return }
+    connect()
+  }
+
   public func connect() {
     disconnect()
     stopped = false
