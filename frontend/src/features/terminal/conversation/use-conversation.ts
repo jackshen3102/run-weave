@@ -5,7 +5,7 @@ import { getTerminalConversation } from "../../../services/terminal/conversation
 import { HttpError } from "../../../services/http";
 import { useTerminalRuntime } from "../queries/provider";
 
-export function useConversation(sessionId: string, panelId: string | null) {
+export function useConversation(sessionId: string, panelId: string | null, expectedThreadId?: string) {
   const runtime = useTerminalRuntime();
   const [data, setData] = useState<TerminalConversationResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,7 +29,7 @@ export function useConversation(sessionId: string, panelId: string | null) {
     try {
       const previous = dataRef.current;
       const response = await getTerminalConversation(runtime.apiBase, runtime.token, sessionId, {
-        panelId, expectedThreadId: boundTarget.current?.threadId,
+        panelId, expectedThreadId: boundTarget.current?.threadId ?? expectedThreadId,
       }, controller.signal);
       if (controller.signal.aborted || ticket !== sequence.current || currentScope.current !== startedScope) return;
       if (boundTarget.current && JSON.stringify(boundTarget.current) !== JSON.stringify(response.target)) {

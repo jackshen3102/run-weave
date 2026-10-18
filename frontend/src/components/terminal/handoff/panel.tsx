@@ -1,3 +1,5 @@
+import { HandoffContextLinks } from "./context-links";
+import { HandoffOriginLink } from "./origin-link";
 import { claimHandoffInput } from "../../../features/terminal/input/handoff-guard";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
@@ -241,6 +243,7 @@ function HandoffContent({
         </Button>
       </header>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+        {query.data?.target ? <HandoffContextLinks key={query.data.target.threadId} target={query.data.target} card={card ?? null} completion={completion} /> : null}
         {(notice || query.error || query.data?.message) && (
           <p role="status" className="break-words text-xs text-amber-300">
             {notice ?? query.error?.message ?? query.data?.message}
@@ -403,6 +406,7 @@ function HandoffContent({
                 {entry.kind} · {entry.occurredAt}
                 {entry.truncated ? " · 摘录" : ""}
               </p>
+              {entry.origin ? <HandoffOriginLink origin={entry.origin} projectId={useTerminalWorkspaceStore.getState().activeProjectId ?? ""} onOpened={() => setSelected(null)} /> : null}
               <pre className="whitespace-pre-wrap break-all rounded border border-slate-800 bg-slate-900 p-3 text-xs">
                 {entry.text}
               </pre>

@@ -2,28 +2,13 @@ import { useSettingsDraft } from "../settings/edit-session";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import { ArrowLeft, Settings, X } from "lucide-react";
-import type {
-  SuijiDesktopState,
-  SuijiEnvironment,
-  SuijiProfile,
-} from "@runweave/shared/suiji/desktop";
+import type { SuijiEnvironment } from "@runweave/shared/suiji/desktop";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import {
-  SuijiClient,
-  SuijiHttpError,
-  suijiEndpoint,
-} from "../../services/suiji";
-import { SuijiDraftStore } from "./drafts";
 import { SuijiWorkspace } from "./workspace";
-import type { SuijiConnection } from "./connection-model";
 import type { SuijiOpenLink } from "./browser-navigation";
-import {
-  environmentLabel,
-  loadAccounts,
-  saveProfile,
-  selectEnvironment,
-} from "./accounts";
+import { environmentLabel } from "./accounts";
+import { useSuijiConnection } from "./connection-provider";
 
 export default function SuijiPage({
   active = true,
@@ -36,177 +21,21 @@ export default function SuijiPage({
   onClose?: () => void;
   onOpenLink?: SuijiOpenLink;
 }) {
-  const [accounts, setAccounts] = useState<SuijiDesktopState>();
-  const [endpoint, setEndpoint] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(true),
-    [message, setMessage] = useState("");
+  const { accounts, endpoint, setEndpoint, username, setUsername, password, setPassword,
+    busy, message, connection, needsLogin, setNeedsLogin, ensure, initialize, connect,
+    switchEnvironment: changeEnvironment, logout, editAccount, isCurrent } = useSuijiConnection();
   const [settings, setSettings] = useState(accountOnly);
-  const [needsLogin, setNeedsLogin] = useState(true);
-  const [connection, setConnection] = useState<SuijiConnection>();
-  const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(
-    null,
-  );
-  const current = useRef<SuijiClient | undefined>(undefined);
+  const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
   const alive = useRef(true);
-  const generation = useRef(0);
+  useEffect(() => { alive.current = true; void ensure(); return () => { alive.current = false; }; }, [ensure]);
+  useEffect(() => { if (connection) setSettings(accountOnly); }, [connection, accountOnly]);
   const openLink = useMemoizedFn((url: string) => {
-    const sequence = generation.current;
-    const client = current.current;
-    onOpenLink?.(
-      url,
-      () =>
-        alive.current &&
-        generation.current === sequence &&
-        current.current === client &&
-        client !== undefined,
-    );
+    const client = connection?.client;
+    onOpenLink?.(url, () => alive.current && !!client && isCurrent(client));
   });
-  const fill = (profile: SuijiProfile) => {
-    setEndpoint(profile.endpoint);
-    setUsername(profile.username);
-    setPassword(profile.password ?? "");
-  };
-  const connect = useMemoizedFn(
-    async (state: SuijiDesktopState, login = false) => {
-      const sequence = ++generation.current;
-      current.current?.cancel();
-      setConnection(undefined);
-      setBusy(true);
-      setMessage("");
-      const environment = state.active;
-      let profile = { ...state.profiles[environment] };
-      let client: SuijiClient | undefined;
-      try {
-        if (login)
-          profile = {
-            endpoint: suijiEndpoint(endpoint),
-            username: username.trim(),
-            password,
-          };
-        setNeedsLogin(login || (!profile.session && !profile.password));
-        if (
-          !profile.endpoint ||
-          (!login && !profile.session && !profile.password)
-        )
-          return;
-        client = new SuijiClient(profile.endpoint, {
-          session: profile.session,
-          credentials: profile.password
-            ? { username: profile.username, password: profile.password }
-            : undefined,
-          persist: async (session, forget) => {
-            if (!alive.current || sequence !== generation.current)
-              throw new DOMException("连接已切换", "AbortError");
-            const next = {
-              ...profile,
-              session,
-              ...(forget ? { password: undefined } : {}),
-            };
-            await saveProfile(environment, next);
-            profile = next;
-            if (alive.current && sequence === generation.current)
-              setAccounts((value) =>
-                value
-                  ? {
-                      ...value,
-                      profiles: { ...value.profiles, [environment]: next },
-                    }
-                  : value,
-              );
-          },
-        });
-        current.current = client;
-        const info = login
-          ? await client.login(profile.username, profile.password!)
-          : await client.restore();
-        if (!alive.current || sequence !== generation.current) return;
-        setConnection({
-          client,
-          info,
-          store: new SuijiDraftStore(client.endpoint, info, environment),
-        });
-        setSettings(accountOnly);
-        fill(profile);
-      } catch (error) {
-        if (alive.current && sequence === generation.current) {
-          if (error instanceof SuijiHttpError && error.status === 401) {
-            setNeedsLogin(true);
-            setPassword("");
-          }
-          setMessage(error instanceof Error ? error.message : "连接失败");
-        }
-      } finally {
-        if (alive.current && sequence === generation.current) setBusy(false);
-      }
-    },
-  );
-  const initialize = useMemoizedFn(async () => {
-    setBusy(true);
-    setMessage("");
-    try {
-      const state = await loadAccounts();
-      if (!alive.current) return;
-      setAccounts(state);
-      fill(state.profiles[state.active]);
-      await connect(state);
-    } catch (error) {
-      if (alive.current) {
-        setMessage(error instanceof Error ? error.message : "账户读取失败");
-        setBusy(false);
-      }
-    }
-  });
-  const dispose = useMemoizedFn(() => {
-    alive.current = false;
-    ++generation.current;
-    current.current?.cancel();
-  });
-  useEffect(() => {
-    alive.current = true;
-    void initialize();
-    return dispose;
-  }, [initialize, dispose]);
-  const switchEnvironment = useMemoizedFn(
-    async (environment: SuijiEnvironment) => {
-      if (!accounts || busy || environment === accounts.active) return;
-      if (dirty && !window.confirm("放弃当前环境未保存的账户修改？")) return;
-      setBusy(true);
-      setMessage("");
-      try {
-        await selectEnvironment(environment);
-        const state = await loadAccounts();
-        setAccounts(state);
-        fill(state.profiles[environment]);
-        await connect(state);
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : "环境切换失败");
-        setBusy(false);
-      }
-    },
-  );
-  const logout = useMemoizedFn(async () => {
-    if (!accounts || busy) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const old = current.current;
-      if (old) await old.logout();
-      else await saveProfile(accounts.active, { endpoint, username });
-      ++generation.current;
-      current.current = undefined;
-      setConnection(undefined);
-      setPassword("");
-      setNeedsLogin(true);
-      const state = await loadAccounts();
-      setAccounts(state);
-      fill(state.profiles[state.active]);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "退出失败");
-    } finally {
-      setBusy(false);
-    }
+  const switchEnvironment = useMemoizedFn(async (environment: SuijiEnvironment) => {
+    if (dirty && !window.confirm("放弃当前环境未保存的账户修改？")) return;
+    await changeEnvironment(environment);
   });
   const profile = accounts?.profiles[accounts.active];
   const dirty = accountOnly && !!profile && !connection && (endpoint !== profile.endpoint || username !== profile.username || password !== (profile.password ?? ""));
@@ -301,12 +130,7 @@ export default function SuijiPage({
                   <Button
                     variant="outline"
                     disabled={busy}
-                    onClick={() => {
-                      current.current?.cancel();
-                      ++generation.current;
-                      setConnection(undefined);
-                      setNeedsLogin(true);
-                    }}
+                    onClick={editAccount}
                   >
                     修改账户配置
                   </Button>

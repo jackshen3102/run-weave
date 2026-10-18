@@ -8,6 +8,20 @@
 
 “继续验收”仅在当前会话空闲且目标仍为同一 Codex Thread 时可用。发送前向终端输入控制器申请发送权；已有未发送草稿、输入状态不明或正在发送时拒绝覆盖。传递目标、剩余事项及有限证据摘录；结果未确认时不自动重发。退出 Agent 后可阅读已有历史，但不能向 Shell 发送交接指令。
 
+## 随记关联与来源阅读
+
+在当前交接中手动搜索、预览和确认一条已有随记。关联选择支持服务端分页，确认前重新读取正文版本与最新跟进序号；来源变化后展示最新内容，等待再次确认。抽屉、账户设置和交接共用当前环境的随记连接；未登录时使用既有账户入口。
+
+关联后可只读查看正文、附件及全部分页跟进，保留 app 用户与 Agent 的来源身份。状态来自随记服务，关联和解除均不修改云端正文、跟进或待办状态。“本轮最新输入”读取当前原生用户消息，过滤监督注入；不可读时明确提示，不使用生成目标代替原文。
+
+同一随记的其他本机关联可展示实际读到的交接成果，注明上次读取时间；刷新前核对原 thread。成果和配对工具记录仍沿用原来的证据语义，不代表独立验收或用户确认。
+
+有结构化 `origin` 的来源可核对原终端、面板和 thread 后进入既有会话阅读，按精确 `messageId` 高亮。此操作不向 PTY 发送指令，不新建或恢复终端。缺少 origin 的历史卡保留摘录，不猜定位身份；原目标已变化或不可用时停止跳转。
+
+关系与已读交接摘录只保存在设备的独立 IndexedDB `runweave-handoff-links-v1`。身份包括 Backend 连接/API/远端端点、terminal/panel/thread，以及随记 environment/endpoint/serverId/ownerId；不跨设备同步。关系不存储凭据，退出或切换身份立即隐藏旧视图。关联写入和解除以 `linkId`、revision 在事务中核对，跨页通知只广播变更键；事务失败不显示保存成功。解除只清除该关系及其摘录。
+
+实现入口：[共享连接](../src/features/suiji/connection-provider.tsx)、[本机关联](../src/features/terminal/handoff/context-link-store.ts)、[来源界面](../src/components/terminal/handoff/context-links.tsx)、[只读定位](../src/features/terminal/conversation/navigation.ts)。行为验收入口为[上下文关联测试计划](../../docs/testing/terminal/task-handoff-context-links.testplan.yaml)，类型检查与历史 HTML 原型不代替真实交互验证。
+
 ## 数据与生命周期
 
 - 首次打开目标后启动整理。Backend 对已关注目标消费完成事件，并周期检查原生历史；关闭面板后仍可增量更新。Backend 重启后重新打开即可恢复已保存卡片。

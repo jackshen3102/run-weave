@@ -1,0 +1,145 @@
+{
+  "connection": "本机",
+  "project": "browser-viewer",
+  "records": [
+    {
+      "id": "tags",
+      "title": "随记详情直接改标签",
+      "status": "未完成",
+      "date": "10月17日 10:08",
+      "body": "在随记详情里直接添加、创建和删除标签，不用每次进入编辑页。保持最多两个标签的限制。",
+      "supplement": "手机也要能改。成功后只追加最终成果；未经我确认，不标记完成。",
+      "supplementTime": "10月17日 10:21",
+      "requirementsVersion": 2,
+      "originSession": "implementation",
+      "result": {
+        "title": "Web 与 iOS 模拟器已验证",
+        "body": "详情内可以添加、创建和删除标签。已检查两个标签上限、并发冲突后的重新选择，以及重新打开后的保存结果。",
+        "limit": "未更新手机，尚无本次真机交互记录。",
+        "time": "10月17日 11:26",
+        "session": "implementation",
+        "evidence": [
+          {
+            "label": "Web · 详情添加与删除",
+            "detail": "在详情内添加已有标签，搜索并创建新标签，再移除其中一个；重新打开详情后与保存结果一致。",
+            "kind": "浏览器交互",
+            "source": "原会话中的验证记录",
+            "platform": "Browser"
+          },
+          {
+            "label": "iOS · 模拟器详情编辑",
+            "detail": "在 iOS 模拟器内执行添加、删除、两个标签上限及冲突后重新选择。结果仅覆盖模拟器。",
+            "kind": "模拟器交互",
+            "source": "原会话中的验证记录",
+            "platform": "Simulator"
+          }
+        ]
+      }
+    },
+    {
+      "id": "research",
+      "title": "研究 Taskboard 有哪些值得借鉴",
+      "status": "未完成",
+      "date": "今天 09:18",
+      "body": "打开文章和项目源码，看看对 Runweave 有没有价值。结合实际使用方式判断，不直接照搬任务看板。",
+      "supplement": "先研究和画原型，不修改产品代码。",
+      "supplementTime": "今天 09:42",
+      "requirementsVersion": 1,
+      "originSession": "research",
+      "result": null
+    }
+  ],
+  "sessions": [
+    {
+      "id": "review",
+      "name": "随记标签 · 继续核对",
+      "worktree": "wt-1",
+      "thread": "6e420ab1",
+      "recordId": "tags",
+      "available": true,
+      "messages": [
+        {
+          "id": "r1",
+          "role": "user",
+          "time": "10:32",
+          "text": "接着看一下随记详情改标签这件事，手机现在是什么情况？"
+        },
+        {
+          "id": "r2",
+          "role": "assistant",
+          "time": "10:33",
+          "text": "上次的成果记录覆盖了 Web 和 iOS 模拟器，手机还没有更新，也没有这版的真机交互记录。",
+          "items": [
+            "Web：详情内添加、创建和删除已验证。",
+            "iOS 模拟器：标签上限、冲突重新选择和保存已验证。",
+            "真机：待更新后检查，不能沿用模拟器结论。"
+          ],
+          "footnote": "随记仍为未完成。"
+        }
+      ]
+    },
+    {
+      "id": "implementation",
+      "name": "随记详情标签编辑",
+      "worktree": "wt-1",
+      "thread": "a82d107c",
+      "recordId": "tags",
+      "available": true,
+      "messages": [
+        {
+          "id": "i1",
+          "role": "user",
+          "time": "10月17日 10:08",
+          "text": "在随记详情里直接添加、创建和删除标签，不用每次进入编辑页。保持最多两个标签的限制。"
+        },
+        {
+          "id": "i2",
+          "role": "user",
+          "time": "10月17日 10:21",
+          "text": "手机也要能改。成功后只追加最终成果；未经我确认，不标记完成。"
+        },
+        {
+          "id": "i3",
+          "role": "assistant",
+          "time": "10月17日 11:26",
+          "text": "Web 与 iOS 模拟器已完成交互验证。",
+          "items": [
+            "在详情直接添加、创建和删除标签。",
+            "已检查两个标签上限、冲突后重新选择及保存。"
+          ],
+          "footnote": "未更新手机，尚无本次真机交互记录。"
+        }
+      ]
+    },
+    {
+      "id": "research",
+      "name": "任务看板研究",
+      "worktree": "wt-2",
+      "thread": "b9402e65",
+      "recordId": null,
+      "available": true,
+      "messages": [
+        {
+          "id": "s1",
+          "role": "user",
+          "time": "09:18",
+          "text": "打开文章，看看这个任务看板有没有价值。"
+        },
+        {
+          "id": "s2",
+          "role": "user",
+          "time": "09:42",
+          "text": "结合我的使用习惯，应该没有你想象的那么理想。先研究和画原型，不修改产品代码。"
+        },
+        {
+          "id": "s3",
+          "role": "assistant",
+          "time": "09:45",
+          "text": "已读文章和项目源码。接下来只画交互原型，先看回到原会话、查看最新要求和核对成果是否有用。",
+          "footnote": "未安装工具，未修改产品代码。"
+        }
+      ]
+    }
+  ],
+  "conflictSupplement": "先保留现有实现，本轮只讨论手机上的交互，不更新手机。"
+}

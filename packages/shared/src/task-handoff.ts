@@ -11,6 +11,13 @@ export interface TaskHandoffEvidence {
   occurredAt: string;
   toolUseId: string | null;
   truncated: boolean;
+  origin?: {
+    target: TaskHandoffTarget;
+    provider: "codex";
+    turnId?: string;
+    messageId?: string;
+    activityEventId?: string;
+  };
 }
 export interface TaskHandoffItem {
   text: string;

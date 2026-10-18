@@ -12,6 +12,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import { useEffect, useRef, useState } from "react";
 import { TunnelDrawer } from "./features/tunnels/drawer";
 import { useTunnelStore } from "./features/tunnels/store";
+import { SuijiConnectionProvider } from "./features/suiji/connection-provider";
 import { SuijiDrawer } from "./features/suiji/drawer";
 import { LOCAL_DEV_CONNECTION_ID, resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
@@ -55,11 +56,13 @@ const isElectron = window.electronAPI?.isElectron === true;
 export default function App() {
   return (
     <OverlayProvider>
+      <SuijiConnectionProvider>
       <SettingsEditProvider><RunweaveApp /></SettingsEditProvider>
       <ClarityDrawerObserver />
       <SuijiDrawer />
       <TunnelDrawer />
       <TerminalSnapshotShareNotification />
+      </SuijiConnectionProvider>
     </OverlayProvider>
   );
 }
