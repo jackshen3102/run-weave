@@ -155,3 +155,19 @@ App Server 是独立的桌面事件服务，名称中的 App 不表示旧移动�
 真机预检与批内复用的入口见 [iOS README](../../packages/app-ios/README.md#真机操作与取证)，
 合同见 [设备预检计划](../testing/app/ios-device-preflight-reuse.testplan.yaml)。历史记录中的系统
 授权等待未在自然再授权窗口完成验收，不能从构建成功或批执行通过推断该分支已验证。
+
+## 消息旁聊
+
+终端浮动输入按钮左侧和主 Composer 工具栏提供「旁聊」。原 `SessionController` 保留，
+消息页独立处理键盘、文字发送、停止和结束，不调用 `AppSession+Input`，不增加终端 WS。
+旧 Backend 缺少能力路由时隐藏入口；不支持的来源显示明确原因。
+
+[SideChatModel](../../packages/app-ios/Sources/RunweaveIOS/State/SideChatModel.swift) 是该客户端
+唯一轮询 owner；[Swift DTO](../../packages/app-ios/Sources/RunweaveIOS/Contracts/SideChat.swift)
+对照共享合同。导航、消息缓存、草稿、UTF-16 选区、revision、操作回执与已读序列使用独立的
+受保护归档，不修改主终端文字/附件归档。返回和 App 离线不停止 Backend 已接受的回答。
+另一端结束时保留本机可复制的文字，停止与结束不影响主任务。
+提问右对齐、使用区别背景并限制为消息区宽度的 80%；回答占满消息区，两者不添加发言者标签。
+
+Backend 执行/权限/恢复合同统一见[独立消息旁聊](terminal-state.md#独立消息旁聊)，
+原生验收见[手机消息旁聊](../testing/app/ios-codex-side-chat.testplan.yaml)。

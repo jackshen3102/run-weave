@@ -80,6 +80,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   taskSupervisionService: TaskSupervisionService;
   textAttachmentDelivery: TerminalTextAttachmentDelivery;
   terminalQuestionsService: TerminalQuestionsService;
+  sideChatService: import("../side-chat/service").SideChatService;
   terminalTaskService: TerminalTaskService;
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;

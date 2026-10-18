@@ -1,0 +1,77 @@
+{
+  "terminal": {
+    "title": "Codex",
+    "project": "browser-viewer",
+    "computer": "MacBook Pro",
+    "model": "GPT-6 · High",
+    "task": "检查终端重连逻辑，确保网络恢复后不会重复发送输入。",
+    "id": "prototype-terminal-codex"
+  },
+  "mainDraft": "完成后把重连时的注意事项也整理一下",
+  "mainOutput": [
+    {
+      "type": "text",
+      "text": "我会先检查连接恢复与输入发送的路径，再验证重复投递的边界。"
+    },
+    {
+      "type": "tool",
+      "text": "已读取 SessionController.swift"
+    },
+    {
+      "type": "tool",
+      "text": "已读取 input-dispatcher.ts"
+    },
+    {
+      "type": "text",
+      "text": "当前输入会绑定会话身份和 generation。接下来检查：旧连接上的待确认输入，会不会被新连接再次提交。"
+    },
+    {
+      "type": "progress",
+      "text": "正在核对连接恢复与输入回执…"
+    }
+  ],
+  "sampleQuestion": "这里的 generation 是做什么的？",
+  "answers": [
+    {
+      "match": "generation|代际|身份",
+      "paragraphs": [
+        "generation 可以理解为这次终端进程的“代号”。同一个终端重启以后，名字可能没变，但它已经是新的一次运行。",
+        "发送输入时带上这个代号，电脑就能拒绝属于上一次运行的旧输入，避免把旧草稿发给新会话。",
+        "它与 revision 的区别是：generation 区分哪次运行，revision 区分这次运行中的哪一版状态。"
+      ]
+    },
+    {
+      "match": "重连|重复|重发",
+      "paragraphs": [
+        "关键是把“恢复连接”和“重新发送”分开。连接恢复后，先查询原请求的回执，再决定下一步。",
+        "如果发送结果仍不明确，保留草稿并提示用户确认，不自动再发一次。这样可以避免同一条指令执行两遍。"
+      ]
+    },
+    {
+      "match": ".*",
+      "paragraphs": [
+        "可以把这里拆成两层理解：终端连接负责把内容送到电脑，会话身份负责确认内容应该交给谁。",
+        "在当前重连场景里，先确认会话身份和原请求的结果，再继续发送，才能避免把一次网络重连变成一次重复操作。"
+      ]
+    }
+  ],
+  "replyDelayMs": 2200,
+  "source": {
+    "threadId": "prototype-main-thread",
+    "lastTurnId": "prototype-completed-turn-12",
+    "label": "第 12 轮",
+    "summary": "开始旁聊时的主对话",
+    "question": "先梳理连接恢复与输入回执的方案。",
+    "answer": "输入绑定会话身份和 generation；网络恢复时先核对原请求结果，再决定是否继续发送。"
+  },
+  "hiddenEvents": [
+    {
+      "type": "reasoning",
+      "text": "PROTOTYPE_REASONING_MUST_NOT_RENDER"
+    },
+    {
+      "type": "commandExecution",
+      "text": "PROTOTYPE_TOOL_OUTPUT_MUST_NOT_RENDER"
+    }
+  ]
+}

@@ -364,3 +364,19 @@ connection generation、controller 身份和草稿 revision 隔离，同文新�
 Keychain 撤销凭据和通知点击。跨端身份、采样、告警与部署合同见 [设备监控](../../../docs/architecture/device-monitor.md)。
 
 电脑本地页面通过可选宿主 lease、原生 CONNECT 和认证 WS 访问；协议、隔离与兼容边界见 [本地网页预览](local-browser.md)。
+
+## 独立消息旁聊
+
+`Contracts/SideChat.swift`、`Services/SideChatService.swift`、`State/SideChatModel.swift` 和
+`Features/Terminal/SideChat` 分别拥有序列化、HTTP、单一数据 owner 与原生消息呈现。
+`State/SideChatDraftArchive.swift` 将旁聊的记录、草稿/选区、revision、操作回执和已读状态
+独立保存在 Application Support 的受保护文件中，排除备份；不改变主归档、Bundle ID 或 Keychain。
+主 Composer 在进入前提交组合文字，消息页使用独立 UITextView 与常规键盘安全区，
+保留原 SessionController，禁止通过主输入接口提交旁聊。
+主编辑器的选区由 TerminalScreen 持有的 CommandTextEditor 在本次终端页面内保留，
+不修改主草稿归档格式；两种编辑器均先恢复文字和选区，再接入 UIKit 选择回调。
+主 Composer 的旁聊未读入口单独观察模型，轮询不重建当前编辑器或输入法菜单。
+覆盖层显示期间保留主终端已接受的视口，真实窗口旋转仍更新尺寸；消息已读以答案和可见视口的交集判定。
+
+跨端执行、权限与持久分支合同只维护在
+[Terminal 状态架构](../../../docs/architecture/terminal-state.md#独立消息旁聊)。

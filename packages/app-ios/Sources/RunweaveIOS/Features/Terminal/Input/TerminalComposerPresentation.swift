@@ -6,9 +6,13 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
   let session: AppSession
   let controller: SessionController
   let terminalID: String
+  let editor: CommandTextEditor
   @Binding var isPresented: Bool
   @Binding var preventsDismissal: Bool
   @Binding var showingInstantReplies: Bool
+  var sideChatAvailable = false
+  var sideChat: SideChatModel?
+  var onSideChat: (() -> Void)?
   var onDismiss: () -> Void
   @EnvironmentObject private var quickInputs: BackendQuickInputModel
   @Environment(\.scenePhase) private var scenePhase
@@ -42,11 +46,14 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
     coordinator.presented = nil
   }
 
-  private func content(onDismiss: @escaping () -> Void) -> AnyView {
+  private func content(onDismiss: @escaping () -> Void, onSideChat: (() -> Void)?) -> AnyView {
     AnyView(
       TerminalComposerSheet(
         session: session, controller: controller, terminalID: terminalID,
+        editor: editor,
         preventsDismissal: $preventsDismissal, showingInstantReplies: $showingInstantReplies,
+        sideChat: sideChat,
+        onSideChat: sideChatAvailable ? onSideChat : nil,
         onDismiss: onDismiss
       )
       .mobileAnalyticsScreen(.composer)
@@ -75,6 +82,7 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
     var requested = false
     var inputs: Inputs?
     private var dismissing = false
+    private var afterDismiss: (() -> Void)?
 
     init(_ parent: TerminalComposerPresentation) { self.parent = parent }
 
@@ -101,18 +109,25 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
           guard let self else { return }
           self.presented = nil
           self.dismissing = false
+          let action = self.afterDismiss
+          self.afterDismiss = nil
           self.parent.onDismiss()
           self.update()
+          action?()
         }
       }
     }
 
     private func content(id: UUID) -> AnyView {
-      parent.content { [weak self] in
+      parent.content(onDismiss: { [weak self] in
         // A late send confirmation from a closed editor must not dismiss a newly opened one.
         guard let self, self.presented?.id == id, !self.dismissing else { return }
         self.parent.isPresented = false
-      }
+      }, onSideChat: { [weak self] in
+        guard let self, self.presented?.id == id, !self.dismissing else { return }
+        self.afterDismiss = self.parent.onSideChat
+        self.parent.isPresented = false
+      })
     }
   }
 
@@ -122,7 +137,10 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
     let session: ObjectIdentifier
     let controller: ObjectIdentifier
     let terminalID: String
+    let editor: ObjectIdentifier
     let quickInputs: ObjectIdentifier
+    let sideChatAvailable: Bool
+    let sideChat: ObjectIdentifier?
     let preventsDismissal: Bool
     let showingInstantReplies: Bool
     let scenePhase: ScenePhase
@@ -132,7 +150,10 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
       session = ObjectIdentifier(presentation.session)
       controller = ObjectIdentifier(presentation.controller)
       terminalID = presentation.terminalID
+      editor = ObjectIdentifier(presentation.editor)
       quickInputs = ObjectIdentifier(presentation.quickInputs)
+      sideChatAvailable = presentation.sideChatAvailable
+      sideChat = presentation.sideChat.map { ObjectIdentifier($0) }
       preventsDismissal = presentation.preventsDismissal
       showingInstantReplies = presentation.showingInstantReplies
       scenePhase = presentation.scenePhase

@@ -1,3 +1,6 @@
+import { useSideChat } from "../../../features/side-chat/use-side-chat";
+import { SideChatView } from "../side-chat/view";
+import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import type { TerminalPreviewFileLinkIntent } from "../preview/panel/file-link";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
@@ -172,6 +175,10 @@ export function TerminalWorkspaceStage({
     const target = store.conversationTarget;
     if (target && (target.scope !== scope || target.sessionId !== activeSessionId || target.panelId !== activePanelId)) store.closePreview();
   }, [scope, activeSessionId, activePanelId]);
+  const sideChat = useSideChat(activeSessionId, activePanelId, !isMobileMonitor);
+  const sideVisible = sideChat.visible && !isMobileMonitor;
+  const sourceStatus = sideChat.state.snapshot?.sourceStatus;
+  const mainStatus = sourceStatus === "running" ? "执行中" : sourceStatus === "idle" ? "等待输入" : sourceStatus === "unavailable" ? "原主会话不可用" : "状态待确认";
   const previewReservedWidth = previewWidthPx
     ? `${previewWidthPx}px`
     : DEFAULT_TERMINAL_SIDECAR_WIDTH;
@@ -196,7 +203,7 @@ export function TerminalWorkspaceStage({
         </p>
       ) : null}
       <div className="relative flex h-full min-h-0">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {!isMobileMonitor ? <TerminalTaskSupervisionStatusStrip sessionId={activeSession?.terminalSessionId ?? null} /> : null}
           {!isMobileMonitor ? <TerminalBrowserAssistance sessionId={activeSessionId} /> : null}
           {activeSession && !isMobileMonitor && panelSplitEnabled ? (
@@ -218,9 +225,10 @@ export function TerminalWorkspaceStage({
 
                   return (
                     <div
-                      aria-hidden={!isActive}
+                      aria-hidden={!isActive || sideVisible}
+                      inert={isActive && sideVisible ? true : undefined}
                       className={[
-                        "absolute top-0 h-full w-full",
+                        "absolute top-0 h-full w-full isolate",
                         isActive
                           ? "left-0"
                           : "-left-[9999em] pointer-events-none",
@@ -238,6 +246,7 @@ export function TerminalWorkspaceStage({
                           useTerminalPreviewStore.getState().openPreview(activeProject.projectId);
                         }}
                         active={isActive}
+                        obscured={isActive && sideVisible}
                         activeCommand={session.activeCommand}
                         clientMode={clientMode}
                         layoutVersion={terminalLayoutVersion}
@@ -287,6 +296,9 @@ export function TerminalWorkspaceStage({
               </div>
             )}
           </div>
+          {sideVisible && activeSession ? <SideChatView model={sideChat.model}
+            title={formatTerminalSessionName({ alias: activeSession.alias, cwd: activeSession.cwd, activeCommand: activeSession.activeCommand })}
+            mainStatus={mainStatus} /> : null}
         </div>
         {previewOpen && !isMobileMonitor ? <>
           {previewExpanded ? <div aria-hidden="true" className="min-h-0 shrink-0" style={{ width: previewReservedWidth }} /> : null}

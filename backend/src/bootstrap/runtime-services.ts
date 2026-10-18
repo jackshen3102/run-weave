@@ -1,3 +1,5 @@
+import { SideChatService } from "../side-chat/service";
+import { SideChatStore } from "../side-chat/store";
 import { observeCodexPane } from "../terminal/application/codex-context-sync";
 import { createFeishuNode } from "../feishu/runtime";
 import { createAuthRuntime } from "./auth-runtime";
@@ -160,6 +162,7 @@ async function assembleRuntimeServices(
   const terminalEventService = new TerminalEventService();
   let terminalStateService: TerminalStateService | null = null;
   let textAttachmentFiles: TerminalTextAttachmentService | null = null;
+  let sideChatService: SideChatService | null = null;
   const terminalSessionManager = new TerminalSessionManager(
     terminalSessionStore,
     {
@@ -167,7 +170,9 @@ async function assembleRuntimeServices(
         kind: "completion_acknowledged", terminalSessionId: session.id, projectId: session.projectId,
         payload: { completionRevision: session.completionRevision, acknowledgedCompletionRevision: session.acknowledgedCompletionRevision },
       }),
-      onSessionDeleted: async (id) => { await textAttachmentFiles?.deleted(id); },
+      onSessionDeleted: async (id) => {
+        await Promise.all([textAttachmentFiles?.deleted(id), sideChatService?.deleted(id)]);
+      },
       onBell: ({ terminalSessionId, projectId, count }) => {
         terminalEventService.record({
           kind: "terminal_bell",
@@ -259,6 +264,10 @@ async function assembleRuntimeServices(
   });
   resources.defer("tmux-output-watcher", () => tmuxOutputWatcher.dispose());
   await terminalSessionManager.initialize();
+  const sideChatStore = new SideChatStore(path.join(storagePaths.browserProfileDir, "side-chats.sqlite"));
+  sideChatService = new SideChatService(sideChatStore, terminalSessionManager, storagePaths.browserProfileDir);
+  resources.defer("side-chat", () => sideChatService!.dispose());
+  await sideChatService.recover();
   textAttachmentFiles = new TerminalTextAttachmentService(path.join(storagePaths.browserProfileDir, "terminal-text-attachments"));
   resources.defer("terminal-text-attachments", () => textAttachmentFiles?.dispose());
   await textAttachmentFiles.initialize();
@@ -544,6 +553,7 @@ async function assembleRuntimeServices(
     taskSupervisionService,
     textAttachmentDelivery,
     terminalQuestionsService,
+    sideChatService,
     terminalEventService,
     terminalCompletionEventService,
     attentionService,

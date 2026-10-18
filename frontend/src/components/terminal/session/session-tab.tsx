@@ -1,3 +1,4 @@
+import { useSideChat } from "../../../features/side-chat/use-side-chat";
 import { useOverlayRef } from "../../../features/overlay/use-overlay-ref";
 import {
   useEffect,
@@ -246,11 +247,14 @@ export function TerminalSessionTab({
     left: number;
     top: number;
   } | null>(null);
-  const displayName = formatTerminalSessionName({
+  const sideChat = useSideChat(session.terminalSessionId, activePanel?.panelId ?? null);
+  const originalDisplayName = formatTerminalSessionName({
     alias: session.alias,
     cwd: session.cwd,
     activeCommand: session.activeCommand,
   });
+  const displayName = sideChat.visible ? `旁聊 · ${originalDisplayName}` : originalDisplayName;
+  const [confirmClose, setConfirmClose] = useState(false);
   const isWorking = terminalState?.state === "agent_running";
   const disablePanelSplitToggle = panelSplitEnabled && panelCount > 1;
   const showStateDetails =
@@ -341,7 +345,9 @@ export function TerminalSessionTab({
                 : "bg-transparent",
           ].join(" ")}
         />
+        {sideChat.state.unread ? <span aria-label="旁聊有新回复" className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
       </button>
+      <Dialog open={confirmClose} onOpenChange={setConfirmClose}><DialogContent><DialogHeader><DialogTitle>关闭终端和旁聊？</DialogTitle><DialogDescription>关闭整个终端会同时结束关联的活跃旁聊。旁聊记录保留。</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setConfirmClose(false)}>取消</Button><Button variant="destructive" onClick={() => { setConfirmClose(false); onRequestCloseSession(session.terminalSessionId); }}>关闭终端</Button></DialogFooter></DialogContent></Dialog>
       {!isMobileMonitor ? (
         <button
           type="button"
@@ -352,8 +358,10 @@ export function TerminalSessionTab({
               : "text-slate-500 hover:text-slate-200",
           ].join(" ")}
           aria-label={`Close terminal ${displayName}`}
-          onClick={() => {
-            onRequestCloseSession(session.terminalSessionId);
+          onClick={async () => {
+            await sideChat.model.discover();
+            if ((sideChat.model.navigation.chatId && sideChat.state.snapshot?.sideChat.status !== "ended") || sideChat.model.state.capabilities?.activeSideChatId) setConfirmClose(true);
+            else onRequestCloseSession(session.terminalSessionId);
           }}
         >
           <X className="h-3 w-3" />

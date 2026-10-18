@@ -1,3 +1,4 @@
+import { SideChatEntry } from "../side-chat/view";
 import { useTerminalBrowserTunnelBinding } from "../../../features/tunnels/terminal-binding";
 import { useTunnelStore } from "../../../features/tunnels/store";
 import { useOpenCodexQuota } from "../../../features/codex-quota/context";
@@ -236,6 +237,7 @@ export function TerminalWorkspaceHeader({
         <ScheduledTaskSourceLink source={activeSession.source} />
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-1">
+        {!isMobileMonitor ? <SideChatEntry terminalId={activeSessionId} panelId={activePanelId ?? null} /> : null}
         {!isMobileMonitor ? (
           <TerminalQuickInputPopover
             key={scope}

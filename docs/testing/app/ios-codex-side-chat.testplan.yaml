@@ -1,0 +1,107 @@
+version: 1
+name: iOS 独立消息旁聊交互验收
+description: >
+  2026-10-17 独立消息架构的待实现合同，替换旧版原生 TUI 切换方案，不表示产品已验收。
+  每例自行建立候选 Backend、可信主历史与旁聊，按共享设备规则申请模拟器或使用明确归属真机。
+  原生 UI 使用 toolkit:agent-device，安装启动沿 packages/app-ios/README.md；仅清理本例资源。
+  配套桌面用 toolkit:playwright-cli，开发实例生命周期用 toolkit:runweave-dev-session。
+  Backend 运行语义独立见 terminal/side-chat-messages.testplan.yaml；HTML 与构建不能替代原生交互。
+cases:
+  - id: IOSSIDEMSG-001
+    name: 两个入口进入消息页而不切换主终端
+    required: true
+    description: 主浮动入口和主输入内入口都打开同一消息旁聊，主 controller/socket 与输入内容保留。
+    preconditions:
+      - 本例候选 App 已登录支持消息旁聊的 Backend，主 Codex 有可分支历史，当前主任务仍运行。
+      - 已记录主 controller、socket、pane、displayedThreadId、主草稿和终端行列数。
+    steps:
+      - 用 toolkit:agent-device 点击浮动旁聊入口，确认整屏普通聊天页、独立输入和固定来源，未发送主草稿或改变主原生显示 thread。
+      - 返回主对话并在主输入工具栏再次进入，确认相同 sideChatID，原主 controller/socket、草稿和行列数保持。
+      - 提问并核对真实独立子 turn，而非终端输入、/side、按键序列或新 tmux pane。
+  - id: IOSSIDEMSG-002
+    name: 中文草稿选区和接受清理按旁聊隔离
+    required: true
+    description: 主和旁聊的组合输入、选区、草稿版本分别保留，旧接受结果不清新编辑。
+    preconditions:
+      - 本例主输入有带禁止收录历史标记的唯一文字，旁聊输入使用另一段中文，可延迟本例真实接受响应。
+      - 设备使用中文输入法，能够检查输入控件、草稿版本和目标 ID。
+    steps:
+      - 用 toolkit:agent-device 在主输入调整选区并编辑组合文本，进入旁聊写另一段文字和选区，再往返两次，确认各自完整保留。
+      - 发送旁聊并延迟接受回执，修改为新草稿再改回同文；放行回执后确认新 revision 的文字/选区未被清空。
+      - 核对主草稿、附件和禁止收录标记未变化，旁聊未写入主终端输入或快捷历史。
+  - id: IOSSIDEMSG-003
+    name: 消息键盘布局可用且不 resize 隐藏主终端
+    required: true
+    description: 旁聊使用常规聊天键盘布局，输入多行仍能操作，主终端不被旁聊布局重排。
+    preconditions:
+      - 本例独占设备连接自有主终端与消息旁聊，无其他客户端 resize，可记录主 surface bounds、WS resize 和 tmux 行列。
+      - 设备有中文键盘及可验证的紧凑竖屏/横屏视口。
+    steps:
+      - 用 toolkit:agent-device 在旁聊展开/收起键盘、输入多行并调整选区；确认消息可滚动，输入、发送、停止和返回仍可达。
+      - 核对仅打开旁聊及键盘时原主终端 bounds/行列和 WS resize 数量不变，无双重 renderer 或 socket。
+      - 旋转设备再返回主视图，确认真实尺寸变化得到有效重排，既有主输入的覆盖式键盘策略未退化。
+  - id: IOSSIDEMSG-004
+    name: 旁聊新回复只更新本机对应提示
+    required: true
+    description: 主视图期间旁聊完成可提示新回复，但不跳视图、不抢键盘、不推进父完成未读。
+    preconditions:
+      - 本例 App 已见旁聊基线，提交一个有限问题后返回主视图并打开主输入草稿。
+      - 已记录父 completionRevision、全局未读及本机旁聊已读版本，可观察真实最终消息。
+    steps:
+      - 等待旁聊完成，用 toolkit:agent-device 确认入口有新回复提示，主视图和主输入保持，不强制导航或清草稿。
+      - 明确进入并呈现最终答案后确认本机提示消失；重复读取快照不重复提示，另一客户端已读不清本机标记。
+      - 核对父状态、摘要、监督和通知未被子回复改写，失败/停止不伪装为成功新回复。
+  - id: IOSSIDEMSG-005
+    name: 停止与结束在原生消息页明确分离
+    required: true
+    description: 停止保留同一旁聊，返回保留生成，结束确认成功后才清本机对应草稿。
+    preconditions:
+      - 本例旁聊有消息、正在生成的子回答和新编辑草稿，父任务仍运行。
+      - 已记录子 turn、chatID 和父任务状态，能够核对真实中断/结束结果。
+    steps:
+      - 用 toolkit:agent-device 停止回答，确认只中断子 turn，消息和新草稿保留；继续提问仍使用原 chatID。
+      - 返回主视图再进入，确认没有隐式结束；打开结束菜单先取消，确认内容与生成保持。
+      - 明确确认结束，确认服务端 ended 后才清当前草稿；再次进入使用新 chatID，父任务未被停止。
+  - id: IOSSIDEMSG-006
+    name: 手机网络恢复读取原结果且不补发问题
+    required: true
+    description: 断线不取消已接受生成，恢复后合并同一 chat 的真实消息并保留未发草稿。
+    preconditions:
+      - 本例 App 旁聊已接受一个问题，并编辑了新草稿，Backend 与子执行器整个用例保持运行。
+      - 可仅中断本例手机网络，已记录 operationID、chatID 和请求次数。
+    steps:
+      - 切断网络并等待服务器完成；用 toolkit:agent-device 确认界面离线且不伪造失败或成功，草稿保留。
+      - 恢复网络并获取新 UI 状态，确认读原操作和快照，没有重复 POST 或新 turn，显示原最终答案。
+      - 确认原未发草稿仍可编辑，轮询不会重建编辑器或将旧响应覆盖到更高版本。
+  - id: IOSSIDEMSG-007
+    name: 冷启动恢复同一消息记录与本机草稿
+    required: true
+    description: 关闭 App 不结束服务器旁聊，重开后按原 chatID 恢复，不将主归档当旁聊草稿。
+    preconditions:
+      - 本例 App 主输入有文字和附件，消息旁聊已有两轮和独立未发草稿，均已成功保存。
+      - 允许仅终止并重开本例 App，Backend 与独立子 thread 保持可用，不卸载清容器。
+    steps:
+      - 关闭 App 再打开并取得 fresh UI，进入原终端和旁聊；确认同 chatID、消息、来源边界和本机未发草稿恢复。
+      - 核对主文字/附件/隐私标记保持原归档，旁聊文字未混入其中；无问题补发或父恢复操作。
+      - 明确继续一次新问题，确认进入原独立子 thread 并只开始一次新 turn。
+  - id: IOSSIDEMSG-008
+    name: 另一端结束时保留手机草稿且不自动换会话
+    required: true
+    description: 远端结束共享状态但不销毁本机未发文字，新旁聊必须由本机明确进入。
+    preconditions:
+      - 本例桌面和手机查看同一消息旁聊，手机有未发文字和已收到的消息。
+      - 桌面可用 toolkit:playwright-cli 操作，手机可用 toolkit:agent-device 操作。
+    steps:
+      - 在桌面明确结束旁聊，确认手机仍显示原记录、结束状态和不可发送反馈，提供复制未发送文字入口。
+      - 在桌面新建另一旁聊，确认手机不自动变成新 chatID、不迁移或发送旧草稿。
+      - 手机明确点击新旁聊后确认复用当前同源活跃会话；旧结果不能清理其新草稿。
+  - id: IOSSIDEMSG-009
+    name: 旧 Backend 与不可用来源安全降级
+    required: true
+    description: 能力接口缺失或来源不可创建时不伪造旁聊，不回退到原生终端按键。
+    preconditions:
+      - 本例候选 App 连接自己的旧 Backend 或返回明确 unsupported 的来源，已有普通终端及主草稿。
+      - 可核对本例请求和原 pane 输入；各拒绝条件使用独立 fixture，不替换用户服务。
+    steps:
+      - 用 toolkit:agent-device 打开终端与主输入，确认新入口隐藏或说明不可用，主终端与草稿仍可使用。
+      - 核对没有 /side、Ctrl+/、Ctrl+C、raw 输入或新终端作为降级，也没有修改用户 Codex 配置。
