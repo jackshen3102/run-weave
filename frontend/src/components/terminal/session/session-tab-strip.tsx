@@ -1,3 +1,4 @@
+import { useHandoffLinks } from "../../../features/terminal/handoff/use-context-link";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { Plus } from "lucide-react";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
@@ -36,6 +37,7 @@ export function TerminalSessionTabStrip({
   onPanelSplitEnabledChange,
   onRequestCreateSession,
 }: TerminalSessionTabStripProps) {
+  const { links } = useHandoffLinks();
   const panelWorkspaceBySessionId = useTerminalWorkspaceStore(
     (state) => state.panelWorkspaceBySessionId,
   );
@@ -54,6 +56,17 @@ export function TerminalSessionTabStrip({
             return (
               <TerminalSessionTab
                 session={session}
+                hasContextLink={links.some(link => {
+                  if (link.target.terminalSessionId !== session.terminalSessionId || link.projectId !== session.projectId) return false;
+                  const workspace = panelWorkspaceBySessionId[session.terminalSessionId];
+                  const panel = workspace?.panels.find(item => item.panelId === link.target.panelId);
+                  if (!link.target.panelId) return session.lastThreadId === link.target.threadId;
+                  // Session metadata describes the active native panel even when
+                  // the single-panel workspace has not loaded thread metadata.
+                  if (link.target.panelId === session.activePanelId)
+                    return session.lastThreadId === link.target.threadId;
+                  return panel?.lastThreadId === link.target.threadId;
+                })}
                 isDragging={sortProps.isDragging}
                 isMobileMonitor={isMobileMonitor}
                 panelCount={

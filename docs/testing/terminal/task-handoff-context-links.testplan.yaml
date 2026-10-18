@@ -1,0 +1,199 @@
+version: 1
+name: 任务交接中的随记关联与来源定位验收
+description: >
+  面向实施计划定义的 Web/Electron 真实界面，验证手动关联随记、来源阅读、精确消息定位、身份隔离与本地持久化。
+  本文件描述待实现行为；HTML 原型、YAML 格式校验和模型报告均不是行为通过证据。
+  使用隔离 Backend 与测试随记数据，不在正式账号、Stable 或无关终端执行破坏性操作。
+cases:
+  - id: HCL-001
+    name: 只有明确确认才建立或解除当前会话关联
+    required: true
+    description: >
+      搜索、预览和取消不写关系，明确确认后只关联当前目标，解除不修改随记内容与状态。
+    preconditions:
+      - 实现已部署到隔离 Web/Electron 测试页面，执行者持有该页面及 Backend 的明确连接信息。
+      - 测试账号已登录，至少有两页可搜索随记；当前 Codex 终端尚未关联记录。
+      - 已保存目标随记的正文、状态、版本和跟进数量供后置核对。
+    steps:
+      - 使用 toolkit:playwright-cli 打开真实任务交接，搜索位于第二页的记录并预览后取消；确认当前终端仍未关联。
+      - 重新搜索并明确确认关联；确认标题、原文和状态属于所选记录，当前终端出现关联标识。
+      - 解除当前会话关联后重新读取随记；确认正文、版本、状态和跟进数量未变化，当前标识消失。
+
+  - id: HCL-002
+    name: 原文与分页跟进保留完整来源身份
+    required: true
+    description: >
+      来源阅读可取得全部分页跟进，区分 app 用户与 Agent，不把报告改写成用户要求或独立验收。
+    preconditions:
+      - 测试随记有长正文、跨页跟进和可读取附件，跟进同时包含 app 与 agent 来源。
+      - 当前测试会话已由执行者关联该记录，Agent 跟进中包含仅报告模拟器验证的文字。
+    steps:
+      - 使用 toolkit:playwright-cli 打开原文和跟进，逐页加载至无 nextCursor；与只读 API 的条目身份、顺序和数量核对。
+      - 确认摘要标明摘录或更多内容，完整阅读能看到正文与必要附件，Agent 跟进没有被标成“你”或真机验收。
+      - 返回任务交接；确认来源展开状态与当前终端目标没有被其他记录替换。
+
+  - id: HCL-003
+    name: 关联确认识别正文与新跟进变化
+    required: true
+    description: >
+      预览过的来源变化后旧确认不得直接成功，尤其追加跟进不改变父记录版本时仍需重新核对。
+    preconditions:
+      - 当前会话未关联记录，测试账号允许通过另一受控客户端修改测试随记。
+      - 已记录初始正文版本和最新跟进 sequence，两个客户端均只操作本用例拥有的数据。
+    steps:
+      - 使用 toolkit:playwright-cli 预览记录后，在另一客户端追加用户跟进并确认父记录版本未变；在预览页确认关联，确认被要求读取最新内容且尚未写关系。
+      - 读取最新内容并确认新补充已展示，再由用户确认；确认本地关系保存的是新跟进序号。
+      - 解除本用例关联，重新预览并由另一客户端修改正文；确认同样拒绝旧版本确认，且没有覆盖云端正文。
+
+  - id: HCL-004
+    name: 同一本地关系的并发写入不覆盖新结果
+    required: true
+    description: >
+      两个同源标签页对同一目标写入时事务拒绝陈旧身份，解除再关联也不能被旧 revision 覆盖。
+    preconditions:
+      - 两个测试标签页使用同一设备存储、同一 Backend 目标和同一随记账号。
+      - 执行者已为当前目标建立关联，并在两页取得相同 linkId 与 revision。
+    steps:
+      - 使用 toolkit:playwright-cli 在第一页解除并关联另一条测试记录；确认生成新的 linkId，第二页从变更通知重新读取。
+      - 使用第二页尚未完成的旧确认或受控调用提交旧 linkId/revision；确认保存被拒绝，重新读库仍是新关联。
+      - 关闭本用例标签页前检查数据库；确认只有当前有效关系，不因冲突新建重复记录。
+
+  - id: HCL-005
+    name: 随记账号与正式开发环境隔离缓存内容
+    required: true
+    description: >
+      endpoint、environment、serverId、ownerId 任一身份变化均不展示旧账号正文、成果和关联标识。
+    preconditions:
+      - 隔离服务准备了两个账号及正式/开发测试环境，记录标题和正文可明确区分。
+      - 当前页面已用账号 A 关联并读取测试记录；执行者可在测试服务延迟一次 A 的只读响应。
+    steps:
+      - 使用 toolkit:playwright-cli 发起 A 的来源读取后切换到 B 或开发测试环境，再释放 A 的迟到响应。
+      - 确认侧栏、弹窗、终端关联图标均没有出现 A 的内容，B 不继承 A 的关联；不能从缓存正文绕过登录。
+      - 明确重新登录 A 并回到原环境；确认只恢复 A 的本地关系，已退出期间没有自动写随记或发送终端输入。
+
+  - id: HCL-006
+    name: 终端面板与原生 thread 变化不继承旧关系
+    required: true
+    description: >
+      本地关系与请求按 Backend、terminal、panel、thread 完整隔离，同名终端和相同目录不能代替身份。
+    preconditions:
+      - 测试环境存在两个终端及多个面板，至少两个目标名称相同但 ID 不同。
+      - 执行者已为其中一个完整目标建立关联，并可受控延迟其一次只读响应。
+    steps:
+      - 使用 toolkit:playwright-cli 在已关联和未关联目标之间快速切换；确认另一目标没有继承原文、成果、图标或选择弹窗。
+      - 在本用例拥有的终端启动新 thread，再释放旧 thread 响应；确认旧关联没有套到新 thread，旧确认被取消。
+      - 切换至另一测试 Backend 后核对目标身份与关系；确认不会仅凭标题、路径或 sessionId 命中原 Backend 数据。
+
+  - id: HCL-007
+    name: 来源定位只进入准确会话并保留草稿
+    required: true
+    description: >
+      完整 origin 使来源按钮进入正确终端面板及会话阅读消息，不依赖文本搜索，也不对 PTY 执行定位命令。
+    preconditions:
+      - 同一测试 Backend 的来源终端仍保持原 thread，存在真实交接结果和完整 origin。
+      - 当前与来源终端各自保留不同未发送草稿；另有一条文本相同但 messageId 不同的回复。
+    steps:
+      - 使用 toolkit:playwright-cli 点击成果来源和查看对应回复；确认先核对原 thread，再进入其会话阅读页，高亮的 messageId 与 origin 完全一致。
+      - 核对另一条相同文本消息未被高亮，来源定位未发送任何终端正文或 Agent 指令。
+      - 返回原当前终端及来源终端的输入框；确认两份草稿逐字不变，项目/worktree 与终端顺序未变化。
+
+  - id: HCL-008
+    name: 原会话变化或不可用时不创建替代执行
+    required: true
+    description: >
+      来源终端被关闭或已换 thread 时保留只读摘录，提示不可定位，不恢复旧执行器或借用同名目标。
+    preconditions:
+      - 当前会话关联的来源缓存由本用例实际读取得到，执行者拥有来源测试终端。
+      - 测试环境存在一个与来源同名的其他终端；已记录当前终端列表和启动操作数量。
+    steps:
+      - 将来源测试终端切换到另一个 thread，使用 toolkit:playwright-cli 点击回到原会话。
+      - 确认提示原目标不可用，保留标明读取时间的已有来源摘录，未进入新 thread 或同名终端。
+      - 核对终端数量和启动记录；确认没有自动新建、恢复执行器或向任何终端发送指令。
+
+  - id: HCL-009
+    name: 老记录缺少 origin 时只提供有据来源
+    required: true
+    description: >
+      缺少结构化来源的旧交接卡和只有 sessionId 的随记跟进不生成猜测定位，也不被升级为验收证明。
+    preconditions:
+      - 隔离 Backend 准备了不含 origin 的旧交接卡，另有仅含 sessionId 的测试 Agent 跟进。
+      - 旧记录正文与 evidenceIds 可正常读取，未主动重写这些历史文件。
+    steps:
+      - 使用 toolkit:playwright-cli 阅读两类记录；确认仍能查看原摘录，缺身份时没有可执行的精确消息定位。
+      - 确认报告与可配对工具记录的标签沿用原语义，用户未确认时没有整体完成或真机验收结论。
+      - 核对后台；确认没有因打开旧记录自动调用模型补造 origin、重写原历史或建立新的任务。
+
+  - id: HCL-010
+    name: 关系在页面重开后保留
+    required: true
+    description: >
+      正常 IndexedDB 写入能在同一设备重开页面后恢复，执行者重新取得页面与服务身份核对结果。
+    preconditions:
+      - 执行者拥有一个可重新打开的隔离浏览器页面、测试账号和明确目标。
+      - 已记录浏览器存储归属，重开过程不清理用户数据，当前账号和 Backend 身份保持不变。
+    steps:
+      - 使用 toolkit:playwright-cli 建立关联、关闭本用例页面并重新取得该测试页面；确认同一账号和目标恢复正确关联。
+      - 重新读取本机关联和随记；确认只有一条当前有效关系，随记正文、跟进和待办状态未被重开过程修改。
+
+  - id: HCL-011
+    name: 本地关联事务失败不破坏已有关系
+    required: true
+    description: >
+      受控的解除事务失败不能显示已解除或删除原关系，明确重试后才删除本地关系。
+    preconditions:
+      - 本用例的隔离浏览器页面已建立测试关联，执行者记录了当前 linkId 与 revision。
+      - 执行者可只对新增关联库施加一次事务失败，不修改或清理其他应用数据。
+    steps:
+      - 使用 toolkit:playwright-cli 解除关联并触发本用例事务失败；确认页面显示保存失败或未确认。
+      - 重新读取本地关系；确认仍为原 linkId 与 revision，页面没有给出持久化成功反馈。
+      - 解除故障后由用户明确重试解除；确认该目标的本地关系及其来源缓存已删除，云端正文与待办状态没有变化。
+
+  - id: HCL-012
+    name: 新关联功能不改变现有任务交接与输入保护
+    required: true
+    description: >
+      原有刷新、目标编辑和继续验收保留，在草稿非空或 thread 变化时仍拒绝覆盖输入。
+    preconditions:
+      - 隔离 Codex 终端已生成真实交接卡，具备现有继续验收入口。
+      - 执行者可在同一测试终端准备未发送草稿及空闲状态。
+    steps:
+      - 使用 toolkit:playwright-cli 刷新和编辑交接目标；确认现有操作仍作用于当前卡与 revision，不修改关联随记。
+      - 在输入框保留草稿后触发继续验收；确认原有输入保护拒绝覆盖，草稿逐字保留。
+      - 清空本用例草稿并明确在获准测试任务上执行一次继续验收；确认只向原目标投递一次，新增来源入口未改变其回执与失败语义。
+
+  - id: HCL-013
+    name: Desktop 关联浮层不被原生 Browser 遮挡
+    required: true
+    description: >
+      在同一 Desktop 浏览器合成环境中，关联弹窗与来源阅读遵守统一浮层，关闭后恢复原 Browser。
+    preconditions:
+      - 隔离 Desktop Dev Session 已按 runweave-dev-session 取得准确实例和页面，Browser 面板可正常显示。
+      - 已登录测试随记并建立可读取的关联，页面存在长正文和长会话标题。
+    steps:
+      - 使用 toolkit:playwright-cli 打开关联弹窗、取消、打开来源阅读并返回；确认原生 Browser 没有盖住浮层，关闭后仍回到原有 Browser。
+      - 关闭侧栏后确认可以继续操作原终端输入，未重建 Browser WebContents，原页面 URL 与登录态保持。
+
+  - id: HCL-014
+    name: 窄侧栏中原文和关键操作均可到达
+    required: true
+    description: >
+      同一页面在两种窄宽度下保持可读、可确认与可返回，不改变终端和 worktree 的顺序。
+    preconditions:
+      - 隔离 Web 页面已登录测试账号并建立可读取的关联，存在长正文与长会话标题。
+      - 执行者可在该页面调整侧栏宽度，不需要切换浏览器或启动新实例。
+    steps:
+      - 使用 toolkit:playwright-cli 在同一页面依次检查 390px 和 320px 侧栏宽度；确认原文可滚动、确认和返回按钮可达，页面无横向溢出。
+      - 关闭侧栏后确认可以继续操作原终端输入，项目、终端和 worktree 布局没有被重新排序。
+
+  - id: HCL-015
+    name: 纯 Web 复用现有登录寿命而不保存密码
+    required: true
+    description: >
+      非 Electron 环境可按现有 Web 登录合同读取来源，不依赖桌面 bridge，也不把凭据写入关联库。
+    preconditions:
+      - 已启动同一实现的纯 Web 测试页面，不注入 Electron bridge。
+      - 测试随记的当前 Web 账号会话可在本标签页登录，且有明确可关联记录。
+    steps:
+      - 使用 toolkit:playwright-cli 按现有入口登录并建立关联，关闭抽屉后在任务交接阅读来源；确认不要求第二次登录且不依赖桌面 IPC。
+      - 检查新增 IndexedDB 数据和 URL；确认没有密码、accessToken 或 refreshToken，现有 Web token 仍仅处于其原来的标签页会话存储。
+      - 退出测试账号；确认任务交接立即隐藏该账号缓存正文，不通过旧关联绕过登录。

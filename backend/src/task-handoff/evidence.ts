@@ -100,6 +100,7 @@ export async function recoverHandoffRequests(
       if (recovered.some((entry) => entry.id === fact.eventId)) continue;
       recovered.push({
         id: fact.eventId,
+        origin: { target: { ...target }, provider: "codex", activityEventId: fact.eventId },
         kind: "agent.tool.requested",
         toolUseId: result.toolUseId,
         occurredAt: fact.occurredAt,

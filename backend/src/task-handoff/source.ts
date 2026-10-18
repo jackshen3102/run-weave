@@ -54,6 +54,7 @@ export async function readHandoffSource(
           (message.role === "user" ? turn.startedAt : turn.completedAt) ??
           turn.startedAt ??
           detail.updatedAt,
+        origin: { target: { ...target }, provider: "codex", turnId: turn.id, messageId: message.id },
         toolUseId: null,
         truncated: raw.length > MESSAGE_LIMIT,
       });
@@ -139,6 +140,7 @@ export async function readHandoffSource(
           bytes += text.length;
           evidence.push({
             id: fact.eventId,
+            origin: { target: { ...target }, provider: "codex", activityEventId: fact.eventId },
             kind: fact.eventName,
             occurredAt: fact.occurredAt,
             text,

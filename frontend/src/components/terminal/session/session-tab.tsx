@@ -10,7 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
-import { GitFork, PanelsTopLeft, Pencil, X } from "lucide-react";
+import { GitFork, Link2, PanelsTopLeft, Pencil, X } from "lucide-react";
 import { useForkTerminalAgent } from "../../../features/terminal/use-fork-agent";
 import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
@@ -198,6 +198,7 @@ function TerminalTabStateCard({
 
 export function TerminalSessionTab({
   session,
+  hasContextLink = false,
   isDragging,
   isMobileMonitor,
   panelCount,
@@ -207,6 +208,7 @@ export function TerminalSessionTab({
   onPanelSplitEnabledChange,
 }: {
   session: TerminalSessionListItem;
+  hasContextLink?: boolean;
   isDragging: boolean;
   isMobileMonitor: boolean;
   panelCount: number;
@@ -345,6 +347,7 @@ export function TerminalSessionTab({
                 : "bg-transparent",
           ].join(" ")}
         />
+        {hasContextLink ? <Link2 aria-label="已关联随记" className="size-3 shrink-0 text-slate-500" /> : null}
         {sideChat.state.unread ? <span aria-label="旁聊有新回复" className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
       </button>
       <Dialog open={confirmClose} onOpenChange={setConfirmClose}><DialogContent><DialogHeader><DialogTitle>关闭终端和旁聊？</DialogTitle><DialogDescription>关闭整个终端会同时结束关联的活跃旁聊。旁聊记录保留。</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setConfirmClose(false)}>取消</Button><Button variant="destructive" onClick={() => { setConfirmClose(false); onRequestCloseSession(session.terminalSessionId); }}>关闭终端</Button></DialogFooter></DialogContent></Dialog>
