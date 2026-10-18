@@ -60,6 +60,8 @@ final class AppSession: ObservableObject {
 
   var api: APIClient?
   var reconnectRequest = 0
+  var routeRecoveryTask: Task<Void, Never>?
+  var routeRecoveryRequested = false
   @Published var replacingTransport = false
   var routeLoginRequired = false
   var routeResolver: ConnectionRouteResolver? { connection.map { ConnectionRouteResolver.forComputer($0) } }
@@ -143,6 +145,7 @@ final class AppSession: ObservableObject {
         Task { await self?.reconnectRoutes() }
       }
       let client = try await resolver.resolve(force: true)
+      guard generation == epoch, !Task.isCancelled else { return }
       api = client
       recordConnection("connection.activated", ["path": networkSignature ?? "unknown"])
       authenticated = await client.hasCredentials()
@@ -338,11 +341,19 @@ final class AppSession: ObservableObject {
   }
 
   func openTerminal(_ id: String) async {
+    // A tap during recovery must use the transport delivered by that recovery.
+    let computerID = connection?.id
+    routeRequest += 1
+    let route = routeRequest
+    if let recovery = routeRecoveryTask { await recovery.value }
+    guard connection?.id == computerID, routeRequest == route, foreground, !Task.isCancelled else { return }
+    guard health.status == .online else {
+      error = health.message
+      return
+    }
     guard let api else { return }
     let revision = overview?.sessions.first { $0.id == id }?.completionRevision ?? 0
     let epoch = generation
-    routeRequest += 1
-    let route = routeRequest
     do {
       let details = try await api.details(id: id)
       guard epoch == generation, !Task.isCancelled else { return }
@@ -435,6 +446,7 @@ final class AppSession: ObservableObject {
     attentionRetention.setForeground(value)
     if !value { knowledgeInbox.suspend() }
     if !value {
+      cancelRouteRecovery()
       saveDraftsNow()
       deviceStatus.suspend()
       clearBellMarkers()
@@ -565,6 +577,7 @@ final class AppSession: ObservableObject {
   }
 
   private func stopResources() {
+    cancelRouteRecovery()
     attentionRetention.setForeground(false)
     showingDevelopmentResources = false; showingScheduledTasks = false; scheduledSource = nil
     deviceStatus.suspend()

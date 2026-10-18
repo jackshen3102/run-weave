@@ -19,6 +19,18 @@ final class EventStream {
 
   init(api: APIClient) { self.api = api }
 
+  func recoverAfterNetworkChange() async {
+    let epoch = generation
+    if let socket {
+      let responsive = await WebSocketLiveness.check(socket)
+      guard generation == epoch, self.socket === socket, !Task.isCancelled else { return }
+      if responsive { return }
+    }
+    guard !Task.isCancelled else { return }
+    stop()
+    start()
+  }
+
   func start() {
     guard task == nil else { return }
     generation += 1

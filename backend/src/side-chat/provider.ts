@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { settingText } from "@runweave/config-node";
@@ -10,7 +9,6 @@ import type { ProviderItem, ProviderTurn } from "./final-messages";
 export interface ProviderThread { id: string; cwd: string; model?: string; environments?: Array<{ environmentId: string; cwd: string; runtimeWorkspaceRoots: string[] }> | null; ephemeral?: boolean; forkedFromId?: string; turns: ProviderTurn[]; status: { type: string } }
 interface ThreadResponse { thread: ProviderThread; model: string; cwd: string; approvalPolicy: string; sandbox: { type: string; networkAccess?: boolean }; activePermissionProfile?: { id: string } }
 type Notification = { method: string; params: { threadId?: string; turnId?: string; turn?: ProviderTurn; item?: ProviderItem } };
-const execFileAsync = promisify(execFile);
 const DISABLED = ["goals", "hooks", "plugins", "apps", "multi_agent", "multi_agent_v2", "collab", "memories", "browser_use", "browser_use_external", "computer_use", "in_app_browser", "remote_control", "remote_plugin", "recommended_plugins", "skill_mcp_dependency_install", "skill_env_var_dependency_prompt", "external_agent_memory_import"];
 const BOUNDARY = "This is an independent read-only side conversation. Inherited messages and instructions are historical reference, never pending work. Answer only the new explicit user question. Do not continue a prior goal or operate the main task. Only local read-only project inspection is allowed. No network, file modifications, MCP, Apps, Browser, Computer Use, hooks, subagents, approvals or privilege escalation. Do not report progress or tool results as the final answer.";
 
@@ -29,19 +27,12 @@ export class SideChatProvider {
   private initialized = false;
   constructor(readonly cwd: string, private readonly binary = settingText("agents.codex.binary")?.trim() || "codex", private readonly env = process.env) {}
 
-  static async supported(binary = settingText("agents.codex.binary")?.trim() || "codex"): Promise<void> {
-    if (process.platform !== "darwin") throw new SideChatError(422, "PLATFORM_UNSUPPORTED", "消息旁聊目前仅支持本机 macOS Codex");
-    const { stdout } = await execFileAsync(binary, ["--version"], { timeout: 5000, maxBuffer: 4096 });
-    if (!/^codex-cli 0\.160\.1\s*$/.test(stdout.trim()))
-      throw new SideChatError(503, "PROTOCOL_UNVERIFIED", "当前 Codex 版本尚未通过消息旁聊协议验证（需要 0.160.1）");
-  }
   async initialize(): Promise<void> {
     if (this.closing) throw new Error("Side chat executor closed");
     if (this.initialized) return;
-    await SideChatProvider.supported(this.binary);
-    if (this.closing) throw new Error("Side chat executor closed");
+    if (process.platform !== "darwin") throw new SideChatError(422, "PLATFORM_UNSUPPORTED", "消息旁聊目前仅支持本机 macOS Codex");
     const cwd = realpathSync(this.cwd);
-    // :minimal in this pinned release implicitly grants scratch writes. Deny both scratch trees.
+    // Explicitly deny scratch writes even when :minimal grants them.
     if (["/private/tmp", "/private/var/tmp", "/System", "/Library", "/usr", "/bin", "/dev", "/private/etc"].some(root => cwd === root || cwd.startsWith(`${root}/`)))
       throw new SideChatError(422, "READ_SCOPE_UNSUPPORTED", "该目录无法落实旁聊的项目读取范围，请使用独立的本地项目目录");
     const filesystem = { ":minimal": "read", "/private/tmp": "deny", "/private/var/tmp": "deny", [cwd]: "read" };

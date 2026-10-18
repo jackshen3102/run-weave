@@ -72,6 +72,9 @@ struct HomeView: View {
 
   var body: some View {
     List {
+      if session.replacingTransport {
+        Section { ProgressView("正在恢复连接…") }
+      }
       if session.health.status == .offline {
         Section { Text("本地电脑暂时不可用，列表会保留最近一次加载的数据。").foregroundColor(.orange) }
       }

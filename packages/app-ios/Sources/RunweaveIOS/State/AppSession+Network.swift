@@ -35,22 +35,26 @@ extension AppSession {
     networkSignature = signature
     recordConnection(
       "network.path.changed", ["path": signature, "previousPath": previous ?? "unknown"])
-    // A system path is only a hint. Verify this Backend before changing connection state.
-    guard reachable, foreground, api != nil, previous != nil || health.status == .offline else {
+    // A path notification is a hint, not proof that an existing transport failed.
+    guard reachable, foreground, connection != nil, previous != nil || health.status == .offline else {
       return
     }
-    let epoch = generation
-    let wasOffline = health.status == .offline
-    probeTask?.cancel()
-    probeTask = nil
     resumeTask?.cancel()
     resumeTask = Task { [weak self] in
       guard let self else { return }
-      await self.refresh()
+      // A cancelled notification waiter never cancels the session-owned recovery.
+      // Check its delivered connection instead of forcing another route selection.
+      if let recovery = self.routeRecoveryTask { await recovery.value }
+      guard self.foreground, !self.routeLoginRequired, !Task.isCancelled else { return }
+      let epoch = self.generation
+      await self.probe(epoch: epoch)
       guard self.generation == epoch, self.foreground, self.authenticated,
-        self.health.status == .online, !Task.isCancelled
-      else { return }
-      if wasOffline { self.terminalController?.connect() }
+        self.health.status == .online, !Task.isCancelled else { return }
+      // HTTP and WebSocket liveness are separate. Preserve healthy sockets and
+      // in-flight writes; only repair a socket that cannot answer on this path.
+      async let eventsCheck: Void? = self.events?.recoverAfterNetworkChange()
+      async let terminalCheck: Void? = self.terminalController?.recoverAfterNetworkChange()
+      _ = await (eventsCheck, terminalCheck)
     }
   }
 
@@ -79,6 +83,7 @@ extension AppSession {
         do { try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000) } catch { return }
         guard self.foreground, self.connection != nil else { return }
         await self.reconnectRoutes()
+        guard !Task.isCancelled else { return }
         if self.health.status == .online {
           self.probeTask = nil
           return
