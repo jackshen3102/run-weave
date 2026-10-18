@@ -223,7 +223,7 @@ export function registerTerminalProjectRoutes(
 
       if (options?.runtimeRegistry) {
         for (const session of childSessions) {
-          await options.runtimeRegistry.disposeRuntime(session.id);
+          await options.runtimeRegistry.disposeSessionRuntimes(session.id);
         }
       }
       for (const session of childSessions) {

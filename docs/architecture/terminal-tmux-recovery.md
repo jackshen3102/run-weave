@@ -41,12 +41,17 @@ tmux 清理范围。未设置或空值兼容原行为（Stable 保留、Beta/Dev
 Backend 重启仍会断开 WebSocket；只有原 tmux/pane/任务 PID 不变才算进程保活，恢复 Agent thread
 不能代替这一保证。首次从旧清理策略切换的运维边界见[部署概览](../deployment/overview.md#后端重启与终端保活)。
 
-1. WebSocket 根据 session/panel 身份取得 runtime；已有有效 runtime 时复用。
+1. tmux WebSocket 按 session 与观看端的 `resumeClientId` 取得独立 attach runtime；只有同一观看端
+   重连才复用其显示流。旧客户端未提供恢复身份时，每个连接独立 attach。各端共享原 tmux pane/任务，
+   但 PTY 行列数、输出镜像和恢复缓存相互独立，不能把桌面尺寸的 VT 指令广播到手机网格。
+   普通 PTY 仍按 session 复用 runtime。控制面输入优先借用在线显示通道；无在线通道时建立的临时
+   attach 使用 `ignore-size`，不参与观看端尺寸选择，并按 idle 规则回收。
 2. tmux session 仍存在而 attach runtime 缺失时，重新 attach，并取得当前 pane 的 fresh snapshot。
-3. 最后一个终端 WebSocket 客户端断开后，attach runtime 最多保活 60 秒；到期或超过全局 8 个 idle
+3. 一个观看端断开后，其 attach runtime 最多保活 60 秒；到期或超过全局 8 个 idle
    runtime 的上限时释放最早 idle 的实例。tmux session 与用户任务继续存活。
    后台输出和 metadata 仍由 watcher 与全局 terminal events 链路维护。
 4. tmux 的 snapshot 与 live output 使用同一 attach 输出流的字节游标衔接，不能拼接独立 attach 的快照。
+   删除终端或项目时按 session 清理全部观看端 runtime；某个 attach 的失败和回收只作用于该显示流。
 
 ## 弱网输出恢复
 

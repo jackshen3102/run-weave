@@ -442,7 +442,7 @@ export class RaceService {
     if (!session) {
       return;
     }
-    await this.options.runtimeRegistry.disposeRuntime(terminalSessionId);
+    await this.options.runtimeRegistry.disposeSessionRuntimes(terminalSessionId);
     await this.options.tmuxOutputWatcher.unwatchSession(terminalSessionId);
     await killTmuxSessionForTerminal(session, this.options.tmuxService);
     await this.options.terminalSessionManager.destroySession(

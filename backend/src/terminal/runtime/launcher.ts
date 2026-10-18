@@ -35,6 +35,8 @@ interface EnsureTerminalRuntimeOptions {
   tmuxService?: TmuxService;
   tmuxOutputWatcher?: TmuxOutputWatcher;
   allowMissingTmuxSession?: boolean;
+  /** Stable per-viewer identity for tmux display output; omitted for control-plane input. */
+  displayRuntimeId?: string;
 }
 
 const TmuxPostEnterInputDelayMs = 300;
@@ -62,18 +64,20 @@ export function resolveTmuxTarget(
 export async function ensureTerminalRuntime(
   options: EnsureTerminalRuntimeOptions,
 ): Promise<EnsureTerminalRuntimeResult> {
-  const existingRuntime = options.runtimeRegistry.getRuntime(
-    options.session.id,
-  );
+  const runtimeId = isTmuxBackedSession(options.session)
+    ? options.displayRuntimeId ?? options.session.id
+    : options.session.id;
+  const findRuntime = () => options.displayRuntimeId
+    ? options.runtimeRegistry.getRuntime(runtimeId)
+    : options.runtimeRegistry.getSessionRuntime(options.session.id);
+  const existingRuntime = findRuntime();
   if (existingRuntime) {
     return { runtime: existingRuntime };
   }
 
   if (isTmuxBackedSession(options.session) && options.tmuxService) {
     return options.tmuxService.withSessionLock(options.session.id, async () => {
-      const existingLockedRuntime = options.runtimeRegistry.getRuntime(
-        options.session.id,
-      );
+      const existingLockedRuntime = findRuntime();
       if (existingLockedRuntime) {
         return { runtime: existingLockedRuntime };
       }
@@ -292,6 +296,8 @@ export async function ensureTerminalRuntime(
       const attachCommand = options.tmuxService!.buildAttachCommand(
         target,
         currentSession.cwd,
+        undefined,
+        { ignoreSize: !options.displayRuntimeId },
       );
       const runtime = createTmuxInputPacedRuntime(
         options.ptyService.spawnSession({
@@ -316,9 +322,12 @@ export async function ensureTerminalRuntime(
       );
       options.runtimeRegistry.createRuntime(currentSession.id, runtime, {
         recoverableOutput: true,
+        runtimeId,
       });
+      if (!options.displayRuntimeId)
+        options.runtimeRegistry.retainIdleRuntime(runtimeId);
       return {
-        runtime: options.runtimeRegistry.getRuntime(currentSession.id)!,
+        runtime: options.runtimeRegistry.getRuntime(runtimeId)!,
         warning,
       };
     });

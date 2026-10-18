@@ -424,7 +424,7 @@ export function createTerminalRouter(
     });
     try {
       if (options?.runtimeRegistry) {
-        await options.runtimeRegistry.disposeRuntime(req.params.id);
+        await options.runtimeRegistry.disposeSessionRuntimes(req.params.id);
       }
       await options?.tmuxOutputWatcher?.unwatchSession(req.params.id);
       if (session) {

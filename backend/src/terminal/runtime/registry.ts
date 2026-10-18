@@ -23,6 +23,7 @@ interface RuntimeSubscriber {
 }
 
 interface RuntimeEntry {
+  terminalSessionId: string;
   runtime: PtyRuntime;
   attachedClients: Set<string>;
   bufferedOutput: string;
@@ -46,9 +47,11 @@ export class TerminalRuntimeRegistry {
   createRuntime(
     terminalSessionId: string,
     runtime: PtyRuntime,
-    options: { recoverableOutput?: boolean } = {},
+    options: { recoverableOutput?: boolean; runtimeId?: string } = {},
   ): void {
+    const runtimeId = options.runtimeId ?? terminalSessionId;
     const entry: RuntimeEntry = {
+      terminalSessionId,
       runtime,
       attachedClients: new Set<string>(),
       bufferedOutput: "",
@@ -69,7 +72,7 @@ export class TerminalRuntimeRegistry {
         () => {
           for (const subscriber of entry.subscribers)
             subscriber.onRecoveryError?.();
-          void this.disposeRuntime(terminalSessionId);
+          void this.disposeRuntime(runtimeId);
         },
       );
       entry.runtime = {
@@ -83,10 +86,10 @@ export class TerminalRuntimeRegistry {
         },
       };
     }
-    this.runtimes.set(terminalSessionId, entry);
+    this.runtimes.set(runtimeId, entry);
 
     runtime.onData((data) => {
-      if (this.runtimes.get(terminalSessionId) !== entry) return;
+      if (this.runtimes.get(runtimeId) !== entry) return;
       const modeData = `${entry.terminalModeSequenceTail}${data}`;
       BRACKETED_PASTE_MODE_PATTERN.lastIndex = 0;
       let modeMatch = BRACKETED_PASTE_MODE_PATTERN.exec(modeData);
@@ -104,7 +107,7 @@ export class TerminalRuntimeRegistry {
         const { output } = extractShellPromptMetadata(data);
         for (const frame of entry.outputRecovery.append(output)) {
           entry.outputScreen!.append(frame);
-          if (this.runtimes.get(terminalSessionId) !== entry) return;
+          if (this.runtimes.get(runtimeId) !== entry) return;
           for (const subscriber of entry.subscribers)
             subscriber.onOutputFrame?.(frame);
         }
@@ -115,7 +118,7 @@ export class TerminalRuntimeRegistry {
     });
 
     runtime.onExit((event) => {
-      if (this.runtimes.get(terminalSessionId) !== entry) return;
+      if (this.runtimes.get(runtimeId) !== entry) return;
       for (const subscriber of entry.subscribers) {
         subscriber.onExit(event);
       }
@@ -132,53 +135,67 @@ export class TerminalRuntimeRegistry {
     entry.recorderAttached = true;
   }
 
-  getRuntime(terminalSessionId: string): PtyRuntime | undefined {
-    return this.runtimes.get(terminalSessionId)?.runtime;
+  getRuntime(runtimeId: string): PtyRuntime | undefined {
+    return this.runtimes.get(runtimeId)?.runtime;
   }
 
-  getBufferedOutput(terminalSessionId: string): string {
-    return this.runtimes.get(terminalSessionId)?.bufferedOutput ?? "";
+  /** Control-plane input may use an existing display without creating another attach. */
+  getSessionRuntime(terminalSessionId: string): PtyRuntime | undefined {
+    for (const entry of this.runtimes.values()) {
+      if (entry.terminalSessionId === terminalSessionId && entry.attachedClients.size)
+        return entry.runtime;
+    }
+    return this.getRuntime(terminalSessionId);
+  }
+
+  /** A display cursor and its VT grid belong to one viewer, not the shared pane. */
+  displayRuntimeId(terminalSessionId: string, viewerId: string): string {
+    return JSON.stringify([terminalSessionId, viewerId]);
+  }
+
+  getBufferedOutput(runtimeId: string): string {
+    return this.runtimes.get(runtimeId)?.bufferedOutput ?? "";
   }
 
   getOutputRecovery(
-    terminalSessionId: string,
+    runtimeId: string,
   ): TerminalOutputRecoveryBuffer | undefined {
-    return this.runtimes.get(terminalSessionId)?.outputRecovery;
+    return this.runtimes.get(runtimeId)?.outputRecovery;
   }
 
-  getOutputScreen(terminalSessionId: string): TerminalOutputScreen | undefined {
-    return this.runtimes.get(terminalSessionId)?.outputScreen;
+  getOutputScreen(runtimeId: string): TerminalOutputScreen | undefined {
+    return this.runtimes.get(runtimeId)?.outputScreen;
   }
 
-  retainIdleRuntime(terminalSessionId: string): void {
-    const entry = this.runtimes.get(terminalSessionId);
+  retainIdleRuntime(runtimeId: string): void {
+    const entry = this.runtimes.get(runtimeId);
     if (!entry || entry.attachedClients.size || entry.idleTimer) return;
     if (!entry.outputRecovery) {
-      void this.disposeRuntime(terminalSessionId);
+      void this.disposeRuntime(runtimeId);
       return;
     }
     entry.idleTimer = setTimeout(() => {
       if (
-        this.runtimes.get(terminalSessionId) === entry &&
+        this.runtimes.get(runtimeId) === entry &&
         !entry.attachedClients.size
       )
-        void this.disposeRuntime(terminalSessionId);
+        void this.disposeRuntime(runtimeId);
     }, RESUME_WINDOW_MS);
     entry.idleTimer.unref();
-    this.idle.set(terminalSessionId, entry);
+    this.idle.set(runtimeId, entry);
     while (this.idle.size > 8)
       void this.disposeRuntime(this.idle.keys().next().value!);
   }
 
-  getBracketedPasteMode(terminalSessionId: string): boolean | null {
-    return this.runtimes.get(terminalSessionId)?.bracketedPasteMode ?? null;
+  getBracketedPasteMode(runtimeId: string): boolean | null {
+    return this.runtimes.get(runtimeId)?.bracketedPasteMode ?? null;
   }
 
   subscribe(
-    terminalSessionId: string,
+    runtimeId: string,
     subscriber: RuntimeSubscriber,
   ): () => void {
-    const entry = this.runtimes.get(terminalSessionId);
+    const entry = this.runtimes.get(runtimeId);
     if (!entry) {
       return () => undefined;
     }
@@ -189,8 +206,8 @@ export class TerminalRuntimeRegistry {
     };
   }
 
-  attachClient(terminalSessionId: string, clientId: string): void {
-    const entry = this.runtimes.get(terminalSessionId);
+  attachClient(runtimeId: string, clientId: string): void {
+    const entry = this.runtimes.get(runtimeId);
     if (!entry) {
       return;
     }
@@ -198,11 +215,11 @@ export class TerminalRuntimeRegistry {
     entry.attachedClients.add(clientId);
     if (entry.idleTimer) clearTimeout(entry.idleTimer);
     entry.idleTimer = undefined;
-    this.idle.delete(terminalSessionId);
+    this.idle.delete(runtimeId);
   }
 
-  detachClient(terminalSessionId: string, clientId: string): void {
-    const entry = this.runtimes.get(terminalSessionId);
+  detachClient(runtimeId: string, clientId: string): void {
+    const entry = this.runtimes.get(runtimeId);
     if (!entry) {
       return;
     }
@@ -210,29 +227,36 @@ export class TerminalRuntimeRegistry {
     entry.attachedClients.delete(clientId);
   }
 
-  getAttachedClientCount(terminalSessionId: string): number {
-    return this.runtimes.get(terminalSessionId)?.attachedClients.size ?? 0;
+  getAttachedClientCount(runtimeId: string): number {
+    return this.runtimes.get(runtimeId)?.attachedClients.size ?? 0;
   }
 
-  async disposeRuntime(terminalSessionId: string): Promise<void> {
-    const entry = this.runtimes.get(terminalSessionId);
+  async disposeRuntime(runtimeId: string): Promise<void> {
+    const entry = this.runtimes.get(runtimeId);
     if (!entry) {
       return;
     }
 
-    this.runtimes.delete(terminalSessionId);
-    this.idle.delete(terminalSessionId);
+    this.runtimes.delete(runtimeId);
+    this.idle.delete(runtimeId);
     if (entry.idleTimer) clearTimeout(entry.idleTimer);
-    this.outputClients.forget(terminalSessionId);
+    this.outputClients.forget(runtimeId);
     entry.outputScreen?.dispose();
     entry.runtime.dispose();
   }
 
   async disposeAll(): Promise<void> {
-    const terminalSessionIds = Array.from(this.runtimes.keys());
+    const runtimeIds = Array.from(this.runtimes.keys());
 
-    for (const terminalSessionId of terminalSessionIds) {
-      await this.disposeRuntime(terminalSessionId);
+    for (const runtimeId of runtimeIds) {
+      await this.disposeRuntime(runtimeId);
+    }
+  }
+
+  async disposeSessionRuntimes(terminalSessionId: string): Promise<void> {
+    for (const [runtimeId, entry] of this.runtimes) {
+      if (entry.terminalSessionId === terminalSessionId)
+        await this.disposeRuntime(runtimeId);
     }
   }
 }

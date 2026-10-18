@@ -17,6 +17,7 @@ export function createTerminalOutputRecovery(options: {
   socket: WebSocket;
   registry: TerminalRuntimeRegistry;
   terminalSessionId: string;
+  runtimeId?: string;
   batcher: TerminalOutputBatcher;
   includeSnapshot: boolean;
 }) {
@@ -28,8 +29,9 @@ export function createTerminalOutputRecovery(options: {
     batcher,
     includeSnapshot,
   } = options;
-  const buffer = registry.getOutputRecovery(terminalSessionId);
-  const screen = registry.getOutputScreen(terminalSessionId);
+  const runtimeId = options.runtimeId ?? terminalSessionId;
+  const buffer = registry.getOutputRecovery(runtimeId);
+  const screen = registry.getOutputScreen(runtimeId);
   if (!buffer || !screen) return undefined;
   let ready = false;
   let disposed = false;
@@ -65,7 +67,7 @@ export function createTerminalOutputRecovery(options: {
         if (replay && !replay.ok) reason = replay.reason;
         else if (cursor) {
           const leaseReason = clientId
-            ? registry.outputClients.reason(terminalSessionId, clientId)
+            ? registry.outputClients.reason(runtimeId, clientId)
             : "client_lease_missing";
           if (leaseReason) {
             reason = leaseReason;
@@ -76,7 +78,7 @@ export function createTerminalOutputRecovery(options: {
         if (resume) reason = "cursor_valid";
         if (clientId)
           releaseLease = registry.outputClients.claim(
-            terminalSessionId,
+            runtimeId,
             clientId,
             resume,
             () =>
@@ -101,7 +103,7 @@ export function createTerminalOutputRecovery(options: {
               ...snapshot,
               modes: {
                 bracketedPasteMode:
-                  registry.getBracketedPasteMode(terminalSessionId),
+                  registry.getBracketedPasteMode(runtimeId),
               },
             })
           )

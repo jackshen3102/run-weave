@@ -325,7 +325,7 @@ export class TerminalWorktreeDeletionService {
     sessions: TerminalSessionRecord[],
   ): Promise<void> {
     for (const session of sessions) {
-      await this.options.runtimeRegistry?.disposeRuntime(session.id);
+      await this.options.runtimeRegistry?.disposeSessionRuntimes(session.id);
       await this.options.tmuxOutputWatcher?.unwatchSession(session.id);
       await killTmuxSessionForTerminal(session, this.options.tmuxService);
       await this.options.terminalSessionManager.destroySession(session.id);

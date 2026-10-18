@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
 import { logger } from "../logging/index";
@@ -82,6 +83,13 @@ export function attachTerminalWebSocketServer(
     const { terminalSessionId } = handshake;
     const connectedAt = Date.now();
     const session = terminalSessionManager.getSession(terminalSessionId);
+    const params = new URL(request.url ?? "/", "http://localhost").searchParams;
+    const requestedViewerId = params.get("resumeClientId");
+    const viewerId = requestedViewerId && /^[a-zA-Z0-9_-]{16,128}$/.test(requestedViewerId)
+      ? requestedViewerId : randomUUID();
+    const runtimeId = session && isTmuxBackedSession(session)
+      ? runtimeRegistry.displayRuntimeId(terminalSessionId, viewerId)
+      : terminalSessionId;
     const sendInitialSnapshot = shouldSendInitialSnapshot(request);
     const settleInitialTmuxRepaint = shouldSettleInitialTmuxRepaint(
       session,
@@ -114,28 +122,29 @@ export function attachTerminalWebSocketServer(
       handleClientMessage(rawData, isBinary);
     });
 
-    let runtime = runtimeRegistry.getRuntime(terminalSessionId);
+    let runtime = runtimeRegistry.getRuntime(runtimeId);
     if (
       runtime &&
       session &&
       isTmuxBackedSession(session) &&
       ptyService &&
       tmuxService &&
-      runtimeRegistry.getAttachedClientCount(terminalSessionId) === 0 &&
-      !runtimeRegistry.getOutputRecovery(terminalSessionId)
+      runtimeRegistry.getAttachedClientCount(runtimeId) === 0 &&
+      !runtimeRegistry.getOutputRecovery(runtimeId)
     ) {
       terminalWsLogger.info("terminal.tmux.attach-runtime.disposed", {
         message:
           "Disposed idle tmux runtime before attaching terminal websocket",
         terminalSessionId,
       });
-      await runtimeRegistry.disposeRuntime(terminalSessionId);
+      await runtimeRegistry.disposeRuntime(runtimeId);
       runtime = undefined;
     }
     if (!runtime && session?.status === "running" && ptyService) {
       try {
         const ensured = await ensureTerminalRuntime({
           session,
+          displayRuntimeId: runtimeId,
           terminalSessionManager,
           runtimeRegistry,
           ptyService,
@@ -179,7 +188,7 @@ export function attachTerminalWebSocketServer(
     const activeRuntime = runtime;
     if (socket.readyState !== 1) {
       if (session && isTmuxBackedSession(session))
-        runtimeRegistry.retainIdleRuntime(terminalSessionId);
+        runtimeRegistry.retainIdleRuntime(runtimeId);
       return;
     }
     const initialSize = new URL(request.url ?? "/", "http://localhost")
@@ -187,7 +196,7 @@ export function attachTerminalWebSocketServer(
     const cols = Number(initialSize.get("cols"));
     const rows = Number(initialSize.get("rows"));
     if (
-      runtimeRegistry.getOutputRecovery(terminalSessionId) &&
+      runtimeRegistry.getOutputRecovery(runtimeId) &&
       Number.isInteger(cols) &&
       Number.isInteger(rows) &&
       cols >= 2 &&
@@ -199,7 +208,7 @@ export function attachTerminalWebSocketServer(
         activeRuntime.resize(cols, rows);
       } catch {
         closeSlowTerminalSocket(socket);
-        runtimeRegistry.retainIdleRuntime(terminalSessionId);
+        runtimeRegistry.retainIdleRuntime(runtimeId);
         return;
       }
     }
@@ -241,6 +250,9 @@ export function attachTerminalWebSocketServer(
       ...correlation,
       clientId,
       terminalSessionId,
+      runtimeId,
+      cols: Number.isInteger(cols) ? cols : undefined,
+      rows: Number.isInteger(rows) ? rows : undefined,
     });
     const inputState: TerminalClientInputState = {
       lastInputAt: null,
@@ -268,6 +280,7 @@ export function attachTerminalWebSocketServer(
       registry: runtimeRegistry,
       terminalSessionId,
       batcher: outputBatcher,
+      runtimeId,
       includeSnapshot: sendInitialSnapshot,
     });
     let snapshotDelivered = false;
@@ -298,7 +311,7 @@ export function attachTerminalWebSocketServer(
             terminalSessionId,
           )
         : undefined;
-    runtimeRegistry.attachClient(terminalSessionId, clientId);
+    runtimeRegistry.attachClient(runtimeId, clientId);
     let unsubscribe = () => undefined as void;
     let cleanedUp = false;
     const cleanupConnection = () => {
@@ -313,11 +326,11 @@ export function attachTerminalWebSocketServer(
       releaseTmuxLifecycleClient?.();
       metadataSync.clearTmuxPaneMetadataSync();
       // An old attach's delayed close must not affect its replacement runtime.
-      if (runtimeRegistry.getRuntime(terminalSessionId) !== activeRuntime)
+      if (runtimeRegistry.getRuntime(runtimeId) !== activeRuntime)
         return;
-      runtimeRegistry.detachClient(terminalSessionId, clientId);
+      runtimeRegistry.detachClient(runtimeId, clientId);
       if (session && isTmuxBackedSession(session))
-        runtimeRegistry.retainIdleRuntime(terminalSessionId);
+        runtimeRegistry.retainIdleRuntime(runtimeId);
     };
     socket.on("terminal-output-stopped", cleanupConnection);
     socket.on("error", cleanupConnection);
@@ -334,7 +347,7 @@ export function attachTerminalWebSocketServer(
       cleanupConnection();
     });
     socket.on("pong", () => heartbeat.markAlive());
-    unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
+    unsubscribe = runtimeRegistry.subscribe(runtimeId, {
       onOutputFrame: (frame) => outputRecovery?.onFrame(frame),
       onRecoveryError: () =>
         closeSlowTerminalSocket(socket, "Terminal mirror output limit"),
@@ -412,9 +425,10 @@ export function attachTerminalWebSocketServer(
         ) {
           void (async () => {
             const recover = async (): Promise<void> => {
-              await runtimeRegistry.disposeRuntime(terminalSessionId);
+              await runtimeRegistry.disposeRuntime(runtimeId);
               const ensured = await ensureTerminalRuntime({
                 session,
+                displayRuntimeId: runtimeId,
                 terminalSessionManager,
                 runtimeRegistry,
                 ptyService,
@@ -427,6 +441,7 @@ export function attachTerminalWebSocketServer(
                   message: ensured.warning,
                 });
               }
+              runtimeRegistry.retainIdleRuntime(runtimeId);
               sendStatusEvent(socket, "running");
               socket.close(1012, "Terminal tmux attach reattached");
             };
@@ -502,7 +517,7 @@ export function attachTerminalWebSocketServer(
             ),
             modes: {
               bracketedPasteMode:
-                runtimeRegistry.getBracketedPasteMode(terminalSessionId),
+                runtimeRegistry.getBracketedPasteMode(runtimeId),
             },
           });
         }

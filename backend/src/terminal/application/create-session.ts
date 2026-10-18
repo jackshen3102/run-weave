@@ -88,7 +88,7 @@ export async function createTerminalSession(
     recordTerminalSessionCreated(options.activity, created);
     return created;
   } catch (error) {
-    await options.runtimeRegistry?.disposeRuntime(session.id);
+    await options.runtimeRegistry?.disposeSessionRuntimes(session.id);
     await options.tmuxOutputWatcher?.unwatchSession(session.id);
     await killTmuxSessionForTerminal(
       manager.getSession(session.id) ?? session,
