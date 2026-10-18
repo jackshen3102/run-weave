@@ -18,7 +18,7 @@ cases:
     steps:
       - 首次连接并消费完整 snapshot，记录 resumeClientId 与 snapshot cursor；断开该客户端 5 秒并产生一组 marker，携带同一组恢复字段重连。
       - 确认 connected 选择 resume，首个 fromOffset 等于客户端 cursor，所有 range 首尾连续且 toOffset 严格递增，没有 snapshot。
-      - 将断开时间改为 30 秒并用新 fixture 重复；按 cursor 区间与始终在线的观察客户端逐字节对照，并比较恢复后的屏幕与光标。VT 重绘允许原始数据重复包含旧 marker，不以原始文本出现次数代替去重判断。
+      - 将断开时间改为 30 秒并用新 fixture 重复；按 cursor 区间与该观看端同一 attach 的留存输出逐字节对照，并比较恢复后的屏幕与光标。不同观看端的 streamId 与 VT 重绘序列独立，不能跨观看端比较字节游标；也不以原始文本出现次数代替去重判断。
       - 模拟旧 socket 在 Backend 仍处于半开状态时由同一 resumeClientId 建立新 socket；确认新连接原子接管，旧 cleanup 不关闭新 runtime 或造成重复输出。
 
   - id: TOR-002
@@ -127,3 +127,44 @@ cases:
       - 确认每个 snapshot 工作在 2 秒或 512 KiB 上限内结束，失败连接收到明确恢复失败或 1013，不收到任意输出尾部。
       - 使用跨输出帧的半截 CSI 和 OSC 制造未完成解析状态；确认不截断控制序列制作快照，2 秒后明确停止恢复；镜像积压超过 512 KiB 或 8,192 个操作时也明确停止，未闭合控制串不能无限占用内存。
       - 停止高频输出后重新连接；确认可取得完整当前 snapshot 并继续交互，Backend RSS 和 attach 子进程数没有持续增长。
+
+  - id: TOR-010
+    name: 不同尺寸观看端的显示流相互隔离
+    required: true
+    description: >
+      同一 tmux 任务的不同观看端必须各自获得匹配本地网格的显示流，另一端缩放不能造成状态栏刷入正文或永久错行。
+    preconditions:
+      - 隔离 Backend 和专用 tmux 会话已就绪，fixture 持续输出中英文 marker，并更新可识别的 tmux 状态栏。
+      - 两个真实 WebSocket 客户端使用独立恢复身份和终端解析器，可记录各自的网格、attach PID、streamId、cursor 和渲染后内容。
+    steps:
+      - 同时连接 44 列 39 行与 100 列 50 行的客户端，确认 attach PID 和 streamId 不同，原 pane 和任务 PID 相同。
+      - 将大窗口依次调整为 120 列 55 行、72 列 42 行和 95 列 46 行，确认小窗口的显示流与镜像始终为 44 列 39 行。
+      - 连续更新正文和状态栏，检查小窗口解析后的正文保持可读，状态栏只在底部出现一次，没有永久重复或错位。
+      - 关闭本例创建的客户端并清理本例会话；确认没有遗留 attach。
+
+  - id: TOR-011
+    name: 旧客户端多窗口也独立显示
+    required: true
+    description: >
+      未提供 resumeClientId 的旧客户端仍各自获得独立显示流，不能退回按 session 广播同一尺寸的 VT 输出。
+    preconditions:
+      - 隔离 Backend 和专用 tmux 会话已就绪，任务持续输出可识别 marker。
+      - 两个真实 WebSocket 客户端均可省略恢复身份并解析 snapshot 和 output。
+    steps:
+      - 分别以 80 列 24 行与 60 列 30 行连接，均省略 resumeClientId，确认两个连接的 streamId 与 attach PID 不同。
+      - 各自改变一次尺寸，确认另一连接的镜像行列数不变，后续输出可继续解析。
+      - 关闭并重新打开其中一端，确认其获得新显示流和 snapshot，另一端连接和任务 PID 保持不变。
+      - 清理本例创建的客户端、runtime 与会话。
+
+  - id: TOR-012
+    name: 按会话释放全部观看端显示通道
+    required: true
+    description: >
+      同一会话包含多个显示通道时，按会话清理必须覆盖在线和闲置 attach，不能只删除旧的 session 主键条目。
+    preconditions:
+      - 隔离 Backend、专用 tmux 会话和至少三个独立观看端已建立，已记录原 pane 与任务 PID。
+      - fixture 可以调用真实 registry 的会话级清理入口，并观测实际 tmux client 进程。
+    steps:
+      - 断开其中一端进入 idle 保活，其余保持在线；调用会话级显示通道清理。
+      - 等待进程退出事件，确认该会话的所有 attach 均消失，registry 中对应显示条目、镜像、缓存和 idle timer 均已释放。
+      - 确认原 tmux pane 和任务 PID 未改变，再显式清理本例创建的 tmux 会话和客户端。

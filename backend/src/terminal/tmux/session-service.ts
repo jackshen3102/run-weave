@@ -128,6 +128,7 @@ export class TmuxSessionService extends TmuxProcess {
     target: TmuxTarget,
     cwd: string,
     launchCommand?: TmuxLaunchCommand,
+    options?: { ignoreSize?: boolean },
   ): TmuxCommand {
     return {
       command: this.binary,
@@ -142,6 +143,7 @@ export class TmuxSessionService extends TmuxProcess {
         ";",
         "new-session",
         "-A",
+        ...(options?.ignoreSize ? ["-f", "ignore-size"] : []),
         "-s",
         target.sessionName,
         "-c",

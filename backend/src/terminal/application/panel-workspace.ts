@@ -408,7 +408,7 @@ export async function ensureTerminalPanelWorkspace(
     resolveTmuxTarget(currentSession, tmuxService),
   );
   if (!hadTmuxSession && options.runtimeRegistry && options.ptyService) {
-    await options.runtimeRegistry.disposeRuntime(currentSession.id);
+    await options.runtimeRegistry.disposeSessionRuntimes(currentSession.id);
     await ensureTerminalRuntime({
       session: currentSession,
       terminalSessionManager,
