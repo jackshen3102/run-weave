@@ -40,6 +40,40 @@ Terminal session 与 panel metadata 中的 current/last thread 必须同时携�
 
 现有 TUI 持有 thread writer，另一个 app-server 无法对这个已加载 thread 执行 `thread/settings/update`。手机提交时，Backend 在终端输入锁下检查 revision，通过该 pane 的 `/model` 原生菜单按键完成选择，再从相同 provider 的 `thread/list` 回读确认。这个路径同时适用于新旧 TUI 会话，无需改变 CLI 启动方式，也不触及定时任务或语音的启动路径。菜单形态、账号目录或 thread 身份不匹配时返回错误，不宣称成功；不根据终端 placeholder 文案或 Agent 忙闲投影预先拒绝切换；直接尝试原生菜单，并以菜单响应和设置回读判断结果。TraeX 的 Max 模式保持原值，目标模型不支持时拒绝。独立 app-server 的读回可能有短暂延迟，因此确认超时后客户端需重新读取。旧客户端不调用新端点，原有终端输入协议不变。
 
+## 独立消息旁聊
+
+桌面原终端 Tab 和 iOS 终端页的「旁聊」使用独立 HTTP 消息领域，入口见
+[共享合同](../../packages/shared/src/side-chat.ts)、[Backend 服务](../../backend/src/side-chat/service.ts)
+和[路由](../../backend/src/routes/side-chat.ts)。它不调用原生 `/side`、切换 displayed thread、
+创建终端或 pane，也不向终端 WS 发送消息。原 surface/socket/controller 保持挂载。
+原生 `/side` 与「Fork Codex 到新终端」仍按各自合同工作。
+
+创建核对服务器注册的 terminal/panel、primary thread 和最后一个已完成 turn；真实持久
+`thread/fork` 固定该边界。专属 stdio Codex app-server 只 fork/resume 本服务的子分支，
+不 resume/start/interrupt 主 thread。首版限本机 macOS、验证过的 Codex 0.160.1；其他版本、
+SSH、来源不完整或目录权限无法落实时明确不可用。无需切换用户的全局 binary/PATH/daemon。
+
+执行器保留项目/受管规则，覆盖为项目只读、关闭网络、MCP/Apps、Hooks、Browser、
+Computer Use、子 Agent、通知及自动目标续接，不接受审批或提权。固定版本的 `:minimal`
+包含隐式临时目录权限，因此额外拒绝 `/private/tmp` 和 `/private/var/tmp`，来源位于这些目录时
+不启用。命名权限 profile 每进程独立，避免与用户配置合并后扩大读取范围。
+
+消息和操作保存在 Backend profile 下独立的 `side-chats.sqlite`（schema 1）。事务约束每来源
+一个活跃旁聊、每旁聊一个未结束 turn；operation ID 加请求指纹去重，版本竞争返回 409。
+只提交成功完成 turn 的 final_answer；phase 缺省仅取本 turn 最后一个完成的 assistant 消息。
+过程、推理、工具输出及失败半成品不进入消息 DTO/表/响应日志。
+
+返回不结束、客户端离线不取消；停止仅针对已绑定的子 turn。结束和源 terminal 删除停止本服务
+执行器，保留不可续接记录。主 CLI 单独退出/重启不结束旁聊，不改变固定上下文。
+Backend 重启只读核对已绑定子历史；已确认完成可补写最终消息，其余标 unknown/unavailable，
+不自动重放 fork/start。HTTP 超时不等于未执行，客户端保留回执并只读查询。
+
+两端的视图、草稿/UTF-16 选区和已读记录按客户端隔离。接受回执只清原 chat/原草稿 revision；
+轮询由一个数据 owner 合并，可见生成中 1 秒、空闲 3 秒、主视图 5 秒，后台停止。
+更旧版本不能覆盖新状态，最新 50 条之外的缺口补分页。来源主任务状态独立读取，旁聊完成
+不推进父 completionRevision、摘要、通知或监督。验收合同见
+[消息闭环](../testing/terminal/side-chat-messages.testplan.yaml)；源码能力不代表全部用例已验收。
+
 ## Codex 会话分叉
 
 桌面终端标签右键菜单、iOS 首页终端长按菜单和终端操作菜单提供「Fork Codex 到新终端」。入口面向当前空闲的 Codex tmux Panel；Backend 按实际选中的 Pane 解析 provider-aware thread，不从终端标题或 cwd 猜测会话。

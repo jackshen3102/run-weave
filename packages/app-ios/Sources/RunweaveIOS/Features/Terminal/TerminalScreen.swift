@@ -18,6 +18,8 @@ struct TerminalScreen: View {
   @State private var showingConversation = false
   @State private var showingInfo = false
   @State private var showingSupervision = false
+  @StateObject private var sideChat: SideChatModel
+  @StateObject private var composerEditor = CommandTextEditor()
   @StateObject private var supervision: TaskSupervisionModel
   @State private var replyContext: CodexReplyContext?
   @State private var showingDiagnostics = false
@@ -43,6 +45,7 @@ struct TerminalScreen: View {
     self.controller = controller
     self.browser = session.browser
     self.details = details
+    _sideChat = StateObject(wrappedValue: SideChatModel(session: session, terminalID: details.id))
     _supervision = StateObject(wrappedValue: TaskSupervisionModel(session: session, controller: controller, terminalID: details.id))
     self.sourceIsParent = sourceIsParent
     _changes = StateObject(wrappedValue: ProjectChangesModel(session: session, terminal: details))
@@ -59,7 +62,7 @@ struct TerminalScreen: View {
   private var canReportCompletionViewed: Bool {
     session.foreground && session.canWrite && session.terminal?.id == details.id
       && controller.canSend && !controller.scrolledBack && tab == "Chat"
-      && browser.state != .presented && !showingHistory && !showingConversation
+      && !sideChat.visible && browser.state != .presented && !showingHistory && !showingConversation
       && !showingInfo && !showingSupervision && !showingDiagnostics && !showingComposer && fileTap == nil
       && replyContext == nil && snapshotShare == nil && !deleting
   }
@@ -165,6 +168,7 @@ struct TerminalScreen: View {
       if status == "已连接" { Task { await changes.refresh() } }
     }
     .onDisappear {
+      if !sideChat.visible { sideChat.suspend() }
       supervision.suspend()
       shareOperation?.cancel()
       controller.openFileRequested = nil
@@ -182,6 +186,12 @@ struct TerminalScreen: View {
     .task(id: "\(session.generation):\(session.foreground):\(session.authenticated):\(session.health.status):\(browser.state == .presented)") {
       if supervision.canRead && browser.state != .presented { await supervision.poll() }
       else { supervision.suspend() }
+    }
+    .task(id: "side-chat:\(session.generation):\(session.foreground):\(session.authenticated):\(session.health.status)") {
+      if sideChat.canRead { sideChat.startPolling() } else { sideChat.suspend() }
+    }
+    .fullScreenCover(isPresented: $sideChat.visible) {
+      SideChatView(model: sideChat, session: session, title: title, terminalID: details.id)
     }
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
@@ -233,6 +243,8 @@ struct TerminalScreen: View {
       shareFailure = nil
       replyContext = nil
       showingConversation = false
+      if !sideChat.current { sideChat.visible = false }
+      sideChat.suspend()
     }
     .alert("分享失败", isPresented: Binding(
       get: { shareFailure != nil }, set: { if !$0 { shareFailure = nil } }
@@ -242,15 +254,19 @@ struct TerminalScreen: View {
     .background {
       TerminalComposerPresentation(
         session: session, controller: controller, terminalID: details.id,
+        editor: composerEditor,
         isPresented: $showingComposer, preventsDismissal: $composerPreventsDismissal,
         showingInstantReplies: $showingInstantReplies,
+        sideChatAvailable: sideChat.capabilities != nil,
+        sideChat: sideChat,
+        onSideChat: { Task { await sideChat.open() } },
         onDismiss: { composerTriggerFocused = true })
     }
     .confirmationDialog("删除终端？", isPresented: $deleting, titleVisibility: .visible) {
       Button("删除", role: .destructive) { Task { await session.deleteTerminal(details.id) } }
       Button("取消", role: .cancel) {}
     } message: {
-      Text("删除后将结束该远端终端会话。")
+      Text("删除后将结束该远端终端会话及其活跃旁聊，旁聊记录保留。")
     }
     .mobileAnalyticsScreen(tab == "Commands" ? .quickReplies : tab == "Files" ? .terminalFiles : tab == "Changes" ? .terminalChanges : .terminalChat)
   }
@@ -352,7 +368,7 @@ struct TerminalScreen: View {
         Text(failure).font(.caption).foregroundColor(.red)
       }
       if let notice = controller.notice { Text(notice).font(.caption).foregroundColor(.orange) }
-      TerminalHostView(surface: controller.surface).frame(minHeight: 24)
+      TerminalHostView(surface: controller.surface, covered: showingComposer || sideChat.visible).frame(minHeight: 24)
         .padding(.horizontal, 12).padding(.top, 10)
         .overlay(alignment: .bottomTrailing) {
           floatingControls.padding(12)
@@ -410,6 +426,13 @@ struct TerminalScreen: View {
         .accessibilityIdentifier("terminal-floating-stop")
         .disabled(stoppingCommand || !session.canWrite)
       }
+      HStack(spacing: 10) {
+        if sideChat.capabilities != nil {
+          Button { Task { await sideChat.open() } } label: {
+            Label(sideChat.unread ? "旁聊 · 新回复" : "旁聊", systemImage: "bubble.left.and.bubble.right")
+              .font(.caption.weight(.semibold)).padding(12).background(.regularMaterial).cornerRadius(18)
+          }.accessibilityIdentifier("side-chat-open").disabled(sideChat.loading)
+        }
       Button {
         actionFailure = nil
         composerPreventsDismissal = false
@@ -433,6 +456,8 @@ struct TerminalScreen: View {
       .accessibilityValue(hasComposerDraft ? "有未发送草稿" : "无草稿")
       .accessibilityIdentifier("terminal-composer-open")
       .accessibilityFocused($composerTriggerFocused)
+      }
+      if let failure = sideChat.failure, !sideChat.visible { Text(failure).font(.caption).foregroundColor(.red).frame(maxWidth: 250) }
     }
   }
 

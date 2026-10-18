@@ -1,0 +1,171 @@
+version: 1
+name: 独立消息旁聊闭环验收
+description: >
+  2026-10-17 消息旁聊方案的待实现合同，不表示已有产品能力或已通过验收。
+  每例独立建立自有候选 Backend、专属 Codex 执行器、临时项目与可确认的持久主历史，不操作用户工作终端。
+  浏览器使用 toolkit:playwright-cli，原生联动使用 toolkit:agent-device；开发实例生命周期使用 toolkit:runweave-dev-session。
+  保存源与子 thread、turn、操作 ID、真实消息、UI 及主终端后置证据；只清理本例资源。
+  HTML 原型、源码阅读、构建和格式校验不能替代真实分支与投递验证。
+cases:
+  - id: SCMSG-001
+    name: 真实分支继承固定主历史且不继续主任务
+    required: true
+    description: 无终端旁聊从确认的已完成轮次 fork，保留完整可验证上下文，首条提问前不执行继承的旧指令。
+    preconditions:
+      - 本例主 thread 有已完成轮次及唯一上下文标记，其中包括可验证的工具结果；之后一轮主任务仍在执行。
+      - 主历史中含仅在主对话授权的临时文件操作，初始文件状态、主 pane/PID 和截止 turn 已记录。
+    steps:
+      - 从候选旁聊服务创建分支，核对真实 thread/fork 使用正确主 thread、已完成 lastTurnId、持久模式及禁止自动目标续接的设置。
+      - 创建后先不提问，确认没有继续父目标或修改临时文件；再明确提问历史标记和工具结果，结合真实子历史与回答确认继承边界。
+      - 在主会话追加新标记后继续问原旁聊，核对上下文仍来自原边界而未悄悄刷新，主任务持续进展。
+  - id: SCMSG-002
+    name: 桌面原 Tab 进入返回不操作终端运行时
+    required: true
+    description: 原 Tab 只切本地视图，终端 WS、pane、输入、尺寸及右侧布局保持原归属。
+    preconditions:
+      - 本例候选桌面有两个自建终端 Tab，主 Codex 执行有限任务，记录 Tab ID/顺序、surface、socket、PID、pane、主草稿和滚动位置。
+      - 能记录本例终端 WS 的输入、resize、连接与销毁事件以及原生 displayedThreadId。
+    steps:
+      - 使用 toolkit:playwright-cli 点击旁聊，确认原 Tab 显示消息页和旁聊标题，Tab 数量、ID、位置与持久 alias 不变。
+      - 提问、返回、再进入和切换另一 Tab 往返；确认复用同一 sideChatID，原 surface/socket 未重建，主草稿与滚动恢复，Browser/文件布局未改变。
+      - 核对旁聊动作没有原 pane 输入、resize、/side、主 turn/start 或 displayedThreadId 切换，也没有新增 tmux pane 或终端。
+  - id: SCMSG-003
+    name: 仅成功最终答案进入消息接口和界面
+    required: true
+    description: 推理、进度、工具输出和失败半成品不成为旁聊答案，重复事件不重复落库。
+    preconditions:
+      - 本例专属执行器真实生成有 commentary、工具事件和 final_answer 的回答，可重投该执行器已记录的同 turn 事件。
+      - 可核对消息接口、消息表和响应日志，本例另有 phase 缺省的兼容 provider 事件记录。
+    steps:
+      - 用 toolkit:playwright-cli 提问并观察等待期，确认只显示正在回答和停止；收到成功 turn 完成后才显示最终答案。
+      - 重投同一最终 item/完成事件，确认同一消息只落库一次；核对过程文本未进入客户端 DTO、消息表或响应日志。
+      - 使用 phase 缺省及 failed/interrupted 的记录核对同一投影规则，确认只在成功完成后选择该 turn 的最终候选，失败不伪造答案。
+  - id: SCMSG-004
+    name: 重复操作与接受响应丢失不重复执行
+    required: true
+    description: 相同 operationID 的同一请求只接受一次，结果不明使用查询，不创建第二个提问。
+    preconditions:
+      - 本例活跃旁聊空闲，可延迟真实 POST 接受响应；能记录持久操作、外部调用次数和 provider turn。
+      - 已记录唯一问题、operationID 及请求指纹。
+    steps:
+      - 提交问题并在服务器接受后阻断响应；用 toolkit:playwright-cli 确认草稿保留、显示结果不明且不能重复发送。
+      - 只读查询原 operationID，确认恢复原接受结果及同一 turn；再次提交同 ID 同请求返回原结果，外部 turn/start 次数仍为一次。
+      - 相同 ID 改正文再次请求，确认 409 且没有副作用；新版本草稿不被旧接受回执清空。
+  - id: SCMSG-005
+    name: 双客户端竞争只能占用一个当前轮次
+    required: true
+    description: 两个客户端对同版本同时提问时只接受一个，失败端保留草稿且不排队到下一轮。
+    preconditions:
+      - 本例两个已登录客户端读取同一空闲旁聊和相同 version，各有不同唯一草稿。
+      - 可对本例两个真实请求设置同步放行点并核对事务与 provider 调用。
+    steps:
+      - 同时放行两端发送，确认一个 202、一个 409，同旁聊最多一个未结束 turn。
+      - 用 toolkit:playwright-cli 检查失败端正文保留并刷新真实状态；等待成功端完成后确认失败问题没有被自动补发或排队。
+  - id: SCMSG-006
+    name: 停止只中断指定旁聊轮次
+    required: true
+    description: 停止子回答保留聊天记录和新草稿，不能中断主任务或误中断后续子 turn。
+    preconditions:
+      - 本例主任务和旁聊回答均在执行有限操作，已记录两个实际 turnID、主状态和 completionRevision。
+      - 旁聊生成期间已编辑新的未发送草稿，可延迟本例旧 stop 请求。
+    steps:
+      - 用 toolkit:playwright-cli 停止旁聊，核对实际 turn/interrupt 只指向子 turn，最终状态为 stopped，主任务继续进展。
+      - 确认原记录及新草稿保留，父完成/摘要/通知/监督未被更改。
+      - 开始新的子 turn 后放行旧 stop，确认旧请求返回原结果或冲突，不停止新 turn。
+  - id: SCMSG-007
+    name: 结束关闭子会话并拒绝旧目标写入
+    required: true
+    description: 返回和取消不结束，确认结束后保留不可续接记录，新旁聊不被旧回调覆盖。
+    preconditions:
+      - 本例活跃旁聊有消息及正在回答的子 turn，主任务仍运行，两端可观察同一 chatID。
+      - 可延迟本例子结果事件，已记录主和子执行归属。
+    steps:
+      - 用 toolkit:playwright-cli 返回再进入并取消一次结束，确认原 chatID、记录和生成保留。
+      - 明确确认结束，核对仅子生成停止，会话成为 ended，消息仍可读取且新 turn 被拒绝，父任务不受影响。
+      - 新建旁聊后放行旧结果和旧 end 请求，确认它们不能写入或结束新 chatID；另一端不自动跳入新旁聊。
+  - id: SCMSG-008
+    name: 客户端断线不取消已接受生成或重发问题
+    required: true
+    description: 旁聊执行归 Backend，网络恢复后读取原结果并补齐消息缺口。
+    preconditions:
+      - 本例客户端有已接受的旁聊问题，Backend 与专属执行器在整个用例保持存活。
+      - 可只断开本例客户端网络，并在其他本例客户端产生足够跨页的消息。
+    steps:
+      - 断开本例客户端，等待真实子完成；确认执行未因页面断开被取消，主终端和父任务不受影响。
+      - 恢复网络，用 toolkit:playwright-cli 取得新 UI 状态；确认查询原 chatID/操作，显示原最终答案，没有新 turn/start。
+      - 核对跨最新页的消息缺口由分页补齐，乱序旧快照不会覆盖更高 version 的状态。
+  - id: SCMSG-009
+    name: Backend 重启后恢复持久子分支
+    required: true
+    description: 重启只恢复已确认归属的旁聊分支，消息不丢失，也不续接或重放父任务。
+    preconditions:
+      - 本例自有 Backend 中旁聊已完成两轮，providerThreadID、消息序列和主任务身份已持久保存。
+      - 可只重启本例 Backend/旁聊执行器，主 tmux/CLI 保持存活。
+    steps:
+      - 记录状态并重启本例 Backend；重新取得 fresh endpoint/UI 引用，确认原 chatID、两轮消息和来源边界仍可读取。
+      - 明确提交第三轮，核对只 resume 原子 providerThreadID 并开始一个新子 turn，未对主 thread 执行 resume/start。
+      - 核对自动目标续接始终关闭，主任务 PID、输入和进展没有被旁聊恢复改变。
+  - id: SCMSG-010
+    name: 外部调用崩溃窗口明确收敛为不明而非自动重放
+    required: true
+    description: fork 或 start 的外部结果无法与本地记录确认时，保留 unknown，不靠猜测绑定或重试。
+    preconditions:
+      - 本例隔离进程可在外部调用已发出但绑定/结果尚未持久确认的位置被安全终止。
+      - 能核对本例 operation、RPC 请求和 provider 中实际已有 thread/turn，不操作其他进程。
+    steps:
+      - 制造本例崩溃窗口后重启并取得 fresh endpoint，确认原操作保持 unknown，未自动再次 fork/start。
+      - 核对没有使用时间接近、全局 thread/started 或任意最近 thread 作为归属证明；清理只作用于已确认归属的子资源。
+      - 界面保留已收到的记录和未确认草稿，不显示假成功，也不自动创建另一条旁聊替代。
+  - id: SCMSG-011
+    name: 隐藏过程的旁聊仍受真实只读权限约束
+    required: true
+    description: 只读检索可用，越界文件修改和外部工具不能因过程不可见而执行。
+    preconditions:
+      - 本例专属执行器启用候选只读配置、关闭网络及受限工具，源主会话权限可与旁聊不同。
+      - 仅使用本例临时项目文件、隔离网络端点和可核对的工具调用记录。
+    steps:
+      - 明确要求旁聊读取本例代码并解释，结合实际工具和最终回答确认允许的读取可用。
+      - 分别请求写临时文件、调用网络/MCP/Browser、启动子 Agent 或继续继承的父目标；确认被实际能力或沙箱拒绝，无文件或端点副作用。
+      - 确认没有自动审批、提权或不可见等待的审批；限制无法落实时能力不可用，不以提示词替代。
+  - id: SCMSG-012
+    name: 不完整或过期来源拒绝创建而不降级复制文本
+    required: true
+    description: 创建需要可信主身份和已完成轮次，来源变更或缺历史时无伪造旁聊。
+    preconditions:
+      - 本例来源终端可独立建立无已完成轮次、历史缺失和已更换主 thread 的受控状态。
+      - 每个来源状态均有自己的临时 fixture 和创建前资源基线。
+    steps:
+      - 对各自来源请求 capabilities 和创建，确认返回明确原因或 409/422，未调用旧来源 fork、未拼接可见文本发起替代问答。
+      - 核对主任务、终端草稿、pane 和已有旁聊记录未被清理或改绑；保存各等价拒绝条件证据。
+  - id: SCMSG-013
+    name: 新消息旁聊认证与目标归属完整校验
+    required: true
+    description: 未授权读取或写入及任意执行目标均被拒绝，不能访问另一个信任域的会话。
+    preconditions:
+      - 本例存在两个独立认证 scope 的候选 Backend 及各自旁聊，有合法和已撤销的测试凭据。
+      - 已记录主/子状态，可核对本例执行器调用而不会泄露真实内容。
+    steps:
+      - 对 create/read/messages/operation/turn/stop/end 使用未授权凭据或另一 scope 的 ID，确认 401/403/404 且无记录泄露或副作用。
+      - 向合法接口添加任意 endpoint、cwd、providerThreadID 或 shell 字段，确认 strict 拒绝且不启动执行器。
+  - id: SCMSG-014
+    name: 源 CLI 重启与终端删除分别遵守归属
+    required: true
+    description: 主 CLI 退出不等于删除终端；独立旁聊继续，明确删除源终端才联动结束它的旁聊。
+    preconditions:
+      - 本例自有主终端关联活跃独立旁聊，另有一个无关自有终端及旁聊作对照。
+      - 本例可安全替换原主 CLI 并使用正式删除终端入口，不影响用户资源。
+    steps:
+      - 仅重启本例主 CLI，确认独立旁聊原 providerThreadID、消息和固定上下文仍可用，没有自动绑定新主身份。
+      - 通过带明确确认的正式入口删除本例源 terminal，确认只结束关联旁聊及其自有子任务，记录保留且新 turn 拒绝。
+      - 核对无关终端、旁聊和所有非本服务拥有的进程未被回收。
+  - id: SCMSG-015
+    name: 两端导航独立且同源打开复用一个旁聊
+    required: true
+    description: 两个客户端打开同一来源时复用同一 chat，消息共享而本地视图和草稿互不驱动。
+    preconditions:
+      - 本例候选桌面和候选 iOS 登录同一来源，当前均显示主视图且无活跃消息旁聊。
+      - 已记录原主 displayedThreadId，两端有不同本地草稿。
+    steps:
+      - 两端同时打开同源旁聊，核对数据库唯一活跃来源约束、仅一次真实 fork 及相同 sideChatID。
+      - 使用 toolkit:playwright-cli 在桌面返回主视图，同时用 toolkit:agent-device 在手机继续提问；确认导航互不驱动，主 displayedThreadId 不变。
+      - 确认桌面后来进入可见手机问答，但不带入手机未发草稿；两端已读标记独立，父全局未读不被子完成推进。

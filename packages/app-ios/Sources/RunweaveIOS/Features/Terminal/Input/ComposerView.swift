@@ -5,8 +5,11 @@ struct TerminalComposerSheet: View {
   let session: AppSession
   let controller: SessionController
   let terminalID: String
+  let editor: CommandTextEditor
   @Binding var preventsDismissal: Bool
   @Binding var showingInstantReplies: Bool
+  var sideChat: SideChatModel?
+  var onSideChat: (() -> Void)?
   let onDismiss: () -> Void
 
   private var busy: Bool { preventsDismissal || quickInputs.saving }
@@ -21,7 +24,7 @@ struct TerminalComposerSheet: View {
           session: session, controller: controller, terminalID: terminalID,
           availableHeight: geometry.size.height, preventsDismissal: $preventsDismissal,
           showingInstantReplies: $showingInstantReplies,
-          onActionSucceeded: onDismiss, onClose: onDismiss, closeDisabled: busy
+          onActionSucceeded: onDismiss, onClose: onDismiss, closeDisabled: busy, onSideChat: onSideChat, sideChat: sideChat, textEditor: editor
         )
         .id(ObjectIdentifier(controller))
       }
@@ -34,7 +37,7 @@ struct ComposerView: View {
   let controller: SessionController
   @StateObject private var state: TerminalComposerState
   @StateObject private var modelSettings = TerminalAgentSettingsModel()
-  @StateObject private var textEditor = CommandTextEditor()
+  private let textEditor: CommandTextEditor
   @ObservedObject private var attachmentDrafts: TerminalAttachmentDrafts
   let terminalID: String
   var active = true
@@ -44,6 +47,8 @@ struct ComposerView: View {
   @Binding var preventsDismissal: Bool
   @Binding var showingInstantReplies: Bool
   let onActionSucceeded: () -> Void
+  let onSideChat: (() -> Void)?
+  let sideChat: SideChatModel?
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   @State private var failure: String?
   @State private var stopping = false
@@ -69,7 +74,7 @@ struct ComposerView: View {
     session: AppSession, controller: SessionController, terminalID: String, active: Bool = true,
     availableHeight: CGFloat, preventsDismissal: Binding<Bool>,
     showingInstantReplies: Binding<Bool>,
-    onActionSucceeded: @escaping () -> Void, onClose: @escaping () -> Void, closeDisabled: Bool
+    onActionSucceeded: @escaping () -> Void, onClose: @escaping () -> Void, closeDisabled: Bool, onSideChat: (() -> Void)? = nil, sideChat: SideChatModel? = nil, textEditor: CommandTextEditor
   ) {
     self.session = session
     self.controller = controller
@@ -84,6 +89,9 @@ struct ComposerView: View {
     _preventsDismissal = preventsDismissal
     _showingInstantReplies = showingInstantReplies
     self.onActionSucceeded = onActionSucceeded
+    self.onSideChat = onSideChat
+    self.sideChat = sideChat
+    self.textEditor = textEditor
   }
 
   private var attachments: [TerminalDraftAttachment] { attachmentDrafts.attachments[terminalID] ?? [] }
@@ -215,6 +223,17 @@ struct ComposerView: View {
             .accessibilityLabel("当前终端模型与推理强度：\(summary)")
             .accessibilityIdentifier("terminal-agent-settings-open")
             .disabled(modelSettings.saving)
+          }
+          if let onSideChat {
+            Button {
+              if let committed = textEditor.commitComposition() { session.setDraft(committed, terminalID: terminalID) }
+              editing = false
+              onSideChat()
+            } label: {
+              if let sideChat { SideChatComposerLabel(model: sideChat) }
+              else { Label("旁聊", systemImage: "bubble.left.and.bubble.right").font(.caption) }
+            }
+            .accessibilityIdentifier("terminal-composer-side-chat").disabled(closeDisabled)
           }
           Spacer(minLength: 0)
           controls.layoutPriority(1)

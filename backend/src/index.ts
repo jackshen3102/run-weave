@@ -1,3 +1,4 @@
+import { createSideChatRouter } from "./routes/side-chat";
 import { createVideoPreviewRouter } from "./routes/terminal/preview/video";
 import { createFeishuRouter } from "./routes/feishu";
 import { registerConnectionRoutes } from "./routes/connection-identity";
@@ -284,6 +285,7 @@ function createHttpApp(
     createAgentModelCatalogRouter(services.agentModelCatalogService),
   );
   app.use("/api/race", requireAuth, createRaceRouter(services.raceService));
+  app.use("/api/side-chats", requireTunnelAuth, requireAuth, createSideChatRouter(services.sideChatService));
   app.use("/api/scheduled-tasks", requireAuth, createScheduledTasksRouter(services.scheduledTaskService));
   app.use("/api/knowledge-inbox", createKnowledgeInboxRouter(services.knowledgeInboxService, services.authService));
   app.use(

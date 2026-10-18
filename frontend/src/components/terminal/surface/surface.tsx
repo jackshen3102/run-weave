@@ -42,6 +42,7 @@ import {
 
 interface TerminalSurfaceProps {
   active: boolean;
+  obscured?: boolean;
   terminalSessionId: string;
   activeCommand?: string | null;
   clientMode?: ClientMode;
@@ -60,6 +61,7 @@ interface TerminalSurfaceProps {
 
 export function TerminalSurface({
   active,
+  obscured = false,
   terminalSessionId,
   activeCommand = null,
   clientMode = "desktop",
@@ -94,6 +96,7 @@ export function TerminalSurface({
   );
   const refreshTerminalViewportRef = useRef<(() => void) | null>(null);
   const activeRef = useRef(active);
+  const outputVisibleRef = useRef(active && !obscured);
   const onViewportResizeRef = useRef(onViewportResize);
   const onAuthExpiredRef = useRef(onAuthExpired);
   const openTerminalLinkRef = useRef<(uri: string) => void>(() => undefined);
@@ -150,7 +153,7 @@ export function TerminalSurface({
   const invalidateOutputRecoveryRef = useRef<() => void>(() => undefined);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
-  const search = useTerminalSearch({ active, clientMode, terminalRef });
+  const search = useTerminalSearch({ active: active && !obscured, clientMode, terminalRef });
   const scroll = useTerminalScrollController({
     active,
     apiBase,
@@ -165,7 +168,7 @@ export function TerminalSurface({
   const { onOutput, onSnapshot, renderTerminalSnapshot, replayDeferredOutput } =
     useTerminalOutputStream({
       onLocalReset: () => invalidateOutputRecoveryRef.current(),
-      activeRef,
+      activeRef: outputVisibleRef,
       deferredOutputRef,
       deferredSnapshotRef,
       hasDeferredOutputRef,
@@ -183,6 +186,11 @@ export function TerminalSurface({
       terminalSessionId,
       websocketContentVersionRef,
     });
+
+  useLayoutEffect(() => {
+    outputVisibleRef.current = active && !obscured;
+    if (active && !obscured) replayDeferredOutput();
+  }, [active, obscured, replayDeferredOutput]);
 
   const {
     invalidateOutputRecovery,
@@ -207,7 +215,7 @@ export function TerminalSurface({
   invalidateOutputRecoveryRef.current = invalidateOutputRecovery;
   useCompletionViewed({
     apiBase, token, terminalSessionId, panelId: paneWorkspace?.activePanelId,
-    active, atBottom: scroll.terminalAtBottom && !scroll.tmuxScrollbackActive && !scroll.hasNewOutputBelow,
+    active: active && !obscured, atBottom: scroll.terminalAtBottom && !scroll.tmuxScrollbackActive && !scroll.hasNewOutputBelow,
     connected: connectionStatus === "connected", terminalRef,
   });
   const runtimeStatusItem = useMemo<RuntimeStatusItem>(() => {
@@ -291,7 +299,7 @@ export function TerminalSurface({
     sendInput(data);
   });
   const floatingComposer = useTerminalFloatingComposerController({
-    active,
+    active: active && !obscured,
     activeCommand,
     apiBase,
     clientMode,

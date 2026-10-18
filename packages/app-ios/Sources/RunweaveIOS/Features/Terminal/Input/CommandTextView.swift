@@ -27,8 +27,10 @@ struct CommandTextView: UIViewRepresentable {
     view.backgroundColor = .clear
     view.textContainer.maximumNumberOfLines = 1
     view.textContainer.lineBreakMode = .byTruncatingTail
-    view.delegate = context.coordinator
     view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    view.text = text
+    view.selectedRange = editor?.selection(for: text) ?? NSRange(location: (text as NSString).length, length: 0)
+    view.delegate = context.coordinator
     return view
   }
   func updateUIView(_ view: GrowingCommandTextView, context: Context) {
@@ -40,7 +42,9 @@ struct CommandTextView: UIViewRepresentable {
     view.onHeightChange = onHeightChange
     // Never replace an in-progress IME composition with the previous committed SwiftUI value.
     if view.markedTextRange == nil, view.text != text {
+      let selection = editor?.selection(for: text)
       view.text = text
+      view.selectedRange = selection ?? NSRange(location: (text as NSString).length, length: 0)
       view.revealSelectionAfterLayout = isFocused
     }
     view.setNeedsLayout()
@@ -63,9 +67,14 @@ struct CommandTextView: UIViewRepresentable {
     var parent: CommandTextView
     init(_ parent: CommandTextView) { self.parent = parent }
     func textViewDidBeginEditing(_ textView: UITextView) { parent.isFocused = true }
-    func textViewDidEndEditing(_ textView: UITextView) { parent.isFocused = false }
+    func textViewDidEndEditing(_ textView: UITextView) {
+      parent.editor?.captureSelection(textView)
+      parent.isFocused = false
+    }
+    func textViewDidChangeSelection(_ textView: UITextView) { parent.editor?.captureSelection(textView) }
     func textViewDidChange(_ textView: UITextView) {
       parent.text = textView.text
+      parent.editor?.captureSelection(textView)
       if let view = textView as? GrowingCommandTextView {
         view.revealSelectionAfterLayout = true
         view.setNeedsLayout()
@@ -78,11 +87,22 @@ struct CommandTextView: UIViewRepresentable {
 @MainActor
 final class CommandTextEditor: ObservableObject {
   fileprivate weak var view: GrowingCommandTextView?
+  private var savedSelection: (text: String, range: NSRange)?
+
+  fileprivate func selection(for text: String) -> NSRange? {
+    guard let savedSelection, savedSelection.text == text else { return nil }
+    return savedSelection.range
+  }
+  fileprivate func captureSelection(_ view: UITextView) {
+    savedSelection = (view.text, view.selectedRange)
+  }
 
   func commitComposition() -> String? {
-    guard let view, view.markedTextRange != nil else { return nil }
-    view.unmarkText()
-    return view.text
+    guard let view else { return nil }
+    let composed = view.markedTextRange != nil
+    if composed { view.unmarkText() }
+    captureSelection(view)
+    return composed ? view.text : nil
   }
 
   func insert(_ text: String) -> String? {
