@@ -10655,5 +10655,37 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "原子发布当前实例 owner 的私有健康报告临时文件，不保存用户配置或服务凭据。"
+  },
+  {
+    "file": "backend/src/side-chat/provider.ts",
+    "kind": "environment",
+    "expression": "env[key]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "专属旁聊执行器启动前删除 RUNWEAVE、tmux 和 Codex 主线程身份，避免继承父终端所有权；不读取持久业务配置。"
+  },
+  {
+    "file": "backend/src/side-chat/provider.ts",
+    "kind": "environment-forward",
+    "expression": "...this.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "复制 Backend 的子进程启动环境，再剔除主终端身份；工具 shell 单独使用 inherit=none 和固定 PATH，不作为 settings.yaml 配置来源。"
+  },
+  {
+    "file": "frontend/src/features/side-chat/model.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.getItem(key)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取带独立旁聊前缀的本机客户端身份、导航、消息缓存、草稿、已读和操作回执；属于恢复状态，不是实例业务配置。"
+  },
+  {
+    "file": "frontend/src/features/side-chat/model.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.setItem(key, JSON.stringify(value))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "持久保存本机旁聊导航、草稿选区 revision、消息缓存和操作回执；按 scope、终端与客户端隔离，不写入 settings.yaml。"
   }
 ]
