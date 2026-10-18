@@ -1,7 +1,7 @@
 version: 1
 name: 任务交接中的随记关联与来源定位验收
 description: >
-  面向实施计划定义的 Web/Electron 真实界面，验证手动关联随记、来源阅读、精确消息定位、身份隔离与本地持久化。
+  面向 frontend/docs/task-handoff.md 定义的 Web/Electron 真实界面，验证手动关联随记、来源阅读、精确消息定位、身份隔离与本地持久化。
   本文件描述待实现行为；HTML 原型、YAML 格式校验和模型报告均不是行为通过证据。
   使用隔离 Backend 与测试随记数据，不在正式账号、Stable 或无关终端执行破坏性操作。
 cases:
