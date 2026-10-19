@@ -15,6 +15,8 @@ import sys
 import time
 import urllib.request
 import uuid
+import runpy
+recycled_group = runpy.run_path(str(Path(__file__).with_name("process_group.py")))["recycled_group"]
 
 BASE = Path.home() / ".runweave"
 APPS = {"runweave": "com.runweave.app.native", "suiji": "com.runweave.suiji"}
@@ -169,6 +171,8 @@ def unsettled(owner):
         if child.get("state") == "spawning" or not child.get("pid"):
             return True
         if group_alive(child["pid"]):
+            if child.get("state") == "exited" and recycled_group(child["pid"], child.get("startIdentity")):
+                continue
             return True
     return False
 
