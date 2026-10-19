@@ -82,6 +82,8 @@ node scripts/ios-simulators/cli.mjs recover --lease <旧lease> --udid <UDID> --j
 ```
 
 活跃/未知子进程、损坏 owner 或未完成的 runner 清理都会阻塞恢复。
+已记录退出的命令若发生 PID 复用，只在新进程组 leader 启动身份不同、当前组内成员均属于新 leader
+且复查身份一致时，才视为原命令已退出；旧孤儿进程或无法确认的进程组继续阻塞，不终止复用该编号的进程。
 工具只在安全清理成功后回收过期空闲租约，不按超时强行抢锁，不 killall，
 不自动重放业务操作；旧 lease 不能释放后来任务。
 `free/busy/blocked/missing` 是池状态，`Booted/Shutdown` 是设备状态；
