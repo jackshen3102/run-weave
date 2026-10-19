@@ -20,6 +20,22 @@ export interface SupervisionPlan {
   /** Absent in older journals. Snapshot content is historical; missing has no readable content. */
   availability?: "current" | "snapshot" | "missing";
 }
+/** A bounded snapshot of an explicitly referenced deliverable, never execution authorization. */
+export interface SupervisionDeliverable {
+  id: string;
+  kind: "local_document" | "github_pr";
+  reference: string;
+  sourceMessageId: string;
+  readAt: string;
+  availability: "available" | "missing" | "unavailable" | "too_large" | "outside_project";
+  text?: string;
+  digest?: string;
+  version?: string;
+}
+export interface SupervisionDeliverables {
+  items: SupervisionDeliverable[];
+  omittedCount: number;
+}
 export interface SupervisionGoalContent {
   objective: string;
   completionCriteria: string;
@@ -79,7 +95,7 @@ export interface SupervisionAssessment {
   disposition: "apply" | "hold";
   holdReason?: "evidence_gap" | "ambiguous_scores" | "no_progress";
   coverage: "complete" | "partial";
-  criteria: Array<{ text: string; state: SupervisionCriterionState; sourceMessageIds: string[]; note: string }>;
+  criteria: Array<{ text: string; state: SupervisionCriterionState; sourceMessageIds: string[]; evidenceIds?: string[]; note: string }>;
   missingEvidence: string[];
   progress?: {
     previousDecisionId: string;
@@ -103,6 +119,8 @@ export interface SupervisionInput {
   currentReply: ConversationMessage & { rawTurnId: string };
   goalDefinition?: SupervisionGoal;
   previousContinuation?: PreviousSupervisionContinuation;
+  /** Absent in historical inputs. Kept separate from adopted plans and user messages. */
+  deliverables?: SupervisionDeliverables;
 }
 export interface SupervisionDecision {
   decisionId: string;

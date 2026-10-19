@@ -29,6 +29,23 @@ struct SupervisionPlan: Codable {
   let availability: String?
 }
 
+struct SupervisionDeliverable: Codable {
+  let id: String
+  let kind: String
+  let reference: String
+  let sourceMessageId: String
+  let readAt: String
+  let availability: String
+  let text: String?
+  let digest: String?
+  let version: String?
+}
+
+struct SupervisionDeliverables: Codable {
+  let items: [SupervisionDeliverable]
+  let omittedCount: Int
+}
+
 struct SupervisionInput: Codable {
   let task: SupervisionMessage
   let goal: String
@@ -38,6 +55,7 @@ struct SupervisionInput: Codable {
   let currentReply: SupervisionMessage
   let goalDefinition: SupervisionGoal?
   let previousContinuation: PreviousSupervisionContinuation?
+  let deliverables: SupervisionDeliverables?
 
   var snapshot: String {
     let encoder = JSONEncoder()
@@ -61,6 +79,7 @@ struct SupervisionAssessment: Decodable {
     let text: String
     let state: String
     let sourceMessageIds: [String]
+    let evidenceIds: [String]?
     let note: String
     var stateLabel: String {
       switch state {

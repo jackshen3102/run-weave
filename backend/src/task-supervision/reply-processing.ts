@@ -21,7 +21,9 @@ import {
   digest,
   refreshReferencedPlans,
   taskCandidates,
+  INPUT_BUDGET_BYTES,
 } from "./context";
+import { collectDeliverables } from "./deliverables";
 import { reconcileDelivery } from "./delivery";
 import { applyVerdict } from "./verdict";
 import { sendSupervisionOffer } from "./continuation";
@@ -233,6 +235,14 @@ export async function processSupervisionReply(
     const previous = previousContinuation(snapshot,
       snapshot.lastObservedContinuationId ? operations.store.summary(id, snapshot.lastObservedContinuationId) : undefined);
     const input = buildSupervisionInput(snapshot, source, reply, previous);
+    input.deliverables = await collectDeliverables(
+      operations.resolve(target.terminalSessionId, target.panelId).root,
+      reply,
+      INPUT_BUDGET_BYTES - Buffer.byteLength(JSON.stringify(input)) - 100,
+      controller.signal,
+    );
+    if (Buffer.byteLength(JSON.stringify(input)) > INPUT_BUDGET_BYTES)
+      throw new Error("交付物读取状态超出上下文预算；本次未自动继续。");
     stage = "classify";
     supervisionLogger.info("task-supervision.classification.started", {
       ...trace,
