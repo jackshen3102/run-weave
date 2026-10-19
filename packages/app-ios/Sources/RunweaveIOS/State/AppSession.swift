@@ -172,22 +172,6 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func login(username: String, password: String, store: ConnectionStore) async throws {
-    guard let api, let connection else { throw APIError.invalidURL }
-    let epoch = generation
-    try await api.login(
-      username: username.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
-    guard epoch == generation, !Task.isCancelled else { throw CancellationError() }
-    try store.confirmLogin(computerID: connection.id, url: api.baseURL.absoluteString)
-    self.connection = store.connections.first { $0.id == connection.id }
-    authenticated = true
-    routeLoginRequired = false
-    attentionRetention.setForeground(foreground)
-    health.status = .online
-    error = nil
-    await reconnectRoutes()
-  }
-
   func logout() async {
     guard let api else { return }
     generation += 1
