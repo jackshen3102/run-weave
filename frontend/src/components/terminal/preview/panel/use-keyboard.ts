@@ -1,4 +1,5 @@
 import { useEffect, type MutableRefObject } from "react";
+import { hasPresentOverlay } from "../../../../features/overlay/registry";
 import type { TerminalPreviewChangeKind, TerminalPreviewGitChangesResponse } from "@runweave/shared/terminal/preview";
 
 export function resolveSelectedPreviewChange(params: {
@@ -55,7 +56,7 @@ export function useTerminalPreviewPanelKeyboardEffects({
       return;
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.defaultPrevented && !hasPresentOverlay()) {
         event.preventDefault();
         setExpanded(false);
       }
