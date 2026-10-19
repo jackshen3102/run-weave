@@ -10,7 +10,8 @@ export function TerminalConversationSidecar({ projectId, title, sessionId, panel
   const { scope } = useTerminalRuntime();
   return target && target.scope === scope && target.sessionId === sessionId && target.panelId === panelId
     ? <TerminalConversationPanel key={JSON.stringify([scope, target.sessionId, target.panelId])} sessionId={target.sessionId} panelId={target.panelId}
-    projectId={projectId} title={title} /> : null;
+    projectId={projectId} title={title} />
+    : <section className="flex h-full items-center justify-center bg-slate-950 text-sm text-slate-400" aria-label="会话阅读">请选择终端以阅读会话</section>;
 }
 
 export function useConversationTool(sessionId: string | null, panelId: string | null) {

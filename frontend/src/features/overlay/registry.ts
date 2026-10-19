@@ -28,6 +28,9 @@ function present(element: HTMLElement): boolean {
   if (style.display === "none" || style.visibility === "hidden" || !element.getClientRects().length) return false;
   return element.dataset.state !== "closed" || running(element);
 }
+export function hasPresentOverlay(): boolean {
+  return [...layers].some(({ element }) => present(element));
+}
 function applyReadiness(): void {
   for (const { element } of layers) {
     element.toggleAttribute("data-native-overlay-pending", suppressed && !ready);

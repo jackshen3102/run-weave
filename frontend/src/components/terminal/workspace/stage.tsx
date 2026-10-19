@@ -170,11 +170,15 @@ export function TerminalWorkspaceStage({
   const activePanelId = activeSession
     ? activePanelIdBySessionId[activeSession.terminalSessionId] ?? activePanelWorkspace?.activePanelId ?? activeSession.activePanelId ?? null
     : null;
+  const conversationSessionId = activeSession?.terminalSessionId ?? null;
   useEffect(() => {
     const store = useTerminalPreviewStore.getState();
-    const target = store.conversationTarget;
-    if (target && (target.scope !== scope || target.sessionId !== activeSessionId || target.panelId !== activePanelId)) store.closePreview();
-  }, [scope, activeSessionId, activePanelId]);
+    if (store.ui.activeTool !== "conversation") return;
+    // Follow the selection without changing the user's sidecar layout or open state.
+    store.setConversationTarget(conversationSessionId
+      ? { scope, sessionId: conversationSessionId, panelId: activePanelId }
+      : null);
+  }, [scope, conversationSessionId, activePanelId]);
   const sideChat = useSideChat(activeSessionId, activePanelId, !isMobileMonitor);
   const sideVisible = sideChat.visible && !isMobileMonitor;
   const sourceStatus = sideChat.state.snapshot?.sourceStatus;

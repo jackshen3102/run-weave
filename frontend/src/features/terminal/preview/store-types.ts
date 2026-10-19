@@ -66,6 +66,7 @@ export interface TerminalPreviewStore {
   reorderSidecarTabs: (available: readonly SidecarTabId[], from: number, to: number) => void;
   resetSidecarLayout: () => void;
   conversationTarget: { scope: string; sessionId: string; panelId: string | null } | null;
+  setConversationTarget: (target: TerminalPreviewStore["conversationTarget"]) => void;
   openConversation: (target: { scope: string; sessionId: string; panelId: string | null }) => void;
   projects: Record<string, TerminalPreviewProjectState>;
   connectionScope: string | null;
