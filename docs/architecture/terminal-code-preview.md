@@ -56,8 +56,10 @@ DOM 检查与静态截图不能替代该交互验收。
 ## Agent 会话阅读
 
 终端头部的「阅读会话」打开当前 panel 的连续问答 Sidecar，可展开、收起和关闭。
-原生 iOS 使用全屏阅读页，返回时保留原终端 controller 和草稿。两端仅在打开及手动刷新时
-读取一次，不订阅进度、不轮询、不新增正文缓存或备份；历史范围取决于当前源记录。
+Web/Electron 阅读工具已打开时，切换终端或 panel 会跟随当前选择读取对应会话，保留 Sidecar
+的打开状态、宽度与布局；没有选中终端时显示选择提示，不自动关闭或继续展示旧目标正文。
+原生 iOS 使用全屏阅读页，返回时保留原终端 controller 和草稿。两端仅在打开、阅读目标切换
+及手动刷新时读取一次，不订阅进度、不轮询、不新增正文缓存或备份；历史范围取决于当前源记录。
 
 链路为客户端 → `GET /api/terminal/session/:id/conversation` → App Server 的
 `GET /threads/:threadId/conversation`。共享合同见
