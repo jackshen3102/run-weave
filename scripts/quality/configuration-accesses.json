@@ -10666,6 +10666,14 @@
   },
   {
     "file": "backend/src/side-chat/provider.ts",
+    "kind": "environment",
+    "expression": "this.env.TMPDIR",
+    "count": 3,
+    "category": "runtime-context",
+    "reason": "读取子进程的系统临时目录并加入旁聊沙箱拒绝清单，避免继承的 scratch 路径扩大写入范围；不作为持久业务配置。"
+  },
+  {
+    "file": "backend/src/side-chat/provider.ts",
     "kind": "environment-forward",
     "expression": "...this.env",
     "count": 1,
