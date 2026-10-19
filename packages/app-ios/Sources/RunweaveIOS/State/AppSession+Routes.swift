@@ -1,9 +1,31 @@
 import Foundation
 
 extension AppSession {
+  func login(username: String, password: String, store: ConnectionStore) async throws {
+    guard let api, let connection else { throw APIError.invalidURL }
+    let epoch = generation
+    try await api.login(
+      username: username.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+    guard epoch == generation, !Task.isCancelled else { throw CancellationError() }
+    try store.confirmLogin(computerID: connection.id, url: api.baseURL.absoluteString)
+    self.connection = store.connections.first { $0.id == connection.id }
+    authenticated = true
+    routeLoginRequired = false
+    attentionRetention.setForeground(foreground)
+    health.status = .online
+    error = nil
+    await reconnectRoutes()
+  }
+
   func updateConnection(_ value: BackendConnection?) async {
     guard connection?.id == value?.id else { return }
+    let previous = connection
     connection = value
+    if routeLoginRequired, let previous, let value,
+      previous.routes != value.routes || previous.automatic != value.automatic || previous.fixedRouteID != value.fixedRouteID {
+      routeLoginRequired = false
+      await reconnectRoutes()
+    }
   }
 
   /// A transport change retains the terminal surface/navigation and the computer's draft scope.
@@ -95,6 +117,7 @@ extension AppSession {
       self.error = displayError(error)
       if case APIError.credentialsUnavailable = error { await prepareRelogin() }
       else if case APIError.refreshResultUnknown = error { await prepareRelogin() }
+      else if case ConnectionIdentityFailure.loginRequired(let url) = error { await prepareRelogin(url: url) }
       else if probeTask == nil { scheduleProbe(epoch: generation) }
     }
   }

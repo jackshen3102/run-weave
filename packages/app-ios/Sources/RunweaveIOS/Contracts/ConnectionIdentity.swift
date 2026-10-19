@@ -32,9 +32,11 @@ struct ConnectionProof: Decodable {
 }
 enum ConnectionIdentityFailure: Error, LocalizedError {
   case unsupported, identityMismatch, invalidProof, redirectRejected, unavailable, selectRoute
+  case loginRequired(url: String)
   var errorDescription: String? {
     switch self {
     case .unsupported: return "电脑端需升级后才能使用多线路"
+    case .loginRequired: return "请确认此线路地址并重新登录，以验证电脑身份"
     case .identityMismatch: return "电脑身份不匹配，请检查线路地址或重新登录确认电脑"
     case .invalidProof: return "电脑身份验证失败"
     case .redirectRejected: return "连接地址发生重定向，请填写最终地址"

@@ -165,7 +165,12 @@ struct ConnectionRoutesView: View {
   }
   private func reconnect() async {
     failure = nil
-    if session.connection?.id == computer.id { await session.reconnectRoutes() }
+    if session.connection?.id == computer.id {
+      await session.reconnectRoutes()
+      if session.routeLoginRequired {
+        if let onLoginRequired { onLoginRequired() } else { dismiss() }
+      }
+    }
     else {
       do { _ = try await resolver.resolve(force: true) }
       catch { failure = displayError(error) }

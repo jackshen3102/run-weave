@@ -16,7 +16,7 @@ struct BackendConnection: Codable, Identifiable, Equatable {
   let createdAt: Date
   let credentialAccount: String
   /// Only this explicitly entered/login-approved URL may use the legacy, unpinned path.
-  let bootstrapURL: String
+  var bootstrapURL: String
   var scope: String { "computer:" + id }
   var url: String { routes.first?.url ?? bootstrapURL }
 
@@ -131,6 +131,16 @@ final class ConnectionStore: ObservableObject {
     if let routeID, let index = computer.routes.firstIndex(where: { $0.id == routeID }) {
       computer.routes[index].name = label; computer.routes[index].url = normalized
     } else { computer.routes.append(ConnectionRoute(id: UUID().uuidString, name: label, url: normalized)) }
+    try update(computer)
+  }
+  func confirmLogin(computerID: String, url: String) throws {
+    guard var computer = connections.first(where: { $0.id == computerID }),
+      computer.routes.contains(where: { $0.url == url }) else {
+      throw MobileLoginFailure(message: "线路已改变，请重新选择线路后登录。")
+    }
+    guard computer.bootstrapURL != url else { return }
+    // Only a successful explicit login may approve a changed address for legacy credentials.
+    computer.bootstrapURL = url
     try update(computer)
   }
   func select(_ id: String) throws {

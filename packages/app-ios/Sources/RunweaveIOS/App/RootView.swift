@@ -25,7 +25,7 @@ public struct RootView: View {
         } else if session.authenticated {
           HomeView(session: session)
         } else {
-          LoginView(session: session, manageConnections: { managingConnections = true })
+          LoginView(session: session, store: connections, manageConnections: { managingConnections = true })
         }
       }
       .background {
@@ -156,6 +156,7 @@ public struct RootView: View {
 
 private struct LoginView: View {
   @ObservedObject var session: AppSession
+  let store: ConnectionStore
   let manageConnections: () -> Void
   @State private var username = "admin"
   @State private var password = ""
@@ -167,6 +168,10 @@ private struct LoginView: View {
     Form {
       Section(header: Text("Runweave")) {
         if session.connection == nil { Button("先添加一个 Runweave 后端连接", action: manageConnections) }
+        if let address = session.api?.baseURL.absoluteString {
+          Text(address).font(.caption).foregroundColor(.secondary).textSelection(.enabled).clarityMask()
+            .accessibilityIdentifier("connection-login-address")
+        }
         TextField("Username", text: $username).textContentType(.username).autocapitalization(.none)
           .disableAutocorrection(true).clarityMask()
         SecureField("Password", text: $password).textContentType(.password).clarityMask()
@@ -175,7 +180,7 @@ private struct LoginView: View {
           failure = nil
           Task {
             do {
-              try await session.login(username: username, password: password)
+              try await session.login(username: username, password: password, store: store)
               password = ""
             } catch { if !(error is CancellationError) { failure = displayError(error) } }
             submitting = false
