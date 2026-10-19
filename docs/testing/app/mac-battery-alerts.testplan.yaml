@@ -57,7 +57,10 @@ cases:
       - 本例 Backend 有专用合法会话和已注册绑定，可构造缺失凭据及伪造身份字段的 HTTP 请求。
     steps:
       - 不带或带无效 Bearer 调用通知状态、注册和删除接口，确认被拒且没有存储变更。
-      - 使用有效会话在请求体伪造 ownerSessionId、username、hostId 或不匹配的 connectionId，确认被拒而非跨身份落盘。
+      - 使用有效会话在请求体伪造 ownerSessionId、username 或 hostId，确认被拒且没有存储变更。
+      - 同一手机登录依次使用两条线路的 connectionId 注册并更新 battery、scheduled-task 和 terminal-unread，确认均成功且各类 subscriptionId 保持不变，存储归属始终取自该登录会话。
+      - 将请求体 connectionId 换成另一个有效登录的标识，确认订阅仍归当前登录；另一个登录的状态不暴露该订阅，确认或删除请求不能改动该订阅。
+      - 撤销本例登录后再次读取、注册或删除，确认被拒且没有存储变更。
       - 核对合法状态响应不回显 deviceToken 或其他绑定的撤销凭据。
   - id: BATALERT-006
     name: 网关只允许发送者操作所属电脑的目标

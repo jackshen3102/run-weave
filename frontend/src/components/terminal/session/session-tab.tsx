@@ -1,4 +1,5 @@
 import { useSideChat } from "../../../features/side-chat/use-side-chat";
+import { useMemoizedFn } from "ahooks";
 import { useOverlayRef } from "../../../features/overlay/use-overlay-ref";
 import {
   useEffect,
@@ -10,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
-import { GitFork, Link2, PanelsTopLeft, Pencil, X } from "lucide-react";
+import { GitFork, Link2, MessageCircle, PanelsTopLeft, Pencil, X } from "lucide-react";
 import { useForkTerminalAgent } from "../../../features/terminal/use-fork-agent";
 import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
@@ -249,7 +250,19 @@ export function TerminalSessionTab({
     left: number;
     top: number;
   } | null>(null);
-  const sideChat = useSideChat(session.terminalSessionId, activePanel?.panelId ?? null);
+  const sideChatPanelId = useTerminalWorkspaceStore((state) =>
+    state.activePanelIdBySessionId[session.terminalSessionId]
+    ?? state.panelWorkspaceBySessionId[session.terminalSessionId]?.activePanelId
+    ?? session.activePanelId ?? null,
+  );
+  const sideChat = useSideChat(session.terminalSessionId, sideChatPanelId);
+  const openSideChat = useMemoizedFn(async () => {
+    onSelectSession(session.terminalSessionId);
+    await sideChat.model.open();
+    if (!sideChat.model.navigation.visible && sideChat.model.state.error) {
+      useTerminalWorkspaceStore.getState().setRequestError(sideChat.model.state.error);
+    }
+  });
   const originalDisplayName = formatTerminalSessionName({
     alias: session.alias,
     cwd: session.cwd,
@@ -404,6 +417,12 @@ export function TerminalSessionTab({
       <ContextMenu>
         <ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
         <ContextMenuContent className="w-56">
+          <ContextMenuItem className="gap-2" disabled={sideChat.state.loading}
+            title={sideChat.state.capabilities?.reason ?? "独立消息旁聊"}
+            onSelect={() => { void openSideChat(); }}>
+            <MessageCircle className="size-4" />
+            旁聊{sideChat.state.unread ? " · 新回复" : ""}
+          </ContextMenuItem>
           <ContextMenuItem className="gap-2" disabled={!canFork || forking || mutationLoading}
             title={canFork ? undefined : "请等待当前 Codex 会话空闲后再 Fork"}
             onSelect={() => { void fork(); }}>

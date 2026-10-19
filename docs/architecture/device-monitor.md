@@ -35,7 +35,7 @@ Backend 负责所在 Mac 的电量事实，原生 iOS 负责前台展示和用�
 每条连接的低电量提醒由用户手动开启。定时任务提醒对已登录、支持推送的电脑默认开启：iOS 在前台自动请求系统通知权限并注册 APNs token；token 和安装 UUID 存 Keychain。系统权限被拒绝时无法投递。
 普通提醒不使用 Critical Alerts 或后台静默推送。
 
-[通知 API](../../backend/src/routes/device-notifications.ts)使用真实 Bearer 会话，要求 App 登录的 connectionId 匹配：
+[通知 API](../../backend/src/routes/device-notifications.ts)使用真实 Bearer 会话，订阅归属取自有效 App 登录中的 connectionId；兼容接收请求体的 connectionId，但不以这个随线路变化的字段决定归属或拒绝注册：
 
 | API                                                                                   | 行为                                                                   |
 | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |

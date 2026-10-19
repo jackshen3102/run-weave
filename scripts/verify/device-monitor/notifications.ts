@@ -13,6 +13,7 @@ import { close, eventually, fixture, listen, pause } from "./fixture";
 
 /** Real HTTPS API, durable SQLite and an observable provider boundary. */
 export async function verifyNotifications() {
+  await verifySubscriptionOwnership();
   let calls = 0;
   let outcome: APNsResult = { state: "accepted" };
   let block = false;
@@ -255,6 +256,71 @@ export async function verifyNotifications() {
     );
   } finally {
     release?.();
+    await f.dispose();
+  }
+}
+
+async function verifySubscriptionOwnership() {
+  const f = await fixture(async () => null, async () => ({ state: "accepted" }));
+  try {
+    const owner = await f.login(), other = await f.login();
+    const installation = randomUUID();
+    const route = `/api/device/notifications/subscriptions/${installation}`;
+    const registration = {
+      connectionId: owner.connectionId,
+      deviceToken: "ab".repeat(48),
+      environment: "sandbox",
+      displayName: "Route-switching phone",
+      enabled: true,
+      explicitEnable: true,
+    };
+    for (const kind of ["battery", "scheduled-task", "terminal-unread"] as const) {
+      const endpoint = route + (kind === "battery" ? "" : `/kinds/${kind}`);
+      const first = await f.request(endpoint, owner.accessToken, "PUT", { ...registration, kind });
+      assert.equal(first.status, 200);
+      const original = await first.json();
+      const updated = await f.request(endpoint, owner.accessToken, "PUT", {
+        ...registration, kind, connectionId: other.connectionId,
+      });
+      assert.equal(updated.status, 200, "route-specific IDs cannot reject a valid App session");
+      const current = await updated.json();
+      assert.equal(current.subscriptionId, original.subscriptionId);
+      assert.equal(current.version, original.version + 1);
+      const stored = f.monitorStore.snapshot().subscriptions[current.subscriptionId]!;
+      assert.equal(stored.connectionId, owner.connectionId);
+      assert.equal(stored.sessionId, owner.sessionId);
+      assert.equal(stored.username, f.auth.getActiveAppSession(owner.sessionId)!.username);
+
+      const confirmation = { subscriptionId: current.subscriptionId, version: current.version };
+      const before = f.monitorStore.snapshot();
+      assert.equal((await f.request(`${route}/confirm`, other.accessToken, "POST", confirmation)).status, 409);
+      assert.equal((await f.request(endpoint, other.accessToken, "DELETE")).status, 204);
+      assert.deepEqual(f.monitorStore.snapshot(), before, "another login cannot confirm or revoke the binding");
+      const confirmed = await f.request(`${route}/confirm`, owner.accessToken, "POST", confirmation);
+      assert.equal(confirmed.status, 200);
+      assert.equal((await confirmed.json()).state, "enabled");
+    }
+    assert.equal(f.subscriptions.status(owner.sessionId, true).subscriptions.length, 3);
+    assert.equal(f.subscriptions.status(other.sessionId, true).subscriptions.length, 0);
+    const before = f.monitorStore.snapshot();
+    for (const field of ["ownerSessionId", "username", "hostId"]) {
+      assert.equal((await f.request(route, owner.accessToken, "PUT", {
+        ...registration, [field]: randomUUID(),
+      })).status, 400);
+    }
+    for (const clientType of ["web", "electron"] as const) {
+      const foreign = await f.login(randomUUID(), clientType);
+      assert.equal((await f.request(route, foreign.accessToken, "PUT", registration)).status, 403);
+    }
+    await f.auth.logoutSession(owner.accessToken);
+    for (const token of [undefined, "invalid-token", owner.accessToken]) {
+      assert.equal((await f.request("/api/device/notifications/status", token)).status, 401);
+      assert.equal((await f.request(route, token, "PUT", registration)).status, 401);
+      assert.equal((await f.request(route, token, "DELETE")).status, 401);
+    }
+    assert.deepEqual(f.monitorStore.snapshot(), before, "rejected identity and authentication inputs cannot mutate subscriptions");
+    process.stdout.write("PASS route-independent battery/task/unread registration retains binding ownership; foreign, revoked and non-App sessions cannot take over\n");
+  } finally {
     await f.dispose();
   }
 }
