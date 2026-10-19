@@ -167,16 +167,19 @@ final class AppSession: ObservableObject {
       health.message = displayError(error)
       if case APIError.refreshResultUnknown = error { await prepareRelogin() }
       else if case APIError.credentialsUnavailable = error { await prepareRelogin() }
+      else if case ConnectionIdentityFailure.loginRequired(let url) = error { await prepareRelogin(url: url) }
       else { scheduleProbe(epoch: epoch) }
     }
   }
 
-  func login(username: String, password: String) async throws {
-    guard let api else { throw APIError.invalidURL }
+  func login(username: String, password: String, store: ConnectionStore) async throws {
+    guard let api, let connection else { throw APIError.invalidURL }
     let epoch = generation
     try await api.login(
       username: username.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
     guard epoch == generation, !Task.isCancelled else { throw CancellationError() }
+    try store.confirmLogin(computerID: connection.id, url: api.baseURL.absoluteString)
+    self.connection = store.connections.first { $0.id == connection.id }
     authenticated = true
     routeLoginRequired = false
     attentionRetention.setForeground(foreground)

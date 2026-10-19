@@ -90,7 +90,7 @@ final class ConnectionRouteResolver: ObservableObject {
     let old = client
     old?.suspendTransport()
     if let activeRouteID { statuses[activeRouteID] = "已断开" }
-    client = nil; activeRouteID = nil
+    client = nil; activeRouteID = nil; needsUpgrade = false
     let snapshot = computer
     let task = Task<APIClient, Error> { [self] in
       // close waits for any rotating refresh response before destroying its transport.
@@ -110,7 +110,7 @@ final class ConnectionRouteResolver: ObservableObject {
             try await ConnectionIdentityClient.verify(base: base, trust: trust)
           } else {
             // An arbitrary added URL can never bootstrap trust using an existing token.
-            guard route.url == snapshot.bootstrapURL else { throw ConnectionIdentityFailure.unsupported }
+            guard route.url == snapshot.bootstrapURL else { throw ConnectionIdentityFailure.loginRequired(url: route.url) }
             let health = await DeviceHealthService.check(base: base,
               connectionID: APIClient.diagnosticConnectionID(base: base, id: snapshot.id))
             guard health.status == .online else { throw RouteHealthFailure(message: health.message) }
@@ -169,7 +169,7 @@ final class ConnectionRouteResolver: ObservableObject {
       return DeviceHealthSnapshot(status: .online,
         latencyMilliseconds: Int((ProcessInfo.processInfo.systemUptime - started) * 1000), message: "电脑在线")
     }
-    guard route.url == computer.bootstrapURL else { throw ConnectionIdentityFailure.unsupported }
+    guard route.url == computer.bootstrapURL else { throw ConnectionIdentityFailure.loginRequired(url: route.url) }
     let health = await DeviceHealthService.check(base: client.baseURL, connectionID: client.connectionID)
     guard health.status == .online else { throw RouteHealthFailure(message: health.message) }
     return health

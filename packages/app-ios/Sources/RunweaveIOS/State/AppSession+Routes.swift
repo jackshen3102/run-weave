@@ -3,7 +3,13 @@ import Foundation
 extension AppSession {
   func updateConnection(_ value: BackendConnection?) async {
     guard connection?.id == value?.id else { return }
+    let previous = connection
     connection = value
+    if routeLoginRequired, let previous, let value,
+      previous.routes != value.routes || previous.automatic != value.automatic || previous.fixedRouteID != value.fixedRouteID {
+      routeLoginRequired = false
+      await reconnectRoutes()
+    }
   }
 
   /// A transport change retains the terminal surface/navigation and the computer's draft scope.
@@ -95,6 +101,7 @@ extension AppSession {
       self.error = displayError(error)
       if case APIError.credentialsUnavailable = error { await prepareRelogin() }
       else if case APIError.refreshResultUnknown = error { await prepareRelogin() }
+      else if case ConnectionIdentityFailure.loginRequired(let url) = error { await prepareRelogin(url: url) }
       else if probeTask == nil { scheduleProbe(epoch: generation) }
     }
   }
