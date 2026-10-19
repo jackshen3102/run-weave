@@ -50,13 +50,19 @@ Terminal session 与 panel metadata 中的 current/last thread 必须同时携�
 
 创建核对服务器注册的 terminal/panel、primary thread 和最后一个已完成 turn；真实持久
 `thread/fork` 固定该边界。专属 stdio Codex app-server 只 fork/resume 本服务的子分支，
-不 resume/start/interrupt 主 thread。首版限本机 macOS、验证过的 Codex 0.160.1；其他版本、
-SSH、来源不完整或目录权限无法落实时明确不可用。无需切换用户的全局 binary/PATH/daemon。
+不 resume/start/interrupt 主 thread。执行归属以 Backend 所在电脑为准，支持本地 macOS 和 Linux；
+已核对 macOS Codex 0.160.1 与 Linux standalone Codex 0.161.0。客户端通过远程连接访问该
+Backend 不影响本地归属；面板本身只有 SSH shell、来源不完整或权限无法落实时明确不可用。
+官方 CLI 完成轮次后移入 lastThread 的身份，仅在原面板仍为 Codex 空闲态时采用；受管 CLI
+始终以实时主会话观测为准，不退回历史猜测。无需切换用户的全局 binary/PATH/daemon。
 
 执行器保留项目/受管规则，覆盖为项目只读、关闭网络、MCP/Apps、Hooks、Browser、
 Computer Use、子 Agent、通知及自动目标续接，不接受审批或提权。固定版本的 `:minimal`
-包含隐式临时目录权限，因此额外拒绝 `/private/tmp` 和 `/private/var/tmp`，来源位于这些目录时
-不启用。命名权限 profile 每进程独立，避免与用户配置合并后扩大读取范围。
+包含隐式临时目录权限，因此 macOS 额外拒绝 `/private/tmp`、`/private/var/tmp`，Linux 拒绝
+`/tmp`、`/var/tmp`，并拒绝进程配置的临时目录；来源位于这些目录时不启用。Linux 使用
+bubblewrap，另外只开放 Codex 可执行文件及其同目录 Code Mode host 的读取，以支持安装在
+用户目录的独立运行时；不因此开放整个 Codex 配置目录。命名权限 profile 每进程独立，避免
+与用户配置合并后扩大读取范围。
 
 消息和操作保存在 Backend profile 下独立的 `side-chats.sqlite`（schema 1）。事务约束每来源
 一个活跃旁聊、每旁聊一个未结束 turn；operation ID 加请求指纹去重，版本竞争返回 409。

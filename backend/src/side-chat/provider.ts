@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { settingText } from "@runweave/config-node";
 import { SideChatError } from "./error";
+import { resolveExecutableFromPath } from "../terminal/tmux/internals";
 import type { ProviderItem, ProviderTurn } from "./final-messages";
 
 export interface ProviderThread { id: string; cwd: string; model?: string; environments?: Array<{ environmentId: string; cwd: string; runtimeWorkspaceRoots: string[] }> | null; ephemeral?: boolean; forkedFromId?: string; turns: ProviderTurn[]; status: { type: string } }
@@ -30,12 +32,22 @@ export class SideChatProvider {
   async initialize(): Promise<void> {
     if (this.closing) throw new Error("Side chat executor closed");
     if (this.initialized) return;
-    if (process.platform !== "darwin") throw new SideChatError(422, "PLATFORM_UNSUPPORTED", "消息旁聊目前仅支持本机 macOS Codex");
+    if (process.platform !== "darwin" && process.platform !== "linux") throw new SideChatError(422, "PLATFORM_UNSUPPORTED", "消息旁聊目前支持在 macOS 或 Linux 上运行的本地 Codex");
     const cwd = realpathSync(this.cwd);
     // Explicitly deny scratch writes even when :minimal grants them.
-    if (["/private/tmp", "/private/var/tmp", "/System", "/Library", "/usr", "/bin", "/dev", "/private/etc"].some(root => cwd === root || cwd.startsWith(`${root}/`)))
+    const scratch = process.platform === "linux" ? ["/tmp", "/var/tmp"] : ["/private/tmp", "/private/var/tmp"];
+    if (this.env.TMPDIR && existsSync(this.env.TMPDIR)) scratch.push(realpathSync(this.env.TMPDIR));
+    const systemRoots = process.platform === "linux" ? ["/usr", "/bin", "/dev", "/etc", "/proc", "/sys", "/run"] : ["/System", "/Library", "/usr", "/bin", "/dev", "/private/etc"];
+    if ([...scratch, ...systemRoots].some(root => cwd === root || cwd.startsWith(`${root}/`)))
       throw new SideChatError(422, "READ_SCOPE_UNSUPPORTED", "该目录无法落实旁聊的项目读取范围，请使用独立的本地项目目录");
-    const filesystem = { ":minimal": "read", "/private/tmp": "deny", "/private/var/tmp": "deny", [cwd]: "read" };
+    const filesystem: Record<string, string> = { ":minimal": "read", ...Object.fromEntries(scratch.map(root => [root, "deny"])), [cwd]: "read" };
+    if (process.platform === "linux") {
+      // bubblewrap re-executes Codex; standalone runtimes can live outside :minimal.
+      const executable = realpathSync(path.resolve(cwd, resolveExecutableFromPath(this.binary, this.env)));
+      filesystem[executable] = "read";
+      const codeHost = path.join(path.dirname(executable), "codex-code-mode-host");
+      if (existsSync(codeHost)) filesystem[realpathSync(codeHost)] = "read";
+    }
     const overrides: Record<string, unknown> = {
       check_for_update_on_startup: false,
       default_permissions: this.profile,
@@ -46,6 +58,7 @@ export class SideChatProvider {
       "orchestrator.mcp.enabled": false, "orchestrator.skills.enabled": false, "shell_environment_policy.inherit": "none",
       "shell_environment_policy.set": { PATH: "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin" },
       "features.daemon_auto_start": false,
+      ...(process.platform === "linux" ? { "features.use_legacy_landlock": false } : {}),
       ...Object.fromEntries(DISABLED.map(name => [`features.${name}`, false])),
     };
     const args = Object.entries(overrides).flatMap(([key, value]) => ["-c", `${key}=${toml(value)}`]);

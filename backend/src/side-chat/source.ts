@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 import type { SideChatSourceRef, SideChatSourceSnapshot } from "@runweave/shared/side-chat";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
+import type { TerminalPanelRecord } from "../terminal/manager/records";
 import { readCodexContext } from "../terminal/runtime/codex-context";
 import { getTerminalSessionAgent } from "../terminal/state/terminal-state-service";
 import { SideChatError } from "./error";
@@ -15,19 +16,32 @@ export function sourceOwner(manager: TerminalSessionManager, terminalSessionId: 
   if (!panel || panel.terminalSessionId !== terminalSessionId) throw new SideChatError(422, "SOURCE_IDENTITY_UNAVAILABLE", "尚未确认来源终端面板");
   return { terminal, panel };
 }
+function primaryThread(panel: TerminalPanelRecord, observed: ReturnType<typeof readCodexContext>): string | null {
+  if (observed.managed) return observed.context?.primaryThreadId ?? null;
+  if (panel.threadProvider === "codex" && panel.threadId) return panel.threadId;
+  // Official CLIs keep running after completion moves the hook identity to lastThread*.
+  if (panel.lastThreadProvider === "codex" && panel.lastThreadStatus === "idle" &&
+      panel.terminalState?.agent === "codex" && panel.terminalState.state === "agent_idle") return panel.lastThreadId ?? null;
+  return null;
+}
 function identity(manager: TerminalSessionManager, terminalId: string, panelId?: string) {
   const { terminal, panel } = sourceOwner(manager, terminalId, panelId);
   const observed = readCodexContext(panel);
   const generation = manager.getPanelAgentOperationGeneration(terminalId, panel.id);
   if (observed.managed && generation && observed.context?.operationId !== generation.operationId)
     throw new SideChatError(422, "SOURCE_GENERATION_UNCONFIRMED", "来源 Codex 启动代次尚未确认");
-  const primary = observed.managed ? observed.context?.primaryThreadId : panel.threadId;
+  const primary = primaryThread(panel, observed);
   if (observed.managed && (!observed.context || observed.context.closed))
     throw new SideChatError(422, "SOURCE_IDENTITY_UNAVAILABLE", "主 Codex 身份尚未确认");
   // A live managed observation is authoritative before the pane's reading projection catches up.
-  if (!primary || getTerminalSessionAgent(panel) !== "codex" || (!observed.managed && panel.threadProvider !== "codex") ||
-    terminal.status !== "running" || panel.status !== "running" || /^(ssh|mosh)(\s|$)/.test(path.basename(panel.activeCommand ?? "")))
-    throw new SideChatError(422, "SOURCE_UNSUPPORTED", "消息旁聊需要本机运行中、有持久主历史的 Codex");
+  if (terminal.status !== "running" || panel.status !== "running")
+    throw new SideChatError(422, "SOURCE_NOT_RUNNING", "来源终端已退出，无法建立新的旁聊");
+  if (/^(ssh|mosh)(\s|$)/.test(path.basename(panel.activeCommand ?? "")))
+    throw new SideChatError(422, "SOURCE_REMOTE_SHELL", "请连接运行 Codex 的电脑后打开旁聊，不能从 SSH shell 推断远端会话");
+  if (getTerminalSessionAgent(panel) !== "codex")
+    throw new SideChatError(422, "SOURCE_NOT_CODEX", "当前终端面板未运行 Codex");
+  if (!primary)
+    throw new SideChatError(422, "SOURCE_IDENTITY_UNAVAILABLE", "尚未确认当前 Codex 主会话身份，请在该会话完成一轮对话后重试");
   return { terminalSessionId: terminalId, panelId: panel.id, expectedPrimaryThreadId: primary, cwd: realpathSync(panel.cwd) };
 }
 export function sourceKey(ref: SideChatSourceRef): string {
@@ -67,7 +81,7 @@ function snapshot(thread: ProviderThread, identity: { terminalSessionId: string;
   if (!preview.some(item => item.role === "user") || !preview.some(item => item.role === "assistant"))
     throw new SideChatError(422, "SOURCE_HISTORY_INCOMPLETE", "来源历史不完整，无法建立旁聊");
   return { ...identity, lastCompletedTurnId: last.id, turnNumber: thread.turns.findIndex(turn => turn.id === last.id) + 1, model: thread.model, preview,
-    permissions: "macOS 本地项目只读；系统运行所需读取；临时目录禁用；无网络、MCP、Apps、Hooks、子 Agent、自动目标续接或提权" };
+    permissions: "来源项目只读；系统运行所需读取；临时目录禁用；无网络、MCP、Apps、Hooks、子 Agent、自动目标续接或提权" };
 }
 
 export function assertSideChatSourceIdentity(manager: TerminalSessionManager, source: SideChatSourceSnapshot): void {
@@ -85,7 +99,7 @@ export function sideChatSourceStatus(manager: TerminalSessionManager, source: Si
       if (context.displayedThreadId === context.primaryThreadId) return context.displayedRunning ? "running" : "idle";
       return "unknown";
     }
-    if (panel.threadId !== source.expectedPrimaryThreadId || getTerminalSessionAgent(panel) !== "codex") return "unavailable";
+    if (primaryThread(panel, { managed, context }) !== source.expectedPrimaryThreadId || getTerminalSessionAgent(panel) !== "codex") return "unavailable";
     return panel.terminalState?.state === "agent_running" ? "running" : panel.terminalState?.state === "agent_idle" ? "idle" : "unknown";
   } catch { return "unavailable"; }
 }
