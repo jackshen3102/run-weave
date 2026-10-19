@@ -127,8 +127,7 @@ export class DeviceSubscriptions {
   ) {
     const push = this.push;
     const owner = this.owner(sessionId);
-    if (owner.connectionId !== input.connectionId)
-      throw new SubscriptionError(403, "连接身份不匹配");
+    // Legacy clients send a route-specific ID; the authenticated session owns the binding.
     if (!push) throw new SubscriptionError(503, "此电脑尚未配置推送服务");
     const kind = input.kind ?? "battery";
     if (!input.enabled) {

@@ -1,20 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle } from "lucide-react";
-import { useSideChat } from "../../../features/side-chat/use-side-chat";
 import { messageSequence, type SideChatModel } from "../../../features/side-chat/model";
 import { cn } from "../../../lib/utils";
 import { Button } from "../../ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../ui/alert-dialog";
 import { SideChatComposer } from "./composer";
 import { SideChatContext } from "./context";
-export function SideChatEntry({ terminalId, panelId }: { terminalId: string | null; panelId: string | null }) {
-  const { model, state, open } = useSideChat(terminalId, panelId);
-  if (!terminalId || !state.capabilities) return null;
-  return <div className="flex items-center gap-2">
-    {state.error && !model.navigation.visible ? <span role="alert" className="max-w-64 truncate text-xs text-destructive" title={state.error}>{state.error}</span> : null}
-    <Button variant="ghost" size="sm" className="h-6 px-2" onClick={open} disabled={state.loading} title={state.capabilities.reason ?? "独立消息旁聊"} aria-label="打开消息旁聊"><MessageCircle data-icon="inline-start" />旁聊{state.unread ? " · 新回复" : ""}</Button>
-  </div>;
-}
 const turnLabels: Record<string, string> = { accepted: "正在回答…", running: "正在回答…", stopping: "正在停止…", stopped: "已停止回答", failed: "回答失败，请重新提问", unknown: "执行结果不明，请查询状态或结束旁聊" };
 export function SideChatView({ model, title, mainStatus }: { model: SideChatModel; title: string; mainStatus: string }) {
   const { snapshot, stale, error, pending } = model.state;

@@ -26,7 +26,8 @@ cases:
       - 本例候选桌面有两个自建终端 Tab，主 Codex 执行有限任务，记录 Tab ID/顺序、surface、socket、PID、pane、主草稿和滚动位置。
       - 能记录本例终端 WS 的输入、resize、连接与销毁事件以及原生 displayedThreadId。
     steps:
-      - 使用 toolkit:playwright-cli 点击旁聊，确认原 Tab 显示消息页和旁聊标题，Tab 数量、ID、位置与持久 alias 不变。
+      - 使用 toolkit:playwright-cli 右键终端 Tab 并选择旁聊，确认右上角已无旁聊入口，原 Tab 显示消息页和旁聊标题，Tab 数量、ID、位置与持久 alias 不变。
+      - 右键另一个未选中的 Tab 并选择旁聊，确认先切换到该 Tab 并打开其旁聊，没有误开原选中终端的旁聊；不支持或创建失败时显示明确错误。
       - 提问、返回、再进入和切换另一 Tab 往返；确认复用同一 sideChatID，原 surface/socket 未重建，主草稿与滚动恢复，Browser/文件布局未改变。
       - 核对旁聊动作没有原 pane 输入、resize、/side、主 turn/start 或 displayedThreadId 切换，也没有新增 tmux pane 或终端。
   - id: SCMSG-003
