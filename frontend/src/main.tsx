@@ -1,3 +1,4 @@
+import "./polyfills";
 import { runtimeBuildInfo } from "@runweave/shared/runtime-version";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
