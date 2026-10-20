@@ -1,4 +1,5 @@
 import { registerBookmarkHandlers } from "./bookmarks/handlers.js";
+import { registerTerminalBrowserFindHandlers } from "./find.js";
 import type { DesktopLocalBrowserSource } from "@runweave/shared/browser-local-tunnel";
 import { navigateWithLocalPreview } from "./local-preview/navigation.js";
 import { registerTerminalBrowserPresentationHandler } from "./view/presentation.js";
@@ -93,6 +94,7 @@ function resolveTerminalBrowserEntryKey(
 
 export function registerTerminalBrowserHandlers(): void {
   registerBookmarkHandlers();
+  registerTerminalBrowserFindHandlers();
   registerTerminalBrowserPresentationHandler();
   ipcMain.handle("terminal-browser:resolve-assistance-target", (event, binding: BrowserAssistanceTarget) => {
     const win = BrowserWindow.fromWebContents(event.sender);

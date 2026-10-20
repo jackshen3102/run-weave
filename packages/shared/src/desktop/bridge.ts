@@ -29,6 +29,8 @@ import type {
   TerminalBrowserAnnotationSubmission,
 } from "../browser/annotation";
 import type { TerminalBrowserCdpProxyInfo } from "../browser/cdp-proxy";
+import type { TerminalBrowserFindCommand, TerminalBrowserFindState } from "../browser/find";
+export type { TerminalBrowserFindCommand, TerminalBrowserFindState } from "../browser/find";
 import type {
   TerminalBrowserAutomationFrame,
   TerminalBrowserAutomationFrameAcknowledgeRequest,
@@ -211,6 +213,9 @@ export interface RunweaveElectronBridge {
   ) => Promise<void>;
   terminalBrowserReload: (tabId: string) => Promise<TerminalBrowserSnapshot>;
   terminalBrowserStop: (tabId: string) => Promise<void>;
+  terminalBrowserGetFindState: (tabId: string) => Promise<TerminalBrowserFindState>;
+  terminalBrowserFind: (tabId: string, command: TerminalBrowserFindCommand) => Promise<void>;
+  onTerminalBrowserFindChanged: (listener: (state: TerminalBrowserFindState) => void) => () => void;
   terminalBrowserGoBack: (tabId: string) => Promise<TerminalBrowserSnapshot>;
   terminalBrowserGoForward: (tabId: string) => Promise<TerminalBrowserSnapshot>;
   terminalBrowserSetPresentation: (state: TerminalBrowserPresentationState) => Promise<void>;

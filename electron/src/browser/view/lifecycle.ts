@@ -47,6 +47,7 @@ import { recordBrowserTabEvent } from "../../activity/emitter.js";
 import { attachBrowserNavigationActivity } from "../../activity/browser-navigation.js";
 import { attachTerminalBrowser, detachTerminalBrowser } from "./attachment.js";
 import { validateTerminalBrowserUrl } from "./helpers.js";
+import { attachTerminalBrowserFind } from "../find.js";
 
 export { attachTerminalBrowser, detachTerminalBrowser } from "./attachment.js";
 export {
@@ -181,6 +182,8 @@ export function getOrCreateTerminalBrowserView(
     pendingUpdate: null,
     pendingUpdateTimer: null,
   };
+
+  attachTerminalBrowserFind(win, tabId, entry);
 
   if (entry.localPreview) {
     entry.localPreview.onFailure = (message) => {
