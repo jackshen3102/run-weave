@@ -90,7 +90,8 @@ Web 远程项目另含 endpoint 身份。关闭重开、切换会话或客户端
 正文共享单一纵向滚动区，表格/代码可横向阅读。Web 复用净化后的 Markdown/Mermaid 渲染，
 无文件上下文时不提供保存、行引用或伪造文件路径；无法解析的相对资源明确不可用。
 Desktop 会话正文的 HTTP(S) 链接复用内置 Browser，按工作区绑定、全局默认选择 Profile，
-在其当前工作组中新建标签并切到 Browser；打开失败时在正文显示错误。Web 形态沿用新窗口打开。
+在其当前工作组中新建标签并切到 Browser；该 Profile 没有活动标签时新建工作组。
+打开失败时在正文显示错误。Web 形态沿用新窗口打开。
 iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)，复用终端的内置浏览器会话；
 收起浏览器后返回原阅读页及位置，已有网页的替换确认沿用浏览器规则。
 验收合同见[会话阅读](../testing/terminal/conversation-reader.testplan.yaml)。
@@ -220,7 +221,7 @@ Web 交互边界：
 - Desktop Sidecar 支持 `Automation` 与 `Browser 1/2/3`，默认只显示 Browser 1，其余两个从“管理标签”按需打开。三个 Browser 入口对应应用进程全局的三个 Profile；入口显隐不删除网页或更改登录态、代理与 CDP 身份。Worktree 只提供默认选择和 Dev Server 端口，不拥有或复制 Profile。
 - Electron 桌面端用 `WebContentsView` 承载 Browser tab，tab 生命周期和可见区域由主进程管理，前端只同步 tab 状态、地址栏、工具栏和面板布局。Profile 1 沿用 `persist:runweave-terminal-browser`，Profile 2/3 使用独立 partition，因此 Cookie、LocalStorage、IndexedDB、Cache Storage 和登录态天然隔离。
 - Web/PWA 模式不提供本地 Electron Browser、Automation 或 CDP endpoint。
-- Desktop Browser 的 `Ctrl+F` / `⌘F` 在网页与工具栏内均打开页内查找；前端搜索栏通过 [desktop bridge](../../packages/shared/src/desktop/bridge.ts) 调用 [Electron 原生查找](../../electron/src/browser/find.ts)，支持匹配计数、Enter/Shift+Enter 和 Esc。查询与结果只保存在当前标签的运行时内；切换标签隔离状态，主文档导航关闭查找并清除旧匹配。
+- Desktop Browser 的 `Ctrl+F` / `⌘F` 在网页与工具栏内均打开页内查找；前端搜索栏通过 [desktop bridge](../../packages/shared/src/desktop/bridge.ts) 调用 [Electron 原生查找](../../electron/src/browser/find.ts)，支持匹配计数、Enter/Shift+Enter 和 Esc。查询与结果只保存在当前标签的运行时内；切换标签隔离状态。Esc 关闭时清除匹配并把焦点交回网页，保留查询；再次打开会重新搜索。主文档的非页内导航同样关闭查找、清除匹配并保留查询，页内导航不触发该重置。
 - Browser tab 只允许 `http:`、`https:` 和 `about:blank` 导航；页面发起的新窗口会被收口成 Browser 工具内的新 tab 或被拒绝。
 - CDP Proxy 只监听 `127.0.0.1`，默认从 `9224` 开始找可用端口，并通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 传给 Runweave terminal 里的子进程。
 - 如果显式设置 `RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。
@@ -228,7 +229,7 @@ Web 交互边界：
 - Playwright MCP / Playwright CLI 通过 `rw browser profile resolve` 先按“本次显式指定 > 当前 Worktree 首选 > 全局默认”解析 Profile 和路由，再以 `chromium.connectOverCDP(...)` 连接返回的 scoped endpoint。显式覆盖不写回 Worktree 偏好。
 - Terminal 中的 resolver 默认携带 `RUNWEAVE_TERMINAL_SESSION_ID`。未显式指定 Group 时，Electron 为该 Terminal 派生不含原始 ID 的稳定 Group，并用一次性内存 token 把 WebSocket connection 投影到 Automation；token 只用于 UI attribution，不扩大 `profileId + groupId` 的 CDP 权限。同一 Terminal 有活跃连接时只能绑定一个 Profile。
 - CDP 仍只有一个 loopback 物理端口，逻辑 scope 为 `profileId + 可选 groupId`。无 `profileId` 的旧 endpoint 只映射全局默认 Profile，不汇总暴露三个 Profile。当前 tab 的 CDP/AI 按钮返回 Profile + Agent Control Group scoped WebSocket endpoint；`Target.getTargets`、discovery、auto-attach 和 target 操作都先过滤 Profile，再过滤可选 Group。
-- Tab 行 `+` 和 Terminal 人工链接在当前 Profile 的当前 group 新建页面；页面或 scoped Agent 派生的新 tab 继承 opener 的 Profile/group；只有总览“新建工作组”和 profile-scoped、group-unscoped `Target.createTarget` 创建新 group。Group 是 Profile 内自动化可见性边界，不是 Agent 身份、Worktree 或 Profile。
+- Tab 行 `+` 和 Terminal 人工链接在当前 Profile 的当前 group 新建页面；页面或 scoped Agent 派生的新 tab 继承 opener 的 Profile/group；总览“新建工作组”、profile-scoped、group-unscoped `Target.createTarget`，以及会话阅读链接在目标 Profile 没有活动标签时的回退路径会创建新 group。Group 是 Profile 内自动化可见性边界，不是 Agent 身份、Worktree 或 Profile。
 - `Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
 - 多个 CDP 客户端可以同时连接并操作不同 Browser tab。Proxy 对同一 target 复用同一个 Electron `webContents.debugger` attachment，但每个客户端仍使用自己的 proxy session id；任一客户端断开不应清理其他 target 的有效 session。
