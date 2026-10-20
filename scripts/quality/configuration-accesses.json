@@ -10695,5 +10695,21 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "持久保存本机旁聊导航、草稿选区 revision、消息缓存和操作回执；按 scope、终端与客户端隔离，不写入 settings.yaml。"
+  },
+  {
+    "file": "scripts/update/cli.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFile(commandPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取当前 shell 的 rw 包装脚本，校验其为 Backend 生成的实例入口；属于运行时产物，不作为业务配置来源。"
+  },
+  {
+    "file": "scripts/update/cli.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFile(runner)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取 Backend 生成的 CLI 绑定元数据并验证产物摘要；属于运行时产物，不作为业务配置来源。"
   }
 ]
