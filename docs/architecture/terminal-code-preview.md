@@ -87,7 +87,10 @@ Web 远程项目另含 endpoint 身份。关闭重开、切换会话或客户端
 附近消息，均不存在时回退到滚动偏移；布局或源内容变化时尽量接近上次位置，不保证逐像素一致。
 正文共享单一纵向滚动区，表格/代码可横向阅读。Web 复用净化后的 Markdown/Mermaid 渲染，
 无文件上下文时不提供保存、行引用或伪造文件路径；无法解析的相对资源明确不可用。
-iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)。
+Desktop 会话正文的 HTTP(S) 链接复用内置 Browser，按工作区绑定、全局默认选择 Profile，
+在其当前工作组中新建标签并切到 Browser；打开失败时在正文显示错误。Web 形态沿用新窗口打开。
+iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)，复用终端的内置浏览器会话；
+收起浏览器后返回原阅读页及位置，已有网页的替换确认沿用浏览器规则。
 验收合同见[会话阅读](../testing/terminal/conversation-reader.testplan.yaml)。
 跨阅读页生命周期的恢复见[阅读位置](../testing/terminal/conversation-reading-position.testplan.yaml)。
 

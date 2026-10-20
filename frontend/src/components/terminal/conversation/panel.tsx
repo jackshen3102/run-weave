@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useLocalBrowserSource } from "../../../features/terminal/navigation/local-preview";
+import { openTerminalBrowserUrl } from "../../../features/terminal/navigation/open-browser";
+import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useConversationLocation } from "../../../features/terminal/conversation/navigation";
 import { ArrowDown, BookOpen, RefreshCw } from "lucide-react";
 import { useConversationReadingPosition } from "../../../features/terminal/conversation/reading-position";
@@ -17,6 +21,17 @@ export function TerminalConversationPanel({ sessionId, panelId, projectId, title
   const [highlight, setHighlight] = useState<string | null>(null);
   const [locationError, setLocationError] = useState("");
   const { apiBase, token, activeConnectionId, remote } = useTerminalRuntime();
+  const browserSource = useLocalBrowserSource(sessionId);
+  const openWebLink = useMemoizedFn(async (url: string): Promise<void> => {
+    const profileId = await openTerminalBrowserUrl({
+      url,
+      source: browserSource,
+      projectId: remote && activeConnectionId ? `${activeConnectionId}:${projectId}` : projectId,
+      profileId: remote?.browserProfileId ?? undefined,
+      placement: { kind: "active-group" },
+    });
+    if (profileId) useTerminalPreviewStore.getState().activateBrowser(profileId, projectId);
+  });
   const positionKey = data?.target ? JSON.stringify([
     activeConnectionId ?? (apiBase.trim().replace(/\/+$/, "") || "same-origin"),
     remote?.endpointId ?? null, data.target.provider, data.target.threadId,
@@ -65,7 +80,7 @@ export function TerminalConversationPanel({ sessionId, panelId, projectId, title
               {message.createdAt && <time className="ml-auto text-slate-500">{new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>}
             </div>
             <TerminalMarkdownPreview apiBase={apiBase} token={token} projectId={projectId}
-              content={message.text} externalScroll onOpenFile={() => {}} />
+              content={message.text} externalScroll onOpenFile={() => {}} onOpenWebLink={openWebLink} />
           </article>)}
         </div>)}
         {!data?.turns.length ? <p className="py-12 text-center text-sm text-slate-400">{loading ? "正在读取会话…" : error && !data ? "点击刷新重试" : empty}</p> : null}

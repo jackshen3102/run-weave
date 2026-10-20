@@ -7,6 +7,7 @@ import type { DesktopLocalBrowserSource } from "@runweave/shared/browser-local-t
 
 type TerminalBrowserPlacement =
   | { kind: "new-group" }
+  | { kind: "active-group" }
   | { kind: "current-group"; groupId: string; openerTabId: string };
 
 export async function openTerminalBrowserUrl(input: {
@@ -38,13 +39,21 @@ export async function openTerminalBrowserUrl(input: {
       : null) ??
     preferences?.defaultProfileId ??
     TERMINAL_BROWSER_DEFAULT_PROFILE_ID;
+  let placement = input.placement;
+  if (placement.kind === "active-group") {
+    const workspace = await window.electronAPI.terminalBrowserGetWorkspace?.(profileId);
+    const opener = workspace?.tabs.find((tab) => tab.tabId === workspace.activeTabId);
+    placement = opener
+      ? { kind: "current-group", groupId: opener.browserGroupId, openerTabId: opener.tabId }
+      : { kind: "new-group" };
+  }
   await window.electronAPI.terminalBrowserCreateTab(
-    input.placement.kind === "current-group"
+    placement.kind === "current-group"
       ? {
           profileId,
           placement: "current-group",
-          groupId: input.placement.groupId,
-          openerTabId: input.placement.openerTabId,
+          groupId: placement.groupId,
+          openerTabId: placement.openerTabId,
           url: normalized.url,
           source: input.source,
         }
