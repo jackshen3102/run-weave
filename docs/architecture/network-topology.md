@@ -34,6 +34,13 @@ Runweave 当前由三条并行链路组成：
 - `/ws/terminal` 与 `/ws/terminal-events` 在握手阶段校验短时 ticket。
 - 后端不再提供服务端浏览器 viewer 相关 HTTP、WebSocket 或 DevTools 入口。
 
+## 局域网 HTTP 前端
+
+Web 主入口与 companion 入口在业务模块加载前补齐缺失的 `crypto.randomUUID`，使用
+`crypto.getRandomValues` 生成 UUID v4，支持局域网 HTTP 页面初始化。该兼容层不改变
+浏览器安全上下文，也不开放其他仅限 HTTPS 的能力；入口见
+[前端兼容层](../../frontend/src/polyfills.ts)。
+
 ## Electron 客户端网络模型
 
 - Electron 生产模式下，前端通过 `runweave://` 自定义协议加载，origin 与任何后端地址均不同源。

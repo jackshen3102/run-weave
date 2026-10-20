@@ -42,7 +42,8 @@ Terminal session 与 panel metadata 中的 current/last thread 必须同时携�
 
 ## 独立消息旁聊
 
-桌面原终端 Tab 和 iOS 终端页的「旁聊」使用独立 HTTP 消息领域，入口见
+桌面终端 Tab 右键菜单和 iOS 终端页提供「旁聊」；桌面右键未选中的 Tab 时先选择该终端，
+再按其当前 panel 打开旁聊，失败时显示原因。旁聊使用独立 HTTP 消息领域，入口见
 [共享合同](../../packages/shared/src/side-chat.ts)、[Backend 服务](../../backend/src/side-chat/service.ts)
 和[路由](../../backend/src/routes/side-chat.ts)。它不调用原生 `/side`、切换 displayed thread、
 创建终端或 pane，也不向终端 WS 发送消息。原 surface/socket/controller 保持挂载。
@@ -51,13 +52,14 @@ Terminal session 与 panel metadata 中的 current/last thread 必须同时携�
 创建核对服务器注册的 terminal/panel、primary thread 和最后一个已完成 turn；真实持久
 `thread/fork` 固定该边界。专属 stdio Codex app-server 只 fork/resume 本服务的子分支，
 不 resume/start/interrupt 主 thread。执行归属以 Backend 所在电脑为准，支持本地 macOS 和 Linux；
-已核对 macOS Codex 0.160.1 与 Linux standalone Codex 0.161.0。客户端通过远程连接访问该
+历史已核对 macOS Codex 0.160.1 与 Linux standalone Codex 0.161.0；运行时不按精确版本号拒绝，
+仍核对实际初始化响应、来源身份和权限边界。客户端通过远程连接访问该
 Backend 不影响本地归属；面板本身只有 SSH shell、来源不完整或权限无法落实时明确不可用。
 官方 CLI 完成轮次后移入 lastThread 的身份，仅在原面板仍为 Codex 空闲态时采用；受管 CLI
 始终以实时主会话观测为准，不退回历史猜测。无需切换用户的全局 binary/PATH/daemon。
 
 执行器保留项目/受管规则，覆盖为项目只读、关闭网络、MCP/Apps、Hooks、Browser、
-Computer Use、子 Agent、通知及自动目标续接，不接受审批或提权。固定版本的 `:minimal`
+Computer Use、子 Agent、通知及自动目标续接，不接受审批或提权。Codex 的 `:minimal`
 包含隐式临时目录权限，因此 macOS 额外拒绝 `/private/tmp`、`/private/var/tmp`，Linux 拒绝
 `/tmp`、`/var/tmp`，并拒绝进程配置的临时目录；来源位于这些目录时不启用。Linux 使用
 bubblewrap，另外只开放 Codex 可执行文件及其同目录 Code Mode host 的读取，以支持安装在
