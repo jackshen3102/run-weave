@@ -197,9 +197,11 @@ export class TaskSupervisionService {
     return watch;
   }
   private async synchronize(id: string, target: SupervisionTarget) {
-    if (!sameTarget(this.find(id).target, target))
+    const watch = this.journal.watches.find((candidate) => candidate.watchId === id);
+    if (watch && !sameTarget(watch.target, target))
       await this.transaction(() => {
-        if (this.current(target)) synchronizeTarget(this.find(id), target, () => this.jobs.cancel(id));
+        const current = this.journal.watches.find((candidate) => candidate.watchId === id);
+        if (current && this.current(target)) synchronizeTarget(current, target, () => this.jobs.cancel(id));
       });
     return [];
   }
@@ -256,6 +258,15 @@ export class TaskSupervisionService {
       find: (id: string) => this.find(id),
       resolve: (terminalSessionId: string) => this.resolve(terminalSessionId),
       cancel: (id: string) => { this.jobs.cancel(id); this.goalEditor.cancel(id); },
+      removeTerminal: (terminalSessionId: string) => {
+        const removed = this.journal.watches.filter((watch) => watch.target.terminalSessionId === terminalSessionId);
+        for (const watch of removed) {
+          this.jobs.cancel(watch.watchId);
+          this.goalEditor.cancel(watch.watchId);
+          this.additions.push({ watchId: watch.watchId, remove: true });
+        }
+        this.journal.watches = this.journal.watches.filter((watch) => watch.target.terminalSessionId !== terminalSessionId);
+      },
       receipt: (id: string) => this.store.receipt(id),
     };
   }
@@ -274,7 +285,10 @@ export class TaskSupervisionService {
       current: (target: SupervisionTarget) => this.current(target),
       transaction: <T>(operation: () => T | Promise<T>) => this.transaction(operation),
       cancel: () => this.jobs.cancel(id), closed: () => this.closed,
-      failure: (decisionId: string, error: unknown, current: boolean, started: boolean) => recordArchivedDeliveryFailure(this.find(id), this.store, this.additions, decisionId, error, current, started),
+      failure: (decisionId: string, error: unknown, current: boolean, started: boolean) => {
+        const watch = this.journal.watches.find((candidate) => candidate.watchId === id);
+        if (watch) recordArchivedDeliveryFailure(watch, this.store, this.additions, decisionId, error, current, started);
+      },
       deliver: this.deliver,
     };
   }
@@ -327,23 +341,29 @@ export class TaskSupervisionService {
     // Native running observations also cover automatic supervision turns. Only a new
     // ordinary user message (above) advances the round; duplicate Hook/native events do not.
     if (["sessionstart", "userpromptsubmit"].includes(observed.raw)) {
-      if (!observed.native) await this.transaction(() => { delete this.find(watch.watchId).pendingReply; });
+      if (!observed.native) await this.transaction(() => {
+        const current = this.forTerminal(observed.terminalSessionId);
+        if (current?.watchId === watch.watchId) delete current.pendingReply;
+      });
       const enabledAt = watch.enabledAt;
       // Input hooks can arrive before the native user message is flushed to disk.
       await delay(500);
       await synchronizeWatch(target, {
         watch: () => this.find(watch.watchId),
-        current: () => !this.closed && this.find(watch.watchId).enabled
-          && this.find(watch.watchId).enabledAt === enabledAt && this.current(target),
-        update: (change) => this.transaction(() => change(this.find(watch.watchId))),
+        current: () => !this.closed && this.forTerminal(observed.terminalSessionId)?.watchId === watch.watchId
+          && this.find(watch.watchId).enabled && this.find(watch.watchId).enabledAt === enabledAt && this.current(target),
+        update: (change) => this.transaction(() => {
+          const current = this.forTerminal(observed.terminalSessionId);
+          if (current?.watchId === watch.watchId) change(current);
+        }),
         cancel: () => this.jobs.cancel(watch.watchId), read: (thread) => this.readContext(watch.watchId, thread),
       });
       return;
     }
     await this.transaction(() => {
-      const current = this.find(watch.watchId);
+      const current = this.forTerminal(observed.terminalSessionId);
       if (
-        current.enabled &&
+        current?.watchId === watch.watchId && current.enabled &&
         this.current(target) &&
         sameTarget(current.target, target)
       )
@@ -404,9 +424,13 @@ export class TaskSupervisionService {
       return;
     }
     await this.synchronize(watch.watchId, target);
-    await this.transaction(() => {
-      if (this.current(target)) this.find(watch.watchId).pendingReply = { ...event, summary: null };
+    const accepted = await this.transaction(() => {
+      const current = this.forTerminal(target.terminalSessionId);
+      if (current?.watchId !== watch.watchId || !current.enabled || !this.current(target)) return false;
+      current.pendingReply = { ...event, summary: null };
+      return true;
     });
+    if (!accepted || this.forTerminal(target.terminalSessionId)?.watchId !== watch.watchId) return;
     const session = this.manager.getSession(target.terminalSessionId)!;
     const inputRevision = terminalInputAdmission(session).revision;
     const controller = new AbortController();
@@ -442,12 +466,14 @@ export class TaskSupervisionService {
       } catch {
         // An unavailable/exited Agent does not turn off the terminal switch.
       }
+      if (this.forTerminal(saved.target.terminalSessionId)?.watchId !== saved.watchId) continue;
       if (saved.pendingReply && saved.enabled && !this.eventQueues.has(saved.target.terminalSessionId)) this.enqueueReply(saved.pendingReply);
       await readPendingDeliveries(
         saved,
         (threadId) => this.readContext(saved.watchId, threadId),
         (messages, threadId) =>
           this.transaction(() => {
+            if (this.forTerminal(saved.target.terminalSessionId)?.watchId !== saved.watchId) return;
             reconcileDelivery(
               this.find(saved.watchId),
               messages,

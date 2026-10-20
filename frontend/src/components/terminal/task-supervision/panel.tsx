@@ -3,8 +3,11 @@ import { SupervisionGoalCard, SupervisionGoalPanel, type GoalView } from "./goal
 import { SupervisionHistory } from "./history";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
+import { useQueryClient } from "@tanstack/react-query";
 import type {
+  ChangeSupervisionResponse,
   StartSupervisionRequest,
+  SupervisionDiscovery,
   TaskOutcome,
 } from "@runweave/shared/task-supervision";
 import {
@@ -47,7 +50,8 @@ export function TerminalTaskSupervisionPanel({
   );
 }
 function SupervisionContent({ sessionId }: { sessionId: string }) {
-  const { apiBase, token, onAuthExpired } = useTerminalRuntime();
+  const { apiBase, token, scope, onAuthExpired } = useTerminalRuntime();
+  const queryClient = useQueryClient();
   const [goalView, setGoalView] = useState<GoalView | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -68,7 +72,15 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     setNotice(null);
     setGoalView(null);
-  }, [discovery?.target?.threadId, discovery?.target?.panelId, discovery?.target?.executorGeneration]);
+  }, [watch?.watchId, discovery?.target?.threadId, discovery?.target?.panelId, discovery?.target?.executorGeneration]);
+  const applyWatch = useMemoizedFn(async (updated: ChangeSupervisionResponse) => {
+    const queryKey = ["task-supervision", scope, sessionId];
+    await queryClient.cancelQueries({ queryKey, exact: true });
+    if (!mounted.current) return;
+    queryClient.setQueryData<SupervisionDiscovery>(queryKey, (current) => current
+      ? { ...current, watch: updated, threadTitle: updated ? current.threadTitle : null }
+      : current);
+  });
   const fail = useMemoizedFn((error: unknown) => {
     if (!mounted.current) return;
     if (error instanceof HttpError && error.status === 401) onAuthExpired?.();
@@ -80,7 +92,8 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
     setBusy(true);
     setNotice(null);
     try {
-      await startTaskSupervision(apiBase, token, request);
+      const updated = await startTaskSupervision(apiBase, token, request);
+      await applyWatch(updated);
       if (mounted.current) {
         await query.refetch();
       }
@@ -97,8 +110,9 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
     setBusy(true);
     setNotice(null);
     try {
+      let updated: ChangeSupervisionResponse;
       try {
-        await changeTaskSupervision(apiBase, token, watch.watchId, {
+        updated = await changeTaskSupervision(apiBase, token, watch.watchId, {
           action,
           expectedRevision: watch.revision,
         });
@@ -110,11 +124,12 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
         )
           throw error;
         const latest = await getTaskWatch(apiBase, token, watch.watchId);
-        await changeTaskSupervision(apiBase, token, watch.watchId, {
+        updated = await changeTaskSupervision(apiBase, token, watch.watchId, {
           action,
           expectedRevision: latest.revision,
         });
       }
+      await applyWatch(updated);
       if (mounted.current) await query.refetch();
     } catch (error) {
       fail(error);
@@ -151,6 +166,9 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
         <h2 className="text-sm font-semibold">长任务监控</h2>
         <p className="mt-1 text-[11px] text-slate-400">
           监听此终端的 Agent 事件 · 处理最终回复
+        </p>
+        <p className="mt-1 text-[11px] text-slate-400">
+          关闭将清空此终端的监控数据，再次开启重新开始。
         </p>
       </header>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">

@@ -104,14 +104,14 @@ Mermaid 首期显示代码，链接只允许 HTTP(S)。完整跨端合同见
 ## 终端长任务监控
 
 终端「… → 长任务监控」打开原生底部面板；已开启时标签下显示状态条，点击进入同一面板。
-手机复用 Web 的 `/api/task-supervision` 发现、开启与 pause/resume 接口，开关绑定 terminal ID，
+手机复用 Web 的 `/api/task-supervision` 发现、开启与关闭接口，开关绑定 terminal ID，
 目标、分类、续接额度和投递确认均取 Backend，不创建手机任务或在客户端计算结果。
 Swift DTO 对照 `packages/shared/src/task-supervision.ts`，入口为 `Contracts/TaskSupervision.swift`、
 `Services/TaskSupervisionService.swift` 和 `Features/Terminal/TaskSupervision/`。
 
 终端页面在前台在线时每五秒读取，后台、离开终端或打开全屏浏览器停止读取；连接 generation、
 terminal/controller 身份与请求序号丢弃迟到响应。离线保留本终端最近状态并标记过期，禁用开关写入；
-关闭面板或退出 App 不关闭服务端监控。开关等待服务响应后更新，冲突或结果不确定只重新读取，不自动重发。
+关闭面板或退出 App 不关闭服务端监控。手动关闭开关成功后接收 JSON `null`，清除当前 watch 并重建面板导航，移除已加载的目标、判断和历史；再次开启使用新的 watchId。开关等待服务响应后更新，冲突或结果不确定只重新读取，不自动重发。
 分类、阻塞、任务完成、达到续接上限和终端开关分别呈现；判断详情保留完整回复、输入快照及来源，
 当前目标显示结构化目标、完成条件、约束和独立目标版本，旧记录回退到原文摘录；“查看原始任务”保留完整交接文本。编辑和重新生成先请求预览，核对差异后显式采用；过期、会话变化或离线禁用采用。
 来源与版本历史按需从同一 Backend 读取，生成请求允许后端模型完成并随页面退出取消。采用不改变监控开关和续接额度，失败只刷新状态，不自动重发。当前判断和待确认提示只展示当前会话、

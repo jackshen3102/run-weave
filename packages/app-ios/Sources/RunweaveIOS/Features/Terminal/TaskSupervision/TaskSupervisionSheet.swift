@@ -16,7 +16,7 @@ struct TaskSupervisionSheet: View {
             Toggle(isOn: Binding(get: { model.watch?.enabled ?? false }, set: model.setEnabled)) {
               VStack(alignment: .leading, spacing: 5) {
                 Text("监听此终端").font(.subheadline.weight(.medium))
-                Text("切换会话保留监听，重置当前任务").font(.caption2).foregroundColor(.secondary)
+                Text("关闭将清空此终端的监控数据，再次开启重新开始。").font(.caption2).foregroundColor(.secondary)
               }
             }.tint(TerminalAppearance.accent).disabled(!model.canToggle)
               .accessibilityIdentifier("terminal-task-supervision-switch")
@@ -48,7 +48,7 @@ struct TaskSupervisionSheet: View {
         }
       }
       .clarityMask()
-    }.navigationViewStyle(.stack).tint(TerminalAppearance.accent)
+    }.id(model.watch?.watchId).navigationViewStyle(.stack).tint(TerminalAppearance.accent)
       .modifier(TaskSupervisionDetents())
       .mobileAnalyticsScreen(.taskSupervision)
   }

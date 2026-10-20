@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
-  ChangeSupervisionRequest, StartSupervisionRequest, SupervisionTarget, TaskWatch,
+  ChangeSupervisionRequest, ChangeSupervisionResponse, StartSupervisionRequest, SupervisionTarget, TaskWatch,
 } from "@runweave/shared/task-supervision";
 import { digest } from "./context";
 import { SupervisionError } from "./errors";
@@ -11,6 +11,7 @@ interface WatchControls {
   find: (id: string) => TaskWatch;
   resolve: (terminalSessionId: string) => { target: SupervisionTarget };
   cancel: (id: string) => void;
+  removeTerminal: (terminalSessionId: string) => void;
   receipt: (id: string) => { digest: string; watchId: string } | undefined;
 }
 
@@ -67,17 +68,17 @@ export function startWatch(journal: SupervisionJournal, request: StartSupervisio
   return watch;
 }
 
-export function changeWatch(id: string, request: ChangeSupervisionRequest, operations: WatchControls) {
+export function changeWatch(id: string, request: ChangeSupervisionRequest, operations: WatchControls): ChangeSupervisionResponse {
   const watch = operations.find(id);
   if (watch.revision !== request.expectedRevision)
     throw new SupervisionError("监控状态已更新，请刷新。");
+  if (request.action === "pause") {
+    operations.removeTerminal(watch.target.terminalSessionId);
+    return null;
+  }
   operations.cancel(id);
   delete watch.pendingReply;
-  if (request.action === "pause") {
-    watch.enabled = false;
-    watch.status = "paused";
-    watch.pauseReason = "user_paused";
-  } else if (request.action === "resume") {
+  if (request.action === "resume") {
     synchronizeTarget(
       watch,
       operations.resolve(watch.target.terminalSessionId).target,

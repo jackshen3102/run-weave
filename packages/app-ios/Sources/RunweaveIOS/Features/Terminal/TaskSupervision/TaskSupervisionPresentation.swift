@@ -31,7 +31,7 @@ extension TaskWatch {
     return "正在监听"
   }
   var statusSummary: String {
-    if !enabled { return "关闭后停止处理最终回复；已有判断记录保留。" }
+    if !enabled { return "关闭后清空此终端的监控数据；再次开启重新开始。" }
     if status == "watching", waitingFor != nil { return "请回到原终端处理，监控仍保持开启。" }
     if pauseReason == "continuation_limit" { return "任务仍未完成。本任务已续接 \(continuationLimit) 次，监控保持开启。" }
     if pauseReason == "delivery_unknown" { return "已保留本次额度，尚未确认原会话接收，不会重复发送。" }

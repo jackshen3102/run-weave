@@ -1,6 +1,7 @@
 import type { SupervisionGoalPage } from "@runweave/shared/task-supervision";
 import type {
   ChangeSupervisionRequest,
+  ChangeSupervisionResponse,
   StartSupervisionRequest,
   SupervisionDiscovery,
   TaskWatch,
@@ -55,7 +56,7 @@ export function changeTaskSupervision(
   token: string,
   watchId: string,
   request: ChangeSupervisionRequest,
-): Promise<TaskWatch> {
+): Promise<ChangeSupervisionResponse> {
   return requestJson(
     apiBase,
     `/api/task-supervision/${encodeURIComponent(watchId)}`,
