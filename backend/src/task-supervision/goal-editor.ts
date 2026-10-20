@@ -123,6 +123,7 @@ export class SupervisionGoalEditor {
       throw new SupervisionError("生成期间任务或输入已变化，请重新生成。");
     const fresh = await ops.read(id, watch.target.threadId);
     if (
+      this.closed || signal.aborted ||
       fingerprint(fresh) !== fingerprint(source) ||
       source.sourceVersion !== fresh.sourceVersion
     )
@@ -240,6 +241,8 @@ export class SupervisionGoalEditor {
   }
   cancel(id: string) {
     this.controllers.get(id)?.abort();
+    for (const [key, entry] of this.previews)
+      if (entry.watchId === id) this.previews.delete(key);
   }
   async dispose() {
     this.closed = true;

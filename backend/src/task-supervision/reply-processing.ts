@@ -87,6 +87,7 @@ export async function processSupervisionReply(
     const finalKey = `${target.threadId}:${native.id}`;
     stage = "prepare_context";
     let snapshot = await operations.transaction(async () => {
+      if (controller.signal.aborted) return null;
       const w = operations.find(id);
       if (
         !w.enabled ||
@@ -178,6 +179,7 @@ export async function processSupervisionReply(
         { ...modelOptions, signal: controller.signal },
       );
       snapshot = await operations.transaction(() => {
+        if (controller.signal.aborted) return null;
         const w = operations.find(id);
         if (
           controller.signal.aborted ||
@@ -267,6 +269,7 @@ export async function processSupervisionReply(
     });
     stage = "commit_decision";
     const offer = await operations.transaction(() => {
+      if (controller.signal.aborted) return ALLOW;
       const w = operations.find(id);
       if (
         !w.enabled ||
@@ -365,6 +368,7 @@ export async function processSupervisionReply(
       });
     await operations
       .transaction(() => {
+        if (controller.signal.aborted) return;
         const w = operations.find(id);
         if (
           !w.enabled ||

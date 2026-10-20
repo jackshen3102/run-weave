@@ -76,7 +76,7 @@ final class TaskSupervisionModel: ObservableObject {
       guard let self else { return }
       defer { if self.sequence == request { self.writing = false; self.operation = nil } }
       do {
-        let updated = try await session.withConnection(reportFailure: false) { api in
+        let updated = try await session.withConnection(reportFailure: false) { api -> TaskWatch? in
           let service = TaskSupervisionService(api: api)
           if retry {
             guard let watch = discovery.watch, let decision = watch.currentDecisions.last,
@@ -88,7 +88,7 @@ final class TaskSupervisionModel: ObservableObject {
           return try await service.start(target: target, requestID: requestID)
         }
         guard self.current, self.sequence == request, !Task.isCancelled else { return }
-        guard updated.target.terminalSessionId == self.terminalID else { throw APIError.invalidResponse }
+        if let updated, updated.target.terminalSessionId != self.terminalID { throw APIError.invalidResponse }
         self.discovery?.watch = updated
       } catch {
         guard self.current, self.sequence == request, !Task.isCancelled, !(error is CancellationError) else { return }

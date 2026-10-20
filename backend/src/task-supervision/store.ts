@@ -18,7 +18,8 @@ import {
 export type ArchiveChange = {
   watchId: string;
   decision: SupervisionDecision | SupervisionDecisionSummary;
-} | { watchId: string; goal: SupervisionGoalDetail } | { watchId: string; goalApplicationId: string };
+} | { watchId: string; goal: SupervisionGoalDetail } | { watchId: string; goalApplicationId: string }
+  | { watchId: string; remove: true };
 
 export interface SupervisionJournal {
   version: 1;
@@ -212,8 +213,9 @@ export class TaskSupervisionStore {
           }
         }
       }
-      const journal: SupervisionJournal = { version: 1, watches, requests: {} };
-      await this.save(journal);
+      // Disabled records from older versions also follow the close-and-clear contract.
+      const journal: SupervisionJournal = { version: 1, watches: watches.filter((watch) => watch.enabled), requests: {} };
+      await this.save(journal, watches.filter((watch) => !watch.enabled).map((watch) => ({ watchId: watch.watchId, remove: true })));
       return journal;
     } catch (error) {
       db.close();
@@ -242,6 +244,13 @@ export class TaskSupervisionStore {
     const db = this.database();
     db.transaction(() => {
       for (const change of additions) {
+        if ("remove" in change) {
+          for (const table of ["decisions", "goal_revisions", "goal_applications"])
+            db.prepare(`DELETE FROM ${table} WHERE watch_id=?`).run(change.watchId);
+          db.prepare("DELETE FROM watches WHERE id=?").run(change.watchId);
+          // Keep request digests as tombstones: a delayed start retry must not revive a deleted watch.
+          continue;
+        }
         if ("goalApplicationId" in change) { db.prepare("INSERT INTO goal_applications(id, watch_id) VALUES (?, ?)").run(change.goalApplicationId, change.watchId); continue; }
         if ("goal" in change) {
           db.prepare("INSERT INTO goal_revisions(id, watch_id, body) VALUES (?, ?, ?)").run(change.goal.goal.revisionId, change.watchId, JSON.stringify(change.goal));

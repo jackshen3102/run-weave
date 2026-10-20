@@ -17,7 +17,8 @@ struct TaskSupervisionService {
       retryUnauthorized: false, decodeError: Self.failure)
   }
 
-  func change(watch: TaskWatch, enabled: Bool) async throws -> TaskWatch {
+  // Closing returns JSON null after deleting this terminal's supervision data.
+  func change(watch: TaskWatch, enabled: Bool) async throws -> TaskWatch? {
     try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watch.watchId))",
       method: "PATCH", body: ["action": enabled ? "resume" : "pause", "expectedRevision": watch.revision],
       retryUnauthorized: false, decodeError: Self.failure)

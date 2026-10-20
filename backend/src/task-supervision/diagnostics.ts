@@ -43,6 +43,9 @@ export function replyFields(event: ReplyEvent) {
 
 /** Only committed state changes are facts; never copy conversation text into logs. */
 export function logWatchChanges(before: TaskWatch[], after: TaskWatch[]) {
+  for (const watch of before)
+    if (!after.some((current) => current.watchId === watch.watchId))
+      supervisionLogger.info("task-supervision.closed", { ...watchFields(watch), enabled: false });
   for (const watch of after) {
     const previous = before.find((item) => item.watchId === watch.watchId);
     const fields = watchFields(watch);

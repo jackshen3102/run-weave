@@ -270,12 +270,15 @@ export interface StartSupervisionRequest {
   expectedRevision?: number;
 }
 export interface ChangeSupervisionRequest {
+  /** pause ends monitoring and deletes this terminal's supervision data. Start again with POST. */
   action: "pause" | "resume" | "update-context" | "retry-continuation";
   expectedRevision: number;
   goal?: string;
   decisionId?: string;
   expectedInputVersion?: string;
 }
+/** Closing a monitor returns null; the next start creates a new watchId. */
+export type ChangeSupervisionResponse = TaskWatch | null;
 export interface SupervisionHookRequest {
   target: SupervisionTarget;
   event:

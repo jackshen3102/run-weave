@@ -35,6 +35,7 @@ export async function discoverSupervision(
     });
   }
   if (watch) await synchronize(watch.watchId, target);
+  watch = readWatch();
   const panel = manager.getPanel(target.panelId);
   const threadTitle =
     watch?.enabled &&
