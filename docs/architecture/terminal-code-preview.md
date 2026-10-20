@@ -215,6 +215,7 @@ Web 交互边界：
 - Desktop Sidecar 支持 `Automation` 与 `Browser 1/2/3`，默认只显示 Browser 1，其余两个从“管理标签”按需打开。三个 Browser 入口对应应用进程全局的三个 Profile；入口显隐不删除网页或更改登录态、代理与 CDP 身份。Worktree 只提供默认选择和 Dev Server 端口，不拥有或复制 Profile。
 - Electron 桌面端用 `WebContentsView` 承载 Browser tab，tab 生命周期和可见区域由主进程管理，前端只同步 tab 状态、地址栏、工具栏和面板布局。Profile 1 沿用 `persist:runweave-terminal-browser`，Profile 2/3 使用独立 partition，因此 Cookie、LocalStorage、IndexedDB、Cache Storage 和登录态天然隔离。
 - Web/PWA 模式不提供本地 Electron Browser、Automation 或 CDP endpoint。
+- Desktop Browser 的 `Ctrl+F` / `⌘F` 在网页与工具栏内均打开页内查找；前端搜索栏通过 [desktop bridge](../../packages/shared/src/desktop/bridge.ts) 调用 [Electron 原生查找](../../electron/src/browser/find.ts)，支持匹配计数、Enter/Shift+Enter 和 Esc。查询与结果只保存在当前标签的运行时内；切换标签隔离状态，主文档导航关闭查找并清除旧匹配。
 - Browser tab 只允许 `http:`、`https:` 和 `about:blank` 导航；页面发起的新窗口会被收口成 Browser 工具内的新 tab 或被拒绝。
 - CDP Proxy 只监听 `127.0.0.1`，默认从 `9224` 开始找可用端口，并通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 传给 Runweave terminal 里的子进程。
 - 如果显式设置 `RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。

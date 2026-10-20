@@ -9,6 +9,7 @@ import {
   Ellipsis,
   MessageSquarePlus,
   RotateCw,
+  Search,
   Square,
 } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
@@ -76,6 +77,7 @@ interface BrowserUtilityControls {
 }
 
 interface TerminalBrowserNavigationBarProps {
+  onFind?: () => void;
   bookmarks: BookmarkControls;
   activeTab: TerminalBrowserTabState;
   address: BrowserAddressControls;
@@ -87,6 +89,7 @@ interface TerminalBrowserNavigationBarProps {
 }
 
 export function TerminalBrowserNavigationBar({
+  onFind,
   bookmarks,
   activeTab,
   address,
@@ -323,6 +326,11 @@ export function TerminalBrowserNavigationBar({
           onBlur={onAddressBlur}
         />
         <BookmarkStar bookmarks={bookmarks} />
+        {onFind ? (
+          <Button type="button" size="sm" variant="ghost" className="h-7 w-7 rounded-md px-0" onClick={onFind} aria-label="Find in page" title="Find in page (Ctrl+F / ⌘F)">
+            <Search className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
         <Button
           type="button"
           size="sm"

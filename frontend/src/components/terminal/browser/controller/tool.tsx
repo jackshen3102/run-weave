@@ -10,6 +10,7 @@ import { TerminalBrowserNavigationBar } from "../header/navigation";
 import { TerminalBrowserAnnotationModeBar } from "../annotations/panel";
 import { TerminalBrowserSurface } from "./surface";
 import { TerminalBrowserTabs } from "../tabs/index";
+import { TerminalBrowserFindBar, useTerminalBrowserFind } from "../find";
 import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 
 interface TerminalBrowserToolProps {
@@ -44,6 +45,7 @@ export function TerminalBrowserTool({
     token,
     terminalSessionId,
   });
+  const find = useTerminalBrowserFind(controller?.activeTab.id, active && !presentation.suppressed);
 
   useEffect(() => {
     if (!active) {
@@ -110,7 +112,7 @@ export function TerminalBrowserTool({
   } = controller;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-950">
+    <div className="flex h-full min-h-0 flex-col bg-slate-950" onKeyDownCapture={find.onKeyDownCapture}>
       <TerminalBrowserTabs
         tabs={tabs}
         groups={groups}
@@ -140,6 +142,7 @@ export function TerminalBrowserTool({
         </div>
       ) : null}
       <TerminalBrowserNavigationBar
+        onFind={find.supported ? () => void find.command({ action: "open" }) : undefined}
         bookmarks={bookmarks}
         activeTab={activeTab}
         address={{
@@ -192,6 +195,7 @@ export function TerminalBrowserTool({
             void setMinimumViewportWidth(width),
         }}
       />
+      <TerminalBrowserFindBar key={activeTab.id} find={find} />
       <BookmarkBar bookmarks={bookmarks} />
       {bookmarks.supported ? <BookmarkEditors bookmarks={bookmarks} /> : null}
       <BookmarkFeedback bookmarks={bookmarks} />
@@ -212,6 +216,7 @@ export function TerminalBrowserTool({
           annotationPanelOpen ? null : annotationError,
           activeTab.navigationError,
           activeTab.error,
+          find.error,
         ]}
       />
       <TerminalBrowserSurface

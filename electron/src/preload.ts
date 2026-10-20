@@ -7,6 +7,7 @@ import type {
   RunweaveElectronBridge,
   TerminalBrowserAnnotationUpdate,
   TerminalBrowserBounds,
+  TerminalBrowserFindState,
 } from "@runweave/shared/desktop-bridge";
 import type { RemoteServiceRef, ResolvedServiceAccess } from "@runweave/shared/remote";
 import type {
@@ -269,6 +270,13 @@ const electronApi = {
     ipcRenderer.invoke("terminal-browser:reload", tabId),
   terminalBrowserStop: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:stop", tabId),
+  terminalBrowserGetFindState: (tabId) => ipcRenderer.invoke("terminal-browser:find-state", tabId),
+  terminalBrowserFind: (tabId, command) => ipcRenderer.invoke("terminal-browser:find", tabId, command),
+  onTerminalBrowserFindChanged: (listener) => {
+    const wrapped = (_event: unknown, state: TerminalBrowserFindState) => listener(state);
+    ipcRenderer.on("terminal-browser:find-changed", wrapped);
+    return () => { ipcRenderer.off("terminal-browser:find-changed", wrapped); };
+  },
   terminalBrowserGoBack: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:go-back", tabId),
   terminalBrowserGoForward: (tabId: string) =>
