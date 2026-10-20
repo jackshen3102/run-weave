@@ -1,18 +1,23 @@
 import Clarity
+import RunweaveBrowser
 import SwiftUI
 
 struct ConversationReaderView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.scenePhase) private var scenePhase
   @ObservedObject var session: AppSession
+  @ObservedObject private var browser: BrowserSession
   let controller: SessionController
   let terminalID: String
   let title: String
   @StateObject private var model: ConversationReaderModel
   @StateObject private var anchor = ConversationScrollAnchor()
+  @State private var browserPresentationID = UUID()
+  @State private var visible = false
 
   init(session: AppSession, controller: SessionController, terminalID: String, title: String) {
     self.session = session; self.controller = controller; self.terminalID = terminalID; self.title = title
+    self.browser = session.browser
     _model = StateObject(wrappedValue: ConversationReaderModel(session: session, controller: controller, terminalID: terminalID))
   }
   var body: some View {
@@ -38,7 +43,13 @@ struct ConversationReaderView: View {
                       .font(.caption).foregroundColor(TerminalAppearance.accent)
                     MarkdownContent(content: message.text)
                       .environment(\.openURL, OpenURLAction { url in
-                        ["http", "https"].contains(url.scheme?.lowercased() ?? "") ? .systemAction : .discarded
+                        guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                          let source = session.browserSource else { return .discarded }
+                        anchor.capture(); anchor.persist()
+                        browser.open(BrowserOpenIntent(target: url.absoluteString, origin: .host, action: .internalOpen),
+                          source: source, presentationAvailable: browser.hostPresentationAvailable(
+                            source: source, registrationID: browserPresentationID))
+                        return .handled
                       })
                   }
                   .frame(maxWidth: .infinity, alignment: .leading)
@@ -76,7 +87,25 @@ struct ConversationReaderView: View {
         }
       }
     }.navigationViewStyle(.stack).tint(TerminalAppearance.accent).clarityMask()
-      .onAppear { model.open() }.onDisappear { anchor.persist(); model.cancel() }
+      .fullScreenCover(isPresented: Binding(
+        get: { browser.state == .presented },
+        set: { if !$0 { browser.collapse() } }
+      )) { BrowserScreen(browser: browser).clarityMask().mobileAnalyticsScreen(.browser) }
+      .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented))
+      .overlay(alignment: .top) {
+        if let status = browser.dataStatus {
+          Text(status).font(.caption).padding(8).background(.regularMaterial)
+            .allowsHitTesting(false).accessibilityIdentifier("browser-data-status")
+        }
+      }
+      .onAppear { visible = true; connectBrowser(); model.open() }
+      .onDisappear {
+        visible = false; anchor.persist()
+        if browser.state != .presented {
+          model.cancel()
+          browser.unregisterHostPresentation(id: browserPresentationID, hostID: ObjectIdentifier(controller))
+        }
+      }
       .onChange(of: model.data?.readAt) { _ in
         anchor.bind(model.readingPositionKey)
         anchor.commit()
@@ -87,6 +116,18 @@ struct ConversationReaderView: View {
       .onChange(of: session.terminalController.map(ObjectIdentifier.init)) { identity in
         if identity != ObjectIdentifier(controller) { model.cancel(); dismiss() }
       }
+  }
+  private func connectBrowser() {
+    guard let source = session.browserSource else { return }
+    let visible = $visible
+    let terminalID = terminalID
+    browser.registerHostPresentation(id: browserPresentationID, source: source, hostID: ObjectIdentifier(controller)) {
+      [weak session, weak controller, weak browser] in
+      guard let session, let controller, let browser else { return false }
+      return visible.wrappedValue && session.browserSource == source
+        && session.terminal?.id == terminalID && session.terminalController === controller
+        && browser.state != .presented && !browser.hasPrompt
+    }
   }
   private var emptyText: String {
     if model.failure != nil && model.data == nil { return "点击刷新重试" }

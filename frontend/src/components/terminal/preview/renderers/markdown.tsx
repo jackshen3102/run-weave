@@ -32,6 +32,7 @@ interface TerminalMarkdownPreviewProps {
   onScrollRatioChange?: (ratio: number) => void;
   onAuthExpired?: () => void;
   onOpenFile: (path: string, hash?: string) => void;
+  onOpenWebLink?: (url: string) => Promise<void>;
   onInsertLineReference?: (reference: string) => void;
   onRevealSourceLine?: (line: number) => void;
 }
@@ -213,6 +214,7 @@ export function TerminalMarkdownPreview({
   onScrollRatioChange,
   onAuthExpired,
   onOpenFile,
+  onOpenWebLink,
   onInsertLineReference,
   onRevealSourceLine,
 }: TerminalMarkdownPreviewProps) {
@@ -406,7 +408,14 @@ export function TerminalMarkdownPreview({
               ?.scrollIntoView({ block: "start" });
           } else if (resolved.kind === "external") {
             event.preventDefault();
-            window.open(resolved.href, "_blank", "noreferrer");
+            setLinkError(null);
+            if (onOpenWebLink && /^https?:\/\//i.test(resolved.href)) {
+              void onOpenWebLink(resolved.href).catch((error: unknown) => {
+                setLinkError(error instanceof Error ? error.message : "打开网页失败，请重试");
+              });
+            } else {
+              window.open(resolved.href, "_blank", "noreferrer");
+            }
           } else if (resolved.kind === "outside-project") {
             event.preventDefault();
             setLinkError("Path is outside the project path");

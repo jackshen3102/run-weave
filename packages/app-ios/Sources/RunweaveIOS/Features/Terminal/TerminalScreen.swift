@@ -203,17 +203,17 @@ struct TerminalScreen: View {
       }
     }
     .fullScreenCover(isPresented: Binding(
-      get: { browser.state == .presented },
-      set: { if !$0 { browser.collapse() } }
+      get: { browser.state == .presented && !showingConversation },
+      set: { if !$0 && !showingConversation { browser.collapse() } }
     )) { BrowserScreen(browser: browser).clarityMask().mobileAnalyticsScreen(.browser) }
-    .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented))
+    .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented && !showingConversation))
     .sheet(item: $fileTap) { tap in
       TerminalFilePreview(session: session, terminalID: details.id, projectID: details.projectId,
         tap: tap, close: { fileTap = nil }, model: changes)
         .clarityMask().mobileAnalyticsScreen(.filePreview)
     }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
-    .fullScreenCover(isPresented: $showingConversation) {
+    .fullScreenCover(isPresented: $showingConversation, onDismiss: connectBrowserIntents) {
       ConversationReaderView(session: session, controller: controller, terminalID: details.id, title: title)
     }
     .sheet(item: $replyContext) { context in
