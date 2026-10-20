@@ -79,7 +79,7 @@ http://127.0.0.1:5500/updates/mac/latest-mac.yml
   热更新。
 - App Server：`app-server/`、`packages/shared` 中的 app-server 协议、CLI app-server
   命令、app-server 安装/验证脚本变化时，单独执行 app-server runtime 安装和重启。
-- 全局 CLI：Stable 更新构建当前 `rw`，登录 shell 中的全局 npm 安装与构建内容不一致时
+- 全局 CLI：Stable 更新构建当前 `rw`，当前 npm prefix 的全局安装与构建内容不一致时
   自动生成递增版本并更新；未安装时补装，内容一致且已有追溯信息则保留版本。
   `rw version --json` 提供源码提交、构建时间和内容哈希；发行包保存在 npm prefix 的
   `lib/runweave-cli-releases/`。规则与 `pnpm cli:publish:local` 一致，详见
@@ -103,8 +103,9 @@ pnpm runweave:update --dry-run
 [runweave-update] selected app-server action: update|skip
 [runweave-update] app-server home: ~/.runweave/app-server
 [runweave-update] selected cli action: sync|skip
-[runweave-update] cli command: /实际命令路径/rw
+[runweave-update] cli command: /npm全局命令路径/rw
 [runweave-update] cli npm prefix: /实际全局安装前缀
+[runweave-update] shell rw: /实例配置根/runtime/bin/rw (instance stable; binding preserved automatically)
 ```
 
 实际执行时，各组件分别更新：
@@ -115,16 +116,19 @@ pnpm runweave:update --dry-run
 3. `app-server action=update` 时构建当前源码中的 app-server bundle，安装到
    `app-server home/runtime/releases/<releaseId>`，再通过 `rw app-server restart`
    切换运行中的全局 owner。
-4. Stable 同步全局 `rw`，核验实际命令指向的文件与本次 CLI 构建 SHA-256 一致，并执行
-   `--version`。`cli verification` 和更新 state 的 `cli` 保存动作、路径、版本和哈希。
+4. Stable 同步全局 `rw`，核验 npm prefix 下命令指向的文件与本次 CLI 构建 SHA-256 一致，并执行
+   `--version`。`cli verification` 和更新 state 的 `cli` 保存动作、全局路径、版本、哈希和当前 shell 入口 `shellCommand`。
    不递增源码版本号，因此同版本号也会按内容更新。CLI 失败则整个命令失败，不报告全部完成。
 
 更新 Desktop 前及退出 App 前检查本机未结束的定时任务；有任务正在排队或执行时停止更新，待运行结束后重试，避免关闭 Backend 取消任务。
 
-桌面 runtime 的 `cli/index.cjs` 与全局 npm 包是两个入口。更新前检查登录 shell 的 `rw`
-是否属于当前 npm prefix；冲突时停止，避免更新了一个包却继续使用另一份命令。该检查也适用于
-dry-run，但 dry-run 不构建或安装。更新后的接口验收使用全局 `rw` 和本轮目标 Backend，
-不能用 runtime 内置 CLI 替代。`--app-server=skip` 不会跳过全局 CLI 同步；此流程不安装 skill。
+Runweave 终端的 `rw` 自动绑定当前实例，并优先进入该终端的 PATH；普通终端使用 npm 全局入口。
+更新器校验全局安装，同时识别 Backend 生成的实例包装脚本及其绑定产物摘要；命中实例入口时自动继续，
+保留该实例绑定，不要求改 PATH 或选择版本。`shell rw` 仅在命中实例入口时输出，其他未知同名命令
+或全局入口指向其他包时仍停止。dry-run 执行相同检查，但不构建或安装。
+两种运行时的版本独立记账，不能用数字大小判断谁更新；更新按各自产物内容决定。
+更新后的接口验收使用回执 `cli.commandPath` 指定的全局入口和本轮目标 Backend，不能用实例入口代替。
+`--app-server=skip` 不会跳过全局 CLI 同步；此流程不安装 skill。
 
 可以显式控制 app-server 组件：
 

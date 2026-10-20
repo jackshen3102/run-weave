@@ -174,6 +174,10 @@ async function main() {
   );
   if (cliPlan.prefix)
     console.log(`[runweave-update] cli npm prefix: ${cliPlan.prefix}`);
+  if (cliPlan.shellCommand?.kind === "instance")
+    console.log(
+      `[runweave-update] shell rw: ${cliPlan.shellCommand.commandPath} (instance ${cliPlan.shellCommand.instanceId}; binding preserved automatically)`,
+    );
   console.log(
     `[runweave-update] desktop verification: ${desktopVerification ? desktopVerification.statusPath : "disabled"}`,
   );

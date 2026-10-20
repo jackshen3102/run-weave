@@ -23,17 +23,66 @@ async function resolveCommand(sourceRoot) {
   return commandPath;
 }
 
-async function checkCommand(commandPath, expectedEntry) {
-  if (!commandPath) return;
-  const installedEntry = await fs.realpath(expectedEntry).catch((error) => {
+async function realpathOrNull(file) {
+  return fs.realpath(file).catch((error) => {
     if (error.code === "ENOENT") return null;
     throw error;
   });
-  if (!installedEntry || (await fs.realpath(commandPath)) !== installedEntry) {
+}
+
+async function checkCommand(commandPath, expectedEntry, allowMissing = false) {
+  const commandEntry = await realpathOrNull(commandPath);
+  if (!commandEntry && allowMissing) return;
+  const installedEntry = await realpathOrNull(expectedEntry);
+  if (!installedEntry || commandEntry !== installedEntry) {
     throw new Error(
       `rw resolves to ${commandPath}, outside the active npm global package ${expectedEntry}. Align the shell PATH and npm prefix before updating.`,
     );
   }
+}
+
+async function inspectShellCommand(sourceRoot, expectedEntry) {
+  const commandPath = await resolveCommand(sourceRoot);
+  if (!commandPath) return null;
+  const installedEntry = await realpathOrNull(expectedEntry);
+  if (installedEntry && (await realpathOrNull(commandPath)) === installedEntry)
+    return { kind: "global", commandPath };
+
+  // Backend-generated wrappers deliberately precede npm on a Runweave terminal's
+  // PATH. Read their binding without executing it or changing the caller's PATH.
+  const runner = path.join(path.dirname(commandPath), "bound-cli.cjs");
+  const source = await fs.readFile(runner, "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
+  const serialized = source.match(/^const binding=(\{.*\});$/m)?.[1];
+  const binding = serialized ? JSON.parse(serialized) : null;
+  if (
+    binding &&
+    ["stable", "dev"].includes(binding.kind) &&
+    typeof binding.instanceId === "string" &&
+    typeof binding.configRoot === "string" &&
+    path.isAbsolute(binding.configRoot) &&
+    commandPath === path.join(binding.configRoot, "runtime", "bin", "rw") &&
+    typeof binding.digest === "string" &&
+    typeof binding.entry === "string" &&
+    binding.entry.startsWith(path.join(binding.configRoot, "runtime", "cli") + path.sep) &&
+    (await sha256(binding.entry)) === binding.digest
+  ) {
+    const wrapper = await fs.readFile(commandPath, "utf8");
+    const quotedRunner = `'${runner.replace(/'/g, `'\\''`)}'`;
+    if (
+      wrapper.startsWith("#!/bin/sh\nexec env ELECTRON_RUN_AS_NODE=1 ") &&
+      wrapper.endsWith(` ${quotedRunner} "$@"\n`)
+    )
+      return {
+        kind: "instance",
+        commandPath,
+        instanceId: binding.instanceId,
+        configRoot: binding.configRoot,
+      };
+  }
+  await checkCommand(commandPath, expectedEntry);
 }
 
 /** Inspect without building or installing, including during --dry-run. */
@@ -56,8 +105,9 @@ export async function planCliUpdate({ sourceRoot, channel }) {
     "dist",
     "index.js",
   );
-  const commandPath = await resolveCommand(sourceRoot);
-  await checkCommand(commandPath, entry);
+  const commandPath = path.join(prefix, "bin", "rw");
+  await checkCommand(commandPath, entry, true);
+  const shellCommand = await inspectShellCommand(sourceRoot, entry);
   return {
     action: "sync",
     reason:
@@ -65,6 +115,7 @@ export async function planCliUpdate({ sourceRoot, channel }) {
     prefix,
     commandPath,
     entry,
+    shellCommand,
   };
 }
 
@@ -138,12 +189,11 @@ async function updateLockedCli({ sourceRoot, plan }) {
     );
   }
   const release = await installCliArtifact({ sourceRoot, plan });
-  const commandPath = await resolveCommand(sourceRoot);
-  if (!commandPath)
-    throw new Error(
-      "Global CLI installed but rw is not on the login shell PATH.",
-    );
+  const commandPath = plan.commandPath;
   await checkCommand(commandPath, plan.entry);
+  const shellCommand = await inspectShellCommand(sourceRoot, plan.entry);
+  if (!shellCommand)
+    throw new Error("Global CLI installed but rw is not on the login shell PATH.");
   if (
     (await sha256(commandPath)) !== expectedHash ||
     (await nativeRuntimeHash(plan.entry)) !== expectedNativeHash
@@ -159,6 +209,7 @@ async function updateLockedCli({ sourceRoot, plan }) {
     ...plan,
     ...release,
     commandPath,
+    shellCommand,
     sha256: expectedHash,
     nativeRuntimeSha256: expectedNativeHash,
     version,
