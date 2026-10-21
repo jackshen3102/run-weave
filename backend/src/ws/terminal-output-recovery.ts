@@ -88,6 +88,7 @@ export function createTerminalOutputRecovery(options: {
           type: "connected",
           terminalSessionId,
           runtimeKind: "tmux",
+          tmuxScrollMode: "single-row",
           recovery: includeSnapshot
             ? { mode: resume ? "resume" : "snapshot", reason }
             : undefined,

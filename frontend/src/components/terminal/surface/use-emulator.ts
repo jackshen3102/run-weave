@@ -4,6 +4,7 @@ import { createTerminalFileLinkProvider } from "../emulator/file-links";
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import {
   createTmuxScrollInput,
+  createTmuxScrollBatcher,
   type TerminalBottomState,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
@@ -51,6 +52,8 @@ interface UseTerminalEmulatorArgs {
   openTerminalFileLinkRef: MutableRef<(text: string, event: MouseEvent, context?: TerminalFileLinkContext) => void>;
   refreshTerminalViewportRef: MutableRef<(() => void) | null>;
   runtimeKindRef: MutableRef<"tmux" | "pty" | null>;
+  singleRowScrollRef: MutableRef<boolean>;
+  resetScrollInputRef: MutableRef<(() => void) | null>;
   searchAddonRef: MutableRef<SearchAddon | null>;
   sendResize: (cols: number, rows: number) => void;
   sendTerminalInput: (data: string) => void;
@@ -82,6 +85,8 @@ export function useTerminalEmulator({
   paneWorkspaceRef,
   refreshTerminalViewportRef,
   runtimeKindRef,
+  singleRowScrollRef,
+  resetScrollInputRef,
   searchAddonRef,
   sendResize,
   sendTerminalInput,
@@ -143,6 +148,16 @@ export function useTerminalEmulator({
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
     const tmuxScroll = createTmuxScrollInput();
+    const singleRowScroll = createTmuxScrollInput(true);
+    const scrollBatcher = createTmuxScrollBatcher((input) => {
+      if (activeRef.current) sendTerminalInput(input);
+    });
+    resetScrollInputRef.current = () => {
+      scrollBatcher.reset();
+      tmuxScroll.reset();
+      singleRowScroll.reset();
+      viewportState.emitBottomState();
+    };
     const screen = terminal.element?.querySelector(".xterm-screen");
     terminal.attachCustomWheelEventHandler((event) => {
       const { baseY, viewportY } = terminal.buffer.active;
@@ -151,7 +166,9 @@ export function useTerminalEmulator({
           ? viewportY > 0
           : event.deltaY > 0 && viewportY < baseY;
       if (!shouldSuppressWheelInput(event, canScroll)) {
+        scrollBatcher.flush();
         tmuxScroll.reset();
+        singleRowScroll.reset();
         return true;
       }
 
@@ -162,7 +179,9 @@ export function useTerminalEmulator({
         !event.shiftKey
       ) {
         if (event.deltaY > 0 && viewportState.isAtBottom()) {
+          scrollBatcher.reset();
           tmuxScroll.reset();
+          singleRowScroll.reset();
           onTmuxExitCopyModeRequest();
           onTmuxScrollbackActiveChange(false);
           event.preventDefault();
@@ -170,7 +189,10 @@ export function useTerminalEmulator({
           return false;
         }
 
-        const scroll = tmuxScroll.consume(
+        const fine = singleRowScrollRef.current && terminal.modes.mouseTrackingMode === "none";
+        const input = fine ? singleRowScroll : tmuxScroll;
+        (fine ? tmuxScroll : singleRowScroll).reset();
+        const scroll = input.consume(
           event,
           terminal.cols,
           terminal.rows,
@@ -178,19 +200,21 @@ export function useTerminalEmulator({
           terminal.options.scrollSensitivity ?? 1,
         );
         if (scroll) {
-          sendTerminalInput(scroll.input);
+          scrollBatcher.enqueue(scroll.input);
           if (scroll.rows < 0) {
-            viewportState.markAwayFromBottom(-scroll.rows);
+            viewportState.markAwayFromBottom(-scroll.rows, fine ? 1 : 8);
             onTmuxScrollbackActiveChange(true);
           } else {
-            const nextBottomState = viewportState.markTowardBottom(scroll.rows);
+            const nextBottomState = viewportState.markTowardBottom(scroll.rows, fine ? 0 : 2);
             if (nextBottomState.isAtBottom) {
               onTmuxScrollbackActiveChange(false);
             }
           }
         }
       } else {
+        scrollBatcher.flush();
         tmuxScroll.reset();
+        singleRowScroll.reset();
       }
 
       event.preventDefault();
@@ -293,6 +317,7 @@ export function useTerminalEmulator({
       if (isTerminalAutoResponse(data)) {
         return;
       }
+      scrollBatcher.flush();
       xtermUserInputSequenceRef.current += 1;
       onUserInputData?.(data);
       sendTerminalInput(data);
@@ -525,6 +550,8 @@ export function useTerminalEmulator({
       selectionDisposable.dispose();
       resizeScheduler.dispose();
       rendererAddon?.dispose();
+      scrollBatcher.reset();
+      resetScrollInputRef.current = null;
       terminal.dispose();
       terminalRef.current = null;
       refreshTerminalViewportRef.current = null;
@@ -550,6 +577,8 @@ export function useTerminalEmulator({
     paneWorkspaceRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
+    singleRowScrollRef,
+    resetScrollInputRef,
     searchAddonRef,
     sendResize,
     sendTerminalInput,

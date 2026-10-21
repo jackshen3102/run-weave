@@ -74,6 +74,7 @@ export function useTerminalConnection(params: {
     includeSnapshot = true,
   } = params;
   const socketRef = useRef<WebSocket | null>(null);
+  const singleRowScrollRef = useRef(false);
   const outputRecoveryRef = useRef<TerminalClientOutputRecovery | null>(null);
   const outputRecoveryScopeRef = useRef<string | null>(null);
   const tokenRef = useRef(token);
@@ -170,6 +171,7 @@ export function useTerminalConnection(params: {
       }
 
       clearReconnectTimer();
+      singleRowScrollRef.current = false;
       setNextConnectionStatus("connecting");
       setError(null);
       logTerminalPerf("ws.connect.start", {
@@ -256,6 +258,7 @@ export function useTerminalConnection(params: {
           }
 
           socketRef.current = null;
+          singleRowScrollRef.current = false;
           clearStableConnectionTimer();
 
           if (event.code === 1008 && event.reason === "Unauthorized") {
@@ -324,6 +327,7 @@ export function useTerminalConnection(params: {
             ) as TerminalServerMessage;
             inboundSequenceRef.current += 1;
             if (parsed.type === "connected") {
+              singleRowScrollRef.current = parsed.runtimeKind === "tmux" && parsed.tmuxScrollMode === "single-row";
               if (parsed.recovery?.mode !== "resume")
                 outputRecovery.invalidate();
               if (parsed.recovery?.mode === "snapshot" && cursor)
@@ -485,6 +489,7 @@ export function useTerminalConnection(params: {
       clearStableConnectionTimer();
       socketRef.current?.close();
       socketRef.current = null;
+      singleRowScrollRef.current = false;
     };
   }, [
     apiBase,
@@ -516,6 +521,7 @@ export function useTerminalConnection(params: {
     terminalStatus,
     exitCode,
     runtimeKind,
+    singleRowScrollRef,
     reconnectAttempt,
     failureSince,
     lastCloseReason,

@@ -30,10 +30,10 @@ export function createTerminalViewportState(
     callbacks.onBottomStateChange(next);
   };
 
-  const markAwayFromBottom = (rows: number): void => {
+  const markAwayFromBottom = (rows: number, minimumOffsetRows = 8): void => {
     const bottomOffsetRows = Math.max(
       (lastBottomState?.bottomOffsetRows ?? 0) + rows,
-      8,
+      minimumOffsetRows,
     );
     if (
       lastBottomState?.isAtBottom === false &&
@@ -45,13 +45,16 @@ export function createTerminalViewportState(
     callbacks.onBottomStateChange(lastBottomState);
   };
 
-  const markTowardBottom = (rows: number): TerminalBottomState => {
+  const markTowardBottom = (
+    rows: number,
+    toleranceRows = TMUX_SCROLLBACK_BOTTOM_TOLERANCE_ROWS,
+  ): TerminalBottomState => {
     const bottomOffsetRows = Math.max(
       0,
       (lastBottomState?.bottomOffsetRows ?? 0) - rows,
     );
     const next = {
-      isAtBottom: bottomOffsetRows <= TMUX_SCROLLBACK_BOTTOM_TOLERANCE_ROWS,
+      isAtBottom: bottomOffsetRows <= toleranceRows,
       bottomOffsetRows,
     };
     if (

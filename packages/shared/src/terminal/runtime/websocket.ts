@@ -55,6 +55,8 @@ export type TerminalServerMessage =
       type: "connected";
       terminalSessionId: string;
       runtimeKind?: "tmux" | "pty";
+      /** Ctrl-wheel (SGR 80/81) moves one row; ordinary wheel remains five rows. */
+      tmuxScrollMode?: "single-row";
       recovery?: TerminalOutputRecovery;
     }
   | {

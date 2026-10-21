@@ -500,6 +500,7 @@ export function attachTerminalWebSocketServer(
         type: "connected",
         terminalSessionId,
         runtimeKind: session && isTmuxBackedSession(session) ? "tmux" : "pty",
+        tmuxScrollMode: session && isTmuxBackedSession(session) ? "single-row" : undefined,
       });
       if (session) {
         if (sendInitialSnapshot) {
