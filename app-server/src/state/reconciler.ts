@@ -215,6 +215,30 @@ export class AgentThreadStatusReconciler {
       } catch (error) {
         statusReadError = error;
       }
+      const lifecycle =
+        await this.options.codexRolloutLifecycleReader.readLatestLifecycle(
+          thread.threadId,
+        );
+      const sameObservedFailure = lifecycle?.error && thread.status === "idle" &&
+        thread.lastLifecycleType === `rollout:${lifecycle.type}` &&
+        thread.lastLifecycleCursor === lifecycle.cursor;
+      if (
+        lifecycle?.status === "idle" &&
+        (!isOlderThanThreadProjection(lifecycle.timestamp, thread) || sameObservedFailure) &&
+        // A terminal error is a fact even if a Hook already marked the thread
+        // idle, or thread/read still reports active. Never adopt an old turn.
+        (lifecycle.error || (thread.status === "running" && status !== "active"))
+      ) {
+        return {
+          status: lifecycle.status,
+          lifecycleType: `rollout:${lifecycle.type}`,
+          lifecycleCursor: lifecycle.cursor,
+          detailStatus: null,
+          preview: null,
+          turnId: lifecycle.turnId,
+          error: lifecycle.error,
+        };
+      }
       if (status === "active") {
         return {
           status: "running",
@@ -224,26 +248,6 @@ export class AgentThreadStatusReconciler {
           preview: null,
           turnId: null,
         };
-      }
-      if (thread.status === "running") {
-        const lifecycle =
-          await this.options.codexRolloutLifecycleReader.readLatestLifecycle(
-            thread.threadId,
-          );
-        if (
-          lifecycle?.status === "idle" &&
-          !isOlderThanThreadProjection(lifecycle.timestamp, thread)
-        ) {
-          return {
-            status: lifecycle.status,
-            lifecycleType: `rollout:${lifecycle.type}`,
-            lifecycleCursor: lifecycle.cursor,
-            detailStatus: null,
-            preview: null,
-            turnId: lifecycle.turnId,
-            error: lifecycle.error,
-          };
-        }
       }
       if (statusReadError) {
         throw statusReadError;

@@ -119,6 +119,8 @@ export class AppServerStateStore {
     const previous = this.threads.get(update.threadId) ?? null;
     const previousTmuxPaneId =
       this.threadTmuxPaneIds.get(update.threadId) ?? null;
+    const startsNewTurn = update.agent === "codex" &&
+      (update.lastHookEvent === "UserPromptSubmit" || update.lastHookEvent === "SessionStart");
     const current: AppServerThreadRef = {
       ...(update.pi ?? previous?.pi ? { pi: update.pi ?? previous?.pi } : {}),
       threadId: update.threadId,
@@ -140,9 +142,9 @@ export class AppServerStateStore {
         previous?.lifecycleStatus ??
         (update.agent === "codex" || update.agent === "pi" ? "available" : "degraded"),
       lastLifecycleType:
-        update.lastLifecycleType ?? previous?.lastLifecycleType ?? null,
+        update.lastLifecycleType ?? (startsNewTurn ? null : previous?.lastLifecycleType) ?? null,
       lastLifecycleCursor:
-        update.lastLifecycleCursor ?? previous?.lastLifecycleCursor ?? null,
+        update.lastLifecycleCursor ?? (startsNewTurn ? null : previous?.lastLifecycleCursor) ?? null,
       sourceInstanceId: update.sourceInstanceId,
       lastEventId: update.lastEventId,
       lastHookEvent:
