@@ -21,8 +21,9 @@ export class AppServerHistoryGateway {
     return (await this.createClient()).getConversation(threadId, AbortSignal.timeout(this.timeoutMs));
   }
 
-  async getSupervisionContext(threadId: string, requiredIds: string[] = []) {
-    return (await this.createClient()).getSupervisionContext(threadId, requiredIds, AbortSignal.timeout(this.timeoutMs));
+  async getSupervisionContext(threadId: string, requiredIds: string[] = [], signal?: AbortSignal) {
+    const timeout = AbortSignal.timeout(this.timeoutMs);
+    return (await this.createClient()).getSupervisionContext(threadId, requiredIds, signal ? AbortSignal.any([signal, timeout]) : timeout);
   }
 
   async listThreads(options: {
