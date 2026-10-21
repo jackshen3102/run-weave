@@ -4,43 +4,57 @@ import RunweaveRemoteDesktopProtocol
 
 enum RemotePairedConnection {
     static func connect(target: RemoteTarget) async throws -> RemoteTLSConnection {
-        do {
-            return try await connectLocal(target: target)
-        } catch {
-            try Task.checkCancellation()
-            guard target.allowsRelayFallback, canTryAnotherRoute(after: error) else { throw error }
-            let localError = error
-            guard let relay = target.relay, relay.isValid else { throw RemoteTransportError.invalidEndpoint }
+        var failures: [String] = []
+        // Simulator-only loopback Hosts do not advertise a LAN service.
+        var discover = true
+        #if DEBUG && targetEnvironment(simulator)
+        discover = target.host != "127.0.0.1" && target.host != "localhost"
+        #endif
+        if discover {
             do {
-                return try await RemoteTLSConnection.connect(target: target,
-                    endpoint: .hostPort(host: .init(relay.host), port: .init(rawValue: relay.port)!), route: .relay)
+                let endpoint = try await RemoteHostDiscovery.resolve(hostID: target.id)
+                return try await RemoteTLSConnection.connect(target: target, endpoint: endpoint, timeout: 3)
             } catch {
                 try Task.checkCancellation()
-                // Identity and protocol errors must remain terminal, including on the fallback route.
+                // Every address must pass the original pin. Identity errors are terminal.
                 guard canTryAnotherRoute(after: error) else { throw error }
-                throw RemoteRouteFailure(local: localError, relay: error)
+                failures.append("局域网发现：\(error.localizedDescription)")
             }
         }
-    }
-
-    private static func connectLocal(target: RemoteTarget) async throws -> RemoteTLSConnection {
-        // Simulator-only loopback Hosts do not advertise a LAN service.
-        #if DEBUG && targetEnvironment(simulator)
-        if target.host == "127.0.0.1" || target.host == "localhost" {
-            return try await RemoteTLSConnection.connect(target: target, timeout: 3)
-        }
-        #endif
-        do {
-            let endpoint = try await RemoteHostDiscovery.resolve(hostID: target.id)
-            return try await RemoteTLSConnection.connect(target: target, endpoint: endpoint, timeout: 3)
-        } catch {
+        var triedLocal = Set<RemoteHostEndpoint>()
+        for (index, endpoint) in target.localEndpoints.enumerated() {
             try Task.checkCancellation()
-            // A discovered service must pass the original pin. Never replace it
-            // or fall back after observing a different identity.
-            guard canTryAnotherRoute(after: error) else { throw error }
-            // Older Hosts and networks without mDNS retain explicit-address access.
-            return try await RemoteTLSConnection.connect(target: target, timeout: 3)
+            guard endpoint.isValid else { throw RemoteTransportError.invalidEndpoint }
+            guard triedLocal.insert(endpoint).inserted else { continue }
+            do {
+                return try await RemoteTLSConnection.connect(target: target,
+                    endpoint: .hostPort(host: .init(endpoint.host), port: .init(rawValue: endpoint.port)!), timeout: 3)
+            } catch {
+                try Task.checkCancellation()
+                guard canTryAnotherRoute(after: error) else { throw error }
+                // Preserve timeout/disconnection reporting for legacy LAN-only targets.
+                if target.localEndpoints.count == 1, !target.allowsRelayFallback { throw error }
+                failures.append("局域网地址 \(index + 1)：\(error.localizedDescription)")
+            }
         }
+        if target.allowsRelayFallback {
+            guard !target.relayEndpoints.isEmpty else { throw RemoteTransportError.invalidEndpoint }
+            var triedRelay = Set<RemoteRelayEndpoint>()
+            for (index, endpoint) in target.relayEndpoints.enumerated() {
+                try Task.checkCancellation()
+                guard endpoint.isValid else { throw RemoteTransportError.invalidEndpoint }
+                guard triedRelay.insert(endpoint).inserted else { continue }
+                do {
+                    return try await RemoteTLSConnection.connect(target: target,
+                        endpoint: .hostPort(host: .init(endpoint.host), port: .init(rawValue: endpoint.port)!), route: .relay)
+                } catch {
+                    try Task.checkCancellation()
+                    guard canTryAnotherRoute(after: error) else { throw error }
+                    failures.append("隧道地址 \(index + 1)：\(error.localizedDescription)")
+                }
+            }
+        }
+        throw RemoteRouteFailure(failures: failures)
     }
 
     private static func canTryAnotherRoute(after error: Error) -> Bool {
@@ -56,9 +70,8 @@ enum RemotePairedConnection {
 }
 
 struct RemoteRouteFailure: LocalizedError {
-    let local: Error
-    let relay: Error
+    let failures: [String]
     var errorDescription: String? {
-        "局域网与隧道均无法连接。\n局域网：\(local.localizedDescription)\n隧道：\(relay.localizedDescription)"
+        "所有桌面地址均无法连接。\n" + failures.joined(separator: "\n")
     }
 }

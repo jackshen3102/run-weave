@@ -1,5 +1,15 @@
 import Foundation
 
+public struct RemoteHostEndpoint: Codable, Hashable, Sendable {
+    public var host: String
+    public var port: UInt16
+    public init(host: String, port: UInt16) { self.host = host; self.port = port }
+    public var isValid: Bool {
+        !host.isEmpty && port > 0 && !host.contains("/") && !host.contains("@") &&
+            host.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
+    }
+}
+
 public struct RemoteRelayEndpoint: Codable, Hashable, Sendable {
     public var host: String
     public var port: UInt16
@@ -28,7 +38,16 @@ public struct RemoteTarget: Codable, Hashable, Sendable, Identifiable {
     public var relay: RemoteRelayEndpoint?
     /// Enables relay fallback after LAN fails. Legacy saved relays enable fallback.
     public var relayEnabled: Bool?
+    /// Additional addresses in priority order; absent in legacy saved targets.
+    public var additionalLocalEndpoints: [RemoteHostEndpoint]?
+    public var additionalRelayEndpoints: [RemoteRelayEndpoint]?
     public var allowsRelayFallback: Bool { relayEnabled ?? (relay != nil) }
+    public var localEndpoints: [RemoteHostEndpoint] {
+        [RemoteHostEndpoint(host: host, port: port)] + (additionalLocalEndpoints ?? [])
+    }
+    public var relayEndpoints: [RemoteRelayEndpoint] {
+        (relay.map { [$0] } ?? []) + (additionalRelayEndpoints ?? [])
+    }
 
     public init(id: UUID, name: String, host: String, port: UInt16 = RemoteTarget.computerPort, certificateFingerprint: String, credentialsReference: String? = nil) {
         self.id = id; self.name = name; self.host = host; self.port = port
