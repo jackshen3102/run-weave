@@ -12,11 +12,15 @@
 
 Identify API 要求 Custom User ID；应用只生成当前 Document 内存中的随机 UUID，刷新或新窗口后重新生成，不保存到 storage/cookie，不使用真实用户、设备、连接或终端身份，也不设置 Custom Session ID。SDK 异步加载或 SPA 重启时只保留并重新应用最新分类，不补发历史页面事件，失败不阻塞导航。
 
+Mac Stable 的 `runweave:` 协议不支持 Chromium 原生 Cookie 写入。集中加载器在启用采集后安装 [桌面 Cookie 兼容层](../src/features/analytics/desktop-clarity-cookies.ts)，仅将 SDK 自己生成的 `_clck`、`_clsk` 按其原有到期时间保存在当前 origin 的 localStorage，支持 SDK 删除操作；其他 Cookie 继续交给原生访问器，普通 Web 不安装兼容层。这里保存的是 SDK 的匿名用户及会话 Cookie，与上面的临时 Custom User ID 不同；不加入业务身份。存储被禁用时采集降级，不阻断应用。
+
 Electron 的官方 SDK 会把 URL 归一化为 `https://Electron`。Custom Page ID 是额外的后台筛选维度，不覆盖原生 URL，也不单独创建 pageview；不能据此承诺“顶级页面”显示真实路由或原生页面数等于功能进入次数。后台应使用“自定义页面 ID”筛选并保存所需区段，页面级聚合与回放粒度需以真实云端验收结果为准。
 
 随记、隧道抽屉由 [ClarityDrawerObserver](../src/features/analytics/clarity-drawer-observer.tsx) 集中监听关闭→打开，分别发送固定事件 `surface_open_suiji`、`surface_open_tunnels`。重复 render、保持打开与关闭均不发送；关闭后再次打开新增一次。隧道仅在实际支持的 Electron 宿主上记录。事件没有附加内容或动态 ID，不改变 Custom Page ID，也不把抽屉当新页面。
 
 SDK 尚未就绪或正在重启时跳过抽屉事件，不补发历史打开，不增加等待队列或重试。后台事件的会话数不能当成打开次数；按真实事件时间线核对次数和回放。分类与抽屉事件不修改既有 SDK 对 URL、DOM 的采集范围。
+
+已经成功启动过的 SDK 如果停止，在用户前台操作、页面分类变化、窗口重新获得焦点或网络恢复时，适配器等待 1 秒并再次确认仍处于停止状态，再调用官方 `start` 恢复，保留 SDK 当前配置与 consent 状态。恢复尝试间隔至少 30 秒，不运行后台重试循环，不重新注入项目 tag，不补发失败期间的操作。正常 SPA 重启期间恢复会自动取消；首次脚本加载失败仍等待新 Document。
 
 ## 构建配置与运行范围
 
@@ -40,6 +44,8 @@ VITE_CLARITY_PROJECT_ID=yo6azwkf18 pnpm --filter @runweave/frontend build
 生产与验收项目均使用全局 Strict masking，不添加 unmask。Strict 遮盖文本与图片，但不能据此推断 URL、属性或所有媒体都安全；使用唯一合成标记检查实际上传和回放。项目规则的修改需要等待生效后用新会话验证。上线前核对既有用户披露和部署环境的 cookies/consent 要求。
 
 使用 [Clarity 测试计划](../../docs/testing/analytics/web-clarity-autocapture.testplan.yaml) 验证 Web、Mac Stable、Beta/Dev Session 排除、普通 DOM 行为、云端回放、遮盖及性能。浏览器网络请求只证明客户端尝试采集，不证明官方后台有可用回放。无法访问后台时相关项记 blocked。
+
+会话身份持续性、SDK Cookie 删除与到期、网络中断后的恢复，使用 [Clarity 会话生命周期计划](../../docs/testing/analytics/clarity-session-lifecycle.testplan.yaml) 独立取证。隔离 Electron 中的本地接收器可验证 SDK 行为与上传信封，不能替代真实桌面实例及云端回放验收。
 
 ## 关闭与回滚
 

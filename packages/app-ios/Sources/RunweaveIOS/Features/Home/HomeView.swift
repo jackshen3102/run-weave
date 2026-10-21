@@ -94,7 +94,9 @@ struct HomeView: View {
           }
         }
       }
-      KnowledgeInboxPreview(session: session, model: session.knowledgeInbox)
+      if !searching {
+        KnowledgeInboxPreview(session: session, model: session.knowledgeInbox)
+      }
       ForEach(groups) { group in
         Section {
           if searching || expanded.contains(group.id) {

@@ -25,7 +25,7 @@ SDK 在主线程启动时初始化一次，不上报自定义用户 ID 或 Runwe
 远控发送固定自定义事件 `remote_paired`、`remote_opened`、`remote_visible`、`remote_input_sent`、
 `remote_closed`，没有事件参数；详细口径见[远控使用记录](../../docs/architecture/remote-desktop.md#使用记录与分析口径)。
 关键页面使用官方 `setCurrentScreenName` 命名：`home`、`login`、`connections`、`terminal_chat`、`terminal_files`、`terminal_changes`、`composer`、`quick_replies`、`quick_reply_editor`、`scheduled_tasks`、`scheduled_task_editor` 等。名称只来自固定分类，不包含项目名、终端 ID、命令或文件路径。
-共用页面标记按可见视图层级选择名称，弹层关闭时恢复底层分类；输入面板的 UIKit host 显式传递层级。SDK 会话开始时重新应用当前分类，未初始化时不调用 SDK 命名接口。系统键盘、系统确认框及未标记的次级内容保留所属业务页面分类；分类不是任务成功率，也不把集中处理或长时间停留视为异常。
+共用页面标记按可见视图层级选择名称，同轮导航的出现与消失回调合并后再上报，弹层关闭时恢复底层分类；输入面板的 UIKit host 显式传递层级。全屏会话阅读与旁聊分别使用 `conversation_reader`、`side_chat`，避免与底层终端或首页混记。SDK 会话开始时重新应用当前分类，未初始化时不调用 SDK 命名接口。系统键盘、系统确认框及未标记的次级内容保留所属业务页面分类；分类不是任务成功率，也不把集中处理或长时间停留视为异常。
 远控管理为 `remote_hosts`，地址编辑为 `remote_host_editor`，本地使用记录列表与详情分别为
 `remote_usage`、`remote_usage_detail`；查看记录不代表打开了远控会话。历史会话不会补写分类。
 

@@ -8,6 +8,7 @@ public enum APIError: Error, LocalizedError {
   case offline
   case writeRequiresRetry
   case refreshResultUnknown
+  case inputResultUnknown
   case loginRejected
   case tunnelAuthenticationRequired
   case diagnosticStorageUnavailable
@@ -25,6 +26,7 @@ public enum APIError: Error, LocalizedError {
     case .offline: return "本地电脑暂时不可用，恢复连接后请重新操作"
     case .writeRequiresRetry: return "登录已刷新，本次操作未重发，请重新操作"
     case .refreshResultUnknown: return "登录刷新结果未确认，请重新登录恢复。草稿已保留。"
+    case .inputResultUnknown: return "连接已中断，未能取得本次发送确认"
     case .loginRejected: return "用户名或密码不正确"
     case .tunnelAuthenticationRequired: return "连接入口需要隧道认证，请检查接入配置"
     case .diagnosticStorageUnavailable: return "持久日志不可用，未完成清理；请先导出当前可读记录"
@@ -61,7 +63,7 @@ func displayError(_ error: Error) -> String {
 func displayInputError(_ error: Error) -> String {
   let uncertain: Bool
   switch error {
-  case is URLError, APIError.invalidResponse: uncertain = true
+  case is URLError, APIError.invalidResponse, APIError.inputResultUnknown: uncertain = true
   case APIError.http(let status): uncertain = status >= 500
   default: uncertain = false
   }

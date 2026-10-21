@@ -1,0 +1,45 @@
+version: 1
+name: "Clarity 会话持续性与故障恢复"
+description: "验证桌面自定义协议中的匿名 Cookie 持续性、Cookie 生命周期，以及已启动采集器在网络失败后的前台恢复。使用合成页面与本地采集接收器，不将本地 SDK 证据当成云端回放或真实产品验收。"
+cases:
+  - id: "CSL-001"
+    name: "桌面 SPA 导航保持 SDK 用户和会话身份"
+    required: true
+    description: "同一 Document 内连续导航三次，SDK 用户与会话身份不变、页码递增；HTTP 对照继续使用原生 Cookie。"
+    preconditions:
+      - "本 case 拥有独立 Electron 进程与全新的 userData，加载当前源码生产模式的真实 Clarity 适配器与同一官方 SDK。"
+      - "准备相同内容的 runweave: 与 HTTP 页面，runweave: 注册权限与桌面一致；上传定向到本 case 的本地接收器，记录真实 SDK metadata 与上传信封。"
+    steps:
+      - "使用 $toolkit:playwright-cli 分别连接两个页面，记录 timeOrigin 与首次 SDK 用户 ID、会话 ID、页码。"
+      - "在每个页面点击实际导航控件三次；确认 timeOrigin 不变，两页各自的用户与会话 ID 保持不变、页码依次递增，项目 tag 仍只有一个，SDK 没有额外启动。"
+      - "核对 runweave: 的兼容存储只包含 _clck、_clsk，HTTP 未安装自定义 document.cookie；从本地上传信封核对同样的身份关系，然后清理本 case 进程。"
+  - id: "CSL-002"
+    name: "兼容 Cookie 遵守到期和删除语义"
+    required: true
+    description: "只有固定两项 SDK Cookie 可以进入兼容存储；到期或显式删除后不可再读，存储异常不阻断页面。"
+    preconditions:
+      - "本 case 拥有独立 runweave: Electron 页面与合成数据，已通过当前源码适配器安装兼容层，可限制此页面的 localStorage；不使用其他 case 的 Cookie。"
+    steps:
+      - "用 $toolkit:playwright-cli 在本 case 页面分别写入带有效 expires 的合成 _clck、_clsk；确认两者可通过 Cookie 访问器读取，SDK 之外的名称没有进入兼容存储。"
+      - "分别将这两项的 expires 设为过去时间，再写入短期到期值并等待到期；每次确认访问器均不再返回过期项，兼容存储中的对应项被删除。"
+      - "写入其他域名或非根路径的同名合成值；确认没有进入兼容存储。使本页面 localStorage 抛错后执行相同读写与普通控件操作，确认不出现应用异常且控件继续响应。清理本 case 进程。"
+  - id: "CSL-003"
+    name: "网络恢复后的前台操作恢复采集"
+    required: true
+    description: "SDK 因上传网络失败停止后，恢复网络并操作当前前台页面，SDK 无需完整刷新即可恢复；期间不补发历史操作。"
+    preconditions:
+      - "本 case 拥有独立 Electron 页面，加载当前源码适配器与官方 SDK；本地接收器已成功收到本 case 至少一个上传，能仅对本页 collect 请求制造网络失败。"
+    steps:
+      - "用 $toolkit:playwright-cli 阻断本页真实上传并点击普通控件，确认上传确实失败且 SDK 最终停止；记录原 Document 的 timeOrigin。"
+      - "撤销本页阻断并进行一次前台操作；等待恢复，确认 SDK 再次启动，本地接收器收到新的实际采集请求，timeOrigin 不变，项目 tag 没有增加。"
+      - "确认请求仅覆盖恢复后的新操作，没有重放失败期间的点击；移除本 case 网络规则并清理独立进程。"
+  - id: "CSL-004"
+    name: "采集恢复不形成后台重试循环"
+    required: true
+    description: "持续网络故障时，隐藏页面和无新操作期间不触发适配器恢复循环，前台恢复尝试间隔至少 30 秒。"
+    preconditions:
+      - "本 case 拥有独立页面、当前适配器与官方 SDK，能观察 start 调用和页面可见性，并只阻断该页面的上传。"
+    steps:
+      - "用 $toolkit:playwright-cli 制造已启动 SDK 的上传失败并使其停止，将页面隐藏；观察 35 秒，确认适配器没有在后台调用 start。"
+      - "回到前台并连续操作，在故障持续的情况下记录恢复尝试时间；确认正常 SPA 短暂停止没有造成额外启动，适配器实际恢复尝试间隔不小于 30 秒。"
+      - "停止操作并保持故障，继续观察 35 秒，确认没有适配器自主重试循环。撤销规则并清理本 case 资源。"
