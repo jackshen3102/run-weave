@@ -1,5 +1,13 @@
 [
   {
+    "file": "packages/runweave-cli/src/commands/browser-headers.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(valueFile === \"-\" ? 0 : valueFile!)",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "读取用户通过 --value-file 明确指定的请求头值文件或 stdin，作为本次命令输入；规则仍由桌面配置域持久化，不另建业务配置来源。"
+  },
+  {
     "file": "backend/src/auth/connection-identity.ts",
     "kind": "file-io",
     "expression": "handle.writeFile(data)",
