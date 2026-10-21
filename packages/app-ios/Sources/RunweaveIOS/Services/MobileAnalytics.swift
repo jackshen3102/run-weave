@@ -7,6 +7,7 @@ public enum MobileAnalytics {
   enum Screen: String {
     case connecting, login, home, connections, configuration, mobileLogin = "mobile_login"
     case terminalChat = "terminal_chat", terminalFiles = "terminal_files", terminalChanges = "terminal_changes"
+    case conversationReader = "conversation_reader", sideChat = "side_chat"
     case taskSupervision = "task_supervision"
     case settings
     case developmentResources = "development_resources"
@@ -26,6 +27,7 @@ public enum MobileAnalytics {
   private static var initialized = false
   private static var screens: [VisibleScreen] = []
   private static var reportedScreen: Screen?
+  private static var reportScheduled = false
   private static var sessionID: String?
   // Keep aligned with the exact clarity-apps dependency in Package.swift.
   private static let sdkVersion = "4.1.0"
@@ -80,7 +82,7 @@ public enum MobileAnalytics {
         diagnostic("clarity.session.started", ["projectId": projectID,
           "failedBuildTags": failedTags.sorted().joined(separator: ",")])
         reportedScreen = nil
-        reportScreen()
+        scheduleScreenReport()
       }
     }
     diagnostic("clarity.session.callback", ["registered": String(registered)])
@@ -89,18 +91,30 @@ public enum MobileAnalytics {
   static func appear(id: UUID, screen: Screen, depth: Int) {
     screens.removeAll { $0.id == id }
     screens.append(VisibleScreen(id: id, screen: screen, depth: depth))
-    reportScreen()
+    scheduleScreenReport()
   }
 
   static func update(id: UUID, screen: Screen) {
     guard let index = screens.firstIndex(where: { $0.id == id }) else { return }
     screens[index].screen = screen
-    reportScreen()
+    scheduleScreenReport()
   }
 
   static func disappear(id: UUID) {
     screens.removeAll { $0.id == id }
-    reportScreen()
+    scheduleScreenReport()
+  }
+
+  // Navigation can remove and insert visible views in the same update. Report only
+  // the settled hierarchy instead of briefly attributing the transition to its parent.
+  private static func scheduleScreenReport() {
+    guard initialized, !reportScheduled else { return }
+    reportScheduled = true
+    Task { @MainActor in
+      await Task.yield()
+      reportScheduled = false
+      reportScreen()
+    }
   }
 
   private static func reportScreen() {

@@ -1,4 +1,5 @@
 import type { AnalyticsScreen } from "./screen-classification";
+import { installDesktopClarityCookies } from "./desktop-clarity-cookies";
 
 type ClarityQueue = ((...args: unknown[]) => unknown) & { q?: unknown[][]; v?: string };
 
@@ -10,6 +11,24 @@ let currentScreen: AnalyticsScreen | null = null;
 let reportedScreen: AnalyticsScreen | null = null;
 let identifying = false;
 let pageGeneration = 0;
+let sdkStarted = false;
+let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+let lastRecoveryAt = -Infinity;
+
+function scheduleClarityRecovery(): void {
+  const clarity = (window as Window & { clarity?: ClarityQueue }).clarity;
+  if (!enabled || !sdkStarted || clarity?.v || !clarity || recoveryTimer !== null ||
+    document.visibilityState !== "visible" || !navigator.onLine || Date.now() - lastRecoveryAt < 30_000) return;
+  // Normal SPA restarts briefly remove v. Only recover a stopped SDK after
+  // another foreground action, never from an autonomous retry loop.
+  recoveryTimer = setTimeout(() => {
+    recoveryTimer = null;
+    const current = (window as Window & { clarity?: ClarityQueue }).clarity;
+    if (!current || current.v || document.visibilityState !== "visible" || !navigator.onLine) return;
+    lastRecoveryAt = Date.now();
+    try { current("start"); } catch { /* Analytics must not interrupt interaction. */ }
+  }, 1_000);
+}
 
 export function reportClarityDrawerOpen(drawer: "suiji" | "tunnels"): void {
   const clarity = (window as Window & { clarity?: ClarityQueue }).clarity;
@@ -24,6 +43,7 @@ export function reportClarityDrawerOpen(drawer: "suiji" | "tunnels"): void {
 // Keep only the latest classification while the SDK loads or restarts.
 export function updateClarityScreen(screen: AnalyticsScreen | null): void {
   currentScreen = screen;
+  scheduleClarityRecovery();
   reportScreen();
 }
 
@@ -80,6 +100,7 @@ export function initializeClarity(): void {
   }
 
   try {
+    if (isDesktop) installDesktopClarityCookies();
     const script = document.createElement("script");
     script.id = SCRIPT_ID;
     script.async = true;
@@ -87,9 +108,14 @@ export function initializeClarity(): void {
     // Keep this marker on load failure: only a new Document should retry.
     document.head.append(script);
     enabled = true;
-    // The hosted SDK recalls this callback after each SPA restart. No SDK IDs
-    // are read or stored; reapply the latest fixed page ID to the new page.
+    window.addEventListener("online", scheduleClarityRecovery);
+    window.addEventListener("focus", scheduleClarityRecovery);
+    window.addEventListener("pointerdown", scheduleClarityRecovery, { capture: true, passive: true });
+    document.addEventListener("visibilitychange", scheduleClarityRecovery);
+    // The hosted SDK recalls this callback after each SPA restart. Reapply the
+    // latest fixed page ID without retaining the callback's metadata.
     clarityWindow.clarity("metadata", () => {
+      sdkStarted = true;
       pageGeneration += 1;
       reportedScreen = null;
       reportScreen();

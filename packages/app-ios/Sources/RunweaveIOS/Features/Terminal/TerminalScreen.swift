@@ -192,6 +192,7 @@ struct TerminalScreen: View {
     }
     .fullScreenCover(isPresented: $sideChat.visible) {
       SideChatView(model: sideChat, session: session, title: title, terminalID: details.id)
+        .mobileAnalyticsScreen(.sideChat)
     }
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
@@ -215,6 +216,7 @@ struct TerminalScreen: View {
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
     .fullScreenCover(isPresented: $showingConversation, onDismiss: connectBrowserIntents) {
       ConversationReaderView(session: session, controller: controller, terminalID: details.id, title: title)
+        .mobileAnalyticsScreen(.conversationReader)
     }
     .sheet(item: $replyContext) { context in
       CodexReplyAssistant(session: session, controller: controller, questions: session.terminalQuestions,

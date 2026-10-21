@@ -206,8 +206,13 @@ public final class SessionController: ObservableObject {
             return
           }
           if let error = error as? APIError {
-            self.halt(error.localizedDescription)
-            return
+            switch error {
+            case .http(408), .http(429), .http(500), .http(502), .http(503), .http(504):
+              break // Ticket requests are safe to retry after transient service failures.
+            default:
+              self.halt(error.localizedDescription)
+              return
+            }
           }
           self.connectionStatus = "离线"
           retries += 1
@@ -285,6 +290,7 @@ public final class SessionController: ObservableObject {
     inputBusy = true
     failure = nil
     let exitsCopyMode = runtimeKind == "tmux" && mode != "tmux_exit_copy_mode"
+    var submissionStarted = false
     let operation = Task {
       if exitsCopyMode {
         // Scrollback consumes ordinary input as navigation keys. Leave it before sending
@@ -292,6 +298,8 @@ public final class SessionController: ObservableObject {
         try await api.terminalInput(id: terminalID, data: "", mode: "tmux_exit_copy_mode")
         guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
       }
+      guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
+      submissionStarted = true
       try await api.terminalInput(id: terminalID, data: text, mode: mode, recordQuickInput: recordQuickInput,
         submitKey: submitKey)
     }
@@ -304,7 +312,7 @@ public final class SessionController: ObservableObject {
     }
     do {
       try await operation.value
-      guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
+      guard generation == epoch, !Task.isCancelled else { throw APIError.inputResultUnknown }
       if exitsCopyMode {
         tmuxScrollRows = 0
         localAtBottom = true
@@ -313,7 +321,12 @@ public final class SessionController: ObservableObject {
       }
       record("input.accepted", extra: ["mode": mode])
     } catch {
-      guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
+      if generation != epoch || Task.isCancelled {
+        // Cancellation cannot retract a command already submitted to the backend.
+        guard submissionStarted else { throw CancellationError() }
+        record("input.unconfirmed", extra: ["mode": mode, "reason": "transport_changed"])
+        throw APIError.inputResultUnknown
+      }
       failure = displayInputError(error)
       record("input.unconfirmed", extra: ["mode": mode])
       throw error
