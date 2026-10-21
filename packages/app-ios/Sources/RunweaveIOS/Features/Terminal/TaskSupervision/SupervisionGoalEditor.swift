@@ -27,8 +27,12 @@ struct SupervisionGoalEditor: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 20) {
         if !available { Text("连接或会话已变化，恢复原会话后再核对目标。").font(.caption).foregroundColor(.orange) }
-        if let failure { Text(failure).font(.caption).foregroundColor(.orange).textSelection(.enabled) }
-        if busy { ProgressView(applying ? "正在采用目标…" : "正在读取并核对原始来源…") }
+        if regenerate && preview == nil {
+          regenerationStatus
+        } else {
+          if let failure { failureCard(failure) }
+          if busy { ProgressView(applying ? "正在采用目标…" : "正在核对目标变更…") }
+        }
         if let preview {
           review(preview)
         } else if !regenerate {
@@ -37,19 +41,66 @@ struct SupervisionGoalEditor: View {
           editorField("范围与约束", text: $draft.constraints, limit: 2000, id: "constraints")
           Text("后续“继续”和进度询问会沿用修订后的目标。").font(.caption).foregroundColor(.secondary)
           Button(failure == nil ? "查看变更" : "基于最新状态核对") { generate() }
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(busy || !available || !draft.valid).accessibilityIdentifier("task-supervision-goal-preview")
-        } else if !busy {
-          Button("重新生成") { generate() }.disabled(!available)
         }
-        Button(preview == nil ? "取消" : "保留当前目标") { dismiss() }.disabled(applying)
+      }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
+    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(TerminalAppearance.background.ignoresSafeArea())
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        Button(preview == nil ? "取消" : "保留当前目标") { dismiss() }
+          .frame(maxWidth: .infinity, minHeight: 44).disabled(applying)
           .accessibilityIdentifier("task-supervision-goal-cancel")
-      }.padding(20)
-    }.background(TerminalAppearance.panel.ignoresSafeArea())
+          .padding(.horizontal, 20).padding(.vertical, 8)
+          .background(TerminalAppearance.background)
+      }
       .navigationTitle(preview != nil ? "核对目标变更" : regenerate ? "重新生成目标" : "编辑目标")
       .navigationBarTitleDisplayMode(.inline).navigationBarBackButtonHidden(applying)
       .interactiveDismissDisabled(applying).clarityMask()
       .onAppear { if regenerate && preview == nil && failure == nil && !busy { generate() } }
       .onDisappear { requestID = UUID(); operation?.cancel(); operation = nil }
+  }
+
+  private var regenerationStatus: some View {
+    VStack(alignment: .leading, spacing: 20) {
+      HStack(alignment: .top, spacing: 14) {
+        Image(systemName: failure == nil ? "arrow.triangle.2.circlepath" : "exclamationmark.arrow.triangle.2.circlepath")
+          .font(.title2).foregroundColor(TerminalAppearance.accent)
+          .frame(width: 48, height: 48)
+          .background(TerminalAppearance.accent.opacity(0.10)).cornerRadius(14)
+        VStack(alignment: .leading, spacing: 6) {
+          Text(failure == nil ? "从最近对话整理目标" : "暂时没能生成目标").font(.headline)
+          Text("根据最近几轮对话，整理任务目标、完成条件和范围。核对并采用后才会生效。")
+            .font(.subheadline).foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      if let failure { failureCard(failure) }
+      if busy {
+        HStack(spacing: 12) {
+          ProgressView()
+          Text("正在整理最近的对话…").font(.subheadline).foregroundColor(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
+          .background(TerminalAppearance.panel).cornerRadius(14)
+      } else {
+        Button { generate() } label: {
+          Text(failure == nil ? "重新生成" : "重试").frame(maxWidth: .infinity, minHeight: 30)
+        }.buttonStyle(.borderedProminent).controlSize(.large)
+          .foregroundColor(TerminalAppearance.background).disabled(!available)
+          .accessibilityIdentifier("task-supervision-goal-regenerate-retry")
+      }
+      Text("当前目标会保留，生成失败也不会修改它。")
+        .font(.caption).foregroundColor(.secondary)
+    }.frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func failureCard(_ message: String) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Label("本次操作未完成", systemImage: "exclamationmark.circle").font(.subheadline.weight(.medium))
+      Text(message).font(.subheadline).textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
+    }.foregroundColor(.orange).frame(maxWidth: .infinity, alignment: .leading)
+      .padding(16).background(Color.orange.opacity(0.08)).cornerRadius(14)
   }
 
   private func editorField(_ title: String, text: Binding<String>, limit: Int, id: String) -> some View {
@@ -89,6 +140,7 @@ struct SupervisionGoalEditor: View {
             Button("重新核对") { generate() }.disabled(busy || !available)
           } else {
             Button("采用并重新判断") { apply(preview) }
+              .buttonStyle(.borderedProminent).controlSize(.large)
               .disabled(busy || model.writing || !available || !preview.requiresAdoption || preview.needsClarification)
               .accessibilityIdentifier("task-supervision-goal-apply")
           }
