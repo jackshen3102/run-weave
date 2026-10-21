@@ -10,7 +10,7 @@ export interface TerminalInputIntent {
 export function rawTerminalInputIntent(data: string): TerminalInputIntent {
   // These are terminal protocol control sequences, intentionally including ESC.
   // eslint-disable-next-line no-control-regex
-  if (/^(?:\x1b\[<(?:64|65);[1-9]\d*;[1-9]\d*M)+$/.test(data))
+  if (/^(?:\x1b\[<(?:64|65|80|81);[1-9]\d*;[1-9]\d*M)+$/.test(data))
     return { kind: "browse", source: "mouse-wheel" };
   // eslint-disable-next-line no-control-regex
   if (!data || /^(?:\x1b\[[IO]|\x1b\[\??[\d;]+R|\x1b\[(?:\?|>)[\d;]+c|\x1b\[\?[\d;]+\$y)$/.test(data))

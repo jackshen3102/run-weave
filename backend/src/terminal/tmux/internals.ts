@@ -18,7 +18,23 @@ export const InteractivePaneReadyMinWaitMs = 1_000;
 export const InteractivePaneReadyStableMs = 200;
 export const InteractivePaneReadyTimeoutMs = 2_500;
 export const DEFAULT_UTF8_LOCALE = "en_US.UTF-8";
-export const TMUX_RUNTIME_OPTION_ARGS = ["set-option", "-g", "mouse", "on"];
+export const TMUX_RUNTIME_OPTION_ARGS = [
+  "set-option", "-g", "mouse", "on", ";",
+  // Keep ordinary wheel bindings unchanged for older Web and native iOS clients.
+  "bind-key", "-n", "C-WheelUpPane", "if-shell", "-F", "-t", "=",
+  "#{pane_in_mode}", "send-keys -M",
+  "copy-mode -e -t = ; send-keys -X -N 1 -t = scroll-up", ";",
+  "bind-key", "-n", "C-WheelDownPane", "if-shell", "-F", "-t", "=",
+  "#{pane_in_mode}", "send-keys -M", ";",
+  ...["copy-mode", "copy-mode-vi"].flatMap((table) =>
+    ([["C-WheelUpPane", "scroll-up"], ["C-WheelDownPane", "scroll-down"]] as const).flatMap(
+      ([key, action]) => [
+        "bind-key", "-T", table, key,
+        "send-keys", "-X", "-N", "1", "-t", "=", action, ";",
+      ],
+    ),
+  ),
+].slice(0, -1);
 export const TMUX_SANITIZE_ENV_ARGS = [
   ...CONFIGURATION_FIELDS.filter((field) => field.sensitive).flatMap((field) => field.environmentKeys),
   "RUNWEAVE_ACCESS_TOKEN",

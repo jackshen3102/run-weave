@@ -130,6 +130,8 @@ export function TerminalSurface({
   const openTerminalFileLinkRef = useRef(openTerminalFileLink);
   const tokenRef = useRef(token);
   const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
+  const resetScrollInputRef = useRef<(() => void) | null>(null);
+  const resetScrollInput = useMemoizedFn(() => resetScrollInputRef.current?.());
   const lastResizedAtRef = useRef<number | null>(null);
   const inputSequenceRef = useRef(0);
   const outputSequenceRef = useRef(0);
@@ -155,6 +157,7 @@ export function TerminalSurface({
   const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
   const search = useTerminalSearch({ active: active && !obscured, clientMode, terminalRef });
   const scroll = useTerminalScrollController({
+    resetScrollInput,
     active,
     apiBase,
     runtimeKindRef,
@@ -203,6 +206,7 @@ export function TerminalSurface({
     sendInput,
     sendResize,
     runtimeKind,
+    singleRowScrollRef,
     terminalStatus: connectionTerminalStatus,
   } = useTerminalConnection({
     apiBase,
@@ -421,6 +425,8 @@ export function TerminalSurface({
     paneWorkspaceRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
+    singleRowScrollRef,
+    resetScrollInputRef,
     searchAddonRef: search.addonRef,
     sendResize,
     sendTerminalInput,

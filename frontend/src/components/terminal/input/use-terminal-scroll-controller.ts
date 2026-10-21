@@ -16,6 +16,7 @@ interface UseTerminalScrollControllerOptions {
   terminalRef: RefObject<Terminal | null>;
   terminalSessionId: string;
   token: string;
+  resetScrollInput?: () => void;
 }
 
 export function useTerminalScrollController({
@@ -25,6 +26,7 @@ export function useTerminalScrollController({
   terminalRef,
   terminalSessionId,
   token,
+  resetScrollInput,
 }: UseTerminalScrollControllerOptions) {
   const tmuxExitCopyModeRequestedAtRef = useRef(0);
   const [bottomOffsetRows, setBottomOffsetRows] = useState(0);
@@ -33,6 +35,7 @@ export function useTerminalScrollController({
   const [tmuxScrollbackActive, setTmuxScrollbackActive] = useState(false);
 
   const requestTmuxExitCopyMode = useMemoizedFn(() => {
+    resetScrollInput?.();
     const now = Date.now();
     if (
       now - tmuxExitCopyModeRequestedAtRef.current <

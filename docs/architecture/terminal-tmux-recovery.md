@@ -104,6 +104,10 @@ Backend 重启仍会断开 WebSocket；只有原 tmux/pane/任务 PID 不变才�
 
 ## 客户端恢复与输入边界
 
+- tmux 连接通过可选 `connected.tmuxScrollMode = single-row` 声明细粒度回看能力。
+  新 Web 在无应用鼠标追踪的备用屏幕中使用专用 Ctrl-wheel 绑定按一行发送，按动画帧合并输入，
+  保持滚动距离与方向顺序；切回底部或销毁 surface 时取消未发送输入。普通 wheel 仍为五行，
+  旧 Backend、新旧 Web 混用及原生 iOS 继续沿用原有路径，不依赖一起升级。
 - 已恢复运行时但原 tmux 会话丢失等非致命提示，通过 terminal WS 的 `notice` 消息展示；
   `error` 留给失败。Web 与原生 iOS 收到 `notice` 后继续处理连接、快照和输出。
 - Web 对建连早期的异常断线也执行有上限的退避重连；连接存活时间只决定重置重试预算。
