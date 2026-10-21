@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { ChevronRight, Eye, TriangleAlert } from "lucide-react";
+import { supervisionGoalPreview } from "@runweave/shared/task-supervision";
 import { useTaskSupervisionQuery } from "../../../features/terminal/queries/task-supervision";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { taskSupervisionNeedsAttention, taskSupervisionStatus } from "./status";
@@ -14,8 +15,8 @@ export function TerminalTaskSupervisionStatusStrip({ sessionId }: { sessionId: s
   if (!watch?.enabled) return null;
   const attention = taskSupervisionNeedsAttention(watch) || query.isError;
   const label = taskSupervisionStatus(watch);
-  const threadTitle = query.data?.threadTitle;
-  const description = [threadTitle, label].filter(Boolean).join(" · ");
+  const taskTitle = supervisionGoalPreview(watch.goalDefinition?.objective ?? watch.goal) || query.data?.threadTitle;
+  const description = [taskTitle, label].filter(Boolean).join(" · ");
   const Icon = attention ? TriangleAlert : Eye;
   return (
     <button
@@ -27,8 +28,8 @@ export function TerminalTaskSupervisionStatusStrip({ sessionId }: { sessionId: s
       className={`flex min-h-10 w-full shrink-0 items-center gap-2 border-b border-slate-800 px-3 py-2 text-left text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${attention ? "bg-amber-950/20 text-amber-300 hover:bg-amber-950/30" : "bg-emerald-950/20 text-emerald-300 hover:bg-emerald-950/30"}`}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      {threadTitle ? <span className="min-w-0 flex-1 truncate">{threadTitle}</span> : null}
-      <span className={threadTitle ? "shrink-0" : "min-w-0 flex-1 truncate"}>{query.isError ? "上次状态 · " : ""}{label}</span>
+      {taskTitle ? <span className="min-w-0 flex-1 truncate">{taskTitle}</span> : null}
+      <span className={taskTitle ? "shrink-0" : "min-w-0 flex-1 truncate"}>{query.isError ? "上次状态 · " : ""}{label}</span>
       <span className="shrink-0 text-[11px] opacity-80">{watch.continuationCount}/{watch.continuationLimit} 次续接</span>
       <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
     </button>
