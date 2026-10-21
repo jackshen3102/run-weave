@@ -206,98 +206,6 @@ struct RemotePairHostView: View {
   }
 }
 
-private struct RemoteHostEndpointView: View {
-  @Environment(\.dismiss) private var dismiss
-  @ObservedObject var coordinator: RemoteDesktopCoordinator
-  let host: PairedRemoteHost
-  let backendConnections: [BackendConnection]
-  @State private var name: String
-  @State private var address: String
-  @State private var port: String
-  @State private var useRelay: Bool
-  @State private var relayAddress: String
-  @State private var relayPort: String
-  @State private var backendConnectionID: String
-  @State private var failure: String?
-
-  init(coordinator: RemoteDesktopCoordinator, host: PairedRemoteHost, backendConnections: [BackendConnection]) {
-    self.coordinator = coordinator
-    self.host = host
-    self.backendConnections = backendConnections
-    _name = State(initialValue: host.target.name)
-    _address = State(initialValue: host.target.host)
-    _port = State(initialValue: String(host.target.port))
-    _useRelay = State(initialValue: host.target.allowsRelayFallback)
-    _relayAddress = State(initialValue: host.target.relay?.host ?? "")
-    _relayPort = State(initialValue: String(host.target.relay?.port ?? 15446))
-    _backendConnectionID = State(initialValue: host.backendConnectionID ?? "")
-  }
-
-  var body: some View {
-    NavigationView {
-      Form {
-        Section {
-          TextField("机器名称", text: $name).clarityMask()
-          TextField("局域网 IP 或主机名", text: $address).textInputAutocapitalization(.never)
-            .disableAutocorrection(true).keyboardType(.URL)
-            .clarityMask()
-          TextField("端口", text: $port).keyboardType(.numberPad).clarityMask()
-          Text("证书指纹：\(host.target.certificateFingerprint)").font(.caption).textSelection(.enabled)
-            .clarityMask()
-        } header: {
-          Text("同一台 Mac 的地址")
-        } footer: {
-          Text("修改地址保留原 Host 身份与指纹。若 Mac 身份改变，必须重新配对。")
-        }
-        Section {
-          Toggle("允许隧道备用连接", isOn: $useRelay)
-            .accessibilityIdentifier("remote-host-use-relay")
-          if useRelay {
-            TextField("中转服务器内网 IPv4", text: $relayAddress).textInputAutocapitalization(.never)
-              .disableAutocorrection(true).keyboardType(.decimalPad).clarityMask()
-            TextField("远控端口", text: $relayPort).keyboardType(.numberPad).clarityMask()
-          }
-        } header: { Text("远程访问") } footer: {
-          Text("优先连接局域网，连接超时或不可达时尝试隧道。填写 Runweave「端口与隧道」中的 RemoteDesk 地址和端口，Mac 上需保持 Runweave 与 RemoteDesk 共享运行，手机需接入对应网络或 VPN。关闭此项仅使用局域网，保留已保存的隧道配置。")
-        }
-        Section(header: Text("终端快捷入口（可选）")) {
-          backendPicker(selection: $backendConnectionID, connections: backendConnections)
-        }
-        if let failure { Section { Text(failure).foregroundColor(.red) } }
-      }
-      .navigationTitle("桌面地址")
-      .toolbar {
-        ToolbarItem(placement: .navigationBarLeading) { Button("取消") { dismiss() } }
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("保存") {
-            do {
-              let configured = try configuredTarget(id: host.id, name: name, host: address, port: port,
-                fingerprint: host.target.certificateFingerprint, credentialsReference: host.target.credentialsReference)
-              var target = host.target
-              target.name = configured.name
-              target.host = configured.host
-              target.port = configured.port
-              target.relayEnabled = useRelay
-              if useRelay {
-                guard let relayPort = UInt16(relayPort.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-                  throw MobileLoginFailure(message: "请输入有效的中转端口。")
-                }
-                let relay = RemoteRelayEndpoint(host: relayAddress.trimmingCharacters(in: .whitespacesAndNewlines), port: relayPort)
-                guard relay.isValid else { throw MobileLoginFailure(message: "请输入中转服务器的内网 IPv4 和 1024–65535 端口。") }
-                target.relay = relay
-              }
-              try coordinator.save(PairedRemoteHost(target: target,
-                backendConnectionID: backendConnectionID.isEmpty ? nil : backendConnectionID))
-              dismiss()
-            } catch { failure = displayError(error) }
-          }
-        }
-      }
-    }
-    .navigationViewStyle(.stack)
-    .clarityMask()
-  }
-}
 
 func backendPicker(selection: Binding<String>, connections: [BackendConnection]) -> some View {
   Picker("关联 Backend", selection: selection) {
@@ -307,7 +215,7 @@ func backendPicker(selection: Binding<String>, connections: [BackendConnection])
   .clarityMask()
 }
 
-private func configuredTarget(id: UUID, name: String, host: String, port: String,
+func configuredTarget(id: UUID, name: String, host: String, port: String,
   fingerprint: String, credentialsReference: String?) throws -> RemoteTarget {
   let address = host.trimmingCharacters(in: .whitespacesAndNewlines)
   guard !address.isEmpty, !address.contains("/"), !address.contains("@"),
