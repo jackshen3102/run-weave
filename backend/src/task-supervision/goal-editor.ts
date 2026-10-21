@@ -12,6 +12,7 @@ import { SupervisionError } from "./errors";
 import {
   manualGoal,
   prepareGoalEvidence,
+  prepareRegenerationEvidence,
   type GoalEvidence,
   type GoalResolution,
 } from "./goals";
@@ -24,6 +25,7 @@ interface GoalEditorOperations {
     id: string,
     thread: string,
   ) => Promise<SupervisionConversationResponse>;
+  readRecent: (thread: string) => Promise<SupervisionConversationResponse>;
   current: (target: SupervisionTarget) => boolean;
   root: (target: SupervisionTarget) => string;
   inputRevision: (target: SupervisionTarget) => object;
@@ -59,6 +61,7 @@ export class SupervisionGoalEditor {
       fingerprint: string;
       sourceVersion?: string;
       inputRevision: object;
+      recent: boolean;
     }
   >();
   private readonly controllers = new Map<string, AbortController>();
@@ -99,10 +102,12 @@ export class SupervisionGoalEditor {
     )
       throw new SupervisionError("任务已变化，请重新读取后生成。");
     const inputRevision = ops.inputRevision(watch.target);
-    const source = await ops.read(id, watch.target.threadId);
+    const recent = !request.content;
+    const read = () => recent ? ops.readRecent(watch.target.threadId) : ops.read(id, watch.target.threadId);
+    const source = await read();
     const previous =
       watch.goalDefinition && ops.archived(id, watch.goalDefinition.revisionId);
-    const evidence = await prepareGoalEvidence(
+    const evidence = recent ? prepareRegenerationEvidence(watch, source) : await prepareGoalEvidence(
       watch,
       source,
       ops.root(watch.target),
@@ -121,7 +126,7 @@ export class SupervisionGoalEditor {
       ops.inputRevision(watch.target) !== inputRevision
     )
       throw new SupervisionError("生成期间任务或输入已变化，请重新生成。");
-    const fresh = await ops.read(id, watch.target.threadId);
+    const fresh = await read();
     if (
       this.closed || signal.aborted ||
       fingerprint(fresh) !== fingerprint(source) ||
@@ -139,7 +144,7 @@ export class SupervisionGoalEditor {
       changed: result.changed,
       needsClarification: result.needsClarification,
       requiresAdoption:
-        result.changed ||
+        recent || result.changed ||
         watch.goalState !== "ready" ||
         watch.goalCheckedMessageId !== result.checkedMessageId,
     };
@@ -157,6 +162,7 @@ export class SupervisionGoalEditor {
       fingerprint: fingerprint(source),
       sourceVersion: source.sourceVersion,
       inputRevision,
+      recent,
     });
     return preview;
   }
@@ -176,7 +182,7 @@ export class SupervisionGoalEditor {
     const { preview } = entry;
     if (preview.needsClarification)
       throw new SupervisionError("必要来源不足，请明确目标后再采用。", 422);
-    const source = await ops.read(id, preview.target.threadId);
+    const source = await (entry.recent ? ops.readRecent(preview.target.threadId) : ops.read(id, preview.target.threadId));
     let adopted = false;
     const updated = await ops.transaction(() => {
       const watch = ops.find(id);
@@ -207,7 +213,18 @@ export class SupervisionGoalEditor {
           "有续接尚未确认接收，请先在原终端核对，暂不能重判旧回复。",
         );
       ops.cancel(id);
-      synchronizeContext(watch, taskCandidates(source));
+      if (entry.recent) {
+        const latest = taskCandidates(source).at(-1)!;
+        watch.task = latest;
+        watch.taskStartMessageId = latest.id;
+        watch.lastUserMessageId = latest.id;
+        // Old references stay in the archives, not in this newly summarized task.
+        watch.evidenceMessageIds = [];
+        watch.completedReplyIds = [];
+        watch.plans = [];
+      } else {
+        synchronizeContext(watch, taskCandidates(source));
+      }
       watch.goalDefinition = preview.goal;
       watch.goal = preview.goal.objective;
       delete watch.goalOverride;

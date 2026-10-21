@@ -104,6 +104,7 @@ export class TaskSupervisionService {
     this.goalEditor = new SupervisionGoalEditor({
       get: (id) => this.get(id), find: (id) => this.find(id),
       read: (id, thread) => this.readContext(id, thread), current: (target) => this.current(target),
+      readRecent: (thread) => this.history.getSupervisionContext(thread),
       root: (target) => this.resolve(target.terminalSessionId, target.panelId).root,
       inputRevision: (target) => terminalInputAdmission(this.manager.getSession(target.terminalSessionId)!).revision,
       generate: (watch, evidence, signal) => this.classifier.generateGoal(watch, evidence, { ...this.modelOptions(), signal }),
