@@ -10711,5 +10711,37 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "读取 Backend 生成的 CLI 绑定元数据并验证产物摘要；属于运行时产物，不作为业务配置来源。"
+  },
+  {
+    "file": "frontend/src/features/analytics/desktop-clarity-cookies.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.getItem(`${STORAGE_PREFIX}${name}`)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "桌面自定义协议保存、读取或删除 Clarity SDK 的 _clck 与 _clsk 匿名 Cookie 及到期时间；属于采集会话运行状态，不作为 settings.yaml 业务配置来源。"
+  },
+  {
+    "file": "frontend/src/features/analytics/desktop-clarity-cookies.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.removeItem(`${STORAGE_PREFIX}${name}`)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "桌面自定义协议保存、读取或删除 Clarity SDK 的 _clck 与 _clsk 匿名 Cookie 及到期时间；属于采集会话运行状态，不作为 settings.yaml 业务配置来源。"
+  },
+  {
+    "file": "frontend/src/features/analytics/desktop-clarity-cookies.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.removeItem(key)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "桌面自定义协议保存、读取或删除 Clarity SDK 的 _clck 与 _clsk 匿名 Cookie 及到期时间；属于采集会话运行状态，不作为 settings.yaml 业务配置来源。"
+  },
+  {
+    "file": "frontend/src/features/analytics/desktop-clarity-cookies.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.setItem(key, JSON.stringify({ value: cookieValue, expires }))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "桌面自定义协议保存、读取或删除 Clarity SDK 的 _clck 与 _clsk 匿名 Cookie 及到期时间；属于采集会话运行状态，不作为 settings.yaml 业务配置来源。"
   }
 ]
