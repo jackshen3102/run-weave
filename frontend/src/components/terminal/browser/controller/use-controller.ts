@@ -61,7 +61,7 @@ export function useTerminalBrowserController({
   const [bookmarkPanelOpen, setBookmarkPanelOpen] = useState(false);
   const editingAddressTabIdRef = useRef<string | null>(null);
   const { headerError, headerRules, headerSaving, saveHeaderRules } =
-    useTerminalBrowserHeaderRules(isElectron, profileId);
+    useTerminalBrowserHeaderRules(isElectron, profileId, headerRulesPanelOpen);
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
     [activeTabId, tabs],

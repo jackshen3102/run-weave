@@ -1,3 +1,4 @@
+import { handleHeaderCommand } from "./headers.js";
 import { randomUUID } from "node:crypto";
 import { handleCookieCommand } from "./cookies.js";
 import {
@@ -49,6 +50,8 @@ export async function handleMessage(
     await handleCookieCommand(conn, id, method, params, sessionId);
     return;
   }
+
+  if (handleHeaderCommand(conn, id, method, params, sessionId)) return;
 
   if (sessionId) {
     if (conn.browserSessionIds.has(sessionId)) {

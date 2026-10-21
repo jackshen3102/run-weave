@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { BrowserWindow } from "electron";
 import { isDeepStrictEqual } from "node:util";
 import { ConfigurationDomain, ConfigurationError } from "@runweave/config-node";
 import { getRuntimeBrowserProfileConfig } from "../profile/endpoints.js";
@@ -23,6 +25,7 @@ const headerRulesByProfile = new Map<
 >();
 const headerStores = new Map<TerminalBrowserProfileId, ConfigurationDomain<TerminalBrowserHeaderRule[]>>();
 const configuredHeaderProfiles = new Set<TerminalBrowserProfileId>();
+const headerRevisions = new Map<TerminalBrowserProfileId, string>();
 function headerStore(profileId: TerminalBrowserProfileId) {
   let store = headerStores.get(profileId);
   if (!store) { store = new ConfigurationDomain<TerminalBrowserHeaderRule[]>(`desktop.browser.headerRules.${profileId}`); headerStores.set(profileId, store); }
@@ -78,7 +81,14 @@ export function getTerminalBrowserHeaderState(
     headerRulesByProfile.set(profileId, normalizeTerminalBrowserHeaderRules(saved ?? []));
     if (saved !== undefined) configuredHeaderProfiles.add(profileId);
   }
-  return { rules: headerRulesByProfile.get(profileId) ?? [], configured: configuredHeaderProfiles.has(profileId) };
+  const rules = headerRulesByProfile.get(profileId) ?? [];
+  const configured = configuredHeaderProfiles.has(profileId);
+  let revision = headerRevisions.get(profileId);
+  if (!revision) {
+    revision = createHash("sha256").update(JSON.stringify({ rules, configured })).digest("hex");
+    headerRevisions.set(profileId, revision);
+  }
+  return { rules, configured, revision };
 }
 
 export function wildcardUrlPatternMatches(
@@ -167,9 +177,13 @@ export function ensureTerminalBrowserHeaderDispatcher(
 export function setTerminalBrowserHeaderRules(
   profileId: TerminalBrowserProfileId,
   rules: unknown,
+  expectedRevision?: string,
 ): TerminalBrowserHeaderState {
   const normalized = normalizeTerminalBrowserHeaderRules(rules);
   const current = getTerminalBrowserHeaderState(profileId);
+  if (expectedRevision !== undefined && expectedRevision !== current.revision) {
+    throw new Error("HEADER_REVISION_CONFLICT: Header rules changed; read them again before saving.");
+  }
   const store = headerStore(profileId);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     // The CAS stamp covers all settings. Rebase only when this Profile's
@@ -189,10 +203,15 @@ export function setTerminalBrowserHeaderRules(
     }
   }
   headerRulesByProfile.set(profileId, normalized);
+  headerRevisions.delete(profileId);
   configuredHeaderProfiles.add(profileId);
   ensureTerminalBrowserHeaderDispatcher(profileId);
   store.markApplied();
-  return getTerminalBrowserHeaderState(profileId);
+  const state = getTerminalBrowserHeaderState(profileId);
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send("terminal-browser:header-rules-changed", { profileId, state });
+  }
+  return state;
 }
 
 export async function configureTerminalBrowserProfileProxy(

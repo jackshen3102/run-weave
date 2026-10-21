@@ -13,9 +13,14 @@ export interface TerminalBrowserHeaderRule {
 }
 
 export interface TerminalBrowserHeaderState {
+  revision?: string;
   configured?: boolean;
   rules: TerminalBrowserHeaderRule[];
 }
+
+export type TerminalBrowserHeaderUpdate =
+  | { operation: "set"; rule: TerminalBrowserHeaderRule; expectedRevision: string }
+  | { operation: "remove"; id: string; expectedRevision: string };
 
 export type TerminalBrowserHeaderRuleField =
   | "id"

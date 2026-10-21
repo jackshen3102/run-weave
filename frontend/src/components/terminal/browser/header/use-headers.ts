@@ -1,8 +1,10 @@
 import { deviceStorage } from "../../../../features/device-storage";
+import { useMemoizedFn } from "ahooks";
 import { useEffect, useState } from "react";
 import {
   normalizeTerminalBrowserHeaderRules,
   type TerminalBrowserHeaderRule,
+  type TerminalBrowserHeaderState,
 } from "@runweave/shared/terminal-browser-headers";
 import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 
@@ -15,15 +17,17 @@ function storageKey(profileId: TerminalBrowserProfileId): string {
 export function useTerminalBrowserHeaderRules(
   isElectron: boolean,
   profileId: TerminalBrowserProfileId,
+  panelOpen: boolean,
 ) {
   const [headerRules, setHeaderRules] = useState<TerminalBrowserHeaderRule[]>(
     [],
   );
+  const [revision, setRevision] = useState<string>();
   const [headerSaving, setHeaderSaving] = useState(false);
   const [headerError, setHeaderError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isElectron) {
+    if (!isElectron || panelOpen) {
       return;
     }
     let cancelled = false;
@@ -32,6 +36,7 @@ export function useTerminalBrowserHeaderRules(
         if (!window.electronAPI?.terminalBrowserGetHeaderRules) throw new Error("Header rules are unavailable");
         const state = await window.electronAPI.terminalBrowserGetHeaderRules(profileId);
         if (cancelled) return;
+        setRevision(state.revision);
         if (!state.configured) {
           const rawRules = deviceStorage.getItem(storageKey(profileId)) ?? (profileId === "profile-1" ? deviceStorage.getItem(LEGACY_HEADER_RULES_STORAGE_KEY) : null);
           if (rawRules !== null) {
@@ -57,7 +62,24 @@ export function useTerminalBrowserHeaderRules(
     return () => {
       cancelled = true;
     };
-  }, [isElectron, profileId]);
+  }, [isElectron, profileId, panelOpen]);
+
+  const onRulesChanged = useMemoizedFn((data: { profileId: TerminalBrowserProfileId; state: TerminalBrowserHeaderState }) => {
+    if (data.profileId !== profileId) return;
+    // Keep an open draft and its original revision together. Saving it must
+    // fail after an external update instead of overwriting the Agent's changes.
+    if (panelOpen) {
+      setHeaderError("请求头规则已在其他位置更新。请关闭面板后重新打开，再检查并保存。");
+    } else {
+      setHeaderRules(data.state.rules);
+      setRevision(data.state.revision);
+      setHeaderError(null);
+    }
+  });
+  useEffect(() => {
+    if (!isElectron) return;
+    return window.electronAPI?.onTerminalBrowserHeaderRulesChanged?.(onRulesChanged);
+  }, [isElectron, onRulesChanged]);
 
   const saveHeaderRules = async (
     nextRules: TerminalBrowserHeaderRule[],
@@ -68,12 +90,17 @@ export function useTerminalBrowserHeaderRules(
     setHeaderSaving(true);
     setHeaderError(null);
     try {
+      if (!revision) {
+        throw new Error("请求头规则版本尚未读取。请关闭面板后重新打开；若仍失败，请更新桌面客户端。");
+      }
       const normalizedRules = normalizeTerminalBrowserHeaderRules(nextRules);
       if (!window.electronAPI?.terminalBrowserSetHeaderRules) {
         throw new Error("Header rules are unavailable");
       }
-      const state = await window.electronAPI.terminalBrowserSetHeaderRules(profileId, normalizedRules);
+      const state = await window.electronAPI.terminalBrowserSetHeaderRules(profileId, normalizedRules, revision);
       setHeaderRules(state.rules);
+      setRevision(state.revision);
+      setHeaderError(null);
       return true;
     } catch (error) {
       setHeaderError(

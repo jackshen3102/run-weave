@@ -134,11 +134,12 @@ export function registerTerminalBrowserHandlers(): void {
       _event,
       profileId: unknown,
       rules: unknown,
+      expectedRevision?: string,
     ): TerminalBrowserHeaderState => {
       if (!isTerminalBrowserProfileId(profileId)) {
         throw new Error("Invalid Terminal Browser Profile");
       }
-      return setTerminalBrowserHeaderRules(profileId, rules);
+      return setTerminalBrowserHeaderRules(profileId, rules, expectedRevision);
     },
   );
 

@@ -1,3 +1,4 @@
+import { runBrowserHeadersCommand } from "./browser-headers.js";
 import { CliError } from "../errors.js";
 import { runBrowserAssistCommand } from "./browser-assist.js";
 import { runBrowserToolsCommand } from "./browser-tools.js";
@@ -7,13 +8,17 @@ import {
 } from "./browser-profile.js";
 
 const USAGE =
-  "Usage: rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json] | rw browser tools <list|call> [options] | rw browser assist <request|status|acknowledge|cancel> [options]";
+  "Usage: rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json] | rw browser headers <list|set|remove> [options] | rw browser tools <list|call> [options] | rw browser assist <request|status|acknowledge|cancel> [options]";
 
 export async function runBrowserCommand(
   subcommand: string | undefined,
   args: string[],
   io: BrowserCommandIo,
 ): Promise<void> {
+  if (subcommand === "headers") {
+    await runBrowserHeadersCommand(args, io);
+    return;
+  }
   if (subcommand === "tools") {
     await runBrowserToolsCommand(args, io);
     return;
