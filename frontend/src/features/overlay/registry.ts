@@ -22,7 +22,9 @@ function running(element: HTMLElement): boolean {
     animation.playState === "running" && animation.effect?.getComputedTiming().iterations !== Infinity);
 }
 function present(element: HTMLElement): boolean {
-  if (!element.isConnected || element.hidden || element.getAttribute("aria-hidden") === "true") return false;
+  // Radix hides visible backdrops/outer layers from assistive technology.
+  // Accessibility exposure does not determine whether a native view is covered.
+  if (!element.isConnected || element.hidden) return false;
   if (element instanceof HTMLDialogElement && !element.open) return false;
   const style = getComputedStyle(element);
   if (style.display === "none" || style.visibility === "hidden" || !element.getClientRects().length) return false;
@@ -53,7 +55,7 @@ export function measureOverlays(): void {
   }
 }
 export function scheduleOverlayMeasure(): void {
-  if (frame !== null || layers.size === 0) return;
+  if (frame !== null) return;
   frame = requestAnimationFrame(() => {
     frame = null;
     measureOverlays();
@@ -68,7 +70,9 @@ export function setOverlayViewport(next: Rect | null): void {
 export function registerOverlay(element: HTMLElement, policy: OverlayPolicy): () => void {
   const layer = { element, policy };
   layers.add(layer);
-  const changed = () => { measureOverlays(); scheduleOverlayMeasure(); };
+  // Ref cleanup/registration can repeat within one React commit. Measure the
+  // settled DOM before paint, never a partially registered set of layers.
+  const changed = scheduleOverlayMeasure;
   const resize = new ResizeObserver(changed);
   resize.observe(element);
   const mutations = new MutationObserver(changed);
@@ -94,11 +98,9 @@ export function registerOverlay(element: HTMLElement, policy: OverlayPolicy): ()
     element.removeEventListener("transitionend", changed);
     element.removeAttribute("data-native-overlay-pending");
     layers.delete(layer);
-    // Allow a replacement layer to register in the same React commit before restoring.
+    // Registration and removal share the same frame, including the last layer.
     scheduleOverlayMeasure();
     if (layers.size === 0) {
-      if (frame !== null) cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => { frame = null; measureOverlays(); });
       window.removeEventListener("resize", scheduleOverlayMeasure);
       window.removeEventListener("scroll", scheduleOverlayMeasure, true);
     }
