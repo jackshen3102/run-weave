@@ -19,7 +19,7 @@ return open ? (
 
 - `window` 用于遮罩覆盖全窗的模态层。
 - 默认 `intersection` 用于非模态菜单、提示、通知；仅覆盖当前 Browser viewport 时避让。
-- 始终挂载的浮层必须用 `hidden`、`aria-hidden`、HTML dialog 的 `open` 或 Radix `data-state` 表达生命周期。`data-state=closed` 的退出动画完成后不再占用。
+- 始终挂载的浮层必须用 `hidden`、CSS 可见性、HTML dialog 的 `open` 或 Radix `data-state` 表达视觉生命周期。`aria-hidden` 只表达无障碍语义，Radix 会将可见遮罩和嵌套外层标为 `aria-hidden`，不能用它判定是否遮挡。`data-state=closed` 的退出动画完成后不再占用。
 - ref 必须落到实际可见区域；普通布局 Portal 不登记。已有布局侧栏继续通过 bounds 预留空间。
 - 图片预览通过 `@runweave/common/terminal` 的 `ImageLightboxLifecycleProvider` 接收宿主适配，Common 不依赖 Electron 或前端业务。
 
@@ -27,7 +27,9 @@ return open ? (
 
 ## 运行时合同
 
-`features/overlay/registry.ts` 保存窗口内的浮层集合，观察登记元素、Popper 父容器和视口变化；仅有限动画期间逐帧测量。没有有效遮挡时不做持续轮询。Browser bounds 来自同一套 CSS 视口坐标。
+`features/overlay/registry.ts` 保存窗口内的浮层集合，观察登记元素、Popper 父容器和视口变化；同一帧内的登记、释放和观察回调合并到绘制前测量，避免 React ref 重新绑定时按不完整集合恢复原生网页。仅有限动画期间逐帧测量，没有有效遮挡时不做持续轮询。Browser bounds 来自同一套 CSS 视口坐标。
+
+根 `package.json` 统一 `@radix-ui/react-dismissable-layer` 版本。Dialog、Sheet、Select 和菜单必须共享同一份层级上下文，避免嵌套时 Escape 或外部点击被多套独立层级同时处理。
 
 `features/terminal/browser-presentation/coordinator.ts` 合并工具激活与覆盖状态，通过窄 bridge 发送单调 revision。等待原生让位确认时浮层保持布局与焦点能力，内容透明且不可点击；超时或错误有限重试并显示重试入口，不能永久卡住弹窗。普通 Web 不等待 Electron。
 

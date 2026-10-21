@@ -114,6 +114,9 @@
     "typescript": "^5.8.2"
   },
   "pnpm": {
+    "overrides": {
+      "@radix-ui/react-dismissable-layer": "1.1.15"
+    },
     "patchedDependencies": {
       "app-builder-lib@25.1.8": "patches/app-builder-lib@25.1.8.patch"
     },

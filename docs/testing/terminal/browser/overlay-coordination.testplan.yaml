@@ -38,6 +38,7 @@ cases:
       - 使用 $toolkit:playwright-cli 建立三层浮层，逐层关闭；computer-use 检查只关闭内层时网页持续隐藏。
       - 在同一 fixture 重新打开后先卸载外层，再关闭剩余有效层；确认只释放已移除登记，不提前恢复网页。
       - 关闭最后一层并在退出动画中观察合成窗口；确认动画结束才恢复，重复快速开关后没有永久隐藏。
+      - 重新建立 Sheet、Dialog、Select 三层，逐次按 Escape；确认每次只关闭最上层，Select 和内层 Dialog 关闭后仍保持遮挡，最后关闭 Sheet 才恢复网页。
   - id: BOV-004
     name: 历史自定义浮层使用统一协调
     required: true
@@ -122,3 +123,23 @@ cases:
     steps:
       - 使用 $toolkit:playwright-cli 打开、键盘切换、按 Escape 关闭标准弹窗及图片浮层；确认无需 IPC 即可显示并恢复触发器焦点。
       - 确认无 Browser 原生占位、无限等待或 bridge 缺失错误。
+  - id: BOV-013
+    name: 背景刷新与浮层 ref 重绑不释放有效遮挡
+    required: true
+    description: 同一浮层持续打开时，背景刷新和内容更新不能使 suppression 短暂失效或反复等待原生让位。
+    preconditions:
+      - 候选隔离桌面已打开真实 Browser Tab，专用终端可从右键菜单打开重命名弹窗，页面实时刷新保持运行。
+      - 本例可观察呈现协议的 suppressed 变化和浮层等待标记；只读观察不改变协议结果。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开终端重命名弹窗并等待初次让位完成；保持至少 15 秒且覆盖至少三轮背景刷新，连续输入名称草稿；确认没有 suppressed=false 请求、等待标记不再出现，输入与焦点保持。
+      - 取消关闭并用 $computer-use 检查合成窗口；确认原 Browser Tab 恢复且没有重载，重新打开新建项目等公共弹窗，按同样方式确认刷新期间不闪动。
+  - id: BOV-014
+    name: 无障碍隐藏的可见遮罩仍阻止原生网页覆盖
+    required: true
+    description: 模态内容未与 Browser 相交时，aria-hidden 的可见全窗遮罩仍持续阻止网页显示，直到最后一层退出完成。
+    preconditions:
+      - 候选隔离桌面打开真实 Browser Tab，专用 fixture 可打开 Dialog、AlertDialog 和 Sheet，并把内容区域移到 Browser viewport 之外。
+      - 模态组件保持真实 Radix 无障碍处理和退出动画，本例可读取遮罩 aria-hidden 及呈现状态。
+    steps:
+      - 使用 $toolkit:playwright-cli 逐个打开三类模态组件并把内容移到 Browser 之外；确认遮罩仍有尺寸且 aria-hidden=true，通过 $computer-use 确认网页被遮罩完整覆盖，呈现状态持续 suppressed。
+      - 在 Sheet 内打开嵌套 Dialog 再关闭内层；确认外层虽被无障碍隐藏仍持续遮挡，关闭最后一层并观察退出动画后，原网页才恢复显示与交互。
