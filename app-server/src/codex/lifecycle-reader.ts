@@ -34,6 +34,7 @@ export interface CodexRolloutLifecycleReaderLike {
 export class CodexRolloutLifecycleReader implements CodexRolloutLifecycleReaderLike {
   private readonly sessionsRoots: string[];
   private readonly threadPaths = new Map<string, string>();
+  private readonly snapshots = new Map<string, { signature: string; lifecycle: CodexRolloutLifecycle | null }>();
   private indexPromise: Promise<void> | null = null;
   private indexedAt = 0;
 
@@ -56,15 +57,24 @@ export class CodexRolloutLifecycleReader implements CodexRolloutLifecycleReaderL
       return null;
     }
     try {
-      return parseLatestLifecycle(await readFileTail(filePath));
+      const previous = this.snapshots.get(threadId);
+      const tail = await readFileTail(filePath, previous?.signature);
+      if (tail.content === null) return previous!.lifecycle;
+      const lifecycle = parseLatestLifecycle(tail.content);
+      this.snapshots.delete(threadId);
+      this.snapshots.set(threadId, { signature: tail.signature, lifecycle });
+      if (this.snapshots.size > 128) this.snapshots.delete(this.snapshots.keys().next().value!);
+      return lifecycle;
     } catch {
       this.threadPaths.delete(threadId);
+      this.snapshots.delete(threadId);
       return null;
     }
   }
 
   shutdown(): void {
     this.threadPaths.clear();
+    this.snapshots.clear();
   }
 
   async findThreadPath(threadId: string): Promise<string | null> {
@@ -90,19 +100,21 @@ export class CodexRolloutLifecycleReader implements CodexRolloutLifecycleReaderL
   }
 }
 
-async function readFileTail(filePath: string): Promise<string> {
+async function readFileTail(filePath: string, previousSignature?: string): Promise<{ signature: string; content: string | null }> {
   const handle = await open(filePath, "r");
   try {
-    const { size } = await handle.stat();
+    const { size, dev, ino, mtimeMs, ctimeMs } = await handle.stat();
+    const signature = `${filePath}:${dev}:${ino}:${size}:${mtimeMs}:${ctimeMs}`;
+    if (signature === previousSignature) return { signature, content: null };
     const start = Math.max(0, size - ROLLOUT_TAIL_BYTES);
     const buffer = Buffer.alloc(size - start);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, start);
     const value = buffer.subarray(0, bytesRead).toString("utf8");
     if (start === 0) {
-      return value;
+      return { signature, content: value };
     }
     const firstNewline = value.indexOf("\n");
-    return firstNewline === -1 ? "" : value.slice(firstNewline + 1);
+    return { signature, content: firstNewline === -1 ? "" : value.slice(firstNewline + 1) };
   } finally {
     await handle.close();
   }

@@ -122,7 +122,7 @@ Codex 使用 App Server 的 `GET /threads/:threadId/supervision-context?messageI
 
 语义缓存位于 App Server profile 的 `supervision-cache/`，总预算 256 MiB；单 thread 正文缓存滚动约 16 MiB、索引元数据上限 8 MiB、最多 4 个内存索引。已淘汰正文通过原始偏移和哈希回读；超过元数据硬上限返回明确错误。重启从完整记录边界继续，源文件替换或截断会重建索引，Backend 校验 sourceVersion，拒绝在替换后的来源上复用旧证据。原始文件被外部删除时报告缺失，历史输入仍可从档案查询。
 
-原生 task_complete 的错误类别和 turn ID 直达监控。`server_overloaded` 等即使没有 final 也显示为运行异常，不生成空回复三分类、不宣称完成、不自动切模型。
+原生 task_complete 的错误类别和 turn ID 直达监控。当前轮终止错误不因线程已被 Hook 标为空闲或 thread/read 仍报告 active 而丢弃；新一轮 UserPromptSubmit / SessionStart 会清除旧生命周期游标，早于当前投影的错误不覆盖新任务；同一轮已记录的异常也不会被迟到的 active 状态清除。原生生命周期尾部按文件身份与修改状态缓存，未变化时不重复读取正文；完整回复的有界重读也逐次核对本轮运行错误。`server_overloaded` 等即使没有 final 也显示为运行异常，不生成空回复三分类、不宣称完成、不自动切模型。
 
 ## 历史存储与升级
 

@@ -30,8 +30,12 @@ export async function readFinalReply(
   signal: AbortSignal,
 ) {
   let source = await read();
-  const runtimeError = source.runtimeError;
-  if (runtimeError && (!event.turnId || event.turnId === runtimeError.turnId)) throw new Error(`${runtimeError.code}: ${runtimeError.message}`);
+  const checkRuntimeError = () => {
+    const error = source.runtimeError;
+    if (error && (!event.turnId || event.turnId === error.turnId))
+      throw new Error(`${error.code}: ${error.message}`);
+  };
+  checkRuntimeError();
   let messages = messagesFrom(source);
   const locate = () =>
     [...messages]
@@ -51,6 +55,7 @@ export async function readFinalReply(
   for (let attempt = 0; !native && attempt < 3 && !signal.aborted; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, 500));
     source = await read();
+    checkRuntimeError();
     messages = messagesFrom(source);
     native = locate();
   }
