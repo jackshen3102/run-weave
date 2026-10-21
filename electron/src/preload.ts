@@ -339,12 +339,19 @@ const electronApi = {
   terminalBrowserSetHeaderRules: (
     profileId: TerminalBrowserProfileId,
     rules: TerminalBrowserHeaderState["rules"],
+    expectedRevision?: string,
   ) =>
     ipcRenderer.invoke(
       "terminal-browser:set-header-rules",
       profileId,
       rules,
+      expectedRevision,
     ) as Promise<TerminalBrowserHeaderState>,
+  onTerminalBrowserHeaderRulesChanged: (listener) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, data: { profileId: TerminalBrowserProfileId; state: TerminalBrowserHeaderState }) => listener(data);
+    ipcRenderer.on("terminal-browser:header-rules-changed", wrapped);
+    return () => { ipcRenderer.off("terminal-browser:header-rules-changed", wrapped); };
+  },
   terminalBrowserRestoreProfilePreferences: () => ipcRenderer.invoke("terminal-browser:restore-profile-preferences") as Promise<TerminalBrowserProfilePreferences>,
   terminalBrowserGetProfilePreferences: () =>
     ipcRenderer.invoke(

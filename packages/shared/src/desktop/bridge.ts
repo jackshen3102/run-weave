@@ -256,7 +256,11 @@ export interface RunweaveElectronBridge {
   terminalBrowserSetHeaderRules: (
     profileId: TerminalBrowserProfileId,
     rules: TerminalBrowserHeaderState["rules"],
+    expectedRevision?: string,
   ) => Promise<TerminalBrowserHeaderState>;
+  onTerminalBrowserHeaderRulesChanged: (
+    listener: (data: { profileId: TerminalBrowserProfileId; state: TerminalBrowserHeaderState }) => void,
+  ) => () => void;
   terminalBrowserRestoreProfilePreferences: () => Promise<TerminalBrowserProfilePreferences>;
   terminalBrowserGetProfilePreferences: () => Promise<TerminalBrowserProfilePreferences>;
   terminalBrowserUpdateProfilePreferences: (

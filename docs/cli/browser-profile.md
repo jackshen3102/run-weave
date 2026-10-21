@@ -40,6 +40,49 @@ Backend 协议 2 的响应包含 `binding`（desktopId、hostId、generation、i
 不单独证明某次请求命中规则。缺失状态或旧桌面没有 resolver 时明确失败，不伪造 `stopped`，
 也不回退到未经解析的 Browser。桌面、远端 Backend 和 CLI 需一起更新。
 
+## 请求头规则（Agent 操作）
+
+简单的请求头设置优先用此入口：与右侧 Headers 面板共用保存和生效逻辑，不需要启用 Whistle
+或配置 HTTPS 拦截。自动解析当前实例、Worktree Profile 和 Group；SSH 终端复用既有 CDP
+隧道，规则仍应用在桌面浏览器上。需要新版桌面和 CLI。
+
+```bash
+rw browser headers list --json
+rw browser headers set --id staging --name X-Environment --value staging \
+  --url-pattern '*://example.com/*' --json
+rw browser headers set --id auth --name Authorization --value-file /path/to/secret \
+  --url-pattern '*://api.example.com/*' --json
+rw browser headers remove --id staging --json
+```
+
+- `list`、`set`、`remove` 始终输出 JSON；支持 `--profile 1|2|3`、`--group-id <id>`。
+  返回 `profileId`、`scope: "profile"`、`appliesTo: "future-requests"` 和规则版本 `revision`。
+- **作用范围是整个 Profile**，包含其他 Group、现有与后续标签页；Group 只决定连接归属，
+  不隔离请求头。保存后从下一次匹配的 HTTP/HTTPS 请求生效，不刷新页面、不重放已发出的请求。
+  如需立刻验证，主动触发一次安全请求并检查服务端实际收到的 Header。
+- `set` 按 `--id` 新增或替换一条完整规则，保留其他规则和顺序；相同 ID/内容重复设置不增加
+  规则。`--disabled` 保存为停用；重新执行同一 ID 的 `set` 且不带此参数即启用。
+  `remove` 只删除指定 ID；ID 不存在时保持现有规则。
+- `--url-pattern` 必填，建议精确到域名。`*://example.com/*` 只匹配该完整主机名；
+  `*://*.example.com/*` 只匹配子域名；`*://*/*` 匹配所有 HTTP/HTTPS 请求，使用前检查必要性。
+  多条规则匹配同一个 Header 时，后面的规则覆盖前面的规则，名称比较不区分大小写。
+- Header 值默认显示为 `[REDACTED]`；仅明确需要时传 `--show-values`。`--value-file -` 从
+  标准输入读取，文件或 stdin 末尾的一个换行会移除；不要把凭据直接写进命令历史或日志。
+  `list` 的脱敏输出不能用来恢复凭据。规则值按现有配置持久保存在该实例的 `settings.yaml`。
+- 最多 20 条；复用面板对名称、控制字符及禁用 Header 的校验。参数错误退出码 2，
+  桌面或传输不可用为 3，协议拒绝或并发冲突为 4。命令先读版本再提交；遇到
+  `HEADER_REVISION_CONFLICT` 重新读取并比较，不自动重试写入。
+  面板打开期间发生外部更新时保留草稿并提示关闭重开，旧草稿保存会被拒绝。
+- CDP 扩展为 `Runweave.getHeaderRules`（无参数）和 `Runweave.updateHeaderRule`：
+  `{ operation: "set", rule, expectedRevision }` 或
+  `{ operation: "remove", id, expectedRevision }`。规则字段沿用
+  [共享合同](../../packages/shared/src/browser/headers.ts)，Profile 来自连接，不能通过参数切换。
+  连接超时或中断后先 `list` 核对结果，不自动重放。
+
+复杂代理规则仍可使用 Profile resolver 返回的 Whistle 状态；此命令管理的是浏览器请求头
+规则，不修改 Whistle 规则。当前面板保存会将该 Profile 全部规则统一为面板中的 Domain，
+Agent 设置了不同 URL pattern 时，后续手工保存前应检查这一范围变化。
+
 ## CDP Cookie 读写
 
 `Storage.getCookies` 和 `Storage.setCookies` 使用连接所选 Profile 的真实 Cookie 存储，
