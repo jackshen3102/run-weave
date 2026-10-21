@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import type {
   PreviewSupervisionGoalRequest,
   SupervisionGoalDetail,
@@ -7,6 +8,7 @@ import type {
   TaskWatch,
 } from "@runweave/shared/task-supervision";
 import type { SupervisionConversationResponse } from "@runweave/shared/terminal/conversation";
+import { AppServerConversationError } from "../app-server/client";
 import { digest, messagesFrom, taskCandidates } from "./context";
 import { SupervisionError } from "./errors";
 import {
@@ -24,8 +26,10 @@ interface GoalEditorOperations {
   read: (
     id: string,
     thread: string,
+    signal: AbortSignal,
   ) => Promise<SupervisionConversationResponse>;
-  readRecent: (thread: string) => Promise<SupervisionConversationResponse>;
+  readRecent: (thread: string, signal: AbortSignal) => Promise<SupervisionConversationResponse>;
+  timeoutMs: () => number;
   current: (target: SupervisionTarget) => boolean;
   root: (target: SupervisionTarget) => string;
   inputRevision: (target: SupervisionTarget) => object;
@@ -77,9 +81,11 @@ export class SupervisionGoalEditor {
     this.controllers.get(id)?.abort();
     const controller = new AbortController();
     this.controllers.set(id, controller);
-    const combined = signal
-      ? AbortSignal.any([controller.signal, signal])
-      : controller.signal;
+    const combined = AbortSignal.any([
+      controller.signal,
+      AbortSignal.timeout(this.operations.timeoutMs()),
+      ...(signal ? [signal] : []),
+    ]);
     const job = this.buildPreview(id, request, combined).finally(() => {
       if (this.controllers.get(id) === controller) this.controllers.delete(id);
       this.pending.delete(job);
@@ -103,7 +109,21 @@ export class SupervisionGoalEditor {
       throw new SupervisionError("任务已变化，请重新读取后生成。");
     const inputRevision = ops.inputRevision(watch.target);
     const recent = !request.content;
-    const read = () => recent ? ops.readRecent(watch.target.threadId) : ops.read(id, watch.target.threadId);
+    const read = async () => {
+      for (;;) {
+        signal.throwIfAborted();
+        try {
+          const source = await (recent
+            ? ops.readRecent(watch.target.threadId, signal)
+            : ops.read(id, watch.target.threadId, signal));
+          signal.throwIfAborted();
+          return source;
+        } catch (error) {
+          if (!(error instanceof AppServerConversationError) || error.code !== "CONTEXT_INDEXING") throw error;
+          await delay(100, undefined, { signal });
+        }
+      }
+    };
     const source = await read();
     const previous =
       watch.goalDefinition && ops.archived(id, watch.goalDefinition.revisionId);
@@ -182,7 +202,8 @@ export class SupervisionGoalEditor {
     const { preview } = entry;
     if (preview.needsClarification)
       throw new SupervisionError("必要来源不足，请明确目标后再采用。", 422);
-    const source = await (entry.recent ? ops.readRecent(preview.target.threadId) : ops.read(id, preview.target.threadId));
+    const signal = AbortSignal.timeout(ops.timeoutMs());
+    const source = await (entry.recent ? ops.readRecent(preview.target.threadId, signal) : ops.read(id, preview.target.threadId, signal));
     let adopted = false;
     const updated = await ops.transaction(() => {
       const watch = ops.find(id);

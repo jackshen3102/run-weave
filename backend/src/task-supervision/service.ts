@@ -103,8 +103,9 @@ export class TaskSupervisionService {
       new TaskSupervisionClassifier(path.join(directory, "classification"));
     this.goalEditor = new SupervisionGoalEditor({
       get: (id) => this.get(id), find: (id) => this.find(id),
-      read: (id, thread) => this.readContext(id, thread), current: (target) => this.current(target),
-      readRecent: (thread) => this.history.getSupervisionContext(thread),
+      read: (id, thread, signal) => this.readContext(id, thread, signal), current: (target) => this.current(target),
+      readRecent: (thread, signal) => this.history.getSupervisionContext(thread, [], signal),
+      timeoutMs: () => this.modelOptions().timeoutMs,
       root: (target) => this.resolve(target.terminalSessionId, target.panelId).root,
       inputRevision: (target) => terminalInputAdmission(this.manager.getSession(target.terminalSessionId)!).revision,
       generate: (watch, evidence, signal) => this.classifier.generateGoal(watch, evidence, { ...this.modelOptions(), signal }),
@@ -206,8 +207,8 @@ export class TaskSupervisionService {
       });
     return [];
   }
-  private readContext(id: string, threadId: string) {
-    return readWatchContext(this.find(id), threadId, (thread, ids) => this.history.getSupervisionContext(thread, ids));
+  private readContext(id: string, threadId: string, signal?: AbortSignal) {
+    return readWatchContext(this.find(id), threadId, (thread, ids) => this.history.getSupervisionContext(thread, ids, signal));
   }
   async discover(terminalSessionId: string, panelId?: string | null, _expectedThreadId?: string): Promise<SupervisionDiscovery> {
     void _expectedThreadId;
