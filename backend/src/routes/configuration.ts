@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { configuration, ConfigurationError, flattenConfiguration, fieldForPath } from "@runweave/config-node";
-import { CONFIGURATION_FIELDS, isConfigurationObject, type ConfigurationObject, type ConfigurationPatch } from "@runweave/shared/configuration";
+import { CONFIGURATION_FIELDS, CONFIGURATION_ENUMS, isConfigurationObject, type ConfigurationObject, type ConfigurationPatch } from "@runweave/shared/configuration";
 
 function publicStatus() {
   const status = configuration().status();
@@ -10,7 +10,7 @@ function publicStatus() {
     if (fieldForPath(configuredKey)?.remote) values[key] = value;
   }
   const fieldStates = Object.fromEntries(Object.entries(status.fieldStates ?? {}).filter(([key]) => fieldForPath(key)?.remote));
-  return { ...status, values, fieldStates, fields: CONFIGURATION_FIELDS.filter((field) => field.remote).map(({ path, type, domain, sensitive, apply, description, default: defaultValue, modelSelection }) => ({ path, type, domain, sensitive, apply, description, default: defaultValue, ...(modelSelection ? { modelSelection } : {}) })) };
+  return { ...status, values, fieldStates, fields: CONFIGURATION_FIELDS.filter((field) => field.remote).map(({ path, type, domain, sensitive, apply, description, default: defaultValue, modelSelection }) => ({ path, type, domain, sensitive, apply, description, default: defaultValue, ...(modelSelection ? { modelSelection: { ...modelSelection, allowedEfforts: CONFIGURATION_ENUMS[modelSelection.effortPath] } } : {}) })) };
 }
 
 export function createConfigurationRouter(): Router {
