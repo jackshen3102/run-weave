@@ -10,7 +10,7 @@ function publicStatus() {
     if (fieldForPath(configuredKey)?.remote) values[key] = value;
   }
   const fieldStates = Object.fromEntries(Object.entries(status.fieldStates ?? {}).filter(([key]) => fieldForPath(key)?.remote));
-  return { ...status, values, fieldStates, fields: CONFIGURATION_FIELDS.filter((field) => field.remote).map(({ path, type, domain, sensitive, apply, description, default: defaultValue }) => ({ path, type, domain, sensitive, apply, description, default: defaultValue })) };
+  return { ...status, values, fieldStates, fields: CONFIGURATION_FIELDS.filter((field) => field.remote).map(({ path, type, domain, sensitive, apply, description, default: defaultValue, modelSelection }) => ({ path, type, domain, sensitive, apply, description, default: defaultValue, ...(modelSelection ? { modelSelection } : {}) })) };
 }
 
 export function createConfigurationRouter(): Router {

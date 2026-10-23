@@ -11,6 +11,9 @@ struct ConfigurationView: View {
   @State private var failure: String?
   @State private var busy = false
   @State private var work: Task<Void, Never>?
+  @State private var catalogs: AgentModelCatalogs?
+  @State private var catalogLoading = false
+  @State private var catalogWork: Task<Void, Never>?
 
   var body: some View {
     NavigationView {
@@ -27,13 +30,29 @@ struct ConfigurationView: View {
             Text("保存版本：\(snapshot.savedRevision.map(String.init) ?? "不可读取")").font(.caption)
             if snapshot.diskError != nil { Text("磁盘配置无法读取，请在当前电脑运行 rw config doctor。") }
           }
-          ForEach(snapshot.fields.filter { !$0.path.contains("<") }) { field in
-            Section(header: Text(field.description)) {
+          ForEach(snapshot.fields.filter { field in
+            !field.path.contains("<") && !snapshot.fields.contains { $0.modelSelection?.effortPath == field.path }
+          }) { field in
+            Section(header: Text(field.modelSelection?.label ?? field.description)) {
               if let consumer = snapshot.consumers[field.domain] {
                 Text(consumer.label + (consumer.appliedRevision.map { " · 生效版本 \($0)" } ?? ""))
                   .font(.caption).foregroundColor(.secondary)
               }
-              if field.sensitive {
+              if let selection = field.modelSelection,
+                let effortField = snapshot.fields.first(where: { $0.path == selection.effortPath }) {
+                Text(field.description).font(.caption).foregroundColor(.secondary)
+                ConfigurationModelSettingView(
+                  field: field, effortField: effortField,
+                  model: binding(field.path).wrappedValue,
+                  effort: binding(effortField.path).wrappedValue,
+                  catalog: catalogs?.catalogs[selection.provider], loading: catalogLoading,
+                  onRetry: { loadCatalogs() },
+                  onChange: { model, effort in
+                    draft[field.path] = model ?? ""
+                    draft[effortField.path] = effort ?? ""
+                  }
+                )
+              } else if field.sensitive {
                 Picker("凭据操作", selection: Binding(get: {
                   removed.contains(field.path) ? "delete" : replacing.contains(field.path) ? "replace" : "keep"
                 }, set: { action in
@@ -64,10 +83,12 @@ struct ConfigurationView: View {
     }
     .navigationViewStyle(.stack)
     .onAppear { load() }
-    .onDisappear { work?.cancel(); draft = [:]; replacing = []; removed = [] }
-    .onChange(of: session.generation) { _ in work?.cancel(); dismiss() }
-    .onChange(of: session.authenticated) { if !$0 { work?.cancel(); dismiss() } }
-    .onChange(of: session.foreground) { if !$0 { work?.cancel(); busy = false } }
+    .onDisappear { work?.cancel(); catalogWork?.cancel(); draft = [:]; replacing = []; removed = [] }
+    .onChange(of: session.generation) { _ in work?.cancel(); catalogWork?.cancel(); dismiss() }
+    .onChange(of: session.authenticated) { if !$0 { work?.cancel(); catalogWork?.cancel(); dismiss() } }
+    .onChange(of: session.foreground) {
+      if !$0 { work?.cancel(); catalogWork?.cancel(); busy = false; catalogLoading = false }
+    }
   }
 
   private func binding(_ key: String) -> Binding<String> {
@@ -83,7 +104,21 @@ struct ConfigurationView: View {
         let value = try await api.configuration()
         guard generation == session.generation, !Task.isCancelled else { return }
         snapshot = value; draft = [:]; removed = []; replacing = []
+        loadCatalogs()
       } catch { if !Task.isCancelled { failure = displayError(error) } }
+    }
+  }
+  private func loadCatalogs() {
+    guard let api = session.api, session.authenticated else { return }
+    catalogWork?.cancel(); catalogLoading = true
+    let generation = session.generation
+    catalogWork = Task { @MainActor in
+      defer { if generation == session.generation, !Task.isCancelled { catalogLoading = false } }
+      do {
+        let value = try await api.agentModelCatalogs()
+        guard generation == session.generation, !Task.isCancelled else { return }
+        catalogs = value
+      } catch { /* Preserve the saved selection; the row provides retry. */ }
     }
   }
   private func save(_ current: ConfigurationSnapshot) {

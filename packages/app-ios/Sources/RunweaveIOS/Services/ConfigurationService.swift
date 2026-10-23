@@ -1,6 +1,9 @@
 import Foundation
 
 extension APIClient {
+  func agentModelCatalogs() async throws -> AgentModelCatalogs {
+    try await authorized("/api/agent-model-catalogs")
+  }
   func configuration() async throws -> ConfigurationSnapshot {
     try await authorized("/api/configuration", method: "GET")
   }

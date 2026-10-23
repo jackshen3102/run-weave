@@ -8,6 +8,9 @@ import { requestConfiguration } from "../../services/configuration";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { ConfigurationFieldDetails } from "./field-status";
+import type { AgentModelCatalogsResponse } from "@runweave/shared/agent-model-catalog";
+import { getAgentModelCatalogs } from "../../services/agent-model-catalog";
+import { ConfigurationModelSetting } from "./model-setting";
 
 const states = { applied: "已生效", restartRequired: "等待所属服务重启", error: "配置错误", unconfigured: "未配置" };
 export function ConfigurationPanel({ apiBase, token, embedded = false, onAuthExpired }: { apiBase: string; token: string | null; embedded?: boolean; onAuthExpired?: () => void }) {
@@ -16,6 +19,23 @@ export function ConfigurationPanel({ apiBase, token, embedded = false, onAuthExp
   const [draft, setDraft] = useState<Record<string, string | null>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [catalogs, setCatalogs] = useState<AgentModelCatalogsResponse | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const catalogRequest = useRef<AbortController | null>(null);
+  const loadCatalogs = useMemoizedFn(async () => {
+    if (!token) return;
+    catalogRequest.current?.abort();
+    const controller = new AbortController(); catalogRequest.current = controller;
+    setCatalogLoading(true);
+    try {
+      const next = await getAgentModelCatalogs(apiBase, token, controller.signal);
+      if (!controller.signal.aborted) setCatalogs(next);
+    } catch { /* Existing values remain editable through reset; retry is shown. */ }
+    finally { if (!controller.signal.aborted) setCatalogLoading(false); }
+  });
+  const hasConfiguration = status !== null;
+  useEffect(() => { if (hasConfiguration && token) void loadCatalogs(); }, [hasConfiguration, token, loadCatalogs]);
+  useEffect(() => () => catalogRequest.current?.abort(), []);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
   const run = useMemoizedFn(async (save = false) => {
@@ -58,12 +78,27 @@ export function ConfigurationPanel({ apiBase, token, embedded = false, onAuthExp
         {[...new Set(status.fields.filter(field => !field.path.includes("<")).map(field => field.domain))].map(domain => <details key={domain} className="rounded-lg border border-border p-3">
           <summary className="cursor-pointer text-sm font-medium">{CONFIGURATION_DOMAIN_LABELS[domain] ?? domain}</summary>
           <div className="mt-3 space-y-3">
-        {status.fields.filter(field => field.domain === domain && !field.path.includes("<")).map(field => {
+        {status.fields.filter(field => field.domain === domain && !field.path.includes("<") && !status.fields.some(modelField => modelField.modelSelection?.effortPath === field.path)).map(field => {
           const changed = Object.hasOwn(draft, field.path);
           const value = changed ? draft[field.path] : status.values[field.path];
           const text = value == null ? "" : typeof value === "string" ? value : JSON.stringify(value);
           const consumer = status.consumers[field.domain];
           const fieldState = status.fieldStates?.[field.path];
+          const effortField = status.fields.find(item => item.path === field.modelSelection?.effortPath);
+          if (field.modelSelection && effortField) {
+            const effortChanged = Object.hasOwn(draft, effortField.path);
+            const effort = effortChanged ? draft[effortField.path] : status.values[effortField.path];
+            return <div key={field.path} className="flex flex-col gap-2 border-b border-border/60 pb-3">
+              <p className="text-sm">{field.modelSelection.label}</p>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
+              {[field, effortField].map(item => {
+                const state = status.fieldStates?.[item.path];
+                return state ? <div key={item.path}><p className="text-xs">{item.path === field.path ? "模型" : "推理强度"}</p><ConfigurationFieldDetails field={item} status={state} changed={changed || effortChanged} /></div> : null;
+              })}
+              {!fieldState && <p className="text-xs text-muted-foreground">{consumer ? states[consumer.state] : "状态未知"}{consumer?.appliedRevision != null ? ` · 生效版本 ${consumer.appliedRevision}` : ""}</p>}
+              <ConfigurationModelSetting field={field} model={typeof value === "string" ? value : ""} effort={typeof effort === "string" ? effort : ""} defaultEffort={"value" in effortField.default && typeof effortField.default.value === "string" ? effortField.default.value : ""} catalog={catalogs?.catalogs[field.modelSelection.provider]} loading={catalogLoading} disabled={busy} onRetry={() => void loadCatalogs()} onChange={(model, nextEffort) => setDraft(current => ({ ...current, [field.path]: model, [effortField.path]: nextEffort }))} />
+            </div>;
+          }
           return <div key={field.path} className="space-y-1 border-b border-border/60 pb-3">
             <label className="text-sm" htmlFor={`config-${field.path}`}>{field.description}</label>
             {fieldState ? <ConfigurationFieldDetails field={field} status={fieldState} changed={changed} /> : <p className="text-xs text-muted-foreground">{consumer ? states[consumer.state] : "状态未知"}{consumer?.appliedRevision != null ? ` · 生效版本 ${consumer.appliedRevision}` : ""} · 当前服务未提供字段来源</p>}

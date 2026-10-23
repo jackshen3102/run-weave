@@ -4,8 +4,15 @@ import Foundation
 struct ConfigurationSnapshot: Decodable {
   struct Identity: Codable, Equatable { let kind: String; let instanceId: String }
   struct Field: Decodable, Identifiable {
+    struct ModelSelection: Decodable {
+      let provider: String; let effortPath: String; let label: String
+      let allowedEfforts: [String]?; let allowDefaultEffort: Bool
+    }
+    struct DefaultValue: Decodable { let value: ConfigurationValue? }
     let path: String; let type: String; let domain: String
     let sensitive: Bool; let apply: String; let description: String
+    let modelSelection: ModelSelection?
+    let `default`: DefaultValue?
     var id: String { path }
   }
   struct Consumer: Decodable {
