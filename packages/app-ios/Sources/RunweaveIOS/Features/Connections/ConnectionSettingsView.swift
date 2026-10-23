@@ -33,9 +33,24 @@ struct ConnectionSettingsView: View {
             } label: { Label("电脑设置", systemImage: "desktopcomputer") }
           }
           Button { showingCodexQuota = true } label: {
-            Label("Codex 额度", systemImage: "chart.bar")
+            Label {
+              Text("Codex 额度").foregroundStyle(Color.primary)
+            } icon: {
+              Image(systemName: "chart.bar")
+            }
           }.disabled(!session.authenticated)
             .accessibilityIdentifier("codex-quota-open")
+          if let url = URL(string: "https://codexreset.org/") {
+            Link(destination: url) {
+              Label {
+                Text("Codex 重置预测").foregroundStyle(Color.primary)
+              } icon: {
+                Image(systemName: "arrow.up.right.square")
+              }
+            }
+            .accessibilityIdentifier("codex-reset-forecast-open")
+            .accessibilityHint("在浏览器中打开 Codex Reset Monitor")
+          }
           NavigationLink {
             QuickReplyLibraryView(session: session)
           } label: { Label("快捷指令", systemImage: "text.badge.plus") }
