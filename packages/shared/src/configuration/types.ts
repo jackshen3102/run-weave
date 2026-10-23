@@ -28,6 +28,14 @@ export interface ConfigurationExplanation {
 }
 export interface ConfigurationLocation { line: number; column: number }
 export interface ConfigurationField {
+  /** Combines a model field and its effort field into one editor. */
+  modelSelection?: {
+    provider: "codex";
+    effortPath: string;
+    label: string;
+    allowedEfforts?: readonly string[];
+    allowDefaultEffort: boolean;
+  };
   owner: string;
   scope: "instance";
   storage: "settings.yaml";
@@ -69,7 +77,7 @@ export interface ConfigurationStatus {
   fieldStates?: Record<string, ConfigurationFieldStatus>;
 }
 
-export type PublicConfigurationField = Pick<ConfigurationField, "path" | "type" | "domain" | "sensitive" | "apply" | "description" | "default">;
+export type PublicConfigurationField = Pick<ConfigurationField, "path" | "type" | "domain" | "sensitive" | "apply" | "description" | "default" | "modelSelection">;
 export interface PublicConfigurationStatus extends ConfigurationStatus {
   fields: PublicConfigurationField[];
 }

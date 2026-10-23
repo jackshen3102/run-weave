@@ -2,7 +2,7 @@ import Foundation
 
 struct TerminalAgentSettingsResponse: Decodable, Equatable {
   let settings: TerminalAgentSettings
-  let models: [TerminalAgentModelOption]
+  let models: [AgentModelOption]
 }
 
 struct TerminalAgentSettings: Decodable, Equatable {
@@ -13,14 +13,6 @@ struct TerminalAgentSettings: Decodable, Equatable {
   let model: String
   let reasoningEffort: String?
   let revision: String
-}
-
-struct TerminalAgentModelOption: Decodable, Identifiable, Equatable {
-  let id: String
-  let label: String
-  let description: String
-  let defaultReasoningEffort: String?
-  let reasoningEfforts: [String]
 }
 
 struct TerminalAgentSettingsFailure: Decodable, LocalizedError {

@@ -50,6 +50,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 - `packages/app-ios/` 与 `packages/suiji-ios/` 共同依赖独立 [Swift 浏览器包](../../packages/browser-ios/README.md)，两个业务 App 不互相依赖；网页数据仍按 App 沙箱隔离。
 - `backend/` 通过 `backend/src/app-server/` 消费 App Server，不把 App Server 并入自身状态。
 - `packages/shared` 不依赖具体运行时；`packages/common` 不承载协议、存储或 Node/Electron 能力。
+- 电脑配置的模型字段通过可选 `modelSelection` 元数据关联推理强度字段。Web 与原生 iOS 设置从当前电脑的模型目录构建级联选择，保存仍使用原配置字段；旧 Backend 未提供元数据时保留通用字段编辑。原生输入框与设置共用选择界面，分别保留当前终端更新和配置草稿保存的生命周期。
 - 机械边界由 `pnpm architecture:check` 校验；本文只维护人和 Agent 需要的语义地图。
 
 ## 按任务阅读
