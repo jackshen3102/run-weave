@@ -65,7 +65,7 @@ export async function runProviderProcess(params: {
   try {
     const [exit, captured] = await Promise.all([waitForExit(child), output]);
     if (exit.error) throw exit.error;
-    if (exit.code !== 0) {
+    if (exit.terminationReason || exit.code !== 0) {
       throw new ProviderProcessError(
         exit.terminationReason ??
           (captured.stderr.includes("schema")

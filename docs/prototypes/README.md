@@ -18,3 +18,5 @@
 - `terminal-browser-annotations/`：Terminal Browser 页面评论完整流程、失败恢复与交互问题梳理原型。
 
 - `mobile-energy-monitor/`：手机耗电排行、进程操作和电脑端远程授权的待评审原型；不是已实现的产品能力。
+
+- `suiji-work-records/`：使用已核对真实事实的随记工作记录原型，验证日周月阅读、补记编辑和周报选材；待用户评审。
