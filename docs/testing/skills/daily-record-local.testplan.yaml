@@ -1,0 +1,81 @@
+version: 1
+name: 本地 Agent 每日事实记录第一阶段验收
+description: >
+  只覆盖本机原生 Agent 采集、事实引用与按日文件。真实执行 CLI，使用独立临时来源验证边界，
+  最后读取本机真实一周记录。无飞书、随记数据源和远程部署，不修改真实原始记录。
+cases:
+  - id: LOCAL-001
+    name: 按消息时间跨日采集四种原生格式
+    required: true
+    description: >
+      Codex、Pi、Claude、Trae 中当日实际消息能采集；旧文件中的新消息不能遗漏，日期按指定时区左闭右开。
+    preconditions:
+      - CLI 已构建，执行者拥有独立 HOME 和新输出目录，四种 provider 根目录均存在。
+      - 各来源有符合真实结构的样本；样本包括前一天、目标日零点、日内、次日零点消息，文件创建日早于目标日。
+    steps:
+      - 使用独立 HOME 采集目标日；核对 materials 与预设清单，确认四种格式都包含目标日消息，排除窗口外消息。
+      - 对每个来源的一条材料执行 read --verify-source；确认源行摘要与实际字节范围匹配。
+  - id: LOCAL-002
+    name: 系统注入和历史回放不重复计入行为
+    required: true
+    description: >
+      系统催办、环境说明、reasoning、重复消息和继承的父会话前缀被排除，Trae replace/rollback 不产生新事实。
+    preconditions:
+      - 本用例独立 HOME 的 Codex 样本包含系统注入、同 ID 消息、带 subagent_history_start_ordinal 的继承历史和子 Agent 新消息。
+      - 同一 HOME 的 Trae 样本包含 append、replace、rollback 与一个重复 commit，四种根目录均已创建。
+    steps:
+      - 执行 collect；确认仅新增对话和工具结果进入材料，子 Agent 自己的新消息保留正确 threadId。
+      - 核对 excluded 计数与来源 ID；确认历史回放没有变成当天新活动，reasoning 未写入材料。
+  - id: LOCAL-003
+    name: 凭据常见格式在导出前脱敏
+    required: true
+    description: >
+      模拟 Bearer、API key、token 和密码字段不会以原值进入材料，仍可通过源行摘要回查原始定位。
+    preconditions:
+      - 独立 HOME 的消息与工具回执含可识别的模拟凭据，均不是真实密钥，四种根目录存在。
+    steps:
+      - 采集并搜索所有产物；确认模拟密钥原值不存在，正文保留 REDACTED 标记。
+      - 使用对应材料执行 read --verify-source；确认原始行摘要校验仍成功，原始文件未修改。
+  - id: LOCAL-004
+    name: 事实缺引用或错误日期时不能渲染
+    required: true
+    description: >
+      校验拒绝无源事实、没有当天依据的事实以及缺少工具回执的 verified，不生成成功报告。
+    preconditions:
+      - 独立材料包有两天用户／助手消息和一天工具回执，执行者拥有对应清单与独立 facts 文件。
+    steps:
+      - 先校验引用和日期正确的 facts，确认通过；分别输入未知来源、跨日错归和无工具 verified 的事实，确认每次退出 1。
+      - 对无效 facts 运行 render；确认输出目录未生成，原材料未变动。
+  - id: LOCAL-005
+    name: 完整空日写没有且不覆盖已有结果
+    required: true
+    description: >
+      范围内每一天都有记录，完整采集的空日显示没有；再次使用同一输出路径时保护原有报告。
+    preconditions:
+      - 独立 HOME 的四种来源根目录均存在，日期范围有一天有消息、一天没有消息。
+      - 有消息日期的事实已从材料整理，空日 items 为空数组。
+    steps:
+      - 校验并渲染；确认 weekly.md 与两份每日文件存在，空日正文为没有，报告按项目展示结论且无来源编号或附件，内部 facts.json 保留引用。
+      - 记录输出摘要后再次渲染到相同目录；确认退出 1，原报告摘要不变。
+  - id: LOCAL-006
+    name: 来源缺失不能当作当天没事
+    required: true
+    description: >
+      目录缺失或非法 JSON 会明确降低覆盖，仍保留可读材料，空日不显示肯定的没有。
+    preconditions:
+      - 本用例独立 HOME 有一处缺失来源与一处含非法 JSON 的来源，其他来源目录为空且可读。
+    steps:
+      - 执行 collect；确认退出 2，manifest 明确标记 unavailable 或 partial，并指出对应来源。
+      - 使用空事实列表渲染；确认退出 2，日记录说明读取不完整，不能确认是否没有事项。
+  - id: LOCAL-007
+    name: 本机真实一周事实能逐条回查
+    required: true
+    description: >
+      按本次明确的 2026-10-16 至 2026-10-22 北京时间读取真实原生记录，生成七天事实并核对语义。
+    preconditions:
+      - 本机真实来源可只读访问，采集与报告保存在受保护的独立本地目录，不进入 Git。
+      - 执行 Agent 已读取每日记录 Skill，具备逐日阅读用户请求、助手回复及必要工具回执的能力。
+    steps:
+      - 完整采集并阅读每日会话清单与消息；核对覆盖状态、来源类型和日期，记录无活动的来源而不杜撰。
+      - 整理 facts，校验后渲染；逐条回读所有被引用材料并验证源行，确认讨论、Agent 自述和实际验证范围分别表述。
+      - 回读七份每日文件及 weekly.md；确认没有绩效评价或次日建议、没有杜撰的完成或发布，空日按实际覆盖显示。

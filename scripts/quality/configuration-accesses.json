@@ -1,5 +1,93 @@
 [
   {
+    "file": "packages/daily-record/src/data.ts",
+    "kind": "file-io",
+    "expression": "handle.writeFile(content)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "写入本次显式输出目录中的材料包与事实报告，不作为实例业务配置来源。"
+  },
+  {
+    "file": "packages/daily-record/src/data.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(directory, \"manifest.json\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户通过 --bundle 指定的采集材料包，校验来源与摘要，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/daily-record/src/data.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(directory, \"materials.jsonl\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户通过 --bundle 指定的采集材料包，校验来源与摘要，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/daily-record/src/facts.ts",
+    "kind": "file-io",
+    "expression": "readFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户通过 --facts 明确指定的事实文件作为本次校验及渲染输入。"
+  },
+  {
+    "file": "packages/daily-record/src/native.ts",
+    "kind": "environment",
+    "expression": "process.env.CLAUDE_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "沿用来源 Agent 原生数据目录环境变量定位只读历史；显式 --home 时忽略，不作为 Runweave 实例配置。"
+  },
+  {
+    "file": "packages/daily-record/src/native.ts",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "沿用来源 Agent 原生数据目录环境变量定位只读历史；显式 --home 时忽略，不作为 Runweave 实例配置。"
+  },
+  {
+    "file": "packages/daily-record/src/native.ts",
+    "kind": "environment",
+    "expression": "process.env.PI_CODING_AGENT_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "沿用来源 Agent 原生数据目录环境变量定位只读历史；显式 --home 时忽略，不作为 Runweave 实例配置。"
+  },
+  {
+    "file": "packages/daily-record/src/projects.ts",
+    "kind": "environment",
+    "expression": "env.GIT_COMMON_DIR",
+    "count": 1,
+    "category": "system",
+    "reason": "从子进程环境删除 Git 目录覆盖变量，保证项目身份只由材料 cwd 对应的仓库决定。"
+  },
+  {
+    "file": "packages/daily-record/src/projects.ts",
+    "kind": "environment",
+    "expression": "env.GIT_DIR",
+    "count": 1,
+    "category": "system",
+    "reason": "从子进程环境删除 Git 目录覆盖变量，保证项目身份只由材料 cwd 对应的仓库决定。"
+  },
+  {
+    "file": "packages/daily-record/src/projects.ts",
+    "kind": "environment",
+    "expression": "env.GIT_WORK_TREE",
+    "count": 1,
+    "category": "system",
+    "reason": "从子进程环境删除 Git 目录覆盖变量，保证项目身份只由材料 cwd 对应的仓库决定。"
+  },
+  {
+    "file": "packages/daily-record/src/projects.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "system",
+    "reason": "项目身份查询的 Git 子进程继承系统运行环境，并移除目录覆盖变量；不建立新的业务配置来源。"
+  },
+  {
     "file": "packages/runweave-cli/src/commands/browser-headers.ts",
     "kind": "file-io",
     "expression": "readFileSync(valueFile === \"-\" ? 0 : valueFile!)",

@@ -94,7 +94,8 @@
     "./resource-monitor": "./src/monitoring/resource-monitor.ts",
     "./service-management": "./src/monitoring/service-management.ts",
     "./feishu/bridge": "./src/feishu/bridge.ts",
-    "./agent-model-catalog": "./src/agent-model-catalog.ts"
+    "./agent-model-catalog": "./src/agent-model-catalog.ts",
+    "./daily-record": "./src/daily-record.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
