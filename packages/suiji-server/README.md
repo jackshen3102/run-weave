@@ -45,7 +45,7 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
-标签最初引入于 schema 4；当前运行版本要求 schema 9，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
+标签最初引入于 schema 4；当前运行版本要求 schema 10，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -188,9 +188,7 @@ schema 7 的 `correction_lexicons` 按 owner 存储。最多 200 个标准写法
 
 ## Web 与 Runweave 桌面
 
-桌面首页、连接/登录页及终端顶部的“随记”打开独立 `/suiji` 窗口，主窗口保持原页面。
-重复点击唤回已有随记窗口，关闭后可重新打开；普通浏览器入口新开页面。
-桌面能力通过专用 preload IPC 调用主进程窗口工厂，旧桌面缺少能力时明确提示更新。
+桌面终端的“随记”沿用480px、最大100%宽度的右侧抽屉；关闭重开保留阅读条件和草稿，不增加大屏工作台。`/suiji` 保留Web直接入口，账户配置复用现有连接设置。
 [页面入口](../../frontend/src/features/suiji/connection.tsx)位于 Runweave 节点认证之外，
 独立配置随记服务地址和账号，直接调用本服务。凭据仅保留在当前标签页 sessionStorage。
 IndexedDB 草稿按 endpoint/serverId/ownerId 隔离；同源多标签页由 Web Locks 交接编辑权。
@@ -225,7 +223,7 @@ pnpm architecture:check
 
 ## 回收站
 
-迁移到当前要求的 schema 9 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
+迁移到当前要求的 schema 10 后部署本版本服务。`GET /records` 默认排除回收站，`trash=true` 仅列回收站；
 分页游标绑定筛选。App 可按 ID 查看回收站原文和附件，不能编辑或变更待办状态。恢复不改变待办原状态。
 每次删除或恢复沿用版本校验、单事务修订及幂等请求；客户端先持久化意图，结果未知时仅由用户手动确认原请求。
 Web 和原生 iOS 均提供回收站入口、删除确认及恢复。已有本机正文草稿保留，恢复后保存仍须通过版本校验。
@@ -237,12 +235,11 @@ schema 5 增加独立、只追加的跟进及附件关系；部署前执行追�
 
 App 使用 GET/POST `/api/suiji/v1/records/:id/followups`，POST 带 Idempotency-Key；分页默认 20、最多 50，sequence 倒序，游标绑定记录。跟进最多 20000 Unicode 标量，支持一张 JPEG/PNG 和一个 UTF-8 Markdown，各 5 MiB。附件绑定父记录但关系独立，原文编辑不会删除成果附件。App 可只读回收站跟进，Agent 不可新读取，任何入口不可新追加；恢复保留数据。
 
-外部 MCP 共 11 工具（另含下文 list_changes）：原七工具加 get_service_info、list_followups、append_followup。列表与搜索增加精确 tag。新 POST `/mcp/uploads` 使用同一 MCP 个人凭据上传单个 multipart file，actor 固定 agent；原 App token 不可互用。agentName/sessionId 是可选自报显示信息，不代表独立身份。认证/关闭/过期/Origin 拒绝同时作用于上传。
+外部 MCP 原有 11 个记录工具（含下文 list_changes）；schema10 另加 5 个工作事实工具：原七工具加 get_service_info、list_followups、append_followup。列表与搜索增加精确 tag。新 POST `/mcp/uploads` 使用同一 MCP 个人凭据上传单个 multipart file，actor 固定 agent；原 App token 不可互用。agentName/sessionId 是可选自报显示信息，不代表独立身份。认证/关闭/过期/Origin 拒绝同时作用于上传。
 
 相同写意图沿用原幂等键与完整参数，结果未知时手动确认，不自动重放。不同 Agent 的不同追加都保留；成果与任务状态独立，用户在 App 完成或明确指示 Agent 完成即可。Skill 只写最终成功成果，不写过程、失败、中断，不触发后续执行。
 
 入口见 [随记 Skill](../../plugins/toolkit/skills/suiji/SKILL.md)；验收分别见 [服务](../../docs/testing/suiji/followups-service.testplan.yaml)、[客户端](../../docs/testing/suiji/followups-clients.testplan.yaml)、[Agent](../../docs/testing/suiji/followups-agent.testplan.yaml)。这些是验收合同，实际通过范围须读取本次证据，不能由文档推断上线状态。
-
 
 ## 增量变化读取与 Lumi
 
@@ -286,3 +283,15 @@ Lumi 的执行、成果写回与状态变更按当前用户授权执行。`follo
 再运行 `pnpm --filter @runweave/suiji-server exec tsx scripts/verify-changes.ts <port>`，
 默认端口 55439。脚本只创建并清理自己随机命名的临时数据库，执行真实迁移、记录事务和 MCP。
 标准计划见[增量变化验收](../../docs/testing/suiji/incremental-changes.testplan.yaml)。
+
+## 工作事实（schema 10）
+
+`features.workRecords=true` 声明独立工作事实领域，不扩展普通 note/task，也不改变待办状态、跟进或旧 AI 检索。工作页复用 Web 的480px抽屉和原生窄屏导航，旧服务缺能力时保留原四Tab。
+
+接口与安全导入见[工作事实合同](../../plugins/toolkit/skills/suiji/references/work-records.md)，采集后的统一导出与稳定身份见[daily-record 导入规则](../../plugins/toolkit/skills/daily-record/references/suiji-work-records.md)。工作日期为 Asia/Shanghai 业务日期，与 createdAt 分离。导入仅使用设备MCP，按源身份去重，保护所有人工字段及人工清空的项目；没有自动采集、模型汇总或周报。
+
+分页按工作日期/创建时间/ID倒排，返回整日count及coverage；游标绑定服务、owner、日期和feedRevision。变化时409 WORK_FEED_CHANGED；客户端丢弃旧页后最多自动重读一次。写入、修订、导入回执、覆盖与head通过同一mutate事务提交。归类及混合项目撤销均整批版本检查，只改project。
+
+新迁移仅新增五张工作领域表，旧数据不自动解析或搬迁。启动严格要求schema10；升级后不能直接运行只支持schema9的旧服务二进制。回退客户端入口可保留新表和事实，服务修复需使用支持schema10的产物，不执行破坏性down。
+
+验收合同：[服务与导入](../../docs/testing/suiji/work-records-service.testplan.yaml)、[双端客户端](../../docs/testing/suiji/work-records-clients.testplan.yaml)。用例通过情况以本次真实环境证据为准，构建或格式校验不代表生产已部署。

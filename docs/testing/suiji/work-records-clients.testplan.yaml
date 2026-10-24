@@ -1,0 +1,184 @@
+version: 1
+name: 随记工作事实双端阅读与编辑
+description: >
+  待实现验收合同，使用真实Electron随记抽屉、独立服务和共享池iOS Simulator。
+  每例自行建立归属明确的数据及页面，不使用HTML原型代替产品，不用一种平台的证据替代另一种。
+  Web通过toolkit:playwright-cli，原生通过toolkit:agent-device；格式校验不代表行为通过。
+cases:
+  - id: SUIJIWRC-001
+    name: 电脑抽屉采用手机尺寸的事实优先布局
+    required: true
+    description: 窄屏阅读不随电脑窗口加宽变成大屏工作台，浮层保持在抽屉内。
+    preconditions:
+      - 本例独占正确Dev Session中的真实Electron终端，已登录隔离工作服务，服务含三日真实24条事实；记录正确Profile和页面归属。
+    steps:
+      - 使用 $toolkit:playwright-cli 从终端打开随记，点工作；确认抽屉为480px/max-width:100%，底部记录/待办/回收站/工作，首屏直接是事实而非筛选面板。
+      - 将同一窗口从1440px加宽至1920px；确认抽屉内容仍单列480px，没有大屏侧栏、项目/类型筛选、搜索框、月历或日周月切换。
+      - 打开日期和一条事实详情；确认浮层、底栏及补记按钮都在抽屉边界内，正文及Agent限定可完整阅读。
+
+  - id: SUIJIWRC-002
+    name: 电脑日期条件在阅读和抽屉开合中保持
+    required: true
+    description: 日期筛选控制同一条倒序记录流，取消不应用，清空恢复全部。
+    preconditions:
+      - 本例独占正确Dev Session的实际Electron随记抽屉，隔离服务已导入真实21至23日的7/9/8条事实。
+    steps:
+      - 使用 $toolkit:playwright-cli 查看工作页，确认日期顺序23、22、21；设置22日至22日后只看到9条，21日至22日看到16条，均按工作日期排列。
+      - 修改日期后取消，确认已应用条件不变；关闭并重开抽屉，确认条件、滚动和未提交输入保留。
+      - 清空条件，确认恢复全部24条；选择未知日期，确认显示尚未导入而不是没有工作；倒置范围在提交前提示且不发送无效读取。
+
+  - id: SUIJIWRC-003
+    name: 电脑保存结果未知在页面重建后仅手动确认
+    required: true
+    description: 工作草稿和冻结意图独立持久化，不覆盖普通草稿或自动重写。
+    preconditions:
+      - 本例独占正确Dev Session的真实Electron抽屉，使用专用工作草稿与普通记录草稿；可控代理只丢弃本例已提交写入的成功响应。
+    steps:
+      - 使用 $toolkit:playwright-cli 补记一条本例已核对的历史事实，项目留空，保存后由代理丢弃成功响应；确认服务只有一条，界面显示未确认并冻结原请求。
+      - 刷新本例页面，重新发现并附着真实页面；确认工作草稿、原键和原payload恢复，普通记录草稿不变，没有自动POST。
+      - 手动确认原请求；确认返回原事实ID，工作日是补记日、项目为未归类、没有重复，成功后才解除冻结。
+
+  - id: SUIJIWRC-004
+    name: 电脑重新归类只改变所选归属
+    required: true
+    description: 单条及批量选择可核对、取消和撤销，事实正文与身份保持。
+    preconditions:
+      - 本例独占正确Dev Session的真实Electron抽屉，服务有跨日期的实际事实，记录全部字段快照。
+    steps:
+      - 使用 $toolkit:playwright-cli 从详情把一条记录移到未归类；确认刷新后保留，正文、日期、状态、ID/eventKey不变。
+      - 从更多进入归类模式，跨已加载日期选择两条；确认全选按钮只选择已加载记录，提交前列出日期、原项目和条数。
+      - 取消后确认无写入；重新选择并保存目标项目，再撤销；确认只有所选项目改变及恢复，未选事实和总条数不变。
+
+  - id: SUIJIWRC-005
+    name: 电脑次级AI入口保留原有回顾上下文
+    required: true
+    description: 撤去AI Tab不删除现有能力，也不把新事实ID传给普通记录回顾。
+    preconditions:
+      - 本例独占正确Dev Session的真实Electron随记抽屉，隔离服务旧AI可用，已有本例普通记录及一次可观察的真实旧回顾上下文。
+    steps:
+      - 使用 $toolkit:playwright-cli 从工作更多打开AI回顾；确认旧问题、回答和有效范围保留，没有因为打开入口自动发送新问题。
+      - 返回普通记录，从详情聊聊这条；确认使用该普通recordId，返回后仍可看到原详情。
+      - 打开工作事实详情，确认不存在把工作factId交给旧record范围的请求；旧AI读取范围未被宣称自动包含工作事实。
+
+  - id: SUIJIWRC-006
+    name: 电脑账户切换隔离工作事实与迟到结果
+    required: true
+    description: 列表、详情、日期和草稿归属于连接身份，旧请求不能污染新账户。
+    preconditions:
+      - 本例独占真实Electron抽屉，有不同server/owner的隔离服务A/B，A有待恢复工作草稿与可延迟读取，B有不同事实。
+    steps:
+      - 使用 $toolkit:playwright-cli 在A发起工作读取后切换B，再释放A迟到响应；确认B不出现A事实/详情/草稿，没有向B重发A的写入。
+      - 切回A，确认原工作草稿可恢复、普通记录草稿未混用，凭据与目标身份正确。
+
+  - id: SUIJIWRC-007
+    name: iOS倒序事实流首屏直接展示真实内容
+    required: true
+    description: 原生首屏突出事实和工作日期，正文归属及限定可完整阅读。
+    preconditions:
+      - 本例独占按随记身份申请的共享池Simulator和task-dir，安装本轮构建；独立服务有真实三日24条事实，可读取服务结果。
+    steps:
+      - 使用 $toolkit:agent-device 打开随记，点工作；确认单列日期倒排、24条及7/9/8分日，无搜索/项目/类型下拉和常驻日历。
+      - 打开长事实并滚动阅读全文，确认Agent归属和未验证/未上线限定保留，首屏没有新增综合总结。
+
+  - id: SUIJIWRC-008
+    name: iOS补记业务日期和可选项目可正确保存
+    required: true
+    description: 用户录入的是事实，不被默认项目或创建时间误分类。
+    preconditions:
+      - 本例独占本轮构建的随记共享池Simulator，已登录专用服务；准备一条真实已核对且尚未导入的历史事实。
+    steps:
+      - 使用 $toolkit:agent-device 点补记，确认项目为空且可选；选择历史工作日，输入事实和实际状态后保存。
+      - 用独立HTTP回读并返回列表刷新；确认workDate为历史日、createdAt为保存时刻、项目为null/未归类，正文与状态准确，原普通记录不增加一条替身。
+      - 编辑这条事实，确认仍操作同一ID和版本，不把编辑保存变成另一条事实。
+
+  - id: SUIJIWRC-009
+    name: iOS手工归类与服务一致且尊重版本
+    required: true
+    description: 原生归类持久保存到服务，独立HTTP读取相同归属，冲突不覆盖。
+    preconditions:
+      - 本例独占本轮构建的随记共享池Simulator和同服务只读核对连接，有两条跨日期实际事实及独立第二客户端。
+    steps:
+      - 使用 $toolkit:agent-device 从详情重新归类一条事实为未归类，再从更多批量归类两条；提交前确认范围和目标。
+      - 通过第二客户端刷新核对，确认项目与原生相同，事实正文、日期、状态、ID及条数不变。
+      - 第二客户端修改其中一条后，原生用旧版本撤销整批；确认冲突且无部分回退，原生选择和输入仍可重新核对。
+
+  - id: SUIJIWRC-010
+    name: iOS未知保存在App重启后只手动重放
+    required: true
+    description: App启动、前台恢复和认证恢复不自动发送工作业务意图。
+    preconditions:
+      - 本例独占本轮构建的随记共享池Simulator、服务和网络代理，可只丢弃一次已提交工作写入的成功响应，task-dir归属清楚。
+    steps:
+      - 使用 $toolkit:agent-device 保存本例已核对事实，代理丢弃响应；确认服务已保存一条，App冻结原键与payload并提示待确认。
+      - 完全终止并重启本例App，重新取得设备UI引用；确认本地工作意图恢复，启动/认证没有自动业务POST，原普通草稿仍保留。
+      - 手动确认原请求；确认同一事实ID和版本，没有重复，成功后才解除冻结。
+
+  - id: SUIJIWRC-011
+    name: iOS切换连接隔离工作草稿和读取
+    required: true
+    description: 不同服务身份的本地工作目录和网络结果不串用。
+    preconditions:
+      - 本例独占随记共享池Simulator及两个隔离服务A/B，A有工作草稿及可延迟读取，B有不同事实。
+    steps:
+      - 使用 $toolkit:agent-device 在A发起工作读取并切换B，再释放A响应；确认B无A的列表、详情、草稿或写重试。
+      - 切回A，确认可恢复其独立work草稿，正文不在UserDefaults，目录身份包含endpoint/serverId/ownerId和环境。
+
+  - id: SUIJIWRC-012
+    name: iOS次级AI导航保留旧回顾能力
+    required: true
+    description: 新工作Tab不打断普通记录的AI对话或自动提交问题。
+    preconditions:
+      - 本例独占本轮构建的随记共享池Simulator，隔离服务旧AI可用，已有本例普通记录和一次真实旧回顾上下文。
+    steps:
+      - 使用 $toolkit:agent-device 从工作更多打开AI回顾，确认旧上下文仍在，范围仍是旧普通记录范围，打开本身无新提交。
+      - 从普通记录聊聊这条并返回，确认原详情和该记录范围正确；新工作factId没有被用作普通recordId。
+
+  - id: SUIJIWRC-013
+    name: 实际工作HTTP响应可由生产SwiftDTO回编码
+    required: true
+    description: 类型检查之外，真实JSON中的日期、null、状态、分页和能力字段能被原生合同准确读取。
+    preconditions:
+      - 本例独占已迁移隔离服务，有实际工作事实、未归类事实和分页响应；endpoint/token仅通过受保护环境注入，可运行本轮生产Swift DTO映射脚本。
+    steps:
+      - 运行扩展后的mapping:check，获取真实info、工作列表和详情，再用App实际Codable定义解码并回编码。
+      - 对比id/eventKey、workDate/timeZone、statement/status、null项目、version、days/count/coverage及nextCursor；确认值完整一致，缺少可选workRecords能力的旧info也能解码。
+
+  - id: SUIJIWRC-014
+    name: 电脑连接旧服务保持既有导航和数据
+    required: true
+    description: 服务没有新能力时，不发新接口或丢失旧AI入口。
+    preconditions:
+      - 本例独占正确Dev Session的真实Electron抽屉，连接不含features.workRecords的兼容旧服务，含普通记录和待办。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开随记；确认普通记录/待办/回收站/AI仍可用，没有不可用的工作写入口。
+      - 操作普通记录阅读及旧AI入口；确认没有调用work-facts接口或创建工作替身，已有数据和草稿保持原样。
+
+  - id: SUIJIWRC-015
+    name: iOS连接旧服务保持既有导航和数据
+    required: true
+    description: 新原生客户端兼容旧info字段和旧普通记录能力。
+    preconditions:
+      - 本例独占本轮构建的随记共享池Simulator，实际连接不含features.workRecords的兼容旧服务，含普通记录和待办。
+    steps:
+      - 使用 $toolkit:agent-device 打开随记；确认旧四Tab可用，不因可选能力缺失而解码失败或显示不可用的工作写入口。
+      - 阅读记录、进入旧AI并返回；确认旧功能保持、无work-facts请求，未修改原记录或完成状态。
+
+  - id: SUIJIWRC-016
+    name: iOS日期筛选只应用已确认范围
+    required: true
+    description: 日期输入的应用、取消、清空和未知空态准确，不受创建时间或设备时区干扰。
+    preconditions:
+      - 本例独占本轮构建的随记共享池Simulator和隔离服务，独立导入三日7/9/8条真实事实，数据创建时间不同于工作日。
+    steps:
+      - 使用 $toolkit:agent-device 将日期设为22日至22日，确认9条；设为21日至22日确认16条，仍按日期倒排。
+      - 改日期后取消，确认未应用；清空条件恢复24条；倒置区间被阻止，未知日期显示尚未导入，不能写成没有工作。
+
+  - id: SUIJIWRC-017
+    name: 手机和电脑刷新读取同一份持久事实
+    required: true
+    description: 两个真实UI构成一个跨端修改与读取闭环，不能用API结果替代另一端的实际展示。
+    preconditions:
+      - 本例同时独占正确Dev Session的真实Electron抽屉、本轮构建的共享池Simulator和同一隔离服务；两端已核对相同serverId/ownerId，有本例专用实际事实。
+    steps:
+      - 使用 $toolkit:agent-device 在手机修改本例项目归类，再用 $toolkit:playwright-cli 在电脑工作页手动刷新；确认同一事实ID显示新的项目，正文和工作日期保持。
+      - 在电脑编辑该事实的正文，再在手机手动刷新；确认读取的是同一事实的新版本，没有创建替身或改变任务状态，服务只有一份持久事实。

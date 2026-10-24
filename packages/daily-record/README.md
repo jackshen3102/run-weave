@@ -4,6 +4,9 @@
 不调用模型、不联网、不读取飞书或随记，不修改来源。Agent 使用配套
 [Skill](../../plugins/toolkit/skills/daily-record/SKILL.md)阅读材料并整理事实，CLI 负责校验与保存。
 
+飞书来源由同一 Skill 的[独立只读脚本与流程](../../plugins/toolkit/skills/daily-record/references/feishu.md)
+采集本人消息、相关回复及文档候选，再由 Agent 合并事实；不混入本包的本地材料格式。
+
 ```bash
 pnpm --filter @runweave/daily-record build
 pnpm daily-record collect --from 2026-10-16 --to 2026-10-22 --timezone Asia/Shanghai --out /private/tmp/agent-week-materials

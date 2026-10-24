@@ -1,0 +1,155 @@
+version: 1
+name: 随记工作事实服务与导入闭环
+description: >
+  待实现验收合同，对照 2026-10-24 随记工作记录一期计划。使用真实 PostgreSQL 18、HTTP、MCP 和终端 CLI；
+  每例自行建立隔离 fixture，不修改生产数据，不依赖前例结果。真实事实材料取本机受保护目录，凭据只从保护环境注入。
+  格式校验不代表服务已实现或用例已执行。
+cases:
+  - id: SUIJIWR-001
+    name: 追加迁移保留原有随记数据
+    required: true
+    description: 从schema9升级只新增工作领域，原记录、跟进、附件和任务状态不变，旧接口仍能读取。
+    preconditions:
+      - 本例独占隔离schema9数据库，已有普通笔记、open/done/archived待办和跟进附件；保存其字段与附件字节摘要。
+      - 迁移角色与运行角色分别从受保护环境注入，迁移校验摘要完整。
+    steps:
+      - 执行追加迁移并启动对应服务；确认schema10、workRecords能力为true，运行进程没有迁移角色。
+      - 用旧HTTP接口读取原数据并对比快照；确认原ID、正文、版本、日期、状态和附件均相同，工作表为空。
+      - 再执行迁移；确认没有重复新表、数据或迁移记录，原迁移摘要不漂移。
+
+  - id: SUIJIWR-002
+    name: 工作事实在服务重启后持久保留
+    required: true
+    description: 事实和完整空日覆盖均落数据库，服务重启不依赖模型或本机缓存。
+    preconditions:
+      - 本例独占已迁移的隔离服务和数据库，可停止并重新启动同一实例；有真实用户会话和设备MCP凭据。
+    steps:
+      - 手工保存一条取自已核对材料的事实，再导入一天有完整空回执的记录范围；保存ID、版本、工作日期和覆盖状态。
+      - 停止并重启同一服务，重新发现端点并重新认证；确认事实和覆盖状态与重启前一致，未触发采集、模型或业务写重试。
+
+  - id: SUIJIWR-003
+    name: 补记与日期筛选使用工作日期
+    required: true
+    description: 今天补记历史事实归入其工作日，起止日期包含两端，不随客户端时区改变。
+    preconditions:
+      - 本例独占隔离服务，使用已核对21至23日事实作为数据源，当前创建时间与工作日不同。
+    steps:
+      - 经真实HTTP分别创建三天的事实；确认createdAt为保存时间，workDate仍为输入的21、22、23日。
+      - 用22日至22日查询只得到22日，用21日至22日查询同时包含两端；单边日期继续按工作日筛选。
+      - 用不同客户端时区读取相同范围；确认事实ID、日期和顺序相同，反向日期及不存在的公历日期被拒绝。
+
+  - id: SUIJIWR-004
+    name: 分页绑定身份条件及稳定数据版本
+    required: true
+    description: 稳定数据分页不重不漏，排序变化后旧游标明确失效，不能静默漏掉事实。
+    preconditions:
+      - 本例独占隔离服务；用实际24条材料初始化事实，页大小设为5，可通过另一有效客户端新增一条真实已核对事项。
+    steps:
+      - 在数据不变时读取全部页；确认24个唯一ID、7/9/8日总数、工作日期倒排，同日跨页仍可归并，HTTP与MCP集合相同。
+      - 重新读首屏后由另一客户端写入新事实，再用原游标翻页；确认WORK_FEED_CHANGED而不是接着返回变化后的旧顺序。
+      - 将游标换日期条件、换owner或换server；确认拒绝，重新读取首屏能看到当前完整数据。
+
+  - id: SUIJIWR-005
+    name: 重复导入不会重复事实或修订
+    required: true
+    description: 业务幂等和事实稳定键分别生效，正文相似不替代身份校验。
+    preconditions:
+      - 本例隔离服务为空，已有受保护的真实24条统一导入包，externalKey/eventKey和来源身份已核对固定。
+    steps:
+      - prepare后用同键同参数并发导入及原样重放；确认返回同一importId和回执，仅有24条事实和一次已提交导入。
+      - 用新键prepare并再次提交相同源快照；确认ID和事实版本不变，回执为unchanged，不新增事实修订。
+      - 使用原成功键改变正文或目标身份；确认IDEMPOTENCY_KEY_REUSED或目标校验失败，既有数据不变。
+
+  - id: SUIJIWR-006
+    name: 导入失败不留下部分事实或完整覆盖
+    required: true
+    description: 导入事实、修订、回执、coverage和feed revision共用一次事务。
+    preconditions:
+      - 本例独占隔离服务和只读数据库观察连接，有一份多条真实事实包，可对本例事务注入受控中途失败。
+    steps:
+      - 在本例导入完成部分SQL后注入失败；确认请求没有成功回执。
+      - 对比事务前后事实、修订、import run、coverage、head和mutation请求；确认全部未提交，不出现半份complete日期或不可重试的幂等占位。
+
+  - id: SUIJIWR-007
+    name: 重导保留人工修改与人工清空归类
+    required: true
+    description: 人工覆盖按字段保护，来源变化不能抹掉用户纠正过的内容。
+    preconditions:
+      - 本例隔离服务已有一条实际导入事实；另有一份同externalKey、较晚实际采集时间的已核对源快照。
+    steps:
+      - 用HTTP修改该事实的项目为null，并手工纠正标题和工作日期；保存用户修改后的字段和版本。
+      - 用新prepare包导入较晚快照；确认内部来源更新，未覆盖的字段可更新，而项目仍null、标题和工作日期仍为人工值，ID/eventKey不变。
+      - 用早于已存来源时间的包再次导入；确认明确拒绝，不把来源或人工字段回退。
+
+  - id: SUIJIWR-008
+    name: 版本冲突不覆盖另一客户端修改
+    required: true
+    description: 编辑和导入均尊重所基于的版本，失败没有部分写入。
+    preconditions:
+      - 本例隔离服务有一条事实，两个真实客户端读取相同版本；准备一份基于当前feed revision的导入包。
+    steps:
+      - 客户端A先编辑事实，再由B使用旧expectedVersion修改；确认VERSION_CONFLICT，A的结果保留。
+      - 提交之前准备的旧feed revision导入包；确认冲突且没有新的事实、来源更新、导入回执或coverage，原包保留待重新核对。
+
+  - id: SUIJIWR-009
+    name: 批量归类与撤销只修改所选项目
+    required: true
+    description: 批量修改原子提交，撤销也按新版本检查，不回滚事实正文或别人的修改。
+    preconditions:
+      - 本例隔离服务有跨日期的实际事实，保存全部字段快照；两个客户端可独立编辑。
+    steps:
+      - 对两条所选事实批量改项目；确认只有这两条project/manualFields/version变化，正文、日期、状态、ID/eventKey及条数不变。
+      - 用成功返回的版本发起反向项目修改；确认能还原项目，修订保留。
+      - 另建同样批次后由另一客户端编辑其中一条，再用旧版本批量撤销；确认整批冲突，任何记录都不被部分回退。
+
+  - id: SUIJIWR-010
+    name: 覆盖不完整不能产生虚构空日
+    required: true
+    description: complete空回执、partial、unavailable和未请求渠道分别处理，不从缺失推断没有工作。
+    preconditions:
+      - 本例隔离服务准备独立日期的完整空包、partial包、unavailable包；每包声明本次requestedScopes；完整空包来自本例独立临时采集目录的实际空回执，不解释为用户真实历史。
+    steps:
+      - 分别导入上述包并读取日期状态；确认只有全部已请求渠道complete且零事实的日期可返回完整空日。
+      - 未导入日期仍unknown，partial/unavailable不变complete；未请求的机器或渠道不被计为已读取，旧事实不因新包遗漏而删除。
+
+  - id: SUIJIWR-011
+    name: 新工作领域遵守鉴权与身份隔离
+    required: true
+    description: HTTP和MCP只操作认证owner，不能通过ID、游标或请求字段越权，撤销设备凭据后不能继续写。
+    preconditions:
+      - 本例隔离数据库有两个独立owner及各自有效会话/设备凭据，各有私有工作事实；可撤销本例设备凭据。
+    steps:
+      - 未认证访问新接口，确认拒绝；用另一owner读写本例ID或批量夹入其ID，确认NOT_FOUND且无部分修改。
+      - 尝试在输入指定ownerId/actor或复用另一身份游标，确认拒绝；撤销本例设备MCP凭据后新导入失败，App会话不被混用。
+
+  - id: SUIJIWR-012
+    name: 输入和包限额拒绝时不缩水保存
+    required: true
+    description: 合法事实完整保留，非法日期、枚举、Unicode、重复ID和超限包原样拒绝，不静默截断。
+    preconditions:
+      - 本例独占隔离服务，有真实事实文本和可观察的前置行数，可构造仅供合同边界验证的超限字符串或不合法输入。
+    steps:
+      - 验证项目空串规范为null、正文首尾空白保存原样、合法emoji按Unicode标量计数。
+      - 分别提交不存在的日期、空白正文、非法Unicode、未知status、超过80标量项目、重复批量ID及超过100条/200KiB的包；确认参数或限额错误，事实和coverage无新增。
+
+  - id: SUIJIWR-013
+    name: CLI未知写入只允许原请求手动重放
+    required: true
+    description: 真实CLI不把回读相似正文当原意图成功，也不会换键自动重写或继续下一包。
+    preconditions:
+      - 本例隔离服务和CLI使用独立受保护连接配置；有本例专用已核对事实包，可只丢弃一次已提交成功的导入响应。
+    steps:
+      - 执行work-prepare确认只读，再导入并丢弃成功响应；确认CLI报告结果未知，原请求键/目标/完整payload保留，服务只有一批事实。
+      - 重新启动CLI并只做列表/身份读取；确认没有自动POST和后续分包提交，也没有因列表相似就删除冻结请求。
+      - 明确执行retry原request；确认返回原importId，没有重复事实，核对回执后才清理原请求。
+
+  - id: SUIJIWR-014
+    name: 统一导出保留来源状态含义并取得真实24条回执
+    required: true
+    description: 两种reported映射不同，材料到随记的闭环有独立回读，不能用原型数据假装采集完整。
+    preconditions:
+      - 本例独占空隔离服务；已有受保护的飞书三日24条材料和一份本机Agent事实包，材料及来源读取范围可核对。
+    steps:
+      - 按Skill生成统一包并prepare/import；确认飞书三天回读为7/9/8，正文、日期、事项和归类逐条匹配，原有Agent限定不丢失。
+      - 独立转换本机reported和飞书reported；确认前者为agent-reported，后者为progress，本机verified保留证据归属，未读取机器不被标complete。
+      - 检查提交包及日志；确认没有完整聊天、原生JSONL、鉴权URL、token或本机材料绝对路径，凭据没有出现在命令参数中。

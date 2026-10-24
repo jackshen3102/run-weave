@@ -138,3 +138,13 @@ MCP 设备凭据存储于 schema 6 的独立凭据表，各设备可单独撤销
 
 增量发现使用 schema 9 的只读 `list_changes`，覆盖记录变化、跟进和回收站可见性；
 游标与 Lumi 消费边界见[服务合同](../../packages/suiji-server/README.md#增量变化读取与-lumi)。
+
+## 独立工作事实
+
+schema10增加work_facts、work_fact_revisions、work_import_runs、work_day_coverage和work_feed_heads；普通records/跟进/任务完成状态不变。共享合同在 `packages/shared/src/suiji/work-records.ts`，HTTP与设备MCP共用 `packages/suiji-server/src/work-records` 服务和校验，写入仍进入原mutate的同一PG client事务。导入没有App密码HTTP入口。
+
+事实按Asia/Shanghai业务日期排序，来源稳定身份与业务幂等各自负责去重。版本检查、人工字段保护、源时间单调和feedRevision分页防止跨客户端覆盖与静默漏读。覆盖回执仅说明实际请求范围，partial/unavailable/缺失不能变成没有工作。内部原生引用不包含原始聊天或本机路径，界面只呈现事实。
+
+Web使用已有480px抽屉、presence和连接身份隔离的IndexedDB；原生使用SwiftUI与独立work草稿文件。工作替换第四个AI主入口，旧AI保留次级入口与普通记录范围，暂不读取新工作领域。自动总结、周报、大屏分类、额外采集渠道与定时任务未接入。
+
+合同和导入操作见[随记工作事实](../../plugins/toolkit/skills/suiji/references/work-records.md)；行为验收分别见[服务](../testing/suiji/work-records-service.testplan.yaml)与[客户端](../testing/suiji/work-records-clients.testplan.yaml)。源码、隔离服务、Electron、Simulator和生产部署证据分开报告。

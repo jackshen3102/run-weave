@@ -1,3 +1,5 @@
+import { WorkRecords } from "./work-records";
+import { WorkRecordModel } from "./work-record-model";
 import { useFollowupActions } from "./followup-actions";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -10,6 +12,7 @@ import {
   Trash2,
   Sparkles,
   RefreshCw,
+  BriefcaseBusiness,
 } from "lucide-react";
 import type {
   RecordPage,
@@ -41,6 +44,9 @@ export function SuijiWorkspace({
   onOpenLink?: (url: string) => void;
 }) {
   const { client, info, store } = connection;
+  const [work] = useState(() => new WorkRecordModel(client, store));
+  const [reviewLocked, setReviewLocked] = useState(false);
+  const [reviewReturn, setReviewReturn] = useState<{ tab: string; detail?: { record: SuijiRecord; citedVersion?: number } }>();
   const [tab, setTab] = useState("records"),
     [kind, setKind] = useState(""),
     [status, setStatus] = useState("open");
@@ -90,20 +96,22 @@ export function SuijiWorkspace({
   useEffect(() => {
     alive.current = true;
     void acquire();
+    if (info.features?.workRecords) void work.initialize();
     const owned = models.current;
     return () => {
       alive.current = false;
       owned.forEach((m) => m.dispose());
-      void Promise.all([...owned.values()].map((m) => m.settled())).finally(
+      work.dispose();
+      void Promise.all([...owned.values()].map((m) => m.settled()).concat(work.settled())).finally(
         () => {
           release.current?.();
           store.close();
         },
       );
     };
-  }, [acquire, store]);
+  }, [acquire, store, work, info]);
   const load = useMemoizedFn(async (more = false) => {
-    if (tab === "ai" || !pagination.begin(more, cursor, loading)) return;
+    if (tab === "ai" || tab === "work" || !pagination.begin(more, cursor, loading)) return;
     const sequence = ++generation.current;
     setLoading(true);
     setMessage("");
@@ -165,7 +173,7 @@ export function SuijiWorkspace({
   }, [load, tab, kind, status, search, tag, active]);
   const pagination = useLoadMore({
     active,
-    disabled: tab === "ai" || Boolean(detail || editor),
+    disabled: tab === "ai" || tab === "work" || Boolean(detail || editor),
     loading,
     cursor,
     load,
@@ -276,7 +284,7 @@ export function SuijiWorkspace({
   );
   return (
     <main className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
-      {headerActions && tab !== "ai" && !detail && !editor
+      {headerActions && tab !== "ai" && tab !== "work" && !detail && !editor
         ? createPortal(
             <Button
               variant="ghost"
@@ -296,7 +304,8 @@ export function SuijiWorkspace({
       <div
         className={detail || editor ? "hidden" : "flex min-h-0 flex-1 flex-col"}
       >
-        <div ref={pagination.scrollContainer} className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
+        {info.features?.workRecords ? <div className={tab === "work" ? "flex min-h-0 flex-1 flex-col" : "hidden"}><WorkRecords model={work} active={tab === "work"} writable={writable} onReview={() => { setReviewReturn({ tab: "work" }); setTab("ai"); }} /></div> : null}
+        <div ref={pagination.scrollContainer} className={tab === "work" ? "hidden" : "min-h-0 flex-1 overflow-y-auto px-5 pt-4"}>
           {!writable ? (
             <div className="flex items-center justify-between gap-4 rounded-xl border p-4 text-sm">
               <p>另一随记页面正在编辑，当前可浏览。关闭那一页后可接管编辑。</p>
@@ -315,6 +324,7 @@ export function SuijiWorkspace({
             </p>
           ) : null}
           <div hidden={tab !== "ai"} className="pb-6">
+            {reviewReturn ? <Button variant="ghost" onClick={() => { setTab(reviewReturn.tab); setDetail(reviewReturn.detail); setReviewReturn(undefined); }}>返回{reviewReturn.detail ? "原记录" : "工作"}</Button> : null}
             <SuijiReviewPanel
               client={client}
               info={info}
@@ -323,9 +333,10 @@ export function SuijiWorkspace({
               onOpen={(id, version) => void open(id, version)}
               onSave={(body, type) => void edit(undefined, type, body)}
               writable={writable}
+              onLockedChange={setReviewLocked}
             />
           </div>
-          {tab !== "ai" ? (
+          {tab !== "ai" && tab !== "work" ? (
             <>
               <section className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 {tab === "tasks" ? (
@@ -440,7 +451,7 @@ export function SuijiWorkspace({
             </>
           ) : null}
         </div>
-        {tab !== "trash" && tab !== "ai" ? (
+        {tab !== "trash" && tab !== "ai" && tab !== "work" ? (
           <Button
             aria-label="新增记录"
             className="absolute bottom-20 right-5 size-12 rounded-full shadow-lg"
@@ -459,7 +470,7 @@ export function SuijiWorkspace({
               ["records", "记录", NotebookPen],
               ["tasks", "待办", ListChecks],
               ["trash", "回收站", Trash2],
-              ["ai", "AI", Sparkles],
+              info.features?.workRecords ? (["work", "工作", BriefcaseBusiness] as const) : (["ai", "AI", Sparkles] as const),
             ] as const
           ).map(([value, label, Icon]) => (
             <button
@@ -498,7 +509,8 @@ export function SuijiWorkspace({
           }
           onTrash={(trashed) => void changeRecord(detail.record, { trashed })}
           onReview={() => {
-            setScope({ kind: "record", recordId: detail.record.id });
+            setReviewReturn({ tab, detail });
+            if (!reviewLocked) setScope({ kind: "record", recordId: detail.record.id });
             setDetail(undefined);
             setTab("ai");
           }}

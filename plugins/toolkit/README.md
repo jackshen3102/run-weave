@@ -23,6 +23,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - [`clear-technical-explanations`](./skills/clear-technical-explanations/SKILL.md)：社区 ASD-STE100 skill 的中文适配，保留 Strict / STE-flavored 两种文本改写模式、语义核对与默认纯文本输出。
 - `daily-doc-maintenance`
 - `daily-refactor`
+- [`daily-record`](./skills/daily-record/SKILL.md)：按日期和项目记录本机 Agent 与飞书本人事项，先筛选本人消息再补上下文，合并文档、聊天和 Agent 的重复事实。
 - `debugging-strategies`
 - `diagnostic-log-debugging`
 - `doc-coauthoring`

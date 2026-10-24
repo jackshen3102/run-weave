@@ -65,7 +65,7 @@ public struct ServiceInfo: Codable, Sendable {
   let ai: ReviewCapability?
 }
 public struct APIError: Error, Decodable, LocalizedError, Sendable {
-  public struct Detail: Decodable, Sendable { public let currentVersion: Int? }
+  public struct Detail: Decodable, Sendable { public let currentVersion: Int?; public let currentFeedRevision: String? }
   public struct Body: Decodable, Sendable {
     public let code: String; public let message: String; public let retryable: Bool; public let details: Detail?
   }

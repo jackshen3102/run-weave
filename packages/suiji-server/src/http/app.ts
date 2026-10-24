@@ -1,3 +1,5 @@
+import { WorkRecordService } from "../work-records/service";
+import { workRecordRouter } from "./work-records";
 import { FollowupService } from "../followups/service";
 import { followupRouter } from "./followups";
 import { randomUUID } from "node:crypto";
@@ -51,6 +53,7 @@ export function createApp(
     records = new RecordService(pool),
     attachments = new AttachmentService(pool, store);
   const followups = new FollowupService(pool);
+  const workRecords = new WorkRecordService(pool);
   const reviews = new ReviewService(config, records, attachments);
   const lexicons = new CorrectionLexicons(pool);
   const correctionHistory = new CorrectionHistory(pool);
@@ -74,7 +77,7 @@ export function createApp(
     }),
   );
   app.use(express.json({ limit: "256kb" }));
-  app.use("/mcp", createMcpRouter(pool, records, attachments, config, followups, store));
+  app.use("/mcp", createMcpRouter(pool, records, attachments, config, followups, store, workRecords));
   app.use("/api", webCors(config.SUIJI_WEB_ORIGINS));
   app.post(
     "/api/auth/login",
@@ -137,7 +140,7 @@ export function createApp(
         schemaVersion: schema.rows[0].version,
         limits: SUIJI_LIMITS,
         ai: reviews.info(),
-        features: { followups: true, changes: true, correction: corrections.info(), correctionHistory: true },
+        features: { workRecords: true, followups: true, changes: true, correction: corrections.info(), correctionHistory: true },
       });
     }),
   );
@@ -148,6 +151,7 @@ export function createApp(
     requestId: res.locals.requestId,
   });
   const root = "/api/suiji/v1";
+  app.use(`${root}/work-facts`, workRecordRouter(workRecords));
   app.get(`${root}/correction-lexicon`, route(async (_req, res) => {
     res.json(await lexicons.get(res.locals.auth.ownerId));
   }));

@@ -1,13 +1,20 @@
 ---
 name: daily-record
-description: 从本机 Codex、Pi、Claude、Trae 原生记录整理按天的事实记录。用户要求回顾本地 Agent 某天或一段时间做了什么时使用；当前不接入其他机器、飞书或随记。
+description: 从本机 Agent 记录、飞书本人参与的聊天及本人创建或编辑的文档整理每日事实。用于按天或项目回顾实际事项、跨渠道合并重复成果；不自动接入其他机器或创建定时任务。
 ---
 
-# 本地 Agent 每日事实记录
+# 每日事实记录
 
-使用仓库的 `pnpm daily-record` 采集和保存；首次先执行 `pnpm --filter @runweave/daily-record build`。命令合同见 [本地采集 CLI](../../../../packages/daily-record/README.md)。
+只采集本次要求的渠道，先确定日期和 IANA 时区；“近 N 天”默认最近 N 个完整日，不含今天尚未结束的部分，明确实际日期。纯记录事实，不增加评分、建议或次日计划。
 
-## 读取与整理
+- 本机 Agent：在 Runweave 源码仓库执行 `pnpm daily-record`；首次先执行 `pnpm --filter @runweave/daily-record build`。命令合同在该仓库的 `packages/daily-record/README.md`，按下方流程处理。
+- 飞书消息或文档：读[飞书采集与合并](references/feishu.md)，使用本 Skill 的 `scripts/feishu.py`。它只调用 `lark-cli` 读取候选与选定上下文，不发消息、不写文档。
+- 用户要求保存到随记：读[随记工作事实导入](references/suiji-work-records.md)，生成统一包后使用随记 Skill 的 prepare/import/回读闭环。
+- 同时使用多个渠道：先分别取得材料，再按下方“跨渠道合并”整理；其他机器未采集时不能宣称已完整覆盖或去重。
+
+本 Skill 目录也可独立安装；飞书脚本只依赖 Python 与 lark-cli，本机 Agent CLI 需要 Runweave 源码仓库。
+
+## 本机 Agent 读取与整理
 
 - 确定日期和时区；“过去一周”默认最近 7 个完整日，明确实际日期。先 collect，再查看 sessions.json，按日期和会话运行 review。review 会标出截断，不能把片段当完整原文；重要来源用 read 读取全文。
 - 每个日期都阅读其用户请求、对应 Agent 回复和必要工具回执。后台运行、子 Agent、测试场景中的模拟用户消息不等于真人提出新事项；记录本机实际发生的工作，避免重复统计派生会话。
@@ -20,8 +27,16 @@ description: 从本机 Codex、Pi、Claude、Trae 原生记录整理按天的事
 
 ## 校验与保存
 
-先 validate，逐条检查语义和来源，再 render 到新目录。工具校验身份、日期和引用，不判定事实语义。使用 read --verify-source 对照关键源行；原文件不可用时说明证据边界。
+本地材料先 validate，逐条检查语义和来源，再 render 到新目录。工具校验身份、日期和引用，不判定事实语义。使用 read --verify-source 对照关键源行；原文件不可用时说明证据边界。
 
 输出 weekly.md、每日 Markdown、facts.json 和 manifest.json。报告默认按“日期 → 项目 → 当天结论”组织，只展示事实与必要的状态、缺失提示，不显示来源编号、来源说明或附件；引用和覆盖明细保留在本地 JSON 与材料包中供校验。文件保存后回读，给用户主报告路径。
 
 用户要求写飞书文档时，使用可用的 lark-doc Skill/CLI 将报告中的日期、项目和结论写入指定文档或新建文档，回读核对日期、项目、事项是否完整。原始材料包含私人对话，放在受保护本地目录，不提交 Git；不自动上传材料包、内部 JSON 或来源附件。
+
+## 跨渠道合并
+
+- 按原生身份关联：消息用 message_id，文档用实际 Docx token（Wiki 是别名），MR 用仓库与编号。先关联，再比较项目、事项、当天动作和状态；相似措辞不足以认定同一成果。
+- 同一事项的 Agent 实现、文档描述、群聊分享和周报回顾合并为一条当天事实，内部保留全部依据。相关文档可分别保留，去重的是事实，不是删掉文档。
+- 跨日只记录新增进展；旧文档转发、日报或周报复述不能把历史产出改记为编辑当天完成。保存本次生成文档的 token 与内容覆盖日期，供后续识别派生报告，防止反复采入自身。
+- 保留主体和状态。申请、部署触发、Agent 报告、独立验证、合并及上线分别表述；浏览器标签或界面中出现某项目不等于在该项目做了工作。团队文档只取本人相关部分，不把整组成果归给本人。
+- 飞书及合并报告按[飞书采集与合并](references/feishu.md)保存内部事实索引及结论 Markdown。现有 `pnpm daily-record validate/render` 只支持本地材料，不把飞书伪装成 Codex 或混入其 collectionId。

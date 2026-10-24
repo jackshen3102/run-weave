@@ -12,8 +12,10 @@ public struct SuijiRootView: View {
 }
 struct CaptureHome: View {
   @ObservedObject var session: SuijiSession
+  @StateObject private var work: WorkRecordModel
+  @State private var aiPresented = false
   @StateObject private var review: ReviewModel
-  init(session: SuijiSession) { self.session = session; _review = StateObject(wrappedValue: ReviewModel(session: session)) }
+  init(session: SuijiSession) { self.session = session; _review = StateObject(wrappedValue: ReviewModel(session: session)); _work = StateObject(wrappedValue: WorkRecordModel(session: session)) }
   @State private var tab = "records"
   @State private var filter = ""
   @State private var taskStatus = "open"
@@ -36,14 +38,20 @@ struct CaptureHome: View {
       }.id(session.returnHomeRequest).tabItem { Label("记录", systemImage: "square.and.pencil") }.tag("records")
       NavigationStack { feed.navigationTitle("待办") }.id(session.returnHomeRequest).tabItem { Label("待办", systemImage: "checklist") }.tag("tasks")
       NavigationStack { feed.navigationTitle("回收站") }.id(session.returnHomeRequest).tabItem { Label("回收站", systemImage: "trash") }.tag("trash")
-      NavigationStack { ReviewView(session: session, model: review) }.id(session.returnHomeRequest).tabItem { Label("AI", systemImage: "sparkles") }.tag("ai")
-    }.task(id: loadKey) { if tab != "ai" { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }
+      if session.info?.features?.workRecords == true {
+        NavigationStack { WorkRecordsView(model: work, onReview: { aiPresented = true }) }.tabItem { Label("工作", systemImage: "briefcase") }.tag("work")
+      } else {
+        NavigationStack { ReviewView(session: session, model: review) }.id(session.returnHomeRequest).tabItem { Label("AI", systemImage: "sparkles") }.tag("ai")
+      }
+    }.task(id: loadKey) { if tab != "ai" && tab != "work" { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }
       .sheet(item: $session.editor, onDismiss: { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }) { RecordEditorSheet(model: $0, availableTags: session.availableTags) }
       .onChange(of: session.returnHomeRequest) { _, _ in
         tab = "records"
       }
       .onReceive(session.$selectedTag.dropFirst()) { _ in if tab == "ai" { tab = "records" } }
       .onDisappear { review.stopWatching() }
+      .sheet(isPresented: $aiPresented) { NavigationStack { ReviewView(session: session, model: review).toolbar { ToolbarItem(placement: .cancellationAction) { Button("返回") { aiPresented = false } } } } }
+      .onChange(of: tab) { _, value in if value == "work" { Task { await work.load() } } }
       .sheet(isPresented: $settings) { ConnectionSettingsView(session: session) }
       .modifier(SuijiBrowserHost(session: session, settingsPresented: $settings))
       .mobileAnalyticsScreen(tab == "tasks" ? .tasks : tab == "trash" ? .trash : tab == "ai" ? .aiReview : .records)
@@ -63,7 +71,7 @@ struct CaptureHome: View {
             Task { await session.changeRecord(record, action: .status(target)) }
           }, onTag: { session.selectedTag = $0 }) {
             RecordDetail(session: session, original: record, onReview: { item in
-              if !review.running && !review.pending { review.scope = .record(item.id) }; tab = "ai"
+              if !review.running && !review.pending { review.scope = .record(item.id) }; if session.info?.features?.workRecords == true { aiPresented = true } else { tab = "ai" }
             })
           }
         }

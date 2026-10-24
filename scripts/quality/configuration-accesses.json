@@ -4891,7 +4891,7 @@
     "file": "packages/suiji-ios/scripts/check-mapping.mjs",
     "kind": "file-io",
     "expression": "readFile(path.join(artifacts, name + \"-roundtrip.json\"))",
-    "count": 1,
+    "count": 2,
     "category": "runtime-state",
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(path.join(artifacts, name + \"-roundtrip.json\"))"
   },
@@ -4899,7 +4899,7 @@
     "file": "packages/suiji-ios/scripts/check-mapping.mjs",
     "kind": "file-io",
     "expression": "readFile(path.join(artifacts, name + \".json\"))",
-    "count": 1,
+    "count": 2,
     "category": "runtime-state",
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFile(path.join(artifacts, name + \".json\"))"
   },
@@ -4915,7 +4915,7 @@
     "file": "packages/suiji-ios/scripts/check-mapping.mjs",
     "kind": "file-io",
     "expression": "writeFile(path.join(artifacts, name + \".json\"))",
-    "count": 1,
+    "count": 2,
     "category": "runtime-state",
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFile(path.join(artifacts, name + \".json\"))"
   },
@@ -10855,5 +10855,29 @@
     "count": 1,
     "category": "tooling",
     "reason": "独立 OpenScreen MCP 子进程继承当前进程环境并移除 ELECTRON_RUN_AS_NODE，以正常启动桌面程序；不定义或持久化业务配置。"
+  },
+  {
+    "file": "packages/suiji-ios/scripts/check-mapping.mjs",
+    "kind": "environment",
+    "expression": "process.env.SUIJI_VERIFY_WORK_FACT_ID",
+    "count": 1,
+    "category": "test",
+    "reason": "SUIJI_VERIFY_WORK_FACT_ID：隔离HTTP到Swift DTO验证的可选事实身份；仅用于本次验证，不进入Stable业务配置。"
+  },
+  {
+    "file": "packages/suiji-ios/scripts/check-mapping.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(artifacts, \"old-info.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅写入独立验收产物目录中的旧info兼容验证材料，由本次实际HTTP响应派生，不作为实例配置来源。"
+  },
+  {
+    "file": "plugins/toolkit/skills/daily-record/scripts/feishu.py",
+    "kind": "native-or-shell",
+    "expression": "env = {**os.environ, \"TZ\": self.zone.key,",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "仅向明确请求的只读lark-cli子进程传递现有环境、时区和关闭通知标志；不新增实例配置或扩大渠道权限。"
   }
 ]
