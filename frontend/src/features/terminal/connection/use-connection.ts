@@ -1,3 +1,4 @@
+import { beginDiagnosticAction } from "../../../lib/action-diagnostics";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -166,6 +167,7 @@ export function useTerminalConnection(params: {
     };
 
     const connect = async (): Promise<void> => {
+      const diagnostics = beginDiagnosticAction("connection_recover");
       if (cancelled) {
         return;
       }
@@ -183,6 +185,7 @@ export function useTerminalConnection(params: {
         await previousRecovery?.reconnectCursor();
         const cursor = await outputRecovery.reconnectCursor();
         if (cancelled) return;
+        diagnostics.stage("request_started");
         const ticketPayload = await createTerminalWsTicket(
           apiBase,
           tokenRef.current,
@@ -226,6 +229,7 @@ export function useTerminalConnection(params: {
             return;
           }
 
+          diagnostics.stage("response_received");
           connectedAtRef.current = Date.now();
           closeReasonRef.current = null;
           setFailureSince(null);
@@ -253,6 +257,7 @@ export function useTerminalConnection(params: {
           }
         });
         socket.addEventListener("close", (event) => {
+          diagnostics.stage(cancelled || socketRef.current !== socket ? "cancelled" : "failed");
           if (socketRef.current !== socket) {
             return;
           }
@@ -327,6 +332,8 @@ export function useTerminalConnection(params: {
             ) as TerminalServerMessage;
             inboundSequenceRef.current += 1;
             if (parsed.type === "connected") {
+              diagnostics.stage("confirmed");
+              diagnostics.stage("state_updated");
               singleRowScrollRef.current = parsed.runtimeKind === "tmux" && parsed.tmuxScrollMode === "single-row";
               if (parsed.recovery?.mode !== "resume")
                 outputRecovery.invalidate();
@@ -442,6 +449,7 @@ export function useTerminalConnection(params: {
           }
         });
       } catch (error) {
+        diagnostics.stage("failed", error);
         if (cancelled) {
           return;
         }

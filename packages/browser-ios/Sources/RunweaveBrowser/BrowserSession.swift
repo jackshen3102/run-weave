@@ -4,6 +4,16 @@ import WebKit
 @MainActor
 public final class BrowserSession: ObservableObject {
   public enum State { case empty, presented, collapsed }
+  public enum DiagnosticEvent { case started, rejected, awaitingConfirmation, presentationRequested, visible, loaded, failed, cancelled }
+  public var diagnosticEvent: ((UUID, DiagnosticEvent, Error?) -> Void)?
+  private var openingDiagnosticID: UUID?
+  func reportDiagnostic(_ event: DiagnosticEvent, error: Error? = nil, operationID: UUID? = nil) {
+    guard let id = operationID ?? openingDiagnosticID else { return }
+    diagnosticEvent?(id, event, error)
+    if id == openingDiagnosticID && (event == .failed || event == .cancelled) { openingDiagnosticID = nil }
+  }
+  func reportVisible() { reportDiagnostic(.visible) }
+
   struct Prompt: Identifiable {
     enum Kind {
       case replace(URL)
@@ -87,39 +97,54 @@ public final class BrowserSession: ObservableObject {
   }
 
   public func open(_ intent: BrowserOpenIntent, source: BrowserContext, presentationAvailable: Bool) {
+    reportDiagnostic(.cancelled)
+    let diagnosticID = UUID()
+    openingDiagnosticID = diagnosticID
+    diagnosticEvent?(diagnosticID, .started, nil)
+    var accepted = false
+    var rejectionCode = 1
+    defer { if !accepted { reportDiagnostic(.rejected, error: NSError(domain: "RunweaveBrowser.Open", code: rejectionCode)); openingDiagnosticID = nil } }
     guard valid(source, identity: intent.sessionIdentity), !clearing else { return }
+    rejectionCode = 2
     guard retiringPages.isEmpty else {
       dataStatus = "旧网页尚未安全卸载，不能打开新网页。若卸载失败，请重启应用后重试。"
       return
     }
+    rejectionCode = 3
     if intent.origin == .page {
       // Native Menu owns its dismissal/presentation transition. Treating it as
       // a competing modal drops the user's action while the menu is still open.
       guard intent.sessionIdentity != nil, state == .presented
       else { return }
     }
+    rejectionCode = 4
     guard presentationAvailable else {
       dataStatus = "请先完成当前输入、媒体或系统操作，再打开网页。"
       return
     }
+    accepted = true
     dataStatus = nil
     // Disclose the original target before copying, even for a rejected OSC 8 link.
     // Only navigation must pass the web policy.
     switch intent.action {
     case .incompleteLink:
+      reportDiagnostic(.rejected, error: NSError(domain: "RunweaveBrowser.Open", code: 5))
       message("终端未保留完整链接目标，未打开可能被截断的地址。请点击括号中的完整网址，或从会话阅读中打开原始链接。" + (intent.target.isEmpty ? "" : "\n\n已识别部分：\(intent.target)"), source: source)
       return
     case .link:
+      reportDiagnostic(.awaitingConfirmation)
       setPrompt(.address(intent.target), message: intent.target, source: source)
       return
     case .internalOpen, .externalOpen, .confirmInternalOpen: break
     }
     let local = prepareLocalPreview != nil && BrowserLocalTarget(intent.target) != nil
     if local && intent.action == .externalOpen {
+      reportDiagnostic(.rejected, error: NSError(domain: "RunweaveBrowser.Open", code: 5))
       message("电脑本地预览仅能在当前 App 的电脑连接中打开。", source: source)
       return
     }
     guard case .web(let url) = BrowserURLPolicy.classify(intent.target, allowLocal: local) else {
+      reportDiagnostic(.rejected, error: NSError(domain: "RunweaveBrowser.Open", code: 5))
       if case .denied(let reason) = BrowserURLPolicy.classify(intent.target) {
         message("\(reason)\n\n目标地址：\(intent.target)", source: source)
       }
@@ -128,6 +153,7 @@ public final class BrowserSession: ObservableObject {
     switch intent.action {
     case .link, .incompleteLink: break
     case .confirmInternalOpen:
+      reportDiagnostic(.awaitingConfirmation)
       setPrompt(.open(url), message: "终端网址跨行显示，请核对完整地址后打开：\n\n\(intent.target)", source: source)
     case .externalOpen: openExternal(url, source: source, identity: intent.sessionIdentity)
     case .internalOpen:
@@ -137,6 +163,7 @@ public final class BrowserSession: ObservableObject {
           resume()
           return
         }
+        reportDiagnostic(.awaitingConfirmation)
         setPrompt(.replace(url), message: "打开以下地址并替换当前网页？\n\n\(url.absoluteString)\n\n未提交内容可能丢失。", source: source)
       } else {
         create(url, source: source)
@@ -149,11 +176,15 @@ public final class BrowserSession: ObservableObject {
       return
     }
     guard let presentation = hostPresentation, presentation.source == source else {
+      reportDiagnostic(.rejected, error: NSError(domain: "RunweaveBrowser.Open", code: 6))
       dataStatus = "当前界面不可呈现网页，请返回来源页面后主动重试。"
       return
     }
     let presentationID = presentation.id
+    let diagnosticID = openingDiagnosticID
+    openingDiagnosticID = nil
     invalidate()
+    openingDiagnosticID = diagnosticID
     openingTarget = url.absoluteString
     dataStatus = "正在准备打开网页…"
     let expectedLifetime = lifetime
@@ -181,6 +212,7 @@ public final class BrowserSession: ObservableObject {
           try await preview?.configure()
         }
       } catch {
+        if let diagnosticID { self.reportDiagnostic(.failed, error: error, operationID: diagnosticID) }
         preview?.close()
         if self.lifetime == expectedLifetime && self.valid(source) {
           self.dataStatus = "本地预览未能打开：\(error.localizedDescription) 请主动重试。"
@@ -196,9 +228,10 @@ public final class BrowserSession: ObservableObject {
       self.dataStatus = nil
       let pageURL = preview?.url ?? url
       let next = BrowserPage(url: pageURL, source: source, store: preview?.store ?? self.store,
-        owner: self, localPreview: preview)
+        owner: self, localPreview: preview, diagnosticID: diagnosticID)
       self.page = next
       self.state = .presented
+      if let diagnosticID { self.reportDiagnostic(.presentationRequested, operationID: diagnosticID) }
       next.load(pageURL)
     }
   }
@@ -218,6 +251,7 @@ public final class BrowserSession: ObservableObject {
 
   /// Invalidates callbacks synchronously, then retires the document without clearing identity.
   public func invalidate() {
+    reportDiagnostic(.cancelled)
     lifetime = UUID()
     openingTarget = nil
     // Preparation notices belong to their source, even before a page exists.

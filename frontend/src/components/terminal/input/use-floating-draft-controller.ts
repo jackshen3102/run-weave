@@ -1,3 +1,4 @@
+import { useSendDiagnostics } from "./use-send-diagnostics";
 import type { FloatingDraftState, UseTerminalFloatingDraftControllerOptions } from "./floating-draft-types";
 import { useRichPaste } from "../../../features/terminal/input/use-rich-paste";
 import {
@@ -55,6 +56,7 @@ export function useTerminalFloatingDraftController({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const requestScopeRef = useRef<object | null>(null);
+  const beginSendDiagnostics = useSendDiagnostics(floatingDraft, sending, requestScopeRef);
   const sendErrorRef = useRef(sendError);
   sendErrorRef.current = sendError;
   const draftsByTargetRef = useRef(new Map<string, FloatingDraftState>());
@@ -262,6 +264,7 @@ export function useTerminalFloatingDraftController({
     async (
       options: { submit?: boolean; submitKey?: TerminalPromptSubmitKey } = {},
     ): Promise<boolean> => {
+      const diagnostics = beginSendDiagnostics();
       if (
         floatingDraftSyncPendingRef.current ||
         textAttachments.blocked ||
@@ -269,33 +272,33 @@ export function useTerminalFloatingDraftController({
         attachmentMirrorUnreliable.current ||
         textAttachments.mirrorUnreliable
       ) {
-        return false;
+        return diagnostics.reject();
       }
       const attachmentItems = [...textAttachments.composerItems];
       const attachmentIds = [...textAttachments.ids];
       const shouldReplay =
         floatingDraftDirtyRef.current || attachmentIds.length > 0;
-      if (attachmentIds.length && options.submit !== true) return false;
+      if (attachmentIds.length && options.submit !== true) return diagnostics.reject();
       const shouldSubmit = options.submit === true;
       if (!shouldReplay && !shouldSubmit) {
-        return true;
+        return diagnostics.noop();
       }
       if (error) {
         setSendError("终端连接不可用，草稿已保留；重连后再发送。");
         setFloatingComposerOpen(true);
-        return false;
+        return diagnostics.reject();
       }
 
       if (codexContext !== undefined && (!codexContext?.inputReady || !codexContext.displayedThreadId)) {
         setSendError("Codex 会话身份尚未就绪，草稿已保留，请在原终端继续。");
-        return false;
+        return diagnostics.reject();
       }
       const draftToReplay = floatingDraftRef.current;
       const scope = requestScopeRef.current;
       const panelId = attachmentIds.length
         ? textAttachments.panelId
         : paneWorkspace?.activePanelId;
-      const operationId = crypto.randomUUID();
+      const operationId = diagnostics.id;
       textAttachments.markInput();
       floatingDraftSyncPendingRef.current = true;
       setSending(true);
@@ -328,6 +331,7 @@ export function useTerminalFloatingDraftController({
             ...(panelId ? { panelId } : {}),
           },
           AbortSignal.timeout(20_000),
+          diagnostics,
         );
         if (attachmentIds.length) textAttachments.consume(attachmentItems);
         if (requestScopeRef.current !== scope) {
@@ -342,6 +346,7 @@ export function useTerminalFloatingDraftController({
           floatingDraftRef.current = "";
           setFloatingDraft("");
         }
+        diagnostics.stateUpdated(shouldSubmit);
         return true;
       } catch (requestError) {
         if (attachmentIds.length) {
@@ -353,6 +358,7 @@ export function useTerminalFloatingDraftController({
               `/operations/${operationId}`,
             ).catch(() => null);
           if (known?.status === "accepted") {
+            diagnostics.stage("confirmed");
             textAttachments.consume(attachmentItems);
             if (
               requestScopeRef.current === scope &&
@@ -362,6 +368,7 @@ export function useTerminalFloatingDraftController({
               lastSyncedTuiDraftRef.current = "";
               floatingDraftDirtyRef.current = false;
               setFloatingDraft("");
+              diagnostics.stateUpdated(true);
             }
             return true;
           }

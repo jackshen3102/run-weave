@@ -1,3 +1,4 @@
+import { BrowserActionDiagnostics } from "../../../../features/diagnostic-logs/browser-actions";
 import { useControllerBookmarks } from "./bookmarks";
 import { useMemoizedFn } from "ahooks";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -119,6 +120,7 @@ export function useTerminalBrowserController({
     tabs,
     updateBrowserTab,
   });
+  const [browserDiagnostics] = useState(() => new BrowserActionDiagnostics());
   const applyElectronSnapshot = useMemoizedFn(
     (tabId: string, snapshot: ElectronBrowserSnapshot) => {
       updateBrowserTab(tabId, buildTabUpdateFromElectronSnapshot(snapshot));
@@ -127,6 +129,7 @@ export function useTerminalBrowserController({
   const applyElectronUpdate = useMemoizedFn(
     (tabId: string, update: ElectronBrowserUpdate, revision?: number) => {
       const tabUpdate = buildTabUpdateFromElectronUpdate(update);
+      browserDiagnostics.updated(tabId, update.loading, Boolean(update.navigationError));
       if (editingAddressTabIdRef.current === tabId) {
         const { addressInput, ...updateWithoutAddressInput } = tabUpdate;
         void addressInput;
@@ -204,11 +207,14 @@ export function useTerminalBrowserController({
 
   const navigateTab = useMemoizedFn(
     async (tabId: string, rawInput: string, source: "address" | "bookmark" = "address"): Promise<void> => {
+      const diagnostics = browserDiagnostics.begin(tabId);
       if (!tabId) {
+        diagnostics.stage("rejected");
         return;
       }
       const nextUrl = normalizeTerminalBrowserUrl(rawInput);
       if (!nextUrl.ok) {
+        diagnostics.stage("rejected");
         updateBrowserTab(tabId, {
           error: nextUrl.error,
           loading: false,
@@ -228,6 +234,7 @@ export function useTerminalBrowserController({
 
       if (!isElectron || !window.electronAPI?.terminalBrowserNavigate) {
         updateBrowserTab(tabId, { loading: false });
+        diagnostics.stage("state_updated");
         return;
       }
 
@@ -240,15 +247,17 @@ export function useTerminalBrowserController({
 
       try {
         loadedUrlByTabRef.current[tabId] = nextUrl.url;
-        const snapshot = await window.electronAPI.terminalBrowserNavigate(
+        const snapshot = await browserDiagnostics.request(tabId, diagnostics, () => window.electronAPI!.terminalBrowserNavigate!(
           tabId,
           nextUrl.url,
           source === "address" ? localBrowserSource : undefined,
-        );
+        ), isNavigationAbortError);
         if (!isCurrentNavigation()) {
+          diagnostics.stage("cancelled");
           return;
         }
         applyElectronSnapshot(tabId, snapshot);
+        diagnostics.stage("state_updated");
         syncActiveTabBounds(tabId);
       } catch (error) {
         if (!isCurrentNavigation()) {

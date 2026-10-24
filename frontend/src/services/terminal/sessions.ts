@@ -1,3 +1,5 @@
+import { beginDiagnosticAction } from "../../lib/action-diagnostics";
+import { HttpError } from "../http";
 import type {
   PrepareTerminalAgentRequest,
   PrepareTerminalAgentResponse,
@@ -137,8 +139,11 @@ export async function sendTerminalInput(
   terminalSessionId: string,
   payload: SendTerminalInputRequest,
   signal?: AbortSignal,
+  diagnostics = beginDiagnosticAction("terminal_send", payload.operationId),
 ): Promise<SendTerminalInputResponse> {
-  return requestJson<SendTerminalInputResponse>(
+  diagnostics.stage("request_started");
+  try {
+    const result = await requestJson<SendTerminalInputResponse>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/input`,
     {
@@ -147,10 +152,18 @@ export async function sendTerminalInput(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, operationId: payload.operationId ?? diagnostics.id }),
       signal,
     },
-  );
+    );
+    const confirmed = result.operationId === (payload.operationId ?? diagnostics.id) &&
+      result.terminalSessionId === terminalSessionId && result.inputAccepted && result.inputEnqueued;
+    diagnostics.stage(confirmed ? "confirmed" : "unknown");
+    return result;
+  } catch (error) {
+    diagnostics.stage(error instanceof HttpError && error.status >= 400 && error.status < 500 && error.status !== 408 ? "failed" : "unknown", error);
+    throw error;
+  }
 }
 
 export async function getTerminalHistory(

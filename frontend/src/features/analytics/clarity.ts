@@ -1,3 +1,5 @@
+import { beginDiagnosticAction, diagnosticLaunchId, setActionDiagnosticEmitter } from "../../lib/action-diagnostics";
+import { runtimeBuildInfo } from "@runweave/shared/runtime-version";
 import type { AnalyticsScreen } from "./screen-classification";
 import { installDesktopClarityCookies } from "./desktop-clarity-cookies";
 
@@ -71,6 +73,7 @@ function reportScreen(): void {
 }
 
 export function initializeClarity(): void {
+  const initialization = beginDiagnosticAction("analytics");
   const projectId = (import.meta.env.VITE_CLARITY_PROJECT_ID ?? DEFAULT_PROJECT_ID).trim();
   const isDesktop = window.electronAPI?.isElectron === true;
   const supportedProtocol = isDesktop
@@ -87,6 +90,7 @@ export function initializeClarity(): void {
     window.companionAPI !== undefined ||
     document.getElementById(SCRIPT_ID)
   ) {
+    initialization.stage("rejected");
     return;
   }
 
@@ -108,6 +112,11 @@ export function initializeClarity(): void {
     // Keep this marker on load failure: only a new Document should retry.
     document.head.append(script);
     enabled = true;
+    setActionDiagnosticEmitter((event) => {
+      const current = (window as Window & { clarity?: ClarityQueue }).clarity;
+      if (enabled && current?.v) current("event", event);
+    });
+    script.addEventListener("error", () => beginDiagnosticAction("analytics").stage("failed"), { once: true });
     window.addEventListener("online", scheduleClarityRecovery);
     window.addEventListener("focus", scheduleClarityRecovery);
     window.addEventListener("pointerdown", scheduleClarityRecovery, { capture: true, passive: true });
@@ -116,6 +125,15 @@ export function initializeClarity(): void {
     // latest fixed page ID without retaining the callback's metadata.
     clarityWindow.clarity("metadata", () => {
       sdkStarted = true;
+      const build = runtimeBuildInfo();
+      const tags = { diagnostic_launch_id: diagnosticLaunchId,
+        client: isDesktop ? "desktop" : "web", environment: projectId === DEFAULT_PROJECT_ID ? "production" : "qa",
+        app_version: build.version, build_id: build.buildId ?? "unknown",
+        source_revision: build.sourceRevision ?? "unknown" };
+      try {
+        for (const [key, value] of Object.entries(tags)) clarityWindow.clarity?.("set", key, value);
+        beginDiagnosticAction("analytics").stage("confirmed");
+      } catch { beginDiagnosticAction("analytics").stage("failed"); }
       pageGeneration += 1;
       reportedScreen = null;
       reportScreen();
