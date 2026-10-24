@@ -292,6 +292,22 @@ Lumi 的执行、成果写回与状态变更按当前用户授权执行。`follo
 
 分页按工作日期/创建时间/ID倒排，返回整日count及coverage；游标绑定服务、owner、日期和feedRevision。变化时409 WORK_FEED_CHANGED；客户端丢弃旧页后最多自动重读一次。写入、修订、导入回执、覆盖与head通过同一mutate事务提交。归类及混合项目撤销均整批版本检查，只改project。
 
-新迁移仅新增五张工作领域表，旧数据不自动解析或搬迁。启动严格要求schema10；升级后不能直接运行只支持schema9的旧服务二进制。回退客户端入口可保留新表和事实，服务修复需使用支持schema10的产物，不执行破坏性down。
+新迁移仅新增五张工作领域表，旧数据不自动解析或搬迁。当前启动严格要求schema11；升级后不能直接运行只支持旧schema的服务二进制。回退客户端入口可保留新表和事实，服务修复需使用支持schema10的产物，不执行破坏性down。
 
 验收合同：[服务与导入](../../docs/testing/suiji/work-records-service.testplan.yaml)、[双端客户端](../../docs/testing/suiji/work-records-clients.testplan.yaml)。用例通过情况以本次真实环境证据为准，构建或格式校验不代表生产已部署。
+
+## Daily Record 来源覆盖（schema 11）
+
+新增预期来源登记与 features.workSources，通过同一工作事实服务和设备MCP提供
+`list_work_sources({from,to})`，日期包含两端且最多366天。日coverage对照实际启用的预期scope，
+缺报为partial，未登记旧日期为unknown；显式双边日期查询含无事实的缺报日（最多366天）。
+原导入幂等摘要、人工字段保护和旧事实均保留，不增加上传结果查询接口。
+
+管理员 `pnpm --filter @runweave/suiji-server work:sources register|list|stop` 从stdin读取JSON，
+使用MIGRATION_DATABASE_URL；容器入口为 `work-sources`。参数及双机部署参见
+[定时Daily Record](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md)。
+新增迁移后仅支持schema11产物，不修改旧迁移、不做破坏性down。
+
+隔离PostgreSQL18上的HTTP/MCP/CLI行为验证：
+`pnpm --filter @runweave/suiji-server exec tsx scripts/verify-reporting.ts <port>`。
+验证程序只创建和删除自己随机命名的数据库，不连接生产随记、不读取真实聊天。

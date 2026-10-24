@@ -196,6 +196,8 @@ export async function collectNative(options: {
   to: string;
   timeZone: string;
   home?: string;
+  providers?: DailyProvider[];
+  excludeThreads?: string[];
 }) {
   const dayAt = dayFormatter(options.timeZone);
   const materials: DailyMaterial[] = [];
@@ -204,6 +206,7 @@ export async function collectNative(options: {
   for (const [provider, root] of Object.entries(
     nativeRoots(path.resolve(options.home ?? os.homedir()), !options.home),
   ) as Array<[DailyProvider, string]>) {
+    if (options.providers && !options.providers.includes(provider)) continue;
     const receipt: DailySourceReceipt = {
       provider,
       root,
@@ -260,6 +263,10 @@ export async function collectNative(options: {
           receipt.issues.push(`${file}:${locator.line}: 缺少有效消息时间`);
           return;
         }
+        if (options.excludeThreads?.includes(threadId)) {
+          exclude("dailyRecordThread");
+          return;
+        }
         const day = dayAt(timestamp);
         if (day < options.from || day > options.to) return;
         const clean = redact(value).trim();
@@ -278,6 +285,7 @@ export async function collectNative(options: {
           id,
           provider,
           threadId,
+          nativeId: nativeId || `${locator.byteOffset}:${role}`,
           cwd,
           origin,
           role,

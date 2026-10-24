@@ -1,0 +1,15 @@
+{
+  "name": "每日工作事实记录",
+  "projectId": "{{LOCAL_PROJECT_ID}}",
+  "provider": "{{LOCAL_AGENT_PROVIDER}}",
+  "prompt": "使用 toolkit:daily-record，先读其 references/scheduled-reporting.md。本机任务配置为 {{LOCAL_JOB_CONFIG_PATH}}。取得本次真实run/thread和Agent进程身份，执行同版job.py流程：先恢复原pending请求，再从首次日期到昨天处理缺日，按预算分批采集和阅读原文，核对事实、日期、状态、项目及稳定来源。飞书仅由本机配置决定；关闭时不检查或调用飞书。核对后validate，配置已显式启用autoPublish时publish并独立回读。未知结果仅在该授权下对原冻结工作事实导入有界原样恢复，不换键，不触发其他写操作。日报自身和派生产物不得作为新工作；不修改普通笔记或待办状态。输出实际确认的工作日期、缺失来源和剩余日期；没有全部补齐时返回remaining-work，权限、身份或依赖不足则返回blocked，不能把模型自述、构建或健康探测当作事实完成。",
+  "schedule": {
+    "kind": "daily",
+    "timezone": "Asia/Shanghai",
+    "localTime": "{{CONFIRMED_LOCAL_TIME}}"
+  },
+  "misfirePolicy": { "mode": "catch-up-latest", "maxDelaySeconds": 86400 },
+  "continuationPolicy": { "mode": "bounded" },
+  "executionPolicy": "{{CONFIRMED_EXECUTION_POLICY}}",
+  "enabled": false
+}

@@ -22,3 +22,9 @@ CLI配置、设备token和请求恢复沿用主Skill，不复制鉴权客户端�
 importId和created/updated/unchanged是本次导入互斥计数；protected为人工字段被保护的附加条数。同键返回原回执；同稳定身份同源快照不新增版本。人工清空项目仍为保护字段。来源倒退、同时间不同快照明确拒绝，整包回滚，遗漏条目不删除旧事实。
 
 sourceRefs只保留原生channel/sourceScope/nativeId/revision/hash，不上传原始聊天、绝对路径或凭据。只有请求范围均complete且事实为空，才说明范围内无记录；partial/unavailable/未导入不能写成没有工作。工作事实无附件/删除/任务完成能力。
+
+定时 Daily Record 可使用显式保护配置的 `work-reconcile --request <原冻结文件> --job-config <任务配置>`，
+仅在 autoPublish=true、目标身份及来源范围匹配时，对工作事实导入最多原样恢复3次并独立回读。
+它不改变人工 retry，也不为笔记/待办操作增加自动重试。详见 Daily Record 的 scheduled-reporting.md。
+`work-sources --from <日期> --to <日期>` 调用只读 list_work_sources，要求 features.workSources。
+schema11 的预期来源登记用于判断全来源完整性；无登记旧日期保持unknown，不再把已收到部分来源的complete当全天完整。

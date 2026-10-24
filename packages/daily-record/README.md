@@ -88,3 +88,17 @@ pnpm testplan:validate docs/testing/skills/daily-record-local.testplan.yaml
 
 真实行为验收见[第一阶段计划](../../docs/testing/skills/daily-record-local.testplan.yaml)和
 [项目分组计划](../../docs/testing/skills/daily-record-projects.testplan.yaml)。
+
+## 多机器定时上报
+
+同一 Skill 与任务模板分别在 Mac/devbox 的 Runweave Backend 运行，只读取本机来源。
+Mac 可启用本人飞书聊天，devbox 明确关闭；关闭时不检查或调用 lark-cli。
+执行入口是 [job.py](../../plugins/toolkit/skills/daily-record/scripts/job.py)，
+[配置、任务模板及恢复](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md)
+说明逐日补报、稳定身份、已读证据校验和显式授权的自动发布。
+
+原生 collect 新增可选 `--providers codex,pi`、`--machine-id <固定ID>`、
+可重复的 `--exclude-thread <ID>`；省略时保留原行为和材料包版本。飞书仍使用独立材料格式。
+
+[多机器验收](../../docs/testing/skills/daily-record-reporting.testplan.yaml) 的真实 Mac、飞书、
+devbox 与到点调度须分别取证；本机 PostgreSQL/HTTP/CLI 集成验证不替代它们。

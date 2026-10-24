@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Portable Suiji client. No automatic business-write retry."""
+"""Portable Suiji client. Opt-in recovery is restricted to frozen Daily Record imports."""
 import argparse
 import hashlib
 import http.client
@@ -162,18 +162,39 @@ def run_intent(client, path, intent):
                 work_records.atomic_private(index_path, json.dumps(index, ensure_ascii=False).encode())
         elif result.get("record", {}).get("taskStatus") != "done":
             raise Failure("INVALID_STATUS_RESPONSE; original request retained")
+    if intent.get("receiptPath"):
+        work_records.atomic_private(Path(intent["receiptPath"]), json.dumps(result, ensure_ascii=False).encode())
     Path(path).unlink()
     if intent["operation"] == "upload":
         snapshot.unlink()
     return result
 
 
+def connect(config, env_file=None):
+    if env_file:
+        lines = private_read(env_file).decode("utf-8").splitlines()
+        entries = [line for line in lines if line.strip()]
+        if len(entries) != 1:
+            raise Failure("INVALID_TOKEN_FILE")
+        key, separator, token = entries[0].partition("=")
+        if not separator or key != config["tokenEnv"] or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+            raise Failure("INVALID_TOKEN_FILE")
+        existing = os.environ.get(key)
+        if existing is not None and existing != token:
+            raise Failure("TOKEN_SOURCE_CONFLICT")
+        os.environ[key] = token
+    client = Client(config)
+    info = client.verify()
+    return client, info
+
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--env-file", help="Protected 0600 file containing only the configured token variable")
-    parser.add_argument("command", choices=["info", "list", "search", "get", "followups", "handoff", "read-attachment", "upload", "append", "complete", "retry", "work-prepare", "work-import", "work-list", "work-get", "work-reclassify"])
-    for option in ("record-id", "attachment-id", "query", "tag", "status", "kind", "cursor", "input", "request", "file", "from", "to", "out", "fact-id"):
+    parser.add_argument("command", choices=["info", "list", "search", "get", "followups", "handoff", "read-attachment", "upload", "append", "complete", "retry", "work-prepare", "work-import", "work-list", "work-get", "work-reclassify", "work-reconcile", "work-sources"])
+    for option in ("record-id", "attachment-id", "query", "tag", "status", "kind", "cursor", "input", "request", "file", "from", "to", "out", "fact-id", "job-config"):
         parser.add_argument("--" + option)
     args = parser.parse_args()
     inputs = None
@@ -195,22 +216,18 @@ def main():
         if target.get("format") != "suiji-handoff-v1" or endpoint(target["endpoint"]) != endpoint(config["endpoint"]) or any(target[key] != config[key] for key in ("serverId", "ownerId")):
             raise Failure("HANDOFF_IDENTITY_MISMATCH; configure the target connection")
         args.record_id = target["recordId"]
-    if args.env_file:
-        lines = private_read(args.env_file).decode("utf-8").splitlines()
-        entries = [line for line in lines if line.strip()]
-        if len(entries) != 1:
-            raise Failure("INVALID_TOKEN_FILE")
-        key, separator, token = entries[0].partition("=")
-        if not separator or key != config["tokenEnv"] or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
-            raise Failure("INVALID_TOKEN_FILE")
-        existing = os.environ.get(key)
-        if existing is not None and existing != token:
-            raise Failure("TOKEN_SOURCE_CONFLICT")
-        os.environ[key] = token
-    client = Client(config)
-    info = client.verify()
+    recovery = None
+    if args.command == "work-reconcile":
+        recovery = work_records.recovery_intent(args, config, Failure, private_read)
+    client, info = connect(config, args.env_file)
     if args.command.startswith("work-") and not info.get("features", {}).get("workRecords"):
         raise Failure("WORK_RECORDS_UNAVAILABLE")
+    if args.command == "work-reconcile":
+        return work_records.reconcile(client, args.request, recovery, Failure, run_intent)
+    if args.command == "work-sources":
+        if not info.get("features", {}).get("workSources"):
+            raise Failure("WORK_SOURCES_UNAVAILABLE")
+        return client.call("list_work_sources", {"from": args.__dict__["from"], "to": args.to})
     if args.command == "work-prepare":
         if not args.input or not args.out:
             raise Failure("INPUT_AND_OUT_REQUIRED")

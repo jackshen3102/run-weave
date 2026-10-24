@@ -8,7 +8,6 @@ import type {
   WorkReclassification,
   WorkProjectRestore,
   WorkFactPage,
-  WorkDay,
   ImportWorkFacts,
 } from "@runweave/shared/suiji";
 import { transaction } from "../db/pool";
@@ -17,6 +16,7 @@ import { invalid } from "../errors";
 import * as repo from "./repository";
 import * as schema from "./schema";
 import { importFacts } from "./imports";
+import { coverageDays, listSources, sourceRange } from "./sources";
 
 const cursorSchema = z
   .object({
@@ -91,25 +91,13 @@ export class WorkRecordService {
       ).rows;
       const items = rows.slice(0, input.limit).map(repo.fact),
         last = items.at(-1);
-      // Counts cover the whole day, including facts on subsequent pages. Covered
-      // empty dates are included only for an explicitly selected empty range.
-      const days = (
-        await client.query<WorkDay>(
-          `WITH counts AS (SELECT work_date,count(*)::int AS count FROM work_facts WHERE owner_id=$1 GROUP BY work_date), coverage AS (
-        SELECT work_date,CASE WHEN bool_and(status='complete') THEN 'complete' ELSE 'partial' END AS coverage FROM work_day_coverage WHERE owner_id=$1 GROUP BY work_date
-      ) SELECT coalesce(c.work_date,v.work_date)::text AS date,coalesce(c.count,0)::int AS count,coalesce(v.coverage,'unknown') AS coverage FROM counts c FULL JOIN coverage v USING(work_date)
-        WHERE ($2::date IS NULL OR coalesce(c.work_date,v.work_date)>=$2) AND ($3::date IS NULL OR coalesce(c.work_date,v.work_date)<=$3)
-        AND (coalesce(c.work_date,v.work_date)=ANY($4::date[]) OR ($5 AND $6)) ORDER BY date DESC`,
-          [
-            owner,
-            input.from ?? null,
-            input.to ?? null,
-            [...new Set(items.map((i) => i.workDate))],
-            items.length === 0,
-            Boolean(input.from || input.to),
-          ],
-        )
-      ).rows;
+      const dates = new Set(items.map(i => i.workDate));
+      if (input.from && input.to) {
+        sourceRange.parse({ from: input.from, to: input.to });
+        for (let t = Date.parse(input.from); t <= Date.parse(input.to); t += 86400000)
+          dates.add(new Date(t).toISOString().slice(0,10));
+      }
+      const days = await coverageDays(client, owner, [...dates]);
       return {
         items,
         days,
@@ -131,6 +119,12 @@ export class WorkRecordService {
               ).toString("base64url")
             : null,
       };
+    });
+  }
+  sources(owner: string, raw: unknown) {
+    return transaction(this.pool, async client => {
+      await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      return listSources(client, owner, raw);
     });
   }
   create(ctx: Mutation, raw: WorkFactInput) {

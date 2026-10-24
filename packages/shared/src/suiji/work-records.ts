@@ -100,3 +100,17 @@ export type WorkImportResult = {
     fact: WorkFact;
   }[];
 };
+
+/** Expected reporting scopes; dates are Shanghai business dates, end exclusive. */
+export type WorkSource = {
+  sourceScope: string;
+  producerId: string;
+  sourceNamespace: string;
+  name: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+};
+export type WorkSourcePage = {
+  items: WorkSource[];
+  days: { date: string; receipts: WorkReceipt[]; missingScopes: string[] }[];
+};

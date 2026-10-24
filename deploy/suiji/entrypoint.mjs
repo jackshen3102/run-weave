@@ -9,6 +9,7 @@ const commands = {
   init: ["dist/admin.js", "init"],
   reset: ["dist/admin.js", "reset"],
   "mcp-credentials": ["dist/mcp-credentials.js", ...process.argv.slice(3)],
+  "work-sources": ["dist/work-sources.js", ...process.argv.slice(3)],
   "codex-login": [
     "-c",
     'cli_auth_credentials_store="file"',
@@ -24,7 +25,7 @@ const commands = {
 };
 if (!Object.hasOwn(commands, action))
   throw new Error(
-    "Expected serve, migrate, init, reset, mcp-credentials, codex-login or codex-status",
+    "Expected serve, migrate, init, reset, mcp-credentials, work-sources, codex-login or codex-status",
   );
 const env = { ...process.env };
 const secret = async (name) =>
