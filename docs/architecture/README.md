@@ -57,6 +57,8 @@ scripts/dev-session    开发会话与 Beta 生命周期
 
 ### 系统与跨端
 
+关键操作阶段、Clarity 回放关联与本地诊断导出见[客户端操作诊断](./client-action-diagnostics.md)。
+
 | 任务                                    | 文档                                                       |
 | --------------------------------------- | ---------------------------------------------------------- |
 | 网络拓扑、Backend 与 Electron 连接      | [network-topology.md](./network-topology.md)               |

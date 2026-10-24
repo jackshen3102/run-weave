@@ -1,3 +1,4 @@
+import IOSDiagnostics
 import Foundation
 
 extension AppSession {
@@ -60,7 +61,11 @@ extension AppSession {
     }
   }
 
-  func sendCommand(terminalID: String, queue: Bool = false) async throws {
+  @discardableResult
+  func sendCommand(terminalID: String, queue: Bool = false) async throws -> ClientDiagnosticOperation? {
+    let action = ClientDiagnosticOperation(.terminalSend)
+    var reachedTransport = false
+    defer { if !reachedTransport { action.stage(.rejected) } }
     guard canWrite, terminal?.id == terminalID, let controller = terminalController else {
       throw APIError.offline
     }
@@ -78,22 +83,25 @@ extension AppSession {
       "'" + $0.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
     let payload = ([text].filter { !$0.isEmpty } + paths).joined(separator: " ")
-    guard !payload.isEmpty else { return }
+    guard !payload.isEmpty else { return nil }
     let epoch = generation
     let agent = overview?.sessions.first { $0.id == terminalID }?.terminalState.agent
     let isSlash = text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/")
     let mode = queue ? "prompt_replace" : (agent == "codex" && isSlash ? "codex_slash_command" : "line")
     do {
+      reachedTransport = true
       try await controller.sendCommand(payload, mode: mode, recordQuickInput: recordQuickInput,
-        submitKey: submitKey)
+        submitKey: submitKey, diagnostics: action)
       guard generation == epoch, terminalController === controller, !Task.isCancelled else {
         throw CancellationError()
       }
       if draftRevisions[terminalID] == draftRevision { setDraft("", terminalID: terminalID) }
       attachmentDrafts.remove(Set(attachments.map(\.id)), terminalID: terminalID)
+      action.stage(.stateUpdated)
     } catch {
       if generation == epoch, !(error is CancellationError) { await handle(error, epoch: epoch) }
       throw error
     }
+    return action
   }
 }

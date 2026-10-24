@@ -9,6 +9,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
   let source: BrowserContext
   let webView: WKWebView
   private weak var owner: BrowserSession?
+  private let diagnosticID: UUID?
   private var observations: [NSKeyValueObservation] = []
   private var navigation: WKNavigation?
   private var requestedURL: URL
@@ -182,10 +183,11 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       completion: completionHandler)
   }
 
-  init(url: URL, source: BrowserContext, store: WKWebsiteDataStore, owner: BrowserSession, localPreview: BrowserLocalPreview? = nil) {
+  init(url: URL, source: BrowserContext, store: WKWebsiteDataStore, owner: BrowserSession, localPreview: BrowserLocalPreview? = nil, diagnosticID: UUID? = nil) {
     self.localPreview = localPreview
     self.source = source
     self.owner = owner
+    self.diagnosticID = diagnosticID
     currentURL = url
     requestedURL = url
     let configuration = WKWebViewConfiguration()
@@ -478,6 +480,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       return
     }
     guard valid, self.navigation === navigation else { return }
+    if let diagnosticID { owner?.reportDiagnostic(.loaded, operationID: diagnosticID) }
     updateURL()
   }
   func webView(
@@ -500,6 +503,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
       return
     }
     // Do not expose NSError.userInfo / localized descriptions containing full secret-bearing URLs.
+    if let diagnosticID { owner?.reportDiagnostic(.failed, error: error, operationID: diagnosticID) }
     failure = "网页加载失败（\(code)）。请检查网络或证书后重试；无法忽略证书错误。"
     failureURL = requestedURL
     changed()

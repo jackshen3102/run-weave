@@ -1,3 +1,4 @@
+import IOSDiagnostics
 import SwiftUI
 
 struct TerminalComposerSheet: View {
@@ -33,6 +34,7 @@ struct TerminalComposerSheet: View {
 }
 
 struct ComposerView: View {
+  @State private var sendDiagnostics: ClientDiagnosticOperation?
   let session: AppSession
   let controller: SessionController
   @StateObject private var state: TerminalComposerState
@@ -184,6 +186,10 @@ struct ComposerView: View {
           await modelSettings.refresh(session: session, terminalID: terminalID)
         }
       }
+    }
+    .onDisappear { sendDiagnostics?.stage(.uiUpdated); sendDiagnostics = nil }
+    .onChange(of: state.snapshot.draft) { draft in
+      if draft.isEmpty { sendDiagnostics?.stage(.uiUpdated); sendDiagnostics = nil }
     }
     .onChange(of: modelSettings.page) { page in
       editing = page == .input
@@ -364,7 +370,7 @@ struct ComposerView: View {
         if stop {
           try await session.stopCommand(terminalID)
         } else {
-          try await session.sendCommand(terminalID: terminalID, queue: queue)
+          sendDiagnostics = try await session.sendCommand(terminalID: terminalID, queue: queue)
         }
         if queue { editing = true } else { onActionSucceeded() }
       } catch {

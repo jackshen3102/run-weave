@@ -86,6 +86,7 @@ struct RecordEditorSheet: View {
         }
       }
     }.clarityMask().mobileAnalyticsScreen(model.draft.followupRecordID == nil ? .recordEditor : .followupEditor)
+      .onDisappear { if model.confirmed { model.saveDiagnostics?.stage(.uiUpdated) } }
   }
   private var selectedText: String? {
     guard case .selection(let range) = textSelection?.indices, !range.isEmpty else { return nil }

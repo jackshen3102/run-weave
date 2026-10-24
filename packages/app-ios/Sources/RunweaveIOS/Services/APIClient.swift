@@ -236,8 +236,7 @@ public actor APIClient {
 
   /// Acceptance is not process completion. Never automatically retry a business write.
   func terminalInput(id: String, data: String, mode: String, recordQuickInput: Bool? = nil,
-    submitKey: TerminalPromptSubmitKey? = nil) async throws {
-    let operationID = UUID().uuidString
+    submitKey: TerminalPromptSubmitKey? = nil, operationID: String = UUID().uuidString) async throws {
     var body: [String: Any] = ["data": data, "mode": mode, "operationId": operationID]
     if let recordQuickInput { body["recordQuickInput"] = recordQuickInput }
     if let submitKey {

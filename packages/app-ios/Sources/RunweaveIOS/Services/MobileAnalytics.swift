@@ -1,5 +1,7 @@
 import Clarity
 import Foundation
+import IOSDiagnostics
+import RunweaveBrowser
 import SwiftUI
 
 @MainActor
@@ -24,6 +26,7 @@ public enum MobileAnalytics {
     var screen: Screen
     let depth: Int
   }
+  private static var initializationState = "not_initialized"
   private static var initialized = false
   private static var screens: [VisibleScreen] = []
   private static var reportedScreen: Screen?
@@ -45,7 +48,32 @@ public enum MobileAnalytics {
   }
 
   public static func initialize() {
+    ClientDiagnostics.contextProvider = {
+      var fields = AppBuildMetadata.fields
+      fields["client"] = "runweave-ios"
+      let project = Bundle.main.infoDictionary?["RunweaveClarityProjectID"] as? String
+      fields["analytics_environment"] = project == "yofefg4fsy" ? "production" : "qa"
+      #if DEBUG
+        fields["build_configuration"] = "debug"
+      #else
+        fields["build_configuration"] = "release"
+      #endif
+      #if targetEnvironment(simulator)
+        fields["device_kind"] = "simulator"
+      #else
+        fields["device_kind"] = "device"
+      #endif
+      fields["clarity_session_id"] = sessionID ?? "not_started"
+      fields["clarity_state"] = initializationState
+      return fields
+    }
+    ClientDiagnostics.onEvent = { event in
+      if initialized { _ = ClaritySDK.sendCustomEvent(value: event) }
+    }
+    let initialization = ClientDiagnosticOperation(.analytics)
+    defer { initialization.stage(initialized ? .confirmed : .rejected) }
     guard !initialized else { return }
+    initializationState = "disabled_or_invalid_project"
     let settings = Bundle.main.infoDictionary ?? [:]
     guard (settings["RunweaveClarityEnabled"] as? String) == "YES" else {
       diagnostic("clarity.initialize.skipped", ["reason": "disabled"])
@@ -61,14 +89,17 @@ public enum MobileAnalytics {
 
     // Simulator acceptance must use a separate mobile project, even for Release builds.
     #if targetEnvironment(simulator)
+      initializationState = "simulator_excluded"
       guard projectID != "yofefg4fsy" else {
         diagnostic("clarity.initialize.skipped", ["reason": "production_project_on_simulator"])
         return
       }
     #endif
+    initializationState = "sdk_rejected"
     initialized = ClaritySDK.initialize(config: ClarityConfig(projectId: projectID))
     diagnostic("clarity.initialize", ["projectId": projectID, "accepted": String(initialized)])
     guard initialized else { return }
+    initializationState = "ready"
     let registered = ClaritySDK.setOnSessionStartedCallback { id in
       Task { @MainActor in
         // Retain the opaque SDK identifier for replay correlation, never its token-bearing URL.
@@ -76,9 +107,10 @@ public enum MobileAnalytics {
           $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "-_.".unicodeScalars.contains($0))
         } ? id : nil
         var failedTags: [String] = []
-        for (key, value) in AppBuildMetadata.fields {
+        for (key, value) in AppBuildMetadata.fields.merging(["diagnostic_launch_id": ClientDiagnostics.launchID], uniquingKeysWith: { _, next in next }) {
           if !ClaritySDK.setCustomTag(key: key, value: value) { failedTags.append(key) }
         }
+        ClientDiagnosticOperation(.analytics).stage(failedTags.isEmpty ? .confirmed : .failed)
         diagnostic("clarity.session.started", ["projectId": projectID,
           "failedBuildTags": failedTags.sorted().joined(separator: ",")])
         reportedScreen = nil
@@ -86,6 +118,33 @@ public enum MobileAnalytics {
       }
     }
     diagnostic("clarity.session.callback", ["registered": String(registered)])
+  }
+
+  static func observeBrowser(_ browser: BrowserSession) {
+    var operations: [UUID: (operation: ClientDiagnosticOperation, visible: Bool, loaded: Bool)] = [:]
+    browser.diagnosticEvent = { id, event, error in
+      if event == .started {
+        if operations.count >= 32 { operations.removeAll() }
+        operations[id] = (ClientDiagnosticOperation(.browserOpen), false, false)
+        return
+      }
+      guard var entry = operations[id] else { return }
+      let stage: DiagnosticStage
+      switch event {
+      case .started: return
+      case .rejected: stage = .rejected
+      case .awaitingConfirmation: stage = .awaitingConfirmation
+      case .presentationRequested: stage = .presentationRequested
+      case .visible: stage = .uiUpdated; entry.visible = true
+      case .loaded: stage = .loaded; entry.loaded = true
+      case .failed: stage = .failed
+      case .cancelled: stage = .cancelled
+      }
+      entry.operation.stage(stage, error: error)
+      if event == .rejected || event == .failed || event == .cancelled || (entry.visible && entry.loaded) {
+        operations.removeValue(forKey: id)
+      } else { operations[id] = entry }
+    }
   }
 
   static func appear(id: UUID, screen: Screen, depth: Int) {

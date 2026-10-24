@@ -1,3 +1,4 @@
+import IOSDiagnostics
 import Clarity
 import IOSBuildIdentity
 import SwiftUI
@@ -14,12 +15,22 @@ struct EnvironmentPicker: View {
 }
 
 struct AnalyticsDisclosure: View {
+  @State private var diagnosticsURL: URL?
+  @State private var exportFailed = false
   var body: some View {
     Section("使用分析") {
       Text(MobileAnalytics.isEnabled
         ? "此版本使用 Microsoft Clarity 收集交互回放与安装包版本信息，用于改进体验。正文、账号和附件设置为遮盖，内置网页 DOM 采集关闭。"
         : "此版本未启用使用分析。")
         .font(.footnote).foregroundStyle(.secondary)
+      Button("准备诊断日志") {
+        Task {
+          do { diagnosticsURL = try await ClientDiagnostics.export(); exportFailed = false }
+          catch { exportFailed = true }
+        }
+      }
+      if let diagnosticsURL { ShareLink("导出诊断日志", item: diagnosticsURL) }
+      if exportFailed { Text("诊断日志导出失败，请稍后重试。").foregroundStyle(.orange) }
     }
   }
 }

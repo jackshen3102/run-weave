@@ -1,3 +1,4 @@
+import IOSDiagnostics
 import Foundation
 import SwiftUI
 @MainActor final class EditorModel: ObservableObject, Identifiable {
@@ -25,6 +26,7 @@ import SwiftUI
   let store: DraftStore
   let limits: Limits
   var onFollowupSaved: ((FollowupResponse) -> Void)?
+  var saveDiagnostics: ClientDiagnosticOperation?
   private var active = true
   init(draft: Draft, client: APIClient, store: DraftStore, limits: Limits, correctionCapability: Bool? = nil, historyCapability: Bool? = nil) {
     self.draft = draft; self.client = client; self.store = store; self.limits = limits
@@ -135,8 +137,12 @@ import SwiftUI
     catch { message = "移除附件后写盘失败：" + error.localizedDescription }
   }
   func save() async {
-    guard !busy, active, !confirmed else { return }
-    guard !draft.conflict else { message = "请先查看并处理版本冲突"; return }
+    let action = ClientDiagnosticOperation(.suijiSave)
+    saveDiagnostics = action
+    var requestStarted = false
+    var responseConfirmed = false
+    guard !busy, active, !confirmed else { action.stage(.rejected); return }
+    guard !draft.conflict else { action.stage(.rejected); message = "请先查看并处理版本冲突"; return }
     busy = true; defer { busy = false }
     do {
       guard draft.body.unicodeScalars.count <= limits.bodyScalars, !draft.body.contains("\0") else { throw MessageError(message: "正文超出限额或包含无效字符") }
@@ -161,20 +167,27 @@ import SwiftUI
         draft.revision += 1; try await store.save(draft)
       }
       try checkActive(); guard let operation = draft.pending else { return }
+      requestStarted = true
+      action.stage(.requestStarted, relatedOperationID: operation.key)
       if let recordID = draft.followupRecordID {
         let result = try await client.request(FollowupResponse.self, path: operation.path, method: operation.method, data: operation.payload, key: operation.key)
+        action.stage(.responseReceived)
         try checkActive()
         guard result.followup.recordId == recordID, result.followup.body == draft.body,
           result.followup.attachments.map(\.id) == draft.local.compactMap({ $0.uploaded?.id }) else { throw MessageError(message: "跟进响应与保存内容不一致，请重试确认") }
-        try await store.remove(draft); confirmed = true; message = "已保存"; onFollowupSaved?(result); return
+        responseConfirmed = true; action.stage(.confirmed)
+        try await store.remove(draft); confirmed = true; message = "已保存"
+        action.stage(.stateUpdated); onFollowupSaved?(result); return
       }
       let result = try await client.request(RecordResponse.self, path: operation.path, method: operation.method, data: operation.payload, key: operation.key)
+      action.stage(.responseReceived)
       try checkActive()
       guard result.record.body == draft.body, result.record.kind == draft.kind,
         draft.tags == nil || (result.record.tags ?? []) == draft.tags,
         draft.recordID == nil || result.record.id == draft.recordID,
         UUID(uuidString: result.record.id) != nil, result.record.version >= (draft.expectedVersion ?? 1),
         result.record.attachments.map(\.id) == draft.existing.map(\.id) + draft.local.compactMap({ $0.uploaded?.id }) else { throw MessageError(message: "响应与保存内容不一致，请重试确认") }
+      responseConfirmed = true; action.stage(.confirmed)
       if let trace = draft.correctionTrace, trace.applied,
         draft.expectedVersion == nil || result.record.version > draft.expectedVersion!, let operation = draft.pending {
         do {
@@ -186,9 +199,11 @@ import SwiftUI
         } catch { correctionMessage = "记录已保存；历史反馈在本机排队失败" }
       }
       try await store.remove(draft); confirmed = true; message = "已保存"
+      action.stage(.stateUpdated)
       await retryFeedback()
-    } catch is CancellationError { return }
+    } catch is CancellationError { action.stage(requestStarted && !responseConfirmed ? .unknown : .cancelled); return }
     catch let error as APIError {
+      action.stage(requestStarted && !responseConfirmed && error.uncertain ? .unknown : .failed, error: error, failureCode: error.error.code)
       guard active else { return }
       if error.error.code == "VERSION_CONFLICT" {
         draft.frozen = false; draft.pending = nil; draft.conflict = true
@@ -198,7 +213,9 @@ import SwiftUI
       } else { message = "保存结果待确认，请手动重试确认。" }
       draft.revision += 1
       do { try await store.save(draft) } catch { message += " 本机状态写入失败，请保留页面。" }
-    } catch { if active { message = draft.frozen ? "保存结果待确认：\(error.localizedDescription)" : error.localizedDescription } }
+    } catch {
+      action.stage(requestStarted && !responseConfirmed ? .unknown : .failed, error: error)
+      if active { message = draft.frozen ? "保存结果待确认：\(error.localizedDescription)" : error.localizedDescription } }
   }
   func loadPreferences() async {
     guard historySupported else { return }

@@ -10879,5 +10879,37 @@
     "count": 1,
     "category": "external-protocol",
     "reason": "仅向明确请求的只读lark-cli子进程传递现有环境、时区和关闭通知标志；不新增实例配置或扩大渠道权限。"
+  },
+  {
+    "file": "frontend/src/lib/action-diagnostics.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.getItem(key)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Read the bounded origin-local action diagnostic ring; this is diagnostic runtime state, not a configuration default."
+  },
+  {
+    "file": "frontend/src/lib/action-diagnostics.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.setItem(key, serialized)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Persist the bounded action diagnostic ring on this origin; failures retain memory records and are disclosed during export."
+  },
+  {
+    "file": "frontend/src/lib/action-diagnostics.ts",
+    "kind": "environment",
+    "expression": "import.meta.env.DEV",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Label diagnostic records with the running development build; this does not enable analytics or change application settings."
+  },
+  {
+    "file": "frontend/src/lib/action-diagnostics.ts",
+    "kind": "environment",
+    "expression": "import.meta.env.VITE_RUNWEAVE_CHANNEL",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Distinguish beta and production build channels in diagnostic context; no backend environment is inferred from this value."
   }
 ]
