@@ -1,7 +1,8 @@
 import type { ExperienceLearningStatus } from "@runweave/shared/experience";
 import type { InboxItem, InboxPage } from "@runweave/shared/knowledge-inbox";
+import { readFile } from "node:fs/promises";
 import type { AuthContext } from "../client/auth-context.js";
-import { CliError } from "../errors.js";
+import { CliError, toCliError } from "../errors.js";
 import { getStringOption } from "../args.js";
 
 /** Consumption state belongs to the authenticated inbox user, not experience validity. */
@@ -20,7 +21,7 @@ export async function runExperienceInbox(
     "backend-port",
     "json",
     "plain",
-    ...(command === "list" ? ["limit", "all"] : ["expected-content-version"]),
+    ...(command === "list" ? ["limit", "all"] : ["expected-content-version", "file"]),
   ]);
   for (const name of Object.keys(options)) {
     if (!allowed.has(name))
@@ -29,11 +30,12 @@ export async function runExperienceInbox(
         2,
       );
   }
-  if (positionals.length !== (command === "process" ? 1 : 0))
+  const file = getStringOption(options, "file");
+  if (positionals.length !== (command === "process" && !file ? 1 : 0))
     throw new CliError(
       command === "list"
         ? "Usage: rw experience list [--limit N | --all]"
-        : "Usage: rw experience process <experience-id> [--expected-content-version hash]",
+        : "Usage: rw experience process <experience-id> [--expected-content-version hash] | process --file reviewed-list.json",
       2,
     );
   const limitText = getStringOption(options, "limit");
@@ -46,6 +48,8 @@ export async function runExperienceInbox(
   )
     throw new CliError("--limit must be a positive safe integer", 2);
   const expectedVersion = getStringOption(options, "expected-content-version");
+  if (file && expectedVersion !== undefined)
+    throw new CliError("--file uses each item's contentVersion; cannot combine with --expected-content-version", 2);
   if (expectedVersion !== undefined && !/^[a-f0-9]{64}$/.test(expectedVersion))
     throw new CliError(
       "--expected-content-version must be a content version hash",
@@ -103,6 +107,74 @@ export async function runExperienceInbox(
     };
   }
 
+  const readCurrent = async (
+    reviewed: Pick<InboxItem, "itemId" | "sourceId" | "contentVersion">,
+  ): Promise<InboxItem> => {
+    const current = await auth.requestJson<InboxItem>(
+      `/api/knowledge-inbox/items/${encodeURIComponent(reviewed.itemId)}`,
+    );
+    if (
+      current.itemId !== reviewed.itemId ||
+      current.source !== "experience" ||
+      current.repositoryId !== identity.repositoryId ||
+      current.sourceId !== reviewed.sourceId
+    )
+      throw new CliError("Experience inbox identity mismatch", 4);
+    if (current.contentVersion !== reviewed.contentVersion)
+      throw new CliError(
+        "Experience content changed; list and review it again before processing",
+        4,
+      );
+    if (current.availability !== "available")
+      throw new CliError("Experience is unavailable; cannot mark processed", 4);
+    return current;
+  };
+  const processCurrent = (current: InboxItem): Promise<InboxItem> => {
+    if (current.processedAt) return Promise.resolve(current);
+    return auth.requestJson<InboxItem>(
+      `/api/knowledge-inbox/items/${encodeURIComponent(current.itemId)}/state`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state: "processed",
+          expectedContentVersion: current.contentVersion,
+          expectedStateVersion: current.stateVersion,
+        }),
+      },
+    );
+  };
+  if (file) {
+    const reviewed = await readReviewedList(file, identity);
+    // Check the entire review before the first write. The PATCH still checks
+    // both versions, so changes after this preflight stop the batch as well.
+    const prepared: InboxItem[] = [];
+    for (const item of reviewed) {
+      try {
+        prepared.push(await readCurrent(item));
+      } catch (error) {
+        const failure = toCliError(error);
+        throw new CliError(
+          `Batch preflight failed at ${item.sourceId}: ${failure.message}. No processing requests sent.`,
+          failure.exitCode,
+        );
+      }
+    }
+    const items: InboxItem[] = [];
+    for (const current of prepared) {
+      try {
+        items.push(await processCurrent(current));
+      } catch (error) {
+        const failure = toCliError(error);
+        throw new CliError(
+          `Batch stopped at ${current.sourceId}: ${failure.message}. Completed ${items.length}/${prepared.length}: ${JSON.stringify(items.map(item => item.sourceId))}. Re-read the inbox before retrying; the failed request may have reached the server.`,
+          failure.exitCode,
+        );
+      }
+    }
+    return { repositoryId: identity.repositoryId, namespace: identity.namespace, state: "processed", items };
+  }
+
   // Resolve within this repository and source; never accept another repository's item ID.
   let found: InboxItem | undefined;
   for (const state of ["pending", "processed"] as const) {
@@ -121,34 +193,47 @@ export async function runExperienceInbox(
   }
   if (!found)
     throw new CliError("Experience not found in this repository's inbox", 4);
-  const current = await auth.requestJson<InboxItem>(
-    `/api/knowledge-inbox/items/${encodeURIComponent(found.itemId)}`,
+  return processCurrent(
+    await readCurrent({ ...found, contentVersion: expectedVersion ?? found.contentVersion }),
   );
+}
+
+async function readReviewedList(
+  file: string,
+  identity: ExperienceLearningStatus,
+): Promise<InboxItem[]> {
+  let snapshot: { repositoryId: string; namespace: string; items: InboxItem[] };
+  try {
+    snapshot = JSON.parse(await readFile(file, "utf8"));
+  } catch {
+    throw new CliError(`Cannot read JSON file: ${file}`, 2);
+  }
   if (
-    current.source !== "experience" ||
-    current.repositoryId !== identity.repositoryId ||
-    current.sourceId !== positionals[0]
+    !snapshot ||
+    snapshot.repositoryId !== identity.repositoryId ||
+    snapshot.namespace !== identity.namespace ||
+    !Array.isArray(snapshot.items)
   )
-    throw new CliError("Experience inbox identity mismatch", 4);
-  const reviewedVersion = expectedVersion ?? found.contentVersion;
-  if (current.contentVersion !== reviewedVersion)
-    throw new CliError(
-      "Experience content changed; list and review it again before processing",
-      4,
-    );
-  if (current.availability !== "available")
-    throw new CliError("Experience is unavailable; cannot mark processed", 4);
-  if (current.processedAt) return current;
-  return auth.requestJson<InboxItem>(
-    `/api/knowledge-inbox/items/${encodeURIComponent(current.itemId)}/state`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        state: "processed",
-        expectedContentVersion: reviewedVersion,
-        expectedStateVersion: current.stateVersion,
-      }),
-    },
-  );
+    throw new CliError("Reviewed list must contain this repository's repositoryId, namespace and items from experience list --json", 2);
+  const ids = new Set<string>();
+  const sources = new Set<string>();
+  for (const item of snapshot.items) {
+    if (
+      !item ||
+      item.source !== "experience" ||
+      item.repositoryId !== identity.repositoryId ||
+      typeof item.sourceId !== "string" ||
+      !item.sourceId.trim() ||
+      typeof item.itemId !== "string" ||
+      !/^[a-f0-9]{64}$/.test(item.itemId) ||
+      typeof item.contentVersion !== "string" ||
+      !/^[a-f0-9]{64}$/.test(item.contentVersion) ||
+      ids.has(item.itemId) ||
+      sources.has(item.sourceId)
+    )
+      throw new CliError("Reviewed list items must be unique experiences from this repository with itemId, sourceId and contentVersion", 2);
+    ids.add(item.itemId);
+    sources.add(item.sourceId);
+  }
+  return snapshot.items;
 }
