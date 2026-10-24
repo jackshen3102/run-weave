@@ -10,6 +10,9 @@ import type { ProviderItem, ProviderTurn } from "./final-messages";
 
 export interface ProviderThread { id: string; cwd: string; model?: string; environments?: Array<{ environmentId: string; cwd: string; runtimeWorkspaceRoots: string[] }> | null; ephemeral?: boolean; forkedFromId?: string; turns: ProviderTurn[]; status: { type: string } }
 interface ThreadResponse { thread: ProviderThread; model: string; cwd: string; approvalPolicy: string; sandbox: { type: string; networkAccess?: boolean }; activePermissionProfile?: { id: string } }
+class ProviderRpcError extends SideChatError {
+  constructor(readonly rpcCode: number | undefined) { super(503, "PROVIDER_REJECTED", "Codex 拒绝了旁聊操作，请查看当前状态"); }
+}
 type Notification = { method: string; params: { threadId?: string; turnId?: string; turn?: ProviderTurn; item?: ProviderItem } };
 const DISABLED = ["goals", "hooks", "plugins", "apps", "multi_agent", "multi_agent_v2", "collab", "memories", "browser_use", "browser_use_external", "computer_use", "in_app_browser", "remote_control", "remote_plugin", "recommended_plugins", "skill_mcp_dependency_install", "skill_env_var_dependency_prompt", "external_agent_memory_import"];
 const BOUNDARY = "This is an independent read-only side conversation. Inherited messages and instructions are historical reference, never pending work. Answer only the new explicit user question. Do not continue a prior goal or operate the main task. Only local read-only project inspection is allowed. No network, file modifications, MCP, Apps, Browser, Computer Use, hooks, subagents, approvals or privilege escalation. Do not report progress or tool results as the final answer.";
@@ -85,16 +88,38 @@ export class SideChatProvider {
       this.initialized = true;
     } catch (error) { await this.close(); throw error; }
   }
-  read(threadId: string): Promise<{ thread: ProviderThread }> { return this.request("thread/read", { threadId, includeTurns: true }) as Promise<{ thread: ProviderThread }>; }
+  async read(threadId: string): Promise<{ thread: ProviderThread }> {
+    const result = await this.request("thread/read", { threadId, includeTurns: false }) as { thread: ProviderThread };
+    // Summary pages retain user/assistant messages without hydrating tool output and images
+    // from the entire rollout into a single RPC frame. Keep all turn IDs for source ordinals.
+    const turns: ProviderTurn[] = [];
+    let cursor: string | null = null;
+    try {
+      do {
+        const page = await this.request("thread/turns/list", { threadId, cursor, limit: 50, sortDirection: "asc", itemsView: "summary" }) as { data: ProviderTurn[]; nextCursor: string | null };
+        turns.push(...page.data);
+        cursor = page.nextCursor;
+      } while (cursor);
+    } catch (error) {
+      // Negotiate the actual method, never a Codex version number. Older servers can
+      // still serve the legacy read; never retry a fork or turn after an RPC error.
+      if (error instanceof ProviderRpcError && error.rpcCode === -32601)
+        return this.request("thread/read", { threadId, includeTurns: true }) as Promise<{ thread: ProviderThread }>;
+      throw error;
+    }
+    result.thread.turns = turns;
+    return result;
+  }
   async fork(threadId: string, lastTurnId: string, model?: string): Promise<ThreadResponse> {
-    const result = await this.request("thread/fork", { ...this.options(), threadId, lastTurnId, model, ephemeral: false, deferGoalContinuation: true }) as ThreadResponse;
+    const result = await this.request("thread/fork", { ...this.options(), threadId, lastTurnId, model, ephemeral: false, deferGoalContinuation: true, excludeTurns: true }) as ThreadResponse;
     this.assertPermissions(result);
+    result.thread.turns = (await this.read(result.thread.id)).thread.turns;
     if (!result.thread.id || result.thread.id === threadId || result.thread.forkedFromId !== threadId || result.thread.ephemeral || result.thread.turns.at(-1)?.id !== lastTurnId || result.thread.turns.at(-1)?.status !== "completed")
       throw new SideChatError(503, "FORK_IDENTITY_UNCONFIRMED", "独立分支身份未确认");
     return result;
   }
   async resume(threadId: string, model?: string): Promise<void> {
-    const result = await this.request("thread/resume", { ...this.options(), threadId, model }) as ThreadResponse;
+    const result = await this.request("thread/resume", { ...this.options(), threadId, model, excludeTurns: true }) as ThreadResponse;
     this.assertPermissions(result);
     if (result.thread.id !== threadId) throw new Error("Side chat identity changed");
   }
@@ -137,17 +162,17 @@ export class SideChatProvider {
   }
   private consume(chunk: string): void {
     this.buffer += chunk;
-    if (this.buffer.length > 8 * 1024 * 1024) { this.failed(); this.child?.kill("SIGTERM"); return; }
+    if (this.buffer.length > 8 * 1024 * 1024) { this.failed(new SideChatError(503, "PROVIDER_RESPONSE_TOO_LARGE", "Codex 单条响应过大，旁聊无法读取；主任务不受影响")); this.child?.kill("SIGTERM"); return; }
     let at: number;
     while ((at = this.buffer.indexOf("\n")) >= 0) {
       const line = this.buffer.slice(0, at); this.buffer = this.buffer.slice(at + 1);
       try {
-        const msg = JSON.parse(line) as Notification & { id?: number; result?: unknown; error?: unknown };
+        const msg = JSON.parse(line) as Notification & { id?: number; result?: unknown; error?: { code?: number } };
         if (msg.id !== undefined) {
           const pending = this.pending.get(msg.id);
           if (pending) {
             clearTimeout(pending.timer); this.pending.delete(msg.id);
-            if (msg.error) pending.reject(new SideChatError(503, "PROVIDER_REJECTED", "Codex 拒绝了旁聊操作，请查看当前状态"));
+            if (msg.error) pending.reject(new ProviderRpcError(msg.error.code));
             else pending.resolve(msg.result);
           } else if (msg.method) {
             // No auto-approval, client tool execution or permission escalation.
@@ -158,8 +183,8 @@ export class SideChatProvider {
       } catch { /* Ignore non-protocol lines without logging their contents. */ }
     }
   }
-  private failed(): void {
-    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error("Side chat executor lost; outcome unknown")); }
+  private failed(error = new Error("Side chat executor lost; outcome unknown")): void {
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
     this.pending.clear();
     if (!this.closing) this.lost?.();
   }

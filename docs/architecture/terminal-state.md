@@ -55,6 +55,9 @@ Terminal session 与 panel metadata 中的 current/last thread 必须同时携�
 历史已核对 macOS Codex 0.160.1 与 Linux standalone Codex 0.161.0；运行时不按精确版本号拒绝，
 仍核对实际初始化响应、来源身份和权限边界。客户端通过远程连接访问该
 Backend 不影响本地归属；面板本身只有 SSH shell、来源不完整或权限无法落实时明确不可用。
+读取来源和恢复子会话时使用 thread 元数据及分页的轮次消息摘要，保留完整轮次编号，
+不把整段工具输出或图片历史装入单条 RPC；fork/resume 也排除完整轮次响应。
+摘要只用于来源预览和结果恢复，实际继承上下文仍由 Codex 按固定边界 fork。
 官方 CLI 完成轮次后移入 lastThread 的身份，仅在原面板仍为 Codex 空闲态时采用；受管 CLI
 始终以实时主会话观测为准，不退回历史猜测。无需切换用户的全局 binary/PATH/daemon。
 
