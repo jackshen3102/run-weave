@@ -3,7 +3,14 @@
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !tsconfig.base.json
+!patches/
+!patches/*.patch
 !packages/
+!packages/config-node/
+!packages/config-node/package.json
+!packages/config-node/tsconfig.json
+!packages/config-node/src/**
+!packages/config-node/scripts/**
 !packages/shared/
 !packages/shared/package.json
 !packages/shared/src/**
