@@ -215,6 +215,10 @@ id 与 revision。其他项目、未召回的记录或伪造版本不能冒充�
 rw experience list --limit 10 --json  # 默认 10 条，只返回未处理经验
 rw experience list --all --json       # 自动翻页，返回当前仓库全部未处理经验
 rw experience process --instance stable <experience-id> --expected-content-version <contentVersion> --json
+
+# 保存列表，逐条审阅后仅保留要处理的 items；不要把未审阅的条目交给 process。
+rw experience list --all --json > reviewed-list.json
+rw experience process --instance stable --file reviewed-list.json --json
 ```
 
 `list` 先按当前认证用户、当前仓库、experience 来源和 pending 状态过滤，再按内容更新时间
@@ -227,3 +231,16 @@ rw experience process --instance stable <experience-id> --expected-content-versi
 内容已更新则拒绝；省略时使用命令开始查询到的版本。更新同时校验服务端状态版本，冲突不自动
 重试。重复处理同一版本不重复写入。后续出现新内容版本时，新版本仍进入未处理列表。
 此操作与手机、桌面成果收件箱共用状态，不修改经验有效性，不提交使用反馈。
+
+批量 `--file` 直接读取上述列表 JSON，要求保留顶层 `repositoryId`、`namespace`，以及每条的
+`source`、`repositoryId`、`itemId`、`sourceId`、`contentVersion`；可删去不处理的 items。
+文件路径相对于命令执行目录；`--cwd` 仅选择仓库。不能与经验 ID 或 `--expected-content-version`
+同时使用，每条沿用其已审阅版本。重复条目、其他来源或仓库、namespace 不符均拒绝。
+空 items 返回空结果，不修改状态。
+
+批量复用一次仓库身份查询，按 itemId 读取当前详情，不扫描待处理或已处理列表。
+全部条目通过身份、内容版本与可用性核对后才开始串行处理；写入仍校验内容及状态版本。
+成功返回 `{repositoryId, namespace, state: "processed", items}`，包含已处理条目的回执；
+同版本已处理项不重复写入。整个批次不是原子事务：写入期间遇到冲突或请求失败立即停止，
+错误包含失败条目及已返回成功的条目 ID；网络失败的那笔可能已在服务端提交，须回读收件箱后
+再决定重试，不自动重放或回滚。

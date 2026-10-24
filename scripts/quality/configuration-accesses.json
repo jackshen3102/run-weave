@@ -1,5 +1,13 @@
 [
   {
+    "file": "packages/runweave-cli/src/commands/experience-inbox.ts",
+    "kind": "file-io",
+    "expression": "readFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户通过 --file 明确指定并审阅的经验列表 JSON，作为本次批量处理输入，不作为业务配置来源。"
+  },
+  {
     "file": "packages/daily-record/src/data.ts",
     "kind": "file-io",
     "expression": "handle.writeFile(content)",
