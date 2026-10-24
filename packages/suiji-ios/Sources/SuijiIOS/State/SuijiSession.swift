@@ -1,4 +1,5 @@
 import SuijiCaptureCore
+import IOSDiagnostics
 import SwiftUI
 import RunweaveBrowser
 enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
@@ -57,6 +58,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
     let saved = ConnectionProfiles.restore(endpoint: endpoint)
     profiles = saved; environment = saved.active
     self.endpoint = saved[saved.active].endpoint; username = saved[saved.active].username
+    MobileAnalytics.observeBrowser(browser)
     browser.currentSource = { [weak self] in self?.browserSource }
   }
   private func rememberConnection() {
@@ -88,6 +90,9 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
     _ = await resetConnection()
   }
   func connect(username: String? = nil, password: String? = nil) async {
+    let action = ClientDiagnosticOperation(.connectionRecover)
+    var complete = false
+    defer { if !complete { action.stage(.cancelled) } }
     if let username { self.username = username }
     rememberConnection()
     let address = endpoint, target = environment
@@ -101,8 +106,10 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
     do {
       let url = try APIClient.normalize(address); let api = try APIClient(endpoint: url, environment: target); client = api
       endpoint = url.absoluteString; rememberConnection()
+      action.stage(.requestStarted)
       let identity: ServiceInfo
       if let username, let password { identity = try await api.login(username: username, password: password) } else { identity = try await api.info() }
+      action.stage(.responseReceived)
       guard generation == current else { await api.cancel(); return }
       let drafts = try DraftStore(endpoint: url, info: identity, environment: target)
       store = drafts; info = identity; message = ""
@@ -112,8 +119,11 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
         try await SharedCaptureStore.setConnection(connection, ifCurrent: { self.generation == current })
         guard generation == current else { return }
         captureConnection = connection; refreshCaptures()
-      } catch { captureMessage = error.localizedDescription }
-    } catch { if generation == current { message = error.localizedDescription } }
+        action.stage(.confirmed); action.stage(.stateUpdated); complete = true
+    } catch {
+      action.stage(.failed, error: error); complete = true
+      if generation == current { message = error.localizedDescription }
+    }
   }
   func isCurrent(_ api: APIClient) -> Bool { client === api && info != nil }
   func logout() async {

@@ -1,3 +1,4 @@
+import { beginDiagnosticAction } from "../../lib/action-diagnostics";
 import {
   SUIJI_LIMITS,
   normalizeSuijiTags,
@@ -251,8 +252,13 @@ export class SuijiEditorModel {
       });
     }
   }
+  lastSaveDiagnostics?: ReturnType<typeof beginDiagnosticAction>;
   async save() {
-    if (this.state.busy || this.state.saved || this.state.savedFollowup) return;
+    const diagnostics = beginDiagnosticAction("suiji_save");
+    this.lastSaveDiagnostics = diagnostics;
+    let requestStarted = false;
+    let confirmed = false;
+    if (this.state.busy || this.state.saved || this.state.savedFollowup) { diagnostics.stage("rejected"); return; }
     this.patch({ busy: true, message: "" });
     try {
       this.check();
@@ -313,12 +319,15 @@ export class SuijiEditorModel {
       }
       this.check();
       const pending = draft.pending!;
+      requestStarted = true;
+      diagnostics.stage("request_started", undefined, pending.key);
       const result = await this.client.request<RecordResponse | FollowupResponse>(
         pending.path,
         pending.method,
         pending.data,
         pending.key,
       );
+      diagnostics.stage("response_received");
       this.check();
       if (this.followupRecordId) {
         if (!("followup" in result) || result.followup.recordId !== this.followupRecordId || result.followup.body !== draft.body ||
@@ -329,6 +338,8 @@ export class SuijiEditorModel {
         (draft.id !== "new" && result.record.id !== draft.id))) {
         throw new Error("记录响应与保存正文不一致，请手动重试确认");
       }
+      confirmed = true;
+      diagnostics.stage("confirmed");
       if ("record" in result && draft.correctionTrace?.applied &&
         (draft.version === undefined || result.record.version > draft.version)) {
         await this.enqueueFeedback({ correctionId: draft.correctionTrace.correctionId,
@@ -339,7 +350,9 @@ export class SuijiEditorModel {
       if ("record" in result) void this.retryFeedback();
       if ("followup" in result) this.patch({ savedFollowup: result });
       else this.patch({ saved: result.record });
+      diagnostics.stage("state_updated");
     } catch (error) {
+      diagnostics.stage(requestStarted && !confirmed && !(error instanceof SuijiHttpError && !error.uncertain) ? "unknown" : "failed", error);
       if (!this.active) return;
       if (error instanceof SuijiHttpError && !error.uncertain) {
         const conflict = error.detail.error.code === "VERSION_CONFLICT";

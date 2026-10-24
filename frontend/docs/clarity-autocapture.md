@@ -1,6 +1,6 @@
 # Web 与 Mac 桌面 Clarity 自动采集
 
-普通 Web 与打包的 Mac Stable 主窗口默认加载 Microsoft Clarity。代码入口是 [clarity.ts](../src/features/analytics/clarity.ts) 与 [main.tsx](../src/main.tsx)。前端构建包含加载器和项目 ID；官方采集脚本运行时从微软下载。业务组件没有按钮事件或元素标签，点击不等于业务成功。
+普通 Web 与打包的 Mac Stable 主窗口默认加载 Microsoft Clarity。代码入口是 [clarity.ts](../src/features/analytics/clarity.ts) 与 [main.tsx](../src/main.tsx)。前端构建包含加载器和项目 ID；官方采集脚本运行时从微软下载。关键流程额外发送固定操作阶段事件；点击不等于业务成功，详见[客户端操作诊断](../../docs/architecture/client-action-diagnostics.md)。
 
 ## 页面分类
 

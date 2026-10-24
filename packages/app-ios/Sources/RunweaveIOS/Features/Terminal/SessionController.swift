@@ -1,3 +1,4 @@
+import IOSDiagnostics
 import RunweaveBrowser
 import Foundation
 import SwiftUI
@@ -145,6 +146,8 @@ public final class SessionController: ObservableObject {
     connect()
   }
 
+  private var connectionDiagnostics: ClientDiagnosticOperation?
+
   public func connect() {
     disconnect()
     stopped = false
@@ -155,10 +158,13 @@ public final class SessionController: ObservableObject {
       guard let self else { return }
       var retries = 0
       while !Task.isCancelled && !self.stopped && self.generation == epoch {
+        let action = ClientDiagnosticOperation(.connectionRecover)
+        self.connectionDiagnostics = action
         let attemptID = UUID().uuidString
         self.record("socket.connecting", extra: ["attemptId": attemptID, "retry": retries])
         do {
           self.connectionStatus = retries == 0 ? "连接中" : "重新连接中"
+          action.stage(.requestStarted)
           let ticket = try await self.api.terminalTicket(id: self.terminalID)
           guard self.generation == epoch, !Task.isCancelled else { return }
           self.record("ticket.acquired")
@@ -192,6 +198,7 @@ public final class SessionController: ObservableObject {
           }
         } catch {
           guard self.generation == epoch, !Task.isCancelled, !self.stopped else { return }
+          action.stage(.failed, error: error)
           self.connected = false
           let closeCode = self.socket?.closeCode.rawValue
           var details: [String: Any] = DiagnosticRecord.errorFields(error).mapValues { $0 as Any }
@@ -225,6 +232,8 @@ public final class SessionController: ObservableObject {
   }
 
   public func disconnect() {
+    connectionDiagnostics?.stage(.cancelled)
+    connectionDiagnostics = nil
     flushOutputLog()
     if !stopped { record("socket.stopped", extra: ["closeCode": 1000]) }
     generation += 1
@@ -284,8 +293,9 @@ public final class SessionController: ObservableObject {
   }
 
   func sendCommand(_ text: String, mode: String, recordQuickInput: Bool? = nil,
-    submitKey: TerminalPromptSubmitKey? = nil) async throws {
-    guard canSend else { throw APIError.offline }
+    submitKey: TerminalPromptSubmitKey? = nil, diagnostics: ClientDiagnosticOperation? = nil) async throws {
+    let action = diagnostics ?? ClientDiagnosticOperation(.terminalSend)
+    guard canSend else { action.stage(.rejected); throw APIError.offline }
     let epoch = generation
     inputBusy = true
     failure = nil
@@ -300,8 +310,9 @@ public final class SessionController: ObservableObject {
       }
       guard generation == epoch, !Task.isCancelled else { throw CancellationError() }
       submissionStarted = true
+      action.stage(.requestStarted)
       try await api.terminalInput(id: terminalID, data: text, mode: mode, recordQuickInput: recordQuickInput,
-        submitKey: submitKey)
+        submitKey: submitKey, operationID: action.id)
     }
     commandTask = operation
     defer {
@@ -312,6 +323,7 @@ public final class SessionController: ObservableObject {
     }
     do {
       try await operation.value
+      action.stage(.confirmed)
       guard generation == epoch, !Task.isCancelled else { throw APIError.inputResultUnknown }
       if exitsCopyMode {
         tmuxScrollRows = 0
@@ -323,10 +335,14 @@ public final class SessionController: ObservableObject {
     } catch {
       if generation != epoch || Task.isCancelled {
         // Cancellation cannot retract a command already submitted to the backend.
-        guard submissionStarted else { throw CancellationError() }
+        guard submissionStarted else { action.stage(.cancelled); throw CancellationError() }
+        action.stage(.unknown, error: error)
         record("input.unconfirmed", extra: ["mode": mode, "reason": "transport_changed"])
         throw APIError.inputResultUnknown
       }
+      if let api = error as? APIError, case .http(let status) = api, (400..<500).contains(status), status != 408 {
+        action.stage(.failed, error: error, failureCode: "HTTP_\(status)")
+      } else { action.stage(submissionStarted ? .unknown : .failed, error: error) }
       failure = displayInputError(error)
       record("input.unconfirmed", extra: ["mode": mode])
       throw error
@@ -346,6 +362,8 @@ public final class SessionController: ObservableObject {
     case .connected(let id, let kind, let recovery):
       guard id == terminalID else { throw APIError.invalidResponse }
       connected = true
+      connectionDiagnostics?.stage(.confirmed)
+      connectionDiagnostics?.stage(.stateUpdated)
       runtimeKind = kind
       if recovery?.mode == .resume {
         guard committedCursor != nil else { throw APIError.invalidResponse }

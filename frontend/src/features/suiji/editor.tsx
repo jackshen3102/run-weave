@@ -38,11 +38,11 @@ export function SuijiEditor({
     if (!busy && !draft.frozen) void model.addFile(file);
   });
   const followed = useMemoizedFn((result: FollowupResponse) => onFollowupSaved?.(result));
-  useEffect(() => { if (state.savedFollowup) followed(state.savedFollowup); }, [state.savedFollowup, followed]);
+  useEffect(() => { if (state.savedFollowup) { model.lastSaveDiagnostics?.stage("ui_updated"); followed(state.savedFollowup); } }, [state.savedFollowup, followed, model]);
   const discarded = useMemoizedFn(onDiscard);
   useEffect(() => {
-    if (state.saved) saved(state.saved);
-  }, [state.saved, saved]);
+    if (state.saved) { model.lastSaveDiagnostics?.stage("ui_updated"); saved(state.saved); }
+  }, [state.saved, saved, model]);
   useEffect(() => {
     if (state.discarded) discarded();
   }, [state.discarded, discarded]);

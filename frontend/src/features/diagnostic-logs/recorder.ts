@@ -1,3 +1,4 @@
+import { actionDiagnosticSnapshot } from "../../lib/action-diagnostics";
 import type { DiagnosticLogRecord, DiagnosticLogResult, DiagnosticLogStatus } from "@runweave/shared/diagnostic-logs";
 
 interface CreateAiDiagnosticLogOptions {
@@ -41,7 +42,7 @@ export class FrontendDiagnosticLogRecorder {
   }
 
   getBufferedLogs(): DiagnosticLogRecord[] {
-    return this.bufferedLogs.map(cloneLog);
+    return [...this.bufferedLogs.map(cloneLog), ...actionDiagnosticSnapshot()];
   }
 
   finish(result: DiagnosticLogResult): void {
