@@ -7,6 +7,7 @@ public final class BrowserSession: ObservableObject {
   struct Prompt: Identifiable {
     enum Kind {
       case replace(URL)
+      case open(URL)
       case close, clear
       case address(String)
       case application(BrowserURLPolicy.ApplicationLink)
@@ -26,6 +27,7 @@ public final class BrowserSession: ObservableObject {
   @Published public private(set) var clearing = false
   @Published var prompt: Prompt?
   @Published public private(set) var dataStatus: String?
+  @Published public private(set) var openingTarget: String?
   public var prepareLocalPreview: ((BrowserLocalTarget, BrowserContext) async throws -> BrowserLocalPreview)?
   private var preparation: Task<Void, Never>?
   public var currentSource: (() -> BrowserContext?)?
@@ -104,10 +106,13 @@ public final class BrowserSession: ObservableObject {
     // Disclose the original target before copying, even for a rejected OSC 8 link.
     // Only navigation must pass the web policy.
     switch intent.action {
+    case .incompleteLink:
+      message("终端未保留完整链接目标，未打开可能被截断的地址。请点击括号中的完整网址，或从会话阅读中打开原始链接。" + (intent.target.isEmpty ? "" : "\n\n已识别部分：\(intent.target)"), source: source)
+      return
     case .link:
       setPrompt(.address(intent.target), message: intent.target, source: source)
       return
-    case .internalOpen, .externalOpen: break
+    case .internalOpen, .externalOpen, .confirmInternalOpen: break
     }
     let local = prepareLocalPreview != nil && BrowserLocalTarget(intent.target) != nil
     if local && intent.action == .externalOpen {
@@ -116,12 +121,14 @@ public final class BrowserSession: ObservableObject {
     }
     guard case .web(let url) = BrowserURLPolicy.classify(intent.target, allowLocal: local) else {
       if case .denied(let reason) = BrowserURLPolicy.classify(intent.target) {
-        message(reason, source: source)
+        message("\(reason)\n\n目标地址：\(intent.target)", source: source)
       }
       return
     }
     switch intent.action {
-    case .link: break
+    case .link, .incompleteLink: break
+    case .confirmInternalOpen:
+      setPrompt(.open(url), message: "终端网址跨行显示，请核对完整地址后打开：\n\n\(intent.target)", source: source)
     case .externalOpen: openExternal(url, source: source, identity: intent.sessionIdentity)
     case .internalOpen:
       if let page {
@@ -130,7 +137,7 @@ public final class BrowserSession: ObservableObject {
           resume()
           return
         }
-        setPrompt(.replace(url), message: "替换当前网页？未提交内容可能丢失。", source: source)
+        setPrompt(.replace(url), message: "打开以下地址并替换当前网页？\n\n\(url.absoluteString)\n\n未提交内容可能丢失。", source: source)
       } else {
         create(url, source: source)
       }
@@ -147,9 +154,15 @@ public final class BrowserSession: ObservableObject {
     }
     let presentationID = presentation.id
     invalidate()
+    openingTarget = url.absoluteString
+    dataStatus = "正在准备打开网页…"
     let expectedLifetime = lifetime
     preparation = Task { [weak self] in
-      guard let self, await self.waitForRetiredPages(), self.lifetime == expectedLifetime,
+      guard let self else { return }
+      defer {
+        if self.lifetime == expectedLifetime { self.openingTarget = nil }
+      }
+      guard await self.waitForRetiredPages(), self.lifetime == expectedLifetime,
         self.valid(source), !self.clearing, self.page == nil
       else { return }
       // This is a live host query, not the Bool captured at the first open.
@@ -206,6 +219,7 @@ public final class BrowserSession: ObservableObject {
   /// Invalidates callbacks synchronously, then retires the document without clearing identity.
   public func invalidate() {
     lifetime = UUID()
+    openingTarget = nil
     // Preparation notices belong to their source, even before a page exists.
     if preparation != nil && page == nil && !clearing { dataStatus = nil }
     preparation?.cancel()
@@ -279,13 +293,16 @@ public final class BrowserSession: ObservableObject {
     prompt = nil
     switch value.kind {
     case .close, .clear: break  // A page cannot defeat these actions by continuously changing URL.
-    case .replace, .address, .message, .application:
+    case .replace, .open, .address, .message, .application:
       guard page?.navigationRevision == value.navigationRevision else {
         dataStatus = "网页地址已变化，请重新选择操作。"
         return
       }
     }
     switch value.kind {
+    case .open(let url):
+      open(BrowserOpenIntent(target: url.absoluteString, origin: .host, action: .internalOpen),
+        source: value.source, presentationAvailable: true)
     case .replace(let url): create(url, source: value.source)
     case .close: invalidate()
     case .clear: clearData()

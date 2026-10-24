@@ -61,32 +61,32 @@ public struct TerminalFileTap: Identifiable {
   let rows: Int
   let explicit: String?
   let firstRow: Int
-  let cells: [Int: [(text: String, col: Int, width: Int)]]
+  let cells: [Int: [(text: String, col: Int, width: Int, attribute: Attribute)]]
   let wrapped: Set<Int>
 
-  @MainActor static func capture(_ terminal: Terminal, hit: Position) -> Self? {
+  @MainActor static func capture(_ terminal: Terminal, hit: Position, filesOnly: Bool = true) -> Self? {
     let explicit = terminal.link(at: .buffer(hit), mode: .explicitOnly)
-    if let explicit, TerminalFileReference.parse(explicit) == nil { return nil }
-    var cells: [Int: [(String, Int, Int)]] = [:]
+    if filesOnly, let explicit, TerminalFileReference.parse(explicit) == nil { return nil }
+    var cells: [Int: [(String, Int, Int, Attribute)]] = [:]
     var wrapped = Set<Int>()
     var first = hit.row
     while first > max(0, hit.row - 31), terminal.displayLine(atBufferRow: first)?.isWrapped == true { first -= 1 }
-    for row in max(0, first - 4)...max(first + 31, hit.row + 4) {
+    for row in max(0, first - 8)...max(first + 31, hit.row + 4) {
       guard let line = terminal.displayLine(atBufferRow: row) else { break }
       if line.isWrapped { wrapped.insert(row) }
-      var items: [(String, Int, Int)] = []
+      var items: [(String, Int, Int, Attribute)] = []
       for col in 0..<min(terminal.cols, line.count) {
         let cell = line[col]
         guard cell.width > 0 else { continue }
         let char = cell.getCharacter()
-        items.append((char == "\0" ? " " : String(char), col, Int(cell.width)))
+        items.append((char == "\0" ? " " : String(char), col, Int(cell.width), cell.attribute))
       }
       cells[row] = items
     }
     let tap = Self(row: hit.row, col: hit.col,
       viewportRow: hit.row - terminal.displayTopVisibleRow, cols: terminal.cols, rows: terminal.rows,
       explicit: explicit, firstRow: first, cells: cells, wrapped: wrapped)
-    return tap.reference() == nil ? nil : tap
+    return filesOnly && tap.reference() == nil ? nil : tap
   }
 
   func reference(geometry: TerminalFilePanel.Geometry? = nil) -> TerminalFileReference? {

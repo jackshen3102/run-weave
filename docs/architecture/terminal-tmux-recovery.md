@@ -71,8 +71,11 @@ Backend 重启仍会断开 WebSocket；只有原 tmux/pane/任务 PID 不变才�
 - [状态适配层](../../backend/src/terminal/runtime/output-screen-state.ts) 补充序列化器遗漏的滚动区域、
   保存光标、字符集、鼠标编码、隐藏光标、行尾 wrap 状态及 OSC 8 链接属性。它依赖固定版本的内部字段；升级依赖必须
   重新验证状态及后续 VT 操作一致性。无法安全序列化的状态拒绝恢复，不发送不完整快照。
-- Runweave 的 tmux attach 客户端声明 `hyperlinks` 能力；实时输出和重连快照均保留 OSC 8
-  完整地址及字符绑定。TUI 排版不参与 URL 重建；快照从镜像里的真实链接属性恢复，不扫描文本。
+- Runweave 的 tmux attach 客户端声明 `hyperlinks` 能力；tmux server 3.4 起支持 OSC 8，
+  copy mode 历史阅读需 3.5 或更新版本。只有 server 已保留真实目标时，实时输出和重连快照才能保留
+  完整地址及字符绑定；仅更新客户端或重启 Backend 不能升级运行中的旧 tmux server，也不能恢复已丢弃的历史目标。
+  快照只从镜像里的真实链接属性恢复，不扫描文本。iOS 对旧 TUI 的有限候选确认见
+  [原生终端架构](../../packages/app-ios/docs/architecture.md)，候选不代表已恢复 OSC 8 属性。
 - Web 终端优先使用 xterm 的 OSC 8 链接，普通 HTTP(S) 文本由官方 `WebLinksAddon`
   识别，两者复用所属页面的打开入口。普通文本只沿终端软换行延伸，不拼接硬换行或缩进续行。
 

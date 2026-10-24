@@ -2,7 +2,7 @@ import Foundation
 
 public struct BrowserOpenIntent {
   public enum Origin { case host, selection, page }
-  public enum Action { case internalOpen, externalOpen, link }
+  public enum Action { case internalOpen, externalOpen, link, confirmInternalOpen, incompleteLink }
   public let target: String
   public let origin: Origin
   public let action: Action
