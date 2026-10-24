@@ -1,0 +1,301 @@
+{
+  "asOfDate": "2026-10-24",
+  "initialDate": "2026-10-23",
+  "importedDates": ["2026-10-21", "2026-10-22", "2026-10-23"],
+  "facts": [
+    {
+      "id": "F01",
+      "date": "2026-10-21",
+      "project": "CCM 性能实验室",
+      "eventKey": "loadline-research",
+      "statement": "请 Agent 解读 LoadLine 2 网页加载基准，获得页面选择、可见与可交互指标及运行方式的说明。",
+      "status": "reported",
+      "title": "LoadLine 2 基准解读"
+    },
+    {
+      "id": "F02",
+      "date": "2026-10-21",
+      "project": "CCM 性能实验室",
+      "eventKey": "dashboard-auth",
+      "statement": "提供实验室大盘授权问题的修复 MR。",
+      "status": "reported",
+      "title": "大盘授权问题"
+    },
+    {
+      "id": "F03",
+      "date": "2026-10-21",
+      "project": "CCM 性能实验室",
+      "eventKey": "skip-reporting",
+      "statement": "确认跳过用例的信息目前留在话题群，提出后续上报到 FaaS，便于统一查询。",
+      "status": "discussed",
+      "title": "跳过用例的记录方式"
+    },
+    {
+      "id": "F04",
+      "date": "2026-10-21",
+      "project": "CCM 性能实验室",
+      "eventKey": "memory-monitor",
+      "statement": "发布实验室新增内存监控的消息，准备观察一周稳定性，并讨论 PSS 指标。",
+      "status": "reported",
+      "title": "新增内存监控"
+    },
+    {
+      "id": "F05",
+      "date": "2026-10-21",
+      "project": "CCM 性能实验室",
+      "eventKey": "landing-templates",
+      "statement": "对一次测试结果反馈：TTV 改善明显，TTU 基本不变。",
+      "status": "reported",
+      "title": "落地页模板与稳定性"
+    },
+    {
+      "id": "F06",
+      "date": "2026-10-21",
+      "project": "Office 静态资源防劣化",
+      "eventKey": "package-monitor-design",
+      "statement": "讨论分组包体积和重点具名 chunk 两层检测，进一步核对动态拆包与聚合规则的关系；阈值仍在讨论。",
+      "status": "discussed",
+      "title": "静态资源监控方案"
+    },
+    {
+      "id": "F07",
+      "date": "2026-10-21",
+      "project": "豆包 Office",
+      "eventKey": "slides-style-deploy",
+      "statement": "为 Slide SSR 样式预取修复发起 Web 小流量部署。机器人确认已成功触发流水线，未确认部署最终完成。",
+      "status": "attempted",
+      "title": "Slide SSR 样式修复部署"
+    },
+    {
+      "id": "F08",
+      "date": "2026-10-22",
+      "project": "Office 静态资源防劣化",
+      "eventKey": "package-monitor-design",
+      "statement": "新建《Office 资源依赖关系与真实构建清单》，更新静态资源体积防劣化技术方案并在群里讨论：重点 chunk 单独监控、其余资源按组统计；优先复用 SDK 已有检查，补充 Flow、统一 Office Runtime 和跨层资源关联。新增阈值仍待收集数据后确定，具名 chunk 独立报告等扩展尚在方案中。",
+      "status": "documented",
+      "title": "静态资源监控方案"
+    },
+    {
+      "id": "F09",
+      "date": "2026-10-22",
+      "project": "Office 静态资源防劣化",
+      "eventKey": "shared-package-release",
+      "statement": "获得 @ccme/infra-shared 发包权限，并协调共享包 alpha 测试及包体积比较器接入。",
+      "status": "reported",
+      "title": "共享包权限与发布"
+    },
+    {
+      "id": "F10",
+      "date": "2026-10-22",
+      "project": "CCM 性能实验室",
+      "eventKey": "runtime-monitor-ui",
+      "statement": "向同事展示运行监控页面并提供对应 MR。",
+      "status": "reported",
+      "title": "运行监控页面"
+    },
+    {
+      "id": "F11",
+      "date": "2026-10-22",
+      "project": "CCM 性能实验室",
+      "eventKey": "landing-templates",
+      "statement": "提供新版 Slide 落地页模板试跑；同事反馈测试结果仍有较大波动，并继续排查业务变化引起的模板失效。",
+      "status": "reported",
+      "title": "落地页模板与稳定性"
+    },
+    {
+      "id": "F12",
+      "date": "2026-10-22",
+      "project": "CCM 性能实验室",
+      "eventKey": "runtime-node",
+      "statement": "沟通 FaaS 仍使用 Node 18，升级到 Node 22 受当前平台支持范围限制。",
+      "status": "reported",
+      "title": "FaaS Node 版本"
+    },
+    {
+      "id": "F13",
+      "date": "2026-10-22",
+      "project": "CCM 性能实验室",
+      "eventKey": "login-expiry",
+      "statement": "排查去 iframe 卡点中 FPS、内存等任务失败，讨论 Cookie 失效的影响并请求重跑；未确认所有错误都由 Cookie 导致。",
+      "status": "discussed",
+      "title": "测试账号反复失效"
+    },
+    {
+      "id": "F14",
+      "date": "2026-10-22",
+      "project": "CCM 性能实验室",
+      "eventKey": "notification-routing",
+      "statement": "提出测试错误通知应与业务群告警区分；同事说明目前只按业务线配置通知群，准备评估增加区分字段。",
+      "status": "discussed",
+      "title": "测试通知与业务告警"
+    },
+    {
+      "id": "F15",
+      "date": "2026-10-22",
+      "project": "CCM 性能实验室",
+      "eventKey": "diagnostic-artifacts",
+      "statement": "Agent 报告：已实现按需采集录屏和 Trace、Web 查看与下载，以及 CLI 发起排查、查询和下载产物。功能默认关闭，代码当晚仍未提交、未上线。",
+      "status": "agent-reported",
+      "title": "录屏与 Trace 排查"
+    },
+    {
+      "id": "F16",
+      "date": "2026-10-22",
+      "project": "CCM 性能实验室",
+      "eventKey": "v8-tuning",
+      "statement": "提出通过调整 V8 semi-space 参数测试稳定性，准备先在 doubao-max 上试验；未记录验证结果。",
+      "status": "discussed",
+      "title": "V8 参数试验"
+    },
+    {
+      "id": "F17",
+      "date": "2026-10-23",
+      "project": "CCM 性能实验室",
+      "eventKey": "cpu-allocation",
+      "statement": "评审 CPU 分核调整，限定本次适配 16／64 vCPU。Agent 反馈 MR 已合并，但随后测试运行于 32 vCPU，未验证到该调整的收益。",
+      "status": "agent-reported",
+      "title": "CPU 分核策略评审"
+    },
+    {
+      "id": "F18",
+      "date": "2026-10-23",
+      "project": "CCM 性能实验室",
+      "eventKey": "landing-templates",
+      "statement": "继续排查三件套落地页波动，补齐 Docx、Slide、Sheet 的缓存 HTML 模板。明确基线与待测各自预热两次、正式采集 15 次，每轮重新执行 JS 和采集 TTV／TTU；同事反馈缓存方案较稳定，Docx 等场景仍在继续排错。",
+      "status": "reported",
+      "title": "落地页模板与稳定性"
+    },
+    {
+      "id": "F19",
+      "date": "2026-10-23",
+      "project": "CCM 性能实验室",
+      "eventKey": "diagnostic-artifacts",
+      "statement": "推进录屏／Trace 排查能力至 MR，明确默认关闭、按需开启，主要服务 CLI 诊断；未确认已合并上线。",
+      "status": "reported",
+      "title": "录屏与 Trace 排查"
+    },
+    {
+      "id": "F20",
+      "date": "2026-10-23",
+      "project": "CCM 性能实验室",
+      "eventKey": "machine-upgrade",
+      "statement": "协调测量机器升级，同事反馈已升级并调整业务线；提出保留 5 台 doubao-test 供后续测试。",
+      "status": "reported",
+      "title": "测量机器升级"
+    },
+    {
+      "id": "F21",
+      "date": "2026-10-23",
+      "project": "CCM 性能实验室",
+      "eventKey": "login-expiry",
+      "statement": "跟进测试账号反复失效，协调从登出埋点和账号 Oncall 排查，提出备用 Cookie 和通知卡片区分登录失效；根因尚未确认。",
+      "status": "discussed",
+      "title": "测试账号反复失效"
+    },
+    {
+      "id": "F22",
+      "date": "2026-10-23",
+      "project": "Office 静态资源防劣化",
+      "eventKey": "shared-package-release",
+      "statement": "沟通共享包正式版发布与 MR 合并顺序，确认目前走内网发布；未记录正式版发布完成。",
+      "status": "discussed",
+      "title": "共享包权限与发布"
+    },
+    {
+      "id": "F23",
+      "date": "2026-10-23",
+      "project": "Office 静态资源防劣化",
+      "eventKey": "size-gate-review",
+      "statement": "委托 Agent 评审包体积检查器 MR；Agent 反馈评审通过并已批准，未记录 MR 已合并。",
+      "status": "agent-reported",
+      "title": "包体积检查器评审"
+    },
+    {
+      "id": "F24",
+      "date": "2026-10-23",
+      "project": "Harness",
+      "eventKey": "usage-reporting-gap",
+      "statement": "反馈任务未计入使用统计。Agent 回复涉及执行账号归属和完成数据漏报，并表示已补入平台问题单；未收到修复确认。",
+      "status": "agent-reported",
+      "title": "任务使用统计缺失"
+    }
+  ],
+  "selectedIds": [],
+  "pinnedIds": [],
+  "drafts": [],
+  "captureRecords": [
+    {
+      "id": "e26c6aa4-dbb3-49bb-8915-90dc1265dad7",
+      "kind": "task",
+      "taskStatus": "open",
+      "tags": ["工作"],
+      "createdAt": "2026-10-21T07:46:02.640Z",
+      "excerpt": "skip 记录，上报到 faas 上"
+    },
+    {
+      "id": "2b5a8635-cb69-4489-9d33-0b680a6291f4",
+      "kind": "task",
+      "taskStatus": "done",
+      "tags": ["工作"],
+      "createdAt": "2026-10-19T03:38:41.416Z",
+      "excerpt": "处理 高危漏洞，工作"
+    },
+    {
+      "id": "e977577d-f41a-47f7-84f1-85bd49a9b268",
+      "kind": "task",
+      "taskStatus": "open",
+      "tags": ["工作"],
+      "createdAt": "2026-10-19T03:33:57.764Z",
+      "excerpt": "scm 后，三件套静态包体积检查，高优处理"
+    },
+    {
+      "id": "51068ace-14ad-4bbf-a9f0-03cec968480e",
+      "kind": "task",
+      "taskStatus": "open",
+      "tags": ["工作"],
+      "createdAt": "2026-10-18T23:35:48.091Z",
+      "excerpt": "根据聊天记录、和 agent 聊天记录，生成每日工作总结"
+    },
+    {
+      "id": "3e7125bf-7ed7-4b87-b157-8f42059e1ea3",
+      "kind": "task",
+      "taskStatus": "open",
+      "tags": ["工作"],
+      "createdAt": "2026-10-17T13:06:05.370Z",
+      "excerpt": "将 coze 的 /how-to 指令搬到 perf-lab-monorepo"
+    },
+    {
+      "id": "d0749a45-5cd2-480d-b5ed-f9f1ce57ff83",
+      "kind": "task",
+      "taskStatus": "done",
+      "tags": ["工作"],
+      "createdAt": "2026-10-15T06:03:49.417Z",
+      "excerpt": "简化性能实验室发布流水线，已完成"
+    },
+    {
+      "id": "5a2071b0-5491-4965-aada-d785f046a67c",
+      "kind": "task",
+      "taskStatus": "done",
+      "tags": ["工作"],
+      "createdAt": "2026-10-15T03:58:05.205Z",
+      "excerpt": "将  fass 的代码，使用 scm 来管理"
+    },
+    {
+      "id": "ad6d395a-21ed-45fc-827a-691f64f1983c",
+      "kind": "task",
+      "taskStatus": "open",
+      "tags": ["工作"],
+      "createdAt": "2026-10-14T12:59:10.777Z",
+      "excerpt": "性能实验室，可以把 puppeteer 的录屏和 trace 搞出来，支持下载或在线看"
+    },
+    {
+      "id": "3f68bb29-66a7-44fc-963f-6fce70060999",
+      "kind": "task",
+      "taskStatus": "done",
+      "tags": ["工作"],
+      "createdAt": "2026-10-13T01:53:53.797Z",
+      "excerpt": "和国财了解下，本地 Office 接入性能实验室事宜\n2. 了解包体积大小接入性能实验室事宜"
+    }
+  ],
+  "captureTag": "工作"
+}
