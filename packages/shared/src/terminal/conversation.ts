@@ -1,4 +1,5 @@
 import type { TerminalAgentKind } from "./runtime/state.js";
+import type { AppServerAgentKind } from "../app-server/events.js";
 
 export interface ConversationMessage {
   id: string;
@@ -31,6 +32,11 @@ export interface ConversationContent {
 export interface AppServerConversationResponse extends ConversationContent {
   threadId: string;
   provider: string;
+}
+
+/** Provider identity retained by the caller when the event projection is absent. */
+export interface AppServerConversationQuery {
+  provider?: AppServerAgentKind;
 }
 
 export interface ConversationTarget {

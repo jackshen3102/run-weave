@@ -29,7 +29,7 @@ type Lifecycle = PiAgentContext & {
 
 /** Reads only a session path registered by an authenticated Pi lifecycle event. */
 export class PiSessionReader {
-  async readConversation(thread: AppServerThreadRef, signal?: AbortSignal) {
+  async readConversation(thread: Pick<AppServerThreadRef, "agent" | "threadId" | "pi">, signal?: AbortSignal) {
     if (thread.agent !== "pi" || !thread.pi?.sessionFile) return null;
     let valid = false;
     let first = true;
