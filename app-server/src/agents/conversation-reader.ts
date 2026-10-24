@@ -3,10 +3,11 @@ import type { AppServerThreadRef } from "@runweave/shared/app-server-events";
 import type { AppServerConversationResponse, ConversationTurn } from "@runweave/shared/terminal/conversation";
 import type { CodexConversationReader } from "../codex/conversation-reader.js";
 import type { PiSessionReader } from "../pi/session-reader.js";
+import type { TraeConversationReader } from "../trae/conversation-reader.js";
 import { ConversationReadError } from "./conversation-source.js";
 
 export class ConversationReader {
-  constructor(private readonly codex: CodexConversationReader, private readonly pi: PiSessionReader, private readonly supervision?: SupervisionConversationReader) {}
+  constructor(private readonly codex: CodexConversationReader, private readonly pi: PiSessionReader, private readonly trae: TraeConversationReader, private readonly supervision?: SupervisionConversationReader) {}
 
   async readSupervision(thread: AppServerThreadRef | { agent: "codex"; threadId: string }, requiredIds: string[]) {
     if (thread.agent !== "codex") return { ...await this.read(thread), indexing: false };
@@ -14,11 +15,13 @@ export class ConversationReader {
     return this.supervision.read(thread.threadId, requiredIds);
   }
 
-  // Codex verifies identity from its controlled rollout source; Pi needs its registered context.
+  // Codex and Trae verify controlled sources; Pi needs its registered file context.
   async read(thread: AppServerThreadRef | { agent: "codex"; threadId: string }, signal?: AbortSignal): Promise<AppServerConversationResponse> {
-    const supported = thread.agent === "codex" || thread.agent === "pi";
+    const isTrae = ["trae", "traecli", "traex"].includes(thread.agent);
+    const supported = thread.agent === "codex" || thread.agent === "pi" || isTrae;
     const content = thread.agent === "codex" ? await this.codex.read(thread.threadId, signal)
-      : thread.agent === "pi" ? await this.pi.readConversation(thread, signal) : null;
+      : thread.agent === "pi" ? await this.pi.readConversation(thread, signal)
+      : isTrae ? await this.trae.read(thread.threadId, signal) : null;
     const response: AppServerConversationResponse = {
       threadId: thread.threadId, provider: thread.agent,
       availability: !supported ? "provider_unsupported" : content ? "available" : "source_missing",

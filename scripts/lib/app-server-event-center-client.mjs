@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFile, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 
@@ -277,6 +277,7 @@ export async function verifyThreadPreviews(baseUrl, token, stateDir) {
   await hook(traeId, "traex");
   const traeNext = await wait(traeId, (value) => value.userText === "Trae 下一轮");
   assert.equal(traeNext.agentText, null);
+  await verifyTraeConversation(baseUrl, token, traeRoot, hook);
 
   await hook("unsupported-provider", "claude");
   const unsupported = await wait("unsupported-provider", (value) => value.availability === "provider_unsupported");
@@ -311,4 +312,91 @@ export async function verifyThreadPreviews(baseUrl, token, stateDir) {
   assert.equal(branchB.agentText, "分支 B 的回复");
   await assertHttpStatus(`${baseUrl}/threads/previews?threadId=${piId}`, { expectedStatus: 401 });
   console.log("thread previews: late hooks, unregistered Codex, Trae messages, incremental append, identity, Pi branch and auth passed");
+}
+
+async function verifyTraeConversation(baseUrl, token, root, hook) {
+  const id = "66666666-6666-4666-8666-666666666666";
+  const file = path.join(root, `${id}.jsonl`);
+  const url = `${baseUrl}/threads/${id}/conversation`;
+  const line = value => `${JSON.stringify(value)}\n`;
+  const msg = (id, role, text, phase) => ({ type: "message", id, role, phase,
+    content: [{ type: role === "user" ? "input_text" : "output_text", text }] });
+  const mutation = (items, extra = {}) => ({ type: "history_mutation",
+    payload: { version: 1, operation: "append", items, ...extra } });
+  const original = [
+    { type: "session_meta", payload: { id } },
+    { type: "event_msg", payload: { type: "task_started", turn_id: "trae-read-turn" } },
+    mutation([
+      msg("env", "user", "<environment_context>private</environment_context>"),
+      msg("u1", "user", "**真实提问**"),
+      msg("a1", "assistant", "可见阶段", "commentary"),
+      msg("hidden", "assistant", "PRIVATE_ANALYSIS", "analysis"),
+      msg("system", "developer", "PRIVATE_SYSTEM"),
+      { type: "function_call_output", output: "PRIVATE_TOOL" },
+      msg("a2", "assistant", "# 长回答\n\n" + "完整正文。".repeat(2000), "final_answer"),
+      msg("a2", "assistant", "DUPLICATE", "final_answer"),
+      msg("u2", "user", "相同提问"), msg("u3", "user", "相同提问"),
+    ]),
+    mutation([msg("summary", "user", "COMPACTED_SUMMARY"), msg("rewritten", "assistant", "REGENERATED")],
+      { operation: "replace", compaction_response_id: "compaction-1" }),
+    mutation([msg("a3", "assistant", "压缩后继续回答", "final_answer")]),
+  ].map(line).join("");
+  await writeFile(file, original);
+  for (const provider of ["traex", "trae", "traecli"]) {
+    await hook(id, provider);
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const body = await response.json();
+    assert.equal(body.provider, provider);
+    assert.equal(body.availability, "available");
+    assert.equal(body.partial, false);
+    assert.deepEqual(body.turns.flatMap(turn => turn.messages.map(message => message.id)), ["u1", "a1", "a2", "u2", "u3", "a3"]);
+    assert.equal(body.turns[0].messages[2].text.length, 10007);
+    assert.equal(body.turns[0].rawTurnId, "trae-read-turn");
+    assert.equal(body.turns[0].messages[2].phase, "final");
+    assert.doesNotMatch(JSON.stringify(body), /PRIVATE_|COMPACTED_SUMMARY|REGENERATED|DUPLICATE|sourcePath/);
+    assert.deepEqual((await getJson(url, token)).turns, body.turns);
+  }
+  assert.equal(await readFile(file, "utf8"), original, "reading cannot change the source");
+  const pending = line(mutation([msg("pending", "user", "完成末行")])).trimEnd();
+  await appendFile(file, pending);
+  assert.equal((await getJson(url, token)).turns.flatMap(t => t.messages).length, 6);
+  await appendFile(file, "\nBROKEN_JSON\n");
+  const partial = await getJson(url, token);
+  assert.equal(partial.partial, true);
+  assert.equal(partial.turns.at(-1).messages[0].id, "pending");
+  await appendFile(file, line(mutation([msg("reset-u", "user", "重写后的历史"), msg("reset-a", "assistant", "重写后的回答")], { operation: "replace" })));
+  assert.deepEqual((await getJson(url, token)).turns.flatMap(t => t.messages.map(m => m.id)), ["reset-u", "reset-a"]);
+  await assertHttpStatus(url, { expectedStatus: 401 });
+  await assertHttpStatus(`${url}?sourcePath=${encodeURIComponent(file)}`, { expectedStatus: 400, token });
+  await writeFile(file, original.replace(`"id":"${id}"`, '"id":"wrong-thread"'));
+  assert.equal((await getJson(url, token)).availability, "source_missing");
+  await unlink(file);
+  assert.equal((await getJson(url, token)).availability, "source_missing");
+  const external = path.join(root, "external.jsonl");
+  await writeFile(external, original);
+  await symlink(external, file);
+  assert.equal((await getJson(url, token)).availability, "source_missing");
+  await unlink(file);
+  await unlink(external);
+  // A bounded tail must retain the authoritative header and the newest complete messages.
+  await writeFile(file, line({ type: "session_meta", payload: { id } }));
+  await appendFile(file, " ".repeat(65 * 1024 * 1024) + "\n" + line(mutation([
+    msg("tail-u", "user", "末尾提问"), msg("tail-a", "assistant", "最新回答", "final_answer"),
+  ])));
+  const bounded = await getJson(url, token);
+  assert.equal(bounded.partial, true);
+  assert.deepEqual(bounded.turns.flatMap(t => t.messages.map(m => m.id)), ["tail-u", "tail-a"]);
+  await writeFile(file, line({ type: "session_meta", payload: { id } }) + line(mutation([
+    msg("huge-u", "user", "超长正文"), msg("huge-a", "assistant", "中😀\"\n".repeat(1_100_000) + "LATEST_MARKER", "final_answer"),
+  ])));
+  const hugeResponse = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const hugeBytes = await hugeResponse.text();
+  const huge = JSON.parse(hugeBytes);
+  assert.equal(huge.partial, true);
+  assert.ok(Buffer.byteLength(hugeBytes) < 8 * 1024 * 1024);
+  assert.ok(huge.turns.at(-1).messages.at(-1).text.endsWith("LATEST_MARKER"));
+  await unlink(file);
+  console.log("Trae conversation: aliases, full prose, filtering, deduplication, compaction, rewrites, stable IDs, partial append, identity, symlinks, bounded source/response and auth passed");
 }

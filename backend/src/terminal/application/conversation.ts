@@ -45,8 +45,9 @@ export async function readTerminalConversation(
   const before = resolveConversationTarget(manager, sessionId, query.panelId);
   if (query.expectedThreadId && before.target?.threadId !== query.expectedThreadId) changed();
   const target = before.target;
-  if (!target || !["codex", "pi"].includes(target.provider)) return {
-    target, availability: (target || (before.agent && !["codex", "pi"].includes(before.agent)))
+  const supported = ["codex", "pi", "trae", "traecli", "traex"];
+  if (!target || !supported.includes(target.provider)) return {
+    target, availability: (target || (before.agent && !supported.includes(before.agent)))
       ? "provider_unsupported" : "no_thread",
     readAt: new Date().toISOString(), partial: false, turns: [],
   };
