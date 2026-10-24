@@ -9131,7 +9131,7 @@
     "file": "scripts/lib/app-server-event-center-client.mjs",
     "kind": "file-io",
     "expression": "appendFile(file)",
-    "count": 3,
+    "count": 7,
     "category": "test",
     "reason": "隔离 App Server 验证使用的原生会话 JSONL 与追加数据，不作为业务配置来源。"
   },
@@ -9163,15 +9163,23 @@
     "file": "scripts/lib/app-server-event-center-client.mjs",
     "kind": "file-io",
     "expression": "readFile(file)",
-    "count": 1,
+    "count": 2,
     "category": "test",
     "reason": "隔离 App Server 预览验证的临时会话 JSONL 及源删除恢复夹具，不读取或写入业务配置。"
   },
   {
     "file": "scripts/lib/app-server-event-center-client.mjs",
     "kind": "file-io",
+    "expression": "writeFile(external)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 App Server 会话验证的临时符号链接目标夹具，不读取或写入业务配置。"
+  },
+  {
+    "file": "scripts/lib/app-server-event-center-client.mjs",
+    "kind": "file-io",
     "expression": "writeFile(file)",
-    "count": 3,
+    "count": 7,
     "category": "test",
     "reason": "隔离 App Server 验证使用的原生会话 JSONL 与追加数据，不作为业务配置来源。"
   },

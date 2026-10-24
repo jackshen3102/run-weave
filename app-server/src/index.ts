@@ -26,6 +26,7 @@ import { createHttpApp } from "./server/http.js";
 import { AppServerStateProjector } from "./state/projector.js";
 import { AppServerStateStore } from "./state/store.js";
 import { TraeThreadLifecycleReader } from "./trae/lifecycle-reader.js";
+import { TraeConversationReader } from "./trae/conversation-reader.js";
 import {
   acquireSingletonLock,
   preflightSingleton,
@@ -88,7 +89,7 @@ async function main(): Promise<void> {
   const codexAppServerClient = new CodexAppServerClient();
   const codexRolloutLifecycleReader = new CodexRolloutLifecycleReader();
   const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader, traeLifecycleReader);
-  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")));
+  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new TraeConversationReader(traeLifecycleReader), new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")));
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,
