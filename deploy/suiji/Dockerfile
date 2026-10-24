@@ -2,6 +2,7 @@ FROM node:22.22.2-bookworm-slim AS build
 WORKDIR /repo
 RUN corepack enable && corepack prepare pnpm@10.6.2 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY patches patches
 COPY packages/shared packages/shared
 COPY packages/config-node packages/config-node
 COPY packages/suiji-server packages/suiji-server
