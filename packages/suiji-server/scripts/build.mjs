@@ -3,7 +3,7 @@ import { build } from "esbuild";
 import { cp, mkdir } from "node:fs/promises";
 await mkdir("dist", { recursive: true });
 await build({
-  entryPoints: { index: "src/index.ts", configuration: "../config-node/src/index.ts", admin: "scripts/admin.ts", migrate: "scripts/migrate.ts", "mcp-credential": "scripts/mcp-credential.ts", "mcp-credentials": "scripts/mcp-credentials.ts" },
+  entryPoints: { index: "src/index.ts", configuration: "../config-node/src/index.ts", admin: "scripts/admin.ts", migrate: "scripts/migrate.ts", "mcp-credential": "scripts/mcp-credential.ts", "mcp-credentials": "scripts/mcp-credentials.ts", "work-sources": "scripts/work-sources.ts" },
   outbase: ".",
   outdir: "dist",
   bundle: true,

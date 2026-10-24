@@ -1,12 +1,13 @@
 ---
 name: daily-record
-description: 从本机 Agent 记录、飞书本人参与的聊天及本人创建或编辑的文档整理每日事实。用于按天或项目回顾实际事项、跨渠道合并重复成果；不自动接入其他机器或创建定时任务。
+description: 从本机 Agent 记录、飞书本人参与的聊天及本人创建或编辑的文档整理每日事实。用于按天或项目回顾实际事项、跨渠道合并重复成果；复用各机器本地执行与显式配置的定时上报，不自动接入其他机器或创建定时任务。
 ---
 
 # 每日事实记录
 
 只采集本次要求的渠道，先确定日期和 IANA 时区；“近 N 天”默认最近 N 个完整日，不含今天尚未结束的部分，明确实际日期。纯记录事实，不增加评分、建议或次日计划。
 
+- 多机器定时上报：读[同一任务的本机配置与恢复](references/scheduled-reporting.md)，复用 `scripts/job.py`。Mac 可启用本人飞书聊天，devbox 关闭飞书；各 Backend 独立执行同版任务，不由 Mac 远程采集。
 - 本机 Agent：在 Runweave 源码仓库执行 `pnpm daily-record`；首次先执行 `pnpm --filter @runweave/daily-record build`。命令合同在该仓库的 `packages/daily-record/README.md`，按下方流程处理。
 - 飞书消息或文档：读[飞书采集与合并](references/feishu.md)，使用本 Skill 的 `scripts/feishu.py`。它只调用 `lark-cli` 读取候选与选定上下文，不发消息、不写文档。
 - 用户要求保存到随记：读[随记工作事实导入](references/suiji-work-records.md)，生成统一包后使用随记 Skill 的 prepare/import/回读闭环。

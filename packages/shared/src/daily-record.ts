@@ -11,6 +11,8 @@ export interface DailyMaterial {
   id: string;
   provider: DailyProvider;
   threadId: string;
+  /** Stable native message identity when available; byte position fallback otherwise. */
+  nativeId?: string;
   cwd: string;
   /** Optional in earlier material bundles. */
   project?: DailyProject;
@@ -75,4 +77,22 @@ export interface DailyFacts {
   schemaVersion: 1;
   collectionId: string;
   days: Array<{ date: string; items: DailyFact[] }>;
+}
+
+/** Local configuration consumed by the portable scheduled Daily Record runner. */
+export interface DailyJobConfig {
+  schemaVersion: 1;
+  producerId: string;
+  sourceNamespace: string;
+  startDate: string;
+  timeZone: "Asia/Shanghai";
+  stateDir: string;
+  collectorArgv: string[];
+  sources: {
+    localAgent: { providers: DailyProvider[]; home?: string };
+    feishu: { enabled: boolean; channels: "messages"; accountScope?: string };
+  };
+  projectAliases: Record<string, string>;
+  suiji: { configPath: string; tokenFile: string; autoPublish: boolean };
+  maxDaysPerRun?: number;
 }

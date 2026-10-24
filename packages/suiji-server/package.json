@@ -13,7 +13,8 @@
     "auth:init": "tsx scripts/admin.ts init",
     "auth:reset": "tsx scripts/admin.ts reset",
     "mcp:credential": "tsx scripts/mcp-credential.ts",
-    "mcp:credentials": "tsx scripts/mcp-credentials.ts"
+    "mcp:credentials": "tsx scripts/mcp-credentials.ts",
+    "work:sources": "tsx scripts/work-sources.ts"
   },
   "dependencies": {
     "@runweave/shared": "workspace:*",

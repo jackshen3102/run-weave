@@ -47,6 +47,6 @@ python3 "$SUIJI_SKILL_DIR/scripts/suiji.py" --config "$CONFIG" --env-file "$TOKE
 
 import 在联网前将精确身份、操作键和 payload 写入0600请求文件。成功回执包含 importId、feedRevision、created/updated/unchanged/protected 和每条事实的ID/版本/sourceHash/有效字段。CLI 用详情独立回读，核对源字段及人工保护，确认后才解除冻结。新键导入同一稳定快照不新增事实或修订，遗漏事实不删除已有数据。
 
-`WORK_FEED_CHANGED` 要重新读取并复核；`VERSION_CONFLICT` 要核对最新事实，不能强制覆盖。结果未知时停止后续包，保留原请求；列表中相似正文不是原请求成功证明。只有用户明确要求重试时执行现有 `retry --request`，保持原身份、键和参数，不自动换键重写。
+`WORK_FEED_CHANGED` 要重新读取并复核；`VERSION_CONFLICT` 要核对最新事实，不能强制覆盖。结果未知时停止后续包，保留原请求；列表中相似正文不是原请求成功证明。人工流程只有用户明确要求重试时执行现有 `retry --request`。已显式启用的定时上报可按[专用恢复规则](scheduled-reporting.md)使用仅限工作事实的 work-reconcile，最多原样恢复3次；保持原身份、键和参数，不自动换键重写。
 
 读取覆盖不完整不能写“没有”；只有所声明范围全部 complete 且事实为空，才可说明该范围无记录。不推断其他机器或渠道。事实导入与旧待办状态无关，不标记交接待办完成。

@@ -148,3 +148,12 @@ schema10增加work_facts、work_fact_revisions、work_import_runs、work_day_cov
 Web使用已有480px抽屉、presence和连接身份隔离的IndexedDB；原生使用SwiftUI与独立work草稿文件。工作替换第四个AI主入口，旧AI保留次级入口与普通记录范围，暂不读取新工作领域。自动总结、周报、大屏分类、额外采集渠道与定时任务未接入。
 
 合同和导入操作见[随记工作事实](../../plugins/toolkit/skills/suiji/references/work-records.md)；行为验收分别见[服务](../testing/suiji/work-records-service.testplan.yaml)与[客户端](../testing/suiji/work-records-clients.testplan.yaml)。源码、隔离服务、Electron、Simulator和生产部署证据分开报告。
+
+## Daily Record 定时上报
+
+同版 Daily Record Skill 在各 Backend 本机运行，Mac 可启用本人飞书聊天，devbox 关闭飞书。
+现有调度只负责唤醒，逐日补报、固定来源身份和冻结导入恢复由 Daily Record 本地状态管理。
+随记 schema11 新增预期来源登记：缺报来源使日期为 partial，无登记旧日期为 unknown；
+仍复用工作事实导入事务与人工字段保护，不修改普通笔记或待办。
+配置、权限与部署合同见[定时上报](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md)。
+实际双机、飞书和到点调度是否通过，以本次验收证据为准。

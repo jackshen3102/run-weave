@@ -45,6 +45,11 @@ export async function importFacts(
   );
   let changed = false;
   for (const day of input.days) {
+    const registered = await client.query<{source_scope: string; source_namespace: string}>(
+      "SELECT source_scope,source_namespace FROM work_sources WHERE owner_id=$1 AND effective_from<=$2::date AND (effective_to IS NULL OR effective_to>$2::date) AND source_scope=ANY($3::text[])",
+      [ctx.ownerId, day.date, day.requestedScopes]);
+    if (registered.rows.some(r => r.source_namespace !== input.sourceNamespace))
+      sourceError("SOURCE_NAMESPACE_MISMATCH");
     for (const source of day.facts) {
       const refs = [...source.sourceRefs].sort((a, b) =>
         digest(a).localeCompare(digest(b)),

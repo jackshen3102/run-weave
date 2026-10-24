@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { open } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import type { DailyManifest } from "@runweave/shared/daily-record";
+import type { DailyManifest, DailyProvider } from "@runweave/shared/daily-record";
 import { collectNative } from "./native.js";
 import {
   dates,
@@ -15,7 +15,7 @@ import { readFacts, render } from "./facts.js";
 import { assignProjects } from "./projects.js";
 
 const help = `本地 Agent 每日事实记录（只读本机来源）
-collect --from YYYY-MM-DD --to YYYY-MM-DD --timezone Asia/Shanghai --out <新目录> [--home <来源HOME>]
+collect --from YYYY-MM-DD --to YYYY-MM-DD --timezone Asia/Shanghai --out <新目录> [--home <来源HOME>] [--providers codex,pi] [--machine-id <固定ID>] [--exclude-thread <ID>]
 review --bundle <材料目录> [--date YYYY-MM-DD] [--thread <ID>] [--max-chars 1200] [--role user|assistant|tool]
 read --bundle <材料目录> --id <材料ID> [--verify-source]
 validate --bundle <材料目录> --facts <facts.json>
@@ -36,6 +36,9 @@ async function main() {
       timezone: { type: "string", default: "Asia/Shanghai" },
       out: { type: "string" },
       home: { type: "string" },
+      providers: { type: "string" },
+      "machine-id": { type: "string" },
+      "exclude-thread": { type: "string", multiple: true },
       bundle: { type: "string" },
       facts: { type: "string" },
       date: { type: "string" },
@@ -63,11 +66,17 @@ async function main() {
       days = dates(from, to),
       timeZone = values.timezone;
     dayFormatter(timeZone);
+    const providers = values.providers?.split(",") as DailyProvider[] | undefined;
+    if (providers && (!providers.length || new Set(providers).size !== providers.length ||
+      providers.some((v) => !["codex", "pi", "claude", "trae"].includes(v))))
+      throw new Error("providers 须为不重复的 codex,pi,claude,trae 列表");
     const { materials, sources } = await collectNative({
       from,
       to,
       timeZone,
       home: values.home,
+      providers,
+      excludeThreads: values["exclude-thread"],
     });
     await assignProjects(materials);
     const jsonl =
@@ -79,7 +88,7 @@ async function main() {
       collectionId: hash(
         JSON.stringify({ from, to, timeZone, materialsSha256, sources }),
       ),
-      machineId: os.hostname(),
+      machineId: values["machine-id"] ?? os.hostname(),
       collectedAt: new Date().toISOString(),
       from,
       to,

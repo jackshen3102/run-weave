@@ -241,3 +241,45 @@ def reclassification(value, fail):
     if "project" in value:
         value["project"] = project(value["project"])
     return value
+
+
+def recovery_intent(args, config, fail, private_read):
+    """Opt-in automation is restricted to an already frozen work import."""
+    job = json.loads(private_read(args.job_config))
+    intent = json.loads(private_read(args.request))
+    if job.get("suiji", {}).get("autoPublish") is not True:
+        raise fail("AUTO_PUBLISH_DISABLED")
+    if Path(job["suiji"]["configPath"]).resolve() != Path(args.config).resolve():
+        raise fail("JOB_CONNECTION_MISMATCH")
+    if intent.get("operation") != "import_work_facts":
+        raise fail("WORK_IMPORT_ONLY")
+    expected = {k: config[k] for k in ("serverId", "ownerId")}
+    # endpoint normalization is done by the shared client before any write.
+    if any(intent.get("identity", {}).get(k) != v for k, v in expected.items()):
+        raise fail("REQUEST_IDENTITY_MISMATCH")
+    payload = intent["arguments"]["input"]
+    if payload.get("sourceNamespace") != job.get("sourceNamespace"):
+        raise fail("JOB_SOURCE_MISMATCH")
+    validate(payload, fail)
+    local = job["sources"]["localAgent"]["providers"]
+    allowed = {"agent:" + job["producerId"] + ":" + p for p in local}
+    if job["sources"]["feishu"]["enabled"]:
+        allowed.add("feishu:" + job["sources"]["feishu"]["accountScope"] + ":messages")
+    if any(set(d["requestedScopes"]) != allowed for d in payload["days"]):
+        raise fail("JOB_SCOPE_MISMATCH")
+    return intent
+
+
+def reconcile(client, request, intent, fail, run_intent):
+    import time
+    for attempt in range(3):
+        try:
+            return run_intent(client, request, intent)
+        except fail as error:
+            # Explicit feed conflicts are terminal rejections, never unknown writes.
+            if not any(str(error).startswith(code) for code in
+                       ("NETWORK_RESULT_UNKNOWN", "DEPENDENCY_UNAVAILABLE", "HTTP_502", "HTTP_503", "HTTP_504")):
+                raise
+            if attempt == 2:
+                raise
+            time.sleep(attempt + 1)

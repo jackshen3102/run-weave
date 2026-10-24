@@ -1,0 +1,204 @@
+version: 1
+name: Daily Record 多机器定时上报
+description: >
+  待实现验收合同。验证相同 Daily Record 任务模板在不同 Backend 本机执行，Mac 单独采集飞书聊天，
+  两端通过现有随记导入保存事实。每例自行建立隔离目录、账号和服务，不依赖前例残留。
+  不创建单元测试，不向真实聊天发送消息；格式校验不代表功能已实现或用例已经执行。
+cases:
+  - id: REPORT-001
+    name: 关闭飞书时不触发任何飞书能力
+    required: true
+    description: 相同任务模板只按本机来源配置运行，禁用飞书不要求安装或登录 lark-cli。
+    preconditions:
+      - 隔离 HOME 有真实结构的 Codex 样本和已构建采集器，job 配置只启用 Codex，飞书关闭。
+      - 独立 PATH 中的 lark-cli 为调用即记日志并失败的探针，其他外部写入指向隔离服务。
+    steps:
+      - 执行共用任务的 prepare 和采集；确认只产生 Codex 材料，未启用 provider 不产生 unavailable。
+      - 核对探针日志、requestedScopes 和依赖检查；确认没有飞书调用或飞书 scope，也没有因为飞书缺失而失败。
+
+  - id: REPORT-002
+    name: Mac 飞书采集仅覆盖本人聊天及选定回复
+    required: true
+    description: 启用飞书消息后复用现有脚本完整分页，不扩展到文档和任意群聊。
+    preconditions:
+      - 隔离 job 配置启用飞书 messages，lark-cli 受控适配器提供已验证本人身份及三页本人消息。
+      - 本例记录所有 CLI 调用，材料含有实质事项的本人消息、闲聊和相关话题回复，另有未请求文档候选。
+    steps:
+      - 运行发现并阅读候选，选择实质事项补上下文；确认全部消息页已消费，只按已发现的本人消息扩展。
+      - 对照调用日志和导出包；确认未查询文档或任意群消息流，保留消息原生 ID 和正确作者，飞书材料没有伪装为 Codex。
+
+  - id: REPORT-003
+    name: 离线多天按缺日补齐原工作日期
+    required: true
+    description: 一次调度唤醒能从逐日状态发现遗漏，不依赖 catch-up-latest 自动重放全部触发。
+    preconditions:
+      - 本例隔离状态的 startDate 到昨天有三个未确认完整日，每天均有独立原生材料。
+      - 隔离随记服务及凭据有效，maxDaysPerRun 为二，共用任务以一次补跑触发执行。
+    steps:
+      - 执行一次任务；确认最早两天得到核对和上报，第三天仍为待处理，任务没有报告全部补齐。
+      - 再次执行同一模板；确认只补剩余一天，三天 workDate 均保持原日期，没有把补报日期当工作日期。
+
+  - id: REPORT-004
+    name: 部分来源失败不阻断已有事实且保留补采义务
+    required: true
+    description: 完成发布和来源完整性是独立状态，partial 日后续仍会被选中。
+    preconditions:
+      - 本例 Mac 隔离配置启用本机 Codex 和飞书聊天，Codex 材料可读，飞书分页可由本例控制失败与恢复。
+      - 隔离随记已登记两个来源，本例有可复核的事实清单和独立状态目录。
+    steps:
+      - 在飞书第二页失败时整理并发布已取得事实；确认来源为 partial、日期覆盖不完整且本机保留补采义务。
+      - 恢复分页并再次执行；确认同一日期被补采，已确认事实不重复，只有实际完整读取后该来源才为 complete。
+
+  - id: REPORT-005
+    name: 同一事项改写后继续更新原事实
+    required: true
+    description: 稳定事项键不由正文或临时目录计算，重复整理不能新增重复事实。
+    preconditions:
+      - 本例隔离材料的一条真实事项已完成首次导入，保存其来源、eventKey、externalKey 和事实 ID。
+      - 独立重跑使用相同证据身份，对正文做不改变事实含义的改写，沿用原本机状态。
+    steps:
+      - 加载旧映射后重新校验、准备和导入；确认沿用相同 eventKey、externalKey 与服务事实 ID。
+      - 再发布同一快照；确认事实总数不增加，未改变字段不增加修订，临时批次路径和 hostname 改变不改变身份。
+
+  - id: REPORT-006
+    name: 上传已提交但响应丢失时恢复原回执
+    required: true
+    description: 未知结果只核对原冻结请求，不换键、不重新生成事实。
+    preconditions:
+      - 本例独占隔离服务、受保护 outbox 和启用自动导入恢复的配置，提交前保存完整请求及摘要。
+      - 本例网络代理在服务提交导入后丢弃响应，服务数据库和现有导入入口仍可核对。
+    steps:
+      - 发起导入并制造响应丢失；确认本机保留 pending 原请求，没有推进成功日期或准备后续包。
+      - 恢复网络并 reconcile；确认原样重放现有 import_work_facts 得到相同 importId，独立回读完成后才确认，数据库只有一份事实和一次导入。
+
+  - id: REPORT-007
+    name: 请求未到达服务时只在授权内原样有界重放
+    required: true
+    description: 发送失败不能作为换键依据，恢复须依赖相同键和精确 payload 的事务幂等。
+    preconditions:
+      - 本例隔离 outbox 有合法冻结导入，服务首次提交未到达数据库，自动恢复已显式授权。
+      - 本例可记录所有请求键和 payload，并使后续调用持续超时超过三次。
+    steps:
+      - 执行 reconcile；确认每次写入与原冻结 key、目标和 payload 完全相同，没有因首次发送失败生成新键。
+      - 持续制造超时；确认达到三次上限后保留 pending 并停止后续包，无无限重试，人工 retry 入口行为未改变。
+
+  - id: REPORT-008
+    name: 两个节点版本冲突后保留各自事实
+    required: true
+    description: 不同机器基于同一 feedRevision 准备时，明确拒绝的导入可重新核对准备，不覆盖另一节点事实。
+    preconditions:
+      - 本例隔离服务有两个已登记 producer，两个独立本机状态分别准备不同来源事实并取得相同 feedRevision。
+      - 两个源流均已授权自动导入，事实 ID 和源键可独立核对。
+    steps:
+      - 并发提交两个导入；确认一个成功，另一个明确返回 WORK_FEED_CHANGED，而非静默覆盖。
+      - 对明确拒绝的流重新读取、核对和 prepare 后发布；确认两份事实都存在，稳定事项键未变，重复冲突遵守三次上限。
+
+  - id: REPORT-009
+    name: 未上报的已登记节点使日期保持不完整
+    required: true
+    description: 全天完整性由有效预期来源决定，未收到 devbox 不能因 Mac 已完成就被忽略。
+    preconditions:
+      - 本例隔离随记在同一日期启用 Mac Agent、Mac 飞书和 devbox Agent 三个 scope，查询日期范围明确。
+      - 仅 Mac 两个 scope 有 complete 回执，devbox 完全没有回执和事实。
+    steps:
+      - 读取工作日期和 list_work_sources；确认 coverage 为 partial，missingScopes 包含 devbox，空事实日也能返回缺失状态。
+      - 补入 devbox 的真实完整回执；确认仅此时日期成为 complete，没有收到事实的完整空来源也有明确回执。
+
+  - id: REPORT-010
+    name: 来源生效区间不改写历史覆盖
+    required: true
+    description: 新来源不会把首次日期以前判为缺失，停用也不会追溯消除旧缺报。
+    preconditions:
+      - 本例隔离服务有旧未登记日期事实，以及从指定日期启用、两日后停用的 devbox scope。
+      - scope 有效期间有一天缺报，停用日之后只有 Mac 来源有效。
+    steps:
+      - 查询四个日期范围；确认旧未登记日期为 unknown，有效期缺报日为 partial，停用日起不再期待 devbox。
+      - 核对来源登记前后的 feedRevision 与历史事实；确认 revision 推进，事实未删除，旧缺报未被停用操作改成 complete。
+
+  - id: REPORT-011
+    name: 本机并发执行不重复分配事项身份
+    required: true
+    description: 同一状态目录的第二个运行不能抢占仍活跃的整理者，也不能重复分配事项键。
+    preconditions:
+      - 本例独占隔离 job 进程、状态目录和服务，原运行正在整理独立材料，另可启动第二个并发本机调用。
+      - 保存原批次代际、事项映射和材料摘要，两个进程均由本例管理。
+    steps:
+      - 在原所有者仍活动时启动第二个调用；确认返回 busy，不产生第二份事项身份或修改原批次。
+      - 继续完成原批次并核对状态提交；确认只有原所有者可以提交，伪造批次代际的提交被拒绝。
+
+  - id: REPORT-012
+    name: 自身日报任务不循环形成新工作事实
+    required: true
+    description: 仅排除本功能派生会话及报告，其他真实后台开发任务仍能进入材料和事实。
+    preconditions:
+      - 本例独立材料含已记录 thread ID 的日报运行、生成的日报复述，以及另一条真实后台开发会话。
+      - 本机状态保存日报 thread/run ID 与派生报告指纹，材料发生于同一目标日期。
+    steps:
+      - 执行采集和整理并对照来源清单；确认日报自身及其复述未作为新成果纳入。
+      - 核对真实后台开发会话；确认它仍保留可回查材料及正确状态，没有因后台或子 Agent 标签被整类排除。
+
+  - id: REPORT-013
+    name: 单日超限保留全部事实并停止发布
+    required: true
+    description: 单日超过 100 条或 200 KiB 时明确阻塞，不裁掉事实或拆包伪造完整覆盖。
+    preconditions:
+      - 本例独立候选包准备两个等价超限输入，分别为单日 101 条及不超过 100 条但编码大于 200 KiB。
+      - 隔离随记无该日事实，调用日志与本地材料摘要可核对。
+    steps:
+      - 分别 validate 并尝试 publish；确认非零退出，指出单日超限，所有本地候选事实保持完整。
+      - 查询服务事实和覆盖；确认没有部分导入、没有虚假 complete，也没有自动改写成多日或删减条目。
+
+  - id: REPORT-014
+    name: 自动恢复不能越过账号或操作边界
+    required: true
+    description: 自动恢复仅针对配置绑定账号的工作事实冻结导入，其他账号或操作不获得自动重放。
+    preconditions:
+      - 本例隔离服务有两个 owner，A 有已提交工作事实请求，B 持有效独立凭据。
+      - 本例有 A 的合法冻结文件、同键改 payload 文件及一个非工作事实操作文件，均为自有测试数据。
+    steps:
+      - 将 A 冻结文件交给 B 配置执行 reconcile；确认在联网前因账号不匹配被拒绝，没有在 B 账号创建事实。以 A 的原成功 key 修改 payload 直接提交现有导入入口；确认摘要冲突被拒绝且原事实未变。
+      - 将非工作事实操作交给自动 reconcile；确认拒绝且没有写调用；关闭 autoPublish 后合法请求也不自动重放。
+
+  - id: REPORT-015
+    name: Mac 真实本机与飞书事实能够上报回读
+    required: true
+    description: 在真实 Mac 用相同任务模板读取一日已授权本机记录和本人飞书聊天，验证来源和落库结果。
+    preconditions:
+      - Mac 已安装目标版本、本人飞书 user 登录态可用，使用独立受保护 job 状态和隔离随记账号。
+      - 已明确一个完整工作日和首次日期，来源登记仅含本机实际启用 provider 及本人飞书 messages。
+    steps:
+      - 手动运行共用任务，逐条抽查实际 Agent 原文和飞书消息及选定回复；确认项目、作者、日期、状态和来源引用一致。
+      - 查询随记回执和事实详情；确认全部已发布条目可回读，未调用飞书文档或发送接口；只对实际可见搜索范围声明覆盖。
+
+  - id: REPORT-016
+    name: devbox 真实执行独立于 Mac 在线状态
+    required: true
+    description: 在真实目标 devbox 使用同版模板本机采集上报，不依赖 Mac 发起 SSH 采集或飞书登录。
+    preconditions:
+      - 用户指明的实际 devbox 身份可核对，已安装目标版本、原生记录可读、模型非交互登录与独立随记凭据可用。
+      - 使用隔离随记账号及 devbox 独立状态，飞书关闭，Mac 不运行采集协调进程。
+    steps:
+      - 在 devbox 手动执行同版任务，核对至少一条真实原生记录；确认机器身份、原生线程、日期和事实一致。
+      - 回读随记导入回执并检查运行依赖；确认无 Mac 协调请求、无 lark-cli 要求，不能用本机复制 fixture 或健康探测替代。
+
+  - id: REPORT-017
+    name: 已确认的定时模板在两个 Backend 各自到点执行
+    required: true
+    description: 验证同版 schedule 和任务提示词分属两个 Backend 实例，真实调度证据与手动执行证据分开。
+    preconditions:
+      - 两个节点已通过真实采集验收，部署目标身份、时刻、目录、模型和权限已由用户核对完整任务草稿。
+      - 本例使用隔离随记账号，两个 Backend 的任务均按 scheduled-task Skill 授权创建，来源配置一边启用飞书一边禁用。
+    steps:
+      - 等待确认的最近一次真实触发，分段检查并记录两个 Backend 的 scheduledFor、run ID 和本机配置身份；确认不是手动运行记录。
+      - 分别核对调度结果与对应随记回执及事实；确认两边共用同版流程且飞书仅 Mac 执行，结束后只禁用本例创建的任务并保留证据。
+
+  - id: REPORT-018
+    name: 中断重启后先恢复本地冻结请求
+    required: true
+    description: 同一状态目录重启后恢复原请求和映射，不重新分配事项键，不丢弃 pending 后继续新日期。
+    preconditions:
+      - 本例独占隔离 job 进程、状态目录和服务，已有 pending 导入请求，可由本例终止并重新启动进程。
+      - 保存原批次代际、事项映射、精确请求字节与摘要，另有尚未开始的后续日期。
+    steps:
+      - 终止原进程并按恢复入口确认原所有者退出，再启动新进程；重新取得本次运行身份和实际服务端点。
+      - 检查恢复顺序并完成原请求确认；确认先处理 pending，身份及 payload 不变，确认前没有发布后续日期，旧代状态写入被拒绝。

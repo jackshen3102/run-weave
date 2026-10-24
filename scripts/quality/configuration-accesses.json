@@ -10879,5 +10879,141 @@
     "count": 1,
     "category": "external-protocol",
     "reason": "仅向明确请求的只读lark-cli子进程传递现有环境、时区和关闭通知标志；不新增实例配置或扩大渠道权限。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "environment",
+    "expression": "process.env.PATH",
+    "count": 2,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "readFile(log)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "readFile(path)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(join(bin,\"lark-cli\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(join(dir,\"home/.codex/sessions\",date+\".jsonl\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(join(root,\"token.env\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(mode)",
+    "count": 3,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/work-sources.ts",
+    "kind": "environment",
+    "expression": "process.env.MIGRATION_DATABASE_URL",
+    "count": 2,
+    "category": "migration",
+    "reason": "来源登记管理员进程专用迁移连接，沿用既有管理员输入，不进入 API 运行时。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "readFile(before.pending.request)",
+    "count": 2,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "readFile(pendingMeta.pending.request)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "readFile(probeLog)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(join(overflow.dir,\"home/.codex/sessions\",day+\".jsonl\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(join(probeBin,\"lark-cli\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(join(self.dir,\"home/.codex/sessions\",name!+\".jsonl\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(pendingMeta.pending.request)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
   }
 ]
