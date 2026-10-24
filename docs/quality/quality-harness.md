@@ -35,11 +35,11 @@
 - `pnpm run quality:gate`：按变更选择 docs、architecture、typecheck/lint 和 Playwright E2E；当前
   E2E 资产为空时不会把该层误报为通过。
 
-## 按需录屏验收
+## 验收材料
 
-当用户明确要求“最后录屏验证”时，可在常规验证后执行浏览器 MCP 录屏验收，并把录屏与元数据保存到本地 `artifacts/verification-runs/`。
-
-该能力是最终验收证据层，不替代 E2E 断言。详细设计见：`docs/quality/recorded-browser-mcp-verification.md`
+用户需要查看本次改动时，使用 [`toolkit:acceptance`](../../plugins/toolkit/skills/acceptance/SKILL.md)
+统一选择图文、视频或原始录屏。普通测试与提交请求不自动生成材料。
+材料是供用户复核的证据层，不代替真实行为验收；当前合同见[验收材料与录屏证据](./acceptance-materials.md)。
 
 ## 行为验收
 

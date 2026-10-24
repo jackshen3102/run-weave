@@ -12,7 +12,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 
 ## 已包含的 Skills
 
-- [`acceptance-gallery`](./skills/acceptance-gallery/SKILL.md)：将真实截图与记录生成本地分页图文材料，提供对照、原图与来源入口。
+- [`acceptance`](./skills/acceptance/SKILL.md)：统一手机验收材料入口，默认图文，按判断需要提供视频或原始录屏；共用采集、预览与检查流程。
 
 - [`agent-device`](./skills/agent-device/SKILL.md)：iOS 模拟器和真机上的 Agent 交互验收，包含设备预检、独立会话及证据记录。
 - [`update-runweave-ios`](./skills/update-runweave-ios/SKILL.md)：通过统一 CLI 更新 Runweave 到 iPhone，自动递增产品版本和构建号并核对安装和启动；也可脱离 Agent 直接执行命令。
@@ -37,7 +37,6 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `playwright-cli`
 - [`product-exploration`](./skills/product-exploration/SKILL.md)：显式调用的产品探索，默认 30 分钟；只取证报告，不生成测试代码或自动修复。
 - `react-best-practices`
-- `recorded-browser-mcp-verification`
 - `review-only`
 - `runweave-change-validation`
 - `runweave-dev-session`
@@ -49,6 +48,8 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `write-test-cases`
 
 - [youtube-reading](./skills/youtube-reading/SKILL.md)：YouTube 字幕与本机识别、保守校对翻译，交付导读与完整中文正文。
+
+原 [`acceptance-gallery`](./skills/acceptance-gallery/SKILL.md)、[`acceptance-video`](./skills/acceptance-video/SKILL.md) 和 [`recorded-browser-mcp-verification`](./skills/recorded-browser-mcp-verification/SKILL.md) 仅作为显式兼容入口；实现与规则统一维护在 `acceptance/`，已有脚本路径继续转发。
 
 ## 随记
 

@@ -232,7 +232,7 @@ function collectSessionReferencedCodexVersions(pluginName, marketplaceName) {
     "plugins/cache",
     marketplaceName,
     pluginName,
-    "0\\.1\\.0\\+codex\\.[0-9]+",
+    "[0-9]+\\.[0-9]+\\.[0-9]+\\+codex\\.[0-9]+",
   ].join("/");
   const result = runResult(
     "rg",
@@ -250,7 +250,7 @@ function collectSessionReferencedCodexVersions(pluginName, marketplaceName) {
     return [];
   }
 
-  const versionPattern = /0\.1\.0\+codex\.[0-9]+/g;
+  const versionPattern = /[0-9]+\.[0-9]+\.[0-9]+\+codex\.[0-9]+/g;
   return Array.from(
     new Set(`${result.stdout || ""}`.match(versionPattern) ?? []),
   );
@@ -497,7 +497,10 @@ function listDirectoryNames(directoryPath) {
 }
 
 function addVersion(versions, version) {
-  if (typeof version === "string" && version.startsWith("0.1.0+codex.")) {
+  if (
+    typeof version === "string" &&
+    /^[0-9]+\.[0-9]+\.[0-9]+\+codex\.[0-9]+$/.test(version)
+  ) {
     versions.add(version);
   }
 }

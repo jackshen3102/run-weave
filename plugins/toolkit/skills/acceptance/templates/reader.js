@@ -9,16 +9,60 @@
     if (className) node.className = className;
     return node;
   };
-  const link = (text, href) => {
-    const node = el("a", text);
-    node.href = href;
-    node.target = "_blank";
-    node.rel = "noopener noreferrer";
-    return node;
-  };
   try {
     const data = JSON.parse(byId("gallery-data").textContent);
     const assets = new Map(data.assets.map((asset) => [asset.id, asset]));
+    const viewer = el("dialog", undefined, "asset-viewer");
+    viewer.setAttribute("aria-labelledby", "asset-title");
+    const toolbar = el("div", undefined, "asset-toolbar");
+    const title = el("h2");
+    title.id = "asset-title";
+    const zoom = el("button", "实际尺寸");
+    zoom.type = "button";
+    zoom.setAttribute("aria-pressed", "false");
+    const close = el("button", "关闭原始材料");
+    close.type = "button";
+    const content = el("div", undefined, "asset-content");
+    let returnFocus;
+    toolbar.append(title, zoom, close);
+    viewer.append(toolbar, content);
+    document.body.append(viewer);
+    close.addEventListener("click", () => viewer.close());
+    viewer.addEventListener("close", () => {
+      document.body.classList.remove("viewing-asset");
+      returnFocus?.focus({ preventScroll: true });
+    });
+    zoom.addEventListener("click", () => {
+      const actual = viewer.classList.toggle("actual-size");
+      zoom.textContent = actual ? "适应屏幕" : "实际尺寸";
+      zoom.setAttribute("aria-pressed", String(actual));
+    });
+    const link = (label, asset) => {
+      const node = el("a", label);
+      node.href = asset.path;
+      node.addEventListener("click", (event) => {
+        event.preventDefault();
+        returnFocus = node;
+        title.textContent = asset.label;
+        content.replaceChildren();
+        viewer.classList.remove("actual-size");
+        zoom.hidden = asset.kind !== "image";
+        zoom.textContent = "实际尺寸";
+        zoom.setAttribute("aria-pressed", "false");
+        if (asset.kind === "image") {
+          const img = el("img");
+          img.src = asset.path;
+          img.alt = asset.label;
+          content.append(img);
+        } else content.append(el("pre", asset.text, "text-evidence"));
+        viewer.showModal();
+        document.body.classList.add("viewing-asset");
+        content.scrollTop = 0;
+        content.scrollLeft = 0;
+        close.focus();
+      });
+      return node;
+    };
     const pageNodes = [],
       headings = [],
       directoryLinks = [];
@@ -47,7 +91,7 @@
       const caption = el("figcaption");
       caption.append(
         el("strong", item.label),
-        link(asset.kind === "image" ? "打开原图 ↗" : "打开原文 ↗", asset.path),
+        link(asset.kind === "image" ? "打开原图" : "打开原文", asset),
       );
       figure.append(caption);
       if (asset.kind === "text") {
@@ -55,7 +99,7 @@
         return figure;
       }
       const stage = el("div", undefined, "image-stage");
-      const anchor = link("", asset.path);
+      const anchor = link("", asset);
       anchor.setAttribute("aria-label", `打开原图：${item.label}`);
       const img = el("img");
       img.alt = item.alt;
@@ -148,7 +192,7 @@
       ids.forEach((id) => {
         const asset = assets.get(id);
         const item = el("div", undefined, "source-item");
-        item.append(link(asset.label, asset.path), el("p", origin(asset)));
+        item.append(link(asset.label, asset), el("p", origin(asset)));
         if (asset.kind === "text")
           item.append(el("pre", asset.text, "text-evidence"));
         details.append(item);
@@ -237,6 +281,7 @@
     addEventListener("hashchange", () => readHash(true));
     addEventListener("keydown", (event) => {
       if (
+        viewer.open ||
         expanded ||
         event.altKey ||
         event.ctrlKey ||
