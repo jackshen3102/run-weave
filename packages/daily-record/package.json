@@ -1,0 +1,20 @@
+{
+  "name": "@runweave/daily-record",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node dist/cli.cjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@runweave/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2"
+  }
+}

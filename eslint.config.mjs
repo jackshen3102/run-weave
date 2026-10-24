@@ -28,6 +28,7 @@ export default tseslint.config(
       "packages/suiji-server/**/*.cjs",
       "packages/runweave-cli/src/**/*.ts",
       "packages/runweave-mcp/src/**/*.ts",
+      "packages/daily-record/src/**/*.ts",
       "packages/config-node/src/**/*.ts",
       "electron/src/**/*.ts",
     ],
