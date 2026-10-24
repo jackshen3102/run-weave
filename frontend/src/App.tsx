@@ -46,7 +46,7 @@ import { HttpError } from "./services/http";
 import { ClarityNavigationObserver } from "./features/analytics/clarity-navigation-observer";
 import { ClarityDrawerObserver } from "./features/analytics/clarity-drawer-observer";
 
-const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
 const CONNECTIONS_STORAGE_KEY = "viewer.connections";
 const TERMINAL_LIST_PATH = "/terminal";
