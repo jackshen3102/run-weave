@@ -1,0 +1,4 @@
+interface:
+  display_name: "验收材料"
+  short_description: "根据本次改动选择图文或视频，生成适合手机查看的真实验收材料"
+  default_prompt: "使用 $acceptance，给我本次改动的手机验收材料，说明已验证范围和查看方式，等我确认后再提交代码。"

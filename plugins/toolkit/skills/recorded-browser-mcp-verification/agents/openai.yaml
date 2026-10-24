@@ -1,0 +1,6 @@
+interface:
+  display_name: "recorded-browser-mcp-verification（兼容）"
+  short_description: "旧名称兼容入口，当前规则与实现统一维护在验收材料 Skill 中"
+  default_prompt: "使用 $acceptance，按我请求的原始录屏形式交付本次验收材料。"
+policy:
+  allow_implicit_invocation: false

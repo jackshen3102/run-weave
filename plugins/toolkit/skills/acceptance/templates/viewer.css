@@ -1,0 +1,55 @@
+/* Keep original assets inside the reader; preview sandboxes may block popups. */
+body.viewing-asset {
+  overflow: hidden;
+}
+.asset-viewer {
+  width: min(96vw, 1100px);
+  max-width: 96vw;
+  max-height: 94dvh;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #172033;
+}
+.asset-viewer::backdrop {
+  background: rgb(10 18 32 / 78%);
+}
+.asset-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid #d9e2ee;
+}
+.asset-toolbar h2 {
+  flex: 1 1 180px;
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.asset-content {
+  max-height: 70dvh;
+  overflow: auto;
+  padding: 12px;
+}
+.asset-content img {
+  display: block;
+  max-width: 100%;
+  max-height: 65dvh;
+  width: auto;
+  height: auto;
+  margin: auto;
+  object-fit: contain;
+}
+.asset-viewer.actual-size img {
+  max-width: none;
+  max-height: none;
+  margin: 0;
+}
+@media print {
+  .asset-viewer {
+    display: none;
+  }
+}

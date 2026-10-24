@@ -10839,5 +10839,21 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "桌面自定义协议保存、读取或删除 Clarity SDK 的 _clck 与 _clsk 匿名 Cookie 及到期时间；属于采集会话运行状态，不作为 settings.yaml 业务配置来源。"
+  },
+  {
+    "file": "plugins/toolkit/skills/acceptance/scripts/preview.py",
+    "kind": "native-or-shell",
+    "expression": "token = os.environ[args.token_env]",
+    "count": 1,
+    "category": "tooling",
+    "reason": "独立验收预览工具只在用户显式指定 --token-env 与 --backend 时读取该凭据变量，为指定文件申请临时预览票据；不保存或输出令牌，不新增 Backend 实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/acceptance/scripts/video.py",
+    "kind": "native-or-shell",
+    "expression": "env = os.environ.copy()",
+    "count": 1,
+    "category": "tooling",
+    "reason": "独立 OpenScreen MCP 子进程继承当前进程环境并移除 ELECTRON_RUN_AS_NODE，以正常启动桌面程序；不定义或持久化业务配置。"
   }
 ]
