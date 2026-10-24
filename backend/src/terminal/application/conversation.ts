@@ -55,7 +55,7 @@ export async function readTerminalConversation(
     const connection = await discoverAppServer({ env: process.env });
     if (!connection) throw new Error("App Server unavailable");
     const response = await new AppServerClient(connection).getConversation(target.threadId,
-      AbortSignal.any([signal, AbortSignal.timeout(20_000)]));
+      AbortSignal.any([signal, AbortSignal.timeout(20_000)]), { provider: target.provider });
     const after = resolveConversationTarget(manager, sessionId, query.panelId);
     if (JSON.stringify(before) !== JSON.stringify(after) || response.threadId !== target.threadId ||
       response.provider !== target.provider) changed();

@@ -5,6 +5,7 @@ import { PiSessionReader } from "../pi/session-reader.js";
 import type { ThreadPreviewReader } from "../agents/thread-previews.js";
 import type { ConversationReader } from "../agents/conversation-reader.js";
 import { ConversationReadError } from "../agents/conversation-source.js";
+import type { AppServerConversationQuery } from "@runweave/shared/terminal/conversation";
 import express from "express";
 import { z } from "zod";
 import type {
@@ -302,19 +303,26 @@ export function createHttpApp(options: {
 
   app.get("/threads/:threadId/conversation", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    if (Object.keys(req.query).length) {
-      res.status(400).json({ code: "INVALID_REQUEST", message: "不支持读取路径参数" }); return;
+    const query = z.object({
+      provider: z.enum(["claude", "codex", "trae", "traecli", "traex", "pi", "unknown"]).optional(),
+    }).strict().safeParse(req.query);
+    if (!query.success) {
+      res.status(400).json({ code: "INVALID_REQUEST", message: "无效会话来源参数" }); return;
     }
+    const { provider }: AppServerConversationQuery = query.data;
     const thread = options.eventCenter.getStateStore().getThread(req.params.threadId);
+    if (thread && provider && thread.agent !== provider) {
+      res.status(409).json({ code: "CONVERSATION_TARGET_CHANGED", message: "会话来源已变化" }); return;
+    }
     const controller = new AbortController();
     const cancel = () => { if (!res.writableEnded) controller.abort(); };
     res.on("close", cancel);
     try {
       if (!options.conversations) throw new Error("conversation reader unavailable");
-      // Historical Codex rollouts may outlive event retention or predate hook registration.
+      // Historical rollouts may outlive event retention or predate hook registration.
       // Reading their verified source must not create lifecycle events or ThreadRef state.
       const response = await options.conversations.read(
-        thread ?? { agent: "codex", threadId: req.params.threadId }, controller.signal,
+        thread ?? { agent: provider ?? "codex", threadId: req.params.threadId }, controller.signal,
       );
       if (controller.signal.aborted) return;
       if (!thread && response.availability === "source_missing") {

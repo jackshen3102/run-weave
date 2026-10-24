@@ -16,7 +16,7 @@ export class ConversationReader {
   }
 
   // Codex and Trae verify controlled sources; Pi needs its registered file context.
-  async read(thread: AppServerThreadRef | { agent: "codex"; threadId: string }, signal?: AbortSignal): Promise<AppServerConversationResponse> {
+  async read(thread: Pick<AppServerThreadRef, "agent" | "threadId" | "pi">, signal?: AbortSignal): Promise<AppServerConversationResponse> {
     const isTrae = ["trae", "traecli", "traex"].includes(thread.agent);
     const supported = thread.agent === "codex" || thread.agent === "pi" || isTrae;
     const content = thread.agent === "codex" ? await this.codex.read(thread.threadId, signal)

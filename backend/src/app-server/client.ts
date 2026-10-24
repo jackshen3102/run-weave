@@ -1,5 +1,5 @@
 import { WebSocket } from "ws";
-import type { AppServerConversationResponse, SupervisionConversationResponse } from "@runweave/shared/terminal/conversation";
+import type { AppServerConversationQuery, AppServerConversationResponse, SupervisionConversationResponse } from "@runweave/shared/terminal/conversation";
 import type { AppServerEventEnvelope, AppServerEventListResponse, AppServerEventStreamMessage, AppServerSyncStatusResponse, AppServerThreadDetailResponse, AppServerThreadListResponse, AppServerThreadResponse, CreateAppServerEventRequest } from "@runweave/shared/app-server-events";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 import type { RuntimeStatusReport } from "@runweave/shared/runtime-status";
@@ -8,8 +8,10 @@ import type { AppServerThreadPreviewsResponse } from "@runweave/shared/app-serve
 export class AppServerClient {
   constructor(private readonly connection: AppServerConnectionInfo) {}
 
-  async getConversation(threadId: string, signal?: AbortSignal): Promise<AppServerConversationResponse> {
-    const response = await fetch(`${this.connection.baseUrl}/threads/${encodeURIComponent(threadId)}/conversation`, {
+  async getConversation(threadId: string, signal?: AbortSignal, query: AppServerConversationQuery = {}): Promise<AppServerConversationResponse> {
+    const url = new URL(`${this.connection.baseUrl}/threads/${encodeURIComponent(threadId)}/conversation`);
+    if (query.provider) url.searchParams.set("provider", query.provider);
+    const response = await fetch(url, {
       headers: this.headers(), signal, cache: "no-store",
     });
     if (!response.ok) throw new AppServerConversationError(response.status);
