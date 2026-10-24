@@ -19,6 +19,7 @@ export function SuijiReviewPanel({
   onOpen,
   onSave,
   writable,
+  onLockedChange,
 }: {
   client: SuijiClient;
   info: SuijiInfo;
@@ -27,6 +28,7 @@ export function SuijiReviewPanel({
   onOpen: (id: string, version: number) => void;
   onSave: (body: string, kind: "note" | "task") => void;
   writable: boolean;
+  onLockedChange?: (value: boolean) => void;
 }) {
   const [question, setQuestion] = useState(""),
     [turns, setTurns] = useState<Turn[]>([]);
@@ -37,6 +39,7 @@ export function SuijiReviewPanel({
     undefined,
   );
   const alive = useRef(true);
+  useEffect(() => { onLockedChange?.(Boolean(pending.current || busy || job?.status === "running")); }, [busy, job, error, onLockedChange]);
   useEffect(() => {
     alive.current = true;
     return () => {

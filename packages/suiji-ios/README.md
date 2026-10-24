@@ -131,3 +131,11 @@ mapping:check 可附加 `SUIJI_VERIFY_FOLLOWUP_RECORD_ID`，核对真实跟进�
 共享 scheme 构建时生成安装包内的 `BuildIdentity.json`，记录提交、源码指纹及构建配置。
 连接页或连接设置中的“构建信息”可按需离线导出该文件。
 本功能不采集运行日志；回查构建和安装记录见 [构建身份](../ios-build-identity/README.md)。
+
+## 工作事实
+
+服务声明可选 `features.workRecords=true` 时，第四个Tab为工作，AI回顾移到工作更多菜单；普通记录“聊聊这条”通过次级页面返回原上下文。缺能力仍显示旧四Tab。工作事实使用独立DTO、模型及身份目录下的work原子文件，不复用普通UUID草稿格式，也不进入UserDefaults。
+
+工作日期固定Asia/Shanghai；倒序全文阅读、可选项目、仅起止日期筛选、补记编辑、单条与跨日批量归类。来源编号不展示，缺失覆盖不推断没有工作。所有写入先冻结意图，启动、认证和前台恢复不重发；只有用户手动确认才沿用原键与完整payload。归类/撤销冲突整批停止，可重新读取所选事实后核对。
+
+`mapping:check` 在真实info声明工作能力时读取实际工作列表及详情，使用生产Swift Codable回编码，核对工作日期、null项目、状态、计数、coverage和分页；同时验证缺少可选能力字段的旧info。服务需要实际工作fixture，凭据仅由保护环境注入。新UI的Simulator验收按[共享池](../../docs/cli/ios-simulators.md)申请随记身份，不把构建或映射当真机交互验收。

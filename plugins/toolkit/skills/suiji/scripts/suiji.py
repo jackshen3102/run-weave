@@ -13,6 +13,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+sys.dont_write_bytecode = True
+import work_records
 
 
 class Failure(Exception):
@@ -145,6 +147,19 @@ def run_intent(client, path, intent):
             args = intent["arguments"]
             if not followup.get("id") or followup.get("recordId") != args["recordId"] or followup.get("body") != args["body"] or [a["id"] for a in followup.get("attachments", [])] != args.get("attachmentIds", []):
                 raise Failure("INVALID_FOLLOWUP_RESPONSE; original request retained")
+        elif intent["operation"] in ("import_work_facts", "reclassify_work_facts"):
+            work_records.verify_result(client, intent, result, Failure)
+            if intent.get("indexPath"):
+                index_path = Path(intent["indexPath"])
+                index = json.loads(private_read(index_path))
+                for row in result["facts"]:
+                    namespace = intent["arguments"]["input"]["sourceNamespace"]
+                    identity = work_records.identity_key(namespace, row["externalKey"])
+                    legacy = namespace + ":" + row["externalKey"]
+                    if identity not in index["keys"] and legacy in index["keys"]:
+                        index["keys"][identity] = dict(index["keys"][legacy])
+                    index["keys"][identity]["id"] = row["id"]
+                work_records.atomic_private(index_path, json.dumps(index, ensure_ascii=False).encode())
         elif result.get("record", {}).get("taskStatus") != "done":
             raise Failure("INVALID_STATUS_RESPONSE; original request retained")
     Path(path).unlink()
@@ -157,8 +172,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--env-file", help="Protected 0600 file containing only the configured token variable")
-    parser.add_argument("command", choices=["info", "list", "search", "get", "followups", "handoff", "read-attachment", "upload", "append", "complete", "retry"])
-    for option in ("record-id", "attachment-id", "query", "tag", "status", "kind", "cursor", "input", "request", "file"):
+    parser.add_argument("command", choices=["info", "list", "search", "get", "followups", "handoff", "read-attachment", "upload", "append", "complete", "retry", "work-prepare", "work-import", "work-list", "work-get", "work-reclassify"])
+    for option in ("record-id", "attachment-id", "query", "tag", "status", "kind", "cursor", "input", "request", "file", "from", "to", "out", "fact-id"):
         parser.add_argument("--" + option)
     args = parser.parse_args()
     inputs = None
@@ -194,6 +209,17 @@ def main():
         os.environ[key] = token
     client = Client(config)
     info = client.verify()
+    if args.command.startswith("work-") and not info.get("features", {}).get("workRecords"):
+        raise Failure("WORK_RECORDS_UNAVAILABLE")
+    if args.command == "work-prepare":
+        if not args.input or not args.out:
+            raise Failure("INPUT_AND_OUT_REQUIRED")
+        return work_records.prepare(client, args, Failure, private_read, exclusive_write)
+    if args.command == "work-list":
+        return work_records.list_all(client, {k: v for k, v in {"from": args.__dict__["from"], "to": args.to}.items() if v}, Failure)
+    if args.command == "work-get":
+        uuid.UUID(args.fact_id)
+        return client.call("get_work_fact", {"factId": args.fact_id})
     if args.command == "info":
         return info
     if args.command in ("list", "search"):
@@ -223,7 +249,16 @@ def main():
         raise Failure("REQUEST_EXISTS; use explicit retry with original parameters")
     intent = {"identity": {"endpoint": client.base, "serverId": config["serverId"], "ownerId": config["ownerId"]}}
     key = str(uuid.uuid4())
-    if args.command == "upload":
+    if args.command in ("work-import", "work-reclassify"):
+        value = json.loads(private_read(args.input))
+        if args.command == "work-import":
+            if value.get("identity") != intent["identity"]:
+                raise Failure("PREPARED_IDENTITY_MISMATCH")
+            payload = work_records.validate(value["payload"], Failure)
+            intent.update(operation="import_work_facts", arguments={"idempotencyKey": key, "input": payload}, indexPath=value["indexPath"])
+        else:
+            intent.update(operation="reclassify_work_facts", arguments={"idempotencyKey": key, "input": work_records.reclassification(value, Failure)})
+    elif args.command == "upload":
         client.call("get_record", {"recordId": args.record_id})
         file = Path(args.file)
         data = file.read_bytes()

@@ -8,11 +8,14 @@ const endpoint = process.env.SUIJI_VERIFY_URL;
 const token = process.env.SUIJI_VERIFY_TOKEN;
 const followupRecordId = process.env.SUIJI_VERIFY_FOLLOWUP_RECORD_ID;
 const reviewId = process.env.SUIJI_VERIFY_REVIEW_ID;
+const workFactId = process.env.SUIJI_VERIFY_WORK_FACT_ID;
 if (!endpoint || !token)
   throw new Error(
     "SUIJI_VERIFY_URL and SUIJI_VERIFY_TOKEN required for real HTTP mapping",
   );
 await mkdir(artifacts, { recursive: true, mode: 0o700 });
+let liveInfo;
+let workPage;
 for (const [name, route] of [
   ["info", "/api/suiji/v1/info"],
   ["page", "/api/suiji/v1/records?limit=100"],
@@ -26,7 +29,20 @@ for (const [name, route] of [
   });
   if (!response.ok) throw new Error(`${name} HTTP ${response.status}`);
   const body = await response.text();
+  if (name === "info") liveInfo = JSON.parse(body);
   await writeFile(path.join(artifacts, name + ".json"), body, { mode: 0o600 });
+}
+if (liveInfo.features?.workRecords) {
+  for (const [name, route] of [["work-page", "/api/suiji/v1/work-facts?limit=5"], ["work-detail", null]]) {
+    const target = route ?? "/api/suiji/v1/work-facts/" + encodeURIComponent(workFactId ?? workPage.items[0].id);
+    const response = await fetch(endpoint + target, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new Error(`${name} HTTP ${response.status}`);
+    const body = await response.text();
+    if (name === "work-page") { workPage = JSON.parse(body); if (!workPage.items.length) throw new Error("Real work fixture required"); }
+    await writeFile(path.join(artifacts, name + ".json"), body, { mode: 0o600 });
+  }
+  const oldInfo = structuredClone(liveInfo); delete oldInfo.features.workRecords;
+  await writeFile(path.join(artifacts, "old-info.json"), JSON.stringify(oldInfo), { mode: 0o600 });
 }
 // Compile the SAME DTO definitions consumed by the iOS app, decode and re-encode actual HTTP JSON.
 await writeFile(
@@ -44,6 +60,12 @@ guard info.ai?.enabled == true, review.status == "completed", review.answer != n
 try JSONEncoder().encode(review).write(to: URL(fileURLWithPath: root + "/review-roundtrip.json"))`
     : ""
 }
+${workPage ? `let workPage = try JSONDecoder().decode(WorkFactPage.self, from: Data(contentsOf: URL(fileURLWithPath: root + "/work-page.json")))
+let workDetail = try JSONDecoder().decode(WorkFactResponse.self, from: Data(contentsOf: URL(fileURLWithPath: root + "/work-detail.json")))
+let oldInfo = try JSONDecoder().decode(ServiceInfo.self, from: Data(contentsOf: URL(fileURLWithPath: root + "/old-info.json")))
+guard info.features?.workRecords == true, oldInfo.features?.workRecords == nil, !workPage.items.isEmpty else { fatalError("Work capability mapping mismatch") }
+try JSONEncoder().encode(workPage).write(to: URL(fileURLWithPath: root + "/work-page-roundtrip.json"))
+try JSONEncoder().encode(workDetail).write(to: URL(fileURLWithPath: root + "/work-detail-roundtrip.json"))` : ""}
 ${followupRecordId ? `let followups = try JSONDecoder().decode(FollowupPage.self, from: Data(contentsOf: URL(fileURLWithPath: root + "/followups.json")))
 try JSONEncoder().encode(followups).write(to: URL(fileURLWithPath: root + "/followups-roundtrip.json"))` : ""}
 print("Decoded actual HTTP info and \\(page.items.count) records with production Swift DTOs")
@@ -59,6 +81,7 @@ run([
   path.join(pkg, "Sources/SuijiIOS/Contracts/Contracts.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/Reviews.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/Followups.swift"),
+  path.join(pkg, "Sources/SuijiIOS/Contracts/WorkRecords.swift"),
   path.join(artifacts, "main.swift"),
   "-o",
   path.join(artifacts, "mapping"),
@@ -149,4 +172,14 @@ if (followupRecordId) {
     if (JSON.stringify(canonical(record.followupSummary)) !== JSON.stringify(canonical(mapped.followupSummary))) throw new Error("Followup summary mapping mismatch");
   }
   console.log("Real followups and record summaries match Swift Codable roundtrip");
+}
+
+if (workPage) {
+  const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().filter(key => value[key] !== null).map(key => [key, canonical(value[key])])) : value;
+  for (const name of ["work-page", "work-detail"]) {
+    const before = JSON.parse(await readFile(path.join(artifacts, name + ".json"), "utf8"));
+    const after = JSON.parse(await readFile(path.join(artifacts, name + "-roundtrip.json"), "utf8"));
+    if (JSON.stringify(canonical(before)) !== JSON.stringify(canonical(after))) throw new Error("Work fact mapping mismatch: " + name);
+  }
+  console.log("Actual work HTTP page/detail, business dates, nullable projects, statuses, counts, coverage and cursor match production Swift DTOs; old optional capability decodes");
 }
