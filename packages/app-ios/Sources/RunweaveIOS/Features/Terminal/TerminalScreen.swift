@@ -199,8 +199,20 @@ struct TerminalScreen: View {
     .toolbar { terminalToolbar }
     .overlay(alignment: .top) {
       if let status = browser.dataStatus {
-        Text(status).font(.caption).padding(8).background(.regularMaterial)
-          .allowsHitTesting(false).accessibilityIdentifier("browser-data-status")
+        HStack(spacing: 12) {
+          if browser.openingTarget != nil { ProgressView() }
+          VStack(alignment: .leading, spacing: 3) {
+            Text(status).font(.subheadline)
+            if let target = browser.openingTarget {
+              Text(URLComponents(string: target)?.host ?? target)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+          }
+          Spacer(minLength: 0)
+        }
+        .padding(14).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, 16).padding(.top, 8)
+        .allowsHitTesting(false).accessibilityIdentifier("browser-data-status")
       }
     }
     .fullScreenCover(isPresented: Binding(

@@ -16,6 +16,11 @@ WebView/Page 内部实现不对业务 App 暴露。真实调用方：
 - [Runweave TerminalScreen](../app-ios/Sources/RunweaveIOS/Features/Terminal/TerminalScreen.swift)：连接/终端身份及输入、媒体呈现互斥。
 - [随记 SuijiBrowserHost](../suiji-ios/Sources/SuijiIOS/Features/Browser/SuijiBrowserHost.swift)：根账户会话、UIKit 链接意图与继续浏览入口。
 
+顶部紧凑地址栏显示站点与页面标题，点击通过可滚动的链接面板核对或复制完整 URL；加载反馈收在地址栏与细进度条中，百分比提供给辅助功能，失败页保留失败目标。
+异步准备期间由 `openingTarget` 提供原目标，宿主可与 `dataStatus` 一起显示。跨行文字恢复的候选使用
+`confirmInternalOpen` 先在同一链接面板核对地址，面板关闭后才通过原来源与生命周期检查执行打开；取消或下滑关闭不导航。
+`incompleteLink` 解释无法识别完整目标且不发起导航。真实 OSC 8 目标继续直接打开。
+
 ## 会话与网站数据
 
 收起保留页面、网页历史和未提交表单；相同完整 URL 恢复页面，不刷新；不同 URL 先确认再替换。

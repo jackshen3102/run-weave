@@ -75,10 +75,29 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
         self.openLinkRequested?(intent)
       }
       view.singleTapLinkHandler = { [weak self, weak view] hit in
-        guard let self, self.active, let view,
-          let tap = TerminalFileTap.capture(view.getTerminal(), hit: hit) else { return false }
-        self.openFileRequested?(tap)
-        return true
+        guard let self, self.active, let view else { return false }
+        let terminal = view.getTerminal()
+        guard let tap = TerminalFileTap.capture(terminal, hit: hit, filesOnly: false) else { return false }
+        if let wrapped = TerminalLinkSelection.wrappedURL(tap) {
+          switch wrapped {
+          case .candidate(let target):
+            self.openLinkRequested?(BrowserOpenIntent(target: target, origin: .host, action: .confirmInternalOpen))
+          case .incomplete(let target):
+            self.openLinkRequested?(BrowserOpenIntent(target: target, origin: .host, action: .incompleteLink))
+          }
+          return true
+        }
+        if tap.reference() != nil {
+          self.openFileRequested?(tap)
+          return true
+        }
+        if terminal.link(at: .buffer(hit), mode: .explicitAndImplicitSoftWrapped) == nil,
+          let line = terminal.displayLine(atBufferRow: hit.row), hit.col >= 0, hit.col < line.count,
+          line[hit.col].attribute.style.contains(.underline) {
+          self.openLinkRequested?(BrowserOpenIntent(target: "", origin: .host, action: .incompleteLink))
+          return true
+        }
+        return false
       }
       view.installSelectionMenu()
       view.linkHighlightMode = .always

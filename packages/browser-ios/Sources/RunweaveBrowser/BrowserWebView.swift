@@ -33,7 +33,7 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
     components.scheme = original.scheme; components.host = original.host; components.port = original.port
     return components.url ?? value
   }
-  var title: String { webView.title.flatMap { $0.isEmpty ? nil : $0 } ?? currentURL.host ?? "网页" }
+  var title: String { webView.title.flatMap { $0.isEmpty ? nil : $0 } ?? exportURL.host ?? "网页" }
   private var javaScriptDialog: UIAlertController?
   private var javaScriptReply: ((String?) -> Void)?
 

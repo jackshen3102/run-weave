@@ -239,8 +239,9 @@ iOS 不保存第二套队列；Claude 和普通 Shell 不显示入口。排队�
 终端链接沿 `SwiftTermSurface → SessionController → TerminalScreen` 只传递意图，不传入认证或输入。
 [本地 SwiftTerm 1.19.0 补丁](../Vendor/SwiftTerm/README.md) 以默认关闭的 opt-in 复用原生
 single-tap recognizer、bidi-aware hit test 与 implicit detector；本 App 开启后，普通完整 HTTP(S)
-URL 和 OSC 8 均首次单击打开，不需预先聚焦或选择。普通 URL 仅合并真实软折行；TUI 多行显示使用 OSC 8 的完整目标。
-不启用上游通用跨硬换行 heuristic；不新增 ANSI/单元格映射，不把 URL 发送到终端。OSC 8 仍常驻高亮。Backend 的 tmux attach 声明 hyperlinks 能力，实时输出与重连屏幕快照均保留字符绑定的真实链接。
+URL 和 OSC 8 均首次单击打开，不需预先聚焦或选择。普通 URL 仅合并真实软折行；TUI 多行显示优先使用 OSC 8 的完整目标。
+旧 tmux 丢失 OSC 8 时，宿主复用文件点击的不可变单元格及属性快照，只恢复括号边界完整、每条中间硬换行到达行尾的 HTTP(S) 候选（最多 8 行、4096 字节）。紧邻同样下划线与前景色的展示标签可进入同一候选确认（最多向后 4 行）；均需核对地址后确认，不能当作已恢复的 OSC 8 元数据。缺失边界或孤立标签时说明未打开，避免导航截断片段。不启用上游通用跨硬换行 heuristic，不新增 ANSI/单元格映射，不把 URL 发送到终端。
+OSC 8 仍常驻高亮。Backend 的 tmux attach 声明 hyperlinks 能力；tmux 3.4 起支持保存真实目标，滚动历史的 copy mode 需 3.5 或更新版本。仅声明客户端能力不能弥补旧 server 缺少协议支持；已被旧 server 丢弃的历史目标不能还原。
 已激活选区保留原选择处理；长按沿用公开 `select` 作为兜底，选区软折行由依赖合并，
 硬换行与多个 URL 混合选区不推测拼接。菜单在现有长按/选择路径上使用系统 edit menu，不新增竞争滚动手势
 或原始 ANSI 坐标映射；OSC 8 菜单按所选字符真实目标显示域名，原生复制仍复制选区原文。
