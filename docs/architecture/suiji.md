@@ -145,7 +145,7 @@ schema10增加work_facts、work_fact_revisions、work_import_runs、work_day_cov
 
 事实按Asia/Shanghai业务日期排序，来源稳定身份与业务幂等各自负责去重。版本检查、人工字段保护、源时间单调和feedRevision分页防止跨客户端覆盖与静默漏读。覆盖回执仅说明实际请求范围，partial/unavailable/缺失不能变成没有工作。内部原生引用不包含原始聊天或本机路径，界面只呈现事实。
 
-Web使用已有480px抽屉、presence和连接身份隔离的IndexedDB；原生使用SwiftUI与独立work草稿文件。工作替换第四个AI主入口，旧AI保留次级入口与普通记录范围，暂不读取新工作领域。自动总结、周报、大屏分类、额外采集渠道与定时任务未接入。
+Web使用已有480px抽屉、presence和连接身份隔离的IndexedDB；原生使用SwiftUI与独立work草稿文件。工作替换第四个AI主入口，旧AI保留次级入口与普通记录范围，暂不读取新工作领域。每日事实的采集与定时上报由下述 Daily Record 承担；随记工作界面不负责采集和调度，周报与大屏分类未接入。
 
 合同和导入操作见[随记工作事实](../../plugins/toolkit/skills/suiji/references/work-records.md)；行为验收分别见[服务](../testing/suiji/work-records-service.testplan.yaml)与[客户端](../testing/suiji/work-records-clients.testplan.yaml)。源码、隔离服务、Electron、Simulator和生产部署证据分开报告。
 
@@ -157,3 +157,10 @@ Web使用已有480px抽屉、presence和连接身份隔离的IndexedDB；原生�
 仍复用工作事实导入事务与人工字段保护，不修改普通笔记或待办。
 配置、权限与部署合同见[定时上报](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md)。
 实际双机、飞书和到点调度是否通过，以本次验收证据为准。
+
+验收入口为[多机器定时上报](../testing/skills/daily-record-reporting.testplan.yaml)、
+[本机采集](../testing/skills/daily-record-local.testplan.yaml)和
+[项目归属](../testing/skills/daily-record-projects.testplan.yaml)。
+本机集成验证不替代真实 Mac/飞书、真实 devbox、服务回执与独立回读及到点调度证据；
+手动触发成功也不证明到点运行。旧研究中的远端拉包、随记来源采集与 `get_change`
+不属于当前 Daily Record 合同，不因过程计划曾列出而视为已实现。
