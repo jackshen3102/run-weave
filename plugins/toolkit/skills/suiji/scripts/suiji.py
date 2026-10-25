@@ -6,9 +6,11 @@ import http.client
 import json
 import os
 import re
+import socket
 from pathlib import Path
 import stat
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -24,6 +26,30 @@ class Failure(Exception):
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise Failure("REDIRECT_REJECTED")
+
+
+def connect_tcp(address, timeout, source_address):
+    # A failed TCP connect has sent no HTTP request. Never retry send/read errors.
+    for attempt in range(5):
+        try:
+            connection = socket.create_connection(address, min(timeout, 5), source_address)
+            connection.settimeout(timeout)
+            return connection
+        except (TimeoutError, ConnectionError):
+            if attempt == 4:
+                raise
+            time.sleep(0.2 * (attempt + 1))
+
+
+class ConnectRetryHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._create_connection = connect_tcp
+
+
+class ConnectRetryHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(ConnectRetryHTTPSConnection, req, context=self._context)
 
 
 def endpoint(value):
@@ -63,7 +89,7 @@ class Client:
         self.token = os.environ.get(config["tokenEnv"])
         if not self.token:
             raise Failure("MISSING_TOKEN_ENV: " + config["tokenEnv"])
-        self.opener = urllib.request.build_opener(NoRedirect)
+        self.opener = urllib.request.build_opener(NoRedirect, ConnectRetryHTTPSHandler)
         self.protocol = "2025-03-26"
 
     def request(self, route, data, content_type="application/json", key=None):
