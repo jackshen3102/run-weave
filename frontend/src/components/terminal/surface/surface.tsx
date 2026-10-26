@@ -168,7 +168,7 @@ export function TerminalSurface({
   const requestTmuxExitCopyMode = scroll.requestTmuxExitCopyMode;
   const tmuxScrollbackActive = scroll.tmuxScrollbackActive;
 
-  const { onOutput, onSnapshot, renderTerminalSnapshot, replayDeferredOutput } =
+  const { enqueueResize, onOutput, onSnapshot, renderTerminalSnapshot, replayDeferredOutput } =
     useTerminalOutputStream({
       onLocalReset: () => invalidateOutputRecoveryRef.current(),
       activeRef: outputVisibleRef,
@@ -207,6 +207,7 @@ export function TerminalSurface({
     sendResize,
     runtimeKind,
     singleRowScrollRef,
+    orderedResizeRef,
     terminalStatus: connectionTerminalStatus,
   } = useTerminalConnection({
     apiBase,
@@ -409,6 +410,8 @@ export function TerminalSurface({
   }, [runtimeKind]);
 
   useTerminalEmulator({
+    enqueueResize,
+    orderedResizeRef,
     activeRef,
     clientMode,
     imeCommitRef,

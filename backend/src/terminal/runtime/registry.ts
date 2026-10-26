@@ -18,6 +18,7 @@ const TERMINAL_MODE_SEQUENCE_TAIL_LENGTH = 7;
 interface RuntimeSubscriber {
   onData(data: string): void;
   onOutputFrame?(frame: TerminalOutputFrame): void;
+  onResize?(cols: number, rows: number): void;
   onRecoveryError?(): void;
   onExit(event: { exitCode: number; signal?: number }): void;
 }
@@ -78,9 +79,13 @@ export class TerminalRuntimeRegistry {
       entry.runtime = {
         ...runtime,
         resize: (cols, rows) => {
-          if (entry.cols === cols && entry.rows === rows) return;
-          entry.outputScreen!.resize(cols, rows);
-          runtime.resize(cols, rows);
+          const changed = entry.cols !== cols || entry.rows !== rows;
+          if (changed) entry.outputScreen!.resize(cols, rows);
+          // Publish the grid boundary before any output from the resized PTY.
+          // Unchanged requests still need an acknowledgement for the viewer.
+          for (const subscriber of entry.subscribers)
+            subscriber.onResize?.(cols, rows);
+          if (changed) runtime.resize(cols, rows);
           entry.cols = cols;
           entry.rows = rows;
         },

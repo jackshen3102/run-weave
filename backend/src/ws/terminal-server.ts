@@ -349,6 +349,7 @@ export function attachTerminalWebSocketServer(
     socket.on("pong", () => heartbeat.markAlive());
     unsubscribe = runtimeRegistry.subscribe(runtimeId, {
       onOutputFrame: (frame) => outputRecovery?.onFrame(frame),
+      onResize: (cols, rows) => outputRecovery?.onResize(cols, rows),
       onRecoveryError: () =>
         closeSlowTerminalSocket(socket, "Terminal mirror output limit"),
       onData(data) {

@@ -17,6 +17,7 @@ import { logTerminalPerf, summarizeTerminalChunk } from "../output/performance";
 import { toWebSocketBase } from "../navigation/url";
 import {
   TerminalClientOutputRecovery,
+  hasTerminalDimensions,
   type TerminalOutputDelivery,
 } from "./output-recovery";
 
@@ -75,6 +76,7 @@ export function useTerminalConnection(params: {
   } = params;
   const socketRef = useRef<WebSocket | null>(null);
   const singleRowScrollRef = useRef(false);
+  const orderedResizeRef = useRef(false);
   const outputRecoveryRef = useRef<TerminalClientOutputRecovery | null>(null);
   const outputRecoveryScopeRef = useRef<string | null>(null);
   const tokenRef = useRef(token);
@@ -201,6 +203,7 @@ export function useTerminalConnection(params: {
           ),
         );
         if (includeSnapshot && onSnapshotRef.current && onOutputRef.current) {
+          wsUrl.searchParams.set("resizeMode", "ordered");
           wsUrl.searchParams.set("resumeClientId", outputRecovery.clientId);
           if (cursor) {
             wsUrl.searchParams.set("resumeStreamId", cursor.streamId);
@@ -327,6 +330,7 @@ export function useTerminalConnection(params: {
             ) as TerminalServerMessage;
             inboundSequenceRef.current += 1;
             if (parsed.type === "connected") {
+              orderedResizeRef.current = parsed.resizeMode === "ordered";
               singleRowScrollRef.current = parsed.runtimeKind === "tmux" && parsed.tmuxScrollMode === "single-row";
               if (parsed.recovery?.mode !== "resume")
                 outputRecovery.invalidate();
@@ -337,15 +341,18 @@ export function useTerminalConnection(params: {
               setRuntimeKind(parsed.runtimeKind ?? null);
               return;
             }
+            if (parsed.type === "resize") {
+              if (!orderedResizeRef.current || !hasTerminalDimensions(parsed))
+                throw new Error("Invalid terminal resize boundary");
+              const delivery = outputRecovery.resize(parsed.cursor, parsed);
+              if (onOutputRef.current) onOutputRef.current("", delivery);
+              else delivery.commit(false);
+              return;
+            }
             if (parsed.type === "snapshot") {
               if (
                 (parsed.cols !== undefined || parsed.rows !== undefined) &&
-                (!Number.isInteger(parsed.cols) ||
-                  !Number.isInteger(parsed.rows) ||
-                  parsed.cols! < 2 ||
-                  parsed.cols! > 500 ||
-                  parsed.rows! < 1 ||
-                  parsed.rows! > 200)
+                !hasTerminalDimensions(parsed)
               )
                 throw new Error("Invalid terminal snapshot dimensions");
               logTerminalPerf("ws.message.snapshot", {
@@ -356,9 +363,15 @@ export function useTerminalConnection(params: {
               const delivery = outputRecovery.snapshot(
                 parsed.data,
                 parsed.cursor,
+                parsed.cols && parsed.rows ? { cols: parsed.cols, rows: parsed.rows } : undefined,
               );
+              const desired = pendingResizeRef.current;
+              if (orderedResizeRef.current && desired &&
+                  (desired.cols !== parsed.cols || desired.rows !== parsed.rows))
+                outputRecovery.invalidate();
               delivery.cols = parsed.cols;
               delivery.rows = parsed.rows;
+              delivery.resizeMode = orderedResizeRef.current ? "ordered" : undefined;
               if (onSnapshotRef.current) {
                 if (!parsed.cursor) delivery.commit(false);
                 onSnapshotRef.current(
@@ -522,6 +535,7 @@ export function useTerminalConnection(params: {
     exitCode,
     runtimeKind,
     singleRowScrollRef,
+    orderedResizeRef,
     reconnectAttempt,
     failureSince,
     lastCloseReason,

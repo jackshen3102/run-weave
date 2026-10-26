@@ -63,6 +63,10 @@ Backend 重启仍会断开 WebSocket；只有原 tmux/pane/任务 PID 不变才�
   Web 在 xterm write callback 后提交，iOS 在完整帧同步 feed 后提交；接收队列中的数据不算已显示。
   本地终端尺寸变化会作废旧网格的恢复游标；包括断线期间外围提示条导致的布局变化，此时安全降级
   为快照，不承诺短断线无清屏。恢复身份在同一 API/session 的客户端实例内稳定，不写入持久化存储。
+- Web 通过 `resizeMode=ordered` 协商按序尺寸确认；Backend 先发完旧网格的输出，再发送带
+  cursor 的 `resize` 边界。Web 在同一写入队列中切换网格，隐藏或零尺寸容器不发起适配。
+  字节续传缓存不保存尺寸边界，因此实际网格变化仍作废恢复游标；未协商的旧客户端和服务端
+  保留原尺寸同步路径。正常适配不重置终端缓冲或退出 tmux copy mode。
 - 客户端 lease、输出数据各自最多保留 60 秒。超过时间、字节上限、stream 改变或游标无效时，只取
   当前屏幕快照，不推送裁剪后的尾部，不从 persisted scrollback 补历史。
 - [输出镜像](../../backend/src/terminal/runtime/output-screen.ts) 使用固定版本的 headless xterm，
