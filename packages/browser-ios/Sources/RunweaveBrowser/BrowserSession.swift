@@ -209,11 +209,12 @@ public final class BrowserSession: ObservableObject {
   }
 
   public func collapse() {
-    guard let page, isCurrent(page) else { return }
-    state = .collapsed
+    // Leaving local UI must remain possible after the host connection changes.
+    // Navigation and resume still validate the page's source independently.
+    state = page == nil ? .empty : .collapsed
     cancelApplicationRequest()
-    page.cancelJavaScriptDialog()
-    page.webView.endEditing(true)
+    page?.cancelJavaScriptDialog()
+    page?.webView.endEditing(true)
   }
 
   /// Invalidates callbacks synchronously, then retires the document without clearing identity.
