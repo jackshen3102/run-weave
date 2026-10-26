@@ -5,6 +5,7 @@ import type { DesktopBrowserBindingRequest, RemoteBrowserResolveRequest } from "
 import { createRequireAuth, readBearerToken } from "../auth/middleware";
 import type { AuthService } from "../auth/service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
+import type { TerminalSessionIdentityResponse } from "@runweave/shared/terminal/session";
 import { DesktopBrowserBindings, RemoteBrowserError } from "./browser-bindings";
 import { registerRemoteCapabilitiesRoute } from "./capabilities";
 
@@ -35,6 +36,17 @@ export function registerRemoteBrowserRoutes(
   const requireAuth = createRequireAuth(auth);
   registerDesktopNetworkRoutes(app, requireAuth);
   registerRemoteCapabilitiesRoute(app, requireTunnelAuth, requireAuth, browserProfileDir, backendId);
+  app.get("/api/terminal/session/:id/runtime-identity", (req, res) => {
+    if (!matchesHookToken(req.headers["x-runweave-hook-token"], process.env.RUNWEAVE_HOOK_TOKEN)) {
+      res.sendStatus(401); return;
+    }
+    const session = sessions.getSession(req.params.id);
+    if (!session) { res.status(404).json({ code: "terminal_session_not_found" }); return; }
+    const identity: TerminalSessionIdentityResponse = {
+      terminalSessionId: session.id, projectId: session.projectId,
+    };
+    res.json(identity);
+  });
   app.post("/api/desktop-browser/bindings", requireAuth, async (req, res) => {
     const owner = auth.verifyAccessToken(readBearerToken(req) ?? "")?.sessionId;
     if (!owner) { res.sendStatus(401); return; }

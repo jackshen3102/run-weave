@@ -234,6 +234,9 @@ final class AppSession: ObservableObject {
       pendingOverviewEvents.removeAll(keepingCapacity: true)
       HomeOverviewEventPatcher.preserveConversationPreviews(from: overview, into: &value)
       overview = value
+      if let id = terminal?.id, let updated = value.sessions.first(where: { $0.id == id }) {
+        terminal?.projectId = updated.projectId
+      }
       health.status = .online
       error = nil
       startEvents()
@@ -283,12 +286,14 @@ final class AppSession: ObservableObject {
     if let index = overview?.sessions.firstIndex(where: { $0.id == id }) {
       switch change {
       case .pinned: overview?.sessions[index].pinnedAt = value.pinnedAt
+      case .project: overview?.sessions[index].projectId = value.projectId
       case .alias:
         overview?.sessions[index].alias = value.alias
         if let alias = value.alias { overview?.sessions[index].title = alias }
       }
     }
     if case .alias = change, terminal?.id == id { terminal?.alias = value.alias }
+    if case .project = change, terminal?.id == id { terminal?.projectId = value.projectId }
     let refreshed = await reload()
     guard epoch == generation, !Task.isCancelled else { throw CancellationError() }
     if !refreshed { error = "已保存，列表刷新失败，请刷新列表。" }

@@ -199,6 +199,9 @@ public actor APIClient {
       "/api/terminal/session/\(Self.pathComponent(id))", method: "PATCH",
       body: change.body, retryUnauthorized: false)
     guard value.terminalSessionId == id else { throw APIError.invalidResponse }
+    if case .project(let projectID) = change, value.projectId != projectID {
+      throw APIError.invalidResponse
+    }
     return value
   }
   func deleteTerminal(id: String) async throws {

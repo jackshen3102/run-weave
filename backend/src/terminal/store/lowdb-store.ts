@@ -26,6 +26,25 @@ export class LowDbTerminalSessionStore
   extends LowDbPanelStore
   implements TerminalSessionStore
 {
+  async moveSession(terminalSessionId: string, projectId: string, orderedIds: string[]): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      if (!database.data.projects.some((project) => project.id === projectId)) {
+        throw new Error("Target project not found");
+      }
+      const session = database.data.sessions.find((record) => record.id === terminalSessionId);
+      if (!session) throw new Error("Terminal session not found");
+      const order = new Map(orderedIds.map((id, index) => [id, index]));
+      const sessions = database.data.sessions.map((record) => {
+        if (record.id === terminalSessionId) return { ...record, projectId, order: order.get(record.id) };
+        if (record.projectId === projectId && order.has(record.id)) return { ...record, order: order.get(record.id) };
+        return record;
+      });
+      await database.adapter.write({ ...database.data, sessions });
+      database.data.sessions = sessions;
+    });
+  }
+
   async listSessions(): Promise<PersistedTerminalSessionRecord[]> {
     return this.getSessions();
   }

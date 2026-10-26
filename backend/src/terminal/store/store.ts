@@ -255,6 +255,8 @@ export interface UpdateTerminalProjectParams {
 }
 
 export interface TerminalSessionStore {
+  /** Atomically move and append to the target project's session order. */
+  moveSession(terminalSessionId: string, projectId: string, orderedIds: string[]): Promise<void>;
   updateLatestReply(
     terminalSessionId: string,
     panelId: string | null,

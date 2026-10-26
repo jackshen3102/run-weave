@@ -65,6 +65,18 @@ desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久
 
 原生 iOS 不渲染 Web rail。`Contracts/Home.swift` 的 `parentProjectID` 把子 Session 归入父 Project 组，打开 Session 时仍使用原始终端身份。
 
+## 移动终端
+
+桌面/Web 的终端标签右键菜单与 iOS 首页终端长按菜单提供“移动到项目”。
+`PATCH /api/terminal/session/:id` 单独发送 `{ "projectId": "目标主项目 ID" }`，
+目标必须是当前 Backend 已有的主项目；不存在的目标返回 404，与其他更新混发返回 400。
+移动将归属和目标项目末尾排序一起持久化，成功后发送 `terminal_session_moved` 供在线客户端刷新。
+相同目标的请求不重复移动或发送事件。
+
+移动只改变归属，保留终端 ID、进程、tmux、分屏、对话、草稿与当前目录，不发送 `cd` 或重启 Agent。
+Files、Changes 和项目快捷指令随后使用目标项目；原进程仍在原目录运行。
+这不是跨电脑迁移或文件移动，也不改写已有 Activity、定时任务来源与历史记录。
+
 ## Race 的 Worktree 生命周期
 
 Race 为同一目标的每个 worker 创建独立 Worktree、分支与 Terminal，用户分别查看输出和 Diff，

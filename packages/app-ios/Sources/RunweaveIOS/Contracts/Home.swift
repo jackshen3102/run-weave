@@ -22,7 +22,7 @@ struct TerminalState: Codable {
 
 struct HomeTerminal: Codable, Identifiable {
   let terminalSessionId: String
-  let projectId: String
+  var projectId: String
   var alias: String?
   var pinnedAt: String?
   var title: String
@@ -89,7 +89,7 @@ struct HomeConversationPreviewsResponse: Decodable {
 struct TerminalDetails: Decodable, Identifiable {
   var source: ScheduledTaskSource? = nil
   let terminalSessionId: String
-  let projectId: String
+  var projectId: String
   var alias: String?
   let command: String
   let cwd: String
@@ -104,6 +104,7 @@ struct TerminalDetails: Decodable, Identifiable {
 // PATCH returns a session list item, without overview title/subtitle fields.
 struct UpdatedTerminal: Decodable {
   let terminalSessionId: String
+  let projectId: String
   let alias: String?
   let pinnedAt: String?
 }
@@ -117,11 +118,13 @@ struct TerminalCompletionAcknowledgement: Decodable {
 enum TerminalMetadataChange {
   case pinned(Bool)
   case alias(String?)
+  case project(String)
 
   var body: [String: Any] {
     switch self {
     case .pinned(let value): return ["pinned": value]
     case .alias(let value): return ["alias": value as Any? ?? NSNull()]
+    case .project(let value): return ["projectId": value]
     }
   }
 }

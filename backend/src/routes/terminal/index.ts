@@ -412,7 +412,7 @@ export function createTerminalRouter(
     );
   });
 
-  registerTerminalSessionUpdateRoute(router, terminalSessionManager, options?.terminalStateService);
+  registerTerminalSessionUpdateRoute(router, terminalSessionManager, options?.terminalStateService, options?.terminalEventService);
   registerTerminalInputRoutes(router, terminalSessionManager, options);
   registerBrowserAssistanceRoutes(router, terminalSessionManager, options);
   router.delete("/session/:id", async (req, res) => {

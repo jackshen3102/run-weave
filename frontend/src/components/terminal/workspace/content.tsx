@@ -511,6 +511,7 @@ export function TerminalWorkspaceContent({
     createSession,
     closeSession,
     updateSessionAlias,
+    moveSession,
     closeProjectDialog,
     submitProjectDialog,
     removeProject,
@@ -550,6 +551,7 @@ export function TerminalWorkspaceContent({
         onRequestCreate: () => void createSession(),
         onSelect: handleSelectSessionTab,
         onSubmitAlias: updateSessionAlias,
+        onMove: moveSession,
       }}
     />
   );

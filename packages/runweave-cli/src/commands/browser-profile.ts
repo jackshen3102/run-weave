@@ -6,6 +6,7 @@ import {
 } from "@runweave/shared/terminal-browser-profile";
 import { CliError } from "../errors.js";
 import { isRemoteBrowserProfileState, type RemoteBrowserResolveResponse } from "@runweave/shared/remote";
+import type { TerminalSessionIdentityResponse } from "@runweave/shared/terminal/session";
 
 export interface BrowserCommandIo {
   stdout: Pick<NodeJS.WriteStream, "write">;
@@ -91,9 +92,9 @@ function parseAmbientEndpoint(raw: string | undefined): {
 async function resolveRemoteBrowserProfile(
   options: ResolveOptions,
   io: BrowserCommandIo,
+  projectId: string | null,
 ): Promise<ResolvedTerminalBrowserProfile> {
   const terminalSessionId = io.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim();
-  const projectId = io.env.RUNWEAVE_PROJECT_ID?.trim();
   const hookToken = io.env.RUNWEAVE_HOOK_TOKEN?.trim();
   const base = io.env.RUNWEAVE_BASE_URL?.trim() ||
     (io.env.RUNWEAVE_BACKEND_PORT ? `http://127.0.0.1:${io.env.RUNWEAVE_BACKEND_PORT}` : "");
@@ -157,17 +158,48 @@ async function resolveRemoteBrowserProfile(
   }
 }
 
+async function resolveCurrentProjectId(io: BrowserCommandIo): Promise<string | null> {
+  const fallback = io.env.RUNWEAVE_PROJECT_ID?.trim() || null;
+  const id = io.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim();
+  const hookToken = io.env.RUNWEAVE_HOOK_TOKEN?.trim();
+  const base = io.env.RUNWEAVE_BASE_URL?.trim() ||
+    (io.env.RUNWEAVE_BACKEND_PORT ? `http://127.0.0.1:${io.env.RUNWEAVE_BACKEND_PORT}` : "");
+  if (!id || !hookToken || !base) return fallback;
+  try {
+    const response = await fetch(`${base.replace(/\/+$/, "")}/api/terminal/session/${encodeURIComponent(id)}/runtime-identity`, {
+      headers: { "x-runweave-hook-token": hookToken }, signal: AbortSignal.timeout(5_000),
+    });
+    // Older Backends do not expose this hook-authenticated route.
+    if (response.status === 404 || response.status === 401) {
+      if (response.status === 404) {
+        const error = await response.json().catch(() => null) as { code?: string } | null;
+        if (error?.code === "terminal_session_not_found") throw new Error("Terminal session not found");
+      }
+      io.stderr.write("Warning: Backend cannot refresh terminal project identity; using launch environment.\n");
+      return fallback;
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const identity = await response.json() as TerminalSessionIdentityResponse;
+    if (identity.terminalSessionId !== id || typeof identity.projectId !== "string" || !identity.projectId.trim()) {
+      throw new Error("Invalid terminal identity");
+    }
+    return identity.projectId;
+  } catch (error) {
+    throw new CliError(`Terminal project identity is unavailable: ${error instanceof Error ? error.message : String(error)}`, 3);
+  }
+}
+
 export async function resolveBrowserProfile(
   args: string[],
   io: BrowserCommandIo,
 ): Promise<ResolvedTerminalBrowserProfile> {
   const options = parseResolveOptions(args);
+  const projectId = await resolveCurrentProjectId(io);
   if (!io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT?.trim() &&
       (io.env.RUNWEAVE_TERMINAL_SESSION_ID || io.env.RUNWEAVE_PROJECT_ID)) {
-    return resolveRemoteBrowserProfile(options, io);
+    return resolveRemoteBrowserProfile(options, io, projectId);
   }
   const ambient = parseAmbientEndpoint(io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT);
-  const projectId = io.env.RUNWEAVE_PROJECT_ID?.trim() || null;
   const groupId = options.groupId ?? (io.env.RUNWEAVE_BROWSER_GROUP_ID?.trim() || null) ?? ambient.ambientGroupId;
   let response: Response;
   const controller = new AbortController();

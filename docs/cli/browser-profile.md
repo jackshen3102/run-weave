@@ -21,7 +21,7 @@ Backend 协议 2 的响应包含 `binding`（desktopId、hostId、generation、i
 远端 Profile 与工作组受桌面
 独立隧道配置约束；完整通道合同见 [SSH 远程项目](../architecture/ssh-remote-projects.md)。
 
-- 默认 Profile 顺序是当前 `RUNWEAVE_PROJECT_ID` 的 Worktree 绑定，再回退全局默认值。
+- 默认 Profile 顺序是终端当前项目的 Worktree 绑定，再回退全局默认值。CLI 用终端 ID 与 Hook 身份查询 Backend 的 `runtime-identity`，因此移动终端后不依赖进程里未改变的 `RUNWEAVE_PROJECT_ID`。旧 Backend 缺少接口时发出警告，并兼容使用启动环境。
 - `--profile` 只覆盖本次解析，不修改偏好。
 - 当前 Terminal 有 `RUNWEAVE_TERMINAL_SESSION_ID` 且未传 `--group-id` 时，resolver 为该 Terminal
   派生稳定的专属 Group，并返回一次性内存 attribution token；原始 Terminal ID 不进入 Group id。

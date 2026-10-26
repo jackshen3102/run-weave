@@ -27,6 +27,32 @@ export type {
 } from "./base";
 
 export class TerminalSessionManager extends TerminalManagerPanelOperations {
+  private pendingSessionMove: Promise<void> = Promise.resolve();
+
+  moveSession(terminalSessionId: string, projectId: string): Promise<{
+    session: TerminalSessionRecord; previousProjectId: string;
+  } | undefined> {
+    // Serialize moves so concurrent clients append against the latest target order.
+    const operation = this.pendingSessionMove.then(async () => {
+      const session = this.sessions.get(terminalSessionId);
+      if (!session) return undefined;
+      if (!this.projects.has(projectId)) throw new Error("Target project not found");
+      const previousProjectId = session.projectId;
+      if (previousProjectId === projectId) return { session, previousProjectId };
+      const orderedIds = this.listSessions()
+        .filter((record) => record.projectId === projectId)
+        .map((record) => record.id);
+      orderedIds.push(terminalSessionId);
+      await this.sessionStore.moveSession(terminalSessionId, projectId, orderedIds);
+      // Publish only after persistence. Runtime identity, cwd, history and panels stay intact.
+      session.projectId = projectId;
+      applySessionOrder(this.sessions.values(), projectId, orderedIds);
+      return { session, previousProjectId };
+    });
+    this.pendingSessionMove = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
   async createProject(
     name: string,
     projectPath?: string | null,
