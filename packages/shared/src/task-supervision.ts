@@ -116,7 +116,11 @@ export interface SupervisionInput {
   plan: SupervisionPlan[];
   userUpdates: ConversationMessage[];
   recentExchanges: ConversationMessage[];
-  currentReply: ConversationMessage & { rawTurnId: string };
+  /** runtime_error projects a native failed turn, never an Agent completion report. */
+  currentReply: Omit<ConversationMessage, "role"> & {
+    role: ConversationMessage["role"] | "runtime_error";
+    rawTurnId: string;
+  };
   goalDefinition?: SupervisionGoal;
   previousContinuation?: PreviousSupervisionContinuation;
   /** Absent in historical inputs. Kept separate from adopted plans and user messages. */

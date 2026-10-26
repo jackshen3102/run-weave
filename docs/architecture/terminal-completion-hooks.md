@@ -49,6 +49,8 @@ RUNWEAVE_HOOK_TOKEN=<random per-backend token>
 
 `RUNWEAVE_HOOK_ENDPOINT` 是 Codex `TerminalState` 的写入入口；`RUNWEAVE_COMPLETION_HOOK_ENDPOINT` 是完成提醒入口。为了兼容旧 pane，launcher 在缺少 completion endpoint 时会从 agent hook endpoint 派生 `/internal/terminal-completion`。这让多个客户端或多个 dev checkout 可以共享同一个用户级 launcher。事件归属由启动该 tmux pane 时注入的 endpoint、token 和 terminal id 决定，而不是由“最后启动哪个客户端”决定。
 
+App Server 的地址与认证信息由 Backend 在发现、校验并建立连接后注入终端启动环境，同时刷新已有 tmux 终端；刷新等待启动恢复完成，失败沿用现有集成周期重试，重连后同步新连接。Hook 每次从 tmux 环境刷新后使用该连接，不自行查找其他实例的凭据。相关入口为 `backend/src/app-server/integration.ts` 和 `backend/src/terminal/tmux/session-environment-sync.ts`。
+
 旧 pane、PTY session、外部系统终端或缺少 `RUNWEAVE_*` 的进程不会上报完成事件。
 
 ## Hook 安装与上报行为

@@ -89,6 +89,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   tmuxLifecycleCoordinator: TmuxLifecycleCoordinator;
   ptyService: PtyService;
   tmuxService: TmuxService;
+  terminalEnvironmentSync: Promise<void>;
   tmuxOutputWatcher: TmuxOutputWatcher;
   tmuxSocketPathsToCleanOnShutdown: readonly string[];
   evolutionActivationStore: EvolutionActivationStore;

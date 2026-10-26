@@ -28,7 +28,7 @@ const input = z.object({
   plan: z.array(plan),
   userUpdates: z.array(message),
   recentExchanges: z.array(message),
-  currentReply: message.extend({ rawTurnId: id }),
+  currentReply: message.extend({ role: z.enum(["user", "assistant", "runtime_error"]), rawTurnId: id }),
 });
 const decision = z.object({
   decisionId: z.string().uuid(),

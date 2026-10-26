@@ -6,7 +6,7 @@
 
 所有终端沿用现有 Hook、App Server 事件中心、终端状态和完成通知链路。监控服务订阅同一条完成流，也消费现有 App Server consumer 交付的 Hook、completion 和已有原生生命周期完成事件；开关只过滤后台业务处理，不控制采集。
 
-普通事件更新等待状态、取消过期计算。主任务的最终回复事件触发独立 Codex 三分类：completed、blocked、continue。commentary、工具输出、SubagentStop 和静默不触发分类。完整回答从事件所指的原会话读取，不把通知摘要当完整报告；会话暂不可读时显示处理异常，开关保持开启。
+普通事件更新等待状态、取消过期计算。主任务的最终回复或可恢复模型容量错误事件触发独立 Codex 三分类：completed、blocked、continue。commentary、工具输出、SubagentStop 和静默不触发分类。完整回答和错误从事件所指的原会话读取，不把通知摘要当完整报告；会话暂不可读时显示处理异常，开关保持开启。
 
 当前会话 Agent 按原有任务授权执行；监控推动原会话完成已授权的剩余工作并验证结果，不自行执行原任务，也不要求当前会话创建或联系其他 Agent。分类 Agent 只判断原任务、计划、用户范围修改及当前会话的报告，不独立执行或验收。评分表示三个选项的相对倾向，不是统计正确率；并列按 continue、blocked、completed 形成候选结果；候选结果还须通过下述动作门禁，并列不能直接采用。
 
@@ -122,7 +122,7 @@ Codex 使用 App Server 的 `GET /threads/:threadId/supervision-context?messageI
 
 语义缓存位于 App Server profile 的 `supervision-cache/`，总预算 256 MiB；单 thread 正文缓存滚动约 16 MiB、索引元数据上限 8 MiB、最多 4 个内存索引。已淘汰正文通过原始偏移和哈希回读；超过元数据硬上限返回明确错误。重启从完整记录边界继续，源文件替换或截断会重建索引，Backend 校验 sourceVersion，拒绝在替换后的来源上复用旧证据。原始文件被外部删除时报告缺失，历史输入仍可从档案查询。
 
-原生 task_complete 的错误类别和 turn ID 直达监控。当前轮终止错误不因线程已被 Hook 标为空闲或 thread/read 仍报告 active 而丢弃；新一轮 UserPromptSubmit / SessionStart 会清除旧生命周期游标，早于当前投影的错误不覆盖新任务；同一轮已记录的异常也不会被迟到的 active 状态清除。原生生命周期尾部按文件身份与修改状态缓存，未变化时不重复读取正文；完整回复的有界重读也逐次核对本轮运行错误。`server_overloaded` 等即使没有 final 也显示为运行异常，不生成空回复三分类、不宣称完成、不自动切模型。
+原生 task_complete 的错误类别和 turn ID 直达监控。当前轮终止错误不因线程已被 Hook 标为空闲或 thread/read 仍报告 active 而丢弃；新一轮 UserPromptSubmit / SessionStart 会清除旧生命周期游标，早于当前投影的错误不覆盖新任务；同一轮已记录的异常也不会被迟到的 active 状态清除。原生生命周期尾部按文件身份与修改状态缓存，未变化时不重复读取正文；完整回复的有界重读也逐次核对本轮运行错误。`server_overloaded`、明确的模型容量不足等临时错误即使没有 final，也以 `currentReply.role=runtime_error` 作为原生错误证据进入判断，不伪造 Agent 完成报告。判断确认仍有获准工作后，通过原有续接流程在原模型、原会话重试；保留三次上限、草稿、审批、用户中断和投递未知保护。重复 Hook 与原生事件按错误 turn 去重；错误证据仅保存在判定档案，不作为原生消息 ID 回读。鉴权、额度耗尽及其他未明确支持恢复的错误仍显示运行异常，不自动切模型。若监控自身的目标整理或分类模型不可用，仍显示处理异常，不自动重试模型调用。
 
 ## 历史存储与升级
 

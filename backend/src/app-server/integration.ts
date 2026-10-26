@@ -18,6 +18,7 @@ import { handleAgentLifecycleEvent } from "./handlers/agent-lifecycle";
 import { isEventOwnedByThisBackend } from "./ownership";
 import { startAppServerRuntimeStatusSource } from "./runtime-status-source";
 import { StartingPanelStateReconciler } from "./starting-panel-reconciler";
+import { syncExistingTmuxSessionEnvironments } from "../terminal/tmux/session-environment-sync";
 
 const APP_SERVER_AGENT_EVENT_CONSUMER_ID = "backend:agent-events";
 
@@ -43,9 +44,36 @@ export async function initializeAppServerEventIntegration(
   let inFlight: Promise<void> | null = null;
   let stopping: Promise<void> | null = null;
   let connection: AppServerConnectionInfo | null = null;
+  let terminalsNeedConnection = false;
+  // Published Hook credentials must not become explicit discovery overrides:
+  // a restarted local App Server can change its port or token.
+  const discoveryEnv = { ...process.env };
   const abort = new AbortController();
   const panelReconciler = new StartingPanelStateReconciler(services);
 
+  const syncTerminalConnection = async (): Promise<void> => {
+    if (!terminalsNeedConnection || stopped) return;
+    try {
+      // Startup recovery may still be writing the previous launch environment.
+      await services.terminalEnvironmentSync;
+      if (stopped) return;
+      const failures = await syncExistingTmuxSessionEnvironments(
+        services.terminalSessionManager,
+        services.tmuxService,
+      );
+      terminalsNeedConnection = failures.length > 0;
+      for (const failure of failures)
+        logger.warn("terminal.tmux.app-server-environment-sync.failed", {
+          terminalSessionId: failure.terminalSessionId,
+          message: "App Server connection refresh failed; the next integration cycle will retry",
+        });
+    } catch {
+      // A tmux refresh failure must not disconnect the working event consumer.
+      logger.warn("terminal.tmux.app-server-environment-sync.failed", {
+        message: "App Server connection refresh failed; the next integration cycle will retry",
+      });
+    }
+  };
   const stopConsumers = async (): Promise<void> => {
     await runtime.appServerSource?.stop();
     runtime.appServerSource = null;
@@ -65,6 +93,7 @@ export async function initializeAppServerEventIntegration(
     // A connected stream needs no discovery polling. A disconnected stream
     // retains its cursor while we look for a replacement singleton address.
     if (runtime.eventConsumer?.getStatusSnapshot().state === "connected") {
+      await syncTerminalConnection();
       if (connection)
         await panelReconciler.poll(
           new AppServerClient(connection),
@@ -73,11 +102,11 @@ export async function initializeAppServerEventIntegration(
       return;
     }
     try {
-      const next = await discoverAppServer({ env: process.env });
+      const next = await discoverAppServer({ env: discoveryEnv });
       if (stopped) return;
       if (!next) {
         if (!runtime.eventConsumer) {
-          const status = await describeUnavailableAppServer();
+          const status = await describeUnavailableAppServer(discoveryEnv);
           if (!stopped) unavailable(status);
         }
         return;
@@ -96,6 +125,14 @@ export async function initializeAppServerEventIntegration(
         AbortSignal.any([abort.signal, AbortSignal.timeout(5_000)]),
       );
       connection = next;
+      // Hooks use only the owning Backend's verified launch context. Publish
+      // discovery results for new terminals, then refresh already-running panes.
+      Object.assign(process.env, {
+        RUNWEAVE_APP_SERVER_URL: next.baseUrl,
+        RUNWEAVE_APP_SERVER_TOKEN: next.token,
+      });
+      terminalsNeedConnection = true;
+      await syncTerminalConnection();
     } catch (error) {
       await stopConsumers();
       if (stopped) return;
@@ -221,8 +258,7 @@ async function connectAppServerEventIntegration(
   });
 }
 
-async function describeUnavailableAppServer(): Promise<AppServerIntegrationStatus> {
-  const env = process.env;
+async function describeUnavailableAppServer(env: NodeJS.ProcessEnv): Promise<AppServerIntegrationStatus> {
   let configured = Boolean(
     env.RUNWEAVE_APP_SERVER_URL?.trim() ||
     env.RUNWEAVE_APP_SERVER_TOKEN?.trim(),
