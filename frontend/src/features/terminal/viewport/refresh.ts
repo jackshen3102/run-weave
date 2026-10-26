@@ -1,5 +1,10 @@
 const DEFAULT_VIEWPORT_REFRESH_DELAY_MS = 120;
 
+export function canFitTerminalViewport(container: HTMLElement): boolean {
+  return document.visibilityState === "visible" &&
+    container.clientWidth > 0 && container.clientHeight > 0;
+}
+
 interface ScheduleTerminalViewportRefreshOptions {
   requestAnimationFrame?: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame?: (handle: number) => void;

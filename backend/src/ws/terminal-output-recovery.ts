@@ -37,6 +37,7 @@ export function createTerminalOutputRecovery(options: {
   let disposed = false;
   let releaseLease: (() => void) | undefined;
   const params = new URL(request.url ?? "/", "http://localhost").searchParams;
+  const orderedResize = params.get("resizeMode") === "ordered";
   const requestedId = params.get("resumeClientId");
   const clientId =
     requestedId && /^[a-zA-Z0-9_-]{16,128}$/.test(requestedId)
@@ -52,6 +53,11 @@ export function createTerminalOutputRecovery(options: {
   return {
     onFrame(frame: TerminalOutputFrame) {
       if (ready && !disposed) batcher.pushFrame(frame);
+    },
+    onResize(cols: number, rows: number) {
+      if (!ready || disposed || !orderedResize) return;
+      batcher.flush();
+      sendEvent(socket, { type: "resize", cols, rows, cursor: buffer.cursor });
     },
     dispose() {
       disposed = true;
@@ -89,6 +95,7 @@ export function createTerminalOutputRecovery(options: {
           terminalSessionId,
           runtimeKind: "tmux",
           tmuxScrollMode: "single-row",
+          resizeMode: orderedResize ? "ordered" : undefined,
           recovery: includeSnapshot
             ? { mode: resume ? "resume" : "snapshot", reason }
             : undefined,

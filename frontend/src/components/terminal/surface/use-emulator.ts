@@ -19,6 +19,7 @@ import { Terminal } from "@xterm/xterm";
 import type { ClientMode } from "../../../features/client-mode";
 import { DEFAULT_TERMINAL_PREFERENCES } from "../../../features/terminal/state/preferences";
 import { createResizeScheduler } from "../../../features/terminal/viewport/resize-scheduler";
+import { canFitTerminalViewport } from "../../../features/terminal/viewport/refresh";
 import { shouldSuppressWheelInput } from "../../../features/terminal/viewport/wheel-input";
 import {
   IME_COMMIT_WINDOW_MS,
@@ -34,6 +35,7 @@ type MutableRef<T> = { current: T };
 
 interface UseTerminalEmulatorArgs {
   activeRef: MutableRef<boolean>;
+  enqueueResize: (resize: () => void) => void;
   clientMode: ClientMode;
   imeCommitRef: MutableRef<TerminalImeCommit | null>;
   imeCompositionEndedAtRef: MutableRef<number | null>;
@@ -52,6 +54,7 @@ interface UseTerminalEmulatorArgs {
   openTerminalFileLinkRef: MutableRef<(text: string, event: MouseEvent, context?: TerminalFileLinkContext) => void>;
   refreshTerminalViewportRef: MutableRef<(() => void) | null>;
   runtimeKindRef: MutableRef<"tmux" | "pty" | null>;
+  orderedResizeRef: MutableRef<boolean>;
   singleRowScrollRef: MutableRef<boolean>;
   resetScrollInputRef: MutableRef<(() => void) | null>;
   searchAddonRef: MutableRef<SearchAddon | null>;
@@ -67,6 +70,7 @@ interface UseTerminalEmulatorArgs {
 
 export function useTerminalEmulator({
   activeRef,
+  enqueueResize,
   clientMode,
   imeCommitRef,
   imeCompositionEndedAtRef,
@@ -85,6 +89,7 @@ export function useTerminalEmulator({
   paneWorkspaceRef,
   refreshTerminalViewportRef,
   runtimeKindRef,
+  orderedResizeRef,
   singleRowScrollRef,
   resetScrollInputRef,
   searchAddonRef,
@@ -227,11 +232,13 @@ export function useTerminalEmulator({
       initialPreferences.renderer,
     );
 
-    const syncSize = () => {
-      if (!activeRef.current) {
+    let disposed = false;
+    const syncSize = () => enqueueResize(() => {
+      if (disposed || !activeRef.current || !canFitTerminalViewport(container)) {
         return;
       }
-      fitAddon.fit();
+      // Negotiated tmux streams change the parser grid only at a server fence.
+      if (!orderedResizeRef.current) fitAddon.fit();
       const dimensions = fitAddon.proposeDimensions();
       if (!dimensions) {
         return;
@@ -249,7 +256,7 @@ export function useTerminalEmulator({
       };
       sendResize(dimensions.cols, dimensions.rows);
       onViewportResizeRef.current?.();
-    };
+    });
     const resizeScheduler = createResizeScheduler(
       syncSize,
       TERMINAL_RESIZE_DEBOUNCE_MS,
@@ -356,7 +363,7 @@ export function useTerminalEmulator({
       if (
         !activeRef.current ||
         !terminalRef.current ||
-        document.visibilityState !== "visible"
+        !canFitTerminalViewport(container)
       ) {
         return;
       }
@@ -365,7 +372,6 @@ export function useTerminalEmulator({
     };
     refreshTerminalViewportRef.current = refreshTerminalViewport;
 
-    let disposed = false;
     const fontFaceSet = document.fonts;
     let fontReadyPromise: Promise<unknown> | null = null;
     if (fontFaceSet?.ready) {
@@ -559,6 +565,7 @@ export function useTerminalEmulator({
     };
   }, [
     activeRef,
+    enqueueResize,
       clientMode,
     imeCommitRef,
     imeCompositionEndedAtRef,
@@ -577,6 +584,7 @@ export function useTerminalEmulator({
     paneWorkspaceRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
+    orderedResizeRef,
     singleRowScrollRef,
     resetScrollInputRef,
     searchAddonRef,

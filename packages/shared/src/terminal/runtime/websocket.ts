@@ -57,6 +57,8 @@ export type TerminalServerMessage =
       runtimeKind?: "tmux" | "pty";
       /** Ctrl-wheel (SGR 80/81) moves one row; ordinary wheel remains five rows. */
       tmuxScrollMode?: "single-row";
+      /** Opt-in grid changes are fenced by the display stream cursor. */
+      resizeMode?: "ordered";
       recovery?: TerminalOutputRecovery;
     }
   | {
@@ -66,6 +68,12 @@ export type TerminalServerMessage =
       cursor?: TerminalOutputCursor;
       cols?: number;
       rows?: number;
+    }
+  | {
+      type: "resize";
+      cols: number;
+      rows: number;
+      cursor: TerminalOutputCursor;
     }
   | {
       type: "metadata";

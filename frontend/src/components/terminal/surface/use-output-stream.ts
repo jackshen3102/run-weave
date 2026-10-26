@@ -129,6 +129,26 @@ export function useTerminalOutputStream({
   const enqueueNetworkWrite = useMemoizedFn((work: () => Promise<void>) => {
     networkWrites.current = networkWrites.current.then(work, work);
   });
+  const enqueueResize = useMemoizedFn((resize: () => void) => {
+    // A fit must not change the grid while a snapshot/output write is pending.
+    // Include legacy writes in the barrier, as they do not use networkWrites.
+    enqueueNetworkWrite(
+      () => new Promise<void>((resolve) => {
+        const terminal = terminalRef.current;
+        if (!terminal) {
+          resolve();
+          return;
+        }
+        terminal.write("", () => {
+          try {
+            resize();
+          } finally {
+            resolve();
+          }
+        });
+      }),
+    );
+  });
   const renderTerminalSnapshot = useMemoizedFn(
     (
       data: string,
@@ -176,7 +196,7 @@ export function useTerminalOutputStream({
             : BRACKETED_PASTE_MODE_DISABLE
         }`,
         () => {
-          if (delivery?.cols && delivery.rows)
+          if (delivery?.cols && delivery.rows && delivery.resizeMode !== "ordered")
             terminal.resize(localSize.cols, localSize.rows);
           delivery?.commit();
           logTerminalPerf("terminal.snapshot.rendered", {
@@ -347,6 +367,12 @@ export function useTerminalOutputStream({
                 resolve();
                 return;
               }
+              if (delivery.resizeMode === "ordered" && delivery.cols && delivery.rows) {
+                terminal.resize(delivery.cols, delivery.rows);
+                delivery.commit();
+                resolve();
+                return;
+              }
               if (!isTerminalAtBottom(terminal)) setHasNewOutputBelow(true);
               terminal.write(nextChunk, () => {
                 delivery.commit();
@@ -442,6 +468,7 @@ export function useTerminalOutputStream({
   );
 
   return {
+    enqueueResize,
     onOutput,
     onSnapshot,
     renderTerminalSnapshot,

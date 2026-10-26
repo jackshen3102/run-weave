@@ -1,0 +1,42 @@
+version: 1
+name: Terminal 网格与输出同步验收
+description: >
+  验证终端在快照恢复、尺寸变化和隐藏恢复时按展示流边界切换网格，
+  正常切换保留阅读状态与原 tmux 任务，不需要刷新页面。
+
+cases:
+  - id: TVP-001
+    name: 快照未完成时尺寸变化等待输出边界
+    required: true
+    description: >
+      延迟当前快照写入期间不能改变解析网格；恢复后编号行与 tmux 屏幕一致，无重行或漏行。
+    preconditions:
+      - 独立 Dev Session 的真实 Web 终端连接 tmux，输出至少 300 行带唯一编号的中英文文本。
+      - 可仅对本测试观看端暂缓一次快照写入，并记录终端行列数与 WebSocket 消息。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 操作真实页面，触发该观看端快照恢复并暂缓写入；改变窗口宽高，确认快照完成前网格保持原尺寸。
+      - 放行快照；确认按 cursor 收到尺寸边界后才切换网格，最终屏幕编号顺序和 tmux capture 一致，原 pane PID 不变。
+
+  - id: TVP-002
+    name: 隐藏恢复保持原网格和历史阅读位置
+    required: true
+    description: >
+      零尺寸容器不能向后端上报极小网格；恢复原布局后无清屏、额外重连或历史阅读位置跳转。
+    preconditions:
+      - 独立 Dev Session 的真实 Web 终端已有带编号历史，处于 tmux copy mode。
+      - 已等待布局和输出稳定，并记录当前网格、可见行、连接与 pane PID。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 临时隐藏终端容器并触发窗口恢复事件；确认容器宽高为零时终端网格保持原值。
+      - 恢复原布局；确认未重置终端或新建连接，可见编号与阅读位置保持不变，pane PID 未变化。
+
+  - id: TVP-003
+    name: 多次尺寸变化后滚动内容仍与 tmux 一致
+    required: true
+    description: >
+      快速连续调整尺寸并上下滚动后，页面最终网格和可见内容必须与该 tmux 客户端一致。
+    preconditions:
+      - 独立 Dev Session 的真实 Web 终端已有带编号历史，并记录原 pane PID。
+      - 可记录同一观看端的 resize 确认与输出 cursor。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 在历史滚动期间连续改变窗口宽高，等待尺寸确认收敛。
+      - 再上下滚动并回底；逐行核对页面与 tmux capture，确认无重复、拼接、漏行，pane PID 保持不变。
