@@ -8,6 +8,7 @@ import { HostForm } from "./host-form";
 import { BrowserStatus } from "./browser-status";
 import { labels } from "./presentation";
 import { Button } from "../../components/ui/button";
+import { StatusNotice } from "../../components/status-notice";
 import {
   Sheet,
   SheetContent,
@@ -45,10 +46,10 @@ export function TunnelDrawer({ embedded = false }: { embedded?: boolean }) {
   const [editing, setEditing] = useState<TunnelHostConfig | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (!notice?.endsWith(" 连接中断")) return;
+    if (!notice || open || embedded) return;
     const timer = window.setTimeout(() => setNotice(null), 8_000);
     return () => window.clearTimeout(timer);
-  }, [notice, setNotice]);
+  }, [notice, open, embedded, setNotice]);
   useEffect(() => {
     const api = window.electronAPI as RunweaveElectronBridge | undefined;
     if (!api?.isElectron || embedded) return;
@@ -334,10 +335,7 @@ export function TunnelDrawer({ embedded = false }: { embedded?: boolean }) {
   return (
     <>
       {notice && !open && (
-        <div
-          role="status"
-          className="fixed bottom-5 right-5 z-50 max-w-sm rounded-lg border border-border bg-background p-3 text-sm shadow-lg"
-        >
+        <StatusNotice kind="tunnel" className="rounded-lg border border-border bg-background p-3 text-sm text-foreground shadow-lg">
           <p>{notice}</p>
           <Button
             size="sm"
@@ -352,7 +350,7 @@ export function TunnelDrawer({ embedded = false }: { embedded?: boolean }) {
           <Button size="sm" variant="ghost" onClick={() => setNotice(null)}>
             关闭
           </Button>
-        </div>
+        </StatusNotice>
       )}
       <Sheet open={open} onOpenChange={setOpen}>
         {content}
