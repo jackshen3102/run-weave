@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
-import { GitFork, Link2, MessageCircle, PanelsTopLeft, Pencil, X } from "lucide-react";
+import { Copy, GitFork, Link2, MessageCircle, PanelsTopLeft, Pencil, X } from "lucide-react";
 import { useForkTerminalAgent } from "../../../features/terminal/use-fork-agent";
 import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
@@ -256,6 +256,13 @@ export function TerminalSessionTab({
     ?? session.activePanelId ?? null,
   );
   const sideChat = useSideChat(session.terminalSessionId, sideChatPanelId);
+  const copyTerminalId = useMemoizedFn(async () => {
+    try {
+      await navigator.clipboard.writeText(session.terminalSessionId);
+    } catch {
+      useTerminalWorkspaceStore.getState().setRequestError("复制终端 ID 失败，请重试。");
+    }
+  });
   const openSideChat = useMemoizedFn(async () => {
     onSelectSession(session.terminalSessionId);
     await sideChat.model.open();
@@ -417,6 +424,13 @@ export function TerminalSessionTab({
       <ContextMenu>
         <ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
         <ContextMenuContent className="w-56">
+          <ContextMenuItem
+            className="gap-2"
+            onSelect={() => { void copyTerminalId(); }}
+          >
+            <Copy className="h-4 w-4" />
+            复制终端 ID
+          </ContextMenuItem>
           <ContextMenuItem className="gap-2" disabled={sideChat.state.loading}
             title={sideChat.state.capabilities?.reason ?? "独立消息旁聊"}
             onSelect={() => { void openSideChat(); }}>
