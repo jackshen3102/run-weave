@@ -11,6 +11,7 @@ import { MobileLoginProvider } from "./features/mobile-login/provider";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { TunnelDrawer } from "./features/tunnels/drawer";
+import { StatusNoticeProvider } from "./components/status-notice";
 import { useTunnelStore } from "./features/tunnels/store";
 import { SuijiConnectionProvider } from "./features/suiji/connection-provider";
 import { SuijiDrawer } from "./features/suiji/drawer";
@@ -56,6 +57,7 @@ const isElectron = window.electronAPI?.isElectron === true;
 export default function App() {
   return (
     <OverlayProvider>
+      <StatusNoticeProvider>
       <SuijiConnectionProvider>
       <SettingsEditProvider><RunweaveApp /></SettingsEditProvider>
       <ClarityDrawerObserver />
@@ -63,6 +65,7 @@ export default function App() {
       <TunnelDrawer />
       <TerminalSnapshotShareNotification />
       </SuijiConnectionProvider>
+      </StatusNoticeProvider>
     </OverlayProvider>
   );
 }
