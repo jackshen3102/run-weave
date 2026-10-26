@@ -7,6 +7,7 @@ struct HomeTerminalRow: View {
   let projectName: String?
   var branchStatus: HomeBranchStatus? = nil
   let rename: () -> Void
+  let move: () -> Void
   let delete: () -> Void
   @State private var showingCopied = false
   @State private var forkFailure: String?
@@ -101,6 +102,10 @@ struct HomeTerminalRow: View {
       Button(action: setPinned) { Label(pinLabel, systemImage: pinned ? "pin.slash" : "pin") }
         .disabled(!session.canEditTerminal(terminal.id))
       Button("重命名", action: rename).disabled(!session.canEditTerminal(terminal.id))
+      Button(action: move) { Label("移动到项目", systemImage: "folder") }
+        .disabled(!session.canEditTerminal(terminal.id)
+          || !(session.overview?.projects.contains { $0.id != terminal.projectId } ?? false))
+        .accessibilityIdentifier("terminal-move-project")
       Button("删除终端", role: .destructive, action: delete)
         .disabled(!session.canEditTerminal(terminal.id))
     }

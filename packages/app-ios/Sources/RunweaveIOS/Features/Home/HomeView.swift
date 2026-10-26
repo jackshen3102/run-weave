@@ -12,6 +12,7 @@ struct HomeView: View {
   @State private var deleting: HomeTerminal?
   @State private var showingDiagnostics = false
   @State private var renaming: HomeTerminal?
+  @State private var moving: HomeTerminal?
   @State private var initializedGeneration: Int?
   @State private var visibleConversationCounts: [String: Int] = [:]
 
@@ -42,7 +43,7 @@ struct HomeView: View {
   private func row(_ terminal: HomeTerminal, projectName: String? = nil) -> some View {
     HomeTerminalRow(session: session, terminal: terminal, projectName: projectName,
       branchStatus: projectName == nil ? nil : branchStatuses.status(for: terminal, generation: session.generation, online: session.health.status == .online),
-      rename: { renaming = terminal }, delete: { deleting = terminal })
+      rename: { renaming = terminal }, move: { moving = terminal }, delete: { deleting = terminal })
       .onAppear { visibleConversationCounts[terminal.id, default: 0] += 1 }
       .onDisappear {
         let count = visibleConversationCounts[terminal.id, default: 0] - 1
@@ -166,6 +167,7 @@ struct HomeView: View {
       initializedGeneration = nil
       query = ""
       renaming = nil
+      moving = nil
       deleting = nil
       initializeExpansion()
     }
@@ -196,6 +198,12 @@ struct HomeView: View {
     }
     .sheet(item: $renaming) { terminal in
       RenameTerminalView(session: session, terminal: terminal).mobileAnalyticsScreen(.renameTerminal)
+    }
+    .sheet(item: $moving) { terminal in
+      MoveTerminalView(session: session, terminal: terminal) { id in
+        expanded.insert(id)
+        query = ""
+      }
     }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session).mobileAnalyticsScreen(.diagnostics) }
     .confirmationDialog(

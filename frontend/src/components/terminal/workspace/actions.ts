@@ -166,6 +166,25 @@ export function useTerminalWorkspaceActions({
     },
   );
 
+  const moveSession = useMemoizedFn(async (terminalSessionId: string, projectId: string): Promise<void> => {
+    setLoading(true);
+    try {
+      await updateTerminalSession(apiBase, token, terminalSessionId, { projectId });
+      // Cancel a list read started before the write, then obtain the durable target order.
+      await loadSessions();
+      selectProjectContext(projectId, projectId, terminalSessionId);
+      setRequestError(null);
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 401) {
+        onAuthExpired?.();
+        return;
+      }
+      setRequestError(String(error));
+    } finally {
+      setLoading(false);
+    }
+  });
+
   const closeProjectDialog = useMemoizedFn(() => {
     if (loading) {
       return;
@@ -338,6 +357,7 @@ export function useTerminalWorkspaceActions({
     createSession,
     closeSession,
     updateSessionAlias,
+    moveSession,
     closeProjectDialog,
     submitProjectDialog,
     removeProject,

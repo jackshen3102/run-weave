@@ -33,6 +33,7 @@ function isTerminalListInvalidationEvent(
     event.kind === "project_created" ||
     event.kind === "project_deleted" ||
     event.kind === "terminal_session_created" ||
+    event.kind === "terminal_session_moved" ||
     event.kind === "terminal_session_deleted"
   );
 }

@@ -18,6 +18,12 @@ export interface CreateTerminalSessionResponse {
   terminalUrl: string;
 }
 
+/** Current backend-owned identity for tools launched before a terminal was moved. */
+export interface TerminalSessionIdentityResponse {
+  terminalSessionId: string;
+  projectId: string;
+}
+
 export interface CreateTerminalWsTicketResponse {
   ticket: string;
   expiresIn: number;
@@ -151,6 +157,8 @@ export interface AppHomeBranchStatusResponse {
 }
 
 export interface UpdateTerminalSessionRequest {
+  /** Move to an existing primary project; preserves cwd, process and panels. Send alone. */
+  projectId?: string;
   pinned?: boolean;
   alias?: string | null;
   panelSplitEnabled?: boolean;

@@ -11,7 +11,8 @@ import {
 import { createPortal } from "react-dom";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
-import { Copy, GitFork, Link2, MessageCircle, PanelsTopLeft, Pencil, X } from "lucide-react";
+import { Copy, FolderInput, GitFork, Link2, MessageCircle, PanelsTopLeft, Pencil, X } from "lucide-react";
+import { useTerminalProjectsQuery, EMPTY_TERMINAL_PROJECTS } from "../../../features/terminal/queries/workspace";
 import { useForkTerminalAgent } from "../../../features/terminal/use-fork-agent";
 import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
@@ -20,7 +21,12 @@ import { ShimmerText } from "../../ui/shimmer-text";
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../ui/context-menu";
 import {
@@ -206,6 +212,7 @@ export function TerminalSessionTab({
   onSelectSession,
   onRequestCloseSession,
   onRequestEditAlias,
+  onMoveSession,
   onPanelSplitEnabledChange,
 }: {
   session: TerminalSessionListItem;
@@ -216,8 +223,11 @@ export function TerminalSessionTab({
   onSelectSession: (terminalSessionId: string) => void;
   onRequestCloseSession: (terminalSessionId: string) => void;
   onRequestEditAlias: (session: TerminalSessionListItem) => void;
+  onMoveSession: (terminalSessionId: string, projectId: string) => Promise<void>;
   onPanelSplitEnabledChange: (enabled: boolean) => void;
 }) {
+  const projects = useTerminalProjectsQuery().data ?? EMPTY_TERMINAL_PROJECTS;
+  const moveTargets = projects.filter((project) => project.projectId !== session.projectId);
   const activeSessionId = useTerminalWorkspaceStore(
     (state) => state.activeSessionId,
   );
@@ -452,6 +462,24 @@ export function TerminalSessionTab({
             <Pencil className="h-4 w-4" />
             Rename Alias
           </ContextMenuItem>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger className="gap-2" disabled={mutationLoading || moveTargets.length === 0}>
+              <FolderInput className="h-4 w-4" />
+              移动到项目
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="max-h-80 overflow-y-auto">
+              <ContextMenuGroup>
+              <ContextMenuLabel>保留进程、对话和当前目录</ContextMenuLabel>
+              {moveTargets.map((project) => (
+                <ContextMenuItem key={project.projectId} onSelect={() => {
+                  void onMoveSession(session.terminalSessionId, project.projectId);
+                }}>
+                  {project.name}
+                </ContextMenuItem>
+              ))}
+              </ContextMenuGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
           <ContextMenuItem
             aria-disabled={disablePanelSplitToggle ? true : undefined}
             className={[

@@ -2,6 +2,7 @@ import type { Router } from "express";
 import type { UpdateTerminalSessionRequest } from "@runweave/shared/terminal/session";
 import type { TerminalSessionManager } from "../../../terminal/manager/manager";
 import type { TerminalStateService } from "../../../terminal/state/terminal-state-service";
+import type { TerminalEventService } from "../../../terminal/state/terminal-event-service";
 import { toPanelWorkspacePayload, toSessionListItem } from "../../../terminal/application/payloads";
 import { resolveEffectiveTerminalState } from "../../../terminal/application/terminal-state-projection";
 import { logger } from "../../../logging/index";
@@ -13,6 +14,7 @@ export function registerTerminalSessionUpdateRoute(
   router: Router,
   terminalSessionManager: TerminalSessionManager,
   terminalStateService?: TerminalStateService,
+  terminalEventService?: TerminalEventService,
 ): void {
   router.patch("/session/:id", async (req, res) => {
     const parsed = updateTerminalSessionSchema.safeParse(
@@ -34,6 +36,29 @@ export function registerTerminalSessionUpdateRoute(
 
     try {
       let updatedSession = session;
+      if (parsed.data.projectId !== undefined) {
+        const projectId = parsed.data.projectId;
+        if (!terminalSessionManager.listProjects().some((project) => project.id === projectId)) {
+          res.status(404).json({ message: "Target project not found" });
+          return;
+        }
+        const moved = await terminalSessionManager.moveSession(session.id, projectId);
+        if (!moved) { res.status(404).json({ message: "Terminal session not found" }); return; }
+        updatedSession = moved.session;
+        if (moved.previousProjectId !== projectId) {
+          terminalEventService?.record({
+            kind: "terminal_session_moved",
+            terminalSessionId: session.id,
+            projectId: updatedSession.projectId,
+            payload: {
+              previousProjectId: moved.previousProjectId,
+              session: toSessionListItem(updatedSession,
+                resolveEffectiveTerminalState(terminalSessionManager, terminalStateService, updatedSession),
+                toPanelWorkspacePayload(terminalSessionManager, session.id)),
+            },
+          });
+        }
+      }
       if (parsed.data.alias !== undefined) {
         updatedSession =
           (await terminalSessionManager.updateSessionAlias(

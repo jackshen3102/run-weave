@@ -48,6 +48,7 @@ interface WorkspaceSessionCommands {
   onRequestCreate: () => void;
   onRequestClose: (terminalSessionId: string) => void;
   onSubmitAlias: (terminalSessionId: string, alias: string) => Promise<void>;
+  onMove: (terminalSessionId: string, projectId: string) => Promise<void>;
   onReorder: (fromIndex: number, toIndex: number) => void;
 }
 
@@ -339,6 +340,7 @@ export function TerminalWorkspaceShell({
               void setPanelSplitEnabled(terminalSessionId, enabled);
             }}
             onRequestCreateSession={onRequestCreateSession}
+            onMoveSession={sessionCommands.onMove}
           />
           <TerminalWorkspaceStage
             clientMode={clientMode}

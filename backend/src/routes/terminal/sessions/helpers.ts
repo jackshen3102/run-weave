@@ -21,12 +21,16 @@ export const createTerminalSessionSchema = z
 
 export const updateTerminalSessionSchema = z
   .object({
+    projectId: z.string().trim().min(1).optional(),
     alias: z.string().trim().max(80).nullable().optional(),
     pinned: z.boolean().optional(),
     panelSplitEnabled: z.boolean().optional(),
     acknowledgedCompletionRevision: z.number().int().nonnegative().optional(),
   })
-  .strict();
+  .strict()
+  .refine((input) => input.projectId === undefined || Object.keys(input).length === 1, {
+    message: "Move a terminal separately from other updates",
+  });
 
 export const sendTerminalInputSchema = z
   .object({

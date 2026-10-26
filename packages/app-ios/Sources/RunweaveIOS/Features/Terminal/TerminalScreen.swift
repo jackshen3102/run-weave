@@ -59,6 +59,7 @@ struct TerminalScreen: View {
   private var currentTerminal: HomeTerminal? {
     session.overview?.sessions.first { $0.id == details.id }
   }
+  private var projectID: String { currentTerminal?.projectId ?? details.projectId }
   private var canReportCompletionViewed: Bool {
     session.foreground && session.canWrite && session.terminal?.id == details.id
       && controller.canSend && !controller.scrolledBack && tab == "Chat"
@@ -90,7 +91,7 @@ struct TerminalScreen: View {
 
   private var projectName: String {
     session.overview?.projects.first {
-      $0.id == HomeOverview.parentProjectID(details.projectId)
+      $0.id == HomeOverview.parentProjectID(projectID)
     }?.name ?? (cwd as NSString).lastPathComponent
   }
 
@@ -120,17 +121,17 @@ struct TerminalScreen: View {
         chat.opacity(tab == "Chat" ? 1 : 0).allowsHitTesting(tab == "Chat").accessibilityHidden(
           tab != "Chat")
         ChangesView(
-          session: session, projectID: details.projectId, active: tab == "Changes",
+          session: session, projectID: projectID, active: tab == "Changes",
           model: changes
         )
-        .opacity(tab == "Changes" ? 1 : 0).allowsHitTesting(tab == "Changes").accessibilityHidden(
+        .id(projectID).opacity(tab == "Changes" ? 1 : 0).allowsHitTesting(tab == "Changes").accessibilityHidden(
           tab != "Changes")
         FilesView(
-          session: session, projectID: details.projectId, active: tab == "Files", model: changes
-        ).opacity(tab == "Files" ? 1 : 0).allowsHitTesting(tab == "Files").accessibilityHidden(
+          session: session, projectID: projectID, active: tab == "Files", model: changes
+        ).id(projectID).opacity(tab == "Files" ? 1 : 0).allowsHitTesting(tab == "Files").accessibilityHidden(
           tab != "Files")
         TerminalQuickCommandsView(
-          session: session, controller: controller, projectId: details.projectId,
+          session: session, controller: controller, projectId: projectID,
           projectLabel: quickCommandProjectLabel, active: tab == "Commands",
           send: sendQuickCommand, insert: insertQuickCommand, onOpenTerminal: { tab = "Chat" }
         ).opacity(tab == "Commands" ? 1 : 0).allowsHitTesting(tab == "Commands")
@@ -160,7 +161,8 @@ struct TerminalScreen: View {
       } catch { /* A missing view receipt must not suppress the reminder. */ }
     }
     .onChange(of: theme) { controller.surface.applyTheme(dark: $0 != "light") }
-    .task(id: canReadChanges) {
+    .task(id: "\(canReadChanges):\(projectID)") {
+      changes.selectProject(projectID)
       if canReadChanges { await changes.refresh() }
       else { changes.cancel() }
     }
@@ -221,7 +223,7 @@ struct TerminalScreen: View {
     )) { BrowserScreen(browser: browser).clarityMask().mobileAnalyticsScreen(.browser) }
     .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented && !showingConversation))
     .sheet(item: $fileTap) { tap in
-      TerminalFilePreview(session: session, terminalID: details.id, projectID: details.projectId,
+      TerminalFilePreview(session: session, terminalID: details.id, projectID: projectID,
         tap: tap, close: { fileTap = nil }, model: changes)
         .clarityMask().mobileAnalyticsScreen(.filePreview)
     }
@@ -476,8 +478,8 @@ struct TerminalScreen: View {
   }
 
   private var quickCommandProjectLabel: String {
-    let label = scheduledProjectLabel(details.projectId, session: session)
-    return details.projectId.hasPrefix("wt:") ? label : label + " / 主项目"
+    let label = scheduledProjectLabel(projectID, session: session)
+    return projectID.hasPrefix("wt:") ? label : label + " / 主项目"
   }
 
   private func sendQuickCommand(_ item: BackendQuickInput) async throws {

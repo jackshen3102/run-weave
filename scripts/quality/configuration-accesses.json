@@ -931,7 +931,7 @@
     "file": "backend/src/remote/routes.ts",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
     "reason": "RUNWEAVE_HOOK_TOKEN：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },

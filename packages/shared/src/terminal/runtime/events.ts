@@ -99,6 +99,7 @@ export type TerminalEventKind =
   | "project_created"
   | "project_deleted"
   | "terminal_session_created"
+  | "terminal_session_moved"
   | "terminal_session_deleted"
   | "terminal_state_changed"
   | "terminal_bell"
@@ -119,6 +120,12 @@ interface TerminalEventEnvelopeBase {
 }
 
 export type TerminalEventEnvelope =
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_session_moved";
+      terminalSessionId: string;
+      projectId: string;
+      payload: { previousProjectId: string; session: TerminalSessionListItem };
+    })
   | (TerminalEventEnvelopeBase & {
       kind: "completion_acknowledged";
       terminalSessionId: string;

@@ -24,6 +24,7 @@ interface TerminalSessionTabStripProps {
     enabled: boolean,
   ) => void;
   onRequestCreateSession: () => void;
+  onMoveSession: (terminalSessionId: string, projectId: string) => Promise<void>;
 }
 
 export function TerminalSessionTabStrip({
@@ -36,6 +37,7 @@ export function TerminalSessionTabStrip({
   onRequestEditAlias,
   onPanelSplitEnabledChange,
   onRequestCreateSession,
+  onMoveSession,
 }: TerminalSessionTabStripProps) {
   const { links } = useHandoffLinks();
   const panelWorkspaceBySessionId = useTerminalWorkspaceStore(
@@ -79,6 +81,7 @@ export function TerminalSessionTabStrip({
                 onSelectSession={onSelectSession}
                 onRequestCloseSession={onRequestCloseSession}
                 onRequestEditAlias={onRequestEditAlias}
+                onMoveSession={onMoveSession}
                 onPanelSplitEnabledChange={(enabled) => {
                   onPanelSplitEnabledChange(session.terminalSessionId, enabled);
                 }}
