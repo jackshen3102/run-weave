@@ -124,6 +124,9 @@ CLI 会发送 agent 名本身作为启动命令，也可以通过 `--agent-start
 
 ## 读取上下文
 
+桌面/Web 的终端标签右键菜单提供“复制终端 ID”，复制完整的 `terminalSessionId`，
+可直接用于下列命令。剪贴板写入失败时界面提示重试；终端名称不替代该 ID。
+
 ```bash
 rw project list --json
 rw terminal list --json
