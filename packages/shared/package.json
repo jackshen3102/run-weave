@@ -55,6 +55,7 @@
     "./terminal/panel": "./src/terminal/panel.ts",
     "./terminal/preview": "./src/terminal/preview.ts",
     "./terminal/project": "./src/terminal/project.ts",
+    "./terminal/branch-updates": "./src/terminal/branch-updates.ts",
     "./terminal/project-context": "./src/terminal/project-context.ts",
     "./terminal/session": "./src/terminal/runtime/session.ts",
     "./terminal/state": "./src/terminal/runtime/state.ts",

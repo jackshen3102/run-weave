@@ -6,6 +6,7 @@ struct HomeTerminalRow: View {
   let terminal: HomeTerminal
   let projectName: String?
   var branchStatus: HomeBranchStatus? = nil
+  let showBranchUpdates: () -> Void
   let rename: () -> Void
   let move: () -> Void
   let delete: () -> Void
@@ -32,10 +33,8 @@ struct HomeTerminalRow: View {
   }
 
   var body: some View {
-    Button {
-      Task { await session.openTerminal(terminal.id) }
-    } label: {
-      VStack(alignment: .leading, spacing: 4) {
+    VStack(alignment: .leading, spacing: 4) {
+      Button { Task { await session.openTerminal(terminal.id) } } label: {
         HStack {
           Text(terminal.title).font(.headline).foregroundColor(.primary).lineLimit(1)
             .layoutPriority(1)
@@ -49,32 +48,38 @@ struct HomeTerminalRow: View {
           Spacer()
           if session.metadataWrites.contains(terminal.id) { ProgressView() }
           TerminalStatusBadge(terminal: terminal).fixedSize()
-        }
-        if let projectName {
-          HStack(spacing: 5) {
-            Text(projectName).lineLimit(1).truncationMode(.middle)
-            if let branchStatus, branchStatus.state != "not-repository" {
-              Text("·")
+        }.contentShape(Rectangle())
+      }.buttonStyle(.plain).frame(minHeight: 44)
+      if let projectName {
+        HStack(spacing: 5) {
+          Text(projectName).font(.caption).foregroundColor(.secondary).lineLimit(1)
+          Spacer(minLength: 3)
+          if let branchStatus, branchStatus.state != "not-repository" {
+            Button(action: showBranchUpdates) {
               HomeBranchStatusLabel(status: branchStatus)
-                .frame(maxWidth: 160, alignment: .leading)
-                .fixedSize(horizontal: true, vertical: false).layoutPriority(1)
-            }
-          }.font(.caption).foregroundColor(.secondary).lineLimit(1)
-        }
-        if hasConversation {
-          if let preview = terminal.conversationPreview, preview.available {
-            Text("最近输入：\(preview.userText ?? "暂无输入记录")").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-              .font(.caption).foregroundColor(.secondary)
-            Text("最近回复：\(preview.agentText ?? "尚无回复")").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-              .font(.caption).foregroundColor(.secondary)
-          } else {
-            Text(previewStatus).lineLimit(1).font(.caption).foregroundColor(.secondary)
+                .font(.caption).frame(minHeight: 44)
+            }.buttonStyle(.borderless)
+              .accessibilityIdentifier("home-branch-updates-\(terminal.id)")
           }
-        } else {
-          Text(terminal.subtitle).lineLimit(1).font(.caption).foregroundColor(.secondary)
         }
-      }.padding(.vertical, 4)
-    }
+      }
+      Button { Task { await session.openTerminal(terminal.id) } } label: {
+        VStack(alignment: .leading, spacing: 4) {
+          if hasConversation {
+            if let preview = terminal.conversationPreview, preview.available {
+              Text("最近输入：\(preview.userText ?? "暂无输入记录")").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                .font(.caption).foregroundColor(.secondary)
+              Text("最近回复：\(preview.agentText ?? "尚无回复")").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                .font(.caption).foregroundColor(.secondary)
+            } else {
+              Text(previewStatus).lineLimit(1).font(.caption).foregroundColor(.secondary)
+            }
+          } else {
+            Text(terminal.subtitle).lineLimit(1).font(.caption).foregroundColor(.secondary)
+          }
+        }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+      }.buttonStyle(.plain)
+    }.padding(.vertical, 4)
     .swipeActions(edge: .leading, allowsFullSwipe: false) {
       Button(action: setPinned) { Label(pinLabel, systemImage: pinned ? "pin.slash" : "pin") }
         .tint(.orange).disabled(!session.canEditTerminal(terminal.id))

@@ -21,7 +21,7 @@ const PREVIEW_SEARCH_DEBOUNCE_MS = 250;
 export function useTerminalPreviewQueries(input: {
   projectId: string | null;
   hasProjectPath: boolean;
-  mode: "file" | "changes" | "explorer" | null;
+  mode: "file" | "changes" | "explorer" | "branch-updates" | null;
   query: string;
   selectedFilePath?: string;
   selectedChangePath?: string;

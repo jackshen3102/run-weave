@@ -36,7 +36,7 @@ const rules = [
           linuxHomePrefix,
         )}[^/\\s"'\\\`]+(?:/|$)`,
         "i",
-      ).test(value),
+      ).test(withoutHttpRoute(value)),
   },
   {
     id: "windows-user-path",
@@ -165,6 +165,14 @@ function scanStagedAddedLines() {
 
 function matchingRules(value) {
   return rules.filter((rule) => rule.test(value));
+}
+
+function withoutHttpRoute(value) {
+  // Express registers URL paths here; inspect any remaining arguments normally.
+  return value.replace(
+    /^(\s*(?:router|app)\.(?:get|post|put|patch|delete|head|options|all|use)\(\s*)(["'])([^"'\r\n]*)\2(?=\s*,)/,
+    "$1$2[http-route]$2",
+  );
 }
 
 function runGit(args) {

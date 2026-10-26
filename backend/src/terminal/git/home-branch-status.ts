@@ -3,6 +3,16 @@ import { realpath } from "node:fs/promises";
 import { promisify } from "node:util";
 import type { AppHomeBranchStatus } from "@runweave/shared/terminal/session";
 
+import { BRANCH_UPDATES_LIMIT, type BranchUpdatesResponse, type BranchUpdatesTarget, type BranchUpdatesSnapshot } from "@runweave/shared/terminal/branch-updates";
+
+export class BranchUpdatesTargetChangedError extends Error {
+  constructor() { super("Branch updates target changed"); }
+}
+
+type Comparison =
+  | { state: "ready"; head: string; remote: string; base: string; oid: string; checkedAt: string }
+  | { state: "not-repository" | "unavailable"; reason?: BranchUpdatesResponse["reason"] };
+
 const exec = promisify(execFile);
 const TTL = 10 * 60_000;
 const RECHECK_TTL = 2_000;
@@ -22,6 +32,7 @@ async function git(cwd: string, args: string[]): Promise<string> {
 export class HomeBranchStatusService {
   private readonly snapshots = new Map<string, Entry<Snapshot>>();
   private readonly remotes = new Map<string, Entry<{ base: string; oid: string; checkedAt: string }>>();
+  private readonly updates = new Map<string, Entry<Omit<BranchUpdatesResponse, "target">>>();
   private active = 0;
   private readonly waiting: Array<() => void> = [];
 
@@ -67,7 +78,92 @@ export class HomeBranchStatusService {
     return { terminalSessionId, cwd, ...snapshot };
   }
 
+  async branchUpdates(target: BranchUpdatesTarget, refresh = false): Promise<BranchUpdatesResponse> {
+    const cwd = target.kind === "project" ? target.path : target.cwd;
+    let directory: string;
+    try { directory = await realpath(cwd); }
+    catch { return { target, state: "unavailable" }; }
+    const entry = this.entry(this.updates, directory);
+    if (!entry.pending) {
+      entry.pending = this.limited(async () => {
+        let value: Omit<BranchUpdatesResponse, "target">;
+        const startingHead = await git(directory, ["rev-parse", "--verify", "HEAD^{commit}"]).catch(() => null);
+        const startingBranch = await this.currentBranch(directory).catch(() => undefined);
+        try {
+          const comparison = await this.comparison(directory, refresh);
+          if (comparison.state !== "ready") return comparison;
+          const currentBranch = await this.currentBranch(directory);
+          if (startingHead !== comparison.head || startingBranch !== currentBranch) throw new BranchUpdatesTargetChangedError();
+          const previous = entry.value?.snapshot;
+          let snapshot: BranchUpdatesSnapshot;
+          if (previous?.headOid === comparison.head && previous.baseOid === comparison.oid
+            && previous.currentBranch === currentBranch) {
+            snapshot = { ...previous, checkedAt: comparison.checkedAt };
+          } else {
+            const output = await git(directory, ["log", "--date-order", `--max-count=${BRANCH_UPDATES_LIMIT}`,
+              "-z", "--format=%H%x00%s%x00%an%x00%cI", `${comparison.head}..${comparison.oid}`, "--"]);
+            const fields = output.split("\0");
+            if (fields.pop() !== "" || fields.length % 4) throw new Error("Invalid commit list");
+            const items: BranchUpdatesSnapshot["items"] = [];
+            for (let i = 0; i < fields.length; i += 4) {
+              const [oid, subject, authorName, committedAt] = fields.slice(i, i + 4);
+              if (oid === undefined || subject === undefined || authorName === undefined || committedAt === undefined
+                || !/^[a-f0-9]{40,64}$/.test(oid) || !Number.isFinite(Date.parse(committedAt))) {
+                throw new Error("Invalid commit metadata");
+              }
+              items.push({ oid, subject, authorName, committedAt });
+            }
+            snapshot = { headOid: comparison.head, currentBranch, baseRemote: comparison.remote,
+              baseBranch: comparison.base, baseOid: comparison.oid, checkedAt: comparison.checkedAt, items };
+          }
+          value = { state: "ready", snapshot };
+        } catch (error) {
+          if (error instanceof BranchUpdatesTargetChangedError) throw error;
+          const previous = entry.value?.snapshot;
+          // Never relabel another HEAD or branch's cached titles as the current target.
+          const [head, branch] = await Promise.all([
+            git(directory, ["rev-parse", "--verify", "HEAD^{commit}"]).catch(() => null),
+            this.currentBranch(directory).catch(() => undefined),
+          ]);
+          value = previous && head === previous.headOid && branch === previous.currentBranch
+            ? { state: "stale", snapshot: previous, reason: "remote-unavailable" }
+            : { state: "unavailable", reason: "remote-unavailable" };
+        }
+        if (await realpath(cwd).catch(() => null) !== directory
+          || (value.snapshot && (await git(directory, ["rev-parse", "--verify", "HEAD^{commit}"]) !== value.snapshot.headOid
+            || await this.currentBranch(directory) !== value.snapshot.currentBranch))) {
+          throw new BranchUpdatesTargetChangedError();
+        }
+        return value;
+      }).then((value) => {
+        entry.value = value;
+        if (value.state === "ready") { this.snapshots.delete(cwd); this.snapshots.delete(directory); }
+        return value;
+      })
+        .finally(() => { entry.pending = undefined; });
+    }
+    const value = await entry.pending;
+    if (await realpath(cwd).catch(() => null) !== directory) throw new BranchUpdatesTargetChangedError();
+    return { target, ...value };
+  }
+
+  private async currentBranch(cwd: string): Promise<string | null> {
+    try { return await git(cwd, ["symbolic-ref", "--quiet", "--short", "HEAD"]); }
+    catch (error) {
+      if ((error as { code?: number }).code === 1) return null;
+      throw error;
+    }
+  }
+
   private async compare(cwd: string, refresh: boolean): Promise<Snapshot> {
+    const comparison = await this.comparison(cwd, refresh);
+    if (comparison.state !== "ready") return { state: comparison.state };
+    const behind = Number(await git(cwd, ["rev-list", "--count", `${comparison.head}..${comparison.oid}`]));
+    if (!Number.isSafeInteger(behind) || behind < 0) throw new Error("Invalid Git count");
+    return { state: "ready", baseBranch: comparison.base, behind, checkedAt: comparison.checkedAt };
+  }
+
+  private async comparison(cwd: string, refresh: boolean): Promise<Comparison> {
     // A missing directory or inaccessible Git repository is unknown, not an empty comparison.
     try { await git(cwd, ["rev-parse", "--show-toplevel"]); }
     catch (error) {
@@ -77,7 +173,7 @@ export class HomeBranchStatusService {
       throw error;
     }
     if (await git(cwd, ["rev-parse", "--is-shallow-repository"]) === "true") {
-      return { state: "unavailable" };
+      return { state: "unavailable", reason: "shallow-repository" };
     }
     const common = await realpath(await git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]));
     const remotes = (await git(cwd, ["remote"])).split("\n").filter(Boolean);
@@ -104,9 +200,11 @@ export class HomeBranchStatusService {
     if (!base || entry.failed) throw new Error("Remote default branch unavailable");
     const head = await git(cwd, ["rev-parse", "--verify", "HEAD^{commit}"]);
     // Reject unrelated histories rather than suggesting a meaningless rebase count.
-    await git(cwd, ["merge-base", head, base.oid]);
-    const behind = Number(await git(cwd, ["rev-list", "--count", `${head}..${base.oid}`]));
-    if (!Number.isSafeInteger(behind) || behind < 0) throw new Error("Invalid Git count");
-    return { state: "ready", baseBranch: base.base, behind, checkedAt: base.checkedAt };
+    try { await git(cwd, ["merge-base", head, base.oid]); }
+    catch (error) {
+      if ((error as { code?: number }).code === 1) return { state: "unavailable", reason: "unrelated-history" };
+      throw error;
+    }
+    return { state: "ready", head, remote, ...base };
   }
 }

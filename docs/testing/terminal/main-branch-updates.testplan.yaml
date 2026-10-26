@@ -1,0 +1,235 @@
+version: 1
+name: 主分支更新视图验收
+description: >
+  验证远端默认主分支中当前目标尚未包含的提交，以最近最多 10 条在 Web/Electron 与原生 iOS 展示，
+  数量文案同样封顶，保持目标身份、只读工作区、旧结果语义及原终端导航。
+  本文件是行为验收合同；每例独立建立并清理自有资源，
+  原型、格式校验、类型检查与构建均不能代替产品行为证据。
+
+cases:
+  - id: MBU-001
+    name: 差异列表固定最多十条且保留原状态精确计数
+    required: true
+    description: >
+      差异查询只包含远端默认分支上当前 HEAD 不可达的提交，按 Git date-order 返回最多 10 条；
+      原状态接口的 behind 仍为精确值，不因界面上限改变。
+    preconditions:
+      - 本例隔离 Backend 登记四个专属仓库，默认分支相对当前 HEAD 分别有 0、3、10、14 个唯一提交，各有已记录的 subject 和 OID。
+      - 每个仓库当前分支还有一个独有提交，已保存 Git 原始差异列表作为预期，不使用用户真实仓库。
+    steps:
+      - 使用认证后的真实 branch-updates API 分别读取四个目标；确认返回 0、3、10、10 条，OID 和顺序与各自 git log --date-order --max-count=10 的差异范围一致。
+      - 确认当前分支独有提交不出现，未提供总数、分页或可扩大上限的参数；条目的标题、作者和时间准确。
+      - 查询原分支状态接口，确认 behind 分别仍为 0、3、10、14；清理本例登记和自有仓库。
+
+  - id: MBU-002
+    name: 比较远端默认分支而非功能分支的上游
+    required: true
+    description: >
+      默认分支不是 main 且当前功能分支有其他 upstream 时，查询仍以远端默认分支为基准。
+    preconditions:
+      - 本例隔离远端默认 HEAD 指向 trunk，当前功能分支 upstream 指向 feature，trunk 与 feature 有不同唯一 marker。
+      - 本例独立 Backend 已登记该仓库，远端不要求交互式凭据。
+    steps:
+      - 通过真实 API 请求并手动刷新，确认 baseBranch 为 trunk，列表包含 trunk marker，不包含仅 feature 上的 marker。
+      - 核对 baseOid 与本例远端 trunk 一致，UI 实施后使用 toolkit:playwright-cli 打开该目标并确认显示实际默认分支名称；清理本例资源。
+
+  - id: MBU-003
+    name: detached HEAD 可以读取对应差异
+    required: true
+    description: detached HEAD 被识别为具体提交目标，不错误显示无分支或空结果，且不创建或切换分支。
+    preconditions:
+      - 本例自有仓库处于已记录 OID 的 detached HEAD，远端默认分支包含两个尚未包含的提交。
+      - 本例隔离 Backend 已登记该目标，已保存引用列表。
+    steps:
+      - 请求真实 API，确认 currentBranch 为 null、headOid 为原 OID，列表恰好为那两个提交。
+      - 确认展示以短 SHA 识别当前目标，git symbolic-ref -q HEAD 仍无分支，引用列表未新增本地分支；清理本例资源。
+
+  - id: MBU-004
+    name: Project 与 terminal 入口分别使用已登记的实际目录
+    required: true
+    description: >
+      桌面按 Project.path，手机按 session.cwd；两者不同时各自查询真实目录，不回退父项目，指向相同目录时结果相同。
+    preconditions:
+      - 本例隔离 Backend 中，专属 Project.path 指向仓库 A，专属 terminal.cwd 指向仓库 B，二者的默认分支提交具有不同 marker。
+      - 本例还登记一个无运行 terminal 的可用 Worktree，以及一个路径不可用的 Worktree。
+    steps:
+      - 分别读取 project 和 terminal 的真实更新接口，确认 target 身份及列表对应 A 和 B，没有串入对方 marker。
+      - 读取无运行 terminal 的 Worktree，确认可返回其自己的数据；读取路径不可用目标，确认 409，不能回退父项目。
+      - 在本例配置中把两个入口指向同一仓库，重新读取并确认 headOid、baseOid 与 items 一致；清理本例资源。
+
+  - id: MBU-005
+    name: 鉴权与目标解析不能变成任意路径查询
+    required: true
+    description: >
+      无认证、无效参数和不存在目标被明确拒绝，不读取用户提交的任意 cwd、ref 或另一个目标。
+    preconditions:
+      - 本例隔离 Backend 有一个合法登记目标，另有未登记目录且包含唯一 marker。
+      - 本例可分别发送无 token、合法 token 和携带额外查询参数的请求。
+    steps:
+      - 无 token 请求两个接口，确认 401 且没有提交内容；合法 token 读取不存在的目标，确认 404。
+      - 携带非法 refresh、cwd、remote、ref 或 limit 参数请求，确认 400，未登记目录 marker 不出现。
+      - 确认合法目标仍可正常读取；清理本例资源。
+
+  - id: MBU-006
+    name: 读取期间目标变化不会返回混合快照
+    required: true
+    description: HEAD 或登记路径在读取期间改变时，旧结果不能被标为新目标的成功快照。
+    preconditions:
+      - 本例自有仓库、独立 Backend 和受控 Git 执行延迟可在固定 OID 后、响应前暂停查询。
+      - 已保存变更前后两个目标的 HEAD 与唯一 marker，操作只涉及本例仓库。
+    steps:
+      - 发起真实查询，在暂停点只由本例操作者切换 HEAD，再放行；确认返回 409 branch_updates_target_changed，没有混合两个 HEAD 的 items。
+      - 对新目标再次请求，确认列表与新 HEAD 一致；恢复并清理本例资源。
+
+  - id: MBU-007
+    name: 不可比较仓库不显示为没有更新
+    required: true
+    description: 非 Git、浅克隆及无共同祖先是不可比较状态，不返回 ready 空列表或已同步结论。
+    preconditions:
+      - 本例隔离 Backend 登记普通目录、浅克隆仓库及与默认分支无共同祖先的专属仓库。
+      - 本例执行前已记录仓库深度与引用状态。
+    steps:
+      - 请求三种目标，确认分别返回 not-repository、unavailable 加 shallow-repository、unavailable 加 unrelated-history，不携带其他目标快照。
+      - 确认未自动 unshallow、改 remote 或切分支；清理本例资源。
+
+  - id: MBU-008
+    name: 桌面刷新失败保留同目标的旧列表和检查时间
+    required: true
+    description: >
+      已成功读取的同目标同 HEAD 在远端不可达时保留旧列表及原成功时间，UI 明确标记旧结果，
+      不用新的失败时间冒充成功，也不变为无差异。
+    preconditions:
+      - 本例独立 Dev Session 中有专属仓库，真实更新列表已有成功快照，已记录 OID 与 checkedAt。
+      - 本例可在不影响其他目标的前提下阻断此仓库远端访问。
+    steps:
+      - 使用 toolkit:playwright-cli 在真实更新页阻断远端后点击刷新，确认显示检查中且重复点击受限。
+      - 确认失败后保留原列表及 checkedAt，显示上次结果提示，不显示已同步；恢复本例远端，手动刷新成功后提示消失。
+      - 只清理本例连接、仓库及 Dev Session 资源。
+
+  - id: MBU-009
+    name: Git 网络认证失败有界结束且不启动交互提示
+    required: true
+    description: 需要密码或不可达的远端在既有超时预算内结束，不挂起请求、不弹认证终端、不阻塞其他目标。
+    preconditions:
+      - 本例隔离 Backend 登记一个需要交互认证的自有远端及另一个可达的自有仓库。
+      - 本例可以记录 Git 子进程参数、执行时长及同一服务的活动请求。
+    steps:
+      - 请求认证目标，确认无交互提示，并在实际配置的进程超时预算内返回 unavailable；并发读取可达目标，确认得到其列表。
+      - 确认请求数突增时 Git 工作并发不超过现有上限 4，完成后无遗留本例进程；清理本例资源。
+
+  - id: MBU-010
+    name: 查看和刷新不修改当前代码状态
+    required: true
+    description: fetch 允许更新远端跟踪引用，但不改变本地 HEAD、索引、分支及工作区内容，不产生同步操作。
+    preconditions:
+      - 本例自有仓库同时包含已暂存、未暂存及未跟踪文件，已保存 HEAD、索引文件哈希、本地引用及文件哈希清单。
+      - 本例远端默认分支比当前 HEAD 多若干提交，隔离 Backend 已登记该仓库。
+    steps:
+      - 通过真实 API 首次读取并手动刷新两次，再比较记录；确认 HEAD、索引、本地分支及工作区文件未变。
+      - 确认仅允许的远端跟踪引用和 fetch 相关 Git 元数据变化，没有 merge、rebase、checkout、reset、commit 或 Agent 输入；清理本例资源。
+
+  - id: MBU-011
+    name: 桌面数量入口和 Preview 页签均使用十条上限
+    required: true
+    description: >
+      桌面从正确 Worktree 进入新页签，数量、摘要、tooltip 与无障碍标签均不展示大于 10 的提交数，
+      原 Changes 仍显示未提交文件。
+    preconditions:
+      - 本例正确 worktree 的真实 Dev Session 可用，并有自有 0、3、10、14 条差异的登记目标和至少一个未提交文件。
+      - 本例已有 Browser/终端页面，Sidecar 的 Preview 可处于关闭或隐藏入口状态。
+    steps:
+      - 使用 toolkit:playwright-cli 点击 14 条目标的主分支提示，确认选中正确 Project 并打开 Preview 的主分支更新页签，恰好 10 条。
+      - 检查数量相关可见文案、tooltip 和 aria，确认使用最近 10 条，不出现总数 14 或 10+；对 0、3、10 条目标确认分别无差异、实际 3 条、最近 10 条。
+      - 切回 Changes，确认仍显示该目标未提交文件；检查终端与输入草稿未变，清理本例资源。
+
+  - id: MBU-012
+    name: 桌面切换 Project 后忽略旧列表迟到响应
+    required: true
+    description: 同一连接内由 A 切到 B 时，延迟到达的 A 响应不能覆盖 B 的标题、数量或提交列表。
+    preconditions:
+      - 本例真实 Dev Session 中有 A、B 两个独立 Project，提交分别有 A_ONLY 和 B_ONLY marker。
+      - 本例可仅对 A 的 branch-updates 请求施加响应延迟。
+    steps:
+      - 使用 toolkit:playwright-cli 打开 A 更新列表，在 A 响应前切换 B 并等待 B 显示。
+      - 释放 A 响应，确认界面仍是 B，不闪出 A_ONLY；关闭重开仍指向 B；移除本例延迟并清理资源。
+
+  - id: MBU-013
+    name: iOS 首页数量按钮独立进入正确列表
+    required: true
+    description: >
+      首页数量触摸区独立于打开终端，不嵌套按钮；点击 14 条目标只展示最近 10 条，无差异目标可展示空状态。
+    preconditions:
+      - 本例原生 iOS 源码 App 已构建安装到已租用的既有 Simulator，连接本例隔离 Backend。
+      - 关注列表有专属 14 条差异终端与无差异终端，已有 controller 数和首页截图记录。
+    steps:
+      - 使用 toolkit:agent-device 点击 main 数量提示，确认进入正确 terminal.cwd 的全屏主分支更新，最多 10 条，标题、数量及 accessibility 使用封顶文案。
+      - 确认触摸区至少 44pt、没有顺带打开终端或新增 controller；返回后点击无差异目标，确认没有待同步提交。
+      - 返回首页并释放本例设备会话和租约，不修改用户手机。
+
+  - id: MBU-014
+    name: iOS 终端菜单往返保留原终端及草稿
+    required: true
+    description: 从终端操作菜单进入更新列表后，返回同一 controller、原标签和原输入草稿，不新增第五个终端标签。
+    preconditions:
+      - 本例原生 App 与隔离 Backend 可用，专属终端处于一个已记录的原有标签且含未发送草稿。
+      - 已记录终端 ID、controller 身份和草稿，专属仓库有已知差异提交。
+    steps:
+      - 使用 toolkit:agent-device 打开终端操作菜单并进入主分支更新，确认所读目标为该终端 cwd。
+      - 点击返回终端，确认原 terminal/controller、原标签和草稿均保留，四个原标签没有增删，也没有发送输入。
+      - 只清理本例会话与设备租约。
+
+  - id: MBU-015
+    name: iOS 长标题阅读及重开保持阅读位置
+    required: true
+    description: 长标题可换行并读完，列表可滚动到第十条，同一目标关闭重开恢复锚点，不串入另一工作区。
+    preconditions:
+      - 本例原生 App 连接自有差异仓库，最新 10 条中含超长中文和英文 subject，原文已保存。
+      - 本例首页有足够行可以滚动，设备会话与租约独立归本例所有。
+    steps:
+      - 使用 toolkit:agent-device 从首页进入目标，确认长标题可完整阅读且没有整页横向溢出，滚动到第十条并记录可见 OID。
+      - 返回首页再进入同一目标，确认恢复到该 OID 附近且首页也保留先前位置；本例不要求逐像素一致。
+      - 清理本例数据、设备会话和租约。
+
+  - id: MBU-016
+    name: iOS 切换连接后旧响应不能覆盖新电脑
+    required: true
+    description: 连接代际改变后，即使 terminal ID 或目录名称相同，也不能显示旧电脑的列表。
+    preconditions:
+      - 本例原生 App 有两个自有 Backend 连接 A、B，故意使用相同 terminal ID 与目录名，提交具有不同 marker。
+      - 本例可延迟 A 的更新响应，设备及两套服务都归本例所有。
+    steps:
+      - 使用 toolkit:agent-device 在 A 发起读取，返回并切换 B，进入 B 的更新页。
+      - 放行 A 的响应，确认 B 的来源电脑、数量与列表不变且不含 A marker；清理本例延迟和资源。
+
+  - id: MBU-017
+    name: iOS 刷新过程中返回不会被迟到结果重新打开
+    required: true
+    description: 同一连接内刷新时离开页面会终止本轮呈现资格，迟到响应不重新打开列表或改变原终端。
+    preconditions:
+      - 本例原生 App 的专属终端菜单可以进入更新页，Backend 可延迟本例刷新响应。
+      - 已记录该终端 controller、标签及原输入草稿。
+    steps:
+      - 使用 toolkit:agent-device 点击刷新后立即返回终端，再放行延迟响应。
+      - 确认仍在原终端且 controller、标签、草稿未变，更新页没有重新出现；清理本例资源。
+
+  - id: MBU-018
+    name: 新客户端连接旧 Backend 时明确降级
+    required: true
+    description: 新列表接口不存在时客户端给出不可提供列表的反馈，不将 404 误当无差异，不自动改连或重试。
+    preconditions:
+      - 本例专属原生 App 连接一个仍支持旧分支状态但没有新 branch-updates 路由的隔离 Backend。
+      - 旧状态明确显示该专属终端有差异，已记录连接身份和请求数。
+    steps:
+      - 使用 toolkit:agent-device 从数量入口进入，确认提示当前后台暂时无法提供提交列表，仍可返回。
+      - 确认未显示已同步、没有借用另一电脑列表、没有自动重试或改变连接；清理本例资源。
+
+  - id: MBU-019
+    name: iOS 失败刷新保持旧结果并允许手动恢复
+    required: true
+    description: 同目标同 HEAD 的刷新失败不丢失旧提交和成功时间，手动成功后清除旧结果提示。
+    preconditions:
+      - 本例原生 App 的专属目标已有成功读取的列表和已记录 checkedAt，隔离远端可以只对本例断开及恢复。
+      - 本例使用独立设备会话，不修改其他仓库网络。
+    steps:
+      - 使用 toolkit:agent-device 在断开本例远端后点击刷新，确认有检查中反馈，失败后仍保留旧列表和原成功时间，明确显示上次结果提示。
+      - 恢复本例远端后手动刷新，确认成功时间更新、旧结果提示消失，提交数量仍封顶为 10；清理本例资源。

@@ -153,6 +153,10 @@ public actor APIClient {
       body: ["terminalSessionIds": ids, "refresh": refresh])
   }
 
+  func branchUpdates(terminalID: String, refresh: Bool) async throws -> BranchUpdatesResponse {
+    try await authorized("/api/app/home/branch-updates/\(Self.pathComponent(terminalID))?refresh=\(refresh)")
+  }
+
   func details(id: String) async throws -> TerminalDetails {
     try await authorized("/api/terminal/session/\(Self.pathComponent(id))")
   }

@@ -14,6 +14,7 @@ struct TerminalActionsMenu: View, Equatable {
   let share: () -> Void
   let supervisionEnabled: Bool
   let canFork: Bool
+  @Binding var showingBranchUpdates: Bool
   @Binding var showingSupervision: Bool
   @Binding var deleting: Bool
   @Binding var showingHistory: Bool
@@ -44,6 +45,9 @@ struct TerminalActionsMenu: View, Equatable {
       Button { showingSupervision = true } label: {
         Label(supervisionEnabled ? "长任务监控 · 已开启" : "长任务监控", systemImage: "eye")
       }.accessibilityIdentifier("terminal-menu-task-supervision")
+      Button { showingBranchUpdates = true } label: {
+        Label("主分支更新", systemImage: "arrow.triangle.branch")
+      }.accessibilityIdentifier("terminal-menu-branch-updates")
       Button { showingInfo = true } label: {
         Label("终端信息", systemImage: "info.circle")
       }
@@ -59,5 +63,9 @@ struct TerminalActionsMenu: View, Equatable {
     } label: {
       Image(systemName: "ellipsis")
     }.accessibilityLabel("终端操作")
+      .fullScreenCover(isPresented: $showingBranchUpdates) {
+        BranchUpdatesView(session: session, terminalID: terminalID, cwd: cwd,
+          title: session.overview?.sessions.first(where: { $0.id == terminalID })?.title ?? "当前终端", returnLabel: "终端")
+      }
   }
 }

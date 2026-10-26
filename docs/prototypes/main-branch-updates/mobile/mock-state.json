@@ -1,0 +1,119 @@
+{
+  "project": "Runweave",
+  "date": "2026-10-26",
+  "checkedAt": "15:28",
+  "contexts": [
+    {
+      "id": "main",
+      "name": "main",
+      "branch": "main",
+      "head": "8e4c92a",
+      "behind": 0,
+      "sessions": 1
+    },
+    {
+      "id": "wt-1",
+      "name": "wt-1",
+      "branch": "feat/source-view",
+      "head": "61d3ab2",
+      "behind": 14,
+      "sessions": 2
+    },
+    {
+      "id": "wt-2",
+      "name": "wt-2",
+      "branch": "fix/terminal-focus",
+      "head": "4c9f2a8",
+      "behind": 3,
+      "sessions": 1
+    }
+  ],
+  "commits": [
+    {
+      "sha": "8e4c92a",
+      "title": "fix(terminal): 保留会话阅读位置，避免切换后回到顶部",
+      "author": "Jack Shen",
+      "time": "14:32"
+    },
+    {
+      "sha": "a7f31d6",
+      "title": "feat(browser): 支持工作区绑定 Browser Profile",
+      "author": "Jack Shen",
+      "time": "13:58"
+    },
+    {
+      "sha": "d2b8e10",
+      "title": "fix(ios): 恢复连接后重新加载终端状态",
+      "author": "Jack Shen",
+      "time": "12:46"
+    },
+    {
+      "sha": "4c9f2a8",
+      "title": "feat(terminal): 支持将后台运行移至历史",
+      "author": "Jack Shen",
+      "time": "11:25"
+    },
+    {
+      "sha": "f681b32",
+      "title": "fix(backend): 优化 Activity worker 异常恢复",
+      "author": "Jack Shen",
+      "time": "10:42"
+    },
+    {
+      "sha": "bc2a719",
+      "title": "refactor(shared): 统一运行时版本信息合同",
+      "author": "Jack Shen",
+      "time": "10:06"
+    },
+    {
+      "sha": "93d0e45",
+      "title": "fix(preview): 切换项目时清除旧文件差异",
+      "author": "Jack Shen",
+      "time": "09:40"
+    },
+    {
+      "sha": "e6a17c3",
+      "title": "feat(ios): 更新快捷指令后台运行入口",
+      "author": "Jack Shen",
+      "time": "09:13"
+    },
+    {
+      "sha": "72cbb90",
+      "title": "fix(browser): 修复浮层关闭后的焦点恢复",
+      "author": "Jack Shen",
+      "time": "08:51"
+    },
+    {
+      "sha": "c1e42f7",
+      "title": "docs: 更新终端工作区服务说明",
+      "author": "Jack Shen",
+      "time": "08:22"
+    }
+  ],
+  "terminals": [
+    {
+      "id": "source",
+      "title": "源码变更视图",
+      "context": "wt-1",
+      "status": "等待输入",
+      "userText": "先做一个交互原型",
+      "agentText": "已生成桌面端原型，可查看主分支更新。"
+    },
+    {
+      "id": "focus",
+      "title": "终端焦点修复",
+      "context": "wt-2",
+      "status": "已完成",
+      "userText": "检查切换终端后的输入焦点",
+      "agentText": "焦点恢复已检查。"
+    },
+    {
+      "id": "main",
+      "title": "主分支工作区",
+      "context": "main",
+      "status": "空闲",
+      "userText": "查看当前主分支状态",
+      "agentText": "当前工作区没有未提交变更。"
+    }
+  ]
+}

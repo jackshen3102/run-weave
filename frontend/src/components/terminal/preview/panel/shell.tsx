@@ -65,7 +65,7 @@ interface PreviewActions {
 interface PreviewNavigation {
   activeProject: ActiveProjectLike | null;
   mode: string | null;
-  onSetMode: (mode: "changes" | "file" | "explorer") => void;
+  onSetMode: (mode: "changes" | "file" | "explorer" | "branch-updates") => void;
 }
 
 interface PreviewViewOptions {
@@ -105,6 +105,7 @@ type SaveStatus =
   | "conflict";
 
 function describeMode(mode: string | null | undefined): string {
+  if (mode === "branch-updates") return "主分支更新";
   if (mode === "file") {
     return "Open";
   }
@@ -238,7 +239,7 @@ export function TerminalPreviewPanelShell({
                   <Save className="h-4 w-4" />
                 </Button>
               ) : null}
-              {activeTool === "preview" ? (
+              {activeTool === "preview" && mode !== "branch-updates" ? (
                 <>
                   <Button
                     type="button"
@@ -289,7 +290,7 @@ export function TerminalPreviewPanelShell({
               role="tablist"
               aria-label="Preview tasks"
             >
-              {(["changes", "explorer", "file"] as const).map((previewMode) => (
+              {(["changes", "explorer", "file", "branch-updates"] as const).map((previewMode) => (
                 <button
                   type="button"
                   role="tab"
