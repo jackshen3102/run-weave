@@ -563,6 +563,7 @@ async function assembleRuntimeServices(
     tmuxService,
     tmuxOutputWatcher,
     tmuxSocketPathsToCleanOnShutdown,
+    terminalEnvironmentSync: environmentSync,
     evolutionActivationStore,
     evolutionAnalysisStore,
     evolutionContextPackStore,

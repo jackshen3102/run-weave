@@ -553,6 +553,14 @@
   },
   {
     "file": "backend/src/app-server/integration.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "保存 Backend 启动时的连接发现上下文，防止后来发布给 Hook 的连接覆盖原发现来源；不作为持久配置。"
+  },
+  {
+    "file": "backend/src/app-server/integration.ts",
     "kind": "environment",
     "expression": "env.RUNWEAVE_APP_SERVER_TOKEN",
     "count": 1,

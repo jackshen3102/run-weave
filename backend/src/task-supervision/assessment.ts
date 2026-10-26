@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { SupervisionAssessment, SupervisionInput, TaskOutcome, TaskWatch, SupervisionDecisionSummary } from "@runweave/shared/task-supervision";
 
-export const ASSESSMENT_POLICY_VERSION = "2026-10-19-deliverable-evidence-v8";
+export const ASSESSMENT_POLICY_VERSION = "2026-10-27-runtime-error-recovery-v9";
 // Frozen on 40 synthetic calibration examples; scores are not correctness probabilities.
 export const ASSESSMENT_THRESHOLDS = { minimumScore: 0.70, minimumMargin: 0.20 };
 export const assessmentSchema = z.object({

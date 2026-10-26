@@ -1,6 +1,6 @@
 import type { ChangeSupervisionRequest, SupervisionHookResponse, SupervisionTarget, TaskWatch } from "@runweave/shared/task-supervision";
 import { currentSupervisionDecisions } from "@runweave/shared/task-supervision";
-import type { ConversationContent } from "@runweave/shared/terminal/conversation";
+import type { SupervisionConversationResponse } from "@runweave/shared/terminal/conversation";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { clearTerminalDraft, terminalInputAdmission } from "../terminal/runtime/input-admission";
 import { sameTarget, synchronizeContext } from "./synchronization";
@@ -8,13 +8,14 @@ import { taskCandidates } from "./context";
 import { SupervisionError } from "./errors";
 import { reserveContinuation } from "./verdict";
 import { supervisionLogger } from "./diagnostics";
+import { readFinalReply } from "./reply";
 
 type Offer = Extract<SupervisionHookResponse, { action: "request-continuation" }>;
 interface ContinuationOperations {
   get: () => Promise<TaskWatch>;
   watch: () => TaskWatch;
   manager: TerminalSessionManager;
-  read: (thread: string) => Promise<ConversationContent>;
+  read: (thread: string) => Promise<SupervisionConversationResponse>;
   current: (target: SupervisionTarget) => boolean;
   transaction: <T>(operation: () => T | Promise<T>) => Promise<T>;
   cancel: () => void;
@@ -64,11 +65,13 @@ export async function retryContinuation(request: ChangeSupervisionRequest, opera
   if (!session || !panel || panel.terminalState?.state !== "agent_idle")
     throw new SupervisionError("原 Agent 当前不是空闲状态，未重试续接。");
   const inputRevision = terminalInputAdmission(session).revision;
+  const { native: latestReply } = await readFinalReply(async () => source, {
+    kind: "reply", eventId: "user-retry", source: "terminal", ...target,
+    summary: null, createdAt: new Date().toISOString(),
+  }, new AbortController().signal);
   const offer = await operations.transaction(() => {
     const watch = operations.watch();
     const decision = currentSupervisionDecisions(watch).at(-1);
-    const latestReply = source.turns.flatMap((turn) => turn.messages)
-      .filter((message) => message.role === "assistant" && message.phase !== "commentary").at(-1);
     if (!operations.current(target) || !sameTarget(watch.target, target) || !watch.enabled || watch.waitingFor || watch.revision !== request.expectedRevision ||
       !request.expectedInputVersion || terminalInputAdmission(session).inputVersion !== request.expectedInputVersion ||
       !decision || decision.decisionId !== request.decisionId || decision.outcome !== "continue" || decision.assessment?.disposition === "hold" ||

@@ -92,15 +92,16 @@ cases:
       - 清理本例资源并保留输入字节、调用计数与状态证据。
 
   - id: TBC-008
-    name: 无 final 的原生错误仍准确显示一次中断
+    name: 无 final 的模型容量错误进入有界续接且按轮去重
     required: true
-    description: 错误结束保留原生原因，不被 idle 或通用读取失败覆盖，也不当成业务完成。
+    description: 临时模型容量错误保留原生原因，经判断恢复已授权任务，不伪造 final 或重复消耗额度。
     preconditions:
-      - 本例独立会话同一 turn 产生 server_overloaded 任务结束事件且 last_agent_message 为空，native 与 hook 均报告该结束。
-      - 本例有 lifecycle 到 Backend 的真实连接，分类与投递接收器可计数。
+      - 本例独立会话有明确未完成的用户任务；错误组分别为 server_overloaded 与 agent_error 加 Selected model is at capacity 提示，均无 final，native 与 hook 报告同一 turn。
+      - 本例有 lifecycle 到 Backend 的真实连接，分类替身固定为有效 continue，投递接收器能记录并确认原会话消费监督输入。
     steps:
-      - 发送两路结束事件，确认当前状态只有一次该 turn 中断，错误类别为 server_overloaded，未生成空 final 分类或 completed 结论。
-      - 确认没有自动切模型或重复投递，历史能追溯两路事件对应同一轮次，然后清理本例资源。
+      - 分别发送各组的两路结束事件，确认仅创建一个判定和一次原会话续接，currentReply.role 为 runtime_error，保留原生错误且未生成空 final 或 completed 结论。
+      - 同一任务后续轮次持续产生容量错误并确认消费续接，确认最多发送三次，随后以 continuation_limit 暂停；真实会话来源回读不会请求 runtime-error 证据 ID，没有自动切模型。
+      - 保存错误、原会话输入、判定与额度记录，然后清理本例资源。
 
   - id: TBC-009
     name: 启动迁移完整保留档案且可重复恢复

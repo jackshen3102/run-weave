@@ -15,7 +15,7 @@ import {
 import { previousContinuation } from "./assessment";
 import { prepareGoalEvidence } from "./goals";
 import { sameTarget, synchronizeContext } from "./synchronization";
-import { readFinalReply, alreadyProcessedReply } from "./reply";
+import { readFinalReply, alreadyProcessedReply, isRuntimeErrorReply } from "./reply";
 import {
   buildSupervisionInput,
   digest,
@@ -77,8 +77,6 @@ export async function processSupervisionReply(
     });
   supervisionLogger.info("task-supervision.reply.started", trace);
   try {
-    if (event.error)
-      throw new Error(`${event.error.code}: ${event.error.message}`);
     const { source, messages, native } = await readFinalReply(
       () => operations.readContext(id, target.threadId),
       event,
@@ -104,9 +102,14 @@ export async function processSupervisionReply(
       synchronizeContext(w, taskCandidates(source));
       w.sourceVersion = source.sourceVersion;
       const latestUser = taskCandidates(source).at(-1);
+      const latestInput = messages.filter((message) => message.role === "user").at(-1);
       if (
         w.pauseReason === "interrupted" ||
-        (latestUser && messages.indexOf(latestUser) > messages.indexOf(native!))
+        (native.role === "runtime_error" && w.waitingFor) ||
+        (native.role === "runtime_error" && latestInput?.rawTurnId &&
+          latestInput.rawTurnId !== native.rawTurnId) ||
+        (native.role !== "runtime_error" && latestUser &&
+          messages.indexOf(latestUser) > messages.findIndex((message) => message.id === native.id))
       ) {
         delete w.pendingReply;
         skip("interrupted_or_new_user_input");
@@ -232,14 +235,14 @@ export async function processSupervisionReply(
     const reply = {
       ...native,
       rawTurnId: native.rawTurnId ?? native.id,
-      phase: "final" as const,
+      ...(native.role !== "runtime_error" ? { phase: "final" as const } : {}),
     };
     const previous = previousContinuation(snapshot,
       snapshot.lastObservedContinuationId ? operations.store.summary(id, snapshot.lastObservedContinuationId) : undefined);
     const input = buildSupervisionInput(snapshot, source, reply, previous);
-    input.deliverables = await collectDeliverables(
+    input.deliverables = native.role === "runtime_error" ? { items: [], omittedCount: 0 } : await collectDeliverables(
       operations.resolve(target.terminalSessionId, target.panelId).root,
-      reply,
+      { ...reply, role: "assistant" },
       INPUT_BUDGET_BYTES - Buffer.byteLength(JSON.stringify(input)) - 100,
       controller.signal,
     );
@@ -298,8 +301,8 @@ export async function processSupervisionReply(
           ...result.guidance.authorizationMessageIds,
           ...(previous ? [previous.reportMessageId] : []),
         ]),
-      ].filter((messageId) => !messageId.startsWith("goal-manual:"));
-      if (result.outcome === "completed" && result.assessment?.disposition !== "hold")
+      ].filter((messageId) => !messageId.startsWith("goal-manual:") && !isRuntimeErrorReply(messageId));
+      if (native.role !== "runtime_error" && result.outcome === "completed" && result.assessment?.disposition !== "hold")
         w.completedReplyIds = [
           ...new Set([...(w.completedReplyIds ?? []), reply.id]),
         ];
