@@ -445,6 +445,14 @@ export function TerminalWorktreeRail({
                           >
                             {getContextDetail(context)}
                           </span>
+                          {!unavailable ? (
+                            <WorktreeBranchStatus
+                              status={branchStatuses.data?.find((status) =>
+                                status.projectId === context.projectId
+                                && status.path === context.path && status.head === context.head)}
+                              failed={branchStatuses.isError}
+                            />
+                          ) : null}
                         </span>
                         {browserSummary ? (
                           <span
@@ -456,18 +464,6 @@ export function TerminalWorktreeRail({
                         ) : null}
                       </span>
                     </button>
-                    {!unavailable ? (
-                      <WorktreeBranchStatus
-                        status={branchStatuses.data?.find((status) =>
-                          status.projectId === context.projectId
-                          && status.path === context.path && status.head === context.head)}
-                        failed={branchStatuses.isError}
-                        onOpen={() => {
-                          onSelectContext(context.projectId);
-                          useTerminalPreviewStore.getState().openPreview(context.projectId, "branch-updates");
-                        }}
-                      />
-                    ) : null}
                     {context.isPrimary ? (
                       <span
                         aria-label="Permanently pinned"

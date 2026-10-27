@@ -55,7 +55,7 @@ DOM 检查与静态截图不能替代该交互验收。
 
 ## 主分支更新
 
-Worktree 主分支状态可打开 Preview 的“主分支更新”页签；直接点击页签也可读取当前 Project。
+Worktree 主分支状态仅作只读提示，属于切换 Worktree 的热区；提交记录通过右侧 Preview 的“主分支更新”页签读取当前 Project。
 桌面按登记 Project/Worktree.path 查询，原生 iOS 首页与终端菜单按登记 session.cwd 查询，
 不互相回退。共享合同为 [Branch updates](../../packages/shared/src/terminal/branch-updates.ts)，
 领域读取复用 [主分支状态服务](../../backend/src/terminal/git/home-branch-status.ts) 的远端识别与 fetch。

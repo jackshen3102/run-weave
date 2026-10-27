@@ -129,16 +129,16 @@ cases:
       - 确认仅允许的远端跟踪引用和 fetch 相关 Git 元数据变化，没有 merge、rebase、checkout、reset、commit 或 Agent 输入；清理本例资源。
 
   - id: MBU-011
-    name: 桌面数量入口和 Preview 页签均使用十条上限
+    name: 桌面状态保持切换热区且 Preview 页签使用十条上限
     required: true
     description: >
-      桌面从正确 Worktree 进入新页签，数量、摘要、tooltip 与无障碍标签均不展示大于 10 的提交数，
+      桌面 Worktree 状态为只读提示，点击仍切换目标；右侧 Preview 读取当前目标，数量、摘要、tooltip 与无障碍标签均不展示大于 10 的提交数，
       原 Changes 仍显示未提交文件。
     preconditions:
       - 本例正确 worktree 的真实 Dev Session 可用，并有自有 0、3、10、14 条差异的登记目标和至少一个未提交文件。
       - 本例已有 Browser/终端页面，Sidecar 的 Preview 可处于关闭或隐藏入口状态。
     steps:
-      - 使用 toolkit:playwright-cli 点击 14 条目标的主分支提示，确认选中正确 Project 并打开 Preview 的主分支更新页签，恰好 10 条。
+      - 使用 toolkit:playwright-cli 点击 14 条目标的主分支提示，确认只切换到正确 Project，状态提示没有独立按钮且未打开或切换 Preview 页签；从右侧 Preview 打开主分支更新，确认列表恰好 10 条。
       - 检查数量相关可见文案、tooltip 和 aria，确认使用最近 10 条，不出现总数 14 或 10+；对 0、3、10 条目标确认分别无差异、实际 3 条、最近 10 条。
       - 切回 Changes，确认仍显示该目标未提交文件；检查终端与输入草稿未变，清理本例资源。
 

@@ -2,30 +2,27 @@ import { branchUpdatesCountLabel, BRANCH_UPDATES_LIMIT } from "@runweave/shared/
 import type { TerminalProjectContextBranchStatus } from "@runweave/shared/terminal/project-context";
 import { isWorktreeBranchStatusStale } from "../../../features/terminal/queries/branch-status";
 
-export function WorktreeBranchStatus({ status, failed, onOpen }: {
+export function WorktreeBranchStatus({ status, failed }: {
   status?: TerminalProjectContextBranchStatus;
   failed: boolean;
-  onOpen: () => void;
 }) {
   if (status?.state === "not-repository") return null;
   const stale = !status || failed || isWorktreeBranchStatusStale(status);
   const hasCount = status?.baseBranch !== undefined && status.behind !== undefined;
   const comparison = hasCount
     ? status.behind! > 0
-      ? `查看 ${status.baseBranch} 待同步提交，${branchUpdatesCountLabel(status.behind!)}`
+      ? `${status.baseBranch} 待同步提交，${branchUpdatesCountLabel(status.behind!)}`
       : `与 ${status.baseBranch} 无落差`
     : "分支状态待更新";
   const description = comparison + (stale && hasCount ? "，待更新" : "")
     + (status?.checkedAt ? `；上次更新：${new Date(status.checkedAt).toLocaleString()}` : "");
   return (
-    <button
-      type="button"
-      onClick={onOpen}
+    <span
       data-testid="terminal-worktree-branch-status"
       aria-label={description}
       title={description}
       className={[
-        "flex min-h-7 min-w-0 shrink-0 items-center gap-1 whitespace-nowrap text-[10px] tabular-nums",
+        "flex min-w-0 shrink-0 items-center gap-1 whitespace-nowrap text-[10px] tabular-nums",
         !stale && (status?.behind ?? 0) > 0 ? "text-amber-400" : "text-slate-500",
       ].join(" ")}
     >
@@ -34,6 +31,6 @@ export function WorktreeBranchStatus({ status, failed, onOpen }: {
         <span>{status.behind! > 0 ? status.behind! >= BRANCH_UPDATES_LIMIT ? "最近 10 条" : `↓${status.behind}` : "✓"}</span>
       </> : null}
       {stale ? <span>待更新</span> : null}
-    </button>
+    </span>
   );
 }
