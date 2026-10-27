@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { Response, Router } from "express";
 import { z } from "zod";
 import type { CreateTerminalProjectRequest, UpdateTerminalProjectRequest } from "@runweave/shared/terminal/project";
@@ -29,12 +31,13 @@ const createTerminalProjectSchema = z
 
 const updateTerminalProjectSchema = z
   .object({
+    mainBranch: z.string().trim().max(1_000).nullable().optional(),
     name: z.string().trim().min(1).optional(),
     path: z.string().nullable().optional(),
   })
   .strict()
-  .refine((payload) => payload.name !== undefined || "path" in payload, {
-    message: "Project name or path is required",
+  .refine((payload) => payload.name !== undefined || "path" in payload || "mainBranch" in payload, {
+    message: "Project name, path or main branch is required",
   });
 
 const reorderProjectsSchema = z
@@ -60,6 +63,17 @@ async function resolveProjectPathInput(
     );
   }
   return normalized;
+}
+
+async function resolveMainBranchInput(raw: string | null | undefined): Promise<string | null | undefined> {
+  if (raw === undefined) return undefined;
+  const branch = raw?.trim() || null;
+  if (branch === null) return null;
+  try {
+    const { stdout } = await promisify(execFile)("git", ["check-ref-format", "--branch", branch], { timeout: 5_000 });
+    if (stdout.trim() === branch) return branch;
+  } catch { /* Invalid branch names are a client error. */ }
+  throw new TerminalPreviewError("Invalid main branch name", 400);
 }
 
 function handleProjectError(res: Response, error: unknown) {
@@ -156,6 +170,7 @@ export function registerTerminalProjectRoutes(
 
     try {
       const projectPath = await resolveProjectPathInput(parsed.data.path);
+      const mainBranch = await resolveMainBranchInput(parsed.data.mainBranch);
       const existingContextIds = terminalSessionManager.listProjectContextIds(
         req.params.id,
       );
@@ -163,6 +178,7 @@ export function registerTerminalProjectRoutes(
         req.params.id,
         {
           name: parsed.data.name,
+          ...(mainBranch !== undefined ? { mainBranch } : {}),
           ...(projectPath !== undefined ? { path: projectPath } : {}),
         },
       );

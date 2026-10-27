@@ -60,14 +60,20 @@ Worktree 主分支状态仅作只读提示，属于切换 Worktree 的热区；�
 不互相回退。共享合同为 [Branch updates](../../packages/shared/src/terminal/branch-updates.ts)，
 领域读取复用 [主分支状态服务](../../backend/src/terminal/git/home-branch-status.ts) 的远端识别与 fetch。
 
-列表只取远端默认主分支中当前 HEAD 不可达的最近 10 个提交，保留 merge commit，
+项目可在桌面端右键项目名 → Edit Project 中设置主分支。`PATCH /api/terminal/project/:id` 的可选
+`mainBranch` 保存远端分支名（如 `release/next`）；缺失保留原设置，空值或空白恢复远端默认分支。
+关注列表计数、Worktree 状态与提交列表都继承所属父 Project 的设置；手机端消费相同 Backend 设置。
+远端仍优先 origin，否则使用唯一 remote；指定分支不可用时显示读取失败，不回退到默认分支。
+缓存按所选基准隔离，切换设置不会沿用其他基准的计数或提交列表。
+
+列表只取所选远端主分支中当前 HEAD 不可达的最近 10 个提交，保留 merge commit，
 显示标题、短 SHA、作者和提交时间。客户端数量同样最多 10；达到上限用“最近 10 条”表示
 展示范围，不显示真实总数或 10+。旧状态接口的精确 behind 合同不变。
 
 新增接口为 `GET /api/terminal/project/:projectId/branch-updates` 与
 `GET /api/app/home/branch-updates/:terminalSessionId`，仅接受可选 `refresh=true|false`，
 不接收任意路径、ref 或 limit。读取使用固定 head/base OID，目标变化返回 409；无共同历史、
-浅克隆、非 Git 与读取失败不伪造零。失败只保留同目录、同 HEAD 与同分支的旧列表及原检查时间。
+浅克隆、非 Git 与读取失败不伪造零。失败只保留同目录、同 HEAD、同当前分支与同基准设置的旧列表及原检查时间。
 仅打开、切换目标、手动刷新时读取列表，不增加正文轮询。fetch 可更新远端跟踪引用，
 不执行分支切换、合并、rebase 或修改索引/工作区。
 

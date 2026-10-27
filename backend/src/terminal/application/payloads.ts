@@ -28,6 +28,7 @@ export function toProjectPayload(
     projectId: project.id,
     name: project.name,
     path: project.path ?? null,
+    mainBranch: project.mainBranch ?? null,
     createdAt: project.createdAt.toISOString(),
     isDefault: project.isDefault,
   };

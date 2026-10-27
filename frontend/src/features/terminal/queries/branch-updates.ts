@@ -1,3 +1,5 @@
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
+import { useTerminalProjectsQuery } from "./workspace";
 import { useEffect, useRef } from "react";
 import { useMemoizedFn } from "ahooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,8 +12,11 @@ export function useBranchUpdates(projectId: string | null, path: string | null, 
   const { apiBase, token, scope, onAuthExpired } = useTerminalRuntime();
   const queryClient = useQueryClient();
   const force = useRef(false);
+  const projects = useTerminalProjectsQuery();
+  const parentProjectId = projectId ? resolveTerminalParentProjectId(projectId) : null;
+  const mainBranch = projects.data?.find((project) => project.projectId === parentProjectId)?.mainBranch ?? null;
   const query = useQuery({
-    queryKey: ["branch-updates", scope, projectId, path],
+    queryKey: ["branch-updates", scope, projectId, path, mainBranch],
     queryFn: ({ signal }) => {
       const refresh = force.current;
       force.current = false;

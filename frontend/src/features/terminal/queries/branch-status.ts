@@ -4,6 +4,7 @@ import type {
   TerminalProjectContextListItem,
 } from "@runweave/shared/terminal/project-context";
 import { getTerminalProjectContextBranchStatuses } from "../../../services/terminal/projects";
+import { useTerminalProjectsQuery } from "./workspace";
 import { terminalQueryKeys } from "./keys";
 import { useTerminalRuntime } from "./provider";
 
@@ -20,10 +21,13 @@ export function useTerminalProjectContextBranchStatuses(
   enabled: boolean,
 ) {
   const { apiBase, scope, token } = useTerminalRuntime();
+  const projects = useTerminalProjectsQuery();
+  const mainBranch = projects.data?.find((project) => project.projectId === parentProjectId)?.mainBranch ?? null;
   const available = contexts.filter((context) => context.availability === "available" && context.path);
   return useQuery({
     queryKey: [
       ...terminalQueryKeys.projectContextBranchStatuses(scope, parentProjectId ?? ""),
+      mainBranch,
       available.map(({ projectId, path, head }) => [projectId, path, head]),
     ],
     queryFn: async () => {

@@ -38,7 +38,7 @@ interface WorkspaceProjectCommands {
   onSelect: (projectId: string) => void;
   onSelectContext: (projectId: string) => void;
   onCloseDialog: () => void;
-  onSubmitDialog: (name: string, projectPath: string) => Promise<void>;
+  onSubmitDialog: (name: string, projectPath: string, mainBranch: string) => Promise<void>;
   onConfirmDelete: () => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
 }

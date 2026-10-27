@@ -62,13 +62,13 @@ export class HomeBranchStatusService {
     return entry;
   }
 
-  async status(terminalSessionId: string, cwd: string, refresh = false): Promise<AppHomeBranchStatus> {
-    const entry = this.entry(this.snapshots, cwd);
+  async status(terminalSessionId: string, cwd: string, refresh = false, mainBranch: string | null = null): Promise<AppHomeBranchStatus> {
+    const entry = this.entry(this.snapshots, JSON.stringify([cwd, mainBranch]));
     const remoteExpired = entry.value?.state === "ready" && entry.value.checkedAt
       && Date.now() - Date.parse(entry.value.checkedAt) >= TTL;
     // Local HEAD can change while the remote snapshot is still fresh.
     if (!entry.pending && (!entry.value || remoteExpired || Date.now() - entry.at >= RECHECK_TTL)) {
-      entry.pending = this.limited(() => this.compare(cwd, refresh)).catch((): Snapshot =>
+      entry.pending = this.limited(() => this.compare(cwd, refresh, mainBranch)).catch((): Snapshot =>
         entry.value?.behind !== undefined
           ? { ...entry.value, state: "stale" } : { state: "unavailable" },
       ).then((value) => { entry.value = value; entry.at = Date.now(); return value; })
@@ -78,19 +78,19 @@ export class HomeBranchStatusService {
     return { terminalSessionId, cwd, ...snapshot };
   }
 
-  async branchUpdates(target: BranchUpdatesTarget, refresh = false): Promise<BranchUpdatesResponse> {
+  async branchUpdates(target: BranchUpdatesTarget, refresh = false, mainBranch: string | null = null): Promise<BranchUpdatesResponse> {
     const cwd = target.kind === "project" ? target.path : target.cwd;
     let directory: string;
     try { directory = await realpath(cwd); }
     catch { return { target, state: "unavailable" }; }
-    const entry = this.entry(this.updates, directory);
+    const entry = this.entry(this.updates, JSON.stringify([directory, mainBranch]));
     if (!entry.pending) {
       entry.pending = this.limited(async () => {
         let value: Omit<BranchUpdatesResponse, "target">;
         const startingHead = await git(directory, ["rev-parse", "--verify", "HEAD^{commit}"]).catch(() => null);
         const startingBranch = await this.currentBranch(directory).catch(() => undefined);
         try {
-          const comparison = await this.comparison(directory, refresh);
+          const comparison = await this.comparison(directory, refresh, mainBranch);
           if (comparison.state !== "ready") return comparison;
           const currentBranch = await this.currentBranch(directory);
           if (startingHead !== comparison.head || startingBranch !== currentBranch) throw new BranchUpdatesTargetChangedError();
@@ -137,7 +137,7 @@ export class HomeBranchStatusService {
         return value;
       }).then((value) => {
         entry.value = value;
-        if (value.state === "ready") { this.snapshots.delete(cwd); this.snapshots.delete(directory); }
+        if (value.state === "ready") { this.snapshots.delete(JSON.stringify([cwd, mainBranch])); this.snapshots.delete(JSON.stringify([directory, mainBranch])); }
         return value;
       })
         .finally(() => { entry.pending = undefined; });
@@ -155,15 +155,15 @@ export class HomeBranchStatusService {
     }
   }
 
-  private async compare(cwd: string, refresh: boolean): Promise<Snapshot> {
-    const comparison = await this.comparison(cwd, refresh);
+  private async compare(cwd: string, refresh: boolean, mainBranch: string | null): Promise<Snapshot> {
+    const comparison = await this.comparison(cwd, refresh, mainBranch);
     if (comparison.state !== "ready") return { state: comparison.state };
     const behind = Number(await git(cwd, ["rev-list", "--count", `${comparison.head}..${comparison.oid}`]));
     if (!Number.isSafeInteger(behind) || behind < 0) throw new Error("Invalid Git count");
     return { state: "ready", baseBranch: comparison.base, behind, checkedAt: comparison.checkedAt };
   }
 
-  private async comparison(cwd: string, refresh: boolean): Promise<Comparison> {
+  private async comparison(cwd: string, refresh: boolean, mainBranch: string | null): Promise<Comparison> {
     // A missing directory or inaccessible Git repository is unknown, not an empty comparison.
     try { await git(cwd, ["rev-parse", "--show-toplevel"]); }
     catch (error) {
@@ -180,13 +180,17 @@ export class HomeBranchStatusService {
     const remote = remotes.includes("origin") ? "origin" : remotes.length === 1 ? remotes[0] : undefined;
     if (!remote) return { state: "unavailable" };
     const url = await git(cwd, ["remote", "get-url", remote]);
-    const entry = this.entry(this.remotes, `${common}\0${remote}\0${url}`);
+    const entry = this.entry(this.remotes, JSON.stringify([common, remote, url, mainBranch]));
     // Failed fetches only coalesce bursts; clients control the retry interval.
     if (!entry.pending && (!entry.at || Date.now() - entry.at >= (refresh || entry.failed ? RECHECK_TTL : TTL))) {
       entry.pending = (async () => {
-        const head = await git(cwd, ["ls-remote", "--symref", remote, "HEAD"]);
-        const base = /^ref: refs\/heads\/(.+)\tHEAD$/m.exec(head)?.[1];
-        if (!base) throw new Error("Remote default branch unavailable");
+        let base = mainBranch;
+        if (!base) {
+          const head = await git(cwd, ["ls-remote", "--symref", remote, "HEAD"]);
+          base = /^ref: refs\/heads\/(.+)\tHEAD$/m.exec(head)?.[1] ?? null;
+        }
+        if (!base) throw new Error("Remote main branch unavailable");
+        await git(cwd, ["check-ref-format", `refs/heads/${base}`]);
         await git(cwd, ["fetch", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head",
           remote, `+refs/heads/${base}:refs/remotes/${remote}/${base}`]);
         const oid = await git(cwd, ["rev-parse", "--verify", `refs/remotes/${remote}/${base}^{commit}`]);
@@ -197,7 +201,7 @@ export class HomeBranchStatusService {
       })().catch((error: unknown) => { entry.failed = true; throw error; }).finally(() => { entry.at = Date.now(); entry.pending = undefined; });
     }
     const base = entry.pending ? await entry.pending : entry.value;
-    if (!base || entry.failed) throw new Error("Remote default branch unavailable");
+    if (!base || entry.failed) throw new Error("Remote main branch unavailable");
     const head = await git(cwd, ["rev-parse", "--verify", "HEAD^{commit}"]);
     // Reject unrelated histories rather than suggesting a meaningless rebase count.
     try { await git(cwd, ["merge-base", head, base.oid]); }

@@ -194,7 +194,7 @@ export function useTerminalWorkspaceActions({
   });
 
   const submitProjectDialog = useMemoizedFn(
-    async (name: string, projectPath: string): Promise<void> => {
+    async (name: string, projectPath: string, mainBranch: string): Promise<void> => {
       const trimmedName = name.trim();
       if (!trimmedName) {
         setProjectDialogError("Project name is required.");
@@ -209,7 +209,7 @@ export function useTerminalWorkspaceActions({
             apiBase,
             token,
             activeProject.projectId,
-            { name: trimmedName, path: trimmedPath || null },
+            { name: trimmedName, path: trimmedPath || null, mainBranch: mainBranch.trim() || null },
           );
           updateTerminalProjects(queryClient, scope, (currentProjects) =>
             currentProjects.map((project) =>

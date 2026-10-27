@@ -306,6 +306,9 @@ export function createAppHomeOverviewRouter(options: {
 }) {
   const router = Router();
   const branchStatus = new HomeBranchStatusService();
+  const mainBranchFor = (projectId: string): string | null => options.terminalSessionManager.getProject(
+    options.terminalSessionManager.resolveParentProjectId(projectId),
+  )?.mainBranch ?? null;
   const branchRequest = z.object({
     terminalSessionIds: z.array(z.string().min(1).max(200)).max(100),
     refresh: z.boolean().optional(),
@@ -318,9 +321,13 @@ export function createAppHomeOverviewRouter(options: {
     const session = options.terminalSessionManager.getSession(req.params.terminalSessionId);
     if (!session) { res.status(404).json({ message: "Terminal not found" }); return; }
     const cwd = session.cwd;
+    const projectId = session.projectId;
+    const mainBranch = mainBranchFor(projectId);
     try {
-      const value = await branchStatus.branchUpdates({ kind: "terminal", terminalSessionId: session.id, cwd }, parsed.data.refresh === "true");
-      if (options.terminalSessionManager.getSession(session.id)?.cwd !== cwd) throw new BranchUpdatesTargetChangedError();
+      const value = await branchStatus.branchUpdates({ kind: "terminal", terminalSessionId: session.id, cwd }, parsed.data.refresh === "true", mainBranch);
+      if (options.terminalSessionManager.getSession(session.id)?.cwd !== cwd
+        || options.terminalSessionManager.getSession(session.id)?.projectId !== projectId
+        || mainBranchFor(projectId) !== mainBranch) throw new BranchUpdatesTargetChangedError();
       res.json(value);
     } catch (error) {
       res.status(error instanceof BranchUpdatesTargetChangedError ? 409 : 503).json({
@@ -347,7 +354,7 @@ export function createAppHomeOverviewRouter(options: {
     const ids = new Set(parsed.data.terminalSessionIds);
     const sessions = options.terminalSessionManager.listSessions().filter((session) => ids.has(session.id));
     const statuses = await Promise.all(sessions.map((session) =>
-      branchStatus.status(session.id, session.cwd, parsed.data.refresh)));
+      branchStatus.status(session.id, session.cwd, parsed.data.refresh, mainBranchFor(session.projectId))));
     res.json({ statuses });
   });
 

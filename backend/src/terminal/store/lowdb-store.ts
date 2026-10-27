@@ -119,6 +119,9 @@ export class LowDbTerminalSessionStore
       if ("path" in params) {
         project.path = params.path ?? null;
       }
+      if ("mainBranch" in params) {
+        project.mainBranch = params.mainBranch ?? null;
+      }
       if (params.pinnedChildProjectIds !== undefined) {
         project.pinnedChildProjectIds = [...params.pinnedChildProjectIds];
       }

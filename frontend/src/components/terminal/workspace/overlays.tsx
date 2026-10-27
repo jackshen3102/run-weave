@@ -32,7 +32,7 @@ import {
 interface TerminalWorkspaceOverlaysProps {
   isMobileMonitor: boolean;
   onCloseProjectDialog: () => void;
-  onSubmitProjectDialog: (name: string, projectPath: string) => Promise<void>;
+  onSubmitProjectDialog: (name: string, projectPath: string, mainBranch: string) => Promise<void>;
   onConfirmDeleteProject: () => void;
   onSubmitSessionAlias: (
     terminalSessionId: string,
@@ -160,6 +160,7 @@ export function TerminalWorkspaceOverlays({
         initialPath={
           projectDialogMode === "edit" ? (activeProject?.path ?? "") : ""
         }
+        initialMainBranch={projectDialogMode === "edit" ? activeProject?.mainBranch : null}
         onClose={onCloseProjectDialog}
         onSubmit={onSubmitProjectDialog}
       />
