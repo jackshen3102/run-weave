@@ -31,6 +31,7 @@ pnpm browser-history read --bundle /private/tmp/browser-review-20261027 \
 
 默认数据根为 `~/.runweave/browser-history`；命令可通过 `--root <dir>` 指定其他本机根。
 Dev Session 的内置 Browser 使用其隔离 userData 下的 `browser-history`，实际路径见状态菜单。
+`collect` 可重复传 `--source-id <UUID>`，仅选择指定来源及其 streams；不存在的预期来源产生 unavailable，未选中来源不影响回执。
 `--out` 必须是不存在的新目录。退出码：0 表示本次读取成功，2 表示材料不完整，1 表示命令失败。
 
 采集产物：

@@ -1,4 +1,4 @@
 interface:
   display_name: "每日事实记录"
-  short_description: "按日期和项目整理本机 Agent 与飞书本人事项，合并重复成果，只展示事实结论"
-  default_prompt: "使用 $daily-record，读取指定日期和渠道的本人事项，按天和项目整理事实，合并重复成果；没有事项的日期写没有。"
+  short_description: "按日期和项目合并 Agent、飞书与 Mac 浏览主题，仅保留简短事实结论"
+  default_prompt: "使用 $daily-record，读取指定日期和渠道的本人事项，按天和项目整理事实，合并同事项与重复访问，只保留新增信息；独立浏览概览每日最多3条、每条最多160字，不输出访问清单；缺失来源不能写没有。"

@@ -1,0 +1,169 @@
+version: 1
+name: Daily Record Mac 浏览来源接入
+description: >
+  验证 Mac 复用现有浏览日志进入 Daily Record 的来源、观察语义、迁移和发布边界。
+  每例自建隔离状态与测试账号，不依赖前例；格式通过不表示功能已实现或用例已执行。
+cases:
+  - id: DRB-001
+    name: 旧配置和关闭配置不依赖浏览组件
+    required: true
+    description: 浏览来源缺省或关闭时延续原采集行为和状态绑定，不产生浏览缺报。
+    preconditions:
+      - 独立临时目录有旧 schemaVersion 1 配置、合法绑定状态和 Codex 样本，飞书关闭。
+      - 浏览 CLI 路径使用调用即记日志并失败的探针，服务为本例隔离服务。
+    steps:
+      - 分别使用无 browser 字段及 enabled 为 false 的配置执行 prepare；确认旧 binding 可用，产生正常 Agent 材料。
+      - 核对探针及 requestedScopes；确认未运行浏览 CLI、未检查浏览根、未生成浏览回执。
+
+  - id: DRB-002
+    name: 非 Mac 拒绝启用浏览来源
+    required: true
+    description: 在真实 Linux 环境启用 browser 时明确报告不支持，不运行采集或伪报空日。
+    preconditions:
+      - 本例有真实 Linux 执行环境及独立有效 job 配置，browser 为 enabled。
+      - collector 为可记录调用的探针，配置和状态均为测试数据。
+    steps:
+      - 执行 prepare；确认在采集前以不支持平台失败，探针无调用，不推进逐日成功状态。
+
+  - id: DRB-003
+    name: 来源白名单隔离未请求的 Profile
+    required: true
+    description: 只读取选定来源，未选中来源损坏不降低选中来源的读取状态。
+    preconditions:
+      - 本例 Mac 临时日志根有三个合法来源身份，其中两个有有效访问，第三个日志损坏。
+      - browser 配置仅包含前两个 sourceId，已构建支持 source-id 过滤的 CLI。
+    steps:
+      - 执行 prepare 并核对材料、manifest 和 scope 回执；确认仅出现两个选中来源，浏览读取 complete 且 coverage 为 observed-only。
+      - 用本例独立新批次将不存在的 UUID 作为预期来源采集；确认明确 unavailable，不能返回完整空日。
+
+  - id: DRB-004
+    name: 浏览材料保持访问身份及原行校验
+    required: true
+    description: 重放和标题晚到只更新同次访问修订，不改变工作日期，原文篡改能被发现。
+    preconditions:
+      - 本例 Mac 临时日志有一条上海零点前访问、次日标题修订及同修订重放，已知 sourceId 与 visitId。
+      - 本例独立 job 使用真实浏览 CLI，采集范围覆盖访问工作日。
+    steps:
+      - 执行 prepare、review 和完整 read；确认只有一条合并页面 observation，属于 visitedAt 日期，anchor 不含 revision，本地访问集合保留最新修订。
+      - 执行 job read --verify-source；确认通过；随后修改被引用原行再回查，确认明确失败，不报告核实成功。
+
+  - id: DRB-005
+    name: 纯浏览主题不能成为工作成果
+    required: true
+    description: browser-only 仅允许已记录主题，页面标题和地址不提供已完成或已验证证据。
+    preconditions:
+      - 本例独立批次仅有已读浏览 observation，包含配置页及标题带完成措辞和指令的网页。
+      - 已准备同一引用的 documented 与 verified、progress 两类候选，服务为隔离账号。
+    steps:
+      - 分别 validate 候选；确认 documented 可通过，verified 和 progress 被拒绝，标题指令没有被执行。
+      - 核对允许发布的正文；确认只描述本机记录到访问、主体未知，没有本人已配置、已发布或阅读时长的断言。
+
+  - id: DRB-006
+    name: 有限观察范围不会变成永久缺报
+    required: true
+    description: 现存日志完整可完成该来源的读取义务，但空结果和正文始终不声称全天无活动。
+    preconditions:
+      - 本例 Mac 日志根有两个登记且可读的来源，目标日没有访问，manifest 为 observed-only。
+      - 本例隔离随记登记浏览 scope，其他启用来源均有完整回执。
+    steps:
+      - 采集并发布空浏览事实日；确认浏览回执 complete，本机不再将该日反复选为待补采。
+      - 核对本地报告、来源名称及云端覆盖；确认 complete 只解释为已登记日志读完，空日描述不等于全天没有浏览。
+
+  - id: DRB-007
+    name: 浏览失败保留其他渠道成果和补采义务
+    required: true
+    description: 部分浏览来源失败时保留有效访问及 Agent 事实，不能把浏览回执提升为完整。
+    preconditions:
+      - 本例 Mac 独立配置启用 Codex 和两个浏览来源，一个浏览 stream 缺失，另一个有有效访问。
+      - 隔离服务已登记本例全部 scope，Agent 和浏览主题均有完整已读证据。
+    steps:
+      - 整理并发布；确认 Agent 事实和有效浏览主题可独立回读，浏览回执 partial，该日仍待补采。
+      - 在同一本例中恢复缺失 stream 后重新采集；确认使用原事项映射补充证据，来源齐全后才变为 complete。
+
+  - id: DRB-008
+    name: 来源迁移保留旧日期和事项身份
+    required: true
+    description: 有效日期迁移只增加生效日后的浏览期待，不重置历史状态或事项映射。
+    preconditions:
+      - 本例独立旧状态已有两日成功回执、事项映射和已结束批次，没有活动批次或 pending。
+      - 新配置仅增加 browser，其 effectiveFrom 为第二日，隔离服务从同日登记浏览来源。
+    steps:
+      - 执行 migrate-sources dry-run；确认准确列出第二日待补采，原配置和状态字节未变。
+      - 执行迁移再 prepare；确认首日成功状态和旧键保留，第二日补浏览且保留旧事实，requestedScopes 按生效日区分。
+
+  - id: DRB-009
+    name: 冻结导入阻止来源迁移
+    required: true
+    description: 新来源不能改写或绕过未知结果的原冻结请求。
+    preconditions:
+      - 本例独立旧状态有 pending 导入、原请求字节及摘要，原所有者已退出。
+      - 新配置仅增加浏览来源，隔离服务可核对原请求状态。
+    steps:
+      - 执行 migrate-sources；确认明确拒绝迁移，原 binding、payload、幂等键和待确认文件未变。
+      - 按现有恢复入口恢复原请求；确认独立回读成功前没有发出带浏览来源的新请求。
+
+  - id: DRB-010
+    name: 浏览引用能力协商及导入兼容
+    required: true
+    description: 新服务接收原生浏览引用，旧服务明确拒绝浏览发布并保留本地产物。
+    preconditions:
+      - 本例两个独立隔离服务分别声明和不声明 workBrowserHistory，均有有效测试凭据。
+      - 本例有经过 validate 的合法 browser-visit 导出及访问集合摘要、本地完整依据索引，未包含原始 URL。
+    steps:
+      - 对旧服务执行发布预检；确认返回不支持且没有 import 写请求，本地产物保留。
+      - 对新服务 prepare、publish 并独立回读；确认 browser-visit 被合法保存，documented 状态保持，未上传路径、URL 或日志。
+
+  - id: DRB-011
+    name: 同一浏览主题改写与补充访问不重复建项
+    required: true
+    description: 同日同主题重跑和新增明确关联访问后复用旧 eventKey 与 externalKey，保留全部来源。
+    preconditions:
+      - 本例独立隔离账号已有一个浏览主题事实，本机状态保存其稳定键、来源 anchor 与服务 ID。
+      - 同日材料含原访问标题新修订及一条明确同主题的新访问，候选沿用原 eventKey，所有材料已读。
+    steps:
+      - 使用新正文和新增依据 validate、publish 后独立回读；确认事实 ID、eventKey、externalKey 不变，仅证据和必要字段更新。
+      - 再导入同一快照；确认事实数量与版本不增加，跨浏览器原始 visit 依据均保留在本地索引，云端仅保留一条集合引用。
+
+  - id: DRB-012
+    name: 实际 Mac 完整日浏览概览能发布回读
+    required: true
+    description: 在实际 Mac 用选定完整日真实材料验证手动整理和上报闭环，不能用 fixture 代替。
+    preconditions:
+      - 实际 Mac 已安装目标 Skill 与固定 CLI，用户已授权选定日期和浏览来源，使用隔离随记账号及独立状态。
+      - 隔离服务已登记该 Mac 浏览 scope，全部目标来源身份、落盘状态和日期可核对。
+    steps:
+      - 运行 prepare，逐条阅读材料并抽样 verify-source，再整理、validate 和 publish；确认日期与主题能追溯到真实访问。
+      - 独立回读事实和来源回执；确认只发布浏览概览及合规引用，没有将未知主体访问表述为本人完成工作。
+
+  - id: DRB-013
+    name: 现有定时任务自然触发包含浏览来源
+    required: true
+    description: 以真实 scheduledFor 运行证明固定 runtime 与本机来源配置可用于自然调度。
+    preconditions:
+      - 实际 Mac 的既有 Daily Record 任务已启用目标配置，隔离随记账号下有独立 job 状态和有效来源登记。
+      - 本例有已结束的完整日浏览材料，模型非交互登录和固定路径依赖有效，不依赖当前 worktree 存活。
+    steps:
+      - 等待该现有任务的下一次自然触发，记录 scheduledFor、run 和所用本机配置身份；确认不是手动 run。
+      - 核对该 run 的浏览材料回执、导入回执和独立回读结果；确认正常采入浏览概览，未创建新调度或调用远端采集。
+
+  - id: DRB-014
+    name: 大量访问只形成简短主题
+    required: true
+    description: 原始访问和引用数量不会迫使日报拆条，独立概览数量与长度有硬校验。
+    preconditions:
+      - 本例 Mac 隔离日志包含至少142次访问和140个不同页面，全部属于一个可核对的主题，包含跨浏览器重复页。
+      - 本例独立批次材料全部已读，隔离随记支持浏览引用，候选使用稳定事项键。
+    steps:
+      - 将全部页面合成一条主题并 validate、publish、回读；确认只有一个浏览事实和一个摘要引用，本地索引保留142次访问。
+      - 用独立候选尝试每日4个浏览主题、161字正文及同访问重复成条；确认分别拒绝，不能通过截断依据或拆条规避。
+
+  - id: DRB-015
+    name: 来源迁移中断后恢复同一事务
+    required: true
+    description: 配置和状态之间中断时普通任务停止，迁移原样恢复且不改变旧事项映射。
+    preconditions:
+      - 本例独立旧配置、状态和新配置均为测试数据，没有活动批次，迁移 journal 已持久化。
+      - 本例可在新状态已写入但原配置尚未更新时中断迁移，所有配置和请求摘要可核对。
+    steps:
+      - 在上述窗口中断迁移后运行普通 prepare；确认明确提示迁移未完成，未采集或发布新日期。
+      - 用同一 next-config 重跑 migrate-sources；确认恢复新配置和状态、完成 journal，旧事项和成功日期保留；更换迁移目标则明确拒绝。

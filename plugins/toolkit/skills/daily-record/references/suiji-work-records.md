@@ -50,3 +50,9 @@ import 在联网前将精确身份、操作键和 payload 写入0600请求文件
 `WORK_FEED_CHANGED` 要重新读取并复核；`VERSION_CONFLICT` 要核对最新事实，不能强制覆盖。结果未知时停止后续包，保留原请求；列表中相似正文不是原请求成功证明。人工流程只有用户明确要求重试时执行现有 `retry --request`。已显式启用的定时上报可按[专用恢复规则](scheduled-reporting.md)使用仅限工作事实的 work-reconcile，最多原样恢复3次；保持原身份、键和参数，不自动换键重写。
 
 读取覆盖不完整不能写“没有”；只有所声明范围全部 complete 且事实为空，才可说明该范围无记录。不推断其他机器或渠道。事实导入与旧待办状态无关，不标记交接待办完成。
+
+Mac 浏览概览使用 `browser-visit` 引用，要求服务声明 `features.workBrowserHistory=true`。
+状态沿用 documented（已记录），不增加手机状态枚举。每个主题的访问身份集合和全部修订保留本地，
+上报 nativeId 为 `visits:<身份集合SHA256>`，hash 为完整 observation 集合摘要；不含 URL 或路径。
+重复访问与工作事项必须先合并，独立浏览主题每日最多3条、正文每条最多160字；不因引用数量拆条。
+来源 `browser:<producerId>:observed` 的 complete 只表示所登记现存日志读取完整，不表示全天活动覆盖。

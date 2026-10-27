@@ -55,7 +55,11 @@ export type WorkProjectRestore = {
   items: { id: string; expectedVersion: number; project: string | null }[];
 };
 export type WorkSourceRef = {
-  channel: "local-agent" | "feishu-message" | "feishu-document";
+  channel:
+    | "local-agent"
+    | "feishu-message"
+    | "feishu-document"
+    | "browser-visit";
   sourceScope: string;
   nativeId: string;
   revision?: string;

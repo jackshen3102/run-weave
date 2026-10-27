@@ -311,3 +311,10 @@ Lumi 的执行、成果写回与状态变更按当前用户授权执行。`follo
 隔离PostgreSQL18上的HTTP/MCP/CLI行为验证：
 `pnpm --filter @runweave/suiji-server exec tsx scripts/verify-reporting.ts <port>`。
 验证程序只创建和删除自己随机命名的数据库，不连接生产随记、不读取真实聊天。
+
+## Mac 浏览主题来源
+
+`features.workBrowserHistory=true` 声明导入支持 `browser-visit`。沿用 schema11 的 JSON 来源快照、
+既有 documented 状态和稳定事项键，无新增迁移或手机 DTO。原始访问在 Mac 本地合并，主题级引用
+只上传访问集合身份与内容摘要；Daily Record 的数量及简短要求见
+[浏览来源说明](../../plugins/toolkit/skills/daily-record/references/browser-history.md)。

@@ -13,8 +13,9 @@ from types import SimpleNamespace
 import uuid
 
 sys.dont_write_bytecode = True
-from job_state import Failure, State, config, date, digest, directory, process_identity, read, require, scopes, stamp, window, write
+from job_state import Failure, State, config, date, digest, directory, process_identity, read, require, scopes, stamp, window, write, browser_enabled, migrate_sources
 import job_facts
+import job_browser
 
 
 def suiji_module():
@@ -71,6 +72,19 @@ def collect(state, path, meta):
                 if str(error) == "FEISHU_IDENTITY_CHANGED":
                     raise
                 receipts.append({"sourceScope": "feishu:" + c["sources"]["feishu"]["accountScope"] + ":messages", "status": "unavailable", "collectedAt": stamp(), **window(day)})
+        if browser_enabled(c, day):
+            bundle = day_root / "browser"
+            browser = c["sources"]["browser"]
+            argv = browser["collectorArgv"] + ["collect", "--root", browser["root"], "--from", day, "--to", day, "--timezone", c["timeZone"], "--out", str(bundle)]
+            for source_id in browser["expectedSourceIds"]:
+                argv += ["--source-id", source_id]
+            try:
+                command(argv, (0, 2))
+                material, receipt = job_browser.rows(bundle, day, c)
+                rows.extend(material)
+                receipts.append(receipt)
+            except (Failure, OSError, ValueError, KeyError):
+                receipts.append(job_browser.unavailable(day, c))
         meta["receipts"][day] = receipts
     write(path / "evidence.json", rows)
     meta.update(phase="reviewed", evidenceHash=digest(rows), read={})
@@ -184,9 +198,11 @@ def publish(state, path, meta):
     client, info = suiji.connect(connection, state.c["suiji"]["tokenFile"])
     require(info.get("features", {}).get("workRecords"), "WORK_RECORDS_UNAVAILABLE")
     require(info.get("features", {}).get("workSources"), "WORK_SOURCES_UNAVAILABLE")
+    if any(ref["channel"] == "browser-visit" for day in payload["days"] for fact in day["facts"] for ref in fact["sourceRefs"]) or any(s.startswith("browser:") for day in payload["days"] for s in day["requestedScopes"]):
+        require(info.get("features", {}).get("workBrowserHistory"), "BROWSER_HISTORY_UNAVAILABLE")
     source_page = client.call("list_work_sources", {"from": meta["days"][0], "to": meta["days"][-1]})
     for day in meta["days"]:
-        for scope in scopes(state.c):
+        for scope in scopes(state.c, day):
             require(any(s["sourceScope"] == scope and s["sourceNamespace"] == state.c["sourceNamespace"] and s["producerId"] == state.c["producerId"] and s["effectiveFrom"] <= day and (not s["effectiveTo"] or s["effectiveTo"] > day) for s in source_page["items"]), "SOURCE_NOT_REGISTERED")
     conflicts = 0
     while len(meta["sentDays"]) < len(meta["days"]):
@@ -261,10 +277,12 @@ def context(state, path, meta, args):
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["prepare", "review", "read", "context", "validate", "publish", "reconcile", "status"])
+    parser.add_argument("command", choices=["prepare", "review", "read", "context", "validate", "publish", "reconcile", "status", "migrate-sources"])
     parser.add_argument("--config", required=True)
-    for name in ("batch", "facts", "run-id", "thread-id", "recover-run-id", "id", "date", "message-id"):
+    for name in ("batch", "facts", "run-id", "thread-id", "recover-run-id", "id", "date", "message-id", "next-config"):
         parser.add_argument("--" + name)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--verify-source", action="store_true")
     parser.add_argument("--recollect", action="store_true")
     parser.add_argument("--generation", type=int)
     parser.add_argument("--owner-pid", type=int)
@@ -278,8 +296,11 @@ def main():
         file = Path(c["stateDir"]) / "state.json"
         stored = read(file) if file.exists() else {}
         return {"producerId": c["producerId"], "sources": scopes(c), "days": stored.get("days", {}), "active": stored.get("active"), "batches": stored.get("batches", {})}
-    with State(c) as state:
+    with State(c, migrating=args.command == "migrate-sources") as state:
         state.config_path = str(Path(args.config).resolve())
+        if args.command == "migrate-sources":
+            require(args.next_config, "NEXT_CONFIG_REQUIRED")
+            return migrate_sources(state, args.config, args.next_config, args.dry_run)
         if args.command == "prepare":
             return prepare(state, args)
         require(args.batch and args.run_id and args.generation, "BATCH_OWNER_REQUIRED")
@@ -291,16 +312,19 @@ def main():
             require(args.offset >= 0 and 1 <= args.limit <= 100 and 1 <= args.max_chars <= 100000, "INVALID_READ_RANGE")
             if args.command == "review":
                 selected = [m for m in materials if not args.date or m["day"] == args.date]
-                return {"total": len(selected), "items": [{k: v for k, v in m.items() if k != "text"} | {"preview": m["text"][:500], "truncated": len(m["text"]) > 500} for m in selected[args.offset:args.offset + args.limit]], "nextOffset": args.offset + args.limit if len(selected) > args.offset + args.limit else None}
+                return {"total": len(selected), "items": [{k: v for k, v in m.items() if k not in ("text", "browserVisits", "browserBundle")} | {"preview": m["text"][:500], "truncated": len(m["text"]) > 500} for m in selected[args.offset:args.offset + args.limit]], "nextOffset": args.offset + args.limit if len(selected) > args.offset + args.limit else None}
             m = next((m for m in materials if m["id"] == args.id), None)
             require(m, "MATERIAL_NOT_FOUND")
+            if args.verify_source:
+                require(m["ref"]["channel"] == "browser-visit", "VERIFY_SOURCE_REQUIRES_BROWSER_MATERIAL")
+                job_browser.verify(m, c, command)
             end = min(len(m["text"]), args.offset + args.max_chars)
             require(args.offset <= len(m["text"]), "INVALID_READ_OFFSET")
             seen = meta.setdefault("read", {}).get(m["id"], 0)
             if args.offset <= seen:
                 meta["read"][m["id"]] = max(seen, end)
             state.save_batch(path, meta)
-            return {**{k: v for k, v in m.items() if k != "text"}, "text": m["text"][args.offset:end], "offset": args.offset, "nextOffset": end if end < len(m["text"]) else None}
+            return {**{k: v for k, v in m.items() if k not in ("text", "browserVisits", "browserBundle")}, "text": m["text"][args.offset:end], "offset": args.offset, "nextOffset": end if end < len(m["text"]) else None}
         if args.command == "validate":
             require(args.facts, "FACTS_REQUIRED")
             result = job_facts.validate(path, meta, args.facts, state, suiji_module().work_records)

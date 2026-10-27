@@ -1,17 +1,17 @@
 ---
 name: daily-record
-description: 从本机 Agent 记录、飞书本人参与的聊天及本人创建或编辑的文档整理每日事实。用于按天或项目回顾实际事项、跨渠道合并重复成果；复用各机器本地执行与显式配置的定时上报，不自动接入其他机器或创建定时任务。
+description: 从本机 Agent 记录、飞书本人事项及 Mac 浏览记录整理每日事实，合并同事项并保持简短。用于按天或项目回顾实际事项、跨渠道合并重复成果；复用各机器本地执行与显式配置的定时上报，不自动接入其他机器或创建定时任务。
 ---
 
 # 每日事实记录
 
 只采集本次要求的渠道，先确定日期和 IANA 时区；“近 N 天”默认最近 N 个完整日，不含今天尚未结束的部分，明确实际日期。纯记录事实，不增加评分、建议或次日计划。
 
-- 多机器定时上报：读[同一任务的本机配置与恢复](references/scheduled-reporting.md)，复用 `scripts/job.py`。Mac 可启用本人飞书聊天，devbox 关闭飞书；各 Backend 独立执行同版任务，不由 Mac 远程采集。
+- 多机器定时上报：读[同一任务的本机配置与恢复](references/scheduled-reporting.md)，复用 `scripts/job.py`。Mac 可启用本人飞书聊天与浏览记录，devbox 关闭这两项；各 Backend 独立执行同版任务，不由 Mac 远程采集。
 - 本机 Agent：在 Runweave 源码仓库执行 `pnpm daily-record`；首次先执行 `pnpm --filter @runweave/daily-record build`。命令合同在该仓库的 `packages/daily-record/README.md`，按下方流程处理。
 - 飞书消息或文档：读[飞书采集与合并](references/feishu.md)，使用本 Skill 的 `scripts/feishu.py`。它只调用 `lark-cli` 读取候选与选定上下文，不发消息、不写文档。
 - 用户要求保存到随记：读[随记工作事实导入](references/suiji-work-records.md)，生成统一包后使用随记 Skill 的 prepare/import/回读闭环。
-- 用户本次包含浏览记录：读[浏览材料与轻量回顾](references/browser-history.md)，使用独立的 browser-history collect/read；只归纳浏览主题，不从访问推断工作成果。
+- 用户本次包含浏览记录或本机配置已启用浏览来源：读[浏览材料与轻量回顾](references/browser-history.md)，使用独立的 browser-history collect/read；只归纳浏览主题，不从访问推断工作成果。
 - 同时使用多个渠道：先分别取得材料，再按下方“跨渠道合并”整理；其他机器未采集时不能宣称已完整覆盖或去重。
 
 本 Skill 目录也可独立安装；飞书脚本只依赖 Python 与 lark-cli，本机 Agent CLI 需要 Runweave 源码仓库。
@@ -34,6 +34,13 @@ description: 从本机 Agent 记录、飞书本人参与的聊天及本人创建
 输出 weekly.md、每日 Markdown、facts.json 和 manifest.json。报告默认按“日期 → 项目 → 当天结论”组织，只展示事实与必要的状态、缺失提示，不显示来源编号、来源说明或附件；引用和覆盖明细保留在本地 JSON 与材料包中供校验。文件保存后回读，给用户主报告路径。
 
 用户要求写飞书文档时，使用可用的 lark-doc Skill/CLI 将报告中的日期、项目和结论写入指定文档或新建文档，回读核对日期、项目、事项是否完整。原始材料包含私人对话，放在受保护本地目录，不提交 Git；不自动上传材料包、内部 JSON 或来源附件。
+
+## 输出必须合并且简短
+
+- 按事项合并 Agent、飞书和浏览资料；已在工作事实中表达的主题不再单列浏览概览。重复打开、刷新、跨浏览器/Profile 访问不增加条目；已知同主题优先沿用旧 eventKey。
+- 浏览数据先由适配器按脱敏 URL 合并，再由当前 Agent 归纳主题。独立浏览概览每天最多 3 条，每条正文最多 160 字；这是上限，不是配额。无新增信息、仅重复打开或低价值跳转可以不成条，不能为凑数拆开。
+- 一条主题写一句具体结论，不写访问流水账、网址/标题清单、次数排名或逐条来源解释。覆盖/缺失边界统一说明一次，不能每条重复免责声明；未知 actor 不表述为本人完成或已阅读。
+- 所有访问与修订保留在本地；上传使用主题级摘要引用，不因引用上限拆日报。不同项目或不同实际成果不能为压数量强行合并。
 
 ## 跨渠道合并
 

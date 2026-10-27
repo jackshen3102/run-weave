@@ -248,6 +248,14 @@ def main():
     client, info = connect(config, args.env_file)
     if args.command.startswith("work-") and not info.get("features", {}).get("workRecords"):
         raise Failure("WORK_RECORDS_UNAVAILABLE")
+    browser_payload = None
+    if args.command == "work-reconcile":
+        browser_payload = recovery["arguments"]["input"]
+    elif args.command in ("work-prepare", "work-import") and args.input:
+        browser_value = json.loads(private_read(args.input))
+        browser_payload = browser_value.get("payload", browser_value)
+    if browser_payload and any(s.startswith("browser:") for day in browser_payload.get("days", []) for s in day.get("requestedScopes", [])) and not info.get("features", {}).get("workBrowserHistory"):
+        raise Failure("BROWSER_HISTORY_UNAVAILABLE")
     if args.command == "work-reconcile":
         return work_records.reconcile(client, args.request, recovery, Failure, run_intent)
     if args.command == "work-sources":

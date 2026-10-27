@@ -78,7 +78,7 @@ def validate(payload, fail, enforce_limits=True):
             require(isinstance(fact["sourceRefs"], list) and 1 <= len(fact["sourceRefs"]) <= 100, "SOURCE_REQUIRED")
             for ref in fact["sourceRefs"]:
                 exact(ref, {"channel", "sourceScope", "nativeId"}, {"revision", "hash"})
-                require(ref["channel"] in {"local-agent", "feishu-message", "feishu-document"} and ref["sourceScope"] in receipts and receipts[ref["sourceScope"]]["status"] != "unavailable", "SOURCE_NOT_READ")
+                require(ref["channel"] in {"local-agent", "feishu-message", "feishu-document", "browser-visit"} and ref["sourceScope"] in receipts and receipts[ref["sourceScope"]]["status"] != "unavailable", "SOURCE_NOT_READ")
                 for field in ("nativeId", "revision"):
                     if field in ref:
                         identity(ref[field])
@@ -265,8 +265,13 @@ def recovery_intent(args, config, fail, private_read):
     allowed = {"agent:" + job["producerId"] + ":" + p for p in local}
     if job["sources"]["feishu"]["enabled"]:
         allowed.add("feishu:" + job["sources"]["feishu"]["accountScope"] + ":messages")
-    if any(set(d["requestedScopes"]) != allowed for d in payload["days"]):
-        raise fail("JOB_SCOPE_MISMATCH")
+    browser = job["sources"].get("browser", {})
+    for day in payload["days"]:
+        expected = set(allowed)
+        if browser.get("enabled") and day["date"] >= browser["effectiveFrom"]:
+            expected.add("browser:" + job["producerId"] + ":observed")
+        if set(day["requestedScopes"]) != expected:
+            raise fail("JOB_SCOPE_MISMATCH")
     return intent
 
 

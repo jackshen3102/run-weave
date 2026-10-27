@@ -28,3 +28,9 @@ sourceRefs只保留原生channel/sourceScope/nativeId/revision/hash，不上传�
 它不改变人工 retry，也不为笔记/待办操作增加自动重试。详见 Daily Record 的 scheduled-reporting.md。
 `work-sources --from <日期> --to <日期>` 调用只读 list_work_sources，要求 features.workSources。
 schema11 的预期来源登记用于判断全来源完整性；无登记旧日期保持unknown，不再把已收到部分来源的complete当全天完整。
+
+Mac 浏览概览使用 `browser-visit` 引用，要求服务声明 `features.workBrowserHistory=true`。
+状态沿用 documented（已记录），不增加手机状态枚举。每个主题的访问身份集合和全部修订保留本地，
+上报 nativeId 为 `visits:<身份集合SHA256>`，hash 为完整 observation 集合摘要；不含 URL 或路径。
+重复访问与工作事项必须先合并，独立浏览主题每日最多3条、正文每条最多160字；不因引用数量拆条。
+来源 `browser:<producerId>:observed` 的 complete 只表示所登记现存日志读取完整，不表示全天活动覆盖。
