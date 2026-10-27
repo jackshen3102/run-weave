@@ -1,0 +1,35 @@
+body {
+  width: 300px;
+  margin: 0;
+  padding: 18px;
+  font: 14px/1.6 system-ui;
+  color: #18202c;
+  background: #f6f8fb;
+}
+h1 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+button {
+  padding: 6px 12px;
+  border: 1px solid #a5afbd;
+  border-radius: 6px;
+  background: white;
+  color: inherit;
+  cursor: pointer;
+}
+.note {
+  color: #5c687a;
+  font-size: 12px;
+}
+#status {
+  padding: 8px;
+  border-radius: 6px;
+  background: #e8edf5;
+  overflow-wrap: anywhere;
+}

@@ -164,6 +164,9 @@ importers:
 
   electron:
     dependencies:
+      "@runweave/browser-history":
+        specifier: workspace:*
+        version: link:../packages/browser-history
       "@runweave/config-node":
         specifier: workspace:*
         version: link:../packages/config-node
@@ -656,7 +659,45 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/browser-history:
+    dependencies:
+      "@runweave/shared":
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      "@types/node":
+        specifier: ^22.13.10
+        version: 22.19.15
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+
+  packages/browser-history-extension:
+    dependencies:
+      "@runweave/shared":
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      "@types/chrome":
+        specifier: 0.3.6
+        version: 0.3.6
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+
 packages:
+  "@types/chrome@0.3.6":
+    resolution: {integrity: sha512-NXCrCBefCHCKMVbkaxfBQqyP766Wg85S2FQhixCCxq7AtjJwoEaja2y5NSqCzpihIi9mPqhaF5RuybTnrdYD2Q==}
+
+  "@types/har-format@1.2.16":
+    resolution: {integrity: sha512-fluxdy7ryD3MV6h8pTfTYpy/xQzCFC7m89nOH9y94cNqJ1mDIDPut7MnRHI3F6qRmh/cT2fUjG1MLdCNb4hE9A==}
+
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
 
@@ -12031,6 +12072,12 @@ packages:
     engines: { node: ">=22.19.0" }
 
 snapshots:
+  "@types/chrome@0.3.6":
+    dependencies:
+      "@types/har-format": 1.2.16
+
+  "@types/har-format@1.2.16": {}
+
   '@mixmark-io/domino@2.2.0': {}
 
   '@types/turndown@5.0.6': {}

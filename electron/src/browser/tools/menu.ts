@@ -16,6 +16,8 @@ import {
   isTerminalBrowserMinimumViewportWidth,
   TERMINAL_BROWSER_MINIMUM_VIEWPORT_WIDTHS,
 } from "@runweave/shared/terminal-browser-minimum-width";
+import { isTerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
+import { browserPluginMenu } from "../plugins/menu.js";
 
 function isTerminalBrowserToolMenuRequest(
   value: unknown,
@@ -54,6 +56,8 @@ export async function popupTerminalBrowserToolMenu(
       resolve(action);
     };
     const template: MenuItemConstructorOptions[] = [];
+    if (isTerminalBrowserProfileId(value.profileId))
+      template.push(browserPluginMenu(win, value.profileId), { type: "separator" });
     if (typeof value.bookmarkBarVisible === "boolean") {
       template.push({ label: "收藏夹", click: () => select("open-bookmarks") },
         { label: "显示收藏栏", type: "checkbox", checked: value.bookmarkBarVisible, click: () => select("toggle-bookmark-bar") },

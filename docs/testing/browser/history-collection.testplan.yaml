@@ -1,0 +1,234 @@
+version: 1
+name: 浏览历史跨浏览器采集验收
+description: >
+  分别验证真实 Chrome、Edge 与 Runweave 右侧 Browser 的时间、标题、网址记录，
+  以及本地落盘、恢复和 Agent 浏览概览。用例定义和格式校验不代表交互验收通过。
+  所有浏览器、fixture 和数据目录使用独立测试资源，不改动真实用户历史。
+cases:
+  - id: BHIST-001
+    name: Chrome 扩展自动把访问写入本机
+    required: true
+    description: >
+      验证实际 Chrome 加载扩展并连接本机接收器后，访问自动落盘；不依赖 Runweave 运行。
+    preconditions:
+      - 已构建扩展与接收器，实际 Chrome 使用归本用例所有的独立 Profile，Runweave 未运行。
+      - 已用实际扩展 ID 登记 Chrome 接收器，接收器写入本用例独立数据根目录。
+      - 本用例 fixture 提供标题为浏览样例甲的 HTTP 页面，并已记录动态地址。
+    steps:
+      - 使用 CUA 在 Chrome 扩展管理页加载解包目录；确认 popup 显示记录开启且接收器可用。
+      - 使用 $toolkit:playwright-cli 附着该实际 Chrome 页面并打开 fixture；确认页面标题为浏览样例甲。
+      - 读取 popup 和 collect 产物；确认出现同一次访问的时间、标题、脱敏网址和 chrome 来源，已落盘计数增加一。
+
+  - id: BHIST-002
+    name: Edge 使用同一扩展构建产物
+    required: true
+    description: >
+      验证实际 Edge 能独立加载 Chrome 共用产物，并通过 Edge 接收器形成 edge 来源记录。
+    preconditions:
+      - 已构建扩展与 Edge 接收器，实际 Edge 使用归本用例所有的独立 Profile。
+      - 已登记 Edge 的实际扩展 ID，数据目录和 fixture 均为本用例独有。
+    steps:
+      - 使用 CUA 在 Edge 加载与 Chrome 相同的解包构建目录；确认 popup 显示接收器可用。
+      - 使用 $toolkit:playwright-cli 附着实际 Edge 页面并打开有唯一标题的 fixture。
+      - 执行 collect；确认该访问自动落盘且 browser 为 edge，未标记为 chrome 或 runweave。
+
+  - id: BHIST-003
+    name: 内置 Browser 无须扩展也能记录访问
+    required: true
+    description: >
+      验证 Runweave 的 WebContents 原生适配器在启用后写出与外部扩展相同合同的记录。
+    preconditions:
+      - 已按 $toolkit:runweave-dev-session 启动归本用例所有的 Session，取得正确 terminal-browser surface。
+      - 本用例 Profile 未加载 Chrome 扩展，历史根目录隔离，fixture 页面可访问。
+    steps:
+      - 用 CUA 在目标 Profile 工具菜单开启记录；确认显示该 Profile 的开启状态。
+      - 使用 $toolkit:playwright-cli 附着返回的正确 surface，访问有唯一标题的 fixture。
+      - 执行 collect；确认同一次访问包含时间、标题、脱敏网址、runweave 来源与正确 Profile 和 Group。
+
+  - id: BHIST-004
+    name: 外部扩展只把主框架提交作为访问
+    required: true
+    description: >
+      验证一次重定向导航只产生最终主框架 visit，子 frame 和未提交失败不混入访问视图。
+    preconditions:
+      - 本用例实际 Chrome 的扩展已开启，接收器和数据根目录隔离。
+      - fixture 提供两跳 HTTP 重定向到带 iframe 的成功页，以及会在提交前断开的地址。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开重定向入口，等待主页面提交；collect 确认只有最终主页面的一条访问，没有中间跳转及 iframe 访问。
+      - 打开会在提交前断开的地址；确认访问视图没有新增该失败地址，原成功访问仍在。
+
+  - id: BHIST-005
+    name: 内置采集遵守主框架导航边界
+    required: true
+    description: >
+      验证内置 Browser 的导航记录不会复制 Activity 的开始、失败与取消事件作为成功访问。
+    preconditions:
+      - 本用例独立 Dev Session 中已开启一个 Profile 的历史记录，并取得其真实 terminal-browser surface。
+      - fixture 提供重定向到含 iframe 的页面和提交前失败的地址，历史目录只归本用例。
+    steps:
+      - 使用 $toolkit:playwright-cli 完成重定向访问；collect 确认只有最终主框架的一条访问。
+      - 发起提交前失败并停止导航；确认没有把 started、failed 或 cancelled 诊断写成新 visit，原 Browser 仍可导航。
+
+  - id: BHIST-006
+    name: 外部晚到标题只更新所属访问
+    required: true
+    description: >
+      验证 SPA 导航和延迟标题不会串页，标题更新不增加访问数。
+    preconditions:
+      - 实际 Chrome 的独立 Profile 已开启扩展并连接本用例接收器。
+      - fixture 具有延迟设置标题的 A 页、可立即进入的 B 页及同文档路径切换控件。
+    steps:
+      - 使用 $toolkit:playwright-cli 进入 A，标题未到时立即进入 B；等待所有回调，确认 A 没有被赋予 B 的标题。
+      - 在 B 触发一次实际 SPA URL 变化，再仅修改一次标题；确认新增一个 same-document visit，随后只增加其 revision 而不再增加 visit。
+
+  - id: BHIST-007
+    name: 内置晚到标题与导航代际对应
+    required: true
+    description: >
+      验证同一 WebContents 内快速切换页面时，异步标题只更新对应的 visit。
+    preconditions:
+      - 本用例独立 Dev Session 的 Profile 已开启记录，并取得正确 surface。
+      - fixture 有延迟标题的 A、立即标题的 B 和同文档路径切换页面，数据目录隔离。
+    steps:
+      - 使用 $toolkit:playwright-cli 在 A 尚未有标题时切到 B；确认 A 保留自己的标题或 null，不能出现 B 标题。
+      - 触发一次同文档 URL 变化并连续修改标题；确认只产生一次新访问，标题修订对应最新导航代际。
+
+  - id: BHIST-008
+    name: 接收器断开后重放不重复计数
+    required: true
+    description: >
+      验证连接故障只让已持久化观察留在待发送队列，恢复和重复 ACK 不新增重复 visit。
+    preconditions:
+      - 本用例实际 Chrome 已装扩展，接收器进程、登记文件和根目录均由本用例管理。
+      - 已开启记录并准备可识别的 fixture 页面，保存了一份真实 append 协议批次用于重复交付。
+    steps:
+      - 暂停本用例接收器并使用 $toolkit:playwright-cli 访问 fixture；确认 popup 显示待发送或接收器不可用，没有显示已落盘。
+      - 恢复接收器并等待重连；确认该访问写入且待发送计数减少，在 ACK 前不会删除队列项。
+      - 用同一来源身份重放保存的原批次；collect 确认访问视图仍只有一个 visit，重复投递没有改变其 visitedAt。
+
+  - id: BHIST-009
+    name: 扩展 Service Worker 重启保留待发送记录
+    required: true
+    description: >
+      验证 MV3 Worker 被终止后从持久队列恢复，而非仅依赖内存变量。
+    preconditions:
+      - 本用例实际 Chrome 已开启扩展，接收器暂不可用，隔离队列内已有一个可识别访问。
+      - 已记录该访问的 sourceId、visitId 和 revision，Worker 可在独立测试 Profile 中终止。
+    steps:
+      - 使用 CUA 终止该扩展 Worker，再通过 popup 或后续导航重新唤醒；确认原队列项及其三个身份字段不变。
+      - 恢复接收器并等待交付；确认旧访问仍落在原访问日期，collect 只计一次。
+
+  - id: BHIST-010
+    name: Browser 隐藏和 WebContents 恢复不伪造访问
+    required: true
+    description: >
+      验证内置 Browser 的界面呈现变化和休眠恢复不被当作新的用户导航。
+    preconditions:
+      - 本用例独立 Dev Session 已开启记录，fixture 中已有一条可识别访问。
+      - 已记录其 visitId，且允许通过现有受控入口休眠和恢复本用例 Tab。
+    steps:
+      - 使用 CUA 切换侧栏并隐藏、重新显示 Browser；确认访问数和原 visitId 不变。
+      - 通过受控入口休眠并恢复同一 Tab 到相同 URL；确认恢复加载有明确抑制，不制造新访问，之后真实导航仍会记录。
+
+  - id: BHIST-011
+    name: 外部暂停与无痕排除可观察
+    required: true
+    description: >
+      验证外部采集开关只控制新记录，无痕和非 HTTP(S) 页面不会进入日志。
+    preconditions:
+      - 本用例实际 Chrome 扩展已运行，接收器可用，日志目录隔离。
+      - 已准备两个正常 fixture 地址，测试 Profile 可以打开无痕窗口及浏览器内部页面。
+    steps:
+      - 用 CUA 暂停记录，使用 $toolkit:playwright-cli 访问第一个 fixture；确认不新增记录，popup 显示暂停。
+      - 恢复记录并访问第二个 fixture；确认产生新访问，暂停期间的访问不被补造。
+      - 用 CUA 打开无痕窗口和浏览器内部页面；确认扩展无痕模式禁用，日志没有这些访问。
+
+  - id: BHIST-012
+    name: 内置开关只影响指定 Profile
+    required: true
+    description: >
+      验证 Profile 身份隔离和跨窗口共享的开关语义，不按 Group 或当前 UI 标签串写。
+    preconditions:
+      - 本用例独立 Dev Session 的 Browser 1、Browser 2 及同 Profile 的第二窗口均可用。
+      - 历史目录隔离，每个目标都能访问带可识别路径的 fixture。
+    steps:
+      - 使用 CUA 只开启 Browser 1；通过各自正确 surface 用 $toolkit:playwright-cli 分别访问 fixture，确认只记录 Browser 1。
+      - 从另一个窗口暂停 Browser 1，再在原窗口导航；确认不新增访问且两个窗口开关状态一致。
+      - 恢复 Browser 1 并在两个 Group 中导航；确认两条记录共享 Profile 身份，同时保留各自 Group，不跨写 Browser 2。
+
+  - id: BHIST-013
+    name: 按访问日期合并修订并保留跨来源证据
+    required: true
+    description: >
+      验证 collect 按 visitedAt 的指定时区分日，晚到修订和重复重放不改变访问日期，跨来源访问不被删除。
+    preconditions:
+      - 本用例独立根目录有协议有效的完整 JSONL，包含上海零点前后、同 visit 的后日标题修订、原样重放及不同 sourceId 的同网址访问。
+      - 已保存 fixture 的预期 visit 身份、日期清单和所有源文件摘要，输出目录尚不存在。
+    steps:
+      - 运行 browser-history collect 指定目标日和 Asia/Shanghai；确认只包含左闭右开日期窗口内的访问，并采用每个 visit 的最新合法标题修订。
+      - 核对原样重放只计一次，不同来源同网址的两条 visit 都保留；使用 read --verify-source 确认能回查实际源行。
+      - 确认源摘要不变，manifest 的 coverage 为 observed-only，没有把日志读取 complete 写成覆盖了本人全天工作。
+
+  - id: BHIST-014
+    name: 损坏与缺失日志明确降低读取状态
+    required: true
+    description: >
+      验证不可读材料不会被覆盖、忽略或渲染成“当天没有浏览”。
+    preconditions:
+      - 本用例独立根目录已登记三个来源，其中有完整有效行、尾部半行、非法 JSON 和一个已登记但不可读的来源。
+      - 已保存所有原文件摘要，准备独立新输出目录和一份高于当前版本的 schema 文件。
+    steps:
+      - 执行 collect；确认退出 2，已有有效材料可读，manifest 标明受影响来源的 partial 或 unavailable 及原因。
+      - 单独读取未来 schema；确认返回明确的不支持状态，不以空日替代，原文件摘要保持不变。
+      - 再次向已存在输出目录采集；确认退出 1 且原成功产物未被覆盖。
+
+  - id: BHIST-015
+    name: Native Messaging 只接受登记来源和合法批次
+    required: true
+    description: >
+      验证本机接收器的边界是固定协议的追加写入，不向扩展提供任意文件或命令执行能力。
+    preconditions:
+      - 本用例接收器在独立 runtime 和数据根目录运行，登记一个实际扩展 ID。
+      - 已准备未登记来源、含路径遍历的 sourceId、未知操作和超过 256 KiB 的批次，全部使用模拟数据。
+    steps:
+      - 使用真实 stdio 协议客户端分别提交这些无效输入；确认拒绝且没有成功 ACK，目录外未创建文件或执行命令。
+      - 从登记身份提交合法小批次；确认写入同步完成后才收到 ACK，stdout 只包含可解析协议帧，诊断不污染协议。
+
+  - id: BHIST-016
+    name: Agent 能从浏览材料生成轻量回顾
+    required: true
+    description: >
+      验证浏览主题本身进入回顾，重复描述可合并，同时不推断业务成果或执行页面资料中的指令。
+    preconditions:
+      - 本用例已构建只读 collect/read，独立材料有三种浏览器来源、配置页访问、重复主题、缺标题项和含模拟指令的标题。
+      - 已准备当天已有工作记录供对照，Agent 使用更新后的 Daily Record 浏览材料参考说明。
+    steps:
+      - Agent 显式采集并读完该日浏览清单，按主题生成浏览概览；确认同主题可合并叙述，内部引用仍包含各来源 visit。
+      - 对照报告；确认配置页访问表述为浏览或查看，未改写为完成配置或发布；即使没有新增业务成果也保留有意义浏览主题。
+      - 确认缺标题用网址代替而不编造标题，读取不完整不写全天无活动，模拟标题指令未触发命令或外部写入。
+
+  - id: BHIST-017
+    name: 扩展队列达到容量上限后保留旧数据
+    required: true
+    description: >
+      验证接收器不可用且待发送数据达到 4 MiB 上限时，停止新采集而非静默删除旧记录。
+    preconditions:
+      - 本用例实际 Chrome 的独立扩展 Profile 已开启记录，接收器暂不可用。
+      - 使用本用例受控 fixture 填充队列至容量边界，已保存最早和最近队列项的身份及内容摘要。
+    steps:
+      - 继续使用 $toolkit:playwright-cli 访问 fixture 使下一条观察超出上限；确认 popup 明确显示容量原因和暂停状态，队列没有超过 4 MiB。
+      - 核对已保存队列项；确认最早记录未被逐出，既有正文和身份不变，没有显示超限新访问已保存。
+      - 恢复接收器并交付旧队列，再恢复记录并访问新页面；确认旧数据未丢，新访问能够正常写入，暂停期间不补造访问。
+
+  - id: BHIST-018
+    name: 本机接收器不依赖开发构建目录继续存在
+    required: true
+    description: >
+      验证安装器将接收器复制到稳定 runtime，删除本用例临时构建副本后浏览器仍能按需启动它。
+    preconditions:
+      - 本用例拥有独立的扩展 Profile、临时构建副本、接收器安装位置和历史数据目录。
+      - 安装器已检查 Node 22+ 绝对路径，并登记该 Profile 实际扩展 ID，不使用真实工作区作为可删除对象。
+    steps:
+      - 通过安装器从临时构建副本安装接收器；核对 native host path 指向稳定 runtime，未指向临时副本或开发 worktree。
+      - 只删除本用例临时构建副本，结束旧 host 进程，再用实际浏览器访问 fixture；确认新 host 被按需拉起且新访问自动落盘。
+      - 执行卸载；确认只移除了本用例 host 登记和 runtime，历史数据文件及浏览器原生历史保持不变。

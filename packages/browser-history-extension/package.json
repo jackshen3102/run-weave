@@ -1,0 +1,19 @@
+{
+  "name": "@runweave/browser-history-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@runweave/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.3.6",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2"
+  }
+}

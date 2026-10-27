@@ -1,4 +1,7 @@
 import { registerBookmarkHandlers } from "./bookmarks/handlers.js";
+import { registerBrowserPluginHandlers } from "./plugins/ipc.js";
+import { startBrowserPlugins } from "./plugins/host.js";
+import { trustedBrowserWindow } from "./security/sender.js";
 import { registerTerminalBrowserFindHandlers } from "./find.js";
 import type { DesktopLocalBrowserSource } from "@runweave/shared/browser-local-tunnel";
 import { navigateWithLocalPreview } from "./local-preview/navigation.js";
@@ -92,7 +95,9 @@ function resolveTerminalBrowserEntryKey(
   return getTerminalBrowserKey(win, entry.profileId, tabId);
 }
 
-export function registerTerminalBrowserHandlers(): void {
+export async function registerTerminalBrowserHandlers(): Promise<void> {
+  registerBrowserPluginHandlers();
+  await startBrowserPlugins();
   registerBookmarkHandlers();
   registerTerminalBrowserFindHandlers();
   registerTerminalBrowserPresentationHandler();
@@ -114,7 +119,7 @@ export function registerTerminalBrowserHandlers(): void {
   registerTerminalBrowserMinimumWidthHandler();
 
   ipcMain.handle("terminal-browser:open-tool-menu", async (event, request) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
+    const win = trustedBrowserWindow(event);
     if (!win) {
       return null;
     }

@@ -343,7 +343,7 @@ if (hasSingleInstanceLock) {
       registerRuntimeStatsHandler(() => desktopRuntime.packagedBackend);
       registerSystemMonitorHandler(() => desktopRuntime.packagedBackend);
       registerClipboardImageHandlers(() => desktopRuntime.mainWindow);
-      registerTerminalBrowserHandlers();
+      await registerTerminalBrowserHandlers();
       registerTerminalBrowserAutomationHandlers();
       registerCdpProxyHandlers();
       const openAttentionSlot = registerCompanionHandlers();
@@ -576,6 +576,7 @@ app.on("before-quit", (event) => {
   desktopRuntime.stoppingPackagedBackendsForQuit = true;
   void (async () => {
     await Promise.allSettled([
+      import("./browser/plugins/host.js").then(module => module.stopBrowserPlugins()),
       Promise.resolve().then(stopTunnels),
       desktopRuntime.cdpProxy?.stop() ?? Promise.resolve(),
       stopAllTerminalBrowserWhistles(),

@@ -1,5 +1,7 @@
 import { BrowserWindow, shell } from "electron";
 import { normalizeTerminalBrowserUrlForStorage } from "./tabs/state.js";
+import { attachBrowserPlugins } from "./plugins/host.js";
+import { randomUUID } from "node:crypto";
 import {
   getTerminalBrowserProfileConfig,
   type TerminalBrowserProfileId,
@@ -37,7 +39,17 @@ export function configureTerminalBrowserPopupWindow(
   parentWindow: BrowserWindow,
   popupWindow: BrowserWindow,
   profileId: TerminalBrowserProfileId,
+  groupId: () => string,
 ): void {
+  attachBrowserPlugins({
+    contents: popupWindow.webContents,
+    profileId,
+    pageId: `browser-popup-${randomUUID()}`,
+    groupId,
+    kind: "popup",
+    restoring: false,
+    displayUrl: (url) => url,
+  });
   popupWindow.once("ready-to-show", () => {
     if (!popupWindow.isDestroyed()) {
       popupWindow.show();
@@ -58,7 +70,12 @@ export function configureTerminalBrowserPopupWindow(
     };
   });
   popupWindow.webContents.on("did-create-window", (childWindow) => {
-    configureTerminalBrowserPopupWindow(parentWindow, childWindow, profileId);
+    configureTerminalBrowserPopupWindow(
+      parentWindow,
+      childWindow,
+      profileId,
+      groupId,
+    );
   });
 }
 

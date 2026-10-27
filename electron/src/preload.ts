@@ -63,6 +63,8 @@ import type {
 } from "@runweave/shared/attention";
 
 const electronApi = {
+  terminalBrowserGetPlugins: (profileId: TerminalBrowserProfileId) => ipcRenderer.invoke("terminal-browser:plugins-list", profileId),
+  terminalBrowserRunPluginCommand: (request: import("@runweave/shared/browser-plugins").BrowserPluginCommand) => ipcRenderer.invoke("terminal-browser:plugin-command", request),
   platform: process.platform,
   downloadClipboardImage: (url: string) => ipcRenderer.invoke("clipboard:download-image", url),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),

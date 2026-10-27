@@ -1,0 +1,25 @@
+{
+  "name": "@runweave/browser-history",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/writer.ts",
+    "./outbox": "./src/outbox.ts"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "verify": "node scripts/verify.mjs && node scripts/verify-outbox.mjs",
+    "fixture": "node scripts/fixture-server.mjs"
+  },
+  "dependencies": {
+    "@runweave/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2"
+  }
+}
