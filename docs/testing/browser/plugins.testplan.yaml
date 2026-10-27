@@ -1,0 +1,116 @@
+version: 1
+name: Browser 插件宿主与解包扩展
+description: >
+  在独立 Beta 验证统一宿主管理内置记录与第三方扩展，状态按 Profile 隔离，
+  持久数据能恢复；原生交互、实际注入和文件集成证据分别报告。
+cases:
+  - id: BPLUGIN-001
+    name: 统一菜单执行内置插件命令
+    required: true
+    description: 验证当前 Profile 的插件菜单能展示记录状态并执行启停，其他 Profile 不受影响。
+    preconditions:
+      - 独立 Beta 已由 Dev Session planner 启动，所有数据目录归本用例所有。
+      - 当前 Profile 已有 HTTP fixture 页面，浏览记录默认关闭。
+    steps:
+      - 打开右侧工具菜单的浏览器插件，确认浏览记录和 Chrome 扩展均在统一入口。
+      - 开启记录新访问并访问 fixture，确认保存状态为已落盘且时间、标题、网址可回读。
+      - 切换另一 Profile 的记录开关，再在原页面更新标题，确认原访问身份未变且标题修订仍能保存。
+  - id: BPLUGIN-002
+    name: 取消导航后保留当前访问
+    required: true
+    description: 验证未提交的导航不会破坏当前页面的后续标题修订或产生虚假访问。
+    preconditions:
+      - 本用例独立 Profile 已开启记录并提交唯一标识的 fixture 页面。
+      - 受控 HTTP 服务提供延迟响应，已记录当前 visitId。
+    steps:
+      - 发起延迟导航并在提交前停止，确认页面仍为原地址。
+      - 修改原页面标题，回读日志确认沿用原 visitId，延迟导航未产生访问。
+  - id: BPLUGIN-003
+    name: 实际弹窗进入同一插件宿主
+    required: true
+    description: 验证允许的 HTTP 弹窗能记录且保留原 Profile 与 Group，iframe 不算访问。
+    preconditions:
+      - 本用例独立 Beta 页面已启用记录，fixture 提供 iframe 和可打开的新窗口。
+    steps:
+      - 打开真实弹窗并完成 HTTP 提交，确认日志有独立 popup 页面身份及原 Profile、Group。
+      - 关闭弹窗后继续在原页更新标题，确认记录正常且无 iframe 访问。
+  - id: BPLUGIN-004
+    name: 内置记录休眠恢复不增加访问
+    required: true
+    description: 验证宿主清理旧监听器并抑制恢复加载，后续真实导航仍恰好记录一次。
+    preconditions:
+      - 独立 Beta 的 fixture 标签符合现有休眠条件，记录已开启。
+      - 已保存休眠前访问视图与标签身份，附着该标签的自动化会话已 detach。
+    steps:
+      - 通过现有休眠入口休眠并重新唤醒该标签，确认恢复加载没有新增访问。
+      - 显式导航到新 fixture，确认仅产生一次新访问及正常标题修订。
+  - id: BPLUGIN-005
+    name: 内置记录写入失败后持久重放
+    required: true
+    description: 验证真实文件写入失败后旧观察跨进程保留身份，恢复交付不会增加访问数。
+    preconditions:
+      - 仅使用本用例独立数据根与 outbox，目标日志根可被本用例阻断和恢复。
+    steps:
+      - 阻断日志写入并保存观察，确认状态报错且 outbox 文件保留，其他 Profile 状态未被覆盖。
+      - 关闭并重新创建写入进程，恢复目录并重试，确认原身份交付成功且待保存为零。
+      - 重放同一未知 ACK 观察并 collect，确认访问数不增加、最后落盘回执可跨重启读取。
+  - id: BPLUGIN-006
+    name: 内置队列超限保留旧记录
+    required: true
+    description: 验证 4 MiB 队列上限暂停新采集，旧观察不被逐出或改写。
+    preconditions:
+      - 本用例真实文件 outbox 的目标日志暂不可写，已保存最早观察摘要。
+    steps:
+      - 填充至容量边界并继续加入一条，确认明确报超限且原最早观察摘要未变。
+      - 恢复日志目录后交付，确认既有观察全部落盘，队列清空。
+  - id: BPLUGIN-007
+    name: 原生选择并确认扩展安装
+    required: true
+    description: 验证用户选择解包目录后能查看目标 Profile、权限和兼容边界，再确认加载。
+    preconditions:
+      - 独立 Beta 当前 Profile 没有本用例扩展，受控扩展只匹配本地 fixture。
+      - CUA 可操作本次实际 Beta 的原生目录选择器与确认弹窗。
+    steps:
+      - 从统一菜单安装解包扩展，在系统选择器选中受控目录，确认权限和目标 Profile 可见。
+      - 先取消一次，确认未安装；再次选择并确认加载，确认菜单出现已加载且兼容未确认。
+      - 访问 fixture 并确认 content script 的可见标识，不能只以加载成功判定兼容。
+  - id: BPLUGIN-008
+    name: 扩展启停和 Profile 隔离
+    required: true
+    description: 验证启停只影响目标 Profile，已卸载的脚本不在后续文档运行。
+    preconditions:
+      - 独立 Beta 的 Profile 1 已安装匹配本地 fixture 的受控扩展，Profile 2 未安装。
+    steps:
+      - 在两个 Profile 分别打开 fixture，确认只有 Profile 1 出现扩展标识。
+      - 停用扩展后重新加载文档，确认标识不再出现；重新启用并加载新文档后确认恢复。
+  - id: BPLUGIN-009
+    name: 私有扩展副本跨启动恢复
+    required: true
+    description: 验证应用启动重新加载登记副本，不依赖原安装目录继续存在。
+    preconditions:
+      - 本用例独立 Dev Session 已捕获实际 ID，作为本用例重启恢复的 validationSessionId。
+      - 受控扩展已复制并登记，已保存 Profile、安装 ID、扩展 ID 及启用状态。
+    steps:
+      - 移走本用例原安装目录，按精确 Session ID 停止并重新启动同一 Session。
+      - 使用新 resolver 返回的入口附着，确认身份与启用状态保持，新 fixture 文档实际注入标识。
+  - id: BPLUGIN-010
+    name: 扩展页面与卸载仅影响本安装
+    required: true
+    description: 验证声明的 popup 能使用扩展 Session 打开，卸载保留浏览记录。
+    preconditions:
+      - 独立 Beta 已安装声明本地 popup 的受控扩展，浏览记录已有可回读日志。
+      - CUA 可操作卸载确认弹窗。
+    steps:
+      - 使用统一菜单打开扩展页面，确认实际 chrome-extension 页面可见且内容正确。
+      - 确认卸载并重新加载 fixture，确认登记和副本移除、注入停止，浏览记录摘要未变。
+  - id: BPLUGIN-011
+    name: 不合法包和不受信命令被拒绝
+    required: true
+    description: 验证包边界和应用命令边界明确拒绝无效输入，其他插件仍可查询。
+    preconditions:
+      - 仅使用本用例自有包目录，包含不合法 manifest、软链接和特殊文件变体。
+      - 实际 Beta 可从可信应用主框架查询插件状态。
+    steps:
+      - 分别提交无效包，确认安装被拒绝且没有可运行登记，不创建目录外副本。
+      - 从可信主窗口提交未声明插件命令或非法 Profile，确认 IPC 拒绝；普通网页不暴露应用 bridge。
+      - 查询其他插件，确认仍有正常状态，不被失败命令中断。

@@ -217,6 +217,7 @@ export function TerminalBrowserNavigationBar({
     setMoreToolsOpen(true);
     try {
       const action = await openToolMenu({
+        profileId: profile.profileId,
         ...(bookmarks.supported ? { bookmarkBarVisible: bookmarks.snapshot?.barVisible ?? true } : {}),
         x: rect.left,
         y: rect.bottom,

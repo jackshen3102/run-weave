@@ -1,4 +1,5 @@
 import type { TerminalBrowserMinimumViewportWidth } from "./minimum-width";
+import type { TerminalBrowserProfileId } from './profile';
 
 export type TerminalBrowserToolMenuAction =
   | "open-bookmarks"
@@ -18,6 +19,7 @@ export type TerminalBrowserToolMenuAction =
   | "minimum-width-1440";
 
 export interface TerminalBrowserToolMenuRequest {
+  profileId?: TerminalBrowserProfileId;
   bookmarkBarVisible?: boolean;
   x: number;
   y: number;

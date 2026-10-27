@@ -45,6 +45,7 @@ import {
 } from "./updates.js";
 import { recordBrowserTabEvent } from "../../activity/emitter.js";
 import { attachBrowserNavigationActivity } from "../../activity/browser-navigation.js";
+import { attachBrowserPlugins } from "../plugins/host.js";
 import { attachTerminalBrowser, detachTerminalBrowser } from "./attachment.js";
 import { validateTerminalBrowserUrl } from "./helpers.js";
 import { attachTerminalBrowserFind } from "../find.js";
@@ -137,7 +138,7 @@ export function getOrCreateTerminalBrowserView(
     popupWindow.once("closed", () => {
       entry.popupCount -= 1;
     });
-    configureTerminalBrowserPopupWindow(win, popupWindow, profileId);
+    configureTerminalBrowserPopupWindow(win, popupWindow, profileId, () => entry.browserGroupId);
   });
   view.setVisible(true);
 
@@ -184,6 +185,12 @@ export function getOrCreateTerminalBrowserView(
   };
 
   attachTerminalBrowserFind(win, tabId, entry);
+  // Dormant metadata explicitly identifies automatic restore/wake loads.
+  attachBrowserPlugins({
+    contents: view.webContents, profileId, pageId: tabId,
+    groupId: () => entry.browserGroupId, kind: "tab", restoring: Boolean(dormant),
+    displayUrl: url => entry.localPreview?.displayURL(url) ?? url,
+  });
 
   if (entry.localPreview) {
     entry.localPreview.onFailure = (message) => {

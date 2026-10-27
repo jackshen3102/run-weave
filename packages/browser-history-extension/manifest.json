@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Runweave 浏览记录",
+  "version": "0.1.0",
+  "description": "在本机记录访问时间、标题和网址，供 Agent 整理每日浏览概览。",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "webNavigation",
+    "tabs",
+    "storage",
+    "nativeMessaging",
+    "alarms"
+  ],
+  "incognito": "not_allowed",
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "浏览记录" }
+}

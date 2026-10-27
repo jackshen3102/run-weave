@@ -1,4 +1,5 @@
 import type { BookmarkMutation, BookmarkResult, BookmarkSnapshot, BookmarkTargetResult } from "../browser/bookmarks";
+import type { BrowserPluginCommand, BrowserPluginSnapshot } from "../browser/plugins";
 import type { TerminalBadgeConnection, TerminalBadgeStatus } from "../terminal/unread";
 import type { TunnelSnapshot, TunnelConfigUpdate, TunnelImport, TunnelLogin, LocalRemoteDesktopInfo } from "../tunnels/index";
 import type { LoginResponse } from "../protocol";
@@ -178,6 +179,8 @@ export interface RunweaveElectronBridge {
     body: string;
   }) => Promise<boolean>;
   terminalBrowserGetBookmarks: () => Promise<BookmarkResult>;
+  terminalBrowserGetPlugins: (profileId: TerminalBrowserProfileId) => Promise<BrowserPluginSnapshot[]>;
+  terminalBrowserRunPluginCommand: (request: BrowserPluginCommand) => Promise<BrowserPluginSnapshot[]>;
   terminalBrowserMutateBookmarks: (request: BookmarkMutation) => Promise<BookmarkResult>;
   terminalBrowserGetBookmarkTarget: (tabId: string) => Promise<BookmarkTargetResult>;
   onTerminalBrowserBookmarksChanged: (listener: (snapshot: BookmarkSnapshot) => void) => () => void;

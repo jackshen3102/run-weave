@@ -11,6 +11,7 @@ description: 从本机 Agent 记录、飞书本人参与的聊天及本人创建
 - 本机 Agent：在 Runweave 源码仓库执行 `pnpm daily-record`；首次先执行 `pnpm --filter @runweave/daily-record build`。命令合同在该仓库的 `packages/daily-record/README.md`，按下方流程处理。
 - 飞书消息或文档：读[飞书采集与合并](references/feishu.md)，使用本 Skill 的 `scripts/feishu.py`。它只调用 `lark-cli` 读取候选与选定上下文，不发消息、不写文档。
 - 用户要求保存到随记：读[随记工作事实导入](references/suiji-work-records.md)，生成统一包后使用随记 Skill 的 prepare/import/回读闭环。
+- 用户本次包含浏览记录：读[浏览材料与轻量回顾](references/browser-history.md)，使用独立的 browser-history collect/read；只归纳浏览主题，不从访问推断工作成果。
 - 同时使用多个渠道：先分别取得材料，再按下方“跨渠道合并”整理；其他机器未采集时不能宣称已完整覆盖或去重。
 
 本 Skill 目录也可独立安装；飞书脚本只依赖 Python 与 lark-cli，本机 Agent CLI 需要 Runweave 源码仓库。

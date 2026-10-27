@@ -94,7 +94,8 @@
     "configuration:check": "node ./scripts/quality/configuration.mjs && pnpm configuration:docs:check",
     "configuration:docs": "pnpm --dir backend exec tsx ../scripts/configuration-reference.ts",
     "configuration:docs:check": "pnpm configuration:docs --check",
-    "daily-record": "node packages/daily-record/dist/cli.cjs"
+    "daily-record": "node packages/daily-record/dist/cli.cjs",
+    "browser-history": "node packages/browser-history/dist/cli.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --fix",
