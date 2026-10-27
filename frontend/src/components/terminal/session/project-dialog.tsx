@@ -11,8 +11,9 @@ interface TerminalProjectDialogProps {
   canSelectDirectory: boolean;
   initialName?: string;
   initialPath?: string | null;
+  initialMainBranch?: string | null;
   onClose: () => void;
-  onSubmit: (name: string, projectPath: string) => Promise<void>;
+  onSubmit: (name: string, projectPath: string, mainBranch: string) => Promise<void>;
 }
 
 export function TerminalProjectDialog({
@@ -23,11 +24,13 @@ export function TerminalProjectDialog({
   canSelectDirectory,
   initialName = "",
   initialPath = "",
+  initialMainBranch = "",
   onClose,
   onSubmit,
 }: TerminalProjectDialogProps) {
   const [name, setName] = useState(initialName);
   const [projectPath, setProjectPath] = useState(initialPath ?? "");
+  const [mainBranch, setMainBranch] = useState(initialMainBranch ?? "");
   const [nameEdited, setNameEdited] = useState(mode === "edit");
   const [selecting, setSelecting] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
@@ -46,13 +49,14 @@ export function TerminalProjectDialog({
 
     setName(initialName);
     setProjectPath(initialPath ?? "");
+    setMainBranch(initialMainBranch ?? "");
     setNameEdited(mode === "edit");
     setSelecting(false);
     setSelectionError(null);
     return () => {
       selectionRequest.current += 1;
     };
-  }, [initialName, initialPath, mode, open]);
+  }, [initialName, initialPath, initialMainBranch, mode, open]);
 
   const chooseDirectory = useMemoizedFn(async (): Promise<void> => {
     if (!selectDirectory || busy) return;
@@ -89,7 +93,7 @@ export function TerminalProjectDialog({
   const submit = async (): Promise<void> => {
     if (busy) return;
     setSelectionError(null);
-    await onSubmit(name, projectPath);
+    await onSubmit(name, projectPath, mainBranch);
   };
 
   return (
@@ -103,7 +107,7 @@ export function TerminalProjectDialog({
             <p className="mt-1 text-sm text-slate-400">
               {mode === "create"
                 ? "Create a project bucket above your terminal tabs."
-                : "Update the name or project path for this terminal project."}
+                : "Update the name, project path or main branch for this terminal project."}
             </p>
           </div>
           <Button
@@ -181,6 +185,35 @@ export function TerminalProjectDialog({
               className="h-12 w-full rounded-[1.25rem] border border-slate-800 bg-slate-900/80 px-4 text-sm text-slate-100 outline-none transition focus:border-slate-500"
             />
           </div>
+
+          {mode === "edit" ? (
+            <div className="space-y-2">
+              <label
+                className="text-xs uppercase tracking-[0.24em] text-slate-500"
+                htmlFor="terminal-project-main-branch"
+              >
+                主分支
+              </label>
+              <input
+                id="terminal-project-main-branch"
+                value={mainBranch}
+                placeholder="默认分支（自动识别）"
+                disabled={busy}
+                onChange={(event) => setMainBranch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void submit();
+                  }
+                }}
+                aria-describedby="terminal-project-main-branch-help"
+                className="h-12 w-full rounded-[1.25rem] border border-slate-800 bg-slate-900/80 px-4 text-sm text-slate-100 outline-none transition focus:border-slate-500"
+              />
+              <p id="terminal-project-main-branch-help" className="text-xs text-slate-500">
+                留空使用远端默认分支。填写分支名（如 release/next），用于关注列表和 Worktree 的差异比较。
+              </p>
+            </div>
+          ) : null}
 
           {selectionError || error ? (
             <p className="text-sm text-rose-400" role="alert">

@@ -25,6 +25,7 @@ export interface TerminalProjectRecord {
   id: string;
   name: string;
   path: string | null;
+  mainBranch?: string | null;
   createdAt: Date;
   isDefault: boolean;
   order?: number;
@@ -131,6 +132,7 @@ export function buildProjectRecord(
     id: persisted.id,
     name: persisted.name,
     path: persisted.path ?? null,
+    mainBranch: persisted.mainBranch ?? null,
     createdAt: new Date(persisted.createdAt),
     isDefault: persisted.isDefault,
     pinnedChildProjectIds: [...(persisted.pinnedChildProjectIds ?? [])],
@@ -145,6 +147,7 @@ export function toPersistedProject(
     id: project.id,
     name: project.name,
     path: project.path,
+    mainBranch: project.mainBranch ?? null,
     createdAt: project.createdAt.toISOString(),
     isDefault: project.isDefault,
     ...(project.pinnedChildProjectIds.length > 0

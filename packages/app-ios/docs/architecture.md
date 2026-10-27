@@ -164,12 +164,13 @@ session ID 和 overview 数据源。同一终端只出现一次，但仍保留�
 
 关注区在项目名旁显示可独立点击的 `main ↓5`、`main 最近 10 条` 或 `main ✓`（仅表示不落后），长项目名优先截断；
 普通项目行和终端页不添加状态。独立 `POST /api/app/home/branch-status` 只接受会话 ID，Backend
-用会话当前 cwd 的 HEAD 对比远端默认分支；优先 origin，否则仅使用唯一 remote。非 Git 目录隐藏，
+用会话当前 cwd 的 HEAD 对比所属父 Project 指定的主分支，未指定时使用远端默认分支
+（设置合同见[主分支更新](../../../docs/architecture/terminal-code-preview.md#主分支更新)）；优先 origin，否则仅使用唯一 remote。非 Git 目录隐藏，
 无法确定基准、浅克隆或无共同历史不伪造零。请求与 overview 分离，不阻塞列表加载。
 远端成功结果缓存十分钟；返回首页、恢复前台或电脑连接恢复时重新查询本地 HEAD，服务端仅合并
 两秒内的本地计算，不因重新进入首页重复 fetch。首页前台每三十秒检查缓存，失败后约三十秒重试；
 离开首页或后台停止轮询。下拉刷新和现有菜单刷新主动更新远端（服务端合并两秒内重复请求）。
-同一 Git common directory 共用远端 fetch，各 worktree 独立计算；失败保留旧计数并显示“待更新”。
+同一 Git common directory 与主分支设置共用远端 fetch，各 worktree 独立计算；失败保留旧计数并显示“待更新”。
 不会自动 rebase，零落后不代表工作区干净或 rebase 没有冲突。
 
 主分支数量入口与“打开终端”是互不嵌套的按钮；终端操作菜单也提供“主分支更新”。

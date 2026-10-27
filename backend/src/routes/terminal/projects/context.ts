@@ -83,9 +83,11 @@ export function registerTerminalProjectContextRoutes(
     }
     if (!project.path) { res.status(409).json({ message: "Project path unavailable" }); return; }
     const directory = project.path;
+    const mainBranch = terminalSessionManager.getProject(terminalSessionManager.resolveParentProjectId(project.id))?.mainBranch ?? null;
     try {
-      const value = await branchStatusService.branchUpdates({ kind: "project", projectId: project.id, path: directory }, parsed.data.refresh === "true");
-      if (terminalSessionManager.getProject(project.id)?.path !== directory) throw new BranchUpdatesTargetChangedError();
+      const value = await branchStatusService.branchUpdates({ kind: "project", projectId: project.id, path: directory }, parsed.data.refresh === "true", mainBranch);
+      if (terminalSessionManager.getProject(project.id)?.path !== directory
+        || (terminalSessionManager.getProject(terminalSessionManager.resolveParentProjectId(project.id))?.mainBranch ?? null) !== mainBranch) throw new BranchUpdatesTargetChangedError();
       res.json(value);
     } catch (error) {
       res.status(error instanceof BranchUpdatesTargetChangedError ? 409 : 503).json({
@@ -120,6 +122,7 @@ export function registerTerminalProjectContextRoutes(
       res.status(404).json({ message: "Terminal project not found" });
       return;
     }
+    const mainBranch = terminalSessionManager.getProject(req.params.parentProjectId)?.mainBranch ?? null;
     const ids = new Set(parsed.data.projectIds);
     const statuses = await Promise.all(contexts.filter((context) => ids.has(context.projectId))
       .map(async (context): Promise<TerminalProjectContextBranchStatus> => {
@@ -128,7 +131,7 @@ export function registerTerminalProjectContextRoutes(
           return { ...identity, state: "unavailable" };
         }
         const { state, baseBranch, behind, checkedAt } =
-          await branchStatusService.status(context.projectId, context.path);
+          await branchStatusService.status(context.projectId, context.path, false, mainBranch);
         return { ...identity, state, baseBranch, behind, checkedAt };
       }));
     res.json({ statuses });

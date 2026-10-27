@@ -19,6 +19,7 @@ export interface PersistedTerminalProjectRecord {
   id: string;
   name: string;
   path?: string | null;
+  mainBranch?: string | null;
   createdAt: string;
   isDefault: boolean;
   order?: number;
@@ -248,6 +249,7 @@ export interface UpdateTerminalPanelStatusParams {
 }
 
 export interface UpdateTerminalProjectParams {
+  mainBranch?: string | null;
   projectId: string;
   name?: string;
   path?: string | null;

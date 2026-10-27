@@ -77,7 +77,7 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
 
   async updateProject(
     projectId: string,
-    patch: { name?: string; path?: string | null },
+    patch: { name?: string; path?: string | null; mainBranch?: string | null },
   ): Promise<TerminalProjectRecord | undefined> {
     const project = this.projects.get(projectId);
     if (!project) {
@@ -94,7 +94,11 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
       projectId,
       name: project.name,
       path: project.path,
+      ...("mainBranch" in patch ? { mainBranch: patch.mainBranch ?? null } : {}),
     });
+    if ("mainBranch" in patch) {
+      project.mainBranch = patch.mainBranch ?? null;
+    }
     this.projectContexts.clear(projectId);
     await this.projectContexts.refresh(project, this.listSessions());
     return project;
