@@ -15,10 +15,9 @@ struct BranchUpdatesView: View {
   @StateObject private var model: BranchUpdatesModel
   @State private var restored = false
   let title: String
-  let returnLabel: String
 
-  init(session: AppSession, terminalID: String, cwd: String, title: String, returnLabel: String) {
-    self.session = session; self.title = title; self.returnLabel = returnLabel
+  init(session: AppSession, terminalID: String, cwd: String, title: String) {
+    self.session = session; self.title = title
     _model = StateObject(wrappedValue: BranchUpdatesModel(session: session, terminalID: terminalID, cwd: cwd))
   }
   var body: some View {
@@ -79,7 +78,10 @@ struct BranchUpdatesView: View {
       .background(Color(UIColor.systemGroupedBackground))
       .navigationTitle("主分支更新").navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button(returnLabel) { dismiss() }.accessibilityIdentifier("branch-updates-back") }
+        ToolbarItem(placement: .cancellationAction) {
+          Button { dismiss() } label: { Image(systemName: "chevron.left") }
+            .accessibilityLabel("返回").accessibilityIdentifier("branch-updates-back")
+        }
         ToolbarItem(placement: .navigationBarTrailing) {
           Button { model.refresh(force: true) } label: {
             if model.loading { ProgressView() } else { Image(systemName: "arrow.clockwise") }
@@ -88,6 +90,12 @@ struct BranchUpdatesView: View {
         }
       }
     }.navigationViewStyle(.stack).tint(TerminalAppearance.accent).clarityMask()
+      .simultaneousGesture(DragGesture(minimumDistance: 20, coordinateSpace: .global).onEnded { value in
+        // Reserve left-edge horizontal swipes for returning; vertical scrolling and text selection stay available.
+        guard value.startLocation.x <= 32, value.translation.width > 80,
+          value.translation.width > abs(value.translation.height) * 1.5 else { return }
+        dismiss()
+      })
       .mobileAnalyticsScreen(.branchUpdates)
       .onAppear { model.refresh() }
       .onDisappear { model.cancel() }

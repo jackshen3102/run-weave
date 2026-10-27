@@ -174,6 +174,7 @@ session ID 和 overview 数据源。同一终端只出现一次，但仍保留�
 不会自动 rebase，零落后不代表工作区干净或 rebase 没有冲突。
 
 主分支数量入口与“打开终端”是互不嵌套的按钮；终端操作菜单也提供“主分支更新”。
+更新页左上角只显示返回箭头，支持从屏幕左缘右滑返回原首页或终端；纵向滚动不触发返回。
 两者通过 `GET /api/app/home/branch-updates/:terminalSessionId` 打开同一 session.cwd 的全屏列表，
 由 `BranchUpdatesModel` 隔离连接代际和迟到请求。列表最多最近 10 条，数量与 accessibility
 同样封顶；精确 behind 仍保留在原状态 DTO。标题长文本换行，返回保留原首页或终端，

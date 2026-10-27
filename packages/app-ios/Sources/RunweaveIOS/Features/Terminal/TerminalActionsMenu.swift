@@ -77,7 +77,7 @@ struct TerminalActionsMenu: View, Equatable {
     }.accessibilityLabel("终端操作")
       .fullScreenCover(isPresented: $showingBranchUpdates) {
         BranchUpdatesView(session: session, terminalID: terminalID, cwd: cwd,
-          title: session.overview?.sessions.first(where: { $0.id == terminalID })?.title ?? "当前终端", returnLabel: "终端")
+          title: session.overview?.sessions.first(where: { $0.id == terminalID })?.title ?? "当前终端")
       }
   }
 }

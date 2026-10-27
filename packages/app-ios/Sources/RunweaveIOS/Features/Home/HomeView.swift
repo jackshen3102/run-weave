@@ -202,7 +202,7 @@ struct HomeView: View {
     }
     .fullScreenCover(item: $branchUpdatesTarget) { target in
       BranchUpdatesView(session: session, terminalID: target.id, cwd: target.cwd,
-        title: target.title, returnLabel: "Runweave")
+        title: target.title)
     }
     .sheet(isPresented: $newProject) {
       NewProjectView(session: session) { id in
