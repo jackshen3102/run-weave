@@ -1,7 +1,7 @@
 # 主分支更新交互原型
 
 > 历史设计原型。当前产品行为见[终端代码预览](../../architecture/terminal-code-preview.md)；数量与列表均最多 10 条，下方原型中的 14 条等计数仅为历史演示。原型截图不能代替产品验收。
-> 设计评审产物，使用虚构提交演示，不代表当前产品已实现或真实仓库状态。当前处于原型评审阶段，未冻结。
+> 冻结的设计评审产物，使用虚构提交演示，不代表真实仓库状态。下文描述原型本身，产品已实现的能力以权威文档和源码为准。
 
 ## 启动
 
@@ -33,7 +33,7 @@ python3 -m http.server 6188 --bind 127.0.0.1 --directory docs/prototypes/main-br
 | 无差异、刷新中及失败反馈           | 避免把失败或旧数据当成已同步  |
 | 切换工作区、关闭/重开、展开/还原   | 融入现有工作台导航            |
 
-`origin/main → 当前分支` 表示主分支提供、当前分支尚未包含的提交；不表达自动合并方向。真实实现应复用远端默认分支识别，不写死 main。
+`origin/main → 当前分支` 表示主分支提供、当前分支尚未包含的提交；不表达自动合并方向。当前产品支持项目主分支设置，未设置时识别远端默认分支；原型中的 main 只是演示。
 
 ## 原型辅助功能
 
@@ -57,10 +57,9 @@ python3 -m http.server 6188 --bind 127.0.0.1 --directory docs/prototypes/main-br
 - 首屏截图：[工作台](prototype-preview.png)
 - 无差异截图：[无待同步提交](prototype-empty.png)
 
-## 设计记录与边界
+## 历史设计与当前边界
 
-- 当前采用：Preview 新页签，数量提示作为快捷入口；提交列表使用单列节点线辅助扫描，不绘制分叉图。
-- 未采用：独立源码工具、完整 Git 图、直接跳转平台 Compare。
-- 尚待用户评审：最终视觉、元数据密度、工作台侧栏宽度。未开始产品实现或实施计划。
-- 真实代码现状：后端 `backend/src/terminal/git/home-branch-status.ts` 已获取默认主分支和落后数量，仍缺提交列表合同与接口。桌面数量提示在 `frontend/src/components/terminal/workspace/worktree-branch-status.tsx`，Preview 页签在 `frontend/src/components/terminal/preview/panel/shell.tsx`。
-- 原型验证不证明真实 API、跨端、远程 Git 或代码同步行为已可用。
+- 原型采用 Preview 新页签、数量提示快捷入口和单列节点线；未采用独立源码工具、完整 Git 图或平台 Compare 跳转。
+- 当前产品的 Worktree 数量提示属于切换 Worktree 的热区，提交列表从 Preview 页签打开；原型快捷入口与差异总数不再代表当前行为。
+- 提交列表合同与 Backend 接口已实现，项目主分支设置、最多 10 条与失败保留旧结果的合同见[终端代码预览](../../architecture/terminal-code-preview.md#主分支更新)。
+- 真实 API、跨端与远程 Git 的验证按[验收计划](../../testing/terminal/main-branch-updates.testplan.yaml)执行；上面的原型验证不能替代产品验收，也不证明代码已同步。
