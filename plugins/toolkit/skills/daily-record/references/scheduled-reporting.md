@@ -4,6 +4,8 @@
 
 ## 前置与配置
 
+已有本机任务时，先在 `~/.runweave/daily-record/` 中查找 `*-job.json`；只有一个任务配置时复用它，多个候选时核对当前机器及来源，不能猜测目标。沿用该配置中的日期、来源、collector、随记目标和状态目录，不重新初始化。执行相邻 `scripts/job.py` 前选择本机 Python 3.9+；macOS 优先使用 Homebrew 的 `python3`，并将 `~/.bun/bin` 和 Homebrew 的 `bin` 加入子进程 PATH，保留原 PATH。
+
 本机需要 Python 3.9+、Node.js 22、同版 `@runweave/daily-record` 构建产物、配套 suiji Skill 和非交互式 Agent 登录。飞书启用的节点另需已授权本人身份的 lark-cli；关闭飞书的节点不检查这个依赖。飞书聊天只采本人发送消息及选定相关回复，文档默认不采。
 
 配置、状态及凭据保存在用户私有目录，目录 0700、文件 0600，不提交 Git。示例中的绝对路径、ID 和首次日期必须替换为实际数据：
