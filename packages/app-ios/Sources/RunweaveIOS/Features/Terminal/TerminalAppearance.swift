@@ -35,12 +35,38 @@ struct TerminalControlButtonStyle: ButtonStyle {
 
 struct TerminalNavigationBackground: ViewModifier {
   func body(content: Content) -> some View {
-    if #available(iOS 16.0, *) {
+    if #available(iOS 26.0, *) {
+      content.toolbarBackground(.hidden, for: .navigationBar)
+    } else if #available(iOS 16.0, *) {
       content
-        .toolbarBackground(TerminalAppearance.background, for: .navigationBar)
+        .toolbarBackground(.regularMaterial, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
     } else {
       content
     }
+  }
+}
+
+/// Use one system material per control group, with an opaque accessibility fallback.
+private struct TerminalGlassSurface<S: InsettableShape>: ViewModifier {
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  let shape: S
+
+  func body(content: Content) -> some View {
+    if reduceTransparency {
+      content.background(TerminalAppearance.panel, in: shape)
+        .overlay(shape.strokeBorder(TerminalAppearance.border, lineWidth: 0.5))
+    } else if #available(iOS 26.0, *) {
+      content.glassEffect(.regular, in: shape)
+    } else {
+      content.background(.regularMaterial, in: shape)
+        .overlay(shape.strokeBorder(TerminalAppearance.border, lineWidth: 0.5))
+    }
+  }
+}
+
+extension View {
+  func terminalGlass<S: InsettableShape>(in shape: S) -> some View {
+    modifier(TerminalGlassSurface(shape: shape))
   }
 }

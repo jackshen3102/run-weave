@@ -43,11 +43,8 @@ struct TerminalInstantReplyBar: View {
     }
     .buttonStyle(.plain)
     .foregroundColor(TerminalAppearance.accent)
-    .padding(.horizontal, 16).padding(.vertical, 8)
-    .background(TerminalAppearance.background)
-    .overlay(alignment: .top) {
-      Rectangle().fill(TerminalAppearance.border).frame(height: 0.5)
-    }
+    .padding(4)
+    .terminalGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     .accessibilityValue(sending ? "发送中" : "")
   }
 }
