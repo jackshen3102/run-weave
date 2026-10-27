@@ -11271,5 +11271,13 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "向每个写入进程独有的 JSONL 流追加已校验浏览观察并同步，作为本机访问事实材料，不写业务配置。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "readFile(join(browserJob.c.stateDir, \"state.json\"))",
+    "count": 2,
+    "category": "test",
+    "reason": "读取本例临时浏览上报状态快照，核对来源迁移 dry-run 无副作用；仅访问隔离 fixture，不读取真实用户配置。"
   }
 ]
