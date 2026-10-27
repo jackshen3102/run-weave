@@ -416,30 +416,10 @@ struct TerminalScreen: View {
       }
       HStack(spacing: 0) {
         if sideChat.capabilities != nil {
-          Button { Task { await sideChat.open() } } label: {
-            Image(systemName: "bubble.left.and.bubble.right")
-              .frame(width: 64, height: 48).contentShape(Rectangle())
-              .overlay(alignment: .topTrailing) {
-                if sideChat.unread {
-                  Circle().fill(TerminalAppearance.accent).frame(width: 7, height: 7)
-                    .padding(.top, 6).padding(.trailing, 10)
-                }
-              }
-          }
-          .accessibilityLabel(sideChat.unread ? "旁聊 · 新回复" : "旁聊")
-          .accessibilityIdentifier("side-chat-open").disabled(sideChat.loading)
+          TerminalSideChatButton(sideChat: sideChat)
         }
         if session.isCommandActive(details.id) {
-          Button(action: stopActiveCommand) {
-            Group {
-              if stoppingCommand { ProgressView().tint(.red) }
-              else { Image(systemName: "stop.fill") }
-            }
-            .frame(width: 64, height: 48).foregroundColor(.red).contentShape(Rectangle())
-          }
-          .accessibilityLabel(stoppingCommand ? "停止中…" : "停止执行")
-          .accessibilityIdentifier("terminal-floating-stop")
-          .disabled(stoppingCommand || !session.canWrite)
+          TerminalStopButton(stopping: stoppingCommand, canWrite: session.canWrite, stop: stopActiveCommand)
         }
         Button(action: openComposer) {
           Image(systemName: "square.and.pencil")
