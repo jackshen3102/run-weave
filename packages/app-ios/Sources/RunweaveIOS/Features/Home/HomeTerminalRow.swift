@@ -1,6 +1,13 @@
 import SwiftUI
 import UIKit
 
+private struct HomeBranchBadgeBounds: PreferenceKey {
+  static var defaultValue: Anchor<CGRect>? { nil }
+  static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+    value = nextValue() ?? value
+  }
+}
+
 struct HomeTerminalRow: View {
   @ObservedObject var session: AppSession
   let terminal: HomeTerminal
@@ -33,38 +40,38 @@ struct HomeTerminalRow: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Button { Task { await session.openTerminal(terminal.id) } } label: {
-        HStack {
-          Text(terminal.title).font(.headline).foregroundColor(.primary).lineLimit(1)
-            .layoutPriority(1)
-          TerminalAttentionBadge(
-            unread: terminal.hasUnreadCompletion, bell: session.bellMarkers.contains(terminal.id),
-            showLabel: false)
-          if pinned {
-            Image(systemName: "pin.fill").font(.caption).foregroundColor(.secondary)
-              .accessibilityLabel("已置顶")
-          }
-          Spacer()
-          if session.metadataWrites.contains(terminal.id) { ProgressView() }
-          TerminalStatusBadge(terminal: terminal).fixedSize()
-        }.contentShape(Rectangle())
-      }.buttonStyle(.plain).frame(minHeight: 44)
-      if let projectName {
-        HStack(spacing: 5) {
-          Text(projectName).font(.caption).foregroundColor(.secondary).lineLimit(1)
-          Spacer(minLength: 3)
-          if let branchStatus, branchStatus.state != "not-repository" {
-            Button(action: showBranchUpdates) {
-              HomeBranchStatusLabel(status: branchStatus)
-                .font(.caption).frame(minHeight: 44)
-            }.buttonStyle(.borderless)
-              .accessibilityIdentifier("home-branch-updates-\(terminal.id)")
-          }
-        }
-      }
-      Button { Task { await session.openTerminal(terminal.id) } } label: {
+    ZStack {
+      Button {
+        Task { await session.openTerminal(terminal.id) }
+      } label: {
         VStack(alignment: .leading, spacing: 4) {
+          HStack {
+            Text(terminal.title).font(.headline).foregroundColor(.primary).lineLimit(1)
+              .layoutPriority(1)
+            TerminalAttentionBadge(
+              unread: terminal.hasUnreadCompletion, bell: session.bellMarkers.contains(terminal.id),
+              showLabel: false)
+            if pinned {
+              Image(systemName: "pin.fill").font(.caption).foregroundColor(.secondary)
+                .accessibilityLabel("已置顶")
+            }
+            Spacer()
+            if session.metadataWrites.contains(terminal.id) { ProgressView() }
+            TerminalStatusBadge(terminal: terminal).fixedSize()
+          }
+          if let projectName {
+            HStack(spacing: 5) {
+              Text(projectName).lineLimit(1).truncationMode(.middle)
+              if let branchStatus, branchStatus.state != "not-repository" {
+                Text("·")
+                HomeBranchStatusLabel(status: branchStatus)
+                  .frame(maxWidth: 160, alignment: .leading)
+                  .fixedSize(horizontal: true, vertical: false).layoutPriority(1)
+                  .hidden()
+                  .anchorPreference(key: HomeBranchBadgeBounds.self, value: .bounds) { $0 }
+              }
+            }.font(.caption).foregroundColor(.secondary).lineLimit(1)
+          }
           if hasConversation {
             if let preview = terminal.conversationPreview, preview.available {
               Text("最近输入：\(preview.userText ?? "暂无输入记录")").lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
@@ -77,9 +84,25 @@ struct HomeTerminalRow: View {
           } else {
             Text(terminal.subtitle).lineLimit(1).font(.caption).foregroundColor(.secondary)
           }
-        }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-      }.buttonStyle(.plain)
-    }.padding(.vertical, 4)
+        }.padding(.vertical, 4).contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+    }
+    .overlayPreferenceValue(HomeBranchBadgeBounds.self) { anchor in
+      GeometryReader { geometry in
+        if let anchor, let branchStatus {
+          let bounds = geometry[anchor]
+          // Keep the original text layout; the independent hit area does not size the row.
+          Button(action: showBranchUpdates) {
+            HomeBranchStatusLabel(status: branchStatus).font(.caption)
+              .frame(width: max(44, bounds.width), height: max(44, bounds.height))
+              .contentShape(Rectangle())
+          }.buttonStyle(.borderless)
+            .position(x: bounds.midX, y: bounds.midY)
+            .accessibilityIdentifier("home-branch-updates-\(terminal.id)")
+        }
+      }
+    }
     .swipeActions(edge: .leading, allowsFullSwipe: false) {
       Button(action: setPinned) { Label(pinLabel, systemImage: pinned ? "pin.slash" : "pin") }
         .tint(.orange).disabled(!session.canEditTerminal(terminal.id))
