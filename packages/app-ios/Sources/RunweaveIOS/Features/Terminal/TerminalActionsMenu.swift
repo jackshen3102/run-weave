@@ -12,6 +12,10 @@ struct TerminalActionsMenu: View, Equatable {
   let canShare: Bool
   let sharing: Bool
   let share: () -> Void
+  let readConversation: () -> Void
+  let canReply: Bool
+  let reply: () -> Void
+  let openDesktop: () -> Void
   let supervisionEnabled: Bool
   let canFork: Bool
   @Binding var showingBranchUpdates: Bool
@@ -29,12 +33,20 @@ struct TerminalActionsMenu: View, Equatable {
       && lhs.canReconnect == rhs.canReconnect && lhs.canDelete == rhs.canDelete
       && lhs.canShare == rhs.canShare && lhs.sharing == rhs.sharing
       && lhs.supervisionEnabled == rhs.supervisionEnabled
-      && lhs.canFork == rhs.canFork
+      && lhs.canFork == rhs.canFork && lhs.canReply == rhs.canReply
   }
 
   var body: some View {
     Menu {
       Text(cwd)
+      Button(action: readConversation) { Label("阅读会话", systemImage: "book") }
+        .accessibilityIdentifier("terminal-conversation-open")
+      if canReply {
+        Button(action: reply) { Label("回复辅助", systemImage: "questionmark.bubble") }
+          .accessibilityIdentifier("codex-reply-assistant-open")
+      }
+      Button(action: openDesktop) { Label("打开 Mac 桌面", systemImage: "display") }
+        .accessibilityIdentifier("terminal-remote-desktop-open")
       Button {
         Task {
           do { try await session.forkTerminal(terminalID) }

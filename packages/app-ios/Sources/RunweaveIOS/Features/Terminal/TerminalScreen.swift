@@ -29,6 +29,7 @@ struct TerminalScreen: View {
   @State private var sharing = false
   @State private var shareFailure: String?
   @State private var showingComposer = false
+  @State private var composerViewportCovered = false
   @AppStorage(DevicePreferences.instantRepliesVisibleKey, store: DevicePreferences.store) private var showingInstantReplies = false
   @State private var sendingInstantReply = false
   @AccessibilityFocusState private var composerTriggerFocused: Bool
@@ -277,7 +278,10 @@ struct TerminalScreen: View {
         sideChatAvailable: sideChat.capabilities != nil,
         sideChat: sideChat,
         onSideChat: { Task { await sideChat.open() } },
-        onDismiss: { composerTriggerFocused = true })
+        onDismiss: {
+          composerViewportCovered = false
+          composerTriggerFocused = true
+        })
     }
     .confirmationDialog("删除终端？", isPresented: $deleting, titleVisibility: .visible) {
       Button("删除", role: .destructive) { Task { await session.deleteTerminal(details.id) } }
@@ -385,18 +389,11 @@ struct TerminalScreen: View {
         Text(failure).font(.caption).foregroundColor(.red)
       }
       if let notice = controller.notice { Text(notice).font(.caption).foregroundColor(.orange) }
-      TerminalHostView(surface: controller.surface, covered: showingComposer || sideChat.visible).frame(minHeight: 24)
-        .padding(.horizontal, 12).padding(.top, 10)
-        .overlay(alignment: .bottomTrailing) {
-          floatingControls.padding(12)
-        }
-      if showingInstantReplies {
-        TerminalInstantReplyBar(
-          enabled: session.canWrite && controller.canSend && !sendingInstantReply && !stoppingCommand,
-          sending: sendingInstantReply,
-          send: sendInstantReply, close: { showingInstantReplies = false })
-      }
+      TerminalHostView(surface: controller.surface, covered: composerViewportCovered || sideChat.visible).frame(minHeight: 24)
+        .padding(.horizontal, 12).padding(.top, 8)
+        .ignoresSafeArea(.container, edges: .bottom)
     }
+    .overlay(alignment: .bottom) { terminalDock }
   }
 
   private var hasComposerDraft: Bool {
@@ -405,77 +402,76 @@ struct TerminalScreen: View {
       || !(attachmentDrafts.attachments[details.id] ?? []).isEmpty
   }
 
-  private var floatingControls: some View {
-    VStack(alignment: .trailing, spacing: 8) {
-      if currentTerminal?.terminalState.agent == "codex" {
-        Button {
-          guard replyContext == nil, session.terminal?.id == details.id,
-            session.terminalController === controller else { return }
-          let preview = currentTerminal?.conversationPreview
-          replyContext = CodexReplyContext(generation: session.generation,
-            conversationKey: currentTerminal?.conversationKey,
-            conversationRevision: currentTerminal?.conversationRevision,
-            agentText: preview?.available == true && preview?.provider == "codex" ? preview?.agentText : nil,
-            turnID: preview?.turnId)
-        } label: {
-          Label("回复辅助", systemImage: "questionmark.bubble")
-            .font(.caption).padding(8).background(.regularMaterial).cornerRadius(12)
-        }.accessibilityIdentifier("codex-reply-assistant-open")
+  private var terminalDock: some View {
+    VStack(spacing: 8) {
+      if let failure = sideChat.failure, !sideChat.visible {
+        Text(failure).font(.caption).foregroundColor(.red).frame(maxWidth: .infinity, alignment: .leading)
       }
-      if controller.scrolledBack {
-        Button("回到底部") { controller.returnToBottom() }
-          .font(.caption).padding(8).background(.regularMaterial).cornerRadius(12)
-          .disabled(!session.canWrite || !controller.canSend)
+      if showingInstantReplies {
+        TerminalInstantReplyBar(
+          enabled: session.canWrite && controller.canSend && !sendingInstantReply && !stoppingCommand,
+          sending: sendingInstantReply,
+          send: sendInstantReply, close: { showingInstantReplies = false })
+          .fixedSize(horizontal: true, vertical: false)
       }
-      if session.isCommandActive(details.id) {
-        Button(action: stopActiveCommand) {
-          Group {
-            if stoppingCommand { ProgressView().tint(.white) }
-            else { Image(systemName: "stop.fill") }
-          }
-          .frame(width: 48, height: 48)
-          .foregroundColor(.white)
-          .background(Color.red)
-          .clipShape(Circle())
-          .shadow(radius: 4, y: 2)
-        }
-        .accessibilityLabel(stoppingCommand ? "停止中…" : "停止执行")
-        .accessibilityIdentifier("terminal-floating-stop")
-        .disabled(stoppingCommand || !session.canWrite)
-      }
-      HStack(spacing: 10) {
+      HStack(spacing: 0) {
         if sideChat.capabilities != nil {
-          Button { Task { await sideChat.open() } } label: {
-            Label(sideChat.unread ? "旁聊 · 新回复" : "旁聊", systemImage: "bubble.left.and.bubble.right")
-              .font(.caption.weight(.semibold)).padding(12).background(.regularMaterial).cornerRadius(18)
-          }.accessibilityIdentifier("side-chat-open").disabled(sideChat.loading)
+          TerminalSideChatButton(sideChat: sideChat)
         }
-      Button {
-        actionFailure = nil
-        composerPreventsDismissal = false
-        showingComposer = true
-      } label: {
-        Image(systemName: "square.and.pencil")
-          .font(.system(size: 20, weight: .semibold))
-          .frame(width: 52, height: 52)
-          .foregroundColor(TerminalAppearance.background)
-          .background(TerminalAppearance.accent)
-          .clipShape(Circle())
-          .shadow(radius: 4, y: 2)
-          .overlay(alignment: .topTrailing) {
-            if hasComposerDraft {
-              Circle().fill(Color.orange).frame(width: 11, height: 11)
-                .overlay(Circle().stroke(TerminalAppearance.background, lineWidth: 2))
+        if session.isCommandActive(details.id) {
+          TerminalStopButton(stopping: stoppingCommand, canWrite: session.canWrite, stop: stopActiveCommand)
+        }
+        Button(action: openComposer) {
+          Image(systemName: "square.and.pencil")
+            .font(.system(size: 26, weight: .medium))
+            .frame(width: 64, height: 48).contentShape(Rectangle())
+            .overlay(alignment: .topTrailing) {
+              if hasComposerDraft {
+                Circle().fill(Color.orange).frame(width: 7, height: 7)
+                  .padding(.top, 6).padding(.trailing, 10)
+              }
             }
+        }
+        .accessibilityLabel("打开终端输入")
+        .accessibilityValue(hasComposerDraft ? "有未发送草稿" : "无草稿")
+        .accessibilityIdentifier("terminal-composer-open").accessibilityFocused($composerTriggerFocused)
+      }
+      .font(.system(size: 20, weight: .medium))
+      .foregroundColor(TerminalAppearance.accent)
+      .padding(4).terminalGlass(in: Capsule())
+      .frame(maxWidth: .infinity)
+      .overlay(alignment: .trailing) {
+        if controller.scrolledBack {
+          Button { controller.returnToBottom() } label: {
+            Image(systemName: "arrow.down").frame(width: 44, height: 44)
+              .terminalGlass(in: Circle()).contentShape(Circle())
           }
+          .accessibilityLabel("回到底部").accessibilityIdentifier("terminal-return-to-bottom")
+          .disabled(!session.canWrite || !controller.canSend)
+        }
       }
-      .accessibilityLabel("打开终端输入")
-      .accessibilityValue(hasComposerDraft ? "有未发送草稿" : "无草稿")
-      .accessibilityIdentifier("terminal-composer-open")
-      .accessibilityFocused($composerTriggerFocused)
-      }
-      if let failure = sideChat.failure, !sideChat.visible { Text(failure).font(.caption).foregroundColor(.red).frame(maxWidth: 250) }
     }
+    .frame(maxWidth: .infinity)
+    .buttonStyle(.plain).padding(.horizontal, 16).padding(.vertical, 8)
+  }
+
+  private func openComposer() {
+    actionFailure = nil
+    composerPreventsDismissal = false
+    // Full-screen content can receive transient safe-area sizes until UIKit finishes dismissing.
+    composerViewportCovered = true
+    showingComposer = true
+  }
+
+  private func openReplyAssistant() {
+    guard replyContext == nil, session.terminal?.id == details.id,
+      session.terminalController === controller else { return }
+    let preview = currentTerminal?.conversationPreview
+    replyContext = CodexReplyContext(generation: session.generation,
+      conversationKey: currentTerminal?.conversationKey,
+      conversationRevision: currentTerminal?.conversationRevision,
+      agentText: preview?.available == true && preview?.provider == "codex" ? preview?.agentText : nil,
+      turnID: preview?.turnId)
   }
 
   private var quickCommandProjectLabel: String {
@@ -503,8 +499,7 @@ struct TerminalScreen: View {
       terminalID: details.id, suppressQuickInputHistory: true)
     Task { await quickInputs.markUsed(session, id: item.id) }
     tab = "Chat"
-    composerPreventsDismissal = false
-    showingComposer = true
+    openComposer()
   }
 
   private func stopActiveCommand() {
@@ -556,13 +551,8 @@ struct TerminalScreen: View {
       .accessibilityElement(children: .combine)
     }
     ToolbarItemGroup(placement: .navigationBarTrailing) {
-      Button { showingConversation = true } label: { Image(systemName: "book") }
-        .accessibilityLabel("阅读会话").accessibilityIdentifier("terminal-conversation-open")
-      Button { remoteDesktop.requestOpen(backendConnectionID: session.connection?.id) } label: {
-        Image(systemName: "display")
-      }
-      .accessibilityLabel("打开 Mac 桌面")
-      .accessibilityIdentifier("terminal-remote-desktop-open")
+      Button { tab = "Files" } label: { Image(systemName: "folder") }
+        .accessibilityLabel("终端文件").accessibilityIdentifier("terminal-files-open")
       if let title = browser.pageTitle {
         Button {
           guard let source = session.browserSource,
@@ -588,6 +578,9 @@ struct TerminalScreen: View {
         cwd: cwd, canReturnToBottom: session.canWrite && controller.canSend,
         canReconnect: session.canReconnect, canDelete: session.canWrite,
         canShare: session.canWrite, sharing: sharing, share: shareSnapshot,
+        readConversation: { showingConversation = true },
+        canReply: currentTerminal?.terminalState.agent == "codex", reply: openReplyAssistant,
+        openDesktop: { remoteDesktop.requestOpen(backendConnectionID: session.connection?.id) },
         supervisionEnabled: supervision.watch?.enabled == true,
         canFork: session.canWrite && currentTerminal?.terminalState.agent == "codex"
           && currentTerminal?.terminalState.state == "agent_idle",
