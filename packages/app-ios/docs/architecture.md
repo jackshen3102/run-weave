@@ -162,7 +162,7 @@ session ID 和 overview 数据源。同一终端只出现一次，但仍保留�
 生成并持久化，缺失或 null 表示未置顶。重复置顶不改变时间；置顶用于保持关注，不提升排序优先级。
 数据随所连接的 Backend 隔离，桌面端不增加置顶 UI。
 
-关注区第二行在项目名后显示紧凑的 `main ↓5` 或 `main ✓`（仅表示不落后），长项目名优先截断；
+关注区在项目名旁显示可独立点击的 `main ↓5`、`main 最近 10 条` 或 `main ✓`（仅表示不落后），长项目名优先截断；
 普通项目行和终端页不添加状态。独立 `POST /api/app/home/branch-status` 只接受会话 ID，Backend
 用会话当前 cwd 的 HEAD 对比远端默认分支；优先 origin，否则仅使用唯一 remote。非 Git 目录隐藏，
 无法确定基准、浅克隆或无共同历史不伪造零。请求与 overview 分离，不阻塞列表加载。
@@ -171,6 +171,14 @@ session ID 和 overview 数据源。同一终端只出现一次，但仍保留�
 离开首页或后台停止轮询。下拉刷新和现有菜单刷新主动更新远端（服务端合并两秒内重复请求）。
 同一 Git common directory 共用远端 fetch，各 worktree 独立计算；失败保留旧计数并显示“待更新”。
 不会自动 rebase，零落后不代表工作区干净或 rebase 没有冲突。
+
+主分支数量入口与“打开终端”是互不嵌套的按钮；终端操作菜单也提供“主分支更新”。
+两者通过 `GET /api/app/home/branch-updates/:terminalSessionId` 打开同一 session.cwd 的全屏列表，
+由 `BranchUpdatesModel` 隔离连接代际和迟到请求。列表最多最近 10 条，数量与 accessibility
+同样封顶；精确 behind 仍保留在原状态 DTO。标题长文本换行，返回保留原首页或终端，
+只在内存保存按连接、terminal、cwd 隔离的提交阅读锚点，不保存正文。页面离开/后台取消请求，
+刷新失败保留同目标的上次结果与原成功时间；旧 Backend 缺少接口时明确降级。
+跨端接口与边界见[代码预览与主分支更新](../../../docs/architecture/terminal-code-preview.md#主分支更新)。
 
 重命名复用共享 `alias`，空值清除别名；Backend 和 Swift 均按最多 80 个 UTF-16 code units
 校验。PATCH 响应是 session list item，标题仍取 overview；修改成功后刷新失败会单独提示已保存，

@@ -16,7 +16,7 @@
 | 原生 Browser、Profile、CDP 与 Automation    | [Electron Browser](../../electron/src/browser/)                                                                                                                                                                       |
 | Agent 会话正文阅读                          | [Web 阅读页](../../frontend/src/components/terminal/conversation/)、[Backend 归属解析](../../backend/src/terminal/application/conversation.ts)、[App Server 投影](../../app-server/src/agents/conversation-reader.ts) |
 
-Preview 是 Terminal 的辅助上下文，提供 Files、Explorer 和 Review changes。它支持受限的文件编辑，
+Preview 是 Terminal 的辅助上下文，提供 Files、Explorer、Review changes 和主分支更新。它支持受限的文件编辑，
 不承担完整 IDE、LSP、扩展宿主、批量文件管理或 Git 提交。终端输出与恢复仍由
 [Terminal Surface](../../frontend/src/components/terminal/surface/) 和终端连接链路负责。
 
@@ -52,6 +52,28 @@ Automation 等能力暂不可用时不展示入口，但保留布局偏好。配
 [Profile 隔离回归](../testing/terminal/browser/multi-profile-whistle.testplan.yaml)。
 SIDETAB-008 必须实际检查 Electron 菜单、拖影与原生网页的显示和输入命中；
 DOM 检查与静态截图不能替代该交互验收。
+
+## 主分支更新
+
+Worktree 主分支状态可打开 Preview 的“主分支更新”页签；直接点击页签也可读取当前 Project。
+桌面按登记 Project/Worktree.path 查询，原生 iOS 首页与终端菜单按登记 session.cwd 查询，
+不互相回退。共享合同为 [Branch updates](../../packages/shared/src/terminal/branch-updates.ts)，
+领域读取复用 [主分支状态服务](../../backend/src/terminal/git/home-branch-status.ts) 的远端识别与 fetch。
+
+列表只取远端默认主分支中当前 HEAD 不可达的最近 10 个提交，保留 merge commit，
+显示标题、短 SHA、作者和提交时间。客户端数量同样最多 10；达到上限用“最近 10 条”表示
+展示范围，不显示真实总数或 10+。旧状态接口的精确 behind 合同不变。
+
+新增接口为 `GET /api/terminal/project/:projectId/branch-updates` 与
+`GET /api/app/home/branch-updates/:terminalSessionId`，仅接受可选 `refresh=true|false`，
+不接收任意路径、ref 或 limit。读取使用固定 head/base OID，目标变化返回 409；无共同历史、
+浅克隆、非 Git 与读取失败不伪造零。失败只保留同目录、同 HEAD 与同分支的旧列表及原检查时间。
+仅打开、切换目标、手动刷新时读取列表，不增加正文轮询。fetch 可更新远端跟踪引用，
+不执行分支切换、合并、rebase 或修改索引/工作区。
+
+阅读位置按连接与目标隔离，只保存提交 SHA 和阅读偏移，不持久化提交正文。
+原生 iOS 使用独立全屏页面，返回原首页或原终端，不创建终端 controller、不增加终端标签；
+HTML 原型不能替代原生验证。实际行为按[验收合同](../testing/terminal/main-branch-updates.testplan.yaml)取证。
 
 ## Agent 会话阅读
 

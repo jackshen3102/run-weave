@@ -6,6 +6,12 @@ struct HomeView: View {
   @ObservedObject private var attentionRetention: AttentionRetentionStore
   @EnvironmentObject private var remoteDesktop: RemoteDesktopCoordinator
   @StateObject private var branchStatuses = HomeBranchStatusModel()
+  private struct BranchUpdatesTarget: Identifiable {
+    let id: String
+    let cwd: String
+    let title: String
+  }
+  @State private var branchUpdatesTarget: BranchUpdatesTarget?
   @State private var query = ""
   @State private var expanded = Set<String>()
   @State private var newProject = false
@@ -43,6 +49,9 @@ struct HomeView: View {
   private func row(_ terminal: HomeTerminal, projectName: String? = nil) -> some View {
     HomeTerminalRow(session: session, terminal: terminal, projectName: projectName,
       branchStatus: projectName == nil ? nil : branchStatuses.status(for: terminal, generation: session.generation, online: session.health.status == .online),
+      showBranchUpdates: {
+        branchUpdatesTarget = BranchUpdatesTarget(id: terminal.id, cwd: terminal.cwd, title: terminal.title)
+      },
       rename: { renaming = terminal }, move: { moving = terminal }, delete: { deleting = terminal })
       .onAppear { visibleConversationCounts[terminal.id, default: 0] += 1 }
       .onDisappear {
@@ -166,6 +175,7 @@ struct HomeView: View {
       expanded.removeAll()
       initializedGeneration = nil
       query = ""
+      branchUpdatesTarget = nil
       renaming = nil
       moving = nil
       deleting = nil
@@ -189,6 +199,10 @@ struct HomeView: View {
           Image(systemName: "ellipsis.circle")
         }.accessibilityLabel("Home actions")
       }
+    }
+    .fullScreenCover(item: $branchUpdatesTarget) { target in
+      BranchUpdatesView(session: session, terminalID: target.id, cwd: target.cwd,
+        title: target.title, returnLabel: "Runweave")
     }
     .sheet(isPresented: $newProject) {
       NewProjectView(session: session) { id in

@@ -4,7 +4,7 @@ import type {
   TerminalProjectContextListItem,
 } from "@runweave/shared/terminal/project-context";
 import { z } from "zod";
-import { HomeBranchStatusService } from "../../../terminal/git/home-branch-status";
+import { BranchUpdatesTargetChangedError, HomeBranchStatusService } from "../../../terminal/git/home-branch-status";
 import type {
   TerminalProjectContextRecord,
   TerminalSessionManager,
@@ -70,6 +70,29 @@ export function registerTerminalProjectContextRoutes(
     tmuxOutputWatcher: options?.tmuxOutputWatcher,
     activity: options?.activity,
     ownerHooks: options?.ownerHooks,
+  });
+
+  router.get("/project/:projectId/branch-updates", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const parsed = z.object({ refresh: z.enum(["true", "false"]).optional() }).strict().safeParse(req.query);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid branch updates request" }); return; }
+    const project = terminalSessionManager.getProject(req.params.projectId);
+    if (!project) {
+      res.status(terminalSessionManager.getProjectContext(req.params.projectId) ? 409 : 404)
+        .json({ message: "Branch updates target unavailable" }); return;
+    }
+    if (!project.path) { res.status(409).json({ message: "Project path unavailable" }); return; }
+    const directory = project.path;
+    try {
+      const value = await branchStatusService.branchUpdates({ kind: "project", projectId: project.id, path: directory }, parsed.data.refresh === "true");
+      if (terminalSessionManager.getProject(project.id)?.path !== directory) throw new BranchUpdatesTargetChangedError();
+      res.json(value);
+    } catch (error) {
+      res.status(error instanceof BranchUpdatesTargetChangedError ? 409 : 503).json({
+        message: error instanceof BranchUpdatesTargetChangedError ? "读取目标已变化，请重新打开" : "主分支更新暂不可用",
+        code: error instanceof BranchUpdatesTargetChangedError ? "branch_updates_target_changed" : "branch_updates_unavailable",
+      });
+    }
   });
 
   router.get("/project/:parentProjectId/contexts", async (req, res) => {

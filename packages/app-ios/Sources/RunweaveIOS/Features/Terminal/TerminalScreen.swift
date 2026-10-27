@@ -14,6 +14,7 @@ struct TerminalScreen: View {
   @State private var scheduledSourceName: String?
   @State private var fileTap: TerminalFileTap?
   @State private var deleting = false
+  @State private var showingBranchUpdates = false
   @State private var showingHistory = false
   @State private var showingConversation = false
   @State private var showingInfo = false
@@ -63,7 +64,7 @@ struct TerminalScreen: View {
   private var canReportCompletionViewed: Bool {
     session.foreground && session.canWrite && session.terminal?.id == details.id
       && controller.canSend && !controller.scrolledBack && tab == "Chat"
-      && !sideChat.visible && browser.state != .presented && !showingHistory && !showingConversation
+      && !showingBranchUpdates && !sideChat.visible && browser.state != .presented && !showingHistory && !showingConversation
       && !showingInfo && !showingSupervision && !showingDiagnostics && !showingComposer && fileTap == nil
       && replyContext == nil && snapshotShare == nil && !deleting
   }
@@ -590,7 +591,7 @@ struct TerminalScreen: View {
         supervisionEnabled: supervision.watch?.enabled == true,
         canFork: session.canWrite && currentTerminal?.terminalState.agent == "codex"
           && currentTerminal?.terminalState.state == "agent_idle",
-        showingSupervision: $showingSupervision,
+        showingBranchUpdates: $showingBranchUpdates, showingSupervision: $showingSupervision,
         deleting: $deleting, showingHistory: $showingHistory,
         showingInfo: $showingInfo, showingDiagnostics: $showingDiagnostics
       ).equatable()

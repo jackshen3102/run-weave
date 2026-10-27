@@ -13,6 +13,8 @@ import {
 } from "../../../../features/terminal/preview/file-types";
 import { useTerminalRuntime } from "../../../../features/terminal/queries/provider";
 import { Button } from "../../../ui/button";
+import { useBranchUpdates } from "../../../../features/terminal/queries/branch-updates";
+import { BranchUpdatesView } from "../branch-updates/view";
 import { TerminalPreviewChangesView } from "../changes/view";
 import { useTerminalPreviewPanelActions } from "./actions";
 import { useTerminalPreviewPanelData } from "./use-data";
@@ -70,7 +72,7 @@ export function TerminalPreviewPanel({
   widthPx,
   onEditProject,
 }: TerminalPreviewPanelProps) {
-  const { apiBase, onAuthExpired, token } = useTerminalRuntime();
+  const { apiBase, onAuthExpired, token, scope, connectionName } = useTerminalRuntime();
   const selectTool = useConversationTool(activeSession?.terminalSessionId ?? null, activePanelId);
   const {
     closePreview,
@@ -150,6 +152,9 @@ export function TerminalPreviewPanel({
     widthPx,
     onAuthExpired,
   });
+
+  const branchUpdates = useBranchUpdates(projectId, activeProject?.path ?? null,
+    activeTool === "preview" && mode === "branch-updates");
 
   const quickSearch = useTerminalPreviewQuickSearch({
     apiBase, token, projectId,
@@ -392,6 +397,11 @@ export function TerminalPreviewPanel({
         }}
       />
     );
+  } else if (mode === "branch-updates") {
+    const readingKey = JSON.stringify([scope, projectId, activeProject.path]);
+    previewBody = <BranchUpdatesView key={readingKey} readingKey={readingKey}
+      projectName={activeProject.name} connectionName={connectionName}
+      data={branchUpdates.data} error={branchUpdates.error} loading={branchUpdates.isFetching} refresh={branchUpdates.refresh} />;
   } else if (mode === "changes") {
     previewBody = (
       <TerminalPreviewChangesView

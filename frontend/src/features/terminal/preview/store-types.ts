@@ -6,7 +6,7 @@ import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser
 import type { TerminalBrowserMinimumViewportWidth } from "@runweave/shared/terminal-browser-minimum-width";
 import type { SidecarTabId, SidecarTabLayout, TerminalSidecarTool } from "./sidecar-layout";
 
-export type TerminalPreviewMode = "file" | "changes" | "explorer";
+export type TerminalPreviewMode = "file" | "changes" | "explorer" | "branch-updates";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
 export type TerminalSvgViewMode = "preview" | "source";
 export type TerminalChangesViewMode = "diff" | "preview";

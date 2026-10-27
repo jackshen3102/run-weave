@@ -7,7 +7,7 @@ public enum MobileAnalytics {
   enum Screen: String {
     case connecting, login, home, connections, configuration, mobileLogin = "mobile_login"
     case terminalChat = "terminal_chat", terminalFiles = "terminal_files", terminalChanges = "terminal_changes"
-    case conversationReader = "conversation_reader", sideChat = "side_chat"
+    case conversationReader = "conversation_reader", sideChat = "side_chat", branchUpdates = "branch_updates"
     case taskSupervision = "task_supervision"
     case settings
     case developmentResources = "development_resources"

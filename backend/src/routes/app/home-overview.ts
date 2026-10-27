@@ -2,7 +2,7 @@ import type { AppHomeOverviewResponse, AppHomeOverviewSession } from "@runweave/
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import { Router } from "express";
 import { z } from "zod";
-import { HomeBranchStatusService } from "../../terminal/git/home-branch-status";
+import { BranchUpdatesTargetChangedError, HomeBranchStatusService } from "../../terminal/git/home-branch-status";
 import path from "node:path";
 import { logger } from "../../logging/index";
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
@@ -310,6 +310,25 @@ export function createAppHomeOverviewRouter(options: {
     terminalSessionIds: z.array(z.string().min(1).max(200)).max(100),
     refresh: z.boolean().optional(),
   }).strict();
+
+  router.get("/home/branch-updates/:terminalSessionId", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const parsed = z.object({ refresh: z.enum(["true", "false"]).optional() }).strict().safeParse(req.query);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid branch updates request" }); return; }
+    const session = options.terminalSessionManager.getSession(req.params.terminalSessionId);
+    if (!session) { res.status(404).json({ message: "Terminal not found" }); return; }
+    const cwd = session.cwd;
+    try {
+      const value = await branchStatus.branchUpdates({ kind: "terminal", terminalSessionId: session.id, cwd }, parsed.data.refresh === "true");
+      if (options.terminalSessionManager.getSession(session.id)?.cwd !== cwd) throw new BranchUpdatesTargetChangedError();
+      res.json(value);
+    } catch (error) {
+      res.status(error instanceof BranchUpdatesTargetChangedError ? 409 : 503).json({
+        message: error instanceof BranchUpdatesTargetChangedError ? "读取目标已变化，请重新打开" : "主分支更新暂不可用",
+        code: error instanceof BranchUpdatesTargetChangedError ? "branch_updates_target_changed" : "branch_updates_unavailable",
+      });
+    }
+  });
 
   router.post("/home/conversation-previews", async (req, res) => {
     const parsed = z.object({ terminalSessionIds: z.array(z.string().min(1).max(200)).max(100) })

@@ -100,7 +100,7 @@ struct HomeBranchStatusLabel: View {
       HStack(spacing: 3) {
         if let base = status.baseBranch, let behind = status.behind {
           Text(base).lineLimit(1).truncationMode(.middle)
-          Text(behind > 0 ? "↓\(behind)" : "✓").monospacedDigit().fixedSize()
+          Text(behind >= branchUpdatesLimit ? branchUpdatesCountLabel(behind) : behind > 0 ? "↓\(behind)" : "✓").monospacedDigit().fixedSize()
         }
         if status.state != "ready" { Text("待更新").fixedSize() }
       }
@@ -112,7 +112,7 @@ struct HomeBranchStatusLabel: View {
 
   private var accessibilityText: String {
     guard let base = status.baseBranch, let behind = status.behind else { return "分支状态待更新" }
-    let comparison = behind > 0 ? "落后 \(base) \(behind) 次提交" : "与 \(base) 无落差"
+    let comparison = behind > 0 ? "\(base) 待同步提交，\(branchUpdatesCountLabel(behind))" : "与 \(base) 无落差"
     return comparison + (status.state == "ready" ? "" : "，待更新")
   }
 }
