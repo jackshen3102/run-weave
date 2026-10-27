@@ -1,7 +1,7 @@
 # 手机主分支更新原型
 
 > 历史设计原型。当前产品行为见[终端代码预览](../../../architecture/terminal-code-preview.md)；数量与列表均最多 10 条，下方原型中的 14 条等计数仅为历史演示。原型截图不能代替产品验收。
-> 设计评审用 HTML 原型，表达原生 iOS 产品界面意图，尚未冻结。全部工作区、终端和提交均为演示数据，不代表当前仓库或原生 App 已实现。
+> 冻结的设计评审 HTML 原型，表达当时的原生 iOS 界面意图。全部工作区、终端和提交均为演示数据；原生 App 的当前能力以权威文档和源码为准。
 
 ## 启动
 
@@ -49,20 +49,12 @@ python3 -m http.server 6188 --bind 127.0.0.1 --directory docs/prototypes/main-br
 
 无可见的原型控制面板。
 
-## 代码依据与缺口
+## 历史设计与当前边界
 
-- 当前首页依据 `packages/app-ios/Sources/RunweaveIOS/App/RootView.swift` 和 `Features/Home/HomeView.swift`，保留电脑入口、大标题、搜索、关注列表与项目分组。
-- 当前 `HomeTerminalRow.swift` 整行是打开终端的 Button，分支状态在内部且不可独立点击。实际实现需拆成互不嵌套的点击区，不能在原按钮内嵌套按钮。
-- `HomeBranchStatusModel.swift` 已展示默认主分支名称、落后数量与旧结果，缺提交列表与导航行为。
-- `TerminalActionsMenu.swift` 已有终端操作菜单；本原型仅增加“主分支更新”入口。
-- 终端背景和薄荷绿参考 `TerminalAppearance.swift`；其他列表按原生深色分组列表绘制。
-- 尚需真实提交列表 DTO、Backend 接口和 Swift 消费。此原型不能证明这些能力、原生交互或真机访问已可用。
-
-## 设计记录
-
-- 采用：全屏阅读页、首页数量入口、终端菜单入口，返回原页面。
-- 未采用：压缩桌面侧栏、增加第五个终端标签、半屏内嵌长列表。
-- 用户尚未确认视觉与行为；不生成实施计划，不改原生代码。
+- 原型采用全屏阅读页、首页数量入口、终端菜单入口和返回原页面；未采用桌面侧栏、第五个终端标签或半屏长列表。
+- 原生实现已提供独立的首页数量按钮、终端菜单入口、提交列表 DTO、Backend 接口与 Swift 阅读页；原型阶段的代码缺口不再适用。
+- 当前列表和数量最多 10 条，继承项目主分支设置；当前合同见[终端代码预览](../../../architecture/terminal-code-preview.md#主分支更新)，原生职责见[iOS 架构](../../../../packages/app-ios/docs/architecture.md#首页终端查找)。
+- 实际交互按[验收计划](../../../testing/terminal/main-branch-updates.testplan.yaml)取证；历史原型及其截图不证明原生交互或真机访问已通过。
 
 ## 验证与截图
 
