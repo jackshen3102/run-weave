@@ -11039,5 +11039,237 @@
     "count": 1,
     "category": "test",
     "reason": "隔离 PostgreSQL/HTTP/CLI 行为验证的自有 fixture、私有凭据及子进程环境，不读取实例业务配置。"
+  },
+  {
+    "file": "electron/src/browser/plugins/builtin/history/runtime.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(configFile())",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "读取当前桌面实例各 Browser Profile 的本机采集开关与稳定来源 UUID，仅用于该设备的插件偏好。"
+  },
+  {
+    "file": "electron/src/browser/plugins/chrome/package.ts",
+    "kind": "file-io",
+    "expression": "output.writeFile(buffer.subarray(0, bytesRead))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "将通过大小与链接检查的用户所选扩展文件复制到应用私有安装目录，内容属于扩展发行副本。"
+  },
+  {
+    "file": "electron/src/browser/plugins/chrome/package.ts",
+    "kind": "file-io",
+    "expression": "readFile(file)",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "读取用户所选解包扩展的 manifest，验证扩展身份、权限与匹配站点，不作为 Runweave 实例业务配置。"
+  },
+  {
+    "file": "electron/src/browser/plugins/chrome/runtime.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(file())",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "读取当前桌面实例按 Browser Profile 登记的扩展安装身份及启用状态，供应用启动恢复本机扩展。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify-outbox.mjs",
+    "kind": "file-io",
+    "expression": "readFile(firstFile)",
+    "count": 2,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟浏览观察、队列和采集结果，验证持久恢复、容量与去重，不访问用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify-outbox.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(out, \"visits.jsonl\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟浏览观察、队列和采集结果，验证持久恢复、容量与去重，不访问用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify-outbox.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(pending, `${row.visitId}.1.json`))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟浏览观察、队列和采集结果，验证持久恢复、容量与去重，不访问用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify-outbox.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(blocked)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟浏览观察、队列和采集结果，验证持久恢复、容量与去重，不访问用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify-outbox.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(pending, `${row.visitId}.1.json`))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟浏览观察、队列和采集结果，验证持久恢复、容量与去重，不访问用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify-outbox.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(root)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟浏览观察、队列和采集结果，验证持久恢复、容量与去重，不访问用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify.mjs",
+    "kind": "file-io",
+    "expression": "appendFile(path.join(root, \"streams\", stream))",
+    "count": 2,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟日志、采集材料和安装文件，验证协议与文件边界，不访问真实用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(installRoot, \"keep.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟日志、采集材料和安装文件，验证协议与文件边界，不访问真实用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(out, \"manifest.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟日志、采集材料和安装文件，验证协议与文件边界，不访问真实用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(out, \"visits.jsonl\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟日志、采集材料和安装文件，验证协议与文件边界，不访问真实用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(root, \"future/manifest.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟日志、采集材料和安装文件，验证协议与文件边界，不访问真实用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(root, \"missing-stream/manifest.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟日志、采集材料和安装文件，验证协议与文件边界，不访问真实用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(root, \"partial/manifest.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟日志、采集材料和安装文件，验证协议与文件边界，不访问真实用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(root, file.file))",
+    "count": 2,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟日志、采集材料和安装文件，验证协议与文件边界，不访问真实用户配置。"
+  },
+  {
+    "file": "packages/browser-history/scripts/verify.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(installRoot, \"keep.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在自有临时目录读写模拟日志、采集材料和安装文件，验证协议与文件边界，不访问真实用户配置。"
+  },
+  {
+    "file": "packages/browser-history/src/collect.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(out, \"daily-browser.md\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "在用户显式指定且不存在的新输出目录生成浏览清单 Markdown，作为本次回顾材料，不写实例配置。"
+  },
+  {
+    "file": "packages/browser-history/src/collect.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(out, \"manifest.json\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "在用户显式指定的新输出目录保存本次采集来源、摘要和覆盖状态回执，不作为实例业务配置来源。"
+  },
+  {
+    "file": "packages/browser-history/src/collect.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(out, \"visits.jsonl\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "在用户显式指定的新输出目录保存按访问身份合并的 JSONL 材料视图，保留只读源日志，不写实例配置。"
+  },
+  {
+    "file": "packages/browser-history/src/files.ts",
+    "kind": "file-io",
+    "expression": "fd.writeFile(JSON.stringify(data, null, 2) + \"\\n\")",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "通过私有临时文件同步写入并原子替换本机浏览来源或接收器登记数据，服务于访问采集状态与安装协议。"
+  },
+  {
+    "file": "packages/browser-history/src/native-install.ts",
+    "kind": "file-io",
+    "expression": "readFile(manifest)",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "读取目标浏览器 Native Messaging host manifest，确认已有登记归属，避免覆盖其他接收器安装。"
+  },
+  {
+    "file": "packages/browser-history/src/native-install.ts",
+    "kind": "file-io",
+    "expression": "writeFile(launcher)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "写入使用已验证 Node 绝对路径及实际扩展 ID 的本机接收器启动脚本，属于用户显式安装的发行副本。"
+  },
+  {
+    "file": "packages/browser-history/src/outbox.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取本机持久队列中已校验名称、大小与身份的浏览观察文件，保留原身份重试交付日志。"
+  },
+  {
+    "file": "packages/browser-history/src/outbox.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(directory, \"receipt.json\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取该来源持久待保存队列的最后落盘回执，在进程重启后展示保存状态，不读取业务配置。"
+  },
+  {
+    "file": "packages/browser-history/src/outbox.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(fd)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "将原始浏览观察或落盘回执写入私有临时文件并同步，在原子替换后才交付和删除队列项。"
+  },
+  {
+    "file": "packages/browser-history/src/writer.ts",
+    "kind": "file-io",
+    "expression": "fd.writeFile(frozen.map((row) => JSON.stringify(row) + \"\\n\").join(\"\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "向每个写入进程独有的 JSONL 流追加已校验浏览观察并同步，作为本机访问事实材料，不写业务配置。"
   }
 ]
