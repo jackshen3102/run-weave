@@ -8,6 +8,9 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import sys
+import copy
+import uuid
 from zoneinfo import ZoneInfo
 
 
@@ -91,7 +94,7 @@ def config(path):
     scope(c["producerId"])
     scope(c["sourceNamespace"])
     date(c["startDate"])
-    exact(c["sources"], {"localAgent", "feishu"})
+    exact(c["sources"], {"localAgent", "feishu"}, {"browser"})
     local, feishu = c["sources"]["localAgent"], c["sources"]["feishu"]
     exact(local, {"providers"}, {"home"})
     require(isinstance(local["providers"], list) and all(p in ("codex", "pi", "claude", "trae") for p in local["providers"]) and len(set(local["providers"])) == len(local["providers"]), "INVALID_PROVIDERS")
@@ -99,7 +102,22 @@ def config(path):
     require(type(feishu["enabled"]) is bool and feishu["channels"] == "messages", "MESSAGES_ONLY")
     if feishu["enabled"]:
         scope(feishu.get("accountScope"))
-    require(local["providers"] or feishu["enabled"], "NO_ENABLED_SOURCE")
+    browser = c["sources"].get("browser", {"enabled": False})
+    require(type(browser.get("enabled")) is bool, "INVALID_BROWSER_ENABLED")
+    if browser["enabled"]:
+        exact(browser, {"enabled", "effectiveFrom", "root", "collectorArgv", "expectedSourceIds"})
+        require(sys.platform == "darwin", "BROWSER_REQUIRES_MACOS")
+        date(browser["effectiveFrom"])
+        require(browser["effectiveFrom"] >= c["startDate"], "BROWSER_BEFORE_JOB_START")
+        require(isinstance(browser["root"], str) and Path(browser["root"]).is_absolute(), "ABSOLUTE_PATH_REQUIRED")
+        require(isinstance(browser["collectorArgv"], list) and browser["collectorArgv"] and all(isinstance(v, str) and v and "\0" not in v for v in browser["collectorArgv"]), "INVALID_BROWSER_ARGV")
+        ids = browser["expectedSourceIds"]
+        require(isinstance(ids, list) and ids and len(ids) == len(set(ids)) and all(isinstance(v, str) and str(uuid.UUID(v)) == v for v in ids), "INVALID_BROWSER_SOURCE_IDS")
+    else:
+        exact(browser, {"enabled"})
+        # Keep the original binding byte-for-byte for old/disabled configurations.
+        c["sources"].pop("browser", None)
+    require(local["providers"] or feishu["enabled"] or (browser["enabled"] and browser["effectiveFrom"] == c["startDate"]), "NO_ENABLED_SOURCE_FOR_START_DATE")
     require(isinstance(c["collectorArgv"], list) and c["collectorArgv"] and all(isinstance(v, str) and v and "\0" not in v for v in c["collectorArgv"]), "INVALID_COLLECTOR_ARGV")
     exact(c["suiji"], {"configPath", "tokenFile", "autoPublish"})
     require(type(c["suiji"]["autoPublish"]) is bool, "INVALID_AUTO_PUBLISH")
@@ -112,10 +130,24 @@ def config(path):
     return c
 
 
-def scopes(c):
+def browser_enabled(c, day=None):
+    browser = c["sources"].get("browser", {})
+    return bool(browser.get("enabled") and (day is None or day >= browser["effectiveFrom"]))
+
+
+def binding(c):
+    connection = read(c["suiji"]["configPath"])
+    value = {k: c[k] for k in ("producerId", "sourceNamespace", "startDate", "sources")}
+    value["target"] = {k: connection[k] for k in ("endpoint", "serverId", "ownerId")}
+    return digest(value)
+
+
+def scopes(c, day=None):
     values = ["agent:" + c["producerId"] + ":" + p for p in c["sources"]["localAgent"]["providers"]]
     if c["sources"]["feishu"]["enabled"]:
         values.append("feishu:" + c["sources"]["feishu"]["accountScope"] + ":messages")
+    if browser_enabled(c, day):
+        values.append("browser:" + c["producerId"] + ":observed")
     for value in values:
         scope(value)
     return values
@@ -130,8 +162,9 @@ def process_identity(pid):
 
 
 class State:
-    def __init__(self, c):
+    def __init__(self, c, migrating=False):
         self.c = c
+        self.migrating = migrating
         self.root = directory(Path(c["stateDir"]).resolve())
         self.file = self.root / "state.json"
         self.lock = None
@@ -145,16 +178,22 @@ class State:
         except BlockingIOError:
             self.lock.close()
             raise Failure("BUSY") from None
-        connection = read(self.c["suiji"]["configPath"])
-        binding = {k: self.c[k] for k in ("producerId", "sourceNamespace", "startDate", "sources")}
-        binding["target"] = {k: connection[k] for k in ("endpoint", "serverId", "ownerId")}
-        self.data = read(self.file) if self.file.exists() else {"schemaVersion": 1, "binding": digest(binding), "days": {}, "identities": {}, "batches": {}, "excludedThreads": []}
-        require(self.data.get("binding") == digest(binding), "JOB_IDENTITY_OR_SOURCES_CHANGED")
+        try:
+            expected = binding(self.c)
+            journal = self.root / "source-migration.json"
+            require(self.migrating or not journal.exists(), "SOURCE_MIGRATION_IN_PROGRESS: resume migrate-sources")
+            self.data = read(self.file) if self.file.exists() else {"schemaVersion": 1, "binding": expected, "days": {}, "identities": {}, "batches": {}, "excludedThreads": []}
+            self.original_digest = digest(self.data)
+            if not (self.migrating and journal.exists()):
+                require(self.data.get("binding") == expected, "JOB_IDENTITY_OR_SOURCES_CHANGED")
+        except Exception:
+            self.lock.close()
+            raise
         return self
 
     def __exit__(self, kind, error, traceback):
         try:
-            if hasattr(self, "data"):
+            if hasattr(self, "data") and digest(self.data) != self.original_digest:
                 write(self.file, self.data)
         finally:
             self.lock.close()
@@ -182,3 +221,40 @@ class State:
                 result.append(day.isoformat())
             day += dt.timedelta(days=1)
         return result
+
+
+def migrate_sources(state, current_path, next_path, dry_run):
+    """Journal a one-time additive browser migration under the existing job lock."""
+    target = str(Path(current_path).resolve())
+    next_c = config(next_path)
+    journal_path = state.root / "source-migration.json"
+    if journal_path.exists():
+        journal = read(journal_path)
+        require(journal["configPath"] == target and journal["newConfig"] == next_c, "MIGRATION_TARGET_CHANGED")
+        require(state.data["binding"] in (journal["oldBinding"], journal["newState"]["binding"]) and state.c in (journal["oldConfig"], journal["newConfig"]), "MIGRATION_IDENTITY_CHANGED")
+    else:
+        require(browser_enabled(next_c) and not browser_enabled(state.c), "ADDITIVE_BROWSER_MIGRATION_ONLY")
+        old_base, new_base = copy.deepcopy(state.c), copy.deepcopy(next_c)
+        new_base["sources"].pop("browser")
+        require(old_base == new_base, "MIGRATION_MAY_ONLY_ADD_BROWSER")
+        require(not state.data.get("active") and all(b["phase"] == "confirmed" for b in state.data["batches"].values()), "ACTIVE_OR_PENDING_BATCH: recover it before migration")
+        updated = copy.deepcopy(state.data)
+        updated["binding"] = binding(next_c)
+        effective = next_c["sources"]["browser"]["effectiveFrom"]
+        affected = [d for d in updated["days"] if d >= effective]
+        for day in affected:
+            updated["days"][day]["complete"] = False
+        journal = {"configPath": target, "oldConfig": state.c, "newConfig": next_c, "oldBinding": state.data["binding"], "newState": updated, "affectedDays": affected}
+    result = {"dryRun": dry_run, "effectiveFrom": next_c["sources"]["browser"]["effectiveFrom"], "affectedDays": journal["affectedDays"], "oldBinding": journal["oldBinding"], "newBinding": journal["newState"]["binding"]}
+    if dry_run:
+        return result
+    if not journal_path.exists():
+        write(state.root / "before-browser-config.json", journal["oldConfig"])
+        write(state.root / "before-browser-state.json", state.data)
+        write(journal_path, journal)
+    write(state.file, journal["newState"])
+    write(target, next_c)
+    state.data = journal["newState"]
+    state.original_digest = digest(state.data)
+    journal_path.rename(state.root / "source-migration-completed.json")
+    return {**result, "migrated": True}

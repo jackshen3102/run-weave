@@ -44,9 +44,10 @@ async function list(dir: string): Promise<string[]> {
     throw e;
   }
 }
-export async function historySources(root: string) {
+export async function historySources(root: string, sourceIds?: string[]) {
   const sources: Array<Receipt & { streams: string[] }> = [];
-  for (const sourceId of await list(path.join(root, "sources"))) {
+  for (const sourceId of sourceIds ??
+    (await list(path.join(root, "sources")))) {
     if (!historyUuid(sourceId)) throw Error("INVALID_SOURCE_DIRECTORY");
     const receipt: Receipt & { streams: string[] } = {
       sourceId,
@@ -114,12 +115,20 @@ export async function collectHistory(
   to: string,
   timeZone: string,
   out: string,
+  sourceIds?: string[],
 ) {
   date(from);
   date(to);
   if (from > to) throw Error("INVALID_DATE_RANGE");
   formatDay(new Date().toISOString(), timeZone);
-  const receipts = await historySources(root);
+  if (
+    sourceIds &&
+    (!sourceIds.length ||
+      new Set(sourceIds).size !== sourceIds.length ||
+      !sourceIds.every(historyUuid))
+  )
+    throw Error("INVALID_SOURCE_IDS");
+  const receipts = await historySources(root, sourceIds);
   const visits = new Map<string, VisitMaterial>();
   const revisions = new Map<string, string>();
   const files: Array<{ file: string; length: number; hash: string }> = [];

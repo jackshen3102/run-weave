@@ -16,6 +16,8 @@ import type { Config } from "../src/config";
 import { LocalFileStore } from "../src/storage/local-files";
 import { registerCredential } from "../src/mcp/credentials";
 import { RecordService } from "../src/records/service";
+import { BrowserHistoryWriter } from "../../browser-history/src/writer";
+type BrowserVisitObservation = Parameters<BrowserHistoryWriter["append"]>[0][number];
 
 const exec = promisify(execFile), require = createRequire(import.meta.url);
 const root = await mkdtemp(join(tmpdir(), "daily-record-integration-"));
@@ -291,6 +293,95 @@ sys.exit(99)
   const tooLarge=await run(overflow,"validate",[...own(ob),"--facts",of],false);assert.match(tooLarge.error,/WORK_PACKAGE_LIMIT/);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM work_import_runs WHERE source_namespace=$1",[overflow.c.sourceNamespace])).rows[0].n,0);
   console.log("PASS single-day count/byte overflow and frozen-request tamper/opt-in guards");
+
+  if (process.platform === "darwin") {
+    const browserJob = await fixture("browser", dateOffset(-1));
+    // Establish a real legacy job before adding a new effective-dated source.
+    const legacy = await prepare(browserJob);
+    const legacyFacts = await factFile(browserJob, legacy);
+    await run(browserJob, "validate", [...own(legacy), "--facts", legacyFacts]);
+    await run(browserJob, "publish", own(legacy));
+    const previousState = await readFile(join(browserJob.c.stateDir, "state.json"), "utf8");
+    const historyRoot = join(browserJob.dir, "history");
+    const writer = new BrowserHistoryWriter(historyRoot);
+    const sourceIds = [randomUUID(), randomUUID()];
+    const visits: BrowserVisitObservation[] = Array.from({ length: 142 }, (_, n) => ({
+      schemaVersion: 1, sourceId: sourceIds[n % 2]!, browser: n % 2 ? "edge" : "chrome",
+      visitId: randomUUID(), revision: 1, visitedAt: day + "T04:00:00.000Z", observedAt: day + "T04:00:00.000Z",
+      url: "https://example.test/docs/" + (n < 3 ? "same" : n), title: "资料 " + n,
+      navigation: "document", profileLabel: "fixture", actor: "unknown",
+    }));
+    await writer.append(visits);
+    await writer.append([{ ...visits[0]!, revision: 2, title: "标题修订" }]);
+    await writer.close();
+    const next = { ...browserJob.c, sources: { ...browserJob.c.sources, browser: {
+      enabled: true, effectiveFrom: day, root: historyRoot,
+      collectorArgv: [process.execPath, join(repoRoot, "packages/browser-history/dist/cli.cjs")], expectedSourceIds: sourceIds,
+    } } };
+    const nextPath = join(browserJob.dir, "next.json"); await save(nextPath, next);
+    const dry = await run(browserJob, "migrate-sources", ["--next-config", nextPath, "--dry-run"]);
+    assert.deepEqual(dry.affectedDays, [day]);
+    assert.equal(await readFile(join(browserJob.c.stateDir, "state.json"), "utf8"), previousState);
+    await run(browserJob, "migrate-sources", ["--next-config", nextPath]);
+    const migrated = await load(join(browserJob.c.stateDir, "state.json"));
+    assert.deepEqual(migrated.identities, JSON.parse(previousState).identities);
+    assert.equal(migrated.days[dateOffset(-1)].complete, true);
+    await registerSource(pool, ownerId, { sourceScope: "browser:browser:observed", producerId: "browser", sourceNamespace: browserJob.c.sourceNamespace, name: "Mac 浏览概览（仅已记录访问）", effectiveFrom: day, effectiveTo: null });
+    const bb = await prepare(browserJob);
+    const browserMaterials = (await load(join(bb.batch, "evidence.json"))) as { id:string; ref:{channel:string}; browserVisits?:{id:string}[]; project:null }[];
+    const pages = browserMaterials.filter(m => m.ref.channel === "browser-visit");
+    assert.equal(pages.length, 140);
+    assert.equal(pages.reduce((n, m) => n + m.browserVisits!.length, 0), 142);
+    for (const m of browserMaterials) await run(browserJob, "read", [...own(bb), "--id", m.id]);
+    await run(browserJob, "read", [...own(bb), "--id", pages[0]!.id, "--verify-source"]);
+    const merged = await load(bb.template);
+    const agent = browserMaterials.find(m => m.ref.channel === "local-agent")!;
+    const prior = Object.values(migrated.identities).find((v) => (v as {date:string}).date === day) as {eventKey:string};
+    merged.days[0].items = [{ title: "工作讨论", statement: "讨论每日记录", status: "discussed", project: agent.project, sourceIds: [agent.id], eventKey: prior.eventKey },
+      { title: "浏览概览：开发资料", statement: "浏览开发资料，集中查看接口与使用说明。", status: "documented", project: null, sourceIds: pages.map(m=>m.id) }];
+    const candidate = join(bb.batch, "merged.json"); await save(candidate, merged);
+    await run(browserJob, "validate", [...own(bb), "--facts", candidate]);
+    const browserExport = await load(join(bb.batch, "export.json"));
+    assert.equal(browserExport.days[0].facts[1].sourceRefs.length, 1);
+    assert.equal(browserExport.days[0].facts.length, 2);
+    const index = await load(join(bb.batch, "browser-evidence-index.json"));
+    assert.equal((Object.values(index)[0] as {visits:unknown[]}).visits.length, 142);
+    // Rejections operate on real collected evidence, not mirrored pure functions.
+    const invalid = structuredClone(merged);
+    invalid.days[0].items[1].status = "verified"; await save(candidate, invalid);
+    assert.match((await run(browserJob, "validate", [...own(bb), "--facts", candidate], false)).error, /BROWSER_ONLY_IS_OBSERVATION/);
+    invalid.days[0].items[1].status = "documented";
+    invalid.days[0].items[1].statement = "字".repeat(161); await save(candidate, invalid);
+    assert.match((await run(browserJob, "validate", [...own(bb), "--facts", candidate], false)).error, /BROWSER_THEME_TOO_VERBOSE/);
+    invalid.days[0].items[1].statement = "浏览开发资料";
+    invalid.days[0].items.push(structuredClone(invalid.days[0].items[1])); await save(candidate, invalid);
+    assert.match((await run(browserJob, "validate", [...own(bb), "--facts", candidate], false)).error, /BROWSER_EVIDENCE_REPEATED/);
+    const tooManyThemes = structuredClone(merged);
+    tooManyThemes.days[0].items = [merged.days[0].items[0], ...pages.slice(0, 4).map(m => ({title:"浏览概览：资料",statement:"浏览资料",status:"documented",project:null,sourceIds:[m.id]}))];
+    await save(candidate, tooManyThemes);
+    assert.match((await run(browserJob, "validate", [...own(bb), "--facts", candidate], false)).error, /TOO_MANY_BROWSER_THEMES/);
+    await save(candidate, merged); await run(browserJob, "validate", [...own(bb), "--facts", candidate]);
+    dropResponse = true;
+    await run(browserJob, "publish", own(bb));
+    const browserFact = (await records.list(ownerId, {from:day,to:day})).items.find(v=>v.title==="浏览概览：开发资料")!;
+    assert(browserFact && browserFact.status === "documented");
+    // Recollect with a changed title and wording; stable anchors retain the same fact.
+    const reopen = await load(join(browserJob.c.stateDir, "state.json")); reopen.days[day].complete = false;
+    await save(join(browserJob.c.stateDir, "state.json"), reopen);
+    const replay = await prepare(browserJob);
+    const replayCandidate = await load(replay.template);
+    replayCandidate.days[0].items = structuredClone(merged.days[0].items);
+    replayCandidate.days[0].items[1].statement = "集中浏览接口和开发使用说明。";
+    const replayMaterials = await load(join(replay.batch, "evidence.json"));
+    for (const m of replayMaterials) await run(browserJob, "read", [...own(replay), "--id", m.id]);
+    const replayPath = join(replay.batch, "facts.json"); await save(replayPath, replayCandidate);
+    await run(browserJob, "validate", [...own(replay), "--facts", replayPath]);
+    await run(browserJob, "publish", own(replay));
+    const replayFact = (await records.list(ownerId, {from:day,to:day})).items.find(v=>v.title==="浏览概览：开发资料")!;
+    assert.equal(replayFact.id, browserFact.id);
+    assert.equal((await load(join(browserJob.c.stateDir, "state.json"))).days[day].complete, true);
+    console.log("PASS Mac browser effective-date migration, 142 visits merged into one theme/reference, concise-output guards, real source verification, HTTP import/recovery and stable replay");
+  }
 
   const old = new RecordService(pool);const baseline=await old.create(context(ownerId),{kind:"task",body:"unrelated baseline"});
   assert.equal((await old.get(ownerId,baseline.record.id)).body,"unrelated baseline");

@@ -11,7 +11,10 @@ async function main() {
     );
     return;
   }
-  const options: Record<string, { type: "string" | "boolean" }> = {};
+  const options: Record<
+    string,
+    { type: "string" | "boolean"; multiple?: boolean }
+  > = {};
   for (const key of [
     "root",
     "from",
@@ -26,6 +29,7 @@ async function main() {
   ])
     options[key] = { type: "string" };
   options["verify-source"] = options.json = { type: "boolean" };
+  options["source-id"] = { type: "string", multiple: true };
   const { values: v } = parseArgs({ args: argv, options });
   const arg = (key: string) => {
     const value = v[key];
@@ -48,6 +52,7 @@ async function main() {
       arg("to"),
       typeof v.timezone === "string" ? v.timezone : "Asia/Shanghai",
       arg("out"),
+      v["source-id"] as string[] | undefined,
     );
     process.exitCode = r.exitCode;
     result = r;

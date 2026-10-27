@@ -148,7 +148,12 @@ const receipt = z
   .strict();
 const sourceRef = z
   .object({
-    channel: z.enum(["local-agent", "feishu-message", "feishu-document"]),
+    channel: z.enum([
+      "local-agent",
+      "feishu-message",
+      "feishu-document",
+      "browser-visit",
+    ]),
     sourceScope: scope,
     nativeId,
     revision: nativeId.optional(),
