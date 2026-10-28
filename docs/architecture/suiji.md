@@ -151,16 +151,29 @@ Web使用已有480px抽屉、presence和连接身份隔离的IndexedDB；原生�
 
 ## Daily Record 定时上报
 
-同版 Daily Record Skill 在各 Backend 本机运行，Mac 可启用本人飞书聊天，devbox 关闭飞书。
+同版 Daily Record Skill 在各 Backend 本机运行，Mac 可启用本人飞书聊天和已落盘的浏览记录，
+devbox 关闭飞书和浏览来源。浏览接入只消费明确选中的本机来源，不安装扩展或自动开启记录。
 现有调度只负责唤醒，逐日补报、固定来源身份和冻结导入恢复由 Daily Record 本地状态管理。
 随记 schema11 新增预期来源登记：缺报来源使日期为 partial，无登记旧日期为 unknown；
 仍复用工作事实导入事务与人工字段保护，不修改普通笔记或待办。
 配置、权限与部署合同见[定时上报](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md)。
 实际双机、飞书和到点调度是否通过，以本次验收证据为准。
 
+浏览材料保持 `observed-only`：只证明记录到访问，不能证明本人操作、阅读时长或工作成果。
+同事项优先与 Agent、飞书事实合并；独立浏览概览每天最多 3 条、每条正文最多 160 字，
+只允许 `documented` 且项目为空。云端保存紧凑摘要引用，完整访问依据保留本地并可回查原行。
+浏览来源的 `complete` 仅表示登记日志读完，不代表全天覆盖；缺失或损坏仍保留补采义务。
+
+已有任务复用本机配置与固定 runtime，不依赖临时 worktree。增加浏览来源必须使用
+`migrate-sources`，保留机器身份、事项映射、历史回执与 outbox；生效日前不要求浏览回执。
+服务先声明 `features.workBrowserHistory=true`，再登记与配置生效日一致的浏览 scope；
+来源迁移不能通过重置状态或更换身份绕过。具体配置、迁移及恢复命令沿用上述定时上报合同。
+
 验收入口为[多机器定时上报](../testing/skills/daily-record-reporting.testplan.yaml)、
 [本机采集](../testing/skills/daily-record-local.testplan.yaml)和
 [项目归属](../testing/skills/daily-record-projects.testplan.yaml)。
+浏览来源另按[浏览接入计划](../testing/skills/daily-record-browser.testplan.yaml)核对观察语义、
+来源隔离、迁移与发布边界。
 本机集成验证不替代真实 Mac/飞书、真实 devbox、服务回执与独立回读及到点调度证据；
 手动触发成功也不证明到点运行。旧研究中的远端拉包、随记来源采集与 `get_change`
 不属于当前 Daily Record 合同，不因过程计划曾列出而视为已实现。
