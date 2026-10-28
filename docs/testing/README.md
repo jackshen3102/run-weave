@@ -33,6 +33,10 @@
 | [`suiji/`](./suiji/)                             | 随记服务、MCP、Web 录入、AI 回顾、原生体验与部署恢复 |
 | [`terminal/`](./terminal/)                       | Terminal、Browser、tmux、MCP 与 Worktree Context     |
 
+Daily Record 的[浏览来源接入计划](./skills/daily-record-browser.testplan.yaml)覆盖 Mac 来源选择、
+访问证据回查、主题归并、来源迁移及导入恢复；架构边界见[定时上报](../architecture/suiji.md#daily-record-定时上报)。
+浏览日志读取完整、手动导入与自然到点调度分别取证，不能相互替代。
+
 开发资源的当前快照、认证与手动释放使用[专项验收计划](./platform/development-resources.testplan.yaml)，
 原生 iOS 使用[手机专项计划](./app/ios-development-resources.testplan.yaml)，
 产品边界见[开发资源合同](../architecture/development-resources.md)。
