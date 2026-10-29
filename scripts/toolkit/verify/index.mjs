@@ -11,9 +11,9 @@ import {
   verifyPreToolHook,
   verifyToolOutcomeHooks,
   verifyTmuxPaneContextFailure,
-  verifyTraexNotificationCompletion,
   writeAppServerDiscoveryFiles,
 } from "./helpers.mjs";
+import { verifyCompletionHookIsolation } from "./completion-isolation.mjs";
 import { createToolkitHookFixture } from "./fixture.mjs";
 import { verifyToolkitHookProviderGuards } from "./provider-guards.mjs";
 
@@ -575,8 +575,8 @@ try {
       "launcher without Runweave identity must not post app-server events",
     );
 
-    await verifyTraexNotificationCompletion({
-      command: getToolkitHookCommand(toolkitHooksConfig, "Notification"),
+    await verifyCompletionHookIsolation({
+      toolkitHooksConfig,
       homeDir,
       appServerUrl: `http://127.0.0.1:${appServerPort}`,
       endpoint,
@@ -584,38 +584,6 @@ try {
       requests,
       appServerRequests,
     });
-
-    const requestsBeforeSubagentStop = requests.length;
-    const appServerRequestsBeforeSubagentStop = appServerRequests.length;
-    for (const source of ["codex", "trae", "claude"]) {
-      for (const event of ["SubagentStop", "subagent_stop", "subagent-stop"]) {
-        await runToolkitHookCommand(
-          getToolkitHookCommand(toolkitHooksConfig, "SubagentStop"),
-          source,
-          {
-            HOME: homeDir,
-            RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
-            RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
-            RUNWEAVE_HOOK_ENDPOINT: endpoint,
-            RUNWEAVE_HOOK_TOKEN: "token-subagent",
-            RUNWEAVE_TERMINAL_SESSION_ID: "terminal-parent",
-            RUNWEAVE_TERMINAL_PANEL_ID: "panel-parent",
-            RUNWEAVE_PROJECT_ID: "project-parent",
-          },
-          { hook_event_name: event, session_id: "thread-parent" },
-        );
-      }
-    }
-    assert.equal(
-      requests.length,
-      requestsBeforeSubagentStop,
-      "subagent completion must not update parent state or send completion notifications",
-    );
-    assert.equal(
-      appServerRequests.length,
-      appServerRequestsBeforeSubagentStop,
-      "subagent completion must not enter parent Activity or task supervision",
-    );
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await new Promise((resolve) => appServer.close(resolve));
