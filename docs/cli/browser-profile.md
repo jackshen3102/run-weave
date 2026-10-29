@@ -229,7 +229,7 @@ rw browser downloads release --json
 
 列表包含 `id`、`targetId`、文件名、MIME、状态、收取字节和总字节；只有 `completed`
 可以取回。每个文件限 512 MiB，最多保留 128 条记录、64 个捕获组；超限下载取消。
-文件位于本次桌面进程的私有临时目录，完成记录在创建一小时后的下一次操作时清理，
+文件位于本次桌面进程的私有临时目录，已结束记录在创建一小时后的下一次操作时清理，
 关闭 CDP 服务时取消未结束的受管下载并删除文件；不跨桌面重启恢复。
 
 `fetch` 每次读取至多 256 KiB，先写 Agent 所在机器上的私有临时文件，全部读取并同步后
@@ -264,7 +264,7 @@ rw browser proxy set --mode whistle --json
 ```
 
 支持与 resolver 相同的 --profile 1|2|3、--group-id。SSH Agent 经原有桌面绑定和 CDP 票据
-修改桌面 Electron Session，不修改 DVBoss 本机代理。作用于整个 Profile，包括其余 Group 和 popup。
+修改桌面 Electron Session，不修改 Agent 所在机器的系统代理。作用于整个 Profile，包括其余 Group 和 popup。
 set 先读取当前模式，再以 expectedMode 在桌面串行校验；冲突需重新核对，不自动重试。
 状态返回 proxyMode、applyError、Whistle 状态和固定外部 HTTPS 地址的实际 effectiveProxy 解析结果；
 该解析结果不证明某个业务请求已发出或命中代理规则。

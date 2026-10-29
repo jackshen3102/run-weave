@@ -86,7 +86,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | 文件、Diff、Markdown、会话阅读与 Browser 预览、页内查找 | [terminal-code-preview.md](./terminal-code-preview.md)                         |
 | tmux 持久化与恢复                                       | [terminal-tmux-recovery.md](./terminal-tmux-recovery.md)                       |
 | 完成事件 Hook                                           | [terminal-completion-hooks.md](./terminal-completion-hooks.md)                 |
-| 桌面与飞书完成通知                                      | [terminal-completion-notifications.md](./terminal-completion-notifications.md) |
+| 连接未读数字、桌面与飞书完成通知                        | [terminal-completion-notifications.md](./terminal-completion-notifications.md) |
 
 Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.md)。
 
