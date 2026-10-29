@@ -5,6 +5,7 @@ struct ConnectionManager: View {
   @Environment(\.dismiss) private var dismiss
   @ObservedObject var store: ConnectionStore
   @ObservedObject var session: AppSession
+  @ObservedObject var completions: ConnectionCompletionStore
   var onMobileLogin: () -> Void = {}
   @State private var detailID: String?
   @State private var adding = false
@@ -68,6 +69,8 @@ struct ConnectionManager: View {
             Text(status(connection)).font(.caption).foregroundColor(.secondary)
           }
           Spacer(minLength: 8)
+          ConnectionCompletionBadge(count: completions.count(for: connection, in: store.connections))
+            .padding(.trailing, 6)
           if connection.id == store.activeID {
             Image(systemName: "checkmark.circle.fill").foregroundColor(.accentColor)
           }
@@ -97,7 +100,9 @@ struct ConnectionManager: View {
   }
 
   private func status(_ connection: BackendConnection) -> String {
-    guard session.connection?.scope == connection.scope else { return "尚未检测" }
+    guard session.connection?.scope == connection.scope else {
+      return completions.status(connection) ?? "尚未检测"
+    }
     switch session.health.status {
     case .checking: return "正在连接…"
     case .offline: return session.health.message

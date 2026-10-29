@@ -220,7 +220,7 @@ export function TerminalWorkspaceHeader({
           activeConnectionName={connectionName}
           onSelectConnection={onSelectConnection}
           onOpenConnectionManager={onOpenConnectionManager}
-          className="h-6 shrink-0 rounded-md border border-slate-800 bg-slate-900 px-2 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+          className="h-6 shrink-0 rounded-full border border-slate-800 bg-slate-900 px-2 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-slate-100"
         />
       ) : null}
       <TerminalProjectTabBar

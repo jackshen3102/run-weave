@@ -5,6 +5,7 @@ import IOSBuildIdentity
 public struct RootView: View {
   @Environment(\.scenePhase) private var scenePhase
   @StateObject private var connections = ConnectionStore()
+  @StateObject private var completions = ConnectionCompletionStore()
   @StateObject private var session = AppSession()
   @StateObject private var quickInputs = BackendQuickInputModel()
   @StateObject private var codexQuota = CodexQuotaStore()
@@ -45,7 +46,8 @@ public struct RootView: View {
           }
         } label: { EmptyView() }.hidden()
       }
-      .navigationTitle(session.authenticated ? "Runweave" : "Sign in")
+      .navigationTitle(session.authenticated ? "" : "Sign in")
+      .navigationBarTitleDisplayMode(session.authenticated ? .inline : .automatic)
       .toolbar {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
           Button { showingSettings = true } label: { Image(systemName: "gearshape") }
@@ -71,6 +73,11 @@ public struct RootView: View {
               if session.authenticated { DeviceBatteryView(device: session.deviceStatus, compact: true) }
               Image(systemName: "chevron.down").font(.caption2)
             }
+            .overlay(alignment: .topTrailing) {
+              ConnectionCompletionBadge(count: completions.otherTotal(in: connections.connections, activeID: connections.activeID))
+                .offset(x: 8, y: -8).allowsHitTesting(false)
+            }
+            .padding(.top, 8).padding(.trailing, 8).contentShape(Rectangle())
           }.accessibilityLabel("切换连接")
             .accessibilityIdentifier("connection-switcher")
         }
@@ -95,6 +102,7 @@ public struct RootView: View {
     }
     .onChange(of: session.authenticated) { authenticated in
       if !authenticated {
+        completions.clear()
         codexQuota.reset(); quickInputs.reset()
         remoteDesktop.invalidate(reason: "backend_logged_out")
       }
@@ -126,8 +134,17 @@ public struct RootView: View {
       if phase == .active { notifications.foreground(connections: connections.connections) }
       else { notifications.suspend() }
     }
+    .task(id: ConnectionCompletionStore.RefreshKey(connections: connections.connections,
+      generation: session.generation, enabled: session.foreground && session.authenticated)) {
+      guard session.foreground, session.authenticated else { return }
+      while !Task.isCancelled {
+        await completions.refresh(connections.connections)
+        do { try await Task.sleep(nanoseconds: 4_000_000_000) }
+        catch { return }
+      }
+    }
     .sheet(isPresented: $managingConnections) {
-      ConnectionManager(store: connections, session: session) {
+      ConnectionManager(store: connections, session: session, completions: completions) {
         managingConnections = false
         mobileLoginRevision += 1
       }.mobileAnalyticsScreen(.connections)

@@ -8,6 +8,7 @@ import { useTerminalEventsConnection } from "../terminal/connection/use-events";
 import { listTerminalProjects, listTerminalSessions } from "../../services/terminal/index";
 import { useAttentionSnapshot } from "../attention/use-attention-snapshot";
 import type { ConnectionConfig } from "./types";
+import { useObserveConnectionCompletions } from "./completion-counts";
 
 export interface ConnectionWorkspaceOverview {
   projects: TerminalProjectListItem[];
@@ -126,6 +127,7 @@ function ConnectionObserverState({ connection, token, status, onAuthExpired }: {
   status: ScopedAuthState["status"];
   onAuthExpired: () => void;
 }) {
+  useObserveConnectionCompletions(connection, status === "authenticated" ? token : null);
   const update = useConnectionWorkspaceOverview((state) => state.update);
   useEffect(() => {
     if (!connection.url || connection.available === false) {
@@ -152,6 +154,7 @@ function ConnectionObserver({ connection }: { connection: ConnectionConfig }) {
 }
 
 function ActiveAttentionObserver({ connection, token }: { connection: ConnectionConfig; token: string | null }) {
+  useObserveConnectionCompletions(connection, token);
   const update = useConnectionWorkspaceOverview((state) => state.update);
   const attention = useAttentionSnapshot({
     apiBase: connection.url,
@@ -191,7 +194,7 @@ export function ConnectionWorkspaceObservers({
       <ConnectionObserverState key={`active:${connection.id}`} connection={connection} token={activeToken} status={activeAuthStatus} onAuthExpired={onActiveAuthExpired} />
     ))}
     {!observeActive && connections.filter((connection) => connection.id === activeConnectionId).map((connection) => (
-      <ActiveAttentionObserver key={`attention:${connection.id}`} connection={connection} token={activeToken} />
+      <ActiveAttentionObserver key={`attention:${connection.id}`} connection={connection} token={activeAuthStatus === "authenticated" ? activeToken : null} />
     ))}
   </>;
 }
