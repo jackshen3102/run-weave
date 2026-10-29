@@ -1,0 +1,76 @@
+{
+  "activeId": "local",
+  "connections": [
+    {
+      "id": "local",
+      "name": "本地",
+      "online": true,
+      "count": 1
+    },
+    {
+      "id": "linux",
+      "name": "Linux 开发机",
+      "online": true,
+      "count": 3
+    },
+    {
+      "id": "macbook",
+      "name": "MacBook Pro",
+      "online": false,
+      "count": 2
+    },
+    {
+      "id": "test",
+      "name": "测试服务器",
+      "online": true,
+      "count": 0
+    }
+  ],
+  "homeAttention": [
+    {
+      "title": "codex · wt-1",
+      "project": "browser-viewer · main ↓1",
+      "state": "等待输入",
+      "running": false,
+      "input": "重新画一下连接入口的数字角标。",
+      "reply": "已整理界面布局，连接列表可以查看。",
+      "hasUnreadCompletion": false
+    },
+    {
+      "title": "codex · wt-1",
+      "project": "browser-viewer · main ↓1",
+      "state": "等待输入",
+      "running": false,
+      "input": "继续",
+      "reply": "已更新当前工作区的原型截图。",
+      "hasUnreadCompletion": false
+    },
+    {
+      "title": "traex · browser-viewer",
+      "project": "browser-viewer · main ✓",
+      "state": "等待输入",
+      "running": false,
+      "input": "git fetch rebase 最新的 origin/main 代码",
+      "reply": "已完成 git fetch origin 和 git rebase origin/main。",
+      "hasUnreadCompletion": true
+    },
+    {
+      "title": "codex · browser-viewer",
+      "project": "browser-viewer · main ✓",
+      "state": "等待输入",
+      "running": false,
+      "input": "那就继续吧",
+      "reply": "成果展示链路也已跑通，可以查看。",
+      "hasUnreadCompletion": false
+    },
+    {
+      "title": "codex · agent-team-2",
+      "project": "browser-viewer · main 最近 10 条",
+      "state": "等待输入",
+      "running": false,
+      "input": "查看一下当前工作区的变更",
+      "reply": "已整理相关文件。",
+      "hasUnreadCompletion": false
+    }
+  ]
+}
