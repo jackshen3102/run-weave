@@ -113,6 +113,9 @@ Companion 不单独维护运行状态；Completion 的来源是历史事件，�
    - `UserPromptSubmit` -> `agent_running`
    - `Stop` -> `agent_idle`
 
+公共 Hook bridge 在状态投递、Activity、完成通知和任务监督之前忽略 `SubagentStop`。
+子 Agent 会继承父终端的 pane/thread 身份，其完成不代表父 Agent 的当前轮次结束。
+
 Agent hook 的接收身份以 Panel 为最小作用域。Backend 为每个 Agent Panel 维护 `starting -> active -> grace` 活动租约，记录 provider、launch `operationId`、当前命令和原始时间戳。多 Pane hook 必须解析到唯一 Panel；存在 operation generation 时必须匹配同一次 launch。`Stop` 只有在目标 Panel 当前仍属于该 Agent，或同一活动租约刚进入 30 秒 grace 时才能写状态，不能消费其它 Pane 或旧 operation 的历史。
 
 活动租约同时写入当前 Profile 的 `terminal-session-store.json`。Backend 重启时只恢复仍存在的 Session/Panel：`starting/active` 必须与当前 Panel 事实兼容，`grace` 必须保持原 `clearedAt` 且仍未超过 30 秒；不匹配、过期或孤立记录会被删除。恢复不得刷新 grace 时间，也不得从 Session 聚合状态推测某个多 Pane Agent 的归属。

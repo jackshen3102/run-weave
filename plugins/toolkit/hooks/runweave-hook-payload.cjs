@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const STOP_EVENTS = new Set(["stop", "subagent_stop", "subagentstop"]);
+const STOP_EVENTS = new Set(["stop"]);
 const COMPLETION_REASONS = new Set([
   "hook_stop",
   "notify",
